@@ -307,19 +307,23 @@ render() {
   rm -f "$hrv"
   printf '%s\n' "$hro" | grep -v '^hook-registration: root '
 
-  sub "Blocking-layer (HARD-* — blocks apply):"
-  # The wrapper gets the same REFUSED treatment as the two detectors it drives (below): print
-  # mode exits 0 always, so a non-zero exit is a run that did not happen, and an empty blocking
-  # list from one must not read as `0 HARD blockers.` — the one line the whole HARD- contract
-  # keys on.
-  local hb hb_rc
-  hb="$(bash "$SELF/hard-blockers.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null \
-    | sed '/BEGIN GENERATED: hard-blockers/d;/END GENERATED: hard-blockers/d')"
-  hb_rc=$?
-  if [ "$hb_rc" -eq 0 ]; then printf '%s\n' "$hb"; else
-    echo "DETECTOR-REFUSED  hard-blockers.sh exited ${hb_rc} without rendering the blocking list, so this section is NOT '0 HARD blockers.'. Run it directly against this consumer to see why: reconcile/hard-blockers.sh <dist> <base> <consumer> <theirs>"
-  fi
-
+  # EACH DETECTOR RUNS ONCE PER RENDER, AND THE WRAPPER IS HANDED THE ROWS.
+  #
+  # This driver needs three OUTPUTS — the blocking list, and each detector's own section — and it
+  # used to derive them from three PROCESSES: `hard-blockers.sh`, which runs both detectors, and
+  # then the same two detectors again, directly. The refs cannot move within one invocation, so the
+  # second run recomputed the first exactly. Measured on the reference consumer, both call sites
+  # byte-identical (layer-drift.sh 50 rows, unregistered-drift.sh 85, degenerate-range control
+  # proving the comparison could report DIFFER): layer-drift.sh 19-20s of a 60-64s render, and
+  # `--verify` re-renders while `apply.sh` gates its writes on `--verify`, so a pull paid it three
+  # times. Filed as PC-S308-EMIT-REPORT-RUNS-LAYER-DRIFT-AND-UNREGISTERED-DRIFT-TWICE.
+  #
+  # THE ROWS GO DOWN, THE BASE DOES NOT. `hard-blockers.sh` keeps the `HARD-` filter, the
+  # `DRIFT-RANGE-DEGENERATE` qualifier and — the reason it exists — the per-detector base split
+  # that `--post-apply` moves. This renderer runs strictly PRE-apply (see the header's note on the
+  # wrapper's two forms), so the base it computes rows at is the base the wrapper would have used;
+  # the wrapper REFUSES `--post-apply` with supplied rows rather than trusting that to stay true.
+  #
   # A DETECTOR THAT DID NOT RUN RENDERS AS REFUSED, NOT AS `none`. Both classifiers exit 0
   # always when they classified and non-zero only when they could not (usage, an unsourceable
   # sibling, a consumer root that is not a directory). Inside a pipeline that rc was lost, so a
@@ -328,20 +332,46 @@ render() {
   # The refused line is a row the approval never saw, so --verify treats it as it treats a new
   # HARD row: UNDECIDED, never BLOCKERS-RESOLVED. A detector that exits 0 having scanned nothing
   # is not visible here and is the detector's own honesty problem.
-  local ud_rc ld_rc
-  sub "Unregistered core drift (consumer in-place edits vs base):"
-  ud="$(bash "$SELF/unregistered-drift.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | awk -F'\t' '$1!="CORE-OK"{print $1"  "$2}' | sort -u)"
+  #
+  # THE rc IS CAPTURED OFF THE BARE RUN, NOT OFF A PIPELINE, and the rows are filtered afterwards.
+  # The previous shape read `$?` after `cmd | awk | sort`, which under this file's `pipefail` is the
+  # pipeline's status and not the detector's; it happened to agree because the readers exit 0, and
+  # an agreement that holds by luck is the shape this region exists to end.
+  local ud_rc ld_rc ud_raw ld_raw
+  ld_raw="$(mktemp)"; ud_raw="$(mktemp)"
+  bash "$SELF/layer-drift.sh"        "$DIST" "$BASE" "$THEIRS" "$CONSUMER" >"$ld_raw" 2>/dev/null
+  ld_rc=$?
+  bash "$SELF/unregistered-drift.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >"$ud_raw" 2>/dev/null
   ud_rc=$?
+
+  sub "Blocking-layer (HARD-* — blocks apply):"
+  # The wrapper gets the same REFUSED treatment as the two detectors it drives (below): print
+  # mode exits 0 always, so a non-zero exit is a run that did not happen, and an empty blocking
+  # list from one must not read as `0 HARD blockers.` — the one line the whole HARD- contract
+  # keys on.
+  local hb hb_rc
+  hb="$(bash "$SELF/hard-blockers.sh" \
+      --ld-rows "$ld_raw" --ld-rc "$ld_rc" \
+      --ud-rows "$ud_raw" --ud-rc "$ud_rc" \
+      "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null \
+    | sed '/BEGIN GENERATED: hard-blockers/d;/END GENERATED: hard-blockers/d')"
+  hb_rc=$?
+  if [ "$hb_rc" -eq 0 ]; then printf '%s\n' "$hb"; else
+    echo "DETECTOR-REFUSED  hard-blockers.sh exited ${hb_rc} without rendering the blocking list, so this section is NOT '0 HARD blockers.'. Run it directly against this consumer to see why: reconcile/hard-blockers.sh <dist> <base> <consumer> <theirs>"
+  fi
+
+  sub "Unregistered core drift (consumer in-place edits vs base):"
+  ud="$(awk -F'\t' '$1!="CORE-OK"{print $1"  "$2}' "$ud_raw" | sort -u)"
   if [ "$ud_rc" -eq 0 ]; then none_or "$ud"; else
     echo "DETECTOR-REFUSED  unregistered-drift.sh exited ${ud_rc} without classifying, so this section is NOT a finding of 'none'. Run it directly against this consumer to see why: reconcile/unregistered-drift.sh <dist> <base> <consumer> <theirs>"
   fi
 
   sub "Layer drift (overrides/extensions vs new core):"
-  ld="$(bash "$SELF/layer-drift.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null | awk -F'\t' '$1!="EXTENSION-OK"{print $1"  "$2}' | sort -u)"
-  ld_rc=$?
+  ld="$(awk -F'\t' '$1!="EXTENSION-OK"{print $1"  "$2}' "$ld_raw" | sort -u)"
   if [ "$ld_rc" -eq 0 ]; then none_or "$ld"; else
     echo "DETECTOR-REFUSED  layer-drift.sh exited ${ld_rc} without classifying, so this section is NOT a finding of 'none'. Run it directly against this consumer to see why: reconcile/layer-drift.sh <dist> <base> <theirs> <consumer>"
   fi
+  rm -f "$ld_raw" "$ud_raw"
 
   sub "Catalog relabel (extension check-number collisions, incl. NEW-THIS-PULL from theirs):"
   # `#{2,4}`, not a literal `### `: relabel matches headings at h2-h4, so filtering the
