@@ -461,6 +461,133 @@ restore
 run "$VERDICT"
 [ "$RC" -eq 0 ] && ok "restored verdict after the carve-out arms → exit 0" || bad "the pristine verdict did not pass after the carve-out arms (rc=$RC)"
 
+# ============================================================================
+# THE DISPATCH BINDING — a nonce with no dispatch at or after it is not a pass.
+# ============================================================================
+# Every field the arms above read is written by whoever wrote the file, the nonce and the
+# stem both, so the freshness anchor anchors the file to itself. The reference consumer holds
+# a verdict that satisfies all of them and that no gate entry ever minted:
+# `gate-adjudication/planning-20260902T160000Z.verdict.json`, a 16:00:00Z nonce whose
+# adjudicator was dispatched at 13:57:46Z. What separates it from a real pass is ORDER, in
+# records written by hooks off a clock, and these arms are the pair that shows the validator
+# reads them.
+#
+# THE ARMS BELOW MUST COME IN PAIRS. A binding arm that refuses everything passes every
+# negative here; a binding arm that refuses nothing passes every positive. Each negative
+# therefore sits beside the near-miss it must NOT catch.
+GA_LEDGER="$WORK/spawn-ledger.jsonl"
+GA_WRITES="$WORK/gate-adjudication/.verdict-writes.jsonl"
+ga_clean_ledgers() { rm -f "$GA_LEDGER" "$GA_WRITES"; }
+ga_ledger() { printf '{"v":1,"ts":"%s","sprint":1,"name":"gate-adjudicator-seed","role":"gate-adjudicator"}\n' "$1" > "$GA_LEDGER"; }
+ga_writerow() { # <ts> <stem> <agent_id>
+  printf '{"v":1,"ts":"%s","stem":"%s","agent_id":"%s","session":"t","tool":"Write"}\n' "$1" "$2" "$3" > "$GA_WRITES"
+}
+ga_run() { # -> RC, and GA_OUT carries the message
+  GA_OUT="$(AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
+              bash "$VALIDATOR" "$GATE_TYPE" "$VERDICT" 2>&1)"
+  RC=$?
+}
+ga_unbound() { case "$GA_OUT" in *"bound to NO dispatch"*) return 0 ;; esac; return 1; }
+
+ga_clean_ledgers
+ga_run
+if [ "$RC" -eq 0 ] && ! ga_unbound; then
+  ok "BINDING: with NO ledger of any kind the arm reports nocorpus and blocks nothing — a consumer that has never run the dispatch guard is not wedged"
+else
+  bad "BINDING: an absent ledger blocked the gate (rc=$RC) — the arm errors on correct data"
+fi
+
+# The nonce is minted at gate ENTRY and the adjudicator dispatched after it.
+ga_ledger "2026-07-15T14:03:42Z"
+ga_run
+if [ "$RC" -eq 0 ] && ! ga_unbound; then
+  ok "BINDING: a gate-adjudicator dispatched 20s AFTER the nonce binds the pass → exit 0"
+else
+  bad "BINDING: an honestly ordered pass was refused (rc=$RC) — the arm denies real gates"
+fi
+
+# One field moves: the same dispatch, 20s BEFORE the nonce. That is the whole difference
+# between a nonce minted at gate entry and one invented afterwards.
+ga_ledger "2026-07-15T14:03:02Z"
+ga_run
+if [ "$RC" -eq 1 ] && ga_unbound; then
+  ok "BINDING: the SAME dispatch 20s BEFORE the nonce does not bind it → exit 1 (order is the discriminator)"
+else
+  bad "BINDING: a nonce minted after its own dispatch passed (rc=$RC) — the arm is not reading the order"
+fi
+
+# WRONG FIX #1, killed here: the id in the verdict is now the ledger's exact dispatch name.
+# A join on `adjudicator_agent_id` reports BOUND; measured on the reference consumer that join
+# accepts 92 of 193 verdicts and accepts the forged one.
+py_edit 'doc["adjudicator_agent_id"] = "gate-adjudicator-seed"'
+ga_run
+if [ "$RC" -eq 1 ] && ga_unbound; then
+  ok "BINDING: naming the ledger's REAL dispatch in adjudicator_agent_id still does not bind — a name join is not this arm"
+else
+  bad "BINDING: a name join lifted it (rc=$RC) — the binding is keyed on a field whoever writes the file writes"
+fi
+restore
+
+# WRONG FIX #2, killed here: gate_nonce, generated_at and the stem are all made mutually
+# consistent. They already were; a binding keyed on any of them is a tautology, because one
+# writer writes all three.
+py_edit 'doc["generated_at"] = "2026-07-15T14:03:22Z"'
+ga_run
+if [ "$RC" -eq 1 ] && ga_unbound; then
+  ok "BINDING: making generated_at agree with the nonce does not bind it — a join over lead-written fields is a tautology"
+else
+  bad "BINDING: an envelope-internal agreement satisfied the binding (rc=$RC)"
+fi
+restore
+
+# The acquitting direction for B1: a dispatched agent's own write of THIS stem, after the nonce.
+ga_writerow "2026-07-15T14:06:00Z" "$NONCE" "aseed-0123456789abcdef"
+ga_run
+if [ "$RC" -eq 0 ] && ! ga_unbound; then
+  ok "BINDING: a write row for this stem, carrying the harness's agent_id and clocked AFTER the nonce, binds it → exit 0"
+else
+  bad "BINDING: a legitimately recorded write did not bind the pass (rc=$RC) — B1 cannot acquit, so every refusal above is unearned"
+fi
+
+# ...and the two ways that row stops being evidence.
+ga_writerow "2026-07-15T14:06:00Z" "$NONCE" ""
+ga_run
+if [ "$RC" -eq 1 ] && ga_unbound; then
+  ok "BINDING: the same row with an EMPTY agent_id does not bind — a lead's own write is not a dispatch"
+else
+  bad "BINDING: a write row with no harness attribution bound the pass (rc=$RC)"
+fi
+ga_writerow "2026-07-15T14:02:00Z" "$NONCE" "aseed-0123456789abcdef"
+ga_run
+if [ "$RC" -eq 1 ] && ga_unbound; then
+  ok "BINDING: the same row clocked BEFORE the nonce does not bind — B1 carries the order arm too"
+else
+  bad "BINDING: a write predating its own nonce bound the pass (rc=$RC)"
+fi
+ga_writerow "2026-07-15T14:06:00Z" "implementation-20260715T140321Z" "aseed-0123456789abcdef"
+ga_run
+if [ "$RC" -eq 1 ] && ga_unbound; then
+  ok "BINDING: a row for a DIFFERENT stem does not bind this one — B1 is keyed on the stem"
+else
+  bad "BINDING: a write row for another verdict bound this one (rc=$RC)"
+fi
+rm -f "$GA_WRITES"
+
+# PRE-MIGRATION. Every row in both ledgers postdates the nonce, so nothing could have recorded
+# this pass and the arm must report PENDING rather than a defect. Without this, installing the
+# binding turns every verdict already on disk into a gate failure.
+ga_ledger "2027-01-01T00:00:00Z"
+ga_run
+if [ "$RC" -eq 0 ] && ! ga_unbound; then
+  ok "BINDING: a nonce predating every row in the ledger is EXEMPT → exit 0 (pre-migration is not a defect)"
+else
+  bad "BINDING: a pre-migration verdict was scored as a defect (rc=$RC) — installing this would fail every gate already on disk"
+fi
+ga_clean_ledgers
+restore
+run "$VERDICT"
+[ "$RC" -eq 0 ] && ok "restored verdict after the binding arms → exit 0" || bad "the pristine verdict did not pass after the binding arms (rc=$RC)"
+
 echo
 if [ "$fails" -eq 0 ]; then echo "gate-adjudication: PASS"; exit 0; fi
 echo "gate-adjudication: $fails assertion(s) FAILED" >&2

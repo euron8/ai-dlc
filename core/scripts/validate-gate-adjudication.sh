@@ -314,12 +314,14 @@ fi
 export GA_IN_FORCE GA_IN_FORCE_STATUS
 
 python3 - "$MODE" "$GATE_TYPE" "$VERDICT_PATH" "$SCHEMA" "$MAP" "$SIBLING" ${SERIES_PATHS+"${SERIES_PATHS[@]}"} <<'PYEOF'
+import calendar
 import glob
 import json
 import os
 import re
 import subprocess
 import sys
+import time
 
 mode = sys.argv[1]
 gate_type = sys.argv[2]
@@ -973,6 +975,103 @@ for f in ("adjudicator_agent_id", "catalog"):
     val = V.get(f)
     if val is None or (isinstance(val, str) and not val.strip()):
         block(1, f"required field '{f}' is missing or empty.")
+
+
+# --- the DISPATCH BINDING -------------------------------------------------------------------
+# Every field checked above is written by whoever wrote the file, the nonce and the stem
+# included, so the freshness anchor above anchors the file to ITSELF. This arm asks the one
+# question the file cannot answer about itself: did a dispatch produce it, and did that dispatch
+# happen AFTER the nonce was minted. The nonce is minted at gate ENTRY, before the dispatch, so
+# on a real pass the work always postdates it -- and a forged nonce that wins the reader's
+# lexical pick has to be minted late, which is the direction this catches.
+#
+# NOT a name join. `adjudicator_agent_id` matches a spawn-ledger name for 92 of the reference
+# consumer's 193 conforming verdicts and is free-form prose in most of the rest; the file this
+# arm exists for carries an id that IS in the ledger. Only the timestamps discriminate, and
+# only a hook writes those.
+#
+# The vocabulary and the window are shared with `core/hooks/ai-dlc-gate-remediation-guard.sh`
+# arm 7a, which reads the same two ledgers for the same decision at edit time. Read that arm's
+# header for the census behind the 900s window and the enumerated false-refusal set.
+BINDING_STATUSES = ("bound-write", "bound-dispatch", "exempt", "nocorpus", "unbound")
+
+
+def _ep(s, fmt):
+    try:
+        return calendar.timegm(time.strptime(s, fmt))
+    except (ValueError, TypeError):
+        return None
+
+
+def _rows(path):
+    out = []
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(row, dict):
+                    out.append(row)
+    except OSError:
+        pass
+    return out
+
+
+def dispatch_binding(stem, gate_dir, window_s):
+    """One of BINDING_STATUSES for `stem`, from records no lead writes from its own input."""
+    nonce_t = _ep(stem[-16:], "%Y%m%dT%H%M%SZ") if len(stem) >= 16 else None
+    state_dir = os.path.dirname(os.path.abspath(gate_dir))
+    writes = _rows(os.path.join(gate_dir, ".verdict-writes.jsonl"))
+    spawns = _rows(os.path.join(state_dir, "spawn-ledger.jsonl"))
+    w_ts = [t for t in (_ep(r.get("ts"), "%Y-%m-%dT%H:%M:%SZ") for r in writes) if t is not None]
+    s_ts = [t for t in (_ep(r.get("ts"), "%Y-%m-%dT%H:%M:%SZ") for r in spawns) if t is not None]
+    epoch = min(w_ts + s_ts) if (w_ts or s_ts) else None
+    if nonce_t is None:
+        return "unbound"
+    if epoch is None:
+        return "nocorpus"
+    if nonce_t < epoch:
+        return "exempt"
+    for r in writes:
+        if r.get("stem") != stem or not str(r.get("agent_id") or "").strip():
+            continue
+        t = _ep(r.get("ts"), "%Y-%m-%dT%H:%M:%SZ")
+        if t is not None and t >= nonce_t:
+            return "bound-write"
+    for r in spawns:
+        if (r.get("role") or "") != "gate-adjudicator":
+            continue
+        t = _ep(r.get("ts"), "%Y-%m-%dT%H:%M:%SZ")
+        if t is not None and nonce_t <= t <= nonce_t + window_s:
+            return "bound-dispatch"
+    return "unbound"
+
+
+try:
+    _window = int(os.environ.get("AI_DLC_GATE_DISPATCH_WINDOW_S", "900"))
+except ValueError:
+    _window = 900
+_binding = dispatch_binding(stem, os.path.dirname(os.path.abspath(verdict_path)), _window)
+if _binding not in BINDING_STATUSES:
+    block(2, f"dispatch binding returned {_binding!r}, which is not one of {BINDING_STATUSES}.")
+if _binding == "unbound":
+    block(1,
+          f"gate_nonce {V['gate_nonce']!r} is bound to NO dispatch. Nothing in "
+          f"spawn-ledger.jsonl or gate-adjudication/.verdict-writes.jsonl records a "
+          f"gate-adjudicator dispatched at or after this nonce, or a dispatched agent writing "
+          f"this stem at or after it.\n"
+          f"  The nonce is minted at gate ENTRY and the adjudicator is dispatched after it, so "
+          f"a nonce with no dispatch at or after it was minted after the work it reports -- "
+          f"which is what a hand-assembled verdict at a chosen timestamp looks like, and it "
+          f"sorts above every real pass in the reader that picks the live one.\n"
+          f"  This is NOT satisfied by naming a real agent in adjudicator_agent_id: that field "
+          f"is written by whoever writes the file. Re-run the gate -- mint the nonce at entry, "
+          f"THEN dispatch the gate-adjudicator.")
 
 # --- verdicts (exit 1 on any coverage/shape/FAIL defect) ---
 verdicts = V.get("verdicts")
