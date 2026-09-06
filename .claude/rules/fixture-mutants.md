@@ -129,6 +129,25 @@ paths:
   SUBJECT'S OWN predicate rather than on a list of sites, and assert the post-mutation
   count is 0 against a non-zero unmutated count — a hand-written site list goes vacuous
   the release somebody adds a site, and nothing announces it.
+- **A mutant of a program that resolves SIBLINGS beside itself is built in a copy of
+  its whole directory, and carries a control saying it ran.** A lone `sed … > $WORK/mutant.sh`
+  of a detector that shells to `$SELF/preclassify.sh` finds no sibling, reads zero rows on
+  every input, and is silent for that reason — measured on a shipped fixture whose
+  comment-strip mutant had scored its kill that way since it was written, exposed only when
+  five new mutants all scored the same vector. Assert the sibling is present in the copy,
+  and give the mutant a positive stderr or row control that a copy which never ran cannot print.
+- **Hardening worlds DISPLACE the motivating world; keep it as its own case, asserted as a
+  number.** Seeding a listed-but-unopened file (so listed > opened) and a token-surviving file
+  (so retiring can be 0) removed the only world where nothing is listed at all — the filed
+  incident — and a one-line wrong fix (`[ "$listed" -gt 0 ] || exit 0`) passed every arm.
+  Every count a message prints is hardcodable until a world exists where it differs.
+- **`exit` inside `$( )` ends the subshell, not the fixture, and a predicate that returns
+  early leaves its last world on disk.** A builder that refuses a lost anchor with `exit 2`
+  from inside a command substitution hands the caller an empty path, `bash ""` fails every
+  predicate, and BROKEN scores as a `0000` regression — check the captured value at the call
+  site. And a seed must define the WHOLE consumer state, removing what it does not write: a
+  predicate that failed at its second world left that world's files behind and the next
+  predicate read a shape nobody seeded, a two-cell flip that read as entanglement.
 - **Mutate the file the fixture RESOLVES, which is not always the one you are
   changing.** A fixture that names candidates in both install layouts takes the
   first that exists, and in this repo `core/git-hooks/pre-push` is found before
