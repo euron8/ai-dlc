@@ -37,7 +37,108 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 61 SHIPPED AS `v0.511.0`, ONE CANDIDATE, A BOOTSTRAPPING SUBJECT SHIPPED ALONE. THE GAP IS FOUR AND PENDING IS FIVE, AND THE PULL IS REQUIRED ON BATCHES 59 AND 60's EVIDENCE; THIS BATCH ADDS NO NEW TRIGGER AND ONE HAND ITEM. THE SWEEP IS EMPTY. ONE CANDIDATE STILL AWAITS THE OPERATOR'S REJECTION, PLUS `BL-159`, `BL-161`, `BL-163`, `BL-171`, `BL-176`, `BL-179` AND `BL-181` WITH NO `PC-` ID.
+### BATCH 62 SHIPPED AS `v0.512.0` AND `v0.513.0`, TWO RELEASES IN ONE SESSION, NEITHER PC-BACKED. THE GAP IS SIX — WIDE — AND PENDING IS SEVEN, AND THE PULL IS REQUIRED ON BATCHES 59 AND 60's EVIDENCE; THIS BATCH ADDS A LOCALE-ONLY TRIGGER AND TWO BRIEF ITEMS. THE SWEEP IS EMPTY. ONE CANDIDATE STILL AWAITS THE OPERATOR'S REJECTION, PLUS `BL-159`, `BL-161`, `BL-163`, `BL-171` AND `BL-176` WITH NO `PC-` ID.
+
+This block replaces the batch-61 record below it. Every figure here was re-derived on 2026-09-06
+after the second merge, against the working tree with the controls in the same invocation;
+re-derive them again rather than reading them.
+
+**`VERSION` IS `0.513.0`, SO BATCH 63 RELEASES AS `0.514.0`.** Re-derive `VERSION` and add one.
+Batch 62 merged twice: `db7cc1a1` (PR #650, squash, `v0.512.0`) closing `BL-181`, and `81c17d1a`
+(PR #651, squash, `v0.513.0`) closing `BL-179`, both rotated (archive 93 → 95, live 90 → 88;
+nothing filed; the receipt histogram read exactly two 0s and both were the subjects). Neither id
+carries a `PC-`, so `named_absorbed()` has nothing to join and the ledger partition did not move.
+No correction release. **The tenth batch opened by a peer's handoff** (action 9's message from
+`ai-dlc-34`), so it scoped itself from its own ranking and stated the choice in its first ping:
+the sweep was empty and the block below ranked `BL-181` and `BL-179` together. **They did NOT
+batch, and the reason is the rule this file already states:** deriving `BL-181`'s reader set
+found its class in `reconcile/layer-drift.sh` and `reconcile/relabel-extension-checks.sh`,
+which the update skill runs, so action 2's separability rule made it ship alone; `BL-179`
+followed as its own release in the same session rather than being dropped.
+
+**THE FILING NAMED ONE SITE AND THE CENSUS FOUND THE CLASS.** `git ls-files '*.sh'` under
+`LC_ALL=C` for a whitespace-free bracket span carrying a high byte in a regex context: 23 lines
+in 9 files (four python sites are locale-independent and stayed). Every site is an alternation
+now, probed in awk, `sed -E` and `grep -E` under both locales; the three awk DYNAMIC-string
+sites needed `\\.` because `"\."` in an awk string is a bare `.`. `scripts/validate-shell-portability.sh`
+gains `S10`, pins `LC_ALL=C` for the whole scan, reports all 23 on the pre-fix tree and 0 now,
+and `core/fixtures/shell-portability` proves it both ways (18 → 24 assertions). Its first
+context span `[^#]*` could not cross the heading grammar's own `#{2,4}` and reported 12 of 23;
+its python subtraction was vacuous over the real corpus and kept only the reachable shape; the
+adversary's bare awk `/re/ { … }` rule is context now.
+
+**THE ALTERNATION CARRIES A `|`, AND THE FIRST GATE RUN FOUND THE ONE PLACE THAT MATTERED.**
+`relabel-extension-checks.sh` interpolated the anchor grammar into `sed -E "s|(${anchor_at})|…|"`,
+so three fixtures went red against a green `origin/main` control; bisected to that one file by
+reverting each candidate alone in a DETACHED worktree (a `git worktree add` of a branch already
+checked out fails inside a subshell and the first bisect's four "exit=1" were the `cd`). The
+delimiter swap to `@` only moved the exposure — the adversary drove `id=a&b` and read
+`[ext:a## Check 24. b]` written into a heading, and no validator constrains an extension `id:` —
+so both label insertions are bash string splices now, guarded against an empty prefix.
+
+**FOUR CLAIMS OF THIS SESSION'S OWN WERE CORRECTED BY ITS HANDS.** The consumer's
+`gate-validation.md` has 0 em-dash headings against 40 dot-form, but its extension checks
+`## Check XAP —` and `## Check XVH —` DO reach the heading branch (old `anchor_form()` read
+`XAP \342` under C, 59 of 60 sampled revisions). The brief's Suppresses figures named the wrong
+corpus: `_bmad-output` holds 50 such lines in no parseable entry; the discriminating file is
+`docs/escalations/pending.md`, 17 suppressions all em-dash, installed `in_force=0` under `env -i`
+against fixed `in_force=1`, both 1 under UTF-8 — the goal-closing measurement. The filed receipt
+accepted the whole locale-pinning family (`export LC_ALL=…`, `LANG=…` inside the script) and
+now rejects it by an awk-octal conjunct that a receipt line can carry where raw bytes cannot.
+`BL-179`'s entry named two callers that were already safe and missed `validate-artifact-paths.sh`
+and `migrate-artifact-paths.sh`, which handed the resolver the cwd BY OMISSION; the hand found
+them, and its receipt drives both subjects where the filed one closed on half a fix.
+
+**THE LEDGER DID NOT MOVE THIS BATCH.** md5 `417c783e…` at open and at both closes; the
+consumer's porcelain read 4 at open and 4 at close, its HEAD `9e6466cad` unmoved, on
+`ai-dlc/carry-over/pool-pnl-backlog-triage`; no write to the consumer by this session or its
+three hands (`git -C` reads, `cat`, `grep`, and one `git clone file://` for the differential).
+**Live 72, cited 52, unfiled 20**, archive 160, partition control 0. Goal partition
+**25 DISCHARGED / 27 in flight / 20 untouched**, overlap 3, discharged-but-invisible 0,
+TERMINAL **49** — unchanged, because neither subject carried a `PC-` id.
+
+**GAP SIX (`0.507.0` installed, `0.513.0` shipped) — SAY WIDE — PENDING 7 (`BL-177` at
+`0.508.0`; `BL-178`, `BL-180` at `0.509.0`; `BL-182` at `0.510.0`; `BL-183` at `0.511.0`;
+`BL-181` at `0.512.0`; `BL-179` at `0.513.0`; five `PC-` ids among them), AND THE PULL IS
+REQUIRED** on batch 59's evidence (the consumer's own pre-push fails `gate-remediation-deny`
+on the installed pair) and batch 60's (the installed gate names two false causes on every pull
+with a blocker). This batch's own trigger is locale-bound: under the UTF-8 locale a Claude Code
+session runs, the installed and shipped suppression validators agree on the consumer's real
+file; under `env -i` or a CI runner with `LANG` unset the installed one reads `in_force=0` and
+the SUPPRESSED carve-out does not exist. The range now carries FOUR bootstrapping files
+(`apply.sh`, `layer-drift.sh`, `relabel-extension-checks.sh`, the update skill's `SKILL.md`)
+plus `emit-report.sh`, `retired-tokens.sh` and `retired-layer-token.sh`, 0 mode-only changes
+over 35 core paths; the INSTALLED `0.507.0` gate runs the delivering pull. A pull is
+operator-initiated; readiness is not authorization.
+
+**THE TOP-RANKED STANDING CANDIDATE STILL AWAITS THE OPERATOR'S REJECTION.**
+`PC-S340-CHECK-26-READS-A-PARTIAL-RE-VERIFY-VERDICT-FILE-AS-UNADJUDICATED` is live at the
+consumer, recommended for rejection in the batch-57 block below and in the `0.507.0`
+CHANGELOG's "Not taken" section, deliberately not named in any release commit. Ask the
+operator to carry it into a graph session; until then it stays live and unfiled.
+
+**TELL THE CONSUMER, IN THE NEXT BRIEF,** that `0.512.0`'s relabeller writes the `[ext:<id>]`
+label by splice and no longer re-parses the heading through sed, so an extension `id:` carrying
+`&`, `|` or `@` is safe where it was not (no validator constrains that field — a hand item if
+the consumer wants one); that `0.512.0` changes how `## Check XAP —` and `## Check XVH —` are
+read ONLY under a C locale, and a consumer CI runner with `LANG` unset was reading their ids with
+two stray bytes; that its 17 in-force suppressions in `docs/escalations/pending.md` were
+invisible to the remediation guard under any non-UTF-8 locale until `0.512.0`; and that the
+batch-59, batch-60 and batch-61 brief items below still stand.
+
+**THE SWEEP FOR BATCH 63 IS EMPTY, AND THE 20 UNFILED IDS ARE THE STANDING CORPUS.** Check the
+ledger's md5 first — the consumer files mid-batch and pulls mid-batch. Of the 20, two are the
+already-in-core `RETRO` siblings (batch 59), one awaits the operator's rejection (above), and the
+other 17 are enumerated in action 1b and the batch-39 paragraph of action 1, none filed since
+2026-08-31. No PC-backed candidate is real work today. What ranks first, by consequence, now
+that `BL-181` and `BL-179` are rotated: `BL-171` and `BL-176` (both DEFECT, both `verify: manual`,
+each a new mechanism: a transcript channel for Check 26's validator, and a verdict-to-dispatch
+binding — read each entry's remedy text and score what its predicate can spell before building),
+then `BL-163` and `BL-161` (batch 50/51 residue, read their entries), then `BL-159` (a
+consumer `.gitignore` item, brief material rather than core work). None is bootstrapping on its
+face; derive each subject's reader set before deciding whether two may batch.
+
+### BATCH 61 SHIPPED AS `v0.511.0` — THE BLOCK ABOVE REPLACES THIS ONE. TAKE THE STATE FROM THERE.
 
 This block replaces the batch-60 record below it. Every figure here was re-derived on 2026-09-06
 after the merge, against the working tree with the controls in the same invocation; re-derive
@@ -6040,7 +6141,7 @@ so no block written before it changes verdict.
 ### NEXT ACTIONS — numbered, in order
 
 1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below), RANK THE UNFILED CANDIDATES,
-   THEN SCOPE BATCH 61 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED YOU.** Operator
+   THEN SCOPE BATCH 63 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED YOU.** Operator
    instruction, given at batch 52. **If the one-liner was TYPED BY THE OPERATOR**, report the
    candidates with a marked recommendation and ask, as every batch before has. **If it ARRIVED
    FROM ANOTHER SESSION** — a cross-session message carrying `READ and FOLLOW …`, which is
@@ -6051,7 +6152,10 @@ so no block written before it changes verdict.
    today: the 20 unfiled ids are the standing corpus, two of them (`PC-S337-RETRO-PARTY-MODE-…`
    and `…SPRINT-SHIP-DUAL-COUNTER-…`) already in core and the consumer's to rotate, not work,
    and one awaiting the operator's rejection;
-   the resume block ranks the rest. Batch 61 is SHIPPED — `v0.511.0` at `86566b0e` (PR #648),
+   the resume block ranks the rest. Batch 62 is SHIPPED as TWO releases — `v0.512.0` at
+   `db7cc1a1` (PR #650) closing `BL-181` and `v0.513.0` at `81c17d1a` (PR #651) closing `BL-179`,
+   neither PC-backed, both rotated, nothing filed, no correction release; the pair did not batch
+   because `BL-181`'s derived class touched two reconcile scripts. Batch 61 is SHIPPED — `v0.511.0` at `86566b0e` (PR #648),
    `PC-S335-NO-DETECTOR-REACHES-A-RETIRED-STATUS-TOKEN-REUSED-IN-A-LAYER-BODY` closed as
    `BL-183`, rotated, nothing filed, no correction release; batch 60 is SHIPPED — `v0.510.0` at `5a29d41a` (PR #646),
    `PC-S305-UNION-GATE-UNPASSABLE-ON-ANY-PULL-THAT-HAD-A-BLOCKER` closed as `BL-182`, rotated,
@@ -6671,9 +6775,9 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # 417c783e... unmoved through batches 59, 60 and 61 (the consumer filed once AFTER batch 58's merge and committed it before batch 60 opened; 7f097cf7... after its mid-batch pull to 0.507.0); it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
-   wc -l < /tmp/live.txt    # 72 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer. 77 through batch 57, 71 after the consumer's pull rotated six, 72 after its post-merge filing, unmoved through batch 61
-   wc -l < /tmp/unfiled.txt # 20 -- PC-S335-NO-DETECTOR-REACHES-... left the set at batch 61 by being cited by BL-183, PC-S305-UNION-GATE-... at batch 60 by BL-182; two of the 20 are RETRO siblings already in core
+   md5 -q "$L"              # 417c783e... unmoved through batches 59, 60, 61 and 62 (the consumer filed once AFTER batch 58's merge and committed it before batch 60 opened; 7f097cf7... after its mid-batch pull to 0.507.0); it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too
+   wc -l < /tmp/live.txt    # 72 with the corrected ^#{2,6} grammar; the old ^## one reads one fewer. 77 through batch 57, 71 after the consumer's pull rotated six, 72 after its post-merge filing, unmoved through batch 62
+   wc -l < /tmp/unfiled.txt # 20 -- unmoved by batch 62 (BL-181 and BL-179 carry no PC- id); PC-S335-NO-DETECTOR-REACHES-... left the set at batch 61 by being cited by BL-183, PC-S305-UNION-GATE-... at batch 60 by BL-182; two of the 20 are RETRO siblings already in core
    ```
 
    **AN UNMOVED md5 WITH A MOVED COUNT IS THE GRAMMAR, NOT THE CONSUMER.** Batch 43 read 72 live
@@ -6681,8 +6785,10 @@ so no block written before it changes verdict.
    `^#{2,6}`. If those two disagree again, ask which of them changed before concluding anything
    about the consumer.
 
-   **THE BASELINE IS 72 LIVE CANDIDATES, 51 CITED, 21 UNFILED** — re-derived at batch 60's
-   close after its merge at `5a29d41a` (md5 `417c783e…` unmoved, archive 160; the batch's one
+   **THE BASELINE IS 72 LIVE CANDIDATES, 52 CITED, 20 UNFILED** — re-derived at batch 62's
+   close after its second merge at `81c17d1a` (md5 `417c783e…` unmoved, archive 160; batch 62
+   cited no `PC-` id so nothing moved; batch 61's close read 72 / 52 / 20 after its one citation;
+   batch 60's close read 72 / 51 / 21 after its merge at `5a29d41a`, where the batch's one
    citation moved one id from unfiled to cited and the consumer wrote nothing; batch 59's close
    read 72 / 50 / 22 at the same md5 after its merge at `68fa7e95`, after the batch's two
    citations moved two ids from unfiled to cited and the consumer wrote nothing; batch 58's
