@@ -115,6 +115,11 @@ A0="2026-07-02T00:00:00Z"
 # wrong here -- the operator did type it -- so every arm keyed on the words alone passes this
 # entry, which is why it needs a case of its own.
 A0_STALE="2026-07-01T00:00:00Z"
+# THE MIRROR OF A0_STALE, and the direction a lead actually forges: the stamp is three weeks
+# AFTER the operator spoke -- write today's entry, reach back to a phrase that already exists.
+# A0_STALE puts the words after the stamp, which is the direction nobody forges, and a window
+# refusing only that side passed every channel this change had.
+A0_FUTURE="2026-07-23T00:00:00Z"
 mkdir -p "$WORK/esc"
 
 # BOTH JSON SPACINGS, in both timelines. The reference consumer's gate-metrics.jsonl carries
@@ -288,6 +293,17 @@ cat > "$ESC_STALE_TS" <<EOF
 **Operator authorization:** ${A0_STALE} | "proceed past this one, file a backlog item"
 EOF
 
+# --- the same entry with the stamp three weeks AFTER the operator spoke --------------------
+# One property from ESC_INFORCE, in the direction ESC_STALE_TS does not cover.
+ESC_FUTURE_TS="$WORK/esc/future-authorization-ts.md"
+cat > "$ESC_FUTURE_TS" <<EOF
+## [S401 gate — a real quote, cited three weeks later] [lead] - ${A0_FUTURE}
+**Status:** SUPPRESSED
+**Suppresses:** [core] ${X} — the check the operator waved through, three weeks before this line says
+**Expires after:** 1 gate
+**Operator authorization:** ${A0_FUTURE} | "proceed past this one, file a backlog item"
+EOF
+
 ESC_MISSING="$WORK/esc/there-is-no-such-file.md"
 [ -e "$ESC_MISSING" ] && { echo "FIXTURE ERROR: the absent-escalations path exists" >&2; exit 2; }
 
@@ -373,6 +389,7 @@ ESC_PREFIX="$ESC_PREFIX"
 ESC_MIXED="$ESC_MIXED"
 ESC_TWOQUOTES="$ESC_TWOQUOTES"
 ESC_STALE_TS="$ESC_STALE_TS"
+ESC_FUTURE_TS="$ESC_FUTURE_TS"
 ESC_MISSING="$ESC_MISSING"
 TDIR="$TDIR"
 TDIR_FORGED="$TDIR_FORGED"

@@ -354,7 +354,7 @@ CITEEOF
 cite_ts() { # $1 authline
   printf '%s\n' "$1" | LC_ALL=C awk '
     got { next }
-    { if (match($0, /[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?Z?/)) {
+    { if (match($0, /[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?(Z|[+-][0-9]{2}:?[0-9]{2})?/)) {
         printf "%s", substr($0, RSTART, RLENGTH); got = 1 } }'
 }
 
@@ -373,6 +373,16 @@ GA_IN_FORCE=""
 GA_IN_FORCE_STATUS="not-asked"
 GA_UNVERIFIED_CITES=0
 GA_VERIFIER_ERRORS=0
+# ROWS VERIFIED WITH NO TIMESTAMP BOUND. `cite_ts` requires `T` between the date and the time,
+# so a space, a lowercase `t` or a date-only value yields no bound and the row is verified
+# against the project's whole session history -- an unbounded pass that reads byte-identically
+# to a bounded one. On THIS path that count is held at zero by a DIFFERENT PROGRAM:
+# `validate-suppression-lifetime.sh` refuses a SUPPRESSED entry whose `**Operator
+# authorization:**` line carries no `<date>T<time>` as malformed, so a non-canonical row is
+# never listed in force and never reaches the verifier here. The count is printed anyway,
+# because that zero is a property of the sibling's shape guard and not of this file: if that
+# guard ever widens, this number moves instead of the bound disappearing in silence.
+GA_UNBOUNDED_CITES=0
 if [ "$MODE" = "adjudicate" ]; then
     ESC="${AI_DLC_ESCALATIONS:-$GA_ROOT/docs/escalations/pending.md}"
     # The sibling is named IN FULL at its call sites below, never through a variable holding
@@ -491,6 +501,7 @@ if [ "$MODE" = "adjudicate" ]; then
                         bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$ga_quote" --authorized-at "$ga_ts" --quiet >/dev/null 2>&1
                         ga_rc=$?
                         if [ "$ga_rc" -eq 0 ]; then
+                            [ -n "$ga_ts" ] || GA_UNBOUNDED_CITES=$((GA_UNBOUNDED_CITES + 1))
                             GA_VERIFIED="${GA_VERIFIED}${ga_row}
 "
                         elif [ "$ga_rc" -eq 2 ]; then
@@ -512,7 +523,7 @@ GAROWEOF
         fi
     fi
 fi
-export GA_IN_FORCE GA_IN_FORCE_STATUS GA_UNVERIFIED_CITES GA_VERIFIER_ERRORS
+export GA_IN_FORCE GA_IN_FORCE_STATUS GA_UNVERIFIED_CITES GA_VERIFIER_ERRORS GA_UNBOUNDED_CITES
 
 python3 - "$MODE" "$GATE_TYPE" "$VERDICT_PATH" "$SCHEMA" "$MAP" "$SIBLING" ${SERIES_PATHS+"${SERIES_PATHS[@]}"} <<'PYEOF'
 import calendar
@@ -1349,6 +1360,7 @@ if not E:
 in_force_status = os.environ.get("GA_IN_FORCE_STATUS", "not-asked")
 unverified_cites = int(os.environ.get("GA_UNVERIFIED_CITES", "0") or 0)
 verifier_errors = int(os.environ.get("GA_VERIFIER_ERRORS", "0") or 0)
+unbounded_cites = int(os.environ.get("GA_UNBOUNDED_CITES", "0") or 0)
 in_force = {}
 for raw in os.environ.get("GA_IN_FORCE", "").splitlines():
     parts = raw.split("\t", 5)
@@ -1397,7 +1409,8 @@ if blocking:
 if suppressed:
     print(f"VALIDATE-GATE-ADJUDICATION: PASS ({verdict_path}, {len(E)} escalated check(s) for "
           f"{gate_type}, {len(E) - len(suppressed)} PASS, {len(suppressed)} FAIL under an "
-          f"in-force SUPPRESSED entry: {sorted(suppressed, key=lambda x: (len(x), x))})")
+          f"in-force SUPPRESSED entry: {sorted(suppressed, key=lambda x: (len(x), x))}, "
+          f"unbounded-citation: {unbounded_cites})")
     sys.exit(0)
 
 print(f"VALIDATE-GATE-ADJUDICATION: PASS ({verdict_path}, {len(E)} escalated check(s) for "

@@ -203,7 +203,7 @@ CITEEOF
 cite_ts() { # $1 authline
   printf '%s\n' "$1" | LC_ALL=C awk '
     got { next }
-    { if (match($0, /[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?Z?/)) {
+    { if (match($0, /[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?(Z|[+-][0-9]{2}:?[0-9]{2})?/)) {
         printf "%s", substr($0, RSTART, RLENGTH); got = 1 } }'
 }
 
@@ -334,6 +334,7 @@ fi
 FAIL=0
 FAILN=0
 CHECKED=0
+UNBOUNDED=0
 while IFS="$(printf '\t')" read -r header status authline; do
   [ -n "$header" ] || continue
   CHECKED=$((CHECKED + 1))
@@ -402,18 +403,42 @@ while IFS="$(printf '\t')" read -r header status authline; do
     # NAME THE CORPUS THAT WAS SEARCHED. The sibling prints its own corpus identity and this
     # caller discards it, so this accusation is otherwise made over a corpus the reader cannot
     # see -- and a wrong-corpus run reads exactly like a real S290 fabrication.
+    #
+    # TWO WHOLE SENTENCES, ONE PER BRANCH, rather than one sentence with the timestamp spliced
+    # into it. Interpolating `${ts:+…}` into a fixed line printed `        . A lead-authored`
+    # when the field carried no parseable timestamp -- a sentence fragment where the reader
+    # needs the reason -- and the unbounded branch went on claiming the sibling's line below
+    # says which of the two failures this is, which only a BOUNDED scan can say.
     echo "FAIL: [$short] operator authorization quotes \"${quote}\", which appears in NO genuine" >&2
-    echo "      operator message in the transcript searched (${STEER_ARG})${ts:+ within the tolerance}" >&2
-    echo "      ${ts:+of the cited authorization time ${ts}}. A lead-authored" >&2
-    echo "      'operator disposition' is not an operator adjudication. This is the S290 failure." >&2
-    echo "      The sibling's own line below says which of the two it is: nothing carried these" >&2
-    echo "      words at all, or the operator said them at some other moment than the one cited." >&2
+    if [ -n "$ts" ]; then
+      echo "      operator message in the transcript searched (${STEER_ARG}) within the tolerance of" >&2
+      echo "      the cited authorization time ${ts}. A lead-authored 'operator disposition' is not" >&2
+      echo "      an operator adjudication. This is the S290 failure. The sibling's own line below" >&2
+      echo "      says which of the two it is: nothing carried these words at all, or the operator" >&2
+      echo "      said them at some other moment than the one cited." >&2
+    else
+      echo "      operator message in the transcript searched (${STEER_ARG}). A lead-authored" >&2
+      echo "      'operator disposition' is not an operator adjudication. This is the S290 failure." >&2
+      echo "      This entry's citation carries no parseable ISO-8601 timestamp, so the scan was" >&2
+      echo "      NOT bounded to when it claims the operator spoke -- it searched the whole corpus" >&2
+      echo "      and still found nothing. Write the timestamp as <YYYY-MM-DD>T<HH:MM:SS>Z." >&2
+    fi
     [ -n "$CITE_REPORT" ] && printf '      %s\n' "$CITE_REPORT" >&2
     FAIL=1; FAILN=$((FAILN + 1)); continue
   elif [ "$rc" -ne 0 ]; then
     echo "FAIL: [$short] operator authorization could not be verified (validator rc=$rc)." >&2
     FAIL=1; FAILN=$((FAILN + 1)); continue
   fi
+  # A PASS OVER AN UNBOUNDED SCAN IS NOT THE PASS THIS GATE MEANS TO GIVE, AND IT LOOKED
+  # IDENTICAL. `cite_ts` requires `T` between the date and the time, so a space, a lowercase
+  # `t` or a date-only value yields no bound and the row is verified against the project's
+  # WHOLE session history -- which is the state this check was built to end, reachable by a
+  # one-character edit to the field the writer controls. It is not refused: one live row on the
+  # reference consumer genuinely carries no parseable timestamp and cites a real operator turn,
+  # so refusing would fail a good citation for a reason that is not about whether the operator
+  # spoke. It is COUNTED, and the count is printed on the PASS line below, so a gate log can
+  # tell a bounded pass from an unbounded one without re-reading pending.md.
+  [ -n "$ts" ] || UNBOUNDED=$((UNBOUNDED + 1))
 done <<EOF
 $RECORDS
 EOF
@@ -422,5 +447,5 @@ if [ "$FAIL" -ne 0 ]; then
   echo "FAIL: ${FAILN} of ${CHECKED} S${SPRINT_NUM} operator-resolved HARD_BLOCK(s) not backed by a real operator message." >&2
   exit 1
 fi
-echo "OK: all ${CHECKED} S${SPRINT_NUM} RESOLVED/OVERRIDDEN escalation(s) cite a verified operator message."
+echo "OK: all ${CHECKED} S${SPRINT_NUM} RESOLVED/OVERRIDDEN escalation(s) cite a verified operator message. unbounded-citation: ${UNBOUNDED} verified with no timestamp bound."
 exit 0

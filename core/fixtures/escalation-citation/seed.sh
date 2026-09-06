@@ -45,7 +45,11 @@ entry "$ROOT/pending-clean.md" S49-OLD-2 RESOLVED
 entry "$ROOT/pending-clean.md" S50-ITEM-5 DECIDED_AUTONOMOUSLY
 
 # --- transcripts ---------------------------------------------------------------------------
+# THE THIRD RECORD IS THREE WEEKS OLD, and it is what a lead reaching backwards would cite:
+# write today's entry, quote a phrase that already exists. Every out-of-window seed this suite
+# had put the record AFTER the stamp, which is the direction nobody forges.
 cat > "$ROOT/real.jsonl" <<'JSONL'
+{"type":"user","timestamp":"2026-06-20T10:00:00Z","message":{"content":"Use the second approach throughout."}}
 {"type":"user","timestamp":"2026-07-12T01:00:00Z","message":{"content":"/ai-dlc Sprint 50."}}
 {"type":"user","timestamp":"2026-07-12T03:00:00Z","message":{"content":"Reframe the AC as a class invariant, not a per-site fix."}}
 JSONL
@@ -124,5 +128,29 @@ CITE_UNTERMINATED='2026-07-12T03:00:00Z, this session, verbatim: "reframe the AC
 : > "$ROOT/pending-order-good-last.md";  entry "$ROOT/pending-order-good-last.md"  S50-ITEM-9  RESOLVED "$CITE_ORDER_GOOD_LAST"
 : > "$ROOT/pending-connective.md";       entry "$ROOT/pending-connective.md"       S50-ITEM-10 RESOLVED "$CITE_CONNECTIVE"
 : > "$ROOT/pending-unterminated.md";     entry "$ROOT/pending-unterminated.md"     S50-ITEM-11 RESOLVED "$CITE_UNTERMINATED"
+
+# --- the citation's TIMESTAMP: what it bounds, and what a writer can do to it -----------------
+# The field is `<ISO ts> | "<quote>"` and the reader passes that timestamp to the verifier as
+# the centre of a window. Three shapes, and only the first is what the grammar prescribes:
+#
+#   BEFORE   a genuine operator turn three weeks EARLIER than the stamp. The quote is real, so
+#            every arm keyed on the words alone accepts it; only the window refuses it, and only
+#            if the window has a lower side. A window spliced to refuse the later side alone
+#            passed this whole suite before this entry existed.
+#   SPACE    a space where the grammar wants `T`. `cite_ts` yields nothing, the reader passes no
+#            bound, and the citation is verified against the WHOLE corpus -- a one-character
+#            edit to the field the writer controls, and the PASS it produces used to be
+#            byte-identical to an honest bounded one. Not refused (a live consumer row carries
+#            no parseable timestamp and cites a real turn); COUNTED and printed.
+#   OFFSET   the SAME INSTANT as the canonical stamp, written `-07:00`. Truncated to its naive
+#            part the window moves seven hours and this citation NOMATCHes; read whole it is the
+#            same moment and verifies.
+CITE_BEFORE='2026-07-12T03:00:00Z | "Use the second approach throughout."'
+CITE_SPACE='2026-07-12 03:00:00Z | "reframe the AC as a class invariant"'
+CITE_OFFSET='2026-07-11T20:00:00-07:00 | "reframe the AC as a class invariant"'
+
+: > "$ROOT/pending-before.md";   entry "$ROOT/pending-before.md"   S50-ITEM-12 RESOLVED "$CITE_BEFORE"
+: > "$ROOT/pending-space.md";    entry "$ROOT/pending-space.md"    S50-ITEM-13 RESOLVED "$CITE_SPACE"
+: > "$ROOT/pending-offset.md";   entry "$ROOT/pending-offset.md"   S50-ITEM-14 RESOLVED "$CITE_OFFSET"
 
 printf '%s\n' "$ROOT"

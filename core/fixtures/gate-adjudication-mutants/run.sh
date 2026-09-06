@@ -209,7 +209,7 @@ score "M0 control (unmutated)" validate-gate-adjudication.sh "" \
 # block text offers no reason, because as far as the caller knows there was nothing to apply.
 # --------------------------------------------------------------------------
 score "m1 caller never asks the sibling (rows blanked)" validate-gate-adjudication.sh \
-  "S1 S2b S6-idonly S13 S15 S17 S18 S19 S20 S21 S22 S23 S24 S25" \
+  "S1 S2b S6-idonly S13 S15 S17 S18 S19 S20 S21 S22 S23 S24 S25 S26 S27" \
   '        if [ "$supp_rc" -eq 0 ]; then
             GA_IN_FORCE_STATUS="ok:$ESC"' \
   '        if [ "$supp_rc" -eq 0 ]; then
@@ -422,7 +422,7 @@ score "m13 caller asks the sibling on a verdict with no FAIL" \
 # Y too and the gate passes. Every case whose quote IS in the corpus is unmoved, and must be.
 # --------------------------------------------------------------------------
 score "m14 caller never asks the citation verifier" validate-gate-adjudication.sh \
-  "S18 S22 S23 S24 S25" \
+  "S18 S22 S23 S24 S25 S26" \
   '                        bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$ga_quote" --authorized-at "$ga_ts" --quiet >/dev/null 2>&1
                         ga_rc=$?' \
   '                        ga_rc=0' \
@@ -456,7 +456,7 @@ score "m15 caller keeps the rows when it has no corpus to verify them against" \
 # kill set as m14, reached from the other side — the ask happened and the answer was dropped.
 # --------------------------------------------------------------------------
 score "m16 caller verifies the rows and exports the unverified set" \
-  validate-gate-adjudication.sh "S18 S22 S23 S24 S25" \
+  validate-gate-adjudication.sh "S18 S22 S23 S24 S25 S26" \
   '                    GA_IN_FORCE="$GA_VERIFIED"' \
   '                    GA_IN_FORCE="$GA_IN_FORCE"' \
   "The verifier was asked and its answer changed nothing. S18, S22, S23, S24 and S25 are the
@@ -474,7 +474,7 @@ score "m16 caller verifies the rows and exports the unverified set" \
 # survive too: their verdicts do not depend on the quote being found.
 # --------------------------------------------------------------------------
 score "m17 caller scans only the corpus's first transcript" validate-gate-adjudication.sh \
-  "S1 S2b S6-idonly S13 S15 S17 S22" \
+  "S1 S2b S6-idonly S13 S15 S17 S22 S27" \
   '                if steer_dir_has_transcript "$TRANSCRIPT_DIR"; then
                     STEER_FLAG="--dir"; STEER_ARG="$TRANSCRIPT_DIR"' \
   '                if steer_dir_has_transcript "$TRANSCRIPT_DIR"; then
@@ -507,7 +507,7 @@ score "m18 caller reports a verifier failure as a forged citation" validate-gate
 # the operator ever typed verifies a citation filed at any moment.
 # --------------------------------------------------------------------------
 score "m19 caller never passes the citation's own timestamp" validate-gate-adjudication.sh \
-  "S25" \
+  "S25 S26" \
   '--cite "$ga_quote" --authorized-at "$ga_ts" --quiet' \
   '--cite "$ga_quote" --quiet' \
   "S25's entry cites words the operator really said, a day after the timestamp on its own
@@ -524,7 +524,7 @@ score "m19 caller never passes the citation's own timestamp" validate-gate-adjud
 # there the ask is honoured and the result discarded; here rc 2 never becomes a finding.
 # --------------------------------------------------------------------------
 score "m20 caller reads the verifier's NOMATCH as verified" validate-gate-adjudication.sh \
-  "S18 S22 S24 S25" \
+  "S18 S22 S24 S25 S26" \
   '                        if [ "$ga_rc" -eq 0 ]; then' \
   '                        if [ "$ga_rc" -eq 0 ] || [ "$ga_rc" -eq 2 ]; then' \
   "A forged quote, a harness-injected one and one cited at the wrong moment all cover the FAIL
@@ -544,7 +544,7 @@ score "m20 caller reads the verifier's NOMATCH as verified" validate-gate-adjudi
 # sibling is never invoked at all.
 # --------------------------------------------------------------------------
 score "m10 sibling replaced by 'exit 0'" validate-suppression-lifetime.sh \
-  "S1 S2b S3 S4 S5 S6-idonly S6-mismatch S8 S9 S11 S12 S13 S14 S15 S17 S18 S19 S20 S21 S22 S23 S24 S25" "" "" \
+  "S1 S2b S3 S4 S5 S6-idonly S6-mismatch S8 S9 S11 S12 S13 S14 S15 S17 S18 S19 S20 S21 S22 S23 S24 S25 S26 S27" "" "" \
   "A sibling that emits nothing and exits 0 satisfied a case, which means that case is
   asserting an ABSENCE and would certify a predicate that never ran."
 

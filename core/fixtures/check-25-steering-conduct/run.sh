@@ -331,7 +331,14 @@ mkdir -p "$AWORK/corpus"
 # THE FIRST MEMBER CARRIES NO CITED PHRASE. A verifier that reads the corpus's first file and
 # stops satisfied every case of this kind when the seed held one transcript, and returned
 # NOMATCH on the reference consumer's one genuine in-force citation.
+# THE OLD TURN IS IN THE FIRST FILE, and it is the direction a lead actually forges: write
+# today's entry, reach back to a phrase the operator typed weeks ago. Every out-of-window seed
+# this suite had placed the record AFTER the bound, which is the direction nobody forges --
+# measured, a window spliced to refuse only the later side passed the receipt, this fixture,
+# the reader fixture and its whole mutation battery, while accepting a citation stamped in
+# September for a phrase said in June.
 cat > "$AWORK/corpus/a-monday.jsonl" <<'JSONL'
+{"type":"user","timestamp":"2026-06-10T08:12:44Z","message":{"role":"user","content":"take the second option and carry on"}}
 {"type":"user","timestamp":"2026-07-01T09:00:00Z","message":{"role":"user","content":"/ai-dlc Sprint 77. Kick off."}}
 JSONL
 # The SECOND member holds every subject: the authorization turn, a harness injection, its
@@ -347,6 +354,11 @@ CITE_AUTH="Suppress this check for this gate only"
 CITE_LATER="Carry the residue into the next sprint"
 CITE_META="the harness injected this sentence verbatim"
 CITE_TYPED="the operator typed this sentence verbatim"
+CITE_OLD="take the second option and carry on"
+# The SAME INSTANT as the authorization turn, written with a zone offset instead of `Z`. The
+# citation field's grammar permits it and the lifetime sibling accepts it, so it reaches every
+# call site; truncated to its naive part it moves the window by the offset -- seven hours here.
+AUTH_TS_OFFSET="2026-07-02T07:37:00-07:00"
 
 # rc AND stdout from one invocation. `cmd | grep` takes grep's status, and --cite exits 2 on
 # NOMATCH, so the two have to be captured together.
@@ -388,6 +400,27 @@ if has "carried it outside the" "$W2D" && has "$AUTH_TS" "$W2D"; then
 else
   bad_ nomatch-names-the-window "the diagnostic does not separate 'never said' from 'said at another moment': $W2D"
 fi
+
+# --- W2e: THE OTHER SIDE OF THE WINDOW, and the one a lead actually reaches for -----------
+# The entry is stamped 2026-07-02; the words were typed on 2026-06-10, three weeks BEFORE it.
+# Every other out-of-window case in this suite puts the record AFTER the bound, and a window
+# refusing only that side accepts this citation while passing every one of them.
+w said-weeks-before "$(acite "$VALIDATOR" "$CITE_OLD" "$AUTH_TS")" "NOMATCH/2" \
+  "a phrase the operator typed three weeks BEFORE the cited authorization does not verify it"
+
+# --- W2f: THE DISCRIMINATOR for W2e. Same quote, same corpus, no bound --------
+w said-weeks-before-unbounded "$(acite "$VALIDATOR" "$CITE_OLD")" "MATCH 2026-06-10T08:12:44Z/0" \
+  "unbounded, that same phrase verifies -- so W2e's NOMATCH came from the WINDOW and not from the corpus, and it came from the corpus's FIRST file"
+
+# --- W2g: a zone OFFSET is honoured, not truncated ---------------------------
+# The same instant as the in-window authorization time, written `-07:00` instead of `Z`. Read
+# as its naive part the window moves by the offset and this citation NOMATCHes; read whole it
+# is the same moment and must MATCH. The pair is W1's, one property apart -- only the spelling
+# of the timestamp differs.
+w offset-honoured "$(acite "$VALIDATOR" "$CITE_AUTH" "$AUTH_TS_OFFSET")" "MATCH 2026-07-02T14:37:41Z/0" \
+  "an authorization time written with a -07:00 offset is the same instant as the Z form and verifies the same citation"
+w offset-still-bounds "$(acite "$VALIDATOR" "$CITE_OLD" "$AUTH_TS_OFFSET")" "NOMATCH/2" \
+  "and it still BOUNDS -- the offset form is not a way to widen the window to everything"
 
 # --- W3: a harness injection is not an operator turn -------------------------
 w ismeta-not-citable "$(acite "$VALIDATOR" "$CITE_META")" "NOMATCH/2" \
@@ -572,16 +605,34 @@ if [ -n "$ME" ]; then
   mw E-meta-holds "$ME" "$CITE_META" "" "NOMATCH/2" hold "E: the isMeta arm is unmoved"
 fi
 
+# MUTANT F -- THE WINDOW MADE ONE-SIDED: a record EARLIER than the cited authorization always
+# verifies. Kill set: {said-weeks-before} exactly. This is the shape that survived every
+# evidence channel this change had -- the receipt, this fixture, the reader fixture and its
+# whole 21-mutant battery all exited 0 against it -- because every out-of-window seed anywhere
+# placed the record AFTER the bound. It is also the direction a lead forges in: nobody writes
+# an entry and then waits for the operator to say something, they write the entry today and
+# reach back for a phrase that already exists.
+mut window-one-sided 's|if (authMs !== null \&\& Math.abs(ts - authMs) > authTolMs) {|if (authMs !== null \&\& ts - authMs > authTolMs) {|'
+MF="$MUTP"
+if [ -n "$MF" ]; then
+  mw F-before-cites "$MF" "$CITE_OLD" "$AUTH_TS" "MATCH 2026-06-10T08:12:44Z/0" kill \
+    "F: with only the later side refused, a phrase from three weeks before the cited moment verifies -- W2e has teeth"
+  mw F-after-holds "$MF" "$CITE_LATER" "$AUTH_TS" "NOMATCH/2" hold \
+    "F: the AFTER side is unmoved, which is why every seed that only looks forward passes this mutant"
+  mw F-rounded-holds "$MF" "$CITE_AUTH" "$AUTH_TS" "MATCH 2026-07-02T14:37:41Z/0" hold "F: W1 is unmoved"
+  mw F-meta-holds "$MF" "$CITE_META" "" "NOMATCH/2" hold "F: the isMeta arm is unmoved"
+fi
+
 # KILL COUNT. A mutation that applied cleanly to a file this run never loaded reads exactly
 # like an arm that cannot fire, and `cmp -s` cannot tell them apart. Zero kills is that state.
-if [ "$KILLS" -ge 6 ]; then
+if [ "$KILLS" -ge 7 ]; then
   ok_ KILL-COUNT "$KILLS mutant kill(s) -- the arms above can fire"
 else
   bad_ KILL-COUNT "$KILLS kill(s); the mutants changed bytes in a file these arms never loaded"
 fi
 
 if [ "$FAILURES" -eq 0 ]; then
-  echo "PASS: check-25 steering-conduct fixture holds (3 cases + count contract + 9 identity arms + provenance window/isMeta arms + 5 mutants)."
+  echo "PASS: check-25 steering-conduct fixture holds (3 cases + count contract + 9 identity arms + provenance window/isMeta arms + 6 mutants)."
   exit 0
 fi
 echo "FAIL: $FAILURES check-25 assertion(s) failed."

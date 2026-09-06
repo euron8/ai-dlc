@@ -374,6 +374,15 @@ SCOPE_GREW=0
 
 ERRORS=0
 UNADJUDICABLE=0   # ordering/vocabulary broken: we cannot say anything about this cycle
+# A PASS OVER AN UNBOUNDED SCAN IS NOT THE PASS THIS GATE MEANS TO GIVE, AND IT LOOKED
+# IDENTICAL. F6 bounds the citation scan to the moment the record claims, and `cite_ts` requires
+# `T` between the date and the time -- so a space, a lowercase `t` or a date-only value yields no
+# bound and the record is verified against the whole window instead of the instant it names, by a
+# one-character edit to the field the writer controls. Not refused: a record whose field carries
+# no parseable timestamp may still cite a real operator turn, and refusing it would fail a good
+# citation for a reason that is not about whether the operator spoke. COUNTED, and printed on the
+# PASS line, so a gate log tells a bounded pass from an unbounded one.
+CITE_UNBOUNDED=0
 err() {
   ERRORS=$((ERRORS + 1))
   [ "$CYCLE_STATE" -eq 1 ] && { printf 'FAIL (%s): %s\n' "$1" "$2" >&2; return; }
@@ -828,7 +837,7 @@ CITEEOF
 cite_ts() { # $1 authline
   printf '%s\n' "$1" | LC_ALL=C awk '
     got { next }
-    { if (match($0, /[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?Z?/)) {
+    { if (match($0, /[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?(Z|[+-][0-9]{2}:?[0-9]{2})?/)) {
         printf "%s", substr($0, RSTART, RLENGTH); got = 1 } }'
 }
 
@@ -1063,6 +1072,8 @@ validate_record() { # $1 record, $2 divergent-pass, $3 index-of-divergent-pass -
     F_WHY="$rec operator_authorization could not be verified (validator rc=$cite_rc)."
     return 1
   fi
+  # Verified. If it was verified with NO bound, say so on the PASS line -- see CITE_UNBOUNDED.
+  [ -n "$auth_ts" ] || CITE_UNBOUNDED=$((CITE_UNBOUNDED + 1))
 
   # F7 -- THE ADJUDICATION WAS A DECISION, NOT A FINDINGS DUMP.
   #
@@ -1683,4 +1694,5 @@ fi
 
 echo "PASS: the cycle converged -- last pass stamps EXIT_CONDITION_MET, no divergent pass"
 echo "      left unresolved, every verdict adjudicable, the series in chronological order."
+echo "      unbounded-citation: ${CITE_UNBOUNDED} verified with no timestamp bound."
 exit 0
