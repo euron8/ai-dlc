@@ -303,6 +303,113 @@ verify: has VERSION "."
 ## BL-403 — REAL-ENTRY-AFTER-THE-UNTERMINATED-FENCE
 EOM
 
+# ---------------------------------------------------------------------------------------
+# THE COLUMN AXIS. Every delimiter in the seeds above sits at column 0, so none of them can
+# separate a guard that reads a delimiter's POSITION from one that strips the indent and looks at
+# what is left. These five add that axis: past column three, a tab, behind a blockquote marker, a
+# carriage return, and the three-space near-miss CommonMark still honours.
+# ---------------------------------------------------------------------------------------
+# DELIM-INDENT — THE ATTACK LEDGER, and it is an OFFENDER seed by the same admission rule as the
+# others: run against a rotator with the position finding removed it APPLIES, exit 0, leaving the
+# archive inside an unclosed ```text fence and `## BL-500` promoted into the live file. Two bare
+# delimiters at eight columns close and reopen a fence the boundary rule believes in and
+# CommonMark does not, so the parity comes back even and the guard sees no fence at all.
+DI="$WORK/delim-indent"
+mkcase "$DI" <<'EOM'
+# Probe backlog
+
+## BL-402 — closed, and its fence quotes an indented delimiter
+
+<br>**LANDED (v0.372.0, verified 0cadda4).** Done.
+
+verify: has VERSION "."
+
+```text
+        ```
+## BL-500 — INSIDE the fence in CommonMark, outside it to a stripping reader
+        ```
+```
+
+DELIM-INDENT-TAIL — the line the corrupting split strands.
+EOM
+
+# DELIM-TAB — the same class spelled with a TAB, which is four columns to CommonMark and one
+# character to anything counting characters. A guard measuring length rather than columns passes
+# this and fails only the eight-space twin.
+DT="$WORK/delim-tab"; mkdir -p "$DT"
+printf '%s\n' \
+  '# Probe backlog' \
+  '' \
+  '## BL-402 — closed, and its fence quotes a tab-indented delimiter' \
+  '' \
+  '<br>**LANDED (v0.372.0, verified 0cadda4).** Done.' \
+  '' \
+  'verify: has VERSION "."' \
+  '' \
+  '```text' \
+  "$(printf '\t```')" \
+  '## BL-500 — INSIDE the fence in CommonMark' \
+  "$(printf '\t```')" \
+  '```' \
+  '' \
+  'DELIM-TAB-TAIL — the line the corrupting split strands.' \
+  > "$DT/backlog.md"
+
+# DELIM-BQ — a delimiter behind a blockquote marker. The divergence runs the other way here: the
+# boundary rule cannot see it at all and CommonMark can, so the fence the reader believes in and
+# the fence the file declares are different fences.
+DB="$WORK/delim-blockquote"
+mkcase "$DB" <<'EOM'
+# Probe backlog
+
+## BL-402 — closed, and its body quotes a blockquoted fence
+
+<br>**LANDED (v0.372.0, verified 0cadda4).** Done.
+
+verify: has VERSION "."
+
+> ```text
+> a fence the boundary rule cannot see
+> ```
+
+DELIM-BQ-TAIL — this line must not move under a refusal.
+EOM
+
+# DELIM-CRLF — CRLF endings. The closer test matches a delimiter followed by BLANKS to end of
+# line, and a carriage return is not blank, so a fence that does close is reported unterminated at
+# its OPENER while the real finding sits a line below. The file is refused either way; the
+# position finding is what names the cause the operator can act on.
+DC="$WORK/delim-crlf"; mkdir -p "$DC"
+printf '# Probe backlog\r\n\r\n## BL-402 — closed, with CRLF endings\r\n\r\n<br>**LANDED (v0.372.0, verified 0cadda4).** Done.\r\n\r\nverify: has VERSION "."\r\n\r\n```text\r\n## BL-500 — quoted\r\n```\r\n\r\nDELIM-CRLF-TAIL — the line the corrupting split strands.\r\n' > "$DC/backlog.md"
+
+# DELIM-3SP — THE NEAR-MISS, one column short of the offender. CommonMark honours a delimiter up
+# to three columns of indentation, so this ledger is well-formed and must ROTATE. Without it the
+# position finding could be `any indent at all` and every arm above would still pass.
+D3="$WORK/delim-three-space"
+mkcase "$D3" <<'EOM'
+# Probe backlog
+
+## BL-402 — closed, and its fence is indented three columns
+
+<br>**LANDED (v0.372.0, verified 0cadda4).** Done.
+
+verify: has VERSION "."
+
+   ```text
+   three columns, which CommonMark still honours
+   ```
+
+DELIM-3SP-TAIL — this line must move with the entry.
+EOM
+
+# The two printf-built seeds need the same pre-existing archive and pristine copies `mkcase`
+# makes, or `reseed` and the wrote-nothing byte-comparison have nothing to compare against.
+for _d in "$DT" "$DC"; do
+  printf '# pre-existing archive\nSENTINEL-ARCHIVE-LINE\n' > "$_d/backlog.archive.md"
+  cp "$_d/backlog.md" "$_d/pristine.ledger"
+  cp "$_d/backlog.archive.md" "$_d/pristine.archive"
+done
+
 # NEAR-MISS — every line here is inside a fence in a CLOSED entry and every one of them merely
 # RESEMBLES an entry boundary. A backlog quoting markdown carries these constantly, so a guard
 # that refuses this file is one the operator switches off. Rotation must SUCCEED.
@@ -382,7 +489,32 @@ verify: has VERSION "."
 EOM
 
 reseed() { cp "$1/pristine.ledger" "$1/backlog.md"; cp "$1/pristine.archive" "$1/backlog.archive.md"; }
-fences() { local n; n="$(grep -c '^[ 	]*\(```\|~~~\)' "$1" 2>/dev/null)" || n=0; printf '%s' "${n:-0}"; }
+# COUNT THE DELIMITERS CommonMark HONOURS, WHICH IS NOT EVERY LINE THAT LOOKS LIKE ONE. This read
+# `^[ \t]*\(```\|~~~\)` -- the same unbounded strip the subject used to have, and therefore blind
+# to the class it is now asked to guard: on the eight-space attack ledger it counted live=2
+# archive=2 and called a genuinely corrupt pair balanced. A delimiter is honoured up to three
+# columns of indentation, tab counting as four.
+fences() {
+  local n
+  n="$(LC_ALL=C awk '
+    function cols(s,   i, c, ch) {
+      c = 0
+      for (i = 1; i <= length(s); i++) {
+        ch = substr(s, i, 1)
+        if (ch == " ") c += 1
+        else if (ch == "\t") c += 4
+        else break
+      }
+      return c
+    }
+    {
+      lead = $0; sub(/[^ \t].*$/, "", lead)
+      t = $0; sub(/^[ \t]+/, "", t)
+      if ((t ~ /^```+/ || t ~ /^~~~+/) && cols(lead) <= 3) n++
+    }
+    END { print n+0 }' "$1" 2>/dev/null)" || n=0
+  printf '%s' "${n:-0}"
+}
 conserved() { # every input line in exactly one output file, as a MULTISET not a count
   local d="$1"
   LC_ALL=C sort "$d/pristine.ledger" > "$d/exp.sorted"
@@ -515,6 +647,39 @@ else
   ok "unterm-quotes-once" "the unterminated fence is reported once, and no line it swallows is named"
 fi
 
+# ---------------------------------------------------------------------------------------
+# THE POSITION FINDING. Each arm derives the lines it expects from the seed's own signature, so
+# the expectation and the observation are two derivations of one fact rather than a number typed
+# twice, and each asserts the refused --apply wrote NOTHING -- byte-compared against an archive
+# that already had content.
+# ---------------------------------------------------------------------------------------
+DELIM_SAYS="cannot agree about what is fenced"
+expect_delim_refusal() { # <arm> <dir> <regex matching the seed's own delimiter lines>
+  local arm="$1" dd="$2" sig="$3" exp got
+  exp="$(LC_ALL=C grep -n -- "$sig" "$dd/pristine.ledger" | cut -d: -f1 | tr '\n' ' ')"
+  if [ -z "$exp" ]; then
+    echo "FIXTURE BROKEN: the seed signature [$sig] matches no line in $dd/pristine.ledger" >&2
+    exit 2
+  fi
+  run_rt "$RT" "$dd" --apply
+  got="$(offender_lines "$LAST_OUT")"
+  if [ "$LAST_RC" -eq 0 ]; then
+    bad "$arm" "exited 0 on a ledger whose delimiter positions the two readers disagree about"
+  elif ! has "$DELIM_SAYS" "$LAST_OUT"; then
+    bad "$arm" "refused, but not by the position finding — the operator is handed the wrong remedy: $LAST_OUT"
+  elif [ "$got" != "$exp" ]; then
+    bad "$arm" "expected exactly the seeded delimiter lines [$exp]; got [$got]"
+  elif ! cmp -s "$dd/backlog.md" "$dd/pristine.ledger" || ! cmp -s "$dd/backlog.archive.md" "$dd/pristine.archive"; then
+    bad "$arm" "the refused --apply wrote to disk"
+  else
+    ok "$arm" "refused by position, naming exactly [$got], and wrote nothing"
+  fi
+}
+expect_delim_refusal "delim-indent"     "$DI" '^        ```'
+expect_delim_refusal "delim-tab"        "$DT" "$(printf '^\t```')"
+expect_delim_refusal "delim-blockquote" "$DB" '^> ```'
+expect_delim_refusal "delim-crlf"       "$DC" '^```'
+
 # REPORT MODE MUST REFUSE TOO. A report that says "1 closed entry would move" and exits 0 is an
 # instruction to the operator to run --apply, which is the corrupting call.
 reseed "$A"
@@ -552,6 +717,19 @@ elif has "BL-403" "$PF_ARCH"; then
   bad "prose-fence" "the real entry AFTER the fence was swept into the archive with the closed one — the fence swallowed the boundary between them"
 else
   ok "prose-fence" "a fence quoting an id-less heading rotates, tail included, and the entry after it stays live"
+fi
+
+# THE NEAR-MISS OF THE POSITION FINDING, ONE COLUMN SHORT. CommonMark honours a delimiter up to
+# three columns, so this ledger is well-formed and must rotate. Asserted as the OUTCOME: a
+# refusal writes nothing, so an archive without the tail fails this by construction.
+run_rt "$RT" "$D3" --apply
+D3_ARCH="$(cat "$D3/backlog.archive.md")"
+if ! has "DELIM-3SP-TAIL" "$D3_ARCH"; then
+  bad "delim-three-space" "a fence indented three columns, which CommonMark honours, did not rotate (exit $LAST_RC): $LAST_OUT"
+elif has "BL-402" "$(cat "$D3/backlog.md")"; then
+  bad "delim-three-space" "the closed entry is still in the live ledger"
+else
+  ok "delim-three-space" "a delimiter at three columns is honoured, not refused — the finding starts at four"
 fi
 
 run_rt "$RT" "$N" --apply
@@ -954,17 +1132,38 @@ if [ -n "$M8" ]; then
   fi
 fi
 
+# M9 — THE POSITION FINDING REMOVED. This is the mutant that re-derives the corruption the
+# finding exists for, the way m1 does for the guard as a whole: with the indent test gone the
+# attack ledger APPLIES, and the two output files each carry an ODD count of the delimiters
+# CommonMark honours. Scored on the corruption and not on the exit code alone, because the
+# rotator refuses for four reasons and every one of them says REFUSING. Control: the blockquote
+# seed, whose finding is a different branch, must still fire — otherwise the mutation took the
+# whole guard rather than the one test it names.
+M9="$(mutate m9-no-position-finding -e 's@if (dl ~ /^```+/ || dl ~ /^~~~+/) {@if (0) {@')"
+if [ -n "$M9" ]; then
+  reseed "$DI"; run_rt "$M9" "$DI" --apply; M9_OUT="$LAST_OUT"; M9_RC="$LAST_RC"
+  M9_LIVE="$(fences "$DI/backlog.md")"; M9_ARCH="$(fences "$DI/backlog.archive.md")"
+  reseed "$DB"; run_rt "$M9" "$DB" --apply; M9_B_OUT="$LAST_OUT"
+  if [ "$M9_RC" -eq 0 ] && ! has "$DELIM_SAYS" "$M9_OUT" \
+     && { [ $((M9_LIVE % 2)) -ne 0 ] || [ $((M9_ARCH % 2)) -ne 0 ]; } \
+     && has "$DELIM_SAYS" "$M9_B_OUT"; then
+    killed m9-no-position-finding "delim-indent would FAIL: the attack ledger applies at exit 0 and the split leaves live=$M9_LIVE archive=$M9_ARCH honoured delimiters, while the blockquote branch still fires"
+  else
+    bad "mutant:m9-no-position-finding" "removing the indent test did not let the attack ledger through with an odd honoured-delimiter count while leaving the blockquote branch alive (exit $M9_RC, live=$M9_LIVE, archive=$M9_ARCH, blockquote=$(has "$DELIM_SAYS" "$M9_B_OUT" && echo fired || echo silent))"
+  fi
+fi
+
 # THE KILL COUNT ITSELF. A mutant that killed nothing reads exactly like an arm that cannot
 # fire, and a battery whose seds all silently missed reads as five clean passes.
 MUT_ATTEMPTED="$(find "$WORK/roots" -name '.mutant-built' -type f 2>/dev/null | wc -l | tr -d ' ')"
-# TEN BUILT, EIGHT KILLS. `m2a` and `m5a` are single-layer TWINS, not targets: each exists to
+# ELEVEN BUILT, NINE KILLS. `m2a` and `m5a` are single-layer TWINS, not targets: each exists to
 # show the arm still speaks (m5a) or stays quiet (m2a) when only one layer is applied, which is
 # what makes the layered mutant's verdict a measurement instead of an absence. Counting a twin
 # as a kill would be counting the control as a result.
-if [ "${MUT_ATTEMPTED:-0}" -eq 10 ] && [ "$KILLS" -eq 8 ]; then
-  ok "mutants" "10 mutants built (8 targets + m2's and m5's single-layer twins) and all 8 targets killed the arm they name"
+if [ "${MUT_ATTEMPTED:-0}" -eq 11 ] && [ "$KILLS" -eq 9 ]; then
+  ok "mutants" "11 mutants built (9 targets + m2's and m5's single-layer twins) and all 9 targets killed the arm they name"
 else
-  bad "mutants" "$MUT_ATTEMPTED of 10 mutants built, $KILLS of 8 killed — an unkilled mutant means an arm cannot fire"
+  bad "mutants" "$MUT_ATTEMPTED of 11 mutants built, $KILLS of 9 killed — an unkilled mutant means an arm cannot fire"
 fi
 
 echo
