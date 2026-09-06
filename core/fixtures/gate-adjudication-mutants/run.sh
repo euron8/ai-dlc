@@ -29,11 +29,15 @@ done
 CALLER="$ROOT_DIR/core/scripts/validate-gate-adjudication.sh"
 SIBLING="$ROOT_DIR/core/scripts/validate-suppression-lifetime.sh"
 CONVERGENCE="$ROOT_DIR/core/scripts/validate-adversarial-convergence.sh"
+# The citation verifier the caller delegates to. It is copied into the sandbox and NOT
+# mutated: the predicate it owns has its own batteries, and what is scored here is whether the
+# caller ASKS it and honours the answer.
+STEER="$ROOT_DIR/core/scripts/validate-steering-budget.sh"
 FIXTURE="$ROOT_DIR/core/fixtures/gate-adjudication"
 SCHEMA="$ROOT_DIR/core/schemas/gate-adjudication-verdict.json"
 MAP="$ROOT_DIR/core/skills/ai-dlc/enforcement-map.yaml"
 
-for p in "$CALLER" "$SIBLING" "$CONVERGENCE" "$SCHEMA" "$MAP" \
+for p in "$CALLER" "$SIBLING" "$CONVERGENCE" "$STEER" "$SCHEMA" "$MAP" \
          "$FIXTURE/run.sh" "$FIXTURE/seed.sh"; do
   if [ ! -f "$p" ]; then
     echo "FIXTURE BROKEN: cannot locate $p from $DIR (root resolved to $ROOT_DIR)"
@@ -64,7 +68,7 @@ build_sandbox() {          # prints the sandbox root
   local sb; sb="$(mktemp -d)"
   mkdir -p "$sb/core/scripts" "$sb/core/schemas" "$sb/core/skills/ai-dlc" \
            "$sb/core/fixtures/gate-adjudication"
-  cp "$CALLER" "$SIBLING" "$CONVERGENCE" "$sb/core/scripts/"
+  cp "$CALLER" "$SIBLING" "$CONVERGENCE" "$STEER" "$sb/core/scripts/"
   cp "$SCHEMA"  "$sb/core/schemas/"
   cp "$MAP"     "$sb/core/skills/ai-dlc/"
   cp "$FIXTURE/run.sh" "$FIXTURE/seed.sh" "$sb/core/fixtures/gate-adjudication/"
@@ -205,18 +209,19 @@ score "M0 control (unmutated)" validate-gate-adjudication.sh "" \
 # block text offers no reason, because as far as the caller knows there was nothing to apply.
 # --------------------------------------------------------------------------
 score "m1 caller never asks the sibling (rows blanked)" validate-gate-adjudication.sh \
-  "S1 S2b S6-idonly S13 S15 S17" \
+  "S1 S2b S6-idonly S13 S15 S17 S18 S19 S20 S21 S22" \
   '        if [ "$supp_rc" -eq 0 ]; then
             GA_IN_FORCE_STATUS="ok:$ESC"' \
   '        if [ "$supp_rc" -eq 0 ]; then
             GA_IN_FORCE=""
             GA_IN_FORCE_STATUS="ok:$ESC"' \
   "The carve-out has no input, so a FAIL under a well-formed in-force suppression blocks
-  exactly as it did before the fix. FOUR cases are named because the mutation removes the
-  carve-out's INPUT rather than a property of the join: S1, S2b, S6-idonly and S13 are the four
-  that assert it FIRED. Every case that asserts it did NOT fire is unaffected, which is the
-  point — those cases cannot tell this validator from the fixed one on their own, and that is
-  what the rest of this battery is for."
+  exactly as it did before the fix. The set is wide because the mutation removes the
+  carve-out's INPUT rather than a property of the join: S1, S2b, S6-idonly, S13, S15, S17 and
+  S20 assert it FIRED, and S18, S19, S21 and S22 assert the citation check's own tokens, which
+  a validator with no rows to verify never prints. Every case that asserts it did NOT fire is
+  unaffected, which is the point — those cases cannot tell this validator from the fixed one
+  on their own, and that is what the rest of this battery is for."
 
 # --------------------------------------------------------------------------
 # m2 — the catalog compare dropped. The join keys on the check id alone, which is the shape
@@ -275,15 +280,17 @@ score "m4 sibling lists a malformed entry in --in-force" validate-suppression-li
 # with a readable pending.md the mutant and the fix are the same program.
 # --------------------------------------------------------------------------
 score "m5 caller fails OPEN when the sibling cannot be asked" validate-gate-adjudication.sh \
-  "S7" \
+  "S7 S19 S21" \
   '    hit = in_force.get((catalog, cid))
     if hit:' \
   '    hit = (in_force.get((catalog, cid))
            or (None if in_force_status.startswith("ok:") else ("?", "?", "(unreadable)")))
     if hit:' \
   "A missing escalations file becomes a blanket authorization, so deleting pending.md is a way
-  to pass any gate. Fail-closed is asserted by S7 alone; every other case supplies a readable
-  file and cannot distinguish the two programs."
+  to pass any gate. The mutation keys on ANY non-ok status, so the two cases that hand the
+  validator no transcript corpus (S19, S21) die with S7: their `no-transcript` refusal is the
+  same fail-closed default, reached from the corpus side. Every other case supplies a readable
+  file and a corpus and cannot distinguish the two programs."
 
 # --------------------------------------------------------------------------
 # m6 — the check id matched by prefix. `cid.startswith(entry_id)` is what a hand-written join
@@ -408,6 +415,53 @@ score "m13 caller asks the sibling on a verdict with no FAIL" \
   identical either way, which is what makes the skip a property only S16 asserts."
 
 # --------------------------------------------------------------------------
+# m14 — the CALLER never asks the verifier. The citation check is reduced to the length floor:
+# every quote of twelve characters or more "verifies", which is the pre-fix validator with the
+# plumbing left in — the row's operator-auth field is read and nothing compares it to anything.
+# S18 dies because the forged corpus now covers X; S22 dies because the forged entry now covers
+# Y too and the gate passes. Every case whose quote IS in the corpus is unmoved, and must be.
+# --------------------------------------------------------------------------
+score "m14 caller never asks the citation verifier" validate-gate-adjudication.sh \
+  "S18 S22" \
+  '                        if [ "${#ga_quote}" -ge 12 ] \
+                           && bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$ga_quote" --quiet >/dev/null 2>&1; then' \
+  '                        if [ "${#ga_quote}" -ge 12 ]; then' \
+  "A quote nobody said verifies, so a lead can write its own gate passage into pending.md and
+  the gate adopts it. Only the two cases whose corpus does NOT carry the quote can see this —
+  every other case's entry cites words the operator genuinely typed."
+
+# --------------------------------------------------------------------------
+# m15 — the CALLER fails OPEN when no corpus was given. The status still says `no-transcript`,
+# which is the trap: the block text would name the absence while the rows it just declined to
+# verify go on covering the FAIL. S19 and S21 are the two cases that hand the validator no
+# corpus, and both must see the rows applied anyway.
+# --------------------------------------------------------------------------
+score "m15 caller keeps the rows when it has no corpus to verify them against" \
+  validate-gate-adjudication.sh "S19 S21" \
+  '                if [ -z "$STEER_FLAG" ]; then
+                    GA_IN_FORCE=""
+                    GA_IN_FORCE_STATUS="no-transcript:' \
+  '                if [ -z "$STEER_FLAG" ]; then
+                    GA_IN_FORCE_STATUS="no-transcript:' \
+  "'Nothing to verify against' became 'verified'. A gate run without its --transcript-dir —
+  the state every consumer is in until its call site is updated — would then adopt every
+  in-force entry unchecked, which is the whole defect with a new reason attached."
+
+# --------------------------------------------------------------------------
+# m16 — the CALLER verifies and then DISCARDS the answer: the narrowed set is computed and the
+# original rows are exported. The UNVERIFIED line and the count are still printed, so the run
+# LOOKS like the fixed one line for line; only the exit and the SUPPRESSED line differ. Same
+# kill set as m14, reached from the other side — the ask happened and the answer was dropped.
+# --------------------------------------------------------------------------
+score "m16 caller verifies the rows and exports the unverified set" \
+  validate-gate-adjudication.sh "S18 S22" \
+  '                    GA_IN_FORCE="$GA_VERIFIED"' \
+  '                    GA_IN_FORCE="$GA_IN_FORCE"' \
+  "The verifier was asked and its answer changed nothing. S18 and S22 are the two cases where
+  the verified set and the original set DIFFER, so they are the only two that can tell the
+  program that honours the answer from the one that prints it and moves on."
+
+# --------------------------------------------------------------------------
 # m10 — the SIBLING emits nothing. The question `.claude/rules/fixture-mutants.md` puts to every
 # new arm: would this pass against a program that never ran? Twelve of the eighteen carve-out
 # cases expect exit 1, which is exactly what a gate gets when the predicate it asks is a stub —
@@ -419,7 +473,7 @@ score "m13 caller asks the sibling on a verdict with no FAIL" \
 # sibling is never invoked at all.
 # --------------------------------------------------------------------------
 score "m10 sibling replaced by 'exit 0'" validate-suppression-lifetime.sh \
-  "S1 S2b S3 S4 S5 S6-idonly S6-mismatch S8 S9 S11 S12 S13 S14 S15 S17" "" "" \
+  "S1 S2b S3 S4 S5 S6-idonly S6-mismatch S8 S9 S11 S12 S13 S14 S15 S17 S18 S19 S20 S21 S22" "" "" \
   "A sibling that emits nothing and exits 0 satisfied a case, which means that case is
   asserting an ABSENCE and would certify a predicate that never ran."
 
@@ -440,8 +494,8 @@ score "m11 caller replaced by 'exit 0'" validate-gate-adjudication.sh NOPASS "" 
 # The kill count itself. A battery whose mutants all applied and killed nothing reports zero
 # failures, which is byte-identical to a battery that worked.
 # --------------------------------------------------------------------------
-if [ "$SCORED" -lt 14 ]; then
-  note_fail "only $SCORED mutant(s) were scored; this battery declares 14. A mutant that never
+if [ "$SCORED" -lt 17 ]; then
+  note_fail "only $SCORED mutant(s) were scored; this battery declares 17. A mutant that never
   ran cannot have been survived or killed."
 fi
 
@@ -450,8 +504,9 @@ if [ "$FAILURES" -eq 0 ]; then
   echo "    unmutated control passes with S1's SUPPRESSED line present, and removing the"
   echo "    sibling's rows, the catalog compare, the lifetime test, the malformed-shape"
   echo "    exclusion, the fail-closed default, the exact-id match, the empty-catalog rule,"
-  echo "    the per-ENTRY exclusion, the sibling's stderr channel, or either script itself"
-  echo "    each kills exactly the case set that owns that property."
+  echo "    the per-ENTRY exclusion, the sibling's stderr channel, the citation verifier's"
+  echo "    ask, its fail-closed default, its answer, or either script itself each kills"
+  echo "    exactly the case set that owns that property."
   exit 0
 fi
 echo "FAILED: gate-adjudication-mutants — $FAILURES finding(s) across $SCORED mutant(s)"

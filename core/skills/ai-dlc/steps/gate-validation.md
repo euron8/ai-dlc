@@ -282,8 +282,9 @@ Two arms, either satisfies (dual-arm OR):
   expiry with the named check still failing, the gate FAILS and the prior
   citation may not be re-cited — re-suppression is a new entry and a new
   operator turn. This holds for an escalated `adjudication: llm` check too:
-  Check 26's validator consults the same script and a covered `FAIL` does not
-  block there. The Rule 28 remediation guard subtracts the same in-force checks
+  Check 26's validator consults the same script, verifies the citation against
+  the corpus its `--transcript-dir` names, and a covered `FAIL` does not block
+  there. The Rule 28 remediation guard subtracts the same in-force checks
   from its artifact lock-out, so a `FAIL` covered by a verified in-force entry
   does not hold the lead out of the corpus either.
 - `DEFERRAL_REQUEST` entries block only the deferred item, not the
@@ -2065,9 +2066,15 @@ entry (the escalation preamble at the top of this file; `_gate-procedures.md`
 **Check.** Join the verdict at
 `${AI_DLC_STATE_DIR:-_bmad-output}/gate-adjudication/<gate_nonce>.verdict.json`, then:
 
-    scripts/ai-dlc/verdict.sh validate-gate-adjudication <gate_type> <verdict_path>
+    scripts/ai-dlc/verdict.sh validate-gate-adjudication <gate_type> <verdict_path> \
+      --transcript <this session's transcript_path> \
+      --transcript-dir <the directory that transcript sits in>
 
-Exit 0 required. The validator DERIVES the escalated set from `enforcement-map.yaml`
+Exit 0 required. **Pass `--transcript-dir`. It is MANDATORY for the same reason it is at
+Check 2:** the carve-out below verifies each suppression's operator citation against that
+corpus, an operator authorizes a suppression in one session and the gate that leans on it
+runs in another, and a gate run with no readable corpus applies the carve-out to nothing —
+every `FAIL` then blocks, and the block says `no-transcript`. The validator DERIVES the escalated set from `enforcement-map.yaml`
 (`--expected <gate_type>` — the same derivation the adjudicator used) and fails closed: a
 missing / malformed / stale verdict (exit 2), an uncovered / unexpected / duplicated escalated
 id, an empty evidence, an envelope or `gate_nonce` mismatch, or any per-check `FAIL` (exit 1)
@@ -2079,11 +2086,16 @@ that a suppression does not block while in force reaches the escalated checks he
 else, because this is the only check that adopts them. The validator asks
 `validate-suppression-lifetime.sh --in-force` for the suppressions that are well-formed, name a
 catalog check and are within their lifetime, and joins them on `[<catalog>] <check-id>` against
-the verdict's own `catalog`; a covered `FAIL` is printed as `SUPPRESSED` with the entry that
-covers it and the gate proceeds. The adjudicator's verdict is unchanged — the check is still
-recorded `FAIL`; what the entry carries is the operator's licence to proceed past it, with the
-lifetime `escalations.md` gives it. Absence fails closed: no `docs/escalations/pending.md`, no
-sibling script, or a sibling refusal means no carve-out, and the block names which.
+the verdict's own `catalog`, and it verifies each row's `**Operator authorization:**` quote
+against the transcript corpus with `validate-steering-budget.sh --cite` — the same predicate
+the Rule 28 remediation guard applies to the same rows — before the row can cover anything; a
+covered `FAIL` is printed as `SUPPRESSED` with the entry that covers it and the gate proceeds.
+The adjudicator's verdict is unchanged — the check is still recorded `FAIL`; what the entry
+carries is the operator's licence to proceed past it, with the lifetime `escalations.md` gives
+it. Absence fails closed: no `docs/escalations/pending.md`, no sibling script, a sibling
+refusal, no readable transcript corpus, or a quote no genuine operator turn carries means that
+entry (or, for an absence, every entry) covers nothing, and the block names which —
+`unverified-citation: <n>` beside the failing ids when a citation did not verify.
 
 **PASS:** exit 0 — every escalated check covered, well-formed, each PASS or `FAIL` under an
 in-force `SUPPRESSED` entry naming it. **FAIL:** any nonzero exit. Fixture:

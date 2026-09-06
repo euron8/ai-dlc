@@ -558,7 +558,7 @@ checks:
       - core/scripts/validate-gate-adjudication.sh
     call_sites:
       - site: gate-validation.md Check 26
-        posture: FAILS the gate (verdict.sh validate-gate-adjudication <gate_type> <verdict_path>; exit 0 required)
+        posture: FAILS the gate (verdict.sh validate-gate-adjudication <gate_type> <verdict_path> --transcript <path> --transcript-dir <dir>; exit 0 required)
         why: the lead runs on a cheaper model and escalates every adjudication:llm check for the
           gate type to ONE fresh Opus gate-adjudicator subagent. This is the SINGLE fail-closed
           check through which the lead adopts those per-check verdicts — a missing / malformed /

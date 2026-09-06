@@ -196,8 +196,9 @@ set -u
 # (`validate-steering-budget.sh:427`), so a directory holding only sidecar files is exactly
 # as blind as an empty one and this counts what that reader would count. This predicate is
 # byte-identical in `core/scripts/validate-adversarial-convergence.sh` and
-# `core/scripts/validate-escalation-resolution.sh`; invariant I92 holds the three copies to
-# one text and refuses a fourth.
+# `core/scripts/validate-escalation-resolution.sh` and
+# `core/scripts/validate-gate-adjudication.sh`; invariant I92 holds the four copies to one
+# text and refuses a fifth.
 steer_dir_has_transcript() { # $1 dir -> 0 if it holds a readable *.jsonl
   [ -n "${1:-}" ] && [ -d "$1" ] || return 1
   for _sdht in "$1"/*.jsonl; do
@@ -213,8 +214,9 @@ steer_dir_has_transcript() { # $1 dir -> 0 if it holds a readable *.jsonl
 # an invented operator authorization verified whenever any genuine operator substring trailed
 # it on the same line. These two are byte-identical in
 # `core/scripts/validate-escalation-resolution.sh` and
-# `core/scripts/validate-adversarial-convergence.sh`; invariant I93 holds the three copies to
-# one text and refuses a fourth. Read the escalation validator's header for the measurement.
+# `core/scripts/validate-adversarial-convergence.sh` and
+# `core/scripts/validate-gate-adjudication.sh`; invariant I103 holds the four copies to one
+# text and refuses a fifth. Read the escalation validator's header for the measurement.
 cite_segments() { # $1 authline -> one quoted segment per line
   printf '%s\n' "$1" | LC_ALL=C awk '
     { n = split($0, p, /"/)

@@ -765,8 +765,9 @@ C_DIVERGED="${C_DIVERGED:-0}"
 # not into a later clearing of STEER_FLAG -- clearing it after the chain has run skips the
 # `-r "$TRANSCRIPT"` fallback and loses the deny for a caller that passed both flags, which
 # `steps/gate-validation.md` instructs the operator to do. This predicate is byte-identical in
-# `validate-escalation-resolution.sh` and `core/hooks/ai-dlc-gate-remediation-guard.sh`;
-# invariant I92 holds the three copies to one text and refuses a fourth.
+# `validate-escalation-resolution.sh`, `validate-gate-adjudication.sh` and
+# `core/hooks/ai-dlc-gate-remediation-guard.sh`; invariant I92 holds the four copies to one
+# text and refuses a fifth.
 steer_dir_has_transcript() { # $1 dir -> 0 if it holds a readable *.jsonl
   [ -n "${1:-}" ] && [ -d "$1" ] || return 1
   for _sdht in "$1"/*.jsonl; do
@@ -780,10 +781,10 @@ steer_dir_has_transcript() { # $1 dir -> 0 if it holds a readable *.jsonl
 # than one quoted segment it took the LAST one and on an odd quote count it took the
 # CONNECTIVE BETWEEN two of them. Both directions are wrong and the second is fail-OPEN: an
 # invented operator disposition verified whenever any genuine operator substring trailed it.
-# These two are byte-identical in `validate-escalation-resolution.sh` and
-# `core/hooks/ai-dlc-gate-remediation-guard.sh`, the other two readers of this same field;
-# invariant I93 holds the three to one text and refuses a fourth. Read that file's header for
-# the measurement.
+# These two are byte-identical in `validate-escalation-resolution.sh`,
+# `validate-gate-adjudication.sh` and `core/hooks/ai-dlc-gate-remediation-guard.sh`, the
+# other three readers of this same field; invariant I103 holds the four to one text and
+# refuses a fifth. Read that file's header for the measurement.
 cite_segments() { # $1 authline -> one quoted segment per line
   printf '%s\n' "$1" | LC_ALL=C awk '
     { n = split($0, p, /"/)

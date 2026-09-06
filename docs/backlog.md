@@ -4090,21 +4090,41 @@ verification absent, and the sentence now says so. `0.505.0` closes the guard's 
 forwards the authorization line verbatim as a sixth row field, and
 `ai-dlc-gate-remediation-guard.sh`, already a declared `--cite` site with a `transcript_path` in
 its input, verifies it and subtracts nothing on a quote the corpus does not carry. The gate's
-half is open: `validate-gate-adjudication.sh` reads the same rows, carries no transcript, and
-passes the FAIL. Driven on the shipped gate-adjudication seed: a well-formed in-force entry with
-no transcript corpus anywhere exits 0 with the `SUPPRESSED` line.
+half WAS open: `validate-gate-adjudication.sh` read the same rows, carried no transcript, and
+passed the FAIL. Driven on the shipped gate-adjudication seed before the fix: a well-formed
+in-force entry with no transcript corpus anywhere exited 0 with the `SUPPRESSED` line.
 
-Shape of the fix: give Check 26's validator a transcript channel (the lead runs it from the
-session whose `transcript_path` the Stop and PreToolUse hooks already receive; a pointer file the
-pause hook writes is the existing pattern), verify each covering row's sixth field the way the
-guard does, fail closed on an unverifiable quote with the status named beside the block, and
-re-seed the gate-adjudication fixture's S1 with a corpus carrying its quote plus a forged twin.
-The sibling cannot host the check: naming the citation helpers there makes it an I103 site, and
-a sibling verifying unconditionally would omit every in-force row for the caller that has no
-transcript. The receipt below is manual because the discriminating input is a transcript corpus
-the validator has no channel for today; write a driving receipt the moment the channel exists.
+**What shipped.** `validate-gate-adjudication.sh` takes `--transcript PATH` and
+`--transcript-dir DIR` after the two positionals in adjudicate mode, the directory taking
+precedence for `validate-escalation-resolution.sh`'s reason, and Check 26's call site in
+`gate-validation.md` passes both — MANDATORY, in the same words Check 2 uses. Once the sibling
+has listed the in-force rows, the validator verifies each row's fifth field with
+`validate-steering-budget.sh --cite` over that corpus — the guard's predicate, through the same
+`cite_quote()` and `steer_dir_has_transcript()` helpers, now four byte-identical sites under I92
+and I103 — keeps the rows that verify, drops and counts the rest, and prints an `UNVERIFIED`
+line per dropped row. It FAILS CLOSED on every absence: no readable corpus (`no-transcript`),
+no verifier beside it (`no-verifier`), a quote under twelve characters, or a quote no genuine
+operator turn carries all mean that row covers nothing, and the block carries
+`unverified-citation: <n>` beside the failing ids. Rows are only ever narrowed, so a forged
+entry beside a genuine one costs the genuine one nothing (S22). The sibling still does not host
+the check, for the reason above.
 
-verify: manual
+Wrong fixes built and refused, each with the case that kills it: a verifier written as a grep
+over the corpus, which accepts the same words carried in an assistant turn and a tool_result
+(S18, `TDIR_FORGED`); a verifier that treats "no corpus given" as "nothing to verify" and keeps
+the rows (S19, S21, mutant m15); and one that computes the narrowed set and exports the
+original (m16). The mutant battery gained m14–m16 and its m1, m5 and m10 sets widened by the
+new cases; m4 (sibling lists a malformed entry) now keys S4 on the ABSENCE of the `UNVERIFIED`
+line, because the verifier would otherwise drop that row on the sibling's behalf and hide the
+sibling's exclusion. Measured on the reference consumer, read-only: one in-force row today
+(`[core] 16`), whose quote verifies against its 250-transcript corpus; its latest FAIL verdict
+(`story-20260904T191843Z`, checks 5 and 7) blocks identically under the installed and the fixed
+reader, in 2.0s with the corpus, so the pull moves no verdict on its files today. The fix fires
+on a forged citation, of which the consumer's in-force set holds none, and on a Check 26 call
+site run without `--transcript-dir` — which is every consumer call site until the pull lands
+the updated step file, so the brief must say so.
+
+verify: sh d=$(bash core/fixtures/gate-adjudication/seed.sh) || exit 9; . "$d/env.sh"; python3 -c 'import json,sys;p,x=sys.argv[1],sys.argv[2];D=json.load(open(p));[v.update(verdict="FAIL") for v in D["verdicts"] if v["check_id"]==x];open(p,"w").write(json.dumps(D))' "$VERDICT" "$X"; r() { AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" AI_DLC_ESCALATIONS="$ESC_INFORCE" AI_DLC_GATE_METRICS="$GM_BEFORE" bash "$VALIDATOR" "$GATE_TYPE" "$VERDICT" "$@" 2>&1; }; g=$(r --transcript-dir "$TDIR"); grc=$?; f=$(r --transcript-dir "$TDIR_FORGED"); frc=$?; n=$(r); nrc=$?; rm -rf "$d"; [ "$grc" -eq 0 ] && grep -q 'FAIL is covered by an' <<<"$g" && [ "$frc" -eq 1 ] && grep -q 'unverified-citation: 1 in-force' <<<"$f" && ! grep -q 'FAIL is covered by an' <<<"$f" && [ "$nrc" -eq 1 ] && grep -q 'no-transcript' <<<"$n"
 
 
 ## BL-176 — nothing binds a gate-adjudication verdict file to the dispatch that produced it, and the remediation guard picks the live verdict by lexical stem order, so a hand-written file at a later-sorting nonce becomes the gate's verdict

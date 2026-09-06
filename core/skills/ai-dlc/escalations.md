@@ -130,10 +130,11 @@ suppression is an operator decision or it is nothing.
 reads the line for its timestamp and does not decide whether the words were
 said. `ai-dlc-gate-remediation-guard.sh` verifies the quote against the harness
 transcript corpus before it will treat an entry as covering a failing check, and
-an entry it cannot verify covers nothing there. Check 26's validator has no
-transcript to verify against, so at the gate the citation is read and not
-checked. Write the quote verbatim from the operator's own turn: a paraphrase is
-indistinguishable from an invention to the reader that does check.
+an entry it cannot verify covers nothing there. Check 26's validator applies the
+same predicate to the same rows against the corpus its `--transcript-dir` names,
+and an entry it cannot verify — or a gate run with no corpus at all — covers
+nothing there either. Write the quote verbatim from the operator's own turn: a
+paraphrase is indistinguishable from an invention to both readers.
 
 **A suppression names its target.** `RESOLVED` and `OVERRIDDEN` name none, and
 that is the loophole: an entry may be closed on an operator's word while a
