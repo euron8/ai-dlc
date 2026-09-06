@@ -423,7 +423,7 @@ score "m13 caller asks the sibling on a verdict with no FAIL" \
 # --------------------------------------------------------------------------
 score "m14 caller never asks the citation verifier" validate-gate-adjudication.sh \
   "S18 S22 S23 S24 S25" \
-  '                        bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$ga_quote" ${ga_at:+"$ga_at" "$ga_at_arg"} --quiet >/dev/null 2>&1
+  '                        bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$ga_quote" --authorized-at "$ga_ts" --quiet >/dev/null 2>&1
                         ga_rc=$?' \
   '                        ga_rc=0' \
   "A quote nobody said verifies, so a lead can write its own gate passage into pending.md and
@@ -508,7 +508,7 @@ score "m18 caller reports a verifier failure as a forged citation" validate-gate
 # --------------------------------------------------------------------------
 score "m19 caller never passes the citation's own timestamp" validate-gate-adjudication.sh \
   "S25" \
-  '--cite "$ga_quote" ${ga_at:+"$ga_at" "$ga_at_arg"} --quiet' \
+  '--cite "$ga_quote" --authorized-at "$ga_ts" --quiet' \
   '--cite "$ga_quote" --quiet' \
   "S25's entry cites words the operator really said, a day after the timestamp on its own
   authorization line. S25 owns this alone: every other entry's quote was said within the

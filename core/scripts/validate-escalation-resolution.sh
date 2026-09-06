@@ -390,10 +390,13 @@ while IFS="$(printf '\t')" read -r header status authline; do
   # project's whole session history and any phrase the operator ever typed verifies a citation
   # filed today. `cite_ts` returns empty for a field carrying no parseable timestamp, and the
   # bound is then omitted -- see its own note.
+  # THE FLAG IS PASSED UNCONDITIONALLY, WITH AN EMPTY VALUE MEANING NO BOUND. A conditional
+  # expansion would put the literal `--authorized-at` on an assignment somewhere above rather
+  # than on the invocation, and a binding keyed on a whole file is satisfied by a comment --
+  # **I109** joins `--cite` to `--authorized-at` at the EMISSION SITE, which is the only place a
+  # reader that quietly stopped passing the bound would show up.
   ts="$(cite_ts "$authline")"
-  STEER_AT=""; STEER_AT_ARG=""
-  if [ -n "$ts" ]; then STEER_AT="--authorized-at"; STEER_AT_ARG="$ts"; fi
-  CITE_REPORT="$(bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$quote" ${STEER_AT:+"$STEER_AT" "$STEER_AT_ARG"} --quiet 2>&1 >/dev/null)"
+  CITE_REPORT="$(bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$quote" --authorized-at "$ts" --quiet 2>&1 >/dev/null)"
   rc=$?
   if [ "$rc" -eq 2 ]; then
     # NAME THE CORPUS THAT WAS SEARCHED. The sibling prints its own corpus identity and this

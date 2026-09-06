@@ -778,7 +778,7 @@ ckey() { # <path> -> a digest of the bytes, "-" when absent, "?" when nothing co
 # short to be evidence, a validator tooling error -- returns non-zero, because this answer
 # releases permission to edit and there is no second piece of evidence behind it.
 cite_verifies() { # <auth-line> -> 0 verified, 1 not
-  local q ts at at_arg flag arg
+  local q ts flag arg
   [ -n "${1:-}" ] || return 1
   [ -f "$STEER_SCRIPT" ] || return 1
   q="$(cite_quote "$1")"
@@ -788,9 +788,9 @@ cite_verifies() { # <auth-line> -> 0 verified, 1 not
   # today. `cite_ts` is empty for a field with no parseable timestamp and the bound is then
   # omitted; a row reaching here cannot be in that state, because the sibling that produced
   # it refuses a SUPPRESSED entry with no authorization timestamp as malformed.
+  # Passed unconditionally, empty meaning no bound, so the literal sits on the invocation
+  # where **I109** joins it to `--cite`.
   ts="$(cite_ts "$1")"
-  at=""; at_arg=""
-  if [ -n "$ts" ]; then at="--authorized-at"; at_arg="$ts"; fi
   flag=""; arg=""
   if [ -n "$TRANSCRIPT" ] && steer_dir_has_transcript "$(dirname "$TRANSCRIPT")"; then
     # THE DIRECTORY, for arm 9's reason: an operator authorizes a suppression in one session
@@ -801,7 +801,7 @@ cite_verifies() { # <auth-line> -> 0 verified, 1 not
     flag="--transcript"; arg="$TRANSCRIPT"
   fi
   [ -n "$flag" ] || return 1
-  bash "$STEER_SCRIPT" "$flag" "$arg" --cite "$q" ${at:+"$at" "$at_arg"} --quiet >/dev/null 2>&1
+  bash "$STEER_SCRIPT" "$flag" "$arg" --cite "$q" --authorized-at "$ts" --quiet >/dev/null 2>&1
 }
 
 if [ ! -f "$ESC_FILE" ]; then
@@ -993,8 +993,6 @@ if [ -f "$AUTH_FILE" ] && [ -f "$STEER_SCRIPT" ]; then
   # anywhere in the project's history. `cite_ts` is empty for a field carrying no parseable
   # timestamp; the bound is then omitted and the answer is the one this arm gave before.
   AUTH_TS="$(cite_ts "$AUTH")"
-  AUTH_AT=""; AUTH_AT_ARG=""
-  if [ -n "$AUTH_TS" ]; then AUTH_AT="--authorized-at"; AUTH_AT_ARG="$AUTH_TS"; fi
   if [ "${#AUTH_QUOTE}" -ge 12 ]; then
     STEER_FLAG=""; STEER_ARG=""
     if [ -n "$TRANSCRIPT" ] && steer_dir_has_transcript "$(dirname "$TRANSCRIPT")"; then
@@ -1006,7 +1004,7 @@ if [ -f "$AUTH_FILE" ] && [ -f "$STEER_SCRIPT" ]; then
       STEER_FLAG="--transcript"; STEER_ARG="$TRANSCRIPT"
     fi
     if [ -n "$STEER_FLAG" ]; then
-      bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$AUTH_QUOTE" ${AUTH_AT:+"$AUTH_AT" "$AUTH_AT_ARG"} --quiet >/dev/null 2>&1
+      bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$AUTH_QUOTE" --authorized-at "$AUTH_TS" --quiet >/dev/null 2>&1
       if [ $? -eq 0 ]; then
         log_event GATE_REMEDIATION_LIFTED \
           "Tool: ${TOOL_NAME} on ${FP}" \

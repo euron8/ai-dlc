@@ -484,10 +484,11 @@ if [ "$MODE" = "adjudicate" ]; then
                         # entry cannot reach here in that state: the sibling that produced
                         # this row refuses one with no `**Operator authorization:**`
                         # timestamp as malformed and never lists it in force.
+                        # Passed unconditionally, empty meaning no bound, so the
+                        # literal sits on the invocation where **I109** joins it
+                        # to `--cite`.
                         ga_ts="$(cite_ts "$ga_auth")"
-                        ga_at=""; ga_at_arg=""
-                        if [ -n "$ga_ts" ]; then ga_at="--authorized-at"; ga_at_arg="$ga_ts"; fi
-                        bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$ga_quote" ${ga_at:+"$ga_at" "$ga_at_arg"} --quiet >/dev/null 2>&1
+                        bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$ga_quote" --authorized-at "$ga_ts" --quiet >/dev/null 2>&1
                         ga_rc=$?
                         if [ "$ga_rc" -eq 0 ]; then
                             GA_VERIFIED="${GA_VERIFIED}${ga_row}

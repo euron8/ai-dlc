@@ -1034,12 +1034,12 @@ validate_record() { # $1 record, $2 divergent-pass, $3 index-of-divergent-pass -
   # sides of the record's own authorization timestamp, so a phrase the operator typed at some
   # other point inside the same window no longer verifies this resolution. `cite_ts` returns
   # empty for a field carrying no parseable timestamp and the bound is then omitted.
-  local auth_ts steer_at steer_at_arg
+  # Passed unconditionally, empty meaning no bound, so the literal sits on the invocation where
+  # **I109** joins it to `--cite`.
+  local auth_ts
   auth_ts="$(cite_ts "$auth")"
-  steer_at=""; steer_at_arg=""
-  if [ -n "$auth_ts" ]; then steer_at="--authorized-at"; steer_at_arg="$auth_ts"; fi
   bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$auth_quote" \
-    --since "${P_AT[$idx]:-}" ${steer_at:+"$steer_at" "$steer_at_arg"} --quiet >/dev/null 2>&1
+    --since "${P_AT[$idx]:-}" --authorized-at "$auth_ts" --quiet >/dev/null 2>&1
   cite_rc=$?
   if [ "$cite_rc" -eq 2 ]; then
     # NAME THE CORPUS THAT WAS SEARCHED. The sibling prints its own corpus identity, and this

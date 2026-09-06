@@ -121,12 +121,15 @@
 #       to /dev/null, so the one output that could have refuted the claim was the one
 #       nobody read. A record verifies only if an accepted operator turn carrying the
 #       quote falls within AI_DLC_CITE_AUTH_TOLERANCE_S seconds either side of this
-#       timestamp. The bound is OPTIONAL: a caller that cannot derive a timestamp from
-#       its own record passes none and gets today's unbounded answer, because refusing
-#       a citation for a field the entry grammar does not require is a check that
-#       wedges live work. A value that will not parse is REFUSED (exit 1) rather than
-#       ignored -- a bound silently dropped is an unbounded verify wearing a bound's
-#       exit code.
+#       timestamp. The bound is OPTIONAL and an EMPTY value is how a caller says so:
+#       a caller that cannot derive a timestamp from its own record passes `""` and
+#       gets today's unbounded answer, because refusing a citation for a field the
+#       entry grammar does not require is a check that wedges live work. Every shipped
+#       reader passes the flag UNCONDITIONALLY for that reason -- the literal then sits
+#       on the invocation line, where invariant I109 joins it to `--cite`, rather than
+#       on a conditional assignment a whole-file grep would find in a comment. A
+#       NON-EMPTY value that will not parse is REFUSED (exit 1) rather than ignored --
+#       a bound silently dropped is an unbounded verify wearing a bound's exit code.
 #
 #       WHY A WINDOW AND NOT AN EQUALITY, measured over the reference consumer's 26
 #       `**Operator authorization:**` rows. These timestamps are HAND-TYPED and

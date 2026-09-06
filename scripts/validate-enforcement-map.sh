@@ -3387,6 +3387,101 @@ else
   fi
 fi
 
+# --- I109: every citation query passes the citation's own timestamp ---
+# WHAT IT BINDS. `validate-steering-budget.sh --cite` answers "did the operator say these
+# words"; `--authorized-at` is what turns that into "did the operator say these words WHEN this
+# record claims". Four programs ask the question -- the escalation gate, the adjudication gate's
+# SUPPRESSED carve-out, the convergence gate, and the remediation guard, which asks twice -- and
+# a caller that drops the bound gets a scan of the project's ENTIRE session history back, with
+# the same exit codes and the same silence. There is no second piece of evidence: the answer is
+# rc 0 or rc 2 either way, and on the guard the permissive direction LIFTS a gate deny.
+#
+# KEYED ON THE EMISSION SITE, WHICH IS WHY THE FLAG IS PASSED UNCONDITIONALLY. A whole-file
+# grep for `--authorized-at` is satisfied by a comment, and a conditional expansion
+# (`${at:+"$at" "$at_arg"}`) puts the literal on an assignment somewhere above the call, out of
+# reach of any grammar that reads the invocation. So every reader passes the flag on every call
+# with an EMPTY value meaning "no bound", the owner already treats empty as absent, and this arm
+# reads the command itself. I103 binds `cite_ts()`'s BODY across the same four files; it says
+# nothing about whether anybody CALLS it, which is the half this arm owns.
+#
+# CONTINUATIONS ARE JOINED FIRST. The convergence gate spells its call across two physical lines
+# with a trailing backslash and `--cite` and `--authorized-at` land on different ones, so a
+# line-oriented scan would report that site as unbound on a conforming tree -- a false finding on
+# the one caller that also passes `--since`.
+#
+# core/fixtures/ is excluded by DIRECTORY, for I92's and I103's reason: the batteries seed calls
+# with the bound deliberately removed, and a per-file exemption list goes stale the release
+# somebody adds a battery.
+i109_join() { # <file> -> the file with backslash-continuations folded onto one line
+  LC_ALL=C awk '{ if (buf != "") { sub(/^[[:space:]]+/, "", $0); line = buf $0 } else line = $0
+                  if (line ~ /\\$/) { sub(/\\$/, " ", line); buf = line; next }
+                  buf = ""; print line }' "$1" 2>/dev/null
+}
+# A CALL, not a mention: `bash <something>` on the line, and `--cite` on it. The owner's own
+# USAGE block writes `--cite "SUBSTR"` in a comment, so the `bash` conjunct is what separates
+# a command from a description of one.
+i109_re='bash .*--cite'
+
+# THE PROBE, RUN BEFORE THE CORPUS, in both directions. Both halves are absence-shaped: a
+# grammar that folds nothing reports every continued call unbound, and one that matches nothing
+# reports no call sites at all. Neither silence is distinguishable from a conforming tree.
+i109_probe="$(mktemp -d "${TMPDIR:-/tmp}/i108-XXXXXX")"
+#  a  a conforming ONE-LINE call.
+printf 'x=1\nbash "$S" --dir "$d" --cite "$q" --authorized-at "$t" --quiet\n' > "$i109_probe/a.sh"
+#  b  a conforming CONTINUED call, the convergence gate's shape: the two flags on different
+#     physical lines. Must fold to one and pass.
+printf 'bash "$S" --dir "$d" --cite "$q" \\\n  --since "$w" --authorized-at "$t" --quiet\n' > "$i109_probe/b.sh"
+#  c  THE OFFENDER: a call with --cite and no bound. Must be reported.
+printf 'bash "$S" --dir "$d" --cite "$q" --quiet\n' > "$i109_probe/c.sh"
+#  d  NEAR-MISS: a comment DESCRIBING the flagless call. Must stay quiet, or the arm flags every
+#     file that documents the interface -- the owner's own usage block first.
+printf '#   validate-steering-budget.sh --dir PATH --cite "SUBSTR"\n' > "$i109_probe/d.sh"
+#  e  NEAR-MISS: a call carrying neither flag. Not this arm'"'"'s subject.
+printf 'bash "$S" --dir "$d" --count\n' > "$i109_probe/e.sh"
+i109_score=0
+for i109_pf in a b c d e; do
+  i109_pn="$(i109_join "$i109_probe/$i109_pf.sh" | grep -cE "$i109_re")" || i109_pn=0
+  i109_pb="$(i109_join "$i109_probe/$i109_pf.sh" | grep -E "$i109_re" | grep -cE -- '--authorized-at')" || i109_pb=0
+  case "$i109_pf" in
+    a) [ "$i109_pn" -eq 1 ] && [ "$i109_pb" -eq 1 ] || i109_score=$((i109_score + 1)) ;;
+    b) [ "$i109_pn" -eq 1 ] && [ "$i109_pb" -eq 1 ] || i109_score=$((i109_score + 10)) ;;
+    c) [ "$i109_pn" -eq 1 ] && [ "$i109_pb" -eq 0 ] || i109_score=$((i109_score + 100)) ;;
+    d) [ "$i109_pn" -eq 0 ]                         || i109_score=$((i109_score + 1000)) ;;
+    e) [ "$i109_pn" -eq 0 ]                         || i109_score=$((i109_score + 10000)) ;;
+  esac
+done
+rm -rf "$i109_probe"
+if [ "$i109_score" -ne 0 ]; then
+  err "I109's probe scored $i109_score where 0 is the only correct total, so the corpus below was not scanned. +1 a conforming one-line call was not seen as a bounded call; +10 a conforming call spelled across a backslash continuation read as UNBOUND, which would report the convergence gate as an offender on a clean tree; +100 a call with --cite and no --authorized-at was not reported, which is the state this arm exists to catch; +1000 a COMMENT describing the interface was scored as a call site, so the arm would flag the owner's own usage block; +10000 a call carrying neither flag was scored as a citation query. Any non-zero total means this arm would report a clean tree for the reason a broken reader does."
+else
+  # THE CORPUS. A POSITIVE CONTROL FIRST: an arm that found no call sites at all reports no
+  # unbound ones, and that silence is what a renamed flag or a moved caller looks like.
+  i109_sites=''
+  i109_unbound=''
+  # NO `--` BEFORE THE PATTERN. It terminates option parsing, so the `--exclude-dir` that
+  # follows the path is read as a FILE to search and the fixtures come back in the corpus --
+  # measured, on this arm's own first run: fifteen deliberately-unbound calls inside the
+  # batteries, reported as offenders.
+  for i109_f in $(grep -rlE "$i109_re" "$REPO_ROOT/core" 2>/dev/null --exclude-dir=fixtures); do
+    while IFS= read -r i109_line; do
+      case "$i109_line" in *--cite*) : ;; *) continue ;; esac
+      case "$i109_line" in *bash*) : ;; *) continue ;; esac
+      i109_rel="${i109_f#"$REPO_ROOT"/}"
+      i109_sites="$i109_sites $i109_rel"
+      case "$i109_line" in
+        *--authorized-at*) : ;;
+        *) i109_unbound="$i109_unbound $i109_rel" ;;
+      esac
+    done <<EOF
+$(i109_join "$i109_f")
+EOF
+  done
+  if [ -z "${i109_sites// /}" ]; then
+    err "I109 found ZERO \`--cite\` call sites under core/. Four programs ask that question and the arm located none of them, so its clean line is about a corpus it never read -- the flag was renamed, the callers moved, or this grammar stopped spelling a call."
+  fi
+  [ -z "${i109_unbound// /}" ] || err "I109 call site(s) ask \`validate-steering-budget.sh --cite\` without passing \`--authorized-at\`:${i109_unbound}. An unbounded citation query scans the project's ENTIRE session history, so any twelve-character phrase the operator ever typed verifies a record filed at any moment -- with the same exit codes, the same output and no second piece of evidence anywhere. Pass the flag on every call, with an empty value where the record carries no parseable timestamp; \`cite_ts()\` beside \`cite_quote()\` is what derives it."
+fi
+
 # --- I50: every scripts/ai-dlc/<script> a shipped file names is one core actually ships ---
 #
 # I49 binds the MODES of one resolver. This is the same join one level out, over every
