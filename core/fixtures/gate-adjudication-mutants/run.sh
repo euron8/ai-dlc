@@ -209,7 +209,7 @@ score "M0 control (unmutated)" validate-gate-adjudication.sh "" \
 # block text offers no reason, because as far as the caller knows there was nothing to apply.
 # --------------------------------------------------------------------------
 score "m1 caller never asks the sibling (rows blanked)" validate-gate-adjudication.sh \
-  "S1 S2b S6-idonly S13 S15 S17 S18 S19 S20 S21 S22 S23" \
+  "S1 S2b S6-idonly S13 S15 S17 S18 S19 S20 S21 S22 S23 S24 S25" \
   '        if [ "$supp_rc" -eq 0 ]; then
             GA_IN_FORCE_STATUS="ok:$ESC"' \
   '        if [ "$supp_rc" -eq 0 ]; then
@@ -218,8 +218,8 @@ score "m1 caller never asks the sibling (rows blanked)" validate-gate-adjudicati
   "The carve-out has no input, so a FAIL under a well-formed in-force suppression blocks
   exactly as it did before the fix. The set is wide because the mutation removes the
   carve-out's INPUT rather than a property of the join: S1, S2b, S6-idonly, S13, S15, S17 and
-  S20 assert it FIRED, and S18, S19, S21, S22 and S23 assert the citation check's own tokens,
-  which a validator with no rows to verify never prints. Every case that asserts it did NOT fire is
+  S20 assert it FIRED, and S18, S19, S21, S22, S23, S24 and S25 assert the citation check's own
+  tokens, which a validator with no rows to verify never prints. Every case that asserts it did NOT fire is
   unaffected, which is the point — those cases cannot tell this validator from the fixed one
   on their own, and that is what the rest of this battery is for."
 
@@ -422,14 +422,15 @@ score "m13 caller asks the sibling on a verdict with no FAIL" \
 # Y too and the gate passes. Every case whose quote IS in the corpus is unmoved, and must be.
 # --------------------------------------------------------------------------
 score "m14 caller never asks the citation verifier" validate-gate-adjudication.sh \
-  "S18 S22 S23" \
-  '                        bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$ga_quote" --quiet >/dev/null 2>&1
+  "S18 S22 S23 S24 S25" \
+  '                        bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$ga_quote" ${ga_at:+"$ga_at" "$ga_at_arg"} --quiet >/dev/null 2>&1
                         ga_rc=$?' \
   '                        ga_rc=0' \
   "A quote nobody said verifies, so a lead can write its own gate passage into pending.md and
-  the gate adopts it. Only the cases whose corpus does NOT carry the quote (S18, S22) or whose
-  verifier cannot run (S23) can see this — every other case's entry cites words the operator
-  genuinely typed."
+  the gate adopts it. Only the cases whose corpus does NOT carry the quote as an operator turn
+  (S18, S22, S24), whose citation names the wrong moment (S25), or whose verifier cannot run
+  (S23) can see this — every other case's entry cites words the operator genuinely typed, when
+  it says they did."
 
 # --------------------------------------------------------------------------
 # m15 — the CALLER fails OPEN when no corpus was given. The status still says `no-transcript`,
@@ -455,12 +456,12 @@ score "m15 caller keeps the rows when it has no corpus to verify them against" \
 # kill set as m14, reached from the other side — the ask happened and the answer was dropped.
 # --------------------------------------------------------------------------
 score "m16 caller verifies the rows and exports the unverified set" \
-  validate-gate-adjudication.sh "S18 S22 S23" \
+  validate-gate-adjudication.sh "S18 S22 S23 S24 S25" \
   '                    GA_IN_FORCE="$GA_VERIFIED"' \
   '                    GA_IN_FORCE="$GA_IN_FORCE"' \
-  "The verifier was asked and its answer changed nothing. S18, S22 and S23 are the cases where
-  the verified set and the original set DIFFER, so they are the only ones that can tell the
-  program that honours the answer from the one that prints it and moves on."
+  "The verifier was asked and its answer changed nothing. S18, S22, S23, S24 and S25 are the
+  cases where the verified set and the original set DIFFER, so they are the only ones that can
+  tell the program that honours the answer from the one that prints it and moves on."
 
 # --------------------------------------------------------------------------
 # m17 — the CALLER scans the corpus's FIRST member and stops. The batch-63 adversary's blocker:
@@ -498,6 +499,40 @@ score "m18 caller reports a verifier failure as a forged citation" validate-gate
   either runs the verifier successfully or never reaches it."
 
 # --------------------------------------------------------------------------
+# m19 — the CALLER asks the verifier and never tells it WHEN the entry says the operator spoke.
+# The owner grew `--authorized-at` and this call site kept its old argument list, which is the
+# shape a partial fix takes: the flag exists, the fixture's own two-file corpus still verifies,
+# and the only case that can see the omission is the one whose quote is genuine and whose
+# TIMESTAMP is not. Unbounded, the corpus is the project's entire session history, so any phrase
+# the operator ever typed verifies a citation filed at any moment.
+# --------------------------------------------------------------------------
+score "m19 caller never passes the citation's own timestamp" validate-gate-adjudication.sh \
+  "S25" \
+  '--cite "$ga_quote" ${ga_at:+"$ga_at" "$ga_at_arg"} --quiet' \
+  '--cite "$ga_quote" --quiet' \
+  "S25's entry cites words the operator really said, a day after the timestamp on its own
+  authorization line. S25 owns this alone: every other entry's quote was said within the
+  window, so bounded and unbounded are the same program for them — including S24, whose
+  refusal is about WHO said the words and not about when."
+
+# --------------------------------------------------------------------------
+# m20 — the CALLER passes the bound and then reads the verifier's NOMATCH as a pass. rc 2 folded
+# into the verified set. Its kill set is the WHOLE citation family, deliberately: this mutation
+# is the reader no longer reading the answer at all, so any citation case that did NOT move
+# under it is a case this fixture files under the citation check and that is passing for some
+# other reason. Distinct from m16, which computes the narrowed set and exports the original —
+# there the ask is honoured and the result discarded; here rc 2 never becomes a finding.
+# --------------------------------------------------------------------------
+score "m20 caller reads the verifier's NOMATCH as verified" validate-gate-adjudication.sh \
+  "S18 S22 S24 S25" \
+  '                        if [ "$ga_rc" -eq 0 ]; then' \
+  '                        if [ "$ga_rc" -eq 0 ] || [ "$ga_rc" -eq 2 ]; then' \
+  "A forged quote, a harness-injected one and one cited at the wrong moment all cover the FAIL
+  again. S23 is NOT in the set and must not be: its verifier exits 1, not 2, so the tier this
+  mutation collapses is one S23 never reaches — which is what makes S23 a case about TOOLING
+  and these four cases about the citation."
+
+# --------------------------------------------------------------------------
 # m10 — the SIBLING emits nothing. The question `.claude/rules/fixture-mutants.md` puts to every
 # new arm: would this pass against a program that never ran? Twelve of the eighteen carve-out
 # cases expect exit 1, which is exactly what a gate gets when the predicate it asks is a stub —
@@ -509,7 +544,7 @@ score "m18 caller reports a verifier failure as a forged citation" validate-gate
 # sibling is never invoked at all.
 # --------------------------------------------------------------------------
 score "m10 sibling replaced by 'exit 0'" validate-suppression-lifetime.sh \
-  "S1 S2b S3 S4 S5 S6-idonly S6-mismatch S8 S9 S11 S12 S13 S14 S15 S17 S18 S19 S20 S21 S22 S23" "" "" \
+  "S1 S2b S3 S4 S5 S6-idonly S6-mismatch S8 S9 S11 S12 S13 S14 S15 S17 S18 S19 S20 S21 S22 S23 S24 S25" "" "" \
   "A sibling that emits nothing and exits 0 satisfied a case, which means that case is
   asserting an ABSENCE and would certify a predicate that never ran."
 
@@ -530,8 +565,8 @@ score "m11 caller replaced by 'exit 0'" validate-gate-adjudication.sh NOPASS "" 
 # The kill count itself. A battery whose mutants all applied and killed nothing reports zero
 # failures, which is byte-identical to a battery that worked.
 # --------------------------------------------------------------------------
-if [ "$SCORED" -lt 19 ]; then
-  note_fail "only $SCORED mutant(s) were scored; this battery declares 19. A mutant that never
+if [ "$SCORED" -lt 21 ]; then
+  note_fail "only $SCORED mutant(s) were scored; this battery declares 21. A mutant that never
   ran cannot have been survived or killed."
 fi
 

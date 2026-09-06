@@ -573,6 +573,36 @@ else
   bad "S22: rows were not narrowed by the citation check (rc=$RC) — either the forged entry poisoned the genuine one, or the forged one covered '$Y' anyway"
 fi
 
+# --- S24: the words are in the corpus, and the HARNESS said them → exit 1 --
+# The near-miss S18 cannot reach. S18's forgery is structural -- an assistant turn and a
+# tool_result, shapes the predicate already rejects by TYPE. This corpus holds a `type:"user"`
+# record whose content is a plain string, the exact shape a typed turn has, differing from one
+# only by the `isMeta:true` flag Claude Code sets on records IT injected. Measured on the
+# reference consumer: 90 of the 984 records the predicate accepted as operator text carried it.
+# A lead cannot make the harness inject arbitrary text, so this is not a forgery surface; it is
+# a record class that is not an operator turn being counted as one.
+restore; fail_on "$X"
+runx "$ESC_INFORCE" "$GM_BEFORE" "$TDIR_META"
+if [ "$RC" -eq 1 ] && has "$BLOCK_X" && has "$UNVERIFIED_LINE" && ! has "$SUPP_LINE"; then
+  ok "S24: an in-force entry whose quote appears only in an isMeta harness injection covers nothing → exit 1"
+else
+  bad "S24: a harness-injected record verified the citation (rc=$RC) — the predicate reads the bytes of a user record and not the flag saying who wrote it"
+fi
+
+# --- S25: the quote is GENUINE and the TIMESTAMP is not → exit 1 -----------
+# ONE PROPERTY from S1: same catalog, same check, same lifetime, same words, same corpus, and
+# only the authorization timestamp moved -- to a day before the operator said them. Every arm
+# keyed on the words alone passes this entry, which is what made it invisible: unbounded, the
+# corpus is the project's whole session history and any phrase the operator ever typed verifies
+# a citation filed at any time.
+restore; fail_on "$X"
+runx "$ESC_STALE_TS" "$GM_BEFORE"
+if [ "$RC" -eq 1 ] && has "$BLOCK_X" && has "$UNVERIFIED_LINE" && ! has "$SUPP_LINE"; then
+  ok "S25: an in-force entry citing real operator words from a DIFFERENT day covers nothing → exit 1"
+else
+  bad "S25: a citation whose words were said a day after its own authorization timestamp still covered the FAIL (rc=$RC) — the citation verifier is not bounded to the moment the entry claims"
+fi
+
 # --- restore, once more, after the carve-out arms ---------------------------
 restore
 run "$VERDICT"
