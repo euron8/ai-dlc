@@ -4184,3 +4184,60 @@ same way from every cwd.
 
 verify: sh V=$PWD/core/scripts/validate-suppression-lifetime.sh; [ -f "$V" ] || exit 9; W=$(mktemp -d); mkdir -p $W/r; printf 'checks:\n  - id: 16\n    title: a\n  - id: 32\n    title: b\n' > $W/map.yaml; printf '## [S1 gate] [lead] - 2026-05-01T00:00:00Z\n**Status:** SUPPRESSED\n**Suppresses:** [core] 32 — b\n**Expires after:** 3 gates\n**Operator authorization:** 2026-05-01T00:00:00Z | "Override, proceed, file backlog item"\n' > $W/r/pending.md; printf '{"ts":"2026-05-02T01:00:00Z","check":"32","verdict":"FAIL"}\n' > $W/gm.jsonl; a=$(LC_ALL=en_US.UTF-8 AI_DLC_PROJECT_ROOT=$W/r bash $V --in-force --escalations $W/r/pending.md --enforcement-map $W/map.yaml --gate-metrics $W/gm.jsonl 2>&1 >/dev/null); b=$(env -i PATH=/usr/bin:/bin AI_DLC_PROJECT_ROOT=$W/r bash $V --in-force --escalations $W/r/pending.md --enforcement-map $W/map.yaml --gate-metrics $W/gm.jsonl 2>&1 >/dev/null); rm -rf $W; case $a in *"in_force=1 "*) ;; *) exit 9;; esac; case $b in *"in_force=1 "*) exit 0;; esac; exit 1
 
+
+## BL-183 — no detector reaches a status token a release retired and a consumer layer file still uses in its own prose, because one sibling matches contract shapes and the other matches whole deleted lines
+
+Filed by the reference consumer as
+`PC-S335-NO-DETECTOR-REACHES-A-RETIRED-STATUS-TOKEN-REUSED-IN-A-LAYER-BODY` (2026-08-19, on its
+0.373.0 → 0.378.0 pull); DEFECT tier — the stale word sat in an override's RENDERED body, the
+text the lead obeys under `overrides > extensions > core`, and every mechanical signal on that
+pull was clean. `v0.378.0` renamed the validator status `VACUOUS` to `EXAMINED NOTHING`;
+`overrides/steps__retro__ci-gates-enforcement-surface.md` still read `or stock exits 78
+VACUOUS;` at line 52 and cited `` `VACUOUS` `` as a term core carried in a frontmatter grep
+control at line 18. `retired-layer-contract.sh` printed "retired NO contract shape (14 at base,
+14 at theirs)" — a status word is neither a labelled directive nor a `{token}` placeholder;
+`retired-layer-passage.sh` printed "12 deleted rulebook line(s) checked against 46 layer
+file(s); no match" — a consumer sentence that reuses a word is not a reproduced core line;
+`layer-drift.sh` classified the entry only as `HARD-OVERRIDE-DRIFT-SECTION`, and the readopt
+dossier said "SUPERSEDED CORE TEXT ... (none)", correctly, because the word is the consumer's
+own prose. The consumer found it by grepping the body by hand and repaired line 52 with operator
+approval; line 18 is still there today and its own dossier NOTE calls that receipt stale.
+
+`reconcile/retired-layer-token.sh` is the token-grain sibling. The retired set is DERIVED:
+every ALL-CAPS word of four or more characters (hyphen chains allowed, bounded by anything
+outside `[A-Za-z0-9_-]`) the core rulebook carries at base and carries nowhere at theirs — the
+rulebook being `setup-sites.md`'s `rulebook:` list, the same declaration both siblings read.
+Every layer file under `overrides/` and `extensions/` (`.md` and `.json`) is split on the same
+class and each retired token is looked up as a whole word, one `awk` for the corpus; rows are
+`RETIRED-LAYER-TOKEN<TAB><layer-path>:<line><TAB><token>`. Driven over the real distribution at
+`6011d94d^..9f4e585` against the consumer's layer files at its pre-repair commit `02ec05984^`:
+exactly the two incident lines (18 and 52), from the repo root and from a cwd carrying
+rulebook-shaped files; the retired set for that pair is two words (`VACUOUS`, `VERIFIED`).
+Over `528ca84b..origin/main` (the consumer's installed release to the head) it retires nothing
+and says so. Two derivations were built and refused before this one: a backticked-only grammar
+cannot derive the incident, because the rulebook wrote `the run is VACUOUS (exit 78)` with no
+code span; and a program-emitted narrowing (keep rulebook words a core script also prints,
+minus everything at theirs) un-retires the incident, because `readopt-override.sh:348` still
+prints the word VACUOUS at theirs in an unrelated sense. The rulebook-only form is what ships,
+with the false-positive set recorded in the CHANGELOG entry beside the census that produced it.
+
+Three quiet states each say which they are, because their stdout is identical: an unreadable
+rulebook list or an unresolvable base is a refusal; a release that retired no token opens no
+layer file and says so with both corpus counts; a scanned-but-no-match run prints the retired
+count and the file count. `emit-report.sh` renders the rows as a fifth classifier section
+("Retired status tokens reused in a consumer layer file's own prose"), so `--verify`
+byte-compares them and `I105` binds the invocation; SKILL.md step 3a-vi is the by-hand form.
+Report-only: the layer is consumer-owned, so a row is a worklist item, never an apply blocker.
+
+What it does not catch, stated in its header and its NOTE: a token the consumer invented, a
+word core still carries anywhere in its rulebook at theirs, a multi-word status whose other
+word survived (matched word by word), and a paraphrase. `BL-016` is the neighbouring gap for a
+retired PATH and is unchanged by this.
+
+The receipt drives the shipped detector over a seeded dist repo and layer file: the body row
+and the frontmatter row must both render with their line numbers, the same word embedded in a
+longer identifier, hyphen-joined, and lower-cased on line 7 must not, the row count must be
+exactly two, and the base==base control must print the opened-nothing NOTE — so a copy that
+emits nothing, a substring matcher, and a silent empty branch each read STILL-LIVE.
+
+verify: sh V=core/skills/ai-dlc-update/reconcile/retired-layer-token.sh; [ -f "$V" ] || exit 9; D=$(mktemp -d); R="$D/dist"; C="$D/cons"; mkdir -p "$R/core/skills/ai-dlc/steps" "$C/.claude/skills/ai-dlc/overrides"; git -C "$R" init -q; git -C "$R" config user.email a@b; git -C "$R" config user.name a; printf 'With neither, the run is WIDGETGONE (exit 78) and prints every gate.\n' > "$R/core/skills/ai-dlc/steps/retro.md"; git -C "$R" add -A; git -C "$R" commit -qm b; B=$(git -C "$R" rev-parse HEAD); printf 'With neither, the run is EXAMINED NOTHING (exit 78) and prints every gate.\n' > "$R/core/skills/ai-dlc/steps/retro.md"; git -C "$R" commit -qam t; T=$(git -C "$R" rev-parse HEAD); printf -- '---\nreason: grep control cites WIDGETGONE reading 1 in core\n---\n# Override\n\nor stock exits 78 WIDGETGONE; empty falls to the alias table\nfooWIDGETGONE and x-WIDGETGONE and widgetgone stay\n' > "$C/.claude/skills/ai-dlc/overrides/o.md"; P=$(bash "$V" "$R" "$B" "$T" "$C" 2>/dev/null); N=$(bash "$V" "$R" "$B" "$B" "$C" 2>&1 >/dev/null); rm -rf "$D"; b=$(printf '%s\n' "$P" | grep -cE '^RETIRED-LAYER-TOKEN[[:space:]]+\.claude/skills/ai-dlc/overrides/o\.md:6[[:space:]]+WIDGETGONE$'); f=$(printf '%s\n' "$P" | grep -cE 'overrides/o\.md:2[[:space:]]+WIDGETGONE$'); m=$(printf '%s\n' "$P" | grep -cE 'o\.md:7[[:space:]]'); a=$(printf '%s\n' "$P" | grep -c '^RETIRED-LAYER-TOKEN'); z=$(printf '%s\n' "$N" | grep -c 'NO layer file was opened'); [ "$b" -eq 1 ] && [ "$f" -eq 1 ] && [ "$m" -eq 0 ] && [ "$a" -eq 2 ] && [ "$z" -eq 1 ]

@@ -198,6 +198,7 @@ core_manifest:
   - core/fixtures/retired-contract-token/**
   - core/fixtures/retired-layer-contract/**
   - core/fixtures/retired-layer-passage/**
+  - core/fixtures/retired-layer-token/**
   - core/fixtures/retired-fixture-orphan/**
   - core/fixtures/consumer-machinery-inventory/**
   - core/fixtures/upstream-routing/**

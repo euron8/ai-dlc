@@ -520,15 +520,16 @@ i16_missing=""
 for i16_h in "Predicate reclassification" \
              "Retired core fixtures the consumer still carries" \
              "Retired contract shapes in consumer layer files" \
-             "Retired core passages still carried"; do
+             "Retired core passages still carried" \
+             "Retired status tokens reused in a consumer layer file"; do
   grep -qF "$i16_h" "$REGION" || i16_missing="$i16_missing | $i16_h"
 done
 # CONTROL in the same invocation: a heading that cannot be there must not be found, or a grep
 # matching everything would report all four present.
 if grep -qF "Retired core passages nobody ever wrote" "$REGION"; then
-  bad "FIXTURE BROKEN — the control heading matched, so assertion 16's four positives prove nothing"
+  bad "FIXTURE BROKEN — the control heading matched, so assertion 16's five positives prove nothing"
 elif [ -z "$i16_missing" ]; then
-  ok "the four previously-narrated classifiers render as sections of the region (control: an impossible heading is absent)"
+  ok "the five previously-narrated classifiers render as sections of the region (control: an impossible heading is absent)"
 else
   bad "these classifier sections are missing from the rendered region:$i16_missing — their findings are back to being narrated, where an omission cannot be caught by --verify"
 fi

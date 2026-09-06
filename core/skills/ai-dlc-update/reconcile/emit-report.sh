@@ -38,7 +38,7 @@
 #   warn-shadowed-…       --root <consumer>                        STATUS<TAB>fork<TAB>detail
 #   predicate-diff…       <dist> <base> <theirs> <consumer>        STATUS<TAB>subject<TAB>detail
 #   retired-fixtures.sh   <dist> <theirs> <consumer>               STATUS<TAB>cons-path<TAB>detail
-#   retired-layer-contract.sh / retired-layer-passage.sh
+#   retired-layer-contract.sh / retired-layer-passage.sh / retired-layer-token.sh
 #                         <dist> <base> <theirs> <consumer>        STATUS<TAB>path<TAB>detail
 #
 # WHICH SCRIPTS BELONG HERE IS A DERIVED JOIN, NOT A HAND-LIST. Every `reconcile/*.sh` is either
@@ -415,6 +415,11 @@ render() {
   local rlp
   rlp="$(bash "$SELF/retired-layer-passage.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null | awk -F'\t' 'NF{print $1"  "$2"  "$3}' | sort -u)"
   none_or "$rlp"
+
+  sub "Retired status tokens reused in a consumer layer file's own prose:"
+  local rlt
+  rlt="$(bash "$SELF/retired-layer-token.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null | awk -F'\t' 'NF{print $1"  "$2"  "$3}' | sort -u)"
+  none_or "$rlt"
 
   echo
   echo "<!-- END GENERATED: reconcile-mechanical -->"

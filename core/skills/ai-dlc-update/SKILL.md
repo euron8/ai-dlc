@@ -609,6 +609,30 @@ prose is itself generated rather than composed.
    cannot be told from one the consumer wrote; the `.dist-only` half is unaffected).
    Note what it does NOT catch: a core fixture the consumer RENAMED, which by design
    reads as the consumer's own.
+3a-vi. **Retired status tokens reused in a layer file's own prose** (cheap, deterministic
+   — no agents): run `reconcile/retired-layer-token.sh <dist-repo> <base-sha>
+   <theirs-ref> <consumer-root>`. 3a-iii matches contract SHAPES and 3a-iv matches whole
+   deleted core LINES; a consumer sentence that merely REUSES a status word core renamed
+   is neither, and both print their clean NOTE over it. It happened: on the
+   0.373.0 → 0.378.0 pull `VACUOUS` became `EXAMINED NOTHING`, an override's rendered
+   body still read `stock exits 78 VACUOUS`, and every mechanical signal was clean — a
+   person found it by grepping the body.
+   The retired set is derived, never listed: every ALL-CAPS word of four or more
+   characters (hyphen chains allowed) that the core rulebook carried at base and carries
+   nowhere at theirs. Output is `RETIRED-LAYER-TOKEN<TAB><layer-path>:<line><TAB><token>`.
+   Each row is a sentence to re-read against `theirs`: re-point it at the replacement
+   token, or record in the report why the old word is still correct there. A row inside
+   a layer file's frontmatter `reason:` is usually a stale grep control and is owed the
+   same re-read.
+   **Read its stderr, not only its rows.** When the release retired no token it opens no
+   layer file at all and says so; a scanned-but-no-match run prints both counts; an
+   unreadable rulebook is a refusal, never a clean line.
+   **This does NOT block the apply** — a layer file is consumer-owned. It is a worklist
+   item, owed before the pull counts as done.
+   Note what it does NOT catch: a token the consumer invented that core never had, a
+   word core still carries anywhere in its rulebook at theirs, a multi-word status whose
+   other word survived (matched word by word), and a paraphrase that drops the literal
+   word. A clean result is not proof every layer file survived the release.
 
 3b. **Template pre-classification** (the generated files outside `core/`):
    run `reconcile/preclassify.sh <dist-repo> <base-sha> <theirs-ref>
