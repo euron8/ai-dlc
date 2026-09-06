@@ -56,10 +56,17 @@ dead — an arm reporting nothing, indistinguishable from a clean corpus.
 index — measured, an outer repo of 17 tracked files to 7, while the fixture printed PASS. It now
 scrubs at its top, as the sibling `prepush-worktree-env-scrub` already did.
 
-Guarded by `m12` and `m13`, one property apart and both needed: `m12` asserts the probe does not
-write the caller's index, `m13` asserts the corpus arms do not read it, seeding a real offender so
-the arm reads a conviction rather than an absence. Scored against the subshell-only build, **m12
-passes it and m13 kills it**; against a fully reverted fix, victim `9 -> 3`, exit 1.
+Guarded by three arms, each killing a build the other two accept: `m12` asserts the probe does not
+write the caller's index, `m13` asserts the corpus arms do not read it (seeding a real offender so
+the arm reads a conviction rather than an absence), and `m12b` drives `GIT_INDEX_FILE` and
+`GIT_WORK_TREE` **without** `GIT_DIR`. A fully reverted fix dies at m12 (victim `9 -> 3`); a
+subshell-only scrub passes m12 and dies at m13; a scrub narrowed to `unset GIT_DIR` passes both and
+dies at m12b.
+
+**That third arm is a seed defect this release nearly shipped.** The entry named
+`GIT_INDEX_FILE` + `GIT_WORK_TREE` as the input separating the fix from the one-variable near-miss,
+and then drove neither — both arms set `GIT_DIR`, the one variable that build handles, so it scored
+as fixed. The assertions were right and the seed was one property short, which reads as coverage.
 
 Distribution-only: named nowhere in `scripts/install.sh` (control: `validate-layer-entries` returns
 1), nowhere in `core/scripts/`, and nowhere in the consumer's hook, whose ten pre-scrub validators

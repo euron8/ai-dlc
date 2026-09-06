@@ -4302,13 +4302,26 @@ to 7**, holding the seed's own paths, while the fixture printed PASS. It now scr
 the sibling `prepush-worktree-env-scrub/run.sh` already did — that sibling was the only one of the
 27 scratch-repo-building fixtures that did.
 
-**Guarded by `m12` and `m13`, which are ONE PROPERTY APART and both are needed.** `m12` seeds a
-nine-entry victim, drives the real validator with `GIT_DIR` pointed at it, and asserts the index is
-unmoved AND that A1 fired. `m13` seeds a corpus carrying a REAL offender against a victim clean
-under `.claude/`, and asserts A1 convicts the same offender scrubbed AND armed — a conviction, not
-an absence, because a redirected read finds nothing to report and prints `ok`, which is exactly the
-acquittal being guarded. Scored against the subshell-only build: **m12 passes it, m13 kills it.**
-Against a fully reverted fix: victim `9 -> 3`, exit 1.
+**Guarded by THREE arms, each killing a build the other two accept.** `m12` seeds a nine-entry
+victim, drives the real validator with `GIT_DIR` pointed at it, and asserts the index is unmoved AND
+that A1 fired. `m13` seeds a corpus carrying a REAL offender against a victim clean under
+`.claude/`, and asserts A1 convicts the same offender scrubbed AND armed — a conviction, not an
+absence, because a redirected read finds nothing to report and prints `ok`, which is exactly the
+acquittal being guarded. `m12b` drives `GIT_INDEX_FILE` and `GIT_WORK_TREE` **without** `GIT_DIR`.
+
+| build | m12 | m12b | m13 |
+|---|---|---|---|
+| fully reverted (victim `9 -> 3`) | KILLS | — | — |
+| scrub in the probe subshell only | passes | — | KILLS |
+| scrub narrowed to `unset GIT_DIR` | passes | KILLS | passes |
+
+**THE `m12b` ROW IS A SEED DEFECT THIS ENTRY SHIPPED AND AN ADVERSARIAL PASS CAUGHT.** The paragraph
+above names `GIT_INDEX_FILE` + `GIT_WORK_TREE` as the input separating the fix from the one-variable
+near-miss — and neither arm drove it. Both set `GIT_DIR`, the single variable a `GIT_DIR`-only scrub
+handles, so that build scored as fixed against two arms asserting the right outcome on an input that
+could not distinguish it. **The assertions were correct and the SEED was one property short**, which
+is the shape that reads as thorough coverage. `GIT_DIR` is deliberately absent from `m12b` for that
+reason: setting it would let the near-miss pass by handling the one variable it knows.
 
 **THE RECEIPT BELOW IS A TEXT ANCHOR AND `m13` IS THE ARM.** Scored across four implementations,
 three of them broken: a commented-out `unset`, an `unset` moved into prose above the subshell, and

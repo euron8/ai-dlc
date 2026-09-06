@@ -270,6 +270,48 @@ else
   else
     note "ok    m12 -- probe built its own repo under an inherited GIT_DIR; caller's index intact at $v_after, A1 still fired"
   fi
+
+  # m12b -- THE INPUT THAT SEPARATES THE FIX FROM THE ONE-VARIABLE NEAR-MISS.
+  #
+  # A `GIT_DIR`-only scrub PASSES both drives above: `GIT_DIR` is the single variable they
+  # set, so unsetting it is sufficient for them and the near-miss scores as fixed. It is not
+  # fixed — git resolves a repository from `GIT_INDEX_FILE` and `GIT_WORK_TREE` as well, and
+  # exports `GIT_INDEX_FILE` to a pre-commit hook even from a PRIMARY checkout, so that world
+  # is one a real caller arrives in.
+  #
+  # THIS ARM EXISTS BECAUSE THE SEPARATING INPUT WAS IDENTIFIED, WRITTEN INTO THE ENTRY, AND
+  # THEN NOT DRIVEN. An adversarial pass caught that: the arms above assert the right
+  # OUTCOME against an input that cannot distinguish the two builds, which is a seed defect
+  # and not an assertion defect. A near-miss one property short of the offender discriminates
+  # against nothing that requires that property.
+  #
+  # `GIT_DIR` is deliberately ABSENT here. Setting it would let a `GIT_DIR`-only scrub pass
+  # by handling the one variable it knows, which is exactly the build being hunted.
+  m12b_victim="$TMP/m12bvictim"
+  mkdir -p "$m12b_victim"
+  ( cd "$m12b_victim" && git init -q . \
+    && for i in 1 2 3 4 5 6 7; do printf 'x\n' > "h$i.txt"; done \
+    && git add -A >/dev/null 2>&1 )
+  b_before="$( ( cd "$m12b_victim" && git ls-files | wc -l ) | tr -d ' ' )"
+  if [ "$b_before" -ne 7 ]; then
+    note "FIXTURE BROKEN: m12b's victim seeded $b_before entries, expected 7; the arm cannot discriminate."
+    rc=1
+  else
+    out_b="$( cd "$TMP/m12" && env "GIT_INDEX_FILE=$m12b_victim/.git/index" "GIT_WORK_TREE=$m12b_victim" \
+      bash scripts/validate-claude-rules.sh 2>&1 )"
+    b_after="$( ( cd "$m12b_victim" && git ls-files | wc -l ) | tr -d ' ' )"
+    if [ "$b_after" -ne "$b_before" ]; then
+      note "FAIL  m12b probe wrote the caller's index through GIT_INDEX_FILE -- victim went $b_before -> $b_after."
+      note "      A GIT_DIR-only scrub passes m12 and m13 and fails here; the scrub must cover all five variables."
+      rc=1
+    elif ! grep -qF "A1  ok" <<<"$out_b"; then
+      note "FAIL  m12b -- victim intact but A1 did not fire under GIT_INDEX_FILE/GIT_WORK_TREE; the probe is redirected."
+      printf '%s\n' "$out_b" | sed 's/^/      /' | head -4
+      rc=1
+    else
+      note "ok    m12b -- GIT_INDEX_FILE/GIT_WORK_TREE without GIT_DIR: victim intact at $b_after, A1 still fired"
+    fi
+  fi
 fi
 
 # m13 -- THE CORPUS READ IS THE OTHER HALF, AND IT IS THE SILENT ONE.
