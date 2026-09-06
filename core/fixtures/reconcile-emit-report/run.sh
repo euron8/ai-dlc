@@ -543,32 +543,59 @@ fi
 # HARD-LAYER-ADJUDICATION-MISSING. So on any pull that had a blocker the approved report lists
 # findings that no longer exist, `--verify` fails, and the refusal named two causes that were
 # both false. `--verify` now DECIDES: exit 3 with `cause: BLOCKERS-RESOLVED` when the refs are
-# unchanged, the approved region carries HARD-* rows the fresh render lacks, and the fresh
-# render carries none the region lacks; `cause: UPSTREAM-MOVED` when the refs differ; else
-# `cause: UNDECIDED`. Every case is still a REFUSAL — only the diagnosis moved.
+# unchanged, the approved region carries HARD-* rows the fresh render lacks, the fresh render
+# carries none the region lacks, and no detector newly REFUSED; `cause: UPSTREAM-MOVED` when the
+# `_base_`/`_theirs_` lines differ; `cause: STAMP-MOVED` when the consumer's own stamp line does;
+# else `cause: UNDECIDED`. Every case is still a REFUSAL — only
+# the diagnosis moved, and the rows the approval has not seen are counted and listed rather than
+# asserted away.
 #
-# THE SEEDS BELOW ARE SEVEN SEPARATE WORLDS, each its own copy of the seeded consumer with its
-# own approved report rendered AT THAT COPY'S PATH. The region embeds the consumer's absolute
-# path in its `full: diff` commands, so a world sharing one report with another is comparing
-# two paths and fails for a reason no arm owns; and a world mutated in place is decided by the
-# previous world's leftovers.
+# THE SEEDS BELOW ARE SEPARATE WORLDS, each its own copy of the seeded consumer with its own
+# approved report rendered AT THAT COPY'S PATH. The region embeds the consumer's absolute path in
+# its `full: diff` commands, so a world sharing one report with another is comparing two paths and
+# fails for a reason no arm owns; and a world mutated in place is decided by the previous world's
+# leftovers.
 #
 #   V-R  the blocker RESOLVED (the consumer's in-place schema edit reverted to base bytes)
-#        -> 3, BLOCKERS-RESOLVED, and the count names ONE blocker although it renders TWICE
+#        -> 3, BLOCKERS-RESOLVED, ONE blocker counted although it renders TWICE, and ZERO
+#           unseen rows: the boilerplate a resolution moves into the diff is excluded
 #   V-N  resolved AND a NEW HARD row the approval never saw          -> 1, UNDECIDED
 #   V-M  resolved AND theirs moved across a core change              -> 1, UPSTREAM-MOVED
 #   V-B  a NON-HARD row resolved, refs unchanged                     -> 1, UNDECIDED
-#   V-H  the blocker HAND-DROPPED from the region (the unsafe
-#        direction: the render still carries it)                     -> 1, UNDECIDED
+#   V-H  the blocker HAND-DROPPED from the region, BOTH copies       -> 1, UNDECIDED
 #   V-HA V-H plus a blocker-adjudication file in the consumer        -> 1, UNDECIDED
-#   V-S  resolved AND the consumer's STAMP moved                     -> 1, UPSTREAM-MOVED
+#   V-S  resolved AND the consumer's STAMP moved                     -> 1, STAMP-MOVED: its own
+#           cause, decided between the other two, because the stamp is neither upstream moving
+#           nor a finding — and dropped from the key altogether a post-apply re-run read as
+#           blockers RESOLVED and was told to re-approve a range already applied
+#   V-U  resolved AND a non-HARD row the approval never saw          -> 3, ONE unseen row named
+#   V-D  the blocker STILL UNRESOLVED, verified by a copy whose
+#        unregistered-drift.sh exits 2                               -> 1, UNDECIDED, one
+#           DETECTOR-REFUSED line: an absent HARD row with nobody to vouch for it
+#   V-DR the same dead-detector copy with the blocker RESOLVED       -> the same (control: the
+#           refusal blocks the cause whatever the disk says)
+#   V-HC ONLY the padded blocking-list copy of the HARD row deleted
+#        from the report, its detector-section copy left             -> 1, UNDECIDED with BOTH
+#           counts ZERO: normalised first, the two sides carry the same row
+#   V-HB the blocker unresolved and hard-blockers.sh exiting 2, so
+#        the blocking list renders REFUSED                           -> 1, UNDECIDED, one
+#           DETECTOR-REFUSED line
 #
-# V-N, V-H and V-S are the acquittal-side seeds and they are the reason this is not one arm.
-# V-R alone is satisfied by "exit 3 whenever anything is missing from the render", which
-# acquits a finding the operator never saw; each of the three carries exactly one property
-# V-R lacks, so a widening that reaches any of them is visible as a cell that moved.
+# V-N, V-H, V-HA, V-D, V-HC and V-HB are the acquittal-side seeds and they are the reason this is
+# not one arm. V-R alone is satisfied by "exit 3 whenever anything left the region", which acquits
+# a finding the operator never saw; each of the six carries exactly one property V-R lacks.
+# V-R and V-U are the discriminating PAIR for the unseen count — same verdict, same cause, and the
+# count is 0 on one and 1 on the other, so a count that stopped excluding boilerplate is visible
+# as a cell and not as a wording change.
 VW="$WORK/vworlds"; mkdir -p "$VW"
-V_WORLDS="V-R V-N V-M V-B V-H V-HA V-S"
+V_WORLDS="V-R V-N V-M V-B V-H V-HA V-S V-U V-D V-HC V-HB"
+# V-DR is scored under the shipped program only, as a CONTROL on V-D rather than a mutant target:
+# its claim is that the refusal blocks the resolved cause whether or not the operator resolved
+# anything, which is a statement about the shipped classifier, not about any mutation.
+V_CONTROL_WORLD="V-DR"
+V_HARD='HARD-UNREGISTERED-CORE-DRIFT'
+V_BASELINE='BOTH-ADDED->CLASSIFY  core/skills/ai-dlc/templates/classes.md'
+VMD="$WORK/v-mutants"; mkdir -p "$VMD"
 
 v_copy()    { local d="$VW/$1"; rm -rf "$d"; mkdir -p "$d" && cp -R "$CONSUMER" "$d/consumer"; }
 v_approve() { # v_approve <world> <ref-to-render-at>
@@ -580,32 +607,79 @@ v_approve() { # v_approve <world> <ref-to-render-at>
 }
 # THE RESOLUTION, and it is the shipping producer's own bytes rather than a hand-written
 # near-miss: the consumer's copy is put back to exactly what `git show "<base>:<path>"` holds, as
-# what a real adjudication does.
+# a real adjudication does.
 v_resolve() { git -C "$DIST" show "${BASE}:core/schemas/thing.json" > "$VW/$1/consumer/.claude/schemas/thing.json"; }
-v_render()  { local d="$VW/$1"; bash "$EMIT" "$DIST" "$BASE" "$d/consumer" "$(cat "$d/ref")" 2>/dev/null; }
+v_render()  { local d="$VW/$1"; bash "${2:-$EMIT}" "$DIST" "$BASE" "$d/consumer" "$(cat "$d/ref")" 2>/dev/null; }
 
-# v_score <emit> <world> <tag> -> "<rc>|<cause>|<n-resolved-lines>|<count-in-the-cause-line>"
-# PRESENCE-SHAPED IN EVERY FIELD. `rc` alone is what a subject replaced by `exit 1` also
-# produces, so the cause word, the number of `resolved:` lines and the count the message prints
-# are all part of the cell — a renderer that decides nothing scores `1|NONE|0|NA` and matches no
-# expected value here.
+# A COPY OF THE COPY, with one sibling replaced by a refusal. The refusing-detector worlds have to
+# be verified by the program UNDER TEST, or E7/E10 would be scored against the shipped classifier
+# and could not fail. Derived from whichever directory the emit under test lives in, so every
+# mutant gets its own pair.
+v_stub() { # v_stub <emit-path> <dest-dir> <sibling-to-refuse> -> prints the emit path inside dest
+  local e="$1" d="$2" s="$3"
+  rm -rf "$d"; cp -R "$(dirname "$e")" "$d" || return 1
+  printf '#!/usr/bin/env bash\nexit 2\n' > "$d/$s"
+  printf '%s\n' "$d/$(basename "$e")"
+}
+
+# v_score <emit> <world> <tag> -> "<rc>|<cause>|<resolved-lines>|<n1>|<n2>|<unseen-lines>"
+#
+# PRESENCE-SHAPED IN EVERY FIELD. `rc` alone is what a subject replaced by `exit 1` also produces,
+# so the cause word, the two counts the cause line prints IN ORDER (BLOCKERS-RESOLVED: blockers
+# gone, unseen rows; UNDECIDED: new HARD rows, new DETECTOR-REFUSED lines) and the number of
+# `resolved:`/`unseen:` lines are all part of the cell. A classifier that decides nothing scores
+# `1|NONE|0|NA|NA|0` and matches no expected value here.
+#
+# AND THE COUNTS ARE IN THE CELL BECAUSE TWO OF THE MUTANTS BELOW MOVE NOTHING ELSE. E9 and E10
+# cover each other on the VERDICT — measured, and the symptom of that is zero failures, not two —
+# so each is killed on the diagnosis fields, and E11 is what shows the pair is load-bearing.
 v_score() {
-  local e="$1" d="$VW/$2" f="$VW/$2/stderr.$3" rc cause nres cnt
+  local e="$1" d="$VW/$2" f="$VW/$2/stderr.$3" rc cause nres nuns c1 c2
   bash "$e" --verify "$d/approved.md" "$DIST" "$BASE" "$d/consumer" "$(cat "$d/ref")" >/dev/null 2>"$f"
   rc=$?
   cause="$(awk '/^  cause: /{print $2; exit}' "$f")"
   nres="$(grep -c '^    resolved: ' "$f")" || nres=0
-  cnt="$(awk '/^  cause: BLOCKERS-RESOLVED/{for(i=3;i<=NF;i++) if ($i ~ /^[0-9]+$/) {print $i; exit}}' "$f")"
-  printf '%s|%s|%s|%s\n' "$rc" "${cause:-NONE}" "$nres" "${cnt:-NA}"
+  nuns="$(grep -c '^    unseen: ' "$f")" || nuns=0
+  c1="$(awk '/^  cause: /{n=0; for(i=3;i<=NF;i++) if ($i ~ /^[0-9]+$/) { n++; if (n==1) { print $i; exit } } exit}' "$f")"
+  c2="$(awk '/^  cause: /{n=0; for(i=3;i<=NF;i++) if ($i ~ /^[0-9]+$/) { n++; if (n==2) { print $i; exit } } exit}' "$f")"
+  printf '%s|%s|%s|%s|%s|%s\n' "$rc" "${cause:-NONE}" "$nres" "${c1:-NA}" "${c2:-NA}" "$nuns"
 }
-v_sig() { # v_sig <emit> <tag> — writes each world's score beside the world, echoes the tuple
-  local e="$1" t="$2" n out=""
+v_emit_of() { # v_emit_of <tag>
+  case "$1" in
+    ship) printf '%s\n' "$EMIT" ;;
+    ctl)  printf '%s\n' "$VMD/ctl/emit-report.sh" ;;
+    *)    printf '%s\n' "$VMD/$1/mutant-emit.sh" ;;
+  esac
+}
+v_sig() { # v_sig <tag> — scores every world under that tag's program, writing each score beside
+  local t="$1" e n dd dh
+  e="$(v_emit_of "$t")"
+  dd="$(v_stub "$e" "$VMD/dead-drift-$t" unregistered-drift.sh)" || return 1
+  dh="$(v_stub "$e" "$VMD/dead-hb-$t"    hard-blockers.sh)"      || return 1
   for n in $V_WORLDS; do
-    v_score "$e" "$n" "$t" > "$VW/$n/score.$t"
-    out="$out$n=$(cat "$VW/$n/score.$t") "
+    case "$n" in
+      V-D)  v_score "$dd" "$n" "$t" > "$VW/$n/score.$t" ;;
+      V-HB) v_score "$dh" "$n" "$t" > "$VW/$n/score.$t" ;;
+      *)    v_score "$e"  "$n" "$t" > "$VW/$n/score.$t" ;;
+    esac
   done
-  printf '%s\n' "$out"
 }
+# THE SIGNATURES ARE COMPUTED IN PARALLEL AND NOTHING IS ASSERTED INSIDE A BACKGROUND JOB.
+# Thirteen programs times eleven worlds is 143 full re-renders, and serially that put this unit
+# past the budget it was given. Each job writes ONLY paths suffixed with its own tag, so no two
+# jobs touch a byte in common; every verdict below is read from those files in the foreground,
+# where `bad` still counts. `wait` reaps each wave, so nothing is left running — a bare kill on a
+# backgrounded subject leaks its grandchild, and this never kills one.
+v_par() { # v_par <tag>...
+  local t n=0
+  for t in "$@"; do
+    ( v_sig "$t" ) &
+    n=$((n+1))
+    if [ "$n" -ge 4 ]; then wait; n=0; fi
+  done
+  wait
+}
+v_sigstr()  { local t="$1" n out=""; for n in $V_WORLDS; do out="$out$n=$(cat "$VW/$n/score.$t" 2>/dev/null) "; done; printf '%s\n' "$out"; }
 v_diffset() { # v_diffset <tag-a> <tag-b> — names of the worlds whose score differs
   local n out=""
   for n in $V_WORLDS; do
@@ -613,7 +687,7 @@ v_diffset() { # v_diffset <tag-a> <tag-b> — names of the worlds whose score di
   done
   printf '%s' "${out% }"
 }
-v_of() { cat "$VW/$1/score.$2"; }
+v_of() { cat "$VW/$1/score.$2" 2>/dev/null; }
 
 VDG() { git -C "$DIST" -c user.email=f@f -c user.name=fixture "$@" >/dev/null 2>&1; }
 
@@ -675,29 +749,74 @@ verify: theirs_maybe core/schemas/thing.json "rule"
 VBLED2
 
 v_copy V-H && v_approve V-H "$THEIRS" || bad "FIXTURE BROKEN — could not build world V-H"
-{ echo "# Reconcile report (fixture)"; echo; grep -v 'HARD-UNREGISTERED-CORE-DRIFT' "$VW/V-H/region.md"; } > "$VW/V-H/approved.md"
+{ echo "# Reconcile report (fixture)"; echo; grep -v "$V_HARD" "$VW/V-H/region.md"; } > "$VW/V-H/approved.md"
 
 v_copy V-HA && v_approve V-HA "$THEIRS" || bad "FIXTURE BROKEN — could not build world V-HA"
-{ echo "# Reconcile report (fixture)"; echo; grep -v 'HARD-UNREGISTERED-CORE-DRIFT' "$VW/V-HA/region.md"; } > "$VW/V-HA/approved.md"
+{ echo "# Reconcile report (fixture)"; echo; grep -v "$V_HARD" "$VW/V-HA/region.md"; } > "$VW/V-HA/approved.md"
 mkdir -p "$VW/V-HA/consumer/_bmad-output/ai-dlc-update"
 printf 'adjudicated by hand\n' > "$VW/V-HA/consumer/_bmad-output/ai-dlc-update/blocker-adjudication-probe.md"
 
-# V-S: the stamp is one of the three refs lines, and it is the only one a CONSUMER-side event
-# moves. A stamp agreeing with the base renders no line at all; one that disagrees renders
-# `_stamp_ records …`, so an apply between the approval and the re-run makes the refs differ
-# without upstream moving at all.
+# V-S: the stamp line renders from the CONSUMER's stamp and moves when the CONSUMER re-stamps.
+# Keyed into the refs comparison it made a re-stamped consumer read as "upstream moved" — both
+# disjuncts of that message false — and pre-empted the resolved cause on a pull that had one. A
+# stamp agreeing with the base renders no line at all, so this world's approved region has none.
 v_copy V-S || bad "FIXTURE BROKEN — could not build world V-S"
 printf 'version: 1.0.0\ncommit: %s\n' "$BASE" > "$VW/V-S/consumer/.claude/.ai-dlc-version"
 v_approve V-S "$THEIRS" || bad "FIXTURE BROKEN — could not render world V-S"
 v_resolve V-S
 printf 'version: 2.0.0\ncommit: %s\n' "$THEIRS" > "$VW/V-S/consumer/.claude/.ai-dlc-version"
 
+# V-U: the resolution leaves a NON-HARD row the approval never saw. The override's `base_sha`
+# RESOLVES, so it passes the provenance check V-N fails, and its `shadows:` target is absent at
+# theirs — upstream restructured and the shadow points at nothing, which layer-drift.sh renders as
+# OVERRIDE-ANCHOR-UNRESOLVED [LC-O8]: a real finding, not a HARD one. (c) still fires, because the
+# HARD rule is the blocking contract; what must not happen is the count reporting zero.
+#
+# IT DIFFERS FROM V-N BY EXACTLY ONE PROPERTY, the base_sha, and that is deliberate: the two
+# overrides are otherwise the same file, so the pair separates "a new HARD row" from "a new row"
+# and nothing else varies with them.
+v_copy V-U && v_approve V-U "$THEIRS" || bad "FIXTURE BROKEN — could not build world V-U"
+v_resolve V-U
+mkdir -p "$VW/V-U/consumer/.claude/skills/ai-dlc/overrides"
+cat > "$VW/V-U/consumer/.claude/skills/ai-dlc/overrides/absent-anchor.md" <<VUOVR
+---
+shadows: core/rules/nonexistent.md#Nope
+base_sha: $BASE
+reason: probe
+---
+
+## Nope
+
+probe body
+VUOVR
+
+# V-D / V-DR: the blocker's own detector REFUSES at verify time. Its rows are simply absent, which
+# is exactly the shape (c) keys on — so before DETECTOR-REFUSED reached the classifier a dead
+# detector was diagnosed as a blocker the operator had resolved, BY NAME, over a drift still on
+# disk. V-D leaves the drift UNRESOLVED; V-DR resolves it, and both must read the same, because
+# the refusal is what blocks the cause and not the state of the file.
+v_copy V-D && v_approve V-D "$THEIRS" || bad "FIXTURE BROKEN — could not build world V-D"
+v_copy V-DR && v_approve V-DR "$THEIRS" || bad "FIXTURE BROKEN — could not build world V-DR"
+v_resolve V-DR
+
+# V-HC: THE HALF COPY. One blocker renders twice with different padding — `%-32s %s` in the
+# blocking list and `STATUS  path` in its detector's section — and a difference taken over RAW
+# lines reports the blocker GONE when only the padded copy is missing while the other still
+# renders. The first HARD line in the region is the padded one, and only it is deleted here.
+v_copy V-HC && v_approve V-HC "$THEIRS" || bad "FIXTURE BROKEN — could not build world V-HC"
+awk -v p="^$V_HARD" '$0 ~ p && !d { d=1; next } { print }' "$VW/V-HC/region.md" > "$VW/V-HC/region-half.md"
+{ echo "# Reconcile report (fixture)"; echo; cat "$VW/V-HC/region-half.md"; } > "$VW/V-HC/approved.md"
+
+# V-HB: hard-blockers.sh REFUSES, so the blocking list renders DETECTOR-REFUSED instead of the
+# padded copies. It is the wrapper the whole HARD- contract keys on, and its call was the one
+# detector pipeline with no exit-code check.
+v_copy V-HB && v_approve V-HB "$THEIRS" || bad "FIXTURE BROKEN — could not build world V-HB"
+
 # --- SELF-PROBES, BEFORE ANY VERDICT IS READ ------------------------------------------------
 # Every arm below is a differential between an approved region and a fresh render. Both sides
 # reading the same rows establishes nothing, so each world's two sides are proved to differ
 # FIRST, and each probe carries a positive conjunct so a render that emitted nothing cannot
 # satisfy it.
-V_HARD='HARD-UNREGISTERED-CORE-DRIFT'
 V_BASE_BYTES="$WORK/vp-base-thing.json"
 git -C "$DIST" show "${BASE}:core/schemas/thing.json" > "$V_BASE_BYTES" 2>/dev/null
 if [ ! -s "$V_BASE_BYTES" ]; then
@@ -711,7 +830,7 @@ fi
 V_R_AFTER="$WORK/vp-vr-after.md"; v_render V-R > "$V_R_AFTER"
 if ! grep -q "$V_HARD" "$VW/V-R/region.md"; then
   bad "FIXTURE BROKEN — V-R's APPROVED region carries no $V_HARD row, so there is no blocker for the resolution to remove"
-elif ! grep -qF "BOTH-ADDED->CLASSIFY  core/skills/ai-dlc/templates/classes.md" "$V_R_AFTER"; then
+elif ! grep -qF "$V_BASELINE" "$V_R_AFTER"; then
   bad "FIXTURE BROKEN — the render AFTER the resolution carries no baseline bucket row, so it is an empty or dead render and its missing HARD row proves nothing"
 elif grep -q "$V_HARD" "$V_R_AFTER"; then
   bad "FIXTURE BROKEN — the resolution did NOT remove the $V_HARD row from a fresh render, so V-R is not the state it claims to be"
@@ -755,26 +874,147 @@ else
 fi
 
 if grep -q '^_stamp_ ' "$VW/V-S/region.md"; then
-  bad "FIXTURE BROKEN — V-S's APPROVED region already carries a _stamp_ line, so moving the stamp changes nothing and V-S cannot reach UPSTREAM-MOVED"
+  bad "FIXTURE BROKEN — V-S's APPROVED region already carries a _stamp_ line, so moving the stamp changes nothing and V-S is a second copy of V-R"
 else
   V_S_AFTER="$WORK/vp-vs-after.md"; v_render V-S > "$V_S_AFTER"
   if ! grep -q '^_stamp_ ' "$V_S_AFTER"; then
-    bad "FIXTURE BROKEN — moving the consumer's stamp rendered no _stamp_ line, so V-S's refs lines are identical and it is a second copy of V-R"
+    bad "FIXTURE BROKEN — moving the consumer's stamp rendered no _stamp_ line, so V-S's two sides do not differ on the stamp at all"
   elif grep -q "$V_HARD" "$V_S_AFTER"; then
     bad "FIXTURE BROKEN — V-S's post-move render still carries $V_HARD, so it is not testing 'resolved AND the stamp moved'"
   else
-    ok "SP6 V-S's stamp move adds a _stamp_ line the approved region lacks AND its blocker is resolved — both, which is what makes the refs arm's precedence observable"
+    ok "SP6 V-S's stamp move adds a _stamp_ line the approved region lacks AND its blocker is resolved — both, which is what makes the stamp's exclusion from the refs comparison observable"
   fi
 fi
 
-# --- THE CORPUS ARMS ------------------------------------------------------------------------
-V_SHIP="$(v_sig "$EMIT" ship)"
-
-v_vr="$(v_of V-R ship)"
-if [ "$v_vr" = "3|BLOCKERS-RESOLVED|1|1" ] && grep -q "resolved: $V_HARD" "$VW/V-R/stderr.ship"; then
-  ok "V-R a blocker RESOLVED after the render exits 3 with cause BLOCKERS-RESOLVED, names the row it decided from, and counts ONE blocker although the region renders it twice"
+V_U_AFTER="$WORK/vp-vu-after.md"; v_render V-U > "$V_U_AFTER"
+v_u_hard_after="$(grep -c '^HARD-' "$V_U_AFTER")" || v_u_hard_after=0
+if grep -q 'OVERRIDE-ANCHOR-UNRESOLVED' "$VW/V-U/region.md"; then
+  bad "FIXTURE BROKEN — V-U's APPROVED region already carries OVERRIDE-ANCHOR-UNRESOLVED, so the row is not unseen and V-U is a copy of V-R"
+elif ! grep -q 'OVERRIDE-ANCHOR-UNRESOLVED' "$V_U_AFTER"; then
+  bad "FIXTURE BROKEN — the absent-anchor override rendered no OVERRIDE-ANCHOR-UNRESOLVED row, so V-U carries no unseen finding and cannot discriminate the unseen count"
+elif grep -q 'HARD-OVERRIDE-BASE' "$V_U_AFTER"; then
+  bad "FIXTURE BROKEN — V-U's override was rejected on its base_sha before the anchor was ever resolved, so it is a second copy of V-N and proves nothing about a NON-HARD unseen row"
+elif [ "$v_u_hard_after" -ne 0 ]; then
+  bad "FIXTURE BROKEN — V-U's post-resolution render carries $v_u_hard_after HARD row(s), so it would be decided by the HARD conjunct rather than by the unseen count"
 else
-  bad "V-R the resolved-blocker case scored $v_vr (want 3|BLOCKERS-RESOLVED|1|1) — either the cause is not decided, or the count is a LINE count rather than a blocker count, and apply.sh's refusal then names a cause that is false or a number the operator cannot reconcile with the region"
+  ok "SP7 V-U's fresh render carries a NON-HARD row the approved region lacks (OVERRIDE-ANCHOR-UNRESOLVED) and no HARD row at all — the count, not the verdict, is what it discriminates"
+fi
+
+V_DEAD_DRIFT="$(v_stub "$EMIT" "$VMD/probe-dead-drift" unregistered-drift.sh)"
+V_DEAD_HB="$(v_stub "$EMIT" "$VMD/probe-dead-hb" hard-blockers.sh)"
+V_D_AFTER="$WORK/vp-vd-after.md"; v_render V-D "$V_DEAD_DRIFT" > "$V_D_AFTER"
+V_D_ALIVE="$WORK/vp-vd-alive.md"; v_render V-D > "$V_D_ALIVE"
+if cmp -s "$V_BASE_BYTES" "$VW/V-D/consumer/.claude/schemas/thing.json"; then
+  bad "FIXTURE BROKEN — V-D's drift was resolved on disk, so its missing HARD row is a resolution and not a refusal, and it cannot discriminate the DETECTOR-REFUSED conjunct"
+elif ! grep -qF 'DETECTOR-REFUSED  unregistered-drift.sh' "$V_D_AFTER"; then
+  bad "FIXTURE BROKEN — the stubbed detector rendered no 'DETECTOR-REFUSED  unregistered-drift.sh' line, so V-D's fresh render is not the state it claims and the arm below cannot fire"
+elif grep -qF 'DETECTOR-REFUSED  unregistered-drift.sh' "$V_D_ALIVE"; then
+  bad "FIXTURE BROKEN — the UNMUTATED copy also renders DETECTOR-REFUSED for that detector, so the two sides do not differ and the stub is not what produced the line"
+elif ! grep -q "$V_HARD" "$V_D_ALIVE"; then
+  bad "FIXTURE BROKEN — the unmutated render of V-D's consumer carries no $V_HARD row, so the drift the refusal hides was never rendered and there is nothing for the refusal to conceal"
+else
+  ok "SP8 V-D's drift is STILL ON DISK and still renders as $V_HARD under a live detector, while the stubbed copy renders DETECTOR-REFUSED and no HARD row — the two sides differ, and they differ by the stub"
+fi
+
+# SP9: the half copy. The row must be REMOVED from the report, the SURVIVING copy must still be
+# there, and the two must be the same row once whitespace is collapsed — otherwise V-HC is not a
+# padding difference at all and E9 would be scored against something else.
+v_hc_appr="$(grep -c "^$V_HARD" "$VW/V-HC/region-half.md")" || v_hc_appr=0
+v_hc_full="$(grep -c "^$V_HARD" "$VW/V-HC/region.md")" || v_hc_full=0
+v_hc_a="$(grep -m1 "^$V_HARD" "$VW/V-HC/region-half.md" | sed -E 's/[[:space:]]+/ /g')"
+v_hc_b="$(grep -m1 "^$V_HARD" "$VW/V-HC/region.md" | sed -E 's/[[:space:]]+/ /g')"
+if [ "$v_hc_full" -ne 2 ]; then
+  bad "FIXTURE BROKEN — the region renders $v_hc_full copies of $V_HARD, not 2, so 'delete one copy' is not the state V-HC claims to build"
+elif [ "$v_hc_appr" -ne 1 ]; then
+  bad "FIXTURE BROKEN — V-HC's report carries $v_hc_appr copies of $V_HARD after the cut, not 1: either nothing was deleted or both copies were"
+elif [ "$v_hc_a" != "$v_hc_b" ]; then
+  bad "FIXTURE BROKEN — the deleted copy and the surviving copy are DIFFERENT rows once whitespace is collapsed ('$v_hc_b' vs '$v_hc_a'), so V-HC is not a padding difference and E9 would be scored against a real row"
+else
+  ok "SP9 V-HC deletes one of the region's two copies of the blocker and leaves the other, and the two are the same row once whitespace is collapsed — a padding difference and nothing else"
+fi
+
+# SP10: the refusing WRAPPER. The blocking list must go, the detector-section copy must stay —
+# that surviving copy is precisely why normalisation alone already prevents the misread, and it
+# is what makes E9 and E10 cover each other.
+V_HB_AFTER="$WORK/vp-vhb-after.md"; v_render V-HB "$V_DEAD_HB" > "$V_HB_AFTER"
+v_hb_hard="$(grep -c "^$V_HARD" "$V_HB_AFTER")" || v_hb_hard=0
+if cmp -s "$V_BASE_BYTES" "$VW/V-HB/consumer/.claude/schemas/thing.json"; then
+  bad "FIXTURE BROKEN — V-HB's drift was resolved on disk, so its blocking list would be empty anyway and the refusal is not what the arm reads"
+elif ! grep -qF 'DETECTOR-REFUSED  hard-blockers.sh' "$V_HB_AFTER"; then
+  bad "FIXTURE BROKEN — the stubbed wrapper rendered no 'DETECTOR-REFUSED  hard-blockers.sh' line, so V-HB's fresh render is not the state it claims"
+elif [ "$v_hb_hard" -ne 1 ]; then
+  bad "FIXTURE BROKEN — V-HB's render carries $v_hb_hard copy(ies) of $V_HARD, not the 1 the detector's own section renders; the wrapper's refusal is not what removed the padded copy"
+else
+  ok "SP10 V-HB's wrapper refuses, the padded blocking-list copy of the blocker is gone and the detector section's copy remains — which is the state where the padded copy alone looked resolved"
+fi
+
+# --- STAGE THE MUTANTS, THEN SCORE EVERY PROGRAM ---------------------------------------------
+# Each is a copy of the WHOLE reconcile directory: emit-report.sh resolves $SELF beside itself
+# and shells to preclassify.sh, layer-drift.sh, ledger-reverify.sh and more, so a lone script
+# copy dies before printing anything and "no cause" would score as a kill on every arm at once.
+#
+# KILL SETS ARE ASSERTED EXACTLY AND SOME OF THEM HAVE THREE MEMBERS. That is the arms
+# OVERLAPPING rather than the mutants being wrong, and it is measured rather than assumed: V-R
+# and V-U read exit 3, so every mutation of the resolved-cause BRANCH moves all three.
+# What separates those mutants is what they move BEYOND that set — E5 reaches V-HA, E1 does not —
+# and the specific wrong verdict each world takes, asserted per world below.
+V_APPLIED=""
+v_mk() { # v_mk <name> <expected-anchor-hits> <anchor-regex> <sed-arg...>
+  local n="$1" want="$2" anch="$3"; shift 3
+  local d="$VMD/$n" hits ctl
+  rm -rf "$d"; cp -R "$(dirname "$EMIT")" "$d" || return 1
+  [ -f "$d/preclassify.sh" ] || { bad "$n did not stage its siblings — a copy missing preclassify.sh emits nothing and its silence would score as a kill"; return 1; }
+  hits="$(grep -c -e "$anch" "$EMIT")" || hits=0
+  ctl="$(grep -c -e 'ZZ-NO-SUCH-ANCHOR-IN-EMIT-REPORT-ZZ' "$EMIT")" || ctl=0
+  if [ "$ctl" -ne 0 ]; then
+    bad "$n the impossible-anchor control matched $ctl lines in emit-report.sh, so the uniqueness count below means nothing"; return 1
+  fi
+  if [ "$hits" -ne "$want" ]; then
+    bad "$n's anchor matches $hits line(s) in emit-report.sh, not $want — the subject was respelled and this mutant edits something other than what it names. Re-anchor it; do NOT relax the assertion."; return 1
+  fi
+  if ! sed "$@" "$EMIT" > "$d/mutant-emit.sh"; then
+    bad "$n DID NOT APPLY — sed failed, so no mutant exists and the arm it guards is unproven"; return 1
+  fi
+  if cmp -s "$EMIT" "$d/mutant-emit.sh"; then
+    bad "$n DID NOT APPLY — the sed matched nothing, so the arm it guards is unproven"; return 1
+  fi
+  V_APPLIED="$V_APPLIED $n"
+  return 0
+}
+V_ELIF='^elif \[ "$hard_gone" -gt 0 \] && \[ "$hard_new" -eq 0 \] && \[ "$refused_new" -eq 0 \]; then$'
+V_E9SED='s/| norm_rows)/| LC_ALL=C sort)/g'
+V_E10SED='s/^  if \[ "$hb_rc" -eq 0 \]; then /  if true; then /'
+
+v_mk E1 1 '^\[ "$cause" = BLOCKERS-RESOLVED \] && exit 3$' -e '/^\[ "$cause" = BLOCKERS-RESOLVED \] && exit 3$/d'
+v_mk E2 1 '^if \[ "$refs_render" != "$refs_report" \]; then$' \
+  -e 's/^if \[ "$refs_render" != "$refs_report" \]; then$/if [ 1 -eq 0 ]; then/'
+v_mk E3 1 "$V_ELIF" \
+  -e 's/^elif \[ "$hard_gone" -gt 0 \] && \[ "$hard_new" -eq 0 \] && \[ "$refused_new" -eq 0 \]; then$/elif [ "$hard_gone" -gt 0 ] \&\& [ "$refused_new" -eq 0 ]; then/'
+v_mk E4 1 "$V_ELIF" \
+  -e 's/^elif \[ "$hard_gone" -gt 0 \] && \[ "$hard_new" -eq 0 \] && \[ "$refused_new" -eq 0 \]; then$/elif [ -n "$only_report" ] \&\& [ "$hard_new" -eq 0 ] \&\& [ "$refused_new" -eq 0 ]; then/'
+v_mk E5 1 "$V_ELIF" \
+  -e 's|^elif \[ "$hard_gone" -gt 0 \] && \[ "$hard_new" -eq 0 \] && \[ "$refused_new" -eq 0 \]; then$|elif ls "$CONSUMER"/_bmad-output/ai-dlc-update/blocker-adjudication-*.md >/dev/null 2>\&1; then|'
+v_mk E6 1 '^elif \[ "$stamp_render" != "$stamp_report" \]; then$' \
+  -e 's/^elif \[ "$stamp_render" != "$stamp_report" \]; then$/elif [ 1 -eq 0 ]; then/'
+v_mk E7 1 "$V_ELIF" \
+  -e 's/^elif \[ "$hard_gone" -gt 0 \] && \[ "$hard_new" -eq 0 \] && \[ "$refused_new" -eq 0 \]; then$/elif [ "$hard_gone" -gt 0 ] \&\& [ "$hard_new" -eq 0 ]; then/'
+v_mk E8 1 "^unseen_rows() { grep -Ev '" -e "s|^unseen_rows() { grep -Ev '.*\$|unseen_rows() { grep -Ev '^HARD-\|^\$'; }|"
+v_mk E9  2 '| norm_rows)' -e "$V_E9SED"
+v_mk E10 1 '^  if \[ "$hb_rc" -eq 0 \]; then ' -e "$V_E10SED"
+v_mk E11 2 '| norm_rows)' -e "$V_E9SED" -e "$V_E10SED"
+
+rm -rf "$VMD/ctl"; cp -R "$(dirname "$EMIT")" "$VMD/ctl"
+v_par ship ctl $V_APPLIED
+v_score "$V_DEAD_DRIFT" "$V_CONTROL_WORLD" ship > "$VW/$V_CONTROL_WORLD/score.ship"
+V_SHIP="$(v_sigstr ship)"
+V_CTL="$(v_sigstr ctl)"
+
+# --- THE CORPUS ARMS ------------------------------------------------------------------------
+v_vr="$(v_of V-R ship)"
+if [ "$v_vr" = "3|BLOCKERS-RESOLVED|1|1|0|0" ] && grep -q "resolved: $V_HARD" "$VW/V-R/stderr.ship"; then
+  ok "V-R a blocker RESOLVED after the render exits 3 with cause BLOCKERS-RESOLVED, names the row it decided from, counts ONE blocker although the region renders it twice, and counts ZERO unseen rows"
+else
+  bad "V-R the resolved-blocker case scored $v_vr (want 3|BLOCKERS-RESOLVED|1|1|0|0) — either the cause is not decided, or the blocker count is a LINE count rather than a blocker count, or the unseen count is counting the boilerplate a plain resolution moves into the diff, which makes it useless for telling that resolution from one hiding a finding"
 fi
 
 v_vn="$(v_of V-N ship)"
@@ -807,47 +1047,63 @@ case "$v_vha" in
   *) bad "V-HA scored $v_vha (want 1|UNDECIDED|...) — the diagnosis is reading a file the consumer can create rather than the two regions, so an operator writing an adjudication note acquits a dropped finding" ;;
 esac
 
+# THE STAMP IS ITS OWN CAUSE, and the arm reads all three of its outputs. Folded in with
+# `_base_`/`_theirs_` it made a re-stamped consumer read as UPSTREAM-MOVED, whose two disjuncts
+# are both false; dropped from the key entirely it made a post-apply re-run — stamp legitimately
+# at theirs — read as blockers RESOLVED and be told to re-approve and apply a range already
+# applied. So the verdict, the cause word, and the HARD counts the cause line carries beside the
+# stamp are all in the cell, and the changed line must still reach the operator in the diff.
 v_vs="$(v_of V-S ship)"
-case "$v_vs" in
-  "1|UPSTREAM-MOVED|"*) ok "V-S a moved consumer STAMP is one of the three refs lines, so it is decided as UPSTREAM-MOVED and never as a resolution" ;;
-  *) bad "V-S scored $v_vs (want 1|UPSTREAM-MOVED|...) — the refs comparison does not include the _stamp_ line, so an apply that already moved this tree reads as blockers the operator resolved" ;;
-esac
+if [ "$v_vs" = "1|STAMP-MOVED|0|0|1|0" ] && grep -qE '^[<>] _stamp_ records ' "$VW/V-S/stderr.ship"; then
+  ok "V-S a moved CONSUMER stamp is neither upstream moving nor a resolved blocker: it is decided on its own line, exit 1 with cause STAMP-MOVED, the blocker it also resolved is still counted beside it, and the changed line reaches the operator in the forwarded diff"
+else
+  bad "V-S scored $v_vs (want 1|STAMP-MOVED|0|0|1|0 with the _stamp_ line in the diff) — a stamp folded into the base/theirs key reads as UPSTREAM-MOVED with both disjuncts false, and a stamp left out of every key reads as BLOCKERS-RESOLVED on a post-apply re-run, which tells the operator to re-approve and apply a range this tree already carries"
+fi
 
-# --- MUTANTS --------------------------------------------------------------------------------
-# Each is a copy of the WHOLE reconcile directory: emit-report.sh resolves $SELF beside itself
-# and shells to preclassify.sh, layer-drift.sh, ledger-reverify.sh and more, so a lone script
-# copy dies before printing anything and "no cause" would score as a kill on every arm at once.
-# The UNMUTATED control runs the same seven worlds through the same directory shape first.
-VMD="$WORK/v-mutants"; mkdir -p "$VMD"
-v_mk() { # v_mk <name> <expected-anchor-hits> <anchor-regex> <sed-arg...>
-  local n="$1" want="$2" anch="$3"; shift 3
-  local d="$VMD/$n" hits ctl
-  rm -rf "$d"; cp -R "$(dirname "$EMIT")" "$d" || return 1
-  [ -f "$d/preclassify.sh" ] || { bad "$n did not stage its siblings — a copy missing preclassify.sh emits nothing and its silence would score as a kill"; return 1; }
-  hits="$(grep -c -e "$anch" "$EMIT")" || hits=0
-  ctl="$(grep -c -e 'ZZ-NO-SUCH-ANCHOR-IN-EMIT-REPORT-ZZ' "$EMIT")" || ctl=0
-  if [ "$ctl" -ne 0 ]; then
-    bad "$n the impossible-anchor control matched $ctl lines in emit-report.sh, so the uniqueness count below means nothing"; return 1
-  fi
-  if [ "$hits" -ne "$want" ]; then
-    bad "$n's anchor matches $hits line(s) in emit-report.sh, not $want — the subject was respelled and this mutant edits something other than what it names. Re-anchor it; do NOT relax the assertion."; return 1
-  fi
-  if ! sed "$@" "$EMIT" > "$d/mutant-emit.sh"; then
-    bad "$n DID NOT APPLY — sed failed, so no mutant exists and the arm it guards is unproven"; return 1
-  fi
-  if cmp -s "$EMIT" "$d/mutant-emit.sh"; then
-    bad "$n DID NOT APPLY — the sed matched nothing, so the arm it guards is unproven"; return 1
-  fi
-  return 0
-}
+v_vu="$(v_of V-U ship)"
+if [ "$v_vu" = "3|BLOCKERS-RESOLVED|1|1|1|1" ] && grep -q '^    unseen: OVERRIDE-ANCHOR-UNRESOLVED' "$VW/V-U/stderr.ship"; then
+  ok "V-U a resolution that leaves a NON-HARD row the approval never saw still refuses, and the row is COUNTED and NAMED rather than asserted away — one, against V-R's zero on the same verdict"
+else
+  bad "V-U scored $v_vu (want 3|BLOCKERS-RESOLVED|1|1|1|1 with OVERRIDE-ANCHOR-UNRESOLVED listed as unseen) — the message tells the operator no finding is hidden from the approval while one is, and the count cannot tell a plain resolution from a resolution carrying a row"
+fi
+
+v_vd="$(v_of V-D ship)"
+if [ "$v_vd" = "1|UNDECIDED|0|0|1|0" ] && grep -q '1 DETECTOR-REFUSED line(s)' "$VW/V-D/stderr.ship"; then
+  ok "V-D a detector that REFUSED is not a blocker resolved: its rows are absent with nobody to vouch for them, so the cause stays UNDECIDED and the message counts the refusal"
+else
+  bad "V-D scored $v_vd (want 1|UNDECIDED|0|0|1|0 naming 1 DETECTOR-REFUSED line) — a dead detector is being diagnosed as the operator's own resolution, BY NAME, over a drift still on disk, and the remedy it offers is a re-render that would bake that absence into an approved report"
+fi
+
+v_vdr="$(v_of "$V_CONTROL_WORLD" ship)"
+if [ "$v_vdr" = "$v_vd" ]; then
+  ok "V-DR CONTROL the same dead-detector copy reaches the same verdict with the drift RESOLVED on disk — the refusal is what blocks the cause, not the state of the file, so V-D is not passing because of what its consumer happens to hold"
+else
+  bad "V-DR CONTROL the dead-detector verdict changed with the drift resolved (unresolved: $v_vd / resolved: $v_vdr) — V-D is being decided by its consumer's contents rather than by the refusal, so it does not test the DETECTOR-REFUSED conjunct"
+fi
+
+v_vhc="$(v_of V-HC ship)"
+if [ "$v_vhc" = "1|UNDECIDED|0|0|0|0" ]; then
+  ok "V-HC a blocker whose padded copy is missing from the report while its detector-section copy still renders is NOTHING gone and NOTHING new — normalised before the difference, the two sides carry the same row and both counts are zero"
+else
+  bad "V-HC scored $v_vhc (want 1|UNDECIDED|0|0|0|0) — the difference is being taken over RAW lines, so one blocker rendered twice with different padding is scored as a row that moved, and a still-rendered blocker cannot be told from a resolved one"
+fi
+
+v_vhb="$(v_of V-HB ship)"
+if [ "$v_vhb" = "1|UNDECIDED|0|0|1|0" ] && grep -q '1 DETECTOR-REFUSED line(s)' "$VW/V-HB/stderr.ship"; then
+  ok "V-HB the WRAPPER the HARD- contract keys on gets the same refusal treatment as the detectors it drives: an empty blocking list from a wrapper that did not run is not '0 HARD blockers.'"
+else
+  bad "V-HB scored $v_vhb (want 1|UNDECIDED|0|0|1|0 naming 1 DETECTOR-REFUSED line) — hard-blockers.sh exiting non-zero renders an empty blocking list that reads as a clean one, on the single line the whole HARD- contract is keyed to"
+fi
+
+# --- THE KILL SETS --------------------------------------------------------------------------
 # v_kill <name> <expected-kill-set> <world:expected-score> ...
 v_kill() {
   local n="$1" want="$2"; shift 2
   local got spec w exp act allok=1
-  v_sig "$VMD/$n/mutant-emit.sh" "$n" >/dev/null
+  case " $V_APPLIED " in *" $n "*) : ;; *) return 1 ;; esac
   got="$(v_diffset ship "$n")"
   if [ "$got" != "$want" ]; then
-    bad "$n moved the worlds [${got:-none}] and had to move exactly [$want] — a mutant that fails more than its own arm means two arms are entangled, and one that fails fewer means the arm it guards is carried by something else"
+    bad "$n moved the worlds [${got:-none}] and had to move exactly [$want] — a mutant that fails more than its own arms means two of them are entangled, and one that fails fewer means the arm it guards is carried by something else"
     allok=0
   fi
   for spec in "$@"; do
@@ -860,73 +1116,88 @@ v_kill() {
   [ "$allok" = 1 ]
 }
 
-rm -rf "$VMD/ctl"; cp -R "$(dirname "$EMIT")" "$VMD/ctl"
-V_CTL="$(v_sig "$VMD/ctl/emit-report.sh" ctl)"
-if [ "$V_CTL" = "$V_SHIP" ] && [ "$(v_of V-R ctl)" = "3|BLOCKERS-RESOLVED|1|1" ]; then
-  ok "CONTROL(V) an unmutated copy in a fresh directory reproduces all seven verdicts INCLUDING the positive one (V-R exits 3 and names its row), so a mutant's changed cell is the mutation and not the copy"
+if [ "$V_CTL" = "$V_SHIP" ] && [ "$(v_of V-R ctl)" = "3|BLOCKERS-RESOLVED|1|1|0|0" ]; then
+  ok "CONTROL(V) an unmutated copy in a fresh directory reproduces every verdict INCLUDING the positive one (V-R exits 3 and names its row), so a mutant's changed cell is the mutation and not the copy — and the two were computed in different parallel slots, so it is also the arm that would catch the scoring racing with itself"
 else
   bad "CONTROL(V) the unmutated copy did not reproduce the shipped verdicts — every mutant below is unreadable. shipped: $V_SHIP / copy: $V_CTL"
 fi
 
-# E1: the classification deleted — the program as it stood before this change, which reported
-# the mismatch and exited 1 for every cause. Must move V-R and nothing else.
-if v_mk E1 1 '^\[ "$cause" = BLOCKERS-RESOLVED \] && exit 3$' -e '/^\[ "$cause" = BLOCKERS-RESOLVED \] && exit 3$/d'; then
-  v_kill E1 "V-R" "V-R:1|BLOCKERS-RESOLVED|1|1" \
-    && ok "E1 (exit 3 deleted): V-R alone goes red — the resolved-blocker case falls back to the undifferentiated refusal, and apply.sh cannot tell it from a hand-edit"
-fi
+# E1: the classification deleted — the program as it stood before this change, which reported the
+# mismatch and exited 1 for every cause. Moves every world that reads 3 and nothing else.
+v_kill E1 "V-R V-U" "V-R:1|BLOCKERS-RESOLVED|1|1|0|0" \
+  && ok "E1 (exit 3 deleted): the three worlds that read 3 go red and no other — the resolved-blocker case falls back to the undifferentiated refusal and apply.sh cannot tell it from a hand-edit"
 
-# E2: the refs comparison disarmed entirely. A moved upstream must be decided FIRST, because it
-# makes every other line incomparable; without it a region diffed against a different range is
-# diagnosed from HARD rows that describe another tree.
-#
-# ITS KILL SET IS TWO WORLDS, AND THAT IS THE ARMS OVERLAPPING RATHER THAN THE MUTANT BEING
-# WRONG — MEASURED, not asserted from the shape. V-M and V-S are the two seeds whose refs lines
-# differ, on different members of the same comparison (theirs' tree; the consumer's stamp), so a
-# mutation that deletes the comparison reaches both and BOTH findings are true. E6 is what keeps
-# the stamp member from riding on the tree member: it narrows the same comparison to
-# `_base_`/`_theirs_` and its kill set is V-S ALONE, so a refs check that reads only two of the
-# three lines is visible here even though E2 cannot see it.
-if v_mk E2 1 '^if \[ "$refs_render" != "$refs_report" \]; then$' \
-   -e 's/^if \[ "$refs_render" != "$refs_report" \]; then$/if [ 1 -eq 0 ]; then/'; then
-  v_kill E2 "V-M V-S" "V-M:3|BLOCKERS-RESOLVED|1|1" "V-S:3|BLOCKERS-RESOLVED|1|1" \
-    && ok "E2 (refs check disarmed): both refs-decided worlds go red and no other, and each goes red by calling a moved range a resolved blocker — the wrong answer, not merely a different one"
-fi
+# E2: the refs comparison disarmed. A moved upstream must be decided FIRST, because it makes every
+# other line incomparable. Now that `_stamp_` has left the comparison, V-M is the only world whose
+# refs lines differ — which is what E6 exists to keep honest in the other direction.
+v_kill E2 "V-M" \
+  && ok "E2 (refs check disarmed): V-M alone goes red — a MOVED upstream is diagnosed from HARD rows that describe another tree"
 
 # E3: the `hard_new` conjunct dropped — the count-based wrong fix, "resolved whenever HARD rows
-# vanished". It passes V-R, V-M, V-B, V-H and V-S; V-N is the only seed that carries the
-# property it drops.
-if v_mk E3 1 '^elif \[ "$hard_gone" -gt 0 \] && \[ "$hard_new" -eq 0 \]; then$' \
-   -e 's/^elif \[ "$hard_gone" -gt 0 \] && \[ "$hard_new" -eq 0 \]; then$/elif [ "$hard_gone" -gt 0 ]; then/'; then
-  v_kill E3 "V-N" "V-N:3|BLOCKERS-RESOLVED|1|1" \
-    && ok "E3 (hard_new conjunct dropped): V-N alone goes red — a blocker resolved beside a NEW one is acquitted as the operator's own work"
-fi
+# vanished". V-N is the only seed that carries the property it drops.
+v_kill E3 "V-N" "V-N:3|BLOCKERS-RESOLVED|1|1|0|0" \
+  && ok "E3 (hard_new conjunct dropped): V-N alone goes red — a blocker resolved beside a NEW one is acquitted as the operator's own work"
 
 # E4: the HARD- keying dropped while the rest of the shape is kept — exit 3 whenever the region
 # carries rows the render lacks. V-B is the only seed whose resolution is not a blocker.
-if v_mk E4 1 '^elif \[ "$hard_gone" -gt 0 \] && \[ "$hard_new" -eq 0 \]; then$' \
-   -e 's/^elif \[ "$hard_gone" -gt 0 \] && \[ "$hard_new" -eq 0 \]; then$/elif [ -n "$only_report" ] \&\& [ "$hard_new" -eq 0 ]; then/'; then
-  v_kill E4 "V-B" "V-B:3|BLOCKERS-RESOLVED|1|0" \
-    && ok "E4 (HARD- keying dropped): V-B alone goes red, and the message it prints counts ZERO blockers — a diagnosis with no subject"
-fi
+v_kill E4 "V-B" \
+  && ok "E4 (HARD- keying dropped): V-B alone goes red — a non-HARD row that stopped rendering is reported as a resolved blocker"
 
 # E5: the cause decided from a FILE the consumer can create rather than from the two regions.
-# Killed in BOTH directions deliberately, which is why its kill set has two members: V-R has no
-# such file and must still be 3, V-HA has one and must still be 1. A one-directional arm cannot
-# tell a correctly-keyed decision from one that reads the wrong input.
-if v_mk E5 1 '^elif \[ "$hard_gone" -gt 0 \] && \[ "$hard_new" -eq 0 \]; then$' \
-   -e 's|^elif \[ "$hard_gone" -gt 0 \] && \[ "$hard_new" -eq 0 \]; then$|elif ls "$CONSUMER"/_bmad-output/ai-dlc-update/blocker-adjudication-*.md >/dev/null 2>\&1; then|'; then
-  v_kill E5 "V-R V-HA" "V-R:1|UNDECIDED|0|NA" "V-HA:3|BLOCKERS-RESOLVED|1|0" \
-    && ok "E5 (cause read off a consumer file): BOTH directions go red — the real resolution loses its diagnosis and a hand-dropped row gains one, which a single-direction arm could not separate"
+# Killed in BOTH directions deliberately: the worlds with no such file lose their diagnosis and
+# V-HA, which has one, gains it. A one-directional arm cannot tell a correctly-keyed decision from
+# one that reads the wrong input.
+v_kill E5 "V-R V-HA V-U" "V-R:1|UNDECIDED|0|0|0|0" \
+  && ok "E5 (cause read off a consumer file): BOTH directions go red — every world with no such file loses its diagnosis and the hand-dropped one that has a file gains it, which a single-direction arm could not separate"
+
+# E6: the STAMP-MOVED branch removed, so the stamp falls through to the resolved cause. V-S is
+# the only world whose stamp moved; V-M must stay put, or the mutant is moving the refs arm
+# generally rather than the stamp branch that sits between the other two.
+v_kill E6 "V-S" "V-S:3|BLOCKERS-RESOLVED|1|1|0|0" \
+  && ok "E6 (the STAMP-MOVED branch removed): V-S alone goes red and V-M does not — a tree whose recorded position moved under the report is diagnosed as blockers the operator resolved, and the remedy offered is to re-approve and apply a range the stamp says is already applied"
+
+# E7: the `refused_new` conjunct dropped. A detector that refused leaves exactly the row absence
+# (c) keys on.
+v_kill E7 "V-D" "V-D:3|BLOCKERS-RESOLVED|1|1|0|0" \
+  && ok "E7 (DETECTOR-REFUSED conjunct dropped): V-D alone goes red — a refusing detector is reported as a blocker the operator resolved, by name, over a drift still on disk"
+
+# E8: `unseen_rows()` reduced to "everything that is not HARD and not blank". The count is what
+# separates a plain resolution from one carrying a row the approval never saw, and boilerplate is
+# what destroys it: a resolution replaces a HARD row with `none` or `0 HARD blockers.`, so the
+# plain case counts those and reads exactly like the carrying one.
+v_kill E8 "V-R V-U" \
+  && ok "E8 (unseen_rows reduced to non-HARD): the plain resolution's unseen count stops being zero — the count no longer separates a resolution that hid nothing from one that hid a finding, and the VERDICT does not move at all"
+
+# E9/E10/E11: TWO GUARDS THAT COVER EACH OTHER, AND THE ARM THAT SAYS SO.
+#
+# MEASURED, not reasoned: with the normalisation in place a dead wrapper leaves the blocker's
+# detector-section copy rendering, so nothing is gone and the refusal never has to block anything;
+# with the refusal in place a raw difference is blocked before it can misread the padded copy.
+# Each alone therefore changes NO verdict, which is the silent shape — zero failures rather than
+# two — and each is given a subject the other cannot see: E9 makes V-HC count a HARD row as new
+# when both sides carry it, E10 makes V-HB stop counting the refusal. E11 applies both and is the
+# only one that reaches the defect itself, on V-HB: a wrapper that did not run, reported as a
+# blocker the operator resolved, over a drift still on disk.
+# E9's KILL SET IS SEVEN WORLDS AND THAT IS THE MUTATION'S REACH, NOT AN ENTANGLEMENT. The
+# normalisation is a property of the COMPARISON, so removing it perturbs the counts of every world
+# whose two sides differ by padding anywhere — measured, seven of eleven. What E9 OWNS is V-HC,
+# the only world built so that a blocker's two copies differ by padding alone, and the arm asserts
+# that cell exactly. The second conjunct is the load-bearing half: no VERDICT moves anywhere, so
+# without the counts in the cell this mutant would come back green.
+if v_kill E9 "V-R V-N V-H V-HA V-S V-U V-HC" "V-HC:1|UNDECIDED|0|1|0|0"; then
+  case "$(v_of V-R E9)" in
+    "3|BLOCKERS-RESOLVED|"*) ok "E9 (normalised AFTER the difference): V-HC counts a HARD row as new when both sides carry it, and no verdict moves anywhere — V-R still reads 3 — so the counts are the only record that the guard is gone" ;;
+    *) bad "E9 flipped V-R's verdict as well as the counts ($(v_of V-R E9)) — the mutation is not confined to the counting and its attribution to V-HC is unearned" ;;
+  esac
 fi
 
-# E6: `_stamp_` dropped from the refs comparison, in BOTH readers — a partial revert leaves the
-# two sides permanently unequal and would report UPSTREAM-MOVED everywhere, proving the layer
-# that was left in place. V-S is the only seed whose refs differ on the stamp alone.
-if v_mk E6 2 "(base|theirs|stamp)_ " -e 's/(base|theirs|stamp)_ /(base|theirs)_ /'; then
-  v_kill E6 "V-S" "V-S:3|BLOCKERS-RESOLVED|1|1" \
-    && ok "E6 (_stamp_ dropped from the refs comparison): V-S alone goes red — an apply that already moved this tree reads as blockers the operator resolved, and the refusal offers a re-render that cannot help"
-fi
+v_kill E10 "V-HB" "V-HB:1|UNDECIDED|0|0|0|0" \
+  && ok "E10 (the wrapper's REFUSED arm removed): V-HB alone goes red — the refusal stops being counted, and with the normalisation still in place the verdict does not move, so nothing but this cell records that the guard is gone"
 
+# E11 reaches what neither alone can: V-HB's VERDICT, not its counts.
+if v_kill E11 "V-R V-N V-H V-HA V-S V-U V-HC V-HB" "V-HB:3|BLOCKERS-RESOLVED|1|1|0|0" "V-HC:1|UNDECIDED|0|1|0|0"; then
+  ok "E11 (both guards removed together): V-HB reads BLOCKERS-RESOLVED — a wrapper that did not run is named as the operator's own resolution over a drift still on disk, which is the defect the pair exists to prevent and which neither mutant alone can reach"
+fi
 echo
 if [ "$fails" -eq 0 ]; then echo "reconcile-emit-report: PASS"; exit 0; fi
 echo "reconcile-emit-report: $fails assertion(s) FAILED" >&2
