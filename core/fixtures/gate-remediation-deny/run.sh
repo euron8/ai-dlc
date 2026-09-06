@@ -1022,7 +1022,7 @@ fi
 if mut m5-any-suppression-lifts 's@if \[ -z "\$FAILED_CHECKS" \]; then@if [ -n "$SUPPRESSED_CHECKS" ]; then@'; then
   kill_arm m5-any-suppression-lifts allow "$W" "M5: 'any suppression lifts' is INVISIBLE on S1 — which is why S5 exists"
 fi
-if mut m6b-key-drops-verifier 's@|\$(fkey "\$STEER_SCRIPT")@@'; then
+if mut m6b-key-drops-verifier 's@|\$(ckey "\$STEER_SCRIPT")@@'; then
   kill_arm m6b-key-drops-verifier allow "$W" "M6b: dropping the VERIFIER term from the cache key does not move S1 itself"
 fi
 if mut m6-key-drops-escalations 's@|\$(ckey "\$ESC_FILE")@@'; then

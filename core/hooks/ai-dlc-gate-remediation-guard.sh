@@ -827,9 +827,12 @@ else
   # stronger one and no term would disagree. The `+cite+at` tag is a human-readable note about
   # WHICH verification generation this is; it decides nothing, because a tag only invalidates
   # when somebody remembers to change it, and reverting it left every fixture and every
-  # validator green -- measured. `fkey` on the verifier itself is the term that cannot be
-  # forgotten: edit the predicate and the key moves.
-  CACHE_KEY="${LIVE_NONCE}|+cite+at|$(ckey "$ESC_FILE")|$(fkey "${AI_DLC_GATE_METRICS:-${LOG_DIR}/implementation-artifacts/gate-metrics.jsonl}")|$(fkey "$SUPP_DIR/validate-suppression-lifetime.sh")|$(fkey "$STEER_SCRIPT")"
+  # validator green -- measured. A digest of the verifier's BYTES is the term that cannot be
+  # forgotten: edit the predicate and the key moves. It is `ckey`, not `fkey`, because the
+  # size-and-mtime form is blind to exactly the class this term exists for -- a same-length
+  # edit (`Math.abs(ts - authMs)` to `Math.abs(authMs - ts)`) under a checkout that preserves
+  # mtime left the key byte-identical, measured by the batch-64 adversary.
+  CACHE_KEY="${LIVE_NONCE}|+cite+at|$(ckey "$ESC_FILE")|$(fkey "${AI_DLC_GATE_METRICS:-${LOG_DIR}/implementation-artifacts/gate-metrics.jsonl}")|$(fkey "$SUPP_DIR/validate-suppression-lifetime.sh")|$(ckey "$STEER_SCRIPT")"
   # A key with an unreadable term cannot invalidate, so there is no key: pay the parse.
   case "$CACHE_KEY" in *"?"*) CACHE_KEY="" ;; esac
   CACHED_KEY=""
