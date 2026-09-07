@@ -18,6 +18,16 @@
 #                   their own way, so every permissive read has a finding of its own to lose.
 #   citation/       an extension whose shadows anchor ACQUITS a bare Check citation in its
 #                   own body — the one guarded read whose failure ADDS a finding.
+#   partial-aa/     an unreadable entry AND a readable sibling that draws a real finding, with
+#   partial-zz/     the unreadable one sorting FIRST and LAST respectively. The subject of
+#                   "findings about the entries this run COULD read still reach the operator".
+#
+# THE TWO PARTIAL TREES ARE ONE WORLD AT TWO SORT POSITIONS, AND THE SECOND IS NOT A COPY.
+# `layer_files()` sorts, so the position decides which entries a loop has already visited when
+# it meets the unreadable one. Measured against a candidate fix whose only error was `break`
+# where `continue` belongs: at `zz-` nothing sorts after the seal, the mistake costs no finding
+# and the arm passes; at `aa-` the readable sibling's row disappears and the arm fires. One
+# position alone cannot see it.
 #
 # THE LAST TWO CARRY NO chmod. Their sites sit behind every earlier guard, so a permanently
 # unreadable file never reaches them; run.sh reaches them with a fault-injected fm() instead,
@@ -197,9 +207,32 @@ core_tree "$CITE"
   printf 'This body cites Check 12 and means the one it shadows.\n'
 } > "$CITE/.claude/skills/ai-dlc/extensions/cite-ext.md"
 
+# --- partial-aa/ and partial-zz/ : the SURVIVAL subject, at both sort positions ----------
+# Each tree holds an entry that draws a REAL finding — `no-receipt` declares no `conforms_to:`
+# and takes an E17 — plus one entry that will be sealed. The sealed basename is chosen so that
+# it sorts BEFORE the finding-bearing entry in one tree and AFTER it in the other:
+#
+#   aa-sealed  <  no-receipt  <  zz-sealed
+#
+# The finding is what must SURVIVE the seal. Sorting it between the two seal names is what
+# makes the two trees answer differently for a fix that stops the loop instead of skipping the
+# entry: in `partial-aa` that fix loses the E17, in `partial-zz` it does not.
+#
+# `no-receipt` and not a malformed entry, because a missing `conforms_to:` is read by the
+# CENSUS LOOP — the same loop the first guarded read sits in, and the loop whose abort BL-122
+# is about. A finding raised by a later pass would survive a fix that only fixes the census.
+for _p in aa zz; do
+  _pt="$ROOT/partial-$_p"
+  core_tree "$_pt"
+  ext "$_pt" no-receipt 901 ""
+  ext "$_pt" "$_p-sealed" 902 "conforms_to: $CV"
+  ovr "$_pt" gate-validation__12 "conforms_to: $CV"
+done
+PAA="$ROOT/partial-aa"; PZZ="$ROOT/partial-zz"
+
 # THE CONSUMERS ARE GIT REPOS, because a real one always is. E16 reads an entry's id history
 # from the consumer's own git and REFUSES on a tree with no git — correctly, and loudly.
-for _c in "$CONS" "$UNR" "$KEY" "$OVRT" "$EXTT" "$PERM" "$CITE"; do
+for _c in "$CONS" "$UNR" "$KEY" "$OVRT" "$EXTT" "$PERM" "$CITE" "$PAA" "$PZZ"; do
   git init -q "$_c"
   git -C "$_c" config user.email fixture@example.invalid
   git -C "$_c" config user.name 'layer-entry-unreadable fixture'
@@ -214,5 +247,7 @@ done
 chmod 000 "$UNR/.claude/skills/ai-dlc/extensions/subject.md"
 chmod 000 "$OVRT/.claude/skills/ai-dlc/overrides/subject-ovr.md"
 chmod 000 "$EXTT/.claude/skills/ai-dlc/extensions/subject-ext.md"
+chmod 000 "$PAA/.claude/skills/ai-dlc/extensions/aa-sealed.md"
+chmod 000 "$PZZ/.claude/skills/ai-dlc/extensions/zz-sealed.md"
 
 printf '%s\n' "$ROOT"

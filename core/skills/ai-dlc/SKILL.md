@@ -926,11 +926,21 @@ context for the Read. The Read tool call is the mechanical
 verification that the step was loaded into the current conversation
 context.
 
-**Verification.** Each step file contains a `STEP_LOADED_TOKEN` HTML
-comment (format: `<!-- STEP_LOADED_TOKEN: <step-name> -->`). The
-gate log entry for that step MUST cite the token value. A gate log
-entry that names a step but cannot cite its token indicates the step
-was not read. Gate FAILS on missing token citation.
+**Each step file carries a `STEP_LOADED_TOKEN` HTML comment** (format:
+`<!-- STEP_LOADED_TOKEN: <step-name> -->`). It is a marker, and no gate
+reads it. This paragraph used to say the gate log entry MUST cite the
+token and that the gate FAILS on a missing citation; nothing ever
+implemented either half, and the claim is withdrawn rather than built.
+A gate log entry is written by the same lead the rule constrains, so a
+token cited there is a SELF-REPORT: the lead this rule exists to catch
+— the one that pattern-matches on "I know what this step does" and
+skips the Read — writes the token from memory exactly as readily as one
+that read the file. The evidence that discriminates is the `Read` tool
+call in the transcript, which the checked agent does not author;
+`.claude/hooks/ai-dlc-acknowledge.sh` Check 2z consumes it that way for
+`route.md`, keyed deliberately on a `file_path` and not on this token.
+Extending that shape to the other step files is a separate, larger
+change and is not claimed here.
 
 **Sliced loading for `gate-validation.md`.** For
 `gate-validation.md` alone, "loaded" does NOT mean the whole file. That

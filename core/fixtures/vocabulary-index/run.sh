@@ -138,9 +138,18 @@ seed() {
                 'after:' '  token: AFTER-BLOCK' '  readers:' '    - readers/decoy-after.md' \
                 > "$d/owners/emap.yaml"
   printf 'echo "SEEDED NOTHING"\n' > "$d/owners/emap-emitter.sh"
+  # The In-Flight status owner. Seeded with the two shapes that are NOT members alongside the
+  # two that are, so this owner is the fixture's standing proof that the extractor keys on the
+  # BRANCH the enforcer takes rather than on the word: a `tok ==` test is a member, a test of
+  # a different variable is not, and neither is a member named in the remedy prose the same
+  # file carries. An extractor reading the prose renders a row that stays correct-looking
+  # after the whitelist it claims to read has changed.
+  printf '%s\n' '      if (tok == "seed-one") next' '      if (tok == "seed-two") next' \
+                '      if (s == "not-a-status") next' \
+                '      The set is seed-three, seed-one and seed-two.' > "$d/owners/budget.sh"
 
   # --- the readers each vocabulary is joined to ---
-  for r in ledger kinds contract cycle skill hook emap; do
+  for r in ledger kinds contract cycle skill hook emap budget; do
     printf 'reader\n' > "$d/readers/$r.md"
   done
 
@@ -203,6 +212,13 @@ err "I807 fired"
 # vocabulary-emitters: @owner-declares
 # vocabulary-readers: @owner-declares
 err "I810 fired"
+# --- I811: the In-Flight status vocabulary is one set ------------------------
+# vocabulary: inflight statuses
+# vocabulary-invariant: I811
+# vocabulary-owner: owners/budget.sh
+# vocabulary-extract: inflight-statuses
+# vocabulary-readers: readers/budget.md
+err "I811 fired"
 # --- I808: an ordinary arm, and a NEAR MISS -- it binds ONE string, not a set -
 # The wording is deliberate. `one string` is one character-class away from `one set`, which
 # is what the demand arm keys on, so this line is the seed's standing proof that the arm
@@ -215,7 +231,7 @@ EOF
   # --- the invariant index the markers' citations resolve against ---
   {
     printf '# Invariant index\n\n| ID | What it binds |\n|----|---------------|\n'
-    for i in 801 802 803 804 805 806 807 808 810; do printf '| I%s | seeded |\n' "$i"; done
+    for i in 801 802 803 804 805 806 807 808 810 811; do printf '| I%s | seeded |\n' "$i"; done
   } > "$d/docs/invariant-index.md"
 
   # --- one schema, so the second table is non-empty ---
@@ -240,8 +256,8 @@ fi
 # --- controlB: the synthetic seed renders and round-trips --------------------
 seed "$TMP/controlB"
 outB="$(render_in "$TMP/controlB")"
-if ! grep -q "8 cross-file vocabular(ies), 1 schema enum(s)" <<<"$outB"; then
-  note "FIXTURE BROKEN: the synthetic seed did not render 8 vocabularies and 1 schema enum."
+if ! grep -q "9 cross-file vocabular(ies), 1 schema enum(s)" <<<"$outB"; then
+  note "FIXTURE BROKEN: the synthetic seed did not render 9 vocabularies and 1 schema enum."
   printf '%s\n' "$outB" | sed 's/^/      /' | head -6
   exit 1
 fi
@@ -249,11 +265,23 @@ fi
 # marker reader ran; six extractors could each be returning nothing and the row count would
 # be identical.
 missing=""
-for want in 'ALPHA' 'kind-one' 'CODE-A' 'keyone' 'heavy' 'one/\*.sh' 'YES' 'SEEDED NOTHING'; do
+for want in 'ALPHA' 'kind-one' 'CODE-A' 'keyone' 'heavy' 'one/\*.sh' 'YES' 'SEEDED NOTHING' 'seed-one'; do
   grep -qE "$want" "$TMP/controlB/docs/vocabulary-index.md" || missing="$missing $want"
 done
 if [ -n "$missing" ]; then
   note "FIXTURE BROKEN: rendered index is missing member(s) from the seed:$missing"
+  exit 1
+fi
+# AND THE In-Flight ROW MUST NOT CARRY THE PROSE-ONLY MEMBER. The seeded owner names
+# `seed-three` in a remedy sentence and never tests for it, which is the shape the real owner
+# has: validate-artifact-budget.sh's own failure text lists all three members, so an extractor
+# reading the prose renders a row that is byte-identical to a correct one today and stays
+# correct-looking after the whitelist it claims to read has changed. Presence of `seed-one`
+# above and absence of `seed-three` here are one assertion in two halves; either alone passes
+# under a prose-reading extractor.
+if grep -q 'seed-three' "$TMP/controlB/docs/vocabulary-index.md"; then
+  note "FIXTURE BROKEN: the inflight-statuses extractor rendered \`seed-three\`, which the seeded owner names only in prose and never tests for. It is reading what the file SAYS rather than the branch it TAKES."
+  grep 'inflight' "$TMP/controlB/docs/vocabulary-index.md" | sed 's/^/      /'
   exit 1
 fi
 # The consumer-owned row must render WITHOUT members and must not have shifted its fields.
@@ -505,7 +533,7 @@ fi
 seed "$TMP/n1"
 if mutate "$TMP/n1/$MAP" '/^# --- I802: the kind vocabulary is one set/d'; then
   green_check "n1  block-scope    two adjacent blocks, one field each" "$TMP/n1" \
-    "8 cross-file vocabular(ies), 1 schema enum(s)" '| ledger statuses |' '| kinds |'
+    "9 cross-file vocabular(ies), 1 schema enum(s)" '| ledger statuses |' '| kinds |'
 else
   note "SKIP  n1 -- sed matched nothing; no mutation occurred"; rc=1
 fi

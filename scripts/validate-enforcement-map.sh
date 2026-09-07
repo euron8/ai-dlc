@@ -9213,6 +9213,225 @@ EOF
   fi
 fi
 
+# --- I110: the In-Flight `status` token set is ONE set across its owner and its readers ---
+# vocabulary: In-Flight Teammates row statuses
+# vocabulary-invariant: I110
+# vocabulary-owner: core/scripts/validate-artifact-budget.sh
+# vocabulary-extract: inflight-statuses
+# vocabulary-readers: core/skills/ai-dlc/steps/route.md, core/skills/ai-dlc/steps/gate-validation.md, core/skills/ai-dlc/steps/_gate-procedures.md, core/skills/ai-dlc/steps/implementation.md, core/skills/ai-dlc/steps/handoff.md, core/skills/ai-dlc/SKILL.md, core/hooks/ai-dlc-continue.sh, core/hooks/ai-dlc-recover.sh
+#
+# WHAT IT BINDS. The `status` column of the snapshot's `## In-Flight Teammates` section is a
+# closed set of three, and `check_inflight_status` in validate-artifact-budget.sh is the only
+# thing that enforces it -- a chain of `tok == "<member>"` tests, which is the OWNER. Six other
+# core files teach the same set in prose, and two hooks branch on members of it. Nothing joined
+# any of them to the whitelist.
+#
+# THE FAILURE IS THE ONE BL-147 SHIPPED, AND IT HAD ALREADY HAPPENED ONCE BEFORE THAT.
+# `core/fixtures/inflight-row-shape/run.sh`'s header records the first: the column was spelled
+# `in-flight`/`idle-reusable`, nothing anywhere enforced either spelling, and the rename closed
+# the set IN THE VALIDATOR ONLY. BL-147 was the second: route.md and handoff.md named `stopped`
+# and carried the handoff exception while gate-validation.md and the whitelist declared a closed
+# set of two, so a snapshot written by a lead following route.md literally failed the budget
+# check that route.md's own step had told it to satisfy. Every gate in the system was green over
+# that contradiction for its whole life, because the two halves were never compared.
+#
+# THE SET IS DERIVED FROM THE WHITELIST, NEVER HAND-LISTED HERE. A restated set in this arm
+# would be a seventh copy, and it would drift the same way the six did. The `sed` below is
+# byte-identical to `vocab_extract_inflight_statuses` in scripts/render-vocabulary-index.sh,
+# which reads the same owner to render this vocabulary's row -- one expression, two readers.
+#
+# THE JOIN IS AN EQUALITY, NOT A SUBSET, and both directions have a distinct subject. A member
+# the whitelist has and no reader teaches is a token a lead can never learn to write; a member a
+# reader teaches and the whitelist lacks is exactly BL-147, where following the step produces a
+# snapshot the enforcer rejects. Either alone acquits the case that motivated this.
+#
+# THE GRAMMAR AND ITS FALSE-POSITIVE SET, MEASURED. A reader "teaches" a member when a backticked
+# lowercase-hyphen token appears within six lines of a line naming `In-Flight`, in a `.md` file
+# under core/skills/ai-dlc or a `.sh` file under core/hooks. Two exclusions, both DERIVED:
+#   1. the owner set itself, which is what the comparison is about;
+#   2. the table's own COLUMN names, read out of the one code span in the window that carries
+#      pipes -- `agent | role | deliverable | dispatched-at | status`. Without this the false
+#      positive set is 2 (`status`, `dispatched-at`), so the narrowing is load-bearing rather
+#      than decorative.
+# Measured over the live corpus with today's set: FP 0 out of 5 backticked tokens in a 183-line
+# window. Measured with `stopped` removed from the whitelist to reconstruct the BL-147 era: the
+# arm reports `stopped` as taught-but-unenforced. The two sides were asserted to differ before
+# the null was read, because a scan that reports nothing on every input reads exactly like one
+# whose corpus is clean.
+#
+# WHY THE WINDOW IS SIX LINES AND THE ANCHOR IS `In-Flight` RATHER THAN THE FULL SECTION NAME.
+# Both were measured against the alternative. Anchoring on the literal `In-Flight Teammates`
+# structurally excludes implementation.md's Rule 26(c) paragraph, whose `delivered-reachable`
+# sits eight lines below a heading that wraps the phrase across two lines -- five reader files
+# instead of six, and the missing one is silently missing. Widening the corpus to every filetype
+# under core/skills/ai-dlc adds one false positive (`inflight-row-shape`, a fixture NAME cited in
+# layer-contract.yaml); adding core/scripts adds two more from the owner's own shell (`case`,
+# `continue`). Six lines, two subtrees, two filetypes: FP 0, all six reader files covered.
+#
+# BACKSLASHES ARE STRIPPED BEFORE THE TOKEN SCAN, and that is not cosmetic. ai-dlc-recover.sh
+# writes its guidance inside a DOUBLE-QUOTED heredoc, so every code span in it is spelled
+# \`stopped\`. Without the strip the hook half of the corpus contributes three tokens instead of
+# four and `dispatched-at` disappears -- the scan cannot spell its own subject there, and the
+# zero it returns is a floor of unknown depth rather than a reading.
+#
+# ONE RECURSIVE GREP PER CORPUS AND ONE `awk` BEHIND IT, NOT A LOOP OVER (subtree x file), AND
+# NOT A PIPELINE PER STAGE. CLAUDE.md records what a nested arm did to this validator once --
+# +39% on it, and a third onto the suite's pole. Measured here by removal differential inside
+# the repo, sides asserted to differ and the file restored under `cmp -s`, both sides spread
+# ZERO: a per-site nested loop costs 239 forks; the first pipeline-per-stage spelling of this
+# arm cost 25 (7925 against 7900); `i110_tokens` folding six stages into one `awk` costs 11.
+# The reduction was taken before the arm shipped, which is the order the fork budget above
+# exists to force.
+i110_owner="$REPO_ROOT/core/scripts/validate-artifact-budget.sh"
+i110_route="$REPO_ROOT/core/skills/ai-dlc/steps/route.md"
+
+# ONE token grammar, called by the probe and by the corpus. A second copy here would be this
+# arm disagreeing with itself about what a taught token looks like, which is the defect one
+# level up from the one it binds. `-A6` and the `In-Flight` anchor are inside the function for
+# the same reason: a probe scanned with a different window proves nothing about the corpus scan.
+i110_tokens() { # i110_tokens <dir> [<dir>...] -> one backticked token per line, sorted, unique
+  grep -rh -A6 --include='*.md' --include='*.sh' -F 'In-Flight' "$@" 2>/dev/null | awk '
+    {
+      gsub(/\\/, "")                       # ai-dlc-recover.sh writes \`token\` in a heredoc
+      while (match($0, /`[a-z][a-z0-9-]*`/)) {
+        t = substr($0, RSTART + 1, RLENGTH - 2)
+        if (!(t in seen)) { seen[t] = 1; n++; out[n] = t }
+        $0 = substr($0, RSTART + RLENGTH)
+      }
+    }
+    END {
+      # Insertion-ordered, then sorted by a shell-free pass: `sort -u` here would be a fork
+      # for an ordering only the finding text depends on, and this list never exceeds single
+      # digits. bash 3.2 has no associative arrays; awk does, which is why the dedupe is here.
+      for (i = 1; i <= n; i++) for (j = i + 1; j <= n; j++)
+        if (out[j] < out[i]) { s = out[i]; out[i] = out[j]; out[j] = s }
+      for (i = 1; i <= n; i++) print out[i]
+    }'
+}
+
+if [ ! -f "$i110_owner" ]; then
+  err "I110: $i110_owner is missing. It carries check_inflight_status, the only enforcer of the In-Flight status column, so there is no owner to compare the readers against and a clean result here would mean nothing."
+elif [ ! -f "$i110_route" ]; then
+  err "I110: $i110_route is missing. Its row schema is where the table's column names are derived from, and without them `status` and `dispatched-at` read as unenforced status tokens in every reader."
+else
+  # THE OWNER SET. Keyed on the `tok ==` line the enforcer branches on, not on a comment or a
+  # remedy paragraph -- validate-artifact-budget.sh's own error text also names all three, and
+  # binding to that would be binding to what the file SAYS rather than to what it DOES.
+  i110_set="$(sed -n 's/^[[:space:]]*if (tok == "\([a-z][a-z-]*\)") next$/\1/p' "$i110_owner" \
+              | LC_ALL=C sort -u)"
+  # THE COLUMN NAMES, read from the row schema route.md hands a lead, by SHAPE: the first code
+  # span in the In-Flight window that carries pipes. A hand-listed exclusion here would be the
+  # same hand-list this arm exists to refuse, one level down.
+  i110_cols="$(awk '
+    /In-Flight/ { w = 6 }
+    w > 0 {
+      w--
+      if (!done && match($0, /`[a-z][a-z0-9 |-]*\|[a-z0-9 |-]*`/)) {
+        s = substr($0, RSTART + 1, RLENGTH - 2)
+        n = split(s, c, "|")
+        for (i = 1; i <= n; i++) {
+          gsub(/^[[:blank:]]+|[[:blank:]]+$/, "", c[i])
+          if (c[i] != "") print c[i]
+        }
+        done = 1
+      }
+    }' "$i110_route")"
+  i110_n_set=0; i110_n_col=0
+  # Counted without a fork: `grep -c .` on a here-string is a process to count single-digit
+  # lines, and its zero-exit behaviour is the shape tool-hazards.md records shipping a dead arm.
+  while IFS= read -r i110_l; do [ -n "$i110_l" ] && i110_n_set=$((i110_n_set + 1)); done <<EOF
+$i110_set
+EOF
+  while IFS= read -r i110_l; do [ -n "$i110_l" ] && i110_n_col=$((i110_n_col + 1)); done <<EOF
+$i110_cols
+EOF
+  if [ "$i110_n_set" -lt 2 ]; then
+    err "I110 could not derive the status set: $i110_n_set member(s) read out of check_inflight_status. Its \`tok == \"<member>\"\` chain changed shape. A set of one or none compares equal to almost anything, so this reports rather than passing."
+  elif [ "$i110_n_col" -lt 2 ]; then
+    err "I110 could not derive the In-Flight row's column names: $i110_n_col read out of route.md's schema code span. Without them the column headings \`status\` and \`dispatched-at\` are indistinguishable from status TOKENS, and the arm would report two findings that are not drift."
+  else
+    # SELF-PROBE, BOTH DIRECTIONS, ON A mktemp TREE AND BEFORE THE CORPUS VERDICT IS READ.
+    # The offender seeds a token no reader teaches and the whitelist does not carry; the
+    # near-miss seeds a COLUMN NAME, which is the input the exclusion above exists for and the
+    # one that separates this grammar from the wider one that scored 2. An arm that reported
+    # both would flag the schema line in every reader; an arm that reported neither could not
+    # have caught BL-147. Both seeds live in ONE probe file: the grammar is line-windowed, not
+    # file-scoped, so two files would prove nothing a blank line between the seeds does not.
+    i110_probe="$(mktemp -d 2>/dev/null)"
+    if [ -z "$i110_probe" ]; then
+      err "I110 could not build its probe tree, so neither direction of its scan was proven this run. A grammar that has not been shown to fire is not evidence about the corpus below it."
+    else
+      # THE THIRD SEED IS WHAT GIVES THE BACKSLASH STRIP A SUBJECT, AND WITHOUT IT THAT LINE
+      # IS A VACUOUS GUARD. Measured on the live corpus: removing `gsub(/\\/, "")` changes the
+      # taught set by NOTHING today, because every member the hooks teach in escaped form is
+      # also taught unescaped in a step file, so a mutant deleting it passes every other arm
+      # here. The strip's real subject is a member taught ONLY inside ai-dlc-continue.sh or
+      # ai-dlc-recover.sh's double-quoted heredocs -- a state one hook edit away -- and this
+      # seed constructs it. It is written into a `.sh` file because that is the filetype the
+      # escaping arises in.
+      printf '%s\n' \
+        'A row in **In-Flight Teammates** may read' '' '`idle-reusable` when parked.' '' \
+        'x' 'x' 'x' 'x' 'x' 'x' 'x' \
+        'The In-Flight row schema names a' '' '`dispatched-at` column.' \
+        > "$i110_probe/probe.md"
+      printf '%s\n' \
+        'echo "## In-Flight Teammates' '' 'Status \`escaped-only\` -> SKIP the row."' \
+        > "$i110_probe/probe.sh"
+      i110_pt="$(i110_tokens "$i110_probe")"
+      i110_pp=0; i110_pn=0; i110_pn_excluded=0; i110_pe=0
+      in_lines 'idle-reusable' "$i110_pt"   && i110_pp=1
+      in_lines 'escaped-only'  "$i110_pt"   && i110_pe=1
+      in_lines 'dispatched-at' "$i110_pt"   && i110_pn=1
+      in_lines 'dispatched-at' "$i110_cols" && i110_pn_excluded=1
+      rm -rf "$i110_probe"
+      if [ "$i110_pp" -eq 0 ]; then
+        err "I110's positive probe was NOT seen: a seeded \`idle-reusable\` two lines under an In-Flight line went unread by the same grammar the corpus arm runs. That is the exact token the FIRST drift of this set used, so a clean verdict below is a scan that cannot spell its own subject."
+      fi
+      if [ "$i110_pe" -eq 0 ]; then
+        err "I110's ESCAPED probe was NOT seen: a token written \\\`escaped-only\\\` -- the spelling both hooks use, because their guidance sits inside double-quoted heredocs -- was invisible to the token grammar. The corpus verdict below would then be taken over a set missing whatever those two files teach and no step file repeats, and it would read exactly like agreement."
+      fi
+      if [ "$i110_pn" -eq 0 ]; then
+        err "I110's near-miss probe read back NOTHING: a seeded \`dispatched-at\` was not extracted at all, so the exclusion below is acquitting a token the scan never found. The quiet direction has to be quiet for the right reason."
+      elif [ "$i110_pn_excluded" -eq 0 ]; then
+        err "I110's near-miss probe was NOT excluded: the row's own column name \`dispatched-at\` survived the derived column list and would be reported as an unenforced status token. That exclusion is what takes this grammar's false-positive set from 2 to 0."
+      fi
+    fi
+    # THE CORPUS. Set equality, both directions, each with its own remedy.
+    i110_taught="$(i110_tokens "$REPO_ROOT/core/skills/ai-dlc" "$REPO_ROOT/core/hooks")"
+    i110_extra=""; i110_missing=""
+    while IFS= read -r i110_t; do
+      [ -n "$i110_t" ] || continue
+      in_lines "$i110_t" "$i110_set"  && continue
+      in_lines "$i110_t" "$i110_cols" && continue
+      i110_extra="$i110_extra $i110_t"
+    done <<EOF
+$i110_taught
+EOF
+    while IFS= read -r i110_m; do
+      [ -n "$i110_m" ] || continue
+      in_lines "$i110_m" "$i110_taught" || i110_missing="$i110_missing $i110_m"
+    done <<EOF
+$i110_set
+EOF
+    if [ -n "$i110_extra" ]; then
+      # THE FINDING NAMES THE FILE, AND THAT COSTS A FORK ONLY ON THE FAILING PATH. A token
+      # alone does not locate a drift: the reader has eight files to open, and the whole point
+      # of the arm is that the token is spelled identically in the one that is wrong. This
+      # grep runs inside the `if`, so a clean tree pays nothing for it.
+      i110_where=''
+      for i110_tok in $i110_extra; do
+        i110_where="$i110_where $i110_tok=$(grep -rl --include='*.md' --include='*.sh' -F -- "$i110_tok" \
+                      "$REPO_ROOT/core/skills/ai-dlc" "$REPO_ROOT/core/hooks" 2>/dev/null \
+                      | sed "s|^$REPO_ROOT/||" | tr '\n' ',')"
+      done
+      err "I110: the In-Flight Teammates \`status\` column is taught with token(s) check_inflight_status does not accept:$i110_extra. A lead following the step writes that value into the snapshot and validate-artifact-budget.sh then fails the row it was told to write -- that is BL-147 exactly, and it was green in every gate for the life of the contradiction. The whitelist in core/scripts/validate-artifact-budget.sh is the owner: either add the member there, or stop teaching it. Taught in:$i110_where"
+    fi
+    if [ -n "$i110_missing" ]; then
+      err "I110: check_inflight_status accepts status token(s) no core file teaches:$i110_missing. A member of the set that appears in no step file, no SKILL.md rule and no hook is one a lead can never learn to write, so the whitelist is enforcing a value nothing produces -- which is how the FIRST spelling of this column (\`idle-reusable\`) survived its own rename. Teach it in the reader that owns the transition, or remove it from the whitelist."
+    fi
+  fi
+fi
+
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"

@@ -15,6 +15,53 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.523.0] - 2026-09-07
+
+### `BL-187` — Rule 21 claimed a gate that was never built, on an artifact that cannot carry it
+
+Rule 21 stated that a gate log entry MUST cite each step file's `STEP_LOADED_TOKEN` and that
+the gate FAILS on a missing citation. Nothing read the token: 0 readers under `core/scripts/`,
+`scripts/`, `.githooks/` and `core/hooks/`, against a control of 11 files carrying `gate-log`
+in the same invocation. Nothing wrote it either — Check 12 of `gate-validation.md` is the
+instruction that appends a gate log entry, and its MUST-include list never asked for the token.
+
+The claim is withdrawn rather than built, because the artifact cannot carry the verification. A
+gate log entry is authored by the same lead the rule constrains, so a cited token is a
+self-report, and Rule 21's own stated failure mode is the lead that skips the Read while
+believing it knows the step. Check 2z of `ai-dlc-acknowledge.sh` consumes read-evidence with
+teeth and keys deliberately on a transcript `file_path`, which the checked agent does not author.
+
+Two mechanisms were built and refuted before choosing this. An entry-level arm over the
+reference consumer's gate logs flags 541 of 839 entries; scoped to the live log and to entries
+naming a step, the population is zero. A carriage census scored 13 of 13 rules as carrying,
+including this one, which hand-reading shows is a false carrier.
+
+### `BL-122` — an unreadable layer entry no longer suppresses every finding about every other entry
+
+`entry_unreadable()` exited immediately from the `conforms_to` census, which is Pass 0, so one
+unreadable file ended the run before any pass had printed. Worst case lost 7 of 7 errors and
+both warnings; even a last-sorting override lost 5 of 7 and the footer.
+
+It now records the path and continues, the footer carries `unreadable=N` disjoint from
+`entries=`, and one `exit 2` refuses at the end, ordered before the `ERRORS` test because
+"could not run" is the stronger fact. The shape is the one `crosswalk_unreadable()` already used
+700 lines away in the same file — cited as a mechanism precedent only: E16 defers because a
+shallow clone is a healthy consumer state, and an unreadable entry is not.
+
+Four population counters and the live-layer loop's two anchor harvests moved behind their first
+guarded read, so an entry nothing opened is not counted into a census or into E16's own guard.
+
+### `I110` / `BL-148` — the In-Flight `status` vocabulary is bound across its six declaring sites
+
+The token set had six declaring sites and no invariant, which is why `BL-147` reached a consumer
+as one token missing from one whitelist. `I110` binds them, with `docs/vocabulary-index.md`
+rendering the row. False-positive set measured at 0 over the live corpus; with the whitelist's
+`stopped` removed to reconstruct the `BL-147` era the arm fires on `stopped`, and without the
+derived column-name exclusion it reports 2 — so that narrowing is load-bearing.
+
+The four prose sites agree today, so the defect was latent rather than live; what was missing is
+the join that keeps them agreeing.
+
 ## [0.522.0] - 2026-09-06
 
 ### `BL-191` correction — the seam missed 13 fixtures whose `seed.sh` does the `git init`, one of them silently
