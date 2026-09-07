@@ -7820,3 +7820,275 @@ today, and nothing fails if one drifts.
 
 verify: sh d=$(mktemp -d) || exit 9; trap 'rm -rf "$d"' EXIT; git grep -l 'git init' -- 'core/fixtures/*/run.sh' | sort > "$d/pop"; N=$(awk 'END{print NR+0}' "$d/pop"); [ "$N" -ge 20 ] || exit 9; mkdir -p "$d/bin" || exit 9; printf '#!/bin/sh\nprintf "%%s\\n" "${GIT_DIR:-SCRUBBED}" >> "%s/rec"\nexit 1\n' "$d" > "$d/bin/git"; chmod +x "$d/bin/git" || exit 9; : > "$d/rec"; ( PATH="$d/bin:$PATH" GIT_DIR="$d/v.git" git rev-parse ) >/dev/null 2>&1; [ "$(awk 'NR==1{print}' "$d/rec")" = "$d/v.git" ] || exit 9; r=0; a=0; while IFS= read -r f; do : > "$d/rec"; ( PATH="$d/bin:$PATH" GIT_DIR="$d/v.git" bash "$f" ) >/dev/null 2>&1; set -- $(awk -v v="$d/v.git" '{n++; if ($0==v) k++} END{print n+0, k+0}' "$d/rec"); [ "$1" -gt 0 ] && r=$((r+1)); a=$((a+$2)); done < "$d/pop"; [ "$r" -eq "$N" ] || exit 9; [ "$a" -eq 0 ]
 
+## BL-122 — one unreadable layer entry suppresses every finding about every other entry
+
+**LANDED (v0.523.0, verified fc68c252).** `entry_unreadable` collects and defers like
+its sibling `crosswalk_unreadable`, the footer carries `unreadable=N`, and the single `exit 2`
+moves to the end, ordered before the `ERRORS` test. The entry's stated deferral reason had
+expired: the collect-defer-report-and-still-refuse machinery already existed in the same file.
+Receipt replaced — five properties across two worlds and two sort positions, scored against
+eleven wrong fixes.
+
+**Found by an adversarial pass over `v0.435.0`'s own fix, and it is the cost that fix chose to pay
+rather than a defect it introduced.** `entry_unreadable` exits immediately, and the first guard sits
+in the `conforms_to` census loop, which runs before any pass prints. So one unreadable file ends the
+run before a single finding about any other entry is emitted.
+
+Measured on the `layer-entry-unreadable` fixture's own `bad-consumer` tree with
+`extensions/above-cv.md` at mode 000, pre-fix against post-fix in the same invocation:
+
+```
+pre-fix   rc=1  errors=8  warns=2      (4 of those 8 were FALSE, about the unreadable file)
+post-fix  rc=2  errors=0  warns=0      no footer
+```
+
+The fix correctly removes the 4 false errors and takes the **4 true ones about the other three
+entries** with them. Both exits refuse the push, so this wedges TRIAGE rather than correctness — but
+an operator on a tree with one persistently unreadable file gets a run that says nothing about the
+43 files it read fine, and no way to see them without fixing the read first.
+
+**Why this was not taken in `v0.435.0`.** The remedy is a behavioural restructure rather than a
+guard: collect unreadable paths, exclude them from the census by name, let the passes finish, print
+the footer with an `unreadable=N` field, and exit 2 at the end. That changes what a clean run looks
+like and what the footer means, and it needs its own fixture arms for the partial-census state. It
+is a different change from "stop reporting a finding about content you never read", which is what
+that release claimed and did.
+
+**Do not close this by making the abort later.** The property is that findings about READABLE
+entries survive an unreadable sibling, and a fix that merely moves the exit point still loses them
+whenever the unreadable file sorts first.
+
+**THE FILED RECEIPT WAS BROKEN AND IS REPLACED. Three non-fixes closed it**, and two of them ship a
+validator reporting `rc=0 ERRORs=0` over a tree it could not read — output an operator cannot tell
+from a clean consumer. It counted `grep -c 'zz-broken'` over whole output, which awk's own
+`can't open file` on stderr can satisfy; it never asked whether the run REFUSED; and its single
+sort position could not see a fix that stops the loop rather than skipping the entry.
+
+**FIVE PROPERTIES, TWO WORLDS, and each property is here because it uniquely rejects a candidate
+nothing else rejects.** Built and scored against the correct fix and ten wrong ones:
+
+| | P1 | P3 | P4 | P5 | P6 | |
+|---|---|---|---|---|---|---|
+| correct | 1 | 1 | 1 | 1 | 1 | **PASS** |
+| unfixed (HEAD) | 0 | 1 | 1 | 1 | 1 | FAIL |
+| footer field only, exit unmoved | 0 | 1 | 1 | 1 | 1 | FAIL |
+| silent skip, no report, no refusal | 1 | 0 | 1 | 0 | 0 | FAIL |
+| unreadable is not an entry (`find -perm`) | 1 | 0 | 1 | 0 | 0 | FAIL |
+| defer the exit only, census unchanged | 1 | 1 | 0 | 1 | 1 | FAIL |
+| correct but ADVISORY | 1 | 1 | 1 | 0 | 1 | FAIL |
+| refuses, counts, names nothing | 1 | 0 | 1 | 1 | 0 | FAIL |
+| report gated on `ERRORS > 0` | 1 | 1 | 1 | 1 | 0 | FAIL |
+| abort moved to the LAST guard | 0 | 1 | 1 | 1 | 1 | FAIL |
+| report gated on `ERRORS == 0` | 1 | 0 | 1 | 1 | 1 | FAIL |
+| `break` where `continue` belongs | 0 | 1 | 1 | 1 | 1 | FAIL |
+
+**P1 SURVIVAL** — the readable sibling's finding is still emitted AND the footer still prints.
+Uniquely rejects unfixed, footer-only, abort-at-the-last-guard, and `break`-for-`continue`. The
+footer conjunct is load-bearing: without it the last two both pass, because moving the abort later
+preserves the rows and loses only the footer.
+**P3 NAMED** — the unreadable file is named by a line that is neither an `ERROR`/`WARN` row nor
+awk's own `can't open file`. Uniquely rejects report-gated-on-clean. Excluding awk's stderr is what
+the old receipt got wrong; excluding finding rows is what stops P4's subject satisfying it.
+**P4 NO-CLAIM** — ZERO `ERROR`/`WARN` rows naming the unreadable file. Uniquely rejects
+defer-the-exit-only.
+**P5 REFUSAL-ON-CLEAN** — on a tree with no other findings the run still exits non-zero. Uniquely
+rejects correct-but-advisory.
+**P6 NAMED-ON-CLEAN** — and still names the file there. Uniquely rejects report-gated-on-findings.
+
+**World 1 runs at BOTH sort positions and the second is not a doubling.** `aa-sealed` sorts before
+the finding-bearing entry and `zz-sealed` after it. Measured: `zz-sealed` alone rejects eight of the
+ten, and `aa-sealed` alone rejects nine — the tenth being `break`-for-`continue`, which loses no
+finding when nothing sorts after the seal.
+
+**World 2 is the fixture's own seeded clean tree, and it is required.** On world 1 an advisory fix
+exits 1 anyway from the readable entry's own error, so a bare `rc != 0` cannot tell a refusal caused
+by the seal from an ordinary finding. `seed.sh` takes NO argument and PRINTS its root; passing it a
+directory yields a second sandbox and reads as a refutation.
+
+verify: sh V="${BL122_V:-core/scripts/validate-layer-entries.sh}"; C=core/skills/ai-dlc/layer-contract.yaml; S=core/fixtures/layer-entry-unreadable/seed.sh; [ -f "$V" ] && [ -f "$C" ] && [ -f "$S" ] || exit 9; d=$(mktemp -d) || exit 9; trap 'chmod -R u+rwX "$d" 2>/dev/null; rm -rf "$d"' EXIT; nm() { awk -v p="$2" 'index($0,p)>0 && index($0,"awk:")!=1 && $1!="ERROR" && $1!="WARN" {n++} END{print n+0}' <<<"$1"; }; rw() { awk -v p="$2" '($1=="ERROR"||$1=="WARN") && index($0,p)>0 {n++} END{print n+0}' <<<"$1"; }; ft() { grep -c '^LAYER_CONFORMANCE ' <<<"$1"; }; P1=1; P3=1; P4=1; for pos in aa-sealed zz-sealed; do w="$d/$pos"; K="$w/.claude/skills/ai-dlc"; mkdir -p "$K/extensions" "$K/steps" || exit 9; cp "$C" "$K/" || exit 9; cv=$(awk '/^contract_version:/{print $2;exit}' "$C"); [ -n "$cv" ] || exit 9; printf -- '---\nname: gate-validation\ndescription: s\n---\n\n# G\n\n### 12. Core.\n' > "$K/steps/gate-validation.md"; printf -- '---\nkind: check\nhooks: steps/gate-validation.md\nid: broken\npush_candidate: false\n---\n\n### 901. [ext:broken] C.\n' > "$K/extensions/broken.md"; printf -- '---\nkind: check\nhooks: steps/gate-validation.md\nid: %s\npush_candidate: false\nconforms_to: %s\n---\n\n### 902. [ext:%s] C.\n' "$pos" "$cv" "$pos" > "$K/extensions/$pos.md"; b=$(bash "$V" "$w" 2>&1); [ "$(rw "$b" 'extensions/broken.md')" -ge 1 ] && [ "$(ft "$b")" -eq 1 ] || { echo "HARNESS BROKEN: the readable control entry drew no finding, or no footer, to lose ($pos)"; exit 9; }; chmod 000 "$K/extensions/$pos.md"; if awk '{exit}' "$K/extensions/$pos.md" 2>/dev/null; then echo "HARNESS BROKEN: seal did not take ($pos)"; exit 9; fi; o=$(bash "$V" "$w" 2>&1); { [ "$(rw "$o" 'extensions/broken.md')" -ge 1 ] && [ "$(ft "$o")" -eq 1 ]; } || P1=0; [ "$(nm "$o" "extensions/$pos.md")" -ge 1 ] || P3=0; [ "$(rw "$o" "extensions/$pos.md")" -eq 0 ] || P4=0; done; R=$(bash "$S") || exit 9; [ -n "$R" ] && [ -d "$R/consumer" ] || { echo "HARNESS BROKEN: seed printed no root"; exit 9; }; trap 'chmod -R u+rwX "$d" "$R" 2>/dev/null; rm -rf "$d" "$R"' EXIT; bash "$V" "$R/consumer" >/dev/null 2>&1 || { echo "HARNESS BROKEN: the seeded clean tree does not exit 0 unsealed, so a non-zero below is not the seal"; exit 9; }; T="$R/consumer/.claude/skills/ai-dlc/overrides/gate-validation__12.md"; [ -f "$T" ] || { echo "HARNESS BROKEN: seed did not write $T"; exit 9; }; chmod 000 "$T"; if awk '{exit}' "$T" 2>/dev/null; then echo "HARNESS BROKEN: world-2 seal did not take"; exit 9; fi; c=$(bash "$V" "$R/consumer" 2>&1); crc=$?; P5=$([ "$crc" -ne 0 ] && echo 1 || echo 0); P6=$([ "$(nm "$c" 'overrides/gate-validation__12.md')" -ge 1 ] && echo 1 || echo 0); echo "P1=$P1 P3=$P3 P4=$P4 P5=$P5 P6=$P6"; [ "$P1$P3$P4$P5$P6" = 11111 ]
+
+## BL-148 — the In-Flight status token set is a controlled vocabulary with SIX declaring sites, owned by nobody and bound by no invariant
+
+**LANDED (v0.523.0, verified fc68c252).** `I110` in `scripts/validate-enforcement-map.sh` binds
+the owner set to the readers as a two-directional set EQUALITY, and
+`docs/vocabulary-index.md` renders its row from the owner. The receipt below was REPLACED: the
+filed one read the rendered index and four non-fixes closed it.
+
+**Found while fixing `BL-147`**, 2026-09-02, and NOT fixed there — deferral reason below is a
+scope constraint, not difficulty. Distribution-internal in its cause and CONSUMER-FACING in its
+effect, so it ranks below any PC-backed entry a sweep turns up but above the distribution-only
+entries.
+
+`BL-147` was one token missing from one whitelist, and the reason it survived to reach a consumer
+is structural: the In-Flight `status` column's token set is declared in six core files and
+nothing joins them.
+
+    core/scripts/validate-artifact-budget.sh     the enforcing whitelist
+    core/skills/ai-dlc/steps/gate-validation.md  "`status` is X, Y or Z"
+    core/skills/ai-dlc/steps/_gate-procedures.md the reconcile instruction
+    core/skills/ai-dlc/steps/route.md            the schema a lead reads FIRST
+    core/skills/ai-dlc/steps/implementation.md   Rule 26(c)'s minimum-mechanism paragraph
+    core/skills/ai-dlc/steps/handoff.md          step 1's stop-and-rewrite instruction
+
+**THE ORIGINAL ENTRY NAMED FOUR AND ITS THREE FIGURES WERE ALL WRONG. THE CORRECTION RUNS BOTH
+WAYS.** Re-derived against the working tree, controls in the same invocation. The site list
+missed `implementation.md:494` and `handoff.md:32,37` — a WIDENING, and the one that mattered,
+because `implementation.md`'s `delivered-reachable` sits eight lines below a heading that wraps
+`In-Flight Teammates` across two lines, so the obvious grammar cannot see it. The index figures
+were unnarrowed greps: **14** rows and **8** `# vocabulary:` markers, not 15 and 12 — the 15
+counted two header rows and four of the twelve "markers" were explicit NEGATIONS ("NOT A
+VOCABULARY, so no `# vocabulary:` marker"). Drive `scripts/render-vocabulary-index.sh --check`
+rather than grepping. The part the entry got right survives: **zero** rows and zero markers
+named `delivered-reachable`.
+
+**AND THE DEFECT WAS LATENT, NOT LIVE.** `BL-147`'s fix landed, so the six sites AGREE today —
+the owner set derived from `tok ==` at `validate-artifact-budget.sh:750-752` is exactly the three
+tokens every reader teaches. The two-homes-to-two disagreement this entry describes is GONE. What
+survives is the structure: nothing joined the sites, so the next token added to any one of them
+drifts silently, exactly as the previous two did.
+
+**IT IS THE SECOND TIME THIS SET HAS DRIFTED.** `core/fixtures/inflight-row-shape/run.sh`'s own
+header records the first: the column was `in-flight`/`idle-reusable`, "nothing anywhere enforced
+either spelling -- the token lived in prose in four core files", and the rename to
+`delivered-reachable` closed the set **in the validator only**. That fixture is the mechanism
+that keeps the ENFORCED spelling from drifting back; nothing kept the PROSE sites agreeing with
+it, which is the half that failed here.
+
+**THE FALSE-POSITIVE SET IS ZERO AND THE MEASUREMENT THAT MAKES THAT WORTH ANYTHING IS THE
+DISCRIMINATING ONE.** The grammar scopes to a six-line window under a line naming `In-Flight`, in
+`.md` under `core/skills/ai-dlc` and `.sh` under `core/hooks`, excluding the owner set AND the
+row's own column names — the latter DERIVED by shape from route.md's schema code span, not
+hand-listed. Live corpus, today's whitelist: **FP 0** of 5 backticked tokens across a 183-line
+window. Whitelist with `stopped` removed to reconstruct the BL-147 era: the arm reports
+`stopped`. Sides asserted to differ before the null was read. Without the column exclusion the FP
+set is **2**, so that narrowing is load-bearing. Wider grammars, for the record of what was
+rejected: any backticked token = 125 FPs; requiring the line to name `status` = 4.
+
+**COST, MEASURED INSIDE THE REPO.** The arm is one recursive `grep` per corpus feeding one `awk`,
+never a loop over (subtree × file) — CLAUDE.md records what a nested arm did to this validator.
+Fork cost by removal differential, sides asserted to differ and the file restored under `cmp -s`:
+**9** (7908 with, 7899 without), corroborated by `fork-profile.sh --section by-arm` at **10**
+against `I108`'s 30. The first pipeline-per-stage spelling of the same logic cost **25** and a
+per-site nested loop cost **239**; the reduction was taken before the arm shipped. Wall clock is
+NOT RESOLVABLE by this instrument and that is the honest statement: five interleaved reps in a
+quiet window read 23.6/23.6, 23.7/23.8, 24.0/23.7 — the effect is inside a ±0.4s spread, and
+under load the same pair spread 23.4–55.0s.
+
+**THE REPLACED RECEIPT DRIVES THE ARM AND NEVER READS THE INDEX**, because the filed one read
+`docs/vocabulary-index.md` and four non-fixes closed it. It copies the tree, records the FAIL
+count, asserts `idle-reusable` ABSENT from the In-Flight window and `in-flight` present as its
+control pair, seeds the token into `route.md`, re-runs the validator, and requires the FAIL count
+to INCREASE with the output naming both the token and the file. Scored, nine implementations:
+UNFIXED, a comment naming the tokens, a prose line in the index, an index row with no owner or
+invariant, a comment disclaiming any reader, and the arm APPENDED AFTER the validator's final
+`exit` all read STILL-LIVE; the arm in its shipped position reads CLOSED; a missing validator and
+a reshaped owner whitelist both read BROKEN. The dead-arm mutant is in that table because a
+first draft of this fix was appended past the final `exit` and read as working.
+
+verify: sh set -e; r="$PWD"; v="$r/scripts/validate-enforcement-map.sh"; o="$r/core/scripts/validate-artifact-budget.sh"; s="$r/core/skills/ai-dlc/steps/route.md"; [ -f "$v" ] && [ -f "$o" ] && [ -f "$s" ] || exit 9; grep -q 'if (tok == "in-flight") next' "$o" || exit 9; w=$(mktemp -d); trap 'rm -rf "$w"' EXIT; grep -rh -A6 --include='*.md' --include='*.sh' -F 'In-Flight' "$r/core/skills/ai-dlc" "$r/core/hooks" > "$w/win" 2>/dev/null; grep -q 'in-flight' "$w/win" || exit 9; grep -q 'idle-reusable' "$w/win" && exit 9; b=$(bash "$v" 2>&1 | grep -c '^FAIL:' || true); cp "$s" "$w/bak"; awk '{print} /^   - Reconcile every .In-Flight Teammates. row/ {print "     `idle-reusable` (parked) is also accepted."}' "$w/bak" > "$s"; grep -q 'idle-reusable' "$s" || { cp "$w/bak" "$s"; exit 9; }; out=$(bash "$v" 2>&1 || true); cp "$w/bak" "$s"; cmp -s "$s" "$w/bak" || exit 9; a=$(printf '%s\n' "$out" | grep -c '^FAIL:' || true); [ "$a" -gt "$b" ] || exit 1; printf '%s\n' "$out" | grep '^FAIL:' | grep -q 'idle-reusable' || exit 1; printf '%s\n' "$out" | grep '^FAIL:' | grep -q 'route.md' || exit 1; exit 0
+
+## BL-187 — Rule 21 says the gate FAILS on a missing step-token citation, no program reads the token, and citation practice decayed to zero across five consecutive sprints unreported
+
+**LANDED (v0.523.0, verified fc68c252).** Rule 21's Verification paragraph is
+withdrawn rather than built: the claim was unbuildable on the artifact it named, because a gate
+log entry is authored by the lead the rule constrains. Two mechanisms were built and refuted
+first. Receipt replaced and scored across seven implementations.
+
+**Found while scoping `BL-186`**, by deriving what already mechanizes `READ AND FOLLOW` before
+proposing anything new. Not filed by the consumer; no `PC-` id.
+
+Rule 21 (`core/skills/ai-dlc/SKILL.md:919-955`) states that each step file carries a
+`STEP_LOADED_TOKEN`, that the gate log entry MUST cite it, and that the **gate FAILS on missing
+token citation** (`:933`).
+
+**Nothing reads it.** Programs under `core/scripts/`, `scripts/`, `.githooks/` and `core/hooks/`
+referencing `STEP_LOADED_TOKEN`: **0**, against a control of 9 validators in `core/scripts/` that
+do read `gate-log`. The single hit anywhere is a COMMENT at `core/hooks/ai-dlc-acknowledge.sh:196`
+— a file that mentions the token, not a reader of it. The stated verification does not exist as a
+program.
+
+**The consequence is measured on the reference consumer's own gate logs**, entries counted by
+`^## ` in the same invocation:
+
+| s246 | s248 | s298 | s299 | s302 | s303 | s304 | s305 | s306 | s307 | live |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 12 | 4 | 0 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | **0 of 9** |
+
+s246 and s248 are the positive control: the practice was real and then decayed to nothing across
+five consecutive sprints, with the live log at 0 of 9 entries. Nothing reported it, because
+nothing reads it.
+
+**Scope note, so the fix is not mis-sited.** All **21 of 21** `steps/*.md` carry a token (the
+21st is `steps/_gate-procedures.md:5`, a leading-underscore filename a `steps/*.md` glob matches
+but an eye scanning a listing skips; it is a genuine `READ AND FOLLOW` target at
+`gate-validation.md:161`). The two FORMAT files the existing steering directives point at —
+`escalations.md` and `artifact-path-grammar.md` — carry **0**.
+
+**A token join would ACQUIT this entry's subject and must not be sold as covering `BL-186`.** A
+token proves a file was READ. It cannot distinguish a read from a compliance, a defined format
+from an absent one, or a resolvable pointer from a dangling one, and its population is exactly
+the 3 sites that already have steering. Any arm built here needs a probe asserting it does NOT
+cover the 21 unsteered artifacts, per `mechanism-design.md` — an exemption needs a probe proving
+it does not cover the arm's own subject.
+
+**THE CLAIM IS WITHDRAWN RATHER THAN BUILT, AND TWO INDEPENDENT MECHANISMS WERE REFUTED BY
+BUILDING THEM.** An entry-level arm over the reference consumer's gate logs flags **541 of 839**
+entries (64.5%); **513** of those name no step file at all, because they are per-story gate
+CYCLES rather than step LOADS. Scoped to the live log and to entries naming a step, the
+population is **zero**. The same measurement read from both ends, with no scoping between that
+both fires and is honest — `CLAUDE.md`'s unmeasured-lint prohibition and `mechanism-design.md`'s
+check-that-cannot-fire, hit at once. A second instrument asked whether each rule's declared
+carrier CONTAINS its rule's subject; it scored **13 of 13 as carrying**, including this rule,
+which hand-reading establishes is a false carrier. A heading-token grammar cannot separate a file
+that INSTRUCTS a rule from one that happens to use its words, so that clean sweep is a floor of
+unknown depth and is discarded rather than reported.
+
+**AND THE ARTIFACT CANNOT CARRY THE VERIFICATION AT ALL, WHICH IS WHY NO THIRD MECHANISM IS
+OWED.** A gate log entry is written by the same lead Rule 21 constrains. Rule 21's own stated
+failure mode is a lead that pattern-matches on "I know what this step does" and skips the Read —
+precisely the lead that will also write the token from memory. `core/hooks/ai-dlc-acknowledge.sh`
+Check 2z consumes read-evidence with teeth and keys deliberately on a transcript `file_path`,
+which the checked agent does not author; its own fixture records the token agreeing with the Read
+count at exactly 38 of 171 transcripts, which is a correlation observed under no adversarial
+pressure and is not evidence of unforgeability. Its authors had the token, had proof it agreed,
+and still refused it as the carrier. Check 2z covers `route.md` alone, so read-evidence reaches
+**1 of 21** step files; extending it is a separate and larger entry.
+
+**Two of this entry's own figures were wrong, both in the direction that makes the practice look
+worse.** The decay table's cells are raw token MENTIONS read as entry counts — s302 is 2 citing
+entries and 3 mentions — and the live log is **10** entries, not 9. The table also excludes most
+of the corpus: 10 columns of 61 tracked gate-log files and 839 entries, omitting a 87-entry
+archive at the `implementation-artifacts` root. The conclusion survives both corrections.
+
+**The fix is the paragraph, and the writer-side gap is why.** Check 12 of `gate-validation.md` is
+the instruction that appends a gate log entry; its MUST-include list carries six items and the
+token is not among them, against `steering_violations` present in the same window as the control.
+The token appears once in that whole file — its own declaration. Nothing ever ASKED for the
+citation, so the practice did not decay through neglect. Making Check 12 ask for it was
+considered and refused: it would manufacture a compliance signal on the one surface that cannot
+carry it, and a gate log full of tokens would read as 21-of-21 verified while establishing
+nothing.
+
+**SEPARATE, UNFILED, AND FOUND WHILE SCOPING THIS:** Check 12 says *"Use the format defined in
+CLAUDE.md Autonomous Gate Protocol section."* That section exists in neither the reference
+consumer's `CLAUDE.md` (control: 13 headers present) nor `templates/CLAUDE.md.template` (control:
+7 headers). It was deleted from the template at `aa2778d5` (2026-04-18), and
+`core/skills/ai-dlc-setup/SKILL.md:212` lists it as MOVED TO `gate-validation.md` — the file
+still pointing at it. Circular, and it is the mechanical cause of the four incompatible heading
+grammars the consumer's gate logs carry.
+
+**Receipt replaced.** The filed one (`grep -rl STEP_LOADED_TOKEN` over three directories) was
+closable by four non-fixes, each BUILT and scored: a comment appended to an unrelated validator,
+a markdown doc, a file whose entire content is the token, and a comment DISCLAIMING that anything
+reads it — all four exit 0. It also INVERTED on the correct fix, which is a prose edit it can
+never close, and it sat one directory from closing today with no fix at all (`core/hooks/` gives
+n=1 on a pre-existing comment). The replacement extracts Rule 21's span with `I79`'s own
+extractor rather than a second grammar, and scores PASS only on the correct fix across seven
+implementations: unfixed, correct, rule gutted, claim reworded to "SHOULD fail", disclaiming
+comment, sliced-loading paragraph moved out, and over-trimmed to a stub. Arm 1 is widened past
+the literal sentence because the literal form PASSES a reworded claim; arm 2 is a span-line floor
+rather than a `CHECK_LOADED` grep because that grep has a one-line margin and fails a correctly
+fixed tree if the sliced-loading paragraph ever moves.
+
+verify: sh S=core/skills/ai-dlc/SKILL.md; [ -f "$S" ] || exit 9; span="$(awk -v n=21 '$0 ~ ("^### Rule " n " "){inb=1;fence=0;next} inb && /^```/{fence=!fence;next} inb && !fence && /^### Rule [0-9]/{exit} inb && !fence && /^## /{exit} inb{print}' "$S")"; [ -n "$span" ] || exit 9; printf '%s\n' "$span" | grep -qiE 'gate (FAILS|SHOULD fail|MUST fail|fails) on missing token' && exit 1; n="$(printf '%s\n' "$span" | grep -c .)" || n=0; [ "$n" -gt 30 ]
+
