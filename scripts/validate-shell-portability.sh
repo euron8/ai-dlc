@@ -104,6 +104,35 @@ S7_WHY="a backreference in an \`awk\` \`sub()\`/\`gsub()\` replacement. awk has 
 # without the word `git`. That number is about this repo's writing about the defect, not about
 # the corpus this arm scans, and reading it as the latter is how the first cut of this comment
 # shipped a false justification.
+#
+# THE `"?` IS LOAD-BEARING AND THIS ARM'S OWN REMEDY USED TO BE WRONG. The pattern once
+# required the rev-path to be UNQUOTED and `S8_WHY` prescribed quoting as the fix. A reader
+# who followed that prescription still lost the character, because zsh applies a history
+# modifier INSIDE a double-quoted parameter expansion -- the quotes are the shell's, and the
+# modifier fires before git ever sees the ref. Measured, one invocation, ref `ae0c6c6f`:
+#
+#   zsh  T=...; git show "$T:templates/settings.json.template"     -> fatal: 'ae0c6c6femplates/...'
+#   zsh  T=...; git show "${T}:templates/settings.json.template"   -> 272 lines   (control)
+#   bash T=...; git show "$T:templates/settings.json.template"     -> 272 lines   (control)
+#   zsh          git show "ae0c6c6f:templates/settings.json..."    -> 272 lines   (control)
+#
+# The last control is why this survived: a LITERAL ref works in every shell, so the rendered
+# form in a doc reads as correct to anyone who tests it without binding a variable first.
+# Only the second control discriminates, and it is the braces that carry it.
+#
+# THE MODIFIER SET IS 17 OF 26 LETTERS, NOT THE TWO `:c`/`:t` THIS FILE USED TO NAME -- so the
+# dangerous half of the corpus is far wider than the two paths that motivated it. Measured by
+# enumerating `"$T:<letter>rest/x"` under zsh: a/A/c/e/f/F/g/h/l/q/Q/r/s/t/u/w MANGLE, `s`
+# raising `bad substitution` rather than a wrong ref. `core/` (c), `templates/` (t) and `lib/`
+# (l) all break; `docs/`, `VERSION` and `scripts/` -- the last only because `s` errors loudly
+# rather than silently -- do not. A pattern keyed on the two known-bad prefixes would have
+# scored the other fifteen as safe, which is the narrowing this note exists to refuse.
+#
+# FALSE-POSITIVE SET: EMPTY, measured over the 563-file `instr` corpus at the widening. The
+# widened pattern found 20 renderings, 7 of them inside this arm's own battery (structurally
+# exempt, and they are the seeds) and 13 real subjects in shipped text, every one of which
+# renders a placeholder a reader substitutes a variable into. It does NOT flag `"${theirs}:`,
+# `"$SHA:` or a literal `HEAD:` -- the three correct forms are asserted as negatives in `n3`.
 # S9 KEYS ON `git grep`, NOT ON `grep`, AND MEASURING THE DIFFERENCE IS THE WHOLE ARM.
 # `git grep -E` and this machine's `/usr/bin/grep -E` are DIFFERENT ENGINES and they disagree
 # about `\b` and `\s`. Measured, both directions, on a token known present:
@@ -179,8 +208,8 @@ S10_HB="$(printf '\200-\377')"
 S10_PAT="(^[[:space:]]*/|grep|sed|awk|sub\\(|match\\(|~|[A-Za-z_][A-Za-z0-9_]*=[\"']).*\\[[^][:space:]]*[${S10_HB}][^][:space:]]*\\]"
 S10_SKIP="re\\.[a-z]+\\("
 S10_WHY="a MULTIBYTE character inside a bracket class in a shell, awk, sed or grep expression. Under the C locale -- every CI runner with LANG unset, every \`env -i\` -- the class holds the character's BYTES, not the character: a match lands on its last byte, a strip leaves the other two behind in the extracted value, and the value joins against nothing. Measured: \`[—–-]\` split every \`**Suppresses:**\` id in the suppression-lifetime validator so no SUPPRESSED carve-out existed under \`env -i\`. Spell it as an ALTERNATION -- \`(—|–|-)\`, \`(\\\\.|—)\` -- which is a byte sequence under both locales. The alternation CARRIES a \`|\`: if the expression is later interpolated into a \`sed s|…|…|\`, pick another delimiter (measured: relabel-extension-checks.sh's \`s|(\${anchor_at})|…|\` refused the pattern and wrote nothing)."
-S8_PAT="(show|cat-file -p|ls-tree|archive|diff)[[:space:]]+<[^>]+>:"
-S8_WHY="an UNQUOTED git rev-path in shipped instruction text. A reader who binds the ref to a variable and pastes this into zsh loses the character after the colon: \`:c\` and \`:t\` are history modifiers that consume it, so \`git show \$THEIRS:templates/x\` reports \`fatal: ambiguous argument 'ca1fb6eemplates/x'\` -- and any \`>\` redirect in the same line still creates the target as a 0-byte file that the next command reads and reports on. Render it quoted: \`git show \"<theirs>:<path>\"\`."
+S8_PAT="(show|cat-file -p|ls-tree|archive|diff)[[:space:]]+\"?<[^>]+>:"
+S8_WHY="a git rev-path in shipped instruction text whose ref placeholder is not BRACED. A reader who binds the ref to a variable and pastes this into zsh loses the character after the colon: \`:c\` and \`:t\` are history modifiers that consume it, so \`git show \"\$THEIRS:templates/x\"\` reports \`fatal: ambiguous argument 'ca1fb6eemplates/x'\` -- and any \`>\` redirect in the same line still creates the target as a 0-byte file that the next command reads and reports on. QUOTING DOES NOT FIX IT; only the braces do. Render it \`git show \"\${theirs}:<path>\"\`."
 
 # Only S1 subtracts. Declared explicitly rather than defaulted in a loop, because `set -u`
 # turns a missing one into an abort mid-scan, and an aborted scan prints fewer findings than
@@ -272,6 +301,7 @@ grep -E 'a\sb' f
 sed -E 's/a\sb/c/' f
 awk '{ gsub(/(a)b/, "\1x") }' f
 git -C <dist> show <theirs>:templates/settings.json.template > "$t"
+git -C <dist> show "<theirs>:templates/settings.json.template" > "$t"
 git grep -nE '\bMODEL_MAX\b' -- core/
 awk '{ sub(/[[:space:]]*[—–-][[:space:]].*$/, "", s) }' f
   /^#{2,4}[ \t]+[0-9]+[ \t]*[.—]/ { print }
@@ -283,7 +313,8 @@ while IFS= read -r l; do :; done < f
 grep -E 'a[[:space:]]b' f
 sed -E 's/a[[:blank:]]b/c/' f
 awk '{ if (match($0, /(a)b/)) print substr($0, RSTART, RLENGTH) }' f
-git -C <dist> show "<theirs>:templates/settings.json.template" > "$t"
+git -C <dist> show "${theirs}:templates/settings.json.template" > "$t"
+git show "$SHA:templates/settings.json.template" > "$t"
 git show HEAD:templates/settings.json.template > "$t"
 git grep -nE '[[:space:]]MODEL_MAX' -- core/
 grep -oE '\bLR-[0-9]+\b' f

@@ -26,6 +26,8 @@
 #   m7  S7  a backreference in an awk gsub replacement            -> must FAIL
 #   m8      the SHELL corpus emptied                              -> must FAIL (fail closed)
 #   m9  S8  `show <theirs>:<path>` unquoted in core text          -> must FAIL
+#   m9b S8  the same QUOTED but UNBRACED -- one char from m9, and
+#           the form this arm used to prescribe AS its fix        -> must FAIL
 #   m10     the CORE corpus emptied, shell corpus alive           -> must FAIL (fail closed)
 #   m11 S10 a multibyte bracket class, all FOUR census shapes plus
 #           the `#{2,4}` heading grammar                          -> must FAIL, 5 counted lines
@@ -566,18 +568,37 @@ seed "$TMP/n3"
 seed_core "$TMP/n3" skills/correct.md \
   'The correct renderings, none of which is the defect S8 hunts:' \
   '' \
-  '    git -C <dist> show "<theirs>:templates/settings.json.template" > "$t"' \
+  '    git -C <dist> show "${theirs}:templates/settings.json.template" > "$t"' \
   '    git show HEAD:templates/settings.json.template > "$t"' \
   '    git show "$SHA:templates/settings.json.template" > "$t"' \
   '' \
-  '# and the same quoted form inside a comment, which S8 scans and must still pass:' \
-  '#   git show "<theirs>:<path>" > "$t"'
+  '# and the same braced form inside a comment, which S8 scans and must still pass:' \
+  '#   git show "${theirs}:<path>" > "$t"'
 if out="$(run_v "$TMP/n3")" && grep -q "PASS" <<<"$out"; then
-  note "ok    n3 -- quoted, HEAD-literal and \"\$SHA: rev-paths are NOT reported"
+  note "ok    n3 -- braced, HEAD-literal and \"\$SHA: rev-paths are NOT reported"
 else
   note "FAIL  n3 -- S8 flagged a correct rev-path rendering; the arm fires on its own fix"
   printf '%s\n' "$out" | sed 's/^/      /' | head -4; rc=1
 fi
+
+# m9b -- S8's OTHER offender form, and the one this arm shipped as its own prescribed FIX for
+# four releases. `m9` seeds the UNQUOTED rendering; this seeds the QUOTED-but-UNBRACED one.
+# They are one character apart and the shells disagree about which of them works:
+#
+#   zsh  T=<sha>; git show "$T:templates/x"     -> fatal: ambiguous argument '<sha-minus-a-char>emplates/x'
+#   zsh  T=<sha>; git show "${T}:templates/x"   -> reads the blob        (the fix)
+#   bash T=<sha>; git show "$T:templates/x"     -> reads the blob        (why it survived review)
+#
+# `n3` above asserts the braced form is NOT reported, so the two together pin the arm to the
+# one character that separates a working paste from a corrupted ref. Without this seed the
+# widening is invisible: `m9`'s unquoted offender fires under the OLD pattern too, so `m9`
+# alone cannot tell the widened arm from the narrow one it replaced.
+seed "$TMP/m9b"
+seed_core "$TMP/m9b" skills/pull.md \
+  'Recover the template from the distribution:' \
+  '' \
+  '    t=$(mktemp); git -C <dist> show "<theirs>:templates/settings.json.template" > "$t"'
+kill_check "m9b S8 quoted-but-unbraced rev-path" "$TMP/m9b" S8
 
 # n4 -- S10's negatives, one line per acquitting mechanism. Every line here is either the FIX
 # S10 prescribes or one of the three narrowings its header records, and each is acquitted by a
