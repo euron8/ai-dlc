@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # layer-extends-grain — the charter's load-bearing `extends:` assertion, proved on the
 # axis no fixture varies today: THE SPAN.
 #

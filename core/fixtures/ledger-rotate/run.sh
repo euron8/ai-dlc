@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # ledger-rotate/run.sh — prove rotation removes CLOSED entries, keeps OPEN ones, loses
 # nothing, and does not change what the classifier says about the work still open.
 #

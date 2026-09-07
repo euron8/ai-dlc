@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # Drive the check-1c-bypass fixture and assert the expected match matrix.
 # Exit 0 = the seeded adversary really is a bypass, and the anchored arms catch it
 # while the naive forms do not.

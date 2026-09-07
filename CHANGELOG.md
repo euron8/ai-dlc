@@ -15,6 +15,49 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.522.0] - 2026-09-06
+
+### `BL-191` correction — the seam missed 13 fixtures whose `seed.sh` does the `git init`, one of them silently
+
+`v0.521.0` derived its population from `core/fixtures/*/run.sh`. **Fifteen `seed.sh` files also run
+`git init`, and for thirteen of them the `run.sh` contains none** — so those `run.sh` sourced
+nothing, the seed inherited an armed `GIT_DIR`, and the clobber survived the fix. Measured against
+the `v0.521.0` tree, fresh victim per trial: `layer-conforms-to` took a **762-entry index to 2 at
+exit 0 with zero FAILs**, `ledger-rotate` to 3, `snapshot-conservation` to 3. Discrimination control
+in the same run: `trunk-push-bound` and `layer-crosswalk-home` stayed 762 — the fix worked where it
+reached, and these were surviving it.
+
+The population now keys on the **directory**: a fixture joins it by running `git init` in any of its
+own scripts, and the seam still goes in `run.sh`, which is the entry point — the scrub reaches the
+seed by inheritance, which is why the two directories whose `run.sh` already ran `git init` were
+fixed by the first cut. Population 28 → 41, and all thirteen are now intact under arming.
+
+### The exemption was position-blind
+
+Sourcing the seam was treated as sufficient. A `run.sh` that sources it on line 2 and re-exports
+`GIT_DIR` on line 3 was **acquitted while clobbering 757 → 4** — the arm keyed on the sourcing site
+existing, never on it being the last writer. It now refuses a `GIT_DIR` assignment that persists.
+
+**A one-shot prefix is not a re-arm, and the first cut of that arm could not tell them apart.**
+`GIT_DIR=x git ls-files` scopes to a single command; keyed loosely, the arm flagged this validator's
+own fixture, whose harness reads a victim index with exactly that prefix — a true match on a false
+subject. The assignment must now END the command.
+
+Neither defect was live (0 of 41 in each case), so both were traps for the next author rather than
+holes. Three probe arms added: a re-arm is refused, a plain source is still acquitted, and a
+seed-only directory joins the population.
+
+### Two claims in the entry were refuted and are corrected in the archive
+
+**"Blast radius: the index only. `HEAD` unchanged, refs unchanged"** is false — against a
+`for-each-ref` snapshot, the ref store changes and **`refs/heads/main` itself moves**; one fixture
+left the index untouched and moved `main` anyway, which an index-only instrument cannot see.
+
+**"Recovers fully with `git reset --hard`"** is false and is the dangerous one: the fixture writes
+commits onto the victim's checked-out branch, so `HEAD` is the damaged state and resetting to it is
+a no-op that reports success. Recovery needs a pinned pre-damage sha. A session following the
+original sentence would conclude the damage is permanent.
+
 ## [0.521.0] - 2026-09-06
 
 ### `BL-191` — a fixture run by hand can no longer clobber the caller's git index while reporting PASS

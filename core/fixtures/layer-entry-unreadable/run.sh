@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # layer-entry-unreadable — prove that "I could not READ this entry" and "this entry has no
 # such key" are two facts and not one. PC-S307.
 #

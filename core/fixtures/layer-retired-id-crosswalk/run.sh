@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # layer-retired-id-crosswalk — E16: an id that LEFT the rulebook needs a crosswalk row.
 #
 # THE ASSERTION. The migration LC-N5 requires renames consumer ids into the band. Every
