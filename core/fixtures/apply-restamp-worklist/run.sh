@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # apply-restamp-worklist — a run that HANDS WORK BACK must not stamp the tree as being at THEIRS,
 # and must not clear the in-flight marker.
 #

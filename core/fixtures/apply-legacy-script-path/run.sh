@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # apply-legacy-script-path — a core validator left at the pre-0.126.0 location is
 # reported, and a LOCALLY EDITED one is reported on its own.
 #

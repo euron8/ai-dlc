@@ -128,6 +128,7 @@ core_manifest:
   - core/fixtures/readset-skip/**
   - core/fixtures/layer-qualifier-grain/**
   - core/fixtures/layer-conforms-to/**
+  - core/fixtures/lib/**
   - core/fixtures/layer-entry-unreadable/**
   - core/fixtures/layer-extends-grain/**
   - core/fixtures/layer-retired-id-crosswalk/**
