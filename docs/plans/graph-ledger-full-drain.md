@@ -37,6 +37,108 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
+### BATCH 68 SHIPPED AS `v0.520.0`, ONE PC-BACKED RELEASE, AND THE FILING'S OWN SPLIT HAD EXPIRED IN THE DIRECTION THAT MAKES THE DEFECT WIDER. THE CONSUMER DID NOT PULL, SO THE GAP IS TWO AND PENDING IS TWO, AND THE PULL IS **REQUIRED** ON A DIVERGENCE MEASURED ON THE REAL SUBJECT. THE SWEEP IS NOT EMPTY: UNFILED IS 16, AND ELEVEN OF THE THIRTEEN AVAILABLE WERE ALREADY ADJUDICATED `NOT-UPSTREAM` IN THIS REPO — A JOIN NOBODY HAD MADE.
+
+This block replaces the batch-67 record below it. Every figure here was re-derived on 2026-09-06
+after the merge, against the working tree with the controls in the same invocation; re-derive
+them again rather than reading them.
+
+**`VERSION` IS `0.520.0`, SO BATCH 69 RELEASES AS `0.521.0`.** Re-derive `VERSION` and add one.
+Batch 68 merged once: `69618a55` (PR #662, squash, `v0.520.0`) closing `BL-193` and citing
+`PC-S340-AUDIT-RULE-FILES-DRIFT-FINDINGS-IN-CORE-PROSE-ARE-NOT-CONSUMER-FIXABLE` verbatim in the
+release commit message — the id resolves to exactly ONE commit at `VERSION` 0.520.0. **Control note:
+`PC-S999-NEVER` is NOT a valid impossible-id control on the message channel — it returns 2, because
+this plan's own prose about that control has been committed. Use a token no commit carries; the
+corrected control returned 0.** Rotated (live 89 → 88, archive 104 → 105), `--check` PASS with the
+sha resolving before `--apply`. **Receipt histogram before and after: 76 all exit 1 before, and
+exactly ONE exit 0 after, identified BY NAME as `BL-193`'s own — zero incidental closes.** The other
+apparent zero is the `## Receipts` legend, prose about the grammar and not an entry; that is the
+known trap in this extraction. No correction release. **The sixteenth batch opened by a peer's
+handoff** (action 9's message from `ai-dlc-18`), so it scoped itself from its own ranking and stated
+the choice in its first ping.
+
+**ELEVEN OF THE THIRTEEN AVAILABLE UNFILED CANDIDATES WERE ALREADY ADJUDICATED IN THIS REPO, AND NO
+BATCH HAD EVER JOINED THAT VERDICT TO THIS FILE.** `docs/reviews/graph-ledger-adjudication-brief.md`
+carries a table headed *"D — LIVE, consumer-local"* whose rows are verdict `NOT-UPSTREAM`, with the
+same verdict in `final-disposition.tsv`, `phase1-verdicts.tsv` and `adjudicable-entries.tsv`. Derived
+both ways, controls passing: of the 13 available, **11 are rows in that brief and 2 are absent from
+all four files** — the two `PC-S340-*` entries, which were filed 2026-08-31, AFTER the corpus pin,
+which is why no adjudication covers them. **So the standing corpus this file has called "the S312
+cluster nobody has read" HAS been read; the answer was recorded and never joined back.** Do not
+re-scope onto those eleven. The brief's own words: *"There is no upstream work and none is coming."*
+
+**THE SUBJECT: `PC-S340-AUDIT-RULE-FILES-DRIFT-FINDINGS-IN-CORE-PROSE-ARE-NOT-CONSUMER-FIXABLE`,
+CLOSED AS `BL-193`.** `steps/retro.md` Step 4 told the lead to disposition every rule-file audit
+finding, and its decision tree ends in editing a rule file — but Rule 27 forbids a consumer editing
+core and `apply` restores any core file it writes, so on a consumer the instruction had no compliant
+remedy.
+
+**THE FILING'S SPLIT HAD EXPIRED, AND THE CORRECTION WIDENS THE CLAIM RATHER THAN NARROWING IT.** The
+filing reports 33 findings across fourteen files, two of them the consumer's own to fix. Driving the
+consumer's INSTALLED audit against its real tree: **32 findings across 14 files, and `--is-core`
+returns 0 for ALL 14** — control in the same invocation, `docs/coding-conventions.md` returns 1.
+Neither named consumer-owned file draws a finding today, so the consumer can fix **none** of the 32
+where the filing implies two. `verification-discipline.md` warns that narrowing is not the safe
+direction; this correction ran the other way.
+
+**WHY IT WENT UNSEEN UPSTREAM FOR SO LONG, WHICH IS THE REUSABLE HALF.** Both pre-push hooks run the
+audit `--fail-on=deterministic`, so only tier 1 gates — and narrative drift is **tier 2**. This repo
+pushes green carrying **62** findings while the consumer's retro invokes the script BARE, defaults to
+`--fail-on=any`, and exits 1 every run. **35 of the 61 narrative findings fire on the token
+`measured:`**, attributed by testing each finding against every alternative in the class regex — and
+that token is what `.claude/rules/resident-context.md:34` REQUIRES to stay. That is why the remedy
+ROUTES the core half rather than proposing to strip it.
+
+**SHIPPED SHAPE: ownership resolved once and reported at `emit()`, the single seam every class
+already routes through.** Each finding prints `[core]`/`[local]`/`[unknown]`, each verdict line
+carries the split, and a new `--fail-on=local` gates the half the reader can act on. `retro.md` uses
+that threshold and routes `[core]` findings to the push-candidate ledger via `upstream-routing.md`,
+which prescribes the SAME `--is-core` call.
+
+**THE FIX'S OWN PROBE CAUGHT TWO DEFECTS IN THE FIX, BOTH IN THE SUBJECT.** With the resolver
+removed every finding scored `unknown` and `--fail-on=local` exited **0** — a clean sheet over a
+32-finding corpus, the exact false clean `--is-core`'s own exit-2 contract exists to prevent;
+unresolved now counts as LOCAL and fails. And the first cut asked the resolver ONCE PER FILE, taking
+the audit from **200ms to 3700ms** across three interleaved pairs timed from inside the repo — a cost
+the suite POLE's path pays. Reshaped to fetch the glob set once via `--list` and match in-process:
+**390ms**, of which ~175ms is that single unavoidable resolver call, measured alone.
+
+**A SECOND MATCHER WAS INTRODUCED DELIBERATELY AND SCORED AGAINST THE SHIPPING ONE.** It loads
+`core-paths.sh --list` as DATA, so the manifest parser is not copied. Differential over all 112
+corpus files: **112 agree, 0 disagree**, with both verdicts present in the corpus so the null is
+readable. `fnmatch` was refused because `*` crosses `/` there.
+
+**SIX FIXTURE ARMS IN `retro-audit-scans`, FOUR WORLDS ONE PROPERTY APART**, each scored against a
+mutant: unresolved-acquits dies at the fail-closed arm alone, everything-core at the local arm alone,
+everything-local and a dropped owner tag at the tag arms. Unmutated whole-tree control clean. **The
+first mutant score was a BROKEN MEASUREMENT and the control is what exposed it** — `run.sh` calls
+`seed.sh` itself and `seed.sh` re-resolves `$AUDIT`, so an env override is overwritten and the mutant
+never runs, reading as a survived mutant at 0 FAILs. Score fixture mutants with a whole-tree copy.
+
+**GAP TWO (`0.518.0` installed, `0.520.0` shipped) — PENDING 2, AND THE PULL IS REQUIRED, NOT MERELY
+OWED.** Action 7's second test was run on the REAL subject with a `cmp -s` control proving the two
+binaries differ (28573 vs 35134 bytes): on the same consumer tree, **installed exits 1 and shipped
+exits 0**, because the installed audit has no ownership concept and fails that consumer's retro over
+32 findings it cannot fix. That is a live red gate today, not a latent divergence — which is what
+makes this REQUIRED rather than owed. **A measurement trap to avoid repeating: the shipped audit
+resolves `core-paths.sh` as a SIBLING, so a copy run from `/tmp` reads `unresolved 32` and exits 1,
+which reads as agreement and is a broken measurement.** Copy the resolver beside it.
+**The bootstrapping hazard IS live in the range** — `emit-report.sh` and `hard-blockers.sh` moved at
+`0.519.0` — so the pull delivering that fix runs under the unfixed engine. `audit-rule-files.sh` is
+not itself bootstrapping.
+
+**THE SWEEP FOR BATCH 69. UNFILED IS 16 AND ELEVEN OF THEM ARE NOW KNOWN DEAD.** After the join
+above, the available residue is: the sibling `PC-S340-RETRO-AUDIT-SCANS-FIXTURE-FAILS-ONCE-AND-
+PASSES-ON-RETRY` (`verify: manual`; **NOT refuted** — 32 reps at 16-way parallelism returned 32/32
+exit 0 with a greppable-log control, and the fixture is hermetic: no real-repo read, no network, no
+`git init`, so `BL-191`'s clobber class does not reach it. A zero is not a refutation without a
+predicted rate, and none has been computed) plus the four ids already named in an `origin/main`
+commit message, which are the instrument gap and not work. The no-`PC` residue therefore ranks
+first for batch 69: **`BL-191`** is the readiest (the `git init` class — 45 files run it, 42 scrub
+nothing; 8 of 8 fixtures clobbered a 757-entry index when run directly and 6 did it at exit 0; its
+detector's FP set measures 41 of 45 so it ships REPORT-ONLY with a downward ratchet), then
+`BL-187`, `BL-113` (ships alone, bootstrapping), `BL-122`, `BL-148`.
+
 ### BATCH 67 SHIPPED AS `v0.519.0`, ONE PC-BACKED RELEASE, AND THE PLAN'S OWN RECOMMENDED FIX SHAPE WAS REFUTED BY BUILDING IT. THE CONSUMER PULLED TO `0.518.0` MID-BATCH, SO THE GAP IS ONE AND PENDING IS ONE, AND THE PULL IS OWED, NOT REQUIRED — ITS DIVERGENCE IS MEASURED AND LATENT. THE SWEEP IS NOT EMPTY: UNFILED IS 17, WITH NO `PC-` CANDIDATE PRE-SCOPED FOR THE FIRST TIME IN THREE BATCHES.
 
 This block replaces the batch-66 record below it. Every figure here was re-derived on 2026-09-06
@@ -6657,7 +6759,7 @@ so no block written before it changes verdict.
 ### NEXT ACTIONS — numbered, in order
 
 1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below), RANK THE UNFILED CANDIDATES,
-   THEN SCOPE BATCH 67 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED YOU.** Operator
+   THEN SCOPE BATCH 69 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED YOU.** Operator
    instruction, given at batch 52. **If the one-liner was TYPED BY THE OPERATOR**, report the
    candidates with a marked recommendation and ask, as every batch before has. **If it ARRIVED
    FROM ANOTHER SESSION** — a cross-session message carrying `READ and FOLLOW …`, which is
@@ -6669,10 +6771,33 @@ so no block written before it changes verdict.
    at every phase when its second adversary returned two BLOCKERs, and batch 66's was green
    when its adversary returned a BLOCKER establishing the shipped fix had made things WORSE.**
 
-   **NOTHING IS PRE-SCOPED, FOR THE FIRST TIME IN THREE BATCHES. THE SWEEP DECIDES.** Unfiled is
-   17 and none has been filed since 2026-08-31; the one 2026-09-06 arrival was batch 67's subject
-   and is shipped. Rank the unfiled set yourself, read each candidate's own status line in the
-   consumer's ledger before treating it as work, and run its receipt RAW before scoping it.
+   **NOTHING IS PRE-SCOPED. THE SWEEP DECIDES — AND ITS AVAILABLE SET IS NOW MUCH SMALLER THAN
+   ITS COUNT.** Unfiled is 16. Four of those are already named in an `origin/main` commit message
+   (fixed without being filed — the instrument gap, not work), and of the 13 that remain,
+   **ELEVEN WERE ALREADY ADJUDICATED `NOT-UPSTREAM`** in
+   `docs/reviews/graph-ledger-adjudication-brief.md`, whose own words are *"There is no upstream
+   work and none is coming."* Batch 68 derived that join, with controls, and it had never been made
+   before — the S312/S297 cluster this file has called unread since batch 1 WAS read; the answer was
+   recorded in this repo and never joined back. **Do not re-scope onto those eleven.** Re-derive the
+   join rather than trusting this paragraph, but do not spend a session re-reading that cluster.
+
+   **SO THE NO-`PC` RESIDUE RANKS FIRST FOR BATCH 69**, which is a change from the standing
+   provenance-first ordering only because the PC-backed set is exhausted rather than outranked.
+   The one remaining live PC candidate is
+   `PC-S340-RETRO-AUDIT-SCANS-FIXTURE-FAILS-ONCE-AND-PASSES-ON-RETRY`, and it is **NOT refuted**:
+   batch 68 drove that fixture 32 times at 16-way parallelism for 32/32 exit 0 against a
+   greppable-log control, and found it hermetic — no real-repo read, no network, no `git init`.
+   **That zero refutes nothing without a predicted rate, and none has been computed** (`verify:
+   manual`, because the defect IS intermittency). Compute the predicted count before reading any
+   clean sweep as an answer.
+
+   **BATCH 68's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.**
+   `PC-S340-AUDIT-RULE-FILES-DRIFT-FINDINGS-IN-CORE-PROSE-ARE-NOT-CONSUMER-FIXABLE` shipped as
+   `v0.520.0` at `69618a55` (PR #662) closing `BL-193`, cited verbatim in the release commit
+   message, rotated. Its consumer-owned half stays that consumer's carry-over and is not upstream
+   work. **The filing's own split had EXPIRED, and the correction WIDENED the defect** — it claims
+   two consumer-fixable files; today all 14 finding files are core-owned and the consumer can fix
+   none. Re-derive a filing's split before building to it.
 
    **BATCH 67's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.**
    `PC-S308-EMIT-REPORT-RUNS-LAYER-DRIFT-AND-UNREGISTERED-DRIFT-TWICE` shipped as `v0.519.0` at
@@ -7337,9 +7462,9 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # b7e0f100... at batch 67's close -- the CONSUMER PULLED to 0.518.0 mid-batch (its PR #1025 at 44001c2aa), which rotated one cited id; 7b363a17... through batches 64-66; 2c129779... through batch 63's close; it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too, and check the consumer's porcelain, because an uncommitted filing has no -S date
-   wc -l < /tmp/live.txt    # 66 at batch 67's close (the consumer's 0.518.0 pull rotated one cited id, 67 -> 66); 67 at batch 66's close; 67 at batch 65's close (the consumer's 0.516.0 pull rotated two and filed one); 66 at batch 64's close (two filed, one rotated); 65 after the consumer's batch-63 pull rotated seven; 72 with the corrected ^#{2,6} grammar through batch 62 (the old ^## one reads one fewer)
-   wc -l < /tmp/unfiled.txt # 17 at batch 67's close -- batch 67's own citation moved PC-S308-EMIT-REPORT-... from unfiled to cited; 18 at batch 66's close, unmoved; 18 at batch 65's close; 19 at batch 64's close -- two new PC-S308-* filings in, PC-S340-CHECK-26-READS-A-PARTIAL-... out by the operator's carried rejection (batch 64 cited no PC- id); 18 through batch 63; 20 through batch 62
+   md5 -q "$L"              # b7e0f100... at batch 68's close -- UNMOVED across batch 68, because the consumer did not pull and closing an entry HERE never moves ITS ledger; same value at batch 67's close, where the CONSUMER PULLED to 0.518.0 mid-batch (its PR #1025 at 44001c2aa) -- the CONSUMER PULLED to 0.518.0 mid-batch (its PR #1025 at 44001c2aa), which rotated one cited id; 7b363a17... through batches 64-66; 2c129779... through batch 63's close; it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too, and check the consumer's porcelain, because an uncommitted filing has no -S date
+   wc -l < /tmp/live.txt    # 66 at batch 68's close, UNMOVED; 66 at batch 67's close (the consumer's 0.518.0 pull rotated one cited id, 67 -> 66); 67 at batch 66's close; 67 at batch 65's close (the consumer's 0.516.0 pull rotated two and filed one); 66 at batch 64's close (two filed, one rotated); 65 after the consumer's batch-63 pull rotated seven; 72 with the corrected ^#{2,6} grammar through batch 62 (the old ^## one reads one fewer)
+   wc -l < /tmp/unfiled.txt # 16 at batch 68's close -- batch 68's citation of PC-S340-AUDIT-RULE-FILES-... moved it from unfiled to cited; 17 at batch 67's close -- batch 67's own citation moved PC-S308-EMIT-REPORT-... from unfiled to cited; 18 at batch 66's close, unmoved; 18 at batch 65's close; 19 at batch 64's close -- two new PC-S308-* filings in, PC-S340-CHECK-26-READS-A-PARTIAL-... out by the operator's carried rejection (batch 64 cited no PC- id); 18 through batch 63; 20 through batch 62
    ```
 
    **AN UNMOVED md5 WITH A MOVED COUNT IS THE GRAMMAR, NOT THE CONSUMER.** Batch 43 read 72 live
@@ -7347,7 +7472,7 @@ so no block written before it changes verdict.
    `^#{2,6}`. If those two disagree again, ask which of them changed before concluding anything
    about the consumer.
 
-   **THE BASELINE IS 66 LIVE CANDIDATES, 49 CITED, 17 UNFILED** — re-derived at batch 67's close
+   **THE BASELINE IS 66 LIVE CANDIDATES, 50 CITED, 16 UNFILED** — re-derived at batch 67's close
    after its merge at `09aa8af9` (md5 `b7e0f100…`, archive 169, partition control 0, all presence
    controls 1, absence control 0). **The CONSUMER PULLED to `0.518.0` mid-batch**, its PR #1025 at
    `44001c2aa`, which rotated one cited id and took live 67 → 66 and archive 168 → 169 while
