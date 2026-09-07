@@ -15,6 +15,66 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.526.0] - 2026-09-07
+
+### `BL-198` — S8 prescribed quoting as the fix for a hazard quoting does not fix
+
+`PC-S341-SETTINGS-TEMPLATE-MATERIALIZE-SNIPPET-BREAKS-UNDER-ZSH`. The reference consumer filed
+two sites in `core/skills/ai-dlc-update/SKILL.md` that materialize the settings template with a
+rev-path whose ref placeholder is not braced. A reader who binds the placeholder to a variable and
+pastes it into zsh gets a corrupted ref — `:t` is a history modifier that eats the next character.
+What they SEE is not the git error: `settings-merge.sh`, handed the resulting empty tempfile,
+reports `FAIL: the sensor predicate produced no verdict against the template`, a message about the
+PREDICATE naming a path that exists and is empty.
+
+**The filing is correct and the defect is one level up.** `scripts/validate-shell-portability.sh`
+arm S8 already owned this subject, both filed sites already SATISFIED it, and its prescribed remedy
+was wrong: it said *"Render it quoted"*. Quoting does not help, because zsh applies the modifier
+INSIDE a double-quoted parameter expansion. Measured, one invocation, ref `ae0c6c6f` — variable
+quoted under zsh gives `fatal: ambiguous argument 'ae0c6c6femplates/...'`; controls, the same
+variable BRACED under zsh, the same unbraced form under bash, and a LITERAL ref under zsh, all give
+272 lines. That last control is why it survived four releases: a literal ref works everywhere, so
+the rendered form reads as correct to anyone who tests it without binding a variable first.
+
+**The hazard is 17 of 52 letter-cases, not the two the arm named.** `a c e f g h l q r s t u w A F
+P Q` mangle; the other 35 are safe. `core/`, `templates/`, `lib/`, `reconcile/` and `uninstall.sh`
+all break; `docs/`, `VERSION` and `install.sh` do not. `&` mangles too, so "only letters are
+dangerous" is false. It is parameter-expansion modifier syntax, **not** history expansion — it
+reproduces in a non-interactive `zsh script.sh` with `histexpand` unset, so the "history modifier"
+wording in `CLAUDE.md` and `tool-hazards.md` implies an interactive-only scope that is false.
+
+**The escaped-quote form was invisible to both patterns, and it is the worst site in the class.**
+`reconcile/apply.sh:1643` renders the command inside a double-quoted shell argument, so every quote
+is `\"` — the unquoted arm missed it because there IS a quote, and a quote-aware widening missed it
+because a BACKSLASH sits between the verb and the quote. `v0.422.0`'s own CHANGELOG had already
+named this site *"a string a tool PRINTS at the moment the operator is told to paste it"*, and the
+consumer closed `PC-S333` as ADOPTED UPSTREAM (v0.425.0, verified) with a positive control run.
+**Both passes were correct about every site their grammar could spell, and this one sat in the
+corpus throughout** — a close verified by two parties is a claim about a grammar before it is a
+claim about a corpus. The arm is now escape-aware; tree-wide that widening costs exactly one line.
+
+**Fixing the source broke the output.** Bracing that string made it EMIT `show ":templates/..."` —
+`${theirs}` expanded to empty at runtime, handing the operator a command that reads the git index.
+The `$` needs escaping, as the `\$t` beside it already is. Caught only by driving the emitter and
+reading the emitted line; a source-level grep scored the broken version as fixed.
+
+**The consumer's own tree records a dated instance** at
+`_bmad-output/ai-dlc-update/reconcile-log-20260901T143500Z.md:131`, where the question went
+unanswered on a real reconcile run. Nothing was blocked only because that run had no settings delta.
+
+**One property the fix trades away, stated rather than hidden.** With the ref variable UNSET the
+two forms fail differently: the unbraced one exits 128 loudly, the braced one exits 0 and reads
+`:path` — the git INDEX. It is accepted because the documented flow resolves `theirs` before use
+(`SKILL.md:154`), so an unset variable means the reader skipped a step, whereas the corrupted-ref
+failure fired for a reader who did everything right.
+
+Thirteen renderings in shipped instruction text moved to the braced form, plus `apply.sh`'s emitted
+remedy; `S8_PAT` widened to `\\?"?` so the quoted-but-unbraced and escaped forms are caught; `S8_WHY` rewritten to prescribe braces. **S8's own
+self-probe refused the change until it was fixed** — it was asserting the broken form was correct,
+which is that guard working. False-positive set EMPTY over the 563-file corpus. The fixture carries
+the widening as `m9b`, one character from the existing `m9`, because `m9`'s unquoted offender fires
+under the old pattern too and alone cannot tell the widened arm from the narrow one.
+
 ## [0.525.0] - 2026-09-07
 
 ### `BL-197` — `templates/` was the second SHARED directory and the only one with no escape hatch
