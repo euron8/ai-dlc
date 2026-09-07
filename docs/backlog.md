@@ -3911,7 +3911,12 @@ verify: sh set -e; r="$PWD"; id='PC-S295-RETRO-PARALLEL-OPEN-COUNT-METHOD'; n=0;
 
 
 
-## BL-148 — the In-Flight status token set is a controlled vocabulary with four declaring sites, owned by nobody and bound by no invariant
+## BL-148 — the In-Flight status token set is a controlled vocabulary with SIX declaring sites, owned by nobody and bound by no invariant
+
+**LANDED (v0.523.0, verified PENDING-MERGE-SHA).** `I110` in `scripts/validate-enforcement-map.sh` binds
+the owner set to the readers as a two-directional set EQUALITY, and
+`docs/vocabulary-index.md` renders its row from the owner. The receipt below was REPLACED: the
+filed one read the rendered index and four non-fixes closed it.
 
 **Found while fixing `BL-147`**, 2026-09-02, and NOT fixed there — deferral reason below is a
 scope constraint, not difficulty. Distribution-internal in its cause and CONSUMER-FACING in its
@@ -3919,51 +3924,72 @@ effect, so it ranks below any PC-backed entry a sweep turns up but above the dis
 entries.
 
 `BL-147` was one token missing from one whitelist, and the reason it survived to reach a consumer
-is structural: the In-Flight `status` column's token set is declared in four core files and
+is structural: the In-Flight `status` column's token set is declared in six core files and
 nothing joins them.
 
-    core/scripts/validate-artifact-budget.sh   the enforcing whitelist
+    core/scripts/validate-artifact-budget.sh     the enforcing whitelist
     core/skills/ai-dlc/steps/gate-validation.md  "`status` is X, Y or Z"
     core/skills/ai-dlc/steps/_gate-procedures.md the reconcile instruction
     core/skills/ai-dlc/steps/route.md            the schema a lead reads FIRST
+    core/skills/ai-dlc/steps/implementation.md   Rule 26(c)'s minimum-mechanism paragraph
+    core/skills/ai-dlc/steps/handoff.md          step 1's stop-and-rewrite instruction
 
-At the time `BL-147` was filed these disagreed **two homes to two** — `route.md` and
-`handoff.md` named `stopped` and carried the handoff exception, `gate-validation.md` and the
-validator declared a closed set of two — and every gate in the system was green over the
-contradiction for its whole life.
+**THE ORIGINAL ENTRY NAMED FOUR AND ITS THREE FIGURES WERE ALL WRONG. THE CORRECTION RUNS BOTH
+WAYS.** Re-derived against the working tree, controls in the same invocation. The site list
+missed `implementation.md:494` and `handoff.md:32,37` — a WIDENING, and the one that mattered,
+because `implementation.md`'s `delivered-reachable` sits eight lines below a heading that wraps
+`In-Flight Teammates` across two lines, so the obvious grammar cannot see it. The index figures
+were unnarrowed greps: **14** rows and **8** `# vocabulary:` markers, not 15 and 12 — the 15
+counted two header rows and four of the twelve "markers" were explicit NEGATIONS ("NOT A
+VOCABULARY, so no `# vocabulary:` marker"). Drive `scripts/render-vocabulary-index.sh --check`
+rather than grepping. The part the entry got right survives: **zero** rows and zero markers
+named `delivered-reachable`.
 
-**THIS IS THE EXACT SHAPE `docs/vocabulary-index.md` EXISTS FOR, AND THIS SET IS NOT IN IT.**
-Measured, with the positive control in the same invocation: the index carries **15** rows and the
-enforcement map carries **12** `# vocabulary:` arms, so the grammar can see a known-present
-instance — and **zero** of either names `delivered-reachable`. The only `in-flight` hit in
-`scripts/validate-enforcement-map.sh` is `I27`, whose subject is the mid-pull MARKER PATH written
-by `apply.sh`, an unrelated token that happens to share the word.
+**AND THE DEFECT WAS LATENT, NOT LIVE.** `BL-147`'s fix landed, so the six sites AGREE today —
+the owner set derived from `tok ==` at `validate-artifact-budget.sh:750-752` is exactly the three
+tokens every reader teaches. The two-homes-to-two disagreement this entry describes is GONE. What
+survives is the structure: nothing joined the sites, so the next token added to any one of them
+drifts silently, exactly as the previous two did.
 
 **IT IS THE SECOND TIME THIS SET HAS DRIFTED.** `core/fixtures/inflight-row-shape/run.sh`'s own
 header records the first: the column was `in-flight`/`idle-reusable`, "nothing anywhere enforced
 either spelling -- the token lived in prose in four core files", and the rename to
 `delivered-reachable` closed the set **in the validator only**. That fixture is the mechanism
-that keeps the ENFORCED spelling from drifting back; nothing keeps the four PROSE sites agreeing
-with it, which is the half that failed here.
+that keeps the ENFORCED spelling from drifting back; nothing kept the PROSE sites agreeing with
+it, which is the half that failed here.
 
-**WHY IT IS FILED RATHER THAN TAKEN.** Three reasons, and the first is a standing rule.
-`steps/` prose is not a machine-readable declaration, so the join needs a grammar over English
-sentences naming tokens inside backticks — and its false-positive set has not been measured. The
-arm would live in `scripts/validate-enforcement-map.sh`, which the fixture suite's POLE invokes,
-so it is a change to the suite's wall clock and must be timed before and after from inside the
-repo. And this batch is scoped to one subsystem. Deriving the single-source form — the tokens as
-DATA the validator loads and the step files RENDER — is likely the right shape and is a larger
-change than the arm.
+**THE FALSE-POSITIVE SET IS ZERO AND THE MEASUREMENT THAT MAKES THAT WORTH ANYTHING IS THE
+DISCRIMINATING ONE.** The grammar scopes to a six-line window under a line naming `In-Flight`, in
+`.md` under `core/skills/ai-dlc` and `.sh` under `core/hooks`, excluding the owner set AND the
+row's own column names — the latter DERIVED by shape from route.md's schema code span, not
+hand-listed. Live corpus, today's whitelist: **FP 0** of 5 backticked tokens across a 183-line
+window. Whitelist with `stopped` removed to reconstruct the BL-147 era: the arm reports
+`stopped`. Sides asserted to differ before the null was read. Without the column exclusion the FP
+set is **2**, so that narrowing is load-bearing. Wider grammars, for the record of what was
+rejected: any backticked token = 125 FPs; requiring the line to name `status` = 4.
 
-**Stated limitation of the receipt below.** It keys on the token set reaching
-`docs/vocabulary-index.md`, which is the derived index and the visible half of the fix; an
-implementation that binds the four sites by some other mechanism and never touches the index
-would score STILL-LIVE. That is deliberate — the index is byte-compared at pre-push and is the
-artifact a later reader consults — but if a competent author closes this another way, re-anchor
-the receipt on their arm rather than reading the non-close. It carries a control so a broken
-grammar reports exit 9 rather than a false STILL-LIVE.
+**COST, MEASURED INSIDE THE REPO.** The arm is one recursive `grep` per corpus feeding one `awk`,
+never a loop over (subtree × file) — CLAUDE.md records what a nested arm did to this validator.
+Fork cost by removal differential, sides asserted to differ and the file restored under `cmp -s`:
+**9** (7908 with, 7899 without), corroborated by `fork-profile.sh --section by-arm` at **10**
+against `I108`'s 30. The first pipeline-per-stage spelling of the same logic cost **25** and a
+per-site nested loop cost **239**; the reduction was taken before the arm shipped. Wall clock is
+NOT RESOLVABLE by this instrument and that is the honest statement: five interleaved reps in a
+quiet window read 23.6/23.6, 23.7/23.8, 24.0/23.7 — the effect is inside a ±0.4s spread, and
+under load the same pair spread 23.4–55.0s.
 
-verify: sh f=docs/vocabulary-index.md; [ -f "$f" ] || exit 9; grep -qE '^\| ' "$f" || exit 9; grep -q 'delivered-reachable' "$f" && exit 0; exit 1
+**THE REPLACED RECEIPT DRIVES THE ARM AND NEVER READS THE INDEX**, because the filed one read
+`docs/vocabulary-index.md` and four non-fixes closed it. It copies the tree, records the FAIL
+count, asserts `idle-reusable` ABSENT from the In-Flight window and `in-flight` present as its
+control pair, seeds the token into `route.md`, re-runs the validator, and requires the FAIL count
+to INCREASE with the output naming both the token and the file. Scored, nine implementations:
+UNFIXED, a comment naming the tokens, a prose line in the index, an index row with no owner or
+invariant, a comment disclaiming any reader, and the arm APPENDED AFTER the validator's final
+`exit` all read STILL-LIVE; the arm in its shipped position reads CLOSED; a missing validator and
+a reshaped owner whitelist both read BROKEN. The dead-arm mutant is in that table because a
+first draft of this fix was appended past the final `exit` and read as working.
+
+verify: sh set -e; r="$PWD"; v="$r/scripts/validate-enforcement-map.sh"; o="$r/core/scripts/validate-artifact-budget.sh"; s="$r/core/skills/ai-dlc/steps/route.md"; [ -f "$v" ] && [ -f "$o" ] && [ -f "$s" ] || exit 9; grep -q 'if (tok == "in-flight") next' "$o" || exit 9; w=$(mktemp -d); trap 'rm -rf "$w"' EXIT; grep -rh -A6 --include='*.md' --include='*.sh' -F 'In-Flight' "$r/core/skills/ai-dlc" "$r/core/hooks" > "$w/win" 2>/dev/null; grep -q 'in-flight' "$w/win" || exit 9; grep -q 'idle-reusable' "$w/win" && exit 9; b=$(bash "$v" 2>&1 | grep -c '^FAIL:' || true); cp "$s" "$w/bak"; awk '{print} /^   - Reconcile every .In-Flight Teammates. row/ {print "     `idle-reusable` (parked) is also accepted."}' "$w/bak" > "$s"; grep -q 'idle-reusable' "$s" || { cp "$w/bak" "$s"; exit 9; }; out=$(bash "$v" 2>&1 || true); cp "$w/bak" "$s"; cmp -s "$s" "$w/bak" || exit 9; a=$(printf '%s\n' "$out" | grep -c '^FAIL:' || true); [ "$a" -gt "$b" ] || exit 1; printf '%s\n' "$out" | grep '^FAIL:' | grep -q 'idle-reusable' || exit 1; printf '%s\n' "$out" | grep '^FAIL:' | grep -q 'route.md' || exit 1; exit 0
 
 ## BL-153 — `implementation-join-yield`'s beat-churn arm needs nine stop-hook invocations inside the hook's 30-second rapid-fire window, and the pool spreads them past it
 

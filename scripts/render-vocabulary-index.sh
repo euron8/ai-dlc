@@ -309,7 +309,17 @@ vocab_extract_empty_subject_verdict() {
   ' "$1"
 }
 
-IMPLEMENTED='ledger-statuses extension-kinds adjudicated-codes pr-class-keys intensity-table syntax-globs empty-subject-verdict'
+vocab_extract_inflight_statuses() {
+  # KEYED ON THE BRANCH THE ENFORCER TAKES, NOT ON ITS REMEDY TEXT. check_inflight_status's
+  # failure message also names all three members, and a file-wide scan for them would render
+  # the same row whether the whitelist still carried them or not -- text about a program is
+  # not the program. The `tok ==` chain is what decides an unknown status, so it is the owner.
+  # The near-miss probe seeds a `tok ==` test against a NON-status variable and a member named
+  # only in a comment.
+  sed -n 's/^[[:space:]]*if (tok == "\([a-z][a-z-]*\)") next$/\1/p' "$1" | LC_ALL=C sort -u
+}
+
+IMPLEMENTED='ledger-statuses extension-kinds adjudicated-codes pr-class-keys intensity-table syntax-globs empty-subject-verdict inflight-statuses'
 
 # =========================================================================================
 # THE PATH LISTS. A marker's `vocabulary-readers:` and `vocabulary-emitters:` fields carry
@@ -386,6 +396,7 @@ extract_with() { # extract_with <slug> <owner-path>
     intensity-table)    vocab_extract_intensity_table    "$2" ;;
     syntax-globs)       vocab_extract_syntax_globs       "$2" ;;
     empty-subject-verdict) vocab_extract_empty_subject_verdict "$2" ;;
+    inflight-statuses)  vocab_extract_inflight_statuses  "$2" ;;
     *) return 3 ;;
   esac
 }
@@ -708,6 +719,23 @@ probe_extract empty-subject-verdict "$PROBE_DIR/emap.yaml" "PROBE VERDICT"
 printf '%s\n' 'other_block:' '  token: SOMETHING ELSE' > "$PROBE_DIR/emap-none.yaml"
 [ -z "$(vocab_extract_empty_subject_verdict "$PROBE_DIR/emap-none.yaml")" ] || \
   probe_fail "the empty-subject-verdict extractor returned a member from a file carrying no empty_subject_verdict: block; it is matching \`token:\` file-wide."
+
+# The seed carries the two shapes that are NOT members and are the whole reason this extractor
+# is keyed on the branch rather than on the word. `check_inflight_status`'s own remedy text
+# names all three members in prose, and its enclosing awk program tests OTHER variables the
+# same way -- an extractor reading either would render a row that stays correct-looking after
+# the whitelist it claims to read has changed.
+printf '%s\n' \
+  '      if (tok == "in-flight") next' \
+  '      if (tok == "delivered-reachable") next' \
+  '      if (s == "not-a-status") next' \
+  '      # if (tok == "commented-out") next' \
+  '      The status column is a closed set: in-flight, delivered-reachable, stopped.' \
+  > "$PROBE_DIR/budget.sh"
+probe_extract inflight-statuses "$PROBE_DIR/budget.sh" "delivered-reachable in-flight"
+printf '%s\n' 'nothing here tests a token' > "$PROBE_DIR/budget-none.sh"
+[ -z "$(vocab_extract_inflight_statuses "$PROBE_DIR/budget-none.sh")" ] || \
+  probe_fail "the inflight-statuses extractor returned a member from a file carrying no \`tok ==\` chain; the zero guard below turns an empty extraction into a failure only if the extractor can actually produce one."
 
 # --- probe 3b: the PATH lists, positive and in every near-miss direction ---------------
 # The seed carries both lists, a scalar `token:` inside the block, and a decoy list under a
