@@ -26,6 +26,11 @@
 #   m7  S7  a backreference in an awk gsub replacement            -> must FAIL
 #   m8      the SHELL corpus emptied                              -> must FAIL (fail closed)
 #   m9  S8  `show <theirs>:<path>` unquoted in core text          -> must FAIL
+#   m9b S8  the same QUOTED but UNBRACED -- one char from m9, and
+#           the form this arm used to prescribe AS its fix        -> must FAIL
+#   m9c S8  the ESCAPED-quote form a tool PRINTS -- invisible to
+#           BOTH earlier patterns, and it survived the v0.422.0
+#           pass over this class and a consumer ADOPTED close     -> must FAIL
 #   m10     the CORE corpus emptied, shell corpus alive           -> must FAIL (fail closed)
 #   m11 S10 a multibyte bracket class, all FOUR census shapes plus
 #           the `#{2,4}` heading grammar                          -> must FAIL, 5 counted lines
@@ -39,7 +44,8 @@
 #   x8  S10 the class's whitespace exclusion widened to `[^]]`    -> a report must APPEAR
 #   n1      `sed -i ''` and `sed -i.bak`                          -> must NOT fail
 #   n2      python `re.sub(r"\1")` in a .sh file                  -> must NOT fail
-#   n3      quoted, `HEAD:`-literal and `"$SHA:` rev-paths        -> must NOT fail
+#   n3      braced, `HEAD:`-literal, `"${SHA}:` and the braced
+#           ESCAPED-quote rev-paths                             -> must NOT fail
 #   n4  S10 alternations, python, message prose, a bracketed
 #           prose aside, and a comment naming the class           -> must NOT fail
 #
@@ -566,18 +572,60 @@ seed "$TMP/n3"
 seed_core "$TMP/n3" skills/correct.md \
   'The correct renderings, none of which is the defect S8 hunts:' \
   '' \
-  '    git -C <dist> show "<theirs>:templates/settings.json.template" > "$t"' \
+  '    git -C <dist> show "${theirs}:templates/settings.json.template" > "$t"' \
   '    git show HEAD:templates/settings.json.template > "$t"' \
-  '    git show "$SHA:templates/settings.json.template" > "$t"' \
+  '    git show "${SHA}:templates/settings.json.template" > "$t"' \
   '' \
-  '# and the same quoted form inside a comment, which S8 scans and must still pass:' \
-  '#   git show "<theirs>:<path>" > "$t"'
+  '# and the same braced form inside a comment, which S8 scans and must still pass:' \
+  '#   git show "${theirs}:<path>" > "$t"' \
+  '' \
+  '# and the ESCAPED-quote form BRACED, which m9c seeds unbraced -- the two together pin the' \
+  '# escape-aware arm to the braces rather than to the backslash:' \
+  '#   say X "run: git show \\"${theirs}:<path>\\" > \\"\$t\\""'
 if out="$(run_v "$TMP/n3")" && grep -q "PASS" <<<"$out"; then
-  note "ok    n3 -- quoted, HEAD-literal and \"\$SHA: rev-paths are NOT reported"
+  note "ok    n3 -- braced, HEAD-literal and \"\$SHA: rev-paths are NOT reported"
 else
   note "FAIL  n3 -- S8 flagged a correct rev-path rendering; the arm fires on its own fix"
   printf '%s\n' "$out" | sed 's/^/      /' | head -4; rc=1
 fi
+
+# m9b -- S8's OTHER offender form, and the one this arm shipped as its own prescribed FIX for
+# four releases. `m9` seeds the UNQUOTED rendering; this seeds the QUOTED-but-UNBRACED one.
+# They are one character apart and the shells disagree about which of them works:
+#
+#   zsh  T=<sha>; git show "$T:templates/x"     -> fatal: ambiguous argument '<sha-minus-a-char>emplates/x'
+#   zsh  T=<sha>; git show "${T}:templates/x"   -> reads the blob        (the fix)
+#   bash T=<sha>; git show "$T:templates/x"     -> reads the blob        (why it survived review)
+#
+# `n3` above asserts the braced form is NOT reported, so the two together pin the arm to the
+# one character that separates a working paste from a corrupted ref. Without this seed the
+# widening is invisible: `m9`'s unquoted offender fires under the OLD pattern too, so `m9`
+# alone cannot tell the widened arm from the narrow one it replaced.
+seed "$TMP/m9b"
+seed_core "$TMP/m9b" skills/pull.md \
+  'Recover the template from the distribution:' \
+  '' \
+  '    t=$(mktemp); git -C <dist> show "<theirs>:templates/settings.json.template" > "$t"'
+kill_check "m9b S8 quoted-but-unbraced rev-path" "$TMP/m9b" S8
+
+# m9c -- the ESCAPED-quote form, and it is the shape that matters most in this class. The other
+# two seeds are text a reader may adapt; this one is a string a tool PRINTS at the moment the
+# operator is told to paste it, so nobody adapts it and the corrupted ref is what they run.
+# `apply.sh` emits exactly this as the remedy for "hook(s) present and UNREGISTERED after this
+# apply", inside a double-quoted shell argument, so every quote in it is written `\"`.
+#
+# BOTH EARLIER PATTERNS WERE BLIND TO IT -- the unquoted arm because there IS a quote, the
+# `"?` arm because a BACKSLASH sits between the verb and the quote. It survived the v0.422.0
+# pass over this whole class, which is the release whose own CHANGELOG called this site the
+# most exposed one in it, and it survived the consumer's ADOPTED-UPSTREAM close of
+# `PC-S333` at v0.425.0. Two verifications passed over a live instance because the grammar
+# could not spell it. That is why the arm is escape-aware rather than quote-aware.
+seed "$TMP/m9c"
+seed_core "$TMP/m9c" scripts/emit.sh \
+  '#!/usr/bin/env bash' \
+  'say WORKLIST settings-merge ".claude/settings.json" \' \
+  '  "run: git -C <dist> show \"<theirs>:templates/settings.json.template\" > \"\$t\""'
+kill_check "m9c S8 escaped-quote rev-path (a PRINTED remedy)" "$TMP/m9c" S8
 
 # n4 -- S10's negatives, one line per acquitting mechanism. Every line here is either the FIX
 # S10 prescribes or one of the three narrowings its header records, and each is acquitted by a
@@ -618,7 +666,24 @@ else
   printf '%s\n' "$out" | sed 's/^/      /' | head -8; rc=1
 fi
 
+# THE MUTANT COUNT IS DERIVED; THE OTHER TWO ARE NOT, AND THE ASYMMETRY IS DELIBERATE.
+# This line read a hardcoded `11/11 ... (24 assertions)` and went stale the moment `m9b` and
+# `m9c` landed -- it still said 11 with twelve corpus mutants live. A total that decays
+# silently reads exactly like a fresh one, so the mutant count now counts its own call sites.
+#
+# THE ARM-TABLE COUNT IS LEFT AS A LITERAL BECAUSE DERIVING IT WAS WRONG. `x1`-`x3` go through
+# `blind_check`; `x4`-`x8` assert inline, because each needs a different observable (a count
+# falling, a report appearing, the validator REFUSING under a foreign locale). A
+# `grep -c blind_check` therefore reads 3 where the truth is 8 -- a derivation that is
+# confidently wrong is worse than a literal somebody must update, so this one stays a literal
+# and says why. If you add an `x*`, update the 8.
+# `m11` goes through `count_check` (it asserts a LINE COUNT, not merely a kill), and `m8`/`m10`
+# assert fail-closed rather than a kill, so all three are counted separately from `kill_check`.
+# A count that silently omitted them is what the first derivation of this line did.
+_n_kill=$(grep -o 'kill_check "' "$0" | grep -c .)
+_n_count=$(grep -o 'count_check "' "$0" | grep -c .)
+_n_kill=$((_n_kill - 1 + _n_count - 1))   # each counting line names its own helper
 if [ "$rc" -eq 0 ]; then
-  note "PASS  shell-portability -- control green, 11/11 corpus mutants killed by their own arm, 8/8 arm-table cells proven load-bearing, 4/4 negatives silent (24 assertions)"
+  note "PASS  shell-portability -- control green, ${_n_kill}/${_n_kill} corpus mutants killed by their own arm, 8/8 arm-table cells proven load-bearing, 4/4 negatives silent"
 fi
 exit "$rc"

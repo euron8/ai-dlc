@@ -2618,7 +2618,7 @@ sha this repository can resolve. `base_sha`, `lines_removed` and `lines_destroye
 print on every path, so a run that examined nothing cannot read like a run that
 found nothing.
 
-**On FAIL, recover from git — do not re-author.** `git show "<base_sha>:<snapshot path>"`
+**On FAIL, recover from git — do not re-author.** `git show "${base_sha}:<snapshot path>"`
 holds the text verbatim; append the named lines to
 `pipeline-snapshot-history.md`. The history file is append-only, so adding to it
 cannot break a later read.

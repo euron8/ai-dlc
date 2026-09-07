@@ -18,9 +18,8 @@ your search ran, not that the thing is missing.
 
 Measured false-zero sources, each of which has shipped a wrong conclusion here:
 
-- **Unbraced `$ref:path` in zsh.** `:c` and `:t` are history modifiers and
-  silently eat the next character — `"$r:core/..."` becomes `f70512eore/...` and
-  git reports the path absent. Always `"${r}:core/..."`.
+- **Unbraced `$ref:path` in zsh** — `"$r:core/..."` becomes `f70512eore/...` and git reports
+  the path absent. Always `"${r}:core/..."`; `tool-hazards.md` owns the rest.
 - **Case-sensitive grep against a differently-cased token** — a lowercase `v8`
   against an uppercase `V8` banner.
 - **A per-file grep against a glob-declared list.** `core-manifest.md` declares
