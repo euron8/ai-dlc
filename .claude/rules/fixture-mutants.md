@@ -177,6 +177,19 @@ paths:
   the copy helper returned 1 silently, and the fixture printed PASS over a mutant no
   arm ever scored. Report a failing `sed` as DID NOT APPLY, and spell `a\` text on the
   next line of the same script argument with `$'...'`.
+- **A PARTIAL COPY TREE MAKES EVERY MUTANT SURVIVE AND THE UNMUTATED CONTROL PASS, BECAUSE TWO
+  INERT RUNS COMPARE EQUAL.** The bullet above covers a mutated PROGRAM that cannot find its
+  siblings; this is the case where the tree is fine and the fixture you DRIVE through it bails at
+  its own startup check before reaching the behaviour under test. Measured: a battery copied only
+  the subject-under-test and the driven fixture, that fixture exited `FIXTURE ERROR: cannot locate
+  <validator>` before its first `git init`, and all four mutants scored SURVIVED against an
+  untouched victim — which reads exactly like a fix that works. **The tell was that the unmutated
+  arm passed too**, so the usual control could not see it: it was comparing two runs of nothing.
+  Copy the WHOLE tree, and add an arm that drives the unmutated subject and REFUSES on
+  `FIXTURE ERROR`/`FIXTURE BROKEN` before any mutant verdict is read. Ask of every battery what its
+  driven subject needs on disk, and prove it got there — a mutant verdict is evidence only about a
+  subject that ran.
+
 - **A seeded SET with one member cannot tell "scanned the set" from "scanned its first
   member", and a one-row ledger makes its own row the epoch.** Measured twice in one batch:
   every transcript corpus a fixture seeded held one `.jsonl`, so a verifier that read the
