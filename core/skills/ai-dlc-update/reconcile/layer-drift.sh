@@ -620,6 +620,45 @@ adj_lookup() { # $1 digest -> 0 if a record with a vocabulary verdict exists
   grep -qxF -f <(printf '%s\n' "$ADJ_VERDICTS") <<<"$found"
 }
 
+# WHY A SPENT VERDICT AND A NEVER-RECORDED ONE PRINTED THE SAME ROW, AND WHY THAT IS THE WHOLE
+# DEFECT. A row can prescribe BOTH an edit to the entry AND a verdict keyed on adj_digest, which
+# covers that entry's WORKING-TREE blob -- so an operator who records first and edits second has
+# spent the record on the edit the row itself demanded. The register behaved exactly as designed;
+# the PRESCRIPTION had no stated order. Measured on the reference consumer's own register at the
+# 0.525.0 -> 0.526.0 apply: `steps-domain/retro-push-party-mode.md` carries `e92e17b43c9b` and
+# `984d207e1fc1`, same verdict, 114 seconds apart.
+#
+# This does NOT re-grain the digest, and re-graining is the change NOT being made -- :509-517
+# argues file-grain is the deliberately safe asymmetry, and expiry is the design. The operator's
+# problem is only that an EXPIRED verdict and a NEVER-RECORDED one are indistinguishable in the
+# row. This makes the first one say so.
+#
+# NARROWED ON A DIRTY WORKING TREE, AND THE NARROWING IS THE CHECK RATHER THAN POLISH. Unnarrowed,
+# "a verdict exists for this entry under some other digest" fires on ordinary CROSS-PULL EXPIRY --
+# core moved, nobody edited anything -- which is the normal state of every long-lived entry.
+# Measured against the consumer's real register over that same range, with the current-key records
+# withheld to reproduce the mid-pull state: 6 rows fired and ALL SIX WERE FALSE, every one clean in
+# git with 2-28 historical digests apiece. Requiring the entry to be dirty takes that 6 to 0 while
+# keeping the positive arm. A 100% false-positive rate is a check the operator switches off.
+#
+# THE GIT GUARD IS NOT OPTIONAL: outside a git repo `git diff --quiet` exits 128, which is neither
+# 0 nor 1, and a bare `if git diff --quiet` would read that as "dirty" and restore the unnarrowed
+# behaviour on exactly the consumers least able to diagnose it. Resolve the repo first and stay
+# silent when there is none -- a note is a courtesy, and it is never worth a false one.
+adj_spent_note() { # $1 entry (consumer-relative), $2 the CURRENT digest -> prints a note, or nothing
+  local prior
+  [ -f "$ADJ_REGISTER" ] || return 0
+  command -v jq >/dev/null 2>&1 || return 0
+  git -C "$CONSUMER" rev-parse --git-dir >/dev/null 2>&1 || return 0
+  git -C "$CONSUMER" diff --quiet -- "$1" 2>/dev/null && return 0
+  prior="$(jq -r --arg e "$1" --arg d "$2" \
+    'select(.entry == $e and .subject_digest != $d)
+     | "\(.verdict) (recorded \(.recorded_utc) under \(.subject_digest[0:12]))"' \
+    "$ADJ_REGISTER" 2>/dev/null | tail -1)"
+  [ -n "$prior" ] || return 0
+  printf ' A verdict for this ENTRY is already recorded under a DIFFERENT subject digest [%s], and this entry has UNCOMMITTED edits — so this is a SPENT verdict rather than an unanswered one: the entry or its hooked core file moved after you recorded. Make every edit this pull prescribes FIRST, then read the digest, then record; recording before an edit to the same entry spends the record you just wrote. Re-record under the digest above.' "$prior"
+}
+
 # THE TOKEN A CONSUMER OF THIS ROW KEYS ON. Declared here, next to the only writer, and
 # read by apply.sh -- which had no register reader of its own and therefore prescribed
 # destructive work the project had already decided against (PC-S326's sibling, PC-S327).
@@ -699,7 +738,7 @@ adj_check() { # $1 status, $2 entry, $3 target
     2) emit_raw HARD-LAYER-ADJUDICATION-MISSING "$2" "$3" \
          "row '$1' needs a recorded verdict and jq is not on PATH, so ${ADJ_REGISTER#"$CONSUMER"/} cannot be read. A register that cannot be read is not an empty one." ;;
     *) emit_raw HARD-LAYER-ADJUDICATION-MISSING "$2" "$3" \
-         "row '$1' is the layer conformance adjudication: its candidate set is mechanized and its verdict is yours. Record one line in ${ADJ_REGISTER#"$CONSUMER"/} with subject_digest ${d} and a verdict of $(printf '%s' "$ADJ_VERDICTS" | tr '\n' '|' | sed 's/|$//'), plus a reason. The digest covers this entry AND the core file it hooks at ${THEIRS}, so the verdict is spent the next time either one moves — it is not an exemption for the path." ;;
+         "row '$1' is the layer conformance adjudication: its candidate set is mechanized and its verdict is yours. Record one line in ${ADJ_REGISTER#"$CONSUMER"/} with subject_digest ${d} and a verdict of $(printf '%s' "$ADJ_VERDICTS" | tr '\n' '|' | sed 's/|$//'), plus a reason. The digest covers this entry AND the core file it hooks at ${THEIRS}, so the verdict is spent the next time either one moves — it is not an exemption for the path.$(adj_spent_note "$2" "$d")" ;;
   esac
 }
 

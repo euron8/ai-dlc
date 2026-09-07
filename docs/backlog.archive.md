@@ -8641,4 +8641,20 @@ rejects a half-fix that patches only Check 29. **A rewrite that keeps the semant
 token scores STILL-LIVE**, which is the known cost of a prose receipt; replace it if a mechanism
 ever reads check scope.
 
-verify: sh GV=core/skills/ai-dlc/steps/gate-validation.md; ok=0; for id in 29 33; do body="$(awk -v id="$id" '$0 ~ "^### " id "\\." {f=1; next} f && /^### [0-9]/ {exit} f {print}' "$GV")"; grep -q "NOT-YET-AUTHORED" <<< "$body" && ok=$((ok+1)); done; c28="$(awk '/^### 28\./{f=1;next} f&&/^### [0-9]/{exit} f{print}' "$GV")"; n28=0; grep -q "NOT-YET-AUTHORED" <<< "$c28" && n28=1; [ "$ok" = 2 ] && [ "$n28" = 0 ]
+**AND THE RECEIPT ACCEPTED ITS OWN NEGATION, WHICH IS THE WORSE HALF AND WAS UNSTATED.** The entry
+already conceded the false-NEGATIVE direction — a rewrite that keeps the semantics and drops the
+token scores STILL-LIVE. An adversarial hand built the false-POSITIVE direction and it is the real
+finding: a body reading *"**No not-yet-authored arm.** This check never reports `NOT-YET-AUTHORED`;
+an absent artifact is always a FAIL"* satisfied the receipt, because `grep -q` on a token cannot
+see the POLARITY of the sentence carrying it. Reproduced here, with `cmp -s` confirming each
+mutation applied: shipped tree PASS, pre-fix FAIL (so it did discriminate), **negation decoy PASS**,
+bare-token decoy PASS. That is this repo's "a receipt that accepts TWO candidate fixes has
+established neither", at the limit where the second is the regression itself.
+
+The receipt now keys on the DIRECTIVE phrase — `Report `NOT-YET-AUTHORED` and move on when` — plus
+the `**Scope — not yet authored.**` heading, both required inside each check's own body, with
+Check 28 still the negative control. Re-scored on all four inputs: fix PASS, pre-fix REJECTED,
+negation decoy REJECTED, bare-token decoy REJECTED. The false-negative limit is unchanged and
+still stated: a competent rewrite that preserves the semantics in other words scores STILL-LIVE.
+
+verify: sh GV=core/skills/ai-dlc/steps/gate-validation.md; ok=0; for id in 29 33; do body="$(awk -v id="$id" '$0 ~ "^### " id "\\." {f=1; next} f && /^### [0-9]/ {exit} f {print}' "$GV")"; grep -q 'Report `NOT-YET-AUTHORED` and move on when' <<< "$body" && grep -q '^\*\*Scope — not yet authored\.\*\*' <<< "$body" && ok=$((ok+1)); done; c28="$(awk '/^### 28\./{f=1;next} f&&/^### [0-9]/{exit} f{print}' "$GV")"; n28=0; grep -q "NOT-YET-AUTHORED" <<< "$c28" && n28=1; [ "$ok" = 2 ] && [ "$n28" = 0 ]

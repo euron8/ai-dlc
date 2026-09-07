@@ -139,4 +139,15 @@ reason: seeded entry whose hooked core file moves across the range
 Body.
 EOF
 
+# The consumer is a GIT REPO, committed clean, because one arm's subject is whether an entry has
+# UNCOMMITTED edits. A plain directory cannot express that state: `git diff` exits 128 there, the
+# spent-verdict guard correctly stays silent, and the arm would report a defect in the fixture's
+# own tree shape rather than in the subject. `layer-readopt-gate` and `layer-anchor-declaration`
+# seed their consumers the same way.
+git -C "$CONS" init -q
+git -C "$CONS" config user.email f@x
+git -C "$CONS" config user.name f
+git -C "$CONS" add -A
+git -C "$CONS" commit -qm "seeded consumer"
+
 printf '%s\n' "$ROOT"
