@@ -44,7 +44,9 @@ after the merge, against the working tree with the controls in the same invocati
 them again rather than reading them.
 
 **`VERSION` IS `0.524.0`, SO BATCH 72 RELEASES AS `0.525.0`.** Re-derive `VERSION` and add one.
-Batch 71 merged once, closing `BL-194` and filing `BL-195`. **NO `PC-` id is cited in the release
+Batch 71 merged once at `b80c753c` (PR #668, squash), closing `BL-194` and filing `BL-195`.
+Rotated live 86 -> 85, archive 109 -> 110, both by exactly one, `--check` scoring
+`BL-194  CLOSE-CANDIDATE [sha b80c753c resolves]` before `--apply`; `BL-195` correctly stays live. **NO `PC-` id is cited in the release
 commit message, and that is a DELIBERATE OMISSION rather than the usual "the subject carries
 none".** The candidate that prompted both entries is `BL-195`'s subject, which ships NO FIX, so a
 citation would make `named_absorbed()` emit a `NAMED-UPSTREAM` row telling the consumer to close an
@@ -130,10 +132,14 @@ killed by assertion 17 alone; run against the pre-fix validator the new arms pro
 exit 1, and the two single-catalog controls stay green in both worlds, so they discriminate rather
 than refuse.
 
-**GAP SIX (`0.518.0` installed, `0.524.0` shipped) — WIDE, PENDING 0 on this release.** No `PC-` id
-shipped, so PENDING did not move. **The bootstrapping hazard IS live in the range** —
-`emit-report.sh`, `hard-blockers.sh` and `setup-sites.md` moved, against a control of 60 core files
-changed — but **0 mode-only changes** (56 M + 4 A), so the specific measured hazard does not bite.
+**GAP FIVE (`0.519.0` installed, `0.524.0` shipped) — WIDE, PENDING 0 on this release.** No `PC-`
+id shipped, so PENDING did not move. **THIS FIGURE WAS SIX FOR MOST OF THE BATCH AND THE CONSUMER
+CLOSED IT UNDER ME WHILE THE GATE RAN** — it pulled `0.518.0 -> 0.519.0` on 2026-09-07 (PR #1028, a
+SPLIT pull stopping at the `SELF-UPDATE-SAFE-STOP`, step 1 of 2) and sat on
+`ai-dlc-update/0.519.0-reconcile-…` rather than `main`. A gap read at the top of a batch is a
+hypothesis by the end of it; re-derive it as the LAST thing you do, not the first. Re-measured
+against the new base: **one bootstrapping file** in range (`setup-sites.md`) against a control of
+57 core files changed, and **0 mode-only changes**, so the specific measured hazard does not bite.
 The second test diverges: `validate-layer-entries.sh` differs between the trees (159201 vs 165133
 bytes, `cmp -s` control, and `validate-gate-adjudication.sh`/`validate-stub-audit.sh` are IDENTICAL,
 which is what proves the control discriminates) and the shipped side reports `unreadable=0` where
@@ -146,7 +152,7 @@ first), which is the expected LATENT result and not an argument against the pull
 lands. **`BL-113`** still ships ALONE (bootstrapping — a two-line `verify: sh` is truncated by the
 engine and mis-scores silently; **its FP set is unmeasured and that measurement is the first thing
 it owes**, and this batch added one long receipt, so run the engine once after it lands), then
-**`BL-155`** and the rest of the live 86. Nothing is pre-scoped; run the sweep and rank.
+**`BL-155`** and the rest of the live 85. Nothing is pre-scoped; run the sweep and rank.
 
 ### BATCH 70 (REPLACED BY THE BLOCK ABOVE) SHIPPED AS `v0.523.0`, ONE RELEASE CARRYING THREE NO-`PC` ENTRIES. ALL THREE FILED RECEIPTS WERE CLOSABLE BY SOMETHING THAT IS NOT A FIX, MEASURED BY BUILDING THE NON-FIXES, AND ONE OF THEM *INVERTED* ON THE CORRECT FIX. THE SUBJECT OF `BL-187` WAS WITHDRAWN RATHER THAN BUILT, AFTER TWO CANDIDATE MECHANISMS WERE BUILT AND REFUTED. THE CONSUMER DID NOT PULL, SO THE GAP IS **FIVE — WIDE** — AND THE PULL IS **REQUIRED** ON A DIVERGENCE MEASURED ON THE CONSUMER'S OWN 48 LAYER ENTRIES. THE SWEEP IS FULLY ADJUDICATED AND ITS AVAILABLE RESIDUE IS ZERO.
 
