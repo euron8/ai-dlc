@@ -278,10 +278,40 @@ invariant = {k: tfields[k] for k in PROFILE["batch_invariant"] if k in tfields a
 # validate-retro-evidence.sh — is the only thing that would make it evidence.
 TID_RE = S["patterns"]["tool_use_id"]
 tid = tool_use_id_override or invariant.get("tool_use_id", "")
-if not re.match(TID_RE, tid):
-    src = "the --tool-use-id override" if tool_use_id_override else f"terminal pass {terminal_path}"
+
+# The WRITER refuses exactly what the READER refuses, resolved from the same schema field.
+# The pattern alone is not that: it is a CHARSET test, and a placeholder literal clears it by
+# construction — so the stamper wrote onto every story a value validate-provenance-block.sh
+# then rejected, which is a wedge rather than a closed loop. Measured on both halves: the
+# writer stamped `toolu_PLACEHOLDER` and `toolu_PLACEHOLDER_LEAD_TO_FILL` while the reader
+# refused both. Read `forbidden` and `forbidden_match` off the same field the reader reads,
+# rather than restating the list here — a second copy of a list is a copy that drifts, and the
+# drift would reopen precisely this gap.
+_tid_spec = next((f for f in S["fields"] if f["name"] == "tool_use_id"), {})
+_tid_forbidden = _tid_spec.get("forbidden") or []
+_tid_match = _tid_spec.get("forbidden_match", "exact")
+if _tid_forbidden and _tid_match not in ("exact", "prefix_ci"):
     print(
-        f"FAIL: tool_use_id from {src} is not a valid toolu_ id ({tid!r}). The terminal pass could "
+        f"FAIL: the schema declares forbidden_match {_tid_match!r} on tool_use_id, which this "
+        f"stamper does not implement. Refusing to stamp rather than falling back to a weaker "
+        f"rule than the reader applies.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+if _tid_match == "prefix_ci":
+    _tid_is_placeholder = any(tid.lower().startswith(f.lower()) for f in _tid_forbidden)
+else:
+    _tid_is_placeholder = tid in _tid_forbidden
+
+if not re.match(TID_RE, tid) or _tid_is_placeholder:
+    src = "the --tool-use-id override" if tool_use_id_override else f"terminal pass {terminal_path}"
+    why = (
+        "is a placeholder literal the schema forbids"
+        if _tid_is_placeholder
+        else "is not a valid toolu_ id"
+    )
+    print(
+        f"FAIL: tool_use_id from {src} {why} ({tid!r}). The terminal pass could "
         f"not self-report its Agent-dispatch id (the tool_use_id self-introspection defect), so the "
         f"SoR still holds a placeholder. Recover the terminal Agent-dispatch tool_use_id from the "
         f"session transcript and either backfill it into {terminal_path} or pass it as "

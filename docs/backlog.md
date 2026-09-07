@@ -4256,3 +4256,94 @@ carry-over.
 
 verify: manual
 
+
+## BL-199 — the provenance `forbidden` list is an EXACT match, so a DECORATED placeholder is a forged evidence cell that passes
+
+**Provenance.** `PC-S309-PROVENANCE-FORBIDDEN-LIST-EXACT-MATCH-MISSES-DECORATED-PLACEHOLDERS`,
+filed by the reference consumer 2026-09-07.
+
+**The defect, driven on the consumer's live artifact rather than a hand-written block.**
+`core/scripts/validate-provenance-block.sh` tested `value in forbidden`. The schema
+(`core/schemas/provenance-block.json`) lists eight placeholder literals for `tool_use_id`. Driven
+on `/Users/n8/git/graph/_bmad-output/planning-artifacts/s309/coe-adversarial-p1.md`, which carries
+the decorated value TODAY, three inputs in one run: decorated `toolu_PLACEHOLDER_LEAD_TO_FILL`
+**rc=0 PASS**, bare `toolu_PLACEHOLDER` **rc=1 forbidden**, real-shaped id rc=0. Only decoration
+separates the first two, and the schema's own `forbidden_reason` already names the class the
+decorated value is in — *"A value that satisfies the SHAPE but was not drawn from the RUN is a
+forged evidence cell."*
+
+**A HAND-WRITTEN PROVENANCE BLOCK IS THE WRONG PROBE AND WASTES A RUN.** Scored on one: rc=0 for
+all three inputs INCLUDING the bare literal, because the block form was wrong and the validator
+never reached the field. Use the consumer's real artifact.
+
+**THE LIST CAN NEVER BE COMPLETE UNDER EXACT MATCHING**, because the decoration is free text.
+That is why the fix is not another list entry.
+
+**The fix is a per-field schema key, and the per-field part is the load-bearing half.**
+`forbidden_match: prefix_ci` on `tool_use_id`; `mode` is left at the default `exact`. `mode` must
+NOT get a prefix rule: its forbidden value `solo` is an enum member, the enum check above returns
+early on anything outside the enum, so `forbidden` there only ever sees `solo` or `subagent` and a
+prefix rule would change nothing while claiming to. An unknown match mode is a **FAILURE, not a
+fallback to exact** — a typo in the schema key would otherwise silently restore this defect, and
+that arm was probed in both directions (a seeded `prefixci` typo reports; the real schema stays
+quiet).
+
+**THE FALSE-POSITIVE SET IS EMPTY, MEASURED OVER THE REAL CORPUS AND NOT REASONED.** 730 distinct
+`tool_use_id` values across this tree and the reference consumer: exact matching hits 0 of them,
+`prefix_ci` hits exactly **1** — the decorated placeholder itself. A substring rule was scored on
+the same population and REJECTED: it also flags a legitimate id that merely CONTAINS a stem
+(`toolu_derived_from_toolu_example_run`), which prefix matching correctly passes. `mode: solo`
+still reads verbatim in the failure message, so Check 17's fixture grep is unaffected.
+
+**Two wrong fixes were built and scored against the receipt, and one of them satisfied its first
+draft.** (a) a global case-insensitive SUBSTRING match — rejects the containing-id case above;
+(b) exact matching with the one observed decoration APPENDED to the list — passes the bare and the
+observed decorated value and misses every unseen decoration, which is the defect intact. Draft one
+of the receipt accepted (b). The shipped receipt seeds an **unseen** decoration
+(`toolu_placeholder_UNSEEN_SUFFIX_XYZ`) plus a real-shaped id that must still PASS, in the same
+run: it accepts the correct fix and a second spelling (`find(...) == 0`), and rejects (b) and the
+pre-fix validator at `origin/main`.
+
+**A STATED LIMIT: the receipt still accepts wrong fix (a).** Both a prefix rule and a substring
+rule refuse the decorated value and admit the real-shaped one, so no input of this shape separates
+them; the containing-id case that does separate them is not in the receipt because a receipt
+asserting a PASS on a value no producer emits is a receipt for a hypothetical. The fixture arm
+carries the discrimination instead.
+
+**The fixture gap this closes is the one-seed-shape failure.** `core/fixtures/taught-schema/run.sh`
+arm V4b seeded only the BARE literal, so for as long as it has existed it could not tell exact
+matching from prefix matching and read green under both. V4c seeds the decorated offender and the
+real-shaped near-miss BESIDE it in the same run — a near-miss in a separate clean run can only ask
+whether the check fires at all. Its mutant reverts `forbidden_match` alone, distinct from V4b's,
+which strips the whole list and would kill both arms while establishing nothing about the match
+mode.
+
+**AND MY OWN CHANGE BROKE V4b's MUTANT, WHICH IS THE FINDING TO CARRY.** That mutant proved the
+strip had applied with a whole-file `grep -q toolu_PLACEHOLDER`. The new `forbidden_match_reason`
+prose NAMES that token to explain the fix, so the grep was satisfied by a comment on a schema whose
+list had in fact been removed, and the arm failed reading exactly like a regression in the change
+under test. It now asks the PARSED schema whether the FIELD carries the key. A whole-file grep is
+satisfied by a comment — the standing rule, collecting its debt on the release that added the prose.
+
+**THE WRITER STAMPED WHAT THE READER REFUSES, AND FIXING ONLY THE READER WOULD HAVE SHIPPED A
+WEDGE.** An adversarial hand found it: `core/scripts/stamp-story-provenance.sh` validated
+`tool_use_id` against `S["patterns"]["tool_use_id"]` ALONE — a charset test its own comment already
+admitted "does NOT catch a well-formed invention such as `toolu_PLACEHOLDER`". Driven on the real
+stamper, both values CLEAR the pattern and were stamped onto every story: bare `toolu_PLACEHOLDER`
+and decorated `toolu_PLACEHOLDER_LEAD_TO_FILL`, against controls (`toolu_`, empty, `nope`) that
+correctly refuse. So the bare half of this wedge PREDATES this release — the reader has always
+refused what the writer has always written — and fixing the reader alone would have widened it to
+the decorated form rather than closing anything.
+
+The writer now resolves `forbidden` and `forbidden_match` off the SAME schema field the reader
+reads, rather than restating the list: a second copy is a copy that drifts, and the drift reopens
+exactly this gap. An unimplemented match mode refuses to stamp rather than falling back to a rule
+weaker than the reader's.
+
+**The fixture seed gap was the same shape as V4b's.** `core/fixtures/story-provenance/run.sh` arm
+10 seeded `nope`, a CHARSET miss, so it could never tell the pattern check from a forbidden check
+and read green under both. Arms 10a/10b seed the bare and the decorated literal, which both clear
+the charset — the decorated one refused only under `prefix_ci`. Scored against the pattern-only
+writer: both arms report `exit=0 want=1`, so they fail on the defect and pass on the fix.
+
+verify: sh R=$(mktemp -d); mk() { printf "%s\n" "<!-- SKILL_INVOCATION_PROVENANCE v1" "skill: ai-dlc-adversary-review" "tool_use_id: $1" "mode: subagent" "lead_role: x" "SKILL_INVOCATION_PROVENANCE_END -->" > "$R/$2"; }; mk "toolu_placeholder_UNSEEN_SUFFIX_XYZ" bad.md; mk "toolu_01ABCdefGHIjklMNOpqrST" good.md; b="$(bash core/scripts/validate-provenance-block.sh "$R/bad.md" 2>&1 || true)"; g="$(bash core/scripts/validate-provenance-block.sh "$R/good.md" 2>&1 || true)"; rc=1; grep -q "toolu_placeholder_UNSEEN_SUFFIX_XYZ is forbidden" <<< "$b" && ! grep -q "is forbidden" <<< "$g" && rc=0; rm -rf "$R"; exit $rc

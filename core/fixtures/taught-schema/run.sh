@@ -243,11 +243,43 @@ else
     bad "V4b failed, but not as forbidden — the diagnosis is wrong: $(head -1 "$TMP/v4b")"
 fi
 
+# ---------------------------------------------------------------------------------------
+# V4c. A DECORATED placeholder is the same forged cell and must be refused too. V4b seeded
+#      only the BARE literal, so for as long as it has existed it could not tell exact
+#      matching from prefix matching — and under exact matching
+#      `toolu_PLACEHOLDER_LEAD_TO_FILL` PASSED, on the reference consumer's live artifact.
+#      The near-miss is seeded BESIDE the offender, in this same arm rather than in a
+#      second clean run, because a separate run can only ask whether the check fires at
+#      all and never whether it fires on the right values.
+# ---------------------------------------------------------------------------------------
+sed 's/^tool_use_id: .*/tool_use_id: toolu_PLACEHOLDER_LEAD_TO_FILL/' \
+    "$TMP/taught.md" >"$TMP/decorated.md"
+sed 's/^tool_use_id: .*/tool_use_id: toolu_01ABCdefGHIjklMNOpqrST/' \
+    "$TMP/taught.md" >"$TMP/nearmiss.md"
+if bash "$VALIDATOR" "$TMP/decorated.md" >"$TMP/v4c" 2>&1; then
+    bad "V4c a DECORATED placeholder (toolu_PLACEHOLDER_LEAD_TO_FILL) PASSED — decoration defeats the forbidden list"
+elif ! grep -q "is forbidden" "$TMP/v4c"; then
+    bad "V4c failed, but not as forbidden — the diagnosis is wrong: $(head -1 "$TMP/v4c")"
+elif ! bash "$VALIDATOR" "$TMP/nearmiss.md" >"$TMP/v4c.near" 2>&1; then
+    bad "V4c NEAR-MISS a real-shaped tool_use_id was REJECTED — the match is too wide: $(head -2 "$TMP/v4c.near" | tail -1)"
+else
+    ok "V4c a decorated placeholder is refused and a real-shaped id is not (the match is by prefix, and it discriminates)"
+fi
+
 # MUTATION control for V4b: strip the tool_use_id `forbidden` list from the schema and
 # require the SAME placeholder block to go green. The FAIL above is evidence for the
-# forbidden list only if removing it removes the FAIL. Anti-vacuity is grep-based (not cmp):
-# json.dump reformats the whole file, so a byte diff would report "changed" even for a
-# no-op strip — instead confirm the token was present before and is gone after.
+# forbidden list only if removing it removes the FAIL. Anti-vacuity is STRUCTURAL (not cmp,
+# and no longer a whole-file grep): json.dump reformats the whole file, so a byte diff would
+# report "changed" even for a no-op strip — and a whole-file grep for the token is satisfied
+# by any PROSE that quotes it. That is not hypothetical: this arm failed the moment the
+# schema's own `forbidden_match_reason` began naming `toolu_PLACEHOLDER_LEAD_TO_FILL` to
+# explain why the match is by prefix, because the token survived a strip that had in fact
+# removed the whole list. Ask the parsed schema whether the FIELD still carries the key.
+field_has() {  # field_has <schema> <field> <key> -> 0 if that field carries that key
+    python3 -c 'import json,sys
+S=json.load(open(sys.argv[1]))
+sys.exit(0 if any(f["name"]==sys.argv[2] and sys.argv[3] in f for f in S["fields"]) else 1)' "$@"
+}
 cp "$SCHEMA" "$TMP/schema.v4b.bak"
 python3 - "$SCHEMA" <<'PYEOF'
 import json, sys
@@ -259,9 +291,9 @@ for f in S["fields"]:
         f.pop("forbidden_reason", None)
 json.dump(S, open(p, "w"), indent=2, ensure_ascii=False)
 PYEOF
-if ! grep -q 'toolu_PLACEHOLDER' "$TMP/schema.v4b.bak"; then
-    bad "V4b MUTATION setup — the real schema has no toolu_PLACEHOLDER forbidden entry to strip"
-elif grep -q 'toolu_PLACEHOLDER' "$SCHEMA"; then
+if ! field_has "$TMP/schema.v4b.bak" tool_use_id forbidden; then
+    bad "V4b MUTATION setup — the real schema has no tool_use_id forbidden list to strip"
+elif field_has "$SCHEMA" tool_use_id forbidden; then
     bad "V4b MUTATION matched nothing — the tool_use_id forbidden list survived the strip"
 elif bash "$VALIDATOR" "$TMP/placeholder.md" >/dev/null 2>&1; then
     ok "V4b MUTATION — removing the forbidden list lets the placeholder pass (the list is what fires)"
@@ -269,6 +301,35 @@ else
     bad "V4b MUTATION — placeholder still refused without the forbidden list; V4b proves nothing"
 fi
 cp "$TMP/schema.v4b.bak" "$SCHEMA"
+
+# MUTATION control for V4c, and it is a DIFFERENT mutation from V4b's on purpose. Stripping
+# the whole forbidden list kills V4b and V4c together, so it establishes that the list
+# fires and says nothing about the MATCH MODE — which is the property V4c owns. This one
+# reverts `forbidden_match` to exact, leaving the list intact, and requires the DECORATED
+# block to go green while the BARE one stays refused. That pair is the whole finding: under
+# exact matching the two inputs are scored differently, and only decoration separates them.
+cp "$SCHEMA" "$TMP/schema.v4c.bak"
+python3 - "$SCHEMA" <<'PYEOF'
+import json, sys
+p = sys.argv[1]
+S = json.load(open(p))
+for f in S["fields"]:
+    if f["name"] == "tool_use_id":
+        f.pop("forbidden_match", None)
+json.dump(S, open(p, "w"), indent=2, ensure_ascii=False)
+PYEOF
+if ! field_has "$TMP/schema.v4c.bak" tool_use_id forbidden_match; then
+    bad "V4c MUTATION setup — the real schema declares no forbidden_match on tool_use_id to revert"
+elif field_has "$SCHEMA" tool_use_id forbidden_match; then
+    bad "V4c MUTATION matched nothing — tool_use_id's forbidden_match survived the revert"
+elif ! bash "$VALIDATOR" "$TMP/decorated.md" >/dev/null 2>&1; then
+    bad "V4c MUTATION — the decorated placeholder is STILL refused under exact matching; V4c proves nothing about the match mode"
+elif bash "$VALIDATOR" "$TMP/placeholder.md" >/dev/null 2>&1; then
+    bad "V4c MUTATION — the BARE literal also passed, so the mutation removed the list rather than the match mode"
+else
+    ok "V4c MUTATION — reverting forbidden_match to exact lets the DECORATED placeholder pass while the bare one stays refused (prefix matching is what fires)"
+fi
+cp "$TMP/schema.v4c.bak" "$SCHEMA"
 
 # ---------------------------------------------------------------------------------------
 # V5. INVARIANT: no hand-written example may exist in an agent-read file. This is the one
