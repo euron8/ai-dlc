@@ -937,7 +937,7 @@ token cited there is a SELF-REPORT: the lead this rule exists to catch
 skips the Read — writes the token from memory exactly as readily as one
 that read the file. The evidence that discriminates is the `Read` tool
 call in the transcript, which the checked agent does not author;
-`core/hooks/ai-dlc-acknowledge.sh` Check 2z consumes it that way for
+`.claude/hooks/ai-dlc-acknowledge.sh` Check 2z consumes it that way for
 `route.md`, keyed deliberately on a `file_path` and not on this token.
 Extending that shape to the other step files is a separate, larger
 change and is not claimed here.

@@ -3049,6 +3049,13 @@ verify: sh e=$(awk '/^## BL-[0-9]+/{f=1} f && sub(/^[ \t]*verify: sh /,"")' docs
 
 ## BL-122 — one unreadable layer entry suppresses every finding about every other entry
 
+**LANDED (v0.523.0, verified PENDING-MERGE-SHA).** `entry_unreadable` collects and defers like
+its sibling `crosswalk_unreadable`, the footer carries `unreadable=N`, and the single `exit 2`
+moves to the end, ordered before the `ERRORS` test. The entry's stated deferral reason had
+expired: the collect-defer-report-and-still-refuse machinery already existed in the same file.
+Receipt replaced — five properties across two worlds and two sort positions, scored against
+eleven wrong fixes.
+
 **Found by an adversarial pass over `v0.435.0`'s own fix, and it is the cost that fix chose to pay
 rather than a defect it introduced.** `entry_unreadable` exits immediately, and the first guard sits
 in the `conforms_to` census loop, which runs before any pass prints. So one unreadable file ends the
@@ -4101,6 +4108,11 @@ verify: sh h=core/hooks/ai-dlc-continue.sh; [ -f "$h" ] || exit 9; grep -q 'PUSH
 
 
 ## BL-187 — Rule 21 says the gate FAILS on a missing step-token citation, no program reads the token, and citation practice decayed to zero across five consecutive sprints unreported
+
+**LANDED (v0.523.0, verified PENDING-MERGE-SHA).** Rule 21's Verification paragraph is
+withdrawn rather than built: the claim was unbuildable on the artifact it named, because a gate
+log entry is authored by the lead the rule constrains. Two mechanisms were built and refuted
+first. Receipt replaced and scored across seven implementations.
 
 **Found while scoping `BL-186`**, by deriving what already mechanizes `READ AND FOLLOW` before
 proposing anything new. Not filed by the consumer; no `PC-` id.
