@@ -37,7 +37,108 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 69 SHIPPED AS `v0.521.0` AND `v0.522.0` — A CORRECTION RELEASE, BECAUSE A LATE ADVERSARIAL HAND FOUND THE SEAM MISSED 13 FIXTURES WHOSE `seed.sh` DOES THE `git init`, ONE OF THEM SILENTLY. THE FIRST NO-`PC` BATCH SINCE THE PC-BACKED SET WAS EXHAUSTED — THE FIRST SINCE THE PC-BACKED SET WAS EXHAUSTED. THE ENTRY'S OWN PARTITION HAD EXPIRED IN THE COMMIT THAT FILED IT, AND ITS RECEIPT WAS REJECTED BY THE CORRECT FIX WHILE A COMMENT COULD CLOSE IT. THE CONSUMER DID NOT PULL, SO THE GAP IS THREE AND PENDING IS TWO, AND THE PULL IS **REQUIRED** ON A CLOBBER REPRODUCED ON THE CONSUMER'S OWN FIXTURE. THE SWEEP IS NOT EMPTY BUT IT IS FULLY ADJUDICATED: UNFILED IS 16 AND **NOTHING IN IT IS AVAILABLE WORK**.
+### BATCH 70 SHIPPED AS `v0.523.0`, ONE RELEASE CARRYING THREE NO-`PC` ENTRIES. ALL THREE FILED RECEIPTS WERE CLOSABLE BY SOMETHING THAT IS NOT A FIX, MEASURED BY BUILDING THE NON-FIXES, AND ONE OF THEM *INVERTED* ON THE CORRECT FIX. THE SUBJECT OF `BL-187` WAS WITHDRAWN RATHER THAN BUILT, AFTER TWO CANDIDATE MECHANISMS WERE BUILT AND REFUTED. THE CONSUMER DID NOT PULL, SO THE GAP IS **FIVE — WIDE** — AND THE PULL IS **REQUIRED** ON A DIVERGENCE MEASURED ON THE CONSUMER'S OWN 48 LAYER ENTRIES. THE SWEEP IS FULLY ADJUDICATED AND ITS AVAILABLE RESIDUE IS ZERO.
+
+This block replaces the batch-69 record below it. Every figure here was re-derived on 2026-09-07
+after the merge, against the working tree with the controls in the same invocation; re-derive
+them again rather than reading them.
+
+**`VERSION` IS `0.523.0`, SO BATCH 71 RELEASES AS `0.524.0`.** Re-derive `VERSION` and add one.
+Batch 70 merged twice: `fc68c252` (PR #665, squash, `v0.523.0`) closing `BL-187`, `BL-122` and
+`BL-148`, then `1f533e8d` (PR #666) rotating all three. **No `PC-` id was cited because none of the
+three carries one**, so `named_absorbed()` has nothing to join and the consumer's ledger cannot move
+on this release. Rotated live 87 → 84, archive 106 → 109, both by exactly three, `--check` scoring
+all three `CLOSE-CANDIDATE [sha fc68c252 resolves]` before `--apply`. **Receipt histogram after: 72
+receipts, ALL exit 1 — zero incidental closes.** No correction release. **The eighteenth batch opened
+by a peer's handoff** (action 9's message from `ai-dlc-4e`), so it scoped itself from its own ranking
+and stated the choice in its first ping.
+
+**THE SWEEP IS STILL FULLY ADJUDICATED AND STILL ZERO, RE-DERIVED INDEPENDENTLY.** Unfiled is 16: 4
+resolve to `origin/main` release commits (`VERSION` at the oldest naming each: 0.372.0, 0.443.0,
+0.448.0, 0.449.0), 11 carry `NOT-UPSTREAM` read from the verdict COLUMN of
+`docs/reviews/graph-ledger-adjudication-brief.md`, and the 12th is the refuted
+`PC-S340-RETRO-AUDIT-SCANS-*`. Impossible-id control 0 on both channels. **Do not re-scope any of
+them.** A sweep is still the opening action because the consumer files while nobody is looking, but
+expect it empty and rank the no-`PC` set without waiting.
+
+**EVERY FILED RECEIPT IN THIS BATCH WAS BROKEN, AND THAT IS THE REUSABLE FINDING.** Three for three,
+each measured by BUILDING the non-fixes rather than reasoning about them. `BL-187`'s was closable by
+four — a comment appended to an unrelated validator, a markdown doc, a file whose entire content is
+the token, and a comment DISCLAIMING that anything reads it — and it **inverted on the correct fix**,
+which is a prose edit it could never close; it also sat one directory from closing with no fix at all.
+`BL-148`'s was closable by four including a table row with no owner and no invariant. `BL-122`'s was
+closable by three, **two of which ship a validator reporting `rc=0 errors=0` over a tree it could not
+read** — indistinguishable from a clean consumer, where the shipping code has a loud refusal. A
+receipt that certifies a regression as a fix is worse than no receipt. **Replace the receipt BEFORE
+writing the fix, and score the replacement against every wrong fix you can build.**
+
+**`BL-187`: THE CLAIM WAS WITHDRAWN, NOT BUILT, AND TWO MECHANISMS WERE REFUTED BY BUILDING THEM.**
+Rule 21 said a gate log entry MUST cite each step file's `STEP_LOADED_TOKEN` and that the gate FAILS
+without it. Nothing read the token (0 readers against a control of 11 `gate-log` files) and **nothing
+ever asked for it to be written** — Check 12 of `gate-validation.md` is the instruction that appends
+the entry and its MUST-include list has six items, none the token, against `steering_violations` in
+the same window as the control. An entry-level arm flags **541 of 839** entries unscoped and **0**
+scoped to the live log naming a step — the same measurement from both ends, with no honest scoping
+between. A carriage census over the 13 file-path carriers scored **13 of 13 as carrying, including
+this rule's own false carrier**, so that clean sweep was discarded rather than reported. **The
+artifact cannot carry the verification**: a gate log entry is authored by the lead the rule
+constrains, so a cited token is a self-report by the subject, while Check 2z keys on a transcript
+`file_path` the checked agent does not author.
+
+**AND THE CARRIER ATTRIBUTION IS A TRAP I FELL INTO — THE `**Carrier:**` LINE SITS ABOVE ITS RULE
+HEADING.** I read it as belonging to the rule above and told a hand that `_gate-procedures.md` was
+Rule 21's carrier; it is Rule 20's. Extracted with I79's own parser, Rule 21's carrier is
+`implementation.md`. **Use I79's extractor, never a hand-rolled span.** The finding survived on the
+correct file — that carrier resolves and carries nothing of Rule 21, and I79 tests `[ -e ]`, so
+carriage is unchecked for all 13 — but it is NOT mechanizable: no grammar over a carrier file can
+separate a file that INSTRUCTS a rule from one that uses its words.
+
+**`BL-122`: THE ENTRY'S OWN DEFERRAL REASON HAD EXPIRED.** It deferred on the grounds that the remedy
+is "a behavioural restructure rather than a guard" — but `crosswalk_unreadable()` already implements
+collect-defer-report-and-still-refuse 700 lines from the `entry_unreadable()` that aborts, and only
+that one body changed. **Cite that precedent as a MECHANISM precedent only**: E16 defers because a
+shallow clone is a healthy consumer state, and an unreadable entry is not. Four population counters
+and two anchor harvests moved behind their guarded reads, or an entry nothing opened would be counted
+into a census and into E16's own guard.
+
+**`BL-148`: THE FILING'S SITE LIST AND ITS INDEX FIGURES WERE BOTH WRONG.** Six declaring sites, not
+four — `implementation.md` and `handoff.md` were omitted. The four named sites AGREE today because
+`BL-147`'s fix landed, so the defect is **latent, not live**; the structural claim (nothing joins the
+sites) is what survives. The index carries 14 rows and 8 markers, not 15/12 — the entry's figures
+reproduce exactly as unnarrowed greps, and 4 of the naive 12 are explicit NEGATIONS. `I110` binds it,
+FP set measured **0**, and with `stopped` removed from the whitelist the arm fires on `stopped`.
+
+**A `core/` PATH CITED INSIDE A RUNTIME FILE FAILED THE GATE, AND 12 FIXTURES WENT RED BEHIND IT.**
+My `SKILL.md` edit cited `core/hooks/ai-dlc-acknowledge.sh`; `install.sh` maps `core/<x>` to
+`.claude/<x>`, so that is a dead link for every consumer. The 12 red fixtures all invoke
+`validate-enforcement-map.sh`, which exited 1 on that one finding, so they **correctly refused**
+rather than reporting false results — `origin/main` was baselined clean first, which is what
+attributed them. **Cite the CONSUMER path in any runtime file.**
+
+**AN ANNOTATION CANNOT CITE ITS OWN COMMIT, AND A HAND'S AMEND LEFT A DANGLING SHA.** The convention
+is the **squash-merge sha on `origin/main`**, written by the LATER rotation commit — not the branch
+commit. A hand reported amending to fix its cited sha; the tree still carried the old one, which
+resolved via reflog (reachable from **0** refs, control 1) while naming a DIFFERENT TREE. Annotate
+`PENDING-MERGE-SHA` pre-merge — the rotator refuses it loudly with `[sha ABSENT]` — and substitute
+the real sha after.
+
+**GAP FIVE (`0.518.0` installed, `0.523.0` shipped) — WIDE, PENDING 0, AND THE PULL IS REQUIRED.**
+No `PC-` id shipped this batch, so PENDING did not move. The differential was run on the REAL
+subject against a scratch copy of the consumer's own 48 layer entries, `cmp -s` control proving the
+binaries differ (159201 vs 165133 bytes): on a healthy tree the two agree exactly, findings identical
+with `unreadable=0` the only diff — but **seal one entry and the installed engine reports 0 findings
+where the shipped one reports 121**, both refusing. That is a live latent defect on their tree today.
+**The bootstrapping hazard IS live in the range**: `emit-report.sh`, `hard-blockers.sh` and
+`setup-sites.md` moved, against a control of 57 core files changed.
+
+**THE SWEEP FOR BATCH 71. THE PC-BACKED SET IS EXHAUSTED AND THREE OF THE FIVE RANKED NO-`PC` ENTRIES
+ARE NOW SPENT.** What remains, both run raw this batch and both exiting 1: **`BL-113`** (ships ALONE,
+bootstrapping — a two-line `verify: sh` receipt is truncated by the engine and mis-scores silently;
+**its FP set is unmeasured and that measurement is the first thing it owes**, and note this batch
+added three long receipts, so run the engine once after it lands), then **`BL-155`** and the rest of
+the live 84. Nothing was pre-scoped for batch 71; run the sweep and rank.
+
+### BATCH 69 (REPLACED BY THE BLOCK ABOVE) SHIPPED AS `v0.521.0` AND `v0.522.0` — A CORRECTION RELEASE, BECAUSE A LATE ADVERSARIAL HAND FOUND THE SEAM MISSED 13 FIXTURES WHOSE `seed.sh` DOES THE `git init`, ONE OF THEM SILENTLY. THE FIRST NO-`PC` BATCH SINCE THE PC-BACKED SET WAS EXHAUSTED — THE FIRST SINCE THE PC-BACKED SET WAS EXHAUSTED. THE ENTRY'S OWN PARTITION HAD EXPIRED IN THE COMMIT THAT FILED IT, AND ITS RECEIPT WAS REJECTED BY THE CORRECT FIX WHILE A COMMENT COULD CLOSE IT. THE CONSUMER DID NOT PULL, SO THE GAP IS THREE AND PENDING IS TWO, AND THE PULL IS **REQUIRED** ON A CLOBBER REPRODUCED ON THE CONSUMER'S OWN FIXTURE. THE SWEEP IS NOT EMPTY BUT IT IS FULLY ADJUDICATED: UNFILED IS 16 AND **NOTHING IN IT IS AVAILABLE WORK**.
 
 This block replaces the batch-68 record below it. Every figure here was re-derived on 2026-09-06
 after the merge, against the working tree with the controls in the same invocation; re-derive
