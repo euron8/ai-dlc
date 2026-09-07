@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # retro-branch-behind-main — a retro branch cut from a leftover feature ref is BEHIND the
 # merged trunk, and validate-mandatory-rules.sh Check 7 is what says so before the PR does.
 #

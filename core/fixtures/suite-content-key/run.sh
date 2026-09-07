@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # suite-content-key — the fixture-suite skip is a check that did not run, and this
 # is what stops it reading like one that passed.
 #

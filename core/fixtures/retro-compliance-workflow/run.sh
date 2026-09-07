@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # retro-compliance-workflow — drive the shipped retro-compliance CI workflow's own shell
 # against seeded trees and assert what it DOES, not what it says.
 #

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # apply-relabel-noop-row — the catalog-relabel manifest row appears only when a heading was
 # actually relabelled.
 #

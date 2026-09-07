@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # trunk-push-bound — assert the ONE commit retro.md Step 5b licenses is actually bounded.
 #
 # Usage: run.sh

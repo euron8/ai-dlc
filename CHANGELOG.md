@@ -15,6 +15,54 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.521.0] - 2026-09-06
+
+### `BL-191` — a fixture run by hand can no longer clobber the caller's git index while reporting PASS
+
+Git exports `GIT_DIR` **absolute** to any hook it runs from a linked worktree. `CLAUDE.md` tells a
+session debugging one fixture to run it by hand — `bash core/fixtures/X/run.sh` — and that
+invocation passes through no seam: both pre-push hooks scrub before dispatching the pool, so the
+suite was never exposed and only the by-hand path was. Under an inherited `GIT_DIR`, `git init`
+**silently succeeds without creating a repository** (`.git` absent afterwards, exit 0, no
+diagnostic), and every later git call in the fixture lands on the caller's repository.
+
+Measured on eight fixtures, fresh victim per trial, against an unarmed control that left all eight
+intact: **8 of 8 wiped a 757-entry index to single digits, and 6 of the 8 did it while exiting 0
+with zero FAILs.** The blast radius is the index only — `HEAD`, refs and worktree files survive and
+`git reset --hard` recovers — but until that is worked out the victim reads as a catastrophic
+deletion. The environment was derived from a probe hook rather than assumed: `GIT_DIR` alone, no
+`GIT_INDEX_FILE`.
+
+**The seam did not exist and the fix creates one.** `core/fixtures/lib/preamble.sh` carries the
+scrub and is sourced first by the 27 fixture `run.sh` that build a scratch repository. A scrub
+pasted into each of them was refused as the hand-list shape this repo's rules exist to avoid;
+deriving the sourcing set from `git grep -l 'git init'` means the 28th fixture is covered the day
+it is written. `scripts/validate-fixture-git-env.sh` binds the other direction, reporting any
+member that does not source it under a ceiling that only ratchets down — **0 today**, because the
+seam closed the whole population at once.
+
+**The binding is a standalone validator, deliberately, and that is a wall-clock decision.**
+`validate-enforcement-map.sh` is invoked by 25 fixture directories, so an arm added there is
+multiplied by the sharded batteries and lands on the suite pole; this subject needs no join
+against the enforcement map, so it is dispatched once from the hook like the other ten standalone
+validators and pays none of that.
+
+`core/fixtures/fixture-git-env-seam/` drives the real seam against a real victim and dies against
+four mutants: the seam's body removed, its source line removed, the scrub **present but commented
+out**, and an unrelated variable unset. The third is the one that matters — the file still contains
+the exact correct text, so every grep-shaped check reports the fix present while nothing changed.
+
+**Two figures in the filing had expired and are corrected in the entry.** The partition is 40 of
+45, not 42 — `validate-claude-rules.sh` and `claude-rules-joins/run.sh` gained scrubs in the *same
+commit that filed the entry* — and the seam's population is 27 `run.sh`, not the 40 fixture
+directories that run `git init` in any `.sh`.
+
+**The filed receipt was rejected by the correct fix and closable by a comment.** It counted
+scrub-regex matches repo-wide, so the prescribed single seam moved it 12 → 13 and read STILL-LIVE
+over a working fix, while 30 files containing nothing but `# env -i` closed it. The replacement is
+behavioural: a `git` shim on `PATH`, a derived population, and the question of whether `GIT_DIR`
+was still armed when each member called git.
+
 ## [0.520.0] - 2026-09-06
 
 ### `BL-193` — every rule-file audit finding names its owner, and a consumer is no longer gated on a file it may not edit

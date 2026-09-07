@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # release-version-triple — assert the commit subject, VERSION and the CHANGELOG's
 # top heading are joined, and that a disagreement between them fails.
 #

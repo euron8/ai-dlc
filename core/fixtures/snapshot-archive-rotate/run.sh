@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # snapshot-archive-rotate/run.sh — prove the snapshot-history rotator moves old narrative into
 # ONE archive, loses nothing, refuses rather than half-writes, and never puts the bytes
 # somewhere Check 35 cannot see them.

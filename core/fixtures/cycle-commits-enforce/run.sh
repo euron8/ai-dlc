@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # cycle-commits-enforce — prove validate-cycle-commits.sh enforces the >=3-cycle
 # floor with matching log rows, that the enforcement is not vacuous (a guard
 # mutation flips a real FAIL to green), and that mandatory-rules Check 2 actually

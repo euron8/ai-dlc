@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # check5-anchor-base — the prior-sprint audit anchor: its ONE resolver, and both its callers.
 #
 # ORIGINALLY: prove mandatory-rules Check 5 FIRES at retro time by diffing from the prior-sprint

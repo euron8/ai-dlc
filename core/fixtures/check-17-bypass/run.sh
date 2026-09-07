@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # Drive the check-17-bypass fixture against the REAL validators and assert the
 # expected pass/fail matrix. Exit 0 = the forgery floor holds.
 #

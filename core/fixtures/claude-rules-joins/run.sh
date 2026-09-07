@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # Exercise scripts/validate-claude-rules.sh -- the join between CLAUDE.md and the
 # path-scoped authoring rules under `.claude/rules/`.
 #
