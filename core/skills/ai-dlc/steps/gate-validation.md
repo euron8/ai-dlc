@@ -2203,6 +2203,26 @@ consumer predates the spec layer.
 **Scope.** Skip unless Check 28 reported `IN-FORCE`; on
 `SKIPPED-PRE-ADOPTION` report that token and move on.
 
+**Scope — not yet authored.** Report `NOT-YET-AUTHORED` and move on when the gate
+being validated is a variant's OPENING planning gate and this sprint's
+`_bmad-output/specs/s<N>/` does not exist. **`NOT-YET-AUTHORED` is deliberately not
+`EXAMINED NOTHING`**, the `empty_subject_verdict` token I93 binds: that one reports
+that a validator RAN and resolved no subject, which is a legal terminal state for a
+subject that claims nothing. This one reports that the check must not run yet,
+because the step that authors its subject has not executed — a statement about
+pipeline ORDERING, not about an empty subject. Recording the distinction here
+because I93's arm scans EMITTERS and this token has none, so nothing mechanical
+would catch a fourth spelling of either state. Check 28 resolves a DECLARATION, not an
+artifact, so an adopted project reports `IN-FORCE` at a gate that runs BEFORE
+`discovery.md` §4b authors the kernel — the carry-over variant opens at
+`carry-over-evaluation.md`, which runs the planning gate at its own step. **This is
+not the blanket "no spec present, so pass" that Check 28's own body refuses**, and
+the difference is the whole clause: that pass cannot tell a project that never
+adopted from one that adopted and stopped, whereas this arm fires only where the
+authoring step demonstrably has not run yet, and reports a token rather than
+silence. Where the spec directory exists and the named `SPEC.md` does not, that is
+a real absence and this arm does NOT apply.
+
 **Check.** Read `_bmad-output/specs/s<N>/<slug>/SPEC.md` and re-grade it against
 BMAD's Spec Law in a fresh `gate-adjudicator` subagent (Rule 20). Read the
 `.memlog.md` verdict entries but do NOT adopt them: BMAD's Self-Validate is run by
@@ -2476,6 +2496,30 @@ can diff against.
 
 ### 33. Every identifier the operator named reaches this sprint's scope (all planning gates).
 <!-- CHECK_LOADED: 33 -->
+
+**Scope — not yet authored.** Report `NOT-YET-AUTHORED` and move on when the gate
+being validated is a variant's OPENING planning gate and this sprint's
+`_bmad-output/planning-artifacts/s<N>/locked-requirements.md` does not exist.
+`discovery.md` §4a authors that file and NO other step writes it — every other
+mention in the step files reads it and cites §4a as its source — and the carry-over
+variant opens at `carry-over-evaluation.md`, which runs its planning gate before
+discovery has run, so the artifact this check reads is not owed yet.
+
+**The condition is the FILE, never the sprint slot, and keying it on the slot makes
+this arm unable to fire on the case that motivated it.** The opening step writes
+`s<N>/carry-over-evaluation.md` and its `s<N>/coe-adversarial-p<M>.md` series
+BEFORE running its own gate, so the slot always exists by the time this check runs.
+Measured at the two carry-over opening gates that produced this finding: at s307 the
+slot held four files with `locked-requirements.md` absent — the reproducing case —
+and at s308 it held seven with the file present. A slot-existence conjunct
+self-excludes on the first and routes it to the real-absence FAIL this clause exists
+to prevent.
+
+Check 29 carries the same clause for the spec kernel, and the two are NOT symmetric:
+its subject is `_bmad-output/specs/s<N>/`, which no opening step writes, so a
+directory condition is correct there and wrong here. Both state their own condition
+rather than sharing an anchor, because a check body is loaded on its own by
+gate-type slicing and a reference to a sibling check is not loaded with it.
 
 **Check.** Run `scripts/ai-dlc/validate-request-coverage.sh --requests
 _bmad-output/operator-requests-history.md --brief

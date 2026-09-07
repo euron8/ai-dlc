@@ -98,6 +98,17 @@ expect "placeholder: --check override-free post-backfill = OK" 0 "OK" \
 expect "placeholder: garbage override refused" 1 "not a valid toolu_ id" \
   bash "$WRITER" --series "$P/s1-stories-adversarial" --tool-use-id "nope" "$P/stories/story-1.md"
 
+# 10a/10b. THE WRITER REFUSES WHAT THE READER REFUSES. Arm 10's `nope` is a CHARSET miss, so it
+# could never tell the pattern check from the forbidden check — and under the pattern alone the
+# stamper wrote onto every story a placeholder that validate-provenance-block.sh then rejected.
+# Both of these CLEAR the charset pattern, so only the schema's `forbidden` list can refuse them,
+# and the decorated one is refused only under `forbidden_match: prefix_ci`. The two together are
+# what separates a writer that reads the field from one that restates a literal.
+expect "placeholder: bare forbidden literal refused" 1 "placeholder literal the schema forbids" \
+  bash "$WRITER" --series "$P/s1-stories-adversarial" --tool-use-id "toolu_PLACEHOLDER" "$P/stories/story-1.md"
+expect "placeholder: DECORATED forbidden literal refused" 1 "placeholder literal the schema forbids" \
+  bash "$WRITER" --series "$P/s1-stories-adversarial" --tool-use-id "toolu_PLACEHOLDER_LEAD_TO_FILL" "$P/stories/story-1.md"
+
 U="$ROOT/unconverged"
 
 # 11. SAFETY: terminal verdict is not EXIT_CONDITION_MET -> refuse to stamp.

@@ -15,6 +15,61 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.527.0] - 2026-09-07
+
+### `BL-199` — `PC-S309-PROVENANCE-FORBIDDEN-LIST-EXACT-MATCH-MISSES-DECORATED-PLACEHOLDERS`
+
+The provenance schema's `forbidden` list was an EXACT membership test, so decoration defeated it.
+Driven on the reference consumer's live artifact, which carries the value today:
+`toolu_PLACEHOLDER_LEAD_TO_FILL` PASSED where the bare `toolu_PLACEHOLDER` was refused, and only
+the decoration separated them. The list can never be complete under exact matching, because the
+decoration is free text.
+
+The match is now per-field and schema-declared. `tool_use_id` carries
+`forbidden_match: prefix_ci`; `mode` stays exact, because its forbidden value is an enum member
+and `check_value` returns on an enum miss before reaching the forbidden test — verified by
+building the widened variant and getting identical cells in every case. An unknown match mode is a
+hard failure rather than a fallback to exact, so a typo in the schema key cannot silently restore
+the defect.
+
+**The WRITER is fixed in the same release, and fixing only the reader would have shipped a wedge.**
+`stamp-story-provenance.sh` validated the id against the charset pattern alone — its own comment
+admitted it "does NOT catch a well-formed invention such as `toolu_PLACEHOLDER`" — so it stamped
+onto every story both values the reader refuses. That bare half predates this release. The writer
+now resolves `forbidden` and `forbidden_match` off the same schema field the reader reads.
+
+False-positive set measured over the 870 distinct `tool_use_id` values in this tree and the
+reference consumer, whole tree: prefix matching newly refuses exactly one value that exact
+matching admits, and it is the true positive itself. A substring rule was built and rejected — it
+also flags a legitimate id that merely CONTAINS a stem.
+
+Two fixture seed gaps of the same shape are closed. `taught-schema` V4b seeded only the bare
+literal and `story-provenance` arm 10 seeded a charset miss, so neither could tell a pattern check
+from a forbidden check and both read green under the defect.
+
+### `BL-200` — `PC-S309-CHECK29-33-NO-SCOPE-CLAUSE-FOR-CARRY-OVER-OPENING-GATE`
+
+Checks 29 and 33 presuppose artifacts `discovery.md` authors — the spec kernel at §4b, the locked
+requirements at §4a — while the carry-over variant runs its planning gate at
+`carry-over-evaluation.md`, before discovery. Neither body could tell "not yet owed, by the
+pipeline's own ordering" from "missing, which is a defect", so every adjudicator re-derived the
+step ordering by hand from prior sprints' history.
+
+Check 28 does not already cover it: it resolves a DECLARATION, not an artifact, so an adopted
+project reports `IN-FORCE` at a gate where the kernel does not exist yet. Reproduced on the
+consumer's own s309 verdict, where Check 29 records `IN-FORCE`, then no specs directory, then
+resolves it under a "Not-yet-owed arm" the check text does not provide.
+
+Both bodies now report `NOT-YET-AUTHORED`, bounded so the arm cannot become the blanket pass
+Check 28's own body refuses: it fires only where the gate is a variant's opening planning gate AND
+the sprint's directory is absent, and reports a token rather than silence. The clause is stated in
+each body rather than shared — gate-type slicing loads a check body on its own, so a reference to
+a sibling check is not loaded at the gate that needs it.
+
+Two corrections to the filing, both narrowing it: Check 29 does carry a Scope clause, gated on
+Check 28, so the defect is what it does not say; and Check 33 does not appear in the s309 verdict
+at all, so "reproduced identically" holds only for Check 29.
+
 ## [0.526.0] - 2026-09-07
 
 ### `BL-198` — S8 prescribed quoting as the fix for a hazard quoting does not fix

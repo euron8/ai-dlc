@@ -648,8 +648,30 @@ def check_value(idx, name, value, failures):
     # class. ONE mechanism for every field that declares `forbidden`, so the rule lives in
     # the schema, not in a per-field code branch. Written `name: value` so a solo
     # rejection still reads `mode: solo` verbatim (Check 17's fixture greps for it).
+    #
+    # The MATCH is per-field and schema-declared, because the two fields need different
+    # ones and a single rule for both is wrong in one direction whichever it picks.
+    # `mode` is EXACT: its forbidden value is an enum member, the enum check above has
+    # already returned on anything outside the enum, so `forbidden` there only ever sees
+    # `solo` or `subagent` and a prefix rule would change nothing while claiming to.
+    # `tool_use_id` is `prefix_ci`: the decoration on a placeholder is free text, so an
+    # exact list can never be complete — `toolu_PLACEHOLDER_LEAD_TO_FILL` PASSED for as
+    # long as this check has existed, on the reference consumer's live artifact. An
+    # unknown match mode is a FAILURE, not a fallback to exact: a typo in the schema key
+    # would otherwise silently restore the defect this closes.
     forbidden = spec.get("forbidden")
-    if forbidden and value in forbidden:
+    match_mode = spec.get("forbidden_match", "exact")
+    if forbidden and match_mode not in ("exact", "prefix_ci"):
+        failures.append(
+            f"block #{idx}: schema error: field '{name}' declares "
+            f"forbidden_match '{match_mode}', which is not one of exact, prefix_ci"
+        )
+        return
+    if match_mode == "prefix_ci":
+        hit = any(value.lower().startswith(f.lower()) for f in (forbidden or []))
+    else:
+        hit = bool(forbidden) and value in forbidden
+    if hit:
         reason = spec.get("forbidden_reason")
         msg = f"block #{idx}: {name}: {value} is forbidden"
         if reason:
