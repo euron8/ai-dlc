@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # Drives the pre-push suite's per-fixture READ-SET SKIP.
 #
 # WHAT IS BEING PROVEN, and why each arm has to exist. The skip decides which fixtures do not

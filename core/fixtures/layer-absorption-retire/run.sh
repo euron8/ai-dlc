@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # layer-absorption-retire — prove LC-E6's code can FIRE, and that what distinguishes it from its
 # sibling is the one fact it claims.
 #

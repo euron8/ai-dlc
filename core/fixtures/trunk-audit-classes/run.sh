@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # trunk-audit-classes — assert `validate-cycle-commits.sh --audit-trunk` fires, and only where
 # it should.
 #

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # apply-restamp-theirs — the re-stamp reads VERSION from THEIRS, never from the
 # distribution's working tree.
 #
