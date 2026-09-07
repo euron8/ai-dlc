@@ -15,6 +15,59 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.524.0] - 2026-09-07
+
+### `BL-194` — a suppression's check id was joined WITHOUT its catalog, so one catalog's verdict answered another's question
+
+`validate-suppression-lifetime.sh`'s `latest_verdict()` selected the newest `gate-metrics.jsonl`
+row whose `check` field matched and ignored the row's `catalog`. The record schema carries that
+field for exactly this reason — `gate-validation.md` says it is "what makes a consumer's `check`
+numbers un-conflatable with this catalog's" and to "never attribute across catalogs by number".
+The entry parser already extracted the bracket and already carried it into the `--in-force` rows;
+it was dropped at the two verdict call sites.
+
+Both directions were live and the second is fail-open: an extension row recorded FAIL fabricates a
+violation against a core check, and an extension row recorded PASS **acquits a core check that is
+still failing** — which defeats the purpose of a lifetime arm. Measured on the reference consumer
+across 1828 rows in five metrics files: 34 check ids carry rows under two or more catalogs against
+37 that carry one, and 11 of the ids in this catalog are among them. Driving the pre-fix reader,
+`latest_verdict 18` answered PASS out of an `extension:gate-validation-push` row; the
+single-catalog control answered out of `core`.
+
+**Latent today, and tiered DEFECT rather than BLOCKER for that reason.** All 18 live suppressions
+on that consumer name `[core]`, none names a colliding id, and restricted to the 57 ids this
+validator acts on a correct join changes 0 answers. The differential over the consumer's own
+corpus is identical before and after, with `cmp -s` asserting the two binaries differ first.
+
+The fix joins on `(catalog, check)`; a bare id resolves as `core`, matching the sibling
+`validate-gate-adjudication.sh`, which already joins this way and whose header records the same
+defect measured and closed there. The terminal arm passes `core` as a literal deliberately: an id
+reaches it only by surviving the catalog membership test, so a stray non-core bracket must not ask
+for a verdict in a catalog whose ids were never resolved.
+
+Fixture assertions 14–18 and mutants I and J carry it. Against the pre-fix validator the new arms
+produce 5 failures and exit 1; the two single-catalog controls stay green in both worlds, so the
+arms discriminate rather than refusing. Mutant J hard-codes `core` and is killed by assertion 17
+ALONE — every seed drawn from the real corpus passes it, because every live suppression is
+`[core]`, so only a mirrored world naming a non-core catalog separates it from the fix.
+
+### `BL-195` — filed, not fixed: Check 2 reads a verdict the current gate has not yet written
+
+Filed from `PC-S308-GATE-METRICS-CHECK2-STALE-VERDICT-READ-ORDER`. The defect is real and better
+evidenced than the filing claims — the consumer diagnosed it eleven days before filing it and
+chose to suppress rather than fix, three times across two sprints — and **all four candidate
+remedies are refuted by measurement**: re-sequencing is a cycle (Check 12 emits a row for Check 2
+itself), re-running the check live fails open on 22 of 57 checks that have no enforcer, a
+sha-freshness guard disarms completely on a squash-merge consumer (0 of 11 recorded shas are
+reachable from HEAD), and reading the current gate's verdict file has no join (96 gate events
+against 197 verdict timestamps intersect at 9).
+
+The entry also records a finding larger than the filing's own: the metrics file undercounts
+Check-2 failures 12.7× (38 in the verdict corpus against 3 in the metrics), because a gate that
+FAILs Check 2 halts before Check 12 writes the row. The arm consults the one artifact that
+structurally cannot record the failures that matter most. No fix ships; the entry exists so the
+next session does not rebuild the four refuted shapes.
+
 ## [0.523.0] - 2026-09-07
 
 ### `BL-187` — Rule 21 claimed a gate that was never built, on an artifact that cannot carry it

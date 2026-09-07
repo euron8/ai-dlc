@@ -321,14 +321,47 @@ fi
 GATES_N="$(grep -c . <<<"${GATE_TS:-}" || true)"
 [ -n "$GATE_TS" ] || GATES_N=0
 
-# latest_verdict <check-id> -> verdict at the most recent gate that recorded it
+# latest_verdict <check-id> [catalog] -> verdict at the most recent gate that recorded it
+#
+# THE JOIN IS (catalog, check), NEVER check ALONE. The record schema names `catalog` for
+# exactly this reason -- gate-validation.md:757 says it "is what makes a consumer's `check`
+# numbers un-conflatable with this catalog's" and "never attribute across catalogs by
+# number". Keying on the id alone answers a `[core]` suppression from whichever catalog
+# happened to write the newest row.
+#
+# Measured on the reference consumer, 1828 rows across five metrics files: 34 check ids
+# carry rows under two or more catalogs against 37 that carry one, and 11 of the ids in
+# THIS catalog are among them (`2a 3a 3b 5 17 18 21 24 27 30 34`). Driving the pre-fix
+# reader, `latest_verdict 18` answered PASS out of an `extension:gate-validation-push` row
+# while the core verdict for 18 was a different value; control, a single-catalog id,
+# answered from `core`. Both directions of the consequence are live: an extension FAIL
+# fabricates a violation against a core check, and an extension PASS ACQUITS a core check
+# that is still failing -- the fail-open direction, and the one a lifetime arm must not have.
+#
+# Today no suppression on that consumer names a colliding id (0, against a control of 6
+# entries naming check 16), so the consequence is LATENT and the mechanism is not. The
+# sibling that consumes these rows already joins this way -- validate-gate-adjudication.sh
+# keys `in_force` on `(catalog, check_id)` and its header records the same defect measured
+# and closed there: "a bare `16` covered an extension check `16` in a catalog the entry
+# never named." Two readers of one corpus disagreeing on the join key is the defect.
+#
+# AN ENTRY WITH NO `[catalog]` BRACKET RESOLVES AS `core`, matching that sibling's `cat or
+# "core"`. The bracket is mandatory per escalations.md but the shape arm requires only the
+# id, so an author error that drops it must not buy WIDER coverage than writing it
+# correctly would: a bare id can only ever have named a check in this catalog, because
+# that is the only catalog whose ids this script resolves.
 latest_verdict() {
   local id="$1"
+  local cat="${2:-}"
+  [ -n "$cat" ] || cat="core"
   [ -n "$GATE_METRICS" ] && [ -f "$GATE_METRICS" ] || { printf '%s\n' ""; return 0; }
-  awk -v want="$id" "$JSTR_AWK"'
+  awk -v want="$id" -v wantcat="$cat" "$JSTR_AWK"'
     {
       c = jstr($0, "check")
       if (c != want) next
+      g = jstr($0, "catalog")
+      if (g == "") g = "core"
+      if (g != wantcat) next
       t = jstr($0, "ts")
       v = jstr($0, "verdict")
       if (t >= bestt) { bestt = t; bestv = v }
@@ -468,7 +501,7 @@ while IFS="$(printf '\037')" read -r header status supp expires authts named sup
         continue
       fi
       elapsed="$(gates_since "$authts")"
-      verdict="$(latest_verdict "$supp")"
+      verdict="$(latest_verdict "$supp" "$suppcat")"
       if [ "$elapsed" -gt "$expires" ]; then
         if [ "$verdict" = "FAIL" ]; then
           key="EXPIRED:$supp"
@@ -496,7 +529,14 @@ while IFS="$(printf '\037')" read -r header status supp expires authts named sup
       for id in "${ids[@]:-}"; do
         [ -n "${id:-}" ] || continue
         grep -qxF "$id" <<<"$CATALOG" || continue
-        [ "$(latest_verdict "$id")" = "FAIL" ] || continue
+        # `core` is not a default here, it is the only answer this arm can mean. The id
+        # reached this line by surviving the CATALOG membership test on the line above,
+        # and CATALOG is derived from THIS distribution's enforcement-map -- so a prose
+        # `Check <n>` in a terminal entry has necessarily named a check in this catalog.
+        # Passing the entry's own `suppcat` would be wrong: a RESOLVED entry carrying a
+        # stray non-core bracket would then ask for a verdict in a catalog whose ids were
+        # never resolved, and every such entry would silently stop being checked.
+        [ "$(latest_verdict "$id" core)" = "FAIL" ] || continue
         hit="$hit $id"
       done
       [ -n "$hit" ] || continue

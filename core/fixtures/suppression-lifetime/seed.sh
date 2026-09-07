@@ -41,6 +41,10 @@ checks:
     title: bmad-invocation-resolves
     enforcer: []
     adjudication: script
+  - id: 33
+    title: single-catalog-control
+    enforcer: []
+    adjudication: script
   - id: H1
     title: harness-meta-check
     enforcer: []
@@ -82,6 +86,43 @@ GM_FIXED="$WORK/gm-fixed.jsonl"
 # unparseable — exists but carries no readable ts/check/verdict at all.
 GM_BROKEN="$WORK/gm-broken.jsonl"
 printf 'not json at all\n{oops\n' > "$GM_BROKEN"
+
+# ---- THE CATALOG-COLLISION TIMELINE ----------------------------------------
+# One check NUMBER carrying rows under two catalogs, which is the shape the real corpus
+# has: 34 of 71 ids on the reference consumer carry more than one catalog, and 11 of the
+# ids in THIS catalog are among them. The core row is OLDER and FAILING; the extension row
+# is NEWER and PASSING, so a reader keyed on the number alone answers PASS for `[core] 32`
+# and acquits a suppression whose check is still red — the fail-open direction.
+#
+# Check 33 is the DISCRIMINATION CONTROL and carries exactly one catalog. Every arm below
+# runs against it too: if a "fix" moves 33 as well, it is not joining, it is just refusing.
+emit_cat() {   # <ts> <catalog> <check> <verdict>
+  printf '{"v": 1, "sprint": 400, "gate": "planning", "phase": "a→b", "ts": "%s", "sha": "deadbeef", "catalog": "%s", "check": "%s", "title": "t", "verdict": "%s", "defect_class": null, "evidence": "e", "tok_slice": 1}\n' "$1" "$2" "$3" "$4"
+}
+GM_COLLIDE="$WORK/gm-collide.jsonl"
+{
+  emit_cat "$G1" "core"             "32" "FAIL"
+  emit_cat "$G2" "core"             "32" "FAIL"
+  emit_cat "$G3" "extension:probe"  "32" "PASS"
+  emit_cat "$G1" "core"             "33" "FAIL"
+  emit_cat "$G2" "core"             "33" "FAIL"
+  emit_cat "$G3" "core"             "33" "FAIL"
+} > "$GM_COLLIDE"
+
+# The mirror: the SUPPRESSED entry names the EXTENSION check, which is the one still
+# failing, while core's newest row PASSES. A fix that hard-codes `core` instead of reading
+# the entry's own bracket passes every arm drawn from the corpus above and fails here —
+# and it is the only input that separates the two, because on the reference consumer all
+# 18 live suppressions are `[core]`.
+GM_COLLIDE_EXT="$WORK/gm-collide-ext.jsonl"
+{
+  emit_cat "$G1" "extension:probe"  "32" "FAIL"
+  emit_cat "$G2" "extension:probe"  "32" "FAIL"
+  emit_cat "$G3" "core"             "32" "PASS"
+  emit_cat "$G1" "core"             "33" "FAIL"
+  emit_cat "$G2" "core"             "33" "FAIL"
+  emit_cat "$G3" "core"             "33" "FAIL"
+} > "$GM_COLLIDE_EXT"
 
 A0="2026-04-30T00:00:00Z"   # authorization, before every gate above
 
@@ -223,6 +264,48 @@ EOF
 # --- 13. the same discard reached through a TERMINAL branch ----------------------
 # RESOLVED has its own `case` branch, so an arm written as the case's `else` would never
 # see this entry. Its suppression fields are discarded exactly as case 10's are.
+# --- catalog collision: the entry names [core], expired, core still FAILING ---
+f="$(mkcase collide-core)"
+cat > "$f" <<EOF
+## [S400 gate — catalog collision] [lead] - ${A0}
+**Status:** SUPPRESSED
+**Suppresses:** [core] 32 — bmad-invocation-resolves
+**Expires after:** 1 gates
+**Operator authorization:** ${A0} | "Override, proceed, file backlog item"
+EOF
+
+# --- the same entry with NO bracket. A bare id resolves as core, matching the sibling's
+#     `cat or "core"`, so this must behave EXACTLY like collide-core above.
+f="$(mkcase collide-bare)"
+cat > "$f" <<EOF
+## [S400 gate — catalog collision, bare id] [lead] - ${A0}
+**Status:** SUPPRESSED
+**Suppresses:** 32 — bmad-invocation-resolves
+**Expires after:** 1 gates
+**Operator authorization:** ${A0} | "Override, proceed, file backlog item"
+EOF
+
+# --- the mirror: the entry names the EXTENSION catalog ---------------------
+f="$(mkcase collide-ext)"
+cat > "$f" <<EOF
+## [S400 gate — catalog collision, extension] [lead] - ${A0}
+**Status:** SUPPRESSED
+**Suppresses:** [extension:probe] 32 — bmad-invocation-resolves
+**Expires after:** 1 gates
+**Operator authorization:** ${A0} | "Override, proceed, file backlog item"
+EOF
+
+# --- the discrimination control: a single-catalog check, expired, still FAILING.
+#     Fires in EVERY world. An arm that stops firing here is refusing, not joining.
+f="$(mkcase collide-control)"
+cat > "$f" <<EOF
+## [S400 gate — single-catalog control] [lead] - ${A0}
+**Status:** SUPPRESSED
+**Suppresses:** [core] 33 — single-catalog-control
+**Expires after:** 1 gates
+**Operator authorization:** ${A0} | "Override, proceed, file backlog item"
+EOF
+
 f="$(mkcase attempt-under-terminal)"
 cat > "$f" <<EOF
 ## [S400 gate — closed out] [lead] - ${A0}
@@ -300,6 +383,8 @@ MAP="$MAP"
 GM_FAILING="$GM_FAILING"
 GM_FIXED="$GM_FIXED"
 GM_BROKEN="$GM_BROKEN"
+GM_COLLIDE="$GM_COLLIDE"
+GM_COLLIDE_EXT="$GM_COLLIDE_EXT"
 CASES="$WORK/cases"
 BASELINE_GOOD="$WORK/baseline-good.txt"
 BASELINE_STALE="$WORK/baseline-stale.txt"
