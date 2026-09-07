@@ -8169,3 +8169,149 @@ than merely refusing.
 
 verify: sh V=core/scripts/validate-suppression-lifetime.sh; [ -f "$V" ] || exit 1; S=$(mktemp -d) || exit 1; trap 'rm -rf "$S"' EXIT; mkdir -p "$S/r/docs/escalations" || exit 1; printf 'checks:\n  - id: "18"\n    enforcer: []\n  - id: "19"\n    enforcer: []\n' > "$S/r/em.yaml" || exit 1; printf '{"v":1,"ts":"2026-01-01T00:00:00Z","catalog":"core","check":"18","verdict":"FAIL"}\n{"v":1,"ts":"2026-01-02T00:00:00Z","catalog":"extension:probe","check":"18","verdict":"PASS"}\n{"v":1,"ts":"2026-01-03T00:00:00Z","catalog":"core","check":"19","verdict":"FAIL"}\n{"v":1,"ts":"2026-01-04T00:00:00Z","catalog":"core","check":"19","verdict":"FAIL"}\n' > "$S/r/gm.jsonl" || exit 1; e() { printf '## [P%s] [op] - 2026-01-01T00:00:00Z\n\n**Status:** SUPPRESSED\n\n**Suppresses:** %s\n\n**Expires after:** 1\n\n**Operator authorization:** 2026-01-01T00:00:00Z | "proceed for now"\n\n' "$1" "$2"; }; q() { printf '%s' "$1" > "$S/r/docs/escalations/pending.md"; AI_DLC_PROJECT_ROOT="$S/r" bash "$V" --escalations "$S/r/docs/escalations/pending.md" --enforcement-map "$S/r/em.yaml" --gate-metrics "$S/r/gm.jsonl" >/dev/null 2>&1; echo $?; }; A=$(q "$(e A '[core] 18')"); B=$(q "$(e B '[extension:probe] 18')"); C=$(q "$(e C '18')"); D=$(q "$(e D '[core] 19')"); [ "$D" = 1 ] || exit 1; [ "$B" = 0 ] || exit 1; [ "$A" = 1 ] && [ "$C" = 1 ] || exit 1; exit 0
 
+## BL-196 — `W7` reports a CORRECT citation of a hook-implemented check as dangling, and is silent on five others because an unrelated heading shares the number
+
+**LANDED (v0.525.0, verified 090c2db9).**
+
+**Provenance.** `PC-S309-VALIDATE-LAYER-ENTRIES-W7-CANNOT-SEE-A-HOOK-IMPLEMENTED-CHECK`, filed by
+the reference consumer 2026-09-07. DEFECT, not BLOCKER: `W7` is a `warn`
+and `validate-layer-entries.sh` exits on `ERRORS` alone (`:2468`), so no push was ever blocked.
+
+**The defect as filed.** `W7` resolves a `Check <n>` citation against the rendered rulebook
+(`GLOBAL_CHECK_ANCHORS`, built from `SKILL.md`, `steps/*.md`, `.claude/team-roles`, extensions and
+overrides) and against the crosswalk. A check implemented in a shipped hook lives in none of them
+by design — the hook IS the implementation — so a correct citation reports as dangling, and both
+remedies the message printed are unavailable for that class: there is nothing to repoint to, and
+a crosswalk row would assert a renumber that never happened.
+
+**Upstream authored the instance, and it reaches every consumer.** `v0.524.0` added a paragraph
+to `core/skills/ai-dlc/SKILL.md:940` citing `.claude/hooks/ai-dlc-acknowledge.sh` Check 2z;
+`ai-dlc-acknowledge.sh` declares 2z at `:185`. Derived: `2z` absent from `SKILL.md` at `09aa8af9`,
+present at `b80c753c`, 3 occurrences in the hook, impossible-token control 0. Driven on a tree
+built by `scripts/install.sh` into an empty directory: **`W7=LC-R2:1/0`** — one finding over ZERO
+layer subjects, so no consumer authoring is involved. On the reference consumer the same run
+reports exactly one `W7` row, with `W6` firing in the same invocation as the control.
+
+**THE SILENT DIRECTION OUTRANKS THE FILED ONE AND IS FIXED IN THE SAME CHANGE.** The resolve was a
+flat `grep -Fxq` of the bare id against ONE global pool, with no join between the citing text and
+where the id resolves. FIVE in-corpus hook-check citations exist; four were silent because an
+unrelated step heading happened to share the number:
+
+| citing site | cites | silenced by |
+|---|---|---|
+| `steps/implementation.md:196` | `ai-dlc-continue.sh` Check 2b | `steps/architecture.md:158` `### 2b. Framework Default Audit…` |
+| `SKILL.md:1633` | `ai-dlc-continue.sh` Check 2b | the same |
+| `steps/handoff.md:36` | `ai-dlc-continue.sh` Check 0 | a step-domain `0` anchor |
+| `steps/_gate-procedures.md:630` | `ai-dlc-continue.sh` Check 0 | the same |
+| `enforcement-map.yaml:515` | `ai-dlc-continue.sh (Stop)` Check 2b | the `2b` anchors |
+
+**Measured by construction, not inferred.** Neutralising the unrelated `2b` step anchors on a
+pristine install took the arm from **1 subject to 3**, while the CITING file `implementation.md`
+stayed byte-identical across both runs (`cmp -s`; the mutation touched only `architecture.md`,
+`stories-test-strategy.md`, `deploy-validate.md`). That is the control proving the extra rows came
+from the anchor pool and not from the prose. The class predates the filing — the earliest such
+citation entered 2026-07-17 (`8f4ea5e5`) — and `v0.524.0` merely produced the first id no step
+file happens to reuse.
+
+**The fix, and both narrowings are measured rather than assumed.** `hook_resolves_ref()` keys on
+**(hook file, id)** and on a **declaration** (`# Check <id>:` at column 0):
+
+- **Per-hook, not per-id.** The candidate's own suggested shape — grep the registered hooks for
+  the id — was built and scored. It silences the true subject exactly as the correct fix does and
+  differs on ONE input: a citation naming a hook that does not declare the id. Mutant
+  `hook-resolve-any` is killed by that cell alone.
+- **Declaration, not mention.** Core hooks MENTION 15 check ids and DECLARE 8. The 7 in the
+  difference — `6 14 16 22 24 25 26` — ALL resolve in the rulebook today, so a mention-keyed
+  resolver would have shipped a **latent** acquittal: invisible now, live the moment one of those
+  is renumbered. Mutant `hook-resolve-mention` is killed by the one cell that separates them.
+
+**A limit, stated because it is the pre-existing behaviour of this arm and not a new one.** The
+grain is `(file, id)`: a file citing an id correctly on one line and danglingly on another reports
+nothing for the second. The global anchor pool has always been file-grained too, so the hook
+branch is no weaker than the three resolvers beside it; narrowing it alone would make one
+resolver disagree with the others about what a row means. Found by building the fixture — the
+cross-hook cell was silent when seeded beside a correct citation of the same id, and the first
+draft of the function's own comment claimed a per-line precision the enclosing loop cannot
+deliver. The comment now records what the code does.
+
+**Fixture.** `core/fixtures/layer-reference-resolution` gains four cells and three mutants; the
+cross-hook cell lives in its own file for the grain reason above. The seed's first cut used
+`hk1`-style ids, which `W7`'s numeric-leading harvest grammar cannot spell — every cell would
+have been invisible to the arm and would have passed by never being asked. Ids are numeric now.
+
+**Receipt scoring.** Scored against six implementations before shipping: the correct fix (0), the
+id-only wrong fix (1), the mention-based wrong fix (1), `origin/main`'s pre-fix copy (1), and four
+degenerate subjects — absent, `exit 0`, `exit 1`, `exit 2` — all 9. The control asserting a
+pre-existing `W7` subject runs FIRST, so a subject that emits nothing scores 9 rather than
+reading as a live reproduction.
+
+verify: sh R="$(mktemp -d)"; trap 'rm -rf "$R"' EXIT; bash core/fixtures/layer-reference-resolution/seed.sh "$R" >/dev/null 2>&1 || exit 9; out="$(bash core/scripts/validate-layer-entries.sh "$R/consumer" 2>&1)" || true; grep -q 'checks/domain.md: references "Check 19b"' <<<"$out" || exit 9; grep -q 'hook-citations.md: references "Check 61"' <<<"$out" && exit 1; grep -q 'hook-cross.md: references "Check 62"' <<<"$out" || exit 1; grep -q 'hook-citations.md: references "Check 64"' <<<"$out" || exit 1; grep -q 'hook-citations.md: references "Check 65"' <<<"$out" || exit 1; exit 0
+
+## BL-197 — `templates/` was the second SHARED directory and the only one with no escape hatch, so a consumer-authored template was `[core]`-owned by a glob against a file upstream has never held
+
+**LANDED (v0.525.0, verified 04254024).** Found by an adversarial hand while adjudicating the withdrawn
+`PC-S309-PRE-PUSH-FLAG-MISMATCH` pair; it is NOT that pair's subject and closes none of it.
+Distribution-internal, no `PC-` id. DEFECT.
+
+**The defect.** `core-manifest.md` declares core ownership by GLOB, and states the rule that
+makes that safe: *"Every entry is a glob over a directory that is exclusively ours."*
+`templates/*.md` broke that rule. The directory is shared — a consumer writes its own templates
+beside core's six — so the glob claims every `.md` a consumer puts there.
+
+The consequence is an **unfixable finding**, not merely a mislabel. `retro.md:300-320` tells the
+lead a `[core]` finding "is NOT yours to disposition … Do not open a carry-over item for it, and
+do not rewrite the file", and that its disposition is a push-candidate filing. For a file
+upstream has never held there is nothing to file the candidate against, while the consumer's
+pre-push (`core/git-hooks/pre-push:121`, `--fail-on=deterministic`) blocks on the tier-1 finding.
+Both sanctioned exits are closed at once.
+
+**Measured on the reference consumer**, each with a control in the same invocation:
+`.claude/skills/ai-dlc/templates/pvc-presentation-template.md` resolves `--is-core` **rc=0**
+citing the glob by name (control: a known-local path returns rc=1 `not-core`); it is in that
+consumer's 117-file audit corpus; upstream has **never** held it at any commit
+(`git log --all --diff-filter=A` returns 0, against a control of 1 for the sibling
+`templates/crosswalk.md`); the consumer authored it at `37b3d15c3`, 2026-04-30.
+
+**The fix is the one the manifest's own rule prescribes** — *"where a directory is shared, give
+core its own directory inside it rather than listing the files we own there"* — applied as the
+hatch `scripts/ai-dlc-local/` already provides for the identical problem in `scripts/`. A
+`templates_local_home:` declaration, and a core-guard branch that routes a template author to it.
+
+**THE GLOB IS UNCHANGED, DELIBERATELY.** Narrowing `templates/*.md` was the obvious fix and is
+refuted by its reader set: derived, roughly twenty programs read that path, and the manifest
+already records that a wildcard-with-exclusion alternative there was considered and rejected for
+exactly that blast radius. Softening `--is-core` is refuted by that resolver's own remedy text —
+the deny "stands whether or not the distribution ships a file by that name" — which is correct
+and must not be weakened. The hatch ADDS a directory instead of changing a glob, so no existing
+reader moves.
+
+**A SECOND REMEDY WAS BUILT AND REVERTED, and it is recorded so nobody rebuilds it.** The first
+attempt annotated the audit's own output: `emit()` would tag a `[core]` finding as an ORPHAN when
+the distribution ships no file at that path. It cannot work, and the reason is structural rather
+than a bug. On a consumer, `.claude/` **is** the installed tree, so every corpus file exists
+there by construction — a consumer holds no record of what the distribution ships for a glob
+entry, and the test returned "not an orphan" for the real subject. Measured: both the orphan and
+a genuinely-shipped core template flagged identically with no note. Prevention at the write is
+reachable where detection at the read is not.
+
+**Probed in four directions**, offender and near-miss, before shipping:
+
+| probe | result |
+|---|---|
+| new template in the core-owned dir | DENY, routed to the declared home |
+| same basename in `templates-local/` | **ALLOW**, rc=0 |
+| `Write` creating one in the core dir | DENY |
+| an unrelated core file (`escalations.md`) | still routed by the GENERIC arm, not the new branch |
+
+The ALLOW arm is the one a deny-only probe cannot supply: a guard that denied both is
+indistinguishable from one that denies unconditionally.
+
+**Bound by `I43b`**, which is I43's shape one directory over and is owed for I43's own measured
+reason: the guard restates the path as a literal while two files declare it. Deleting
+`templates_local_home:` from the manifest left the guard still naming the directory, both halves
+internally consistent and bound by nothing. Three surfaces, two directions, four probes — absent
+declaration, disagreeing declarations, and a guard stripped of the hatch all ERR; an unrelated
+core edit stays silent.
+
+verify: sh R="$(mktemp -d)"; trap 'rm -rf "$R"' EXIT; m=core/skills/ai-dlc/core-manifest.md; grep -q '^templates_local_home:' "$m" || exit 1; h="$(sed -n 's/^templates_local_home:[[:space:]]*//p' "$m" | head -1 | sed 's#/*$##')"; [ -n "$h" ] || exit 9; grep -qF "$h" core/hooks/ai-dlc-core-guard.sh || exit 1; grep -q '^templates_local_home:' core/skills/ai-dlc-update/reconcile/setup-sites.md || exit 1; grep -q 'I43b' scripts/validate-enforcement-map.sh || exit 1; exit 0
+

@@ -17,6 +17,40 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.525.0] - 2026-09-07
 
+### `BL-197` — `templates/` was the second SHARED directory and the only one with no escape hatch
+
+`core-manifest.md` states the rule that makes glob ownership safe: *"Every entry is a glob over
+a directory that is exclusively ours."* `templates/*.md` broke it. A consumer writes its own
+templates beside core's, so the glob claimed every `.md` there — making a consumer-authored file
+`[core]`-owned against a path upstream has never held.
+
+That is an UNFIXABLE finding rather than a mislabel. `retro.md` tells the lead a `[core]`
+finding is not theirs to disposition and that its remedy is a push candidate; for a file upstream
+does not have there is nothing to file it against, while the consumer's pre-push blocks on the
+tier-1 finding. Both sanctioned exits are closed at once. Measured on the reference consumer:
+`templates/pvc-presentation-template.md` resolves `--is-core` rc=0 by glob, sits in its
+117-file corpus, and appears in ZERO upstream commits (control: the sibling `crosswalk.md`
+returns 1).
+
+The fix is the manifest's own prescription — where a directory is shared, give core its own and
+route the consumer elsewhere — applied as the hatch `scripts/ai-dlc-local/` already provides for
+the identical problem one directory over. `templates_local_home:` is declared in both manifest
+copies and the core-guard gains a routing branch.
+
+**The glob is unchanged, deliberately.** Narrowing it is refuted by its reader set (roughly twenty
+programs), and softening `--is-core` is refuted by that resolver's own remedy text. The hatch adds
+a directory rather than changing a glob, so no existing reader moves.
+
+A second remedy was built and REVERTED: annotating the audit's output cannot work, because on a
+consumer `.claude/` IS the installed tree, so every corpus file exists there and no consumer-side
+record of the shipped set exists. Prevention at the write is reachable where detection at the read
+is not.
+
+Bound by **I43b** — I43's shape one directory over, owed for I43's own reason: the guard restates
+the path while two files declare it. Four probes, both directions: an absent declaration,
+disagreeing declarations and a guard stripped of the hatch all ERR, and an unrelated core edit
+stays silent.
+
 ### `BL-196` — `W7` reported a CORRECT citation of a hook-implemented check as a dangling pointer, and was silent on five more for an unrelated reason
 
 Closes `PC-S309-VALIDATE-LAYER-ENTRIES-W7-CANNOT-SEE-A-HOOK-IMPLEMENTED-CHECK`, filed by the
@@ -40,7 +74,11 @@ flat `grep -Fxq` of the bare id against ONE global anchor pool, so a citation na
 cleared by any numerically-equal heading anywhere in the rulebook. `steps/implementation.md`
 cites `ai-dlc-continue.sh` Check 2b and was silenced by `steps/architecture.md`'s
 `### 2b. Framework Default Audit for Security-Relevant Properties` — a different file about a
-different subject. Five of the six hook-check citations in core prose were silent that way.
+different subject. FOUR of the FIVE in-corpus hook-check citations were silent that way.
+A sixth citation, `enforcement-map.yaml:515`, is not in the arm's corpus at all — `all_files`
+takes `SKILL.md` by name at `-maxdepth 1`, so a sibling in that directory is never scanned.
+It is invisible to `W7` rather than silenced by it; stated rather than fixed, because widening
+the corpus is a separate change with its own false-positive set.
 Measured by construction: neutralising the unrelated `2b` step anchors took the arm from 1
 subject to 3 while the CITING file stayed byte-identical, which is the control proving the extra
 rows came from the anchor pool and not from the prose.
