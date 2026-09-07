@@ -13,15 +13,17 @@ here. What follows has no corpus to scan because it happens in tool calls.
   `cmd | tail` reports the status of `tail`. A failing `git push` piped anywhere reports 0.
 - **Unquoted `$var` is not word-split**, so a loop written for bash iterates once over the
   whole string.
-- **History modifiers eat unbraced references.** `"$r:core/..."` becomes garbage because
-  `:c` and `:t` are modifiers that consume the next character. Always `"${r}:core/..."`.
+- **Modifiers eat unbraced references, and QUOTING DOES NOT SAVE YOU** — they fire inside the
+  quotes. `:c`/`:t` are 2 of 17 letter-cases (`acefghlqrstuwAFPQ`) consuming the next char. A
+  LITERAL ref works everywhere, so a rendering reads correct until a variable is bound.
+  Always `"${r}:core/..."`.
 - **`case` patterns are not glob-substituted** the way a bash author expects.
 - **The working directory PERSISTS across calls.** A `cd` inside one compound command
   relocates every later call, so a correct relative path then reports **No such file** —
   which reads as a deleted file rather than a moved shell. Subshell it: `( cd x && ... )`.
 
-**Force `bash -c` for any loop, any heredoc, and any hook test.** The rule is not "be careful
-in zsh"; it is "do not author shell logic in the interactive shell at all".
+**Force `bash -c` for any loop, heredoc or hook test** — do not author shell logic in the
+interactive shell at all.
 
 **But a heredoc INSIDE `bash -c '…'` whose body carries a backtick or a single quote breaks the
 outer quoting silently**: the body executes as commands, the consumer of the heredoc gets a
