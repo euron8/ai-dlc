@@ -4066,7 +4066,66 @@ the 3 sites that already have steering. Any arm built here needs a probe asserti
 cover the 21 unsteered artifacts, per `mechanism-design.md` — an exemption needs a probe proving
 it does not cover the arm's own subject.
 
-verify: sh n=$(grep -rl "STEP_LOADED_TOKEN" core/scripts/ scripts/ .githooks/ 2>/dev/null | wc -l) || n=0; [ "$n" -gt 0 ]
+**THE CLAIM IS WITHDRAWN RATHER THAN BUILT, AND TWO INDEPENDENT MECHANISMS WERE REFUTED BY
+BUILDING THEM.** An entry-level arm over the reference consumer's gate logs flags **541 of 839**
+entries (64.5%); **513** of those name no step file at all, because they are per-story gate
+CYCLES rather than step LOADS. Scoped to the live log and to entries naming a step, the
+population is **zero**. The same measurement read from both ends, with no scoping between that
+both fires and is honest — `CLAUDE.md`'s unmeasured-lint prohibition and `mechanism-design.md`'s
+check-that-cannot-fire, hit at once. A second instrument asked whether each rule's declared
+carrier CONTAINS its rule's subject; it scored **13 of 13 as carrying**, including this rule,
+which hand-reading establishes is a false carrier. A heading-token grammar cannot separate a file
+that INSTRUCTS a rule from one that happens to use its words, so that clean sweep is a floor of
+unknown depth and is discarded rather than reported.
+
+**AND THE ARTIFACT CANNOT CARRY THE VERIFICATION AT ALL, WHICH IS WHY NO THIRD MECHANISM IS
+OWED.** A gate log entry is written by the same lead Rule 21 constrains. Rule 21's own stated
+failure mode is a lead that pattern-matches on "I know what this step does" and skips the Read —
+precisely the lead that will also write the token from memory. `core/hooks/ai-dlc-acknowledge.sh`
+Check 2z consumes read-evidence with teeth and keys deliberately on a transcript `file_path`,
+which the checked agent does not author; its own fixture records the token agreeing with the Read
+count at exactly 38 of 171 transcripts, which is a correlation observed under no adversarial
+pressure and is not evidence of unforgeability. Its authors had the token, had proof it agreed,
+and still refused it as the carrier. Check 2z covers `route.md` alone, so read-evidence reaches
+**1 of 21** step files; extending it is a separate and larger entry.
+
+**Two of this entry's own figures were wrong, both in the direction that makes the practice look
+worse.** The decay table's cells are raw token MENTIONS read as entry counts — s302 is 2 citing
+entries and 3 mentions — and the live log is **10** entries, not 9. The table also excludes most
+of the corpus: 10 columns of 61 tracked gate-log files and 839 entries, omitting a 87-entry
+archive at the `implementation-artifacts` root. The conclusion survives both corrections.
+
+**The fix is the paragraph, and the writer-side gap is why.** Check 12 of `gate-validation.md` is
+the instruction that appends a gate log entry; its MUST-include list carries six items and the
+token is not among them, against `steering_violations` present in the same window as the control.
+The token appears once in that whole file — its own declaration. Nothing ever ASKED for the
+citation, so the practice did not decay through neglect. Making Check 12 ask for it was
+considered and refused: it would manufacture a compliance signal on the one surface that cannot
+carry it, and a gate log full of tokens would read as 21-of-21 verified while establishing
+nothing.
+
+**SEPARATE, UNFILED, AND FOUND WHILE SCOPING THIS:** Check 12 says *"Use the format defined in
+CLAUDE.md Autonomous Gate Protocol section."* That section exists in neither the reference
+consumer's `CLAUDE.md` (control: 13 headers present) nor `templates/CLAUDE.md.template` (control:
+7 headers). It was deleted from the template at `aa2778d5` (2026-04-18), and
+`core/skills/ai-dlc-setup/SKILL.md:212` lists it as MOVED TO `gate-validation.md` — the file
+still pointing at it. Circular, and it is the mechanical cause of the four incompatible heading
+grammars the consumer's gate logs carry.
+
+**Receipt replaced.** The filed one (`grep -rl STEP_LOADED_TOKEN` over three directories) was
+closable by four non-fixes, each BUILT and scored: a comment appended to an unrelated validator,
+a markdown doc, a file whose entire content is the token, and a comment DISCLAIMING that anything
+reads it — all four exit 0. It also INVERTED on the correct fix, which is a prose edit it can
+never close, and it sat one directory from closing today with no fix at all (`core/hooks/` gives
+n=1 on a pre-existing comment). The replacement extracts Rule 21's span with `I79`'s own
+extractor rather than a second grammar, and scores PASS only on the correct fix across seven
+implementations: unfixed, correct, rule gutted, claim reworded to "SHOULD fail", disclaiming
+comment, sliced-loading paragraph moved out, and over-trimmed to a stub. Arm 1 is widened past
+the literal sentence because the literal form PASSES a reworded claim; arm 2 is a span-line floor
+rather than a `CHECK_LOADED` grep because that grep has a one-line margin and fails a correctly
+fixed tree if the sliced-loading paragraph ever moves.
+
+verify: sh S=core/skills/ai-dlc/SKILL.md; [ -f "$S" ] || exit 9; span="$(awk -v n=21 '$0 ~ ("^### Rule " n " "){inb=1;fence=0;next} inb && /^```/{fence=!fence;next} inb && !fence && /^### Rule [0-9]/{exit} inb && !fence && /^## /{exit} inb{print}' "$S")"; [ -n "$span" ] || exit 9; printf '%s\n' "$span" | grep -qiE 'gate (FAILS|SHOULD fail|MUST fail|fails) on missing token' && exit 1; n="$(printf '%s\n' "$span" | grep -c .)" || n=0; [ "$n" -gt 30 ]
 
 ## BL-188 — no gate bounds `core/skills/ai-dlc/SKILL.md`'s total size or its narrative content, and `audit-rule-files.sh` scores narrative 0 where its own header says narrative "fails where it is authored"
 
