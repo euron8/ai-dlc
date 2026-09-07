@@ -1983,16 +1983,90 @@ fi
 # consumer's pre-push on prose it wrote before the rule existed. §4b's ERROR ruling is about
 # the naming partition, whose remedy the validator itself prints for every subject; here the
 # remedy is a judgement about what the author meant.
+#
+# THE HOOK NAMESPACE IS A FOURTH RESOLVER, AND WITHOUT IT THIS ARM IS WRONG IN BOTH
+# DIRECTIONS AT ONCE. A check implemented in a shipped hook is defined in no rendered-rulebook
+# file, no extension, no override and no crosswalk row, by design — the hook is the
+# implementation. Before this resolver existed the arm therefore reported a CORRECT citation of
+# a hook check as dangling, and both remedies it printed were unavailable for that class: there
+# is nothing to repoint to, and a crosswalk row would assert a renumber that never happened.
+# Measured on a tree built by `scripts/install.sh` into an empty directory: ONE subject,
+# `SKILL.md`'s citation of `ai-dlc-acknowledge.sh` Check 2z, over ZERO layer subjects — so the
+# finding reached every consumer and no consumer authoring was involved in making it.
+#
+# THE SILENT DIRECTION IS THE WORSE ONE AND IT IS WHY THE JOIN IS PER-HOOK. The resolve below
+# used to be a flat `grep -Fxq` of the bare id against ONE global anchor pool, so a citation
+# naming a hook was cleared by any numerically-equal heading anywhere in the rulebook. Measured
+# by construction: `steps/implementation.md` cites `ai-dlc-continue.sh` Check 2b and was
+# silenced by `steps/architecture.md`'s `### 2b. Framework Default Audit for Security-Relevant
+# Properties` — a different file about a different subject. Neutralising the unrelated `2b`
+# step anchors took the arm from 1 subject to 3 while the CITING file stayed byte-identical
+# (`cmp -s`), which is the control proving the extra rows came from the anchor pool and not
+# from the prose. Five of the six hook-check citations in core prose were silent that way, and
+# a silence is invisible where a warning is not.
+#
+# SO THE KEY IS (HOOK FILE, ID), NEVER THE ID ALONE. A citation that names a hook resolves only
+# against the ids THAT hook declares; a citation naming no hook keeps the pre-existing global
+# path untouched. Deriving the hook's id set from a DECLARATION — `# Check <id>:` at column 0,
+# the form every hook already uses to open a check block — rather than from any mention of the
+# id is the other half. Core hooks MENTION 15 ids and DECLARE 8; resolving on a mention would
+# acquit the 7-id difference (`6 14 16 22 24 25 26`), every one of which resolves in the
+# rulebook today, so that acquittal would be latent — invisible now and live the moment one of
+# them is renumbered. An exemption that cannot be observed today is the vacuous guard
+# `mechanism-design.md` refuses.
+#
+# WHAT IT MUST NOT DO, asserted by the fixture rather than by this comment: the four silent
+# cases `layer-reference-resolution` already owns — a bare crosswalk row, a namespaced
+# crosswalk row, an id core still defines, and the `Check A`/`Check N` placeholders — stay
+# silent, because a citation naming no hook never reaches the new branch at all.
+HOOKS_DIR="$PROJECT_ROOT/.claude/hooks"
+
+# The ids one hook DECLARES. A declaration opens a check block at column 0; a mention in
+# running prose is not one, for the acquittal reason in the header above.
+hook_declared_ids() { # hook_declared_ids <hook-file>
+  [ -f "$1" ] || return 0
+  grep -hoE '^# Check [0-9]+[a-z-]*:' "$1" 2>/dev/null | sed -E 's/^# Check //; s/:$//' | sort -u
+}
+
+# Does <file> resolve `Check <ref>` through a hook NAMED ON A LINE THAT CITES IT?
+#
+# THE GRAIN IS (FILE, ID) AND NOT (LINE, ID), BECAUSE THAT IS THE GRAIN OF THE FINDING. The
+# caller harvests one id set per file and emits at most one row per (file, id), so this
+# predicate answers for the whole file: if ANY citing line names a hook declaring the id, the
+# file's citations of that id resolve. A first cut of this function claimed the line was the
+# join grain and it was not — the enclosing loop had already collapsed the id — so the comment
+# asserted a precision the code could not deliver. Measured on a seeded world where one file
+# cited the same id twice, once naming a hook that declares it and once naming a hook that does
+# not: the second citation was cleared by the first, exactly as the loop requires.
+#
+# WHAT THAT COSTS, stated rather than hidden: a file citing an id correctly on one line and
+# danglingly on another reports nothing for the second. That is the pre-existing behaviour of
+# this arm for every other resolver — the global anchor pool has always been file-grained too —
+# so the hook branch is no weaker here than the three resolvers beside it, and narrowing it
+# alone would make one resolver disagree with the others about what a row means.
+hook_resolves_ref() { # hook_resolves_ref <citing-file> <ref>
+  [ -d "$HOOKS_DIR" ] || return 1
+  local line hook_base
+  while IFS= read -r line; do
+    while IFS= read -r hook_base; do
+      [ -n "$hook_base" ] || continue
+      hook_declared_ids "$HOOKS_DIR/$hook_base" | grep -Fxq -- "$2" && return 0
+    done < <(printf '%s\n' "$line" | grep -oE 'ai-dlc-[a-z0-9-]+\.sh' | sort -u)
+  done < <(grep -nE "Check[ -]$2([^0-9a-z-]|\$)" "$1" 2>/dev/null)
+  return 1
+}
+
 GLOBAL_CHECK_ANCHORS="$(while IFS= read -r f; do [ -n "$f" ] && defined_anchors "$f"; done <<< "$all_files" | sort -u)"
 
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   while IFS= read -r ref; do
     [ -n "$ref" ] || continue
+    hook_resolves_ref "$f" "$ref" && continue
     grep -Fxq -- "$ref" <<<"$GLOBAL_CHECK_ANCHORS" && continue
     grep -Fxq -- "$ref" <<<"$CROSSWALK_IDS" && continue
     grep -Fxq -- "Check $ref" <<<"$CROSSWALK_IDS" && continue
-    warn W7 "$(rel "$f"): references \"Check $ref\" but no core file, extension, or override defines check $ref anywhere in the rendered rulebook, and the crosswalk file (${CROSSWALK_REL:-undeclared}) carries no crosswalk row resolving it — dangling check pointer. Either repoint the citation at the id the check carries today, or add a crosswalk row naming '$ref', the id it became, and the title. A renumber into the reserved band does not reach back into prose that cites the old id, which is how these are made."
+    warn W7 "$(rel "$f"): references \"Check $ref\" but no core file, extension, or override defines check $ref anywhere in the rendered rulebook, no shipped hook named on that line declares it, and the crosswalk file (${CROSSWALK_REL:-undeclared}) carries no crosswalk row resolving it — dangling check pointer. Either repoint the citation at the id the check carries today, or add a crosswalk row naming '$ref', the id it became, and the title. If the check is implemented in a hook, name that hook on the same line as the citation — the hook's own \`# Check $ref:\` declaration is what resolves it. A renumber into the reserved band does not reach back into prose that cites the old id, which is how these are made."
   done < <(grep -Eoh 'Check[ -][0-9]+[a-z-]*' "$f" 2>/dev/null | sed -E 's/^Check[ -]//' | sort -u)
 done <<< "$all_files"
 

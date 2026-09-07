@@ -15,6 +15,48 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.525.0] - 2026-09-07
+
+### `BL-196` — `W7` reported a CORRECT citation of a hook-implemented check as a dangling pointer, and was silent on five more for an unrelated reason
+
+Closes `PC-S309-VALIDATE-LAYER-ENTRIES-W7-CANNOT-SEE-A-HOOK-IMPLEMENTED-CHECK`, filed by the
+reference consumer 2026-09-07.
+
+`validate-layer-entries.sh` `W7` resolves a `Check <n>` citation against the rendered rulebook
+and the crosswalk. A check implemented in a shipped hook lives in neither, by design — the hook
+IS the implementation — so a correct citation of one reported as dangling, and both remedies the
+message printed were unavailable for that class: there is nothing to repoint to, and a crosswalk
+row would assert a renumber that never happened.
+
+Upstream authored the instance. `v0.524.0` added a paragraph to `core/skills/ai-dlc/SKILL.md`
+citing `.claude/hooks/ai-dlc-acknowledge.sh` Check 2z, which `ai-dlc-acknowledge.sh` declares.
+Measured on a tree built by `scripts/install.sh` into an empty directory: **one subject over
+ZERO layer subjects** (`W7=LC-R2:1/0`), so the finding reached every consumer and no consumer
+authoring was involved in producing it. `W7` is a `warn` and the script exits on `ERRORS` alone,
+so no push was blocked.
+
+**The silent direction was the worse one and it is fixed in the same change.** The resolve was a
+flat `grep -Fxq` of the bare id against ONE global anchor pool, so a citation naming a hook was
+cleared by any numerically-equal heading anywhere in the rulebook. `steps/implementation.md`
+cites `ai-dlc-continue.sh` Check 2b and was silenced by `steps/architecture.md`'s
+`### 2b. Framework Default Audit for Security-Relevant Properties` — a different file about a
+different subject. Five of the six hook-check citations in core prose were silent that way.
+Measured by construction: neutralising the unrelated `2b` step anchors took the arm from 1
+subject to 3 while the CITING file stayed byte-identical, which is the control proving the extra
+rows came from the anchor pool and not from the prose.
+
+The resolver keys on **(hook file, id)** and on a **declaration** — `# Check <id>:` at column 0 —
+never on the id alone and never on a mention. Both narrowings were measured rather than assumed:
+core hooks MENTION 15 check ids and DECLARE 8, and all 7 in the difference resolve in the
+rulebook today, so a mention-keyed resolver would have shipped a LATENT acquittal — invisible now
+and live the moment one of those ids is renumbered.
+
+`core/fixtures/layer-reference-resolution` gains four cells and three mutants. The cross-hook
+cell sits in its own file because `W7`'s finding grain is `(file, id)`: seeded beside a correct
+citation of the same id it would be shadowed by it and would be silent for a reason unrelated to
+the resolver. That cell is the only input separating the shipped per-hook join from the
+candidate's own suggested shape (grep the registered hooks for the id), which it kills.
+
 ## [0.524.0] - 2026-09-07
 
 ### `BL-194` — a suppression's check id was joined WITHOUT its catalog, so one catalog's verdict answered another's question
