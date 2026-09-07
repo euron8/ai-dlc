@@ -1036,6 +1036,111 @@ else
   bad "an EMPTY overrides/ or extensions/ changed the resolve — the layered assertions above measure the wrong thing"
 fi
 
+
+# ======================= OWNERSHIP SPLIT (BL-193) ===========================
+# A consumer cannot fix a core file -- Rule 27 forbids it and `apply` restores
+# it -- so a finding in one must not fail that consumer's gate while its ONLY
+# compliant remedy is a write it may not perform. Every finding carries an
+# owner, and `--fail-on=local` gates on the half the reader can act on.
+#
+# THE FOUR WORLDS BELOW ARE ONE PROPERTY APART EACH, deliberately: clean,
+# core-offender-only, plus-local-offender, and resolver-absent. A build that
+# gets ownership wrong fails exactly one of them, which is what makes the set
+# diagnostic rather than merely red.
+
+# --- Assertion 25: a CORE-owned finding does NOT fail --fail-on=local --------
+# The motivating case, measured on the reference consumer: 32 findings, 32 of
+# them core-owned, and a retro that could clear none of them.
+fresh
+printf 'The lead MUST retry, because we lost a sprint to this.\n' >> "$WORK/t/.claude/skills/ai-dlc/SKILL.md"
+out="$(audit)"
+rc_local="$(rc_of "$AUDIT" --fail-on=local)"
+if [ "$rc_local" = "0" ] && has '\[core\] .claude/skills/ai-dlc/SKILL.md' "$out"; then
+  ok "a CORE-owned finding is tagged [core] and does NOT fail --fail-on=local"
+else
+  bad "a core-owned finding failed the local gate (rc=$rc_local) — the consumer is gated on a file it may not edit"
+fi
+
+# --- Assertion 26: and it is STILL REPORTED, at full volume ------------------
+# The whole risk of this change is that it becomes a quieter audit. The core
+# half must print, enumerated, or the finding is lost rather than routed.
+if has 'NARRATIVE_DRIFT: FLAGGED' "$out" && has 'core 1 / local 0' "$out"; then
+  ok "  and it still PRINTS, FLAGGED, with the split enumerated"
+else
+  bad "  but the core finding stopped being reported — routing requires it be visible"
+fi
+
+# --- Assertion 27: a LOCAL-owned finding DOES fail --fail-on=local -----------
+# The discriminating input. Same corpus, same class, one property different:
+# the file is the consumer's own. Without this arm, assertion 25 is satisfied
+# by a gate that never fails at all.
+fresh
+printf 'The dev MUST comply, because we lost a sprint to this.\n' >> "$WORK/t/docs/coding-conventions.md"
+out="$(audit)"
+rc_local="$(rc_of "$AUDIT" --fail-on=local)"
+if [ "$rc_local" = "1" ] && has '\[local\] docs/coding-conventions.md' "$out"; then
+  ok "a LOCAL-owned finding is tagged [local] and DOES fail --fail-on=local"
+else
+  bad "a locally-owned finding did not fail the local gate (rc=$rc_local) — the gate cannot fire"
+fi
+
+# --- Assertion 28: an UNRESOLVED owner fails CLOSED --------------------------
+# Ownership decides whether a finding gates, so a resolver that cannot answer
+# must never be able to ACQUIT. Measured while building this fix: with the
+# resolver removed, every finding scored `unknown` and the gate exited 0 over a
+# 32-finding corpus -- a clean sheet, which is the false clean `--is-core`'s own
+# exit-2 contract exists to prevent.
+#
+# The resolver is copied to a scratch dir and REMOVED there, never from the real
+# tree: the audit finds it beside itself, so a sibling copy is the only way to
+# express its absence without mutating the distribution.
+fresh
+SB="$WORK/nores"
+rm -rf "$SB"; mkdir -p "$SB"
+cp "$AUDIT" "$SB/audit-rule-files.sh"
+if [ -f "$SB/core-paths.sh" ]; then
+  bad "FIXTURE BROKEN — the scratch dir was seeded with a resolver, so the absent-resolver world is not the world under test"
+else
+  printf 'The lead MUST retry, because we lost a sprint to this.\n' >> "$WORK/t/.claude/skills/ai-dlc/SKILL.md"
+  out_nr="$( cd "$WORK/t" && bash "$SB/audit-rule-files.sh" 2>&1 )"
+  rc_nr="$( cd "$WORK/t" && bash "$SB/audit-rule-files.sh" --fail-on=local >/dev/null 2>&1; echo $? )"
+  if [ "$rc_nr" = "1" ] && has 'unresolved 1' "$out_nr"; then
+    ok "an UNRESOLVED owner counts as local and FAILS — a missing resolver cannot acquit"
+  else
+    bad "with no resolver the local gate returned rc=$rc_nr — an unresolvable owner acquitted the tree"
+  fi
+  # The control that makes the arm above readable: the SAME scratch copy, with
+  # the resolver restored beside it, must go back to 0. Without this, "rc=1 with
+  # no resolver" is equally consistent with a copy that simply cannot run.
+  cp "$RESOLVER" "$SB/core-paths.sh"
+  rc_ok="$( cd "$WORK/t" && bash "$SB/audit-rule-files.sh" --fail-on=local >/dev/null 2>&1; echo $? )"
+  [ "$rc_ok" = "0" ] \
+    && ok "  control: the same copy with the resolver restored returns 0 — the rc=1 above was the ABSENCE, not a broken copy" \
+    || bad "  control FAILED: the scratch copy returns rc=$rc_ok even with its resolver — assertion 28 proves nothing"
+fi
+
+# --- Assertion 29: the other two thresholds are UNCHANGED --------------------
+# This change must move which findings GATE and never which are REPORTED.
+# `--fail-on=any` is what a bare invocation does and what every existing caller
+# outside retro relies on.
+fresh
+printf 'The lead MUST retry, because we lost a sprint to this.\n' >> "$WORK/t/.claude/skills/ai-dlc/SKILL.md"
+rc_any="$(rc_of "$AUDIT" --fail-on=any)"
+rc_det="$(rc_of "$AUDIT" --fail-on=deterministic)"
+if [ "$rc_any" = "1" ] && [ "$rc_det" = "0" ]; then
+  ok "--fail-on=any still fails on a tier-2 core finding; --fail-on=deterministic still passes"
+else
+  bad "a threshold other than local moved (any=$rc_any det=$rc_det) — the change was not confined to the new gate"
+fi
+
+# --- Assertion 30: an unknown --fail-on value is still refused ---------------
+# The flag parser gained a branch; a parser that accepts anything would make
+# every arm above passable by a typo that silently selects the default.
+fresh
+rc_bad="$(rc_of "$AUDIT" --fail-on=nonsense)"
+[ "$rc_bad" = "2" ] \
+  && ok "an unrecognized --fail-on value still exits 2 rather than defaulting" \
+  || bad "--fail-on=nonsense returned $rc_bad, not 2 — a typo silently selects a threshold"
 echo
 if [ "$fails" -eq 0 ]; then echo "retro-audit-scans: PASS"; exit 0; fi
 echo "retro-audit-scans: $fails assertion(s) FAILED" >&2

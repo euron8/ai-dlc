@@ -104,11 +104,38 @@ GATE_MANIFEST_END -->
 <!-- CHECK_LOADED: 3 -->
 EOF
 
+# --- core-manifest.md, so OWNERSHIP can resolve in this tree ------------------
+# The audit tags every finding `[core]` or `[local]` by asking `core-paths.sh`,
+# which derives the core set from this file. Without it the resolver cannot
+# answer, every finding scores `unknown`, and the ownership arms would be
+# measuring a broken resolver rather than the split. Entries are skill-relative
+# bare paths -- the parser strips `- ` and nothing else, so a backticked or
+# project-relative entry yields a corrupted glob that matches nothing and reads
+# as a clean `local` for the whole tree.
+#
+# `docs/coding-conventions.md` is deliberately NOT listed: it is the LOCAL half,
+# and an arm that seeds an offender there is what separates the two verdicts.
+cat > "$P/.claude/skills/ai-dlc/core-manifest.md" <<'EOF'
+# Core manifest
+
+core_manifest:
+  - SKILL.md
+  - steps/*.md
+  - rule-authoring.md
+EOF
+
+# The resolver the audit shells to for ownership. It is a SIBLING of the audit in
+# both layouts (`core/scripts/*` is a derived glob in install.sh), so it is
+# resolved beside $AUDIT rather than under the project tree.
+RESOLVER="$(dirname "$AUDIT")/core-paths.sh"
+[ -f "$RESOLVER" ] || { echo "FIXTURE ERROR: core-paths.sh not found beside audit-rule-files.sh" >&2; exit 2; }
+
 cat > "$WORK/env.sh" <<EOF
 AUDIT="$AUDIT"
 MANIFEST="$MANIFEST"
+RESOLVER="$RESOLVER"
 PROJ="$P"
-export AUDIT MANIFEST PROJ
+export AUDIT MANIFEST RESOLVER PROJ
 EOF
 
 echo "$WORK"
