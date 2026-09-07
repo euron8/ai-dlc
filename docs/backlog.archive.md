@@ -7773,6 +7773,21 @@ armed state by construction.
 on disk. The victim then shows `AD` / `D ` / `??` rows — it reads as a catastrophic deletion and
 recovers fully with `git reset --hard`. No object loss.
 
+**BOTH SENTENCES ABOVE ARE REFUTED, AND THE SECOND ONE IS OPERATIONALLY DANGEROUS. Corrected at
+`v0.522.0`; the original is kept because the reasoning around it is still the record of what was
+measured then.** Against a full `for-each-ref` snapshot taken before and after, on the unfixed
+tree: the **ref store changes too**, and `refs/heads/main` itself MOVES — `release-version-triple`
+changed 8 ref rows and moved `main`, `check5-anchor-base` 3 rows and moved `main`,
+`trunk-push-bound` 2 rows. An index-only instrument cannot see any of it, and one fixture left the
+index untouched while moving `main` anyway.
+
+**`git reset --hard` DOES NOT RECOVER, and prescribing it is worse than prescribing nothing.** Run
+verbatim after driving `trunk-push-bound`: index stays at **4** against a baseline of 762, because
+the fixture wrote commits onto the victim's checked-out branch — so `HEAD` IS the damaged state and
+resetting to it is a no-op that reports success. Recovery needs a pinned pre-damage sha
+(`git update-ref` then `reset --hard <sha>`). **A session following the original sentence would
+reset, see no improvement, and conclude the damage is permanent.**
+
 **THE REMEDY IS TWO PARTS AND NEITHER ALONE IS SUFFICIENT.**
 
 - **A scrub in each of the 40 fixtures is the wrong shape** — a hand-maintained list of 40 with

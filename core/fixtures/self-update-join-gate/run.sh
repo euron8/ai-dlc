@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # self-update-join-gate — prove the self-update gate refuses to cut a branch when the
 # machinery slice cannot be green without the rulebook.
 #

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # layer-artifact-path-prescriptions — LC-R4 / W11: an artifact path a layer entry PRESCRIBES is
 # held to artifact-path-grammar.md.
 #

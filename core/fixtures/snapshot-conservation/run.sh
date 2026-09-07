@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # snapshot-conservation/run.sh — prove Check 35 can tell a snapshot whose content
 # was MOVED from one whose content was destroyed.
 #

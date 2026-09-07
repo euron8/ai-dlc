@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # ledger-reverify-unfalsifiable/run.sh — prove ledger-reverify.sh separates a live
 # `theirs_lacks` entry from an UNFALSIFIABLE one when both are absent at base and theirs.
 #

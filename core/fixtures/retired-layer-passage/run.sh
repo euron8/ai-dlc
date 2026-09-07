@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # retired-layer-passage/run.sh — prove the passage detector fires on a reproduced core
 # line, stays quiet on a paraphrase, and never emits a zero that cannot be told from a
 # scan that opened nothing.

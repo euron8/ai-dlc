@@ -54,8 +54,21 @@ while [ $# -gt 0 ]; do
 done
 
 # THE POPULATION IS DERIVED, never listed. A fixture joins it by running `git
-# init` in its own run.sh; the 28th one is covered the day it is written.
-POP="$(git -C "$ROOT" grep -l 'git init' -- 'core/fixtures/*/run.sh' 2>/dev/null | sort)"
+# init` in ANY of its own scripts; the next one is covered the day it is written.
+#
+# IT KEYS ON THE DIRECTORY, NOT ON run.sh, AND THE FIRST CUT DID NOT. Scoped to
+# `*/run.sh` it missed 13 fixture directories whose `seed.sh` runs `git init`
+# while their `run.sh` does not -- those `run.sh` sourced nothing, so the seed
+# inherited an armed GIT_DIR and clobbered. Measured against the tree carrying
+# the run.sh-only fix: `layer-conforms-to` took a 762-entry index to 2 at exit 0
+# with ZERO FAILs, while `trunk-push-bound` in the same run stayed 762 -- the
+# discrimination control proving the fix worked where it reached and that these
+# were surviving it. The seam still goes in `run.sh`, which is the entry point;
+# the scrub reaches the seed by INHERITANCE, which is why the two dirs whose
+# run.sh already `git init`s were fixed by the first cut.
+POP="$(git -C "$ROOT" grep -l 'git init' -- 'core/fixtures/*/*.sh' 2>/dev/null \
+       | sed 's#/[^/]*$##' | sort -u \
+       | while IFS= read -r d; do [ -f "$ROOT/$d/run.sh" ] && printf '%s/run.sh\n' "$d"; done | sort -u)"
 POP_N="$(printf '%s\n' "$POP" | grep -c . || true)"
 
 # A population that collapsed is a REFUSAL. An empty set is consistent with every
@@ -87,6 +100,27 @@ for f in $POP; do
   # Key on the SOURCING SITE, not on a whole-file grep: a comment naming the
   # preamble satisfies `grep -qF` over the file and changes no behaviour.
   if grep -qE '^[[:space:]]*(\.|source)[[:space:]]+.*preamble\.sh' "$ROOT/$f"; then
+    # SOURCING IT IS NOT ENOUGH IF SOMETHING RE-ARMS AFTERWARDS. The scrub is a
+    # statement, not a property: a later `GIT_DIR=` assignment or `export GIT_DIR`
+    # undoes it, and an arm keyed only on the sourcing site is POSITION-BLIND --
+    # it acquits a file whose second line sources the seam and whose third line
+    # re-exports GIT_DIR. Verified against this validator's own earlier cut: that
+    # file reported `0 unscrubbed` while clobbering 757 -> 4. Not live today (0 of
+    # 41), so this is a trap for the next author rather than a hole -- the same
+    # status, and the same treatment, as the comment-form acquittal below.
+    # A ONE-SHOT PREFIX IS NOT A RE-ARM, and the first cut of this arm could not
+    # tell them apart. `GIT_DIR=x git ls-files` scopes the variable to that single
+    # command and leaves the shell's environment alone; `GIT_DIR=x` on its own, or
+    # `export GIT_DIR=x`, persists. Keyed loosely it flagged this validator's own
+    # fixture, whose harness reads a victim index with exactly that prefix -- a
+    # true match on a false subject, which is the false-positive path CLAUDE.md
+    # requires measured before an arm ships. The assignment must END the command:
+    # nothing after it but whitespace, a comment, or a `;`/`&&`/`||` separator.
+    if grep -qE '^[[:space:]]*(export[[:space:]]+)?GIT_DIR=[^[:space:]]*[[:space:]]*(#.*)?$' "$ROOT/$f" \
+       || grep -qE '^[[:space:]]*(export[[:space:]]+)?GIT_DIR=[^[:space:]]*[[:space:]]*(;|&&|\|\|)' "$ROOT/$f"; then
+      UNSCRUBBED="${UNSCRUBBED} ${f}(re-arms)"
+      N_UNSCRUBBED=$((N_UNSCRUBBED + 1))
+    fi
     continue
   fi
   # A fixture may scrub inline instead. That is a different shape from the seam

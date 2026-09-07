@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # layer-qualifier-grain — assert the `extends:` / `kind: qualifier` grain is real:
 # that declaring an anchor NARROWS pull-time drift to that anchor's span, that the
 # narrowing cannot invent silence, and that the authoring arms discriminate.
