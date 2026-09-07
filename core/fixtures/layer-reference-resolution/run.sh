@@ -44,6 +44,15 @@
 # Exit:  0 = every assertion holds, 1 = something regressed, 2 = fixture broken.
 set -uo pipefail
 
+# SCRUB AMBIENT AI_DLC_* BEFORE ANYTHING READS IT. This fixture seeds files under
+# `.claude/hooks/` for W7's hook namespace, so an operator's own `AI_DLC_*` tunables would be
+# testing the CONFIG rather than the code. The enforcement map asserts this of every fixture
+# whose run.sh names a hook path, and the reason is a measured one: a consumer that pins a
+# tunable in settings.json otherwise fails a fixture — and blocks every push — against code
+# that is behaving correctly.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+unset _v
+
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 # TWO LAYOUTS. install.sh splits what shares a parent here: core/fixtures/ becomes
@@ -334,7 +343,7 @@ mk_mutant no-hook-resolve \
 # agrees with the pristine vector — hk62 is the ONLY input that separates the two
 # implementations, which is why the seed puts it in its own file.
 mk_mutant hook-resolve-any \
-  "s@hook_declared_ids \"\\\$HOOKS_DIR/\\\$hook_base\" \| grep -Fxq -- \"\\\$2\" \&\& return 0@for _h in \"\$HOOKS_DIR\"/ai-dlc-*.sh; do hook_declared_ids \"\$_h\" | grep -Fxq -- \"\$2\" \&\& return 0; done@" \
+  "s@ids=\"\\\$\(hook_declared_ids \"\\\$HOOKS_DIR/\\\$hook_base\"\)\"@ids=\"\$(for _h in \"\$HOOKS_DIR\"/ai-dlc-*.sh; do hook_declared_ids \"\$_h\"; done)\"@" \
   "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- hk61=- hk62=- hk64=W hk65=W apform=OK dotform=OK $W9WANT $W12WANT"
 
 # M7 — RESOLVE ON A MENTION RATHER THAN A DECLARATION. The other plausible wrong fix, and the

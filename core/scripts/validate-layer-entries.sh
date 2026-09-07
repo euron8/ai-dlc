@@ -2046,11 +2046,18 @@ hook_declared_ids() { # hook_declared_ids <hook-file>
 # alone would make one resolver disagree with the others about what a row means.
 hook_resolves_ref() { # hook_resolves_ref <citing-file> <ref>
   [ -d "$HOOKS_DIR" ] || return 1
-  local line hook_base
+  local line hook_base ids
   while IFS= read -r line; do
     while IFS= read -r hook_base; do
       [ -n "$hook_base" ] || continue
-      hook_declared_ids "$HOOKS_DIR/$hook_base" | grep -Fxq -- "$2" && return 0
+      # NEVER FEED `grep -q` FROM A PIPE. It leaves at its first match while the writer is
+      # still pushing, and under `pipefail` the pipeline then answers with the writer's EPIPE
+      # and reports NOT-FOUND on input that contains the pattern. It is a SIZE threshold, not
+      # a race — correct until the output after the match fills the pipe buffer, then wrong
+      # permanently and with no symptom. I54b fails the push on the piped form; the here-string
+      # below is the shape v0.231.0 converted seventeen sites to.
+      ids="$(hook_declared_ids "$HOOKS_DIR/$hook_base")"
+      grep -Fxq -- "$2" <<<"$ids" && return 0
     done < <(printf '%s\n' "$line" | grep -oE 'ai-dlc-[a-z0-9-]+\.sh' | sort -u)
   done < <(grep -nE "Check[ -]$2([^0-9a-z-]|\$)" "$1" 2>/dev/null)
   return 1
