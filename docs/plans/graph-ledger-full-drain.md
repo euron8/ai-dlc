@@ -37,7 +37,122 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 71 SHIPPED AS `v0.524.0`. THE SWEEP WAS **NOT EMPTY** — THE CONSUMER FILED A NEW `PC-` CANDIDATE MID-GAP AND THE "PC-BACKED SET IS EXHAUSTED" CLAIM THE LAST TWO BLOCKS CARRIED IS NOW FALSE. ITS HEADLINE DEFECT IS REAL, BETTER EVIDENCED THAN THE FILING CLAIMS, AND **ALL FOUR CANDIDATE REMEDIES ARE REFUTED BY MEASUREMENT** — SO THE RELEASE SHIPS A *SECOND* DEFECT FOUND IN THE SAME FUNCTION WHILE THE FILED SUBJECT IS FILED UNFIXED AS `BL-195`. THE CONSUMER DID NOT PULL, SO THE GAP IS **SIX — WIDE**.
+### BATCH 72 SHIPPED AS `v0.525.0`, ONE RELEASE CARRYING TWO ENTRIES. THE SWEEP FOUND **THREE NEW `PC-S309-*` CANDIDATES** FILED THE SAME DAY, ONE OF THEM REAL AND TAKEN; THE OTHER TWO ARE A WITHDRAWN/SUPERSEDED PAIR WHOSE ACQUITTAL IS **WRONG IN ITS REASONING AND RIGHT IN ITS CONCLUSION**. **THE CONSUMER PULLED TO `0.524.0` BEFORE THE BATCH OPENED, SO THE GAP WAS ZERO AND IS NOW ONE.** AN ADVERSARIAL HAND FOUND A COUNT ERROR IN THE SHIPPED PROSE AND IT WAS CORRECTED ON THE BRANCH.
+
+This block replaces the batch-71 record below it. Every figure was re-derived after the merge at
+`7a562971`, against the working tree with controls in the same invocation; re-derive them again
+rather than reading them.
+
+**`VERSION` IS `0.525.0`, SO BATCH 73 RELEASES AS `0.526.0`.** Re-derive `VERSION` and add one.
+Batch 72 merged once at `7a562971` (PR #669, squash), closing `BL-196` and `BL-197`. Rotated live
+85 -> 85 (two filed, two rotated), archive 110 -> 112. `--check` PASS before each `--apply`,
+scoring `BL-196 CLOSE-CANDIDATE [sha 090c2db9 resolves]` and `BL-197 [sha 04254024 resolves]`.
+**Receipt histogram 72 at exit 1 before AND after, zero exit 0 — no incidental closes.** No
+correction release. The one-liner was TYPED BY THE OPERATOR, so the subject was reported with a
+marked recommendation and chosen by them.
+
+**THE GAP WAS ZERO AT THE TOP OF THIS BATCH, WHICH HAS NEVER HAPPENED AT A BATCH OPEN BEFORE.**
+The consumer pulled `0.519.0 -> 0.524.0` at `4a930316d` (PR #1030) before the sweep ran; all four
+stamp fields read `0.524.0` / `b80c753c`. Batch 71's "gap SIX — WIDE, pull REQUIRED" was
+discharged by that pull, not by anything this batch did. **This release reopens it at ONE**, and
+`PENDING` is 1 (`PC-S309-VALIDATE-LAYER-ENTRIES-...`). Not wide, not owed yet — re-derive it.
+
+**THE SWEEP FOUND THREE NEW CANDIDATES, ALL FILED 2026-09-07.** Live 67 -> **70**, unfiled 16 ->
+**19**, ledger md5 `254d669e…` -> `1ac25a27…`. All six sweep controls fired. The three are
+`PC-S309-VALIDATE-LAYER-ENTRIES-W7-CANNOT-SEE-A-HOOK-IMPLEMENTED-CHECK` (taken, shipped),
+`PC-S309-PRE-PUSH-STILL-CALLS-FAIL-ON-DETERMINISTIC-AFTER-RETRO-MOVED-TO-LOCAL` (the consumer
+withdrew it itself) and `PC-S309-PRE-PUSH-FLAG-MISMATCH-ORIGINAL-TEXT` (that filing's retained
+original). The other 16 unfiled re-derive exactly as batch 69 recorded — 4 in release commits, 11
+`NOT-UPSTREAM`, 1 refuted at `182817fb`. **Do not re-scope onto those 16.**
+
+**WHAT SHIPPED, AND THE SECOND FINDING OUTRANKS THE FILED ONE.** `BL-196`: `W7` resolved a
+`Check <n>` citation against the rendered rulebook and the crosswalk only, so a CORRECT citation
+of a check implemented in a hook reported as dangling — and both remedies it printed were
+unavailable for that class. Upstream authored the instance in `0.524.0`. Driven on a tree built by
+`install.sh` into an empty directory: **`W7=LC-R2:1/0`**, one finding over ZERO layer subjects, so
+it reached every consumer. It is a `warn` and the script exits on `ERRORS` alone, so nothing was
+blocked — DEFECT, not BLOCKER.
+
+**The silent half was worse and is fixed in the same change.** The resolve was a flat `grep -Fxq`
+of the bare id against ONE global anchor pool, with no join between the citing text and where the
+id resolves. `steps/implementation.md` cites `ai-dlc-continue.sh` Check 2b and was silenced by
+`steps/architecture.md`'s `### 2b. Framework Default Audit` — a different file about a different
+subject. **Measured by CONSTRUCTION, which is the technique to reuse**: neutralising the unrelated
+`2b` step anchors took the arm from 1 subject to 3 while the CITING file stayed byte-identical
+(`cmp -s`), so the extra rows provably came from the anchor pool and not from the prose.
+
+**AN ADVERSARIAL HAND CORRECTED A COUNT I HAD ALREADY SHIPPED IN THREE PLACES.** I wrote "five of
+the SIX hook-check citations"; the sixth, `enforcement-map.yaml:515`, is **not in W7's corpus at
+all** — `all_files` takes `SKILL.md` by name at `-maxdepth 1`, so a sibling in that directory is
+never scanned. It is INVISIBLE to the arm rather than silenced by it, which is a WIDER gap, and it
+is stated in the shipped comment rather than fixed: widening the corpus is a separate change with
+its own false-positive set. Corrected to **four of five in-corpus** in the source comment, the
+CHANGELOG and the archived entry.
+
+**BOTH NARROWINGS WERE MEASURED, AND THE FILING'S OWN REMEDY WAS BUILT AND KILLED.** The resolver
+keys on **(hook file, id)** and on a **declaration** (`# Check <id>:` at column 0). The candidate's
+suggested shape — grep the registered hooks for the id — silences the true subject exactly as the
+correct fix does and differs on ONE input; the fixture's cross-hook cell kills it. Keying on a
+MENTION would have shipped a LATENT acquittal: core hooks mention 15 ids and declare 8, and all 7
+in the difference resolve in the rulebook today.
+
+**ONE ACQUITTAL REMAINS, RECORDED RATHER THAN FIXED, and a hand found it.** A line naming a hook
+for an unrelated reason while citing an id that hook declares is cleared. Reproduced with its
+control: hook named -> `0/0`, same id and file without the hook -> `1/0`. Only `2z` and `0b` are
+reachable that way; all five in-corpus hook-naming citations are correctly declared (5/5, control
+0), so zero live instances exist. The alternative is a grammar over English prose with an
+unmeasured FP set.
+
+**`BL-197` IS THE OPERATOR'S CALL, MID-BATCH: "don't file it, fix it."** It began as a filing and
+became a fix. `templates/*.md` claims every `.md` a consumer puts beside core's own six, so a
+consumer-authored template is `[core]`-owned by a GLOB against a file upstream has never held.
+That makes the finding **UNFIXABLE**, not merely mislabelled: `retro.md`'s remedy for a `[core]`
+finding is a push candidate, there is nothing upstream to file it against, and the consumer's
+pre-push blocks on the tier-1 finding. Both sanctioned exits closed at once. Measured:
+`pvc-presentation-template.md` resolves `--is-core` rc=0 by glob, is in the consumer's 117-file
+corpus, appears in ZERO upstream commits (control: sibling `crosswalk.md` returns 1), and was
+authored by the consumer at `37b3d15c3`.
+
+**THE FIX IS THE MANIFEST'S OWN PRESCRIPTION, AND THE GLOB IS UNCHANGED.** `core-manifest.md`
+already says "where a directory is shared, give core its own directory inside it" — the hatch
+`scripts/ai-dlc-local/` provides for the identical problem one directory over.
+`templates_local_home:` is declared in BOTH manifest copies, routed to by a new core-guard branch,
+and bound by **I43b**. Narrowing the glob is refuted by its reader set (roughly twenty programs,
+and the manifest already records that alternative as considered-and-rejected); softening
+`--is-core` is refuted by that resolver's own remedy text.
+
+**A SECOND REMEDY WAS BUILT AND REVERTED — do not rebuild it.** Annotating the audit's output
+(`emit()` tagging a `[core]` finding as an ORPHAN when the distribution ships no such file) CANNOT
+WORK: on a consumer `.claude/` **IS** the installed tree, so every corpus file exists there by
+construction and no consumer-side record of the shipped set exists. Measured: both the orphan and
+a genuinely-shipped core template flagged identically with no note. **Prevention at the WRITE is
+reachable where detection at the READ is not.**
+
+**THE GATE CAUGHT TWO DEFECTS IN MY OWN CHANGE, AND A `cmp -s` GUARD CAUGHT A THIRD.** `I54b`
+found `hook_declared_ids | grep -Fxq` — the documented EPIPE trap, correct until the output after
+the match fills the pipe buffer. The enforcement map's env-scrub arm fired because the fixture now
+names a hook path. Fixing the first moved a mutant's anchor, and `mk_mutant`'s `cmp -s` reported it
+as "proving nothing" rather than passing — that guard working. Re-anchored, uniqueness re-checked
+against an impossible-anchor control.
+
+**THE `--fail-on` PAIR IS ADJUDICATED AND NEEDS NO UPSTREAM WORK.** The consumer withdrew it as
+its own uncommitted edits. The withdrawal's REASONING is false — the thresholds are ORTHOGONAL,
+not ordered (`audit-rule-files.sh:701-705`: `deterministic` gates on tier, `local` on ownership),
+and on this repo's own tree the ordering visibly inverts (deterministic rc=0, local rc=1). Its
+CONCLUSION holds anyway: **the two-tier split is stated INTENT, byte-identically, in both hooks**
+("Only the deterministic tier gates the push; the judgement tier prints and is dispositioned at
+retro" — 1 occurrence each, impossible-phrase control 0/0). Every route into the divergent cell
+needs consumer-authored content or a transient mid-apply window, and a hand measured that
+upstream's own `.githooks/pre-push` catches the latter. The consumer sits in the both-green cell
+today. **Do not re-scope it.**
+
+**THE SWEEP FOR BATCH 73.** Unfiled falls to 18 as this batch's citation lands; in-flight 28,
+DISCHARGED 24, TERMINAL 55, overlap 4. Nothing is pre-scoped. **`BL-113` still ships ALONE**
+(bootstrapping — a two-line `verify: sh` is truncated by the engine and mis-scores silently; its
+FP set is unmeasured and is the first thing it owes, and this batch added two more long receipts,
+so run the engine once), then **`BL-155`** and the rest of the live 85. Run the sweep and rank.
+
+### BATCH 71 (REPLACED BY THE BLOCK ABOVE) SHIPPED AS `v0.524.0`. THE SWEEP WAS **NOT EMPTY** — THE CONSUMER FILED A NEW `PC-` CANDIDATE MID-GAP AND THE "PC-BACKED SET IS EXHAUSTED" CLAIM THE LAST TWO BLOCKS CARRIED IS NOW FALSE. ITS HEADLINE DEFECT IS REAL, BETTER EVIDENCED THAN THE FILING CLAIMS, AND **ALL FOUR CANDIDATE REMEDIES ARE REFUTED BY MEASUREMENT** — SO THE RELEASE SHIPS A *SECOND* DEFECT FOUND IN THE SAME FUNCTION WHILE THE FILED SUBJECT IS FILED UNFIXED AS `BL-195`. THE CONSUMER DID NOT PULL, SO THE GAP IS **SIX — WIDE**.
 
 This block replaces the batch-70 record below it. Every figure here was re-derived on 2026-09-07
 after the merge, against the working tree with the controls in the same invocation; re-derive
@@ -7178,14 +7293,23 @@ so no block written before it changes verdict.
    at every phase when its second adversary returned two BLOCKERs, and batch 66's was green
    when its adversary returned a BLOCKER establishing the shipped fix had made things WORSE.**
 
-   **NOTHING IS PRE-SCOPED. THE SWEEP DECIDES, AND AT BATCH 71 IT RETURNED NEW WORK AFTER TWO
-   BLOCKS HAD DECLARED THE PC-BACKED SET EXHAUSTED.** That declaration was true when written and
-   FALSE one batch later: the consumer filed `PC-S308-GATE-METRICS-CHECK2-STALE-VERDICT-READ-ORDER`
-   on 2026-09-06, live went 66 -> 67, unfiled 16 -> 17, and the ledger md5 moved. **A sentence in
-   this file saying the residue is zero is a snapshot of a file someone else is holding open. Run
-   the sweep; never read that sentence for an answer.** Batch 71 took that candidate, and its
-   disposition is `BL-194` (shipped) plus `BL-195` (filed unfixed — all four remedies refuted, and
-   the entry records each so they are not rebuilt). Unfiled is 16 again after that citation. Four of those are already named in an `origin/main` commit message
+   **NOTHING IS PRE-SCOPED. THE SWEEP DECIDES, AND IT HAS NOW RETURNED NEW WORK TWO BATCHES
+   RUNNING AFTER TWO EARLIER BLOCKS DECLARED THE PC-BACKED SET EXHAUSTED.** That declaration was
+   true when written and false one batch later, twice over: the consumer filed
+   `PC-S308-GATE-METRICS-CHECK2-STALE-VERDICT-READ-ORDER` on 2026-09-06 (live 66 -> 67), and then
+   THREE `PC-S309-*` candidates on 2026-09-07 (live 67 -> 70, unfiled 16 -> 19, md5 moved again).
+   **A sentence in this file saying the residue is zero is a snapshot of a file someone else is
+   holding open. Run the sweep; never read that sentence for an answer.**
+
+   **BATCH 72's SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope them.**
+   `PC-S309-VALIDATE-LAYER-ENTRIES-W7-CANNOT-SEE-A-HOOK-IMPLEMENTED-CHECK` shipped as `v0.525.0`
+   at `7a562971` (PR #669) closing `BL-196`, cited verbatim in the release commit message, plus
+   `BL-197` beside it on the operator's mid-batch ruling. The other two `PC-S309-*` are a
+   withdrawn/superseded PAIR the consumer retracted itself; its reasoning is false and its
+   conclusion holds, both measured — **do not re-open that pair.** Batch 71's are shipped too:
+   `BL-194` (shipped) plus `BL-195` (filed unfixed, all four remedies refuted and each recorded so
+   they are not rebuilt). Of the 18 unfiled that remain, four are already named in an `origin/main`
+   commit message
    (fixed without being filed — the instrument gap, not work), and of the 13 that remain,
    **ELEVEN WERE ALREADY ADJUDICATED `NOT-UPSTREAM`** in
    `docs/reviews/graph-ledger-adjudication-brief.md`, whose own words are *"There is no upstream
@@ -7904,15 +8028,20 @@ so no block written before it changes verdict.
    `^#{2,6}`. If those two disagree again, ask which of them changed before concluding anything
    about the consumer.
 
-   **THE BASELINE IS 67 LIVE CANDIDATES, 51 CITED, 16 UNFILED** — re-derived at batch 71's close
-   (md5 `254d669e…`, archive 169, partition control 0, all four presence controls 1, absence
-   control 0). **THE CONSUMER FILED DURING THE GAP AND THAT IS WHY LIVE MOVED**: 66 -> 67 with
-   `PC-S308-GATE-METRICS-CHECK2-STALE-VERDICT-READ-ORDER` on 2026-09-06, taking unfiled 16 -> 17;
-   batch 71's own citation of it then moved it to cited, so unfiled reads 16 again for an
-   OFFSETTING reason and the two 16s are not the same 16. **DISCHARGED 23 / in-flight 28 /
-   untouched 16, summing to 67 after subtracting the 3-id overlap; TERMINAL 55;
-   discharged-but-invisible 0.** Report TERMINAL as the delivered total, never the backlog's own
-   live count. The paragraph below is the earlier reading and records how the counts moved:
+   **THE BASELINE IS 70 LIVE CANDIDATES, 52 CITED, 18 UNFILED** — re-derived at batch 72's close
+   after its merge at `7a562971` (md5 `1ac25a27…`, archive 169, partition control 0, all four
+   presence controls 1, absence control 0). **THE CONSUMER FILED THREE CANDIDATES IN ONE DAY AND
+   THAT IS WHY LIVE MOVED**: 67 -> 70, all three `PC-S309-*` dated 2026-09-07, taking unfiled
+   16 -> 19; batch 72's own citation of the one it took then moved it to cited, so unfiled reads
+   18. **DISCHARGED 24 / in-flight 28 / untouched 18, summing to 70 after subtracting the 4-id
+   overlap; TERMINAL 55; discharged-but-invisible 1.** That one invisible id is batch 71's
+   `BL-195` subject, which shipped NO fix and is therefore deliberately uncited — the row is
+   correct, not a gap. Report TERMINAL as the delivered total, never the backlog's own live count.
+   The paragraph below is the earlier reading and records how the counts moved: the batch-71
+   baseline was 67 / 51 / 16 at md5 `254d669e…`, where the consumer had filed
+   `PC-S308-GATE-METRICS-CHECK2-STALE-VERDICT-READ-ORDER` on 2026-09-06 (66 -> 67, unfiled
+   16 -> 17) and batch 71's citation moved it back to 16 for an OFFSETTING reason, so those two
+   16s are not the same 16. Before that:
    the batch-69/70 baseline was 66 / 50 / 16 at md5 `b7e0f100…` — re-derived at batch 69's close
    after its merge at `cb9c8fb6` (md5 `b7e0f100…`, archive 169, partition control 0, all presence
    controls 1, absence control 0), and UNMOVED from batch 68's close: batch 69 cited no `PC-` id and
