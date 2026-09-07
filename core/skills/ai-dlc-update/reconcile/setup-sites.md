@@ -259,7 +259,16 @@ rulebook:
 consumer_machinery_home: scripts/ai-dlc-local/
 consumer_machinery_subdirs: lib/ hooks/ fixtures/ config/ tests/
 consumer_crosswalk_file: .claude/skills/ai-dlc/crosswalk.md
+templates_local_home: .claude/skills/ai-dlc/templates-local/
 ```
+
+`templates_local_home:` carries no `core/` prefix for the same reason
+`consumer_machinery_home:` does not: it is a CONSUMER path, identical in both
+layouts, and core never writes it. It is the escape hatch for the second shared
+directory — `templates/*.md` claims every `.md` a consumer puts beside core's, so
+without a declared home a consumer-authored template is `[core]`-owned by a glob
+against a file upstream has never held, and the rule-file audit's only sanctioned
+disposition for it is a push candidate that cannot be filed.
 
 `consumer_crosswalk_file:` is here for the same reason and under the same rule.
 It is the file LC-N6 requires a consumer to write a crosswalk row into, and it

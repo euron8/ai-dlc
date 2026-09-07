@@ -3030,6 +3030,56 @@ else
   fi
 fi
 
+# --- I43b: the TEMPLATES local home is one string across its three surfaces ----
+# requires-arms: I43
+# THE SAME DEFECT ONE DIRECTORY OVER, and it is here because `templates/` is the second
+# shared directory and was the one with no escape hatch. `templates/*.md` claims every
+# `.md` a consumer puts beside core's, so a consumer-authored template is `[core]`-owned
+# by a GLOB against a file upstream has never held. Measured on the reference consumer:
+# `templates/pvc-presentation-template.md`, authored there at 37b3d15c3, absent from every
+# upstream commit (control: the sibling `templates/crosswalk.md` resolves 1). For such a
+# file `retro.md` Step 4's disposition -- a [core] finding's remedy is a push candidate --
+# names nothing that can be filed, while the consumer's pre-push blocks on the tier-1
+# finding. The hatch is what makes that state unreachable rather than merely reported.
+#
+# THE BINDING IS OWED FOR I43'S OWN REASON. The guard restates the path as a LITERAL in
+# its deny text; the manifest and reconcile/setup-sites.md declare it. Measured while
+# building this: deleting `templates_local_home:` from the manifest left the guard still
+# naming the directory, so the two ends were bound by nothing and each stayed internally
+# consistent. Same three surfaces, same two directions as I43.
+tlh_decl() { # <file> -> the declared templates home, trailing slash stripped
+  sed -n 's/^templates_local_home:[[:space:]]*//p' "$1" | head -1 | sed 's#/*$##'
+}
+TLH="$(tlh_decl "$CORE_MANIFEST")"
+TLH_SS="$(tlh_decl "$SETUP_SITES")"
+
+if [ -z "$TLH" ] || [ -z "$TLH_SS" ]; then
+  err "I43b could not read 'templates_local_home:' from core-manifest.md and/or reconcile/setup-sites.md (got '${TLH:-<none>}' and '${TLH_SS:-<none>}'). Both copies are required for the reason I43 states: the core-guard routes authors to this path and ai-dlc-update cannot read core-manifest.md at runtime. Without the declaration a consumer-authored template stays [core]-owned by the templates glob with no sanctioned destination, which is the unfixable-finding state the hatch exists to prevent."
+elif [ "$TLH" != "$TLH_SS" ]; then
+  err "I43b the templates local home differs between its two declarations — core-manifest.md says '$TLH', reconcile/setup-sites.md says '$TLH_SS'. ai-dlc-update reads its own copy and everything else reads the manifest's, so the guard would route a template author to one directory while the reader walks another."
+else
+  TLH_GUARD="$REPO_ROOT/core/hooks/ai-dlc-core-guard.sh"
+  if [ ! -f "$TLH_GUARD" ]; then
+    err "I43b could not read the core-guard at $TLH_GUARD, so the reverse arm compared nothing. A missing guard is not a passing one."
+  elif ! grep -qF "$TLH" "$TLH_GUARD"; then
+    err "I43b the declared templates local home '$TLH' appears nowhere in core/hooks/ai-dlc-core-guard.sh. That deny text is the ONLY thing that routes an author out of the core-owned templates directory; a declared home nothing points at is an affordance no author finds, and it fails silently because the declaration stays internally consistent on its own."
+  fi
+  # The forward direction: no shipped core file may invent a SECOND templates home.
+  # The grammar is deliberately the same shape as I43's and its false-positive set is
+  # measured below rather than assumed -- core's own `templates` and the declared home
+  # are the only two tokens, and the zero guard proves the scan can still see core's.
+  TLH_BASE="${TLH##*/}"
+  tlh_bad="$(grep -rhoE 'skills/ai-dlc/templates[A-Za-z0-9_-]*' \
+               "$REPO_ROOT/core" "$REPO_ROOT/scripts" "$REPO_ROOT/templates" "$REPO_ROOT/.githooks" 2>/dev/null \
+             | sort -u | grep -vxF 'skills/ai-dlc/templates' | grep -vxF "skills/ai-dlc/$TLH_BASE" || true)"
+  if [ -n "$tlh_bad" ]; then
+    err "I43b shipped core file(s) name a skills/ai-dlc/templates* path that is neither core's own 'skills/ai-dlc/templates' nor the declared local home '$TLH': $(echo $tlh_bad). Either the home was renamed in one surface and not the declaration, or a second home was invented; both leave the guard routing template authors somewhere no reader walks."
+  fi
+  if ! grep -rqoE 'skills/ai-dlc/templates[A-Za-z0-9_-]*' "$REPO_ROOT/core" 2>/dev/null; then
+    err "I43b's token scan matched NOTHING under core/, not even core's own templates directory. The grammar or the search root has moved, and an empty scan passes the forward arm exactly like a clean tree."
+  fi
+fi
+
 # --- I44: core never reads, never writes and never overwrites the home ---------
 # requires-arms: I43
 # core-manifest.md and the guard's deny text BOTH make this promise in those words.

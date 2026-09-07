@@ -15,6 +15,86 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.525.0] - 2026-09-07
+
+### `BL-197` — `templates/` was the second SHARED directory and the only one with no escape hatch
+
+`core-manifest.md` states the rule that makes glob ownership safe: *"Every entry is a glob over
+a directory that is exclusively ours."* `templates/*.md` broke it. A consumer writes its own
+templates beside core's, so the glob claimed every `.md` there — making a consumer-authored file
+`[core]`-owned against a path upstream has never held.
+
+That is an UNFIXABLE finding rather than a mislabel. `retro.md` tells the lead a `[core]`
+finding is not theirs to disposition and that its remedy is a push candidate; for a file upstream
+does not have there is nothing to file it against, while the consumer's pre-push blocks on the
+tier-1 finding. Both sanctioned exits are closed at once. Measured on the reference consumer:
+`templates/pvc-presentation-template.md` resolves `--is-core` rc=0 by glob, sits in its
+117-file corpus, and appears in ZERO upstream commits (control: the sibling `crosswalk.md`
+returns 1).
+
+The fix is the manifest's own prescription — where a directory is shared, give core its own and
+route the consumer elsewhere — applied as the hatch `scripts/ai-dlc-local/` already provides for
+the identical problem one directory over. `templates_local_home:` is declared in both manifest
+copies and the core-guard gains a routing branch.
+
+**The glob is unchanged, deliberately.** Narrowing it is refuted by its reader set (roughly twenty
+programs), and softening `--is-core` is refuted by that resolver's own remedy text. The hatch adds
+a directory rather than changing a glob, so no existing reader moves.
+
+A second remedy was built and REVERTED: annotating the audit's output cannot work, because on a
+consumer `.claude/` IS the installed tree, so every corpus file exists there and no consumer-side
+record of the shipped set exists. Prevention at the write is reachable where detection at the read
+is not.
+
+Bound by **I43b** — I43's shape one directory over, owed for I43's own reason: the guard restates
+the path while two files declare it. Four probes, both directions: an absent declaration,
+disagreeing declarations and a guard stripped of the hatch all ERR, and an unrelated core edit
+stays silent.
+
+### `BL-196` — `W7` reported a CORRECT citation of a hook-implemented check as a dangling pointer, and was silent on five more for an unrelated reason
+
+Closes `PC-S309-VALIDATE-LAYER-ENTRIES-W7-CANNOT-SEE-A-HOOK-IMPLEMENTED-CHECK`, filed by the
+reference consumer 2026-09-07.
+
+`validate-layer-entries.sh` `W7` resolves a `Check <n>` citation against the rendered rulebook
+and the crosswalk. A check implemented in a shipped hook lives in neither, by design — the hook
+IS the implementation — so a correct citation of one reported as dangling, and both remedies the
+message printed were unavailable for that class: there is nothing to repoint to, and a crosswalk
+row would assert a renumber that never happened.
+
+Upstream authored the instance. `v0.524.0` added a paragraph to `core/skills/ai-dlc/SKILL.md`
+citing `.claude/hooks/ai-dlc-acknowledge.sh` Check 2z, which `ai-dlc-acknowledge.sh` declares.
+Measured on a tree built by `scripts/install.sh` into an empty directory: **one subject over
+ZERO layer subjects** (`W7=LC-R2:1/0`), so the finding reached every consumer and no consumer
+authoring was involved in producing it. `W7` is a `warn` and the script exits on `ERRORS` alone,
+so no push was blocked.
+
+**The silent direction was the worse one and it is fixed in the same change.** The resolve was a
+flat `grep -Fxq` of the bare id against ONE global anchor pool, so a citation naming a hook was
+cleared by any numerically-equal heading anywhere in the rulebook. `steps/implementation.md`
+cites `ai-dlc-continue.sh` Check 2b and was silenced by `steps/architecture.md`'s
+`### 2b. Framework Default Audit for Security-Relevant Properties` — a different file about a
+different subject. FOUR of the FIVE in-corpus hook-check citations were silent that way.
+A sixth citation, `enforcement-map.yaml:515`, is not in the arm's corpus at all — `all_files`
+takes `SKILL.md` by name at `-maxdepth 1`, so a sibling in that directory is never scanned.
+It is invisible to `W7` rather than silenced by it; stated rather than fixed, because widening
+the corpus is a separate change with its own false-positive set.
+Measured by construction: neutralising the unrelated `2b` step anchors took the arm from 1
+subject to 3 while the CITING file stayed byte-identical, which is the control proving the extra
+rows came from the anchor pool and not from the prose.
+
+The resolver keys on **(hook file, id)** and on a **declaration** — `# Check <id>:` at column 0 —
+never on the id alone and never on a mention. Both narrowings were measured rather than assumed:
+core hooks MENTION 15 check ids and DECLARE 8, and all 7 in the difference resolve in the
+rulebook today, so a mention-keyed resolver would have shipped a LATENT acquittal — invisible now
+and live the moment one of those ids is renumbered.
+
+`core/fixtures/layer-reference-resolution` gains four cells and three mutants. The cross-hook
+cell sits in its own file because `W7`'s finding grain is `(file, id)`: seeded beside a correct
+citation of the same id it would be shadowed by it and would be silent for a reason unrelated to
+the resolver. That cell is the only input separating the shipped per-hook join from the
+candidate's own suggested shape (grep the registered hooks for the id), which it kills.
+
 ## [0.524.0] - 2026-09-07
 
 ### `BL-194` — a suppression's check id was joined WITHOUT its catalog, so one catalog's verdict answered another's question

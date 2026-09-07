@@ -122,6 +122,73 @@ mkdir -p "$CONS/scripts"
 printf '#!/usr/bin/env bash\necho present\n' > "$CONS/scripts/present.sh"
 chmod +x "$CONS/scripts/present.sh"
 
+# W7's HOOK NAMESPACE. A check implemented in a shipped hook is defined in no rendered-rulebook
+# file and no crosswalk row, so before the hook resolver existed a CORRECT citation of one was
+# reported as dangling. Two hooks, because the join is per-hook and a single-hook world cannot
+# tell "resolves against the hook the line names" from "resolves against any hook at all" —
+# `fixture-mutants.md`'s seeded-set rule, met in the id namespace.
+#
+# THE IDS HERE ARE NUMERIC-LEADING BECAUSE W7'S HARVEST GRAMMAR IS. A first cut of this seed
+# used `hk1`-style ids; `grep -Eoh 'Check[ -][0-9]+[a-z-]*'` cannot spell them, so every cell
+# below would have been invisible to the arm and each one would have passed by never being
+# asked. That is the "point a search grammar at its own subject" failure one level over —
+# a seed the arm cannot see asserts nothing, and reads exactly like a seed that passed.
+# 61-65 are free in this fixture's namespace; the seed's own ids are 5,7,8,17,20-30,3a.
+#
+# THE DECLARATION FORM IS THE SUBJECT. `# Check <id>:` at column 0 opens a check block; a
+# mention of the id in running prose is not a declaration. `64` below is MENTIONED by
+# `alpha` and declared by nobody, which is what separates a resolver keyed on declarations
+# from one keyed on any occurrence — the latter acquits an id no hook implements.
+mkdir -p "$CONS/.claude/hooks"
+cat > "$CONS/.claude/hooks/ai-dlc-alpha.sh" <<'EOF'
+#!/usr/bin/env bash
+# Check 61: alpha's own check, declared here and cited from step prose.
+# The line below MENTIONS Check 64 without declaring it -- a resolver keyed on
+# occurrence rather than on declaration would wrongly acquit a citation of 64.
+# See Check 64 in the design notes; it was never built.
+exit 0
+EOF
+cat > "$CONS/.claude/hooks/ai-dlc-beta.sh" <<'EOF'
+#!/usr/bin/env bash
+# Check 62: beta's own check. Cited correctly from step prose naming THIS hook.
+exit 0
+EOF
+chmod +x "$CONS/.claude/hooks/ai-dlc-alpha.sh" "$CONS/.claude/hooks/ai-dlc-beta.sh"
+
+# The citing prose. Four cells in this file, each isolating one property of the resolver:
+#   61 named with alpha  -> SILENT: the hook on the line declares it
+#   62 named with beta   -> SILENT: the other hook, so a single-hook resolver fails here
+#   64 named with alpha  -> REPORTS: mentioned in the hook, never declared
+#   65 named with no hook-> REPORTS: the pre-existing global path, untouched by this change
+cat > "$SKILL/steps/hook-citations.md" <<'EOF'
+# Hook-implemented check citations
+
+The acknowledge-side hook (`ai-dlc-alpha.sh` Check 61) consumes the transcript directly.
+
+The other hook (`ai-dlc-beta.sh` Check 62) owns the yield permission.
+
+`ai-dlc-alpha.sh` Check 64 is mentioned in that hook and declared by nothing.
+
+Check 65 names no hook at all and must reach the pre-existing resolver.
+EOF
+
+# THE CROSS-HOOK CELL LIVES IN ITS OWN FILE, AND THAT PLACEMENT IS THE MEASUREMENT.
+# W7's finding grain is (file, id): the caller harvests one id set per file, so a file citing
+# 62 correctly (naming beta) ALSO clears a dangling citation of 62 elsewhere in that same file.
+# Seeded in `hook-citations.md` beside the beta line, this cell was silent — not because the
+# resolver is id-only, but because the enclosing loop had already resolved 62 for the file.
+# In its own file, with no correct 62 citation to shadow it, the cell reports.
+#
+# THIS IS THE SEED THAT DISCRIMINATES THE PER-HOOK JOIN FROM AN ID-ONLY ONE. A resolver that
+# clears an id whenever ANY hook declares it stays silent here; the shipped per-hook join
+# reports, because the hook this line NAMES does not declare 62. Without this file the whole
+# hook branch passes under both implementations.
+cat > "$SKILL/steps/hook-cross.md" <<'EOF'
+# The cross-hook cell
+
+`ai-dlc-alpha.sh` Check 62 names a hook that does not declare 62; beta declares it.
+EOF
+
 cat > "$SKILL/extensions/checks/domain.md" <<'EOF'
 ---
 kind: check

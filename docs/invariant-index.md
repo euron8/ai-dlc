@@ -59,6 +59,7 @@ To change this file, change the arm header it came from and re-run the renderer.
 | I41 | a clause id is unique. |
 | I42 | no clause is introduced at a contract_version the contract has not reached. |
 | I43 | the consumer machinery home is ONE string across every surface |
+| I43b | the TEMPLATES local home is one string across its three surfaces |
 | I44 | core never reads, never writes and never overwrites the home |
 | I45 | core allocates below the reserved consumer band |
 | I46 | the extension kind vocabulary is one set |
