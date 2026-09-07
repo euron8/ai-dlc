@@ -37,9 +37,121 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 70 SHIPPED AS `v0.523.0`, ONE RELEASE CARRYING THREE NO-`PC` ENTRIES. ALL THREE FILED RECEIPTS WERE CLOSABLE BY SOMETHING THAT IS NOT A FIX, MEASURED BY BUILDING THE NON-FIXES, AND ONE OF THEM *INVERTED* ON THE CORRECT FIX. THE SUBJECT OF `BL-187` WAS WITHDRAWN RATHER THAN BUILT, AFTER TWO CANDIDATE MECHANISMS WERE BUILT AND REFUTED. THE CONSUMER DID NOT PULL, SO THE GAP IS **FIVE — WIDE** — AND THE PULL IS **REQUIRED** ON A DIVERGENCE MEASURED ON THE CONSUMER'S OWN 48 LAYER ENTRIES. THE SWEEP IS FULLY ADJUDICATED AND ITS AVAILABLE RESIDUE IS ZERO.
+### BATCH 71 SHIPPED AS `v0.524.0`. THE SWEEP WAS **NOT EMPTY** — THE CONSUMER FILED A NEW `PC-` CANDIDATE MID-GAP AND THE "PC-BACKED SET IS EXHAUSTED" CLAIM THE LAST TWO BLOCKS CARRIED IS NOW FALSE. ITS HEADLINE DEFECT IS REAL, BETTER EVIDENCED THAN THE FILING CLAIMS, AND **ALL FOUR CANDIDATE REMEDIES ARE REFUTED BY MEASUREMENT** — SO THE RELEASE SHIPS A *SECOND* DEFECT FOUND IN THE SAME FUNCTION WHILE THE FILED SUBJECT IS FILED UNFIXED AS `BL-195`. THE CONSUMER DID NOT PULL, SO THE GAP IS **SIX — WIDE**.
 
-This block replaces the batch-69 record below it. Every figure here was re-derived on 2026-09-07
+This block replaces the batch-70 record below it. Every figure here was re-derived on 2026-09-07
+after the merge, against the working tree with the controls in the same invocation; re-derive
+them again rather than reading them.
+
+**`VERSION` IS `0.524.0`, SO BATCH 72 RELEASES AS `0.525.0`.** Re-derive `VERSION` and add one.
+Batch 71 merged once, closing `BL-194` and filing `BL-195`. **NO `PC-` id is cited in the release
+commit message, and that is a DELIBERATE OMISSION rather than the usual "the subject carries
+none".** The candidate that prompted both entries is `BL-195`'s subject, which ships NO FIX, so a
+citation would make `named_absorbed()` emit a `NAMED-UPSTREAM` row telling the consumer to close an
+entry this release did not resolve — which that function's own header calls *"strictly worse than
+the silence it replaces"*. The short-form prefix is worse still: it covers **7** live candidates, 6
+untouched here. The id is written in full in `docs/backlog.md` and the `CHANGELOG`, where a human
+reads it and no join fires. **Receipt histogram before and after: 72 receipts at exit 1 both times,
+the single exit 0 being `BL-194`'s own — zero incidental closes.** No correction release. **The
+nineteenth batch opened by a peer's handoff** (action 9's message from `ai-dlc-14`), so it scoped
+itself from its own ranking and stated the choice in its first ping.
+
+**THE SWEEP FOUND NEW WORK, WHICH IS A CHANGE OF STATE.** Live **67** (was 66), unfiled **17** (was
+16), ledger md5 `254d669e…` (was `b7e0f100…`) — the consumer wrote. The new member is
+`PC-S308-GATE-METRICS-CHECK2-STALE-VERDICT-READ-ORDER`, filed 2026-09-06, never adjudicated, never
+shipped, cited by nothing; controls fired in both directions (impossible id 0, known-shipped id 1,
+brief-side `NOT-UPSTREAM` control 1). **So "the PC-backed set is EXHAUSTED and available residue is
+ZERO" — carried by the last two blocks — is FALSE as of this batch. Run the sweep; do not read that
+sentence.** The other 16 unfiled remain adjudicated exactly as batch 69 derived them (4 in release
+commits, 11 `NOT-UPSTREAM`, 1 refuted at `182817fb`); do not re-scope onto those.
+
+**ALL FOUR REMEDIES FOR THE FILED SUBJECT ARE REFUTED, AND `BL-195` RECORDS EACH SO NOBODY REBUILDS
+THEM.** Check 2 invokes the suppression validator at `gate-validation.md:245`; the verdict it reads
+is written only by Check 12 at `:736`, which runs after — so it necessarily reads the PREVIOUS
+gate's verdict. **(a) re-sequence is a CYCLE** — Check 12's own instruction at `:750` is to emit a
+row for every other check the manifest loaded, *including Check 2*; measured, 12 rows carry
+`"check":"2"` against an impossible-id control of 0. **(b) re-run the check live FAILS OPEN on 22 of
+57** ids carrying `enforcer: []` (35 have one; the partition is exact), and `[core] 11` is
+suppressed twice on that consumer today with none. **(c) a sha-freshness guard DISARMS** — 0 of 11
+recorded shas are ancestors of HEAD (10 orphans, 1 unresolvable; control `merge-base --is-ancestor
+HEAD HEAD` exit 0), because the consumer squash-merges and the merge orphans the commit the gate
+recorded. **(d) reading the current gate's `verdict.json` HAS NO JOIN** — 96 gate events against 197
+verdict `generated_at` values intersect at **9**, control (ts ∩ ts) 96.
+
+**THE FINDING THAT OUTRANKS THE FILING'S OWN CLAIM, and it is the reusable one.** The metrics file
+is not merely stale at unlucky moments — it is the LOSSY artifact in principle. Check-2 verdicts:
+**38 FAIL in the per-gate verdict corpus against 3 in the metrics, a 12.7× undercount**, because a
+gate that FAILs Check 2 halts before Check 12 writes the row. Control: check 16, which does not halt
+the gate, agrees far better (18 against 5). The arm consults the one artifact that structurally
+cannot record the failures that matter most.
+
+**THE CONSUMER DIAGNOSED THIS ELEVEN DAYS BEFORE FILING IT AND CHOSE TO SUPPRESS.**
+`pending.md:3684`, 2026-08-26, states the mechanism verbatim including *"Check 12 runs after this
+adoption"*, and lists its options as *"(a) fresh SUPPRESSED … [chosen]; (b) investigate/fix the
+Check 12-before-Check 2 ordering instead"*. A sibling entry does the same on check 22 at the S305
+sprint-review gate. **The recurrence is the choice, not the mechanism** — 3 distinct gate events
+across 2 sprints, derived from both escalation corpora with an impossible-phrase control.
+
+**A MID-BATCH NARROWING TO N=1 WAS WRONG AND A HAND WIDENED IT BACK.** It rested on an ancestry test
+I proposed, which cannot answer the question: it asks whether the FAIL row was written before the
+fix, necessarily true of every entry, because the row IS the record of the failing gate. **The
+staleness is in the READ, not the write.** Narrowing is not the safe direction; ask which row a
+correction was measured on before believing it.
+
+**WHAT SHIPPED: `BL-194`, a SECOND defect in the same function.** `latest_verdict()` joined on
+`check` alone, ignoring the row's `catalog`, so one catalog's verdict answered another's question —
+and the fail-open direction ACQUITS a core check that is still failing. Measured across 1828 rows in
+five metrics files: 34 ids carry two or more catalogs against 37 that carry one, 11 of them in this
+catalog. **LATENT, tiered DEFECT not BLOCKER**: all 18 live suppressions name `[core]`, none names a
+colliding id, and restricted to the 57 ids the validator acts on a correct join changes **0** answers
+today. The sibling `validate-gate-adjudication.sh:1375` already joins on `(catalog, check_id)` and
+its header records the same defect closed there — two readers of one corpus disagreeing on the join
+key was the defect.
+
+**THE FILED RECEIPT WAS *INVERTED*, THE FOURTH CONSECUTIVE BATCH TO FIND A BROKEN ONE.**
+`theirs_has … "gate-metrics.jsonl"` tests a token present 3 times before any fix; no fix to the read
+ordering removes it, so it reports STILL-LIVE over both correct fixes and closes on exactly one
+thing — deleting the string from prose while the mechanism runs untouched.
+
+**AND MY OWN REPLACEMENT WAS BROKEN TWICE, BOTH CAUGHT BY RUNNING IT RATHER THAN READING IT.** The
+first draft resolved its subject through `$DIST`/`$THEIRS`, which is the CONSUMER's `ledger-reverify`
+vocabulary and is undefined here (control: an impossible variable also 0) — under `set -uo pipefail`
+at `backlog-reverify.sh:5` it aborts 127, so it could never close, on any tree. **I first reported
+that as a false CLOSE, which was wrong: I had measured it without `set -u`.** A hand corrected the
+direction. The second break was polarity — this harness reads exit **0 as CLOSE-CANDIDATE**
+(`:198-203`) where the consumer's engine is the inverse. Both fixed; the shipped receipt now refuses
+on an absent, unparseable, always-pass, always-fail or always-refuse subject, and closes only on the
+fix.
+
+**SEED THE NON-CORE CASE OR THE CORPUS CANNOT DISCRIMINATE YOUR FIX.** A variant that HARD-CODES
+`core` passes every seed drawn from the real corpus, because all 18 live suppressions are `[core]`.
+Only a mirrored world naming a non-core catalog separates it from the fix. Fixture mutant J is
+killed by assertion 17 alone; run against the pre-fix validator the new arms produce 5 failures and
+exit 1, and the two single-catalog controls stay green in both worlds, so they discriminate rather
+than refuse.
+
+**GAP SIX (`0.518.0` installed, `0.524.0` shipped) — WIDE, PENDING 0 on this release.** No `PC-` id
+shipped, so PENDING did not move. **The bootstrapping hazard IS live in the range** —
+`emit-report.sh`, `hard-blockers.sh` and `setup-sites.md` moved, against a control of 60 core files
+changed — but **0 mode-only changes** (56 M + 4 A), so the specific measured hazard does not bite.
+The second test diverges: `validate-layer-entries.sh` differs between the trees (159201 vs 165133
+bytes, `cmp -s` control, and `validate-gate-adjudication.sh`/`validate-stub-audit.sh` are IDENTICAL,
+which is what proves the control discriminates) and the shipped side reports `unreadable=0` where
+the installed side reports nothing — `BL-122`'s 0.523.0 fix, whose stakes batch 70 already measured
+as 0 findings against 121 on a sealed entry. **The pull is REQUIRED and is NOT yours to run.**
+This batch's own fix changes nothing observable there (identical findings, binaries proven to differ
+first), which is the expected LATENT result and not an argument against the pull.
+
+**THE SWEEP FOR BATCH 72.** Unfiled drops to 16 and in-flight rises to 28 as this batch's citation
+lands. **`BL-113`** still ships ALONE (bootstrapping — a two-line `verify: sh` is truncated by the
+engine and mis-scores silently; **its FP set is unmeasured and that measurement is the first thing
+it owes**, and this batch added one long receipt, so run the engine once after it lands), then
+**`BL-155`** and the rest of the live 86. Nothing is pre-scoped; run the sweep and rank.
+
+### BATCH 70 (REPLACED BY THE BLOCK ABOVE) SHIPPED AS `v0.523.0`, ONE RELEASE CARRYING THREE NO-`PC` ENTRIES. ALL THREE FILED RECEIPTS WERE CLOSABLE BY SOMETHING THAT IS NOT A FIX, MEASURED BY BUILDING THE NON-FIXES, AND ONE OF THEM *INVERTED* ON THE CORRECT FIX. THE SUBJECT OF `BL-187` WAS WITHDRAWN RATHER THAN BUILT, AFTER TWO CANDIDATE MECHANISMS WERE BUILT AND REFUTED. THE CONSUMER DID NOT PULL, SO THE GAP IS **FIVE — WIDE** — AND THE PULL IS **REQUIRED** ON A DIVERGENCE MEASURED ON THE CONSUMER'S OWN 48 LAYER ENTRIES. THE SWEEP IS FULLY ADJUDICATED AND ITS AVAILABLE RESIDUE IS ZERO.
+
+This block is REPLACED by the batch-71 block above and is kept as the record of batch 70.
+It replaced the batch-69 record below it. Every figure here was re-derived on 2026-09-07
 after the merge, against the working tree with the controls in the same invocation; re-derive
 them again rather than reading them.
 
@@ -7048,7 +7160,7 @@ so no block written before it changes verdict.
 ### NEXT ACTIONS — numbered, in order
 
 1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below), RANK THE UNFILED CANDIDATES,
-   THEN SCOPE BATCH 69 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED YOU.** Operator
+   THEN SCOPE BATCH 72 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED YOU.** Operator
    instruction, given at batch 52. **If the one-liner was TYPED BY THE OPERATOR**, report the
    candidates with a marked recommendation and ask, as every batch before has. **If it ARRIVED
    FROM ANOTHER SESSION** — a cross-session message carrying `READ and FOLLOW …`, which is
@@ -7060,8 +7172,14 @@ so no block written before it changes verdict.
    at every phase when its second adversary returned two BLOCKERs, and batch 66's was green
    when its adversary returned a BLOCKER establishing the shipped fix had made things WORSE.**
 
-   **NOTHING IS PRE-SCOPED. THE SWEEP DECIDES — AND ITS AVAILABLE SET IS NOW MUCH SMALLER THAN
-   ITS COUNT.** Unfiled is 16. Four of those are already named in an `origin/main` commit message
+   **NOTHING IS PRE-SCOPED. THE SWEEP DECIDES, AND AT BATCH 71 IT RETURNED NEW WORK AFTER TWO
+   BLOCKS HAD DECLARED THE PC-BACKED SET EXHAUSTED.** That declaration was true when written and
+   FALSE one batch later: the consumer filed `PC-S308-GATE-METRICS-CHECK2-STALE-VERDICT-READ-ORDER`
+   on 2026-09-06, live went 66 -> 67, unfiled 16 -> 17, and the ledger md5 moved. **A sentence in
+   this file saying the residue is zero is a snapshot of a file someone else is holding open. Run
+   the sweep; never read that sentence for an answer.** Batch 71 took that candidate, and its
+   disposition is `BL-194` (shipped) plus `BL-195` (filed unfixed — all four remedies refuted, and
+   the entry records each so they are not rebuilt). Unfiled is 16 again after that citation. Four of those are already named in an `origin/main` commit message
    (fixed without being filed — the instrument gap, not work), and of the 13 that remain,
    **ELEVEN WERE ALREADY ADJUDICATED `NOT-UPSTREAM`** in
    `docs/reviews/graph-ledger-adjudication-brief.md`, whose own words are *"There is no upstream
@@ -7070,8 +7188,8 @@ so no block written before it changes verdict.
    recorded in this repo and never joined back. **Do not re-scope onto those eleven.** Re-derive the
    join rather than trusting this paragraph, but do not spend a session re-reading that cluster.
 
-   **SO THE NO-`PC` RESIDUE IS THE WHOLE AVAILABLE SET FOR BATCH 70**, because the PC-backed set is
-   EXHAUSTED rather than outranked. **Batch 69 re-derived that exhaustion independently and it
+   **THE NO-`PC` RESIDUE IS THE FALLBACK, NOT THE WHOLE AVAILABLE SET — batch 71 disproved that
+   framing by finding a PC-backed candidate the previous two blocks said could not exist.** **Batch 69 re-derived that exhaustion independently and it
    holds: of the 16 unfiled, 4 resolve to `origin/main` RELEASE commits, 11 carry a `NOT-UPSTREAM`
    verdict read from the brief's verdict COLUMN, and the 12th is the refutation below — leaving
    ZERO available.** A sweep is still the opening action, because the consumer files while nobody is
@@ -7780,7 +7898,16 @@ so no block written before it changes verdict.
    `^#{2,6}`. If those two disagree again, ask which of them changed before concluding anything
    about the consumer.
 
-   **THE BASELINE IS 66 LIVE CANDIDATES, 50 CITED, 16 UNFILED** — re-derived at batch 69's close
+   **THE BASELINE IS 67 LIVE CANDIDATES, 51 CITED, 16 UNFILED** — re-derived at batch 71's close
+   (md5 `254d669e…`, archive 169, partition control 0, all four presence controls 1, absence
+   control 0). **THE CONSUMER FILED DURING THE GAP AND THAT IS WHY LIVE MOVED**: 66 -> 67 with
+   `PC-S308-GATE-METRICS-CHECK2-STALE-VERDICT-READ-ORDER` on 2026-09-06, taking unfiled 16 -> 17;
+   batch 71's own citation of it then moved it to cited, so unfiled reads 16 again for an
+   OFFSETTING reason and the two 16s are not the same 16. **DISCHARGED 23 / in-flight 28 /
+   untouched 16, summing to 67 after subtracting the 3-id overlap; TERMINAL 55;
+   discharged-but-invisible 0.** Report TERMINAL as the delivered total, never the backlog's own
+   live count. The paragraph below is the earlier reading and records how the counts moved:
+   the batch-69/70 baseline was 66 / 50 / 16 at md5 `b7e0f100…` — re-derived at batch 69's close
    after its merge at `cb9c8fb6` (md5 `b7e0f100…`, archive 169, partition control 0, all presence
    controls 1, absence control 0), and UNMOVED from batch 68's close: batch 69 cited no `PC-` id and
    the consumer neither pulled nor filed. **DISCHARGED 23 / in-flight 27 / untouched 16, summing to
