@@ -37,6 +37,9 @@ ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 
 run()    { bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null; }
+# Same drive against a consumer root given as an argument. Part 3b's third control needs a world
+# that is NOT a git repo, and a helper hard-coding $CONS cannot express one.
+run_at() { bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$1" 2>/dev/null; }
 blocks() { run | grep -c '^HARD-LAYER-ADJUDICATION-MISSING'; }
 drifts() { run | grep -c '^EXTENSION-HOOK-DRIFT'; }
 digest() { run | awk -F'\t' '$1 == "HARD-LAYER-ADJUDICATION-MISSING"' \
@@ -149,6 +152,79 @@ if [ "$(blocks)" -eq 1 ]; then
 else
   bad "the entry's body changed and the recorded verdict still cleared it. That record is a permanent exemption for the path: every future core change inherits a verdict made against text that no longer exists"
 fi
+
+# --- Part 3b: the RE-FIRED row says the verdict is SPENT, not merely unanswered ----
+# Part 3 establishes the re-fire; this establishes that the operator can TELL a spent verdict from
+# a never-recorded one. They printed the same row, which is the whole of PC-S342: a row can
+# prescribe an entry edit AND a verdict keyed on that entry, so an operator following it in order
+# spends the record they just wrote and the block returns looking untouched.
+#
+# THE CONTROL IS THE HALF THAT MATTERS. A note printed unconditionally tells an operator nothing,
+# so the arm below requires the note ABSENT where no prior verdict exists for the entry — the same
+# shape as Part 2b's token control. The register still holds the Part-2 record keyed to the
+# PREVIOUS digest, and the entry is dirty from Part 3, which is exactly the spent state.
+spentnote() { run | awk -F'\t' '$1 == "HARD-LAYER-ADJUDICATION-MISSING" {print $4; exit}'; }
+case "$(spentnote)" in
+  *"SPENT verdict rather than an unanswered one"*)
+    ok "the re-fired row names the prior verdict as SPENT — a spent record is distinguishable from a missing one" ;;
+  *)
+    bad "the re-fired blocking row is byte-indistinguishable from one that was never adjudicated, so an operator who recorded and then made the edit the row itself prescribed is told only 'record a verdict' again: $(spentnote | cut -c1-90)" ;;
+esac
+# CONTROL 1: with the register cleared the SAME dirty entry must NOT carry the note.
+mv "$REG" "$REG.spenthold"
+case "$(spentnote)" in
+  *"SPENT verdict rather than an unanswered one"*)
+    bad "a row with NO prior verdict for the entry also claims a verdict was spent — the note is unconditional and every ordinary first adjudication now carries a false accusation" ;;
+  *)
+    ok "control: with no prior verdict recorded the same dirty entry carries no spent-verdict note" ;;
+esac
+mv "$REG.spenthold" "$REG"
+
+# CONTROL 2 — THE ONE THAT DISCRIMINATES, and control 1 alone does NOT.
+# Control 1 clears the REGISTER, so no prior record exists and even a helper that appends its note
+# unconditionally prints nothing: it exercises the register-empty path and is blind to the guard
+# that matters. Measured — a mutant with the dirty-entry guard removed passed control 1 and the
+# whole fixture, 36 ok / 0 bad. The near-miss was one property short of the offender.
+#
+# The state that separates them is PRIOR VERDICT PRESENT and entry CLEAN, which is ordinary
+# cross-pull expiry: core moved, nobody edited anything. Against the reference consumer's real
+# register that state is 6 of 6 blocking rows, so a helper firing here has a 100% false-positive
+# rate and is a check the operator switches off. Commit the entry to reach it; Part 4 re-derives
+# its own digest, so the tree state below is not carried forward as an assumption.
+git -C "$CONS" add -A >/dev/null 2>&1
+git -C "$CONS" commit -qm "operator committed the entry; the register still holds the older key" >/dev/null 2>&1
+if git -C "$CONS" diff --quiet -- "$ENTRY"; then
+  case "$(spentnote)" in
+    *"SPENT verdict rather than an unanswered one"*)
+      bad "the entry is CLEAN and a prior verdict exists — ordinary cross-pull expiry — and the row still accuses the operator of spending a verdict. Measured on the reference consumer that shape fires on 6 of 6 blocking rows, every one false" ;;
+    *)
+      ok "control: prior verdict recorded and the entry CLEAN — no spent-verdict note, so the note keys on the operator's own uncommitted edit rather than on expiry" ;;
+  esac
+else
+  bad "Part 3b's second control could not reach its state: the entry is still dirty after a commit, so the arm below would measure the same thing control 1 does and could not see an unconditional note"
+fi
+
+# CONTROL 3: A NON-GIT CONSUMER. Its own world, because the two controls above are measured in a
+# git-backed tree where the repo guard never runs — a mutant with that guard removed survives both
+# of them. Outside a repo `git diff --quiet` exits 128, which is neither 0 nor 1, so a bare
+# conditional reads it as "dirty" and restores the unnarrowed behaviour on exactly the consumers
+# least able to diagnose it. Measured on a de-gitted copy of the reference consumer: without the
+# guard, 6 false notes; with it, 0.
+NGC="$ROOT/consumer-nongit"
+rm -rf "$NGC"
+cp -R "$CONS" "$NGC" && rm -rf "$NGC/.git"
+if git -C "$NGC" rev-parse --git-dir >/dev/null 2>&1; then
+  bad "Part 3b's third control could not reach its state: the copied consumer is still a git repo, so a missing repo guard would go unnoticed"
+else
+  case "$(run_at "$NGC" | awk -F'\t' '$1 == "HARD-LAYER-ADJUDICATION-MISSING" {print $4; exit}')" in
+    *"SPENT verdict rather than an unanswered one"*)
+      bad "in a NON-GIT consumer the row claims a verdict was spent. \`git diff\` exits 128 there, so the dirty test answered neither yes nor no and the note fired anyway — the guard is missing or reads a 128 as dirty" ;;
+    *)
+      ok "control: in a NON-GIT consumer the note is silent — the repo is resolved before the dirty test, so a 128 is not read as an edit" ;;
+  esac
+fi
+rm -rf "$NGC"
+
 # --- Part 4a: a verdict OUTSIDE the schema's enum does not discharge it -------
 if DIG="$(need_digest 'Part 4a')"; then
 record "$DIG" looks-fine-to-me > "$REG"

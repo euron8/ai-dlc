@@ -15,6 +15,47 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.528.0] - 2026-09-07
+
+### `BL-201` — `PC-S342-ADJUDICATION-ROW-PRESCRIBES-AN-ENTRY-EDIT-THAT-SPENDS-ITS-OWN-VERDICT`
+
+A `layer-drift.sh` row can prescribe BOTH an edit to the layer entry AND a verdict keyed on
+`adj_digest`, which covers that entry's working-tree blob. An operator following the row in order
+records first, makes the prescribed edit second, and the digest moves — so the block returns
+looking exactly like one that was never adjudicated. Dated in the reference consumer's own
+register: `steps-domain/retro-push-party-mode.md` carries two digests with the same verdict 114
+seconds apart.
+
+The digest is NOT re-grained. File-grain is the deliberately safe asymmetry the script argues for
+at `:509-517`, and expiry is the design. The only thing fixed is that an expired verdict and a
+never-recorded one printed the same row.
+
+**The narrowing is the check, not polish.** Unnarrowed, "a verdict exists under some other digest"
+fires on ordinary cross-pull expiry: measured against the consumer's real register with the
+current-key records withheld, 6 rows fired and **all six were false**, every entry clean in git.
+Narrowed on a dirty working tree, 0; with one entry dirtied, 1. The non-git guard is load-bearing
+too — outside a repo `git diff --quiet` exits 128, so a bare conditional reads it as dirty and
+restores the unnarrowed behaviour; measured on a de-gitted copy, 6 false notes without it and 0
+with it.
+
+It acquits nothing: row sets are byte-identical between the shipping and patched programs across
+the real corpus, with `cmp -s` asserting the two differ first.
+
+**The filing named the wrong row as its sharpest case.** It picked `EXTENSION-TITLE-MATCHES-CORE`;
+driving `--adjudicated-codes` shows that code is absent from the adjudicated set, so it is
+WARN-level and blocks nothing. The rows that BLOCK are the multi-anchor `OVERRIDE-SUPERSEDED` arms
+the filing missed.
+
+### `BL-200` receipt hardened — it accepted its own negation
+
+A correction to `0.527.0`, not a new subject. The shipped receipt keyed on the token
+`NOT-YET-AUTHORED` appearing in each check body, and a body reading *"This check never reports
+`NOT-YET-AUTHORED`; an absent artifact is always a FAIL"* satisfied it — `grep -q` on a token
+cannot see the polarity of the sentence carrying it. The entry had conceded the false-negative
+direction and not this one. The receipt now requires the directive phrase and the scope heading;
+re-scored, it rejects the pre-fix tree, the negation decoy and a bare-token decoy, and accepts the
+fix.
+
 ## [0.527.0] - 2026-09-07
 
 ### `BL-199` — `PC-S309-PROVENANCE-FORBIDDEN-LIST-EXACT-MATCH-MISSES-DECORATED-PLACEHOLDERS`

@@ -8641,4 +8641,101 @@ rejects a half-fix that patches only Check 29. **A rewrite that keeps the semant
 token scores STILL-LIVE**, which is the known cost of a prose receipt; replace it if a mechanism
 ever reads check scope.
 
-verify: sh GV=core/skills/ai-dlc/steps/gate-validation.md; ok=0; for id in 29 33; do body="$(awk -v id="$id" '$0 ~ "^### " id "\\." {f=1; next} f && /^### [0-9]/ {exit} f {print}' "$GV")"; grep -q "NOT-YET-AUTHORED" <<< "$body" && ok=$((ok+1)); done; c28="$(awk '/^### 28\./{f=1;next} f&&/^### [0-9]/{exit} f{print}' "$GV")"; n28=0; grep -q "NOT-YET-AUTHORED" <<< "$c28" && n28=1; [ "$ok" = 2 ] && [ "$n28" = 0 ]
+**AND THE RECEIPT ACCEPTED ITS OWN NEGATION, WHICH IS THE WORSE HALF AND WAS UNSTATED.** The entry
+already conceded the false-NEGATIVE direction — a rewrite that keeps the semantics and drops the
+token scores STILL-LIVE. An adversarial hand built the false-POSITIVE direction and it is the real
+finding: a body reading *"**No not-yet-authored arm.** This check never reports `NOT-YET-AUTHORED`;
+an absent artifact is always a FAIL"* satisfied the receipt, because `grep -q` on a token cannot
+see the POLARITY of the sentence carrying it. Reproduced here, with `cmp -s` confirming each
+mutation applied: shipped tree PASS, pre-fix FAIL (so it did discriminate), **negation decoy PASS**,
+bare-token decoy PASS. That is this repo's "a receipt that accepts TWO candidate fixes has
+established neither", at the limit where the second is the regression itself.
+
+The receipt now keys on the DIRECTIVE phrase — `Report `NOT-YET-AUTHORED` and move on when` — plus
+the `**Scope — not yet authored.**` heading, both required inside each check's own body, with
+Check 28 still the negative control. Re-scored on all four inputs: fix PASS, pre-fix REJECTED,
+negation decoy REJECTED, bare-token decoy REJECTED. The false-negative limit is unchanged and
+still stated: a competent rewrite that preserves the semantics in other words scores STILL-LIVE.
+
+verify: sh GV=core/skills/ai-dlc/steps/gate-validation.md; ok=0; for id in 29 33; do body="$(awk -v id="$id" '$0 ~ "^### " id "\\." {f=1; next} f && /^### [0-9]/ {exit} f {print}' "$GV")"; grep -q 'Report `NOT-YET-AUTHORED` and move on when' <<< "$body" && grep -q '^\*\*Scope — not yet authored\.\*\*' <<< "$body" && ok=$((ok+1)); done; c28="$(awk '/^### 28\./{f=1;next} f&&/^### [0-9]/{exit} f{print}' "$GV")"; n28=0; grep -q "NOT-YET-AUTHORED" <<< "$c28" && n28=1; [ "$ok" = 2 ] && [ "$n28" = 0 ]
+## BL-201 — a layer-drift row can prescribe an entry edit AND a verdict keyed on that entry, and an operator following it in order spends the verdict they just wrote
+
+**LANDED (v0.528.0, verified f8e6a8ee).**
+
+**Provenance.** `PC-S342-ADJUDICATION-ROW-PRESCRIBES-AN-ENTRY-EDIT-THAT-SPENDS-ITS-OWN-VERDICT`,
+filed by the reference consumer 2026-09-07, hit on its own `0.525.0 → 0.526.0` apply twice in one
+run.
+
+**The premise holds at code level.** `adj_digest` (`layer-drift.sh:585-596`) hashes the
+WORKING-TREE file (`git hash-object "$CONSUMER/$1"`, not a ref) joined with the core target blob at
+`theirs`, so an UNCOMMITTED edit to the entry moves the key. A row that prescribes both an entry
+edit and a verdict under that key therefore spends the verdict if the operator records first.
+
+**THE DEFECT IS DATED IN THE CONSUMER'S OWN REGISTER.** `steps-domain/retro-push-party-mode.md`,
+2026-09-07: `e92e17b43c9b` at `20:02:03Z` and `984d207e1fc1` at `20:03:57Z` — same verdict, **114
+seconds apart**. That is the record being re-written after the prescribed edit moved the key.
+
+**THE FILING NAMED THE WRONG ROW AS ITS SHARPEST CASE, AND THE CORRECTION MATTERS BECAUSE IT
+CHANGES WHAT BLOCKS.** It picked `EXTENSION-TITLE-MATCHES-CORE`. Driven — not read —
+`layer-drift.sh --adjudicated-codes` returns `OVERRIDE-SUPERSEDED`, `EXTENSION-HOOK-DRIFT`,
+`EXTENSION-ANCHOR-DRIFT`, `EXTENSION-RETIRE-CANDIDATE`; the filing's pick is **absent from that
+set**, so it is WARN-level and blocks nothing. The rows that BLOCK are the multi-anchor
+`OVERRIDE-SUPERSEDED` arms at `:1239` and `:1242`, which the filing missed: they prescribe
+narrowing an entry's `shadows:` AND a recorded verdict in one sentence. The discriminator is
+whether the prescribed edit REMOVES the subject — the single-anchor arms prescribe
+`readopt-override.sh --stamp retire`, which deletes the entry, so the row self-resolves.
+
+**WHAT IS NOT BEING CHANGED, AND WHY.** The digest stays FILE-GRAIN; one digest still covers both
+`OVERRIDE-SUPERSEDED` rows on an entry. `layer-drift.sh:509-517` argues that grain is the
+deliberately safe asymmetry, and expiry is the DESIGN — a verdict is meant to be spent when either
+side moves. The operator's problem is not that the verdict expired. It is that an EXPIRED verdict
+and a NEVER-RECORDED one print the same row. This makes the first one say so, and nothing else.
+
+**THE NARROWING IS THE CHECK, NOT POLISH — THE OBVIOUS FORM HAS A 100% FALSE-POSITIVE RATE.**
+"A verdict exists for this entry under some other digest" fires on ordinary CROSS-PULL EXPIRY,
+which is the normal state of every long-lived entry. Measured by driving the emitter against a
+`git clone --local` of the consumer over its real `ae0c6c6f..9d7b38e6` range, with the 12
+current-key records withheld to reproduce the mid-pull state (422 → 410 rows; control: the
+withholding must drop rows and leave a non-zero remainder — an earlier cut of this measurement
+keyed on the wrong output column, emptied the register outright, and its zero meant nothing):
+
+```
+unnarrowed   blocking=6  spent-notes=6      <- all six FALSE, every entry clean in git
+narrowed     blocking=6  spent-notes=0
+narrowed + ONE entry dirtied   spent-notes=1   <- the positive arm
+```
+
+All six are ordinary expiry with 2–28 historical digests apiece and no operator edit. **A check
+with a 100% FP rate is one the operator turns off**, which is worse than none.
+
+**THE NON-GIT GUARD IS LOAD-BEARING AND WAS MISSING FROM THE FIRST CUT.** Outside a git repo
+`git diff --quiet` exits 128 — neither 0 nor 1 — so a bare conditional reads it as "dirty" and
+restores the unnarrowed behaviour on exactly the consumers least able to diagnose it. Measured on
+a de-gitted copy of the same tree: without the `rev-parse --git-dir` arm, **6 false notes**; with
+it, **0**.
+
+**IT ACQUITS NOTHING AND BLOCKS NOTHING.** Row sets are byte-identical between the shipping and
+patched programs across the real corpus — 1 `EXTENSION-ANCHOR-DRIFT`, 5 `EXTENSION-HOOK-DRIFT`,
+33 `EXTENSION-OK`, 1 `EXTENSION-RESTATES-CORE`, 1 `OVERRIDE-ASSERTS-SHADOW-SURVIVES`,
+10 `OVERRIDE-OK` — asserted with `cmp -s` that the two programs differ first. The note appends to
+field 4 of a row that was ALREADY firing: it cannot suppress a row, cannot clear a blocker, and
+adds no status token, so `I36` and `I86` are untouched and no join becomes vacuous.
+
+**A SCHEMA FIELD NAME WAS WRONG IN THE FIRST CUT AND WOULD HAVE FAILED SILENTLY.** The helper read
+`.recorded_at`; the register schema requires **`recorded_utc`**. With a `// "date unknown"`
+fallback beside it, every note would have printed "date unknown" and read as a working feature.
+The fallback is removed — `recorded_utc` is a REQUIRED field, so its absence is a schema violation
+to surface, not something to paper over.
+
+**The receipt drives the emitter and rejects a prose-only fix.** It dirties a real entry, runs the
+program, and requires the SPENT note; digests are redacted because the row PRINTS the digest, so
+raw rows differ by construction under every implementation and a comparison of them discriminates
+nothing. Scored: shipping HEAD **0**, the fix **1**, and an unconditional ordering sentence with no
+conditional helper **0** — so the receipt accepts exactly one of the two candidate fixes rather
+than both.
+
+**Not measured, and it was available:** `apply.sh` mid-apply with a spent verdict. The hand that
+found this flagged it, `core/fixtures/apply-drift-after-write` drives it, and `apply.sh` has prior
+form in this area (`PC-S331`). Stated rather than hidden behind the null.
+
+verify: sh S="$(mktemp -d)"; C="$S/c"; git clone -q --local /Users/n8/git/graph "$C" 2>/dev/null || exit 1; E=".claude/skills/ai-dlc/extensions/checks/gate-validation-push.md"; [ -f "$C/$E" ] || { rm -rf "$S"; exit 1; }; R="$C/_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl"; [ -f "$R" ] || { rm -rf "$S"; exit 1; }; keys="$(bash core/skills/ai-dlc-update/reconcile/layer-drift.sh --list-adjudications /Users/n8/git/ai-dlc ae0c6c6f 9d7b38e6 "$C" 2>/dev/null | cut -f4 | grep -E '^[0-9a-f]{40}$' | sort -u)"; [ -n "$keys" ] || { rm -rf "$S"; exit 1; }; grep -vFf <(printf '%s\n' "$keys") "$R" > "$R.new" && mv "$R.new" "$R"; [ -s "$R" ] || { rm -rf "$S"; exit 1; }; printf '\n<!-- edit after recording -->\n' >> "$C/$E"; out="$(bash core/skills/ai-dlc-update/reconcile/layer-drift.sh /Users/n8/git/ai-dlc ae0c6c6f 9d7b38e6 "$C" 2>/dev/null)"; rm -rf "$S"; grep -q "SPENT verdict rather than an unanswered one" <<< "$out"
