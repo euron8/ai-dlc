@@ -37,6 +37,129 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
+### BATCH 69 SHIPPED AS `v0.521.0`, ONE NO-`PC` RELEASE — THE FIRST SINCE THE PC-BACKED SET WAS EXHAUSTED. THE ENTRY'S OWN PARTITION HAD EXPIRED IN THE COMMIT THAT FILED IT, AND ITS RECEIPT WAS REJECTED BY THE CORRECT FIX WHILE A COMMENT COULD CLOSE IT. THE CONSUMER DID NOT PULL, SO THE GAP IS THREE AND PENDING IS TWO, AND THE PULL IS **REQUIRED** ON A CLOBBER REPRODUCED ON THE CONSUMER'S OWN FIXTURE. THE SWEEP IS NOT EMPTY BUT IT IS FULLY ADJUDICATED: UNFILED IS 16 AND **NOTHING IN IT IS AVAILABLE WORK**.
+
+This block replaces the batch-68 record below it. Every figure here was re-derived on 2026-09-06
+after the merge, against the working tree with the controls in the same invocation; re-derive
+them again rather than reading them.
+
+**`VERSION` IS `0.521.0`, SO BATCH 70 RELEASES AS `0.522.0`.** Re-derive `VERSION` and add one.
+Batch 69 merged once: `cb9c8fb6` (PR #663, squash, `v0.521.0`) closing `BL-191`. **No `PC-` id was
+cited, because the subject carries none** — so `named_absorbed()` has nothing to join and the
+consumer's ledger cannot move on this release. Rotated (live 88 → 87, archive 105 → 106), `--check`
+PASS with the sha resolving before `--apply`. **Receipt histogram keyed BY NAME, not by tally: 76
+receipts, exactly ONE exit 0, and it is `BL-191`'s own — zero incidental closes.** No correction
+release. **The seventeenth batch opened by a peer's handoff** (action 9's message from `ai-dlc-cf`),
+so it scoped itself from its own ranking and stated the choice in its first ping.
+
+**THE SWEEP IS NOW FULLY ADJUDICATED AND THE RESIDUE IS ZERO. THIS IS A CHANGE OF STATE, NOT A
+SNAPSHOT.** Unfiled is 16. Four are already named in an `origin/main` release commit (fixed without
+being filed — the instrument gap, not work; each resolves to a release commit, verified). Eleven
+carry verdict `NOT-UPSTREAM` in `docs/reviews/graph-ledger-adjudication-brief.md`, re-derived this
+batch by reading the VERDICT COLUMN rather than testing presence. **And the twelfth — the last live
+PC candidate, `PC-S340-RETRO-AUDIT-SCANS-FIXTURE-FAILS-ONCE-AND-PASSES-ON-RETRY` — was REFUTED by a
+peer at `182817fb`, mid-batch**, on the consumer's own committed investigation: the fixture is in no
+dispatch table, which is a structural non-reproduction rather than a probabilistic one. **So no
+PC-backed work remains, and a future batch scoping from the ledger will find nothing.** Batch 68's
+32/32 clean sweep was the right reading of the wrong instrument; the answer was one grep away in a
+tree already on disk. Re-derive the join rather than trusting this paragraph, but do not spend a
+session re-reading that cluster.
+
+**THE SUBJECT: `BL-191`, THE `git init` CLOBBER CLASS.** Git exports `GIT_DIR` **absolute** to any
+hook run from a linked worktree. `CLAUDE.md` tells a session debugging one fixture to run it by hand
+— `bash core/fixtures/X/run.sh` — and that invocation passes through **no seam**: both pre-push hooks
+scrub before dispatching the pool, so the SUITE was never exposed and only the by-hand path was.
+Under an inherited `GIT_DIR`, `git init` **silently succeeds without creating a repository**, and
+every later git call lands on the caller's index.
+
+**REPRODUCED FROM SCRATCH, and the environment was DERIVED rather than assumed** — a probe hook
+showed `GIT_DIR` alone, absolute, with no `GIT_INDEX_FILE`. Fresh victim per trial: **8 of 8 armed
+wiped a 757-entry index to single digits, 6 at exit 0 with zero FAILs; unarmed control 8 of 8
+intact.** Discrimination control first (757 → 756 → 757), so the instrument was known to see
+movement before any null was read.
+
+**TWO OF THE ENTRY'S OWN FIGURES HAD EXPIRED, ONE OF THEM IN THE COMMIT THAT FILED IT.** The
+partition is **40 of 45**, not 42 — `validate-claude-rules.sh` and `claude-rules-joins/run.sh` gained
+scrubs in `11ebb342`, which is `BL-190`'s release and `BL-191`'s filing. Confirmed behaviourally, not
+only by grep: `claude-rules-joins` came back 757 → 757 armed where the entry lists it at 757 → 9. And
+the remedy's population is **27 `run.sh`**, not the 40 fixture DIRECTORIES that run `git init` in any
+`.sh`. **A filing is authoritative about its symptom and evidence about nothing else — including its
+own arithmetic, and including a figure measured the same day it was written.**
+
+**THE FILED RECEIPT WAS REJECTED BY THE CORRECT FIX AND CLOSABLE BY A COMMENT.** It counted
+scrub-regex matches repo-wide (`s >= 40`), so the single seam the entry PRESCRIBES moves it 12 → 13
+and reports STILL-LIVE over a working fix, while the per-fixture paste the entry CALLS WRONG closes
+it at 42 files. Three non-fixes that close it, each BUILT: 30 files whose entire content is
+`# env -i`; the same text in a disclaiming comment; and `unset GIT_DIRECTORY_OF_NOTHING` in 40 files,
+which closes it **without ever naming `GIT_DIR`** — the regex has no word boundary. The replacement
+is behavioural: a `git` shim on `PATH`, a DERIVED population, and the question of whether `GIT_DIR`
+was still armed when each member called git. Scored 1 unfixed / 0 fixed on two trees, cross-checked
+through `backlog-reverify.sh` (`STILL-LIVE` → `CLOSE-CANDIDATE`, and the only CLOSE-CANDIDATE in the
+corpus).
+
+**SHIPPED SHAPE: a seam that did not exist.** `core/fixtures/lib/preamble.sh` carries the scrub,
+sourced by the 27 fixture `run.sh` that build a scratch repository, the set DERIVED from
+`git grep -l 'git init'` so the 28th is covered the day it is written.
+`scripts/validate-fixture-git-env.sh` binds the other direction under a ceiling that only ratchets
+down — **0 today**, because the seam closed the whole population at once, so the entry's predicted
+"41 findings on day one" never materialised.
+
+**THE BINDING IS STANDALONE, AND THAT IS A WALL-CLOCK DECISION WITH A NUMBER BEHIND IT.**
+`validate-enforcement-map.sh` is invoked by **25** fixture directories, so an arm added there is
+multiplied by the sharded batteries onto the suite POLE; a standalone validator is invoked by **0**,
+dispatched once from the hook like the other ten. Derived both ways with a nonsense-validator control
+of 0.
+
+**ASKING WHAT MY OWN ARM ACQUITS FOUND A DEFECT IN IT, AND IT WAS THE SAME DEFECT I HAD JUST
+RETIRED.** The inline-scrub exemption was written as an unanchored alternation, so `# env -i` in a
+COMMENT acquitted a fixture that scrubs nothing — the whole-file-grep weakness that killed the old
+receipt, reintroduced inside the arm replacing it. It acquitted 0 of the 27 live, so it was a trap
+for the next author rather than a hole; anchored at column 0 and probed both ways.
+
+**THE FIXTURE'S FIRST CUT WAS FULLY VACUOUS AND ITS OWN MUTANTS EXPOSED IT.** `core/fixtures/fixture-git-env-seam/`
+copied only the seam and the driven fixture, so that fixture exited at its own startup check before
+reaching any `git init` — all four mutants "survived" against a pristine victim and **arm A passed
+for the same reason**, because two inert runs compare equal. Arm `H2` now proves the driven fixture
+can reach its git calls in the copy tree before any mutant verdict is read. Four mutants now die:
+seam body removed, source line removed, scrub **present but commented out**, and an unrelated
+variable unset. 71s solo against a pole of 300s.
+
+**A GATE FAILURE MID-BUILD WAS MINE AND THE BASELINE IS WHAT ATTRIBUTED IT.** Four fixtures went red;
+`origin/main` was run first and was clean (exit 0, 0 FAILs), so they were attributable — an `I77`
+exec-bit finding I introduced made `validate-enforcement-map.sh` exit 1, and those fixtures
+**correctly refused** rather than reporting false results. The cause: splicing by
+`{ ...; } > tmp && mv` drops the mode at the umask, taking the committed executable bit off all 27
+files. `git update-index --chmod=+x` fixes the index and leaves the DISK file 0644, which reads as a
+clean fix and is not.
+
+**GAP THREE (`0.518.0` installed, `0.521.0` shipped) — PENDING 2, AND THE PULL IS REQUIRED.** The
+stock differential is meaningless here: the consumer's installed `validate-write-format-steering.sh`
+is **byte-identical** to this tree's (`cmp -s` control), so it would produce a perfect null that
+reads as agreement. Measured on THIS batch's real subject instead: the consumer has **23** fixtures
+running `git init` in `run.sh`, **22 of which scrub nothing**, and `tests/fixtures/lib/preamble.sh`
+is absent entirely. Driving one of them on a `file://` CLONE of the consumer, armed: **victim index
+30 → 4.** That is a live clobber on the consumer's own fixture under its own installed engine, not a
+latent divergence. **A first attempt at that measurement read 30 → 30 and was BROKEN** — the fixture
+was driven from a bare `cp -R` of `tests/fixtures/` and exited `FIXTURE ERROR: apply.sh not found`
+before any `git init`, which is the same partial-tree trap the fixture's own `H2` arm exists for.
+**The bootstrapping hazard IS live in the range**: `emit-report.sh`, `hard-blockers.sh` and
+`setup-sites.md` moved at `0.519.0`/`0.520.0`, so the pull delivering them runs under the unfixed
+engine. Derived against the stamp commit `f895995d` with a control of 40 core files changed.
+
+**THE SWEEP FOR BATCH 70. THE PC-BACKED SET IS EXHAUSTED AND THE NO-`PC` RESIDUE IS THE WHOLE
+BACKLOG NOW.** Ranked, each receipt run raw this batch and each exiting 1: **`BL-187`** (Rule 21 says
+the gate FAILS on a missing step-token citation, nothing reads the token, and citation practice
+decayed to 0 of 9 across five sprints unreported — note its own warning that a token join would
+ACQUIT its subject and needs a probe proving it does not cover the 21 unsteered artifacts), then
+**`BL-113`** (ships ALONE, bootstrapping: a two-line `verify: sh` receipt is truncated by the engine
+and mis-scores silently; **its FP set is unmeasured and that measurement is the first thing it
+owes** — and note this batch shipped the corpus's longest receipt at 804 chars, so run the engine
+once after both land), **`BL-122`** (one unreadable layer entry suppresses every finding about every
+other entry), and **`BL-148`** (the In-Flight token set has four declaring sites, no owner and no
+invariant; its arm would live in `validate-enforcement-map.sh`, which the POLE invokes, so time it
+from inside the repo). **A hand scored all four against `BL-191`'s fix and none is closed by it**,
+with path-disjointness and satisfiability controls — so any of them may batch together.
+
 ### BATCH 68 SHIPPED AS `v0.520.0`, ONE PC-BACKED RELEASE, AND THE FILING'S OWN SPLIT HAD EXPIRED IN THE DIRECTION THAT MAKES THE DEFECT WIDER. THE CONSUMER DID NOT PULL, SO THE GAP IS TWO AND PENDING IS TWO, AND THE PULL IS **REQUIRED** ON A DIVERGENCE MEASURED ON THE REAL SUBJECT. THE SWEEP IS NOT EMPTY: UNFILED IS 16, AND ELEVEN OF THE THIRTEEN AVAILABLE WERE ALREADY ADJUDICATED `NOT-UPSTREAM` IN THIS REPO — A JOIN NOBODY HAD MADE.
 
 This block replaces the batch-67 record below it. Every figure here was re-derived on 2026-09-06
@@ -6812,8 +6935,13 @@ so no block written before it changes verdict.
    recorded in this repo and never joined back. **Do not re-scope onto those eleven.** Re-derive the
    join rather than trusting this paragraph, but do not spend a session re-reading that cluster.
 
-   **SO THE NO-`PC` RESIDUE IS THE WHOLE AVAILABLE SET FOR BATCH 69**, because the PC-backed set is
-   EXHAUSTED rather than outranked. The last live PC candidate,
+   **SO THE NO-`PC` RESIDUE IS THE WHOLE AVAILABLE SET FOR BATCH 70**, because the PC-backed set is
+   EXHAUSTED rather than outranked. **Batch 69 re-derived that exhaustion independently and it
+   holds: of the 16 unfiled, 4 resolve to `origin/main` RELEASE commits, 11 carry a `NOT-UPSTREAM`
+   verdict read from the brief's verdict COLUMN, and the 12th is the refutation below — leaving
+   ZERO available.** A sweep is still the opening action, because the consumer files while nobody is
+   looking; but expect it to come back empty of PC work and rank the no-`PC` set without waiting for
+   permission. The last live PC candidate,
    `PC-S340-RETRO-AUDIT-SCANS-FIXTURE-FAILS-ONCE-AND-PASSES-ON-RETRY`, is **REFUTED** — not by batch
    68's 32/32 clean sweep, which proved nothing against an unstated rate, but by the consumer's own
    committed story-297-9 investigation at
@@ -6824,6 +6952,17 @@ so no block written before it changes verdict.
    `validate-mandatory-rules.sh` zero times. **Do not re-scope it.** The consumer's own
    `RE-VERIFY OPEN` remainder — why the 2026-07-22 failure happened at all — is that consumer's
    follow-on work, not upstream's.
+
+   **BATCH 69's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.** `BL-191` closed the `git init`
+   clobber class as `v0.521.0` at `cb9c8fb6` (PR #663), no `PC-` id cited because it carries none.
+   The seam is `core/fixtures/lib/preamble.sh`, the binding is the standalone
+   `scripts/validate-fixture-git-env.sh` at `--max-unscrubbed 0`, the fixture is
+   `core/fixtures/fixture-git-env-seam/`. **Two of the entry's own figures had expired, one of them
+   in the commit that FILED it** (the partition is 40 of 45, not 42), and **its receipt was rejected
+   by the correct fix while three non-fixes closed it** — including 30 files containing nothing but
+   a comment. Both are corrected in the archived entry. **The readiest remaining entries are
+   `BL-187`, then `BL-113` (ALONE, bootstrapping), `BL-122`, `BL-148`** — all four scored against
+   BL-191's fix and none is closed by it, so any may batch.
 
    **BATCH 68's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.**
    `PC-S340-AUDIT-RULE-FILES-DRIFT-FINDINGS-IN-CORE-PROSE-ARE-NOT-CONSUMER-FIXABLE` shipped as
@@ -7496,9 +7635,9 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # b7e0f100... at batch 68's close -- UNMOVED across batch 68, because the consumer did not pull and closing an entry HERE never moves ITS ledger; same value at batch 67's close, where the CONSUMER PULLED to 0.518.0 mid-batch (its PR #1025 at 44001c2aa) -- the CONSUMER PULLED to 0.518.0 mid-batch (its PR #1025 at 44001c2aa), which rotated one cited id; 7b363a17... through batches 64-66; 2c129779... through batch 63's close; it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too, and check the consumer's porcelain, because an uncommitted filing has no -S date
-   wc -l < /tmp/live.txt    # 66 at batch 68's close, UNMOVED; 66 at batch 67's close (the consumer's 0.518.0 pull rotated one cited id, 67 -> 66); 67 at batch 66's close; 67 at batch 65's close (the consumer's 0.516.0 pull rotated two and filed one); 66 at batch 64's close (two filed, one rotated); 65 after the consumer's batch-63 pull rotated seven; 72 with the corrected ^#{2,6} grammar through batch 62 (the old ^## one reads one fewer)
-   wc -l < /tmp/unfiled.txt # 16 at batch 68's close -- batch 68's citation of PC-S340-AUDIT-RULE-FILES-... moved it from unfiled to cited; 17 at batch 67's close -- batch 67's own citation moved PC-S308-EMIT-REPORT-... from unfiled to cited; 18 at batch 66's close, unmoved; 18 at batch 65's close; 19 at batch 64's close -- two new PC-S308-* filings in, PC-S340-CHECK-26-READS-A-PARTIAL-... out by the operator's carried rejection (batch 64 cited no PC- id); 18 through batch 63; 20 through batch 62
+   md5 -q "$L"              # b7e0f100... at batch 69's close -- UNMOVED across batches 68 AND 69, because the consumer did not pull and closing an entry HERE never moves ITS ledger; same value at batch 67's close, where the CONSUMER PULLED to 0.518.0 mid-batch (its PR #1025 at 44001c2aa), which rotated one cited id; 7b363a17... through batches 64-66; 2c129779... through batch 63's close; it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too, and check the consumer's porcelain, because an uncommitted filing has no -S date
+   wc -l < /tmp/live.txt    # 66 at batch 69's close, UNMOVED across 68 and 69 (batch 69 cited no PC- id -- its subject carries none); 66 at batch 67's close (the consumer's 0.518.0 pull rotated one cited id, 67 -> 66); 67 at batch 66's close; 67 at batch 65's close (the consumer's 0.516.0 pull rotated two and filed one); 66 at batch 64's close (two filed, one rotated); 65 after the consumer's batch-63 pull rotated seven; 72 with the corrected ^#{2,6} grammar through batch 62 (the old ^## one reads one fewer)
+   wc -l < /tmp/unfiled.txt # 16 at batch 69's close, UNMOVED -- batch 69 cited no PC- id, so nothing left the unfiled set; ALL 16 are now adjudicated (4 in release commits, 11 NOT-UPSTREAM, 1 refuted at 182817fb), so the AVAILABLE residue is ZERO; 16 at batch 68's close after its citation of PC-S340-AUDIT-RULE-FILES-...; 17 at batch 67's close -- batch 67's own citation moved PC-S308-EMIT-REPORT-... from unfiled to cited; 18 at batch 66's close, unmoved; 18 at batch 65's close; 19 at batch 64's close -- two new PC-S308-* filings in, PC-S340-CHECK-26-READS-A-PARTIAL-... out by the operator's carried rejection (batch 64 cited no PC- id); 18 through batch 63; 20 through batch 62
    ```
 
    **AN UNMOVED md5 WITH A MOVED COUNT IS THE GRAMMAR, NOT THE CONSUMER.** Batch 43 read 72 live
@@ -7506,9 +7645,13 @@ so no block written before it changes verdict.
    `^#{2,6}`. If those two disagree again, ask which of them changed before concluding anything
    about the consumer.
 
-   **THE BASELINE IS 66 LIVE CANDIDATES, 50 CITED, 16 UNFILED** — re-derived at batch 67's close
-   after its merge at `09aa8af9` (md5 `b7e0f100…`, archive 169, partition control 0, all presence
-   controls 1, absence control 0). **The CONSUMER PULLED to `0.518.0` mid-batch**, its PR #1025 at
+   **THE BASELINE IS 66 LIVE CANDIDATES, 50 CITED, 16 UNFILED** — re-derived at batch 69's close
+   after its merge at `cb9c8fb6` (md5 `b7e0f100…`, archive 169, partition control 0, all presence
+   controls 1, absence control 0), and UNMOVED from batch 68's close: batch 69 cited no `PC-` id and
+   the consumer neither pulled nor filed. **DISCHARGED 23 / in-flight 27 / untouched 16, summing to
+   66 after subtracting the 3-id overlap; TERMINAL 55; discharged-but-invisible 0.** Report TERMINAL
+   as the delivered total, never the backlog's own live count. The paragraph below records how the
+   earlier readings moved. The CONSUMER PULLED to `0.518.0` during batch 67, its PR #1025 at
    `44001c2aa`, which rotated one cited id and took live 67 → 66 and archive 168 → 169 while
    unfiled held at 18; batch 67's own citation of
    `PC-S308-EMIT-REPORT-RUNS-LAYER-DRIFT-AND-UNREGISTERED-DRIFT-TWICE` then moved that id from
