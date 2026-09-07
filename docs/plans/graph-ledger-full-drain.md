@@ -37,6 +37,120 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
+### BATCH 73 SHIPPED AS `v0.526.0`, ONE RELEASE CARRYING ONE ENTRY. THE FILING WAS CORRECT AND THE DEFECT WAS ONE LEVEL UP: **THE ARM THAT ALREADY OWNED THE SUBJECT PRESCRIBED A REMEDY THAT DOES NOT WORK, AND ITS OWN SELF-PROBE ASSERTED THE BROKEN FORM WAS CORRECT.** TWO ADVERSARIAL HANDS EACH FOUND A BLOCKER ON THE PUSHED TIP, ONE OF THEM A **REGRESSION ACROSS A CLOSE TWO PARTIES HAD VERIFIED**. THE CONSUMER PULLED TO `0.525.0` BEFORE THE BATCH OPENED, SO THE GAP WAS ZERO AND IS NOW ONE.
+
+This block replaces the batch-72 record below it. Every figure was re-derived after the merge at
+`c44ed80c`, against the working tree with controls in the same invocation; re-derive them again
+rather than reading them.
+
+**`VERSION` IS `0.526.0`, SO BATCH 74 RELEASES AS `0.527.0`.** Re-derive `VERSION` and add one.
+Batch 73 merged once at `c44ed80c` (PR #670, squash), closing `BL-198`. Rotated live 86 -> 85,
+archive 112 -> 113. **Receipt histogram 72 at exit 1 before, 1-at-0 / 72-at-1 after — the single
+exit 0 is this batch's own entry, so no incidental closes.** No correction release. The one-liner
+was TYPED BY THE OPERATOR, so the subject was reported with a marked recommendation and chosen by
+them.
+
+**THE SWEEP FOUND THREE NEW CANDIDATES, ALL DATED 2026-09-07.** Live 70 -> **73**, unfiled 18 ->
+21, md5 `1ac25a27…` -> `2fd16419…`. All six sweep controls fired. Two of the three were
+UNCOMMITTED in the consumer's tree when the sweep ran — their `-S` date came back empty exactly
+like the impossible-id control, and only checking `git show HEAD:` against the worktree separated
+"new filing" from "grammar failure". **Both were committed by the consumer mid-batch**, so they
+now date normally. The three are `PC-S341-SETTINGS-TEMPLATE-MATERIALIZE-SNIPPET-BREAKS-UNDER-ZSH`
+(taken, shipped), `PC-S309-PROVENANCE-FORBIDDEN-LIST-EXACT-MATCH-MISSES-DECORATED-PLACEHOLDERS`
+and `PC-S309-CHECK29-33-NO-SCOPE-CLAUSE-FOR-CARRY-OVER-OPENING-GATE`.
+
+**WHAT SHIPPED, AND THE SECOND FINDING OUTRANKED THE FILED ONE.** The filing named two sites in
+`core/skills/ai-dlc-update/SKILL.md` rendering a rev-path whose ref placeholder is unbraced; a
+reader binding it to a variable in zsh gets a corrupted ref, and what they SEE is
+`settings-merge.sh` reporting `FAIL: the sensor predicate produced no verdict against the
+template` — a message about the PREDICATE. But arm `S8` of `scripts/validate-shell-portability.sh`
+already owned the subject, both filed sites already SATISFIED it, and **`S8_WHY` prescribed
+quoting, which does not work**: zsh applies the modifier INSIDE a double-quoted expansion.
+Measured, one invocation, ref `ae0c6c6f` — quoted variable under zsh `fatal: ambiguous argument
+'ae0c6c6femplates/...'`; braced under zsh, unbraced under bash, and a LITERAL ref under zsh all
+272 lines. **The literal-ref control is why it survived four releases**: a rendered command reads
+as correct to anyone who tests it without binding a variable first.
+
+**BOTH HANDS FOUND A BLOCKER ON THE PUSHED TIP AND BOTH WERE RIGHT.** The first: the self-probe's
+GOOD set carried `git show "$SHA:templates/..."`, which THIS BATCH ADDED — `$SHA:t` is the
+canonical `:t` case, so the arm certified its own subject as correct on every run. The second and
+larger: `reconcile/apply.sh:1643` renders the command inside a double-quoted shell argument, so
+every quote is `\"` — **invisible to the unquoted arm because there IS a quote, and to the `"?`
+widening because a BACKSLASH sits between the verb and the quote.** `S8_PAT` is now `\\?"?`;
+tree-wide that widening costs exactly one line.
+
+**IT IS A REGRESSION ACROSS A VERIFIED CLOSE, AND THAT IS THE LESSON TO CARRY.** `v0.422.0` swept
+this whole class and its own CHANGELOG named this very site *"a string a tool PRINTS at the moment
+the operator is told to paste it"*; the consumer then closed `PC-S333` as **ADOPTED UPSTREAM
+(v0.425.0, verified 2026-08-27)**, its archived entry recording that it ran a POSITIVE control
+precisely because the receipt's evidence was an absence. Both passes were correct about every site
+their grammar could spell, and this one sat in the corpus throughout. **A close verified by two
+parties is a claim about a GRAMMAR before it is a claim about a corpus.**
+
+**FIXING THE SOURCE BROKE THE OUTPUT, AND ONLY DRIVING THE EMITTER CAUGHT IT.** Bracing that
+string made it EMIT `show ":templates/..."` — `${theirs}` expanded at runtime to empty, handing
+the operator a command that reads the git INDEX. The `$` needs escaping, as the `\$t` beside it
+already is. **A source-level grep scored the broken version as fixed.** The sibling emitter
+`core/scripts/validate-snapshot-conservation.sh:344` was checked the same way and is correct — its
+remedy sits in a quoted heredoc.
+
+**THREE OF MY OWN ERRORS WERE CAUGHT BY MECHANISMS OR BY HANDS, NEVER BY READING.** S8's own
+self-probe REFUSED the change until the GOOD/BAD sets were fixed. My first seeded-offender test
+read green because `git worktree add HEAD` carried the OLD validator — a broken measurement, not a
+broken arm. My first receipt was **closable by prose** (braced sites plus a bare comment gave
+rc=0) and was rewritten to drive `S8_PAT` itself. And the rotator refused the close because that
+receipt depended on `$PROJECT_ROOT`, which `backlog-reverify.sh` never sets — **under its
+`set -uo pipefail` the receipt exited 127 while exiting 0 in every hand-run**. Run a receipt under
+the READER's own shell options, not yours.
+
+**A COUNT I SHIPPED IN THE ENTRY WAS WRONG AND BOTH HANDS CAUGHT IT INDEPENDENTLY.** I wrote "17
+of 26 modifier letters" while listing 16 members, paired with "7 safe" — not the complement of 17
+in any base. It is **17 of 52 letter-cases** (`acefghlqrstuwAFPQ`), `&` mangles too, and it is
+**PARAMETER-EXPANSION modifier syntax, not history expansion** — it fires in a non-interactive
+`zsh script.sh` with `histexpand` unset, so the "history modifier" wording implied an
+interactive-only scope that is false. `CLAUDE.md` and `tool-hazards.md` both carried it and are
+corrected; **the durable-channel ceiling (A6) made that a NET trade** — the channel was at its
+limit, so `CLAUDE.md` now cites `tool-hazards.md` rather than restating it.
+
+**THE FIXTURE'S SUMMARY COUNTS WERE HARDCODED AND HAD ALREADY GONE STALE**, reading `11/11 … 24
+assertions` with twelve corpus mutants live. The mutant count is now derived from its own call
+sites. **The arm-table count is deliberately left a LITERAL**: deriving it read 3 where the truth
+is 8, because `x4`-`x8` assert inline rather than through `blind_check`, and a derivation that is
+confidently wrong is worse than a literal that says why it is one.
+
+**THE GAP WAS ZERO AT THE TOP OF THIS BATCH FOR THE SECOND TIME EVER.** The consumer pulled to
+`0.525.0` before the sweep ran; all four stamp fields read `0.525.0` / `ae0c6c6f`. **This release
+reopens it at ONE**, and `PENDING` is 1 (`PC-S341-…`). Not wide, not owed yet — re-derive it.
+**The consumer's porcelain moved 39 -> 1 mid-batch**, which is `graph-f6` committing its own
+sprint work; verified by authorship and timestamps that NOTHING in this session wrote there — the
+newest consumer commit is 15:03 and this session opened after 18:00.
+
+**THE SWEEP FOR BATCH 74.** Live 73, cited 53, unfiled **20**; DISCHARGED 25 / in-flight 28 /
+untouched 20, summing to 73 after subtracting the 4-id overlap; TERMINAL **55**;
+discharged-but-invisible 1 (batch 71's `BL-195` subject, which shipped no fix and is deliberately
+uncited — the row is correct, not a gap). Of the 20 unfiled, **16 re-derive exactly as batch 72
+recorded** — 4 named in `origin/main` release commits, 11 `NOT-UPSTREAM` in the adjudication
+brief, 1 refuted at `182817fb`. **Do not re-scope onto those 16.** **TWO ARE AVAILABLE WORK AND
+BOTH ARE MEASURED:**
+
+- `PC-S309-PROVENANCE-FORBIDDEN-LIST-EXACT-MATCH-MISSES-DECORATED-PLACEHOLDERS` — **RECOMMENDED,
+  reproduced on the consumer's real artifact.** `core/scripts/validate-provenance-block.sh:652`
+  is `if forbidden and value in forbidden:`, an EXACT match, so a decorated placeholder passes.
+  Driven on the consumer's own `s309/coe-adversarial-p1.md` with three `cmp -s`-asserted inputs:
+  decorated `toolu_PLACEHOLDER_LEAD_TO_FILL` **rc=0 PASS**, bare `toolu_PLACEHOLDER` **rc=1
+  forbidden**, real-shaped id rc=0. The schema's own `forbidden_reason` already states the intent
+  the decorated value violates identically. **Note the probe shape that WASTED a run**: a
+  hand-written provenance block scored rc=0 for all three inputs including the bare literal,
+  because the block form was wrong — use the consumer's real artifact.
+- `PC-S309-CHECK29-33-NO-SCOPE-CLAUSE-FOR-CARRY-OVER-OPENING-GATE` — **WEAKEST, and its own filing
+  concedes the false-FAIL is hypothetical** (*"a future consumer whose H1/H2 harness enforces
+  check-body literalism"*). Check 29 DOES carry a `**Scope.**` clause, gated on Check 28, just not
+  one about carry-over ordering; Check 33 carries none. Adjudicator burden, no wrong verdict today.
+
+Then **`BL-113`** (bootstrapping — ships ALONE; a two-line `verify: sh` is truncated by the engine
+and mis-scores silently, its FP set unmeasured and the first thing it owes), then **`BL-155`** and
+the rest of the live 85. Run the sweep and rank.
+
 ### BATCH 72 SHIPPED AS `v0.525.0`, ONE RELEASE CARRYING TWO ENTRIES. THE SWEEP FOUND **THREE NEW `PC-S309-*` CANDIDATES** FILED THE SAME DAY, ONE OF THEM REAL AND TAKEN; THE OTHER TWO ARE A WITHDRAWN/SUPERSEDED PAIR WHOSE ACQUITTAL IS **WRONG IN ITS REASONING AND RIGHT IN ITS CONCLUSION**. **THE CONSUMER PULLED TO `0.524.0` BEFORE THE BATCH OPENED, SO THE GAP WAS ZERO AND IS NOW ONE.** AN ADVERSARIAL HAND FOUND A COUNT ERROR IN THE SHIPPED PROSE AND IT WAS CORRECTED ON THE BRANCH.
 
 This block replaces the batch-71 record below it. Every figure was re-derived after the merge at
@@ -7281,7 +7395,7 @@ so no block written before it changes verdict.
 ### NEXT ACTIONS — numbered, in order
 
 1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below), RANK THE UNFILED CANDIDATES,
-   THEN SCOPE BATCH 72 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED YOU.** Operator
+   THEN SCOPE BATCH 74 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED YOU.** Operator
    instruction, given at batch 52. **If the one-liner was TYPED BY THE OPERATOR**, report the
    candidates with a marked recommendation and ask, as every batch before has. **If it ARRIVED
    FROM ANOTHER SESSION** — a cross-session message carrying `READ and FOLLOW …`, which is
@@ -7300,6 +7414,17 @@ so no block written before it changes verdict.
    THREE `PC-S309-*` candidates on 2026-09-07 (live 67 -> 70, unfiled 16 -> 19, md5 moved again).
    **A sentence in this file saying the residue is zero is a snapshot of a file someone else is
    holding open. Run the sweep; never read that sentence for an answer.**
+
+   **BATCH 73's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.**
+   `PC-S341-SETTINGS-TEMPLATE-MATERIALIZE-SNIPPET-BREAKS-UNDER-ZSH` shipped as `v0.526.0` at
+   `c44ed80c` (PR #670) closing `BL-198`, cited verbatim in the release commit message, rotated.
+   **TWO `PC-S309-*` REMAIN AND BOTH ARE AVAILABLE**, ranked with their measurements in the
+   batch-73 resume block: `PROVENANCE-FORBIDDEN-LIST-...` is the recommendation (reproduced on the
+   consumer's real artifact, with a bare-literal control) and `CHECK29-33-...` is the weaker
+   (adjudicator burden; its own filing concedes the false-FAIL is hypothetical). **Do not take a
+   fix shape from this file without scoring it** — batch 73's filed remedy was right about the
+   symptom and one level short of the defect, and the arm that already owned the subject was
+   shipping a remedy that does not work.
 
    **BATCH 72's SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope them.**
    `PC-S309-VALIDATE-LAYER-ENTRIES-W7-CANNOT-SEE-A-HOOK-IMPLEMENTED-CHECK` shipped as `v0.525.0`
@@ -8018,9 +8143,9 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # b7e0f100... at batch 69's close -- UNMOVED across batches 68 AND 69, because the consumer did not pull and closing an entry HERE never moves ITS ledger; same value at batch 67's close, where the CONSUMER PULLED to 0.518.0 mid-batch (its PR #1025 at 44001c2aa), which rotated one cited id; 7b363a17... through batches 64-66; 2c129779... through batch 63's close; it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too, and check the consumer's porcelain, because an uncommitted filing has no -S date
-   wc -l < /tmp/live.txt    # 66 at batch 69's close, UNMOVED across 68 and 69 (batch 69 cited no PC- id -- its subject carries none); 66 at batch 67's close (the consumer's 0.518.0 pull rotated one cited id, 67 -> 66); 67 at batch 66's close; 67 at batch 65's close (the consumer's 0.516.0 pull rotated two and filed one); 66 at batch 64's close (two filed, one rotated); 65 after the consumer's batch-63 pull rotated seven; 72 with the corrected ^#{2,6} grammar through batch 62 (the old ^## one reads one fewer)
-   wc -l < /tmp/unfiled.txt # 16 at batch 69's close, UNMOVED -- batch 69 cited no PC- id, so nothing left the unfiled set; ALL 16 are now adjudicated (4 in release commits, 11 NOT-UPSTREAM, 1 refuted at 182817fb), so the AVAILABLE residue is ZERO; 16 at batch 68's close after its citation of PC-S340-AUDIT-RULE-FILES-...; 17 at batch 67's close -- batch 67's own citation moved PC-S308-EMIT-REPORT-... from unfiled to cited; 18 at batch 66's close, unmoved; 18 at batch 65's close; 19 at batch 64's close -- two new PC-S308-* filings in, PC-S340-CHECK-26-READS-A-PARTIAL-... out by the operator's carried rejection (batch 64 cited no PC- id); 18 through batch 63; 20 through batch 62
+   md5 -q "$L"              # 2fd16419... at batch 73's close, MOVED from 1ac25a27 because the consumer filed three candidates mid-batch and committed two of them mid-batch; b7e0f100... at batch 69's close -- UNMOVED across batches 68 AND 69, because the consumer did not pull and closing an entry HERE never moves ITS ledger; same value at batch 67's close, where the CONSUMER PULLED to 0.518.0 mid-batch (its PR #1025 at 44001c2aa), which rotated one cited id; 7b363a17... through batches 64-66; 2c129779... through batch 63's close; it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too, and check the consumer's porcelain, because an uncommitted filing has no -S date
+   wc -l < /tmp/live.txt    # 73 at batch 73's close (three filed, none rotated -- the consumer did not pull); 70 at batch 72's close; 66 at batch 69's close, UNMOVED across 68 and 69 (batch 69 cited no PC- id -- its subject carries none); 66 at batch 67's close (the consumer's 0.518.0 pull rotated one cited id, 67 -> 66); 67 at batch 66's close; 67 at batch 65's close (the consumer's 0.516.0 pull rotated two and filed one); 66 at batch 64's close (two filed, one rotated); 65 after the consumer's batch-63 pull rotated seven; 72 with the corrected ^#{2,6} grammar through batch 62 (the old ^## one reads one fewer)
+   wc -l < /tmp/unfiled.txt # 20 at batch 73's close -- three filed (18 -> 21) and batch 73's own citation moved one to cited; of the 20, SIXTEEN are the adjudicated set (4 in release commits, 11 NOT-UPSTREAM, 1 refuted) and TWO are available PC-S309 work; 16 at batch 69's close, UNMOVED -- batch 69 cited no PC- id, so nothing left the unfiled set; ALL 16 are now adjudicated (4 in release commits, 11 NOT-UPSTREAM, 1 refuted at 182817fb), so the AVAILABLE residue is ZERO; 16 at batch 68's close after its citation of PC-S340-AUDIT-RULE-FILES-...; 17 at batch 67's close -- batch 67's own citation moved PC-S308-EMIT-REPORT-... from unfiled to cited; 18 at batch 66's close, unmoved; 18 at batch 65's close; 19 at batch 64's close -- two new PC-S308-* filings in, PC-S340-CHECK-26-READS-A-PARTIAL-... out by the operator's carried rejection (batch 64 cited no PC- id); 18 through batch 63; 20 through batch 62
    ```
 
    **AN UNMOVED md5 WITH A MOVED COUNT IS THE GRAMMAR, NOT THE CONSUMER.** Batch 43 read 72 live
@@ -8028,8 +8153,19 @@ so no block written before it changes verdict.
    `^#{2,6}`. If those two disagree again, ask which of them changed before concluding anything
    about the consumer.
 
-   **THE BASELINE IS 70 LIVE CANDIDATES, 52 CITED, 18 UNFILED** — re-derived at batch 72's close
-   after its merge at `7a562971` (md5 `1ac25a27…`, archive 169, partition control 0, all four
+   **THE BASELINE IS 73 LIVE CANDIDATES, 53 CITED, 20 UNFILED** — re-derived at batch 73's close
+   after its merge at `c44ed80c` (md5 `2fd16419…`, archive 169, partition control 0, all four
+   presence controls 1, absence control 0). **THE CONSUMER FILED THREE MORE CANDIDATES, ALL DATED
+   2026-09-07**, taking live 70 -> 73 and unfiled 18 -> 21; batch 73's own citation moved one to
+   cited, so unfiled reads 20. **TWO OF THE THREE WERE UNCOMMITTED WHEN THE SWEEP RAN** — their
+   `-S` date came back EMPTY, exactly like the impossible-id control, and only `git show HEAD:`
+   against the worktree separated a new filing from a grammar failure. Both are committed now.
+   **DISCHARGED 25 / in-flight 28 / untouched 20, summing to 73 after subtracting the 4-id
+   overlap; TERMINAL 55; discharged-but-invisible 1** (batch 71's `BL-195` subject, which shipped
+   no fix and is deliberately uncited — the row is correct, not a gap). Report TERMINAL as the
+   delivered total, never the backlog's own live count. The paragraph below is the earlier reading
+   and records how the counts moved: the batch-72 baseline was 70 / 52 / 18 at md5 `1ac25a27…`,
+   re-derived after its merge at `7a562971` (md5 `1ac25a27…`, archive 169, partition control 0, all four
    presence controls 1, absence control 0). **THE CONSUMER FILED THREE CANDIDATES IN ONE DAY AND
    THAT IS WHY LIVE MOVED**: 67 -> 70, all three `PC-S309-*` dated 2026-09-07, taking unfiled
    16 -> 19; batch 72's own citation of the one it took then moved it to cited, so unfiled reads
