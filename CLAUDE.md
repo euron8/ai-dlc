@@ -30,6 +30,13 @@ Measured false-zero sources, each of which has shipped a wrong conclusion here:
   tree, and `git grep` then exits **1, not 128** — indistinguishable from a real
   absence.
 
+**AND THE CONTROL ITSELF CAN BE THE THING THAT IS WRONG.** A negative control must be a token
+NO commit, file or corpus entry carries — which is a claim to CHECK, not to assume. Measured:
+`PC-S999-NEVER` used as the impossible-id control on `git log -F --grep` returned **2**, because
+this repo's own prose ABOUT that control has since been committed. A control returning non-zero
+where zero was expected reads as a broken search and invites you to "fix" a correct query. Pick
+a token, then verify it is absent, before trusting the zero beside it.
+
 ## A check that cannot fire reads exactly like one that passed
 
 Before shipping a check, prove it can fail. This is the repo's recurring defect;
