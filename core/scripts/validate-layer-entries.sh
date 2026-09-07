@@ -210,6 +210,16 @@ OVR_DIR="$SKILL_DIR/overrides"
 ERRORS=0
 WARNS=0
 
+# Entries this run could not READ. Primed HERE, in the parent shell, for the reason the
+# crosswalk accumulator states at its own priming site: assigned from inside a `$( )` these
+# would land in a subshell and read as empty at the end of the run.
+#
+# ONE newline-separated list and one counter, deduplicated on insert because the eight
+# guarded reads sit on the same files across several loops and a file that fails one read
+# fails every later one. The count is ENTRIES, not read attempts.
+UNREADABLE_ENTRIES=''
+UNREADABLE_N=0
+
 # THE CODE IS AN ARGUMENT, and that is the whole point of this shape.
 #
 # WHAT IT ENDS, MEASURED ON THE RELEASE BEFORE THIS ONE. The contract's header claimed
@@ -342,19 +352,61 @@ fm() { # fm <file> <key> -- first frontmatter scalar, trimmed. rc 0 read it, non
   ' "$1"
 }
 
-# A VALIDATOR THAT CANNOT READ ITS SUBJECT HAS NO FINDING TO REPORT ABOUT IT, so this exits
-# rather than counting an error. Reporting one would be a claim about the file's CONTENT made by
-# a run that never saw the content, which is the defect above wearing a better message; and
-# skipping the file silently would drop it from a census whose whole job is completeness. Exit 2
-# is this script's existing "could not run" code, beside "Not an ai-dlc consumer" — a state that
-# produced no verdict must never share an exit with one that ran and passed.
-entry_unreadable() { # entry_unreadable <file>
-  echo "validate-layer-entries: FATAL — could not READ '$1'. The file is listed as a layer entry" >&2
-  echo "  and awk failed to open it, so this run has no verdict about its frontmatter. It is NOT" >&2
-  echo "  being reported as missing keys: a read failure and an absent key are different facts," >&2
-  echo "  and conflating them is PC-S307. Check permissions, and if this is a git worktree that" >&2
-  echo "  was just created, re-run once the checkout has finished materialising." >&2
-  exit 2
+# A VALIDATOR THAT CANNOT READ ITS SUBJECT HAS NO FINDING TO REPORT ABOUT IT, so this emits no
+# finding about that entry. Reporting one would be a claim about the file's CONTENT made by a run
+# that never saw the content, which is the defect above wearing a better message; and skipping the
+# file silently would drop it from a census whose whole job is completeness. Exit 2 is this
+# script's existing "could not run" code, beside "Not an ai-dlc consumer" — a state that produced
+# no verdict must never share an exit with one that ran and passed, and it is still what this run
+# exits with. What changed is WHEN.
+#
+# COLLECT, EXCLUDE, REPORT AT THE END, STILL REFUSE. The exit used to be taken here, at the
+# first failing read. The first guarded read is in the `conforms_to` census loop, which runs
+# before any pass prints — so one unreadable entry ended the run before a single finding about
+# any OTHER entry was emitted. Measured on the fixture's own trees: worst case 7 of 7 ERRORs and
+# both WARNs lost, and even an entry that sorts LAST cost 5 of 7 plus the footer. An operator
+# holding one persistently unreadable file got a run that said nothing about the entries it read
+# fine, and no way to see them without fixing the read first.
+#
+# `continue` PROPAGATES OUT OF A FUNCTION into the caller's loop — measured on this machine's
+# bash 3.2 in all three shapes this file uses, including `v="$(fm …)" || entry_unreadable "$f"`
+# inside a `while … done < <(…)`. That is what excludes the entry from the rest of ITS loop
+# without a `continue` at each of the eight call sites; the sites are unchanged.
+#
+# THE MECHANISM IS THE ONE `crosswalk_unreadable()` USES BELOW. THE POLICY IS NOT, AND THE TWO
+# MUST NOT BE READ TOGETHER. E16 defers because git history is OPTIONALLY readable — a shallow
+# clone is a healthy consumer state and refusing it would wedge one. Nothing about a healthy
+# consumer produces a layer entry the process cannot open, so this refuses. The shared shape says
+# how to accumulate, never that an unreadable entry is tolerable.
+entry_unreadable() { # entry_unreadable <file> -- record, and `continue` the caller's loop
+  case "
+${UNREADABLE_ENTRIES}" in
+    *"
+$1
+"*) : ;;
+    *) UNREADABLE_ENTRIES="${UNREADABLE_ENTRIES}$1
+"
+       UNREADABLE_N=$((UNREADABLE_N+1)) ;;
+  esac
+  continue
+}
+
+# The end-of-run report. It is the message that used to print at the abort, unchanged in what it
+# says, because the facts it states are the same ones: this run has no verdict about these files,
+# and a read failure is not an absent key.
+unreadable_report() {
+  [ "$UNREADABLE_N" -gt 0 ] || return 0
+  echo "validate-layer-entries: FATAL — could not READ ${UNREADABLE_N} layer entr(y/ies)." >&2
+  printf '%s' "$UNREADABLE_ENTRIES" | while IFS= read -r _ur; do
+    [ -n "$_ur" ] && echo "  could not READ '$_ur'" >&2
+  done
+  echo "  Each is listed as a layer entry and awk failed to open it, so this run has no verdict" >&2
+  echo "  about its frontmatter. They are NOT being reported as missing keys: a read failure and" >&2
+  echo "  an absent key are different facts, and conflating them is PC-S307. Every finding above" >&2
+  echo "  is about an entry this run DID read; these were excluded from the census by name, so a" >&2
+  echo "  clean report above is a clean report about the rest of the layer and not about these." >&2
+  echo "  Check permissions, and if this is a git worktree that was just created, re-run once the" >&2
+  echo "  checkout has finished materialising." >&2
 }
 
 # Does the frontmatter block CLOSE? Nothing asked before, and the omission hid a real
@@ -805,7 +857,6 @@ fi
 if [ -n "$LC_CV" ]; then
   while IFS= read -r f; do
     [ -n "$f" ] || continue
-    LC_ENTRIES=$((LC_ENTRIES+1))
     # THE FOURTH SITE, AND IT IS THE ONE THE FIRST THREE GUARDS DID NOT COVER. This census loop
     # runs BEFORE the override and extension loops, so an unreadable entry drew an E17
     # "missing conforms_to" here and then hit the fatal below — one collapsed finding still
@@ -813,7 +864,14 @@ if [ -n "$LC_CV" ]; then
     # guards in place and this one absent, the unreadable entry produced exactly 1 ERROR line.
     # Asking which loop READS FIRST is the question a fix keyed on "the loops that matter" does
     # not ask.
+    #
+    # THE POPULATION COUNTER MOVED BELOW THE GUARD, and that is the "excluded by name" half.
+    # `entry_unreadable` now `continue`s, so counting the entry first would leave it in
+    # `entries=` while contributing to none of at_current/behind/undeclared — a footer whose
+    # four numbers no longer sum, over a file this run never opened. `entries=` counts entries
+    # READ; `unreadable=` counts the rest, and the two are disjoint by construction.
     ct="$(fm "$f" conforms_to)" || entry_unreadable "$f"
+    LC_ENTRIES=$((LC_ENTRIES+1))
     if [ -z "$ct" ]; then
       LC_UNDECLARED=$((LC_UNDECLARED+1))
       err E17 "$(rel "$f"): missing 'conforms_to:' frontmatter. Every layer entry declares the contract version it has been migrated to; without it neither you nor core can say which of the contract's ${LC_CV} versions of clauses this entry has ever been read against. Add 'conforms_to: ${LC_CV}' once the entry holds every clause, or the lower version it was last migrated to."
@@ -850,12 +908,17 @@ fi
 echo "== overrides =="
 while IFS= read -r f; do
   [ -n "$f" ] || continue
-  LC_N_OVERRIDE=$((LC_N_OVERRIDE+1))
   # THE STATUS IS TAKEN OFF THE CALL THAT ALREADY HAPPENS, so the guard costs no extra read and
   # cannot drift out of step with the loop it protects. Split off `base_sha` because `a=$(x);
   # b=$(y)` reports only y's status — the first assignment's rc is discarded by the `;` and the
   # guard would have watched the wrong call.
+  #
+  # THE POPULATION COUNTER SITS AFTER THE FIRST GUARDED READ IN EVERY LOOP, and that placement is
+  # the rule rather than a preference. `LC_N_OVERRIDE` is the `of` denominator the LAYER_MEASURED
+  # census divides by, so counting a file whose first read failed would claim every override
+  # clause was evaluated against a subject nothing opened.
   shadows="$(fm "$f" shadows)" || entry_unreadable "$f"
+  LC_N_OVERRIDE=$((LC_N_OVERRIDE+1))
   base_sha="$(fm "$f" base_sha)"
 
   fm_unterminated "$f" \
@@ -1227,12 +1290,18 @@ LIVE_RULES=''
 LIVE_ENTRY_N=0
 while IFS= read -r _lf; do
   [ -n "$_lf" ] || continue
+  # READ FIRST, THEN COUNT AND HARVEST. The read guard used to sit below the two harvests, which
+  # was harmless while it exited: nothing downstream ran. Now that it `continue`s, an unreadable
+  # entry reaching the harvest would add `defined_anchors`/`defined_rules` output taken from a
+  # file `awk` could not open — empty, and indistinguishable from an entry that defines nothing —
+  # and would count itself into `LIVE_ENTRY_N`, which is E16's own "there were entries to build
+  # from" guard. Both harvests are therefore behind the read.
+  _lh="$(fm "$_lf" hooks)" || entry_unreadable "$_lf"
   LIVE_ENTRY_N=$((LIVE_ENTRY_N+1))
   LIVE_ANCHORS="$LIVE_ANCHORS
 $(defined_anchors "$_lf")"
   LIVE_RULES="$LIVE_RULES
 $(defined_rules "$_lf")"
-  _lh="$(fm "$_lf" hooks)" || entry_unreadable "$_lf"
   # AND THIS `continue` IS EXACTLY WHY THE GUARD ABOVE IT IS NOT OPTIONAL. An unreadable entry
   # yields an empty `hooks`, which reads as "declares no hook" and drops the file out of the
   # resolvability set WITHOUT a finding — the silent direction of PC-S307, in the one loop whose
@@ -1268,12 +1337,14 @@ if [ -z "$LIVE_ANCHORS" ] && [ -z "$LIVE_RULES" ] && [ "$LIVE_ENTRY_N" -gt 0 ]; 
 fi
 while IFS= read -r f; do
   [ -n "$f" ] || continue
-  LC_N_EXTENSION=$((LC_N_EXTENSION+1))
   # THE GUARD GOES ON `kind`, NOT ON `hooks`, and the pipe is the reason. `$(fm … | awk …)`
   # reports AWK's status, never fm's, so a read failure behind a pipe is invisible here — the
   # same subshell-swallows-the-status shape one line over. `kind` is unpiped and is the first
   # read of this file, so it is the one call whose failure still reaches the caller.
+  #
+  # COUNTED AFTER, like every other population in this file. See the overrides loop.
   kind="$(fm "$f" kind)" || entry_unreadable "$f"
+  LC_N_EXTENSION=$((LC_N_EXTENSION+1))
   hooks="$(fm "$f" hooks | awk '{print $1}')"; id="$(fm "$f" id)"
 
   fm_unterminated "$f" \
@@ -2298,8 +2369,17 @@ printf 'validate-layer-entries: %d error(s), %d warning(s)\n' "$ERRORS" "$WARNS"
 # `contract_version=-` is the honest reading when the contract could not be read at all: the
 # fields below are then counts over zero entries, and printing a plausible 0 there would make an
 # unevaluated consumer and a conforming one produce the same line.
-printf 'LAYER_CONFORMANCE v1 contract_version=%s entries=%d at_current=%d behind=%d undeclared=%d errors=%d warnings=%d\n' \
-  "${LC_CV:--}" "$LC_ENTRIES" "$LC_CURRENT" "$LC_BEHIND" "$LC_UNDECLARED" "$ERRORS" "$WARNS"
+#
+# `unreadable=` IS THE SAME ARGUMENT ONE LEVEL DOWN, and it is the field that stops this footer
+# from being a completeness claim it has not earned. `entries=` counts entries this run READ. An
+# entry it could not open is excluded from that count and from every count derived from it, so
+# without this field a footer over a partially-unread layer is byte-identical to one over a layer
+# that simply has fewer entries. It is APPENDED rather than inserted: both readers in the tree
+# (`core/fixtures/layer-conforms-to/run.sh`, `core/fixtures/layer-entry-unreadable/run.sh`) look
+# fields up by key through the same `split($i, p, "=")` awk, so position carries no meaning and a
+# new trailing field reaches neither.
+printf 'LAYER_CONFORMANCE v1 contract_version=%s entries=%d at_current=%d behind=%d undeclared=%d errors=%d warnings=%d unreadable=%d\n' \
+  "${LC_CV:--}" "$LC_ENTRIES" "$LC_CURRENT" "$LC_BEHIND" "$LC_UNDECLARED" "$ERRORS" "$WARNS" "$UNREADABLE_N"
 
 # THE MEASURED CENSUS — `measured{fires,of}`, the charter's last unbuilt contract field.
 #
@@ -2372,4 +2452,17 @@ if [ "$lc_m_n" -eq 0 ]; then lc_m_n='-'; lc_m_fired='-'; lc_m_silent='-'; fi
 printf 'LAYER_MEASURED v1 enforcer=validate-layer-entries.sh contract_version=%s codes=%s fired=%s silent_with_subjects=%s unclaimed=%s subjects=override:%d,extension:%d measured=%s\n' \
   "${LC_CV:--}" "$lc_m_n" "$lc_m_fired" "$lc_m_silent" "${lc_m_unclaimed:-none}" \
   "$LC_N_OVERRIDE" "$LC_N_EXTENSION" "${lc_m_list:--}"
+
+# THE REFUSAL, AND IT IS LAST BECAUSE THAT IS THE WHOLE CHANGE. Exit 2 is unmoved as a verdict:
+# a run that could not read an entry still refuses, and still refuses on a tree where every
+# entry it DID read is clean. What moved is the point at which it is taken — after every pass
+# has emitted its findings about the entries this run could read, and after the footer that says
+# how many it could not.
+#
+# ORDERED 2 BEFORE 1. An unreadable entry and an ERROR are both live on the same run now, which
+# was not reachable before, and "could not run" is the stronger fact: a caller told `1` would
+# read a completed run with findings, when the run is incomplete. This is the only ordering that
+# preserves what exit 2 meant.
+unreadable_report
+[ "$UNREADABLE_N" -eq 0 ] || exit 2
 [ "$ERRORS" -eq 0 ]

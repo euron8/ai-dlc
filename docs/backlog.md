@@ -3078,7 +3078,54 @@ that release claimed and did.
 entries survive an unreadable sibling, and a fix that merely moves the exit point still loses them
 whenever the unreadable file sorts first.
 
-verify: sh V=core/scripts/validate-layer-entries.sh; C=core/skills/ai-dlc/layer-contract.yaml; [ -f "$V" ] && [ -f "$C" ] || exit 9; d=$(mktemp -d) || exit 9; trap 'chmod -R u+rwX "$d" 2>/dev/null; rm -rf "$d"' EXIT; K="$d/.claude/skills/ai-dlc"; mkdir -p "$K/extensions" "$K/steps" || exit 9; cp "$C" "$K/" || exit 9; printf -- '---\nname: retro\ndescription: s\n---\n\n# R\n' > "$K/steps/retro.md"; printf -- '---\nkind: role\nid: good\nhooks: steps/retro.md\npush_candidate: false\nconforms_to: 1\n---\n# G\n' > "$K/extensions/zz-broken.md"; printf -- '---\nkind: role\nid: u\nhooks: steps/retro.md\npush_candidate: false\nconforms_to: 1\n---\n# U\n' > "$K/extensions/aa-unreadable.md"; B=$(bash "$V" "$d" 2>/dev/null | grep -c 'zz-broken'); [ "$B" -ge 1 ] || { echo "HARNESS BROKEN: the readable control entry drew no finding to lose"; exit 9; }; chmod 000 "$K/extensions/aa-unreadable.md"; if awk '{exit}' "$K/extensions/aa-unreadable.md" 2>/dev/null; then echo "HARNESS BROKEN: seal did not take"; exit 9; fi; A=$(bash "$V" "$d" 2>/dev/null | grep -c 'zz-broken'); [ "$A" -ge 1 ]
+**THE FILED RECEIPT WAS BROKEN AND IS REPLACED. Three non-fixes closed it**, and two of them ship a
+validator reporting `rc=0 ERRORs=0` over a tree it could not read — output an operator cannot tell
+from a clean consumer. It counted `grep -c 'zz-broken'` over whole output, which awk's own
+`can't open file` on stderr can satisfy; it never asked whether the run REFUSED; and its single
+sort position could not see a fix that stops the loop rather than skipping the entry.
+
+**FIVE PROPERTIES, TWO WORLDS, and each property is here because it uniquely rejects a candidate
+nothing else rejects.** Built and scored against the correct fix and ten wrong ones:
+
+| | P1 | P3 | P4 | P5 | P6 | |
+|---|---|---|---|---|---|---|
+| correct | 1 | 1 | 1 | 1 | 1 | **PASS** |
+| unfixed (HEAD) | 0 | 1 | 1 | 1 | 1 | FAIL |
+| footer field only, exit unmoved | 0 | 1 | 1 | 1 | 1 | FAIL |
+| silent skip, no report, no refusal | 1 | 0 | 1 | 0 | 0 | FAIL |
+| unreadable is not an entry (`find -perm`) | 1 | 0 | 1 | 0 | 0 | FAIL |
+| defer the exit only, census unchanged | 1 | 1 | 0 | 1 | 1 | FAIL |
+| correct but ADVISORY | 1 | 1 | 1 | 0 | 1 | FAIL |
+| refuses, counts, names nothing | 1 | 0 | 1 | 1 | 0 | FAIL |
+| report gated on `ERRORS > 0` | 1 | 1 | 1 | 1 | 0 | FAIL |
+| abort moved to the LAST guard | 0 | 1 | 1 | 1 | 1 | FAIL |
+| report gated on `ERRORS == 0` | 1 | 0 | 1 | 1 | 1 | FAIL |
+| `break` where `continue` belongs | 0 | 1 | 1 | 1 | 1 | FAIL |
+
+**P1 SURVIVAL** — the readable sibling's finding is still emitted AND the footer still prints.
+Uniquely rejects unfixed, footer-only, abort-at-the-last-guard, and `break`-for-`continue`. The
+footer conjunct is load-bearing: without it the last two both pass, because moving the abort later
+preserves the rows and loses only the footer.
+**P3 NAMED** — the unreadable file is named by a line that is neither an `ERROR`/`WARN` row nor
+awk's own `can't open file`. Uniquely rejects report-gated-on-clean. Excluding awk's stderr is what
+the old receipt got wrong; excluding finding rows is what stops P4's subject satisfying it.
+**P4 NO-CLAIM** — ZERO `ERROR`/`WARN` rows naming the unreadable file. Uniquely rejects
+defer-the-exit-only.
+**P5 REFUSAL-ON-CLEAN** — on a tree with no other findings the run still exits non-zero. Uniquely
+rejects correct-but-advisory.
+**P6 NAMED-ON-CLEAN** — and still names the file there. Uniquely rejects report-gated-on-findings.
+
+**World 1 runs at BOTH sort positions and the second is not a doubling.** `aa-sealed` sorts before
+the finding-bearing entry and `zz-sealed` after it. Measured: `zz-sealed` alone rejects eight of the
+ten, and `aa-sealed` alone rejects nine — the tenth being `break`-for-`continue`, which loses no
+finding when nothing sorts after the seal.
+
+**World 2 is the fixture's own seeded clean tree, and it is required.** On world 1 an advisory fix
+exits 1 anyway from the readable entry's own error, so a bare `rc != 0` cannot tell a refusal caused
+by the seal from an ordinary finding. `seed.sh` takes NO argument and PRINTS its root; passing it a
+directory yields a second sandbox and reads as a refutation.
+
+verify: sh V="${BL122_V:-core/scripts/validate-layer-entries.sh}"; C=core/skills/ai-dlc/layer-contract.yaml; S=core/fixtures/layer-entry-unreadable/seed.sh; [ -f "$V" ] && [ -f "$C" ] && [ -f "$S" ] || exit 9; d=$(mktemp -d) || exit 9; trap 'chmod -R u+rwX "$d" 2>/dev/null; rm -rf "$d"' EXIT; nm() { awk -v p="$2" 'index($0,p)>0 && index($0,"awk:")!=1 && $1!="ERROR" && $1!="WARN" {n++} END{print n+0}' <<<"$1"; }; rw() { awk -v p="$2" '($1=="ERROR"||$1=="WARN") && index($0,p)>0 {n++} END{print n+0}' <<<"$1"; }; ft() { grep -c '^LAYER_CONFORMANCE ' <<<"$1"; }; P1=1; P3=1; P4=1; for pos in aa-sealed zz-sealed; do w="$d/$pos"; K="$w/.claude/skills/ai-dlc"; mkdir -p "$K/extensions" "$K/steps" || exit 9; cp "$C" "$K/" || exit 9; cv=$(awk '/^contract_version:/{print $2;exit}' "$C"); [ -n "$cv" ] || exit 9; printf -- '---\nname: gate-validation\ndescription: s\n---\n\n# G\n\n### 12. Core.\n' > "$K/steps/gate-validation.md"; printf -- '---\nkind: check\nhooks: steps/gate-validation.md\nid: broken\npush_candidate: false\n---\n\n### 901. [ext:broken] C.\n' > "$K/extensions/broken.md"; printf -- '---\nkind: check\nhooks: steps/gate-validation.md\nid: %s\npush_candidate: false\nconforms_to: %s\n---\n\n### 902. [ext:%s] C.\n' "$pos" "$cv" "$pos" > "$K/extensions/$pos.md"; b=$(bash "$V" "$w" 2>&1); [ "$(rw "$b" 'extensions/broken.md')" -ge 1 ] && [ "$(ft "$b")" -eq 1 ] || { echo "HARNESS BROKEN: the readable control entry drew no finding, or no footer, to lose ($pos)"; exit 9; }; chmod 000 "$K/extensions/$pos.md"; if awk '{exit}' "$K/extensions/$pos.md" 2>/dev/null; then echo "HARNESS BROKEN: seal did not take ($pos)"; exit 9; fi; o=$(bash "$V" "$w" 2>&1); { [ "$(rw "$o" 'extensions/broken.md')" -ge 1 ] && [ "$(ft "$o")" -eq 1 ]; } || P1=0; [ "$(nm "$o" "extensions/$pos.md")" -ge 1 ] || P3=0; [ "$(rw "$o" "extensions/$pos.md")" -eq 0 ] || P4=0; done; R=$(bash "$S") || exit 9; [ -n "$R" ] && [ -d "$R/consumer" ] || { echo "HARNESS BROKEN: seed printed no root"; exit 9; }; trap 'chmod -R u+rwX "$d" "$R" 2>/dev/null; rm -rf "$d" "$R"' EXIT; bash "$V" "$R/consumer" >/dev/null 2>&1 || { echo "HARNESS BROKEN: the seeded clean tree does not exit 0 unsealed, so a non-zero below is not the seal"; exit 9; }; T="$R/consumer/.claude/skills/ai-dlc/overrides/gate-validation__12.md"; [ -f "$T" ] || { echo "HARNESS BROKEN: seed did not write $T"; exit 9; }; chmod 000 "$T"; if awk '{exit}' "$T" 2>/dev/null; then echo "HARNESS BROKEN: world-2 seal did not take"; exit 9; fi; c=$(bash "$V" "$R/consumer" 2>&1); crc=$?; P5=$([ "$crc" -ne 0 ] && echo 1 || echo 0); P6=$([ "$(nm "$c" 'overrides/gate-validation__12.md')" -ge 1 ] && echo 1 || echo 0); echo "P1=$P1 P3=$P3 P4=$P4 P5=$P5 P6=$P6"; [ "$P1$P3$P4$P5$P6" = 11111 ]
 
 ## BL-124
 

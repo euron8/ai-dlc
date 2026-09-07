@@ -40,14 +40,22 @@
 #
 # Three consequences the arms below are shaped by. Sites 2 onward are only observable where
 # the census loop does not run -- `if [ -n "$LC_CV" ]` -- which is why two trees carry an
-# unreadable contract_version. Site 8 reads BOTH populations last, so it is now the backstop
-# that aborts any permanently unreadable entry: no earlier guard owns the exit code any
-# more, and what each one still buys is the false findings printed BEFORE the abort. And
-# site 4 is observable only once site 3 is gone -- DELETING SITE 4's GUARD ALONE CHANGES NO
-# OUTPUT ON ANY OF THE SEVEN TREES, re-measured, against a control showing the same
-# comparison does find a difference for site 3. m4 therefore reverts both layers over that
-# population, per the rule that a partial revert of a layered fix proves the layer it left
-# in place and comes out green.
+# unreadable contract_version. Site 8 reads BOTH populations last, so it is the backstop that
+# records any permanently unreadable entry: no single guard owns the exit code, and what each
+# one still buys is the false findings that would otherwise be printed. And site 4 is
+# observable only once site 3 is gone -- DELETING SITE 4's GUARD ALONE CHANGES NO OUTPUT ON
+# ANY OF THE SEVEN TREES, re-measured, against a control showing the same comparison does find
+# a difference for site 3. m4 therefore reverts both layers over that population, per the rule
+# that a partial revert of a layered fix proves the layer it left in place and comes out green.
+#
+# NO GUARD ABORTS ANY MORE, AND THAT IS BL-122. `entry_unreadable` records the path and
+# `continue`s the caller's loop; the refusal is one `exit 2` at the END of the run, after every
+# pass has emitted its findings about the entries the run COULD read and after a footer whose
+# `unreadable=` field says how many it could not. The exit CODE is unchanged and the exit POINT
+# moved. Two things follow for the arms here: an absent footer is no longer the shape of a
+# refusal (three arms in Part 7 were keyed on it and now assert `unreadable=1` instead), and
+# the property this fixture did not previously have a subject for -- findings about OTHER
+# entries surviving -- gets Part 4b and m10.
 #
 # SITES 5-8 CANNOT BE REACHED BY chmod 000 AT ALL, and Part 7 explains what replaces it.
 #
@@ -140,8 +148,13 @@ echo "layer-entry-unreadable:"
 # Part 1 — an entry that cannot be READ produces a refusal and NO finding about it
 # --------------------------------------------------------------------------------------
 UNR_OUT="$(bash "$LINTER" "$UNR" 2>&1)"; UNR_RC=$?
-say "$([ "$UNR_RC" -eq 2 ] && echo 1 || echo 0)" \
-  "an unreadable entry exits 2 — the 'could not run' code, never 0 and never a 1 that reads as a verdict"
+# EXIT 2 IS UNMOVED AS A VERDICT AND MOVED AS AN EVENT, and both halves are asserted. The code
+# is the same one; what changed is that it is taken after every pass has run, so the footer is
+# now present on this tree where it used to be absent. Requiring the footer HERE is what stops
+# a fix that reverts to the immediate abort from passing this arm — that fix produces the same
+# exit code and no footer at all.
+say "$([ "$UNR_RC" -eq 2 ] && [ "$(footer_field "$UNR_OUT" errors)" = 0 ] && echo 1 || echo 0)" \
+  "an unreadable entry exits 2 — the 'could not run' code — AFTER a completed run that printed its footer"
 say "$(fatal_for "$UNR_OUT" 'extensions/subject.md' && echo 1 || echo 0)" \
   "the FATAL names the file it could not read, so the operator is told WHICH entry"
 say "$([ "$(errs_naming "$UNR_OUT" 'extensions/subject.md')" -eq 0 ] && echo 1 || echo 0)" \
@@ -167,6 +180,14 @@ CONS_OUT="$(bash "$LINTER" "$CONS" 2>&1)"; CONS_RC=$?
 say "$([ "$CONS_RC" -eq 0 ] && [ "$(footer_field "$CONS_OUT" entries)" = 2 ] \
        && [ "$(footer_field "$CONS_OUT" errors)" = 0 ] && echo 1 || echo 0)" \
   "a readable, well-formed consumer exits 0 with the footer counting both its entries"
+# `unreadable=` IN BOTH DIRECTIONS, IN THE SAME RUN. A field hardcoded to 1 satisfies every
+# other arm in this fixture, all of which run on a tree that HAS an unreadable entry; the clean
+# tree is the only input that separates a counted field from a printed constant. Asserted as
+# `= 0` and not merely non-empty, because an empty value would also pass an absence test on a
+# subject that never learned the field at all.
+say "$([ "$(footer_field "$CONS_OUT" unreadable)" = 0 ] \
+       && [ "$(footer_field "$UNR_OUT" unreadable)" = 1 ] && echo 1 || echo 0)" \
+  "the footer's unreadable= counts 0 on the clean tree and 1 on the sealed one — a count, not a constant"
 
 # --------------------------------------------------------------------------------------
 # Part 4 — the two trees the later guards are the first reader on
@@ -183,6 +204,52 @@ say "$([ "$EXT_RC" -eq 2 ] && fatal_for "$EXT_OUT" 'extensions/subject-ext.md' \
        && ! has "$EXT_OUT" 'EMPTY resolvability set' \
        && [ "$(errs_naming "$EXT_OUT" 'extensions/subject-ext.md')" -eq 0 ] && echo 1 || echo 0)" \
   "an unreadable EXTENSION refuses before the resolvability set is judged, so E16 makes no claim"
+
+# --------------------------------------------------------------------------------------
+# Part 4b — SURVIVAL: an unreadable entry does not suppress findings about its siblings
+# --------------------------------------------------------------------------------------
+# BL-122's subject. Every arm above asks what the run says ABOUT the unreadable file; this
+# asks what it still says about the OTHER files, which is the property the immediate exit
+# destroyed. Measured at HEAD on this fixture's own trees, worst case lost 7 of 7 ERRORs and
+# both WARNs before printing anything.
+#
+# BOTH SORT POSITIONS, AND THE SECOND IS NOT A DUPLICATE. `layer_files()` sorts, so the seal's
+# basename decides whether the readable sibling has already been visited when the loop meets
+# it. Scored against a candidate whose sole error was `break` for `continue`: `partial-zz`
+# passed it — nothing sorts after the seal there, so no finding is lost — and `partial-aa`
+# killed it. An arm run at one position only cannot tell that fix from this one.
+#
+# THE CONTROL IS THE BASELINE, NOT AN ASSUMPTION. A tree whose readable sibling drew no finding
+# in the first place would satisfy "the finding survived" by having nothing to lose, and would
+# read identically to a working fix. Each position asserts its own unsealed row count first,
+# from the same tree, and requires the sealed run to reproduce it.
+for _p in aa zz; do
+  _pt="$ROOT/partial-$_p"
+  _seal="$_pt/.claude/skills/ai-dlc/extensions/${_p}-sealed.md"
+  # The seal must have taken here too. Without this the two arms below pass on a tree whose
+  # sealed file is perfectly readable, which is the vacuous state the preamble refuses globally
+  # — and these two trees are seeded after that loop's list was written.
+  if cat "$_seal" >/dev/null 2>&1; then
+    bad "FIXTURE BROKEN: partial-$_p's seal did not take, so its survival arms are vacuous"
+    bad "FIXTURE BROKEN: partial-$_p (second arm not run for the same reason)"
+    continue
+  fi
+  PT_OUT="$(bash "$LINTER" "$_pt" 2>&1)"; PT_RC=$?
+  # `no-receipt.md` declares no conforms_to, so the CENSUS LOOP — the loop the first guarded
+  # read sits in, and the one whose abort this entry is about — raises an E17 naming it. A
+  # finding raised by a later pass would survive a fix that only repaired the census.
+  PT_SIB="$(errs_naming "$PT_OUT" 'extensions/no-receipt.md')"
+  say "$([ "$PT_RC" -eq 2 ] && [ "$PT_SIB" -ge 1 ] \
+         && [ "$(footer_field "$PT_OUT" unreadable)" = 1 ] \
+         && [ -n "$(footer_field "$PT_OUT" errors)" ] && echo 1 || echo 0)" \
+    "partial-$_p: the readable sibling's finding SURVIVES the unreadable one, the footer prints, and the run still refuses"
+  # ATTRIBUTION, and it is the half that separates this from `defer-the-exit-only`. The sealed
+  # entry draws no ERROR or WARN row of its own: the run makes no claim about content it never
+  # read, and every row in that count is about a file it did.
+  say "$([ "$(errs_naming "$PT_OUT" "extensions/${_p}-sealed.md")" -eq 0 ] \
+         && fatal_for "$PT_OUT" "extensions/${_p}-sealed.md" && echo 1 || echo 0)" \
+    "partial-$_p: and ZERO rows name the sealed entry, which is instead named by the end-of-run FATAL"
+done
 
 # --------------------------------------------------------------------------------------
 # Part 5 — cwd invariance, asserted rather than assumed
@@ -297,6 +364,35 @@ if mk m4 sed -e 's@^  _lh="$(fm "$_lf" hooks)" || entry_unreadable "$_lf"$@  _lh
     "MUTANT m4 killed: with both extension-side guards gone the run reports missing-key findings about frontmatter nobody read"
 fi
 
+# --- m10: `break` where `continue` belongs — the one-word regression Part 4b exists for ----
+# `entry_unreadable` ends with `continue`, which propagates out of the function into the
+# caller's loop and SKIPS the entry. `break` LEAVES the loop, taking every entry that sorts
+# after the unreadable one with it. The run still refuses, still names the file, still prints
+# a footer, and still makes no false claim — every other arm in this fixture passes it.
+#
+# ANCHORED ON THE PRECEDING `esac`, not on the bare word. `continue` appears many times in the
+# subject and a needle keyed on it would edit all of them; this one is the last line of
+# `entry_unreadable`'s body and the only `continue` immediately following a `case` close.
+#
+# DRIVEN AT `partial-aa` ONLY, and that is the measurement, not a shortcut: at `partial-zz`
+# nothing sorts after the seal, so `break` and `continue` produce identical output and this
+# mutant would come out green. The second position is Part 4b's near-miss and it is asserted
+# there; here the kill needs the position where the difference exists.
+if mk m10 awk '{ if ($0 == "  continue" && p == "  esac") { print "  break" } else { print }; p = $0 }'; then
+  M10_LEFT="$(grep -c '^  break$' "$TMP/m10.sh")"
+  M10_BASE="$(grep -c '^  break$' "$LINTER")"
+  M10_OUT="$(bash "$TMP/m10.sh" "$ROOT/partial-aa" 2>&1)"; M10_RC=$?
+  # POSITIVE CONJUNCTS EITHER SIDE OF THE MISSING ROW. "The E17 is gone" alone is satisfied by
+  # a subject that emits nothing at all, so the refusal, the FATAL and a full footer must all
+  # still be THERE — a plausible complete report with one finding silently absent is the exact
+  # shape of the defect and nothing else produces it.
+  say "$([ "$M10_LEFT" -eq $((M10_BASE + 1)) ] && [ "$M10_RC" -eq 2 ] \
+         && [ "$(errs_naming "$M10_OUT" 'extensions/no-receipt.md')" -eq 0 ] \
+         && fatal_for "$M10_OUT" 'extensions/aa-sealed.md' \
+         && [ "$(footer_field "$M10_OUT" unreadable)" = 1 ] && echo 1 || echo 0)" \
+    "MUTANT m10 killed: with break for continue the sibling's finding vanishes while the refusal, the FATAL and the footer all stay"
+fi
+
 # --------------------------------------------------------------------------------------
 # Part 7 — the reads whose EMPTY value is PERMISSIVE
 # --------------------------------------------------------------------------------------
@@ -389,11 +485,22 @@ if [ "$SEAL_OK" = 1 ]; then
   # Later sites legitimately emit the findings the earlier arms already produced before the
   # abort, so unlike Part 1 these do NOT assert zero ERRORs naming the file. What they assert
   # is the refusal: no verdict is issued over a file this run could not finish reading.
+  #
+  # THE THIRD CONJUNCT WAS `[ -z "$(footer_field … errors)" ]` — an absent footer — and it was
+  # asserting the ABORT, not the refusal. The abort is what BL-122 removed: the run now finishes
+  # every pass and prints the footer, then refuses. An absent footer is no longer the shape of a
+  # refusal, and keeping the arm would have held the defect in place.
+  #
+  # `unreadable=1` REPLACES IT, and it is the stronger conjunct rather than a weaker one. An
+  # absent footer says only that the run stopped somewhere; this says the run finished AND
+  # counted this entry as one it could not read. The footer is present and it does not pass
+  # judgement on the sealed file — that second half is what the `unreadable=` field states, and
+  # what P4 of the ledger receipt asserts separately in row terms.
   for _k in extends position gate_types; do
     sr "$TMP/sealed.sh" "$_k" "$PERM" "$PERM_SUBJ"
     say "$([ "$SR_RC" -eq 2 ] && fatal_for "$SR_OUT" 'extensions/role-entry.md' \
-           && [ -z "$(footer_field "$SR_OUT" errors)" ] && echo 1 || echo 0)" \
-      "a mid-run read failure on '$_k' REFUSES — exit 2, named, and no footer passing judgement"
+           && [ "$(footer_field "$SR_OUT" unreadable)" = 1 ] && echo 1 || echo 0)" \
+      "a mid-run read failure on '$_k' REFUSES — exit 2, named, and a footer declaring unreadable=1"
   done
 
   # --- C7/C8: the acquittal site, which is the odd one of the eight ---------------------
@@ -494,7 +601,7 @@ fi
 # ASSERTION FLOOR. An arm that never executes -- a helper that returned early, a mutant whose
 # `mk` bailed -- leaves a green report that reads exactly like a passing one.
 # --------------------------------------------------------------------------------------
-EXPECTED_ASSERTIONS=30
+EXPECTED_ASSERTIONS=36
 echo
 if [ "$ASSERTIONS" -ne "$EXPECTED_ASSERTIONS" ]; then
   printf 'layer-entry-unreadable: FAIL — %d assertions ran, %d expected. An arm did not execute.\n' \
