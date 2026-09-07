@@ -185,6 +185,55 @@ else
   bad "a stale baseline line was tolerated (rc=$rc) — a baseline would silently suppress a check that started passing"
 fi
 
+# --- Assertions 14-18: the verdict is joined on (catalog, check), not on check --
+# A check NUMBER is not unique across catalogs — `gate-validation.md` says so in as many
+# words and forbids attributing across them by number. The reference consumer carries 34
+# such ids. Every arm here is paired with the single-catalog control (check 33) in the SAME
+# timeline, because an arm that stops firing everywhere is a refusal wearing a fix's clothes.
+
+# 14. THE DEFECT, in its fail-open direction. `[core] 32` is expired and core's own newest
+#     verdict is FAIL, so this must fire — even though a NEWER extension row says PASS.
+drive "$VALIDATOR" collide-core "$GM_COLLIDE"; rc="$LAST_RC"
+if [ "$rc" = "1" ] && grep -q "STILL FAILING" <<<"$LAST_OUT"; then
+  ok "an expired suppression on a still-failing CORE check fires, though a newer extension row PASSes"
+else
+  bad "the extension row ACQUITTED a core check that is still failing (rc=$rc) — the fail-open direction of the collision"
+fi
+
+# 15. The control, same timeline: a single-catalog check must be unaffected.
+drive "$VALIDATOR" collide-control "$GM_COLLIDE"; rc="$LAST_RC"
+if [ "$rc" = "1" ]; then
+  ok "the single-catalog control still fires in the colliding timeline (assertion 14 discriminates)"
+else
+  bad "the single-catalog control stopped firing (rc=$rc) — assertion 14 proves nothing, the arm just refuses"
+fi
+
+# 16. A bare id carries no bracket and must resolve as `core`, exactly as `[core]` does.
+#     An author error that drops the required field must not buy WIDER coverage.
+drive "$VALIDATOR" collide-bare "$GM_COLLIDE"; rc="$LAST_RC"
+if [ "$rc" = "1" ]; then
+  ok "a bare id resolves as core and fires identically to the bracketed form"
+else
+  bad "a bare id stopped resolving (rc=$rc) — dropping the bracket now buys silence"
+fi
+
+# 17. THE MIRROR, and the only input that separates a real join from a hard-coded `core`.
+#     Here the EXTENSION check is the failing one and core's newest row PASSes.
+drive "$VALIDATOR" collide-ext "$GM_COLLIDE_EXT"; rc="$LAST_RC"
+if [ "$rc" = "1" ] && grep -q "STILL FAILING" <<<"$LAST_OUT"; then
+  ok "an expired suppression on a still-failing EXTENSION check fires, though core's newer row PASSes"
+else
+  bad "hard-coding the core catalog acquitted a failing extension check (rc=$rc) — every corpus-drawn seed passes this, only this one separates them"
+fi
+
+# 18. And the mirror's own control: core 33 still fires in the mirrored timeline.
+drive "$VALIDATOR" collide-control "$GM_COLLIDE_EXT"; rc="$LAST_RC"
+if [ "$rc" = "1" ]; then
+  ok "the single-catalog control fires in the mirrored timeline too (assertion 17 discriminates)"
+else
+  bad "the control stopped firing in the mirrored timeline (rc=$rc)"
+fi
+
 # ------------------------------------------------------------------------------
 # MUTANTS. Copies, never in-place edits. `cmp -s` proves the mutation landed and
 # `bash -n` proves the result is still a program — a copy that dies on a syntax error
@@ -867,6 +916,57 @@ if [ "$SL_CWD_CTRL_OK" = "1" ]; then
     else
       bad "MUTANT H also moved world A (gates_recorded='$(sl_field gates_recorded)') — the two worlds are entangled and one of them is redundant"
     fi
+  fi
+fi
+
+# ------------------------------------------------------------------------------
+# CATALOG-JOIN MUTANTS. Each replaces latest_verdict()'s body with a WRONG join and must
+# be killed by the assertions above. Keyed on BEHAVIOUR — the verdict each returns — never
+# on the spelling of the condition line, so a second correct spelling is not a false kill.
+#
+# MUTANT J is the one that matters: it hard-codes `core`. Every seed drawn from the real
+# corpus passes it, because all 18 live suppressions on the reference consumer are `[core]`
+# and the non-core control is 0. Only assertion 17's mirrored world separates it from the
+# fix, which is why that world exists.
+# ------------------------------------------------------------------------------
+sl_mkjoin() { # <src> <out> <awk-guard-line> — swap the catalog guard for a wrong one
+  awk -v G="$3" '
+    index($0, "if (g != wantcat) next") { print "      " G; next }
+                                        { print }
+  ' "$1" > "$2"
+}
+
+SL_MUT_I="$WORK/mutant-join-blind.sh"
+sl_mkjoin "$VALIDATOR" "$SL_MUT_I" "# join guard removed"
+SL_MUT_J="$WORK/mutant-join-hardcoded.sh"
+sed 's/^  \[ -n "\$cat" \] || cat="core"$/  cat="core"/' "$VALIDATOR" > "$SL_MUT_J"
+
+if cmp -s "$VALIDATOR" "$SL_MUT_I"; then
+  bad "MUTANT I did not apply — the catalog guard line was not found, so this arm proves nothing"
+elif ! bash -n "$SL_MUT_I" 2>/dev/null; then
+  bad "MUTANT I is not a valid program"
+else
+  drive "$SL_MUT_I" collide-core "$GM_COLLIDE"; rc_i="$LAST_RC"
+  drive "$SL_MUT_I" collide-control "$GM_COLLIDE"; rc_ic="$LAST_RC"
+  if [ "$rc_i" = "0" ] && [ "$rc_ic" = "1" ]; then
+    ok "MUTANT I killed — dropping the catalog guard acquits the failing core check while the control still fires (assertion 14 has teeth)"
+  else
+    bad "MUTANT I SURVIVED (collide=$rc_i control=$rc_ic) — assertion 14 does not depend on the join"
+  fi
+fi
+
+if cmp -s "$VALIDATOR" "$SL_MUT_J"; then
+  bad "MUTANT J did not apply — the bare-id default line was not found, so this arm proves nothing"
+elif ! bash -n "$SL_MUT_J" 2>/dev/null; then
+  bad "MUTANT J is not a valid program"
+else
+  drive "$SL_MUT_J" collide-core "$GM_COLLIDE"; rc_ja="$LAST_RC"
+  drive "$SL_MUT_J" collide-bare "$GM_COLLIDE"; rc_jb="$LAST_RC"
+  drive "$SL_MUT_J" collide-ext "$GM_COLLIDE_EXT"; rc_je="$LAST_RC"
+  if [ "$rc_je" = "0" ] && [ "$rc_ja" = "1" ] && [ "$rc_jb" = "1" ]; then
+    ok "MUTANT J killed by assertion 17 ALONE — hard-coding core passes the core and bare-id arms and acquits a failing extension check"
+  else
+    bad "MUTANT J scored core=$rc_ja bare=$rc_jb ext=$rc_je — expected 1/1/0; assertion 17 is not the discriminator it claims to be"
   fi
 fi
 

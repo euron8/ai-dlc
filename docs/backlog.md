@@ -4156,3 +4156,177 @@ understood or fixed.
 
 verify: sh f=core/fixtures/check-1c-bypass/seed.sh; [ -f "$f" ] || exit 9; n=$(grep -cE '^[[:space:]]*cd "[^"]+"[[:space:]]*$' "$f") || n=0; [ "$n" -eq 0 ]
 
+
+## BL-194 — `latest_verdict()` joins a suppression's check id WITHOUT its catalog, so one catalog's verdict answers another catalog's question
+
+**Provenance.** `PC-S308-GATE-METRICS-CHECK2-STALE-VERDICT-READ-ORDER`, filed by the reference
+consumer 2026-09-06. **This is NOT that candidate's subject** — it was found while measuring it,
+in the same function, and is filed on its own because it is separable, live and fixable where the
+filed subject is none of those. The filed subject's own disposition is `BL-195`.
+
+**The mechanism.** `core/scripts/validate-suppression-lifetime.sh:325` `latest_verdict()` selects
+the newest `gate-metrics.jsonl` row whose `check` field matches, and ignores the row's `catalog`.
+The record schema carries `catalog` for exactly this reason: `core/skills/ai-dlc/steps/gate-validation.md:757`
+says it "is what makes a consumer's `check` numbers un-conflatable with this catalog's" and
+"never attribute across catalogs by number". The entry parser already extracts the bracket into
+`suppcat` at `:250` and already carries it into the `--in-force` rows at `:460`; it was dropped at
+the two call sites, `:471` and `:499`.
+
+**Both directions of the consequence are live, and the second is fail-open.** An extension row
+recorded FAIL fabricates a violation against a core check; an extension row recorded PASS
+**acquits a core check that is still failing**. A lifetime arm exists to stop an expired
+authorization walking past a red check, so the acquitting direction defeats the whole point of the
+file.
+
+**Measured on the reference consumer**, 1828 rows across five metrics files (the live
+`implementation-artifacts/gate-metrics.jsonl` plus the `s288` and `s305` archives and the `s300`
+and `s301` planning archives): **34 check ids carry rows under two or more catalogs against 37
+that carry one**, and **11 of the ids in THIS catalog are among them** — `2a 3a 3b 5 17 18 21 24
+27 30 34`. Driving a byte-faithful replica of the shipped reader, `latest_verdict 18` answers
+`PASS` out of an `extension:gate-validation-push` row; control, the single-catalog id 16, answers
+out of `core`. Impossible-id control returns empty.
+
+**IT IS LATENT TODAY AND THE MECHANISM IS NOT.** Every one of the 18 live suppressions on that
+consumer names `[core]`, non-core control 0, and no suppression names any of the colliding ids
+(0, against a control of 6 entries naming check 16). Restricted to the 57 ids this validator can
+act on, a correct join changes **0** answers today; across all 71 ids it changes 26, all of them
+extension-only. So this is tiered **DEFECT, not BLOCKER**: the collision surface is real and live,
+and nothing is currently standing on it. The differential over the consumer's own corpus is
+identical before and after the fix, with `cmp -s` asserting the two binaries differ first.
+
+**The argument for fixing it now rather than filing it.** The sibling that CONSUMES these rows
+already joins correctly — `core/scripts/validate-gate-adjudication.sh:1375` keys `in_force` on
+`(catalog, check_id)`, and its header at `:1350-1351` records the identical defect measured and
+closed there: *"a bare `16` covered an extension check `16` in a catalog the entry never named."*
+Two readers of one suppression corpus disagreeing on the join key is the defect; one of them was
+already repaired, and this is the other.
+
+**A bare id resolves as `core`,** matching that sibling's `cat or "core"`. The bracket is
+mandatory per `escalations.md` but the shape arm requires only the id, so an author error that
+drops it must not buy WIDER coverage than writing it correctly would.
+
+**The terminal arm at `:499` passes `core` as a literal, not `suppcat`, and that is deliberate.**
+An id reaches that line only by surviving the CATALOG membership test above it, and `CATALOG` is
+derived from this distribution's enforcement map — so a prose `Check <n>` in a `RESOLVED` entry
+has necessarily named a check in this catalog. Passing the entry's own bracket would let a stray
+non-core bracket ask for a verdict in a catalog whose ids were never resolved, silently
+un-checking every such entry.
+
+**The receipt drives the shipping program over a constructed corpus and reads its verdicts; it
+greps nothing.** It builds one world where a core check is failing under an older core row and
+passing under a newer extension row, and a mirrored world where the extension check is the failing
+one. Arm D is a single-catalog positive control that no degenerate subject can satisfy: measured,
+a subject that is absent, unparseable, always-passes, always-fails or always-refuses is REFUSED by
+it, while the correct fix closes — so the close side is reachable and the receipt is neither
+stuck-closed nor satisfiable by a disarm. **Scored against nine implementations**; it accepts the
+correct fix and its second spelling and rejects all the rest, including the two refuted fixes for
+the `BL-195` subject, a comment-only edit, a doc-only edit, a variant that parses the catalog and
+never compares it, a variant that breaks the bare-id case, and a variant that hard-codes `core`.
+
+**That last one is the reason the fixture carries a mirrored world.** Hard-coding `core` passes
+every seed drawn from the real corpus, because all 18 live suppressions are `[core]`. Only an
+input naming a NON-core catalog separates it from the fix. Fixture assertions 14-18 and mutants I
+and J carry that; run against the pre-fix validator the new arms produce 5 failures and exit 1,
+and the two single-catalog controls stay green in both worlds, so the arms discriminate rather
+than merely refusing.
+
+verify: sh V=core/scripts/validate-suppression-lifetime.sh; [ -f "$V" ] || exit 1; S=$(mktemp -d) || exit 1; trap 'rm -rf "$S"' EXIT; mkdir -p "$S/r/docs/escalations" || exit 1; printf 'checks:\n  - id: "18"\n    enforcer: []\n  - id: "19"\n    enforcer: []\n' > "$S/r/em.yaml" || exit 1; printf '{"v":1,"ts":"2026-01-01T00:00:00Z","catalog":"core","check":"18","verdict":"FAIL"}\n{"v":1,"ts":"2026-01-02T00:00:00Z","catalog":"extension:probe","check":"18","verdict":"PASS"}\n{"v":1,"ts":"2026-01-03T00:00:00Z","catalog":"core","check":"19","verdict":"FAIL"}\n{"v":1,"ts":"2026-01-04T00:00:00Z","catalog":"core","check":"19","verdict":"FAIL"}\n' > "$S/r/gm.jsonl" || exit 1; e() { printf '## [P%s] [op] - 2026-01-01T00:00:00Z\n\n**Status:** SUPPRESSED\n\n**Suppresses:** %s\n\n**Expires after:** 1\n\n**Operator authorization:** 2026-01-01T00:00:00Z | "proceed for now"\n\n' "$1" "$2"; }; q() { printf '%s' "$1" > "$S/r/docs/escalations/pending.md"; AI_DLC_PROJECT_ROOT="$S/r" bash "$V" --escalations "$S/r/docs/escalations/pending.md" --enforcement-map "$S/r/em.yaml" --gate-metrics "$S/r/gm.jsonl" >/dev/null 2>&1; echo $?; }; A=$(q "$(e A '[core] 18')"); B=$(q "$(e B '[extension:probe] 18')"); C=$(q "$(e C '18')"); D=$(q "$(e D '[core] 19')"); [ "$D" = 1 ] || exit 1; [ "$B" = 0 ] || exit 1; [ "$A" = 1 ] && [ "$C" = 1 ] || exit 1; exit 0
+
+## BL-195 — Check 2's suppression-lifetime arm reads a verdict the CURRENT gate has not yet written, and all four candidate remedies are refuted by measurement
+
+**Provenance.** `PC-S308-GATE-METRICS-CHECK2-STALE-VERDICT-READ-ORDER`, filed by the reference
+consumer 2026-09-06. **This entry is FILED AND DELIBERATELY NOT FIXED.** The defect is real and
+better evidenced than the filing claims; every remedy proposed for it — the filing's two, plus two
+derived here — was built or measured and refuted. It is recorded so the next session does not
+rebuild any of them.
+
+**The defect, verified against the consumer's own committed history.** Check 2 invokes
+`validate-suppression-lifetime.sh` (`core/skills/ai-dlc/steps/gate-validation.md:245`), which
+decides whether a suppression's named check is still failing by reading the newest recorded
+verdict in `gate-metrics.jsonl` (`core/scripts/validate-suppression-lifetime.sh:471`). That file
+is written ONLY by Check 12 (`gate-validation.md:736`), which runs after. So Check 2 necessarily
+reads the PREVIOUS gate's verdict, and a fix landing between two gates is invisible to it.
+
+The filing's cited case reproduces exactly: the FAIL row at `2026-09-05T22:58:00Z` carries sha
+`7729b544a…`, and `git merge-base --is-ancestor` puts that tree strictly BEFORE the reword fix at
+`33f925bcf` (exit 0; reverse direction exit 1 as control).
+
+**THE CONSUMER DIAGNOSED THIS ELEVEN DAYS BEFORE FILING IT, AND CHOSE TO SUPPRESS.**
+`docs/escalations/pending.md:3684`, 2026-08-26: *"Check 16 itself passed cleanly THIS gate on its
+own merits … but that PASS has not yet been recorded to `gate-log.md` (Check 12 runs after this
+adoption), so `validate-suppression-lifetime.sh` still reads story 2.1 gate-3's real 23-finding
+check-16 FAIL as the last recorded verdict and reactivates these two unrelated older entries."*
+That entry's own options list reads *"(a) fresh SUPPRESSED for check 16, this gate only [chosen];
+(b) investigate/fix the Check 12-before-Check 2 ordering instead"*. A sibling entry at the S305
+sprint-review gate does the same on check 22. **The recurrence is the choice, not the mechanism.**
+
+**Recurrence: 3 distinct gate events across 2 sprints (S305 ×2, S308 ×1),** derived by scanning
+both escalation corpora for entries naming a Check-2 suppression-lifetime FAIL together with a
+last-recorded-verdict cause; 4 entries resolve to 3 gates. Impossible-phrase control returns
+nothing. **An earlier reading of this batch narrowed it to 1 and was wrong** — that reading rested
+on an ancestry test which cannot answer the question, because it asks whether the FAIL row was
+written before the fix, which is necessarily true of every entry: the row IS the record of the
+failing gate. The staleness is in the READ, not the write.
+
+**THE FINDING THAT OUTRANKS THE FILING'S OWN CLAIM.** The metrics file is not merely stale at
+unlucky moments; it is the LOSSY artifact in principle. Check-2 verdicts, full population:
+
+| source | PASS | FAIL |
+|---|---|---|
+| per-gate `*.verdict.json` | 158 | **38** |
+| `gate-metrics.jsonl` | 93 | **3** |
+
+**A 12.7× undercount**, and the cause is structural: a gate that FAILs Check 2 halts before
+reaching Check 12, so the row recording that failure is never written. Control — check 16, which
+does not halt the gate, agrees far better (18 verdict FAILs against 5 metrics FAILs). The arm
+consults the one artifact that structurally cannot record the failures that matter most.
+
+**THE FOUR REFUTED REMEDIES. Do not rebuild these.**
+
+**(a) Re-sequence Check 2's read to after Check 12's write — A CYCLE.** Check 12's own instruction
+(`gate-validation.md:750`) is to emit a row for *every other check the manifest loaded*, which
+includes Check 2. Measured: 12 rows carry `"check":"2"`, against an impossible-id control of 0.
+Check 12 cannot write until Check 2 has produced a verdict to record, so "read after the writer
+writes" is self-referential.
+
+**(b) Re-run the underlying check live — FAILS OPEN ON 22 OF 57 CHECKS.** `enforcement-map.yaml`
+gives 22 ids `enforcer: []` against 35 with one (57 total, partitioning exactly; impossible-key
+control 0): `1 1c 3 3a 4 6 7 8 9 10 11 11a 12 13 14 15 19 20 21 27 29 H1`. **`[core] 11` is
+suppressed twice in the live corpus and has no enforcer to run.** Treating "cannot re-run" as PASS
+acquits every suppression on those 22 ids; treating it as FAIL fabricates blocks on them. The 35
+that do have enforcers resolve to distinct CLI contracts with no generic invocation, so (b) would
+additionally need a hand-written per-check invocation table.
+
+**(c) Refuse when the recorded row's `sha` is not current — DISARMS ON A SQUASH-MERGE CONSUMER.**
+Over the live metrics: 11 distinct shas, **0 ancestors of HEAD**, 10 orphans, 1 unresolvable;
+control `merge-base --is-ancestor HEAD HEAD` exit 0. The consumer squash-merges, so the commit a
+gate records is orphaned by the merge that lands the work. This shape reports NOT-APPLICABLE for
+every row on a healthy tree — a total disarm that reads as green. `tool-hazards.md` states the
+general rule: never test whether work landed by ancestry in a squash-merge repo.
+
+**(d) Read the CURRENT gate's `*.verdict.json` instead — NO JOIN EXISTS.** 198 verdict files carry
+the right answer (the file the S305 entry names records `check_id 16 → PASS` at the exact gate
+where the metrics said FAIL), and they cover every suppressed id including the ones (b) cannot
+reach — `2` (196 files), `16` (195), `11` (69), `22` (69), `24` (1), `30` (1), impossible-id
+control 0. But **96 distinct gate events in the metrics against 197 distinct verdict
+`generated_at` values intersect at 9**, control (ts ∩ ts) = 96. `generated_at` is the
+adjudicator's write time, not the gate's `ts`. With no key, the fix either wedges 87 of 96 gates
+or falls back to the stale row and reintroduces the defect. `gate_nonce` identifies a file
+uniquely (197 of 198) but is not available to the validator, and "newest verdict.json" picks the
+wrong file within two hours at the S305 gate — the original defect one file over. The directory
+is also absent on a fresh consumer.
+
+**What a fix would actually require**, stated so the next attempt starts from the real
+constraint rather than from the filing's framing: a gate-scoped identifier that both the verdict
+artifact and the suppression validator can see, passed IN by the caller rather than discovered.
+That is a change to Check 2's invocation line in a resident skill file plus a new flag, and it is
+fail-open the moment one caller omits it. **Nothing here is a small fix, and the smallest honest
+change is documentation** — Check 2's body stating that its verdict source is the PREVIOUS gate's
+record, and the arm reporting the `ts` of the row it read so a false positive is legible when it
+fires.
+
+**The consumer-owned half is not upstream work.** Why the 2026-07-22 failure happened at all, and
+whether their sprints should keep suppressing rather than escalating, is that consumer's own
+carry-over.
+
+verify: manual
