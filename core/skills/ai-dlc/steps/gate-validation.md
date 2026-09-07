@@ -2203,6 +2203,19 @@ consumer predates the spec layer.
 **Scope.** Skip unless Check 28 reported `IN-FORCE`; on
 `SKIPPED-PRE-ADOPTION` report that token and move on.
 
+**Scope — not yet authored.** Report `NOT-YET-AUTHORED` and move on when the gate
+being validated is a variant's OPENING planning gate and this sprint's
+`_bmad-output/specs/s<N>/` does not exist. Check 28 resolves a DECLARATION, not an
+artifact, so an adopted project reports `IN-FORCE` at a gate that runs BEFORE
+`discovery.md` §4b authors the kernel — the carry-over variant opens at
+`carry-over-evaluation.md`, which runs the planning gate at its own step. **This is
+not the blanket "no spec present, so pass" that Check 28's own body refuses**, and
+the difference is the whole clause: that pass cannot tell a project that never
+adopted from one that adopted and stopped, whereas this arm fires only where the
+authoring step demonstrably has not run yet, and reports a token rather than
+silence. Where the spec directory exists and the named `SPEC.md` does not, that is
+a real absence and this arm does NOT apply.
+
 **Check.** Read `_bmad-output/specs/s<N>/<slug>/SPEC.md` and re-grade it against
 BMAD's Spec Law in a fresh `gate-adjudicator` subagent (Rule 20). Read the
 `.memlog.md` verdict entries but do NOT adopt them: BMAD's Self-Validate is run by
@@ -2476,6 +2489,17 @@ can diff against.
 
 ### 33. Every identifier the operator named reaches this sprint's scope (all planning gates).
 <!-- CHECK_LOADED: 33 -->
+
+**Scope — not yet authored.** Report `NOT-YET-AUTHORED` and move on when the gate
+being validated is a variant's OPENING planning gate and this sprint's
+`_bmad-output/planning-artifacts/s<N>/locked-requirements.md` does not exist.
+`discovery.md` §4a authors that file, and the carry-over variant opens at
+`carry-over-evaluation.md`, which runs its planning gate before discovery has run —
+so the artifact this check reads is not owed yet. Where the sprint slot exists and
+the file does not, that is a real absence and this arm does NOT apply. Check 29
+carries the same clause for the spec kernel; both state the condition rather than
+sharing an anchor, because a check body is loaded on its own by gate-type slicing
+and a reference to a sibling check is not loaded with it.
 
 **Check.** Run `scripts/ai-dlc/validate-request-coverage.sh --requests
 _bmad-output/operator-requests-history.md --brief

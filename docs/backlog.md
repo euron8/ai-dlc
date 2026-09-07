@@ -4347,3 +4347,69 @@ the charset — the decorated one refused only under `prefix_ci`. Scored against
 writer: both arms report `exit=0 want=1`, so they fail on the defect and pass on the fix.
 
 verify: sh R=$(mktemp -d); mk() { printf "%s\n" "<!-- SKILL_INVOCATION_PROVENANCE v1" "skill: ai-dlc-adversary-review" "tool_use_id: $1" "mode: subagent" "lead_role: x" "SKILL_INVOCATION_PROVENANCE_END -->" > "$R/$2"; }; mk "toolu_placeholder_UNSEEN_SUFFIX_XYZ" bad.md; mk "toolu_01ABCdefGHIjklMNOpqrST" good.md; b="$(bash core/scripts/validate-provenance-block.sh "$R/bad.md" 2>&1 || true)"; g="$(bash core/scripts/validate-provenance-block.sh "$R/good.md" 2>&1 || true)"; rc=1; grep -q "toolu_placeholder_UNSEEN_SUFFIX_XYZ is forbidden" <<< "$b" && ! grep -q "is forbidden" <<< "$g" && rc=0; rm -rf "$R"; exit $rc
+
+## BL-200 — Checks 29 and 33 presuppose an artifact the carry-over variant authors AFTER its opening planning gate, and neither body can tell "not yet owed" from "missing"
+
+**Provenance.** `PC-S309-CHECK29-33-NO-SCOPE-CLAUSE-FOR-CARRY-OVER-OPENING-GATE`, filed by the
+reference consumer 2026-09-07.
+
+**THE MECHANISM HOLDS AND THE FILING'S OWN FRAMING IS WRONG IN TWO PLACES.** Both corrections were
+derived before building, and both narrow the entry rather than widening it.
+
+**Correction 1: Check 29 DOES carry a `**Scope.**` clause.** The filing says neither check has one.
+Check 29's is gated on Check 28 (`Skip unless Check 28 reported IN-FORCE`), just not about
+ordering. Check 33 carries none at all. The defect is what the clause does not SAY, not its
+absence.
+
+**Correction 2: the class is TWO checks, and a survey was needed to establish that.** Derived over
+all 40 check bodies: exactly four name `locked-requirements.md`, `specs/s<N>` or `SPEC.md` — 3b,
+29, 30 and 33. Checks 3b and 30 are STORY gates, which run after discovery has authored both
+artifacts, and both carry a Scope clause anyway. **My own first survey read a fifth instance,
+Check 35, and it was an artifact of the awk that produced it** — the matched text was the
+remediation loop, not a check body. Check 35 runs a script against a file that always exists.
+
+**Why Check 28 does not already cover it.** Check 28 resolves a DECLARATION, not an artifact —
+`validate-spec-adoption.sh` keys on `--verdict <sprint>` against a declared floor, so an adopted
+project reports `IN-FORCE` at every planning gate including one that runs before the kernel
+exists. Check 29 is then in scope with nothing to read.
+
+**REPRODUCED ON THE CONSUMER'S OWN VERDICT ARTIFACT, and the reproduction is narrower than the
+filing claims.** `_bmad-output/gate-adjudication/planning-20260907T162823Z.verdict.json` carries 10
+verdicts. Check 29's records Check 28 returning `IN-FORCE s309 >= s299 (declared 89b053ba2)`, then
+`no _bmad-output/specs/s309/ exists`, and the adjudicator resolving it under a **"Not-yet-owed arm"
+the check text does not give it** — the burden the filing describes, in the consumer's own words.
+**Check 33 does not appear in that verdict at all** (ids: 1, 1c, 2, 3, 4, 7, 16, 20, 27, 29;
+control: an impossible id is absent), so "reproduced identically at sprint 309" is false for 33 —
+the filing's own body says "checks 29 and 27", which is closer than its title. Check 33's evidence
+is the s307 archive, which corroborates: it names Check 33, states `not-yet-authored ≠ missing`,
+and records the same recommendation.
+
+**The fix is one scope clause in each body, and NOT a shared anchor, which is what the filing
+asks for.** Gate-type slicing loads a check body on its own; a reference to a sibling check is not
+loaded with it, so a shared clause would be invisible at exactly the gate that needs it. Each
+clause states its own condition and names the authoring step.
+
+**THE ARM IS BOUNDED SO IT CANNOT BECOME THE BLANKET PASS CHECK 28 REFUSES.** Check 28's body
+already argues that a clause skipping the spec checks whenever no spec artifact is present is
+indistinguishable from the failure it masks — a project that never adopts, one that adopted and
+stopped, and one with a perfect spec all produce the same silence. The clause fires only where the
+gate is a variant's OPENING planning gate AND the sprint's directory does not exist, and reports a
+TOKEN rather than silence. Where the directory exists and the named file does not, it does not
+apply — that is a real absence.
+
+**`NOT-YET-AUTHORED` needs no vocabulary-index row.** Derived: gate check-status tokens are not a
+bound vocabulary; the precedent `SKIPPED-PRE-ADOPTION` carries no row either. It has an emitter
+(`validate-spec-adoption.sh`) and a fixture reader; the new token is adjudicator-facing prose with
+no emitter, so it adds no join and cannot go stale. `validate-gate-manifest.sh` resolves both
+directions after the edit.
+
+**THE RECEIPT IS PROSE-KEYED AND THAT IS A STATED WEAKNESS, NOT AN OVERSIGHT.** Nothing drives a
+check body's scope semantics — `validate-gate-manifest.sh` resolves ids to anchors and
+`validate-enforcement-map.sh` joins the catalog, neither reads what a body MEANS. So the receipt
+keys on the token appearing inside each of the two check BODIES, scoped by awk rather than
+whole-file, with Check 28 as a negative control that must stay 0. It rejects `origin/main` and
+rejects a half-fix that patches only Check 29. **A rewrite that keeps the semantics and drops the
+token scores STILL-LIVE**, which is the known cost of a prose receipt; replace it if a mechanism
+ever reads check scope.
+
+verify: sh GV=core/skills/ai-dlc/steps/gate-validation.md; ok=0; for id in 29 33; do body="$(awk -v id="$id" '$0 ~ "^### " id "\\." {f=1; next} f && /^### [0-9]/ {exit} f {print}' "$GV")"; grep -q "NOT-YET-AUTHORED" <<< "$body" && ok=$((ok+1)); done; c28="$(awk '/^### 28\./{f=1;next} f&&/^### [0-9]/{exit} f{print}' "$GV")"; n28=0; grep -q "NOT-YET-AUTHORED" <<< "$c28" && n28=1; [ "$ok" = 2 ] && [ "$n28" = 0 ]
