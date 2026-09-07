@@ -37,20 +37,54 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 69 SHIPPED AS `v0.521.0`, ONE NO-`PC` RELEASE — THE FIRST SINCE THE PC-BACKED SET WAS EXHAUSTED. THE ENTRY'S OWN PARTITION HAD EXPIRED IN THE COMMIT THAT FILED IT, AND ITS RECEIPT WAS REJECTED BY THE CORRECT FIX WHILE A COMMENT COULD CLOSE IT. THE CONSUMER DID NOT PULL, SO THE GAP IS THREE AND PENDING IS TWO, AND THE PULL IS **REQUIRED** ON A CLOBBER REPRODUCED ON THE CONSUMER'S OWN FIXTURE. THE SWEEP IS NOT EMPTY BUT IT IS FULLY ADJUDICATED: UNFILED IS 16 AND **NOTHING IN IT IS AVAILABLE WORK**.
+### BATCH 69 SHIPPED AS `v0.521.0` AND `v0.522.0` — A CORRECTION RELEASE, BECAUSE A LATE ADVERSARIAL HAND FOUND THE SEAM MISSED 13 FIXTURES WHOSE `seed.sh` DOES THE `git init`, ONE OF THEM SILENTLY. THE FIRST NO-`PC` BATCH SINCE THE PC-BACKED SET WAS EXHAUSTED — THE FIRST SINCE THE PC-BACKED SET WAS EXHAUSTED. THE ENTRY'S OWN PARTITION HAD EXPIRED IN THE COMMIT THAT FILED IT, AND ITS RECEIPT WAS REJECTED BY THE CORRECT FIX WHILE A COMMENT COULD CLOSE IT. THE CONSUMER DID NOT PULL, SO THE GAP IS THREE AND PENDING IS TWO, AND THE PULL IS **REQUIRED** ON A CLOBBER REPRODUCED ON THE CONSUMER'S OWN FIXTURE. THE SWEEP IS NOT EMPTY BUT IT IS FULLY ADJUDICATED: UNFILED IS 16 AND **NOTHING IN IT IS AVAILABLE WORK**.
 
 This block replaces the batch-68 record below it. Every figure here was re-derived on 2026-09-06
 after the merge, against the working tree with the controls in the same invocation; re-derive
 them again rather than reading them.
 
-**`VERSION` IS `0.521.0`, SO BATCH 70 RELEASES AS `0.522.0`.** Re-derive `VERSION` and add one.
-Batch 69 merged once: `cb9c8fb6` (PR #663, squash, `v0.521.0`) closing `BL-191`. **No `PC-` id was
-cited, because the subject carries none** — so `named_absorbed()` has nothing to join and the
-consumer's ledger cannot move on this release. Rotated (live 88 → 87, archive 105 → 106), `--check`
-PASS with the sha resolving before `--apply`. **Receipt histogram keyed BY NAME, not by tally: 76
-receipts, exactly ONE exit 0, and it is `BL-191`'s own — zero incidental closes.** No correction
-release. **The seventeenth batch opened by a peer's handoff** (action 9's message from `ai-dlc-cf`),
-so it scoped itself from its own ranking and stated the choice in its first ping.
+**`VERSION` IS `0.522.0`, SO BATCH 70 RELEASES AS `0.523.0`.** Re-derive `VERSION` and add one.
+Batch 69 merged TWICE: `cb9c8fb6` (PR #663, squash, `v0.521.0`) closing `BL-191`, then `6885ba21`
+(PR #664, squash, `v0.522.0`) correcting it. **No `PC-` id was cited, because the subject carries
+none** — so `named_absorbed()` has nothing to join and the consumer's ledger cannot move on either
+release. Rotated at the first (live 88 → 87, archive 105 → 106), `--check` PASS with the sha
+resolving before `--apply`. **Receipt histogram keyed BY NAME, not by tally: 76 receipts, exactly
+ONE exit 0, and it is `BL-191`'s own — zero incidental closes.** **The seventeenth batch opened by a
+peer's handoff** (action 9's message from `ai-dlc-cf`), so it scoped itself from its own ranking and
+stated the choice in its first ping.
+
+**THE CORRECTION EXISTS BECAUSE A HAND REPORTED AFTER THE MERGE, AND THIS IS THE THIRD TIME IN THIS
+PROGRAM THAT A LATE HAND WAS RIGHT AND COST A RELEASE.** It had gone idle without delivering — the
+measured base case — and was asked once more before the merge; its answer arrived after. **Ask a
+silent hand for its findings AS TEXT before merging, and read a late hand's report against what
+shipped rather than filing it.** Every finding below was re-measured here before it was acted on.
+
+**THE POPULATION WAS SCOPED TO `run.sh` AND THE DEFECT LIVES IN `seed.sh`.** Fifteen `seed.sh` run
+`git init`; for **thirteen** of them the `run.sh` runs none, so those `run.sh` sourced nothing and
+the seed inherited an armed `GIT_DIR`. Against the `v0.521.0` tree: **`layer-conforms-to` took a
+762-entry index to 2 at exit 0 with ZERO FAILs**, `ledger-rotate` to 3, `snapshot-conservation` to
+3 — while `trunk-push-bound` and `layer-crosswalk-home` stayed 762 in the same run, which is the
+discrimination control proving the fix worked where it reached and that these were surviving it.
+**A derived population is only as wide as its GLOB**, and `*/run.sh` read as "every fixture" while
+meaning "every fixture whose entry point happens to hold the call". Keyed on the DIRECTORY now
+(28 → 41 members); the seam still goes in `run.sh` and reaches the seed by INHERITANCE.
+
+**TWO FURTHER DEFECTS IN THE VALIDATOR, BOTH MINE, NEITHER LIVE.** The exemption was
+**POSITION-BLIND** — a `run.sh` sourcing the seam on line 2 and re-exporting `GIT_DIR` on line 3 was
+acquitted while clobbering 757 → 4, because the arm keyed on the sourcing site EXISTING and never on
+it being the LAST WRITER. And the first cut of the arm closing that could not distinguish a one-shot
+prefix (`GIT_DIR=x git ls-files`, which scopes to one command) from a persisting assignment, so it
+flagged this validator's own fixture — a true match on a false subject.
+
+**TWO OF THE ENTRY'S MEASURED CLAIMS ARE REFUTED, AND THE SECOND IS OPERATIONALLY DANGEROUS.**
+*"Blast radius: the index only, `HEAD` unchanged, refs unchanged"* is false — against a
+`for-each-ref` snapshot the ref store changes and **`refs/heads/main` itself MOVES**, and one
+fixture left the index untouched while moving `main` anyway, which an index-only instrument cannot
+see. *"Recovers fully with `git reset --hard`"* is false: the fixture commits onto the victim's
+checked-out branch, so **`HEAD` IS the damaged state** and resetting to it is a no-op that reports
+success — index stays at 4 against a baseline of 762. Recovery needs a pinned pre-damage sha. **A
+session following that sentence would reset, see no change, and conclude the damage is permanent.**
+Both corrected in the archived entry with the originals kept.
 
 **THE SWEEP IS NOW FULLY ADJUDICATED AND THE RESIDUE IS ZERO. THIS IS A CHANGE OF STATE, NOT A
 SNAPSHOT.** Unfiled is 16. Four are already named in an `origin/main` release commit (fixed without
@@ -6954,7 +6988,7 @@ so no block written before it changes verdict.
    follow-on work, not upstream's.
 
    **BATCH 69's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.** `BL-191` closed the `git init`
-   clobber class as `v0.521.0` at `cb9c8fb6` (PR #663), no `PC-` id cited because it carries none.
+   clobber class as `v0.521.0` at `cb9c8fb6` (PR #663) and corrected by `v0.522.0` at `6885ba21` (PR #664), no `PC-` id cited because it carries none.
    The seam is `core/fixtures/lib/preamble.sh`, the binding is the standalone
    `scripts/validate-fixture-git-env.sh` at `--max-unscrubbed 0`, the fixture is
    `core/fixtures/fixture-git-env-seam/`. **Two of the entry's own figures had expired, one of them
