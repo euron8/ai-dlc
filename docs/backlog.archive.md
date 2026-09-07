@@ -8544,6 +8544,41 @@ verify: sh R=$(mktemp -d); mk() { printf "%s\n" "<!-- SKILL_INVOCATION_PROVENANC
 
 **LANDED (v0.527.0, verified 15e42dcc).**
 
+**AMENDED ON THE BRANCH: THE FIRST CUT OF CHECK 33's ARM COULD NOT FIRE ON THE CASE THAT
+MOTIVATED IT, AND AN ADVERSARIAL HAND CAUGHT IT AFTER THE RELEASE COMMIT.** Both clauses first
+required the sprint SLOT to be absent. That is correct for Check 29, whose subject is
+`_bmad-output/specs/s<N>/` — no opening step writes it. It is FALSE for Check 33:
+`carry-over-evaluation.md:23` writes `s<N>/carry-over-evaluation.md` and `:147` writes the
+`s<N>/coe-adversarial-p<M>.md` series, both BEFORE its own §7 gate, so the slot always exists by
+the time the check runs. Measured at the two real gate shas, subject and control in one
+invocation: at s307 (`1f35f5637`, the reproducing case) the slot held 4 files with
+`locked-requirements.md` ABSENT, and at s308 (`a4304cbfc`) it held 7 with the file present. Under
+the first cut, s307 evaluates as "slot exists", the arm self-excludes, and the check routes to the
+real-absence FAIL this clause exists to prevent. **The two checks read as a pair and are not
+symmetric.** Check 33's arm now keys on the FILE alone; the directory conjunct is dropped and the
+asymmetry is stated in both bodies. Establishing that this is safe needed the sole-writer
+derivation: `discovery.md` §4a authors the file and every other step mention reads it and cites
+§4a, so on the carry-over path its absence at the opening gate is always the ordering case.
+
+**`NOT-YET-AUTHORED` VS `EXAMINED NOTHING` IS A DELIBERATE CALL, NOT AN OVERSIGHT.** The same hand
+flagged the new token as a possible fourth spelling of the `empty_subject_verdict` vocabulary I93
+binds across fifteen emitters, whose own header records that three spellings of one state WAS the
+defect. The states are distinct: `EXAMINED NOTHING` reports that a validator RAN and resolved no
+subject — a legal terminal state, and `gate-validation.md:455` already reads it in that sense —
+where `NOT-YET-AUTHORED` reports that the check must not run yet because its authoring step has
+not executed. That is a claim about pipeline ORDERING. The precedent for a scope token living in
+this file with no vocabulary row is `SKIPPED-PRE-ADOPTION`. The distinction is now stated in
+Check 29's body, **because I93's arm scans EMITTERS and this token has none**, so nothing
+mechanical would catch a fourth spelling of either state.
+
+**THE CONSUMER'S OWN RECEIPT FOR THIS CANDIDATE CANNOT SEE THE FIX, AND THE BRIEF MUST SAY SO.**
+It is `theirs_has .claude/skills/ai-dlc/steps/gate-validation.md "### 29. Spec kernel integrity"` —
+a heading this fix never touches. Measured against `b5024d5a~1` and against the fixed tree: 1 and
+1, with an impossible heading returning 0 as the control. It was satisfied before the fix existed
+and will report the same after any future regression, so a `CLOSE-CANDIDATE` row from it is
+evidence about the heading and about nothing else.
+
+
 **Provenance.** `PC-S309-CHECK29-33-NO-SCOPE-CLAUSE-FOR-CARRY-OVER-OPENING-GATE`, filed by the
 reference consumer 2026-09-07.
 
