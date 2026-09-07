@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # Exercise the `.claude/rules/` version floor -- the DETECTOR, not a copy-time gate.
 #
 # `.claude/rules/` did not exist before Claude Code 2.0.64. Below that floor an installed

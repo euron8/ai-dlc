@@ -178,6 +178,21 @@ step "rule-file audit (origin tags, dates, dangling pointers)" \
 step "write-format steering (every shared append-only artifact declares its entry format)" \
   bash core/scripts/validate-write-format-steering.sh --max-undeclared 15
 
+# 2b. A fixture that builds a scratch repository must scrub the inherited git environment
+#     FIRST. Git exports GIT_DIR absolute to a hook run from a linked worktree; a fixture
+#     invoked directly inherits it, its `git init` then succeeds WITHOUT creating a
+#     repository, and every later git call lands on the caller's index. Measured: 8 of 8
+#     wiped a 757-entry index, 6 of them at exit 0 with zero FAILs.
+#
+#     THE SCRUB ABOVE DOES NOT COVER THIS. It protects the fixture POOL, which is dispatched
+#     from inside this hook; a hand running `bash core/fixtures/X/run.sh` passes through no
+#     seam at all, and that is the invocation CLAUDE.md prescribes for debugging one.
+#
+#     The ceiling only moves DOWN. It is 0 today because the seam closed the whole
+#     population; a new fixture that skips it is the same defect one instance larger.
+step "fixture git-env scrub (a directly-run fixture cannot clobber the caller's index)" \
+  bash scripts/validate-fixture-git-env.sh --max-unscrubbed 0
+
 # 3. Every fixture is an adversarial self-test for one gate check. A fixture that is
 #    never driven is a green light nobody earned.
 #

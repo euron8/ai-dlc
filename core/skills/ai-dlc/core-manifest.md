@@ -185,6 +185,7 @@ core_manifest:
   - fixtures/readset-skip/**
   - fixtures/layer-qualifier-grain/**
   - fixtures/layer-conforms-to/**
+  - fixtures/lib/**
   - fixtures/layer-entry-unreadable/**
   - fixtures/layer-extends-grain/**
   - fixtures/layer-retired-id-crosswalk/**

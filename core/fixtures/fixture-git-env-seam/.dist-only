@@ -1,0 +1,6 @@
+Its arm V drives scripts/validate-fixture-git-env.sh, which is a DISTRIBUTION-ONLY
+validator: its population is core/fixtures/*/run.sh, a path that does not exist on a
+consumer, where the same program refuses with exit 2 (measured on a tree built by
+install.sh). Shipped, this fixture would report on a subject the consumer does not
+have. The SEAM it guards does ship -- core/fixtures/lib/ carries no marker -- and a
+consumer exercises it through its own copies of the 27 fixtures that source it.

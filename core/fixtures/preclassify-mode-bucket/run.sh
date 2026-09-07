@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # preclassify-mode-bucket — the noop arms of the `A` and `M` branches must bucket on the
 # consumer's EXEC BIT, not on content alone, and must not collapse the two mode-only cases
 # into one.

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # layer-title-join — assert the absorption question is asked of PROSE headings, and that
 # the two exclusions that make it bearable are real rather than aspirational.
 #

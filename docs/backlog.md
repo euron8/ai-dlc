@@ -4286,6 +4286,44 @@ verify: sh f=core/fixtures/check-1c-bypass/seed.sh; [ -f "$f" ] || exit 9; n=$(g
 
 ## BL-191 — 42 of 45 scratch-repo-building scripts depend on a caller having scrubbed the git environment, and a fixture run BY HAND clobbers the index while printing PASS
 
+**LANDED (v0.521.0, verified on the branch that carries this line).** The seam is
+`core/fixtures/lib/preamble.sh`, sourced by the 27 fixture `run.sh` that run `git init`; the
+binding is `scripts/validate-fixture-git-env.sh` at `--max-unscrubbed 0`, dispatched from
+`.githooks/pre-push`; the fixture is `core/fixtures/fixture-git-env-seam/`.
+
+**TWO FIGURES IN THIS ENTRY'S OWN TEXT HAD EXPIRED BY THE TIME IT WAS TAKEN, and both are
+corrected here rather than in place, because the reasoning below is still the record of what was
+measured then.** The partition is **40 of 45**, not 42: `validate-claude-rules.sh` and
+`core/fixtures/claude-rules-joins/run.sh` gained scrubs in `11ebb342` — **the same commit that
+filed this entry** — so it was stale on arrival. Confirmed behaviourally as well as by grep:
+`claude-rules-joins` was driven armed and came back 757 → 757 where it is listed below at
+757 → 9. And the remedy's population is **27**, not 40: 40 is the count of fixture DIRECTORIES
+with a `git init` in any `.sh`, while the seam is sourced by `run.sh`, of which 27 qualify. The
+other 15 are `seed.sh` files, covered transitively where a sourcing `run.sh` invokes them and
+outside the population where they are reached another way.
+
+**THE CLOBBER ITSELF REPRODUCED EXACTLY**, which is why the corrections above narrow the entry
+without weakening it. Fresh victim per trial (a real repository with a real linked worktree),
+`GIT_DIR` exported as git exports it — derived from a probe hook rather than assumed, and it is
+`GIT_DIR` alone, absolute, with no `GIT_INDEX_FILE`. Armed: **8 of 8 wiped a 757-entry index to
+single digits, 6 at exit 0 with zero FAILs.** Unarmed control, same eight: 8 of 8 intact. Two
+further fixtures that came back intact under arming turned out not to run `git init` at all —
+correctly outside the population, not counter-examples.
+
+**THE FILED RECEIPT WAS REJECTED BY THE CORRECT FIX AND CLOSABLE BY A COMMENT.** It counted files
+matching a scrub regex repo-wide (`s >= 40`), so the single seam this entry PRESCRIBES moves it
+only 12 → 13 and reports STILL-LIVE over a working fix, while the per-fixture paste the entry
+CALLS WRONG closes it once it reaches 42 files. Measured non-fixes that also close it, each built:
+30 files whose entire content is `# env -i` (touching no fixture, adding no scrub); the same
+disclaiming text in a comment; and `unset GIT_DIRECTORY_OF_NOTHING` appended to 40 files, which
+closes it without ever naming `GIT_DIR` — the regex has no word boundary. The replacement below is
+behavioural: it puts a `git` shim on `PATH`, drives every member of a DERIVED population, and asks
+whether `GIT_DIR` was still armed at the moment each one called git. Scored both ways — 1 on the
+unfixed tree, 0 on the built fix — and it rejects all three of those non-fixes plus the sharpest
+case, the real scrub text present but commented out. Its stated limits: the shim makes every git
+call fail, so the guarantee is "every member makes at least one observed call and none saw an armed
+`GIT_DIR`", not every call in every member; and its population is the 27 `run.sh`.
+
 **FILED SEPARATELY FROM `BL-190` ON PURPOSE.** That entry is one program and it closes. This is the
 class behind it, and folding the two together would make `BL-190` unclosable — a second subject one
 paragraph down is the shape that keeps an entry open forever.
@@ -4390,5 +4428,5 @@ the suite POLE invokes to be timed before and after from inside the repo. That i
 placement** — it binds only the `FIXTURE_POOL` block. The two hooks agreeing here is coincidence
 today, and nothing fails if one drifts.
 
-verify: sh n=$(git grep -l 'git init' -- '*.sh' '.githooks/*' 'core/git-hooks/*' | wc -l); [ "$n" -gt 0 ] || exit 9; s=$(git grep -lE 'unset[[:space:]]+GIT_DIR|env -u GIT_DIR|env -i' -- '*.sh' '.githooks/*' 'core/git-hooks/*' | wc -l); [ "$s" -ge 40 ]
+verify: sh d=$(mktemp -d) || exit 9; trap 'rm -rf "$d"' EXIT; git grep -l 'git init' -- 'core/fixtures/*/run.sh' | sort > "$d/pop"; N=$(awk 'END{print NR+0}' "$d/pop"); [ "$N" -ge 20 ] || exit 9; mkdir -p "$d/bin" || exit 9; printf '#!/bin/sh\nprintf "%%s\\n" "${GIT_DIR:-SCRUBBED}" >> "%s/rec"\nexit 1\n' "$d" > "$d/bin/git"; chmod +x "$d/bin/git" || exit 9; : > "$d/rec"; ( PATH="$d/bin:$PATH" GIT_DIR="$d/v.git" git rev-parse ) >/dev/null 2>&1; [ "$(awk 'NR==1{print}' "$d/rec")" = "$d/v.git" ] || exit 9; r=0; a=0; while IFS= read -r f; do : > "$d/rec"; ( PATH="$d/bin:$PATH" GIT_DIR="$d/v.git" bash "$f" ) >/dev/null 2>&1; set -- $(awk -v v="$d/v.git" '{n++; if ($0==v) k++} END{print n+0, k+0}' "$d/rec"); [ "$1" -gt 0 ] && r=$((r+1)); a=$((a+$2)); done < "$d/pop"; [ "$r" -eq "$N" ] || exit 9; [ "$a" -eq 0 ]
 
