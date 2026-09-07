@@ -7595,6 +7595,16 @@ consumer's INSTALLED audit against its real tree today: **32 findings across 14 
 named consumer-owned file draws a finding now. **So the consumer cannot fix a single one of the 32**,
 where the filing implies it can fix two. The defect is wider than filed.
 
+**AND THE FILING'S FILE LIST IS WRONG IN BOTH DIRECTIONS, confirmed by a second hand after the
+merge.** The two files it calls the consumer's own — `docs/coding-conventions.md` and
+`gate-validation-domain.md` — are both PRESENT and both IN the scan corpus
+(`audit-rule-files.sh:107` names the first literally), yet each carries **0 findings**, against a
+control of 2 in `.claude/skills/ai-dlc/SKILL.md` in the same run. And its core-file list
+UNDER-counts by two: `steps/route.md` (1 finding) and
+`ai-dlc-update/reconcile/predicate-sites.md` (2) draw findings and are named nowhere in it.
+Neither correction moves this entry's claim — 32 of 32 core-owned is unchanged — but a filing's
+enumeration is evidence about nothing, which is the standing rule collecting its debt again.
+
 **THE MECHANISM.** `steps/retro.md` Step 4 said *"the lead dispositions every finding and authors
 every rewrite inline"*, and its decision tree ends in editing a rule file. Rule 27 forbids a consumer
 editing core, and `apply` restores any core file it does. So on a consumer every one of the 32

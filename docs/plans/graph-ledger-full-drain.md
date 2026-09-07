@@ -127,14 +127,45 @@ which reads as agreement and is a broken measurement.** Copy the resolver beside
 `0.519.0` — so the pull delivering that fix runs under the unfixed engine. `audit-rule-files.sh` is
 not itself bootstrapping.
 
-**THE SWEEP FOR BATCH 69. UNFILED IS 16 AND ELEVEN OF THEM ARE NOW KNOWN DEAD.** After the join
-above, the available residue is: the sibling `PC-S340-RETRO-AUDIT-SCANS-FIXTURE-FAILS-ONCE-AND-
-PASSES-ON-RETRY` (`verify: manual`; **NOT refuted** — 32 reps at 16-way parallelism returned 32/32
-exit 0 with a greppable-log control, and the fixture is hermetic: no real-repo read, no network, no
-`git init`, so `BL-191`'s clobber class does not reach it. A zero is not a refutation without a
-predicted rate, and none has been computed) plus the four ids already named in an `origin/main`
-commit message, which are the instrument gap and not work. The no-`PC` residue therefore ranks
-first for batch 69: **`BL-191`** is the readiest (the `git init` class — 45 files run it, 42 scrub
+**THE SWEEP FOR BATCH 69. UNFILED IS 16, ELEVEN ARE KNOWN DEAD, AND THE LAST LIVE `PC-` CANDIDATE
+IS REFUTED — SO THE PC-BACKED SET IS EXHAUSTED.** After the join above, the residue is the four ids
+already named in an `origin/main` commit message (the instrument gap, not work) plus the sibling
+`PC-S340-RETRO-AUDIT-SCANS-FIXTURE-FAILS-ONCE-AND-PASSES-ON-RETRY`, which is **REFUTED ON THE
+CONSUMER'S OWN COMMITTED INVESTIGATION** and is not available work.
+
+**AND THE REFUTATION IS NOT THE CLEAN SWEEP — THE CLEAN SWEEP PROVED NOTHING.** Batch 68 first drove
+that fixture 32 times at 16-way parallelism for 32/32 exit 0 and correctly recorded that as NO
+refutation, because the entry is `verify: manual` precisely since a single verdict is not evidence
+and no predicted rate had been computed. **The thing that actually settles it is STRUCTURAL and was
+sitting committed in the consumer's own tree**, at
+`_bmad-output/planning-artifacts/carry-over-backlog.md:1268` (also `docs/reviews/story-297-9-qa.md`):
+its story-297-9 re-verified through the real `pre-commit run ci-local --hook-stage push` path and
+found the fixture *"is referenced nowhere outside its own directory — it is not registered in
+`ci-local.sh`'s dispatch table under any check name"*, calling it **"a structural, not probabilistic,
+non-reproduction."** Re-derived here: `retro-audit-scans` appears **0 times** in the consumer's
+`scripts/ci-local.sh` against a control of 74 `run_check` hits, and its only references anywhere
+outside its own directory are four PACKAGING manifests (`core-manifest.md`, `setup-sites.md`,
+`tests/fixtures/MANIFEST`, the readsets TSV) — none of which dispatches anything. **The entry's own
+reproduction path cannot run the fixture, so the failure it describes did not come from there.**
+
+**ITS SECOND NAMED SUBJECT IS WRONG TOO.** The entry names `core/scripts/validate-mandatory-rules.sh`
+beside the fixture. That validator is INVOKED ZERO TIMES by the fixture: `seed.sh:15-19` resolves
+only `audit-rule-files.sh` and `validate-gate-manifest.sh`, and the three `validate-mandatory-rules`
+hits in `run.sh` (`:477`, `:487`, `:562`) are SEED PROSE inside a test corpus — text about a program
+scored as the program, which is `verification-discipline.md`'s own named trap.
+
+**WHAT IS NOT CLOSED, AND IT IS NOT OURS.** story-297-9 left its disposition `RE-VERIFY OPEN`, not
+CLOSED, because *"the original 2026-07-22 failure was not produced via this wired path and its actual
+origin remains unexplained."* Wiring the fixture in, or deciding it stays unwired, is that consumer's
+follow-on work. **Do not re-scope this as an upstream defect on the strength of the original
+observation** — the observation is real and its stated mechanism is refuted.
+
+**THE LESSON, AND IT COST NOTHING ONLY BECAUSE A HAND WENT LOOKING.** A clean sweep against an
+unstated rate is not evidence, and the answer was one `grep` away in a tree already on disk.
+`consumer-boundary.md` says exactly this: the rehearsal clone carries committed HISTORY, the stakes
+are almost always reachable, and the failure is not looking.
+
+**SO THE NO-`PC` RESIDUE IS THE WHOLE AVAILABLE SET FOR BATCH 69:** **`BL-191`** is the readiest (the `git init` class — 45 files run it, 42 scrub
 nothing; 8 of 8 fixtures clobbered a 757-entry index when run directly and 6 did it at exit 0; its
 detector's FP set measures 41 of 45 so it ships REPORT-ONLY with a downward ratchet), then
 `BL-187`, `BL-113` (ships alone, bootstrapping), `BL-122`, `BL-148`.
@@ -6781,15 +6812,18 @@ so no block written before it changes verdict.
    recorded in this repo and never joined back. **Do not re-scope onto those eleven.** Re-derive the
    join rather than trusting this paragraph, but do not spend a session re-reading that cluster.
 
-   **SO THE NO-`PC` RESIDUE RANKS FIRST FOR BATCH 69**, which is a change from the standing
-   provenance-first ordering only because the PC-backed set is exhausted rather than outranked.
-   The one remaining live PC candidate is
-   `PC-S340-RETRO-AUDIT-SCANS-FIXTURE-FAILS-ONCE-AND-PASSES-ON-RETRY`, and it is **NOT refuted**:
-   batch 68 drove that fixture 32 times at 16-way parallelism for 32/32 exit 0 against a
-   greppable-log control, and found it hermetic — no real-repo read, no network, no `git init`.
-   **That zero refutes nothing without a predicted rate, and none has been computed** (`verify:
-   manual`, because the defect IS intermittency). Compute the predicted count before reading any
-   clean sweep as an answer.
+   **SO THE NO-`PC` RESIDUE IS THE WHOLE AVAILABLE SET FOR BATCH 69**, because the PC-backed set is
+   EXHAUSTED rather than outranked. The last live PC candidate,
+   `PC-S340-RETRO-AUDIT-SCANS-FIXTURE-FAILS-ONCE-AND-PASSES-ON-RETRY`, is **REFUTED** — not by batch
+   68's 32/32 clean sweep, which proved nothing against an unstated rate, but by the consumer's own
+   committed story-297-9 investigation at
+   `_bmad-output/planning-artifacts/carry-over-backlog.md:1268`: the fixture is not in
+   `ci-local.sh`'s dispatch table under any name, so the entry's stated reproduction path cannot run
+   it — *"a structural, not probabilistic, non-reproduction"*. Re-derived: 0 hits in that file
+   against a control of 74. Its second named subject is wrong too — the fixture invokes
+   `validate-mandatory-rules.sh` zero times. **Do not re-scope it.** The consumer's own
+   `RE-VERIFY OPEN` remainder — why the 2026-07-22 failure happened at all — is that consumer's
+   follow-on work, not upstream's.
 
    **BATCH 68's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.**
    `PC-S340-AUDIT-RULE-FILES-DRIFT-FINDINGS-IN-CORE-PROSE-ARE-NOT-CONSUMER-FIXABLE` shipped as
