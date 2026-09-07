@@ -202,6 +202,38 @@ got="$(decision scripts/ai-dlc/brand-new.sh Write)"
 [ "$got" = "deny" ] && ok "  and a Write that would CREATE a squatter is denied too" \
                     || bad "  a Write creating scripts/ai-dlc/brand-new.sh was $got -- a squatter can still be planted through the editor"
 
+# --- 9. THE SECOND SHARED DIRECTORY, AND IT HAD NO HATCH UNTIL 0.525.0 ----------
+# `templates/*.md` is the same shape as `scripts/ai-dlc/*`: a glob over a directory
+# the consumer also writes into. The difference was the missing escape route. A
+# consumer-authored template there is [core]-owned by the GLOB while upstream has
+# never held the file, so retro.md Step 4's disposition for a [core] finding -- file
+# a push candidate -- names nothing that exists, while the consumer's pre-push blocks
+# on the tier-1 finding. Measured on the reference consumer: exactly one such file,
+# authored at 37b3d15c3, absent from every upstream commit.
+#
+# THREE DIRECTIONS, the same three assertion 8 makes for scripts. The ALLOW arm is
+# the one that matters and is the one a DENY-only probe cannot supply: a guard that
+# denied both would be indistinguishable from one that denies unconditionally.
+cat > "$WORK/.claude/skills/ai-dlc/core-manifest.md" <<'TPLMANIFEST'
+<!-- CORE_MANIFEST v1 -->
+```yaml
+core_manifest:
+  - SKILL.md
+  - hooks/ai-dlc-*.sh
+  - scripts/ai-dlc/*
+  - templates/*.md
+```
+
+templates_local_home: .claude/skills/ai-dlc/templates-local/
+TPLMANIFEST
+expect deny  ".claude/skills/ai-dlc/templates/pvc-presentation-template.md" \
+  "a consumer-authored template in the core-owned dir is denied, though upstream ships no such file"
+expect allow ".claude/skills/ai-dlc/templates-local/pvc-presentation-template.md" \
+  "  and the SAME basename in the declared local home is allowed"
+got="$(decision .claude/skills/ai-dlc/templates/brand-new.md Write)"
+[ "$got" = "deny" ] && ok "  and a Write that would CREATE one there is denied too" \
+                    || bad "  a Write creating .claude/skills/ai-dlc/templates/brand-new.md was $got -- the unfixable-[core] state can still be entered"
+
 echo ""
 if [ "$fails" -eq 0 ]; then
   echo "core-script-boundary: PASS"

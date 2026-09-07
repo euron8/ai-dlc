@@ -48,6 +48,21 @@ in-place edit AND denies the `Write` that would create such a file, routing the
 author to `scripts/ai-dlc-local/`. `core-script-boundary`'s assertion 8 asserts all
 three directions.
 
+**`templates/` is the SECOND shared directory, and it had no escape hatch until
+`0.525.0`.** The same reasoning applies to it verbatim: `templates/*.md` claims every
+`.md` a consumer puts there, so a consumer-authored template is `[core]`-owned by a
+glob and upstream has never held the file. That combination makes `retro.md`'s
+disposition for a `[core]` finding unactionable in BOTH directions — there is nothing
+upstream to file a push candidate against, and editing it locally is what the rule
+forbids — while the consumer's pre-push blocks on the tier-1 finding. Measured on the
+reference consumer: one such file, authored there, never upstream at any commit.
+
+`templates_local_home:` below is that hatch, and it is a DECLARATION rather than a new
+glob because the entry is read by roughly twenty programs and narrowing it would touch
+every one of them. Core keeps the whole `templates/*.md` glob; a consumer's own
+templates go in the declared local directory, which core never reads, never writes and
+never overwrites. `core-templates-boundary` asserts all three directions.
+
 **Fixtures are the one entry set that must be enumerated, and the enumeration is
 DERIVED.** `tests/fixtures/` is genuinely shared: core ships its adversarial
 self-tests there and a consumer's own fixtures sit beside them under no
@@ -327,6 +342,7 @@ rulebook:
 
 consumer_machinery_home: scripts/ai-dlc-local/
 consumer_machinery_subdirs: lib/ hooks/ fixtures/ config/ tests/
+templates_local_home: .claude/skills/ai-dlc/templates-local/
 ```
 
 **Note on the second copy.** `ai-dlc-update`'s

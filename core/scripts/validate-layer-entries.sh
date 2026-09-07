@@ -2002,8 +2002,15 @@ fi
 # Properties` — a different file about a different subject. Neutralising the unrelated `2b`
 # step anchors took the arm from 1 subject to 3 while the CITING file stayed byte-identical
 # (`cmp -s`), which is the control proving the extra rows came from the anchor pool and not
-# from the prose. Five of the six hook-check citations in core prose were silent that way, and
-# a silence is invisible where a warning is not.
+# from the prose. FOUR of the FIVE in-corpus hook-check citations were silent that way, and a
+# silence is invisible where a warning is not.
+#
+# A SIXTH CITATION EXISTS AND IS NOT IN THIS ARM'S CORPUS AT ALL, which is a wider gap than the
+# one this change closes. `enforcement-map.yaml:515` cites `ai-dlc-continue.sh (Stop) Check 2b`,
+# and `all_files` above takes `SKILL.md` by name at `-maxdepth 1` — so a sibling file in that
+# same directory is never scanned. It is invisible to W7 rather than silenced by it, and no
+# resolver here reaches it. Stated rather than fixed: widening the corpus is a separate change
+# with its own false-positive set to measure, and this one is already load-bearing.
 #
 # SO THE KEY IS (HOOK FILE, ID), NEVER THE ID ALONE. A citation that names a hook resolves only
 # against the ids THAT hook declares; a citation naming no hook keeps the pre-existing global
@@ -2019,6 +2026,23 @@ fi
 # cases `layer-reference-resolution` already owns — a bare crosswalk row, a namespaced
 # crosswalk row, an id core still defines, and the `Check A`/`Check N` placeholders — stay
 # silent, because a citation naming no hook never reaches the new branch at all.
+#
+# WHAT IT DOES ACQUIT, measured by an adversarial hand and reproduced here rather than left for
+# the next reader to rediscover. A line that names a hook for an UNRELATED reason while citing
+# an id that hook happens to declare is cleared. Measured, with the control in the same probe:
+#   "The retro step reads `ai-dlc-acknowledge.sh` logs; see Check 2z of the gate catalog"
+#      -> W7=LC-R2:0/0   ACQUITTED
+#   "See Check 2z of the gate catalog"  (same id, same file, no hook named)
+#      -> W7=LC-R2:1/0   reports
+# Only `2z` and `0b` are acquittable this way at all; the other six declared ids carry rulebook
+# anchors regardless, so the hook branch changes nothing for them. It is a LATENT false negative
+# on a warn-only arm: all five in-corpus hook-naming citations are correctly declared by the hook
+# they name (5/5, control: an impossible hook stem returns 0), so zero live instances exist.
+# NOT fixed, and the reason is that the alternative is worse. Keying on proximity or on a verb
+# would be a grammar over English prose, whose false-positive set nobody has measured, in
+# exchange for a false negative that requires three coincidences at once. The declaration
+# grammar already took the exposure from 149-of-200 synthetic ids under a naive substring form
+# down to two real ones.
 HOOKS_DIR="$PROJECT_ROOT/.claude/hooks"
 
 # The ids one hook DECLARES. A declaration opens a check block at column 0; a mention in
