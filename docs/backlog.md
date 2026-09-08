@@ -57,6 +57,62 @@ not a closed entry.
 
 ---
 
+## BL-202 — the gate-remediation guard arms on a prior sprint's dispositioned FAIL and denies every lead edit until the next sprint's first verdict lands
+
+**LANDED (v0.529.0).**
+
+**`ai-dlc-gate-remediation-guard.sh` arm 4 picks the live pass by nonce timestamp over the whole
+`gate-adjudication/` directory** (`core/hooks/ai-dlc-gate-remediation-guard.sh:431-443`). A
+sprint's closing `sprint-review` verdict that carries a FAIL is therefore the guard's live pass
+from retro close until the next sprint writes its first verdict, whatever the gate log says about
+that FAIL.
+
+**Dated in the reference consumer's own flow log.** Both `GATE_REMEDIATION_DENIED` events at the
+first step of sprint 309 name `Live gate pass: sprint-review-20260907T002257Z; FAILed check(s)
+still owed a repair: 2`. That gate PASSED with check 2 SUPPRESSED under a verified operator
+citation; the suppression was then archived by the retro close-out sweep; and
+`validate-suppression-lifetime.sh --in-force` answered `in_force=0` throughout. Six clerical edits
+went through opus remediators in that window. The guard's own header says the deny names "what a
+remediator is still owed", and nothing was owed.
+
+**Why the hook is not taught about sprints.** It deliberately reads no snapshot, because every
+record a lead can author is a record a lead can use to lift its own deny. A sprint-aware arm would
+read the snapshot or the status yaml, both lead-written. Removing the affordance is the smaller
+mechanism: `retro.md` §7a-post rotates the closing sprint's verdicts, selected on
+`gate_series_id`, with their `.repair*.md` and `.authorization.md` sidecars, to
+`implementation-artifacts/s<N>/gate-adjudication/`, so the guard meets an empty directory at
+sprint start. Legacy verdicts with no series id are never moved; the series validator's legacy
+split already tolerates them and they predate every live series on the consumer.
+
+**The receipt drives the hook, not the rotator's own output.** A rotator that moved the file to a
+path the guard still globbed would report success and change nothing.
+
+Tiered **DEFECT**.
+
+verify: sh W="$(mktemp -d)"; trap 'rm -rf "$W"' EXIT; cd "$W" && git init -q . && mkdir -p _bmad-output/gate-adjudication _bmad-output/planning-artifacts/s309 && printf '# Pipeline Snapshot\nsprint: 309\n' > _bmad-output/pipeline-snapshot.md && printf '# x\n' > _bmad-output/planning-artifacts/s309/x.md && printf '{"schema_id":"GATE_ADJUDICATION_VERDICT v1","gate_type":"sprint-review","gate_series_id":"sprint-review-s308-20260907T002257Z","gate_nonce":"sprint-review-20260907T002257Z","generated_at":"2026-09-07T00:38:34Z","adjudicator_agent_id":"seed","catalog":"core","verdicts":[{"check_id":"2","verdict":"FAIL","evidence":"seeded"}]}\n' > _bmad-output/gate-adjudication/sprint-review-20260907T002257Z.verdict.json && git add -A && git -c user.email=f@x -c user.name=f commit -qm seed && H=/Users/n8/git/ai-dlc/core/hooks/ai-dlc-gate-remediation-guard.sh; drive(){ printf '{"session_id":"t","tool_name":"Edit","transcript_path":"","tool_input":{"file_path":"%s/_bmad-output/planning-artifacts/s309/x.md"}}' "$W" | CLAUDE_PROJECT_DIR="$W" bash "$H" 2>/dev/null; }; drive | grep -q '"permissionDecision": *"deny"' || exit 1; AI_DLC_STATE_DIR=_bmad-output bash /Users/n8/git/ai-dlc/core/scripts/rotate-gate-adjudication.sh --sprint s308 --apply >/dev/null 2>&1 || exit 1; [ ! -f _bmad-output/gate-adjudication/sprint-review-20260907T002257Z.verdict.json ] || exit 1; drive | grep -q '"permissionDecision": *"deny"' && exit 1; exit 0
+
+## BL-203 — a human handoff stops an in-flight review pass that would have landed inside one wait beat, and the successor re-dispatches it from scratch
+
+**LANDED (v0.529.0).**
+
+**`handoff.md` step 1 called `TaskStop` on every in-flight teammate as its first act.** Measured
+on the reference consumer: an adversary pass dispatched at 13:29 was stopped at 13:49 by a typed
+`handoff` and re-dispatched from scratch by the resumed session at 14:02. The killed pass had run
+twenty minutes; the rerun took eighteen. Thirty-eight minutes of opus time for one keystroke, and
+a resume whose first act was to redo the work the handoff had thrown away.
+
+**The fix is one bounded beat, not a policy.** Step 1 in `handoff.md` and its auto-handoff copy in
+`_gate-procedures.md` now run one backgrounded `wait-for-deliverable.sh` beat over every in-flight
+deliverable before stopping anything, and stop only the rows still absent after the beat. The
+beat is the same quantum every other join uses, so a handoff still completes within one beat and
+the operator is never blocked in the foreground. `handoff-resume-guard` holds the two copies to
+the same clause, because a copy that drifts is the defect class `_gate-procedures.md` already
+names for this pair.
+
+Tiered **DEFECT**.
+
+verify: sh a="$(awk '/^1\. \*\*Stop all in-flight/{p=1} p&&/^2\. /{exit} p' core/skills/ai-dlc/steps/handoff.md)"; b="$(awk '/^1\. \*\*Stop all in-flight/{p=1} p&&/^2\. /{exit} p' core/skills/ai-dlc/steps/_gate-procedures.md)"; [ -n "$a" ] && [ -n "$b" ] || exit 1; grep -q 'wait-for-deliverable.sh' <<<"$a" && grep -q 'wait-for-deliverable.sh' <<<"$b"
+
 ## BL-099 — the exec-bit audit is one-directional, so a consumer file that upstream STOPPED shipping executable is never reported
 
 **`apply.sh`'s EXEC-BIT AUDIT is LEVEL-triggered and covers exactly one of the two directions

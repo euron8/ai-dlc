@@ -150,6 +150,7 @@ core_manifest:
   - core/fixtures/extension-check-adoption/**
   - core/fixtures/escalation-status-vocabulary/**
   - core/fixtures/gate-adjudication/**
+  - core/fixtures/gate-adjudication-rotate/**
   - core/fixtures/gate-remediation-deny/**
   - core/fixtures/gate-repair-record/**
   - core/fixtures/gate-series-rung/**

@@ -219,6 +219,92 @@ else
   fi
 fi
 
+# --- Beat-before-stop arm -----------------------------------------------------------
+#
+# THE DEFECT THIS ARM EXISTS FOR. Measured on the reference consumer: an adversary pass
+# was dispatched, the operator typed `handoff`, step 1 called `TaskStop` on every
+# in-flight teammate with no join first, and the resumed session dispatched the same
+# pass again from scratch — 38 minutes of opus time for a pass that would have landed
+# in under one wait beat. `steps/handoff.md` step 1 and its copy in `_gate-procedures.md`
+# "Auto-handoff evaluation" step 1 now run ONE `wait-for-deliverable.sh` beat over every
+# in-flight row before calling `TaskStop`, and the two copies must carry the SAME clause
+# — a copy that drifts is the defect class this whole fixture's header describes.
+#
+# TOKENS. `wait-for-deliverable.sh` names the beat script; `still absent after the beat`
+# is the exact phrase marking which rows still get stopped. Both are asserted in BOTH
+# files so a future edit to either cannot silently drop the join or reword it out of
+# step with its sibling.
+HANDOFF_MD="$(pick "$HERE/../../skills/ai-dlc/steps/handoff.md" \
+                    "$HERE/../../../core/skills/ai-dlc/steps/handoff.md" \
+                    "$HERE/../../../.claude/skills/ai-dlc/steps/handoff.md")"
+GATE_PROC_MD="$(pick "$HERE/../../skills/ai-dlc/steps/_gate-procedures.md" \
+                      "$HERE/../../../core/skills/ai-dlc/steps/_gate-procedures.md" \
+                      "$HERE/../../../.claude/skills/ai-dlc/steps/_gate-procedures.md")"
+if [ -z "$HANDOFF_MD" ] || [ -z "$GATE_PROC_MD" ]; then
+  bad "FIXTURE BROKEN — could not locate handoff.md and/or _gate-procedures.md in either layout"
+else
+  # Extract step 1 of a "Stop all in-flight teammates" procedure: from the opening bold
+  # line to the line before the next numbered "2. " step. Two occurrences can exist in
+  # one file (handoff.md's own procedure, and a second copy if one is ever pasted in);
+  # this greps every such block in the file, which is a superset of the single block
+  # each of today's two files carries and still correct if that ever changes.
+  extract_step1() {
+    awk '
+      /^1\. \*\*Stop all in-flight teammates first\.\*\*/ { f=1 }
+      f { print }
+      f && /^2\. / && !/^1\. / { exit }
+    ' "$1"
+  }
+  check_beat_clause() { # check_beat_clause <label> <text>
+    local label="$1" text="$2"
+    if grep -qF 'wait-for-deliverable.sh' <<<"$text" \
+       && grep -qF 'still absent after the beat' <<<"$text"; then
+      ok "$label carries the beat-before-stop clause"
+    else
+      bad "$label is missing 'wait-for-deliverable.sh' and/or 'still absent after the beat' in its step 1 — the two-file clause has drifted or been dropped"
+    fi
+  }
+
+  # THE SELF-PROBE, run BEFORE the corpus checks below so a check that cannot fire is
+  # not mistaken for one that passed: a scratch copy of handoff.md with the clause
+  # deleted (reverted to the pre-fix wording) must FAIL the same assertion. Built as a
+  # copy per fixture-mutants.md, guarded by cmp -s.
+  DECOY="$ROOT/handoff-nobeat.md"
+  awk '
+    /^1\. \*\*Stop all in-flight teammates first\.\*\*/ {
+      print "1. **Stop all in-flight teammates first.** Call `TaskStop` on"
+      print "   every `in_progress` task. Halt any Agent-spawned teammate not"
+      print "   bound to a task. Wait until every teammate has returned before"
+      print "   proceeding. Record stopped teammates and in-flight artifacts"
+      print "   in the snapshot'"'"'s Open Items in Step 3, and set each stopped"
+      print "   teammate'"'"'s **In-Flight Teammates** row `status` to `stopped`."
+      skip=1
+      next
+    }
+    skip && /^2\. / { skip=0 }
+    skip { next }
+    { print }
+  ' "$HANDOFF_MD" > "$DECOY"
+  if cmp -s "$HANDOFF_MD" "$DECOY"; then
+    bad "FIXTURE STALE: the decoy rewrite produced a byte-identical copy of handoff.md — the self-probe cannot discriminate anything"
+  else
+    decoy_step1="$(extract_step1 "$DECOY")"
+    if grep -qF 'wait-for-deliverable.sh' <<<"$decoy_step1" \
+       && grep -qF 'still absent after the beat' <<<"$decoy_step1"; then
+      bad "SELF-PROBE FAILED: a decoy with the beat clause deleted still matched the assertion — it cannot discriminate, so the two ok's above are not evidence"
+    else
+      ok "self-probe: a decoy with the beat clause removed correctly FAILS the assertion"
+    fi
+  fi
+
+  # Only now, with the self-probe having shown the assertion can fail, run it on the
+  # real corpus.
+  h_step1="$(extract_step1 "$HANDOFF_MD")"
+  g_step1="$(extract_step1 "$GATE_PROC_MD")"
+  check_beat_clause "handoff.md step 1" "$h_step1"
+  check_beat_clause "_gate-procedures.md step 1" "$g_step1"
+fi
+
 rm -rf "$ROOT"
 echo ""
 [ "$fails" -eq 0 ] && { echo "handoff-resume-guard: PASS"; exit 0; }

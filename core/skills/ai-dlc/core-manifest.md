@@ -222,6 +222,7 @@ core_manifest:
   - fixtures/extension-check-adoption/**
   - fixtures/escalation-status-vocabulary/**
   - fixtures/gate-adjudication/**
+  - fixtures/gate-adjudication-rotate/**
   - fixtures/gate-remediation-deny/**
   - fixtures/gate-repair-record/**
   - fixtures/gate-series-rung/**
