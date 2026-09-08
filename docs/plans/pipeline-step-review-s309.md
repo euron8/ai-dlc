@@ -29,49 +29,35 @@ that wrote them, and the lead re-runs the proof before merging.
 
 ### Next actions
 
-**Releases 1, 2 and 3 are on `origin/main`. Do not re-execute any of them.** Release 1 is
+**All four releases are on `origin/main`. Do not re-execute any of them.** Release 1 is
 `c5ee81e9` (PR #674, `0.529.0`): the gate-adjudication rotator, its shipping fixture, the retro
 step, the beat-before-stop clause, `BL-202` and `BL-203`. Release 2 is `886bd76d` (PR #676,
 `0.530.0`): script arms before the adjudicator, the snapshot-file lead-repair exemption,
-`BL-204` and `BL-205`. Release 3 is `da80e8d0` (PR #678, `0.531.0`): the new
-`core/skills/ai-dlc/steps/requirements.md` replaces `discovery.md` plus
-`research-requirements.md` in `route.md`'s `carry-over` and `feature` rows only; one analyst
-dispatch, one `pm-escalated` authoring dispatch writing the brief, the spec kernel, the PRD and a
-per-FR `s<N>/architecture-impact.md` carrying `architecture_impact:` lines; one validation cycle
-over the three as one subject with seats Architect and Dev; Checks 1c, 17, 20, 23, 24, 28 and 3b,
-SKILL.md Rules 8 and 24, `validate-draft-stamps.sh`, `validate-cycle-commits.sh`, the two role
-files and the QUICKSTART template moved with it; the shipping fixture
-`core/fixtures/requirements-step/` asserts the partition from both sides; `BL-206` carries a
-`verify: sh` receipt that exits 1 against the pre-fix tree; `FORK_BUDGET` rose 8000 to 8060 with
-the attribution in its ledger. The consumer's `research-requirements-domain` and
-`discovery-prior-decision-corpus` extensions still hook the old step files and are named as layer
-debt in the CHANGELOG, not edited. Re-derive before acting: `git log --oneline origin/main -3`
-must show `da80e8d0`, `git show origin/main:VERSION` must print `0.531.0`,
-`grep -c 'architecture_impact:' core/skills/ai-dlc/steps/requirements.md` must print a non-zero
-count, and
-`grep -cE '^\| (carry-over|feature) \|.*[^-]requirements → architecture' core/skills/ai-dlc/steps/route.md`
-must print `2` (the `[^-]` excludes `research-requirements`, which the pre-fix rows carried; on
-`eb49b783` this command prints `0`).
+`BL-204` and `BL-205`. Release 3 is `da80e8d0` (PR #678, `0.531.0`): the `requirements` step
+replacing `discovery.md` plus `research-requirements.md` in `route.md`'s `carry-over` and
+`feature` rows, the per-FR `s<N>/architecture-impact.md`, the shipping fixture
+`core/fixtures/requirements-step/`, `BL-206`. Release 4 is `d8ef5100` (PR #680, `0.532.0`):
+`core/skills/ai-dlc/steps/architecture.md` §4's intensity bullet fast-tracks at ANY intensity
+when the Step 2 assessment is NO CHANGES NEEDED and every `architecture_impact:` line of the
+impact file reads exactly `architecture_impact: none`; the predicate is one fenced awk line
+under `<!-- FAST_TRACK_PREDICATE -->`; Check 20 names the file, the token
+`fast_track: architecture-impact-none` and runs the predicate; the shipping fixture
+`core/fixtures/architecture-fast-track/` extracts and executes the predicate over an eight-seed
+table; `BL-207` carries a `verify: sh` receipt that exits 1 against the pre-fix tree;
+`FORK_BUDGET` stayed 8060 with the 8009 to 8022 move attributed in its ledger. Re-derive before
+acting: `git log --oneline origin/main -3` must show `d8ef5100`, `git show origin/main:VERSION`
+must print `0.532.0`, `grep -c 'FAST_TRACK_PREDICATE' core/skills/ai-dlc/steps/architecture.md`
+must print `1` (on `545f5f97` it prints `0`), and
+`grep -c 'fast_track: architecture-impact-none' core/skills/ai-dlc/steps/gate-validation.md`
+must print `1`.
 
-1. **Release 3 (`0.531.0`) is merged as `da80e8d0`.** Nothing to do.
-2. **Release 4 (`0.532.0`), architecture fast-track on declared no-impact at every intensity.**
-   Ships alone. Its precondition, release 3's `architecture_impact:` field, is on `origin/main`.
-   `core/skills/ai-dlc/steps/architecture.md:285-287` widens the intensity bullet from
-   `lightweight` to any intensity when every line of this sprint's
-   `_bmad-output/planning-artifacts/s<N>/architecture-impact.md` reads `architecture_impact: none`
-   AND the Step 2 assessment is NO CHANGES NEEDED; the file absent, or any line not `none`, keeps
-   the full cycle. Skip provenance goes in the gate log as Check 20 already accepts, and Check
-   20's own fast-track sentence widens the same way. A shipping fixture asserts the widened
-   bullet, its condition names the impact file, and that the `none` predicate is line-exact
-   (`architecture_impact: none-for-now` must not satisfy it), with self-probes in both directions.
-   One agent builds the edit plus the fixture; the lead re-runs the proof before merging.
-3. **Release 4 is the last release.** After its merge, action 4 re-derives this block, action 5
-   runs the fresh-resume check, then action 6 waits on the operator's pull.
-4. **After each merge, before stopping: re-derive this block.** Replace the finished release's
+1. **Releases 1 through 4 are merged; release 4 is `d8ef5100`.** Nothing to do. No further
+   release is planned by this file.
+2. **After each merge, before stopping: re-derive this block.** Replace the finished release's
    action with one line naming the merged sha, re-run
    `bash scripts/validate-plan-shape.sh docs/plans/pipeline-step-review-s309.md`, commit the docs
    change on a branch, merge it.
-5. **THE FRESH-RESUME CHECK, after action 4's docs commit has MERGED to `origin/main`. One
+3. **THE FRESH-RESUME CHECK, after action 2's docs commit has MERGED to `origin/main`. One
    responsibility: a session that starts from `origin/main` with nothing but the one-liner
    resumes correctly.** Merge the docs commit; `git worktree add` a fresh checkout of
    `origin/main` under `mktemp`; read `## Start here` and this action list there as a stranger
@@ -79,10 +65,12 @@ must print `2` (the `[^-]` excludes `research-requirements`, which the pre-fix r
    compare; assert action 1 names no work a commit on `origin/main` has already shipped; run
    `bash scripts/validate-plan-shape.sh` there as the floor; remove the worktree and report
    `resumable from origin/main at <sha>` or the mismatch. Do not stop before it passes.
-6. **Consumer-side measurement, after the consumer pulls (the pull is operator-initiated; never
-   dispatch it).** Re-derive the per-step table below from the same ledgers for sprint 310 and
-   record it beside the s309 table. That comparison is the receipt for the whole program.
-7. **HAND THE PLAN TO A LOCAL AI-DLC SESSION, THEN STOP.** The last action, after action 5 has
+4. **BLOCKED on the operator: consumer-side measurement, after the consumer pulls (the pull is
+   operator-initiated; never dispatch it).** The reference consumer is at `0.530.0` and owes a
+   pull of two releases. Once it has pulled and run a sprint, re-derive the per-step table below
+   from the same ledgers for sprint 310 and record it beside the s309 table. That comparison is
+   the receipt for the whole program. Nothing in this file can start it.
+5. **HAND THE PLAN TO A LOCAL AI-DLC SESSION, THEN STOP.** The last action, after action 3 has
    passed. Call `ListAgents`; a qualifying target is a local peer session whose name begins
    `ai-dlc-` (never a `graph-*` session, which is the consumer). If one qualifies, send it
    exactly `READ and FOLLOW docs/plans/pipeline-step-review-s309.md` with `SendMessage` and
@@ -95,9 +83,10 @@ must print `2` (the `[^-]` excludes `research-requirements`, which the pre-fix r
 
 ### Done when
 
-All four releases are on `origin/main`, the s310 table exists beside the s309 one, and the
-guard's `GATE_REMEDIATION_DENIED` count in the consumer's continuation log for a sprint's first
-gate window is zero.
+All four releases are on `origin/main` (done at `d8ef5100`), the s310 table exists beside the
+s309 one, and the guard's `GATE_REMEDIATION_DENIED` count in the consumer's continuation log for
+a sprint's first gate window is zero. The last two are observed AFTER the operator-initiated
+pull and a consumer sprint; they are not reachable from this tree.
 
 ## Context
 
