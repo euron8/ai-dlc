@@ -1865,8 +1865,10 @@ done < <(layer_files "$EXT_DIR")
 # that prescribes the record hands over the digest verbatim and the listing is the documented
 # way to re-read a key after the block has cleared. Two clauses produce keyed rows whose text
 # differs only in a quoted status name, so a reader following the one worked example writes that
-# example's id every time. Measured on the reference consumer: 9 of 441 records carry a clause
-# the fired status does not map to, and neither the row nor this listing could have said so.
+# example's id every time. Measured on the reference consumer over one pull's range: of the 16
+# keyed subjects this listing prints, 3 carry a recorded clause the fired status does not map
+# to; and 2 of its 441 register records carry a value that is not a contract clause id at all.
+# Neither the row nor this listing could have said so.
 #
 # THE COUNT LINE IS ON STDERR AND IS ALWAYS PRINTED, INCLUDING AT ZERO. This mode's answer is
 # frequently an ABSENCE, and an empty stdout is what a broken pass, a wrong consumer root and a
@@ -1900,7 +1902,7 @@ if [ "$MODE" = list ]; then
     # THE DEDUPE KEY IS THE SUBJECT, NOT THE WHOLE LINE, AND THAT IS A CORRECTION THIS CHANGE
     # FORCED. `sort -u` over the accumulated rows was a subject dedupe only while every column
     # was a property of the subject. The clause is a property of the ROW: one entry can be keyed
-    # by two clauses in a single pass — the reference consumer has three subjects keyed by both
+    # by two clauses in a single pass — the reference consumer has two subjects keyed by both
     # LC-E19's title-join and LC-E4's hook-drift — so the whole-line unique split each of them in
     # two and the listing grew 16 subjects to 18. Measured on a clone of the reference consumer
     # over eb49b783..a798e215; the count line said 18 and would have been counting rows while
