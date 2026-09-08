@@ -65,11 +65,15 @@ must print `1`.
    compare; assert action 1 names no work a commit on `origin/main` has already shipped; run
    `bash scripts/validate-plan-shape.sh` there as the floor; remove the worktree and report
    `resumable from origin/main at <sha>` or the mismatch. Do not stop before it passes.
-4. **BLOCKED on the operator: consumer-side measurement, after the consumer pulls (the pull is
-   operator-initiated; never dispatch it).** The reference consumer is at `0.530.0` and owes a
-   pull of two releases. Once it has pulled and run a sprint, re-derive the per-step table below
-   from the same ledgers for sprint 310 and record it beside the s309 table. That comparison is
-   the receipt for the whole program. Nothing in this file can start it.
+4. **BLOCKED on the consumer: a sprint has to run on the new engine.** The reference consumer
+   pulled to `0.533.0` at `a798e215` on 2026-09-08 (its PR #1037), so the pull this action used
+   to wait on has happened and the gap is zero. What remains is observation: once s309 finishes
+   and s310 runs its planning phase, re-derive the per-step table below from the same ledgers
+   for sprint 310 and record it beside the s309 table. That comparison is the receipt for the
+   whole program. Nothing in this file can start a consumer sprint. Two cautions for the
+   consumer's own session, recorded in its adjudication file: s309 passed its planning gates on
+   the old two-step form and is NOT re-routed through `requirements.md`, and
+   `s309/architecture-impact.md` is not hand-authored to take the `0.532.0` fast-track.
 5. **HAND THE PLAN TO A LOCAL AI-DLC SESSION, THEN STOP.** The last action, after action 3 has
    passed. Call `ListAgents`; a qualifying target is a local peer session whose name begins
    `ai-dlc-` (never a `graph-*` session, which is the consumer). If one qualifies, send it
