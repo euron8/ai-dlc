@@ -86,6 +86,32 @@ default is adjudicated against whatever that consumer suppressed this week.
 `core/fixtures/gate-adjudication-mutants/` scores these cases against thirteen wrong fixes and
 an unmutated control, and asserts for each one exactly which cases go red.
 
+## Script arms before the adjudicator
+
+The last arm reads the two step files rather than the validator, because the defect it guards
+is a prose one: a script-arm FAIL found AFTER the `gate-adjudicator` had been dispatched sent
+the lead to Gate Failure step 2, whose only reachable sentence told it to re-run the full
+escalated set — so the consumer ran the full escalated set twice for a script FAIL found after
+dispatch. The repair has two halves and the arm asserts both. `gate-validation.md` and
+`_gate-procedures.md` must each carry **Script arms before the adjudicator**, so the ordering
+cannot hold in the gate's own file while the dispatch procedure it references still says
+otherwise. And in `gate-validation.md`'s Gate Failure block, `re-derives the full escalated set
+at a fresh` must be present with the `pipeline-snapshot-history.md` lead-repair exemption
+beside it, while `whose inputs the remediation touched` must survive NOWHERE in that file.
+
+That last assertion is FILE-WIDE and not block-scoped, deliberately: the clause is an
+instruction, and a copy of it anywhere in the gate's own step file is one the lead can read and
+follow. A **near-miss probe plants it after `## Gate Reset` and REQUIRES the assertion to
+fail** — narrowing the grep to the block is what would make that probe green, so the arm
+carries its own refusal of the narrowing. Three further probes delete the preamble clause from
+each file in turn and revert step 2 to the old wording, each against a synthesised control copy
+that carries every property and must PASS the same five predicates. The control is what
+separates a probe set that discriminates from one that refuses everything; all of them are
+built as copies under the seed's work tree, `cmp -s`-guarded against the copy they were derived
+from, and run BEFORE the corpus is read. The corpus's absence assertion carries a positive
+control in the same invocation — the `CHECK_LOADED: failure` marker, demanded exactly once — so
+a zero from an empty or mis-resolved file cannot read as a clause that is gone.
+
 ## Files
 
 - `seed.sh` — builds a pristine, COMPLETE, all-PASS verdict for the `implementation` gate in a

@@ -793,6 +793,201 @@ restore
 run "$VERDICT"
 [ "$RC" -eq 0 ] && ok "restored verdict after the binding arms → exit 0" || bad "the pristine verdict did not pass after the binding arms (rc=$RC)"
 
+# ============================================================================
+# SCRIPT ARMS BEFORE THE ADJUDICATOR — the escalation preamble and the Gate
+# Failure re-run rule, asserted in the two step files that carry them.
+# ============================================================================
+# THE DEFECT THIS ARM EXISTS FOR. `gate-validation.md`'s Gate Failure step 2 told the
+# lead to re-run the failed check AND every check "whose inputs the remediation
+# touched", and — when that set was not derivable from the repair record — to re-run
+# the FULL escalated set. On a script FAIL found AFTER the gate-adjudicator had already
+# been dispatched, the second sentence is the only reachable one, so the consumer ran
+# the full escalated set twice for a script FAIL found after dispatch. The repair is in
+# two halves and BOTH must be present or the defect is back: the escalation preamble
+# orders the script arms BEFORE the adjudicator so a script FAIL is found before the
+# dispatch, and step 2 re-derives the escalated set at a fresh nonce instead of
+# re-running the old one wholesale.
+#
+# TWO FILES CARRY THE PREAMBLE, and a copy that drifts is the failure class this whole
+# suite exists for: `gate-validation.md` states it in the escalation preamble, and
+# `_gate-procedures.md` states it in the dispatch section the gate references. Both are
+# asserted, so an edit to either cannot silently leave the other behind.
+#
+# THE DELETED-CLAUSE ASSERTION IS FILE-WIDE, DELIBERATELY. The old clause must survive
+# NOWHERE in `gate-validation.md`, not merely outside the Gate Failure block: the
+# sentence is the instruction, and a copy of it anywhere in the gate's own step file is
+# an instruction the lead can read and follow. The near-miss probe below plants it
+# outside the block and REQUIRES the assertion to fail on it — a later reader who
+# narrows this grep to the block will make that probe red.
+# Both layouts, first existing candidate wins. A fixture that hard-codes one layout is
+# green here and asserts nothing on a consumer, where the same files sit under
+# `.claude/skills/`; an absent file is reported as BROKEN below and never skipped.
+ga_pick() { for c in "$@"; do [ -n "$c" ] && [ -f "$c" ] && { printf '%s' "$c"; return; }; done; }
+GA_STEPS_GV="$(ga_pick "$HERE/../../skills/ai-dlc/steps/gate-validation.md" \
+                       "$HERE/../../../core/skills/ai-dlc/steps/gate-validation.md" \
+                       "$HERE/../../../.claude/skills/ai-dlc/steps/gate-validation.md")"
+GA_STEPS_GP="$(ga_pick "$HERE/../../skills/ai-dlc/steps/_gate-procedures.md" \
+                       "$HERE/../../../core/skills/ai-dlc/steps/_gate-procedures.md" \
+                       "$HERE/../../../.claude/skills/ai-dlc/steps/_gate-procedures.md")"
+if [ -z "$GA_STEPS_GV" ] || [ -z "$GA_STEPS_GP" ]; then
+  bad "FIXTURE BROKEN — could not locate gate-validation.md and/or _gate-procedures.md in either layout from $HERE; the script-arms-first arm asserted nothing"
+else
+  # The Gate Failure block: from the CHECK_LOADED marker to the line before `## Gate Reset`.
+  ga_block() { awk '/CHECK_LOADED: failure/{f=1} f&&/^## Gate Reset/{exit} f' "$1"; }
+
+  # The four assertions, written ONCE so the probes below and the corpus checks further
+  # down cannot diverge. A probe that exercises a second copy of the predicate proves
+  # only that the copy discriminates.
+  ga_hasf() { # ga_hasf <file> <token> — token present in the file
+    local n; n="$(grep -cF -- "$2" "$1")" || n=0; [ "$n" -gt 0 ]
+  }
+  ga_hast() { # ga_hast <text> <token> — token present in the captured text
+    local n; n="$(grep -cF -- "$2" <<<"$1")" || n=0; [ "$n" -gt 0 ]
+  }
+  ga_a_preamble()  { ga_hasf "$1" 'Script arms before the adjudicator'; }
+  ga_a_noold()     { ! ga_hasf "$1" 'whose inputs the remediation touched'; }
+  ga_a_replaced()  { ga_hast "$(ga_block "$1")" 're-derives the full escalated set at a fresh'; }
+  ga_a_exemption() { ga_hast "$(ga_block "$1")" 'pipeline-snapshot-history.md'; }
+  # THE POSITIVE CONTROL FOR THE ABSENCE. `ga_a_noold` answers with a zero, and a zero
+  # from an empty, truncated or mis-resolved file is the same zero. This demands the
+  # block marker be there, exactly once, in the same file in the same invocation.
+  ga_a_live() { local n; n="$(grep -cF -- 'CHECK_LOADED: failure' "$1")" || n=0; [ "$n" -eq 1 ]; }
+
+  # --- THE PROBE WORLD ------------------------------------------------------
+  # Built as COPIES under $WORK, never in place. The CONTROL copy carries every
+  # property; each decoy is that same copy with exactly ONE property removed, so a
+  # decoy that fails names the property it lost rather than "something is different".
+  # The control is SYNTHESISED rather than a plain `cp`, because this fixture must be
+  # able to prove its assertions discriminate whether or not the tree already carries
+  # the repair — a probe world that borrows the corpus's shape is a probe that stops
+  # working the moment the corpus is wrong, which is the moment it is needed.
+  GA_GV_OK="$WORK/sa-gv-ok.md"
+  GA_GV_NOPRE="$WORK/sa-gv-nopreamble.md"
+  GA_GV_OLD="$WORK/sa-gv-oldstep2.md"
+  GA_GV_NEAR="$WORK/sa-gv-nearmiss.md"
+  GA_GP_OK="$WORK/sa-gp-ok.md"
+  GA_GP_NOPRE="$WORK/sa-gp-nopreamble.md"
+
+  # The post-repair shape: the preamble clause present, the old step-2 paragraph gone
+  # file-wide, and the block carrying the replacement token and the lead-repair
+  # exemption. Idempotent over both the pre- and post-repair corpus.
+  awk '
+    BEGIN { print "<!-- fixture probe: Script arms before the adjudicator -->" }
+    /Script arms before the adjudicator/ { next }
+    /whose inputs the remediation touched/ { skip = 1; next }
+    skip && /^3\. / { skip = 0 }
+    skip { next }
+    /re-derives the full escalated set at a fresh/ { next }
+    { print }
+    /CHECK_LOADED: failure/ {
+      print "2. Re-run the failed check. The gate-adjudicator re-derives the full escalated set at a fresh"
+      print "   nonce; a lead repair is exempt only where `pipeline-snapshot-history.md` records it."
+    }
+  ' "$GA_STEPS_GV" > "$GA_GV_OK"
+  awk '
+    BEGIN { print "<!-- fixture probe: Script arms before the adjudicator -->" }
+    /Script arms before the adjudicator/ { next }
+    { print }
+  ' "$GA_STEPS_GP" > "$GA_GP_OK"
+
+  # DECOY 1: the preamble clause deleted from gate-validation.md.
+  grep -vF 'Script arms before the adjudicator' "$GA_GV_OK" > "$GA_GV_NOPRE"
+  # DECOY 2: the block reverted to the OLD step-2 wording, and the replacement token
+  # removed. It must fail TWO assertions — the clause is back and the replacement is
+  # gone — because a repair that restores the old sentence beside the new one, or
+  # deletes the new one and leaves the old absent, is a half-repair either way.
+  awk '
+    /re-derives the full escalated set at a fresh/ { next }
+    { print }
+    /CHECK_LOADED: failure/ {
+      print "2. Re-run the failed check AND every check whose inputs the remediation touched."
+      print "   When that set is not derivable from the repair record, re-run the full"
+      print "   escalated set. The verdict schema'"'"'s `coverage_exact` rule binds the pass to"
+      print "   that same set."
+    }
+  ' "$GA_GV_OK" > "$GA_GV_OLD"
+  # DECOY 3 (NEAR-MISS): the deleted clause planted OUTSIDE the Gate Failure block,
+  # after `## Gate Reset`. IT MUST FAIL. The assertion is file-wide on purpose; if this
+  # probe ever goes green, the grep has been narrowed to the block and the clause can
+  # live one heading away from the step that used to carry it.
+  awk '
+    { print }
+    /^## Gate Reset/ {
+      print ""
+      print "A reset does not re-run every check whose inputs the remediation touched."
+    }
+  ' "$GA_GV_OK" > "$GA_GV_NEAR"
+  # DECOY 4: the preamble clause deleted from _gate-procedures.md — the drifted copy.
+  grep -vF 'Script arms before the adjudicator' "$GA_GP_OK" > "$GA_GP_NOPRE"
+
+  # A rewrite that changed no bytes discriminates nothing, and reads exactly like one
+  # that worked. Guarded against the copy each decoy was DERIVED from, which is the
+  # comparison that says the property was actually removed.
+  ga_stale=0
+  for _pair in "$GA_GV_OK:$GA_GV_NOPRE" "$GA_GV_OK:$GA_GV_OLD" \
+               "$GA_GV_OK:$GA_GV_NEAR" "$GA_GP_OK:$GA_GP_NOPRE"; do
+    if cmp -s "${_pair%%:*}" "${_pair##*:}"; then
+      bad "FIXTURE STALE: the decoy ${_pair##*:} is byte-identical to the control it was built from — that probe discriminates nothing"
+      ga_stale=1
+    fi
+  done
+  [ "$ga_stale" -eq 0 ] && ok "script-arms probes: all four decoys differ from the control they were built from"
+
+  # --- THE CONTROL, run BEFORE any decoy ------------------------------------
+  # Without it the four red probes below establish that the assertions fire, never that
+  # they discriminate: a predicate that refuses everything fails every decoy too.
+  if ga_a_live "$GA_GV_OK" && ga_a_preamble "$GA_GV_OK" && ga_a_noold "$GA_GV_OK" \
+     && ga_a_replaced "$GA_GV_OK" && ga_a_exemption "$GA_GV_OK" && ga_a_preamble "$GA_GP_OK"; then
+    ok "script-arms control: a copy carrying every property PASSES all five assertions in both files — the probes below discriminate rather than refuse"
+  else
+    bad "SELF-PROBE BROKEN — the synthesised post-repair control does not satisfy its own assertions, so every probe below fails for a reason that has nothing to do with the property it names"
+  fi
+
+  # --- THE PROBES -----------------------------------------------------------
+  if ga_a_preamble "$GA_GV_NOPRE"; then
+    bad "SELF-PROBE FAILED: gate-validation.md with every 'Script arms before the adjudicator' line deleted still PASSED the preamble assertion — it cannot fire"
+  else
+    ok "script-arms probe 1: gate-validation.md with the preamble clause deleted FAILS the preamble assertion"
+  fi
+  if ga_a_noold "$GA_GV_OLD"; then
+    bad "SELF-PROBE FAILED: a decoy carrying the OLD step-2 wording still PASSED the deleted-clause assertion — the clause could come back unnoticed"
+  elif ga_a_replaced "$GA_GV_OLD"; then
+    bad "SELF-PROBE FAILED: a decoy with 're-derives the full escalated set at a fresh' removed from the Gate Failure block still PASSED the replacement assertion — it cannot fire"
+  else
+    ok "script-arms probe 2: a decoy reverted to the OLD step-2 wording FAILS both the deleted-clause and the replacement-token assertions"
+  fi
+  if ga_a_noold "$GA_GV_NEAR"; then
+    bad "SELF-PROBE FAILED: the NEAR-MISS decoy carrying 'whose inputs the remediation touched' AFTER '## Gate Reset' passed the deleted-clause assertion. That assertion is FILE-WIDE by design — the clause is an instruction and must survive nowhere in the file. Do not narrow this grep to the Gate Failure block; narrowing it is what makes this probe green."
+  else
+    ok "script-arms probe 3: the NEAR-MISS decoy with the clause planted OUTSIDE the Gate Failure block also FAILS — the deleted-clause assertion is file-wide, and it must stay that way"
+  fi
+  if ga_a_preamble "$GA_GP_NOPRE"; then
+    bad "SELF-PROBE FAILED: _gate-procedures.md with its 'Script arms before the adjudicator' line deleted still PASSED — the second copy is asserted by nothing"
+  else
+    ok "script-arms probe 4: _gate-procedures.md with the preamble clause deleted FAILS the preamble assertion — the drifted-copy case is reachable"
+  fi
+
+  # --- THE CORPUS, only now -------------------------------------------------
+  ga_a_live "$GA_STEPS_GV" \
+    && ok "script-arms corpus control: gate-validation.md carries exactly one '<!-- CHECK_LOADED: failure -->' marker, so the zero the next row demands is a real absence and not an empty or mis-resolved file" \
+    || bad "script-arms corpus control: gate-validation.md does not carry exactly one '<!-- CHECK_LOADED: failure -->' marker — the deleted-clause zero below would be unreadable"
+  ga_a_preamble "$GA_STEPS_GV" \
+    && ok "corpus: gate-validation.md's escalation preamble says 'Script arms before the adjudicator'" \
+    || bad "corpus: gate-validation.md does not say 'Script arms before the adjudicator' — a script FAIL is found AFTER the gate-adjudicator is dispatched, and the consumer ran the full escalated set twice for a script FAIL found after dispatch"
+  ga_a_preamble "$GA_STEPS_GP" \
+    && ok "corpus: _gate-procedures.md's gate-adjudication dispatch section says 'Script arms before the adjudicator'" \
+    || bad "corpus: _gate-procedures.md does not say 'Script arms before the adjudicator' — the dispatch procedure the gate references has drifted from the gate's own preamble, so the ordering holds in one file and not in the other"
+  ga_a_noold "$GA_STEPS_GV" \
+    && ok "corpus: 'whose inputs the remediation touched' survives NOWHERE in gate-validation.md" \
+    || bad "corpus: 'whose inputs the remediation touched' is still in gate-validation.md — the clause whose undecidable set sent the lead to the full escalated set is back, and the consumer ran the full escalated set twice for a script FAIL found after dispatch"
+  ga_a_replaced "$GA_STEPS_GV" \
+    && ok "corpus: the Gate Failure block says the escalated set is 're-derive[d] ... at a fresh' nonce" \
+    || bad "corpus: the Gate Failure block does not carry 're-derives the full escalated set at a fresh' — the deleted clause was removed and nothing replaced it, so step 2 prescribes no re-run set at all"
+  ga_a_exemption "$GA_STEPS_GV" \
+    && ok "corpus: the Gate Failure block names 'pipeline-snapshot-history.md' — the lead-repair exemption is stated where the re-run rule is" \
+    || bad "corpus: the Gate Failure block does not name 'pipeline-snapshot-history.md' — the lead-repair exemption is missing from the step that decides the re-run set"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "gate-adjudication: PASS"; exit 0; fi
 echo "gate-adjudication: $fails assertion(s) FAILED" >&2

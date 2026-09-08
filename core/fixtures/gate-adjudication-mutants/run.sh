@@ -37,7 +37,15 @@ FIXTURE="$ROOT_DIR/core/fixtures/gate-adjudication"
 SCHEMA="$ROOT_DIR/core/schemas/gate-adjudication-verdict.json"
 MAP="$ROOT_DIR/core/skills/ai-dlc/enforcement-map.yaml"
 
+# The two step files the fixture's script-arms-first arm reads. They are copied into the
+# sandbox and NOT mutated: what this battery scores is the carve-out and the citation join, and
+# an arm that reads a file the sandbox does not carry reports FIXTURE BROKEN on every mutant —
+# which reads as twenty-one kills and is twenty-one runs of nothing.
+STEP_GV="$ROOT_DIR/core/skills/ai-dlc/steps/gate-validation.md"
+STEP_GP="$ROOT_DIR/core/skills/ai-dlc/steps/_gate-procedures.md"
+
 for p in "$CALLER" "$SIBLING" "$CONVERGENCE" "$STEER" "$SCHEMA" "$MAP" \
+         "$STEP_GV" "$STEP_GP" \
          "$FIXTURE/run.sh" "$FIXTURE/seed.sh"; do
   if [ ! -f "$p" ]; then
     echo "FIXTURE BROKEN: cannot locate $p from $DIR (root resolved to $ROOT_DIR)"
@@ -66,11 +74,12 @@ note_fail() { echo "FAIL: $*"; FAILURES=$((FAILURES + 1)); }
 # --------------------------------------------------------------------------
 build_sandbox() {          # prints the sandbox root
   local sb; sb="$(mktemp -d)"
-  mkdir -p "$sb/core/scripts" "$sb/core/schemas" "$sb/core/skills/ai-dlc" \
+  mkdir -p "$sb/core/scripts" "$sb/core/schemas" "$sb/core/skills/ai-dlc/steps" \
            "$sb/core/fixtures/gate-adjudication"
   cp "$CALLER" "$SIBLING" "$CONVERGENCE" "$STEER" "$sb/core/scripts/"
   cp "$SCHEMA"  "$sb/core/schemas/"
   cp "$MAP"     "$sb/core/skills/ai-dlc/"
+  cp "$STEP_GV" "$STEP_GP" "$sb/core/skills/ai-dlc/steps/"
   cp "$FIXTURE/run.sh" "$FIXTURE/seed.sh" "$sb/core/fixtures/gate-adjudication/"
   printf '%s\n' "$sb"
 }

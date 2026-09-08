@@ -147,6 +147,14 @@ the read-and-compare (`adjudication: llm`) checks of ONE gate to a fresh Opus su
 lead can run on a cheaper model without weakening the gate. The lead still owns PASS/FAIL: it
 adopts the verdict only through Check 26.
 
+**Script arms before the adjudicator.** Nothing is dispatched until the script checks pass.
+At gate entry the lead first runs every `adjudication: script` check and the script arm of
+every `adjudication: llm` check whose enforcement-map entry carries an `enforcer:`. A FAIL
+there is repaired through `gate-validation.md` **Gate Failure** before any nonce exists, so
+no adjudicator is running while the repair happens. Only once those pass does the lead mint
+the nonce and dispatch. A script FAIL discovered after a dispatch costs a second full
+adjudication, because there is no partial re-adjudication to fall back on.
+
 **At gate entry, generate the nonce** — `<gate_type>-<UTC timestamp>`, e.g.
 `implementation-20260715T140322Z` — and derive the verdict path:
 
@@ -169,11 +177,14 @@ the native path with its own schema.
 `gate-validation.md` governs: a fresh `gate_nonce`, every escalated check re-derived from current
 state, and no verdict carried forward, cited or merged from a superseded dispatch. There is no
 partial or targeted re-adjudication, and a verdict file assembled by hand is not a dispatch's
-verdict.
+verdict. `scripts/ai-dlc/validate-gate-adjudication.sh` is what makes that binding rather than
+advisory: it refuses any verdict whose covered set differs from the escalated set (the schema's
+`coverage_exact` rule), so a verdict covering only the checks that failed cannot be adopted.
 
 **Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh <verdict_path>`.
 
-**While it runs, the lead evaluates ONLY the `script` / `project` / `lead` checks.**
+**While it runs, the lead evaluates ONLY the remaining `project` / `lead` checks** — the
+`script` checks ran before the dispatch and are already decided.
 Inline-evaluating an `adjudication: llm` check is a Rule 20 solo violation — that judgment is the
 adjudicator's, adopted at Check 26.
 
