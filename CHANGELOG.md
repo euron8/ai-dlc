@@ -15,6 +15,40 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.536.0] - 2026-09-08
+
+### `BL-113` — a `verify: sh` receipt written across two lines was truncated and mis-scored silently
+
+No `PC-` id: filed here, on this repo's own engine, while authoring `BL-110`.
+
+Both reverify engines extract a receipt as ONE line. A receipt an author wraps across two — a
+literal newline inside a quoted payload is the natural way to feed multi-line text to a subject —
+arrives truncated inside its quote or its `$( )`. Evaluated, the fragment is a syntax error at
+exit 2. The distribution engine, `scripts/backlog-reverify.sh`, read that as STILL-LIVE forever
+with no hint. **The consumer engine's case was worse than the entry filed**:
+`ledger-reverify.sh`'s `*)` arm takes any non-zero exit as "no longer reproduces", and the
+absent-subject guard could not downgrade it because every path the fragment names still exists,
+so a receipt that never ran read CLOSE-CANDIDATE — the one verdict that retires a live entry.
+Reproduced on a scratch world beside a one-line control.
+
+Each engine now runs `bash -n` over the EXACT string it is about to execute and emits
+`NEEDS-REVIEW` under `unresolved:` naming the receipt MALFORMED, with the remedy. The consumer
+wrapper closes its brace on its own line, so a receipt ending in a `#` comment is parsed the same
+way it runs; under the old one-line `{ …; }` form the comment swallowed the brace and the
+WRAPPER was the syntax error.
+
+**False-positive set measured before shipping: 0 of 234** `sh` receipts across the reference
+consumer's live ledger (38), this backlog (72) and its archive (124), under both wrapper shapes;
+control: a receipt cut inside a double quote exits 2. Limit, stated: an unterminated heredoc
+opener parses clean under bash 3.2's `bash -n`, so a truncation landing exactly on one is not
+caught; none of the 234 opens a heredoc.
+
+`ledger-reverify` gains a two-line seed and a trailing-comment near-miss with three mutants
+(guard disarmed, bare receipt parsed instead of the wrapped program, guard inverted);
+`backlog-ledger` gains the same pair with one mutant. `BL-113`'s own receipt was rewritten at
+close: the original keyed on two tokens in the engine's text and a one-line comment carrying
+both satisfied it; the new one drives the engine on a seeded pair.
+
 ## [0.535.0] - 2026-09-08
 
 ### `BL-210` — the adjudication row hands over the digest verbatim and withholds the clause the record requires

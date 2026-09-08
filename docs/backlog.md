@@ -3015,36 +3015,6 @@ be located or the keep run emits nothing.
 
 verify: sh set -e; a=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$a" ] || exit 9; t=$(mktemp -d); sed -n '/^while IFS="$TAB_CH" read -r ext detail; do$/,/^EOF$/p' "$a" > "$t/l.sh"; [ -s "$t/l.sh" ] || exit 9; { echo 'TAB_CH="$(printf "\t")"'; echo 'say(){ printf "%s %s\n" "$1" "$2"; }'; echo 'ADJ_ROW_TOKEN=adjudicated'; echo 'ADJ_KEEP_VERDICT=still-additive'; echo 'LD_HOOK="$(printf "extensions/e.md\t%s" "$D")"'; echo '. "$T/l.sh"'; } > "$t/d.sh"; r=$(T="$t" D="adjudicated=retire :: p" bash "$t/d.sh" 2>&1) || exit 9; k=$(T="$t" D="adjudicated=still-additive :: p" bash "$t/d.sh" 2>&1) || exit 9; rm -rf "$t"; [ -n "$k" ] || exit 9; [ "$r" = "$k" ] && exit 1; exit 0
 
-## BL-113 — a `verify: sh` receipt that spans two lines is TRUNCATED by the engine and mis-scores silently
-
-**Found while authoring `BL-110` in `v0.429.0`, and it produced a wrong verdict before it was
-caught.**
-
-`backlog-reverify.sh` extracts a receipt with `sub(/^[ \t]*verify: sh /,"")` on a SINGLE line. An
-author who puts a literal newline inside a quoted payload — a plausible thing to do when the
-receipt must feed multi-line text to its subject — writes a receipt the engine reads as its first
-line only.
-
-**The failure is silent and the two readings disagree.** Measured: the receipt scored **0** run
-from the scratch file where it was authored and **1** read out of `docs/backlog.md` by the
-engine's own extraction, because the truncated fragment ended inside a quoted string. Nothing
-reported a malformed receipt; the entry would have read `STILL-LIVE` forever. `BL-089` already
-establishes that a `STILL-LIVE` row is not evidence an entry is live — **this is a second and
-distinct way to manufacture one**, and unlike the exit-9 case it leaves no hint at all.
-
-**Candidate fix**: the engine already holds the extracted string, so `bash -n -c "$receipt"`
-before evaluating costs one fork per entry and separates "this receipt does not parse" from "this
-receipt ran and reported non-zero". A truncation lands inside a quote or a `$( )` precisely
-because that is what made it multi-line, so the parse check is well matched to the defect. Emit a
-distinct verdict — `MALFORMED` — because the whole defect is that the two are currently one row.
-
-**False-positive set NOT measured, and that measurement is the first thing this entry owes.** The
-corpus is every live `sh` receipt; run `bash -n` over all of them and enumerate anything that
-fails to parse yet measures correctly. Whether any such receipt exists is NOT established, and
-this entry must not be closed on a fix whose FP set was never taken.
-
-verify: sh e=$(awk '/^## BL-[0-9]+/{f=1} f && sub(/^[ \t]*verify: sh /,"")' docs/backlog.md); [ -n "$e" ] || exit 9; n=$(printf '%s\n' "$e" | grep -c .); [ "$n" -ge 40 ] || exit 9; bad=$(printf '%s\n' "$e" | while IFS= read -r l; do [ -n "$l" ] || continue; bash -n -c "$l" 2>/dev/null || echo x; done | grep -c x); [ -f scripts/backlog-reverify.sh ] || exit 9; grep -q 'bash -n -c' scripts/backlog-reverify.sh || exit 1; grep -q MALFORMED scripts/backlog-reverify.sh || exit 1; [ "${bad:-1}" -eq 0 ]
-
 ## BL-124
 
 **Arm C's carry list falsifies a premise `unregistered-drift.sh` states in its own remedy text, and

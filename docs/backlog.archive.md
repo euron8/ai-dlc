@@ -9039,3 +9039,42 @@ verify: sh set -e; T=$(mktemp -d); D=$T/d; C=$T/c; mkdir -p "$D/core/skills/ai-d
 
 ---
 
+## BL-113 — a `verify: sh` receipt that spans two lines is TRUNCATED by the engine and mis-scores silently
+
+**LANDED (v0.536.0, verified 7bfcb305).** Both engines now `bash -n` the exact string they are
+about to run and refuse a non-parsing receipt as `NEEDS-REVIEW` under `unresolved: MALFORMED`.
+The consumer engine's case was worse than this entry filed: there the fragment's exit 2 read
+CLOSE-CANDIDATE, the data-losing direction, because every path the fragment named still
+existed. FP set measured at 0 of 234 `sh` receipts across the consumer's live ledger, this
+backlog and its archive. The receipt below was REWRITTEN at close: the original keyed on two
+tokens in the engine's text and was satisfied by a one-line comment carrying both; this one
+drives the engine on a seeded two-line receipt and its trailing-comment near-miss.
+
+**Found while authoring `BL-110` in `v0.429.0`, and it produced a wrong verdict before it was
+caught.**
+
+`backlog-reverify.sh` extracts a receipt with `sub(/^[ \t]*verify: sh /,"")` on a SINGLE line. An
+author who puts a literal newline inside a quoted payload — a plausible thing to do when the
+receipt must feed multi-line text to its subject — writes a receipt the engine reads as its first
+line only.
+
+**The failure is silent and the two readings disagree.** Measured: the receipt scored **0** run
+from the scratch file where it was authored and **1** read out of `docs/backlog.md` by the
+engine's own extraction, because the truncated fragment ended inside a quoted string. Nothing
+reported a malformed receipt; the entry would have read `STILL-LIVE` forever. `BL-089` already
+establishes that a `STILL-LIVE` row is not evidence an entry is live — **this is a second and
+distinct way to manufacture one**, and unlike the exit-9 case it leaves no hint at all.
+
+**Candidate fix**: the engine already holds the extracted string, so `bash -n -c "$receipt"`
+before evaluating costs one fork per entry and separates "this receipt does not parse" from "this
+receipt ran and reported non-zero". A truncation lands inside a quote or a `$( )` precisely
+because that is what made it multi-line, so the parse check is well matched to the defect. Emit a
+distinct verdict — `MALFORMED` — because the whole defect is that the two are currently one row.
+
+**False-positive set NOT measured, and that measurement is the first thing this entry owes.** The
+corpus is every live `sh` receipt; run `bash -n` over all of them and enumerate anything that
+fails to parse yet measures correctly. Whether any such receipt exists is NOT established, and
+this entry must not be closed on a fix whose FP set was never taken.
+
+verify: sh d=$(mktemp -d) || exit 9; printf '## BL-901\n\nverify: sh grep -q "alpha\nbeta" VERSION\n\n## BL-902\n\nverify: sh false # a comment, still reproduces\n' > "$d/l.md"; [ "$(grep -c '^beta" VERSION$' "$d/l.md")" -eq 1 ] || exit 9; o=$(bash scripts/backlog-reverify.sh "$d/l.md"); rm -rf "$d"; awk -F'\t' '$2=="BL-901" && $1=="NEEDS-REVIEW" && index($3,"MALFORMED")>0 {a=1} $2=="BL-902" && $1=="STILL-LIVE" {b=1} END{exit !(a && b)}' <<<"$o"
+
