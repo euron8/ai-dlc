@@ -15,6 +15,45 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.530.0] - 2026-09-07
+
+### `BL-204` — the gate's script arms ran after the adjudicator was dispatched, and prose promised a targeted re-adjudication the mechanism refuses
+
+`gate-validation.md`'s escalation preamble minted the nonce and dispatched the `gate-adjudicator`
+first, then had the lead run the `script` checks while it ran. Gate Failure step 2 then said to
+re-run "the failed check AND every check whose inputs the remediation touched", while
+`_gate-procedures.md` said there is no partial re-adjudication and `validate-gate-adjudication.sh`
+refuses any verdict whose covered set differs from the escalated set (`coverage_exact`). Measured on
+the reference consumer: Check 2's vocabulary validator failed on one token after the adjudicator
+was already running, the remediator fixed it in seven minutes, and the full escalated set was
+adjudicated a second time, thirty-two minutes of opus for a FAIL a script reports in under a second.
+
+The order is reversed. The preamble and the dispatch procedure now open with **Script arms before
+the adjudicator**: every `adjudication: script` check and the script arm of every `adjudication:
+llm` check that carries an `enforcer:` (Check 2's two validators are the measured case) run
+BEFORE the nonce is minted, a FAIL there goes through Gate Failure while no adjudicator is running,
+and the adjudicator is dispatched once against a corpus whose script checks already pass. Gate
+Failure step 2 now says what the mechanism enforces: a script-arm FAIL is re-run as that script
+alone, and a FAIL in the adjudicator's verdict is a whole new dispatch that re-derives the full
+escalated set at a fresh nonce. The deleted clause survives nowhere in the file.
+
+### `BL-205` — Check 35's FAIL was routed to a remediator although its subject is a state record the lead owns and the guard already permits
+
+Gate Failure step 1 routed every FAIL to ONE `remediator`. Check 35 (`validate-snapshot-conservation.sh`)
+fails on `pipeline-snapshot.md` and `pipeline-snapshot-history.md`, both in the gate-remediation
+guard's permitted set, and its own body says "recover from git — do not re-author". Measured on the
+reference consumer: the Check 35 repair cost a 22-minute remediator dispatch plus a second
+adjudication. Step 1 now carries one exemption, stated in the step: a FAIL whose subject is one of
+those two files is repaired by the lead per Check 35's remedy, because Rule 28(c)'s reason for the
+remediator (a planning artifact repaired from a compacted summary) does not reach a state record
+the lead already owns. Every other FAIL is dispatched exactly as before.
+
+The shipping fixture `gate-adjudication` gains an arm asserting the ordering phrase in both step
+files, the exemption and the replacement wording inside the Gate Failure block, and the deleted
+clause absent file-wide, with decoy self-probes in each direction run before the corpus. The
+`gate-adjudication-mutants` sandbox now carries the two step files so the battery's inert control
+still resolves them.
+
 ## [0.529.0] - 2026-09-07
 
 ### `BL-202` — the gate-remediation guard arms on a prior sprint's dispositioned FAIL, and denies every lead edit until the next sprint's first verdict lands

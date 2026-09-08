@@ -157,10 +157,23 @@ rendered namespace.
 
 **Gate-adjudication escalation (before the checklist).** The lead may run on a cheaper model;
 the `adjudication: llm` checks (read-and-compare judgment) are escalated, once per gate, to a
-fresh Opus `gate-adjudicator`. At gate entry: generate `gate_nonce` (`<gate_type>-<UTC>`),
+fresh Opus `gate-adjudicator`.
+
+**Script arms before the adjudicator.** At gate entry, BEFORE minting `gate_nonce` and before
+dispatching anything, the lead runs every `adjudication: script` check in the manifest AND the
+script arm of every `adjudication: llm` check whose enforcement-map entry carries an
+`enforcer:` — Check 2's `validate-escalation-status-vocabulary.sh` and
+`validate-suppression-lifetime.sh` are the measured case. A FAIL there goes to **Gate Failure**
+now, while no adjudicator is running. The adjudicator is then dispatched once, against a corpus
+whose script checks already pass. Measured on the reference consumer: Check 2's vocabulary
+validator failed on a single token after the adjudicator had already been dispatched, and the
+gate paid a second full adjudication for a FAIL a script reports in under a second.
+
+At gate entry, once those pass: generate `gate_nonce` (`<gate_type>-<UTC>`),
 then READ AND FOLLOW `_gate-procedures.md` "Gate-adjudication dispatch" — dispatch the
-adjudicator `run_in_background`, join its verdict. While it runs, evaluate ONLY the `script` /
-`project` / `lead` checks below; inline-evaluating an `llm` check is a Rule 20 solo violation.
+adjudicator `run_in_background`, join its verdict. While it runs, evaluate ONLY the remaining
+`project` / `lead` checks below — the script checks are already done;
+inline-evaluating an `llm` check is a Rule 20 solo violation.
 Adopt the adjudicator's per-check verdicts through the terminal **Check 26** (fail-closed).
 A verdict is valid ONLY for the dispatch that produced it. If you re-dispatch — because
 state moved, or the prior verdict cited state that has since changed — generate a fresh
@@ -2688,10 +2701,24 @@ If any check fails:
    It takes every FAILED check of this pass and writes its repair record to
    `_bmad-output/planning-artifacts/s<N>/gate-<type>-repair-p<M>.md`. The lead
    dispatches, joins, and adjudicates; it does not edit the artifact.
-2. Re-run the failed check AND every check whose inputs the remediation touched.
-   When that set is not derivable from the repair record, re-run the full
-   escalated set. The verdict schema's `coverage_exact` rule binds the pass to
-   that same set.
+   **One exemption, and it is the only one:** a FAIL whose subject is
+   `pipeline-snapshot.md` or `pipeline-snapshot-history.md` is repaired by the
+   LEAD, not by a remediator — recover the destroyed content from git, never
+   re-author it, per Check 35's own remedy. Those two files are the first two
+   arms of the gate-remediation guard's permitted set
+   (`.claude/hooks/ai-dlc-gate-remediation-guard.sh:467-468`), so the lead's
+   write is already permitted there. Rule 28(c) routes a repair to the remediator
+   because the lead would otherwise rebuild a planning ARTIFACT from a compacted
+   summary; a state record the lead already owns and the guard already permits is
+   not that case. Every other FAIL goes to ONE `remediator` per pass.
+2. Re-run the failed check. What that costs depends on where the FAIL came from.
+   A script-arm FAIL found before the dispatch is re-run as that script alone, and
+   no adjudicator is involved. A FAIL inside the adjudicator's verdict is a whole
+   new dispatch: the lead mints a fresh `gate_nonce` and the adjudicator
+   re-derives the full escalated set at a fresh nonce.
+   `scripts/ai-dlc/validate-gate-adjudication.sh` refuses any verdict whose
+   covered set differs from the escalated set (the schema's `coverage_exact`
+   rule), so there is no targeted or partial re-adjudication to reach for.
 3. If the check now passes, continue with remaining checks.
 4. If still failing after remediation, escalate as HARD_BLOCK per Rule 12. Run
    this after every recorded pass:

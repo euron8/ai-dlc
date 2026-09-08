@@ -57,6 +57,59 @@ not a closed entry.
 
 ---
 
+## BL-204 — the gate's script arms ran after the adjudicator was dispatched, and the Gate Failure prose promised a targeted re-adjudication the mechanism refuses
+
+**LANDED (v0.530.0).**
+
+**The escalation preamble in `gate-validation.md` minted the nonce and dispatched the
+`gate-adjudicator` FIRST, then had the lead run the `script` checks while it ran.** Gate Failure
+step 2 then said "Re-run the failed check AND every check whose inputs the remediation touched",
+while `_gate-procedures.md` "Gate-adjudication dispatch" says there is no partial re-adjudication
+and `validate-gate-adjudication.sh` refuses any verdict whose covered set differs from the
+escalated set (`coverage_exact` in `core/schemas/gate-adjudication-verdict.json`). The two
+statements could not both be followed, and the mechanism decides which one wins.
+
+**Measured on the reference consumer.** Check 2's `validate-escalation-status-vocabulary.sh`
+failed on one token after the adjudicator was already running; the remediator fixed it in seven
+minutes; the full escalated set was then adjudicated a second time. Thirty-two minutes of opus for
+a FAIL a script reports in under a second, and the second dispatch was forced by the mechanism the
+prose said could be avoided.
+
+**The fix reverses the order rather than teaching the validator a partial set.** The preamble and
+the dispatch procedure open with **Script arms before the adjudicator**: every `adjudication:
+script` check and the script arm of every `adjudication: llm` check that carries an `enforcer:`
+run before the nonce is minted, a FAIL goes through Gate Failure while no adjudicator is running,
+and the adjudicator is dispatched once against a corpus whose script checks already pass. Step 2
+says what the mechanism enforces: a script-arm FAIL is re-run as that script alone; a FAIL in the
+verdict is a whole new dispatch that re-derives the full escalated set at a fresh nonce.
+
+Tiered **DEFECT**.
+
+verify: sh [ "$(grep -c 'Script arms before the adjudicator' core/skills/ai-dlc/steps/gate-validation.md)" -gt 0 ] && [ "$(grep -c 'Script arms before the adjudicator' core/skills/ai-dlc/steps/_gate-procedures.md)" -gt 0 ] && [ "$(grep -c 'CHECK_LOADED: failure' core/skills/ai-dlc/steps/gate-validation.md)" -eq 1 ] && [ "$(grep -c 'whose inputs the remediation touched' core/skills/ai-dlc/steps/gate-validation.md)" -eq 0 ] && awk '/CHECK_LOADED: failure/{f=1} f&&/^## Gate Reset/{exit} f' core/skills/ai-dlc/steps/gate-validation.md | grep -q 're-derives the full escalated set at a fresh'
+
+## BL-205 — Check 35's FAIL is routed to a remediator although its subject is a state record the lead owns and the guard already permits
+
+**LANDED (v0.530.0).**
+
+**Gate Failure step 1 routed every FAIL to ONE `remediator`.** Check 35
+(`validate-snapshot-conservation.sh`, `adjudication: script`) fails on `pipeline-snapshot.md` and
+`pipeline-snapshot-history.md`. Both are in the gate-remediation guard's permitted set
+(`core/hooks/ai-dlc-gate-remediation-guard.sh`, the first two `case` arms of the permitted set),
+and Check 35's own body says "On FAIL, recover from git — do not re-author". Rule 28(c)'s reason
+for the remediator, that the lead repairs a planning artifact from a compacted summary, does not
+reach a state record the lead already owns and the guard already lets it edit.
+
+**Measured on the reference consumer.** The Check 35 repair cost a 22-minute remediator dispatch
+plus a second full adjudication, for an append of lines `git show` already holds verbatim.
+
+**The fix is one exemption stated in the numbered step.** A FAIL whose subject is one of those two
+files is repaired by the lead per Check 35's remedy. Every other FAIL is dispatched exactly as
+before, so the remediator's reason survives everywhere it applies.
+
+Tiered **NOTE**.
+
+verify: sh [ "$(grep -c 'CHECK_LOADED: failure' core/skills/ai-dlc/steps/gate-validation.md)" -eq 1 ] && awk '/CHECK_LOADED: failure/{f=1} f&&/^## Gate Reset/{exit} f' core/skills/ai-dlc/steps/gate-validation.md | grep -q 'pipeline-snapshot-history.md'
+
 ## BL-202 — the gate-remediation guard arms on a prior sprint's dispositioned FAIL and denies every lead edit until the next sprint's first verdict lands
 
 **LANDED (v0.529.0).**
