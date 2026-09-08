@@ -277,10 +277,46 @@ section_flat() {
     | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | tr '\n' ' ' | tr -s ' '
 }
 
+# section_ordered <sha> <anchor> — the section's non-blank lines in FILE ORDER, trimmed
+# and squeezed, no floor and no sort. `carried_in_context` needs adjacency, which
+# `section_lines` discards.
+section_ordered() {
+  git -C "$DIST" show "${1}:${CORE}" 2>/dev/null | section_of "$2" \
+    | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -v '^$' | tr -s ' '
+}
+
+# carried_in_context <to-sha> <anchor> <line> — does the BODY carry the run of consecutive
+# TO lines that holds <line>'s words? Every start position is tried and the window grows
+# until it contains the needle, so the shortest carrier at each start is tested; a body
+# carrying any of them carries the needle IN THE CONTEXT TO GIVES IT.
+carried_in_context() {
+  local needle i j n win l
+  needle="$(printf '%s' "$3" | tr -s ' ')"
+  local -a L
+  i=0
+  while IFS= read -r l; do L[$i]="$l"; i=$((i+1)); done < <(section_ordered "$1" "$2")
+  n=$i
+  i=0
+  while [ "$i" -lt "$n" ]; do
+    win="${L[$i]}"; j=$i
+    while :; do
+      case "$win" in *"$needle"*)
+        body_carries "$win" && return 0
+        break ;;
+      esac
+      j=$((j+1)); [ "$j" -lt "$n" ] || break
+      win="$win ${L[$j]}"
+    done
+    i=$((i+1))
+  done
+  return 1
+}
+
 # changed_lines <from-sha> <to-sha> <anchor> — the substantive lines of the section at
-# FROM whose word sequence the section at TO no longer carries.
+# FROM that the section at TO no longer carries as a whole line, EXCEPT those whose words
+# survive at TO inside a longer run of text that the body ALSO carries.
 #
-# CONTAINMENT, NOT A WHOLE-LINE SET DIFFERENCE, AND THE DIFFERENCE IS A FALSE REFUSAL.
+# A WHOLE-LINE SET DIFFERENCE IS A FALSE REFUSAL, AND BARE CONTAINMENT IS A FALSE PASS.
 # Upstream re-flows paragraphs. When it does, a base line survives at theirs as the
 # SUFFIX (or prefix, or middle) of a longer line, so a whole-line difference scores it
 # as deleted while a body that adopted theirs faithfully still contains it — and the
@@ -288,17 +324,31 @@ section_flat() {
 # reference consumer's `steps__gate-validation__check-20.md` across `eb49b783 ->
 # a798e215`: `--merge` reported 1 merged / 0 conflicted, a containment join found all 38
 # substantive theirs lines in the body, and `--stamp readopt` refused on one line that
-# theirs carried at the end of a re-flowed sentence. The only stamp then available was
-# `reaffirm`, which recorded a re-adoption under the wrong outcome name. Whole-line
-# equality implies containment, so nothing a set difference would have reported is
-# lost; the 24-character floor on the needle side excludes coincidental short matches
-# as before.
+# theirs carried at the end of a longer sentence. The only stamp then available was
+# `reaffirm`, which recorded a re-adoption under the wrong outcome name.
+#
+# But a base line's words also survive at theirs when upstream QUALIFIED or NEGATED the
+# line in place — `Never` prepended, a clause appended, a table row extended — and there
+# the body carrying only the base line is teaching the OLD rule. Measured over the last
+# 60 non-merge commits touching the shipped rule text: of 209 deleted substantive lines,
+# 46 survive by containment, 24 across a line join and 22 inside one line, and the
+# consumer's own motivating line is in the second group. Requiring the containment to
+# cross a line join would therefore refuse the case that motivated the change. What
+# separates the two is the BODY: a faithful adoption carries the theirs text that now
+# holds the base line's words, and a body teaching the old rule does not. So a contained
+# line is acquitted only when `carried_in_context` finds the body carrying its carrier.
+# Whole-line presence at TO is checked first, so an UNCHANGED line the body omits is never
+# reported as new in the mirror direction. The 24-character floor on the needle side
+# excludes coincidental short matches as before.
 changed_lines() {
-  local to_flat line
+  local to_lines to_flat line
+  to_lines="$(section_lines "$2" "$3")"
   to_flat="$(section_flat "$2" "$3")"
   while IFS= read -r line; do
     [ -n "$line" ] || continue
-    carries "$to_flat" "$line" || printf '%s\n' "$line"
+    grep -qxF -- "$line" <<<"$to_lines" && continue
+    carries "$to_flat" "$line" && carried_in_context "$2" "$3" "$line" && continue
+    printf '%s\n' "$line"
   done < <(section_lines "$1" "$3")
 }
 

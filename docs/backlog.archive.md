@@ -8761,24 +8761,35 @@ reports OK and exits 0. Independently derived on core's Check 20 section: three 
 whole-line equality at theirs, of which one is contained in theirs' flattened section and two are
 genuinely gone. The fix reports the two and not the one.
 
-**The fix is one predicate for both directions.** `changed_lines <from> <to> <anchor>` yields the
-FROM section's substantive lines whose word sequence the flattened TO section does not carry;
-`stale_lines` and `unadopted_lines` call it with the refs swapped. Whole-line equality implies
-containment, so nothing the set difference reported is lost, and the 24-character floor stays.
+**The fix is one predicate for both directions, and its first cut was wrong in the direction
+that clears a HARD block.** `changed_lines <from> <to> <anchor>` yields the FROM section's
+substantive lines absent from TO as whole lines, minus those whose words survive at TO inside a
+longer run of text that the BODY also carries; `stale_lines` and `unadopted_lines` call it with
+the refs swapped. The first cut acquitted on bare containment, and an adversarial hand measured
+that over the last 60 non-merge commits touching the shipped rule text, 46 of 209 deleted lines
+survive by containment, 22 of them inside a single theirs line, where upstream had qualified or
+NEGATED the line in place. A body carrying only the old line then passed `--check` and landed
+`--stamp readopt`, advancing `base_sha` so the next pull computed no drift. The hand's proposed
+narrowing, requiring the containment to cross a line join, would have refused the consumer's own
+case, which is in the single-line group. What separates a re-flow from an edit is the body: a
+faithful adoption carries the theirs text that now holds the base line's words, and a body
+teaching the old rule does not.
 
-**Two wrong fixes were built and both are rejected by the receipt.** The filing's own first
+**Four non-fixes were built and every one is rejected by the receipt.** The filing's own first
 suggestion, dropping a survivor that is a substring of some single theirs LINE, passes the
-consumer's case and misses a base line that theirs split across two lines; the receipt seeds
-that split. Clearing the stale set whenever the body carries every theirs line passes the
-faithful adoption and also passes a body that kept a genuinely dropped sentence beside it. The
-`layer-readopt-gate` fixture's arm J carries the same three subjects plus a mutant restoring the
-whole-line form, which moves exactly one cell; the mutant's first cut survived because the arm's
-own successful stamp had advanced `base_sha` to theirs, and the arm now resets it and asserts the
-range is not degenerate before scoring.
+consumer's case and misses a base line that theirs split across two lines. Clearing the stale
+set whenever the body carries every theirs line passes a body that kept a genuinely dropped
+sentence beside a full adoption. Bare containment passes a body teaching a rule theirs negated.
+The receipt seeds all three shapes. The `layer-readopt-gate` fixture's arm J carries the same
+subjects plus two mutants, one per half of the predicate, each moving exactly one cell; the
+re-flow mutant's first cut survived because the arm's own successful stamp had advanced
+`base_sha` to theirs, and the negation mutant's first cut survived because the seed lowercased a
+letter after `Never` and so was not contained at all. Both seeds are now asserted before any
+verdict is read.
 
 Tiered **DEFECT**.
 
-verify: sh R="$(mktemp -d)"; D="$R/d"; C="$R/c/.claude/skills/ai-dlc/overrides"; mkdir -p "$D/core/skills/ai-dlc" "$C"; S="$D/core/skills/ai-dlc/SKILL.md"; printf '## Rule 1 -- A\n\nalpha alpha alpha alpha alpha\nbeta beta beta beta beta beta beta beta beta\n\ngamma gamma gamma gamma gamma gamma gamma gamma\n\n## Rule 2 -- B\n\ntail tail tail tail tail tail tail tail\n' > "$S"; env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git -C "$D" init -q; git -C "$D" -c user.email=a@b -c user.name=a add -A; git -C "$D" -c user.email=a@b -c user.name=a commit -qm b; B="$(git -C "$D" rev-parse --short HEAD)"; printf '## Rule 1 -- A\n\nalpha alpha alpha alpha alpha beta beta beta beta\nbeta beta beta beta beta\n\n## Rule 2 -- B\n\ntail tail tail tail tail tail tail tail\n' > "$S"; git -C "$D" -c user.email=a@b -c user.name=a commit -qam t; T="$(git -C "$D" rev-parse --short HEAD)"; printf -- '---\nshadows: SKILL.md#Rule 1\nbase_sha: %s\nreason: x\n---\n\n## Rule 1 -- A\n\nmine mine mine mine mine mine mine mine\n\nalpha alpha alpha alpha alpha beta beta beta beta\nbeta beta beta beta beta\n' "$B" > "$C/ok.md"; printf -- '---\nshadows: SKILL.md#Rule 1\nbase_sha: %s\nreason: x\n---\n\n## Rule 1 -- A\n\nalpha alpha alpha alpha alpha beta beta beta beta\nbeta beta beta beta beta\n\ngamma gamma gamma gamma gamma gamma gamma gamma\n' "$B" > "$C/bad.md"; P=core/skills/ai-dlc-update/reconcile/readopt-override.sh; o="$(bash "$P" "$D" "$T" "$R/c" "$C/ok.md" --check 2>&1)"; a=$?; b="$(bash "$P" "$D" "$T" "$R/c" "$C/bad.md" --check 2>&1)"; c=$?; rm -rf "$R"; [ "$a" -eq 0 ] && grep -q '^OK' <<<"$o" && [ "$c" -eq 1 ] && grep -q 'gamma gamma' <<<"$b" && ! grep -q 'beta beta' <<<"$b"
+verify: sh R="$(mktemp -d)"; D="$R/d"; C="$R/c/.claude/skills/ai-dlc/overrides"; mkdir -p "$D/core/skills/ai-dlc" "$C"; S="$D/core/skills/ai-dlc/SKILL.md"; printf '## Rule 1 -- A\n\nalpha alpha alpha alpha alpha\nbeta beta beta beta beta beta beta beta beta\n\ngamma gamma gamma gamma gamma gamma gamma gamma\n\n## Rule 2 -- B\n\ndelta delta delta delta delta delta delta delta\n' > "$S"; env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git -C "$D" init -q; git -C "$D" -c user.email=a@b -c user.name=a add -A; git -C "$D" -c user.email=a@b -c user.name=a commit -qm b; B="$(git -C "$D" rev-parse --short HEAD)"; printf '## Rule 1 -- A\n\nalpha alpha alpha alpha alpha beta beta beta beta\nbeta beta beta beta beta\n\n## Rule 2 -- B\n\nNever delta delta delta delta delta delta delta delta\n' > "$S"; git -C "$D" -c user.email=a@b -c user.name=a commit -qam t; T="$(git -C "$D" rev-parse --short HEAD)"; printf -- '---\nshadows: SKILL.md#Rule 1\nbase_sha: %s\nreason: x\n---\n\n## Rule 1 -- A\n\nmine mine mine mine mine mine mine mine\n\nalpha alpha alpha alpha alpha beta beta beta beta\nbeta beta beta beta beta\n' "$B" > "$C/ok.md"; printf -- '---\nshadows: SKILL.md#Rule 1\nbase_sha: %s\nreason: x\n---\n\n## Rule 1 -- A\n\nalpha alpha alpha alpha alpha beta beta beta beta\nbeta beta beta beta beta\n\ngamma gamma gamma gamma gamma gamma gamma gamma\n' "$B" > "$C/bad.md"; printf -- '---\nshadows: SKILL.md#Rule 2\nbase_sha: %s\nreason: x\n---\n\n## Rule 2 -- B\n\nmine mine mine mine mine mine mine mine\n\ndelta delta delta delta delta delta delta delta\n' "$B" > "$C/neg.md"; P=core/skills/ai-dlc-update/reconcile/readopt-override.sh; o="$(bash "$P" "$D" "$T" "$R/c" "$C/ok.md" --check 2>&1)"; a=$?; b="$(bash "$P" "$D" "$T" "$R/c" "$C/bad.md" --check 2>&1)"; c=$?; g="$(bash "$P" "$D" "$T" "$R/c" "$C/neg.md" --check 2>&1)"; e=$?; rm -rf "$R"; [ "$a" -eq 0 ] && grep -q '^OK' <<<"$o" && [ "$c" -eq 1 ] && grep -q 'gamma gamma' <<<"$b" && ! grep -q 'beta beta' <<<"$b" && [ "$e" -eq 1 ] && grep -q 'delta delta' <<<"$g"
 
 ---
 
