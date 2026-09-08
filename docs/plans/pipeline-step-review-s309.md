@@ -29,32 +29,21 @@ that wrote them, and the lead re-runs the proof before merging.
 
 ### Next actions
 
-**Release 1 is on `origin/main` as `c5ee81e9` (PR #674, `0.529.0`). Do not re-execute it.** It shipped
-`core/scripts/rotate-gate-adjudication.sh`, the shipping fixture `core/fixtures/gate-adjudication-rotate/`,
-retro.md 7a-post step 5b, the beat-before-stop clause in `handoff.md` step 1 and its
-`_gate-procedures.md` copy, and backlog entries `BL-202` and `BL-203` with receipts that drive the shipping
-programs. Re-derive before acting: `git log --oneline origin/main -3` must show `c5ee81e9`, and
-`grep -c rotate-gate-adjudication core/skills/ai-dlc/steps/retro.md` must print a non-zero count.
+**Releases 1 and 2 are on `origin/main`. Do not re-execute either.** Release 1 is `c5ee81e9`
+(PR #674, `0.529.0`): `core/scripts/rotate-gate-adjudication.sh`, the shipping fixture
+`core/fixtures/gate-adjudication-rotate/`, retro.md 7a-post step 5b, the beat-before-stop clause in
+`handoff.md` step 1 and its `_gate-procedures.md` copy, `BL-202` and `BL-203`. Release 2 is
+`886bd76d` (PR #676, `0.530.0`): the escalation preamble and the "Gate-adjudication dispatch"
+procedure open with **Script arms before the adjudicator**, Gate Failure step 1 carries the
+snapshot-file lead-repair exemption, step 2 no longer carries the deleted clause, the
+`gate-adjudication` fixture asserts all of it with self-probes, and `BL-204` and `BL-205` carry
+`verify: sh` receipts that exit 1 against the pre-fix tree. Re-derive before acting:
+`git log --oneline origin/main -3` must show `886bd76d`, `git show origin/main:VERSION` must print
+`0.530.0`, and
+`grep -c 'Script arms before the adjudicator' core/skills/ai-dlc/steps/gate-validation.md core/skills/ai-dlc/steps/_gate-procedures.md`
+must print a non-zero count for each file.
 
-1. **Release 2 (`0.530.0`), script arms before the adjudicator, and Check 35 as a lead remedy.**
-   Branch `release/0.530.0-script-arms-first` from `origin/main`. Edit targets, verified at
-   `c5ee81e9`: the escalation preamble at `core/skills/ai-dlc/steps/gate-validation.md:158-172`,
-   the Gate Failure block at `core/skills/ai-dlc/steps/gate-validation.md:2682-2704`, and
-   "Gate-adjudication dispatch" at `core/skills/ai-dlc/steps/_gate-procedures.md:143-178`.
-   The change: the lead runs every `adjudication: script` check and the script arm of every
-   `adjudication: llm` check (Check 2's two validators are the measured case) BEFORE minting the
-   nonce and dispatching the adjudicator; a script FAIL is repaired first, so the adjudicator runs
-   once. Delete Gate Failure step 2's "AND every check whose inputs the remediation touched" clause
-   and say what `validate-gate-adjudication.sh` enforces: a re-dispatch re-derives the full escalated
-   set at a fresh nonce. Gate Failure step 1 gains one exemption: a FAIL whose subject is
-   `pipeline-snapshot.md` or `pipeline-snapshot-history.md` (the guard's permitted set,
-   `core/hooks/ai-dlc-gate-remediation-guard.sh:467-468`) is repaired by the lead, because Rule 28's
-   reason for the remediator does not reach a state record the lead owns; Check 35's body already
-   says "recover from git, do not re-author". Fixture `core/fixtures/gate-adjudication/run.sh` gains
-   an arm asserting the preamble names the script-first ordering and the Gate Failure text no longer
-   carries the deleted clause, with a decoy self-probe. Backlog `BL-204` (DEFECT 2) and `BL-205`
-   (the NOTE on Check 35) with `verify: has` and `verify: lacks` receipts. Delegate the prose edits
-   to one agent; the lead wires VERSION, CHANGELOG, backlog, runs the gate, merges.
+1. **Release 2 (`0.530.0`) is merged as `886bd76d`.** Nothing to do.
 2. **Release 3 (`0.531.0`), the `requirements` step for carry-over and feature variants, two
    party seats.** Ships alone. New `core/skills/ai-dlc/steps/requirements.md` replacing
    `discovery.md` plus `research-requirements.md` in `core/skills/ai-dlc/steps/route.md:431-434`
@@ -191,7 +180,10 @@ names "what a remediator is still owed". Nothing was owed.
 
 ### DEFECT 2: prose promises a targeted re-adjudication that the mechanism refuses
 
-`core/skills/ai-dlc/steps/gate-validation.md:2691` says "Re-run the failed check AND every check
+Shipped in release 2 as `BL-204` (`886bd76d`). Citations are at `c5ee81e9`, the tree the
+finding was measured on; the clause no longer exists on `origin/main`.
+
+`core/skills/ai-dlc/steps/gate-validation.md:2691` said "Re-run the failed check AND every check
 whose inputs the remediation touched." `core/skills/ai-dlc/steps/_gate-procedures.md:168-172`
 says there is no partial re-adjudication, and `core/scripts/validate-gate-adjudication.sh`
 blocks any verdict whose set differs from the escalated set. The consumer ran the full set twice
@@ -206,8 +198,10 @@ keystroke.
 
 ### NOTE: Check 35's remedy is dispatched although the subject is lead-owned
 
+Shipped in release 2 as `BL-205` (`886bd76d`).
+
 `pipeline-snapshot-history.md` is in the guard's permitted set
-(`core/hooks/ai-dlc-gate-remediation-guard.sh:458-460`), yet the Gate Failure protocol routes
+(`core/hooks/ai-dlc-gate-remediation-guard.sh:467-468`), yet the Gate Failure protocol routed
 every FAIL to a remediator. The s309 Check 35 repair cost 22 min plus a second adjudication.
 
 ### NOTE: party-mode yield at the brief and PRD is concentrated in the architect seat
