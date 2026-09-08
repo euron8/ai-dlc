@@ -282,9 +282,27 @@ architecture doc — its passes use the **Adversarial review dispatch** and
   failure, backward compatibility, migration risk, integration seams, and
   over-engineering (Rule 26: mechanism beyond requirements, parallel paths,
   unjustified guards — propose removals as findings).
-- **intensity:** on `validation_intensity == lightweight` AND the Step 2
-  assessment is NO CHANGES NEEDED, skip this cycle entirely (Rule 5 fast-track)
-  and proceed to Step 5; otherwise run the full cycle.
+- **intensity:** when the Step 2 assessment is NO CHANGES NEEDED AND EITHER
+  `validation_intensity == lightweight` OR the declared-no-impact predicate below
+  holds, skip this cycle entirely (Rule 5 fast-track) and proceed to Step 5;
+  otherwise run the full cycle. The declared-no-impact arm applies at EVERY
+  intensity: it keys on this sprint's
+  `_bmad-output/planning-artifacts/s<N>/architecture-impact.md` (written by
+  `requirements.md` §4, one `architecture_impact:` line per FR). The predicate is
+  line-exact — every `architecture_impact:` line reads exactly
+  `architecture_impact: none`, and there is at least one such line. The file
+  absent, an empty file, or any line reading anything else (`none-for-now`,
+  `None`, a trailing word) keeps the full cycle. With `f` set to the file's path,
+  the predicate holds when this exits 0 (a fixture extracts and runs this line, so
+  it is the predicate, not a paraphrase of it):
+  <!-- FAST_TRACK_PREDICATE -->
+  ```
+  awk '/architecture_impact:/{n++; if ($0 !~ /architecture_impact: none$/) b++} END{exit !(n>=1 && b==0)}' "$f"
+  ```
+  When the fast-track is taken on this arm, the Step 5 gate log entry records
+  `fast_track: architecture-impact-none` and the impact file's path beside
+  `validation_intensity:` and `minimum_met:` — that is the skip provenance
+  gate-validation Check 20 reads.
 - **`Seam D` label:** `architecture adversarial pass <N>`.
 - **on convergence:** append a changelog to
   `_bmad-output/planning-artifacts/s<N>/changelog-architecture.md`

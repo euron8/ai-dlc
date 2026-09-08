@@ -57,6 +57,34 @@ not a closed entry.
 
 ---
 
+## BL-207 — the architecture step ran a full validation cycle over a design already declared to change nothing
+
+**LANDED (v0.532.0).**
+
+**`architecture.md` §4 fast-tracked only under `lightweight`.** At `standard`, `full` and
+`carry-over-single`, a sprint whose Step 2 assessment read NO CHANGES NEEDED still ran party
+mode, an adversarial series, a remediator and the adjudicator over an addendum whose content was
+that nothing changed.
+
+**Measured on the reference consumer's sprint 308** (`carry-over-single`; `s308/architecture.md`
+opens "Existing architecture fully supports Sprint 308 scope"; `subagent-context.jsonl` rows
+between the research-requirements gate at 2026-09-04T00:30Z and the architecture gate at
+16:28Z): twelve dispatches, 110 subagent-busy minutes, two adversary passes and a remediator,
+over a 16-hour wall clock between the two gates.
+
+**The fix widens the bullet's condition, keyed on `0.531.0`'s `architecture-impact.md`.** When
+the assessment is NO CHANGES NEEDED and every `architecture_impact:` line reads exactly
+`architecture_impact: none`, the cycle is skipped at any intensity. The predicate is one fenced
+awk line under `<!-- FAST_TRACK_PREDICATE -->` in `architecture.md`, extracted and RUN by the
+shipping fixture `architecture-fast-track`; Check 20 names the file and the `fast_track:
+architecture-impact-none` gate-log token and runs the same predicate.
+
+Tiered **DEFECT**.
+
+verify: sh P="$(awk '/<!-- FAST_TRACK_PREDICATE -->/{getline; getline; print; exit}' core/skills/ai-dlc/steps/architecture.md)" && [ -n "$P" ] && d="$(mktemp -d)" && printf -- '- FR-S1-1: architecture_impact: none\n' > "$d/ok" && printf -- '- FR-S1-1: architecture_impact: none-for-now\n' > "$d/near" && f="$d/ok" bash -c "$P" && ! f="$d/near" bash -c "$P" && grep -q 'fast_track: architecture-impact-none' core/skills/ai-dlc/steps/gate-validation.md && grep -q 'fast_track: architecture-impact-none' core/skills/ai-dlc/steps/architecture.md; r=$?; rm -rf "$d"; exit $r
+
+---
+
 ## BL-206 — the `carry-over` and `feature` variants ran two planning steps, two validation cycles and two gates over one already-named scope
 
 **LANDED (v0.531.0).**

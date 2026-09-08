@@ -342,6 +342,11 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   with this raise: the reduction target is I87's per-directory pipeline in `i87_exposed_in`,
 #   and reshaping the pole's validator is a separate change timed on its own. Headroom is one
 #   further directory, so the next author attributes theirs.
+#
+#   v0.532.0: budget UNCHANGED at 8060; corpus 8009 -> 8022 on the same validator bytes, the
+#   +13 being the `architecture-fast-track` fixture directory and nothing else. Headroom is
+#   now 38 forks, which is LESS than one further directory at this rate. The next fixture
+#   directory raises the budget or takes the I87 reduction; there is no third option left.
 FORK_BUDGET=8060
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------

@@ -269,6 +269,7 @@ core_manifest:
   - fixtures/relocation-preclassify/**
   - fixtures/preclassify-rename-row/**
   - fixtures/requirements-step/**
+  - fixtures/architecture-fast-track/**
   - fixtures/resume-whole-read/**
   - fixtures/retired-contract-token/**
   - fixtures/retired-layer-contract/**

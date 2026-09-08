@@ -15,6 +15,50 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.532.0] - 2026-09-07
+
+### `BL-207` — the architecture step ran a full validation cycle over a design that had already been declared to change nothing
+
+`architecture.md` §4 fast-tracked the cycle only under `validation_intensity == lightweight`.
+At every other intensity a sprint whose Step 2 assessment read NO CHANGES NEEDED still ran
+party mode, an adversarial series and a remediator over an addendum stating that nothing
+changed. Measured on the reference consumer's sprint 308 (`carry-over-single`): the
+architecture addendum opened "Existing architecture fully supports Sprint 308 scope ... no new
+mechanism class, no new service, no new API, no new data store", and the step still spent
+110 subagent-busy minutes across twelve dispatches (four party-mode seats, two adversary
+passes, a remediator, the adjudicator) over a 16-hour wall clock between its two gates, with
+pass 1 reporting one CRITICAL and three MAJOR against a document whose content was that
+nothing was changing.
+
+**The intensity bullet now fast-tracks at ANY intensity on declared no-impact.** The second arm
+keys on the per-FR `s<N>/architecture-impact.md` that `requirements.md` §4 writes since
+`0.531.0`: when the Step 2 assessment is NO CHANGES NEEDED and every `architecture_impact:` line
+of that file reads exactly `architecture_impact: none`, the cycle is skipped and the step
+proceeds to its gate. The predicate is line-exact and lives as one fenced awk line under the
+`<!-- FAST_TRACK_PREDICATE -->` marker so a fixture can extract and run it rather than restate
+it: `architecture_impact: none-for-now`, `None`, a trailing blank, an empty file, a file with no
+impact lines, or no file at all each keep the full cycle. The `lightweight` arm is unchanged.
+The gate log records `fast_track: architecture-impact-none` and the impact file's path beside
+`validation_intensity:` and `minimum_met:`; Check 20 names the file, the token and the
+predicate's home, and runs the predicate against the file rather than reading the log's claim.
+
+**Shipping fixture `architecture-fast-track`** asserts, with a self-probe per arm in both
+directions before the corpus read: the bullet names the impact file and the `none` value and is
+no longer the lightweight-only form; the predicate extracts non-empty and, RUN, accepts only the
+all-`none` seed and refuses seven near-misses including `none-for-now` (a deliberately loose
+predicate is shown to pass that seed, which is what makes the arm able to fire); Check 20 names
+the file, the token and `architecture.md`; `requirements.md` still writes the file and the
+value the predicate reads; and the gate-log token is byte-identical across the two files.
+`uninstall.sh`, `core-manifest.md` and `setup-sites.md` name the fixture.
+
+**Consumer note.** The reference consumer's `overrides/steps__gate-validation__check-20.md`
+shadows core Check 20 verbatim at its `base_sha` plus two relaxations; on the next pull the
+layer drift check will report the base moved, and the override re-bases by carrying the new
+fast-track sentence. Named here, not edited.
+
+`BL-207` carries a `verify: sh` receipt that exits 1 against the pre-fix tree. This is the
+last release of `docs/plans/pipeline-step-review-s309.md`.
+
 ## [0.531.0] - 2026-09-07
 
 ### `BL-206` — the `carry-over` and `feature` variants ran two planning steps over one already-named scope
