@@ -24,12 +24,24 @@ rewrites it. Step 5 removes the marker.
 
 Execute this 5-step procedure in order:
 
-1. **Stop all in-flight teammates first.** Call `TaskStop` on
-   every `in_progress` task. Halt any Agent-spawned teammate not
-   bound to a task. Wait until every teammate has returned before
-   proceeding. Record stopped teammates and in-flight artifacts
-   in the snapshot's Open Items in Step 3, and set each stopped
-   teammate's **In-Flight Teammates** row `status` to `stopped`.
+1. **Stop all in-flight teammates first.** Before calling `TaskStop`, run
+   ONE bounded-join beat (`_gate-procedures.md` "Bounded-join beat") over
+   every **In-Flight Teammates** row whose `status` is `in-flight` and that
+   names a deliverable path: one `scripts/ai-dlc/wait-for-deliverable.sh
+   <path> [<path> ...]` call over the whole set, `run_in_background: true`,
+   ending this turn on the armed beat and resuming this step on its result.
+   A row whose deliverable is DELIVERED in that beat is joined normally —
+   apply the sub-step snapshot update's handling (`status:
+   delivered-reachable`, or delete the row outright), never `stopped`. Only
+   rows still absent after the beat get `TaskStop`. Measured: a handoff
+   that stops a pass already near delivery discards it and the successor
+   redoes it from scratch.
+
+   Call `TaskStop` on every `in_progress` task still absent after the beat.
+   Halt any Agent-spawned teammate not bound to a task. Wait until every
+   teammate has returned before proceeding. Record stopped teammates and
+   in-flight artifacts in the snapshot's Open Items in Step 3, and set each
+   stopped teammate's **In-Flight Teammates** row `status` to `stopped`.
    **Rewrite the row; do not delete it** — at a handoff the successor
    needs to know what was running, and a deleted row is
    indistinguishable from a teammate that never existed.

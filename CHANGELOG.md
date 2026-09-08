@@ -15,6 +15,46 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.529.0] - 2026-09-07
+
+### `BL-202` — the gate-remediation guard arms on a prior sprint's dispositioned FAIL, and denies every lead edit until the next sprint's first verdict lands
+
+`ai-dlc-gate-remediation-guard.sh` picks its live pass by nonce timestamp across the whole
+`gate-adjudication/` directory. A closed sprint's `sprint-review` verdict carrying a FAIL that was
+SUPPRESSED under operator authorization, with the gate PASSED and the suppression since archived by
+the retro close-out sweep, is therefore the guard's live pass from retro close until the next
+sprint's first verdict is written. In that window every lead edit under `planning-artifacts/` and
+`docs/` is denied as owing a repair nobody owes.
+
+Dated in the reference consumer's own flow log: two `GATE_REMEDIATION_DENIED` events at the first
+step of a new sprint, both naming the prior sprint's `sprint-review` nonce and check 2, and six
+clerical edits (backlog appends, a placeholder field, a rename, locked-requirements authoring)
+routed through opus remediators in the same window. The suppression validator's `--in-force`
+answered zero the whole time.
+
+The affordance is removed rather than the hook taught about sprints. The hook deliberately reads
+no snapshot, so a sprint-aware arm would have to read something a lead can author. Instead
+`retro.md` §7a-post rotates the closing sprint's verdicts to
+`implementation-artifacts/s<N>/gate-adjudication/` beside the two logs it already rotates, with a
+new `rotate-gate-adjudication.sh` that selects on `gate_series_id`, moves each verdict's
+`.repair*.md` and `.authorization.md` sidecars with it, byte-verifies, refuses an ignored
+destination, and never touches a legacy verdict carrying no series id. The guard then meets an
+empty directory at sprint start, which is the state every fresh consumer is in.
+
+The shipping fixture `gate-adjudication-rotate` drives the hook itself: DENY before rotation on the
+seeded prior-sprint FAIL, ALLOW after, and DENY again once a current-sprint FAIL is seeded. One
+direction alone would not distinguish a rotation from a guard that stopped firing.
+
+### `BL-203` — a human handoff kills an in-flight review pass that would have landed inside one wait beat, and the successor redoes it
+
+`handoff.md` step 1 called `TaskStop` on every in-flight teammate first. Measured on the reference
+consumer: an adversary pass dispatched at 13:29 was stopped at 13:49 by a typed `handoff` and
+re-dispatched from scratch by the resumed session at 14:02, 38 minutes of opus time for one
+keystroke. Step 1 and its auto-handoff copy in `_gate-procedures.md` now run one backgrounded
+`wait-for-deliverable.sh` beat over every in-flight deliverable before stopping anything, and stop
+only the rows still absent after the beat. `handoff-resume-guard` gains an arm holding the two
+copies to the same clause.
+
 ## [0.528.0] - 2026-09-07
 
 ### `BL-201` — `PC-S342-ADJUDICATION-ROW-PRESCRIBES-AN-ENTRY-EDIT-THAT-SPENDS-ITS-OWN-VERDICT`

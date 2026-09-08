@@ -1093,11 +1093,12 @@ epic scope, and residual risks are still in the lead's working context.
   proceed to **7a-post** — not straight to 7b. The artifacts are already on
   `main`, so the rotation's precondition is met and it still has to run.
 
-**7a-post. Rotate the two merge-sensitive logs (Rule 25(c)).**
+**7a-post. Rotate the three merge-sensitive records (Rule 25(c)).**
 
 `gate-log.md` and `compaction-log.md` are append-only per-sprint logs that
 `validate-artifact-budget.sh` marks `rotate`, whose breach message reads "a
-rotation was MISSED". This is the rotation. Without it that message accuses the
+rotation was MISSED". This is the rotation. The sprint's gate-adjudication
+verdicts rotate here too (step 5b), for the guard's reason stated there. Without it that message accuses the
 operator of skipping a step this file never defined.
 
 **Runs only after the retro PR has merged** (or, on the direct-to-main path,
@@ -1143,12 +1144,29 @@ follow their audit, these must follow the merge.
    artifact-size audit already read it first — its `recovery_injected: no`
    entries must reach the retro doc, because after rotation the live log no
    longer carries them.
+5b. **Rotate this sprint's gate-adjudication verdicts.** Run
+
+       bash scripts/ai-dlc/rotate-gate-adjudication.sh --sprint s<N> --apply
+
+   It moves every `_bmad-output/gate-adjudication/*.verdict.json` whose
+   `gate_series_id` names sprint `<N>`, with that verdict's `.repair*.md` and
+   `.authorization.md` sidecars, to
+   `_bmad-output/implementation-artifacts/s<N>/gate-adjudication/`, byte-verified,
+   and refuses with exit 1 and nothing written on any integrity failure. Legacy
+   verdicts carrying no `gate_series_id` stay. `ai-dlc-gate-remediation-guard.sh`
+   picks its live pass by nonce across the whole directory, so a closed sprint's
+   dispositioned FAIL stays live until the next sprint's first verdict lands and
+   denies every lead edit in between; measured on the reference consumer as two
+   `GATE_REMEDIATION_DENIED` events naming the prior sprint's `sprint-review`
+   nonce and six clerical edits routed through remediators. Rotation removes the
+   affordance. A non-zero exit here is a HARD_BLOCK: do not commit, read the
+   refusal, and investigate before re-running.
 6. **Verify no-loss per file:** each archive's byte count MUST equal that file's
    pre-rotation live byte count, and each new live log MUST contain only its
    header. A mismatch is a HARD_BLOCK — do not commit; restore from git and
    investigate.
 7. Commit to `main`:
-   `chore(s<N>): rotate gate-log and compaction-log post-retro-merge`.
+   `chore(s<N>): rotate gate-log, compaction-log and gate-adjudication post-retro-merge`.
    The commit touches only those files.
 
 **7b. Assemble next-sprint inputs.**
