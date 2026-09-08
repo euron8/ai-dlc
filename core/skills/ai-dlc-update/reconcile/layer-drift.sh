@@ -179,9 +179,14 @@ set -uo pipefail
 #       invariant would agree with itself while the shipped one had gone inert. Exit 0 with no
 #       output is a legitimate answer (no clause sits at that level).
 #   layer-drift.sh --list-adjudications <dist-repo> <base-sha> <theirs-ref> <consumer-root>
-#       print every KEYED subject this run can see — entry, target, `subject_digest`, and the
-#       verdict recorded against that digest if there is one — and emit no classification rows
+#       print every KEYED subject this run can see — entry, target, `subject_digest`, the
+#       verdict recorded against that digest if there is one, and the `clause` id the firing
+#       status maps to in layer-contract.yaml at <theirs-ref> — and emit no classification rows
 #       and no blockers. Read-only; needs no gate state.
+#
+#       THE CLAUSE IS THE LAST COLUMN AND IS NOT PART OF THE JOIN KEY. It is here because the
+#       register schema requires the field and the operator has nowhere else to read it from;
+#       the lookup keys on the digest alone, which stays field 4 for every existing reader.
 #
 #       WHY THIS MODE EXISTS. The digest was reachable only from a row that was still BLOCKING.
 #       `adj_check` prints it inside HARD-LAYER-ADJUDICATION-MISSING, and the moment a verdict is
@@ -522,14 +527,48 @@ ADJ_REGISTER="$CONSUMER/_bmad-output/ai-dlc-update/layer-adjudication-register.j
 ADJ_SCHEMA_REL="core/schemas/layer-adjudication-register.json"
 ADJ_CONTRACT_REL="core/skills/ai-dlc/layer-contract.yaml"
 
+# THE CONTRACT AT THEIRS, READ ONCE. Both derivations below are awk passes over THIS text and
+# not two `git show` calls, so a clause whose level says one thing to the first reader and whose
+# id says another to the second is not constructible: there is one snapshot.
+ADJ_CONTRACT_TEXT="$(git_show "$THEIRS" "$ADJ_CONTRACT_REL")"
+
 # The ADJUDICATED code set, DERIVED from the contract at THEIRS — the version being pulled is
 # the version the consumer is held to. `level:` precedes `code:` in every clause, which is what
 # lets one pass carry the level forward onto the code it belongs to.
-ADJ_CODES="$(git_show "$THEIRS" "$ADJ_CONTRACT_REL" | awk '
+ADJ_CODES="$(awk '
   /^  - id:/       { lvl=""; next }
   /^    level:/    { lvl=$2; next }
   /^    code:/     { if (lvl == "ADJUDICATED") print $2; next }
-')"
+' <<<"$ADJ_CONTRACT_TEXT")"
+
+# STATUS -> CLAUSE ID, over EVERY clause and not only the adjudicable ones, because the row that
+# most needs the id is LC-E19's — level WARN, prescribing a register record all the same.
+#
+# WHY THE ROW HAS TO CARRY THIS. The record the row prescribes is validated against
+# `core/schemas/layer-adjudication-register.json`, which lists `clause` in `required`; and the
+# value is not derivable from the row's own text, because two clauses at the same duty print
+# messages that differ only in the quoted status name. Measured on the reference consumer: 9 of
+# 441 records carry a clause the fired status does not map to, and nothing in the register, the
+# row or the listing could have said so. The digest is printed for exactly this reason already
+# — the operator copies a value, nobody re-derives one — and the clause is the other half of the
+# same key.
+#
+# `id:` PRECEDES `code:` in every clause block, the same single-pass carry ADJ_CODES relies on,
+# in the other direction. A status this map cannot spell yields EMPTY and never a guess: a
+# wrong-but-well-formed clause passes the schema's pattern and lands in an append-only register,
+# so a missing field an operator must supply is strictly better than a plausible wrong one.
+ADJ_CLAUSE_MAP="$(awk -v TAB="$TAB" '
+  /^  - id:/    { id=$3; next }
+  /^    code:/  { if (id != "") print $2 TAB id; next }
+' <<<"$ADJ_CONTRACT_TEXT")"
+
+# Never a `case` and never a hand-written pair: a restated map drifts tighter than the contract
+# and reads as correct while it does. Whole-line field match, for the reason adj_is_adjudicated
+# matches whole lines — a code that is a prefix of another must not inherit its id.
+adj_clause_of() { # $1 status -> the clause id, or nothing
+  [ -n "$1" ] || return 0
+  awk -F"$TAB" -v s="$1" '$1 == s { print $2; exit }' <<<"$ADJ_CLAUSE_MAP"
+}
 
 # The verdict vocabulary, read from the schema's own `verdict` enum rather than restated. A
 # record whose verdict is outside it does not satisfy the duty: otherwise any string clears a
@@ -581,17 +620,25 @@ adj_is_adjudicated() { adj_active && grep -qxF -- "$1" <<<"$ADJ_CODES"; }
 # THE UNKEYABLE CASE IS RECORDED TOO, as `-`. A row whose entry or target cannot be read is the
 # one an operator most needs to see named; dropping it would make the listing quietly shorter in
 # exactly the case adj_check itself treats as blocking.
-adj_digest() { # $1 entry (consumer-relative), $2 core-relative target
-  local ef tb dg
+#
+# THE THIRD PARAMETER IS THE FIRING STATUS, and it is OPTIONAL because it is a property of the
+# listing and never of the key. Every existing caller passes two arguments and computes the same
+# digest it always did; a caller that knows its status hands it over so the accumulated row can
+# carry the clause the record requires. Absent, the clause column is empty — which is what the
+# unkeyable arm and any future caller that does not know its own status will print, and an empty
+# cell an operator must resolve is better than a plausible wrong one.
+adj_digest() { # $1 entry (consumer-relative), $2 core-relative target, [$3 firing status]
+  local ef tb dg cl
+  cl="$(adj_clause_of "${3:-}")"
   ef="$(git -C "$DIST" hash-object "$CONSUMER/$1" 2>/dev/null)"
   tb="$(git -C "$DIST" rev-parse "$THEIRS:$(dist_path "$2")" 2>/dev/null)"
   if [ -z "$ef" ] || [ -z "$tb" ]; then
-    [ -n "$ADJ_LIST_FILE" ] && printf '%s\t%s\t-\n' "$1" "$2" >> "$ADJ_LIST_FILE"
+    [ -n "$ADJ_LIST_FILE" ] && printf '%s\t%s\t-\t%s\n' "$1" "$2" "$cl" >> "$ADJ_LIST_FILE"
     return 1
   fi
   dg="$(printf '%s\n%s\n' "$ef" "$tb" | git -C "$DIST" hash-object --stdin)"
   [ -n "$dg" ] || return 1
-  [ -n "$ADJ_LIST_FILE" ] && printf '%s\t%s\t%s\n' "$1" "$2" "$dg" >> "$ADJ_LIST_FILE"
+  [ -n "$ADJ_LIST_FILE" ] && printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$dg" "$cl" >> "$ADJ_LIST_FILE"
   printf '%s\n' "$dg"
 }
 
@@ -709,26 +756,50 @@ fi
 # greps for exactly that shape to prove the token has an EMITTER and not just a home. A `printf
 # '%s=%s'` form writes the identical bytes and I86 cannot see it — the invariant would have gone
 # green over a token nothing wrote. Keeping the literal shape keeps the check able to fire.
-adj_prefix() { # $1 entry, $2 target
+#
+# THE STATUS IS PASSED THROUGH, AND NOT PASSING IT WOULD DOUBLE THE LISTING. This function and
+# adj_check both ask adj_digest for the SAME subject on every adjudicable row, and the listing
+# dedupes those two calls with `sort -u`. Once the accumulated row carries a clause, a call that
+# withheld the status would write a clause-less twin of a row adj_check wrote with one, and the
+# listing would name every adjudicable subject twice — a count that doubles is exactly the shape
+# the mode's own stderr control is there to make readable, and it would be reporting a defect in
+# this line.
+adj_prefix() { # $1 entry, $2 target, [$3 firing status]
   local _d _v
   case "$2" in ''|'?') return 0 ;; esac
-  _d="$(adj_digest "$1" "$2" 2>/dev/null || true)"
+  _d="$(adj_digest "$1" "$2" "${3:-}" 2>/dev/null || true)"
   [ -n "$_d" ] || return 0
   adj_lookup "$_d" 2>/dev/null || return 0
   _v="$(adj_verdict "$_d" 2>/dev/null | head -1)"
   printf '%s' "${ADJ_ROW_TOKEN}=${_v} :: "
 }
 
+# WHAT THE ROW SAYS WHEN THE STATUS MAPS TO NO CLAUSE. Spelled out rather than left blank: a row
+# that silently omits a required field is the defect this whole change exists to close, one level
+# up. The status is quoted back so the operator can join it to the contract by hand.
+adj_clause_cell() { # $1 status -> `LC-E14`, or a stated absence
+  local c; c="$(adj_clause_of "$1")"
+  if [ -n "$c" ]; then printf '%s' "$c"
+  else printf '%s' "<no clause in ${ADJ_CONTRACT_REL} at ${THEIRS} carries code '$1' — resolve it there before recording>"; fi
+}
+
 adj_check() { # $1 status, $2 entry, $3 target
   adj_is_adjudicated "$1" || return 0
   case "$3" in ''|'?') return 0 ;; esac
-  local d rc
-  d="$(adj_digest "$2" "$3")" || {
+  local d rc cl
+  # THE CLAUSE ID IS PRINTED BESIDE THE DIGEST IN EVERY ARM, and for the same reason the digest is:
+  # the record this row prescribes is refused without it (`clause` sits in the schema's `required`)
+  # and it is not derivable from the row, because two clauses at one duty print messages differing
+  # only in the quoted status name. Copied, never guessed — measured on the reference consumer, an
+  # operator following the ONE worked example writes the example's id for every row, and a
+  # wrong-but-well-formed id passes the schema and lands in an append-only register.
+  cl="$(adj_clause_cell "$1")"
+  d="$(adj_digest "$2" "$3" "$1")" || {
     # In list mode the unkeyable subject has already been recorded by adj_digest; a blocking row
     # is the classifier's job, and this mode is a reader.
     [ "$MODE" = list ] && return 0
     emit_raw HARD-LAYER-ADJUDICATION-MISSING "$2" "$3" \
-      "row '$1' is a clause at level ADJUDICATED, but its subject digest could not be computed (entry or target unreadable), so no recorded verdict can be matched against it. This blocks rather than passes: an unkeyable row is the one case where 'no record found' and 'nothing to look up' are indistinguishable."
+      "row '$1' is clause ${cl} at level ADJUDICATED, but its subject digest could not be computed (entry or target unreadable), so no recorded verdict can be matched against it. This blocks rather than passes: an unkeyable row is the one case where 'no record found' and 'nothing to look up' are indistinguishable."
     return 0
   }
   [ "$MODE" = list ] && return 0
@@ -736,9 +807,9 @@ adj_check() { # $1 status, $2 entry, $3 target
   case "$rc" in
     0) return 0 ;;
     2) emit_raw HARD-LAYER-ADJUDICATION-MISSING "$2" "$3" \
-         "row '$1' needs a recorded verdict and jq is not on PATH, so ${ADJ_REGISTER#"$CONSUMER"/} cannot be read. A register that cannot be read is not an empty one." ;;
+         "row '$1' is clause ${cl} and needs a recorded verdict, and jq is not on PATH, so ${ADJ_REGISTER#"$CONSUMER"/} cannot be read. A register that cannot be read is not an empty one." ;;
     *) emit_raw HARD-LAYER-ADJUDICATION-MISSING "$2" "$3" \
-         "row '$1' is the layer conformance adjudication: its candidate set is mechanized and its verdict is yours. Record one line in ${ADJ_REGISTER#"$CONSUMER"/} with subject_digest ${d} and a verdict of $(printf '%s' "$ADJ_VERDICTS" | tr '\n' '|' | sed 's/|$//'), plus a reason. The digest covers this entry AND the core file it hooks at ${THEIRS}, so the verdict is spent the next time either one moves — it is not an exemption for the path.$(adj_spent_note "$2" "$d")" ;;
+         "row '$1' is the layer conformance adjudication: its candidate set is mechanized and its verdict is yours. Record one line in ${ADJ_REGISTER#"$CONSUMER"/} with clause ${cl} and subject_digest ${d} and a verdict of $(printf '%s' "$ADJ_VERDICTS" | tr '\n' '|' | sed 's/|$//'), plus a reason. Both of those are COPIED from this row, not derived: the clause is the code this status maps to in ${ADJ_CONTRACT_REL} at ${THEIRS}, and a different clause produces a textually similar row. The digest covers this entry AND the core file it hooks at ${THEIRS}, so the verdict is spent the next time either one moves — it is not an exemption for the path.$(adj_spent_note "$2" "$d")" ;;
   esac
 }
 
@@ -1221,7 +1292,7 @@ while IFS= read -r f; do
       # Through `adj_prefix`, which is the same computation the two EXTENSION emits now share.
       # It was inline here until an emit in another block forgot it; the scope of "computed once"
       # is the file, not this loop.
-      sup_adj="$(adj_prefix "$entry" "$tgt")"
+      sup_adj="$(adj_prefix "$entry" "$tgt" OVERRIDE-SUPERSEDED)"
 
       # THE SURPLUS, MEASURED. Every emit below already said, in prose, that narrowing or
       # retiring "releases every unrelated line that anchor's span froze at base_sha". It never
@@ -1704,12 +1775,16 @@ while IFS= read -r f; do
       # The level stays WARN. This row still blocks nothing; recording a verdict makes a
       # considered entry stop being re-raised cold on every pull, which is the only thing the
       # consumer was asking for.
-      tm_digest="$(adj_digest "$entry" "$hooks" 2>/dev/null || true)"
+      # The status is handed to adj_digest so the LISTING carries this row's clause too. It is
+      # level WARN and still prescribes a register record, which is exactly why the id has to
+      # travel with the key: eleven of the reference consumer's twelve keyed subjects are this
+      # row, so a clause column that covered only the blocking arm would cover one of twelve.
+      tm_digest="$(adj_digest "$entry" "$hooks" EXTENSION-TITLE-MATCHES-CORE 2>/dev/null || true)"
       if [ -n "$tm_digest" ] && adj_lookup "$tm_digest"; then
         continue
       fi
       emit EXTENSION-TITLE-MATCHES-CORE "$entry" "$hooks" \
-        "${when}: this entry's heading '$ut' names the same section as core's '$hit' in '$hooks', matched on TEXT because neither side carries a number. ${extra}. THREE dispositions, and the entry decides which: if the body DUPLICATES core's section, retire it per Rule 27(b) — an absorbed-but-kept entry starts as an exact copy and diverges from there. If it AUGMENTS that section, record it in ${ADJ_REGISTER#"$CONSUMER"/} with subject_digest ${tm_digest:-<unkeyable: entry or target unreadable>} and a verdict of $(printf '%s' "$ADJ_VERDICTS" | tr '\n' '|' | sed 's/|$//'), plus a reason -- that is what clears this row, and it is the only thing that does. The digest covers this entry AND the core file it hooks at ${THEIRS}, so the verdict is spent the next time either one moves; it is a record of a reading, not an exemption for the path. If it REPRODUCES core's section in order to append to it, neither of those is the answer and the grain is: \`kind: qualifier\` with \`extends: '#${hit}'\` and \`position: append\`, which renders your addition INSIDE core's section and carries no obligation on the prose you did not write. Recording an augmenting verdict on a reproduction clears this row and leaves the copy frozen, and a frozen copy cannot receive an upstream improvement -- measured on the reference consumer at this exact clause: 165 lines reproducing a 133-line core section to carry 49 additive ones, and core's step 1 had already gained guidance the copy never received. That is Rule 27(c)'s silent fork, and the verdict channel is not where it gets fixed. Declaring \`extends: '#${hit}'\` (spelled as the core heading actually reads) is worth doing anyway because it narrows the DRIFT subject to that span, but it does NOT silence this row and never has: \`extends:\` answers 'which span do I augment', never 'does core now carry my body'. Weaker than EXTENSION-RESTATES-CORE on purpose: a numbered anchor is an identity claim, a prose heading is not, so this reports the match and does not prescribe the delete."
+        "${when}: this entry's heading '$ut' names the same section as core's '$hit' in '$hooks', matched on TEXT because neither side carries a number. ${extra}. THREE dispositions, and the entry decides which: if the body DUPLICATES core's section, retire it per Rule 27(b) — an absorbed-but-kept entry starts as an exact copy and diverges from there. If it AUGMENTS that section, record it in ${ADJ_REGISTER#"$CONSUMER"/} with clause $(adj_clause_cell EXTENSION-TITLE-MATCHES-CORE) and subject_digest ${tm_digest:-<unkeyable: entry or target unreadable>} and a verdict of $(printf '%s' "$ADJ_VERDICTS" | tr '\n' '|' | sed 's/|$//'), plus a reason -- that is what clears this row, and it is the only thing that does. The digest covers this entry AND the core file it hooks at ${THEIRS}, so the verdict is spent the next time either one moves; it is a record of a reading, not an exemption for the path. If it REPRODUCES core's section in order to append to it, neither of those is the answer and the grain is: \`kind: qualifier\` with \`extends: '#${hit}'\` and \`position: append\`, which renders your addition INSIDE core's section and carries no obligation on the prose you did not write. Recording an augmenting verdict on a reproduction clears this row and leaves the copy frozen, and a frozen copy cannot receive an upstream improvement -- measured on the reference consumer at this exact clause: 165 lines reproducing a 133-line core section to carry 49 additive ones, and core's step 1 had already gained guidance the copy never received. That is Rule 27(c)'s silent fork, and the verdict channel is not where it gets fixed. Declaring \`extends: '#${hit}'\` (spelled as the core heading actually reads) is worth doing anyway because it narrows the DRIFT subject to that span, but it does NOT silence this row and never has: \`extends:\` answers 'which span do I augment', never 'does core now carry my body'. Weaker than EXTENSION-RESTATES-CORE on purpose: a numbered anchor is an identity claim, a prose heading is not, so this reports the match and does not prescribe the delete."
     done <<< "$(printf '%s' "$cand" | awk -F"$TAB" 'NF>=3 { if ($1 > d[$3]) { d[$3]=$1; r[$3]=$0 } } END { for (k in r) print r[k] }')"
   fi
 
@@ -1765,11 +1840,11 @@ while IFS= read -r f; do
         emit EXTENSION-OK "$entry" "$hooks" "hooked core file changed ${BASE}..${THEIRS} but the declared extends: span '${ext_anc}' did not"
       else
         emit EXTENSION-ANCHOR-DRIFT "$entry" "$hooks" \
-          "$(adj_prefix "$entry" "$hooks")the declared extends: span '${ext_anc}' in '$hooks' changed ${BASE}..${THEIRS} — re-read this entry against the new core text for that section. This is the file-grain re-read narrowed to the span the entry actually declared; everything else that moved in this file is not this entry's business."
+          "$(adj_prefix "$entry" "$hooks" EXTENSION-ANCHOR-DRIFT)the declared extends: span '${ext_anc}' in '$hooks' changed ${BASE}..${THEIRS} — re-read this entry against the new core text for that section. This is the file-grain re-read narrowed to the span the entry actually declared; everything else that moved in this file is not this entry's business."
       fi
     fi
   else
-    emit EXTENSION-HOOK-DRIFT "$entry" "$hooks" "$(adj_prefix "$entry" "$hooks")hooked core file changed ${BASE}..${THEIRS} — this entry declares no extends: anchor, so its drift subject is the whole file; re-read it against the new core text"
+    emit EXTENSION-HOOK-DRIFT "$entry" "$hooks" "$(adj_prefix "$entry" "$hooks" EXTENSION-HOOK-DRIFT)hooked core file changed ${BASE}..${THEIRS} — this entry declares no extends: anchor, so its drift subject is the whole file; re-read it against the new core text"
   fi
 done < <(layer_files "$EXT_DIR")
 
@@ -1777,9 +1852,23 @@ done < <(layer_files "$EXT_DIR")
 #
 # One line per keyed subject, joined to the register through `adj_verdict` — the SAME reader
 # `adj_lookup` is written in terms of, so the listing and the gate can never disagree about
-# what counts as a record. The join key is the DIGEST ALONE, which is what the register lookup
-# keys on: `clause` is stored in a record but is not part of the key, so a clause column here
-# would suggest a distinction the matching does not make.
+# what counts as a record.
+#
+# THE JOIN KEY IS THE DIGEST ALONE, AND THE CLAUSE COLUMN IS NOT PART OF IT. That is stated
+# here because the column's presence otherwise reads as a second key: `adj_verdict` selects on
+# `subject_digest` and on nothing else, and two records under one digest with different clauses
+# both answer that lookup. The column is LAST for the same reason — the digest stays field 4,
+# where every reader of this stream already finds it.
+#
+# WHY THE COLUMN IS HERE AT ALL. `clause` sits in the register schema's `required`, so it is a
+# field the operator MUST supply and cannot obtain from anywhere else in this stream: the row
+# that prescribes the record hands over the digest verbatim and the listing is the documented
+# way to re-read a key after the block has cleared. Two clauses produce keyed rows whose text
+# differs only in a quoted status name, so a reader following the one worked example writes that
+# example's id every time. Measured on the reference consumer over one pull's range: of the 16
+# keyed subjects this listing prints, 3 carry a recorded clause the fired status does not map
+# to; and 2 of its 441 register records carry a value that is not a contract clause id at all.
+# Neither the row nor this listing could have said so.
 #
 # THE COUNT LINE IS ON STDERR AND IS ALWAYS PRINTED, INCLUDING AT ZERO. This mode's answer is
 # frequently an ABSENCE, and an empty stdout is what a broken pass, a wrong consumer root and a
@@ -1788,11 +1877,11 @@ done < <(layer_files "$EXT_DIR")
 # about a zero being reported with its own control.
 if [ "$MODE" = list ]; then
   _n=0; _withv=0; _without=0
-  while IFS="$TAB" read -r _e _t _d; do
+  while IFS="$TAB" read -r _e _t _d _c; do
     [ -n "$_e" ] || continue
     _n=$((_n + 1))
     if [ "$_d" = "-" ]; then
-      printf 'ADJUDICABLE\t%s\t%s\t(unkeyable: entry or target unreadable)\t(none)\n' "$_e" "$_t"
+      printf 'ADJUDICABLE\t%s\t%s\t(unkeyable: entry or target unreadable)\t(none)\t%s\n' "$_e" "$_t" "${_c:-(unmapped)}"
       _without=$((_without + 1)); continue
     fi
     _v="$(adj_verdict "$_d")"; _rc=$?
@@ -1809,8 +1898,22 @@ if [ "$MODE" = list ]; then
       # a contradiction when it is a duplicate line.
       _v="$(printf '%s\n' "$_v" | sort -u | grep -v '^$' | tr '\n' ',' | sed 's/,$//')"; _withv=$((_withv + 1))
     fi
-    printf 'ADJUDICABLE\t%s\t%s\t%s\t%s\n' "$_e" "$_t" "$_d" "$_v"
-  done < <(sort -u "$ADJ_LIST_FILE" 2>/dev/null)
+    printf 'ADJUDICABLE\t%s\t%s\t%s\t%s\t%s\n' "$_e" "$_t" "$_d" "$_v" "${_c:-(unmapped)}"
+    # THE DEDUPE KEY IS THE SUBJECT, NOT THE WHOLE LINE, AND THAT IS A CORRECTION THIS CHANGE
+    # FORCED. `sort -u` over the accumulated rows was a subject dedupe only while every column
+    # was a property of the subject. The clause is a property of the ROW: one entry can be keyed
+    # by two clauses in a single pass — the reference consumer has two subjects keyed by both
+    # LC-E19's title-join and LC-E4's hook-drift — so the whole-line unique split each of them in
+    # two and the listing grew 16 subjects to 18. Measured on a clone of the reference consumer
+    # over eb49b783..a798e215; the count line said 18 and would have been counting rows while
+    # calling them subjects. Comma-joined and sorted, for the reason the verdict column beside it
+    # is: showing one of two would hide the thing the operator opened the listing to find.
+  done < <(sort -u "$ADJ_LIST_FILE" 2>/dev/null | awk -F"$TAB" -v OFS="$TAB" '
+      { k = $1 OFS $2 OFS $3
+        if (!(k in seen)) { seen[k] = 1; order[++nk] = k }
+        if ($4 != "" && index("," cl[k] ",", "," $4 ",") == 0) cl[k] = (cl[k] == "" ? $4 : cl[k] "," $4) }
+      END { for (i = 1; i <= nk; i++) print order[i], cl[order[i]] }
+    ')
   rm -f "$ADJ_LIST_FILE"
   echo "layer-drift --list-adjudications: ${_n} keyed subject(s) in ${BASE}..${THEIRS} — ${_withv} with a recorded verdict, ${_without} without. A subject is any row this pass asked adj_digest to key; ZERO means the pass produced no keyed row, not that the layer is clean." >&2
   exit 0

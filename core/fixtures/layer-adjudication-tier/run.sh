@@ -519,7 +519,7 @@ rm -rf "$MUT9DIR"; mkdir -p "$MUT9DIR"
 cp "$(dirname "$DRIFT")"/* "$MUT9DIR"/ 2>/dev/null
 MUT9="$MUT9DIR/layer-drift.sh"
 CTL9="$MUT9DIR/layer-drift-unmutated.sh"; cp "$DRIFT" "$CTL9" 2>/dev/null
-MUT9_OLD='[ -n "$ADJ_LIST_FILE" ] && printf '"'"'%s\t%s\t%s\n'"'"' "$1" "$2" "$dg" >> "$ADJ_LIST_FILE"'
+MUT9_OLD='[ -n "$ADJ_LIST_FILE" ] && printf '"'"'%s\t%s\t%s\t%s\n'"'"' "$1" "$2" "$dg" "$cl" >> "$ADJ_LIST_FILE"'
 MUT9_OLD="$MUT9_OLD" python3 -c 'import os,sys; s=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(s.replace(os.environ["MUT9_OLD"],"true",1))' \
   "$DRIFT" "$MUT9" 2>/dev/null
 ctl9_rows="$(bash "$CTL9" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null | grep -c '^ADJUDICABLE')"
@@ -543,6 +543,278 @@ else
     bad "MUTATION PAIRING — the mutant's classify output moved ($mut9_cls vs $cls_rows), so its empty listing cannot be attributed to the recording line"
   fi
 fi
+
+# --- Part 10: the row and the listing carry the CLAUSE the record requires -------------------
+#
+# THE DEFECT. The blocking row prints `subject_digest` verbatim so the operator copies it rather
+# than deriving it, and withholds `clause` — which the register schema lists in `required` and
+# which is NOT derivable from the row, because two clauses at this duty print messages differing
+# only in the quoted status name. `--list-adjudications`, the documented way to re-read a key,
+# printed no clause either. So the one worked example's id got written for every row: measured on
+# the reference consumer, 9 of 441 records carry a clause the fired status does not map to.
+#
+# SEEDED ON LC-E14, NOT LC-E4, AND THAT IS THE WHOLE DISCRIMINATION. A mapper that answers with
+# whichever clause it read first returns LC-E4 for every status, and the seeded contract's first
+# adjudicable clause IS LC-E4 — so an LC-E4-only assertion passes against exactly the broken
+# implementation this part exists to reject. The LC-E4 row is kept beside it as the control that
+# the two differ: one id appearing on both rows is the failure, not a pass.
+#
+# ITS OWN CONSUMER WORLD, because the entry that fires LC-E14 is a second entry and every count
+# assertion in Parts 0-9 is keyed to there being exactly one.
+echo
+echo "Part 10 — the clause id travels with the digest"
+
+E14CONS="$ROOT/consumer-e14"
+rm -rf "$E14CONS"
+cp -R "$CONS" "$E14CONS"
+E14REG="$E14CONS/_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl"
+rm -f "$E14REG"
+E14ENTRY=".claude/skills/ai-dlc/extensions/anchored.md"
+cat > "$E14CONS/$E14ENTRY" <<'E14EOF'
+---
+kind: qualifier
+hooks: steps/demo.md
+extends: '#Gamma review'
+position: append
+reason: seeded entry whose DECLARED extends: span is the thing that moves, so its drift is at anchor grain and its clause is LC-E14 rather than LC-E4
+---
+
+### 902. [ext:anchored] Consumer entry at anchor grain.
+
+Body.
+E14EOF
+git -C "$E14CONS" add -A >/dev/null 2>&1
+git -C "$E14CONS" commit -qm "seed the anchor-grain entry" >/dev/null 2>&1
+
+e14_run()  { bash "${1:-$DRIFT}" "$DIST" "$BASE" "$THEIRS" "$E14CONS" 2>/dev/null; }
+e14_list() { bash "${1:-$DRIFT}" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$E14CONS" 2>/dev/null; }
+# The blocking row belonging to ONE entry, by its detail field. Keyed on the entry rather than on
+# the status, because the two blocking rows in this world are byte-identical apart from the
+# quoted status and the two values this part is about — which is the defect stated as a selector.
+e14_detail() { e14_run "${2:-$DRIFT}" | awk -F'\t' -v e="$1" '$1=="HARD-LAYER-ADJUDICATION-MISSING" && $2==e {print $4; exit}'; }
+e14_col6()   { e14_list "${2:-$DRIFT}" | awk -F'\t' -v e="$1" '$1=="ADJUDICABLE" && $2==e {print $6; exit}'; }
+
+# PRECONDITION: both clauses fire in this world, or every arm below is measuring one of them.
+e14_anchor_rows="$(e14_run | awk -F'\t' '$1=="EXTENSION-ANCHOR-DRIFT"{c++} END{print c+0}')"
+e14_hook_rows="$(e14_run  | awk -F'\t' '$1=="EXTENSION-HOOK-DRIFT"{c++}   END{print c+0}')"
+if [ "$e14_anchor_rows" -eq 1 ] && [ "$e14_hook_rows" -eq 1 ]; then
+  ok "Part 10 precondition: this world fires ONE EXTENSION-ANCHOR-DRIFT (LC-E14) and ONE EXTENSION-HOOK-DRIFT (LC-E4), so an id printed on both rows is visible as a failure"
+else
+  bad "Part 10 precondition failed: anchor-grain rows=$e14_anchor_rows hook-grain rows=$e14_hook_rows, want 1 and 1. Without both clauses firing, an assertion about which id each row carries cannot discriminate"
+fi
+
+case "$(e14_detail "$E14ENTRY")" in
+  *"clause LC-E14"*) ok "the LC-E14 blocking row names its clause: an operator can COPY the required field instead of guessing it from the one worked example" ;;
+  *) bad "the LC-E14 blocking row does not carry 'clause LC-E14'. The record it prescribes is refused without that field and the value is not derivable from the row: $(e14_detail "$E14ENTRY" | cut -c1-140)" ;;
+esac
+case "$(e14_detail "$ENTRY")" in
+  *"clause LC-E4"*) ok "CONTROL: the LC-E4 row in the SAME run names LC-E4 — the two rows differ, so the id above is read from the status rather than printed on everything" ;;
+  *) bad "the LC-E4 row does not carry 'clause LC-E4': $(e14_detail "$ENTRY" | cut -c1-140)" ;;
+esac
+# POSITIVE CONTROL that this arm can fail: a clause token no seeded contract carries must be
+# absent from the row the arms above read. An assertion that only ever looks for strings it put
+# there itself passes against a row containing every id at once.
+case "$(e14_detail "$E14ENTRY")" in
+  *LC-ZZ999*) bad "the blocking row carries the impossible clause token LC-ZZ999, so the arms above are matching against text this fixture did not derive from the contract" ;;
+  *) ok "POSITIVE CONTROL: an impossible clause token is absent from the row, so the matches above are on ids the contract actually declares" ;;
+esac
+
+# The digest is still field 4 and the verdict still field 5 — every reader of this stream in the
+# suite reads one of those two positions, so the clause is APPENDED and never inserted.
+if e14_list | awk -F'\t' '$1=="ADJUDICABLE" && (NF!=6 || $4 !~ /^[0-9a-f]{40}$/ || $5=="") {bad=1} END{exit bad+0}'; then
+  ok "every listing row is 6 fields with a 40-hex digest still in field 4 and a non-empty verdict cell in field 5 — columns 1-5 are where they were"
+else
+  bad "a listing row is not 6 fields, or its field 4 is not the digest / field 5 not the verdict. The clause was inserted rather than appended and every reader keyed on \$4 or \$5 is now reading the wrong column"
+fi
+if [ "$(e14_col6 "$E14ENTRY")" = "LC-E14" ] && [ "$(e14_col6 "$ENTRY")" = "LC-E4" ]; then
+  ok "listing column 6 is LC-E14 for the anchor-grain subject and LC-E4 for the file-grain one — the documented way to re-read a key now supplies every field the record requires"
+else
+  bad "listing column 6 reads '$(e14_col6 "$E14ENTRY")' and '$(e14_col6 "$ENTRY")', want LC-E14 and LC-E4. An operator re-reading a key after the block cleared still cannot obtain the clause"
+fi
+# ONE SUBJECT KEYED BY TWO DIFFERENT CLAUSES, WHICH IS THE STATE THE COLUMN BROKE.
+# `sort -u` over the accumulated rows was a subject dedupe only while every column was a
+# property of the subject; the clause is a property of the ROW, and one entry can be keyed by
+# LC-E19's title-join AND by LC-E4's hook-drift in a single pass. Measured on a clone of the
+# reference consumer over eb49b783..a798e215: 16 keyed subjects became 18 rows, with the count
+# line calling rows subjects. A seed in which no subject carries two clauses cannot see it, so
+# this entry exists to carry both — a heading core also has, plus the hook drift every entry in
+# this world has.
+#
+# THE ROW COUNT ALONE IS NOT THE ASSERTION. A dedupe that discarded the second clause would keep
+# the counts equal while losing a field the record requires, so the joined cell is asserted too.
+DUALENTRY=".claude/skills/ai-dlc/extensions/dual-keyed.md"
+cat > "$E14CONS/$DUALENTRY" <<'DUALEOF'
+---
+kind: check
+hooks: steps/demo.md
+reason: seeded entry with an UNNUMBERED heading core also carries, so the title-join keys it at LC-E19 and the hook drift keys the same subject at LC-E4
+---
+
+## Gamma review
+
+Body this entry adds under a heading core already has.
+DUALEOF
+git -C "$E14CONS" add -A >/dev/null 2>&1
+git -C "$E14CONS" commit -qm "seed the dual-keyed entry" >/dev/null 2>&1
+
+dual_title_rows="$(e14_run | awk -F'\t' -v e="$DUALENTRY" '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2==e {c++} END{print c+0}')"
+dual_hook_rows="$(e14_run  | awk -F'\t' -v e="$DUALENTRY" '$1=="EXTENSION-HOOK-DRIFT" && $2==e {c++} END{print c+0}')"
+if [ "$dual_title_rows" -eq 1 ] && [ "$dual_hook_rows" -eq 1 ]; then
+  ok "PRECONDITION: one entry produces both an LC-E19 title-join row and an LC-E4 hook-drift row, so a subject keyed by two DIFFERENT clauses exists to dedupe"
+else
+  bad "PRECONDITION failed: the dual-keyed entry produced $dual_title_rows title-join row(s) and $dual_hook_rows hook-drift row(s), want 1 and 1. Without a subject carrying two clauses the dedupe arm below cannot fire"
+fi
+e14_rows="$(e14_list | grep -c '^ADJUDICABLE')"
+e14_subj="$(e14_list | awk -F'\t' '$1=="ADJUDICABLE"{print $2"\t"$3"\t"$4}' | sort -u | grep -c .)"
+if [ "$e14_rows" -eq "$e14_subj" ] && [ "$e14_rows" -ge 3 ]; then
+  ok "the listing names $e14_rows row(s) over $e14_subj distinct subject(s) — a subject keyed by two clauses is still ONE line, so the count line counts subjects and not rows"
+else
+  bad "the listing prints $e14_rows row(s) over $e14_subj distinct subject(s). The dedupe key includes the clause, so a subject keyed by two clauses is listed twice and the mode's own count line is reporting rows while calling them subjects"
+fi
+dual_cell="$(e14_col6 "$DUALENTRY")"
+case ",$dual_cell," in
+  *,LC-E19,*) case ",$dual_cell," in
+                *,LC-E4,*) ok "the dual-keyed subject's clause cell carries BOTH ids ('$dual_cell') — collapsing to one line did not drop a field the record requires" ;;
+                *)         bad "the dual-keyed subject's clause cell is '$dual_cell' and names no LC-E4. The dedupe kept one clause and discarded the other, so the operator is handed one of the two ids with nothing saying a second exists" ;;
+              esac ;;
+  *) bad "the dual-keyed subject's clause cell is '$dual_cell' and names no LC-E19. The dedupe kept one clause and discarded the other" ;;
+esac
+
+# MUTANTS. Whole-directory copies, `cmp -s`-guarded, with the unmutated copy scored first: a copy
+# that dies sourcing lib.sh emits nothing, and no row at all satisfies an arm looking for a wrong
+# row exactly as well as it satisfies one looking for the right one.
+M10DIR="$ROOT/reconcile-mutant-clause"
+rm -rf "$M10DIR"; mkdir -p "$M10DIR"
+cp "$(dirname "$DRIFT")"/* "$M10DIR"/ 2>/dev/null
+CTL10="$M10DIR/layer-drift-unmutated.sh"; cp "$DRIFT" "$CTL10" 2>/dev/null
+if [ "$(e14_col6 "$E14ENTRY" "$CTL10")" != "LC-E14" ]; then
+  bad "FIXTURE ERROR: the UNMUTATED copy in $M10DIR does not report LC-E14 in the copied tree, so no mutant verdict below is attributable to its edit"
+else
+  ok "CONTROL: an unmutated copy in the same directory still reports LC-E14 in column 6 — the mutant verdicts below are their edits, not the copy"
+
+  # MUTANT (a): the map is HARDCODED to LC-E4 rather than derived from the contract. This is the
+  # implementation an LC-E4-only seed cannot tell from the real one.
+  M10A="$M10DIR/layer-drift-hardcoded.sh"
+  M10A_OLD='  awk -F"$TAB" -v s="$1" '"'"'$1 == s { print $2; exit }'"'"' <<<"$ADJ_CLAUSE_MAP"'
+  M10A_OLD="$M10A_OLD" python3 -c 'import os,sys; s=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(s.replace(os.environ["M10A_OLD"],"  printf %s\\\\n LC-E4",1))' \
+    "$DRIFT" "$M10A" 2>/dev/null
+  if [ ! -s "$M10A" ] || cmp -s "$DRIFT" "$M10A"; then
+    bad "FIXTURE ERROR: the hardcoded-map mutation matched nothing, so Part 10's LC-E14 assertion is unproven. Update M10A_OLD to match adj_clause_of's real lookup line"
+  else
+    m10a_e14="$(e14_col6 "$E14ENTRY" "$M10A")"
+    m10a_e4="$(e14_col6 "$ENTRY" "$M10A")"
+    if [ "$m10a_e14" = "LC-E14" ]; then
+      bad "MUTANT (a) — a map hardcoded to LC-E4 still printed LC-E14, so the clause is not coming from the map this fixture mutated"
+    elif [ "$m10a_e4" != "LC-E4" ]; then
+      bad "MUTANT (a) — the hardcoded map also lost the LC-E4 row ('$m10a_e4'), so it broke the harness rather than the derivation and its LC-E14 verdict is not attributable"
+    else
+      ok "MUTANT (a) — hardcoding the map to LC-E4 kills the LC-E14 assertion and leaves the LC-E4 control alive: the id is DERIVED from the contract, and an LC-E4-only seed could not have shown it"
+    fi
+  fi
+
+  # MUTANT (b): the clause PREPENDED as column 2 instead of appended. Every reader of this stream
+  # in the suite takes the digest from field 4; this is the mutation that proves the append is
+  # load-bearing rather than a formatting preference.
+  M10B="$M10DIR/layer-drift-prepended.sh"
+  python3 - "$DRIFT" "$M10B" <<'M10BPY' 2>/dev/null
+import sys
+s = open(sys.argv[1]).read()
+a = """    printf 'ADJUDICABLE\\t%s\\t%s\\t%s\\t%s\\t%s\\n' "$_e" "$_t" "$_d" "$_v" "${_c:-(unmapped)}\""""
+b = """    printf 'ADJUDICABLE\\t%s\\t%s\\t%s\\t%s\\t%s\\n' "${_c:-(unmapped)}" "$_e" "$_t" "$_d" "$_v\""""
+if s.count(a) == 1:
+    open(sys.argv[2], "w").write(s.replace(a, b, 1))
+M10BPY
+  if [ ! -s "$M10B" ] || cmp -s "$DRIFT" "$M10B"; then
+    bad "FIXTURE ERROR: the prepended-column mutation matched nothing, so nothing here proves the clause column has to be LAST. Update the keyed printf in the M10B block"
+  else
+    m10b_shape="$(bash "$M10B" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$E14CONS" 2>/dev/null \
+                  | awk -F'\t' '$1=="ADJUDICABLE" && $4 ~ /^[0-9a-f]{40}$/ {c++} END{print c+0}')"
+    m10b_rows="$(bash "$M10B" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$E14CONS" 2>/dev/null | grep -c '^ADJUDICABLE')"
+    if [ "$m10b_rows" -lt 1 ]; then
+      bad "MUTANT (b) — the prepended copy emitted no listing rows at all, so its verdict is a dead harness rather than a moved column"
+    elif [ "$m10b_shape" -ne 0 ]; then
+      bad "MUTANT (b) — with the clause prepended, field 4 still reads as a digest on $m10b_shape row(s). Then the position assertion above is vacuous and a reader keyed on \$4 would not have noticed the shift either"
+    else
+      ok "MUTANT (b) — prepending the clause moves the digest out of field 4 and the shape assertion dies: appending is load-bearing for every reader that keys on \$4 or \$5"
+    fi
+  fi
+
+  # MUTANT (d): the accumulated rows deduped by WHOLE LINE, which is what `sort -u` alone does
+  # and what this listing did before the clause column existed. The dual-keyed subject then
+  # appears twice and the mode's count line reports rows while calling them subjects. Anchored on
+  # the awk that follows the sort rather than on the sort itself, because the sort line is shared
+  # with the form being reverted TO and a mutation keyed on it would match both.
+  M10D="$M10DIR/layer-drift-wholeline.sh"
+  python3 - "$DRIFT" "$M10D" <<'M10DPY' 2>/dev/null
+import sys
+s = open(sys.argv[1]).read()
+a = '  done < <(sort -u "$ADJ_LIST_FILE" 2>/dev/null | awk'
+if a in s:
+    i = s.index(a)
+    j = s.index("    ')", i) + len("    ')")
+    open(sys.argv[2], "w").write(s[:i] + '  done < <(sort -u "$ADJ_LIST_FILE" 2>/dev/null)' + s[j:])
+M10DPY
+  if [ ! -s "$M10D" ] || cmp -s "$DRIFT" "$M10D"; then
+    bad "FIXTURE ERROR: the whole-line-dedupe mutation matched nothing, so nothing here proves the subject dedupe is load-bearing. Update the M10D block to match the listing's real dedupe pipeline"
+  else
+    m10d_rows="$(e14_list "$M10D" | grep -c '^ADJUDICABLE')"
+    m10d_subj="$(e14_list "$M10D" | awk -F'\t' '$1=="ADJUDICABLE"{print $2"\t"$3"\t"$4}' | sort -u | grep -c .)"
+    if [ "$m10d_rows" -lt 1 ]; then
+      bad "MUTANT (d) — the whole-line-dedupe copy emitted no listing rows, so its verdict is a dead harness rather than a split subject"
+    elif [ "$m10d_rows" -le "$m10d_subj" ]; then
+      bad "MUTANT (d) — deduping by whole line still gave $m10d_rows row(s) over $m10d_subj subject(s), so the count arm above is vacuous and would not have seen the subject that carries two clauses split in two"
+    else
+      ok "MUTANT (d) — deduping by whole line splits the dual-keyed subject ($m10d_rows rows over $m10d_subj subjects): keying the dedupe on the subject rather than the line is load-bearing"
+    fi
+  fi
+fi
+
+# MUTANT (c): THE CONTRACT ITSELF MOVES. The two arms above establish that the id is not a literal
+# in this fixture; this establishes that it is not a literal in the SCRIPT either. The seeded
+# contract's two adjudicable clauses SWAP codes at a new THEIRS, and the shipping script — not a
+# copy, not a mutant — must print the mapping the contract now gives. Both rows are asserted,
+# because under the swap a first-clause-wins mapper would still answer LC-E4 for the anchor row
+# and only the hook row separates it.
+SWAPDIST="$ROOT/dist-swapped-codes"
+rm -rf "$SWAPDIST"
+cp -R "$DIST" "$SWAPDIST"
+SWAPC="$SWAPDIST/core/skills/ai-dlc/layer-contract.yaml"
+sed -e 's/^    code: EXTENSION-HOOK-DRIFT$/    code: EXTENSION-ANCHOR-DRIFT-SWAPPED/' \
+    -e 's/^    code: EXTENSION-ANCHOR-DRIFT$/    code: EXTENSION-HOOK-DRIFT/' \
+    -e 's/^    code: EXTENSION-ANCHOR-DRIFT-SWAPPED$/    code: EXTENSION-ANCHOR-DRIFT/' \
+    "$SWAPC" > "$SWAPC.new"
+if cmp -s "$SWAPC" "$SWAPC.new"; then
+  bad "FIXTURE ERROR: the code swap matched nothing in the seeded contract, so mutant (c) proves nothing about where the id comes from"
+else
+  mv "$SWAPC.new" "$SWAPC"
+  git -C "$SWAPDIST" add -A >/dev/null 2>&1
+  git -C "$SWAPDIST" commit -qm "swap the two adjudicable clauses' codes" >/dev/null 2>&1
+  SWAPT="$(git -C "$SWAPDIST" rev-parse --short HEAD)"
+  swap_detail() { bash "$DRIFT" "$SWAPDIST" "$BASE" "$SWAPT" "$E14CONS" 2>/dev/null \
+                  | awk -F'\t' -v e="$1" '$1=="HARD-LAYER-ADJUDICATION-MISSING" && $2==e {print $4; exit}'; }
+  swap_anchor="$(swap_detail "$E14ENTRY")"
+  swap_hook="$(swap_detail "$ENTRY")"
+  case "$swap_anchor" in
+    *"clause LC-E4"*) swap_a=ok ;;
+    *)                swap_a=no ;;
+  esac
+  case "$swap_hook" in
+    *"clause LC-E14"*) swap_h=ok ;;
+    *)                 swap_h=no ;;
+  esac
+  if [ "$swap_a" = ok ] && [ "$swap_h" = ok ]; then
+    ok "MUTANT (c) — with the two codes SWAPPED in the contract at theirs, the anchor row prints LC-E4 and the hook row LC-E14: the printed id follows the contract the consumer is being held to, and is a literal nowhere"
+  else
+    bad "MUTANT (c) — after swapping the codes the anchor row reads '$(printf '%s' "$swap_anchor" | grep -o 'clause [^ ]*' | head -1)' and the hook row '$(printf '%s' "$swap_hook" | grep -o 'clause [^ ]*' | head -1)', want LC-E4 and LC-E14. The id is baked into the script rather than read from layer-contract.yaml at theirs"
+  fi
+  # CONTROL: the unrenamed dist prints LC-E14 for the anchor row, so the swap above is what moved
+  # it. Without this arm a script that printed nothing at all would pass both cases.
+  case "$(e14_detail "$E14ENTRY")" in
+    *"clause LC-E14"*) ok "CONTROL: the UNSWAPPED dist prints LC-E14 for the same entry, so mutant (c)'s verdict is the contract edit and not a script that stopped resolving anything" ;;
+    *) bad "CONTROL FAILED: the unswapped dist does not print LC-E14 for the anchor entry, so mutant (c) compared two broken states" ;;
+  esac
+fi
+rm -rf "$SWAPDIST" "$E14CONS" "$M10DIR"
 
 echo
 if [ "$fails" -eq 0 ]; then

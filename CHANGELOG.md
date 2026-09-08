@@ -15,6 +15,42 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.535.0] - 2026-09-08
+
+### `BL-210` — the adjudication row hands over the digest verbatim and withholds the clause the record requires
+
+Closes `PC-S343-ADJUDICATION-ROW-WITHHOLDS-THE-ONE-FIELD-ITS-RECORD-REQUIRES`.
+
+`layer-drift.sh`'s `HARD-LAYER-ADJUDICATION-MISSING` row prints the `subject_digest` verbatim so
+the operator copies rather than derives it, and withheld the `clause` id the register schema
+requires. The value is not guessable from the row: two clauses at `level: ADJUDICATED` produce
+rows identical apart from the quoted status name, `--list-adjudications` printed no clause
+either, and SKILL.md's one worked example shows `LC-E4`, so every row got `LC-E4`.
+
+**Measured on the reference consumer's register, 441 records:** nine carry a wrong clause and
+nothing can see them. Two are status names written where an id belongs and fail the schema
+pattern outright. Two carry `LC-A1`, the blocking status itself. Five disagree with the status
+their own reason opens by naming. A wrong clause splits the contradiction detector's key and
+the debt join's key rather than tripping either.
+
+**The status-to-clause map is derived from `layer-contract.yaml` at THEIRS**, from the same
+snapshot that already yields the ADJUDICATED code set, by the same single-pass carry in the
+other direction. Every blocking arm and the title-join row now print `clause <id>` beside the
+digest, and a status the contract does not declare prints a stated absence rather than a guess.
+The listing appends the clause as its last column, because five readers across three fixtures
+take the digest from the fourth.
+
+**A second defect surfaced while building it.** The listing deduplicated on the whole row,
+which was a per-subject dedupe only while every column was a property of the subject; one
+entry keyed by two clauses in one pass then printed twice. The dedupe now keys on entry, target
+and digest with clauses comma-joined. On a clone of the consumer the listing reads 16 rows
+before and after with the first five columns byte-identical, and three of those sixteen print a
+clause that matches none of their recorded ones.
+
+`layer-adjudication-tier` gains Part 10, seeded on an `LC-E14` row with an `LC-E4` control,
+with four mutants: a hardcoded map, a prepended column, swapped contract codes at a new theirs,
+and the whole-row dedupe restored.
+
 ## [0.534.0] - 2026-09-08
 
 ### `BL-209` — `readopt-override.sh` refused a faithful re-adoption because a base line survived at theirs as the suffix of a re-flowed line

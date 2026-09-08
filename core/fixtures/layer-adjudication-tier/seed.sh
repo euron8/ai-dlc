@@ -53,6 +53,33 @@ clauses:
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: EXTENSION-HOOK-DRIFT
 
+  - id: LC-E14
+    subject: extension
+    level: ADJUDICATED
+    since: 1
+    normative: >-
+      Seeded stand-in for the same duty at the declared extends: grain. A SECOND adjudicable
+      clause is what makes the clause column assertable: a mapper that answers with whichever id
+      it read first is correct for LC-E4 and wrong here, and one seeded clause cannot tell those
+      apart. `id:` precedes `code:` here as it does in the real contract, which is the carry the
+      reader's single pass depends on.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
+    code: EXTENSION-ANCHOR-DRIFT
+
+  - id: LC-E19
+    subject: extension
+    level: WARN
+    since: 1
+    normative: >-
+      Seeded stand-in for the title-join. It is at WARN and it PRESCRIBES A REGISTER RECORD all
+      the same, which is why it needs a clause id here: a status the contract does not declare
+      maps to nothing and the listing correctly shows an empty cell, so the two-clause subject
+      this seed builds would be indistinguishable from a dedupe that dropped a field.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
+    code: EXTENSION-TITLE-MATCHES-CORE
+
   - id: LC-E3
     subject: extension
     level: WARN

@@ -55,6 +55,56 @@ have gone green, and would have reported "still open" forever.
 never the word anywhere in prose, because an entry that merely discusses landing something is
 not a closed entry.
 
+## BL-210 — the adjudication row hands over the digest verbatim and withholds the clause the record requires
+
+**LANDED (v0.535.0).**
+
+**Provenance.** `PC-S343-ADJUDICATION-ROW-WITHHOLDS-THE-ONE-FIELD-ITS-RECORD-REQUIRES`, filed by
+the reference consumer from a row its `0.526.0 -> 0.530.0` pull emitted.
+
+**The row printed the digest and not the clause.** `layer-drift.sh`'s
+`HARD-LAYER-ADJUDICATION-MISSING` row prints `subject_digest` verbatim so the operator copies it
+rather than derives it, and withheld `clause`, which the register schema lists in `required`.
+The value is not derivable from the row: `EXTENSION-HOOK-DRIFT` (`LC-E4`, file grain) and
+`EXTENSION-ANCHOR-DRIFT` (`LC-E14`, the same duty at the declared `extends:` grain) produce rows
+identical apart from the quoted status name. `--list-adjudications`, the documented way to
+re-read a recorded key, printed entry, target, digest and verdict and no clause either. The one
+worked example in SKILL.md shows `LC-E4`, so a reader following it writes `LC-E4` for every row.
+
+**Measured on the consumer's register, 441 records, 9 wrong and none visible to any check.**
+Two carry a status name where an id belongs and fail the schema pattern outright. Two carry
+`LC-A1`, which is the blocking status itself. Five carry a clause that disagrees with the status
+their own reason opens by naming, one of them corroborated by the consumer's dry-run report of
+the same day. A wrong-but-well-formed clause passes the schema, nothing joins the value back to
+the status that fired, and the record lands in an append-only register that the contradiction
+detector and the debt join both key on, so a wrong clause SPLITS those keys rather than tripping
+them.
+
+**The map is derived, not written.** Beside `ADJ_CODES`, one snapshot of `layer-contract.yaml`
+at THEIRS yields status-to-id by the same single-pass carry in the other direction. A status the
+contract does not declare yields a stated absence naming the contract path, never a guess. All
+three `adj_check` arms and the `EXTENSION-TITLE-MATCHES-CORE` row print `clause <id>` beside the
+digest; the listing appends the clause as column 6, because five readers across three fixtures
+take the digest from field 4 and a prepended column moves every one of them.
+
+**Building it surfaced a second defect.** The listing's whole-row `sort -u` was a subject dedupe
+only while every column was a property of the subject. One entry can be keyed by `LC-E19`'s
+title-join and `LC-E4`'s hook-drift in one pass, and the reference consumer has two such
+entries, so the clause column took the listing from 16 rows to 18 with its own count line still
+calling rows subjects. The dedupe now keys on entry, target and digest with clauses comma-joined.
+Driven on a clone of the consumer over `eb49b783..a798e215`: 16 rows before and after, columns 1
+to 5 byte-identical, and of the 16 subjects 3 print a clause that matches none of their recorded
+ones. Control: an impossible digest joins 0 against 418 real ones.
+
+**Four mutants in `layer-adjudication-tier` Part 10, seeded on an `LC-E14` row** because `LC-E4`
+is what a broken mapper returns for everything: a hardcoded map, the clause prepended as column
+2, the contract's codes swapped at a new theirs driven against the shipping script, and the
+whole-row dedupe restored. Each moves exactly one cell.
+
+Tiered **DEFECT**.
+
+verify: sh set -e; T=$(mktemp -d); D=$T/d; C=$T/c; mkdir -p "$D/core/skills/ai-dlc/steps" "$D/core/schemas" "$C/.claude/skills/ai-dlc/extensions"; printf 'clauses:\n\n  - id: LC-E14\n    level: ADJUDICATED\n    code: EXTENSION-ANCHOR-DRIFT\n' > "$D/core/skills/ai-dlc/layer-contract.yaml"; printf '{"required":["clause"],"properties":{"verdict":{\n"enum":[\n"still-additive",\n"retire"\n]}}}\n' > "$D/core/schemas/layer-adjudication-register.json"; printf '# S\n\n## G\n\nbase\n' > "$D/core/skills/ai-dlc/steps/demo.md"; env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git -C "$D" init -q; git -C "$D" config user.email f@x; git -C "$D" config user.name f; git -C "$D" add -A; git -C "$D" commit -qm b; printf '# S\n\n## G\n\ntheirs REWRITTEN\n' > "$D/core/skills/ai-dlc/steps/demo.md"; git -C "$D" add -A; git -C "$D" commit -qm t; printf -- "---\nkind: qualifier\nhooks: steps/demo.md\nextends: '#G'\n---\n\n### 9. x\n\nb\n" > "$C/.claude/skills/ai-dlc/extensions/e.md"; env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git -C "$C" init -q; git -C "$C" config user.email f@x; git -C "$C" config user.name f; git -C "$C" add -A; git -C "$C" commit -qm s; B=$(git -C "$D" rev-parse HEAD~1); H=$(git -C "$D" rev-parse HEAD); P=core/skills/ai-dlc-update/reconcile/layer-drift.sh; bash "$P" "$D" "$B" "$H" "$C" 2>/dev/null | grep -qF 'clause LC-E14' || { rm -rf "$T"; exit 1; }; bash "$P" --list-adjudications "$D" "$B" "$H" "$C" 2>/dev/null | awk -F'\t' '$1=="ADJUDICABLE" && $6=="LC-E14"{f=1} END{exit !f}' || { rm -rf "$T"; exit 1; }; rm -rf "$T"; exit 0
+
 ---
 
 ## BL-099 — the exec-bit audit is one-directional, so a consumer file that upstream STOPPED shipping executable is never reported

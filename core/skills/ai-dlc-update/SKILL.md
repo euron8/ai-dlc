@@ -773,6 +773,9 @@ prose is itself generated rather than composed.
      recorded verdict in `_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl`
      under the `subject_digest` the row carries. **Blocks `apply`.** The remedy is to make
      the judgement and write it down, not to widen anything. Step 7 has the record shape.
+     The row carries the `clause` id as well as the `subject_digest`, and BOTH are copied
+     from it rather than derived — a wrong clause is well-formed, passes the schema, and
+     lands in an append-only register.
    - `HARD-REGISTER-CONTRADICTION` [LC-A2] → that register states two different verdicts under one
      key and the later record declares no `supersedes` plus `reason`. **Blocks `apply`**,
      because a lookup would otherwise answer with whichever record was read last.
@@ -1484,8 +1487,10 @@ prose is itself generated rather than composed.
    `layer-drift.sh` emits `HARD-LAYER-ADJUDICATION-MISSING` (**LC-A1**) for every such row with
    no recorded verdict, and a `HARD-` status blocks `apply`. Write one JSON object per line into
    `_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl`, shape in
-   `.claude/schemas/layer-adjudication-register.json`, copying `subject_digest` **verbatim from
-   the blocking row**:
+   `.claude/schemas/layer-adjudication-register.json`, copying `clause` AND `subject_digest`
+   **verbatim from the blocking row** — the row prints both, and the example below is one
+   clause of several that produce these rows, so its `LC-E4` is an illustration and never the
+   value to reuse:
 
    ```json
    {"clause":"LC-E4","entry":".claude/skills/ai-dlc/extensions/checks/gate-validation-domain.md","subject_digest":"<copied from the row>","verdict":"still-additive","recorded_utc":"2026-07-29T10:00:00Z","reason":"core's change was to the gate-type enum; this entry adds a check row and does not restate it"}
@@ -1523,8 +1528,9 @@ prose is itself generated rather than composed.
 
    **TO RE-READ A KEY YOU HAVE ALREADY RECORDED A VERDICT UNDER, run
    `layer-drift.sh --list-adjudications <dist> <base> <theirs> <consumer>`.** It prints every
-   keyed subject this pass can see — entry, target, `subject_digest`, and the recorded verdict
-   if there is one — and nothing else: no classification rows, no blockers, and no dependence on
+   keyed subject this pass can see — entry, target, `subject_digest`, the recorded verdict
+   if there is one, and the `clause` id in the last column — and nothing else: no classification
+   rows, no blockers, and no dependence on
    whether the row is still blocking. Pass the SAME base the pull uses, for the reason step 7
    states per script: base decides which rows the pass produces, so a degenerate range gives a
    short listing rather than a visibly missing one. **Do not withhold the register to re-fire the
