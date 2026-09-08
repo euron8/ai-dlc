@@ -1897,7 +1897,21 @@ if [ "$MODE" = list ]; then
       _v="$(printf '%s\n' "$_v" | sort -u | grep -v '^$' | tr '\n' ',' | sed 's/,$//')"; _withv=$((_withv + 1))
     fi
     printf 'ADJUDICABLE\t%s\t%s\t%s\t%s\t%s\n' "$_e" "$_t" "$_d" "$_v" "${_c:-(unmapped)}"
-  done < <(sort -u "$ADJ_LIST_FILE" 2>/dev/null)
+    # THE DEDUPE KEY IS THE SUBJECT, NOT THE WHOLE LINE, AND THAT IS A CORRECTION THIS CHANGE
+    # FORCED. `sort -u` over the accumulated rows was a subject dedupe only while every column
+    # was a property of the subject. The clause is a property of the ROW: one entry can be keyed
+    # by two clauses in a single pass — the reference consumer has three subjects keyed by both
+    # LC-E19's title-join and LC-E4's hook-drift — so the whole-line unique split each of them in
+    # two and the listing grew 16 subjects to 18. Measured on a clone of the reference consumer
+    # over eb49b783..a798e215; the count line said 18 and would have been counting rows while
+    # calling them subjects. Comma-joined and sorted, for the reason the verdict column beside it
+    # is: showing one of two would hide the thing the operator opened the listing to find.
+  done < <(sort -u "$ADJ_LIST_FILE" 2>/dev/null | awk -F"$TAB" -v OFS="$TAB" '
+      { k = $1 OFS $2 OFS $3
+        if (!(k in seen)) { seen[k] = 1; order[++nk] = k }
+        if ($4 != "" && index("," cl[k] ",", "," $4 ",") == 0) cl[k] = (cl[k] == "" ? $4 : cl[k] "," $4) }
+      END { for (i = 1; i <= nk; i++) print order[i], cl[order[i]] }
+    ')
   rm -f "$ADJ_LIST_FILE"
   echo "layer-drift --list-adjudications: ${_n} keyed subject(s) in ${BASE}..${THEIRS} — ${_withv} with a recorded verdict, ${_without} without. A subject is any row this pass asked adj_digest to key; ZERO means the pass produced no keyed row, not that the layer is clean." >&2
   exit 0

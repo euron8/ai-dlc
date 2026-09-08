@@ -631,15 +631,54 @@ if [ "$(e14_col6 "$E14ENTRY")" = "LC-E14" ] && [ "$(e14_col6 "$ENTRY")" = "LC-E4
 else
   bad "listing column 6 reads '$(e14_col6 "$E14ENTRY")' and '$(e14_col6 "$ENTRY")', want LC-E14 and LC-E4. An operator re-reading a key after the block cleared still cannot obtain the clause"
 fi
-# The listing must not have doubled: adj_prefix and adj_check both key the same subject, and a
-# clause column they disagreed about would defeat the `sort -u` that collapses them.
+# ONE SUBJECT KEYED BY TWO DIFFERENT CLAUSES, WHICH IS THE STATE THE COLUMN BROKE.
+# `sort -u` over the accumulated rows was a subject dedupe only while every column was a
+# property of the subject; the clause is a property of the ROW, and one entry can be keyed by
+# LC-E19's title-join AND by LC-E4's hook-drift in a single pass. Measured on a clone of the
+# reference consumer over eb49b783..a798e215: 16 keyed subjects became 18 rows, with the count
+# line calling rows subjects. A seed in which no subject carries two clauses cannot see it, so
+# this entry exists to carry both — a heading core also has, plus the hook drift every entry in
+# this world has.
+#
+# THE ROW COUNT ALONE IS NOT THE ASSERTION. A dedupe that discarded the second clause would keep
+# the counts equal while losing a field the record requires, so the joined cell is asserted too.
+DUALENTRY=".claude/skills/ai-dlc/extensions/dual-keyed.md"
+cat > "$E14CONS/$DUALENTRY" <<'DUALEOF'
+---
+kind: check
+hooks: steps/demo.md
+reason: seeded entry with an UNNUMBERED heading core also carries, so the title-join keys it at LC-E19 and the hook drift keys the same subject at LC-E4
+---
+
+## Gamma review
+
+Body this entry adds under a heading core already has.
+DUALEOF
+git -C "$E14CONS" add -A >/dev/null 2>&1
+git -C "$E14CONS" commit -qm "seed the dual-keyed entry" >/dev/null 2>&1
+
+dual_title_rows="$(e14_run | awk -F'\t' -v e="$DUALENTRY" '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2==e {c++} END{print c+0}')"
+dual_hook_rows="$(e14_run  | awk -F'\t' -v e="$DUALENTRY" '$1=="EXTENSION-HOOK-DRIFT" && $2==e {c++} END{print c+0}')"
+if [ "$dual_title_rows" -eq 1 ] && [ "$dual_hook_rows" -eq 1 ]; then
+  ok "PRECONDITION: one entry produces both an LC-E19 title-join row and an LC-E4 hook-drift row, so a subject keyed by two DIFFERENT clauses exists to dedupe"
+else
+  bad "PRECONDITION failed: the dual-keyed entry produced $dual_title_rows title-join row(s) and $dual_hook_rows hook-drift row(s), want 1 and 1. Without a subject carrying two clauses the dedupe arm below cannot fire"
+fi
 e14_rows="$(e14_list | grep -c '^ADJUDICABLE')"
 e14_subj="$(e14_list | awk -F'\t' '$1=="ADJUDICABLE"{print $2"\t"$3"\t"$4}' | sort -u | grep -c .)"
-if [ "$e14_rows" -eq "$e14_subj" ] && [ "$e14_rows" -ge 2 ]; then
-  ok "the listing names $e14_rows row(s) over $e14_subj distinct subject(s) — the two call sites that key one subject still collapse to one line"
+if [ "$e14_rows" -eq "$e14_subj" ] && [ "$e14_rows" -ge 3 ]; then
+  ok "the listing names $e14_rows row(s) over $e14_subj distinct subject(s) — a subject keyed by two clauses is still ONE line, so the count line counts subjects and not rows"
 else
-  bad "the listing prints $e14_rows row(s) over $e14_subj distinct subject(s). A caller withheld its status, so its clause-less row no longer dedupes against the one that carries a clause and every subject is listed twice"
+  bad "the listing prints $e14_rows row(s) over $e14_subj distinct subject(s). The dedupe key includes the clause, so a subject keyed by two clauses is listed twice and the mode's own count line is reporting rows while calling them subjects"
 fi
+dual_cell="$(e14_col6 "$DUALENTRY")"
+case ",$dual_cell," in
+  *,LC-E19,*) case ",$dual_cell," in
+                *,LC-E4,*) ok "the dual-keyed subject's clause cell carries BOTH ids ('$dual_cell') — collapsing to one line did not drop a field the record requires" ;;
+                *)         bad "the dual-keyed subject's clause cell is '$dual_cell' and names no LC-E4. The dedupe kept one clause and discarded the other, so the operator is handed one of the two ids with nothing saying a second exists" ;;
+              esac ;;
+  *) bad "the dual-keyed subject's clause cell is '$dual_cell' and names no LC-E19. The dedupe kept one clause and discarded the other" ;;
+esac
 
 # MUTANTS. Whole-directory copies, `cmp -s`-guarded, with the unmutated copy scored first: a copy
 # that dies sourcing lib.sh emits nothing, and no row at all satisfies an arm looking for a wrong
@@ -697,6 +736,35 @@ M10BPY
       bad "MUTANT (b) — with the clause prepended, field 4 still reads as a digest on $m10b_shape row(s). Then the position assertion above is vacuous and a reader keyed on \$4 would not have noticed the shift either"
     else
       ok "MUTANT (b) — prepending the clause moves the digest out of field 4 and the shape assertion dies: appending is load-bearing for every reader that keys on \$4 or \$5"
+    fi
+  fi
+
+  # MUTANT (d): the accumulated rows deduped by WHOLE LINE, which is what `sort -u` alone does
+  # and what this listing did before the clause column existed. The dual-keyed subject then
+  # appears twice and the mode's count line reports rows while calling them subjects. Anchored on
+  # the awk that follows the sort rather than on the sort itself, because the sort line is shared
+  # with the form being reverted TO and a mutation keyed on it would match both.
+  M10D="$M10DIR/layer-drift-wholeline.sh"
+  python3 - "$DRIFT" "$M10D" <<'M10DPY' 2>/dev/null
+import sys
+s = open(sys.argv[1]).read()
+a = '  done < <(sort -u "$ADJ_LIST_FILE" 2>/dev/null | awk'
+if a in s:
+    i = s.index(a)
+    j = s.index("    ')", i) + len("    ')")
+    open(sys.argv[2], "w").write(s[:i] + '  done < <(sort -u "$ADJ_LIST_FILE" 2>/dev/null)' + s[j:])
+M10DPY
+  if [ ! -s "$M10D" ] || cmp -s "$DRIFT" "$M10D"; then
+    bad "FIXTURE ERROR: the whole-line-dedupe mutation matched nothing, so nothing here proves the subject dedupe is load-bearing. Update the M10D block to match the listing's real dedupe pipeline"
+  else
+    m10d_rows="$(e14_list "$M10D" | grep -c '^ADJUDICABLE')"
+    m10d_subj="$(e14_list "$M10D" | awk -F'\t' '$1=="ADJUDICABLE"{print $2"\t"$3"\t"$4}' | sort -u | grep -c .)"
+    if [ "$m10d_rows" -lt 1 ]; then
+      bad "MUTANT (d) — the whole-line-dedupe copy emitted no listing rows, so its verdict is a dead harness rather than a split subject"
+    elif [ "$m10d_rows" -le "$m10d_subj" ]; then
+      bad "MUTANT (d) — deduping by whole line still gave $m10d_rows row(s) over $m10d_subj subject(s), so the count arm above is vacuous and would not have seen the subject that carries two clauses split in two"
+    else
+      ok "MUTANT (d) — deduping by whole line splits the dual-keyed subject ($m10d_rows rows over $m10d_subj subjects): keying the dedupe on the subject rather than the line is load-bearing"
     fi
   fi
 fi
