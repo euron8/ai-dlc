@@ -3961,9 +3961,16 @@ is a rule the operator turns off.
 **Stated limit of the receipt below.** It closes when any shipped program reads the whole file's
 size, which a mere observation satisfies. It cannot tell an observation from a gate, and it says
 nothing about narrative detection — that half is deliberately unmechanised here, for the reason
-above.
+above. **The receipt was REWRITTEN at close, because the original could not have measured its own
+subject**: it counted FILES matching a `wc -c`/`SKILL` regex and required more than one, so the
+preferred remedy — the whole-file figure added to the one script that already matched — leaves the
+count at 1 and reads STILL-LIVE over a correct fix, while a bare COMMENT naming both tokens in any
+second script closes it. The replacement DRIVES the validator against an appended copy of
+`SKILL.md` and asserts the figure it reports equals a `wc -c` of that copy, so a comment closes
+nothing and a hardcoded number — correct against the shipped file and unable to move — fails on
+the copy.
 
-verify: sh n=0; for s in core/scripts/*.sh scripts/*.sh; do grep -qE 'wc -c.*SKILL|SKILL.*wc -c' "$s" 2>/dev/null && n=$((n+1)); done; [ "$n" -gt 1 ]
+verify: sh V=core/scripts/validate-reattach-budget.sh; S=core/skills/ai-dlc/SKILL.md; [ -f "$V" ] && [ -f "$S" ] || exit 9; D="$(mktemp -d)" || exit 9; C="$D/skill.md"; { cat "$S"; printf 'zzprobe padding appended below the protocol\n'; } > "$C" || { rm -rf "$D"; exit 9; }; R="$(wc -c < "$C" | tr -d ' ')"; B="$(wc -c < "$S" | tr -d ' ')"; [ -n "$R" ] && [ -n "$B" ] && [ "$R" != "$B" ] || { rm -rf "$D"; exit 9; }; O="$(bash "$V" --skill "$C" 2>&1)"; rc=$?; N="$(printf '%s\n' "$O" | sed -n 's/^whole file  *: \([0-9][0-9]*\) bytes.*/\1/p' | head -1)"; rm -rf "$D"; [ "$rc" -eq 0 ] && [ -n "$N" ] && [ "$N" = "$R" ]
 
 ## BL-189 — an argument-less `git init --bare` under an exported `GIT_DIR` writes `core.bare=true` into the real repo, which git exports to any hook running from a linked worktree
 

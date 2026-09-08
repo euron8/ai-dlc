@@ -191,6 +191,69 @@ else
   bad "the shipped SKILL.md fails its own re-attach budget validator"
 fi
 
+# --- Assertion 6b: the WHOLE-FILE byte observation is reported, and it is the whole file --
+# The only reader of SKILL.md's total size in the tree. It is an OBSERVATION -- it must never
+# move the exit code -- so an arm keyed on a verdict could not fire on it at all, and its
+# subject is the FIGURE.
+#
+# TWO INDEPENDENTLY DERIVED VALUES, COMPARED. The fixture takes `wc -c` of the file itself and
+# the validator prints its own; reading the number back off the validator's rendering and
+# declaring it correct would be a count read off a rendering, which is not a derived count.
+VB_OUT="$(bash "$VAL" --skill "$SKILL" 2>&1)"
+whole_of() { # whole_of <validator output> -> the reported whole-file byte figure, or empty
+  sed -n 's/^whole file  *: \([0-9][0-9]*\) bytes.*/\1/p' <<<"$1" | head -1
+}
+proto_of() { # proto_of <validator output> -> the reported protocol end offset, or empty
+  sed -n 's/^protocol end offset : \([0-9][0-9]*\) bytes.*/\1/p' <<<"$1" | head -1
+}
+VB_WHOLE="$(whole_of "$VB_OUT")"
+VB_REAL="$(wc -c < "$SKILL" | tr -d ' ')"
+if [ -z "$VB_WHOLE" ]; then
+  bad "the validator reports no whole-file byte figure at all — SKILL.md's total size has no reader in the tree, so a section added anywhere below the protocol moves nothing anybody prints"
+elif [ "$VB_WHOLE" != "$VB_REAL" ]; then
+  bad "the validator reports ${VB_WHOLE} bytes where wc -c of the same file gives ${VB_REAL} — the figure is not the whole file"
+elif ! grep -q "${VB_REAL}" <<<"$(printf '%s' "$VB_OUT" | sed -n '/^PASS/,$p')"; then
+  bad "the whole-file figure never reaches the PASS line, so a gate log carries the verdict without the number the observation exists to publish"
+else
+  ok "the validator reports whole file = ${VB_WHOLE} bytes, equal to an independently derived wc -c, and carries it into the PASS line"
+fi
+
+# --- Assertion 6c: MUTANT — bytes appended BELOW the protocol, only the whole-file figure moves
+# THE ARM THAT PROVES 6b READS THE FILE AND NOT THE WINDOW. `protocol end offset` and
+# `whole file` are both byte counts printed by the same program; a figure wired to the
+# protocol window would satisfy 6b exactly as a correct one does, and a reader would have no
+# way to tell. The mutation appends padding at the END of the file -- strictly below the
+# protocol section, whose end boundary is the next `## ` heading far above -- so the protocol
+# offset MUST hold still while the whole-file figure MUST move. Both directions in one arm.
+#
+# The padding carries no `## ` so it cannot become a section and re-bound anything, and the
+# exit code must stay 0: an observation that can fail the gate is a gate.
+# Built as a COPY, guarded by cmp -s per fixture-mutants.md.
+MUT_BIG="$WORK/skill-appended-below.md"
+{ cat "$SKILL"; printf 'padding below the protocol, carrying no heading\n'; } > "$MUT_BIG"
+if cmp -s "$SKILL" "$MUT_BIG"; then
+  bad "FIXTURE STALE: the appended copy is byte-identical to SKILL.md, so the whole-file figure has nothing to move and assertion 6b is unproven"
+else
+  MB_OUT="$(bash "$VAL" --skill "$MUT_BIG" 2>&1)"; mb_rc=$?
+  MB_WHOLE="$(whole_of "$MB_OUT")"
+  MB_PROTO="$(proto_of "$MB_OUT")"
+  VB_PROTO="$(proto_of "$VB_OUT")"
+  MB_REAL="$(wc -c < "$MUT_BIG" | tr -d ' ')"
+  if [ "$mb_rc" -ne 0 ]; then
+    bad "MUTANT CHANGED THE VERDICT — appending bytes below the protocol made the validator exit ${mb_rc}, so the whole-file figure is a GATE and not the observation this entry asked for"
+  elif [ -z "$MB_WHOLE" ] || [ -z "$MB_PROTO" ] || [ -z "$VB_PROTO" ]; then
+    bad "FIXTURE STALE: could not read both figures back from the validator (whole='${MB_WHOLE}' proto='${MB_PROTO}' base-proto='${VB_PROTO}') — the output lines were reshaped"
+  elif [ "$MB_WHOLE" = "$VB_WHOLE" ]; then
+    bad "MUTANT DID NOT FAIL — ${MB_REAL} bytes of file were reported as ${MB_WHOLE}, the same figure as the unappended copy, so the observation is not reading the whole file"
+  elif [ "$MB_WHOLE" != "$MB_REAL" ]; then
+    bad "the appended copy is ${MB_REAL} bytes and the validator reports ${MB_WHOLE} — the figure moved but does not track the file"
+  elif [ "$MB_PROTO" != "$VB_PROTO" ]; then
+    bad "MUTANT FAILED TOO MUCH — appending below the protocol moved the protocol end offset from ${VB_PROTO} to ${MB_PROTO}, so the two figures are entangled and the protocol arm is measuring something other than its window"
+  else
+    ok "mutant: bytes appended BELOW the protocol move the whole-file figure ${VB_WHOLE} -> ${MB_WHOLE} (= wc -c) while the protocol offset holds at ${VB_PROTO} and the exit stays 0"
+  fi
+fi
+
 # --- Assertion 7: MUTANT — strip the mandate from SKILL.md, arm 6 must fail ---
 # Built as a COPY, guarded by cmp -s so a sed that matched nothing cannot pass as a mutation.
 # THE MUTATION MOVED WITH THE MANDATE. It used to strip `Read ... SKILL.md` IN FULL; the

@@ -28,6 +28,17 @@
 # exceeds the budget minus a safety margin, so it trips BEFORE the real 5,000
 # cliff, leaving room for tokenizer variance.
 #
+# WHAT IT ALSO REPORTS, AND WHY THAT HALF IS AN OBSERVATION RATHER THAN A GATE. Nothing in
+# the tree reports SKILL.md's TOTAL size; the window measured above is a small fraction of the
+# file, so a section added far below the protocol moves nothing anybody prints. The whole-file
+# byte count is therefore emitted beside the protocol offset and in the PASS line, and it NEVER
+# sets the exit code. That is not timidity: the governing rule for this corpus is that verbosity
+# is deliberate scar tissue, so any threshold keyed on length, on figure density, or on
+# measurement-shaped tokens flags exactly the prose the rule requires to be there. The
+# false-positive set of a gate on this file is the file, which is the unmeasured-lint shape
+# CLAUDE.md forbids shipping. A number nobody gates on still moves the author, and that is the
+# whole of what this figure is for. The narrative half is deliberately unmechanised.
+#
 # THAT RATIO IS A PROPERTY OF THIS TEXT, NOT OF THE DIVISOR. Do not carry the
 # "slightly conservative" conclusion to another population without re-measuring it:
 # the ratio is content-dependent and the DIRECTION of the error reverses. Prose-heavy
@@ -47,6 +58,7 @@
 # EXIT
 #   0  protocol end is within (budget - margin)
 #   1  protocol end exceeds the ceiling, an anchor is missing, or input unreadable
+#   The whole-file byte figure is reported at both exits and decides neither.
 
 set -u
 
@@ -142,10 +154,17 @@ EST_TOKENS=$(( BYTES / BPT ))
 # 3, and the old message read "253 tokens of slack".
 SLACK=$(( CEILING - EST_TOKENS ))
 
+# The OBSERVATION. Derived from the whole file, not from the protocol window above, so a
+# section added anywhere below the protocol moves it and moves nothing else here. Reported,
+# never gated -- see the header paragraph on why a threshold on this figure would flag the
+# scar tissue this corpus requires.
+WHOLE_BYTES="$(wc -c < "$SKILL_MD" | tr -d ' ')"
+
 say "re-attach window    : ${BUDGET} tokens (Claude Code re-attaches the first ~${BUDGET})"
 say "safety margin       : ${MARGIN} tokens  (ceiling ${CEILING})"
 say "protocol section    : lines ${START_LINE}..${PROTO_END}"
 say "protocol end offset : ${BYTES} bytes ~= ${EST_TOKENS} tokens (at ${BPT} bytes/token)"
+say "whole file          : ${WHOLE_BYTES} bytes (OBSERVATION -- reported, never gated)"
 say ""
 
 if [ "$EST_TOKENS" -gt "$CEILING" ]; then
@@ -269,4 +288,5 @@ fi
 
 say "PASS  protocol ends at ~${EST_TOKENS} tokens; ${SLACK} tokens of slack under the ${CEILING}-token ceiling (${BUDGET} window - ${MARGIN} margin)."
 say "      protocol names the digest to recover from, SKILL.md for full rule text, and the router for an un-routed session."
+say "      whole file is ${WHOLE_BYTES} bytes -- an observation carried into the gate log, bounded by nothing."
 exit 0
