@@ -8739,3 +8739,251 @@ found this flagged it, `core/fixtures/apply-drift-after-write` drives it, and `a
 form in this area (`PC-S331`). Stated rather than hidden behind the null.
 
 verify: sh S="$(mktemp -d)"; C="$S/c"; git clone -q --local /Users/n8/git/graph "$C" 2>/dev/null || exit 1; E=".claude/skills/ai-dlc/extensions/checks/gate-validation-push.md"; [ -f "$C/$E" ] || { rm -rf "$S"; exit 1; }; R="$C/_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl"; [ -f "$R" ] || { rm -rf "$S"; exit 1; }; keys="$(bash core/skills/ai-dlc-update/reconcile/layer-drift.sh --list-adjudications /Users/n8/git/ai-dlc ae0c6c6f 9d7b38e6 "$C" 2>/dev/null | cut -f4 | grep -E '^[0-9a-f]{40}$' | sort -u)"; [ -n "$keys" ] || { rm -rf "$S"; exit 1; }; grep -vFf <(printf '%s\n' "$keys") "$R" > "$R.new" && mv "$R.new" "$R"; [ -s "$R" ] || { rm -rf "$S"; exit 1; }; printf '\n<!-- edit after recording -->\n' >> "$C/$E"; out="$(bash core/skills/ai-dlc-update/reconcile/layer-drift.sh /Users/n8/git/ai-dlc ae0c6c6f 9d7b38e6 "$C" 2>/dev/null)"; rm -rf "$S"; grep -q "SPENT verdict rather than an unanswered one" <<< "$out"
+## BL-209 — `readopt-override.sh` refused a faithful re-adoption because a base line survived at theirs as the suffix of a re-flowed line
+
+**LANDED (v0.534.0, verified 37227131).**
+
+**Provenance.** `PC-S309-READOPT-STAMP-REFUSES-A-CLEAN-MERGE-WHEN-A-DELETED-CORE-LINE-IS-A-SUFFIX-OF-ITS-REFLOWED-REPLACEMENT`,
+filed by the reference consumer on its `0.530.0 -> 0.533.0` pull.
+
+**The superseded set was a whole-line set difference tested by substring.** `stale_lines` built
+its candidates with `comm -23` over the trimmed base and theirs section lines, then asked whether
+the flattened body CONTAINED each survivor. Upstream re-flows paragraphs. A base line then
+survives at theirs as the suffix, prefix or middle of a longer line: whole-line equality says
+deleted, and a body that adopted theirs faithfully contains the longer line and therefore the
+base line, so `--stamp readopt` refused exactly the state it exists to certify. The only stamp
+left was `reaffirm`, which records a re-adoption under the wrong outcome name; the consumer's
+`steps__gate-validation__check-20.md` carries one such note today.
+
+**Reproduced on a scratch copy of that override.** Base `eb49b783`, theirs `a798e215`: the
+shipping script reports `STALE-CORE-TEXT` on one line and exits 1; with base equal to theirs it
+reports OK and exits 0. Independently derived on core's Check 20 section: three base lines fail
+whole-line equality at theirs, of which one is contained in theirs' flattened section and two are
+genuinely gone. The fix reports the two and not the one.
+
+**The fix is one predicate for both directions, and its first cut was wrong in the direction
+that clears a HARD block.** `changed_lines <from> <to> <anchor>` yields the FROM section's
+substantive lines absent from TO as whole lines, minus those whose words survive at TO inside a
+longer run of text that the BODY also carries; `stale_lines` and `unadopted_lines` call it with
+the refs swapped. The first cut acquitted on bare containment, and an adversarial hand measured
+that over the last 60 non-merge commits touching the shipped rule text, 46 of 209 deleted lines
+survive by containment, 22 of them inside a single theirs line, where upstream had qualified or
+NEGATED the line in place. A body carrying only the old line then passed `--check` and landed
+`--stamp readopt`, advancing `base_sha` so the next pull computed no drift. The hand's proposed
+narrowing, requiring the containment to cross a line join, would have refused the consumer's own
+case, which is in the single-line group. What separates a re-flow from an edit is the body: a
+faithful adoption carries the theirs text that now holds the base line's words, and a body
+teaching the old rule does not.
+
+**Four non-fixes were built and every one is rejected by the receipt.** The filing's own first
+suggestion, dropping a survivor that is a substring of some single theirs LINE, passes the
+consumer's case and misses a base line that theirs split across two lines. Clearing the stale
+set whenever the body carries every theirs line passes a body that kept a genuinely dropped
+sentence beside a full adoption. Bare containment passes a body teaching a rule theirs negated.
+The receipt seeds all three shapes. The `layer-readopt-gate` fixture's arm J carries the same
+subjects plus two mutants, one per half of the predicate, each moving exactly one cell; the
+re-flow mutant's first cut survived because the arm's own successful stamp had advanced
+`base_sha` to theirs, and the negation mutant's first cut survived because the seed lowercased a
+letter after `Never` and so was not contained at all. Both seeds are now asserted before any
+verdict is read.
+
+Tiered **DEFECT**.
+
+verify: sh R="$(mktemp -d)"; D="$R/d"; C="$R/c/.claude/skills/ai-dlc/overrides"; mkdir -p "$D/core/skills/ai-dlc" "$C"; S="$D/core/skills/ai-dlc/SKILL.md"; printf '## Rule 1 -- A\n\nalpha alpha alpha alpha alpha\nbeta beta beta beta beta beta beta beta beta\n\ngamma gamma gamma gamma gamma gamma gamma gamma\n\n## Rule 2 -- B\n\ndelta delta delta delta delta delta delta delta\n' > "$S"; env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git -C "$D" init -q; git -C "$D" -c user.email=a@b -c user.name=a add -A; git -C "$D" -c user.email=a@b -c user.name=a commit -qm b; B="$(git -C "$D" rev-parse --short HEAD)"; printf '## Rule 1 -- A\n\nalpha alpha alpha alpha alpha beta beta beta beta\nbeta beta beta beta beta\n\n## Rule 2 -- B\n\nNever delta delta delta delta delta delta delta delta\n' > "$S"; git -C "$D" -c user.email=a@b -c user.name=a commit -qam t; T="$(git -C "$D" rev-parse --short HEAD)"; printf -- '---\nshadows: SKILL.md#Rule 1\nbase_sha: %s\nreason: x\n---\n\n## Rule 1 -- A\n\nmine mine mine mine mine mine mine mine\n\nalpha alpha alpha alpha alpha beta beta beta beta\nbeta beta beta beta beta\n' "$B" > "$C/ok.md"; printf -- '---\nshadows: SKILL.md#Rule 1\nbase_sha: %s\nreason: x\n---\n\n## Rule 1 -- A\n\nalpha alpha alpha alpha alpha beta beta beta beta\nbeta beta beta beta beta\n\ngamma gamma gamma gamma gamma gamma gamma gamma\n' "$B" > "$C/bad.md"; printf -- '---\nshadows: SKILL.md#Rule 2\nbase_sha: %s\nreason: x\n---\n\n## Rule 2 -- B\n\nmine mine mine mine mine mine mine mine\n\ndelta delta delta delta delta delta delta delta\n' "$B" > "$C/neg.md"; P=core/skills/ai-dlc-update/reconcile/readopt-override.sh; o="$(bash "$P" "$D" "$T" "$R/c" "$C/ok.md" --check 2>&1)"; a=$?; b="$(bash "$P" "$D" "$T" "$R/c" "$C/bad.md" --check 2>&1)"; c=$?; g="$(bash "$P" "$D" "$T" "$R/c" "$C/neg.md" --check 2>&1)"; e=$?; rm -rf "$R"; [ "$a" -eq 0 ] && grep -q '^OK' <<<"$o" && [ "$c" -eq 1 ] && grep -q 'gamma gamma' <<<"$b" && ! grep -q 'beta beta' <<<"$b" && [ "$e" -eq 1 ] && grep -q 'delta delta' <<<"$g"
+
+---
+
+## BL-208 — the fixture read-set map decayed for 510 commits and nothing said so
+
+**LANDED (v0.533.0, verified a798e215).**
+
+**The read-set skip is keyed on a snapshot no gate can refresh.** The deriver needs root, and
+the runner's fallbacks are correct and silent: an unmapped fixture always runs, a changed path
+in NO read-set forces the whole suite. The second fallback cannot see a path already in some
+read-set that gained a NEW reader after the derivation — that reader is skipped whenever only
+that path moves.
+
+**Measured between the map's last commit `fe64a47a` and `81ec5c44`, 510 commits:** 41 of 194
+fixture directories unmapped, 744 loaded seconds on every push; 2341 dead-path entries; of 187
+changed tracked paths that gained readers, 113 caught by the orphan arm and 74 in the silent
+class, 255 fixture-to-path pairs.
+
+**Both hooks now announce the map's age, the unmapped count and names, and the `--list`
+command on every run.** `fixture-ship-decl.md` names the two re-derive triggers. A per-plan
+re-derive step was rejected: root-only, so a plan step naming it stalls every session.
+
+Tiered **DEFECT**.
+
+verify: sh h=.githooks/pre-push; c=core/git-hooks/pre-push; [ "$(grep -c 'fixture dir(s) UNMAPPED (always run)' "$h")" -eq 1 ] && [ "$(grep -c 'fixture dir(s) UNMAPPED (always run)' "$c")" -eq 1 ] && [ "$(grep -c '^readset_deriver_path()' "$h")" -eq 1 ] && [ "$(grep -c '^readset_deriver_path()' "$c")" -eq 1 ] && grep -q 'derive-fixture-readsets.sh --list' .claude/rules/fixture-ship-decl.md && [ "$(grep -c 'UNMAPPED (always run): gamma' core/fixtures/readset-skip/run.sh)" -ge 2 ]
+
+---
+
+## BL-207 — the architecture step ran a full validation cycle over a design already declared to change nothing
+
+**LANDED (v0.532.0, verified d8ef5100).**
+
+**`architecture.md` §4 fast-tracked only under `lightweight`.** At `standard`, `full` and
+`carry-over-single`, a sprint whose Step 2 assessment read NO CHANGES NEEDED still ran party
+mode, an adversarial series, a remediator and the adjudicator over an addendum whose content was
+that nothing changed.
+
+**Measured on the reference consumer's sprint 308** (`carry-over-single`; `s308/architecture.md`
+opens "Existing architecture fully supports Sprint 308 scope"; `subagent-context.jsonl` rows
+between the research-requirements gate at 2026-09-04T00:30Z and the architecture gate at
+16:28Z): twelve dispatches, 110 subagent-busy minutes, two adversary passes and a remediator,
+over a 16-hour wall clock between the two gates.
+
+**The fix widens the bullet's condition, keyed on `0.531.0`'s `architecture-impact.md`.** When
+the assessment is NO CHANGES NEEDED and every `architecture_impact:` line reads exactly
+`architecture_impact: none`, the cycle is skipped at any intensity. The predicate is one fenced
+awk line under `<!-- FAST_TRACK_PREDICATE -->` in `architecture.md`, extracted and RUN by the
+shipping fixture `architecture-fast-track`; Check 20 names the file and the `fast_track:
+architecture-impact-none` gate-log token and runs the same predicate.
+
+Tiered **DEFECT**.
+
+verify: sh P="$(awk '/<!-- FAST_TRACK_PREDICATE -->/{getline; getline; print; exit}' core/skills/ai-dlc/steps/architecture.md)" && [ -n "$P" ] && d="$(mktemp -d)" && printf -- '- FR-S1-1: architecture_impact: none\n' > "$d/ok" && printf -- '- FR-S1-1: architecture_impact: none-for-now\n' > "$d/near" && f="$d/ok" bash -c "$P" && ! f="$d/near" bash -c "$P" && grep -q 'fast_track: architecture-impact-none' core/skills/ai-dlc/steps/gate-validation.md && grep -q 'fast_track: architecture-impact-none' core/skills/ai-dlc/steps/architecture.md; r=$?; rm -rf "$d"; exit $r
+
+---
+
+## BL-206 — the `carry-over` and `feature` variants ran two planning steps, two validation cycles and two gates over one already-named scope
+
+**LANDED (v0.531.0, verified da80e8d0).**
+
+**`route.md` sent every build variant through `discovery` then `research-requirements`.** For
+`carry-over` and `feature` the scope is already named — by the operator's prompt or the carry-over
+item — so the brainstorm ideates over a decision already taken, and the brief-only cycle, the
+PRD-only cycle and the two gates each re-review a restatement of the same fact.
+
+**Measured on the reference consumer's sprint 309** (`docs/plans/pipeline-step-review-s309.md`,
+"Ground truth"). Carry-over-evaluation plus discovery took 10.5 wall-clock hours to reach the
+architecture step; the decision the first step existed to make was reached by 12:08 of an 11:35
+start; roughly half of the review findings across both cycles were errors introduced by
+restating one fact across the brief, the locked slot, the spec kernel and the PRD and then
+re-reviewing the restatement. Authoring was about fifteen percent of each step and review cycles
+about half.
+
+**The fix is one step for those two variants and nothing else.** `steps/requirements.md`: one
+analyst exploration, the locked block inline, ONE `pm-escalated` authoring dispatch (brief, spec
+kernel, PRD with `(CAP-<m>)` citations, and a per-FR `architecture-impact.md`), one validation
+cycle over the three artifacts as one subject with seats Architect and Dev, one gate. Research
+sub-skills run only on a SPEC open question that bears on a locked requirement; the skip is
+recorded in the PRD and Check 1c arm (b) accepts the record. The four other variants keep the
+two-step form, and the shipping fixture `requirements-step` asserts the partition from both
+sides.
+
+Tiered **DEFECT**.
+
+verify: sh [ -f core/skills/ai-dlc/steps/requirements.md ] && r="$(grep -E '^\| (carry-over|feature) \|' core/skills/ai-dlc/steps/route.md)" && [ "$(grep -c 'requirements → architecture' <<<"$r")" -eq 2 ] && [ "$(grep -c 'discovery → research-requirements' <<<"$r")" -eq 0 ] && u="$(grep -E '^\| (greenfield|brownfield-[abc]) \|' core/skills/ai-dlc/steps/route.md)" && [ "$(grep -c 'discovery → research-requirements' <<<"$u")" -eq 4 ] && grep -q '^nextStepFile: ./requirements.md' core/skills/ai-dlc/steps/carry-over-evaluation.md
+
+---
+
+## BL-204 — the gate's script arms ran after the adjudicator was dispatched, and the Gate Failure prose promised a targeted re-adjudication the mechanism refuses
+
+**LANDED (v0.530.0, verified 886bd76d).**
+
+**The escalation preamble in `gate-validation.md` minted the nonce and dispatched the
+`gate-adjudicator` FIRST, then had the lead run the `script` checks while it ran.** Gate Failure
+step 2 then said "Re-run the failed check AND every check whose inputs the remediation touched",
+while `_gate-procedures.md` "Gate-adjudication dispatch" says there is no partial re-adjudication
+and `validate-gate-adjudication.sh` refuses any verdict whose covered set differs from the
+escalated set (`coverage_exact` in `core/schemas/gate-adjudication-verdict.json`). The two
+statements could not both be followed, and the mechanism decides which one wins.
+
+**Measured on the reference consumer.** Check 2's `validate-escalation-status-vocabulary.sh`
+failed on one token after the adjudicator was already running; the remediator fixed it in seven
+minutes; the full escalated set was then adjudicated a second time. Thirty-two minutes of opus for
+a FAIL a script reports in under a second, and the second dispatch was forced by the mechanism the
+prose said could be avoided.
+
+**The fix reverses the order rather than teaching the validator a partial set.** The preamble and
+the dispatch procedure open with **Script arms before the adjudicator**: every `adjudication:
+script` check and the script arm of every `adjudication: llm` check that carries an `enforcer:`
+run before the nonce is minted, a FAIL goes through Gate Failure while no adjudicator is running,
+and the adjudicator is dispatched once against a corpus whose script checks already pass. Step 2
+says what the mechanism enforces: a script-arm FAIL is re-run as that script alone; a FAIL in the
+verdict is a whole new dispatch that re-derives the full escalated set at a fresh nonce.
+
+Tiered **DEFECT**.
+
+verify: sh [ "$(grep -c 'Script arms before the adjudicator' core/skills/ai-dlc/steps/gate-validation.md)" -gt 0 ] && [ "$(grep -c 'Script arms before the adjudicator' core/skills/ai-dlc/steps/_gate-procedures.md)" -gt 0 ] && [ "$(grep -c 'CHECK_LOADED: failure' core/skills/ai-dlc/steps/gate-validation.md)" -eq 1 ] && [ "$(grep -c 'whose inputs the remediation touched' core/skills/ai-dlc/steps/gate-validation.md)" -eq 0 ] && awk '/CHECK_LOADED: failure/{f=1} f&&/^## Gate Reset/{exit} f' core/skills/ai-dlc/steps/gate-validation.md | grep -q 're-derives the full escalated set at a fresh'
+
+## BL-205 — Check 35's FAIL is routed to a remediator although its subject is a state record the lead owns and the guard already permits
+
+**LANDED (v0.530.0, verified 886bd76d).**
+
+**Gate Failure step 1 routed every FAIL to ONE `remediator`.** Check 35
+(`validate-snapshot-conservation.sh`, `adjudication: script`) fails on `pipeline-snapshot.md` and
+`pipeline-snapshot-history.md`. Both are in the gate-remediation guard's permitted set
+(`core/hooks/ai-dlc-gate-remediation-guard.sh`, the first two `case` arms of the permitted set),
+and Check 35's own body says "On FAIL, recover from git — do not re-author". Rule 28(c)'s reason
+for the remediator, that the lead repairs a planning artifact from a compacted summary, does not
+reach a state record the lead already owns and the guard already lets it edit.
+
+**Measured on the reference consumer.** The Check 35 repair cost a 22-minute remediator dispatch
+plus a second full adjudication, for an append of lines `git show` already holds verbatim.
+
+**The fix is one exemption stated in the numbered step.** A FAIL whose subject is one of those two
+files is repaired by the lead per Check 35's remedy. Every other FAIL is dispatched exactly as
+before, so the remediator's reason survives everywhere it applies.
+
+Tiered **NOTE**.
+
+verify: sh [ "$(grep -c 'CHECK_LOADED: failure' core/skills/ai-dlc/steps/gate-validation.md)" -eq 1 ] && awk '/CHECK_LOADED: failure/{f=1} f&&/^## Gate Reset/{exit} f' core/skills/ai-dlc/steps/gate-validation.md | grep -q 'pipeline-snapshot-history.md'
+
+## BL-202 — the gate-remediation guard arms on a prior sprint's dispositioned FAIL and denies every lead edit until the next sprint's first verdict lands
+
+**LANDED (v0.529.0, verified c5ee81e9).**
+
+**`ai-dlc-gate-remediation-guard.sh` arm 4 picks the live pass by nonce timestamp over the whole
+`gate-adjudication/` directory** (`core/hooks/ai-dlc-gate-remediation-guard.sh:431-443`). A
+sprint's closing `sprint-review` verdict that carries a FAIL is therefore the guard's live pass
+from retro close until the next sprint writes its first verdict, whatever the gate log says about
+that FAIL.
+
+**Dated in the reference consumer's own flow log.** Both `GATE_REMEDIATION_DENIED` events at the
+first step of sprint 309 name `Live gate pass: sprint-review-20260907T002257Z; FAILed check(s)
+still owed a repair: 2`. That gate PASSED with check 2 SUPPRESSED under a verified operator
+citation; the suppression was then archived by the retro close-out sweep; and
+`validate-suppression-lifetime.sh --in-force` answered `in_force=0` throughout. Six clerical edits
+went through opus remediators in that window. The guard's own header says the deny names "what a
+remediator is still owed", and nothing was owed.
+
+**Why the hook is not taught about sprints.** It deliberately reads no snapshot, because every
+record a lead can author is a record a lead can use to lift its own deny. A sprint-aware arm would
+read the snapshot or the status yaml, both lead-written. Removing the affordance is the smaller
+mechanism: `retro.md` §7a-post rotates the closing sprint's verdicts, selected on
+`gate_series_id`, with their `.repair*.md` and `.authorization.md` sidecars, to
+`implementation-artifacts/s<N>/gate-adjudication/`, so the guard meets an empty directory at
+sprint start. Legacy verdicts with no series id are never moved; the series validator's legacy
+split already tolerates them and they predate every live series on the consumer.
+
+**The receipt drives the hook, not the rotator's own output.** A rotator that moved the file to a
+path the guard still globbed would report success and change nothing.
+
+Tiered **DEFECT**.
+
+verify: sh W="$(mktemp -d)"; trap 'rm -rf "$W"' EXIT; cd "$W" && git init -q . && mkdir -p _bmad-output/gate-adjudication _bmad-output/planning-artifacts/s309 && printf '# Pipeline Snapshot\nsprint: 309\n' > _bmad-output/pipeline-snapshot.md && printf '# x\n' > _bmad-output/planning-artifacts/s309/x.md && printf '{"schema_id":"GATE_ADJUDICATION_VERDICT v1","gate_type":"sprint-review","gate_series_id":"sprint-review-s308-20260907T002257Z","gate_nonce":"sprint-review-20260907T002257Z","generated_at":"2026-09-07T00:38:34Z","adjudicator_agent_id":"seed","catalog":"core","verdicts":[{"check_id":"2","verdict":"FAIL","evidence":"seeded"}]}\n' > _bmad-output/gate-adjudication/sprint-review-20260907T002257Z.verdict.json && git add -A && git -c user.email=f@x -c user.name=f commit -qm seed && H=/Users/n8/git/ai-dlc/core/hooks/ai-dlc-gate-remediation-guard.sh; drive(){ printf '{"session_id":"t","tool_name":"Edit","transcript_path":"","tool_input":{"file_path":"%s/_bmad-output/planning-artifacts/s309/x.md"}}' "$W" | CLAUDE_PROJECT_DIR="$W" bash "$H" 2>/dev/null; }; drive | grep -q '"permissionDecision": *"deny"' || exit 1; AI_DLC_STATE_DIR=_bmad-output bash /Users/n8/git/ai-dlc/core/scripts/rotate-gate-adjudication.sh --sprint s308 --apply >/dev/null 2>&1 || exit 1; [ ! -f _bmad-output/gate-adjudication/sprint-review-20260907T002257Z.verdict.json ] || exit 1; drive | grep -q '"permissionDecision": *"deny"' && exit 1; exit 0
+
+## BL-203 — a human handoff stops an in-flight review pass that would have landed inside one wait beat, and the successor re-dispatches it from scratch
+
+**LANDED (v0.529.0, verified c5ee81e9).**
+
+**`handoff.md` step 1 called `TaskStop` on every in-flight teammate as its first act.** Measured
+on the reference consumer: an adversary pass dispatched at 13:29 was stopped at 13:49 by a typed
+`handoff` and re-dispatched from scratch by the resumed session at 14:02. The killed pass had run
+twenty minutes; the rerun took eighteen. Thirty-eight minutes of opus time for one keystroke, and
+a resume whose first act was to redo the work the handoff had thrown away.
+
+**The fix is one bounded beat, not a policy.** Step 1 in `handoff.md` and its auto-handoff copy in
+`_gate-procedures.md` now run one backgrounded `wait-for-deliverable.sh` beat over every in-flight
+deliverable before stopping anything, and stop only the rows still absent after the beat. The
+beat is the same quantum every other join uses, so a handoff still completes within one beat and
+the operator is never blocked in the foreground. `handoff-resume-guard` holds the two copies to
+the same clause, because a copy that drifts is the defect class `_gate-procedures.md` already
+names for this pair.
+
+Tiered **DEFECT**.
+
+verify: sh a="$(awk '/^1\. \*\*Stop all in-flight/{p=1} p&&/^2\. /{exit} p' core/skills/ai-dlc/steps/handoff.md)"; b="$(awk '/^1\. \*\*Stop all in-flight/{p=1} p&&/^2\. /{exit} p' core/skills/ai-dlc/steps/_gate-procedures.md)"; [ -n "$a" ] && [ -n "$b" ] || exit 1; grep -q 'wait-for-deliverable.sh' <<<"$a" && grep -q 'wait-for-deliverable.sh' <<<"$b"
+

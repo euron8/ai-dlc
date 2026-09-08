@@ -1659,6 +1659,275 @@ else
 fi
 rm -f "$GOK" "$HOVR" "$HOK"
 
+# ---------------------------------------------------------------------------
+# J. UPSTREAM RE-FLOWED A PARAGRAPH, AND A FAITHFUL ADOPTION MUST NOT BE REFUSED.
+# ---------------------------------------------------------------------------
+# Arms A-H all change WORDS. This one changes only LINE BREAKS on the core side: the
+# same sentences, re-wrapped so that a base line survives at theirs as the SUFFIX of
+# a longer line. A whole-line set difference scores that base line as DELETED, and a
+# body that adopted theirs faithfully still CONTAINS it (it contains the whole longer
+# line), so the superseded gate refuses exactly the state it exists to certify.
+# Measured on the reference consumer's `steps__gate-validation__check-20.md` across
+# `eb49b783 -> a798e215`: --merge 1 merged / 0 conflicted, all 38 substantive theirs
+# lines carried, --stamp readopt REFUSED on one suffix line, and the only stamp left
+# was `reaffirm`, which recorded a re-adoption under the wrong outcome name.
+#
+# THREE SUBJECTS, AND THE NEAR-MISS CARRIES THE PROPERTY THE FEARED REGRESSION KEYS ON.
+# JOK adopted theirs verbatim (must pass). JBAD adopted theirs' re-flow AND still carries
+# a sentence theirs genuinely DROPPED (must refuse, naming that sentence and NOT the
+# re-flowed one). A fix that simply stopped looking at the base side would pass JOK and
+# miss JBAD's dropped sentence; a fix keyed on "line count unchanged" would pass JOK and
+# call JBAD clean too. JBAD's dropped sentence sits in a DIFFERENT paragraph from the
+# re-flow so neither guard covers the other's subject.
+J3="$ROOT/j3"; rm -rf "$J3"; mkdir -p "$J3"
+JPRE="$(git -C "$DIST" rev-parse --short HEAD)"
+python3 - "$DIST/core/skills/ai-dlc/SKILL.md" <<'JPY'
+import sys
+p = sys.argv[1]; s = open(p).read()
+old = """## Rule 14 -- Budget
+
+Shadowed by an override whose survival claim is about the rest of the FILE, which is
+TRUE for a single-section shadow. The control for the noun restriction.
+"""
+assert old in s, "rule 14 seed text moved; re-anchor arm J"
+# RE-FLOW ONLY: the second base line becomes the SUFFIX of a longer theirs line, and
+# the first base line is split. Every word survives; no whole base line does.
+# Then a SEPARATE paragraph is DROPPED (the genuinely superseded sentence JBAD keeps).
+new = """## Rule 14 -- Budget
+
+Shadowed by an override whose survival claim is about the rest of the FILE, which is TRUE
+for a single-section shadow. The control for the noun restriction.
+"""
+s = s.replace(old, new)
+old2 = """The ordering guarantee and the retention window live here, in the paragraphs that entry
+silently drops.
+"""
+assert old2 in s, "rule 16 seed text moved; re-anchor arm J"
+s = s.replace(old2, "")
+# NEGATED IN PLACE: the base rule-15 line survives at theirs as the SUFFIX of one longer
+# line whose meaning is the opposite. Bare containment acquits a body carrying only the
+# old line; that is the false pass an adversarial hand measured on the first cut.
+old3 = """Shadowed by an override whose survival vocabulary names a DIFFERENT unit (Rule 9) and
+its own body. The control for the measured false-positive class.
+"""
+assert old3 in s, "rule 15 seed text moved; re-anchor arm J"
+s = s.replace(old3, """Never Shadowed by an override whose survival vocabulary names a DIFFERENT unit (Rule 9) and
+its own body. The control for the measured false-positive class.
+""")
+open(p, "w").write(s)
+JPY
+git -C "$DIST" add -A >/dev/null 2>&1
+git -C "$DIST" -c user.email=f@x -c user.name=f commit -qm "re-flow rule 14, drop a rule 16 paragraph" >/dev/null 2>&1
+JTH="$(git -C "$DIST" rev-parse --short HEAD)"
+# The seed must actually be a re-flow: no base Rule 14 line survives whole at theirs, and
+# every base line's words are contained in theirs' flattened section. Without this the arm
+# would be asserting an ordinary rewrite, which arm A already covers.
+j_base_lines="$(git -C "$DIST" show "${JPRE}:core/skills/ai-dlc/SKILL.md" | awk '/^## Rule 14/{f=1;next} /^## /{f=0} f && length($0)>24')"
+j_theirs_lines="$(git -C "$DIST" show "${JTH}:core/skills/ai-dlc/SKILL.md" | awk '/^## Rule 14/{f=1;next} /^## /{f=0} f && length($0)>24')"
+j_theirs_flat="$(printf '%s\n' "$j_theirs_lines" | tr '\n' ' ' | tr -s ' ')"
+j_whole=0; j_contained=0; j_n=0
+while IFS= read -r l; do
+  [ -n "$l" ] || continue; j_n=$((j_n+1))
+  grep -qxF -- "$l" <<<"$j_theirs_lines" && j_whole=$((j_whole+1))
+  case "$j_theirs_flat" in *"$l"*) j_contained=$((j_contained+1));; esac
+done <<<"$j_base_lines"
+if [ "$j_n" -ge 2 ] && [ "$j_whole" -eq 0 ] && [ "$j_contained" -eq "$j_n" ]; then
+  ok "SEED: rule 14 is a pure RE-FLOW -- $j_n base lines, 0 survive whole at theirs, $j_n contained in theirs' flattened section"
+else
+  bad "SEED: rule 14 is not a re-flow (lines=$j_n whole=$j_whole contained=$j_contained) -- arm J would be asserting an ordinary rewrite"
+fi
+
+JOK="$CONS/.claude/skills/ai-dlc/overrides/J__reflow-adopted.md"
+cat > "$JOK" <<EOF
+---
+shadows: SKILL.md#Rule 14
+base_sha: ${JPRE}
+reason: consumer budget ceiling; body carries core's rule 14 at theirs verbatim.
+---
+
+## Rule 14 -- Budget
+
+This consumer raises the budget ceiling.
+
+Shadowed by an override whose survival claim is about the rest of the FILE, which is TRUE
+for a single-section shadow. The control for the noun restriction.
+EOF
+
+JBAD="$CONS/.claude/skills/ai-dlc/overrides/J__reflow-plus-dropped.md"
+cat > "$JBAD" <<EOF
+---
+shadows: SKILL.md#Rule 14, SKILL.md#Rule 16
+base_sha: ${JPRE}
+reason: consumer budget and record format; adopted the re-flow, still carries a sentence core dropped.
+---
+
+## Rule 14 -- Budget
+
+This consumer raises the budget ceiling.
+
+Shadowed by an override whose survival claim is about the rest of the FILE, which is TRUE
+for a single-section shadow. The control for the noun restriction.
+
+## Rule 16 -- Recording
+
+Multi-paragraph, shadowed by an override whose survival claim WRAPS across a newline --
+the shape that returns a false zero to any line-based predicate.
+
+The ordering guarantee and the retention window live here, in the paragraphs that entry
+silently drops.
+EOF
+
+# NEGATED IN PLACE. Base rule 15 permits; theirs prepends `Never`, so the old line is a
+# strict SUFFIX of the new one. JNEG carries only the OLD line and must be refused naming
+# it; JNEGOK carries theirs' line and must pass. Bare containment acquits JNEG, because
+# the old line's words are in theirs; what separates the two is that JNEGOK's body carries
+# the theirs text holding those words and JNEG's does not.
+JNEG="$CONS/.claude/skills/ai-dlc/overrides/J__negated-kept.md"
+cat > "$JNEG" <<EOF
+---
+shadows: SKILL.md#Rule 15
+base_sha: ${JPRE}
+reason: consumer gating; still teaches the rule core inverted.
+---
+
+## Rule 15 -- Gating
+
+This consumer gates at two failures.
+
+Shadowed by an override whose survival vocabulary names a DIFFERENT unit (Rule 9) and
+its own body. The control for the measured false-positive class.
+EOF
+JNEGOK="$CONS/.claude/skills/ai-dlc/overrides/J__negated-adopted.md"
+cat > "$JNEGOK" <<EOF
+---
+shadows: SKILL.md#Rule 15
+base_sha: ${JPRE}
+reason: consumer gating; adopted core's inverted rule.
+---
+
+## Rule 15 -- Gating
+
+This consumer gates at two failures.
+
+Never Shadowed by an override whose survival vocabulary names a DIFFERENT unit (Rule 9) and
+its own body. The control for the measured false-positive class.
+EOF
+# The seed must be a NEGATION IN PLACE: the base line's words survive INSIDE one theirs
+# line and not as a whole line. The first cut lowercased a letter after `Never`, so the
+# base line was not contained at all and every implementation refused JNEG -- the M2
+# mutant then survived, and only this assertion separates that from a real kill.
+jn_base="Shadowed by an override whose survival vocabulary names a DIFFERENT unit (Rule 9) and"
+jn_theirs="$(git -C "$DIST" show "${JTH}:core/skills/ai-dlc/SKILL.md" | awk '/^## Rule 15/{f=1;next} /^## /{f=0} f' | tr -s ' ')"
+if ! grep -qxF -- "$jn_base" <<<"$jn_theirs" && grep -qF -- "$jn_base" <<<"$jn_theirs"; then
+  ok "SEED: the rule 15 base line survives at theirs INSIDE a longer line and not as a whole line"
+else
+  bad "SEED: the rule 15 base line is not a negation-in-place at theirs -- the JNEG arm below cannot discriminate"
+fi
+
+echo "== J. a RE-FLOWED core paragraph, faithfully adopted, is not superseded text =="
+out="$(bash "$READOPT" "$DIST" "$JTH" "$CONS" "$JOK" --check 2>&1)"; rc=$?
+if [ "$rc" -eq 0 ] && ! grep -q 'STALE-CORE-TEXT' <<<"$out"; then
+  ok "--check OK: a body carrying theirs' re-flowed paragraph verbatim is not refused"
+else
+  bad "--check refused a faithful adoption of a RE-FLOWED paragraph (rc=$rc) -- the suffix false positive: the only stamp left is reaffirm, which records a readopt under the wrong name"
+  printf '%s\n' "$out" | sed 's/^/    /'
+fi
+before_sha="$(sed -n 's/^base_sha:[[:space:]]*//p' "$JOK" | head -1)"
+out="$(bash "$READOPT" "$DIST" "$JTH" "$CONS" "$JOK" --stamp readopt 2>&1)"; rc=$?
+after_sha="$(sed -n 's/^base_sha:[[:space:]]*//p' "$JOK" | head -1)"
+if [ "$rc" -eq 0 ] && [ "$after_sha" = "$JTH" ]; then
+  ok "--stamp readopt LANDS on it ($before_sha -> $after_sha)"
+else
+  bad "--stamp readopt REFUSED a faithful re-flow adoption (rc=$rc, base_sha $before_sha -> $after_sha)"
+  printf '%s\n' "$out" | sed 's/^/    /'
+fi
+out="$(bash "$READOPT" "$DIST" "$JTH" "$CONS" "$JBAD" --check 2>&1)"; rc=$?
+if [ "$rc" -eq 1 ] && grep -q 'STALE-CORE-TEXT' <<<"$out" && grep -q 'retention window live here' <<<"$out"; then
+  ok "NEAR-MISS: the same re-flow adopted PLUS a sentence core genuinely dropped is still refused, naming the dropped sentence"
+else
+  bad "NEAR-MISS: a body still carrying a sentence core DROPPED was not refused, or the refusal did not name it (rc=$rc) -- containment has swallowed the superseded direction"
+  printf '%s\n' "$out" | sed 's/^/    /'
+fi
+if ! grep -q 'noun restriction' <<<"$out"; then
+  ok "  and the re-flowed rule 14 line is NOT among the lines it names"
+else
+  bad "  the refusal names the RE-FLOWED line as superseded -- the false positive is back, hiding behind a true one"
+fi
+out="$(bash "$READOPT" "$DIST" "$JTH" "$CONS" "$JNEG" --check 2>&1)"; rc=$?
+if [ "$rc" -eq 1 ] && grep -q 'STALE-CORE-TEXT' <<<"$out" && grep -q 'survival vocabulary names a DIFFERENT unit' <<<"$out"; then
+  ok "NEGATED IN PLACE: a body carrying only the line core prefixed with Never is REFUSED, naming it"
+else
+  bad "NEGATED IN PLACE: a body teaching the rule core INVERTED was not refused (rc=$rc) -- bare containment acquitted it because the old words survive inside the new line"
+  printf '%s\n' "$out" | sed 's/^/    /'
+fi
+out="$(bash "$READOPT" "$DIST" "$JTH" "$CONS" "$JNEGOK" --check 2>&1)"; rc=$?
+if [ "$rc" -eq 0 ] && ! grep -q 'STALE-CORE-TEXT' <<<"$out"; then
+  ok "  and a body carrying core's Never line passes -- the same words, in the context theirs gives them"
+else
+  bad "  a body that adopted the inverted line was refused (rc=$rc) -- the narrowing overshot and refuses a faithful adoption"
+  printf '%s\n' "$out" | sed 's/^/    /'
+fi
+
+# --- MUTANT: put the base-side test back on WHOLE LINES ----------------------------------
+# The shipped-before shape: a set difference over whole trimmed lines. Restoring it must
+# make JOK REFUSE (the suffix line scores as deleted) while JBAD still refuses -- one cell
+# moves. Built as a whole-directory copy, cmp -s guarded, with the unmutated control first.
+#
+# THE STAMP ABOVE ADVANCED JOK'S base_sha TO THEIRS, and against a degenerate range every
+# implementation reports OK -- the first cut of this mutant "survived" for exactly that
+# reason, with its control passing beside it. Put the range back and assert it is back.
+sed -i.bak "s/^base_sha:.*/base_sha: ${JPRE}/" "$JOK" && rm -f "$JOK.bak"
+if [ "$(sed -n 's/^base_sha:[[:space:]]*//p' "$JOK" | head -1)" = "$JPRE" ] && [ "$JPRE" != "$JTH" ]; then
+  ok "  JOK's base_sha reset to $JPRE for the mutant (theirs is $JTH, so the range is not degenerate)"
+else
+  bad "  could not reset JOK's base_sha -- the mutant below would compare theirs against itself"
+fi
+JMUT="$ROOT/reflowmut"; rm -rf "$JMUT"; mkdir -p "$JMUT"
+cp "$(dirname "$READOPT")"/*.sh "$JMUT/" 2>/dev/null || true
+cp "$(dirname "$READOPT")"/*.md "$JMUT/" 2>/dev/null || true
+if bash "$JMUT/readopt-override.sh" "$DIST" "$JTH" "$CONS" "$JOK" --check >/dev/null 2>&1 \
+   && ! bash "$JMUT/readopt-override.sh" "$DIST" "$JTH" "$CONS" "$JBAD" --check >/dev/null 2>&1; then
+  ok "CONTROL: the unmutated copy in a fresh directory passes JOK and refuses JBAD"
+else
+  bad "CONTROL: the unmutated copy does not reproduce the two baseline verdicts -- the mutant below would be unreadable"
+fi
+# TWO MUTANTS, one per half of the predicate. M1 drops the containment acquittal, so
+# `changed_lines` is the whole-line set difference again: JOK must be REFUSED, JBAD still
+# refused. M2 drops the context test, so bare containment acquits: JNEG must PASS (the
+# false pass the first cut shipped), JOK still passes. Each is anchored on the clause it
+# removes, which no other line in the file carries.
+sed 's@    carries "\$to_flat" "\$line" \&\& carried_in_context "\$2" "\$3" "\$line" \&\& continue@    :@' "$READOPT" > "$JMUT/readopt-override.sh"
+if cmp -s "$READOPT" "$JMUT/readopt-override.sh"; then
+  bad "the re-flow MUTANT (M1) did not apply -- the containment line in changed_lines has been respelled, so arm J proves nothing"
+else
+  if bash "$JMUT/readopt-override.sh" "$DIST" "$JTH" "$CONS" "$JOK" --check >/dev/null 2>&1; then
+    bad "MUTANT M1 SURVIVED: with the containment acquittal removed, the faithful re-flow adoption still passes -- arm J is not testing containment"
+  else
+    ok "MUTANT M1 (whole-line set difference restored): the faithful re-flow adoption is REFUSED -- containment is what clears it"
+  fi
+  if bash "$JMUT/readopt-override.sh" "$DIST" "$JTH" "$CONS" "$JBAD" --check >/dev/null 2>&1; then
+    bad "  M1 passed JBAD, so it is not the whole-line form -- its JOK verdict says nothing"
+  else
+    ok "  and M1 still refuses JBAD, so exactly one cell moved"
+  fi
+fi
+sed 's@    carries "\$to_flat" "\$line" \&\& carried_in_context "\$2" "\$3" "\$line" \&\& continue@    carries "$to_flat" "$line" \&\& continue@' "$READOPT" > "$JMUT/readopt-override.sh"
+if cmp -s "$READOPT" "$JMUT/readopt-override.sh"; then
+  bad "the bare-containment MUTANT (M2) did not apply -- the context clause in changed_lines has been respelled, so the negation arm proves nothing"
+else
+  if bash "$JMUT/readopt-override.sh" "$DIST" "$JTH" "$CONS" "$JNEG" --check >/dev/null 2>&1; then
+    ok "MUTANT M2 (bare containment, no context test): the body teaching the INVERTED rule PASSES -- the context test is what refuses it"
+  else
+    bad "MUTANT M2 SURVIVED: bare containment still refuses the negated-in-place body, so the context test is not what is doing the work"
+  fi
+  if bash "$JMUT/readopt-override.sh" "$DIST" "$JTH" "$CONS" "$JOK" --check >/dev/null 2>&1; then
+    ok "  and M2 still passes the faithful re-flow, so exactly one cell moved"
+  else
+    bad "  M2 refused JOK, so it is not bare containment -- its JNEG verdict says nothing"
+  fi
+fi
+rm -f "$JOK" "$JBAD" "$JNEG" "$JNEGOK"
+
 rm -rf "$ROOT"
 echo ""
 if [ "$fails" -eq 0 ]; then echo "layer-readopt-gate: PASS"; exit 0; fi
