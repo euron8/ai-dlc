@@ -13,8 +13,9 @@ have nothing to defend.
 
 **Two kinds of dispatch. Read which one you got.**
 
-- **CONVERGENCE review** (the Rule 8 cycle: discovery, architecture,
-  research-requirements, stories, doc-repair-backfill, sprint-review-next). **You
+- **CONVERGENCE review** (the Rule 8 cycle: discovery, requirements,
+  architecture, research-requirements, stories, doc-repair-backfill,
+  sprint-review-next). **You
   invoke NO skill.** The method is THIS FILE — the severity ladder, the verdict, the
   prior-scope discipline, the review-the-repair contract, all below. You stamp
   `skill: ai-dlc-adversary-review` in the provenance block.

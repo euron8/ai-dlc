@@ -332,7 +332,17 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   raises will land unmeasured and this ledger will record nothing about them. That is the
 #   trade the ruling accepts, and it is written down here so the next reader knows the gap
 #   between 7223 and 8000 is slack nobody has accounted for rather than forks somebody measured.
-FORK_BUDGET=8000
+#
+#   v0.531.0: 8000 -> 8060. The slack the ruling above bought is spent: origin/main's corpus
+#   already read 7960 against a spread of 7960-7960 with this validator byte-identical, and
+#   ONE new fixture directory (`requirements-step`) took the same validator to 8009, spread
+#   8009-8009. ATTRIBUTED both sides in one session, validator unchanged, so the +49 is corpus
+#   growth and nothing else -- which matches the per-directory rate I87's by-arm figure
+#   predicts (1792 forks over the fixture set, the largest single arm). NO REDUCTION WAS TAKEN
+#   with this raise: the reduction target is I87's per-directory pipeline in `i87_exposed_in`,
+#   and reshaping the pole's validator is a separate change timed on its own. Headroom is one
+#   further directory, so the next author attributes theirs.
+FORK_BUDGET=8060
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

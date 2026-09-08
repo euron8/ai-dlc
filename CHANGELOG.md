@@ -15,6 +15,62 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.531.0] - 2026-09-07
+
+### `BL-206` — the `carry-over` and `feature` variants ran two planning steps over one already-named scope
+
+`route.md` sent every build variant through `discovery` and then `research-requirements`: a
+brainstorm, a brief-only validation cycle, a gate, a research pass, a PRD-only validation cycle
+and a second gate. Measured on the reference consumer's sprint 309, a carry-over sprint whose
+items the operator's prompt had already named: the two steps took 10.5 wall-clock hours to reach
+the architecture step, the decision each existed to make was reached by the end of the first
+party-mode, and about half the review findings across both cycles were errors introduced by
+restating one fact across the brief, the locked-requirements slot, the spec kernel and the PRD
+and then re-reviewing the restatement. Authoring was roughly fifteen percent of each step;
+review cycles roughly half.
+
+**A new step, `core/skills/ai-dlc/steps/requirements.md`, replaces the two for the `carry-over`
+and `feature` rows of `route.md`. Every other variant is unchanged.** One analyst exploration
+dispatch writes `s<N>/requirements-context.md`; the lead writes the sprint's
+`locked-requirements.md` inline; ONE `pm-escalated` dispatch updates the brief, derives the spec
+kernel headless, updates the PRD with its `(CAP-<m>)` citations, and writes a new per-FR
+`s<N>/architecture-impact.md` (`architecture_impact: none` or one line naming the change); one
+validation cycle runs over the brief, the kernel and the PRD as one subject with seats Architect
+and Dev, the Architect seat challenging every `none`; one planning gate. The research sub-skills
+run only when a SPEC `open_questions[]` entry bears on a locked requirement, and otherwise the
+PRD's Research Findings section carries a `Research skipped:` record naming the open-questions
+state, which Check 1c arm (b) now accepts at the requirements gate.
+
+**Joins that moved.** `route.md` rows and note, `carry-over-evaluation.md`'s `nextStepFile` and
+§7 hand-off, Check 1c's scope and arm (b), Check 20's per-artifact minimum at the requirements
+gate, Check 24's scope sentence (I11 derives it from the step file's dispatch substrings, and
+fails the push if it drifts), Check 23's draft list, Checks 28 and 3b's authoring citations,
+SKILL.md Rule 8's `lightweight` row and Rule 24's offload and draft lists,
+`validate-draft-stamps.sh`'s `DRAFTS=`, `validate-cycle-commits.sh`'s normalization (a `Sprint
+N requirements:` commit counts toward both the brief and the PRD), `team-roles/adversary.md`
+and `pm-escalated.md`, and the QUICKSTART template. `discovery.md` and `research-requirements.md`
+are untouched and still run for `greenfield` and the three brownfield variants.
+
+**Shipping fixture `requirements-step`** asserts the partition from both sides with a
+self-probe per arm in both directions before the corpus read: the two merged rows name
+`requirements` and the four unmerged rows still carry `discovery → research-requirements`; the
+step file carries its loaded token, `nextStepFile`, both dispatch substrings and the
+`architecture_impact:` token; the predecessor, Check 1c, Check 24, the `lightweight` row and
+the `DRAFTS=` line all name it. `changelog-sprint-slot` gains a mutation arm over the new
+step's changelog prescription. Rehearsed by `scripts/install.sh` into an empty directory and
+running the consumer's pre-push there.
+
+**Consumer layer debt, named here and not edited.** The reference consumer's
+`extensions/steps-domain/research-requirements-domain.md` (`id: research-requirements-domain`,
+`hooks: steps/research-requirements.md`) and `discovery-prior-decision-corpus.md` (`hooks:
+steps/discovery.md`) still resolve, so no validator fails on the pull, but neither renders into
+a `carry-over` or `feature` run any more. The consumer re-hooks them to `steps/requirements.md`
+on its next pull; the prior-decision search itself is carried in `requirements.md` §1.
+
+`BL-206` carries a `verify: sh` receipt that exits 1 against the pre-fix tree. Release 4
+(`0.532.0`), the architecture fast-track on declared no-impact, keys on the
+`architecture_impact:` field this release introduces.
+
 ## [0.530.0] - 2026-09-07
 
 ### `BL-204` — the gate's script arms ran after the adjudicator was dispatched, and prose promised a targeted re-adjudication the mechanism refuses

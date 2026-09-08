@@ -14,7 +14,11 @@
 #   2. COMMIT-BASED: count commits on the branch whose subject matches
 #      "Sprint N <artifact>: <cycle>", normalized so "discovery" counts toward
 #      the sprint's first brief, "research-requirements" toward its first PRD,
-#      and "stories-test-strategy" toward its stories.
+#      "requirements" toward BOTH the sprint's first brief and its first PRD
+#      (one cycle, one subject, two gate-log artifacts — the `feature` and
+#      `carry-over` variants run one validation cycle over the requirements
+#      step's brief, spec kernel and PRD as one subject), and
+#      "stories-test-strategy" toward its stories.
 #
 # PASS per artifact:
 #   - log_row_count >= MIN_CYCLES
@@ -725,6 +729,8 @@ if current_sprint_n is None and artifacts:
 # Normalization:
 #   "discovery draft" -> the sprint's first brief artifact
 #   "research-requirements draft" -> the sprint's first PRD artifact
+#   "requirements draft" -> BOTH the sprint's first brief artifact AND its
+#     first PRD artifact (one cycle, one subject, two gate-log artifacts)
 #   "stories-test-strategy draft" -> the sprint's stories artifact
 COMMIT_RE = re.compile(r'^[0-9a-f]+ Sprint (\d+) (.+?): .+')
 
@@ -779,6 +785,18 @@ for line in commits:
         if target:
             commit_counts[target] = commit_counts.get(target, 0) + 1
             commit_subjects.setdefault(target, []).append(subject_after_sha)
+        continue
+    if artifact_lc == 'requirements' or artifact_lc.startswith('requirements '):
+        # One cycle, one subject, two gate-log artifacts: counts toward BOTH
+        # the sprint's first brief and its first PRD.
+        brief_target = sprint_brief_map.get(sprint_n)
+        if brief_target:
+            commit_counts[brief_target] = commit_counts.get(brief_target, 0) + 1
+            commit_subjects.setdefault(brief_target, []).append(subject_after_sha)
+        prd_target = sprint_prd_map.get(sprint_n)
+        if prd_target:
+            commit_counts[prd_target] = commit_counts.get(prd_target, 0) + 1
+            commit_subjects.setdefault(prd_target, []).append(subject_after_sha)
         continue
     if artifact_lc == 'stories-test-strategy' or artifact_lc.startswith('stories-test-strategy '):
         target = sprint_stories_map.get(sprint_n)

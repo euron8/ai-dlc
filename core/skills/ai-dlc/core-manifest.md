@@ -268,6 +268,7 @@ core_manifest:
   - fixtures/release-version-triple/**
   - fixtures/relocation-preclassify/**
   - fixtures/preclassify-rename-row/**
+  - fixtures/requirements-step/**
   - fixtures/resume-whole-read/**
   - fixtures/retired-contract-token/**
   - fixtures/retired-layer-contract/**

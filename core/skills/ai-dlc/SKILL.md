@@ -244,7 +244,7 @@ more is always permitted.
 | `full` | ≥3 stories touching service code paths | Party Mode → Advanced Elicitation → Adversarial Review |
 | `standard` | 1-2 stories touching service code paths | Party Mode → Adversarial Review |
 | `carry-over-single` | carry-over variant with ≤2 stories touching service code paths | Party Mode → Adversarial Review |
-| `lightweight` | All stories touch only pipeline-infra paths | Adversarial Review at discovery + stories-test-strategy only |
+| `lightweight` | All stories touch only pipeline-infra paths | Adversarial Review at discovery (or requirements) + stories-test-strategy only |
 
 **The Adversarial Review runs until a pass stamps `EXIT_CONDITION_MET`. That
 verdict is the only thing that ends it, and it is honoured the moment it is met,
@@ -274,7 +274,7 @@ be revised upward to `standard`.
 
 The gate log MUST record the declared intensity and confirm the
 minimum was met. A gate that passes under `lightweight` with zero
-adversarial passes at discovery is a violation.
+adversarial passes at discovery (or requirements) is a violation.
 
 Intensity does NOT reduce the following (always required regardless):
 - Carry-over eval party mode (evaluates slot/close/defer decisions)
@@ -1061,7 +1061,8 @@ by setting `planning_offload` in this section directly.
 `codebase-inventory`, `bug-investigation`, `doc-reconciliation`,
 `carry-over-evaluation`. Split offload (exploration only; authoring +
 validation stay inline) — `discovery`, `research-requirements`,
-`architecture`, `stories-test-strategy` (framework-import probe only),
+`requirements`, `architecture`, `stories-test-strategy` (framework-import
+probe only),
 `retro` (per-phase micro-dispatches interleaved with lead decisions; the
 evidence chain and all governance authoring stay inline — see
 `steps/retro.md`).
@@ -1091,9 +1092,9 @@ from the pipeline snapshot's Sprint Context (resolved at `route.md`
 Step 6). **The stamp is the DIRECTORY, not the basename.**
 `artifact-path-grammar.md` is the whole rule — the directory is the only
 sprint slot, and a basename carrying a sprint token is what forces a
-reader to search — and this is one application of it. This applies to the four
+reader to search — and this is one application of it. This applies to the five
 per-sprint drafts: `carry-over-evaluation.md`, `discovery-context.md`,
-`research-notes.md`, `architecture-context.md`. It does NOT apply to the
+`research-notes.md`, `requirements-context.md`, `architecture-context.md`. It does NOT apply to the
 one-shot onboarding artifacts (`codebase-analysis.md`,
 `brownfield-inventory.md`, `doc-reconciliation.md`) — those are written
 once at the area root, are read by path downstream, and have no sprint

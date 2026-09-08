@@ -57,6 +57,38 @@ not a closed entry.
 
 ---
 
+## BL-206 — the `carry-over` and `feature` variants ran two planning steps, two validation cycles and two gates over one already-named scope
+
+**LANDED (v0.531.0).**
+
+**`route.md` sent every build variant through `discovery` then `research-requirements`.** For
+`carry-over` and `feature` the scope is already named — by the operator's prompt or the carry-over
+item — so the brainstorm ideates over a decision already taken, and the brief-only cycle, the
+PRD-only cycle and the two gates each re-review a restatement of the same fact.
+
+**Measured on the reference consumer's sprint 309** (`docs/plans/pipeline-step-review-s309.md`,
+"Ground truth"). Carry-over-evaluation plus discovery took 10.5 wall-clock hours to reach the
+architecture step; the decision the first step existed to make was reached by 12:08 of an 11:35
+start; roughly half of the review findings across both cycles were errors introduced by
+restating one fact across the brief, the locked slot, the spec kernel and the PRD and then
+re-reviewing the restatement. Authoring was about fifteen percent of each step and review cycles
+about half.
+
+**The fix is one step for those two variants and nothing else.** `steps/requirements.md`: one
+analyst exploration, the locked block inline, ONE `pm-escalated` authoring dispatch (brief, spec
+kernel, PRD with `(CAP-<m>)` citations, and a per-FR `architecture-impact.md`), one validation
+cycle over the three artifacts as one subject with seats Architect and Dev, one gate. Research
+sub-skills run only on a SPEC open question that bears on a locked requirement; the skip is
+recorded in the PRD and Check 1c arm (b) accepts the record. The four other variants keep the
+two-step form, and the shipping fixture `requirements-step` asserts the partition from both
+sides.
+
+Tiered **DEFECT**.
+
+verify: sh [ -f core/skills/ai-dlc/steps/requirements.md ] && r="$(grep -E '^\| (carry-over|feature) \|' core/skills/ai-dlc/steps/route.md)" && [ "$(grep -c 'requirements → architecture' <<<"$r")" -eq 2 ] && [ "$(grep -c 'discovery → research-requirements' <<<"$r")" -eq 0 ] && u="$(grep -E '^\| (greenfield|brownfield-[abc]) \|' core/skills/ai-dlc/steps/route.md)" && [ "$(grep -c 'discovery → research-requirements' <<<"$u")" -eq 4 ] && grep -q '^nextStepFile: ./requirements.md' core/skills/ai-dlc/steps/carry-over-evaluation.md
+
+---
+
 ## BL-204 — the gate's script arms ran after the adjudicator was dispatched, and the Gate Failure prose promised a targeted re-adjudication the mechanism refuses
 
 **LANDED (v0.530.0).**
