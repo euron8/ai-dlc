@@ -236,6 +236,37 @@ else
   bad "  an ignored file blocked the skip (flag $(flag_of "$R")): the skip could never fire on a real tree"
 fi
 
+# ------------------------------------------------------------------------- arms 13-14 ----
+# THE MAP'S STALENESS IS ANNOUNCED, because nothing else can see it. A fixture directory with
+# no entry runs on every push and the cost is invisible; a mapped path that gained a reader
+# after the derivation is skipped for that reader and nothing reports it. Measured on the
+# distribution: 510 commits between two derivations, 41 of 194 directories unmapped, 74 paths
+# with untraced readers. The announce is the only mechanism -- the deriver needs root, so the
+# hook cannot re-derive -- and an announce that cannot fire reads exactly like one that did.
+# The seed maps alpha and beta and leaves gamma out, so the line must say 1 of 3 and name it.
+T="$WORK/t13"; seed "$T" || broken "seed failed"
+R="$(select_in "$T" 'printf v2 > src/a.sh')"
+case "$(msg_of "$R")" in
+  *"1 of 3 fixture dir(s) UNMAPPED (always run): gamma"*)
+    ok "the run ANNOUNCES the map's coverage gap by count and by name — an unmapped fixture is not a silent always-run" ;;
+  *)
+    bad "the coverage gap was not announced (expected '1 of 3 ... UNMAPPED ... gamma'): $(msg_of "$R" | tr -d '\n')" ;;
+esac
+# Near-miss: a map covering every directory announces ZERO unmapped and names nothing. The
+# seed's map is tracked in its own repo, so the age half must resolve to a sha, never to
+# 'UNTRACKED' -- the arm asserts both halves so an announce that lost its age cannot pass.
+T="$WORK/t14"; seed "$T" || broken "seed failed"
+printf 'gamma\tsrc/b.sh\n' >> "$T/.ai-dlc-fixture-readsets.tsv"
+( cd "$T" && git add -A && git -c user.email=f@f -c user.name=f commit -qm mapall ) >/dev/null 2>&1 || broken "could not commit the full map"
+R="$(select_in "$T" 'printf v2 > src/a.sh')"
+M14="$(msg_of "$R")"
+if grep -qE 'read-set map: derived at [0-9a-f]{7,}, 0 commit\(s\) ago; 0 of 3 fixture dir\(s\) UNMAPPED' <<< "$M14" \
+   && ! grep -q 'trace them' <<< "$M14"; then
+  ok "  and a map covering every directory announces its age and ZERO unmapped, with no remedy printed"
+else
+  bad "  a fully-mapped tree did not announce 'derived at <sha>, 0 commit(s) ago; 0 of 3 ... UNMAPPED' cleanly: $(printf '%s' "$M14" | tr -d '\n')"
+fi
+
 # -------------------------------------------------------------------------- mutants ----
 # Each mutant is a COPY, guarded by `cmp -s` so a sed that matched nothing cannot pass as a
 # mutation, and each declares the EXACT arm it must move. A mutant that moves an arm it did
@@ -300,6 +331,29 @@ flag_mutant() {
     ok "FLAG MUTANT $name moves its arm: flag '$want' became '$(flag_of "$out")'"
   fi
 }
+# SCORED ON THE MESSAGE, because the staleness announce changes no decision -- it is the only
+# arm whose whole subject is a line of output, so its mutant must be too. Keyed on the line
+# that EMITS the unmapped names: with it gone the count still prints, the name does not, and
+# arm 13 (which demands the name) is the only one that moves; arm 14 names nothing and stays.
+msg_mutant() {
+  local name="$1" expr="$2" needle="$3" mut="$4" t m out
+  m="$WORK/pool.$name.sh"
+  sed "$expr" "$POOL" > "$m"
+  if cmp -s "$POOL" "$m"; then
+    bad "MSG MUTANT $name: the edit matched nothing, so this mutant tests the unmutated program"
+    return
+  fi
+  t="$WORK/mm.$name"; seed "$t" || { bad "MSG MUTANT $name: seed failed"; return; }
+  local saved="$POOL"; POOL="$m"
+  out="$(select_in "$t" "$mut")"
+  POOL="$saved"
+  case "$(msg_of "$out")" in
+    *"$needle"*) bad "MSG MUTANT $name: the announce still carries '$needle' — arm 13 does not depend on the mutated line" ;;
+    *)           ok "MSG MUTANT $name moves arm 13: '$needle' is gone from the announce" ;;
+  esac
+}
+msg_mutant unnamed "s|printf ': %s' \"\$unmapped_names\"|:|" "UNMAPPED (always run): gamma" 'printf v2 > src/a.sh'
+
 # Keyed on the EMITTING line, not on a spelling of the announce: the flag is the decision.
 flag_mutant nochange_off 's|READSET_NO_CHANGE=1|READSET_NO_CHANGE=0|' "1" ':'
 # Drop untracked files from the universe: arm 11's newcomer goes invisible and the suite skips
@@ -424,7 +478,7 @@ fi
 # mistake: it printed two thirds of its arms, never reached a verdict line, and exited 0 --
 # which the suite's worker records as `ok`. A fixture that dies silently reads exactly like one
 # that passed, so the arm count is asserted against the number this file actually carries.
-EXPECTED=$(( 15 + MERGE_ARMS ))
+EXPECTED=$(( 18 + MERGE_ARMS ))
 if [ "$asserts" -lt "$EXPECTED" ]; then
   printf '  FAIL  only %s assertions ran; this fixture carries %s — it exited early and a short green run reads exactly like a passing one\n' "$asserts" "$EXPECTED"
   fails=$((fails+1))

@@ -27,6 +27,13 @@ this rule existed. Getting it wrong in the shipping direction is how a distribut
 battery once became the reference consumer's suite pole; getting it wrong the other way
 means a fixture reaches no consumer while this repo's own suite stays green over it.
 
+**A new fixture directory has no read-set entry until someone traces it**, and the pre-push
+runner runs an unmapped fixture on every push, silently. The deriver needs root, so a session
+cannot run it: name the new directory to the operator with the exact command the runner
+prints, `sudo bash core/scripts/derive-fixture-readsets.sh --list "<name>"`, and commit the
+map it writes. The same is owed when a change makes an existing fixture READ a new file —
+the runner cannot see that case at all.
+
 **Three hand-written lists remain and they are deliberate.** `uninstall.sh` bounds a
 DESTRUCTIVE loop and runs on a consumer where `core/fixtures/` does not exist, so it cannot
 derive and must not glob the consumer's `tests/fixtures/` — that would delete fixtures the

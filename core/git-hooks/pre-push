@@ -379,8 +379,19 @@ readset_manifest() {
     | awk '{ path = $0; sub(/^[0-9a-f]+  /, "", path); print path "\t" $1 }' | sort > "$out/.now"
 }
 
+# The deriver lands under a different parent on each side (install.sh copies core/scripts/<x>
+# to scripts/ai-dlc/<x>), so both are probed and neither is assumed. Consumer layout first,
+# the order every two-layout resolver here uses. Prints nothing when neither exists.
+readset_deriver_path() {
+  local c
+  for c in scripts/ai-dlc/derive-fixture-readsets.sh core/scripts/derive-fixture-readsets.sh; do
+    [ -f "$c" ] && { printf '%s' "$c"; return 0; }
+  done
+  return 0
+}
+
 apply_readset_skip() {
-  local list="$1" out="$2" n_all n_sel n_skip
+  local list="$1" out="$2" n_all n_sel n_skip readset_at readset_age n_unmapped unmapped_names readset_deriver
 
   n_all="$(grep -c . "$list" 2>/dev/null)"; case "$n_all" in ''|*[!0-9]*) n_all=0 ;; esac
 
@@ -390,6 +401,39 @@ apply_readset_skip() {
   # run would write nothing, the second would find no state, and the skip could never
   # bootstrap -- a mechanism that is always inert and never says so.
   readset_manifest "$out"
+
+  # THE MAP DECAYS SILENTLY, AND THIS LINE IS THE ONLY THING THAT SAYS SO. A fixture directory
+  # you add after the last derivation has no entry and runs on every push -- correct, and the
+  # cost is invisible. A path that gained a NEW reader after the derivation is skipped for that
+  # reader with nothing reporting it, because the orphan test below sees only paths in NO
+  # read-set. Neither state is detectable from here, so the map's age and the set it does not
+  # cover are printed on every run. The deriver needs root, so the remedy is printed rather
+  # than run; a `--list` of just the unmapped names costs their own runtime, not the suite's.
+  if [ -s "$READSET_MAP" ]; then
+    readset_at="$(git log -1 --format=%h -- "$READSET_MAP" 2>/dev/null)"
+    if [ -n "$readset_at" ]; then
+      readset_age="$(git rev-list --count "${readset_at}..HEAD" 2>/dev/null)"
+      case "$readset_age" in ''|*[!0-9]*) readset_age='?' ;; esac
+      readset_age="derived at ${readset_at}, ${readset_age} commit(s) ago"
+    else
+      readset_age="UNTRACKED, age unknown"
+    fi
+    grep -v '^#' "$READSET_MAP" | cut -f1 | sort -u > "$out/.mapped"
+    : > "$out/.unmapped"
+    while IFS= read -r d; do
+      b="${d%/}"; b="${b##*/}"
+      grep -qxF "$b" "$out/.mapped" || printf '%s\n' "$b" >> "$out/.unmapped"
+    done < "$list"
+    n_unmapped="$(grep -c . "$out/.unmapped" 2>/dev/null)"; case "$n_unmapped" in ''|*[!0-9]*) n_unmapped=0 ;; esac
+    printf '   ..    read-set map: %s; %s of %s fixture dir(s) UNMAPPED (always run)' "$readset_age" "$n_unmapped" "$n_all"
+    if [ "$n_unmapped" -gt 0 ]; then
+      unmapped_names="$(tr '\n' ' ' < "$out/.unmapped" | sed 's/ $//')"
+      printf ': %s' "$unmapped_names"
+      readset_deriver="$(readset_deriver_path)"
+      [ -n "$readset_deriver" ] && printf ' -- trace them: sudo bash %s --list "%s"' "$readset_deriver" "$unmapped_names"
+    fi
+    printf '\n'
+  fi
 
   if [ "${AI_DLC_FIXTURE_NO_SKIP:-}" = "1" ]; then
     printf '   ..    read-set skip OFF (AI_DLC_FIXTURE_NO_SKIP=1) -- running all %s\n' "$n_all"
@@ -408,10 +452,7 @@ apply_readset_skip() {
     # ROOT: fs_usage is the only tracer that sees a stat()-only dependency, an atime-only map
     # under-records exactly those, and under-recording is the direction that skips a fixture
     # silently forever. A pre-push that prompted for a password would be worse than the wait.
-    readset_deriver=""
-    for c in scripts/ai-dlc/derive-fixture-readsets.sh core/scripts/derive-fixture-readsets.sh; do
-      [ -f "$c" ] && readset_deriver="$c" && break
-    done
+    readset_deriver="$(readset_deriver_path)"
     if [ -n "$readset_deriver" ]; then
       printf '   ..    build one once, from a normal account: sudo bash %s --all\n' "$readset_deriver"
     else

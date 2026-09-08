@@ -15,6 +15,50 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.533.0] - 2026-09-08
+
+### `BL-208` — the fixture read-set map decayed for 510 commits and nothing said so
+
+The pre-push runner skips fixtures whose read-set does not intersect the change, keyed on
+`.ai-dlc-fixture-readsets.tsv`. That map is a snapshot: the deriver needs root, so no gate can
+refresh it, and the runner's own fallbacks are correct in the direction that matters — an
+unmapped fixture always runs, and a changed path in no read-set forces the whole suite. Both
+fallbacks are silent, and the second one has a blind spot the runner cannot see from inside:
+a path that is ALREADY in some fixture's read-set and gains a NEW reader after the derivation
+is skipped for that reader on every push, because the orphan test asks only whether the path is
+in any set at all.
+
+**Measured on this distribution between the map's last commit (`fe64a47a`) and `81ec5c44`,
+510 commits.** 41 of 194 fixture directories had no entry and ran on every push — 744 loaded
+seconds, including `gate-adjudication-mutants` at 243, the third-heaviest unit in the suite.
+2341 map entries named paths that no longer existed. Of the 187 tracked paths that changed in
+that window and gained readers, 113 were caught by the orphan arm, and 74 were the silent
+class: already mapped under some other fixture, 255 fixture-to-path pairs whose new reader was
+skipped whenever only that path moved. `validate-hook-registration.sh` had 14 untraced readers;
+the gate-remediation guard hook had 11.
+
+**Both pre-push hooks now announce the map's age and its coverage gap on every run**, one line
+beside the existing skip announce: the commit the map was derived at, the commits since, the
+count of unmapped fixture directories out of the total, their names, and the exact `--list`
+command that traces just those. A `--list` costs the named fixtures' own runtime, never the
+suite's. The announce changes no decision — under invariant **I66** it is one program across
+both hooks — and the `readset-skip` fixture carries two arms and a message mutant for it: the
+seeded gap is reported by count AND name, a fully mapped tree reports its age and zero with no
+remedy, and dropping the emitting line kills only the naming arm.
+
+**The map itself is re-derived in this release** (`sudo bash core/scripts/derive-fixture-readsets.sh --all`,
+run by the operator): 194 of 195 drivable fixtures mapped, one omitted by the deriver because
+its trace did not settle (`fanout-payload-channel`, which therefore always runs), and the
+three dead-path entries out of every four dropped.
+
+**Two triggers are now written where they can fire.** `.claude/rules/fixture-ship-decl.md`,
+which loads when a fixture directory is read or edited, tells the author to hand the operator
+the `--list` command for a new directory and for a fixture that started reading a new file.
+The runner's announce carries the first trigger mechanically on every push; the second is
+invisible to the runner and lives only in that rule. A per-plan re-derive step was evaluated
+and rejected: the deriver refuses to run except as root, so a plan step naming it stalls every
+executing session on an operator action and reads as optional from the first time it is skipped.
+
 ## [0.532.0] - 2026-09-07
 
 ### `BL-207` — the architecture step ran a full validation cycle over a design that had already been declared to change nothing
