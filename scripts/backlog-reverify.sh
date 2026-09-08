@@ -195,6 +195,39 @@ while IFS="$(printf '\t')" read -r LABEL CLOSED RECEIPT; do
         emit "NEEDS-REVIEW" "$LABEL" "unresolved: 'verify: sh' with an empty one-liner. An empty command exits 0, which this tool would read as CLOSE-CANDIDATE -- a receipt that closes itself."
         continue
       fi
+      # A RECEIPT THAT DOES NOT PARSE HAS NOT RUN, AND ITS EXIT STATUS SAYS NOTHING ABOUT THE ENTRY.
+      # The extraction above reads ONE line. A receipt an author wrapped across two -- a literal
+      # newline inside a quoted payload is the natural way to feed multi-line text to a subject --
+      # arrives here as its first line only, truncated inside the quote or the `$( )` that made it
+      # multi-line. `eval` then dies with a syntax error, which is a non-zero exit, which the branch
+      # below reads as STILL-LIVE: a wrong verdict with no hint, forever. Measured while authoring
+      # BL-110: the same receipt scored 0 from the file it was written in and 1 through this
+      # extraction. So the text is PARSED before it is EVALUATED, with the exact string `eval` would
+      # read, and a receipt that does not parse is a finding about the RECEIPT -- NEEDS-REVIEW, the
+      # status this file already reserves for that -- never a verdict on the entry. It is not a new
+      # status: the two rows this separates are "ran and reported" and "never ran", and
+      # NEEDS-REVIEW is the second of those by definition.
+      #
+      # THE STRING PARSED IS A BRACE-WRAPPED COPY WITH ITS CLOSER ON A SECOND LINE, NOT THE BARE
+      # RECEIPT. The first cut parsed `$REST` alone, and an adversarial hand showed it acquits the
+      # two most natural two-line shapes: a trailing `\` -- the canonical way to break a command
+      # across lines -- parses clean as a fragment and the fragment EXITS 0, so the entry read
+      # CLOSE-CANDIDATE on a receipt that never ran in full; and an open heredoc parses clean and
+      # read STILL-LIVE. Wrapped as `{ <fragment>` newline `}`, both fail: the `}` line becomes the
+      # continuation or the heredoc body, and the group never closes. The wrap is STRICTER than the
+      # `eval` below, which is the point -- `eval 'true \'` returns 0. A receipt ending in a `#`
+      # comment still parses, because the closer is on its own line.
+      #
+      # FALSE-POSITIVE SET, MEASURED BEFORE THIS SHIPPED: every `sh` receipt in docs/backlog.md
+      # (72), docs/backlog.archive.md (124) and the reference consumer's live ledger (38) parses
+      # under this wrap, so the set is EMPTY over 234; controls: a receipt cut inside a double
+      # quote, a trailing backslash and an open heredoc each exit 2.
+      SH_PROG="{ $REST
+}"
+      if ! bash -n -c "$SH_PROG" >/dev/null 2>&1; then
+        emit "NEEDS-REVIEW" "$LABEL" "unresolved: MALFORMED sh receipt -- the one-liner does not parse ($(bash -n -c "$SH_PROG" 2>&1 | head -1 | sed 's/^bash: -c: //')). This engine reads a receipt as ONE line, so a receipt written across two arrives here truncated at its first newline, usually inside a quote, a \$( ), after a trailing backslash or inside a heredoc. It was NOT evaluated; a syntax error is not a verdict on the entry. Rewrite it on one line (printf '\\n' in place of a literal newline), then re-run."
+        continue
+      fi
       ( cd "$REPO_ROOT" && eval "$REST" ) >/dev/null 2>&1
       if [ $? -eq 0 ]; then
         emit "CLOSE-CANDIDATE" "$LABEL" "sh receipt exited 0 -- the fix is present. Operator confirms and annotates."

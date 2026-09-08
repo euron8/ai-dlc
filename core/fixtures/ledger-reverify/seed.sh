@@ -770,6 +770,56 @@ verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
 
 ---
 
+## PC-FIXTURE-SH-TWO-LINE — an sh receipt written across two lines, cut inside its quote
+
+The engine reads a receipt as ONE line, so this one arrives truncated at `"alpha` with the
+quote still open. Evaluated, that fragment is a syntax error at exit 2, and the `*)` arm reads
+exit 2 as "no longer reproduces" while every path the fragment names still exists — a
+CLOSE-CANDIDATE on a receipt that never ran. It must be refused as NEEDS-REVIEW naming the
+receipt MALFORMED. The second line below is prose to the parser and is what the author meant
+as the rest of the command.
+
+verify: sh grep -q "alpha
+beta" VERSION
+
+---
+
+## PC-FIXTURE-SH-TRAILING-COMMENT — a valid one-line sh receipt that ends in a comment
+
+The near-miss for the parse guard, and the subject of the wrapper's shape. This receipt parses
+on its own and exits 0, so it must read STILL-LIVE. Wrapped as `{ … ; }` on one line the
+comment swallows the closing brace and the WRAPPER is the syntax error — which, before the
+guard, was a CLOSE-CANDIDATE too, and with a guard that parses the wrong string is a false
+MALFORMED. The wrapper closes on its own line for this entry.
+
+verify: sh true # exits 0, still reproduces
+
+---
+
+## PC-FIXTURE-SH-TRAILING-BACKSLASH — a two-line sh receipt joined by a trailing backslash
+
+The canonical way to break a command across lines, and the shape a bare `bash -n` acquits: the
+fragment `test -f VERSION \` parses clean and EXITS 0. Read by the consumer engine that exit
+is STILL-LIVE and by the distribution engine it is a CLOSE — either way a verdict from half a
+receipt. Under the two-line wrapper the closing brace becomes the continuation and the group
+never closes, so this must be refused as MALFORMED.
+
+verify: sh test -f VERSION \
+  && test -f no-such-file-zz
+
+---
+
+## PC-FIXTURE-SH-OPEN-HEREDOC — a two-line sh receipt whose first line opens a heredoc
+
+The other shape a bare parse acquits: `cat <<EOF` alone is a clean parse on bash 3.2. Under the
+wrapper the closer line is heredoc body and the delimiter never arrives. Refused as MALFORMED.
+
+verify: sh cat <<EOF | grep -q zz
+zz
+EOF
+
+---
+
 ## PC-FIXTURE-ESCAPED-BACKTICK — a receipt whose backticks are markdown-escaped
 
 THE FILED DEFECT. Read with bare backticks the substring is present at base and gone at

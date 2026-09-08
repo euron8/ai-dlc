@@ -121,9 +121,10 @@
 #   STILL-LIVE       the entry still reproduces at theirs; stays open (filtered from the report).
 #   HAND-REVIEW      the entry declares `verify: manual` — no mechanical predicate by design.
 #   NEEDS-REVIEW     the receipt itself is at fault. THREE causes, and the DETAIL names which:
-#                    `unresolved:` (malformed line, unresolvable path, empty sh, unknown verb),
-#                    `vacuous predicate:`, `unfalsifiable predicate:`. Hand-review, as an entry
-#                    without a verify line would be.
+#                    `unresolved:` (malformed line, unresolvable path, empty sh, an sh
+#                    one-liner that does not PARSE, unknown verb), `vacuous predicate:`,
+#                    `unfalsifiable predicate:`. Hand-review, as an entry without a verify
+#                    line would be.
 #
 #   INPUT-UNRESOLVED an ARGUMENT does not resolve — the consumer root is not a directory, or an
 #                    explicitly-supplied arg-5 ledger path is not a readable file. Run-scoped,
@@ -1368,8 +1369,50 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       # `cd` FAILING MUST NOT LOOK LIKE A FIX. The `&&` makes an unreachable consumer root a
       # non-zero exit routed through the same guards, never a silent evaluation at the caller's
       # cwd; arg parsing already refuses a `$CONSUMER` that is not a directory (INPUT-UNRESOLVED).
+      #
+      # A RECEIPT THAT DOES NOT PARSE HAS NOT RUN, AND ITS EXIT SAYS NOTHING ABOUT THE ENTRY.
+      # The extraction above reads ONE line per receipt. A receipt an author wrapped across two
+      # -- a literal newline inside a quoted payload is the natural way to hand multi-line text
+      # to a subject -- arrives here as its first line only, cut inside the quote or the `$( )`
+      # that made it multi-line. `bash -c` then dies with a syntax error at exit 2, which the
+      # `*)` arm below reads as "no longer reproduces": a CLOSE-CANDIDATE, the one verdict this
+      # file says loses data, on a receipt that never ran. `receipt_absent_subjects` cannot
+      # downgrade it, because every path the fragment names still exists. Measured on the
+      # distribution's own engine first (BL-113: the same receipt scored 0 from the file it was
+      # written in and 1 through the one-line extraction), then reproduced here on a scratch
+      # world: a two-line `sh` receipt read CLOSE-CANDIDATE beside a one-line control.
+      #
+      # So the text is PARSED before it is EVALUATED. THE STRING PARSED IS THE STRING RUN: the
+      # same `cd … && { …; }` wrapper, byte for byte, so a receipt the wrapper itself would
+      # break is caught here rather than scored. A parse failure is a finding about the
+      # RECEIPT -- NEEDS-REVIEW under `unresolved:`, the cause SKILL.md step 8 already lists for
+      # a malformed `verify:` line -- never a verdict on the entry.
+      #
+      # THE WRAPPER CLOSES ON ITS OWN LINE, NOT AFTER `; }`. A receipt ending in a `#` comment
+      # swallowed the old `; }` and the wrapper itself failed to parse; the newline ends the
+      # comment and `}` on the next line closes the group either way. Measured over every `sh`
+      # receipt in the reference consumer's live ledger and this repo's two backlogs: the old
+      # form parses 234 of 234 and so does this one, so the change is inert on the corpus and
+      # exists for the receipt an author has not written yet.
+      #
+      # AND THE SECOND LINE IS WHAT CATCHES THE OTHER TWO TRUNCATION SHAPES. A trailing `\` and
+      # an open heredoc both parse clean as a bare fragment on bash 3.2 -- an adversarial hand
+      # measured the distribution engine's first cut acquitting both, the backslash one as a
+      # CLOSE. Under this wrapper the `}` line becomes the continuation or the heredoc body, the
+      # group never closes, and both exit 2.
+      #
+      # FALSE-POSITIVE SET, MEASURED BEFORE THIS SHIPPED: 0 of 234 -- every `sh` receipt in the
+      # reference consumer's live ledger (38) and this repo's backlog (72) and archive (124)
+      # parses under this wrapper; controls: a receipt cut inside a double quote, a trailing
+      # backslash and an open heredoc each exit 2.
+      sh_prog="cd \"$CONSUMER\" && { $rest
+}"
+      if ! bash -n -c "$sh_prog" >/dev/null 2>&1; then
+        emit NEEDS-REVIEW "$label" "unresolved: MALFORMED sh receipt — the one-liner does not parse ($(bash -n -c "$sh_prog" 2>&1 | head -1 | sed 's/^bash: -c: //')). This engine reads a receipt as ONE line, so a receipt written across two arrives here truncated at its first newline, usually inside a quote, a \$( ), after a trailing backslash or inside a heredoc. It was NOT evaluated, so this is not a verdict on the entry — and without this guard the syntax error's exit 2 would have read as CLOSE-CANDIDATE, the direction that retires a live entry. Rewrite the receipt on one line (printf '\\n' in place of a literal newline), then re-run."
+        continue
+      fi
       DIST="$DIST" BASE="$BASE" THEIRS="$THEIRS" CONSUMER="$CONSUMER" \
-        bash -c "cd \"$CONSUMER\" && { $rest; }" >/dev/null 2>&1
+        bash -c "$sh_prog" >/dev/null 2>&1
       sh_rc=$?
       case "$sh_rc" in
         0)
