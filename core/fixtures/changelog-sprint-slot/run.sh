@@ -179,6 +179,37 @@ else
   bad "MUTATION: a durable target was NOT reported -- assertion 1 proves nothing"
 fi
 
+# --- 4b. MUTATION: same probe against requirements.md's changelog prescription ---
+# requirements.md (the `feature`/`carry-over` merge of discovery +
+# research-requirements) carries its own convergence changelog line at
+# s<N>/changelog-requirements.md. It is authored by a concurrent hand and may not
+# be on disk yet; report that plainly and skip rather than FIXTURE ERROR, since a
+# fixture that could not fire must not print a false PASS or a false FIXTURE ERROR.
+REQSRC="$SKILLDIR/steps/requirements.md"
+if [ -f "$REQSRC" ]; then
+  MUT1B="$WORK/mutant-durable-requirements.md"
+  sed -e 's|_bmad-output/planning-artifacts/s<N>/changelog-requirements.md|the PRD|' \
+      -e 's|"Where a changelog is written"|the step loop|' \
+      "$REQSRC" > "$MUT1B" || exit 2
+  if cmp -s "$REQSRC" "$MUT1B"; then
+    echo "FIXTURE ERROR: mutation matched nothing -- requirements.md's convergence line" >&2
+    echo "  was rewritten; update the sed patterns in assertion 4b to match it" >&2
+    exit 2
+  fi
+  if grep -q 's<N>/changelog-requirements.md' "$MUT1B" || grep -q 'Where a changelog is written' "$MUT1B"; then
+    echo "FIXTURE ERROR: mutation left the slot path or the pointer in place in" >&2
+    echo "  requirements.md -- it would be measuring the leftover rather than the revert" >&2
+    exit 2
+  fi
+  if [ "$(offenders "$MUT1B" | grep -c . || true)" -ge 1 ]; then
+    ok "MUTATION: requirements.md pointed back at the durable artifact is reported"
+  else
+    bad "MUTATION: requirements.md durable target was NOT reported -- assertion 1 proves nothing for it"
+  fi
+else
+  echo "  SKIP  requirements.md not yet on disk -- assertion 4b cannot fire"
+fi
+
 # --- 5. MUTATION: delete the canonical declaration ----------------------------
 # Assertion 3 and assertion 1 must fail for DIFFERENT reasons, so this mutant is checked
 # against assertion 3 only and then asserted NOT to trip assertion 1. Two failures would

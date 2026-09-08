@@ -210,11 +210,14 @@ H1/H2 stay with the lead — a self-test is never escalated into the mechanism i
 - **Evidence:** Gate log must record which validations were run and their
   outcomes. "Completed" without evidence is not completed.
 
-### 1c. Research-invocation enforcement (research-requirements gate only).
+### 1c. Research-invocation enforcement (research-requirements gate, and the requirements gate on the variants that replace it).
 <!-- CHECK_LOADED: 1c -->
 
-**Scope.** This check fires only at the research-requirements gate, and
-only when the pipeline variant (read from
+**Scope.** This check fires at the research-requirements gate (variants
+`greenfield`, `brownfield-a`, `brownfield-b`, `brownfield-c`, which still
+run that step) and at the requirements gate (variants `feature` and
+`carry-over`, whose `requirements` step absorbed research-requirements),
+and only when the pipeline variant (read from
 `_bmad-output/pipeline-snapshot.md` `pipeline_variant` field as-of
 start-of-gate-check) is one of `{greenfield, feature, brownfield-a,
 brownfield-b, brownfield-c, carry-over}`. SKIPS `{bug,
@@ -236,7 +239,11 @@ Two arms, either satisfies (dual-arm OR):
   `^(- |### )?\*{0,2}R[0-9]+\s+[—–-]\s`. The `\*{0,2}` optionally
   accepts bold-marker prefix `**R1 — ...**` which is the dominant
   style in real PRDs authored via `/bmad-technical-research`. Single
-  match satisfies arm (b).
+  match satisfies arm (b). At the requirements gate, arm (b) is ALSO
+  satisfied by a "Research Findings" section containing a skip record
+  matching regex `^(- )?\*{0,2}Research skipped\*{0,2}:[[:space:]]+\S`,
+  whose text names the SPEC `open_questions[]` state that justified
+  skipping the research sub-skills.
 
 **PASS:** arm (a) OR arm (b) matches. **FAIL:** neither matches.
 
@@ -1134,6 +1141,10 @@ gate's primary artifact.
   `scripts/ai-dlc/validate-provenance-block.sh
   _bmad-output/planning-artifacts/prd.md --require-skill
   bmad-prd`.
+  The same arm runs at the requirements gate on `feature` and `carry-over`, whose
+  `requirements.md` §4 invokes the same skill; I32 joins the pin to
+  `research-requirements.md` by the parenthetical, and the `requirements-step` fixture
+  holds `requirements.md` to the same name.
   `research-requirements.md` §3 invokes `/bmad-prd` with the **validate** intent, so
   that is the name a correct run stamps. It pinned `bmad-validate-prd` until this
   release — a fork introduced when §3 was repointed and this arm was not — and the
@@ -1312,7 +1323,9 @@ skip the validation cycle (fast-track). The gate log entry MUST record
 FAILS if the declared minimum was not met. Declared intensity MUST NOT
 reduce the always-required floors — carry-over-eval Party Mode, retro
 Party Mode, and deploy-validate smoke remain mandatory at every
-intensity.
+intensity. At the requirements gate, one validation cycle run over the
+brief, the spec kernel and the PRD as one subject satisfies the
+per-planning-artifact minimum for all three.
 
 **Minimum mechanism (Rule 26(c)).** Failure caught: a planning gate that
 under-ran its declared intensity by SKIPPING an evaluation its row names,
@@ -1566,17 +1579,18 @@ it afterwards. Cite the ledger.
 implementation, sprint-review, and retro gates.
 
 **Check.** Invoke `scripts/ai-dlc/validate-draft-stamps.sh`; exit 0 required.
-It asserts the five per-sprint planning artifacts are written to
+It asserts the six per-sprint planning artifacts are written to
 their sprint-stamped paths — `planning-artifacts/s<N>/carry-over-evaluation.md`,
 `planning-artifacts/s<N>/discovery-context.md`,
 `planning-artifacts/s<N>/research-notes.md`,
+`planning-artifacts/s<N>/requirements-context.md`,
 `planning-artifacts/s<N>/architecture-context.md`,
 `planning-artifacts/s<N>/test-strategy.md`, where `<N>` is
 `sprint_id` from the pipeline snapshot's Sprint Context (resolved at
 `route.md` Step 6). **The stamp is the DIRECTORY** — the basename carries
 no sprint token (`artifact-path-grammar.md`).
 
-**The subject is the PATH SHAPE, not the producer.** Four of the five are Rule 24
+**The subject is the PATH SHAPE, not the producer.** Five of the six are Rule 24
 analyst drafts; `test-strategy.md` is a TEA deliverable and is read downstream.
 It is here because the failure mode does not depend on who wrote it — one
 basename, one area root, one write per sprint, nothing consolidating and nothing
@@ -1630,7 +1644,8 @@ a loop that must reach its exit criteria to leave — zero CRITICAL and at most 
 blocking MAJOR, declared once at `CRITICAL_EXIT_CEILING`/`MAJOR_EXIT_CEILING` in
 `scripts/ai-dlc/validate-adversarial-convergence.sh` and adjudicated by its arm B.
 Those steps are:
-`carry-over-evaluation`, `discovery`, `architecture`, `research-requirements`
+`carry-over-evaluation`, `discovery`, `architecture`, `research-requirements`,
+`requirements`
 (**including its `lightweight` single-pass path** — one pass is still a convergence
 pass and still stamps a verdict), `stories-test-strategy`, `doc-repair-backfill`, and
 `sprint-review-next`.
@@ -2227,7 +2242,8 @@ pipeline ORDERING, not about an empty subject. Recording the distinction here
 because I93's arm scans EMITTERS and this token has none, so nothing mechanical
 would catch a fourth spelling of either state. Check 28 resolves a DECLARATION, not an
 artifact, so an adopted project reports `IN-FORCE` at a gate that runs BEFORE
-`discovery.md` §4b authors the kernel — the carry-over variant opens at
+`discovery.md` §4b authors the kernel (or, for `feature` and `carry-over`,
+`requirements.md` §4(b)) — the carry-over variant opens at
 `carry-over-evaluation.md`, which runs the planning gate at its own step. **This is
 not the blanket "no spec present, so pass" that Check 28's own body refuses**, and
 the difference is the whole clause: that pass cannot tell a project that never
@@ -2513,10 +2529,12 @@ can diff against.
 **Scope — not yet authored.** Report `NOT-YET-AUTHORED` and move on when the gate
 being validated is a variant's OPENING planning gate and this sprint's
 `_bmad-output/planning-artifacts/s<N>/locked-requirements.md` does not exist.
-`discovery.md` §4a authors that file and NO other step writes it — every other
-mention in the step files reads it and cites §4a as its source — and the carry-over
-variant opens at `carry-over-evaluation.md`, which runs its planning gate before
-discovery has run, so the artifact this check reads is not owed yet.
+`discovery.md` §4a authors that file, and the `requirements` step (§3, same
+grammar) now also writes it for the `feature` and `carry-over` variants — every
+other mention in the step files reads it and cites its authoring step as its
+source — and the carry-over variant opens at `carry-over-evaluation.md`, which
+runs its planning gate before requirements has run, so the artifact this check
+reads is not owed yet.
 
 **The condition is the FILE, never the sprint slot, and keying it on the slot makes
 this arm unable to fire on the case that motivated it.** The opening step writes
@@ -2538,8 +2556,9 @@ gate-type slicing and a reference to a sibling check is not loaded with it.
 _bmad-output/operator-requests-history.md --brief
 _bmad-output/planning-artifacts/s<N>/locked-requirements.md --sprint <n>
 --cite-sha <user_request_cite>`; exit 0 required. **`--brief` names whatever carries
-this sprint's LOCKED blocks**, which since discovery.md §4a moved them is the sprint
-slot's `locked-requirements.md`, not the durable brief. Every `CO-`, `LR-`, `CAP-`
+this sprint's LOCKED blocks**, which since discovery.md §4a (or, for `feature` and
+`carry-over`, requirements.md §3) moved them is the sprint slot's
+`locked-requirements.md`, not the durable brief. Every `CO-`, `LR-`, `CAP-`
 and `Epic-` identifier in the operator's captured request must appear inside a
 LOCKED bullet this sprint commits to, or carry a
 `<!-- NOT-IN-SCOPE: <id> — <reason> -->` disposition in those same blocks.

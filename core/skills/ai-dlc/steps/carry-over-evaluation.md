@@ -1,7 +1,7 @@
 ---
 name: carry-over-evaluation
 description: Evaluate carry-over backlog, scope items, handle deferrals, then feed into full planning pipeline
-nextStepFile: ./discovery.md
+nextStepFile: ./requirements.md
 ---
 <!-- STEP_LOADED_TOKEN: carry-over-evaluation -->
 
@@ -9,7 +9,7 @@ nextStepFile: ./discovery.md
 
 **Purpose:** Evaluate carry-over backlog items, close invalid ones,
 handle deferrals, then feed valid items into the full planning pipeline
-(discovery → research-requirements → architecture → stories). Carry-over
+(requirements → architecture → stories). Carry-over
 items get the same planning rigor as new features.
 
 ## EXECUTION SEQUENCE
@@ -202,11 +202,9 @@ Valid carry-over items now enter the same planning pipeline as new
 features. Do NOT create stories here — that happens in
 stories-test-strategy after the full planning cycle.
 
-The discovery step will:
+The requirements step will:
 - Dispatch the `pm` to update the product brief with carry-over scope
 - Extract LOCKED_REQUIREMENTS from carry-over items
-
-The research-requirements step will:
 - Dispatch the `pm` to update the PRD with carry-over requirements
 
 The architecture step will:
@@ -220,4 +218,4 @@ Every new item filed MUST include `**Status:** OPEN` at minimum.
 Item IDs MUST use `CO-S<sprint>-<descriptor>` format.
 
 Run gate validation [planning] (`gate-validation.md`), then:
-**READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/discovery.md`
+**READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/requirements.md`

@@ -429,9 +429,9 @@ Based on `pipeline_variant`, load the first step file:
 |---------|------------------|------------|
 | sprint-execute | implementation → sprint-review → deploy-validate → retro | `implementation.md` |
 | greenfield | discovery → research-requirements → architecture → stories-test-strategy → [ui-direction] → implementation → sprint-review → deploy-validate → retro | `discovery.md` |
-| feature | discovery → research-requirements → architecture → stories-test-strategy → [ui-direction] → implementation → sprint-review → deploy-validate → retro | `discovery.md` |
+| feature | requirements → architecture → stories-test-strategy → [ui-direction] → implementation → sprint-review → deploy-validate → retro | `requirements.md` |
 | bug | bug-investigation → implementation → deploy-validate → retro | `bug-investigation.md` |
-| carry-over | carry-over-evaluation → discovery → research-requirements → architecture → stories-test-strategy → [ui-direction] → implementation → sprint-review → deploy-validate → retro | `carry-over-evaluation.md` |
+| carry-over | carry-over-evaluation → requirements → architecture → stories-test-strategy → [ui-direction] → implementation → sprint-review → deploy-validate → retro | `carry-over-evaluation.md` |
 | brownfield-a | codebase-inventory → discovery → research-requirements → architecture → stories-test-strategy → implementation → sprint-review → deploy-validate → retro | `codebase-inventory.md` |
 | brownfield-b | deep-codebase-analysis → discovery → research-requirements → architecture → stories-test-strategy → [ui-direction] → implementation → sprint-review → deploy-validate → retro | `deep-codebase-analysis.md` |
 | brownfield-c | doc-reconciliation → doc-repair-backfill → discovery → research-requirements → architecture → stories-test-strategy → [ui-direction] → implementation → sprint-review → deploy-validate → retro | `doc-reconciliation.md` |
@@ -447,7 +447,7 @@ loops through: `sprint-review-next` → `implementation` → `sprint-review`
 sprint's stories before implementation begins. This loop is handled by
 `deploy-validate.md`'s post-validation routing, not by the router.
 
-**Note:** For `feature` variant, the discovery step is scoped — it updates
+**Note:** For `feature` variant, the requirements step is scoped — it updates
 existing artifacts rather than creating from scratch.
 
 **Determine validation intensity (Rule 8).** Before creating the

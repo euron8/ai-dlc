@@ -86,6 +86,7 @@ conversation, from the user's initial request through production deployment.
     gate-validation.md        -- shared gate protocol, referenced by all steps
     discovery.md              -- Phase 1: brainstorm + product brief
     research-requirements.md  -- Phase 2a-b: research + PRD
+    requirements.md           -- feature/carry-over: brief + spec + PRD in one step
     architecture.md           -- Phase 2c: system design + ADRs
     stories-test-strategy.md  -- Phase 2d-f: stories + test strategy
     ui-direction.md           -- Phase 2g: UI mockups (conditional)
@@ -211,9 +212,9 @@ Do ANY planning artifacts exist?
 |---------|--------------|
 | **sprint-execute** | implementation --> sprint-review --> deploy-validate --> retro |
 | **greenfield** | discovery --> research-requirements --> architecture --> stories-test-strategy --> [ui-direction] --> implementation --> sprint-review --> deploy-validate --> retro |
-| **feature** | discovery --> research-requirements --> architecture --> stories-test-strategy --> [ui-direction] --> implementation --> sprint-review --> deploy-validate --> retro |
+| **feature** | requirements --> architecture --> stories-test-strategy --> [ui-direction] --> implementation --> sprint-review --> deploy-validate --> retro |
 | **bug** | bug-investigation --> implementation --> deploy-validate --> retro |
-| **carry-over** | carry-over-evaluation --> discovery --> research-requirements --> architecture --> stories-test-strategy --> [ui-direction] --> implementation --> sprint-review --> deploy-validate --> retro |
+| **carry-over** | carry-over-evaluation --> requirements --> architecture --> stories-test-strategy --> [ui-direction] --> implementation --> sprint-review --> deploy-validate --> retro |
 | **brownfield-a** | codebase-inventory --> discovery --> research-requirements --> architecture --> stories-test-strategy --> implementation --> sprint-review --> deploy-validate --> retro |
 | **brownfield-b** | deep-codebase-analysis --> discovery --> research-requirements --> architecture --> stories-test-strategy --> [ui-direction] --> implementation --> sprint-review --> deploy-validate --> retro |
 | **brownfield-c** | doc-reconciliation --> doc-repair-backfill --> discovery --> research-requirements --> architecture --> stories-test-strategy --> [ui-direction] --> implementation --> sprint-review --> deploy-validate --> retro |

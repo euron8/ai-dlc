@@ -6,7 +6,7 @@
 #
 # Gate-validation Check 23 enforcer (planning gates).
 #
-# WHAT IT GUARDS. Four of the five names below are per-sprint ANALYST DRAFTS,
+# WHAT IT GUARDS. Five of the six names below are per-sprint ANALYST DRAFTS,
 # written by an analyst subagent at a step's Section 0 (Rule 24) and read by
 # NOTHING in the pipeline. They have no template, no size threshold, and no
 # history/archive pair. So an unstamped write is not "an overwrite" — it is a
@@ -17,7 +17,7 @@
 # `carry-over-evaluation.md §7 F6`, and the file on disk — thirty sprints
 # later — has no §7 at all.
 #
-# THE FIFTH, `test-strategy`, IS NOT AN ANALYST DRAFT, AND ITS PRESENCE IS WHY
+# THE SIXTH, `test-strategy`, IS NOT AN ANALYST DRAFT, AND ITS PRESENCE IS WHY
 # THE SUBJECT OF THIS SCRIPT IS THE PATH SHAPE RATHER THAN THE PRODUCER. It is a
 # TEA deliverable authored at `stories-test-strategy.md` §5, and it IS read
 # downstream. It belongs here because the failure mode is identical and does not
@@ -47,14 +47,15 @@
 #   (c) ONE-SHOT — written once at onboarding and never again. See the scope
 #       note below.
 #   (x) NONE OF THESE — one write per sprint, nothing draining and nothing
-#       archiving. That is this check's subject, and the four drafts plus
+#       archiving. That is this check's subject, and the five drafts plus
 #       test-strategy are the whole of it on today's tree.
 #
-# Derived, not asserted: over the 10 basenames core prescribes at
+# Derived, not asserted: over the 11 basenames core prescribes at
 # `_bmad-output/planning-artifacts/` root, (a) accounts for 4, (b) for 1
-# (sprint-status.yaml, route.md Step 1), (c) for 3, and (x) for 1 —
-# test-strategy. bug-analysis is (x) by shape and exempt for a stated reason
-# below, which is the one place the criterion and the exemption disagree.
+# (sprint-status.yaml, route.md Step 1), (c) for 3, and (x) for 2 —
+# test-strategy, requirements-context. bug-analysis is (x) by shape and exempt
+# for a stated reason below, which is the one place the criterion and the
+# exemption disagree.
 #
 # TWO HALVES, because the drift has two surfaces:
 #
@@ -71,9 +72,9 @@
 #       against the rendered pipeline, not core alone.) Catching it here reports
 #       the drift BEFORE it produces a destroyed artifact.
 #
-# SCOPE — the five per-sprint planning artifacts, and only those:
+# SCOPE — the six per-sprint planning artifacts, and only those:
 #   carry-over-evaluation · discovery-context · research-notes ·
-#   architecture-context · test-strategy
+#   requirements-context · architecture-context · test-strategy
 #
 # Deliberately NOT in scope (they are not per-sprint, and stamping them would be
 # Rule 26(a) speculative mechanism):
@@ -129,10 +130,10 @@ if [ ! -d "$PROJECT_ROOT" ]; then
   exit 2
 fi
 
-# The five per-sprint planning artifacts. See the scope note and the criterion
+# The six per-sprint planning artifacts. See the scope note and the criterion
 # above before adding to this list — a durable, rotated, one-shot or
 # non-sprint-keyed artifact does not belong here.
-DRAFTS="carry-over-evaluation discovery-context research-notes architecture-context test-strategy"
+DRAFTS="carry-over-evaluation discovery-context research-notes requirements-context architecture-context test-strategy"
 
 ARTIFACT_DIR="$PROJECT_ROOT/_bmad-output/planning-artifacts"
 LAYER_DIRS="$PROJECT_ROOT/.claude/skills/ai-dlc/extensions $PROJECT_ROOT/.claude/skills/ai-dlc/overrides"
