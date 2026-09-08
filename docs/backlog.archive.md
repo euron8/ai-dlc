@@ -9041,14 +9041,19 @@ verify: sh set -e; T=$(mktemp -d); D=$T/d; C=$T/c; mkdir -p "$D/core/skills/ai-d
 
 ## BL-113 — a `verify: sh` receipt that spans two lines is TRUNCATED by the engine and mis-scores silently
 
-**LANDED (v0.536.0, verified 7bfcb305).** Both engines now `bash -n` the exact string they are
-about to run and refuse a non-parsing receipt as `NEEDS-REVIEW` under `unresolved: MALFORMED`.
-The consumer engine's case was worse than this entry filed: there the fragment's exit 2 read
-CLOSE-CANDIDATE, the data-losing direction, because every path the fragment named still
-existed. FP set measured at 0 of 234 `sh` receipts across the consumer's live ledger, this
-backlog and its archive. The receipt below was REWRITTEN at close: the original keyed on two
-tokens in the engine's text and was satisfied by a one-line comment carrying both; this one
-drives the engine on a seeded two-line receipt and its trailing-comment near-miss.
+**LANDED (v0.536.0, verified 7bfcb305).** Both engines now `bash -n` a brace-wrapped copy of the
+receipt whose closer sits on a second line, and refuse a non-parsing receipt as `NEEDS-REVIEW`
+under `unresolved: MALFORMED`. The consumer engine's case was worse than this entry filed: there
+the fragment's exit 2 read CLOSE-CANDIDATE, the data-losing direction, because every path the
+fragment named still existed. **The first cut parsed the BARE receipt on the distribution side
+and an adversarial hand showed it acquits the two most natural two-line shapes** — a trailing
+backslash (whose fragment EXITS 0, so the entry CLOSED) and an open heredoc; the second wrapper
+line is what turns each into a syntax error. FP set measured at 0 of 234 `sh` receipts across
+the consumer's live ledger, this backlog and its archive, under the wrapped form. The receipt
+below was REWRITTEN at close, twice: the original keyed on two tokens in the engine's text and
+was satisfied by a one-line comment carrying both; the second seeded a near-miss that exits 1,
+which cannot tell "ran" from "died unparsed" because both read STILL-LIVE. This one seeds a
+near-miss that exits 0 and must CLOSE, plus the backslash shape that must be refused.
 
 **Found while authoring `BL-110` in `v0.429.0`, and it produced a wrong verdict before it was
 caught.**
@@ -9076,5 +9081,5 @@ corpus is every live `sh` receipt; run `bash -n` over all of them and enumerate 
 fails to parse yet measures correctly. Whether any such receipt exists is NOT established, and
 this entry must not be closed on a fix whose FP set was never taken.
 
-verify: sh d=$(mktemp -d) || exit 9; printf '## BL-901\n\nverify: sh grep -q "alpha\nbeta" VERSION\n\n## BL-902\n\nverify: sh false # a comment, still reproduces\n' > "$d/l.md"; [ "$(grep -c '^beta" VERSION$' "$d/l.md")" -eq 1 ] || exit 9; o=$(bash scripts/backlog-reverify.sh "$d/l.md"); rm -rf "$d"; awk -F'\t' '$2=="BL-901" && $1=="NEEDS-REVIEW" && index($3,"MALFORMED")>0 {a=1} $2=="BL-902" && $1=="STILL-LIVE" {b=1} END{exit !(a && b)}' <<<"$o"
+verify: sh d=$(mktemp -d) || exit 9; printf '## BL-901\n\nverify: sh grep -q "alpha\nbeta" VERSION\n\n## BL-902\n\nverify: sh true # a comment, exits 0\n\n## BL-903\n\nverify: sh test -f VERSION \\\n  && test -f no-such-file-zz\n' > "$d/l.md"; [ "$(grep -c '^beta" VERSION$' "$d/l.md")" -eq 1 ] || exit 9; [ "$(grep -c '^  && test -f no-such-file-zz$' "$d/l.md")" -eq 1 ] || exit 9; o=$(bash scripts/backlog-reverify.sh "$d/l.md"); rm -rf "$d"; awk -F'\t' '$2=="BL-901" && $1=="NEEDS-REVIEW" && index($3,"MALFORMED")>0 {a=1} $2=="BL-902" && $1=="CLOSE-CANDIDATE" {b=1} $2=="BL-903" && $1=="NEEDS-REVIEW" && index($3,"MALFORMED")>0 {c=1} END{exit !(a && b && c)}' <<<"$o"
 

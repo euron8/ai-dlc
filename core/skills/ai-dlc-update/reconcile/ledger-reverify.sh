@@ -1395,16 +1395,20 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       # form parses 234 of 234 and so does this one, so the change is inert on the corpus and
       # exists for the receipt an author has not written yet.
       #
+      # AND THE SECOND LINE IS WHAT CATCHES THE OTHER TWO TRUNCATION SHAPES. A trailing `\` and
+      # an open heredoc both parse clean as a bare fragment on bash 3.2 -- an adversarial hand
+      # measured the distribution engine's first cut acquitting both, the backslash one as a
+      # CLOSE. Under this wrapper the `}` line becomes the continuation or the heredoc body, the
+      # group never closes, and both exit 2.
+      #
       # FALSE-POSITIVE SET, MEASURED BEFORE THIS SHIPPED: 0 of 234 -- every `sh` receipt in the
       # reference consumer's live ledger (38) and this repo's backlog (72) and archive (124)
-      # parses under this wrapper; control: a receipt truncated inside a double quote exits 2.
-      # THE LIMIT: `bash -n` accepts an unterminated heredoc opener (`cat <<EOF` parses clean on
-      # bash 3.2), so a truncation landing exactly on one is not caught. Zero of the 234 open a
-      # heredoc; the one `<<` in the corpus sits inside an awk regex.
+      # parses under this wrapper; controls: a receipt cut inside a double quote, a trailing
+      # backslash and an open heredoc each exit 2.
       sh_prog="cd \"$CONSUMER\" && { $rest
 }"
       if ! bash -n -c "$sh_prog" >/dev/null 2>&1; then
-        emit NEEDS-REVIEW "$label" "unresolved: MALFORMED sh receipt — the one-liner does not parse ($(bash -n -c "$sh_prog" 2>&1 | head -1 | sed 's/^bash: -c: //')). This engine reads a receipt as ONE line, so a receipt written across two arrives here truncated at its first newline, usually inside a quote or a \$( ). It was NOT evaluated, so this is not a verdict on the entry — and without this guard the syntax error's exit 2 would have read as CLOSE-CANDIDATE, the direction that retires a live entry. Rewrite the receipt on one line (printf '\\n' in place of a literal newline), then re-run."
+        emit NEEDS-REVIEW "$label" "unresolved: MALFORMED sh receipt — the one-liner does not parse ($(bash -n -c "$sh_prog" 2>&1 | head -1 | sed 's/^bash: -c: //')). This engine reads a receipt as ONE line, so a receipt written across two arrives here truncated at its first newline, usually inside a quote, a \$( ), after a trailing backslash or inside a heredoc. It was NOT evaluated, so this is not a verdict on the entry — and without this guard the syntax error's exit 2 would have read as CLOSE-CANDIDATE, the direction that retires a live entry. Rewrite the receipt on one line (printf '\\n' in place of a literal newline), then re-run."
         continue
       fi
       DIST="$DIST" BASE="$BASE" THEIRS="$THEIRS" CONSUMER="$CONSUMER" \

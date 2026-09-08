@@ -208,14 +208,24 @@ while IFS="$(printf '\t')" read -r LABEL CLOSED RECEIPT; do
       # status: the two rows this separates are "ran and reported" and "never ran", and
       # NEEDS-REVIEW is the second of those by definition.
       #
+      # THE STRING PARSED IS A BRACE-WRAPPED COPY WITH ITS CLOSER ON A SECOND LINE, NOT THE BARE
+      # RECEIPT. The first cut parsed `$REST` alone, and an adversarial hand showed it acquits the
+      # two most natural two-line shapes: a trailing `\` -- the canonical way to break a command
+      # across lines -- parses clean as a fragment and the fragment EXITS 0, so the entry read
+      # CLOSE-CANDIDATE on a receipt that never ran in full; and an open heredoc parses clean and
+      # read STILL-LIVE. Wrapped as `{ <fragment>` newline `}`, both fail: the `}` line becomes the
+      # continuation or the heredoc body, and the group never closes. The wrap is STRICTER than the
+      # `eval` below, which is the point -- `eval 'true \'` returns 0. A receipt ending in a `#`
+      # comment still parses, because the closer is on its own line.
+      #
       # FALSE-POSITIVE SET, MEASURED BEFORE THIS SHIPPED: every `sh` receipt in docs/backlog.md
-      # (72), docs/backlog.archive.md (124) and the reference consumer's live ledger (38) parses,
-      # so the set is EMPTY over 234; control: a receipt truncated inside a double quote exits 2.
-      # THE LIMIT: `bash -n` accepts an unterminated heredoc opener (`cat <<EOF` parses clean on
-      # bash 3.2), so a truncation landing exactly on one is not caught here. Zero of the 234 open a
-      # heredoc; the one `<<` in the corpus is inside an awk regex.
-      if ! bash -n -c "$REST" >/dev/null 2>&1; then
-        emit "NEEDS-REVIEW" "$LABEL" "unresolved: MALFORMED sh receipt -- the one-liner does not parse ($(bash -n -c "$REST" 2>&1 | head -1 | sed 's/^bash: -c: //')). This engine reads a receipt as ONE line, so a receipt written across two arrives here truncated at its first newline, usually inside a quote or a \$( ). It was NOT evaluated; a syntax error is not a verdict on the entry. Rewrite it on one line (printf '\\n' in place of a literal newline), then re-run."
+      # (72), docs/backlog.archive.md (124) and the reference consumer's live ledger (38) parses
+      # under this wrap, so the set is EMPTY over 234; controls: a receipt cut inside a double
+      # quote, a trailing backslash and an open heredoc each exit 2.
+      SH_PROG="{ $REST
+}"
+      if ! bash -n -c "$SH_PROG" >/dev/null 2>&1; then
+        emit "NEEDS-REVIEW" "$LABEL" "unresolved: MALFORMED sh receipt -- the one-liner does not parse ($(bash -n -c "$SH_PROG" 2>&1 | head -1 | sed 's/^bash: -c: //')). This engine reads a receipt as ONE line, so a receipt written across two arrives here truncated at its first newline, usually inside a quote, a \$( ), after a trailing backslash or inside a heredoc. It was NOT evaluated; a syntax error is not a verdict on the entry. Rewrite it on one line (printf '\\n' in place of a literal newline), then re-run."
         continue
       fi
       ( cd "$REPO_ROOT" && eval "$REST" ) >/dev/null 2>&1

@@ -1925,6 +1925,16 @@ row_lacks "PC-FIXTURE-SH-TWO-LINE" CLOSE-CANDIDATE \
   "the syntax error's exit 2 must never read as an absorption"
 row_is "PC-FIXTURE-SH-TRAILING-COMMENT" STILL-LIVE \
   "a valid receipt ending in a comment is evaluated under the wrapper — the guard parses the string that RUNS, and the wrapper closes on its own line"
+# THE TWO SHAPES A BARE PARSE ACQUITS. A trailing backslash and an open heredoc both parse clean
+# as one-line fragments on bash 3.2; the second wrapper line is what turns each into a syntax
+# error. The backslash fragment EXITS 0, so without the wrap it read STILL-LIVE here and a CLOSE
+# on the distribution engine — a verdict from half a receipt either way.
+row_is "PC-FIXTURE-SH-TRAILING-BACKSLASH" NEEDS-REVIEW \
+  "a receipt cut after a trailing backslash is refused — the closer line becomes the continuation"
+detail_has "PC-FIXTURE-SH-TRAILING-BACKSLASH" "MALFORMED sh receipt" \
+  "and the refusal names the cause"
+row_is "PC-FIXTURE-SH-OPEN-HEREDOC" NEEDS-REVIEW \
+  "a receipt cut after a heredoc opener is refused — the closer line becomes heredoc body"
 
 # THREE MUTANTS, each on a whole-directory copy so the closer finds its siblings, each scored
 # on the full seeded ledger because the two subjects sit outside the tiny backslash ledger.

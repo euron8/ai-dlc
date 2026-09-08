@@ -796,6 +796,30 @@ verify: sh true # exits 0, still reproduces
 
 ---
 
+## PC-FIXTURE-SH-TRAILING-BACKSLASH — a two-line sh receipt joined by a trailing backslash
+
+The canonical way to break a command across lines, and the shape a bare `bash -n` acquits: the
+fragment `test -f VERSION \` parses clean and EXITS 0. Read by the consumer engine that exit
+is STILL-LIVE and by the distribution engine it is a CLOSE — either way a verdict from half a
+receipt. Under the two-line wrapper the closing brace becomes the continuation and the group
+never closes, so this must be refused as MALFORMED.
+
+verify: sh test -f VERSION \
+  && test -f no-such-file-zz
+
+---
+
+## PC-FIXTURE-SH-OPEN-HEREDOC — a two-line sh receipt whose first line opens a heredoc
+
+The other shape a bare parse acquits: `cat <<EOF` alone is a clean parse on bash 3.2. Under the
+wrapper the closer line is heredoc body and the delimiter never arrives. Refused as MALFORMED.
+
+verify: sh cat <<EOF | grep -q zz
+zz
+EOF
+
+---
+
 ## PC-FIXTURE-ESCAPED-BACKTICK — a receipt whose backticks are markdown-escaped
 
 THE FILED DEFECT. Read with bare backticks the substring is present at base and gone at

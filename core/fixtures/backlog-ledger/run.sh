@@ -121,7 +121,18 @@ beta" VERSION
 
 ## BL-114 — sh ending in a comment, valid on one line, the near-miss for the parse guard
 
-verify: sh false # still reproduces
+verify: sh true # exits 0 -- the fix is present
+
+## BL-115 — sh written across two lines joined by a trailing backslash; the fragment EXITS 0
+
+verify: sh test -f VERSION \
+  && test -f no-such-file-zz
+
+## BL-116 — sh whose first line opens a heredoc; the fragment parses clean bare
+
+verify: sh cat <<EOF | grep -q zz
+zz
+EOF
 EOM
 
 OUT="$(bash "$RV" "$LA" 2>&1)"
@@ -130,13 +141,13 @@ OUT="$(bash "$RV" "$LA" 2>&1)"
 # its own failure but the cause would read as fourteen unrelated regressions rather than one dead
 # harness. Assert it produced rows at all before asking what they say.
 ROWS="$(grep -c '	' <<<"$OUT")"
-if [ "$ROWS" -lt 14 ]; then
-  echo "FIXTURE BROKEN: backlog-reverify.sh produced $ROWS rows over a 14-entry seed. Every"
-  echo "assertion below reads those rows, so this is a dead harness, not fourteen regressions." >&2
+if [ "$ROWS" -lt 16 ]; then
+  echo "FIXTURE BROKEN: backlog-reverify.sh produced $ROWS rows over a 16-entry seed. Every"
+  echo "assertion below reads those rows, so this is a dead harness, not sixteen regressions." >&2
   printf '%s\n' "$OUT" >&2
   exit 2
 fi
-ok "harness"          "classifier produced $ROWS rows over a 14-entry seed"
+ok "harness"          "classifier produced $ROWS rows over a 16-entry seed"
 
 want "anchor present"     CLOSE-CANDIDATE BL-101 "$OUT"
 want "anchor present"     STILL-LIVE      BL-102 "$OUT"
@@ -151,14 +162,23 @@ want "backslash anchor"   NEEDS-REVIEW    BL-110 "$OUT"
 want "annotated"          ALREADY-CLOSED  BL-111 "$OUT"
 want "empty sh"           NEEDS-REVIEW    BL-112 "$OUT"
 want "two-line sh"        NEEDS-REVIEW    BL-113 "$OUT"
-want "sh with comment"    STILL-LIVE      BL-114 "$OUT"
+want "sh with comment"    CLOSE-CANDIDATE BL-114 "$OUT"
+want "trailing backslash" NEEDS-REVIEW    BL-115 "$OUT"
+want "open heredoc"       NEEDS-REVIEW    BL-116 "$OUT"
 
 # A TWO-LINE `sh` RECEIPT IS REFUSED BY NAME, NOT MERELY NOT-CLOSED (BL-113). The engine reads a
 # receipt as one line, so BL-113 arrives cut inside its quote; evaluated, `eval` dies at exit 2
 # and the entry read STILL-LIVE forever with no hint — the filed defect. The refusal must name
-# the cause so the author learns the receipt never ran. BL-114 is the near-miss: it parses on
-# its own line and must be EVALUATED (exit 1, STILL-LIVE), so a guard that refused any receipt
-# carrying `#` would fail it.
+# the cause so the author learns the receipt never ran.
+#
+# BL-114 is the near-miss, and it EXITS 0 ON PURPOSE. The first cut seeded `false # …` and an
+# adversarial hand showed that cannot discriminate: `false` and a syntax error both exit non-zero
+# and both read STILL-LIVE, so a guard that parsed the receipt and then ran a DIFFERENT string
+# passed this arm. A receipt that exits 0 reads CLOSE-CANDIDATE only if it actually RAN.
+#
+# BL-115 and BL-116 are the two shapes a bare `bash -n` acquits — a trailing backslash and an
+# open heredoc both parse clean as fragments — and BL-115's fragment exits 0, so before the
+# brace-wrapped parse it read CLOSE-CANDIDATE: a live entry proposed for close on half a receipt.
 BL113_ROW="$(grep -E '	BL-113	' <<<"$OUT")"
 if grep -q "MALFORMED sh receipt" <<<"$BL113_ROW"; then
   ok "malformed-named" "the two-line receipt's refusal names it MALFORMED"
@@ -166,29 +186,48 @@ else
   bad "malformed-named" "BL-113's detail does not say MALFORMED: $(cut -c1-120 <<<"$BL113_ROW")"
 fi
 
-# THE MUTANT: the parse guard disarmed. BL-113 must regress to STILL-LIVE (the filed silent
-# mis-score) while BL-114 stays STILL-LIVE — a mutant that broke the engine would lose both.
-# Whole-file copy, `cmp -s` refuses a sed that matched nothing. THE COPY NEEDS A ROOT: the
-# engine walks up from its own directory for `VERSION` and sources reconcile/lib.sh beneath
-# that root, so a bare copy in $WORK reports INPUT-UNRESOLVED and every row is absent — which
-# scored as "the mutant broke the engine" on this arm's first run. Build the two markers.
+# TWO MUTANTS. Whole-file copy, `cmp -s` refuses a sed that matched nothing. THE COPY NEEDS A
+# ROOT: the engine walks up from its own directory for `VERSION` and sources reconcile/lib.sh
+# beneath that root, so a bare copy in $WORK reports INPUT-UNRESOLVED and every row is absent —
+# which scored as "the mutant broke the engine" on this arm's first run. Build the two markers.
 MROOT="$WORK/mut-root"
 mkdir -p "$MROOT/scripts" "$MROOT/core/skills/ai-dlc-update/reconcile"
 printf '0.0.0\n' > "$MROOT/VERSION"
 cp "$(dirname "$RV")/../core/skills/ai-dlc-update/reconcile/lib.sh" "$MROOT/core/skills/ai-dlc-update/reconcile/lib.sh" 2>/dev/null \
   || cp "$(dirname "$RV")/../../core/skills/ai-dlc-update/reconcile/lib.sh" "$MROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
 MUT="$MROOT/scripts/backlog-reverify.sh"
-sed 's/^\( *\)if ! bash -n -c "\$REST" >\/dev\/null 2>&1; then$/\1if false; then/' "$RV" > "$MUT"
+# The guard line is the anchor for both; assert it is unique so a sed cannot edit a second copy.
+GN="$(grep -c '^ *if ! bash -n -c "\$SH_PROG" >/dev/null 2>&1; then$' "$RV")" || GN=0
+if [ "$GN" -eq 1 ]; then ok "parse-anchor" "the parse guard line is unique in the engine"
+else bad "parse-anchor" "the parse guard line appears $GN times; the mutations below need exactly one"; fi
+# 1. THE GUARD DISARMED. BL-113 regresses to STILL-LIVE (the filed silent mis-score) and BL-115
+#    to CLOSE-CANDIDATE (the false close); BL-114 stays CLOSE-CANDIDATE, the control.
+sed 's/^\( *\)if ! bash -n -c "\$SH_PROG" >\/dev\/null 2>&1; then$/\1if false; then/' "$RV" > "$MUT"
 if cmp -s "$RV" "$MUT"; then
   bad "mutation-no-parse" "the mutation matched nothing, so the parse guard is unproven"
 else
   MOUT="$(bash "$MUT" "$LA" 2>&1)"
-  if ! grep -qE '^STILL-LIVE	BL-114	' <<<"$MOUT"; then
-    bad "mutation-no-parse" "the control row (BL-114 STILL-LIVE) is gone — the mutant broke the engine, not the guard"
-  elif grep -qE '^STILL-LIVE	BL-113	' <<<"$MOUT"; then
-    ok "mutation-no-parse" "with the guard disarmed the two-line receipt silently reads STILL-LIVE again — the guard is load-bearing"
+  if ! grep -qE '^CLOSE-CANDIDATE	BL-114	' <<<"$MOUT"; then
+    bad "mutation-no-parse" "the control row (BL-114 CLOSE-CANDIDATE) is gone — the mutant broke the engine, not the guard"
+  elif grep -qE '^STILL-LIVE	BL-113	' <<<"$MOUT" && grep -qE '^CLOSE-CANDIDATE	BL-115	' <<<"$MOUT"; then
+    ok "mutation-no-parse" "with the guard disarmed the cut-quote receipt reads STILL-LIVE and the backslash one CLOSES — the guard is load-bearing in both directions"
   else
-    bad "mutation-no-parse" "guard disarmed and BL-113 did not regress: $(grep -E '	BL-113	' <<<"$MOUT" | cut -c1-100)"
+    bad "mutation-no-parse" "guard disarmed and the seeds did not regress: $(grep -E '	BL-11[35]	' <<<"$MOUT" | cut -f1,2 | tr '\n' ' ')"
+  fi
+fi
+# 2. THE BARE RECEIPT PARSED instead of the brace-wrapped copy — the first cut. BL-115's fragment
+#    parses clean and exits 0, so it CLOSES; BL-113 is still refused, the control.
+sed 's/^\( *\)if ! bash -n -c "\$SH_PROG" >\/dev\/null 2>&1; then$/\1if ! bash -n -c "$REST" >\/dev\/null 2>\&1; then/' "$RV" > "$MUT"
+if cmp -s "$RV" "$MUT"; then
+  bad "mutation-parse-bare" "the mutation matched nothing, so the brace wrap is unproven"
+else
+  MOUT="$(bash "$MUT" "$LA" 2>&1)"
+  if ! grep -qE '^NEEDS-REVIEW	BL-113	' <<<"$MOUT"; then
+    bad "mutation-parse-bare" "the control row (BL-113 NEEDS-REVIEW) is gone — the mutant broke the engine, not the wrap"
+  elif grep -qE '^CLOSE-CANDIDATE	BL-115	' <<<"$MOUT" && grep -qE '^STILL-LIVE	BL-116	' <<<"$MOUT"; then
+    ok "mutation-parse-bare" "parsing the bare receipt acquits the backslash fragment (CLOSES) and the heredoc opener (STILL-LIVE) — the brace wrap is what catches them"
+  else
+    bad "mutation-parse-bare" "bare parse and the seeds did not regress: $(grep -E '	BL-11[56]	' <<<"$MOUT" | cut -f1,2 | tr '\n' ' ')"
   fi
 fi
 

@@ -31,23 +31,31 @@ absent-subject guard could not downgrade it because every path the fragment name
 so a receipt that never ran read CLOSE-CANDIDATE — the one verdict that retires a live entry.
 Reproduced on a scratch world beside a one-line control.
 
-Each engine now runs `bash -n` over the EXACT string it is about to execute and emits
-`NEEDS-REVIEW` under `unresolved:` naming the receipt MALFORMED, with the remedy. The consumer
-wrapper closes its brace on its own line, so a receipt ending in a `#` comment is parsed the same
-way it runs; under the old one-line `{ …; }` form the comment swallowed the brace and the
-WRAPPER was the syntax error.
+Each engine now runs `bash -n` over a brace-wrapped copy of the receipt whose closing `}` sits
+on a SECOND line, and emits `NEEDS-REVIEW` under `unresolved:` naming the receipt MALFORMED, with
+the remedy. On the consumer side that wrapped copy is the exact string it then executes. The
+second line is load-bearing twice over: a receipt ending in a `#` comment parses (under the old
+one-line `{ …; }` form the comment swallowed the brace and the WRAPPER was the syntax error), and
+**the two truncation shapes a bare parse acquits are caught** — a trailing backslash and an open
+heredoc both parse clean as one-line fragments on bash 3.2, and the backslash fragment EXITS 0.
+An adversarial hand measured the first cut, which parsed the bare receipt on the distribution
+side, CLOSING a trailing-backslash receipt: a live entry proposed for close on half a receipt,
+the same class the release exists to fix. Under the wrap the closer line becomes the
+continuation or the heredoc body and the group never closes.
 
 **False-positive set measured before shipping: 0 of 234** `sh` receipts across the reference
-consumer's live ledger (38), this backlog (72) and its archive (124), under both wrapper shapes;
-control: a receipt cut inside a double quote exits 2. Limit, stated: an unterminated heredoc
-opener parses clean under bash 3.2's `bash -n`, so a truncation landing exactly on one is not
-caught; none of the 234 opens a heredoc.
+consumer's live ledger (38), this backlog (72) and its archive (124), under the wrapped form;
+controls: a receipt cut inside a double quote, a trailing backslash and an open heredoc each exit
+2.
 
-`ledger-reverify` gains a two-line seed and a trailing-comment near-miss with three mutants
-(guard disarmed, bare receipt parsed instead of the wrapped program, guard inverted);
-`backlog-ledger` gains the same pair with one mutant. `BL-113`'s own receipt was rewritten at
-close: the original keyed on two tokens in the engine's text and a one-line comment carrying
-both satisfied it; the new one drives the engine on a seeded pair.
+`ledger-reverify` gains a cut-quote seed, a trailing-comment near-miss and the backslash and
+heredoc shapes, with three mutants (guard disarmed, bare receipt parsed instead of the wrapped
+program, guard inverted); `backlog-ledger` gains the same four with two mutants. `BL-113`'s own
+receipt was rewritten at close, twice: the original keyed on two tokens in the engine's text and
+a one-line comment carrying both satisfied it; the second seeded a near-miss that exits 1, which
+the same hand showed cannot tell "ran" from "died unparsed" because both read STILL-LIVE, so a
+guard that parses one string and runs another passed it. The shipped near-miss exits 0 and must
+CLOSE.
 
 ## [0.535.0] - 2026-09-08
 
