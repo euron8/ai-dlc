@@ -57,6 +57,31 @@ not a closed entry.
 
 ---
 
+## BL-208 — the fixture read-set map decayed for 510 commits and nothing said so
+
+**LANDED (v0.533.0).**
+
+**The read-set skip is keyed on a snapshot no gate can refresh.** The deriver needs root, and
+the runner's fallbacks are correct and silent: an unmapped fixture always runs, a changed path
+in NO read-set forces the whole suite. The second fallback cannot see a path already in some
+read-set that gained a NEW reader after the derivation — that reader is skipped whenever only
+that path moves.
+
+**Measured between the map's last commit `fe64a47a` and `81ec5c44`, 510 commits:** 41 of 194
+fixture directories unmapped, 744 loaded seconds on every push; 2341 dead-path entries; of 187
+changed tracked paths that gained readers, 113 caught by the orphan arm and 74 in the silent
+class, 255 fixture-to-path pairs.
+
+**Both hooks now announce the map's age, the unmapped count and names, and the `--list`
+command on every run.** `fixture-ship-decl.md` names the two re-derive triggers. A per-plan
+re-derive step was rejected: root-only, so a plan step naming it stalls every session.
+
+Tiered **DEFECT**.
+
+verify: sh h=.githooks/pre-push; c=core/git-hooks/pre-push; [ "$(grep -c 'fixture dir(s) UNMAPPED (always run)' "$h")" -eq 1 ] && [ "$(grep -c 'fixture dir(s) UNMAPPED (always run)' "$c")" -eq 1 ] && [ "$(grep -c '^readset_deriver_path()' "$h")" -eq 1 ] && [ "$(grep -c '^readset_deriver_path()' "$c")" -eq 1 ] && grep -q 'derive-fixture-readsets.sh --list' .claude/rules/fixture-ship-decl.md && [ "$(grep -c 'UNMAPPED (always run): gamma' core/fixtures/readset-skip/run.sh)" -ge 2 ]
+
+---
+
 ## BL-207 — the architecture step ran a full validation cycle over a design already declared to change nothing
 
 **LANDED (v0.532.0).**
