@@ -195,6 +195,29 @@ while IFS="$(printf '\t')" read -r LABEL CLOSED RECEIPT; do
         emit "NEEDS-REVIEW" "$LABEL" "unresolved: 'verify: sh' with an empty one-liner. An empty command exits 0, which this tool would read as CLOSE-CANDIDATE -- a receipt that closes itself."
         continue
       fi
+      # A RECEIPT THAT DOES NOT PARSE HAS NOT RUN, AND ITS EXIT STATUS SAYS NOTHING ABOUT THE ENTRY.
+      # The extraction above reads ONE line. A receipt an author wrapped across two -- a literal
+      # newline inside a quoted payload is the natural way to feed multi-line text to a subject --
+      # arrives here as its first line only, truncated inside the quote or the `$( )` that made it
+      # multi-line. `eval` then dies with a syntax error, which is a non-zero exit, which the branch
+      # below reads as STILL-LIVE: a wrong verdict with no hint, forever. Measured while authoring
+      # BL-110: the same receipt scored 0 from the file it was written in and 1 through this
+      # extraction. So the text is PARSED before it is EVALUATED, with the exact string `eval` would
+      # read, and a receipt that does not parse is a finding about the RECEIPT -- NEEDS-REVIEW, the
+      # status this file already reserves for that -- never a verdict on the entry. It is not a new
+      # status: the two rows this separates are "ran and reported" and "never ran", and
+      # NEEDS-REVIEW is the second of those by definition.
+      #
+      # FALSE-POSITIVE SET, MEASURED BEFORE THIS SHIPPED: every `sh` receipt in docs/backlog.md
+      # (72), docs/backlog.archive.md (124) and the reference consumer's live ledger (38) parses,
+      # so the set is EMPTY over 234; control: a receipt truncated inside a double quote exits 2.
+      # THE LIMIT: `bash -n` accepts an unterminated heredoc opener (`cat <<EOF` parses clean on
+      # bash 3.2), so a truncation landing exactly on one is not caught here. Zero of the 234 open a
+      # heredoc; the one `<<` in the corpus is inside an awk regex.
+      if ! bash -n -c "$REST" >/dev/null 2>&1; then
+        emit "NEEDS-REVIEW" "$LABEL" "unresolved: MALFORMED sh receipt -- the one-liner does not parse ($(bash -n -c "$REST" 2>&1 | head -1 | sed 's/^bash: -c: //')). This engine reads a receipt as ONE line, so a receipt written across two arrives here truncated at its first newline, usually inside a quote or a \$( ). It was NOT evaluated; a syntax error is not a verdict on the entry. Rewrite it on one line (printf '\\n' in place of a literal newline), then re-run."
+        continue
+      fi
       ( cd "$REPO_ROOT" && eval "$REST" ) >/dev/null 2>&1
       if [ $? -eq 0 ]; then
         emit "CLOSE-CANDIDATE" "$LABEL" "sh receipt exited 0 -- the fix is present. Operator confirms and annotates."

@@ -770,6 +770,32 @@ verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
 
 ---
 
+## PC-FIXTURE-SH-TWO-LINE — an sh receipt written across two lines, cut inside its quote
+
+The engine reads a receipt as ONE line, so this one arrives truncated at `"alpha` with the
+quote still open. Evaluated, that fragment is a syntax error at exit 2, and the `*)` arm reads
+exit 2 as "no longer reproduces" while every path the fragment names still exists — a
+CLOSE-CANDIDATE on a receipt that never ran. It must be refused as NEEDS-REVIEW naming the
+receipt MALFORMED. The second line below is prose to the parser and is what the author meant
+as the rest of the command.
+
+verify: sh grep -q "alpha
+beta" VERSION
+
+---
+
+## PC-FIXTURE-SH-TRAILING-COMMENT — a valid one-line sh receipt that ends in a comment
+
+The near-miss for the parse guard, and the subject of the wrapper's shape. This receipt parses
+on its own and exits 0, so it must read STILL-LIVE. Wrapped as `{ … ; }` on one line the
+comment swallows the closing brace and the WRAPPER is the syntax error — which, before the
+guard, was a CLOSE-CANDIDATE too, and with a guard that parses the wrong string is a false
+MALFORMED. The wrapper closes on its own line for this entry.
+
+verify: sh true # exits 0, still reproduces
+
+---
+
 ## PC-FIXTURE-ESCAPED-BACKTICK — a receipt whose backticks are markdown-escaped
 
 THE FILED DEFECT. Read with bare backticks the substring is present at base and gone at

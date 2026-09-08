@@ -915,8 +915,11 @@ prose is itself generated rather than composed.
      it BY DESIGN; adjudicate the body against theirs. This is NOT an entry with no `verify:`
      line — that emits no row at all.
    - `NEEDS-REVIEW` → THREE causes. The DETAIL field names which; report them separately.
-     - *unresolved* — the `verify:` line is malformed, or its path resolves neither as given
-       nor by unique basename at theirs. Correct the path, then re-run.
+     - *unresolved* — the `verify:` line is malformed, its path resolves neither as given
+       nor by unique basename at theirs, or an `sh` one-liner does not PARSE (the engine
+       reads ONE line, so a receipt written across two arrives cut inside its quote; the row
+       says MALFORMED and the receipt was never run). Correct the path or rewrite the receipt
+       on one line, then re-run.
      - *vacuous predicate* — the STILL-LIVE side was never reachable: a `theirs_has`
        substring absent at BOTH base and theirs, or a `theirs_lacks` substring present at
        both. Read the body and check whether the verb is inverted. **Never drain on this

@@ -1907,6 +1907,98 @@ detail_has "PC-FIXTURE-ESCAPED-PATH" "Write the path bare" \
 row_is "PC-FIXTURE-SH-WITH-BACKSLASH" STILL-LIVE \
   "an sh receipt carrying a backslash is EVALUATED, not refused — the remedy the refusal row offers exists"
 
+# --- A TWO-LINE `sh` RECEIPT IS REFUSED, NEVER CLOSED (BL-113) ---------------------------------
+# The extraction reads one line, so a receipt wrapped across two arrives cut inside its quote.
+# Before the parse guard `bash -c` died at exit 2 on the fragment, `*)` read exit 2 as "no longer
+# reproduces", `receipt_absent_subjects` found every named path present, and the entry read
+# CLOSE-CANDIDATE — measured on this seed before the guard existed. Both directions: the
+# truncated receipt is refused with the MALFORMED reason, and the trailing-comment near-miss —
+# valid on its own line, a syntax error under a `{ …; }` wrapper — is evaluated and reads
+# STILL-LIVE. The near-miss is what separates "parse the receipt" from "parse the wrapper".
+row_is "PC-FIXTURE-SH-TWO-LINE" NEEDS-REVIEW \
+  "a receipt cut inside its quote is refused, not evaluated"
+detail_has "PC-FIXTURE-SH-TWO-LINE" "MALFORMED sh receipt" \
+  "and the refusal names the cause"
+detail_has "PC-FIXTURE-SH-TWO-LINE" "Rewrite the receipt on one line" \
+  "and carries its remedy"
+row_lacks "PC-FIXTURE-SH-TWO-LINE" CLOSE-CANDIDATE \
+  "the syntax error's exit 2 must never read as an absorption"
+row_is "PC-FIXTURE-SH-TRAILING-COMMENT" STILL-LIVE \
+  "a valid receipt ending in a comment is evaluated under the wrapper — the guard parses the string that RUNS, and the wrapper closes on its own line"
+
+# THREE MUTANTS, each on a whole-directory copy so the closer finds its siblings, each scored
+# on the full seeded ledger because the two subjects sit outside the tiny backslash ledger.
+# The kill is a status FLIP on the two-line entry; the control is the trailing-comment entry
+# still reading STILL-LIVE (or, for the wrapper mutant, the two-line entry still refused), so a
+# mutant that broke the parser rather than the guard cannot score.
+tl_mutant() { # <name> <awk-program> -> dir on stdout, empty if the program changed nothing
+  local n="$1" prog="$2" d
+  d="$(dirname "$DIST")/mut-$n"; rm -rf "$d"; mkdir -p "$d"
+  cp "$(dirname "$CLOSER")"/*.sh "$d/" 2>/dev/null
+  awk "$prog" "$CLOSER" > "$d/ledger-reverify.sh" || return 1
+  if cmp -s "$CLOSER" "$d/ledger-reverify.sh"; then return 1; fi
+  printf '%s' "$d"
+}
+tl_kill() { # <name> <dir-or-empty> <kill-awk> <control-awk> <kill-msg> <ctl-msg>
+  local n="$1" d="$2" kill="$3" ctl="$4" kmsg="$5" cmsg="$6" out
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ -z "$d" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutation DID NOT APPLY (matched nothing, or awk died), so the arm it targets is unproven\n' "$n"
+    return
+  fi
+  out="$(bash "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
+  if ! printf '%s\n' "$out" | awk -F'\t' "$ctl"; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the control row is gone too (%s) — the mutant broke the closer rather than the guard, so its verdict is wreckage\n' "$n" "$cmsg"
+    printf '%s\n' "$out" | grep -E 'PC-FIXTURE-SH-' | sed 's/^/          | /'
+  elif printf '%s\n' "$out" | awk -F'\t' "$kill"; then
+    printf '  ok    %-22s %s\n' "$n" "$kmsg"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the guard was changed and the arm it protects did NOT change verdict — that arm cannot fire\n' "$n"
+    printf '%s\n' "$out" | grep -E 'PC-FIXTURE-SH-' | sed 's/^/          | /'
+  fi
+}
+# The three anchors are asserted UNIQUE first: a mutation that matched two sites would edit a
+# line this fixture never reads and score a kill it did not earn.
+ASSERTIONS=$((ASSERTIONS + 1))
+tl_g="$(grep -c '^ *if ! bash -n -c "\$sh_prog" >/dev/null 2>&1; then$' "$CLOSER")" || tl_g=0
+tl_p="$(grep -c '^ *sh_prog="cd \\"\$CONSUMER\\" && { \$rest$' "$CLOSER")" || tl_p=0
+tl_r="$(grep -c '^ *bash -c "\$sh_prog" >/dev/null 2>&1$' "$CLOSER")" || tl_r=0
+if [ "$tl_g" -eq 1 ] && [ "$tl_p" -eq 1 ] && [ "$tl_r" -eq 1 ]; then
+  printf '  ok    %-22s the parse guard, the wrapper assignment and the run line are each unique in the closer\n' "sh-parse-anchors"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s guard=%s wrapper=%s run=%s — the mutations below anchor on these and need exactly one each\n' "sh-parse-anchors" "$tl_g" "$tl_p" "$tl_r"
+fi
+# 1. THE GUARD DISARMED: `bash -n` replaced by `true`, so every receipt is evaluated. The two-line
+#    entry regresses to the filed CLOSE-CANDIDATE — the false close this guard exists to stop.
+tl_kill mutation-sh-no-parse \
+  "$(tl_mutant sh-no-parse '/^ *if ! bash -n -c "\$sh_prog" >\/dev\/null 2>&1; then$/ { sub(/bash -n -c "\$sh_prog"/, "true") } { print }')" \
+  '$2 ~ /PC-FIXTURE-SH-TWO-LINE/ && $1=="CLOSE-CANDIDATE" {f=1} END{exit !f}' \
+  '$2 ~ /PC-FIXTURE-SH-TRAILING-COMMENT/ && $1=="STILL-LIVE" {f=1} END{exit !f}' \
+  "with the parse guard disarmed the two-line receipt CLOSES again — the guard is what stops the false close" \
+  "PC-FIXTURE-SH-TRAILING-COMMENT STILL-LIVE"
+# 2. THE WRONG STRING PARSED: the guard checks the BARE receipt rather than the wrapped program.
+#    The trailing-comment receipt then passes the guard, the wrapper is rebuilt on one line with
+#    `; }` glued to the comment, and the entry regresses to CLOSE-CANDIDATE through exit 2.
+tl_kill mutation-sh-parse-bare \
+  "$(tl_mutant sh-parse-bare '/^ *if ! bash -n -c "\$sh_prog" >\/dev\/null 2>&1; then$/ { sub(/"\$sh_prog"/, "\"$rest\"") } /^ *sh_prog="cd \\"\$CONSUMER\\" && { \$rest$/ { print "      sh_prog=\"cd \\\"$CONSUMER\\\" && { $rest; }\""; skip = 1; next } skip == 1 { skip = 0; if ($0 == "}\"") next } { print }')" \
+  '$2 ~ /PC-FIXTURE-SH-TRAILING-COMMENT/ && $1=="CLOSE-CANDIDATE" {f=1} END{exit !f}' \
+  '$2 ~ /PC-FIXTURE-SH-TWO-LINE/ && $1=="NEEDS-REVIEW" && index($3,"MALFORMED")>0 {f=1} END{exit !f}' \
+  "parsing the bare receipt instead of the wrapped program lets the comment break the one-line wrapper and the entry CLOSES — the guard must parse the string that runs" \
+  "PC-FIXTURE-SH-TWO-LINE refused MALFORMED"
+# 3. THE GUARD INVERTED: a receipt that PARSES is refused and one that does not is run. Both
+#    seeds flip — the control here is that the run still produced rows for both, so a dead
+#    closer cannot score this as a kill.
+tl_kill mutation-sh-parse-inverted \
+  "$(tl_mutant sh-parse-inverted '/^ *if ! bash -n -c "\$sh_prog" >\/dev\/null 2>&1; then$/ { sub(/if ! bash/, "if bash") } { print }')" \
+  '$2 ~ /PC-FIXTURE-SH-TRAILING-COMMENT/ && $1=="NEEDS-REVIEW" {f=1} END{exit !f}' \
+  '$2 ~ /PC-FIXTURE-SH-TWO-LINE/ {f=1} $2 ~ /PC-FIXTURE-SH-TRAILING-COMMENT/ {g=1} END{exit !(f && g)}' \
+  "with the guard inverted the valid receipt is refused — the arm reads the guard's polarity, not merely its presence" \
+  "both sh seeds still produce a row"
+
 # SIX MUTANTS ON A TINY LEDGER. Each runs the closer over ONLY the eight backslash entries, cut
 # from the seeded ledger by heading so the receipts are not restated here, because a full-ledger
 # run is what makes this fixture the suite's third-longest unit. Each mutation is anchored on

@@ -113,21 +113,30 @@ verify: has VERSION "."
 ## BL-112 — sh with no command
 
 verify: sh
+
+## BL-113 — sh written across two lines, cut inside its quote (the engine reads one line)
+
+verify: sh grep -q "alpha
+beta" VERSION
+
+## BL-114 — sh ending in a comment, valid on one line, the near-miss for the parse guard
+
+verify: sh false # still reproduces
 EOM
 
 OUT="$(bash "$RV" "$LA" 2>&1)"
 
 # POSITIVE CONTROL, FIRST. If the classifier emitted nothing, every `want` below would report
-# its own failure but the cause would read as twelve unrelated regressions rather than one dead
+# its own failure but the cause would read as fourteen unrelated regressions rather than one dead
 # harness. Assert it produced rows at all before asking what they say.
 ROWS="$(grep -c '	' <<<"$OUT")"
-if [ "$ROWS" -lt 12 ]; then
-  echo "FIXTURE BROKEN: backlog-reverify.sh produced $ROWS rows over a 12-entry seed. Every"
-  echo "assertion below reads those rows, so this is a dead harness, not twelve regressions." >&2
+if [ "$ROWS" -lt 14 ]; then
+  echo "FIXTURE BROKEN: backlog-reverify.sh produced $ROWS rows over a 14-entry seed. Every"
+  echo "assertion below reads those rows, so this is a dead harness, not fourteen regressions." >&2
   printf '%s\n' "$OUT" >&2
   exit 2
 fi
-ok "harness"          "classifier produced $ROWS rows over a 12-entry seed"
+ok "harness"          "classifier produced $ROWS rows over a 14-entry seed"
 
 want "anchor present"     CLOSE-CANDIDATE BL-101 "$OUT"
 want "anchor present"     STILL-LIVE      BL-102 "$OUT"
@@ -141,6 +150,47 @@ want "self-reference"     NEEDS-REVIEW    BL-109 "$OUT"
 want "backslash anchor"   NEEDS-REVIEW    BL-110 "$OUT"
 want "annotated"          ALREADY-CLOSED  BL-111 "$OUT"
 want "empty sh"           NEEDS-REVIEW    BL-112 "$OUT"
+want "two-line sh"        NEEDS-REVIEW    BL-113 "$OUT"
+want "sh with comment"    STILL-LIVE      BL-114 "$OUT"
+
+# A TWO-LINE `sh` RECEIPT IS REFUSED BY NAME, NOT MERELY NOT-CLOSED (BL-113). The engine reads a
+# receipt as one line, so BL-113 arrives cut inside its quote; evaluated, `eval` dies at exit 2
+# and the entry read STILL-LIVE forever with no hint — the filed defect. The refusal must name
+# the cause so the author learns the receipt never ran. BL-114 is the near-miss: it parses on
+# its own line and must be EVALUATED (exit 1, STILL-LIVE), so a guard that refused any receipt
+# carrying `#` would fail it.
+BL113_ROW="$(grep -E '	BL-113	' <<<"$OUT")"
+if grep -q "MALFORMED sh receipt" <<<"$BL113_ROW"; then
+  ok "malformed-named" "the two-line receipt's refusal names it MALFORMED"
+else
+  bad "malformed-named" "BL-113's detail does not say MALFORMED: $(cut -c1-120 <<<"$BL113_ROW")"
+fi
+
+# THE MUTANT: the parse guard disarmed. BL-113 must regress to STILL-LIVE (the filed silent
+# mis-score) while BL-114 stays STILL-LIVE — a mutant that broke the engine would lose both.
+# Whole-file copy, `cmp -s` refuses a sed that matched nothing. THE COPY NEEDS A ROOT: the
+# engine walks up from its own directory for `VERSION` and sources reconcile/lib.sh beneath
+# that root, so a bare copy in $WORK reports INPUT-UNRESOLVED and every row is absent — which
+# scored as "the mutant broke the engine" on this arm's first run. Build the two markers.
+MROOT="$WORK/mut-root"
+mkdir -p "$MROOT/scripts" "$MROOT/core/skills/ai-dlc-update/reconcile"
+printf '0.0.0\n' > "$MROOT/VERSION"
+cp "$(dirname "$RV")/../core/skills/ai-dlc-update/reconcile/lib.sh" "$MROOT/core/skills/ai-dlc-update/reconcile/lib.sh" 2>/dev/null \
+  || cp "$(dirname "$RV")/../../core/skills/ai-dlc-update/reconcile/lib.sh" "$MROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
+MUT="$MROOT/scripts/backlog-reverify.sh"
+sed 's/^\( *\)if ! bash -n -c "\$REST" >\/dev\/null 2>&1; then$/\1if false; then/' "$RV" > "$MUT"
+if cmp -s "$RV" "$MUT"; then
+  bad "mutation-no-parse" "the mutation matched nothing, so the parse guard is unproven"
+else
+  MOUT="$(bash "$MUT" "$LA" 2>&1)"
+  if ! grep -qE '^STILL-LIVE	BL-114	' <<<"$MOUT"; then
+    bad "mutation-no-parse" "the control row (BL-114 STILL-LIVE) is gone — the mutant broke the engine, not the guard"
+  elif grep -qE '^STILL-LIVE	BL-113	' <<<"$MOUT"; then
+    ok "mutation-no-parse" "with the guard disarmed the two-line receipt silently reads STILL-LIVE again — the guard is load-bearing"
+  else
+    bad "mutation-no-parse" "guard disarmed and BL-113 did not regress: $(grep -E '	BL-113	' <<<"$MOUT" | cut -c1-100)"
+  fi
+fi
 
 # The preamble and the `## Receipts` prose section must contribute NO row. A parser that
 # treated any heading as an entry produced a phantom `Receipts` entry that came back
