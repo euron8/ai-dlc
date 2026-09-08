@@ -29,38 +29,44 @@ that wrote them, and the lead re-runs the proof before merging.
 
 ### Next actions
 
-**Releases 1 and 2 are on `origin/main`. Do not re-execute either.** Release 1 is `c5ee81e9`
-(PR #674, `0.529.0`): `core/scripts/rotate-gate-adjudication.sh`, the shipping fixture
-`core/fixtures/gate-adjudication-rotate/`, retro.md 7a-post step 5b, the beat-before-stop clause in
-`handoff.md` step 1 and its `_gate-procedures.md` copy, `BL-202` and `BL-203`. Release 2 is
-`886bd76d` (PR #676, `0.530.0`): the escalation preamble and the "Gate-adjudication dispatch"
-procedure open with **Script arms before the adjudicator**, Gate Failure step 1 carries the
-snapshot-file lead-repair exemption, step 2 no longer carries the deleted clause, the
-`gate-adjudication` fixture asserts all of it with self-probes, and `BL-204` and `BL-205` carry
-`verify: sh` receipts that exit 1 against the pre-fix tree. Re-derive before acting:
-`git log --oneline origin/main -3` must show `886bd76d`, `git show origin/main:VERSION` must print
-`0.530.0`, and
-`grep -c 'Script arms before the adjudicator' core/skills/ai-dlc/steps/gate-validation.md core/skills/ai-dlc/steps/_gate-procedures.md`
-must print a non-zero count for each file.
+**Releases 1, 2 and 3 are on `origin/main`. Do not re-execute any of them.** Release 1 is
+`c5ee81e9` (PR #674, `0.529.0`): the gate-adjudication rotator, its shipping fixture, the retro
+step, the beat-before-stop clause, `BL-202` and `BL-203`. Release 2 is `886bd76d` (PR #676,
+`0.530.0`): script arms before the adjudicator, the snapshot-file lead-repair exemption,
+`BL-204` and `BL-205`. Release 3 is `da80e8d0` (PR #678, `0.531.0`): the new
+`core/skills/ai-dlc/steps/requirements.md` replaces `discovery.md` plus
+`research-requirements.md` in `route.md`'s `carry-over` and `feature` rows only; one analyst
+dispatch, one `pm-escalated` authoring dispatch writing the brief, the spec kernel, the PRD and a
+per-FR `s<N>/architecture-impact.md` carrying `architecture_impact:` lines; one validation cycle
+over the three as one subject with seats Architect and Dev; Checks 1c, 17, 20, 23, 24, 28 and 3b,
+SKILL.md Rules 8 and 24, `validate-draft-stamps.sh`, `validate-cycle-commits.sh`, the two role
+files and the QUICKSTART template moved with it; the shipping fixture
+`core/fixtures/requirements-step/` asserts the partition from both sides; `BL-206` carries a
+`verify: sh` receipt that exits 1 against the pre-fix tree; `FORK_BUDGET` rose 8000 to 8060 with
+the attribution in its ledger. The consumer's `research-requirements-domain` and
+`discovery-prior-decision-corpus` extensions still hook the old step files and are named as layer
+debt in the CHANGELOG, not edited. Re-derive before acting: `git log --oneline origin/main -3`
+must show `da80e8d0`, `git show origin/main:VERSION` must print `0.531.0`,
+`grep -c 'architecture_impact:' core/skills/ai-dlc/steps/requirements.md` must print a non-zero
+count, and
+`grep -cE '^\| (carry-over|feature) \|.*[^-]requirements → architecture' core/skills/ai-dlc/steps/route.md`
+must print `2` (the `[^-]` excludes `research-requirements`, which the pre-fix rows carried; on
+`eb49b783` this command prints `0`).
 
-1. **Release 2 (`0.530.0`) is merged as `886bd76d`.** Nothing to do.
-2. **Release 3 (`0.531.0`), the `requirements` step for carry-over and feature variants, two
-   party seats.** Ships alone. New `core/skills/ai-dlc/steps/requirements.md` replacing
-   `discovery.md` plus `research-requirements.md` in `core/skills/ai-dlc/steps/route.md:431-434`
-   rows `carry-over` and `feature`; other variants unchanged. One analyst dispatch, one
-   `pm-escalated` authoring dispatch (brief update, spec kernel, PRD FRs), one validation cycle over
-   the three as one subject with seats Architect and Dev, one planning gate. Research sub-skills run
-   only when a SPEC `open_questions[]` entry bears on a locked requirement; otherwise the skip is
-   recorded with its reason (Check 1c arm (b) accepts that). Joins that move: I11's derived scope
-   list in `scripts/validate-enforcement-map.sh`, Check 1c and Check 20 wording,
-   `core/scripts/validate-draft-stamps.sh` write paths, `core/scripts/validate-bmad-invocations.sh`
-   expectations, the `nextStepFile` chain. The consumer's `extensions/steps-domain/*` keyed on the
-   old step names becomes a layer-debt row on its next pull, named in the CHANGELOG, not edited here.
-   Two agents: one authors the step file, one moves the joins; join both before the gate.
-3. **Release 4 (`0.532.0`), architecture fast-track on declared no-impact at every intensity.**
-   Depends on release 3's `architecture_impact:` field. `core/skills/ai-dlc/steps/architecture.md:285-287`
-   widens from `lightweight` to any intensity when every in-scope item declares `none`; skip
-   provenance goes in the gate log, which Check 20 already accepts.
+1. **Release 3 (`0.531.0`) is merged as `da80e8d0`.** Nothing to do.
+2. **Release 4 (`0.532.0`), architecture fast-track on declared no-impact at every intensity.**
+   Ships alone. Its precondition, release 3's `architecture_impact:` field, is on `origin/main`.
+   `core/skills/ai-dlc/steps/architecture.md:285-287` widens the intensity bullet from
+   `lightweight` to any intensity when every line of this sprint's
+   `_bmad-output/planning-artifacts/s<N>/architecture-impact.md` reads `architecture_impact: none`
+   AND the Step 2 assessment is NO CHANGES NEEDED; the file absent, or any line not `none`, keeps
+   the full cycle. Skip provenance goes in the gate log as Check 20 already accepts, and Check
+   20's own fast-track sentence widens the same way. A shipping fixture asserts the widened
+   bullet, its condition names the impact file, and that the `none` predicate is line-exact
+   (`architecture_impact: none-for-now` must not satisfy it), with self-probes in both directions.
+   One agent builds the edit plus the fixture; the lead re-runs the proof before merging.
+3. **Release 4 is the last release.** After its merge, action 4 re-derives this block, action 5
+   runs the fresh-resume check, then action 6 waits on the operator's pull.
 4. **After each merge, before stopping: re-derive this block.** Replace the finished release's
    action with one line naming the merged sha, re-run
    `bash scripts/validate-plan-shape.sh docs/plans/pipeline-step-review-s309.md`, commit the docs
