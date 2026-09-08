@@ -1318,9 +1318,17 @@ evaluation that row names. SKILL.md is resident at every gate, so the
 table is always readable here.
 
 An architecture gate that reaches a NO-CHANGES-NEEDED assessment MAY
-skip the validation cycle (fast-track). The gate log entry MUST record
-`validation_intensity: <level>` and `minimum_met: true|false`. The check
-FAILS if the declared minimum was not met. Declared intensity MUST NOT
+skip the validation cycle (fast-track) under `lightweight`, or at ANY
+intensity when every `architecture_impact:` line of this sprint's
+`_bmad-output/planning-artifacts/s<N>/architecture-impact.md` reads
+exactly `architecture_impact: none` — `architecture.md` §4 carries the
+predicate, and this check RUNS it against that file rather than reading
+the gate log's claim; the file absent or any line not `none` means no
+fast-track was available and the declared minimum was owed. The gate log
+entry MUST record `validation_intensity: <level>` and
+`minimum_met: true|false`, and when the fast-track was taken on declared
+no-impact, `fast_track: architecture-impact-none` plus the impact file's
+path. The check FAILS if the declared minimum was not met. Declared intensity MUST NOT
 reduce the always-required floors — carry-over-eval Party Mode, retro
 Party Mode, and deploy-validate smoke remain mandatory at every
 intensity. At the requirements gate, one validation cycle run over the
