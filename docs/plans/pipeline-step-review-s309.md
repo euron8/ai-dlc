@@ -29,81 +29,65 @@ that wrote them, and the lead re-runs the proof before merging.
 
 ### Next actions
 
-1. **Release 1 (`0.529.0`) — verdict rotation at retro close plus handoff waits one beat.**
-   Branch `release/0.529.0-verdict-rotation` from `origin/main`. Deliverables:
-   - `core/scripts/rotate-gate-adjudication.sh`: moves every `*.verdict.json`, `*.repair*.md`
-     and `*.authorization.md` under `_bmad-output/gate-adjudication/` whose `gate_series_id`
-     names sprint `<N>` (verdicts) or whose nonce matches a moved verdict (repairs, authorizations)
-     to `_bmad-output/implementation-artifacts/s<N>/gate-adjudication/`. Report by default,
-     `--apply` writes, exit 1 refuses on any integrity failure with nothing written. Byte-count
-     no-loss per file. Refuses an ignored destination the way `rotate-snapshot-archive.sh` does.
-     Legacy verdicts with no `gate_series_id` are never moved (the series validator's legacy
-     split already tolerates them and they predate every live series on the consumer).
-   - `core/skills/ai-dlc/steps/retro.md` §7a-post gains step 5b: run the rotator with
-     `--sprint s<N> --apply` between the compaction-log rotation and the no-loss verify, and the
-     commit subject becomes `chore(s<N>): rotate gate-log, compaction-log and gate-adjudication post-retro-merge`.
-   - `core/fixtures/gate-adjudication-rotate/` (SHIPS; no `.dist-only`): seeds a verdict dir with
-     a prior-sprint FAIL verdict, a current-sprint FAIL verdict, a legacy verdict, a repair record
-     for the prior-sprint nonce, and one unrelated file. Arms: (a) report mode writes nothing;
-     (b) apply moves exactly the prior-sprint set, byte-equal; (c) the current-sprint verdict and
-     the legacy verdict stay; (d) an ignored destination refuses with exit 1 and nothing written;
-     (e) THE GUARD CONTROL: drive `ai-dlc-gate-remediation-guard.sh` against a planning-artifacts
-     edit before rotation (DENY) and after (ALLOW), then seed a current-sprint FAIL and drive
-     again (DENY). One direction alone proves nothing.
-   - `core/skills/ai-dlc/steps/handoff.md` step 1 and its copy in `_gate-procedures.md`
-     "Auto-handoff evaluation" step 1: before `TaskStop`, run ONE `wait-for-deliverable.sh` beat
-     over every In-Flight Teammates row's deliverable path; stop only what has not landed.
-     `core/fixtures/handoff-resume-guard/run.sh` gains an arm asserting both files carry the
-     beat-before-stop clause and the same wording (a copy that drifts is the defect class).
-   - Add the three hand lists a shipping fixture needs (`scripts/uninstall.sh`,
-     `core/skills/ai-dlc/core-manifest.md`, `core/skills/ai-dlc-update/reconcile/setup-sites.md`);
-     I74 fails the push if any is missed.
-   - `VERSION`, `CHANGELOG.md` heading, commit subject: one triple. `docs/backlog.md` entry
-     `BL-202` (guard arms on a prior sprint's dispositioned FAIL) and `BL-203` (handoff kills an
-     in-flight pass) with `verify: sh` receipts that drive the shipping programs.
-   - Gate: `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`, read the gate's exit, then
-     `git push`, then `git ls-remote --heads origin <branch>` non-empty, then `gh pr create`,
-     `gh pr merge --squash --delete-branch`.
-2. **Release 2 (`0.530.0`) — script arms before the adjudicator, and Check 35 as a lead remedy.**
-   Branch from `origin/main` after release 1 merges. `gate-validation.md` escalation preamble
-   (`:158-172`) and `_gate-procedures.md` "Gate-adjudication dispatch": the lead runs every
-   `script` check and the script arm of every `llm` check FIRST; the adjudicator is dispatched
-   only when all of them pass. Delete the narrower clause at `gate-validation.md:2691` so prose
-   matches `validate-gate-adjudication.sh`, which refuses a partial set. Gate Failure step 1
-   gains: a FAIL whose subject is in the guard's permitted set (`pipeline-snapshot.md`,
-   `pipeline-snapshot-history.md`) is repaired by the lead. Fixture `gate-adjudication` gains an
-   ordering arm. `BL-204`, `BL-205`.
-3. **Release 3 (`0.531.0`) — the `requirements` step for carry-over and feature variants, two
+**Release 1 is on `origin/main` as `c5ee81e9` (PR #674, `0.529.0`). Do not re-execute it.** It shipped
+`core/scripts/rotate-gate-adjudication.sh`, the shipping fixture `core/fixtures/gate-adjudication-rotate/`,
+retro.md 7a-post step 5b, the beat-before-stop clause in `handoff.md` step 1 and its
+`_gate-procedures.md` copy, and backlog entries `BL-202` and `BL-203` with receipts that drive the shipping
+programs. Re-derive before acting: `git log --oneline origin/main -3` must show `c5ee81e9`, and
+`grep -c rotate-gate-adjudication core/skills/ai-dlc/steps/retro.md` must print a non-zero count.
+
+1. **Release 2 (`0.530.0`), script arms before the adjudicator, and Check 35 as a lead remedy.**
+   Branch `release/0.530.0-script-arms-first` from `origin/main`. Edit targets, verified at
+   `c5ee81e9`: the escalation preamble at `core/skills/ai-dlc/steps/gate-validation.md:158-172`,
+   the Gate Failure block at `core/skills/ai-dlc/steps/gate-validation.md:2682-2704`, and
+   "Gate-adjudication dispatch" at `core/skills/ai-dlc/steps/_gate-procedures.md:143-178`.
+   The change: the lead runs every `adjudication: script` check and the script arm of every
+   `adjudication: llm` check (Check 2's two validators are the measured case) BEFORE minting the
+   nonce and dispatching the adjudicator; a script FAIL is repaired first, so the adjudicator runs
+   once. Delete Gate Failure step 2's "AND every check whose inputs the remediation touched" clause
+   and say what `validate-gate-adjudication.sh` enforces: a re-dispatch re-derives the full escalated
+   set at a fresh nonce. Gate Failure step 1 gains one exemption: a FAIL whose subject is
+   `pipeline-snapshot.md` or `pipeline-snapshot-history.md` (the guard's permitted set,
+   `core/hooks/ai-dlc-gate-remediation-guard.sh:467-468`) is repaired by the lead, because Rule 28's
+   reason for the remediator does not reach a state record the lead owns; Check 35's body already
+   says "recover from git, do not re-author". Fixture `core/fixtures/gate-adjudication/run.sh` gains
+   an arm asserting the preamble names the script-first ordering and the Gate Failure text no longer
+   carries the deleted clause, with a decoy self-probe. Backlog `BL-204` (DEFECT 2) and `BL-205`
+   (the NOTE on Check 35) with `verify: has` and `verify: lacks` receipts. Delegate the prose edits
+   to one agent; the lead wires VERSION, CHANGELOG, backlog, runs the gate, merges.
+2. **Release 3 (`0.531.0`), the `requirements` step for carry-over and feature variants, two
    party seats.** Ships alone. New `core/skills/ai-dlc/steps/requirements.md` replacing
-   `discovery.md` + `research-requirements.md` in `route.md` step 6 rows `carry-over` and
-   `feature`; other variants unchanged. One analyst dispatch, one `pm-escalated` authoring
-   dispatch (brief update, spec kernel, PRD FRs), one validation cycle over the three as one
-   subject with seats Architect + Dev, one planning gate. Research sub-skills run only when a
-   SPEC `open_questions[]` entry bears on a locked requirement, otherwise the skip is recorded
-   with its reason (Check 1c arm (b) already accepts that). Joins that move: I11's derived scope
-   list in `validate-enforcement-map.sh`, Check 1c and Check 20 wording,
-   `validate-draft-stamps.sh` write paths, `validate-bmad-invocations.sh` expectations, the
-   `nextStepFile` chain. The consumer's `extensions/steps-domain/*` keyed on the old step names
-   becomes a layer-debt row on the next pull, filed in the CHANGELOG, not edited here.
-4. **Release 4 (`0.532.0`) — architecture fast-track on declared no-impact at every intensity.**
-   Depends on release 3's `architecture_impact:` field. `architecture.md` §4 intensity clause
+   `discovery.md` plus `research-requirements.md` in `core/skills/ai-dlc/steps/route.md:431-434`
+   rows `carry-over` and `feature`; other variants unchanged. One analyst dispatch, one
+   `pm-escalated` authoring dispatch (brief update, spec kernel, PRD FRs), one validation cycle over
+   the three as one subject with seats Architect and Dev, one planning gate. Research sub-skills run
+   only when a SPEC `open_questions[]` entry bears on a locked requirement; otherwise the skip is
+   recorded with its reason (Check 1c arm (b) accepts that). Joins that move: I11's derived scope
+   list in `scripts/validate-enforcement-map.sh`, Check 1c and Check 20 wording,
+   `core/scripts/validate-draft-stamps.sh` write paths, `core/scripts/validate-bmad-invocations.sh`
+   expectations, the `nextStepFile` chain. The consumer's `extensions/steps-domain/*` keyed on the
+   old step names becomes a layer-debt row on its next pull, named in the CHANGELOG, not edited here.
+   Two agents: one authors the step file, one moves the joins; join both before the gate.
+3. **Release 4 (`0.532.0`), architecture fast-track on declared no-impact at every intensity.**
+   Depends on release 3's `architecture_impact:` field. `core/skills/ai-dlc/steps/architecture.md:285-287`
    widens from `lightweight` to any intensity when every in-scope item declares `none`; skip
    provenance goes in the gate log, which Check 20 already accepts.
-5. **After each merge, before stopping: re-derive this block.** Replace the finished release's
-   action with one line naming the merged sha, re-run `bash scripts/validate-plan-shape.sh
-   docs/plans/pipeline-step-review-s309.md`, commit the docs change on a branch, merge it.
-6. **THE FRESH-RESUME CHECK, after action 5's docs commit has MERGED to `origin/main`. One
+4. **After each merge, before stopping: re-derive this block.** Replace the finished release's
+   action with one line naming the merged sha, re-run
+   `bash scripts/validate-plan-shape.sh docs/plans/pipeline-step-review-s309.md`, commit the docs
+   change on a branch, merge it.
+5. **THE FRESH-RESUME CHECK, after action 4's docs commit has MERGED to `origin/main`. One
    responsibility: a session that starts from `origin/main` with nothing but the one-liner
    resumes correctly.** Merge the docs commit; `git worktree add` a fresh checkout of
    `origin/main` under `mktemp`; read `## Start here` and this action list there as a stranger
-   with no memory of this session; re-run the derive block's figures from the worktree and
+   with no memory of this session; re-run the derive block's commands from the worktree and
    compare; assert action 1 names no work a commit on `origin/main` has already shipped; run
    `bash scripts/validate-plan-shape.sh` there as the floor; remove the worktree and report
    `resumable from origin/main at <sha>` or the mismatch. Do not stop before it passes.
-7. **Consumer-side measurement, after the consumer pulls (the pull is operator-initiated; never
+6. **Consumer-side measurement, after the consumer pulls (the pull is operator-initiated; never
    dispatch it).** Re-derive the per-step table below from the same ledgers for sprint 310 and
    record it beside the s309 table. That comparison is the receipt for the whole program.
-8. **HAND THE PLAN TO A LOCAL AI-DLC SESSION, THEN STOP.** The last action, after action 6 has
+7. **HAND THE PLAN TO A LOCAL AI-DLC SESSION, THEN STOP.** The last action, after action 5 has
    passed. Call `ListAgents`; a qualifying target is a local peer session whose name begins
    `ai-dlc-` (never a `graph-*` session, which is the consumer). If one qualifies, send it
    exactly `READ and FOLLOW docs/plans/pipeline-step-review-s309.md` with `SendMessage` and
