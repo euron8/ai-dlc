@@ -14,12 +14,12 @@
 # wearing a stamp, and it is precisely how a core fix lands on disk while the
 # pipeline goes on running the rule it replaced.
 #
-# So the set difference is read in BOTH directions, and the two are TIERED DIFFERENTLY:
+# So the change is read in BOTH directions, and the two are TIERED DIFFERENTLY:
 #
-#   SUPERSEDED — a line core carried at `base_sha` and does NOT carry at `theirs`,
-#                still sitting in the body. The override is teaching the old rule.
-#                REFUSES `--stamp readopt`.
-#   UNADOPTED  — a line core carries at `theirs` and did NOT carry at `base_sha`,
+#   SUPERSEDED — a line core carried at `base_sha` whose words `theirs` no longer
+#                carries, still sitting in the body. The override is teaching the
+#                old rule. REFUSES `--stamp readopt`.
+#   UNADOPTED  — a line core carries at `theirs` whose words `base_sha` did not,
 #                which the body does not carry. The override never took the fix up.
 #                REPORTS. It does not refuse, and v0.477.0 demoted it after v0.476.0
 #                shipped it as a refusal.
@@ -67,7 +67,9 @@
 # fires on the same entry; a reword inside an otherwise-adopted section is not
 # mechanically detectable and is what `--stamp reaffirm --note` is for.
 #
-# Both tests are mechanical (set difference over lines), both fail RED on a real
+# Both tests are mechanical (containment of one side's lines in the other side's
+# flattened section — `changed_lines` below says why not a whole-line set
+# difference), both fail RED on a real
 # defect today, and both can only be cleared by editing the body, by running
 # `--merge`, or by an explicit, recorded re-affirm.
 #
@@ -248,15 +250,16 @@ BODY_FLAT="$(awk 'BEGIN{fm=0; started=0}
                     }' \
              | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | tr '\n' ' ' | tr -s ' ')"
 
-# body_carries <core-line> — is this core line's word sequence in the body at all?
-# The needle is squeezed the same way the haystack is, or a core line carrying a
+# carries <haystack> <needle> — is this core line's word sequence in the haystack at all?
+# The needle is squeezed the same way every haystack is, or a core line carrying a
 # double space matches nothing and reports as absent.
-body_carries() {
+carries() {
   local needle
-  needle="$(printf '%s' "$1" | tr -s ' ')"
-  case "$BODY_FLAT" in *"$needle"*) return 0 ;; esac
+  needle="$(printf '%s' "$2" | tr -s ' ')"
+  case "$1" in *"$needle"*) return 0 ;; esac
   return 1
 }
+body_carries() { carries "$BODY_FLAT" "$1"; }
 
 # section_lines <sha> <anchor> — the substantive lines of one shadowed section.
 # ONE spelling for both directions: two copies of this filter is two chances for
@@ -264,6 +267,39 @@ body_carries() {
 section_lines() {
   git -C "$DIST" show "${1}:${CORE}" 2>/dev/null | section_of "$2" \
     | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -vE '^.{0,24}$' | sort -u
+}
+
+# section_flat <sha> <anchor> — the same section as ONE squeezed line, the shape
+# BODY_FLAT has, so a core line is tested against a SECTION exactly as it is tested
+# against the body.
+section_flat() {
+  git -C "$DIST" show "${1}:${CORE}" 2>/dev/null | section_of "$2" \
+    | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | tr '\n' ' ' | tr -s ' '
+}
+
+# changed_lines <from-sha> <to-sha> <anchor> — the substantive lines of the section at
+# FROM whose word sequence the section at TO no longer carries.
+#
+# CONTAINMENT, NOT A WHOLE-LINE SET DIFFERENCE, AND THE DIFFERENCE IS A FALSE REFUSAL.
+# Upstream re-flows paragraphs. When it does, a base line survives at theirs as the
+# SUFFIX (or prefix, or middle) of a longer line, so a whole-line difference scores it
+# as deleted while a body that adopted theirs faithfully still contains it — and the
+# refusal below fires on exactly the state it exists to certify. Measured on the
+# reference consumer's `steps__gate-validation__check-20.md` across `eb49b783 ->
+# a798e215`: `--merge` reported 1 merged / 0 conflicted, a containment join found all 38
+# substantive theirs lines in the body, and `--stamp readopt` refused on one line that
+# theirs carried at the end of a re-flowed sentence. The only stamp then available was
+# `reaffirm`, which recorded a re-adoption under the wrong outcome name. Whole-line
+# equality implies containment, so nothing a set difference would have reported is
+# lost; the 24-character floor on the needle side excludes coincidental short matches
+# as before.
+changed_lines() {
+  local to_flat line
+  to_flat="$(section_flat "$2" "$3")"
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    carries "$to_flat" "$line" || printf '%s\n' "$line"
+  done < <(section_lines "$1" "$3")
 }
 
 stale_lines() {
@@ -275,12 +311,12 @@ stale_lines() {
     while IFS= read -r line; do
       [ -n "$line" ] || continue
       body_carries "$line" && printf '%s\n' "$line"
-    done < <(comm -23 <(section_lines "$BASE_SHA" "$id") <(section_lines "$THEIRS" "$id"))
+    done < <(changed_lines "$BASE_SHA" "$THEIRS" "$id")
   done <<< "$ids"
 }
 
-# The mirror. `comm -13` instead of `-23`, and the body test NEGATED: core gained
-# this line and the override does not have it.
+# The mirror. The two refs swapped, and the body test NEGATED: core gained this line
+# and the override does not have it.
 unadopted_lines() {
   local ids
   ids="$(printf '%s' "$SHADOWS" | tr ',' '\n' | sed -n 's/.*#//p' | sed 's/^ *//; s/ *$//')"
@@ -290,7 +326,7 @@ unadopted_lines() {
     while IFS= read -r line; do
       [ -n "$line" ] || continue
       body_carries "$line" || printf '%s\n' "$line"
-    done < <(comm -13 <(section_lines "$BASE_SHA" "$id") <(section_lines "$THEIRS" "$id"))
+    done < <(changed_lines "$THEIRS" "$BASE_SHA" "$id")
   done <<< "$ids"
 }
 

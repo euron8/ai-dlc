@@ -57,6 +57,49 @@ not a closed entry.
 
 ---
 
+## BL-209 — `readopt-override.sh` refused a faithful re-adoption because a base line survived at theirs as the suffix of a re-flowed line
+
+**LANDED (v0.534.0).**
+
+**Provenance.** `PC-S309-READOPT-STAMP-REFUSES-A-CLEAN-MERGE-WHEN-A-DELETED-CORE-LINE-IS-A-SUFFIX-OF-ITS-REFLOWED-REPLACEMENT`,
+filed by the reference consumer on its `0.530.0 -> 0.533.0` pull.
+
+**The superseded set was a whole-line set difference tested by substring.** `stale_lines` built
+its candidates with `comm -23` over the trimmed base and theirs section lines, then asked whether
+the flattened body CONTAINED each survivor. Upstream re-flows paragraphs. A base line then
+survives at theirs as the suffix, prefix or middle of a longer line: whole-line equality says
+deleted, and a body that adopted theirs faithfully contains the longer line and therefore the
+base line, so `--stamp readopt` refused exactly the state it exists to certify. The only stamp
+left was `reaffirm`, which records a re-adoption under the wrong outcome name; the consumer's
+`steps__gate-validation__check-20.md` carries one such note today.
+
+**Reproduced on a scratch copy of that override.** Base `eb49b783`, theirs `a798e215`: the
+shipping script reports `STALE-CORE-TEXT` on one line and exits 1; with base equal to theirs it
+reports OK and exits 0. Independently derived on core's Check 20 section: three base lines fail
+whole-line equality at theirs, of which one is contained in theirs' flattened section and two are
+genuinely gone. The fix reports the two and not the one.
+
+**The fix is one predicate for both directions.** `changed_lines <from> <to> <anchor>` yields the
+FROM section's substantive lines whose word sequence the flattened TO section does not carry;
+`stale_lines` and `unadopted_lines` call it with the refs swapped. Whole-line equality implies
+containment, so nothing the set difference reported is lost, and the 24-character floor stays.
+
+**Two wrong fixes were built and both are rejected by the receipt.** The filing's own first
+suggestion, dropping a survivor that is a substring of some single theirs LINE, passes the
+consumer's case and misses a base line that theirs split across two lines; the receipt seeds
+that split. Clearing the stale set whenever the body carries every theirs line passes the
+faithful adoption and also passes a body that kept a genuinely dropped sentence beside it. The
+`layer-readopt-gate` fixture's arm J carries the same three subjects plus a mutant restoring the
+whole-line form, which moves exactly one cell; the mutant's first cut survived because the arm's
+own successful stamp had advanced `base_sha` to theirs, and the arm now resets it and asserts the
+range is not degenerate before scoring.
+
+Tiered **DEFECT**.
+
+verify: sh R="$(mktemp -d)"; D="$R/d"; C="$R/c/.claude/skills/ai-dlc/overrides"; mkdir -p "$D/core/skills/ai-dlc" "$C"; S="$D/core/skills/ai-dlc/SKILL.md"; printf '## Rule 1 -- A\n\nalpha alpha alpha alpha alpha\nbeta beta beta beta beta beta beta beta beta\n\ngamma gamma gamma gamma gamma gamma gamma gamma\n\n## Rule 2 -- B\n\ntail tail tail tail tail tail tail tail\n' > "$S"; env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git -C "$D" init -q; git -C "$D" -c user.email=a@b -c user.name=a add -A; git -C "$D" -c user.email=a@b -c user.name=a commit -qm b; B="$(git -C "$D" rev-parse --short HEAD)"; printf '## Rule 1 -- A\n\nalpha alpha alpha alpha alpha beta beta beta beta\nbeta beta beta beta beta\n\n## Rule 2 -- B\n\ntail tail tail tail tail tail tail tail\n' > "$S"; git -C "$D" -c user.email=a@b -c user.name=a commit -qam t; T="$(git -C "$D" rev-parse --short HEAD)"; printf -- '---\nshadows: SKILL.md#Rule 1\nbase_sha: %s\nreason: x\n---\n\n## Rule 1 -- A\n\nmine mine mine mine mine mine mine mine\n\nalpha alpha alpha alpha alpha beta beta beta beta\nbeta beta beta beta beta\n' "$B" > "$C/ok.md"; printf -- '---\nshadows: SKILL.md#Rule 1\nbase_sha: %s\nreason: x\n---\n\n## Rule 1 -- A\n\nalpha alpha alpha alpha alpha beta beta beta beta\nbeta beta beta beta beta\n\ngamma gamma gamma gamma gamma gamma gamma gamma\n' "$B" > "$C/bad.md"; P=core/skills/ai-dlc-update/reconcile/readopt-override.sh; o="$(bash "$P" "$D" "$T" "$R/c" "$C/ok.md" --check 2>&1)"; a=$?; b="$(bash "$P" "$D" "$T" "$R/c" "$C/bad.md" --check 2>&1)"; c=$?; rm -rf "$R"; [ "$a" -eq 0 ] && grep -q '^OK' <<<"$o" && [ "$c" -eq 1 ] && grep -q 'gamma gamma' <<<"$b" && ! grep -q 'beta beta' <<<"$b"
+
+---
+
 ## BL-208 — the fixture read-set map decayed for 510 commits and nothing said so
 
 **LANDED (v0.533.0).**

@@ -26,6 +26,7 @@ core fix lands on disk while the pipeline goes on running the rule it replaced.
 | B2 | `--stamp reaffirm` demands `--note` | an unrecorded decision is not a decision |
 | C | the gate goes green after a **real** re-adoption, re-stamps `base_sha`, and the consumer's own delta survives | a "fix" that discards the consumer's reason for overriding |
 | D | `unregistered-drift.sh` separates an in-place core rewrite (`tea.md`) from install.sh's template substitution (`dev.md`), and leaves untouched files `CORE-OK` | both directions are fatal — see below |
+| J | a core paragraph upstream RE-FLOWED (same words, new line breaks) is not superseded text: a faithful adoption passes `--check` and lands `--stamp readopt`; a near-miss that also keeps a sentence core genuinely dropped is refused, naming only the dropped one | the live `steps__gate-validation__check-20` case: a base line survives at theirs as the SUFFIX of a longer line, a whole-line set difference calls it deleted, and the refusal fires on the state it exists to certify |
 
 ## Why D is two-sided
 
@@ -52,6 +53,7 @@ Every gate here was mutation-tested; each mutant is caught:
 | stale-line gate always reports clean | A (×2), B (×2) |
 | `--stamp` skips the refusal branch | A, B |
 | trailing-newline bug reintroduced in `unregistered-drift.sh` | D (template substitution misread as drift) |
+| base-side test put back on WHOLE LINES (set difference instead of containment) | J (faithful re-flow adoption refused; the near-miss still refuses, so exactly one cell moves) |
 
 `seed.sh` writes a real git repository with two commits and a real consumer tree
 to disk. It contains no `echo` describing a file it does not create — v0.48.0

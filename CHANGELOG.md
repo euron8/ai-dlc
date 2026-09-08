@@ -15,6 +15,45 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.534.0] - 2026-09-08
+
+### `BL-209` — `readopt-override.sh` refused a faithful re-adoption because a base line survived at theirs as the suffix of a re-flowed line
+
+Closes `PC-S309-READOPT-STAMP-REFUSES-A-CLEAN-MERGE-WHEN-A-DELETED-CORE-LINE-IS-A-SUFFIX-OF-ITS-REFLOWED-REPLACEMENT`.
+
+`--stamp readopt` is refused while the override body still carries core text that theirs
+superseded. That set was computed as a whole-line difference between the base and theirs
+sections and then tested by substring against the flattened body. When upstream re-flows a
+paragraph, a base line survives at theirs as part of a longer line, whole-line equality scores it
+as deleted, and every body that adopted theirs faithfully contains it, so the refusal fired on
+the one state it exists to certify. The escape, `--stamp reaffirm --note`, records a re-adoption
+under the wrong outcome name, and the reference consumer's Check 20 override carries such a note
+from its `0.530.0 -> 0.533.0` pull.
+
+**Reproduced on a scratch copy of that override** at base `eb49b783` against theirs `a798e215`:
+`STALE-CORE-TEXT` on one line, exit 1; the same body with base equal to theirs, OK and exit 0. On
+core's Check 20 section, three base lines fail whole-line equality at theirs; one of them is
+contained in theirs' flattened section and two are genuinely gone. The shipping script named all
+three; the fix names the two.
+
+**Both directions now go through one predicate.** `changed_lines <from> <to> <anchor>` yields
+the FROM section's substantive lines whose word sequence the flattened TO section does not
+carry, and the superseded and unadopted arms call it with the refs swapped. Equality implies
+containment, so the set difference's findings are a subset of the new ones, and the 24-character
+floor is unchanged.
+
+**The `layer-readopt-gate` fixture gains arm J**: a pure re-flow of one seeded rule plus a
+dropped paragraph in another, a faithful adoption that must pass and land its stamp, a near-miss
+that adopted the re-flow and kept the dropped sentence and must be refused naming only that
+sentence, and a mutant restoring the whole-line form that moves exactly one cell. The seed
+asserts it is a re-flow before any verdict is read: every base line's words are contained in
+theirs' flattened section and none survives whole. The receipt seeds a base line that theirs
+SPLIT across two lines, because the filing's own suggested fix, a substring test against single
+theirs lines, passes the consumer's case and misses that shape.
+
+Driven over all ten overrides on the reference consumer at their own `base_sha` against
+`a798e215`: the verdict set changes on the one file the filing named and on no other.
+
 ## [0.533.0] - 2026-09-08
 
 ### `BL-208` — the fixture read-set map decayed for 510 commits and nothing said so
