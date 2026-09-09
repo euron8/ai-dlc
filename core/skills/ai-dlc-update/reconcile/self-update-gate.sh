@@ -342,6 +342,30 @@ fi
 gate_input ".claude/.ai-dlc-version"
 gate_input ".claude/.ai-dlc-applying"
 
+# ---- A GATE THAT CANNOT READ ITS OWN RANGE MUST NOT RETURN OK ---------------------------
+# Sited at classify ENTRY, before any arm, because EVERY arm below fails OPEN on an unreadable
+# range and the terminal they fall through to is `SELF-UPDATE-OK`. Measured against this gate's
+# own fixture seed: a bogus `theirs` (and equally a bogus `base`) makes
+# `git diff --name-only bad..X` fail, `CHANGED` reads EMPTY, and the empty-diff arm acquits with
+# "this pull changes no core/scripts/ path" — while arms R1, R2 and the CARRY arm are silent for
+# the same reason, so the output is byte-indistinguishable from a genuinely clean pull.
+#
+# THE ROW NAMES THE REF, in field 2, because the caller passes two and the answer is useless
+# without knowing which one did not resolve. Both are checked in the same run rather than
+# stopping at the first, so a caller with two bad refs is told both.
+if ! git -C "$DIST" rev-parse --git-dir >/dev/null 2>&1; then
+  emit SELF-UPDATE-UNDECIDED "$DIST" "the distribution path is not a git repository, so neither endpoint of the range can be resolved and no arm below has a subject. Every one of them fails OPEN on an unreadable range and falls through to SELF-UPDATE-OK, which would send step 2 to push on a comparison that never happened."
+  exit 0
+fi
+gate_bad_ref=0
+for gate_ref in "$BASE" "$THEIRS"; do
+  git -C "$DIST" rev-parse -q --verify "${gate_ref}^{commit}" >/dev/null 2>&1 && continue
+  emit SELF-UPDATE-UNDECIDED "$gate_ref" "this ref does not resolve to a commit in $DIST, so base..theirs is unreadable. \`git diff\` over an unreadable range fails and reports NOTHING, which the arms below cannot tell from a pull that changes nothing — a gate that cannot read its own subject must not return OK."
+  gate_bad_ref=1
+done
+if [ "$gate_bad_ref" -ne 0 ]; then
+  exit 0
+fi
 
 # A DEFER WITHOUT A NEXT STEP IS A DEAD END, and the operator's next step is not obvious:
 # it is a REF, derivable only by running this gate against each release in the range. So

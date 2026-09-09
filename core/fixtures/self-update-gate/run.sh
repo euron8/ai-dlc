@@ -1530,6 +1530,127 @@ else
   fi
 fi
 
+# --- A GATE THAT CANNOT READ ITS OWN RANGE MUST NOT RETURN OK ----------------------------
+#
+# Measured against this seed before the guard existed: `self-update-gate.sh <dist> <base>
+# deadbeefcafe <cons>` printed `SELF-UPDATE-OK - this pull changes no core/scripts/ path`, and so
+# did a bogus BASE. `git diff --name-only bad..X` fails, `CHANGED` reads EMPTY, and the empty-diff
+# terminal acquits; arms R1, R2 and the CARRY arm are silent for the same reason, so the output is
+# byte-indistinguishable from a genuinely clean pull. The gate's own header already said a gate
+# that cannot read its own subject must not return OK.
+#
+# EACH RUN IS SCORED AS A TUPLE, not as a presence. `und=` alone cannot tell a guard that reads
+# the ref from one that reports UNDECIDED unconditionally, and `ok=` alone cannot tell a refusal
+# from a gate that emits nothing.
+#
+# ITS OWN CONSUMER, BUILT HERE. `$VR_C1` has had its hook REWRITTEN by the input-digest arm above
+# — deliberately, since that arm's whole subject is a recorded input moving — and the hook decides
+# the gating set. Reusing it makes `range-control` read one OK row where the seed produces two,
+# which is a false red that looks exactly like the guard over-reaching.
+VR_RC="$(vr_cons rangecons)"
+vr_range() { # vr_range <gate> <base> <theirs> <dist> -> "und=<n> f2=<first-undecided-subject> ok=<n>"
+  local o
+  o="$(bash "$1" "$4" "$2" "$3" "$VR_RC" 2>/dev/null)"
+  printf 'und=%s f2=%s ok=%s\n' \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1=="SELF-UPDATE-UNDECIDED" {n++} END{print n+0}')" \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1=="SELF-UPDATE-UNDECIDED" {print $2; exit}')" \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1=="SELF-UPDATE-OK" {n++} END{print n+0}')"
+}
+
+ss_assert "range-bogus-theirs" "$(vr_range "$GATE" "$BASE" deadbeefcafe "$DIST")" \
+  "und=1 f2=deadbeefcafe ok=0" \
+  "an unresolvable THEIRS yields one UNDECIDED row NAMING that ref and no OK row at all"
+ss_assert "range-bogus-base" "$(vr_range "$GATE" deadbeefcafe "$THEIRS" "$DIST")" \
+  "und=1 f2=deadbeefcafe ok=0" \
+  "and an unresolvable BASE likewise -- a guard on THEIRS alone leaves this one acquitting"
+ss_assert "range-both-bogus" "$(vr_range "$GATE" nope-base nope-theirs "$DIST")" \
+  "und=2 f2=nope-base ok=0" \
+  "both endpoints are checked in one run, so a caller with two bad refs is told about both"
+
+# A TREE OBJECT IS THE INPUT THAT SEPARATES `^{commit}` FROM A BARE EXISTENCE TEST, and it is the
+# one a syntactically-valid-but-wrong sha actually looks like. A tree RESOLVES: `<tree>:<path>`
+# reads blobs perfectly well, so before the peel this ref produced the full correct verdict set
+# off a range endpoint that is not a commit at all. `deadbeefcafe` cannot make that distinction --
+# it fails every test, so a guard written as `rev-parse -q --verify "$REF"` would pass on it and
+# still admit the tree.
+VR_TREE="$(git -C "$DIST" rev-parse "${THEIRS}^{tree}")"
+ss_assert "range-tree-theirs" "$(vr_range "$GATE" "$BASE" "$VR_TREE" "$DIST")" \
+  "und=1 f2=$VR_TREE ok=0" \
+  "a THEIRS naming a TREE is refused: it resolves as an object, so only the ^{commit} peel can tell it from a range endpoint"
+
+# THE CONTROL, AND IT IS THE ARM THAT SEPARATES A REFUSAL FROM A GATE THAT REFUSES EVERYTHING.
+# The real range is the input the guard must NOT touch: it carries OK rows and exactly one
+# UNDECIDED, gate-agree.sh's, which the differential arms at the top of this fixture already own.
+ss_assert "range-control" "$(vr_range "$GATE" "$BASE" "$THEIRS" "$DIST")" \
+  "und=1 f2=gate-agree.sh ok=2" \
+  "the real range is untouched: two OK rows and the one UNDECIDED the differential produces"
+
+# DIST IS NOT A REPOSITORY. Its own arm rather than a case of the ref check, because the two have
+# different SUBJECTS: naming two perfectly good refs as unresolvable sends the operator after the
+# range when the argument that is wrong is the path.
+VR_NR="$VR/notarepo"; rm -rf "$VR_NR"; mkdir -p "$VR_NR"
+ss_assert "range-not-a-repo" "$(vr_range "$GATE" "$BASE" "$THEIRS" "$VR_NR")" \
+  "und=1 f2=$VR_NR ok=0" \
+  "a DIST that is not a git repository is reported as ITSELF, once, with no OK row"
+
+# THE REFUSAL IS STILL RECORDED. An UNDECIDED with no artifact is the same hole for the runner as
+# an OK with no artifact, and the header must say which endpoint failed to resolve.
+VR_C4="$(vr_cons c4)"
+bash "$GATE" "$DIST" "$BASE" deadbeefcafe "$VR_C4" >/dev/null 2>&1
+VR_REC4="$(vr_newest "$VR_C4")"
+ss_assert "range-recorded" \
+  "$(sed -n 's/^# theirs-sha: *//p' "${VR_REC4:-/dev/null}" | head -1)|$(sed -n 's/^# verdict: *//p' "${VR_REC4:-/dev/null}" | head -1)" \
+  "unresolved|UNDECIDED" \
+  "a refused range is recorded too, with the unresolvable endpoint marked rather than the line omitted"
+
+# A RECORD WITH NO `# input:` LINE IS MALFORMED AND THE RUNNER REFUSES IT, so the earliest
+# terminal must carry the inputs it could read. This is the refusal above -- it exits before any
+# arm -- and it still names the hook and the stamp pair.
+ss_assert "range-recorded-inputs" \
+  "$(vr_in "$VR_REC4" | awk -F'\t' '$1 == ".githooks/pre-push" {n++} END{print n+0}')|$(vr_in "$VR_REC4" | grep -c .)" \
+  "1|3" \
+  "the earliest terminal records the inputs it could read, so no record reaches the runner with an empty input set"
+
+# --- MUTANTS on the range guard -----------------------------------------------------------
+# The unmutated control for these two is `range-control` above, which is PRESENCE-shaped on the OK
+# rows: a gate that emits nothing scores ok=0 there and fails.
+VR_M5="$(vr_mut m5 'index($0,"  gate_bad_ref=1") { next } { print }')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$GATE" "$VR_M5"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-16s mutation matched nothing, so the arm it scores is unproven\n' "range-mut-refs"
+else
+  vr_m5_got="$(vr_range "$VR_M5" "$BASE" deadbeefcafe "$DIST")"
+  if [ "$vr_m5_got" = "und=1 f2=deadbeefcafe ok=1" ]; then
+    printf '  ok    %-16s KILLED (%s)\n' "range-mut-refs" \
+      "with the refusal defeated the OK RETURNS beside the row -- and a caller reading the verdict, as step 2 does, proceeds"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s SURVIVED: got=[%s] want=[und=1 f2=deadbeefcafe ok=1]\n' "range-mut-refs" "$vr_m5_got"
+  fi
+fi
+
+# THE SECOND GUARD HAS ITS OWN MUTANT BECAUSE ITS SUBJECT IS THE ONE THE FIRST CANNOT NAME. With
+# the repository arm gone the ref loop still refuses -- correctly, since neither ref resolves --
+# so the verdict does not change and only the SUBJECT does: two rows blaming two good refs instead
+# of one naming the path. That is the whole outcome this arm owns, and stating it here stops the
+# next reader scoring the guard as vacuous because the verdict held.
+VR_M6="$(vr_mut m6 'index($0,"if ! git -C \"$DIST\" rev-parse --git-dir") { print "if false; then"; next } { print }')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$GATE" "$VR_M6"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-16s mutation matched nothing, so the arm it scores is unproven\n' "range-mut-repo"
+else
+  vr_m6_got="$(vr_range "$VR_M6" "$BASE" "$THEIRS" "$VR_NR")"
+  if [ "$vr_m6_got" = "und=2 f2=$BASE ok=0" ]; then
+    printf '  ok    %-16s KILLED (%s)\n' "range-mut-repo" \
+      "without its own arm the missing REPOSITORY is reported as two unresolvable refs, sending the operator after the range instead of the path"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s SURVIVED: got=[%s] want=[und=2 f2=%s ok=0]\n' "range-mut-repo" "$vr_m6_got" "$BASE"
+  fi
+fi
+
 echo
 if [ "$FAILURES" -gt 0 ]; then
   echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong."

@@ -4011,3 +4011,42 @@ verify: manual
 
 
 
+## BL-212 — `self-update-gate.sh` returns `SELF-UPDATE-OK` on a range it cannot read, because every arm fails OPEN and the terminal they fall through to is OK
+
+Found by batch 78's briefing probe against `core/fixtures/self-update-gate/seed.sh`.
+Distribution-internal, no `PC-` id; ranks below any PC-backed entry under the provenance-first
+rule. DEFECT.
+
+**Measured, against that seed.** `self-update-gate.sh <dist> <base> deadbeefcafe <cons>` printed
+one row — `SELF-UPDATE-OK - this pull changes no core/scripts/ path, so nothing the pre-push
+invokes can be replaced by the self-update.` — and a bogus BASE printed the same. `git diff
+--name-only bad..X` fails, `CHANGED` reads EMPTY, and the empty-diff arm acquits. Arms R1 and R2
+and the CARRY arm are silent for the same reason, so the output is byte-indistinguishable from a
+genuinely clean pull. **Control, same invocation:** the real seed range emits six rows —
+`SELF-UPDATE-UNDECIDED gate-agree.sh`, `SELF-UPDATE-OK gate-broken.sh`, `SELF-UPDATE-DEFER
+gate-defer.sh`, `SELF-UPDATE-OK gate-pass.sh`, the summary DEFER and a `SELF-UPDATE-SAFE-STOP`
+row. A `DIST` that is not a git repository behaves the same way.
+
+**Why it matters where it sits.** Step 2 reads this verdict to decide whether to cut a branch,
+write the machinery slice, push and auto-merge with no operator. The gate's own header already
+says a gate that cannot read its own subject must not return OK — the CARRY arm's set-empty guard
+and the preclassify-empty guard both cite it — and the range endpoints were the one input with
+no such guard.
+
+**The input that discriminates is a TREE, not a bogus sha.** `rev-parse "$THEIRS^{tree}"` resolves
+as an object and `<tree>:<path>` reads blobs, so it produced the full correct-looking verdict set
+off a range endpoint that is not a commit. A guard spelled `rev-parse -q --verify "$REF"` refuses
+`deadbeefcafe` and still admits the tree; only the `^{commit}` peel separates them.
+
+**Receipt limits, stated.** The receipt drives the SHIPPING gate against the fixture's own seed:
+a bogus THEIRS must yield zero OK rows and an UNDECIDED row whose field 2 is the bogus string, a
+bogus BASE zero OK rows, and a THEIRS naming a tree zero OK rows and exactly one UNDECIDED. Its
+control is the real range, which must produce at least one OK row and exactly one UNDECIDED
+(`gate-agree.sh`'s) — exit 9 if that control does not hold, so a gate emitting nothing scores
+NEEDS-REVIEW rather than a close. Scored against four non-fixes: refusal defeated → 1,
+UNDECIDED emitted unconditionally → 9 (the control kills it), guard on THEIRS only → 1, the
+`^{commit}` peel dropped for a bare existence test → 1, and the header prose reworded with the
+refusal removed → 1. It does NOT assert the record trailer or the fixture's arms; those are
+`core/fixtures/self-update-gate/run.sh`'s `range-*` arms and their two mutants.
+
+verify: sh g=core/skills/ai-dlc-update/reconcile/self-update-gate.sh; s=core/fixtures/self-update-gate/seed.sh; [ -f "$g" ] && [ -f "$s" ] || exit 9; d="$(mktemp -d)"; trap 'rm -rf "$d"' EXIT; bash "$s" > "$d/refs" 2>/dev/null || exit 9; read -r D B T C < "$d/refs"; [ -n "${C:-}" ] && [ -d "$D" ] || exit 9; TR="$(git -C "$D" rev-parse "${T}^{tree}" 2>/dev/null)"; [ -n "$TR" ] || exit 9; n_ok() { awk -F'\t' '$1=="SELF-UPDATE-OK"{n++} END{print n+0}' "$1"; }; n_un() { awk -F'\t' '$1=="SELF-UPDATE-UNDECIDED"{n++} END{print n+0}' "$1"; }; bash "$g" "$D" "$B" "$T" "$C" > "$d/ctl" 2>/dev/null; [ "$(n_ok "$d/ctl")" -ge 1 ] && [ "$(n_un "$d/ctl")" -eq 1 ] || exit 9; bash "$g" "$D" "$B" deadbeefcafe "$C" > "$d/bt" 2>/dev/null; bash "$g" "$D" deadbeefcafe "$T" "$C" > "$d/bb" 2>/dev/null; bash "$g" "$D" "$B" "$TR" "$C" > "$d/tr" 2>/dev/null; [ "$(n_ok "$d/bt")" -eq 0 ] && [ "$(awk -F'\t' '$1=="SELF-UPDATE-UNDECIDED"{print $2; exit}' "$d/bt")" = deadbeefcafe ] && [ "$(n_ok "$d/bb")" -eq 0 ] && [ "$(n_ok "$d/tr")" -eq 0 ] && [ "$(n_un "$d/tr")" -eq 1 ] && exit 0; exit 1
