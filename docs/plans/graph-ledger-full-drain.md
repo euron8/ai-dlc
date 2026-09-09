@@ -8547,12 +8547,21 @@ so no block written before it changes verdict.
    `PC-S308-DISPATCH-GUARD-SPRINT-FIELD-INTERMITTENTLY-NULL` and
    `PC-S305-DISPATCH-GUARD-SED-PATTERN-BOLD-MISMATCH` shipped as `v0.481.0`, cited by `BL-146`.
    Do not re-scope onto them. **`PC-S303-SCOPE-CONFIRMATION-FIELD-OF-MISSES-BOLD-MARKDOWN-GRAMMAR`
-   IS REFUTED — `v0.481.0` RECOMMENDED IT AND `v0.482.0` WITHDREW THAT.** The filing describes a
-   backtick-only wrapper at lines 158-162; the shipping `field_of()` opens by STRIPPING `**`, `__`
-   and backticks, and driving it on the filing's own case returns `confirmed` where the entry says
-   it returns the literal `**`. Not available work. **The expired-premise rate landed on this
-   file's own recommendation, which is the thing to take from it: re-derive a recommendation
-   before acting on it even when this block is where you read it.**
+   IS RESOLVED, FIXED AT `v0.375.0` — AND THIS BLOCK CALLED IT REFUTED FOR SEVEN BATCHES, WHICH
+   WAS WRONG IN THE DIRECTION THAT DISCARDS A REAL FILING.** Not available work either way, so the
+   scoping advice was harmless and the LABEL was not: `REFUTED` reads as "the premise was never
+   true", and the premise was true when filed and was FIXED. Re-derived at batch 82 by lifting
+   both implementations and driving them on byte-identical bold input — pre-fix
+   (`9b18af4d^`) returns `[**]`, which is the entry's own reproduction; HEAD returns
+   `[confirmed]`; `cmp -s` control asserts the two function bodies differ. `git log -L` over the
+   function returns exactly TWO commits ever: `69a22e6b` (`v0.258.0`, created it) and `9b18af4d`
+   (`v0.375.0`, 2026-08-17, fixed it). **`v0.482.0` touches this file ZERO times** against a
+   control of 5 files it does touch — it only OBSERVED the state and withdrew a recommendation.
+   **The lesson is not the one this block used to draw.** It read the fix's effect, saw the
+   defect absent, and wrote REFUTED — a verdict about the FILING — when the measurement only ever
+   supported a verdict about the TREE. Ask whether a premise is false NOW or was false WHEN
+   FILED; a fix makes the first true and says nothing about the second, and only a pre-fix
+   control separates them.
 
    **AND THERE IS NO REMAINING SIBLING IN THAT CLASS.** An adversarial hand swept every `core/`
    site parsing a markdown field with a decoration-requiring grammar and the answer is NONE

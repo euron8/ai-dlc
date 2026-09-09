@@ -4184,3 +4184,78 @@ inversion — so the fix must not be applied blindly across all four copies.
 supplying MORE ground truth than the passing case requires.
 
 verify: sh set -e; V=core/scripts/validate-adversarial-convergence.sh; [ -f "$V" ] || exit 9; grep -q 'steer_dir_has_transcript "$TRANSCRIPT_DIR"' "$V" || exit 9; grep -q 'ADVERSARIAL_CITATION_UNVERIFIABLE' "$V" || exit 9; n="$(grep -rlc 'steer_dir_has_transcript() {' core/ | wc -l)"; [ "$n" -ge 4 ] || exit 9; grep -qE 'citation-less|present-but-unquoted|lacks the citation' "$V" && exit 0; exit 1
+
+## BL-220 — `validate-provenance-block.sh` exits 0 on an ordinary file with no marker and no flag, and there is no opt-out to require otherwise
+
+**Found 2026-09-09** adjudicating `PC-S297-PROVENANCE-FLAGLESS-FAIL-OPEN-BY-DEFAULT` against HEAD,
+re-derived here. That entry's PATH-CLASSIFIER half is genuinely fixed (`RETRO_PATH_RE` at
+`core/scripts/validate-provenance-block.sh:513` with three same-run self-probes). **The flagless
+default is the half that survives, and the entry's `sh` receipt exiting 0 is a LIVE DEFECT rather
+than a stale anchor** — the receipt's own control arm returns 1, so it did not take its `exit 127`
+path: the archive resolved, the validator ran, and the control discriminated.
+
+Driven through the shipping validator, three arms, one invocation each:
+
+    (1) ordinary file, no marker, NO flag              rc=0   <- the residue
+    (2) retro path, no block, NO flag                  rc=1   <- control, denies
+    (3) ordinary file WITH --require-skill             rc=1   <- control, denies
+
+Both controls deny, so arm (1) is not a run failing for an unrelated reason. The emitting line is
+`validate-provenance-block.sh:576`, `print("OK: no provenance block required or present in …")`
+followed by `sys.exit(0)`.
+
+**No opt-out exists**: `--allow-missing` resolves 0 times against a control of 6 for
+`--require-skill` in the same file. So a provenance gate handed a file it should examine, with no
+flag, reports OK and exits 0 — the caller must remember to pass a flag to get a denial, which is
+the fail-open direction the entry names.
+
+**The fail-open is NARROWER than the entry implies**, and that is worth recording so the fix is not
+over-scoped: two of the three no-block paths already fail closed — the retro path at `:566-571`,
+and a marker present but unparseable at `:549-563` (`MALFORMED != ABSENT`, landed `46695054`,
+v0.60.0). Only the ordinary-file default remains.
+
+**Not fixed here.** Reversing the default is a caller-contract change across every site invoking
+this validator without a flag, and that population is unmeasured. `CLAUDE.md` requires the
+false-positive set before the check ships.
+
+**Tiered DEFECT.** Consumer-facing; the validator ships in `core/scripts/`.
+
+verify: sh V=core/scripts/validate-provenance-block.sh; [ -f "$V" ] || exit 9; grep -q -- "--require-skill" "$V" || exit 9; d=$(mktemp -d) || exit 9; printf 'ordinary file, no marker\n' > "$d/plain.md"; a=0; AI_DLC_PROJECT_ROOT="$d" bash "$V" "$d/plain.md" >/dev/null 2>&1 || a=$?; c=0; AI_DLC_PROJECT_ROOT="$d" bash "$V" "$d/plain.md" --require-skill bmad-review-adversarial-general >/dev/null 2>&1 || c=$?; rm -rf "$d"; [ "$c" -eq 1 ] || exit 9; [ "$a" -eq 0 ] && exit 1; exit 0
+
+## BL-221 — I93 refuses three RETIRED spellings by name, so a FOURTH empty-subject spelling seeds clean
+
+**Found 2026-09-09** adjudicating `PC-S297-VALIDATOR-PASS-VS-NOTHING-TO-CHECK-CONVENTION` against
+HEAD, re-derived here. That entry's first claim — no documented convention exists — is RESOLVED:
+`EXAMINED NOTHING` is declared once at `core/skills/ai-dlc/enforcement-map.yaml:66-90`, rendered
+into `docs/vocabulary-index.md:27`, and bound by **I93**. **Its second claim — "across the
+validator population as a whole" — is the half that survives.**
+
+Seeded into a `git archive HEAD` extraction, one emitter per run:
+
+    baseline, no seed                                  I93 findings: 0   <- control, clean
+    seed a NOVEL spelling ("NOTHING TO EXAMINE HERE")  I93 findings: 0   <- ESCAPES
+    seed a RETIRED spelling ("AUDITED NOTHING")        I93 findings: 1   <- control, caught
+
+The retired-spelling control fires from the same position the novel one occupies, so the escape is
+a property of the GRAMMAR and not of where the probe sat.
+
+**The map's own comment already predicted this**, at `enforcement-map.yaml:64-65`: *"No shipped
+validator may emit one again — a fourth spelling is how this became three."* I93 enumerates the
+three historical spellings; enumeration cannot reach a spelling nobody has written yet. This is
+`CLAUDE.md`'s "prefer deriving both sides of a join over hand-listing either", collecting its debt
+on a list that documents its own incompleteness.
+
+**Not fixed here, and the shape is the hard part.** A general "this run examined nothing" detector
+over arbitrary prose has an unmeasured false-positive set over 38 `validate-*.sh`/`audit-*.sh`
+files, 23 of which carry the declared token nowhere. The tractable form is probably a POSITIVE
+binding — every validator with an empty-subject path must emit the declared token — rather than a
+negative scan for novel spellings, but that inverts the arm and needs its own population measured
+first.
+
+**Related, not folded in:** `core/scripts/validate-scope-confirmation.sh:214,221` emits `PENDING:`
+for a genuine empty-subject state, undeclared and uncaught — one instance of the same gap.
+
+**Tiered DEFECT.** The vocabulary index reads as complete and the invariant reads as binding, while
+a new emitter may spell the verdict however it likes.
+
+verify: sh set -e; M=core/skills/ai-dlc/enforcement-map.yaml; E=scripts/validate-enforcement-map.sh; [ -f "$M" ] && [ -f "$E" ] || exit 9; grep -q "EXAMINED NOTHING" "$M" || exit 9; grep -q "I93" "$E" || exit 9; grep -qE 'retired:' "$M" || exit 9; grep -qE 'empty-subject-emitter-positive|every emitter of an empty-subject|emits the declared token' "$E" && exit 0; exit 1
