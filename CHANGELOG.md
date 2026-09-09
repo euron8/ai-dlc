@@ -65,6 +65,18 @@ scored 0 on the fix, 1 on the `origin/main` validator and three built non-fixes 
 skip any comment containing `no`, `stub` removed from the marker set), 9 with the validator
 absent.
 
+### A same-second gate-record collision REPLACED a record in `0.539.0`; it now yields to the existing file
+
+`0.539.0` moved the verdict record's assembly out of the consumer tree and into the gate's temp
+directory, moving it in at exit. That move was a bare `mv`, and the record's name carries a
+whole-second timestamp — so a second classify landing inside the same second (a nested walk with
+its guard removed, or two runs on one consumer) REPLACED the first record silently, where the
+in-place assembly it replaced had APPENDED and left a visible double trailer. Caught by the
+fixture's own nested-write mutant surviving on the release-2 push: it scores the collision on
+trailer count, and a replaced file has one. The move now waits for a free second, up to five,
+and renames if the announced name was taken; the mutant is re-scored on the same trailer count,
+which two files carry.
+
 ## [0.539.0] - 2026-09-09
 
 ### `BL-086` — the self-update gate asked whether the pull could break the push, never whether the consumer could push at all; it now runs the pre-push hook git would run, on the tree as it stands, and defers when that hook refuses
