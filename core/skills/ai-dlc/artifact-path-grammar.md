@@ -202,6 +202,14 @@ The header is asked FIRST because the basename is the wider channel and the wron
 sprints 72 and 73. Every recovery is REPORTED with the channel that produced it, because a
 recovered sprint is the migration's claim rather than something the path stated.
 
+The header value may carry an `S` prefix — `**Sprint:** S303` is the consumer's own spelling on 46
+lines at HEAD — and is canonicalised, so `007` and `7` resolve to the one slot `s7/` rather than
+minting two homes for one sprint. **A header that is PRESENT but unreadable is a refusal, never a
+fall-back to the basename**: `TBD`, a range like `53-54`, and the template's unfilled
+`[sprint ID/name]` all stop there, because for a carry-over story the leading number in the name is
+the ITEM, so guessing from it files the story under a sprint that does not own it — worse than
+refusing.
+
 `STORY-NO-SPRINT` is therefore the residue where both channels come back empty, plus a suffixed
 sprint like `131b` for which no legal `s<N>/` slot spelling exists. It leaves the class when the
 file is renamed **or** when that header is added. **23 on the reference consumer before recovery,

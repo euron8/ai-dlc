@@ -259,7 +259,7 @@ BEGIN {
     # cannot derive a sprint for it either, so it is reported rather than blocked -- blocking a
     # path no command can clean is what makes an operator turn a gate off.
     if (legacy_story(orig)) {
-      print "STORY-NO-SPRINT\t" orig "\tsits in a stories/ directory with no `s<N>/` above it, and neither its name nor its own **Sprint:** header gives a sprint to move it to"
+      print "STORY-NO-SPRINT\t" orig "\tsits in a stories/ directory with no `s<N>/` above it, and neither its name nor its own **Sprint:** header gives a sprint number to move it to (a header that is PRESENT but unreadable refuses here rather than falling back to the name)"
       next
     }
     print "CONFORMING\t" orig "\t"; next
@@ -366,9 +366,12 @@ if [ "$N_AMBIG" -gt 0 ] || [ "$N_NOAREA" -gt 0 ] || [ "$N_STORY" -gt 0 ]; then
     echo "                        reserved \`s<N>/\` slot AND give no sprint in their name, so the migration"
     echo "                        has nowhere to put them. The corpus itself is no longer deferred — these"
     echo "                        are the individual leftovers, named rather than counted as a class."
-    echo "                        The migration RECOVERS a sprint from a \`**Sprint:** <N>\` header or a"
-    echo "                        leading number before refusing, so these are the files where both came"
-    echo "                        back empty. Add that header line, or rename to"
+    echo "                        The migration RECOVERS a sprint from a \`**Sprint:** <N>\` header (an \`S\`"
+    echo "                        prefix is fine) or a leading number before refusing, so these are the"
+    echo "                        files where both came back empty. A header that is PRESENT but not a"
+    echo "                        sprint number -- \`TBD\`, a range, an unfilled placeholder -- refuses"
+    echo "                        rather than falling back to the name, because for a carry-over story"
+    echo "                        that leading number is the ITEM. Fix the header, or rename to"
     echo "                        story-<sprint>-<index>-<slug>.md, and the next push judges it."
   }
   echo ""

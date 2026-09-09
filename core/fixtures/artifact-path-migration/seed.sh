@@ -106,15 +106,64 @@ mk _bmad-output/planning-artifacts/stories/hotfix-158-1-token0-fixes.md \
 
 **Epic:** Sprint 131b — a mid-line mention, not a declaration
 **QA agent:** Sprint 158-hotfix'
+# --- HEADER SPELLINGS THAT ARE PRESENT BUT NOT A BARE NUMBER -------------------
+# EVERY BASENAME BELOW LEADS WITH A CARRY-OVER ITEM NUMBER, deliberately. That is what makes these
+# discriminating: if the header channel declines and falls through, each lands under its ITEM
+# rather than its sprint -- silently, and worse than the refusal the recovery replaced.
+#
+# `S`-PREFIXED, WHICH THE CONSUMER USES 46 times at HEAD and 30 at the pre-migration ref, against a
+# control of 817 bare-digit headers. It must resolve, and beat the basename's 124.
+mk _bmad-output/planning-artifacts/stories/bug-124-s-prefix-hdr.md \
+   '# S-prefixed header
+
+**Sprint:** S270 (carry-over from 269)'
+# UNPARSEABLE BUT PRESENT -- a range, a placeholder value, and the value the shipped story template
+# scaffolds. Each must REFUSE rather than fall through.
+mk _bmad-output/planning-artifacts/stories/bug-311-range-hdr.md \
+   '# Range header
+
+**Sprint:** 53-54'
+mk _bmad-output/planning-artifacts/stories/bug-312-tbd-hdr.md \
+   '# Undecided header
+
+**Sprint:** TBD'
+mk _bmad-output/planning-artifacts/stories/bug-313-placeholder-hdr.md \
+   '# Unfilled template
+
+**Sprint:** [sprint ID/name]'
+# NON-CANONICAL AND NON-SPRINT NUMERIC VALUES. `007` is sprint 7 spelt long -- it must land in the
+# ONE slot s7/, never mint a second home at s007/. `0` names no sprint at all and refuses.
+mk _bmad-output/planning-artifacts/stories/bug-314-leading-zeros-hdr.md \
+   '# Leading zeros
+
+**Sprint:** 007'
+mk _bmad-output/planning-artifacts/stories/bug-315-zero-hdr.md \
+   '# Zero
+
+**Sprint:** 0'
+
 # SUFFIXED SPRINT -- RECOVERABLE BY NEITHER, DELIBERATELY. `131b` is not spellable as the reserved
 # slot `^s[0-9]+$`, so truncating it to s131 would merge a distinct sprint into another's slot on a
 # guess. It is REFUSED, which is the one place this fix trades a placement for a refusal.
 mk _bmad-output/planning-artifacts/stories/story-131b-1-hr12-retirement.md "suffixed sprint, no header"
-# THE `--follow` BOUND, ASSERTED AS A TREE PROPERTY. This file is ALREADY on the grammar under
-# s121/ and is renamed by THIS seed's history from a path naming sprint 71 -- the exact shape that
-# makes `git log --follow` answer 71 for a file the operator put in 121. No channel reads history,
-# so it must not move at all.
-mk _bmad-output/planning-artifacts/s71/stories/story-2-cooldown-sentinel.md "moved by an earlier migration"
+# THE `--follow` BOUND. THE SUBJECT MUST BE A *LEGACY* PATH OR THE ARM CANNOT REACH THE MECHANISM.
+# The first cut of this seed put the file under `s121/stories/`, which is conforming -- and
+# `legacy_story()` returns FALSE for it (measured: `not-leg`, against a control of `LEGACY` for
+# `bug-mobile-layout.md`), so the file skipped the recovery block entirely and the arm passed
+# without ever reaching the code it claims to guard. An adversary proved it by adding a real
+# `git log --follow` third channel to the shipping script; the arm still passed.
+#
+# So the subject sits in a LEGACY `stories/` directory with NO `s<N>/` above it, giving no sprint
+# in its name and no header. It reaches the recovery, both channels decline, and it must be
+# REFUSED. Its history (below) carries a crossing rename out of a sprint-71 path, so a recovery
+# that consulted `git log --follow` would find 71 and PLACE it -- which is what the arm detects.
+#
+# IT IS BORN HERE, ON THE SPRINT-71 PATH, and moved to `stories/` in a LATER commit. That ordering
+# is the whole hazard: `git log` on the final path then starts at the MOVE, while `--follow`
+# crosses it and reaches this creation commit. Created directly at the `stories/` path instead --
+# which is what the first cut did -- both readings return the same oldest commit and the control
+# below correctly fails, because there is no crossing to inherit.
+mk _bmad-output/planning-artifacts/s71-cooldown-sentinel-followbait.md "no sprint in name, no header"
 # A story ALREADY on the grammar, whose basename happens to lead with a number. It must not be
 # touched: the `s<N>/` above it is what says so, and without that test the leading number would be
 # re-read as a sprint. The number MATCHES the parent slot deliberately — with any other value the
@@ -143,17 +192,20 @@ git commit -q -m "seed"
 
 # --- A PRIOR MIGRATION, IN THE HISTORY, SO THE `--follow` HAZARD IS REAL -------
 #
-# The file above was committed at `s71/stories/`; this second commit MOVES it to `s121/stories/`,
-# exactly as an earlier migration would have. `git log --follow` on the s121 path now crosses this
-# rename and reports the commit that created the s71 path -- so a recovery reading history would
-# answer 71 for a file the tree says is 121. Reproduced on the reference consumer, on
-# `s121/stories/story-2-sg1-cooldown-sentinel-fix.md`, which `--follow` traces back to a Sprint 71
-# commit. Seeding the rename rather than asserting the absence of a history channel is what makes
-# the arm able to fail: without this commit `--follow` and `git log` agree and a history-reading
-# recovery would pass.
-mkdir -p _bmad-output/planning-artifacts/s121/stories
-git mv _bmad-output/planning-artifacts/s71/stories/story-2-cooldown-sentinel.md \
-       _bmad-output/planning-artifacts/s121/stories/story-2-cooldown-sentinel.md
-git commit -q -m "an earlier migration moved this story from s71 into s121"
+# The follow-bait file was committed under a sprint-71 path; this second commit moves it into the
+# LEGACY `stories/` directory, exactly as an earlier reorganisation would have. `git log --follow`
+# on its current path now crosses this rename and reports the commit that created the s71 path, so
+# a recovery reading history would answer 71 for a file whose own name and body say nothing.
+# Reproduced on the reference consumer, on `s121/stories/story-2-sg1-cooldown-sentinel-fix.md`,
+# which `--follow` traces back to a Sprint 71 commit while the tree says 121.
+#
+# Seeding the rename rather than asserting the absence of a history channel is what makes the arm
+# able to fail: without this commit `--follow` and `git log` agree and a history-reading recovery
+# would pass. The subject is legacy, so it REACHES the recovery block -- which the first cut of
+# this seed did not, and that is the defect this shape fixes.
+mkdir -p _bmad-output/planning-artifacts/stories
+git mv _bmad-output/planning-artifacts/s71-cooldown-sentinel-followbait.md \
+       _bmad-output/planning-artifacts/stories/cooldown-sentinel-followbait.md
+git commit -q -m "an earlier reorganisation moved it off its sprint-71 path into legacy stories/"
 
 printf '%s\n' "$WORK"

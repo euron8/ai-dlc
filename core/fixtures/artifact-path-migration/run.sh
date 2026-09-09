@@ -226,32 +226,87 @@ moved "recover-not-a-mention" "_bmad-output/planning-artifacts/s158/stories/hotf
 refused "recover-suffixed" "_bmad-output/planning-artifacts/stories/story-131b-1-hr12-retirement.md" \
         "STORY-NO-SPRINT" "a suffixed sprint (131b) has no legal slot, so it is refused not rounded"
 
-# THE `--follow` BOUND. The seed's history renames this file out of s71/ into s121/, so
-# `git log --follow` on it reports a sprint-71 commit while the tree says 121. No channel reads
-# history, so the file must not move -- a recovery that consulted `--follow` would file it under
-# s71 and inherit a prior migration's placement as though it were evidence.
+# A HEADER THAT SPOKE AND COULD NOT BE READ IS A REFUSAL, NOT A FALL-THROUGH TO THE BASENAME.
+# One arm per shape the consumer actually produces or its template ships. Each of these files has
+# a basename whose leading number is a carry-over ITEM, so a fall-through lands the exact case the
+# header channel exists to prevent -- worse than the pre-recovery state, which refused.
+refused "hdr-unparseable-range" "_bmad-output/planning-artifacts/stories/bug-311-range-hdr.md" \
+        "STORY-NO-SPRINT" "a **Sprint:** 53-54 header refuses; it does not fall through to the basename"
+refused "hdr-unparseable-tbd"   "_bmad-output/planning-artifacts/stories/bug-312-tbd-hdr.md" \
+        "STORY-NO-SPRINT" "a **Sprint:** TBD header refuses rather than guessing from the name"
+refused "hdr-unparseable-tmpl"  "_bmad-output/planning-artifacts/stories/bug-313-placeholder-hdr.md" \
+        "STORY-NO-SPRINT" "the shipped template's [sprint ID/name] placeholder refuses"
+refused "hdr-zero"              "_bmad-output/planning-artifacts/stories/bug-315-zero-hdr.md" \
+        "STORY-NO-SPRINT" "**Sprint:** 0 names no sprint, so it refuses rather than minting s0/"
+
+# THE `S` PREFIX IS A SPELLING THE CONSUMER USES, not a stray: 46 such header lines at consumer
+# HEAD and 30 at the pre-migration ref, against a control of 817 bare-digit headers. It must reach
+# the SAME slot as the bare form, and it must beat the basename exactly as the bare form does.
+moved "hdr-s-prefix"     "_bmad-output/planning-artifacts/s270/stories/bug-124-s-prefix-hdr.md" \
+                         "_bmad-output/planning-artifacts/stories/bug-124-s-prefix-hdr.md" \
+                         "**Sprint:** S270 resolves to s270, not to the basename's carry-over 124"
 asserts=$((asserts+1))
-if has "$W" "_bmad-output/planning-artifacts/s121/stories/story-2-cooldown-sentinel.md" \
-   && ! has "$W" "_bmad-output/planning-artifacts/s71/stories/story-2-cooldown-sentinel.md"; then
-  printf '  ok    %-26s %s\n' "follow-bound" "a file a PRIOR migration moved keeps its slot; history is not a channel"
+if ! has "$W" "_bmad-output/planning-artifacts/s124/stories/bug-124-s-prefix-hdr.md"; then
+  printf '  ok    %-26s %s\n' "hdr-s-prefix-precedence" "an S-prefixed header is READ, not skipped into the basename channel"
 else
   fails=$((fails+1))
-  printf '  FAIL  %-26s %s\n' "follow-bound" "the s121 file moved to s71 — a --follow read crossed the earlier rename"
+  printf '  FAIL  %-26s %s\n' "hdr-s-prefix-precedence" "S270 fell through to the basename and landed s124 — the carry-over ITEM"
 fi
 
-# CONTROL ON THE ARM ABOVE: the hazard must be REAL in this tree, or it asserts nothing. If
-# `--follow` and plain `git log` agree here, the seed failed to build the crossing rename and the
-# arm would pass against a recovery that does read history.
+# ONE CANONICAL SLOT PER SPRINT. `007` and `7` are one sprint; minting s007/ beside s7/ gives it
+# two homes and the conformance validator accepts both, so nothing downstream would report it.
+moved "hdr-leading-zeros" "_bmad-output/planning-artifacts/s7/stories/bug-314-leading-zeros-hdr.md" \
+                         "_bmad-output/planning-artifacts/stories/bug-314-leading-zeros-hdr.md" \
+                         "**Sprint:** 007 canonicalises to s7/, so one sprint keeps one slot"
 asserts=$((asserts+1))
-_p=_bmad-output/planning-artifacts/s121/stories/story-2-cooldown-sentinel.md
+if ! has "$W" "_bmad-output/planning-artifacts/s007/stories/bug-314-leading-zeros-hdr.md"; then
+  printf '  ok    %-26s %s\n' "hdr-no-s007-slot" "no s007/ slot was minted beside s7/"
+else
+  fails=$((fails+1))
+  printf '  FAIL  %-26s %s\n' "hdr-no-s007-slot" "s007/ and s7/ now both exist as homes for one sprint"
+fi
+
+# THE `--follow` BOUND. The subject is a LEGACY story path -- no `s<N>/` above it, no sprint in the
+# name, no header -- so it REACHES the recovery block and both channels decline. That is the whole
+# repair: the first cut of this arm used a conforming `s121/` path, for which `legacy_story()`
+# returns false, so the file skipped the recovery entirely and the arm passed against a shipping
+# script carrying a real `git log --follow` third channel.
+#
+# Its history crosses a rename out of a sprint-71 path, so a history-reading recovery finds 71 and
+# PLACES it. It must be REFUSED and stay where it is.
+refused "follow-bound" "_bmad-output/planning-artifacts/stories/cooldown-sentinel-followbait.md" \
+        "STORY-NO-SPRINT" "history is not a channel: a crossing rename does not become a sprint"
+
+# CONTROL ONE: the hazard must be REAL in this tree. If `--follow` and plain `git log` agree here,
+# the seeded crossing rename is missing and the arm above cannot discriminate.
+asserts=$((asserts+1))
+_p=_bmad-output/planning-artifacts/stories/cooldown-sentinel-followbait.md
 _f="$(cd "$W" && git log --follow --format=%H -- "$_p" 2>/dev/null | tail -1)"
 _n="$(cd "$W" && git log --format=%H -- "$_p" 2>/dev/null | tail -1)"
 if [ -n "$_f" ] && [ -n "$_n" ] && [ "$_f" != "$_n" ]; then
-  printf '  ok    %-26s %s\n' "follow-bound-control" "--follow and git log DISAGREE here, so the arm above discriminates"
+  printf '  ok    %-26s %s\n' "follow-bound-control" "--follow and git log DISAGREE here, so a history channel would answer 71"
 else
   fails=$((fails+1))
   printf '  FAIL  %-26s %s\n' "follow-bound-control" "--follow ($_f) and git log ($_n) agree; the seeded rename is missing and follow-bound is vacuous"
 fi
+
+# CONTROL TWO, AND IT IS THE ONE THE FIRST CUT LACKED: the subject must REACH the recovery block.
+# `legacy_story()` is what decides that, and a conforming path answers false and skips the whole
+# mechanism -- passing the arm above for a reason that has nothing to do with history. Driving the
+# SHIPPING function is the only way to establish it; a path that merely looks legacy is not one.
+asserts=$((asserts+1))
+_lsfn="$(mktemp "${TMPDIR:-/tmp}/lsfn-XXXXXX")"
+sed -n '/^legacy_story() {/,/^}/p' "$MIG" > "$_lsfn"
+# shellcheck disable=SC1090
+. "$_lsfn"
+if legacy_story "_bmad-output/planning-artifacts/stories/cooldown-sentinel-followbait.md" \
+   && ! legacy_story "_bmad-output/planning-artifacts/s299/stories/story-299-3-gamma.md"; then
+  printf '  ok    %-26s %s\n' "follow-bound-reaches" "the follow-bait IS legacy, so it reaches the recovery the arm guards"
+else
+  fails=$((fails+1))
+  printf '  FAIL  %-26s %s\n' "follow-bound-reaches" "the follow-bait is not legacy (or the control is): the arm never reaches the recovery"
+fi
+rm -f "$_lsfn"
 
 # RECOVERY IS REPORTED, NEVER SILENT. A recovered sprint is the migration's own claim about a file
 # whose path never stated one, so the operator has to be able to audit it. The report must name

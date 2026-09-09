@@ -290,24 +290,93 @@ story_normalize() { # <path> -> the path with a bare leading sprint number spelt
 # above already refuses the same basename for the same reason; a recovery that accepted it would
 # contradict its own sibling three functions up. That trades the one WRONG placement for a
 # refusal: 18 correct / 0 wrong / 5 refused, against 18 / 1 / 4 for a recovery that takes it.
-sprint_from_header() { # <path> -> the sprint the file's own header declares, or empty
+# A HEADER THAT SPOKE AND COULD NOT BE READ IS A REFUSAL, NEVER A FALL-THROUGH. This is the
+# structural half and it matters more than the grammar half below. Without a distinct
+# "spoke but unparseable" state, `**Sprint:** TBD` is indistinguishable from a file with no header
+# at all, so the basename channel answers -- and for the carry-over shapes the basename is the ITEM
+# number, which is the exact mis-filing the header channel exists to prevent. Measured on the
+# shipping migrator, one file, two runs differing only in the header line:
+#
+#     **Sprint:** S270   ->  s124/stories/bug-124-deployed-range.md   (basename, WRONG)
+#     **Sprint:** 270    ->  s270/stories/bug-124-deployed-range.md   (header, control)
+#
+# `s124` is the carry-over item. That is worse than the pre-recovery state, which refused outright,
+# and `53-54`, `TBD` and the template's `[sprint ID/name]` all reach it the same way.
+#
+# So the header is read in TWO steps: does a `**Sprint:**` line exist at all, and does its value
+# parse. `sprint_header_present` owns the first question, and the caller refuses when it says yes
+# and the value comes back empty.
+sprint_header_present() { # <path> -> 0 when a **Sprint:** declaration line exists, whatever it says
+  local body
+  body="$(head -40 "$1" 2>/dev/null)" || body=""
+  grep -qE '^\*\*Sprint:?\*\*' <<<"$body"
+}
+
+sprint_from_header() { # <path> -> the CANONICAL sprint the file's own header declares, or empty
   # The spelling is markdown-bold PROSE and not the schema's `^sprint:` key. Measured on the
   # refused population: the schema form matches 0 of 23, against a control of 318 files elsewhere
   # in the same tree that do match it -- so that zero discriminates rather than reporting a broken
   # search. Anchored at line start so `**Epic:** Sprint 131b` and `**QA agent:** Sprint 158-hotfix`
   # -- both present in this population -- cannot be read as declarations, and trailing prose is
   # allowed because `**Sprint:** 18 (carry-over eligible)` is one of the six that resolve.
+  #
+  # `S` IS OPTIONAL AND THE CONSUMER USES BOTH. `**Sprint:** S303` and `**Sprint:** S270 (carry-over
+  # ...)` are spelt with the prefix: 46 such lines at consumer HEAD, 30 at the pre-migration ref
+  # this script runs against, both against a control of 817 bare-digit headers in the same scan --
+  # so the prefix is a real and separately-populated spelling, not a stray. The value is CASE-
+  # FOLDED to the one legal slot spelling by `canon_sprint` below, exactly as the path-side
+  # transform already normalises an uppercase `S301` component.
   local body first
   body="$(head -40 "$1" 2>/dev/null)" || body=""
-  first="$(sed -n -E 's/^\*\*Sprint:?\*\*[[:blank:]]*([0-9]+)([[:blank:]].*)?$/\1/p' <<<"$body")"
-  printf '%s' "${first%%$'\n'*}"
+  first="$(sed -n -E 's/^\*\*Sprint:?\*\*[[:blank:]]*[Ss]?([0-9]+)([[:blank:]].*)?$/\1/p' <<<"$body")"
+  canon_sprint "${first%%$'\n'*}"
 }
 
+# ONE CANONICAL FORM, ENFORCED AT THE ONLY WRITER THAT MINTS A SLOT FROM FILE CONTENT.
+# `007` and `7` are the same sprint and would otherwise mint `s007/` and `s7/` as two homes for it,
+# which `validate-artifact-paths.sh` accepts on both sides because `^s[0-9]+$` is satisfied by
+# either -- so nothing downstream would ever report the split. Zero instances in the consumer today
+# (control: 817 numeric headers in the same scan), so this is latent rather than live, and latent
+# is the whole reason to fix it here: every OTHER sprint value in this script is read off a PATH
+# that some earlier mechanism already normalised, while a header is free text nobody normalises.
+# Leading zeros are STRIPPED rather than refused, because `007` states its sprint unambiguously and
+# refusing it would strand a file over a spelling. `0` has no `s0` sprint to belong to and is
+# refused, as is a value long enough to be an identifier rather than a sprint.
+canon_sprint() { # <raw digits> -> the canonical spelling, or empty when it is not a sprint
+  local v="$1"
+  [ -n "$v" ] || { printf ''; return; }
+  case "$v" in *[!0-9]*) printf ''; return ;; esac
+  [ "${#v}" -le 6 ] || { printf ''; return; }     # not a sprint number; a date or an id
+  # `0` and `000` strip to the empty string and are refused BY that, with no separate guard. A
+  # guard here would be vacuous -- both branches return empty -- and a mutant deleting it survived
+  # every arm, which is exactly what a vacuous guard looks like from the outside.
+  printf '%s' "$(printf '%s' "$v" | sed -E 's/^0+//')"
+}
+
+# THE BASENAME CHANNEL AND `story_normalize` READ THE SAME DIGITS AND DO NOT AGREE, DELIBERATELY.
+# Re-derived by driving both against one basename set: on `story-<A>-<B>` they agree (`story-297-1`
+# -> 297 both ways). They part on `story-<M>-<slug>`, which `story_normalize` leaves ALONE -- its
+# comment says a basename that is already `story-<M>-<slug>` must not have its index read as a
+# sprint -- while this function returns that same `M`.
+#
+# THAT DIVERGENCE IS CORRECT AND IT IS THE WHOLE REASON THIS FUNCTION IS SEPARATE. The two are
+# asked DIFFERENT QUESTIONS at different points. `story_normalize` runs on every legacy story and
+# rewrites the path the general transform then scans, so reading an index as a sprint there would
+# mis-file a file whose sprint is about to be read correctly from somewhere else. This function
+# runs ONLY after `sprints_in` has returned zero over the whole path -- the file has no sprint
+# anywhere, in any component -- and only after the header has been asked and declined. At that
+# point the alternative to reading the leading number is refusing the file outright, which is why
+# 15 of the consumer's 23 resolve here.
+#
+# Two guards keep that licence narrow. A `story-<M>-<slug>` basename reaching this point has
+# already been left alone by `story_normalize` AND scored zero by `sprints_in`, so nothing else in
+# the tree claims it; and the value goes through `canon_sprint`, so this channel cannot mint a slot
+# spelling the path-side transform would not.
 sprint_from_subject() { # <path> -> a sprint opening the basename, or empty
   local b="${1##*/}" v
   v="$(sed -n -E 's/^(story|bug|hotfix|spike|chore|task)-([0-9]+)-.*$/\2/p' <<<"$b")"
   [ -n "$v" ] || v="$(sed -n -E 's/^([0-9]+)-.*$/\1/p' <<<"$b")"
-  printf '%s' "${v%%$'\n'*}"
+  canon_sprint "${v%%$'\n'*}"
 }
 
 # --- build the plan -----------------------------------------------------------
@@ -349,6 +418,15 @@ while IFS= read -r src; do
       rec=""; rec_ch=""
       rec="$(sprint_from_header "$src")"
       [ -n "$rec" ] && rec_ch="header"
+      # THE HEADER SPOKE AND COULD NOT BE READ -> REFUSE, never fall through to the basename.
+      # For every carry-over shape the basename is the ITEM number, so falling through files the
+      # file under a sprint that does not own it, silently -- strictly worse than the refusal this
+      # recovery replaced. A file whose own declaration is unreadable is one the operator must fix.
+      if [ -z "$rec" ] && sprint_header_present "$src"; then
+        printf 'STORY-NO-SPRINT\t%s\tsits in a stories/ directory with no `s<N>/` above it, and it DOES carry a `**Sprint:**` line whose value could not be read as a sprint number. Its basename was NOT used as a fallback, deliberately: for a carry-over story the leading number is the ITEM, so guessing from it files the story under a sprint that does not own it. Fix the header to `**Sprint:** <N>` (an `S` prefix is fine) and the next run moves it.\n' \
+          "$src" >> "$REFUSE"
+        continue
+      fi
       if [ -z "$rec" ]; then
         rec="$(sprint_from_subject "$src")"
         [ -n "$rec" ] && rec_ch="basename"
