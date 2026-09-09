@@ -37,6 +37,101 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
+### BATCH 81 SHIPPED AS ONE RELEASE, `v0.542.0`, CARRYING TWO PC-BACKED SUBJECTS — **THE CONSUMER FILED THREE MORE CANDIDATES MID-BATCH WHILE ITS OWN COMMIT SUBJECT SAID TWO**, AND **THE RECOVERY FIX'S FIRST CUT WAS WORSE THAN THE STATE IT REPLACED ON 46 CONSUMER FILES**, CAUGHT BY AN ADVERSARY ON A GATE-GREEN BRANCH. THE GAP IS **TWO**, PENDING **2**, NOT BOOTSTRAPPING, NOT WIDE, NOT REQUIRED.
+
+This block replaces the batch-80 record below it. Every figure was re-derived after the merge
+against the working tree with controls in the same invocation; re-derive them again rather than
+reading them.
+
+**`VERSION` IS `0.542.0`, SO BATCH 82 RELEASES AS `0.543.0`.** Re-derive `VERSION` and add one.
+Batch 81 merged once, at `732db5a5`, carrying
+`PC-S309-STORY-NO-SPRINT-REMEDY-IS-RENAME-ONLY-WHILE-THE-FIXTURE-RATIONALE-CLAIMS-OUT-OF-BAND-DERIVATION`
+and `PC-S309-VALIDATE-MANDATORY-RULES-CHECK5-TEST-ONLY-WEB-DIFF-FALSE-FAIL`, both cited verbatim in
+the release commit message and each appearing in EXACTLY ONE commit on the range. They batched
+because the range is seven core paths with no bootstrapping file among them and neither receipt is
+closed by the other's fix — measured in BOTH directions with a control firing in each invocation.
+
+**THE SWEEP AT THE OPEN MATCHED THE BLOCK EXACTLY AND THEN MOVED TWICE.** Open: live 72, cited 53,
+unfiled 19, md5 `76f34a6b…`, archive 175, all six controls fired. Of the 19 unfiled, 4 were already
+named in `origin/main` release commits, 11 carry `NOT-UPSTREAM` in the adjudication brief, 1 is
+refuted, 1 WITHDRAWN by the consumer itself and 1 superseded — leaving the 2026-09-09 filing as the
+only available residue. **Close: live 75, cited 55, unfiled 20, md5 `21cbc866…`, archive 175
+UNMOVED.** The consumer filed THREE new candidates mid-batch — `ADR-DEFERRED-WORK-HAS-NO-CARRIER`,
+`RETRO-CLOSURE-QUOTATION-NOT-VERBATIM-BOUND`, `VALIDATE-MANDATORY-RULES-CHECK5-…` — while its own
+commit subject claimed two. **Derive the id set, never the commit message.** DISCHARGED 25 /
+in-flight 30 / untouched 20, summing to 75 after subtracting the 4-id overlap; TERMINAL 61;
+discharged-but-invisible 1 (`BL-195`, deliberately uncited).
+
+**WHAT SHIPPED, AND BOTH FILED PREMISES WERE REFUTED BY MEASUREMENT.** The `STORY-NO-SPRINT` refusal
+claimed a RENAME was its only remedy; the consumer's operator resolved all 23 such files with PURE
+DIRECTORY MOVES — 0 insertions, 0 deletions, basename identical — against controls of 36 rows
+carrying insertions and 72 renaming a basename in the same parse. Recovery now reads the file's own
+`**Sprint:** <N>` header then the basename, reports every one, and scores 19 correct / 0 wrong / 4
+refused of 23; consumer-wide 970 moves against 951, 79 refusals against 98, 0 newly refused. **The
+`--follow` premise in the brief was also wrong**: at the PRE-migration ref `--follow` and plain
+`git log` return the same oldest commit for all 23, because the renames that make them differ are
+the ones the migration itself creates. The fix reads no history at all.
+
+**THE ADVERSARY'S BLOCKER MADE THE FIX WORSE THAN THE STATE IT REPLACED.** The first cut's header
+grammar took only a bare digit while the consumer spells 46 headers `**Sprint:** S303`. On those the
+header read returned empty and FELL THROUGH TO THE BASENAME, placing a file whose header says sprint
+270 into `s124/` — its carry-over ITEM number, which is the exact defect the fix exists to prevent,
+and worse than the refusal it replaced. The channel had no **"spoke but unparseable"** state. Fixed
+both halves: the grammar takes `[Ss]?[0-9]+`, and a `**Sprint:**` line present but unreadable
+(`53-54`, `TBD`, the `[sprint ID/name]` placeholder, `0`) REFUSES. **ASK OF ANY PARTIAL READER WHAT
+IT DOES WHEN ITS SUBJECT SPOKE AND IT COULD NOT LISTEN.**
+
+**TWO OF SIX NEW ARMS WERE VACUOUS AND ONE ADVERSARY PROVED IT BY BUILDING THE MUTANT THEY CLAIMED
+TO KILL.** The `follow-bound` seed sat in an `s121/` slot, so driving the shipping `legacy_story()`
+returned `not-leg` against a `LEGACY` control — it never entered the recovery block. A real
+`git log --follow` third channel added to the shipping script PASSED the arm. The subject moved to a
+legacy path born on another slot and moved later, plus a new `follow-bound-reaches` arm that drives
+`legacy_story()` to prove the subject reaches the mechanism. **AN ARM'S CONTROL MUST ESTABLISH THAT
+ITS SUBJECT REACHES THE CODE, NOT MERELY THAT THE TREE HAS A PROPERTY.**
+
+**CHECK 5 TOOK THREE ADVERSARY FINDINGS AFTER ITS GATE WAS GREEN.** A `| head -20` truncation
+acquitted a 22-file diff whose only source file sorted past position 20; the bare `web/**` glob was
+pinned by NO fixture world, so a narrowed pathspec passed all 19 assertions while `web/index.html`
+skipped as "no web changes"; and default rename detection collapsed
+`git mv Gauge.jsx Gauge.test.jsx` to one test path, acquitting a diff that DELETED a rendered
+component. A fourth finding was a VACUOUS GUARD the commit message presented as a fix — removed by
+subtraction. **The `.stories.` widening is caught by a SET-LOCK, not another world**: no battery of
+worlds can catch a fifth suffix.
+
+**BOTH BUILD HANDS SHIPPED A STALE DIFF AND ONE PUSHED WITH `--no-verify`.** Each worktree was cut
+from `aca1f5e3`, so a straight merge would have reverted the other subject entirely plus three
+backlog filings. **CHERRY-PICK A WORKTREE HAND'S COMMIT; NEVER MERGE ITS BRANCH.** One hand pushed
+its own branch to origin on the strength of a gate run BEFORE the commit — `origin/main` was
+untouched and nothing reached the release, but a gate that ran before the tree froze is not a gate
+on what was pushed.
+
+**THREE ENTRIES FILED AND DELIBERATELY NOT FIXED**, live 79 → 82 against a ceiling of 100.
+**`BL-214`** — `story_normalize` reads a carry-over ITEM number as a sprint: 165 of 1045 story files
+disagree with their own headers, ALL ONE DIRECTION, mass at gaps 44–50, and the licence at
+`artifact-path-grammar.md:191` rests on a control that CANNOT DISCRIMINATE (an item number falls
+inside the sprint range too). **`BL-215`** — the ADR-carrier filing's headline is refuted
+(`requirements.md:50-56` mandates the `docs/adr/` grep one step later); no enforcer is constructible
+because the predicate is intent. **`BL-216`** — the closure-quotation filing's own remedy is a FALSE
+NEGATIVE ON ITS MOTIVATING CASE, the id on line 198 and the ellipsis on 199. Both new `sh` receipts
+were proven BIDIRECTIONAL: exit 1 here, exit 0 against a simulated correct fix, each with a `cmp -s`
+control asserting the mutation applied. **The first `BL-214` mutation returned exit 3 — the
+migrator's "nothing to migrate" — a receipt satisfied by DELETING ITS OWN SUBJECT.**
+
+**THE GAP IS TWO, PENDING 2, NOT BOOTSTRAPPING, NOT WIDE, NOT REQUIRED.** Consumer installed
+`0.540.0`, distribution `0.542.0`. Both shipped ids resolve to `0.542.0` and are invisible to the
+consumer until it pulls. The range is seven core paths, **0 mode-only changes** against a control of
+7 changed paths, and no `preclassify.sh`/`apply.sh`/`ledger-reverify.sh`/update-skill path in it.
+Backlog receipt histogram at close: 72 STILL-LIVE, 8 HAND-REVIEW, 2 NEEDS-REVIEW, **0
+CLOSE-CANDIDATE** — no incidental closes.
+
+**THE SWEEP FOR BATCH 82.** Live 75, cited 55, unfiled 20. Two of the three mid-batch filings remain
+available and both are adjudicated NOT-READY with the reason recorded in `BL-215` and `BL-216` —
+read those entries before re-scoping either. **`BL-137` IS THE READIEST NO-`PC` ENTRY AND ITS
+SEPARABILITY IS ALREADY MEASURED** in both directions; `BL-153` is batchable with the caution that
+its receipt accepts either remedy form, and `BL-133` SHIPS ALONE (3 of its 5 instances are in
+bootstrapping files). Run the sweep anyway — the consumer has now filed mid-batch in four of the
+last five batches.
+
 ### BATCH 80 SHIPPED AS ONE RELEASE, `v0.541.0`, CARRYING TWO NO-`PC` ENTRIES (`BL-088`, `BL-087`) — THE SWEEP WAS EMPTY AT THE OPEN, THE SUITE POLE FELL **480 → 97** BY REFUTING THE FILED REMEDY, AND **THE CONCURRENCY ARM TOOK FOUR CUTS, THREE OF THEM CAUGHT BY AN ADVERSARY ON A GATE-GREEN BRANCH.** THE CONSUMER PULLED TO `0.540.0` AND FILED ONE NEW CANDIDATE MID-BATCH, SO THE GAP IS **ONE**, PENDING **0**, NOT BOOTSTRAPPING, NOT WIDE, NOT REQUIRED.
 
 This block replaces the batch-79 record below it. Every figure was re-derived after the merge
@@ -8008,7 +8103,7 @@ so no block written before it changes verdict.
 ### NEXT ACTIONS — numbered, in order
 
 1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below), RANK THE UNFILED CANDIDATES,
-   THEN SCOPE BATCH 80 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED YOU.** Operator
+   THEN SCOPE BATCH 82 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED YOU.** Operator
    instruction, given at batch 52. **If the one-liner was TYPED BY THE OPERATOR**, report the
    candidates with a marked recommendation and ask, as every batch before has. **If it ARRIVED
    FROM ANOTHER SESSION** — a cross-session message carrying `READ and FOLLOW …`, which is
@@ -8027,6 +8122,28 @@ so no block written before it changes verdict.
    THREE `PC-S309-*` candidates on 2026-09-07 (live 67 -> 70, unfiled 16 -> 19, md5 moved again).
    **A sentence in this file saying the residue is zero is a snapshot of a file someone else is
    holding open. Run the sweep; never read that sentence for an answer.**
+
+   **BATCH 81's TWO SUBJECTS ARE SHIPPED — do not re-scope either of them.**
+   `PC-S309-STORY-NO-SPRINT-REMEDY-IS-RENAME-ONLY-WHILE-THE-FIXTURE-RATIONALE-CLAIMS-OUT-OF-BAND-DERIVATION`
+   and `PC-S309-VALIDATE-MANDATORY-RULES-CHECK5-TEST-ONLY-WEB-DIFF-FALSE-FAIL` shipped as ONE
+   release, `v0.542.0` at `732db5a5`, both cited verbatim in the release commit message. Neither
+   has a `BL-` entry to rotate — both came straight from the consumer's ledger.
+
+   **TWO OF THE THREE MID-BATCH FILINGS REMAIN AVAILABLE AND BOTH ARE ADJUDICATED NOT-READY.**
+   `ADR-DEFERRED-WORK-HAS-NO-CARRIER-INTO-BACKLOG` is refuted at its headline and has no
+   constructible enforcer (`BL-215`); `RETRO-CLOSURE-QUOTATION-NOT-VERBATIM-BOUND` is real but its
+   filed remedy is a false negative on its own motivating case, and choosing between the two
+   candidate shapes is design work (`BL-216`). **Read those two entries before re-scoping either
+   candidate** — the adjudication is recorded there so it is not re-derived.
+
+   **THE READIEST NO-`PC` ENTRY IS `BL-137`, AND ITS SEPARABILITY IS ALREADY MEASURED** in both
+   directions against batch 81's subjects, with a control firing in each invocation. `BL-153`
+   batches with one caution: its receipt accepts either remedy form, and a receipt accepting two
+   candidates has established neither — build and score both. `BL-133` SHIPS ALONE: 5 instances at
+   HEAD rather than the 4 it records, 3 of them in bootstrapping files, and its receipt is a
+   corpus-wide count that cannot close without touching them. `BL-091` writes `docs/backlog.md`
+   across 44 headings and therefore CONTENDS with the batch's own filings and rotation — do not
+   batch it with anything that files an entry.
 
    **BATCH 80's TWO SUBJECTS ARE SHIPPED — do not re-scope either of them.** `BL-088` and
    `BL-087` shipped as ONE release, `v0.541.0` at `274efdae` (PR #695), neither carrying a `PC-`
@@ -8859,9 +8976,9 @@ so no block written before it changes verdict.
 
    ```
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
-   md5 -q "$L"              # 76f34a6b... at batch 80's close -- MOVED from 3b33db78 because the consumer PULLED to 0.540.0 mid-batch (rotating one cited id, archive 174 -> 175) AND filed one new candidate dated 2026-09-09; 3b33db78... at batch 79's close -- MOVED from c8bf4477 mid-batch because the consumer filed one candidate, UNCOMMITTED (no -S date; read the working file); c8bf4477... at batch 78's close -- UNMOVED across the batch (no filing, no pull; batch 78 cited no PC- id); c8bf4477... at batch 77's close -- MOVED from 9459fa46 because the consumer pulled to 0.536.0 mid-batch and rotated two cited ids; 9459fa46... at batch 76's close -- UNMOVED across the batch (batch 76 cited no PC- id and the consumer did not pull); 9459fa46... at batch 75's close -- MOVED from a72adb6e because the consumer pulled to 0.533.0 and filed two candidates before the batch opened, UNMOVED across the batch itself; a72adb6e... at batch 74's close -- UNMOVED across the batch, because the consumer neither pulled nor filed after the sweep ran; 2fd16419... at batch 73's close, MOVED from 1ac25a27 because the consumer filed three candidates mid-batch and committed two of them mid-batch; b7e0f100... at batch 69's close -- UNMOVED across batches 68 AND 69, because the consumer did not pull and closing an entry HERE never moves ITS ledger; same value at batch 67's close, where the CONSUMER PULLED to 0.518.0 mid-batch (its PR #1025 at 44001c2aa), which rotated one cited id; 7b363a17... through batches 64-66; 2c129779... through batch 63's close; it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too, and check the consumer's porcelain, because an uncommitted filing has no -S date
-   wc -l < /tmp/live.txt    # 72 at batch 80's close -- UNMOVED, but for two OFFSETTING consumer moves: its 0.540.0 pull rotated one cited id (-1) and it filed one new candidate (+1), so this 72 is not the same 72; 72 at batch 79's close (one filed mid-batch, cited by v0.540.0 -- CITED moved, LIVE moved on the filing); 71 at batch 78's close, UNMOVED; 71 at batch 77's close (the consumer's 0.536.0 pull rotated two cited ids, 73 -> 71); 73 at batch 76's close, UNMOVED (no filing, no pull); 73 at batch 75's close, UNMOVED (two filed, two rotated by the 0.533.0 pull, before the batch opened); 73 at batch 74's close, UNMOVED (batch 74 cited three PC- ids, which moves CITED and never LIVE -- the consumer's ledger only moves on a pull); 73 at batch 73's close (three filed, none rotated -- the consumer did not pull); 70 at batch 72's close; 66 at batch 69's close, UNMOVED across 68 and 69 (batch 69 cited no PC- id -- its subject carries none); 66 at batch 67's close (the consumer's 0.518.0 pull rotated one cited id, 67 -> 66); 67 at batch 66's close; 67 at batch 65's close (the consumer's 0.516.0 pull rotated two and filed one); 66 at batch 64's close (two filed, one rotated); 65 after the consumer's batch-63 pull rotated seven; 72 with the corrected ^#{2,6} grammar through batch 62 (the old ^## one reads one fewer)
-   wc -l < /tmp/unfiled.txt # 19 at batch 80's close -- the consumer's 2026-09-09 filing took it 18 -> 19 and batch 80 cited no PC- id, so the residue is NO LONGER ZERO: that one filing is available PC-backed work; 18 at batch 79's close -- the filing took it to 19 and v0.540.0's citation took it back to 18, the SAME 18 as batch 75's, all adjudicated, residue ZERO; 18 at batch 78's close, UNMOVED -- the same 18 as batch 75's, all adjudicated, residue ZERO; 18 at batch 77's close, UNMOVED; 18 at batch 76's close, UNMOVED -- batch 76 cited no PC- id and nothing was filed, so this is the SAME 18 as batch 75's, all adjudicated, residue ZERO; 18 at batch 75's close -- two new filings took it to 20 and batch 75's two citations took it back to 18, so those two 18s are not the same 18; ALL 18 are adjudicated and the AVAILABLE residue is ZERO; 18 at batch 74's close -- its three citations moved two ids from unfiled to cited (PC-S342 was already counted once) and ALL 18 that remain are adjudicated, so the AVAILABLE residue is ZERO; 20 at batch 73's close -- three filed (18 -> 21) and batch 73's own citation moved one to cited; of the 20, SIXTEEN are the adjudicated set (4 in release commits, 11 NOT-UPSTREAM, 1 refuted) and TWO are available PC-S309 work; 16 at batch 69's close, UNMOVED -- batch 69 cited no PC- id, so nothing left the unfiled set; ALL 16 are now adjudicated (4 in release commits, 11 NOT-UPSTREAM, 1 refuted at 182817fb), so the AVAILABLE residue is ZERO; 16 at batch 68's close after its citation of PC-S340-AUDIT-RULE-FILES-...; 17 at batch 67's close -- batch 67's own citation moved PC-S308-EMIT-REPORT-... from unfiled to cited; 18 at batch 66's close, unmoved; 18 at batch 65's close; 19 at batch 64's close -- two new PC-S308-* filings in, PC-S340-CHECK-26-READS-A-PARTIAL-... out by the operator's carried rejection (batch 64 cited no PC- id); 18 through batch 63; 20 through batch 62
+   md5 -q "$L"              # 21cbc866... at batch 81's close -- MOVED from 76f34a6b mid-batch because the consumer filed THREE candidates while its own commit subject said TWO (derive the id set, never the message); 76f34a6b... at batch 80's close -- MOVED from 3b33db78 because the consumer PULLED to 0.540.0 mid-batch (rotating one cited id, archive 174 -> 175) AND filed one new candidate dated 2026-09-09; 3b33db78... at batch 79's close -- MOVED from c8bf4477 mid-batch because the consumer filed one candidate, UNCOMMITTED (no -S date; read the working file); c8bf4477... at batch 78's close -- UNMOVED across the batch (no filing, no pull; batch 78 cited no PC- id); c8bf4477... at batch 77's close -- MOVED from 9459fa46 because the consumer pulled to 0.536.0 mid-batch and rotated two cited ids; 9459fa46... at batch 76's close -- UNMOVED across the batch (batch 76 cited no PC- id and the consumer did not pull); 9459fa46... at batch 75's close -- MOVED from a72adb6e because the consumer pulled to 0.533.0 and filed two candidates before the batch opened, UNMOVED across the batch itself; a72adb6e... at batch 74's close -- UNMOVED across the batch, because the consumer neither pulled nor filed after the sweep ran; 2fd16419... at batch 73's close, MOVED from 1ac25a27 because the consumer filed three candidates mid-batch and committed two of them mid-batch; b7e0f100... at batch 69's close -- UNMOVED across batches 68 AND 69, because the consumer did not pull and closing an entry HERE never moves ITS ledger; same value at batch 67's close, where the CONSUMER PULLED to 0.518.0 mid-batch (its PR #1025 at 44001c2aa), which rotated one cited id; 7b363a17... through batches 64-66; 2c129779... through batch 63's close; it moves whenever the CONSUMER writes, which is the normal case and not an alarm -- check the id set too, and check the consumer's porcelain, because an uncommitted filing has no -S date
+   wc -l < /tmp/live.txt    # 75 at batch 81's close -- the consumer's three mid-batch filings took it 72 -> 75 and nothing rotated (no pull), so archive held at 175; 72 at batch 80's close -- UNMOVED, but for two OFFSETTING consumer moves: its 0.540.0 pull rotated one cited id (-1) and it filed one new candidate (+1), so this 72 is not the same 72; 72 at batch 79's close (one filed mid-batch, cited by v0.540.0 -- CITED moved, LIVE moved on the filing); 71 at batch 78's close, UNMOVED; 71 at batch 77's close (the consumer's 0.536.0 pull rotated two cited ids, 73 -> 71); 73 at batch 76's close, UNMOVED (no filing, no pull); 73 at batch 75's close, UNMOVED (two filed, two rotated by the 0.533.0 pull, before the batch opened); 73 at batch 74's close, UNMOVED (batch 74 cited three PC- ids, which moves CITED and never LIVE -- the consumer's ledger only moves on a pull); 73 at batch 73's close (three filed, none rotated -- the consumer did not pull); 70 at batch 72's close; 66 at batch 69's close, UNMOVED across 68 and 69 (batch 69 cited no PC- id -- its subject carries none); 66 at batch 67's close (the consumer's 0.518.0 pull rotated one cited id, 67 -> 66); 67 at batch 66's close; 67 at batch 65's close (the consumer's 0.516.0 pull rotated two and filed one); 66 at batch 64's close (two filed, one rotated); 65 after the consumer's batch-63 pull rotated seven; 72 with the corrected ^#{2,6} grammar through batch 62 (the old ^## one reads one fewer)
+   wc -l < /tmp/unfiled.txt # 20 at batch 81's close -- three filed (+3) and batch 81's two citations moved two to cited (-2); of the 20, TWO are the available residue and both are adjudicated NOT-READY in BL-215/BL-216; 19 at batch 80's close -- the consumer's 2026-09-09 filing took it 18 -> 19 and batch 80 cited no PC- id, so the residue is NO LONGER ZERO: that one filing is available PC-backed work; 18 at batch 79's close -- the filing took it to 19 and v0.540.0's citation took it back to 18, the SAME 18 as batch 75's, all adjudicated, residue ZERO; 18 at batch 78's close, UNMOVED -- the same 18 as batch 75's, all adjudicated, residue ZERO; 18 at batch 77's close, UNMOVED; 18 at batch 76's close, UNMOVED -- batch 76 cited no PC- id and nothing was filed, so this is the SAME 18 as batch 75's, all adjudicated, residue ZERO; 18 at batch 75's close -- two new filings took it to 20 and batch 75's two citations took it back to 18, so those two 18s are not the same 18; ALL 18 are adjudicated and the AVAILABLE residue is ZERO; 18 at batch 74's close -- its three citations moved two ids from unfiled to cited (PC-S342 was already counted once) and ALL 18 that remain are adjudicated, so the AVAILABLE residue is ZERO; 20 at batch 73's close -- three filed (18 -> 21) and batch 73's own citation moved one to cited; of the 20, SIXTEEN are the adjudicated set (4 in release commits, 11 NOT-UPSTREAM, 1 refuted) and TWO are available PC-S309 work; 16 at batch 69's close, UNMOVED -- batch 69 cited no PC- id, so nothing left the unfiled set; ALL 16 are now adjudicated (4 in release commits, 11 NOT-UPSTREAM, 1 refuted at 182817fb), so the AVAILABLE residue is ZERO; 16 at batch 68's close after its citation of PC-S340-AUDIT-RULE-FILES-...; 17 at batch 67's close -- batch 67's own citation moved PC-S308-EMIT-REPORT-... from unfiled to cited; 18 at batch 66's close, unmoved; 18 at batch 65's close; 19 at batch 64's close -- two new PC-S308-* filings in, PC-S340-CHECK-26-READS-A-PARTIAL-... out by the operator's carried rejection (batch 64 cited no PC- id); 18 through batch 63; 20 through batch 62
    ```
 
    **AN UNMOVED md5 WITH A MOVED COUNT IS THE GRAMMAR, NOT THE CONSUMER.** Batch 43 read 72 live
@@ -8869,9 +8986,16 @@ so no block written before it changes verdict.
    `^#{2,6}`. If those two disagree again, ask which of them changed before concluding anything
    about the consumer.
 
-   **THE BASELINE IS 72 LIVE CANDIDATES, 53 CITED, 19 UNFILED** — re-derived at batch 80's close
-   after the merge at `274efdae` (md5 `76f34a6b…`, archive 175, partition control 0, all four
-   presence controls 1, absence control 0). **The residue is NO LONGER ZERO.** The consumer both
+   **THE BASELINE IS 75 LIVE CANDIDATES, 55 CITED, 20 UNFILED** — re-derived at batch 81's close
+   after the merge at `732db5a5` (md5 `21cbc866…`, archive 175, partition control 0, all four
+   presence controls 1, absence control 0). **The residue is TWO, and both are adjudicated
+   NOT-READY** with the reason recorded in `BL-215` and `BL-216` — read those before re-scoping
+   either. The consumer filed THREE candidates mid-batch while its own commit subject said TWO,
+   taking live 72 → 75 and unfiled 19 → 22; batch 81's two citations then moved two to cited, so
+   unfiled reads 20 and cited 55. Archive held at 175 because the consumer did not pull.
+   **DERIVE THE ID SET, NEVER THE COMMIT MESSAGE.** The paragraph below is the batch-80 reading and
+   records how the counts moved: the batch-80 baseline was 72 / 53 / 19, re-derived at that batch's
+   close after the merge at `274efdae` (md5 `76f34a6b…`, archive 175). The consumer both
    PULLED to `0.540.0` (rotating one cited id) and FILED
    `PC-S309-STORY-NO-SPRINT-REMEDY-IS-RENAME-ONLY-WHILE-THE-FIXTURE-RATIONALE-CLAIMS-OUT-OF-BAND-DERIVATION`
    on 2026-09-09, so live held at 72 for two offsetting reasons while cited fell and unfiled
