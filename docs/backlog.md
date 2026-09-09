@@ -3933,6 +3933,122 @@ carry-over.
 
 verify: manual
 
+## BL-214 — `story_normalize` reads a carry-over ITEM number as a sprint, and the licence that authorised it used a non-discriminating control
+
+`story_normalize()` (`core/scripts/migrate-artifact-paths.sh:244`) rewrites `story-<A>-<B>` to
+`story-s<A>-<B>`, taking `A` as the sprint. In the pre-s199 era `A` is the carry-over ITEM or epic
+number, not the sprint, so the migration places those files under the wrong slot.
+
+Driven on the shipping program, seeded from the consumer's own file, with a refused control in the
+same run: a story whose body carries `**Sprint:** 53` is planned into `s102/`, because its basename
+is `story-102-1-…`. On the reference consumer the real file
+`s102/stories/story-1-effective-spread-500.md` carries `**Sprint:** 53` and the title
+`Epic: 102 — Sprint 53 … (Item 102)`; `docs/retro/s53/retro.md` opens by naming that story, while
+`docs/retro/s102/retro.md` is a different sprint entirely. There is no `s53` planning directory,
+against a control that `s102` exists.
+
+**Scale, and it is not a delivery lag.** 1045 story files compared header-against-slot: 598 agree,
+165 DISAGREE, 282 silent. Control on 600 non-story artifacts under a slot: 4 disagree of 90 valued.
+All 165 run ONE direction — slot strictly greater than header, 165 to 0. An authored-in-one-sprint
+delivered-in-the-next reading predicts a small positive gap; the mass sits at gaps of 44, 45, 48 and
+50, and only 8 files sit at gap 1. Adjudicated against sprint retros, the header-named sprint's retro
+claims the story 22 times against the slot-named sprint's 3; the 3 counter-cases are all gap 1 and
+are genuine carry-over, correctly slotted. Against add-commit subjects on a 300-file sample, the
+header sided with the subject against the name 58 times to 4.
+
+**The licence's own control could not discriminate, which is why this shipped.**
+`core/skills/ai-dlc/artifact-path-grammar.md:191` justifies reading `A` as the sprint on the ground
+that all 786 `story-<A>-<B>` basenames have `A` "inside the sprint range the tree actually uses
+(7–302)". An item number falls inside that same range, so the observation is true and cannot
+separate the two hypotheses it is offered as evidence for. This is the repo's own rule — a control
+drawn from a form you already know cannot discover the form you do not — collected on the licence
+that authorised 951 moves.
+
+**Not fixed here, and deliberately not folded into the `STORY-NO-SPRINT` work beside it.** That
+subject is the refusal class for files with NO derivable sprint; this is the opposite failure — a
+sprint derived confidently and wrongly — and the remedy is a change to `story_normalize`'s licence
+with its own false-positive measurement over the post-s199 era, where `A` genuinely is a sprint. The
+repair also cannot be a pure rename of the recovery order: 598 files agree today and must not move.
+
+**Tiered DEFECT.** Files are placed under a wrong but well-formed slot, so nothing reports and the
+error is invisible to every conformance check — the destination is on the grammar either way.
+
+verify: sh set -e; d=$(mktemp -d); trap 'rm -rf "$d"' EXIT; mkdir -p "$d/_bmad-output/planning-artifacts/stories"; ( cd "$d" && git init -q . && git config user.email t@t && git config user.name t ); printf '# S\n\n**Sprint:** 53\n\nB.\n' > "$d/_bmad-output/planning-artifacts/stories/story-102-1-x.md"; ( cd "$d" && git add -A && git commit -qm s ); o="$(bash core/scripts/migrate-artifact-paths.sh --root "$d" --grammar "$PWD/core/skills/ai-dlc/artifact-path-grammar.md" 2>&1)"; grep -q 's102/stories' <<<"$o" && exit 1; exit 0
+
+## BL-215 — an ADR that defers work reaches the next sprint's intake, but the intake's disposition vocabulary has no slot for "this names undone work"
+
+Filed by the consumer as `PC-S309-ADR-DEFERRED-WORK-HAS-NO-CARRIER-INTO-BACKLOG`. **The filing's
+headline is refuted and the narrowed finding is what stands.**
+
+The filing says an ADR's deferred work is invisible to the next sprint's intake. It is not.
+`route.md:434` puts the carry-over variant at `carry-over-evaluation → requirements → architecture`,
+and `requirements.md:50-56` MANDATES a grep of `docs/adr/` as part of the settled-decision corpus,
+cites the literal command, and FAILs the gate if it is absent. Derived: `docs/adr` appears 0 times in
+`carry-over-evaluation.md` against a control of 3 for `carry-over-backlog` in the same file, and 1
+time in `requirements.md`. So the step AFTER the blind one does read the corpus.
+
+**What it cannot do is read it AS deferred work.** That mandated grep is keyed on subsystem keywords
+and its disposition vocabulary is `superseded / still binding / not relevant` — there is no slot for
+"this names work nobody has filed". The symptom the consumer observed is real; its account of where
+the gap sits is one step wide.
+
+**No enforcer is constructible on what exists today, and that is the finding.** The predicate is
+"this ADR's own text defers work" — intent, not an act. This repo's mechanisms deny an ACT and never
+evaluate a REASON. There is no ADR frontmatter and no ADR template, and no core script takes
+`docs/adr` as a corpus: 0 scripts name it, against a control of 20 naming `docs/retro`. A
+same-commit join would need a machine-readable `defers:` field that does not exist and that an
+author could omit silently, which relocates the judgement rather than mechanising it.
+
+**Ownership is contestable and should be settled before any upstream work.** `extensions/` is a
+consumer-owned layer grain (`core-manifest.md:13-14`), and the consumer already runs steps-domain
+entries hooking `steps/retro.md`. An architecture-step domain entry is available to it today and
+survives `apply`. Under the standing rule — establish that no simpler change suffices — that is the
+question to answer first.
+
+**Tiered NOTE.** Recorded so the refutation is not re-derived and the enforcer question is not
+re-opened blind.
+
+verify: manual
+
+## BL-216 — nothing binds a quoted closure condition to the text it quotes, and the filed remedy is a false negative on its own motivating case
+
+Filed by the consumer as `PC-S309-RETRO-CLOSURE-QUOTATION-NOT-VERBATIM-BOUND`. The defect is real
+and the FILED REMEDY IS REFUTED; both halves are recorded so neither is rebuilt blind.
+
+The instance reproduces. `ADR-S309-1:198-200` quotes a carry-over item's closure condition with an
+ellipsis; the elided text — `(feeds a future sprint's scope)` — is the operative clause, and
+`:190-191` explicitly declines the decision that clause requires. The document claims a condition met
+while declining what meeting it needs. Every other claim in that document is bound by a re-runnable
+`derived` fence and reproduces byte-identically; this one was not, and it is the one that went wrong.
+
+**The coverage gap is structural.** The `derived`-fence convention is scoped by the FENCE and re-runs
+shell commands only, so a paraphrase carries no fence and nothing reaches it.
+`validate-locked-anchor.sh` is the one program in core doing byte-verbatim quotation checking, and its
+SoR set is `("locked-requirements.md", "product-brief.md")`: `carry-over-backlog.md` appears 0 times
+in it, against a control of 11 for `product-brief|prd.md`. Its population structurally excludes the
+corpus this claim quotes.
+
+**The filed remedy — ban an ellipsis inside a closure-condition quotation — does not work.** Its
+false-positive ceiling on the consumer's own corpus is 3140 quoted-ellipsis lines, 108 when narrowed
+to lines also carrying a `CO-S…` id, 51 adding a closure word: not empty and not enumerated. Worse,
+it is a FALSE NEGATIVE ON ITS OWN MOTIVATING CASE — the `CO-S307` id sits on line 198 and the ellipsis
+on 199, so any line-keyed grammar scores the filed instance as a non-instance. Point a search grammar
+at its own subject before trusting its zero.
+
+**The sound shape is a join and needs no intent predicate**: extend `validate-locked-anchor.sh`'s SoR
+set to `carry-over-backlog.md` and let the existing `full_text_source:` machinery byte-compare. The
+declaring ACT is the author writing `full_text_source: carry-over-backlog.md#<id>` — the same act
+stories already perform 62 times on the reference consumer. An ellipsis then fails as a bullet not
+byte-present. Its honest limit: it does not catch an author who quotes without declaring.
+
+**Not fixed here.** Choosing between the two shapes is design work, and the entry exists so the
+refuted one is not built.
+
+**Tiered DEFECT.** A closure claim can assert a condition met that its own document declines to meet,
+and no mechanism reads it.
+
+verify: sh set -e; V=core/scripts/validate-locked-anchor.sh; [ -f "$V" ] || exit 9; n="$(grep -c 'carry-over-backlog' "$V")" || n=0; c="$(grep -c 'product-brief\|prd\.md' "$V")" || c=0; [ "$c" -gt 0 ] || exit 9; [ "$n" -eq 0 ] && exit 1; exit 0
+
 
 
 
