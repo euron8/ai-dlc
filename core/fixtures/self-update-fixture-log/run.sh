@@ -282,6 +282,20 @@ printf "# verdict: OK\n" > "$_rec_p"'
 G add -A >/dev/null 2>&1; G commit -q --no-verify -m base-recording >/dev/null 2>&1
 D_BASE_REC="$(G rev-parse HEAD 2>/dev/null)"
 
+# A THIRD BASE: a gate that DECLARES the record directory and never writes. It is the near-miss
+# for the probe token, and it is what forced the token off `GATE_REC_DIR` — that spelling names
+# an ASSIGNMENT, so this text scores 1 and is read as a recording gate, turning a local edit
+# into a refusal whose message says the records were deleted. The composed FILENAME cannot be
+# present without the write, so this text scores 0 under it and the recording gate above scores
+# 1. Part G22 is the arm; the two texts are one property apart and nothing else separates them.
+dput "core/skills/ai-dlc-update/reconcile/self-update-gate.sh" '#!/usr/bin/env bash
+# declares the record directory and never writes a record — a locally patched old gate
+GATE_REC_DIR="$4/_bmad-output/ai-dlc-update"
+emit() { printf "%s\t%s\t%s\n" "$1" "$2" "$3"; }
+emit SELF-UPDATE-OK - nothing'
+G add -A >/dev/null 2>&1; G commit -q --no-verify -m base-declaring >/dev/null 2>&1
+D_BASE_DECL="$(G rev-parse HEAD 2>/dev/null)"
+
 # theirs: three fixtures changed, one deleted, one left alone, and a machinery path moved
 # alongside them so the `-- core/fixtures/` pathspec has something to exclude.
 for f in touched-shippable touched-named touched-distonly; do
@@ -1233,6 +1247,174 @@ else
 fi
 rm -f "$GCONS/scripts/ai-dlc/machinery.sh"
 
+# --- Parts G18 to G21: the digest column must be LOAD-BEARING ---------------------------------
+# ARM 2 accepts an input whose content is now the `theirs` blob, because that is the slice this
+# cycle wrote. Taken alone that makes the RECORDED digest decorative: after the write EVERY
+# gating script is at `theirs`, so a record whose digests were never read off anything passes.
+# Measured on the shipped arm — an all-zero forgery naming the derived required set returned
+# rc=0, against a control with one script at a third-hand blob which correctly returned rc=2.
+#
+# The repair is that a recorded digest differing from `now` must be a content the path actually
+# CARRIED in the range: its blob at BASE, or at any commit in `base..theirs` that touches it.
+# G21 is why that set is not narrowed to "the base blob" — a split stamp legitimately leaves the
+# consumer holding an intermediate release's blob.
+#   G18  an all-zero forgery, consumer at theirs   the arm's own subject
+#   G19  a decoy digest on the `-` row             the fallback hook always matches theirs
+#   G20  the honest normal order                   the acquittal, re-asserted after the narrowing
+#   G21  a consumer at an INTERMEDIATE blob        the acquittal a base-only rule would refuse
+GZERO=0000000000000000000000000000000000000000
+
+# --- Part G18: a record whose digests were never read off anything ----------------------------
+# The required set is NAMED in full, so arm 1 is satisfied and cannot be what refuses; every
+# digest is forty zeroes. The consumer is post-slice, which is the state that makes the forgery
+# work: `now` equals `theirs` for the changed script, so a bare theirs-acceptance passes it.
+gin_restore
+gin_write_slice
+gin_seed "$(printf '# input: .githooks/pre-push\t%s\t-\n# input: %s\t%s\tcore/scripts/gate-changed.sh\n# input: %s\t%s\tcore/scripts/gate-steady.sh' \
+  "$(git hash-object "$GCONS/.githooks/pre-push")" \
+  "$GIN_CHANGED" "$GZERO" "$GIN_STEADY" "$GZERO")" 400
+bash "$RUNNER" "$DIST" "$D_BASE" "$D_THEIRS" "$GCONS" touched-shippable touched-named green-one \
+  >/dev/null 2>&1
+rc=$?
+LG18="$(newest_glog)"
+if [ "$rc" -eq 2 ] && [ -n "$LG18" ] && grep -qF "GATE-RECORD: INPUT-MOVED $GIN_CHANGED" "$LG18" \
+   && grep -qF "is not a content this path carried anywhere" "$LG18"; then
+  ok "a record whose digests are content this path NEVER carried is refused, though every file is at theirs — the digest column stays load-bearing after the slice is written"
+else
+  bad "an all-zero-digest record naming the full required set authorised the cycle (rc=$rc). After the write every gating script IS at theirs, so accepting on that alone makes the recorded digest decorative and a forged record indistinguishable from a gate's"
+fi
+gin_restore
+
+# --- Part G19: a DECOY digest on the distribution-side row ------------------------------------
+# The `-` row's file is the distribution's own copy, which the reader resolves under $DIST — so
+# `now` equals the theirs blob by construction on every run, and a theirs-acceptance there would
+# accept any digest at all. The slice never writes that file, so strict equality costs nothing.
+# The consumer here has NO hook of its own, which is the only state that produces a `-` row.
+GH="$(bash "$HERE/seed.sh")"
+rm -rf "$GH/.githooks"
+GHLOG="$GH/_bmad-output/ai-dlc-update"
+mkdir -p "$GHLOG"
+SR_INPUTS="$(printf -- '# input: -\t%s\tcore/git-hooks/pre-push\n# input: %s\tABSENT\tcore/scripts/machinery.sh' \
+  "$GZERO" "scripts/ai-dlc/machinery.sh")" \
+  seed_record "$GHLOG" "$DIST" "$D_BASE" "$D_THEIRS" OK 410 >/dev/null \
+  || bad "FIXTURE ERROR: could not seed Part G19's decoy record"
+bash "$RUNNER" "$DIST" "$D_BASE" "$D_THEIRS" "$GH" touched-shippable touched-named green-one \
+  >/dev/null 2>&1
+rc=$?
+LG19="$(ls -t "$GHLOG"/self-update-fixtures-*.md 2>/dev/null | head -1)"
+if [ "$rc" -eq 2 ] && [ -n "$LG19" ] && grep -qF "INPUT-MOVED" "$LG19" \
+   && grep -qF "distribution fallback hook" "$LG19"; then
+  ok "a decoy digest on the distribution-side row is refused: that row is compared STRICTLY, because its file is the one the reader itself resolves"
+else
+  bad "a decoy digest on the \`-\` row was accepted (rc=$rc). The fallback hook's file IS the distribution's copy, so it equals the theirs blob on every run — a theirs-acceptance there accepts forty zeroes as readily as a real digest"
+fi
+# The ACQUITTAL for the same row, one property apart: the true digest must pass, or the arm
+# above would be satisfied by a reader that refuses every `-` row.
+SR_INPUTS="$(printf -- '# input: -\t%s\tcore/git-hooks/pre-push\n# input: %s\tABSENT\tcore/scripts/machinery.sh' \
+  "$(git hash-object "$DIST/core/git-hooks/pre-push" 2>/dev/null)" "scripts/ai-dlc/machinery.sh")" \
+  seed_record "$GHLOG" "$DIST" "$D_BASE" "$D_THEIRS" OK 411 >/dev/null
+rm -f "$GHLOG"/self-update-fixtures-*.md
+bash "$RUNNER" "$DIST" "$D_BASE" "$D_THEIRS" "$GH" touched-shippable touched-named green-one \
+  >/dev/null 2>&1
+rc=$?
+LG19B="$(ls -t "$GHLOG"/self-update-fixtures-*.md 2>/dev/null | head -1)"
+if [ "$rc" -eq 0 ] && [ -n "$LG19B" ] && grep -qF "===== FIXTURE green-one =====" "$LG19B"; then
+  ok "...and the row's TRUE digest is accepted, so the refusal above is about the digest and not about the \`-\` spelling"
+else
+  bad "the distribution-side row was refused with its true digest (rc=$rc). A consumer with no hook of its own would then be refused on every self-update, forever"
+fi
+rm -rf "$GH"
+
+# --- Part G20: the honest normal order still passes, after the narrowing ----------------------
+# Re-asserted here rather than left to Part G6 because the conjunct added for G18 is the one
+# thing that could refuse it: the recorded digest is the pre-write content, which must be found
+# in the range's history for this path.
+gin_restore
+gin_seed_clean 420
+gin_write_slice
+bash "$RUNNER" "$DIST" "$D_BASE" "$D_THEIRS" "$GCONS" touched-shippable touched-named green-one \
+  >/dev/null 2>&1
+rc=$?
+LG20="$(newest_glog)"
+if [ "$rc" -eq 0 ] && [ -n "$LG20" ] && grep -qF "===== FIXTURE green-one =====" "$LG20" \
+   && ! grep -qF "GATE-RECORD:" "$LG20"; then
+  ok "the honest normal order still passes with the carried-content conjunct in place — the pre-write digest IS a content the path carried at base"
+else
+  bad "the narrowing added for Part G18 refused the legitimate flow (rc=$rc): $(grep -m1 '^GATE-RECORD:' "$LG20" 2>/dev/null | cut -c1-150). A conjunct that refuses the honest case wedges every self-update, which is worse than the forgery it prevents"
+fi
+gin_restore
+
+# --- Part G21: a consumer holding an INTERMEDIATE release's blob ------------------------------
+# The acquittal a base-only rule would refuse, and the reason the carried-content set is derived
+# from `git log` rather than from BASE alone. A split stamp — `skill_commit` ahead of `commit` —
+# leaves the consumer at some release BETWEEN base and theirs, which is the normal state after
+# any self-update and one this cycle itself creates. Its own three-commit distribution, because
+# the shared one has no intermediate commit touching a gating script.
+I_D="$(mktemp -d)"
+IG(){ git -C "$I_D" -c user.name=ai-dlc-fixture -c user.email=fixture@invalid \
+                    -c commit.gpgsign=false "$@"; }
+iput(){ mkdir -p "$(dirname "$I_D/$1")" && printf '%s\n' "$2" > "$I_D/$1"; }
+git -c init.templateDir= init -q -b main "$I_D" >/dev/null 2>&1 \
+  || git -c init.templateDir= init -q "$I_D" >/dev/null 2>&1
+iput "core/fixtures/probe/run.sh" 'exit 0'
+iput "core/scripts/gate-changed.sh" 'gate-changed at base'
+iput "core/skills/ai-dlc-update/reconcile/self-update-gate.sh" 'a gate that records nothing'
+IG add -A >/dev/null 2>&1; IG commit -q --no-verify -m base >/dev/null 2>&1
+I_B="$(IG rev-parse HEAD 2>/dev/null)"
+iput "core/scripts/gate-changed.sh" 'gate-changed at MID'
+IG add -A >/dev/null 2>&1; IG commit -q --no-verify -m mid >/dev/null 2>&1
+I_M="$(IG rev-parse HEAD 2>/dev/null)"
+iput "core/scripts/gate-changed.sh" 'gate-changed at theirs'
+IG add -A >/dev/null 2>&1; IG commit -q --no-verify -m theirs >/dev/null 2>&1
+I_T="$(IG rev-parse HEAD 2>/dev/null)"
+I_MB="$(IG rev-parse -q --verify "${I_M}:core/scripts/gate-changed.sh" 2>/dev/null)"
+I_BB="$(IG rev-parse -q --verify "${I_B}:core/scripts/gate-changed.sh" 2>/dev/null)"
+I_TB="$(IG rev-parse -q --verify "${I_T}:core/scripts/gate-changed.sh" 2>/dev/null)"
+# THE SEED IS ASSERTED TO DISCRIMINATE. Three distinct blobs are what make "carried in the
+# range" and "equals the base blob" different answers; where mid equals base or theirs the arm
+# below passes for either implementation.
+if [ -n "$I_MB" ] && [ "$I_MB" != "$I_BB" ] && [ "$I_MB" != "$I_TB" ]; then
+  ok "SEED: the intermediate release's blob differs from BOTH base and theirs, so 'carried anywhere in the range' and 'equals the base blob' give different answers"
+else
+  bad "FIXTURE ERROR: the intermediate seed's three blobs are not distinct (base ${I_BB:-none}, mid ${I_MB:-none}, theirs ${I_TB:-none}). Part G21 would then pass for a base-only rule and the narrowing is untested"
+fi
+I_K="$(mktemp -d)"
+mkdir -p "$I_K/_bmad-output/ai-dlc-update" "$I_K/tests/fixtures/probe" "$I_K/.githooks" "$I_K/scripts/ai-dlc"
+printf 'exit 0\n' > "$I_K/tests/fixtures/probe/run.sh"
+printf 'bash scripts/ai-dlc/gate-changed.sh\n' > "$I_K/.githooks/pre-push"
+# The consumer sits at MID when the gate runs — the split-stamp state.
+IG show "${I_M}:core/scripts/gate-changed.sh" > "$I_K/scripts/ai-dlc/gate-changed.sh" 2>/dev/null
+printf '# base-sha: %s\n# theirs-sha: %s\n# input: .githooks/pre-push\t%s\t-\n# input: scripts/ai-dlc/gate-changed.sh\t%s\tcore/scripts/gate-changed.sh\n\n# verdict: OK\n' \
+  "$I_B" "$I_T" "$(git hash-object "$I_K/.githooks/pre-push")" "$I_MB" \
+  > "$I_K/_bmad-output/ai-dlc-update/self-update-gate-19700101T000000Z.md"
+# ...and then the slice is written, exactly as step 2 writes it.
+IG show "${I_T}:core/scripts/gate-changed.sh" > "$I_K/scripts/ai-dlc/gate-changed.sh" 2>/dev/null
+bash "$RUNNER" "$I_D" "$I_B" "$I_T" "$I_K" probe >/dev/null 2>&1
+rc=$?
+LG21="$(ls -t "$I_K"/_bmad-output/ai-dlc-update/self-update-fixtures-*.md 2>/dev/null | head -1)"
+if [ "$rc" -eq 0 ] && [ -n "$LG21" ] && ! grep -qF "GATE-RECORD:" "$LG21"; then
+  ok "a consumer whose pre-write copy was an INTERMEDIATE release's blob is accepted — the carried-content set is every blob the path held in the range, not the base blob alone"
+else
+  bad "a split-stamp consumer at an intermediate release's blob was refused (rc=$rc): $(grep -m1 '^GATE-RECORD:' "$LG21" 2>/dev/null | cut -c1-150). That is the normal state after any self-update and one this cycle itself creates, so narrowing the accepted set to the base blob wedges those consumers"
+fi
+
+# --- Part G22: a base gate that DECLARES the record directory and never writes ----------------
+# ARM 4's token has to spell the WRITE, not an assignment. Keyed on `GATE_REC_DIR` it scores 1
+# on a locally patched old gate that declares the variable and never writes — converting a local
+# edit into a refusal whose message says the records were deleted. The composed filename cannot
+# be present without the write.
+gin_restore
+rm -f "$GLOG"/self-update-gate-*.md "$GLOG"/self-update-fixtures-*.md
+bash "$RUNNER" "$DIST" "$D_BASE_DECL" "$D_THEIRS" "$GCONS" touched-shippable touched-named green-one \
+  >/dev/null 2>&1
+rc=$?
+LG22="$(newest_glog)"
+if [ "$rc" -eq 0 ] && [ -n "$LG22" ] && grep -qF "GATE-RECORD: NOT-REQUIRED" "$LG22"; then
+  ok "a base gate that DECLARES the record directory and never writes is read as non-recording — the token spells the write site, not an assignment"
+else
+  bad "a gate declaring GATE_REC_DIR without writing was read as a recording gate (rc=$rc), so an empty directory becomes a refusal saying the records were deleted. A local edit that adds the variable then wedges the consumer with a message about a state that never happened"
+fi
+
 # --- Parts G12 and G13: the DELIVERY-PULL tolerance, and the state it must NOT cover -----------
 # A fix to a bootstrapping step can never be delivered by that step. On the pull that DELIVERS
 # this requirement the OLD gate runs and records nothing, the slice installs this runner, and a
@@ -2130,10 +2312,8 @@ fi
 # CORRECT on all of them. That is why the arm had to model the real order rather than run the
 # gate and the runner back to back.
 MG7="$MUTDIR/mg7-theirs-acceptance-removed.sh"
-if mkmutant "$MG7" '              elif [ -n "$gr_tb" ] && [ "$gr_now" = "$gr_tb" ]; then
-                : # ARM 2: this is the written slice, and it is the normal case' \
-                   '              elif false; then
-                :' ; then
+if mkmutant "$MG7" '              elif [ -n "$gr_tb" ] && [ "$gr_now" = "$gr_tb" ]; then' \
+                   '              elif false; then' ; then
   gin_restore
   gin_seed_clean 320
   gin_write_slice
@@ -2197,6 +2377,136 @@ if mkmutant "$MG9" '    if [ "$gr_tok_base" -gt 0 ]; then' \
   fi
 else
   bad "FIXTURE ERROR: the tolerance anchor no longer occurs exactly once in the runner — Part G13a proves nothing"
+fi
+
+
+# --- MUTANTS G10 to G12: the digest column and the probe token --------------------------------
+#   G10  the carried-content conjunct removed     Part G18  (all-zero forgery accepted)
+#   G11  the set narrowed to the BASE blob        Part G21  (intermediate-blob consumer refused)
+#   G12  the probe token back to GATE_REC_DIR     Part G22  (a declaring gate read as recording)
+#
+# G10 and G11 pull in opposite directions, exactly as G7 and G8 do: one makes the reader accept
+# a record no gate produced, the other makes it refuse a consumer in a state this cycle itself
+# creates. Either alone certifies whichever error its author was not thinking about.
+
+# --- MUTANT G10: the carried-content conjunct removed -----------------------------------------
+# ARM 2 back to a bare theirs-acceptance, which is what shipped. After the slice every gating
+# script IS at theirs, so a record whose digests were never read off anything passes.
+MG10="$MUTDIR/mg10-theirs-acceptance-unqualified.sh"
+python3 -c 'import sys
+s = open(sys.argv[1]).read()
+a = s.index("                # ARM 2, and the second conjunct is what keeps the digest column")
+b = s.index("              else\n                gr_moved=\"$gr_moved\n  $gr_p — recorded ${gr_h}, now ${gr_now:-<unhashable>}, which is neither")
+open(sys.argv[2], "w").write(s[:a] + "                :\n" + s[b:])' "$RUNNER" "$MG10" 2>/dev/null
+if [ -s "$MG10" ] && ! cmp -s "$RUNNER" "$MG10" && bash -n "$MG10" 2>/dev/null; then
+  gin_restore
+  gin_write_slice
+  gin_seed "$(printf '# input: .githooks/pre-push\t%s\t-\n# input: %s\t%s\tcore/scripts/gate-changed.sh\n# input: %s\t%s\tcore/scripts/gate-steady.sh' \
+    "$(git hash-object "$GCONS/.githooks/pre-push")" \
+    "$GIN_CHANGED" "$GZERO" "$GIN_STEADY" "$GZERO")" 430
+  bash "$MG10" "$DIST" "$D_BASE" "$D_THEIRS" "$GCONS" touched-shippable touched-named green-one \
+    >/dev/null 2>&1
+  rc=$?
+  LM="$(newest_glog)"
+  gin_restore
+  if [ "$rc" -eq 0 ] && [ -n "$LM" ] && grep -qF "===== FIXTURE green-one =====" "$LM" \
+     && ! grep -qF "GATE-RECORD:" "$LM"; then
+    ok "MUTATION — with the carried-content conjunct gone an all-zero-digest record passes, because after the write every file IS at theirs: Part G18 is what catches that"
+  else
+    bad "MUTATION — the conjunct was removed and the forged record was still refused (rc=$rc). Part G18's verdict is coming from somewhere else, and the digest column's load-bearing half is untested"
+  fi
+else
+  bad "FIXTURE ERROR: the carried-content conjunct could not be excised or the result does not parse — Part G18 proves nothing"
+fi
+
+# --- MUTANT G11: the carried set narrowed to the BASE blob ------------------------------------
+# The over-tight repair, and the one a hand reaching for the simplest fix writes. It refuses a
+# consumer whose pre-write copy was an intermediate release's blob — the split-stamp state this
+# cycle itself creates — while passing every other arm here, because the shared distribution has
+# no intermediate commit touching a gating script.
+MG11="$MUTDIR/mg11-carried-set-base-only.sh"
+if mkmutant "$MG11" '                gr_hist="$(
+                  { git -C "$DIST" rev-parse -q --verify "${BASE}:${gr_c}" 2>/dev/null
+                    for gr_cm in $(git -C "$DIST" log --format=%H "${BASE}..${THEIRS}" -- "$gr_c" 2>/dev/null); do
+                      git -C "$DIST" rev-parse -q --verify "${gr_cm}:${gr_c}" 2>/dev/null
+                    done
+                  } | sort -u
+                )"' \
+                    '                gr_hist="$(git -C "$DIST" rev-parse -q --verify "${BASE}:${gr_c}" 2>/dev/null)"'; then
+  # Rebuilt here rather than reusing Part G21's, because that world is torn down with its own
+  # temp dirs and a mutant reading a deleted tree is a mutant that never ran.
+  M11K="$(mktemp -d)"
+  mkdir -p "$M11K/_bmad-output/ai-dlc-update" "$M11K/tests/fixtures/probe" "$M11K/.githooks" "$M11K/scripts/ai-dlc"
+  printf 'exit 0\n' > "$M11K/tests/fixtures/probe/run.sh"
+  printf 'bash scripts/ai-dlc/gate-changed.sh\n' > "$M11K/.githooks/pre-push"
+  IG show "${I_M}:core/scripts/gate-changed.sh" > "$M11K/scripts/ai-dlc/gate-changed.sh" 2>/dev/null
+  printf '# base-sha: %s\n# theirs-sha: %s\n# input: .githooks/pre-push\t%s\t-\n# input: scripts/ai-dlc/gate-changed.sh\t%s\tcore/scripts/gate-changed.sh\n\n# verdict: OK\n' \
+    "$I_B" "$I_T" "$(git hash-object "$M11K/.githooks/pre-push")" "$I_MB" \
+    > "$M11K/_bmad-output/ai-dlc-update/self-update-gate-19700101T000000Z.md"
+  IG show "${I_T}:core/scripts/gate-changed.sh" > "$M11K/scripts/ai-dlc/gate-changed.sh" 2>/dev/null
+  bash "$MG11" "$I_D" "$I_B" "$I_T" "$M11K" probe >/dev/null 2>&1
+  m11_int=$?
+  # ...and the control: the SAME copy must still refuse the all-zero forgery, or the kill above
+  # is a copy that refuses everything rather than one that narrowed the set.
+  gin_restore
+  gin_write_slice
+  gin_seed "$(printf '# input: .githooks/pre-push\t%s\t-\n# input: %s\t%s\tcore/scripts/gate-changed.sh\n# input: %s\t%s\tcore/scripts/gate-steady.sh' \
+    "$(git hash-object "$GCONS/.githooks/pre-push")" \
+    "$GIN_CHANGED" "$GZERO" "$GIN_STEADY" "$GZERO")" 440
+  bash "$MG11" "$DIST" "$D_BASE" "$D_THEIRS" "$GCONS" touched-shippable touched-named green-one \
+    >/dev/null 2>&1
+  m11_forge=$?
+  gin_restore
+  M11L="$(ls -t "$M11K"/_bmad-output/ai-dlc-update/self-update-fixtures-*.md 2>/dev/null | head -1)"
+  if [ "$m11_int" -eq 2 ] && [ "$m11_forge" -eq 2 ] \
+     && [ -n "$M11L" ] && grep -qF "INPUT-MOVED" "$M11L"; then
+    ok "MUTATION — narrowing the carried set to the BASE blob refuses a consumer at an intermediate release's blob, while still refusing the forgery: Part G21 is what catches that"
+  else
+    bad "MUTATION — the carried set was narrowed to base-only and Part G21 did not see it (intermediate rc=$m11_int expected 2, forgery rc=$m11_forge expected 2). A split stamp is the normal state after any self-update, so this narrowing wedges those consumers and no arm here would say so"
+  fi
+  rm -rf "$M11K"
+else
+  bad "FIXTURE ERROR: the carried-set anchor no longer occurs exactly once in the runner — Part G21 proves nothing"
+fi
+rm -rf "$I_D" "$I_K"
+
+# --- MUTANT G12: the probe token back to the ASSIGNMENT ---------------------------------------
+# `GATE_REC_DIR` scores correctly at both real revisions and is still wrong: it names an
+# assignment, so a gate that declares the variable and never writes reads as a recording gate.
+# Both directions, because a token that matched nothing would also "kill" Part G22 by making
+# every base look non-recording — the recording base must still be seen.
+MG12="$MUTDIR/mg12-token-names-an-assignment.sh"
+if mkmutant2 "$MG12" "gr_tok_base=\"\$(git -C \"\$DIST\" show \"\${BASE}:\${gr_gate_core}\" 2>/dev/null \\
+                   | grep -v '^[[:space:]]*#' | grep -cF '/self-update-gate-\$(date')\" || gr_tok_base=0" \
+                     "gr_tok_base=\"\$(git -C \"\$DIST\" show \"\${BASE}:\${gr_gate_core}\" 2>/dev/null \\
+                   | grep -v '^[[:space:]]*#' | grep -cF 'GATE_REC_DIR')\" || gr_tok_base=0" \
+                     "gr_tok_theirs=\"\$(git -C \"\$DIST\" show \"\${THEIRS}:\${gr_gate_core}\" 2>/dev/null \\
+                     | grep -v '^[[:space:]]*#' | grep -cF '/self-update-gate-\$(date')\" || gr_tok_theirs=0" \
+                     "gr_tok_theirs=\"\$(git -C \"\$DIST\" show \"\${THEIRS}:\${gr_gate_core}\" 2>/dev/null \\
+                     | grep -v '^[[:space:]]*#' | grep -cF 'GATE_REC_DIR')\" || gr_tok_theirs=0"; then
+  gin_restore
+  rm -f "$GLOG"/self-update-gate-*.md "$GLOG"/self-update-fixtures-*.md
+  bash "$MG12" "$DIST" "$D_BASE_DECL" "$D_THEIRS" "$GCONS" touched-shippable touched-named green-one \
+    >/dev/null 2>&1
+  m12_decl=$?
+  M12L="$(newest_glog)"
+  # SCORED BEFORE THE CLEAR, because the clear below deletes the very file this reads and a
+  # grep over a missing path is a clean zero indistinguishable from a message that was absent.
+  m12_missing=0
+  { [ -n "$M12L" ] && grep -qF "GATE-RECORD: MISSING" "$M12L"; } && m12_missing=1
+  # The control: the genuinely NON-recording base must still reach the tolerance under the
+  # mutated token, or the kill is a token that matches nothing rather than one that over-matches.
+  rm -f "$GLOG"/self-update-gate-*.md "$GLOG"/self-update-fixtures-*.md
+  bash "$MG12" "$DIST" "$D_BASE" "$D_THEIRS" "$GCONS" touched-shippable touched-named green-one \
+    >/dev/null 2>&1
+  m12_plain=$?
+  if [ "$m12_decl" -eq 2 ] && [ "$m12_missing" -eq 1 ] && [ "$m12_plain" -eq 0 ]; then
+    ok "MUTATION — keyed on the ASSIGNMENT, a gate that declares the record directory and never writes is read as recording, and the consumer is refused with a message saying its records were deleted: Part G22 is what catches that"
+  else
+    bad "MUTATION — the token was pointed back at the assignment and Part G22 did not fire (declaring-base rc=$m12_decl expected 2, MISSING line=$m12_missing expected 1, non-recording base rc=$m12_plain expected 0). Either the arm cannot see the over-match, or the mutated token matches nothing at all and the kill would be for the wrong reason"
+  fi
+else
+  bad "FIXTURE ERROR: one of the two probe-token sites no longer occurs exactly once in the runner — Part G22 proves nothing"
 fi
 
 echo
