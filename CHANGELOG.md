@@ -15,6 +15,96 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.538.0] - 2026-09-09
+
+### `BL-155` — step 2's autonomous self-update left no approval artifact anywhere in its path; the gate now records the verdict it acted on, and the fixture runner refuses to run without it
+
+No `PC-` id: split out of `BL-131` on an operator ruling at batch 46 and filed unfixed then, because
+gating step 2 on an operator changes the bootstrapping contract every pull depends on. This release
+does not add an operator gate. The cycle is still autonomous; what changes is that the decision is
+RECORDED by the program that took it and CONSUMED by the program that must run before the push.
+
+`reconcile/self-update-gate.sh` classified to stdout and persisted nothing, so the only record of
+why a self-update pushed was the operating agent's narration of the verdict into a PR body. Measured
+on the reference consumer: 87 self-update commits, 9 carrying any evidence file; 47 of the 51
+fixture logs on disk reached git in a later, unrelated sprint commit rather than in the self-update
+that produced them. The prose duty to cite the log was being missed in the direction that leaves
+nothing behind.
+
+In classify mode the gate now writes `_bmad-output/ai-dlc-update/self-update-gate-<ts>.md`: the
+full resolved base and theirs shas, every emitted TSV row byte-identical to stdout through one emit
+path, a `# verdict:` trailer derived from the rows, and one `# input:` line per consumer file the
+verdict READ — its consumer path, its blob digest, and the core path it maps from.
+`reconcile/self-update-fixtures.sh` refuses (exit 2, a `GATE-RECORD:` line in its own log) unless a
+record for its own resolved range reads `OK`, names every input the runner itself derives from the
+hook, and every input either still hashes as recorded or hashes as `theirs` for its core path. Both
+records are the approval artifact and step 2 commits both in the self-update commit.
+
+**Four designs were built and refuted before this one, all by the adversarial hand or by
+reproduction, and the shipped arms are the answers.** A record keyed on base and theirs alone is a
+tautology: the verdict is a differential between the consumer's CURRENT copy and the incoming one,
+and step 2 overwrites the current copy — measured pre-write 2 DEFER, post-write on the same command
+4 OK, reverted 2 DEFER. A record binding every input to its digest at RECORD time refuses the
+LEGITIMATE flow: step 2 writes the slice and the stamp between the gate and the runner, so 6 of 9
+recorded inputs read moved on the seed and every self-update whose range changes a gating script
+would have been refused — the fixtures could not see it because their join part wrote nothing
+between the two programs. And the same design still ACCEPTED a gate run after the write, because
+both sides then hash the post-write files. So: the runner accepts an input at its `theirs` blob,
+the gate and the runner each refuse a verdict whose gating-script inputs were ALREADY at `theirs`
+when it was taken (the differential compared a file with itself — and on the reference consumer's
+LIVE range that arm's population is zero, so its clean reading there is vacuous; against two stale
+bases it fires on 4 of 4 and 3 of 3, a refusal for a caller naming a base the consumer has already
+moved past, which is the direction a differential that cannot answer must fail), the required input
+set is derived by the runner from the hook rather than trusted from the record (a one-line forged
+record naming a distribution file was accepted), and the stamp is not an input because step 2
+rewrites it by design. The fourth refutation landed on the theirs acceptance itself: once the
+slice is written every gating script IS at `theirs`, so a record naming the right files with
+all-zero digests was accepted and the digest column was decorative for exactly the files the
+record exists to attest. A recorded digest that differs from the tree is now accepted only if it
+is a blob that path carried at `base` or at a commit in the range that touched it — the set a
+consumer on a split stamp can legitimately hold — and a fallback-hook row is compared strictly,
+because the slice never writes the distribution's own file.
+
+**The refusal tolerates the pull that delivers it, keyed on the gate the consumer HAD.** A fix to a
+bootstrapping step cannot be delivered by that step: on that pull the OLD gate runs and records
+nothing while the slice installs the NEW runner. With no record on the consumer, the runner reads
+the gate at `base` from the distribution; a gate whose text cannot compose the record's filename
+could not have recorded, so the run proceeds with a `NOT-REQUIRED` line, once. The probe token is
+the third spelling and each earlier one failed in a different direction: the directory variable
+scored 1 on a locally patched gate that declares it and never writes (a refusal in the wrong
+voice), and the write site's exact text scored 0 on a recording gate whose timestamp was moved
+into its own variable — an acquittal, which waived the requirement for that consumer. The
+composed filename survives both edits, and both directions are mutants. A recording gate at `base` and
+no record is a REFUSAL — the first cut keyed the tolerance on directory emptiness and `rm` of the
+records reached it at will.
+
+`BL-155`'s receipt is replaced: the old one keyed on the autonomy sentence in `SKILL.md` and its own
+limits paragraph said rewording closed it. The new one drives the gate against
+`core/fixtures/self-update-gate/seed.sh`, asserts the record's rows `cmp -s` the gate's stdout,
+drives the NORMAL order — gate, one gating script written from `theirs`, runner — and asserts the
+runner reaches its loop, then asserts a runner with no record refuses with `GATE-RECORD:`. Scored 0
+on the fixed tree and 1 on the non-fixes: record with no requirement, requirement with no record,
+rows spelled by a second `printf`, the sentence reworded alone, a record with no input lines, the
+integrated first cut that refused the normal order, and a forged record naming the required set
+with all-zero digests.
+
+### `BL-212` — the self-update gate returned `SELF-UPDATE-OK` on a range it could not read
+
+No `PC-` id: found by this batch's briefing probe against the gate's own seed. With a base or theirs
+that does not resolve, `git diff --name-only` fails, `CHANGED` reads empty, and the empty-diff arm
+acquits with "this pull changes no core/scripts/ path". The gate's own header says a gate that cannot
+read its subject must not return OK. Control in the same invocation: the seed's real range emits
+DEFER, OK, UNDECIDED and SAFE-STOP rows. A theirs naming a TREE object produced the full correct
+verdict set and was indistinguishable from a real answer, and a receipt built to the filing's own
+description scored 0 against a non-fix that dropped the `^{commit}` peel — a garbage string fails a
+bare existence test too, so the receipt drives a resolvable tree sha.
+
+Both refs are now peeled to a commit at classify entry, and a non-git `DIST` is refused the same
+way: one `SELF-UPDATE-UNDECIDED` row naming the offending ref, no arm evaluated, recorded under
+`BL-155`'s record. `UNDECIDED` rather than a new token because step 2 already treats it as defer
+and no installed consumer copy carries new vocabulary. `BASE == THEIRS` peels and diffs empty
+and stays OK, correctly.
+
 ## [0.537.0] - 2026-09-08
 
 ### `BL-211` — the fixture git-env validator's population grammar could not spell `git -C X init`, and 26 of the 27 fixtures it could not see clobber the caller's repository
