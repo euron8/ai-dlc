@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # layer-adjudication-tier — assert `level: ADJUDICATED` is a mechanism and not a declaration.
 #
 # Usage: run.sh [path-to-layer-drift.sh]

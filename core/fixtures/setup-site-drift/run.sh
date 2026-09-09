@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # setup-site-drift — §7v criterion 5 as a program: a core file carrying a declared setup site
 # must equal `theirs` everywhere OUTSIDE that file's declared spans.
 #

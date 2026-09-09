@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # artifact-path-conformance — validate-artifact-paths.sh holds a consumer's REAL filenames to
 # the declared grammar, blocks on exactly the set the migration would move, and reports the rest
 # rather than wedging a tree nobody can clean.

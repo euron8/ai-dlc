@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # reconcile-blocking-list/run.sh — prove hard-blockers.sh renders the blocking list and its --check
 # catches a report that dropped a HARD blocker.
 #

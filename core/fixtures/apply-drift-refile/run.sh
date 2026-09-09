@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # apply-drift-refile/run.sh — prove apply.sh AUTOMATES the known_skills drift migration: refile the
 # in-place addition to extensions/known-skills.json and revert the core schema, with no manual step.
 set -uo pipefail

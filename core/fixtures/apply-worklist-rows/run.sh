@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # apply-worklist-rows/run.sh — prove a WORKLIST row reaches the operator with its INSTRUCTION,
 # and that an ATOMIC sequence emits every step it numbers.
 #

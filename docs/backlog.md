@@ -4233,3 +4233,78 @@ verify: manual
 
 
 
+
+
+## BL-211 — `validate-fixture-git-env.sh`'s population grammar could not spell `git -C X init`, so 27 fixture directories sat outside the set it reported `0 unscrubbed` over, and 26 of them clobber
+
+**DEFECT.** Found by the batch-77 census hand while closing `BL-189`, measured on a whole-tree copy.
+
+**The grammar scored its own subject as a non-instance.** The population was derived with a
+literal `git init`, which resolved **43** fixture directories. Re-derived with a grammar that
+also spells `git -C "$X" init`, `git -c init.defaultBranch=main init -q .` and chained
+`-c`/`-C` options, it resolves **70**. The 27 in the difference were outside the population
+entirely, none of their `run.sh` sourced `core/fixtures/lib/preamble.sh`, and the validator
+reported `0 unscrubbed` at ceiling 0 over a set that excluded every one of them. Controls in
+the same derivation: an impossible pattern returns 0, `check-1c-bypass` appears in the literal
+set, and the literal set minus the broad set is empty — the widening only adds.
+
+**26 of the 27 clobber, and 13 of those do it at exit 0.** Driven directly under an armed
+`GIT_DIR` against a fresh 40-entry victim, whole-tree copy per trial, the harness self-probed
+in both directions first: 13 wrecked the victim while exiting non-zero and **13 wrecked it
+while exiting 0**, index damage reaching 40 down to 1.
+
+**THREE OF THEM LEAVE THE INDEX AT 40 AND AN INDEX-COUNT GUARD CALLS THEM INTACT.**
+`consumer-suite-pool`, `suite-dispatch-order` and `layer-anchor-declaration` wreck the victim
+through CONFIG alone — `core.bare` set to `true` and `user.name` rewritten — after which
+`git status` in that victim answers `fatal: this operation must be run in a work tree`. A
+verdict reading only the index scores all three as survivors.
+
+**The form is why, and it is a distinct behaviour from the argument-less bare init `BL-189`
+reproduces.** Under an armed `GIT_DIR`, `git -C X init`, `git -C X init .` and
+`git -c k=v init <path>` all exit 0, create NO repository at the target, and flip the victim's
+`core.bare` to true. Measured on `setup-config-drift`, whose init is in its `seed.sh` and is
+reached by inheritance: with the seam line its victim reads index 40 / bare false / sentinel
+intact; with the seam line stripped, index **2** and `core.bare` **true**, also at exit 0 with
+no diagnostic.
+
+**AND THE INLINE-SCRUB EXEMPTION ACQUITTED TWO FIXTURES THAT CLOBBER, BECAUSE IT WAS KEYED ON
+CONTAINMENT RATHER THAN POSITION.** `self-update-fixture-log` carries its `unset GIT_DIR` at
+`run.sh:694` with its first init at `run.sh:88`; `self-update-gate` scrubs at `run.sh:819`
+against a first init at `run.sh:159`. Both were acquitted on the whole-file grep and both
+clobbered silently at exit 0, and both omit `GIT_COMMON_DIR` and `GIT_OBJECT_DIRECTORY` besides.
+The exemption was defending the arm's own subject. `handoff-completion-assertion` is the
+discriminating near-miss and must stay acquitted: its scrub sits at `run.sh:56` and
+`seed.sh:24`, above every git call in each file, and it survives a drive.
+
+**Remedy, all three halves in one change.** (1) The population grammar spells every `git … init`
+form, POSIX classes only — `git grep -E` implements neither `\b` nor `\s` and returns a clean
+zero rather than an error, and the pattern resolves the identical 74 files under `git grep -E`
+and `/usr/bin/grep -E`. (2) The inline-scrub exemption and the seam-sourcing branch both compare
+LINE NUMBERS: a scrub below the file's first init is not a scrub. (3) The 27 `run.sh` source the
+seam as their first executable line, which is how the other 42 carry it and which reaches each
+`seed.sh` by inheritance.
+
+**False-positive set of the widened grammar, measured before it shipped.** The pattern matches a
+COMMENT naming `git init`, and zero fixture scripts join the population by a comment-only hit —
+every matching file carries at least one non-comment match. `git config init.defaultBranch main`,
+`git commit -m init`, `git-init` and `legit initiate` are all refused, because `init` must be a
+whole word preceded only by `-c`/`-C` options.
+
+**The receipt drives the shipping validator against a probe tree and reads its output for a path
+that could only have come from there**, because this validator walks up for its own `VERSION`
+marker unless `AI_DLC_PROJECT_ROOT` is set, and a run that resolved the distribution instead
+produces the same verdict line. The probe is `git init`ed and its files added: the population is
+derived with `git grep`, which searches TRACKED content only, so against a plain directory it
+collapses to 0 and the run REFUSES with exit 2 — a refusal that reads as a finding to anything
+testing merely for a non-zero exit. Twelve literal-form fillers carry the population over the
+floor of 10 under BOTH grammars, so the old-grammar reading is an acquittal rather than a refusal.
+
+**Scored against four trees, each BUILT rather than argued.** `origin/main` **1** (the old
+grammar acquits the probe); the fix **0**; a non-fix carrying all 27 seam lines with the grammar
+left literal **1**; a non-fix carrying the widened grammar with its unscrubbed branch disabled
+**1**. Controls on the same four trees, initialised so the validator does not refuse: `origin/main`
+and the seam-only non-fix both report a population of 42, the fix and the branch-disabled non-fix
+both report 69, and all four are green on their own trees — which is what the receipt has to see
+past.
+
+verify: sh v=scripts/validate-fixture-git-env.sh; [ -f "$v" ] || exit 9; p=$(mktemp -d) || exit 9; trap 'rm -rf "$p"' EXIT; mkdir -p "$p/core/fixtures/lib" "$p/scripts" || exit 9; printf '0.0.0\n' > "$p/VERSION"; cp core/fixtures/lib/preamble.sh "$p/core/fixtures/lib/" || exit 9; i=1; while [ $i -le 12 ]; do mkdir -p "$p/core/fixtures/fill$i"; printf '#!/usr/bin/env bash\n. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"\ngit init -q .\n' > "$p/core/fixtures/fill$i/run.sh"; i=$((i+1)); done; mkdir -p "$p/core/fixtures/bl211probe"; printf '#!/usr/bin/env bash\ngit -C "$d" init -q\n' > "$p/core/fixtures/bl211probe/run.sh"; cp "$v" "$p/scripts/" || exit 9; git -C "$p" init -q . >/dev/null 2>&1 || exit 9; git -C "$p" add -A -f >/dev/null 2>&1 || exit 9; o=$(AI_DLC_PROJECT_ROOT="$p" bash "$p/scripts/validate-fixture-git-env.sh" --max-unscrubbed 0 2>&1); rc=$?; case "$o" in *bl211probe*) [ "$rc" -eq 1 ] ;; *) false ;; esac

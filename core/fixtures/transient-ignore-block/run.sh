@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # transient-ignore-block/run.sh — prove sync-transient-ignore.sh renders the declared transient
 # paths into a consumer's .gitignore, edits ONLY the region between its markers, and refuses to
 # write rather than guessing when the declaration is unusable.

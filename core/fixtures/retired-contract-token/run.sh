@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # retired-contract-token — assert the detector sees a severed contract, and only a real one.
 #
 # Usage: run.sh

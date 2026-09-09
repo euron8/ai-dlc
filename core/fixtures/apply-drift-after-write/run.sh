@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # apply-drift-after-write/run.sh — prove apply.sh measures consumer drift BEFORE it writes.
 #
 # THE DEFECT. apply.sh phase 1 overwrites every pure-apply core file from THEIRS. The
