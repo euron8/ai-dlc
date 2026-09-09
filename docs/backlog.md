@@ -564,15 +564,29 @@ of step 1's preflight result, which has already exercised the real hook by that 
 existing `SELF-UPDATE-DEFER` when the probe fails, since the DEFER path already handles the slice
 correctly.
 
-  verify: manual
+**Shipped shape, and why it is neither of the two proposed.** A `git push --dry-run` runs the hook
+(measured: it does, and a red hook fails the dry run) but also contacts the remote, and step 2's
+disposition for a remote-side failure is already "commit locally, note it" — the deterministic local
+half is the hook. Step 1's preflight result is not reusable: it pushes the OPERATOR'S branch through
+the hook with a different ref line, and on an in-sync branch it pushes nothing at all
+(`Everything up-to-date`, hook fed zero ref lines). So the gate runs the hook GIT WOULD RUN —
+`git rev-parse --git-path hooks/pre-push`, which honours `core.hooksPath` and the `.git/hooks/`
+shim the reference consumer uses, and skips a hook git would skip — fed the ref line step 2's push
+sends, on the tree as the operator left it, and emits `SELF-UPDATE-DEFER` on script `pre-push` when
+it exits non-zero. Measured cost on the reference consumer's own hook from a clone: 303s cold, 28s
+once its read-set skip engaged.
 
-**Why `manual` and not `sh`, given this file prefers `sh`.** Every mechanical anchor available here
-is a token a HYPOTHESISED fix would introduce — a flag name, a probe function, a new verdict word —
-and an entry anchored that way reports STILL-LIVE forever, including after the fix lands. That is
-the defect class `v0.402.0` shipped a guard for on the consumer side, and filing this entry in the
-shape that release exists to catch would be its own finding. A falsifiable `sh` receipt is available
-once the remedy has a shape: run the gate against a tree whose push fails and assert the verdict is
-not `SELF-UPDATE-OK`. Re-anchor on that at the change that builds it.
+verify: sh G=core/skills/ai-dlc-update/reconcile/self-update-gate.sh; [ -f "$G" ] || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; R=$(mktemp -d); D="$R/d"; mkdir -p "$D/core/git-hooks"; printf 'x\n' > "$D/core/git-hooks/pre-push"; printf '0.1.0\n' > "$D/VERSION"; git -C "$D" init -q && git -C "$D" add -A && git -C "$D" -c user.email=r@x -c user.name=r commit -qm b || exit 9; B=$(git -C "$D" rev-parse HEAD); printf '0.2.0\n' > "$D/VERSION"; git -C "$D" add -A && git -C "$D" -c user.email=r@x -c user.name=r commit -qm t || exit 9; T=$(git -C "$D" rev-parse HEAD); w() { C="$R/$1"; mkdir -p "$C/.githooks" && git -C "$C" init -q && git -C "$C" -c user.email=r@x -c user.name=r commit -q --allow-empty -m s && git -C "$C" remote add origin "$R/o.git" && mkdir -p "$C/.git/hooks" || return 9; printf '#!/bin/sh\nexit 0\n' > "$C/.githooks/pre-push"; printf '#!/bin/sh\nexit %s\n' "$2" > "$C/.git/hooks/pre-push"; chmod +x "$C/.githooks/pre-push" "$C/.git/hooks/pre-push"; bash "$G" "$D" "$B" "$T" "$C" 2>/dev/null | awk -F'\t' '$2=="pre-push"{print $1; exit}'; }; a=$(w a 1); b=$(w b 0); rm -rf "$R"; [ "$a" = SELF-UPDATE-DEFER ] && [ "$b" = SELF-UPDATE-OK ]
+
+**Receipt shape.** Two consumers, one property apart: both carry a TRACKED hook that exits 0 and an
+UNARMED-by-`core.hooksPath` hook at `.git/hooks/pre-push`, which is the file git runs. One's exits 1,
+the other's exits 0. The fix is present when the first reads `SELF-UPDATE-DEFER` on script
+`pre-push` AND the second reads `SELF-UPDATE-OK` there. Scored against four non-fixes on the
+release branch: a gate that reads the tracked `.githooks/pre-push` (exits 0 in both worlds, so no
+DEFER — rejected), a gate with no probe (no `pre-push` row — rejected), a gate that runs the hook
+and ignores its exit (OK in both — rejected), and a gate that refuses every consumer (DEFER in
+both — rejected by the second conjunct). The range changes no `core/` path so no differential row
+can supply the DEFER.
 
 ---
 
