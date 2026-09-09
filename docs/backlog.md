@@ -488,34 +488,140 @@ did not happen when 6b shipped as v0.405.0; this entry is it, filed from the pla
 measurements. Note the distinction from **BL-005**, which is a different pole — this repo's
 `validator-arm-selection` at 166s of a 217s wall. Reducing one does not touch the other.
 
-**Proposed:** shard `layer-reference-resolution` the way the mutation batteries are already
-sharded, so the pole falls to the next-longest directory. Re-measure the pole AFTER, because a
-loaded cost is only valid under the pool that produced it and the number to watch is the top of
-`.git/ai-dlc-fixture-durations`, never the total.
+**THE PROPOSED FIX WAS SHARDING AND IT WAS REFUTED BY MEASURING THE FIXTURE.** The shard rests
+on the premise that the unit is saturated and needs splitting across directories. It is not:
+the fixture consumed **1.22 of 18 cores**, against 4.2–7.6 for the enforcement-map poles, and
+two concurrent full runs cost 125.8s against a solo 120.3s. It was serial for no reason.
 
-  verify: manual
+**The cost is fork/exec throughput** — ~5200 traced commands per linter run (control: an
+impossible pattern returns 0 in the same trace), 2.32s real / 0.88 user / **1.98 sys** at
+~0.44ms per spawn, working set small enough to stay in page cache. Not CPU, and not disk. That
+resource scales with concurrency on this box, which is what makes an inner pool work and what
+made the serial chain wasteful.
 
-## BL-087 — nobody knows whether `PreToolUse` fires on a tool call that fails INPUT VALIDATION, and it decides whether a whole class of guard is buildable
+**Shipped instead: an inner `xargs -P 6` over the 24 mutants, inside the existing directory.**
+120.3s → 48.0s wall at 467% CPU, all 24 mutant vectors byte-identical to the serial run on
+`origin/main` with a `cmp -s` control asserting the two sides are different programs.
+**P=6 and not the 8 that measured fastest** — an inner width multiplies against the outer one
+(`AI_DLC_FIXTURE_JOBS`, default 12) and both existing inner pools fix theirs as a narrow
+constant for that reason.
 
-**The unresolved question.** When the model emits a tool call whose input fails the tool's own
-schema, Claude Code returns `<tool_use_error>InputValidationError: [{"origin":"array",
-"code":"too_small","minimum":2,...,"path":["questions",1,"options"]}]`. It is not known whether
-the `PreToolUse` hook for that tool runs first, or whether the call is rejected before any hook
-sees it.
+**WHY THE POOL BEATS THE SHARD ON SAFETY, WHICH OUTRANKS THE COST ARGUMENT. Nothing binds the
+union of a split fixture's arms.** Derived: `docs/invariant-index.md` has no coverage invariant
+(one unrelated `I107` hit against a control of 11 `fixture` mentions); `shard` appears in
+`validate-enforcement-map.sh` only in comments, never opening an arm header, so it declares
+nothing; **I8**/**I74** bind whether a directory SHIPS, never what it ASSERTS. Each existing
+shard pair hand-writes its own binding and they differ in strength. So a shard turns
+`EXPECTED_ASSERTIONS=38` into two literals that must sum to 38 with no external reader deriving
+that sum, and a miscount reads as a shorter green run. Inside one file `made` increments inside
+`ok()`/`bad()` themselves, so a lost arm fails the count in the file that lost it.
 
-**Why it is worth settling once.** Every `PreToolUse` guard this repo might build against a
-MALFORMED call — not a disallowed one, a malformed one — is unbuildable if validation wins, and
-would look exactly like a guard that works: registered, green, never firing. That is this repo's
-recurring defect class, and here it is decided by a harness behaviour no local mechanism can
-observe.
+**The pool's own new hazard is real and is armed against.** A pooled child's `made=$((made+1))`
+is lost to the subshell, so each worker writes a verdict FILE and the collector walks the
+DISPATCHED LIST rather than the directory listing, which cannot see a worker that died. Two
+arms, and **each is proven to fire alone** — the count arm was measured firing with every
+verdict file present and zero absences, which is the property the `.githooks/pre-push`
+precedent lacks (there the count cannot fire unless the per-file branch already has).
 
-**What is already established, both directions, so the next session does not re-derive it.**
-The docs reference says `PreToolUse` "Runs after Claude creates tool parameters and **before
-processing the tool call**", which leans toward the hook firing first. Against that,
-`PostToolUseFailure` is documented as running "when a tool that **started executing** fails",
-which a schema-invalid call never did — so if `PreToolUse` also does not see it, such a call is
-invisible to the hook system entirely. **The documentation does not state the ordering**, checked
-against both the hooks reference and the hooks guide.
+**Re-derive the pole from `.git/ai-dlc-fixture-durations` after this lands** — a loaded cost is
+only valid under the pool that produced it, and a solo timing answers a different question.
+`BL-005`'s `validator-arm-selection` pole is untouched by this and remains separate.
+
+**The receipt DRIVES the fixture rather than grepping it.** A grep for `MUT_JOBS` or for
+`worker.sh` is satisfied by a comment naming either, and by a pool that dispatches nothing;
+scored against both non-fixes before shipping. Requiring the pool-accounting arm to report in
+the fixture's own output cannot be satisfied without the collector actually running.
+
+**AND IT MUST NOT PIPE INTO `grep -q`.** The first cut did, and it exited **141** on the
+CORRECT fix: `grep -q` leaves at its first match while the fixture is still writing, the
+writer takes the EPIPE, and under `pipefail` the receipt reports failure on output that
+contains the pattern. I54, measured here rather than recalled. Capture first, match against
+a here-string.
+
+**THE RECEIPT WAS WEAK AND THE FIXTURE WAS FIXED, NOT THE RECEIPT.** Scored against three
+built non-fixes: a serial loop leaving `MUT_JOBS` and `worker.sh` named behind it (refused,
+correctly), **a collector reading the DIRECTORY instead of the list (CLOSED it)** and **a pool
+at `MUT_JOBS=1` (CLOSED it)**. The last two are the defects this section exists to prevent,
+and both produce an identical green accounting line — a collector that never loses anything
+cannot tell a list-walk from a directory-walk. So three committed self-probes now assert the
+seed's discriminating property, the arm's ability to fire on that seed, and the pool's WIDTH as
+a number, before any real verdict is read; the receipt requires all three lines.
+
+**AND THE PROBE HAD TO DRIVE THE SHIPPING WALK.** Its first cut carried its own copy of the
+loop, so it agreed with itself and the directory-reading non-fix STILL closed the receipt — the
+probe never touched the collector that non-fix had changed. `collect_into` is now the one walk,
+called by the probe and by the collector; point it at the directory and the probe goes red in
+the same run. A fourth non-fix weakening the probe's own seed (two verdict files, nothing
+missing) is refused by the seed arm. Final scoring: the correct fix closes it, four non-fixes
+refuse, zero setup failures — and one earlier "refusal" was a `sed` that matched nothing, which
+is a non-fix that never applied rather than a receipt that discriminated.
+
+  verify: sh o="$(bash core/fixtures/layer-reference-resolution/run.sh 2>&1)"; grep -q 'self-probe: the list-walk reports a seeded missing verdict' <<<"$o" && grep -q 'self-probe: the mutant pool is dispatched at width [2-9]' <<<"$o" && grep -q 'pool accounting: all 24 dispatched mutants produced a verdict' <<<"$o"
+
+## BL-087 — ANSWERED: `PreToolUse` does NOT fire on a tool call that fails INPUT VALIDATION, so a guard whose predicate is the malformation is unbuildable
+
+**THE ANSWER.** A tool call whose input fails the tool's own schema is rejected before any hook
+sees it, and it is invisible to the hook system ENTIRELY — not merely to `PreToolUse`. Measured
+on **Claude Code 2.1.266**; a refactor of the dispatch chain could move it, which is why the
+build is named.
+
+**The measurement, with its positive control in the SAME session.** A scratch project driving
+real Claude Code as `claude -p --settings <scratch>/settings.json`, hook body three lines
+(append stdin to a file, exit 0). The decisive arm put both calls in one session, so the control
+cannot differ in registration, settings, model or session from the test:
+
+```
+Read {"path": "target.txt"}        schema-invalid   -> InputValidationError, NO hook payload
+Read {"file_path": "target.txt"}   well-formed      -> executed, ONE hook line
+```
+
+With `PreToolUse`, `PostToolUse` and `PostToolUseFailure` all registered on `Read`
+simultaneously, a schema-invalid call produced **zero lines across all three**. An
+isolated malformed-only run wrote zero; an isolated well-formed-only run wrote one.
+
+**The mechanism agrees and is the weaker source.** In the shipped bundle, dispatch is a hook
+middleware chain whose INNERMOST step is the function carrying both `inputSchema.safeParse` and
+the `InputValidationError` emission — so the chain's outer hook handlers are never entered for a
+call that fails it. Controls on the extraction: `PreToolUse` 107 hits, `InputValidationError`
+11, impossible token 0. That reading is what extends the result from `Read` to all tools, and it
+is minified text ABOUT a program rather than the program; the measurement covers `Read` on
+2.1.266 and nothing more.
+
+**Subject substitution, stated because the entry prescribed `AskUserQuestion`.** That tool is
+not offered under `claude -p`, so the model emitted no tool call at all — zero hook lines with
+zero evidentiary value, which is the empty-file-without-a-control failure this repo names.
+`Read` is valid because the validation site is shared by every tool. The literal 1-option
+`AskUserQuestion` case needs an interactive run; nothing in the mechanism suggests it differs.
+
+**"MALFORMED" IS TWO CLASSES AND ONLY ONE IS MEASURED.** `coerceInput` is an optional per-tool
+hook that runs BEFORE `safeParse`, and its telemetry has a `coerced_still_invalid` outcome, so
+it is permitted to fail. Hook-invisible: anything `safeParse` still refuses after coercion, or
+with no `coerceInput` at all (measured: `Read` with `{"path": …}`), plus unparseable JSON
+rejected upstream. Hook-visible: anything a tool's `coerceInput` repairs into a valid shape —
+**existence follows from the mechanism; there is NO measured instance.** The nine `coerceInput`
+implementations are **not enumerated**, so which malformations are visible cannot be predicted
+from this entry. A candidate instance was measured and RETRACTED: re-reading the raw wire bytes
+with `repr()` showed the input was a STRING containing brackets, schema-valid on arrival and
+failing at the filesystem, not an array being coerced.
+
+**THE DOCUMENTATION HAS MOVED SINCE THIS ENTRY WAS FILED, AND THE SENTENCE IT RESTED ON IS
+GONE.** Re-checked: the hooks reference 301s to a new host, and `PreToolUse` now reads only
+"Before a tool call executes. Can block it." The quoted "after Claude creates tool parameters
+and before processing the tool call" is **deleted**. The ordering is still unstated, so the
+entry's conclusion holds — but it no longer leans either way, and a session citing that sentence
+is citing text that no longer exists.
+
+**WHAT IS UNBUILDABLE, AND WHAT IS NOT AT RISK TODAY.** The unbuildable class is a `PreToolUse`
+guard whose predicate is the malformation itself — the `<2`-option `AskUserQuestion` deny
+dropped at v0.407.0, and any "refuse a call the schema will reject anyway" guard. **Nothing
+shipped depends on it.** Derived over `templates/settings.json.template`: all five `PreToolUse`
+groups (`ctx_*` MCP tools; `Edit|Write|MultiEdit`; `Agent|Task`; the acknowledge matcher; `*`)
+read `.tool_input.<field>` on a call they assume is already valid — each decides on CONTENT,
+none on VALIDITY. The only `AskUserQuestion` matcher in the template is under `PostToolUse`
+(`ai-dlc-answer-capture.sh`), which records answers to SUCCESSFUL calls. A grep for
+`tool_input.questions`/`.options` across `core/hooks/` returns 0 against a control of 9 files
+containing `tool_input`. So this entry closes a question and forecloses a future design; it
+fixes no live defect, and it ships as a recorded answer rather than as code.
 
 **The rejections are real and reachable**, which is what makes the experiment cheap to validate:
 parsing session transcripts finds `<2`-option `AskUserQuestion` calls that received an
@@ -527,11 +633,16 @@ carried three, one per session, each losing an operator decision to a compaction
 grounds that it could not be shown able to fire AND would duplicate a rejection the lead already
 sees in-band. The second ground is independent of this question; only the first depends on it.
 
-**Proposed:** run the experiment rather than reason about it. A scratch project, a `PreToolUse`
-hook on `AskUserQuestion` whose whole body appends its payload to a file, one deliberately
-1-option call, then read the file. Record the answer where a future guard author will meet it.
-This repo's own session could not run it — no `PreToolUse` hook is registered here, so there was
-nothing to observe.
+**The experiment RAN and the answer is at the top of this entry.** The prescription was right
+about method and wrong about one detail: `AskUserQuestion` cannot serve as the subject headless.
+The general lesson is the one this repo already carries — an empty hook file is evidence only
+beside a positive control that wrote to the same file, in the same session, through the same
+registration.
+
+**This entry stays LIVE and is not a fix.** There is nothing to ship: the answer is recorded,
+no shipped guard depends on it, and the next author of a malformation-predicated guard needs to
+meet this text before building. Its remaining unmeasured half is the coercion partition — nine
+`coerceInput` implementations unread, and no measured instance of a repaired call.
 
   verify: manual
 
