@@ -15,6 +15,126 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.537.0] - 2026-09-08
+
+### `BL-211` — the fixture git-env validator's population grammar could not spell `git -C X init`, and 26 of the 27 fixtures it could not see clobber the caller's repository
+
+No `PC-` id: found by this release's census hand while closing `BL-189`, measured on a
+whole-tree copy against fresh victims.
+
+`scripts/validate-fixture-git-env.sh` derived its population from the literal `git init`, which
+cannot spell `git -C "$X" init` or `git -c init.defaultBranch=main init -q .`. Twenty-seven
+fixture directories therefore sat outside the set it reported `0 unscrubbed` over, none of their
+`run.sh` sourced the seam, and under an inherited `GIT_DIR` every one of those forms exits 0,
+creates no repository at its target, and redirects onto the caller's repository exactly as the
+literal form does. Driven directly, harness self-probed both ways first: **26 of 27 wrecked the
+victim, 13 of them at exit 0.** Three — `consumer-suite-pool`, `suite-dispatch-order`,
+`layer-anchor-declaration` — left the index at 40 and instead set `core.bare=true` and rewrote
+`user.name`, after which the victim answers `fatal: this operation must be run in a work tree`;
+an index-count guard scores all three as intact. Two more, `self-update-fixture-log` and
+`self-update-gate`, carry an inline `unset GIT_DIR` that the exemption acquitted on containment,
+below their first init, and both clobbered silently. The one survivor,
+`handoff-completion-assertion`, survives because its scrub precedes every git call — a mutant with
+the scrub stripped flips the victim's `core.bare`.
+
+The population grammar now spells every `git … init` form (42 -> 69 `run.sh`; the 70th match is
+the seam's own directory, which has no `run.sh`). The inline-scrub exemption and the seam-sourcing
+branch both compare line numbers against the directory's init SITE — the earliest of the first init
+in `run.sh` and the first line of `run.sh` that invokes a sibling script carrying one, because 30 of
+the 69 members init only from `seed.sh` and a `run.sh`-only reading left the position check vacuous
+for every one of them, which an adversarial hand showed by acquitting a seam sourced three lines
+below the seed call while the victim went to 0. A site that resolves through neither is reported
+`init-site-unresolved` and counted, never acquitted. All 27 `run.sh` now source the seam as their
+first executable line, reaching each `seed.sh` by inheritance; the 27 exit as they did before.
+`fixture-git-env-seam` reads the victim's `core.bare` and a `user.name` sentinel beside its index
+count, drives a `git -C`-form subject with and without its seam line, and carries validator-driven
+probe arms asserting that the offender is NAMED in the output, that a `git init`-less probe tree is
+refused at exit 2 rather than scored, that the old literal grammar acquits the probe the widened one
+reports, and that a seam below the seed call is flagged while one above it is acquitted, with a
+`run.sh`-only mutant of the site resolver killed by name. The receipt drives the shipping validator
+against a probe tree rooted by `AI_DLC_PROJECT_ROOT` and carries a near-miss whose only `init` is in
+`git commit -m init`, which must NOT be named — the first cut was closed by a grammar matching every
+line of the corpus. Scored against origin/main, the fix, a seam-lines-only non-fix, a
+grammar-widened-but-branch-disabled non-fix and the match-everything grammar; it rejects all four
+non-fixes. Stated limits: `git "-C" x init`, `$GIT init`, a `git()` wrapper and `--git-dir=` are
+unseeable and at incidence 0 today, and `git grep` sees tracked content only.
+
+### `BL-189` — six fixture scripts ran `cd` unguarded directly above a `git init`, and a portability arm now refuses the shape
+
+No `PC-` id: filed on this repo's own `core.bare` flips, whose mechanism the entry reproduces
+(an argument-less `git init --bare` under an exported `GIT_DIR`) and whose writer it leaves
+unidentified. This release closes remedies (1) and (2) of that entry and says nothing about the
+incident.
+
+The entry named one unguarded `cd` at `check-1c-bypass/seed.sh`, protected in practice by that
+file's `set -e`. A tree-wide census found six bare `cd` lines over the tracked shell corpus,
+control 27 guarded, and the live one was not the one named: `check-17-bypass/run.sh` runs under
+`set -uo pipefail` with NO `-e`, and its two bare `cd` lines sit inside `( … ) >/dev/null 2>&1`
+subshells directly above `git init -q .` and `git config`. On a sandbox in that exact shape with
+the target absent, the unguarded form wrote `user.email` into the surrounding repository and the
+subshell exited 0 with its output discarded. All six carry `|| exit 2` now, and the two subshells
+have their status read at the closing paren so a failed `cd` is a `BAD` row rather than silence.
+
+`validate-shell-portability.sh` gains **S11**: an unguarded `cd` in `core/fixtures/*/*.sh`, a
+third corpus with its own refusal floor. It does NOT acquit on `set -e`, because a subshell or
+`||` context disables `-e` and the guard is a one-token edit; the `check-17-bypass` pair is the
+measured reason. False-positive set 6 before the guards, 0 after, 104 guarded lines acquitted in
+the same run. The three corpora nest, which broke three existing mutants whose seeds no longer
+emptied what they named, and made a condition unprovable cell by cell; each condition now names
+its own corpus and the battery keys on the name. Stated hole, written in the arm's header: a
+`cd "$x" \` with an unrelated continuation is invisible to a line scan, and zero such sites
+exist today. `BL-189`'s receipt was rewritten at close: the original was satisfied by deleting
+the `cd` line and could not see the arm; the shipped one drives the copied validator against a
+probe tree and the shipping one against the real corpus, and rejects a guards-only non-fix and an
+arm that matches nothing.
+
+An adversarial hand then showed the arm's SKIP pattern was unanchored past a `;`, so
+`cd "$W"; git init . && git add -A` — the arm's own subject — was acquitted by the later `&&`;
+the pattern now stops at the first `;`, four such offenders are seeded, and `cd "$x" || exit 2;
+git init .` is the discriminating near-miss that stays acquitted. The same hand built a one-line
+`set -e` acquittal into the arm and it passed the battery and the receipt, because no seed carried
+`set -e`; both now do, and the acquittal is a killed mutant. The banner's arm count is derived
+from the arm list rather than written beside it.
+
+### `BL-188` — nothing reported `SKILL.md`'s whole-file size, and the only reader of the file measured a window
+
+No `PC-` id: found by the operator, mid-batch, reading a diff.
+
+`core/scripts/validate-reattach-budget.sh` measures bytes from the top of `SKILL.md` through the
+end of the post-compact recovery protocol — a few thousand bytes of a file two orders of magnitude
+larger — and nothing else in the tree reads the file's size at all. A section added far below the
+protocol moved no figure anybody printed, and the rule audit scored a ten-line incident narrative
+in a resident rule 0 because its tier-1 grammar keys on origin tags, dates and version stamps, none
+of which the narrative carried. The entry's own finding is that a narrative lint is the wrong
+answer: `resident-context.md` requires the scar tissue such a lint would flag, so its false-positive
+set is the file, which is the unmeasured-lint shape `CLAUDE.md` forbids shipping.
+
+The validator now derives the whole-file byte count with `wc -c` and prints it beside the protocol
+offset and again in its PASS line, so the figure reaches the gate log on every push here and, via
+`verdict.sh --all`, on a consumer. It NEVER sets the exit code; `--quiet` suppresses it. The
+narrative half stays deliberately unmechanised.
+
+`postcompact-rulebook-recovery` gains two arms: the reported figure equals an independently derived
+`wc -c`, and a `cmp -s`-guarded copy of `SKILL.md` with bytes appended BELOW the protocol moves the
+whole-file figure while the protocol offset and the exit hold — the discriminating input, because a
+hardcoded figure equal to the true size passes the first arm and dies only on the second.
+`BL-188`'s receipt was rewritten at close: the original counted FILES matching two tokens, so the
+entry's own preferred remedy left it reading STILL-LIVE, and a comment carrying both tokens in any
+second script closed it. The shipped receipt drives the validator on a padded copy and compares the
+reported figure to a derived `wc -c`; scored against origin/main, the fix, a comment-only non-fix
+and a hardcoded-figure non-fix, and it rejects all three non-fixes.
+
+An adversarial hand then found that the figure never reached a consumer: `verdict.sh` renders
+evidence by a line-prefix filter that neither the standalone line nor a PASS continuation
+matches, and `verdict.sh --all` is the only path that runs this validator on a consumer at all.
+The figure now sits inside the PASS line's own body, measured through `verdict.sh` before and
+after, and `retro.md`'s evidence cell says so. The same hand showed that every channel passed
+`--skill` while `verdict.sh` calls the validator bare, that the receipt accepted the line from any
+source including one that broke `--quiet`, and that it was coupled to the budget verdict so an
+unrelated protocol overrun would reopen the entry. The fixture gains a bare-invocation arm, a
+`--quiet` arm and a `verdict.sh` arm, each mutant kills exactly one arm, and the receipt asserts
+the figure regardless of the budget verdict and asserts silence under `--quiet`; ten trees scored.
+
 ## [0.536.0] - 2026-09-08
 
 ### `BL-113` — a `verify: sh` receipt written across two lines was truncated and mis-scored silently
