@@ -182,7 +182,89 @@ else
 fi
 
 refused "story-no-sprint" "_bmad-output/planning-artifacts/stories/bug-mobile-layout.md" \
-        "STORY-NO-SPRINT" "a story basename with no sprint in it is refused by path, not guessed"
+        "STORY-NO-SPRINT" "a story with no sprint in its name OR its body is refused, not guessed"
+
+# =============================================================================
+# 3b. SPRINT RECOVERY — read the FILE before refusing, header first.
+# =============================================================================
+# The refusal this replaces prescribed a rename as the only remedy, and the reference consumer's
+# own migration commit places all 23 of the files it refused as PURE DIRECTORY MOVES -- 0
+# insertions, 0 deletions -- so nobody ever renamed one. Each arm below asserts the DESTINATION,
+# not the report: a recovery that reports the right sprint and files the file somewhere else is
+# the failure that matters.
+
+moved "recover-header"   "_bmad-output/planning-artifacts/s72/stories/bug-124-deployed-range.md" \
+                         "_bmad-output/planning-artifacts/stories/bug-124-deployed-range.md" \
+                         "a story with no sprint in its path is placed from its **Sprint:** header"
+# THE PRECEDENCE ARM, AND IT IS THE ONE THAT SEPARATES THE TWO CHANNEL ORDERS. The file above
+# opens with 124 and declares 72. Asking the basename first puts it under s124 -- a slot that is
+# WRONG rather than merely absent, and silent. Asserting the destination is s72 is not enough on
+# its own: this asserts the wrong slot was not created at all.
+asserts=$((asserts+1))
+if ! has "$W" "_bmad-output/planning-artifacts/s124/stories/bug-124-deployed-range.md"; then
+  printf '  ok    %-26s %s\n' "recover-precedence" "the HEADER outranks the basename: no s124/ slot was created"
+else
+  fails=$((fails+1))
+  printf '  FAIL  %-26s %s\n' "recover-precedence" "the basename won: 124 is a carry-over ITEM, the header said sprint 72"
+fi
+
+moved "recover-header-prose" "_bmad-output/planning-artifacts/s18/stories/bug-dashboard-portfolio.md" \
+                         "_bmad-output/planning-artifacts/stories/bug-dashboard-portfolio.md" \
+                         "a header carrying trailing prose still resolves"
+moved "recover-subject"  "_bmad-output/planning-artifacts/s192/stories/192-ff-A-token-decimals.md" \
+                         "_bmad-output/planning-artifacts/stories/192-ff-A-token-decimals.md" \
+                         "with no header, the leading number in the basename places it"
+# The header expression is anchored at line start, so `**Epic:** Sprint 131b` and
+# `**QA agent:** Sprint 158-hotfix` are mentions rather than declarations. If either were read this
+# file would land under s131.
+moved "recover-not-a-mention" "_bmad-output/planning-artifacts/s158/stories/hotfix-158-1-token0-fixes.md" \
+                         "_bmad-output/planning-artifacts/stories/hotfix-158-1-token0-fixes.md" \
+                         "a mid-line 'Sprint 131b' mention is not read as the file's declaration"
+
+# A SUFFIXED SPRINT IS REFUSED, NOT ROUNDED. `131b` has no legal `^s[0-9]+$` slot spelling, and
+# truncating it to s131 merges one sprint's artifacts into another's on a guess.
+refused "recover-suffixed" "_bmad-output/planning-artifacts/stories/story-131b-1-hr12-retirement.md" \
+        "STORY-NO-SPRINT" "a suffixed sprint (131b) has no legal slot, so it is refused not rounded"
+
+# THE `--follow` BOUND. The seed's history renames this file out of s71/ into s121/, so
+# `git log --follow` on it reports a sprint-71 commit while the tree says 121. No channel reads
+# history, so the file must not move -- a recovery that consulted `--follow` would file it under
+# s71 and inherit a prior migration's placement as though it were evidence.
+asserts=$((asserts+1))
+if has "$W" "_bmad-output/planning-artifacts/s121/stories/story-2-cooldown-sentinel.md" \
+   && ! has "$W" "_bmad-output/planning-artifacts/s71/stories/story-2-cooldown-sentinel.md"; then
+  printf '  ok    %-26s %s\n' "follow-bound" "a file a PRIOR migration moved keeps its slot; history is not a channel"
+else
+  fails=$((fails+1))
+  printf '  FAIL  %-26s %s\n' "follow-bound" "the s121 file moved to s71 — a --follow read crossed the earlier rename"
+fi
+
+# CONTROL ON THE ARM ABOVE: the hazard must be REAL in this tree, or it asserts nothing. If
+# `--follow` and plain `git log` agree here, the seed failed to build the crossing rename and the
+# arm would pass against a recovery that does read history.
+asserts=$((asserts+1))
+_p=_bmad-output/planning-artifacts/s121/stories/story-2-cooldown-sentinel.md
+_f="$(cd "$W" && git log --follow --format=%H -- "$_p" 2>/dev/null | tail -1)"
+_n="$(cd "$W" && git log --format=%H -- "$_p" 2>/dev/null | tail -1)"
+if [ -n "$_f" ] && [ -n "$_n" ] && [ "$_f" != "$_n" ]; then
+  printf '  ok    %-26s %s\n' "follow-bound-control" "--follow and git log DISAGREE here, so the arm above discriminates"
+else
+  fails=$((fails+1))
+  printf '  FAIL  %-26s %s\n' "follow-bound-control" "--follow ($_f) and git log ($_n) agree; the seeded rename is missing and follow-bound is vacuous"
+fi
+
+# RECOVERY IS REPORTED, NEVER SILENT. A recovered sprint is the migration's own claim about a file
+# whose path never stated one, so the operator has to be able to audit it. The report must name
+# the file AND the channel that produced it.
+asserts=$((asserts+1))
+if grep -q 'SPRINT RECOVERED' <<<"$OUT" \
+   && grep -qE '^  s72 +header +.*bug-124-deployed-range\.md$' <<<"$OUT" \
+   && grep -qE '^  s192 +basename +.*192-ff-A-token-decimals\.md$' <<<"$OUT"; then
+  printf '  ok    %-26s %s\n' "recovery-reported" "every recovered sprint is printed with the channel that produced it"
+else
+  fails=$((fails+1))
+  printf '  FAIL  %-26s %s\n' "recovery-reported" "a sprint was recovered SILENTLY, or without naming its channel"
+fi
 
 # =============================================================================
 # 4. NOTHING WAS LOST. git is the witness, not the script's own verdict.
@@ -249,9 +331,17 @@ mutate 'ambiguity-allowed' \
 # The anchor is the `s` in the REPLACEMENT half of the normalising expression — one occurrence in
 # the whole file, checked. Removing it makes the rewrite an identity, which is precisely "the bare
 # number is no longer read as a sprint" and nothing else.
+# RE-ANCHORED, NOT RELAXED. This mutant's subject is the SPLIT -- two spellings of one sprint's
+# stories reaching two different shapes -- and it used to observe that split as "beta never moves".
+# It does move now: with normalisation broken the path yields no sprint, and the recovery reads the
+# leading number off the basename and places it. The defect is unchanged and still visible one step
+# later, in the DESTINATION BASENAME: alpha comes out as `story-1-alpha.md` with its sprint lifted
+# into the slot, beta keeps `story-297-1-` beside a `s297/` that now says the same thing twice.
+# Asserting the two shapes DISAGREE is strictly stronger than asserting beta stood still, and it is
+# the claim this mutant's own text makes.
 mutate 'stories-half-migrated' \
   's@/story-s@/story-@' \
-  '[ ! -f "$w/_bmad-output/planning-artifacts/stories/story-S301-1-alpha.md" ] && [ -f "$w/_bmad-output/planning-artifacts/stories/story-297-1-beta.md" ]' \
+  '[ -f "$w/_bmad-output/planning-artifacts/s301/stories/story-1-alpha.md" ] && [ -f "$w/_bmad-output/planning-artifacts/s297/stories/story-297-1-beta.md" ]' \
   'without the bare-number normalisation one sprint\x27s stories split across two conventions'
 
 # Break the POSITIONAL test, so a story already under `s<N>/` is treated as legacy. Its INDEX is

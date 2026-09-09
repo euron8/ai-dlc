@@ -248,11 +248,73 @@ story_normalize() { # <path> -> the path with a bare leading sprint number spelt
   if [ "$nb" = "$b" ]; then printf '%s' "$1"; else printf '%s/%s' "${1%/*}" "$nb"; fi
 }
 
+# --- RECOVERING A SPRINT BEFORE REFUSING --------------------------------------
+#
+# THE REFUSAL USED TO PRESCRIBE A RENAME AS THE ONLY REMEDY, AND GROUND TRUTH SAYS THAT IS FALSE.
+# On the reference consumer all 23 files this class refused were subsequently placed into slots by
+# the operator, and `git show --numstat -M` on that commit scores every one of the 23 as a PURE
+# DIRECTORY MOVE -- 0 insertions, 0 deletions, basename unchanged. Nobody renamed anything. The
+# sprint was recoverable from the file the whole time and this script was the only thing that
+# could not read it. Control on that measurement, in the same commit: 36 rows carry non-zero
+# insertions and 72 rows DO rename a basename, so the parser that scored 23/23 can see both of
+# the states it reported absent.
+#
+# TWO CHANNELS, HEADER FIRST, AND THE ORDER IS THE WHOLE MECHANISM. Scored against that commit as
+# the oracle: the header alone is 6 correct / 0 wrong / 17 silent, the basename alone is 15 / 3 / 5,
+# header-then-basename is 18 / 0 / 5, and basename-then-header is 17 / 3 / 3. The basename is the
+# wider channel AND the wrong one to ask first: `bug-124-...` and `bug-125-...` open with a
+# CARRY-OVER ITEM number, and their own headers say sprint 72 and 73. Asking the name first files
+# both under a sprint that does not own them, silently. The file's own declaration outranks its
+# name wherever both speak.
+#
+# NO GIT-HISTORY CHANNEL, AND THAT IS THE BOUND ON `--follow`. A history channel is the obvious
+# third reading and it is refused here on measurement: at the pre-migration ref -- the state this
+# script actually runs against -- `git log --follow` and `git log` return the SAME oldest commit
+# for all 23, so following buys nothing where it would be used. Run against a tree where a
+# migration has ALREADY moved the file, `--follow` crosses that rename and answers about the
+# file's previous home: on the reference consumer it returns a "Sprint 71" commit for a story
+# sitting in `s121/`, because an earlier migration moved it there. A recovery reading history
+# inherits every prior migration's placement as though it were evidence. Both channels below read
+# only the file's own bytes and its own name, neither of which a `git mv` alters.
+#
+# WHAT THIS BOUND CANNOT CATCH: a header that is itself wrong. If a story was authored by copying
+# another sprint's file and its `**Sprint:**` line was never updated, the recovery believes it and
+# places the file under the stale number. Nothing in the tree can separate that from a correct
+# header -- the header IS the operator's declaration of ownership -- which is why every recovery
+# is REPORTED with the channel that produced it rather than applied silently.
+#
+# A SUFFIXED SPRINT IS REFUSED, NOT ROUNDED. `story-131b-1-hr12-retirement.md` yields `131b`, and
+# the reserved slot is `^s[0-9]+$` -- there is no legal slot spelling for it. Truncating to `s131`
+# merges a distinct sprint's artifacts into another sprint's slot on a guess, so both channels
+# require the sprint to be purely numeric and this file is refused and named. `story_normalize`
+# above already refuses the same basename for the same reason; a recovery that accepted it would
+# contradict its own sibling three functions up. That trades the one WRONG placement for a
+# refusal: 18 correct / 0 wrong / 5 refused, against 18 / 1 / 4 for a recovery that takes it.
+sprint_from_header() { # <path> -> the sprint the file's own header declares, or empty
+  # The spelling is markdown-bold PROSE and not the schema's `^sprint:` key. Measured on the
+  # refused population: the schema form matches 0 of 23, against a control of 318 files elsewhere
+  # in the same tree that do match it -- so that zero discriminates rather than reporting a broken
+  # search. Anchored at line start so `**Epic:** Sprint 131b` and `**QA agent:** Sprint 158-hotfix`
+  # -- both present in this population -- cannot be read as declarations, and trailing prose is
+  # allowed because `**Sprint:** 18 (carry-over eligible)` is one of the six that resolve.
+  local body first
+  body="$(head -40 "$1" 2>/dev/null)" || body=""
+  first="$(sed -n -E 's/^\*\*Sprint:?\*\*[[:blank:]]*([0-9]+)([[:blank:]].*)?$/\1/p' <<<"$body")"
+  printf '%s' "${first%%$'\n'*}"
+}
+
+sprint_from_subject() { # <path> -> a sprint opening the basename, or empty
+  local b="${1##*/}" v
+  v="$(sed -n -E 's/^(story|bug|hotfix|spike|chore|task)-([0-9]+)-.*$/\2/p' <<<"$b")"
+  [ -n "$v" ] || v="$(sed -n -E 's/^([0-9]+)-.*$/\1/p' <<<"$b")"
+  printf '%s' "${v%%$'\n'*}"
+}
+
 # --- build the plan -----------------------------------------------------------
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/apmig-XXXXXX")" || exit 2
 trap 'rm -rf "$TMP"' EXIT
-PLAN="$TMP/plan"; REFUSE="$TMP/refuse"; INFERRED="$TMP/inferred"
-: > "$PLAN"; : > "$REFUSE"; : > "$INFERRED"
+PLAN="$TMP/plan"; REFUSE="$TMP/refuse"; INFERRED="$TMP/inferred"; RECOVERED="$TMP/recovered"
+: > "$PLAN"; : > "$REFUSE"; : > "$INFERRED"; : > "$RECOVERED"
 
 SCANNED=0
 STORIES_SEEN=0
@@ -280,10 +342,28 @@ while IFS= read -r src; do
     # derive is a refusal that must be named -- not the silent skip every other tokenless path
     # gets, which is correct for them because they are already conforming.
     if legacy_story "$src"; then
-      printf 'STORY-NO-SPRINT\t%s\tsits in a stories/ directory with no `s<N>/` above it, so it is not on the grammar -- but its name gives no sprint to move it to. Rename it `story-<sprint>-<index>-<slug>.md` (or `s<N>-...`) and the next run moves it.\n' \
-        "$src" >> "$REFUSE"
+      # RECOVER BEFORE REFUSING. The header is the file's own declaration and outranks its name;
+      # see the two functions above for the ordering measurement and for why history is not a
+      # channel. A recovery is never silent -- it is recorded here and printed under RECOVERED, so
+      # the operator can audit every sprint this script decided rather than read.
+      rec=""; rec_ch=""
+      rec="$(sprint_from_header "$src")"
+      [ -n "$rec" ] && rec_ch="header"
+      if [ -z "$rec" ]; then
+        rec="$(sprint_from_subject "$src")"
+        [ -n "$rec" ] && rec_ch="basename"
+      fi
+      if [ -n "$rec" ]; then
+        printf '%s\t%s\t%s\n' "$src" "$rec" "$rec_ch" >> "$RECOVERED"
+        hits="$rec"; nhits=1
+      else
+        printf 'STORY-NO-SPRINT\t%s\tsits in a stories/ directory with no `s<N>/` above it, so it is not on the grammar. Its name gives no sprint, its own `**Sprint:** <N>` header gives none either, and a suffixed sprint (`131b`) has no legal `s<N>/` slot to move to -- so both readings were tried and both came back empty. Add a `**Sprint:** <N>` header line, or rename it `story-<sprint>-<index>-<slug>.md` (or `s<N>-...`), and the next run moves it.\n' \
+          "$src" >> "$REFUSE"
+        continue
+      fi
+    else
+      continue
     fi
-    continue
   fi
   if [ "$nhits" -gt 1 ]; then
     printf 'AMBIGUOUS\t%s\tpath names %s different sprints (%s); which one owns it is not derivable\n' \
@@ -425,6 +505,22 @@ if [ "$STORIES_SEEN" -gt 0 ]; then
   echo "STORIES — $STORIES_SEEN file(s) sit in a stories/ directory carrying no \`s<N>/\` slot,"
   echo "  which is what makes them legacy whatever they are called. The sprint is taken from the"
   echo "  name; where the name does not give one they are REFUSED above by path, never guessed."
+  echo ""
+fi
+
+# RECOVERY IS NEVER SILENT. A sprint this script READ off the path is derivable by anyone; a
+# sprint it RECOVERED is a claim it made about a file whose name does not carry one, and the
+# operator has to be able to audit it. Each row names the channel that produced it, because the
+# two channels are not equally trustworthy -- a header is the file's own declaration, a basename
+# is an inference from a spelling convention -- and a wrong recovery is a file filed under the
+# wrong sprint, which is invisible afterwards.
+N_RECOVERED="$(grep -c . "$RECOVERED")" || N_RECOVERED=0
+if [ "$N_RECOVERED" -gt 0 ]; then
+  echo "SPRINT RECOVERED — $N_RECOVERED story file(s) name no sprint in their path, so one was read"
+  echo "  from the file itself. These MOVE. Audit them: a recovered sprint is this script's claim,"
+  echo "  not something the path stated. \`header\` is the file's own \`**Sprint:** <N>\` line and wins"
+  echo "  where both speak; \`basename\` is the leading number in the name:"
+  sort "$RECOVERED" | awk -F'\t' '{printf "  s%-6s %-8s %s\n", $2, $3, $1}'
   echo ""
 fi
 
