@@ -556,12 +556,24 @@ whose variable read 1. The arm now counts workers OBSERVED in flight, from a liv
 each worker creates and removes, which is a property of the run. `consumer-suite-pool/run.sh:274`
 is the precedent.
 
-**A WALL-CLOCK OVERLAP TEST DOES NOT WORK, MEASURED ON THE FIRST REPAIR.** `date +%s` is whole
-seconds, so a worker ending at T and the next starting at T read as overlapping: a fully SERIAL
-4m34s run reported "2 in flight" and PASSED. Presence, not time. The marker version reports
-exactly 6 on the pool, 1 on the serial dispatch, and 6 on the parallel-run-with-variable-1 case.
-The floor is **2 and not `$MUT_JOBS`** — a loaded box may never place 6 at once, and an arm
-demanding 6 would fail for a reason that is not a regression.
+**TWO WRONG REPAIRS WERE BUILT AND MEASURED BEFORE THE ONE THAT SHIPPED, and both are the same
+error one level down — an instrument counting something ADJACENT to the property.**
+
+*A wall-clock overlap test does not work.* `date +%s` is whole seconds, so a worker ending at T
+and the next starting at T read as overlapping: a fully SERIAL 4m34s run reported "2 in flight"
+and PASSED. Presence, not time.
+
+*A marker FILE is not a LIVE worker.* Counting files counts whatever was left behind — by a
+killed worker or anything else that wrote there. Measured, by probing my own repair: **five
+seeded stale markers made a serial dispatch report 6 in flight and PASS.** The marker is named
+for its PID and the count admits only PIDs still running (`kill -0`, which sends no signal), so
+a leftover cannot inflate it. With that fix, stale-plus-serial and plain serial both FAIL.
+
+The shipped arm reports exactly 6 on the pool, 1 on the serial dispatch, and 6 on the
+parallel-run-with-variable-1 case. The floor is **2 and not `$MUT_JOBS`** — a loaded box may
+never place 6 at once, and an arm demanding 6 would fail for a reason that is not a regression.
+The collector cannot mistake `.inflight` or a `.work-<label>` directory for a verdict either: it
+walks the 24 declared labels rather than the directory, and `[ -f ]` rejects a directory.
 
 **AND THE PROBE HAD TO DRIVE THE SHIPPING WALK.** Its first cut carried its own copy of the
 loop, so it agreed with itself and the directory-reading non-fix STILL closed the receipt — the
