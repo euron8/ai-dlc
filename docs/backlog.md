@@ -4136,3 +4136,51 @@ before the check ships. The reference consumer carries no live layer-debt regist
 duplicate obligation filed under a new id, which is a wrong WRITE prompted by a false finding.
 
 verify: sh set -e; V=core/scripts/audit-layer-debt.sh; [ -f "$V" ] || exit 9; d=$(mktemp -d); trap 'rm -rf "$d"' EXIT; printf '{"clause":"LC-E4","entry":"e1","subject_digest":"x","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"The narrowing is owed under OWED-X."}\n{"clause":"LC-E4","entry":"e2","subject_digest":"y","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","owed":{"id":"OWED-X","what":"w"}}\n' > "$d/r.jsonl"; o="$(bash "$V" --register "$d/r.jsonl" 2>/dev/null)" || true; printf '%s' "$o" | grep -q 'OPEN (1)' || exit 9; printf '%s' "$o" | grep -q 'UNDECLARED (1)' && exit 1; exit 0
+
+## BL-219 — a transcript corpus that is PRESENT but lacks the citation fails CLOSED, while one that is ABSENT fails OPEN
+
+**Found 2026-09-09** by an adjudication hand measuring
+`PC-S300-RESOLUTION-RECORD-CITATION-CANNOT-OUTLIVE-ITS-SESSION` against HEAD, and re-derived here
+by driving the shipping validator on the fixture-seeded `stalled-resolved` series. That entry's
+headline — a citation unverifiable across a handoff — is RESOLVED by `--transcript-dir`
+(`core/scripts/validate-adversarial-convergence.sh:127`). **This is the residual the entry itself
+stays open on, and only the EMPTY-corpus half was ever narrowed.**
+
+Driven through `validate-adversarial-convergence.sh --cycle-state --series <prefix>`, one
+invocation per row, same seeded series throughout:
+
+    CONTROL  --transcript-dir <real corpus>              rc=0   RESOLVED
+    (c)      --transcript-dir <dir, citation-less jsonl> rc=3   STALL          <- fails CLOSED
+    (d)      --transcript-dir <empty dir, no jsonl>      rc=0   UNVERIFIABLE   <- fails OPEN
+    (a)      no transcript flag at all                   rc=0   UNVERIFIABLE   <- fails OPEN
+
+**The control discriminates**: it RESOLVES where the others do not, and (c) and (d) differ on the
+same flag, so the pair is a real asymmetry rather than a run failing for a reason none of the arms
+owns. A first attempt at this measurement returned `rc=1` on all arms — the series argument is a
+path PREFIX, not a directory, and every arm was failing for that reason. A non-discriminating null
+reads exactly like agreement.
+
+**The mechanism**, at `validate-adversarial-convergence.sh:1015-1031`: `steer_dir_has_transcript`
+sets `STEER_FLAG` when the directory holds any readable `*.jsonl`. Only the `[ -z "$STEER_FLAG" ]`
+branch carries the two-tier fail-open. A corpus that is present but citation-less therefore never
+reaches that branch — it sets the flag, runs the predicate, and denies.
+
+So an operator who supplies a transcript directory that happens not to contain the quote is worse
+off than one who supplies nothing at all, which inverts the intended posture: the fail-open exists
+so a missing transcript never wedges the pipeline.
+
+**Any fix touches four files.** `steer_dir_has_transcript` is byte-identical in
+`validate-adversarial-convergence.sh`, `validate-escalation-resolution.sh`,
+`validate-gate-adjudication.sh` and `core/hooks/ai-dlc-gate-remediation-guard.sh`; **I92** holds
+the four copies to one text and refuses a fifth (derived: 4 definitions under `core/`).
+
+**Not fixed here, and the shape needs deciding.** Distinguishing "present but lacks the citation"
+from "absent" is a third state the two-tier branch does not model, and widening the fail-open to
+cover it would acquit exactly the case the gate posture exists to deny. On the escalation
+validator the same shape is fail-CLOSED uniformly, which is the gate posture and not this
+inversion — so the fix must not be applied blindly across all four copies.
+
+**Tiered DEFECT.** Consumer-facing; all four readers ship. Its consequence is a pipeline wedged by
+supplying MORE ground truth than the passing case requires.
+
+verify: sh set -e; V=core/scripts/validate-adversarial-convergence.sh; [ -f "$V" ] || exit 9; grep -q 'steer_dir_has_transcript "$TRANSCRIPT_DIR"' "$V" || exit 9; grep -q 'ADVERSARIAL_CITATION_UNVERIFIABLE' "$V" || exit 9; n="$(grep -rlc 'steer_dir_has_transcript() {' core/ | wc -l)"; [ "$n" -ge 4 ] || exit 9; grep -qE 'citation-less|present-but-unquoted|lacks the citation' "$V" && exit 0; exit 1
