@@ -4054,3 +4054,44 @@ verify: sh set -e; V=core/scripts/validate-locked-anchor.sh; [ -f "$V" ] || exit
 
 
 
+
+## BL-217 — a worktree-isolated code reviewer's own role file tells it to do what the lead is forbidden to ask for
+
+**Found 2026-09-09**, by an adjudication hand measuring `PC-S306-WORKTREE-DELIVERABLE-PATH-AMBIGUOUS-PRIMARY-VS-WORKTREE`
+against HEAD. Not that entry's residue: `git blame` puts the offending line at `e7ccffa9`
+(2026-07-05), predating the `v0.429.0` fix and untouched by it. Verified independently of the hand.
+
+Three shipped core files disagree, and all three are read at HEAD:
+
+- `core/skills/ai-dlc/steps/implementation.md:118` names the worktree dispatch targets as
+  "dev, **code reviewer**, or QA".
+- `core/skills/ai-dlc/steps/implementation.md:130-133` — the `v0.429.0` remedy — states the lead
+  "MUST NOT ask it to write outside that worktree, and MUST NOT name a primary-tree path for a
+  file the teammate is to produce."
+- `core/team-roles/code-reviewer.md:453-456` instructs the reviewer: "**Write the review file to
+  the canonical branch checkout** (or hand it to the lead to persist) BEFORE reporting the gate-1
+  verdict."
+
+So a worktree-isolated code reviewer is told by its own contract to write to the canonical
+checkout, which item 7 forbids the lead to request. The role file's reasoning is sound — a review
+left in a pruned worktree is lost — and that is why this is a PRECEDENCE defect rather than a
+contradiction: the parenthetical fallback ("or hand it to the lead to persist") is already
+compatible with item 7. The two are stated in the wrong order, with the forbidden action primary.
+
+**Scoped, not assumed a class.** `code-reviewer.md` is the only role file carrying the
+instruction — QA does not (1 of 21 role files, control: 21 mention `worktree`).
+
+**The fix shape is a wording repair in one file**: make handing the review to the lead the primary
+instruction and the canonical-checkout write the non-worktree case. Not built here — the LOUD line
+wins in a role file, and which of the two readings a reviewer takes is worth deciding deliberately
+rather than in the same change that found it.
+
+**Item 7 has no enforcer, which is why this survived.** Nothing under `core/fixtures/`, `scripts/`
+or `core/scripts/` references the worktree deliverable rule (control: an unrelated token resolves a
+fixture in the same invocation), so deleting or contradicting item 7 fails no push.
+
+**Tiered DEFECT.** Consumer-facing: both files ship. A reviewer following its role file produces a
+deliverable the lead's protocol says it must not have been asked for, and the losing case is a
+review that is lost with a pruned worktree.
+
+verify: sh r=core/team-roles/code-reviewer.md; i=core/skills/ai-dlc/steps/implementation.md; [ -f "$r" ] && [ -f "$i" ] || exit 9; grep -q "code reviewer" "$i" || exit 9; grep -q "NOT ask it to write outside that worktree" "$i" || exit 9; grep -q "Write the review file to the canonical branch checkout" "$r" && exit 1; exit 0
