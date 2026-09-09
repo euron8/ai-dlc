@@ -15,6 +15,84 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.540.0] - 2026-09-09
+
+### `PC-S309-STUB-AUDIT-PROSE-MARKER-FIRES-ON-NEGATION-AND-TEST-DOUBLE-REFERENCE` — Check 16's comment-portion prose gate fired on a comment that DENIES a deferral and on one naming a test double (`BL-213`)
+
+Filed by the reference consumer at its sprint-309 implementation gate, on the day of this
+release. The v0.451.0 gate matches the four prose markers only inside a line's comment portion
+and only as whole words, which correctly excludes a bare identifier and a non-comment line. Two
+further shapes are comment-portion prose and so sit inside that gate's own boundary: `// Real
+asset -- no inline stub. CDK zips the directory.` — a sentence whose whole content is that the
+adjacent call is NOT a stub — and `# ... "broadcast" via the stub.` seven lines below an
+`AsyncMock` assignment in a test. Element 1 runs first and short-circuits, so no truthful
+`deferral-reason:` can clear either; the only clearing paths were rewording true prose or
+inventing an `Item N` for work that does not exist.
+
+Two carve-outs, both measured over both trees by driving the shipping validator. A `stub`
+occurrence immediately preceded by a negation token, at most two intervening alphabetic words
+and no punctuation, applied per occurrence and only when `stub` is the sole prose marker the
+comment carries, is not a marker. A `stub` in a file under a test path with mock vocabulary
+within ten lines is not a marker either, and BOTH conjuncts are load-bearing: the vocabulary
+alone acquitted three comment lines in the validator's own header, and the path alone acquits
+the fixture's own `# stub, wire later` seeds. On the reference consumer: 127 comment-portion
+`stub` markers, 6 negated, 97 test-double, 24 neither; findings 69 → 57, zero new. On this tree
+144 → 127, zero new. `# not yet done: stub, wire later` still fires — `not yet` is deferral
+vocabulary, and a first cut keyed on a character window acquitted it.
+
+**One residual false negative, stated rather than hidden.** A bare `# stub, the real assertion
+is unwritten` in a test file with mock vocabulary in the window is acquitted. The negation-only
+shape does not have that hole and acquits only the first site; the shipped shape trades it for
+the 97-line consumer population.
+
+**The adversarial hand found a second false-negative class in the first cut, and it is closed.**
+Eight prefixes drawn from the validator's own `PHASE_ABSENCE` deferral list — `not implemented`,
+`not wired`, `not yet done`, `no-op`, `non-functional` and the rest — satisfy the negation grammar
+too, so `# not implemented stub` was acquitted where the shipped gate had fired, and the header's
+own must-fire case was held only by its colon. The matched negation phrase is now refused when it
+carries deferral vocabulary; the consumer's site and `not a stub` carry none and stay acquitted.
+The same hand built four differently-wrong validators that passed every fixture arm and the
+receipt — the intervening-word bound widened, the mock window at 5 and at 100, the test path
+widened — because no seed sat at a boundary. Four seeds now do (V31–V34: a deferral-word
+negation, a negation one word past the bound, a mock one line outside the window and one at its
+far edge), three mutants kill on exactly those cells, and the receipt carries the same worlds:
+0 on the fix, 1 on each of the four variants, on the deferral refusal removed, on the marker
+disarmed, and on `origin/main`. A first cut of the bound seed sat six words out, which no
+plausible widening reaches, and its mutant survived for that reason — a boundary seed sits one
+past the boundary.
+
+**The scoping hand's implementation carried a defect the builder found by mutant.** Its
+boundary test re-spelled `PROSE_MARKER`'s word boundary by hand, so the fixture's
+`prose-marker-unbounded` mutant — which widens the marker to a bare alternation — survived: the
+copy still applied a boundary of its own. The shipped form splices the neighbouring characters
+back around the token and re-tests `PROSE_MARKER` itself, so the two spellings cannot diverge.
+`PROSE_MARKER_OTHER` is derived by substitution rather than spelled twice, and a `die` fires if
+the substitution is a no-op — a marker set that lost its `stub` alternative would otherwise make
+both carve-outs acquit vacuously while reading as live.
+
+Fixture: `core/fixtures/check-15-bypass` gained eight seeds (V23–V30) — the two acquittals and
+six shapes one property short of them, including a negation AFTER the occurrence, a negation
+qualifying a different token, two occurrences on one line, and mock vocabulary in a non-test
+file — and four mutants killed on exactly the cells the header names. Two collateral defects in
+the existing battery were fixed in the same change: one old mutant's `sed` anchored on a line
+the fix edits and would have gone dead reading as a regression, and the quote-guard mutant's
+anchor now matches two `case` lines under the fix and was re-keyed on the quote class. Receipt
+scored 0 on the fix, 1 on the `origin/main` validator and three built non-fixes (skip `tests/`,
+skip any comment containing `no`, `stub` removed from the marker set), 9 with the validator
+absent.
+
+### A same-second gate-record collision REPLACED a record in `0.539.0`; it now yields to the existing file
+
+`0.539.0` moved the verdict record's assembly out of the consumer tree and into the gate's temp
+directory, moving it in at exit. That move was a bare `mv`, and the record's name carries a
+whole-second timestamp — so a second classify landing inside the same second (a nested walk with
+its guard removed, or two runs on one consumer) REPLACED the first record silently, where the
+in-place assembly it replaced had APPENDED and left a visible double trailer. Caught by the
+fixture's own nested-write mutant surviving on the release-2 push: it scores the collision on
+trailer count, and a replaced file has one. The move now waits for a free second, up to five,
+and renames if the announced name was taken; the mutant is re-scored on the same trailer count,
+which two files carry.
+
 ## [0.539.0] - 2026-09-09
 
 ### `BL-086` — the self-update gate asked whether the pull could break the push, never whether the consumer could push at all; it now runs the pre-push hook git would run, on the tree as it stands, and defers when that hook refuses

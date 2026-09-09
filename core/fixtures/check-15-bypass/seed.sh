@@ -42,7 +42,10 @@ set -euo pipefail
 OUT="${1:-${OUT:-$(mktemp -d)}}"
 TREE="$OUT/tree"
 rm -rf "$TREE"                     # idempotent re-seed
-mkdir -p "$TREE/src" "$TREE/_bmad-output/planning-artifacts"
+# `tests/` is created here and not beside V24 because V26 needs it too, and because the
+# test-double carve-out is keyed on the PATH: a variant that silently landed outside
+# `tests/` would be acquitted or not for a reason no arm names.
+mkdir -p "$TREE/src" "$TREE/tests" "$TREE/_bmad-output/planning-artifacts"
 
 cat > "$TREE/_bmad-output/planning-artifacts/carry-over-backlog.md" <<'EOF'
 # Carry-over backlog
@@ -254,6 +257,168 @@ cat > "$TREE/src/v22_quoted_opener.sh" <<'EOF'
 emit_marker() {
   printf '# stub, wire later\n' > "$1"
 }
+EOF
+
+# ---- V23-V30: `stub` INSIDE a comment that is still not a deferral ------------
+#
+# The comment gate (V17-V22) decides WHERE a prose marker is credible. These decide whether
+# the word means what the check assumes even once it is in a comment, and they are the two
+# shapes the reference consumer's gate hit that the comment gate does not reach: a comment
+# using `stub` to DENY a deferral, and a comment naming a TEST DOUBLE.
+#
+# BOTH CARVE-OUTS ARE ABSENCE-SHAPED (V23, V24), so each has a mutant at the end of run.sh.
+# What makes the six positive variants beside them load-bearing is that each is one property
+# short of an acquittal, and a different wrong fix acquits each one:
+#
+#   V25  a negation-vocabulary word that is a DEFERRAL word, with punctuation between it and
+#        `stub`. A character window rather than strict adjacency acquits it — and it is a
+#        real deferral, so that acquittal is the expensive direction.
+#   V26  a real deferral in a TEST FILE with NO mock vocabulary. `skip tests/` acquits it.
+#   V27  the negation qualifies a DIFFERENT noun; `stub` itself is bare. Any carve-out keyed
+#        on "the comment contains `no`" acquits it.
+#   V28  the negation sits AFTER the token, so a carve-out scanning the whole comment rather
+#        than the text BEFORE each occurrence acquits it.
+#   V29  two occurrences, only the first negated. A per-COMMENT rather than per-OCCURRENCE
+#        test acquits it, and the bare second occurrence is the one that matters.
+#   V30  mock vocabulary in a file that is NOT a test. The vocabulary half without the path
+#        conjunct acquits it — measured, that half alone acquits three comment lines in
+#        validate-stub-audit.sh itself, which is not a test and defers nothing.
+#
+# V25 IS THE ONE THAT FORCES STRICT ADJACENCY. `[Nn]ot yet` is PHASE_ABSENCE vocabulary — a
+# word for deferring, not for denying stubness — so a window loose enough to read it as a
+# negation silences the check on its own subject.
+
+# V23: the consumer's negation site, verbatim. Prose denying a deferral. NO finding.
+cat > "$TREE/src/v23_negation.ts" <<'EOF'
+export function bundle() {
+      // Real asset -- no inline stub. CDK zips the directory.
+      return 1;
+}
+EOF
+
+# V24: the consumer's test-double site — an `AsyncMock` stand-in named seven lines above the
+# comment that refers to it. The window is why the vocabulary lookback is 10 lines and not the
+# elements' 5. NO finding.
+cat > "$TREE/tests/v24_test_double.py" <<'EOF'
+import unittest
+from unittest.mock import AsyncMock
+
+
+class RemoveTest(unittest.TestCase):
+    def test_partial_remove(self):
+        broadcaster = AsyncMock()
+        run_remove(broadcaster)
+        self.assertEqual(broadcaster.call_count, 1)
+        # The partial remove proceeded and "broadcast" via the stub.
+        self.assertTrue(True)
+EOF
+
+# V25: a real deferral whose comment carries a negation-VOCABULARY word separated from `stub`
+# by a colon. Element 1 rejects it.
+cat > "$TREE/src/v25_neg_word_real_deferral.py" <<'EOF'
+def resample():
+    # not yet done: stub, wire later
+    return None
+EOF
+
+# V26: a real deferral in a TEST file carrying no mock vocabulary at all. Element 1 rejects it.
+cat > "$TREE/tests/v26_test_real_deferral.py" <<'EOF'
+def test_pending():
+    # stub, wire later -- the real assertion is unwritten
+    pass
+EOF
+
+# V27: the negation qualifies `repository`, not `stub`. Element 1 rejects it.
+cat > "$TREE/src/v27_neg_other_token.py" <<'EOF'
+def lookup():
+    # no repository behind it, so this is a stub
+    return 0
+EOF
+
+# V28: the negation follows the token. Element 1 rejects it.
+cat > "$TREE/src/v28_neg_after.sh" <<'EOF'
+check_existence() {
+  # existence: a stub file is not a repair record.
+  return 0
+}
+EOF
+
+# V29: two occurrences, the second bare. Element 1 rejects it.
+cat > "$TREE/src/v29_two_occurrences.py" <<'EOF'
+def fallback():
+    # no inline stub here, but the fallback is a stub
+    return 1
+EOF
+
+# V30: mock vocabulary in a NON-test file. Element 1 rejects it.
+cat > "$TREE/src/v30_mock_prose_nontest.py" <<'EOF'
+def build_broadcaster():
+    fake = AsyncMock()
+    # broadcast goes through the stub
+    return fake
+EOF
+
+# ---- V31-V34: the boundaries an adversarial hand found unasserted --------------
+#
+# Four differently-wrong validators passed every arm above and the receipt: the negation's
+# intervening-word bound widened from two to five, the mock window at 5 and at 100, and the
+# test-path predicate widened. V24's `AsyncMock` sits seven lines up, so it survives a window
+# of 5 and of 100 alike, and V25's negation is one word from the token, so a wider bound never
+# bites. Each of these seeds sits AT a boundary, so one number moving flips exactly one cell.
+#
+# V31: a negation that is itself DEFERRAL vocabulary. `not implemented stub` satisfies the
+# negation grammar -- negation word, one intervening word, the token -- and is unfinished
+# work. Eight such prefixes drawn from PHASE_ABSENCE's own list reached the carve-out on the
+# first cut and were acquitted where the shipped gate had fired. MUST FIRE.
+cat > "$TREE/src/v31_neg_deferral_word.py" <<'EOF'
+def render_v31():
+    # not implemented stub
+    return 0
+EOF
+
+# V32: a negation THREE words from the token -- one past the bound. Strict adjacency allows
+# at most two intervening words; a real denial is written adjacent (`no inline stub`), and a
+# negation further back qualifies something else. MUST FIRE. Flips under a bound of five. The
+# first cut of this seed put the negation SIX words out, which no plausible widening reaches,
+# and the mutant survived for that reason: a boundary seed sits ONE past the boundary.
+cat > "$TREE/src/v32_neg_three_words_out.py" <<'EOF'
+def render_v32():
+    # no other module may touch stub
+    return 0
+EOF
+
+# V33: mock vocabulary EXACTLY ELEVEN lines above the comment, in a test file. One past the
+# window. MUST FIRE. Flips under a window of 100; V24 (seven up) is the acquitted twin.
+cat > "$TREE/tests/v33_mock_eleven_up.py" <<'EOF'
+b = AsyncMock()
+x1 = 1
+x2 = 2
+x3 = 3
+x4 = 4
+x5 = 5
+x6 = 6
+x7 = 7
+x8 = 8
+x9 = 9
+x10 = 10
+# the v33 result is broadcast via the stub
+EOF
+
+# V34: mock vocabulary on line 1 and the comment on line 11 -- exactly ten lines up, the far
+# edge INSIDE the window. Acquitted. Flips under a window of 5; V33 is its one-line twin on
+# the other side of the boundary.
+cat > "$TREE/tests/v34_mock_ten_up.py" <<'EOF'
+b = AsyncMock()
+y1 = 1
+y2 = 2
+y3 = 3
+y4 = 4
+y5 = 5
+y6 = 6
+y7 = 7
+y8 = 8
+y9 = 9
+# the v34 result is broadcast via the stub
 EOF
 
 # ---- V5: the positive control — satisfies all four elements ------------------

@@ -51,8 +51,9 @@
 # exit:
 #   0 = audited >=1 in-scope hot-path file, no finding
 #   1 = >=1 finding. Each names `file:line` and the element that rejected it
-#   2 = cannot decide: bad arguments, no resolver, or a stub match needed the backlog
-#       and no backlog file exists. Fail-closed -- never a pass
+#   2 = cannot decide: bad arguments, no resolver, a stub match needed the backlog and no
+#       backlog file exists, or the marker set lost the alternative a carve-out narrows.
+#       Fail-closed -- never a pass
 #   4 = EXAMINED NOTHING. No path given was an in-scope hot-path file. Not a pass:
 #       the caller decides whether an empty subject set is legitimate at this gate
 
@@ -174,6 +175,140 @@ PROSE_MARKER='(^|[^[:alnum:]_])(stub|TODO|FIXME|wired later)([^[:alnum:]_]|$)'
 # phase reference was deleted from a consumer's module docstring to clear a gate.
 PHASE_MARKER='Phase [0-9]'
 PHASE_ABSENCE='([Dd]eferr|[Pp]ending|TBD|[Pp]laceholder|[Nn]ot yet|[Yy]et to be|[Nn]o [^[:space:]]+ yet|[Nn]ot (wired|implemented|deployed|available|supported|populated)|[Ww]ill (be|supply)|[Uu]ntil .* (deployed|lands|ships))'
+
+# `stub` INSIDE A COMMENT IS STILL NOT ALWAYS A DEFERRAL, and the comment gate above does
+# not reach the two remaining shapes. Same design as PHASE_ABSENCE -- the token stays in the
+# marker set and a CONTEXT predicate decides -- and the same reason: a false positive on a
+# consumer-owned file has no escape hatch, because upstream ownership is the only exemption
+# and element 1 short-circuits before any truthful annotation can be read. Its only
+# remediation is rewording true prose, or inventing an `Item N` for work that does not exist.
+#
+# THE TWO SHAPES, both measured on the reference consumer at a gate they failed:
+#   NEGATION      `// Real asset -- no inline stub. CDK zips the directory.` The sentence's
+#                 entire content is that the call beside it is NOT a stub.
+#   TEST DOUBLE   `# ... "broadcast" via the stub.` naming an `AsyncMock` stand-in declared
+#                 seven lines above, in a unit test. Sanctioned test-isolation vocabulary,
+#                 not a description of unfinished production work.
+#
+# MEASURED, driving THIS script over both trees. Of the consumer's 127 comment-portion `stub`
+# markers, 6 are negated, 97 are test doubles and 24 are neither; findings there go 69 -> 57.
+# Here they go 107 -> 93, and NO new finding appears on either tree. The 14 acquitted here are
+# `no-stub:` marker prose in the rules validators and its fixture, plus two "not a stub"
+# sentences -- the same shape as the consumer's, in a corpus that never wrote a test double.
+#
+# THE ADJACENCY IS STRICT, AND THAT IS THE WHOLE FIX. A window measured in characters was
+# built first and it acquitted `# not yet done: stub, wire later` -- a real deferral whose
+# `[Nn]ot yet` is PHASE_ABSENCE vocabulary, i.e. a DEFERRAL word, not a denial of stubness.
+# The negation must sit immediately before `stub` with at most two intervening alphabetic
+# words and NOTHING else: no colon, no comma, no punctuation of any kind. That is what
+# separates "no inline stub" from "not yet done: stub" and from "no repository behind it, so
+# this is a stub", where the negation qualifies a different noun entirely.
+#
+# THREE WRONG FIXES, EACH BUILT AND REFUTED BY MEASUREMENT:
+#   SKIP `tests/`         acquits `# stub, wire later` in a test file -- a real deferral --
+#                         and leaves the negation site firing untouched. Both halves are
+#                         required below for exactly this reason.
+#   SKIP ANY COMMENT      `# no repository behind it, so this is a stub` carries `no` and is
+#   CONTAINING `no`       a deferral; so does `# no stub yet -- TODO wire it`.
+#   DROP `stub` FROM      deletes the alternative that catches the check's own subject. A
+#   PROSE_MARKER          detector that cannot fire reads exactly like one with nothing to find.
+#
+# THE RESIDUAL FALSE NEGATIVE, STATED RATHER THAN HIDDEN. A bare `# stub, the real assertion
+# is unwritten` in a test file with mock vocabulary within the window IS acquitted. A form
+# scoped to the negation alone does not have that hole, and it is traded deliberately: the
+# test-double class is 97 of the consumer's 127 markers and the negation class is 6.
+#
+# SCOPED TO THE `stub` ALTERNATIVE, NEVER TO THE LINE. `# no stub yet -- TODO wire it` is a
+# real deferral, and suppressing the LINE would lose it to a word qualifying a different
+# token. Neither carve-out gets to decide unless `stub` is the sole prose alternative the
+# comment carries, which is what PROSE_MARKER_OTHER tests.
+#
+# PROSE_MARKER_OTHER IS DERIVED FROM PROSE_MARKER, NEVER SPELLED A SECOND TIME. A marker set
+# written twice is one chance to drift per alternative, and the copy that drifts is the one
+# no arm drives. The `die` below is the join: if the substitution changes nothing then
+# PROSE_MARKER no longer carries the `stub` alternative, both carve-outs have lost their
+# subject, and a silent vacuous acquittal is exactly the state this file exists to refuse.
+PROSE_MARKER_OTHER="${PROSE_MARKER/stub|/}"
+[ "$PROSE_MARKER_OTHER" != "$PROSE_MARKER" ] || die "PROSE_MARKER no longer carries a 'stub|' alternative, so the negation and test-double carve-outs below have no subject and would acquit nothing while reading as live."
+
+STUB_NEGATION='(^|[^[:alnum:]_])([Nn]o|[Nn]ot|[Nn]on|[Nn]ever)[[:space:]-]+([[:alpha:]]+[[:space:]]+){0,2}$'
+
+# A NEGATION THAT IS ITSELF DEFERRAL VOCABULARY DOES NOT ACQUIT. `not implemented stub`,
+# `not yet done stub`, `no-op stub`, `non-functional stub` all satisfy STUB_NEGATION and are all
+# unfinished work: the word between the negation and the token is what PHASE_ABSENCE above
+# already classifies as an ABSENCE statement, and "not X yet" is a deferral of X, not a denial
+# of stubness. Measured by an adversarial hand on the first cut: eight prefixes drawn from
+# PHASE_ABSENCE's own list reached the carve-out and were acquitted where the shipped gate had
+# fired, and the header's own must-fire case (`# not yet done: stub, wire later`) was held
+# only by its COLON. So the text between the negation and `stub` is refused when it carries a
+# deferral word; the consumer's site (`no inline stub`) and `not a stub` carry none and stay
+# acquitted. The list is the noun-and-participle set a deferral is written with, not a
+# restatement of PHASE_ABSENCE -- that regex requires its own sentence shape and would not
+# match a bare `not wired`.
+STUB_NEGATION_DEFERRAL='(^|[^[:alnum:]_])(implemented|wired|deployed|available|supported|populated|done|finished|ready|yet|op|functional|working|real|longer|impl|behaviou?r|blocking|production|complete)([^[:alnum:]_]|$)'
+
+# EVERY OCCURRENCE MUST BE NEGATED. `# no inline stub here, but the fallback is a stub` still
+# fires: the second occurrence is bare, and the false-NEGATIVE direction is the expensive one
+# for a check whose whole subject is unfinished work.
+#
+# THE PER-OCCURRENCE BOUNDARY IS TAKEN FROM PROSE_MARKER ITSELF, not restated as a `case`
+# pattern. Measured: a hand-spelled `[!a-zA-Z0-9_]` copy of the boundary here made the
+# `prose-marker-unbounded` mutant SURVIVE -- with PROSE_MARKER widened to a bare alternation
+# this function still applied a boundary of its own, so `# the client_stub helper is fine`
+# stayed quiet and an arm that had been load-bearing since the marker split scored a kill it
+# no longer earned. Splicing the character either side of the candidate back around it and
+# re-testing the emitter's own regex keeps the two spellings one.
+#
+# args: <comment portion> <1 if the line sits in test-double context, else 0>
+# 0 = the comment still carries a live prose marker; 1 = every `stub` in it is accounted for
+# and it carries no other prose marker.
+prose_marker_live() {
+  local ct="$1" td="$2" pre rest pc rc
+  [[ $ct =~ $PROSE_MARKER_OTHER ]] && return 0
+  [ "$td" = 1 ] && return 1
+  rest="$ct"
+  while :; do
+    case "$rest" in *stub*) ;; *) break ;; esac
+    pre="${rest%%stub*}"
+    rest="${rest#*stub}"
+    pc="${pre#"${pre%?}"}"          # the character before this occurrence, or empty
+    rc="${rest%"${rest#?}"}"        # the character after it, or empty
+    [[ "${pc}stub${rc}" =~ $PROSE_MARKER ]] || continue
+    [[ $pre =~ $STUB_NEGATION ]] || return 0
+    # The matched negation phrase -- the negation word and the words between it and the
+    # token -- must carry no deferral vocabulary. `BASH_REMATCH[0]` is exactly that span.
+    [[ ${BASH_REMATCH[0]} =~ $STUB_NEGATION_DEFERRAL ]] && return 0
+  done
+  return 1
+}
+
+# BOTH HALVES OF THE TEST-DOUBLE CARVE-OUT ARE REQUIRED, and neither covers the other. The
+# PATH alone is `skip tests/`, refuted above. The VOCABULARY alone acquits prose ABOUT mocks
+# in production code -- measured, it acquitted three comment lines in this very file, which is
+# not a test and defers nothing. The window is the lookback the elements already read, widened
+# from 5 to 10 because the consumer's own site declares its `AsyncMock` seven lines up.
+TEST_VOCAB='(AsyncMock|MagicMock|Mock\(|monkeypatch|test double|patch\()'
+TEST_VOCAB_LINES=10
+
+test_path() { # 0 = the path names a TEST file
+  case "$1" in
+    tests/*|*/tests/*|test_*|*/test_*|*_test.*|*.test.*|*/conftest.py) return 0 ;;
+  esac
+  return 1
+}
+
+# Reads the enclosing `lines` array rather than taking it as an argument: bash here is 3.2 and
+# an array cannot be passed. args: <1-based line number the window ends at>
+vocab_near() { # 0 = test-double vocabulary within the window
+  local n="$1" lo k
+  lo=$((n - TEST_VOCAB_LINES)); [ "$lo" -lt 1 ] && lo=1
+  k="$lo"
+  while [ "$k" -le "$n" ]; do
+    [[ ${lines[$((k - 1))]} =~ $TEST_VOCAB ]] && return 0
+    k=$((k + 1))
+  done
+  return 1
+}
 
 E1_ITEM='Item [0-9]+'
 E3_FILE_LINE='(^|[[:space:]])[^[:space:]]+:[0-9]+([[:space:]]|$)'
@@ -300,7 +435,12 @@ for rel in "${paths[@]}"; do
     if ! [[ $line =~ $CODE_MARKER ]]; then
       ctext=""
       [[ $line =~ $PROSE_MARKER ]] && ctext="$(comment_text "$line")"
-      if ! { [ -n "$ctext" ] && [[ $ctext =~ $PROSE_MARKER ]]; }; then
+      # The test-double context is computed here rather than inside prose_marker_live so the
+      # scan of the window happens once per MARKER CANDIDATE, never once per occurrence of
+      # `stub` inside one comment.
+      testctx=0
+      if [ -n "$ctext" ] && test_path "$rel" && vocab_near "$i"; then testctx=1; fi
+      if ! { [ -n "$ctext" ] && [[ $ctext =~ $PROSE_MARKER ]] && prose_marker_live "$ctext" "$testctx"; }; then
         [[ $line =~ $PHASE_MARKER ]]   || continue
         [[ $line =~ $PHASE_ABSENCE ]]  || continue
       fi

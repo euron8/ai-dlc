@@ -307,11 +307,25 @@ gate_exit_cleanup() {
     # run-everything branch on every probe. Measured on a shared clone, one settled tree: 30s
     # with no record on disk, 257s with one record-shaped file added, 30s again with it removed.
     # Every claimed warm-cost figure was unreachable by construction until this move.
+    #
+    # NEVER OVER AN EXISTING RECORD. The name carries a whole-second timestamp, so a second
+    # invocation landing inside the same second — a nested classify with its guard removed, or
+    # two gate runs on one consumer — would otherwise REPLACE the first record silently, and a
+    # lost record reads exactly like a run that never happened. (Assembled in place, the same
+    # collision used to APPEND, leaving one file with two trailers — visible, and the fixture's
+    # nested-write mutant is scored on it.) The move waits for a free second instead; the
+    # timestamp grammar stays intact, so the runner's newest-by-name read is unaffected.
     if [ -n "${GATE_REC_FINAL:-}" ]; then
-      if mv "$GATE_REC" "$GATE_REC_FINAL" 2>/dev/null; then
-        GATE_REC="$GATE_REC_FINAL"
+      _rec_dst="$GATE_REC_FINAL"; _rec_tries=0
+      while [ -e "$_rec_dst" ] && [ "$_rec_tries" -lt 5 ]; do
+        sleep 1; _rec_tries=$((_rec_tries + 1))
+        _rec_dst="$GATE_REC_DIR/self-update-gate-$(date -u +%Y%m%dT%H%M%SZ).md"
+      done
+      if mv "$GATE_REC" "$_rec_dst" 2>/dev/null; then
+        [ "$_rec_dst" = "$GATE_REC_FINAL" ] || printf 'record: %s (renamed: the announced name was taken by another run)\n' "$_rec_dst" >&2
+        GATE_REC="$_rec_dst"
       else
-        printf 'record: could not move %s to %s\n' "$GATE_REC" "$GATE_REC_FINAL" >&2
+        printf 'record: could not move %s to %s\n' "$GATE_REC" "$_rec_dst" >&2
       fi
     fi
   fi
