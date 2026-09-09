@@ -296,6 +296,22 @@ emit SELF-UPDATE-OK - nothing'
 G add -A >/dev/null 2>&1; G commit -q --no-verify -m base-declaring >/dev/null 2>&1
 D_BASE_DECL="$(G rev-parse HEAD 2>/dev/null)"
 
+# A FOURTH BASE: a RECORDING gate whose write site was REFLOWED — the timestamp moved into its
+# own variable, an ordinary edit that changes nothing. Under the exact-text token
+# `/self-update-gate-$(date` this text scored 0 and the gate still recorded, so a consumer on it
+# with its records deleted reached NOT-REQUIRED — the ACQUITTING direction, which is the one that
+# matters. The composed filename fragment scores 1 here and 0 on the declaring gate above; Part
+# G23 is the arm.
+dput "core/skills/ai-dlc-update/reconcile/self-update-gate.sh" '#!/usr/bin/env bash
+# the engine that RECORDS, with its write site reflowed across two lines
+GATE_REC_DIR="$4/_bmad-output/ai-dlc-update"
+mkdir -p "$GATE_REC_DIR"
+_ts="$(date -u +%Y%m%dT%H%M%SZ)"
+_rec_p="$GATE_REC_DIR/self-update-gate-${_ts}.md"
+printf "# verdict: OK\n" > "$_rec_p"'
+G add -A >/dev/null 2>&1; G commit -q --no-verify -m base-recording-reflowed >/dev/null 2>&1
+D_BASE_REFLOW="$(G rev-parse HEAD 2>/dev/null)"
+
 # theirs: three fixtures changed, one deleted, one left alone, and a machinery path moved
 # alongside them so the `-- core/fixtures/` pathspec has something to exclude.
 for f in touched-shippable touched-named touched-distonly; do
@@ -1415,6 +1431,23 @@ else
   bad "a gate declaring GATE_REC_DIR without writing was read as a recording gate (rc=$rc), so an empty directory becomes a refusal saying the records were deleted. A local edit that adds the variable then wedges the consumer with a message about a state that never happened"
 fi
 
+# --- Part G23: a RECORDING gate whose write site was reflowed is still read as recording -------
+# The mirror of G22. G22 guards against a token that OVER-fires (an assignment read as a write);
+# this guards against one that UNDER-fires, and under-firing here is the acquittal: the records
+# deleted on such a consumer would otherwise reach NOT-REQUIRED and waive the requirement.
+gin_restore
+rm -f "$GLOG"/self-update-gate-*.md "$GLOG"/self-update-fixtures-*.md
+bash "$RUNNER" "$DIST" "$D_BASE_REFLOW" "$D_THEIRS" "$GCONS" touched-shippable touched-named green-one \
+  >/dev/null 2>&1
+rc=$?
+LG23="$(newest_glog)"
+if [ "$rc" -eq 2 ] && [ -n "$LG23" ] && grep -qF "GATE-RECORD: MISSING" "$LG23" \
+   && ! grep -qF "NOT-REQUIRED" "$LG23"; then
+  ok "a base gate that RECORDS through a reflowed write site is still read as recording, so deleted records are refused as MISSING — the token spells the composed filename, which no reflow removes"
+else
+  bad "a recording gate whose write site was reflowed was read as NON-recording (rc=$rc), so an operator who deleted the records reached NOT-REQUIRED and the whole requirement was waived. The probe token is keyed on one author's exact spelling of the write, and the acquitting direction is the one that must not fail"
+fi
+
 # --- Parts G12 and G13: the DELIVERY-PULL tolerance, and the state it must NOT cover -----------
 # A fix to a bootstrapping step can never be delivered by that step. On the pull that DELIVERS
 # this requirement the OLD gate runs and records nothing, the slice installs this runner, and a
@@ -2470,6 +2503,43 @@ else
 fi
 rm -rf "$I_D" "$I_K"
 
+# --- MUTANT G13: the probe token back to the EXACT WRITE-SITE TEXT------------------------------------
+# `/self-update-gate-$(date` scores correctly at both real revisions and is still wrong in the
+# OTHER direction: a recording gate whose author moved the timestamp into its own variable scores
+# 0, and a zero here is an acquittal — the records deleted on that consumer reach NOT-REQUIRED.
+# The kill is the reflowed recording base reading NOT-REQUIRED; the control is the declaring base
+# still reaching NOT-REQUIRED under the mutant, so the kill is an under-match and not a token
+# that refuses everything.
+MG13="$MUTDIR/mg13-token-is-the-exact-write-text.sh"
+if mkmutant2 "$MG13" "gr_tok_base=\"\$(git -C \"\$DIST\" show \"\${BASE}:\${gr_gate_core}\" 2>/dev/null \\
+                   | grep -v '^[[:space:]]*#' | grep -cE 'self-update-gate-.*\\.md')\" || gr_tok_base=0" \
+                     "gr_tok_base=\"\$(git -C \"\$DIST\" show \"\${BASE}:\${gr_gate_core}\" 2>/dev/null \\
+                   | grep -v '^[[:space:]]*#' | grep -cF '/self-update-gate-\$(date')\" || gr_tok_base=0" \
+                     "gr_tok_theirs=\"\$(git -C \"\$DIST\" show \"\${THEIRS}:\${gr_gate_core}\" 2>/dev/null \\
+                     | grep -v '^[[:space:]]*#' | grep -cE 'self-update-gate-.*\\.md')\" || gr_tok_theirs=0" \
+                     "gr_tok_theirs=\"\$(git -C \"\$DIST\" show \"\${THEIRS}:\${gr_gate_core}\" 2>/dev/null \\
+                     | grep -v '^[[:space:]]*#' | grep -cF '/self-update-gate-\$(date')\" || gr_tok_theirs=0"; then
+  gin_restore
+  rm -f "$GLOG"/self-update-gate-*.md "$GLOG"/self-update-fixtures-*.md
+  bash "$MG13" "$DIST" "$D_BASE_REFLOW" "$D_THEIRS" "$GCONS" touched-shippable touched-named green-one \
+    >/dev/null 2>&1
+  m13_reflow=$?
+  M13L="$(newest_glog)"
+  m13_waived=0
+  { [ -n "$M13L" ] && grep -qF "GATE-RECORD: NOT-REQUIRED" "$M13L"; } && m13_waived=1
+  rm -f "$GLOG"/self-update-gate-*.md "$GLOG"/self-update-fixtures-*.md
+  bash "$MG13" "$DIST" "$D_BASE_DECL" "$D_THEIRS" "$GCONS" touched-shippable touched-named green-one \
+    >/dev/null 2>&1
+  m13_decl=$?
+  if [ "$m13_reflow" -eq 0 ] && [ "$m13_waived" -eq 1 ] && [ "$m13_decl" -eq 0 ]; then
+    ok "MUTATION — keyed on the exact write-site text, a recording gate whose write was reflowed reads as NON-recording and deleted records reach NOT-REQUIRED (the declaring base still reaches it too, so this is an under-match): Part G23 is what catches that"
+  else
+    bad "MUTATION — the token was narrowed to the exact write-site text and the reflowed recording base was still refused (rc=$m13_reflow waived=$m13_waived decl-rc=$m13_decl). Part G23's verdict is coming from somewhere other than the token, and the acquitting direction is untested"
+  fi
+else
+  bad "FIXTURE ERROR: the token anchor for MUTANT G13 no longer occurs exactly once in the runner — Part G23 proves nothing"
+fi
+
 # --- MUTANT G12: the probe token back to the ASSIGNMENT ---------------------------------------
 # `GATE_REC_DIR` scores correctly at both real revisions and is still wrong: it names an
 # assignment, so a gate that declares the variable and never writes reads as a recording gate.
@@ -2477,11 +2547,11 @@ rm -rf "$I_D" "$I_K"
 # every base look non-recording — the recording base must still be seen.
 MG12="$MUTDIR/mg12-token-names-an-assignment.sh"
 if mkmutant2 "$MG12" "gr_tok_base=\"\$(git -C \"\$DIST\" show \"\${BASE}:\${gr_gate_core}\" 2>/dev/null \\
-                   | grep -v '^[[:space:]]*#' | grep -cF '/self-update-gate-\$(date')\" || gr_tok_base=0" \
+                   | grep -v '^[[:space:]]*#' | grep -cE 'self-update-gate-.*\\.md')\" || gr_tok_base=0" \
                      "gr_tok_base=\"\$(git -C \"\$DIST\" show \"\${BASE}:\${gr_gate_core}\" 2>/dev/null \\
                    | grep -v '^[[:space:]]*#' | grep -cF 'GATE_REC_DIR')\" || gr_tok_base=0" \
                      "gr_tok_theirs=\"\$(git -C \"\$DIST\" show \"\${THEIRS}:\${gr_gate_core}\" 2>/dev/null \\
-                     | grep -v '^[[:space:]]*#' | grep -cF '/self-update-gate-\$(date')\" || gr_tok_theirs=0" \
+                     | grep -v '^[[:space:]]*#' | grep -cE 'self-update-gate-.*\\.md')\" || gr_tok_theirs=0" \
                      "gr_tok_theirs=\"\$(git -C \"\$DIST\" show \"\${THEIRS}:\${gr_gate_core}\" 2>/dev/null \\
                      | grep -v '^[[:space:]]*#' | grep -cF 'GATE_REC_DIR')\" || gr_tok_theirs=0"; then
   gin_restore

@@ -479,7 +479,7 @@ GRHISTEOF
                   : # the written slice, over a content this path genuinely carried
                 else
                   gr_moved="$gr_moved
-  $gr_p — recorded ${gr_h} is not a content this path carried anywhere in ${BASE}..${THEIRS}, so no gate read this file; the copy on disk being at ${THEIRS} is the slice and does not vouch for the record"
+  $gr_p — recorded ${gr_h} is not a content this path carried anywhere in ${BASE}..${THEIRS}. Either no gate read this file, or the consumer's copy was a LOCAL EDIT the gate reported as SELF-UPDATE-CARRY and the cycle wrote it from theirs anyway — a carried path is never written; the copy on disk being at ${THEIRS} is the slice and does not vouch for the record"
                 fi
               else
                 gr_moved="$gr_moved
@@ -560,11 +560,21 @@ GRINVLIST
     # at `base`. Where `theirs` also scores 0 the range delivers no recording gate at all and
     # the tolerance is correct for a different reason; where it scores non-zero the grammar is
     # live and a zero at `base` is a real absence.
+    #
+    # THE TOKEN IS THE COMPOSED FILENAME — `self-update-gate-` followed by `.md` on one non-comment
+    # line — and it is the THIRD spelling. `GATE_REC_DIR` named an assignment and scored 1 on a gate
+    # that declares the directory and never writes (a refusal in the wrong voice). The write site's
+    # exact text `/self-update-gate-$(date` scored 0 on a gate whose author moved the timestamp
+    # into its own variable — an ordinary reflow that changes nothing — and a zero here ACQUITS:
+    # such a consumer with its records deleted was waived entirely. The filename fragment survives
+    # both edits, because a gate cannot compose the record's name without it, and scores 0 at the
+    # last non-recording release and 1 at the first recording one. Comment lines are stripped first
+    # so the header prose naming the file does not count.
     gr_gate_core="core/skills/ai-dlc-update/reconcile/self-update-gate.sh"
     gr_tok_base="$(git -C "$DIST" show "${BASE}:${gr_gate_core}" 2>/dev/null \
-                   | grep -v '^[[:space:]]*#' | grep -cF '/self-update-gate-$(date')" || gr_tok_base=0
+                   | grep -v '^[[:space:]]*#' | grep -cE 'self-update-gate-.*\.md')" || gr_tok_base=0
     gr_tok_theirs="$(git -C "$DIST" show "${THEIRS}:${gr_gate_core}" 2>/dev/null \
-                     | grep -v '^[[:space:]]*#' | grep -cF '/self-update-gate-$(date')" || gr_tok_theirs=0
+                     | grep -v '^[[:space:]]*#' | grep -cE 'self-update-gate-.*\.md')" || gr_tok_theirs=0
     if [ "$gr_tok_base" -gt 0 ]; then
       # The gate the consumer had DOES record, so an empty directory means the records were
       # deleted or the gate was never run. Both are refusals, and neither is a bootstrapping
