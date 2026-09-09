@@ -671,7 +671,7 @@ largest single writing cost for its least-read content.
 | check | verdict | evidence |
 |-------|---------|----------|
 | `audit-rule-files.sh` | PASS / FINDINGS | exit code + each class's verdict line |
-| `validate-reattach-budget.sh` | PASS / FAIL | exit code + the slack figure, read against the guard's ceiling |
+| `validate-reattach-budget.sh` | PASS / FAIL | exit code + the slack figure, read against the guard's ceiling, and the whole-file byte figure beside it — the second is an OBSERVATION and bounds nothing |
 | `validate-gate-manifest.sh` | PASS / FAIL | exit code + the `manifest source:` and `anchor sources:` lines + the MISSING/ORPHAN/UNLOADABLE lines |
 | `validate-artifact-budget.sh --warn-only --fail-on pipeline-snapshot.md` | CLEAN / BREACH | exit code + each breached artifact, and the run's own final summary line verbatim; a nonzero exit here is the snapshot's hard verdict (budget, schema, or in-place supersession marker). **Exit 0 is not by itself CLEAN under `--warn-only`** — the summary line says which, and it is `WARN  this run reported …` when anything was reported |
 | `validate-layer-entries.sh` | CLEAN / N ERR, M WARN | exit code + the summary line, or "n/a (unlayered)" |

@@ -3968,9 +3968,18 @@ count at 1 and reads STILL-LIVE over a correct fix, while a bare COMMENT naming 
 second script closes it. The replacement DRIVES the validator against an appended copy of
 `SKILL.md` and asserts the figure it reports equals a `wc -c` of that copy, so a comment closes
 nothing and a hardcoded number — correct against the shipped file and unable to move — fails on
-the copy.
+the copy. It additionally requires the figure inside the `PASS` line's own body, because that is
+the only spelling `verdict.sh` renders and `verdict.sh` is the only path to a consumer's gate
+log; and it requires `--quiet` to print NOTHING, which is what separates the figure going
+through the `say` helper from a raw `printf` that ignores the flag.
 
-verify: sh V=core/scripts/validate-reattach-budget.sh; S=core/skills/ai-dlc/SKILL.md; [ -f "$V" ] && [ -f "$S" ] || exit 9; D="$(mktemp -d)" || exit 9; C="$D/skill.md"; { cat "$S"; printf 'zzprobe padding appended below the protocol\n'; } > "$C" || { rm -rf "$D"; exit 9; }; R="$(wc -c < "$C" | tr -d ' ')"; B="$(wc -c < "$S" | tr -d ' ')"; [ -n "$R" ] && [ -n "$B" ] && [ "$R" != "$B" ] || { rm -rf "$D"; exit 9; }; O="$(bash "$V" --skill "$C" 2>&1)"; rc=$?; N="$(printf '%s\n' "$O" | sed -n 's/^whole file  *: \([0-9][0-9]*\) bytes.*/\1/p' | head -1)"; rm -rf "$D"; [ "$rc" -eq 0 ] && [ -n "$N" ] && [ "$N" = "$R" ]
+**The receipt is DECOUPLED from the budget verdict, deliberately.** It asserts `rc != 2` — a
+refusal, meaning the validator could not run — rather than `rc == 0`. Keying on a clean exit
+would make an unrelated future protocol overrun, which is what the budget arm exists to catch,
+reopen this entry: the figure would be present and correct while the receipt read STILL-LIVE.
+The two subjects share a program and nothing else.
+
+verify: sh V=core/scripts/validate-reattach-budget.sh; S=core/skills/ai-dlc/SKILL.md; [ -f "$V" ] && [ -f "$S" ] || exit 9; D="$(mktemp -d)" || exit 9; C="$D/skill.md"; { cat "$S"; printf 'zzprobe padding appended below the protocol\n'; } > "$C" || { rm -rf "$D"; exit 9; }; R="$(wc -c < "$C" | tr -d ' ')"; B="$(wc -c < "$S" | tr -d ' ')"; [ -n "$R" ] && [ -n "$B" ] && [ "$R" != "$B" ] || { rm -rf "$D"; exit 9; }; O="$(bash "$V" --skill "$C" 2>&1)"; rc=$?; Q="$(bash "$V" --skill "$C" --quiet 2>/dev/null)"; N="$(printf '%s\n' "$O" | sed -n 's/^whole file  *: \([0-9][0-9]*\) bytes.*/\1/p' | head -1)"; P="$(printf '%s\n' "$O" | sed -n '/^PASS/p' | head -1)"; rm -rf "$D"; [ "$rc" -ne 2 ] && [ -n "$N" ] && [ "$N" = "$R" ] && [ -z "$Q" ] && case "$P" in ""|*"$R"*) true ;; *) false ;; esac
 
 ## BL-189 — an argument-less `git init --bare` under an exported `GIT_DIR` writes `core.bare=true` into the real repo, which git exports to any hook running from a linked worktree
 

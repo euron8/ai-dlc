@@ -39,6 +39,16 @@
 # CLAUDE.md forbids shipping. A number nobody gates on still moves the author, and that is the
 # whole of what this figure is for. The narrative half is deliberately unmechanised.
 #
+# THE FIGURE SITS INSIDE THE `PASS` LINE'S OWN BODY, AND THAT PLACEMENT IS THE WHOLE DELIVERY.
+# `verdict.sh` renders a passing validator's evidence with a grep anchored on `ok|warn|OK:|PASS|
+# WARN|OVER` at the START of a line, and that is the ONLY path by which this validator reaches a
+# consumer -- the consumer's `core/git-hooks/pre-push` never invokes it. Measured: with the
+# figure on a `whole file :` line of its own, and again on a six-space continuation of the PASS
+# line, `verdict.sh` carried the number 0 times against a control of 1 for the slack figure on
+# the same run. Neither spelling matches the filter. So the standalone line below is for the raw
+# log and the PASS line is what a gate log actually keeps; a future edit that moves the figure
+# back out of the PASS body silently un-ships it.
+#
 # THAT RATIO IS A PROPERTY OF THIS TEXT, NOT OF THE DIVISOR. Do not carry the
 # "slightly conservative" conclusion to another population without re-measuring it:
 # the ratio is content-dependent and the DIRECTION of the error reverses. Prose-heavy
@@ -58,7 +68,10 @@
 # EXIT
 #   0  protocol end is within (budget - margin)
 #   1  protocol end exceeds the ceiling, an anchor is missing, or input unreadable
-#   The whole-file byte figure is reported at both exits and decides neither.
+#   The whole-file byte figure decides neither, and is reported on the PASS path and on the
+#   three FAIL paths that measure something (budget, mandate, router). The two anchor-missing
+#   paths and the unreadable-file path exit BEFORE it is computed -- there the structure moved
+#   or the input is absent, so the measurement is undefined rather than withheld.
 
 set -u
 
@@ -286,7 +299,6 @@ if ! grep -q '\.claude/skills/ai-dlc/steps/route\.md' <<<"$PROTO_LIVE"; then
   exit 1
 fi
 
-say "PASS  protocol ends at ~${EST_TOKENS} tokens; ${SLACK} tokens of slack under the ${CEILING}-token ceiling (${BUDGET} window - ${MARGIN} margin)."
+say "PASS  protocol ends at ~${EST_TOKENS} tokens; ${SLACK} tokens of slack under the ${CEILING}-token ceiling (${BUDGET} window - ${MARGIN} margin); whole file ${WHOLE_BYTES} bytes (observation)."
 say "      protocol names the digest to recover from, SKILL.md for full rule text, and the router for an un-routed session."
-say "      whole file is ${WHOLE_BYTES} bytes -- an observation carried into the gate log, bounded by nothing."
 exit 0

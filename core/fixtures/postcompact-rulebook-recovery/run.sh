@@ -40,6 +40,12 @@ skip() { # skip <what> <why> — tolerated only where the subject legitimately h
   if [ "${IS_DIST:-0}" = 1 ]; then bad "$1 -- $2 (HARD in the distribution: the subject must be present here)"
   else printf '  SKIP  %s -- %s\n' "$1" "$2"; fi
 }
+# defer <what> <owner> — an arm standing down because ANOTHER arm owns the finding, which is a
+# different state from `skip` and must not escalate in the distribution. `skip` means the
+# subject has not arrived and the run learned nothing; `defer` means the run DID learn it, once,
+# from the named arm, and reporting it again would be one finding counted twice. Without this
+# split a single wrong figure fails four arms and three of them are vacuous.
+defer() { printf '  ----  %s -- stands down; %s owns this finding\n' "$1" "$2"; }
 
 # Drive the hook exactly as the harness does: JSON on stdin, source=compact. `fire` is the
 # seeded project; `fire_at` is any project, and `fire` is written in terms of it so the two
@@ -208,14 +214,99 @@ proto_of() { # proto_of <validator output> -> the reported protocol end offset, 
 }
 VB_WHOLE="$(whole_of "$VB_OUT")"
 VB_REAL="$(wc -c < "$SKILL" | tr -d ' ')"
-if [ -z "$VB_WHOLE" ]; then
+# THIS ARM OWNS ONE PROPERTY: THE FIGURE EXISTS AND IS THE WHOLE FILE. Delivery is 6b2's,
+# because 6b2 DRIVES the renderer where this arm could only grep for the shape it needs, and
+# the arm that runs the subject beats the one that reads its output. The three arms below all
+# stand down when this one fires, so a validator with no figure -- or a wrong one -- produces
+# ONE red arm rather than four true findings reported four times.
+#
+# `vb_owns` is the stand-down predicate, computed once and read by 6b2, 6b3 and 6c.
+vb_owns=0
+{ [ -z "$VB_WHOLE" ] || [ "$VB_WHOLE" != "$VB_REAL" ]; } && vb_owns=1
+if [ -z "$VB_WHOLE" ] && [ "${IS_DIST:-0}" != 1 ]; then
+  skip "the whole-file byte observation" "this validator predates it; the fixture ships one pull ahead of its subject"
+elif [ -z "$VB_WHOLE" ]; then
   bad "the validator reports no whole-file byte figure at all — SKILL.md's total size has no reader in the tree, so a section added anywhere below the protocol moves nothing anybody prints"
 elif [ "$VB_WHOLE" != "$VB_REAL" ]; then
   bad "the validator reports ${VB_WHOLE} bytes where wc -c of the same file gives ${VB_REAL} — the figure is not the whole file"
-elif ! grep -q "${VB_REAL}" <<<"$(printf '%s' "$VB_OUT" | sed -n '/^PASS/,$p')"; then
-  bad "the whole-file figure never reaches the PASS line, so a gate log carries the verdict without the number the observation exists to publish"
 else
-  ok "the validator reports whole file = ${VB_WHOLE} bytes, equal to an independently derived wc -c, and carries it into the PASS line"
+  ok "the validator reports whole file = ${VB_WHOLE} bytes, equal to an independently derived wc -c"
+fi
+
+# --- Assertion 6b2: the figure survives verdict.sh, which is the CONSUMER'S ONLY PATH ------
+# THE ARM THAT OWNS DELIVERY, and the one the entry's whole purpose rests on. `verdict.sh`
+# renders a passing validator's evidence with a grep anchored on `ok|warn|OK:|PASS|WARN|OVER`
+# at line start; it is the only path by which this validator reaches a consumer, because the
+# consumer's own `core/git-hooks/pre-push` never invokes it. Measured with the figure on a
+# line of its own, and again on a six-space continuation of the PASS line: verdict.sh carried
+# it 0 times each, against a control of 1 for the slack figure in the same run. The figure
+# therefore has to sit INSIDE the PASS line's body, and only running the renderer proves it --
+# a fixture grepping for the shape would be a second implementation of verdict.sh's filter.
+#
+# THE CONTROL IS IN THE SAME INVOCATION. A byte-figure count of 0 could mean the figure was
+# dropped OR that verdict.sh printed nothing at all, and those are different facts; the slack
+# figure is a token this rendering already carried before the change, so it discriminates a
+# dropped figure from a dead renderer.
+VD="$(dirname "$VAL")/verdict.sh"
+if [ ! -f "$VD" ]; then
+  skip "verdict.sh delivery of the byte figure" "verdict.sh is not beside the validator in this layout"
+elif [ "$vb_owns" = 1 ]; then
+  defer "verdict.sh delivery of the byte figure" "assertion 6b"
+else
+  VD_OUT="$(bash "$VD" "$(basename "$VAL")" --skill "$SKILL" 2>&1)"
+  vd_fig="$(grep -cF "$VB_REAL" <<<"$VD_OUT")" || vd_fig=0
+  vd_ctl="$(grep -c 'tokens of slack' <<<"$VD_OUT")" || vd_ctl=0
+  if [ "$vd_ctl" -eq 0 ]; then
+    bad "FIXTURE STALE: verdict.sh rendered no slack figure either, so its evidence filter or this call is broken and the byte figure's absence proves nothing about delivery"
+  elif [ "$vd_fig" -eq 0 ]; then
+    bad "verdict.sh renders the verdict WITHOUT the whole-file byte figure (control: the slack figure came through ${vd_ctl}x in the same run) — the observation does not reach a consumer's gate log, and verdict.sh is the only path that would carry it there"
+  else
+    ok "verdict.sh carries the whole-file figure into its evidence cell (${vd_fig} hit(s), control: slack ${vd_ctl})"
+  fi
+fi
+
+# --- Assertion 6b3: the BARE invocation reports it too ------------------------------------
+# EVERY OTHER CHANNEL PASSES `--skill`, AND `verdict.sh --all` DOES NOT. A validator that
+# emitted the figure only under an explicit `--skill` would satisfy the receipt and every arm
+# above while the consumer's actual `--all` call -- the one that runs with no arguments --
+# reported nothing. The probe root is consumer-SHAPED because that is the layout the default
+# path resolves in: the validator defaults to `<root>/.claude/skills/ai-dlc/SKILL.md`.
+#
+# AI_DLC_PROJECT_ROOT, not a `cd`. This validator resolves its own root by walking up, so a
+# probe tree entered with `cd` is discarded and the run answers about the distribution.
+BARE_P="$(mktemp -d "$WORK/bare.XXXXXX")"
+mkdir -p "$BARE_P/.claude/skills/ai-dlc"
+cp "$SKILL" "$BARE_P/.claude/skills/ai-dlc/SKILL.md"
+BARE_REAL="$(wc -c < "$BARE_P/.claude/skills/ai-dlc/SKILL.md" | tr -d ' ')"
+BARE_OUT="$(AI_DLC_PROJECT_ROOT="$BARE_P" bash "$VAL" 2>&1)"; bare_rc=$?
+BARE_WHOLE="$(whole_of "$BARE_OUT")"
+if [ "$vb_owns" = 1 ]; then
+  defer "the bare invocation's byte figure" "assertion 6b"
+elif [ "$bare_rc" -ne 0 ]; then
+  bad "FIXTURE STALE: the bare invocation against a consumer-shaped probe root exited ${bare_rc}, so it never reached the figure and this arm measures nothing. Output: $(head -1 <<<"$BARE_OUT")"
+elif [ -z "$BARE_WHOLE" ]; then
+  bad "the validator reports NO whole-file figure when invoked BARE — verdict.sh --all calls it with no arguments, so a figure emitted only under --skill never reaches the consumer path that actually runs"
+elif [ "$BARE_WHOLE" != "$BARE_REAL" ]; then
+  bad "the bare invocation reports ${BARE_WHOLE} bytes where wc -c of the resolved file gives ${BARE_REAL}"
+else
+  ok "the BARE invocation resolves its default SKILL.md and reports whole file = ${BARE_WHOLE} bytes (= wc -c of that copy)"
+fi
+
+# --- Assertion 6b4: --quiet suppresses the observation entirely ---------------------------
+# THE OBSERVATION MUST GO THROUGH `say`, AND ONLY THE QUIET SIDE CAN ESTABLISH THAT. A raw
+# `printf`, or a `say()` that ignores --quiet, emits the identical loud output and satisfies
+# every arm above -- the loud and quiet halves are one property seen from two sides, and
+# 6b/6b2/6b3 can only ever see the loud one. --quiet is what a caller uses to read the exit
+# code alone, and a validator that prints anyway breaks that contract for every caller.
+Q_OUT="$(bash "$VAL" --skill "$SKILL" --quiet 2>&1)"; q_rc=$?
+q_lines="$(printf '%s' "$Q_OUT" | grep -c '')" || q_lines=0
+[ -z "$Q_OUT" ] && q_lines=0
+if [ "$q_rc" -ne 0 ]; then
+  bad "FIXTURE STALE: the shipped SKILL.md fails its own validator under --quiet (rc=${q_rc}), so this arm cannot measure suppression"
+elif [ "$q_lines" -ne 0 ]; then
+  bad "--quiet printed ${q_lines} line(s) on a passing run: $(head -1 <<<"$Q_OUT") — the observation (or another line) is not going through the say helper, so --quiet no longer means quiet for any caller that reads only the exit code"
+else
+  ok "--quiet suppresses every line including the observation, and still exits 0 — the figure goes through the say helper"
 fi
 
 # --- Assertion 6c: MUTANT — bytes appended BELOW the protocol, only the whole-file figure moves
@@ -229,9 +320,16 @@ fi
 # The padding carries no `## ` so it cannot become a section and re-bound anything, and the
 # exit code must stay 0: an observation that can fail the gate is a gate.
 # Built as a COPY, guarded by cmp -s per fixture-mutants.md.
+#
+# THIS ARM STANDS DOWN WHERE 6b ALREADY OWNS THE FINDING. A validator emitting no figure, or a
+# wrong one, is 6b's case; without the stand-down both arms report it and one of the two is
+# vacuous -- measured on the protocol-window and figure-deleted mutants, each of which tripped
+# 6b AND this arm's staleness diagnostic. One mutant, one red arm.
 MUT_BIG="$WORK/skill-appended-below.md"
 { cat "$SKILL"; printf 'padding below the protocol, carrying no heading\n'; } > "$MUT_BIG"
-if cmp -s "$SKILL" "$MUT_BIG"; then
+if [ "$vb_owns" = 1 ]; then
+  defer "the whole-file figure MOVES with the file" "assertion 6b"
+elif cmp -s "$SKILL" "$MUT_BIG"; then
   bad "FIXTURE STALE: the appended copy is byte-identical to SKILL.md, so the whole-file figure has nothing to move and assertion 6b is unproven"
 else
   MB_OUT="$(bash "$VAL" --skill "$MUT_BIG" 2>&1)"; mb_rc=$?
