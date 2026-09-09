@@ -60,13 +60,20 @@ green line and CLOSED the receipt — and the same probe FAILED a genuinely 6-wa
 variable read 1, so it scored the opposite of the truth in both directions. The arm now counts
 workers OBSERVED in flight from a live per-worker marker file.
 
-**Two wrong repairs were built and measured first, both the same error one level down — an
-instrument counting something ADJACENT to the property.** A wall-clock overlap test does not
-work: `date +%s` is whole seconds, so abutting intervals read as overlapping and a fully serial
-4m34s run reported "2 in flight" and PASSED. And a marker FILE is not a LIVE worker — five
-seeded stale markers made a serial dispatch report 6 and pass — so the marker is named for its
-PID and only running PIDs are counted (`kill -0`, no signal sent). With that fix, stale-plus-
-serial and plain serial both FAIL. Five non-fixes refuse; the correct fix closes.
+**Three wrong repairs were built and measured first, each counting something ADJACENT to the
+property.** A wall-clock overlap test does not work: `date +%s` is whole seconds, so abutting
+intervals read as overlapping and a fully serial 4m34s run reported "2 in flight" and PASSED. A
+marker FILE is not a LIVE worker — five seeded stale markers made a serial dispatch report 6 and
+pass. And a LIVE PID is not MY PEER: one marker named with `run.sh`'s own pid, alive by
+construction, made a serial dispatch report 2 and pass at 125.5s. The shipped arm makes the
+marker's identity provable — a run-scoped nonce written into each marker, counted only when the
+pid is live AND the nonce matches.
+
+**The floor rises 2 → 4, because the old number was doing two jobs.** "Ran concurrently" and
+"ran at the width this release measured" are two claims: `xargs -P 2` reports 2 in flight and
+PASSES at 72.0s against the pool's 45.5s, a width regression eating more than half the gain.
+Scored six ways — pool 6/PASS, `-P 4` 4/PASS, `-P 2` 2/FAIL, `-P 1` 1/FAIL, foreign live-pid
+marker 1/FAIL, live-pid marker carrying the nonce 2/FAIL.
 
 ### `PreToolUse` does not fire on a schema-invalid tool call, settled by experiment (`BL-087`)
 

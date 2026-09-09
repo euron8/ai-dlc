@@ -563,15 +563,31 @@ error one level down — an instrument counting something ADJACENT to the proper
 and the next starting at T read as overlapping: a fully SERIAL 4m34s run reported "2 in flight"
 and PASSED. Presence, not time.
 
-*A marker FILE is not a LIVE worker.* Counting files counts whatever was left behind — by a
-killed worker or anything else that wrote there. Measured, by probing my own repair: **five
-seeded stale markers made a serial dispatch report 6 in flight and PASS.** The marker is named
-for its PID and the count admits only PIDs still running (`kill -0`, which sends no signal), so
-a leftover cannot inflate it. With that fix, stale-plus-serial and plain serial both FAIL.
+*A marker FILE is not a LIVE worker.* Counting files counts whatever was left behind. Measured,
+by probing my own repair: **five seeded stale markers made a serial dispatch report 6 in flight
+and PASS.**
 
-The shipped arm reports exactly 6 on the pool, 1 on the serial dispatch, and 6 on the
-parallel-run-with-variable-1 case. The floor is **2 and not `$MUT_JOBS`** — a loaded box may
-never place 6 at once, and an arm demanding 6 would fail for a reason that is not a regression.
+*A LIVE PID is not MY PEER.* `kill -0` closes the DEAD-pid hole and not the LIVE-pid one — the
+adversary's second finding, on the repair for its first. Measured: one marker named with
+`run.sh`'s own pid, alive for the whole run by construction, made a serial dispatch report 2 and
+**PASS at 125.5s / 122% CPU**. The shipped version makes the marker's identity PROVABLE rather
+than inferred from a name anything can choose: `run.sh` generates a run-scoped nonce, each
+worker writes it into its marker, and a marker counts only if its pid is live AND it carries
+that nonce.
+
+**THE FLOOR RISES 2 → 4, AND THE OLD NUMBER WAS DOING TWO JOBS.** "The pool ran concurrently"
+and "the pool ran at the width this release measured" are two claims, and 2 made only the
+first: **`xargs -P 2` reports 2 in flight and PASSES while costing 72.0s against the pool's
+45.5s** — a width regression eating more than half of what this change bought, shipping green.
+The floor cannot be `$MUT_JOBS` either, because a loaded box may never place all 6 at once and
+that is not a regression. 4 refuses `-P 2` and `-P 3` and still passes a genuine `-P 4`.
+
+Scored, six cases, each built and run: unmutated pool **6/PASS**; `-P 4` **4/PASS**; `-P 2`
+**2/FAIL**; `-P 1` **1/FAIL**; serial + foreign live-pid marker **1/FAIL**; serial + live-pid
+marker CARRYING the nonce **2/FAIL**. That last case is the sharp one — even with the real nonce
+the injection reaches only 2, so the nonce and the floor close the hole from different
+directions.
+
 The collector cannot mistake `.inflight` or a `.work-<label>` directory for a verdict either: it
 walks the 24 declared labels rather than the directory, and `[ -f ]` rejects a directory.
 
