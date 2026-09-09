@@ -4259,3 +4259,50 @@ for a genuine empty-subject state, undeclared and uncaught — one instance of t
 a new emitter may spell the verdict however it likes.
 
 verify: sh set -e; M=core/skills/ai-dlc/enforcement-map.yaml; E=scripts/validate-enforcement-map.sh; [ -f "$M" ] && [ -f "$E" ] || exit 9; grep -q "EXAMINED NOTHING" "$M" || exit 9; grep -q "I93" "$E" || exit 9; grep -qE 'retired:' "$M" || exit 9; grep -qE 'empty-subject-emitter-positive|every emitter of an empty-subject|emits the declared token' "$E" && exit 0; exit 1
+
+## BL-222 — the escalation validator names the corpus it searched when it DENIES and discards it when it PASSES
+
+**Found 2026-09-09** adjudicating
+`PC-S340-VALIDATE-ESCALATION-RESOLUTION-NONDETERMINISTIC-ON-BYTE-IDENTICAL-INPUT` against HEAD,
+re-derived here. **The entry's stated mechanism is REFUTED and its headline is still true for a
+different reason**, which is why this is filed rather than folded into that entry.
+
+**What is fixed.** The greedy-capture defect that made the verdict a function of quote ORDER is
+gone. `cite_segments()` (`core/scripts/validate-escalation-resolution.sh:161`) splits on `"` and
+takes even-indexed fields; `cite_quote()` (`:172`) takes the FIRST segment of 12+ chars —
+position-independent by construction. There is no unordered iteration anywhere in the parse, so
+the entry's own proposed adjudication ("read whether the parse still depends on unordered
+iteration") is refuted as stated.
+
+**And the nondeterminism claim is genuinely refuted at rate, not by a bare zero.** The filing
+reports 3 distinct verdicts in 5 runs — a per-run flip probability of order 0.4–0.6, predicting
+>20 second-verdict occurrences over 25 runs. Measured on a frozen corpus with `shasum` confirmed
+unchanged either side: 25 runs, `25 × (rc=1, output-hash f95c3e53)`; 20 runs on a single-entry
+file, `20 × (rc=0, hash 2c4194a3)`. Control that the harness can see a difference at all: the two
+inputs hash differently, and the pre-fix build over the same 25 gives a third hash. A clean sweep
+at N=25 against a predicted count >20 discriminates.
+
+**What remains, and it is the entry's actual headline.** The verdict still moves on a
+byte-identical `pending.md`, because `pending.md` is not the only input: the transcript CORPUS is
+the second one. Measured — same `pending.md` (`shasum 4b6e0efe`, unchanged), corpus gains one
+`.jsonl`, verdict goes FAIL → OK.
+
+The fix makes that legible in ONE direction only. `CITE_REPORT` is captured at `:400` and rendered
+at `:426` — inside the `rc -eq 2` FAIL branch (`[ -n "$CITE_REPORT" ] && printf …`). The PASS
+branch at `:450` prints `OK: all N … unbounded-citation: N` and discards it. Derived: `cite:
+scanned` resolves at `:382` only, and that is a COMMENT; the string appears on no PASS-path
+`echo`.
+
+**So the fail-OPEN half — the one the entry calls "the half nobody notices" — is precisely the
+branch that still does not say which corpus state produced it.** An operator reading `OK` cannot
+tell a pass over the right corpus from a pass over an empty one.
+
+**Not fixed here.** The one-line form (render `CITE_REPORT` on the PASS path too) is probably
+right, but the PASS line is a gate-facing contract string and ~40 fixture arms plus `retro.md`
+prose read this validator's output; the population that would see a changed success line is
+unmeasured, and `CLAUDE.md` requires that before the check ships.
+
+**Tiered DEFECT.** Consumer-facing. Its consequence is an unfalsifiable PASS: the reader cannot
+reconstruct which corpus produced it.
+
+verify: sh V=core/scripts/validate-escalation-resolution.sh; [ -f "$V" ] || exit 9; grep -q 'CITE_REPORT=' "$V" || exit 9; grep -qE '^\s*echo "OK: all \$\{CHECKED\}' "$V" || exit 9; n="$(awk '/^echo "OK: all \$\{CHECKED\}/{print NR}' "$V")"; [ -n "$n" ] || exit 9; awk -v n="$n" 'NR>=n-6 && NR<=n && /CITE_REPORT/' "$V" | grep -q . && exit 0; exit 1
