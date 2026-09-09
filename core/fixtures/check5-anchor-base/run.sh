@@ -348,10 +348,177 @@ mutate closenote \
   "R:sha N:named P:named U:named A:usage C:nono X:closed PC:closed" \
   "without the NOTE a sprint closed WITHOUT a retro-PR merge resolves silently, reading exactly like a merge anchor"
 
+# ============================================================================
+# THE TEST-ONLY CARVE-OUT. Check 5 fires on ANY web/** member of the diff, so a sprint whose
+# entire web/** change is one test file — no source, no rendering — FAILed for want of visual
+# evidence of a rendering that did not change. The consumer that filed it had exactly one changed
+# file, a `.test.jsx` beside its component.
+#
+# SIX WORLDS, and the three that matter are the ones a WRONG fix passes:
+#
+#   H  a helper under a tests dir with NO suffix. A directory-keyed rule acquits it; it is source,
+#      and Check 5 must still fire. This is the seed that kills the directory rule, and the
+#      consumer corpus has exactly one such file.
+#   E  an e2e `.spec.` under `web/tests/e2e/`. THE ACQUITTAL PROBE, and it is asserted as a SKIP:
+#      the suffix rule DOES acquit an all-e2e diff. That is stated as a decision, not hidden —
+#      what a directory rule would additionally acquit is every source file that happens to live
+#      under such a directory, which is strictly worse. See the report below.
+#   B  twenty-one test files and ONE source file, sorted so the source falls past position 20.
+#      The emptiness test the carve-out was grafted onto carried a `| head -20`, which answers
+#      the "is it empty" question correctly and the "is EVERY member a test" question WRONGLY.
+#
+# M is the ALL-not-ANY arm and it is the one this whole change turns on: one test file beside one
+# source file must still FIRE. N is the pre-existing no-web/** skip, asserted on its own wording so
+# a mutant that collapses the two skip reasons into one is visible.
+# ============================================================================
+c5_world() {  # <branch-suffix> <file>...  — a tree whose PRIOR_SHA..HEAD is exactly these files
+  local tag="$1"; shift
+  ( cd "$WORK" && git checkout -q -B "c5w-$tag" "$PRIOR_SHA" ) || return 1
+  local f
+  for f in "$@"; do
+    ( cd "$WORK" && mkdir -p "$(dirname "$f")" && printf 'x\n' > "$f" )
+  done
+  # `git add -- "$@"`, NEVER `git add -A`. Measured while building this: an `-A` swept the
+  # UNTRACKED audit-anchors.md and gate-log.md into the world's commit, and the next world's
+  # `checkout PRIOR_SHA` then DELETED both — every later world reported
+  # "cannot resolve diff base", which reads as the carve-out having broken the anchor resolution
+  # rather than as the harness eating its own inputs.
+  if [ "$#" -gt 0 ]; then
+    ( cd "$WORK" && git add -- "$@" && git commit -q -m "world $tag" ) || return 1
+  fi
+  # Recreated per world rather than assumed: the directory is empty in PRIOR_SHA's tree, so git
+  # does not carry it, and a world that inherited a previous world's gate-log asserts nothing.
+  mkdir -p "$WORK/_bmad-output/implementation-artifacts"
+  printf -- '- sprint: 899\n  sha: %s\n- sprint: 900\n  sha: <PENDING-S900-RETRO>\n' "$PRIOR_SHA" \
+    > "$WORK/_bmad-output/audit-anchors.md"
+  write_gatelog "deploy completed"   # no visual evidence: a firing Check 5 FAILs
+}
+
+# battery5 <script> -> six tokens. A mutant must move a set no other mutant moves.
+battery5() {
+  local S="$1" L t=""
+
+  c5_world testonly web/src/components/PositionRangeGauge.test.jsx
+  L="$(check5_line "$S")"
+  case "$L" in
+    *"SKIP (test-only"*) t="T:skip-named" ;;
+    *SKIP*)              t="T:skip-unnamed" ;;
+    *FAIL*)              t="T:FAIL" ;;
+    *)                   t="T:none" ;;
+  esac
+
+  c5_world mixed web/src/components/PositionRangeGauge.test.jsx web/src/components/PositionRangeGauge.jsx
+  L="$(check5_line "$S")"
+  case "$L" in *FAIL*) t="$t M:fires" ;; *SKIP*) t="$t M:SKIPPED" ;; *) t="$t M:none" ;; esac
+
+  c5_world e2e web/tests/e2e/navigation.spec.js
+  L="$(check5_line "$S")"
+  case "$L" in
+    *"SKIP (test-only"*) t="$t E:skip" ;;
+    *SKIP*)              t="$t E:skip-other" ;;
+    *FAIL*)              t="$t E:fires" ;;
+    *)                   t="$t E:none" ;;
+  esac
+
+  c5_world noweb docs/notes.md
+  L="$(check5_line "$S")"
+  case "$L" in
+    *"no web/** file changes"*) t="$t N:noweb" ;;
+    *SKIP*)                     t="$t N:skip-other" ;;
+    *)                          t="$t N:none" ;;
+  esac
+
+  c5_world helper web/src/tests/contract/helpers.js
+  L="$(check5_line "$S")"
+  case "$L" in *FAIL*) t="$t H:fires" ;; *SKIP*) t="$t H:SKIPPED" ;; *) t="$t H:none" ;; esac
+
+  # Sorted, the lone source file lands at position 22 of 22.
+  c5_world big web/src/c/a1.test.jsx web/src/c/a2.test.jsx web/src/c/a3.test.jsx \
+    web/src/c/a4.test.jsx web/src/c/a5.test.jsx web/src/c/a6.test.jsx web/src/c/a7.test.jsx \
+    web/src/c/a8.test.jsx web/src/c/a9.test.jsx web/src/c/a10.test.jsx web/src/c/a11.test.jsx \
+    web/src/c/a12.test.jsx web/src/c/a13.test.jsx web/src/c/a14.test.jsx web/src/c/a15.test.jsx \
+    web/src/c/a16.test.jsx web/src/c/a17.test.jsx web/src/c/a18.test.jsx web/src/c/a19.test.jsx \
+    web/src/c/a20.test.jsx web/src/c/a21.test.jsx web/src/c/zsource.jsx
+  L="$(check5_line "$S")"
+  case "$L" in *FAIL*) t="$t B:fires" ;; *SKIP*) t="$t B:SKIPPED" ;; *) t="$t B:none" ;; esac
+
+  printf '%s' "$t"
+}
+
+EXPECTED5="T:skip-named M:fires E:skip N:noweb H:fires B:fires"
+
+# --- 6. the shipping validator answers every world -----------------------------
+GOT5="$(battery5 "$WORK/bin/validate-mandatory-rules.sh")"
+if [ "$GOT5" = "$EXPECTED5" ]; then
+  ok "test-only carve-out: an all-test web/** diff SKIPs and SAYS test-only, a test file BESIDE a source file still FIREs, a no-suffix helper under a tests dir still FIREs, the pre-existing no-web/** skip keeps its own wording, and a 22-file diff whose only source sits past position 20 still FIREs"
+else
+  bad "test-only battery: expected [$EXPECTED5], got [$GOT5]"
+fi
+
+# --- 7. CONTROL: an unmutated copy in the mutant directory answers identically ---
+C5CTL="$WORK/mut5-control/validate-mandatory-rules.sh"
+mkdir -p "$WORK/mut5-control"
+cp "$WORK/bin/validate-mandatory-rules.sh" "$WORK/bin/validate-audit-anchors.sh" \
+   "$WORK/bin/validate-retro-evidence.sh" "$WORK/bin/validate-cycle-commits.sh" "$WORK/mut5-control/"
+C5GOT="$(battery5 "$C5CTL")"
+if [ "$C5GOT" = "$EXPECTED5" ]; then
+  ok "CONTROL: an unmutated copy beside the mutants answers every world (a mutant's silence below is the mutation, not a copy that could not find its siblings)"
+else
+  echo "FIXTURE ERROR: the unmutated Check 5 control does not reproduce the battery — expected [$EXPECTED5], got [$C5GOT]." >&2
+  exit 2
+fi
+
+# mutate5 <tag> <sed-program> <expected-battery> <what-it-proves>
+mutate5() {
+  local tag="$1" prog="$2" want="$3" claim="$4"
+  local D="$WORK/mut5-$tag" got
+  mkdir -p "$D"
+  cp "$WORK/bin/validate-audit-anchors.sh" "$WORK/bin/validate-retro-evidence.sh" \
+     "$WORK/bin/validate-cycle-commits.sh" "$D/"
+  sed "$prog" "$WORK/bin/validate-mandatory-rules.sh" > "$D/validate-mandatory-rules.sh" \
+    || { bad "MUTANT $tag: sed DID NOT APPLY"; return; }
+  if cmp -s "$WORK/bin/validate-mandatory-rules.sh" "$D/validate-mandatory-rules.sh"; then
+    echo "FIXTURE ERROR: mutant '$tag' matched nothing — the line it targets was renamed." >&2
+    exit 2
+  fi
+  got="$(battery5 "$D/validate-mandatory-rules.sh")"
+  if [ "$got" = "$want" ]; then
+    ok "MUTANT $tag: $claim"
+  elif [ "$got" = "$EXPECTED5" ]; then
+    bad "MUTANT $tag SURVIVED: $claim — every world unchanged, so nothing here can catch it"
+  else
+    bad "MUTANT $tag ($claim): expected battery [$want], got [$got]"
+  fi
+}
+
+# WRONG FIX 1, keyed on the containing DIRECTORY as WELL as the suffix — "a test file is one that
+# carries the suffix OR lives under a tests dir". This is the shape to build, not a pure directory
+# rule: a pure one fails the FILED case (the consumer's `.test.jsx` sits under no tests dir), so it
+# would never have been proposed. The union fixes the filing AND acquits the helper, which is
+# exactly how a wrong fix survives review — and H is the only world that separates them.
+mutate5 dirkey \
+  "s@-F/ 'NF && \$NF !~ /@-F/ 'NF \&\& \$0 !~ /(^|\\\\/)tests?\\\\// \&\& \$NF !~ /@" \
+  "T:skip-named M:fires E:skip N:noweb H:SKIPPED B:fires" \
+  "widening the rule to acquit anything under a tests dir lets a no-suffix HELPER — source, and the consumer has exactly one — pass as a test file, and no other world can see it"
+
+# WRONG FIX 2, ANY instead of ALL: skip as soon as one changed file is a test file. Both halves
+# are flipped, because either alone is not the wrong fix — it is the pair.
+mutate5 anyfix \
+  's@\$NF !~ /\\.(test|spec)\\./@$NF ~ /\\.(test|spec)\\./@; s@elif \[ -z "\$CHECK5_WEB_NONTEST" \]@elif [ -n "$CHECK5_WEB_NONTEST" ]@' \
+  "T:skip-named M:SKIPPED E:skip N:noweb H:fires B:SKIPPED" \
+  "skipping when ANY changed file is a test acquits the mixed test+source diff, which is the whole behaviour this change must NOT have"
+
+# The truncation the carve-out was grafted onto. It answers "is this list empty" correctly and
+# "is EVERY member a test" wrongly, and only the 22-file world can see the difference.
+mutate5 truncate \
+  's@2>/dev/null)"$@2>/dev/null | head -20)"@' \
+  "T:skip-named M:fires E:skip N:noweb H:fires B:SKIPPED" \
+  "restoring the 20-line truncation on the enumeration acquits a diff whose only source file sorts past position 20, and moves no other world"
+
 echo
 # Liveness: a harness that silently stopped running assertions reads exactly like a clean pass.
-if [ "$asserted" -ne 14 ]; then
-  echo "check5-anchor-base: FIXTURE ERROR — ran $asserted assertions, expected 14" >&2
+if [ "$asserted" -ne 19 ]; then
+  echo "check5-anchor-base: FIXTURE ERROR — ran $asserted assertions, expected 19" >&2
   exit 2
 fi
 if [ "$fails" -eq 0 ]; then

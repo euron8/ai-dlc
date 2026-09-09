@@ -342,11 +342,49 @@ else
   rm -f "$C5_ERRF"
 fi
 
+# The web/** change set, enumerated ONCE and in FULL. The emptiness test used to carry a
+# `| head -20`, which is sound for "is this list empty" and is NOT sound for the ALL question
+# below: a twenty-one-file diff whose only source change sits at position 21 would be truncated
+# away and acquitted. The truncation is therefore gone rather than reused.
+# Guarded on the base, because an empty one makes the range `..HEAD`, which git resolves to
+# HEAD..HEAD and answers EMPTY — indistinguishable from a sprint that touched no web file.
+CHECK5_WEB_FILES=""
+if [ -n "$CHECK5_BASE" ]; then
+  CHECK5_WEB_FILES="$(git diff --name-only "${CHECK5_BASE}..HEAD" -- 'web/**' 'web/src/**' 'web/tests/**' 2>/dev/null)"
+fi
+
+# THE TEST-ONLY CARVE-OUT, AND WHY IT IS KEYED ON THE SUFFIX AND NEVER ON A DIRECTORY.
+# Check 5 demands visual evidence because a web/** change may have changed what a user SEES. A
+# diff whose every member is a test file changed no source and rendered nothing, so there is
+# nothing for an operator to have looked at — and the consumer that filed this hit exactly that
+# shape: one changed file, `web/src/components/PositionRangeGauge.test.jsx`, no source beside it,
+# Check 5 FAIL, retro blocked on evidence of a rendering that did not change.
+#
+# A DIRECTORY-KEYED RULE ("skip when every changed file is under a tests/ dir") was measured and
+# REFUSED. On the filing consumer's 164 tracked web/** files, all 12 playwright e2e specs live
+# under `web/tests/e2e/` — so a directory rule would SILENTLY ACQUIT a diff that is entirely
+# end-to-end RENDERING tests, which is the worst acquittal available to a visual-verification
+# gate. It also misses the 25 suffix-carrying tests colocated beside their components outside any
+# tests dir. The suffix rule keeps firing on the one file under a tests dir that carries no
+# suffix (`web/src/tests/contract/helpers.js`) — a helper is source, and it is right that it does.
+#
+# Matched against the BASENAME (`-F/`, `$NF`), so a directory that happens to be named
+# `foo.test.d/` cannot acquit the source files inside it. The regex is a STATIC awk literal, not a
+# string built by concatenation, so `\.` is a real escaped dot here.
+#
+# ALL, NEVER ANY. The skip requires the non-test remainder to be EMPTY. One test file beside one
+# source file leaves a remainder and Check 5 fires exactly as before.
+CHECK5_WEB_NONTEST="$(printf '%s\n' "$CHECK5_WEB_FILES" | awk -F/ 'NF && $NF !~ /\.(test|spec)\./ {print}')"
+CHECK5_WEB_N="$(printf '%s\n' "$CHECK5_WEB_FILES" | awk 'NF{n++} END{print n+0}')"
+
 if [ -z "$CHECK5_BASE" ]; then
   echo "  CHECK 5: SKIP (cannot resolve diff base: ${CHECK5_ANCHOR_ERR})"
   SKIPPED_CHECKS="$SKIPPED_CHECKS 5"
-elif [ -z "$(git diff --name-only "${CHECK5_BASE}..HEAD" -- 'web/**' 'web/src/**' 'web/tests/**' 2>/dev/null | head -20)" ]; then
+elif [ -z "$CHECK5_WEB_FILES" ]; then
   echo "  CHECK 5: SKIP (no web/** file changes in ${CHECK5_BASE}..HEAD for Sprint ${SPRINT_N})"
+  SKIPPED_CHECKS="$SKIPPED_CHECKS 5"
+elif [ -z "$CHECK5_WEB_NONTEST" ]; then
+  echo "  CHECK 5: SKIP (test-only web/** diff: all ${CHECK5_WEB_N} changed web/** file(s) match *.test.* or *.spec.* by filename, so no source and no rendering changed in ${CHECK5_BASE}..HEAD for Sprint ${SPRINT_N})"
   SKIPPED_CHECKS="$SKIPPED_CHECKS 5"
 else
   if [ ! -f "$GATE_LOG" ]; then
