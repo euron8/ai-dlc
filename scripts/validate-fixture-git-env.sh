@@ -149,6 +149,56 @@ first_line_re() {
   printf '%s\n' "$out" | sed -n '1s/:.*//p'
 }
 
+# THE POSITION THAT MATTERS IS WHERE run.sh REACHES AN INIT, NOT WHERE run.sh
+# CONTAINS ONE, AND THE FIRST CUT OF THE POSITION ARMS CONFLATED THE TWO. The
+# population joins on ANY *.sh in the directory, and 30 of its 69 members have no
+# init in their own run.sh at all -- their init is in a seed.sh the run.sh
+# INVOKES. For those the run.sh-only reading is empty, both position branches fall
+# through on `[ -n "$init_ln" ]`, and a run.sh whose seam sits BELOW its
+# `bash seed.sh` call is acquitted. Measured on a probe tree: such a fixture takes
+# a 40-entry victim to 0, and its inline-scrub twin does the same. Live exposure
+# was zero -- all 30 carry the seam at line 2 -- so it was a trap rather than a
+# hole, and it was the exact defect these arms exist to catch, one file over.
+#
+# So the init SITE is the earliest of: the first init in run.sh, and the first
+# line of run.sh that INVOKES a sibling script which itself carries an init.
+# Keyed on the invocation rather than on any mention of the sibling's name: a
+# comment naming seed.sh is not a call, and keying on the name alone would move
+# the site earlier than the program does.
+# THE PRECEDING CLASS IS SEPARATORS, NOT "ANY NON-WORD CHARACTER", AND THE FIRST
+# CUT WAS THE LOOSE FORM. Written `[^[:alnum:]_-]` it matched the `sh` inside the
+# FILENAME `seed.sh`, so a COMMENT merely naming the sibling scored as an
+# invocation -- the whole-file-grep weakness these arms exist to refuse, inside the
+# reader meant to replace it. Caught by this fixture's own W9 arm, which seeds
+# exactly that comment. A command starts the line or follows whitespace or a
+# `;`/`&`/`|`/`(` separator; it never follows a dot.
+INVOKE_RE='(^|[[:space:]]|[;&|(])(bash|sh|source|\.)[[:space:]]'
+init_site_line() { # init_site_line <dir> <run.sh-path> -> earliest reaching line, or empty
+  local dir="$1"
+  local run="$2"
+  local best
+  local s
+  local b
+  local hits
+  local ln
+  best="$(first_line_re "$run" "$INIT_RE")"
+  for s in "$dir"/*.sh; do
+    [ -f "$s" ] || continue
+    b="$(basename "$s")"
+    [ "$b" = "run.sh" ] && continue
+    grep -qE "$INIT_RE" "$s" || continue
+    # Two greps, not one: the sibling's basename is a LITERAL (`-F`) and the
+    # invocation is a pattern, and spelling a filename into an ERE turns its dot
+    # into a wildcard.
+    hits="$(grep -nE "$INVOKE_RE" "$run" 2>/dev/null)" || hits=""
+    [ -n "$hits" ] || continue
+    ln="$(printf '%s\n' "$hits" | grep -F "$b" | sed -n '1s/:.*//p')" || ln=""
+    [ -n "$ln" ] || continue
+    if [ -z "$best" ] || [ "$ln" -lt "$best" ]; then best="$ln"; fi
+  done
+  printf '%s\n' "$best"
+}
+
 UNSCRUBBED=""
 N_UNSCRUBBED=0
 for f in $POP; do
@@ -165,7 +215,25 @@ for f in $POP; do
   # run.sh:56 and seed.sh:24, above every git call in each file, and it genuinely
   # survives a drive -- it must stay acquitted, so this arm compares LINE NUMBERS
   # and never merely counts scrubs.
-  init_ln="$(first_line_re "$ROOT/$f" "$INIT_RE")"
+  #
+  # The site is resolved through the whole DIRECTORY, per init_site_line above: a
+  # run.sh that never inits itself still reaches one through the seed it invokes.
+  init_ln="$(init_site_line "$ROOT/$(dirname "$f")" "$ROOT/$f")"
+
+  # AN UNRESOLVABLE SITE IS A FINDING, NOT AN ACQUITTAL. Every member of this
+  # population runs an init somewhere in its directory -- that is how it joined --
+  # so a site that resolves to nothing means run.sh reaches that init by a route
+  # this reader cannot see, and the position arms below are then unable to judge
+  # it. Falling through would acquit exactly the file nobody can reason about.
+  # FALSE-POSITIVE SET, measured over the live population before this shipped:
+  # ZERO of 69 fail to resolve -- 34 by an init in run.sh, 30 by an invoked
+  # sibling, 5 by both. It ships as a finding because there is no correct input it
+  # can fire on today.
+  if [ -z "$init_ln" ]; then
+    UNSCRUBBED="${UNSCRUBBED} ${f}(init-site-unresolved)"
+    N_UNSCRUBBED=$((N_UNSCRUBBED + 1))
+    continue
+  fi
 
   # Key on the SOURCING SITE, not on a whole-file grep: a comment naming the
   # preamble satisfies `grep -qF` over the file and changes no behaviour.
@@ -176,7 +244,7 @@ for f in $POP; do
     # re-arm check below. Asserted rather than assumed: a convention is not a
     # mechanism, and a seam sourced after the init scrubs nothing.
     seam_ln="$(first_line_re "$ROOT/$f" "$SEAM_RE")"
-    if [ -n "$init_ln" ] && [ -n "$seam_ln" ] && [ "$seam_ln" -gt "$init_ln" ]; then
+    if [ -n "$seam_ln" ] && [ "$seam_ln" -gt "$init_ln" ]; then
       UNSCRUBBED="${UNSCRUBBED} ${f}(seam-sourced-below-first-init)"
       N_UNSCRUBBED=$((N_UNSCRUBBED + 1))
       continue
@@ -223,7 +291,7 @@ for f in $POP; do
   scrub_ln="$(first_line_re "$ROOT/$f" "$SCRUB_RE")"
   [ -n "$scrub_ln" ] || scrub_ln="$(first_line_re "$ROOT/$f" "$ENVSCRUB_RE")"
   if [ -n "$scrub_ln" ]; then
-    if [ -z "$init_ln" ] || [ "$scrub_ln" -lt "$init_ln" ]; then
+    if [ "$scrub_ln" -lt "$init_ln" ]; then
       continue
     fi
     UNSCRUBBED="${UNSCRUBBED} ${f}(scrub-below-first-init)"

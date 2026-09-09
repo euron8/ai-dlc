@@ -399,6 +399,36 @@ mk_literal_filler() { # mk_literal_filler <root> <name>
   } > "$f" || return 1
   chmod +x "$f"
 }
+# THE SEED-CALL SHAPE, WHICH IS THE MAJORITY OF THE REAL POPULATION AND WHICH THE
+# PROBE ABOVE CANNOT EXPRESS. 30 of the 69 live members have NO init in their own
+# run.sh: the init is in a seed.sh the run.sh invokes, and the scrub reaches it by
+# inheritance. A position arm reading run.sh alone finds no init line for those,
+# falls through, and acquits a run.sh whose seam sits BELOW its `bash seed.sh`
+# call -- which drives a 40-entry victim to 0. Every case above puts the init in
+# run.sh, so none of them can seed this.
+mk_seedcall_fixture() { # mk_seedcall_fixture <root> <name> <seam:above|below>
+  local r="$1"
+  local n="$2"
+  local where="$3"
+  local d="$r/core/fixtures/$n"
+  mkdir -p "$d" || return 1
+  {
+    printf '#!/usr/bin/env bash\n'
+    [ "$where" = above ] && printf '. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"\n'
+    printf 'd="$(mktemp -d)"\n'
+    printf 'bash "$(dirname "$0")/seed.sh" "$d"\n'
+    printf 'echo mid\n'
+    [ "$where" = below ] && printf '. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"\n'
+    printf 'exit 0\n'
+  } > "$d/run.sh" || return 1
+  # The init lives HERE, never in run.sh -- that is the whole point of the shape.
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf 'git -C "$1" init -q\n'
+    printf 'git -C "$1" add -A 2>/dev/null\n'
+  } > "$d/seed.sh" || return 1
+  chmod +x "$d/run.sh" "$d/seed.sh"
+}
 build_probe() { # build_probe <root>
   local r="$1"
   rm -rf "$r"; mkdir -p "$r/core/fixtures/lib" "$r/scripts" || return 1
@@ -410,6 +440,8 @@ build_probe() { # build_probe <root>
   mk_probe_fixture "$r" "acquitted-seam"    yes none  || return 1  # git -C, seam     -> acquitted
   mk_probe_fixture "$r" "offender-scrub-below" no below || return 1 # scrub after init -> REPORTED
   mk_probe_fixture "$r" "acquitted-scrub-above" no above || return 1 # scrub before init -> acquitted
+  mk_seedcall_fixture "$r" "offender-seam-below-seedcall" below || return 1  # seam after the call -> REPORTED
+  mk_seedcall_fixture "$r" "acquitted-seam-above-seedcall" above || return 1 # seam before it    -> acquitted
   cp "$V_SRC" "$r/scripts/validate-fixture-git-env.sh" || return 1
   chmod +x "$r/scripts/validate-fixture-git-env.sh"
   # THE PROBE MUST BE A GIT REPOSITORY WITH ITS FILES TRACKED. The validator
@@ -477,6 +509,75 @@ else
     *) ok "W4 an inline \`unset GIT_DIR\` ABOVE the first init stays acquitted — the position arm did not swallow the inline-scrub exemption" ;;
   esac
 
+  # W6/W7. THE SEED-CALL PAIR. The init is in a seed.sh the run.sh INVOKES, which
+  # is the shape 30 of the 69 live members have and which no arm above can seed --
+  # every case above puts its init in run.sh. A position arm reading run.sh alone
+  # finds no init line here, falls through, and acquits. Measured on a probe tree
+  # before this arm existed: the seam-below-the-seed-call shape takes a 40-entry
+  # victim to 0, and its inline-scrub twin does the same.
+  case "$w_out" in
+    *"offender-seam-below-seedcall"*) ok "W6 a run.sh with NO init of its own, sourcing the seam BELOW its \`bash seed.sh\` call, is REPORTED — the init site is resolved through the directory, not through run.sh alone" ;;
+    *) fail "W6 a run.sh whose seam sits after the seed call that inits was acquitted. The position arms read run.sh only, and 30 of the live population have no init there — this is the arm's own subject, one file over." ;;
+  esac
+  case "$w_out" in
+    *"acquitted-seam-above-seedcall"*) fail "W7 the seam-ABOVE-the-seed-call shape was REPORTED — the site resolution moved the line earlier than the program does, and it would flag 30 correct fixtures." ;;
+    *) ok "W7 the same shape with the seam ABOVE the seed call stays acquitted — W6 discriminates on position rather than on the shape itself" ;;
+  esac
+
+  # W8. THE run.sh-ONLY DERIVATION, RESTORED AS A MUTANT. W6 asserts the seed-call
+  # offender is reported; this asserts that the OLD site derivation is what fails
+  # to report it, so a revert to reading run.sh alone dies here rather than
+  # passing. The mutation neuters the sibling half of init_site_line by making its
+  # loop body unreachable, which is the whole of the difference.
+  # THE ANCHOR IS MATCHED WITH `grep -F`, NOT WITH A `case` GLOB. The line carries
+  # `*`, which a case pattern reads as a wildcard rather than as the character --
+  # written as a case arm the mutation silently matched NOTHING, and `bash -n`
+  # cannot see that. Asserted unique in the file first, so the mutation cannot
+  # quietly edit two lines or none.
+  SIB_ANCHOR='  for s in "$dir"/*.sh; do'
+  anchor_n="$(grep -cF "$SIB_ANCHOR" "$V_SRC")" || anchor_n=0
+  [ "$anchor_n" -eq 1 ] || broken "W8 anchor matches $anchor_n lines in the validator, expected exactly 1 — the mutation would edit the wrong thing or nothing"
+  smut="$Wp/scripts/mutant-runsh-only.sh"
+  while IFS= read -r line; do
+    printf '%s\n' "$line"
+    if [ "$line" = "$SIB_ANCHOR" ]; then printf '    continue\n'; fi
+  done < "$V_SRC" > "$smut"
+  cmp -s "$smut" "$V_SRC" && broken "W8 mutant did not apply — the run.sh-only copy is byte-identical to the shipping validator, so its silence would prove nothing"
+  bash -n "$smut" || broken "W8 mutant does not parse"
+  chmod +x "$smut"
+  smut_out="$(AI_DLC_PROJECT_ROOT="$Wp" bash "$smut" --max-unscrubbed 0 2>&1)"
+  smut_rc=$?
+  # It must still SEE the run.sh-init offender -- otherwise it is failing for some
+  # reason other than the site derivation and W6's attribution is unproven.
+  #
+  # AND THE KILL IS READ OFF THE REASON, NOT OFF THE OFFENDER'S PRESENCE. With the
+  # sibling half dead, the seed-call member's site resolves by NEITHER route, so
+  # the refusal branch reports it as `(init-site-unresolved)` -- it is still named,
+  # for a completely different reason, and an arm keyed on the NAME scores that as
+  # survival. Measured: this arm's first cut read exactly that and failed. The
+  # discriminating observable is which suffix the row carries.
+  smut_row="$(printf '%s\n' "$smut_out" | grep -F 'offender-seam-below-seedcall')" || smut_row=""
+  ship_row="$(printf '%s\n' "$w_out" | grep -F 'offender-seam-below-seedcall')" || ship_row=""
+  case "$ship_row" in
+    *"(seam-sourced-below-first-init)"*) : ;;
+    *) fail "W8 precondition: the SHIPPING run does not report the seed-call offender as (seam-sourced-below-first-init); its row is '${ship_row:-<none>}', so there is no position verdict for the mutant to lose." ;;
+  esac
+  case "$smut_out" in
+    *"offender-c-form"*)
+      case "$smut_row" in
+        *"(seam-sourced-below-first-init)"*)
+          fail "W8 the run.sh-only derivation ALSO reached a POSITION verdict on the seed-call offender (exit $smut_rc). W6 is then not a measurement of the site resolution — something else is doing the work." ;;
+        *"(init-site-unresolved)"*)
+          ok "W8 with the sibling half dead the seed-call offender loses its POSITION verdict and falls to (init-site-unresolved) — the directory-wide resolution is what makes W6 fire, and the refusal branch is what stops the loss becoming an acquittal" ;;
+        "")
+          fail "W8 the run.sh-only mutant does not name the seed-call offender at all (exit $smut_rc) — it was ACQUITTED, which is the pre-repair behaviour and means the refusal branch did not fire." ;;
+        *)
+          fail "W8 the seed-call offender is reported by the mutant with an unexpected reason: '$smut_row'." ;;
+      esac ;;
+    *)
+      fail "W8 the run.sh-only mutant does not report the run.sh-init offender either (exit $smut_rc); it is broken rather than narrowed, so W6's attribution is unproven. Output: $(printf '%s' "$smut_out" | head -2)" ;;
+  esac
+
   # W5. THE OLD GRAMMAR MUST ACQUIT THE PROBE. This is what makes W1 a statement
   # about the WIDENING rather than about the arm beside it: a mutant validator
   # carrying the literal `git init` population, run against the same probe, must
@@ -508,6 +609,26 @@ else
       else
         fail "W5 the old-grammar mutant exits $mut_rc without naming the offender; it is failing for some reason other than the population, so W1's attribution is unproven. Output: $(printf '%s' "$mut_out" | head -2)"
       fi ;;
+  esac
+
+  # W9. AN UNRESOLVABLE INIT SITE IS REPORTED, NOT ACQUITTED. A member joins the
+  # population by running an init somewhere in its directory, so a site resolving
+  # to nothing means run.sh reaches it by a route this reader cannot see, and the
+  # position arms cannot judge it. Seeded by a fixture whose seed.sh inits and
+  # whose run.sh NEVER invokes it -- the file it names sits in a comment, which is
+  # not a call. THIS ARM RUNS LAST AND MUTATES THE PROBE TREE, so every reading
+  # above is taken against the unmodified probe.
+  ud="$Wp/core/fixtures/unresolved-site"
+  mkdir -p "$ud" || broken "W9 could not extend the probe tree"
+  printf '#!/usr/bin/env bash\n# this comment names seed.sh and is not a call\necho nothing\n' > "$ud/run.sh"
+  printf '#!/usr/bin/env bash\ngit -C "$1" init -q\n' > "$ud/seed.sh"
+  chmod +x "$ud/run.sh" "$ud/seed.sh"
+  ( cd "$Wp" && git add -A -f ) >/dev/null 2>&1 || broken "W9 could not track the seeded case; git grep would not see it and the arm would pass vacuously"
+  u_out="$(AI_DLC_PROJECT_ROOT="$Wp" bash "$Wp/scripts/validate-fixture-git-env.sh" --max-unscrubbed 0 2>&1)"
+  case "$u_out" in
+    *"unresolved-site/run.sh(init-site-unresolved)"*) ok "W9 a member whose init site resolves by NEITHER route is REPORTED as (init-site-unresolved) — an unreadable file is not acquitted, and a comment naming seed.sh is not a call" ;;
+    *"unresolved-site"*) fail "W9 the unresolvable member is reported, but not as (init-site-unresolved) — some other branch fired and the refusal branch is untested." ;;
+    *) fail "W9 a member whose init site cannot be resolved was ACQUITTED. The position arms then pass silently over exactly the file nobody can reason about." ;;
   esac
 fi
 

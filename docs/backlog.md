@@ -4299,11 +4299,37 @@ LINE NUMBERS: a scrub below the file's first init is not a scrub. (3) The 27 `ru
 seam as their first executable line, which is how the other 42 carry it and which reaches each
 `seed.sh` by inheritance.
 
+**AND THE FIRST CUT OF (2) MEASURED THE WRONG POSITION, WHICH IS THE SAME DEFECT ONE FILE OVER.**
+It read the init line from the directory's `run.sh`, where the population joins on ANY `*.sh` in
+the directory: **30 of the 69 members have no init in their own `run.sh` at all**, their init
+being in a `seed.sh` the `run.sh` invokes. For those the reading was empty, both position branches
+fell through, and a `run.sh` whose seam sits BELOW its `bash seed.sh` call was acquitted — driven
+on a probe tree, that shape takes a 40-entry victim to **0**, and its inline-scrub twin does the
+same. Live exposure was zero, because all 30 carry the seam at line 2, so it was a trap rather
+than a hole. The site is now the earliest of the first init in `run.sh` and the first line of
+`run.sh` that INVOKES a sibling script carrying an init — keyed on the invocation, since a comment
+naming `seed.sh` is not a call. A site that resolves to NEITHER is reported
+`(init-site-unresolved)` and counted unscrubbed rather than acquitted: every member reaches an
+init somewhere, so an unresolvable site means the route is one this reader cannot see, and
+falling through would acquit exactly the file nobody can reason about. False-positive set over the
+live population: **zero of 69** fail to resolve — 34 by an init in `run.sh`, 30 by an invoked
+sibling, 5 by both.
+
 **False-positive set of the widened grammar, measured before it shipped.** The pattern matches a
 COMMENT naming `git init`, and zero fixture scripts join the population by a comment-only hit —
 every matching file carries at least one non-comment match. `git config init.defaultBranch main`,
 `git commit -m init`, `git-init` and `legit initiate` are all refused, because `init` must be a
 whole word preceded only by `-c`/`-C` options.
+
+**WHAT THE WIDENED GRAMMAR STILL CANNOT SEE, stated because a coverage claim over a derived
+population says nothing about what the population EXCLUDED.** Four spellings redirect under an
+armed `GIT_DIR` and are invisible to it: a quoted option (`git "-C" sub init`), an indirected
+binary (`$GIT init .`), a shell `git()` wrapper function, and `git --git-dir=x init`, whose
+option form the pattern does not admit. Corpus incidence is **0 each**, against a control of 49
+matches for the forms it does spell. Separately, the population is derived with `git grep`, which
+searches TRACKED content only — an untracked fixture script is outside the population entirely and
+the clean verdict reads identically over it. Both limits are floors of unknown depth, not
+measurements of safety.
 
 **The receipt drives the shipping validator against a probe tree and reads its output for a path
 that could only have come from there**, because this validator walks up for its own `VERSION`
@@ -4314,12 +4340,22 @@ collapses to 0 and the run REFUSES with exit 2 — a refusal that reads as a fin
 testing merely for a non-zero exit. Twelve literal-form fillers carry the population over the
 floor of 10 under BOTH grammars, so the old-grammar reading is an acquittal rather than a refusal.
 
-**Scored against four trees, each BUILT rather than argued.** `origin/main` **1** (the old
-grammar acquits the probe); the fix **0**; a non-fix carrying all 27 seam lines with the grammar
-left literal **1**; a non-fix carrying the widened grammar with its unscrubbed branch disabled
-**1**. Controls on the same four trees, initialised so the validator does not refuse: `origin/main`
-and the seam-only non-fix both report a population of 42, the fix and the branch-disabled non-fix
-both report 69, and all four are green on their own trees — which is what the receipt has to see
-past.
+**THE RECEIPT ALSO CARRIES A NEAR-MISS, BECAUSE ITS FIRST CUT WAS SATISFIED BY A GRAMMAR THAT
+MATCHED EVERYTHING.** Asking only that the offender be NAMED is satisfied by `INIT_RE='.'`, which
+reports the whole corpus and includes the offender for a reason that is not the fix — built and
+scored, that non-fix closed the first receipt at exit 0. The probe therefore also carries a
+fixture whose only script runs `git config init.defaultBranch main` and `git commit -m init`,
+which is not an init and carries no seam, and the receipt asserts that name does NOT appear.
+A grammar that reports everything now fails on the near-miss before the offender is read.
 
-verify: sh v=scripts/validate-fixture-git-env.sh; [ -f "$v" ] || exit 9; p=$(mktemp -d) || exit 9; trap 'rm -rf "$p"' EXIT; mkdir -p "$p/core/fixtures/lib" "$p/scripts" || exit 9; printf '0.0.0\n' > "$p/VERSION"; cp core/fixtures/lib/preamble.sh "$p/core/fixtures/lib/" || exit 9; i=1; while [ $i -le 12 ]; do mkdir -p "$p/core/fixtures/fill$i"; printf '#!/usr/bin/env bash\n. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"\ngit init -q .\n' > "$p/core/fixtures/fill$i/run.sh"; i=$((i+1)); done; mkdir -p "$p/core/fixtures/bl211probe"; printf '#!/usr/bin/env bash\ngit -C "$d" init -q\n' > "$p/core/fixtures/bl211probe/run.sh"; cp "$v" "$p/scripts/" || exit 9; git -C "$p" init -q . >/dev/null 2>&1 || exit 9; git -C "$p" add -A -f >/dev/null 2>&1 || exit 9; o=$(AI_DLC_PROJECT_ROOT="$p" bash "$p/scripts/validate-fixture-git-env.sh" --max-unscrubbed 0 2>&1); rc=$?; case "$o" in *bl211probe*) [ "$rc" -eq 1 ] ;; *) false ;; esac
+**Scored against five trees, each BUILT rather than argued.** The branch **0**; `origin/main`
+**1** (the old literal grammar acquits the probe); the match-everything grammar **1**; the seam
+emptied to a body that scrubs nothing **1**; the seam DELETED **9**, a precondition rather than a
+finding, since the receipt cannot build its probe without it. The differential that matters is the
+match-everything tree, where the first receipt read **0** and the strengthened one reads **1** —
+the near-miss is doing that work, not the arm beside it. Controls on the earlier four, initialised
+so the validator does not refuse: `origin/main` and a seam-only non-fix both report a population
+of 42, the fix and a branch-disabled non-fix both report 69, and all are green on their own trees,
+which is what the receipt has to see past.
+
+verify: sh v=scripts/validate-fixture-git-env.sh; [ -f "$v" ] || exit 9; p=$(mktemp -d) || exit 9; trap 'rm -rf "$p"' EXIT; mkdir -p "$p/core/fixtures/lib" "$p/scripts" || exit 9; printf '0.0.0\n' > "$p/VERSION"; cp core/fixtures/lib/preamble.sh "$p/core/fixtures/lib/" || exit 9; i=1; while [ $i -le 12 ]; do mkdir -p "$p/core/fixtures/fill$i"; printf '#!/usr/bin/env bash\n. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"\ngit init -q .\n' > "$p/core/fixtures/fill$i/run.sh"; i=$((i+1)); done; mkdir -p "$p/core/fixtures/bl211probe" "$p/core/fixtures/bl211nearmiss"; printf '#!/usr/bin/env bash\ngit -C "$d" init -q\n' > "$p/core/fixtures/bl211probe/run.sh"; printf '#!/usr/bin/env bash\ngit config init.defaultBranch main\ngit commit -m init\n' > "$p/core/fixtures/bl211nearmiss/run.sh"; cp "$v" "$p/scripts/" || exit 9; git -C "$p" init -q . >/dev/null 2>&1 || exit 9; git -C "$p" add -A -f >/dev/null 2>&1 || exit 9; o=$(AI_DLC_PROJECT_ROOT="$p" bash "$p/scripts/validate-fixture-git-env.sh" --max-unscrubbed 0 2>&1); rc=$?; case "$o" in *bl211nearmiss*) false ;; *bl211probe*) [ "$rc" -eq 1 ] ;; *) false ;; esac
