@@ -547,6 +547,22 @@ cannot tell a list-walk from a directory-walk. So three committed self-probes no
 seed's discriminating property, the arm's ability to fire on that seed, and the pool's WIDTH as
 a number, before any real verdict is read; the receipt requires all three lines.
 
+**THE WIDTH PROBE WAS THE SAME DEFECT ONE LEVEL DOWN, AND AN ADVERSARY FOUND IT ON A
+GATE-GREEN BRANCH.** Asserting `[ "$MUT_JOBS" -ge 2 ]` reads a VARIABLE that nothing joins to
+the dispatch. Measured: `xargs -P 1` beside an untouched `MUT_JOBS="6"` ran **132.3s at 125%
+CPU**, printed a byte-identical green "dispatched at width 6" line, and **closed the receipt**.
+It scored the opposite of the truth in both directions — it also FAILED a genuinely 6-way run
+whose variable read 1. The arm now counts workers OBSERVED in flight, from a live marker file
+each worker creates and removes, which is a property of the run. `consumer-suite-pool/run.sh:274`
+is the precedent.
+
+**A WALL-CLOCK OVERLAP TEST DOES NOT WORK, MEASURED ON THE FIRST REPAIR.** `date +%s` is whole
+seconds, so a worker ending at T and the next starting at T read as overlapping: a fully SERIAL
+4m34s run reported "2 in flight" and PASSED. Presence, not time. The marker version reports
+exactly 6 on the pool, 1 on the serial dispatch, and 6 on the parallel-run-with-variable-1 case.
+The floor is **2 and not `$MUT_JOBS`** — a loaded box may never place 6 at once, and an arm
+demanding 6 would fail for a reason that is not a regression.
+
 **AND THE PROBE HAD TO DRIVE THE SHIPPING WALK.** Its first cut carried its own copy of the
 loop, so it agreed with itself and the directory-reading non-fix STILL closed the receipt — the
 probe never touched the collector that non-fix had changed. `collect_into` is now the one walk,
@@ -556,7 +572,7 @@ missing) is refused by the seed arm. Final scoring: the correct fix closes it, f
 refuse, zero setup failures — and one earlier "refusal" was a `sed` that matched nothing, which
 is a non-fix that never applied rather than a receipt that discriminated.
 
-  verify: sh o="$(bash core/fixtures/layer-reference-resolution/run.sh 2>&1)"; grep -q 'self-probe: the list-walk reports a seeded missing verdict' <<<"$o" && grep -q 'self-probe: the mutant pool is dispatched at width [2-9]' <<<"$o" && grep -q 'pool accounting: all 24 dispatched mutants produced a verdict' <<<"$o"
+  verify: sh o="$(bash core/fixtures/layer-reference-resolution/run.sh 2>&1)"; grep -q 'self-probe: the list-walk reports a seeded missing verdict' <<<"$o" && grep -qE 'self-probe: [2-9][0-9]* worker\(s\) observed in flight' <<<"$o" && grep -q 'pool accounting: all 24 dispatched mutants produced a verdict' <<<"$o"
 
 ## BL-087 — ANSWERED: `PreToolUse` does NOT fire on a tool call that fails INPUT VALIDATION, so a guard whose predicate is the malformation is unbuildable
 

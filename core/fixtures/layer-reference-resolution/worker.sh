@@ -43,7 +43,40 @@ work="$outdir/.work-$label"
 mkdir -p "$work"
 m="$work/mutant.sh"
 
-report() { printf '%s\n' "$1" > "$outdir/$label"; exit 0; }
+# THE WORKER COUNTS ITS OWN PEERS IN FLIGHT, and that is not bookkeeping: it is the only
+# evidence that the pool was CONCURRENT. A probe reading the width VARIABLE is satisfied by
+# `xargs -P 1` beside a `MUT_JOBS=6` that nothing joins to the dispatch — measured, an
+# adversary closed the receipt that way at 132.3s and 125% CPU while the probe still printed
+# "dispatched at width 6".
+#
+# AND A WALL-CLOCK OVERLAP TEST DOES NOT WORK EITHER, measured on the first repair: `date +%s`
+# is whole seconds, so a worker ending at T and the next starting at T read as overlapping and
+# a fully SERIAL run reported 2 in flight. The marker is presence, not time — a live marker
+# file per running worker, counted while this one is running, so an interval that merely
+# ABUTS another cannot be mistaken for one that overlaps it.
+# AND A MARKER FILE IS NOT A LIVE WORKER. Measured on the second repair: seeding five stale
+# markers made a fully SERIAL dispatch report 6 in flight and PASS, because counting FILES
+# counts whatever was left behind — by a killed worker, or by anything else that wrote there.
+# The marker's name is its PID and the count admits only PIDs that are still running, so a
+# leftover from a dead process cannot inflate it. `kill -0` tests existence, sends no signal.
+inflight_dir="$outdir/.inflight"
+mkdir -p "$inflight_dir"
+: > "$inflight_dir/$$"
+peers=0
+for _p in "$inflight_dir"/*; do
+  [ -e "$_p" ] || continue
+  _pid="${_p##*/}"
+  case "$_pid" in ''|*[!0-9]*) continue ;; esac
+  kill -0 "$_pid" 2>/dev/null && peers=$((peers+1))
+done
+
+report() {
+  rm -f "$inflight_dir/$$"
+  { printf '%s\n' "$1"
+    printf 'inflight %s\n' "$peers"
+  } > "$outdir/$label"
+  exit 0
+}
 
 cp "$LINTER" "$m" || report "BROKEN could not copy the linter"
 

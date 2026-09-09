@@ -51,7 +51,17 @@ the first receipt was weak: a directory-reading collector and a pool at P=1 both
 a collector that never loses anything cannot tell a list-walk from a directory-walk. The probe
 now drives the SHIPPING walk (`collect_into`, one function called by both) — a probe carrying its
 own copy of the loop agreed with itself and let the directory non-fix through — and its seed is
-asserted too. Four non-fixes refuse; the correct fix closes.
+asserted too.
+
+**The width probe was that same defect one level down, found by an adversary on a gate-green
+branch.** Asserting `[ "$MUT_JOBS" -ge 2 ]` reads a variable nothing joins to the dispatch:
+`xargs -P 1` beside an untouched `MUT_JOBS="6"` ran 132.3s at 125% CPU, printed a byte-identical
+green line and CLOSED the receipt — and the same probe FAILED a genuinely 6-way run whose
+variable read 1, so it scored the opposite of the truth in both directions. The arm now counts
+workers OBSERVED in flight from a live per-worker marker file. **A wall-clock overlap test does
+not work either**, measured on the first repair: `date +%s` is whole seconds, so abutting
+intervals read as overlapping and a fully serial 4m34s run reported "2 in flight" and passed.
+Five non-fixes refuse; the correct fix closes.
 
 ### `PreToolUse` does not fire on a schema-invalid tool call, settled by experiment (`BL-087`)
 

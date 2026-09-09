@@ -494,14 +494,8 @@ collect_into "$probe_dir/list" "$probe_dir"
   && ok "self-probe: the list-walk reports a seeded missing verdict (1 absent, 1 present) — a directory listing would report 1 and 0 findings" \
   || bad "self-probe BROKEN: the list-walk scored $c_seen present / $c_missing missing on a 1-and-1 seed — the collector below cannot be trusted"
 
-# AND THE POOL MUST ACTUALLY BE CONCURRENT. P=1 satisfies every correctness arm above while
-# buying nothing, and a serial pool is indistinguishable from a parallel one by verdict alone.
-# The subject here is the WIDTH, asserted as a number, because that is what a P=1 regression
-# changes and nothing else can see.
-[ "${MUT_JOBS:-0}" -ge 2 ] \
-  && ok "self-probe: the mutant pool is dispatched at width $MUT_JOBS, so it is concurrent" \
-  || bad "self-probe: MUT_JOBS=${MUT_JOBS:-<unset>} — the pool is serial and this fixture is the suite pole again"
-
+# The concurrency arm is NOT here: it reads the workers' own start/end stamps, so it can only
+# run after collection. See "the pool ACTUALLY ran concurrently" below.
 dispatched="$(wc -l < "$ROOT/mutant-list" | tr -d ' ')"
 if [ "$dispatched" -eq 0 ]; then
   bad "fixture BROKEN: no mutants were dispatched — the list is empty, so every kill below is vacuous"
@@ -522,13 +516,35 @@ else
   while IFS= read -r label; do
     [ -n "$label" ] || continue
     [ -f "$MUT_DIR/$label" ] || continue
-    verdict="$(cat "$MUT_DIR/$label")"
+    # HEAD -1, not `cat`: the worker appends a `stamp <start> <end>` line the overlap arm
+    # below reads, and `cat` would fold it into the reported vector.
+    verdict="$(head -1 "$MUT_DIR/$label")"
     case "$verdict" in
       KILL*)     ok  "mutant $label killed — vector [${verdict#KILL }]" ;;
       SURVIVED*) bad "mutant $label SURVIVED or misfired — ${verdict#SURVIVED }" ;;
       *)         bad "mutant $label: ${verdict}" ;;
     esac
   done < "$ROOT/mutant-list"
+
+  # THE POOL ACTUALLY RAN CONCURRENTLY, OBSERVED FROM THE WORKERS' OWN STAMPS. A probe that
+  # reads the WIDTH VARIABLE is not this arm and cannot replace it: measured by an adversary,
+  # `xargs -P 1` beside an untouched `MUT_JOBS="6"` ran 132.3s at 125% CPU and printed an
+  # identical green "width 6" line, closing the receipt. Nothing joined the assertion to the
+  # dispatch. This counts workers whose [start,end] intervals OVERLAP, which is a property of
+  # the run rather than of a variable, and `consumer-suite-pool/run.sh:274` is the precedent.
+  #
+  # The floor is 2, not $MUT_JOBS: a loaded box may never place 6 in flight at once, and an
+  # arm that demanded 6 would fail for a reason that is not a regression. 2 is what separates
+  # a pool from a serial loop, which is the property being asserted.
+  max_inflight="$(
+    for _lbl in $(cat "$ROOT/mutant-list"); do
+      [ -f "$MUT_DIR/$_lbl" ] || continue
+      sed -n 's/^inflight \([0-9]*\)$/\1/p' "$MUT_DIR/$_lbl"
+    done | sort -n | tail -1
+  )"
+  [ "${max_inflight:-0}" -ge 2 ] \
+    && ok "self-probe: $max_inflight worker(s) observed in flight at once — the pool ran concurrently, read from the workers' own stamps and not from MUT_JOBS" \
+    || bad "self-probe: max ${max_inflight:-0} worker(s) in flight — the mutants ran SERIALLY and this fixture is the suite pole again, whatever MUT_JOBS says"
 
   # The count arm, independent of the per-label arm above: it compares what the pool was
   # given against what the walk actually read a file for.
