@@ -42,7 +42,10 @@ set -euo pipefail
 OUT="${1:-${OUT:-$(mktemp -d)}}"
 TREE="$OUT/tree"
 rm -rf "$TREE"                     # idempotent re-seed
-mkdir -p "$TREE/src" "$TREE/_bmad-output/planning-artifacts"
+# `tests/` is created here and not beside V24 because V26 needs it too, and because the
+# test-double carve-out is keyed on the PATH: a variant that silently landed outside
+# `tests/` would be acquitted or not for a reason no arm names.
+mkdir -p "$TREE/src" "$TREE/tests" "$TREE/_bmad-output/planning-artifacts"
 
 cat > "$TREE/_bmad-output/planning-artifacts/carry-over-backlog.md" <<'EOF'
 # Carry-over backlog
@@ -254,6 +257,105 @@ cat > "$TREE/src/v22_quoted_opener.sh" <<'EOF'
 emit_marker() {
   printf '# stub, wire later\n' > "$1"
 }
+EOF
+
+# ---- V23-V30: `stub` INSIDE a comment that is still not a deferral ------------
+#
+# The comment gate (V17-V22) decides WHERE a prose marker is credible. These decide whether
+# the word means what the check assumes even once it is in a comment, and they are the two
+# shapes the reference consumer's gate hit that the comment gate does not reach: a comment
+# using `stub` to DENY a deferral, and a comment naming a TEST DOUBLE.
+#
+# BOTH CARVE-OUTS ARE ABSENCE-SHAPED (V23, V24), so each has a mutant at the end of run.sh.
+# What makes the six positive variants beside them load-bearing is that each is one property
+# short of an acquittal, and a different wrong fix acquits each one:
+#
+#   V25  a negation-vocabulary word that is a DEFERRAL word, with punctuation between it and
+#        `stub`. A character window rather than strict adjacency acquits it — and it is a
+#        real deferral, so that acquittal is the expensive direction.
+#   V26  a real deferral in a TEST FILE with NO mock vocabulary. `skip tests/` acquits it.
+#   V27  the negation qualifies a DIFFERENT noun; `stub` itself is bare. Any carve-out keyed
+#        on "the comment contains `no`" acquits it.
+#   V28  the negation sits AFTER the token, so a carve-out scanning the whole comment rather
+#        than the text BEFORE each occurrence acquits it.
+#   V29  two occurrences, only the first negated. A per-COMMENT rather than per-OCCURRENCE
+#        test acquits it, and the bare second occurrence is the one that matters.
+#   V30  mock vocabulary in a file that is NOT a test. The vocabulary half without the path
+#        conjunct acquits it — measured, that half alone acquits three comment lines in
+#        validate-stub-audit.sh itself, which is not a test and defers nothing.
+#
+# V25 IS THE ONE THAT FORCES STRICT ADJACENCY. `[Nn]ot yet` is PHASE_ABSENCE vocabulary — a
+# word for deferring, not for denying stubness — so a window loose enough to read it as a
+# negation silences the check on its own subject.
+
+# V23: the consumer's negation site, verbatim. Prose denying a deferral. NO finding.
+cat > "$TREE/src/v23_negation.ts" <<'EOF'
+export function bundle() {
+      // Real asset -- no inline stub. CDK zips the directory.
+      return 1;
+}
+EOF
+
+# V24: the consumer's test-double site — an `AsyncMock` stand-in named seven lines above the
+# comment that refers to it. The window is why the vocabulary lookback is 10 lines and not the
+# elements' 5. NO finding.
+cat > "$TREE/tests/v24_test_double.py" <<'EOF'
+import unittest
+from unittest.mock import AsyncMock
+
+
+class RemoveTest(unittest.TestCase):
+    def test_partial_remove(self):
+        broadcaster = AsyncMock()
+        run_remove(broadcaster)
+        self.assertEqual(broadcaster.call_count, 1)
+        # The partial remove proceeded and "broadcast" via the stub.
+        self.assertTrue(True)
+EOF
+
+# V25: a real deferral whose comment carries a negation-VOCABULARY word separated from `stub`
+# by a colon. Element 1 rejects it.
+cat > "$TREE/src/v25_neg_word_real_deferral.py" <<'EOF'
+def resample():
+    # not yet done: stub, wire later
+    return None
+EOF
+
+# V26: a real deferral in a TEST file carrying no mock vocabulary at all. Element 1 rejects it.
+cat > "$TREE/tests/v26_test_real_deferral.py" <<'EOF'
+def test_pending():
+    # stub, wire later -- the real assertion is unwritten
+    pass
+EOF
+
+# V27: the negation qualifies `repository`, not `stub`. Element 1 rejects it.
+cat > "$TREE/src/v27_neg_other_token.py" <<'EOF'
+def lookup():
+    # no repository behind it, so this is a stub
+    return 0
+EOF
+
+# V28: the negation follows the token. Element 1 rejects it.
+cat > "$TREE/src/v28_neg_after.sh" <<'EOF'
+check_existence() {
+  # existence: a stub file is not a repair record.
+  return 0
+}
+EOF
+
+# V29: two occurrences, the second bare. Element 1 rejects it.
+cat > "$TREE/src/v29_two_occurrences.py" <<'EOF'
+def fallback():
+    # no inline stub here, but the fallback is a stub
+    return 1
+EOF
+
+# V30: mock vocabulary in a NON-test file. Element 1 rejects it.
+cat > "$TREE/src/v30_mock_prose_nontest.py" <<'EOF'
+def build_broadcaster():
+    fake = AsyncMock()
+    # broadcast goes through the stub
+    return fake
 EOF
 
 # ---- V5: the positive control — satisfies all four elements ------------------

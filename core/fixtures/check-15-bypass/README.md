@@ -24,6 +24,14 @@ so the driver can assert *which* element rejects it:
 | V9 | consumer-owned `.claude/hooks/my-own-hook.sh` — same marker | 1 (item ref) |
 | V10 | core fixture `tests/fixtures/check-15-bypass/seed.sh` — `TODO` | none; **dropped from scope** |
 | V11 | consumer fixture `tests/fixtures/check-15-bypass-local/seed.sh` — same marker | 1 (item ref) |
+| V23 | `// Real asset -- no inline stub. CDK zips the directory.` | none; **not a marker** |
+| V24 | `# … "broadcast" via the stub.` in a test file, `AsyncMock` seven lines up | none; **not a marker** |
+| V25 | `# not yet done: stub, wire later` | 1 (item ref) |
+| V26 | `# stub, wire later …` in a test file with NO mock vocabulary | 1 (item ref) |
+| V27 | `# no repository behind it, so this is a stub` | 1 (item ref) |
+| V28 | `# existence: a stub file is not a repair record.` | 1 (item ref) |
+| V29 | `# no inline stub here, but the fallback is a stub` | 1 (item ref) |
+| V30 | `# broadcast goes through the stub` in a NON-test file | 1 (item ref) |
 
 V5 is what makes the fixture able to fail. Without it, an element mutated into
 always-rejecting would still look correct: every adversary would be rejected
@@ -59,6 +67,31 @@ them. A marker gate keyed on comment TEXT — the remedy filed for the sibling
 defect, where an identifier named `stub` matches in code — clears V13, which
 sits in a docstring carrying no comment prefix, and leaves V16 untouched
 because V16 *is* a comment. Only the absence requirement clears V16.
+
+**V23–V30 are whether a `stub` inside a comment means what the check assumes.**
+V17–V22 decide *where* a prose marker is credible; these decide the word itself
+once it is already in a comment, and they cover the two shapes the reference
+consumer's gate hit that the comment gate does not reach: a comment using `stub`
+to DENY a deferral, and a comment naming a test double. Both acquittals are
+absence-shaped and both have mutants.
+
+The six positive variants are not one arm six times — each is one property short
+of an acquittal, and a *different* wrong fix acquits each. V25 is acquitted by a
+character window instead of strict adjacency, and it is the one that forces the
+adjacency: `not yet` is `PHASE_ABSENCE` vocabulary, a word for deferring rather
+than for denying stubness, so a window loose enough to read it as a negation
+silences the check on its own subject. V26 is acquitted by `skip tests/`; V27 by
+"the comment contains `no`"; V28 by scanning the whole comment rather than the
+text before each occurrence; V29 by a per-comment rather than per-occurrence
+test; V30 by the vocabulary half without the path conjunct — measured, that half
+alone acquits three comment lines in `validate-stub-audit.sh` itself, which is
+not a test and defers nothing.
+
+**The residual false negative is stated rather than hidden.** A bare
+`# stub, the real assertion is unwritten` in a test file with mock vocabulary in
+the window IS acquitted. A form scoped to the negation alone does not have that
+hole; it is traded deliberately, because the test-double class is 97 of the
+consumer's 127 comment-portion `stub` markers and the negation class is 6.
 
 **V8/V9 are a pair, and neither means anything alone.** They cover the
 upstream-owned exemption: Check 16 drops core-manifest paths before the marker
@@ -125,6 +158,23 @@ Restoring the bare alternative flips V13 and V16; deleting the phase marker
 flips only V14; widening the absence vocabulary to match anything flips V13 and
 V16; dropping `NotImplementedError` from the other markers flips only V15, which
 no other arm here notices.
+
+The comment-gate and carve-out mutants follow the same construction. Every one
+was profiled against all thirty variants and an unmutated control, and nine move
+exactly one cell. Two move two, and both overlaps are real rather than entangled:
+`carve-outs-disarmed` removes both carve-outs so V23 and V24 are its subject
+together, and `negation-window-not-adjacency` moves V25 and V27 because a
+boundary-only negation genuinely acquits both — V25 owns the kill and V27 stands
+down for it.
+
+Two of the older mutants were re-anchored in the same change, and both would
+otherwise have gone dead rather than wrong. `prose-gate-on-raw-line` was keyed on
+the exact text of the marker gate's condition, which the carve-outs edit — the
+`cmp -s` guard reports that as `BAD`, which reads as a regression in the change
+under test rather than as a lost anchor. `quote-guard-dropped` was keyed on
+`case "$pre" in`, a spelling the negation loop's occurrence walk now also uses;
+a mutant matching two lines silently tests two properties and its kill belongs to
+neither, so it is anchored on the quote class only the quote guard carries.
 
 Three assertions are deliberately NOT about the elements, so no element
 mutation can flip one: an all-out-of-scope set must exit **4**, not 0

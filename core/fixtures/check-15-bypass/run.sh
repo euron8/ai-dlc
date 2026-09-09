@@ -180,6 +180,36 @@ expect src/v19_comment_bare_stub.py \
 expect src/v21_slashslash_comment.js \
                                 element1-item-ref  "V21 marker in a trailing // comment"
 
+# WHETHER A `stub` INSIDE A COMMENT MEANS WHAT THE CHECK ASSUMES. V17-V22 above decide WHERE
+# a prose marker is credible; these decide whether the word carries the check's subject once
+# it is in a comment. V23 and V24 are the two acquittals — the consumer's negation site and
+# its test-double site verbatim — and both are ABSENCE-shaped, so both have mutants at the end
+# of this file.
+#
+# THE SIX POSITIVE VARIANTS ARE NOT ONE ARM SIX TIMES. Each is one property short of an
+# acquittal, and each is acquitted by a DIFFERENT wrong fix: V25 by a character window instead
+# of strict adjacency, V26 by `skip tests/`, V27 by "the comment contains `no`", V28 by
+# scanning the whole comment rather than the text before each occurrence, V29 by a
+# per-comment rather than a per-occurrence test, V30 by the vocabulary half without the path
+# conjunct. Three of those six have committed mutants below; the other three are wrong fixes
+# nobody has proposed as a shape, and their variants stand as the seeds that would go red.
+expect src/v23_negation.ts \
+                                ok                 "V23 negation denies the deferral"
+expect tests/v24_test_double.py \
+                                ok                 "V24 test double in a test file"
+expect src/v25_neg_word_real_deferral.py \
+                                element1-item-ref  "V25 'not yet' is deferral vocabulary"
+expect tests/v26_test_real_deferral.py \
+                                element1-item-ref  "V26 real deferral in a test file"
+expect src/v27_neg_other_token.py \
+                                element1-item-ref  "V27 negation qualifies another token"
+expect src/v28_neg_after.sh \
+                                element1-item-ref  "V28 negation after the token"
+expect src/v29_two_occurrences.py \
+                                element1-item-ref  "V29 second occurrence is bare"
+expect src/v30_mock_prose_nontest.py \
+                                element1-item-ref  "V30 mock vocabulary, non-test file"
+
 # The exemption pair. V8 satisfies zero elements and must NEVER reach the elements
 # at all; V9 satisfies zero elements at a core-ADJACENT path and must reach them.
 # Drop the exemption and V8 flips to element1-item-ref. Widen it to all of
@@ -275,10 +305,28 @@ fi
 # The `cmp -s` guard below turns a sed that stopped matching into a loud BAD rather than a
 # silent survival, which is what happened to the first two of these when the marker set
 # split: both were keyed on a `STUB_MARKER=` line that no longer exists.
+#
+# TWO OF THESE WERE RE-ANCHORED WHEN THE CARVE-OUTS LANDED, AND BOTH WOULD OTHERWISE HAVE GONE
+# DEAD RATHER THAN WRONG. `prose-gate-on-raw-line` was keyed on the exact text of the marker
+# gate's condition, which the carve-outs edit — the `cmp -s` guard reports that as BAD, which
+# reads as a regression in the change under test rather than as a lost anchor. And
+# `quote-guard-dropped` was keyed on `case "$pre" in`, a spelling the negation loop's
+# occurrence walk now also uses: a mutant matching TWO lines silently tests two properties at
+# once and its kill belongs to neither. It is anchored on the QUOTE CLASS instead, which only
+# the quote guard carries.
+#
+# TWO OF THE FOUR NEW MUTANTS MOVE A SECOND CELL, and both overlaps are real rather than
+# entangled — measured by profiling every seeded variant against an unmutated control.
+# `carve-outs-disarmed` removes BOTH carve-outs, so V23 and V24 are its subject together.
+# `negation-window-not-adjacency` moves V25 and V27, and both are genuinely acquitted by a
+# boundary-only negation: V25 owns the kill because strict adjacency is what it exists to
+# force, and V27 stands down for it. The other nine each move exactly one.
 MUT_NAME=(
   phase-alternative-restored phase-marker-dropped absence-widened
   notimplementederror-dropped prose-marker-unbounded prose-gate-on-raw-line
   comment-openers-emptied quote-guard-dropped
+  negation-window-not-adjacency tests-path-skipped
+  test-vocab-without-path-conjunct carve-outs-disarmed
 )
 MUT_SED=(
   "s@^CODE_MARKER='.*'\$@CODE_MARKER='(NotImplementedError|Phase [0-9])'@"
@@ -286,18 +334,26 @@ MUT_SED=(
   "s@^PHASE_ABSENCE='.*'\$@PHASE_ABSENCE='.'@"
   "s@^CODE_MARKER='.*'\$@CODE_MARKER='NotImplementedErrorThatCannotOccur'@"
   "s@^PROSE_MARKER='.*'\$@PROSE_MARKER='(stub|TODO|FIXME|wired later)'@"
-  's@^      if ! { \[ -n "\$ctext" \] && \[\[ \$ctext =~ \$PROSE_MARKER \]\]; }; then$@      if ! [[ $line =~ $PROSE_MARKER ]]; then@'
+  's@^      if ! { \[ -n "\$ctext" \] && \[\[ \$ctext =~ \$PROSE_MARKER \]\] && prose_marker_live "\$ctext" "\$testctx"; }; then$@      if ! [[ $line =~ $PROSE_MARKER ]]; then@'
   "s@^COMMENT_OPENERS='.*'\$@COMMENT_OPENERS='#'@"
-  's@^    case "[$]pre" in .*$@    :@'
+  's@^    case "[$]pre" in \*\[.*\]\*) continue ;; esac$@    :@'
+  "s@^STUB_NEGATION='.*'\$@STUB_NEGATION='(^|[^[:alnum:]_])([Nn]o|[Nn]ot|[Nn]on|[Nn]ever)([^[:alnum:]_]|\$)'@"
+  's@^      if \[ -n "\$ctext" \] && test_path "\$rel" && vocab_near "\$i"; then testctx=1; fi$@      if [ -n "$ctext" ] \&\& test_path "$rel"; then testctx=1; fi@'
+  's@^      if \[ -n "\$ctext" \] && test_path "\$rel" && vocab_near "\$i"; then testctx=1; fi$@      if [ -n "$ctext" ] \&\& vocab_near "$i"; then testctx=1; fi@'
+  's@^      if ! { \[ -n "\$ctext" \] && \[\[ \$ctext =~ \$PROSE_MARKER \]\] && prose_marker_live "\$ctext" "\$testctx"; }; then$@      if ! { [ -n "$ctext" ] \&\& [[ $ctext =~ $PROSE_MARKER ]]; }; then@'
 )
 MUT_PROBE=(
   src/v13_phase_prose_docstring.py src/v14_phase_deferral.py src/v16_phase_section_label.py
   src/v15_notimplemented_bare.py src/v18_comment_substring.py src/v17_code_bare_stub.py
   src/v21_slashslash_comment.js src/v22_quoted_opener.sh
+  src/v25_neg_word_real_deferral.py tests/v26_test_real_deferral.py
+  src/v30_mock_prose_nontest.py src/v23_negation.ts
 )
 MUT_WANT=(
   element1-item-ref ok element1-item-ref
   ok element1-item-ref element1-item-ref
+  ok element1-item-ref
+  ok ok
   ok element1-item-ref
 )
 MUT_WHY=(
@@ -309,9 +365,13 @@ MUT_WHY=(
   "V17 — a variable named 'stub' is a finding again the moment the marker is read off the raw line"
   "V21 — a // comment stops being read the moment the opener set is narrowed to #"
   "V22 — an opener inside a string literal becomes a comment the moment the quote guard goes"
+  "V25 — 'not yet done: stub, wire later' is acquitted the moment the negation stops requiring strict adjacency; it is a REAL deferral, and the loose form was built first and refuted here"
+  "V26 — a real deferral in a test file is acquitted the moment the path alone decides, with no vocabulary conjunct"
+  "V30 — prose ABOUT a mock in production code is acquitted the moment the vocabulary alone decides, with no path conjunct"
+  "V23 — the consumer's negation site is a finding again the moment both carve-outs are removed, which is the state this change replaced"
 )
 
-for i in 0 1 2 3 4 5 6 7; do
+for i in 0 1 2 3 4 5 6 7 8 9 10 11; do
   label="${MUT_NAME[$i]}"; copy="$MUT/$label.sh"
   sed "${MUT_SED[$i]}" "$AUDIT" > "$copy" 2>/dev/null
   # `cmp -s` first: a sed that matched nothing produces an unmutated copy, which answers
@@ -331,7 +391,7 @@ done
 
 echo
 if [ "$fails" -eq 0 ]; then
-  echo "PASS  check-15-bypass: 22 variants correct against the shipping validator. Each"
+  echo "PASS  check-15-bypass: 30 variants correct against the shipping validator. Each"
   echo "      adversary is rejected on its intended element — absent item, CLOSED item, no"
   echo "      file:line, digitless file ref, and element 4's two floors separately (a"
   echo "      padded reason under density, a short reason under length) — the honest stub"
@@ -348,8 +408,14 @@ if [ "$fails" -eq 0 ]; then
   echo "      comment, while a bare marker in a leading comment and one in a trailing //"
   echo "      comment are both still caught. The three non-element assertions hold too:"
   echo "      the exit mapping separates audited-nothing from clean and from a finding,"
-  echo "      and the run reports what it looked at. Eight mutants prove the phase rule's"
-  echo "      three lines and the prose gate's four load-bearing."
+  echo "      and the run reports what it looked at. A 'stub' inside a comment holds in both"
+  echo "      directions too: a comment DENYING a deferral and one naming a test double in a"
+  echo "      test file beside mock vocabulary are ignored, while six one-property-short"
+  echo "      neighbours are still caught — deferral vocabulary that is not a denial, a real"
+  echo "      deferral in a test file with no mock vocabulary, a negation qualifying another"
+  echo "      noun, a negation after the token, a second bare occurrence, and mock prose in a"
+  echo "      file that is not a test. Twelve mutants prove the phase rule's three lines, the"
+  echo "      prose gate's four, and the two carve-outs' four load-bearing."
   exit 0
 fi
 echo "FAIL  check-15-bypass: $fails assertion(s) wrong." >&2
