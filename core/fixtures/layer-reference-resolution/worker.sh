@@ -54,20 +54,31 @@ m="$work/mutant.sh"
 # a fully SERIAL run reported 2 in flight. The marker is presence, not time — a live marker
 # file per running worker, counted while this one is running, so an interval that merely
 # ABUTS another cannot be mistaken for one that overlaps it.
-# AND A MARKER FILE IS NOT A LIVE WORKER. Measured on the second repair: seeding five stale
-# markers made a fully SERIAL dispatch report 6 in flight and PASS, because counting FILES
-# counts whatever was left behind — by a killed worker, or by anything else that wrote there.
-# The marker's name is its PID and the count admits only PIDs that are still running, so a
-# leftover from a dead process cannot inflate it. `kill -0` tests existence, sends no signal.
+# AND A MARKER FILE IS NOT A LIVE WORKER, WHICH TOOK THREE CUTS TO STATE CORRECTLY. Each wrong
+# version counted something ADJACENT to "a peer worker is running right now":
+#
+#   counting FILES        — a killed worker's leftover inflates it. Measured: five seeded
+#                           stale markers made a SERIAL dispatch report 6 and PASS.
+#   PID is LIVE           — closes the DEAD-pid hole and not the LIVE-pid one. Measured: one
+#                           marker named with run.sh's own pid, alive by construction for the
+#                           whole run, made a SERIAL dispatch report 2 and PASS.
+#   PID is live AND MINE  — this. A marker counts only if it carries the run-scoped nonce
+#                           run.sh generated for THIS dispatch, so neither a leftover from an
+#                           earlier run nor a file named for any other live process qualifies.
+#
+# The nonce is not a secret and does not need to be: its whole job is to make the marker's
+# identity PROVABLE rather than inferred from a name anything can choose.
 inflight_dir="$outdir/.inflight"
 mkdir -p "$inflight_dir"
-: > "$inflight_dir/$$"
+printf '%s\n' "${MUT_NONCE:?worker: missing MUT_NONCE}" > "$inflight_dir/$$"
 peers=0
 for _p in "$inflight_dir"/*; do
-  [ -e "$_p" ] || continue
+  [ -f "$_p" ] || continue
   _pid="${_p##*/}"
   case "$_pid" in ''|*[!0-9]*) continue ;; esac
-  kill -0 "$_pid" 2>/dev/null && peers=$((peers+1))
+  kill -0 "$_pid" 2>/dev/null || continue          # not a live process
+  grep -qxF "$MUT_NONCE" "$_p" 2>/dev/null || continue   # live, but not one of MY peers
+  peers=$((peers+1))
 done
 
 report() {

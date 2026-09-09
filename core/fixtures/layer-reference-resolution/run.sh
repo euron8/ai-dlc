@@ -218,6 +218,12 @@ rm -f "$DOMAIN.bak" "$CONS/.claude/skills/ai-dlc/extensions/roles/dev.md.bak"
 MUT_DIR="$ROOT/mutants"
 mkdir -p "$MUT_DIR"
 MUT_JOBS="6"
+# THE RUN-SCOPED NONCE THAT MAKES AN IN-FLIGHT MARKER PROVABLE. Every worker writes it into
+# its own marker and counts only markers carrying it, so the concurrency arm below counts
+# peers of THIS dispatch rather than any live process that happens to have a file named for
+# its pid. `worker.sh`'s header records the two wrong versions this replaces.
+MUT_NONCE="$$-$(date +%s)-$RANDOM"
+export MUT_NONCE
 : > "$ROOT/mutant-list"
 
 mk_mutant() { # mk_mutant <label> <sed-expr> <expected-vector>
@@ -533,16 +539,20 @@ else
   # dispatch. This counts workers whose [start,end] intervals OVERLAP, which is a property of
   # the run rather than of a variable, and `consumer-suite-pool/run.sh:274` is the precedent.
   #
-  # The floor is 2, not $MUT_JOBS: a loaded box may never place 6 in flight at once, and an
-  # arm that demanded 6 would fail for a reason that is not a regression. 2 is what separates
-  # a pool from a serial loop, which is the property being asserted.
+  # THE FLOOR IS 4, AND 2 WAS THE WRONG NUMBER FOR A NAMED REASON. "The pool ran concurrently"
+  # and "the pool ran at the width this release measured" are two claims, and a floor of 2
+  # makes only the first: measured, `xargs -P 2` reports 2 in flight and PASSES while costing
+  # 72.0s against the pool's 45.5s — a width regression eating more than half of what this
+  # change bought, shipping green. The floor cannot be $MUT_JOBS either, because a loaded box
+  # may never place all 6 at once and that failure would not be a regression. 4 refuses -P 2
+  # and -P 3 while leaving headroom for a box that never schedules the full 6.
   max_inflight="$(
     for _lbl in $(cat "$ROOT/mutant-list"); do
       [ -f "$MUT_DIR/$_lbl" ] || continue
       sed -n 's/^inflight \([0-9]*\)$/\1/p' "$MUT_DIR/$_lbl"
     done | sort -n | tail -1
   )"
-  [ "${max_inflight:-0}" -ge 2 ] \
+  [ "${max_inflight:-0}" -ge 4 ] \
     && ok "self-probe: $max_inflight worker(s) observed in flight at once — the pool ran concurrently, read from the workers' own stamps and not from MUT_JOBS" \
     || bad "self-probe: max ${max_inflight:-0} worker(s) in flight — the mutants ran SERIALLY and this fixture is the suite pole again, whatever MUT_JOBS says"
 
