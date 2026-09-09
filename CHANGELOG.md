@@ -15,6 +15,83 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.542.0] - 2026-09-09
+
+### A story's sprint is recovered from the file before it is refused, and an unreadable header refuses instead of guessing (`PC-S309-STORY-NO-SPRINT-REMEDY-IS-RENAME-ONLY-WHILE-THE-FIXTURE-RATIONALE-CLAIMS-OUT-OF-BAND-DERIVATION`)
+
+`migrate-artifact-paths.sh` refused every legacy story whose path named no sprint and told the
+operator its only remedy was a RENAME. A consumer's fixture rationale said the opposite — that a
+real migration derives the sprint out of band — and the two accounts had contradicted each other
+across two trees for several releases.
+
+**The ground truth refutes the tool, not the rationale.** The consumer's own operator resolved all
+23 of these files, and `git show --numstat -M` over that commit reports every one as a pure
+directory move: 0 insertions, 0 deletions, basename identical. Not one was renamed. Controls in the
+same parse: 36 rows carry non-zero insertions and 72 rows do rename a basename, so the 23 zeros
+discriminate.
+
+The migration now reads the file's own `**Sprint:** <N>` header, then the basename's leading number,
+and reports every recovery under a `SPRINT RECOVERED` block naming the channel per file — a
+recovered sprint is the script's claim rather than something the path stated, so it is auditable
+rather than silent. Against the operator's placements: **19 correct, 0 wrong, 4 refused** of 23.
+Consumer-wide the migration moves 970 files instead of 951 and refuses 79 instead of 98, with the
+75 non-story refusals byte-identical and **0 newly refused**.
+
+**A header the tool cannot parse now REFUSES rather than falling through.** The first cut accepted
+only a bare digit, and the reference consumer spells 46 of its headers `**Sprint:** S303`. On those
+the header read came back empty and the basename won — placing `bug-124-deployed-range.md`, whose
+header says sprint 270, into `s124/`, which is its carry-over ITEM number. That is worse than the
+refusal it replaced, and it was found by an adversarial review of a branch whose gate was green.
+The grammar now takes `[Ss]?[0-9]+`, and a `**Sprint:**` line that is present but unparseable
+(`53-54`, `TBD`, the `[sprint ID/name]` template placeholder, `0`) is a refusal — the channel has an
+explicit "spoke but unreadable" state rather than treating it as silence. `007` canonicalises to
+`s7` so one sprint cannot own two slots.
+
+**History is not a channel, and the reason is measured.** At the pre-migration ref `git log --follow`
+and plain `git log` return the same oldest commit for all 23 files: the renames that make `--follow`
+differ are the ones the migration itself creates, so following buys nothing where it would run, and
+after a migration it crosses the earlier rename and answers with a stale sprint. Both channels read
+only the file's own bytes and name, neither of which `git mv` alters. What this cannot catch is a
+header that is itself wrong — a story copied from another sprint whose header was never updated —
+which is why recovery is reported rather than silent.
+
+The refusal text, `validate-artifact-paths.sh`'s sibling string and `artifact-path-grammar.md` all
+state the same account. A story whose sprint is genuinely underivable is still refused, and the
+message now says what was tried instead of prescribing a rename.
+
+### Check 5 stops demanding visual evidence for a `web/**` diff that is entirely test files (`PC-S309-VALIDATE-MANDATORY-RULES-CHECK5-TEST-ONLY-WEB-DIFF-FALSE-FAIL`)
+
+`validate-mandatory-rules.sh` Check 5 FAILed whenever a sprint's diff touched any `web/**` path
+without playwright or `USER-CONFIRMED` evidence in the gate log. A sprint whose entire `web/**` diff
+was one test file — no source change, no rendering change — therefore blocked its own retro, and
+`deploy-validate.md` had already correctly recorded `is_ui_epic: false` for it. The two cannot
+agree today: `is_ui_epic` appears in 5 core step and role files and **0** scripts, so that
+determination has no channel by which to reach Check 5.
+
+The check now skips only when EVERY changed `web/**` file carries a `*.test.*` or `*.spec.*`
+suffix, and says `test-only` in its skip reason so an operator can tell it from the pre-existing
+"no web changes" skip. **The rule is keyed on the suffix and never on the containing directory**,
+which is measured rather than chosen: all 12 of the consumer's playwright e2e specs live under
+`web/tests/e2e/` and all 12 carry `.spec.`, so a directory rule would silently acquit a diff that is
+entirely rendering tests, while exactly one file sits under a tests directory with no suffix and
+must keep firing.
+
+Three further defects were found by adversarial review after the gate was green. The enumeration was
+truncated at 20 paths, so a 22-file diff whose only source file sorted past position 20 was acquitted.
+The pathspec's bare `web/**` glob was asserted by no fixture world, so a narrowing to
+`web/src/**` + `web/tests/**` passed every assertion while `web/index.html` skipped as "no web
+changes". And `git diff` detects renames by default, so `git mv Gauge.jsx Gauge.test.jsx` enumerated
+as a single test path and acquitted a diff that DELETED a rendered component — `--no-renames` closes
+it, and costs nothing: of 365 web-touching consumer commits, 10 enumerate differently and the
+acquitted population is 26 either way.
+
+**What this deliberately acquits:** a diff that is entirely `.spec.` end-to-end specs now skips a
+gate whose subject is rendering. On the consumer's merged history that has never occurred — 0 of the
+26 all-test-suffix commits bear an e2e spec, against a control of 8 commits touching `web/tests/e2e/`
+at all — but across all refs 10 such commits exist, none an ancestor of `main`. The acquittal is real
+on branches and not on merged history, and the fixture asserts it as a SKIP so it is stated rather
+than hidden.
+
 ## [0.541.0] - 2026-09-09
 
 ### The suite pole scores its mutants under an inner pool, and the filed remedy — sharding — was refuted by measuring the fixture (`BL-088`)
