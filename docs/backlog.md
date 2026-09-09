@@ -4124,12 +4124,27 @@ is the 23 currently-guarded sites, so it must key on the GUARD, not on the call,
 must be measured before it ships. (3) Nothing keyed on `core.bare` itself: a check for a state
 whose cause is unknown would fire on the symptom and teach nobody anything.
 
-**Stated limit of the receipt.** It closes when the unguarded `cd` at `check-1c-bypass/seed.sh`
-is guarded. That is remedy (1) only. It says nothing about the incident, which is not mechanically
-detectable from this tree, and it must NOT be read as evidence that the `core.bare` flip is
-understood or fixed.
+**THE ENTRY NAMED ONE UNGUARDED SITE AND THERE WERE SIX, ONE OF WHICH IS LIVE.** Re-derived at
+close over tracked `*.sh`: `^[[:space:]]*cd [^|&;]*$`, comments excluded, returns exactly SIX
+lines, every one in a fixture script — `artifact-path-conformance/seed.sh:39`,
+`artifact-path-migration/seed.sh:23`, `check-17-bypass/run.sh:240`, `check-17-bypass/run.sh:288`,
+`check-1c-bypass/seed.sh:49` and `retired-layer-passage/seed.sh:25`. Control in the same run: 30
+guarded `cd … ||`/`&&` lines. **The paragraph above's reasoning that `set -euo pipefail` makes the
+named site inert does not cover the pair it never looked at.** `check-17-bypass/run.sh` sets
+`set -uo pipefail` with NO `-e`, and both its `cd`s sit inside `( … )` subshells directly above
+`git init -q .`, `git config user.email` and `git config user.name`, with the subshell's output
+sent to `/dev/null` and its status unread. Demonstrated on a throwaway sandbox in that exact
+shape, target absent: the unguarded form wrote `user.email` into the SURROUNDING repository and
+the subshell still exited 0, so nothing reported; guarded `|| exit 2` it exits 2, the caller
+reports, and neither key is written.
 
-verify: sh f=core/fixtures/check-1c-bypass/seed.sh; [ -f "$f" ] || exit 9; n=$(grep -cE '^[[:space:]]*cd "[^"]+"[[:space:]]*$' "$f") || n=0; [ "$n" -eq 0 ]
+**Stated limit.** This closes remedies (1) and (2). It says nothing about the incident: the
+writer of `core.bare = true` remains unidentified and this must NOT be read as evidence that the
+flip is understood or fixed. The receipt was rewritten at close — the original closed on remedy
+(1) alone and was satisfiable by DELETING the `cd` line, so it now drives the shipping arm
+against a seeded offender under `mktemp` and then over the real corpus.
+
+verify: sh v="scripts/validate-shell-portability.sh"; [ -f "$v" ] || exit 9; p="$(mktemp -d)" || exit 9; mkdir -p "$p/scripts" "$p/core/skills" "$p/core/fixtures/probe-unit" || exit 9; echo 0.0.0 > "$p/VERSION"; cp "$v" "$p/scripts/" || exit 9; printf '#!/usr/bin/env bash\necho clean\n' > "$p/scripts/clean.sh"; printf '# clean\n' > "$p/core/skills/clean.md"; printf '#!/usr/bin/env bash\nW="$(mktemp -d)"\ncd "$W"\ngit init -q .\n' > "$p/core/fixtures/probe-unit/seed.sh"; ( cd "$p" && git init -q . && git add -A ) >/dev/null 2>&1 || exit 9; o="$( cd "$p" && bash scripts/validate-shell-portability.sh 2>&1 </dev/null )"; r=$?; rm -rf "$p"; case "$o" in *"S11: an UNGUARDED"*) : ;; *) exit 1 ;; esac; [ "$r" -ne 0 ] || exit 1; bash "$v" --quiet >/dev/null 2>&1
 
 
 ## BL-195 — Check 2's suppression-lifetime arm reads a verdict the CURRENT gate has not yet written, and all four candidate remedies are refuted by measurement

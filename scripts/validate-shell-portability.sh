@@ -210,6 +210,42 @@ S10_SKIP="re\\.[a-z]+\\("
 S10_WHY="a MULTIBYTE character inside a bracket class in a shell, awk, sed or grep expression. Under the C locale -- every CI runner with LANG unset, every \`env -i\` -- the class holds the character's BYTES, not the character: a match lands on its last byte, a strip leaves the other two behind in the extracted value, and the value joins against nothing. Measured: \`[—–-]\` split every \`**Suppresses:**\` id in the suppression-lifetime validator so no SUPPRESSED carve-out existed under \`env -i\`. Spell it as an ALTERNATION -- \`(—|–|-)\`, \`(\\\\.|—)\` -- which is a byte sequence under both locales. The alternation CARRIES a \`|\`: if the expression is later interpolated into a \`sed s|…|…|\`, pick another delimiter (measured: relabel-extension-checks.sh's \`s|(\${anchor_at})|…|\` refused the pattern and wrote nothing)."
 S8_PAT="(show|cat-file -p|ls-tree|archive|diff)[[:space:]]+\\\\?\"?<[^>]+>:"
 S8_WHY="a git rev-path in shipped instruction text whose ref placeholder is not BRACED. A reader who binds the ref to a variable and pastes this into zsh loses the character after the colon: \`:c\` and \`:t\` are history modifiers that consume it, so \`git show \"\$THEIRS:templates/x\"\` reports \`fatal: ambiguous argument 'ca1fb6eemplates/x'\` -- and any \`>\` redirect in the same line still creates the target as a 0-byte file that the next command reads and reports on. QUOTING DOES NOT FIX IT; only the braces do. Render it \`git show \"\${theirs}:<path>\"\`."
+# S11 IS THE ONE ARM HERE WHOSE FAILURE REACHES OUTSIDE THE PROCESS, and its corpus is
+# FIXTURE shell rather than every `.sh`. A fixture seed's first act is to enter a sandbox it
+# just built and then run repo-mutating git; if the `cd` fails, every one of those commands
+# resolves against the PROCESS cwd instead. The Bash tool's working directory persists across
+# calls and a linked worktree exports `GIT_DIR` absolute, so the process cwd at that moment is
+# routinely the real repository. MEASURED on a throwaway sandbox, the shipped subshell shape
+# with the `cd` target absent: unguarded, `git config user.email` landed in the SURROUNDING
+# repo and the subshell exited 0, so nothing reported; guarded `|| exit 2`, the subshell exits
+# 2, the caller reports, and neither key is written.
+#
+# IT DOES NOT ACQUIT ON `set -e`, AND THAT IS THE DESIGN DECISION. Four of the six sites this
+# arm was written against sit in scripts carrying `set -e`, which does abort them today. But
+# `-e` is DISABLED inside a `( … )` whose status is consumed by `||`, inside a condition, and
+# in a function called from one -- so the acquittal would depend on where the line is invoked
+# from, which a line-oriented scan cannot see. The two `check-17-bypass` sites are the proof:
+# that script sets `set -uo pipefail` with NO `-e` and both `cd`s sit in subshells directly
+# above `git init -q .`. Keying on `set -e` would have acquitted the file-level majority and
+# missed the live pair. The guard is a one-token edit, so the arm asks for it unconditionally.
+#
+# FALSE-POSITIVE SET: EMPTY over the fixture corpus, after two narrowings measured on the
+# census that found the six offending lines:
+#   1. an optional leading `(` -- the corpus's dominant guarded idiom is `( cd "$x" && … )`,
+#      and without the paren the anchored pattern cannot see those lines at all. Widening the
+#      anchor took the arm's own matched set from 21 lines to 110, of which the SKIP acquits
+#      104 -- so the paren is what makes the skip load-bearing rather than decorative.
+#   2. the SKIP takes a trailing BACKSLASH as a guard as well as `||`/`&&`. Two sites
+#      (`gate-adjudication-rotate/seed.sh`, `snapshot-archive-rotate/seed.sh`) open
+#      `( cd "$PROJ" \` and put the `&& git init` on the NEXT line. A line-oriented scan
+#      cannot reach that continuation, and reporting the opener would be flagging the correct
+#      form. That is a STATED HOLE, not a claim of coverage: an unguarded `cd "$x" \` followed
+#      by an unrelated continuation is invisible to this arm. Zero such sites exist today
+#      (both continuations are `&&` chains) and a multi-line grammar is its own piece of work.
+# A comment line is skipped, as in S1-S7.
+S11_PAT="^[[:space:]]*(\\([[:space:]]*)?cd[[:space:]]"
+S11_SKIP="cd[[:space:]].*(\\|\\||&&|\\\\$)"
+S11_WHY="an UNGUARDED \`cd\` in a fixture script. If the target does not exist the \`cd\` fails, the script keeps going, and every command below it -- \`git init\`, \`git config\`, \`git commit\` -- resolves against the PROCESS working directory instead of the sandbox. Measured on a throwaway repo: with the target absent, the following \`git config user.email\` overwrote the SURROUNDING repository's value and the subshell still exited 0, so nothing reported it. Under a linked worktree, where git exports \`GIT_DIR\` absolute, that surrounding repository is the real one. Write \`cd \"\$x\" || exit 2\` (or \`( cd \"\$x\" && … )\`), and where the subshell's output is discarded, read its exit status at the closing paren."
 
 # Only S1 subtracts. Declared explicitly rather than defaulted in a loop, because `set -u`
 # turns a missing one into an abort mid-scan, and an aborted scan prints fewer findings than
@@ -222,7 +258,7 @@ S2_SKIP=""; S3_SKIP=""; S4_SKIP=""; S5_SKIP=""; S6_SKIP=""; S8_SKIP=""; S9_SKIP=
 # lands and an awk backreference in the same file is still caught.
 S7_SKIP="re\\.g?sub\\("
 
-ARMS="S1 S2 S3 S4 S5 S6 S7 S8 S9 S10"
+ARMS="S1 S2 S3 S4 S5 S6 S7 S8 S9 S10 S11"
 
 # Two more per-arm columns, declared for EVERY arm for the reason the SKIP block above gives:
 # under `set -u` a missing one aborts the scan mid-way, and an aborted scan prints FEWER
@@ -237,12 +273,16 @@ ARMS="S1 S2 S3 S4 S5 S6 S7 S8 S9 S10"
 # WRONG for S8, whose whole subject is text a human copies -- a rev-path rendered inside a
 # comment is pasted exactly as readily as one rendered in a heredoc, and two of the sites that
 # motivated this arm were comments. `keep` scans them.
+#
+# `fixture` is `git ls-files 'core/fixtures/*/*.sh'` -- S11's subject is a fixture SEED's
+# sandbox entry, and the `scripts/` validators it would otherwise scan resolve their own root
+# by walking up for `VERSION` rather than by entering a directory they built.
 S1_CORPUS=shell; S2_CORPUS=shell; S3_CORPUS=shell; S4_CORPUS=shell
 S5_CORPUS=shell; S6_CORPUS=shell; S7_CORPUS=shell; S8_CORPUS=instr
-S9_CORPUS=shell; S10_CORPUS=shell
+S9_CORPUS=shell; S10_CORPUS=shell; S11_CORPUS=fixture
 S1_COMMENTS=skip; S2_COMMENTS=skip; S3_COMMENTS=skip; S4_COMMENTS=skip
 S5_COMMENTS=skip; S6_COMMENTS=skip; S7_COMMENTS=skip; S8_COMMENTS=keep
-S9_COMMENTS=skip; S10_COMMENTS=skip
+S9_COMMENTS=skip; S10_COMMENTS=skip; S11_COMMENTS=skip
 
 # Corpus: every tracked shell file except this one and its own mutation battery.
 #
@@ -263,10 +303,11 @@ S9_COMMENTS=skip; S10_COMMENTS=skip
 # `git ls-files 'core/*'`: the battery lives UNDER `core/`, so an S8 offender seeded there
 # would pin this arm non-zero for as long as the fixture exists.
 SELF_BATTERY="core/fixtures/$(basename "$SELF" .sh | sed 's/^validate-//')/"
-corpus() { # corpus shell|instr
+corpus() { # corpus shell|instr|fixture
   case "$1" in
     shell) git ls-files '*.sh' ;;
     instr) git ls-files 'core/*' ;;
+    fixture) git ls-files 'core/fixtures/*/*.sh' ;;
     *) return 1 ;;
   esac | grep -vxF "$SELF" | grep -v "^${SELF_BATTERY}"
 }
@@ -305,6 +346,7 @@ git -C <dist> show "<theirs>:templates/settings.json.template" > "$t"
 git grep -nE '\bMODEL_MAX\b' -- core/
 awk '{ sub(/[[:space:]]*[—–-][[:space:]].*$/, "", s) }' f
   /^#{2,4}[ \t]+[0-9]+[ \t]*[.—]/ { print }
+  cd "$REPO"
 BADEOF
 cat > "$probe/good.sh" <<'GOODEOF'
 sed -i.bak 's/a/b/' f && rm -f f.bak
@@ -322,10 +364,18 @@ awk '{ sub(/[[:space:]]*(—|–|-)[[:space:]].*$/, "", s) }' f
 HEAD_RE='^#{2,4}[[:space:]]+[0-9]+[[:space:]]*(\.|—)'
   /^#{2,4}[ \t]+[0-9]+[ \t]*(\.|—)/ { print }
 /usr/bin/grep -E '[[:space:]]' f
+cd "$REPO" || exit 2
+cd "$REPO" && git init -q .
+( cd "$REPO" && git init -q . )
+cd "$(dirname "$0")" || exit 2
+SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
+( cd "$PROJ" \
+  && git init -q . )
 ok "prose naming a class in a message ([…]) is a string, not a class"
     r"^#{2,4}[ \t]+(?:Check[ \t]+)?([0-9]+)[ \t]*[.—]")
 SECTION_RE = re.compile(r'^## Sprint (\d+) [—\-]+ (.+)')
 # mapfile and declare -A and setsid named in a comment are prose, not code
+#   cd "$REPO" named in a comment is prose, not an unguarded chdir
 GOODEOF
 
 for a in $ARMS; do
@@ -344,8 +394,10 @@ done
 # --- the corpus ----------------------------------------------------------------------------
 FILES_shell="$(corpus shell)"
 FILES_instr="$(corpus instr)"
+FILES_fixture="$(corpus fixture)"
 n_shell="$(grep -c . <<<"$FILES_shell" || true)"
 n_instr="$(grep -c . <<<"$FILES_instr" || true)"
+n_fixture="$(grep -c . <<<"$FILES_fixture" || true)"
 n_files="$n_shell"
 # ZERO is the failure, not "few". A threshold tuned to this repo's 325 files would make the
 # guard fire on any legitimately small tree -- including the fixture's own seed, which is how
@@ -354,8 +406,39 @@ n_files="$n_shell"
 # BOTH corpora are guarded, separately. One combined count would let a dead `core/*` listing
 # hide behind a live `*.sh` one, and S8's zero over nothing reads exactly like S8's zero over
 # 510 files -- which is the failure this whole script exists to refuse.
-if [ "${n_shell:-0}" -lt 1 ] || [ "${n_instr:-0}" -lt 1 ]; then
-  err "the corpora are $n_shell shell file(s) and $n_instr core file(s). \`git ls-files\` found nothing to scan on at least one of them, and an empty corpus passes every arm it never ran. Failing closed."
+#
+# THE THIRD CORPUS IS GUARDED SEPARATELY TOO, for the reason the paragraph above gives one
+# more time: `core/fixtures/*/*.sh` is a NARROWER glob than `*.sh`, so a typo in it collapses
+# to nothing while both other counts stay healthy, and S11's zero over nothing is the exact
+# shape of S11's zero over a clean tree.
+#
+# EACH CONDITION NAMES ITS OWN CORPUS, AND THAT IS FORCED BY THE CORPORA NESTING. Once a third
+# corpus exists the three are no longer independent: `core/fixtures/*/*.sh` is a SUBSET of both
+# `*.sh` and `core/*`, so no tree can have `instr` empty while `fixture` is populated. A single
+# disjunction therefore cannot be proven cell-by-cell -- emptying `core/*` trips the `fixture`
+# condition as well, and a mutant that disables the `instr` half still sees the guard refuse,
+# which reads exactly like a load-bearing condition. Three separately-named refusals make the
+# observable WHICH CORPUS IS NAMED rather than merely whether a refusal happened, and that is
+# the only shape the battery can score. `fail=1` either way; the message is the discriminator.
+#
+# `dead_corpus` IS ITS OWN FLAG AND NOT `fail`. `fail` is already 1 when a SELF-PROBE failed,
+# and gating the corpus scan on it would silently stop scanning on a probe failure -- a
+# behaviour change that removes findings and reports the same exit.
+dead_corpus=0
+if [ "${n_shell:-0}" -lt 1 ]; then
+  err "the SHELL corpus is empty. \`git ls-files '*.sh'\` found nothing to scan, and an empty corpus passes every arm it never ran. Failing closed."
+  dead_corpus=1
+fi
+if [ "${n_instr:-0}" -lt 1 ]; then
+  err "the CORE corpus is empty. \`git ls-files 'core/*'\` found nothing to scan, and an empty corpus passes every arm it never ran. Failing closed."
+  dead_corpus=1
+fi
+if [ "${n_fixture:-0}" -lt 1 ]; then
+  err "the FIXTURE shell corpus is empty. \`git ls-files 'core/fixtures/*/*.sh'\` found nothing to scan, and an empty corpus passes every arm it never ran. Failing closed."
+  dead_corpus=1
+fi
+if [ "$dead_corpus" -ne 0 ]; then
+  : # a dead corpus is already reported above; scanning it would print a clean line beside the refusal
 else
   for a in $ARMS; do
     eval "p=\$${a}_PAT"; eval "w=\$${a}_WHY"; eval "sk=\$${a}_SKIP"
@@ -370,6 +453,6 @@ else
 fi
 
 if [ "$fail" -eq 0 ]; then
-  say "validate-shell-portability: PASS -- $n_shell shell file(s) + $n_instr core file(s), 10 arms (S1 sed -i, S2 mapfile, S3 declare -A, S4 setsid, S5/S6 backslash-s, S7 awk backreference, S8 unquoted rev-path, S9 git-grep ERE escape, S10 multibyte bracket class), every arm probed in both directions."
+  say "validate-shell-portability: PASS -- $n_shell shell file(s) + $n_instr core file(s) + $n_fixture fixture shell file(s), 11 arms (S1 sed -i, S2 mapfile, S3 declare -A, S4 setsid, S5/S6 backslash-s, S7 awk backreference, S8 unquoted rev-path, S9 git-grep ERE escape, S10 multibyte bracket class, S11 unguarded cd in a fixture script), every arm probed in both directions."
 fi
 exit "$fail"
