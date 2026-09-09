@@ -211,7 +211,12 @@ CONSUMER="${4:?}"
 # THE STAMP IS NOT AMONG THEM. Step 2 rewrites `.claude/.ai-dlc-version` between this gate and
 # the runner by design, so its digest can never survive and it has no core origin to be accepted
 # by the theirs rule either. The reasoning is beside the recording site.
+# ONE TEMP DIRECTORY FOR THE WHOLE RUN, created before the record opens because the record is
+# ASSEMBLED here (see `gate_record_open`) and the differential and the push probe reuse it.
+# `gate_exit_cleanup` removes it — no second `trap … EXIT` anywhere in this file.
+TMP="$(mktemp -d "${TMPDIR:-/tmp}/self-update-gate-XXXXXX")"
 GATE_REC=""
+GATE_REC_FINAL=""
 GATE_REC_DIR="$CONSUMER/_bmad-output/ai-dlc-update"
 
 # THE INPUT BUFFER IS A FILE FOR THE REASON THE RECORD IS. `INVOKED` is walked in a `while … read`
@@ -294,6 +299,21 @@ gate_exit_cleanup() {
       _rec_v=UNDECIDED
     fi
     printf '# verdict: %s\n# rows: %s\n' "$_rec_v" "${_rec_n:-0}" >> "$GATE_REC" 2>/dev/null
+    # THE RECORD REACHES THE CONSUMER ONLY HERE, and the reason is arm P. The record is
+    # assembled under `$TMP` for the whole run; a file under `_bmad-output/ai-dlc-update/` is
+    # untracked and unignored on the reference consumer, and its hook builds the read-set
+    # universe from `git ls-files --others --exclude-standard` — so a record written IN PLACE
+    # before the probe is a changed path in no fixture's read-set, and the hook takes its
+    # run-everything branch on every probe. Measured on a shared clone, one settled tree: 30s
+    # with no record on disk, 257s with one record-shaped file added, 30s again with it removed.
+    # Every claimed warm-cost figure was unreachable by construction until this move.
+    if [ -n "${GATE_REC_FINAL:-}" ]; then
+      if mv "$GATE_REC" "$GATE_REC_FINAL" 2>/dev/null; then
+        GATE_REC="$GATE_REC_FINAL"
+      else
+        printf 'record: could not move %s to %s\n' "$GATE_REC" "$GATE_REC_FINAL" >&2
+      fi
+    fi
   fi
   [ -n "${TMP:-}" ] && rm -rf "$TMP"
   return 0
@@ -320,9 +340,17 @@ emit() {
 gate_record_open() {
   [ -n "${AI_DLC_GATE_IN_SAFE_STOP:-}" ] && return 0
   _rec_p="$GATE_REC_DIR/self-update-gate-$(date -u +%Y%m%dT%H%M%SZ).md"
+  # OPENED IN PLACE TO PROVE IT CAN BE WRITTEN, THEN ASSEMBLED UNDER `$TMP` AND MOVED BACK AT
+  # EXIT. The in-place open is the writability test — the refusal below has to fire NOW, not
+  # at exit when the verdict is already printed. The assembly happens elsewhere for arm P's
+  # reason, stated at the move in `gate_exit_cleanup`: a record sitting under `_bmad-output/`
+  # while the probe runs the consumer's hook is what defeats that hook's read-set skip.
   if mkdir -p "$GATE_REC_DIR" 2>/dev/null && : > "$_rec_p" 2>/dev/null; then
-    GATE_REC="$_rec_p"
-    GATE_IN="${_rec_p}.inputs"
+    rm -f "$_rec_p"
+    GATE_REC_FINAL="$_rec_p"
+    GATE_REC="$TMP/record.md"
+    GATE_IN="$TMP/record.inputs"
+    : > "$GATE_REC"
     : > "$GATE_IN" 2>/dev/null || GATE_IN=""
     {
       echo "# ai-dlc-update step-2 self-update — gate verdict record"
@@ -342,8 +370,9 @@ gate_record_open() {
       echo "# Rows below are byte-identical to this run's stdout, in emission order."
       echo ""
     } >> "$GATE_REC"
-    # STDERR, because stdout is the TSV contract and every caller parses it by field.
-    printf 'record: %s\n' "$GATE_REC" >&2
+    # STDERR, because stdout is the TSV contract and every caller parses it by field. The
+    # FINAL path is named, because that is where the reader will find it.
+    printf 'record: %s\n' "$GATE_REC_FINAL" >&2
   else
     # AN UNRECORDED AUTONOMOUS WRITE IS THE DEFECT, so a record that cannot be written is a
     # verdict this gate must not return OK on. `self-update-fixtures.sh` refuses without a
@@ -793,10 +822,15 @@ EOF
 # FED THE LINE STEP 2'S PUSH WILL SEND. A pre-push hook reads git's ref protocol on stdin and
 # the shipped hook's arm 0 judges it; a probe with empty stdin leaves that arm judging nothing
 # — the shipped hook says so in its own words — and an arm judging nothing reads like an arm
-# finding nothing wrong. The line names a NEW branch under `ai-dlc-update/self-update-`, at
-# the consumer's HEAD, with the remote side all zeros, which is the shape of the push this
-# cycle makes. Stdin is a FILE, not a pipe: a hook that never reads stdin would hand the
-# writer an EPIPE and `pipefail` would report the writer's 141 as the hook's verdict.
+# finding nothing wrong. The line's local side is the CURRENT BRANCH at HEAD, which any hook
+# can resolve; its remote side is the NEW branch under `ai-dlc-update/self-update-` with a zero
+# sha, which is what git sends for a branch the remote lacks. The hook gets the remote's NAME
+# and URL as `$1` and `$2`, as git passes them. Stdin is a FILE, not a pipe: a hook that never
+# reads stdin would hand the writer an EPIPE and `pipefail` would report the writer's 141 as
+# the hook's verdict. Measured against a real push to a local bare remote with a hook that
+# dumps its arguments, environment, cwd and stdin: identical on `$1`, `$2`, argc and cwd;
+# differs in stdin being a file, the ref line, and git's `GIT_PREFIX`/`GIT_EXEC_PATH`, none of
+# which the shipped hook reads.
 #
 # ON THE TREE AS IT STANDS, BEFORE ANYTHING IS WRITTEN. That is the only tree this gate is
 # allowed to read, and it is the right one: a refusal here is PRE-EXISTING and the pull did
@@ -830,15 +864,16 @@ EOF
 # push viability is a property of the consumer's tree, not of the range, so it is the same
 # answer at every candidate ref, and the walk runs one classify per release.
 #
-# COST, MEASURED ON THE REFERENCE CONSUMER'S OWN HOOK, fed this line, from a clone: 303s with
-# no verified-state record, 244s on the next run (its read-set map could not attribute the
-# changed paths), 28s once the skip engaged. The push this cycle makes pays the same hook, so
-# the probe adds one hook run per pull and removes the one that would have stranded a branch.
-#
-# ONE TEMP DIRECTORY FOR THE WHOLE RUN, created here because this is the first arm that needs
-# one; the differential below reuses it. `gate_exit_cleanup` removes it — no second
-# `trap … EXIT` anywhere in this file, for the reason the record's header gives.
-TMP="$(mktemp -d "${TMPDIR:-/tmp}/self-update-gate-XXXXXX")"
+# COST, MEASURED ON THE REFERENCE CONSUMER'S OWN HOOK, fed this line, from a shared clone:
+# 303s with no verified-state record, 244s on the next run (its read-set map could not
+# attribute the changed paths), 30s once the skip engaged. THE THIRD FIGURE WAS UNREACHABLE
+# UNTIL THE RECORD MOVED OUT OF THE TREE: an earlier cut wrote the verdict record in place
+# under `_bmad-output/` BEFORE this probe, the hook's read-set skip saw an untracked path no
+# fixture reads, and every probe ran all 179 fixtures — 287s, 257s, 247s across three runs on a
+# settled tree where the bare hook took 30s. The record is now assembled under `$TMP` and
+# moved into the consumer at exit; the reasoning is at that move. The push this cycle makes
+# pays the same hook, so the probe adds one hook run per pull and removes the one that would
+# have stranded a branch.
 if [ -z "${AI_DLC_GATE_IN_SAFE_STOP:-}" ] \
    && git -C "$CONSUMER" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
    && [ -n "$(git -C "$CONSUMER" remote 2>/dev/null)" ]; then
@@ -855,13 +890,42 @@ if [ -z "${AI_DLC_GATE_IN_SAFE_STOP:-}" ] \
       emit SELF-UPDATE-UNDECIDED "pre-push" "HEAD does not resolve to a commit on this consumer, so there is no ref line a push could carry and the hook cannot be asked the question the push would ask."
       exit 0
     fi
+    # THE LOCAL REF IS THE CURRENT BRANCH, WHICH RESOLVES; THE REMOTE REF IS THE NEW BRANCH
+    # STEP 2 WILL PUSH TO. A first cut named a branch that did not exist on both sides, and a
+    # hook that resolves each pushed local ref (`git rev-parse --verify "$lr"`), or that
+    # requires it to be the checked-out branch, refused the probe while the real push
+    # succeeded. Step 2's push is `git push -u <remote> <branch>` with that branch checked out;
+    # at probe time it does not exist yet, so the current branch stands in for it on the local
+    # side — every property such a hook can check of a local ref holds for it — and the remote
+    # side carries the new name with a zero sha, which is what git sends for a branch the
+    # remote lacks. A detached HEAD is refused above by the `symbolic-ref` test, since step 1
+    # stops on it too.
+    pp_local="$(git -C "$CONSUMER" symbolic-ref -q HEAD 2>/dev/null)" || pp_local=""
+    if [ -z "$pp_local" ]; then
+      emit SELF-UPDATE-UNDECIDED "pre-push" "HEAD is detached on this consumer, so there is no branch a push could carry. Step 1's preflight stops on this state; a gate asked anyway must not answer OK about a push that cannot be made."
+      exit 0
+    fi
     pp_tv="$(git -C "$DIST" show "${THEIRS}:VERSION" 2>/dev/null | tr -d '[:space:]')"
     pp_ref="refs/heads/ai-dlc-update/self-update-${pp_tv:-theirs}-probe"
-    pp_url="$(git -C "$CONSUMER" remote get-url origin 2>/dev/null)" || pp_url="$(git -C "$CONSUMER" remote 2>/dev/null | head -1)"
+    # THE REMOTE NAME AND URL ARE WHAT GIT PASSES: `$1` is the name, `$2` its URL. A first cut
+    # passed the literal `origin` and, when no remote was so named, a NAME where the URL goes;
+    # measured, a hook branching on `$2` being URL-shaped refused the probe on a consumer whose
+    # remote was `upstream` while its real push succeeded. Step 1 pushes to the current branch's
+    # upstream remote; that remote is taken first, then `origin`, then the first configured.
+    pp_remote="$(git -C "$CONSUMER" rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null | sed 's|/.*||')" || pp_remote=""
+    [ -n "$pp_remote" ] && git -C "$CONSUMER" remote get-url "$pp_remote" >/dev/null 2>&1 || pp_remote=""
+    [ -n "$pp_remote" ] || { git -C "$CONSUMER" remote get-url origin >/dev/null 2>&1 && pp_remote=origin; }
+    [ -n "$pp_remote" ] || pp_remote="$(git -C "$CONSUMER" remote 2>/dev/null | head -1)"
+    pp_url="$(git -C "$CONSUMER" remote get-url "$pp_remote" 2>/dev/null)" || pp_url="$pp_remote"
     pp_in="$TMP/push-probe.in"; pp_out="$TMP/push-probe.out"
-    printf '%s %s %s %s\n' "$pp_ref" "$pp_head" "$pp_ref" "0000000000000000000000000000000000000000" > "$pp_in"
+    printf '%s %s %s %s\n' "$pp_local" "$pp_head" "$pp_ref" "0000000000000000000000000000000000000000" > "$pp_in"
     printf 'push probe: running the pre-push hook git would run (%s); this is the consumer'\''s own gate and can take minutes\n' "$pp_hook" >&2
-    ( cd "$CONSUMER" && "$pp_hook" origin "$pp_url" < "$pp_in" ) > "$pp_out" 2>&1
+    # THE HOOK WRITES INTO `.git/`, AND THAT IS STATED RATHER THAN HIDDEN. The shipped hook
+    # records `.git/ai-dlc-fixture-verified` and `.git/ai-dlc-fixture-durations` on a run, as it
+    # would on the real push; both are untracked, under `.git/`, and are the hook's own state.
+    # The consumer's TREE is not written. The probe is exactly one run of the hook the push
+    # would run, so its side effects are the push's side effects, arriving one step earlier.
+    ( cd "$CONSUMER" && "$pp_hook" "$pp_remote" "$pp_url" < "$pp_in" ) > "$pp_out" 2>&1
     pp_rc=$?
     if [ "$pp_rc" -eq 0 ]; then
       emit SELF-UPDATE-OK "pre-push" "the pre-push hook git runs on this consumer ($pp_hook) exits 0 on the tree as it stands, fed the ref line this cycle's push will send, so the push is not refused locally. A remote-side rejection is outside this gate."

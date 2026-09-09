@@ -48,7 +48,25 @@ because a hook that never reads stdin would hand a pipe's writer an EPIPE.
 
 **Cost, measured on the reference consumer's own hook from a shared clone, fed that line.** 303s
 with no verified-state record, 244s on the next run (its read-set map could not attribute the
-changed paths), 28s once the skip engaged. The push this cycle makes pays the same hook.
+changed paths), then ~30s once its read-set skip engaged. **The warm figure was unreachable in the
+first cut, and the adversarial hand measured why:** the gate opened its verdict record IN PLACE
+under `_bmad-output/` before the probe, that path is untracked and unignored on the reference
+consumer, and the hook's read-set skip saw an untracked path no fixture reads and ran all 179
+fixtures on every probe — 287s, 257s, 247s across three runs on a settled tree where the bare
+hook took 30s. The record is now assembled under the gate's temp directory and moved into the
+consumer at exit; the fixture drives a hook that lists the record directory and refuses if it sees
+a record. Re-measured after the move: 37s on the same clone with the skip engaged.
+
+**Two more of the adversary's findings, both latent on a stock consumer and both fixed.** The
+probe passed the literal `origin` as the hook's first argument and, on a consumer with no remote
+so named, a remote NAME where git passes the URL; a hook branching on either refused the probe
+while the real push succeeded. It now passes the current branch's upstream remote (then `origin`,
+then the first configured) by name and URL, as git does. And the probe's local ref named a branch
+that did not exist; a hook resolving each pushed local ref, or requiring it to be the checked-out
+branch, refused it. The local side is now the current branch at HEAD, the remote side the new
+self-update branch with a zero sha — measured identical to a real push on `$1`, `$2`, argc and cwd
+with a hook that dumps them. The hook's own writes under `.git/` (its verified-state and durations
+records) are stated in the arm's header rather than hidden.
 
 Fixture: `core/fixtures/self-update-gate` gained repository worlds one property apart — armed hook
 green, armed hook red with the shipped hook's own phase grammar, red hook at `.git/hooks/` with no

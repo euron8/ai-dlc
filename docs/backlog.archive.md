@@ -9626,20 +9626,23 @@ the hook with a different ref line, and on an in-sync branch it pushes nothing a
 `git rev-parse --git-path hooks/pre-push`, which honours `core.hooksPath` and the `.git/hooks/`
 shim the reference consumer uses, and skips a hook git would skip — fed the ref line step 2's push
 sends, on the tree as the operator left it, and emits `SELF-UPDATE-DEFER` on script `pre-push` when
-it exits non-zero. Measured cost on the reference consumer's own hook from a clone: 303s cold, 28s
-once its read-set skip engaged.
+it exits non-zero. Measured cost on the reference consumer's own hook from a clone: 303s cold, 37s
+once its read-set skip engaged — reachable only because the record is assembled out of tree.
 
-verify: sh G=core/skills/ai-dlc-update/reconcile/self-update-gate.sh; [ -f "$G" ] || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; R=$(mktemp -d); D="$R/d"; mkdir -p "$D/core/git-hooks"; printf 'x\n' > "$D/core/git-hooks/pre-push"; printf '0.1.0\n' > "$D/VERSION"; git -C "$D" init -q && git -C "$D" add -A && git -C "$D" -c user.email=r@x -c user.name=r commit -qm b || exit 9; B=$(git -C "$D" rev-parse HEAD); printf '0.2.0\n' > "$D/VERSION"; git -C "$D" add -A && git -C "$D" -c user.email=r@x -c user.name=r commit -qm t || exit 9; T=$(git -C "$D" rev-parse HEAD); w() { C="$R/$1"; mkdir -p "$C/.githooks" && git -C "$C" init -q && git -C "$C" -c user.email=r@x -c user.name=r commit -q --allow-empty -m s && git -C "$C" remote add origin "$R/o.git" && mkdir -p "$C/.git/hooks" || return 9; printf '#!/bin/sh\nexit 0\n' > "$C/.githooks/pre-push"; printf '#!/bin/sh\nexit %s\n' "$2" > "$C/.git/hooks/pre-push"; chmod +x "$C/.githooks/pre-push" "$C/.git/hooks/pre-push"; bash "$G" "$D" "$B" "$T" "$C" 2>/dev/null | awk -F'\t' '$2=="pre-push"{print $1; exit}'; }; a=$(w a 1); b=$(w b 0); rm -rf "$R"; [ "$a" = SELF-UPDATE-DEFER ] && [ "$b" = SELF-UPDATE-OK ]
+verify: sh G=core/skills/ai-dlc-update/reconcile/self-update-gate.sh; [ -f "$G" ] || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; R=$(mktemp -d); D="$R/d"; mkdir -p "$D/core/git-hooks"; printf 'x\n' > "$D/core/git-hooks/pre-push"; printf '0.1.0\n' > "$D/VERSION"; git -C "$D" init -q && git -C "$D" add -A && git -C "$D" -c user.email=r@x -c user.name=r commit -qm b || exit 9; B=$(git -C "$D" rev-parse HEAD); printf '0.2.0\n' > "$D/VERSION"; git -C "$D" add -A && git -C "$D" -c user.email=r@x -c user.name=r commit -qm t || exit 9; T=$(git -C "$D" rev-parse HEAD); w() { C="$R/$1"; mkdir -p "$C/.githooks" && git -C "$C" init -q && git -C "$C" -c user.email=r@x -c user.name=r commit -q --allow-empty -m s && git -C "$C" remote add origin "$R/o.git" && mkdir -p "$C/.git/hooks" || return 9; printf '#!/bin/sh\nexit %s\n' "$3" > "$C/.githooks/pre-push"; printf '#!/bin/sh\nexit %s\n' "$2" > "$C/.git/hooks/pre-push"; chmod +x "$C/.githooks/pre-push" "$C/.git/hooks/pre-push"; [ "$4" = hp ] && git -C "$C" config core.hooksPath .githooks; bash "$G" "$D" "$B" "$T" "$C" 2>/dev/null | awk -F'\t' '$2=="pre-push"{print $1; exit}'; }; a=$(w a 1 0 -); b=$(w b 0 0 -); c=$(w c 0 1 hp); rm -rf "$R"; [ "$a" = SELF-UPDATE-DEFER ] && [ "$b" = SELF-UPDATE-OK ] && [ "$c" = SELF-UPDATE-DEFER ]
 
-**Receipt shape.** Two consumers, one property apart: both carry a TRACKED hook that exits 0 and an
-UNARMED-by-`core.hooksPath` hook at `.git/hooks/pre-push`, which is the file git runs. One's exits 1,
-the other's exits 0. The fix is present when the first reads `SELF-UPDATE-DEFER` on script
-`pre-push` AND the second reads `SELF-UPDATE-OK` there. Scored against four non-fixes on the
-release branch: a gate that reads the tracked `.githooks/pre-push` (exits 0 in both worlds, so no
-DEFER — rejected), a gate with no probe (no `pre-push` row — rejected), a gate that runs the hook
-and ignores its exit (OK in both — rejected), and a gate that refuses every consumer (DEFER in
-both — rejected by the second conjunct). The range changes no `core/` path so no differential row
-can supply the DEFER.
+**Receipt shape.** Three consumers. The first two are one property apart: both carry a TRACKED
+hook that exits 0 and an UNARMED-by-`core.hooksPath` hook at `.git/hooks/pre-push`, which is the
+file git runs; one's exits 1, the other's exits 0. The third arms a RED tracked hook through
+`core.hooksPath` with a green `.git/hooks/` copy beside it, so the hook git runs is the tracked one.
+The fix is present when the first reads `SELF-UPDATE-DEFER` on script `pre-push`, the second
+`SELF-UPDATE-OK`, and the third `SELF-UPDATE-DEFER`. Scored against five non-fixes on the release
+branch: a gate that reads the tracked `.githooks/pre-push` (OK in world a — rejected), a gate with
+no probe (no `pre-push` row — rejected), a gate that runs the hook and ignores its exit (OK in a —
+rejected), a gate that refuses every consumer (DEFER in b — rejected), and a gate that hardcodes
+`.git/hooks/pre-push` and ignores `core.hooksPath` (OK in c — rejected; the adversarial hand found
+the two-world receipt accepted this one while the fixture killed it, so the third world was added).
+The range changes no `core/` path so no differential row can supply the DEFER.
 
 ---
 

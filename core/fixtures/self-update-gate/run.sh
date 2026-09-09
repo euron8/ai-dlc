@@ -2004,8 +2004,8 @@ ss_assert "pp-red-record-probe" \
 # THE FED LINE IS THE STEP-2 SHAPE: a new branch under ai-dlc-update/self-update-, at the
 # consumer's HEAD, remote side all zeros. Read off the record's header line.
 ss_assert "pp-red-fed-line" \
-  "$(sed -n 's/^# probe: .* fed: //p' "${pp_red_rec:-/dev/null}" | head -1 | awk -v h="$(git -C "$PP_RED" rev-parse HEAD)" '{ok = ($1 ~ /^refs\/heads\/ai-dlc-update\/self-update-/ && $2 == h && $3 == $1 && $4 ~ /^0+$/); print ok ? "step2-shape" : "wrong:" $0}')" \
-  "step2-shape" "the probe feeds the hook the ref line step 2's push sends -- new self-update branch at HEAD, remote side zeros"
+  "$(sed -n 's/^# probe: .* fed: //p' "${pp_red_rec:-/dev/null}" | head -1 | awk -v h="$(git -C "$PP_RED" rev-parse HEAD)" -v b="$(git -C "$PP_RED" symbolic-ref HEAD)" '{ok = ($1 == b && $2 == h && $3 ~ /^refs\/heads\/ai-dlc-update\/self-update-/ && $3 != $1 && $4 ~ /^0+$/); print ok ? "step2-shape" : "wrong:" $0}')" \
+  "step2-shape" "the probe feeds the hook the ref line step 2's push sends -- the current branch at HEAD on the local side, a new self-update branch with a zero sha on the remote side"
 
 # 3. THE HOOK GIT WOULD RUN, NOT THE TRACKED FILE. Same red body at `.git/hooks/pre-push` with no
 #    core.hooksPath (the reference consumer's shim spelling) still defers; the tracked hook
@@ -2075,6 +2075,51 @@ ss_assert "pp-safe-stop-walk" \
 |rc=0" \
   "the walk's nested classifies skip the probe, so a refusing hook does not empty the candidate set"
 
+# 7. THE RECORD IS NOT IN THE TREE WHILE THE HOOK RUNS. An earlier cut opened the verdict record
+#    under `_bmad-output/` before the probe, and the consumer's hook then saw an untracked path no
+#    fixture reads and ran its whole suite on every probe -- 257s where the settled tree took 30s.
+#    A hook that lists the record directory at run time is the cell: it must see NOTHING there,
+#    and the record must still be on disk, complete, once the gate exits.
+PP_HOOK_LSREC='n=$(ls _bmad-output/ai-dlc-update/self-update-gate-*.md 2>/dev/null | wc -l | tr -d " ")
+echo "records-visible-during-hook=$n"
+[ "$n" -eq 0 ] || exit 4
+exit 0'
+PP_LSREC="$(pp_world lsrec "$PP_HOOK_LSREC" hooksPath yes)"
+ss_assert "pp-record-out-of-tree" \
+  "$(pp_scan "$GATE" "$PP_LSREC")|n=$(vr_n "$PP_LSREC")|$(sed -n 's/^# verdict: *//p' "$(vr_newest "$PP_LSREC")" | head -1)" \
+  "pp=SELF-UPDATE-OK sum=1 ss=1 und=1|n=1|DEFER" \
+  "the hook sees no record file while it runs (it exits 4 otherwise), and exactly one complete record is in the tree afterwards"
+# CONTROL: the same hook, fed the directory with a record-shaped file already in it, exits 4 --
+# so the cell above is the record's absence and not a hook that cannot see the directory.
+ss_assert "pp-record-control" \
+  "$( mkdir -p "$PP_LSREC/_bmad-output/ai-dlc-update" && : > "$PP_LSREC/_bmad-output/ai-dlc-update/self-update-gate-00000000T000000Z.md" \
+      && ( cd "$PP_LSREC" && .githooks/pre-push origin x </dev/null >/dev/null 2>&1 ); echo $? )" "4" \
+  "...and the same hook with a record-shaped file present exits 4, so the probe's hook really can see that directory"
+
+# 8. THE HOOK GETS WHAT GIT PASSES. `$1` is the remote NAME and `$2` its URL; the local ref on
+#    stdin is the CURRENT BRANCH, which resolves. A first cut passed the literal `origin`, a
+#    NAME where the URL goes when no remote was so named, and a local ref that existed nowhere;
+#    a hook branching on any of those refused the probe while the real push succeeded.
+PP_HOOK_ARGS='[ "$1" = "upstream" ] || { echo "arg1=$1"; exit 5; }
+case "$2" in *nowhere-upstream.git) ;; *) echo "arg2=$2"; exit 6 ;; esac
+read -r lref lsha rref rsha
+git rev-parse --verify -q "$lref" >/dev/null || { echo "local ref $lref does not resolve"; exit 7; }
+[ "$lref" = "$(git symbolic-ref HEAD)" ] || { echo "local ref $lref is not the current branch"; exit 8; }
+case "$rref" in refs/heads/ai-dlc-update/self-update-*) ;; *) echo "remote ref $rref"; exit 9 ;; esac
+exit 0'
+PP_UPSTREAM="$(pp_world upstream "$PP_HOOK_ARGS" hooksPath no)"
+git -C "$PP_UPSTREAM" remote add upstream "$PP/nowhere-upstream.git"
+ss_assert "pp-args-as-git" "$(pp_scan "$GATE" "$PP_UPSTREAM")" \
+  "pp=SELF-UPDATE-OK sum=1 ss=1 und=1" \
+  "a hook demanding the remote's name in \$1, its URL in \$2, a resolvable current-branch local ref and a self-update remote ref is satisfied, on a consumer whose only remote is 'upstream'"
+# CONTROL: the same hook fed the first cut's line by hand -- literal origin, a name as the URL, a
+# non-existent local ref -- refuses, so the cell above is the arguments and not a hook that
+# accepts anything.
+ss_assert "pp-args-control" \
+  "$( ( cd "$PP_UPSTREAM" && printf 'refs/heads/ai-dlc-update/self-update-x-probe %s refs/heads/ai-dlc-update/self-update-x-probe 0000000000000000000000000000000000000000\n' "$(git rev-parse HEAD)" \
+        | .githooks/pre-push origin upstream >/dev/null 2>&1 ); echo $? )" "5" \
+  "...and the same hook fed the first cut's arguments exits 5, so the probe's arguments are what satisfies it"
+
 # --- MUTANTS on arm P ---------------------------------------------------------------------
 # Each is scored on the RED world, where the shipped gate defers; a mutant that keeps deferring
 # there is not a mutant of this arm. The unmutated control is `pp-red-defers` above.
@@ -2107,7 +2152,7 @@ else
   fi
 fi
 # M3: the probe feeds EMPTY stdin. The stdin world's hook then refuses.
-PP_M3="$(vr_mut pp3 'index($0,"\"$pp_hook\" origin \"$pp_url\" < \"$pp_in\"") { sub(/< "\$pp_in"/, "< /dev/null"); print; next } { print }')"
+PP_M3="$(vr_mut pp3 'index($0,"\"$pp_hook\" \"$pp_remote\" \"$pp_url\" < \"$pp_in\"") { sub(/< "\$pp_in"/, "< /dev/null"); print; next } { print }')"
 ASSERTIONS=$((ASSERTIONS + 1))
 if cmp -s "$GATE" "$PP_M3"; then
   FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s mutation matched nothing\n' "pp-mut-nostdin"
