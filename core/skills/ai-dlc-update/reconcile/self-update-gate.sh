@@ -190,7 +190,19 @@ CONSUMER="${4:?}"
 # the current copy. A record keyed on the range alone therefore accepts a post-write re-run as an
 # approval of the pre-write question. `mechanism-design.md`: a record a program writes from its
 # own input is a record of INTENT; what makes this one a record of the DECISION is the digest of
-# every consumer file the decision read. One `# input: <path>\t<blob-sha>` line each, sorted.
+# every consumer file the decision read.
+#
+# THREE COLUMNS, SORTED, ONE PER FILE READ:
+#   `# input: <consumer-relative path | ->\t<digest-at-record | ABSENT>\t<core-relative path | ->`
+# Column 3 exists because the digests CANNOT survive step 2's own write — gate, write, run the
+# fixtures is the real order, and 6 of 9 recorded inputs read MOVED on this gate's seed with the
+# write simulated. It lets the reader accept "now equals the recorded digest, OR now equals the
+# blob at theirs for this core path", the second being exactly what the slice writes. Column 1
+# `-` marks the distribution's fallback hook, the only file here not read from the consumer.
+#
+# THE STAMP IS NOT AMONG THEM. Step 2 rewrites `.claude/.ai-dlc-version` between this gate and
+# the runner by design, so its digest can never survive and it has no core origin to be accepted
+# by the theirs rule either. The reasoning is beside the recording site.
 GATE_REC=""
 GATE_REC_DIR="$CONSUMER/_bmad-output/ai-dlc-update"
 
@@ -199,38 +211,48 @@ GATE_REC_DIR="$CONSUMER/_bmad-output/ai-dlc-update"
 # subshell those acquire, a variable does not.
 GATE_IN=""
 
-# gate_input <consumer-relative-path> — record one file the verdict READ, at the site that reads
-# it. `git hash-object` is content-only, portable, and already the grammar `preclassify.sh` uses,
-# so a digest here and a digest there mean the same thing. An absent file is recorded as ABSENT
-# rather than omitted: a script the hook names and the consumer lacks is a file whose later
-# APPEARANCE changes the gating set, and an omitted line cannot express that.
+# gate_input <consumer-relative-path> <core-relative-path|-> — record one file the verdict READ,
+# at the site that reads it. `git hash-object` is content-only, portable, and already the grammar
+# `preclassify.sh` uses, so a digest here and a digest there mean the same thing. An absent file
+# is recorded as ABSENT rather than omitted: a script the hook names and the consumer lacks is a
+# file whose later APPEARANCE changes the gating set, and an omitted line cannot express that.
+#
+# THREE COLUMNS, AND THE THIRD IS WHAT MAKES THE RECORD SURVIVE THE WRITE. Step 2's real order is
+# gate, then WRITE the slice, then run the fixture runner. A digest taken at gate time therefore
+# cannot match the tree the runner hashes: reproduced on this gate's own seed with the write
+# simulated, 6 of 9 recorded inputs read MOVED, so a reader comparing digests alone refuses every
+# legitimate self-update whose range changes a gating script. Column 3 is the CORE path this
+# consumer path maps from, which lets the reader accept "now == the recorded digest, OR now ==
+# the blob at theirs for that core path" — the second being exactly what the slice writes. The
+# gate has the core path in hand at every site it records; nothing here inverts `map_consumer()`.
+#
+# COLUMN 1 `-` MEANS READ FROM THE DISTRIBUTION, NOT THE CONSUMER, and it is used for exactly one
+# thing: the fallback hook a consumer without its own `.githooks/pre-push` is judged against.
+# Column 3 is then `core/git-hooks/pre-push` and the reader refuses any `-` row saying otherwise,
+# which is what stops a forged row naming a distribution path of the forger's choosing.
 #
 # THE PATH IS CONSUMER-RELATIVE so the record is comparable across a rehearsal copy and the tree
-# it was copied from. The distribution's fallback hook has no consumer-relative form and is
-# recorded under the `dist:core/git-hooks/pre-push` spelling: a `dist:` prefix the READER
-# resolves against its own distribution argument. NOT the absolute distribution path -- the
-# first integrated run recorded it that way, the runner resolved it under the consumer root as
-# it does every other input, read it ABSENT, and refused the shipping gate's own OK record. A
-# consumer with no hook of its own would have been refused on every self-update, forever.
+# it was copied from.
 gate_input() {
   [ -n "$GATE_IN" ] || return 0
   _gi_abs="$CONSUMER/$1"
   if [ -f "$_gi_abs" ]; then
     _gi_h="$(git hash-object "$_gi_abs" 2>/dev/null)" || _gi_h=""
-    printf '%s\t%s\n' "$1" "${_gi_h:-UNREADABLE}" >> "$GATE_IN"
+    printf '%s\t%s\t%s\n' "$1" "${_gi_h:-UNREADABLE}" "$2" >> "$GATE_IN"
   else
-    printf '%s\tABSENT\n' "$1" >> "$GATE_IN"
+    printf '%s\tABSENT\t%s\n' "$1" "$2" >> "$GATE_IN"
   fi
   return 0
 }
-# The fallback hook lives in the DISTRIBUTION, so it takes an absolute path and its own spelling.
-gate_input_abs() {
+# The fallback hook lives in the DISTRIBUTION, so it is hashed from an absolute path and its
+# consumer column is `-`.
+gate_input_dist() {
   [ -n "$GATE_IN" ] || return 0
   if [ -f "$2" ]; then
     _gi_h="$(git hash-object "$2" 2>/dev/null)" || _gi_h=""
-    printf '%s\t%s\n' "$1" "${_gi_h:-UNREADABLE}" >> "$GATE_IN"
+    printf -- '-\t%s\t%s\n' "${_gi_h:-UNREADABLE}" "$1" >> "$GATE_IN"
   else
-    printf '%s\tABSENT\n' "$1" >> "$GATE_IN"
+    printf -- '-\tABSENT\t%s\n' "$1" >> "$GATE_IN"
   fi
   return 0
 }
@@ -335,16 +357,24 @@ gate_record_open
 # file and read another — the failure this whole input list exists to make impossible.
 HOOK="$CONSUMER/.githooks/pre-push"
 if [ -f "$HOOK" ]; then
-  gate_input ".githooks/pre-push"
+  gate_input ".githooks/pre-push" "core/git-hooks/pre-push"
 else
   HOOK="$DIST/core/git-hooks/pre-push"
-  gate_input_abs "dist:core/git-hooks/pre-push" "$HOOK"
+  gate_input_dist "core/git-hooks/pre-push" "$HOOK"
 fi
-# `skill_commit` decides the SAFE-STOP acquittal and step 2 advances it mid-cycle; the marker
-# decides whether that acquittal is withheld. Both are recorded, the marker as ABSENT when
-# missing, because its ARRIVAL is what changes the answer.
-gate_input ".claude/.ai-dlc-version"
-gate_input ".claude/.ai-dlc-applying"
+# THE STAMP IS DELIBERATELY NOT RECORDED. `.claude/.ai-dlc-version` is the one input step 2
+# REWRITES between this gate and the runner -- it advances `skill_version` and `skill_commit` to
+# theirs as part of writing the slice -- so its digest can never survive to the read, and a row
+# for it refuses every legitimate self-update. Nor can the reader accept it by the theirs-blob
+# rule the other rows use: the stamp has no core origin, so there is no blob to compare against.
+# What is lost is small and stated rather than assumed: the only arm reading the stamp is
+# `advise_safe_stop`'s acquittal, which is ADVISORY prose beside a DEFER the reader refuses on
+# the verdict anyway.
+#
+# The interrupted-apply marker IS recorded, and its ABSENCE is the value that matters: step 2
+# never writes it, and its ARRIVAL between the gate and the runner means an apply touched the
+# tree mid-cycle.
+gate_input ".claude/.ai-dlc-applying" "-"
 
 # ---- A GATE THAT CANNOT READ ITS OWN RANGE MUST NOT RETURN OK ---------------------------
 # Sited at classify ENTRY, before any arm, because EVERY arm below fails OPEN on an unreadable
@@ -550,11 +580,12 @@ if [ -z "${AI_DLC_GATE_IN_SAFE_STOP:-}" ]; then
   #
   # MAPPED BY `map_consumer()`, eval'd out of the same file for the same reason `machinery_paths`
   # is: `install.sh` splits what shares a parent in `core/`, and a private path table here would
-  # answer for one layout and be silently wrong in the other.
+  # answer for one layout and be silently wrong in the other. The CORE path is what the loop
+  # already holds, so column 3 costs nothing and no inverse mapping is needed anywhere.
   if [ -n "$C_PATHS" ] && command -v map_consumer >/dev/null 2>&1; then
     while IFS= read -r c_mp; do
       [ -n "$c_mp" ] || continue
-      gate_input "$(map_consumer "$c_mp")"
+      gate_input "$(map_consumer "$c_mp")" "$c_mp"
     done <<EOF
 $C_PATHS
 EOF
@@ -726,7 +757,7 @@ INVOKED="$(grep -oE 'scripts/ai-dlc/[A-Za-z0-9._-]+\.sh' "$HOOK" | sed 's|.*/||'
 # than omitting the line.
 while IFS= read -r gi_name; do
   [ -n "$gi_name" ] || continue
-  gate_input "scripts/ai-dlc/$gi_name"
+  gate_input "scripts/ai-dlc/$gi_name" "core/scripts/$gi_name"
 done <<EOF
 $INVOKED
 EOF
@@ -772,6 +803,53 @@ while IFS= read -r name; do
     emit SELF-UPDATE-OK "$name" "the consumer has no current copy at scripts/ai-dlc/$name, so this pull ADDS it rather than replacing something the hook already runs against this tree."
     continue
   fi
+  # ---- A VERDICT TAKEN ON AN ALREADY-WRITTEN TREE ANSWERS A DIFFERENT QUESTION ----------
+  # The differential asks whether the INCOMING version fails where the CURRENT one passes. When
+  # the consumer's current copy is already byte-identical to `theirs` AND the range changes that
+  # script, `cur` and `new` are the same file: the two runs compare a program with itself, agree
+  # by construction, and the equality arm below reports OK. That is not a finding about the pull,
+  # it is the absence of one.
+  #
+  # THE STATE IS REACHABLE AND IT IS THE ORDINARY ONE, WHICH IS WHY THIS ARM EXISTS. Step 2's
+  # order is gate, WRITE the slice, run the fixtures, push — and the write puts every gating
+  # script at theirs. A gate re-run after that write reads OK for every one of them, on a pull
+  # that was DEFER before it. Measured on this file's own fixture seed: 2 DEFER rows pre-write,
+  # 4 OK post-write, 2 DEFER again on revert. Without this arm the only thing separating an
+  # honest verdict from one taken too late is the ORDER a human ran two commands in.
+  #
+  # BOTH CONJUNCTS ARE LOAD-BEARING. "Current equals theirs" alone is satisfied by a script the
+  # range does not touch at all — base, theirs and the consumer's copy all identical — which is a
+  # perfectly ordinary state and not a pre-written one, and it cannot reach here anyway because
+  # `GATING` is the changed set intersected with the hook's. Asserting `base != theirs` beside it
+  # says the equality is a CHANGE the consumer already holds rather than a file nobody moved.
+  #
+  # FALSE-POSITIVE SET, MEASURED BEFORE THIS SHIPPED, AND THE POPULATION IS REPORTED BESIDE EVERY
+  # ZERO because one of them is vacuous. On the reference consumer, whose pre-push names 11
+  # scripts and which holds all 11:
+  #
+  #   base = that consumer's own stamp `commit` (the range step 2 actually runs)
+  #                                                  population 0, fires 0
+  #   base = an older release, four sampled                population 4/6/6/6, fires 4/6/6/6
+  #
+  # THE FIRST ZERO IS OVER AN EMPTY POPULATION and is not evidence: no hook-named script changes
+  # in that range at all, so the arm has nothing to reach. The second row is the finding, and it
+  # is not a false positive — it is the arm's own subject arriving by a second route. A consumer
+  # asked about a range it has ALREADY PARTLY TAKEN holds those scripts at theirs because an
+  # earlier apply wrote them, and the differential is exactly as unable to answer as it is after
+  # step 2's own write. Refusing is correct there; what the operator does about it is re-run the
+  # gate with the range their stamp actually names.
+  #
+  # SO THE COST IS BORNE BY A CALLER PASSING A STALE BASE, and it is a refusal rather than a wrong
+  # OK. That direction is the one this file's header chooses everywhere else.
+  gi_cur_h="$(git hash-object "$cur" 2>/dev/null)" || gi_cur_h=""
+  gi_th_h="$(git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/scripts/$name" 2>/dev/null)" || gi_th_h=""
+  gi_ba_h="$(git -C "$DIST" rev-parse -q --verify "${BASE}:core/scripts/$name" 2>/dev/null)" || gi_ba_h=""
+  if [ -n "$gi_cur_h" ] && [ -n "$gi_th_h" ] && [ "$gi_cur_h" = "$gi_th_h" ] && [ "$gi_ba_h" != "$gi_th_h" ]; then
+    emit SELF-UPDATE-UNDECIDED "$name" "the consumer's copy of scripts/ai-dlc/$name is ALREADY at theirs while base..theirs changes it, so the differential would run this file against itself: cur and new are the same bytes, they agree by construction, and their agreement says nothing about whether the incoming version fails where the current one passes. This is what a gate re-run AFTER step 2 wrote the slice looks like. Take the verdict BEFORE the write, once, and do not re-run this gate to refresh a record. Treat as defer — a verdict that could not ask its own question must not read as OK."
+    deferred=1
+    continue
+  fi
+
   cp "$cur" "$TMP/cur-$name"
 
   ( cd "$CONSUMER" && bash "$TMP/cur-$name" >/dev/null 2>&1 ); rc_cur=$?
