@@ -51,7 +51,8 @@
 # Output: a per-fixture verdict line on stdout, then the log path.
 # Exit:   0 all green · 1 at least one red · 2 the harness could not run
 #         (no fixtures named, fixture root underivable, log unwritable, the `base..theirs`
-#         range unresolvable, the named set omitting a fixture the diff changes, or the
+#         range unresolvable, NO RECORDED `# verdict: OK` from self-update-gate.sh for this
+#         range, the named set omitting a fixture the diff changes, or the
 #         named set CONTAINING a fixture no consumer can run). A run
 #         that could not happen must NOT exit 0: "no failures" and "no assertions" are the
 #         same byte to the caller, and this whole file exists because that difference
@@ -164,6 +165,482 @@ if ! git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures" 2>/dev/null; then
   { echo "COVERAGE: WRONG-REPO — '${THEIRS}:core/fixtures' does not resolve in $DIST."; } >> "$LOG"
   exit 2
 fi
+
+# --- THE GATE RECORD: this cycle must be AUTHORISED, and the authorisation is a FILE -----
+# Step 2 cuts a branch, writes the machinery slice, pushes and auto-merges with no operator
+# gate. `self-update-gate.sh` decides WHETHER that may happen, and its verdict used to reach
+# stdout and nowhere else — so the only record of the decision was the operating agent's own
+# narration in a PR body. An autonomous write whose approval exists only as prose has no
+# artifact, and the merged PR carries no evidence of the check that permitted it.
+#
+# SO THE DUTY IS SITED HERE, on the program step 2 must call before it may push. This runner
+# already stands between the slice and the push; the gate does not, because a classifier
+# printing TSV cannot refuse anything. Requiring the RECORD here is what makes the gate's
+# verdict load-bearing rather than advisory, and it needs no new call site: a cycle that
+# skipped the gate entirely now cannot run a single fixture.
+#
+# THE COMPARISON IS ON RESOLVED SHAS, NEVER ON THE ARGUMENT STRINGS. The gate and this runner
+# are invoked by the same step with the same `theirs-ref`, but that ref is commonly a TAG or a
+# branch name, and the record stores what it resolved to. A string comparison then refuses a
+# record written for this very range, by this very cycle, one minute earlier — and its failure
+# mode is to wedge every self-update rather than to admit a wrong one, which is the kind of
+# false positive nobody debugs twice before switching the check off. Both sides are peeled with
+# `rev-parse`; an empty result on either side is refused rather than compared, because two
+# empty strings are equal and that is how an unreadable range would acquit itself.
+#
+# THE RANGE IS NOT THE WHOLE INPUT, AND A RECORD KEYED ONLY ON IT AUTHORISES A DIFFERENT
+# QUESTION. The gate's verdict is a DIFFERENTIAL: it runs the consumer's CURRENT copy of each
+# gating script against the incoming one, so its answer is a function of the consumer tree as
+# well as of `base..theirs`. Measured on the same command over one range: 2 DEFER rows before
+# step 2 wrote the slice, 4 OK rows after it, and 2 DEFER again once the write was reverted. So
+# an OK recorded before the write does not attest the state the fixtures are about to run in —
+# a cycle could run the gate, write anything at all, and cite the earlier verdict.
+#
+# The record therefore carries one
+# `# input: <consumer path | ->\t<digest-at-record | ABSENT>\t<core path | ->` line per
+# consumer-side file its verdict READ, and this runner re-reads every one of them against the
+# tree as it now stands. A record with NO input lines is malformed and refused rather than
+# accepted leniently: zero lines to compare is a comparison that cannot fail, which is the same
+# byte as a comparison that passed.
+#
+# BUT "THE INPUTS MUST NOT HAVE MOVED" IS THE WRONG RULE, AND IT REFUSED EVERY LEGITIMATE
+# SELF-UPDATE. Step 2's real order is gate, then WRITE THE SLICE, then this runner: the record's
+# digests are taken before the write and re-read after it, so the files the slice legitimately
+# replaced are exactly the ones that differ. Measured on the gate's own seed, driving both
+# shipping programs in that order: 4 of 9 recorded inputs moved, and every one of them moved to
+# precisely the `theirs` blob of its core path. A rule spelled "nothing moved" therefore fails
+# closed on the normal case while a third hand editing a script produces the same word, MOVED.
+#
+# WHAT DISCRIMINATES IS WHICH INPUT MOVED AND TOWARD WHAT, and that is the whole design:
+#   now == the recorded digest      the slice did not touch it. Unchanged, accepted.
+#   now == `theirs:<core path>`     this is the written slice. Expected, accepted.
+#   now == neither                  a third hand. Refused, INPUT-MOVED.
+#   recorded at `theirs` ALREADY,
+#     on a path the range CHANGES   the gate compared the file with itself and its verdict
+#                                   answers nothing. Refused, PRE-WRITTEN.
+# The last row is the one no digest comparison can express, because the digests AGREE there —
+# the record and the tree match perfectly and the verdict is still worthless. It is keyed on the
+# range instead: `base:C` != `theirs:C` says the pull changes that file, and a digest equal to
+# `theirs:C` at RECORD time says the consumer already held the incoming version when the gate
+# ran, so `cur` and `new` were the same bytes. A gate run AFTER the write reads OK for exactly
+# that reason, and would otherwise re-authorise a question whose honest answer was DEFER.
+#
+# AND THE REQUIRED SET IS DERIVED HERE, NOT TAKEN FROM THE RECORD. A record naming one input of
+# the forger's choosing satisfies any "at least one line" rule. So this runner resolves the hook
+# the same way the gate does and demands a line for the hook and for every
+# `scripts/ai-dlc/<name>` that hook names; a record missing one is refused before any digest is
+# compared. Both sides of that join are derived from the same file, so neither can be authored.
+#
+# NEWEST MATCHING RECORD, ORDERED BY THE GATE'S OWN STAMP. The candidates are ordered by
+# FILENAME descending, not by mtime: the name carries the UTC timestamp the gate wrote, while
+# an mtime is a property of the filesystem that a copy, a checkout or an archive extraction
+# resets. The filter is applied BEFORE the pick, so a stale OK for some other range cannot
+# shadow a newer record for this one — and, in the other direction, an OK that a later DEFER
+# supersedes cannot be revived by reaching further back.
+#
+# SITED AFTER THE REF RESOLUTION AND THE WRONG-REPO GUARD, and that is load-bearing. This arm
+# peels both refs, so against an unresolvable one it finds no matching record and would report a
+# MISSING APPROVAL where the real finding is an unreadable range — pointing the operator at the
+# gate when what is broken is the argument they passed. It is sited ABOVE the two slice-shaped
+# arms below for the mirror reason: those report a defect in the SLICE, and printing one for a
+# cycle that was never authorised sends the reader to fix the wrong thing entirely.
+GATE_REC=""
+GATE_REC_WHY=""
+
+# One reader for all three fields. A second spelling per field is a second grammar to keep in
+# agreement with the writer, which is the drift `lib.sh` exists to end for the section resolver.
+rec_field() { # $1=record path $2=field name -> the first value, trimmed, or nothing
+  awk -v k="$2" 'index($0, "# " k ":") == 1 {
+    s = substr($0, length(k) + 4)
+    gsub(/^[[:space:]]+/, "", s); gsub(/[[:space:]]+$/, "", s)
+    print s; exit
+  }' "$1" 2>/dev/null
+}
+
+# THE PEEL BELOW IS THE SECOND LAYER OF A TWO-LAYER REFUSAL, AND IT IS UNREACHABLE UNDER THE
+# SHIPPED CONTROL FLOW — stated rather than dressed up as load-bearing. The ref-resolution loop
+# above has already exited 2 on anything that does not peel, so `gr_base`/`gr_theirs` are never
+# empty here today. Its subject is the state where that loop is GONE: an empty sha compares
+# EQUAL to an empty header field, so a record whose header the gate could not fill would match
+# a range nobody resolved, and the approval check would acquit itself. It routes into the same
+# refusal as every other unidentifiable record rather than taking its own exit, so the whole
+# requirement is disabled by ONE edit and a mutant can revert it as one layer.
+gr_base="$(git -C "$DIST" rev-parse "${BASE}^{commit}" 2>/dev/null)"
+gr_theirs="$(git -C "$DIST" rev-parse "${THEIRS}^{commit}" 2>/dev/null)"
+
+if [ -z "$gr_base" ] || [ -z "$gr_theirs" ]; then
+  GATE_REC_WHY="'${BASE}' or '${THEIRS}' does not peel to a commit in $DIST, so the gate record for this range cannot be identified — and an empty sha would match a record whose header is empty too"
+else
+  gr_cands="$(ls "$OUT_DIR"/self-update-gate-*.md 2>/dev/null | sort -r)"
+  gr_seen=0
+  while IFS= read -r gr_f; do
+    [ -n "$gr_f" ] || continue
+    [ -f "$gr_f" ] || continue
+    gr_seen=$((gr_seen + 1))
+    gr_rb="$(rec_field "$gr_f" base-sha)"
+    gr_rt="$(rec_field "$gr_f" theirs-sha)"
+    [ -n "$gr_rb" ] && [ -n "$gr_rt" ] || continue
+    [ "$gr_rb" = "$gr_base" ] && [ "$gr_rt" = "$gr_theirs" ] || continue
+    GATE_REC="$gr_f"
+    break
+  done <<GRECEOF
+$gr_cands
+GRECEOF
+
+  if [ -n "$GATE_REC" ]; then
+    gr_verdict="$(rec_field "$GATE_REC" verdict)"
+    if [ "$gr_verdict" != "OK" ]; then
+      GATE_REC_WHY="the newest gate record for this range is $(basename "$GATE_REC") and its verdict is '${gr_verdict:-<absent>}', not OK"
+    else
+      # THE INPUTS THE VERDICT READ, RE-HASHED AGAINST THE TREE AS IT NOW STANDS.
+      # `git hash-object` is used rather than a checksum because it is the spelling the WRITER
+      # uses and because it needs no repository — the consumer path may sit outside any git dir
+      # this runner can assume. The count is asserted non-zero SEPARATELY from the comparison:
+      # a loop over zero lines reports agreement having compared nothing, which is exactly the
+      # silent pass the whole record exists to remove.
+      # ABSENCE IS A RECORDED VALUE, NOT A MISSING ONE. The gate reads some inputs that are not
+      # there — a script the hook names and the consumer does not hold, the in-flight apply
+      # marker — and their ABSENCE is what its verdict rested on. `ABSENT` is therefore compared
+      # in BOTH directions: a file that has since APPEARED moves the verdict exactly as an
+      # edited one does, and treating `ABSENT` as "nothing to check" would acquit the direction
+      # where a new file arrives between the gate and the run. The one exception is the slice
+      # ADDING a file the pull ships: an `ABSENT` row whose core path exists at `theirs` and
+      # whose file now hashes equal to that blob is the written slice, exactly as for a digest row.
+      #
+      # A THIRD VALUE IS MALFORMED AND IS REFUSED RATHER THAN SKIPPED. Anything that is neither
+      # 40 hex nor `ABSENT` is a line this reader cannot evaluate, and a `continue` there is a
+      # record silently authorising whatever it could not spell.
+      gr_tab="$(printf '\t')"
+      gr_n_in=0; gr_moved=""; gr_bad=""; gr_prewritten=""; gr_have=""
+
+      # ARM 1's REQUIRED SET, DERIVED. The hook is resolved the way the GATE resolves it —
+      # consumer first, distribution fallback second — because the two must name the same file
+      # or the join compares one hook's scripts against another hook's record. `INVOKED` is the
+      # same derivation the gate uses to decide which scripts can block a push; hand-listing it
+      # here would be a second copy of the set the record is supposed to attest.
+      #
+      # THE ONE FALSE POSITIVE THIS ARM HAS, STATED RATHER THAN CODED AROUND. A consumer whose
+      # INCOMING hook — the one at `theirs` — names a `scripts/ai-dlc/<x>.sh` that comes from
+      # outside the distribution is refused here, because the gate records in-distribution
+      # scripts in advance through the machinery set and cannot record a file it has never seen.
+      # Population measured EMPTY on the reference consumer today.
+      #
+      # The obvious remedy is wrong and is named so the next reader does not reach for it:
+      # running the gate again after the hook is in place produces a record taken on the written
+      # tree, which ARM 3 refuses as PRE-WRITTEN. The honest disposition is that such a consumer
+      # has DIVERGED on its hook, so the gate emits a `SELF-UPDATE-CARRY` row for it and step 2
+      # does not write that path at all — the hook the runner resolves is then the consumer's own
+      # and the scripts it names are its own to account for. No code path is built for this.
+      gr_hook="$CONSUMER/.githooks/pre-push"
+      gr_hook_key=".githooks/pre-push"
+      if [ ! -f "$gr_hook" ]; then
+        gr_hook="$DIST/core/git-hooks/pre-push"
+        # Column 1 `-` is the ONLY spelling for "read from the distribution", and column 3 must
+        # then be the fallback hook's core path. Anything else under a `-` would let a record
+        # point the reader at an arbitrary distribution file.
+        gr_hook_key="-"
+      fi
+      gr_required=""
+      if [ -f "$gr_hook" ]; then
+        gr_invoked="$(grep -oE 'scripts/ai-dlc/[A-Za-z0-9._-]+\.sh' "$gr_hook" | sort -u)"
+      else
+        gr_invoked=""
+      fi
+
+      while IFS= read -r gr_line; do
+        case "$gr_line" in "# input: "*) ;; *) continue ;; esac
+        gr_rest="${gr_line#\# input: }"
+        gr_p="${gr_rest%%${gr_tab}*}"
+        gr_r2="${gr_rest#*${gr_tab}}"
+        gr_h="${gr_r2%%${gr_tab}*}"
+        gr_c="${gr_r2#*${gr_tab}}"
+        if [ -z "$gr_p" ] || [ "$gr_p" = "$gr_rest" ] || [ -z "$gr_h" ] \
+           || [ "$gr_h" = "$gr_r2" ] || [ -z "$gr_c" ]; then
+          gr_bad="$gr_bad
+  ${gr_rest} — not a <path><TAB><digest><TAB><core path> triple"
+          continue
+        fi
+        gr_n_in=$((gr_n_in + 1))
+        gr_have="$gr_have
+$gr_p"
+
+        # WHERE THE PATH RESOLVES, and the `-` row is CONSTRAINED rather than trusted. A
+        # distribution-side row exists for exactly one file — the fallback hook a consumer
+        # without its own cannot name in consumer-relative form — so its core path is checked
+        # against that one value. A `-` row naming anything else is a record aiming the reader
+        # at a file of its author's choosing, which is the shape the forged single-line record
+        # took.
+        if [ "$gr_p" = "-" ]; then
+          if [ "$gr_c" != "core/git-hooks/pre-push" ]; then
+            gr_bad="$gr_bad
+  a distribution-side row whose core path is '${gr_c}' — the only file read from the distribution is core/git-hooks/pre-push"
+            continue
+          fi
+          gr_abs="$DIST/$gr_c"
+        else
+          gr_abs="$CONSUMER/$gr_p"
+        fi
+
+        # The blob this path carries at each end of the range. `theirs` is what the slice writes,
+        # so it is the second accepted value; `base` against `theirs` says whether the pull
+        # changes the file at all, which is what makes ARM 3's question answerable.
+        gr_tb=""; gr_bb=""
+        if [ "$gr_c" != "-" ]; then
+          gr_tb="$(git -C "$DIST" rev-parse -q --verify "${THEIRS}:${gr_c}" 2>/dev/null)"
+          gr_bb="$(git -C "$DIST" rev-parse -q --verify "${BASE}:${gr_c}" 2>/dev/null)"
+        fi
+
+        # THE `-` ROW GETS NO `theirs` ACCEPTANCE, AND THAT IS A SEPARATE RULE RATHER THAN A
+        # CONSEQUENCE OF THE ONE BELOW. Its file IS the distribution's own copy — the reader
+        # resolves it under `$DIST` — so `hash(now)` equals the `theirs` blob by construction on
+        # every run, and a `theirs`-acceptance there would make the digest column decorative:
+        # any value at all, a decoy or forty zeroes, would pass. Measured: rc=0 for an all-zero
+        # digest on this row before this branch existed. The slice never writes the
+        # distribution's own file, so there is nothing for the acceptance to be FOR.
+        if [ "$gr_p" = "-" ]; then
+          case "$gr_h" in
+            ABSENT)
+              [ -e "$gr_abs" ] && gr_moved="$gr_moved
+  the distribution fallback hook — recorded ABSENT, and present now"
+              ;;
+            *)
+              gr_now="$(git hash-object "$gr_abs" 2>/dev/null)"
+              [ "$gr_now" = "$gr_h" ] || gr_moved="$gr_moved
+  the distribution fallback hook — recorded ${gr_h}, now ${gr_now:-<unhashable>}; a distribution-side row is compared STRICTLY, because its file is the one the reader resolves and a theirs-acceptance would accept any digest at all"
+              ;;
+          esac
+          continue
+        fi
+
+        # THE CONTENTS THIS PATH HAS ACTUALLY CARRIED ACROSS THE RANGE, and this is what stops
+        # the `theirs` acceptance from making the digest column decorative. After the slice is
+        # written EVERY gating script is at `theirs`, so "accept when now == theirs" alone
+        # accepts a record whose digests were never read off anything — measured, an all-zero
+        # forgery naming the derived required set returned rc=0, against a control where one
+        # script sat at a third-hand blob and correctly returned rc=2.
+        #
+        # So a recorded digest that differs from `now` has to be a content the path really held:
+        # its blob at BASE, or at any commit in `base..theirs` that touches it. NOT "== the base
+        # blob" alone — a split stamp, where `skill_commit` runs ahead of `commit`, legitimately
+        # leaves the consumer holding an INTERMEDIATE release's blob, and narrowing to base
+        # refuses that consumer on every pull. The set is derived per row and only for rows that
+        # take the acceptance, so the `git log` cost is paid once per moved input rather than
+        # once per record.
+        gr_hist=""
+
+        case "$gr_h" in
+          ABSENT)
+            if [ -e "$gr_abs" ]; then
+              gr_now="$(git hash-object "$gr_abs" 2>/dev/null)"
+              if [ -n "$gr_tb" ] && [ "$gr_now" = "$gr_tb" ]; then
+                : # the slice ADDED a file this pull ships — expected
+              else
+                gr_moved="$gr_moved
+  $gr_p — recorded ABSENT, and now PRESENT with content the pull does not ship"
+              fi
+            fi
+            ;;
+          [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]\
+[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]\
+[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]\
+[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f])
+            # ARM 3, and it is asked FIRST because it is the case where the digests AGREE. A
+            # verdict taken on a tree that already held `theirs` for a file the pull CHANGES
+            # compared that file with itself; the record and the tree can match perfectly and the
+            # OK still answers nothing. The digest comparison below cannot see it by construction.
+            if [ -n "$gr_tb" ] && [ -n "$gr_bb" ] && [ "$gr_bb" != "$gr_tb" ] \
+               && [ "$gr_h" = "$gr_tb" ]; then
+              gr_prewritten="$gr_prewritten
+  $gr_p — recorded at the ${THEIRS} blob for a path this range CHANGES, so the gate compared the incoming version with itself"
+            elif [ ! -f "$gr_abs" ]; then
+              gr_moved="$gr_moved
+  $gr_p — recorded ${gr_h}, and ABSENT from the consumer now"
+            else
+              gr_now="$(git hash-object "$gr_abs" 2>/dev/null)"
+              if [ "$gr_now" = "$gr_h" ]; then
+                : # untouched by the slice
+              elif [ -n "$gr_tb" ] && [ "$gr_now" = "$gr_tb" ]; then
+                # ARM 2, and the second conjunct is what keeps the digest column load-bearing.
+                # The file is at `theirs`, which is where the slice puts it — but that is true of
+                # a forged record too, so the RECORDED digest must also be a content this path
+                # carried somewhere in the range. Derived here rather than hand-listed: the blob
+                # at BASE plus the blob at every commit that touches this path in base..theirs.
+                gr_hist="$(
+                  { git -C "$DIST" rev-parse -q --verify "${BASE}:${gr_c}" 2>/dev/null
+                    for gr_cm in $(git -C "$DIST" log --format=%H "${BASE}..${THEIRS}" -- "$gr_c" 2>/dev/null); do
+                      git -C "$DIST" rev-parse -q --verify "${gr_cm}:${gr_c}" 2>/dev/null
+                    done
+                  } | sort -u
+                )"
+                if grep -qxF "$gr_h" <<GRHISTEOF
+$gr_hist
+GRHISTEOF
+                then
+                  : # the written slice, over a content this path genuinely carried
+                else
+                  gr_moved="$gr_moved
+  $gr_p — recorded ${gr_h} is not a content this path carried anywhere in ${BASE}..${THEIRS}. Either no gate read this file, or the consumer's copy was a LOCAL EDIT the gate reported as SELF-UPDATE-CARRY and the cycle wrote it from theirs anyway — a carried path is never written; the copy on disk being at ${THEIRS} is the slice and does not vouch for the record"
+                fi
+              else
+                gr_moved="$gr_moved
+  $gr_p — recorded ${gr_h}, now ${gr_now:-<unhashable>}, which is neither the recorded content nor what this pull ships"
+              fi
+            fi
+            ;;
+          *)
+            gr_bad="$gr_bad
+  $gr_p — value '${gr_h}' is neither a 40-hex digest nor ABSENT"
+            ;;
+        esac
+      done < "$GATE_REC"
+
+      # ARM 1, scored after the read so the record is parsed once. The membership test is a
+      # here-string rather than a pipe: `grep -q` fed from a pipe answers with the writer's EPIPE
+      # under `pipefail` and reports NOT-FOUND on input that contains the pattern.
+      if [ -f "$gr_hook" ]; then
+        grep -qxF "$gr_hook_key" <<GRHOOKEOF || gr_required="$gr_required
+  $gr_hook_key — the pre-push hook itself, which decides WHICH scripts can block the push"
+$gr_have
+GRHOOKEOF
+        while IFS= read -r gr_iv; do
+          [ -n "$gr_iv" ] || continue
+          grep -qxF "$gr_iv" <<GRINVEOF || gr_required="$gr_required
+  $gr_iv — named by the consumer's pre-push hook, so the verdict had to read it"
+$gr_have
+GRINVEOF
+        done <<GRINVLIST
+$gr_invoked
+GRINVLIST
+      fi
+
+      if [ -n "$gr_bad" ]; then
+        GATE_REC_WHY="the gate record $(basename "$GATE_REC") carries input line(s) this reader cannot evaluate:${gr_bad}"
+      elif [ "$gr_n_in" -eq 0 ]; then
+        GATE_REC_WHY="the gate record $(basename "$GATE_REC") records verdict OK for this range and names NO input files, so there is nothing to compare and its OK cannot be attributed to any consumer tree"
+      elif [ -n "$gr_required" ]; then
+        GATE_REC_WHY="the gate record $(basename "$GATE_REC") omits input line(s) for file(s) its verdict must have read:${gr_required}"
+      elif [ -n "$gr_prewritten" ]; then
+        GATE_REC_WHY="the gate record $(basename "$GATE_REC") was taken on a tree that ALREADY held this pull's version of file(s) the pull changes:${gr_prewritten}"
+      elif [ -n "$gr_moved" ]; then
+        gr_n_moved="$(printf '%s' "$gr_moved" | grep -c '^  ')" || gr_n_moved=0
+        GATE_REC_WHY="the gate record $(basename "$GATE_REC") says OK for this range, but ${gr_n_moved} of the $gr_n_in file(s) its verdict READ now hold content that is neither what was recorded nor what this pull ships:${gr_moved}"
+      fi
+    fi
+  elif [ "$gr_seen" -eq 0 ]; then
+    # THE TOLERANCE, AND IT IS KEYED ON THE GATE THE CONSUMER HAD — read from the DISTRIBUTION
+    # at BASE — NOT ON THE RECORD DIRECTORY BEING EMPTY.
+    #
+    # A fix to a bootstrapping step can never be delivered by that step: on the pull that
+    # DELIVERS this requirement the OLD gate runs and records nothing, the slice installs this
+    # runner, and a hard refusal would then block the very self-update carrying the fixed gate —
+    # with step 2 requiring green before the push, that pull can never land. Measured on the
+    # reference consumer: 69 of 87 self-update commits wrote some `reconcile/` file and 3 wrote
+    # this runner, against a control of 0 of 87 for an impossible path.
+    #
+    # AN EMPTINESS TEST IS NOT THAT QUESTION, AND `rm -f` REACHES IT AT WILL. What the tolerance
+    # needs to know is whether the gate this consumer was RUNNING could have recorded anything,
+    # and that is a property of the engine at `base` — the stamp's `commit` is the revision the
+    # consumer installed. So the answer is read out of the distribution rather than off the
+    # consumer's disk, where a deletion cannot reach it.
+    #
+    # THE TOKEN SPELLS THE WRITE SITE, AND TWO EARLIER CHOICES DID NOT. `self-update-gate-${`
+    # scored 0 at BOTH the recording and the non-recording revision — a probe that cannot fire
+    # reads exactly like one that passed, and it would have exempted every consumer forever.
+    # `GATE_REC_DIR` scored correctly at both revisions and was still wrong: it names an
+    # ASSIGNMENT, so a gate that DECLARES the variable and never writes scores 1 and is read as
+    # a recording gate — turning a local edit into a refusal whose message says the records were
+    # deleted. Measured 1 on exactly such a text. The composed FILENAME is the write itself, and
+    # it cannot be present without the write. Comment lines are stripped first because this
+    # file's own prose names the token and a whole-file grep is satisfied by a comment.
+    #
+    # THE PROBE RUNS BEFORE THE ANSWER IS USED. A grammar that matches nothing at both ends is
+    # indistinguishable from a gate that does not record, and it fails in the ACQUITTING
+    # direction, so the arm establishes that it can still see a recording gate — the one at
+    # `theirs`, which by construction is the version this pull delivers — before trusting a zero
+    # at `base`. Where `theirs` also scores 0 the range delivers no recording gate at all and
+    # the tolerance is correct for a different reason; where it scores non-zero the grammar is
+    # live and a zero at `base` is a real absence.
+    #
+    # THE TOKEN IS THE COMPOSED FILENAME — `self-update-gate-` followed by `.md` on one non-comment
+    # line — and it is the THIRD spelling. `GATE_REC_DIR` named an assignment and scored 1 on a gate
+    # that declares the directory and never writes (a refusal in the wrong voice). The write site's
+    # exact text `/self-update-gate-$(date` scored 0 on a gate whose author moved the timestamp
+    # into its own variable — an ordinary reflow that changes nothing — and a zero here ACQUITS:
+    # such a consumer with its records deleted was waived entirely. The filename fragment survives
+    # both edits, because a gate cannot compose the record's name without it, and scores 0 at the
+    # last non-recording release and 1 at the first recording one. Comment lines are stripped first
+    # so the header prose naming the file does not count.
+    gr_gate_core="core/skills/ai-dlc-update/reconcile/self-update-gate.sh"
+    gr_tok_base="$(git -C "$DIST" show "${BASE}:${gr_gate_core}" 2>/dev/null \
+                   | grep -v '^[[:space:]]*#' | grep -cE 'self-update-gate-.*\.md')" || gr_tok_base=0
+    gr_tok_theirs="$(git -C "$DIST" show "${THEIRS}:${gr_gate_core}" 2>/dev/null \
+                     | grep -v '^[[:space:]]*#' | grep -cE 'self-update-gate-.*\.md')" || gr_tok_theirs=0
+    if [ "$gr_tok_base" -gt 0 ]; then
+      # The gate the consumer had DOES record, so an empty directory means the records were
+      # deleted or the gate was never run. Both are refusals, and neither is a bootstrapping
+      # state. THE RESIDUAL, STATED: a consumer whose `skill_commit` ran ahead of `commit` across
+      # the delivery release — so its installed gate records while `base` still names one that
+      # does not — and whose records were then deleted is acquitted here. Measured unreachable on
+      # the reference consumer today, whose two stamp fields are equal.
+      GATE_REC_WHY="no gate record exists in $OUT_DIR, and the gate at ${BASE} DOES record its verdict (${gr_tok_base} emission site(s)), so this is not a consumer whose installed gate predates recording — the records were deleted or the gate was never run"
+    else
+      { echo "GATE-RECORD: NOT-REQUIRED — no gate record exists and the gate at ${BASE} carries no record-writing site (${gr_tok_base}; the gate at ${THEIRS} carries ${gr_tok_theirs}, so the probe can still see one), meaning the installed gate could not have recorded. This is the pull that delivers recording, and the requirement binds from the next run on."; } >> "$LOG"
+      echo "self-update-fixtures: NOT-REQUIRED — the gate at ${BASE} carries no record-writing site," >&2
+      echo "  so the gate this consumer installed could not have recorded a verdict. This is the pull" >&2
+      echo "  that delivers recording; the requirement binds from the next run on." >&2
+      echo "  (probe control: the gate at ${THEIRS} scores ${gr_tok_theirs}.)" >&2
+    fi
+  else
+    GATE_REC_WHY="$gr_seen gate record(s) exist in $OUT_DIR and none records ${gr_base} -> ${gr_theirs}, so none of them classified THIS range"
+  fi
+fi
+
+if [ -n "$GATE_REC_WHY" ]; then
+  # The INPUT-MOVED tag is emitted per moved path rather than once for the set: the remedy is the
+  # same in every case, but WHICH file moved is the whole diagnostic, and a reader who has to
+  # re-derive it from a count goes back to the tree that is already gone.
+  # ONE TAG PER FINDING CLASS, because the four refusals have four different remedies and an
+  # operator who has to infer which one applied from a paragraph goes back to a tree that is
+  # already gone. `MISSING` is emitted only where no record was identified at all.
+  { echo "GATE-RECORD: refusing to run — ${GATE_REC_WHY}."
+    if [ -z "${GATE_REC:-}" ]; then
+      echo "GATE-RECORD: MISSING — no record identified for this range."
+    fi
+    if [ -n "${gr_required:-}" ]; then
+      printf '%s\n' "${gr_required#
+}" | sed 's/^  /GATE-RECORD: INPUT-MISSING /'
+    fi
+    if [ -n "${gr_prewritten:-}" ]; then
+      printf '%s\n' "${gr_prewritten#
+}" | sed 's/^  /GATE-RECORD: PRE-WRITTEN /'
+    fi
+    if [ -n "${gr_moved:-}" ]; then
+      printf '%s\n' "${gr_moved#
+}" | sed 's/^  /GATE-RECORD: INPUT-MOVED /'
+    fi
+    echo "GATE-RECORD: base ${gr_base} theirs ${gr_theirs}"
+    echo ""; } >> "$LOG"
+  echo "self-update-fixtures: ${GATE_REC_WHY}." >&2
+  echo "  Step 2 pushes and auto-merges with no operator gate, so the gate's recorded OK is the" >&2
+  echo "  only artifact of the decision that permitted the write. Running the fixtures without it" >&2
+  echo "  would produce a green suite for a cycle nothing authorised." >&2
+  if [ -n "${gr_moved:-}" ]; then
+    echo "  Its verdict is a DIFFERENTIAL against the consumer's own copies, so it does not carry" >&2
+    echo "  across a change to them. Re-run the gate on the tree AS IT NOW STANDS:" >&2
+  else
+    echo "  Run the gate first:" >&2
+  fi
+  echo "    bash ${SELF}/self-update-gate.sh ${DIST} ${BASE} ${THEIRS} ${CONSUMER}" >&2
+  echo "  then re-run this command. Commit the gate record beside this log." >&2
+  echo "  log: $LOG" >&2
+  exit 2
+fi
+
+# The record path joins the log's `#` prologue rather than the block written at the top,
+# because the arms between the two both EXIT — so on every run that reaches the fixture loop
+# this line is contiguous with the header, and on every run that does not there is a
+# GATE-RECORD or COVERAGE line saying why instead.
+{ echo "# gate record: $GATE_REC (verdict OK)"; } >> "$LOG"
 
 # --- The OVER-completeness arm: every NAMED dir must be one a consumer can RUN -----------
 # The join below refuses a set that is MISSING a diff-touched dir. This one refuses a set

@@ -3834,50 +3834,6 @@ or the hook constant is gone.
 
 verify: sh f=core/fixtures/implementation-join-yield/run.sh; h=core/hooks/ai-dlc-continue.sh; [ -f "$f" ] && [ -f "$h" ] || exit 9; grep -q 'beat-churn stall' "$f" || exit 9; grep -q '^RAPID_WINDOW_SECONDS=' "$h" || exit 9; grep -qE '^RAPID_WINDOW_SECONDS="?\$\{' "$h" && exit 0; awk '/pipeline-block-state/ && /date \+%s/ {c++} END{exit !(c>0)}' "$f" && exit 0; exit 1
 
-## BL-155 — step 2's autonomous self-update writes `core/skills/ai-dlc-update/**` onto a consumer and auto-merges it with no approval artifact anywhere in the path
-
-Split out of `BL-131` on an operator ruling at batch 46, when that entry was narrowed to the two
-write paths `v0.488.0` gated. This is the third path, the one a reader will not expect, and it is
-the one `BL-131` itself called the hard half. Distribution-internal, no `PC-` id; ranks below any
-PC-backed entry under the provenance-first rule. DEFECT.
-
-**What it does.** `SKILL.md:205-210`: the skill's own files are declared upstream-owned and
-overwrite-safe, so the self-update "lands on its OWN cycle, **autonomously — no operator
-approval**". `SKILL.md:160-161` records that this runs on every invocation — the push and
-auto-merge write to `origin` even on a bare dry-run. No report is produced for that write, so
-there is no region for `emit-report.sh --verify` to check and nothing for `apply.sh`'s union gate
-(`v0.488.0`) to reach: that gate sits in step 7 and this write happens in step 2, before it.
-`reconcile/self-update-gate.sh` decides WHETHER the cycle runs (`SELF-UPDATE-OK` /
-`SELF-UPDATE-DEFER` / `SELF-UPDATE-SAFE-STOP`) and names consumer-modified machinery paths; it
-is a classifier, not an approval, and nothing records that an operator saw its verdict before
-the write.
-
-**Why it is filed rather than fixed.** The overwrite-safe declaration is deliberate and measured
-(`SKILL.md:212-220` records the one time it was read too widely), and gating step 2 on an
-operator changes the bootstrapping contract every consumer pull depends on: the broken version
-of the updater is the one that runs the delivery, so a gate that can refuse the self-update can
-also refuse its own repair. The candidate shapes — record the `self-update-gate.sh` verdict and
-the written slice into the stamp so the write has an artifact, or require a dry-run report to
-exist before step 2 may push — differ in what they do to a consumer mid-pull and have to be
-measured on a scratch install before either is built. Read `BL-131`'s archived body for the
-three-path analysis before touching this.
-
-**Receipt limits, stated.** The receipt keys on the declaration in `SKILL.md` that step 2 needs
-no operator approval, case-insensitive and refusing a match inside an HTML comment. It is
-closable by rewording that sentence without changing the behaviour, and a fix that gates the
-write in a program while leaving the sentence in place scores STILL-LIVE; replace it with one
-that drives the gate when a gate exists. A prose receipt is what a prose-only subject affords.
-
-**Receipt repaired at `v0.496.0`; it had read `CLOSE-CANDIDATE` since the day it was filed.**
-It fed `grep -q` from a `sed` over a 150 KB file; `grep -q` leaves at the first match, the
-writer takes EPIPE, and under `backlog-reverify.sh`'s `pipefail` the pipeline answers non-zero
-on a MATCH — so `&& exit 1` never fired and the tool reported the fix present. Run bare, the same
-line exits 1. The count form below reads all of its input. The other seven receipts in this file
-that pipe into `grep -q` agree under both modes today; that is a size property of their inputs,
-not a guarantee.
-
-verify: sh f=core/skills/ai-dlc-update/SKILL.md; [ -f "$f" ] || exit 9; grep -qi 'self-update' "$f" || exit 9; [ "$(sed 's/<!--.*-->//g' "$f" | grep -ciE 'autonomously[^.]*no operator approval')" -gt 0 ] && exit 1; exit 0
-
 ## BL-159 — four handoff-completion defects adjacent to `BL-158`, found by the batch-49 hands and deliberately not fixed there
 
 Distribution-internal, no `PC-` id; ranks below any PC-backed entry. Filed together because they

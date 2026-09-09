@@ -1218,6 +1218,686 @@ ss_assert "su-machfn-control" \
   "$(printf '%s\n' "$SU_GATE_MID" | grep -c 'SELF-UPDATE-UNDECIDED')" "0" \
   "the unmutated gate resolves a non-empty machinery set on this tree, so the UNDECIDED above is the mutation"
 
+# --- THE VERDICT RECORD: an autonomous decision that leaves an artifact ------------------
+#
+# Step 2 cuts a branch, writes the machinery slice, pushes and auto-merges with no operator.
+# Until the record existed the only trace of the DECISION was the model's own PR-body prose, and
+# `self-update-fixtures.sh` now REFUSES to run a fixture without a matching `# verdict: OK`
+# record for its own range -- so a gate that silently stops recording turns every self-update
+# into a refusal, and one that records the WRONG rows turns the runner's join into a rubber stamp.
+#
+# ITS OWN CONSUMER COPY PER WORLD, and that is a counting requirement rather than tidiness. Every
+# gate invocation above has already written a record into whichever consumer it was handed, so
+# `$CONS` holds an unknown number of them by the time this section runs; an arm asserting "exactly
+# one" against that directory would be asserting about the whole fixture's history.
+VR="$(dirname "$DIST")/vr"
+rm -rf "$VR"; mkdir -p "$VR"
+
+vr_cons() { # vr_cons <name> -> a fresh consumer copy with an EMPTY record directory
+  rm -rf "$VR/$1"
+  cp -R "$CONS" "$VR/$1"
+  rm -rf "$VR/$1/_bmad-output"
+  printf '%s\n' "$VR/$1"
+}
+vr_dir() { printf '%s\n' "$1/_bmad-output/ai-dlc-update"; }
+vr_n() { # vr_n <consumer> -> how many record files exist
+  local n
+  n="$(ls "$(vr_dir "$1")"/self-update-gate-*.md 2>/dev/null | grep -c .)" || n=0
+  printf '%s\n' "$n"
+}
+vr_newest() { ls -t "$(vr_dir "$1")"/self-update-gate-*.md 2>/dev/null | head -1; }
+# TRAILERS, NOT FILES, IS THE COUNT THAT SURVIVES THE FILENAME COLLISION. The record's name
+# carries a whole-second timestamp, so a nested invocation firing inside the same second reuses
+# the name and TRUNCATES the top-level's record instead of adding a file -- one file, two
+# `# verdict:` lines, and a file count of 1 that reads exactly like the guard working. This is
+# the observable the nested-write mutant below is scored on for that reason.
+vr_trailers() {
+  local n
+  n="$(cat "$(vr_dir "$1")"/self-update-gate-*.md 2>/dev/null | grep -c '^# verdict:')" || n=0
+  printf '%s\n' "$n"
+}
+
+VR_C1="$(vr_cons c1)"
+bash "$GATE" "$DIST" "$BASE" "$THEIRS" "$VR_C1" > "$VR/c1.out" 2> "$VR/c1.err"
+VR_REC1="$(vr_newest "$VR_C1")"
+
+ss_assert "rec-written" "$(vr_n "$VR_C1")" "1" \
+  "one classify run leaves exactly one record under the consumer's _bmad-output/ai-dlc-update"
+
+# THE ROWS ARE THE STDOUT ROWS, BYTE FOR BYTE, and `cmp -s` is the arm rather than a row count.
+# A second `printf` spelling the record's copy is a second grammar with nothing comparing the two:
+# it agrees on the day it is written and drifts the first time a field gains a tab or a verdict
+# gains a name. PRESENCE-shaped -- a record that was never written extracts to nothing and fails
+# this outright, so a gate that stopped recording cannot pass it.
+if [ -n "$VR_REC1" ]; then grep '^SELF-UPDATE-' "$VR_REC1" > "$VR/c1.rows" 2>/dev/null || : > "$VR/c1.rows"
+else : > "$VR/c1.rows"; fi
+ss_assert "rec-rows-identical" \
+  "$(cmp -s "$VR/c1.rows" "$VR/c1.out" && printf identical || printf differ)|$(grep -c . "$VR/c1.out" || true)" \
+  "identical|6" \
+  "the recorded rows are byte-identical to stdout, and the run really did emit rows -- a gate emitting nothing satisfies an equality of two empty files"
+
+# THE TRAILER IS DERIVED FROM THE ROWS. This seed DEFERS (asserted at the top of this fixture by
+# the gate-defer.sh row), and the row count is taken from stdout at run time rather than written
+# out here, so a gate that emits a different number of rows moves this cell instead of hiding
+# behind a literal that happened to stay true.
+ss_assert "rec-trailer" \
+  "$(sed -n 's/^# verdict: *//p' "${VR_REC1:-/dev/null}" | head -1)|$(sed -n 's/^# rows: *//p' "${VR_REC1:-/dev/null}" | head -1)" \
+  "DEFER|$(grep -c . "$VR/c1.out" || true)" \
+  "the trailer's verdict is the rows' verdict (any DEFER wins) and its count is the number of rows emitted"
+
+# THE RANGE ALONE DOES NOT IDENTIFY THE ANSWER, WHICH IS WHY THE RECORD NAMES ITS INPUTS.
+# Measured: the same gate command flips DEFER to OK once step 2 has written the slice, because
+# the differential runs the consumer's CURRENT copy of each gating script against the incoming
+# one and the write replaces the current copy. A record keyed on base/theirs alone therefore
+# accepts a post-write re-run as an approval of the pre-write question -- a record of INTENT
+# rather than of the decision.
+#
+# THE DIGESTS ARE ASSERTED AGAINST `git hash-object` OF THE FILES THEMSELVES, not against a list
+# spelled here: a hand-written expectation would go vacuous the release the seed gains a script,
+# and the property is that the record agrees with the TREE.
+vr_in() { sed -n 's/^# input: //p' "${1:-/dev/null}"; }
+vr_in_h() { vr_in "$1" | awk -F'\t' -v p="$2" '$1 == p {print $2; exit}'; }
+vr_in_c() { vr_in "$1" | awk -F'\t' -v p="$2" '$1 == p {print $3; exit}'; }
+
+# THE EXACT PATH SET, DERIVED FROM THE SEEDED TREE rather than spelled here: a literal list goes
+# vacuous the release the seed gains a script, and the property is that the record covers the
+# consumer files this verdict could read. The seed's machinery set over this miniature
+# distribution is its `core/scripts/`, which `map_consumer` sends to `scripts/ai-dlc/`, so the
+# union with the hook's named set is exactly the consumer's own script directory.
+ss_assert "rec-inputs-set" "$(vr_in "$VR_REC1" | awk -F'\t' '{print $1}' | sort | tr '\n' ',')" \
+  "$( { printf '.claude/.ai-dlc-applying\n.githooks/pre-push\n'
+        ls "$VR_C1/scripts/ai-dlc" | sed 's|^|scripts/ai-dlc/|'; } | sort | tr '\n' ',')" \
+  "one input line per consumer file the verdict could read: the hook, the interrupted-apply marker, and every script the hook names or the machinery set covers"
+
+# THE STAMP IS NOT AN INPUT, AND ITS ABSENCE IS A DECISION RATHER THAN AN OVERSIGHT. Step 2
+# rewrites `.claude/.ai-dlc-version` between this gate and the runner by design, so a row for it
+# could never match at read time and would refuse every legitimate self-update. It also has no
+# core origin, so the theirs-blob acceptance the other rows rely on cannot reach it.
+ss_assert "rec-input-no-stamp" "$(vr_in "$VR_REC1" | awk -F'\t' '$1 == ".claude/.ai-dlc-version"' | grep -c .)" \
+  "0" "the stamp step 2 rewrites mid-cycle is deliberately NOT recorded"
+# ...AND THAT ZERO IS ABOUT THE STAMP, NOT ABOUT THE GATE READING THE `.claude/` DIRECTORY AT
+# ALL: its sibling marker in the same directory IS recorded, in the same run.
+ss_assert "rec-input-no-stamp-control" \
+  "$(vr_in "$VR_REC1" | awk -F'\t' '$1 == ".claude/.ai-dlc-applying"' | grep -c .)" \
+  "1" "...while the marker beside it in the same directory IS, so the zero above is that file and not the directory"
+
+# COLUMN 3 IS THE CORE PATH, AND IT IS WHAT LETS THE RECORD SURVIVE STEP 2'S OWN WRITE. The
+# digests are taken at gate time and the reader hashes at runner time, with the slice written in
+# between; without a core path the reader has no theirs blob to accept the moved file against and
+# refuses every legitimate self-update.
+ss_assert "rec-input-core-col" \
+  "$(vr_in_c "$VR_REC1" '.githooks/pre-push')|$(vr_in_c "$VR_REC1" 'scripts/ai-dlc/gate-defer.sh')|$(vr_in_c "$VR_REC1" '.claude/.ai-dlc-applying')" \
+  "core/git-hooks/pre-push|core/scripts/gate-defer.sh|-" \
+  "each row names the CORE path its consumer path maps from, and a file with no core origin carries a literal -"
+
+# THE FALLBACK HOOK IS THE ONLY `-` IN COLUMN 1, and its column 3 is fixed. A consumer with no
+# hook of its own is judged against the distribution's copy, which is not under the consumer root
+# at all — so the reader is told where to look rather than left to resolve a consumer path that
+# does not exist. Its own consumer, because $VR_C1 has a hook.
+VR_NH="$(vr_cons nohook)"; rm -rf "$VR_NH/.githooks"
+bash "$GATE" "$DIST" "$BASE" "$THEIRS" "$VR_NH" >/dev/null 2>&1
+VR_NHR="$(vr_newest "$VR_NH")"
+ss_assert "rec-input-fallback-hook" \
+  "$(vr_in "$VR_NHR" | awk -F'\t' '$1 == "-" {print $3}' | tr '\n' ',')" \
+  "core/git-hooks/pre-push," \
+  "a consumer with no hook records the distribution's fallback as a - row whose core path is the hook, and nothing else takes a - column 1"
+# CONTROL: the consumer that HAS a hook produces no `-` row at all, so the row above is the
+# fallback and not a shape every record carries.
+ss_assert "rec-input-fallback-control" \
+  "$(vr_in "$VR_REC1" | awk -F'\t' '$1 == "-"' | grep -c .)" "0" \
+  "...and a consumer with its own hook has no - row, so column 1 marks the distribution read and only that"
+
+# THE HOOK IS THE INPUT THE WHOLE GATING SET IS DERIVED FROM. Measured by the adversary: writing
+# the hook alone flips OK to DEFER, and writing the scripts alone flips DEFER to OK.
+ss_assert "rec-input-hook" "$(vr_in_h "$VR_REC1" '.githooks/pre-push')" \
+  "$(git hash-object "$VR_C1/.githooks/pre-push")" \
+  "the pre-push hook the gating set was derived from is recorded at its exact content digest"
+
+# EVERY SCRIPT THE DIFFERENTIAL RAN AS THE CURRENT SIDE, and the one it did NOT run is here too:
+# which scripts get rows is derived from the hook, so a record holding only the row-producing
+# subset could not tell a hook that stopped naming a script from a script that stopped changing.
+ss_assert "rec-input-current-side" \
+  "$(vr_in_h "$VR_REC1" 'scripts/ai-dlc/gate-defer.sh')|$(vr_in_h "$VR_REC1" 'scripts/ai-dlc/unchanged.sh')" \
+  "$(git hash-object "$VR_C1/scripts/ai-dlc/gate-defer.sh")|$(git hash-object "$VR_C1/scripts/ai-dlc/unchanged.sh")" \
+  "a script that produced a DEFER row and one the pull never changed are both recorded -- the hook's membership is itself an input"
+
+# AN ABSENT INPUT IS RECORDED AS ABSENT, NOT OMITTED. `.ai-dlc-applying` decides whether the
+# SAFE-STOP acquittal is withheld, so its ARRIVAL changes the answer; an omitted line cannot
+# express "this file was not there when the verdict was taken".
+ss_assert "rec-input-absent" "$(vr_in_h "$VR_REC1" '.claude/.ai-dlc-applying')" "ABSENT" \
+  "a file whose absence the verdict depended on is recorded as ABSENT rather than left out"
+
+# THE DIGEST MOVES WITH THE FILE, which is the whole property. Editing a recorded input after the
+# run makes the record disagree with the tree -- and the runner refuses on that disagreement.
+printf '#!/usr/bin/env bash\n# edited after the verdict was taken\nexit 0\n' > "$VR_C1/.githooks/pre-push"
+ss_assert "rec-input-detects-edit" \
+  "$([ "$(vr_in_h "$VR_REC1" '.githooks/pre-push')" = "$(git hash-object "$VR_C1/.githooks/pre-push")" ] && printf still-matches || printf diverged)" \
+  "diverged" \
+  "editing a recorded input after the run makes the record disagree with the tree, which is the state the runner must refuse"
+# CONTROL, IN THE SAME BREATH: an input NOT edited still matches, so the arm above reads the file
+# rather than reporting divergence for everything.
+ss_assert "rec-input-detects-edit-control" \
+  "$([ "$(vr_in_h "$VR_REC1" 'scripts/ai-dlc/gate-defer.sh')" = "$(git hash-object "$VR_C1/scripts/ai-dlc/gate-defer.sh")" ] && printf still-matches || printf diverged)" \
+  "still-matches" \
+  "...while an untouched input still matches, so the divergence above is that one file and not the whole record"
+
+# THE JOIN KEYS THE RUNNER READS. `self-update-fixtures.sh` compares FULL resolved shas, so a
+# header carrying the caller's argument strings would let a short sha and its long form read as
+# two different ranges. Derived here from the same rev-parse the runner uses.
+ss_assert "rec-shas" \
+  "$(sed -n 's/^# base-sha: *//p' "${VR_REC1:-/dev/null}" | head -1)|$(sed -n 's/^# theirs-sha: *//p' "${VR_REC1:-/dev/null}" | head -1)" \
+  "$(git -C "$DIST" rev-parse "${BASE}^{commit}")|$(git -C "$DIST" rev-parse "${THEIRS}^{commit}")" \
+  "the header carries the FULL resolved shas of both endpoints, which is what the runner joins on"
+
+# THE PATH REACHES THE CALLER ON STDERR, because stdout is the TSV contract and every caller of
+# this gate parses it by field. A record nobody can name is a record nobody commits.
+ss_assert "rec-stderr-path" "$(sed -n 's/^record: *//p' "$VR/c1.err" | head -1)" "$VR_REC1" \
+  "the record's path is announced on stderr, so step 2 can commit the file it just produced"
+ss_assert "rec-stdout-tsv-only" \
+  "$(awk '!/^SELF-UPDATE-/ {n++} END{print n+0}' "$VR/c1.out")" "0" \
+  "...and NOTHING non-TSV reached stdout, so the announcement cannot be parsed as a row"
+
+# NO RECORD UNDER --safe-stop. That mode prints a REF for the caller to substitute into a
+# command; a record written there would name a candidate the operator never asked about.
+VR_C2="$(vr_cons c2)"
+bash "$GATE" --safe-stop "$DIST" "$BASE" "$THEIRS" "$VR_C2" >/dev/null 2>&1
+ss_assert "rec-safestop-quiet" "$(vr_n "$VR_C2")" "0" \
+  "--safe-stop writes no record at all"
+# ...AND THAT ZERO IS A DECISION, NOT A CONSUMER THAT CANNOT BE WRITTEN TO. Same tree, same
+# directory, one classify: a permissions problem would produce the same zero above.
+bash "$GATE" "$DIST" "$BASE" "$THEIRS" "$VR_C2" >/dev/null 2>&1
+ss_assert "rec-safestop-control" "$(vr_n "$VR_C2")" "1" \
+  "...and a classify against the SAME consumer records normally, so the zero above is the mode and not the tree"
+
+# EXACTLY ONE RECORD PER TOP-LEVEL CLASSIFY, EVEN WHEN THE VERDICT SPAWNS A WALK. The seed above
+# cannot see this: its range holds no INTERMEDIATE release, so `advise_safe_stop` classifies
+# nothing. The $SS world does -- base..r2 carries r1 -- so a DEFER there really does spawn a
+# nested classify, and without the guard that child writes a record of its OWN range which then
+# becomes the newest one the runner reads.
+#
+# WHAT CARRIES THE PROPERTY IS THE `export` BEFORE THE WALK'S LOOP, not the write site. The child
+# is a separate `bash` process; a guard the parent evaluates says nothing about what the child
+# does, and only an EXPORTED variable reaches it. The mutant below is keyed on that export for
+# that reason, and it is what proves this arm has a subject at all.
+ss_stamp -; ss_marker off
+VR_SS="$VR/sscons"; rm -rf "$VR_SS"; cp -R "$SS/cons" "$VR_SS"; rm -rf "$VR_SS/_bmad-output"
+# PRECONDITION: the walk must actually have a candidate to classify, or the arm below counts one
+# record because nothing nested ran and the guard was never exercised.
+ss_assert "rec-nested-pre" "$(bash "$GATE" --safe-stop "$SS/dist" "$SS_BASE" "$SS_R2" "$SS/cons" 2>/dev/null)" \
+  "$SS_R1" "the walk this DEFER spawns really does classify an intermediate candidate"
+bash "$GATE" "$SS/dist" "$SS_BASE" "$SS_R2" "$VR_SS" >/dev/null 2>&1
+ss_assert "rec-nested-one" "$(vr_trailers "$VR_SS")" "1" \
+  "a DEFER that spawns a --safe-stop walk still leaves exactly ONE recorded verdict, the top-level one"
+
+# AN UNRECORDABLE VERDICT IS UNDECIDED. The runner's doctrine for a join it could not run is a
+# refusal; the classifier's half of that answer is a row, not a silent OK.
+VR_C3="$(vr_cons c3)"
+mkdir -p "$VR_C3/_bmad-output"; chmod 500 "$VR_C3/_bmad-output"
+ss_assert "rec-unwritable-pre" "$([ -w "$VR_C3/_bmad-output" ] && printf writable || printf refused)" "refused" \
+  "the seeded consumer's _bmad-output really does refuse a write, so the row below is the gate reading a failure"
+VR_U="$(bash "$GATE" "$DIST" "$BASE" "$THEIRS" "$VR_C3" 2>/dev/null)"
+ss_assert "rec-unwritable-row" \
+  "$(printf '%s\n' "$VR_U" | awk -F'\t' '$1=="SELF-UPDATE-UNDECIDED" && $3 ~ /could not be RECORDED/ {print $2; exit}')" \
+  "$VR_C3/_bmad-output/ai-dlc-update" \
+  "an unwritable record directory produces an UNDECIDED row naming it, rather than a verdict with no artifact"
+chmod 700 "$VR_C3/_bmad-output"
+# CONTROL, ONE PROPERTY APART: the same consumer with the mode restored emits no such row.
+ss_assert "rec-unwritable-control" \
+  "$(bash "$GATE" "$DIST" "$BASE" "$THEIRS" "$VR_C3" 2>/dev/null | awk -F'\t' '$3 ~ /could not be RECORDED/' | grep -c .)" \
+  "0" "...and with the directory writable that row is gone, so it reads the failure and not every run"
+
+# --- MUTANTS on the record ---------------------------------------------------------------
+# THE COPY NEEDS ITS SIBLINGS, for the reason every battery in this file states: the gate resolves
+# preclassify.sh and setup-sites.md by `dirname "$0"`, and a lone copy answers UNDECIDED off an
+# empty machinery set with no record arm ever reached.
+vr_mut() { # vr_mut <name> <awk-program> -> path to the mutated gate, siblings beside it
+  local d="$VR/m-$1"
+  rm -rf "$d"; mkdir -p "$d"
+  cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$d"/ 2>/dev/null
+  awk "$2" "$GATE" > "$d/self-update-gate.sh" 2>/dev/null
+  printf '%s\n' "$d/self-update-gate.sh"
+}
+# vr_score <gate> <consumer-name> -> "n=<records> rows=<identical|differ> v=<verdict>"
+vr_score() {
+  local c out rec rows v
+  c="$(vr_cons "$2")"
+  bash "$1" "$DIST" "$BASE" "$THEIRS" "$c" > "$VR/$2.out" 2>/dev/null
+  rec="$(vr_newest "$c")"
+  if [ -n "$rec" ]; then grep '^SELF-UPDATE-' "$rec" > "$VR/$2.rows" 2>/dev/null || : > "$VR/$2.rows"
+  else : > "$VR/$2.rows"; fi
+  rows=differ; cmp -s "$VR/$2.rows" "$VR/$2.out" && rows=identical
+  v="$(sed -n 's/^# verdict: *//p' "${rec:-/dev/null}" | head -1)"
+  printf 'n=%s rows=%s v=%s\n' "$(vr_n "$c")" "$rows" "${v:-<none>}"
+}
+
+# THE UNMUTATED CONTROL, PRESENCE-SHAPED. A copy that dies resolving its siblings, or one replaced
+# by `exit 0`, scores n=0 rows=identical (two empty files compare equal) v=<none> and fails this.
+rm -rf "$VR/m-control"; mkdir -p "$VR/m-control"
+cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$VR/m-control"/ 2>/dev/null
+ss_assert "rec-mut-control" "$(vr_score "$VR/m-control/self-update-gate.sh" ctl)" \
+  "n=1 rows=identical v=DEFER" \
+  "an unmutated copy beside its siblings records normally, so a mutant's shift is the mutation"
+
+vr_kill() { # vr_kill <label> <awk> <consumer-name> <want> <why>
+  local g got
+  g="$(vr_mut "$1" "$2")"
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if cmp -s "$GATE" "$g"; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s mutation matched nothing, so the arm it scores is unproven\n' "$1"
+    return
+  fi
+  got="$(vr_score "$g" "$3")"
+  if [ "$got" = "$4" ]; then
+    printf '  ok    %-16s KILLED (%s)\n' "$1" "$5"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]  %s\n' "$1" "$got" "$4" "$5"
+  fi
+}
+
+# THE CALL, NOT THE DEFINITION. `gate_record_open` appears twice; the bare call is the one line
+# whose removal leaves a gate that still classifies and records nothing -- which is the state the
+# runner reads as a refusal on every self-update.
+vr_kill "rec-mut-norecord" 'index($0,"gate_record_open") && $0 == "gate_record_open" { next } { print }' \
+  m1 "n=0 rows=differ v=<none>" \
+  "a gate that never opens the record still prints its verdict, and step 2 pushes on a decision with no artifact"
+
+# THE SECOND SPELLING. The record's copy of the row is written by its own printf instead of the
+# one string emit() already rendered. The divergence seeded here is ONE TRAILING SPACE, which is
+# the shape a second grammar actually drifts into -- and it is deliberately NOT a change of
+# separator, because a space-separated row would also move the trailer (the derivation splits on
+# tabs, so field 1 would stop being a verdict token) and a mutant moving two cells proves neither.
+# `v=DEFER` in the expectation is the conjunct that holds it to one cell.
+vr_kill "rec-mut-2printf" \
+  'index($0,"[ -n \"$GATE_REC\" ] && printf") { print "  [ -n \"$GATE_REC\" ] && printf \"%s\\t%s\\t%s \\n\" \"$1\" \"$2\" \"$3\" >> \"$GATE_REC\""; next } { print }' \
+  m2 "n=1 rows=differ v=DEFER" \
+  "rows spelled a second time diverge from stdout, and the record stops being evidence about what the operator was shown"
+
+# THE TRAILER STOPS BEING DERIVED. The whole if/elif that reads the rows is dropped, leaving the
+# `_rec_v=OK` initialiser -- so a DEFER record advertises itself to the runner as an approval.
+vr_kill "rec-mut-trailer-ok" \
+  '{ if (index($0,"    _rec_v=OK")) { print; blk=1; next }
+     if (blk && index($0,"    fi")) { blk=0; next }
+     if (blk) next
+     print }' \
+  m3 "n=1 rows=identical v=OK" \
+  "a hard-coded trailer says OK over DEFER rows, which is the one value the runner reads before it will run a fixture"
+
+# THE DIGESTS ARE READ FROM THE FILES. A constant in their place leaves the record structurally
+# perfect -- right count, right paths, right sort order -- and joins on nothing, which is the
+# shape `rec-input-detects-edit` exists to catch and the only mutation that can move that cell.
+VR_M7="$(vr_mut m7 'index($0,"_gi_h=\"$(git hash-object \"$_gi_abs\" 2>/dev/null)\"") { print "    _gi_h=CONSTANT"; next } { print }')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$GATE" "$VR_M7"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-16s mutation matched nothing, so the arm it scores is unproven\n' "rec-mut-digest"
+else
+  VR_C7="$(vr_cons m7c)"
+  bash "$VR_M7" "$DIST" "$BASE" "$THEIRS" "$VR_C7" >/dev/null 2>&1
+  VR_R7="$(vr_newest "$VR_C7")"
+  vr_m7_got="$(vr_in_h "$VR_R7" '.githooks/pre-push')|$(vr_in "$VR_R7" | grep -c .)"
+  vr_m7_want="CONSTANT|$(vr_in "$VR_REC1" | grep -c .)"
+  if [ "$vr_m7_got" = "$vr_m7_want" ]; then
+    printf '  ok    %-16s KILLED (%s)\n' "rec-mut-digest" \
+      "a constant digest leaves the record structurally identical -- same paths, same count -- and joins on nothing"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]\n' "rec-mut-digest" "$vr_m7_got" "$vr_m7_want"
+  fi
+fi
+
+# THE NESTED-WRITE GUARD, scored on the $SS world because it is the only one whose DEFER spawns a
+# walk, and on the TRAILER count because a child firing in the same whole second reuses the
+# record's name and truncates rather than adding a file. KEYED ON THE `export`: the child is a
+# separate process, so an un-exported variable is what actually lets it record.
+VR_M4="$(vr_mut m4 'index($0,"  export AI_DLC_GATE_IN_SAFE_STOP=1") { print "  AI_DLC_GATE_IN_SAFE_STOP=1"; next } { print }')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$GATE" "$VR_M4"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-16s mutation matched nothing, so the arm it scores is unproven\n' "rec-mut-nested"
+else
+  VR_SS4="$VR/sscons4"; rm -rf "$VR_SS4"; cp -R "$SS/cons" "$VR_SS4"; rm -rf "$VR_SS4/_bmad-output"
+  bash "$VR_M4" "$SS/dist" "$SS_BASE" "$SS_R2" "$VR_SS4" >/dev/null 2>&1
+  vr_m4_got="$(vr_trailers "$VR_SS4")"
+  if [ "$vr_m4_got" -gt 1 ] 2>/dev/null; then
+    printf '  ok    %-16s KILLED (%s recorded verdicts; %s)\n' "rec-mut-nested" "$vr_m4_got" \
+      "without the EXPORT the nested classify records its OWN range, and the newest record the runner reads is a candidate's verdict"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s SURVIVED: got=[%s] want=[>1]\n' "rec-mut-nested" "$vr_m4_got"
+  fi
+fi
+
+# --- A GATE THAT CANNOT READ ITS OWN RANGE MUST NOT RETURN OK ----------------------------
+#
+# Measured against this seed before the guard existed: `self-update-gate.sh <dist> <base>
+# deadbeefcafe <cons>` printed `SELF-UPDATE-OK - this pull changes no core/scripts/ path`, and so
+# did a bogus BASE. `git diff --name-only bad..X` fails, `CHANGED` reads EMPTY, and the empty-diff
+# terminal acquits; arms R1, R2 and the CARRY arm are silent for the same reason, so the output is
+# byte-indistinguishable from a genuinely clean pull. The gate's own header already said a gate
+# that cannot read its own subject must not return OK.
+#
+# EACH RUN IS SCORED AS A TUPLE, not as a presence. `und=` alone cannot tell a guard that reads
+# the ref from one that reports UNDECIDED unconditionally, and `ok=` alone cannot tell a refusal
+# from a gate that emits nothing.
+#
+# ITS OWN CONSUMER, BUILT HERE. `$VR_C1` has had its hook REWRITTEN by the input-digest arm above
+# — deliberately, since that arm's whole subject is a recorded input moving — and the hook decides
+# the gating set. Reusing it makes `range-control` read one OK row where the seed produces two,
+# which is a false red that looks exactly like the guard over-reaching.
+VR_RC="$(vr_cons rangecons)"
+vr_range() { # vr_range <gate> <base> <theirs> <dist> -> "und=<n> f2=<first-undecided-subject> ok=<n>"
+  local o
+  o="$(bash "$1" "$4" "$2" "$3" "$VR_RC" 2>/dev/null)"
+  printf 'und=%s f2=%s ok=%s\n' \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1=="SELF-UPDATE-UNDECIDED" {n++} END{print n+0}')" \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1=="SELF-UPDATE-UNDECIDED" {print $2; exit}')" \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1=="SELF-UPDATE-OK" {n++} END{print n+0}')"
+}
+
+ss_assert "range-bogus-theirs" "$(vr_range "$GATE" "$BASE" deadbeefcafe "$DIST")" \
+  "und=1 f2=deadbeefcafe ok=0" \
+  "an unresolvable THEIRS yields one UNDECIDED row NAMING that ref and no OK row at all"
+ss_assert "range-bogus-base" "$(vr_range "$GATE" deadbeefcafe "$THEIRS" "$DIST")" \
+  "und=1 f2=deadbeefcafe ok=0" \
+  "and an unresolvable BASE likewise -- a guard on THEIRS alone leaves this one acquitting"
+ss_assert "range-both-bogus" "$(vr_range "$GATE" nope-base nope-theirs "$DIST")" \
+  "und=2 f2=nope-base ok=0" \
+  "both endpoints are checked in one run, so a caller with two bad refs is told about both"
+
+# A TREE OBJECT IS THE INPUT THAT SEPARATES `^{commit}` FROM A BARE EXISTENCE TEST, and it is the
+# one a syntactically-valid-but-wrong sha actually looks like. A tree RESOLVES: `<tree>:<path>`
+# reads blobs perfectly well, so before the peel this ref produced the full correct verdict set
+# off a range endpoint that is not a commit at all. `deadbeefcafe` cannot make that distinction --
+# it fails every test, so a guard written as `rev-parse -q --verify "$REF"` would pass on it and
+# still admit the tree.
+VR_TREE="$(git -C "$DIST" rev-parse "${THEIRS}^{tree}")"
+ss_assert "range-tree-theirs" "$(vr_range "$GATE" "$BASE" "$VR_TREE" "$DIST")" \
+  "und=1 f2=$VR_TREE ok=0" \
+  "a THEIRS naming a TREE is refused: it resolves as an object, so only the ^{commit} peel can tell it from a range endpoint"
+
+# THE CONTROL, AND IT IS THE ARM THAT SEPARATES A REFUSAL FROM A GATE THAT REFUSES EVERYTHING.
+# The real range is the input the guard must NOT touch: it carries OK rows and exactly one
+# UNDECIDED, gate-agree.sh's, which the differential arms at the top of this fixture already own.
+ss_assert "range-control" "$(vr_range "$GATE" "$BASE" "$THEIRS" "$DIST")" \
+  "und=1 f2=gate-agree.sh ok=2" \
+  "the real range is untouched: two OK rows and the one UNDECIDED the differential produces"
+
+# DIST IS NOT A REPOSITORY. Its own arm rather than a case of the ref check, because the two have
+# different SUBJECTS: naming two perfectly good refs as unresolvable sends the operator after the
+# range when the argument that is wrong is the path.
+VR_NR="$VR/notarepo"; rm -rf "$VR_NR"; mkdir -p "$VR_NR"
+ss_assert "range-not-a-repo" "$(vr_range "$GATE" "$BASE" "$THEIRS" "$VR_NR")" \
+  "und=1 f2=$VR_NR ok=0" \
+  "a DIST that is not a git repository is reported as ITSELF, once, with no OK row"
+
+# THE REFUSAL IS STILL RECORDED. An UNDECIDED with no artifact is the same hole for the runner as
+# an OK with no artifact, and the header must say which endpoint failed to resolve.
+VR_C4="$(vr_cons c4)"
+bash "$GATE" "$DIST" "$BASE" deadbeefcafe "$VR_C4" >/dev/null 2>&1
+VR_REC4="$(vr_newest "$VR_C4")"
+ss_assert "range-recorded" \
+  "$(sed -n 's/^# theirs-sha: *//p' "${VR_REC4:-/dev/null}" | head -1)|$(sed -n 's/^# verdict: *//p' "${VR_REC4:-/dev/null}" | head -1)" \
+  "unresolved|UNDECIDED" \
+  "a refused range is recorded too, with the unresolvable endpoint marked rather than the line omitted"
+
+# A RECORD WITH NO `# input:` LINE IS MALFORMED AND THE RUNNER REFUSES IT, so the earliest
+# terminal must carry the inputs it could read. This is the refusal above -- it exits before any
+# arm -- and it still names the hook and the marker.
+ss_assert "range-recorded-inputs" \
+  "$(vr_in "$VR_REC4" | awk -F'\t' '$1 == ".githooks/pre-push" {n++} END{print n+0}')|$(vr_in "$VR_REC4" | grep -c .)" \
+  "1|2" \
+  "the earliest terminal records the inputs it could read, so no record reaches the runner with an empty input set"
+
+# --- MUTANTS on the range guard -----------------------------------------------------------
+# The unmutated control for these two is `range-control` above, which is PRESENCE-shaped on the OK
+# rows: a gate that emits nothing scores ok=0 there and fails.
+VR_M5="$(vr_mut m5 'index($0,"  gate_bad_ref=1") { next } { print }')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$GATE" "$VR_M5"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-16s mutation matched nothing, so the arm it scores is unproven\n' "range-mut-refs"
+else
+  vr_m5_got="$(vr_range "$VR_M5" "$BASE" deadbeefcafe "$DIST")"
+  if [ "$vr_m5_got" = "und=1 f2=deadbeefcafe ok=1" ]; then
+    printf '  ok    %-16s KILLED (%s)\n' "range-mut-refs" \
+      "with the refusal defeated the OK RETURNS beside the row -- and a caller reading the verdict, as step 2 does, proceeds"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s SURVIVED: got=[%s] want=[und=1 f2=deadbeefcafe ok=1]\n' "range-mut-refs" "$vr_m5_got"
+  fi
+fi
+
+# THE SECOND GUARD HAS ITS OWN MUTANT BECAUSE ITS SUBJECT IS THE ONE THE FIRST CANNOT NAME. With
+# the repository arm gone the ref loop still refuses -- correctly, since neither ref resolves --
+# so the verdict does not change and only the SUBJECT does: two rows blaming two good refs instead
+# of one naming the path. That is the whole outcome this arm owns, and stating it here stops the
+# next reader scoring the guard as vacuous because the verdict held.
+VR_M6="$(vr_mut m6 'index($0,"if ! git -C \"$DIST\" rev-parse --git-dir") { print "if false; then"; next } { print }')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$GATE" "$VR_M6"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-16s mutation matched nothing, so the arm it scores is unproven\n' "range-mut-repo"
+else
+  vr_m6_got="$(vr_range "$VR_M6" "$BASE" "$THEIRS" "$VR_NR")"
+  if [ "$vr_m6_got" = "und=2 f2=$BASE ok=0" ]; then
+    printf '  ok    %-16s KILLED (%s)\n' "range-mut-repo" \
+      "without its own arm the missing REPOSITORY is reported as two unresolvable refs, sending the operator after the range instead of the path"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s SURVIVED: got=[%s] want=[und=2 f2=%s ok=0]\n' "range-mut-repo" "$vr_m6_got" "$BASE"
+  fi
+fi
+
+# --- A VERDICT TAKEN ON AN ALREADY-WRITTEN TREE ANSWERS A DIFFERENT QUESTION --------------
+#
+# Step 2's real order is: gate, WRITE the machinery slice (every gating script at theirs), run the
+# derived fixtures, push. A gate run AFTER that write compares each script with ITSELF -- cur and
+# new are the same bytes -- so every differential agrees and the equality arm reports OK. Measured
+# on this seed: 2 DEFER rows before the write, 4 OK after, 2 DEFER again on revert. Nothing but
+# the ORDER a human ran two commands in separated an honest verdict from that one.
+#
+# THE WRITE IS SIMULATED WITH THE DISTRIBUTION'S OWN BLOBS, not with invented content, because the
+# property under test is byte-equality with theirs. Content of my own choosing would exercise a
+# state step 2 never produces.
+VR_PW="$(vr_cons prewritten)"
+vr_write_slice() { # vr_write_slice <consumer> -- what step 2 writes: every CHANGED gating script at theirs
+  local n
+  for n in gate-pass gate-defer gate-broken gate-agree; do
+    git -C "$DIST" show "${THEIRS}:core/scripts/${n}.sh" > "$1/scripts/ai-dlc/${n}.sh" 2>/dev/null
+  done
+}
+# PRECONDITION. The simulation is only a simulation of step 2 if the bytes really land at theirs;
+# a `git show` that silently wrote nothing would leave the tree at base and the arm below would
+# pass for the reason it exists to refuse.
+vr_write_slice "$VR_PW"
+ss_assert "prewritten-pre" \
+  "$(git hash-object "$VR_PW/scripts/ai-dlc/gate-defer.sh")" \
+  "$(git -C "$DIST" rev-parse "${THEIRS}:core/scripts/gate-defer.sh")" \
+  "the simulated write really put the consumer's copy at theirs, so the arm below has its subject"
+
+vr_pw_scan() { # vr_pw_scan <gate> <consumer> -> "und=<n> ok=<n> pw=<n>"
+  local o
+  o="$(bash "$1" "$DIST" "$BASE" "$THEIRS" "$2" 2>/dev/null)"
+  printf 'und=%s ok=%s pw=%s\n' \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1=="SELF-UPDATE-UNDECIDED" {n++} END{print n+0}')" \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1=="SELF-UPDATE-OK" {n++} END{print n+0}')" \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$3 ~ /ALREADY at theirs/ {n++} END{print n+0}')"
+}
+
+# FOUR GATING SCRIPTS, ALL AT THEIRS, ALL CHANGED IN THE RANGE: four UNDECIDED rows naming them
+# and ZERO OK rows. The `pw=` cell is what separates this arm from a gate that went UNDECIDED for
+# some other reason -- the range guard, an unreadable script, an empty machinery set all produce
+# UNDECIDED too, and only this row's own wording says WHICH question could not be asked.
+ss_assert "prewritten-refused" "$(vr_pw_scan "$GATE" "$VR_PW")" "und=4 ok=0 pw=4" \
+  "a gate run after the slice was written refuses every gating script: cur and new are one file, so their agreement answers nothing"
+
+# THE CONTROL, ONE PROPERTY APART AND IN THE SAME RUN. The same gate, the same range, a consumer
+# whose copies are still at BASE: the ordinary verdicts return untouched. Without this the arm
+# above is satisfied by a gate that refuses everything.
+ss_assert "prewritten-control" "$(vr_pw_scan "$GATE" "$VR_RC")" "und=1 ok=2 pw=0" \
+  "...while the un-written consumer keeps its two OK rows and its one differential UNDECIDED, so the refusal reads the tree"
+
+# --- THE NEAR-MISS THAT SITES THE SECOND CONJUNCT, IN ITS OWN MINIATURE DISTRIBUTION -----
+#
+# The second conjunct is `base blob != theirs blob`, and its subject is a script that IS in the
+# gating set and whose content did NOT move. The main seed cannot express that, measured rather
+# than assumed: `GATING` is `INVOKED` intersected with `git diff --name-only base..theirs --
+# core/scripts/`, and `unchanged.sh` -- the obvious candidate -- is byte-identical at both refs,
+# so the diff never lists it and the loop never reaches it. An arm aimed at it scores 0 whether
+# the conjunct is there or not, which is how the first cut of this battery read a green mutant.
+#
+# A MODE-ONLY CHANGE IS THE INPUT THAT DISCRIMINATES. `git diff --name-only` lists a path whose
+# mode moved 100644 -> 100755 while `rev-parse base:<p>` and `rev-parse theirs:<p>` return the
+# SAME blob -- verified in this world below, because the whole arm rests on it. Such a script is
+# in the gating set, its consumer copy equals theirs by construction, and only `base != theirs`
+# separates it from a genuinely pre-written one.
+PW="$(dirname "$DIST")/pw"
+rm -rf "$PW"; mkdir -p "$PW/dist/core/scripts" "$PW/dist/core/rules" \
+                       "$PW/cons/scripts/ai-dlc" "$PW/cons/.githooks"
+git -C "$PW/dist" init -q
+printf '0.1.0\n'            > "$PW/dist/VERSION"
+printf 'pw machinery\n'     > "$PW/dist/core/rules/pw.md"
+printf '#!/bin/sh\nexit 0\n' > "$PW/dist/core/scripts/moved.sh"
+printf '#!/bin/sh\nexit 0\n' > "$PW/dist/core/scripts/modeonly.sh"
+chmod 644 "$PW/dist/core/scripts/modeonly.sh"
+git -C "$PW/dist" add -A >/dev/null 2>&1
+git -C "$PW/dist" -c user.email=f@x -c user.name=f commit -qm base >/dev/null 2>&1
+PW_BASE="$(git -C "$PW/dist" rev-parse HEAD)"
+printf '0.2.0\n'                          > "$PW/dist/VERSION"
+printf '#!/bin/sh\n# reworded\nexit 0\n'   > "$PW/dist/core/scripts/moved.sh"
+chmod 755 "$PW/dist/core/scripts/modeonly.sh"
+git -C "$PW/dist" add -A >/dev/null 2>&1
+git -C "$PW/dist" -c user.email=f@x -c user.name=f commit -qm theirs >/dev/null 2>&1
+PW_THEIRS="$(git -C "$PW/dist" rev-parse HEAD)"
+# The consumer holds BOTH at theirs' content: the offender because step 2 wrote it, the near-miss
+# because its content never moved. That is the whole point -- one property apart.
+git -C "$PW/dist" show "${PW_THEIRS}:core/scripts/moved.sh"    > "$PW/cons/scripts/ai-dlc/moved.sh"
+git -C "$PW/dist" show "${PW_THEIRS}:core/scripts/modeonly.sh" > "$PW/cons/scripts/ai-dlc/modeonly.sh"
+printf '#!/usr/bin/env bash\nbash scripts/ai-dlc/moved.sh\nbash scripts/ai-dlc/modeonly.sh\n' \
+  > "$PW/cons/.githooks/pre-push"
+chmod +x "$PW/cons/.githooks/pre-push" "$PW/cons/scripts/ai-dlc"/*.sh
+
+# PRECONDITION, AND THE ARM BELOW IS VACUOUS WITHOUT IT. A mode flip git did not record leaves
+# the near-miss out of the gating set entirely, and its silence would then mean nothing.
+ss_assert "prewritten-nm-seed" \
+  "$(git -C "$PW/dist" diff --name-only "${PW_BASE}..${PW_THEIRS}" -- core/scripts/ | sort | tr '\n' ',')|$([ "$(git -C "$PW/dist" rev-parse "${PW_BASE}:core/scripts/modeonly.sh")" = "$(git -C "$PW/dist" rev-parse "${PW_THEIRS}:core/scripts/modeonly.sh")" ] && printf same-blob || printf moved)" \
+  "core/scripts/modeonly.sh,core/scripts/moved.sh,|same-blob" \
+  "the mode-only script IS in the range's changed set while its blob never moved, so it reaches the loop and only the second conjunct can excuse it"
+
+pw_rows() { # pw_rows <gate> <script> -> "<status>|<pw-marker>"
+  local o
+  o="$(bash "$1" "$PW/dist" "$PW_BASE" "$PW_THEIRS" "$PW/cons" 2>/dev/null)"
+  printf '%s|%s\n' \
+    "$(printf '%s\n' "$o" | awk -F'\t' -v s="$2" '$2 == s {print $1; exit}')" \
+    "$(printf '%s\n' "$o" | awk -F'\t' -v s="$2" '$2 == s && $3 ~ /ALREADY at theirs/ {print "pw"; exit}')"
+}
+
+ss_assert "prewritten-nm-offender" "$(pw_rows "$GATE" moved.sh)" "SELF-UPDATE-UNDECIDED|pw" \
+  "the script the range genuinely changed, held at theirs by the consumer, is refused"
+ss_assert "prewritten-nearmiss" "$(pw_rows "$GATE" modeonly.sh)" "SELF-UPDATE-OK|" \
+  "...while the mode-only script beside it, at theirs for a reason the pull did not create, keeps its ordinary verdict"
+
+# --- MUTANTS on the pre-written arm ----------------------------------------------------
+# `prewritten-control` above is the unmutated control and it is PRESENCE-shaped on ok=2, so a
+# gate replaced by `exit 0` fails it rather than scoring these as kills.
+VR_M8="$(vr_mut m8 'index($0,"  if [ -n \"$gi_cur_h\" ] && [ -n \"$gi_th_h\" ]") { print "  if false; then"; next } { print }')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$GATE" "$VR_M8"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-16s mutation matched nothing, so the arm it scores is unproven\n' "prewritten-mut"
+else
+  vr_m8_got="$(vr_pw_scan "$VR_M8" "$VR_PW")"
+  if [ "$vr_m8_got" = "und=0 ok=4 pw=0" ]; then
+    printf '  ok    %-16s KILLED (%s)\n' "prewritten-mut" \
+      "with the arm gone the post-write tree reports OK for every gating script -- the verdict that was DEFER before the write"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s SURVIVED: got=[%s] want=[und=0 ok=4 pw=0]\n' "prewritten-mut" "$vr_m8_got"
+  fi
+fi
+
+# THE SECOND CONJUNCT HAS ITS OWN MUTANT, because dropping it changes no cell on the OFFENDER and
+# `prewritten-mut` would score identically. Its subject is the near-miss world above: without
+# `base != theirs` the guard refuses the mode-only script too, on a consumer that is merely
+# current. Scored as a PAIR -- the near-miss moves and the offender does NOT -- so a mutation that
+# broke the arm outright cannot pass as this kill.
+VR_M9="$(vr_mut m9 'index($0,"[ \"$gi_ba_h\" != \"$gi_th_h\" ]") { sub(/\[ "\$gi_ba_h" != "\$gi_th_h" \]/, "true") } { print }')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$GATE" "$VR_M9"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-16s mutation matched nothing, so the arm it scores is unproven\n' "prewritten-mut-conj"
+else
+  vr_m9_got="$(pw_rows "$VR_M9" modeonly.sh)|$(pw_rows "$VR_M9" moved.sh)"
+  if [ "$vr_m9_got" = "SELF-UPDATE-UNDECIDED|pw|SELF-UPDATE-UNDECIDED|pw" ]; then
+    printf '  ok    %-16s KILLED (%s)\n' "prewritten-mut-conj" \
+      "without the base != theirs conjunct the mode-only script is refused too, on a consumer that is merely current"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s SURVIVED: got=[%s] want=[SELF-UPDATE-UNDECIDED|pw|SELF-UPDATE-UNDECIDED|pw]\n' \
+      "prewritten-mut-conj" "$vr_m9_got"
+  fi
+fi
+
+# ONE ROW PER CONSUMER PATH, AND THE DEDUP IS LOAD-BEARING RATHER THAN COSMETIC. Two sites record
+# a gating script: the hook-named loop and the machinery loop, which `map_consumer` sends to the
+# same consumer path. Unmutated they emit BYTE-IDENTICAL rows -- same path, same digest, same core
+# path -- and `sort -u` collapses them to one. A reader iterating rows would otherwise check the
+# same file twice, and worse, two rows for one path that DISAGREED in any column would give it two
+# answers with no rule for choosing. Measured on this seed: 8 lines, one per consumer file.
+ss_assert "rec-inputs-unique" \
+  "$(vr_in "$VR_REC1" | awk -F'\t' '{print $1}' | sort | uniq -d | grep -c .)" "0" \
+  "no consumer path appears twice, so the two recording sites agree in every column and collapse"
+# CONTROL: the dedup has a subject -- the machinery loop really does reach the same paths, so the
+# zero above is agreement rather than a set the second site never touched.
+# READ OFF `$CONS`, THE SEED'S OWN CONSUMER, AND NOT OFF `$VR_C1`. The edit-detection arm below
+# REWRITES `$VR_C1`'s hook to a script naming nothing -- deliberately, that is its whole subject --
+# and a hook naming no scripts intersects the machinery set in zero members, so this control would
+# read `none` and fail while describing a tree nobody was asserting about.
+ss_assert "rec-inputs-unique-control" \
+  "$(bash "$SU/mach/list-machinery.sh" "$DIST" "$BASE" "$THEIRS" 2>/dev/null \
+     | sed -n 's|^core/scripts/||p' | sort -u \
+     | grep -Fxf <(grep -oE 'scripts/ai-dlc/[A-Za-z0-9._-]+\.sh' "$CONS/.githooks/pre-push" | sed 's|.*/||' | sort -u) \
+     | grep -c . | awk '{print ($1 > 0) ? "overlap" : "none"}')" \
+  "overlap" "...and the two recording sites really do overlap on some script, so the collapse is agreement rather than a set the second site never touched"
+
+# THE CORE-PATH COLUMN HAS ITS OWN MUTANT. Written as `-` for a script, the record keeps every
+# path and every digest and the reader loses the theirs blob it needs to accept a file the slice
+# legitimately moved -- so every self-update whose range changes a gating script is refused.
+#
+# IT MOVES A SECOND CELL, AND THAT IS THE MUTATION RATHER THAN AN ENTANGLEMENT. With column 3
+# differing between the two recording sites their rows stop being identical, `sort -u` no longer
+# collapses them, and the same consumer path appears TWICE with contradictory core paths. Both
+# outcomes are the one defect and both are asserted, because a mutant scored on the column alone
+# would read identically to one that also made the record self-contradictory.
+VR_M10="$(vr_mut m10 'index($0,"  gate_input \"scripts/ai-dlc/$gi_name\" \"core/scripts/$gi_name\"") { print "  gate_input \"scripts/ai-dlc/$gi_name\" \"-\""; next } { print }')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$GATE" "$VR_M10"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-16s mutation matched nothing, so the arm it scores is unproven\n' "rec-mut-corepath"
+else
+  VR_C10="$(vr_cons m10c)"
+  bash "$VR_M10" "$DIST" "$BASE" "$THEIRS" "$VR_C10" >/dev/null 2>&1
+  VR_R10="$(vr_newest "$VR_C10")"
+  vr_m10_got="$(vr_in_c "$VR_R10" 'scripts/ai-dlc/gate-defer.sh')|$(vr_in_c "$VR_R10" '.githooks/pre-push')|dup=$(vr_in "$VR_R10" | awk -F'\t' '{print $1}' | sort | uniq -d | grep -c .)"
+  # THE DUPLICATE COUNT IS DERIVED, NOT SPELLED: it is the INTERSECTION of the two recording
+  # sites -- the scripts the hook names AND the machinery set covers. `not-invoked.sh` is in the
+  # machinery set and not in the hook, so it is recorded once and cannot duplicate; a literal here
+  # would go vacuous the day the seed's hook gains a line.
+  vr_m10_dup="$(grep -oE 'scripts/ai-dlc/[A-Za-z0-9._-]+\.sh' "$CONS/.githooks/pre-push" | sed 's|.*/||' | sort -u \
+                | grep -Fxf <(bash "$SU/mach/list-machinery.sh" "$DIST" "$BASE" "$THEIRS" 2>/dev/null \
+                              | sed -n 's|^core/scripts/||p' | sort -u) | grep -c .)" || vr_m10_dup=0
+  vr_m10_want="-|core/git-hooks/pre-push|dup=$vr_m10_dup"
+  if [ "$vr_m10_got" = "$vr_m10_want" ] && [ "$vr_m10_dup" -gt 0 ] 2>/dev/null; then
+    printf '  ok    %-16s KILLED (%s)\n' "rec-mut-corepath" \
+      "a script row whose core path is - leaves the reader no theirs blob for the write, and breaks the dedup so every doubly-recorded path carries two contradictory rows"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]\n' "rec-mut-corepath" "$vr_m10_got" "$vr_m10_want"
+  fi
+fi
+
 echo
 if [ "$FAILURES" -gt 0 ]; then
   echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong."

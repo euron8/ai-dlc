@@ -393,6 +393,42 @@ prose is itself generated rather than composed.
    under identical conditions — so a script that merely fails to resolve from a temp path cannot
    masquerade as a new finding and strand the slice for no reason.
 
+   **THE APPROVAL ARTIFACT FOR THIS AUTONOMOUS CYCLE IS THE PAIR OF RECORDS, AND IT IS THE ONLY
+   ONE.** This cycle cuts a branch, writes the machinery slice, pushes and auto-merges with no
+   operator gate, so nothing outside the operating agent's own narration records the decision that
+   permitted the write. The gate now writes
+   `_bmad-output/ai-dlc-update/self-update-gate-<ts>.md` — its verdict, the rows it emitted and the
+   range it classified — and `reconcile/self-update-fixtures.sh` writes its own log beside it.
+   **Commit BOTH files in the self-update commit**, so the auto-merged PR carries the evidence of
+   its own approval rather than a claim about it.
+
+   **The fixture runner REFUSES to run anything without that record.** It looks for a recorded
+   `# verdict: OK` whose range matches its own — compared as RESOLVED COMMITS, so a tag and the sha
+   it names are the same range — and exits 2 with a `GATE-RECORD:` line naming the exact gate
+   command when there is none. That is what makes the gate's verdict load-bearing rather than
+   advisory: a classifier printing to stdout can refuse nothing, and the program this step must
+   call before it may push is the one that can.
+
+   **The record also binds the CONSUMER TREE its verdict was taken against, not just the range.**
+   The verdict is a differential against the consumer's own copies, so the same command over one
+   range answers differently once this cycle has written the slice — the record therefore names
+   every consumer file the verdict read, with its digest and the core path it maps from, and the
+   runner re-reads each one.
+
+   **THE ORDER IS GATE, THEN WRITE, THEN RUNNER, AND THE GATE RUNS ONCE.** Run
+   `self-update-gate.sh` BEFORE writing anything, on the tree as the operator left it; write the
+   slice; then run the fixture runner. It accepts an input whose content is now what this pull
+   ships — that is the slice it just wrote — and refuses one that is neither the recorded content
+   nor `theirs`. **Never re-run the gate after the write to refresh a record.** A gate run on the
+   written tree compares each incoming script with a copy of itself, so it reports OK for the one
+   reason that means nothing, and the runner refuses such a record as `PRE-WRITTEN`.
+
+   **One tolerance, and it exists because a fix to a bootstrapping step cannot be delivered by that
+   step.** On the pull that delivers the recording gate the OLD gate runs and records nothing, so
+   the runner proceeds with a `NOT-REQUIRED` line when no record exists AND the gate at `base` —
+   the engine the consumer installed — carries no record-writing site. Where that gate does record,
+   an empty record directory is a refusal: the records were deleted or the gate was never run.
+
    If NON-EMPTY and the gate says OK:
    - **Run the self-update cycle autonomously:** cut a dedicated branch
      `ai-dlc-update/self-update-<theirs-version>-<ts>`, write from `theirs` **only the paths
@@ -402,7 +438,8 @@ prose is itself generated rather than composed.
      directory, **update the stamp's
      `skill_version`/`skill_commit` to `theirs`** (rewrite the stamp in schema,
      preserving `version`/`commit`/`installed_at`/`upstream`), commit
-     (`chore(ai-dlc-update): self-update <base-skill-ver> → <theirs-ver>`), **run the
+     (`chore(ai-dlc-update): self-update <base-skill-ver> → <theirs-ver>`) — **including the
+     gate record and the fixture log, which are this cycle's approval artifact** — **run the
      derived fixtures through
      `reconcile/self-update-fixtures.sh <dist> <base> <theirs> <consumer> <fixture>...`
      and require green BEFORE the push**, push,

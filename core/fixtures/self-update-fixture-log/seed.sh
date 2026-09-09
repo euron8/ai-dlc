@@ -64,4 +64,25 @@ EOF
 done
 
 chmod +x "$ROOT/tests/fixtures"/*/run.sh
+
+# A PRE-PUSH HOOK AND THE SCRIPTS IT NAMES, because the runner's gate-record arm DERIVES the set
+# of inputs a record must carry by reading this hook. A consumer without one sends the runner to
+# the distribution's fallback copy, and the required set would then be a property of whatever
+# throwaway distribution the caller built rather than of the consumer under test — so the arm
+# that refuses a forged record naming inputs of its author's choosing would have no subject here.
+#
+# The two scripts differ in one property the arms below turn on: `gate-changed.sh` is a path the
+# seeded distribution CHANGES across its range, so it is the one the slice rewrites and the one a
+# verdict can be taken on a pre-written tree for; `gate-steady.sh` is untouched, so it must stay
+# equal to its recorded digest through every legitimate flow.
+mkdir -p "$ROOT/.githooks" "$ROOT/scripts/ai-dlc" "$ROOT/.claude"
+cat > "$ROOT/.githooks/pre-push" <<'EOF'
+#!/usr/bin/env bash
+bash scripts/ai-dlc/gate-changed.sh || exit 1
+bash scripts/ai-dlc/gate-steady.sh || exit 1
+EOF
+printf '%s\n' 'gate-changed at base' > "$ROOT/scripts/ai-dlc/gate-changed.sh"
+printf '%s\n' 'gate-steady, never moved' > "$ROOT/scripts/ai-dlc/gate-steady.sh"
+chmod +x "$ROOT/.githooks/pre-push" "$ROOT/scripts/ai-dlc"/*.sh
+
 printf '%s\n' "$ROOT"
