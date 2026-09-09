@@ -537,59 +537,6 @@ nothing to observe.
 
 ---
 
-## BL-086 — `self-update-gate.sh` asks whether the PULL can break the push, never whether the consumer can push AT ALL
-
-The gate is differential on incoming-vs-installed script, and its own header shows that is
-deliberate: it exists because a cycle can install a validator that then fails the very push the
-cycle is making. That case it catches. A **standing, pre-existing** push failure is not in the delta
-it examines, so the gate correctly returns `SELF-UPDATE-OK`, and step 2 — explicitly ungated —
-branches, commits, pushes and auto-merges into a push that cannot succeed for reasons the pull never
-caused. The result is `PC-S308` exactly: orphaned branch, push permanently blocked, `skill_version`
-already advanced on a commit that will never land. No operator is in the loop.
-
-**Measured on the reference consumer, during the 0.396.0 → 0.403.0 pull, by that consumer.**
-`self-update-gate.sh` printed `SELF-UPDATE-OK` with a non-empty machinery slice while `git push` on
-the same tree returned rc=1 with `VERDICT: FAIL — 6 blocking, 3 ambiguous` — an artifact-path
-conformance failure predating the pull. That session skipped step 2 and carried the slice through
-`--carried-machinery-slice`, the path built for `DEFER`, which worked cleanly. Had it followed the
-step as written, it would have hit `PC-S308` autonomously.
-
-**It composes with `PC-S336`, and the pair is one root cause.** That entry reports step 1's
-auto-push arm as fatal and unguarded where step 2's is hardened. Together: neither step asks
-whether this consumer's push can succeed before acting on the answer. Any consumer carrying a
-standing pre-push red meets one or the other on every machinery-bearing pull.
-
-**Proposed:** probe push viability before step 2 acts on `SELF-UPDATE-OK` — a dry-run push, or reuse
-of step 1's preflight result, which has already exercised the real hook by that point. Emit the
-existing `SELF-UPDATE-DEFER` when the probe fails, since the DEFER path already handles the slice
-correctly.
-
-**Shipped shape, and why it is neither of the two proposed.** A `git push --dry-run` runs the hook
-(measured: it does, and a red hook fails the dry run) but also contacts the remote, and step 2's
-disposition for a remote-side failure is already "commit locally, note it" — the deterministic local
-half is the hook. Step 1's preflight result is not reusable: it pushes the OPERATOR'S branch through
-the hook with a different ref line, and on an in-sync branch it pushes nothing at all
-(`Everything up-to-date`, hook fed zero ref lines). So the gate runs the hook GIT WOULD RUN —
-`git rev-parse --git-path hooks/pre-push`, which honours `core.hooksPath` and the `.git/hooks/`
-shim the reference consumer uses, and skips a hook git would skip — fed the ref line step 2's push
-sends, on the tree as the operator left it, and emits `SELF-UPDATE-DEFER` on script `pre-push` when
-it exits non-zero. Measured cost on the reference consumer's own hook from a clone: 303s cold, 28s
-once its read-set skip engaged.
-
-verify: sh G=core/skills/ai-dlc-update/reconcile/self-update-gate.sh; [ -f "$G" ] || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; R=$(mktemp -d); D="$R/d"; mkdir -p "$D/core/git-hooks"; printf 'x\n' > "$D/core/git-hooks/pre-push"; printf '0.1.0\n' > "$D/VERSION"; git -C "$D" init -q && git -C "$D" add -A && git -C "$D" -c user.email=r@x -c user.name=r commit -qm b || exit 9; B=$(git -C "$D" rev-parse HEAD); printf '0.2.0\n' > "$D/VERSION"; git -C "$D" add -A && git -C "$D" -c user.email=r@x -c user.name=r commit -qm t || exit 9; T=$(git -C "$D" rev-parse HEAD); w() { C="$R/$1"; mkdir -p "$C/.githooks" && git -C "$C" init -q && git -C "$C" -c user.email=r@x -c user.name=r commit -q --allow-empty -m s && git -C "$C" remote add origin "$R/o.git" && mkdir -p "$C/.git/hooks" || return 9; printf '#!/bin/sh\nexit 0\n' > "$C/.githooks/pre-push"; printf '#!/bin/sh\nexit %s\n' "$2" > "$C/.git/hooks/pre-push"; chmod +x "$C/.githooks/pre-push" "$C/.git/hooks/pre-push"; bash "$G" "$D" "$B" "$T" "$C" 2>/dev/null | awk -F'\t' '$2=="pre-push"{print $1; exit}'; }; a=$(w a 1); b=$(w b 0); rm -rf "$R"; [ "$a" = SELF-UPDATE-DEFER ] && [ "$b" = SELF-UPDATE-OK ]
-
-**Receipt shape.** Two consumers, one property apart: both carry a TRACKED hook that exits 0 and an
-UNARMED-by-`core.hooksPath` hook at `.git/hooks/pre-push`, which is the file git runs. One's exits 1,
-the other's exits 0. The fix is present when the first reads `SELF-UPDATE-DEFER` on script
-`pre-push` AND the second reads `SELF-UPDATE-OK` there. Scored against four non-fixes on the
-release branch: a gate that reads the tracked `.githooks/pre-push` (exits 0 in both worlds, so no
-DEFER — rejected), a gate with no probe (no `pre-push` row — rejected), a gate that runs the hook
-and ignores its exit (OK in both — rejected), and a gate that refuses every consumer (DEFER in
-both — rejected by the second conjunct). The range changes no `core/` path so no differential row
-can supply the DEFER.
-
----
-
 ## BL-085 — `extends:` cannot express a multi-span dependency, so an additive entry falls back to file grain and nothing says so
 
 `LC-E11` permits exactly one anchor, and the reasoning is sound: two anchors mean two spans and a
