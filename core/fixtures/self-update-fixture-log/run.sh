@@ -57,6 +57,95 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 newest_log()  { ls -t "$LOGDIR"/self-update-fixtures-*.md 2>/dev/null | head -1; }
 newest_log2() { ls -t "$LOGDIR2"/self-update-fixtures-*.md 2>/dev/null | head -1; }
 
+# --- The GATE RECORD, and the FALSE-POSITIVE SET this fixture had to be narrowed against ----
+# The runner now refuses to run any fixture without a recorded `# verdict: OK` from
+# `self-update-gate.sh` for its own resolved range. EVERY PART BELOW WAS A FALSE POSITIVE OF
+# THAT ARM ON ITS FIRST RUN — parts 1 to 20 drive the runner directly and none of them had ever
+# invoked the gate, so all of them exited 2 with a GATE-RECORD line. That is the whole
+# false-positive set, it is enumerated (it is every part that drives the runner), and the
+# narrowing is `seed_record` below: each part seeds the OK record its own range needs, exactly
+# as step 2's real cycle produces one by running the gate first.
+#
+# THE SEEDED RECORD IS FORGED, DELIBERATELY, FOR THE PARTS THAT TEST THE RUNNER'S READ SIDE.
+# What those parts assert is what the runner DOES with a record, and a forged file exercises
+# that completely while costing no gate invocation. What a forged file cannot establish is that
+# the SHIPPING gate writes a record this reader accepts — two programs agreeing because one
+# author wrote both sides of the grammar is the drift this repo keeps paying for — so Part G4
+# drives the real `self-update-gate.sh` and reads its output with the same parser, and it is the
+# only part here that may not use `seed_record`.
+#
+# The shas are RESOLVED, not the argument strings: the runner peels its own refs and compares
+# commit to commit, so a record forged with the literal `theirs-tag` would be refused. That is
+# Mutant G2's subject from the other side.
+# The consumer-relative file every default-seeded record names as an input, written into each
+# consumer tree below. It sits OUTSIDE `tests/`, and that is load-bearing rather than tidy: Part
+# 3 performs the branch discard as `rm -rf "$CONS/tests"`, so a probe under there vanishes
+# mid-run and every later part reads INPUT-MOVED — a refusal that belongs to the seed and reads
+# as a defect in whatever arm happens to be next. Measured; it took Part 5 red.
+SR_PROBE_REL="_bmad-output/.gate-input-probe"
+
+# The sentinel for "this record names NO inputs at all". An empty `$SR_INPUTS` cannot say it —
+# an unset variable and one set to the empty string are the same test, so the default block runs
+# and the record gets an input line after all. Measured: Part G7 passed for the wrong reason.
+SR_NO_INPUTS="@@none@@"
+
+seed_record() { # $1=log dir $2=dist $3=base-ref $4=theirs-ref [$5=verdict] [$6=name suffix]
+  sr_b="$(git -C "$2" rev-parse "${3}^{commit}" 2>/dev/null)"
+  sr_t="$(git -C "$2" rev-parse "${4}^{commit}" 2>/dev/null)"
+  [ -n "$sr_b" ] && [ -n "$sr_t" ] || { echo "FIXTURE ERROR: seed_record could not peel ${3}/${4}" >&2; return 1; }
+  mkdir -p "$1"
+  # The name carries the timestamp the gate stamps into it, and the runner orders candidates by
+  # NAME — so two records seeded inside one wall-clock second would sort identically and Part G5
+  # could not tell the two orderings apart. The disambiguating suffix is therefore an ARGUMENT
+  # and not a counter this function increments: a caller that captures the printed path runs this
+  # inside `$( )`, where an assignment is lost to the subshell, and the first draft's counter
+  # silently produced ONE file for Part G5's two calls — the OK record overwritten by the DEFER,
+  # which reads exactly like a correct newest-wins answer.
+  sr_f="$1/self-update-gate-$(date -u +%Y%m%dT%H%M%SZ)-${6:-000}.md"
+  # THE INPUT LINES ARE PART OF THE MINIMUM VALID RECORD, so the default seed carries them.
+  # The gate's verdict is a DIFFERENTIAL against the consumer's own copies, and a record naming
+  # no input authorises a question about no tree — which the runner refuses. `$SR_INPUTS`, when
+  # the caller sets it, REPLACES this default and is written verbatim; that is how the arms
+  # below build a record whose inputs are absent, malformed, or about to be edited.
+  { echo "# ai-dlc-update step-2 self-update — gate verdict record"
+    echo "# generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "# base ${3} -> theirs ${4}"
+    echo "# consumer: seeded-by-fixture   dist: ${2}"
+    echo "# base-sha: ${sr_b}"
+    echo "# theirs-sha: ${sr_t}"
+    if [ "${SR_INPUTS:-}" = "$SR_NO_INPUTS" ]; then
+      :
+    elif [ -n "${SR_INPUTS:-}" ]; then
+      printf '%s\n' "$SR_INPUTS"
+    else
+      sr_root="${1%/_bmad-output/ai-dlc-update}"
+      [ -f "$sr_root/$SR_PROBE_REL" ] || printf '%s\n' 'the default gate-record input probe' > "$sr_root/$SR_PROBE_REL"
+      printf '# input: %s\t%s\n' "$SR_PROBE_REL" \
+        "$(git hash-object "$sr_root/$SR_PROBE_REL" 2>/dev/null)"
+    fi
+    echo ""
+    printf 'SELF-UPDATE-OK\t-\tseeded by the fixture: this range changes no gating script.\n'
+    echo ""
+    echo "# verdict: ${5:-OK}"
+    echo "# rows: 1"; } > "$sr_f"
+  printf '%s' "$sr_f"
+}
+
+# Every range any part below drives, recorded OK once, up front. Seeding per-part would make
+# each part's verdict depend on a seeding step written beside it, and a part whose seed silently
+# failed would report the runner refusing for the reason the part was testing.
+#
+# THE SUFFIXES ARE DISTINCT AND THAT IS LOAD-BEARING, NOT TIDY. All four land inside one
+# wall-clock second, so a shared suffix makes them ONE FILE: each write clobbers the last, three
+# ranges lose their record, and every part driving them exits 2 on a missing approval. Measured —
+# it took twenty-six parts red at once, all of them reading as regressions in the arm under test.
+seed_ranges() { # $1=log dir
+  seed_record "$1" "$DIST" "$D_THEIRS" "$D_QUIET"  OK 010 >/dev/null || return 1
+  seed_record "$1" "$DIST" "$D_QUIET"  "$D_SHIP"   OK 011 >/dev/null || return 1
+  seed_record "$1" "$DIST" "$D_BASE"   theirs-tag  OK 012 >/dev/null || return 1
+  seed_record "$1" "$DIST" "$D_THEIRS" "$D_BASE"   OK 013 >/dev/null || return 1
+}
+
 # The refusal list, read back as a SET rather than as N greps. An equality against the whole
 # list is what carries the exemptions: a `.dist-only` directory that stopped being exempt
 # appears here, and no absence-shaped assertion has to be written for it separately.
@@ -189,6 +278,17 @@ wput "tests/fixtures/green-one/run.sh" 'a consumer-layout fixture, changed'
 W add -A >/dev/null 2>&1; W commit -q --no-verify -m theirs >/dev/null 2>&1
 W_THEIRS="$(W rev-parse HEAD 2>/dev/null)"
 wput "core/fixtures/touched-shippable/run.sh" 'back on disk, committed nowhere'
+
+# --- The FP-set repair, applied ONCE for every range every part below drives ----------------
+# Both consumer trees, because parts 1 to 6 run against `$CONS` and 7 onward against `$CONS2`.
+# `W_THEIRS -> W_BASE` is Part 13b's swapped range and Mutant 5's, the two runs against the
+# wrong-repo checkout that are supposed to REACH the loop.
+seed_ranges "$LOGDIR"  || bad "FIXTURE ERROR: could not seed the gate records for \$CONS"
+seed_ranges "$LOGDIR2" || bad "FIXTURE ERROR: could not seed the gate records for \$CONS2"
+seed_record "$LOGDIR2" "$WREPO" "$W_THEIRS" "$W_BASE"   OK 020 >/dev/null \
+  || bad "FIXTURE ERROR: could not seed the wrong-repo swapped-range gate record"
+seed_record "$LOGDIR2" "$WREPO" "$W_BASE"   "$W_THEIRS" OK 021 >/dev/null \
+  || bad "FIXTURE ERROR: could not seed the wrong-repo forward-range gate record"
 
 # --- Part 0: the seed can EXPRESS the defect ----------------------------------------------
 # A fixture whose tree cannot reach the branch under test proves nothing, and every arm below
@@ -591,6 +691,335 @@ else
   bad "a checkout with no core/fixtures at theirs was reported as an over-complete named set (rc=$rc), not as the wrong repo. Both refs resolve here, so the resolution loop lets this through and only the wrong-repo guard's position keeps the arm from indicting two directories the distribution genuinely ships"
 fi
 
+# --- Parts G1 to G5: the RECORDED GATE VERDICT is what authorises the cycle ------------------
+# Step 2 cuts a branch, writes the machinery slice, pushes and auto-merges with NO operator
+# gate, and until this arm existed the only record of the decision that permitted the write was
+# the operating agent's narration in a PR body. `self-update-gate.sh` prints TSV and the runner
+# ran whatever it was handed, so a cycle that never invoked the gate at all was
+# indistinguishable from one the gate cleared.
+#
+# THE PARTS ARE SPLIT BY WHAT EACH ONE CAN SEE, and no two share an input:
+#   G1  no record at all                     the state every cycle starts in
+#   G2  a record whose verdict is DEFER      a gate that RAN and said no
+#   G3  an OK record for a DIFFERENT range   the input a presence-only check accepts
+#   G4  the SHIPPING gate's own record       the only part that proves the two grammars agree
+#   G5  a DEFER record NEWER than an OK      the input a first-match-wins reader accepts
+#
+# EVERY ONE OF THESE USES ITS OWN CONSUMER TREE. `$CONS`/`$CONS2` already carry the seeded OK
+# records for every range the parts above drive, and an arm asserting a REFUSAL cannot be run in
+# a directory where an acquitting record exists — the refusal would be the seed's absence rather
+# than the arm's subject, and seeding is not something a part should have to undo.
+GCONS="$(bash "$HERE/seed.sh")"
+GLOG="$GCONS/_bmad-output/ai-dlc-update"
+trap 'rm -rf "$CONS" "$CONS2" "$DIST" "$WREPO" "$GCONS"' EXIT
+newest_glog() { ls -t "$GLOG"/self-update-fixtures-*.md 2>/dev/null | head -1; }
+
+# --- Part G1: NO record for this range is a refusal, not a green run --------------------------
+# Keyed on the `GATE-RECORD:` line in the runner's OWN LOG as well as the exit code, because
+# exit 2 has seven producers in this runner and a part reading only the code cannot say which
+# one answered. The named set is wholly legitimate for this range — the only thing wrong here is
+# that nothing authorised the cycle.
+#
+# A RECORD FOR AN UNRELATED RANGE IS SEEDED FIRST, AND IT IS WHAT MAKES THIS PART ITS OWN. An
+# EMPTY record directory is the delivery-pull state Part G12 owns, where proceeding is correct;
+# with one record present this consumer has demonstrably recorded a verdict before, so the
+# requirement binds. The two parts are one property apart and the seed is the property.
+rm -f "$GLOG"/self-update-gate-*.md "$GLOG"/self-update-fixtures-*.md
+seed_record "$GLOG" "$DIST" "$D_QUIET" "$D_SHIP" OK 190 >/dev/null \
+  || bad "FIXTURE ERROR: could not seed Part G1's unrelated-range record"
+ERRG1="$GCONS/err-g1.txt"; OUTG1="$GCONS/out-g1.txt"
+bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$GCONS" green-one cwd-probe >"$OUTG1" 2>"$ERRG1"
+rc=$?
+LG1="$(newest_glog)"
+if [ "$rc" -eq 2 ] && [ -n "$LG1" ] && grep -qF "GATE-RECORD:" "$LG1"; then
+  ok "with NO gate record the runner refuses with exit 2 and a GATE-RECORD line in its own log"
+else
+  bad "the runner ran the fixtures with no recorded gate verdict at all (rc=$rc, log '${LG1:-none}'). Step 2 pushes and auto-merges autonomously, so the gate's recorded OK is the only artifact of the decision that permitted the write — without this the suite reports green for a cycle nothing authorised"
+fi
+if grep -qF "self-update-gate.sh" "$ERRG1"; then
+  ok "the stderr remedy names the exact gate command, so the operator is not left to derive it"
+else
+  bad "the refusal did not name the gate command on stderr. A refusal whose remedy the reader has to reconstruct is where a cycle gets rerun with the check switched off"
+fi
+# ORDERING, both channels in one arm — the refusal must precede the loop, or a green verdict is
+# printed above the finding that condemns it.
+if [ -n "$LG1" ] && ! grep -qF "===== FIXTURE " "$LG1" && ! grep -qE '^ +(ok|FAIL|MISS) +' "$OUTG1"; then
+  ok "the gate-record refusal is ORDERED BEFORE the fixture loop — no per-fixture section and no per-fixture verdict"
+else
+  bad "the runner reported fixture verdicts before refusing for a missing gate record: sections $(grep -cF '===== FIXTURE ' "$LG1" 2>/dev/null), stdout verdicts $(grep -cE '^ +(ok|FAIL|MISS) +' "$OUTG1" 2>/dev/null)"
+fi
+
+# --- Part G2: a DEFER record is a refusal ----------------------------------------------------
+# The input a PRESENCE check cannot see. A record exists, its shas match this exact range, and
+# the gate said do not proceed — so a reader that only asks whether a record is there acquits
+# the one case the gate explicitly refused.
+rm -f "$GLOG"/self-update-gate-*.md "$GLOG"/self-update-fixtures-*.md
+seed_record "$GLOG" "$DIST" "$D_THEIRS" "$D_QUIET" DEFER >/dev/null \
+  || bad "FIXTURE ERROR: could not seed the DEFER record for Part G2"
+ERRG2="$GCONS/err-g2.txt"
+bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$GCONS" green-one cwd-probe >/dev/null 2>"$ERRG2"
+rc=$?
+LG2="$(newest_glog)"
+if [ "$rc" -eq 2 ] && [ -n "$LG2" ] && grep -qF "GATE-RECORD:" "$LG2" && grep -qF "DEFER" "$LG2"; then
+  ok "a gate record for this range whose verdict is DEFER is refused, and the log says which verdict it read"
+else
+  bad "a DEFER verdict for this exact range did not stop the run (rc=$rc). A reader asking only whether a record EXISTS acquits the one case the gate explicitly refused, which is worse than no check at all"
+fi
+
+# --- Part G3: an OK record for a DIFFERENT range is a refusal --------------------------------
+# The input only a sha-matching reader can see. The record is real, its verdict is OK, and it
+# classified a different pull entirely — a stale artifact from the previous self-update, which is
+# the state a consumer's `_bmad-output/` is in on every cycle after the first.
+rm -f "$GLOG"/self-update-gate-*.md "$GLOG"/self-update-fixtures-*.md
+seed_record "$GLOG" "$DIST" "$D_QUIET" "$D_SHIP" >/dev/null \
+  || bad "FIXTURE ERROR: could not seed the wrong-range record for Part G3"
+bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$GCONS" green-one cwd-probe >/dev/null 2>&1
+rc=$?
+LG3="$(newest_glog)"
+if [ "$rc" -eq 2 ] && [ -n "$LG3" ] && grep -qF "GATE-RECORD:" "$LG3"; then
+  ok "an OK record classifying a DIFFERENT range does not authorise this one — the stale artifact of the previous cycle is refused"
+else
+  bad "an OK record for another range authorised this cycle (rc=$rc). After the first self-update a consumer's _bmad-output/ always holds one, so a reader that does not compare shas is permanently satisfied by an artifact that classified a different pull"
+fi
+
+# --- Part G4: THE SHIPPING GATE'S OWN RECORD, not a forged one -------------------------------
+# The only part here that establishes the two halves agree. Every other part seeds a record this
+# fixture's own author wrote, so they all prove the reader accepts its author's grammar — which
+# stays true through a change to BOTH sides. This one runs `self-update-gate.sh` against the
+# throwaway distribution and the seeded consumer, then hands the runner whatever it wrote.
+#
+# THE THROWAWAY DIST CARRIES A `core/git-hooks/pre-push`, and that is required rather than
+# decorative: with no hook at the consumer and none in the distribution the gate emits
+# SELF-UPDATE-UNDECIDED ("no pre-push hook found") and records a verdict this runner correctly
+# refuses — the part would then fail for a reason that has nothing to do with the join.
+GATE_SH="$RECONCILE/self-update-gate.sh"
+rm -f "$GLOG"/self-update-gate-*.md "$GLOG"/self-update-fixtures-*.md
+if [ ! -f "$GATE_SH" ]; then
+  bad "FIXTURE ERROR: self-update-gate.sh is not beside the runner at $RECONCILE, so the record's WRITER cannot be driven and nothing here establishes that the two grammars agree"
+else
+  G_OUT="$GCONS/out-g4-gate.txt"; G_ERR="$GCONS/err-g4-gate.txt"
+  bash "$GATE_SH" "$DIST" "$D_THEIRS" "$D_QUIET" "$GCONS" >"$G_OUT" 2>"$G_ERR"
+  g_rc=$?
+  G_REC="$(ls -t "$GLOG"/self-update-gate-*.md 2>/dev/null | head -1)"
+  if [ "$g_rc" -eq 0 ] && [ -n "$G_REC" ] && [ -s "$G_REC" ]; then
+    ok "the SHIPPING gate writes a record of its own under _bmad-output/ai-dlc-update/"
+    # The record has to say OK for the join to be observable at all; if the gate defers on this
+    # seed the arm below cannot distinguish a reader defect from a correct refusal, so the
+    # verdict is read and reported rather than assumed.
+    g_verdict="$(awk 'index($0, "# verdict:") == 1 { s = substr($0, 11); gsub(/[[:space:]]/, "", s); print s; exit }' "$G_REC")"
+    if [ "$g_verdict" = "OK" ]; then
+      bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$GCONS" green-one cwd-probe >/dev/null 2>&1
+      rc=$?
+      LG4="$(newest_glog)"
+      if [ "$rc" -eq 0 ] && [ -n "$LG4" ] && grep -qF "===== FIXTURE green-one =====" "$LG4" \
+         && ! grep -qF "GATE-RECORD:" "$LG4"; then
+        ok "the runner ACCEPTS the record the shipping gate wrote and reaches the loop — the writer's grammar and the reader's agree, established by running both and not by one author writing both"
+      else
+        bad "the runner refused the record the SHIPPING gate wrote for this exact range (rc=$rc). Every other part here seeds a record this fixture authored, so they would all stay green through a change that broke the join; this is the only arm that can see it"
+      fi
+      if [ -n "$LG4" ] && grep -qF "$(basename "$G_REC")" "$LG4"; then
+        ok "the runner's log header CITES the gate record it accepted, so the two artifacts of one cycle name each other"
+      else
+        bad "the runner ran on a gate record and did not name it in its log. The pair of records is the approval artifact for an autonomous write, and a log that does not say which record authorised it leaves the reader to guess"
+      fi
+    else
+      bad "FIXTURE ERROR: the shipping gate recorded verdict '${g_verdict:-<absent>}' on this seed, not OK, so the acceptance join below could not be scored. Gate stdout: $(head -1 "$G_OUT" 2>/dev/null | cut -c1-160)"
+    fi
+  else
+    bad "PENDING hand-gate: the shipping self-update-gate.sh wrote no record under $GLOG (rc=$g_rc). The record's WRITER is the other half of batch 78 and lands in a separate commit; until it does, this part is the only failing one here and its failure is that absence, not a defect in the reader"
+  fi
+fi
+
+# --- Part G5: the NEWEST matching record decides, and it is picked by NAME --------------------
+# The input a first-match-wins reader accepts. An OK is written, the operator changes something,
+# the gate runs again and DEFERS — and a reader that stops at the first matching record it finds
+# revives the superseded OK. Both records match this range exactly, so nothing but the ordering
+# separates them.
+rm -f "$GLOG"/self-update-gate-*.md "$GLOG"/self-update-fixtures-*.md
+G5_OK="$(seed_record "$GLOG" "$DIST" "$D_THEIRS" "$D_QUIET" OK 100)" \
+  || bad "FIXTURE ERROR: could not seed Part G5's OK record"
+G5_DEFER="$(seed_record "$GLOG" "$DIST" "$D_THEIRS" "$D_QUIET" DEFER 900)" \
+  || bad "FIXTURE ERROR: could not seed Part G5's DEFER record"
+# THE SEED IS ASSERTED TO DISCRIMINATE BEFORE IT IS SCORED. Two records written inside the same
+# wall-clock second sort identically, and the arm would then pass for either implementation.
+if [ -n "${G5_OK:-}" ] && [ -n "${G5_DEFER:-}" ] \
+   && [ "$(basename "$G5_DEFER")" \> "$(basename "$G5_OK")" ]; then
+  ok "SEED: Part G5's DEFER record sorts strictly AFTER its OK record by name, so the two orderings give different answers"
+else
+  bad "FIXTURE ERROR: Part G5's two records do not order ('${G5_OK:-none}' then '${G5_DEFER:-none}'). Where the newest and the oldest are the same file, an implementation picking either passes, and the arm below asserts nothing"
+fi
+bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$GCONS" green-one cwd-probe >/dev/null 2>&1
+rc=$?
+LG5="$(newest_glog)"
+if [ "$rc" -eq 2 ] && [ -n "$LG5" ] && grep -qF "GATE-RECORD:" "$LG5"; then
+  ok "with a DEFER record NEWER than an OK for the same range the runner reads the newest and refuses — a superseded OK cannot be revived by reaching further back"
+else
+  bad "a superseded OK record authorised the cycle (rc=$rc). The gate ran twice and its LAST answer was DEFER; a reader taking the oldest, or the first it happens to encounter, acts on a verdict the gate has already withdrawn"
+fi
+
+# --- Parts G6 to G11: the record binds the CONSUMER TREE, not only the range -----------------
+# The gate's verdict is a DIFFERENTIAL — it runs the consumer's CURRENT copy of each gating
+# script against the incoming one — so the same command over one range answers differently as
+# the tree moves. Measured: 2 DEFER rows before step 2 wrote the slice, 4 OK after, 2 DEFER once
+# the write was reverted. An OK matched on the range alone therefore authorises a question that
+# was asked about a different tree, and a cycle could run the gate, write anything, and cite the
+# earlier verdict. Each part below is the ONE input that separates a reader from a weaker one:
+#   G6   an input file EDITED after the record          a range-only reader accepts
+#   G7   a record naming NO inputs                      a reader looping over zero lines accepts
+#   G8   inputs matching                                the acquittal — the arm must stay silent
+#   G9   a recorded ABSENT that is now PRESENT          a reader skipping ABSENT accepts
+#   G10  a recorded digest whose file is now ABSENT     a reader testing only "differs" accepts
+#   G11  an input value that is neither hex nor ABSENT  a reader `continue`-ing on the unknown
+GIN_REL="tests/fixtures/cwd-probe/run.sh"
+gin_seed() { # $1=inputs block $2=suffix -> seeds ONE record for the G-range, clearing first
+  rm -f "$GLOG"/self-update-gate-*.md "$GLOG"/self-update-fixtures-*.md
+  SR_INPUTS="$1" seed_record "$GLOG" "$DIST" "$D_THEIRS" "$D_QUIET" OK "$2" >/dev/null \
+    || bad "FIXTURE ERROR: could not seed the input-bearing record for suffix $2"
+}
+gin_hash() { git hash-object "$GCONS/$GIN_REL" 2>/dev/null; }
+
+# --- Part G6: an input the record READ, edited since ------------------------------------------
+gin_seed "$(printf '# input: %s\t%s' "$GIN_REL" "$(gin_hash)")" 200
+printf '%s\n' '#!/usr/bin/env bash' 'echo "cwd-probe ran from: $PWD"' 'echo edited-after-the-gate' \
+  > "$GCONS/$GIN_REL"
+ERRG6="$GCONS/err-g6.txt"
+bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$GCONS" green-one cwd-probe >/dev/null 2>"$ERRG6"
+rc=$?
+LG6="$(newest_glog)"
+if [ "$rc" -eq 2 ] && [ -n "$LG6" ] && grep -qF "GATE-RECORD: INPUT-MOVED $GIN_REL" "$LG6"; then
+  ok "an OK record whose input file has been EDITED since is refused, and the log names the moved path"
+else
+  bad "a consumer file the gate's verdict READ was edited after the record was written and the runner accepted the record anyway (rc=$rc). The verdict is a differential against those very copies — measured, one range answered DEFER, OK and DEFER again as the tree moved — so a record matched on the range alone authorises a question asked about a different tree"
+fi
+if grep -qF "AS IT NOW STANDS" "$ERRG6"; then
+  ok "the remedy tells the operator to re-run the gate against the tree as it now stands, not merely that something is wrong"
+else
+  bad "the INPUT-MOVED refusal gave the generic missing-record remedy. The operator has a record and will read 'run the gate' as already done"
+fi
+printf '%s\n' '#!/usr/bin/env bash' 'echo "cwd-probe ran from: $PWD"' 'exit 0' > "$GCONS/$GIN_REL"
+
+# --- Part G7: a record naming NO inputs is malformed ------------------------------------------
+# Zero lines to compare is a comparison that cannot fail, and its silence is byte-identical to a
+# comparison that passed.
+gin_seed "$SR_NO_INPUTS" 210
+bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$GCONS" green-one cwd-probe >/dev/null 2>&1
+rc=$?
+LG7="$(newest_glog)"
+if [ "$rc" -eq 2 ] && [ -n "$LG7" ] && grep -qF "GATE-RECORD:" "$LG7"; then
+  ok "a record for this range, verdict OK, naming NO input files is refused — nothing to compare is not the same as nothing changed"
+else
+  bad "a record naming no inputs authorised the cycle (rc=$rc). A loop over zero input lines reports agreement having compared nothing, which is the silent pass the input binding exists to remove"
+fi
+
+# --- Part G8: matching inputs ACQUIT ----------------------------------------------------------
+# The acquittal, and it is what stops every arm above from passing for a reader that refuses
+# everything. Keyed on a fixture section being PRESENT, not merely on the absence of a
+# GATE-RECORD line: an arm asserting only that nothing was said passes against a subject that
+# says nothing at all.
+gin_seed "$(printf '# input: %s\t%s' "$GIN_REL" "$(gin_hash)")" 220
+bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$GCONS" green-one cwd-probe >/dev/null 2>&1
+rc=$?
+LG8="$(newest_glog)"
+if [ "$rc" -eq 0 ] && [ -n "$LG8" ] && grep -qF "===== FIXTURE green-one =====" "$LG8" \
+   && ! grep -qF "GATE-RECORD:" "$LG8"; then
+  ok "a record whose recorded inputs still hash to what the consumer holds is ACCEPTED and the run reaches the loop — the check stays silent on correct input"
+else
+  bad "a record whose inputs all match was refused (rc=$rc). An input binding that fires on an unmoved tree wedges every self-update, which is worse than the stale verdict it prevents"
+fi
+
+# --- Part G9: a recorded ABSENT that is now PRESENT -------------------------------------------
+# Absence is a recorded VALUE. The gate reads inputs that are not there — a script the hook names
+# and the consumer lacks, the in-flight apply marker — and its verdict rests on that absence, so a
+# file ARRIVING moves the verdict exactly as an edit does.
+gin_seed "$(printf '# input: %s\tABSENT' 'tests/fixtures/appeared-since/run.sh')" 230
+mkdir -p "$GCONS/tests/fixtures/appeared-since"
+printf '%s\n' 'written after the gate ran' > "$GCONS/tests/fixtures/appeared-since/run.sh"
+bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$GCONS" green-one cwd-probe >/dev/null 2>&1
+rc=$?
+LG9="$(newest_glog)"
+if [ "$rc" -eq 2 ] && [ -n "$LG9" ] && grep -qF "INPUT-MOVED" "$LG9" && grep -qF "appeared-since" "$LG9"; then
+  ok "a path the record read as ABSENT and the consumer now HOLDS is refused — absence is a value, compared in both directions"
+else
+  bad "a file that appeared after the gate ran did not move the verdict (rc=$rc). A reader treating ABSENT as 'nothing to check' acquits exactly the direction where a new file arrives between the gate and the run"
+fi
+rm -rf "$GCONS/tests/fixtures/appeared-since"
+
+# --- Part G10: a recorded DIGEST whose file is now ABSENT -------------------------------------
+# The mirror of G9, and the input a reader testing only "the hashes differ" cannot see: there is
+# no hash to differ from once the file is gone.
+gin_seed "$(printf '# input: %s\t%s' "$GIN_REL" "$(gin_hash)")" 240
+GIN_SAVED="$(cat "$GCONS/$GIN_REL")"
+rm -f "$GCONS/$GIN_REL"
+bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$GCONS" green-one >/dev/null 2>&1
+rc=$?
+LG10="$(newest_glog)"
+if [ "$rc" -eq 2 ] && [ -n "$LG10" ] && grep -qF "INPUT-MOVED $GIN_REL" "$LG10"; then
+  ok "a path recorded with a digest and now ABSENT from the consumer is refused — a reader comparing only two hashes has none to compare here"
+else
+  bad "a recorded input file was DELETED after the gate ran and the record was still accepted (rc=$rc). An absent file produces no hash, so a check spelled as 'the hashes differ' passes over it silently"
+fi
+printf '%s\n' "$GIN_SAVED" > "$GCONS/$GIN_REL"; chmod +x "$GCONS/$GIN_REL"
+
+# --- Part G11: an input VALUE that is neither a digest nor ABSENT -----------------------------
+# A line this reader cannot evaluate. Skipping it is a record silently authorising whatever it
+# could not spell, and the skip is invisible — the run goes green with one fewer comparison.
+gin_seed "$(printf '# input: %s\tmaybe-changed' "$GIN_REL")" 250
+bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$GCONS" green-one cwd-probe >/dev/null 2>&1
+rc=$?
+LG11="$(newest_glog)"
+if [ "$rc" -eq 2 ] && [ -n "$LG11" ] && grep -qF "GATE-RECORD:" "$LG11"; then
+  ok "an input value that is neither a 40-hex digest nor ABSENT is refused rather than skipped"
+else
+  bad "an uninterpretable input value was skipped and the record accepted (rc=$rc). A reader that continues past what it cannot spell reports agreement over a line it never evaluated, and nothing announces the missing comparison"
+fi
+
+# --- Parts G12 and G13: the DELIVERY-PULL tolerance, and the state it must NOT cover -----------
+# A fix to a bootstrapping step can never be delivered by that step. On the pull that DELIVERS
+# this requirement the OLD gate runs and records nothing, the slice installs this runner, and a
+# hard refusal blocks the self-update carrying the fixed gate — with step 2 requiring green
+# before the push, that pull can never land. Measured on the reference consumer: 69 of 87
+# self-update commits wrote some `reconcile/` file and 3 wrote this runner, against a control of
+# 0 of 87 for an impossible path.
+#
+# THE EXEMPTION IS KEYED ON WHETHER THIS CONSUMER HAS EVER RECORDED A VERDICT, and G13 is the
+# probe proving it does not cover the arm's own subject — the moment one record exists the
+# installed gate is one that records, and a record for the WRONG range must still refuse.
+
+# --- Part G12: a consumer that has NEVER recorded a verdict proceeds --------------------------
+rm -f "$GLOG"/self-update-gate-*.md "$GLOG"/self-update-fixtures-*.md
+ERRG12="$GCONS/err-g12.txt"
+bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$GCONS" green-one cwd-probe >/dev/null 2>"$ERRG12"
+rc=$?
+LG12="$(newest_glog)"
+if [ "$rc" -eq 0 ] && [ -n "$LG12" ] && grep -qF "GATE-RECORD: NOT-REQUIRED" "$LG12" \
+   && grep -qF "===== FIXTURE green-one =====" "$LG12"; then
+  ok "a consumer with NO gate record ever written proceeds, and says NOT-REQUIRED in its log — the pull that delivers the recording gate can still land"
+else
+  bad "a consumer that has never recorded a verdict was refused (rc=$rc). The old gate writes no record, so this is the state of the very pull that installs the recording one; refusing it means the fix can never be delivered by the step that delivers it"
+fi
+if grep -qF "NOT-REQUIRED" "$ERRG12"; then
+  ok "the tolerance is announced on stderr too, so a green run does not silently omit the check"
+else
+  bad "the run proceeded on the tolerance and said so only in the log. A skipped requirement that reports nothing to the operator's channel reads exactly like one that passed"
+fi
+
+# --- Part G13: ONE record, for a DIFFERENT range, still refuses -------------------------------
+# The arm's own subject, standing one property from the tolerance: a consumer that HAS recorded a
+# verdict, just not for this range. That is the ordinary post-first-cycle state, and an exemption
+# widened to "no record for THIS range" would acquit every one of them.
+rm -f "$GLOG"/self-update-gate-*.md "$GLOG"/self-update-fixtures-*.md
+seed_record "$GLOG" "$DIST" "$D_QUIET" "$D_SHIP" OK 260 >/dev/null \
+  || bad "FIXTURE ERROR: could not seed Part G13's wrong-range record"
+bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$GCONS" green-one cwd-probe >/dev/null 2>&1
+rc=$?
+LG13="$(newest_glog)"
+if [ "$rc" -eq 2 ] && [ -n "$LG13" ] && grep -qF "GATE-RECORD:" "$LG13" \
+   && ! grep -qF "NOT-REQUIRED" "$LG13"; then
+  ok "with ONE record present, for a DIFFERENT range, the requirement still binds — the tolerance covers a consumer that has never recorded, not a range that has not been classified"
+else
+  bad "a consumer holding a record for another range was let through on the delivery-pull tolerance (rc=$rc). That is the ordinary state after the first cycle, so this widening acquits every subsequent self-update and the exemption defends the defect the arm exists for"
+fi
+
 # --- MUTATION: prove the arms above can fail -----------------------------------------------
 # The runner sources nothing from its own directory, so a lone copy is a working harness here
 # — but the copies are still taken beside the original and checked with an unmutated control,
@@ -741,6 +1170,10 @@ if [ -d "$FILT/.git" ]; then
   f_cat="$(git -C "$FILT" cat-file -e "${f_base}:core/fixtures/keeper/run.sh" 2>/dev/null && echo present || echo ABSENT)"
   f_rev="$(git -C "$FILT" rev-parse -q --verify "${f_base}:core/fixtures/keeper/run.sh" >/dev/null 2>&1 && echo present || echo ABSENT)"
   f_ctl="$(git -C "$FILT" rev-parse -q --verify "${f_base}:core/fixtures/zzz-no-such/run.sh" >/dev/null 2>&1 && echo present || echo ABSENT)"
+  # The filtered clone is a FIFTH range, in a repo built inside this block, so `seed_ranges`
+  # above could not have covered it: the runner refuses any range with no recorded OK, and every
+  # run below would exit 2 on that before reaching a probe.
+  seed_record "$LOGDIR2" "$FILT" "${f_base:-HEAD}" filt-theirs OK 030 >/dev/null 2>&1
   if [ -z "$f_base" ] || [ "$f_missing" -eq 0 ] || [ "$f_cat" != ABSENT ] \
      || [ "$f_rev" != present ] || [ "$f_ctl" != ABSENT ]; then
     ok "SKIP: this git/transport did not produce a DISCRIMINATING blob-filtered clone (missing=$f_missing, cat-file=$f_cat, rev-parse=$f_rev, control=$f_ctl) — reporting that rather than scoring a null the probe could not have failed"
@@ -871,19 +1304,36 @@ fi
 # --- MUTANT 4: the ref-resolution loop neutered ------------------------------------------------
 # `&& continue` becomes `; continue`, so every ref is accepted. On a BOGUS ref this changes
 # almost nothing — the diff-failure arm underneath still exits 2 — which is why the mutant is
-# scored on Part 12's input instead: `git diff <tree> <commit>` succeeds, so the copy runs the
-# join against a base that names no commit and reports a green suite.
+# scored on Part 12's input instead: `git diff <tree> <commit>` succeeds, so that arm never fires
+# either, and the loop's peel to `^{commit}` is the only thing standing between a base that names
+# no commit and a join taken over whatever fell out.
+#
+# SCORED ON THE MESSAGE AND NOT ON THE EXIT CODE, AND THE REASON IS A SECOND GUARD DOWNSTREAM.
+# The gate-record arm peels both refs too, so an unpeelable base now reaches it and is refused
+# there as an unidentifiable range — the copy still exits 2, and an arm reading the code alone
+# would score a kill for a loop it never reached. That is the shape Parts 18 and 19 already own
+# from the other side: an arm hoisted above a guard makes the guard unreachable, and which arm
+# ANSWERS is the property, not whether something did. So the pair is asserted — the unmutated
+# copy records UNRESOLVABLE for this input and the mutant does not — with the mutant's own
+# refusal read as the control that says it RAN. Parts 10 to 12 key on the same message for the
+# same reason.
 M4="$MUTDIR/m4-refcheck-neutered.sh"
 if mkmutant "$M4" 'rev-parse --verify --quiet "${r}^{commit}" >/dev/null 2>&1 && continue' \
                   'rev-parse --verify --quiet "${r}^{commit}" >/dev/null 2>&1; continue'; then
   rm -f "$LOGDIR2"/self-update-fixtures-*.md
   bash "$M4" "$DIST" "$D_TREE" theirs-tag "$CONS2" green-one >/dev/null 2>&1
   rc=$?
-  LM="$(newest_log2)"
-  if [ "$rc" -eq 0 ] && [ -n "$LM" ] && ! grep -qF "COVERAGE: UNRESOLVABLE" "$LM"; then
-    ok "MUTATION — with the ref peel removed a base that names a TREE reports a green suite: Part 12 is what catches that"
+  LM4="$(newest_log2)"
+  m4_mut_unres=1; { [ -n "$LM4" ] && grep -qF "COVERAGE: UNRESOLVABLE" "$LM4"; } || m4_mut_unres=0
+  m4_mut_said=0; { [ -n "$LM4" ] && grep -qE "^(COVERAGE|GATE-RECORD):" "$LM4"; } && m4_mut_said=1
+  rm -f "$LOGDIR2"/self-update-fixtures-*.md
+  bash "$CTL" "$DIST" "$D_TREE" theirs-tag "$CONS2" green-one >/dev/null 2>&1
+  LM4C="$(newest_log2)"
+  m4_ctl_unres=0; { [ -n "$LM4C" ] && grep -qF "COVERAGE: UNRESOLVABLE" "$LM4C"; } && m4_ctl_unres=1
+  if [ "$m4_ctl_unres" -eq 1 ] && [ "$m4_mut_unres" -eq 0 ] && [ "$m4_mut_said" -eq 1 ]; then
+    ok "MUTATION — with the ref peel removed a base that names a TREE stops being reported as UNRESOLVABLE (the unmutated copy reports it on the same input, and the mutant still writes a log, so it ran): Part 12 is what catches that"
   else
-    bad "MUTATION — the ref-resolution loop was neutered and the run still refused (rc=$rc). Part 12's input does not reach that loop, so the peel to ^{commit} is untested"
+    bad "MUTATION — the ref-resolution loop was neutered and Part 12's message did not move (unmutated UNRESOLVABLE=$m4_ctl_unres expected 1, mutant UNRESOLVABLE=$m4_mut_unres expected 0, mutant wrote a finding=$m4_mut_said expected 1). Either Part 12's input does not reach that loop, or the copy emitted nothing and its silence was about to score as a kill"
   fi
 else
   bad "FIXTURE ERROR: the ref-resolution anchor no longer occurs exactly once in the runner — Parts 10 to 12 prove nothing"
@@ -1185,6 +1635,246 @@ if mkmutant "$M14" '  if git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fi
   fi
 else
   bad "FIXTURE ERROR: the .dist-only probe anchor no longer occurs exactly once in the runner — Part 16 proves nothing"
+fi
+
+# --- MUTANTS G1 to G4: the GATE-RECORD requirement --------------------------------------------
+# Keyed on LOCATION and on observable BEHAVIOUR. Each is scored on the input of the ONE part
+# that owns it, and the scoring runs in `$GCONS` — the only consumer tree with no acquitting
+# record seeded into it.
+#   G1  the requirement excised outright      Part G1
+#   G2  the shas compared as STRINGS          Part G3 (the record's header is resolved; the
+#                                             argument is a tag, so a string compare refuses
+#                                             the right range and the arm reads it as a refusal
+#                                             for the wrong reason — see the two-run scoring)
+#   G3  the verdict check accepts DEFER       Part G2
+#   G4  the candidates ordered OLDEST first   Part G5
+
+# --- MUTANT G1: the whole gate-record requirement excised ------------------------------------
+# Excised rather than edited: a partial revert leaves whichever layer was not touched, and this
+# refusal has two (the peel and the record match). The named set is legitimate for this range, so
+# the copy runs the fixtures and reports a GREEN suite over a cycle nothing authorised — exactly
+# the state step 2 was in before this arm existed.
+MG1="$MUTDIR/mg1-gaterecord-deleted.sh"
+python3 -c 'import sys
+s = open(sys.argv[1]).read()
+a, b = s.index("# --- THE GATE RECORD"), s.index("# --- The OVER-completeness arm")
+open(sys.argv[2], "w").write(s[:a] + s[b:])' "$RUNNER" "$MG1" 2>/dev/null
+if [ -s "$MG1" ] && ! cmp -s "$RUNNER" "$MG1"; then
+  rm -f "$GLOG"/self-update-gate-*.md "$GLOG"/self-update-fixtures-*.md
+  bash "$MG1" "$DIST" "$D_THEIRS" "$D_QUIET" "$GCONS" green-one cwd-probe >/dev/null 2>&1
+  rc=$?
+  LM="$(newest_glog)"
+  if [ "$rc" -eq 0 ] && [ -n "$LM" ] && grep -qF "===== FIXTURE green-one =====" "$LM" \
+     && ! grep -qF "GATE-RECORD:" "$LM"; then
+    ok "MUTATION — with the gate-record requirement removed a cycle NOTHING authorised runs to a green suite: Part G1 is what catches that"
+  else
+    bad "MUTATION — the gate-record requirement was removed and the unauthorised cycle was still refused (rc=$rc). Part G1's verdict is coming from somewhere else and the requirement is untested"
+  fi
+else
+  bad "FIXTURE ERROR: the gate-record block could not be excised — its start or end anchor has moved, and Parts G1 to G5 prove nothing"
+fi
+
+# --- MUTANT G2: the shas compared as STRINGS rather than resolved ------------------------------
+# The implementation a naive seed cannot tell from the right one. Both sides are compared as the
+# CALLER SPELLED them, so a record written for `theirs-tag` matches an argument of `theirs-tag`
+# and everything looks fine — until the two spellings differ, which is the normal case, because
+# step 2 passes a ref and the gate records what it resolved to.
+#
+# SCORED IN TWO RUNS, because a mutant that refuses EVERYTHING would satisfy a one-run arm keyed
+# on a refusal. The first run is the legitimate range Part G4's shape uses, spelled as a TAG:
+# correct code accepts it, the mutant refuses. The second is Part G3's wrong-range input, which
+# BOTH implementations must refuse — so the kill is the pair, and a copy that simply always
+# refuses fails the pair rather than scoring it.
+MG2="$MUTDIR/mg2-sha-compared-as-string.sh"
+if mkmutant2 "$MG2" 'gr_base="$(git -C "$DIST" rev-parse "${BASE}^{commit}" 2>/dev/null)"' \
+                    'gr_base="$BASE"' \
+                    'gr_theirs="$(git -C "$DIST" rev-parse "${THEIRS}^{commit}" 2>/dev/null)"' \
+                    'gr_theirs="$THEIRS"'; then
+  # A record for D_BASE..theirs-tag, written with RESOLVED shas exactly as the gate writes it.
+  rm -f "$GLOG"/self-update-gate-*.md "$GLOG"/self-update-fixtures-*.md
+  seed_record "$GLOG" "$DIST" "$D_BASE" theirs-tag >/dev/null
+  bash "$MG2" "$DIST" "$D_BASE" theirs-tag "$GCONS" touched-shippable touched-named green-one \
+    >/dev/null 2>&1
+  mg2_tag=$?
+  mg2_tag_ref=0
+  bash "$RUNNER" "$DIST" "$D_BASE" theirs-tag "$GCONS" touched-shippable touched-named green-one \
+    >/dev/null 2>&1 || mg2_tag_ref=1
+  # ...and the wrong-range input, which both must refuse.
+  rm -f "$GLOG"/self-update-gate-*.md "$GLOG"/self-update-fixtures-*.md
+  seed_record "$GLOG" "$DIST" "$D_QUIET" "$D_SHIP" >/dev/null
+  bash "$MG2" "$DIST" "$D_THEIRS" "$D_QUIET" "$GCONS" green-one >/dev/null 2>&1
+  mg2_wrong=$?
+  if [ "$mg2_tag" -eq 2 ] && [ "$mg2_tag_ref" -eq 0 ] && [ "$mg2_wrong" -eq 2 ]; then
+    ok "MUTATION — comparing the ARGUMENT STRINGS instead of the resolved shas refuses a record written for this very range one minute earlier (tag ref: correct=accepted, mutant=exit 2), while still refusing the wrong range: Part G3's sha comparison is what catches that"
+  else
+    bad "MUTATION — the sha comparison was replaced by a string comparison and the fixture did not see it (mutant on the tag ref rc=$mg2_tag expected 2, unmutated rc=$mg2_tag_ref expected 0, wrong-range rc=$mg2_wrong expected 2). Step 2 passes a REF and the gate records a SHA, so a string comparison wedges every self-update whose theirs is not spelled as a raw sha"
+  fi
+else
+  bad "FIXTURE ERROR: one of the two rev-parse anchors no longer occurs exactly once in the runner — the resolved-sha comparison is untested"
+fi
+
+# --- MUTANT G3: the verdict check accepts DEFER ------------------------------------------------
+# The presence-only reader: a record for the right range is enough and its verdict is never read.
+# It passes Parts G1 and G3 — there is no record and a wrong-range record in those — and the only
+# thing it gets wrong is the one case the gate explicitly refused.
+MG3="$MUTDIR/mg3-verdict-unread.sh"
+if mkmutant "$MG3" '    if [ "$gr_verdict" != "OK" ]; then' \
+                   '    if [ -z "$gr_verdict" ]; then'; then
+  rm -f "$GLOG"/self-update-gate-*.md "$GLOG"/self-update-fixtures-*.md
+  seed_record "$GLOG" "$DIST" "$D_THEIRS" "$D_QUIET" DEFER >/dev/null
+  bash "$MG3" "$DIST" "$D_THEIRS" "$D_QUIET" "$GCONS" green-one cwd-probe >/dev/null 2>&1
+  rc=$?
+  LM="$(newest_glog)"
+  if [ "$rc" -eq 0 ] && [ -n "$LM" ] && grep -qF "===== FIXTURE green-one =====" "$LM"; then
+    ok "MUTATION — with the verdict unread a DEFER record authorises the cycle, because a record EXISTS: Part G2 is what catches that"
+  else
+    bad "MUTATION — the verdict check was reduced to a presence check and the DEFER record still stopped the run (rc=$rc). Part G2 is being answered by the sha match, so the verdict itself is untested"
+  fi
+else
+  bad "FIXTURE ERROR: the verdict-check anchor no longer occurs exactly once in the runner — Part G2 proves nothing"
+fi
+
+# --- MUTANT G4: the newest-record selection picks the OLDEST -----------------------------------
+# `sort -r` becomes `sort`. Every other part here seeds exactly one matching record, so this copy
+# is correct for all of them; the only input that separates the two orderings is Part G5's pair.
+MG4="$MUTDIR/mg4-oldest-record-wins.sh"
+if mkmutant "$MG4" 'gr_cands="$(ls "$OUT_DIR"/self-update-gate-*.md 2>/dev/null | sort -r)"' \
+                   'gr_cands="$(ls "$OUT_DIR"/self-update-gate-*.md 2>/dev/null | sort)"'; then
+  rm -f "$GLOG"/self-update-gate-*.md "$GLOG"/self-update-fixtures-*.md
+  seed_record "$GLOG" "$DIST" "$D_THEIRS" "$D_QUIET" OK    100 >/dev/null
+  seed_record "$GLOG" "$DIST" "$D_THEIRS" "$D_QUIET" DEFER 900 >/dev/null
+  bash "$MG4" "$DIST" "$D_THEIRS" "$D_QUIET" "$GCONS" green-one cwd-probe >/dev/null 2>&1
+  rc=$?
+  LM="$(newest_glog)"
+  if [ "$rc" -eq 0 ] && [ -n "$LM" ] && grep -qF "===== FIXTURE green-one =====" "$LM"; then
+    ok "MUTATION — ordering the candidates oldest-first revives an OK the gate has already superseded with a DEFER: Part G5 is what catches that"
+  else
+    bad "MUTATION — the record ordering was reversed and Part G5 did not see it (rc=$rc). Where every part seeds one matching record the two orderings are the same program, and the arm asserts nothing"
+  fi
+else
+  bad "FIXTURE ERROR: the record-ordering anchor no longer occurs exactly once in the runner — Part G5 proves nothing"
+fi
+
+# --- MUTANTS G5 to G8: the input binding and the delivery-pull tolerance -----------------------
+#   G5  the input comparison removed entirely     Part G6
+#   G6  the inputs COUNTED, never compared        Part G6 — the shape that reads as a check
+#   G7  ABSENT skipped as "nothing to check"      Part G9
+#   G8  the tolerance widened to "no record for THIS range"   Part G13
+
+# --- MUTANT G5: the input comparison removed ---------------------------------------------------
+# The whole `else` branch under the OK verdict, so a matching range and an OK verdict are the
+# entire requirement again. Scored on Part G6's input: the record is real, its verdict is OK, and
+# the file it read has changed underneath it.
+MG5="$MUTDIR/mg5-inputs-unchecked.sh"
+python3 -c 'import sys
+s = open(sys.argv[1]).read()
+a = s.index("    else\n      # THE INPUTS THE VERDICT READ")
+b = s.index("  elif [ \"$gr_seen\" -eq 0 ]; then")
+open(sys.argv[2], "w").write(s[:a] + "    fi\n" + s[b:])' "$RUNNER" "$MG5" 2>/dev/null
+if [ -s "$MG5" ] && ! cmp -s "$RUNNER" "$MG5" && bash -n "$MG5" 2>/dev/null; then
+  gin_seed "$(printf '# input: %s\t%s' "$GIN_REL" "$(gin_hash)")" 300
+  MG5_SAVED="$(cat "$GCONS/$GIN_REL")"
+  printf '%s\n' 'edited after the gate ran' > "$GCONS/$GIN_REL"
+  bash "$MG5" "$DIST" "$D_THEIRS" "$D_QUIET" "$GCONS" green-one >/dev/null 2>&1
+  rc=$?
+  LM="$(newest_glog)"
+  printf '%s\n' "$MG5_SAVED" > "$GCONS/$GIN_REL"; chmod +x "$GCONS/$GIN_REL"
+  if [ "$rc" -eq 0 ] && [ -n "$LM" ] && grep -qF "===== FIXTURE green-one =====" "$LM" \
+     && ! grep -qF "GATE-RECORD:" "$LM"; then
+    ok "MUTATION — with the input comparison removed a verdict taken against a DIFFERENT consumer tree authorises this run: Part G6 is what catches that"
+  else
+    bad "MUTATION — the input comparison was removed and the moved input was still refused (rc=$rc). Part G6's verdict is coming from the range match, so the tree binding is untested"
+  fi
+else
+  bad "FIXTURE ERROR: the input-comparison block could not be excised or the result does not parse — an anchor has moved, and Parts G6 to G11 prove nothing"
+fi
+
+# --- MUTANT G6: the inputs COUNTED, never compared ---------------------------------------------
+# The shape that looks exactly like a working check and is the one this repo keeps shipping: the
+# record's input lines are counted, the count is asserted non-zero, and no byte of the consumer
+# is ever read. It passes Part G7 — a record with no inputs still counts zero — and only an arm
+# that MOVES a file can tell the two apart.
+MG6="$MUTDIR/mg6-inputs-counted-not-compared.sh"
+python3 -c 'import sys
+s = open(sys.argv[1]).read()
+a = s.index("    else\n      # THE INPUTS THE VERDICT READ")
+b = s.index("  elif [ \"$gr_seen\" -eq 0 ]; then")
+body = """    else
+      gr_n_in="$(grep -c "^# input: " "$GATE_REC")" || gr_n_in=0
+      gr_moved=""
+      if [ "$gr_n_in" -eq 0 ]; then
+        GATE_REC_WHY="the gate record $(basename "$GATE_REC") names NO input files"
+      fi
+    fi
+"""
+open(sys.argv[2], "w").write(s[:a] + body + s[b:])' "$RUNNER" "$MG6" 2>/dev/null
+if [ -s "$MG6" ] && ! cmp -s "$RUNNER" "$MG6" && ! cmp -s "$MG5" "$MG6" && bash -n "$MG6" 2>/dev/null; then
+  # BOTH DIRECTIONS, because a copy that refuses everything would satisfy a one-run arm: the
+  # no-input record must still be refused (so the copy RAN and its count arm works) and the
+  # moved input must be accepted (so it never looked at the tree).
+  gin_seed "$SR_NO_INPUTS" 310
+  bash "$MG6" "$DIST" "$D_THEIRS" "$D_QUIET" "$GCONS" green-one >/dev/null 2>&1
+  mg6_empty=$?
+  gin_seed "$(printf '# input: %s\t%s' "$GIN_REL" "$(gin_hash)")" 311
+  MG6_SAVED="$(cat "$GCONS/$GIN_REL")"
+  printf '%s\n' 'edited after the gate ran' > "$GCONS/$GIN_REL"
+  bash "$MG6" "$DIST" "$D_THEIRS" "$D_QUIET" "$GCONS" green-one >/dev/null 2>&1
+  mg6_moved=$?
+  printf '%s\n' "$MG6_SAVED" > "$GCONS/$GIN_REL"; chmod +x "$GCONS/$GIN_REL"
+  if [ "$mg6_empty" -eq 2 ] && [ "$mg6_moved" -eq 0 ]; then
+    ok "MUTATION — COUNTING the input lines instead of comparing them still refuses an empty record (so the copy ran) and accepts a tree that has moved underneath the verdict: Part G6 is what catches that"
+  else
+    bad "MUTATION — the inputs were counted rather than compared and the fixture did not see it (empty-record rc=$mg6_empty expected 2, moved-input rc=$mg6_moved expected 0). A count is true either way, and an arm asserting only that the record names SOMETHING passes against a check that never opens a file"
+  fi
+else
+  bad "FIXTURE ERROR: the count-only mutant could not be built or does not parse — Part G6's comparison is untested"
+fi
+
+# --- MUTANT G7: ABSENT skipped as "nothing to check" -------------------------------------------
+# One value at a time: the digest comparison is left intact, so this copy passes Parts G6 and G10
+# and fails only where the recorded value is an absence. That is the direction a reader naturally
+# gets wrong, because "the file is not there" reads as "there is nothing to compare".
+MG7="$MUTDIR/mg7-absent-skipped.sh"
+if mkmutant "$MG7" '          ABSENT)
+            [ -e "$CONSUMER/$gr_p" ] && gr_moved="$gr_moved' \
+                   '          ABSENT)
+            false && gr_moved="$gr_moved'; then
+  gin_seed "$(printf '# input: %s\tABSENT' 'tests/fixtures/appeared-since/run.sh')" 320
+  mkdir -p "$GCONS/tests/fixtures/appeared-since"
+  printf '%s\n' 'written after the gate ran' > "$GCONS/tests/fixtures/appeared-since/run.sh"
+  bash "$MG7" "$DIST" "$D_THEIRS" "$D_QUIET" "$GCONS" green-one >/dev/null 2>&1
+  rc=$?
+  LM="$(newest_glog)"
+  rm -rf "$GCONS/tests/fixtures/appeared-since"
+  if [ "$rc" -eq 0 ] && [ -n "$LM" ] && grep -qF "===== FIXTURE green-one =====" "$LM"; then
+    ok "MUTATION — treating a recorded ABSENT as nothing to check accepts a file that ARRIVED after the verdict: Part G9 is what catches that"
+  else
+    bad "MUTATION — the ABSENT direction was skipped and the arrived file was still refused (rc=$rc). Part G9 is being answered by the digest branch, so the absence direction is untested"
+  fi
+else
+  bad "FIXTURE ERROR: the ABSENT-branch anchor no longer occurs exactly once in the runner — Part G9 proves nothing"
+fi
+
+# --- MUTANT G8: the delivery-pull tolerance WIDENED --------------------------------------------
+# `no record has EVER been written` becomes `no record for THIS range`. That is the ordinary state
+# of every consumer after its first cycle, so the copy exempts essentially all of them while
+# looking like a narrow bootstrapping allowance — a mechanism defending its own defect. Part G13
+# is the probe that the exemption does not cover the arm's own subject.
+MG8="$MUTDIR/mg8-tolerance-widened.sh"
+if mkmutant "$MG8" '  elif [ "$gr_seen" -eq 0 ]; then' \
+                   '  elif [ "$gr_seen" -ge 0 ]; then'; then
+  rm -f "$GLOG"/self-update-gate-*.md "$GLOG"/self-update-fixtures-*.md
+  seed_record "$GLOG" "$DIST" "$D_QUIET" "$D_SHIP" OK 330 >/dev/null
+  bash "$MG8" "$DIST" "$D_THEIRS" "$D_QUIET" "$GCONS" green-one >/dev/null 2>&1
+  rc=$?
+  LM="$(newest_glog)"
+  if [ "$rc" -eq 0 ] && [ -n "$LM" ] && grep -qF "NOT-REQUIRED" "$LM"; then
+    ok "MUTATION — widening the tolerance to 'no record for THIS range' exempts a consumer that HAS recorded verdicts, which is every consumer after its first cycle: Part G13 is what catches that"
+  else
+    bad "MUTATION — the tolerance was widened and Part G13 did not fire (rc=$rc). The exemption would then acquit the arm's own subject on every self-update after the first, and nothing here would say so"
+  fi
+else
+  bad "FIXTURE ERROR: the tolerance anchor no longer occurs exactly once in the runner — Part G13 proves nothing"
 fi
 
 echo

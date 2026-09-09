@@ -3862,21 +3862,38 @@ exist before step 2 may push — differ in what they do to a consumer mid-pull a
 measured on a scratch install before either is built. Read `BL-131`'s archived body for the
 three-path analysis before touching this.
 
-**Receipt limits, stated.** The receipt keys on the declaration in `SKILL.md` that step 2 needs
-no operator approval, case-insensitive and refusing a match inside an HTML comment. It is
-closable by rewording that sentence without changing the behaviour, and a fix that gates the
-write in a program while leaving the sentence in place scores STILL-LIVE; replace it with one
-that drives the gate when a gate exists. A prose receipt is what a prose-only subject affords.
+**The prose receipt is REPLACED, and the entry it was written for said why.** The old one keyed
+on the `SKILL.md` declaration that step 2 needs no operator approval, and its own limits
+paragraph called it closable by rewording that sentence with no behaviour change — a prose
+receipt being what a prose-only subject affords. The subject is no longer prose-only: the gate
+RECORDS its verdict and `self-update-fixtures.sh` REFUSES to run a fixture without a recorded
+`OK` for its own resolved range, so the receipt now drives both programs. The autonomy
+declaration is deliberately UNCHANGED — this cycle is still autonomous, and what moved is what
+the sentence claims about the artifact, not whether an operator gates the write.
 
-**Receipt repaired at `v0.496.0`; it had read `CLOSE-CANDIDATE` since the day it was filed.**
-It fed `grep -q` from a `sed` over a 150 KB file; `grep -q` leaves at the first match, the
-writer takes EPIPE, and under `backlog-reverify.sh`'s `pipefail` the pipeline answers non-zero
-on a MATCH — so `&& exit 1` never fired and the tool reported the fix present. Run bare, the same
-line exits 1. The count form below reads all of its input. The other seven receipts in this file
-that pipe into `grep -q` agree under both modes today; that is a size property of their inputs,
-not a guarantee.
+**Receipt scored against four NON-FIXES and against the fix, each built as a whole-tree copy and
+run through the same one-liner.** The fixed tree reads **0**; all four read **1**. (a) the gate
+writing a record while the runner does not require it — the record exists and nothing consumes
+it, so the write is still unauthorised; (b) the runner requiring a record while the gate writes
+none — the requirement is unsatisfiable and every self-update wedges; (c) the record's rows
+spelled by a SECOND printf so they diverge from stdout, which is the shape where the persisted
+evidence stops being the verdict that was actually emitted; (d) the `SKILL.md` sentence reworded
+with no code change, the exact non-fix the old receipt could not tell from a real one. The
+control that makes those four readable is (a) and (b) failing for OPPOSITE reasons — one half
+present without the other in each direction — so a receipt satisfied by either half alone would
+have scored one of them 0.
 
-verify: sh f=core/skills/ai-dlc-update/SKILL.md; [ -f "$f" ] || exit 9; grep -qi 'self-update' "$f" || exit 9; [ "$(sed 's/<!--.*-->//g' "$f" | grep -ciE 'autonomously[^.]*no operator approval')" -gt 0 ] && exit 1; exit 0
+**Receipt limits, stated.** It drives the gate against `core/fixtures/self-update-gate/seed.sh`
+and asserts the record's TSV rows `cmp -s` the gate's stdout and that the row COUNT agrees, then
+builds its own throwaway distribution and consumer and asserts the runner exits 2 with a
+`GATE-RECORD:` line when no record matches the range. It exits 9 when either program is missing,
+when the seed does not resolve, when the gate emits no rows, or when the throwaway repo does not
+build — the states where a 1 would be a claim about the entry rather than about the tree. What
+it does NOT cover: the input-digest binding and the delivery-pull tolerance are asserted by
+`core/fixtures/self-update-fixture-log/run.sh` and not by this line, because a receipt long
+enough to drive them is one nobody can read at a glance.
+
+verify: sh unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; r=core/skills/ai-dlc-update/reconcile; g="$r/self-update-gate.sh"; f="$r/self-update-fixtures.sh"; [ -f "$g" ] && [ -f "$f" ] || exit 9; s="$(bash core/fixtures/self-update-gate/seed.sh)" || exit 9; set -- $s; d="$1"; b="$2"; t="$3"; c="$4"; [ -d "$c" ] && [ -d "$d" ] || exit 9; o="$c/_bmad-output/ai-dlc-update"; rm -rf "$o"; out="$(bash "$g" "$d" "$b" "$t" "$c" 2>/dev/null)" || exit 9; n0="$(printf '%s\n' "$out" | grep -c '^SELF-UPDATE-')" || n0=0; [ "$n0" -gt 0 ] || exit 9; rec="$(ls -t "$o"/self-update-gate-*.md 2>/dev/null | head -1)"; [ -n "$rec" ] || exit 1; a="$(mktemp)"; e="$(mktemp)"; printf '%s\n' "$out" > "$a"; grep '^SELF-UPDATE-' "$rec" > "$e"; n1="$(grep -c . "$e")" || n1=0; [ "$n1" -eq "$n0" ] || exit 1; cmp -s "$a" "$e" || exit 1; D="$(mktemp -d)"; K="$(mktemp -d)"; G(){ git -C "$D" -c user.name=b -c user.email=b@invalid -c commit.gpgsign=false "$@"; }; git -c init.templateDir= init -q -b main "$D" >/dev/null 2>&1 || git -c init.templateDir= init -q "$D" >/dev/null 2>&1; [ -d "$D/.git" ] || exit 9; mkdir -p "$D/core/fixtures/probe" "$D/core/scripts"; printf 'exit 0\n' > "$D/core/fixtures/probe/run.sh"; printf 'base\n' > "$D/core/scripts/m.sh"; G add -A >/dev/null 2>&1; G commit -q --no-verify -m base >/dev/null 2>&1; B="$(G rev-parse HEAD 2>/dev/null)"; printf 'theirs\n' > "$D/core/scripts/m.sh"; G add -A >/dev/null 2>&1; G commit -q --no-verify -m theirs >/dev/null 2>&1; T="$(G rev-parse HEAD 2>/dev/null)"; [ -n "$B" ] && [ -n "$T" ] && [ "$B" != "$T" ] || exit 9; mkdir -p "$K/_bmad-output/ai-dlc-update" "$K/tests/fixtures/probe"; printf 'exit 0\n' > "$K/tests/fixtures/probe/run.sh"; printf '# base-sha: %s\n# theirs-sha: %s\n# input: x\tABSENT\n\n# verdict: OK\n' "$T" "$B" > "$K/_bmad-output/ai-dlc-update/self-update-gate-19700101T000000Z.md"; bash "$f" "$D" "$B" "$T" "$K" probe >/dev/null 2>&1; [ $? -eq 2 ] || exit 1; l="$(ls -t "$K"/_bmad-output/ai-dlc-update/self-update-fixtures-*.md 2>/dev/null | head -1)"; [ -n "$l" ] || exit 1; grep -q '^GATE-RECORD:' "$l" || exit 1; rm -rf "$D" "$K"; exit 0
 
 ## BL-159 — four handoff-completion defects adjacent to `BL-158`, found by the batch-49 hands and deliberately not fixed there
 
