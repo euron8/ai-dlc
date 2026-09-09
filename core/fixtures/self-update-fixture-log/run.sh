@@ -208,6 +208,16 @@ dput "core/fixtures/theirs-only-distonly/.dist-only" 'a mutation battery over co
 dput "core/fixtures/theirs-only-nodriver/.keep" 'a directory upstream carries with no driver in it'
 
 dput "core/scripts/machinery.sh" 'at base'
+# THE DISTRIBUTION FALLBACK HOOK, and it is what Part G4 stands on. The seeded consumer has no
+# `.githooks/pre-push`, so the shipping gate falls back to `$DIST/core/git-hooks/pre-push`; with
+# neither present it emits SELF-UPDATE-UNDECIDED ("no pre-push hook found") and records a
+# verdict the runner correctly refuses -- and G4 then fails for a reason that has nothing to do
+# with the join it exists to prove. Measured on the first integrated run: the record read
+# UNDECIDED, one row naming the missing hook. The hook names the one machinery script so the
+# differential arm runs too; the consumer lacks a current copy, which the gate scores OK ("this
+# pull ADDS it") and records as an ABSENT input the runner then compares in both directions.
+dput "core/git-hooks/pre-push" '#!/usr/bin/env bash
+bash scripts/ai-dlc/machinery.sh'
 G add -A >/dev/null 2>&1; G commit -q --no-verify -m base >/dev/null 2>&1
 D_BASE="$(G rev-parse HEAD 2>/dev/null)"
 
@@ -1836,7 +1846,7 @@ fi
 # gets wrong, because "the file is not there" reads as "there is nothing to compare".
 MG7="$MUTDIR/mg7-absent-skipped.sh"
 if mkmutant "$MG7" '          ABSENT)
-            [ -e "$CONSUMER/$gr_p" ] && gr_moved="$gr_moved' \
+            [ -e "$gr_abs" ] && gr_moved="$gr_moved' \
                    '          ABSENT)
             false && gr_moved="$gr_moved'; then
   gin_seed "$(printf '# input: %s\tABSENT' 'tests/fixtures/appeared-since/run.sh')" 320

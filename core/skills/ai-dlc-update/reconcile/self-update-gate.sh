@@ -207,7 +207,11 @@ GATE_IN=""
 #
 # THE PATH IS CONSUMER-RELATIVE so the record is comparable across a rehearsal copy and the tree
 # it was copied from. The distribution's fallback hook has no consumer-relative form and is
-# recorded under its literal `<dist>:core/git-hooks/pre-push` spelling, which cannot collide.
+# recorded under the `dist:core/git-hooks/pre-push` spelling: a `dist:` prefix the READER
+# resolves against its own distribution argument. NOT the absolute distribution path -- the
+# first integrated run recorded it that way, the runner resolved it under the consumer root as
+# it does every other input, read it ABSENT, and refused the shipping gate's own OK record. A
+# consumer with no hook of its own would have been refused on every self-update, forever.
 gate_input() {
   [ -n "$GATE_IN" ] || return 0
   _gi_abs="$CONSUMER/$1"
@@ -334,7 +338,7 @@ if [ -f "$HOOK" ]; then
   gate_input ".githooks/pre-push"
 else
   HOOK="$DIST/core/git-hooks/pre-push"
-  gate_input_abs "${DIST}:core/git-hooks/pre-push" "$HOOK"
+  gate_input_abs "dist:core/git-hooks/pre-push" "$HOOK"
 fi
 # `skill_commit` decides the SAFE-STOP acquittal and step 2 advances it mid-cycle; the marker
 # decides whether that acquittal is withheld. Both are recorded, the marker as ABSENT when

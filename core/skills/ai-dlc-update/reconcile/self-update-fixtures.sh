@@ -292,20 +292,30 @@ GRECEOF
           continue
         fi
         gr_n_in=$((gr_n_in + 1))
+        # WHERE THE PATH RESOLVES. Every input is consumer-relative except the distribution's
+        # fallback pre-push hook, which the gate records under a `dist:` prefix because it has no
+        # consumer-relative form; that one resolves against THIS run's distribution argument.
+        # Resolving it under the consumer -- the first integrated run did -- reads the fallback
+        # hook ABSENT on every consumer that has no hook of its own, and refuses the shipping
+        # gate's own OK record forever.
+        case "$gr_p" in
+          dist:*) gr_abs="$DIST/${gr_p#dist:}" ;;
+          *)      gr_abs="$CONSUMER/$gr_p" ;;
+        esac
         case "$gr_h" in
           ABSENT)
-            [ -e "$CONSUMER/$gr_p" ] && gr_moved="$gr_moved
+            [ -e "$gr_abs" ] && gr_moved="$gr_moved
   $gr_p — recorded ABSENT, and PRESENT on the consumer now"
             ;;
           [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]\
 [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]\
 [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]\
 [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f])
-            if [ ! -f "$CONSUMER/$gr_p" ]; then
+            if [ ! -f "$gr_abs" ]; then
               gr_moved="$gr_moved
   $gr_p — recorded ${gr_h}, and ABSENT from the consumer now"
             else
-              gr_now="$(git hash-object "$CONSUMER/$gr_p" 2>/dev/null)"
+              gr_now="$(git hash-object "$gr_abs" 2>/dev/null)"
               [ "$gr_now" = "$gr_h" ] || gr_moved="$gr_moved
   $gr_p — recorded ${gr_h}, now ${gr_now:-<unhashable>}"
             fi
