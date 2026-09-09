@@ -412,15 +412,22 @@ prose is itself generated rather than composed.
    **The record also binds the CONSUMER TREE its verdict was taken against, not just the range.**
    The verdict is a differential against the consumer's own copies, so the same command over one
    range answers differently once this cycle has written the slice — the record therefore names
-   every consumer file the verdict read, with its digest, and the runner re-hashes each one and
-   refuses if any has moved. **Run the gate on the tree as it stands when you run the fixtures**;
-   a verdict taken before the write does not authorise the run after it.
+   every consumer file the verdict read, with its digest and the core path it maps from, and the
+   runner re-reads each one.
+
+   **THE ORDER IS GATE, THEN WRITE, THEN RUNNER, AND THE GATE RUNS ONCE.** Run
+   `self-update-gate.sh` BEFORE writing anything, on the tree as the operator left it; write the
+   slice; then run the fixture runner. It accepts an input whose content is now what this pull
+   ships — that is the slice it just wrote — and refuses one that is neither the recorded content
+   nor `theirs`. **Never re-run the gate after the write to refresh a record.** A gate run on the
+   written tree compares each incoming script with a copy of itself, so it reports OK for the one
+   reason that means nothing, and the runner refuses such a record as `PRE-WRITTEN`.
 
    **One tolerance, and it exists because a fix to a bootstrapping step cannot be delivered by that
-   step.** On the pull that delivers the recording gate the OLD gate runs and records nothing, so a
-   consumer where NO gate record has ever been written proceeds with a `NOT-REQUIRED` line in the
-   log and on stderr. That state occurs once: the moment any record exists the requirement binds in
-   full, including when the only record present classifies a different range.
+   step.** On the pull that delivers the recording gate the OLD gate runs and records nothing, so
+   the runner proceeds with a `NOT-REQUIRED` line when no record exists AND the gate at `base` —
+   the engine the consumer installed — carries no record-writing site. Where that gate does record,
+   an empty record directory is a refusal: the records were deleted or the gate was never run.
 
    If NON-EMPTY and the gate says OK:
    - **Run the self-update cycle autonomously:** cut a dedicated branch

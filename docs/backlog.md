@@ -3871,29 +3871,45 @@ RECORDS its verdict and `self-update-fixtures.sh` REFUSES to run a fixture witho
 declaration is deliberately UNCHANGED — this cycle is still autonomous, and what moved is what
 the sentence claims about the artifact, not whether an operator gates the write.
 
-**Receipt scored against four NON-FIXES and against the fix, each built as a whole-tree copy and
-run through the same one-liner.** The fixed tree reads **0**; all four read **1**. (a) the gate
+**Receipt scored against SIX NON-FIXES and against the fix, each built as a whole-tree copy and
+run through the same one-liner.** The fixed tree reads **0**; all six read **1**. (a) the gate
 writing a record while the runner does not require it — the record exists and nothing consumes
 it, so the write is still unauthorised; (b) the runner requiring a record while the gate writes
 none — the requirement is unsatisfiable and every self-update wedges; (c) the record's rows
 spelled by a SECOND printf so they diverge from stdout, which is the shape where the persisted
 evidence stops being the verdict that was actually emitted; (d) the `SKILL.md` sentence reworded
-with no code change, the exact non-fix the old receipt could not tell from a real one. The
-control that makes those four readable is (a) and (b) failing for OPPOSITE reasons — one half
-present without the other in each direction — so a receipt satisfied by either half alone would
-have scored one of them 0.
+with no code change, the exact non-fix the old prose receipt could not tell from a real one;
+(e) both programs correct but the gate's input flush deleted, so no `# input:` line is ever
+written — **an earlier revision of this receipt read that tree as FIXED**, which is why the
+receipt now asserts a line whose third column is `core/scripts/<a hook-named script>`; (f) the
+runner as first integrated, which refuses the legitimate post-write state. The control that makes
+those readable is (a) and (b) failing for OPPOSITE reasons — one half present without the other
+in each direction — so a receipt satisfied by either half alone would have scored one of them 0.
 
-**Receipt limits, stated.** It drives the gate against `core/fixtures/self-update-gate/seed.sh`
-and asserts the record's TSV rows `cmp -s` the gate's stdout and that the row COUNT agrees, then
-builds its own throwaway distribution and consumer and asserts the runner exits 2 with a
-`GATE-RECORD:` line when no record matches the range. It exits 9 when either program is missing,
-when the seed does not resolve, when the gate emits no rows, or when the throwaway repo does not
-build — the states where a 1 would be a claim about the entry rather than about the tree. What
-it does NOT cover: the input-digest binding and the delivery-pull tolerance are asserted by
+**What the join actually discriminates, which is the sentence the design rests on.** Not whether
+an input moved, but WHICH input moved and TOWARD WHAT. A gating script now equal to `theirs` is
+the written slice and is expected — step 2 writes it between the gate and the runner, so the
+recorded digest is stale by design. One equal to neither the record nor `theirs` is tampering.
+One already at `theirs` when the gate RAN is a verdict that compared a file with itself, and no
+digest comparison can see it because the record and the tree agree perfectly; it is caught on the
+range instead. Measured on the gate's own seed, driving both shipping programs in step 2's real
+order: 4 of 9 recorded inputs moved, every one to precisely the `theirs` blob — so a rule spelled
+"nothing moved" refuses every legitimate self-update whose range changes a gating script.
+
+**Receipt limits, stated.** It drives the gate against `core/fixtures/self-update-gate/seed.sh`,
+asserts the record's TSV rows `cmp -s` the gate's stdout and that the row COUNT agrees, asserts
+the record names an input whose core path is a script the consumer's own pre-push hook names,
+then builds its own throwaway distribution and consumer and drives the NORMAL ORDER — gate,
+write one changed gating script from `theirs`, runner — asserting exit 0 with no `GATE-RECORD:`
+line, and finally that a third-hand edit to that same script is refused with `INPUT-MOVED`. It
+exits 9 when either program is missing, when the seed does not resolve, when the gate emits no
+rows, when the consumer has no hook, or when the throwaway repo does not build — the states where
+a 1 would be a claim about the entry rather than about the tree. What it does NOT cover: the
+PRE-WRITTEN arm and the delivery-pull tolerance are asserted by
 `core/fixtures/self-update-fixture-log/run.sh` and not by this line, because a receipt long
 enough to drive them is one nobody can read at a glance.
 
-verify: sh unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; r=core/skills/ai-dlc-update/reconcile; g="$r/self-update-gate.sh"; f="$r/self-update-fixtures.sh"; [ -f "$g" ] && [ -f "$f" ] || exit 9; s="$(bash core/fixtures/self-update-gate/seed.sh)" || exit 9; set -- $s; d="$1"; b="$2"; t="$3"; c="$4"; [ -d "$c" ] && [ -d "$d" ] || exit 9; o="$c/_bmad-output/ai-dlc-update"; rm -rf "$o"; out="$(bash "$g" "$d" "$b" "$t" "$c" 2>/dev/null)" || exit 9; n0="$(printf '%s\n' "$out" | grep -c '^SELF-UPDATE-')" || n0=0; [ "$n0" -gt 0 ] || exit 9; rec="$(ls -t "$o"/self-update-gate-*.md 2>/dev/null | head -1)"; [ -n "$rec" ] || exit 1; a="$(mktemp)"; e="$(mktemp)"; printf '%s\n' "$out" > "$a"; grep '^SELF-UPDATE-' "$rec" > "$e"; n1="$(grep -c . "$e")" || n1=0; [ "$n1" -eq "$n0" ] || exit 1; cmp -s "$a" "$e" || exit 1; D="$(mktemp -d)"; K="$(mktemp -d)"; G(){ git -C "$D" -c user.name=b -c user.email=b@invalid -c commit.gpgsign=false "$@"; }; git -c init.templateDir= init -q -b main "$D" >/dev/null 2>&1 || git -c init.templateDir= init -q "$D" >/dev/null 2>&1; [ -d "$D/.git" ] || exit 9; mkdir -p "$D/core/fixtures/probe" "$D/core/scripts"; printf 'exit 0\n' > "$D/core/fixtures/probe/run.sh"; printf 'base\n' > "$D/core/scripts/m.sh"; G add -A >/dev/null 2>&1; G commit -q --no-verify -m base >/dev/null 2>&1; B="$(G rev-parse HEAD 2>/dev/null)"; printf 'theirs\n' > "$D/core/scripts/m.sh"; G add -A >/dev/null 2>&1; G commit -q --no-verify -m theirs >/dev/null 2>&1; T="$(G rev-parse HEAD 2>/dev/null)"; [ -n "$B" ] && [ -n "$T" ] && [ "$B" != "$T" ] || exit 9; mkdir -p "$K/_bmad-output/ai-dlc-update" "$K/tests/fixtures/probe"; printf 'exit 0\n' > "$K/tests/fixtures/probe/run.sh"; printf '# base-sha: %s\n# theirs-sha: %s\n# input: x\tABSENT\n\n# verdict: OK\n' "$T" "$B" > "$K/_bmad-output/ai-dlc-update/self-update-gate-19700101T000000Z.md"; bash "$f" "$D" "$B" "$T" "$K" probe >/dev/null 2>&1; [ $? -eq 2 ] || exit 1; l="$(ls -t "$K"/_bmad-output/ai-dlc-update/self-update-fixtures-*.md 2>/dev/null | head -1)"; [ -n "$l" ] || exit 1; grep -q '^GATE-RECORD:' "$l" || exit 1; rm -rf "$D" "$K"; exit 0
+verify: sh unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; r=core/skills/ai-dlc-update/reconcile; g="$r/self-update-gate.sh"; f="$r/self-update-fixtures.sh"; [ -f "$g" ] && [ -f "$f" ] || exit 9; s="$(bash core/fixtures/self-update-gate/seed.sh)" || exit 9; set -- $s; d="$1"; b="$2"; t="$3"; c="$4"; [ -d "$c" ] && [ -d "$d" ] || exit 9; o="$c/_bmad-output/ai-dlc-update"; rm -rf "$o"; out="$(bash "$g" "$d" "$b" "$t" "$c" 2>/dev/null)" || exit 9; n0="$(printf '%s\n' "$out" | grep -c '^SELF-UPDATE-')" || n0=0; [ "$n0" -gt 0 ] || exit 9; rec="$(ls -t "$o"/self-update-gate-*.md 2>/dev/null | head -1)"; [ -n "$rec" ] || exit 1; a="$(mktemp)"; e="$(mktemp)"; printf '%s\n' "$out" > "$a"; grep '^SELF-UPDATE-' "$rec" > "$e"; n1="$(grep -c . "$e")" || n1=0; [ "$n1" -eq "$n0" ] || exit 1; cmp -s "$a" "$e" || exit 1; hk="$c/.githooks/pre-push"; [ -f "$hk" ] || exit 9; nm="$(grep -oE 'scripts/ai-dlc/[A-Za-z0-9._-]+\.sh' "$hk" | sed 's|.*/||' | sort -u | head -1)"; [ -n "$nm" ] || exit 9; grep -q "^# input: .*	core/scripts/${nm}$" "$rec" || exit 1; D="$(mktemp -d)"; K="$(mktemp -d)"; G(){ git -C "$D" -c user.name=b -c user.email=b@invalid -c commit.gpgsign=false "$@"; }; git -c init.templateDir= init -q -b main "$D" >/dev/null 2>&1 || git -c init.templateDir= init -q "$D" >/dev/null 2>&1; [ -d "$D/.git" ] || exit 9; mkdir -p "$D/core/fixtures/probe" "$D/core/scripts" "$D/core/skills/ai-dlc-update/reconcile"; printf 'exit 0\n' > "$D/core/fixtures/probe/run.sh"; printf 'base\n' > "$D/core/scripts/m.sh"; printf 'gc base\n' > "$D/core/scripts/gc.sh"; printf 'GATE_REC_DIR=x\n' > "$D/core/skills/ai-dlc-update/reconcile/self-update-gate.sh"; G add -A >/dev/null 2>&1; G commit -q --no-verify -m base >/dev/null 2>&1; B="$(G rev-parse HEAD 2>/dev/null)"; printf 'theirs\n' > "$D/core/scripts/m.sh"; printf 'gc theirs\n' > "$D/core/scripts/gc.sh"; G add -A >/dev/null 2>&1; G commit -q --no-verify -m theirs >/dev/null 2>&1; T="$(G rev-parse HEAD 2>/dev/null)"; [ -n "$B" ] && [ -n "$T" ] && [ "$B" != "$T" ] || exit 9; mkdir -p "$K/_bmad-output/ai-dlc-update" "$K/tests/fixtures/probe" "$K/.githooks" "$K/scripts/ai-dlc"; printf 'exit 0\n' > "$K/tests/fixtures/probe/run.sh"; printf 'bash scripts/ai-dlc/gc.sh\n' > "$K/.githooks/pre-push"; printf 'gc base\n' > "$K/scripts/ai-dlc/gc.sh"; hh="$(git hash-object "$K/.githooks/pre-push")"; gh="$(git hash-object "$K/scripts/ai-dlc/gc.sh")"; printf '# base-sha: %s\n# theirs-sha: %s\n# input: .githooks/pre-push\t%s\t-\n# input: scripts/ai-dlc/gc.sh\t%s\tcore/scripts/gc.sh\n\n# verdict: OK\n' "$B" "$T" "$hh" "$gh" > "$K/_bmad-output/ai-dlc-update/self-update-gate-19700101T000000Z.md"; git -C "$D" show "${T}:core/scripts/gc.sh" > "$K/scripts/ai-dlc/gc.sh" 2>/dev/null; bash "$f" "$D" "$B" "$T" "$K" probe >/dev/null 2>&1; [ $? -eq 0 ] || exit 1; l="$(ls -t "$K"/_bmad-output/ai-dlc-update/self-update-fixtures-*.md 2>/dev/null | head -1)"; [ -n "$l" ] || exit 1; grep -q '^GATE-RECORD:' "$l" && exit 1; rm -f "$K"/_bmad-output/ai-dlc-update/self-update-fixtures-*.md; printf 'a third hand\n' > "$K/scripts/ai-dlc/gc.sh"; bash "$f" "$D" "$B" "$T" "$K" probe >/dev/null 2>&1; [ $? -eq 2 ] || exit 1; l2="$(ls -t "$K"/_bmad-output/ai-dlc-update/self-update-fixtures-*.md 2>/dev/null | head -1)"; [ -n "$l2" ] || exit 1; grep -q '^GATE-RECORD: INPUT-MOVED' "$l2" || exit 1; rm -rf "$D" "$K"; exit 0
 
 ## BL-159 — four handoff-completion defects adjacent to `BL-158`, found by the batch-49 hands and deliberately not fixed there
 
