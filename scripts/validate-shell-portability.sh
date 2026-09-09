@@ -235,7 +235,18 @@ S8_WHY="a git rev-path in shipped instruction text whose ref placeholder is not 
 #      and without the paren the anchored pattern cannot see those lines at all. Widening the
 #      anchor took the arm's own matched set from 21 lines to 110, of which the SKIP acquits
 #      104 -- so the paren is what makes the skip load-bearing rather than decorative.
-#   2. the SKIP takes a trailing BACKSLASH as a guard as well as `||`/`&&`. Two sites
+#   2. THE SKIP STOPS AT THE FIRST `;`, AND THE UNANCHORED SPELLING WAS A REAL ACQUITTAL. The
+#      first cut read `cd[[:space:]].*(\|\||&&|\\$)`, whose `.*` runs to end of line, so ANY
+#      guard token anywhere past the `cd` acquitted it -- including one belonging to a
+#      different command. Measured with the shipped grammar, four offenders acquitted and the
+#      arm's own subject among them: `cd "$W"; git init . && git add -A`,
+#      `cd "$W"; [ -d x ] || mkdir x`, `cd "$W"; git init . \` and `cd "$W"; echo "a && b"`,
+#      where the last one's guard is inside a STRING. `[^;]*` reports all four. Corpus
+#      incidence of the difference is 0 either way (control: the plain anchor matches 110
+#      lines in 48 files), so this is a latent hole closed before it had an instance, not a
+#      cleanup. The discriminating near-miss is `cd "$x" || exit 2; git init .` -- a `;` AFTER
+#      the guard, which must stay acquitted, and does.
+#   3. the SKIP takes a trailing BACKSLASH as a guard as well as `||`/`&&`. Two sites
 #      (`gate-adjudication-rotate/seed.sh`, `snapshot-archive-rotate/seed.sh`) open
 #      `( cd "$PROJ" \` and put the `&& git init` on the NEXT line. A line-oriented scan
 #      cannot reach that continuation, and reporting the opener would be flagging the correct
@@ -244,7 +255,7 @@ S8_WHY="a git rev-path in shipped instruction text whose ref placeholder is not 
 #      (both continuations are `&&` chains) and a multi-line grammar is its own piece of work.
 # A comment line is skipped, as in S1-S7.
 S11_PAT="^[[:space:]]*(\\([[:space:]]*)?cd[[:space:]]"
-S11_SKIP="cd[[:space:]].*(\\|\\||&&|\\\\$)"
+S11_SKIP="cd[[:space:]][^;]*(\\|\\||&&|\\\\$)"
 S11_WHY="an UNGUARDED \`cd\` in a fixture script. If the target does not exist the \`cd\` fails, the script keeps going, and every command below it -- \`git init\`, \`git config\`, \`git commit\` -- resolves against the PROCESS working directory instead of the sandbox. Measured on a throwaway repo: with the target absent, the following \`git config user.email\` overwrote the SURROUNDING repository's value and the subshell still exited 0, so nothing reported it. Under a linked worktree, where git exports \`GIT_DIR\` absolute, that surrounding repository is the real one. Write \`cd \"\$x\" || exit 2\` (or \`( cd \"\$x\" && … )\`), and where the subshell's output is discarded, read its exit status at the closing paren."
 
 # Only S1 subtracts. Declared explicitly rather than defaulted in a loop, because `set -u`
@@ -452,7 +463,14 @@ else
   done
 fi
 
+# THE ARM COUNT IS DERIVED FROM `ARMS`, NOT WRITTEN. It was a literal sitting beside the
+# eleven-member string with nothing joining them, so the twelfth arm would have shipped under a
+# banner reading eleven -- a total that decays silently and reads exactly like a fresh one. The
+# parenthetical roster stays hand-written: it carries a per-arm GLOSS, which no derivation can
+# produce, and a wrong gloss is visible where a wrong count is not.
+n_arms=0
+for a in $ARMS; do n_arms=$((n_arms + 1)); done
 if [ "$fail" -eq 0 ]; then
-  say "validate-shell-portability: PASS -- $n_shell shell file(s) + $n_instr core file(s) + $n_fixture fixture shell file(s), 11 arms (S1 sed -i, S2 mapfile, S3 declare -A, S4 setsid, S5/S6 backslash-s, S7 awk backreference, S8 unquoted rev-path, S9 git-grep ERE escape, S10 multibyte bracket class, S11 unguarded cd in a fixture script), every arm probed in both directions."
+  say "validate-shell-portability: PASS -- $n_shell shell file(s) + $n_instr core file(s) + $n_fixture fixture shell file(s), $n_arms arms (S1 sed -i, S2 mapfile, S3 declare -A, S4 setsid, S5/S6 backslash-s, S7 awk backreference, S8 unquoted rev-path, S9 git-grep ERE escape, S10 multibyte bracket class, S11 unguarded cd in a fixture script), every arm probed in both directions."
 fi
 exit "$fail"

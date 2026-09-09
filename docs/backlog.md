@@ -4127,9 +4127,14 @@ whose cause is unknown would fire on the symptom and teach nobody anything.
 **THE ENTRY NAMED ONE UNGUARDED SITE AND THERE WERE SIX, ONE OF WHICH IS LIVE.** Re-derived at
 close over tracked `*.sh`: `^[[:space:]]*cd [^|&;]*$`, comments excluded, returns exactly SIX
 lines, every one in a fixture script — `artifact-path-conformance/seed.sh:39`,
-`artifact-path-migration/seed.sh:23`, `check-17-bypass/run.sh:240`, `check-17-bypass/run.sh:288`,
-`check-1c-bypass/seed.sh:49` and `retired-layer-passage/seed.sh:25`. Control in the same run: 30
-guarded `cd … ||`/`&&` lines. **The paragraph above's reasoning that `set -euo pipefail` makes the
+`artifact-path-migration/seed.sh:23`, `check-17-bypass/run.sh:245`, `check-17-bypass/run.sh:293`,
+`check-1c-bypass/seed.sh:49` and `retired-layer-passage/seed.sh:25` — the two `check-17-bypass`
+lines cited at their POST-FIX positions, because the guard commit added a header comment above
+them and the pre-fix numbers 240 and 288 now land on that comment's text. Control in the same
+run, over the 414-file tracked `*.sh` population: 42 guarded `cd … ||`/`&&` lines, against 30 on
+the pre-fix tree — the difference is these six sites plus the battery's own seeds, so the two
+figures are the same measurement either side of the change and neither is a free-standing total.
+**The paragraph above's reasoning that `set -euo pipefail` makes the
 named site inert does not cover the pair it never looked at.** `check-17-bypass/run.sh` sets
 `set -uo pipefail` with NO `-e`, and both its `cd`s sit inside `( … )` subshells directly above
 `git init -q .`, `git config user.email` and `git config user.name`, with the subshell's output
@@ -4142,9 +4147,15 @@ reports, and neither key is written.
 writer of `core.bare = true` remains unidentified and this must NOT be read as evidence that the
 flip is understood or fixed. The receipt was rewritten at close — the original closed on remedy
 (1) alone and was satisfiable by DELETING the `cd` line, so it now drives the shipping arm
-against a seeded offender under `mktemp` and then over the real corpus.
+against a seeded offender under `mktemp` and then over the real corpus. **It carries a SECOND
+seed under `set -euo pipefail`, and that seed is the receipt's only defence against a `set -e`
+acquittal**: with one seed only, a file-level `set -e` filter spliced into the arm's loop
+returned 0 here and PASS in the battery, so the arm's "does not acquit on `set -e`" claim had
+nothing behind it in either channel. Scored on five trees — the fix 0; `origin/main` 1; the six
+sites guarded with no arm 1; the arm present but matching nothing 1; the `set -e` acquittal
+mutant 1.
 
-verify: sh v="scripts/validate-shell-portability.sh"; [ -f "$v" ] || exit 9; p="$(mktemp -d)" || exit 9; mkdir -p "$p/scripts" "$p/core/skills" "$p/core/fixtures/probe-unit" || exit 9; echo 0.0.0 > "$p/VERSION"; cp "$v" "$p/scripts/" || exit 9; printf '#!/usr/bin/env bash\necho clean\n' > "$p/scripts/clean.sh"; printf '# clean\n' > "$p/core/skills/clean.md"; printf '#!/usr/bin/env bash\nW="$(mktemp -d)"\ncd "$W"\ngit init -q .\n' > "$p/core/fixtures/probe-unit/seed.sh"; ( cd "$p" && git init -q . && git add -A ) >/dev/null 2>&1 || exit 9; o="$( cd "$p" && bash scripts/validate-shell-portability.sh 2>&1 </dev/null )"; r=$?; rm -rf "$p"; case "$o" in *"S11: an UNGUARDED"*) : ;; *) exit 1 ;; esac; [ "$r" -ne 0 ] || exit 1; bash "$v" --quiet >/dev/null 2>&1
+verify: sh v="scripts/validate-shell-portability.sh"; [ -f "$v" ] || exit 9; p="$(mktemp -d)" || exit 9; mkdir -p "$p/scripts" "$p/core/skills" "$p/core/fixtures/probe-unit" "$p/core/fixtures/strict-unit" || exit 9; echo 0.0.0 > "$p/VERSION"; cp "$v" "$p/scripts/" || exit 9; printf '#!/usr/bin/env bash\necho clean\n' > "$p/scripts/clean.sh"; printf '# clean\n' > "$p/core/skills/clean.md"; printf '#!/usr/bin/env bash\nW="$(mktemp -d)"\ncd "$W"\ngit init -q .\n' > "$p/core/fixtures/probe-unit/seed.sh"; printf '#!/usr/bin/env bash\nset -euo pipefail\nW="$(mktemp -d)"\ncd "$W"\ngit init -q .\n' > "$p/core/fixtures/strict-unit/seed.sh"; ( cd "$p" && git init -q . && git add -A ) >/dev/null 2>&1 || exit 9; o="$( cd "$p" && bash scripts/validate-shell-portability.sh 2>&1 </dev/null )"; r=$?; rm -rf "$p"; case "$o" in *"S11: an UNGUARDED"*) : ;; *) exit 1 ;; esac; case "$o" in *"strict-unit/seed.sh"*) : ;; *) exit 1 ;; esac; [ "$r" -ne 0 ] || exit 1; bash "$v" --quiet >/dev/null 2>&1
 
 
 ## BL-195 — Check 2's suppression-lifetime arm reads a verdict the CURRENT gate has not yet written, and all four candidate remedies are refuted by measurement

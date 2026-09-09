@@ -37,6 +37,8 @@
 #   m11 S10 a multibyte bracket class, all FOUR census shapes plus
 #           the `#{2,4}` heading grammar                          -> must FAIL, 5 counted lines
 #   m12 S11 an unguarded `cd` above `git init` in a fixture seed  -> must FAIL
+#   m12b S11 the same under `set -euo pipefail`                   -> must FAIL
+#   m12c S11 four `cd`s whose only guard token sits past a `;`    -> must FAIL, 4 counted lines
 #   x1  S8  S8_CORPUS forced from `instr` to `shell`              -> the report must VANISH
 #   x2  S8  S8_COMMENTS forced from `keep` to `skip`              -> the report must VANISH
 #   x3  S8  S8_PAT narrowed to require `git` on the line          -> the report must VANISH
@@ -49,6 +51,8 @@
 #           `scripts/`                                            -> a report must APPEAR
 #   x10 S11 S11_PAT's optional leading `(` removed                -> the report must VANISH
 #   x11     the FIXTURE empty-corpus condition pointed at n_shell -> its NAMED refusal must VANISH
+#   x12 S11 a file-level `set -e` acquittal spliced into the loop -> the report must VANISH
+#   x13 S11 S11_SKIP's `[^;]*` bound restored to `.*`            -> all 4 reports must VANISH
 #   n1      `sed -i ''` and `sed -i.bak`                          -> must NOT fail
 #   n2      python `re.sub(r"\1")` in a .sh file                  -> must NOT fail
 #   n3      braced, `HEAD:`-literal, `"${SHA}:` and the braced
@@ -631,6 +635,38 @@ git init -q .
 M12EOF
 kill_check "m12 S11 unguarded cd in a fixture script" "$TMP/m12" S11
 
+# m12b -- THE `set -e` SEED, and the arm's "does not acquit on set -e" claim had NO CELL behind
+# it until this one. Measured: a one-line file-level `set -e` acquittal filter spliced into the
+# S11 loop (cmp -s confirmed applied) passed the whole battery AND the receipt, because not one
+# seed carried a `set -e` line -- the claim was prose over an untested predicate, which is the
+# "a check that cannot fire" shape one level up. m12b is m12's seed plus `set -euo pipefail`,
+# and x12 below is that filter as a mutant this cell must kill.
+seed "$TMP/m12b"
+seed_fixture "$TMP/m12b" strict-unit seed.sh <<'M12BEOF'
+set -euo pipefail
+WORK="$(mktemp -d)"
+cd "$WORK"
+git init -q .
+M12BEOF
+kill_check "m12b S11 unguarded cd under set -euo pipefail" "$TMP/m12b" S11
+
+# m12c -- D1: THE SKIP MUST NOT REACH PAST A `;`. The first cut's skip was
+# `cd[[:space:]].*(\|\||&&|\\$)`, whose `.*` runs to end of line, so ANY guard token anywhere
+# past the `cd` acquitted it -- including one belonging to a different command, and including
+# one inside a STRING. Four offenders, every one ACQUITTED by the shipped grammar when measured:
+# the arm's own subject (`git init` past the semicolon), an unrelated `||`, a trailing backslash
+# on a following command, and a `&&` inside a quoted echo. All four are seeded together and the
+# COUNT is asserted, because a pattern that spells one of the four passes a presence check
+# identically to one that spells all four.
+seed "$TMP/m12c"
+seed_fixture "$TMP/m12c" semi-unit seed.sh <<'M12CEOF'
+cd "$W"; git init . && git add -A
+cd "$W"; [ -d x ] || mkdir x
+cd "$W"; git init . \
+cd "$W"; echo "a && b"
+M12CEOF
+count_check "m12c S11 guard token past a semicolon" "$TMP/m12c" S11 4
+
 # x9 -- S11's CORPUS column. `fixture` is `core/fixtures/*/*.sh`; forcing `shell` leaves an arm
 # that runs, probes green and scans a set that still CONTAINS the seed, so the report would
 # NOT vanish and `blind_check` cannot be used. The discriminating mutation is the other
@@ -670,6 +706,47 @@ seed "$TMP/x11"
 empty_fixture "$TMP/x11"
 corpus_cell_check "x11 empty-guard FIXTURE" "$TMP/x11" 's/n_fixture:-0/n_shell:-0/' "FIXTURE shell" \
   "the FIXTURE corpus condition"
+
+# x12 -- THE `set -e` NON-ACQUITTAL, which is a claim in S11's header and needs a subject like
+# any other. The mutation splices a file-level `set -e` acquittal into the S11 branch of the
+# corpus loop -- the exact filter S11's header argues against -- and m12b's seed is the only
+# thing in this battery it can act on. Without m12b the mutant applies cleanly, changes no cell,
+# and reads as a claim that holds; measured, it passed the whole battery and the receipt.
+#
+# THE SEED IS m12b's AND NOT m12's, deliberately: m12's file carries no `set -e`, so the filter
+# cannot reach it and its survival would prove nothing about the claim.
+seed "$TMP/x12"
+seed_fixture "$TMP/x12" strict-unit seed.sh <<'X12EOF'
+set -euo pipefail
+WORK="$(mktemp -d)"
+cd "$WORK"
+git init -q .
+X12EOF
+#
+# THE MUTANT MUST STILL PARSE, AND THE FIRST CUT OF THIS ONE DID NOT. A multi-line `sed` append
+# left an unbalanced `)`, so the mutated validator died at line 459 with a syntax error --
+# `blind_check` scored it correctly as "did not go quiet", but for the wrong reason entirely: a
+# script that cannot be parsed acquits nothing and proves nothing about the claim. `grep -L`
+# lists the files NOT carrying the pattern, which is the whole acquittal in one physical line
+# with no nesting, and the substitution below rewrites exactly one line.
+blind_check "x12 S11 set -e non-acquittal" "$TMP/x12" \
+  's|^    hits="\$(scan "\$p" "\$sk" "\$cm" \$files)"$|    if [ "$a" = S11 ]; then files="$(grep -L "^set -e" $files)"; fi; hits="$(scan "$p" "$sk" "$cm" $files)"|' \
+  S11 "refusing to acquit a file carrying \`set -e\`"
+
+# x13 -- D1's cell: S11_SKIP's `[^;]*` anchor. The mutation restores the first cut's `.*`, which
+# runs to end of line and lets a guard token belonging to a DIFFERENT command acquit the `cd`.
+# m12c's four seeds are the subject; the assertion is that all four vanish, because a mutation
+# that loses one of them and keeps three would pass a presence check.
+seed "$TMP/x13"
+seed_fixture "$TMP/x13" semi-unit seed.sh <<'X13EOF'
+cd "$W"; git init . && git add -A
+cd "$W"; [ -d x ] || mkdir x
+cd "$W"; git init . \
+cd "$W"; echo "a && b"
+X13EOF
+blind_check "x13 S11_SKIP semicolon anchor" "$TMP/x13" \
+  '/^S11_SKIP=/s/\[^;\]\*/.*/' S11 \
+  "the \`[^;]*\` bound stopping the SKIP at the first command separator"
 
 # --- negative arms: the measured false positives must stay silent -----------
 seed "$TMP/n1" "sed -i '' 's/x/y/' f" "sed -i.bak 's/x/y/' f && rm -f f.bak"
@@ -801,10 +878,17 @@ fi
 #
 # LINE 5 IS ACQUITTED BY THE ANCHOR AND NOT BY THE SKIP, and it is the one an unanchored
 # rewrite of this arm would report on nearly every script in the tree.
+#
+# LINE 2 AND THE `; git init .` LINE ARE THE DISCRIMINATING PAIR FOR THE `[^;]*` BOUND, and they
+# are one character apart from m12c's offenders. `cd "$x" && git init .` has its guard BEFORE any
+# separator; `cd "$x" || exit 2; git init .` has a `;` AFTER the guard, which the bound must not
+# read as disqualifying. A narrowing that closed m12c by refusing every line containing a `;`
+# would report this one, and the arm would be flagging its own remedy.
 seed "$TMP/n5"
 seed_fixture "$TMP/n5" guarded-unit seed.sh <<'N5EOF'
 cd "$WORK" || exit 2
 cd "$WORK" && git init -q .
+cd "$WORK" || exit 2; git init .
 ( cd "$WORK" && git init -q . )
 cd "$(dirname "$0")" || exit 2
 SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -827,9 +911,9 @@ fi
 # THE ARM-TABLE COUNT IS LEFT AS A LITERAL BECAUSE DERIVING IT WAS WRONG. `x1`-`x3` go through
 # `blind_check`; `x4`-`x8` assert inline, because each needs a different observable (a count
 # falling, a report appearing, the validator REFUSING under a foreign locale). A
-# `grep -c blind_check` therefore reads 4 where the truth is 11 -- a derivation that is
+# `grep -c blind_check` therefore reads 6 where the truth is 13 -- a derivation that is
 # confidently wrong is worse than a literal somebody must update, so this one stays a literal
-# and says why. If you add an `x*`, update the 11.
+# and says why. If you add an `x*`, update the 13.
 # `m11` goes through `count_check` (it asserts a LINE COUNT, not merely a kill), and `m8`/`m10`
 # assert fail-closed rather than a kill, so all three are counted separately from `kill_check`.
 # A count that silently omitted them is what the first derivation of this line did.
@@ -837,6 +921,6 @@ _n_kill=$(grep -o 'kill_check "' "$0" | grep -c .)
 _n_count=$(grep -o 'count_check "' "$0" | grep -c .)
 _n_kill=$((_n_kill - 1 + _n_count - 1))   # each counting line names its own helper
 if [ "$rc" -eq 0 ]; then
-  note "PASS  shell-portability -- control green, ${_n_kill}/${_n_kill} corpus mutants killed by their own arm, 11/11 arm-table cells proven load-bearing, 5/5 negatives silent"
+  note "PASS  shell-portability -- control green, ${_n_kill}/${_n_kill} corpus mutants killed by their own arm, 13/13 arm-table cells proven load-bearing, 5/5 negatives silent"
 fi
 exit "$rc"
