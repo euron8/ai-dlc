@@ -4306,3 +4306,88 @@ unmeasured, and `CLAUDE.md` requires that before the check ships.
 reconstruct which corpus produced it.
 
 verify: sh V=core/scripts/validate-escalation-resolution.sh; [ -f "$V" ] || exit 9; grep -q 'CITE_REPORT=' "$V" || exit 9; grep -qE '^\s*echo "OK: all \$\{CHECKED\}' "$V" || exit 9; n="$(awk '/^echo "OK: all \$\{CHECKED\}/{print NR}' "$V")"; [ -n "$n" ] || exit 9; awk -v n="$n" 'NR>=n-6 && NR<=n && /CITE_REPORT/' "$V" | grep -q . && exit 0; exit 1
+
+## BL-223 — the push-candidate ledger is outside `validate-write-format-steering.sh`'s population by construction, and `upstream-routing.md` steers no format
+
+**Found 2026-09-09** adjudicating `PC-S308-WRITE-FORMAT-STEERING-APPLIED-AD-HOC-NOT-UNIVERSALLY`
+against HEAD, re-derived here. Two of that entry's claims are RESOLVED — the enforcer exists
+(`core/scripts/validate-write-format-steering.sh`, run at both pre-push hooks, population JOINED
+from `core/schemas/pipeline-state-paths.json` on `transient:false`), and
+`pipeline-snapshot-history.md`'s header format is now stated at `SKILL.md:1237`. **The third claim
+is the residue, and it covers one of the entry's own two motivating write attempts.**
+
+Derived, each with a control in the same invocation:
+
+    push-candidate in pipeline-state-paths.json   0   <- outside the population
+    CONTROL pipeline-snapshot-history             1   <- inside it
+    READ AND FOLLOW in core/rules/upstream-routing.md   0
+    CONTROL READ AND FOLLOW in SKILL.md                 9
+
+`upstream-routing.md` is BYTE-UNCHANGED by the release that closed the entry: md5
+`91e84d42…` at both `db078cbe^` and HEAD. So the file that tells a session to file a
+push-candidate still steers it to no format, and the ledger it writes into is not a member of the
+set the new enforcer scans — the one declared `ai-dlc-update` entry covers
+`layer-adjudication-register.jsonl` and says so verbatim: *"The pull LEDGERS that share this
+directory are not covered by it."*
+
+**The entry grammar therefore remains an unstated convention** across ~70 live entries, which is
+what the filing said and what a reader of the enforcer's PASS line would not learn.
+
+**A note on the shape, so it is not rebuilt.** The entry's suggested remedy — a standing rule that
+a write site must LOCATE its format first — was refuted on measurement and the reason is recorded
+at `validate-write-format-steering.sh:16-23`: a locate-duty is discharged by looking, fires on
+nothing where no format exists, and a vacuous one is spelled identically to a real one.
+Existence-and-declaration replaced it. **That refutation is sound and this entry does not reopen
+it** — the fix here is to DECLARE a format for the ledger and admit it to the population, not to
+add a duty.
+
+**Not fixed here.** Writing the entry grammar down is a schema addition plus a format file, and
+the grammar itself is contested: `ledger_entry_shape()` accepts five record forms, and declaring
+one as canonical would make the other four undeclared drift on an artifact the consumer owns.
+
+**Tiered DEFECT.** The enforcer's PASS line reads as coverage of the shared append-only artifacts
+while the ledger this program exists to drain is not among them.
+
+verify: sh S=core/schemas/pipeline-state-paths.json; R=core/rules/upstream-routing.md; [ -f "$S" ] && [ -f "$R" ] || exit 9; grep -q "pipeline-snapshot-history" "$S" || exit 9; n="$(grep -c "push-candidate" "$S")" || n=0; [ "$n" -gt 0 ] && exit 0; exit 1
+
+## BL-224 — `layer-drift.sh`'s spent-verdict note reaches ONE row, and the fixture that proves it works cannot see the others
+
+**Found 2026-09-09** adjudicating
+`PC-S342-ADJUDICATION-ROW-PRESCRIBES-AN-ENTRY-EDIT-THAT-SPENDS-ITS-OWN-VERDICT` against HEAD,
+re-derived here. `v0.528.0` genuinely fixed the row the entry's receipt keys on: `adj_spent_note()`
+(`core/skills/ai-dlc-update/reconcile/layer-drift.sh:695`) distinguishes a SPENT verdict from a
+never-recorded one. **It has exactly ONE call site**, at `:812`.
+
+Derived by driving the shipping tool rather than reading the contract:
+
+    layer-drift.sh --adjudicated-codes <repo> HEAD
+      -> OVERRIDE-SUPERSEDED, EXTENSION-HOOK-DRIFT, EXTENSION-ANCHOR-DRIFT,
+         EXTENSION-RETIRE-CANDIDATE
+    EXTENSION-TITLE-MATCHES-CORE in that set:  0   <- the row the filing named
+
+All four ADJUDICATED codes route `emit()` -> `adj_check()` -> the `:812` row, so they get the
+note. `EXTENSION-TITLE-MATCHES-CORE` (LC-E19) is WARN-level and unreached. **WARN does not make it
+moot**: it still prescribes an entry edit AND a digest-keyed verdict in one sentence, so it can be
+spent by following it in order, re-fires on the new digest, and says nothing about why.
+
+**AND THE FIXTURE IS GREEN BECAUSE IT ASSERTS NOTHING ABOUT THAT PATH.** Every SPENT assertion in
+`core/fixtures/layer-adjudication-tier/run.sh` reads the row through an `awk` field-1 match pinned
+to one code (`run.sh:167`, `$1 == "HARD-LAYER-ADJUDICATION-MISSING"`). Derived: that code appears
+11 times in the fixture, `EXTENSION-TITLE-MATCHES-CORE` once and never in a spent-note arm. A
+fixture whose oracle is hard-pinned to the one covered code cannot fail on an uncovered one — this
+repo's own "a check that cannot fire reads exactly like one that passed", in a fixture rather than
+a validator.
+
+**The second residue is the ordering clause.** The instruction to record the verdict BEFORE making
+the prescribed edit exists only INSIDE the conditional note, so it reaches the operator after they
+have already spent one. `SKILL.md:1597` states the spend rule with no ordering consequence beside
+it, unchanged by the release.
+
+**Not fixed here.** Widening the note to WARN rows changes what a WARN row prints, and the
+population that reads those strings is unmeasured; the ordering clause belongs where the
+prescription is issued, which is a separate edit in `SKILL.md`.
+
+**Tiered DEFECT.** An operator who follows an LC-E19 row in the order it lists spends their own
+verdict and is told only to record another.
+
+verify: sh L=core/skills/ai-dlc-update/reconcile/layer-drift.sh; F=core/fixtures/layer-adjudication-tier/run.sh; [ -f "$L" ] && [ -f "$F" ] || exit 9; grep -q "adj_spent_note() {" "$L" || exit 9; n="$(grep -c "adj_spent_note" "$L")" || n=0; [ "$n" -ge 2 ] || exit 9; c="$(grep -c 'EXTENSION-TITLE-MATCHES-CORE' "$F")" || c=0; a="$(awk '/adj_spent_note/ {n++} END{print n+0}' "$L")"; [ "$a" -ge 3 ] && exit 0; [ "$c" -ge 2 ] && exit 0; exit 1
