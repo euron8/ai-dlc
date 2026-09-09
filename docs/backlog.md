@@ -3961,9 +3961,25 @@ is a rule the operator turns off.
 **Stated limit of the receipt below.** It closes when any shipped program reads the whole file's
 size, which a mere observation satisfies. It cannot tell an observation from a gate, and it says
 nothing about narrative detection — that half is deliberately unmechanised here, for the reason
-above.
+above. **The receipt was REWRITTEN at close, because the original could not have measured its own
+subject**: it counted FILES matching a `wc -c`/`SKILL` regex and required more than one, so the
+preferred remedy — the whole-file figure added to the one script that already matched — leaves the
+count at 1 and reads STILL-LIVE over a correct fix, while a bare COMMENT naming both tokens in any
+second script closes it. The replacement DRIVES the validator against an appended copy of
+`SKILL.md` and asserts the figure it reports equals a `wc -c` of that copy, so a comment closes
+nothing and a hardcoded number — correct against the shipped file and unable to move — fails on
+the copy. It additionally requires the figure inside the `PASS` line's own body, because that is
+the only spelling `verdict.sh` renders and `verdict.sh` is the only path to a consumer's gate
+log; and it requires `--quiet` to print NOTHING, which is what separates the figure going
+through the `say` helper from a raw `printf` that ignores the flag.
 
-verify: sh n=0; for s in core/scripts/*.sh scripts/*.sh; do grep -qE 'wc -c.*SKILL|SKILL.*wc -c' "$s" 2>/dev/null && n=$((n+1)); done; [ "$n" -gt 1 ]
+**The receipt is DECOUPLED from the budget verdict, deliberately.** It asserts `rc != 2` — a
+refusal, meaning the validator could not run — rather than `rc == 0`. Keying on a clean exit
+would make an unrelated future protocol overrun, which is what the budget arm exists to catch,
+reopen this entry: the figure would be present and correct while the receipt read STILL-LIVE.
+The two subjects share a program and nothing else.
+
+verify: sh V=core/scripts/validate-reattach-budget.sh; S=core/skills/ai-dlc/SKILL.md; [ -f "$V" ] && [ -f "$S" ] || exit 9; D="$(mktemp -d)" || exit 9; C="$D/skill.md"; { cat "$S"; printf 'zzprobe padding appended below the protocol\n'; } > "$C" || { rm -rf "$D"; exit 9; }; R="$(wc -c < "$C" | tr -d ' ')"; B="$(wc -c < "$S" | tr -d ' ')"; [ -n "$R" ] && [ -n "$B" ] && [ "$R" != "$B" ] || { rm -rf "$D"; exit 9; }; O="$(bash "$V" --skill "$C" 2>&1)"; rc=$?; Q="$(bash "$V" --skill "$C" --quiet 2>/dev/null)"; N="$(printf '%s\n' "$O" | sed -n 's/^whole file  *: \([0-9][0-9]*\) bytes.*/\1/p' | head -1)"; P="$(printf '%s\n' "$O" | sed -n '/^PASS/p' | head -1)"; rm -rf "$D"; [ "$rc" -ne 2 ] && [ -n "$N" ] && [ "$N" = "$R" ] && [ -z "$Q" ] && case "$P" in ""|*"$R"*) true ;; *) false ;; esac
 
 ## BL-189 — an argument-less `git init --bare` under an exported `GIT_DIR` writes `core.bare=true` into the real repo, which git exports to any hook running from a linked worktree
 
@@ -4117,12 +4133,38 @@ is the 23 currently-guarded sites, so it must key on the GUARD, not on the call,
 must be measured before it ships. (3) Nothing keyed on `core.bare` itself: a check for a state
 whose cause is unknown would fire on the symptom and teach nobody anything.
 
-**Stated limit of the receipt.** It closes when the unguarded `cd` at `check-1c-bypass/seed.sh`
-is guarded. That is remedy (1) only. It says nothing about the incident, which is not mechanically
-detectable from this tree, and it must NOT be read as evidence that the `core.bare` flip is
-understood or fixed.
+**THE ENTRY NAMED ONE UNGUARDED SITE AND THERE WERE SIX, ONE OF WHICH IS LIVE.** Re-derived at
+close over tracked `*.sh`: `^[[:space:]]*cd [^|&;]*$`, comments excluded, returns exactly SIX
+lines, every one in a fixture script — `artifact-path-conformance/seed.sh:39`,
+`artifact-path-migration/seed.sh:23`, `check-17-bypass/run.sh:245`, `check-17-bypass/run.sh:293`,
+`check-1c-bypass/seed.sh:49` and `retired-layer-passage/seed.sh:25` — the two `check-17-bypass`
+lines cited at their POST-FIX positions, because the guard commit added a header comment above
+them and the pre-fix numbers 240 and 288 now land on that comment's text. Control in the same
+run, over the 414-file tracked `*.sh` population: 42 guarded `cd … ||`/`&&` lines, against 30 on
+the pre-fix tree — the difference is these six sites plus the battery's own seeds, so the two
+figures are the same measurement either side of the change and neither is a free-standing total.
+**The paragraph above's reasoning that `set -euo pipefail` makes the
+named site inert does not cover the pair it never looked at.** `check-17-bypass/run.sh` sets
+`set -uo pipefail` with NO `-e`, and both its `cd`s sit inside `( … )` subshells directly above
+`git init -q .`, `git config user.email` and `git config user.name`, with the subshell's output
+sent to `/dev/null` and its status unread. Demonstrated on a throwaway sandbox in that exact
+shape, target absent: the unguarded form wrote `user.email` into the SURROUNDING repository and
+the subshell still exited 0, so nothing reported; guarded `|| exit 2` it exits 2, the caller
+reports, and neither key is written.
 
-verify: sh f=core/fixtures/check-1c-bypass/seed.sh; [ -f "$f" ] || exit 9; n=$(grep -cE '^[[:space:]]*cd "[^"]+"[[:space:]]*$' "$f") || n=0; [ "$n" -eq 0 ]
+**Stated limit.** This closes remedies (1) and (2). It says nothing about the incident: the
+writer of `core.bare = true` remains unidentified and this must NOT be read as evidence that the
+flip is understood or fixed. The receipt was rewritten at close — the original closed on remedy
+(1) alone and was satisfiable by DELETING the `cd` line, so it now drives the shipping arm
+against a seeded offender under `mktemp` and then over the real corpus. **It carries a SECOND
+seed under `set -euo pipefail`, and that seed is the receipt's only defence against a `set -e`
+acquittal**: with one seed only, a file-level `set -e` filter spliced into the arm's loop
+returned 0 here and PASS in the battery, so the arm's "does not acquit on `set -e`" claim had
+nothing behind it in either channel. Scored on five trees — the fix 0; `origin/main` 1; the six
+sites guarded with no arm 1; the arm present but matching nothing 1; the `set -e` acquittal
+mutant 1.
+
+verify: sh v="scripts/validate-shell-portability.sh"; [ -f "$v" ] || exit 9; p="$(mktemp -d)" || exit 9; mkdir -p "$p/scripts" "$p/core/skills" "$p/core/fixtures/probe-unit" "$p/core/fixtures/strict-unit" || exit 9; echo 0.0.0 > "$p/VERSION"; cp "$v" "$p/scripts/" || exit 9; printf '#!/usr/bin/env bash\necho clean\n' > "$p/scripts/clean.sh"; printf '# clean\n' > "$p/core/skills/clean.md"; printf '#!/usr/bin/env bash\nW="$(mktemp -d)"\ncd "$W"\ngit init -q .\n' > "$p/core/fixtures/probe-unit/seed.sh"; printf '#!/usr/bin/env bash\nset -euo pipefail\nW="$(mktemp -d)"\ncd "$W"\ngit init -q .\n' > "$p/core/fixtures/strict-unit/seed.sh"; ( cd "$p" && git init -q . && git add -A ) >/dev/null 2>&1 || exit 9; o="$( cd "$p" && bash scripts/validate-shell-portability.sh 2>&1 </dev/null )"; r=$?; rm -rf "$p"; case "$o" in *"S11: an UNGUARDED"*) : ;; *) exit 1 ;; esac; case "$o" in *"strict-unit/seed.sh"*) : ;; *) exit 1 ;; esac; [ "$r" -ne 0 ] || exit 1; bash "$v" --quiet >/dev/null 2>&1
 
 
 ## BL-195 — Check 2's suppression-lifetime arm reads a verdict the CURRENT gate has not yet written, and all four candidate remedies are refuted by measurement
@@ -4226,3 +4268,114 @@ verify: manual
 
 
 
+
+
+## BL-211 — `validate-fixture-git-env.sh`'s population grammar could not spell `git -C X init`, so 27 fixture directories sat outside the set it reported `0 unscrubbed` over, and 26 of them clobber
+
+**DEFECT.** Found by the batch-77 census hand while closing `BL-189`, measured on a whole-tree copy.
+
+**The grammar scored its own subject as a non-instance.** The population was derived with a
+literal `git init`, which resolved **43** fixture directories. Re-derived with a grammar that
+also spells `git -C "$X" init`, `git -c init.defaultBranch=main init -q .` and chained
+`-c`/`-C` options, it resolves **70**. The 27 in the difference were outside the population
+entirely, none of their `run.sh` sourced `core/fixtures/lib/preamble.sh`, and the validator
+reported `0 unscrubbed` at ceiling 0 over a set that excluded every one of them. Controls in
+the same derivation: an impossible pattern returns 0, `check-1c-bypass` appears in the literal
+set, and the literal set minus the broad set is empty — the widening only adds.
+
+**26 of the 27 clobber, and 13 of those do it at exit 0.** Driven directly under an armed
+`GIT_DIR` against a fresh 40-entry victim, whole-tree copy per trial, the harness self-probed
+in both directions first: 13 wrecked the victim while exiting non-zero and **13 wrecked it
+while exiting 0**, index damage reaching 40 down to 1.
+
+**THREE OF THEM LEAVE THE INDEX AT 40 AND AN INDEX-COUNT GUARD CALLS THEM INTACT.**
+`consumer-suite-pool`, `suite-dispatch-order` and `layer-anchor-declaration` wreck the victim
+through CONFIG alone — `core.bare` set to `true` and `user.name` rewritten — after which
+`git status` in that victim answers `fatal: this operation must be run in a work tree`. A
+verdict reading only the index scores all three as survivors.
+
+**The form is why, and it is a distinct behaviour from the argument-less bare init `BL-189`
+reproduces.** Under an armed `GIT_DIR`, `git -C X init`, `git -C X init .` and
+`git -c k=v init <path>` all exit 0, create NO repository at the target, and flip the victim's
+`core.bare` to true. Measured on `setup-config-drift`, whose init is in its `seed.sh` and is
+reached by inheritance: with the seam line its victim reads index 40 / bare false / sentinel
+intact; with the seam line stripped, index **2** and `core.bare` **true**, also at exit 0 with
+no diagnostic.
+
+**AND THE INLINE-SCRUB EXEMPTION ACQUITTED TWO FIXTURES THAT CLOBBER, BECAUSE IT WAS KEYED ON
+CONTAINMENT RATHER THAN POSITION.** `self-update-fixture-log` carries its `unset GIT_DIR` at
+`run.sh:694` with its first init at `run.sh:88`; `self-update-gate` scrubs at `run.sh:819`
+against a first init at `run.sh:159`. Both were acquitted on the whole-file grep and both
+clobbered silently at exit 0, and both omit `GIT_COMMON_DIR` and `GIT_OBJECT_DIRECTORY` besides.
+The exemption was defending the arm's own subject. `handoff-completion-assertion` is the
+discriminating near-miss and must stay acquitted: its scrub sits at `run.sh:56` and
+`seed.sh:24`, above every git call in each file, and it survives a drive.
+
+**Remedy, all three halves in one change.** (1) The population grammar spells every `git … init`
+form, POSIX classes only — `git grep -E` implements neither `\b` nor `\s` and returns a clean
+zero rather than an error, and the pattern resolves the identical 74 files under `git grep -E`
+and `/usr/bin/grep -E`. (2) The inline-scrub exemption and the seam-sourcing branch both compare
+LINE NUMBERS: a scrub below the file's first init is not a scrub. (3) The 27 `run.sh` source the
+seam as their first executable line, which is how the other 42 carry it and which reaches each
+`seed.sh` by inheritance.
+
+**AND THE FIRST CUT OF (2) MEASURED THE WRONG POSITION, WHICH IS THE SAME DEFECT ONE FILE OVER.**
+It read the init line from the directory's `run.sh`, where the population joins on ANY `*.sh` in
+the directory: **30 of the 69 members have no init in their own `run.sh` at all**, their init
+being in a `seed.sh` the `run.sh` invokes. For those the reading was empty, both position branches
+fell through, and a `run.sh` whose seam sits BELOW its `bash seed.sh` call was acquitted — driven
+on a probe tree, that shape takes a 40-entry victim to **0**, and its inline-scrub twin does the
+same. Live exposure was zero, because all 30 carry the seam at line 2, so it was a trap rather
+than a hole. The site is now the earliest of the first init in `run.sh` and the first line of
+`run.sh` that INVOKES a sibling script carrying an init — keyed on the invocation, since a comment
+naming `seed.sh` is not a call. A site that resolves to NEITHER is reported
+`(init-site-unresolved)` and counted unscrubbed rather than acquitted: every member reaches an
+init somewhere, so an unresolvable site means the route is one this reader cannot see, and
+falling through would acquit exactly the file nobody can reason about. False-positive set over the
+live population: **zero of 69** fail to resolve — 34 by an init in `run.sh`, 30 by an invoked
+sibling, 5 by both.
+
+**False-positive set of the widened grammar, measured before it shipped.** The pattern matches a
+COMMENT naming `git init`, and zero fixture scripts join the population by a comment-only hit —
+every matching file carries at least one non-comment match. `git config init.defaultBranch main`,
+`git commit -m init`, `git-init` and `legit initiate` are all refused, because `init` must be a
+whole word preceded only by `-c`/`-C` options.
+
+**WHAT THE WIDENED GRAMMAR STILL CANNOT SEE, stated because a coverage claim over a derived
+population says nothing about what the population EXCLUDED.** Four spellings redirect under an
+armed `GIT_DIR` and are invisible to it: a quoted option (`git "-C" sub init`), an indirected
+binary (`$GIT init .`), a shell `git()` wrapper function, and `git --git-dir=x init`, whose
+option form the pattern does not admit. Corpus incidence is **0 each**, against a control of 49
+matches for the forms it does spell. Separately, the population is derived with `git grep`, which
+searches TRACKED content only — an untracked fixture script is outside the population entirely and
+the clean verdict reads identically over it. Both limits are floors of unknown depth, not
+measurements of safety.
+
+**The receipt drives the shipping validator against a probe tree and reads its output for a path
+that could only have come from there**, because this validator walks up for its own `VERSION`
+marker unless `AI_DLC_PROJECT_ROOT` is set, and a run that resolved the distribution instead
+produces the same verdict line. The probe is `git init`ed and its files added: the population is
+derived with `git grep`, which searches TRACKED content only, so against a plain directory it
+collapses to 0 and the run REFUSES with exit 2 — a refusal that reads as a finding to anything
+testing merely for a non-zero exit. Twelve literal-form fillers carry the population over the
+floor of 10 under BOTH grammars, so the old-grammar reading is an acquittal rather than a refusal.
+
+**THE RECEIPT ALSO CARRIES A NEAR-MISS, BECAUSE ITS FIRST CUT WAS SATISFIED BY A GRAMMAR THAT
+MATCHED EVERYTHING.** Asking only that the offender be NAMED is satisfied by `INIT_RE='.'`, which
+reports the whole corpus and includes the offender for a reason that is not the fix — built and
+scored, that non-fix closed the first receipt at exit 0. The probe therefore also carries a
+fixture whose only script runs `git config init.defaultBranch main` and `git commit -m init`,
+which is not an init and carries no seam, and the receipt asserts that name does NOT appear.
+A grammar that reports everything now fails on the near-miss before the offender is read.
+
+**Scored against five trees, each BUILT rather than argued.** The branch **0**; `origin/main`
+**1** (the old literal grammar acquits the probe); the match-everything grammar **1**; the seam
+emptied to a body that scrubs nothing **1**; the seam DELETED **9**, a precondition rather than a
+finding, since the receipt cannot build its probe without it. The differential that matters is the
+match-everything tree, where the first receipt read **0** and the strengthened one reads **1** —
+the near-miss is doing that work, not the arm beside it. Controls on the earlier four, initialised
+so the validator does not refuse: `origin/main` and a seam-only non-fix both report a population
+of 42, the fix and a branch-disabled non-fix both report 69, and all are green on their own trees,
+which is what the receipt has to see past.
+
+verify: sh v=scripts/validate-fixture-git-env.sh; [ -f "$v" ] || exit 9; p=$(mktemp -d) || exit 9; trap 'rm -rf "$p"' EXIT; mkdir -p "$p/core/fixtures/lib" "$p/scripts" || exit 9; printf '0.0.0\n' > "$p/VERSION"; cp core/fixtures/lib/preamble.sh "$p/core/fixtures/lib/" || exit 9; i=1; while [ $i -le 12 ]; do mkdir -p "$p/core/fixtures/fill$i"; printf '#!/usr/bin/env bash\n. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"\ngit init -q .\n' > "$p/core/fixtures/fill$i/run.sh"; i=$((i+1)); done; mkdir -p "$p/core/fixtures/bl211probe" "$p/core/fixtures/bl211nearmiss"; printf '#!/usr/bin/env bash\ngit -C "$d" init -q\n' > "$p/core/fixtures/bl211probe/run.sh"; printf '#!/usr/bin/env bash\ngit config init.defaultBranch main\ngit commit -m init\n' > "$p/core/fixtures/bl211nearmiss/run.sh"; cp "$v" "$p/scripts/" || exit 9; git -C "$p" init -q . >/dev/null 2>&1 || exit 9; git -C "$p" add -A -f >/dev/null 2>&1 || exit 9; o=$(AI_DLC_PROJECT_ROOT="$p" bash "$p/scripts/validate-fixture-git-env.sh" --max-unscrubbed 0 2>&1); rc=$?; case "$o" in *bl211nearmiss*) false ;; *bl211probe*) [ "$rc" -eq 1 ] ;; *) false ;; esac

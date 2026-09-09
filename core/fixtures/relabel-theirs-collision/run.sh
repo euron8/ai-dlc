@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # relabel-theirs-collision/run.sh — prove relabel-extension-checks.sh sees a collision the pull
 # CREATES, not only one already present in the installed core.
 #

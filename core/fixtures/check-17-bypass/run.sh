@@ -236,8 +236,13 @@ if [ ! -f "$EVID" ]; then
 else
   REPO="$WORK/repo"
   mkdir -p "$REPO/_bmad-output/party-mode-transcripts/s999" "$REPO/docs/retro"
+  # `|| exit 2` ON THE `cd`, AND THE SUBSHELL'S STATUS READ AFTERWARDS. This script sets
+  # `set -uo pipefail` and NOT `-e`, so an unguarded failing `cd` here would fall through to
+  # `git init -q .` and initialise whatever the PROCESS cwd is -- the real repository, from a
+  # linked worktree where git exports GIT_DIR. The guard exits the SUBSHELL, and a subshell
+  # whose output is discarded exits silently, so the status is checked at the closing paren.
   (
-    cd "$REPO"
+    cd "$REPO" || exit 2
     git init -q .
     git config user.email fixture@ai-dlc.local
     git config user.name  "check-17-bypass fixture"
@@ -259,7 +264,7 @@ else
     mkdir -p docs/retro/s999 && cp "$WORK/docs/retro/s905/retro.md" docs/retro/s999/retro.md
     git add -A
     git commit -q -m "Sprint 999 retro party-mode transcript"
-  ) >/dev/null 2>&1
+  ) >/dev/null 2>&1 || { note "BAD" "sprint-999 (seed)" "the repo subshell failed (cd or git) — nothing below is about this fixture's subject"; fails=$((fails + 1)); }
 
   # The retro doc cites @deadbee, which names no blob in this repo.
   if ( cd "$REPO" && bash "$EVID" ai-dlc/retro/sprint-999 999 >/dev/null 2>&1 ); then
@@ -285,10 +290,10 @@ else
   CLONE="$WORK/retro-clone"
   git clone -q "$REPO" "$CLONE" >/dev/null 2>&1
   (
-    cd "$CLONE"
+    cd "$CLONE" || exit 2
     git checkout -q --detach
     git branch -D ai-dlc/retro/sprint-999
-  ) >/dev/null 2>&1
+  ) >/dev/null 2>&1 || { note "BAD" "sprint-999 (clone)" "the clone subshell failed (cd or git) — the origin-only condition was never built"; fails=$((fails + 1)); }
   NEW_OUT="$( cd "$CLONE" && bash "$EVID" ai-dlc/retro/sprint-999 999 2>&1 )"
   if grep -Eq 'transcript committed.*: OK' <<<"$NEW_OUT"; then
     note "ok" "sprint-999 (origin-only)" "retro branch resolves via origin/<name> (ls-tree found the transcript)"

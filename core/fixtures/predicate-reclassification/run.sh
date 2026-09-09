@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # predicate-reclassification — assert the pull reports when an incoming release re-renders the
 # verdicts it has already given on the consumer's STORED artifacts.
 #

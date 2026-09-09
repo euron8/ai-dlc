@@ -17,7 +17,8 @@
 # it is dispatched once, from the hook, like the other ten standalone validators.
 #
 # THE FALSE-POSITIVE SET IS WHY THIS REPORTS RATHER THAN FAILS BY DEFAULT. The
-# population is every fixture run.sh containing `git init`. Of the eight driven,
+# population is every fixture directory running any `git ... init` form in any of
+# its own scripts, keyed to that directory's run.sh. Of the eight driven,
 # six genuinely clobbered and two never reached a git write, so a fail-by-default
 # arm would have wedged the push over findings a third of which cannot fire. It
 # ships REPORT-ONLY with `--max-unscrubbed N`, a ceiling that only ever moves
@@ -66,7 +67,40 @@ done
 # were surviving it. The seam still goes in `run.sh`, which is the entry point;
 # the scrub reaches the seed by INHERITANCE, which is why the two dirs whose
 # run.sh already `git init`s were fixed by the first cut.
-POP="$(git -C "$ROOT" grep -l 'git init' -- 'core/fixtures/*/*.sh' 2>/dev/null \
+#
+# AND THE GRAMMAR ITSELF SCORED ITS OWN SUBJECT AS A NON-INSTANCE. Keyed on the
+# LITERAL string `git init`, the population was 43 fixture directories where 70
+# run some `git ... init` form: `git -C "$X" init`, `git -c init.defaultBranch=main
+# init -q .`, chained `-c`/`-C`. The 27 in the difference sat OUTSIDE the
+# population entirely, none of their run.sh sourced the seam, and this validator
+# reported `0 unscrubbed` at ceiling 0 over them -- a clean sheet computed over a
+# set that excluded every one of them. Driven directly under an armed GIT_DIR
+# against a fresh 40-entry victim, whole-tree copy, harness self-probed both ways:
+# 26 of those 27 clobbered, 13 of them at exit 0.
+#
+# THE FORM IS WHY, AND IT IS NOT A VARIANT OF THE SAME FAILURE. Under an armed
+# GIT_DIR, `git -C X init`, `git -C X init .` and `git -c k=v init <path>` all exit
+# 0, create NO repository at the target, AND FLIP THE VICTIM'S `core.bare` TO TRUE.
+# Three of the 27 -- consumer-suite-pool, suite-dispatch-order,
+# layer-anchor-declaration -- left the victim's index at 40 and wrecked it through
+# config alone (`core.bare=true`, `user.name` rewritten), after which `git status`
+# in the victim answers `fatal: this operation must be run in a work tree`. An
+# index-count guard scores those three as INTACT, which is why
+# core/fixtures/fixture-git-env-seam/run.sh reads bare and user.name too.
+#
+# THE GRAMMAR BELOW IS POSIX-CLASS ONLY, DELIBERATELY. `git grep -E` implements
+# neither `\b` nor `\s` and returns a CLEAN ZERO rather than an error, so an
+# escape that works in the `grep -E` beside it silently empties this one. Measured
+# on the real corpus: this pattern resolves the identical 74 files under
+# `git grep -E` and under `/usr/bin/grep -E`. FALSE-POSITIVE SET, measured before
+# it shipped: the pattern matches a COMMENT naming `git init`, and zero fixture
+# scripts join the population by a comment-only hit -- every matching file carries
+# at least one non-comment match. `git config init.defaultBranch main`,
+# `git commit -m init`, `git-init` and `legit initiate` are all refused, because
+# `init` must be a whole word preceded only by `-c`/`-C` options.
+INIT_RE='(^|[^[:alnum:]_-])git([[:space:]]+-[cC][[:space:]]*[^[:space:]]+)*[[:space:]]+init([[:space:]]|$)'
+
+POP="$(git -C "$ROOT" grep -lE "$INIT_RE" -- 'core/fixtures/*/*.sh' 2>/dev/null \
        | sed 's#/[^/]*$##' | sort -u \
        | while IFS= read -r d; do [ -f "$ROOT/$d/run.sh" ] && printf '%s/run.sh\n' "$d"; done | sort -u)"
 POP_N="$(printf '%s\n' "$POP" | grep -c . || true)"
@@ -94,12 +128,127 @@ if ! grep -qE '^[[:space:]]*unset([[:space:]]+[A-Z_]+)*[[:space:]]+GIT_DIR([[:sp
   exit 1
 fi
 
+# THE GRAMMARS ARE SINGLE-SOURCED, because each is now read twice -- once to ask
+# WHETHER a file carries the thing and once to ask WHERE. A pattern spelled twice
+# is one chance to drift, and the two readings would then disagree silently.
+SEAM_RE='^[[:space:]]*(\.|source)[[:space:]]+.*preamble\.sh'
+SCRUB_RE='^[[:space:]]*unset([[:space:]]+[A-Z_]+)*[[:space:]]+GIT_DIR([[:space:]]|$)'
+ENVSCRUB_RE='^[[:space:]]*env[[:space:]]+(-u[[:space:]]+GIT_DIR|-i)([[:space:]]|$)'
+
+# first_line_re <file> <ere> -> the line number of the first match, or empty.
+# `grep -n` rather than `awk -v`: awk strips one level of escaping from a -v
+# value, so `preamble\.sh` would arrive as a bare `.` and widen the match
+# invisibly -- a correct site would look wrong and a wrong one would look right.
+first_line_re() {
+  local out
+  out="$(grep -nE "$2" "$1" 2>/dev/null)" || return 0
+  [ -n "$out" ] || return 0
+  # `sed -n 1s` rather than `head -1 | cut`: head leaves at its first line while
+  # the writer is still pushing, and a reader fed from a pipe that way answers with
+  # the writer's EPIPE the day the upstream grows past the pipe buffer.
+  printf '%s\n' "$out" | sed -n '1s/:.*//p'
+}
+
+# THE POSITION THAT MATTERS IS WHERE run.sh REACHES AN INIT, NOT WHERE run.sh
+# CONTAINS ONE, AND THE FIRST CUT OF THE POSITION ARMS CONFLATED THE TWO. The
+# population joins on ANY *.sh in the directory, and 30 of its 69 members have no
+# init in their own run.sh at all -- their init is in a seed.sh the run.sh
+# INVOKES. For those the run.sh-only reading is empty, both position branches fall
+# through on `[ -n "$init_ln" ]`, and a run.sh whose seam sits BELOW its
+# `bash seed.sh` call is acquitted. Measured on a probe tree: such a fixture takes
+# a 40-entry victim to 0, and its inline-scrub twin does the same. Live exposure
+# was zero -- all 30 carry the seam at line 2 -- so it was a trap rather than a
+# hole, and it was the exact defect these arms exist to catch, one file over.
+#
+# So the init SITE is the earliest of: the first init in run.sh, and the first
+# line of run.sh that INVOKES a sibling script which itself carries an init.
+# Keyed on the invocation rather than on any mention of the sibling's name: a
+# comment naming seed.sh is not a call, and keying on the name alone would move
+# the site earlier than the program does.
+# THE PRECEDING CLASS IS SEPARATORS, NOT "ANY NON-WORD CHARACTER", AND THE FIRST
+# CUT WAS THE LOOSE FORM. Written `[^[:alnum:]_-]` it matched the `sh` inside the
+# FILENAME `seed.sh`, so a COMMENT merely naming the sibling scored as an
+# invocation -- the whole-file-grep weakness these arms exist to refuse, inside the
+# reader meant to replace it. Caught by this fixture's own W9 arm, which seeds
+# exactly that comment. A command starts the line or follows whitespace or a
+# `;`/`&`/`|`/`(` separator; it never follows a dot.
+INVOKE_RE='(^|[[:space:]]|[;&|(])(bash|sh|source|\.)[[:space:]]'
+init_site_line() { # init_site_line <dir> <run.sh-path> -> earliest reaching line, or empty
+  local dir="$1"
+  local run="$2"
+  local best
+  local s
+  local b
+  local hits
+  local ln
+  best="$(first_line_re "$run" "$INIT_RE")"
+  for s in "$dir"/*.sh; do
+    [ -f "$s" ] || continue
+    b="$(basename "$s")"
+    [ "$b" = "run.sh" ] && continue
+    grep -qE "$INIT_RE" "$s" || continue
+    # Two greps, not one: the sibling's basename is a LITERAL (`-F`) and the
+    # invocation is a pattern, and spelling a filename into an ERE turns its dot
+    # into a wildcard.
+    hits="$(grep -nE "$INVOKE_RE" "$run" 2>/dev/null)" || hits=""
+    [ -n "$hits" ] || continue
+    ln="$(printf '%s\n' "$hits" | grep -F "$b" | sed -n '1s/:.*//p')" || ln=""
+    [ -n "$ln" ] || continue
+    if [ -z "$best" ] || [ "$ln" -lt "$best" ]; then best="$ln"; fi
+  done
+  printf '%s\n' "$best"
+}
+
 UNSCRUBBED=""
 N_UNSCRUBBED=0
 for f in $POP; do
+  # A SCRUB BELOW THE FIRST `git ... init` IN THE SAME FILE IS NOT A SCRUB, and
+  # both halves of this loop were POSITION-BLIND until they were measured. The
+  # re-arm note below already stated the general form for the seam branch; the
+  # inline-scrub exemption had it live. Measured: self-update-fixture-log scrubs
+  # at run.sh:694 with its first init at run.sh:88, and self-update-gate scrubs at
+  # run.sh:819 with its first init at run.sh:159. Both were acquitted by the
+  # inline exemption on the whole-file grep alone, and both clobbered the victim
+  # silently at exit 0 -- an exemption acquitting the arm's own subject. Both also
+  # omit GIT_COMMON_DIR and GIT_OBJECT_DIRECTORY, which the seam unsets.
+  # handoff-completion-assertion is the discriminating near-miss: its scrub sits at
+  # run.sh:56 and seed.sh:24, above every git call in each file, and it genuinely
+  # survives a drive -- it must stay acquitted, so this arm compares LINE NUMBERS
+  # and never merely counts scrubs.
+  #
+  # The site is resolved through the whole DIRECTORY, per init_site_line above: a
+  # run.sh that never inits itself still reaches one through the seed it invokes.
+  init_ln="$(init_site_line "$ROOT/$(dirname "$f")" "$ROOT/$f")"
+
+  # AN UNRESOLVABLE SITE IS A FINDING, NOT AN ACQUITTAL. Every member of this
+  # population runs an init somewhere in its directory -- that is how it joined --
+  # so a site that resolves to nothing means run.sh reaches that init by a route
+  # this reader cannot see, and the position arms below are then unable to judge
+  # it. Falling through would acquit exactly the file nobody can reason about.
+  # FALSE-POSITIVE SET, measured over the live population before this shipped:
+  # ZERO of 69 fail to resolve -- 34 by an init in run.sh, 30 by an invoked
+  # sibling, 5 by both. It ships as a finding because there is no correct input it
+  # can fire on today.
+  if [ -z "$init_ln" ]; then
+    UNSCRUBBED="${UNSCRUBBED} ${f}(init-site-unresolved)"
+    N_UNSCRUBBED=$((N_UNSCRUBBED + 1))
+    continue
+  fi
+
   # Key on the SOURCING SITE, not on a whole-file grep: a comment naming the
   # preamble satisfies `grep -qF` over the file and changes no behaviour.
-  if grep -qE '^[[:space:]]*(\.|source)[[:space:]]+.*preamble\.sh' "$ROOT/$f"; then
+  if grep -qE "$SEAM_RE" "$ROOT/$f"; then
+    # THE SEAM LINE MUST PRECEDE THE FIRST INIT TOO. By convention it is line 2,
+    # immediately after the shebang, so this arm has no live subject today and is a
+    # trap for the next author -- the same status, and the same treatment, as the
+    # re-arm check below. Asserted rather than assumed: a convention is not a
+    # mechanism, and a seam sourced after the init scrubs nothing.
+    seam_ln="$(first_line_re "$ROOT/$f" "$SEAM_RE")"
+    if [ -n "$seam_ln" ] && [ "$seam_ln" -gt "$init_ln" ]; then
+      UNSCRUBBED="${UNSCRUBBED} ${f}(seam-sourced-below-first-init)"
+      N_UNSCRUBBED=$((N_UNSCRUBBED + 1))
+      continue
+    fi
     # SOURCING IT IS NOT ENOUGH IF SOMETHING RE-ARMS AFTERWARDS. The scrub is a
     # statement, not a property: a later `GIT_DIR=` assignment or `export GIT_DIR`
     # undoes it, and an arm keyed only on the sourcing site is POSITION-BLIND --
@@ -136,8 +285,17 @@ for f in $POP; do
   # acquitted nothing live -- it was a trap for the next author, not a hole.
   # Each alternative is `^[[:space:]]*` anchored and the probe asserts the comment
   # form is NOT acquitted.
-  if grep -qE '^[[:space:]]*unset([[:space:]]+[A-Z_]+)*[[:space:]]+GIT_DIR([[:space:]]|$)' "$ROOT/$f" \
-     || grep -qE '^[[:space:]]*env[[:space:]]+(-u[[:space:]]+GIT_DIR|-i)([[:space:]]|$)' "$ROOT/$f"; then
+  #
+  # AND IT IS KEYED ON POSITION, per the note at the top of this loop: the
+  # exemption holds only where the scrub precedes the file's first init.
+  scrub_ln="$(first_line_re "$ROOT/$f" "$SCRUB_RE")"
+  [ -n "$scrub_ln" ] || scrub_ln="$(first_line_re "$ROOT/$f" "$ENVSCRUB_RE")"
+  if [ -n "$scrub_ln" ]; then
+    if [ "$scrub_ln" -lt "$init_ln" ]; then
+      continue
+    fi
+    UNSCRUBBED="${UNSCRUBBED} ${f}(scrub-below-first-init)"
+    N_UNSCRUBBED=$((N_UNSCRUBBED + 1))
     continue
   fi
   UNSCRUBBED="${UNSCRUBBED} ${f}"

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # Exercise the anchor-declaration checks in validate-layer-entries.sh: E7 (a `shadows:` anchor
 # must FORWARD-match a heading), E8 (`reason:` required), E9 (`push_candidate:` required), and
 # E3's widening to every comma-part of `shadows:`.

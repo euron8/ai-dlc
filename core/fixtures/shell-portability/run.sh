@@ -31,23 +31,35 @@
 #   m9c S8  the ESCAPED-quote form a tool PRINTS -- invisible to
 #           BOTH earlier patterns, and it survived the v0.422.0
 #           pass over this class and a consumer ADOPTED close     -> must FAIL
-#   m10     the CORE corpus emptied, shell corpus alive           -> must FAIL (fail closed)
+#   m10     the CORE corpus emptied                               -> must FAIL (fail closed)
+#   m10b    ONLY the FIXTURE shell corpus emptied, both wider
+#           corpora alive -- the one world the nesting allows      -> must FAIL (fail closed)
 #   m11 S10 a multibyte bracket class, all FOUR census shapes plus
 #           the `#{2,4}` heading grammar                          -> must FAIL, 5 counted lines
+#   m12 S11 an unguarded `cd` above `git init` in a fixture seed  -> must FAIL
+#   m12b S11 the same under `set -euo pipefail`                   -> must FAIL
+#   m12c S11 four `cd`s whose only guard token sits past a `;`    -> must FAIL, 4 counted lines
 #   x1  S8  S8_CORPUS forced from `instr` to `shell`              -> the report must VANISH
 #   x2  S8  S8_COMMENTS forced from `keep` to `skip`              -> the report must VANISH
 #   x3  S8  S8_PAT narrowed to require `git` on the line          -> the report must VANISH
-#   x4      the two-count empty guard collapsed to one count      -> the refusal must VANISH
+#   x4      the CORE empty-corpus condition pointed at n_shell    -> its NAMED refusal must VANISH
 #   x5  S10 the context span narrowed from `.*` back to `[^#]*`   -> 5 lines must become 4
 #   x6  S10 S10_SKIP emptied                                      -> a report must APPEAR
 #   x7  S10 `export LC_ALL=C` deleted, run under en_US.UTF-8      -> the arm must REFUSE
 #   x8  S10 the class's whitespace exclusion widened to `[^]]`    -> a report must APPEAR
+#   x9  S11 S11_CORPUS forced from `fixture` to `shell`, seed in
+#           `scripts/`                                            -> a report must APPEAR
+#   x10 S11 S11_PAT's optional leading `(` removed                -> the report must VANISH
+#   x11     the FIXTURE empty-corpus condition pointed at n_shell -> its NAMED refusal must VANISH
+#   x12 S11 a file-level `set -e` acquittal spliced into the loop -> the report must VANISH
+#   x13 S11 S11_SKIP's `[^;]*` bound restored to `.*`            -> all 4 reports must VANISH
 #   n1      `sed -i ''` and `sed -i.bak`                          -> must NOT fail
 #   n2      python `re.sub(r"\1")` in a .sh file                  -> must NOT fail
 #   n3      braced, `HEAD:`-literal, `"${SHA}:` and the braced
 #           ESCAPED-quote rev-paths                             -> must NOT fail
 #   n4  S10 alternations, python, message prose, a bracketed
 #           prose aside, and a comment naming the class           -> must NOT fail
+#   n5  S11 guarded cd in six spellings plus a comment            -> must NOT fail
 #
 # THE NEGATIVE ARMS ARE NOT DECORATION. n1 and n2 are measured false positives the validator
 # was narrowed against: every `sed -i` site in this repo already uses the portable pair, and
@@ -98,8 +110,27 @@ seed() { # seed <dir> [extra-line...]
   # empty `core/*` listing trips the fail-closed guard before any arm runs. Without this the
   # control itself dies, and every verdict under it is the harness reporting on itself.
   printf '%s\n' '# clean' 'nothing here to paste' > "$d/core/skills/clean.md"
+  # And a clean FIXTURE shell file, because S11's corpus is counted separately from the other
+  # two and a seed with an empty `core/fixtures/*/*.sh` listing trips the fail-closed guard
+  # before any arm runs. Its `cd` is GUARDED, so every run of this fixture exercises S11's
+  # acquittal over the sandbox corpus rather than only over the validator's own probe.
+  mkdir -p "$d/core/fixtures/probe-unit"
+  printf '%s\n' '#!/usr/bin/env bash' 'cd "$WORK" || exit 2' 'echo clean' \
+    > "$d/core/fixtures/probe-unit/seed.sh"
   if [ "$#" -gt 0 ]; then printf '%s\n' '#!/usr/bin/env bash' "$@" > "$d/scripts/subject.sh"; fi
   ( cd "$d" && git init -q . && git add -A >/dev/null 2>&1 )
+}
+
+# S11's corpus is `core/fixtures/*/*.sh`, which neither `seed` (writes `scripts/`) nor
+# `seed_core` (writes `core/<rel>` at any depth, but the caller would have to spell the
+# fixture path) targets by name. Stdin, for `seed_shell`'s reason: every S11 seed carries
+# double quotes, a `$` and often a `||`, and each level of argument escaping is a chance to
+# seed a shape nobody meant.
+seed_fixture() { # seed_fixture <dir> <fixture-name> <file>   (subject lines on stdin)
+  local d="$1" name="$2" file="$3"
+  mkdir -p "$d/core/fixtures/$name"
+  { printf '%s\n' '#!/usr/bin/env bash'; cat; } > "$d/core/fixtures/$name/$file"
+  ( cd "$d" && git add -A >/dev/null 2>&1 )
 }
 
 seed_core() { # seed_core <dir> <path-under-core> <line...>
@@ -369,26 +400,58 @@ count_check "m11 S10 multibyte bracket class" "$TMP/m11" S10 5
 # one -- which is what a second copy of it, written for x4 below, walked straight into.
 refused() { grep -qF 'Failing closed.' <<<"$1"; }
 
-empty_check() { # empty_check <name> <dir> <what-was-emptied>
-  local n="$1" d="$2" what="$3" out
+# THE CORPORA NEST, SO "A REFUSAL HAPPENED" IS NO LONGER THE OBSERVABLE. `core/fixtures/*/*.sh`
+# is a SUBSET of both `*.sh` and `core/*`: emptying either wider corpus necessarily empties the
+# fixture one too, and a single "did it refuse" assertion is then satisfied by whichever
+# condition happens to fire. `refused_for` requires the refusal to NAME the corpus this seed
+# emptied, which is the only property a mutant of one condition can move.
+refused_for() { grep -qF "the $2 corpus is empty" <<<"$1"; }
+
+empty_check() { # empty_check <name> <dir> <what-was-emptied> <corpus-name-in-the-message>
+  local n="$1" d="$2" what="$3" which="$4" out
   out="$(run_v "$d")"
-  if refused "$out"; then
-    note "ok    $n -- $what emptied: fails closed rather than reporting a clean scan"
-  else
+  if ! refused "$out"; then
     note "FAIL  $n -- $what emptied: did not fail closed"
     printf '%s\n' "$out" | sed 's/^/      /' | head -4; rc=1
+  elif ! refused_for "$out" "$which"; then
+    note "FAIL  $n -- $what emptied: it refused, but not for the $which corpus. Some OTHER condition"
+    note "               fired, so this seed proves nothing about the one it names."
+    printf '%s\n' "$out" | sed 's/^/      /' | head -4; rc=1
+  else
+    note "ok    $n -- $what emptied: fails closed naming the $which corpus, rather than reporting a clean scan"
   fi
 }
 
+# THE THREE CORPORA NEST, AND EMPTYING ONE MEANS REMOVING ITS MEMBERS FROM THE OTHERS TOO.
+# `core/fixtures/*/*.sh` is a SUBSET of both `*.sh` and `core/*`, so the clean fixture file
+# `seed` writes is a member of all three listings. Deleting only `scripts/clean.sh` leaves
+# that file in the shell corpus and m8's seed no longer empties what it names -- measured, the
+# arm reported PASS over `1 shell file(s)` and read as a guard that stopped working. Each
+# `empty_*` seed below removes every member of the corpus it is emptying, and the assertion
+# that the OTHER counts stay non-zero is what keeps the three cells from covering each other.
+empty_shell() { # empty_shell <dir>   -- every `*.sh`, which includes the fixture one
+  rm -f "$1/scripts/clean.sh" "$1/core/fixtures/probe-unit/seed.sh"
+  ( cd "$1" && git rm -q --cached scripts/clean.sh core/fixtures/probe-unit/seed.sh >/dev/null 2>&1 )
+}
+empty_instr() { # empty_instr <dir>   -- every `core/*`, which includes the fixture one
+  rm -f "$1/core/skills/clean.md" "$1/core/fixtures/probe-unit/seed.sh"
+  ( cd "$1" && git rm -q --cached core/skills/clean.md core/fixtures/probe-unit/seed.sh >/dev/null 2>&1 )
+}
+empty_fixture() { # empty_fixture <dir>   -- ONLY the fixture one; the other two stay live
+  rm -f "$1/core/fixtures/probe-unit/seed.sh"
+  ( cd "$1" && git rm -q --cached core/fixtures/probe-unit/seed.sh >/dev/null 2>&1 )
+}
+
 seed "$TMP/m8"
-rm -f "$TMP/m8/scripts/clean.sh"
-( cd "$TMP/m8" && git rm -q --cached scripts/clean.sh >/dev/null 2>&1 )
-empty_check "m8 " "$TMP/m8" "the SHELL corpus"
+empty_shell "$TMP/m8"
+empty_check "m8 " "$TMP/m8" "the SHELL corpus" SHELL
 
 seed "$TMP/m10"
-rm -f "$TMP/m10/core/skills/clean.md"
-( cd "$TMP/m10" && git rm -q --cached core/skills/clean.md >/dev/null 2>&1 )
-empty_check "m10" "$TMP/m10" "the CORE corpus (shell corpus still live)"
+empty_instr "$TMP/m10"
+empty_check "m10" "$TMP/m10" "the CORE corpus (shell corpus still live)" CORE
+seed "$TMP/m10b"
+empty_fixture "$TMP/m10b"
+empty_check "m10b" "$TMP/m10b" "the FIXTURE shell corpus (both wider corpora still live)" "FIXTURE shell"
 
 # --- x arms: one cell of the arm table at a time ----------------------------
 # S8 is four decisions, not one, and a seeded offender is reported if ANY combination of them
@@ -429,29 +492,37 @@ seed_core "$TMP/x3" skills/pull.md \
 blind_check "x3 S8_PAT" "$TMP/x3" 's/^S8_PAT="/S8_PAT="git.*/' S8 \
   "keying on the placeholder rather than on the word git"
 
-# x4 -- the empty-corpus guard, collapsed to a single count. m10 establishes that a dead
-# `core/*` listing is refused; this establishes that the refusal comes from the `n_instr`
-# half rather than from anything else. The mutation points both halves at `n_shell`, which is
-# the pre-S8 shape -- and note it leaves m8's seed still refused, so the two arms are not
-# covering for one another.
-seed "$TMP/x4"
-rm -f "$TMP/x4/core/skills/clean.md"
-( cd "$TMP/x4" && git rm -q --cached core/skills/clean.md >/dev/null 2>&1 )
-pre="$(run_v "$TMP/x4")"
-if ! refused "$pre"; then
-  note "FAIL  x4 empty-guard -- the UNMUTATED validator did not refuse the dead core corpus; nothing below discriminates"
-  printf '%s\n' "$pre" | sed 's/^/      /' | head -4; rc=1
-elif ! mutate "$TMP/x4" 's/n_instr:-0/n_shell:-0/' "x4 empty-guard"; then
-  rc=1
-else
-  post="$(run_v "$TMP/x4")"
-  if grep -q "^validate-shell-portability: PASS" <<<"$post"; then
-    note "ok    x4 empty-guard -- the second count is load-bearing: shipped refuses a dead core corpus, one-count mutant scans nothing and reports PASS"
-  else
-    note "FAIL  x4 empty-guard -- the one-count mutant still refused; the two counts are not what did it"
-    printf '%s\n' "$post" | sed 's/^/      /' | head -4; rc=1
+# x4 and x11 -- the per-corpus empty-guard conditions, one each. m8/m10/m10b establish that
+# each dead listing is refused NAMING its own corpus; these establish that the naming comes
+# from that condition rather than from a sibling.
+#
+# THE OBSERVABLE IS THE CORPUS NAMED, NOT WHETHER A REFUSAL HAPPENED, and the corpora nesting
+# is what forces it. `core/fixtures/*/*.sh` is a SUBSET of both wider globs, so emptying
+# `core/*` empties the fixture listing too and the FIXTURE condition refuses whatever the CORE
+# condition does. A mutant that disables one condition therefore still produces a refusal, and
+# an assertion keyed on PASS would score it SURVIVED. Keying on the sentence naming the corpus
+# is the only property one condition owns alone.
+corpus_cell_check() { # corpus_cell_check <name> <dir> <sed-expr> <corpus-name> <cell>
+  local n="$1" d="$2" expr="$3" which="$4" cell="$5" pre post
+  pre="$(run_v "$d")"
+  if ! refused_for "$pre" "$which"; then
+    note "FAIL  $n -- the UNMUTATED validator did not name the $which corpus; nothing below discriminates"
+    printf '%s\n' "$pre" | sed 's/^/      /' | head -4; rc=1; return
   fi
-fi
+  mutate "$d" "$expr" "$n" || { rc=1; return; }
+  post="$(run_v "$d")"
+  if refused_for "$post" "$which"; then
+    note "FAIL  $n -- $cell: the mutated validator still named the $which corpus, so that condition is not what did it"
+    printf '%s\n' "$post" | sed 's/^/      /' | head -4; rc=1
+  else
+    note "ok    $n -- $cell is load-bearing: shipped names the $which corpus, mutated does not"
+  fi
+}
+
+seed "$TMP/x4"
+empty_instr "$TMP/x4"
+corpus_cell_check "x4 empty-guard CORE" "$TMP/x4" 's/n_instr:-0/n_shell:-0/' CORE \
+  "the CORE corpus condition"
 
 # x5 -- S10's CONTEXT SPAN. The shipped pattern puts `.*` between the regex context and the
 # class; the first cut put `[^#]*` there and could not cross the heading grammar's own
@@ -550,6 +621,132 @@ X8EOF
 appear_check "x8 S10_PAT whitespace" "$TMP/x8" \
   '/^S10_PAT=/s/\[^\]\[:space:\]\]/[^]]/g' S10 \
   "the class's whitespace exclusion"
+
+# m12 -- S11. The offender is a fixture SEED entering a sandbox it just built and then running
+# repo-mutating git, which is the shape the arm was written against: if the `cd` fails the
+# script keeps going and `git init` lands in the PROCESS working directory. The seed lives
+# under `core/fixtures/*/`, because that is S11's whole corpus and a `scripts/` copy of the
+# same line is structurally invisible to it -- which is x9's subject below.
+seed "$TMP/m12"
+seed_fixture "$TMP/m12" some-unit seed.sh <<'M12EOF'
+WORK="$(mktemp -d)"
+cd "$WORK"
+git init -q .
+M12EOF
+kill_check "m12 S11 unguarded cd in a fixture script" "$TMP/m12" S11
+
+# m12b -- THE `set -e` SEED, and the arm's "does not acquit on set -e" claim had NO CELL behind
+# it until this one. Measured: a one-line file-level `set -e` acquittal filter spliced into the
+# S11 loop (cmp -s confirmed applied) passed the whole battery AND the receipt, because not one
+# seed carried a `set -e` line -- the claim was prose over an untested predicate, which is the
+# "a check that cannot fire" shape one level up. m12b is m12's seed plus `set -euo pipefail`,
+# and x12 below is that filter as a mutant this cell must kill.
+seed "$TMP/m12b"
+seed_fixture "$TMP/m12b" strict-unit seed.sh <<'M12BEOF'
+set -euo pipefail
+WORK="$(mktemp -d)"
+cd "$WORK"
+git init -q .
+M12BEOF
+kill_check "m12b S11 unguarded cd under set -euo pipefail" "$TMP/m12b" S11
+
+# m12c -- D1: THE SKIP MUST NOT REACH PAST A `;`. The first cut's skip was
+# `cd[[:space:]].*(\|\||&&|\\$)`, whose `.*` runs to end of line, so ANY guard token anywhere
+# past the `cd` acquitted it -- including one belonging to a different command, and including
+# one inside a STRING. Four offenders, every one ACQUITTED by the shipped grammar when measured:
+# the arm's own subject (`git init` past the semicolon), an unrelated `||`, a trailing backslash
+# on a following command, and a `&&` inside a quoted echo. All four are seeded together and the
+# COUNT is asserted, because a pattern that spells one of the four passes a presence check
+# identically to one that spells all four.
+seed "$TMP/m12c"
+seed_fixture "$TMP/m12c" semi-unit seed.sh <<'M12CEOF'
+cd "$W"; git init . && git add -A
+cd "$W"; [ -d x ] || mkdir x
+cd "$W"; git init . \
+cd "$W"; echo "a && b"
+M12CEOF
+count_check "m12c S11 guard token past a semicolon" "$TMP/m12c" S11 4
+
+# x9 -- S11's CORPUS column. `fixture` is `core/fixtures/*/*.sh`; forcing `shell` leaves an arm
+# that runs, probes green and scans a set that still CONTAINS the seed, so the report would
+# NOT vanish and `blind_check` cannot be used. The discriminating mutation is the other
+# direction: force the corpus to `instr` (`core/*`, every shipped file regardless of
+# extension) and the offending `.sh` is still in it -- so neither widening discriminates.
+# What DOES is narrowing the corpus to something the seed cannot be in: `S11_CORPUS=fixture`
+# forced to a corpus whose listing this seed's path is absent from. The seed is placed at
+# `scripts/` for x9 and the corpus forced to `fixture`, which is the shipped value -- so the
+# mutation runs the other way: the seed sits in `scripts/`, the SHIPPED arm is silent on it,
+# and forcing `S11_CORPUS=shell` makes the report APPEAR. That is `appear_check`, and it
+# proves the corpus column is what confines this arm to fixture shell.
+seed "$TMP/x9" 'WORK="$(mktemp -d)"' 'cd "$WORK"' 'git init -q .'
+appear_check "x9 S11_CORPUS=fixture" "$TMP/x9" '/^S9_CORPUS=shell; S10_CORPUS=shell; S11_CORPUS=fixture$/s/S11_CORPUS=fixture/S11_CORPUS=shell/' S11 \
+  "the corpus column confining S11 to fixture shell"
+
+# x10 -- S11's PATTERN, specifically the optional leading `(`. Without it the anchored pattern
+# cannot see the corpus's dominant guarded idiom at all, so the SKIP has nothing to acquit and
+# reads as load-bearing when it is not. The seed is a BARE-paren offender: `( cd "$x"` with the
+# guard on the NEXT line is out of scope (the arm's header states that hole), so this seed is
+# `( cd "$x"` with nothing after it on the line and no continuation -- an offender the shipped
+# pattern reports and the narrowed one cannot spell.
+seed "$TMP/x10"
+seed_fixture "$TMP/x10" paren-unit seed.sh <<'X10EOF'
+WORK="$(mktemp -d)"
+( cd "$WORK"
+  git init -q . )
+X10EOF
+blind_check "x10 S11_PAT leading paren" "$TMP/x10" \
+  '/^S11_PAT=/s/(\\\\(\[\[:space:\]\]\*)?//' S11 \
+  "the optional leading \`(\` in the anchor"
+
+# x11 -- the THIRD empty-corpus condition, the one S11 needs. Its seed empties ONLY the fixture
+# listing, so both wider corpora stay live and the other two conditions cannot fire: this is the
+# one world where a PASS after the mutation is the honest observable, and the shared helper's
+# name assertion holds it to the same standard as x4.
+seed "$TMP/x11"
+empty_fixture "$TMP/x11"
+corpus_cell_check "x11 empty-guard FIXTURE" "$TMP/x11" 's/n_fixture:-0/n_shell:-0/' "FIXTURE shell" \
+  "the FIXTURE corpus condition"
+
+# x12 -- THE `set -e` NON-ACQUITTAL, which is a claim in S11's header and needs a subject like
+# any other. The mutation splices a file-level `set -e` acquittal into the S11 branch of the
+# corpus loop -- the exact filter S11's header argues against -- and m12b's seed is the only
+# thing in this battery it can act on. Without m12b the mutant applies cleanly, changes no cell,
+# and reads as a claim that holds; measured, it passed the whole battery and the receipt.
+#
+# THE SEED IS m12b's AND NOT m12's, deliberately: m12's file carries no `set -e`, so the filter
+# cannot reach it and its survival would prove nothing about the claim.
+seed "$TMP/x12"
+seed_fixture "$TMP/x12" strict-unit seed.sh <<'X12EOF'
+set -euo pipefail
+WORK="$(mktemp -d)"
+cd "$WORK"
+git init -q .
+X12EOF
+#
+# THE MUTANT MUST STILL PARSE, AND THE FIRST CUT OF THIS ONE DID NOT. A multi-line `sed` append
+# left an unbalanced `)`, so the mutated validator died at line 459 with a syntax error --
+# `blind_check` scored it correctly as "did not go quiet", but for the wrong reason entirely: a
+# script that cannot be parsed acquits nothing and proves nothing about the claim. `grep -L`
+# lists the files NOT carrying the pattern, which is the whole acquittal in one physical line
+# with no nesting, and the substitution below rewrites exactly one line.
+blind_check "x12 S11 set -e non-acquittal" "$TMP/x12" \
+  's|^    hits="\$(scan "\$p" "\$sk" "\$cm" \$files)"$|    if [ "$a" = S11 ]; then files="$(grep -L "^set -e" $files)"; fi; hits="$(scan "$p" "$sk" "$cm" $files)"|' \
+  S11 "refusing to acquit a file carrying \`set -e\`"
+
+# x13 -- D1's cell: S11_SKIP's `[^;]*` anchor. The mutation restores the first cut's `.*`, which
+# runs to end of line and lets a guard token belonging to a DIFFERENT command acquit the `cd`.
+# m12c's four seeds are the subject; the assertion is that all four vanish, because a mutation
+# that loses one of them and keeps three would pass a presence check.
+seed "$TMP/x13"
+seed_fixture "$TMP/x13" semi-unit seed.sh <<'X13EOF'
+cd "$W"; git init . && git add -A
+cd "$W"; [ -d x ] || mkdir x
+cd "$W"; git init . \
+cd "$W"; echo "a && b"
+X13EOF
+blind_check "x13 S11_SKIP semicolon anchor" "$TMP/x13" \
+  '/^S11_SKIP=/s/\[^;\]\*/.*/' S11 \
+  "the \`[^;]*\` bound stopping the SKIP at the first command separator"
 
 # --- negative arms: the measured false positives must stay silent -----------
 seed "$TMP/n1" "sed -i '' 's/x/y/' f" "sed -i.bak 's/x/y/' f && rm -f f.bak"
@@ -666,6 +863,46 @@ else
   printf '%s\n' "$out" | sed 's/^/      /' | head -8; rc=1
 fi
 
+# n5 -- S11's negatives, one line per acquitting mechanism. Every line is either the FIX S11
+# prescribes or one of the two narrowings its header records:
+#
+#   1  `cd "$x" || exit 2` ...................... the remedy, acquitted by the SKIP's `||`
+#   2  `cd "$x" && …` ........................... the remedy's other spelling, by the SKIP's `&&`
+#   3  `( cd "$x" && … )` ....................... the corpus's dominant idiom, same cell
+#   4  `cd "$(dirname "$0")" || exit 2` ......... a command-substitution target, still guarded
+#   5  `SELF_DIR="$(cd "$(dirname "$0")" && pwd)"` the standard root resolution -- the `cd` is
+#                                                 not line-leading, so the ANCHOR acquits it
+#   6  `( cd "$x" \` + `&& …` on the next line .. the two real continuation sites, by the
+#                                                 SKIP's trailing-backslash clause
+#   7  a `#` comment naming `cd "$x"` ........... acquitted by S11_COMMENTS=skip
+#
+# LINE 5 IS ACQUITTED BY THE ANCHOR AND NOT BY THE SKIP, and it is the one an unanchored
+# rewrite of this arm would report on nearly every script in the tree.
+#
+# LINE 2 AND THE `; git init .` LINE ARE THE DISCRIMINATING PAIR FOR THE `[^;]*` BOUND, and they
+# are one character apart from m12c's offenders. `cd "$x" && git init .` has its guard BEFORE any
+# separator; `cd "$x" || exit 2; git init .` has a `;` AFTER the guard, which the bound must not
+# read as disqualifying. A narrowing that closed m12c by refusing every line containing a `;`
+# would report this one, and the arm would be flagging its own remedy.
+seed "$TMP/n5"
+seed_fixture "$TMP/n5" guarded-unit seed.sh <<'N5EOF'
+cd "$WORK" || exit 2
+cd "$WORK" && git init -q .
+cd "$WORK" || exit 2; git init .
+( cd "$WORK" && git init -q . )
+cd "$(dirname "$0")" || exit 2
+SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
+( cd "$PROJ" \
+  && git init -q . )
+#   cd "$WORK" named in a comment is prose, not an unguarded chdir
+N5EOF
+if out="$(run_v "$TMP/n5")" && grep -q "PASS" <<<"$out"; then
+  note "ok    n5 -- guarded cd, subshell-and, a substitution target, SELF_DIR, a continuation and a comment are NOT reported"
+else
+  note "FAIL  n5 -- S11 flagged a correct form; the arm fires on its own fix or on prose"
+  printf '%s\n' "$out" | sed 's/^/      /' | head -8; rc=1
+fi
+
 # THE MUTANT COUNT IS DERIVED; THE OTHER TWO ARE NOT, AND THE ASYMMETRY IS DELIBERATE.
 # This line read a hardcoded `11/11 ... (24 assertions)` and went stale the moment `m9b` and
 # `m9c` landed -- it still said 11 with twelve corpus mutants live. A total that decays
@@ -674,9 +911,9 @@ fi
 # THE ARM-TABLE COUNT IS LEFT AS A LITERAL BECAUSE DERIVING IT WAS WRONG. `x1`-`x3` go through
 # `blind_check`; `x4`-`x8` assert inline, because each needs a different observable (a count
 # falling, a report appearing, the validator REFUSING under a foreign locale). A
-# `grep -c blind_check` therefore reads 3 where the truth is 8 -- a derivation that is
+# `grep -c blind_check` therefore reads 6 where the truth is 13 -- a derivation that is
 # confidently wrong is worse than a literal somebody must update, so this one stays a literal
-# and says why. If you add an `x*`, update the 8.
+# and says why. If you add an `x*`, update the 13.
 # `m11` goes through `count_check` (it asserts a LINE COUNT, not merely a kill), and `m8`/`m10`
 # assert fail-closed rather than a kill, so all three are counted separately from `kill_check`.
 # A count that silently omitted them is what the first derivation of this line did.
@@ -684,6 +921,6 @@ _n_kill=$(grep -o 'kill_check "' "$0" | grep -c .)
 _n_count=$(grep -o 'count_check "' "$0" | grep -c .)
 _n_kill=$((_n_kill - 1 + _n_count - 1))   # each counting line names its own helper
 if [ "$rc" -eq 0 ]; then
-  note "PASS  shell-portability -- control green, ${_n_kill}/${_n_kill} corpus mutants killed by their own arm, 8/8 arm-table cells proven load-bearing, 4/4 negatives silent"
+  note "PASS  shell-portability -- control green, ${_n_kill}/${_n_kill} corpus mutants killed by their own arm, 13/13 arm-table cells proven load-bearing, 5/5 negatives silent"
 fi
 exit "$rc"

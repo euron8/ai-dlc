@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # self-update-fixture-log — assert step 2's fixture run leaves evidence behind, and that its
 # COVERAGE join refuses a slice that omits a fixture the pull itself changes.
 #

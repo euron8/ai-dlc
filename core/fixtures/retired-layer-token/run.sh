@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # retired-layer-token/run.sh — prove the token detector fires on a status word a release
 # retired and a layer file still carries, stays quiet on the four shapes that merely look
 # like one, and never emits a zero that cannot be told from a scan that opened nothing.

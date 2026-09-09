@@ -46,7 +46,7 @@ rm -rf "$REPO"                     # idempotent re-seed
 mkdir -p "$REPO"
 
 (
-  cd "$REPO"
+  cd "$REPO" || exit 2
   git init -q .
   git config user.email fixture@ai-dlc.local
   git config user.name  "check-1c-bypass fixture"

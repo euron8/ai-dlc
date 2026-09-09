@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # audit-anchors-schema/run.sh — prove the audit-anchors housekeeping schema is single-source and
 # enforced: the header is RENDERED from schemas/audit-anchors.json, --check catches header drift,
 # validate catches entry shape drift, and the reader fails CLOSED on an unreadable schema.

@@ -20,7 +20,7 @@ if [ -n "$GRAMMAR_SRC" ]; then
   [ -f "$GRAMMAR_SRC" ] || { echo "FIXTURE ERROR: seed cannot read grammar at $GRAMMAR_SRC" >&2; exit 2; }
 fi
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/apmig-fx-XXXXXX")"
-cd "$WORK"
+cd "$WORK" || exit 2
 git -c init.defaultBranch=main init -q .
 git config user.email f@example.com; git config user.name Fixture; git config commit.gpgsign false
 

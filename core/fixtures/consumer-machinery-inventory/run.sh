@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # consumer-machinery-inventory — assert LC-M1/E18 and LC-M2/W10 fire, and only where they should.
 #
 # Usage: run.sh

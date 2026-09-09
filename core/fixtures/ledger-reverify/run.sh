@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # Exercise reconcile/ledger-reverify.sh against the ledger-reverify fixture.
 #
 # THE DIFFERENTIAL. Entry A and Entry B carry identical verify directives except the

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # handoff-completion-assertion — assert the handoff seam end to end, across the two hooks and
 # the one predicate they now share.
 #

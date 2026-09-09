@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # reconcile-emit-report/run.sh — prove the reconcile report's mechanical sections are driver-owned:
 # emit-report.sh renders them, and --verify fails a report whose region is missing OR hand-edited.
 #

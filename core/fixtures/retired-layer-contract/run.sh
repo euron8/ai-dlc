@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # retired-layer-contract/run.sh — prove the layer-contract detector fires, stays quiet
 # where it should, and cannot report clean by finding nothing to compare.
 #

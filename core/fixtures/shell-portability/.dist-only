@@ -4,5 +4,7 @@ Its subject is scripts/validate-shell-portability.sh, which is this repository's
 pre-push validator. install.sh does not ship it, so on a consumer this fixture would
 resolve no validator at all and could only pass.
 
-It is also a MUTATION BATTERY: it builds eleven throwaway git repos per run, each carrying
-a copy of the validator and a seeded shell file, and asserts one arm fires per repo.
+It is also a MUTATION BATTERY: it builds one throwaway git repo per unit, each carrying a
+copy of the validator and a seeded shell file, and asserts one arm fires per repo. The unit
+count is derived and printed by the run itself; it is not quoted here, because every raw
+total written into this tree has gone stale while reading exactly like a fresh one.

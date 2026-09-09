@@ -22,7 +22,7 @@ DIST="$WORK/dist"
 CONS="$WORK/consumer"
 
 mkdir -p "$DIST/core/skills/ai-dlc/steps"
-cd "$DIST"
+cd "$DIST" || exit 2
 git init -q .
 git config user.email f@f; git config user.name f
 
