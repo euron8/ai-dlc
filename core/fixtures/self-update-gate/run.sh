@@ -1898,6 +1898,306 @@ else
   fi
 fi
 
+# --- ARM P: CAN THIS CONSUMER PUSH AT ALL? (BL-086) ----------------------------------------
+#
+# Every other arm in the gate is a DIFFERENTIAL, and a push failure that PREDATES the pull is
+# outside the difference by construction: the gate said OK on a consumer whose `git push` was
+# already refused by its own hook, and step 2 would have pushed into that refusal. Measured on the
+# reference consumer during a real pull. The arm runs the hook GIT WOULD RUN -- resolved by
+# `git rev-parse --git-path hooks/pre-push`, which honours `core.hooksPath` -- on the tree as it
+# stands, fed the ref line step 2's push sends, and defers when it exits non-zero.
+#
+# ITS OWN MINIATURE WORLD, BECAUSE THE SEED'S CONSUMER IS NOT A REPOSITORY. Every world above
+# hands the gate a bare directory, and the arm is SILENT there by design (no push can happen from
+# a non-repo, so there is nothing to probe). That silence is asserted below as its own cell, with
+# a repo world beside it so "silent because no push" and "silent because dead" are two different
+# readings. Each consumer here is `git init`ed, given a remote, and armed through
+# `core.hooksPath` -- the spelling install.sh documents -- so the probe reaches a hook the way a
+# real push would.
+#
+# THE HOOK IS THE SUBJECT, AND IT IS THE SEED'S HOOK PLUS A TAIL. The seed's `.githooks/pre-push`
+# names the gating scripts the DIFFERENTIAL reads its set from, and it exits 0 (no `set -e`; its
+# last script passes), so replacing it would empty the differential's subject and every row above
+# would vanish from these worlds -- measured on the first cut of this section, where every world
+# read `none of which the consumer's pre-push invokes`. Each world's hook is therefore the seed's
+# hook VERBATIM followed by a tail that decides the probe's answer: exit 0, refuse with the shipped
+# hook's own phase grammar, or read stdin and refuse when it is EMPTY -- the tail that separates
+# "fed the protocol line" from "fed nothing".
+PP="$(dirname "$DIST")/pp"
+rm -rf "$PP"; mkdir -p "$PP"
+PP_SEED_HOOK="$(cat "$CONS/.githooks/pre-push")"
+
+# pp_world <name> <tail|""> <arm:hooksPath|dotgit|none> <remote:yes|no> -> consumer path
+# A consumer copied from the seed's, made a repository with one commit, and given a remote unless
+# told not to. The hook (seed + tail) lands at `.githooks/pre-push` (armed via core.hooksPath), at
+# `.git/hooks/pre-push` (the shim spelling the reference consumer uses; the tracked hook stays the
+# seed's), or nowhere.
+pp_world() {
+  local c="$PP/$1" tail="$2" arm="$3" remote="$4"
+  rm -rf "$c"; cp -R "$CONS" "$c"; rm -rf "$c/_bmad-output"
+  if [ -n "$tail" ] && [ "$arm" = "hooksPath" ]; then
+    printf '%s\n%s\n' "$PP_SEED_HOOK" "$tail" > "$c/.githooks/pre-push"; chmod +x "$c/.githooks/pre-push"
+  fi
+  ( cd "$c" && git init -q . && git config user.email f@x && git config user.name f \
+      && git config commit.gpgsign false && git add -A >/dev/null 2>&1 \
+      && git commit -qm seed >/dev/null 2>&1 ) || { printf 'FIXTURE ERROR: pp_world %s init failed\n' "$1" >&2; return 1; }
+  [ "$remote" = yes ] && git -C "$c" remote add origin "$PP/nowhere-$1.git"
+  case "$arm" in
+    hooksPath) git -C "$c" config core.hooksPath .githooks ;;
+    dotgit)    mkdir -p "$c/.git/hooks"; printf '%s\n%s\n' "$PP_SEED_HOOK" "$tail" > "$c/.git/hooks/pre-push"; chmod +x "$c/.git/hooks/pre-push" ;;
+    none)      ;;
+  esac
+  printf '%s\n' "$c"
+}
+# pp_scan <gate> <consumer> -> "pp=<status|none> sum=<n summary DEFER rows> ss=<n SAFE-STOP rows> und=<n>"
+pp_scan() {
+  local o
+  o="$(bash "$1" "$DIST" "$BASE" "$THEIRS" "$2" 2>/dev/null)"
+  printf 'pp=%s sum=%s ss=%s und=%s\n' \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$2 == "pre-push" {print $1; exit} END{if (!NR) print "none"}' | { read -r x; printf '%s' "${x:-none}"; })" \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1 == "SELF-UPDATE-DEFER" && $2 == "-" {n++} END{print n+0}')" \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1 == "SELF-UPDATE-SAFE-STOP" {n++} END{print n+0}')" \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1 == "SELF-UPDATE-UNDECIDED" {n++} END{print n+0}')"
+}
+# The tails. Each is appended to the seed's hook, whose own last line exits 0.
+PP_HOOK_GREEN='exit 0'
+PP_HOOK_RED='printf "\n── artifact paths (the directory is the only sprint slot)\n   FAIL\n"
+printf "\n── layer entries\n   PASS\n"
+printf "\npre-push: BLOCKED.\n"
+exit 1'
+# READS STDIN, AND REFUSES WHEN IT IS EMPTY. The shipped hook'"'"'s arm 0 judges the ref protocol; a
+# probe that fed nothing would leave that arm judging nothing, which this tail turns into a
+# refusal so the fed line is a cell and not an assumption.
+PP_HOOK_STDIN='n=$(grep -c . /dev/stdin)
+[ "$n" -gt 0 ] || { echo "no ref lines on stdin"; exit 3; }
+exit 0'
+# The record carries the hook'"'"'s whole output, BLANK LINES INCLUDED -- the shipped hook prints a
+# blank before every phase header and a faithful transcript keeps them. The seed'"'"'s scripts print
+# nothing, so the tail'"'"'s lines are the whole of it. Derived by running the tail, never spelled.
+PP_RED_LINES="$(printf '%s\n' "$PP_HOOK_RED" | bash 2>/dev/null | wc -l | tr -d ' ')"
+
+# 1. SILENT ON A NON-REPOSITORY, and the control beside it is a repository where the arm speaks.
+ss_assert "pp-nonrepo-silent" "$(pp_scan "$GATE" "$(vr_cons ppnonrepo)")" \
+  "pp=none sum=1 ss=1 und=1" \
+  "the seed's consumer is a bare directory: no push can happen, so no pre-push row -- the differential's own DEFER/SAFE-STOP pair is what remains"
+PP_GREEN="$(pp_world green "$PP_HOOK_GREEN" hooksPath yes)"
+ss_assert "pp-green" "$(pp_scan "$GATE" "$PP_GREEN")" \
+  "pp=SELF-UPDATE-OK sum=1 ss=1 und=1" \
+  "a repository with a remote and an armed hook that exits 0: the probe ran, said OK, and the differential's verdicts are untouched beside it"
+
+# 2. A REFUSING HOOK DEFERS, names the phase it read out of the hook's own output, and the record
+#    carries the hook's output as `# probe:` lines. ONE summary DEFER and ONE SAFE-STOP row: the
+#    push arm exits after its own pair, so the differential cannot add a second.
+PP_RED="$(pp_world red "$PP_HOOK_RED" hooksPath yes)"
+pp_red_out="$(bash "$GATE" "$DIST" "$BASE" "$THEIRS" "$PP_RED" 2>/dev/null)"
+ss_assert "pp-red-defers" "$(pp_scan "$GATE" "$PP_RED")" \
+  "pp=SELF-UPDATE-DEFER sum=1 ss=1 und=0" \
+  "a hook that refuses the tree as it stands defers BEFORE the differential runs: one summary DEFER, one SAFE-STOP, and no per-script rows at all"
+ss_assert "pp-red-names-phase" \
+  "$(printf '%s\n' "$pp_red_out" | awk -F'\t' '$2 == "pre-push" && $3 ~ /Refused by: artifact paths/ {print "named"; exit}')" \
+  "named" "the DEFER row names the phase the hook reported FAIL, read out of the hook's own output grammar"
+pp_red_rec="$(vr_newest "$PP_RED")"
+ss_assert "pp-red-record-probe" \
+  "$(grep -c '^# probe: ' "${pp_red_rec:-/dev/null}")|$(grep -c '^# probe: .*pre-push: BLOCKED' "${pp_red_rec:-/dev/null}")|$(sed -n 's/^# verdict: *//p' "${pp_red_rec:-/dev/null}" | head -1)" \
+  "$(( PP_RED_LINES + 1 ))|1|DEFER" \
+  "the record carries every line the hook printed plus the header line naming the hook, its exit and the fed ref line, and its verdict trailer reads DEFER"
+# THE FED LINE IS THE STEP-2 SHAPE: a new branch under ai-dlc-update/self-update-, at the
+# consumer's HEAD, remote side all zeros. Read off the record's header line.
+ss_assert "pp-red-fed-line" \
+  "$(sed -n 's/^# probe: .* fed: //p' "${pp_red_rec:-/dev/null}" | head -1 | awk -v h="$(git -C "$PP_RED" rev-parse HEAD)" -v b="$(git -C "$PP_RED" symbolic-ref HEAD)" '{ok = ($1 == b && $2 == h && $3 ~ /^refs\/heads\/ai-dlc-update\/self-update-/ && $3 != $1 && $4 ~ /^0+$/); print ok ? "step2-shape" : "wrong:" $0}')" \
+  "step2-shape" "the probe feeds the hook the ref line step 2's push sends -- the current branch at HEAD on the local side, a new self-update branch with a zero sha on the remote side"
+
+# 3. THE HOOK GIT WOULD RUN, NOT THE TRACKED FILE. Same red body at `.git/hooks/pre-push` with no
+#    core.hooksPath (the reference consumer's shim spelling) still defers; the tracked hook
+#    unarmed -- present at .githooks/ but no core.hooksPath and no .git/hooks copy -- is OK,
+#    because git runs nothing, and the row says so.
+PP_DOTGIT="$(pp_world dotgit "$PP_HOOK_RED" dotgit yes)"
+ss_assert "pp-dotgit-hook" "$(pp_scan "$GATE" "$PP_DOTGIT")" \
+  "pp=SELF-UPDATE-DEFER sum=1 ss=1 und=0" \
+  "a refusing hook at .git/hooks/pre-push with no core.hooksPath is the hook git runs, and the probe finds it there"
+PP_UNARMED="$(pp_world unarmed "" none yes)"
+ss_assert "pp-unarmed-ok" \
+  "$(pp_scan "$GATE" "$PP_UNARMED")|$(bash "$GATE" "$DIST" "$BASE" "$THEIRS" "$PP_UNARMED" 2>/dev/null | awk -F'\t' '$2 == "pre-push" && $3 ~ /git runs no pre-push hook/ {print "says-so"; exit}')" \
+  "pp=SELF-UPDATE-OK sum=1 ss=1 und=1|says-so" \
+  "the tracked hook exists but nothing arms it: git runs no hook, so the push is not refused locally, and the row says that rather than claiming the hook passed"
+# NOT EXECUTABLE IS NOT ARMED. Git skips a hook without the exec bit, and so does the probe.
+PP_NOEXEC="$(pp_world noexec "$PP_HOOK_RED" hooksPath yes)"; chmod -x "$PP_NOEXEC/.githooks/pre-push"
+ss_assert "pp-noexec-ok" "$(pp_scan "$GATE" "$PP_NOEXEC")" \
+  "pp=SELF-UPDATE-OK sum=1 ss=1 und=1" \
+  "a refusing hook without its exec bit is one git would skip, so the probe skips it too"
+
+# 4. NO REMOTE: silent, like the non-repo, because step 2 commits locally and pushes nothing.
+PP_NOREMOTE="$(pp_world noremote "$PP_HOOK_RED" hooksPath no)"
+ss_assert "pp-noremote-silent" "$(pp_scan "$GATE" "$PP_NOREMOTE")" \
+  "pp=none sum=1 ss=1 und=1" \
+  "a repository with no remote makes no push, so a refusing hook is never run and no pre-push row is emitted"
+
+# 5. FED THE PROTOCOL LINE. A hook that refuses on EMPTY stdin passes under the probe, so the
+#    probe fed it something; the control is the same hook driven with empty stdin by hand.
+PP_STDIN="$(pp_world stdin "$PP_HOOK_STDIN" hooksPath yes)"
+ss_assert "pp-stdin-fed" "$(pp_scan "$GATE" "$PP_STDIN")" \
+  "pp=SELF-UPDATE-OK sum=1 ss=1 und=1" \
+  "a hook that refuses empty stdin is OK under the probe, so the probe fed it the ref protocol"
+ss_assert "pp-stdin-control" "$( ( cd "$PP_STDIN" && .githooks/pre-push origin x </dev/null >/dev/null 2>&1 ); echo $? )" "3" \
+  "...and the same hook fed nothing exits 3, so the cell above is the fed line and not a hook that ignores stdin"
+
+# 6. THE SAFE-STOP ROW SAYS THE SPLIT BUYS NOTHING, AND THE WALK SKIPS THE PROBE. A push refused
+#    on the tree as it stands is refused at every ref in the range alike, so the DEFER's advisory
+#    is "fix what the hook refuses" rather than a ref -- and a `--safe-stop` walk over the same
+#    consumer must still find the range's clean release, because its nested classifies never run
+#    the probe. Driven on the SS world, whose range has a clean release and a deferring one; its
+#    consumer becomes a repository with a refusing hook armed. The SS hook names no gating script
+#    and ends in `exit 0`, so it is REPLACED rather than appended to.
+PP_SS="$PP/sscons"; rm -rf "$PP_SS"; cp -R "$SS/cons" "$PP_SS"; rm -rf "$PP_SS/_bmad-output"
+printf '#!/usr/bin/env bash\n%s\n' "$PP_HOOK_RED" > "$PP_SS/.githooks/pre-push"; chmod +x "$PP_SS/.githooks/pre-push"
+( cd "$PP_SS" && git init -q . && git config user.email f@x && git config user.name f \
+    && git config commit.gpgsign false && git config core.hooksPath .githooks \
+    && git add -A >/dev/null 2>&1 && git commit -qm seed >/dev/null 2>&1 \
+    && git remote add origin "$PP/nowhere-ss.git" ) || printf 'FIXTURE ERROR: pp sscons init failed\n' >&2
+# The CLEAN range: the coupling arms are silent, so the probe is the only thing that can defer.
+pp_ss_out="$(bash "$GATE" "$SS/dist" "$SS_BASE" "$SS_R1" "$PP_SS" 2>/dev/null)"
+ss_assert "pp-safe-stop-nothing" \
+  "$(printf '%s\n' "$pp_ss_out" | awk -F'\t' '$2 == "pre-push" {print $1; exit}')|$(printf '%s\n' "$pp_ss_out" | awk -F'\t' '$1 == "SELF-UPDATE-SAFE-STOP" {print $2; exit}')|$(printf '%s\n' "$pp_ss_out" | awk -F'\t' '$1 == "SELF-UPDATE-SAFE-STOP" && $3 ~ /SPLIT BUYS NOTHING/ {print "nothing"; exit}')" \
+  "SELF-UPDATE-DEFER|-|nothing" \
+  "on a range the coupling arms clear, a refusing hook defers and the SAFE-STOP row names no ref: the push is refused at every ref alike"
+# CONTROL, ONE PROPERTY APART: the same consumer, same range, hook exiting 0, is clean OK.
+printf '#!/usr/bin/env bash\nexit 0\n' > "$PP_SS/.githooks/pre-push"
+ss_assert "pp-safe-stop-control" \
+  "$(bash "$GATE" "$SS/dist" "$SS_BASE" "$SS_R1" "$PP_SS" 2>/dev/null | awk -F'\t' '$1 ~ /^SELF-UPDATE-(OK|DEFER|UNDECIDED)$/ {print $1}' | sort -u | tr '\n' ',')" \
+  "SELF-UPDATE-OK," "...and with the hook exiting 0 the same range is OK, so the DEFER above is the hook's refusal"
+# THE WALK SKIPS THE PROBE. `--safe-stop` over the range whose LAST release couples answers with
+# the clean release even though this consumer's hook refuses: if the nested classifies ran the
+# probe every candidate would defer and the walk would print nothing (rc 1).
+printf '#!/usr/bin/env bash\n%s\n' "$PP_HOOK_RED" > "$PP_SS/.githooks/pre-push"
+ss_assert "pp-safe-stop-walk" \
+  "$(bash "$GATE" --safe-stop "$SS/dist" "$SS_BASE" "$SS_R2" "$PP_SS" 2>/dev/null; echo "|rc=$?")" \
+  "$SS_R1
+|rc=0" \
+  "the walk's nested classifies skip the probe, so a refusing hook does not empty the candidate set"
+
+# 7. THE RECORD IS NOT IN THE TREE WHILE THE HOOK RUNS. An earlier cut opened the verdict record
+#    under `_bmad-output/` before the probe, and the consumer's hook then saw an untracked path no
+#    fixture reads and ran its whole suite on every probe -- 257s where the settled tree took 30s.
+#    A hook that lists the record directory at run time is the cell: it must see NOTHING there,
+#    and the record must still be on disk, complete, once the gate exits.
+PP_HOOK_LSREC='n=$(ls _bmad-output/ai-dlc-update/self-update-gate-*.md 2>/dev/null | wc -l | tr -d " ")
+echo "records-visible-during-hook=$n"
+[ "$n" -eq 0 ] || exit 4
+exit 0'
+PP_LSREC="$(pp_world lsrec "$PP_HOOK_LSREC" hooksPath yes)"
+ss_assert "pp-record-out-of-tree" \
+  "$(pp_scan "$GATE" "$PP_LSREC")|n=$(vr_n "$PP_LSREC")|$(sed -n 's/^# verdict: *//p' "$(vr_newest "$PP_LSREC")" | head -1)" \
+  "pp=SELF-UPDATE-OK sum=1 ss=1 und=1|n=1|DEFER" \
+  "the hook sees no record file while it runs (it exits 4 otherwise), and exactly one complete record is in the tree afterwards"
+# CONTROL: the same hook, fed the directory with a record-shaped file already in it, exits 4 --
+# so the cell above is the record's absence and not a hook that cannot see the directory.
+ss_assert "pp-record-control" \
+  "$( mkdir -p "$PP_LSREC/_bmad-output/ai-dlc-update" && : > "$PP_LSREC/_bmad-output/ai-dlc-update/self-update-gate-00000000T000000Z.md" \
+      && ( cd "$PP_LSREC" && .githooks/pre-push origin x </dev/null >/dev/null 2>&1 ); echo $? )" "4" \
+  "...and the same hook with a record-shaped file present exits 4, so the probe's hook really can see that directory"
+
+# 8. THE HOOK GETS WHAT GIT PASSES. `$1` is the remote NAME and `$2` its URL; the local ref on
+#    stdin is the CURRENT BRANCH, which resolves. A first cut passed the literal `origin`, a
+#    NAME where the URL goes when no remote was so named, and a local ref that existed nowhere;
+#    a hook branching on any of those refused the probe while the real push succeeded.
+PP_HOOK_ARGS='[ "$1" = "upstream" ] || { echo "arg1=$1"; exit 5; }
+case "$2" in *nowhere-upstream.git) ;; *) echo "arg2=$2"; exit 6 ;; esac
+read -r lref lsha rref rsha
+git rev-parse --verify -q "$lref" >/dev/null || { echo "local ref $lref does not resolve"; exit 7; }
+[ "$lref" = "$(git symbolic-ref HEAD)" ] || { echo "local ref $lref is not the current branch"; exit 8; }
+case "$rref" in refs/heads/ai-dlc-update/self-update-*) ;; *) echo "remote ref $rref"; exit 9 ;; esac
+exit 0'
+PP_UPSTREAM="$(pp_world upstream "$PP_HOOK_ARGS" hooksPath no)"
+git -C "$PP_UPSTREAM" remote add upstream "$PP/nowhere-upstream.git"
+ss_assert "pp-args-as-git" "$(pp_scan "$GATE" "$PP_UPSTREAM")" \
+  "pp=SELF-UPDATE-OK sum=1 ss=1 und=1" \
+  "a hook demanding the remote's name in \$1, its URL in \$2, a resolvable current-branch local ref and a self-update remote ref is satisfied, on a consumer whose only remote is 'upstream'"
+# CONTROL: the same hook fed the first cut's line by hand -- literal origin, a name as the URL, a
+# non-existent local ref -- refuses, so the cell above is the arguments and not a hook that
+# accepts anything.
+ss_assert "pp-args-control" \
+  "$( ( cd "$PP_UPSTREAM" && printf 'refs/heads/ai-dlc-update/self-update-x-probe %s refs/heads/ai-dlc-update/self-update-x-probe 0000000000000000000000000000000000000000\n' "$(git rev-parse HEAD)" \
+        | .githooks/pre-push origin upstream >/dev/null 2>&1 ); echo $? )" "5" \
+  "...and the same hook fed the first cut's arguments exits 5, so the probe's arguments are what satisfies it"
+
+# --- MUTANTS on arm P ---------------------------------------------------------------------
+# Each is scored on the RED world, where the shipped gate defers; a mutant that keeps deferring
+# there is not a mutant of this arm. The unmutated control is `pp-red-defers` above.
+#
+# M1: the probe never runs (the whole arm removed). The red world reads exactly like the green.
+PP_M1="$(vr_mut pp1 'index($0,"if [ -z \"${AI_DLC_GATE_IN_SAFE_STOP:-}\" ] \\") && !done { print "if false \\"; done=1; next } { print }')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$GATE" "$PP_M1"; then
+  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s mutation matched nothing\n' "pp-mut-noprobe"
+else
+  pp_m1_got="$(pp_scan "$PP_M1" "$PP_RED")"
+  if [ "$pp_m1_got" = "pp=none sum=1 ss=1 und=1" ]; then
+    printf '  ok    %-16s KILLED (without the probe a consumer whose push is already refused reads exactly like one whose push is clear)\n' "pp-mut-noprobe"
+  else
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED: got=[%s]\n' "pp-mut-noprobe" "$pp_m1_got"
+  fi
+fi
+# M2: the probe reads the TRACKED hook instead of the one git runs. The dotgit world -- red hook
+#     at .git/hooks, tracked hook the seed's -- then answers about the wrong file.
+PP_M2="$(vr_mut pp2 'index($0,"pp_hook=\"$(cd \"$CONSUMER\" && git rev-parse --git-path hooks/pre-push") { print "  pp_hook=\".githooks/pre-push\""; next } { print }')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$GATE" "$PP_M2"; then
+  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s mutation matched nothing\n' "pp-mut-tracked"
+else
+  pp_m2_got="$(pp_scan "$PP_M2" "$PP_DOTGIT")"
+  if [ "$pp_m2_got" != "pp=SELF-UPDATE-DEFER sum=1 ss=1 und=0" ]; then
+    printf '  ok    %-16s KILLED (reading the tracked file misses the hook git actually runs: got [%s])\n' "pp-mut-tracked" "$pp_m2_got"
+  else
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED: the dotgit world still deferred, so the probe is not keyed on what git resolves\n' "pp-mut-tracked"
+  fi
+fi
+# M3: the probe feeds EMPTY stdin. The stdin world's hook then refuses.
+PP_M3="$(vr_mut pp3 'index($0,"\"$pp_hook\" \"$pp_remote\" \"$pp_url\" < \"$pp_in\"") { sub(/< "\$pp_in"/, "< /dev/null"); print; next } { print }')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$GATE" "$PP_M3"; then
+  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s mutation matched nothing\n' "pp-mut-nostdin"
+else
+  pp_m3_got="$(pp_scan "$PP_M3" "$PP_STDIN")"
+  if [ "$pp_m3_got" = "pp=SELF-UPDATE-DEFER sum=1 ss=1 und=0" ]; then
+    printf '  ok    %-16s KILLED (fed nothing, a hook that judges the ref protocol refuses -- the fed line is load-bearing)\n' "pp-mut-nostdin"
+  else
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED: got=[%s]\n' "pp-mut-nostdin" "$pp_m3_got"
+  fi
+fi
+# M4: a non-zero hook exit is reported OK. The red world reads OK on the pre-push row.
+PP_M4="$(vr_mut pp4 'index($0,"    if [ \"$pp_rc\" -eq 0 ]; then") { print "    if true; then"; next } { print }')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$GATE" "$PP_M4"; then
+  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s mutation matched nothing\n' "pp-mut-rc"
+else
+  pp_m4_got="$(pp_scan "$PP_M4" "$PP_RED")"
+  if [ "$pp_m4_got" = "pp=SELF-UPDATE-OK sum=1 ss=1 und=1" ]; then
+    printf '  ok    %-16s KILLED (a probe that ignores the hook exit code says OK on a refused push)\n' "pp-mut-rc"
+  else
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED: got=[%s]\n' "pp-mut-rc" "$pp_m4_got"
+  fi
+fi
+# M5: the exec-bit test is dropped, so a hook git would skip is run. The noexec world defers.
+PP_M5="$(vr_mut pp5 'index($0,"if [ -z \"$pp_hook\" ] || [ ! -x \"$pp_hook\" ]; then") { print "  if [ -z \"$pp_hook\" ] || [ ! -e \"$pp_hook\" ]; then"; next } { print }')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$GATE" "$PP_M5"; then
+  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s mutation matched nothing\n' "pp-mut-exec"
+else
+  pp_m5_got="$(pp_scan "$PP_M5" "$PP_NOEXEC")"
+  if [ "$pp_m5_got" != "pp=SELF-UPDATE-OK sum=1 ss=1 und=1" ]; then
+    printf '  ok    %-16s KILLED (running a hook git would skip refuses a push git would allow: got [%s])\n' "pp-mut-exec" "$pp_m5_got"
+  else
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s SURVIVED: the non-executable hook was skipped anyway, so the exec-bit test is not what skips it\n' "pp-mut-exec"
+  fi
+fi
+# CONTROL: an unmutated copy beside its siblings defers on the red world, so a kill above is the
+# mutation and not a copy that died resolving preclassify.sh.
+rm -rf "$PP/m-control"; mkdir -p "$PP/m-control"
+cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$PP/m-control"/ 2>/dev/null
+ss_assert "pp-mut-control" "$(pp_scan "$PP/m-control/self-update-gate.sh" "$PP_RED")" \
+  "pp=SELF-UPDATE-DEFER sum=1 ss=1 und=0" \
+  "an unmutated copy beside its siblings defers on the red world, so each kill above is its mutation"
+
 echo
 if [ "$FAILURES" -gt 0 ]; then
   echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong."

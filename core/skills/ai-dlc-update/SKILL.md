@@ -393,6 +393,21 @@ prose is itself generated rather than composed.
    under identical conditions — so a script that merely fails to resolve from a temp path cannot
    masquerade as a new finding and strand the slice for no reason.
 
+   **One arm is NOT a differential, and it is the one that asks whether this consumer can push at
+   all.** A push failure that predates the pull sits outside every incoming-versus-current
+   comparison by construction, so the gate used to say OK on a tree whose `git push` was already
+   refused by its own hook, and this cycle would have pushed into that refusal — the orphaned branch
+   `PC-S308` describes, reached by a route the pull did not cause. The gate now runs the pre-push
+   hook GIT WOULD RUN — resolved by `git rev-parse --git-path hooks/pre-push`, so `core.hooksPath`
+   and a `.git/hooks/` shim both count, and a hook git would skip is skipped — on the tree as the
+   operator left it, fed the ref line this cycle's push sends, and emits a `SELF-UPDATE-DEFER` row
+   on script `pre-push` when it exits non-zero. The record carries the hook's output as `# probe:`
+   lines. It is a DEFER like any other: fold the slice into the gated apply, where the operator
+   fixes what the hook refuses. No `pre-push` row at all means no push can happen here (not a work
+   tree, or no remote), so nothing was probed. **The probe runs the consumer's whole pre-push once,
+   which can take minutes; the push this cycle makes pays the same hook, and this run is the one
+   that would otherwise have stranded a branch.**
+
    **THE APPROVAL ARTIFACT FOR THIS AUTONOMOUS CYCLE IS THE PAIR OF RECORDS, AND IT IS THE ONLY
    ONE.** This cycle cuts a branch, writes the machinery slice, pushes and auto-merges with no
    operator gate, so nothing outside the operating agent's own narration records the decision that

@@ -15,6 +15,73 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.539.0] - 2026-09-09
+
+### `BL-086` — the self-update gate asked whether the pull could break the push, never whether the consumer could push at all; it now runs the pre-push hook git would run, on the tree as it stands, and defers when that hook refuses
+
+No `PC-` id: the entry composes the consumer's `PC-S308` (the orphaned branch) with its `PC-S336`
+(step 1's unguarded auto-push) into one root cause — neither step asked whether this consumer's
+push could succeed before acting on the answer — and was filed here at the 0.396.0 → 0.403.0 pull,
+where the gate printed `SELF-UPDATE-OK` with a non-empty machinery slice while `git push` on the
+same tree returned rc=1 from an artifact-path failure the pull never touched.
+
+Every other arm in `reconcile/self-update-gate.sh` is a DIFFERENTIAL: incoming script against the
+consumer's current copy. A refusal that predates the pull sits outside that difference by
+construction, so the gate acquitted it and step 2 as written would have cut a branch, written the
+slice, advanced `skill_version` and pushed into the refusal.
+
+The gate now resolves the hook GIT WOULD RUN — `git rev-parse --git-path hooks/pre-push`, so
+`core.hooksPath` and the reference consumer's `.git/hooks/` shim both count, and a hook git would
+skip (absent, not executable) is skipped — runs it on the tree as the operator left it with the
+ref line step 2's push sends on stdin from a FILE, and emits `SELF-UPDATE-DEFER` on script
+`pre-push` when it exits non-zero, followed by the summary DEFER and a `SAFE-STOP` row saying the
+split buys nothing because a tree-level refusal holds at every ref alike. The record carries the
+hook's output as `# probe:` lines. It runs once, after the coupling arms, never inside a
+`--safe-stop` walk, and is silent where no push can happen (not a work tree, no remote).
+
+**Neither of the entry's own proposed remedies shipped, and both were measured.** `git push
+--dry-run` runs the hook (measured) and also contacts the remote, whose failures step 2 already
+disposes of; and step 1's preflight cannot be reused, because on an in-sync branch it pushes
+nothing — `Everything up-to-date`, the hook fed zero ref lines — and on an unpushed one it pushes
+the OPERATOR'S branch with a different ref line. The probe's stdin is a file rather than a pipe
+because a hook that never reads stdin would hand a pipe's writer an EPIPE.
+
+**Cost, measured on the reference consumer's own hook from a shared clone, fed that line.** 303s
+with no verified-state record, 244s on the next run (its read-set map could not attribute the
+changed paths), then ~30s once its read-set skip engaged. **The warm figure was unreachable in the
+first cut, and the adversarial hand measured why:** the gate opened its verdict record IN PLACE
+under `_bmad-output/` before the probe, that path is untracked and unignored on the reference
+consumer, and the hook's read-set skip saw an untracked path no fixture reads and ran all 179
+fixtures on every probe — 287s, 257s, 247s across three runs on a settled tree where the bare
+hook took 30s. The record is now assembled under the gate's temp directory and moved into the
+consumer at exit; the fixture drives a hook that lists the record directory and refuses if it sees
+a record. Re-measured after the move: 37s on the same clone with the skip engaged — and 257s on
+the run after it, because the first run's record, moved in at exit, was still untracked when the
+second probe fired. The probe writes nothing before the hook runs; it cannot make the tree settled.
+Step 2 commits the record, a DEFER leaves it for the consumer's next commit, so the warm figure
+holds for a probe on a committed tree and the cold one for any tree carrying an untracked path no
+fixture reads.
+
+**Two more of the adversary's findings, both latent on a stock consumer and both fixed.** The
+probe passed the literal `origin` as the hook's first argument and, on a consumer with no remote
+so named, a remote NAME where git passes the URL; a hook branching on either refused the probe
+while the real push succeeded. It now passes the current branch's upstream remote (then `origin`,
+then the first configured) by name and URL, as git does. And the probe's local ref named a branch
+that did not exist; a hook resolving each pushed local ref, or requiring it to be the checked-out
+branch, refused it. The local side is now the current branch at HEAD, the remote side the new
+self-update branch with a zero sha — measured identical to a real push on `$1`, `$2`, argc and cwd
+with a hook that dumps them. The hook's own writes under `.git/` (its verified-state and durations
+records) are stated in the arm's header rather than hidden.
+
+Fixture: `core/fixtures/self-update-gate` gained repository worlds one property apart — armed hook
+green, armed hook red with the shipped hook's own phase grammar, red hook at `.git/hooks/` with no
+`core.hooksPath`, tracked hook unarmed, hook without its exec bit, no remote, non-repository, and a
+hook that refuses EMPTY stdin — plus the safe-stop walk on a consumer whose hook refuses. Five
+mutants killed (no probe, tracked file instead of git's answer, empty stdin, ignored exit code,
+exec bit ignored) against an unmutated control. The `manual` receipt is now `sh`, two consumers one
+property apart at `.git/hooks/pre-push`, scored 0 on the fix and 1 on four built non-fixes and on
+the gate at `origin/main`.
+
 ## [0.538.0] - 2026-09-09
 
 ### `BL-155` — step 2's autonomous self-update left no approval artifact anywhere in its path; the gate now records the verdict it acted on, and the fixture runner refuses to run without it
