@@ -27,9 +27,12 @@
 # operator turns off, and then nothing is enforced at all.
 #
 # THE STORY DEFERRAL IS GONE as of the release that moved the corpus under `s<N>/`; what remains
-# of it is `STORY-NO-SPRINT`, the individual files whose name gives the migration no sprint to
-# move them to. Same principle, one grain finer: the class is no longer "this directory is hard",
-# it is "this file cannot be placed", and it leaves the moment the file is renamed.
+# of it is `STORY-NO-SPRINT`, the individual files the migration can place nowhere. Same principle,
+# one grain finer: the class is no longer "this directory is hard", it is "this file cannot be
+# placed", and it leaves the moment the file names a sprint the migration can read. The migration
+# RECOVERS one from the file's own `**Sprint:** <N>` header, then from a leading number in the
+# basename, before refusing -- so this class is what survives BOTH readings, not merely what the
+# name fails to spell. A rename is one remedy and adding that header is the other.
 #
 # So the blocking set is exactly THE SET THE MIGRATION WOULD MOVE: non-conforming, unambiguous,
 # with a derivable area and a derivable sprint. That set is empty on a migrated tree and grows the
@@ -256,7 +259,7 @@ BEGIN {
     # cannot derive a sprint for it either, so it is reported rather than blocked -- blocking a
     # path no command can clean is what makes an operator turn a gate off.
     if (legacy_story(orig)) {
-      print "STORY-NO-SPRINT\t" orig "\tsits in a stories/ directory with no `s<N>/` above it, and its name gives no sprint to move it to"
+      print "STORY-NO-SPRINT\t" orig "\tsits in a stories/ directory with no `s<N>/` above it, and neither its name nor its own **Sprint:** header gives a sprint to move it to"
       next
     }
     print "CONFORMING\t" orig "\t"; next
@@ -363,7 +366,10 @@ if [ "$N_AMBIG" -gt 0 ] || [ "$N_NOAREA" -gt 0 ] || [ "$N_STORY" -gt 0 ]; then
     echo "                        reserved \`s<N>/\` slot AND give no sprint in their name, so the migration"
     echo "                        has nowhere to put them. The corpus itself is no longer deferred — these"
     echo "                        are the individual leftovers, named rather than counted as a class."
-    echo "                        Rename to story-<sprint>-<index>-<slug>.md and the next push judges it."
+    echo "                        The migration RECOVERS a sprint from a \`**Sprint:** <N>\` header or a"
+    echo "                        leading number before refusing, so these are the files where both came"
+    echo "                        back empty. Add that header line, or rename to"
+    echo "                        story-<sprint>-<index>-<slug>.md, and the next push judges it."
   }
   echo ""
 fi

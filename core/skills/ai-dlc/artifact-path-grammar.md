@@ -193,10 +193,22 @@ actually uses (7–302) and `B` distributed as a story index. Control, in the fo
 is not in doubt: all **73** `story-S<N>-<M>` files carry that same structure in those same two
 positions.
 
-What survives is per-FILE rather than per-directory. A story basename giving no sprint at all
-(`bug-mobile-layout.md`, `192-ff-A-…`, `story-168-process-A.md`) is reported as
-`STORY-NO-SPRINT` and leaves the class the moment it is renamed. **23 on the reference consumer,
-against 951 the migration moves.**
+What survives is per-FILE rather than per-directory, and it is what survives BOTH readings the
+migration attempts. A story path naming no sprint is not refused on its name alone: the migration
+first reads the file's own `**Sprint:** <N>` header — markdown-bold prose, not the schema's
+`sprint:` key, which matches none of this population — and then a leading number in the basename.
+The header is asked FIRST because the basename is the wider channel and the wrong one to trust:
+`bug-124-…` and `bug-125-…` open with a carry-over ITEM number while their own headers declare
+sprints 72 and 73. Every recovery is REPORTED with the channel that produced it, because a
+recovered sprint is the migration's claim rather than something the path stated.
+
+`STORY-NO-SPRINT` is therefore the residue where both channels come back empty, plus a suffixed
+sprint like `131b` for which no legal `s<N>/` slot spelling exists. It leaves the class when the
+file is renamed **or** when that header is added. **23 on the reference consumer before recovery,
+against 951 the migration moves**; scored against the commit that later placed all 23 by hand,
+the two channels together recover 18 and refuse 5. That commit is also why the remedy text no
+longer says "rename": `git show --numstat -M` scores all 23 of those placements as pure directory
+moves, 0 insertions and 0 deletions, so no operator ever renamed one.
 
 ## Enforcement
 
