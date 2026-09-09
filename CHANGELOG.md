@@ -45,6 +45,22 @@ is unwritten` in a test file with mock vocabulary in the window is acquitted. Th
 shape does not have that hole and acquits only the first site; the shipped shape trades it for
 the 97-line consumer population.
 
+**The adversarial hand found a second false-negative class in the first cut, and it is closed.**
+Eight prefixes drawn from the validator's own `PHASE_ABSENCE` deferral list — `not implemented`,
+`not wired`, `not yet done`, `no-op`, `non-functional` and the rest — satisfy the negation grammar
+too, so `# not implemented stub` was acquitted where the shipped gate had fired, and the header's
+own must-fire case was held only by its colon. The matched negation phrase is now refused when it
+carries deferral vocabulary; the consumer's site and `not a stub` carry none and stay acquitted.
+The same hand built four differently-wrong validators that passed every fixture arm and the
+receipt — the intervening-word bound widened, the mock window at 5 and at 100, the test path
+widened — because no seed sat at a boundary. Four seeds now do (V31–V34: a deferral-word
+negation, a negation one word past the bound, a mock one line outside the window and one at its
+far edge), three mutants kill on exactly those cells, and the receipt carries the same worlds:
+0 on the fix, 1 on each of the four variants, on the deferral refusal removed, on the marker
+disarmed, and on `origin/main`. A first cut of the bound seed sat six words out, which no
+plausible widening reaches, and its mutant survived for that reason — a boundary seed sits one
+past the boundary.
+
 **The scoping hand's implementation carried a defect the builder found by mutant.** Its
 boundary test re-spelled `PROSE_MARKER`'s word boundary by hand, so the fixture's
 `prose-marker-unbounded` mutant — which widens the marker to a bare alternation — survived: the

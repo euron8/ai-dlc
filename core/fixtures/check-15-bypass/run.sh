@@ -209,6 +209,14 @@ expect src/v29_two_occurrences.py \
                                 element1-item-ref  "V29 second occurrence is bare"
 expect src/v30_mock_prose_nontest.py \
                                 element1-item-ref  "V30 mock vocabulary, non-test file"
+expect src/v31_neg_deferral_word.py \
+                                element1-item-ref  "V31 'not implemented stub' -- the negation word is deferral vocabulary"
+expect src/v32_neg_three_words_out.py \
+                                element1-item-ref  "V32 negation three words from the token, one past the bound"
+expect tests/v33_mock_eleven_up.py \
+                                element1-item-ref  "V33 mock vocabulary eleven lines up, one past the window"
+expect tests/v34_mock_ten_up.py \
+                                ok                 "V34 mock vocabulary ten lines up, the window's far edge"
 
 # The exemption pair. V8 satisfies zero elements and must NEVER reach the elements
 # at all; V9 satisfies zero elements at a core-ADJACENT path and must reach them.
@@ -327,6 +335,7 @@ MUT_NAME=(
   comment-openers-emptied quote-guard-dropped
   negation-window-not-adjacency tests-path-skipped
   test-vocab-without-path-conjunct carve-outs-disarmed
+  deferral-word-refusal-dropped negation-bound-widened vocab-window-widened
 )
 MUT_SED=(
   "s@^CODE_MARKER='.*'\$@CODE_MARKER='(NotImplementedError|Phase [0-9])'@"
@@ -341,6 +350,9 @@ MUT_SED=(
   's@^      if \[ -n "\$ctext" \] && test_path "\$rel" && vocab_near "\$i"; then testctx=1; fi$@      if [ -n "$ctext" ] \&\& test_path "$rel"; then testctx=1; fi@'
   's@^      if \[ -n "\$ctext" \] && test_path "\$rel" && vocab_near "\$i"; then testctx=1; fi$@      if [ -n "$ctext" ] \&\& vocab_near "$i"; then testctx=1; fi@'
   's@^      if ! { \[ -n "\$ctext" \] && \[\[ \$ctext =~ \$PROSE_MARKER \]\] && prose_marker_live "\$ctext" "\$testctx"; }; then$@      if ! { [ -n "$ctext" ] \&\& [[ $ctext =~ $PROSE_MARKER ]]; }; then@'
+  's@^    \[\[ \${BASH_REMATCH\[0\]} =~ \$STUB_NEGATION_DEFERRAL \]\] && return 0$@    :@'
+  "s@\[\[:space:\]\]+){0,2}\$'\$@[[:space:]]+){0,5}\$'@"
+  's@^TEST_VOCAB_LINES=10$@TEST_VOCAB_LINES=100@'
 )
 MUT_PROBE=(
   src/v13_phase_prose_docstring.py src/v14_phase_deferral.py src/v16_phase_section_label.py
@@ -348,6 +360,7 @@ MUT_PROBE=(
   src/v21_slashslash_comment.js src/v22_quoted_opener.sh
   src/v25_neg_word_real_deferral.py tests/v26_test_real_deferral.py
   src/v30_mock_prose_nontest.py src/v23_negation.ts
+  src/v31_neg_deferral_word.py src/v32_neg_three_words_out.py tests/v33_mock_eleven_up.py
 )
 MUT_WANT=(
   element1-item-ref ok element1-item-ref
@@ -355,6 +368,7 @@ MUT_WANT=(
   ok element1-item-ref
   ok ok
   ok element1-item-ref
+  ok ok ok
 )
 MUT_WHY=(
   "V13 — the sprint-306 docstring is a finding again the moment the alternative is matched on the raw line"
@@ -369,9 +383,12 @@ MUT_WHY=(
   "V26 — a real deferral in a test file is acquitted the moment the path alone decides, with no vocabulary conjunct"
   "V30 — prose ABOUT a mock in production code is acquitted the moment the vocabulary alone decides, with no path conjunct"
   "V23 — the consumer's negation site is a finding again the moment both carve-outs are removed, which is the state this change replaced"
+  "V31 — 'not implemented stub' is acquitted the moment the negation phrase stops being checked for deferral vocabulary; eight such prefixes reached the first cut"
+  "V32 — a negation three words from the token acquits the moment the intervening-word bound widens; strict adjacency is what separates a denial from a qualifier of something else"
+  "V33 — a mock eleven lines up acquits the moment the window widens; V24 at seven lines survives every window, so only this seed asserts the boundary"
 )
 
-for i in 0 1 2 3 4 5 6 7 8 9 10 11; do
+for i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14; do
   label="${MUT_NAME[$i]}"; copy="$MUT/$label.sh"
   sed "${MUT_SED[$i]}" "$AUDIT" > "$copy" 2>/dev/null
   # `cmp -s` first: a sed that matched nothing produces an unmutated copy, which answers
@@ -391,7 +408,7 @@ done
 
 echo
 if [ "$fails" -eq 0 ]; then
-  echo "PASS  check-15-bypass: 30 variants correct against the shipping validator. Each"
+  echo "PASS  check-15-bypass: 34 variants correct against the shipping validator. Each"
   echo "      adversary is rejected on its intended element — absent item, CLOSED item, no"
   echo "      file:line, digitless file ref, and element 4's two floors separately (a"
   echo "      padded reason under density, a short reason under length) — the honest stub"
@@ -414,8 +431,8 @@ if [ "$fails" -eq 0 ]; then
   echo "      neighbours are still caught — deferral vocabulary that is not a denial, a real"
   echo "      deferral in a test file with no mock vocabulary, a negation qualifying another"
   echo "      noun, a negation after the token, a second bare occurrence, and mock prose in a"
-  echo "      file that is not a test. Twelve mutants prove the phase rule's three lines, the"
-  echo "      prose gate's four, and the two carve-outs' four load-bearing."
+  echo "      file that is not a test. Fifteen mutants prove the phase rule's three lines, the"
+  echo "      prose gate's four, and the two carve-outs' seven load-bearing -- the last three at the boundaries an adversary found unasserted."
   exit 0
 fi
 echo "FAIL  check-15-bypass: $fails assertion(s) wrong." >&2

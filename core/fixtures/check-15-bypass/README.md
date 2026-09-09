@@ -32,6 +32,10 @@ so the driver can assert *which* element rejects it:
 | V28 | `# existence: a stub file is not a repair record.` | 1 (item ref) |
 | V29 | `# no inline stub here, but the fallback is a stub` | 1 (item ref) |
 | V30 | `# broadcast goes through the stub` in a NON-test file | 1 (item ref) |
+| V31 | `# not implemented stub` — the negation word is deferral vocabulary | 1 (item ref) |
+| V32 | negation three words from the token, one past the bound | 1 (item ref) |
+| V33 | `AsyncMock` eleven lines above the comment, test file | 1 (item ref) |
+| V34 | `AsyncMock` ten lines above the comment, test file | 0 |
 
 V5 is what makes the fixture able to fail. Without it, an element mutated into
 always-rejecting would still look correct: every adversary would be rejected
@@ -68,7 +72,9 @@ defect, where an identifier named `stub` matches in code — clears V13, which
 sits in a docstring carrying no comment prefix, and leaves V16 untouched
 because V16 *is* a comment. Only the absence requirement clears V16.
 
-**V23–V30 are whether a `stub` inside a comment means what the check assumes.**
+**V23–V34 are whether a `stub` inside a comment means what the check assumes.** V31–V34 sit at
+the boundaries an adversarial hand found unasserted: a negation that is itself deferral vocabulary,
+the intervening-word bound, and both edges of the mock-vocabulary window.
 V17–V22 decide *where* a prose marker is credible; these decide the word itself
 once it is already in a comment, and they cover the two shapes the reference
 consumer's gate hit that the comment gate does not reach: a comment using `stub`

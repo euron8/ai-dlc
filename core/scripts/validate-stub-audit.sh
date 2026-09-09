@@ -233,6 +233,20 @@ PROSE_MARKER_OTHER="${PROSE_MARKER/stub|/}"
 
 STUB_NEGATION='(^|[^[:alnum:]_])([Nn]o|[Nn]ot|[Nn]on|[Nn]ever)[[:space:]-]+([[:alpha:]]+[[:space:]]+){0,2}$'
 
+# A NEGATION THAT IS ITSELF DEFERRAL VOCABULARY DOES NOT ACQUIT. `not implemented stub`,
+# `not yet done stub`, `no-op stub`, `non-functional stub` all satisfy STUB_NEGATION and are all
+# unfinished work: the word between the negation and the token is what PHASE_ABSENCE above
+# already classifies as an ABSENCE statement, and "not X yet" is a deferral of X, not a denial
+# of stubness. Measured by an adversarial hand on the first cut: eight prefixes drawn from
+# PHASE_ABSENCE's own list reached the carve-out and were acquitted where the shipped gate had
+# fired, and the header's own must-fire case (`# not yet done: stub, wire later`) was held
+# only by its COLON. So the text between the negation and `stub` is refused when it carries a
+# deferral word; the consumer's site (`no inline stub`) and `not a stub` carry none and stay
+# acquitted. The list is the noun-and-participle set a deferral is written with, not a
+# restatement of PHASE_ABSENCE -- that regex requires its own sentence shape and would not
+# match a bare `not wired`.
+STUB_NEGATION_DEFERRAL='(^|[^[:alnum:]_])(implemented|wired|deployed|available|supported|populated|done|finished|ready|yet|op|functional|working|real|longer|impl|behaviou?r|blocking|production|complete)([^[:alnum:]_]|$)'
+
 # EVERY OCCURRENCE MUST BE NEGATED. `# no inline stub here, but the fallback is a stub` still
 # fires: the second occurrence is bare, and the false-NEGATIVE direction is the expensive one
 # for a check whose whole subject is unfinished work.
@@ -261,6 +275,9 @@ prose_marker_live() {
     rc="${rest%"${rest#?}"}"        # the character after it, or empty
     [[ "${pc}stub${rc}" =~ $PROSE_MARKER ]] || continue
     [[ $pre =~ $STUB_NEGATION ]] || return 0
+    # The matched negation phrase -- the negation word and the words between it and the
+    # token -- must carry no deferral vocabulary. `BASH_REMATCH[0]` is exactly that span.
+    [[ ${BASH_REMATCH[0]} =~ $STUB_NEGATION_DEFERRAL ]] && return 0
   done
   return 1
 }

@@ -358,6 +358,69 @@ def build_broadcaster():
     return fake
 EOF
 
+# ---- V31-V34: the boundaries an adversarial hand found unasserted --------------
+#
+# Four differently-wrong validators passed every arm above and the receipt: the negation's
+# intervening-word bound widened from two to five, the mock window at 5 and at 100, and the
+# test-path predicate widened. V24's `AsyncMock` sits seven lines up, so it survives a window
+# of 5 and of 100 alike, and V25's negation is one word from the token, so a wider bound never
+# bites. Each of these seeds sits AT a boundary, so one number moving flips exactly one cell.
+#
+# V31: a negation that is itself DEFERRAL vocabulary. `not implemented stub` satisfies the
+# negation grammar -- negation word, one intervening word, the token -- and is unfinished
+# work. Eight such prefixes drawn from PHASE_ABSENCE's own list reached the carve-out on the
+# first cut and were acquitted where the shipped gate had fired. MUST FIRE.
+cat > "$TREE/src/v31_neg_deferral_word.py" <<'EOF'
+def render_v31():
+    # not implemented stub
+    return 0
+EOF
+
+# V32: a negation THREE words from the token -- one past the bound. Strict adjacency allows
+# at most two intervening words; a real denial is written adjacent (`no inline stub`), and a
+# negation further back qualifies something else. MUST FIRE. Flips under a bound of five. The
+# first cut of this seed put the negation SIX words out, which no plausible widening reaches,
+# and the mutant survived for that reason: a boundary seed sits ONE past the boundary.
+cat > "$TREE/src/v32_neg_three_words_out.py" <<'EOF'
+def render_v32():
+    # no other module may touch stub
+    return 0
+EOF
+
+# V33: mock vocabulary EXACTLY ELEVEN lines above the comment, in a test file. One past the
+# window. MUST FIRE. Flips under a window of 100; V24 (seven up) is the acquitted twin.
+cat > "$TREE/tests/v33_mock_eleven_up.py" <<'EOF'
+b = AsyncMock()
+x1 = 1
+x2 = 2
+x3 = 3
+x4 = 4
+x5 = 5
+x6 = 6
+x7 = 7
+x8 = 8
+x9 = 9
+x10 = 10
+# the v33 result is broadcast via the stub
+EOF
+
+# V34: mock vocabulary on line 1 and the comment on line 11 -- exactly ten lines up, the far
+# edge INSIDE the window. Acquitted. Flips under a window of 5; V33 is its one-line twin on
+# the other side of the boundary.
+cat > "$TREE/tests/v34_mock_ten_up.py" <<'EOF'
+b = AsyncMock()
+y1 = 1
+y2 = 2
+y3 = 3
+y4 = 4
+y5 = 5
+y6 = 6
+y7 = 7
+y8 = 8
+y9 = 9
+# the v34 result is broadcast via the stub
+EOF
+
 # ---- V5: the positive control — satisfies all four elements ------------------
 cat > "$TREE/src/v5_honest.py" <<'EOF'
 def widen_read_path():
