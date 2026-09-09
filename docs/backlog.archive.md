@@ -9646,3 +9646,84 @@ The range changes no `core/` path so no differential row can supply the DEFER.
 
 ---
 
+## BL-213 — Check 16's comment-portion prose gate fires on a comment that DENIES a deferral and on one naming a test double
+
+**LANDED (v0.540.0, verified 5b3bbad4).**
+
+Filed by the reference consumer as
+`PC-S309-STUB-AUDIT-PROSE-MARKER-FIRES-ON-NEGATION-AND-TEST-DOUBLE-REFERENCE` on 2026-09-09,
+at its sprint-309 implementation gate. Core-owned (`scripts/ai-dlc/validate-stub-audit.sh`),
+so Rule 27 forbids an in-repo fix there. DEFECT.
+
+**The defect.** `PROSE_MARKER` plus the comment-portion gate correctly excludes a bare
+identifier named `stub` and a marker on a non-comment line. It does not exclude two further
+shapes, both of them comment-portion prose, so the v0.451.0 fix's own boundary cannot reach
+either. Element 1 runs first and `continue`s, so a truthful `deferral-reason:` annotation
+cannot clear the finding — it becomes a second marker instance in its own five-line window.
+The only clearing paths are rewording true prose or inventing an `Item N` for work that does
+not exist.
+
+**Site 1, negation.** `infra/lib/monitoring-stack.ts:491`:
+`// Real asset -- no inline stub. CDK zips the directory and uploads to S3.` The sentence's
+entire content is that the `lambda_.Code.fromAsset(...)` call beside it is NOT a stub.
+
+**Site 2, test double.** `rebalancer/tests/test_277_2_residual_recovery_observability.py:242`:
+`# The partial remove proceeded and (capital-safely) "broadcast" via the stub.` `stub` names an
+`AsyncMock`-based stand-in declared earlier in the same test method. Sanctioned test-isolation
+vocabulary, not unfinished production work. Neither line was touched by the sprint's diff;
+both pre-exist on that consumer's `main`.
+
+**The population, measured by driving THIS script over both trees.** Comment-portion `stub`
+markers, classified by the shipping grammar rather than by a restatement of it:
+
+| tree | comment-portion `stub` markers | negated | test double | neither | findings before | after |
+|---|---|---|---|---|---|---|
+| reference consumer | 127 | 6 | 97 | 24 | 69 | 57 |
+| this repo | 83 | 18 | 0 | 65 | 107 | 93 |
+
+No NEW finding appears on either tree; the finding sets are compared line by line, and the
+removals are the control. The 14 acquitted here are `no-stub:` marker prose in
+`validate-claude-rules.sh`, `render-vocabulary-index.sh` and the `claude-rules-joins` fixture,
+plus two "not a stub" sentences — the same shape as the consumer's, in a corpus that has never
+written a test double.
+
+**The shape shipped, and why.** Two per-occurrence carve-outs, both keyed on the `stub`
+alternative alone and neither on the LINE, so `# no stub yet -- TODO wire it` stays a finding
+on its `TODO`. A negation carve-out requires the negation immediately before the occurrence
+with at most two intervening alphabetic words and NO punctuation. A test-double carve-out
+requires BOTH a test path AND test-double vocabulary within a ten-line lookback. `PROSE_MARKER_OTHER`
+is DERIVED from `PROSE_MARKER` by substitution rather than spelled a second time, and the
+derivation is joined by a `die` — if the substitution changes nothing the marker set has lost
+its `stub` alternative and both carve-outs would acquit vacuously while reading as live.
+
+**The residual false negative, recorded rather than hidden.** A bare
+`# stub, the real assertion is unwritten` in a test file with mock vocabulary in the window IS
+acquitted. A form scoped to the negation alone does not have that hole; it is traded
+deliberately, because the test-double class is 97 of the consumer's 127 markers and the
+negation class is 6. The fixture's V26 seeds the case WITHOUT mock vocabulary, which is the
+half that still fires.
+
+**Three wrong fixes, each built and refuted.** Skipping all of `tests/` acquits
+`# stub, wire later` in a test file — a real deferral — and leaves the negation site firing
+untouched; both halves of the test-double conjunct exist for that reason. Skipping any comment
+containing `no` acquits `# no repository behind it, so this is a stub`, where the negation
+qualifies a different noun. Dropping `stub` from `PROSE_MARKER` deletes the alternative that
+catches the check's own subject, which is a detector that cannot fire.
+
+**The strict adjacency is the whole fix.** A character window was built first and it acquitted
+`# not yet done: stub, wire later` — a real deferral whose `[Nn]ot yet` is `PHASE_ABSENCE`
+vocabulary, a word for deferring rather than for denying stubness. The fixture's
+`negation-window-not-adjacency` mutant is that loose form, and V25 kills it.
+
+**Receipt limits, stated.** The receipt drives the SHIPPING validator over six seeded files:
+the two consumer sites must be silent, and four one-property-short neighbours must each report
+`element1-item-ref` — a real deferral in a test file with no mock vocabulary, deferral
+vocabulary separated from the token by a colon, a negation qualifying another noun, and a
+second bare occurrence after a negated one. It exits 9 if either the validator or
+`core-paths.sh` is absent, so a missing subject scores NEEDS-REVIEW rather than a close. It
+does NOT assert the population figures or the mutants; those are
+`core/fixtures/check-15-bypass/run.sh`'s V23–V30 arms and its four new mutants. Scored: the
+fix 0; the origin/main validator 1; skip-all-of-`tests/` 1; acquit-any-comment-containing-`no`
+1; `stub` dropped from `PROSE_MARKER` 1; the validator absent 9.
+
+verify: sh V=core/scripts/validate-stub-audit.sh; [ -f "$V" ] && [ -f core/scripts/core-paths.sh ] || exit 9; d="$(mktemp -d)" || exit 9; trap 'rm -rf "$d"' EXIT; mkdir -p "$d/tests" || exit 9; printf 'export function f() {\n  // Real asset -- no inline stub. CDK zips the directory.\n  return 1;\n}\n' > "$d/a.ts"; printf 'from unittest.mock import AsyncMock\n\ndef test_x():\n    b = AsyncMock()\n    # The partial remove proceeded and "broadcast" via the stub.\n    assert b\n' > "$d/tests/td.py"; printf 'def test_y():\n    # stub, wire later -- the real assertion is unwritten\n    pass\n' > "$d/tests/df.py"; printf 'def g():\n    # not yet done: stub, wire later\n    return 2\n' > "$d/c.py"; printf 'def h():\n    # no repository behind it, so this is a stub\n    return 3\n' > "$d/e.py"; printf 'def k():\n    # no inline stub here, but the fallback is a stub\n    return 4\n' > "$d/f.py"; o="$(bash "$V" --root "$d" a.ts tests/td.py tests/df.py c.py e.py f.py 2>&1)"; for p in tests/df.py c.py e.py f.py; do grep -q "FINDING $p:2 element1-item-ref" <<<"$o" || exit 1; done; grep -q 'FINDING a.ts:2' <<<"$o" && exit 1; grep -q 'FINDING tests/td.py:5' <<<"$o" && exit 1; exit 0
