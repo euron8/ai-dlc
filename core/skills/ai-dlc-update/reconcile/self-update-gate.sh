@@ -871,9 +871,15 @@ EOF
 # under `_bmad-output/` BEFORE this probe, the hook's read-set skip saw an untracked path no
 # fixture reads, and every probe ran all 179 fixtures — 287s, 257s, 247s across three runs on a
 # settled tree where the bare hook took 30s. The record is now assembled under `$TMP` and
-# moved into the consumer at exit; the reasoning is at that move. The push this cycle makes
-# pays the same hook, so the probe adds one hook run per pull and removes the one that would
-# have stranded a branch.
+# moved into the consumer at exit; the reasoning is at that move. Re-measured after the move:
+# 37s on a settled clone. AND THE NEXT RUN READ 257s, because the record the first run moved
+# in at exit was still UNTRACKED when the second probe fired — the same skip defeat, one gate
+# later. This probe writes nothing before the hook runs; it cannot make the tree settled.
+# Step 2 commits the record in the self-update commit, and a DEFER leaves it for the consumer's
+# next commit, so on a real consumer the warm figure holds for a probe on a committed tree and
+# the cold one for any tree carrying an untracked path no fixture reads. The push this cycle
+# makes pays the same hook, so the probe adds one hook run per pull and removes the one that
+# would have stranded a branch.
 if [ -z "${AI_DLC_GATE_IN_SAFE_STOP:-}" ] \
    && git -C "$CONSUMER" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
    && [ -n "$(git -C "$CONSUMER" remote 2>/dev/null)" ]; then

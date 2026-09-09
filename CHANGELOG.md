@@ -55,7 +55,12 @@ consumer, and the hook's read-set skip saw an untracked path no fixture reads an
 fixtures on every probe — 287s, 257s, 247s across three runs on a settled tree where the bare
 hook took 30s. The record is now assembled under the gate's temp directory and moved into the
 consumer at exit; the fixture drives a hook that lists the record directory and refuses if it sees
-a record. Re-measured after the move: 37s on the same clone with the skip engaged.
+a record. Re-measured after the move: 37s on the same clone with the skip engaged — and 257s on
+the run after it, because the first run's record, moved in at exit, was still untracked when the
+second probe fired. The probe writes nothing before the hook runs; it cannot make the tree settled.
+Step 2 commits the record, a DEFER leaves it for the consumer's next commit, so the warm figure
+holds for a probe on a committed tree and the cold one for any tree carrying an untracked path no
+fixture reads.
 
 **Two more of the adversary's findings, both latent on a stock consumer and both fixed.** The
 probe passed the literal `origin` as the hook's first argument and, on a consumer with no remote
