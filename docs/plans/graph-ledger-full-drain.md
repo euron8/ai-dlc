@@ -37,6 +37,85 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
+### BATCH 77 SHIPPED AS `v0.537.0`, ONE RELEASE CARRYING THREE NO-`PC` ENTRIES — THE SWEEP WAS EMPTY AGAIN, TWO ENTRIES WERE TAKEN ON THIS SESSION'S OWN RANKING BECAUSE THE ONE-LINER ARRIVED FROM A PEER, AND **THE CENSUS RUN TO BRIEF ONE OF THEM FOUND A THIRD, WORSE THAN EITHER: 26 FIXTURES THE GIT-ENV VALIDATOR COULD NOT SEE CLOBBER THE CALLER'S REPOSITORY, 13 AT EXIT 0.** THREE ADVERSARIES, THREE CORRECTION COMMITS BEFORE MERGE. THE CONSUMER PULLED TO `0.536.0` MID-BATCH, SO THE GAP IS ONE, PENDING 0, NOT WIDE, NOT REQUIRED.
+
+This block replaces the batch-76 record below it. Every figure was re-derived on the release
+branch after the merge, against the working tree with controls in the same invocation; re-derive
+them again rather than reading them.
+
+**`VERSION` IS `0.537.0`, SO BATCH 78 RELEASES AS `0.538.0`.** Re-derive `VERSION` and add one.
+Batch 77 merged once (PR #688, `0.537.0`, `BL-188` + `BL-189` + `BL-211`). The three batched
+because the machinery slice over the range — derived by running the shipping `machinery_paths()`
+globs, 1 of 41 changed paths — is `validate-reattach-budget.sh` alone, no bootstrapping file is
+touched, and no receipt is closed by a sibling's fix. Rotated live 85 -> 82, archive
+126 -> 129. **Receipt histogram over entries: exactly the three subjects at exit 0 before
+rotation, 68 at exit 1 and 1 at exit 9 before and after** — no incidental closes.
+
+**THE SWEEP WAS EMPTY, AND THE LEDGER MOVED ANYWAY.** At the open: live 73, cited 55, unfiled
+**18**, md5 `9459fa46…` UNMOVED from batch 75's close, archive 172, all six controls fired. At
+the close the consumer had pulled `0.533.0 -> 0.536.0` and closed both PENDING candidates: live
+**71**, cited 53, unfiled still 18, archive **174**, md5 `c8bf4477…`, the two ids that left the
+live set are exactly the two that were PENDING. Every one of the 18 re-derives as adjudicated
+exactly as batch 75 left them. DISCHARGED 25 / in-flight 28 / untouched 18, overlap 4, TERMINAL
+**60**, discharged-but-invisible **1** (`PC-S308-GATE-METRICS-CHECK2-STALE-VERDICT-READ-ORDER`,
+`BL-195`'s deliberately uncited subject; correct, not a gap). **The one-liner ARRIVED FROM
+`ai-dlc-29`**, so per action 1 this session took the two readiest no-`PC` entries without asking
+and named the choice in its first ping.
+
+**WHAT SHIPPED. `BL-211`** — `validate-fixture-git-env.sh` derived its population from the
+literal `git init`; 27 fixture dirs spell it `git -C X init` or `git -c k=v init` and sat outside
+the set it reported `0 unscrubbed` over. Under an inherited `GIT_DIR` every one of those forms
+exits 0, creates NO repository at the target, and redirects onto the caller's repo. A census hand
+drove all 27 against fresh victims: **26 clobbered, 13 at exit 0**, three of them by flipping
+`core.bare` and rewriting `user.name` with the index untouched — the seam fixture's index-count
+arm scored those three as INTACT. Two more carried an inline scrub BELOW their first init, which
+the exemption acquitted on containment. Grammar widened (42 -> 69), position keyed against the
+directory's init site, 27 seam lines, config channel in the seam fixture. **`BL-189`** — six bare
+`cd` lines in fixture scripts, and the live one was NOT the one the entry named: `check-17-bypass`
+runs without `set -e` inside output-discarded subshells directly above `git init`. All six
+guarded, subshell status read, and S11 refuses the shape, FP 6 -> 0. **`BL-188`** —
+`validate-reattach-budget.sh` reports `SKILL.md`'s whole-file bytes as an observation that never
+gates, inside the PASS line so `verdict.sh` carries it to a consumer's gate log.
+
+**THREE ADVERSARIES, ONE FINDING EACH THAT DEFEATED THE COMMIT'S OWN CLAIM.** The git-env position
+arm read `run.sh` only, so for the 30 of 69 members whose init lives in `seed.sh` the position
+check was VACUOUS — a seam sourced three lines below the seed call was acquitted while the victim
+went 40 -> 0; the site now resolves through invoked siblings and refuses to acquit when
+unresolvable. S11's SKIP was unanchored past a `;`, so `cd "$W"; git init . && git add -A` — the
+arm's own subject — was acquitted by the later `&&`; and its "does not acquit on `set -e`" claim
+had NO cell behind it — a one-line acquittal mutant passed battery and receipt. The BL-188 figure
+never reached a consumer at all: `verdict.sh` renders evidence by a line-prefix filter neither
+new line matched, and `verdict.sh --all` is the only consumer path. **A commit message's claim
+about a property is not a cell; ask what mutant would refute each sentence of it.**
+
+**RECEIPTS CLOSED BY NON-FIXES, THREE TIMES.** BL-188's original counted FILES, so the entry's own
+preferred remedy read STILL-LIVE and a comment closed it; the rewrite was then coupled to the
+budget verdict so an unrelated protocol overrun would reopen it. BL-211's first receipt was closed
+by a grammar matching every line of the corpus. BL-189's original was satisfiable by DELETING the
+`cd`. Every shipped receipt is scored against five or more built trees, and each entry says which.
+
+**HARNESS HAZARDS MEASURED THIS BATCH, both self-reported by hands.** A worktree copied with
+`cp -R` carries a `.git` FILE pointing at the real gitdir, so a `git checkout -- path` "inside
+the copy" writes the hand's own index. A whole-tree tar copy that is not `git init`ed makes
+`git grep` derive an EMPTY population and the validator REFUSES at exit 2 — which a probe testing
+"non-zero" scores as a kill. And `local a="$1" b="$a/x"` on bash 3.2 expands every word before
+assigning any, so `b` reads an unbound `a` under `set -u`.
+
+**THE GAP IS ONE, PENDING 0, NOT WIDE, NOT REQUIRED.** The consumer pulled `0.533.0 -> 0.536.0`
+during this batch (its commit `69943d741`), while the hands were building, so
+the PENDING set this block was drafted with — 2 — reads 0 at the close, both ids in the
+consumer's archive against an impossible-id control of 0. Consumer installed `0.536.0`,
+distribution `0.537.0`, and `0.537.0` touches NO bootstrapping file and has zero mode-only
+changes. The installed `validate-layer-entries.sh` is byte-identical to the distribution's, so
+that differential cannot discriminate and is not reported as a null. The consumer's porcelain
+read 0 at the sweep and 12 at the close, all under `_bmad-output/` and all its own pipeline
+state; zero paths under this repo's write surface moved.
+
+**THE SWEEP FOR BATCH 78.** Live 71, cited 53, unfiled 18, residue ZERO. Run it anyway. Then
+**`BL-155`**, `BL-195` and the rest of the live 82 — none carries a `PC-` id, so any
+PC-backed candidate the sweep turns up outranks them. `BL-188`, `BL-189` and `BL-211` are
+ARCHIVED (`LANDED (v0.537.0)`), so do not re-scope them.
+
 ### BATCH 76 SHIPPED AS `v0.536.0`, ONE RELEASE CARRYING ONE NO-`PC` ENTRY — THE SWEEP CAME BACK EMPTY FOR THE FIRST TIME IN FIVE BATCHES, `BL-113` WAS TAKEN ON THIS SESSION'S OWN RANKING BECAUSE THE ONE-LINER ARRIVED FROM A PEER, AND **THE CONSUMER ENGINE'S HALF OF THE DEFECT WAS WORSE THAN THE ENTRY FILED: A RECEIPT THAT NEVER RAN READ `CLOSE-CANDIDATE`.** THE GAP IS THREE, PENDING 2, NOT WIDE, NOT REQUIRED.
 
 This block replaces the batch-75 record below it. Every figure was re-derived on the release
@@ -7692,7 +7771,7 @@ so no block written before it changes verdict.
 ### NEXT ACTIONS — numbered, in order
 
 1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below), RANK THE UNFILED CANDIDATES,
-   THEN SCOPE BATCH 75 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED YOU.** Operator
+   THEN SCOPE BATCH 78 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED YOU.** Operator
    instruction, given at batch 52. **If the one-liner was TYPED BY THE OPERATOR**, report the
    candidates with a marked recommendation and ask, as every batch before has. **If it ARRIVED
    FROM ANOTHER SESSION** — a cross-session message carrying `READ and FOLLOW …`, which is
@@ -7711,6 +7790,17 @@ so no block written before it changes verdict.
    THREE `PC-S309-*` candidates on 2026-09-07 (live 67 -> 70, unfiled 16 -> 19, md5 moved again).
    **A sentence in this file saying the residue is zero is a snapshot of a file someone else is
    holding open. Run the sweep; never read that sentence for an answer.**
+
+   **BATCH 77's THREE SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope any of them.** `BL-188`,
+   `BL-189` and `BL-211` shipped as ONE release, `v0.537.0` (PR #688), none carrying a `PC-` id,
+   all three rotated. They batched because the machinery slice over the range — derived by
+   RUNNING the shipping `machinery_paths()` globs — is `validate-reattach-budget.sh` alone and no
+   bootstrapping file is in it. `BL-211` was FOUND during the batch, by the census hand briefing
+   `BL-189`, and was fixed rather than filed under the batch-72 ruling. **Every one of the three
+   commits was corrected once after its adversary reported**, and each correction defeated a claim
+   the commit message itself made — read the batch-77 resume block before writing a claim about
+   a property into a commit, and ask which cell would refute it. The readiest no-`PC` entries now
+   are `BL-155` and `BL-195`; run the sweep first, a PC-backed candidate outranks both.
 
    **BATCH 76's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.** `BL-113` shipped ALONE as
    `v0.536.0` (PR #687), no `PC-` id because it carries none, rotated. Its owed FP measurement
