@@ -432,6 +432,34 @@ battery5() {
   L="$(check5_line "$S")"
   case "$L" in *FAIL*) t="$t H:fires" ;; *SKIP*) t="$t H:SKIPPED" ;; *) t="$t H:none" ;; esac
 
+  # P — a web file at the TOP LEVEL of web/, under neither src/ nor tests/. Every other world's
+  # files sit under one of those two, so the bare `web/**` glob in the pathspec is asserted by
+  # nothing without this: narrowing the pathspec to two globs returns an EMPTY diff, and Check 5
+  # then reports "no web/** file changes" — a SKIP that reads exactly like a sprint with no web
+  # work. Asserted on the FAIL, because the narrowed form's answer is a skip.
+  c5_world toplevel web/index.html
+  L="$(check5_line "$S")"
+  case "$L" in *FAIL*) t="$t P:fires" ;; *SKIP*) t="$t P:SKIPPED" ;; *) t="$t P:none" ;; esac
+
+  # R — a source file RENAMED to a test-suffixed name. git detects renames by default and
+  # enumerates the pair as ONE line, the test path, so a diff that DELETED a rendered component
+  # reads as test-only. `--no-renames` is what makes both paths appear and the check fire.
+  #
+  # THE SOURCE FILE MUST EXIST AT THE DIFF BASE, which is what makes this world's anchor its own.
+  # Seeded and renamed inside one range, the base never held the source, the range is a bare ADD
+  # of the test path, and the world asserts nothing — it would be green under both spellings. So
+  # the anchor is REWRITTEN to the commit that added the source, and the rename is the only thing
+  # in the range.
+  c5_world renamesrc web/src/components/Gauge.jsx
+  local rbase
+  rbase="$( cd "$WORK" && git rev-parse HEAD )"
+  ( cd "$WORK" && git mv web/src/components/Gauge.jsx web/src/components/Gauge.test.jsx \
+      && git commit -q -m "rename a source file to a test name" ) >/dev/null 2>&1
+  printf -- '- sprint: 899\n  sha: %s\n- sprint: 900\n  sha: <PENDING-S900-RETRO>\n' "$rbase" \
+    > "$WORK/_bmad-output/audit-anchors.md"
+  L="$(check5_line "$S")"
+  case "$L" in *FAIL*) t="$t R:fires" ;; *SKIP*) t="$t R:SKIPPED" ;; *) t="$t R:none" ;; esac
+
   # Sorted, the lone source file lands at position 22 of 22.
   c5_world big web/src/c/a1.test.jsx web/src/c/a2.test.jsx web/src/c/a3.test.jsx \
     web/src/c/a4.test.jsx web/src/c/a5.test.jsx web/src/c/a6.test.jsx web/src/c/a7.test.jsx \
@@ -445,7 +473,7 @@ battery5() {
   printf '%s' "$t"
 }
 
-EXPECTED5="T:skip-named M:fires E:skip N:noweb H:fires B:fires"
+EXPECTED5="T:skip-named M:fires E:skip N:noweb H:fires P:fires R:fires B:fires"
 
 # --- 6. the shipping validator answers every world -----------------------------
 GOT5="$(battery5 "$WORK/bin/validate-mandatory-rules.sh")"
@@ -455,7 +483,37 @@ else
   bad "test-only battery: expected [$EXPECTED5], got [$GOT5]"
 fi
 
-# --- 7. CONTROL: an unmutated copy in the mutant directory answers identically ---
+# --- 7. THE ACQUITTED SUFFIX SET IS PINNED, not merely its two members exercised ---
+# A BATTERY OF WORLDS CANNOT SEE A WIDENING IT DOES NOT SPELL. Every world above names a
+# `.test.` or a `.spec.` file, so adding a THIRD member to the acquittal list — `.stories.`, say,
+# which is a rendering artifact and exactly the acquittal this change argues against for e2e
+# specs — moves no world and passes every arm. The gap is in the SEED and cannot be closed by
+# another world: a fourth suffix has the same problem, and so would a fifth.
+#
+# So the SET is read off the line that EMITS it and compared to the whole declared value.
+# Extracted from `$NF !~ /\.(...)\./` on the CHECK5_WEB_NONTEST assignment — the emission site,
+# not a comment that mentions the members and not a grep for either name, both of which a
+# widening leaves satisfied. The control is the extraction itself: a sed that matched nothing
+# yields an empty string, which would compare equal to nothing and pass silently, so an empty
+# extraction is a FIXTURE ERROR rather than a finding.
+c5_suffix_set() {  # <script> -> the alternation inside the acquittal regex, verbatim
+  sed -n 's/^CHECK5_WEB_NONTEST=.*\$NF !~ \/\\\.(\([^)]*\))\\\.\/.*/\1/p' "$1" | head -1
+}
+SUFFIX_SET="$(c5_suffix_set "$WORK/bin/validate-mandatory-rules.sh")"
+if [ -z "$SUFFIX_SET" ]; then
+  echo "FIXTURE ERROR: could not extract the acquitted suffix set from the CHECK5_WEB_NONTEST assignment — the emitting line was reshaped, so the set-lock arm below would compare two empty strings and pass." >&2
+  exit 2
+fi
+# The control the extraction needs: the same sed against a line that is NOT the emission site
+# must yield nothing, or the extractor is matching on something other than what it claims.
+SUFFIX_CTL="$(printf '%s\n' 'CHECK5_WEB_N="$(printf ... )"' | sed -n 's/^CHECK5_WEB_NONTEST=.*\$NF !~ \/\\\.(\([^)]*\))\\\.\/.*/\1/p')"
+if [ "$SUFFIX_SET" = "test|spec" ] && [ -z "$SUFFIX_CTL" ]; then
+  ok "the acquitted suffix SET is exactly [test|spec] at the emission site (control: the same extraction against a non-emitting line yields nothing) — a THIRD suffix cannot be added without failing here, which no battery of worlds can see"
+else
+  bad "acquitted suffix set is [$SUFFIX_SET], expected [test|spec] — a member was added or removed. If this widening is intended, the change belongs in a release that argues for it, and this arm is where it is argued. (extraction control returned [$SUFFIX_CTL], expected empty)"
+fi
+
+# --- 8. CONTROL: an unmutated copy in the mutant directory answers identically ---
 C5CTL="$WORK/mut5-control/validate-mandatory-rules.sh"
 mkdir -p "$WORK/mut5-control"
 cp "$WORK/bin/validate-mandatory-rules.sh" "$WORK/bin/validate-audit-anchors.sh" \
@@ -498,27 +556,70 @@ mutate5() {
 # exactly how a wrong fix survives review — and H is the only world that separates them.
 mutate5 dirkey \
   "s@-F/ 'NF && \$NF !~ /@-F/ 'NF \&\& \$0 !~ /(^|\\\\/)tests?\\\\// \&\& \$NF !~ /@" \
-  "T:skip-named M:fires E:skip N:noweb H:SKIPPED B:fires" \
+  "T:skip-named M:fires E:skip N:noweb H:SKIPPED P:fires R:fires B:fires" \
   "widening the rule to acquit anything under a tests dir lets a no-suffix HELPER — source, and the consumer has exactly one — pass as a test file, and no other world can see it"
 
 # WRONG FIX 2, ANY instead of ALL: skip as soon as one changed file is a test file. Both halves
 # are flipped, because either alone is not the wrong fix — it is the pair.
 mutate5 anyfix \
   's@\$NF !~ /\\.(test|spec)\\./@$NF ~ /\\.(test|spec)\\./@; s@elif \[ -z "\$CHECK5_WEB_NONTEST" \]@elif [ -n "$CHECK5_WEB_NONTEST" ]@' \
-  "T:skip-named M:SKIPPED E:skip N:noweb H:fires B:SKIPPED" \
-  "skipping when ANY changed file is a test acquits the mixed test+source diff, which is the whole behaviour this change must NOT have"
+  "T:skip-named M:SKIPPED E:skip N:noweb H:fires P:fires R:SKIPPED B:SKIPPED" \
+  "skipping when ANY changed file is a test acquits the mixed test+source diff AND the renamed-source diff — M owns the finding, and R moving is the same defect reached by a second road rather than a second one"
 
 # The truncation the carve-out was grafted onto. It answers "is this list empty" correctly and
 # "is EVERY member a test" wrongly, and only the 22-file world can see the difference.
 mutate5 truncate \
   's@2>/dev/null)"$@2>/dev/null | head -20)"@' \
-  "T:skip-named M:fires E:skip N:noweb H:fires B:SKIPPED" \
+  "T:skip-named M:fires E:skip N:noweb H:fires P:fires R:fires B:SKIPPED" \
   "restoring the 20-line truncation on the enumeration acquits a diff whose only source file sorts past position 20, and moves no other world"
+
+# The PATHSPEC. Narrowing it to the two `**`-suffixed globs is the plausible tidy-up — they look
+# like they subsume the bare one, and they do not reach `web/index.html`. It does not error: the
+# diff comes back EMPTY and Check 5 reports "no web/** file changes", a SKIP that reads exactly
+# like a sprint which touched no web file at all.
+mutate5 pathspec \
+  "s@-- 'web/\*\*' 'web/src/\*\*' 'web/tests/\*\*'@-- 'web/src/**' 'web/tests/**'@" \
+  "T:skip-named M:fires E:skip N:noweb H:fires P:SKIPPED R:fires B:fires" \
+  "dropping the bare web/** glob makes a TOP-LEVEL web file invisible — it SKIPs as 'no web/** file changes' — and only the toplevel world can see it"
+
+# RENAME DETECTION. Removing --no-renames restores git's default, under which a source file
+# renamed to a test name enumerates as ONE line (the test path) and the deletion of the rendered
+# component is laundered into a test-only diff.
+mutate5 renames \
+  's@--name-only --no-renames@--name-only@' \
+  "T:skip-named M:fires E:skip N:noweb H:fires P:fires R:SKIPPED B:fires" \
+  "without --no-renames a source file renamed to a test-suffixed name enumerates as one test path, and a diff that DELETED a rendered component is acquitted as test-only"
+
+# THE SUFFIX WIDENING, scored differently from every mutant above BECAUSE THE BATTERY CANNOT SEE
+# IT. `.stories.` is a rendering artifact, and adding it to the acquittal moves NO world — every
+# world spells a `.test.` or a `.spec.`, so a battery of worlds is structurally blind to a third
+# member. This asserts both halves: the battery is unchanged, AND the set-lock arm reads the
+# widened set. That pair is the whole claim assertion 7 exists to carry.
+C5STORIES="$WORK/mut5-stories"
+mkdir -p "$C5STORIES"
+cp "$WORK/bin/validate-audit-anchors.sh" "$WORK/bin/validate-retro-evidence.sh" \
+   "$WORK/bin/validate-cycle-commits.sh" "$C5STORIES/"
+sed 's@(test|spec)@(test|spec|stories)@' "$WORK/bin/validate-mandatory-rules.sh" \
+  > "$C5STORIES/validate-mandatory-rules.sh" \
+  || { echo "FIXTURE ERROR: mutant 'stories' sed DID NOT APPLY" >&2; exit 2; }
+if cmp -s "$WORK/bin/validate-mandatory-rules.sh" "$C5STORIES/validate-mandatory-rules.sh"; then
+  echo "FIXTURE ERROR: mutant 'stories' matched nothing — the acquittal regex was reshaped." >&2
+  exit 2
+fi
+C5SGOT="$(battery5 "$C5STORIES/validate-mandatory-rules.sh")"
+C5SSET="$(c5_suffix_set "$C5STORIES/validate-mandatory-rules.sh")"
+if [ "$C5SSET" != "test|spec|stories" ]; then
+  bad "MUTANT stories: the widened set extracted as [$C5SSET], expected [test|spec|stories] — the set-lock arm is not reading what it claims to read"
+elif [ "$C5SGOT" != "$EXPECTED5" ]; then
+  bad "MUTANT stories: expected the world battery to be UNCHANGED at [$EXPECTED5] — that blindness is the finding — but got [$C5SGOT]"
+else
+  ok "MUTANT stories: widening the acquittal to a THIRD suffix leaves every world unchanged, so no battery of worlds can catch it, and the set-lock arm is what reads [test|spec|stories] and refuses"
+fi
 
 echo
 # Liveness: a harness that silently stopped running assertions reads exactly like a clean pass.
-if [ "$asserted" -ne 19 ]; then
-  echo "check5-anchor-base: FIXTURE ERROR — ran $asserted assertions, expected 19" >&2
+if [ "$asserted" -ne 23 ]; then
+  echo "check5-anchor-base: FIXTURE ERROR — ran $asserted assertions, expected 23" >&2
   exit 2
 fi
 if [ "$fails" -eq 0 ]; then

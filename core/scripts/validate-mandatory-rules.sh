@@ -346,12 +346,28 @@ fi
 # `| head -20`, which is sound for "is this list empty" and is NOT sound for the ALL question
 # below: a twenty-one-file diff whose only source change sits at position 21 would be truncated
 # away and acquitted. The truncation is therefore gone rather than reused.
-# Guarded on the base, because an empty one makes the range `..HEAD`, which git resolves to
-# HEAD..HEAD and answers EMPTY — indistinguishable from a sprint that touched no web file.
-CHECK5_WEB_FILES=""
-if [ -n "$CHECK5_BASE" ]; then
-  CHECK5_WEB_FILES="$(git diff --name-only "${CHECK5_BASE}..HEAD" -- 'web/**' 'web/src/**' 'web/tests/**' 2>/dev/null)"
-fi
+#
+# `--no-renames` IS LOAD-BEARING AND IS THE WHOLE OF ONE DEFECT. git detects renames by default,
+# so `git mv web/src/components/Gauge.jsx web/src/components/Gauge.test.jsx` enumerates as ONE
+# line — the test path — and the carve-out below then reads a diff that DELETED a rendered
+# component as test-only and SKIPs. Measured on a probe: the default form shows only the test
+# path, `--no-renames` shows both, and a control rename to a non-test name keeps the check firing
+# under either. The cost is that a pure rename now enumerates two paths instead of one; that
+# cannot turn a legitimate all-test diff into a firing one, because both halves of a
+# test-file-to-test-file rename carry the suffix and both are acquitted.
+#
+# THE PATHSPEC IS THREE GLOBS AND ALL THREE ARE LOAD-BEARING. `web/src/**` and `web/tests/**` do
+# not reach a file at the TOP LEVEL of `web/` — `web/index.html`, `web/App.jsx`, `web/nginx.conf`
+# — and the bare `web/**` is what does. Dropping it does not error: the diff comes back empty and
+# Check 5 reports "no web/** file changes", which reads exactly like a sprint that touched no web
+# file at all. The `toplevel` world below is the only arm that can see this.
+#
+# NO EMPTY-BASE GUARD. One was written here and REMOVED as vacuous: the `[ -z "$CHECK5_BASE" ]`
+# branch below fires first, so nothing ever reads a value computed from an empty base. Driven
+# both ways over three empty-base worlds (no anchors file, no prior-sprint entry, PENDING sha),
+# the Check 5 line was byte-identical with and without it, against a control where a resolving
+# base gives FAIL. It suppressed a `git diff` no reader consumes.
+CHECK5_WEB_FILES="$(git diff --name-only --no-renames "${CHECK5_BASE}..HEAD" -- 'web/**' 'web/src/**' 'web/tests/**' 2>/dev/null)"
 
 # THE TEST-ONLY CARVE-OUT, AND WHY IT IS KEYED ON THE SUFFIX AND NEVER ON A DIRECTORY.
 # Check 5 demands visual evidence because a web/** change may have changed what a user SEES. A
