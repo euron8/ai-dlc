@@ -4095,3 +4095,44 @@ deliverable the lead's protocol says it must not have been asked for, and the lo
 review that is lost with a pruned worktree.
 
 verify: sh r=core/team-roles/code-reviewer.md; i=core/skills/ai-dlc/steps/implementation.md; [ -f "$r" ] && [ -f "$i" ] || exit 9; grep -q "code reviewer" "$i" || exit 9; grep -q "NOT ask it to write outside that worktree" "$i" || exit 9; grep -q "Write the review file to the canonical branch checkout" "$r" && exit 1; exit 0
+
+## BL-218 — `audit-layer-debt.sh`'s UNDECLARED arm files a row that CITES a resolvable `OWED-` id in the same bucket as a genuine undeclared obligation
+
+**Found 2026-09-09** by an adjudication hand measuring
+`PC-S340-UNDECLARED-CUE-CANNOT-TELL-A-REFERENCE-FROM-A-DECLARATION` against HEAD, and re-derived
+here independently. `v0.478.0` closed that entry's NEGATION class and `v0.479.0` corrected it; the
+CITATION class is the half that survives.
+
+**This is not a rediscovery of a deferred item.** `CHANGELOG.md:3926-3929` states the class as a
+surviving limit — *"the cue in a clause citing a resolvable `OWED-` id. 15 of the surviving 19 are
+still false"*. A stated limit is a DISCLOSURE, not a resolution, and the consumer's cost is
+untouched: obeying the printed remedy on a citing row declares a duplicate obligation under a new
+id for work another row already tracks.
+
+Driven through the shipping `core/scripts/audit-layer-debt.sh --register`, three inputs, one
+invocation each:
+
+- **subject** — row `e1` prose *"The narrowing is owed under OWED-X."* beside row `e2` declaring
+  `owed.id: OWED-X` -> `OPEN (1)` for the declaration AND `UNDECLARED (1)` for the citation. The
+  citing row sits in the same bucket as a real offender.
+- **control A** — cue text occurring ONLY inside the token (*"Tracked on the row that carries
+  OWED-DEBT-DEFERRED."*) -> `UNDECLARED (0)`. The arm's word-boundary lookahead already refuses a
+  cue inside the id.
+- **control B** — a genuine undeclared obligation (*"A narrowing is still owed here."*) ->
+  `UNDECLARED (1)`. The arm fires, so the subject's row is not a dead scan.
+
+**THE ENTRY'S OWN FILED REMEDY IS REFUTED AND MUST NOT BE BUILT.** It asks to skip a row whose cue
+occurrences all sit inside a resolvable `OWED-<id>` token. Control A is exactly that state and it
+already reports 0 — the state the remedy targets is UNCONSTRUCTIBLE. The real consumer shape is a
+STANDALONE cue word BESIDE the citation, which is the subject above.
+
+**The fix must key on cue occurrences ADJACENT TO a resolvable `OWED-` token, not INSIDE one**, and
+resolvability is a join against the declaring rows in the same register. Not built here: the
+false-positive set over the arm's real corpus has not been measured, and `CLAUDE.md` requires that
+before the check ships. The reference consumer carries no live layer-debt register (only two
+`tests/fixtures/` trees), so that measurement needs a corpus decision first.
+
+**Tiered DEFECT.** Consumer-facing; the arm ships in `core/scripts/`. Its consequence is a
+duplicate obligation filed under a new id, which is a wrong WRITE prompted by a false finding.
+
+verify: sh set -e; V=core/scripts/audit-layer-debt.sh; [ -f "$V" ] || exit 9; d=$(mktemp -d); trap 'rm -rf "$d"' EXIT; printf '{"clause":"LC-E4","entry":"e1","subject_digest":"x","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"The narrowing is owed under OWED-X."}\n{"clause":"LC-E4","entry":"e2","subject_digest":"y","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","owed":{"id":"OWED-X","what":"w"}}\n' > "$d/r.jsonl"; o="$(bash "$V" --register "$d/r.jsonl" 2>/dev/null)" || true; printf '%s' "$o" | grep -q 'OPEN (1)' || exit 9; printf '%s' "$o" | grep -q 'UNDECLARED (1)' && exit 1; exit 0
