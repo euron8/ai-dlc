@@ -15,6 +15,77 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.541.0] - 2026-09-09
+
+### The suite pole scores its mutants under an inner pool, and the filed remedy — sharding — was refuted by measuring the fixture (`BL-088`)
+
+`layer-reference-resolution` was the suite's POLE, the single longest directory, which is what
+the worker pool's wall clock tracks. Its 24 mutants ran serially while the fixture consumed
+**1.22 of 18 cores**, against 4.2–7.6 for the enforcement-map poles.
+
+**The entry proposed sharding and building it was unnecessary: the premise is false.** A shard
+assumes the unit is saturated. Two concurrent full runs cost 125.8s against a solo 120.3s. The
+cost is **fork/exec throughput** — ~5200 traced commands per linter run (control: an impossible
+pattern returns 0 in the same trace), 85% system time at ~0.44ms per spawn, working set in page
+cache — not CPU and not disk, and that resource scales with concurrency on this box.
+
+Part 5 now dispatches through `xargs -P 6` and collects each verdict by name: **120.3s → 48.0s
+wall at 467% CPU**, every one of the 24 mutant vectors byte-identical to the serial run on
+`origin/main`, with a `cmp -s` control asserting the two sides are different programs. **P=6 and
+not the 8 that measured fastest** — an inner width multiplies against the outer one
+(`AI_DLC_FIXTURE_JOBS`, default 12) and both existing inner pools fix theirs as a narrow
+constant for that reason. Re-derive the loaded pole from `.git/ai-dlc-fixture-durations`; a solo
+timing answers a different question.
+
+**The pool beats the shard on SAFETY, which outranks the cost.** Nothing binds the union of a
+split fixture's arms: no coverage invariant in `docs/invariant-index.md`, `shard` opens no arm
+header in `validate-enforcement-map.sh`, and **I8**/**I74** bind whether a directory SHIPS and
+never what it ASSERTS. A shard turns `EXPECTED_ASSERTIONS` into two literals that must sum, with
+no external reader deriving the sum; inside one file `made` increments inside `ok()`/`bad()`
+themselves, so a lost arm fails the count in the file that lost it.
+
+**The pool's own hazard is armed against.** A pooled child's `made=$((made+1))` is lost to the
+subshell, so each worker writes a verdict FILE and the collector walks the DISPATCHED LIST — not
+the directory listing, which cannot see a worker that died. Three committed self-probes, because
+the first receipt was weak: a directory-reading collector and a pool at P=1 both CLOSED it, since
+a collector that never loses anything cannot tell a list-walk from a directory-walk. The probe
+now drives the SHIPPING walk (`collect_into`, one function called by both) — a probe carrying its
+own copy of the loop agreed with itself and let the directory non-fix through — and its seed is
+asserted too.
+
+**The width probe was that same defect one level down, found by an adversary on a gate-green
+branch.** Asserting `[ "$MUT_JOBS" -ge 2 ]` reads a variable nothing joins to the dispatch:
+`xargs -P 1` beside an untouched `MUT_JOBS="6"` ran 132.3s at 125% CPU, printed a byte-identical
+green line and CLOSED the receipt — and the same probe FAILED a genuinely 6-way run whose
+variable read 1, so it scored the opposite of the truth in both directions. The arm now counts
+workers OBSERVED in flight from a live per-worker marker file.
+
+**Three wrong repairs were built and measured first, each counting something ADJACENT to the
+property.** A wall-clock overlap test does not work: `date +%s` is whole seconds, so abutting
+intervals read as overlapping and a fully serial 4m34s run reported "2 in flight" and PASSED. A
+marker FILE is not a LIVE worker — five seeded stale markers made a serial dispatch report 6 and
+pass. And a LIVE PID is not MY PEER: one marker named with `run.sh`'s own pid, alive by
+construction, made a serial dispatch report 2 and pass at 125.5s. The shipped arm makes the
+marker's identity provable — a run-scoped nonce written into each marker, counted only when the
+pid is live AND the nonce matches.
+
+**The floor rises 2 → 4, because the old number was doing two jobs.** "Ran concurrently" and
+"ran at the width this release measured" are two claims: `xargs -P 2` reports 2 in flight and
+PASSES at 72.0s against the pool's 45.5s, a width regression eating more than half the gain.
+Scored six ways — pool 6/PASS, `-P 4` 4/PASS, `-P 2` 2/FAIL, `-P 1` 1/FAIL, foreign live-pid
+marker 1/FAIL, live-pid marker carrying the nonce 2/FAIL.
+
+### `PreToolUse` does not fire on a schema-invalid tool call, settled by experiment (`BL-087`)
+
+Recorded answer, no code change. A tool call failing its own input schema is rejected before any
+hook sees it and is invisible to the hook system **entirely**: with `PreToolUse`, `PostToolUse`
+and `PostToolUseFailure` all registered on `Read`, a schema-invalid call produced zero lines
+across all three. Measured on **Claude Code 2.1.266**, with the positive control in the SAME
+session as the test. Nothing shipped depends on it — all five `PreToolUse` groups in the settings
+template decide on tool_input CONTENT, never on validity — so what it forecloses is a future
+design: any guard whose predicate is the malformation itself. The docs sentence the entry rested
+on has since been deleted upstream, and the coercion partition is unmeasured.
+
 ## [0.540.0] - 2026-09-09
 
 ### `PC-S309-STUB-AUDIT-PROSE-MARKER-FIRES-ON-NEGATION-AND-TEST-DOUBLE-REFERENCE` — Check 16's comment-portion prose gate fired on a comment that DENIES a deferral and on one naming a test double (`BL-213`)

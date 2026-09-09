@@ -82,8 +82,8 @@ bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
 # what closes it, and the count is a literal here or it disappears with the assertions.
 # 3 premises + 3 W9 premises + 1 pristine vector + 2 applicability + 1 code-attribution
 # + 1 crosswalk-is-load-bearing + 1 exit condition + 9 mutants + 1 unmutated control.
-# + 1 W12 premise + 12 W12 mutants + 3 HOOK-namespace mutants
-EXPECTED_ASSERTIONS=38
+# + 1 W12 premise + 12 W12 mutants + 3 HOOK-namespace mutants + 1 pool-accounting arm + 3 collector self-probes
+EXPECTED_ASSERTIONS=42
 
 echo "layer-reference-resolution:"
 
@@ -123,100 +123,12 @@ awk '/^[[:space:]]*```/ { f = 1 - f; next } f && /scripts\/fenced-missing\.sh/ {
   && ok "premise: scripts/fenced-missing.sh sits INSIDE a fenced block in the seed" \
   || bad "premise BROKEN: scripts/fenced-missing.sh is not inside a fence — the fence mutant cannot fire"
 
-# vector <linter> <root> -> one line, one cell per case
-#
-# Scored as a VECTOR rather than per row: several of these cells are served by one branch, and
-# per-row scoring reports entanglement on every mutant in that shape. One assertion per mutant,
-# stating the complete expected vector positively.
-vector() {
-  local out v=''
-  out="$(bash "$1" "$2" 2>&1)"
-  # W7 subjects, by (file, id)
-  v="d19b=$(grep -q 'checks/domain.md: references "Check 19b"' <<<"$out" && echo W || echo -)"
-  v="$v r19b=$(grep -q 'roles/dev.md: references "Check 19b"' <<<"$out" && echo W || echo -)"
-  v="$v r11b=$(grep -q 'roles/dev.md: references "Check 11b"' <<<"$out" && echo W || echo -)"
-  v="$v c34=$(grep -q 'references "Check 34"' <<<"$out" && echo W || echo -)"
-  v="$v c12=$(grep -q 'references "Check 12"' <<<"$out" && echo W || echo -)"
-  v="$v c7=$(grep -q 'references "Check 7"' <<<"$out" && echo W || echo -)"
-  v="$v alpha=$(grep -qE 'references "Check (A|N)"' <<<"$out" && echo W || echo -)"
-  # THE HOOK NAMESPACE — a check implemented in a shipped hook is defined in no rendered-
-  # rulebook file and no crosswalk row, so a CORRECT citation of one used to report as
-  # dangling. Four cells, and each is silent or loud for a reason no other cell shares:
-  #   hk61  the hook named on the line DECLARES it            -> silent
-  #   hk62  the OTHER hook declares it, this one does not     -> reports (the per-hook join)
-  #   hk64  the hook MENTIONS it and declares nothing         -> reports (declaration, not mention)
-  #   hk65  no hook named at all                              -> reports (pre-existing path)
-  # hk62 lives in its own file on purpose: W7's grain is (file, id), so seeded beside the
-  # correct 62 citation it would be shadowed by it and the cell would be silent for a reason
-  # that has nothing to do with the resolver.
-  v="$v hk61=$(grep -q 'hook-citations.md: references \"Check 61\"' <<<"$out" && echo W || echo -)"
-  v="$v hk62=$(grep -q 'hook-cross.md: references \"Check 62\"' <<<"$out" && echo W || echo -)"
-  v="$v hk64=$(grep -q 'hook-citations.md: references \"Check 64\"' <<<"$out" && echo W || echo -)"
-  v="$v hk65=$(grep -q 'hook-citations.md: references \"Check 65\"' <<<"$out" && echo W || echo -)"
-  # APPLICABILITY: is the form E15 emits actually present in the file it is emitted about?
-  # This is the property that failed, and it is not the same as "the message changed".
-  local apf dotf
-  apf="$(grep -oE "SECTION ID OUT OF BAND(, ALREADY COLLIDED)? — '[^']*' allocates" <<<"$out" | grep -oE "'[^']*'" | tr -d "'" | grep -E '^AP' | head -1)"
-  dotf="$(grep -oE "SECTION ID OUT OF BAND(, ALREADY COLLIDED)? — '[^']*' allocates" <<<"$out" | grep -oE "'[^']*'" | tr -d "'" | grep -E '^7' | head -1)"
-  v="$v apform=$([ -n "$apf" ] && grep -qF -- "$apf" "$DOMAIN" && echo OK || echo BAD)"
-  v="$v dotform=$([ -n "$dotf" ] && grep -qF -- "$dotf" "$DOMAIN" && echo OK || echo BAD)"
-  # W9 — the script-citation namespace. Three subjects that must report and four that must
-  # not, and each silent cell is silent for a DIFFERENT reason: the file resolves, the path
-  # is fenced, the path is not root-relative, the file is not an entry.
-  v="$v w9miss=$(grep -q 'roles/dev.md: names `scripts/missing-tool.sh`' <<<"$out" && echo W || echo -)"
-  v="$v w9dot=$(grep -q 'roles/dev.md: names `scripts/dot-slash-missing.sh`' <<<"$out" && echo W || echo -)"
-  v="$v w9ovr=$(grep -q 'overrides/gate-validation__8.md: names `scripts/override-missing.sh`' <<<"$out" && echo W || echo -)"
-  v="$v w9ok=$(grep -q 'names `scripts/present.sh`' <<<"$out" && echo W || echo -)"
-  v="$v w9fence=$(grep -q 'names `scripts/fenced-missing.sh`' <<<"$out" && echo W || echo -)"
-  v="$v w9dist=$(grep -q 'dist-only-missing.sh' <<<"$out" && echo W || echo -)"
-  v="$v w9rdme=$(grep -q 'names `scripts/readme-missing.sh`' <<<"$out" && echo W || echo -)"
-  # W12 — the citation that RESOLVES and still names the wrong check. Every silent cell here
-  # is silent for a different reason, which is what the six mutants below take apart. The
-  # grammar is `cites`, never `references`: W7's message uses the other verb on the same ids,
-  # and a cell keyed on the id alone would score W7's finding as this arm's.
-  v="$v w12t26=$(grep -q 'cites \"Check 26\"' <<<"$out" && echo W || echo -)"
-  v="$v w12g24=$(grep -q 'cites \"Check 24\"' <<<"$out" && echo W || echo -)"
-  v="$v w12q17=$(grep -q 'cites \"Check 17\"' <<<"$out" && echo W || echo -)"
-  v="$v w12w19b=$(grep -q 'cites \"Check 19b\"' <<<"$out" && echo W || echo -)"
-  v="$v w12x34=$(grep -q 'cites \"Check 34\"' <<<"$out" && echo W || echo -)"
-  v="$v w12n8=$(grep -q 'cites \"Check 8\"' <<<"$out" && echo W || echo -)"
-  v="$v w12p20=$(grep -q 'cites \"Check 20\"' <<<"$out" && echo W || echo -)"
-  # The AMBIGUOUS bucket is not a warning, so it cannot be read off the default output. It is
-  # a POSITIVE assertion on the listing: a count alone would be satisfied by two rows that are
-  # not the two seeded, and the bare-stem case is the one this fixture exists to pin.
-  # I54, and it bit here before it was spotted: `grep -q` leaves at its first match, the
-  # writer takes the EPIPE, and under `set -o pipefail` the pipeline reports NOT-FOUND on
-  # input that contains the pattern. The count cell survived it only because `grep -c` reads
-  # to EOF. Run once, capture, and feed both readers a here-string.
-  local refs_out
-  refs_out="$(bash "$1" "$2" --check-refs 2>&1)"
-  v="$v w12amb=$(grep -c '^  ambiguous ' <<<"$refs_out")"
-  v="$v w12stem=$(grep -q 'ambiguous.*"Check 30"' <<<"$refs_out" && echo A || echo -)"
-  # THE RESTRAINT HALF of the crosswalk rule: a corroborating row removes the EXEMPTION and
-  # must not PROMOTE. Asserted on the listing, positively, because "no warning for Check 26"
-  # is also what a stood-down subject looks like.
-  v="$v w12x26amb=$(grep -q 'ambiguous.*"Check 26"' <<<"$refs_out" && echo A || echo -)"
-  # THE COUNT LINE ITSELF. Its whole job is to stop a reader inferring "N genuinely
-  # undecidable" from N, so the caveat is the payload and not decoration — a note that keeps
-  # the number and loses the sentence is the failure this cell exists to catch.
-  v="$v w12note=$(grep -q 'UNADJUDICATED is not UNDECIDABLE' <<<"$out" && echo N || echo -)"
-  # THE SELF-REFERENCE SIGNAL: a bare sub-band citation inside the section defining its own
-  # band counterpart. No title, no tag — the position is the whole evidence.
-  v="$v w12self=$(grep -q 'from INSIDE the section that defines' <<<"$out" && echo W || echo -)"
-  # THE `shadows:` SIGNAL, three-state on purpose. `-` is also what a subject that was never
-  # reached looks like, so the cell has to distinguish quiet-by-declaration from absent: the
-  # mutant that disables the branch must move it to A, not merely leave it at `-`.
-  v="$v w12shadow5=$(grep -q 'cites \"Check 5\"' <<<"$out" && echo W \
-      || { grep -q 'ambiguous.*\"Check 5\"' <<<"$refs_out" && echo A || echo -; })"
-  # THE WRAPPED QUALIFIER and THE SECTION REBUTTAL, both three-state for the same reason the
-  # shadows cell is: `-` is also what a subject nothing reached looks like, and each mutant
-  # below has to move its cell to W rather than merely leave it silent.
-  v="$v w12wrap21=$(grep -q 'cites \"Check 21\"' <<<"$out" && echo W \
-      || { grep -q 'ambiguous.*\"Check 21\"' <<<"$refs_out" && echo A || echo -; })"
-  v="$v w12sect23=$(grep -q 'cites \"Check 23\"' <<<"$out" && echo W \
-      || { grep -q 'ambiguous.*\"Check 23\"' <<<"$refs_out" && echo A || echo -; })"
-  printf '%s' "$v"
-}
+# THE SCORING FUNCTION IS SOURCED, NOT DEFINED HERE. The mutants run under an inner pool
+# (Part 5), so the worker is a separate process that cannot inherit a function from this file.
+# One definition in `vector.sh`, sourced by both readers — restating it in the worker would be
+# two copies of one grammar free to drift. It reads $DOMAIN, set above.
+. "$HERE/vector.sh"
+
 
 W9WANT='w9miss=W w9dot=W w9ovr=W w9ok=- w9fence=- w9dist=- w9rdme=-'
 W12WANT='w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=3 w12stem=A w12x26amb=A w12note=N w12self=W w12shadow5=- w12wrap21=- w12sect23=-'
@@ -283,19 +195,44 @@ rm -f "$DOMAIN.bak" "$CONS/.claude/skills/ai-dlc/extensions/roles/dev.md.bak"
 # Each is a COPY of the linter, never an in-place edit, guarded by `cmp -s` so a sed that
 # matched nothing cannot pass as a mutation. Each asserts a complete vector distinct from every
 # other mutant's, so a mutant that fails two cells is reporting entanglement rather than a kill.
+#
+# THE MUTANTS RUN UNDER AN INNER POOL, AND THAT IS A COST FIX, NOT A BEHAVIOUR CHANGE. This
+# fixture was the suite's POLE — the single longest directory, which is what the pool's wall
+# clock tracks. Measured: it is fork/exec-bound (~5200 spawns per linter run, 85% system time)
+# and was consuming 1.22 cores while the box had 18, so it was serial for no reason. Under the
+# outer pool (`.githooks/pre-push`, `AI_DLC_FIXTURE_JOBS` default 12) an inner pool at P=6
+# measured 4.4-4.8x on the mutant phase, interleaved, with P=8 run FIRST so the ordering
+# confound ran against the change. Re-derive the loaded cost from `.git/ai-dlc-fixture-durations`
+# after any edit here; a solo timing of this directory answers a different question and the two
+# must never be compared.
+#
+# WHY P=6 AND NOT THE 8 THAT MEASURED FASTEST. An inner width multiplies against the outer
+# one, and both existing inner pools in this suite fix theirs as a narrow constant for exactly
+# that reason (`enforcement-map-sites/run.sh`, `validator-arm-selection/run.sh`). The
+# measurement justifies a pool; it does not justify 8.
+#
+# THE POOL IS WHY THE COLLECTOR EXISTS. `made=$((made+1))` inside a pooled child is lost to
+# the subshell, so a child cannot assert. Each worker writes a verdict FILE and the collector
+# below walks the DISPATCHED LIST to read them — see its own header for why the list and not
+# the directory listing.
+MUT_DIR="$ROOT/mutants"
+mkdir -p "$MUT_DIR"
+MUT_JOBS="6"
+# THE RUN-SCOPED NONCE THAT MAKES AN IN-FLIGHT MARKER PROVABLE. Every worker writes it into
+# its own marker and counts only markers carrying it, so the concurrency arm below counts
+# peers of THIS dispatch rather than any live process that happens to have a file named for
+# its pid. `worker.sh`'s header records the two wrong versions this replaces.
+MUT_NONCE="$$-$(date +%s)-$RANDOM"
+export MUT_NONCE
+: > "$ROOT/mutant-list"
+
 mk_mutant() { # mk_mutant <label> <sed-expr> <expected-vector>
-  local label="$1" expr="$2" want="$3" m out
-  m="$ROOT/mutant-$label.sh"
-  cp "$LINTER" "$m"
-  sed -E "$expr" "$m" > "$m.new" && mv "$m.new" "$m"
-  if cmp -s "$LINTER" "$m"; then
-    bad "mutant $label: the sed matched NOTHING, so this arm proved nothing"
-    return
-  fi
-  out="$(vector "$m" "$CONS")"
-  [ "$out" = "$want" ] \
-    && ok "mutant $label killed — vector [$out]" \
-    || bad "mutant $label SURVIVED or misfired — got [$out] want [$want]"
+  local label="$1" expr="$2" want="$3"
+  # printf '%s' and not echo: these expressions carry backslashes and `-e`-shaped leading
+  # text, both of which echo is free to interpret. The worker reads the file verbatim.
+  printf '%s' "$expr" > "$MUT_DIR/$label.expr"
+  printf '%s' "$want" > "$MUT_DIR/$label.want"
+  printf '%s\n' "$label" >> "$ROOT/mutant-list"
 }
 
 # M1 — put the hardcoded dot back. Only the em-dash subject's applicability moves.
@@ -508,6 +445,125 @@ mk_mutant w12-window-one-line \
 mk_mutant w12-section-rebuttal-off \
   "s/inb { printf \"%s \", \\\$0 }/inb { }/" \
   "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- hk61=- hk62=W hk64=W hk65=W apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=- w12amb=3 w12stem=A w12x26amb=A w12note=N w12self=W w12shadow5=- w12wrap21=- w12sect23=W"
+
+# --- Part 5b: DISPATCH the mutants through the inner pool, then COLLECT by name ------------
+# THE DISPATCH LIST IS THE POPULATION, AND THE COLLECTOR WALKS IT RATHER THAN THE DIRECTORY.
+# A worker that died — killed, aborted under `set -u`, a `sed` that segfaulted — writes no
+# file. Reading the directory listing would then simply not see it, and a lost mutant would
+# score as a shorter green run, which is this repo's named recurring defect. Walking the list
+# makes the absence a FINDING with the label attached.
+#
+# TWO LOSSES, TWO ARMS, AND EACH MUST BE ABLE TO FIRE WITHOUT THE OTHER. The precedent in
+# `.githooks/pre-push` has a count assertion that cannot fire unless its per-file branch
+# already has — the count increments only on the path the branch skips — so the count arm
+# there is unreachable-by-construction. Here they are independent: the per-label arm below
+# reports a MISSING verdict and does not touch `dispatched`, and the count arm compares the
+# dispatched total against the number of labels the pool was GIVEN, so a list that lost an
+# entry between writing and dispatch fails the count while every file that does exist reads
+# fine.
+#
+# THE SELF-PROBE RUNS BEFORE THE CORPUS, AND IT IS COMMITTED RATHER THAN HAND-RUN. Measured
+# while building this: a receipt asserting only that the pool-accounting arm reports OK was
+# closed by a collector reading the DIRECTORY instead of the list — the precise defect this
+# section exists to prevent — and by a pool at P=1. Both non-fixes produce an identical green
+# line, because a collector that never loses anything cannot tell the two apart. So the arm's
+# ability to FIRE is asserted here, on a seeded absence, before any real verdict is read.
+# THE PROBE DRIVES THE SHIPPING COLLECTOR, NOT A COPY OF IT. A probe that re-implements the
+# walk is a second implementation agreeing with itself: measured here, the first cut asserted
+# its OWN loop and the directory-reading non-fix still closed the receipt, because the probe
+# never touched the collector that non-fix had changed. `collect_into` is the one walk, called
+# once by the probe against a seeded 1-absent/1-present list and once against the real one.
+# Change it to read the directory and the probe's `missing` falls to 0 in the same run.
+collect_into() { # collect_into <listfile> <verdict-dir> -> sets c_seen, c_missing, c_labels
+  c_seen=0; c_missing=0; c_labels=''
+  local _l
+  while IFS= read -r _l; do
+    [ -n "$_l" ] || continue
+    if [ ! -f "$2/$_l" ]; then c_missing=$((c_missing+1)); c_labels="$c_labels $_l"; continue; fi
+    c_seen=$((c_seen+1))
+  done < "$1"
+}
+
+probe_dir="$ROOT/collector-probe"
+mkdir -p "$probe_dir"
+printf 'present\nabsent\n' > "$probe_dir/list"
+printf 'KILL probe\n' > "$probe_dir/present"      # one verdict exists, one deliberately does not
+# THE PROBE'S SEED IS ITSELF ASSERTED. A seed that quietly gains a second verdict file leaves
+# the probe reporting on a world with nothing missing — it still passes, and it discriminates
+# against nothing. Measured: seeding both files closed this receipt. The seed's discriminating
+# property is that `absent` is ABSENT, so that is stated before the walk reads it.
+{ [ -f "$probe_dir/present" ] && [ ! -e "$probe_dir/absent" ]; } \
+  && ok "self-probe seed: 'present' has a verdict file and 'absent' has none, so the walk below has something to discriminate" \
+  || bad "self-probe seed BROKEN: the 1-absent/1-present world is not what is on disk, so the walk below discriminates against nothing"
+collect_into "$probe_dir/list" "$probe_dir"
+[ "$c_missing" -eq 1 ] && [ "$c_seen" -eq 1 ] \
+  && ok "self-probe: the list-walk reports a seeded missing verdict (1 absent, 1 present) — a directory listing would report 1 and 0 findings" \
+  || bad "self-probe BROKEN: the list-walk scored $c_seen present / $c_missing missing on a 1-and-1 seed — the collector below cannot be trusted"
+
+# The concurrency arm is NOT here: it reads the workers' own start/end stamps, so it can only
+# run after collection. See "the pool ACTUALLY ran concurrently" below.
+dispatched="$(wc -l < "$ROOT/mutant-list" | tr -d ' ')"
+if [ "$dispatched" -eq 0 ]; then
+  bad "fixture BROKEN: no mutants were dispatched — the list is empty, so every kill below is vacuous"
+else
+  # I54: no `printf | xargs`. The list is a file; feed the pool from the file.
+  xargs -P "$MUT_JOBS" -I{} bash "$HERE/worker.sh" \
+      {} "$MUT_DIR/{}.expr" "$MUT_DIR/{}.want" "$LINTER" "$CONS" "$DOMAIN" "$MUT_DIR" \
+      < "$ROOT/mutant-list"
+
+  # THE SAME WALK THE PROBE JUST EXERCISED. `collect_into` decides what is present and what
+  # is missing; this loop only reads the verdicts it found. Point the walk at the directory
+  # instead of the list and the probe above goes red in the same run.
+  collect_into "$ROOT/mutant-list" "$MUT_DIR"
+  collected="$c_seen"
+  for label in $c_labels; do
+    bad "mutant $label: NO VERDICT — the worker produced no file, so this mutant was never scored"
+  done
+  while IFS= read -r label; do
+    [ -n "$label" ] || continue
+    [ -f "$MUT_DIR/$label" ] || continue
+    # HEAD -1, not `cat`: the worker appends a `stamp <start> <end>` line the overlap arm
+    # below reads, and `cat` would fold it into the reported vector.
+    verdict="$(head -1 "$MUT_DIR/$label")"
+    case "$verdict" in
+      KILL*)     ok  "mutant $label killed — vector [${verdict#KILL }]" ;;
+      SURVIVED*) bad "mutant $label SURVIVED or misfired — ${verdict#SURVIVED }" ;;
+      *)         bad "mutant $label: ${verdict}" ;;
+    esac
+  done < "$ROOT/mutant-list"
+
+  # THE POOL ACTUALLY RAN CONCURRENTLY, OBSERVED FROM THE WORKERS' OWN STAMPS. A probe that
+  # reads the WIDTH VARIABLE is not this arm and cannot replace it: measured by an adversary,
+  # `xargs -P 1` beside an untouched `MUT_JOBS="6"` ran 132.3s at 125% CPU and printed an
+  # identical green "width 6" line, closing the receipt. Nothing joined the assertion to the
+  # dispatch. This counts workers whose [start,end] intervals OVERLAP, which is a property of
+  # the run rather than of a variable, and `consumer-suite-pool/run.sh:274` is the precedent.
+  #
+  # THE FLOOR IS 4, AND 2 WAS THE WRONG NUMBER FOR A NAMED REASON. "The pool ran concurrently"
+  # and "the pool ran at the width this release measured" are two claims, and a floor of 2
+  # makes only the first: measured, `xargs -P 2` reports 2 in flight and PASSES while costing
+  # 72.0s against the pool's 45.5s — a width regression eating more than half of what this
+  # change bought, shipping green. The floor cannot be $MUT_JOBS either, because a loaded box
+  # may never place all 6 at once and that failure would not be a regression. 4 refuses -P 2
+  # and -P 3 while leaving headroom for a box that never schedules the full 6.
+  max_inflight="$(
+    for _lbl in $(cat "$ROOT/mutant-list"); do
+      [ -f "$MUT_DIR/$_lbl" ] || continue
+      sed -n 's/^inflight \([0-9]*\)$/\1/p' "$MUT_DIR/$_lbl"
+    done | sort -n | tail -1
+  )"
+  [ "${max_inflight:-0}" -ge 4 ] \
+    && ok "self-probe: $max_inflight worker(s) observed in flight at once — the pool ran concurrently, read from the workers' own stamps and not from MUT_JOBS" \
+    || bad "self-probe: max ${max_inflight:-0} worker(s) in flight — the mutants ran SERIALLY and this fixture is the suite pole again, whatever MUT_JOBS says"
+
+  # The count arm, independent of the per-label arm above: it compares what the pool was
+  # given against what the walk actually read a file for.
+  if [ "$collected" -ne "$dispatched" ]; then
+    bad "pool accounting: $dispatched mutant(s) dispatched, $collected verdict(s) collected"
+  else
+    ok "pool accounting: all $dispatched dispatched mutants produced a verdict"
+  fi
+fi
 
 # THE UNMUTATED CONTROL, from the same directory and run last. A lone copy that dies for a
 # reason unrelated to any mutation emits nothing, and "no output" otherwise scores as a kill.

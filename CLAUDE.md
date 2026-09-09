@@ -46,7 +46,7 @@ the general form.
 ## Run the fixture suite the way the hook runs it, never a hand-rolled loop
 
 `.githooks/pre-push` is the runner. It dispatches through a worker pool
-(`xargs -P "$FIXTURE_JOBS"`, default 16), orders units by their own recorded costs so
+(`xargs -P "$FIXTURE_JOBS"`, default 12), orders units by their own recorded costs so
 the longest starts first, content-keys the skip, and asserts that every dispatched
 fixture produced a verdict. Invariant **I66** binds that runner to be one program
 across both pre-push hooks. Reach for it — `git push` is the cheapest way to run it —
