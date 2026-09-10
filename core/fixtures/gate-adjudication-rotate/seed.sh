@@ -112,6 +112,17 @@ seed_unselectable_fail() {
           "planning-20260701T000000Z" "s310-planning" "$LEGACY_FAIL"
 }
 
+# A SECOND unselectable SHAPE, because one shape cannot tell a predicate that
+# asks the selector's question from one that hardcodes the single seeded string.
+# Measured: a wrong fix special-casing `s<N>-*` passed every arm while stranding
+# four of the five unselectable shapes. This one is sprint-LAST -- no trailing
+# `-`, so the selector's `-s<N>-` never matches -- and it shares no prefix with
+# the sprint-first case above.
+seed_unselectable_fail2() {
+  verdict "$GA/story-20260702T000000Z.verdict.json" \
+          "story-20260702T000000Z" "x-s310" "$LEGACY_FAIL"
+}
+
 seed_noise() {
   printf '{"line":1}\n' > "$GA/.verdict-writes.jsonl"
   mkdir -p "$GA/s293"
@@ -159,6 +170,12 @@ case "$CASE" in
   # the legacy predicate scores it movable and the refusal misses it entirely.
   strand-unselectable)
     seed_s308; seed_unselectable_fail
+    ;;
+  # The same case with a DIFFERENT unselectable shape (sprint-LAST rather than
+  # sprint-first). A predicate that hardcodes the other seed's spelling passes
+  # `strand-unselectable` and strands this one.
+  strand-unselectable2)
+    seed_s308; seed_unselectable_fail2
     ;;
   badjson)
     seed_s308; seed_s309_pass; seed_legacy; seed_noise

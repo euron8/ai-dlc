@@ -334,6 +334,23 @@ else
   bad "(h.4b) the unselectable case printed the wrong remedy: $out"
 fi
 
+# (h.4c) A SECOND UNSELECTABLE SHAPE, one property apart from (h.4)'s. One shape
+# cannot distinguish a predicate that asks the selector's question from one that
+# hardcodes the seeded string: a wrong fix special-casing `s<N>-*` passed (h.4)
+# and (h.4b) while stranding four of the five unselectable shapes. This seed is
+# sprint-LAST and shares no prefix with the sprint-first one.
+seed strand-unselectable2
+BEFORE_H4C="$(treehash "$PROJ")"
+out="$(rotate --sprint s308 --apply 2>&1)"; rc=$?
+AFTER_H4C="$(treehash "$PROJ")"
+if [ "$rc" -eq 1 ] && [ "$BEFORE_H4C" = "$AFTER_H4C" ] \
+   && grep -q 'no mode can move' <<<"$out" \
+   && grep -q "x-s310" <<<"$out"; then
+  ok "(h.4c) a DIFFERENTLY-SHAPED unselectable survivor is refused too — the predicate asks the selector's question rather than matching one spelling"
+else
+  bad "(h.4c) a sprint-last unselectable survivor was not refused (rc=$rc): $out"
+fi
+
 # =============================================================================
 # ARM (i) — the legacy escape the refusal prescribes actually works.
 #
