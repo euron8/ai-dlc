@@ -4436,3 +4436,104 @@ is the smaller and is probably right; it also measures (b)'s population before (
 pull, indistinguishable from one deliberately left manual.
 
 verify: sh R=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -f "$R" ] || exit 9; grep -q 'verify:' "$R" || exit 9; grep -qE 'no row of any kind|produced no row|receipt-invisible|entries with no emitted row' "$R" && exit 0; exit 1
+
+## BL-226 — the over-completeness arm convicted an unparsable argument as a deleted driver
+
+**Filed and FIXED in the same release**, `v0.543.0`, closing
+`PC-S310-SELF-UPDATE-FIXTURES-OVER-ARM-CONVICTS-A-SET-IT-COULD-NOT-PARSE`, filed by the reference
+consumer on 2026-09-09 during its `0.540.0 -> 0.542.0` pull.
+
+**The defect.** `self-update-fixtures.sh`'s over-completeness arm probed
+`${THEIRS}:core/fixtures/${d}/run.sh` for each named fixture and, on failure, convicted it as
+*"no run.sh at <theirs>: upstream deleted the driver"*. `$d` is caller-supplied, so any malformed
+argument failed the same probe and was reported with the same sentence — an assertion about the
+DISTRIBUTION that is false, naming a cause the operator cannot act on. Under zsh an unquoted
+`$FIX` holding a newline-joined list does not word-split, so fifteen names arrived as ONE
+argument and were reported as one row declaring fifteen drivers deleted, every one present.
+The printed remedy — drop them from the slice — is then refused by the diff-side join as an
+omission, so following it walks into the opposite refusal.
+
+**THE FIRST CUT OF THE FIX WAS WRONG IN THE DIRECTION THAT DESTROYS THE ARM, AND THE FIXTURE
+CAUGHT IT.** It probed the containing TREE (`${THEIRS}:core/fixtures/${d}`) and ordered that
+first, reasoning that a retirement resolves as a tree and lacks only its driver. That is false
+for a real retirement, which removes the whole directory: measured against `origin/main` with a
+resolving control in the same invocation, a retired-shaped name and the joined fifteen-name
+argument BOTH fail the tree probe while `self-update-gate` resolves. Part 15 went red where
+`origin/main` is green — the tree probe relabels every genuine deleted-driver row.
+
+**The discriminator is the argument's SHAPE.** A fixture name cannot carry a space or a `/`;
+the joined-list case is one argument holding fifteen space-separated names, while a retirement
+is a well-formed name whose tree is gone. The probe needs no tree lookup, is sited before both,
+and the deleted-driver verdict keeps every input it had before this change.
+
+**Guarded by two arms, because one cannot tell a discriminator from a blanket relabel.** Part 15b
+asserts the joined argument gets the new row; Part 15 (unchanged) asserts `touched-deleted` keeps
+the old one. Mutant 13b rebuilds the tree-probe cut and must move Part 15 while LEAVING 15b green
+— an arm keyed only on 15b would score that wrong cut a pass. Proven bidirectional: neutering the
+new row to `elif false` takes Part 15b red, and the subject restores byte-identical after.
+
+**Mutant 12's anchor moved and the fixture said so rather than passing.** The four new remedy
+lines sit between the RETIRED-FIXTURE-ORPHAN sentence and the shared `log:`/`exit 2` tail, so the
+old three-line anchor stopped resolving and reported FIXTURE ERROR — correct, since a mutant that
+cannot be built kills nothing. Re-keyed on the last line of the new remedy: 1 occurrence, against
+3 for the bare tail it sits above.
+
+**Tiered DEFECT.** Consumer-facing; the script ships in `core/skills/ai-dlc-update/`.
+
+verify: sh S=core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh; [ -f "$S" ] || exit 9; W="$(mktemp -d)" || exit 9; R="$W/dist"; mkdir -p "$R/core/fixtures/real-fx" "$R/core/fixtures/no-driver" "$W/c"; printf '#!/bin/sh\nexit 0\n' > "$R/core/fixtures/real-fx/run.sh"; printf 'x\n' > "$R/core/fixtures/no-driver/README.md"; git init -q "$R" >/dev/null 2>&1; git -C "$R" config user.email t@t; git -C "$R" config user.name t; git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -qm s >/dev/null 2>&1; T="$(git -C "$R" rev-parse HEAD)"; git -C "$R" rev-parse -q --verify "${T}:core/fixtures/no-driver" >/dev/null || { rm -rf "$W"; exit 9; }; bad="$(bash "$S" "$R" "$T" "$T" "$W/c" "real-fx no-driver" 2>&1)"; good="$(bash "$S" "$R" "$T" "$T" "$W/c" "no-driver" 2>&1)"; rm -rf "$W"; printf '%s' "$good" | grep -qF 'no consumer can run' || exit 9; printf '%s' "$good" | grep -qF 'upstream deleted the driver' || exit 1; printf '%s' "$bad" | grep -qF 'not a fixture NAME' || exit 1; printf '%s' "$bad" | grep -qE 'real-fx no-driver — no run\.sh at' && exit 1; exit 0
+
+## BL-227 — nine of batch 82's ten receipts are satisfied by something that is not a fix, and the rule forbidding it has no enforcer
+
+**Found 2026-09-10** scoping batch 83, by building the non-fix for every candidate receipt in the
+ranked set and running it. Not a rediscovery: `.claude/rules/verification-discipline.md:154`
+already states *"A whole-file `grep -qF` is satisfied by a comment... Bind to the line that EMITS
+the thing"*. **The rule is right, it is written down, and nothing enforces it** — which is how one
+batch produced nine receipts that break it while certifying each as bidirectional.
+
+**Measured. Every mutation carries a `cmp -s` control asserting it applied, and every subject an
+unmutated control that stays at 1.**
+
+    BL-217   1 -> 0   a PURE LINE REFLOW, words byte-identical
+    BL-218   1 -> 0   blanket acquittal of any row citing any OWED- token
+    BL-219   1 -> 0   a bare comment
+    BL-220   1 -> 0   blanket deny, no opt-out
+    BL-221   1 -> 0   a bare comment
+    BL-222   1 -> 0   a bare comment -- AND it REJECTS a correct fix rendered after the OK line
+    BL-223   1 -> 0   one word inside an unrelated description string
+    BL-224   1 -> 0   a bare comment naming adj_spent_note
+    BL-225   1 -> 0   a bare comment
+    PC-S310  0 -> 1   a bare comment, and gutting the arm (consumer polarity: nonzero = CLOSE)
+
+**THE TWO CLASSES ARE NOT EQUALLY DANGEROUS.** Seven close on PROSE — a comment, a reflow, a
+mention — and those are caught by binding to the emission site. **BL-218 and BL-220 close on an
+OVER-BROAD VERSION OF THE REAL FIX**, which is the shape a hand is most likely to build by
+accident: BL-218's closer silences every genuine debt, BL-220's denies every ordinary file. Their
+receipts DRIVE the shipping tool, which defeats prose closers and not fix-shaped ones. **Driving
+the subject is necessary and not sufficient** — the arm must also assert the control case still
+DENIES, which BL-226's receipt does and theirs do not.
+
+**BL-217's closer is the sharpest and it is invisible to review.** After rewrapping one word
+earlier, `tr '\n' ' '` over both files yields the SAME STRING — the two are word-for-word
+identical and only the line break moved. A formatting pass closes that entry silently with the
+defect fully intact.
+
+**Two measurement errors of my own, both caught by controls rather than by reading**, and they
+are why the scoring is stated with its controls: an over-escaped `awk` returned `rc=1` on all
+three arms of one probe (a non-discriminating null that reads exactly like agreement), and a
+lone copy of a validator in a bare temp dir exited before reaching its arm — the "a copied
+validator needs its siblings" hazard — reading as all-1 a second time. A second hand hit the
+same hazard independently on BL-220 and self-corrected.
+
+**Not fixed here, and the shape needs deciding.** A mechanical arm over `verify: sh` lines cannot
+ask whether a receipt binds to an emission site — that is a judgment about what the predicate
+reads. The tractable forms are (a) a REPORTING arm that scores every backlog receipt against a
+seeded comment appended to each path it names, and fails the push on any that flips, which needs
+no judgment and cannot false-positive on a receipt that drives; or (b) a producer-side rule at
+filing time. (a) is the smaller and measures (b)'s population as a side effect. **The
+false-positive set for (a) is unmeasured over the 79 live receipts** and `CLAUDE.md` requires that
+before the check ships.
+
+**Tiered DEFECT.** Every receipt in the ranked set is the instrument the next batch will use to
+decide whether its own fix worked, and nine of them cannot tell a fix from a comment.
+
+verify: sh B=docs/backlog.md; [ -f "$B" ] || exit 9; grep -q '^## BL-227' "$B" || exit 9; grep -qE 'receipt-emission-site|scores every backlog receipt against a seeded|verify-receipt-binding' scripts/*.sh 2>/dev/null && exit 0; exit 1

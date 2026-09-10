@@ -15,6 +15,45 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.543.0] - 2026-09-10
+
+### An unparsable argument is no longer convicted as a deleted driver (`PC-S310-SELF-UPDATE-FIXTURES-OVER-ARM-CONVICTS-A-SET-IT-COULD-NOT-PARSE`)
+
+`self-update-fixtures.sh`'s over-completeness arm probed `${THEIRS}:core/fixtures/${d}/run.sh` for
+each named fixture and, on failure, convicted it as *"upstream deleted the driver"*. `$d` is
+caller-supplied, so any malformed argument failed the same probe and got the same sentence — an
+assertion about the distribution that is false, naming a cause the operator cannot act on. Under
+zsh an unquoted `$FIX` holding a newline-joined list does not word-split, so fifteen names arrived
+as ONE argument and were reported as fifteen deleted drivers, every one present. The printed
+remedy — drop them from the slice — is then refused by the diff-side join as an omission, so
+following it walks into the opposite refusal.
+
+**The first cut of the fix was wrong in the direction that destroys the arm, and the fixture
+caught it.** Probing the containing TREE looks equivalent and is not: a real retirement removes
+the whole directory, so it fails a tree probe exactly as a bad argument does. Measured against
+`origin/main` with a resolving control in the same invocation, a retired-shaped name and the
+joined argument both fail it while `self-update-gate` resolves — the tree probe relabels every
+genuine deleted-driver row, and Part 15 went red where `origin/main` is green.
+
+The discriminator is the argument's SHAPE: a fixture name cannot carry a space or a `/`. Two
+fixture arms guard it, because one cannot tell a discriminator from a blanket relabel — Part 15b
+asserts the joined argument gets the new row, Part 15 asserts a real retirement keeps the old one,
+and Mutant 13b rebuilds the tree-probe cut and must move 15 while leaving 15b green.
+
+Filed as `BL-226`. Mutant 12's anchor moved with the new remedy lines and reported FIXTURE ERROR
+rather than passing; re-keyed on a line unique to that block (1 occurrence, against 3 for the bare
+tail above it).
+
+### Nine of ten candidate receipts are closable by a non-fix, filed as `BL-227`
+
+Scoping this batch scored every receipt in the ranked set by BUILDING the non-fix and running it.
+Seven close on prose — a bare comment, a mention in an unrelated string, and in one case a pure
+line reflow whose words are byte-identical. Two close on an over-broad version of the real fix,
+which is the shape most likely to be built by accident. One rejects a correct fix outright.
+`.claude/rules/verification-discipline.md:154` already forbids this and has no enforcer; the
+reporting arm that would bind it needs its false-positive set measured over the live receipts
+first, so the finding is filed rather than fixed.
+
 ## [0.542.0] - 2026-09-09
 
 ### A story's sprint is recovered from the file before it is refused, and an unreadable header refuses instead of guessing (`PC-S309-STORY-NO-SPRINT-REMEDY-IS-RENAME-ONLY-WHILE-THE-FIXTURE-RATIONALE-CLAIMS-OUT-OF-BAND-DERIVATION`)
