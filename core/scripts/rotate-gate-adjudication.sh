@@ -313,7 +313,25 @@ conforming_nonce() {
   return 1
 }
 
-SURVIVOR_STEM=""; SURVIVOR_TS=""; SURVIVOR_FAILS=""; SURVIVOR_LEGACY=0
+# THE PREDICATE IS "NO MODE CAN MOVE IT", NOT "IT IS LEGACY", AND THE NARROWER
+# SPELLING LEFT A SECOND DOOR OPEN. A verdict is unmovable in TWO ways: it
+# carries no `gate_series_id` (legacy, moved only by --legacy-through), or it
+# carries one that `*-s<N>-*` cannot select. The schema calls the field
+# "deliberately unpatterned: required and non-empty, nothing more", so the glob
+# is an UNSTATED pattern imposed on a field nothing constrains -- any writer
+# stamping a legal-but-differently-ordered id produces a member. Measured on the
+# reference consumer: `s310-planning`, sprint-first, written by a live session
+# and matching no `*-s<N>-*`. Such a verdict is worse than a legacy one, because
+# --legacy-through skips it too (`[ -n "$series" ] && continue`): no refusal AND
+# no escape. Keying on legacy-ness alone reopened the exact trap this refusal
+# exists to close, through a different door.
+survivor_unmovable() { # <series> -> 0 when no mode can ever move this verdict
+  [ -n "$1" ] || return 0                      # legacy: only --legacy-through
+  case "$1" in *-s[0-9]*-*) return 1 ;; esac   # a --sprint can select it
+  return 0                                     # series id no glob can select
+}
+
+SURVIVOR_STEM=""; SURVIVOR_TS=""; SURVIVOR_FAILS=""; SURVIVOR_UNMOVABLE=0; SURVIVOR_WHY=""
 for f in "$SRC"/*.verdict.json; do
   [ -e "$f" ] || continue
   _stem="$(basename "$f" .verdict.json)"
@@ -325,21 +343,43 @@ for f in "$SRC"/*.verdict.json; do
     SURVIVOR_FAILS="$(jq -r '[.verdicts[]? | select(.verdict=="FAIL") | .check_id] | join(" ")' \
                         "$f" 2>/dev/null)" || SURVIVOR_FAILS=""
     _series="$(jq -r '.gate_series_id // empty' "$f" 2>/dev/null)" || _series=""
-    if [ -n "$_series" ]; then SURVIVOR_LEGACY=0; else SURVIVOR_LEGACY=1; fi
+    if survivor_unmovable "$_series"; then
+      SURVIVOR_UNMOVABLE=1
+      if [ -n "$_series" ]; then
+        SURVIVOR_WHY="its gate_series_id '${_series}' matches no --sprint selector"
+      else
+        SURVIVOR_WHY="it carries no gate_series_id"
+      fi
+    else
+      SURVIVOR_UNMOVABLE=0; SURVIVOR_WHY=""
+    fi
   fi
 done
 
-if [ "$SURVIVOR_LEGACY" -eq 1 ] && [ -n "$SURVIVOR_FAILS" ]; then
-  echo "${SELF_NAME}: REFUSED -- this rotation would strand a FAILing legacy verdict." >&2
+if [ "$SURVIVOR_UNMOVABLE" -eq 1 ] && [ -n "$SURVIVOR_FAILS" ]; then
+  echo "${SELF_NAME}: REFUSED -- this rotation would strand a FAILing verdict no mode can move." >&2
   echo "  Newest verdict left in '${SRC}' after this move:" >&2
-  echo "    ${SURVIVOR_STEM} -- no gate_series_id, FAILed check(s): ${SURVIVOR_FAILS}" >&2
+  echo "    ${SURVIVOR_STEM} -- ${SURVIVOR_WHY}; FAILed check(s): ${SURVIVOR_FAILS}" >&2
   echo "  The gate-remediation guard picks its live pass by trailing nonce with no notion of" >&2
-  echo "  sprint, so that verdict would become the live pass and deny artifact edits. It" >&2
-  echo "  carries no gate_series_id, so NO --sprint rotation can ever move it, and the deny" >&2
-  echo "  would not clear on its own. Nothing written." >&2
+  echo "  sprint, so that verdict would become the live pass and deny artifact edits, and the" >&2
+  echo "  deny would not clear on its own. Nothing written." >&2
   echo "" >&2
-  echo "  THE REMEDY IS TO ROTATE THE PRE-SERIES VERDICTS OUT, then re-run this command:" >&2
-  echo "    ${SELF_NAME}.sh --legacy-through ${SURVIVOR_TS} --apply" >&2
+  # THE REMEDY DIFFERS BY CASE AND MUST NOT BE PRINTED UNCONDITIONALLY. A
+  # --legacy-through run cannot move a verdict that HAS a series id, so printing
+  # it for that case would be a second inert remedy -- the defect this block was
+  # already corrected for once.
+  if [ -z "$(jq -r '.gate_series_id // empty' "${SRC}/${SURVIVOR_STEM}.verdict.json" 2>/dev/null)" ]; then
+    echo "  THE REMEDY IS TO ROTATE THE PRE-SERIES VERDICTS OUT, then re-run this command:" >&2
+    echo "    ${SELF_NAME}.sh --legacy-through ${SURVIVOR_TS} --apply" >&2
+  else
+    echo "  THIS ONE HAS NO MECHANICAL REMEDY, and that is the finding rather than an" >&2
+    echo "  oversight. Its gate_series_id is well-formed by the schema, which leaves the" >&2
+    echo "  field deliberately unpatterned, but no --sprint selector can name it and" >&2
+    echo "  --legacy-through skips it because it HAS a series id. Re-stamp that verdict's" >&2
+    echo "  gate_series_id in the '<gate_type>-s<N>-<nonce>' form its siblings use, then" >&2
+    echo "  re-run this command -- and report the writer that stamped it, because it will" >&2
+    echo "  keep producing verdicts no rotation can move." >&2
+  fi
   echo "" >&2
   echo "  A SIDECAR DOES NOT LIFT THIS. The guard's repair and authorization records are" >&2
   echo "  read by the GUARD, not by this rotator, so writing one changes nothing here --" >&2
