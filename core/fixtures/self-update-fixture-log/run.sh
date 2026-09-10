@@ -745,8 +745,15 @@ bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
      "touched-shippable green-one" cwd-probe \
      >"$CONS2/out-part15b.txt" 2>"$ERR15B"
 rc=$?
-if [ "$rc" -eq 2 ] && grep -qF "not a fixture NAME" "$ERR15B" \
-   && ! grep -qF "upstream deleted the driver" "$ERR15B"; then
+# KEYED ON THE EMITTED ROW, NEVER ON THE TOKEN ANYWHERE IN THE OUTPUT. The remedy paragraph
+# below the rows names the 'not a fixture NAME' case UNCONDITIONALLY, on every refusal — so a
+# bare `grep -qF` for that phrase passes on a run that emitted no such row at all. Measured on
+# this branch before it was fixed: seeding only a genuine retirement produced the deleted-driver
+# row and the first conjunct still passed. That is `verification-discipline.md`'s "bind to the
+# line that EMITS the thing", and it was committed here in the same branch that FILED it as
+# BL-227. A row opens a line, carries the subject, and is indented two spaces.
+if [ "$rc" -eq 2 ] && grep -qE '^  touched-shippable green-one — not a fixture NAME' "$ERR15B" \
+   && ! grep -qE '^  [^ ].* — no run\.sh at' "$ERR15B"; then
   ok "a joined-list argument is refused as an unparsable NAME, not as a deleted driver — the operator is sent to the argument rather than to a retirement that never happened"
 else
   bad "a joined-list argument was not refused under its own reason (rc=$rc). Either it is being convicted as a deleted driver — the filed defect, which sends the operator to a remedy that walks into the opposite refusal — or the arm no longer fires at all"
