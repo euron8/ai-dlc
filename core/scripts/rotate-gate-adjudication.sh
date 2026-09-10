@@ -325,10 +325,38 @@ conforming_nonce() {
 # --legacy-through skips it too (`[ -n "$series" ] && continue`): no refusal AND
 # no escape. Keying on legacy-ness alone reopened the exact trap this refusal
 # exists to close, through a different door.
+# ASK THE SELECTOR'S OWN QUESTION; DO NOT APPROXIMATE IT WITH A GLOB. An earlier
+# revision tested `*-s[0-9]*-*`, which is NOT equivalent to "some --sprint moves
+# it": in a shell glob `[0-9]*` is one digit followed by ANYTHING, so it spans
+# characters no concrete sprint token contains. Measured against every s0..s400 —
+# `a-s1x-b`, `x-s3 1 0-y` and `planning-s310 -<nonce>` all scored MOVABLE while no
+# --sprint selects any of them, which is the stranded state with no refusal and no
+# escape, reached through the predicate's own approximation.
+#
+# So the token is DERIVED from the id and tested as the selector tests it: split
+# on `-`, and for each field of the form s<digits> ask whether the exact
+# `-<field>-` substring the selector uses is present. Same string operation the
+# selection loop performs, so the two cannot drift.
 survivor_unmovable() { # <series> -> 0 when no mode can ever move this verdict
   [ -n "$1" ] || return 0                      # legacy: only --legacy-through
-  case "$1" in *-s[0-9]*-*) return 1 ;; esac   # a --sprint can select it
-  return 0                                     # series id no glob can select
+  _u_rest="$1"
+  while [ -n "$_u_rest" ]; do
+    case "$_u_rest" in
+      *-*) _u_field="${_u_rest%%-*}"; _u_rest="${_u_rest#*-}" ;;
+      *)   _u_field="$_u_rest"; _u_rest="" ;;
+    esac
+    # A sprint token is `s` followed by digits ONLY -- the same shape --sprint
+    # validation accepts, minus its `s[0-9]*` looseness.
+    case "$_u_field" in
+      s*) _u_n="${_u_field#s}" ;;
+      *)  continue ;;
+    esac
+    [ -n "$_u_n" ] || continue
+    case "$_u_n" in *[!0-9]*) continue ;; esac
+    # The selector's exact test, on the whole id.
+    case "$1" in *"-${_u_field}-"*) return 1 ;; esac
+  done
+  return 0
 }
 
 SURVIVOR_STEM=""; SURVIVOR_TS=""; SURVIVOR_FAILS=""; SURVIVOR_UNMOVABLE=0; SURVIVOR_WHY=""
