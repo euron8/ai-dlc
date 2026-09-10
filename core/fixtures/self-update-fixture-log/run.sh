@@ -789,6 +789,30 @@ else
   bad "a newline-joined (rc=$rc) or tab-joined (rc=$rcd) argument was not refused under the name-shape reason. A predicate keyed on a literal space passes Part 15b and leaves the filed mechanism — and every tab-delimited caller — still convicted as a deleted driver"
 fi
 
+# --- Part 15d: a SLASH-bearing argument, which no other arm observes -------------------------
+# THE ONE-CHARACTER WRONG FIX IS DELETING THE `/` FROM THE PREDICATE'S CHARACTER CLASS, and
+# before this arm existed the ONLY thing that went red was Mutant 13b's `FIXTURE ERROR: the
+# name-shape probe anchor no longer occurs exactly once` — an anchor complaint, not a behaviour
+# finding. An author who hits that message re-keys the anchor to their own spelling and the
+# wrong fix then goes fully green. Predicted by an adversarial hand and CONFIRMED by building it:
+# one FAIL, and it was the anchor row.
+#
+# A mutant cannot cover this: the mutation IS the wrong fix, so the thing that must fail is a
+# behavioural arm reading the emitted row. `lib` is a real no-`run.sh` directory in this repo,
+# so the slash case is not exotic — `lib/preamble.sh` is the shape a caller passing a path
+# rather than a name actually produces.
+rm -f "$LOGDIR2"/self-update-fixtures-*.md
+ERR15E="$CONS2/err-part15e.txt"
+bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
+     "touched-shippable/run.sh" cwd-probe >/dev/null 2>"$ERR15E"
+rce=$?
+if [ "$rce" -eq 2 ] && grep -qE '^  touched-shippable/run\.sh — ' "$ERR15E" \
+   && ! grep -qE '^  touched-shippable/run\.sh — no run\.sh at' "$ERR15E"; then
+  ok "a SLASH-bearing argument is refused under the name-shape reason — deleting the slash from the predicate's class is a one-character wrong fix, and this is the only arm that sees it as behaviour rather than as a broken anchor"
+else
+  bad "a slash-bearing argument was not refused under the name-shape reason (rc=$rce). The predicate's slash half is untested by behaviour, and the only thing standing between that wrong fix and a green suite is a mutant anchor an author is invited to re-key"
+fi
+
 # --- Part 16: a wholly legitimate set does NOT trip the arm ----------------------------------
 # The negative direction, and it is keyed on the arm's OWN MESSAGE rather than on the exit code:
 # exit 2 has six producers in this runner and a control reading only the code cannot tell them

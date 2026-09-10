@@ -4522,9 +4522,23 @@ after each:
 Four correct spellings close it and three wrong ones do not, so it is keyed on BEHAVIOUR rather
 than on one author's phrasing.
 
+**BOTH CONJUNCTS ARE ANCHORED ON THE ROW'S SHAPE, NOT ITS WORDING, AND THE MIDDLE VERSION WAS
+WRONG IN THE OTHER DIRECTION.** Anchoring the exact phrase `— not a fixture NAME` rejected
+`r1-correct-reworded`, a behaviourally-correct fix using the consumer's own proposed wording
+(measured: receipt REJECTED, behaviour ok on all three inputs). Anchoring `^  <subject> — `
+keeps the emission-binding — the remedy paragraph is not indented-subject-dash shaped — while
+accepting any wording, and the negative deleted-driver conjuncts carry the discrimination.
+
+**PART 15d EXISTS BECAUSE THE ONE-CHARACTER WRONG FIX WAS CAUGHT ONLY BY AN ANCHOR COMPLAINT.**
+Deleting the `/` from the predicate's character class is a wrong fix, and before 15d the only red
+was Mutant 13b's `FIXTURE ERROR: the name-shape probe anchor no longer occurs exactly once` — a
+message that invites an author to re-key the anchor to their own spelling, after which the wrong
+fix goes fully green. Predicted by an adversarial hand and confirmed by building it. 15d reads the
+emitted row for a slash-bearing argument, so the wrong fix now fails on BEHAVIOUR.
+
 **Tiered DEFECT.** Consumer-facing; the script ships in `core/skills/ai-dlc-update/`.
 
-verify: sh S=core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh; [ -f "$S" ] || exit 9; W="$(mktemp -d)" || exit 9; R="$W/dist"; mkdir -p "$R/core/fixtures/real-fx" "$R/core/fixtures/no-driver" "$R/core/fixtures/lib" "$W/c"; printf '#!/bin/sh\nexit 0\n' > "$R/core/fixtures/real-fx/run.sh"; printf 'x\n' > "$R/core/fixtures/no-driver/README.md"; printf 'x\n' > "$R/core/fixtures/lib/preamble.sh"; git init -q "$R" >/dev/null 2>&1; git -C "$R" config user.email t@t; git -C "$R" config user.name t; git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -qm s >/dev/null 2>&1; T="$(git -C "$R" rev-parse HEAD)"; git -C "$R" rev-parse -q --verify "${T}:core/fixtures/no-driver" >/dev/null || { rm -rf "$W"; exit 9; }; bad="$(bash "$S" "$R" "$T" "$T" "$W/c" "real-fx no-driver" 2>&1)"; slash="$(bash "$S" "$R" "$T" "$T" "$W/c" "lib/preamble.sh" 2>&1)"; good="$(bash "$S" "$R" "$T" "$T" "$W/c" "no-driver" 2>&1)"; rm -rf "$W"; printf '%s' "$good" | grep -qF 'no consumer can run' || exit 9; printf '%s' "$good" | grep -qF 'upstream deleted the driver' || exit 1; printf '%s' "$bad" | grep -qF 'not a fixture NAME' || exit 1; printf '%s' "$bad" | grep -qE 'real-fx no-driver — no run\.sh at' && exit 1; printf '%s' "$slash" | grep -qE '^  lib/preamble\.sh — not a fixture NAME' || exit 1; exit 0
+verify: sh S=core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh; [ -f "$S" ] || exit 9; W="$(mktemp -d)" || exit 9; R="$W/dist"; mkdir -p "$R/core/fixtures/real-fx" "$R/core/fixtures/no-driver" "$R/core/fixtures/lib" "$W/c"; printf '#!/bin/sh\nexit 0\n' > "$R/core/fixtures/real-fx/run.sh"; printf 'x\n' > "$R/core/fixtures/no-driver/README.md"; printf 'x\n' > "$R/core/fixtures/lib/preamble.sh"; git init -q "$R" >/dev/null 2>&1; git -C "$R" config user.email t@t; git -C "$R" config user.name t; git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -qm s >/dev/null 2>&1; T="$(git -C "$R" rev-parse HEAD)"; git -C "$R" rev-parse -q --verify "${T}:core/fixtures/no-driver" >/dev/null || { rm -rf "$W"; exit 9; }; bad="$(bash "$S" "$R" "$T" "$T" "$W/c" "real-fx no-driver" 2>&1)"; slash="$(bash "$S" "$R" "$T" "$T" "$W/c" "lib/preamble.sh" 2>&1)"; good="$(bash "$S" "$R" "$T" "$T" "$W/c" "no-driver" 2>&1)"; rm -rf "$W"; printf '%s' "$good" | grep -qF 'no consumer can run' || exit 9; printf '%s' "$good" | grep -qF 'upstream deleted the driver' || exit 1; printf '%s' "$bad" | grep -qE '^  real-fx no-driver — ' || exit 1; printf '%s' "$bad" | grep -qE 'real-fx no-driver — no run\.sh at' && exit 1; printf '%s' "$slash" | grep -qE '^  lib/preamble\.sh — ' || exit 1; printf '%s' "$slash" | grep -qE ' — no run\.sh at' && exit 1; exit 0
 
 ## BL-227 — nine of batch 82's ten receipts are satisfied by something that is not a fix, and the rule forbidding it has no enforcer
 
