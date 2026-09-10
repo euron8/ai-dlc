@@ -246,6 +246,182 @@ else
 fi
 
 # =============================================================================
+# ARM (h) — REFUSAL: the rotation would STRAND a FAILing legacy verdict.
+#
+# The two cases differ in exactly ONE property: whether the legacy verdict left
+# behind records a FAIL. Both must be here, because a refusal keyed on legacy-ness
+# ALONE passes (h.1) and is a wrong fix -- it would refuse 94 files on the
+# reference consumer and break every legitimate close. (h.2) is what convicts it.
+# =============================================================================
+seed strand
+BEFORE_H="$(treehash "$PROJ")"
+out="$(rotate --sprint s308 --apply 2>&1)"; rc=$?
+AFTER_H="$(treehash "$PROJ")"
+if [ "$rc" -eq 1 ] && [ "$BEFORE_H" = "$AFTER_H" ] \
+   && grep -q 'no mode can move' <<<"$out" \
+   && grep -q 'carries no gate_series_id' <<<"$out" \
+   && grep -q 'legacy-20260701T000000Z' <<<"$out"; then
+  ok "(h.1) REFUSAL: rotating s308 PROMOTES a FAILing legacy verdict to newest — refused (exit 1), tree byte-identical, offender named"
+else
+  bad "(h.1) a rotation that strands a FAILing legacy verdict was not refused (rc=$rc): $out"
+fi
+
+# The offender's remedy must name an action THIS tool honours. An earlier revision
+# printed "write a repair or authorization record", which the refusal never reads —
+# a remedy the consumer follows to no effect. Assert the executable one is offered.
+if grep -q -- '--legacy-through' <<<"$out"; then
+  ok "(h.1b) the refusal offers a remedy this tool can execute (--legacy-through), not a sidecar it never reads"
+else
+  bad "(h.1b) the refusal named no executable remedy: $out"
+fi
+
+seed strand-nearmiss
+out="$(rotate --sprint s308 --apply 2>&1)"; rc=$?
+if [ "$rc" -eq 0 ] && ! grep -q 'would strand' <<<"$out" \
+   && [ -f "$DEST_S308/sprint-review-20260907T002257Z.verdict.json" ]; then
+  ok "(h.2) NEAR-MISS: a CLEAN legacy verdict rotates normally AND the move landed — the refusal is keyed on the FAIL, not on legacy-ness"
+else
+  bad "(h.2) a clean legacy verdict was wrongly refused, or the move did not land (rc=$rc): $out"
+fi
+
+# =============================================================================
+# ARM (h.3) — a FAILing legacy verdict that the rotation does NOT promote.
+#
+# THE ARM THAT CONVICTS A SURVIVORSHIP-BLIND PREDICATE. (h.1) and (h.2) both pass
+# against "refuse if any legacy verdict anywhere records a FAIL" — a fix that
+# refuses EVERY rotation on the reference consumer. Here the FAILing legacy
+# verdict is shadowed by a newer verdict that does not move, so the correct
+# answer is PROCEED, and the destination assertion stops "exit 0 having moved
+# nothing" from passing as a rotation.
+# =============================================================================
+seed strand-shadowed
+out="$(rotate --sprint s308 --apply 2>&1)"; rc=$?
+if [ "$rc" -eq 0 ] && ! grep -q 'would strand' <<<"$out" \
+   && [ -f "$DEST_S308/sprint-review-20260907T002257Z.verdict.json" ]; then
+  ok "(h.3) a FAILing legacy verdict SHADOWED by a newer non-moving verdict does not block the rotation, and the move landed"
+else
+  bad "(h.3) a shadowed FAILing legacy verdict wrongly blocked the rotation, or the move did not land (rc=$rc): $out"
+fi
+
+# =============================================================================
+# ARM (h.4) — the SECOND unmovable shape: a survivor with a series id that no
+# `*-s<N>-*` selector can name. The schema leaves `gate_series_id` deliberately
+# unpatterned, so this is legal input, and it is worse than a legacy verdict
+# because `--legacy-through` skips it too. A predicate keyed on legacy-ness
+# scores it movable and lets the rotation strand it — no refusal, no escape.
+# =============================================================================
+seed strand-unselectable
+BEFORE_H4="$(treehash "$PROJ")"
+out="$(rotate --sprint s308 --apply 2>&1)"; rc=$?
+AFTER_H4="$(treehash "$PROJ")"
+if [ "$rc" -eq 1 ] && [ "$BEFORE_H4" = "$AFTER_H4" ] \
+   && grep -q 'no mode can move' <<<"$out" \
+   && grep -q 'matches no --sprint selector' <<<"$out"; then
+  ok "(h.4) REFUSAL: a survivor whose gate_series_id no selector can name is refused too, and the row says WHY it is unmovable"
+else
+  bad "(h.4) an unselectable FAILing survivor was not refused (rc=$rc): $out"
+fi
+
+# Its remedy must NOT be the legacy one — --legacy-through cannot move a verdict
+# that has a series id, so printing it here would be a second inert remedy.
+# Keyed on the PRESCRIBED COMMAND LINE, not on the token: the prose explains why
+# --legacy-through does not apply here, so a bare token grep matches that
+# explanation and reads as the wrong remedy being offered.
+if ! grep -qE '^ +rotate-gate-adjudication\.sh --legacy-through' <<<"$out" \
+   && grep -q 'Re-stamp that' <<<"$out"; then
+  ok "(h.4b) the unselectable case prescribes a re-stamp and does NOT offer the legacy escape, which cannot move it"
+else
+  bad "(h.4b) the unselectable case printed the wrong remedy: $out"
+fi
+
+# (h.4c) A SECOND UNSELECTABLE SHAPE, one property apart from (h.4)'s. One shape
+# cannot distinguish a predicate that asks the selector's question from one that
+# hardcodes the seeded string: a wrong fix special-casing `s<N>-*` passed (h.4)
+# and (h.4b) while stranding four of the five unselectable shapes. This seed is
+# sprint-LAST and shares no prefix with the sprint-first one.
+seed strand-unselectable2
+BEFORE_H4C="$(treehash "$PROJ")"
+out="$(rotate --sprint s308 --apply 2>&1)"; rc=$?
+AFTER_H4C="$(treehash "$PROJ")"
+if [ "$rc" -eq 1 ] && [ "$BEFORE_H4C" = "$AFTER_H4C" ] \
+   && grep -q 'no mode can move' <<<"$out" \
+   && grep -q "x-s310" <<<"$out"; then
+  ok "(h.4c) a DIFFERENTLY-SHAPED unselectable survivor is refused too — the predicate asks the selector's question rather than matching one spelling"
+else
+  bad "(h.4c) a sprint-last unselectable survivor was not refused (rc=$rc): $out"
+fi
+
+# =============================================================================
+# ARM (i) — the legacy escape the refusal prescribes actually works.
+#
+# A refusal whose remedy cannot be executed is the defect the remedy text exists
+# to avoid, so the remedy is asserted here rather than trusted: rotating the
+# pre-series verdicts out must let the previously-refused rotation proceed.
+# =============================================================================
+#
+# THE BOUND IS PARSED OUT OF THE REFUSAL'S OWN OUTPUT AND EXECUTED VERBATIM. An
+# earlier revision hardcoded a bound, which is why it could not see a strict-`<`
+# off-by-one: the printed command moved everything EXCEPT the verdict it named,
+# so the next close re-printed the identical bound and a consumer following the
+# message looped forever. A hardcoded bound made that converge and proved nothing.
+# It also let a one-line wrong fix — print an impossible bound like
+# `00000000T000000Z`, which selects nothing — pass every arm.
+seed strand
+refusal="$(rotate --sprint s308 --apply 2>&1)"
+PRINTED_BOUND="$(grep -oE -- '--legacy-through [0-9]{8}T[0-9]{6}Z' <<<"$refusal" | head -1 | awk '{print $2}')"
+if [ -z "$PRINTED_BOUND" ]; then
+  bad "(i) the refusal printed no executable bound to run: $refusal"
+else
+  out="$(rotate --legacy-through "$PRINTED_BOUND" --apply 2>&1)"; rc_i=$?
+  # The verdict the refusal NAMED must be the one the printed command removes.
+  legacy_gone=1; [ -e "$GA/legacy-20260701T000000Z.verdict.json" ] && legacy_gone=0
+  out2="$(rotate --sprint s308 --apply 2>&1)"; rc_i2=$?
+  if [ "$rc_i" -eq 0 ] && [ "$rc_i2" -eq 0 ] && [ "$legacy_gone" -eq 1 ] \
+     && [ -f "$DEST_S308/sprint-review-20260907T002257Z.verdict.json" ]; then
+    ok "(i) running the refusal's OWN printed bound (${PRINTED_BOUND}) removes the verdict it named and unblocks the rotation in ONE run — the remedy converges"
+  else
+    bad "(i) the printed remedy did not converge (legacy rc=$rc_i, named-verdict-removed=$legacy_gone, sprint rc=$rc_i2): $out / $out2"
+  fi
+fi
+
+# The bound is not decorative: a legacy verdict at or after it must NOT move.
+seed strand
+out="$(rotate --legacy-through 20260101T000000Z --apply 2>&1)"; rc_i3=$?
+if [ "$rc_i3" -eq 0 ] && grep -q 'nothing to move' <<<"$out"; then
+  ok "(i.2) --legacy-through honours its bound: a legacy verdict NEWER than the bound is left alone"
+else
+  bad "(i.2) the --legacy-through bound was not honoured (rc=$rc_i3): $out"
+fi
+
+# =============================================================================
+# MUTATION 4 — strip the stranding refusal; arm (h.1) must go red.
+#
+# Keyed on the refusal's own emission, so a mutant that matched nothing cannot
+# pass as a mutation. (h.2) must stay green under it: the mutation removes the
+# refusal, and a world that was never refused is unaffected by removing it.
+# =============================================================================
+MUT4="$W/mut-strand.sh"
+# Re-anchored when the predicate widened from "is legacy" to "no mode can move
+# it": the old anchor named `SURVIVOR_LEGACY`, which no longer exists. The
+# `cmp -s` guard below caught the dead anchor rather than letting a no-op
+# mutation score a kill, which is the whole reason it is there.
+sed 's/^if \[ "\$SURVIVOR_UNMOVABLE" -eq 1 \] && \[ -n "\$SURVIVOR_FAILS" \]; then/if false; then/' "$ROT" > "$MUT4"
+if cmp -s "$ROT" "$MUT4"; then
+  bad "MUTATION 4: the sed matched nothing, so the stranding refusal in arm (h.1) is UNPROVEN"
+else
+  chmod +x "$MUT4"
+  seed strand
+  BEFORE_M4="$(treehash "$PROJ")"
+  out4="$( ( cd "$PROJ" && bash "$MUT4" --sprint s308 --apply ) 2>&1 )"; rc4=$?
+  AFTER_M4="$(treehash "$PROJ")"
+  if [ "$rc4" -eq 0 ] && [ "$BEFORE_M4" != "$AFTER_M4" ]; then
+    ok "MUTATION 4: with the stranding refusal stripped, the rotation proceeds and strands the FAILing legacy verdict (rc=$rc4) — arm (h.1) is live, not vacuous"
+  else
+    bad "MUTATION 4: stripping the refusal did not change the outcome (rc=$rc4); arm (h.1) may be passing for another reason"
+  fi
+fi
+
+# =============================================================================
 # MUTATION 1 — key selection on the wrong JSON field (`gate_type` instead of
 # `gate_series_id`), and the base world's s308 set must fail to be found.
 # =============================================================================

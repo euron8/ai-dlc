@@ -20,11 +20,20 @@
 # SELECTION. A verdict moves when it parses as JSON and its `gate_series_id`
 # names the given sprint (`*-s<N>-*`, e.g. `planning-s308-20260902T034604Z`
 # for `--sprint s308`). A verdict with NO `gate_series_id` is legacy and never
-# moves -- the guard's own series split already tolerates it and it predates
-# every live series on the consumer. A verdict naming a different sprint never
-# moves. A `*.verdict.json` that does not parse is a REFUSAL: an unreadable
-# verdict must never be silently left standing as the guard's live pass,
-# whichever sprint it does or does not belong to.
+# moves. A verdict naming a different sprint never moves. A `*.verdict.json`
+# that does not parse is a REFUSAL: an unreadable verdict must never be silently
+# left standing as the guard's live pass, whichever sprint it does or does not
+# belong to.
+#
+# THE LEGACY SKIP IS SAFE ONLY WHILE A NEWER VERDICT SHADOWS IT, AND AN EARLIER
+# REVISION OF THIS HEADER CLAIMED OTHERWISE. It said the skip was safe because
+# "the guard's own series split already tolerates it". The guard has no series
+# split: `gate_series_id` does not appear in `ai-dlc-gate-remediation-guard.sh`
+# at all. That split is `validate-gate-adjudication.sh`'s, and even there the
+# tolerance is conditional on the legacy verdict sorting BEFORE every live
+# series. Rotating a closed sprint out can therefore promote a FAILing legacy
+# verdict to live pass, which is a deny no later rotation can clear -- so the
+# refusal below computes that outcome and refuses the move. See its header.
 #
 # SIDECARS move with their verdict: any regular file in the source directory
 # whose name is `<nonce-stem>.<anything>` -- `<stem>.repair.md`,
@@ -40,15 +49,24 @@
 #
 # Usage:
 #   rotate-gate-adjudication.sh --sprint s<N> [--apply] [--state-dir <dir>]
-#     --apply       write; default is a report that changes nothing
-#     --state-dir   default: ${AI_DLC_STATE_DIR:-_bmad-output}, resolved under
-#                   the repo root found by walking UP for a `VERSION` file or a
-#                   `.git` directory from the CURRENT WORKING DIRECTORY. Given
-#                   explicitly, a RELATIVE --state-dir is resolved against the
-#                   cwd instead, never against the repo root.
+#   rotate-gate-adjudication.sh --legacy-through <nonce> [--apply] [--state-dir <dir>]
+#     --apply           write; default is a report that changes nothing
+#     --state-dir       default: ${AI_DLC_STATE_DIR:-_bmad-output}, resolved under
+#                       the repo root found by walking UP for a `VERSION` file or a
+#                       `.git` directory from the CURRENT WORKING DIRECTORY. Given
+#                       explicitly, a RELATIVE --state-dir is resolved against the
+#                       cwd instead, never against the repo root.
+#     --legacy-through  the OTHER mode, and it takes no --sprint. Moves PRE-SERIES
+#                       verdicts (no `gate_series_id`) whose nonce is at or before
+#                       <nonce>, INCLUSIVE. This is the escape the stranding
+#                       refusal prescribes: a pre-series verdict names no sprint,
+#                       so no --sprint invocation can ever move it. The bound is
+#                       CALLER-ASSERTED -- nothing derives it from a live series.
 #
 #   source:      <state-dir>/gate-adjudication/
 #   destination: <state-dir>/implementation-artifacts/s<N>/gate-adjudication/
+#                <state-dir>/implementation-artifacts/pre-series/gate-adjudication/
+#                  (--legacy-through)
 #
 # Exit: 0 = reported or rotated (nothing to rotate is a normal, affirmative
 #           result, and so is a second --apply for an already-rotated sprint)
@@ -61,28 +79,46 @@ SELF_NAME="rotate-gate-adjudication"
 
 usage() {
   echo "usage: rotate-gate-adjudication.sh --sprint s<N> [--apply] [--state-dir <dir>]" >&2
+  echo "       rotate-gate-adjudication.sh --legacy-through <nonce> [--apply] [--state-dir <dir>]" >&2
+  echo "  --legacy-through moves PRE-SERIES verdicts at or before <nonce> (inclusive)," >&2
+  echo "  which no --sprint invocation can move. It is what the stranding refusal prescribes." >&2
   exit 2
 }
 
 SPRINT=""
 APPLY=0
 STATE_DIR_ARG=""
+LEGACY_THROUGH=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --sprint)     SPRINT="${2:?--sprint needs a value}"; shift 2 ;;
     --apply)      APPLY=1; shift ;;
     --state-dir)  STATE_DIR_ARG="${2:?--state-dir needs a path}"; shift 2 ;;
+    --legacy-through) LEGACY_THROUGH="${2:?--legacy-through needs a nonce}"; shift 2 ;;
     -h|--help)    usage ;;
     *) echo "${SELF_NAME}: unknown argument '$1'" >&2; usage ;;
   esac
 done
 
-[ -n "$SPRINT" ] || usage
-case "$SPRINT" in
-  s[0-9]*) ;;
-  *) echo "${SELF_NAME}: --sprint must look like 's<N>' (got '${SPRINT}')" >&2; exit 2 ;;
-esac
+# --legacy-through is the OTHER mode and takes no --sprint: it moves pre-series
+# verdicts, which name no sprint and so cannot be selected by one.
+if [ -n "$LEGACY_THROUGH" ]; then
+  [ -n "$SPRINT" ] && {
+    echo "${SELF_NAME}: --legacy-through and --sprint are separate modes; pass one" >&2; exit 2; }
+  case "$LEGACY_THROUGH" in
+    [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z) ;;
+    *) echo "${SELF_NAME}: --legacy-through must be a nonce like 20260811T000000Z (got '${LEGACY_THROUGH}')" >&2
+       exit 2 ;;
+  esac
+  SPRINT="pre-series"
+else
+  [ -n "$SPRINT" ] || usage
+  case "$SPRINT" in
+    s[0-9]*) ;;
+    *) echo "${SELF_NAME}: --sprint must look like 's<N>' (got '${SPRINT}')" >&2; exit 2 ;;
+  esac
+fi
 
 command -v jq >/dev/null 2>&1 || {
   echo "${SELF_NAME}: jq is required and not on PATH" >&2; exit 2; }
@@ -151,6 +187,35 @@ for f in "$SRC"/*.verdict.json; do
     printf '%s\n' "$f" >> "$TMPD/unparseable"
     continue
   fi
+  if [ -n "$LEGACY_THROUGH" ]; then
+    # LEGACY MODE: select PRE-SERIES verdicts only, up to and INCLUDING the bound.
+    #
+    # THE BOUND IS INCLUSIVE, AND AN EXCLUSIVE ONE MADE THE REFUSAL'S OWN REMEDY
+    # LOOP FOREVER. The refusal names the survivor and prints a command to remove
+    # it; under a strict `<` that command moved everything EXCEPT the named file,
+    # so the next close re-printed the identical bound. Measured on the reference
+    # consumer: 92 verdicts moved where 93 were owed, the named survivor still
+    # live, and no fixed point. Inclusive, the printed command converges in one
+    # run. `--legacy-through` is named for the semantics so a reader cannot carry
+    # the old assumption over.
+    #
+    # THE BOUND IS CALLER-ASSERTED AND IS NOT DERIVED FROM ANY LIVE SERIES. An
+    # earlier comment here claimed it was what stopped this mode moving a legacy
+    # verdict a live series had not yet overtaken; it is not, and a hand-run bound
+    # can do exactly that. The refusal's own printed bound cannot -- the survivor
+    # it names is by construction the newest conforming stem -- but a hand-run one
+    # is the documented usage, so the property is the caller's to hold.
+    [ -n "$series" ] && continue
+    _lstem="$(basename "$f" .verdict.json)"
+    case "${_lstem##*-}" in
+      [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z) ;;
+      *) continue ;;              # unorderable stem: the guard cannot see it either
+    esac
+    if [ ! "${_lstem##*-}" \> "$LEGACY_THROUGH" ]; then
+      printf '%s\n' "$_lstem" >> "$TMPD/move_stems"
+    fi
+    continue
+  fi
   [ -n "$series" ] || continue   # legacy: no gate_series_id -- never moves
   case "$series" in
     *"-${SPRINT}-"*) basename "$f" .verdict.json >> "$TMPD/move_stems" ;;
@@ -195,6 +260,174 @@ N_SIDECARS=$(( N_FILES - N_VERDICTS ))
 if [ "$N_FILES" -eq 0 ]; then
   echo "${SELF_NAME}: no verdict under '${SRC}' names series '${SPRINT}' -- nothing to move."
   exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# REFUSAL: this rotation would leave a FAILing LEGACY verdict as the guard's
+# live pass, and no later rotation can ever clear it.
+#
+# WHY THIS EXISTS, AND WHY THE CARVE-OUT ABOVE IS NOT SELF-JUSTIFYING. The
+# legacy skip at the selection loop says a verdict with no `gate_series_id`
+# never moves, on the stated grounds that "the guard's own series split already
+# tolerates it". THAT SPLIT IS NOT THE GUARD'S. `gate_series_id` does not occur
+# in `ai-dlc-gate-remediation-guard.sh` at all; its live-pass pick orders every
+# conforming stem in the directory by trailing nonce and reads nothing else.
+# The split described is `validate-gate-adjudication.sh`'s, whose own header
+# tolerates a legacy verdict ONLY while it sorts strictly BEFORE the first pass
+# of every live series -- a precondition that rotating every series-bearing
+# verdict out DESTROYS. A true sentence about one reader, offered as a safety
+# argument for another that shares the directory and nothing else.
+#
+# WHAT THAT COSTS, MEASURED ON THE REFERENCE CONSUMER. Its live directory holds
+# 188 verdicts, 94 of them legacy, and 33 of those 94 record a FAIL. The newest
+# is `story-20260811T214958Z`, check 7, carrying no repair and no authorization
+# sidecar. Today every legacy verdict is shadowed by a newer series-bearing one,
+# so the guard never reaches back that far and the state is invisible. Rotate
+# the closed sprints out and that 2026-08-11 verdict becomes the live pass:
+# driving the real guard against a scratch copy, residue present ALLOWS,
+# residue rotated away DENIES, and restoring one clean current-sprint verdict
+# ALLOWS again -- so the removal is the cause, not something ambient.
+#
+# THE DENY IS UNCLEARABLE, WHICH IS WHY THIS REFUSES RATHER THAN WARNS. A
+# stale-sprint deny clears when the next sprint writes its first verdict. This
+# one cannot: the file carries no series id, so the selection loop above refuses
+# to move it for ANY `--sprint`, and with no sidecar neither lift arm applies.
+# Trading a self-clearing denial for a permanent one is strictly worse than the
+# state being repaired, so the rotation is refused before it can construct it.
+#
+# THE PREDICATE COSTS NO NEW I/O -- every verdict in the directory was already
+# parsed by the discovery loop above -- and it is keyed on what the GUARD reads:
+# the conforming-stem shape and the trailing nonce, not on this script's own
+# selection rule. FP set on the reference consumer: 0 across all nine
+# single-sprint rotations, which is the shipping call path (`retro.md` 5b);
+# it fires only on the multi-sprint backfill that actually strands the residue.
+# ---------------------------------------------------------------------------
+conforming_nonce() {
+  # The guard's own filter: the stem's trailing `-` field must be a nonce.
+  # A stem that fails it is invisible to the guard and must not be considered
+  # here either -- two such files exist on the reference consumer.
+  case "${1##*-}" in
+    [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z)
+      printf '%s' "${1##*-}"; return 0 ;;
+  esac
+  return 1
+}
+
+# THE PREDICATE IS "NO MODE CAN MOVE IT", NOT "IT IS LEGACY", AND THE NARROWER
+# SPELLING LEFT A SECOND DOOR OPEN. A verdict is unmovable in TWO ways: it
+# carries no `gate_series_id` (legacy, moved only by --legacy-through), or it
+# carries one that `*-s<N>-*` cannot select. The schema calls the field
+# "deliberately unpatterned: required and non-empty, nothing more", so the glob
+# is an UNSTATED pattern imposed on a field nothing constrains -- any writer
+# stamping a legal-but-differently-ordered id produces a member. Measured on the
+# reference consumer: `s310-planning`, sprint-first, written by a live session
+# and matching no `*-s<N>-*`. Such a verdict is worse than a legacy one, because
+# --legacy-through skips it too (`[ -n "$series" ] && continue`): no refusal AND
+# no escape. Keying on legacy-ness alone reopened the exact trap this refusal
+# exists to close, through a different door.
+# ASK WHETHER A SPRINT ANYONE WOULD TYPE MOVES IT; A GLOB ANSWERS A DIFFERENT
+# QUESTION. An earlier revision tested `*-s[0-9]*-*`, where `[0-9]*` is one digit
+# followed by ANYTHING, so it matched ids whose "sprint token" holds whitespace or
+# letters -- `a-s1x-b`, `x-s3 1 0-y`, `planning-s310 -<nonce>`.
+#
+# THOSE THREE ARE TECHNICALLY MOVABLE, AND AN EARLIER COMMENT HERE SAID THEY WERE
+# NOT. Measured by DRIVING this rotator rather than by a second parser: `--sprint`
+# validation accepts `s[0-9]*`, so `s1x` and `s310 ` are accepted arguments and
+# they do select those verdicts. The claim that nothing could move them came from
+# an oracle that swept only well-formed numeric sprints -- the same narrowness it
+# was written to criticise.
+#
+# REFUSING THEM IS STILL RIGHT, for a reason the old comment did not give. The
+# only argument that moves such a verdict is one no operator would type, and its
+# destination is derived from that argument: `--sprint "s310 "` writes to
+# `implementation-artifacts/s310 /`, a trailing-space directory that is NOT the
+# sprint it appears to name. An "escape" that silently files a verdict under a
+# differently-named sprint is not an escape. So the predicate is deliberately
+# CONSERVATIVE here: it refuses, and the operator re-stamps.
+#
+# The token is DERIVED from the id and tested as the selector tests it: split on
+# `-`, and for each field of the form s<digits> -- digits ONLY, which is where
+# this is stricter than `--sprint` validation and is the whole point -- ask
+# whether the exact `-<field>-` substring the selector uses is present. Same
+# string operation the selection loop performs, so the two cannot drift.
+survivor_unmovable() { # <series> -> 0 when no mode can ever move this verdict
+  [ -n "$1" ] || return 0                      # legacy: only --legacy-through
+  _u_rest="$1"
+  while [ -n "$_u_rest" ]; do
+    case "$_u_rest" in
+      *-*) _u_field="${_u_rest%%-*}"; _u_rest="${_u_rest#*-}" ;;
+      *)   _u_field="$_u_rest"; _u_rest="" ;;
+    esac
+    # A sprint token is `s` followed by digits ONLY -- the same shape --sprint
+    # validation accepts, minus its `s[0-9]*` looseness.
+    case "$_u_field" in
+      s*) _u_n="${_u_field#s}" ;;
+      *)  continue ;;
+    esac
+    [ -n "$_u_n" ] || continue
+    case "$_u_n" in *[!0-9]*) continue ;; esac
+    # The selector's exact test, on the whole id.
+    case "$1" in *"-${_u_field}-"*) return 1 ;; esac
+  done
+  return 0
+}
+
+SURVIVOR_STEM=""; SURVIVOR_TS=""; SURVIVOR_FAILS=""; SURVIVOR_UNMOVABLE=0; SURVIVOR_WHY=""
+for f in "$SRC"/*.verdict.json; do
+  [ -e "$f" ] || continue
+  _stem="$(basename "$f" .verdict.json)"
+  # Anything this run is about to move is not a survivor.
+  if grep -qxF "$_stem" "$TMPD/move_stems" 2>/dev/null; then continue; fi
+  _ts="$(conforming_nonce "$_stem")" || continue
+  if [ -z "$SURVIVOR_TS" ] || [ "$_ts" \> "$SURVIVOR_TS" ]; then
+    SURVIVOR_TS="$_ts"; SURVIVOR_STEM="$_stem"
+    SURVIVOR_FAILS="$(jq -r '[.verdicts[]? | select(.verdict=="FAIL") | .check_id] | join(" ")' \
+                        "$f" 2>/dev/null)" || SURVIVOR_FAILS=""
+    _series="$(jq -r '.gate_series_id // empty' "$f" 2>/dev/null)" || _series=""
+    if survivor_unmovable "$_series"; then
+      SURVIVOR_UNMOVABLE=1
+      if [ -n "$_series" ]; then
+        SURVIVOR_WHY="its gate_series_id '${_series}' matches no --sprint selector"
+      else
+        SURVIVOR_WHY="it carries no gate_series_id"
+      fi
+    else
+      SURVIVOR_UNMOVABLE=0; SURVIVOR_WHY=""
+    fi
+  fi
+done
+
+if [ "$SURVIVOR_UNMOVABLE" -eq 1 ] && [ -n "$SURVIVOR_FAILS" ]; then
+  echo "${SELF_NAME}: REFUSED -- this rotation would strand a FAILing verdict no mode can move." >&2
+  echo "  Newest verdict left in '${SRC}' after this move:" >&2
+  echo "    ${SURVIVOR_STEM} -- ${SURVIVOR_WHY}; FAILed check(s): ${SURVIVOR_FAILS}" >&2
+  echo "  The gate-remediation guard picks its live pass by trailing nonce with no notion of" >&2
+  echo "  sprint, so that verdict would become the live pass and deny artifact edits, and the" >&2
+  echo "  deny would not clear on its own. Nothing written." >&2
+  echo "" >&2
+  # THE REMEDY DIFFERS BY CASE AND MUST NOT BE PRINTED UNCONDITIONALLY. A
+  # --legacy-through run cannot move a verdict that HAS a series id, so printing
+  # it for that case would be a second inert remedy -- the defect this block was
+  # already corrected for once.
+  if [ -z "$(jq -r '.gate_series_id // empty' "${SRC}/${SURVIVOR_STEM}.verdict.json" 2>/dev/null)" ]; then
+    echo "  THE REMEDY IS TO ROTATE THE PRE-SERIES VERDICTS OUT, then re-run this command:" >&2
+    echo "    ${SELF_NAME}.sh --legacy-through ${SURVIVOR_TS} --apply" >&2
+  else
+    echo "  THIS ONE HAS NO MECHANICAL REMEDY, and that is the finding rather than an" >&2
+    echo "  oversight. Its gate_series_id is well-formed by the schema, which leaves the" >&2
+    echo "  field deliberately unpatterned, but no --sprint selector can name it and" >&2
+    echo "  --legacy-through skips it because it HAS a series id. Re-stamp that verdict's" >&2
+    echo "  gate_series_id in the '<gate_type>-s<N>-<nonce>' form its siblings use, then" >&2
+    echo "  re-run this command -- and report the writer that stamped it, because it will" >&2
+    echo "  keep producing verdicts no rotation can move." >&2
+  fi
+  echo "" >&2
+  echo "  A SIDECAR DOES NOT LIFT THIS. The guard's repair and authorization records are" >&2
+  echo "  read by the GUARD, not by this rotator, so writing one changes nothing here --" >&2
+  echo "  an earlier revision of this message prescribed exactly that and it was inert." >&2
+  echo "  Deferring until the next sprint's first verdict lands also only moves the block:" >&2
+  echo "  it clears this close and refuses the following one, one sprint behind forever." >&2
+  exit 1
 fi
 
 # ---------------------------------------------------------------------------

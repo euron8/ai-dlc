@@ -15,6 +15,98 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.544.0] - 2026-09-10
+
+### The gate-adjudication rotator refuses a rotation that would strand a FAILing legacy verdict (`PC-S310-GATE-ADJUDICATION-ROTATION-HAS-NO-BACKFILL-PATH-FOR-PRE-MECHANISM-SPRINTS`)
+
+The candidate asks for a one-time backfill of the sprints that closed before
+`rotate-gate-adjudication.sh` existed, so their verdicts stop sitting in the live directory.
+Building that naively makes a consumer WORSE, and this release ships the refusal that has to
+land first.
+
+**The carve-out was justified against the wrong reader.** The rotator skips any verdict with no
+`gate_series_id`, on the stated grounds that *"the guard's own series split already tolerates
+it"*. `gate_series_id` does not occur in `ai-dlc-gate-remediation-guard.sh` at all — control:
+`LIVE_NONCE` occurs 18 times in that file, and the token appears in 16 files under `core/`. The
+guard's live-pass pick orders every conforming stem by trailing nonce and reads nothing else. The
+split described is `validate-gate-adjudication.sh`'s, whose own output prints the header's phrase
+verbatim. A true sentence about one program, offered as a safety argument for another that shares
+a directory and nothing else — and that validator's tolerance is itself conditional on the legacy
+verdict sorting BEFORE every live series, which is exactly the precondition a backfill destroys.
+
+**What the residue is doing today is SHIELDING the consumer.** On the reference consumer: 189 live
+verdicts, 94 legacy, 33 of those 94 recording a FAIL, the newest `story-20260811T214958Z` at check
+7 with no repair and no authorization sidecar. Every one is currently shadowed by a newer
+series-bearing verdict, so the guard never reaches back that far and the state is invisible. Drive
+the real guard against a scratch copy and the ordering is measurable: residue present ALLOWS,
+residue rotated away DENIES on that 2026-08-11 verdict, and restoring one clean current-sprint
+verdict ALLOWS again — so the removal is the cause, not something ambient.
+
+**The trade is strictly bad because the lifetimes differ.** A stale-sprint deny clears when the
+next sprint writes its first verdict. This one cannot: the file carries no series id, so no
+`--sprint` rotation will ever move it, and with no sidecar neither lift arm applies.
+
+So the rotator now refuses a move that would PROMOTE a FAILing legacy verdict to newest conforming
+stem — and ships `--legacy-through <nonce>`, which rotates pre-series verdicts, up to and including
+the bound, into `implementation-artifacts/pre-series/`. The refusal without the escape is a trap,
+and shipping it that way is what the adversarial pass caught.
+
+**The refusal alone made the post-backfill state uncloseable.** Backfill the six pre-mechanism
+sprints, then run an ordinary `retro.md` 5b close: exit 1, which retro reads as a HARD_BLOCK. The
+release would have made the state it exists to enable a state where retro can never close. The
+refusal itself is correct — driving the real guard, pristine ALLOWS, post-backfill ALLOWS, and
+post-close DENIES on the 2026-08-11 verdict, permanently — so the answer was to ship the way out
+rather than weaken the predicate. Narrowing it to fire only on promotion was built and refuted: the
+consumer's own next close genuinely is a promotion.
+
+**The first remedy text prescribed something this tool does not read.** It said to write a repair or
+authorization record; those are read by the guard, and the refusal block reads no sidecar at all —
+measured, writing both still exits 1. A fixture arm now asserts the printed remedy names the flag
+that actually works.
+
+**FP set measured at ZERO in both states**, which is the correction that matters: every single-sprint
+rotation the corpus can express — seven distinct sprints, derived rather than counted by hand — plus
+every close after the backfill once the escape has run. The first cut measured only the pre-backfill
+tree, the wrong population for a fix whose purpose is the post-backfill world.
+
+**The escape's own printed remedy could not converge, and a second adversarial pass caught that.**
+The bound was exclusive while the refusal prints the survivor's nonce as that bound, so the printed
+command moved everything except the verdict it named and the next close re-printed the same bound —
+92 moved where 93 were owed, on the consumer's real corpus. The first end-to-end run passed only
+because the bound had been hand-chosen. The bound is inclusive now, and the flag is named
+`--legacy-through` so the semantics are in the name.
+
+**A third pass found a second door, and it is the more general defect.** The refusal keyed on "the
+survivor is LEGACY", but `*-s<N>-*` is an unstated pattern imposed on a field the verdict schema
+calls *"deliberately unpatterned: required and non-empty, nothing more"*. A sprint-first
+`gate_series_id` is legal input, no `--sprint` can select it, and `--legacy-through` skips it because
+it carries a series id — no refusal and no escape, which is strictly worse than the legacy class.
+The reference consumer already has one, written by a live session. The predicate now asks whether
+any mode can move the survivor, and the remedy branches rather than offering an escape that cannot
+apply.
+
+**That verdict also masks the refusal, so the false-positive sweep is pinned against it.** It is
+clean and sorts newest, so on the tree as-is it becomes the survivor and the refusal correctly stays
+quiet — a zero measured there says nothing about the fix. With it excluded the refusal fires, prints
+its bound, and the remedy converges in one run. FP is 0 in both phases on the pinned corpus.
+
+**A fourth pass found the predicate approximating the selector rather than asking it.** The first
+spelling tested the glob `*-s[0-9]*-*`, where `[0-9]*` is one digit followed by anything — so ids
+carrying whitespace or a non-digit inside the sprint token scored movable while no `--sprint`
+selects them, which is the stranded state again by a shorter route. The token is now derived and
+tested with the selector's own substring; re-probed against a brute-force oracle over every
+`s0`..`s400`, zero mismatches in either direction.
+
+Fixture arms guard it, plus a mutant. **Eleven non-fixes were built and scored**, and earlier receipts
+accepted four of them at various points: a survivorship-blind sweep (which refuses every rotation on
+the consumer's real corpus), one with the move-set exclusion deleted, one printing an impossible
+bound, and the off-by-one itself. Every seed had been built from what the predicate reads, and the
+arm that checks the remedy hardcoded a bound the refusal never printed — so it parses the bound out
+of the refusal's own output and runs that instead.
+
+**What this does NOT do:** the backfill has not been run on any consumer. It is now safe and
+executable, and running it is the consumer's call. Filed as `BL-228`.
+
 ## [0.543.0] - 2026-09-10
 
 ### An unparsable argument is no longer convicted as a deleted driver (`PC-S310-SELF-UPDATE-FIXTURES-OVER-ARM-CONVICTS-A-SET-IT-COULD-NOT-PARSE`)
