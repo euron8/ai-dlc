@@ -715,9 +715,9 @@ for d in "$@"; do
   if git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${d}/.dist-only" >/dev/null 2>&1; then
     unshippable="$unshippable
   $d — carries .dist-only at ${THEIRS}: never shipped, so no consumer can hold it"
-  elif [ "$d" != "${d#* }" ] || [ "$d" != "${d#*/}" ]; then
+  elif [ "$d" != "$(printf '%s' "$d" | tr -d '[:space:]/')" ] || [ -z "$d" ]; then
     unshippable="$unshippable
-  $d — not a fixture NAME: it carries a space or a slash, so it is an unparsable argument rather than a deleted driver"
+  $d — not a fixture NAME: it carries whitespace or a slash, so it is an unparsable argument rather than a deleted driver"
   elif ! git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${d}/run.sh" >/dev/null 2>&1; then
     unshippable="$unshippable
   $d — no run.sh at ${THEIRS}: upstream deleted the driver, so there is nothing to write"

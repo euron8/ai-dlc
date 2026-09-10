@@ -2159,7 +2159,7 @@ fi
 # the new row for the joined argument, so an arm keyed only on 15b would score it a pass. Scored
 # on BOTH: 15b stays green, 15 goes red.
 M13B="$MUTDIR/m13b-tree-probe-not-name-shape.sh"
-if mkmutant "$M13B" '  elif [ "$d" != "${d#* }" ] || [ "$d" != "${d#*/}" ]; then' \
+if mkmutant "$M13B" '  elif [ "$d" != "$(printf '"'"'%s'"'"' "$d" | tr -d '"'"'[:space:]/'"'"')" ] || [ -z "$d" ]; then' \
                     '  elif ! git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${d}" >/dev/null 2>&1; then'; then
   s13b=0
   # (a) the joined argument still gets the new row — the mutant is NOT a simple deletion

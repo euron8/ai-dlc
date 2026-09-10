@@ -4461,10 +4461,22 @@ resolving control in the same invocation, a retired-shaped name and the joined f
 argument BOTH fail the tree probe while `self-update-gate` resolves. Part 15 went red where
 `origin/main` is green — the tree probe relabels every genuine deleted-driver row.
 
-**The discriminator is the argument's SHAPE.** A fixture name cannot carry a space or a `/`;
-the joined-list case is one argument holding fifteen space-separated names, while a retirement
-is a well-formed name whose tree is gone. The probe needs no tree lookup, is sited before both,
-and the deleted-driver verdict keeps every input it had before this change.
+**The discriminator is the argument's SHAPE.** A fixture name carries no whitespace and no `/`;
+the joined-list case is one argument holding fifteen separated names, while a retirement is a
+well-formed name whose tree is gone. The probe needs no tree lookup, is sited before both, and
+the deleted-driver verdict keeps every input it had before this change.
+
+**THE FIRST SPELLING OF THE PREDICATE WAS TOO NARROW AND THE RESIDUAL WAS REACHABLE.** It tested
+for a literal space and a slash (`${d#* }`), which leaves a TAB-joined list still convicted as a
+deleted driver — the same defect with a narrower trigger. That is not hypothetical: this pipeline
+reads tab-delimited records (`apply.sh:504`, `:694` both set `IFS` to a tab), so a tab-joined `$d`
+is constructible. Widened to `tr -d '[:space:]/'` plus an empty-string arm.
+
+**False-positive set MEASURED, as `CLAUDE.md` requires before a check ships: ZERO over all 198
+live fixture directory names**, derived with `find core/fixtures -mindepth 1 -maxdepth 1 -type d`.
+Positive controls in the same invocation: a space-joined pair, a slash path, a TAB-joined pair,
+the empty string and the real fifteen-name argument all convict. Negative controls: `touched-deleted`
+(the retirement case), `check5-anchor-base`, `lib`, and a unicode name all acquit.
 
 **Guarded by two arms, because one cannot tell a discriminator from a blanket relabel.** Part 15b
 asserts the joined argument gets the new row; Part 15 (unchanged) asserts `touched-deleted` keeps
