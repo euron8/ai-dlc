@@ -259,18 +259,73 @@ out="$(rotate --sprint s308 --apply 2>&1)"; rc=$?
 AFTER_H="$(treehash "$PROJ")"
 if [ "$rc" -eq 1 ] && [ "$BEFORE_H" = "$AFTER_H" ] \
    && grep -q 'would strand a FAILing legacy verdict' <<<"$out" \
-   && grep -q 'story-20260908T214958Z' <<<"$out"; then
-  ok "(h.1) REFUSAL: rotating s308 would leave a FAILing legacy verdict newest — refused (exit 1), tree byte-identical, offender named"
+   && grep -q 'legacy-20260701T000000Z' <<<"$out"; then
+  ok "(h.1) REFUSAL: rotating s308 PROMOTES a FAILing legacy verdict to newest — refused (exit 1), tree byte-identical, offender named"
 else
   bad "(h.1) a rotation that strands a FAILing legacy verdict was not refused (rc=$rc): $out"
 fi
 
+# The offender's remedy must name an action THIS tool honours. An earlier revision
+# printed "write a repair or authorization record", which the refusal never reads —
+# a remedy the consumer follows to no effect. Assert the executable one is offered.
+if grep -q -- '--legacy-before' <<<"$out"; then
+  ok "(h.1b) the refusal offers a remedy this tool can execute (--legacy-before), not a sidecar it never reads"
+else
+  bad "(h.1b) the refusal named no executable remedy: $out"
+fi
+
 seed strand-nearmiss
 out="$(rotate --sprint s308 --apply 2>&1)"; rc=$?
-if [ "$rc" -eq 0 ] && ! grep -q 'would strand' <<<"$out"; then
-  ok "(h.2) NEAR-MISS: the same world with a CLEAN legacy verdict rotates normally — the refusal is keyed on the FAIL, not on legacy-ness"
+if [ "$rc" -eq 0 ] && ! grep -q 'would strand' <<<"$out" \
+   && [ -f "$DEST_S308/sprint-review-20260907T002257Z.verdict.json" ]; then
+  ok "(h.2) NEAR-MISS: a CLEAN legacy verdict rotates normally AND the move landed — the refusal is keyed on the FAIL, not on legacy-ness"
 else
-  bad "(h.2) a clean legacy verdict was wrongly refused (rc=$rc): $out"
+  bad "(h.2) a clean legacy verdict was wrongly refused, or the move did not land (rc=$rc): $out"
+fi
+
+# =============================================================================
+# ARM (h.3) — a FAILing legacy verdict that the rotation does NOT promote.
+#
+# THE ARM THAT CONVICTS A SURVIVORSHIP-BLIND PREDICATE. (h.1) and (h.2) both pass
+# against "refuse if any legacy verdict anywhere records a FAIL" — a fix that
+# refuses EVERY rotation on the reference consumer. Here the FAILing legacy
+# verdict is shadowed by a newer verdict that does not move, so the correct
+# answer is PROCEED, and the destination assertion stops "exit 0 having moved
+# nothing" from passing as a rotation.
+# =============================================================================
+seed strand-shadowed
+out="$(rotate --sprint s308 --apply 2>&1)"; rc=$?
+if [ "$rc" -eq 0 ] && ! grep -q 'would strand' <<<"$out" \
+   && [ -f "$DEST_S308/sprint-review-20260907T002257Z.verdict.json" ]; then
+  ok "(h.3) a FAILing legacy verdict SHADOWED by a newer non-moving verdict does not block the rotation, and the move landed"
+else
+  bad "(h.3) a shadowed FAILing legacy verdict wrongly blocked the rotation, or the move did not land (rc=$rc): $out"
+fi
+
+# =============================================================================
+# ARM (i) — the legacy escape the refusal prescribes actually works.
+#
+# A refusal whose remedy cannot be executed is the defect the remedy text exists
+# to avoid, so the remedy is asserted here rather than trusted: rotating the
+# pre-series verdicts out must let the previously-refused rotation proceed.
+# =============================================================================
+seed strand
+out="$(rotate --legacy-before 20260907T000000Z --apply 2>&1)"; rc_i=$?
+out2="$(rotate --sprint s308 --apply 2>&1)"; rc_i2=$?
+if [ "$rc_i" -eq 0 ] && [ "$rc_i2" -eq 0 ] \
+   && [ -f "$DEST_S308/sprint-review-20260907T002257Z.verdict.json" ]; then
+  ok "(i) --legacy-before rotates the pre-series verdict out, and the rotation that was refused then proceeds — the printed remedy is executable"
+else
+  bad "(i) the prescribed remedy did not unblock the refused rotation (legacy rc=$rc_i, sprint rc=$rc_i2): $out / $out2"
+fi
+
+# The bound is not decorative: a legacy verdict at or after it must NOT move.
+seed strand
+out="$(rotate --legacy-before 20260101T000000Z --apply 2>&1)"; rc_i3=$?
+if [ "$rc_i3" -eq 0 ] && grep -q 'nothing to move' <<<"$out"; then
+  ok "(i.2) --legacy-before honours its bound: a legacy verdict NEWER than the bound is left alone"
+else
+  bad "(i.2) the --legacy-before bound was not honoured (rc=$rc_i3): $out"
 fi
 
 # =============================================================================

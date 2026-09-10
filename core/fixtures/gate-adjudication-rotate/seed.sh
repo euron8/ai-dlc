@@ -79,13 +79,25 @@ seed_legacy() {
           "implementation-20260720T011606Z" "" "$LEGACY_PASS"
 }
 
-# The stranding subject: a FAILing legacy verdict whose nonce sorts above every
-# series-bearing seed, so rotating the named sprint out promotes IT to live pass.
+# The stranding subject: a FAILing legacy verdict. Its nonce sorts BELOW every
+# series-bearing seed on purpose -- an earlier revision put it ABOVE, which made
+# it newest before the move as well as after, so the rotation never PROMOTED it
+# and the move-set exclusion was never exercised. A wrong fix that ignores which
+# files are moving passed the whole receipt for exactly that reason.
 # Deliberately carries no repair and no authorization sidecar -- with either one
 # the guard's lift arms would clear the deny and the case would prove nothing.
 seed_legacy_fail() {
-  verdict "$GA/story-20260908T214958Z.verdict.json" \
-          "story-20260908T214958Z" "" "$LEGACY_FAIL"
+  verdict "$GA/legacy-20260701T000000Z.verdict.json" \
+          "legacy-20260701T000000Z" "" "$LEGACY_FAIL"
+}
+
+# A verdict that SHADOWS the legacy FAIL and does not move for --sprint s308.
+# Without it, no world in this fixture holds a FAILing legacy verdict that is
+# correctly IGNORED, and a predicate that refuses on any FAILing legacy anywhere
+# -- which refuses every rotation on the reference consumer -- passes every arm.
+seed_shadow() {
+  verdict "$GA/planning-20260910T120000Z.verdict.json" \
+          "planning-20260910T120000Z" "planning-s309-20260910T120000Z" "$S309_ALLPASS"
 }
 
 seed_noise() {
@@ -122,6 +134,14 @@ case "$CASE" in
     ;;
   strand-nearmiss)
     seed_s308; seed_legacy
+    ;;
+  # The FAILing legacy verdict is SHADOWED by a newer verdict that does not move,
+  # so rotating s308 does NOT promote it and the correct answer is PROCEED. This
+  # is the world that separates a survivorship predicate from a directory-wide
+  # sweep; the other two cases cannot, because in both of them the legacy verdict
+  # either is or is not the survivor for reasons that do not involve shadowing.
+  strand-shadowed)
+    seed_s308; seed_legacy_fail; seed_shadow
     ;;
   badjson)
     seed_s308; seed_s309_pass; seed_legacy; seed_noise
