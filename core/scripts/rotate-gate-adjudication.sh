@@ -76,22 +76,37 @@ usage() {
 SPRINT=""
 APPLY=0
 STATE_DIR_ARG=""
+LEGACY_BEFORE=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --sprint)     SPRINT="${2:?--sprint needs a value}"; shift 2 ;;
     --apply)      APPLY=1; shift ;;
     --state-dir)  STATE_DIR_ARG="${2:?--state-dir needs a path}"; shift 2 ;;
+    --legacy-before) LEGACY_BEFORE="${2:?--legacy-before needs a nonce}"; shift 2 ;;
     -h|--help)    usage ;;
     *) echo "${SELF_NAME}: unknown argument '$1'" >&2; usage ;;
   esac
 done
 
-[ -n "$SPRINT" ] || usage
-case "$SPRINT" in
-  s[0-9]*) ;;
-  *) echo "${SELF_NAME}: --sprint must look like 's<N>' (got '${SPRINT}')" >&2; exit 2 ;;
-esac
+# --legacy-before is the OTHER mode and takes no --sprint: it moves pre-series
+# verdicts, which name no sprint and so cannot be selected by one.
+if [ -n "$LEGACY_BEFORE" ]; then
+  [ -n "$SPRINT" ] && {
+    echo "${SELF_NAME}: --legacy-before and --sprint are separate modes; pass one" >&2; exit 2; }
+  case "$LEGACY_BEFORE" in
+    [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z) ;;
+    *) echo "${SELF_NAME}: --legacy-before must be a nonce like 20260811T000000Z (got '${LEGACY_BEFORE}')" >&2
+       exit 2 ;;
+  esac
+  SPRINT="pre-series"
+else
+  [ -n "$SPRINT" ] || usage
+  case "$SPRINT" in
+    s[0-9]*) ;;
+    *) echo "${SELF_NAME}: --sprint must look like 's<N>' (got '${SPRINT}')" >&2; exit 2 ;;
+  esac
+fi
 
 command -v jq >/dev/null 2>&1 || {
   echo "${SELF_NAME}: jq is required and not on PATH" >&2; exit 2; }
@@ -158,6 +173,22 @@ for f in "$SRC"/*.verdict.json; do
   rc=$?
   if [ "$rc" -ne 0 ]; then
     printf '%s\n' "$f" >> "$TMPD/unparseable"
+    continue
+  fi
+  if [ -n "$LEGACY_BEFORE" ]; then
+    # LEGACY MODE: select PRE-SERIES verdicts only, and only those strictly older
+    # than the given nonce. The bound is required and is not a convenience: it is
+    # what keeps this mode from moving a legacy verdict that a live series has not
+    # yet overtaken -- the one case `validate-gate-adjudication.sh` FAILS CLOSED on.
+    [ -n "$series" ] && continue
+    _lstem="$(basename "$f" .verdict.json)"
+    case "${_lstem##*-}" in
+      [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z) ;;
+      *) continue ;;              # unorderable stem: the guard cannot see it either
+    esac
+    if [ "${_lstem##*-}" \< "$LEGACY_BEFORE" ]; then
+      printf '%s\n' "$_lstem" >> "$TMPD/move_stems"
+    fi
     continue
   fi
   [ -n "$series" ] || continue   # legacy: no gate_series_id -- never moves
@@ -281,9 +312,15 @@ if [ "$SURVIVOR_LEGACY" -eq 1 ] && [ -n "$SURVIVOR_FAILS" ]; then
   echo "  sprint, so that verdict would become the live pass and deny artifact edits. It" >&2
   echo "  carries no gate_series_id, so NO --sprint rotation can ever move it, and the deny" >&2
   echo "  would not clear on its own. Nothing written." >&2
-  echo "  Resolve it first: disposition its FAILing check(s) via an operator authorization or" >&2
-  echo "  a bound repair record, or run this rotation after the next sprint's first verdict" >&2
-  echo "  has landed, which restores a newer pass above it." >&2
+  echo "" >&2
+  echo "  THE REMEDY IS TO ROTATE THE PRE-SERIES VERDICTS OUT, then re-run this command:" >&2
+  echo "    ${SELF_NAME}.sh --legacy-before ${SURVIVOR_TS} --apply" >&2
+  echo "" >&2
+  echo "  A SIDECAR DOES NOT LIFT THIS. The guard's repair and authorization records are" >&2
+  echo "  read by the GUARD, not by this rotator, so writing one changes nothing here --" >&2
+  echo "  an earlier revision of this message prescribed exactly that and it was inert." >&2
+  echo "  Deferring until the next sprint's first verdict lands also only moves the block:" >&2
+  echo "  it clears this close and refuses the following one, one sprint behind forever." >&2
   exit 1
 fi
 
