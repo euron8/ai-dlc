@@ -49,15 +49,24 @@
 #
 # Usage:
 #   rotate-gate-adjudication.sh --sprint s<N> [--apply] [--state-dir <dir>]
-#     --apply       write; default is a report that changes nothing
-#     --state-dir   default: ${AI_DLC_STATE_DIR:-_bmad-output}, resolved under
-#                   the repo root found by walking UP for a `VERSION` file or a
-#                   `.git` directory from the CURRENT WORKING DIRECTORY. Given
-#                   explicitly, a RELATIVE --state-dir is resolved against the
-#                   cwd instead, never against the repo root.
+#   rotate-gate-adjudication.sh --legacy-through <nonce> [--apply] [--state-dir <dir>]
+#     --apply           write; default is a report that changes nothing
+#     --state-dir       default: ${AI_DLC_STATE_DIR:-_bmad-output}, resolved under
+#                       the repo root found by walking UP for a `VERSION` file or a
+#                       `.git` directory from the CURRENT WORKING DIRECTORY. Given
+#                       explicitly, a RELATIVE --state-dir is resolved against the
+#                       cwd instead, never against the repo root.
+#     --legacy-through  the OTHER mode, and it takes no --sprint. Moves PRE-SERIES
+#                       verdicts (no `gate_series_id`) whose nonce is at or before
+#                       <nonce>, INCLUSIVE. This is the escape the stranding
+#                       refusal prescribes: a pre-series verdict names no sprint,
+#                       so no --sprint invocation can ever move it. The bound is
+#                       CALLER-ASSERTED -- nothing derives it from a live series.
 #
 #   source:      <state-dir>/gate-adjudication/
 #   destination: <state-dir>/implementation-artifacts/s<N>/gate-adjudication/
+#                <state-dir>/implementation-artifacts/pre-series/gate-adjudication/
+#                  (--legacy-through)
 #
 # Exit: 0 = reported or rotated (nothing to rotate is a normal, affirmative
 #           result, and so is a second --apply for an already-rotated sprint)
@@ -70,33 +79,36 @@ SELF_NAME="rotate-gate-adjudication"
 
 usage() {
   echo "usage: rotate-gate-adjudication.sh --sprint s<N> [--apply] [--state-dir <dir>]" >&2
+  echo "       rotate-gate-adjudication.sh --legacy-through <nonce> [--apply] [--state-dir <dir>]" >&2
+  echo "  --legacy-through moves PRE-SERIES verdicts at or before <nonce> (inclusive)," >&2
+  echo "  which no --sprint invocation can move. It is what the stranding refusal prescribes." >&2
   exit 2
 }
 
 SPRINT=""
 APPLY=0
 STATE_DIR_ARG=""
-LEGACY_BEFORE=""
+LEGACY_THROUGH=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --sprint)     SPRINT="${2:?--sprint needs a value}"; shift 2 ;;
     --apply)      APPLY=1; shift ;;
     --state-dir)  STATE_DIR_ARG="${2:?--state-dir needs a path}"; shift 2 ;;
-    --legacy-before) LEGACY_BEFORE="${2:?--legacy-before needs a nonce}"; shift 2 ;;
+    --legacy-through) LEGACY_THROUGH="${2:?--legacy-through needs a nonce}"; shift 2 ;;
     -h|--help)    usage ;;
     *) echo "${SELF_NAME}: unknown argument '$1'" >&2; usage ;;
   esac
 done
 
-# --legacy-before is the OTHER mode and takes no --sprint: it moves pre-series
+# --legacy-through is the OTHER mode and takes no --sprint: it moves pre-series
 # verdicts, which name no sprint and so cannot be selected by one.
-if [ -n "$LEGACY_BEFORE" ]; then
+if [ -n "$LEGACY_THROUGH" ]; then
   [ -n "$SPRINT" ] && {
-    echo "${SELF_NAME}: --legacy-before and --sprint are separate modes; pass one" >&2; exit 2; }
-  case "$LEGACY_BEFORE" in
+    echo "${SELF_NAME}: --legacy-through and --sprint are separate modes; pass one" >&2; exit 2; }
+  case "$LEGACY_THROUGH" in
     [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z) ;;
-    *) echo "${SELF_NAME}: --legacy-before must be a nonce like 20260811T000000Z (got '${LEGACY_BEFORE}')" >&2
+    *) echo "${SELF_NAME}: --legacy-through must be a nonce like 20260811T000000Z (got '${LEGACY_THROUGH}')" >&2
        exit 2 ;;
   esac
   SPRINT="pre-series"
@@ -175,18 +187,31 @@ for f in "$SRC"/*.verdict.json; do
     printf '%s\n' "$f" >> "$TMPD/unparseable"
     continue
   fi
-  if [ -n "$LEGACY_BEFORE" ]; then
-    # LEGACY MODE: select PRE-SERIES verdicts only, and only those strictly older
-    # than the given nonce. The bound is required and is not a convenience: it is
-    # what keeps this mode from moving a legacy verdict that a live series has not
-    # yet overtaken -- the one case `validate-gate-adjudication.sh` FAILS CLOSED on.
+  if [ -n "$LEGACY_THROUGH" ]; then
+    # LEGACY MODE: select PRE-SERIES verdicts only, up to and INCLUDING the bound.
+    #
+    # THE BOUND IS INCLUSIVE, AND AN EXCLUSIVE ONE MADE THE REFUSAL'S OWN REMEDY
+    # LOOP FOREVER. The refusal names the survivor and prints a command to remove
+    # it; under a strict `<` that command moved everything EXCEPT the named file,
+    # so the next close re-printed the identical bound. Measured on the reference
+    # consumer: 92 verdicts moved where 93 were owed, the named survivor still
+    # live, and no fixed point. Inclusive, the printed command converges in one
+    # run. `--legacy-through` is named for the semantics so a reader cannot carry
+    # the old assumption over.
+    #
+    # THE BOUND IS CALLER-ASSERTED AND IS NOT DERIVED FROM ANY LIVE SERIES. An
+    # earlier comment here claimed it was what stopped this mode moving a legacy
+    # verdict a live series had not yet overtaken; it is not, and a hand-run bound
+    # can do exactly that. The refusal's own printed bound cannot -- the survivor
+    # it names is by construction the newest conforming stem -- but a hand-run one
+    # is the documented usage, so the property is the caller's to hold.
     [ -n "$series" ] && continue
     _lstem="$(basename "$f" .verdict.json)"
     case "${_lstem##*-}" in
       [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z) ;;
       *) continue ;;              # unorderable stem: the guard cannot see it either
     esac
-    if [ "${_lstem##*-}" \< "$LEGACY_BEFORE" ]; then
+    if [ ! "${_lstem##*-}" \> "$LEGACY_THROUGH" ]; then
       printf '%s\n' "$_lstem" >> "$TMPD/move_stems"
     fi
     continue
@@ -314,7 +339,7 @@ if [ "$SURVIVOR_LEGACY" -eq 1 ] && [ -n "$SURVIVOR_FAILS" ]; then
   echo "  would not clear on its own. Nothing written." >&2
   echo "" >&2
   echo "  THE REMEDY IS TO ROTATE THE PRE-SERIES VERDICTS OUT, then re-run this command:" >&2
-  echo "    ${SELF_NAME}.sh --legacy-before ${SURVIVOR_TS} --apply" >&2
+  echo "    ${SELF_NAME}.sh --legacy-through ${SURVIVOR_TS} --apply" >&2
   echo "" >&2
   echo "  A SIDECAR DOES NOT LIFT THIS. The guard's repair and authorization records are" >&2
   echo "  read by the GUARD, not by this rotator, so writing one changes nothing here --" >&2
