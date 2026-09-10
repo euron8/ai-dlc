@@ -37,6 +37,98 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
+### BATCH 84 SHIPPED AS `v0.544.0`, ONE RELEASE CARRYING ONE PC-BACKED SUBJECT — AND **FIVE ADVERSARIAL PASSES WERE RUN, OF WHICH FOUR FOUND A REAL DEFECT ON A GATE-GREEN, PUSHED BRANCH.** THE FILED CANDIDATE'S OWN PROPOSED REMEDY WAS REFUTED BY MEASUREMENT: BUILDING IT MAKES THE CONSUMER **WORSE**. THE GAP IS **TWO**, PENDING **2**, AND THE PULL IS **REQUIRED** — CARRIED OVER FROM BATCH 83, WHOSE THREE DATED FIRINGS ARE STILL UNDELIVERED.
+
+This block replaces the batch-83 record below it. Every figure was re-derived after the merge
+against the working tree with controls in the same invocation; re-derive them again rather than
+reading them.
+
+**`VERSION` IS `0.544.0`, SO BATCH 85 RELEASES AS `0.545.0`.** Re-derive `VERSION` and add one.
+Batch 84 merged once, at `5b829554` (PR #699), carrying
+`PC-S310-GATE-ADJUDICATION-ROTATION-HAS-NO-BACKFILL-PATH-FOR-PRE-MECHANISM-SPRINTS`, cited verbatim
+in the release commit message and appearing in EXACTLY ONE commit on `origin/main` (control: an
+impossible id resolves 0, `VERSION` at that commit is `0.544.0`). `BL-228` is filed, fixed and
+ROTATED — live 93 → 92, archive 135 → 136, confirmed by content.
+
+**THE SUBJECT, AND THE CANDIDATE'S OWN REMEDY WAS THE THING REFUTED.** It asked for a one-time
+backfill of the sprints that closed before `rotate-gate-adjudication.sh` existed. Building that
+naively makes the reference consumer WORSE: the residue it removes is currently SHIELDING the guard
+from 33 legacy verdicts that record a FAIL and that no `--sprint` rotation can ever move. Driving
+the real guard: residue present ALLOWS, residue rotated away DENIES on `story-20260811T214958Z`
+check 7, one clean current-sprint verdict restored ALLOWS again. **The root cause is a
+misattribution** — the rotator's legacy carve-out was justified by "the guard's own series split",
+and the guard has none (`gate_series_id` occurs zero times in it, control `LIVE_NONCE` 18 times).
+That phrase belongs verbatim to `validate-gate-adjudication.sh`, a different reader of the same
+directory, whose tolerance is itself conditional on the legacy verdict sorting BEFORE every live
+series — the precondition a backfill destroys.
+
+**WHAT SHIPPED**: the refusal, keyed on whether ANY mode can move the survivor; `--legacy-through
+<nonce>`, the pre-series escape it prescribes; and a remedy naming an action the tool honours.
+**The backfill itself is deliberately NOT shipped and has not been run on any consumer.** It is now
+safe and executable; running it is the consumer's call.
+
+**FIVE ADVERSARIAL PASSES, FOUR FINDINGS, EVERY ONE ON A BRANCH THAT WAS GATE-GREEN AND PUSHED.**
+(1) The refusal alone made the post-backfill state UNCLOSEABLE — backfill, then an ordinary
+`retro.md` 5b close returns exit 1, which `retro.md:1162` reads as a HARD_BLOCK — and its first
+remedy text was INERT, prescribing a sidecar the refusal never reads. (2) The escape's printed bound
+was off by one and could never converge: 92 moved where 93 were owed, the named survivor still live,
+the identical bound re-printed forever. (3) A SECOND stranding door — the verdict schema leaves
+`gate_series_id` "deliberately unpatterned", so a sprint-first id has neither refusal nor escape, and
+the consumer already has one. (4) The predicate approximated the selector with a glob, and one seeded
+shape could not discriminate a correct fix from one hardcoding that spelling.
+
+**MY OWN VERIFICATION FAILED THE SAME WAY THREE TIMES, AND IT IS THE LESSON OF THIS BATCH.** Each
+time a zero sat beside a control that could not fire: an FP sweep whose positive control was shadowed
+by the live sprint's verdict; an FP sweep taken on the pre-backfill tree, the wrong population for a
+fix whose purpose is the post-backfill world; and an FP sweep masked by an untracked verdict the
+consumer wrote mid-batch. **Pin the corpus and state what it excludes.**
+
+**AND TWO ORACLES, WRITTEN BY TWO HANDS, AGREED WITH EACH OTHER AND DISAGREED WITH THE PROGRAM.**
+Both scored three ids as movable-by-nothing; driving the shipping rotator showed `--sprint` accepts
+`s[0-9]*`, so `s1x` and `s310 ` are accepted arguments that DO select them. Refusing them is still
+right, for a different reason — the destination is derived from that argument, so `--sprint "s310 "`
+files under a trailing-space directory that is not the sprint it names. **Drive the program; a
+second parser is an opinion.**
+
+**ELEVEN WRONG FIXES WERE BUILT AND SCORED**, per `BL-227`, and earlier revisions of the receipt
+accepted four of them. Every original seed had been built from what the predicate itself reads, which
+is `fixture-mutants.md`'s "never seed from what the reader accepts". **A scoring harness of mine also
+restored a stale copy of the subject between candidates, producing a table in which the real fix read
+FAIL** — regenerate every candidate from a snapshot taken at run time and `cmp` the subject back.
+
+**THE GAP IS TWO, PENDING 2, AND THE PULL IS REQUIRED.** Consumer installed `0.542.0`, distribution
+`0.544.0`. The requirement is carried over from batch 83 and is unchanged: its fix has already fired
+THREE times in the consumer's own committed history, all 2026-09-09, every one an unparsable argument
+rather than a retirement. **Do not dispatch the pull** — it is operator-initiated and readiness is not
+authorization.
+
+**THE SWEEP FOR BATCH 85. Live 50, cited 32, unfiled 18, md5 `179790fe…`, archive 202, partition
+control 0.** DISCHARGED 2 / in-flight 30 / untouched 18, summing to 50 after the 4-id overlap;
+TERMINAL 86. **The consumer wrote a verdict mid-batch but filed NO new candidate** — the ledger md5
+is unmoved from batch 83's, so the id set is unchanged and only batch 84's own citation moved unfiled
+19 → 18. **THE AVAILABLE PC-BACKED RESIDUE IS ZERO**: of the 18 unfiled, 4 are named in `origin/main`
+release commits, 11 carry `NOT-UPSTREAM`, the `PC-S309-PRE-PUSH` pair is WITHDRAWN and
+`PC-S340-RETRO-AUDIT-SCANS-…` is REFUTED. **Do not re-scope any of those.** Run the sweep anyway —
+the consumer files while nobody is looking — but expect it empty and rank the no-`PC` set without
+waiting.
+
+**A CONSUMER-SIDE FINDING WAS SURFACED AND IS NOT UPSTREAM WORK, THOUGH IT MAY BECOME A CANDIDATE.**
+`planning-20260910T102842Z` carries `gate_series_id: s310-planning`, sprint-FIRST, where every other
+id in that directory is `<gate_type>-s<N>-<nonce>`. It is schema-legal — the schema declines to
+pattern the field — and no `*-s<N>-*` selector can name it, so it is 1 of 95 series-bearing verdicts
+that no rotation can move. Batch 84's widened predicate REFUSES rather than strands it, so the
+distribution is correct; the writer stamping that shape is the consumer's own engine. It is also
+UNTRACKED, and it currently MASKS the stranding refusal, which is why the FP sweep is pinned against
+it.
+
+**AND READ `BL-227` BEFORE BUILDING ANY RECEIPT.** Batch 83 scored every candidate receipt in its
+ranked set by BUILDING the non-fix: nine of ten are closable by something that is not a fix. Batch 84
+confirmed it at a second level — driving the subject is necessary and NOT sufficient, and a receipt
+must also assert the control case still DENIES. The ranked no-`PC` entries, readiest first, are
+`BL-225`, `BL-217`, `BL-222`, `BL-224`, `BL-220`, `BL-218`, `BL-219`, `BL-221`, `BL-223` — **every one
+of their receipts needs repairing before it is trusted**. `BL-222`'s owed FP measurement is already
+taken; `BL-218` is blocked on a corpus that does not exist.
+
 ### BATCH 83 SHIPPED AS `v0.543.0`, ONE RELEASE CARRYING ONE PC-BACKED SUBJECT — AND **SEVEN DEFECTS IN THAT FIX WERE FOUND BY MECHANISMS, NONE BY READING IT.** THREE CAME FROM THE FIXTURE AND MY OWN FP MEASUREMENT, FOUR FROM AN ADVERSARY ON A BRANCH THAT WAS GATE-GREEN AND PUSHED. **FIVE OF THE SEVEN ARE THE `BL-227` CLASS — A CHECK SATISFIED BY PROSE — WHICH THIS SAME BRANCH FILED.** THE GAP IS **ONE**, PENDING **1**, AND THE PULL IS **REQUIRED** ON THREE DATED OCCURRENCES IN THE CONSUMER'S OWN COMMITTED HISTORY.
 
 This block replaces the batch-82 record below it. Every figure was re-derived after the merge
@@ -8309,19 +8401,24 @@ so no block written before it changes verdict.
    **Do not re-derive their findings**; each carries a bidirectional receipt and the measurement
    that produced it.
 
+   **BATCH 84's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.**
+   `PC-S310-GATE-ADJUDICATION-ROTATION-HAS-NO-BACKFILL-PATH-FOR-PRE-MECHANISM-SPRINTS` shipped
+   ALONE as `v0.544.0` at `5b829554` (PR #699), closing `BL-228`, cited verbatim in the release
+   commit message and appearing in exactly one commit on the range. **Its own proposed remedy was
+   REFUTED** — building the backfill naively makes the consumer worse — so what shipped is the
+   refusal plus the `--legacy-through` escape. **The backfill has NOT been run on any consumer and
+   that is the consumer's call, not upstream's.**
+
    **BATCH 83's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.**
    `PC-S310-SELF-UPDATE-FIXTURES-OVER-ARM-CONVICTS-A-SET-IT-COULD-NOT-PARSE` shipped ALONE as
    `v0.543.0` at `2b6901d9` (PR #697), closing `BL-226`, cited verbatim in the release commit
    message and appearing in exactly one commit on the range. `BL-227` was filed beside it and
    deliberately NOT fixed.
 
-   **THE ONE AVAILABLE PC-BACKED CANDIDATE IS
-   `PC-S310-GATE-ADJUDICATION-ROTATION-HAS-NO-BACKFILL-PATH-FOR-PRE-MECHANISM-SPRINTS`**, filed by
-   the consumer on 2026-09-10, MID-BATCH and UNCOMMITTED at the time — so it has no `-S` date and
-   must be read from the working file. It is core-owned across three paths
-   (`core/hooks/ai-dlc-gate-remediation-guard.sh`, `core/skills/ai-dlc/steps/retro.md` §5b, and
-   `core/scripts/ai-dlc/rotate-gate-adjudication.sh`), so check the bootstrapping rule in action 2
-   before batching it. Re-derive it from the sweep rather than trusting this sentence.
+   **THE AVAILABLE PC-BACKED RESIDUE IS ZERO.** All 18 unfiled re-derive as adjudicated — 4 named in
+   `origin/main` release commits, 11 `NOT-UPSTREAM`, the `PC-S309-PRE-PUSH` pair WITHDRAWN, and
+   `PC-S340-RETRO-AUDIT-SCANS-…` REFUTED. Run the sweep anyway, because the consumer files while
+   nobody is looking; expect it empty and rank the no-`PC` set without waiting for permission.
 
    **READ `BL-227` BEFORE YOU BUILD OR TRUST ANY RECEIPT THIS BATCH.** Batch 83 scored every
    candidate receipt in its ranked set by BUILDING the non-fix and running it: **nine of ten close
@@ -9246,7 +9343,15 @@ so no block written before it changes verdict.
    `^#{2,6}`. If those two disagree again, ask which of them changed before concluding anything
    about the consumer.
 
-   **THE BASELINE IS 75 LIVE CANDIDATES, 55 CITED, 20 UNFILED** — re-derived at batch 81's close
+   **THE BASELINE IS 50 LIVE CANDIDATES, 32 CITED, 18 UNFILED** — re-derived at batch 84's close
+   after the merge at `5b829554` (md5 `179790fe…`, archive 202, partition control 0, all four
+   presence controls 1, absence control 0). **DISCHARGED 2 / in-flight 30 / untouched 18, summing to
+   50 after subtracting the 4-id overlap; TERMINAL 86; discharged-but-invisible 1.** The consumer
+   wrote a verdict mid-batch but filed NO candidate — the ledger md5 is UNMOVED from batch 83's, so
+   the id set is unchanged and only batch 84's own citation moved cited 31 → 32 and unfiled 19 → 18.
+   **All 18 unfiled are adjudicated and the AVAILABLE residue is ZERO.** The paragraph below is the
+   batch-81 reading and records how the counts moved: the batch-81 baseline was 75 / 55 / 20,
+   re-derived at that batch's close
    after the merge at `732db5a5` (md5 `21cbc866…`, archive 175, partition control 0, all four
    presence controls 1, absence control 0). **The residue is TWO, and both are adjudicated
    NOT-READY** with the reason recorded in `BL-215` and `BL-216` — read those before re-scoping
