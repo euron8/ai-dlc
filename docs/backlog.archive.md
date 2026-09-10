@@ -9982,3 +9982,150 @@ emitted row for a slash-bearing argument, so the wrong fix now fails on BEHAVIOU
 
 verify: sh S=core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh; [ -f "$S" ] || exit 9; W="$(mktemp -d)" || exit 9; R="$W/dist"; mkdir -p "$R/core/fixtures/real-fx" "$R/core/fixtures/no-driver" "$R/core/fixtures/lib" "$W/c"; printf '#!/bin/sh\nexit 0\n' > "$R/core/fixtures/real-fx/run.sh"; printf 'x\n' > "$R/core/fixtures/no-driver/README.md"; printf 'x\n' > "$R/core/fixtures/lib/preamble.sh"; git init -q "$R" >/dev/null 2>&1; git -C "$R" config user.email t@t; git -C "$R" config user.name t; git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -qm s >/dev/null 2>&1; T="$(git -C "$R" rev-parse HEAD)"; git -C "$R" rev-parse -q --verify "${T}:core/fixtures/no-driver" >/dev/null || { rm -rf "$W"; exit 9; }; bad="$(bash "$S" "$R" "$T" "$T" "$W/c" "real-fx no-driver" 2>&1)"; slash="$(bash "$S" "$R" "$T" "$T" "$W/c" "lib/preamble.sh" 2>&1)"; good="$(bash "$S" "$R" "$T" "$T" "$W/c" "no-driver" 2>&1)"; rm -rf "$W"; printf '%s' "$good" | grep -qF 'no consumer can run' || exit 9; printf '%s' "$good" | grep -qF 'upstream deleted the driver' || exit 1; printf '%s' "$bad" | grep -qE '^  real-fx no-driver — ' || exit 1; printf '%s' "$bad" | grep -qE 'real-fx no-driver — no run\.sh at' && exit 1; printf '%s' "$slash" | grep -qE '^  lib/preamble\.sh — ' || exit 1; printf '%s' "$slash" | grep -qE ' — no run\.sh at' && exit 1; exit 0
 
+## BL-228 — the gate-adjudication rotator's legacy carve-out is justified by a series split the guard does not have, so a backfill strands a permanent deny
+
+**LANDED (v0.544.0, verified 5b829554).**
+
+**Found 2026-09-10** while scoping
+`PC-S310-GATE-ADJUDICATION-ROTATION-HAS-NO-BACKFILL-PATH-FOR-PRE-MECHANISM-SPRINTS`. The candidate
+asks for a one-time backfill of the sprints that closed before the rotator shipped. **Building it
+naively makes the reference consumer WORSE**, and the reason is a misattributed justification.
+
+**The carve-out.** `core/scripts/rotate-gate-adjudication.sh` skips any verdict carrying no
+`gate_series_id` — "legacy: no gate_series_id -- never moves". Its header justified that with *"the
+guard's own series split already tolerates it and it predates every live series on the consumer."*
+
+**There is no such split in the guard.** `gate_series_id` does not occur in
+`core/hooks/ai-dlc-gate-remediation-guard.sh` at all (control: `LIVE_NONCE` occurs 18 times in the
+same file; `grep -rln` finds the token in 16 files under `core/`). Its live-pass pick at `:431-441`
+orders every conforming stem by trailing nonce and reads nothing else. The split described is
+`core/scripts/validate-gate-adjudication.sh`'s, whose `:779` prints the header's phrase verbatim —
+`counted, not grouped (no gate_series_id, predates every live series)`. **A true sentence about one
+reader, offered as a safety argument for another that shares the directory and nothing else.** And
+that validator's tolerance is itself CONDITIONAL (`:106-111`): a legacy verdict is tolerated only
+while it sorts strictly BEFORE the first pass of every live series — the precondition a complete
+backfill destroys.
+
+**What it costs, measured on the reference consumer.** 189 live verdicts (188 when this entry was
+first written; the consumer wrote one more mid-batch), 94 legacy, **33 of the 94
+record a FAIL** (control: 49 of the 94 series-bearing ones do, so the query discriminates). Newest
+is `story-20260811T214958Z`, check 7, carrying no repair and no authorization sidecar (control: 8
+repair sidecars exist in that directory, so the glob finds them when present). Nothing is
+suppressed today — `validate-suppression-lifetime.sh --in-force` reports `in_force=0` against
+`entries_scanned=143`.
+
+**The residue currently SHIELDS the consumer, which is why this is invisible.** Driving the real
+guard against a scratch copy: residue present **ALLOW**; residue rotated away **DENY** on
+`story-20260811T214958Z` check 7; one clean current-sprint verdict restored **ALLOW** again. The
+ordering of denies is today the live sprint, after s310's retro a rotatable s307 FAIL, and after a
+backfill the 2026-08-11 legacy FAIL — **which no `--sprint` rotation can ever move and no sidecar
+lifts.** A self-clearing deny traded for a permanent one.
+
+**FIXED in this release, in the rotator, as a REFUSAL PLUS THE ESCAPE IT PRESUPPOSES.** The
+refusal computes, from verdicts the discovery loop already parsed, whether the move would promote a
+FAIL-carrying legacy verdict to newest conforming stem. `--legacy-through <nonce>` is the escape: it
+rotates PRE-SERIES verdicts older than a bound into `implementation-artifacts/pre-series/`. The
+guard was deliberately not taught sprint awareness — `rotate-gate-adjudication.sh:17-18` states
+rotation exists precisely so the hook is not.
+
+**THE REFUSAL ALONE MADE THE POST-BACKFILL STATE UNCLOSEABLE, AND ONLY AN ADVERSARY FOUND IT.**
+Shipped without the escape, backfilling s302–s307 and then running an ORDINARY `retro.md` 5b close
+returns exit 1 — which `retro.md:1162` reads as a HARD_BLOCK. The release would have made the state
+it exists to enable a state where retro can never close. **The refusal itself is correct**: driving
+the real guard across the sequence, pristine ALLOWS, post-backfill ALLOWS, and post-s310-close
+DENIES on `story-20260811T214958Z` check 7. The deny it predicts is real and permanent, so the
+answer was to ship the way out, not to weaken the predicate. Narrowing the refusal to fire only on
+promotion was BUILT and REFUTED — the consumer's own s310 close genuinely is a promotion, so it
+refuses anyway.
+
+**AND THE FIRST REMEDY TEXT WAS INERT — IT PRESCRIBED WHAT THIS TOOL DOES NOT READ.** It told the
+operator to write a repair or authorization record. Those are read by the GUARD; the refusal block
+reads no sidecar at all. Measured: writing both `story-20260811T214958Z.repair.md` and
+`.authorization.md` still returns exit 1. Deferring until the next sprint's verdict lands only
+moves the block one sprint, forever. Arm (h.1b) now asserts the printed remedy names `--legacy-through`.
+
+**FP set measured at ZERO in BOTH states**, which is the correction that matters: every single-sprint
+rotation the corpus can express — **seven** distinct sprints, derived from the series ids rather than
+counted by hand — plus every close post-backfill after the escape runs. **The first cut measured only
+the pre-backfill tree** — the wrong population for a fix whose purpose is the post-backfill world.
+End to end on the consumer's real corpus: backfill rc=0, ordinary close REFUSED, escape moves 93
+pre-series verdicts, close then rc=0.
+
+**AND THE ESCAPE'S OWN PRINTED REMEDY COULD NOT CONVERGE, WHICH A SECOND ADVERSARIAL PASS FOUND.**
+The selector was strictly `<` the bound while the refusal prints the SURVIVOR's nonce as that
+bound, so the printed command moved everything EXCEPT the verdict it named and the next close
+re-printed the identical bound. Measured on the consumer: **92 moved where 93 were owed**, the named
+survivor still live, no fixed point. The bound is inclusive now and the flag is `--legacy-through`,
+renamed because an `--legacy-before` that includes its bound is a trap for anyone who reads the name
+rather than the code. **The first end-to-end run passed only because the bound was hand-chosen** —
+`20260910T034119Z` rather than the one the tool prints.
+
+**Arm (i) could not see it, because it hardcoded a bound the refusal never printed.** It now parses
+the bound out of the refusal's own output and runs THAT, asserting the named verdict is gone and the
+rotation completes in one run. That single change also kills a wrong fix that prints an impossible
+bound selecting nothing.
+
+**Six non-fixes were built and scored**, per `BL-227` — and the first receipt accepted two of them.
+Prose on the unfixed baseline, an unreachable condition, warn-instead-of-refuse and the over-broad
+legacy-only form all FAIL. **`W5a` (refuse on any FAILing legacy anywhere, ignoring survivorship)
+and `W5b` (drop the move-set exclusion) both PASSED the original receipt**; `W5a` refuses every
+rotation on the consumer's real corpus. Both are killed now — `W5a` by the new shadowed arm (h.3),
+`W5b` by (h.1) once the seed's legacy nonce was renumbered BELOW the moved verdict so the rotation
+genuinely promotes it. **Every one of the original seeds was built from what the predicate itself
+reads**, which is the failure `fixture-mutants.md` names as "never seed from what the reader accepts".
+Two more were found on the second pass — an impossible printed bound and the exclusive-bound
+off-by-one. A fourth pass added three: reverting the widening, hardcoding the ONE unselectable
+spelling the fixture seeded, and an over-wide predicate. **Eleven wrong fixes are now scored and
+rejected** against the real fix accepted. **The hardcoding one is the instructive kill**: `(h.4)`
+seeded a single unselectable shape, so a predicate special-casing that spelling passed while
+stranding four of the five — the same one-shape-cannot-discriminate failure as the seeds above, one
+level down. `(h.4c)` seeds a second, sprint-LAST shape sharing no prefix with the first.
+
+**AND THERE WAS A SECOND DOOR, KEYED ON A FIELD THE SCHEMA REFUSES TO CONSTRAIN.** The refusal
+tested "is the survivor LEGACY", so a verdict carrying a `gate_series_id` scored as movable. But
+`*-s<N>-*` is an UNSTATED pattern on a field `core/schemas/gate-adjudication-verdict.json` calls
+*"deliberately unpatterned: required and non-empty, nothing more"*. A sprint-FIRST id is legal,
+matches no `--sprint` selector, and `--legacy-through` skips it because it HAS a series id — so such
+a verdict has **no refusal and no escape**, which is worse than the legacy class this entry opens
+with. Not hypothetical: `planning-20260910T102842Z` carries `s310-planning`, written by a live
+consumer session, 1 of 95 series-bearing verdicts. The predicate now asks whether ANY mode can move
+the survivor, and the remedy branches — a re-stamp for this case, since offering `--legacy-through`
+where it cannot apply would be a second inert remedy.
+
+**AND THE FIRST SPELLING OF THAT PREDICATE APPROXIMATED THE SELECTOR INSTEAD OF ASKING IT.** It
+tested the glob `*-s[0-9]*-*`, where `[0-9]*` is one digit followed by ANYTHING, so it matched ids
+whose sprint token holds whitespace or letters — `a-s1x-b`, `x-s3 1 0-y`, `planning-s310 -<nonce>`.
+The token is now DERIVED from the id and tested with the selector's exact `-<field>-` substring,
+restricted to digit-only fields, so the two cannot drift.
+
+**THE FIRST JUSTIFICATION FOR THAT CHANGE WAS WRONG, AND BOTH HANDS GOT IT WRONG THE SAME WAY.** It
+said no `--sprint` could move those three. Settled by DRIVING the rotator rather than consulting a
+second parser: `--sprint` validation accepts `s[0-9]*`, so `s1x` and `s310 ` are accepted arguments
+and they DO select those verdicts — against a positive control that moves a well-formed id and a
+negative one that refuses `s310-planning`. Two oracles, written by two hands, agreed with each other
+and disagreed with the program; each had swept only well-formed numeric sprints. **Refusing is still
+correct, for a different reason**: the only argument that moves such a verdict is one no operator
+would type, and the destination is derived from that argument, so `--sprint "s310 "` files it under
+`implementation-artifacts/s310 /` — a trailing-space directory that is not the sprint it appears to
+name. An escape that silently mis-files is not an escape, so the predicate is deliberately
+conservative and the operator re-stamps.
+
+**THE FP SWEEP HAD TO BE PINNED, BECAUSE THAT SAME VERDICT MASKS THE REFUSAL.** It is CLEAN and
+sorts newest, so on the tree as-is it becomes the survivor and the refusal correctly stays silent —
+a sweep taken there reads a clean zero for a reason unrelated to the fix. Measured both ways: on the
+189-verdict tree the s310 close returns 0 and no bound is printed; with that one file excluded it
+returns 1, prints `20260811T214958Z`, and the remedy converges in one run. **FP is 0 in both phases
+on the pinned corpus**, and the unpinned zero is not evidence.
+
+**A SCORING-HARNESS DEFECT OF MY OWN, WORTH THE LINE BECAUSE IT PRODUCED A CONFIDENT WRONG TABLE.**
+The first score script restored a STALE copy of the subject after each candidate, so it silently
+reverted the fix mid-run: the "real fix" row read FAIL while the wrong-fix rows read plausible
+numbers. Regenerate every candidate from a snapshot taken at run time, and `cmp` the subject back
+afterwards.
+
+**Tiered DEFECT.** Consumer-facing. Still NOT closed by this fix: the candidate's actual request — a
+backfill run on the consumer — is now safe and executable but has not been run, and running it is
+the consumer's call, not upstream's.
+
+verify: sh bash core/fixtures/gate-adjudication-rotate/run.sh >/dev/null 2>&1
+
