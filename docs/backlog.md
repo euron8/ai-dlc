@@ -4476,7 +4476,7 @@ lifts.** A self-clearing deny traded for a permanent one.
 
 **FIXED in this release, in the rotator, as a REFUSAL PLUS THE ESCAPE IT PRESUPPOSES.** The
 refusal computes, from verdicts the discovery loop already parsed, whether the move would promote a
-FAIL-carrying legacy verdict to newest conforming stem. `--legacy-before <nonce>` is the escape: it
+FAIL-carrying legacy verdict to newest conforming stem. `--legacy-through <nonce>` is the escape: it
 rotates PRE-SERIES verdicts older than a bound into `implementation-artifacts/pre-series/`. The
 guard was deliberately not taught sprint awareness — `rotate-gate-adjudication.sh:17-18` states
 rotation exists precisely so the hook is not.
@@ -4495,7 +4495,7 @@ refuses anyway.
 operator to write a repair or authorization record. Those are read by the GUARD; the refusal block
 reads no sidecar at all. Measured: writing both `story-20260811T214958Z.repair.md` and
 `.authorization.md` still returns exit 1. Deferring until the next sprint's verdict lands only
-moves the block one sprint, forever. Arm (h.1b) now asserts the printed remedy names `--legacy-before`.
+moves the block one sprint, forever. Arm (h.1b) now asserts the printed remedy names `--legacy-through`.
 
 **FP set measured at ZERO in BOTH states**, which is the correction that matters: nine single-sprint
 rotations pre-backfill, and every close post-backfill after the escape runs. **The first cut measured
@@ -4526,7 +4526,12 @@ rotation on the consumer's real corpus. Both are killed now — `W5a` by the new
 genuinely promotes it. **Every one of the original seeds was built from what the predicate itself
 reads**, which is the failure `fixture-mutants.md` names as "never seed from what the reader accepts".
 Two more were found on the second pass — an impossible printed bound and the exclusive-bound
-off-by-one — so **eight wrong fixes are now scored and rejected** against the real fix accepted.
+off-by-one. A fourth pass added three: reverting the widening, hardcoding the ONE unselectable
+spelling the fixture seeded, and an over-wide predicate. **Eleven wrong fixes are now scored and
+rejected** against the real fix accepted. **The hardcoding one is the instructive kill**: `(h.4)`
+seeded a single unselectable shape, so a predicate special-casing that spelling passed while
+stranding four of the five — the same one-shape-cannot-discriminate failure as the seeds above, one
+level down. `(h.4c)` seeds a second, sprint-LAST shape sharing no prefix with the first.
 
 **AND THERE WAS A SECOND DOOR, KEYED ON A FIELD THE SCHEMA REFUSES TO CONSTRAIN.** The refusal
 tested "is the survivor LEGACY", so a verdict carrying a `gate_series_id` scored as movable. But
@@ -4538,6 +4543,16 @@ with. Not hypothetical: `planning-20260910T102842Z` carries `s310-planning`, wri
 consumer session, 1 of 95 series-bearing verdicts. The predicate now asks whether ANY mode can move
 the survivor, and the remedy branches — a re-stamp for this case, since offering `--legacy-through`
 where it cannot apply would be a second inert remedy.
+
+**AND THE FIRST SPELLING OF THAT PREDICATE APPROXIMATED THE SELECTOR INSTEAD OF ASKING IT.** It
+tested the glob `*-s[0-9]*-*`, which is NOT equivalent to "some `--sprint` moves it": in a shell
+glob `[0-9]*` is one digit followed by ANYTHING, so it spans characters no concrete sprint token
+contains. Probed against every `s0`..`s400`, `a-s1x-b`, `x-s3 1 0-y` and `planning-s310 -<nonce>`
+all scored MOVABLE while no `--sprint` selects any of them — the same stranded state, reached
+through the predicate's own approximation. The token is now DERIVED from the id and tested with the
+selector's exact `-<field>-` substring, so the two cannot drift; re-probed against the brute-force
+oracle, **zero mismatches in either direction** over thirteen shapes including the case-preserving
+and substring-sprint cases.
 
 **THE FP SWEEP HAD TO BE PINNED, BECAUSE THAT SAME VERDICT MASKS THE REFUSAL.** It is CLEAN and
 sorts newest, so on the tree as-is it becomes the survivor and the refusal correctly stays silent —

@@ -90,7 +90,14 @@ clean and sorts newest, so on the tree as-is it becomes the survivor and the ref
 quiet — a zero measured there says nothing about the fix. With it excluded the refusal fires, prints
 its bound, and the remedy converges in one run. FP is 0 in both phases on the pinned corpus.
 
-Fixture arms guard it, plus a mutant. **Nine non-fixes were built and scored**, and earlier receipts
+**A fourth pass found the predicate approximating the selector rather than asking it.** The first
+spelling tested the glob `*-s[0-9]*-*`, where `[0-9]*` is one digit followed by anything — so ids
+carrying whitespace or a non-digit inside the sprint token scored movable while no `--sprint`
+selects them, which is the stranded state again by a shorter route. The token is now derived and
+tested with the selector's own substring; re-probed against a brute-force oracle over every
+`s0`..`s400`, zero mismatches in either direction.
+
+Fixture arms guard it, plus a mutant. **Eleven non-fixes were built and scored**, and earlier receipts
 accepted four of them at various points: a survivorship-blind sweep (which refuses every rotation on
 the consumer's real corpus), one with the move-set exclusion deleted, one printing an impossible
 bound, and the off-by-one itself. Every seed had been built from what the predicate reads, and the
