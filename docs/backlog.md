@@ -4054,3 +4054,385 @@ verify: sh set -e; V=core/scripts/validate-locked-anchor.sh; [ -f "$V" ] || exit
 
 
 
+
+## BL-217 — a worktree-isolated code reviewer's own role file tells it to do what the lead is forbidden to ask for
+
+**Found 2026-09-09**, by an adjudication hand measuring `PC-S306-WORKTREE-DELIVERABLE-PATH-AMBIGUOUS-PRIMARY-VS-WORKTREE`
+against HEAD. Not that entry's residue: `git blame` puts the offending line at `e7ccffa9`
+(2026-07-05), predating the `v0.429.0` fix and untouched by it. Verified independently of the hand.
+
+Three shipped core files disagree, and all three are read at HEAD:
+
+- `core/skills/ai-dlc/steps/implementation.md:118` names the worktree dispatch targets as
+  "dev, **code reviewer**, or QA".
+- `core/skills/ai-dlc/steps/implementation.md:130-133` — the `v0.429.0` remedy — states the lead
+  "MUST NOT ask it to write outside that worktree, and MUST NOT name a primary-tree path for a
+  file the teammate is to produce."
+- `core/team-roles/code-reviewer.md:453-456` instructs the reviewer: "**Write the review file to
+  the canonical branch checkout** (or hand it to the lead to persist) BEFORE reporting the gate-1
+  verdict."
+
+So a worktree-isolated code reviewer is told by its own contract to write to the canonical
+checkout, which item 7 forbids the lead to request. The role file's reasoning is sound — a review
+left in a pruned worktree is lost — and that is why this is a PRECEDENCE defect rather than a
+contradiction: the parenthetical fallback ("or hand it to the lead to persist") is already
+compatible with item 7. The two are stated in the wrong order, with the forbidden action primary.
+
+**Scoped, not assumed a class.** `code-reviewer.md` is the only role file carrying the
+instruction — QA does not (1 of 21 role files, control: 21 mention `worktree`).
+
+**The fix shape is a wording repair in one file**: make handing the review to the lead the primary
+instruction and the canonical-checkout write the non-worktree case. Not built here — the LOUD line
+wins in a role file, and which of the two readings a reviewer takes is worth deciding deliberately
+rather than in the same change that found it.
+
+**Item 7 has no enforcer, which is why this survived.** Nothing under `core/fixtures/`, `scripts/`
+or `core/scripts/` references the worktree deliverable rule (control: an unrelated token resolves a
+fixture in the same invocation), so deleting or contradicting item 7 fails no push.
+
+**Tiered DEFECT.** Consumer-facing: both files ship. A reviewer following its role file produces a
+deliverable the lead's protocol says it must not have been asked for, and the losing case is a
+review that is lost with a pruned worktree.
+
+verify: sh r=core/team-roles/code-reviewer.md; i=core/skills/ai-dlc/steps/implementation.md; [ -f "$r" ] && [ -f "$i" ] || exit 9; grep -q "code reviewer" "$i" || exit 9; grep -q "NOT ask it to write outside that worktree" "$i" || exit 9; grep -q "Write the review file to the canonical branch checkout" "$r" && exit 1; exit 0
+
+## BL-218 — `audit-layer-debt.sh`'s UNDECLARED arm files a row that CITES a resolvable `OWED-` id in the same bucket as a genuine undeclared obligation
+
+**Found 2026-09-09** by an adjudication hand measuring
+`PC-S340-UNDECLARED-CUE-CANNOT-TELL-A-REFERENCE-FROM-A-DECLARATION` against HEAD, and re-derived
+here independently. `v0.478.0` closed that entry's NEGATION class and `v0.479.0` corrected it; the
+CITATION class is the half that survives.
+
+**This is not a rediscovery of a deferred item.** `CHANGELOG.md:3926-3929` states the class as a
+surviving limit — *"the cue in a clause citing a resolvable `OWED-` id. 15 of the surviving 19 are
+still false"*. A stated limit is a DISCLOSURE, not a resolution, and the consumer's cost is
+untouched: obeying the printed remedy on a citing row declares a duplicate obligation under a new
+id for work another row already tracks.
+
+Driven through the shipping `core/scripts/audit-layer-debt.sh --register`, three inputs, one
+invocation each:
+
+- **subject** — row `e1` prose *"The narrowing is owed under OWED-X."* beside row `e2` declaring
+  `owed.id: OWED-X` -> `OPEN (1)` for the declaration AND `UNDECLARED (1)` for the citation. The
+  citing row sits in the same bucket as a real offender.
+- **control A** — cue text occurring ONLY inside the token (*"Tracked on the row that carries
+  OWED-DEBT-DEFERRED."*) -> `UNDECLARED (0)`. The arm's word-boundary lookahead already refuses a
+  cue inside the id.
+- **control B** — a genuine undeclared obligation (*"A narrowing is still owed here."*) ->
+  `UNDECLARED (1)`. The arm fires, so the subject's row is not a dead scan.
+
+**THE ENTRY'S OWN FILED REMEDY IS REFUTED AND MUST NOT BE BUILT.** It asks to skip a row whose cue
+occurrences all sit inside a resolvable `OWED-<id>` token. Control A is exactly that state and it
+already reports 0 — the state the remedy targets is UNCONSTRUCTIBLE. The real consumer shape is a
+STANDALONE cue word BESIDE the citation, which is the subject above.
+
+**The fix must key on cue occurrences ADJACENT TO a resolvable `OWED-` token, not INSIDE one**, and
+resolvability is a join against the declaring rows in the same register. Not built here: the
+false-positive set over the arm's real corpus has not been measured, and `CLAUDE.md` requires that
+before the check ships. The reference consumer carries no live layer-debt register (only two
+`tests/fixtures/` trees), so that measurement needs a corpus decision first.
+
+**Tiered DEFECT.** Consumer-facing; the arm ships in `core/scripts/`. Its consequence is a
+duplicate obligation filed under a new id, which is a wrong WRITE prompted by a false finding.
+
+verify: sh set -e; V=core/scripts/audit-layer-debt.sh; [ -f "$V" ] || exit 9; d=$(mktemp -d); trap 'rm -rf "$d"' EXIT; printf '{"clause":"LC-E4","entry":"e1","subject_digest":"x","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"The narrowing is owed under OWED-X."}\n{"clause":"LC-E4","entry":"e2","subject_digest":"y","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","owed":{"id":"OWED-X","what":"w"}}\n' > "$d/r.jsonl"; o="$(bash "$V" --register "$d/r.jsonl" 2>/dev/null)" || true; printf '%s' "$o" | grep -q 'OPEN (1)' || exit 9; printf '%s' "$o" | grep -q 'UNDECLARED (1)' && exit 1; exit 0
+
+## BL-219 — a transcript corpus that is PRESENT but lacks the citation fails CLOSED, while one that is ABSENT fails OPEN
+
+**Found 2026-09-09** by an adjudication hand measuring
+`PC-S300-RESOLUTION-RECORD-CITATION-CANNOT-OUTLIVE-ITS-SESSION` against HEAD, and re-derived here
+by driving the shipping validator on the fixture-seeded `stalled-resolved` series. That entry's
+headline — a citation unverifiable across a handoff — is RESOLVED by `--transcript-dir`
+(`core/scripts/validate-adversarial-convergence.sh:127`). **This is the residual the entry itself
+stays open on, and only the EMPTY-corpus half was ever narrowed.**
+
+Driven through `validate-adversarial-convergence.sh --cycle-state --series <prefix>`, one
+invocation per row, same seeded series throughout:
+
+    CONTROL  --transcript-dir <real corpus>              rc=0   RESOLVED
+    (c)      --transcript-dir <dir, citation-less jsonl> rc=3   STALL          <- fails CLOSED
+    (d)      --transcript-dir <empty dir, no jsonl>      rc=0   UNVERIFIABLE   <- fails OPEN
+    (a)      no transcript flag at all                   rc=0   UNVERIFIABLE   <- fails OPEN
+
+**The control discriminates**: it RESOLVES where the others do not, and (c) and (d) differ on the
+same flag, so the pair is a real asymmetry rather than a run failing for a reason none of the arms
+owns. A first attempt at this measurement returned `rc=1` on all arms — the series argument is a
+path PREFIX, not a directory, and every arm was failing for that reason. A non-discriminating null
+reads exactly like agreement.
+
+**The mechanism**, at `validate-adversarial-convergence.sh:1015-1031`: `steer_dir_has_transcript`
+sets `STEER_FLAG` when the directory holds any readable `*.jsonl`. Only the `[ -z "$STEER_FLAG" ]`
+branch carries the two-tier fail-open. A corpus that is present but citation-less therefore never
+reaches that branch — it sets the flag, runs the predicate, and denies.
+
+So an operator who supplies a transcript directory that happens not to contain the quote is worse
+off than one who supplies nothing at all, which inverts the intended posture: the fail-open exists
+so a missing transcript never wedges the pipeline.
+
+**Any fix touches four files.** `steer_dir_has_transcript` is byte-identical in
+`validate-adversarial-convergence.sh`, `validate-escalation-resolution.sh`,
+`validate-gate-adjudication.sh` and `core/hooks/ai-dlc-gate-remediation-guard.sh`; **I92** holds
+the four copies to one text and refuses a fifth (derived: 4 definitions under `core/`).
+
+**Not fixed here, and the shape needs deciding.** Distinguishing "present but lacks the citation"
+from "absent" is a third state the two-tier branch does not model, and widening the fail-open to
+cover it would acquit exactly the case the gate posture exists to deny. On the escalation
+validator the same shape is fail-CLOSED uniformly, which is the gate posture and not this
+inversion — so the fix must not be applied blindly across all four copies.
+
+**Tiered DEFECT.** Consumer-facing; all four readers ship. Its consequence is a pipeline wedged by
+supplying MORE ground truth than the passing case requires.
+
+verify: sh set -e; V=core/scripts/validate-adversarial-convergence.sh; [ -f "$V" ] || exit 9; grep -q 'steer_dir_has_transcript "$TRANSCRIPT_DIR"' "$V" || exit 9; grep -q 'ADVERSARIAL_CITATION_UNVERIFIABLE' "$V" || exit 9; n="$(grep -rlc 'steer_dir_has_transcript() {' core/ | wc -l)"; [ "$n" -ge 4 ] || exit 9; grep -qE 'citation-less|present-but-unquoted|lacks the citation' "$V" && exit 0; exit 1
+
+## BL-220 — `validate-provenance-block.sh` exits 0 on an ordinary file with no marker and no flag, and there is no opt-out to require otherwise
+
+**Found 2026-09-09** adjudicating `PC-S297-PROVENANCE-FLAGLESS-FAIL-OPEN-BY-DEFAULT` against HEAD,
+re-derived here. That entry's PATH-CLASSIFIER half is genuinely fixed (`RETRO_PATH_RE` at
+`core/scripts/validate-provenance-block.sh:513` with three same-run self-probes). **The flagless
+default is the half that survives, and the entry's `sh` receipt exiting 0 is a LIVE DEFECT rather
+than a stale anchor** — the receipt's own control arm returns 1, so it did not take its `exit 127`
+path: the archive resolved, the validator ran, and the control discriminated.
+
+Driven through the shipping validator, three arms, one invocation each:
+
+    (1) ordinary file, no marker, NO flag              rc=0   <- the residue
+    (2) retro path, no block, NO flag                  rc=1   <- control, denies
+    (3) ordinary file WITH --require-skill             rc=1   <- control, denies
+
+Both controls deny, so arm (1) is not a run failing for an unrelated reason. The emitting line is
+`validate-provenance-block.sh:576`, `print("OK: no provenance block required or present in …")`
+followed by `sys.exit(0)`.
+
+**No opt-out exists**: `--allow-missing` resolves 0 times against a control of 6 for
+`--require-skill` in the same file. So a provenance gate handed a file it should examine, with no
+flag, reports OK and exits 0 — the caller must remember to pass a flag to get a denial, which is
+the fail-open direction the entry names.
+
+**The fail-open is NARROWER than the entry implies**, and that is worth recording so the fix is not
+over-scoped: two of the three no-block paths already fail closed — the retro path at `:566-571`,
+and a marker present but unparseable at `:549-563` (`MALFORMED != ABSENT`, landed `46695054`,
+v0.60.0). Only the ordinary-file default remains.
+
+**Not fixed here.** Reversing the default is a caller-contract change across every site invoking
+this validator without a flag, and that population is unmeasured. `CLAUDE.md` requires the
+false-positive set before the check ships.
+
+**Tiered DEFECT.** Consumer-facing; the validator ships in `core/scripts/`.
+
+verify: sh V=core/scripts/validate-provenance-block.sh; [ -f "$V" ] || exit 9; grep -q -- "--require-skill" "$V" || exit 9; d=$(mktemp -d) || exit 9; printf 'ordinary file, no marker\n' > "$d/plain.md"; a=0; AI_DLC_PROJECT_ROOT="$d" bash "$V" "$d/plain.md" >/dev/null 2>&1 || a=$?; c=0; AI_DLC_PROJECT_ROOT="$d" bash "$V" "$d/plain.md" --require-skill bmad-review-adversarial-general >/dev/null 2>&1 || c=$?; rm -rf "$d"; [ "$c" -eq 1 ] || exit 9; [ "$a" -eq 0 ] && exit 1; exit 0
+
+## BL-221 — I93 refuses three RETIRED spellings by name, so a FOURTH empty-subject spelling seeds clean
+
+**Found 2026-09-09** adjudicating `PC-S297-VALIDATOR-PASS-VS-NOTHING-TO-CHECK-CONVENTION` against
+HEAD, re-derived here. That entry's first claim — no documented convention exists — is RESOLVED:
+`EXAMINED NOTHING` is declared once at `core/skills/ai-dlc/enforcement-map.yaml:66-90`, rendered
+into `docs/vocabulary-index.md:27`, and bound by **I93**. **Its second claim — "across the
+validator population as a whole" — is the half that survives.**
+
+Seeded into a `git archive HEAD` extraction, one emitter per run:
+
+    baseline, no seed                                  I93 findings: 0   <- control, clean
+    seed a NOVEL spelling ("NOTHING TO EXAMINE HERE")  I93 findings: 0   <- ESCAPES
+    seed a RETIRED spelling ("AUDITED NOTHING")        I93 findings: 1   <- control, caught
+
+The retired-spelling control fires from the same position the novel one occupies, so the escape is
+a property of the GRAMMAR and not of where the probe sat.
+
+**The map's own comment already predicted this**, at `enforcement-map.yaml:64-65`: *"No shipped
+validator may emit one again — a fourth spelling is how this became three."* I93 enumerates the
+three historical spellings; enumeration cannot reach a spelling nobody has written yet. This is
+`CLAUDE.md`'s "prefer deriving both sides of a join over hand-listing either", collecting its debt
+on a list that documents its own incompleteness.
+
+**Not fixed here, and the shape is the hard part.** A general "this run examined nothing" detector
+over arbitrary prose has an unmeasured false-positive set over 38 `validate-*.sh`/`audit-*.sh`
+files, 23 of which carry the declared token nowhere. The tractable form is probably a POSITIVE
+binding — every validator with an empty-subject path must emit the declared token — rather than a
+negative scan for novel spellings, but that inverts the arm and needs its own population measured
+first.
+
+**Related, not folded in:** `core/scripts/validate-scope-confirmation.sh:214,221` emits `PENDING:`
+for a genuine empty-subject state, undeclared and uncaught — one instance of the same gap.
+
+**Tiered DEFECT.** The vocabulary index reads as complete and the invariant reads as binding, while
+a new emitter may spell the verdict however it likes.
+
+verify: sh set -e; M=core/skills/ai-dlc/enforcement-map.yaml; E=scripts/validate-enforcement-map.sh; [ -f "$M" ] && [ -f "$E" ] || exit 9; grep -q "EXAMINED NOTHING" "$M" || exit 9; grep -q "I93" "$E" || exit 9; grep -qE 'retired:' "$M" || exit 9; grep -qE 'empty-subject-emitter-positive|every emitter of an empty-subject|emits the declared token' "$E" && exit 0; exit 1
+
+## BL-222 — the escalation validator names the corpus it searched when it DENIES and discards it when it PASSES
+
+**Found 2026-09-09** adjudicating
+`PC-S340-VALIDATE-ESCALATION-RESOLUTION-NONDETERMINISTIC-ON-BYTE-IDENTICAL-INPUT` against HEAD,
+re-derived here. **The entry's stated mechanism is REFUTED and its headline is still true for a
+different reason**, which is why this is filed rather than folded into that entry.
+
+**What is fixed.** The greedy-capture defect that made the verdict a function of quote ORDER is
+gone. `cite_segments()` (`core/scripts/validate-escalation-resolution.sh:161`) splits on `"` and
+takes even-indexed fields; `cite_quote()` (`:172`) takes the FIRST segment of 12+ chars —
+position-independent by construction. There is no unordered iteration anywhere in the parse, so
+the entry's own proposed adjudication ("read whether the parse still depends on unordered
+iteration") is refuted as stated.
+
+**And the nondeterminism claim is genuinely refuted at rate, not by a bare zero.** The filing
+reports 3 distinct verdicts in 5 runs — a per-run flip probability of order 0.4–0.6, predicting
+>20 second-verdict occurrences over 25 runs. Measured on a frozen corpus with `shasum` confirmed
+unchanged either side: 25 runs, `25 × (rc=1, output-hash f95c3e53)`; 20 runs on a single-entry
+file, `20 × (rc=0, hash 2c4194a3)`. Control that the harness can see a difference at all: the two
+inputs hash differently, and the pre-fix build over the same 25 gives a third hash. A clean sweep
+at N=25 against a predicted count >20 discriminates.
+
+**What remains, and it is the entry's actual headline.** The verdict still moves on a
+byte-identical `pending.md`, because `pending.md` is not the only input: the transcript CORPUS is
+the second one. Measured — same `pending.md` (`shasum 4b6e0efe`, unchanged), corpus gains one
+`.jsonl`, verdict goes FAIL → OK.
+
+The fix makes that legible in ONE direction only. `CITE_REPORT` is captured at `:400` and rendered
+at `:426` — inside the `rc -eq 2` FAIL branch (`[ -n "$CITE_REPORT" ] && printf …`). The PASS
+branch at `:450` prints `OK: all N … unbounded-citation: N` and discards it. Derived: `cite:
+scanned` resolves at `:382` only, and that is a COMMENT; the string appears on no PASS-path
+`echo`.
+
+**So the fail-OPEN half — the one the entry calls "the half nobody notices" — is precisely the
+branch that still does not say which corpus state produced it.** An operator reading `OK` cannot
+tell a pass over the right corpus from a pass over an empty one.
+
+**Not fixed here.** The one-line form (render `CITE_REPORT` on the PASS path too) is probably
+right, but the PASS line is a gate-facing contract string and ~40 fixture arms plus `retro.md`
+prose read this validator's output; the population that would see a changed success line is
+unmeasured, and `CLAUDE.md` requires that before the check ships.
+
+**Tiered DEFECT.** Consumer-facing. Its consequence is an unfalsifiable PASS: the reader cannot
+reconstruct which corpus produced it.
+
+verify: sh V=core/scripts/validate-escalation-resolution.sh; [ -f "$V" ] || exit 9; grep -q 'CITE_REPORT=' "$V" || exit 9; grep -qE '^\s*echo "OK: all \$\{CHECKED\}' "$V" || exit 9; n="$(awk '/^echo "OK: all \$\{CHECKED\}/{print NR}' "$V")"; [ -n "$n" ] || exit 9; awk -v n="$n" 'NR>=n-6 && NR<=n && /CITE_REPORT/' "$V" | grep -q . && exit 0; exit 1
+
+## BL-223 — the push-candidate ledger is outside `validate-write-format-steering.sh`'s population by construction, and `upstream-routing.md` steers no format
+
+**Found 2026-09-09** adjudicating `PC-S308-WRITE-FORMAT-STEERING-APPLIED-AD-HOC-NOT-UNIVERSALLY`
+against HEAD, re-derived here. Two of that entry's claims are RESOLVED — the enforcer exists
+(`core/scripts/validate-write-format-steering.sh`, run at both pre-push hooks, population JOINED
+from `core/schemas/pipeline-state-paths.json` on `transient:false`), and
+`pipeline-snapshot-history.md`'s header format is now stated at `SKILL.md:1237`. **The third claim
+is the residue, and it covers one of the entry's own two motivating write attempts.**
+
+Derived, each with a control in the same invocation:
+
+    push-candidate in pipeline-state-paths.json   0   <- outside the population
+    CONTROL pipeline-snapshot-history             1   <- inside it
+    READ AND FOLLOW in core/rules/upstream-routing.md   0
+    CONTROL READ AND FOLLOW in SKILL.md                 9
+
+`upstream-routing.md` is BYTE-UNCHANGED by the release that closed the entry: md5
+`91e84d42…` at both `db078cbe^` and HEAD. So the file that tells a session to file a
+push-candidate still steers it to no format, and the ledger it writes into is not a member of the
+set the new enforcer scans — the one declared `ai-dlc-update` entry covers
+`layer-adjudication-register.jsonl` and says so verbatim: *"The pull LEDGERS that share this
+directory are not covered by it."*
+
+**The entry grammar therefore remains an unstated convention** across ~70 live entries, which is
+what the filing said and what a reader of the enforcer's PASS line would not learn.
+
+**A note on the shape, so it is not rebuilt.** The entry's suggested remedy — a standing rule that
+a write site must LOCATE its format first — was refuted on measurement and the reason is recorded
+at `validate-write-format-steering.sh:16-23`: a locate-duty is discharged by looking, fires on
+nothing where no format exists, and a vacuous one is spelled identically to a real one.
+Existence-and-declaration replaced it. **That refutation is sound and this entry does not reopen
+it** — the fix here is to DECLARE a format for the ledger and admit it to the population, not to
+add a duty.
+
+**Not fixed here.** Writing the entry grammar down is a schema addition plus a format file, and
+the grammar itself is contested: `ledger_entry_shape()` accepts five record forms, and declaring
+one as canonical would make the other four undeclared drift on an artifact the consumer owns.
+
+**Tiered DEFECT.** The enforcer's PASS line reads as coverage of the shared append-only artifacts
+while the ledger this program exists to drain is not among them.
+
+verify: sh S=core/schemas/pipeline-state-paths.json; R=core/rules/upstream-routing.md; [ -f "$S" ] && [ -f "$R" ] || exit 9; grep -q "pipeline-snapshot-history" "$S" || exit 9; n="$(grep -c "push-candidate" "$S")" || n=0; [ "$n" -gt 0 ] && exit 0; exit 1
+
+## BL-224 — `layer-drift.sh`'s spent-verdict note reaches ONE row, and the fixture that proves it works cannot see the others
+
+**Found 2026-09-09** adjudicating
+`PC-S342-ADJUDICATION-ROW-PRESCRIBES-AN-ENTRY-EDIT-THAT-SPENDS-ITS-OWN-VERDICT` against HEAD,
+re-derived here. `v0.528.0` genuinely fixed the row the entry's receipt keys on: `adj_spent_note()`
+(`core/skills/ai-dlc-update/reconcile/layer-drift.sh:695`) distinguishes a SPENT verdict from a
+never-recorded one. **It has exactly ONE call site**, at `:812`.
+
+Derived by driving the shipping tool rather than reading the contract:
+
+    layer-drift.sh --adjudicated-codes <repo> HEAD
+      -> OVERRIDE-SUPERSEDED, EXTENSION-HOOK-DRIFT, EXTENSION-ANCHOR-DRIFT,
+         EXTENSION-RETIRE-CANDIDATE
+    EXTENSION-TITLE-MATCHES-CORE in that set:  0   <- the row the filing named
+
+All four ADJUDICATED codes route `emit()` -> `adj_check()` -> the `:812` row, so they get the
+note. `EXTENSION-TITLE-MATCHES-CORE` (LC-E19) is WARN-level and unreached. **WARN does not make it
+moot**: it still prescribes an entry edit AND a digest-keyed verdict in one sentence, so it can be
+spent by following it in order, re-fires on the new digest, and says nothing about why.
+
+**AND THE FIXTURE IS GREEN BECAUSE IT ASSERTS NOTHING ABOUT THAT PATH.** Every SPENT assertion in
+`core/fixtures/layer-adjudication-tier/run.sh` reads the row through an `awk` field-1 match pinned
+to one code (`run.sh:167`, `$1 == "HARD-LAYER-ADJUDICATION-MISSING"`). Derived: that code appears
+11 times in the fixture, `EXTENSION-TITLE-MATCHES-CORE` once and never in a spent-note arm. A
+fixture whose oracle is hard-pinned to the one covered code cannot fail on an uncovered one — this
+repo's own "a check that cannot fire reads exactly like one that passed", in a fixture rather than
+a validator.
+
+**The second residue is the ordering clause.** The instruction to record the verdict BEFORE making
+the prescribed edit exists only INSIDE the conditional note, so it reaches the operator after they
+have already spent one. `SKILL.md:1597` states the spend rule with no ordering consequence beside
+it, unchanged by the release.
+
+**Not fixed here.** Widening the note to WARN rows changes what a WARN row prints, and the
+population that reads those strings is unmeasured; the ordering clause belongs where the
+prescription is issued, which is a separate edit in `SKILL.md`.
+
+**Tiered DEFECT.** An operator who follows an LC-E19 row in the order it lists spends their own
+verdict and is told only to record another.
+
+verify: sh L=core/skills/ai-dlc-update/reconcile/layer-drift.sh; F=core/fixtures/layer-adjudication-tier/run.sh; [ -f "$L" ] && [ -f "$F" ] || exit 9; grep -q "adj_spent_note() {" "$L" || exit 9; n="$(grep -c "adj_spent_note" "$L")" || n=0; [ "$n" -ge 2 ] || exit 9; c="$(grep -c 'EXTENSION-TITLE-MATCHES-CORE' "$F")" || c=0; a="$(awk '/adj_spent_note/ {n++} END{print n+0}' "$L")"; [ "$a" -ge 3 ] && exit 0; [ "$c" -ge 2 ] && exit 0; exit 1
+
+## BL-225 — a receipt written mid-line is invisible to `ledger-reverify.sh`, and an entry with no receipt is silent in exactly the same way
+
+**Found 2026-09-09** by the consumer session executing the hand-review close, and re-derived here.
+Six of the twenty rows in that close emitted NO closer row at all before the write, which broke a
+criterion the worklist had asserted was reachable.
+
+`ledger_entry_awk()`'s receipt rule (`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:1099`)
+is line-anchored:
+
+    /^[ \t]*(<br[ \t]*\/?[ \t]*>)?[ \t]*[-*]?[ \t]*`?verify:/
+
+**The anchoring is correct and must not simply be relaxed.** Its own header at `:1087` records why:
+an unanchored match treats a PROSE MENTION of a receipt as a receipt, and this ledger is full of
+them — `status: live · merge: standalone · verify: theirs_has` summary lines, and
+`**Why `verify: manual`.**` rationale headers. Measured on the live ledger: 85 lines mention
+`verify:` and only 65 are anchored receipts, so 20 of them are prose.
+
+**But a real receipt can sit mid-line, and then it is silent.** Measured, keying on `verify:`
+followed by an actual verb rather than on the bare token:
+
+    mid-line receipts   live ledger 12    archive 40
+    line-anchored       live ledger 64    archive 198
+
+Two of the closed twenty are worked examples, both in the archive at the refs above: a `verify:
+manual — re-run a worktree-isolated dev dispatch …` and a `verify: manual — inspect whether …`,
+each ending a prose sentence rather than opening a line.
+
+**The failure mode is the one this repo names most often.** An entry whose receipt the grammar
+cannot spell emits no row, and that is BYTE-IDENTICAL to an entry that genuinely declares no
+receipt. The reverify's summary counts neither, so a ledger can carry a dozen entries nothing has
+ever adjudicated while every count reads complete. The consumer's own close is the evidence: the
+criterion "HAND-REVIEW falls by 20" was unsatisfiable and nobody could have known which 6 were
+missing without diffing the row sets by hand.
+
+**Not fixed here, and the fix is not the obvious one.** Widening the anchor re-admits the 20 prose
+mentions. The tractable shapes are (a) a REPORTING arm — count entries in the corpus that produce
+no row of any kind and name them, which needs no grammar change and cannot false-positive, or (b)
+a producer-side rule that a receipt occupies its own line, enforced where entries are written. (a)
+is the smaller and is probably right; it also measures (b)'s population before (b) is built.
+
+**Tiered DEFECT.** Consumer-facing. Its consequence is an entry that is never adjudicated by any
+pull, indistinguishable from one deliberately left manual.
+
+verify: sh R=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -f "$R" ] || exit 9; grep -q 'verify:' "$R" || exit 9; grep -qE 'no row of any kind|produced no row|receipt-invisible|entries with no emitted row' "$R" && exit 0; exit 1
