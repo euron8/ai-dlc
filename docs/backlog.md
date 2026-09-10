@@ -4506,9 +4506,25 @@ old three-line anchor stopped resolving and reported FIXTURE ERROR — correct, 
 cannot be built kills nothing. Re-keyed on the last line of the new remedy: 1 occurrence, against
 3 for the bare tail it sits above.
 
+**THE RECEIPT ACCEPTED A WRONG FIX UNTIL AN ADVERSARY BUILT ONE.** Deleting the SLASH half of
+the predicate leaves a wrong fix that the first cut of this receipt closed, because the receipt
+probed only a space-joined argument. Adding a slash probe was not enough on its own: the scratch
+repo held no nested path, so the slash argument fell through to the `run.sh` probe and produced a
+refusal for the WRONG REASON, and `w1` still closed. The arm needs a seeded `lib/preamble.sh` AND
+a row-anchored assertion. Scored across seven implementations, the subject restored byte-identical
+after each:
+
+    p0-shipped            CLOSED     n0-no-fix             open
+    c1-case-stmt          CLOSED     w1-whitespace-only    open
+    c2-tr-blank-slash     CLOSED     w2-slash-only         open
+    c3-case-charclass     CLOSED     w3-always-true        open
+
+Four correct spellings close it and three wrong ones do not, so it is keyed on BEHAVIOUR rather
+than on one author's phrasing.
+
 **Tiered DEFECT.** Consumer-facing; the script ships in `core/skills/ai-dlc-update/`.
 
-verify: sh S=core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh; [ -f "$S" ] || exit 9; W="$(mktemp -d)" || exit 9; R="$W/dist"; mkdir -p "$R/core/fixtures/real-fx" "$R/core/fixtures/no-driver" "$W/c"; printf '#!/bin/sh\nexit 0\n' > "$R/core/fixtures/real-fx/run.sh"; printf 'x\n' > "$R/core/fixtures/no-driver/README.md"; git init -q "$R" >/dev/null 2>&1; git -C "$R" config user.email t@t; git -C "$R" config user.name t; git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -qm s >/dev/null 2>&1; T="$(git -C "$R" rev-parse HEAD)"; git -C "$R" rev-parse -q --verify "${T}:core/fixtures/no-driver" >/dev/null || { rm -rf "$W"; exit 9; }; bad="$(bash "$S" "$R" "$T" "$T" "$W/c" "real-fx no-driver" 2>&1)"; good="$(bash "$S" "$R" "$T" "$T" "$W/c" "no-driver" 2>&1)"; rm -rf "$W"; printf '%s' "$good" | grep -qF 'no consumer can run' || exit 9; printf '%s' "$good" | grep -qF 'upstream deleted the driver' || exit 1; printf '%s' "$bad" | grep -qF 'not a fixture NAME' || exit 1; printf '%s' "$bad" | grep -qE 'real-fx no-driver — no run\.sh at' && exit 1; exit 0
+verify: sh S=core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh; [ -f "$S" ] || exit 9; W="$(mktemp -d)" || exit 9; R="$W/dist"; mkdir -p "$R/core/fixtures/real-fx" "$R/core/fixtures/no-driver" "$R/core/fixtures/lib" "$W/c"; printf '#!/bin/sh\nexit 0\n' > "$R/core/fixtures/real-fx/run.sh"; printf 'x\n' > "$R/core/fixtures/no-driver/README.md"; printf 'x\n' > "$R/core/fixtures/lib/preamble.sh"; git init -q "$R" >/dev/null 2>&1; git -C "$R" config user.email t@t; git -C "$R" config user.name t; git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -qm s >/dev/null 2>&1; T="$(git -C "$R" rev-parse HEAD)"; git -C "$R" rev-parse -q --verify "${T}:core/fixtures/no-driver" >/dev/null || { rm -rf "$W"; exit 9; }; bad="$(bash "$S" "$R" "$T" "$T" "$W/c" "real-fx no-driver" 2>&1)"; slash="$(bash "$S" "$R" "$T" "$T" "$W/c" "lib/preamble.sh" 2>&1)"; good="$(bash "$S" "$R" "$T" "$T" "$W/c" "no-driver" 2>&1)"; rm -rf "$W"; printf '%s' "$good" | grep -qF 'no consumer can run' || exit 9; printf '%s' "$good" | grep -qF 'upstream deleted the driver' || exit 1; printf '%s' "$bad" | grep -qF 'not a fixture NAME' || exit 1; printf '%s' "$bad" | grep -qE 'real-fx no-driver — no run\.sh at' && exit 1; printf '%s' "$slash" | grep -qE '^  lib/preamble\.sh — not a fixture NAME' || exit 1; exit 0
 
 ## BL-227 — nine of batch 82's ten receipts are satisfied by something that is not a fix, and the rule forbidding it has no enforcer
 
