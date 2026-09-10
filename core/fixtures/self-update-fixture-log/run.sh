@@ -722,6 +722,97 @@ else
   bad "a named directory with no run.sh at theirs was not refused under its own reason (rc=$rc, refused '${UNS15:-empty}'). The MISS arm below reports this only when the slice FAILED to write the directory; when the slice writes it the run is green and the orphan survives, which is the episode that was filed"
 fi
 
+# --- Part 15b: an UNPARSABLE argument is not a deleted driver ---------------------------------
+# PC-S310. Under zsh an unquoted `$FIX` holding a newline-joined list does not word-split, so a
+# whole list arrives as ONE argument and every name in it is convicted with a sentence asserting
+# that upstream deleted the driver — a fact about the distribution that is false, naming a cause
+# the operator cannot act on, and prescribing a remedy (drop it from the slice) that the
+# diff-side join then refuses as an omission.
+#
+# THE DISCRIMINATOR IS THE ARGUMENT'S SHAPE, AND A TREE PROBE IS NOT IT. The first cut of the
+# fix probed `${THEIRS}:core/fixtures/${d}` and ordered it first, on the reasoning that a
+# retirement resolves as a tree and a bad argument does not. That is FALSE for the case this
+# fixture already seeds: `touched-deleted` has the whole directory removed at theirs, so it
+# resolves to no tree either, and Part 15 went red — the tree probe relabels every real
+# retirement. A fixture name cannot contain a space or a `/`; that is what separates them.
+#
+# TWO ARMS, because one alone cannot tell a working discriminator from a blanket relabel:
+# the joined argument must get the NEW row, and `touched-deleted` must keep the OLD one. Part
+# 15 above is the second half and is left where it is.
+rm -f "$LOGDIR2"/self-update-fixtures-*.md
+ERR15B="$CONS2/err-part15b.txt"
+bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
+     "touched-shippable green-one" cwd-probe \
+     >"$CONS2/out-part15b.txt" 2>"$ERR15B"
+rc=$?
+# KEYED ON THE EMITTED ROW, NEVER ON THE TOKEN ANYWHERE IN THE OUTPUT. The remedy paragraph
+# below the rows names the 'not a fixture NAME' case UNCONDITIONALLY, on every refusal — so a
+# bare `grep -qF` for that phrase passes on a run that emitted no such row at all. Measured on
+# this branch before it was fixed: seeding only a genuine retirement produced the deleted-driver
+# row and the first conjunct still passed. That is `verification-discipline.md`'s "bind to the
+# line that EMITS the thing", and it was committed here in the same branch that FILED it as
+# BL-227. A row opens a line, carries the subject, and is indented two spaces.
+if [ "$rc" -eq 2 ] && grep -qE '^  touched-shippable green-one — not a fixture NAME' "$ERR15B" \
+   && ! grep -qE '^  [^ ].* — no run\.sh at' "$ERR15B"; then
+  ok "a joined-list argument is refused as an unparsable NAME, not as a deleted driver — the operator is sent to the argument rather than to a retirement that never happened"
+else
+  bad "a joined-list argument was not refused under its own reason (rc=$rc). Either it is being convicted as a deleted driver — the filed defect, which sends the operator to a remedy that walks into the opposite refusal — or the arm no longer fires at all"
+fi
+
+# --- Part 15c: the NEWLINE-joined shape, which is the one the filing actually describes -------
+# THE ARM ABOVE SEEDS A SPACE-JOINED ARGUMENT AND THE FILED EPISODE IS NEWLINE-JOINED. Both
+# arrive as one argument under zsh, so the seed above is a reachable shape — but a channel that
+# sits only on it cannot say the mechanism the header, BL-226 and the CHANGELOG all name is
+# covered. The first spelling of the predicate tested a literal space and PASSED Part 15b while
+# a newline-joined and a tab-joined list were both still convicted as deleted drivers; an
+# adversarial hand found that on the pushed tip. One seed per channel, never another arm on the
+# same seed.
+rm -f "$LOGDIR2"/self-update-fixtures-*.md
+ERR15C="$CONS2/err-part15c.txt"
+NL_ARG="touched-shippable
+green-one"
+TAB_ARG="$(printf 'touched-shippable\tgreen-one')"
+bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
+     "$NL_ARG" cwd-probe >"$CONS2/out-part15c.txt" 2>"$ERR15C"
+rc=$?
+ERR15D="$CONS2/err-part15d.txt"
+rm -f "$LOGDIR2"/self-update-fixtures-*.md
+bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
+     "$TAB_ARG" cwd-probe >/dev/null 2>"$ERR15D"
+rcd=$?
+if [ "$rc" -eq 2 ] && grep -qE ' — not a fixture NAME' "$ERR15C" \
+   && ! grep -qE '^  [^ ].* — no run\.sh at' "$ERR15C" \
+   && [ "$rcd" -eq 2 ] && grep -qE ' — not a fixture NAME' "$ERR15D" \
+   && ! grep -qE '^  [^ ].* — no run\.sh at' "$ERR15D"; then
+  ok "a NEWLINE-joined and a TAB-joined argument are both refused as unparsable NAMEs — the predicate covers the whitespace the filing describes, not only the literal space Part 15b seeds"
+else
+  bad "a newline-joined (rc=$rc) or tab-joined (rc=$rcd) argument was not refused under the name-shape reason. A predicate keyed on a literal space passes Part 15b and leaves the filed mechanism — and every tab-delimited caller — still convicted as a deleted driver"
+fi
+
+# --- Part 15d: a SLASH-bearing argument, which no other arm observes -------------------------
+# THE ONE-CHARACTER WRONG FIX IS DELETING THE `/` FROM THE PREDICATE'S CHARACTER CLASS, and
+# before this arm existed the ONLY thing that went red was Mutant 13b's `FIXTURE ERROR: the
+# name-shape probe anchor no longer occurs exactly once` — an anchor complaint, not a behaviour
+# finding. An author who hits that message re-keys the anchor to their own spelling and the
+# wrong fix then goes fully green. Predicted by an adversarial hand and CONFIRMED by building it:
+# one FAIL, and it was the anchor row.
+#
+# A mutant cannot cover this: the mutation IS the wrong fix, so the thing that must fail is a
+# behavioural arm reading the emitted row. `lib` is a real no-`run.sh` directory in this repo,
+# so the slash case is not exotic — `lib/preamble.sh` is the shape a caller passing a path
+# rather than a name actually produces.
+rm -f "$LOGDIR2"/self-update-fixtures-*.md
+ERR15E="$CONS2/err-part15e.txt"
+bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
+     "touched-shippable/run.sh" cwd-probe >/dev/null 2>"$ERR15E"
+rce=$?
+if [ "$rce" -eq 2 ] && grep -qE '^  touched-shippable/run\.sh — ' "$ERR15E" \
+   && ! grep -qE '^  touched-shippable/run\.sh — no run\.sh at' "$ERR15E"; then
+  ok "a SLASH-bearing argument is refused under the name-shape reason — deleting the slash from the predicate's class is a one-character wrong fix, and this is the only arm that sees it as behaviour rather than as a broken anchor"
+else
+  bad "a slash-bearing argument was not refused under the name-shape reason (rc=$rce). The predicate's slash half is untested by behaviour, and the only thing standing between that wrong fix and a green suite is a mutant anchor an author is invited to re-key"
+fi
+
 # --- Part 16: a wholly legitimate set does NOT trip the arm ----------------------------------
 # The negative direction, and it is keyed on the arm's OWN MESSAGE rather than on the exit code:
 # exit 2 has six producers in this runner and a control reading only the code cannot tell them
@@ -2019,11 +2110,20 @@ fi
 # `exit 2` becomes `:`. The two refusal blocks in this runner end in BYTE-IDENTICAL three-line
 # tails, so the anchor carries the remedy sentence that only this one has — keying on the shared
 # tail would edit the miss-join and score a kill this arm did not earn.
+#
+# THE ANCHOR MOVED WHEN THE ARM GAINED A ROW, AND THE FIXTURE SAID SO RATHER THAN PASSING.
+# The unparsable-argument row (PC-S310) added four remedy lines between the RETIRED-FIXTURE-
+# ORPHAN sentence and the shared tail, so the old three-line anchor stopped resolving and this
+# arm reported FIXTURE ERROR — correctly, since a mutant that cannot be built kills nothing.
+# Re-keyed on the LAST line of that remedy, which is unique to this block (derived: 1
+# occurrence, against 3 for the bare `log:`/`exit 2` tail it sits above). Any future row added
+# here moves it again, and that is the intended behaviour: the anchor is meant to break loudly
+# rather than silently edit the other refusal.
 M12="$MUTDIR/m12-refusal-is-a-warning.sh"
-if mkmutant "$M12" '  never ships — the RETIRED-FIXTURE-ORPHAN class. Drop them from the slice and re-run." >&2
+if mkmutant "$M12" '  newline-joined list arrives as ONE argument; word-split it explicitly." >&2
   echo "  log: $LOG" >&2
   exit 2' \
-                   '  never ships — the RETIRED-FIXTURE-ORPHAN class. Drop them from the slice and re-run." >&2
+                   '  newline-joined list arrives as ONE argument; word-split it explicitly." >&2
   echo "  log: $LOG" >&2
   :'; then
   rm -f "$LOGDIR2"/self-update-fixtures-*.md
@@ -2108,6 +2208,40 @@ if [ -s "$M13" ] && ! cmp -s "$RUNNER" "$M13"; then
   fi
 else
   bad "FIXTURE ERROR: the second spelling could not be built — the over-completeness block's anchors have moved, and nothing establishes that Parts 14 to 19 accept an equivalent implementation"
+fi
+
+# --- MUTANT 13b: the NAME-SHAPE probe reverted to a TREE probe --------------------------------
+# The mutant that rebuilds the fix's own first wrong cut, which passed a hand-written check and
+# was caught only by Part 15 going red. Probing the containing TREE looks equivalent and is not:
+# a genuine retirement removes the directory, so it fails a tree probe exactly as an unparsable
+# argument does, and every real deleted-driver row is relabelled.
+#
+# IT MUST MOVE PART 15, NOT PART 15b. That asymmetry is the whole point — the mutant still emits
+# the new row for the joined argument, so an arm keyed only on 15b would score it a pass. Scored
+# on BOTH: 15b stays green, 15 goes red.
+M13B="$MUTDIR/m13b-tree-probe-not-name-shape.sh"
+if mkmutant "$M13B" '  elif [ "$d" != "$(printf '"'"'%s'"'"' "$d" | tr -d '"'"'[:space:]/'"'"')" ] || [ -z "$d" ]; then' \
+                    '  elif ! git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${d}" >/dev/null 2>&1; then'; then
+  s13b=0
+  # (a) the joined argument still gets the new row — the mutant is NOT a simple deletion
+  rm -f "$LOGDIR2"/self-update-fixtures-*.md
+  EB="$CONS2/err-m13b-a.txt"
+  bash "$M13B" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
+       "touched-shippable green-one" cwd-probe >/dev/null 2>"$EB"
+  grep -qF "not a fixture NAME" "$EB" || s13b=$((s13b+1))
+  # (b) ...and a GENUINE retirement is now relabelled, which is the damage
+  rm -f "$LOGDIR2"/self-update-fixtures-*.md
+  EC="$CONS2/err-m13b-b.txt"
+  bash "$M13B" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
+       touched-deleted green-one cwd-probe touched-shippable >/dev/null 2>"$EC"
+  grep -qF "upstream deleted the driver" "$EC" && s13b=$((s13b+1))
+  if [ "$s13b" -eq 0 ]; then
+    ok "MUTATION — a TREE probe in place of the name-shape test still names the joined argument, and SILENTLY relabels a real retirement as an unparsable name: Part 15 is what catches that, and Part 15b alone would not"
+  else
+    bad "MUTATION — the tree-probe revert did not produce the expected split ($s13b of 2 arms disagreed). Either Part 15b is not reading the new row, or a real retirement is no longer distinguishable, and the fix's discriminator is untested"
+  fi
+else
+  bad "FIXTURE ERROR: the name-shape probe anchor no longer occurs exactly once in the runner — Part 15b's discriminator is untested"
 fi
 
 # --- MUTANT 14: the .dist-only probe WIDENED to convict every shippable directory -------------
