@@ -4459,7 +4459,8 @@ that validator's tolerance is itself CONDITIONAL (`:106-111`): a legacy verdict 
 while it sorts strictly BEFORE the first pass of every live series — the precondition a complete
 backfill destroys.
 
-**What it costs, measured on the reference consumer.** 188 live verdicts, 94 legacy, **33 of the 94
+**What it costs, measured on the reference consumer.** 189 live verdicts (188 when this entry was
+first written; the consumer wrote one more mid-batch), 94 legacy, **33 of the 94
 record a FAIL** (control: 49 of the 94 series-bearing ones do, so the query discriminates). Newest
 is `story-20260811T214958Z`, check 7, carrying no repair and no authorization sidecar (control: 8
 repair sidecars exist in that directory, so the glob finds them when present). Nothing is
@@ -4526,6 +4527,24 @@ genuinely promotes it. **Every one of the original seeds was built from what the
 reads**, which is the failure `fixture-mutants.md` names as "never seed from what the reader accepts".
 Two more were found on the second pass — an impossible printed bound and the exclusive-bound
 off-by-one — so **eight wrong fixes are now scored and rejected** against the real fix accepted.
+
+**AND THERE WAS A SECOND DOOR, KEYED ON A FIELD THE SCHEMA REFUSES TO CONSTRAIN.** The refusal
+tested "is the survivor LEGACY", so a verdict carrying a `gate_series_id` scored as movable. But
+`*-s<N>-*` is an UNSTATED pattern on a field `core/schemas/gate-adjudication-verdict.json` calls
+*"deliberately unpatterned: required and non-empty, nothing more"*. A sprint-FIRST id is legal,
+matches no `--sprint` selector, and `--legacy-through` skips it because it HAS a series id — so such
+a verdict has **no refusal and no escape**, which is worse than the legacy class this entry opens
+with. Not hypothetical: `planning-20260910T102842Z` carries `s310-planning`, written by a live
+consumer session, 1 of 95 series-bearing verdicts. The predicate now asks whether ANY mode can move
+the survivor, and the remedy branches — a re-stamp for this case, since offering `--legacy-through`
+where it cannot apply would be a second inert remedy.
+
+**THE FP SWEEP HAD TO BE PINNED, BECAUSE THAT SAME VERDICT MASKS THE REFUSAL.** It is CLEAN and
+sorts newest, so on the tree as-is it becomes the survivor and the refusal correctly stays silent —
+a sweep taken there reads a clean zero for a reason unrelated to the fix. Measured both ways: on the
+189-verdict tree the s310 close returns 0 and no bound is printed; with that one file excluded it
+returns 1, prints `20260811T214958Z`, and the remedy converges in one run. **FP is 0 in both phases
+on the pinned corpus**, and the unpinned zero is not evidence.
 
 **A SCORING-HARNESS DEFECT OF MY OWN, WORTH THE LINE BECAUSE IT PRODUCED A CONFIDENT WRONG TABLE.**
 The first score script restored a STALE copy of the subject after each candidate, so it silently

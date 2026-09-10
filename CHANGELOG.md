@@ -76,7 +76,21 @@ command moved everything except the verdict it named and the next close re-print
 because the bound had been hand-chosen. The bound is inclusive now, and the flag is named
 `--legacy-through` so the semantics are in the name.
 
-Fixture arms guard it, plus a mutant. **Eight non-fixes were built and scored**, and earlier receipts
+**A third pass found a second door, and it is the more general defect.** The refusal keyed on "the
+survivor is LEGACY", but `*-s<N>-*` is an unstated pattern imposed on a field the verdict schema
+calls *"deliberately unpatterned: required and non-empty, nothing more"*. A sprint-first
+`gate_series_id` is legal input, no `--sprint` can select it, and `--legacy-through` skips it because
+it carries a series id — no refusal and no escape, which is strictly worse than the legacy class.
+The reference consumer already has one, written by a live session. The predicate now asks whether
+any mode can move the survivor, and the remedy branches rather than offering an escape that cannot
+apply.
+
+**That verdict also masks the refusal, so the false-positive sweep is pinned against it.** It is
+clean and sorts newest, so on the tree as-is it becomes the survivor and the refusal correctly stays
+quiet — a zero measured there says nothing about the fix. With it excluded the refusal fires, prints
+its bound, and the remedy converges in one run. FP is 0 in both phases on the pinned corpus.
+
+Fixture arms guard it, plus a mutant. **Nine non-fixes were built and scored**, and earlier receipts
 accepted four of them at various points: a survivorship-blind sweep (which refuses every rotation on
 the consumer's real corpus), one with the move-set exclusion deleted, one printing an impossible
 bound, and the off-by-one itself. Every seed had been built from what the predicate reads, and the
