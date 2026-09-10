@@ -258,7 +258,8 @@ BEFORE_H="$(treehash "$PROJ")"
 out="$(rotate --sprint s308 --apply 2>&1)"; rc=$?
 AFTER_H="$(treehash "$PROJ")"
 if [ "$rc" -eq 1 ] && [ "$BEFORE_H" = "$AFTER_H" ] \
-   && grep -q 'would strand a FAILing legacy verdict' <<<"$out" \
+   && grep -q 'no mode can move' <<<"$out" \
+   && grep -q 'carries no gate_series_id' <<<"$out" \
    && grep -q 'legacy-20260701T000000Z' <<<"$out"; then
   ok "(h.1) REFUSAL: rotating s308 PROMOTES a FAILing legacy verdict to newest — refused (exit 1), tree byte-identical, offender named"
 else
@@ -300,6 +301,37 @@ if [ "$rc" -eq 0 ] && ! grep -q 'would strand' <<<"$out" \
   ok "(h.3) a FAILing legacy verdict SHADOWED by a newer non-moving verdict does not block the rotation, and the move landed"
 else
   bad "(h.3) a shadowed FAILing legacy verdict wrongly blocked the rotation, or the move did not land (rc=$rc): $out"
+fi
+
+# =============================================================================
+# ARM (h.4) — the SECOND unmovable shape: a survivor with a series id that no
+# `*-s<N>-*` selector can name. The schema leaves `gate_series_id` deliberately
+# unpatterned, so this is legal input, and it is worse than a legacy verdict
+# because `--legacy-through` skips it too. A predicate keyed on legacy-ness
+# scores it movable and lets the rotation strand it — no refusal, no escape.
+# =============================================================================
+seed strand-unselectable
+BEFORE_H4="$(treehash "$PROJ")"
+out="$(rotate --sprint s308 --apply 2>&1)"; rc=$?
+AFTER_H4="$(treehash "$PROJ")"
+if [ "$rc" -eq 1 ] && [ "$BEFORE_H4" = "$AFTER_H4" ] \
+   && grep -q 'no mode can move' <<<"$out" \
+   && grep -q 'matches no --sprint selector' <<<"$out"; then
+  ok "(h.4) REFUSAL: a survivor whose gate_series_id no selector can name is refused too, and the row says WHY it is unmovable"
+else
+  bad "(h.4) an unselectable FAILing survivor was not refused (rc=$rc): $out"
+fi
+
+# Its remedy must NOT be the legacy one — --legacy-through cannot move a verdict
+# that has a series id, so printing it here would be a second inert remedy.
+# Keyed on the PRESCRIBED COMMAND LINE, not on the token: the prose explains why
+# --legacy-through does not apply here, so a bare token grep matches that
+# explanation and reads as the wrong remedy being offered.
+if ! grep -qE '^ +rotate-gate-adjudication\.sh --legacy-through' <<<"$out" \
+   && grep -q 'Re-stamp that' <<<"$out"; then
+  ok "(h.4b) the unselectable case prescribes a re-stamp and does NOT offer the legacy escape, which cannot move it"
+else
+  bad "(h.4b) the unselectable case printed the wrong remedy: $out"
 fi
 
 # =============================================================================
@@ -352,7 +384,11 @@ fi
 # refusal, and a world that was never refused is unaffected by removing it.
 # =============================================================================
 MUT4="$W/mut-strand.sh"
-sed 's/^if \[ "\$SURVIVOR_LEGACY" -eq 1 \] && \[ -n "\$SURVIVOR_FAILS" \]; then/if false; then/' "$ROT" > "$MUT4"
+# Re-anchored when the predicate widened from "is legacy" to "no mode can move
+# it": the old anchor named `SURVIVOR_LEGACY`, which no longer exists. The
+# `cmp -s` guard below caught the dead anchor rather than letting a no-op
+# mutation score a kill, which is the whole reason it is there.
+sed 's/^if \[ "\$SURVIVOR_UNMOVABLE" -eq 1 \] && \[ -n "\$SURVIVOR_FAILS" \]; then/if false; then/' "$ROT" > "$MUT4"
 if cmp -s "$ROT" "$MUT4"; then
   bad "MUTATION 4: the sed matched nothing, so the stranding refusal in arm (h.1) is UNPROVEN"
 else

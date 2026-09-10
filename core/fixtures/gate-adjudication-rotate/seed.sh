@@ -100,6 +100,18 @@ seed_shadow() {
           "planning-20260910T120000Z" "planning-s309-20260910T120000Z" "$S309_ALLPASS"
 }
 
+# THE SECOND UNMOVABLE SHAPE. `gate-adjudication-verdict.json` leaves
+# `gate_series_id` "deliberately unpatterned: required and non-empty, nothing
+# more", so a sprint-FIRST id is schema-legal and no `*-s<N>-*` selector can name
+# it. Observed on the reference consumer as `s310-planning`, written by a live
+# session. It is worse than a legacy verdict: --legacy-through skips it too,
+# because it HAS a series id. Neither refusal nor escape reached it until the
+# predicate was widened from "is legacy" to "no mode can move it".
+seed_unselectable_fail() {
+  verdict "$GA/planning-20260701T000000Z.verdict.json" \
+          "planning-20260701T000000Z" "s310-planning" "$LEGACY_FAIL"
+}
+
 seed_noise() {
   printf '{"line":1}\n' > "$GA/.verdict-writes.jsonl"
   mkdir -p "$GA/s293"
@@ -142,6 +154,11 @@ case "$CASE" in
   # either is or is not the survivor for reasons that do not involve shadowing.
   strand-shadowed)
     seed_s308; seed_legacy_fail; seed_shadow
+    ;;
+  # The survivor is UNSELECTABLE rather than legacy: it carries a series id, so
+  # the legacy predicate scores it movable and the refusal misses it entirely.
+  strand-unselectable)
+    seed_s308; seed_unselectable_fail
     ;;
   badjson)
     seed_s308; seed_s309_pass; seed_legacy; seed_noise
