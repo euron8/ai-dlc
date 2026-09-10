@@ -37,6 +37,89 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
+### BATCH 83 SHIPPED AS `v0.543.0`, ONE RELEASE CARRYING ONE PC-BACKED SUBJECT — AND **SEVEN DEFECTS IN THAT FIX WERE FOUND BY MECHANISMS, NONE BY READING IT.** THREE CAME FROM THE FIXTURE AND MY OWN FP MEASUREMENT, FOUR FROM AN ADVERSARY ON A BRANCH THAT WAS GATE-GREEN AND PUSHED. **FIVE OF THE SEVEN ARE THE `BL-227` CLASS — A CHECK SATISFIED BY PROSE — WHICH THIS SAME BRANCH FILED.** THE GAP IS **ONE**, PENDING **1**, AND THE PULL IS **REQUIRED** ON THREE DATED OCCURRENCES IN THE CONSUMER'S OWN COMMITTED HISTORY.
+
+This block replaces the batch-82 record below it. Every figure was re-derived after the merge
+against the working tree with controls in the same invocation; re-derive them again rather than
+reading them.
+
+**`VERSION` IS `0.543.0`, SO BATCH 84 RELEASES AS `0.544.0`.** Re-derive `VERSION` and add one.
+Batch 83 merged once, at `2b6901d9` (PR #697), carrying
+`PC-S310-SELF-UPDATE-FIXTURES-OVER-ARM-CONVICTS-A-SET-IT-COULD-NOT-PARSE`, cited verbatim in the
+release commit message and appearing in EXACTLY ONE commit on the range at `VERSION` 0.543.0
+(control: an impossible id resolves 0). `BL-226` is filed, fixed and ROTATED; `BL-227` is filed and
+deliberately NOT fixed.
+
+**THE SUBJECT.** The over-completeness arm convicted any named fixture whose `run.sh` did not
+resolve at theirs as *"upstream deleted the driver"*. `$d` is caller-supplied, so a malformed
+argument produced the same verdict — a false assertion about the DISTRIBUTION, naming a cause the
+operator cannot act on, prescribing a remedy the diff-side join then refuses as an omission. The
+discriminator is the argument's SHAPE: a fixture name carries no whitespace and no `/`. **FP set
+measured at ZERO over all 198 live fixture directory names**, derived with `find`, against five
+positive controls that convict and four negatives that acquit.
+
+**THE FIX WAS WRONG FOUR TIMES BEFORE IT WAS RIGHT, AND EACH WRONG CUT LOOKED FINISHED.**
+(1) The first probed the containing TREE, on the reasoning that a retirement resolves as a tree and
+a bad argument does not — FALSE, a real retirement removes the whole directory, so it relabelled
+every genuine deleted-driver row. Part 15 went red where `origin/main` was green. (2) The second
+tested a literal space, leaving TAB- and NEWLINE-joined lists still misconvicted; this pipeline
+reads tab-delimited records (`apply.sh:504`, `:694` set `IFS` to a tab), so that was reachable, not
+hypothetical. (3) Part 15b's positive conjunct was satisfied by the remedy paragraph the fix itself
+added, which prints on EVERY refusal — vacuous. (4) No arm seeded the NEWLINE shape the filing
+actually describes, so the narrow spelling passed 15b while 15c fails it.
+
+**AND THE RECEIPT ACCEPTED A WRONG FIX UNTIL AN ADVERSARY BUILT ONE.** Deleting the SLASH half of
+the predicate closed `BL-226`'s receipt. The first repair did not work either: the scratch repo held
+no nested path, so the slash argument fell through to the `run.sh` probe and refused for the WRONG
+REASON while the token grep closed anyway. It needs a seeded `lib/preamble.sh` AND a row-anchored
+assertion. **Anchoring the exact PHRASE then over-corrected** — it rejected a behaviourally-correct
+fix that reworded the row using the consumer's own proposed wording. Anchored on the row's SHAPE
+(`^  <subject> — `) it keeps the emission-binding while accepting any wording, and the negative
+deleted-driver conjuncts carry the discrimination. Final: **three wrong fixes rejected, six correct
+spellings accepted.**
+
+**THE ONE-CHARACTER WRONG FIX WAS CAUGHT ONLY BY AN ANCHOR COMPLAINT, WHICH INVITES LAUNDERING.**
+Deleting the `/` from the predicate's class went red solely as Mutant 13b's `FIXTURE ERROR: the
+name-shape probe anchor no longer occurs exactly once` — a message that tells an author to re-key
+the anchor to their own spelling, after which the wrong fix goes fully green. Predicted by the
+adversary, confirmed by building it. **A mutant cannot cover this, because the mutation IS the
+wrong fix**; Part 15d reads the emitted row instead. Four arms now, one seed per channel: space
+(15b), newline+tab (15c), slash (15d), retirement (15).
+
+**THE GAP IS ONE, PENDING 1, AND THE PULL IS REQUIRED — ON THE CONSUMER'S OWN HISTORY, NOT ON A
+RISK ARGUMENT.** Consumer installed `0.542.0`, distribution `0.543.0`. **The prescribed
+`validate-layer-entries.sh` differential is VACUOUS for this release and its control says so**: the
+two binaries are byte-identical because `0.543.0` does not touch that file, so its perfect null
+means nothing. Run the differential on the subject that CHANGED, each engine with its siblings
+beside it: the consumer's installed engine misconvicts the unparsable argument while both agree on
+a genuine retirement. **Then ask whether it is reachable — it has already fired THREE times**, all
+2026-09-09, in 3 of 57 committed `self-update-fixtures` logs in the consumer's own tree, every one
+an unparsable argument rather than a retirement, and one spelling its subject with `core/fixtures/`
+slash-prefixed paths — the case only the slash arm catches. That is a regression with dates.
+**Do not dispatch the pull**: it is operator-initiated and readiness is not authorization.
+
+**THE SWEEP FOR BATCH 84. Live 50, cited 31, unfiled 19, md5 `179790fe…`, archive 202, partition
+control 0.** DISCHARGED 1 / in-flight 30 / TERMINAL 86. **The consumer filed one new candidate
+MID-BATCH and it was UNCOMMITTED at the time** (so it has no `-S` date — read the working file):
+`PC-S310-GATE-ADJUDICATION-ROTATION-HAS-NO-BACKFILL-PATH-FOR-PRE-MECHANISM-SPRINTS`, core-owned
+across three paths. **That is the one available PC-backed candidate and it outranks the no-`PC`
+set.** Of the other 18 unfiled: 11 carry `NOT-UPSTREAM`, 4 are named in `origin/main` release
+commits, the `PC-S309-PRE-PUSH` pair is WITHDRAWN/superseded (each says so in its own first
+sentence) and `PC-S340-RETRO-AUDIT-SCANS-…` is REFUTED — **do not re-scope any of those.**
+
+**AND READ `BL-227` BEFORE BUILDING ANY RECEIPT THIS BATCH.** Scoping batch 83 scored every
+candidate receipt in the ranked set by BUILDING the non-fix and running it: **nine of ten are
+closable by something that is not a fix** — seven by prose (a bare comment, a mention in an
+unrelated string, and one PURE LINE REFLOW whose words are byte-identical), two by an over-broad
+version of the real fix, and one of the nine also REJECTS a correct fix. The two that survived are
+the two whose receipts DRIVE their subject — **and driving is necessary, not sufficient**: both were
+then closed by an over-broad fix, so the arm must also assert the control case still DENIES.
+`verification-discipline.md:154` already forbids all of this and has no enforcer. The remaining
+ranked entries after `BL-226` are, readiest first: `BL-225`, `BL-217`, `BL-222`, `BL-224`, `BL-220`,
+`BL-218`, `BL-219`, `BL-221`, `BL-223` — **every one of their receipts needs repairing before it is
+trusted**, and `BL-222`'s owed FP measurement is already taken (one fixture, four substring
+assertions, none anchored; `retro.md` reads it zero times).
+
 ### BATCH 82 SHIPPED NO RELEASE. IT HAND-ADJUDICATED THE TWENTY DISCHARGED-BUT-OPEN LEDGER ROWS AND **8 OF THE 20 HAD LIVE RESIDUE A RELEASE COMMIT HAD ALREADY CLAIMED**, FILED AS `BL-217`..`BL-225`. THE CONSUMER CLOSED AND ROTATED ALL TWENTY, SO **LIVE FELL 69 → 49, TERMINAL ROSE TO 86, AND `DISCHARGED` IS NOW ZERO.** THE GAP IS **ZERO**, PENDING **0**, NOT BOOTSTRAPPING, NOT WIDE, NOT REQUIRED.
 
 This block replaces the batch-81 record below it. Every figure was re-derived against the working
@@ -8226,16 +8309,35 @@ so no block written before it changes verdict.
    **Do not re-derive their findings**; each carries a bidirectional receipt and the measurement
    that produced it.
 
-   **THE ONE AVAILABLE PC-BACKED CANDIDATE IS `PC-S310-SELF-UPDATE-FIXTURES-OVER-ARM-CONVICTS-A-SET-IT-COULD-NOT-PARSE`,
-   AND IT SHIPS ALONE.** `core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh` resolves
-   inside the `core/skills/ai-dlc-update/**` machinery glob — DERIVED, against a control of a
-   non-machinery core path resolving 0 — so action 2's bootstrapping rule puts it in its own
-   release. Its defect reproduces: the over-completeness arm at `:689` probes
-   `${THEIRS}:core/fixtures/${d}/run.sh` and convicts a failure as *"upstream deleted the driver"*,
-   which a malformed `$d` triggers identically. Measured with the discriminator — a joined-list
-   argument fails BOTH the `run.sh` probe and a bare-directory probe, while `check5-anchor-base`
-   resolves both, and `lib`/`check-h1-recursion`/`check-manifest-bypass` are genuine no-`run.sh`
-   directories the fix MUST keep convicting.
+   **BATCH 83's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.**
+   `PC-S310-SELF-UPDATE-FIXTURES-OVER-ARM-CONVICTS-A-SET-IT-COULD-NOT-PARSE` shipped ALONE as
+   `v0.543.0` at `2b6901d9` (PR #697), closing `BL-226`, cited verbatim in the release commit
+   message and appearing in exactly one commit on the range. `BL-227` was filed beside it and
+   deliberately NOT fixed.
+
+   **THE ONE AVAILABLE PC-BACKED CANDIDATE IS
+   `PC-S310-GATE-ADJUDICATION-ROTATION-HAS-NO-BACKFILL-PATH-FOR-PRE-MECHANISM-SPRINTS`**, filed by
+   the consumer on 2026-09-10, MID-BATCH and UNCOMMITTED at the time — so it has no `-S` date and
+   must be read from the working file. It is core-owned across three paths
+   (`core/hooks/ai-dlc-gate-remediation-guard.sh`, `core/skills/ai-dlc/steps/retro.md` §5b, and
+   `core/scripts/ai-dlc/rotate-gate-adjudication.sh`), so check the bootstrapping rule in action 2
+   before batching it. Re-derive it from the sweep rather than trusting this sentence.
+
+   **READ `BL-227` BEFORE YOU BUILD OR TRUST ANY RECEIPT THIS BATCH.** Batch 83 scored every
+   candidate receipt in its ranked set by BUILDING the non-fix and running it: **nine of ten close
+   on something that is not a fix.** Seven close on prose — a bare comment, a mention inside an
+   unrelated string, and one PURE LINE REFLOW whose words are byte-identical to the original. Two
+   close on an over-broad version of the real fix, which is the shape a hand builds by accident.
+   One of the nine also REJECTS a correct fix. **The two that survived the prose attack were the
+   two whose receipts DRIVE their subject — and driving is NECESSARY, NOT SUFFICIENT**: both were
+   then closed by an over-broad fix, so an arm must also assert the CONTROL case still DENIES.
+   `verification-discipline.md:154` states this rule and has no enforcer, which is why `BL-227`
+   exists. The ranked no-`PC` set, readiest first, is `BL-225`, `BL-217`, `BL-222`, `BL-224`,
+   `BL-220`, `BL-218`, `BL-219`, `BL-221`, `BL-223` — **every one of their receipts needs repairing
+   before its verdict means anything.** `BL-222`'s owed FP measurement is already taken and small
+   (one fixture, four substring assertions, none anchored; `retro.md` reads that PASS line zero
+   times). `BL-218` is blocked on a corpus that does not exist — zero live layer-debt registers in
+   either tree, against a control of 10 other tracked `_bmad-output` jsonl files on the consumer.
 
    **THE OTHER THREE APPARENTLY-AVAILABLE UNFILED IDS ARE NOT WORK.** The
    `PC-S309-PRE-PUSH-FLAG-MISMATCH-ORIGINAL-TEXT` / `PC-S309-PRE-PUSH-STILL-CALLS-FAIL-ON-DETERMINISTIC-AFTER-RETRO-MOVED-TO-LOCAL`
