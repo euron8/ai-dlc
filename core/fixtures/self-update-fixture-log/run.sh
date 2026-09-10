@@ -759,6 +759,36 @@ else
   bad "a joined-list argument was not refused under its own reason (rc=$rc). Either it is being convicted as a deleted driver — the filed defect, which sends the operator to a remedy that walks into the opposite refusal — or the arm no longer fires at all"
 fi
 
+# --- Part 15c: the NEWLINE-joined shape, which is the one the filing actually describes -------
+# THE ARM ABOVE SEEDS A SPACE-JOINED ARGUMENT AND THE FILED EPISODE IS NEWLINE-JOINED. Both
+# arrive as one argument under zsh, so the seed above is a reachable shape — but a channel that
+# sits only on it cannot say the mechanism the header, BL-226 and the CHANGELOG all name is
+# covered. The first spelling of the predicate tested a literal space and PASSED Part 15b while
+# a newline-joined and a tab-joined list were both still convicted as deleted drivers; an
+# adversarial hand found that on the pushed tip. One seed per channel, never another arm on the
+# same seed.
+rm -f "$LOGDIR2"/self-update-fixtures-*.md
+ERR15C="$CONS2/err-part15c.txt"
+NL_ARG="touched-shippable
+green-one"
+TAB_ARG="$(printf 'touched-shippable\tgreen-one')"
+bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
+     "$NL_ARG" cwd-probe >"$CONS2/out-part15c.txt" 2>"$ERR15C"
+rc=$?
+ERR15D="$CONS2/err-part15d.txt"
+rm -f "$LOGDIR2"/self-update-fixtures-*.md
+bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
+     "$TAB_ARG" cwd-probe >/dev/null 2>"$ERR15D"
+rcd=$?
+if [ "$rc" -eq 2 ] && grep -qE ' — not a fixture NAME' "$ERR15C" \
+   && ! grep -qE '^  [^ ].* — no run\.sh at' "$ERR15C" \
+   && [ "$rcd" -eq 2 ] && grep -qE ' — not a fixture NAME' "$ERR15D" \
+   && ! grep -qE '^  [^ ].* — no run\.sh at' "$ERR15D"; then
+  ok "a NEWLINE-joined and a TAB-joined argument are both refused as unparsable NAMEs — the predicate covers the whitespace the filing describes, not only the literal space Part 15b seeds"
+else
+  bad "a newline-joined (rc=$rc) or tab-joined (rc=$rcd) argument was not refused under the name-shape reason. A predicate keyed on a literal space passes Part 15b and leaves the filed mechanism — and every tab-delimited caller — still convicted as a deleted driver"
+fi
+
 # --- Part 16: a wholly legitimate set does NOT trip the arm ----------------------------------
 # The negative direction, and it is keyed on the arm's OWN MESSAGE rather than on the exit code:
 # exit 2 has six producers in this runner and a control reading only the code cannot tell them

@@ -4478,11 +4478,27 @@ Positive controls in the same invocation: a space-joined pair, a slash path, a T
 the empty string and the real fifteen-name argument all convict. Negative controls: `touched-deleted`
 (the retirement case), `check5-anchor-base`, `lib`, and a unicode name all acquit.
 
-**Guarded by two arms, because one cannot tell a discriminator from a blanket relabel.** Part 15b
-asserts the joined argument gets the new row; Part 15 (unchanged) asserts `touched-deleted` keeps
-the old one. Mutant 13b rebuilds the tree-probe cut and must move Part 15 while LEAVING 15b green
-— an arm keyed only on 15b would score that wrong cut a pass. Proven bidirectional: neutering the
-new row to `elif false` takes Part 15b red, and the subject restores byte-identical after.
+**Guarded by THREE arms and one seed per channel.** Part 15b asserts a space-joined argument gets
+the new row; Part 15 (unchanged) asserts `touched-deleted` keeps the old one; **Part 15c seeds the
+NEWLINE-joined and TAB-joined shapes**, which is the mechanism the filing actually names. Mutant
+13b rebuilds the tree-probe cut and must move Part 15 while LEAVING 15b green — an arm keyed only
+on 15b would score that wrong cut a pass. Proven bidirectional: neutering the predicate takes 15b
+red, and the subject restores byte-identical after.
+
+**PART 15c EXISTS BECAUSE AN ADVERSARY FOUND THAT 15b's SEED WAS NOT THE FILED SHAPE.** Every
+channel — the arm, the header, this entry, the CHANGELOG — said "newline-joined", and the first
+predicate tested a literal space, so a newline-joined and a tab-joined list were both still
+convicted as deleted drivers on a gate-green pushed tip. Measured decisively: reverting to the
+narrow spelling leaves **Part 15b green while Part 15c fails**. One seed per channel is the repair;
+another arm on the same seed would not have found it.
+
+**AND PART 15b's FIRST CONJUNCT WAS VACUOUS AS FIRST WRITTEN — the BL-227 defect, committed in the
+branch that files BL-227.** The remedy paragraph names the `not a fixture NAME` case
+UNCONDITIONALLY on every refusal, so a whole-output `grep -qF` for that phrase passed on runs that
+emitted no such row. Scored on the two discriminating inputs: the token grammar passed BOTH, the
+row-anchored grammar passes the subject and fails the retirement. Part 15 was checked for the same
+shape and is clean — the remedy names only the name-shape phrase, so the deleted-driver phrase
+appears solely in a real row.
 
 **Mutant 12's anchor moved and the fixture said so rather than passing.** The four new remedy
 lines sit between the RETIRED-FIXTURE-ORPHAN sentence and the shared `log:`/`exit 2` tail, so the
