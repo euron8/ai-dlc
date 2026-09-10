@@ -4437,6 +4437,67 @@ pull, indistinguishable from one deliberately left manual.
 
 verify: sh R=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -f "$R" ] || exit 9; grep -q 'verify:' "$R" || exit 9; grep -qE 'no row of any kind|produced no row|receipt-invisible|entries with no emitted row' "$R" && exit 0; exit 1
 
+## BL-228 — the gate-adjudication rotator's legacy carve-out is justified by a series split the guard does not have, so a backfill strands a permanent deny
+
+**Found 2026-09-10** while scoping
+`PC-S310-GATE-ADJUDICATION-ROTATION-HAS-NO-BACKFILL-PATH-FOR-PRE-MECHANISM-SPRINTS`. The candidate
+asks for a one-time backfill of the sprints that closed before the rotator shipped. **Building it
+naively makes the reference consumer WORSE**, and the reason is a misattributed justification.
+
+**The carve-out.** `core/scripts/rotate-gate-adjudication.sh` skips any verdict carrying no
+`gate_series_id` — "legacy: no gate_series_id -- never moves". Its header justified that with *"the
+guard's own series split already tolerates it and it predates every live series on the consumer."*
+
+**There is no such split in the guard.** `gate_series_id` does not occur in
+`core/hooks/ai-dlc-gate-remediation-guard.sh` at all (control: `LIVE_NONCE` occurs 18 times in the
+same file; `grep -rln` finds the token in 16 files under `core/`). Its live-pass pick at `:431-441`
+orders every conforming stem by trailing nonce and reads nothing else. The split described is
+`core/scripts/validate-gate-adjudication.sh`'s, whose `:779` prints the header's phrase verbatim —
+`counted, not grouped (no gate_series_id, predates every live series)`. **A true sentence about one
+reader, offered as a safety argument for another that shares the directory and nothing else.** And
+that validator's tolerance is itself CONDITIONAL (`:106-111`): a legacy verdict is tolerated only
+while it sorts strictly BEFORE the first pass of every live series — the precondition a complete
+backfill destroys.
+
+**What it costs, measured on the reference consumer.** 188 live verdicts, 94 legacy, **33 of the 94
+record a FAIL** (control: 49 of the 94 series-bearing ones do, so the query discriminates). Newest
+is `story-20260811T214958Z`, check 7, carrying no repair and no authorization sidecar (control: 8
+repair sidecars exist in that directory, so the glob finds them when present). Nothing is
+suppressed today — `validate-suppression-lifetime.sh --in-force` reports `in_force=0` against
+`entries_scanned=143`.
+
+**The residue currently SHIELDS the consumer, which is why this is invisible.** Driving the real
+guard against a scratch copy: residue present **ALLOW**; residue rotated away **DENY** on
+`story-20260811T214958Z` check 7; one clean current-sprint verdict restored **ALLOW** again. The
+ordering of denies is today the live sprint, after s310's retro a rotatable s307 FAIL, and after a
+backfill the 2026-08-11 legacy FAIL — **which no `--sprint` rotation can ever move and no sidecar
+lifts.** A self-clearing deny traded for a permanent one.
+
+**FIXED in this release, in the rotator.** It computes, from verdicts the discovery loop already
+parsed, whether the move would leave a FAIL-carrying legacy verdict as the newest conforming stem,
+and refuses in the register it already has. Refusal rather than detection because it makes the
+state unconstructible on the producer path; it is NOT unconstructible generally — a consumer
+deleting verdicts by hand reaches it too. The guard was deliberately not taught sprint awareness:
+`rotate-gate-adjudication.sh:17-18` states rotation exists precisely so the hook is not.
+
+**FP set measured at ZERO** across all nine single-sprint rotations on the consumer's real corpus,
+which is the shipping call path (`core/skills/ai-dlc/steps/retro.md:1149`), evaluated in the window
+that matters — retro close, next sprint unwritten. The positive control fires on the multi-sprint
+backfill, naming that exact file. **An earlier run of this measurement read FP 0 with the positive
+control NOT firing**, because the live s310 verdict shadowed everything; FP 0 beside a control that
+cannot fire is not a measurement.
+
+**Four non-fixes were built and scored against the receipt**, per `BL-227`: a prose comment on the
+unfixed baseline FAILS, an unreachable refusal condition FAILS, warn-instead-of-refuse FAILS, and
+the over-broad version keyed on legacy-ness alone FAILS on the near-miss arm — that one would
+refuse 94 files on the consumer and break every legitimate close. The real fix PASSES.
+
+**Tiered DEFECT.** Consumer-facing. Two things remain open and are NOT closed by this fix: the
+candidate's actual request — a backfill path for the six closed sprints — is now SAFE to build but
+still unbuilt, and 33 legacy FAILs remain unrotatable by design.
+
+verify: sh bash core/fixtures/gate-adjudication-rotate/run.sh >/dev/null 2>&1
+
 ## BL-227 — nine of batch 82's ten receipts are satisfied by something that is not a fix, and the rule forbidding it has no enforcer
 
 **Found 2026-09-10** scoping batch 83, by building the non-fix for every candidate receipt in the
