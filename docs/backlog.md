@@ -4502,6 +4502,20 @@ only the pre-backfill tree** — the wrong population for a fix whose purpose is
 world. End to end on the consumer's real corpus: backfill rc=0, ordinary close REFUSED, escape moves
 93 pre-series verdicts, close then rc=0.
 
+**AND THE ESCAPE'S OWN PRINTED REMEDY COULD NOT CONVERGE, WHICH A SECOND ADVERSARIAL PASS FOUND.**
+The selector was strictly `<` the bound while the refusal prints the SURVIVOR's nonce as that
+bound, so the printed command moved everything EXCEPT the verdict it named and the next close
+re-printed the identical bound. Measured on the consumer: **92 moved where 93 were owed**, the named
+survivor still live, no fixed point. The bound is inclusive now and the flag is `--legacy-through`,
+renamed because an `--legacy-before` that includes its bound is a trap for anyone who reads the name
+rather than the code. **The first end-to-end run passed only because the bound was hand-chosen** —
+`20260910T034119Z` rather than the one the tool prints.
+
+**Arm (i) could not see it, because it hardcoded a bound the refusal never printed.** It now parses
+the bound out of the refusal's own output and runs THAT, asserting the named verdict is gone and the
+rotation completes in one run. That single change also kills a wrong fix that prints an impossible
+bound selecting nothing.
+
 **Six non-fixes were built and scored**, per `BL-227` — and the first receipt accepted two of them.
 Prose on the unfixed baseline, an unreachable condition, warn-instead-of-refuse and the over-broad
 legacy-only form all FAIL. **`W5a` (refuse on any FAILing legacy anywhere, ignoring survivorship)
@@ -4510,6 +4524,14 @@ rotation on the consumer's real corpus. Both are killed now — `W5a` by the new
 `W5b` by (h.1) once the seed's legacy nonce was renumbered BELOW the moved verdict so the rotation
 genuinely promotes it. **Every one of the original seeds was built from what the predicate itself
 reads**, which is the failure `fixture-mutants.md` names as "never seed from what the reader accepts".
+Two more were found on the second pass — an impossible printed bound and the exclusive-bound
+off-by-one — so **eight wrong fixes are now scored and rejected** against the real fix accepted.
+
+**A SCORING-HARNESS DEFECT OF MY OWN, WORTH THE LINE BECAUSE IT PRODUCED A CONFIDENT WRONG TABLE.**
+The first score script restored a STALE copy of the subject after each candidate, so it silently
+reverted the fix mid-run: the "real fix" row read FAIL while the wrong-fix rows read plausible
+numbers. Regenerate every candidate from a snapshot taken at run time, and `cmp` the subject back
+afterwards.
 
 **Tiered DEFECT.** Consumer-facing. Still NOT closed by this fix: the candidate's actual request — a
 backfill run on the consumer — is now safe and executable but has not been run, and running it is

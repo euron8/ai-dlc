@@ -47,9 +47,9 @@ next sprint writes its first verdict. This one cannot: the file carries no serie
 `--sprint` rotation will ever move it, and with no sidecar neither lift arm applies.
 
 So the rotator now refuses a move that would PROMOTE a FAILing legacy verdict to newest conforming
-stem — and ships `--legacy-before <nonce>`, which rotates pre-series verdicts out into
-`implementation-artifacts/pre-series/`. The refusal without the escape is a trap, and shipping it
-that way is what the adversarial pass caught.
+stem — and ships `--legacy-through <nonce>`, which rotates pre-series verdicts, up to and including
+the bound, into `implementation-artifacts/pre-series/`. The refusal without the escape is a trap,
+and shipping it that way is what the adversarial pass caught.
 
 **The refusal alone made the post-backfill state uncloseable.** Backfill the six pre-mechanism
 sprints, then run an ordinary `retro.md` 5b close: exit 1, which retro reads as a HARD_BLOCK. The
@@ -69,12 +69,19 @@ rotations before the backfill, and every close after it once the escape has run.
 measured only the pre-backfill tree — the wrong population for a fix whose purpose is the
 post-backfill world.
 
-Four fixture arms guard it, plus a mutant. Six non-fixes were built and scored, and the first receipt
-accepted two of them: a survivorship-blind sweep (which refuses every rotation on the consumer's real
-corpus) and one with the move-set exclusion deleted. Both passed because every seed had been built
-from what the predicate itself reads — the legacy verdict was newest before the move as well as
-after, so no arm exercised promotion. Renumbering it below the moved verdict and adding a shadowed
-world kills both.
+**The escape's own printed remedy could not converge, and a second adversarial pass caught that.**
+The bound was exclusive while the refusal prints the survivor's nonce as that bound, so the printed
+command moved everything except the verdict it named and the next close re-printed the same bound —
+92 moved where 93 were owed, on the consumer's real corpus. The first end-to-end run passed only
+because the bound had been hand-chosen. The bound is inclusive now, and the flag is named
+`--legacy-through` so the semantics are in the name.
+
+Fixture arms guard it, plus a mutant. **Eight non-fixes were built and scored**, and earlier receipts
+accepted four of them at various points: a survivorship-blind sweep (which refuses every rotation on
+the consumer's real corpus), one with the move-set exclusion deleted, one printing an impossible
+bound, and the off-by-one itself. Every seed had been built from what the predicate reads, and the
+arm that checks the remedy hardcoded a bound the refusal never printed — so it parses the bound out
+of the refusal's own output and runs that instead.
 
 **What this does NOT do:** the backfill has not been run on any consumer. It is now safe and
 executable, and running it is the consumer's call. Filed as `BL-228`.
