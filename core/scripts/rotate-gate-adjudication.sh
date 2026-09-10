@@ -20,11 +20,20 @@
 # SELECTION. A verdict moves when it parses as JSON and its `gate_series_id`
 # names the given sprint (`*-s<N>-*`, e.g. `planning-s308-20260902T034604Z`
 # for `--sprint s308`). A verdict with NO `gate_series_id` is legacy and never
-# moves -- the guard's own series split already tolerates it and it predates
-# every live series on the consumer. A verdict naming a different sprint never
-# moves. A `*.verdict.json` that does not parse is a REFUSAL: an unreadable
-# verdict must never be silently left standing as the guard's live pass,
-# whichever sprint it does or does not belong to.
+# moves. A verdict naming a different sprint never moves. A `*.verdict.json`
+# that does not parse is a REFUSAL: an unreadable verdict must never be silently
+# left standing as the guard's live pass, whichever sprint it does or does not
+# belong to.
+#
+# THE LEGACY SKIP IS SAFE ONLY WHILE A NEWER VERDICT SHADOWS IT, AND AN EARLIER
+# REVISION OF THIS HEADER CLAIMED OTHERWISE. It said the skip was safe because
+# "the guard's own series split already tolerates it". The guard has no series
+# split: `gate_series_id` does not appear in `ai-dlc-gate-remediation-guard.sh`
+# at all. That split is `validate-gate-adjudication.sh`'s, and even there the
+# tolerance is conditional on the legacy verdict sorting BEFORE every live
+# series. Rotating a closed sprint out can therefore promote a FAILing legacy
+# verdict to live pass, which is a deny no later rotation can clear -- so the
+# refusal below computes that outcome and refuses the move. See its header.
 #
 # SIDECARS move with their verdict: any regular file in the source directory
 # whose name is `<nonce-stem>.<anything>` -- `<stem>.repair.md`,
@@ -195,6 +204,87 @@ N_SIDECARS=$(( N_FILES - N_VERDICTS ))
 if [ "$N_FILES" -eq 0 ]; then
   echo "${SELF_NAME}: no verdict under '${SRC}' names series '${SPRINT}' -- nothing to move."
   exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# REFUSAL: this rotation would leave a FAILing LEGACY verdict as the guard's
+# live pass, and no later rotation can ever clear it.
+#
+# WHY THIS EXISTS, AND WHY THE CARVE-OUT ABOVE IS NOT SELF-JUSTIFYING. The
+# legacy skip at the selection loop says a verdict with no `gate_series_id`
+# never moves, on the stated grounds that "the guard's own series split already
+# tolerates it". THAT SPLIT IS NOT THE GUARD'S. `gate_series_id` does not occur
+# in `ai-dlc-gate-remediation-guard.sh` at all; its live-pass pick orders every
+# conforming stem in the directory by trailing nonce and reads nothing else.
+# The split described is `validate-gate-adjudication.sh`'s, whose own header
+# tolerates a legacy verdict ONLY while it sorts strictly BEFORE the first pass
+# of every live series -- a precondition that rotating every series-bearing
+# verdict out DESTROYS. A true sentence about one reader, offered as a safety
+# argument for another that shares the directory and nothing else.
+#
+# WHAT THAT COSTS, MEASURED ON THE REFERENCE CONSUMER. Its live directory holds
+# 188 verdicts, 94 of them legacy, and 33 of those 94 record a FAIL. The newest
+# is `story-20260811T214958Z`, check 7, carrying no repair and no authorization
+# sidecar. Today every legacy verdict is shadowed by a newer series-bearing one,
+# so the guard never reaches back that far and the state is invisible. Rotate
+# the closed sprints out and that 2026-08-11 verdict becomes the live pass:
+# driving the real guard against a scratch copy, residue present ALLOWS,
+# residue rotated away DENIES, and restoring one clean current-sprint verdict
+# ALLOWS again -- so the removal is the cause, not something ambient.
+#
+# THE DENY IS UNCLEARABLE, WHICH IS WHY THIS REFUSES RATHER THAN WARNS. A
+# stale-sprint deny clears when the next sprint writes its first verdict. This
+# one cannot: the file carries no series id, so the selection loop above refuses
+# to move it for ANY `--sprint`, and with no sidecar neither lift arm applies.
+# Trading a self-clearing denial for a permanent one is strictly worse than the
+# state being repaired, so the rotation is refused before it can construct it.
+#
+# THE PREDICATE COSTS NO NEW I/O -- every verdict in the directory was already
+# parsed by the discovery loop above -- and it is keyed on what the GUARD reads:
+# the conforming-stem shape and the trailing nonce, not on this script's own
+# selection rule. FP set on the reference consumer: 0 across all nine
+# single-sprint rotations, which is the shipping call path (`retro.md` 5b);
+# it fires only on the multi-sprint backfill that actually strands the residue.
+# ---------------------------------------------------------------------------
+conforming_nonce() {
+  # The guard's own filter: the stem's trailing `-` field must be a nonce.
+  # A stem that fails it is invisible to the guard and must not be considered
+  # here either -- two such files exist on the reference consumer.
+  case "${1##*-}" in
+    [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z)
+      printf '%s' "${1##*-}"; return 0 ;;
+  esac
+  return 1
+}
+
+SURVIVOR_STEM=""; SURVIVOR_TS=""; SURVIVOR_FAILS=""; SURVIVOR_LEGACY=0
+for f in "$SRC"/*.verdict.json; do
+  [ -e "$f" ] || continue
+  _stem="$(basename "$f" .verdict.json)"
+  # Anything this run is about to move is not a survivor.
+  if grep -qxF "$_stem" "$TMPD/move_stems" 2>/dev/null; then continue; fi
+  _ts="$(conforming_nonce "$_stem")" || continue
+  if [ -z "$SURVIVOR_TS" ] || [ "$_ts" \> "$SURVIVOR_TS" ]; then
+    SURVIVOR_TS="$_ts"; SURVIVOR_STEM="$_stem"
+    SURVIVOR_FAILS="$(jq -r '[.verdicts[]? | select(.verdict=="FAIL") | .check_id] | join(" ")' \
+                        "$f" 2>/dev/null)" || SURVIVOR_FAILS=""
+    _series="$(jq -r '.gate_series_id // empty' "$f" 2>/dev/null)" || _series=""
+    if [ -n "$_series" ]; then SURVIVOR_LEGACY=0; else SURVIVOR_LEGACY=1; fi
+  fi
+done
+
+if [ "$SURVIVOR_LEGACY" -eq 1 ] && [ -n "$SURVIVOR_FAILS" ]; then
+  echo "${SELF_NAME}: REFUSED -- this rotation would strand a FAILing legacy verdict." >&2
+  echo "  Newest verdict left in '${SRC}' after this move:" >&2
+  echo "    ${SURVIVOR_STEM} -- no gate_series_id, FAILed check(s): ${SURVIVOR_FAILS}" >&2
+  echo "  The gate-remediation guard picks its live pass by trailing nonce with no notion of" >&2
+  echo "  sprint, so that verdict would become the live pass and deny artifact edits. It" >&2
+  echo "  carries no gate_series_id, so NO --sprint rotation can ever move it, and the deny" >&2
+  echo "  would not clear on its own. Nothing written." >&2
+  echo "  Resolve it first: disposition its FAILing check(s) via an operator authorization or" >&2
+  echo "  a bound repair record, or run this rotation after the next sprint's first verdict" >&2
+  echo "  has landed, which restores a newer pass above it." >&2
+  exit 1
 fi
 
 # ---------------------------------------------------------------------------
