@@ -4473,28 +4473,47 @@ ordering of denies is today the live sprint, after s310's retro a rotatable s307
 backfill the 2026-08-11 legacy FAIL — **which no `--sprint` rotation can ever move and no sidecar
 lifts.** A self-clearing deny traded for a permanent one.
 
-**FIXED in this release, in the rotator.** It computes, from verdicts the discovery loop already
-parsed, whether the move would leave a FAIL-carrying legacy verdict as the newest conforming stem,
-and refuses in the register it already has. Refusal rather than detection because it makes the
-state unconstructible on the producer path; it is NOT unconstructible generally — a consumer
-deleting verdicts by hand reaches it too. The guard was deliberately not taught sprint awareness:
-`rotate-gate-adjudication.sh:17-18` states rotation exists precisely so the hook is not.
+**FIXED in this release, in the rotator, as a REFUSAL PLUS THE ESCAPE IT PRESUPPOSES.** The
+refusal computes, from verdicts the discovery loop already parsed, whether the move would promote a
+FAIL-carrying legacy verdict to newest conforming stem. `--legacy-before <nonce>` is the escape: it
+rotates PRE-SERIES verdicts older than a bound into `implementation-artifacts/pre-series/`. The
+guard was deliberately not taught sprint awareness — `rotate-gate-adjudication.sh:17-18` states
+rotation exists precisely so the hook is not.
 
-**FP set measured at ZERO** across all nine single-sprint rotations on the consumer's real corpus,
-which is the shipping call path (`core/skills/ai-dlc/steps/retro.md:1149`), evaluated in the window
-that matters — retro close, next sprint unwritten. The positive control fires on the multi-sprint
-backfill, naming that exact file. **An earlier run of this measurement read FP 0 with the positive
-control NOT firing**, because the live s310 verdict shadowed everything; FP 0 beside a control that
-cannot fire is not a measurement.
+**THE REFUSAL ALONE MADE THE POST-BACKFILL STATE UNCLOSEABLE, AND ONLY AN ADVERSARY FOUND IT.**
+Shipped without the escape, backfilling s302–s307 and then running an ORDINARY `retro.md` 5b close
+returns exit 1 — which `retro.md:1162` reads as a HARD_BLOCK. The release would have made the state
+it exists to enable a state where retro can never close. **The refusal itself is correct**: driving
+the real guard across the sequence, pristine ALLOWS, post-backfill ALLOWS, and post-s310-close
+DENIES on `story-20260811T214958Z` check 7. The deny it predicts is real and permanent, so the
+answer was to ship the way out, not to weaken the predicate. Narrowing the refusal to fire only on
+promotion was BUILT and REFUTED — the consumer's own s310 close genuinely is a promotion, so it
+refuses anyway.
 
-**Four non-fixes were built and scored against the receipt**, per `BL-227`: a prose comment on the
-unfixed baseline FAILS, an unreachable refusal condition FAILS, warn-instead-of-refuse FAILS, and
-the over-broad version keyed on legacy-ness alone FAILS on the near-miss arm — that one would
-refuse 94 files on the consumer and break every legitimate close. The real fix PASSES.
+**AND THE FIRST REMEDY TEXT WAS INERT — IT PRESCRIBED WHAT THIS TOOL DOES NOT READ.** It told the
+operator to write a repair or authorization record. Those are read by the GUARD; the refusal block
+reads no sidecar at all. Measured: writing both `story-20260811T214958Z.repair.md` and
+`.authorization.md` still returns exit 1. Deferring until the next sprint's verdict lands only
+moves the block one sprint, forever. Arm (h.1b) now asserts the printed remedy names `--legacy-before`.
 
-**Tiered DEFECT.** Consumer-facing. Two things remain open and are NOT closed by this fix: the
-candidate's actual request — a backfill path for the six closed sprints — is now SAFE to build but
-still unbuilt, and 33 legacy FAILs remain unrotatable by design.
+**FP set measured at ZERO in BOTH states**, which is the correction that matters: nine single-sprint
+rotations pre-backfill, and every close post-backfill after the escape runs. **The first cut measured
+only the pre-backfill tree** — the wrong population for a fix whose purpose is the post-backfill
+world. End to end on the consumer's real corpus: backfill rc=0, ordinary close REFUSED, escape moves
+93 pre-series verdicts, close then rc=0.
+
+**Six non-fixes were built and scored**, per `BL-227` — and the first receipt accepted two of them.
+Prose on the unfixed baseline, an unreachable condition, warn-instead-of-refuse and the over-broad
+legacy-only form all FAIL. **`W5a` (refuse on any FAILing legacy anywhere, ignoring survivorship)
+and `W5b` (drop the move-set exclusion) both PASSED the original receipt**; `W5a` refuses every
+rotation on the consumer's real corpus. Both are killed now — `W5a` by the new shadowed arm (h.3),
+`W5b` by (h.1) once the seed's legacy nonce was renumbered BELOW the moved verdict so the rotation
+genuinely promotes it. **Every one of the original seeds was built from what the predicate itself
+reads**, which is the failure `fixture-mutants.md` names as "never seed from what the reader accepts".
+
+**Tiered DEFECT.** Consumer-facing. Still NOT closed by this fix: the candidate's actual request — a
+backfill run on the consumer — is now safe and executable but has not been run, and running it is
+the consumer's call, not upstream's.
 
 verify: sh bash core/fixtures/gate-adjudication-rotate/run.sh >/dev/null 2>&1
 

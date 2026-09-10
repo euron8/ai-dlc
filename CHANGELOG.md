@@ -46,27 +46,38 @@ verdict ALLOWS again — so the removal is the cause, not something ambient.
 next sprint writes its first verdict. This one cannot: the file carries no series id, so no
 `--sprint` rotation will ever move it, and with no sidecar neither lift arm applies.
 
-So the rotator now computes, from verdicts its discovery loop already parsed, whether the move
-would leave a FAILing legacy verdict as the newest conforming stem, and refuses in the register it
-already has. Refusal rather than detection makes the state unconstructible on the producer path —
-though not generally, since deleting verdicts by hand reaches it too, and the arm header says so.
-The guard was deliberately NOT taught sprint awareness: the rotator exists precisely so the hook
-need not be.
+So the rotator now refuses a move that would PROMOTE a FAILing legacy verdict to newest conforming
+stem — and ships `--legacy-before <nonce>`, which rotates pre-series verdicts out into
+`implementation-artifacts/pre-series/`. The refusal without the escape is a trap, and shipping it
+that way is what the adversarial pass caught.
 
-**FP set measured at ZERO** across all nine single-sprint rotations on the consumer's real corpus,
-which is the shipping call path at `retro.md` 5b, evaluated in the window that matters — retro
-close, with the next sprint unwritten. An earlier run of that measurement read FP 0 while its
-positive control did not fire, because the live sprint's verdict shadowed everything; FP 0 beside
-a control that cannot fire is not a measurement, and the corrected run fires on the exact file.
+**The refusal alone made the post-backfill state uncloseable.** Backfill the six pre-mechanism
+sprints, then run an ordinary `retro.md` 5b close: exit 1, which retro reads as a HARD_BLOCK. The
+release would have made the state it exists to enable a state where retro can never close. The
+refusal itself is correct — driving the real guard, pristine ALLOWS, post-backfill ALLOWS, and
+post-close DENIES on the 2026-08-11 verdict, permanently — so the answer was to ship the way out
+rather than weaken the predicate. Narrowing it to fire only on promotion was built and refuted: the
+consumer's own next close genuinely is a promotion.
 
-Two fixture arms guard it, one property apart, because a refusal keyed on legacy-ness alone passes
-the offender arm and is a wrong fix that would refuse 94 files on the consumer and break every
-legitimate close. A committed mutant proves the refusal arm can fire. Four non-fixes were built and
-scored: prose on the unfixed baseline, an unreachable condition, warn-instead-of-refuse, and the
-over-broad form — all four rejected, the real fix accepted.
+**The first remedy text prescribed something this tool does not read.** It said to write a repair or
+authorization record; those are read by the guard, and the refusal block reads no sidecar at all —
+measured, writing both still exits 1. A fixture arm now asserts the printed remedy names the flag
+that actually works.
 
-**What this does NOT do:** the backfill itself is still unbuilt. It is now safe to build, and the
-33 unrotatable legacy FAILs remain by design. Filed as `BL-228`.
+**FP set measured at ZERO in both states**, which is the correction that matters: nine single-sprint
+rotations before the backfill, and every close after it once the escape has run. The first cut
+measured only the pre-backfill tree — the wrong population for a fix whose purpose is the
+post-backfill world.
+
+Four fixture arms guard it, plus a mutant. Six non-fixes were built and scored, and the first receipt
+accepted two of them: a survivorship-blind sweep (which refuses every rotation on the consumer's real
+corpus) and one with the move-set exclusion deleted. Both passed because every seed had been built
+from what the predicate itself reads — the legacy verdict was newest before the move as well as
+after, so no arm exercised promotion. Renumbering it below the moved verdict and adding a shadowed
+world kills both.
+
+**What this does NOT do:** the backfill has not been run on any consumer. It is now safe and
+executable, and running it is the consumer's call. Filed as `BL-228`.
 
 ## [0.543.0] - 2026-09-10
 
