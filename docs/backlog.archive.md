@@ -9877,3 +9877,108 @@ is a non-fix that never applied rather than a receipt that discriminated.
 
   verify: sh o="$(bash core/fixtures/layer-reference-resolution/run.sh 2>&1)"; grep -q 'self-probe: the list-walk reports a seeded missing verdict' <<<"$o" && grep -qE 'self-probe: [2-9][0-9]* worker\(s\) observed in flight' <<<"$o" && grep -q 'pool accounting: all 24 dispatched mutants produced a verdict' <<<"$o"
 
+## BL-226 — the over-completeness arm convicted an unparsable argument as a deleted driver
+
+**LANDED (v0.543.0, verified 2b6901d9).**
+
+**Filed and FIXED in the same release**, `v0.543.0`, closing
+`PC-S310-SELF-UPDATE-FIXTURES-OVER-ARM-CONVICTS-A-SET-IT-COULD-NOT-PARSE`, filed by the reference
+consumer on 2026-09-09 during its `0.540.0 -> 0.542.0` pull.
+
+**The defect.** `self-update-fixtures.sh`'s over-completeness arm probed
+`${THEIRS}:core/fixtures/${d}/run.sh` for each named fixture and, on failure, convicted it as
+*"no run.sh at <theirs>: upstream deleted the driver"*. `$d` is caller-supplied, so any malformed
+argument failed the same probe and was reported with the same sentence — an assertion about the
+DISTRIBUTION that is false, naming a cause the operator cannot act on. Under zsh an unquoted
+`$FIX` holding a newline-joined list does not word-split, so fifteen names arrived as ONE
+argument and were reported as one row declaring fifteen drivers deleted, every one present.
+The printed remedy — drop them from the slice — is then refused by the diff-side join as an
+omission, so following it walks into the opposite refusal.
+
+**THE FIRST CUT OF THE FIX WAS WRONG IN THE DIRECTION THAT DESTROYS THE ARM, AND THE FIXTURE
+CAUGHT IT.** It probed the containing TREE (`${THEIRS}:core/fixtures/${d}`) and ordered that
+first, reasoning that a retirement resolves as a tree and lacks only its driver. That is false
+for a real retirement, which removes the whole directory: measured against `origin/main` with a
+resolving control in the same invocation, a retired-shaped name and the joined fifteen-name
+argument BOTH fail the tree probe while `self-update-gate` resolves. Part 15 went red where
+`origin/main` is green — the tree probe relabels every genuine deleted-driver row.
+
+**The discriminator is the argument's SHAPE.** A fixture name carries no whitespace and no `/`;
+the joined-list case is one argument holding fifteen separated names, while a retirement is a
+well-formed name whose tree is gone. The probe needs no tree lookup, is sited before both, and
+the deleted-driver verdict keeps every input it had before this change.
+
+**THE FIRST SPELLING OF THE PREDICATE WAS TOO NARROW AND THE RESIDUAL WAS REACHABLE.** It tested
+for a literal space and a slash (`${d#* }`), which leaves a TAB-joined list still convicted as a
+deleted driver — the same defect with a narrower trigger. That is not hypothetical: this pipeline
+reads tab-delimited records (`apply.sh:504`, `:694` both set `IFS` to a tab), so a tab-joined `$d`
+is constructible. Widened to `tr -d '[:space:]/'` plus an empty-string arm.
+
+**False-positive set MEASURED, as `CLAUDE.md` requires before a check ships: ZERO over all 198
+live fixture directory names**, derived with `find core/fixtures -mindepth 1 -maxdepth 1 -type d`.
+Positive controls in the same invocation: a space-joined pair, a slash path, a TAB-joined pair,
+the empty string and the real fifteen-name argument all convict. Negative controls: `touched-deleted`
+(the retirement case), `check5-anchor-base`, `lib`, and a unicode name all acquit.
+
+**Guarded by THREE arms and one seed per channel.** Part 15b asserts a space-joined argument gets
+the new row; Part 15 (unchanged) asserts `touched-deleted` keeps the old one; **Part 15c seeds the
+NEWLINE-joined and TAB-joined shapes**, which is the mechanism the filing actually names. Mutant
+13b rebuilds the tree-probe cut and must move Part 15 while LEAVING 15b green — an arm keyed only
+on 15b would score that wrong cut a pass. Proven bidirectional: neutering the predicate takes 15b
+red, and the subject restores byte-identical after.
+
+**PART 15c EXISTS BECAUSE AN ADVERSARY FOUND THAT 15b's SEED WAS NOT THE FILED SHAPE.** Every
+channel — the arm, the header, this entry, the CHANGELOG — said "newline-joined", and the first
+predicate tested a literal space, so a newline-joined and a tab-joined list were both still
+convicted as deleted drivers on a gate-green pushed tip. Measured decisively: reverting to the
+narrow spelling leaves **Part 15b green while Part 15c fails**. One seed per channel is the repair;
+another arm on the same seed would not have found it.
+
+**AND PART 15b's FIRST CONJUNCT WAS VACUOUS AS FIRST WRITTEN — the BL-227 defect, committed in the
+branch that files BL-227.** The remedy paragraph names the `not a fixture NAME` case
+UNCONDITIONALLY on every refusal, so a whole-output `grep -qF` for that phrase passed on runs that
+emitted no such row. Scored on the two discriminating inputs: the token grammar passed BOTH, the
+row-anchored grammar passes the subject and fails the retirement. Part 15 was checked for the same
+shape and is clean — the remedy names only the name-shape phrase, so the deleted-driver phrase
+appears solely in a real row.
+
+**Mutant 12's anchor moved and the fixture said so rather than passing.** The four new remedy
+lines sit between the RETIRED-FIXTURE-ORPHAN sentence and the shared `log:`/`exit 2` tail, so the
+old three-line anchor stopped resolving and reported FIXTURE ERROR — correct, since a mutant that
+cannot be built kills nothing. Re-keyed on the last line of the new remedy: 1 occurrence, against
+3 for the bare tail it sits above.
+
+**THE RECEIPT ACCEPTED A WRONG FIX UNTIL AN ADVERSARY BUILT ONE.** Deleting the SLASH half of
+the predicate leaves a wrong fix that the first cut of this receipt closed, because the receipt
+probed only a space-joined argument. Adding a slash probe was not enough on its own: the scratch
+repo held no nested path, so the slash argument fell through to the `run.sh` probe and produced a
+refusal for the WRONG REASON, and `w1` still closed. The arm needs a seeded `lib/preamble.sh` AND
+a row-anchored assertion. Scored across seven implementations, the subject restored byte-identical
+after each:
+
+    p0-shipped            CLOSED     n0-no-fix             open
+    c1-case-stmt          CLOSED     w1-whitespace-only    open
+    c2-tr-blank-slash     CLOSED     w2-slash-only         open
+    c3-case-charclass     CLOSED     w3-always-true        open
+
+Four correct spellings close it and three wrong ones do not, so it is keyed on BEHAVIOUR rather
+than on one author's phrasing.
+
+**BOTH CONJUNCTS ARE ANCHORED ON THE ROW'S SHAPE, NOT ITS WORDING, AND THE MIDDLE VERSION WAS
+WRONG IN THE OTHER DIRECTION.** Anchoring the exact phrase `— not a fixture NAME` rejected
+`r1-correct-reworded`, a behaviourally-correct fix using the consumer's own proposed wording
+(measured: receipt REJECTED, behaviour ok on all three inputs). Anchoring `^  <subject> — `
+keeps the emission-binding — the remedy paragraph is not indented-subject-dash shaped — while
+accepting any wording, and the negative deleted-driver conjuncts carry the discrimination.
+
+**PART 15d EXISTS BECAUSE THE ONE-CHARACTER WRONG FIX WAS CAUGHT ONLY BY AN ANCHOR COMPLAINT.**
+Deleting the `/` from the predicate's character class is a wrong fix, and before 15d the only red
+was Mutant 13b's `FIXTURE ERROR: the name-shape probe anchor no longer occurs exactly once` — a
+message that invites an author to re-key the anchor to their own spelling, after which the wrong
+fix goes fully green. Predicted by an adversarial hand and confirmed by building it. 15d reads the
+emitted row for a slash-bearing argument, so the wrong fix now fails on BEHAVIOUR.
+
+**Tiered DEFECT.** Consumer-facing; the script ships in `core/skills/ai-dlc-update/`.
+
+verify: sh S=core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh; [ -f "$S" ] || exit 9; W="$(mktemp -d)" || exit 9; R="$W/dist"; mkdir -p "$R/core/fixtures/real-fx" "$R/core/fixtures/no-driver" "$R/core/fixtures/lib" "$W/c"; printf '#!/bin/sh\nexit 0\n' > "$R/core/fixtures/real-fx/run.sh"; printf 'x\n' > "$R/core/fixtures/no-driver/README.md"; printf 'x\n' > "$R/core/fixtures/lib/preamble.sh"; git init -q "$R" >/dev/null 2>&1; git -C "$R" config user.email t@t; git -C "$R" config user.name t; git -C "$R" add -A >/dev/null 2>&1; git -C "$R" commit -qm s >/dev/null 2>&1; T="$(git -C "$R" rev-parse HEAD)"; git -C "$R" rev-parse -q --verify "${T}:core/fixtures/no-driver" >/dev/null || { rm -rf "$W"; exit 9; }; bad="$(bash "$S" "$R" "$T" "$T" "$W/c" "real-fx no-driver" 2>&1)"; slash="$(bash "$S" "$R" "$T" "$T" "$W/c" "lib/preamble.sh" 2>&1)"; good="$(bash "$S" "$R" "$T" "$T" "$W/c" "no-driver" 2>&1)"; rm -rf "$W"; printf '%s' "$good" | grep -qF 'no consumer can run' || exit 9; printf '%s' "$good" | grep -qF 'upstream deleted the driver' || exit 1; printf '%s' "$bad" | grep -qE '^  real-fx no-driver — ' || exit 1; printf '%s' "$bad" | grep -qE 'real-fx no-driver — no run\.sh at' && exit 1; printf '%s' "$slash" | grep -qE '^  lib/preamble\.sh — ' || exit 1; printf '%s' "$slash" | grep -qE ' — no run\.sh at' && exit 1; exit 0
+
