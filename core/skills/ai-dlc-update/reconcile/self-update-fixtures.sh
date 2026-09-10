@@ -670,6 +670,35 @@ fi
 # named set — a check whose failure mode is to indict correct input. The two guards above
 # turn that state into its own exit first.
 #
+# A NAME THAT RESOLVES TO NO TREE IS AN UNPARSABLE ARGUMENT, NOT A DELETED DRIVER, AND THE
+# ARM CONVICTED IT AS ONE. Every probe here resolves `${d}` as a path COMPONENT, so a `$d` that
+# is not a directory name at all fails them identically to a genuine retirement — and the
+# verdict printed asserts a fact about the DISTRIBUTION ("upstream deleted the driver") that is
+# false, names a cause the operator cannot act on, and prescribes dropping the entry from the
+# slice, which the diff-side join then correctly refuses as an omission. Following the printed
+# remedy walks into the opposite refusal.
+#
+# MEASURED, and the trigger is this shell rather than a typo: under zsh an unquoted `$FIX`
+# holding a newline-joined list does not word-split, so fifteen names arrived as ONE argument
+# and were reported as one row whose subject was the whole list — fifteen drivers declared
+# deleted, every one of them present. Filed by the reference consumer as
+# PC-S310-SELF-UPDATE-FIXTURES-OVER-ARM-CONVICTS-A-SET-IT-COULD-NOT-PARSE.
+#
+# THE DISCRIMINATOR IS THE ARGUMENT'S SHAPE, NOT THE CONTAINING TREE, AND THE FIRST CUT OF
+# THIS FIX GOT THAT WRONG IN THE DIRECTION THAT DESTROYS THE ARM. A tree probe looks like the
+# answer and is not: a genuine retirement removes the whole DIRECTORY, so it resolves to no
+# tree — exactly as an unparsable argument does. Measured against `origin/main`, both in the
+# same invocation with a resolving control: a retired-shaped name and the joined fifteen-name
+# argument BOTH fail the tree probe, while `self-update-gate` resolves. Ordering a tree probe
+# first therefore relabels every real retirement "not a fixture directory", and
+# `self-update-fixture-log` caught it — Part 15 went red where `origin/main` is green.
+#
+# What actually separates the two is that a fixture NAME cannot contain a space or a `/`.
+# The joined-list case is one argument holding fifteen space-separated names; a retirement is
+# a well-formed name whose tree is gone. So the probe is on the SHAPE of `$d`, it is sited
+# before the tree lookups because it needs none, and the deleted-driver verdict keeps every
+# input it had before this change.
+#
 # `rev-parse -q --verify`, NOT `cat-file -e`, AND THE DIFFERENCE IS A SHIPPED FALSE CONVICTION.
 # `cat-file -e <rev>:<path>` requires the BLOB OBJECT to be present locally. On a
 # `--filter=blob:none` clone whose promisor is unreachable it answers ABSENT for a path that
@@ -686,6 +715,9 @@ for d in "$@"; do
   if git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${d}/.dist-only" >/dev/null 2>&1; then
     unshippable="$unshippable
   $d — carries .dist-only at ${THEIRS}: never shipped, so no consumer can hold it"
+  elif [ "$d" != "${d#* }" ] || [ "$d" != "${d#*/}" ]; then
+    unshippable="$unshippable
+  $d — not a fixture NAME: it carries a space or a slash, so it is an unparsable argument rather than a deleted driver"
   elif ! git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${d}/run.sh" >/dev/null 2>&1; then
     unshippable="$unshippable
   $d — no run.sh at ${THEIRS}: upstream deleted the driver, so there is nothing to write"
@@ -702,6 +734,10 @@ if [ -n "$unshippable" ]; then
   echo "  Step 2 derives the covering set by hand and the exclusions are stated for the" >&2
   echo "  diff-side term. Writing one of these into the consumer creates a fixture core" >&2
   echo "  never ships — the RETIRED-FIXTURE-ORPHAN class. Drop them from the slice and re-run." >&2
+  echo "  A 'not a fixture NAME' row is the EXCEPTION to that remedy: no such fixture was" >&2
+  echo "  ever named, so dropping it drops nothing and the diff-side join then refuses the" >&2
+  echo "  omission. Fix the ARGUMENT instead — under zsh an unquoted \$FIX holding a" >&2
+  echo "  newline-joined list arrives as ONE argument; word-split it explicitly." >&2
   echo "  log: $LOG" >&2
   exit 2
 fi
