@@ -268,8 +268,8 @@ fi
 # The offender's remedy must name an action THIS tool honours. An earlier revision
 # printed "write a repair or authorization record", which the refusal never reads —
 # a remedy the consumer follows to no effect. Assert the executable one is offered.
-if grep -q -- '--legacy-before' <<<"$out"; then
-  ok "(h.1b) the refusal offers a remedy this tool can execute (--legacy-before), not a sidecar it never reads"
+if grep -q -- '--legacy-through' <<<"$out"; then
+  ok "(h.1b) the refusal offers a remedy this tool can execute (--legacy-through), not a sidecar it never reads"
 else
   bad "(h.1b) the refusal named no executable remedy: $out"
 fi
@@ -309,23 +309,39 @@ fi
 # to avoid, so the remedy is asserted here rather than trusted: rotating the
 # pre-series verdicts out must let the previously-refused rotation proceed.
 # =============================================================================
+#
+# THE BOUND IS PARSED OUT OF THE REFUSAL'S OWN OUTPUT AND EXECUTED VERBATIM. An
+# earlier revision hardcoded a bound, which is why it could not see a strict-`<`
+# off-by-one: the printed command moved everything EXCEPT the verdict it named,
+# so the next close re-printed the identical bound and a consumer following the
+# message looped forever. A hardcoded bound made that converge and proved nothing.
+# It also let a one-line wrong fix — print an impossible bound like
+# `00000000T000000Z`, which selects nothing — pass every arm.
 seed strand
-out="$(rotate --legacy-before 20260907T000000Z --apply 2>&1)"; rc_i=$?
-out2="$(rotate --sprint s308 --apply 2>&1)"; rc_i2=$?
-if [ "$rc_i" -eq 0 ] && [ "$rc_i2" -eq 0 ] \
-   && [ -f "$DEST_S308/sprint-review-20260907T002257Z.verdict.json" ]; then
-  ok "(i) --legacy-before rotates the pre-series verdict out, and the rotation that was refused then proceeds — the printed remedy is executable"
+refusal="$(rotate --sprint s308 --apply 2>&1)"
+PRINTED_BOUND="$(grep -oE -- '--legacy-through [0-9]{8}T[0-9]{6}Z' <<<"$refusal" | head -1 | awk '{print $2}')"
+if [ -z "$PRINTED_BOUND" ]; then
+  bad "(i) the refusal printed no executable bound to run: $refusal"
 else
-  bad "(i) the prescribed remedy did not unblock the refused rotation (legacy rc=$rc_i, sprint rc=$rc_i2): $out / $out2"
+  out="$(rotate --legacy-through "$PRINTED_BOUND" --apply 2>&1)"; rc_i=$?
+  # The verdict the refusal NAMED must be the one the printed command removes.
+  legacy_gone=1; [ -e "$GA/legacy-20260701T000000Z.verdict.json" ] && legacy_gone=0
+  out2="$(rotate --sprint s308 --apply 2>&1)"; rc_i2=$?
+  if [ "$rc_i" -eq 0 ] && [ "$rc_i2" -eq 0 ] && [ "$legacy_gone" -eq 1 ] \
+     && [ -f "$DEST_S308/sprint-review-20260907T002257Z.verdict.json" ]; then
+    ok "(i) running the refusal's OWN printed bound (${PRINTED_BOUND}) removes the verdict it named and unblocks the rotation in ONE run — the remedy converges"
+  else
+    bad "(i) the printed remedy did not converge (legacy rc=$rc_i, named-verdict-removed=$legacy_gone, sprint rc=$rc_i2): $out / $out2"
+  fi
 fi
 
 # The bound is not decorative: a legacy verdict at or after it must NOT move.
 seed strand
-out="$(rotate --legacy-before 20260101T000000Z --apply 2>&1)"; rc_i3=$?
+out="$(rotate --legacy-through 20260101T000000Z --apply 2>&1)"; rc_i3=$?
 if [ "$rc_i3" -eq 0 ] && grep -q 'nothing to move' <<<"$out"; then
-  ok "(i.2) --legacy-before honours its bound: a legacy verdict NEWER than the bound is left alone"
+  ok "(i.2) --legacy-through honours its bound: a legacy verdict NEWER than the bound is left alone"
 else
-  bad "(i.2) the --legacy-before bound was not honoured (rc=$rc_i3): $out"
+  bad "(i.2) the --legacy-through bound was not honoured (rc=$rc_i3): $out"
 fi
 
 # =============================================================================
