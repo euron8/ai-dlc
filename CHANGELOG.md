@@ -15,6 +15,59 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.544.0] - 2026-09-10
+
+### The gate-adjudication rotator refuses a rotation that would strand a FAILing legacy verdict (`PC-S310-GATE-ADJUDICATION-ROTATION-HAS-NO-BACKFILL-PATH-FOR-PRE-MECHANISM-SPRINTS`)
+
+The candidate asks for a one-time backfill of the sprints that closed before
+`rotate-gate-adjudication.sh` existed, so their verdicts stop sitting in the live directory.
+Building that naively makes a consumer WORSE, and this release ships the refusal that has to
+land first.
+
+**The carve-out was justified against the wrong reader.** The rotator skips any verdict with no
+`gate_series_id`, on the stated grounds that *"the guard's own series split already tolerates
+it"*. `gate_series_id` does not occur in `ai-dlc-gate-remediation-guard.sh` at all — control:
+`LIVE_NONCE` occurs 18 times in that file, and the token appears in 16 files under `core/`. The
+guard's live-pass pick orders every conforming stem by trailing nonce and reads nothing else. The
+split described is `validate-gate-adjudication.sh`'s, whose own output prints the header's phrase
+verbatim. A true sentence about one program, offered as a safety argument for another that shares
+a directory and nothing else — and that validator's tolerance is itself conditional on the legacy
+verdict sorting BEFORE every live series, which is exactly the precondition a backfill destroys.
+
+**What the residue is doing today is SHIELDING the consumer.** On the reference consumer: 188 live
+verdicts, 94 legacy, 33 of those 94 recording a FAIL, the newest `story-20260811T214958Z` at check
+7 with no repair and no authorization sidecar. Every one is currently shadowed by a newer
+series-bearing verdict, so the guard never reaches back that far and the state is invisible. Drive
+the real guard against a scratch copy and the ordering is measurable: residue present ALLOWS,
+residue rotated away DENIES on that 2026-08-11 verdict, and restoring one clean current-sprint
+verdict ALLOWS again — so the removal is the cause, not something ambient.
+
+**The trade is strictly bad because the lifetimes differ.** A stale-sprint deny clears when the
+next sprint writes its first verdict. This one cannot: the file carries no series id, so no
+`--sprint` rotation will ever move it, and with no sidecar neither lift arm applies.
+
+So the rotator now computes, from verdicts its discovery loop already parsed, whether the move
+would leave a FAILing legacy verdict as the newest conforming stem, and refuses in the register it
+already has. Refusal rather than detection makes the state unconstructible on the producer path —
+though not generally, since deleting verdicts by hand reaches it too, and the arm header says so.
+The guard was deliberately NOT taught sprint awareness: the rotator exists precisely so the hook
+need not be.
+
+**FP set measured at ZERO** across all nine single-sprint rotations on the consumer's real corpus,
+which is the shipping call path at `retro.md` 5b, evaluated in the window that matters — retro
+close, with the next sprint unwritten. An earlier run of that measurement read FP 0 while its
+positive control did not fire, because the live sprint's verdict shadowed everything; FP 0 beside
+a control that cannot fire is not a measurement, and the corrected run fires on the exact file.
+
+Two fixture arms guard it, one property apart, because a refusal keyed on legacy-ness alone passes
+the offender arm and is a wrong fix that would refuse 94 files on the consumer and break every
+legitimate close. A committed mutant proves the refusal arm can fire. Four non-fixes were built and
+scored: prose on the unfixed baseline, an unreachable condition, warn-instead-of-refuse, and the
+over-broad form — all four rejected, the real fix accepted.
+
+**What this does NOT do:** the backfill itself is still unbuilt. It is now safe to build, and the
+33 unrotatable legacy FAILs remain by design. Filed as `BL-228`.
+
 ## [0.543.0] - 2026-09-10
 
 ### An unparsable argument is no longer convicted as a deleted driver (`PC-S310-SELF-UPDATE-FIXTURES-OVER-ARM-CONVICTS-A-SET-IT-COULD-NOT-PARSE`)
