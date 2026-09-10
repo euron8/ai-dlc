@@ -325,18 +325,31 @@ conforming_nonce() {
 # --legacy-through skips it too (`[ -n "$series" ] && continue`): no refusal AND
 # no escape. Keying on legacy-ness alone reopened the exact trap this refusal
 # exists to close, through a different door.
-# ASK THE SELECTOR'S OWN QUESTION; DO NOT APPROXIMATE IT WITH A GLOB. An earlier
-# revision tested `*-s[0-9]*-*`, which is NOT equivalent to "some --sprint moves
-# it": in a shell glob `[0-9]*` is one digit followed by ANYTHING, so it spans
-# characters no concrete sprint token contains. Measured against every s0..s400 —
-# `a-s1x-b`, `x-s3 1 0-y` and `planning-s310 -<nonce>` all scored MOVABLE while no
-# --sprint selects any of them, which is the stranded state with no refusal and no
-# escape, reached through the predicate's own approximation.
+# ASK WHETHER A SPRINT ANYONE WOULD TYPE MOVES IT; A GLOB ANSWERS A DIFFERENT
+# QUESTION. An earlier revision tested `*-s[0-9]*-*`, where `[0-9]*` is one digit
+# followed by ANYTHING, so it matched ids whose "sprint token" holds whitespace or
+# letters -- `a-s1x-b`, `x-s3 1 0-y`, `planning-s310 -<nonce>`.
 #
-# So the token is DERIVED from the id and tested as the selector tests it: split
-# on `-`, and for each field of the form s<digits> ask whether the exact
-# `-<field>-` substring the selector uses is present. Same string operation the
-# selection loop performs, so the two cannot drift.
+# THOSE THREE ARE TECHNICALLY MOVABLE, AND AN EARLIER COMMENT HERE SAID THEY WERE
+# NOT. Measured by DRIVING this rotator rather than by a second parser: `--sprint`
+# validation accepts `s[0-9]*`, so `s1x` and `s310 ` are accepted arguments and
+# they do select those verdicts. The claim that nothing could move them came from
+# an oracle that swept only well-formed numeric sprints -- the same narrowness it
+# was written to criticise.
+#
+# REFUSING THEM IS STILL RIGHT, for a reason the old comment did not give. The
+# only argument that moves such a verdict is one no operator would type, and its
+# destination is derived from that argument: `--sprint "s310 "` writes to
+# `implementation-artifacts/s310 /`, a trailing-space directory that is NOT the
+# sprint it appears to name. An "escape" that silently files a verdict under a
+# differently-named sprint is not an escape. So the predicate is deliberately
+# CONSERVATIVE here: it refuses, and the operator re-stamps.
+#
+# The token is DERIVED from the id and tested as the selector tests it: split on
+# `-`, and for each field of the form s<digits> -- digits ONLY, which is where
+# this is stricter than `--sprint` validation and is the whole point -- ask
+# whether the exact `-<field>-` substring the selector uses is present. Same
+# string operation the selection loop performs, so the two cannot drift.
 survivor_unmovable() { # <series> -> 0 when no mode can ever move this verdict
   [ -n "$1" ] || return 0                      # legacy: only --legacy-through
   _u_rest="$1"

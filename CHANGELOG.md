@@ -34,7 +34,7 @@ verbatim. A true sentence about one program, offered as a safety argument for an
 a directory and nothing else — and that validator's tolerance is itself conditional on the legacy
 verdict sorting BEFORE every live series, which is exactly the precondition a backfill destroys.
 
-**What the residue is doing today is SHIELDING the consumer.** On the reference consumer: 188 live
+**What the residue is doing today is SHIELDING the consumer.** On the reference consumer: 189 live
 verdicts, 94 legacy, 33 of those 94 recording a FAIL, the newest `story-20260811T214958Z` at check
 7 with no repair and no authorization sidecar. Every one is currently shadowed by a newer
 series-bearing verdict, so the guard never reaches back that far and the state is invisible. Drive
@@ -64,10 +64,10 @@ authorization record; those are read by the guard, and the refusal block reads n
 measured, writing both still exits 1. A fixture arm now asserts the printed remedy names the flag
 that actually works.
 
-**FP set measured at ZERO in both states**, which is the correction that matters: nine single-sprint
-rotations before the backfill, and every close after it once the escape has run. The first cut
-measured only the pre-backfill tree — the wrong population for a fix whose purpose is the
-post-backfill world.
+**FP set measured at ZERO in both states**, which is the correction that matters: every single-sprint
+rotation the corpus can express — seven distinct sprints, derived rather than counted by hand — plus
+every close after the backfill once the escape has run. The first cut measured only the pre-backfill
+tree, the wrong population for a fix whose purpose is the post-backfill world.
 
 **The escape's own printed remedy could not converge, and a second adversarial pass caught that.**
 The bound was exclusive while the refusal prints the survivor's nonce as that bound, so the printed

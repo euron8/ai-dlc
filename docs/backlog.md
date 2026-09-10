@@ -4497,11 +4497,12 @@ reads no sidecar at all. Measured: writing both `story-20260811T214958Z.repair.m
 `.authorization.md` still returns exit 1. Deferring until the next sprint's verdict lands only
 moves the block one sprint, forever. Arm (h.1b) now asserts the printed remedy names `--legacy-through`.
 
-**FP set measured at ZERO in BOTH states**, which is the correction that matters: nine single-sprint
-rotations pre-backfill, and every close post-backfill after the escape runs. **The first cut measured
-only the pre-backfill tree** — the wrong population for a fix whose purpose is the post-backfill
-world. End to end on the consumer's real corpus: backfill rc=0, ordinary close REFUSED, escape moves
-93 pre-series verdicts, close then rc=0.
+**FP set measured at ZERO in BOTH states**, which is the correction that matters: every single-sprint
+rotation the corpus can express — **seven** distinct sprints, derived from the series ids rather than
+counted by hand — plus every close post-backfill after the escape runs. **The first cut measured only
+the pre-backfill tree** — the wrong population for a fix whose purpose is the post-backfill world.
+End to end on the consumer's real corpus: backfill rc=0, ordinary close REFUSED, escape moves 93
+pre-series verdicts, close then rc=0.
 
 **AND THE ESCAPE'S OWN PRINTED REMEDY COULD NOT CONVERGE, WHICH A SECOND ADVERSARIAL PASS FOUND.**
 The selector was strictly `<` the bound while the refusal prints the SURVIVOR's nonce as that
@@ -4545,14 +4546,22 @@ the survivor, and the remedy branches — a re-stamp for this case, since offeri
 where it cannot apply would be a second inert remedy.
 
 **AND THE FIRST SPELLING OF THAT PREDICATE APPROXIMATED THE SELECTOR INSTEAD OF ASKING IT.** It
-tested the glob `*-s[0-9]*-*`, which is NOT equivalent to "some `--sprint` moves it": in a shell
-glob `[0-9]*` is one digit followed by ANYTHING, so it spans characters no concrete sprint token
-contains. Probed against every `s0`..`s400`, `a-s1x-b`, `x-s3 1 0-y` and `planning-s310 -<nonce>`
-all scored MOVABLE while no `--sprint` selects any of them — the same stranded state, reached
-through the predicate's own approximation. The token is now DERIVED from the id and tested with the
-selector's exact `-<field>-` substring, so the two cannot drift; re-probed against the brute-force
-oracle, **zero mismatches in either direction** over thirteen shapes including the case-preserving
-and substring-sprint cases.
+tested the glob `*-s[0-9]*-*`, where `[0-9]*` is one digit followed by ANYTHING, so it matched ids
+whose sprint token holds whitespace or letters — `a-s1x-b`, `x-s3 1 0-y`, `planning-s310 -<nonce>`.
+The token is now DERIVED from the id and tested with the selector's exact `-<field>-` substring,
+restricted to digit-only fields, so the two cannot drift.
+
+**THE FIRST JUSTIFICATION FOR THAT CHANGE WAS WRONG, AND BOTH HANDS GOT IT WRONG THE SAME WAY.** It
+said no `--sprint` could move those three. Settled by DRIVING the rotator rather than consulting a
+second parser: `--sprint` validation accepts `s[0-9]*`, so `s1x` and `s310 ` are accepted arguments
+and they DO select those verdicts — against a positive control that moves a well-formed id and a
+negative one that refuses `s310-planning`. Two oracles, written by two hands, agreed with each other
+and disagreed with the program; each had swept only well-formed numeric sprints. **Refusing is still
+correct, for a different reason**: the only argument that moves such a verdict is one no operator
+would type, and the destination is derived from that argument, so `--sprint "s310 "` files it under
+`implementation-artifacts/s310 /` — a trailing-space directory that is not the sprint it appears to
+name. An escape that silently mis-files is not an escape, so the predicate is deliberately
+conservative and the operator re-stamps.
 
 **THE FP SWEEP HAD TO BE PINNED, BECAUSE THAT SAME VERDICT MASKS THE REFUSAL.** It is CLEAN and
 sorts newest, so on the tree as-is it becomes the survivor and the refusal correctly stays silent —
