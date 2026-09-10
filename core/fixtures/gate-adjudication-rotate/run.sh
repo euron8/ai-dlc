@@ -246,6 +246,58 @@ else
 fi
 
 # =============================================================================
+# ARM (h) — REFUSAL: the rotation would STRAND a FAILing legacy verdict.
+#
+# The two cases differ in exactly ONE property: whether the legacy verdict left
+# behind records a FAIL. Both must be here, because a refusal keyed on legacy-ness
+# ALONE passes (h.1) and is a wrong fix -- it would refuse 94 files on the
+# reference consumer and break every legitimate close. (h.2) is what convicts it.
+# =============================================================================
+seed strand
+BEFORE_H="$(treehash "$PROJ")"
+out="$(rotate --sprint s308 --apply 2>&1)"; rc=$?
+AFTER_H="$(treehash "$PROJ")"
+if [ "$rc" -eq 1 ] && [ "$BEFORE_H" = "$AFTER_H" ] \
+   && grep -q 'would strand a FAILing legacy verdict' <<<"$out" \
+   && grep -q 'story-20260908T214958Z' <<<"$out"; then
+  ok "(h.1) REFUSAL: rotating s308 would leave a FAILing legacy verdict newest — refused (exit 1), tree byte-identical, offender named"
+else
+  bad "(h.1) a rotation that strands a FAILing legacy verdict was not refused (rc=$rc): $out"
+fi
+
+seed strand-nearmiss
+out="$(rotate --sprint s308 --apply 2>&1)"; rc=$?
+if [ "$rc" -eq 0 ] && ! grep -q 'would strand' <<<"$out"; then
+  ok "(h.2) NEAR-MISS: the same world with a CLEAN legacy verdict rotates normally — the refusal is keyed on the FAIL, not on legacy-ness"
+else
+  bad "(h.2) a clean legacy verdict was wrongly refused (rc=$rc): $out"
+fi
+
+# =============================================================================
+# MUTATION 4 — strip the stranding refusal; arm (h.1) must go red.
+#
+# Keyed on the refusal's own emission, so a mutant that matched nothing cannot
+# pass as a mutation. (h.2) must stay green under it: the mutation removes the
+# refusal, and a world that was never refused is unaffected by removing it.
+# =============================================================================
+MUT4="$W/mut-strand.sh"
+sed 's/^if \[ "\$SURVIVOR_LEGACY" -eq 1 \] && \[ -n "\$SURVIVOR_FAILS" \]; then/if false; then/' "$ROT" > "$MUT4"
+if cmp -s "$ROT" "$MUT4"; then
+  bad "MUTATION 4: the sed matched nothing, so the stranding refusal in arm (h.1) is UNPROVEN"
+else
+  chmod +x "$MUT4"
+  seed strand
+  BEFORE_M4="$(treehash "$PROJ")"
+  out4="$( ( cd "$PROJ" && bash "$MUT4" --sprint s308 --apply ) 2>&1 )"; rc4=$?
+  AFTER_M4="$(treehash "$PROJ")"
+  if [ "$rc4" -eq 0 ] && [ "$BEFORE_M4" != "$AFTER_M4" ]; then
+    ok "MUTATION 4: with the stranding refusal stripped, the rotation proceeds and strands the FAILing legacy verdict (rc=$rc4) — arm (h.1) is live, not vacuous"
+  else
+    bad "MUTATION 4: stripping the refusal did not change the outcome (rc=$rc4); arm (h.1) may be passing for another reason"
+  fi
+fi
+
+# =============================================================================
 # MUTATION 1 — key selection on the wrong JSON field (`gate_type` instead of
 # `gate_series_id`), and the base world's s308 set must fail to be found.
 # =============================================================================

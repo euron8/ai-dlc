@@ -53,6 +53,12 @@ S308_FAIL='[{"check_id":"2","verdict":"FAIL","evidence":"seeded"}]'
 S309_ALLPASS='[{"check_id":"1","verdict":"PASS","evidence":"seeded"}]'
 S309_FAIL='[{"check_id":"1","verdict":"FAIL","evidence":"seeded, current sprint"}]'
 LEGACY_PASS='[{"check_id":"1","verdict":"PASS","evidence":"pre-migration"}]'
+# A pre-migration verdict that CONVICTS. The rotator can never move a verdict with
+# no gate_series_id, so if this one is left as the newest conforming stem it becomes
+# the guard's live pass permanently. Its nonce sorts ABOVE the s308/s309 seeds so it
+# survives their rotation and is genuinely newest -- a lower nonce would be shadowed
+# and the arm would pass without the property it exists to test.
+LEGACY_FAIL='[{"check_id":"7","verdict":"FAIL","evidence":"pre-migration, never repaired"}]'
 
 seed_s308() {
   verdict "$GA/sprint-review-20260907T002257Z.verdict.json" \
@@ -71,6 +77,15 @@ seed_s309_pass() {
 seed_legacy() {
   verdict "$GA/implementation-20260720T011606Z.verdict.json" \
           "implementation-20260720T011606Z" "" "$LEGACY_PASS"
+}
+
+# The stranding subject: a FAILing legacy verdict whose nonce sorts above every
+# series-bearing seed, so rotating the named sprint out promotes IT to live pass.
+# Deliberately carries no repair and no authorization sidecar -- with either one
+# the guard's lift arms would clear the deny and the case would prove nothing.
+seed_legacy_fail() {
+  verdict "$GA/story-20260908T214958Z.verdict.json" \
+          "story-20260908T214958Z" "" "$LEGACY_FAIL"
 }
 
 seed_noise() {
@@ -96,6 +111,17 @@ case "$CASE" in
     ;;
   legacyonly)
     seed_legacy
+    ;;
+  # THE STRANDING PAIR. Both cases hold the same s308 verdicts; they differ in ONE
+  # property -- whether the legacy verdict left behind CONVICTS. `strand` must be
+  # refused, `strand-nearmiss` must proceed. A single case here would leave a
+  # refusal that fires on every legacy file indistinguishable from one keyed on the
+  # FAIL, and that wrong version refuses 94 files on the reference consumer.
+  strand)
+    seed_s308; seed_legacy_fail
+    ;;
+  strand-nearmiss)
+    seed_s308; seed_legacy
     ;;
   badjson)
     seed_s308; seed_s309_pass; seed_legacy; seed_noise
