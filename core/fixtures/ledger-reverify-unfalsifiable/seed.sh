@@ -66,6 +66,14 @@ cat > core/scripts/both-refs-subject.sh <<'EOS'
 # present at BASE already: a variant here proves nothing about upstream movement
 carry_bothrefs_flag() { :; }
 EOS
+# The bare-swap subject ALSO exists at base, carrying the COMPOSED variant, which is what
+# disqualifies that generator and leaves the bare swap as the only one that can close. Without
+# this base state the composed variant would reach the fix too and the seed would isolate nothing.
+cat > core/scripts/bare-swap-subject.sh <<'EOS'
+#!/bin/bash
+# the composed variant is present at BASE, so only the bare swap can close
+bare-swap-flag() { :; }
+EOS
 g "$WORK/dist" add -A; g "$WORK/dist" commit -qm base
 BASE="$(git -C "$WORK/dist" rev-parse HEAD)"
 printf '0.2.0\n' > VERSION
@@ -97,6 +105,30 @@ cat > core/scripts/colon-strip-subject.sh <<'EOS'
 #!/bin/bash
 # theirs introduces the fix; the anchor differs from it only by a trailing colon
 emit_flag() { printf '%s\n' "colonstripflag value"; }
+EOS
+# THE COMPOSED-VARIANT SUBJECT, AND IT IS THE ARM'S OWN MOTIVATING SPELLING. `anchor_variants`
+# emits THREE generators — the swap, the colon strip, and their COMPOSITION — and the two seeds
+# above each have their closing spelling reachable by TWO of the three, so neither can isolate a
+# member. Measured: dropping the composed variant leaves the whole fixture PASSING with a
+# byte-identical ok-set.
+#
+# That is not a hypothetical gap. On the real case this release was cut for — anchor
+# `skill_commit:`, fix `skill-commit` — the swap gives `skill-commit:` (0 at theirs), the strip
+# gives `skill_commit` (present at BASE, so disqualified), and ONLY the composition `skill-commit`
+# reaches. A build without it reports `unfalsifiable` on the exact case the arm exists for.
+# Here the anchor carries both a separator to swap and a colon to strip, and only doing BOTH finds
+# the fix.
+cat > core/scripts/composed-variant-subject.sh <<'EOS'
+#!/bin/bash
+# theirs introduces the fix: hyphen AND no trailing colon. Neither transform alone reaches it.
+emit_combo() { printf '%s\n' "combo-flag is the shipped spelling"; }
+EOS
+# THE BARE-SWAP SUBJECT, the mirror. An implementation dropping the SWAP but keeping the strip
+# and the composition also survives everything above. It needs a world where the composed variant
+# is DISQUALIFIED — present at base — while the bare swap is the one that closes.
+cat >> core/scripts/bare-swap-subject.sh <<'EOS'
+# theirs adds the COLON-BEARING swap, which only the bare-swap generator produces
+emit_bare() { printf '%s\n' "bare-swap-flag: value"; }
 EOS
 # THE BOTH-REFS SUBJECT — the FALSE-ACCUSATION direction, which no seed above can reach.
 # The variant is present at theirs AND at base, so upstream did NOT move under it and the
@@ -205,6 +237,31 @@ colon the fix does not, and nothing but the colon strip reaches it. Must be NEED
 `colonstripflag`.
 
 verify: theirs_lacks core/scripts/colon-strip-subject.sh "colonstripflag:"
+
+---
+
+## PC-COMBO — only the COMPOSED variant reaches the fix, and it is the real case's shape
+
+ISOLATES THE THIRD GENERATOR. `combo_flag:` swaps to `combo-flag:` (absent at theirs) and strips
+to `combo_flag` (absent at theirs); only swap-THEN-strip gives `combo-flag`, which theirs carries.
+This is the shape of the release's own motivating case — anchor `skill_commit:`, fix
+`skill-commit` — where the swap alone is absent at theirs and the strip alone is disqualified at
+base. An implementation without the composition reports `unfalsifiable` here and passes everything
+else. Must be NEEDS-REVIEW naming `combo-flag`.
+
+verify: theirs_lacks core/scripts/composed-variant-subject.sh "combo_flag:"
+
+---
+
+## PC-BARESWAP — the composed variant is DISQUALIFIED at base, so only the bare swap closes
+
+ISOLATES THE FIRST GENERATOR, and it is the mirror of PC-COMBO. `bare_swap_flag:` swaps to
+`bare-swap-flag:` — absent at base, present at theirs, so it closes. The composed variant
+`bare-swap-flag` is present at BASE, which disqualifies it. An implementation that drops the bare
+swap and keeps the strip and the composition reports `unfalsifiable` here while passing every
+other world. Must be NEEDS-REVIEW naming `bare-swap-flag:`.
+
+verify: theirs_lacks core/scripts/bare-swap-subject.sh "bare_swap_flag:"
 
 ---
 

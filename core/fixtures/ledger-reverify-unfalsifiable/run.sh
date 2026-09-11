@@ -146,6 +146,33 @@ else
   bad "PC-MULTISUB was accused, so the multi-substring skip is gone and the row quotes a guess spanning two substrings: $_ms"
 fi
 
+# ONE SEED PER GENERATOR, BECAUSE `anchor_variants` EMITS THREE AND THE SEEDS ABOVE COVER TWO.
+# The swap, the colon strip, and their COMPOSITION. `PC-NEARMISS` and `PC-COLONSTRIP` each have
+# their closing spelling reachable by TWO of the three, so neither can isolate a member: dropping
+# the composition, or dropping the bare swap, left this whole fixture PASSING with a
+# byte-identical ok-set. An adversary found both by building them.
+#
+# AND THE COMPOSED ONE IS THE RELEASE'S OWN MOTIVATING CASE, which is what makes this the sharpest
+# gap the fixture has had. For anchor `skill_commit:` against fix `skill-commit`: the swap gives
+# `skill-commit:`, absent at theirs; the strip gives `skill_commit`, present at BASE and therefore
+# disqualified; only swap-THEN-strip reaches. A build without the composition reports
+# `unfalsifiable` on the exact case this arm was written for.
+_cb="$(detail PC-COMBO)"
+if grep -qF 'mis-anchored predicate:' <<<"$_cb" && grep -qF 'combo-flag' <<<"$_cb"; then
+  ok "PC-COMBO (only swap-THEN-strip reaches the fix) → mis-anchored (kills a no-composition arm)"
+else
+  bad "PC-COMBO was not reported mis-anchored — the composed variant is the release's own motivating shape and nothing else proves it: $_cb"
+fi
+
+# THE MIRROR. Here the composed variant is present at BASE and thus disqualified, so the bare
+# swap is the only generator that can close. An arm dropping the swap passes every other world.
+_bs="$(detail PC-BARESWAP)"
+if grep -qF 'mis-anchored predicate:' <<<"$_bs" && grep -qF 'bare-swap-flag:' <<<"$_bs"; then
+  ok "PC-BARESWAP (composed variant disqualified at base) → mis-anchored (kills a no-swap arm)"
+else
+  bad "PC-BARESWAP was not reported mis-anchored, so the bare-swap generator is unproven: $_bs"
+fi
+
 # THE VERDICT CLASS IS LOAD-BEARING AND NO ARM ABOVE READS IT. `SKILL.md` step 8 closes
 # `CLOSE-CANDIDATE` rows and says a `NEEDS-REVIEW` row is never a close, whatever its detail
 # says. An implementation emitting the near-miss finding as CLOSE-CANDIDATE therefore puts a
