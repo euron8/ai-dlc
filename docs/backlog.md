@@ -55,48 +55,6 @@ have gone green, and would have reported "still open" forever.
 never the word anywhere in prose, because an entry that merely discusses landing something is
 not a closed entry.
 
-## BL-230 — the handoff guard's driver signal is tested for FRESHNESS and its entry marker is not, so a stale marker is indistinguishable from a live one
-
-**Found 2026-09-11** by a scope hand during batch 85, as a second-order observation while
-enumerating the four signal files the consumer's handoff candidate named. NOTE tier: it is a
-design asymmetry with a real consequence, and no consumer has yet been shown to hit it in the
-form described here.
-
-**THE ASYMMETRY, derived.** `ai-dlc-continue.sh:463-467` guards `.driver/handoff` two ways — the
-file must exist AND must not predate this handoff's step 3 (`[ "$SNAPSHOT_FILE" -nt "$_drv" ]`,
-commented *"stale: predates this handoff's step 3"*). Four lines later, `:470` tests the entry
-marker with a bare `[ -f ]`, and `ai-dlc-handoff-pending.sh:87` — Key 1, the FIRST key and the one
-its own header says requires the least lead cooperation — does the same. Control in the same
-invocation: the `-nt` freshness test occurs once in `ai-dlc-continue.sh` and zero times in the Key 1
-arm.
-
-**WHY THE TWO DIFFER MATTERS.** The driver signal has a reference point: the snapshot step 3
-rewrites. An old `.driver/handoff` is therefore DETECTABLE as old, which is why nothing removing it
-is tolerable — `handoff.md:85-88` says the touch is unconditional and inert with no driver attached.
-The entry marker has no such reference, so a marker from any earlier session, a `git pull`, or a
-branch checkout reads exactly like one written by the procedure that is running now. **That is why
-`0.545.0`'s subject was the entry marker and not the driver signal**: the same stale-file hazard
-reaches both, and only one of them can tell.
-
-**This is a claim about the READER, not about the ignore rule.** `0.545.0` stops the marker being
-committed in the first place, which removes the most common source of a stale one. It does not give
-Key 1 a way to recognise a stale marker that arrives by any other route — a restored backup, a
-worktree, a copied tree, or a consumer that has not yet pulled.
-
-**Not yet designed, deliberately.** The obvious remedy — give Key 1 the same `-nt` test against the
-snapshot — is NOT obviously right: Key 1's own header states the marker exists so that *"a
-compaction landing anywhere inside the 5-step procedure is detectable"*, and step 3 rewrites the
-snapshot mid-procedure, so a naive freshness test would disarm the key for steps 4 and 5 — the
-steps most likely to be skipped, which is the case the marker was added for. Scoring that trade is
-design work and belongs in whichever batch takes this.
-
-**Receipt limits, stated.** The receipt asserts Key 1 still has NO freshness notion, keyed on the
-arm rather than on the file, and is satisfied the moment one is added in any spelling — it does not
-score whether the remedy is CORRECT, because the paragraph above says the obvious remedy may not be.
-Whoever closes this must show the key still fires for steps 4 and 5. Exit 9 if either hook is gone.
-
-verify: sh h=core/hooks/ai-dlc-handoff-pending.sh; c=core/hooks/ai-dlc-continue.sh; [ -f "$h" ] && [ -f "$c" ] || exit 9; grep -q 'SNAPSHOT_FILE" -nt' "$c" || exit 9; arm=$(awk '/Key 1 -- the entry marker/,/^  fi$/' "$h"); [ -n "$arm" ] || exit 9; grep -q -- '-nt ' <<<"$arm" && exit 0; exit 1
-
 ## BL-099 — the exec-bit audit is one-directional, so a consumer file that upstream STOPPED shipping executable is never reported
 
 **`apply.sh`'s EXEC-BIT AUDIT is LEVEL-triggered and covers exactly one of the two directions
