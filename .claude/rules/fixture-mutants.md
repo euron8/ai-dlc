@@ -199,3 +199,22 @@ paths:
   EXEMPTION rather than by binding. Seed the discriminating member NOT first, and seed an
   epoch row that is not the subject, then ask which arm dies when the subject scans one
   member — if none does, the set is not being scanned.
+
+- **"UNPROVABLE TODAY" IS USUALLY A CLAIM ABOUT THE CORPUS, AND THE ANSWER IS TO SYNTHESISE
+  THE WORLD.** A conjunct the shipped data cannot exercise gets filed as a loaded gun and
+  left, because its mutant survives for a reason that has nothing to do with the predicate.
+  Measured, with three hands agreeing on the wrong verdict: a filter over a declaration was
+  scored unprovable because NO entry of the excluded class carried the field it keys on —
+  true of that declaration, not of the predicate. A seed that MANUFACTURES one entry of the
+  excluded class makes the two predicates separate and the mutant die. **Ask whether the
+  world is unreachable or merely absent from the corpus**; only the first is a real limit.
+- **A SHARED PREDICATE WITH COVERAGE ON ONE SIDE POINTS AT THAT SIDE'S SEED.** The same
+  episode: the identical filter lived in two programs, one of which already had a mutant
+  that synthesised exactly the missing world. That was read as evidence the risk was
+  CONTAINED, which is the opposite of what it supports. When two programs share a predicate
+  and one is covered, go read how its seed reaches the case before concluding yours cannot.
+- **ASK WHAT A WRONG OUTPUT MAKES SOMEONE DO, NOT WHAT IT MAKES THE PROGRAM SAY.** The same
+  mutant was filed as a latent miscount — a wrong number in a message — and is a wrong
+  REMEDY: it names a durable artifact as scratch state to untrack, in the channel an
+  operator is contracted to act on. Severity read off the message is a different figure
+  from severity read off the action, and only the second one is the cost.
