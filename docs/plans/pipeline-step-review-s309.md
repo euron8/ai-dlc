@@ -1,10 +1,14 @@
-# Pipeline step review — which steps earn their place, measured on the graph consumer's sprint 309
+# DISCHARGED — Pipeline step review — which steps earn their place, measured on the graph consumer's sprint 309
+
+**DISCHARGED 2026-09-11 at `3dba95ea` (PR #711). DO NOT EXECUTE.** All four releases are on
+`origin/main` (last is `d8ef5100`), the s310 observation is recorded below beside the s309
+table, and the fresh-resume check passed. This file is a record now. A session told to READ
+and FOLLOW it has nothing to do and should say so.
 
 ## Start here
 
 **You were started with one sentence: `READ and FOLLOW docs/plans/pipeline-step-review-s309.md`.**
-This section is the entry point and the only current status record. Anything below that reads
-as a status is out of date and THIS BLOCK REPLACES IT.
+This section was the entry point while the plan was live. The banner above replaces it.
 
 **Repos.** One tree is written: `/Users/n8/git/ai-dlc`. The reference consumer at
 `/Users/n8/git/graph` is READ for evidence and is never written; anything that needs a consumer
