@@ -58,17 +58,93 @@ EOS
     i=$((i + 1))
   done
 } > core/scripts/big-rule-file.md
+# The both-refs subject exists AT BASE carrying the variant already — that is the whole point
+# of the case, and seeding it only at theirs would make it indistinguishable from the ordinary
+# near-miss. See its second write below.
+cat > core/scripts/both-refs-subject.sh <<'EOS'
+#!/bin/bash
+# present at BASE already: a variant here proves nothing about upstream movement
+carry_bothrefs_flag() { :; }
+EOS
+# The bare-swap subject ALSO exists at base, carrying the COMPOSED variant, which is what
+# disqualifies that generator and leaves the bare swap as the only one that can close. Without
+# this base state the composed variant would reach the fix too and the seed would isolate nothing.
+cat > core/scripts/bare-swap-subject.sh <<'EOS'
+#!/bin/bash
+# the composed variant is present at BASE, so only the bare swap can close
+bare-swap-flag() { :; }
+EOS
 g "$WORK/dist" add -A; g "$WORK/dist" commit -qm base
 BASE="$(git -C "$WORK/dist" rev-parse HEAD)"
 printf '0.2.0\n' > VERSION
 cat >> core/scripts/validate-thing.sh <<'EOS'
 # theirs moved, but still has no strict mode
 EOS
+# THE NEAR-MISS SUBJECT, AND IT IS A SEPARATE FILE ON PURPOSE. Upstream introduces
+# `near-miss-flag:` (HYPHEN) between base and theirs; the ledger's receipt anchors on
+# `near_miss_flag:` (UNDERSCORE). Sharing `validate-thing.sh` with PC-GOOD/PC-BAD would let a
+# guard that mis-resolves the path reach the right bytes for the wrong entry, and two guards
+# covering one subject report zero failures.
+cat > core/scripts/near-miss-subject.sh <<'EOS'
+#!/bin/bash
+# theirs introduces the fix, spelled with hyphens
+emit_header() { printf '# near-miss-flag: %s\n' "$1"; }
+# The multi-substring world's bait, and it is the WHOLE QUOTED RUN swapped, because that is what
+# `$sub` holds for a two-substring predicate. An implementation without the skip builds its
+# variant from this run and reports a two-token guess as the spelling that closes. Present only
+# at theirs, so the skip is the only thing standing between it and a mis-anchored row.
+# multi-alpha-x" "multi-beta-y
+EOS
+# THE COLON-STRIP SUBJECT. The hyphen/underscore seed above cannot separate an arm that
+# implements BOTH transforms from one that implements only the swap: its closing spelling
+# differs from the anchor in a separator, so a swap-only arm finds it. Here the anchor and
+# the closing spelling differ ONLY by a trailing colon, so an arm that never strips the colon
+# reports STILL-LIVE and the near-miss goes unreported. A receipt with one transform's seed
+# accepts an implementation carrying half the transform set.
+cat > core/scripts/colon-strip-subject.sh <<'EOS'
+#!/bin/bash
+# theirs introduces the fix; the anchor differs from it only by a trailing colon
+emit_flag() { printf '%s\n' "colonstripflag value"; }
+EOS
+# THE COMPOSED-VARIANT SUBJECT, AND IT IS THE ARM'S OWN MOTIVATING SPELLING. `anchor_variants`
+# emits THREE generators — the swap, the colon strip, and their COMPOSITION — and the two seeds
+# above each have their closing spelling reachable by TWO of the three, so neither can isolate a
+# member. Measured: dropping the composed variant leaves the whole fixture PASSING with a
+# byte-identical ok-set.
+#
+# That is not a hypothetical gap. On the real case this release was cut for — anchor
+# `skill_commit:`, fix `skill-commit` — the swap gives `skill-commit:` (0 at theirs), the strip
+# gives `skill_commit` (present at BASE, so disqualified), and ONLY the composition `skill-commit`
+# reaches. A build without it reports `unfalsifiable` on the exact case the arm exists for.
+# Here the anchor carries both a separator to swap and a colon to strip, and only doing BOTH finds
+# the fix.
+cat > core/scripts/composed-variant-subject.sh <<'EOS'
+#!/bin/bash
+# theirs introduces the fix: hyphen AND no trailing colon. Neither transform alone reaches it.
+emit_combo() { printf '%s\n' "combo-flag is the shipped spelling"; }
+EOS
+# THE BARE-SWAP SUBJECT, the mirror. An implementation dropping the SWAP but keeping the strip
+# and the composition also survives everything above. It needs a world where the composed variant
+# is DISQUALIFIED — present at base — while the bare swap is the one that closes.
+cat >> core/scripts/bare-swap-subject.sh <<'EOS'
+# theirs adds the COLON-BEARING swap, which only the bare-swap generator produces
+emit_bare() { printf '%s\n' "bare-swap-flag: value"; }
+EOS
+# THE BOTH-REFS SUBJECT — the FALSE-ACCUSATION direction, which no seed above can reach.
+# The variant is present at theirs AND at base, so upstream did NOT move under it and the
+# receipt is not mis-anchored. An arm that tests the variant at theirs only, dropping the
+# `absent at base` conjunct, accuses a healthy receipt. Every other seed here has its variant
+# absent at base, so none of them can tell the two implementations apart.
+cat > core/scripts/both-refs-subject.sh <<'EOS'
+#!/bin/bash
+# present at BASE already: a variant here proves nothing about upstream movement
+carry_bothrefs_flag() { :; }
+EOS
 g "$WORK/dist" add -A; g "$WORK/dist" commit -qm theirs
 THEIRS="$(git -C "$WORK/dist" rev-parse HEAD)"
 
 # --- synthetic consumer: implements the innovation PC-GOOD anchors on -----------------
-mkdir -p "$WORK/consumer/_bmad-output/ai-dlc-update" "$WORK/consumer/scripts"
+mkdir -p "$WORK/consumer/_bmad-output/ai-dlc-update" "$WORK/consumer/scripts" "$WORK/consumer/notes"
 cat > "$WORK/consumer/scripts/thing.sh" <<'EOS'
 #!/bin/bash
 # the local hardening this consumer built and wants upstreamed
@@ -98,6 +174,19 @@ cat > "$WORK/consumer/scripts/ai-dlc/retired-marker.sh" <<'EOS'
 # the replacement token a STAYS-RETIRED watchdog asserts is present
 use_new_anchor() { :; }
 EOS
+# THE MASK. This is what made the near-miss case invisible rather than merely unreported:
+# the misspelled anchor is REACHABLE in the consumer's own tracked tree through unrelated
+# prose, so `consumer_reachable` returns 0 and the unfalsifiability guard cannot fire. The
+# row is then a DECIDED STILL-LIVE. Without this file the near-miss entry would be caught by
+# the OLD guard and the new arm would be scoring a case that was already handled — the seed
+# would prove nothing. Measured on the reference consumer: 80 tracked files carried the
+# underscore spelling against 0 for an impossible token.
+cat > "$WORK/consumer/notes/unrelated-prose.md" <<'EOS'
+# design notes
+
+An earlier draft called this field `near_miss_flag:` before the spelling was settled.
+Nothing reads this file; it exists so the token is reachable in the tracked tree.
+EOS
 cat > "$WORK/consumer/_bmad-output/ai-dlc-update/push-candidate-ledger.md" <<'EOM'
 ## PC-GOOD — anchored on a flag the fix cannot be written without
 
@@ -112,6 +201,91 @@ verify: theirs_lacks core/scripts/validate-thing.sh "--strict-provenance"
 Upstream should enforce provenance strictly by default.
 
 verify: theirs_lacks core/scripts/validate-thing.sh "strict provenance enforced by default"
+
+---
+
+## PC-NEARMISS — the anchor is one character off the token the fix shipped
+
+THE OFFENDER. Upstream really did move: `near-miss-flag:` is absent at base and present at
+theirs. This receipt anchors on `near_miss_flag:` — underscore — which is absent at BOTH, so
+the two refs alone say "still live". The old guard cannot catch it either, because the
+misspelled token IS reachable in this consumer's own tracked tree (notes/unrelated-prose.md),
+so `consumer_reachable` returns 0 and the row is DECIDED. Must be NEEDS-REVIEW naming the
+hyphen spelling.
+
+verify: theirs_lacks core/scripts/near-miss-subject.sh "near_miss_flag:"
+
+---
+
+## PC-NOMISS — absent at both, and NO variant of it closes either
+
+THE NEAR-MISS SEED, one property apart from PC-NEARMISS: same subject, same shape, absent at
+both refs, unreachable in the consumer — but neither the hyphen swap nor the colon strip finds
+anything at theirs, so there is no misspelling to report. It must fall through to the EXISTING
+unfalsifiable arm and not be claimed by the new one. Without this, an arm that reported
+mis-anchored on every absent-at-both anchor would pass every other assertion here.
+
+verify: theirs_lacks core/scripts/near-miss-subject.sh "ZZQQ_NO_SUCH_TOKEN:"
+
+---
+
+## PC-COLONSTRIP — the closing spelling differs from the anchor ONLY by a trailing colon
+
+SEPARATES BOTH TRANSFORMS FROM THE SWAP ALONE. `PC-NEARMISS` above differs by a separator, so a
+swap-only implementation finds its closing spelling and passes. Here the anchor carries a trailing
+colon the fix does not, and nothing but the colon strip reaches it. Must be NEEDS-REVIEW naming
+`colonstripflag`.
+
+verify: theirs_lacks core/scripts/colon-strip-subject.sh "colonstripflag:"
+
+---
+
+## PC-COMBO — only the COMPOSED variant reaches the fix, and it is the real case's shape
+
+ISOLATES THE THIRD GENERATOR. `combo_flag:` swaps to `combo-flag:` (absent at theirs) and strips
+to `combo_flag` (absent at theirs); only swap-THEN-strip gives `combo-flag`, which theirs carries.
+This is the shape of the release's own motivating case — anchor `skill_commit:`, fix
+`skill-commit` — where the swap alone is absent at theirs and the strip alone is disqualified at
+base. An implementation without the composition reports `unfalsifiable` here and passes everything
+else. Must be NEEDS-REVIEW naming `combo-flag`.
+
+verify: theirs_lacks core/scripts/composed-variant-subject.sh "combo_flag:"
+
+---
+
+## PC-BARESWAP — the composed variant is DISQUALIFIED at base, so only the bare swap closes
+
+ISOLATES THE FIRST GENERATOR, and it is the mirror of PC-COMBO. `bare_swap_flag:` swaps to
+`bare-swap-flag:` — absent at base, present at theirs, so it closes. The composed variant
+`bare-swap-flag` is present at BASE, which disqualifies it. An implementation that drops the bare
+swap and keeps the strip and the composition reports `unfalsifiable` here while passing every
+other world. Must be NEEDS-REVIEW naming `bare-swap-flag:`.
+
+verify: theirs_lacks core/scripts/bare-swap-subject.sh "bare_swap_flag:"
+
+---
+
+## PC-BOTHREFS — the variant is present at theirs AND at base, so upstream did not move
+
+THE FALSE-ACCUSATION DIRECTION, and no other seed here can reach it. Every other near-miss world
+has its variant absent at base, so an arm that tests only "present at theirs" and drops the
+"absent at base" conjunct passes all of them. It fails here, because `carry_bothrefs_flag` is at
+BOTH refs: the receipt is not mis-anchored and accusing it would be a false finding about a
+healthy entry. Must NOT be claimed by the near-miss arm.
+
+verify: theirs_lacks core/scripts/both-refs-subject.sh "carry-bothrefs-flag"
+
+---
+
+## PC-MULTISUB — two substrings, so which one was misspelled is not derivable
+
+THE MULTI-SUBSTRING SKIP'S ONLY SUBJECT. `all_present` requires EVERY substring, so `$sub` here is
+the whole quoted run and a variant of it is a two-token guess naming something no fix ever wrote.
+An implementation with the skip removed emits a `mis-anchored` row quoting that guess. Nothing else
+in this fixture carries a multi-substring predicate, so without this world the skip is unprovable
+and its removal is a silent widening.
+
+verify: theirs_lacks core/scripts/near-miss-subject.sh "multi_alpha_x" "multi_beta_y"
 
 ---
 

@@ -15,6 +15,69 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.549.0] - 2026-09-11
+
+### A receipt anchored one character off its own fix reports STILL-LIVE forever, and the guard built to catch that could not see it
+
+`SKILL.md` step 3f requires a receipt to *"anchor on a token the fix cannot be written without"*.
+Nothing enforced it. The only mechanism that ever read that rule is `consumer_reachable()`'s
+unfalsifiability guard, and it fires on a much narrower case: the anchor must be absent at base,
+absent at theirs, AND absent from the consumer's whole tracked tree.
+
+**An anchor misspelled by one separator against a token the consumer carries in unrelated prose
+satisfies none of that.** `consumer_reachable` returns 0, the row is a DECIDED `STILL-LIVE`, and a
+receipt that can never close is byte-indistinguishable from a live defect — permanently, including
+after the fix lands.
+
+**Measured on this distribution's own work.** The reference consumer's
+`PC-S311-SELF-UPDATE-FIXTURES-ARM-3-PREWRITTEN-HAS-NO-SPLIT-STAMP-SUPPRESSION` receipt read
+`theirs_lacks … "skill_commit:"` (underscore) while the fix shipping in the same pull writes
+`skill-commit:` (hyphen). Over the receipt's own path at `e26a1c7b^..e26a1c7b`, four tokens in one
+invocation: the anchor as written 0/0, the spelling that closes 0/1, a present-both control 3/3, an
+absent-both control 0/0.
+
+**What ships.** `near_miss_spelling()` in `ledger-reverify.sh` and its call site, sited BEFORE the
+reachability check — because reachability is precisely what masks the case, so asking second means
+never asking. Two transforms only: hyphen/underscore swap and trailing-colon strip, the two
+spellings this ledger's receipts have actually confused. When a variant is absent at base and
+PRESENT at theirs, the row is `NEEDS-REVIEW mis-anchored predicate:` naming the spelling that would
+have closed.
+
+**It reports; it never closes.** A near-miss means the receipt cannot be trusted in either
+direction, and turning it into a `CLOSE-CANDIDATE` on a guessed spelling is the false-close this
+engine exists to refuse. The spelling is never adopted automatically.
+
+**The first candidate remedy was refuted by building it.** Excluding the consumer's installed copy
+of upstream's own machinery from the third ref restores the guard's stated premise and does NOT fix
+this: built from pristine HEAD with the sides asserted to differ, and driven against the real case
+on the real consumer, it still returns `STILL-LIVE`. The misspelling remains reachable in
+`.claude/.ai-dlc-version` — the stamp every consumer has, whose fourth field is literally
+`skill_commit:`. Excluding the stamp too would mean excluding the consumer's own state from a scan
+whose entire premise is reading the consumer's own state.
+
+**The filed remedy was not built either.** The consumer's own filing proposed asking whether the
+entry BODY names a near-miss spelling — a prose predicate over free text, closable by rewording.
+
+**False-positive set, measured before shipping**, at installed..HEAD over all three real corpora:
+the consumer's live ledger at `main` (5 absent-at-both anchors), at its sprint tip (4), and its
+archive (6 in-population of 43) — ZERO near-miss rows in every one. Driving the shipping tool over
+the consumer's real ledger before and after gives a byte-identical verdict distribution: 13
+NAMED-UPSTREAM, 7 NAMED-UPSTREAM-AMBIGUOUS, 47 STILL-LIVE.
+
+**Multi-substring predicates are skipped.** `all_present` requires every substring, so which one was
+misspelled is not derivable, and a guess would name the wrong token in a row that reads as an
+accusation.
+
+**Guarded in `core/fixtures/ledger-reverify-unfalsifiable/`.** `PC-NEARMISS` and `PC-NOMISS` are
+both `NEEDS-REVIEW`, so a verdict-only arm would pass whether the fix exists or not — the arms
+assert the DETAIL instead, and the near-miss seed is one property from the offender: same subject,
+same shape, absent at both refs, and no variant that closes. The seed also carries the MASK that
+made this invisible rather than merely unreported, so the pre-existing guard cannot claim the case.
+A committed mutant removing the call site reverts `PC-NEARMISS` to the decided `STILL-LIVE`.
+
+Closes `BL-234` and the consumer candidate
+`PC-S341-STEP-3F-ANCHOR-RULE-HAS-NO-LINT-AND-A-ONE-CHARACTER-MISS-IS-INVISIBLE`.
+
 ## [0.548.1] - 2026-09-11
 
 ### The 8-vs-0 figure was taken over a population Check 5 never opens

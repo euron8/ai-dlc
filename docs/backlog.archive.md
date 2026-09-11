@@ -10416,3 +10416,105 @@ step-file half.** Exit 9 if either file is gone.
 
 verify: sh a=core/skills/ai-dlc/steps/retro.md; b=core/scripts/validate-retro-evidence.sh; [ -f "$a" ] && [ -f "$b" ] || exit 9; grep -q 'PERSONA_MARKERS' "$b" || exit 9; grep -q "join(PERSONA_MARKERS)" "$b" || exit 1; grep -q "join(PHASE_LABELS)" "$b" || exit 1; grep -q 'pipeline-state-paths.json' "$a" || exit 1; grep -q 'PERSONA_MARKERS' "$a" || exit 1; exit 0
 
+## BL-234 — `consumer_reachable` reads the INSTALLED copy of upstream's own machinery as the consumer's implementation, so a receipt anchored on a near-miss spelling is acquitted by the distribution it is asking about
+
+**Found 2026-09-11** while second-reading a consumer's `0.547.0 → 0.548.1` reconcile. The
+unfalsifiable-predicate guard has a third ref, and that ref is not disjoint from the subject.
+
+**THE PREMISE, STATED IN THE FUNCTION'S OWN HEADER.** `ledger-reverify.sh:87-89`: *"the CONSUMER's
+tree is read as a third ref. A token the fix cannot be written without exists in the consumer's own
+implementation of it; prose invented to describe the fix exists nowhere."* The guard fires
+`NEEDS-REVIEW unfalsifiable` only when a `theirs_lacks` substring is absent at base, at theirs, AND
+from the consumer's tracked tree.
+
+**THE DEFECT.** The scan at `:913-936` excludes exactly two things — the ledger's own top directory
+and `*/$SELF_BASE`. It does NOT exclude `.claude/skills/ai-dlc-update/**`, which is the consumer's
+INSTALLED COPY OF THE VERY MACHINERY THE RECEIPT IS ASKING ABOUT. Upstream ships those files, so a
+token upstream writes anywhere in its own reconcile engine is "reachable in the consumer's tree" by
+construction, whether or not the consumer implements anything. The third ref stops being independent
+of the subject and the premise above is false for every token upstream's own machinery mentions.
+
+**MEASURED, BY DRIVING THE SHIPPING FUNCTION.** Extracted `consumer_scannable` + `consumer_reachable`
+against a probe consumer whose ONLY occurrence of `skill_commit:` sits inside
+`.claude/skills/ai-dlc-update/reconcile/unregistered-drift.sh`: **exit 0** — reachable, decided
+`STILL-LIVE` — against a control of **exit 1** for an absent token in the same invocation. On the
+real consumer the token resolves in **10** files with the ledger excluded, of which the
+`.claude/skills/ai-dlc-update/` ones are installed upstream machinery; the CORRECT spelling
+`skill-commit` resolves in **0**.
+
+**WHAT IT COSTS, AND THE CASE IS NOT HYPOTHETICAL.** That consumer's
+`PC-S311-SELF-UPDATE-FIXTURES-ARM-3-PREWRITTEN-HAS-NO-SPLIT-STAMP-SUPPRESSION` anchors
+`verify: theirs_lacks … "skill_commit:"` — underscore, with a colon. `v0.548.0` SHIPPED that fix and
+writes `# skill-commit:` — hyphen (`self-update-gate.sh:423` emits, `self-update-fixtures.sh:307`
+reads). The anchored token can never appear, so the entry reports `STILL-LIVE` on this pull and on
+every pull after, with its subject already fixed upstream. `SKILL.md` step 3f's rule — anchor on a
+token the fix cannot be written without — was missed by ONE CHARACTER, and the guard built to catch
+exactly that returns a decided verdict instead of `NEEDS-REVIEW`, because upstream's own installed
+files carry the near-miss spelling as unrelated prose.
+
+**A NEAR-MISS IS THE CASE THE HEADER DOES NOT CONSIDER.** Its stated target is *"prose invented to
+describe the fix"*, which genuinely exists nowhere. A token differing from the real one by a
+separator is not invented prose — it is a plausible spelling of a real identifier, which is why it
+resolves, and why the author never sees the guard fire.
+
+**WHY FILED AND NOT FIXED.** Two candidate remedies and neither is obviously right. Excluding
+`.claude/skills/ai-dlc-update/**` restores the premise but narrows the third ref on a consumer that
+legitimately implements something there. A separator-variant arm (report when a token is unreachable
+but a `-`/`_` variant IS reachable) catches this class directly and needs its false-positive set
+measured before it ships — `CLAUDE.md` requires that set enumerated, and it has not been. Pick with
+a measurement, not by reading.
+
+**LANDED (v0.549.0, verified aeb28004).**
+
+**FIXED at `v0.549.0`, AND THE MEASUREMENT REFUTED THE FIRST REMEDY AND THIS ENTRY'S OWN RECEIPT
+LIMITS.** Both remedies were built from pristine HEAD, the sides asserted to differ with `cmp -s`,
+and each driven against the real motivating case — the consumer's original `theirs_lacks …
+"skill_commit:"` receipt at `e26a1c7b^..e26a1c7b`, on the real consumer tree:
+
+    exclude installed machinery   STILL-LIVE   (the defect REPRODUCES — not a fix)
+    separator-variant arm         NEEDS-REVIEW mis-anchored, naming "skill-commit"
+
+**The exclusion fails because the misspelling is reachable in a file EVERY consumer has.** With the
+ledger, the installed machinery AND this script excluded, `skill_commit:` still resolves in
+`.claude/.ai-dlc-version` — the stamp itself, whose fourth field is literally `skill_commit:`.
+Controls in the same invocation: a verified-absent token returns 0, a present token returns 1310.
+Excluding the stamp too would be excluding the consumer's own state from a scan whose whole premise
+is reading the consumer's own state.
+
+**So this entry's stated receipt limit — *"a fix that excludes installed machinery and a fix that
+adds a variant arm both close it"* — is wrong in the direction that closes on a non-fix.** Measured:
+the exclusion remedy exits 0 against this receipt while reproducing the defect, and the variant arm
+that DOES fix it exits 1. The receipt is replaced below with one that drives the shipping program
+over the motivating case; it was scored against four built non-fixes (pre-fix, comment-only, helper
+present but never called, over-broad flagging every absent-at-both anchor) and rejects all four.
+
+**What shipped.** `near_miss_spelling()` plus its call site, sited BEFORE the reachability check
+because reachability is what masks the case: hyphen/underscore swap and trailing-colon strip, and a
+`mis-anchored predicate:` NEEDS-REVIEW when a variant is absent at base and PRESENT at theirs. It
+reports; it never closes, and the spelling is never adopted automatically. False-positive set,
+measured before shipping over all three real corpora at installed..HEAD — the consumer's live ledger
+at `main` (5 absent-at-both anchors), at its sprint tip (4), and its archive (6 in-population of
+43): **ZERO** near-miss rows in every one, with the verdict distribution over the consumer's real
+ledger byte-identical before and after (13 NAMED-UPSTREAM / 7 NAMED-UPSTREAM-AMBIGUOUS / 47
+STILL-LIVE). The guarding arms are in `core/fixtures/ledger-reverify-unfalsifiable/`, where
+`PC-NEARMISS` and `PC-NOMISS` are both `NEEDS-REVIEW` — so they are asserted on the DETAIL, not the
+verdict — and a committed mutant removing the call site reverts `PC-NEARMISS` to the decided
+`STILL-LIVE` this release exists to eliminate.
+
+**It closes `PC-S341-STEP-3F-ANCHOR-RULE-HAS-NO-LINT-AND-A-ONE-CHARACTER-MISS-IS-INVISIBLE`**, which
+the consumer filed independently on 2026-09-11 for the same subject reached from the rule's side
+rather than the guard's. That filing's own proposed remedy — ask whether the entry BODY names a
+near-miss spelling — was NOT built: it is a prose predicate over free text, closable by rewording,
+which is the `BL-227` class this repo filed one release ago.
+
+**Receipt limits, stated, and the ORIGINAL receipt is retained above in prose because its
+refutation is the entry's most transferable finding.** The replacement DRIVES the shipping fixture,
+which is the only shape batch 83 found survives a prose attack, and it was scored by BUILDING four
+wrong implementations rather than by reading: pre-fix with no call site, comment-only, the helper
+present but never invoked (the vacuous shape), and an over-broad arm flagging every absent-at-both
+anchor. The correct fix exits 0; all four exit 1. What it does NOT establish: it is satisfied by any
+mechanism that makes the fixture's `PC-NEARMISS`/`PC-NOMISS` pair discriminate, so a second spelling
+of the same arm closes it too — which is the intended latitude, not a gap.
+
+verify: sh bash core/fixtures/ledger-reverify-unfalsifiable/run.sh >/dev/null 2>&1
+

@@ -910,6 +910,67 @@ consumer_scannable() {
 # Returns 2 — NOT false — when the consumer cannot be scanned. Undecidable must not
 # manufacture a verdict: reporting "unreachable" there would turn a missing input into a
 # wall of NEEDS-REVIEW on entries that are fine. The caller says so in DETAIL.
+# NEAR-MISS ANCHORS: the case `consumer_reachable` STRUCTURALLY CANNOT REACH.
+#
+# SKILL.md step 3f says "anchor on a token the fix cannot be written without", and until this
+# arm nothing checked it. The unfalsifiability guard above is the only reader of that rule, and
+# it fires only when the anchor is absent at base, at theirs AND from the consumer's whole
+# tracked tree. An anchor misspelled by ONE CHARACTER against a token the consumer carries in
+# unrelated prose satisfies none of that: `consumer_reachable` returns 0, the row is a DECIDED
+# `STILL-LIVE`, and a receipt that can never close is byte-indistinguishable from a live defect
+# — permanently, including after the fix lands.
+#
+# MEASURED ON THIS PROGRAM'S OWN WORK, which is why the arm exists rather than the rule alone.
+# The reference consumer's `PC-S311` receipt read `theirs_lacks … "skill_commit:"` (underscore)
+# while the fix shipping in the same pull writes `skill-commit:` (hyphen). At the fix commit and
+# its parent, over the receipt's own path: `skill_commit:` base 0 / theirs 0; `skill-commit`
+# base 0 / theirs 1; `PRE-WRITTEN` base 3 / theirs 3 (present-both control); `ZZZ-NO-SUCH` 0 / 0
+# (absent-both control). `git grep -lF 'skill_commit:'` matched 80 consumer files against 0 for
+# an impossible token — that reachability is exactly what kept the guard silent.
+#
+# THE DISCRIMINATOR IS THE TWO REFS THIS TOOL ALREADY HOLDS, NOT THE ENTRY'S PROSE. A variant
+# that is ABSENT at base and PRESENT at theirs is a spelling that WOULD have closed; the anchor
+# as written cannot. That is a claim about the receipt, decided from blobs, and it needs no
+# reading of what the author meant. The filing proposed asking whether the entry BODY names a
+# near-miss, which is a prose predicate over free text and closable by rewording.
+#
+# TWO TRANSFORMS ONLY, AND THE NARROWING IS THE ARM. Hyphen/underscore swap and trailing-colon
+# strip are the two spellings this ledger's own receipts have actually confused. A wider
+# generator — edit distance, case folding, punctuation classes — buys candidates nothing has
+# ever produced and widens the false-accusation surface on a row that reads as an accusation.
+# FALSE-POSITIVE SET, MEASURED before this shipped, at installed..HEAD over all three real
+# corpora: the consumer's live ledger at `main` (5 absent-at-both anchors), at its sprint tip
+# (4), and its archive (6 in-population of 43) — ZERO near-miss rows in every one. The seeded
+# original spelling reports NEAR-MISS and a seeded absent-at-both anchor with no closing
+# variant stays quiet, so the arm discriminates in both directions rather than flagging the
+# whole population.
+#
+# IT REPORTS, IT DOES NOT CLOSE. The verdict is NEEDS-REVIEW: a near-miss means the receipt
+# cannot be trusted either way, and turning it into a CLOSE-CANDIDATE on a GUESSED spelling is
+# the false-close direction this whole file is built to refuse.
+anchor_variants() { # <anchor> -> candidate spellings, the original excluded by the caller
+  local _a="$1" _swapped
+  _swapped="$(printf '%s' "$_a" | tr '_-' '-_')"
+  printf '%s\n%s\n%s\n' "$_swapped" "${_a%:}" "${_swapped%:}" | sort -u
+}
+
+# Echoes the first variant that is absent at base and present at theirs; empty when none is.
+# Multi-substring predicates are skipped: `all_present` requires every substring, so which one
+# was misspelled is not derivable and a guess names the wrong token in the row.
+near_miss_spelling() { # <path> <anchor> <subs>
+  local _p="$1" _a="$2" _subs="$3" _v _tb _bb
+  [ "$(printf '%s\n' "$_subs" | grep -c .)" -eq 1 ] || return 0
+  _tb="$(theirs_show "$_p")"; _bb="$(base_show "$_p")"
+  while IFS= read -r _v; do
+    [ -n "$_v" ] && [ "$_v" != "$_a" ] || continue
+    if grep -qF -- "$_v" <<<"$_tb" && ! grep -qF -- "$_v" <<<"$_bb"; then
+      printf '%s' "$_v"; return 0
+    fi
+  done <<EOF
+$(anchor_variants "$_a")
+EOF
+}
+
 consumer_reachable() {
   consumer_scannable || return 2
   while IFS= read -r _one; do
@@ -1270,6 +1331,14 @@ while IFS="$(printf '\t')" read -r label ord directive; do
           if base_holds "$path" "$subs"; then
             emit STILL-LIVE "$label" "theirs:$path still lacks \"$sub\"$note"
           else
+            # BEFORE the reachability arm, because reachability is what MASKS this case: a
+            # near-miss anchor is reachable through unrelated consumer prose, so asking the
+            # question second means never asking it at all.
+            _nm="$(near_miss_spelling "$path" "$sub" "$subs")"
+            if [ -n "$_nm" ]; then
+              emit NEEDS-REVIEW "$label" "mis-anchored predicate: \"$sub\" is absent at base AND at theirs ($TV), but the near-miss spelling \"$_nm\" is absent at base and PRESENT at theirs — so upstream DID move, and this receipt anchors on a token the fix was not written with. It reports STILL-LIVE forever as written. Re-anchor on \"$_nm\" and re-run; this is a finding about the RECEIPT, not a verdict on the entry, and the spelling is NOT adopted automatically.$note"
+              continue
+            fi
             consumer_reachable "$subs"; _reach=$?
             case "$_reach" in
               0) emit STILL-LIVE "$label" "theirs:$path still lacks \"$sub\"$note" ;;

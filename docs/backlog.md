@@ -55,64 +55,6 @@ have gone green, and would have reported "still open" forever.
 never the word anywhere in prose, because an entry that merely discusses landing something is
 not a closed entry.
 
-## BL-234 — `consumer_reachable` reads the INSTALLED copy of upstream's own machinery as the consumer's implementation, so a receipt anchored on a near-miss spelling is acquitted by the distribution it is asking about
-
-**Found 2026-09-11** while second-reading a consumer's `0.547.0 → 0.548.1` reconcile. The
-unfalsifiable-predicate guard has a third ref, and that ref is not disjoint from the subject.
-
-**THE PREMISE, STATED IN THE FUNCTION'S OWN HEADER.** `ledger-reverify.sh:87-89`: *"the CONSUMER's
-tree is read as a third ref. A token the fix cannot be written without exists in the consumer's own
-implementation of it; prose invented to describe the fix exists nowhere."* The guard fires
-`NEEDS-REVIEW unfalsifiable` only when a `theirs_lacks` substring is absent at base, at theirs, AND
-from the consumer's tracked tree.
-
-**THE DEFECT.** The scan at `:913-936` excludes exactly two things — the ledger's own top directory
-and `*/$SELF_BASE`. It does NOT exclude `.claude/skills/ai-dlc-update/**`, which is the consumer's
-INSTALLED COPY OF THE VERY MACHINERY THE RECEIPT IS ASKING ABOUT. Upstream ships those files, so a
-token upstream writes anywhere in its own reconcile engine is "reachable in the consumer's tree" by
-construction, whether or not the consumer implements anything. The third ref stops being independent
-of the subject and the premise above is false for every token upstream's own machinery mentions.
-
-**MEASURED, BY DRIVING THE SHIPPING FUNCTION.** Extracted `consumer_scannable` + `consumer_reachable`
-against a probe consumer whose ONLY occurrence of `skill_commit:` sits inside
-`.claude/skills/ai-dlc-update/reconcile/unregistered-drift.sh`: **exit 0** — reachable, decided
-`STILL-LIVE` — against a control of **exit 1** for an absent token in the same invocation. On the
-real consumer the token resolves in **10** files with the ledger excluded, of which the
-`.claude/skills/ai-dlc-update/` ones are installed upstream machinery; the CORRECT spelling
-`skill-commit` resolves in **0**.
-
-**WHAT IT COSTS, AND THE CASE IS NOT HYPOTHETICAL.** That consumer's
-`PC-S311-SELF-UPDATE-FIXTURES-ARM-3-PREWRITTEN-HAS-NO-SPLIT-STAMP-SUPPRESSION` anchors
-`verify: theirs_lacks … "skill_commit:"` — underscore, with a colon. `v0.548.0` SHIPPED that fix and
-writes `# skill-commit:` — hyphen (`self-update-gate.sh:423` emits, `self-update-fixtures.sh:307`
-reads). The anchored token can never appear, so the entry reports `STILL-LIVE` on this pull and on
-every pull after, with its subject already fixed upstream. `SKILL.md` step 3f's rule — anchor on a
-token the fix cannot be written without — was missed by ONE CHARACTER, and the guard built to catch
-exactly that returns a decided verdict instead of `NEEDS-REVIEW`, because upstream's own installed
-files carry the near-miss spelling as unrelated prose.
-
-**A NEAR-MISS IS THE CASE THE HEADER DOES NOT CONSIDER.** Its stated target is *"prose invented to
-describe the fix"*, which genuinely exists nowhere. A token differing from the real one by a
-separator is not invented prose — it is a plausible spelling of a real identifier, which is why it
-resolves, and why the author never sees the guard fire.
-
-**WHY FILED AND NOT FIXED.** Two candidate remedies and neither is obviously right. Excluding
-`.claude/skills/ai-dlc-update/**` restores the premise but narrows the third ref on a consumer that
-legitimately implements something there. A separator-variant arm (report when a token is unreachable
-but a `-`/`_` variant IS reachable) catches this class directly and needs its false-positive set
-measured before it ships — `CLAUDE.md` requires that set enumerated, and it has not been. Pick with
-a measurement, not by reading.
-
-**Receipt limits, stated.** It drives the SHIPPING function against a constructed probe consumer
-rather than greping the source, so a fix by any mechanism closes it and a rename does not. It scores
-only the acquittal — it does NOT assert which remedy landed, and a fix that excludes installed
-machinery and a fix that adds a variant arm both close it. Proven in both directions before filing:
-current tree exits 1, a copy whose scan also excludes `.claude/skills/ai-dlc-update/**` exits 0
-(sides asserted to differ), absent subject exits 9, and the probe's own absent-token control is
-asserted inside the receipt so a scan that reaches nothing cannot read as a fix.
-
-verify: sh f=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -f "$f" ] || exit 9; t=$(mktemp -d); trap "rm -rf $t" EXIT; mkdir -p "$t/c/.claude/skills/ai-dlc-update/reconcile" "$t/c/_bmad-output/ai-dlc-update"; printf 'rec_field skill_commit: header\n' > "$t/c/.claude/skills/ai-dlc-update/reconcile/unregistered-drift.sh"; printf 'ledger\n' > "$t/c/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; ( cd "$t/c" && git init -q . && git add -A && git -c user.email=a@b -c user.name=t commit -qm s ) >/dev/null 2>&1 || exit 9; awk '/^consumer_scannable\(\)/,/^}/' "$f" > "$t/fn.sh"; awk '/^consumer_reachable\(\)/,/^}/' "$f" >> "$t/fn.sh"; [ -s "$t/fn.sh" ] || exit 9; CONSUMER="$t/c"; LEDGER_TOP="_bmad-output/ai-dlc-update"; SELF_BASE="ledger-reverify.sh"; . "$t/fn.sh"; consumer_reachable "ZZQQ-NO-SUCH-TOKEN-ANYWHERE"; [ $? -eq 1 ] || exit 9; consumer_reachable "skill_commit:"; [ $? -eq 0 ] && exit 1; exit 0
-
 ## BL-230 — `reconcile-emit-report`'s E1 kill-set arm fails intermittently under the pool, and its success message describes a different assertion than the one it makes
 
 **Found 2026-09-11** during batch 85, when E1 failed a gate run on a branch whose change cannot

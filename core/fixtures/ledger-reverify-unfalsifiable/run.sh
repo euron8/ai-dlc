@@ -49,6 +49,142 @@ fi
   && ok "PC-BAD (prose describing the fix) → NEEDS-REVIEW" \
   || bad "PC-BAD → $(verdict PC-BAD), expected NEEDS-REVIEW — unfalsifiable predicate not caught"
 
+# --- Assertion 2b: the NEAR-MISS arm, and it is asserted on the DETAIL, not the verdict --
+# PC-NEARMISS and PC-NOMISS are BOTH NEEDS-REVIEW, so a verdict-only arm passes whether the
+# new arm exists or not — it would be the vacuous shape this fixture's header warns about.
+# What separates them is WHICH cause the row names, and that the mis-anchored row names the
+# spelling that would have closed.
+detail() { bash "$RV" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null |
+             awk -F'\t' -v l="$1" '$2 ~ l {print $3; exit}'; }
+
+# SANITY, because every arm below is unattributable without it: upstream really did move,
+# under the HYPHEN spelling, and the receipt's UNDERSCORE spelling is absent at both refs.
+#
+# NEVER PIPE INTO `grep -q`. It leaves at its first match while the writer is still pushing,
+# and under pipefail the pipeline answers with the writer's EPIPE — reporting NOT-FOUND on
+# input that contains the pattern. It is a size threshold rather than a race, so it is correct
+# until the blob grows past the pipe buffer and then wrong permanently with no symptom. `I54b`
+# of `validate-enforcement-map.sh` refuses the shape; the blobs here are small and it would
+# have been latent, which is exactly the state that arm exists to prevent. Capture first, feed
+# a here-string.
+#
+# `git show` on a path absent at a ref is a FATAL on stderr and empty on stdout. That is the
+# correct state for the BASE arm — the subject is ADDED between base and theirs — so its
+# stderr is discarded and the emptiness is what the assertion reads. The THEIRS arm keeps its
+# stderr: absence there is a broken fixture, not a precondition.
+nm_ok=1
+nm_theirs="$(git -C "$DIST" show "${THEIRS}:core/scripts/near-miss-subject.sh")"
+nm_base="$(git -C "$DIST" show "${BASE}:core/scripts/near-miss-subject.sh" 2>/dev/null)"
+grep -qF 'near-miss-flag:' <<<"$nm_theirs" || nm_ok=0
+grep -qF 'near-miss-flag:' <<<"$nm_base"   && nm_ok=0
+grep -qF 'near_miss_flag:' <<<"$nm_theirs" && nm_ok=0
+grep -qF 'near_miss_flag:' <<<"$nm_base"   && nm_ok=0
+# AND THE MASK MUST BE IN PLACE. If the misspelling is NOT reachable in the consumer tree,
+# the OLD unfalsifiable guard catches this row and the new arm is scoring a solved case.
+# Control in the same arm: an impossible token must not be reachable.
+git -C "$CONSUMER" grep -qF 'near_miss_flag:' -- ":(exclude)_bmad-output" || nm_ok=0
+git -C "$CONSUMER" grep -qF 'ZZQQ_NO_SUCH_TOKEN:' -- ":(exclude)_bmad-output" && nm_ok=0
+if [ "$nm_ok" -eq 1 ]; then
+  ok "before: hyphen spelling absent at base / present at theirs, underscore absent at both, and REACHABLE in the consumer (the mask)"
+else
+  bad "FIXTURE BROKEN — near-miss preconditions do not hold; the arm below would score a solved case"; echo
+  echo "ledger-reverify-unfalsifiable: FIXTURE BROKEN" >&2; exit 2
+fi
+
+_nm="$(detail PC-NEARMISS)"
+if grep -qF 'mis-anchored predicate:' <<<"$_nm" && grep -qF 'near-miss-flag' <<<"$_nm"; then
+  ok "PC-NEARMISS (anchor one character off) → mis-anchored, naming the spelling that closes"
+else
+  bad "PC-NEARMISS detail does not report a mis-anchored predicate naming 'near-miss-flag': $_nm"
+fi
+
+# The other direction. An arm that flagged every absent-at-both anchor would pass above and
+# fail here, which is the only reason the arm above means anything.
+_nomiss="$(detail PC-NOMISS)"
+if grep -qF 'unfalsifiable predicate:' <<<"$_nomiss" && ! grep -qF 'mis-anchored' <<<"$_nomiss"; then
+  ok "PC-NOMISS (absent at both, no closing variant) → unfalsifiable, NOT claimed by the near-miss arm"
+else
+  bad "PC-NOMISS was claimed by the near-miss arm or lost its unfalsifiable verdict: $_nomiss"
+fi
+
+# --- Assertion 2c: ONE SEED PER WRONG IMPLEMENTATION ----------------------------------
+# An independent hand built seven wrong implementations against the arms above and FOUR of them
+# passed. Every acceptance was a gap in the SEEDS, not in the arm: the worlds could not express
+# the property each wrong implementation drops. These three arms are those worlds, and each one
+# names the implementation it exists to kill.
+#
+# Both-directions controls establish that the arm discriminates between two inputs; they cannot
+# establish it discriminates at all, which is why the committed mutant below stays.
+
+# SWAP-ONLY. `PC-NEARMISS`'s closing spelling differs by a separator, so an implementation that
+# swaps hyphen/underscore and never strips the trailing colon finds it and passes. Here the
+# anchor and the fix differ ONLY by a colon.
+_cs="$(detail PC-COLONSTRIP)"
+if grep -qF 'mis-anchored predicate:' <<<"$_cs" && grep -qF 'colonstripflag' <<<"$_cs"; then
+  ok "PC-COLONSTRIP (colon-strip is the only reaching transform) → mis-anchored (kills a swap-only arm)"
+else
+  bad "PC-COLONSTRIP was not reported mis-anchored, so half the transform set is unproven: $_cs"
+fi
+
+# DROPPED `absent at base` CONJUNCT, and this is the FALSE-ACCUSATION direction. Every other
+# near-miss world has its variant absent at base, so an arm testing only "present at theirs"
+# passes all of them and accuses a healthy receipt here.
+_br="$(detail PC-BOTHREFS)"
+if ! grep -qF 'mis-anchored' <<<"$_br"; then
+  ok "PC-BOTHREFS (variant at BOTH refs — upstream did not move) → not accused (kills a theirs-only arm)"
+else
+  bad "PC-BOTHREFS was accused of a mis-anchored predicate, but its variant is present at base too — upstream never moved under it, so this is a false accusation: $_br"
+fi
+
+# THE MULTI-SUBSTRING SKIP, whose only subject this is. `$sub` is the whole quoted run, so a
+# variant of it is a two-token guess naming something no fix wrote. Without this world the skip
+# can be deleted and nothing changes.
+_ms="$(detail PC-MULTISUB)"
+if ! grep -qF 'mis-anchored' <<<"$_ms"; then
+  ok "PC-MULTISUB (two substrings — which one is misspelled is not derivable) → not accused (kills a skip-less arm)"
+else
+  bad "PC-MULTISUB was accused, so the multi-substring skip is gone and the row quotes a guess spanning two substrings: $_ms"
+fi
+
+# ONE SEED PER GENERATOR, BECAUSE `anchor_variants` EMITS THREE AND THE SEEDS ABOVE COVER TWO.
+# The swap, the colon strip, and their COMPOSITION. `PC-NEARMISS` and `PC-COLONSTRIP` each have
+# their closing spelling reachable by TWO of the three, so neither can isolate a member: dropping
+# the composition, or dropping the bare swap, left this whole fixture PASSING with a
+# byte-identical ok-set. An adversary found both by building them.
+#
+# AND THE COMPOSED ONE IS THE RELEASE'S OWN MOTIVATING CASE, which is what makes this the sharpest
+# gap the fixture has had. For anchor `skill_commit:` against fix `skill-commit`: the swap gives
+# `skill-commit:`, absent at theirs; the strip gives `skill_commit`, present at BASE and therefore
+# disqualified; only swap-THEN-strip reaches. A build without the composition reports
+# `unfalsifiable` on the exact case this arm was written for.
+_cb="$(detail PC-COMBO)"
+if grep -qF 'mis-anchored predicate:' <<<"$_cb" && grep -qF 'combo-flag' <<<"$_cb"; then
+  ok "PC-COMBO (only swap-THEN-strip reaches the fix) → mis-anchored (kills a no-composition arm)"
+else
+  bad "PC-COMBO was not reported mis-anchored — the composed variant is the release's own motivating shape and nothing else proves it: $_cb"
+fi
+
+# THE MIRROR. Here the composed variant is present at BASE and thus disqualified, so the bare
+# swap is the only generator that can close. An arm dropping the swap passes every other world.
+_bs="$(detail PC-BARESWAP)"
+if grep -qF 'mis-anchored predicate:' <<<"$_bs" && grep -qF 'bare-swap-flag:' <<<"$_bs"; then
+  ok "PC-BARESWAP (composed variant disqualified at base) → mis-anchored (kills a no-swap arm)"
+else
+  bad "PC-BARESWAP was not reported mis-anchored, so the bare-swap generator is unproven: $_bs"
+fi
+
+# THE VERDICT CLASS IS LOAD-BEARING AND NO ARM ABOVE READS IT. `SKILL.md` step 8 closes
+# `CLOSE-CANDIDATE` rows and says a `NEEDS-REVIEW` row is never a close, whatever its detail
+# says. An implementation emitting the near-miss finding as CLOSE-CANDIDATE therefore puts a
+# GUESSED spelling into the set an operator auto-closes — retiring a live entry on a guess,
+# which is the false-close this engine exists to refuse. Asserting the detail alone cannot see
+# it: the detail text is identical under both verdicts.
+_nmv="$(bash "$RV" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null |
+          awk -F'\t' '$2 ~ /PC-NEARMISS/ {print $1; exit}')"
+[ "$_nmv" = "NEEDS-REVIEW" ] \
+  && ok "PC-NEARMISS verdict is NEEDS-REVIEW, not CLOSE-CANDIDATE (a guessed spelling never enters the auto-close set)" \
+  || bad "PC-NEARMISS verdict is '$_nmv' — step 8 auto-closes CLOSE-CANDIDATE rows, so a guessed spelling would retire a live entry"
+
 # --- Assertion 3: MUTATION — the verdict follows the anchor, not the entry -----------
 # Remove ONLY the anchor. keep.sh survives, so the scan set stays non-empty and the
 # undecidable path cannot supply a false pass.
@@ -189,6 +325,51 @@ else
     ok "mutation: the old strip clears PC-GOOD through the default path and accuses it through an out-of-tree ledger (assertions 6-7 are real)"
   else
     bad "mutation did not reproduce the defect (default=$cv out-of-tree=$mv2; expected STILL-LIVE / NEEDS-REVIEW)"
+  fi
+fi
+
+# --- Assertion 8b: MUTATION — delete the near-miss arm --------------------------------
+# Assertions 2b are PRESENCE-shaped (they demand a specific detail string), so a subject that
+# emits nothing fails them by construction. What they cannot establish on their own is that
+# the arm is what produces the row rather than something upstream of it: remove the call site
+# and PC-NEARMISS must fall back to the OLD verdict, which is the DECIDED STILL-LIVE this
+# whole release exists to eliminate. That is the observable, and it is the defect itself.
+#
+# The whole reconcile/ directory is copied, as assertion 8 does and for the same reason: this
+# script sources lib.sh from its own dirname, so a lone copy emits nothing and "no output"
+# would score as a kill.
+MUTD2="$W2/mut-nearmiss"; rm -rf "$MUTD2"
+cp -R "$(dirname "$RV")" "$MUTD2" 2>/dev/null
+CTL2="$MUTD2/$(basename "$RV")"
+MUT2="$MUTD2/mutant-nearmiss.sh"
+# Delete the CALL SITE, not the helper: a fix whose helper survives while nothing invokes it
+# is precisely the vacuous shape, and this mutant must reproduce it.
+awk '
+  /^            _nm="\$\(near_miss_spelling "\$path" "\$sub" "\$subs"\)"$/ { inblk=1; next }
+  inblk && /^            fi$/ { inblk=0; next }
+  inblk { next }
+  { print }
+' "$CTL2" > "$MUT2"
+nm_detail() { bash "$1" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null |
+                awk -F'\t' '$2 ~ /PC-NEARMISS/ {print $1"\t"$3; exit}'; }
+if cmp -s "$CTL2" "$MUT2"; then
+  bad "FIXTURE BROKEN — the near-miss mutation matched nothing, so assertion 2b is unproven"
+elif [ "$(grep -c 'near_miss_spelling "\$path"' "$MUT2")" -ne 0 ]; then
+  bad "FIXTURE BROKEN — partial mutation: the call site survives, so the mutant proves nothing"
+else
+  # UNMUTATED CONTROL, with a POSITIVE conjunct: the copy must reproduce the fixed row, not
+  # merely fail to crash. A control asserting only "nothing went wrong" passes against a
+  # subject replaced by `exit 0`.
+  _cd="$(nm_detail "$CTL2")"
+  if ! grep -qF 'mis-anchored predicate:' <<<"$_cd"; then
+    bad "FIXTURE BROKEN — the UNMUTATED copy does not reproduce the mis-anchored row (got '$_cd'), so the mutant below would score a false kill"
+  else
+    _md="$(nm_detail "$MUT2")"
+    if grep -qF 'STILL-LIVE' <<<"$_md" && ! grep -qF 'mis-anchored' <<<"$_md"; then
+      ok "mutation: with the near-miss call site removed, PC-NEARMISS reverts to a DECIDED STILL-LIVE (the defect reproduces)"
+    else
+      bad "mutation did not reproduce the defect (got '$_md'; expected a STILL-LIVE row with no mis-anchored detail)"
+    fi
   fi
 fi
 
