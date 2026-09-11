@@ -4102,47 +4102,6 @@ verify: sh set -e; V=core/scripts/validate-locked-anchor.sh; [ -f "$V" ] || exit
 
 
 
-## BL-217 — a worktree-isolated code reviewer's own role file tells it to do what the lead is forbidden to ask for
-
-**Found 2026-09-09**, by an adjudication hand measuring `PC-S306-WORKTREE-DELIVERABLE-PATH-AMBIGUOUS-PRIMARY-VS-WORKTREE`
-against HEAD. Not that entry's residue: `git blame` puts the offending line at `e7ccffa9`
-(2026-07-05), predating the `v0.429.0` fix and untouched by it. Verified independently of the hand.
-
-Three shipped core files disagree, and all three are read at HEAD:
-
-- `core/skills/ai-dlc/steps/implementation.md:118` names the worktree dispatch targets as
-  "dev, **code reviewer**, or QA".
-- `core/skills/ai-dlc/steps/implementation.md:130-133` — the `v0.429.0` remedy — states the lead
-  "MUST NOT ask it to write outside that worktree, and MUST NOT name a primary-tree path for a
-  file the teammate is to produce."
-- `core/team-roles/code-reviewer.md:453-456` instructs the reviewer: "**Write the review file to
-  the canonical branch checkout** (or hand it to the lead to persist) BEFORE reporting the gate-1
-  verdict."
-
-So a worktree-isolated code reviewer is told by its own contract to write to the canonical
-checkout, which item 7 forbids the lead to request. The role file's reasoning is sound — a review
-left in a pruned worktree is lost — and that is why this is a PRECEDENCE defect rather than a
-contradiction: the parenthetical fallback ("or hand it to the lead to persist") is already
-compatible with item 7. The two are stated in the wrong order, with the forbidden action primary.
-
-**Scoped, not assumed a class.** `code-reviewer.md` is the only role file carrying the
-instruction — QA does not (1 of 21 role files, control: 21 mention `worktree`).
-
-**The fix shape is a wording repair in one file**: make handing the review to the lead the primary
-instruction and the canonical-checkout write the non-worktree case. Not built here — the LOUD line
-wins in a role file, and which of the two readings a reviewer takes is worth deciding deliberately
-rather than in the same change that found it.
-
-**Item 7 has no enforcer, which is why this survived.** Nothing under `core/fixtures/`, `scripts/`
-or `core/scripts/` references the worktree deliverable rule (control: an unrelated token resolves a
-fixture in the same invocation), so deleting or contradicting item 7 fails no push.
-
-**Tiered DEFECT.** Consumer-facing: both files ship. A reviewer following its role file produces a
-deliverable the lead's protocol says it must not have been asked for, and the losing case is a
-review that is lost with a pruned worktree.
-
-verify: sh r=core/team-roles/code-reviewer.md; i=core/skills/ai-dlc/steps/implementation.md; [ -f "$r" ] && [ -f "$i" ] || exit 9; grep -q "code reviewer" "$i" || exit 9; grep -q "NOT ask it to write outside that worktree" "$i" || exit 9; grep -q "Write the review file to the canonical branch checkout" "$r" && exit 1; exit 0
-
 ## BL-218 — `audit-layer-debt.sh`'s UNDECLARED arm files a row that CITES a resolvable `OWED-` id in the same bucket as a genuine undeclared obligation
 
 **Found 2026-09-09** by an adjudication hand measuring
@@ -4306,53 +4265,6 @@ for a genuine empty-subject state, undeclared and uncaught — one instance of t
 a new emitter may spell the verdict however it likes.
 
 verify: sh set -e; M=core/skills/ai-dlc/enforcement-map.yaml; E=scripts/validate-enforcement-map.sh; [ -f "$M" ] && [ -f "$E" ] || exit 9; grep -q "EXAMINED NOTHING" "$M" || exit 9; grep -q "I93" "$E" || exit 9; grep -qE 'retired:' "$M" || exit 9; grep -qE 'empty-subject-emitter-positive|every emitter of an empty-subject|emits the declared token' "$E" && exit 0; exit 1
-
-## BL-222 — the escalation validator names the corpus it searched when it DENIES and discards it when it PASSES
-
-**Found 2026-09-09** adjudicating
-`PC-S340-VALIDATE-ESCALATION-RESOLUTION-NONDETERMINISTIC-ON-BYTE-IDENTICAL-INPUT` against HEAD,
-re-derived here. **The entry's stated mechanism is REFUTED and its headline is still true for a
-different reason**, which is why this is filed rather than folded into that entry.
-
-**What is fixed.** The greedy-capture defect that made the verdict a function of quote ORDER is
-gone. `cite_segments()` (`core/scripts/validate-escalation-resolution.sh:161`) splits on `"` and
-takes even-indexed fields; `cite_quote()` (`:172`) takes the FIRST segment of 12+ chars —
-position-independent by construction. There is no unordered iteration anywhere in the parse, so
-the entry's own proposed adjudication ("read whether the parse still depends on unordered
-iteration") is refuted as stated.
-
-**And the nondeterminism claim is genuinely refuted at rate, not by a bare zero.** The filing
-reports 3 distinct verdicts in 5 runs — a per-run flip probability of order 0.4–0.6, predicting
->20 second-verdict occurrences over 25 runs. Measured on a frozen corpus with `shasum` confirmed
-unchanged either side: 25 runs, `25 × (rc=1, output-hash f95c3e53)`; 20 runs on a single-entry
-file, `20 × (rc=0, hash 2c4194a3)`. Control that the harness can see a difference at all: the two
-inputs hash differently, and the pre-fix build over the same 25 gives a third hash. A clean sweep
-at N=25 against a predicted count >20 discriminates.
-
-**What remains, and it is the entry's actual headline.** The verdict still moves on a
-byte-identical `pending.md`, because `pending.md` is not the only input: the transcript CORPUS is
-the second one. Measured — same `pending.md` (`shasum 4b6e0efe`, unchanged), corpus gains one
-`.jsonl`, verdict goes FAIL → OK.
-
-The fix makes that legible in ONE direction only. `CITE_REPORT` is captured at `:400` and rendered
-at `:426` — inside the `rc -eq 2` FAIL branch (`[ -n "$CITE_REPORT" ] && printf …`). The PASS
-branch at `:450` prints `OK: all N … unbounded-citation: N` and discards it. Derived: `cite:
-scanned` resolves at `:382` only, and that is a COMMENT; the string appears on no PASS-path
-`echo`.
-
-**So the fail-OPEN half — the one the entry calls "the half nobody notices" — is precisely the
-branch that still does not say which corpus state produced it.** An operator reading `OK` cannot
-tell a pass over the right corpus from a pass over an empty one.
-
-**Not fixed here.** The one-line form (render `CITE_REPORT` on the PASS path too) is probably
-right, but the PASS line is a gate-facing contract string and ~40 fixture arms plus `retro.md`
-prose read this validator's output; the population that would see a changed success line is
-unmeasured, and `CLAUDE.md` requires that before the check ships.
-
-**Tiered DEFECT.** Consumer-facing. Its consequence is an unfalsifiable PASS: the reader cannot
-reconstruct which corpus produced it.
-
-verify: sh V=core/scripts/validate-escalation-resolution.sh; [ -f "$V" ] || exit 9; grep -q 'CITE_REPORT=' "$V" || exit 9; grep -qE '^\s*echo "OK: all \$\{CHECKED\}' "$V" || exit 9; n="$(awk '/^echo "OK: all \$\{CHECKED\}/{print NR}' "$V")"; [ -n "$n" ] || exit 9; awk -v n="$n" 'NR>=n-6 && NR<=n && /CITE_REPORT/' "$V" | grep -q . && exit 0; exit 1
 
 ## BL-223 — the push-candidate ledger is outside `validate-write-format-steering.sh`'s population by construction, and `upstream-routing.md` steers no format
 
@@ -4540,74 +4452,3 @@ decide whether its own fix worked, and nine of them cannot tell a fix from a com
 
 verify: sh B=docs/backlog.md; [ -f "$B" ] || exit 9; grep -q '^## BL-227' "$B" || exit 9; grep -qE 'receipt-emission-site|scores every backlog receipt against a seeded|verify-receipt-binding' scripts/*.sh 2>/dev/null && exit 0; exit 1
 
-## BL-235 — conforming a gate-log header flips Check 5 from silent SKIP to FAIL, and nothing in the step file that prescribes the header says so
-
-**Found 2026-09-11** while scoping
-`PC-S341-0548-1-CONFORMANCE-FIGURE-IS-TAKEN-OVER-A-TEST-FIXTURE-POPULATION`. The filing named the
-consequence in passing; it is a separate subject from the figure and is the more expensive half.
-
-**THE MECHANISM.** Check 5 of `core/scripts/validate-mandatory-rules.sh` isolates a
-`## Gate Log: Sprint <N>` section out of `_bmad-output/implementation-artifacts/gate-log.md`. When
-it cannot isolate one it SKIPs. When it can, it requires `USER-CONFIRMED` or playwright evidence in
-that section and FAILs without it. `core/skills/ai-dlc/steps/gate-validation.md` step 12 prescribes
-the header format and says nothing about what following it turns on.
-
-**So a consumer that repairs its header format — a documentation-conformance change, with no
-behavioural intent — arms a gate that was silently skipping.** The direction is correct by design:
-a SKIP is a check that did not run, and the whole point of `0.548.0` was to stop that SKIP reading
-as "nothing to check". But it is delivered by prose, to a reader who is being told to fix
-formatting, and the step that tells them carries no warning.
-
-**DRIVEN, NOT READ, ON A CONSTRUCTED PROBE.** Fresh repo, the consumer's installed validator copied
-in (`cmp -s` against `core/scripts/validate-mandatory-rules.sh` IDENTICAL; control `cmp` against a
-sibling validator DIFFERS), one non-test `web/**` change in the window, sprint 500, and ONLY the
-gate-log header varying:
-
-    ## Gate: deploy-validate — Sprint 500     no evidence   ->  CHECK 5: SKIP
-    ## Gate Log: Sprint 500 — deploy-validate  no evidence   ->  CHECK 5: FAIL [Check5_VISUAL_UI]
-    ## Gate Log: Sprint 500 — deploy-validate  USER-CONFIRMED -> CHECK 5: PASS
-    ## Gate Log: Sprint 500 (bare)             no evidence   ->  CHECK 5: FAIL
-
-The two sides differ on the header text alone, and the PASS arm is the positive control proving the
-evidence predicate can reach PASS rather than being stuck closed.
-
-**AND IT ALREADY FIRED ONCE ON THE CONSUMER'S OWN COMMITTED HISTORY.** At `bd1b0a17d` — the single
-revision whose live `gate-log.md` carries a conforming header — the validator installed AT THAT
-COMMIT returns `CHECK 5: FAIL [Check5_VISUAL_UI]` for sprint 309. Control on the identical tree:
-de-conforming that one header returns SKIP; restoring it returns FAIL.
-
-**ONE QUALIFICATION, STATED BECAUSE IT CUTS AGAINST THE FINDING.** That s309 instance is now
-acquitted by the test-only carve-out, which shipped BECAUSE of it — the s309 window's entire web
-diff is one `*.test.jsx` file, and the current validator SKIPs it as test-only. So the historical
-firing is spent. **The live exposure is a sprint with a NON-TEST web remainder**, and the consumer's
-sprint 310 is one: two non-test files in its window, and its archive carries neither evidence token
-(control: an impossible token also returns 0).
-
-**NOT FIXED HERE, AND IT IS DELIBERATELY NOT FOLDED INTO THE COMMENT REWRITE THAT SHIPS BESIDE IT.**
-Folding a blocker into a defect's fix buries it. The fix belongs in step 12, which prescribes the
-header: state that a conforming header makes Check 5 REACHABLE, and that a `web/**` sprint with a
-non-test remainder then needs `USER-CONFIRMED` or a playwright trace in its Deploy Status Report.
-That is a consumer-facing behavioural warning attached to the instruction that causes it.
-
-**Tiered DEFECT, not BLOCKER, and the tiering is a judgement worth stating.** The scoping hand
-tiered it BLOCKER on consequence. Tiered here on what a consumer can DO about it: the gate firing is
-the mechanism working, the remedy is to supply the evidence the gate asks for, and no consumer is
-wedged — a FAIL names its cause and the evidence is a line in a report they already write. What is
-missing is the warning, not the escape.
-
-**Receipt limits, stated, AND THE FIRST DRAFT OF THIS RECEIPT CLOSED ON THE LIVE DEFECT.** It
-keyed on `reachable|no longer skips|stops skipping` ANYWHERE in the step file, and exited 0 before
-anything was fixed — satisfied by `delivered-reachable`, an agent-lifecycle status token in the
-Rule 28 prose eight hundred lines away, with the second conjunct satisfied by the one pre-existing
-`playwright` mention. A whole-file grep for a common English word is not a statement about the
-subject; `verification-discipline.md` calls this keying on the emission site, and this receipt is
-the worked example.
-
-The replacement narrows to the SECTION that prescribes the header and requires the two tokens to
-co-occur with `Check 5` inside it, which no prose outside step 12 can satisfy. It is still
-prose-keyed and still closable by careful rewording — the `BL-227` class — and the honest
-replacement drives the validator over two probe trees differing only in the header, asserting the
-step names the consequence. That needs the probe harness a fix would build, so it is owed WITH the
-fix rather than before it.
-
-verify: sh S=core/skills/ai-dlc/steps/gate-validation.md; [ -f "$S" ] || exit 9; SEC="$(awk '/^## .*[Gg]ate [Ll]og/{f=1} f&&/^## /&&!/[Gg]ate [Ll]og/{exit} f' "$S")"; [ -n "$SEC" ] || SEC="$(grep -A40 -E 'Gate Log: Sprint' "$S")"; [ -n "$SEC" ] || exit 9; grep -qiE 'check ?5' <<<"$SEC" || exit 1; grep -qiE 'reachable|no longer skip|stops skipping|becomes enforceable' <<<"$SEC" || exit 1; grep -qiE 'USER-CONFIRMED|playwright' <<<"$SEC" || exit 1; exit 0

@@ -184,6 +184,78 @@ saysout pending-real.md  real.jsonl "unbounded-citation: 0"
 # pending-real.md; only the spelling of the stamp differs.
 g pending-offset.md 50 real.jsonl 0 "(w) an offset stamp naming the same instant -> PASS"
 
+# --- what the PASS path says about the corpus it was taken over -------------------------------
+# THE FAIL-OPEN DIRECTION. The accusation branch names its corpus; the PASS branch captured the
+# same report and discarded it, so the one verdict an operator cannot falsify was also the one
+# that never said what produced it. A pass over the intended corpus and a pass over a nearly
+# empty one were the same bytes.
+#
+# THE SEED HOLDS THE PATH FIXED AND MOVES THE CONTENT, because that is the measured phenomenon:
+# a transcript directory is LIVE and the same `--transcript-dir` argument names a different set
+# of files minutes apart. Two differently-named directories would be separated by an output that
+# merely echoed its own argument, which is blind to exactly the thing that moves.
+#
+# ASSERT THE VALUE THAT VARIES, NEVER THE SENTENCE. `1 transcript(s)` against `2 transcript(s)`
+# over one byte-identical pending.md is a difference no constant can produce -- and the DIFFER
+# assertion beside it is what makes this an arm rather than two hardcoded strings, since a reader
+# printing the same line on every run satisfies neither.
+echo
+echo "  -- the PASS path names the corpus state it was taken over --"
+pass_corpus_pair() {  # $1 validator  -> 0 if the PASS output moves with the corpus
+  local v="$1" a b ra rb
+  rm -f "$ROOT/corpus-live"/*.jsonl
+  cp "$ROOT/corpus/spoke.jsonl" "$ROOT/corpus-live/spoke.jsonl"
+  local md5a; md5a="$(md5 -q "$ROOT/pending-crosssession.md" 2>/dev/null || md5sum "$ROOT/pending-crosssession.md" | cut -d' ' -f1)"
+  a="$(bash "$v" --escalations "$ROOT/pending-crosssession.md" --sprint 50 --transcript-dir "$ROOT/corpus-live" 2>/dev/null)"; ra=$?
+  cp "$ROOT/corpus/gate.jsonl" "$ROOT/corpus-live/gate.jsonl"
+  local md5b; md5b="$(md5 -q "$ROOT/pending-crosssession.md" 2>/dev/null || md5sum "$ROOT/pending-crosssession.md" | cut -d' ' -f1)"
+  b="$(bash "$v" --escalations "$ROOT/pending-crosssession.md" --sprint 50 --transcript-dir "$ROOT/corpus-live" 2>/dev/null)"; rb=$?
+  PCP_WHY=""
+  # The two sides must differ in the INPUT before their outputs are compared, and the one input
+  # this arm claims is unchanged must be provably unchanged -- otherwise a difference in the
+  # output says nothing about which side of the pair produced it.
+  [ "$md5a" = "$md5b" ] || PCP_WHY="$PCP_WHY [pending.md moved between the runs: $md5a vs $md5b]"
+  [ "$ra" -eq 0 ] && [ "$rb" -eq 0 ] || PCP_WHY="$PCP_WHY [not both PASS: rc=$ra,$rb]"
+  grep -qF -- "1 transcript(s)" <<<"$a" || PCP_WHY="$PCP_WHY [run A does not report its 1-file corpus]"
+  grep -qF -- "2 transcript(s)" <<<"$b" || PCP_WHY="$PCP_WHY [run B does not report its 2-file corpus]"
+  [ "$a" != "$b" ] || PCP_WHY="$PCP_WHY [both PASSes are byte-identical over two different corpora]"
+  [ -z "$PCP_WHY" ]
+}
+N=$((N + 1))
+if pass_corpus_pair "$VALIDATOR"; then
+  printf '  ok   %-30s (x) a PASS states the corpus state it was taken over\n' "corpus-live"
+else
+  FAIL=$((FAIL + 1)); printf '  FAIL %-30s%s  (x) the PASS path does not name its corpus\n' "corpus-live" "$PCP_WHY"
+fi
+
+# (y) THE ACCUSATION BRANCH DID NOT CHANGE SHAPE. The over-broad version of this fix -- render
+# the report on every path -- passes (x) and gives the FAIL branch the report TWICE, where it
+# already had it. Counted, not grepped: presence is true under both.
+cite_lines() {  # $1 validator  -> how many corpus-report lines the FAIL output carries
+  local v="$1" out n
+  out="$(bash "$v" --escalations "$ROOT/pending-crossfake.md" --sprint 50 --transcript-dir "$ROOT/corpus" 2>&1)"
+  n="$(grep -cF -- "cite: scanned" <<<"$out")" || n=0
+  printf '%s' "$n"
+}
+N=$((N + 1))
+CL="$(cite_lines "$VALIDATOR")"
+if [ "$CL" -eq 1 ]; then printf '  ok   %-30s (y) the FAIL branch reports its corpus exactly once\n' "pending-crossfake.md"
+else FAIL=$((FAIL + 1)); printf '  FAIL %-30s (y) the FAIL branch carries %s corpus-report line(s), not 1\n' "pending-crossfake.md" "$CL"; fi
+
+# (z) A VERDICT THAT VERIFIED NOTHING NAMES NO CORPUS. The vacuous path exits before any
+# citation is checked, so a corpus line there would attest a scan that never ran -- which is the
+# same unfalsifiable claim this whole section removes, in the other direction. Asserted as a LINE
+# COUNT, because a reader rendering an empty default there prints a line that greps as nothing.
+vac_lines() {  # $1 validator  -> stdout line count of the nothing-in-scope PASS
+  local v="$1" out
+  out="$(bash "$v" --escalations "$ROOT/pending-clean.md" --sprint 50 --transcript "$ROOT/real.jsonl" 2>/dev/null)"
+  printf '%s' "$(printf '%s\n' "$out" | grep -c .)"
+}
+N=$((N + 1))
+VL="$(vac_lines "$VALIDATOR")"
+if [ "$VL" -eq 1 ]; then printf '  ok   %-30s (z) a PASS that examined nothing names no corpus\n' "pending-clean.md"
+else FAIL=$((FAIL + 1)); printf '  FAIL %-30s (z) the vacuous PASS printed %s line(s), not 1\n' "pending-clean.md" "$VL"; fi
+
 # --- mutants ---------------------------------------------------------------------------------
 # Built as COPIES, guarded by `cmp -s` (a sed that matched nothing must not pass as a mutation)
 # and `bash -n` (a mutant that is no longer a program emits nothing, and nothing scores as a
@@ -337,10 +409,85 @@ if [ -n "${MB2:-}" ]; then
   fi
 fi
 
+# Mutant P1 -- the PASS path captures the corpus report and discards it, which is the shape this
+# validator shipped with. The verdict does not move: every exit code, the FAIL branch and the
+# vacuous branch are untouched, and only an operator asking WHAT the pass was taken over can see
+# the difference. Kills (x) ONLY.
+echo "  -- mutant P1: the PASS path discards the corpus report --"
+MP1="$(mutate pass-drops-corpus 's@^echo "      \${CITE_REPORT:-@echo "      " #@')" || FAIL=$((FAIL + 1))
+if [ -n "${MP1:-}" ]; then
+  N=$((N + 1))
+  if ! pass_corpus_pair "$MP1"; then
+    KILLS=$((KILLS + 1)); printf '  ok   %-30s P1: (x) is red -- the PASS says nothing about its corpus\n' "corpus-live"
+  else
+    FAIL=$((FAIL + 1)); printf '  FAIL %-30s P1 SURVIVED: (x) passes with the render deleted, so it is not testing it\n' "corpus-live"
+  fi
+  N=$((N + 1))
+  [ "$(cite_lines "$MP1")" -eq 1 ] && printf '  ok   %-30s P1: (y) unchanged\n' "pending-crossfake.md" \
+    || { FAIL=$((FAIL + 1)); printf '  FAIL %-30s P1 moved (y) too -- the arms are entangled\n' "pending-crossfake.md"; }
+fi
+
+# Mutant P2 -- THE FIRST PLAUSIBLE WRONG FIX: the PASS path renders a fixed sentence instead of
+# the verifier's own report. It satisfies every presence-shaped reading of "the PASS names its
+# corpus" and is blind to the thing that moves, which is why (x) asserts the COUNT and asserts
+# the two runs DIFFER rather than asserting a phrase. Kills (x) ONLY.
+echo "  -- mutant P2: the PASS path renders a constant, not the corpus state --"
+MP2="$(mutate pass-renders-constant 's@\${CITE_REPORT:-[^}]*}@cite: scanned the transcript corpus@')" || FAIL=$((FAIL + 1))
+if [ -n "${MP2:-}" ]; then
+  N=$((N + 1))
+  if ! pass_corpus_pair "$MP2"; then
+    KILLS=$((KILLS + 1)); printf '  ok   %-30s P2: (x) is red -- a constant renders identically over both corpora\n' "corpus-live"
+  else
+    FAIL=$((FAIL + 1)); printf '  FAIL %-30s P2 SURVIVED: (x) accepts a sentence that never moves\n' "corpus-live"
+  fi
+  N=$((N + 1))
+  [ "$(vac_lines "$MP2")" -eq 1 ] && printf '  ok   %-30s P2: (z) unchanged\n' "pending-clean.md" \
+    || { FAIL=$((FAIL + 1)); printf '  FAIL %-30s P2 moved (z) too -- the arms are entangled\n' "pending-clean.md"; }
+fi
+
+# Mutant P3 -- THE SECOND PLAUSIBLE WRONG FIX, and the one a hand builds by accident: render the
+# report unconditionally, above the branch that forks. It satisfies (x) completely -- the PASS
+# does name its corpus -- and gives the accusation the same line TWICE. Kills (y) ONLY, which is
+# why (y) counts the lines instead of grepping for one: presence is true under both.
+echo "  -- mutant P3: the report is rendered unconditionally, on both branches --"
+MP3="$(mutate report-on-every-path 's@^if \[ "\$FAIL" -ne 0 \]; then@printf "      %s\\n" "$CITE_REPORT"; if [ "$FAIL" -ne 0 ]; then@')" || FAIL=$((FAIL + 1))
+if [ -n "${MP3:-}" ]; then
+  N=$((N + 1))
+  MP3CL="$(cite_lines "$MP3")"
+  if [ "$MP3CL" -ne 1 ]; then
+    KILLS=$((KILLS + 1)); printf '  ok   %-30s P3: (y) is red -- the accusation carries %s corpus lines\n' "pending-crossfake.md" "$MP3CL"
+  else
+    FAIL=$((FAIL + 1)); printf '  FAIL %-30s P3 SURVIVED: an unconditional dump left the FAIL branch at one line\n' "pending-crossfake.md"
+  fi
+  # ...and it PASSES (x), which is the hazard: the over-broad shape reads as the fix.
+  N=$((N + 1))
+  if pass_corpus_pair "$MP3"; then printf '  ok   %-30s P3: (x) unchanged -- which is why this shape reads as a fix\n' "corpus-live"
+  else FAIL=$((FAIL + 1)); printf '  FAIL %-30s P3 moved (x) too -- the arms are entangled\n' "corpus-live"; fi
+fi
+
+# Mutant P4 -- the corpus line is attached to the branch that VERIFIED NOTHING. No citation was
+# checked there, so the line attests a scan that never ran: the same unfalsifiable claim, in the
+# other direction. Kills (z) ONLY -- and (z) is absence-shaped, so nothing but a mutant can
+# establish that it fires at all.
+echo "  -- mutant P4: the nothing-in-scope PASS claims a corpus --"
+MP4="$(mutate vacuous-claims-corpus 's@^  echo "OK: no S\${SPRINT_NUM} RESOLVED/OVERRIDDEN escalation requires an operator citation."@  echo "OK: no S${SPRINT_NUM} RESOLVED/OVERRIDDEN escalation requires an operator citation."; echo "      cite: scanned 0 transcript(s)"@')" || FAIL=$((FAIL + 1))
+if [ -n "${MP4:-}" ]; then
+  N=$((N + 1))
+  MP4VL="$(vac_lines "$MP4")"
+  if [ "$MP4VL" -ne 1 ]; then
+    KILLS=$((KILLS + 1)); printf '  ok   %-30s P4: (z) is red -- the vacuous PASS printed %s lines\n' "pending-clean.md" "$MP4VL"
+  else
+    FAIL=$((FAIL + 1)); printf '  FAIL %-30s P4 SURVIVED: (z) cannot see a corpus line on a path that verified nothing\n' "pending-clean.md"
+  fi
+  N=$((N + 1))
+  if pass_corpus_pair "$MP4"; then printf '  ok   %-30s P4: (x) unchanged\n' "corpus-live"
+  else FAIL=$((FAIL + 1)); printf '  FAIL %-30s P4 moved (x) too -- the arms are entangled\n' "corpus-live"; fi
+fi
+
 # KILL COUNT. A mutation that applied cleanly to a file the run never loaded reads exactly
 # like an arm that cannot fire, and `cmp -s` cannot tell them apart. Zero kills is that state.
 N=$((N + 1))
-if [ "$KILLS" -ge 14 ]; then printf '  ok   %-30s %s mutant kill(s) -- these arms can fire\n' "KILL-COUNT" "$KILLS"
+if [ "$KILLS" -ge 18 ]; then printf '  ok   %-30s %s mutant kill(s) -- these arms can fire\n' "KILL-COUNT" "$KILLS"
 else FAIL=$((FAIL + 1)); printf '  FAIL %-30s %s kill(s); the mutants changed bytes in a file these arms never loaded\n' "KILL-COUNT" "$KILLS"; fi
 
 echo

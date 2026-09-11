@@ -713,6 +713,13 @@ that isolation return nothing, and Check 5 then reports SKIP rather than PASS or
 SKIP is silent and permanent** — it reads as a check that ran, so a consumer can section its
 log any reasonable way and never learn that its UI evidence has gone unverified since install.
 
+**Conforming the header makes Check 5 REACHABLE, and reachable means it can FAIL.** When the
+sprint's diff window carries `web/**` changes whose non-test remainder is non-empty — the
+changed web files are not all `*.test.*` or `*.spec.*` by basename, which is the only shape
+Check 5 skips as source-free — the isolated section MUST carry `USER-CONFIRMED` or playwright
+trace evidence in its Deploy Status Report, or Check 5 FAILs with `Check5_VISUAL_UI`. Write
+that evidence into this entry at the same time as the header.
+
 **This used to cite "CLAUDE.md Autonomous Gate Protocol" and that section does not exist.** It
 was a pre-R22 CLAUDE.md section, and `ai-dlc-setup/SKILL.md`'s own absorption table records it
 as having MOVED to this file — so the citation pointed at a section whose content was supposed

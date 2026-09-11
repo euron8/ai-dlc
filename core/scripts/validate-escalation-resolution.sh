@@ -335,6 +335,11 @@ FAIL=0
 FAILN=0
 CHECKED=0
 UNBOUNDED=0
+# LOOP-CARRIED, AND READ AFTER THE LOOP BY THE PASS LINE. A `while ... done <<EOF` is not a
+# subshell, so the last verified row's corpus report survives to the bottom of this file. It is
+# initialised here because the PASS line must be able to say "the verifier named no corpus"
+# rather than print a blank, and a blank is the state this whole section exists to end.
+CITE_REPORT=""
 while IFS="$(printf '\t')" read -r header status authline; do
   [ -n "$header" ] || continue
   CHECKED=$((CHECKED + 1))
@@ -448,4 +453,25 @@ if [ "$FAIL" -ne 0 ]; then
   exit 1
 fi
 echo "OK: all ${CHECKED} S${SPRINT_NUM} RESOLVED/OVERRIDDEN escalation(s) cite a verified operator message. unbounded-citation: ${UNBOUNDED} verified with no timestamp bound."
+# NAME THE CORPUS ON THE PASS PATH TOO, WHICH IS THE FAIL-OPEN DIRECTION. The accusation branch
+# above already prints the sibling's corpus report; this branch captured the same string and
+# threw it away, so the ONE verdict an operator cannot falsify -- a pass -- was also the one that
+# never said what it was taken over. The transcript corpus is a SECOND input alongside
+# pending.md: measured, a byte-identical pending.md moved FAIL -> OK when the corpus gained one
+# `.jsonl`, and nothing in the OK line said a thing had changed. A pass over the right corpus and
+# a pass over a nearly-empty one were the same bytes.
+#
+# THE VALUE, NOT A CONSTANT. `CITE_REPORT` is the sibling's own line, carrying the file COUNT and
+# the resolved corpus path, so it MOVES with the corpus. A fixed sentence here would render
+# identically over one transcript and over two hundred, which is the state being fixed.
+#
+# AFTER THE OK LINE, NOT BEFORE IT. The verdict stays the first token on stdout; readers that
+# take the first line get the same bytes they always did.
+#
+# THE DEFAULT HAS A SUBJECT AND IS NOT PADDING: the report is the SIBLING's stderr, and a
+# sibling that verifies a citation without naming its corpus leaves it empty. A consumer runs
+# its OWN installed pair, so that is a version skew and not a hypothetical. Rendering `      `
+# with nothing after it reads as a display bug rather than as the missing fact it is, so the
+# absence is stated in words -- this line always carries a sentence.
+echo "      ${CITE_REPORT:-cite: the citation verifier named no corpus on this run.}"
 exit 0

@@ -452,9 +452,19 @@ A gate-1 verdict is NOT APPROVED until the review file (a) exists on a
 path Git tracks, and (b) is referenced by the story file's Gate-status
 line. A review written only inside a dev worktree is untracked there —
 if the worktree is pruned before the file is persisted, the review is
-lost. Write the review file to the canonical branch checkout (or hand
-it to the lead to persist) BEFORE reporting the gate-1 verdict, not
-after. A verdict reported without a resolvable review-file path is
+lost.
+
+**WRITE THE REVIEW FILE INSIDE THE TREE YOU WERE DISPATCHED INTO, AT A
+PATH RELATIVE TO THAT TREE'S ROOT, AND NEVER OUTSIDE IT.** A dispatch
+into a worktree gives that worktree's root; the primary tree is not
+yours to write and its paths are not yours to name.
+
+**THEN HAND THE REVIEW TO THE LEAD TO PERSIST, BEFORE REPORTING THE
+GATE-1 VERDICT, NOT AFTER.** Report the path you wrote, relative to
+your own root; the lead persists it to the canonical branch checkout
+and answers for that write.
+
+A verdict reported without a resolvable review-file path is
 incomplete; treat it as gate-1 not yet APPROVED.
 
 ### Diff Removes Existing Error-Handling = Important
