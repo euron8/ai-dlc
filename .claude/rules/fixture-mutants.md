@@ -207,8 +207,18 @@ paths:
   scored unprovable because NO entry of the excluded class carried the field it keys on —
   true of that declaration, not of the predicate. A seed that MANUFACTURES one entry of the
   excluded class makes the two predicates separate and the mutant die. **A fact about what
-  the corpus contains TODAY is not a fact about what the mechanism must HANDLE.** Ask whether
-  the world is unreachable or merely absent; only the first is a real limit.
+  the corpus contains TODAY is not a fact about what the mechanism must HANDLE.**
+
+  **THE TEST IS REACHABILITY UNDER THE MECHANISM'S OWN CONTRACT, NOT ABSENCE FROM THE
+  CORPUS**, and this clause is load-bearing: read without it the rule argues for
+  synthesising EVERY absent world, and most absent worlds are absent because they are
+  genuinely unconstructible. Both directions measured in one file. A durable entry gaining
+  an `ignore` is REACHABLE — the declaration is hand-edited and the renderer already models
+  the field — so a seed may manufacture one. A declaration with no transient members is NOT:
+  `sync-transient-ignore.sh:96` refuses it and exits 2, so a seed asserting anything about
+  that world is asserting about a state the program forbids. Ask what the subject would DO
+  with the synthesised world before building it; if the answer is "refuse it", the absence
+  was the contract and not a gap.
 - **SHARED LOGIC IS A REASON TO GO READ THE OTHER SIDE'S SEEDS, NEVER A REASON TO SKIP
   THEM.** The same episode, and the failure was not a missed pointer — it was the RIGHT
   observation drawing the INVERSE conclusion. The identical filter lived in two programs,

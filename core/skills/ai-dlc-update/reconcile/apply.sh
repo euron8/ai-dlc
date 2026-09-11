@@ -1747,6 +1747,15 @@ if [ -f "$TI_RENDERER" ]; then
   # THE TRACKED HALF, ASKED OF THE INDEX AND NOT OF `--check`. Runs whatever `--check` answered:
   # a current block and a tracked path is a real and silent state, and it is the one that keeps
   # firing after the rule is correct.
+  #
+  # TWO REASONS, AND ONLY THE SECOND ONE IS STRUCTURAL. The first is that `--check` cannot SEE a
+  # tracked path — it returns at its block comparison, above the renderer's own tracked scan. True
+  # today and CONTINGENT: someone could widen `--check` to ask the index, and that justification
+  # would evaporate while this arm was still required. The second holds whatever any checker does —
+  # **an ignore rule has no effect on a file git is already tracking**, so the block being current
+  # and the path being tracked are independent facts with independent remedies (`sync-transient-
+  # ignore.sh` vs `git rm --cached`), and neither implies the other. Measured: once a path is
+  # tracked, `git add -A` and `git commit -a` both capture it with the rule in place.
   if [ -f "$TI_SCHEMA" ] && command -v jq >/dev/null 2>&1 \
      && git -C "$CONSUMER" rev-parse --git-dir >/dev/null 2>&1; then
     ti_tracked=""
