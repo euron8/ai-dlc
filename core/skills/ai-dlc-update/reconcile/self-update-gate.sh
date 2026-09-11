@@ -387,17 +387,27 @@ gate_record_open() {
       echo "# generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
       echo "# base $BASE -> theirs $THEIRS"
       echo "# consumer: $CONSUMER   dist: $DIST"
-      # THE JOIN KEYS. `self-update-fixtures.sh` reads exactly these three prefixes, first match
-      # wins, so no other line in this file may open with one of them.
+      # THE JOIN KEYS. `self-update-fixtures.sh` reads these by PREFIX, first match wins, so no
+      # other line in this file may open with one of them. Deliberately not a tally: this comment
+      # said "exactly these three prefixes" and the runner already read four — a count in prose
+      # beside a generic reader is a figure with nothing binding it, and `# skill-commit:` was
+      # added directly below it without the number moving.
       echo "# base-sha: $(gate_rec_sha "$BASE")"
       echo "# theirs-sha: $(gate_rec_sha "$THEIRS")"
       # THE STAMP'S `skill_commit` AS THIS GATE SAW IT, AND IT IS A HEADER VALUE RATHER THAN AN
       # `# input:` ROW FOR THE REASON THE COMMENT BELOW GIVES. Step 2 ADVANCES this field to
       # `theirs` before it invokes the runner, so the runner cannot read it from the stamp and
-      # learn anything: measured over the 129 paths `machinery_paths()` resolves, a runner
-      # consulting the LIVE stamp finds `skill_commit == theirs` on 129 of 129 and acquits every
-      # one, against 128 of 129 at the value the gate actually saw. That is a TOTAL DISARM of the
-      # PRE-WRITTEN arm, and it is what the naive form of this fix does.
+      # learn anything: the live stamp IS `theirs`, so asking whether the consumer's copy at
+      # `skill_commit` matches the incoming blob becomes `blob(theirs:P) == blob(theirs:P)`, a
+      # TAUTOLOGY that holds on every path the PRE-WRITTEN arm would fire on. Driven over the
+      # reference consumer's real record at 0.542.0 -> 0.547.0: the arm fires on 2 of 129 recorded
+      # inputs, and a live-stamp reader acquits 2 of those 2. That is a TOTAL DISARM, and it is
+      # what the naive form of this fix does.
+      #
+      # AN EARLIER REVISION ARGUED THIS FROM "129 of 129 against 128 of 129" AND BOTH FIGURES WERE
+      # WRONG WAY ROUND AND BESIDE THE POINT. They came from comparing each path's theirs blob with
+      # itself, which is true by construction; the real 129/128 spread measures whether a recorded
+      # digest matches at all, which is a different question. An adversarial hand caught it.
       #
       # RECORDING THE VALUE IS NOT RECORDING THE DIGEST, and the distinction is the whole design.
       # The comment at the `.ai-dlc-applying` row below refuses a DIGEST row for the stamp because
@@ -454,9 +464,18 @@ fi
 # theirs as part of writing the slice -- so its digest can never survive to the read, and a row
 # for it refuses every legitimate self-update. Nor can the reader accept it by the theirs-blob
 # rule the other rows use: the stamp has no core origin, so there is no blob to compare against.
-# What is lost is small and stated rather than assumed: the only arm reading the stamp is
-# `advise_safe_stop`'s acquittal, which is ADVISORY prose beside a DEFER the reader refuses on
-# the verdict anyway.
+#
+# THIS REFUSES A DIGEST ROW, NOT THE VALUE, AND THE DISTINCTION IS NOW LOAD-BEARING. The header
+# above carries `# skill-commit:` — the stamp's VALUE as this gate read it — and that is not the
+# thing this paragraph declines. A DIGEST cannot survive step 2's rewrite, because it attests the
+# bytes of a file step 2 replaces; a VALUE copied into the record survives precisely because the
+# rewrite moves the STAMP and not the RECORD. The runner's PRE-WRITTEN arm depends on it, and
+# without it that arm refuses every split-stamp consumer permanently.
+#
+# AN EARLIER REVISION OF THIS COMMENT SAID "what is lost is small": that the only arm reading the
+# stamp was `advise_safe_stop`'s advisory acquittal. That was true when written and is FALSE now,
+# and it read as a standing rationale for deleting the header. What was lost was load-bearing, and
+# the fix that needed it is the proof.
 #
 # The interrupted-apply marker IS recorded, and its ABSENCE is the value that matters: step 2
 # never writes it, and its ARRIVAL between the gate and the runner means an apply touched the

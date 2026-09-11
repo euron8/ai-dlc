@@ -474,25 +474,61 @@ $gr_p"
             # PRIOR self-update's delivery for some machinery paths, and for those the recorded
             # digest equals `theirs` without any self-comparison having occurred: the gate read a
             # file a previous cycle wrote, not the file this cycle is about to write. Measured on
-            # the reference consumer at 0.542.0 -> 0.547.0 (commit 98acc996, skill_commit
-            # 28d35728): `self-update-fixtures.sh` and `rotate-gate-adjudication.sh` both satisfy
-            # the first three conjuncts and are NOT self-comparisons, against `apply.sh` in the
-            # same run, which satisfies them and IS one. Without this arm the runner exits 2, step
-            # 2 cannot run its fixtures, and the refusal REPEATS on every invocation — `commit`
-            # advances only under a gated apply, so nothing clears it.
+            # the reference consumer's real gate record at 0.542.0 -> 0.547.0 (commit 98acc996,
+            # skill_commit 28d35728), driven per row against all four conjuncts: of 129 recorded
+            # inputs carrying a core path, ARM 3 fires on exactly TWO —
+            # `self-update-fixtures.sh` and `rotate-gate-adjudication.sh` — and both are split-stamp
+            # deliveries rather than self-comparisons. `apply.sh` is the CONTROL and it is refused
+            # ENTRY to the arm: its recorded digest 09036680 is not the theirs blob 1768c802, so
+            # the `gr_h = gr_tb` conjunct is false. Naming it as a case that FIRES is wrong, and an
+            # earlier revision of this comment did — a control that is claimed to fire where it
+            # does not is not a control. Without this arm the runner exits 2, step 2 cannot run its
+            # fixtures, and the refusal REPEATS on every invocation — `commit` advances only under
+            # a gated apply, so nothing clears it.
             #
             # KEYED ON THE RECORDED VALUE, NEVER ON THE LIVE STAMP, and that is the difference
             # between this fix and the one that was filed. Step 2 advances `skill_commit` to
             # `theirs` BEFORE invoking this runner (`SKILL.md` step 2, whose ordered clause puts
-            # the stamp rewrite ahead of the fixture run), so a runner reading the stamp finds
-            # `skill_commit == theirs` for EVERY path and acquits all of them: 129 of 129 over the
-            # machinery set, against 128 of 129 at the value the gate saw. The gate therefore
-            # copies the value into its record header and this arm reads it back.
+            # the stamp rewrite ahead of the fixture run). A runner reading the LIVE stamp is
+            # therefore asking whether `blob(theirs:P) == blob(theirs:P)` — a TAUTOLOGY — so it
+            # acquits every path the arm would otherwise fire on: 2 of 2 on the reference
+            # consumer's record. That is a total disarm, and it is the filed remedy read literally.
+            #
+            # THE DISARM IS THE TAUTOLOGY, NOT A COUNT, AND AN EARLIER REVISION OF THIS COMMENT
+            # ARGUED IT FROM THE WRONG NUMBER. It cited "129 of 129 against 128 of 129" — figures
+            # taken by comparing each path's theirs blob with ITSELF, which is true by construction
+            # and measures nothing about this predicate. The 129/128 spread is a fact about whether
+            # a recorded digest matches at all, a different question entirely. An adversarial hand
+            # found the two figures swapped and the reasoning misattributed; both are corrected
+            # here. The gate copies the value it saw into its record header and this arm reads it
+            # back, which is what makes the question answerable at all.
             #
             # AN ABSENT OR UNUSABLE RECORDED VALUE IS `-`, AND IT TAKES THE STRICT PATH. A record
             # written by a gate that predates the header carries no such line, `rec_field` returns
             # empty, and the acquittal is simply not available — which is the OLD behaviour, and
             # the right default for a record this runner cannot fully read.
+            #
+            # THE KEY IS CONTENT, NOT ANCESTRY, AND THAT IS DELIBERATE — BOTH ALTERNATIVES WERE
+            # BUILT AND REFUSED. An adversarial hand observed that the arm never asks whether the
+            # recorded sha is an ancestor of `theirs`, and that nothing cross-checks it against the
+            # consumer's LIVE stamp. Both observations are true; both remedies are wrong.
+            #
+            # An ANCESTRY key refuses a consumer that materially holds the incoming bytes. Measured
+            # on a constructed repo: a commit on an unrelated branch can carry `theirs`' blob for a
+            # path while failing `merge-base --is-ancestor`, and a consumer sitting there genuinely
+            # holds byte-identical content — so the gate genuinely did not compare the file with
+            # itself. Refusing it is a FALSE REFUSAL, which is the failure this whole arm exists to
+            # remove.
+            #
+            # A LIVE-STAMP CROSS-CHECK IS FALSE ON EVERY LEGITIMATE SPLIT STAMP, because step 2
+            # advances the live stamp to `theirs` before this runner sees it — so `recorded ==
+            # live` fails precisely when the exemption is owed. That is the same tautology that
+            # makes the filed remedy a total disarm, arriving from the other direction.
+            #
+            # The arm's subject is whether the GATE'S VERDICT is worth anything, which is a
+            # question about what the consumer's tree CONTAINED when the gate read it. Content is
+            # the honest key for that question, and the threat model is a misleading gate run
+            # rather than a forger: a hand that can edit this record can edit the tree it attests.
             # AND THE RECORDED `skill_commit` MUST NOT BE `theirs` ITSELF, WHICH IS THE CONJUNCT
             # THE FIRST CUT OF THIS FIX LACKED AND AN ADVERSARIAL DRIVE FOUND. The genuine
             # self-comparison is reached by running the gate a SECOND time after the slice is

@@ -701,9 +701,10 @@ Skip this check for planning phase gates. Required for Phase 4+ gates.
 
 Create or append to `_bmad-output/implementation-artifacts/gate-log.md`.
 
-**Open the entry with a level-two heading spelled exactly `## Gate Log: Sprint <N>`**, where
-`<N>` is the sprint number and nothing follows it on the line but whitespace. Put the phase,
-the timestamp and everything else below that line, not in it.
+**Open the entry with a level-two heading that BEGINS `## Gate Log: Sprint <N>`**, where `<N>` is
+the sprint number followed by whitespace or the end of the line. **A trailing title is fine and
+conventional** — `## Gate Log: Sprint 288 — Sweep Tx Idempotency` isolates exactly as the bare form
+does. What matters is the opening, because that is what the isolator anchors on.
 
 **That header is a MACHINE JOIN KEY, not a style preference.** Check 5 of
 `validate-mandatory-rules.sh` isolates a sprint's section by matching it literally in order to
