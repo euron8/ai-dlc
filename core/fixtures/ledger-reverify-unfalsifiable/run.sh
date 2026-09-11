@@ -107,6 +107,57 @@ else
   bad "PC-NOMISS was claimed by the near-miss arm or lost its unfalsifiable verdict: $_nomiss"
 fi
 
+# --- Assertion 2c: ONE SEED PER WRONG IMPLEMENTATION ----------------------------------
+# An independent hand built seven wrong implementations against the arms above and FOUR of them
+# passed. Every acceptance was a gap in the SEEDS, not in the arm: the worlds could not express
+# the property each wrong implementation drops. These three arms are those worlds, and each one
+# names the implementation it exists to kill.
+#
+# Both-directions controls establish that the arm discriminates between two inputs; they cannot
+# establish it discriminates at all, which is why the committed mutant below stays.
+
+# SWAP-ONLY. `PC-NEARMISS`'s closing spelling differs by a separator, so an implementation that
+# swaps hyphen/underscore and never strips the trailing colon finds it and passes. Here the
+# anchor and the fix differ ONLY by a colon.
+_cs="$(detail PC-COLONSTRIP)"
+if grep -qF 'mis-anchored predicate:' <<<"$_cs" && grep -qF 'colonstripflag' <<<"$_cs"; then
+  ok "PC-COLONSTRIP (colon-strip is the only reaching transform) → mis-anchored (kills a swap-only arm)"
+else
+  bad "PC-COLONSTRIP was not reported mis-anchored, so half the transform set is unproven: $_cs"
+fi
+
+# DROPPED `absent at base` CONJUNCT, and this is the FALSE-ACCUSATION direction. Every other
+# near-miss world has its variant absent at base, so an arm testing only "present at theirs"
+# passes all of them and accuses a healthy receipt here.
+_br="$(detail PC-BOTHREFS)"
+if ! grep -qF 'mis-anchored' <<<"$_br"; then
+  ok "PC-BOTHREFS (variant at BOTH refs — upstream did not move) → not accused (kills a theirs-only arm)"
+else
+  bad "PC-BOTHREFS was accused of a mis-anchored predicate, but its variant is present at base too — upstream never moved under it, so this is a false accusation: $_br"
+fi
+
+# THE MULTI-SUBSTRING SKIP, whose only subject this is. `$sub` is the whole quoted run, so a
+# variant of it is a two-token guess naming something no fix wrote. Without this world the skip
+# can be deleted and nothing changes.
+_ms="$(detail PC-MULTISUB)"
+if ! grep -qF 'mis-anchored' <<<"$_ms"; then
+  ok "PC-MULTISUB (two substrings — which one is misspelled is not derivable) → not accused (kills a skip-less arm)"
+else
+  bad "PC-MULTISUB was accused, so the multi-substring skip is gone and the row quotes a guess spanning two substrings: $_ms"
+fi
+
+# THE VERDICT CLASS IS LOAD-BEARING AND NO ARM ABOVE READS IT. `SKILL.md` step 8 closes
+# `CLOSE-CANDIDATE` rows and says a `NEEDS-REVIEW` row is never a close, whatever its detail
+# says. An implementation emitting the near-miss finding as CLOSE-CANDIDATE therefore puts a
+# GUESSED spelling into the set an operator auto-closes — retiring a live entry on a guess,
+# which is the false-close this engine exists to refuse. Asserting the detail alone cannot see
+# it: the detail text is identical under both verdicts.
+_nmv="$(bash "$RV" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null |
+          awk -F'\t' '$2 ~ /PC-NEARMISS/ {print $1; exit}')"
+[ "$_nmv" = "NEEDS-REVIEW" ] \
+  && ok "PC-NEARMISS verdict is NEEDS-REVIEW, not CLOSE-CANDIDATE (a guessed spelling never enters the auto-close set)" \
+  || bad "PC-NEARMISS verdict is '$_nmv' — step 8 auto-closes CLOSE-CANDIDATE rows, so a guessed spelling would retire a live entry"
+
 # --- Assertion 3: MUTATION — the verdict follows the anchor, not the entry -----------
 # Remove ONLY the anchor. keep.sh survives, so the scan set stays non-empty and the
 # undecidable path cannot supply a false pass.

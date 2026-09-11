@@ -58,6 +58,14 @@ EOS
     i=$((i + 1))
   done
 } > core/scripts/big-rule-file.md
+# The both-refs subject exists AT BASE carrying the variant already — that is the whole point
+# of the case, and seeding it only at theirs would make it indistinguishable from the ordinary
+# near-miss. See its second write below.
+cat > core/scripts/both-refs-subject.sh <<'EOS'
+#!/bin/bash
+# present at BASE already: a variant here proves nothing about upstream movement
+carry_bothrefs_flag() { :; }
+EOS
 g "$WORK/dist" add -A; g "$WORK/dist" commit -qm base
 BASE="$(git -C "$WORK/dist" rev-parse HEAD)"
 printf '0.2.0\n' > VERSION
@@ -73,6 +81,32 @@ cat > core/scripts/near-miss-subject.sh <<'EOS'
 #!/bin/bash
 # theirs introduces the fix, spelled with hyphens
 emit_header() { printf '# near-miss-flag: %s\n' "$1"; }
+# The multi-substring world's bait, and it is the WHOLE QUOTED RUN swapped, because that is what
+# `$sub` holds for a two-substring predicate. An implementation without the skip builds its
+# variant from this run and reports a two-token guess as the spelling that closes. Present only
+# at theirs, so the skip is the only thing standing between it and a mis-anchored row.
+# multi-alpha-x" "multi-beta-y
+EOS
+# THE COLON-STRIP SUBJECT. The hyphen/underscore seed above cannot separate an arm that
+# implements BOTH transforms from one that implements only the swap: its closing spelling
+# differs from the anchor in a separator, so a swap-only arm finds it. Here the anchor and
+# the closing spelling differ ONLY by a trailing colon, so an arm that never strips the colon
+# reports STILL-LIVE and the near-miss goes unreported. A receipt with one transform's seed
+# accepts an implementation carrying half the transform set.
+cat > core/scripts/colon-strip-subject.sh <<'EOS'
+#!/bin/bash
+# theirs introduces the fix; the anchor differs from it only by a trailing colon
+emit_flag() { printf '%s\n' "colonstripflag value"; }
+EOS
+# THE BOTH-REFS SUBJECT — the FALSE-ACCUSATION direction, which no seed above can reach.
+# The variant is present at theirs AND at base, so upstream did NOT move under it and the
+# receipt is not mis-anchored. An arm that tests the variant at theirs only, dropping the
+# `absent at base` conjunct, accuses a healthy receipt. Every other seed here has its variant
+# absent at base, so none of them can tell the two implementations apart.
+cat > core/scripts/both-refs-subject.sh <<'EOS'
+#!/bin/bash
+# present at BASE already: a variant here proves nothing about upstream movement
+carry_bothrefs_flag() { :; }
 EOS
 g "$WORK/dist" add -A; g "$WORK/dist" commit -qm theirs
 THEIRS="$(git -C "$WORK/dist" rev-parse HEAD)"
@@ -160,6 +194,41 @@ unfalsifiable arm and not be claimed by the new one. Without this, an arm that r
 mis-anchored on every absent-at-both anchor would pass every other assertion here.
 
 verify: theirs_lacks core/scripts/near-miss-subject.sh "ZZQQ_NO_SUCH_TOKEN:"
+
+---
+
+## PC-COLONSTRIP — the closing spelling differs from the anchor ONLY by a trailing colon
+
+SEPARATES BOTH TRANSFORMS FROM THE SWAP ALONE. `PC-NEARMISS` above differs by a separator, so a
+swap-only implementation finds its closing spelling and passes. Here the anchor carries a trailing
+colon the fix does not, and nothing but the colon strip reaches it. Must be NEEDS-REVIEW naming
+`colonstripflag`.
+
+verify: theirs_lacks core/scripts/colon-strip-subject.sh "colonstripflag:"
+
+---
+
+## PC-BOTHREFS — the variant is present at theirs AND at base, so upstream did not move
+
+THE FALSE-ACCUSATION DIRECTION, and no other seed here can reach it. Every other near-miss world
+has its variant absent at base, so an arm that tests only "present at theirs" and drops the
+"absent at base" conjunct passes all of them. It fails here, because `carry_bothrefs_flag` is at
+BOTH refs: the receipt is not mis-anchored and accusing it would be a false finding about a
+healthy entry. Must NOT be claimed by the near-miss arm.
+
+verify: theirs_lacks core/scripts/both-refs-subject.sh "carry-bothrefs-flag"
+
+---
+
+## PC-MULTISUB — two substrings, so which one was misspelled is not derivable
+
+THE MULTI-SUBSTRING SKIP'S ONLY SUBJECT. `all_present` requires EVERY substring, so `$sub` here is
+the whole quoted run and a variant of it is a two-token guess naming something no fix ever wrote.
+An implementation with the skip removed emits a `mis-anchored` row quoting that guess. Nothing else
+in this fixture carries a multi-substring predicate, so without this world the skip is unprovable
+and its removal is a silent widening.
+
+verify: theirs_lacks core/scripts/near-miss-subject.sh "multi_alpha_x" "multi_beta_y"
 
 ---
 
