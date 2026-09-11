@@ -15,6 +15,51 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.550.0] - 2026-09-11
+
+### The figure that replaced a wrong-population figure had the same defect one level down
+
+`0.548.1` corrected an 8-vs-0 gate-log figure precisely because it was taken over a population
+Check 5 never opens, and wrote the lesson into its own comment: **ask which population a number was
+taken over.** The figure that replaced it does not survive the same question.
+
+**"229 titled against 10 bare, excluding worktree duplicates" is arithmetically exact, and roughly
+half of it is the same files counted twice.** 36 of 36 per-sprint archives under the reference
+consumer's `corpus-snapshot-s288` test fixture are `cmp -s` IDENTICAL to their live counterparts
+(control: a snapshot file against an unrelated live sprint DIFFERS). The de-duplication that
+correctly excluded an untracked worktree checkout was never applied to the fixture snapshot — the
+same exclusion argument, made once and not twice.
+
+**It also said NORM, and that is the clause a reader acts on.** On the population this check opens,
+conformance is near-total ABSENCE rather than near-total titling: 121 conforming headers against 856
+`## Gate` headings in the live tree, one of 106 H2 entries across the nine most recent sprints, and
+the conforming corpus stopping after s290 (control: an impossible heading returns 0). "Consumers
+already conform" is what NORM is read as, and on that consumer they have not for twenty sprints.
+
+**The decision the figure justified is right, and its warrant was never a census.** Whether a
+gate-log header may carry a trailing title is settled by the isolator's own anchor —
+`([[:space:]]|$)` after the sprint number — and by `steps/gate-validation.md` step 12 stating the
+format literally. A titled header isolates identically to a bare one because the anchor is on the
+OPENING. That is a property of the grammar and cannot rot as a corpus moves, which a ratio can and
+did. The comment now turns on the anchor, with one instance count over a named, non-duplicated
+population — 115 titled against 6 bare among the 121 conforming headers in the consumer's live
+`_bmad-output/` — in place of a ratio over a doubled one.
+
+**Two further figures in the filing do not reproduce and are deliberately not carried forward.**
+"724 non-conforming" is stale by one day under an unstated grammar (it reads 727 now, and was
+exactly 724 at `84451b892`). "Max sprint under the conforming shape is 284" is wrong — the true max
+over the live tree is 309, which contradicts the filing's own s309 row inside the same entry. A
+receipt anchored on either would report STILL-LIVE forever.
+
+**The behavioural consequence is filed as `BL-235`, not folded in.** Conforming a gate-log header
+flips Check 5 from a silent SKIP to a FAIL on a `web/**` sprint lacking `USER-CONFIRMED` or
+playwright evidence — driven on a constructed probe where the two sides differ on the header text
+alone, and on the consumer's own committed history, with a de-conforming control returning SKIP on
+the identical tree. That warning is owed by the step file that prescribes the header. Burying it
+inside a comment rewrite is how it would go unread.
+
+Closes `PC-S341-0548-1-CONFORMANCE-FIGURE-IS-TAKEN-OVER-A-TEST-FIXTURE-POPULATION`.
+
 ## [0.549.0] - 2026-09-11
 
 ### A receipt anchored one character off its own fix reports STILL-LIVE forever, and the guard built to catch that could not see it
