@@ -15,6 +15,64 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.546.0] - 2026-09-11
+
+### The transient-ignore row gets the two seeds that kill its wrong implementations, and its comment stops carrying a raw count
+
+A correction to `0.545.0`, from an adversarial pass that reported after that release had merged.
+Both findings are real and both were reproduced here before being acted on.
+
+**FOUR WRONG IMPLEMENTATIONS PASSED THE PROBE THAT SHIPPED WITH THE ROW.** Two are live defects and
+each is killed by ONE state the probe never built:
+
+- **The rc branches collapsed.** `sync-transient-ignore.sh` has six `exit 2` paths — an unresolvable
+  declaration, an empty block marker, absent `jq`, a declaration with no transient half. A row
+  written `!= "0"` where the shipped one writes `= "1"` turns every one of them into a WORKLIST row
+  saying *re-render it*, when the truth is that the declaration cannot be resolved at all.
+  Re-rendering is not the remedy, and the row lands in the WORKLIST hand-back bucket where a
+  DECISION is owed. That is the distinction `hook_registration_row()` draws one function above.
+- **The worktree read for the index read.** A row testing `[ -e ]` on the consumer's working tree
+  instead of asking `git ls-files` fires on every healthy consumer: transient files are present on
+  disk constantly and being untracked is exactly correct. The property is whether git TRACKS the
+  path, and only the index answers that. A row that wedges a correct pull is worse than the defect
+  it reports.
+
+Both now have a committed seed in `apply-restamp-worklist` — the fixture that drives `apply.sh`,
+rather than the one whose subject is the renderer. `T1`/`T3`/`T5` are a presence/absence pair on one
+input, with `T0` asserting the seeds discriminate. Scored by building both wrong implementations on
+whole-tree copies: each is killed by its own arm ALONE, against an unmutated control green in the
+same copy shape.
+
+`T0` was narrowed after its first cut also fired on the worktree mutant — a setup arm that overlaps
+the behaviour arms it introduces makes two cells go red on one input, and the harness then cannot
+say which is load-bearing.
+
+**AND THE ROW WAS REPORTING A WRONG CAUSE ON HALF ITS OWN TRIGGER.** `--check` exits 1 for two
+different states and distinguishes them in its text: a block that was NEVER WRITTEN (`carries no
+AI/DLC transient-state block`) and one written that has since DRIFTED (`does not match`). The row
+reported both as *"does NOT match the declaration this apply just delivered"* — which on a
+never-rendered consumer is false in every clause: nothing drifted, no declaration moved, and the
+operator goes looking for a change that never happened. The remedy is the same command either way;
+the diagnosis is not, and a WORKLIST row is the only channel the operator reads. The row now
+branches on the cause, and `T6`/`T7` hold the two apart — `T6` goes red alone against a mutant that
+re-flattens them.
+
+**AND THE ROW'S COMMENT CARRIED A RAW COUNT THAT WENT STALE INSIDE A DAY.** It read *"declares 16
+transient patterns and its rendered block carries 13"*. The reference consumer re-rendered its own
+block hours after the release merged, and that comment was false in resident prose before anyone
+read it. It now states the SHAPE — a block can carry fewer patterns than its schema declares — and
+the dated measurement lives here, where a date is allowed.
+
+**Measured 2026-09-10, before that consumer repaired itself**: 16 declared, 13 rendered, both handoff
+markers absent from the block. Recoverable at `567cfc9dc^` in that consumer's history; a control in
+the same invocation shows `pipeline-paused.flag` present.
+
+Two further variants were found and are NOT defects, recorded so they are not re-derived: dropping
+`select(.transient)` from the jq is correct-but-unprovable today (zero durable entries carry an
+`ignore` key, control: 16 transient ones do), and the `${ti_tracked// /}` strip is vacuous because
+the loop already excludes the only input that could reach it — as is the identical strip in
+`sync-transient-ignore.sh` it was copied from.
+
 ## [0.545.0] - 2026-09-10
 
 ### A pull now says when the consumer's transient-ignore block no longer matches the declaration it just delivered (`PC-S310-HANDOFF-ENTRY-MARKER-COMMITTED-NEVER-DISCHARGES-CROSS-SESSION`)
@@ -40,9 +98,17 @@ invoke it and no arm binds the update path.
 
 **Measured on the reference consumer, recoverable from its own history**: 16 transient patterns
 declared, 13 rendered, both handoff markers absent (control: `pipeline-paused.flag` returns 2). The
-declaration gained them 2026-09-06; the block was last rendered 2026-08-31. In that window a broad
-`git add` committed the marker, it rode into `main`, and it re-armed the handoff guard on an
-unrelated pause in a session that had run no handoff.
+declaration gained them 2026-09-06; the block was last rendered **2026-08-26, at the INSTALL** —
+`git log -S"BEGIN AI/DLC transient" -- .gitignore` resolves exactly one commit, against a control of
+49 commits touching that file. The renderer had never run again on that consumer. In the five weeks
+between, a broad `git add` committed the marker, it rode into `main`, and it re-armed the handoff
+guard on an unrelated pause in a session that had run no handoff.
+
+`0.545.0` said "last rendered 2026-08-31" and called it a five-day window. That date was the
+`.gitignore` file's most recent commit, which is a different question: that commit's whole diff is
+two `!.claude/rules/` negations OUTSIDE the marker-bounded region. **Ask what a date is a date OF.**
+The correction widens the finding — the mechanism had fired exactly once, at day zero, which is what
+"no caller on the pull path" predicts.
 
 **A current rule IS sufficient for that case**, measured rather than assumed: with the pattern in
 place `git add -A`, `git add .` and `git add <dir>` all skip the marker and an explicit add refuses;
