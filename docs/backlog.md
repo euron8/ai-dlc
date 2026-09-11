@@ -4141,7 +4141,7 @@ fixture in the same invocation), so deleting or contradicting item 7 fails no pu
 deliverable the lead's protocol says it must not have been asked for, and the losing case is a
 review that is lost with a pruned worktree.
 
-verify: sh r=core/team-roles/code-reviewer.md; i=core/skills/ai-dlc/steps/implementation.md; [ -f "$r" ] && [ -f "$i" ] || exit 9; grep -q "code reviewer" "$i" || exit 9; grep -q "NOT ask it to write outside that worktree" "$i" || exit 9; grep -q "Write the review file to the canonical branch checkout" "$r" && exit 1; exit 0
+verify: sh r=core/team-roles/code-reviewer.md; i=core/skills/ai-dlc/steps/implementation.md; [ -f "$r" ] && [ -f "$i" ] || exit 9; grep -q "NOT ask it to write outside that worktree" "$i" || exit 9; grep -q "^### Diff Removes Existing Error-Handling" "$r" || exit 9; s="$(sed -n '/^### Gate-1 Review File Not Persisted/,/^### Diff Removes Existing Error-Handling/p' "$r" | tr '\n' ' ')"; [ ${#s} -ge 400 ] || exit 1; awk 'BEGIN{C="canonical branch[- ]checkout"} { n=split($0,P,/\*\*/); pos=1; own=0; lead=0; canb=0; canp=0; for(k=1;k<=n;k++){ t=tolower(P[k]); if(k%2==0){ if(t~/never[^a-z]+outside/ && own==0) own=pos; h=index(t,"hand"); l=index(t,"lead"); if(h>0 && l>h && lead==0) lead=pos; if(t~C) canb=1 } else { if(match(t,C)>0 && canp==0) canp=pos+RSTART-1 } pos=pos+length(P[k])+2 } if(own==0||lead==0||canp==0||canb==1) exit 1; if(own>lead||canp<lead) exit 1; exit 0 }' <<<"$s"
 
 ## BL-218 — `audit-layer-debt.sh`'s UNDECLARED arm files a row that CITES a resolvable `OWED-` id in the same bucket as a genuine undeclared obligation
 
