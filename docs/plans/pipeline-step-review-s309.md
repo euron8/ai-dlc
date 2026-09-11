@@ -45,14 +45,18 @@ under `<!-- FAST_TRACK_PREDICATE -->`; Check 20 names the file, the token
 `core/fixtures/architecture-fast-track/` extracts and executes the predicate over an eight-seed
 table; `BL-207` carries a `verify: sh` receipt that exits 1 against the pre-fix tree;
 `FORK_BUDGET` stayed 8060 with the 8009 to 8022 move attributed in its ledger. Re-derive before
-acting: `git log --oneline origin/main -3` must show `d8ef5100`, `git show origin/main:VERSION`
-must print `0.532.0`, `grep -c 'FAST_TRACK_PREDICATE' core/skills/ai-dlc/steps/architecture.md`
-must print `1` (on `545f5f97` it prints `0`), and
+acting: `git merge-base --is-ancestor d8ef5100 origin/main` must exit 0 (`545f5f97` is a
+pre-release-4 control and exits 1), `git show origin/main:VERSION` must print `0.532.0` or
+later, `grep -c 'FAST_TRACK_PREDICATE' core/skills/ai-dlc/steps/architecture.md` must print `1`
+(on `545f5f97` it prints `0`), and
 `grep -c 'fast_track: architecture-impact-none' core/skills/ai-dlc/steps/gate-validation.md`
 must print `1`.
 
 1. **Releases 1 through 4 are merged; release 4 is `d8ef5100`.** Nothing to do. No further
-   release is planned by this file.
+   release is planned by this file. The consumer ran sprint 310 on `0.542.0`, which carries
+   all four; the s310 table is recorded below beside the s309 one, and it is the receipt for
+   releases 1, 2 and 4 (release 3's step ran and its gate passed; release 4's predicate was
+   evaluated and correctly declined).
 2. **After each merge, before stopping: re-derive this block.** Replace the finished release's
    action with one line naming the merged sha, re-run
    `bash scripts/validate-plan-shape.sh docs/plans/pipeline-step-review-s309.md`, commit the docs
@@ -65,15 +69,13 @@ must print `1`.
    compare; assert action 1 names no work a commit on `origin/main` has already shipped; run
    `bash scripts/validate-plan-shape.sh` there as the floor; remove the worktree and report
    `resumable from origin/main at <sha>` or the mismatch. Do not stop before it passes.
-4. **BLOCKED on the consumer: a sprint has to run on the new engine.** The reference consumer
-   pulled to `0.533.0` at `a798e215` on 2026-09-08 (its PR #1037), so the pull this action used
-   to wait on has happened and the gap is zero. What remains is observation: once s309 finishes
-   and s310 runs its planning phase, re-derive the per-step table below from the same ledgers
-   for sprint 310 and record it beside the s309 table. That comparison is the receipt for the
-   whole program. Nothing in this file can start a consumer sprint. Two cautions for the
-   consumer's own session, recorded in its adjudication file: s309 passed its planning gates on
-   the old two-step form and is NOT re-routed through `requirements.md`, and
-   `s309/architecture-impact.md` is not hand-authored to take the `0.532.0` fast-track.
+4. **The s310 observation is recorded.** Sprint 310 ran 2026-09-10 on engine `0.542.0`
+   (consumer commit `93df611a7`, the last `.ai-dlc-version` change before its `/ai-dlc` at
+   00:12 UTC) and closed with its retro merge `937c4a24e` on 2026-09-11. The per-step table
+   for s310 is under `## Ground truth: sprint 310`, beside the s309 one, with every figure
+   derived from the same ledgers. The one residual finding from that comparison is filed in
+   that section and is already LANDED upstream as `BL-228` (`v0.544.0`); it needs no action
+   from this plan. Nothing further is owed by this action.
 5. **HAND THE PLAN TO A LOCAL AI-DLC SESSION, THEN STOP.** The last action, after action 3 has
    passed. Call `ListAgents`; a qualifying target is a local peer session whose name begins
    `ai-dlc-` (never a `graph-*` session, which is the consumer). If one qualifies, send it
@@ -88,9 +90,16 @@ must print `1`.
 ### Done when
 
 All four releases are on `origin/main` (done at `d8ef5100`), the s310 table exists beside the
-s309 one, and the guard's `GATE_REMEDIATION_DENIED` count in the consumer's continuation log for
-a sprint's first gate window is zero. The last two are observed AFTER the operator-initiated
-pull and a consumer sprint; they are not reachable from this tree.
+s309 one (done, `## Ground truth: sprint 310` below), and the guard's `GATE_REMEDIATION_DENIED`
+count in the consumer's continuation log for a sprint's first gate window is zero. **The third
+reads ONE at s310, not zero**, at 01:09:48 UTC, and its cause is dated in the s310 section: the
+rotator shipped in release 1 rotates only the sprint it is invoked for, sprint 308 closed before
+it existed, so s308's dispositioned FAIL was still the live pass. The consumer rotated s308 by
+hand and the write succeeded eight minutes later. Driving the shipped guard against a scratch
+clone of the consumer's current tree returns ALLOW on a `s311` planning-artifacts write, with a
+seeded bound FAIL at a newer nonce returning DENY as the control, so the criterion is predicted
+to read zero at s311. A prediction is not the measurement; the literal zero is observable only
+when s311 runs, and nothing in this tree can start it.
 
 ## Context
 
@@ -159,6 +168,70 @@ From `s308/gate-log-archive.md` nonces: first planning gate 09-02 03:46, story g
 last story gate 3 09-06 13:26, sprint-review 09-07 00:40, retro end 09-07 04:11. Planning was
 53 percent of the wall clock. Three stories. Five gate-repair records and one divergent series
 needing operator adjudication and a fourth pass.
+
+## Ground truth: sprint 310 on 2026-09-10, times UTC, on engine `0.542.0`
+
+Recorded 2026-09-11 against the consumer's committed ledgers after its retro merge
+`937c4a24e`. Same sources and the same derivation as the s309 tables: `subagent-context.jsonl`
+rows with `sprint: 310`, `ts` minus `duration_s`, intervals merged per window; window
+boundaries from the gate nonces in `s310/gate-log-archive.md`. The s309 planning figures in
+this section are re-derived over the same three windows so the two columns are one instrument;
+they differ from the per-step tables above because those count activity by step, not by gate
+window. Five stories against s309's three.
+
+| Window (gate nonce closing it) | s310 wall h | s310 busy h | s310 dispatches | s310 opus min | s309 equivalent (wall / busy / dispatches / opus min) |
+|---|---|---|---|---|---|
+| Requirements, `/ai-dlc` 00:12 (routing 00:38) to `planning-20260910T034119Z` adopted 04:06 | 3.9 | 2.8 | 12 | 73 | carry-over-evaluation + discovery + research-requirements, 11:35 to 23:41: 12.1 / 5.7 / 29 / 373 |
+| Architecture, 04:06 to `planning-20260910T102842Z` 10:35 | 6.5 | 5.9 | 16 | 246 | 23:41 to 09-08 20:20: 20.7 / 1.3 / 3 / 76 (a 19 h operator pause inside it) |
+| Stories and test strategy, 10:35 to `story-20260910T165803Z` 17:10 | 6.6 | 4.2 | 19 | 300 | 09-08 20:20 to 09-09 03:47: 7.5 / 4.6 / 19 / 344 |
+| Planning total | 17.0 | 12.8 | 46 | 619 | 40.2 / 11.5 / 51 / 793 |
+
+The step this program replaced is the first row. The three s309 steps it collapses spent 12.1
+wall hours and 373 opus minutes to reach the architecture gate; the one `requirements` step
+spent 3.9 and 73. Busy time fell by half and opus time by four fifths, on a sprint with more
+stories. The other two rows moved the other way and that is content, not engine: s310's
+architecture step carried real impact on all four FRs (`s310/architecture-impact.md`, so the
+release-4 fast-track was evaluated and correctly did NOT apply) and ran a three-pass adversarial
+series that found two CRITICALs the four-seat party mode had missed; its story step validated
+five stories at `full` intensity against three at s309.
+
+### Requirements step, 00:38 to 04:06
+
+| Activity | Minutes | Note |
+|---|---|---|
+| Analyst context digest | 23 | sonnet; surfaced two scope gaps resolved by one `AskUserQuestion` round |
+| `bmad-spec` plus brief, PRD section and `architecture-impact.md` via pm-escalated | 16 | sonnet |
+| Party mode, Architect plus Dev, in parallel | 28 | the two seats the operator chose; Dev moved FR-S310-4 off dead code, Architect found five MAJOR gaps |
+| Adversarial cycle: p1 21, repair 29 plus 6, p2 24, repair 6 plus 3 | 89 | p1 two CRITICAL against the gated path's execution shape; p2 `EXIT_CONDITION_MET` |
+| Gate: adjudicator 18, Check 33 FAIL on `LR-S310-<n>` header convention, one remediator 3, script re-run only | ~30 | no second adjudication: release 2's ordering held, the script arm re-ran in seconds |
+
+Guard-induced clerical routing: one event, not six. At 01:09:48 the first `Write` to
+`s310/locked-requirements.md` was DENIED naming `sprint-review-20260907T002257Z`, sprint 308's
+gate, exactly DEFECT 1's mechanism. Release 1's rotator was on the engine but it rotates only the
+sprint it is invoked for and sprint 308 closed before it existed, so nothing had ever rotated
+s308 out. The consumer's lead ran `rotate-gate-adjudication.sh --sprint s308 --apply` by hand
+and the write succeeded at 01:17. It filed the gap upstream as
+`PC-S310-GATE-ADJUDICATION-ROTATION-HAS-NO-BACKFILL-PATH-FOR-PRE-MECHANISM-SPRINTS`, adjudicated
+here as `BL-228` and LANDED in `v0.544.0`: the naive backfill was refuted by building it (a
+FAILing legacy verdict with no series id would become the permanent live pass), and the rotator
+now refuses a move that would promote one. s309's own retro then rotated s309 and s310's rotated
+s310, so from s311 onward the deny cannot recur through this path.
+
+DEFECT 3 did not recur. The two typed `handoff`s at 11:12 and 16:02 each landed with no
+adversary pass in flight: the 11:12 one caught two analyst pre-flight rows that had already
+delivered, and the 16:02 one caught a test-strategy remediator at its last minute, whose 19
+findings the resumed session reconciled by hand rather than redispatching. The bounded-join beat
+from release 1 is what those records describe.
+
+### Residual finding, NOTE tier
+
+One s310 verdict is still in the consumer's live `gate-adjudication/` directory after the
+retro's rotation: `planning-20260910T102842Z`, whose `gate_series_id` reads `s310-planning`, a
+sprint-first spelling that matches neither the rotator's `-s<N>-` selector
+(`core/scripts/rotate-gate-adjudication.sh:220-221`) nor `--legacy-through`. It records no FAIL,
+so it is inert for the guard today (`core/hooks/ai-dlc-gate-remediation-guard.sh:428-442` picks
+by nonce and reads nothing about series), and `BL-228` already names this exact verdict and
+prescribes an operator re-stamp. Nothing here to build.
 
 ## Findings, tiered
 
