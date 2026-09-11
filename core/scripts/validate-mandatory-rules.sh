@@ -420,10 +420,19 @@ else
       # It is not consumer-defined: `steps/gate-validation.md` step 12 states it literally. That
       # comment cited "CLAUDE.md Autonomous Gate Protocol" as the authority — a pre-R22 section
       # that `ai-dlc-setup/SKILL.md`'s absorption table records as MOVED into gate-validation.md,
-      # so the citation named a section that does not exist in any consumer tree. Measured on the
-      # reference consumer: 8 entries under its own `## Gate:` shape, 0 under this one, and this
-      # check had therefore SKIPped on every sprint since that consumer's install without anyone
-      # learning that its UI evidence was unverified.
+      # so the citation named a section that does not exist in any consumer tree.
+      #
+      # ASK WHICH POPULATION A FIGURE WAS TAKEN OVER. An earlier revision of this comment said
+      # "8 entries under its own `## Gate:` shape, 0 under this one" — measured over the reference
+      # consumer's ARCHIVED per-sprint logs, which this check never opens. `$GATE_LOG` is one
+      # path, `_bmad-output/implementation-artifacts/gate-log.md`, and on that consumer it holds
+      # a single `# Gate Log` heading and ZERO entries of either shape, because the log is rotated
+      # per sprint. The isolation returns nothing there for a reason that has nothing to do with
+      # header style, which is exactly why this SKIP must name its cause rather than imply one.
+      #
+      # Across that consumer's gate logs generally, titled headers are the NORM and not an edge
+      # case — 229 titled against 10 bare, excluding worktree duplicates — which is why the step
+      # file admits a trailing title rather than forbidding it.
       #
       # SO THE MESSAGE PRINTS THE REMEDY. A SKIP that names no cause reads as "nothing to check"
       # and is the reason this went unnoticed for the life of an install.
