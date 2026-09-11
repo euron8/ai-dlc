@@ -64,11 +64,21 @@ printf '0.2.0\n' > VERSION
 cat >> core/scripts/validate-thing.sh <<'EOS'
 # theirs moved, but still has no strict mode
 EOS
+# THE NEAR-MISS SUBJECT, AND IT IS A SEPARATE FILE ON PURPOSE. Upstream introduces
+# `near-miss-flag:` (HYPHEN) between base and theirs; the ledger's receipt anchors on
+# `near_miss_flag:` (UNDERSCORE). Sharing `validate-thing.sh` with PC-GOOD/PC-BAD would let a
+# guard that mis-resolves the path reach the right bytes for the wrong entry, and two guards
+# covering one subject report zero failures.
+cat > core/scripts/near-miss-subject.sh <<'EOS'
+#!/bin/bash
+# theirs introduces the fix, spelled with hyphens
+emit_header() { printf '# near-miss-flag: %s\n' "$1"; }
+EOS
 g "$WORK/dist" add -A; g "$WORK/dist" commit -qm theirs
 THEIRS="$(git -C "$WORK/dist" rev-parse HEAD)"
 
 # --- synthetic consumer: implements the innovation PC-GOOD anchors on -----------------
-mkdir -p "$WORK/consumer/_bmad-output/ai-dlc-update" "$WORK/consumer/scripts"
+mkdir -p "$WORK/consumer/_bmad-output/ai-dlc-update" "$WORK/consumer/scripts" "$WORK/consumer/notes"
 cat > "$WORK/consumer/scripts/thing.sh" <<'EOS'
 #!/bin/bash
 # the local hardening this consumer built and wants upstreamed
@@ -98,6 +108,19 @@ cat > "$WORK/consumer/scripts/ai-dlc/retired-marker.sh" <<'EOS'
 # the replacement token a STAYS-RETIRED watchdog asserts is present
 use_new_anchor() { :; }
 EOS
+# THE MASK. This is what made the near-miss case invisible rather than merely unreported:
+# the misspelled anchor is REACHABLE in the consumer's own tracked tree through unrelated
+# prose, so `consumer_reachable` returns 0 and the unfalsifiability guard cannot fire. The
+# row is then a DECIDED STILL-LIVE. Without this file the near-miss entry would be caught by
+# the OLD guard and the new arm would be scoring a case that was already handled — the seed
+# would prove nothing. Measured on the reference consumer: 80 tracked files carried the
+# underscore spelling against 0 for an impossible token.
+cat > "$WORK/consumer/notes/unrelated-prose.md" <<'EOS'
+# design notes
+
+An earlier draft called this field `near_miss_flag:` before the spelling was settled.
+Nothing reads this file; it exists so the token is reachable in the tracked tree.
+EOS
 cat > "$WORK/consumer/_bmad-output/ai-dlc-update/push-candidate-ledger.md" <<'EOM'
 ## PC-GOOD — anchored on a flag the fix cannot be written without
 
@@ -112,6 +135,31 @@ verify: theirs_lacks core/scripts/validate-thing.sh "--strict-provenance"
 Upstream should enforce provenance strictly by default.
 
 verify: theirs_lacks core/scripts/validate-thing.sh "strict provenance enforced by default"
+
+---
+
+## PC-NEARMISS — the anchor is one character off the token the fix shipped
+
+THE OFFENDER. Upstream really did move: `near-miss-flag:` is absent at base and present at
+theirs. This receipt anchors on `near_miss_flag:` — underscore — which is absent at BOTH, so
+the two refs alone say "still live". The old guard cannot catch it either, because the
+misspelled token IS reachable in this consumer's own tracked tree (notes/unrelated-prose.md),
+so `consumer_reachable` returns 0 and the row is DECIDED. Must be NEEDS-REVIEW naming the
+hyphen spelling.
+
+verify: theirs_lacks core/scripts/near-miss-subject.sh "near_miss_flag:"
+
+---
+
+## PC-NOMISS — absent at both, and NO variant of it closes either
+
+THE NEAR-MISS SEED, one property apart from PC-NEARMISS: same subject, same shape, absent at
+both refs, unreachable in the consumer — but neither the hyphen swap nor the colon strip finds
+anything at theirs, so there is no misspelling to report. It must fall through to the EXISTING
+unfalsifiable arm and not be claimed by the new one. Without this, an arm that reported
+mis-anchored on every absent-at-both anchor would pass every other assertion here.
+
+verify: theirs_lacks core/scripts/near-miss-subject.sh "ZZQQ_NO_SUCH_TOKEN:"
 
 ---
 
