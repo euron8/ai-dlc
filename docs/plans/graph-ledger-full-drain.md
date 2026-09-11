@@ -37,127 +37,182 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 85 SHIPPED THREE RELEASES — `v0.545.0`, CORRECTED BY `v0.546.0`, THEN `v0.547.0` — AND **EVERY DEFECT IN ALL THREE WAS FOUND BY AN ADVERSARY AFTER THE BRANCH WAS GATE-GREEN AND PUSHED, THE FIRST TIME AFTER IT WAS ALREADY MERGED.** THE SWEEP ITSELF WAS ALSO A DEFECT: THIS BATCH READ THE CONSUMER'S LEDGER AT THE WRONG REF AND RECORDED A LIVE FILING AS ABSENT, TWICE, IN OPPOSITE DIRECTIONS. THE CANDIDATE'S DIAGNOSIS WAS ONE LEVEL SHORT: THE IGNORE PATTERN IT ASKED FOR WAS ALREADY DECLARED, AND WHAT NEVER RUNS IS THE **RENDER**. THE GAP IS **FIVE**, PENDING **3**, AND THE PULL IS **REQUIRED** — CARRIED OVER FROM BATCH 83 AND UNCHANGED.
+### BATCH 86 SHIPPED AS `v0.548.0`, ONE RELEASE CARRYING THREE PC-BACKED SUBJECTS — AND **THE SWEEP'S OWN SUBSET CONTROL FIRED, BECAUSE THE CONSUMER'S SPRINT BRANCH AND `main` HAVE EACH DIVERGED FROM THE OTHER AND NEITHER REF IS THE LIVE SET.** THE FILED REMEDY FOR THE HEADLINE CANDIDATE WAS REFUTED BY BUILDING IT: READ LITERALLY IT ACQUITS **129 OF 129** MACHINERY PATHS, A TOTAL DISARM OF THE ARM IT MEANS TO NARROW. MY OWN FIX THEN CARRIED **TWO** DEFECTS, BOTH FOUND BY DRIVING IT AND NEITHER BY READING IT. THE GAP IS **ONE**, PENDING **4**, AND THE PULL IS **NOT REQUIRED** — THE CONSUMER PULLED TO `0.547.0` MID-BATCH AND THE BOOTSTRAPPING HAZARD IS MEASURED CLEAN FOR THIS RANGE.
 
-This block replaces the batch-84 record below it. Every figure was re-derived after the merge
+This block replaces the batch-85 record below it. Every figure was re-derived after the merge
 against the working tree with controls in the same invocation; re-derive them again rather than
 reading them.
 
-**`VERSION` IS `0.547.0`, SO BATCH 86 RELEASES AS `0.548.0`.** Re-derive `VERSION` and add one.
-Batch 85 merged THREE times: `v0.545.0` at `ef20d75a` (PR #701) carrying
-`PC-S310-HANDOFF-ENTRY-MARKER-COMMITTED-NEVER-DISCHARGES-CROSS-SESSION`, cited verbatim in the
-release commit message; the correction `v0.546.0` at `3cce29b6` (PR #702); and `v0.547.0` at
-`3e7c5707` (PR #704). `BL-229` is filed, fixed and ROTATED; `BL-230` is filed and NOT fixed.
+**`VERSION` IS `0.548.0`, SO BATCH 87 RELEASES AS `0.549.0`.** Re-derive `VERSION` and add one.
+Batch 86 merged ONCE, at `e26a1c7b` (PR #706), carrying three candidates in one release:
+`PC-S311-SELF-UPDATE-FIXTURES-ARM-3-PREWRITTEN-HAS-NO-SPLIT-STAMP-SUPPRESSION`,
+`PC-S310-CHECK5-GATE-LOG-HEADER-CONVENTION-UNDOCUMENTED-AND-UNSATISFIABLE`, and the
+`PC-S310-RETRO-PERSONA-MARKER-VOCABULARY-NOT-DOCUMENTED-IN-STEP-FILE` /
+`PC-S310-RETRO-STEP6A-COMMIT-LIST-OMITS-AMBIENT-SESSION-LOGS` pair, all four cited verbatim in the
+release commit message. `BL-231`, `BL-232` and `BL-233` are filed, fixed and ROTATED; archive moved
+**137 → 140**.
 
-**`v0.547.0` KILLED THE CONJUNCT THREE HANDS HAD SCORED UNPROVABLE, AND THAT IS THE BATCH'S MOST
-TRANSFERABLE LESSON.** `select(.transient)` in the row's jq could not be exercised by the shipped
-declaration — zero DURABLE entries carry an `ignore` key, control 16 transient ones do — so all
-three of us filed it as a loaded gun and moved on. **That was a fact about the CORPUS, not about
-the world.** The precedent for synthesising it had been sitting one layer down since it was
-written: `transient-ignore-block`'s own `renders-durable-too` mutant manufactures a durable pattern
-rather than waiting for the schema to grow one. `T8` does the same for the row and kills the mutant
-alone. **And the mutant was a wrong REMEDY, not a miscount** — it tells the operator to
-`git rm --cached` a durable path, which on the reference consumer resolves to
-`_bmad-output/ai-dlc-update`, the ledger directory this program exists to drain. Three hands had it
-tiered as cosmetic because each asked what the wrong output would SAY rather than what it would
-make someone DO. Both rules are now in `.claude/rules/fixture-mutants.md`.
+**THE SWEEP'S SUBSET CONTROL FIRED AND THE DERIVE BLOCK'S OWN PREMISE IS WHAT IS WRONG.** Batch 85
+added a control asserting `main`'s live set is a SUBSET of the sprint tip's, on the reasoning that
+the consumer files onto its sprint branch after the sprint's PR merges. **That reasoning holds only
+while the sprint branch is AHEAD.** Measured this batch: the sprint branch
+`ai-dlc/feature/rebalancer-restart-chunk-recenter` is **DIVERGED** — 58 commits `main` lacks, and
+**11 commits IT lacks**, including the `0.542.0 → 0.547.0` pull — so four ids live at `main` are
+absent from the tip and the control reported 4 where it demands 0. **Neither ref alone is the live
+set.** The answer is the UNION of both, minus anything archived at either: **55 live**, against 51
+at the tip and 54 at `main`. Take the union; report both refs when they differ, and treat the
+control firing as a fact about the BRANCH TOPOLOGY rather than as a stale `$SB`.
 
-**MERGING WITH A DISPATCHED ADVERSARY STILL OUT COST THIS BATCH A WHOLE CORRECTION RELEASE, AND THE
-PLAN ALREADY SAID NOT TO.** Action 1's "do not merge while a hand you dispatched is still out, even
-on a green gate" was overridden on the reasoning that two hands had gone idle without reporting and
-the third was slow. All three then reported, all three were right, and between them they found: four
-wrong implementations that passed the shipped probe (two of them live defects), a raw count in
-resident prose that went stale within a day, a wrong cause reported on half the row's own trigger,
-a shipped date that was wrong by five weeks, and a false deferral in `BL-229`'s own receipt limits.
-**None of it was reachable by reading; all of it came from building the wrong thing and driving it.**
+**THE SWEEP WAS NOT EMPTY, AND EVERY PRIOR BLOCK SAID TO EXPECT IT EMPTY.** The consumer filed FOUR
+candidates on 2026-09-11 — three in its sprint-310 retro (`937c4a24e`) and one in the pull commit
+itself (`7f7800e81`) — and pulled to `0.547.0` the same day. All four were unfiled here, none named
+in any `origin/main` release commit (control: a known-shipped id returns 1, an impossible id 0).
+**Run the sweep; never read a sentence in this file for the answer.**
 
-**THE SUBJECT, AND THE FILED REMEDY WAS RIGHT IN SHAPE AND POINTED AT THE WRONG LAYER.** The
-candidate reads as a `handoff.md` step-ordering problem — step 1 writes `.handoff-in-progress`,
-step 2's broad `git add` commits it, step 5's `rm -f` records no deletion — and asks for a
-`.gitignore` pattern. **That pattern is already declared**, in `pipeline-state-paths.json`, whose
-own `reason` fields name this exact failure. What never runs is the RENDER:
-`sync-transient-ignore.sh` is the only thing projecting declarations into a consumer's
-`.gitignore`, and its sole invocation site in the distribution is `install.sh` — the NEW-consumer
-path. Zero callers under `core/skills/ai-dlc-update/**`, zero in `core/git-hooks/`, against a
-control of 15 files naming `validate-hook-registration`. **The renderer's own header claims it was
-lifted out of `install.sh` so existing consumers would be reached; moving it made it REACHABLE
-there and nothing made it RUN.** `I95(d)` binds `install.sh` to invoke it and no arm binds the
-update path, so the invariant covers the half that already worked.
+**THE HEADLINE CANDIDATE'S FILED REMEDY IS REFUTED, AND ITS FAILURE MODE IS TOTAL RATHER THAN
+PARTIAL.** `PC-S311` is real: ARM 3 of `self-update-fixtures.sh` refuses a gate record whose
+recorded digest equals the `theirs` blob for a path the range changes, and that predicate is also
+satisfied — with no self-comparison having occurred — by every machinery path a PRIOR self-update
+delivered. The consumer's ledger asks for the exemption to be keyed on its `skill_commit`. **Read
+literally, against the LIVE stamp, that acquits everything**, because `SKILL.md` step 2 advances
+`skill_commit` to `theirs` BEFORE invoking the runner: driven over the 129 paths the shipping
+`machinery_paths()` resolves, **129 of 129** acquitted against **128 of 129** at the value the gate
+actually saw. The two sides differ, so the measurement discriminates — and the naive form deletes
+the arm's whole subject while reading as a fix.
 
-**WHAT SHIPPED**: `transient_ignore_row()` in `apply.sh`, sited beside `hook_registration_row()`
-and shaped like it — the same "other half of a delivery this tool does not do", one schema over.
-It NAMES the work rather than doing it, because `.gitignore` is user-owned and this driver has no
-channel for the operator's gate on that edit.
+**SO THE GATE CARRIES THE VALUE, AND "RECORDING A VALUE" IS NOT "RECORDING A DIGEST".**
+`self-update-gate.sh` writes `# skill-commit: <peeled sha | ->` into its record header and the
+runner reads it back through the existing `rec_field()`. The gate deliberately keeps the stamp out
+of its `# input:` rows because step 2 REWRITES the file, so a digest cannot survive to the read — a
+value copied into the header survives precisely because it is a copy. That distinction is the whole
+design; if it is wrong, the design is wrong.
 
-**AND `--check` IS BLIND TO HALF ITS OWN SUBJECT, FOUND BY DRIVING IT.** It returns at the block
-comparison while the still-TRACKED scan sits below on the write path, so on a tree with the marker
-tracked AND the block current it prints `OK: transient-state block current` and exits **0** while
-`git ls-files` returns the marker in the same invocation. An ignore rule does nothing to a file git
-already tracks. **A row keyed on `--check` alone reports clean over exactly the state where the
-guard fires forever**, which is why arm 2 asks the consumer's index directly and runs whatever arm
-1 answered.
+**MY OWN FIX CARRIED TWO DEFECTS AND DRIVING IT FOUND BOTH, WHILE READING FOUND NEITHER.** The first
+cut had no `!= theirs` guard: a gate RE-RUN after the write records `skill_commit == theirs`, and
+the blob test then acquits the exact case ARM 3 exists to catch, because `theirs:P` trivially equals
+itself. The second compared the recorded value as a STRING, so an abbreviated `48e81187` differed
+textually from the full sha naming one commit and the guard silently never fired — a refusal
+defeated by a spelling, four lines from a comment stating that rule for `base`/`theirs`.
 
-**THE BATCH'S OWN LESSON IS A ZERO TAKEN AGAINST THE WRONG REF, AND IT COST TWO WRONG RECORDS
-BEFORE THE CONSUMER CORRECTED IT.** That consumer branches per sprint and merges at the retro, so a
-candidate filed AFTER the sprint's PR merges sits committed and pushed on the sprint branch and is
-ABSENT FROM `main` until the retro. The sweep's `lids()` reads the WORKING file — whatever is
-checked out at that instant — and the `-S` date check keys on `main`. This batch read the entry in
-full at 02:00 with the sprint tree checked out, then read 0 twice after the consumer checked out
-`main`, and recorded the filing first as UNCOMMITTED, then as WITHDRAWN. **Two instruments agreed
-on a wrong answer because both pointed at the wrong ref, which is the shape that reads most
-convincingly.** The derive block now resolves the sprint branch and reads the ledger with
-`git show`, with a control asserting `main`'s live set is a SUBSET of the tip's. **ASK WHICH REF A
-LEDGER ZERO WAS TAKEN AGAINST before calling a filing absent.**
+**THE RECEIPT WAS SCORED BY BUILDING SEVEN WRONG IMPLEMENTATIONS AND ONE WAS ACCEPTED UNTIL A THIRD
+SEED EXISTED.** It drives the shipping program and rejects all seven: pre-fix (1), comment-only (1),
+token-in-an-unrelated-string (1), ARM 3 deleted (9), the filed live-stamp remedy (1), cut 1 (9), cut
+2 (1), against the correct fix at 0. **Cut 2 scored CLOSES until an ABBREVIATED seed was added** —
+the forged world writes a FULL sha, which an unpeeled implementation also refuses, so no seed in the
+original set could separate a peeled comparison from a string one. Ask of every seed which candidate
+implementations it cannot tell apart.
 
-**MY OWN FIX CARRIED THREE DEFECTS AND NO MECHANISM MISSED ONE, WHILE READING CAUGHT NONE.** The
-first fixture arm was VACUOUS — it asserted `--check` exits 0, which a subject with its check
-branch deleted also does — and its mutant said so. The first mutant then belonged to a DIFFERENT
-arm: disabling the mode branch makes `--check` re-render, which is `check_discriminates`'s subject,
-so both arms killed it and the harness reported entanglement. And the row's first gate keyed on the
-RENDERER's absence, which over-fired on every pre-`0.410.0` consumer and failed
-`apply-restamp-worklist`'s C4 (whose consumer asserts ZERO hand-back rows) — corrected to gate on
-the DECLARATION, since renderer and schema shipped together at `0.410.0`, so "schema present,
-renderer absent" is a real split and "neither" is just an older consumer. **I also hit I54 in my own
-arm**, four lines below the comment warning about it: `render | grep -q` gave a false FAIL on the
-correct subject.
+**THE OTHER TWO SUBJECTS ARE DOCUMENTATION DEFECTS AND THEIR RECEIPTS ARE THE WEAK PART, STATED
+RATHER THAN HIDDEN.** Both carry prose-keyed receipts closable by rewording, with the honest
+replacement named in each entry. `BL-233`'s receipt does discriminate against the likeliest wrong
+fix — a hand-copied roster scores 1, because the arm requires the failure messages to INTERPOLATE
+`PERSONA_MARKERS`/`PHASE_LABELS` rather than name markers literally.
 
-**THE FP SET WAS MEASURED BEFORE SHIPPING AND IS EMPTY** on four correct-consumer shapes: durable
-artifacts tracked, transient files present on disk but untracked (the common mid-pipeline state), a
-consumer's own extra `.gitignore` rules outside the block, and a current block with nothing tracked.
+**TWO FILINGS WERE CORRECTED BY DERIVING RATHER THAN ACCEPTING.** `PC-S310-CHECK5`'s strongest
+evidence is not in the filing: `ai-dlc-setup/SKILL.md`'s R22 absorption table records
+`| Autonomous Gate Protocol | gate-validation.md |`, so step 12 cited CLAUDE.md for content the
+setup skill says lives in step 12's own file — a CIRCULAR citation, where the filing establishes
+only that the section is absent. And `PC-S310-RETRO-STEP6A` asks for a longer hand list, which is
+the wrong shape: `core/schemas/pipeline-state-paths.json` already declares **36** such paths as
+**20 DURABLE / 16 TRANSIENT** with a reason on each, and all four files the consumer agonised over
+are declared DURABLE there. **Derive a filing's population before building to its remedy.**
 
-**THE GAP IS THREE, PENDING 3, AND THE PULL IS REQUIRED.** Consumer installed `0.542.0`,
-distribution `0.545.0`. The requirement is carried over from batch 83 and unchanged. **Do not
-dispatch the pull** — it is operator-initiated and readiness is not authorization. The operator was
-asked at this batch's open and chose REPORT ONLY, no runbook.
+**A CORRECTION TO A THIRD FILING, IN THE NARROWING DIRECTION.** `PC-S310-RETRO-PERSONA` claims
+neither vocabulary is named in the step file. At HEAD `retro.md` names `PHASE_LABELS` once; the
+consumer's installed `0.542.0` copy names it zero times. `PERSONA_MARKERS` is named zero times
+either way, and neither is in `docs/vocabulary-index.md` (0 hits each against a control of 19
+entries).
 
-**THE SWEEP FOR BATCH 86. Live 51, cited 33, unfiled 18, archive 202, partition control 0**, all
-derived at the sprint tip. DISCHARGED 2 / in-flight 31 / untouched 18, summing to 51 after the
-4-id overlap; TERMINAL 86; discharged-but-invisible 1. **THE AVAILABLE PC-BACKED RESIDUE IS ZERO**:
-of the 18 unfiled, 4 are named in `origin/main` release commits, 11 carry `NOT-UPSTREAM`, the
-`PC-S309-PRE-PUSH` pair is WITHDRAWN and `PC-S340-RETRO-AUDIT-SCANS-…` is REFUTED. Run the sweep
-anyway — and run it against the SPRINT TIP, which is the whole point of this batch's correction.
+**THE GAP IS ONE, PENDING 4, AND THE PULL IS NOT REQUIRED.** The consumer pulled `0.542.0 →
+0.547.0` mid-batch at `7f7800e81`, so the gap was ZERO at the open and this batch reopened it at
+one. **The bootstrapping hazard is MEASURED for this range rather than warned about**: the range
+carries `self-update-gate.sh` and `self-update-fixtures.sh`, so the consumer's installed pre-fix
+ARM 3 classifies the pull delivering its own repair — but its stamp is currently EQUAL
+(`commit == skill_commit == 48e81187`), so **0 of 8 changed core paths** would be refused, against a
+control of **2** that fire at the consumer's own prior split. 0 mode-only changes. The operator was
+asked at this batch's open and chose REPORT ONLY, no runbook. **Do not dispatch the pull.**
 
-**THE CONSUMER REPAIRED ITS OWN TREE MID-BATCH AND THAT IS NOT THIS FIX.** It ran `git rm --cached`
-on both markers and re-rendered its block (`21100b72f`, `567cfc9dc`), after this session answered
-its direct question about whether the markers should be tracked. Its own `--check` now exits 0 with
-zero tracked transient paths. **That repairs one tree and gives the pull path no caller**, so the
-next pull adding a transient declaration drifts again, there and everywhere else. The pre-fix state
-is recoverable at `567cfc9dc^`: 16 declared, 13 rendered, both handoff markers absent (control:
-`pipeline-paused.flag` present). **And the renderer had run EXACTLY ONCE there, at the install
-(`f53453868`, 2026-08-26)** — derived with `git log -S"BEGIN AI/DLC transient" -- .gitignore`
-against a control of 49 commits touching that file. Batch 85 first reported "last rendered
-2026-08-31" from the file's most recent commit, whose whole diff is two negations OUTSIDE the
-marker region; an adversary corrected it. **Ask what a date is a date OF** — a file moving and a
-rendered REGION moving are different events.
+**THE SWEEP FOR BATCH 87. Live 55 as the UNION (51 at the sprint tip, 54 at `main`), cited 33,
+unfiled 18, archive 202, partition control 0.** DISCHARGED 7 / in-flight 30 / untouched 18, summing
+to 55 after the 4-id overlap; TERMINAL 86. **THE AVAILABLE PC-BACKED RESIDUE IS ZERO**: of the 18
+unfiled, 11 carry `NOT-UPSTREAM`, the `PC-S309-PRE-PUSH` pair is WITHDRAWN,
+`PC-S340-RETRO-AUDIT-SCANS-…` is REFUTED, and the rest are named in `origin/main` release commits.
+Run it anyway — that expectation has now been wrong two batches running.
 
-**AND READ `BL-227` BEFORE BUILDING ANY RECEIPT.** Unchanged from batch 84. The ranked no-`PC`
-entries, readiest first, are `BL-225`, `BL-217`, `BL-222`, `BL-224`, `BL-220`, `BL-218`, `BL-219`,
-`BL-221`, `BL-223` — **every one of their receipts needs repairing before it is trusted**.
-`BL-229`'s own receipt was scored by building three non-fixes: a prose-only copy naming every row
-in comments, a copy defining the function but never dispatching it, and a `--check`-only copy that
-never asks the index. All three are rejected. **One known limit, stated rather than hidden: the
-receipt cannot see WHICH schema the index arm reads**, so a copy pointed at the distribution's
-declaration still closes it; the fixture covers that arm.
+**`discharged-but-INVISIBLE` READS 5 ON THE BRANCH AND 1 AFTER THE MERGE.** Four of the five are
+this batch's own ids, cited on HEAD and not yet on `origin/main`; the join reads commit MESSAGES on
+`origin/main`, so it cannot see them until the squash lands. Re-derive after the merge and expect 1.
+
+**ALL THREE HANDS REPORTED AN HOUR LATE, TRUNCATED, AND BETWEEN THEM FOUND FOUR REAL DEFECTS ON
+THE GATE-GREEN, PUSHED BRANCH — AND THE MERGE WAS HELD FOR THEM, WHICH IS THE ONLY REASON IT COST
+NOTHING.** Every one was in prose that ships to consumers, and two would have survived into the
+CHANGELOG. They are corrected in `a98835a4` and `70b443c2`, on the same branch, before the merge.
+
+**MY OWN HEADLINE FIGURES WERE SWAPPED AND THE MEASUREMENT BEHIND THEM WAS A TAUTOLOGY. THAT IS
+THIS BATCH'S MOST TRANSFERABLE LESSON.** Two shipped comments and the commit message said a
+live-stamp reader acquits "129 of 129 against 128 of 129 at the value the gate saw". Re-derived
+over the 129 rows of the consumer's real gate record: 128/129 advanced, 129/129 pre-advance — the
+wrong way round. Reading my own probe found why: its "advanced" arm bound BOTH sides to `THEIRS`,
+so 129/129 was true by construction. **An arm that cannot return anything else is not a
+measurement**, and it passed unnoticed because the number it produced was the number I expected.
+**And the spread was never the evidence anyway** — it measures whether a recorded digest matches at
+all. The disarm is that under the live stamp the test becomes `blob(theirs:P) == blob(theirs:P)`, a
+TAUTOLOGY on exactly the set the arm fires on: 2 of 2 on that record. The conclusion held; the
+argument for it was wrong in two independent ways.
+
+**A CONTROL I NAMED AS FIRING DOES NOT FIRE.** The same comments called `apply.sh` a
+self-comparison "in the same run". Driven per row against all four conjuncts, it is refused ENTRY
+to the arm — recorded digest `09036680` is not the theirs blob `1768c802`, so `gr_h = gr_tb` is
+false. My BRIEF to the hand had this right and the SHIPPED comment inverted it. A comment asserting
+a predicate discriminates by naming a case it says fires, where that case does not fire, is
+`verification-discipline.md`'s "a control that agrees with the verdict is not a control".
+
+**A STALE COUNT WAS REINTRODUCED ONE LINE ABOVE WHERE IT WAS JUST FIXED.** The runner's `rec_field`
+comment was edited in this very release to stop carrying a tally, while the gate's JOIN KEYS
+comment still read "exactly these three prefixes" with `# skill-commit:` inserted directly below
+its own list. The runner reads four.
+
+**AND A PARAGRAPH BECAME FALSE IN A WAY THAT ARMED A FUTURE DELETION.** `self-update-gate.sh`'s
+stamp-not-recorded note said "what is lost is small — the only arm reading the stamp is
+`advise_safe_stop`'s advisory acquittal". True when written; the PRE-WRITTEN arm now depends on the
+recorded value. Left alone it was a standing rationale for deleting the header this batch added.
+**Ask of every comment a change makes false whether it now argues AGAINST the change.**
+
+**THE GATE-LOG INSTRUCTION OVER-CONSTRAINED ITS OWN VALIDATOR**, found by the receipt hand driving
+the isolator rather than reading it. Step 12 said "nothing follows it on the line but whitespace";
+Check 5 anchors on `([[:space:]]|$)` and accepts anything after. Titled and bare headers isolate
+IDENTICALLY (4 lines each) against a `## Gate:` control at 0. A lead following the prose strips a
+title that works, and a later hand could "repair" the regex to match the prose. **One figure in
+that hand's report did NOT reproduce** — it claimed 121 titled consumer headers; the census is 1
+untitled `Gate Log:` header against 8 `Gate:`. The finding stands on the driven regex, which is the
+stronger evidence; the figure was not checked.
+
+**TWO PROPOSED REMEDIES WERE BUILT AND REFUSED, AND A THIRD SHAPE THE FIXTURE ALREADY KILLS.** An
+ANCESTRY key refuses a consumer that materially holds the incoming bytes — measured on a
+constructed repo, an unrelated branch can carry `theirs`' blob while failing
+`merge-base --is-ancestor`. A recorded-vs-LIVE cross-check is false on every legitimate split
+stamp, because step 2 advances the live stamp before the runner sees it. And a hardcoded
+path-name exemption — fix-shaped, wrong, and invisible to a prose attack — was built and driven:
+Part G14b fails against it, because G14b and G14c assert over ONE path and differ only in the
+recorded `skill_commit`. **Make the acquitted case and the control case use the SAME path**; a
+name-keyed exemption then has to produce two verdicts for one name.
+
+**THE HANDS' EARLIER SILENCE WAS AN INSTRUMENT DEFECT, NOT A CHOICE.** One reported it had NO
+`SendMessage` tool in its session, which is why two of its drains arrived empty. All three payloads
+truncated near 16000 characters and had to be asked for by part. **An idle hand with an unanswered
+request is a hand whose report is in transit** — this batch is the strongest evidence yet.
+
+**WHAT THE LEAD'S OWN PASS FOUND, AND WHY IT WAS NOT ENOUGH.** Two receipt hands and one adversary, two-to-three
+direct requests each, idle without reporting across the whole batch. The lead ran the adversary's
+briefed attacks itself and found no defect in the shipped fix: the record's `# input:` population IS
+`machinery_paths()` (`self-update-gate.sh:623`, eval'd out of `preclassify.sh`), so the 129/129
+figure is over the right set and is understated if anything, since the true population is machinery
+∪ the hook ∪ the scripts it names ∪ the applying marker; every classify terminal carries the new
+header, the only two pre-record exits being inside `--safe-stop`, which writes no record and whose
+absence the fixture already asserts; a degenerate stamp correctly withholds the acquittal; and a
+forged record buys exactly what a real split stamp buys, because a sha satisfying the acquittal must
+be a commit that genuinely carried that content. **That is the lead's own pass and it is not an
+independent one** — a late report from any of the three should be read against what shipped.
 
 ### BATCH 84 SHIPPED AS `v0.544.0`, ONE RELEASE CARRYING ONE PC-BACKED SUBJECT — AND **FIVE ADVERSARIAL PASSES WERE RUN, OF WHICH FOUR FOUND A REAL DEFECT ON A GATE-GREEN, PUSHED BRANCH.** THE FILED CANDIDATE'S OWN PROPOSED REMEDY WAS REFUTED BY MEASUREMENT: BUILDING IT MAKES THE CONSUMER **WORSE**. THE GAP IS **TWO**, PENDING **2**, AND THE PULL IS **REQUIRED** — CARRIED OVER FROM BATCH 83, WHOSE THREE DATED FIRINGS ARE STILL UNDELIVERED.
 
@@ -8523,7 +8578,7 @@ so no block written before it changes verdict.
 ### NEXT ACTIONS — numbered, in order
 
 1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below) AGAINST THE CONSUMER'S SPRINT TIP,
-   RANK THE UNFILED CANDIDATES, THEN SCOPE BATCH 86 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED
+   RANK THE UNFILED CANDIDATES, THEN SCOPE BATCH 87 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED
    YOU.** Operator
    instruction, given at batch 52. **If the one-liner was TYPED BY THE OPERATOR**, report the
    candidates with a marked recommendation and ask, as every batch before has. **If it ARRIVED
@@ -8552,6 +8607,20 @@ so no block written before it changes verdict.
    residue — several are cheap, and `BL-222` is plausibly a one-line render on a PASS path.
    **Do not re-derive their findings**; each carries a bidirectional receipt and the measurement
    that produced it.
+
+   **BATCH 86's THREE SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope any of them.**
+   `PC-S311-SELF-UPDATE-FIXTURES-ARM-3-PREWRITTEN-HAS-NO-SPLIT-STAMP-SUPPRESSION`,
+   `PC-S310-CHECK5-GATE-LOG-HEADER-CONVENTION-UNDOCUMENTED-AND-UNSATISFIABLE` and the
+   `PC-S310-RETRO-PERSONA-MARKER-VOCABULARY-NOT-DOCUMENTED-IN-STEP-FILE` /
+   `PC-S310-RETRO-STEP6A-COMMIT-LIST-OMITS-AMBIENT-SESSION-LOGS` pair shipped as ONE release,
+   `v0.548.0` at `e26a1c7b` (PR #706), all four cited verbatim in the release commit message,
+   closing `BL-231`, `BL-232` and `BL-233`, all three rotated. They batched because no receipt is
+   closed by a sibling's fix and the range's only bootstrapping files are the two this batch's own
+   subject required. **The filed remedy for `PC-S311` was REFUTED by building it** — keyed on the
+   LIVE stamp it is a total disarm — and **three adversarial hands found four defects on the
+   gate-green pushed branch**, all in shipped prose, corrected at `a98835a4` and `70b443c2` before
+   the merge. Read the batch-86 resume block before writing any figure into a comment: two of those
+   four were MY OWN numbers, swapped, taken from a probe that compared a value with itself.
 
    **BATCH 85's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.**
    `PC-S310-HANDOFF-ENTRY-MARKER-COMMITTED-NEVER-DISCHARGES-CROSS-SESSION` shipped ALONE as
