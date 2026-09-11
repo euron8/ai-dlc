@@ -59,17 +59,26 @@ detail() { bash "$RV" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null |
 
 # SANITY, because every arm below is unattributable without it: upstream really did move,
 # under the HYPHEN spelling, and the receipt's UNDERSCORE spelling is absent at both refs.
-# `git show` on a path that does not exist at a ref is a FATAL on stderr and empty on stdout.
-# That is the correct state here — the subject is ADDED between base and theirs — so stderr is
-# discarded and the emptiness is what the assertions read. Discarding it in the `theirs` arm
-# instead would hide a genuinely missing subject, which is why each call is written out rather
-# than looped: the theirs arm must find the token, and absence there is a broken fixture.
+#
+# NEVER PIPE INTO `grep -q`. It leaves at its first match while the writer is still pushing,
+# and under pipefail the pipeline answers with the writer's EPIPE — reporting NOT-FOUND on
+# input that contains the pattern. It is a size threshold rather than a race, so it is correct
+# until the blob grows past the pipe buffer and then wrong permanently with no symptom. `I54b`
+# of `validate-enforcement-map.sh` refuses the shape; the blobs here are small and it would
+# have been latent, which is exactly the state that arm exists to prevent. Capture first, feed
+# a here-string.
+#
+# `git show` on a path absent at a ref is a FATAL on stderr and empty on stdout. That is the
+# correct state for the BASE arm — the subject is ADDED between base and theirs — so its
+# stderr is discarded and the emptiness is what the assertion reads. The THEIRS arm keeps its
+# stderr: absence there is a broken fixture, not a precondition.
 nm_ok=1
-git -C "$DIST" show "${THEIRS}:core/scripts/near-miss-subject.sh" | grep -qF 'near-miss-flag:' || nm_ok=0
-git -C "$DIST" show "${BASE}:core/scripts/near-miss-subject.sh" 2>/dev/null | grep -qF 'near-miss-flag:' && nm_ok=0
-for ref in "$BASE" "$THEIRS"; do
-  git -C "$DIST" show "${ref}:core/scripts/near-miss-subject.sh" 2>/dev/null | grep -qF 'near_miss_flag:' && nm_ok=0
-done
+nm_theirs="$(git -C "$DIST" show "${THEIRS}:core/scripts/near-miss-subject.sh")"
+nm_base="$(git -C "$DIST" show "${BASE}:core/scripts/near-miss-subject.sh" 2>/dev/null)"
+grep -qF 'near-miss-flag:' <<<"$nm_theirs" || nm_ok=0
+grep -qF 'near-miss-flag:' <<<"$nm_base"   && nm_ok=0
+grep -qF 'near_miss_flag:' <<<"$nm_theirs" && nm_ok=0
+grep -qF 'near_miss_flag:' <<<"$nm_base"   && nm_ok=0
 # AND THE MASK MUST BE IN PLACE. If the misspelling is NOT reachable in the consumer tree,
 # the OLD unfalsifiable guard catches this row and the new arm is scoring a solved case.
 # Control in the same arm: an impossible token must not be reachable.
