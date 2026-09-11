@@ -37,6 +37,105 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
+### BATCH 88 SHIPPED AS `v0.551.0`, ONE RELEASE CARRYING THREE NO-`PC` SUBJECTS — AND **ALL THREE RECEIPTS WERE REBUILT, BECAUSE ALL THREE CLOSED ON SOMETHING THAT WAS NOT A FIX.** ONE PASSED ON AN **EMPTY SUBJECT FILE**; ONE CARRIED A **DEAD PRIMARY ARM** THAT HAD NEVER DECIDED A SINGLE RUN; ONE **REJECTED A CORRECT FIX** ON LINE DISTANCE ALONE. THE SWEEP WAS EMPTY OF PC WORK AT THE OPEN AND **IS NOT EMPTY NOW — THE CONSUMER FILED TWO NEW `PC-S341-*` CANDIDATES MID-BATCH AND BOTH ARE AVAILABLE.** THE GAP IS **ONE**, PENDING **1**, AND THE PULL IS **NOT REQUIRED** — THE CONSUMER PULLED ITSELF TO `0.550.0` DURING THE BATCH.
+
+This block replaces the batch-87 record below it. Every figure was re-derived after the merge
+against the working tree with controls in the same invocation; re-derive them again rather than
+reading them.
+
+**`VERSION` IS `0.551.0`, SO BATCH 89 RELEASES AS `0.552.0`.** Re-derive `VERSION` and add one.
+Batch 88 merged ONCE — `v0.551.0` at `864c37d9` (PR #716) — closing `BL-217`, `BL-222` and
+`BL-235`, all three ROTATED; archive moved **141 → 144**, live **94 → 91**. The release carries
+NO `PC-` id because none of the three entries holds one.
+
+**BATCH 89's SUBJECT IS ALREADY ON THE BOARD, AND IT IS PC-BACKED.** The consumer filed
+`PC-S341-AUDIT-LAYER-DEBT-UNDECLARED-ARM-IS-ROW-KEYED-AND-CANNOT-BE-CLEARED` and
+`PC-S341-SKILL-MD-SHIPS-REV-PATH-COMMANDS-WITH-NO-SHELL-HAZARD-NOTE` on 2026-09-11, during this
+batch, taking unfiled **18 → 20**. Both re-derive as genuinely available: **0** commits on
+`origin/main` name either, and neither appears in the `NOT-UPSTREAM` brief (control: an impossible
+id returns 0 from both joins). They outrank the no-`PC` set. **Re-run the sweep anyway** — that is
+now FOUR consecutive batches in which the residue was declared zero and the consumer filed
+anyway.
+
+**EVERY ONE OF THE THREE RECEIPTS THIS BATCH INHERITED WAS UNSAFE, AND THE FAILURES WERE NOT THE
+SAME FAILURE.** `BL-217`'s only predicate on its own subject file was one `grep -q` whose FAILURE
+was the close, so it passed on a **truncated-to-empty role file**, on a pure line reflow whose
+word sequence is byte-identical, on a one-hyphen reword, and on RELOCATING the offending sentence
+into the other file in the contradiction — while REJECTING two correct fixes. `BL-235`'s primary
+`awk` arm keyed on `^## .*Gate Log`, which matches **0** headings in its own subject file (control:
+6 `^## ` headings exist), so a fallback grep window decided every run by accident of layout — and
+a correct fix plus an unrelated `## Gate Log` heading scored as a FAILURE. `BL-222`'s seven-line
+positional window accepted a bare comment and rejected the correct fix rendered one line past it.
+
+**THE TWO REPLACEMENTS THAT DRIVE A PROGRAM WERE PROVEN ABLE TO FAIL, WHICH IS THE PART THAT IS
+USUALLY SKIPPED.** `BL-235`'s receipt was run against three mutants of `validate-mandatory-rules.sh`
+with the PROSE LEFT FIXED, so only the driving arms could answer: forcing the non-test remainder
+empty, disabling the test-only carve-out, and widening isolation to any `^## ` heading all exit 1.
+A receipt whose driving half cannot fail is a prose receipt wearing a harness.
+
+**SEPARABILITY WAS DERIVED, NOT ASSERTED, AND THE SHAPE TO REUSE IS THE DIAGONAL.** Each receipt
+was run against each sibling's fix applied ALONE, from a pristine `origin/main` extraction: every
+receipt exits 0 for its own fix and 1 for both siblings, with the pristine control at 1 in every
+row. Nine cells plus three controls. A single table settles what "no receipt is closed by a
+sibling's fix" means and it costs one loop.
+
+**A NON-APPLIED MUTANT READS EXACTLY LIKE A PASSING ONE, AND IT HAPPENED TWICE IN THIS BATCH —
+BOTH TIMES TO THE LEAD.** A `perl` edit whose anchor text the fix had already removed left the
+tree unmutated and the receipt returned 0, which reads as "the correct fix is accepted". A second
+mutation placed a variable assignment INSIDE the FAIL branch, after `exit 1`, producing a fix that
+cannot work; the harness exited **9**, a REFUSAL, and reading it as a receipt defect would have
+filed a false finding against a correct receipt. **The `cmp -s` applied control caught both.**
+Never read a mutant's verdict before reading its applied control.
+
+**AND A HEREDOC INSIDE `bash -c` CARRYING `$(` BROKE THE OUTER QUOTING SILENTLY** — the mutator
+never ran, the control said NOT-APPLIED, and the exit beside it was meaningless. Write the
+mutator to a FILE and invoke it; `tool-hazards.md` says this and the batch did it anyway.
+
+**THE PUSH EXITED 141 WITH A FULLY GREEN GATE AND THE REF DID NOT LAND.** `pre-push: all gates
+green`, every phase PASS, 195 fixtures — and `git ls-remote --heads origin batch-88-release` came
+back EMPTY against a working control. A bare retry landed it. **Confirm the remote ref moved
+before opening a PR**; this is the sixth occurrence recorded in this program.
+
+**THE SWEEP AT THIS BATCH'S CLOSE. Live 57 as the UNION (both refs), cited 37, unfiled 20, archive
+204, partition control 0.** DISCHARGED 7 / in-flight 30 / untouched 20 after the 4-id overlap;
+TERMINAL 88; discharged-but-INVISIBLE 1. Ledger md5 `4f82fa63` — it MOVED mid-batch, because the
+consumer both pulled and filed.
+
+**THE INCIDENTAL-CLOSE CHECK WAS RUN AND FOUND NOTHING.** Receipt histogram before: 81×1 and 1×9
+over 82 live receipts. After: 78×1 and 1×9 over 79 — down exactly the three that rotated, no zeros,
+so no entry closed without meaning to. The single exit-9 is unchanged across the batch and is a
+harness refusal, not a verdict.
+
+**THE PULL IS NOT REQUIRED AND ONE ALREADY HAPPENED.** The consumer's stamp read `0.548.1` at the
+open and reads **`0.550.0`** now, on all three fields, having pulled itself mid-batch. Gap is ONE
+release, PENDING is **1**. The second test was run on a `file://` scratch clone and its null is
+**NON-DISCRIMINATING** in both directions — `0.550.0`'s only change to `validate-mandatory-rules.sh`
+is a COMMENT rewrite, and the range's one behavioural change, `ledger-reverify.sh`, had already
+landed on the consumer through its own skill self-update, so `cmp -s` reports the two sides
+identical. **Report that null with its limits or not at all.** Zero mode-only changes in the range
+(all four rows: modes equal, blobs differ), so the bootstrapping hazard is measured clean even
+though `ledger-reverify.sh` is in it.
+
+**THE CONSUMER'S LIVE `gate-log.md` IS A ONE-LINE STUB, WHICH SILENTLY DISARMS ANY CHECK 5
+MEASUREMENT TAKEN AGAINST IT.** Its 55 conforming `## Gate Log: Sprint` headers all sit in
+`gate-log-archive.md`, which Check 5 never opens. A probe pointed at the live file SKIPs for every
+sprint and that SKIP reads as "no exposure". Construct the probe under `mktemp`; do not point it at
+the consumer.
+
+**THE READIEST NO-`PC` WORK, IF THE SWEEP SOMEHOW COMES BACK EMPTY**, is the batch-82 remainder:
+`BL-225`, `BL-224`, `BL-220`, `BL-218`, `BL-219`, `BL-221`, `BL-223`. **Read `BL-227` first** — its
+nine are now SEVEN, since `BL-217` and `BL-222` shipped this batch, and every remaining one needs
+its receipt repaired before its verdict means anything. **`BL-218` and `BL-220` are the two that
+close on an OVER-BROAD version of the real fix**, which is the shape a hand builds by accident and
+the one prose-attacks do not catch.
+
+**A CLASS WORTH ONE MEASUREMENT BEFORE IT IS WORTH A MECHANISM.** Across the live backlog at this
+batch's open, **5** receipts closed on a bare absence (`grep -q … && exit 1`): `BL-123`, `BL-145`,
+`BL-214`, `BL-217`, `BL-218`. `BL-217` was one and it passed on an empty file. That grammar keys on
+SHAPE and not on what the predicate reads, so the 5 is a FLOOR and the "43 that drive a program"
+beside it is a CEILING — it is a population estimate and adjudicates no single entry. `BL-227`
+exists because no mechanical arm can ask whether a receipt binds to an emission site.
+
 ### BATCH 87 SHIPPED AS `v0.549.0` AND `v0.550.0`, TWO RELEASES CARRYING ONE PC-BACKED SUBJECT EACH — AND **EIGHT WRONG IMPLEMENTATIONS PASSED THE FIXTURE ACROSS THREE ROUNDS, EVERY ONE A SEED GAP AND NOT ONE A DEFECT IN THE ARM.** THE SHARPEST LEFT THE WHOLE FIXTURE GREEN WHILE BREAKING THE RELEASE'S OWN MOTIVATING CASE. **A FILED `BL-` ENTRY ALREADY EXISTED FOR RELEASE 1'S SUBJECT AND ITS OWN STATED RECEIPT LIMIT WAS REFUTED BY BUILDING BOTH REMEDIES.** THE GAP IS **TWO**, PENDING **2**, AND THE PULL IS **NOT REQUIRED** — THE CONSUMER BEGAN PULLING `0.549.0` ITSELF, MID-BATCH, MINUTES AFTER THE MERGE.
 
 This block replaces the batch-86 record below it. Every figure was re-derived after both merges
@@ -8718,7 +8817,7 @@ so no block written before it changes verdict.
 ### NEXT ACTIONS — numbered, in order
 
 1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below) AGAINST THE CONSUMER'S SPRINT TIP,
-   RANK THE UNFILED CANDIDATES, THEN SCOPE BATCH 87 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED
+   RANK THE UNFILED CANDIDATES, THEN SCOPE BATCH 89 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED
    YOU.** Operator
    instruction, given at batch 52. **If the one-liner was TYPED BY THE OPERATOR**, report the
    candidates with a marked recommendation and ask, as every batch before has. **If it ARRIVED
@@ -8747,6 +8846,20 @@ so no block written before it changes verdict.
    residue — several are cheap, and `BL-222` is plausibly a one-line render on a PASS path.
    **Do not re-derive their findings**; each carries a bidirectional receipt and the measurement
    that produced it.
+
+   **BATCH 88's THREE SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope any of them.** `BL-217`,
+   `BL-222` and `BL-235` shipped as ONE release, `v0.551.0` at `864c37d9` (PR #716), none carrying
+   a `PC-` id, all three rotated. They batched because the derived separability diagonal showed no
+   receipt closed by a sibling's fix and no bootstrapping file is in the range. **All three
+   receipts were REBUILT** — the originals closed on an empty file, on a dead arm, and on a
+   positional window — so do not treat a batch-82 receipt as trustworthy because it exists.
+
+   **AND THE SWEEP IS NOT EMPTY: TWO NEW `PC-S341-*` CANDIDATES WERE FILED MID-BATCH AND BOTH ARE
+   AVAILABLE.** `PC-S341-AUDIT-LAYER-DEBT-UNDECLARED-ARM-IS-ROW-KEYED-AND-CANNOT-BE-CLEARED` and
+   `PC-S341-SKILL-MD-SHIPS-REV-PATH-COMMANDS-WITH-NO-SHELL-HAZARD-NOTE`, both dated 2026-09-11,
+   both unnamed in any `origin/main` commit and absent from the `NOT-UPSTREAM` brief. They are
+   batch 89's ranked subject and they outrank every no-`PC` entry. Re-derive them from the sweep
+   rather than trusting this sentence.
 
    **BATCH 87's TWO SUBJECTS ARE SHIPPED — do not re-scope either of them.**
    `PC-S341-STEP-3F-ANCHOR-RULE-HAS-NO-LINT-AND-A-ONE-CHARACTER-MISS-IS-INVISIBLE` shipped as
