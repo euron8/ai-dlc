@@ -79,9 +79,13 @@ absorption table records it as a pre-R22 CLAUDE.md section that MOVED into gate-
 12 therefore cited CLAUDE.md for content the setup skill says lives in step 12's own file, and a
 consumer following it literally found nothing and invented a format.
 
-Measured on the reference consumer, both directions in one invocation: 8 entries under its own
-`## Gate:` shape, 0 under the header Check 5 matches — so the check had SKIPped on every sprint
-since that consumer's install without anyone learning its UI evidence was unverified.
+**Ask which population a figure was taken over.** A first cut of this entry said "8 entries under
+its own `## Gate:` shape, 0 under the header Check 5 matches" — measured over that consumer's
+ARCHIVED per-sprint logs, which the check never opens. `$GATE_LOG` is one path, and on that
+consumer it holds a single `# Gate Log` heading and zero entries of either shape, because the log
+is rotated per sprint. An adversarial hand caught it. Across that consumer's gate logs generally,
+titled headers are the norm — 229 titled against 10 bare, excluding worktree duplicates — which is
+why the step file admits a trailing title rather than forbidding it.
 
 `CLAUDE.md` is consumer-owned, so an instruction pointing at it cannot be kept true by this
 distribution. Step 12 now states the header inline and says it is a machine join key rather than a
