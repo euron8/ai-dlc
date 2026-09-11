@@ -47,6 +47,16 @@ same copy shape.
 the behaviour arms it introduces makes two cells go red on one input, and the harness then cannot
 say which is load-bearing.
 
+**AND THE ROW WAS REPORTING A WRONG CAUSE ON HALF ITS OWN TRIGGER.** `--check` exits 1 for two
+different states and distinguishes them in its text: a block that was NEVER WRITTEN (`carries no
+AI/DLC transient-state block`) and one written that has since DRIFTED (`does not match`). The row
+reported both as *"does NOT match the declaration this apply just delivered"* — which on a
+never-rendered consumer is false in every clause: nothing drifted, no declaration moved, and the
+operator goes looking for a change that never happened. The remedy is the same command either way;
+the diagnosis is not, and a WORKLIST row is the only channel the operator reads. The row now
+branches on the cause, and `T6`/`T7` hold the two apart — `T6` goes red alone against a mutant that
+re-flattens them.
+
 **AND THE ROW'S COMMENT CARRIED A RAW COUNT THAT WENT STALE INSIDE A DAY.** It read *"declares 16
 transient patterns and its rendered block carries 13"*. The reference consumer re-rendered its own
 block hours after the release merged, and that comment was false in resident prose before anyone

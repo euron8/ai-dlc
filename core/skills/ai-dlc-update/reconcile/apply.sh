@@ -1725,8 +1725,21 @@ TI_SCHEMA="$CONSUMER/.claude/schemas/pipeline-state-paths.json"
 if [ -f "$TI_RENDERER" ]; then
   ti_out="$(bash "$TI_RENDERER" --check --root "$CONSUMER" 2>&1)"; ti_rc=$?
   if [ "$ti_rc" = "1" ]; then
-    say WORKLIST transient-ignore ".gitignore" \
-      "the transient-state ignore block does NOT match the declaration this apply just delivered. Every newly-declared transient path is unignored until it is re-rendered, and a broad \`git add\` then commits pipeline scratch state as a tracked file — which is how a stale handoff entry marker re-arms the handoff guard in sessions that never ran a handoff. Re-render it: \`bash scripts/ai-dlc/sync-transient-ignore.sh\` (it rewrites only its own marker-bounded region, and names anything already tracked). Detail: $(printf '%s' "$ti_out" | tr '\n' ' ')"
+    # TWO CAUSES, AND THE ROW MUST NOT FLATTEN THEM. `--check` exits 1 for a block that was NEVER
+    # WRITTEN (`carries no ... block`) and for one that was written and has since DRIFTED from the
+    # declaration (`does not match`), and it takes trouble to say which. An earlier revision of this
+    # row reported both as "does NOT match the declaration this apply just delivered", which is a
+    # WRONG CAUSE on the first: nothing drifted, no declaration moved, and the operator reading it
+    # goes looking for a change that does not exist. The remedy is the same command either way; the
+    # DIAGNOSIS is not, and this is the only channel the operator reads.
+    case "$ti_out" in
+      *"carries no AI/DLC transient-state block"*)
+        say WORKLIST transient-ignore ".gitignore" \
+          "this consumer has NEVER had a transient-state ignore block written. Nothing drifted — the rendered region does not exist, so every path the declaration marks transient is unignored, and a broad \`git add\` commits pipeline scratch state as a tracked file. That is how a stale handoff entry marker re-arms the handoff guard in sessions that never ran a handoff. Write it: \`bash scripts/ai-dlc/sync-transient-ignore.sh\` (it appends its own marker-bounded region and touches nothing else, and names anything already tracked). Detail: $(printf '%s' "$ti_out" | tr '\n' ' ')" ;;
+      *)
+        say WORKLIST transient-ignore ".gitignore" \
+          "the transient-state ignore block no longer matches the declaration this apply just delivered. Every newly-declared transient path is unignored until it is re-rendered, and a broad \`git add\` then commits pipeline scratch state as a tracked file — which is how a stale handoff entry marker re-arms the handoff guard in sessions that never ran a handoff. Re-render it: \`bash scripts/ai-dlc/sync-transient-ignore.sh\` (it rewrites only its own marker-bounded region, and names anything already tracked). Detail: $(printf '%s' "$ti_out" | tr '\n' ' ')" ;;
+    esac
   elif [ "$ti_rc" != "0" ]; then
     say DECISION transient-ignore-unreadable ".gitignore" \
       "the transient-state ignore check could not run, so whether this pull's newly-declared transient paths are ignored is UNKNOWN — and unknown reads exactly like clean. Detail: $(printf '%s' "$ti_out" | tr '\n' ' ')"

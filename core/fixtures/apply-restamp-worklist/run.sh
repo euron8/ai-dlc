@@ -1201,6 +1201,14 @@ ti_row_out() { # <consumer> -> the row types this consumer draws, or -NONE-
     transient_ignore_row' 2>/dev/null | tr '\n' ' ' )"
   printf '%s' "${out:--NONE-}"
 }
+ti_row_text() { # <consumer> -> the row's PROSE, for the arms that discriminate on diagnosis
+  local c="$1"
+  CONSUMER="$c" DIST="$DIST" bash -c '
+    handback=0; worklist_n=0
+    say() { printf "%s\n" "${4:-}"; }
+    '"$(sed -n '/^transient_ignore_row() {/,/^}$/p' "$APPLY")"'
+    transient_ignore_row' 2>/dev/null | tr '\n' ' '
+}
 mk_ti_consumer() { # <dir> <render yes|no> <ondisk yes|no> <tracked yes|no> <break yes|no>
   local c="$1" rnd="$2" od="$3" tr_="$4" brk="$5"
   mkdir -p "$c/scripts/ai-dlc" "$c/.claude/schemas" "$c/_bmad-output" || return 1
@@ -1270,6 +1278,36 @@ else
         ok "T5 the same path, TRACKED, does draw the row — so T3's silence is discrimination and not a row that never fires" ;;
       *) bad "T5 a TRACKED transient path drew '$T_TRACK' — the arm T3 relies on cannot fire, so T3's silence proves nothing" ;;
     esac
+
+    # T6/T7 -- NEVER-RENDERED AND DRIFTED ARE DIFFERENT DIAGNOSES, AND THE ROW MUST SAY WHICH.
+    # `--check` exits 1 for both and distinguishes them in its text. A row that flattens them tells
+    # a consumer whose block was never written that something "no longer matches" — a wrong cause,
+    # in the only channel the operator reads, sending them after a declaration change that never
+    # happened. Keyed on the row's PROSE and not on its type, because both are the same row type;
+    # the type is what an earlier revision got right while the diagnosis was wrong.
+    TI_NEVER="$WORK/ti-never"; TI_DRIFT="$WORK/ti-drift"
+    if mk_ti_consumer "$TI_NEVER" no no no no && mk_ti_consumer "$TI_DRIFT" yes no no no; then
+      # Drift the rendered block by deleting one pattern, leaving the markers in place.
+      sed -i.bak '/handoff-in-progress/d' "$TI_DRIFT/.gitignore"; rm -f "$TI_DRIFT/.gitignore.bak"
+      git -C "$TI_DRIFT" add -A >/dev/null 2>&1; git -C "$TI_DRIFT" commit -qm drift >/dev/null 2>&1
+      N_TXT="$(ti_row_text "$TI_NEVER")"; D_TXT="$(ti_row_text "$TI_DRIFT")"
+      if [ "$N_TXT" = "$D_TXT" ]; then
+        bad "T6 a never-rendered consumer and a drifted one drew the SAME text — the row is flattening two causes that \`--check\` separates, and one of the two diagnoses is therefore wrong"
+      else
+        case "$N_TXT" in
+          *"NEVER had a transient-state ignore block"*)
+            ok "T6 a consumer whose block was never written is told so, rather than that something 'no longer matches' a declaration nothing changed" ;;
+          *) bad "T6 a never-rendered consumer drew '$(printf '%s' "$N_TXT" | cut -c1-90)' — it must name the absence, not a mismatch" ;;
+        esac
+        case "$D_TXT" in
+          *"no longer matches the declaration"*)
+            ok "T7 a consumer whose block DRIFTED is told that, so T6's wording is a diagnosis and not the only sentence the row can say" ;;
+          *) bad "T7 a drifted consumer drew '$(printf '%s' "$D_TXT" | cut -c1-90)' — T6 cannot be read as discrimination if this one does not say mismatch" ;;
+        esac
+      fi
+    else
+      bad "T6/T7 setup: could not build the never-rendered and drifted consumers"
+    fi
   else
     bad "T1-T5 setup: could not build the transient-ignore consumers, so the row was never driven"
   fi
