@@ -4539,3 +4539,75 @@ before the check ships.
 decide whether its own fix worked, and nine of them cannot tell a fix from a comment.
 
 verify: sh B=docs/backlog.md; [ -f "$B" ] || exit 9; grep -q '^## BL-227' "$B" || exit 9; grep -qE 'receipt-emission-site|scores every backlog receipt against a seeded|verify-receipt-binding' scripts/*.sh 2>/dev/null && exit 0; exit 1
+
+## BL-235 — conforming a gate-log header flips Check 5 from silent SKIP to FAIL, and nothing in the step file that prescribes the header says so
+
+**Found 2026-09-11** while scoping
+`PC-S341-0548-1-CONFORMANCE-FIGURE-IS-TAKEN-OVER-A-TEST-FIXTURE-POPULATION`. The filing named the
+consequence in passing; it is a separate subject from the figure and is the more expensive half.
+
+**THE MECHANISM.** Check 5 of `core/scripts/validate-mandatory-rules.sh` isolates a
+`## Gate Log: Sprint <N>` section out of `_bmad-output/implementation-artifacts/gate-log.md`. When
+it cannot isolate one it SKIPs. When it can, it requires `USER-CONFIRMED` or playwright evidence in
+that section and FAILs without it. `core/skills/ai-dlc/steps/gate-validation.md` step 12 prescribes
+the header format and says nothing about what following it turns on.
+
+**So a consumer that repairs its header format — a documentation-conformance change, with no
+behavioural intent — arms a gate that was silently skipping.** The direction is correct by design:
+a SKIP is a check that did not run, and the whole point of `0.548.0` was to stop that SKIP reading
+as "nothing to check". But it is delivered by prose, to a reader who is being told to fix
+formatting, and the step that tells them carries no warning.
+
+**DRIVEN, NOT READ, ON A CONSTRUCTED PROBE.** Fresh repo, the consumer's installed validator copied
+in (`cmp -s` against `core/scripts/validate-mandatory-rules.sh` IDENTICAL; control `cmp` against a
+sibling validator DIFFERS), one non-test `web/**` change in the window, sprint 500, and ONLY the
+gate-log header varying:
+
+    ## Gate: deploy-validate — Sprint 500     no evidence   ->  CHECK 5: SKIP
+    ## Gate Log: Sprint 500 — deploy-validate  no evidence   ->  CHECK 5: FAIL [Check5_VISUAL_UI]
+    ## Gate Log: Sprint 500 — deploy-validate  USER-CONFIRMED -> CHECK 5: PASS
+    ## Gate Log: Sprint 500 (bare)             no evidence   ->  CHECK 5: FAIL
+
+The two sides differ on the header text alone, and the PASS arm is the positive control proving the
+evidence predicate can reach PASS rather than being stuck closed.
+
+**AND IT ALREADY FIRED ONCE ON THE CONSUMER'S OWN COMMITTED HISTORY.** At `bd1b0a17d` — the single
+revision whose live `gate-log.md` carries a conforming header — the validator installed AT THAT
+COMMIT returns `CHECK 5: FAIL [Check5_VISUAL_UI]` for sprint 309. Control on the identical tree:
+de-conforming that one header returns SKIP; restoring it returns FAIL.
+
+**ONE QUALIFICATION, STATED BECAUSE IT CUTS AGAINST THE FINDING.** That s309 instance is now
+acquitted by the test-only carve-out, which shipped BECAUSE of it — the s309 window's entire web
+diff is one `*.test.jsx` file, and the current validator SKIPs it as test-only. So the historical
+firing is spent. **The live exposure is a sprint with a NON-TEST web remainder**, and the consumer's
+sprint 310 is one: two non-test files in its window, and its archive carries neither evidence token
+(control: an impossible token also returns 0).
+
+**NOT FIXED HERE, AND IT IS DELIBERATELY NOT FOLDED INTO THE COMMENT REWRITE THAT SHIPS BESIDE IT.**
+Folding a blocker into a defect's fix buries it. The fix belongs in step 12, which prescribes the
+header: state that a conforming header makes Check 5 REACHABLE, and that a `web/**` sprint with a
+non-test remainder then needs `USER-CONFIRMED` or a playwright trace in its Deploy Status Report.
+That is a consumer-facing behavioural warning attached to the instruction that causes it.
+
+**Tiered DEFECT, not BLOCKER, and the tiering is a judgement worth stating.** The scoping hand
+tiered it BLOCKER on consequence. Tiered here on what a consumer can DO about it: the gate firing is
+the mechanism working, the remedy is to supply the evidence the gate asks for, and no consumer is
+wedged — a FAIL names its cause and the evidence is a line in a report they already write. What is
+missing is the warning, not the escape.
+
+**Receipt limits, stated, AND THE FIRST DRAFT OF THIS RECEIPT CLOSED ON THE LIVE DEFECT.** It
+keyed on `reachable|no longer skips|stops skipping` ANYWHERE in the step file, and exited 0 before
+anything was fixed — satisfied by `delivered-reachable`, an agent-lifecycle status token in the
+Rule 28 prose eight hundred lines away, with the second conjunct satisfied by the one pre-existing
+`playwright` mention. A whole-file grep for a common English word is not a statement about the
+subject; `verification-discipline.md` calls this keying on the emission site, and this receipt is
+the worked example.
+
+The replacement narrows to the SECTION that prescribes the header and requires the two tokens to
+co-occur with `Check 5` inside it, which no prose outside step 12 can satisfy. It is still
+prose-keyed and still closable by careful rewording — the `BL-227` class — and the honest
+replacement drives the validator over two probe trees differing only in the header, asserting the
+step names the consequence. That needs the probe harness a fix would build, so it is owed WITH the
+fix rather than before it.
+
+verify: sh S=core/skills/ai-dlc/steps/gate-validation.md; [ -f "$S" ] || exit 9; SEC="$(awk '/^## .*[Gg]ate [Ll]og/{f=1} f&&/^## /&&!/[Gg]ate [Ll]og/{exit} f' "$S")"; [ -n "$SEC" ] || SEC="$(grep -A40 -E 'Gate Log: Sprint' "$S")"; [ -n "$SEC" ] || exit 9; grep -qiE 'check ?5' <<<"$SEC" || exit 1; grep -qiE 'reachable|no longer skip|stops skipping|becomes enforceable' <<<"$SEC" || exit 1; grep -qiE 'USER-CONFIRMED|playwright' <<<"$SEC" || exit 1; exit 0
