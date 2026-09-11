@@ -138,6 +138,11 @@ seed_record() { # $1=log dir $2=dist $3=base-ref $4=theirs-ref [$5=verdict] [$6=
     echo "# consumer: seeded-by-fixture   dist: ${2}"
     echo "# base-sha: ${sr_b}"
     echo "# theirs-sha: ${sr_t}"
+    # THE STAMP AS THE GATE SAW IT, and it is OMITTED unless a caller asks for it. A record with
+    # no such line is what every gate older than the field writes, and that is the state the
+    # runner must still handle strictly -- so the DEFAULT seed here is deliberately the
+    # pre-header record, and only the split-stamp arms below set `$SR_SKILL_COMMIT`.
+    [ -n "${SR_SKILL_COMMIT:-}" ] && echo "# skill-commit: ${SR_SKILL_COMMIT}"
     sr_root="${1%/_bmad-output/ai-dlc-update}"
     if [ "${SR_INPUTS:-}" = "$SR_NO_INPUTS" ]; then
       :
@@ -327,6 +332,24 @@ dput "core/scripts/gate-changed.sh" 'gate-changed at theirs'
 G add -A >/dev/null 2>&1; G commit -q --no-verify -m theirs >/dev/null 2>&1
 D_THEIRS="$(G rev-parse HEAD 2>/dev/null)"
 G tag theirs-tag >/dev/null 2>&1
+
+# AN INTERMEDIATE RELEASE THAT ALREADY CARRIES THE `theirs` CONTENT OF `gate-changed.sh`, AND IT
+# IS THE SPLIT-STAMP WORLD. A consumer whose `skill_commit` sits here has had a PRIOR self-update
+# deliver that file, so a gate run on its tree honestly records the `theirs` blob for a path the
+# range changes -- satisfying the PRE-WRITTEN arm's first three conjuncts with no self-comparison
+# having occurred. Without this commit the two cases cannot be separated: `$D_THEIRS` itself also
+# carries that content, so a seed using it as the recorded `skill_commit` is the FORGED case
+# (a gate re-run after the write, which advances the stamp to theirs) and not this one.
+#
+# IT SITS ON ITS OWN COMMIT AFTER `theirs` RATHER THAN BEFORE IT, because `base..theirs` must
+# still CHANGE `gate-changed.sh` for the arm to be reachable at all -- an intermediate inside the
+# range that already held the final content would make `base:P == theirs:P` for the seeded world
+# and the arm would never be entered. `merge-base` is irrelevant here: the runner only ever asks
+# for `<recorded-sha>:<core path>`, so any commit carrying the right blob is a valid world.
+dput "core/scripts/gate-changed.sh" 'gate-changed at theirs'
+dput "core/scripts/machinery.sh" 'at the split-stamp intermediate'
+G add -A >/dev/null 2>&1; G commit -q --no-verify -m split-stamp-intermediate >/dev/null 2>&1
+D_SPLIT="$(G rev-parse HEAD 2>/dev/null)"
 
 # A quiet commit on top: machinery only, no fixture touched. Parts 1-6 run over this range so
 # the coverage join stands down and they assert about the LOG, exactly as they did before.
@@ -1293,6 +1316,77 @@ if [ "$rc" -eq 2 ] && [ -n "$LG14" ] && grep -qF "GATE-RECORD: PRE-WRITTEN $GIN_
   ok "a verdict taken AFTER the slice was written is refused as PRE-WRITTEN — the gate compared the incoming script with a copy of itself, and every digest in that record agrees with the tree"
 else
   bad "a gate run on the already-written tree authorised the cycle (rc=$rc). Its OK says only that the file equals itself, and no digest comparison can catch it: the record and the tree agree perfectly. The range is what separates them — recorded == theirs, on a path base..theirs changes"
+fi
+gin_restore
+
+# --- Part G14b: A SPLIT STAMP IS NOT A SELF-COMPARISON, AND G14's KEY CANNOT TELL THEM APART --
+# The false positive in G14's own predicate, and the reason the arm above is not the whole rule.
+# A consumer whose `skill_commit` runs ahead of `commit` already holds a PRIOR self-update's
+# delivery for some machinery paths. For those, a gate run on its tree records the `theirs` blob
+# for a path the range changes — G14's three conjuncts, satisfied honestly — and the cycle is
+# refused forever: `commit` advances only under a gated apply, so nothing clears it.
+#
+# Measured on the reference consumer at 0.542.0 -> 0.547.0 before this arm existed: two machinery
+# paths refused, the runner exited 2, and step 2 could not run its fixtures at all.
+#
+# THE WORLD IS THE SAME AS G14's IN EVERY RESPECT BUT ONE. The slice is written and the record
+# carries post-write digests, exactly as above; what differs is a `# skill-commit:` header naming
+# an intermediate that already carried that blob. One property apart, in the same run, so the arm
+# discriminates between the two cases rather than merely firing on one of them.
+gin_write_slice
+SR_SKILL_COMMIT="$(git -C "$DIST" rev-parse "${D_SPLIT}^{commit}" 2>/dev/null)" \
+  gin_seed_clean 271
+bash "$RUNNER" "$DIST" "$D_BASE" "$D_THEIRS" "$GCONS" touched-shippable touched-named green-one \
+  >/dev/null 2>&1
+rc=$?
+LG14B="$(newest_glog)"
+if [ "$rc" -ne 2 ] || { [ -n "$LG14B" ] && ! grep -qF "GATE-RECORD: PRE-WRITTEN $GIN_CHANGED" "$LG14B"; }; then
+  ok "a split stamp is NOT refused as PRE-WRITTEN — the recorded skill_commit already carried that blob, so the gate read a prior self-update's delivery rather than comparing this pull's file with itself"
+else
+  bad "a legitimate split-stamp consumer was refused as PRE-WRITTEN (rc=$rc). Its skill_commit already held that blob, so no self-comparison occurred; refusing it wedges every self-update on that consumer permanently, because commit advances only under a gated apply"
+fi
+gin_restore
+
+# --- Part G14c: THE ACQUITTAL MUST NOT COVER G14's OWN SUBJECT -------------------------------
+# The exemption's probe, and the arm that stops G14b from being a hole. Step 2 advances the stamp
+# to `theirs` as part of writing the slice, so a gate RE-RUN after the write records
+# `skill_commit == theirs` — and a fix keyed on the blob alone then acquits exactly the case G14
+# exists to catch, because `theirs:P` trivially equals itself. Driven while building this fix:
+# without the equality guard the seeded self-comparison went from REFUSED to ACQUITTED while G14b
+# behaved identically, so the blob test could not separate them.
+#
+# A legitimate split stamp sits at a STRICTLY EARLIER release — `skill_commit` runs ahead of
+# `commit`, never ahead of the target — which is what makes excluding equality the right key.
+gin_write_slice
+SR_SKILL_COMMIT="$(git -C "$DIST" rev-parse "${D_THEIRS}^{commit}" 2>/dev/null)" \
+  gin_seed_clean 272
+bash "$RUNNER" "$DIST" "$D_BASE" "$D_THEIRS" "$GCONS" touched-shippable touched-named green-one \
+  >/dev/null 2>&1
+rc=$?
+LG14C="$(newest_glog)"
+if [ "$rc" -eq 2 ] && [ -n "$LG14C" ] && grep -qF "GATE-RECORD: PRE-WRITTEN $GIN_CHANGED" "$LG14C"; then
+  ok "a record whose skill_commit IS theirs is still refused — that is the post-write re-run, not a split stamp, and the blob test alone cannot tell it from one"
+else
+  bad "a gate re-run after the write was ACQUITTED by the split-stamp exemption (rc=$rc). skill_commit == theirs is what step 2 itself writes, so an exemption that accepts it covers the very case the PRE-WRITTEN arm exists to catch"
+fi
+gin_restore
+
+# --- Part G14d: AN ABBREVIATED RECORDED SHA IS THE SAME COMMIT -------------------------------
+# The comparison is on RESOLVED shas, never on the header string — the rule this file states for
+# `base`/`theirs` and which the first cut of the split-stamp field broke. A record carrying an
+# abbreviated `skill-commit` names one commit; compared as text against a full sha it differs,
+# the equality guard above silently never fires, and G14c's refusal is defeated by a spelling.
+gin_write_slice
+SR_SKILL_COMMIT="$(git -C "$DIST" rev-parse --short=8 "${D_THEIRS}^{commit}" 2>/dev/null)" \
+  gin_seed_clean 273
+bash "$RUNNER" "$DIST" "$D_BASE" "$D_THEIRS" "$GCONS" touched-shippable touched-named green-one \
+  >/dev/null 2>&1
+rc=$?
+LG14D="$(newest_glog)"
+if [ "$rc" -eq 2 ] && [ -n "$LG14D" ] && grep -qF "GATE-RECORD: PRE-WRITTEN $GIN_CHANGED" "$LG14D"; then
+  ok "an ABBREVIATED skill-commit equal to theirs is still refused — the runner peels the recorded value rather than comparing header strings"
+else
+  bad "an abbreviated skill-commit defeated the equality guard (rc=$rc). '${SR_SKILL_COMMIT:-<short>}' and the full sha name one commit; comparing them as text acquits the post-write re-run"
 fi
 gin_restore
 
@@ -2504,7 +2598,7 @@ fi
 # and the OK means only that each file equals itself.
 MG8="$MUTDIR/mg8-prewritten-arm-removed.sh"
 if mkmutant "$MG8" '            if [ -n "$gr_tb" ] && [ -n "$gr_bb" ] && [ "$gr_bb" != "$gr_tb" ] \
-               && [ "$gr_h" = "$gr_tb" ]; then' \
+               && [ "$gr_h" = "$gr_tb" ] && [ "$gr_sk" != "$gr_tb" ]; then' \
                    '            if false; then'; then
   gin_restore
   gin_write_slice
@@ -2522,6 +2616,63 @@ if mkmutant "$MG8" '            if [ -n "$gr_tb" ] && [ -n "$gr_bb" ] && [ "$gr_
   fi
 else
   bad "FIXTURE ERROR: the PRE-WRITTEN anchor no longer occurs exactly once in the runner — Part G14 proves nothing"
+fi
+
+# --- MUTANT G8b: the split-stamp acquittal removed ---------------------------------------------
+# G8 proves Part G14 by removing the arm the split-stamp exemption narrows. This is the mirror,
+# and Part G14b is what it scores: with the exemption gone a legitimate split-stamp consumer is
+# refused as PRE-WRITTEN on every invocation and its self-update can never land. Without this
+# mutant, G14b would pass against a runner that reads no `skill-commit` at all and simply never
+# enters the arm — an absence that reads exactly like the exemption working.
+#
+# THE ANCHOR IS THE CONJUNCT, NOT THE WHOLE CONDITION. Removing the condition is G8's mutation
+# and would fail G14 as well; entangled failures mean one of the two arms is vacuous.
+MG8B="$MUTDIR/mg8b-splitstamp-acquittal-removed.sh"
+if mkmutant "$MG8B" ' && [ "$gr_sk" != "$gr_tb" ]; then' \
+                    '; then'; then
+  gin_restore
+  gin_write_slice
+  SR_SKILL_COMMIT="$(git -C "$DIST" rev-parse "${D_SPLIT}^{commit}" 2>/dev/null)" \
+    gin_seed_clean 331
+  bash "$MG8B" "$DIST" "$D_BASE" "$D_THEIRS" "$GCONS" touched-shippable touched-named green-one \
+    >/dev/null 2>&1
+  rc=$?
+  LM="$(newest_glog)"
+  gin_restore
+  if [ "$rc" -eq 2 ] && [ -n "$LM" ] && grep -qF "GATE-RECORD: PRE-WRITTEN $GIN_CHANGED" "$LM"; then
+    ok "MUTATION — without the split-stamp conjunct a consumer whose skill_commit already carried the blob is refused as PRE-WRITTEN, which wedges its self-update permanently: Part G14b is what catches that"
+  else
+    bad "MUTATION — the split-stamp conjunct was removed and the split-stamp world still ran (rc=$rc). Part G14b is being answered by something that is not its subject, so the exemption is unproven"
+  fi
+else
+  bad "FIXTURE ERROR: the split-stamp conjunct no longer occurs exactly once in the runner — Part G14b proves nothing"
+fi
+
+# --- MUTANT G8c: the recorded sha compared as a STRING ------------------------------------------
+# The peel removed, which is the defect the first cut of this fix shipped and Part G14d owns. An
+# abbreviated recorded value then differs from the full sha as text, the equality guard never
+# fires, and the post-write re-run is acquitted — a refusal defeated by a spelling rather than by
+# a wrong decision. G14c stays green under this mutation (its seed writes a full sha), so this
+# mutant and that arm are not entangled: only G14d can see it.
+MG8C="$MUTDIR/mg8c-recorded-sha-unpeeled.sh"
+if mkmutant "$MG8C" '      gr_rec_sk="$(git -C "$DIST" rev-parse -q --verify "${gr_rec_sk}^{commit}" 2>/dev/null || printf '"'"'%s'"'"' '"'"'-'"'"')"' \
+                    '      gr_rec_sk="$gr_rec_sk"'; then
+  gin_restore
+  gin_write_slice
+  SR_SKILL_COMMIT="$(git -C "$DIST" rev-parse --short=8 "${D_THEIRS}^{commit}" 2>/dev/null)" \
+    gin_seed_clean 332
+  bash "$MG8C" "$DIST" "$D_BASE" "$D_THEIRS" "$GCONS" touched-shippable touched-named green-one \
+    >/dev/null 2>&1
+  rc=$?
+  LM="$(newest_glog)"
+  gin_restore
+  if [ "$rc" -ne 2 ] || { [ -n "$LM" ] && ! grep -qF "GATE-RECORD: PRE-WRITTEN $GIN_CHANGED" "$LM"; }; then
+    ok "MUTATION — with the recorded sha left unpeeled an ABBREVIATED value equal to theirs slips past the equality guard and acquits the post-write re-run: Part G14d is what catches that"
+  else
+    bad "MUTATION — the peel was removed and the abbreviated record was still refused (rc=$rc). Part G14d is being answered by something that is not its subject"
+  fi
+else
+  bad "FIXTURE ERROR: the recorded-sha peel no longer occurs exactly once in the runner — Part G14d proves nothing"
 fi
 
 # --- MUTANT G9: the tolerance keyed on EMPTINESS alone -----------------------------------------

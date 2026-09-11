@@ -278,6 +278,22 @@ gate_input_dist() {
 # an omitted line and a placeholder are two shapes for the reader to spell instead of one.
 gate_rec_sha() { git -C "$DIST" rev-parse -q --verify "${1}^{commit}" 2>/dev/null || printf 'unresolved\n'; }
 
+# The consumer's `skill_commit` AS THIS GATE SEES IT, peeled to a commit, for the record header.
+# `-` on every failure path — no stamp, no field, a value that does not peel — because the
+# runner treats `-` as "no usable value" and falls back to the STRICT comparison. A guess here
+# would be an acquittal.
+#
+# PEELED, for the same reason `base-sha` and `theirs-sha` are: the stamp has carried both an
+# abbreviated sha and a full one in this consumer's own committed history, and an unpeeled
+# comparison against a blob lookup would answer differently for the two spellings of one commit.
+gate_rec_skill_commit() {
+  _grsc_st="$CONSUMER/.claude/.ai-dlc-version"
+  [ -f "$_grsc_st" ] || { printf '%s\n' '-'; return 0; }
+  _grsc_v="$(sed -n 's/^skill_commit:[[:space:]]*\([^[:space:]]*\).*/\1/p' "$_grsc_st" | head -1)"
+  [ -n "$_grsc_v" ] || { printf '%s\n' '-'; return 0; }
+  git -C "$DIST" rev-parse -q --verify "${_grsc_v}^{commit}" 2>/dev/null || printf '%s\n' '-'
+}
+
 # DERIVED FROM THE ROWS, never from a variable a branch remembered to set. Same precedence the
 # header states for the verdicts themselves: any DEFER wins, else any UNDECIDED, else OK.
 gate_exit_cleanup() {
@@ -375,6 +391,26 @@ gate_record_open() {
       # wins, so no other line in this file may open with one of them.
       echo "# base-sha: $(gate_rec_sha "$BASE")"
       echo "# theirs-sha: $(gate_rec_sha "$THEIRS")"
+      # THE STAMP'S `skill_commit` AS THIS GATE SAW IT, AND IT IS A HEADER VALUE RATHER THAN AN
+      # `# input:` ROW FOR THE REASON THE COMMENT BELOW GIVES. Step 2 ADVANCES this field to
+      # `theirs` before it invokes the runner, so the runner cannot read it from the stamp and
+      # learn anything: measured over the 129 paths `machinery_paths()` resolves, a runner
+      # consulting the LIVE stamp finds `skill_commit == theirs` on 129 of 129 and acquits every
+      # one, against 128 of 129 at the value the gate actually saw. That is a TOTAL DISARM of the
+      # PRE-WRITTEN arm, and it is what the naive form of this fix does.
+      #
+      # RECORDING THE VALUE IS NOT RECORDING THE DIGEST, and the distinction is the whole design.
+      # The comment at the `.ai-dlc-applying` row below refuses a DIGEST row for the stamp because
+      # step 2 rewrites the file, so a digest taken here can never survive to the read. A VALUE
+      # copied into this header survives exactly because it is a copy: the rewrite moves the
+      # stamp, not this record. The runner compares against what the consumer held WHEN THE
+      # VERDICT WAS TAKEN, which is the only state that makes the verdict's question answerable.
+      #
+      # UNRESOLVABLE OR ABSENT IS RECORDED AS `-`, NEVER OMITTED. An absent line and a line the
+      # reader cannot parse are the same byte to a prefix reader, and the runner's acceptance is
+      # keyed on a value it can compare; `-` is a value that matches no blob, so a stamp this gate
+      # could not read yields the STRICT behaviour rather than the lenient one.
+      echo "# skill-commit: $(gate_rec_skill_commit)"
       # SCOPE, BYTE-FIXED so a reader can ignore it by prefix. A committed file named for this
       # gate carrying `# verdict: OK` reads as "this push was cleared", and it is not that: the
       # differential asks only whether the incoming machinery slice fails where the consumer's
