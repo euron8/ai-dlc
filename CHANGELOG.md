@@ -15,6 +15,69 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.545.0] - 2026-09-10
+
+### A pull now says when the consumer's transient-ignore block no longer matches the declaration it just delivered (`PC-S310-HANDOFF-ENTRY-MARKER-COMMITTED-NEVER-DISCHARGES-CROSS-SESSION`)
+
+The candidate reads as a `handoff.md` step-ordering problem — step 1 writes
+`_bmad-output/.handoff-in-progress`, step 2's broad `git add` sweeps it into a commit, step 5's
+`rm -f` records no deletion — and proposes shipping a `.gitignore` pattern for it. **That pattern
+has been declared all along.** `schemas/pipeline-state-paths.json` marks the marker and
+`.handoff-guard-armed` transient with an `ignore` each, and says why in their own `reason` fields:
+*"A tracked copy makes every checkout look mid-handoff."*
+
+**What never runs is the render.** `sync-transient-ignore.sh` is the only thing that projects those
+patterns into a consumer's `.gitignore`, and its sole invocation site in the distribution is
+`install.sh` — the path a NEW consumer takes. Zero callers in `core/skills/ai-dlc-update/**` and
+zero in `core/git-hooks/`, against a control of 15 files naming `validate-hook-registration` and a
+skill that names five other `scripts/ai-dlc/*.sh`. So a pull delivers new transient names and
+renders no rule for them, and the gap is invisible: a block that predates a declaration reads
+exactly like a current one.
+
+The renderer's own header says it was lifted out of `install.sh` so that existing consumers would
+be reached. Moving it made it REACHABLE there; nothing made it RUN. `I95(d)` binds `install.sh` to
+invoke it and no arm binds the update path.
+
+**Measured on the reference consumer, recoverable from its own history**: 16 transient patterns
+declared, 13 rendered, both handoff markers absent (control: `pipeline-paused.flag` returns 2). The
+declaration gained them 2026-09-06; the block was last rendered 2026-08-31. In that window a broad
+`git add` committed the marker, it rode into `main`, and it re-armed the handoff guard on an
+unrelated pause in a session that had run no handoff.
+
+**A current rule IS sufficient for that case**, measured rather than assumed: with the pattern in
+place `git add -A`, `git add .` and `git add <dir>` all skip the marker and an explicit add refuses;
+only `git add -f` captures it, which step 2 never uses.
+
+**And `--check` is blind to half the subject.** It returns at its block comparison, while the
+still-TRACKED scan sits below on the write path. Driven on a tree with the marker tracked and the
+block current, it printed `OK: transient-state block current (16 path(s))` and exited 0 while
+`git ls-files` returned the marker in the same invocation. An ignore rule does nothing to a file
+git already tracks, so anything keyed on `--check` alone reports clean over exactly the state where
+the guard keeps firing.
+
+`apply.sh` grows `transient_ignore_row()`, sited beside `hook_registration_row()` and shaped like
+it. One arm drives the consumer's own installed `--check`; a second reads the consumer's own
+declaration and asks its index directly, so a tracked transient path is reported whatever `--check`
+said. It NAMES the work rather than doing it — `.gitignore` is user-owned and this driver has no
+channel for the operator's gate on that edit, the same reason `settings-merge.sh` is named and not
+called. False-positive set measured empty across four correct-consumer shapes, including the common
+one where transient files are present on disk but untracked.
+
+`transient-ignore-block` gains an arm pinning `--check`'s contract — it reports the block and never
+names a tracked path — plus the mutant that kills it. Filed as `BL-229`.
+
+**The candidate is filed and committed** at `36f0e852c` on the consumer's pushed sprint branch,
+ahead of `main` because that sprint's PR merged before the entry was written. This batch twice
+concluded otherwise — once "uncommitted", once "withdrawn" — from zeros taken against `main` while
+the sweep's own read had seen the sprint tree, the consumer having checked out `main` in between.
+**Ask which ref a ledger zero was taken against**; an unmerged sprint branch is where a filing
+lives between the merge and the retro. The consumer session supplied the correction.
+
+The release's subject stands either way, and the consumer's own repair does not overlap it:
+re-rendering one tree's block and untracking its markers gives the pull path no caller, so the next
+pull that adds a transient declaration drifts again, there and everywhere else. Every figure above
+is derived against the distribution or against that consumer's committed history.
+
 ## [0.544.0] - 2026-09-10
 
 ### The gate-adjudication rotator refuses a rotation that would strand a FAILing legacy verdict (`PC-S310-GATE-ADJUDICATION-ROTATION-HAS-NO-BACKFILL-PATH-FOR-PRE-MECHANISM-SPRINTS`)

@@ -225,10 +225,77 @@ arm_names_tracked_paths() {
   return 0
 }
 
+# Arm 8: `--check` ANSWERS ONLY THE BLOCK, AND A CALLER MUST NOT READ IT AS THE WHOLE SUBJECT.
+#
+# The arm above proves the WRITE path names an already-tracked transient path. This one pins the
+# other half of that same property: `--check` does NOT, and cannot, because it returns at the
+# block comparison while the tracked scan sits below on the write path. The state that
+# discriminates is a block that is CURRENT and a declared transient path that is TRACKED -- there
+# `--check` exits 0 saying "current" while the ignore rule is doing nothing whatever about the
+# file git already holds.
+#
+# THIS IS A CONTRACT ARM, NOT A DEFECT ARM. It is not asking the renderer to change: `--check`
+# is documented to report on the block and to never write, and widening it to mutate or to scan
+# the index would break the property that makes it safe to call from a gate. The arm exists so
+# that a caller which reads `--check` as "the transient state is clean" is refuted HERE, by a
+# seeded world, rather than on a consumer whose committed marker keeps re-arming a guard.
+# `apply.sh`'s transient_ignore_row() asks the consumer's index directly for exactly this reason.
+#
+# SEEDED WITH A NON-FIRST MEMBER on purpose. A seed that tracked the first declared pattern could
+# not tell "scanned the declared set" from "looked at its first entry".
+arm_check_is_blind_to_tracked() {
+  local w="$1" subj="$2" pat rc_check tracked out_check out_write before
+  render "$subj" "$w" >/dev/null || return 1
+  # A FILE pattern, and deliberately not the first one in the declared set.
+  pat="$(printf '%s\n' "$TRANSIENT" | grep -v '/$' | sed -n 2p)"
+  [ -n "$pat" ] || return 1
+  mkdir -p "$(dirname "$w/project/$pat")" || return 1
+  : > "$w/project/$pat"
+  git -C "$w/project" add -f "$pat" >/dev/null 2>&1 || return 1
+  git -C "$w/project" commit -qm tracked-transient >/dev/null 2>&1 || return 1
+  # PRESENCE-SHAPED, AND THAT IS WHAT MAKES THIS ARM NON-VACUOUS. An earlier cut asserted only
+  # that `--check` exits 0 over the tracked path -- which a subject whose check branch has been
+  # deleted ALSO does, because it then re-renders an already-current block and exits 0 too. The
+  # discriminating observables are what `--check` must PRINT and must NOT print: it reports the
+  # block is current, and it never names the tracked path. Its mutant is what established this.
+  # `cmp -s` AGAINST A SAVED COPY, NOT `md5 -q`. The first cut used md5, which is absent under the
+  # scrubbed `PATH` a shipped script must hold for -- `command -v md5` is MISSING under
+  # `env -i PATH=/usr/bin:/bin` -- so `before` came back EMPTY and the arm failed on the
+  # unmutated subject. `cmp` is what the rest of this suite uses for the same question.
+  before="$w/gitignore.before"
+  cp "$w/project/.gitignore" "$before" || return 1
+  out_check="$(render "$subj" "$w" --check)"; rc_check=$?
+  [ "$rc_check" -eq 0 ] || return 1
+  grep -q 'transient-state block current' <<<"$out_check" || return 1
+  grep -q 'still TRACKED' <<<"$out_check" && return 1
+  # "IT WROTE NOTHING" IS `check_discriminates`'s PROPERTY, NOT THIS ARM'S, AND ASSERTING IT HERE
+  # ENTANGLED THE TWO. A `cmp` of .gitignore across the --check made both arms fail the same
+  # mutant, which the harness reports as entanglement and is right to: two arms failing together
+  # cannot tell you which one is load-bearing. This arm owns exactly one property -- what --check
+  # REPORTS about a tracked path -- and stands down on the write question. The saved copy is kept
+  # only to make the seeded world reproducible for a reader.
+  :
+  # The path must genuinely still be tracked in the same invocation, which is the control that
+  # makes the clean report above a BLINDNESS rather than a correct all-clear.
+  tracked="$(git -C "$w/project" ls-files -- "$pat" | wc -l | tr -d ' ')"
+  [ "${tracked:-0}" -ge 1 ] || return 1
+  # And the WRITE path DOES see it -- the two halves of the contract, one property apart.
+  #
+  # VIA A COMMAND SUBSTITUTION AND A HERE-STRING, NEVER A PIPE. `render | grep -q` is I54: grep
+  # leaves at its first match while the renderer is still writing, the renderer takes EPIPE, and
+  # under this file's `pipefail` the pipeline answers NOT-FOUND on output that DOES contain the
+  # string. It cost this arm a false FAIL on the correct subject, four lines below the comment in
+  # arm 1 that says so.
+  out_write="$(render "$subj" "$w")"
+  grep -q 'still TRACKED' <<<"$out_write" || return 1
+  return 0
+}
+
 run_arms() { # <subject> -> prints "<name>:<0|1>" per arm, each on its own project
   local subj="$1" name w rc
   for name in renders_declared_set excludes_durable cut_is_bounded idempotent \
-              check_discriminates fails_closed_on_empty_marker names_tracked_paths; do
+              check_discriminates fails_closed_on_empty_marker names_tracked_paths \
+              check_is_blind_to_tracked; do
     w="$(fresh_project)" || { printf '%s:1\n' "$name"; continue; }
     "arm_$name" "$w" "$subj" >/dev/null 2>&1 && rc=0 || rc=1
     rm -rf "$w"
@@ -250,6 +317,7 @@ while IFS=: read -r name rc; do
     check_discriminates)   msg="--check passes on a current block and fails on a present-but-stale one" ;;
     fails_closed_on_empty_marker) msg="an empty block marker is refused and .gitignore is left byte-identical" ;;
     names_tracked_paths)   msg="an already-tracked transient path is named, not silently ignored" ;;
+    check_is_blind_to_tracked) msg="--check reports the BLOCK only: it exits 0 over a tracked transient path, which the write path names" ;;
     *)                     msg="$name" ;;
   esac
   [ "$rc" -eq 0 ] && ok "$msg" || bad "$msg"
@@ -314,6 +382,21 @@ mutate renders-durable-too 's#\.paths\[\] | select(\.transient) | \.ignore // em
 
 # M3: drop the empty-marker guard, so an unusable declaration is used anyway.
 mutate no-empty-marker-guard 's/if \[ -z "\$IG_BEGIN" \] || \[ -z "\$IG_END" \]; then/if false; then/' fails_closed_on_empty_marker
+
+# M4: make `--check` REPORT a tracked transient path while still exiting 0 and still writing
+# nothing. That is the widening arm 8's contract forbids, and it is the shape a later hand
+# reaches for on being told "--check cannot see a tracked path": add the scan to the check branch
+# because it looks like free information.
+#
+# THE FIRST SPELLING OF THIS MUTANT WAS `if false; then` ON THE MODE BRANCH, AND IT BELONGED TO A
+# DIFFERENT ARM. Disabling the branch makes --check fall through and RE-RENDER, which turns a
+# stale block current -- exactly `check_discriminates`'s subject -- so both arms failed it and the
+# harness reported entanglement, correctly. A mutant that two arms kill cannot say which one is
+# load-bearing. This spelling leaves the mode branch intact and moves only the one observable arm
+# 8 owns: what --check PRINTS about the index.
+mutate check-reports-tracked \
+  's#^  echo "OK: transient-state block current#  git -C "$PROJECT_ROOT" ls-files -- $PATTERNS 2>/dev/null | sed "s/^/  NOTE: still TRACKED: /"\n  echo "OK: transient-state block current#' \
+  check_is_blind_to_tracked
 
 # UNMUTATED CONTROL, with a POSITIVE conjunct. A control asserting only "nothing went wrong"
 # passes against a subject replaced by `exit 0`, because rc=0 with nothing reported is exactly

@@ -1653,6 +1653,104 @@ else
 fi
 }
 
+# --- TRANSIENT IGNORE BLOCK: the other half of a DECLARATION delivery -------------------------
+#
+# THE SAME SHAPE AS THE HOOK ROW ABOVE, one schema over. A transient pipeline path arrives on a
+# consumer in two halves. The DECLARATION is a pure apply -- this program writes
+# `.claude/schemas/pipeline-state-paths.json` from theirs, mechanically, with a manifest row. The
+# RENDER is `sync-transient-ignore.sh` projecting that declaration's transient half into the
+# consumer's `.gitignore`, and on a PULL nothing calls it: its only invocation site in the whole
+# distribution is `scripts/install.sh`, the path a NEW consumer takes.
+#
+# THE RENDERER'S OWN HEADER SAYS IT WAS MOVED OUT OF install.sh SO EXISTING CONSUMERS WOULD BE
+# REACHED, AND THE SHIPPED CALL GRAPH REFUTES THAT. Moving it made the renderer REACHABLE on a
+# consumer; nothing made it RUN there. So every pull since has delivered new transient names with
+# no rule rendered for them, and the gap is invisible: a consumer whose block predates a
+# declaration looks exactly like one whose block is current.
+#
+# WHAT IT COSTS, MEASURED ON THE REFERENCE CONSUMER RATHER THAN REASONED. Its installed schema
+# declares 16 transient patterns and its rendered block carries 13. `.handoff-in-progress` is one
+# of the three missing -- the handoff entry marker, whose whole meaning is "the lead is INSIDE the
+# handoff procedure". With no rule, steps/handoff.md step 2's broad `git add` commits it, step 5's
+# `rm -f` records no deletion, and the tracked blob re-materializes on every later checkout. A
+# consumer hit exactly that: an unrelated pause re-armed the handoff guard from a marker no
+# session had written, and the operator's first words were that no handoff had been requested.
+#
+# AND A CURRENT RULE IS SUFFICIENT FOR THAT CASE -- measured, not assumed. With the pattern in
+# place, `git add -A`, `git add .` and `git add <dir>` all stage the real artifacts and skip the
+# marker; naming it explicitly refuses loudly. Only `git add -f` captures it, and step 2 does not
+# use it. The declaration was already right; only the render was missing.
+#
+# WHY A `WORKLIST` ROW AND NOT A CALL TO THE RENDERER HERE. `.gitignore` is a user-owned file. The
+# renderer CUTS AND REWRITES a marker-bounded region of it, and this driver has no channel to
+# obtain the operator's gate on that edit -- the same reason settings-merge.sh is named rather
+# than called by the hook row above. Naming the work does not discard the gate.
+#
+# IT DRIVES THE CONSUMER'S OWN COPY, exactly as the hook row does: that is the copy which will run
+# from now on, and `--check` never writes, so it is safe from a driver.
+#
+# THE `--check` ANSWER IS HALF THE SUBJECT, AND THE ROW SAYS SO RATHER THAN IMPLYING OTHERWISE.
+# An ignore rule does nothing to a path git is ALREADY TRACKING, and `--check` cannot see that
+# case at all: it returns at its block comparison, while the renderer's still-TRACKED scan sits on
+# the write path below it. Driven on a probe tree with the marker tracked AND the block current,
+# `--check` printed `OK: transient-state block current` and exited 0 while `git ls-files` returned
+# the marker in the same invocation. So this row asks the consumer's index directly, and reports a
+# tracked transient path even when the block itself is current -- otherwise the one state where
+# the guard fires forever is the one state that reads clean.
+#
+# UNCONDITIONAL, like the hook row, and for the same reason: a withheld stamp does not make an
+# unrendered ignore rule any more rendered.
+transient_ignore_row() {
+TI_RENDERER="$CONSUMER/scripts/ai-dlc/sync-transient-ignore.sh"
+TI_SCHEMA="$CONSUMER/.claude/schemas/pipeline-state-paths.json"
+# GATED ON THE DECLARATION, NOT ON THE RENDERER, AND THE DIFFERENCE IS A MEASURED FALSE POSITIVE.
+# The first cut keyed its "not a silent skip" branch on the RENDERER's absence, mirroring the hook
+# row above. That row's absent-branch fires only on a consumer whose validator is missing, which is
+# rare; this one fired on EVERY consumer predating the mechanism, because a tree with neither half
+# is not a defect -- it is a tree this release has nothing to say about. It failed
+# `apply-restamp-worklist`'s C4, whose consumer asserts ZERO hand-back rows, and that fixture was
+# right: a row on that tree is noise an operator cannot act on.
+#
+# The declaration and the renderer shipped in the same release, so "schema present, renderer
+# absent" is a real and reportable split -- the declaration arrived and the thing that renders it
+# did not -- while "neither present" is simply an older consumer. Gate on the schema and the two
+# states stop reading alike.
+[ -f "$TI_SCHEMA" ] || return 0
+if [ -f "$TI_RENDERER" ]; then
+  ti_out="$(bash "$TI_RENDERER" --check --root "$CONSUMER" 2>&1)"; ti_rc=$?
+  if [ "$ti_rc" = "1" ]; then
+    say WORKLIST transient-ignore ".gitignore" \
+      "the transient-state ignore block does NOT match the declaration this apply just delivered. Every newly-declared transient path is unignored until it is re-rendered, and a broad \`git add\` then commits pipeline scratch state as a tracked file — which is how a stale handoff entry marker re-arms the handoff guard in sessions that never ran a handoff. Re-render it: \`bash scripts/ai-dlc/sync-transient-ignore.sh\` (it rewrites only its own marker-bounded region, and names anything already tracked). Detail: $(printf '%s' "$ti_out" | tr '\n' ' ')"
+  elif [ "$ti_rc" != "0" ]; then
+    say DECISION transient-ignore-unreadable ".gitignore" \
+      "the transient-state ignore check could not run, so whether this pull's newly-declared transient paths are ignored is UNKNOWN — and unknown reads exactly like clean. Detail: $(printf '%s' "$ti_out" | tr '\n' ' ')"
+  fi
+  # THE TRACKED HALF, ASKED OF THE INDEX AND NOT OF `--check`. Runs whatever `--check` answered:
+  # a current block and a tracked path is a real and silent state, and it is the one that keeps
+  # firing after the rule is correct.
+  if [ -f "$TI_SCHEMA" ] && command -v jq >/dev/null 2>&1 \
+     && git -C "$CONSUMER" rev-parse --git-dir >/dev/null 2>&1; then
+    ti_tracked=""
+    ti_pats="$(jq -r '.paths[] | select(.transient) | .ignore // empty' "$TI_SCHEMA" 2>/dev/null)"
+    while IFS= read -r ti_p; do
+      [ -n "$ti_p" ] || continue
+      ti_n="$(git -C "$CONSUMER" ls-files -- "$ti_p" "${ti_p%/}" 2>/dev/null | wc -l | tr -d ' ')"
+      [ "${ti_n:-0}" -gt 0 ] && ti_tracked="$ti_tracked ${ti_p}(${ti_n})"
+    done <<EOF
+$ti_pats
+EOF
+    if [ -n "${ti_tracked// /}" ]; then
+      say WORKLIST transient-ignore-tracked ".gitignore" \
+        "transient pipeline path(s) are TRACKED on this consumer, and an ignore rule does nothing to a file git already tracks:${ti_tracked}. Each one re-materializes on every checkout of this branch, so a marker no session wrote is present for hooks that read it. Untrack with \`git rm -r --cached <path>\` and commit. Not done here: rewriting an index is the operator's call."
+    fi
+  fi
+else
+  # NOT a silent skip -- the same reason the hook row states its own absence.
+  say DECISION transient-ignore-unchecked ".gitignore" \
+    "scripts/ai-dlc/sync-transient-ignore.sh is not on this consumer, so nothing verified that the transient paths this apply declared are ignored. It is delivered by install.sh's copy loop over core/scripts/; run a fresh install of that script, then \`bash scripts/ai-dlc/sync-transient-ignore.sh\`."
+fi
+}
+
 # --- THE TWO ORDERS, DISPATCHED ONCE ---------------------------------------------------------
 #
 # Ordinary apply: stamp, then the hook row. The hook row cannot gate the stamp here because the
@@ -1663,12 +1761,19 @@ fi
 # the question is answerable and its answer is verified by a validator rather than attested. A
 # still-unwired hook therefore raises `handback` before the guard reads it, and the finisher
 # withholds -- which terminates, because registering the hooks is work that clears the row.
+#
+# The transient-ignore row rides with the hook row in both orders. It is answerable at either
+# moment -- unlike the hook row it depends on no later step-7 bullet, because the declaration it
+# checks was written by the pure-apply phase above -- so it takes the hook row's position rather
+# than introducing a third ordering for a reader to reason about.
 if [ "$FINISH" = 1 ]; then
   hook_registration_row
+  transient_ignore_row
   write_stamp
 else
   write_stamp
   hook_registration_row
+  transient_ignore_row
 fi
 
 exit 0
