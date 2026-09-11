@@ -411,12 +411,23 @@ else
     SPRINT_SECTION=$(awk "/^## Gate Log: Sprint ${SPRINT_N}([[:space:]]|$)/{found=1} found && /^## Gate Log: Sprint [0-9]/ && !/^## Gate Log: Sprint ${SPRINT_N}([[:space:]]|$)/{found=0} found{print}" "$GATE_LOG" 2>/dev/null | head -200)
 
     if [ -z "$SPRINT_SECTION" ]; then
-      # Could not isolate this sprint's deploy-validate section in gate-log.md. The gate-log entry
-      # header format is consumer-defined (CLAUDE.md Autonomous Gate Protocol) — core keys on
-      # "## Gate Log: Sprint N", but a consumer may section its log differently, so a missing section
-      # means "cannot determine", not "no visual evidence". SKIP rather than fail on an unparseable
-      # format; a consumer whose gate-log uses this header still gets the real check below.
-      echo "  CHECK 5: SKIP (could not isolate Sprint ${SPRINT_N} section in gate-log.md — consumer-defined format)"
+      # Could not isolate this sprint's deploy-validate section in gate-log.md. SKIP rather than
+      # fail: a consumer whose log predates the documented header, or who sections it differently,
+      # has not thereby failed to verify anything, and a FAIL here would block a gate on a
+      # formatting mismatch.
+      #
+      # THE SKIP NAMES THE HEADER IT WANTED, AND IT USED TO CALL THE FORMAT "consumer-defined".
+      # It is not consumer-defined: `steps/gate-validation.md` step 12 states it literally. That
+      # comment cited "CLAUDE.md Autonomous Gate Protocol" as the authority — a pre-R22 section
+      # that `ai-dlc-setup/SKILL.md`'s absorption table records as MOVED into gate-validation.md,
+      # so the citation named a section that does not exist in any consumer tree. Measured on the
+      # reference consumer: 8 entries under its own `## Gate:` shape, 0 under this one, and this
+      # check had therefore SKIPped on every sprint since that consumer's install without anyone
+      # learning that its UI evidence was unverified.
+      #
+      # SO THE MESSAGE PRINTS THE REMEDY. A SKIP that names no cause reads as "nothing to check"
+      # and is the reason this went unnoticed for the life of an install.
+      echo "  CHECK 5: SKIP (could not isolate a '## Gate Log: Sprint ${SPRINT_N}' section in gate-log.md — this check needs that exact header, which steps/gate-validation.md step 12 specifies; entries under a different heading shape are not read, so visual-UI evidence for this sprint is NOT machine-verified)"
       SKIPPED_CHECKS="$SKIPPED_CHECKS 5"
     else
       VISUAL_OK=0
