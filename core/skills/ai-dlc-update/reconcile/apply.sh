@@ -1668,13 +1668,19 @@ fi
 # no rule rendered for them, and the gap is invisible: a consumer whose block predates a
 # declaration looks exactly like one whose block is current.
 #
-# WHAT IT COSTS, MEASURED ON THE REFERENCE CONSUMER RATHER THAN REASONED. Its installed schema
-# declares 16 transient patterns and its rendered block carries 13. `.handoff-in-progress` is one
-# of the three missing -- the handoff entry marker, whose whole meaning is "the lead is INSIDE the
-# handoff procedure". With no rule, steps/handoff.md step 2's broad `git add` commits it, step 5's
-# `rm -f` records no deletion, and the tracked blob re-materializes on every later checkout. A
-# consumer hit exactly that: an unrelated pause re-armed the handoff guard from a marker no
-# session had written, and the operator's first words were that no handoff had been requested.
+# WHAT IT COSTS, MEASURED ON THE REFERENCE CONSUMER RATHER THAN REASONED -- and stated as the
+# SHAPE rather than as a count, because the count is a property of a tree somebody else is holding
+# open. An earlier revision of this comment carried "declares 16 and renders 13"; that consumer
+# re-rendered its own block hours later and the figure was false in resident prose before the
+# release it shipped in had been merged a day. A raw total here decays silently and reads exactly
+# like a fresh one. The CHANGELOG dates the measurement; this comment states what is durable:
+#
+# A consumer's block can carry FEWER patterns than its schema declares, and `.handoff-in-progress`
+# -- the handoff entry marker, whose whole meaning is "the lead is INSIDE the handoff procedure" --
+# has been one of the missing ones. With no rule, steps/handoff.md step 2's broad `git add` commits
+# it, step 5's `rm -f` records no deletion, and the tracked blob re-materializes on every later
+# checkout. A consumer hit exactly that: an unrelated pause re-armed the handoff guard from a marker
+# no session had written, and the operator's first words were that no handoff had been requested.
 #
 # AND A CURRENT RULE IS SUFFICIENT FOR THAT CASE -- measured, not assumed. With the pattern in
 # place, `git add -A`, `git add .` and `git add <dir>` all stage the real artifacts and skip the

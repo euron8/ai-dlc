@@ -1167,6 +1167,114 @@ else
   bad "A3 did not apply — apply.sh no longer forwards --verify's stderr with \`printf '%s\\n' \"\$_ug_verr\" >&2\`, so this mutant proves nothing. Re-anchor it on the current spelling."
 fi
 
+# --- T1-T4: transient_ignore_row() DISCRIMINATES, on the two states where a wrong row does not --
+#
+# WHY HERE AND NOT IN transient-ignore-block. That fixture's subject is the RENDERER; this one
+# drives `apply.sh`, and the row is apply.sh's. The row shipped in 0.545.0 with a scratch probe
+# behind it and no committed seed, and an adversary then built FOUR wrong implementations that
+# passed every state that probe seeded. Two of the four are live defects, and both are killed by
+# ONE state each that the probe never built. Those two states are seeded here.
+#
+# T1/T2 -- THE RENDERER EXITS 2. `sync-transient-ignore.sh` has six `exit 2` paths (an unresolvable
+# declaration, an empty block marker, no jq, a declaration with no transient half). The row must
+# call that UNREADABLE, because "the check could not run" and "the block is stale" are different
+# facts with different remedies: re-rendering an unresolvable declaration does nothing, and a
+# WORKLIST row saying "re-render it" sends the operator to a tool that will exit 2 again. A row
+# written `!= "0"` instead of `= "1"` collapses the two, lands in the wrong hand-back bucket, and
+# passes every other seed. That is the same distinction hook_registration_row() draws one function
+# above, which is why the row is shaped like it.
+#
+# T3/T4 -- THE MARKER IS ON DISK AND UNTRACKED, BLOCK CURRENT. This is the ORDINARY mid-pipeline
+# state: transient files exist on disk constantly and being untracked is exactly correct. The row
+# must be SILENT. A row testing `[ -e ]` on the worktree instead of asking the INDEX fires here on
+# every healthy consumer -- and a row that wedges a correct pull is worse than the defect it
+# reports. The property is "git is tracking it", which only `ls-files` answers.
+#
+# BOTH ARMS ARE PRESENCE/ABSENCE PAIRS ON ONE INPUT, one property apart, so neither can pass by
+# reporting everything or by reporting nothing.
+ti_row_out() { # <consumer> -> the row types this consumer draws, or -NONE-
+  local c="$1" out
+  out="$( CONSUMER="$c" DIST="$DIST" bash -c '
+    handback=0; worklist_n=0
+    say() { printf "%s|%s\n" "$1" "$2"; }
+    '"$(sed -n '/^transient_ignore_row() {/,/^}$/p' "$APPLY")"'
+    transient_ignore_row' 2>/dev/null | tr '\n' ' ' )"
+  printf '%s' "${out:--NONE-}"
+}
+mk_ti_consumer() { # <dir> <render yes|no> <ondisk yes|no> <tracked yes|no> <break yes|no>
+  local c="$1" rnd="$2" od="$3" tr_="$4" brk="$5"
+  mkdir -p "$c/scripts/ai-dlc" "$c/.claude/schemas" "$c/_bmad-output" || return 1
+  git -C "$c" init -q . 2>/dev/null || return 1
+  git -C "$c" config user.email t@t; git -C "$c" config user.name t
+  cp "$REPO/core/schemas/pipeline-state-paths.json" "$c/.claude/schemas/" || return 1
+  cp "$REPO/core/scripts/sync-transient-ignore.sh"  "$c/scripts/ai-dlc/"  || return 1
+  printf 'node_modules/\n' > "$c/.gitignore"
+  git -C "$c" add -A >/dev/null 2>&1; git -C "$c" commit -qm base >/dev/null 2>&1
+  [ "$rnd" = yes ] && bash "$c/scripts/ai-dlc/sync-transient-ignore.sh" --root "$c" >/dev/null 2>&1
+  [ "$od"  = yes ] && : > "$c/_bmad-output/.handoff-in-progress"
+  if [ "$tr_" = yes ]; then
+    git -C "$c" add -f _bmad-output/.handoff-in-progress >/dev/null 2>&1
+    git -C "$c" commit -qm tracked >/dev/null 2>&1
+  fi
+  # An EMPTY block marker: the renderer refuses rather than guessing, and exits 2.
+  if [ "$brk" = yes ]; then
+    sed -i.bak 's/"block_begin": "[^"]*"/"block_begin": ""/' "$c/.claude/schemas/pipeline-state-paths.json"
+    rm -f "$c/.claude/schemas/pipeline-state-paths.json.bak"
+  fi
+  git -C "$c" add -A >/dev/null 2>&1; git -C "$c" commit -qm state >/dev/null 2>&1
+  return 0
+}
+
+REPO="$(cd "$(dirname "$APPLY")/../../../.." && pwd)"
+if [ ! -f "$REPO/core/scripts/sync-transient-ignore.sh" ] || [ ! -f "$REPO/core/schemas/pipeline-state-paths.json" ]; then
+  # A core fixture ships AHEAD of its subject: say so rather than printing a green line.
+  ok "T1-T4 skipped: sync-transient-ignore.sh / pipeline-state-paths.json are not in this tree, so the row's inputs cannot be built"
+else
+  TI_UNREADABLE="$WORK/ti-unreadable"; TI_ONDISK="$WORK/ti-ondisk"; TI_TRACKED="$WORK/ti-tracked"
+  if mk_ti_consumer "$TI_UNREADABLE" yes no no yes && mk_ti_consumer "$TI_ONDISK" yes yes no no \
+     && mk_ti_consumer "$TI_TRACKED" yes yes yes no; then
+    T_UNREAD="$(ti_row_out "$TI_UNREADABLE")"
+    T_DISK="$(ti_row_out "$TI_ONDISK")"
+    T_TRACK="$(ti_row_out "$TI_TRACKED")"
+
+    # T0 -- the seeds DISCRIMINATE, keyed on the pair NO arm below owns.
+    #
+    # IT ASSERTS unreadable != tracked AND NOT unreadable/on-disk/tracked ALL-DIFFER, and the
+    # narrowing is deliberate. The wider form ALSO fires on the worktree-test mutant -- which
+    # collapses on-disk into tracked, exactly what T4 exists to catch -- so two arms went red on
+    # one input and the harness could not say which was load-bearing. A setup arm must not overlap
+    # the behaviour arms it introduces: these two worlds differ under every implementation that
+    # reads the schema at all, so T0 fails only when the SEEDS are broken, which is its whole job.
+    if [ "$T_UNREAD" != "$T_TRACK" ]; then
+      ok "T0 setup: the unreadable and the tracked consumer draw different answers, so the arms below are reading more than one world"
+    else
+      bad "T0 setup: the unreadable and the tracked consumer both drew '$T_UNREAD' — the seeds do not separate and every verdict below is about one world"
+    fi
+
+    case "$T_UNREAD" in
+      *"DECISION|transient-ignore-unreadable"*)
+        ok "T1 a renderer that exits 2 is reported UNREADABLE, not as a stale block — re-rendering an unresolvable declaration is not the remedy" ;;
+      *"WORKLIST|transient-ignore"*)
+        bad "T2 the row told the operator to RE-RENDER a consumer whose declaration cannot be resolved at all ($T_UNREAD). \`--check\` exited 2, not 1; those are different facts with different remedies, and this row lands in the WORKLIST hand-back bucket where a DECISION is owed" ;;
+      *) bad "T1 a consumer whose renderer exits 2 drew '$T_UNREAD' — neither the unreadable DECISION nor the stale WORKLIST, so the rc branches are not reached at all" ;;
+    esac
+
+    case "$T_DISK" in
+      "-NONE-")
+        ok "T3 a transient path present ON DISK and untracked, with the block current, draws NO row — the ordinary mid-pipeline state of every healthy consumer" ;;
+      *) bad "T4 the row fired on a consumer that is CORRECT ($T_DISK): the marker is on disk and untracked, which is exactly what a transient path should be. The property is whether git TRACKS it, which only \`ls-files\` answers; a worktree test flags every healthy consumer on every pull" ;;
+    esac
+
+    case "$T_TRACK" in
+      *"WORKLIST|transient-ignore-tracked"*)
+        ok "T5 the same path, TRACKED, does draw the row — so T3's silence is discrimination and not a row that never fires" ;;
+      *) bad "T5 a TRACKED transient path drew '$T_TRACK' — the arm T3 relies on cannot fire, so T3's silence proves nothing" ;;
+    esac
+  else
+    bad "T1-T5 setup: could not build the transient-ignore consumers, so the row was never driven"
+  fi
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then
   echo "PASS  apply-restamp-worklist: a run that hands back a WORKLIST or a DECISION row leaves"
