@@ -55,6 +55,60 @@ have gone green, and would have reported "still open" forever.
 never the word anywhere in prose, because an entry that merely discusses landing something is
 not a closed entry.
 
+## BL-236 — the note that makes `ai-dlc-update`'s braced rev-paths survive a retype has no mechanism behind it, and arm S8 cannot see the form a reader actually mistypes
+
+**Found 2026-09-11**, filed by the reference consumer as a candidate against
+`core/skills/ai-dlc-update/SKILL.md`. The prose half landed with the entry; what is owed is the
+enforcement, and the reason it is owed is that the arm which looks like the enforcer is not one.
+
+**THE ARM DOES NOT COVER THE FORM.** `validate-shell-portability.sh`'s S8 already spells this
+exact rule in its own `S8_WHY` — history modifiers, `:c`/`:t`, "QUOTING DOES NOT FIX IT; only the
+braces do" — so the program exists and a second one must not be built. But its pattern is
+`(show|cat-file -p|…)[[:space:]]+\\?"?<[^>]+>:`, which is keyed on an **angle-bracket
+placeholder**. Derived by extracting `S8_PAT` from the shipping file and running it against four
+renderings: `show <theirs>:<core-path>` scores **1**, and `show "$THEIRS:core/scripts/x.sh"`,
+`show "${THEIRS}:core/scripts/x.sh"` and `show "${theirs}:<core-path>"` each score **0**. So the
+`$VAR:` spelling — the one a reader produces by dropping the braces from a correct site, and the
+one that is live in two shipped files today — is outside the arm's grammar by construction.
+
+**THE PROSE IS THE ONLY CARRIER, AND ITS CHANNEL IS WRONG FOR THE JOB.** `resident-context.md`
+requires a named carrier per rule. This one's carrier is a paragraph in a file the reader is
+already skimming, and the failure it prevents is silent in the expensive direction: the ref
+resolves, git answers about a different blob, and the answer looks like an answer. Measured on
+this machine under `/bin/zsh` with the ref bound, bare against braced: `core/scripts/x.sh`,
+`templates/x` and `tests/x` MANGLE, `docs/x` is SAFE (control, same invocation), and
+`"$REF:$CP"` is also SAFE because the character after the colon is `$`, not a modifier letter.
+That last row is why `reconcile/classify-block.md:15-16` is NOT a defect despite carrying the
+bare form, and it is also why a naive `\$[A-Za-z_]+:` arm would have a non-empty false-positive
+set on the shipped tree.
+
+**WHAT THE MISSING ARM WOULD HAVE TO DISCRIMINATE**, and why it is not a one-liner. Three
+populations share one shape and need three verdicts: the bare form in a `#!/usr/bin/env bash`
+script is CORRECT (`reconcile/emit-report.sh:300`, `reconcile/ledger-reverify.sh:636` — both
+shebangs verified), the bare form followed by `$` is correct in any shell, and the bare form in
+instruction text a human retypes is the defect. Keying on the shebang was measured wrong for
+S11's subject for a reason that applies here too — a line-oriented scan cannot see which shell
+will run the text — and for a `.md` file there is no shebang to key on at all. So the arm's
+population is "text that will be retyped", which no regex spells, and any candidate needs its
+false-positive set measured over `git ls-files 'core/*'` before it ships.
+
+**Why this is filed rather than built now.** The entry's own remedy was one sentence, and the
+operator's instruction was explicitly not to build a mechanism. Widening S8 changes an arm whose
+false-positive set is recorded EMPTY and whose corpus the fixture battery under
+`core/fixtures/shell-portability/` necessarily seeds with every pattern it forbids — that
+exclusion is derived from the validator's own name at `:316`, so a widened pattern interacts
+with it. That is a measured change to a live arm, not an addition beside one.
+
+**Receipt limits, stated.** The receipt scores the PROSE half only — that a `zsh` sentence about
+braces stands above the first braced rev-path command, outside a fenced block and outside an HTML
+comment. **It cannot score the missing arm**, because the arm does not exist and a receipt for an
+absent mechanism has nothing to run; closing this entry needs S8 widened or a successor arm with
+its own measured false-positive set, and that half is not receipt-enforceable. Exit 9 if the
+subject file or every braced command site is gone — a truncated or deleted file is NEEDS-REVIEW,
+never a close.
+
+verify: sh f=core/skills/ai-dlc-update/SKILL.md; [ -r "$f" ] || exit 9; c=$(grep -nE 'show "\$\{[a-z]+\}:' "$f" | head -1 | cut -d: -f1); [ -n "$c" ] || exit 9; n=$(awk -v c="$c" 'BEGIN{bt=sprintf("%c%c%c",96,96,96)} { if (substr($0,1,3)==bt || substr($0,5,3)==bt) { fence=!fence; F[NR]=1 } else F[NR]=fence; L[NR]=tolower($0) } END { for (i=1;i<c;i++) { if (F[i] || L[i] !~ /zsh/ || L[i] ~ /<!--/) continue; lo=i-3; if (lo<1) lo=1; hi=i+5; if (hi>NR) hi=NR; for (j=lo;j<=hi;j++) if (!F[j] && L[j] ~ /brace/) { print i; exit } } }' "$f"); [ -n "$n" ] || exit 1; exit 0
+
 ## BL-230 — `reconcile-emit-report`'s E1 kill-set arm fails intermittently under the pool, and its success message describes a different assertion than the one it makes
 
 **Found 2026-09-11** during batch 85, when E1 failed a gate run on a branch whose change cannot
