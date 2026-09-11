@@ -98,9 +98,17 @@ invoke it and no arm binds the update path.
 
 **Measured on the reference consumer, recoverable from its own history**: 16 transient patterns
 declared, 13 rendered, both handoff markers absent (control: `pipeline-paused.flag` returns 2). The
-declaration gained them 2026-09-06; the block was last rendered 2026-08-31. In that window a broad
-`git add` committed the marker, it rode into `main`, and it re-armed the handoff guard on an
-unrelated pause in a session that had run no handoff.
+declaration gained them 2026-09-06; the block was last rendered **2026-08-26, at the INSTALL** —
+`git log -S"BEGIN AI/DLC transient" -- .gitignore` resolves exactly one commit, against a control of
+49 commits touching that file. The renderer had never run again on that consumer. In the five weeks
+between, a broad `git add` committed the marker, it rode into `main`, and it re-armed the handoff
+guard on an unrelated pause in a session that had run no handoff.
+
+`0.545.0` said "last rendered 2026-08-31" and called it a five-day window. That date was the
+`.gitignore` file's most recent commit, which is a different question: that commit's whole diff is
+two `!.claude/rules/` negations OUTSIDE the marker-bounded region. **Ask what a date is a date OF.**
+The correction widens the finding — the mechanism had fired exactly once, at day zero, which is what
+"no caller on the pull path" predicts.
 
 **A current rule IS sufficient for that case**, measured rather than assumed: with the pattern in
 place `git add -A`, `git add .` and `git add <dir>` all skip the marker and an explicit add refuses;

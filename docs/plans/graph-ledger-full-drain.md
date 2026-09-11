@@ -120,7 +120,12 @@ its direct question about whether the markers should be tracked. Its own `--chec
 zero tracked transient paths. **That repairs one tree and gives the pull path no caller**, so the
 next pull adding a transient declaration drifts again, there and everywhere else. The pre-fix state
 is recoverable at `567cfc9dc^`: 16 declared, 13 rendered, both handoff markers absent (control:
-`pipeline-paused.flag` present).
+`pipeline-paused.flag` present). **And the renderer had run EXACTLY ONCE there, at the install
+(`f53453868`, 2026-08-26)** — derived with `git log -S"BEGIN AI/DLC transient" -- .gitignore`
+against a control of 49 commits touching that file. Batch 85 first reported "last rendered
+2026-08-31" from the file's most recent commit, whose whole diff is two negations OUTSIDE the
+marker region; an adversary corrected it. **Ask what a date is a date OF** — a file moving and a
+rendered REGION moving are different events.
 
 **AND READ `BL-227` BEFORE BUILDING ANY RECEIPT.** Unchanged from batch 84. The ranked no-`PC`
 entries, readiest first, are `BL-225`, `BL-217`, `BL-222`, `BL-224`, `BL-220`, `BL-218`, `BL-219`,

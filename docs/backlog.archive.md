@@ -10186,7 +10186,21 @@ patterns declared, **13 rendered**, both handoff markers absent from the block (
 pattern, `pipeline-paused.flag`, returns 2). The marker is tracked at the sprint-310 merge the
 candidate names (`git ls-tree 84451b892` returns 1; control: an impossible path returns 0). The
 declaration gained the two markers on 2026-09-06 (`f8c9c4ef2`); the block was last rendered
-2026-08-31 (`efcb013b5`). A five-day window in which every broad `git add` could commit the marker.
+**2026-08-26 (`f53453868`), which is the INSTALL** — the renderer had never run again on that
+consumer. Every broad `git add` in the five weeks between could commit the marker.
+
+**AN EARLIER REVISION OF THIS PARAGRAPH SAID "last rendered 2026-08-31 (`efcb013b5`)" AND CALLED
+IT A FIVE-DAY WINDOW. Both were wrong, and the correction WIDENS the finding.** That figure came
+from the `.gitignore` file's most recent commit, which is not the same question as when the BLOCK
+was rendered: `efcb013b5`'s entire `.gitignore` diff is two `!.claude/rules/` negations, both
+OUTSIDE the marker-bounded region — a hand-edit, not a renderer run. Derived correctly with
+`git log -S"BEGIN AI/DLC transient" -- .gitignore`, which resolves exactly one commit against a
+control of 49 commits touching that file at all. **Ask what a date is a date OF**: the file moving
+and the rendered region moving are different events, and only the second one answers this question.
+
+That the renderer had fired exactly once, at install, is the strongest available evidence for this
+entry's subject — the mechanism had never once run on the reference consumer after day zero, which
+is precisely what "no caller on the pull path" predicts.
 
 **A CURRENT RULE IS SUFFICIENT FOR THE UNTRACKED CASE — measured, not reasoned.** In a scratch
 repo with the pattern in place: `git add -A`, `git add .` and `git add <dir>` each stage the real
