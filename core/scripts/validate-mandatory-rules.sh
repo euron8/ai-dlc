@@ -430,9 +430,32 @@ else
       # per sprint. The isolation returns nothing there for a reason that has nothing to do with
       # header style, which is exactly why this SKIP must name its cause rather than imply one.
       #
-      # Across that consumer's gate logs generally, titled headers are the NORM and not an edge
-      # case — 229 titled against 10 bare, excluding worktree duplicates — which is why the step
-      # file admits a trailing title rather than forbidding it.
+      # AND THE SAME QUESTION, ASKED AGAIN ONE LEVEL DOWN, BREAKS THE FIGURE THAT REPLACED IT.
+      # The revision above corrected an 8-vs-0 figure for being taken over the wrong population,
+      # then justified admitting a trailing title with "229 titled against 10 bare, excluding
+      # worktree duplicates" — which has the same defect. The count is arithmetically exact and
+      # roughly HALF of it is the same files counted twice: 36 of 36 per-sprint archives under
+      # `scripts/ai-dlc-local/tests/validate-mandatory-rules/corpus-snapshot-s288/` are `cmp -s`
+      # IDENTICAL to their live counterparts (control: a snapshot file against an unrelated live
+      # sprint DIFFERS). The de-duplication that correctly excluded the untracked worktree
+      # checkout was never applied to the fixture snapshot.
+      #
+      # IT ALSO SAID "NORM", AND THAT IS THE CLAUSE A READER ACTS ON. On the population this
+      # check opens, conformance is near-total ABSENCE rather than near-total titling: 121
+      # conforming headers against 856 `## Gate` headings in the live tree, one of 106 H2
+      # entries across the nine most recent sprints, and the conforming corpus stops after
+      # s290 (control: an impossible heading returns 0). "Consumers already conform" is what
+      # NORM is read as, and on the reference consumer they have not for twenty sprints.
+      #
+      # THE DECISION IS RIGHT AND ITS WARRANT IS NOT A CENSUS. Whether a header may carry a
+      # trailing title is settled by the isolator's own anchor — `([[:space:]]|$)` after the
+      # sprint number — and by `steps/gate-validation.md` step 12, which states the format
+      # literally. A titled header isolates identically to a bare one because the anchor is on
+      # the OPENING, which is a property of the grammar and cannot rot as a corpus moves. That
+      # the form occurs at all is worth one instance count over a named, non-duplicated
+      # population: 115 titled against 6 bare among the 121 conforming headers in the reference
+      # consumer's live `_bmad-output/`, excluding an untracked worktree checkout and a
+      # byte-identical test-fixture copy of those same files.
       #
       # SO THE MESSAGE PRINTS THE REMEDY. A SKIP that names no cause reads as "nothing to check"
       # and is the reason this went unnoticed for the life of an install.
