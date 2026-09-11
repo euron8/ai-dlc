@@ -371,17 +371,34 @@ if transcript_text is not None and chars > 0:
         failures.append(
             ("FLOOR_CHARS", f"transcript char count {chars} < {MIN_CHARS}")
         )
+    # THE MESSAGE NAMES WHAT IS ACCEPTED, NOT ONLY WHAT WAS FOUND, AND `found: []` IS WHY.
+    # These two floors are counted against a CLOSED VOCABULARY that exists nowhere but this
+    # file. An author who shapes a transcript with descriptive `## PM` / `## Dev` headings —
+    # a reasonable reading of the step file, which states the floor without naming the
+    # strings — gets `found: []` and a count, and nothing in the output or in `retro.md`
+    # says which strings would have counted. The only ways left to discover them are reading
+    # this source or copying a prior sprint's transcript out of git history, and the second
+    # is what the reference consumer did after this floor failed its sprint-310 retro.
+    #
+    # RENDERED FROM THE LIST ITSELF, never restated: a hand-copied roster here would be a
+    # second spelling of the vocabulary, drifting the first time someone edits the list
+    # above and not this message. That is the failure this repo names "a schema written
+    # N times is N-1 chances to drift", and the remedy is that the reader LOADS it.
     if len(personas_found) < MIN_PERSONAS:
         failures.append(
             ("FLOOR_PERSONAS",
              f"distinct persona markers {len(personas_found)} < {MIN_PERSONAS} "
-             f"(found: {personas_found})")
+             f"(found: {personas_found}). The count is over a FIXED set, so a transcript "
+             f"using its own section names scores zero however complete it is. Accepted "
+             f"markers: {', '.join(PERSONA_MARKERS)}")
         )
     if len(phases_found) < MIN_PHASES:
         failures.append(
             ("FLOOR_PHASES",
              f"distinct phase labels {len(phases_found)} < {MIN_PHASES} "
-             f"(found: {phases_found})")
+             f"(found: {phases_found}). The count is over a FIXED set, so a transcript "
+             f"grouped some other way scores zero however complete it is. Accepted "
+             f"labels: {', '.join(PHASE_LABELS)}")
         )
 
 # Sprint 138 Story 138-3 / LR-S138-21: transcript SHA citation failure codes
