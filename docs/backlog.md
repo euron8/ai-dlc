@@ -63,6 +63,17 @@ diagnosis is one level short of the defect: it reads as a `handoff.md` step-orde
 proposes shipping a `.gitignore` pattern. **The pattern is already declared, and has been. What
 never runs is the render.**
 
+**THE CANDIDATE WAS UNCOMMITTED WHEN THE SWEEP READ IT AND THE CONSUMER HAS SINCE WITHDRAWN IT,
+so this entry's SUBJECT is upstream-derived and does not rest on that filing.** Measured at the
+batch's close: the id is in neither the consumer's live ledger nor its archive (0 and 0, control:
+`PC-S295-RETRO-CHECK5-SELF-REFERENTIAL` returns 2 in the live file), and `git log -S` over that
+ledger returns ZERO commits introducing it against a control of 5 for the same PC-S295 id. It
+existed only in that consumer's working tree, was read there, and was reverted after the consumer
+repaired its own tree (`567cfc9dc`). **A consumer repairing itself does not repair the pull path** —
+the render still has no caller on an update, which is what this entry is about and what no local
+`git rm --cached` can reach. The filing is recorded as provenance, not as evidence; every figure
+below is derived against the distribution or against the consumer's own committed history.
+
 **THE DECLARATION SIDE WAS ALREADY CORRECT.** `core/schemas/pipeline-state-paths.json` declares
 `_bmad-output/.handoff-in-progress` and `_bmad-output/.handoff-guard-armed` `transient: true` with
 an `ignore` pattern each, and their own `reason` fields name this exact failure — *"A tracked copy

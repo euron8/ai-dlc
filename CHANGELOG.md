@@ -66,6 +66,15 @@ one where transient files are present on disk but untracked.
 `transient-ignore-block` gains an arm pinning `--check`'s contract — it reports the block and never
 names a tracked path — plus the mutant that kills it. Filed as `BL-229`.
 
+**The candidate was uncommitted when the sweep read it, and the consumer withdrew it mid-batch
+after repairing its own tree.** At the batch's close the id is in neither its live ledger nor its
+archive, and `git log -S` returns zero commits introducing it (control: a live id returns 2 in the
+file and 5 in the log). That changes the filing's status and not this release's subject: a consumer
+running `git rm --cached` and re-rendering its own block does not give the pull path a caller, so
+the next pull that adds a transient declaration drifts again, there and everywhere else. Every
+figure above is derived against the distribution or against that consumer's committed history,
+never against the withdrawn entry.
+
 ## [0.544.0] - 2026-09-10
 
 ### The gate-adjudication rotator refuses a rotation that would strand a FAILing legacy verdict (`PC-S310-GATE-ADJUDICATION-ROTATION-HAS-NO-BACKFILL-PATH-FOR-PRE-MECHANISM-SPRINTS`)
