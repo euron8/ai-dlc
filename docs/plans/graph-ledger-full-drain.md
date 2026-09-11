@@ -37,17 +37,30 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 85 SHIPPED AS `v0.545.0` AND WAS CORRECTED BY `v0.546.0` — AND **EVERY DEFECT IN BOTH RELEASES WAS FOUND BY AN ADVERSARY AFTER THE BRANCH WAS GATE-GREEN, PUSHED, AND IN THE FIRST CASE ALREADY MERGED.** THE SWEEP ITSELF WAS ALSO A DEFECT: THIS BATCH READ THE CONSUMER'S LEDGER AT THE WRONG REF AND RECORDED A LIVE FILING AS ABSENT, TWICE, IN OPPOSITE DIRECTIONS. THE CANDIDATE'S DIAGNOSIS WAS ONE LEVEL SHORT: THE IGNORE PATTERN IT ASKED FOR WAS ALREADY DECLARED, AND WHAT NEVER RUNS IS THE **RENDER**. THE GAP IS **FOUR**, PENDING **3**, AND THE PULL IS **REQUIRED** — CARRIED OVER FROM BATCH 83 AND UNCHANGED.
+### BATCH 85 SHIPPED THREE RELEASES — `v0.545.0`, CORRECTED BY `v0.546.0`, THEN `v0.547.0` — AND **EVERY DEFECT IN ALL THREE WAS FOUND BY AN ADVERSARY AFTER THE BRANCH WAS GATE-GREEN AND PUSHED, THE FIRST TIME AFTER IT WAS ALREADY MERGED.** THE SWEEP ITSELF WAS ALSO A DEFECT: THIS BATCH READ THE CONSUMER'S LEDGER AT THE WRONG REF AND RECORDED A LIVE FILING AS ABSENT, TWICE, IN OPPOSITE DIRECTIONS. THE CANDIDATE'S DIAGNOSIS WAS ONE LEVEL SHORT: THE IGNORE PATTERN IT ASKED FOR WAS ALREADY DECLARED, AND WHAT NEVER RUNS IS THE **RENDER**. THE GAP IS **FIVE**, PENDING **3**, AND THE PULL IS **REQUIRED** — CARRIED OVER FROM BATCH 83 AND UNCHANGED.
 
 This block replaces the batch-84 record below it. Every figure was re-derived after the merge
 against the working tree with controls in the same invocation; re-derive them again rather than
 reading them.
 
-**`VERSION` IS `0.546.0`, SO BATCH 86 RELEASES AS `0.547.0`.** Re-derive `VERSION` and add one.
-Batch 85 merged TWICE: `v0.545.0` at `ef20d75a` (PR #701) carrying
+**`VERSION` IS `0.547.0`, SO BATCH 86 RELEASES AS `0.548.0`.** Re-derive `VERSION` and add one.
+Batch 85 merged THREE times: `v0.545.0` at `ef20d75a` (PR #701) carrying
 `PC-S310-HANDOFF-ENTRY-MARKER-COMMITTED-NEVER-DISCHARGES-CROSS-SESSION`, cited verbatim in the
-release commit message, and the correction `v0.546.0` at `3cce29b6` (PR #702). `BL-229` is filed,
-fixed and ROTATED; `BL-230` is filed and NOT fixed.
+release commit message; the correction `v0.546.0` at `3cce29b6` (PR #702); and `v0.547.0` at
+`3e7c5707` (PR #704). `BL-229` is filed, fixed and ROTATED; `BL-230` is filed and NOT fixed.
+
+**`v0.547.0` KILLED THE CONJUNCT THREE HANDS HAD SCORED UNPROVABLE, AND THAT IS THE BATCH'S MOST
+TRANSFERABLE LESSON.** `select(.transient)` in the row's jq could not be exercised by the shipped
+declaration — zero DURABLE entries carry an `ignore` key, control 16 transient ones do — so all
+three of us filed it as a loaded gun and moved on. **That was a fact about the CORPUS, not about
+the world.** The precedent for synthesising it had been sitting one layer down since it was
+written: `transient-ignore-block`'s own `renders-durable-too` mutant manufactures a durable pattern
+rather than waiting for the schema to grow one. `T8` does the same for the row and kills the mutant
+alone. **And the mutant was a wrong REMEDY, not a miscount** — it tells the operator to
+`git rm --cached` a durable path, which on the reference consumer resolves to
+`_bmad-output/ai-dlc-update`, the ledger directory this program exists to drain. Three hands had it
+tiered as cosmetic because each asked what the wrong output would SAY rather than what it would
+make someone DO. Both rules are now in `.claude/rules/fixture-mutants.md`.
 
 **MERGING WITH A DISPATCHED ADVERSARY STILL OUT COST THIS BATCH A WHOLE CORRECTION RELEASE, AND THE
 PLAN ALREADY SAID NOT TO.** Action 1's "do not merge while a hand you dispatched is still out, even
@@ -8543,9 +8556,22 @@ so no block written before it changes verdict.
    **BATCH 85's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.**
    `PC-S310-HANDOFF-ENTRY-MARKER-COMMITTED-NEVER-DISCHARGES-CROSS-SESSION` shipped ALONE as
    `v0.545.0` at `ef20d75a` (PR #701), closing `BL-229`, cited verbatim in the release commit
-   message, and was corrected by `v0.546.0` at `3cce29b6` (PR #702). It shipped alone
+   message, and was corrected by `v0.546.0` at `3cce29b6` (PR #702) and `v0.547.0` at `3e7c5707`
+   (PR #704). It shipped alone
    because `apply.sh` is a BOOTSTRAPPING file and the machinery slice — derived by RUNNING the
    shipping `machinery_paths()`, 129 paths — contains both it and the renderer.
+
+   **THE POOL WIDTH IS `AI_DLC_FIXTURE_JOBS`, DEFAULT 12, AND FOUR WIDTHS WERE MEASURED THIS
+   BATCH — DO NOT READ THEM AS A CONCURRENCY CURVE.** Totals for a complete `NO_SKIP` run, 195
+   fixtures verdicted each: 12-way **429 / 456 / 462s** (three runs), 8-way **646s**, 6-way
+   **514s**, 4-way **619s**. **4-way beat 8-way, which is not a plausible effect of width**, so
+   something other than width moved these: the low-width runs are single reps, the 8-way one
+   overlapped other work on this machine, and the tree gained four commits between the 12-way runs
+   and the rest. The 6-way and 4-way pair is the only clean comparison — same frozen tree, quiet
+   machine — and 514 vs 619 is a 105s spread on N=1 each. **A real answer needs interleaved reps
+   per width on a frozen tree**, roughly six runs of ten minutes. Nobody has run that, and the
+   default of 12 remains a figure measured on one machine by whoever wrote the hook. Take the
+   numbers above as evidence the instrument is noisy, not as a recommendation.
 
    **`BL-230` IS FILED AND NOT FIXED, AND IT IS NOT THIS PROGRAM'S SUBJECT.**
    `reconcile-emit-report`'s E1 arm failed one 12-way pool run on a branch that cannot reach it
