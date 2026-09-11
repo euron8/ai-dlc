@@ -1316,8 +1316,19 @@ else
         git -C "$TI_DUR" commit -qm durable >/dev/null 2>&1
         ti_dur_n="$(jq '[.paths[] | select(.transient|not) | select(.ignore != null)] | length' "$ti_tmp" 2>/dev/null)"
         ti_dur_tracked="$(git -C "$TI_DUR" ls-files -- "${ti_dur_root}/${ti_dur_name}" | wc -l | tr -d ' ')"
+        # THE TWO PREDICATES MUST ACTUALLY DIFFER ON THIS WORLD, ASSERTED AND NEVER ASSUMED.
+        # Both counts are DERIVED here rather than written down: the transient set grows whenever a
+        # path is declared, so a quoted figure would go stale and the arm would start comparing a
+        # live tree against a remembered one. What must hold is the RELATION -- the filtered set is
+        # strictly smaller than the unfiltered one. Without this, a schema in which the synthesised
+        # durable entry collided with something already carrying an `ignore` would leave the two
+        # predicates agreeing, and T8 would pass while testing nothing.
+        ti_sel="$(jq -r '[.paths[] | select(.transient) | .ignore // empty] | length' "$ti_tmp" 2>/dev/null)"
+        ti_all="$(jq -r '[.paths[] | .ignore // empty] | length' "$ti_tmp" 2>/dev/null)"
         if [ "${ti_dur_n:-0}" -lt 1 ] || [ "${ti_dur_tracked:-0}" -lt 1 ]; then
           bad "T8 setup: seeded a durable entry with an ignore ($ti_dur_n) tracked at its path ($ti_dur_tracked) and one of them did not take — the world cannot separate the two halves of the declaration"
+        elif [ "${ti_sel:-0}" -ge "${ti_all:-0}" ]; then
+          bad "T8 setup: the filtered and unfiltered predicates yield ${ti_sel} and ${ti_all} patterns — they do not SEPARATE on this world, so a row with \`select(.transient)\` and one without it read the same set and this arm cannot discriminate"
         else
           D_TXT="$(ti_row_text "$TI_DUR")"
           case "$D_TXT" in
