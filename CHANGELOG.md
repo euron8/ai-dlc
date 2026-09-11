@@ -15,6 +15,33 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.547.0] - 2026-09-11
+
+### The last unprovable conjunct in the transient-ignore row gets a world that can prove it
+
+`0.546.0` recorded `select(.transient)` in the row's jq as correct-but-unprovable and left it there,
+with both adversarial hands independently reaching that verdict: zero DURABLE entries in the shipped
+declaration carry an `ignore` key, against a control of 16 transient ones, so dropping the filter
+changes nothing observable and a mutant of it survives for a reason that has nothing to do with the
+predicate. That is a loaded gun — a conjunct that changes no outcome today and changes one the day a
+durable entry gains an ignore pattern, with nobody looking.
+
+**The world was synthesisable all along**, which is what `transient-ignore-block`'s own
+`renders-durable-too` mutant already does one layer down: it manufactures a durable pattern rather
+than waiting for the schema to grow one. `T8` does the same for the row — a durable entry gets an
+`ignore`, a file is tracked at its path, and the row must still report ONLY the transient set.
+Seeded: 16 patterns under the correct predicate, 17 without it.
+
+**What the mutant does is worse than a miscount.** With the filter dropped, the row tells the
+operator to `git rm --cached` a DURABLE path — a pipeline artifact the consumer is supposed to
+commit. On the reference consumer's own shape that resolves to `_bmad-output/ai-dlc-update`, the
+push-candidate ledger directory. This is the one direction of this row that could cost a consumer
+real work, and it was the one direction nothing could see.
+
+`T8` is keyed on the durable path being ABSENT from the row's text while the tracked transient one
+is PRESENT, both in the same world, one property apart — so it cannot pass by reporting everything
+or by reporting nothing. It kills the mutant ALONE.
+
 ## [0.546.0] - 2026-09-11
 
 ### The transient-ignore row gets the two seeds that kill its wrong implementations, and its comment stops carrying a raw count

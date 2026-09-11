@@ -1279,6 +1279,61 @@ else
       *) bad "T5 a TRACKED transient path drew '$T_TRACK' — the arm T3 relies on cannot fire, so T3's silence proves nothing" ;;
     esac
 
+    # T8 -- THE ROW REPORTS THE TRANSIENT HALF AND NOT THE WHOLE DECLARATION, PROVED ON A SCHEMA
+    # THAT CAN TELL THE DIFFERENCE.
+    #
+    # `select(.transient)` in the row's jq is UNPROVABLE against the shipped declaration: today no
+    # DURABLE entry carries an `ignore` key (control below), so dropping the filter changes nothing
+    # and a mutant of it survives for a reason that has nothing to do with the predicate. That is a
+    # loaded gun in `mechanism-design.md`'s sense -- the conjunct changes no outcome now and will
+    # change one the day a durable entry gains an ignore pattern, with nobody looking.
+    #
+    # SO THE WORLD IS SYNTHESISED, exactly as `transient-ignore-block`'s own `renders-durable-too`
+    # mutant synthesises a durable pattern rather than waiting for the schema to grow one. A durable
+    # entry here gets an `ignore`, and the row must still report ONLY the transient set: a durable
+    # path is a pipeline ARTIFACT the consumer is supposed to commit, and naming it as scratch state
+    # to untrack is the one direction of this row that could cost a consumer real work.
+    #
+    # The arm is keyed on the tracked DURABLE path being ABSENT from the row's text while the
+    # tracked TRANSIENT one is PRESENT -- both in the same world, one property apart, so it cannot
+    # pass by reporting everything or by reporting nothing.
+    TI_DUR="$WORK/ti-durable"
+    if mk_ti_consumer "$TI_DUR" yes yes yes no; then
+      ti_dur_name="$(jq -r '[.paths[] | select(.transient|not)][0].name // empty' \
+                       "$TI_DUR/.claude/schemas/pipeline-state-paths.json" 2>/dev/null)"
+      ti_dur_root="$(jq -r '.root // empty' "$TI_DUR/.claude/schemas/pipeline-state-paths.json" 2>/dev/null)"
+      if [ -z "$ti_dur_name" ] || [ -z "$ti_dur_root" ]; then
+        bad "T8 setup: the declaration yields no durable entry to synthesise against, so this arm cannot discriminate"
+      else
+        # Give that durable entry an ignore pattern, and TRACK a file at its path.
+        ti_tmp="$TI_DUR/.claude/schemas/pipeline-state-paths.json"
+        jq --arg n "$ti_dur_name" --arg r "$ti_dur_root" \
+           '(.paths[] | select(.name == $n) | .ignore) = ($r + "/" + $n)' "$ti_tmp" > "$ti_tmp.new" \
+          && mv "$ti_tmp.new" "$ti_tmp"
+        mkdir -p "$(dirname "$TI_DUR/${ti_dur_root}/${ti_dur_name}")" 2>/dev/null
+        printf 'durable artifact\n' > "$TI_DUR/${ti_dur_root}/${ti_dur_name}"
+        git -C "$TI_DUR" add -f "${ti_dur_root}/${ti_dur_name}" >/dev/null 2>&1
+        git -C "$TI_DUR" commit -qm durable >/dev/null 2>&1
+        ti_dur_n="$(jq '[.paths[] | select(.transient|not) | select(.ignore != null)] | length' "$ti_tmp" 2>/dev/null)"
+        ti_dur_tracked="$(git -C "$TI_DUR" ls-files -- "${ti_dur_root}/${ti_dur_name}" | wc -l | tr -d ' ')"
+        if [ "${ti_dur_n:-0}" -lt 1 ] || [ "${ti_dur_tracked:-0}" -lt 1 ]; then
+          bad "T8 setup: seeded a durable entry with an ignore ($ti_dur_n) tracked at its path ($ti_dur_tracked) and one of them did not take — the world cannot separate the two halves of the declaration"
+        else
+          D_TXT="$(ti_row_text "$TI_DUR")"
+          case "$D_TXT" in
+            *"${ti_dur_root}/${ti_dur_name}"*)
+              bad "T8 the row named the DURABLE path '${ti_dur_root}/${ti_dur_name}' as transient state to untrack. That path is a pipeline artifact the consumer is supposed to commit, and this row is telling them to \`git rm --cached\` it — the one direction of this arm that costs a consumer real work" ;;
+            *".handoff-in-progress"*)
+              ok "T8 with a durable entry carrying an ignore pattern, the row reports the TRANSIENT tracked path and NOT the durable one — \`select(.transient)\` is load-bearing on a declaration that can tell them apart" ;;
+            *)
+              bad "T8 the row named neither path in a world where a transient one IS tracked ('$(printf '%s' "$D_TXT" | cut -c1-70)') — the arm cannot discriminate because nothing fired" ;;
+          esac
+        fi
+      fi
+    else
+      bad "T8 setup: could not build the durable-entry consumer"
+    fi
+
     # T6/T7 -- NEVER-RENDERED AND DRIFTED ARE DIFFERENT DIAGNOSES, AND THE ROW MUST SAY WHICH.
     # `--check` exits 1 for both and distinguishes them in its text. A row that flattens them tells
     # a consumer whose block was never written that something "no longer matches" — a wrong cause,
