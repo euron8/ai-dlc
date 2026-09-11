@@ -37,16 +37,26 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 85 SHIPPED AS `v0.545.0`, ONE RELEASE CARRYING ONE PC-BACKED SUBJECT — AND **THE SWEEP ITSELF WAS THE DEFECT: THIS BATCH READ THE CONSUMER'S LEDGER AT THE WRONG REF AND RECORDED A LIVE FILING AS ABSENT, TWICE, IN OPPOSITE DIRECTIONS.** THE CANDIDATE'S DIAGNOSIS WAS ONE LEVEL SHORT OF THE DEFECT: THE IGNORE PATTERN IT ASKED FOR WAS ALREADY DECLARED, AND WHAT NEVER RUNS IS THE **RENDER**. THE GAP IS **THREE**, PENDING **3**, AND THE PULL IS **REQUIRED** — CARRIED OVER FROM BATCH 83 AND UNCHANGED.
+### BATCH 85 SHIPPED AS `v0.545.0` AND WAS CORRECTED BY `v0.546.0` — AND **EVERY DEFECT IN BOTH RELEASES WAS FOUND BY AN ADVERSARY AFTER THE BRANCH WAS GATE-GREEN, PUSHED, AND IN THE FIRST CASE ALREADY MERGED.** THE SWEEP ITSELF WAS ALSO A DEFECT: THIS BATCH READ THE CONSUMER'S LEDGER AT THE WRONG REF AND RECORDED A LIVE FILING AS ABSENT, TWICE, IN OPPOSITE DIRECTIONS. THE CANDIDATE'S DIAGNOSIS WAS ONE LEVEL SHORT: THE IGNORE PATTERN IT ASKED FOR WAS ALREADY DECLARED, AND WHAT NEVER RUNS IS THE **RENDER**. THE GAP IS **FOUR**, PENDING **3**, AND THE PULL IS **REQUIRED** — CARRIED OVER FROM BATCH 83 AND UNCHANGED.
 
 This block replaces the batch-84 record below it. Every figure was re-derived after the merge
 against the working tree with controls in the same invocation; re-derive them again rather than
 reading them.
 
-**`VERSION` IS `0.545.0`, SO BATCH 86 RELEASES AS `0.546.0`.** Re-derive `VERSION` and add one.
-Batch 85 merged once, carrying
+**`VERSION` IS `0.546.0`, SO BATCH 86 RELEASES AS `0.547.0`.** Re-derive `VERSION` and add one.
+Batch 85 merged TWICE: `v0.545.0` at `ef20d75a` (PR #701) carrying
 `PC-S310-HANDOFF-ENTRY-MARKER-COMMITTED-NEVER-DISCHARGES-CROSS-SESSION`, cited verbatim in the
-release commit message. `BL-229` is filed, fixed and ROTATED.
+release commit message, and the correction `v0.546.0` at `3cce29b6` (PR #702). `BL-229` is filed,
+fixed and ROTATED; `BL-230` is filed and NOT fixed.
+
+**MERGING WITH A DISPATCHED ADVERSARY STILL OUT COST THIS BATCH A WHOLE CORRECTION RELEASE, AND THE
+PLAN ALREADY SAID NOT TO.** Action 1's "do not merge while a hand you dispatched is still out, even
+on a green gate" was overridden on the reasoning that two hands had gone idle without reporting and
+the third was slow. All three then reported, all three were right, and between them they found: four
+wrong implementations that passed the shipped probe (two of them live defects), a raw count in
+resident prose that went stale within a day, a wrong cause reported on half the row's own trigger,
+a shipped date that was wrong by five weeks, and a false deferral in `BL-229`'s own receipt limits.
+**None of it was reachable by reading; all of it came from building the wrong thing and driving it.**
 
 **THE SUBJECT, AND THE FILED REMEDY WAS RIGHT IN SHAPE AND POINTED AT THE WRONG LAYER.** The
 candidate reads as a `handoff.md` step-ordering problem — step 1 writes `.handoff-in-progress`,
@@ -8532,9 +8542,26 @@ so no block written before it changes verdict.
 
    **BATCH 85's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.**
    `PC-S310-HANDOFF-ENTRY-MARKER-COMMITTED-NEVER-DISCHARGES-CROSS-SESSION` shipped ALONE as
-   `v0.545.0`, closing `BL-229`, cited verbatim in the release commit message. It shipped alone
+   `v0.545.0` at `ef20d75a` (PR #701), closing `BL-229`, cited verbatim in the release commit
+   message, and was corrected by `v0.546.0` at `3cce29b6` (PR #702). It shipped alone
    because `apply.sh` is a BOOTSTRAPPING file and the machinery slice — derived by RUNNING the
    shipping `machinery_paths()`, 129 paths — contains both it and the renderer.
+
+   **`BL-230` IS FILED AND NOT FIXED, AND IT IS NOT THIS PROGRAM'S SUBJECT.**
+   `reconcile-emit-report`'s E1 arm failed one 12-way pool run on a branch that cannot reach it
+   (that fixture invokes `apply.sh` ZERO times, control 24 in `apply-restamp-worklist`), then
+   passed solo and on two later pool runs. Its success message also says *"the three worlds"*
+   while its assertion passes two. **An intermittent arm on a shared fixture charges its cost to
+   whichever change is in flight** — two measurements and an adversarial pass went to proving a
+   correct fix innocent. Take it only if you want the fixture; it is not ledger work.
+
+   **DO NOT MERGE WHILE A DISPATCHED HAND IS STILL OUT.** The rule is already in this action and
+   batch 85 overrode it, on the reasoning that two hands had gone idle without reporting. All
+   three then reported and all three were right, and the cost was a full correction release
+   (`v0.546.0`) fixing four wrong implementations that passed the shipped probe, a stale raw count
+   in resident prose, a wrong cause on half the row's own trigger, a date wrong by five weeks, and
+   a false deferral in the entry's own receipt limits. **An idle hand with an unanswered request is
+   a hand whose report is in transit.**
 
    **AND RUN THE SWEEP AGAINST THE SPRINT TIP.** Batch 85's own lesson: that consumer files onto
    its sprint branch after the sprint's PR has merged, so a filing is committed, pushed and ABSENT
