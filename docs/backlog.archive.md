@@ -10518,3 +10518,195 @@ of the same arm closes it too — which is the intended latitude, not a gap.
 
 verify: sh bash core/fixtures/ledger-reverify-unfalsifiable/run.sh >/dev/null 2>&1
 
+## BL-217 — a worktree-isolated code reviewer's own role file tells it to do what the lead is forbidden to ask for
+
+**LANDED (v0.551.0, verified 6070faed).**
+
+**Found 2026-09-09**, by an adjudication hand measuring `PC-S306-WORKTREE-DELIVERABLE-PATH-AMBIGUOUS-PRIMARY-VS-WORKTREE`
+against HEAD. Not that entry's residue: `git blame` puts the offending line at `e7ccffa9`
+(2026-07-05), predating the `v0.429.0` fix and untouched by it. Verified independently of the hand.
+
+Three shipped core files disagree, and all three are read at HEAD:
+
+- `core/skills/ai-dlc/steps/implementation.md:118` names the worktree dispatch targets as
+  "dev, **code reviewer**, or QA".
+- `core/skills/ai-dlc/steps/implementation.md:130-133` — the `v0.429.0` remedy — states the lead
+  "MUST NOT ask it to write outside that worktree, and MUST NOT name a primary-tree path for a
+  file the teammate is to produce."
+- `core/team-roles/code-reviewer.md:453-456` instructs the reviewer: "**Write the review file to
+  the canonical branch checkout** (or hand it to the lead to persist) BEFORE reporting the gate-1
+  verdict."
+
+So a worktree-isolated code reviewer is told by its own contract to write to the canonical
+checkout, which item 7 forbids the lead to request. The role file's reasoning is sound — a review
+left in a pruned worktree is lost — and that is why this is a PRECEDENCE defect rather than a
+contradiction: the parenthetical fallback ("or hand it to the lead to persist") is already
+compatible with item 7. The two are stated in the wrong order, with the forbidden action primary.
+
+**Scoped, not assumed a class.** `code-reviewer.md` is the only role file carrying the
+instruction — QA does not (1 of 21 role files, control: 21 mention `worktree`).
+
+**The fix shape is a wording repair in one file**: make handing the review to the lead the primary
+instruction and the canonical-checkout write the non-worktree case. Not built here — the LOUD line
+wins in a role file, and which of the two readings a reviewer takes is worth deciding deliberately
+rather than in the same change that found it.
+
+**Item 7 has no enforcer, which is why this survived.** Nothing under `core/fixtures/`, `scripts/`
+or `core/scripts/` references the worktree deliverable rule (control: an unrelated token resolves a
+fixture in the same invocation), so deleting or contradicting item 7 fails no push.
+
+**Tiered DEFECT.** Consumer-facing: both files ship. A reviewer following its role file produces a
+deliverable the lead's protocol says it must not have been asked for, and the losing case is a
+review that is lost with a pruned worktree.
+
+verify: sh r=core/team-roles/code-reviewer.md; i=core/skills/ai-dlc/steps/implementation.md; [ -f "$r" ] && [ -f "$i" ] || exit 9; grep -q "NOT ask it to write outside that worktree" "$i" || exit 9; grep -q "^### Diff Removes Existing Error-Handling" "$r" || exit 9; s="$(sed -n '/^### Gate-1 Review File Not Persisted/,/^### Diff Removes Existing Error-Handling/p' "$r" | tr '\n' ' ')"; [ ${#s} -ge 400 ] || exit 1; awk 'BEGIN{C="canonical branch[- ]checkout"} { n=split($0,P,/\*\*/); pos=1; own=0; lead=0; canb=0; canp=0; for(k=1;k<=n;k++){ t=tolower(P[k]); if(k%2==0){ if(t~/never[^a-z]+outside/ && own==0) own=pos; h=index(t,"hand"); l=index(t,"lead"); if(h>0 && l>h && lead==0) lead=pos; if(t~C) canb=1 } else { if(match(t,C)>0 && canp==0) canp=pos+RSTART-1 } pos=pos+length(P[k])+2 } if(own==0||lead==0||canp==0||canb==1) exit 1; if(own>lead||canp<lead) exit 1; exit 0 }' <<<"$s"
+
+## BL-222 — the escalation validator names the corpus it searched when it DENIES and discards it when it PASSES
+
+**LANDED (v0.551.0, verified 6070faed).**
+
+**Found 2026-09-09** adjudicating
+`PC-S340-VALIDATE-ESCALATION-RESOLUTION-NONDETERMINISTIC-ON-BYTE-IDENTICAL-INPUT` against HEAD,
+re-derived here. **The entry's stated mechanism is REFUTED and its headline is still true for a
+different reason**, which is why this is filed rather than folded into that entry.
+
+**What is fixed.** The greedy-capture defect that made the verdict a function of quote ORDER is
+gone. `cite_segments()` (`core/scripts/validate-escalation-resolution.sh:161`) splits on `"` and
+takes even-indexed fields; `cite_quote()` (`:172`) takes the FIRST segment of 12+ chars —
+position-independent by construction. There is no unordered iteration anywhere in the parse, so
+the entry's own proposed adjudication ("read whether the parse still depends on unordered
+iteration") is refuted as stated.
+
+**And the nondeterminism claim is genuinely refuted at rate, not by a bare zero.** The filing
+reports 3 distinct verdicts in 5 runs — a per-run flip probability of order 0.4–0.6, predicting
+>20 second-verdict occurrences over 25 runs. Measured on a frozen corpus with `shasum` confirmed
+unchanged either side: 25 runs, `25 × (rc=1, output-hash f95c3e53)`; 20 runs on a single-entry
+file, `20 × (rc=0, hash 2c4194a3)`. Control that the harness can see a difference at all: the two
+inputs hash differently, and the pre-fix build over the same 25 gives a third hash. A clean sweep
+at N=25 against a predicted count >20 discriminates.
+
+**What remains, and it is the entry's actual headline.** The verdict still moves on a
+byte-identical `pending.md`, because `pending.md` is not the only input: the transcript CORPUS is
+the second one. Measured — same `pending.md` (`shasum 4b6e0efe`, unchanged), corpus gains one
+`.jsonl`, verdict goes FAIL → OK.
+
+The fix makes that legible in ONE direction only. `CITE_REPORT` is captured at `:400` and rendered
+at `:426` — inside the `rc -eq 2` FAIL branch (`[ -n "$CITE_REPORT" ] && printf …`). The PASS
+branch at `:450` prints `OK: all N … unbounded-citation: N` and discards it. Derived: `cite:
+scanned` resolves at `:382` only, and that is a COMMENT; the string appears on no PASS-path
+`echo`.
+
+**So the fail-OPEN half — the one the entry calls "the half nobody notices" — is precisely the
+branch that still does not say which corpus state produced it.** An operator reading `OK` cannot
+tell a pass over the right corpus from a pass over an empty one.
+
+**FIXED.** `CITE_REPORT` is initialised before the row loop — a `while … done <<EOF` is not a
+subshell, so the last verified row's report survives — and rendered on its own continuation line
+after the OK line, defaulted to a sentence naming the absence so the line never renders blank.
+
+**The owed false-positive population is EMPTY, and here is the derivation with its controls.**
+The exact PASS string `RESOLVED/OVERRIDDEN escalation` resolves in ONE file, the validator
+itself, at its own two emission sites. Control in the same sweep: `validate-mandatory-rules`
+resolves in 59 files by the identical method, and an impossible token resolves in none. The
+`unbounded-citation:` SUBSTRING has readers, and they are the population that matters: they all
+key on a substring of the OK line, which this change does not touch — it appends a line. The
+coupled fixture arm at `core/fixtures/escalation-citation/run.sh:179,182` and the
+`drop-unbounded-count` mutant beside it are unmoved, verified by running the fixture.
+
+**Three arms and four mutants now hold the PASS path.** `(x)` drives the validator twice over
+one `--transcript-dir` PATH whose CONTENT changes between the runs, asserts `pending.md`'s md5 is
+unchanged across both, and requires the two PASS outputs to DIFFER and to carry their own file
+counts — the seed shape is what refuses a constant. `(y)` COUNTS the FAIL branch's corpus-report
+lines, which is what refuses an unconditional dump that renders it twice. `(z)` counts the
+nothing-in-scope PASS's lines, which refuses a corpus claim on a path that verified nothing.
+
+**Tiered DEFECT.** Consumer-facing. Its consequence was an unfalsifiable PASS: the reader could
+not reconstruct which corpus produced it.
+
+verify: sh V=core/scripts/validate-escalation-resolution.sh; S=core/scripts/validate-steering-budget.sh; [ -f "$V" ] && [ -f "$S" ] || exit 9; command -v node >/dev/null 2>&1 || exit 9; w=$(mktemp -d); mkdir -p "$w/c"; printf '%s\n' '{"type":"user","timestamp":"2026-07-12T03:00:00Z","message":{"role":"user","content":"Cut the contested clause and proceed to stories."}}' > "$w/spoke.jsonl"; printf '%s\n' '{"type":"user","timestamp":"2026-07-15T09:00:00Z","message":{"role":"user","content":"resume at the planning gate please"}}' > "$w/gate.jsonl"; e(){ printf '%s\n' '## S50-ITEM-1 Lead (gate [planning]) - 2026-07-12' '**Status:** RESOLVED' "**Operator authorization:** 2026-07-12T03:00:00Z | \"$1\"" > "$2"; }; e 'Cut the contested clause and proceed to stories.' "$w/ok.md"; e 'zzz no operator ever typed this phrase zzz' "$w/bad.md"; printf '%s\n' '## S49-OLD-1 Lead (gate [planning]) - 2026-07-12' '**Status:** RESOLVED' > "$w/vac.md"; cp "$w/spoke.jsonl" "$w/c/"; h0=$(md5 -q "$w/ok.md"); A="$(bash "$V" --escalations "$w/ok.md" --sprint 50 --transcript-dir "$w/c" 2>/dev/null)"; ra=$?; cp "$w/gate.jsonl" "$w/c/"; h1=$(md5 -q "$w/ok.md"); B="$(bash "$V" --escalations "$w/ok.md" --sprint 50 --transcript-dir "$w/c" 2>/dev/null)"; rb=$?; F="$(bash "$V" --escalations "$w/bad.md" --sprint 50 --transcript-dir "$w/c" 2>&1)"; rf=$?; VC="$(bash "$V" --escalations "$w/vac.md" --sprint 50 --transcript-dir "$w/c" 2>/dev/null)"; rv=$?; rm -rf "$w"; [ "$h0" = "$h1" ] || exit 9; [ "$ra" -eq 0 ] && [ "$rb" -eq 0 ] && [ "$rf" -eq 1 ] && [ "$rv" -eq 0 ] || exit 9; nf="$(printf '%s\n' "$F" | grep -cF 'cite: scanned')" || nf=0; nv="$(printf '%s\n' "$VC" | grep -c .)" || nv=0; [ "$nf" -eq 1 ] || exit 1; [ "$nv" -eq 1 ] || exit 1; [ "$A" != "$B" ] || exit 1; printf '%s\n' "$A" | grep -qF '1 transcript(s)' || exit 1; printf '%s\n' "$B" | grep -qF '2 transcript(s)' || exit 1; exit 0
+
+## BL-235 — conforming a gate-log header flips Check 5 from silent SKIP to FAIL, and nothing in the step file that prescribes the header says so
+
+**LANDED (v0.551.0, verified 6070faed).**
+
+**Found 2026-09-11** while scoping
+`PC-S341-0548-1-CONFORMANCE-FIGURE-IS-TAKEN-OVER-A-TEST-FIXTURE-POPULATION`. The filing named the
+consequence in passing; it is a separate subject from the figure and is the more expensive half.
+
+**THE MECHANISM.** Check 5 of `core/scripts/validate-mandatory-rules.sh` isolates a
+`## Gate Log: Sprint <N>` section out of `_bmad-output/implementation-artifacts/gate-log.md`. When
+it cannot isolate one it SKIPs. When it can, it requires `USER-CONFIRMED` or playwright evidence in
+that section and FAILs without it. `core/skills/ai-dlc/steps/gate-validation.md` step 12 prescribes
+the header format and says nothing about what following it turns on.
+
+**So a consumer that repairs its header format — a documentation-conformance change, with no
+behavioural intent — arms a gate that was silently skipping.** The direction is correct by design:
+a SKIP is a check that did not run, and the whole point of `0.548.0` was to stop that SKIP reading
+as "nothing to check". But it is delivered by prose, to a reader who is being told to fix
+formatting, and the step that tells them carries no warning.
+
+**DRIVEN, NOT READ, ON A CONSTRUCTED PROBE.** Fresh repo, the consumer's installed validator copied
+in (`cmp -s` against `core/scripts/validate-mandatory-rules.sh` IDENTICAL; control `cmp` against a
+sibling validator DIFFERS), one non-test `web/**` change in the window, sprint 500, and ONLY the
+gate-log header varying:
+
+    ## Gate: deploy-validate — Sprint 500     no evidence   ->  CHECK 5: SKIP
+    ## Gate Log: Sprint 500 — deploy-validate  no evidence   ->  CHECK 5: FAIL [Check5_VISUAL_UI]
+    ## Gate Log: Sprint 500 — deploy-validate  USER-CONFIRMED -> CHECK 5: PASS
+    ## Gate Log: Sprint 500 (bare)             no evidence   ->  CHECK 5: FAIL
+
+The two sides differ on the header text alone, and the PASS arm is the positive control proving the
+evidence predicate can reach PASS rather than being stuck closed.
+
+**AND IT ALREADY FIRED ONCE ON THE CONSUMER'S OWN COMMITTED HISTORY.** At `bd1b0a17d` — the single
+revision whose live `gate-log.md` carries a conforming header — the validator installed AT THAT
+COMMIT returns `CHECK 5: FAIL [Check5_VISUAL_UI]` for sprint 309. Control on the identical tree:
+de-conforming that one header returns SKIP; restoring it returns FAIL.
+
+**ONE QUALIFICATION, STATED BECAUSE IT CUTS AGAINST THE FINDING.** That s309 instance is now
+acquitted by the test-only carve-out, which shipped BECAUSE of it — the s309 window's entire web
+diff is one `*.test.jsx` file, and the current validator SKIPs it as test-only. So the historical
+firing is spent. **The live exposure is a sprint with a NON-TEST web remainder**, and the consumer's
+sprint 310 is one: two non-test files in its window, and its archive carries neither evidence token
+(control: an impossible token also returns 0).
+
+**NOT FIXED HERE, AND IT IS DELIBERATELY NOT FOLDED INTO THE COMMENT REWRITE THAT SHIPS BESIDE IT.**
+Folding a blocker into a defect's fix buries it. The fix belongs in step 12, which prescribes the
+header: state that a conforming header makes Check 5 REACHABLE, and that a `web/**` sprint with a
+non-test remainder then needs `USER-CONFIRMED` or a playwright trace in its Deploy Status Report.
+That is a consumer-facing behavioural warning attached to the instruction that causes it.
+
+**Tiered DEFECT, not BLOCKER, and the tiering is a judgement worth stating.** The scoping hand
+tiered it BLOCKER on consequence. Tiered here on what a consumer can DO about it: the gate firing is
+the mechanism working, the remedy is to supply the evidence the gate asks for, and no consumer is
+wedged — a FAIL names its cause and the evidence is a line in a report they already write. What is
+missing is the warning, not the escape.
+
+**Receipt limits, stated, AND THE FIRST DRAFT OF THIS RECEIPT CLOSED ON THE LIVE DEFECT.** It
+keyed on `reachable|no longer skips|stops skipping` ANYWHERE in the step file, and exited 0 before
+anything was fixed — satisfied by `delivered-reachable`, an agent-lifecycle status token in the
+Rule 28 prose eight hundred lines away, with the second conjunct satisfied by the one pre-existing
+`playwright` mention. A whole-file grep for a common English word is not a statement about the
+subject; `verification-discipline.md` calls this keying on the emission site, and this receipt is
+the worked example.
+
+**THE SECOND DRAFT'S PRIMARY ARM WAS DEAD AT HEAD, AND A DEAD ARM IS A LANDMINE.** It isolated on
+`^## .*[Gg]ate [Ll]og`, which matches ZERO headings in the step file (control: 6 `^## ` headings
+exist there, so the grammar and the corpus both work). `SEC` therefore always came from the
+`grep -A40` fallback, and the arm that read as the predicate had never decided anything. Driven
+both ways: a correct fix plus an unrelated `## Gate Log` heading elsewhere in the file flipped it
+onto the dead arm and REJECTED the fix, while a far mention of the tokens at EOF under a
+`Gate Log: Sprint` anchor PASSED with nothing fixed.
+
+**The shipped receipt DRIVES the shipping validator and does not key on the step file's headings
+at all.** It builds three probe trees under `mktemp` differing only in the gate-log header text and
+the changed web file's basename, runs `validate-mandatory-rules.sh` in each, and asserts a
+non-conforming header SKIPs on the isolation, a conforming header with a non-test remainder reaches
+`CHECK 5: FAIL` or `PASS`, and a conforming header with a test-only diff SKIPs on the carve-out.
+`cmp -s` controls assert the three trees differ where they must and agree where they must. The
+prose arm isolates on the header-prescription SENTENCE, not on a heading, so promoting or renaming
+step 12's heading cannot flip it. The probe trees scrub `GIT_DIR` and the inherited-worktree git
+variables before `git init`: run unscrubbed under an armed `GIT_DIR`, this receipt takes a
+10-entry victim index to 7.
+
+verify: sh S=core/skills/ai-dlc/steps/gate-validation.md; V=core/scripts/validate-mandatory-rules.sh; [ -f "$S" ] && [ -f "$V" ] || exit 9; SEC="$(awk '/Open the entry with a level-two heading that BEGINS/{f=1} f&&/^###? /{exit} f{if(/<!--/)c=1; if(!c)print; if(/-->/)c=0}' "$S")"; [ -n "$SEC" ] || exit 9; grep -qF 'Check5_VISUAL_UI' <<<"$SEC" || exit 1; grep -qF 'USER-CONFIRMED' <<<"$SEC" || exit 1; grep -qi 'playwright' <<<"$SEC" || exit 1; R="$PWD"; B="$(mktemp -d)" || exit 9; mk(){ d="$B/$1"; mkdir -p "$d/core/scripts" "$d/core/schemas" "$d/_bmad-output/implementation-artifacts" "$d/web/src"; cp "$R/core/scripts/validate-mandatory-rules.sh" "$R/core/scripts/validate-audit-anchors.sh" "$d/core/scripts/" && cp "$R/core/schemas/audit-anchors.json" "$R/core/schemas/sprint-status.json" "$d/core/schemas/" || return 9; ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY; cd "$d" && git init -q . && git -c user.email=p@p -c user.name=p commit -q --allow-empty -m base && printf '## Entries\n\n- sprint: 499\n  sha: %s\n' "$(git rev-parse HEAD)" > _bmad-output/audit-anchors.md && printf 'export default function App(){return null}\n' > "web/src/$3" && printf '# Gate Log\n\n%s\n\nDeploy Status Report: deployed.\n' "$2" > _bmad-output/implementation-artifacts/gate-log.md && git add -A && git -c user.email=p@p -c user.name=p commit -q -m s500 && bash core/scripts/validate-mandatory-rules.sh 500 2>&1 | grep -E '^  CHECK 5:' ); }; A="$(mk a '## Gate: deploy-validate — Sprint 500' App.jsx)"; C="$(mk c '## Gate Log: Sprint 500 — deploy-validate' App.jsx)"; T="$(mk t '## Gate Log: Sprint 500 — deploy-validate' App.test.jsx)"; G=_bmad-output/implementation-artifacts/gate-log.md; cmp -s "$B/a/web/src/App.jsx" "$B/c/web/src/App.jsx" || exit 9; cmp -s "$B/a/$G" "$B/c/$G" && exit 9; cmp -s "$B/c/$G" "$B/t/$G" || exit 9; rm -rf "$B"; grep -qF 'SKIP (could not isolate' <<<"$A" || exit 1; grep -qE 'CHECK 5: (FAIL|PASS)' <<<"$C" || exit 1; grep -qF 'SKIP (test-only' <<<"$T" || exit 1; exit 0

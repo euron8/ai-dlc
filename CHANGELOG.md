@@ -15,6 +15,56 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.551.0] - 2026-09-11
+
+### Three receipts that could not tell a fix from a comment, and the three defects behind them
+
+Batch 88. The sweep returned no PC-backed residue — all 18 unfiled candidates re-derive as
+adjudicated — so this release takes three no-`PC` backlog entries. Every one of the three was
+scored against built non-fixes before it shipped, and all three receipts were REBUILT because
+the originals closed on something that was not a fix.
+
+#### `BL-217` — a worktree-isolated reviewer was told to do what the lead is forbidden to ask for
+
+`core/team-roles/code-reviewer.md` instructed the reviewer to write the review file to the
+canonical branch checkout, which `steps/implementation.md` forbids the lead to request of a
+worktree dispatch. The role file's reasoning was sound and its ordering was not: the forbidden
+action was primary and the compatible fallback was a parenthetical. The reviewer is now told,
+in the loud position, to write inside its own dispatched tree and hand the review to the lead;
+the canonical-checkout write survives as the lead's duty.
+
+Its receipt asked only whether one sentence was ABSENT, so it was closed by a pure line reflow
+(word sequence byte-identical), by a one-hyphen reword, by relocating the sentence into the
+other file in the contradiction, and by truncating the role file to empty. It also rejected two
+correct fixes. The replacement binds to emphasis spans and their offsets, and deleting the
+canonical-checkout guidance now FAILS it — that guidance is load-bearing, not the defect.
+
+#### `BL-222` — the escalation validator named its corpus when it DENIED and discarded it on PASS
+
+`core/scripts/validate-escalation-resolution.sh` captured `CITE_REPORT` and rendered it only in
+the FAIL branch. The transcript corpus is a second input alongside `pending.md`: a byte-identical
+`pending.md` moves FAIL to OK when the corpus gains one `.jsonl`, and the OK line said nothing.
+The fail-OPEN direction — the one an operator cannot falsify — was the one that never said what
+it was taken over. The PASS path now renders the corpus report, after the verdict line so the
+first token on stdout is unchanged.
+
+Its receipt was keyed on a seven-line window around the OK line, so a bare comment closed it and
+a correct fix one line too far away was rejected. The replacement drives the validator and reads
+its output, accepting the fix wherever it is written and refusing a constant.
+
+#### `BL-235` — conforming a gate-log header arms a gate, and the step prescribing it said so in one direction only
+
+`steps/gate-validation.md` step 12 explained that a non-conforming header makes Check 5 SKIP and
+stopped there. Conforming it makes Check 5 REACHABLE, and reachable means it can FAIL: a sprint
+whose `web/**` window has a non-test remainder then needs `USER-CONFIRMED` or playwright evidence.
+The step now states that direction and names the test-only carve-out by its actual predicate, so
+the warning does not overstate the exposure.
+
+Its receipt carried a DEAD primary arm — no `^## ` heading in that file matches `Gate Log`, so
+the intended anchor never fired and a fallback grep window decided every run by accident of
+layout. The replacement drives `validate-mandatory-rules.sh` over probe trees differing only in
+the header text, and its driving half is proven able to fail against three validator mutants.
+
 ## [0.550.0] - 2026-09-11
 
 ### The figure that replaced a wrong-population figure had the same defect one level down
