@@ -30,17 +30,18 @@ the normal state of a consumer whose `skill_commit` runs ahead of `commit`, whic
 land. It is not transient — `commit` advances only under a gated apply, so the refusal repeats until
 a rulebook pull lands.
 
-Measured on the reference consumer pulling `0.542.0 → 0.547.0`, with the control in the same
-invocation: `self-update-fixtures.sh` and `rotate-gate-adjudication.sh` satisfy the first three
-conjuncts and are NOT self-comparisons; `apply.sh` in the same run satisfies them and IS one. That
-consumer's committed stamp history carries five split stamps in its last twelve stamp commits.
+Measured on the reference consumer's real gate record for `0.542.0 → 0.547.0`, driven per row
+against all four conjuncts: of 129 recorded inputs carrying a core path, the arm fires on exactly
+**two** — `self-update-fixtures.sh` and `rotate-gate-adjudication.sh` — and both are split-stamp
+deliveries rather than self-comparisons. `apply.sh` is the control and is refused **entry** to the
+arm: its recorded digest is not the `theirs` blob. That consumer's committed stamp history carries
+five split stamps in its last twelve stamp commits.
 
 **The filed remedy is refuted by measurement, and its failure mode is total.** Keying the exemption
 on the consumer's LIVE `skill_commit` acquits everything, because step 2 advances that field to
-`theirs` BEFORE invoking the runner. Driven over the 129 paths the shipping `machinery_paths()`
-resolves: 129 of 129 acquitted with the stamp advanced, against 128 of 129 at the value the gate
-actually saw. The two sides differ, so the measurement discriminates — and the live-stamp form
-deletes the arm's entire subject while reading as a fix.
+`theirs` BEFORE invoking the runner — so the test becomes `blob(theirs:P) == blob(theirs:P)`, a
+**tautology** that holds on exactly the set the arm fires on. On that record it acquits 2 of those
+2. The live-stamp form deletes the arm's entire subject while reading as a fix.
 
 So the discriminator is the stamp **as the gate saw it**, and the gate carries it: `self-update-gate.sh`
 writes `# skill-commit: <peeled sha | ->` into its record header, and the runner reads it back
