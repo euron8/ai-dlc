@@ -206,13 +206,16 @@ paths:
   Measured, with three hands agreeing on the wrong verdict: a filter over a declaration was
   scored unprovable because NO entry of the excluded class carried the field it keys on —
   true of that declaration, not of the predicate. A seed that MANUFACTURES one entry of the
-  excluded class makes the two predicates separate and the mutant die. **Ask whether the
-  world is unreachable or merely absent from the corpus**; only the first is a real limit.
-- **A SHARED PREDICATE WITH COVERAGE ON ONE SIDE POINTS AT THAT SIDE'S SEED.** The same
-  episode: the identical filter lived in two programs, one of which already had a mutant
-  that synthesised exactly the missing world. That was read as evidence the risk was
-  CONTAINED, which is the opposite of what it supports. When two programs share a predicate
-  and one is covered, go read how its seed reaches the case before concluding yours cannot.
+  excluded class makes the two predicates separate and the mutant die. **A fact about what
+  the corpus contains TODAY is not a fact about what the mechanism must HANDLE.** Ask whether
+  the world is unreachable or merely absent; only the first is a real limit.
+- **SHARED LOGIC IS A REASON TO GO READ THE OTHER SIDE'S SEEDS, NEVER A REASON TO SKIP
+  THEM.** The same episode, and the failure was not a missed pointer — it was the RIGHT
+  observation drawing the INVERSE conclusion. The identical filter lived in two programs,
+  one of which already had a mutant synthesising exactly the missing world. Noticing the
+  duplication should have prompted *"so how is it tested over there"*; it was read instead
+  as evidence the risk was already handled. Noticing that two programs share a predicate
+  tells you where to look, and never that you need not.
 - **ASK WHAT A WRONG OUTPUT MAKES SOMEONE DO, NOT WHAT IT MAKES THE PROGRAM SAY.** The same
   mutant was filed as a latent miscount — a wrong number in a message — and is a wrong
   REMEDY: it names a durable artifact as scratch state to untrack, in the channel an
