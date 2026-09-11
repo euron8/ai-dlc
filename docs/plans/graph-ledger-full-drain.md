@@ -37,6 +37,126 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
+### BATCH 87 SHIPPED AS `v0.549.0` AND `v0.550.0`, TWO RELEASES CARRYING ONE PC-BACKED SUBJECT EACH — AND **EIGHT WRONG IMPLEMENTATIONS PASSED THE FIXTURE ACROSS THREE ROUNDS, EVERY ONE A SEED GAP AND NOT ONE A DEFECT IN THE ARM.** THE SHARPEST LEFT THE WHOLE FIXTURE GREEN WHILE BREAKING THE RELEASE'S OWN MOTIVATING CASE. **A FILED `BL-` ENTRY ALREADY EXISTED FOR RELEASE 1'S SUBJECT AND ITS OWN STATED RECEIPT LIMIT WAS REFUTED BY BUILDING BOTH REMEDIES.** THE GAP IS **TWO**, PENDING **2**, AND THE PULL IS **NOT REQUIRED** — THE CONSUMER BEGAN PULLING `0.549.0` ITSELF, MID-BATCH, MINUTES AFTER THE MERGE.
+
+This block replaces the batch-86 record below it. Every figure was re-derived after both merges
+against the working tree with controls in the same invocation; re-derive them again rather than
+reading them.
+
+**`VERSION` IS `0.550.0`, SO BATCH 88 RELEASES AS `0.551.0`.** Re-derive `VERSION` and add one.
+Batch 87 merged TWICE — `v0.549.0` at `795274e2` (PR #713) and `v0.550.0` at `3020f4f0` (PR #714) —
+carrying one candidate each: `PC-S341-STEP-3F-ANCHOR-RULE-HAS-NO-LINT-AND-A-ONE-CHARACTER-MISS-IS-INVISIBLE`
+and `PC-S341-0548-1-CONFORMANCE-FIGURE-IS-TAKEN-OVER-A-TEST-FIXTURE-POPULATION`, both cited verbatim
+in their release commit messages and both joining to their own version (control: an impossible id
+returns 0). `BL-234` is closed and ROTATED; archive moved **140 → 141**. `BL-235` is filed and NOT
+fixed.
+
+**THE SWEEP WAS NOT EMPTY, A THIRD BATCH RUNNING.** The consumer filed both `PC-S341-*` candidates on
+2026-09-11 and they were the whole of the available residue. Every prior block said to expect the
+sweep empty; it has now returned new work three batches in a row. **Run it; never read a sentence in
+this file for the answer.**
+
+**A `BL-` ENTRY ALREADY EXISTED FOR RELEASE 1'S SUBJECT, AND DERIVING "THE NEXT FREE ID" FROM THE MAX
+IS HOW A DUPLICATE GETS WRITTEN.** `BL-234` was filed the previous day, from the guard's side, for
+what the consumer filed from the rule's side. A first draft appended a second `BL-234` before the
+collision was noticed. **Grep for the id you are about to use; the max id in the corpus is the one
+IN USE, not the next free one.**
+
+**AND THAT ENTRY'S OWN STATED RECEIPT LIMIT WAS FALSE IN THE DIRECTION THAT CLOSES ON A NON-FIX.** It
+said "a fix that excludes installed machinery and a fix that adds a variant arm both close it". Both
+were built from pristine HEAD with `cmp -s` asserting the sides differ, and driven against the real
+case on the real consumer: **the exclusion remedy closes the receipt while REPRODUCING the defect**,
+because the misspelling survives in `.claude/.ai-dlc-version` — the stamp every consumer has, whose
+fourth field is literally `skill_commit:`. The variant arm, which does fix it, was REJECTED by that
+receipt. **Build both sides of any receipt that claims to accept two remedies.**
+
+**EIGHT WRONG IMPLEMENTATIONS PASSED THE FIXTURE, IN THREE ROUNDS, AND EVERY ONE WAS A SEED GAP.**
+The shipped arm was correct throughout — what failed each time was the fixture's power to tell a
+right implementation from a wrong one. Round 1 (the lead's own four) was rejected correctly. Round 2,
+found by a receipt hand: a swap-only arm, an arm dropping the `absent at base` conjunct, an arm
+emitting `CLOSE-CANDIDATE` instead of `NEEDS-REVIEW`, and one with the multi-substring skip removed.
+Round 3, found by an adversary: an arm dropping the COMPOSED variant, and its mirror dropping the
+bare swap.
+
+**THE COMPOSED-VARIANT GAP IS THE ONE TO CARRY FORWARD.** `anchor_variants` emits THREE generators —
+the swap, the colon strip, and their composition — and the seeds covered two, because each existing
+seed had its closing spelling reachable by TWO of the three. Dropping the composition left the entire
+fixture PASSING with a byte-identical ok-set. **And the composed variant is the only generator that
+reaches the case the release was cut for**: for anchor `skill_commit:` against fix `skill-commit`,
+the swap gives `skill-commit:` (0 at theirs), the strip gives `skill_commit` (present at base,
+disqualified), and only swap-then-strip reaches. A release had been cut whose fixture could not
+protect its own subject. **Ask of every generator set whether one seed isolates each member.**
+
+**AN ARM ASSERTED ON A DETAIL CANNOT SEE THE VERDICT CLASS.** The `CLOSE-CANDIDATE` implementation
+passed every arm because the detail text is byte-identical under both verdicts, and `SKILL.md` step 8
+closes `CLOSE-CANDIDATE` rows only — so a GUESSED spelling would have entered the set an operator
+auto-closes. That is the false-close direction, and the shipped commit message claimed the fix
+refuses it while nothing checked. **Assert the verdict class whenever the remedy text does not
+depend on it.**
+
+**A RECEIPT CLOSED ON ITS OWN LIVE DEFECT, VIA A WORD EIGHT HUNDRED LINES AWAY.** `BL-235`'s first
+receipt grepped the whole step file for `reachable`, and `delivered-reachable` — an agent-lifecycle
+status token in unrelated prose — satisfied it before anything was fixed. Rewritten to key on the
+section that prescribes the header; now exits 1 pristine and 0 against a seeded fix. **A whole-file
+grep for a common English word is not a statement about the subject.**
+
+**RELEASE 2's FILING WAS CORRECT AND UNDERSTATED.** The consumer said the `229 titled against 10
+bare` figure "includes a test fixture". Measured: **36 of 36** per-sprint archives in that snapshot
+are `cmp -s` IDENTICAL to their live counterparts (control: a snapshot file against an unrelated live
+sprint DIFFERS), so the figure counts the same ~115 entries TWICE — the de-duplication that correctly
+removed the worktree copies was never applied to the snapshot. And "titles are the NORM" is
+unsupported on the population Check 5 opens: **121 conforming of 856** `## Gate` headings, 1 of 106
+entries across the nine most recent sprints, conforming corpus stopping after s290.
+
+**TWO OF THAT FILING'S OWN FIGURES DO NOT REPRODUCE AND ARE NOT CARRIED FORWARD.** "724
+non-conforming" is stale by one day under an unstated grammar (reads 727; was exactly 724 at
+`84451b892`). "Max sprint 284" is wrong — the true max is **309**, which contradicts the filing's own
+s309 row inside the same entry. **A receipt anchored on either would read STILL-LIVE forever.**
+
+**`BL-235` IS FILED AND NOT FIXED, AND IT IS REAL WORK.** Conforming a gate-log header flips Check 5
+from a silent SKIP to a FAIL on a `web/**` sprint lacking `USER-CONFIRMED` or playwright evidence —
+driven on a constructed probe where the two sides differ on header text alone, and on the consumer's
+own committed history at `bd1b0a17d` with a de-conforming control returning SKIP on the identical
+tree. The fix belongs in `steps/gate-validation.md` step 12, which prescribes the header and carries
+no warning. Tiered DEFECT rather than BLOCKER: no consumer is wedged and the remedy is evidence they
+already write, but the warning is owed.
+
+**THE GAP IS TWO, PENDING 2, AND THE PULL IS NOT REQUIRED — THE CONSUMER STARTED IT ITSELF.** Its
+stamp reads `0.548.1` / `212d1fc2` with `skill_commit` ALREADY ADVANCED to `795274e2`, which is step
+2 of its own `ai-dlc-update` run, and live `emit-report.sh` processes out of its installed
+`.claude/skills/` were running at the close of this batch. **Do not dispatch a pull; one is in
+flight.** Re-derive the stamp before reading this sentence as current.
+
+**A DIRTY-COUNT MOVE ON THE CONSUMER IS NOT EVIDENCE OF A BOUNDARY BREACH, AND THE CHEAP TEST IS THE
+STAMP.** The count went 7 → 8 mid-batch and the new path was a `self-update-gate` record whose header
+names this batch's own merge as `theirs-sha` — which reads alarming and is the consumer pulling. What
+settles it is that `commit:` is UNMOVED, no applying marker exists, the ledger md5 is unchanged, and
+no `core/`, `docs/`, `CHANGELOG` or `VERSION` path is dirty there. **Measure before escalating: the
+stamp answers this in one read.**
+
+**THE SWEEP FOR BATCH 88. Live 56 as the UNION (both refs), cited 38, unfiled 18, archive 203,
+partition control 0.** DISCHARGED 7 / in-flight 31 / untouched 18, summing to 56 after the 4-id
+overlap; TERMINAL 87; discharged-but-INVISIBLE 1. **THE AVAILABLE PC-BACKED RESIDUE IS ZERO** — the
+18 unfiled re-derive as adjudicated exactly as batch 86 recorded. Run it anyway; that expectation has
+now been wrong three batches running.
+
+**THE READIEST NO-`PC` WORK IS `BL-235` (this batch's own filing, step 12's missing warning), then
+the batch-82 set: `BL-225`, `BL-217`, `BL-222`, `BL-224`, `BL-220`, `BL-218`, `BL-219`, `BL-221`,
+`BL-223`.** Every one of those nine needs its receipt repaired before its verdict means anything —
+read `BL-227` first.
+
+**ONE RELEASE PER BRANCH, AND THE VALIDATOR IS WHAT CAUGHT IT.** Release 2 was first committed on top
+of release 1's branch; `validate-release-version.sh` refused the two-heading range, correctly, because
+a squash would take the first version and make the second unattributable. The remedy is to cut the
+later release onto a fresh branch off `origin/main` AFTER the earlier one merges — cherry-picking it
+across conflicts on `VERSION` and `CHANGELOG.md`, since its own version number depends on merge
+order.
+
+**AND AN `I54b` VIOLATION IN A NEW FIXTURE ARM CASCADED TWELVE FIXTURES.** A `git show | grep -q`
+under pipefail in a sanity arm — small blobs, so latent rather than wrong, which is exactly the state
+the invariant exists to prevent. Twelve fixtures failed on that one root cause because the
+enforcement map is a shared subject. **Capture first, feed a here-string.**
+
 ### BATCH 86 SHIPPED AS `v0.548.0`, CORRECTED BY `v0.548.1`, ONE RELEASE CARRYING THREE PC-BACKED SUBJECTS — AND **THE SWEEP'S OWN SUBSET CONTROL FIRED, BECAUSE THE CONSUMER'S SPRINT BRANCH AND `main` HAVE EACH DIVERGED FROM THE OTHER AND NEITHER REF IS THE LIVE SET.** THE FILED REMEDY FOR THE HEADLINE CANDIDATE WAS REFUTED BY BUILDING IT: READ LITERALLY IT ACQUITS **129 OF 129** MACHINERY PATHS, A TOTAL DISARM OF THE ARM IT MEANS TO NARROW. MY OWN FIX THEN CARRIED **TWO** DEFECTS, BOTH FOUND BY DRIVING IT AND NEITHER BY READING IT. THE GAP IS **ONE**, PENDING **4**, AND THE PULL IS **NOT REQUIRED** — THE CONSUMER PULLED TO `0.547.0` MID-BATCH AND THE BOOTSTRAPPING HAZARD IS MEASURED CLEAN FOR THIS RANGE.
 
 This block replaces the batch-85 record below it. Every figure was re-derived after the merge
@@ -8628,6 +8748,24 @@ so no block written before it changes verdict.
    **Do not re-derive their findings**; each carries a bidirectional receipt and the measurement
    that produced it.
 
+   **BATCH 87's TWO SUBJECTS ARE SHIPPED — do not re-scope either of them.**
+   `PC-S341-STEP-3F-ANCHOR-RULE-HAS-NO-LINT-AND-A-ONE-CHARACTER-MISS-IS-INVISIBLE` shipped as
+   `v0.549.0` at `795274e2` (PR #713), closing `BL-234`, which is ROTATED; and
+   `PC-S341-0548-1-CONFORMANCE-FIGURE-IS-TAKEN-OVER-A-TEST-FIXTURE-POPULATION` shipped as
+   `v0.550.0` at `3020f4f0` (PR #714), carrying no `BL-` entry to rotate. Both are cited verbatim
+   in their own release commit messages and both join to their own version. They did NOT batch:
+   release 1 touches `ledger-reverify.sh`, a bootstrapping file, which action 2 requires to ship
+   alone. **`BL-235` was filed beside release 2 and deliberately NOT fixed** — step 12 prescribes
+   the gate-log header and never says that conforming it makes Check 5 reachable, which flips a
+   `web/**` sprint from SKIP to FAIL. It is the readiest no-`PC` work.
+
+   **READ THE BATCH-87 RESUME BLOCK BEFORE WRITING ANY FIXTURE ARM THIS BATCH.** Eight wrong
+   implementations passed that fixture across three rounds and every one was a SEED gap, not an
+   arm defect — including one that left the whole fixture green while breaking the release's own
+   motivating case, because a three-member generator set had seeds isolating only two of its
+   members. Ask of every generator set whether one seed isolates each member, and assert the
+   VERDICT CLASS wherever the remedy text does not depend on it.
+
    **BATCH 86's THREE SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope any of them.**
    `PC-S311-SELF-UPDATE-FIXTURES-ARM-3-PREWRITTEN-HAS-NO-SPLIT-STAMP-SUPPRESSION`,
    `PC-S310-CHECK5-GATE-LOG-HEADER-CONVENTION-UNDOCUMENTED-AND-UNSATISFIABLE` and the
@@ -9553,7 +9691,7 @@ so no block written before it changes verdict.
    `predicate-differential.sh` fingerprints the corpus either side of its own run for exactly this
    reason; a hand-rolled measurement has no such guard.
 
-1a. **`docs/backlog.md` IS AT 85 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
+1a. **`docs/backlog.md` IS AT 94 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
    is not blocked. That is not licence to file rather than fix — the standing correction in the
    resume block still governs — but a filing no longer costs a rotation, and rotating still means
    CLOSING, which needs a measurement.
