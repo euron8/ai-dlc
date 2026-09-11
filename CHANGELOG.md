@@ -15,6 +15,32 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.548.1] - 2026-09-11
+
+### The 8-vs-0 figure was taken over a population Check 5 never opens
+
+A PATCH: comment and CHANGELOG wording only, no behavioural change. It is cut as its own release
+rather than folded into `0.548.0` because the corrected comment ships in `core/`, and a consumer
+pulling at `0.548.0` would otherwise hold a blob its own version does not name.
+
+Check 5 reads ONE path, `_bmad-output/implementation-artifacts/gate-log.md`. On the reference
+consumer that file is 11 bytes — a single `# Gate Log` heading and zero entries of either header
+shape, because the log is rotated per sprint. `0.548.0`'s "8 entries under its own `## Gate:`
+shape, 0 under this one" was measured over that consumer's ARCHIVED per-sprint logs, which this
+check never opens.
+
+**The finding still holds and the evidence was for a different claim than the one it sat beside.**
+The citation really was circular and the SKIP really was silent; on the population that matters the
+isolation returns nothing for a reason unrelated to header style, which is why the SKIP must NAME
+its cause rather than imply one.
+
+**And titles are the norm, which is what the step file's wording turns on:** 229 titled headers
+against 10 bare across that consumer's gate logs excluding worktree duplicates, doubling to 457/20
+when the mirrored copies are counted. Two hands reported the two figures and they reconcile exactly.
+
+This is the third figure corrected in this release band, all one class: arithmetically right about
+the wrong set. The other two were swapped and drawn from a probe that compared a value with itself.
+
 ## [0.548.0] - 2026-09-11
 
 ### The PRE-WRITTEN arm refused every split-stamp consumer, and the filed remedy disarmed it completely
