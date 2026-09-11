@@ -199,3 +199,35 @@ paths:
   EXEMPTION rather than by binding. Seed the discriminating member NOT first, and seed an
   epoch row that is not the subject, then ask which arm dies when the subject scans one
   member — if none does, the set is not being scanned.
+
+- **"UNPROVABLE TODAY" IS USUALLY A CLAIM ABOUT THE CORPUS, AND THE ANSWER IS TO SYNTHESISE
+  THE WORLD.** A conjunct the shipped data cannot exercise gets filed as a loaded gun and
+  left, because its mutant survives for a reason that has nothing to do with the predicate.
+  Measured, with three hands agreeing on the wrong verdict: a filter over a declaration was
+  scored unprovable because NO entry of the excluded class carried the field it keys on —
+  true of that declaration, not of the predicate. A seed that MANUFACTURES one entry of the
+  excluded class makes the two predicates separate and the mutant die. **A fact about what
+  the corpus contains TODAY is not a fact about what the mechanism must HANDLE.**
+
+  **THE TEST IS REACHABILITY UNDER THE MECHANISM'S OWN CONTRACT, NOT ABSENCE FROM THE
+  CORPUS**, and this clause is load-bearing: read without it the rule argues for
+  synthesising EVERY absent world, and most absent worlds are absent because they are
+  genuinely unconstructible. Both directions measured in one file. A durable entry gaining
+  an `ignore` is REACHABLE — the declaration is hand-edited and the renderer already models
+  the field — so a seed may manufacture one. A declaration with no transient members is NOT:
+  `sync-transient-ignore.sh:96` refuses it and exits 2, so a seed asserting anything about
+  that world is asserting about a state the program forbids. Ask what the subject would DO
+  with the synthesised world before building it; if the answer is "refuse it", the absence
+  was the contract and not a gap.
+- **SHARED LOGIC IS A REASON TO GO READ THE OTHER SIDE'S SEEDS, NEVER A REASON TO SKIP
+  THEM.** The same episode, and the failure was not a missed pointer — it was the RIGHT
+  observation drawing the INVERSE conclusion. The identical filter lived in two programs,
+  one of which already had a mutant synthesising exactly the missing world. Noticing the
+  duplication should have prompted *"so how is it tested over there"*; it was read instead
+  as evidence the risk was already handled. Noticing that two programs share a predicate
+  tells you where to look, and never that you need not.
+- **ASK WHAT A WRONG OUTPUT MAKES SOMEONE DO, NOT WHAT IT MAKES THE PROGRAM SAY.** The same
+  mutant was filed as a latent miscount — a wrong number in a message — and is a wrong
+  REMEDY: it names a durable artifact as scratch state to untrack, in the channel an
+  operator is contracted to act on. Severity read off the message is a different figure
+  from severity read off the action, and only the second one is the cost.
