@@ -107,6 +107,16 @@ its own measured false-positive set, and that half is not receipt-enforceable. E
 subject file or every braced command site is gone — a truncated or deleted file is NEEDS-REVIEW,
 never a close.
 
+**AND IT CANNOT SCORE WHETHER THE SENTENCE IS TRUE.** Measured by the lead against seeds chosen
+independently of the ones that produced the arm: a note reading *"the braces in a rev-path are
+cosmetic; zsh needs no brace here"* — wrong in the one way that matters, and placed correctly
+above the first command with both keywords in window — closes the receipt at exit 0, beside a
+control of 0 for the real fix. Six other non-fixes were rejected (`zsh` as a command inside a
+fence, a sentence denying the hazard, the correct note below the last command site, `zsh` inside
+a URL) and the two degenerate trees exit 9, each mutant `cmp -s`-asserted applied before its
+verdict was read. So the arm binds POSITION and VOCABULARY, never semantics; a reviewer reads the
+sentence, and this receipt only establishes that there is one to read.
+
 verify: sh f=core/skills/ai-dlc-update/SKILL.md; [ -r "$f" ] || exit 9; c=$(grep -nE 'show "\$\{[a-z]+\}:' "$f" | head -1 | cut -d: -f1); [ -n "$c" ] || exit 9; n=$(awk -v c="$c" 'BEGIN{bt=sprintf("%c%c%c",96,96,96)} { if (substr($0,1,3)==bt || substr($0,5,3)==bt) { fence=!fence; F[NR]=1 } else F[NR]=fence; L[NR]=tolower($0) } END { for (i=1;i<c;i++) { if (F[i] || L[i] !~ /zsh/ || L[i] ~ /<!--/) continue; lo=i-3; if (lo<1) lo=1; hi=i+5; if (hi>NR) hi=NR; for (j=lo;j<=hi;j++) if (!F[j] && L[j] ~ /brace/) { print i; exit } } }' "$f"); [ -n "$n" ] || exit 1; exit 0
 
 ## BL-230 — `reconcile-emit-report`'s E1 kill-set arm fails intermittently under the pool, and its success message describes a different assertion than the one it makes
