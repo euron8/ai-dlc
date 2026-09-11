@@ -4344,15 +4344,30 @@ scanned` resolves at `:382` only, and that is a COMMENT; the string appears on n
 branch that still does not say which corpus state produced it.** An operator reading `OK` cannot
 tell a pass over the right corpus from a pass over an empty one.
 
-**Not fixed here.** The one-line form (render `CITE_REPORT` on the PASS path too) is probably
-right, but the PASS line is a gate-facing contract string and ~40 fixture arms plus `retro.md`
-prose read this validator's output; the population that would see a changed success line is
-unmeasured, and `CLAUDE.md` requires that before the check ships.
+**FIXED.** `CITE_REPORT` is initialised before the row loop — a `while … done <<EOF` is not a
+subshell, so the last verified row's report survives — and rendered on its own continuation line
+after the OK line, defaulted to a sentence naming the absence so the line never renders blank.
 
-**Tiered DEFECT.** Consumer-facing. Its consequence is an unfalsifiable PASS: the reader cannot
-reconstruct which corpus produced it.
+**The owed false-positive population is EMPTY, and here is the derivation with its controls.**
+The exact PASS string `RESOLVED/OVERRIDDEN escalation` resolves in ONE file, the validator
+itself, at its own two emission sites. Control in the same sweep: `validate-mandatory-rules`
+resolves in 59 files by the identical method, and an impossible token resolves in none. The
+`unbounded-citation:` SUBSTRING has readers, and they are the population that matters: they all
+key on a substring of the OK line, which this change does not touch — it appends a line. The
+coupled fixture arm at `core/fixtures/escalation-citation/run.sh:179,182` and the
+`drop-unbounded-count` mutant beside it are unmoved, verified by running the fixture.
 
-verify: sh V=core/scripts/validate-escalation-resolution.sh; [ -f "$V" ] || exit 9; grep -q 'CITE_REPORT=' "$V" || exit 9; grep -qE '^\s*echo "OK: all \$\{CHECKED\}' "$V" || exit 9; n="$(awk '/^echo "OK: all \$\{CHECKED\}/{print NR}' "$V")"; [ -n "$n" ] || exit 9; awk -v n="$n" 'NR>=n-6 && NR<=n && /CITE_REPORT/' "$V" | grep -q . && exit 0; exit 1
+**Three arms and four mutants now hold the PASS path.** `(x)` drives the validator twice over
+one `--transcript-dir` PATH whose CONTENT changes between the runs, asserts `pending.md`'s md5 is
+unchanged across both, and requires the two PASS outputs to DIFFER and to carry their own file
+counts — the seed shape is what refuses a constant. `(y)` COUNTS the FAIL branch's corpus-report
+lines, which is what refuses an unconditional dump that renders it twice. `(z)` counts the
+nothing-in-scope PASS's lines, which refuses a corpus claim on a path that verified nothing.
+
+**Tiered DEFECT.** Consumer-facing. Its consequence was an unfalsifiable PASS: the reader could
+not reconstruct which corpus produced it.
+
+verify: sh V=core/scripts/validate-escalation-resolution.sh; S=core/scripts/validate-steering-budget.sh; [ -f "$V" ] && [ -f "$S" ] || exit 9; command -v node >/dev/null 2>&1 || exit 9; w=$(mktemp -d); mkdir -p "$w/c"; printf '%s\n' '{"type":"user","timestamp":"2026-07-12T03:00:00Z","message":{"role":"user","content":"Cut the contested clause and proceed to stories."}}' > "$w/spoke.jsonl"; printf '%s\n' '{"type":"user","timestamp":"2026-07-15T09:00:00Z","message":{"role":"user","content":"resume at the planning gate please"}}' > "$w/gate.jsonl"; e(){ printf '%s\n' '## S50-ITEM-1 Lead (gate [planning]) - 2026-07-12' '**Status:** RESOLVED' "**Operator authorization:** 2026-07-12T03:00:00Z | \"$1\"" > "$2"; }; e 'Cut the contested clause and proceed to stories.' "$w/ok.md"; e 'zzz no operator ever typed this phrase zzz' "$w/bad.md"; printf '%s\n' '## S49-OLD-1 Lead (gate [planning]) - 2026-07-12' '**Status:** RESOLVED' > "$w/vac.md"; cp "$w/spoke.jsonl" "$w/c/"; h0=$(md5 -q "$w/ok.md"); A="$(bash "$V" --escalations "$w/ok.md" --sprint 50 --transcript-dir "$w/c" 2>/dev/null)"; ra=$?; cp "$w/gate.jsonl" "$w/c/"; h1=$(md5 -q "$w/ok.md"); B="$(bash "$V" --escalations "$w/ok.md" --sprint 50 --transcript-dir "$w/c" 2>/dev/null)"; rb=$?; F="$(bash "$V" --escalations "$w/bad.md" --sprint 50 --transcript-dir "$w/c" 2>&1)"; rf=$?; VC="$(bash "$V" --escalations "$w/vac.md" --sprint 50 --transcript-dir "$w/c" 2>/dev/null)"; rv=$?; rm -rf "$w"; [ "$h0" = "$h1" ] || exit 9; [ "$ra" -eq 0 ] && [ "$rb" -eq 0 ] && [ "$rf" -eq 1 ] && [ "$rv" -eq 0 ] || exit 9; nf="$(printf '%s\n' "$F" | grep -cF 'cite: scanned')" || nf=0; nv="$(printf '%s\n' "$VC" | grep -c .)" || nv=0; [ "$nf" -eq 1 ] || exit 1; [ "$nv" -eq 1 ] || exit 1; [ "$A" != "$B" ] || exit 1; printf '%s\n' "$A" | grep -qF '1 transcript(s)' || exit 1; printf '%s\n' "$B" | grep -qF '2 transcript(s)' || exit 1; exit 0
 
 ## BL-223 — the push-candidate ledger is outside `validate-write-format-steering.sh`'s population by construction, and `upstream-routing.md` steers no format
 

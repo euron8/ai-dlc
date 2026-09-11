@@ -73,6 +73,15 @@ cat > "$ROOT/corpus/gate.jsonl" <<'JSONL'
 {"type":"assistant","timestamp":"2026-07-15T09:01:00Z","message":{"content":[{"type":"text","text":"Resuming at the planning gate."}]}}
 JSONL
 
+# A corpus the RUN MOVES BETWEEN TWO INVOCATIONS, seeded empty and filled by run.sh. The
+# measured phenomenon is that a transcript directory is LIVE: the same `--transcript-dir` path
+# holds a different set of `.jsonl` files minutes apart while the session writing it is idle, so
+# two runs over a byte-identical pending.md are two runs over two corpora. Proving a reader sees
+# that needs the PATH held constant and the CONTENT changed -- two differently-named seed dirs
+# cannot express it, because an output that merely echoes its own `--transcript-dir` argument
+# would separate them and still be blind to the thing that moves.
+mkdir -p "$ROOT/corpus-live"
+
 CITE_CROSS='2026-07-12T03:00:00Z | "Cut the contested clause and proceed to stories."'
 CITE_CROSS_FAKE='2026-07-12T03:00:00Z | "zzz no operator ever typed this phrase zzz"'
 
