@@ -63,16 +63,27 @@ diagnosis is one level short of the defect: it reads as a `handoff.md` step-orde
 proposes shipping a `.gitignore` pattern. **The pattern is already declared, and has been. What
 never runs is the render.**
 
-**THE CANDIDATE WAS UNCOMMITTED WHEN THE SWEEP READ IT AND THE CONSUMER HAS SINCE WITHDRAWN IT,
-so this entry's SUBJECT is upstream-derived and does not rest on that filing.** Measured at the
-batch's close: the id is in neither the consumer's live ledger nor its archive (0 and 0, control:
-`PC-S295-RETRO-CHECK5-SELF-REFERENTIAL` returns 2 in the live file), and `git log -S` over that
-ledger returns ZERO commits introducing it against a control of 5 for the same PC-S295 id. It
-existed only in that consumer's working tree, was read there, and was reverted after the consumer
-repaired its own tree (`567cfc9dc`). **A consumer repairing itself does not repair the pull path** —
-the render still has no caller on an update, which is what this entry is about and what no local
-`git rm --cached` can reach. The filing is recorded as provenance, not as evidence; every figure
-below is derived against the distribution or against the consumer's own committed history.
+**THE CANDIDATE IS FILED AND COMMITTED, AND THIS BATCH CONCLUDED TWICE THAT IT WAS NOT — BOTH
+TIMES FROM A ZERO TAKEN OVER THE WRONG TREE.** It is `36f0e852c` on the consumer's pushed sprint
+branch `ai-dlc/feature/rebalancer-restart-chunk-recenter`, ahead of `main`: that sprint's PR merged
+before the entry was filed, so it lands on `main` at the retro-branch merge like every other
+post-merge docs commit there. Control in the same invocation: an impossible id returns 0 commits on
+that branch and path, and the branch resolves on origin against 0 for an impossible branch name.
+
+**The first zero said "uncommitted", the second said "withdrawn", and the consumer had simply
+checked out `main` between the two reads.** The sweep's `lids()` reads the WORKING ledger and the
+`-S` date check keys on `main`; at 02:00 the sprint tree was checked out and the entry was there,
+and afterwards `main` was, and it was not. Neither reading was a fact about the ledger. This is the
+plan's own rule collecting its debt — *a sweep reporting no new work has made a claim about its own
+grammar first* — one tree over: **ASK WHICH REF A LEDGER ZERO WAS TAKEN AGAINST, and check the
+consumer's unmerged sprint branches before calling a filing absent.** The correction came from the
+consumer session, not from this one.
+
+The subject below does not rest on the filing either way; every figure is derived against the
+distribution or against that consumer's committed history. And the consumer's own repair
+(`567cfc9dc`, which re-rendered its block and untracked its markers) does not touch this entry:
+**a consumer repairing itself does not give the render a caller on the pull path**, so the next
+pull that adds a transient declaration drifts again, there and everywhere else.
 
 **THE DECLARATION SIDE WAS ALREADY CORRECT.** `core/schemas/pipeline-state-paths.json` declares
 `_bmad-output/.handoff-in-progress` and `_bmad-output/.handoff-guard-armed` `transient: true` with

@@ -66,14 +66,17 @@ one where transient files are present on disk but untracked.
 `transient-ignore-block` gains an arm pinning `--check`'s contract — it reports the block and never
 names a tracked path — plus the mutant that kills it. Filed as `BL-229`.
 
-**The candidate was uncommitted when the sweep read it, and the consumer withdrew it mid-batch
-after repairing its own tree.** At the batch's close the id is in neither its live ledger nor its
-archive, and `git log -S` returns zero commits introducing it (control: a live id returns 2 in the
-file and 5 in the log). That changes the filing's status and not this release's subject: a consumer
-running `git rm --cached` and re-rendering its own block does not give the pull path a caller, so
-the next pull that adds a transient declaration drifts again, there and everywhere else. Every
-figure above is derived against the distribution or against that consumer's committed history,
-never against the withdrawn entry.
+**The candidate is filed and committed** at `36f0e852c` on the consumer's pushed sprint branch,
+ahead of `main` because that sprint's PR merged before the entry was written. This batch twice
+concluded otherwise — once "uncommitted", once "withdrawn" — from zeros taken against `main` while
+the sweep's own read had seen the sprint tree, the consumer having checked out `main` in between.
+**Ask which ref a ledger zero was taken against**; an unmerged sprint branch is where a filing
+lives between the merge and the retro. The consumer session supplied the correction.
+
+The release's subject stands either way, and the consumer's own repair does not overlap it:
+re-rendering one tree's block and untracking its markers gives the pull path no caller, so the next
+pull that adds a transient declaration drifts again, there and everywhere else. Every figure above
+is derived against the distribution or against that consumer's committed history.
 
 ## [0.544.0] - 2026-09-10
 
