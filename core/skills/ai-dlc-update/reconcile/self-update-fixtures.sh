@@ -247,8 +247,10 @@ fi
 GATE_REC=""
 GATE_REC_WHY=""
 
-# One reader for all three fields. A second spelling per field is a second grammar to keep in
+# One reader for every header field. A second spelling per field is a second grammar to keep in
 # agreement with the writer, which is the drift `lib.sh` exists to end for the section resolver.
+# Deliberately NOT a count — this comment said "all three fields" until a fourth was added, and a
+# tally in prose beside a generic reader is a figure with nothing binding it.
 rec_field() { # $1=record path $2=field name -> the first value, trimmed, or nothing
   awk -v k="$2" 'index($0, "# " k ":") == 1 {
     s = substr($0, length(k) + 4)
@@ -288,6 +290,24 @@ $gr_cands
 GRECEOF
 
   if [ -n "$GATE_REC" ]; then
+    # THE STAMP AS THE GATE SAW IT. Read once, here, beside the other header fields rather than
+    # inside the per-input loop: it is a property of the RECORD, not of a row, and a re-read per
+    # input would be one `rec_field` scan of the whole file per line of the record.
+    #
+    # EMPTY IS THE PRE-HEADER RECORD AND IS NOT AN ERROR. A gate older than this header writes no
+    # such line; the arm below then has no acquittal available and behaves exactly as it did
+    # before the field existed. That is the conservative direction, and it is why a missing field
+    # is not refused here — a consumer mid-upgrade holds a gate that cannot write it.
+    # PEELED HERE, ONCE, AND THE COMPARISON BELOW IS ON RESOLVED SHAS — never on the header
+    # string. The file's own header states this rule for `base`/`theirs` and the first cut of
+    # this field broke it: the gate writes a peeled value, but a hand-written or older record may
+    # carry an ABBREVIATED sha, and `48e81187` != `48e811872e8b…` as strings while naming one
+    # commit. Driven before this line existed, the equality guard below silently never fired and
+    # the seeded self-comparison was acquitted — a refusal defeated by a spelling.
+    gr_rec_sk="$(rec_field "$GATE_REC" skill-commit)"
+    if [ -n "$gr_rec_sk" ] && [ "$gr_rec_sk" != "-" ]; then
+      gr_rec_sk="$(git -C "$DIST" rev-parse -q --verify "${gr_rec_sk}^{commit}" 2>/dev/null || printf '%s' '-')"
+    fi
     gr_verdict="$(rec_field "$GATE_REC" verdict)"
     if [ "$gr_verdict" != "OK" ]; then
       GATE_REC_WHY="the newest gate record for this range is $(basename "$GATE_REC") and its verdict is '${gr_verdict:-<absent>}', not OK"
@@ -448,8 +468,85 @@ $gr_p"
             # verdict taken on a tree that already held `theirs` for a file the pull CHANGES
             # compared that file with itself; the record and the tree can match perfectly and the
             # OK still answers nothing. The digest comparison below cannot see it by construction.
+            #
+            # AND THE SPLIT STAMP IS NOT THAT CASE, WHICH IS THE SECOND CONJUNCT'S WHOLE SUBJECT.
+            # A consumer whose `skill_commit` runs ahead of `commit` legitimately already holds a
+            # PRIOR self-update's delivery for some machinery paths, and for those the recorded
+            # digest equals `theirs` without any self-comparison having occurred: the gate read a
+            # file a previous cycle wrote, not the file this cycle is about to write. Measured on
+            # the reference consumer's real gate record at 0.542.0 -> 0.547.0 (commit 98acc996,
+            # skill_commit 28d35728), driven per row against all four conjuncts: of 129 recorded
+            # inputs carrying a core path, ARM 3 fires on exactly TWO —
+            # `self-update-fixtures.sh` and `rotate-gate-adjudication.sh` — and both are split-stamp
+            # deliveries rather than self-comparisons. `apply.sh` is the CONTROL and it is refused
+            # ENTRY to the arm: its recorded digest 09036680 is not the theirs blob 1768c802, so
+            # the `gr_h = gr_tb` conjunct is false. Naming it as a case that FIRES is wrong, and an
+            # earlier revision of this comment did — a control that is claimed to fire where it
+            # does not is not a control. Without this arm the runner exits 2, step 2 cannot run its
+            # fixtures, and the refusal REPEATS on every invocation — `commit` advances only under
+            # a gated apply, so nothing clears it.
+            #
+            # KEYED ON THE RECORDED VALUE, NEVER ON THE LIVE STAMP, and that is the difference
+            # between this fix and the one that was filed. Step 2 advances `skill_commit` to
+            # `theirs` BEFORE invoking this runner (`SKILL.md` step 2, whose ordered clause puts
+            # the stamp rewrite ahead of the fixture run). A runner reading the LIVE stamp is
+            # therefore asking whether `blob(theirs:P) == blob(theirs:P)` — a TAUTOLOGY — so it
+            # acquits every path the arm would otherwise fire on: 2 of 2 on the reference
+            # consumer's record. That is a total disarm, and it is the filed remedy read literally.
+            #
+            # THE DISARM IS THE TAUTOLOGY, NOT A COUNT, AND AN EARLIER REVISION OF THIS COMMENT
+            # ARGUED IT FROM THE WRONG NUMBER. It cited "129 of 129 against 128 of 129" — figures
+            # taken by comparing each path's theirs blob with ITSELF, which is true by construction
+            # and measures nothing about this predicate. The 129/128 spread is a fact about whether
+            # a recorded digest matches at all, a different question entirely. An adversarial hand
+            # found the two figures swapped and the reasoning misattributed; both are corrected
+            # here. The gate copies the value it saw into its record header and this arm reads it
+            # back, which is what makes the question answerable at all.
+            #
+            # AN ABSENT OR UNUSABLE RECORDED VALUE IS `-`, AND IT TAKES THE STRICT PATH. A record
+            # written by a gate that predates the header carries no such line, `rec_field` returns
+            # empty, and the acquittal is simply not available — which is the OLD behaviour, and
+            # the right default for a record this runner cannot fully read.
+            #
+            # THE KEY IS CONTENT, NOT ANCESTRY, AND THAT IS DELIBERATE — BOTH ALTERNATIVES WERE
+            # BUILT AND REFUSED. An adversarial hand observed that the arm never asks whether the
+            # recorded sha is an ancestor of `theirs`, and that nothing cross-checks it against the
+            # consumer's LIVE stamp. Both observations are true; both remedies are wrong.
+            #
+            # An ANCESTRY key refuses a consumer that materially holds the incoming bytes. Measured
+            # on a constructed repo: a commit on an unrelated branch can carry `theirs`' blob for a
+            # path while failing `merge-base --is-ancestor`, and a consumer sitting there genuinely
+            # holds byte-identical content — so the gate genuinely did not compare the file with
+            # itself. Refusing it is a FALSE REFUSAL, which is the failure this whole arm exists to
+            # remove.
+            #
+            # A LIVE-STAMP CROSS-CHECK IS FALSE ON EVERY LEGITIMATE SPLIT STAMP, because step 2
+            # advances the live stamp to `theirs` before this runner sees it — so `recorded ==
+            # live` fails precisely when the exemption is owed. That is the same tautology that
+            # makes the filed remedy a total disarm, arriving from the other direction.
+            #
+            # The arm's subject is whether the GATE'S VERDICT is worth anything, which is a
+            # question about what the consumer's tree CONTAINED when the gate read it. Content is
+            # the honest key for that question, and the threat model is a misleading gate run
+            # rather than a forger: a hand that can edit this record can edit the tree it attests.
+            # AND THE RECORDED `skill_commit` MUST NOT BE `theirs` ITSELF, WHICH IS THE CONJUNCT
+            # THE FIRST CUT OF THIS FIX LACKED AND AN ADVERSARIAL DRIVE FOUND. The genuine
+            # self-comparison is reached by running the gate a SECOND time after the slice is
+            # written — and step 2 advances the stamp to `theirs` as part of that write, so the
+            # second gate records `skill_commit == theirs` and the blob test alone then acquits
+            # the very case this arm exists to catch. Driven through this runner before the
+            # conjunct existed: the seeded self-comparison went from REFUSED to ACQUITTED while
+            # the split-stamp case behaved identically, so the blob test could not tell them
+            # apart. A legitimate split stamp sits at a STRICTLY EARLIER release — `skill_commit`
+            # runs ahead of `commit`, never ahead of the target — so excluding equality keeps the
+            # acquittal for the real case and withdraws it for the forged one.
+            gr_sk=""
+            if [ -n "$gr_rec_sk" ] && [ "$gr_rec_sk" != "-" ] && [ "$gr_c" != "-" ] \
+               && [ "$gr_rec_sk" != "$gr_theirs" ]; then
+              gr_sk="$(git -C "$DIST" rev-parse -q --verify "${gr_rec_sk}:${gr_c}" 2>/dev/null)"
+            fi
             if [ -n "$gr_tb" ] && [ -n "$gr_bb" ] && [ "$gr_bb" != "$gr_tb" ] \
-               && [ "$gr_h" = "$gr_tb" ]; then
+               && [ "$gr_h" = "$gr_tb" ] && [ "$gr_sk" != "$gr_tb" ]; then
               gr_prewritten="$gr_prewritten
   $gr_p — recorded at the ${THEIRS} blob for a path this range CHANGES, so the gate compared the incoming version with itself"
             elif [ ! -f "$gr_abs" ]; then

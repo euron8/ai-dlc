@@ -1389,6 +1389,91 @@ ss_assert "rec-shas" \
   "$(git -C "$DIST" rev-parse "${BASE}^{commit}")|$(git -C "$DIST" rev-parse "${THEIRS}^{commit}")" \
   "the header carries the FULL resolved shas of both endpoints, which is what the runner joins on"
 
+# THE STAMP AS THIS GATE SAW IT. Step 2 advances `skill_commit` to `theirs` before it invokes
+# the runner, so the runner cannot learn the value from the stamp and the record is its only
+# carrier; `self-update-fixtures.sh`'s PRE-WRITTEN arm reads this field to tell a legitimate
+# split stamp from a gate re-run on an already-written tree.
+#
+# BOTH DIRECTIONS ARE SEEDED, AND THE PAIR IS THE ARM. The base consumer this fixture builds
+# carries NO stamp, so a single arm here would only ever exercise the `-` path -- which is the
+# value a gate that never learned to read the stamp also produces, and the two would be
+# indistinguishable. The stamped world is constructed for that reason.
+VR_SK_C1="$(vr_cons skc)"
+mkdir -p "$VR_SK_C1/.claude"
+printf 'version: 1.0.0\ncommit: %s\nskill_version: 1.1.0\nskill_commit: %s\n' \
+  "$BASE" "$BASE" > "$VR_SK_C1/.claude/.ai-dlc-version"
+bash "$GATE" "$DIST" "$BASE" "$THEIRS" "$VR_SK_C1" > "$VR/skc.out" 2> "$VR/skc.err"
+VR_SK_REC="$(vr_newest "$VR_SK_C1")"
+# THE VALUE, PEELED, not the line count. An arm counting the line passes on a gate writing `-`
+# forever -- the acquittal-free direction, which reads exactly like this working.
+ss_assert "rec-skill-commit" \
+  "$(sed -n 's/^# skill-commit: *//p' "${VR_SK_REC:-/dev/null}" | head -1)" \
+  "$(git -C "$DIST" rev-parse "${BASE}^{commit}")" \
+  "the header carries the consumer's skill_commit, PEELED, as the gate saw it -- the runner's only honest source for it"
+
+# AND `-` WHERE THERE IS NO STAMP TO READ, rather than an omitted line. A reader keyed on a
+# prefix cannot tell an absent line from an unparseable one, and `-` is a value that matches no
+# blob, so an unreadable stamp yields the STRICT comparison rather than a lenient one. `$VR_C1`
+# is the unstamped world -- the seed writes no stamp into it, which is asserted here rather than
+# assumed, because a seed that GAINS one would make this arm silently test the other case.
+ss_assert "rec-skill-commit-absent" \
+  "$([ -f "$VR_C1/.claude/.ai-dlc-version" ] && printf 'stamped|' || printf 'no-stamp|')$(sed -n 's/^# skill-commit: *//p' "${VR_REC1:-/dev/null}" | head -1)" \
+  "no-stamp|-" \
+  "a consumer with no stamp records '-', so the field is always present and always comparable"
+
+# THE MUTANT FOR THE ARM ABOVE. Both arms are value-shaped rather than presence-shaped, so a gate
+# that stopped emitting the line fails them by construction -- but a gate that emits a CONSTANT
+# would satisfy neither, and a gate that reads the WRONG FIELD would satisfy the `-` arm on an
+# unstamped consumer while being silently wrong everywhere else. The mutation makes the reader
+# key on `commit:` instead of `skill_commit:`, which is the single most plausible wrong
+# implementation and the one no absence-shaped arm could see.
+#
+# THE WHOLE DIRECTORY IS COPIED, because this gate resolves `preclassify.sh` beside itself and a
+# lone copy reads an empty machinery set and goes quiet -- silence that would score as a kill.
+VR_MUT_D="$VR/m-skc"
+rm -rf "$VR_MUT_D"; mkdir -p "$VR_MUT_D"
+cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$VR_MUT_D"/ 2>/dev/null
+awk '{ if (index($0, "s/^skill_commit:[[:space:]]*\\([^[:space:]]*\\).*/\\1/p") && index($0, "_grsc_v=")) { sub(/\^skill_commit:/, "^commit:"); } print }' \
+  "$GATE" > "$VR_MUT_D/self-update-gate.sh"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$GATE" "$VR_MUT_D/self-update-gate.sh"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-16s mutation matched nothing, so rec-skill-commit is unproven\n' "rec-skc-mutant"
+else
+  VR_MUT_C="$(vr_cons skcmut)"
+  mkdir -p "$VR_MUT_C/.claude"
+  # `commit` and `skill_commit` DELIBERATELY DIFFER in this stamp, which is what makes the two
+  # readers separable. Seeded equal -- the shape the base fixture uses -- the mutant and the
+  # shipped gate emit the same value and the mutant survives for a reason that is not the
+  # predicate's fault.
+  printf 'version: 1.0.0\ncommit: %s\nskill_version: 1.1.0\nskill_commit: %s\n' \
+    "$THEIRS" "$BASE" > "$VR_MUT_C/.claude/.ai-dlc-version"
+  bash "$VR_MUT_D/self-update-gate.sh" "$DIST" "$BASE" "$THEIRS" "$VR_MUT_C" \
+    > "$VR/skcmut.out" 2> "$VR/skcmut.err"
+  vr_mut_rec="$(vr_newest "$VR_MUT_C")"
+  vr_mut_got="$(sed -n 's/^# skill-commit: *//p' "${vr_mut_rec:-/dev/null}" | head -1)"
+  if [ "$vr_mut_got" = "$(git -C "$DIST" rev-parse "${THEIRS}^{commit}")" ]; then
+    printf '  ok    %-16s KILLED (a reader keyed on commit: records the wrong field, and the arm says so)\n' "rec-skc-mutant"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s SURVIVED: mutant recorded [%s] -- the arm cannot tell skill_commit from commit\n' \
+      "rec-skc-mutant" "${vr_mut_got:-<none>}"
+  fi
+  # THE UNMUTATED CONTROL, ON THE SAME SPLIT-STAMP WORLD, and it carries a POSITIVE conjunct: the
+  # shipped gate must record the `skill_commit` VALUE here, not merely something-that-is-not-the
+  # -mutant's. A control asserting only inequality passes against a gate that records nothing.
+  VR_CTL_C="$(vr_cons skcctl)"
+  mkdir -p "$VR_CTL_C/.claude"
+  printf 'version: 1.0.0\ncommit: %s\nskill_version: 1.1.0\nskill_commit: %s\n' \
+    "$THEIRS" "$BASE" > "$VR_CTL_C/.claude/.ai-dlc-version"
+  bash "$GATE" "$DIST" "$BASE" "$THEIRS" "$VR_CTL_C" > "$VR/skcctl.out" 2> "$VR/skcctl.err"
+  vr_ctl_rec="$(vr_newest "$VR_CTL_C")"
+  ss_assert "rec-skc-mutant-control" \
+    "$(sed -n 's/^# skill-commit: *//p' "${vr_ctl_rec:-/dev/null}" | head -1)" \
+    "$(git -C "$DIST" rev-parse "${BASE}^{commit}")" \
+    "the SHIPPED gate on that same split-stamp world records skill_commit, so the kill above is the mutation and not the world"
+fi
+
 # THE PATH REACHES THE CALLER ON STDERR, because stdout is the TSV contract and every caller of
 # this gate parses it by field. A record nobody can name is a record nobody commits.
 ss_assert "rec-stderr-path" "$(sed -n 's/^record: *//p' "$VR/c1.err" | head -1)" "$VR_REC1" \

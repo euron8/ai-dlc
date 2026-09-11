@@ -10246,3 +10246,173 @@ still closes it. That arm is covered by the `transient-ignore-block` fixture, no
 
 verify: sh a=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$a" ] || exit 9; grep -qE '^ *say WORKLIST transient-ignore ' "$a" || exit 1; grep -qE '^ *say WORKLIST transient-ignore-tracked ' "$a" || exit 1; grep -qE '^ *transient_ignore_row$' "$a" || exit 1; grep -qE '^ *ti_n="\$\(git -C "\$CONSUMER" ls-files' "$a" || exit 1; exit 0
 
+## BL-231 — the self-update gate-record reader's PRE-WRITTEN arm refuses every SPLIT-STAMP consumer, and the filed remedy disarms it completely
+
+**Found 2026-09-11**, filed by the reference consumer as
+`PC-S311-SELF-UPDATE-FIXTURES-ARM-3-PREWRITTEN-HAS-NO-SPLIT-STAMP-SUPPRESSION` while pulling
+`0.542.0 → 0.547.0`.
+
+**LANDED (v0.548.0, verified 07baf125).**
+
+**THE DEFECT.** ARM 3 of `self-update-fixtures.sh`'s gate-record reader refuses a record when a
+recorded input's digest equals that path's blob at `theirs` AND the range changes that path, on
+the reasoning that the gate compared the incoming version with itself. **That predicate is also
+satisfied, with no self-comparison having occurred, by every machinery path a PRIOR self-update
+already delivered** — the normal state of a consumer whose `skill_commit` runs ahead of `commit`,
+which is the state step 2 itself creates. The runner exits 2, step 2 cannot run its fixtures, and
+the self-update cannot land. **Not transient**: `commit` advances only under a gated apply, so the
+refusal repeats on every invocation until a rulebook pull lands.
+
+Re-derived here against the working tree, with the control in the same invocation
+(commit `98acc996` = 0.542.0, `skill_commit` `28d35728` = 0.546.0, theirs `48e81187` = 0.547.0):
+`self-update-fixtures.sh` and `rotate-gate-adjudication.sh` both satisfy the first three conjuncts
+and are NOT self-comparisons; `apply.sh` in the same run satisfies them and IS one. The consumer's
+committed stamp history carries **5 split stamps in its last 12 stamp commits**, so this is the
+recurrent state and not an edge case.
+
+**THE FILED REMEDY IS REFUTED BY MEASUREMENT, AND ITS FAILURE MODE IS TOTAL.** The entry asks for
+the exemption to be keyed on the consumer's `skill_commit`. Read literally — against the LIVE
+stamp — that acquits everything, because `SKILL.md` step 2 advances `skill_commit` to `theirs`
+BEFORE invoking the runner. Driven over the 129 paths the shipping `machinery_paths()` resolves:
+**129 of 129 acquitted** with the stamp advanced, against **128 of 129** at the value the gate
+actually saw. The two sides differ, so the measurement discriminates — and the live-stamp form
+deletes the arm's entire subject while reading as a fix.
+
+**WHAT SHIPPED, IN TWO HALVES, BECAUSE THE RUNNER CANNOT LEARN THIS FROM THE TREE.** The gate is
+the only party that sees the stamp before step 2 rewrites it, so the gate carries the value:
+`self-update-gate.sh` gains `gate_rec_skill_commit()` and writes `# skill-commit: <peeled sha | ->`
+into its record header; `self-update-fixtures.sh` reads it back through the existing `rec_field()`,
+peels it, and adds one conjunct to ARM 3. `-` on every gate-side failure path, because the runner
+treats `-` as "no usable value" and falls back to the STRICT comparison — a guess there would be an
+acquittal, and a record written by a gate older than the field simply has no exemption available.
+
+**RECORDING THE VALUE IS NOT RECORDING THE DIGEST**, and that distinction is load-bearing. The gate
+deliberately keeps the stamp out of its `# input:` rows (`self-update-gate.sh`, the
+`.ai-dlc-applying` row's comment) because step 2 rewrites the file and a digest cannot survive to
+the read. A VALUE copied into the header survives precisely because it is a copy.
+
+**TWO DEFECTS IN THIS FIX'S OWN FIRST CUTS, BOTH FOUND BY DRIVING IT AND NEITHER BY READING IT.**
+(1) With no `!= theirs` guard, a gate RE-RUN after the write records `skill_commit == theirs` and
+the blob test acquits the genuine self-comparison — `theirs:P` trivially equals itself. (2) With the
+recorded value compared as a STRING, an abbreviated `48e81187` differs textually from the full sha
+naming one commit, so the guard silently never fired. The file's own header states the peel rule for
+`base`/`theirs`; this field broke it.
+
+**THE RECEIPT DRIVES THE SHIPPING PROGRAM AND WAS SCORED AGAINST SEVEN WRONG IMPLEMENTATIONS**,
+each built and run: the pre-fix subject (1), a comment describing the split stamp (1), the token
+inside an unrelated string (1), ARM 3 deleted outright (9), the filed live-stamp remedy (1), cut 1
+(9) and cut 2 (1) — against the correct fix at 0. **Case (2) was accepted until a third seed
+existed**: the forged world writes a FULL sha, which an unpeeled implementation also refuses, so
+only an ABBREVIATED seed separates a peeled comparison from a string one.
+
+**Receipt limits, stated.** It drives `self-update-fixture-log`, whose Parts G14b/G14c/G14d own this
+behaviour, so it is as strong as that fixture and no stronger; it takes ~1 minute. It exits 9 if
+Part G14b is gone, which is the case where the arm was deleted rather than the fix removed — a
+deletion reads as "measured nothing" rather than as a close. It cannot see a gate that records the
+field correctly while some FUTURE caller advances the stamp earlier; that ordering is asserted in
+`SKILL.md` prose and nothing binds it mechanically.
+
+verify: sh f=core/fixtures/self-update-fixture-log/run.sh; [ -f "$f" ] || exit 9; grep -q "G14b" "$f" || exit 9; timeout 900 bash "$f" >/dev/null 2>&1
+
+## BL-232 — Check 5's gate-log header is cited to a CLAUDE.md section that does not exist, so the check has SKIPped silently since install
+
+**Found 2026-09-11**, filed by the reference consumer as
+`PC-S310-CHECK5-GATE-LOG-HEADER-CONVENTION-UNDOCUMENTED-AND-UNSATISFIABLE` during its sprint-310
+retro.
+
+**LANDED (v0.548.0, verified 1585c51c).**
+
+**THE DEFECT.** Check 5 of `validate-mandatory-rules.sh` isolates a sprint's section of
+`gate-log.md` by matching the literal header `## Gate Log: Sprint <N>`, in order to look for
+`USER-CONFIRMED` or playwright evidence on a `web/**` sprint. Where the isolation returns nothing it
+reports **SKIP** — which is the right disposition for a formatting mismatch, and is also silent and
+permanent: it reads as a check that ran.
+
+The format was attributed by `steps/gate-validation.md` step 12 to *"CLAUDE.md Autonomous Gate
+Protocol"*. **That section does not exist, and the distribution says so itself**:
+`ai-dlc-setup/SKILL.md`'s R22 absorption table carries `| Autonomous Gate Protocol |
+gate-validation.md |`, recording it as a pre-R22 CLAUDE.md section that MOVED into
+gate-validation.md. So step 12 cited CLAUDE.md for content the setup skill says lives in step 12's
+own file — a circular citation — and a consumer following it literally found nothing and invented a
+format. **This evidence is not in the filing**; the filing establishes only that the section is
+absent from that consumer's tree.
+
+Measured on the reference consumer, both directions in the same invocation: **8** entries under its
+own `## Gate: <phase> (Sprint <N>, ...)` shape, **0** under the header Check 5 matches. That
+consumer's sprint-309 retro disclosed the same gap without filing it, so 310 was the second
+consecutive sprint to hit one unresolved ambiguity.
+
+**WHY THE INDIRECTION COULD NOT BE REPAIRED IN PLACE.** `CLAUDE.md` is consumer-owned —
+`core-paths.sh --is-core CLAUDE.md` exits 1 — so an instruction pointing at it cannot be kept true
+by this distribution. Step 12 now states the header inline and says plainly that it is a MACHINE
+JOIN KEY rather than a style preference. Check 5's own comment repeated the dead citation and called
+the format *"consumer-defined"*; it is not, and the SKIP message now names the header it wanted and
+states that visual-UI evidence for that sprint is NOT machine-verified. **A SKIP naming no cause
+reads as "nothing to check", which is why this survived the life of an install.**
+
+Behaviour is otherwise unchanged: a log already using the documented header still gets the real
+check, and a mismatch still SKIPs rather than failing a gate on a heading shape.
+
+**Receipt limits, stated.** The receipt asserts the CITATION is gone and the literal header is
+stated in the step file — it is PROSE-KEYED and a rewording closes it, which is the `BL-227` class.
+That is stated rather than hidden: the honest replacement is an arm that drives Check 5 against a
+gate-log in each header shape and asserts SKIP vs PASS, which needs a fixture this repo does not
+have for `validate-mandatory-rules.sh`. Exit 9 if either file is gone.
+
+verify: sh a=core/skills/ai-dlc/steps/gate-validation.md; b=core/scripts/validate-mandatory-rules.sh; [ -f "$a" ] && [ -f "$b" ] || exit 9; grep -q 'Gate Log: Sprint' "$b" || exit 9; grep -qi 'format defined in CLAUDE.md Autonomous Gate Protocol' "$a" && exit 1; grep -qF '## Gate Log: Sprint <N>' "$a" || exit 1; grep -qi 'consumer-defined format' "$b" && exit 1; exit 0
+
+## BL-233 — `retro.md` states two duties whose satisfying VALUES exist only in a program's source, so a lead following the step file gets both wrong
+
+**Found 2026-09-11**, filed by the reference consumer as
+`PC-S310-RETRO-PERSONA-MARKER-VOCABULARY-NOT-DOCUMENTED-IN-STEP-FILE` and
+`PC-S310-RETRO-STEP6A-COMMIT-LIST-OMITS-AMBIENT-SESSION-LOGS` during its sprint-310 retro. Filed as
+one entry because both are the same defect shape in one file and one fix commit closes both.
+**LANDED (v0.548.0, verified b9a0b2a2).**
+
+**THE FLOOR VOCABULARIES.** `retro.md` deliberately does not restate `validate-retro-evidence.sh`'s
+threshold NUMBERS — correct, they drift — but it also never names the MARKER STRINGS the counts are
+measured against, and **a closed vocabulary is a different kind of information from a number that
+drifts.** Both floors count against fixed lists (`PERSONA_MARKERS`, `PHASE_LABELS`), so a transcript
+with every persona present and every phase covered scores **ZERO** on both if it labels them in its
+own words. That is what happened: descriptive `## PM` / `## Dev` headings, 0 personas and 0 phases
+found, and a second commit to reformat.
+
+**The failure message made it worse by printing only what it FOUND.** An author saw `found: []` and
+a count, with nothing in the output or in the step file saying which strings would have counted. The
+only ways left to discover them were reading the validator's source or copying a prior sprint's
+transcript out of git history — the consumer did the second.
+
+**A CORRECTION TO THE FILING.** It claims neither vocabulary is named in the step file. At HEAD
+`retro.md` names `PHASE_LABELS` once; the consumer's installed 0.542.0 copy names it zero times, so
+**the defect is narrower upstream than filed**. `PERSONA_MARKERS` is named zero times either way.
+Neither is in `docs/vocabulary-index.md` (0 hits for both, against a control of 19 index entries).
+
+**THE AMBIENT LOGS.** Step 6a enumerates three artifact categories and names none of the files
+AI/DLC's own hooks write under `_bmad-output/` during a sprint, which are dirty at that step on
+essentially every sprint. The consumer decided their disposition by inspecting a prior sprint's
+commit — precedent-matching, which a first sprint cannot do and which Rule 23's discipline against
+reading unrelated history discourages.
+
+**THE FILING ASKS FOR A LONGER LIST AND THAT IS THE WRONG SHAPE.** Deriving the real population
+rather than taking the four filed names: `core/schemas/pipeline-state-paths.json` already declares
+**36** such paths, partitioned **20 DURABLE / 16 TRANSIENT** with a `reason` on each, and all four
+files the consumer agonised over are declared DURABLE there. The answer was already machine-readable
+and Step 6a simply never pointed at it. It now routes the reader to that declaration and says
+explicitly not to hand-copy either list into the step file, because the set grows as hooks are added
+and a roster written there would be stale the first time that happens with nothing to announce it.
+
+**WHAT SHIPPED.** The two floor failures RENDER their accepted sets from the lists themselves —
+never a hand-copied roster, which would be a second spelling that drifts the first time someone
+edits the list and not the copy. `retro.md` says both counts are over fixed vocabularies, points at
+the owning file, and adds the ambient-state category pointing at the schema.
+
+**Receipt limits, stated, and they are the honest half of this entry.** Both halves are PROSE and
+DATA-RENDERING changes with no behavioural arm available short of a fixture for
+`validate-retro-evidence.sh` and one for the retro step file, neither of which exists. The receipt
+asserts the RENDERED form specifically — that the failure messages interpolate `PERSONA_MARKERS`
+and `PHASE_LABELS` rather than naming markers literally — which a hand-copied roster would FAIL,
+so it discriminates against the most likely wrong fix. **It remains closable by rewording the
+step-file half.** Exit 9 if either file is gone.
+
+verify: sh a=core/skills/ai-dlc/steps/retro.md; b=core/scripts/validate-retro-evidence.sh; [ -f "$a" ] && [ -f "$b" ] || exit 9; grep -q 'PERSONA_MARKERS' "$b" || exit 9; grep -q "join(PERSONA_MARKERS)" "$b" || exit 1; grep -q "join(PHASE_LABELS)" "$b" || exit 1; grep -q 'pipeline-state-paths.json' "$a" || exit 1; grep -q 'PERSONA_MARKERS' "$a" || exit 1; exit 0
+

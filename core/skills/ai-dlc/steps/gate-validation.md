@@ -700,7 +700,25 @@ Skip this check for planning phase gates. Required for Phase 4+ gates.
 <!-- CHECK_LOADED: 12 -->
 
 Create or append to `_bmad-output/implementation-artifacts/gate-log.md`.
-Use the format defined in CLAUDE.md Autonomous Gate Protocol section.
+
+**Open the entry with a level-two heading that BEGINS `## Gate Log: Sprint <N>`**, where `<N>` is
+the sprint number followed by whitespace or the end of the line. **A trailing title is fine and
+conventional** — `## Gate Log: Sprint 288 — Sweep Tx Idempotency` isolates exactly as the bare form
+does. What matters is the opening, because that is what the isolator anchors on.
+
+**That header is a MACHINE JOIN KEY, not a style preference.** Check 5 of
+`validate-mandatory-rules.sh` isolates a sprint's section by matching it literally in order to
+look for visual-verification evidence on a `web/**` sprint; a differently-shaped header makes
+that isolation return nothing, and Check 5 then reports SKIP rather than PASS or FAIL. **The
+SKIP is silent and permanent** — it reads as a check that ran, so a consumer can section its
+log any reasonable way and never learn that its UI evidence has gone unverified since install.
+
+**This used to cite "CLAUDE.md Autonomous Gate Protocol" and that section does not exist.** It
+was a pre-R22 CLAUDE.md section, and `ai-dlc-setup/SKILL.md`'s own absorption table records it
+as having MOVED to this file — so the citation pointed at a section whose content was supposed
+to be here, and a consumer following it literally found nothing to follow and invented a format.
+The format is stated inline for that reason: an indirection to a file this distribution does not
+own cannot be kept true.
 
 The gate log entry MUST include:
 - Gate name and phase

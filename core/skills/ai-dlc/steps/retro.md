@@ -134,6 +134,20 @@ both at authoring time and committing in this order:
    required count of distinct canonical `Phase N` labels (from its
    `PHASE_LABELS` allow-list), and its minimum character count. Committing the
    full agent responses verbatim (not summaries) clears all three.
+
+   **BOTH COUNTS ARE OVER FIXED VOCABULARIES, NOT OVER "how many personas spoke".**
+   A transcript with every persona present and every phase covered scores ZERO on
+   both floors if it labels them in its own words — `## PM`, `## Dev`, `## TEA` and
+   ungrouped sections are the shape that fails. The markers are literal strings:
+   emoji persona icons or `Name (Role):` prefixes, and `Phase N` headings.
+
+   **Read the two lists before authoring, from the one file that owns them** —
+   `PERSONA_MARKERS` and `PHASE_LABELS` in `validate-retro-evidence.sh`. They are
+   not restated here for the same reason the numbers are not: a second copy drifts.
+   The validator's own FLOOR_PERSONAS and FLOOR_PHASES failures print the accepted
+   set in full, so a run that fails tells you exactly what would have counted —
+   but running it to discover the vocabulary costs a commit, which is what reading
+   the lists first avoids.
 2. **Commit the transcript as its own commit first**, then read back that
    COMMIT's SHA: `git rev-parse HEAD`. Not `git rev-parse HEAD:<path>` — that
    returns the BLOB sha, which is exactly the citation the validator rejects.
@@ -999,6 +1013,31 @@ This typically includes:
 - `docs/escalations/pending.md` (resolutions and deferrals)
 - `_bmad-output/implementation-artifacts/sprint-status.yaml`
   (any drift corrections)
+
+**Ambient pipeline state** — AI/DLC's own hooks write files under `_bmad-output/`
+throughout the sprint, and they are dirty at this step on essentially every sprint.
+**The three lists above name none of them, and their disposition is NOT a judgment
+call**: `.claude/schemas/pipeline-state-paths.json` declares every such path as
+DURABLE or TRANSIENT, with a reason on each.
+
+- **DURABLE paths are committed here**, with the rest of the retro. They are
+  evidence later sessions read — the spawn ledger the dispatch guard joins against,
+  the operator request and answer trails, the compaction and continuation logs a
+  retro measurement reads, the snapshot pair the post-compact recovery diffs.
+  Leaving them uncommitted silently loses cross-session state at every sprint
+  boundary.
+- **TRANSIENT paths are not committed and not deleted** — they are in-run markers
+  and flags, meaningless outside the run that wrote them, and the `.gitignore`
+  block keeps them out of the way.
+
+**Do not hand-copy either list into this file.** The declaration is the single
+source, it is machine-readable, and it grows as hooks are added — a roster written
+here would be stale the first time that happens, and nothing would announce it.
+Read the schema; `git status` against it is the completeness check.
+
+**This was previously left to precedent, and precedent is not discoverable.** A lead
+with no prior-sprint history — a first sprint, or one correctly declining to read
+unrelated history — would find Step 6a's list complete and leave that state behind.
 
 Use a conventional commit message:
 `docs(retro): sprint N retrospective, reviews, and process improvements`
