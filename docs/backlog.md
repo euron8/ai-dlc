@@ -4603,11 +4603,23 @@ Rule 28 prose eight hundred lines away, with the second conjunct satisfied by th
 subject; `verification-discipline.md` calls this keying on the emission site, and this receipt is
 the worked example.
 
-The replacement narrows to the SECTION that prescribes the header and requires the two tokens to
-co-occur with `Check 5` inside it, which no prose outside step 12 can satisfy. It is still
-prose-keyed and still closable by careful rewording — the `BL-227` class — and the honest
-replacement drives the validator over two probe trees differing only in the header, asserting the
-step names the consequence. That needs the probe harness a fix would build, so it is owed WITH the
-fix rather than before it.
+**THE SECOND DRAFT'S PRIMARY ARM WAS DEAD AT HEAD, AND A DEAD ARM IS A LANDMINE.** It isolated on
+`^## .*[Gg]ate [Ll]og`, which matches ZERO headings in the step file (control: 6 `^## ` headings
+exist there, so the grammar and the corpus both work). `SEC` therefore always came from the
+`grep -A40` fallback, and the arm that read as the predicate had never decided anything. Driven
+both ways: a correct fix plus an unrelated `## Gate Log` heading elsewhere in the file flipped it
+onto the dead arm and REJECTED the fix, while a far mention of the tokens at EOF under a
+`Gate Log: Sprint` anchor PASSED with nothing fixed.
 
-verify: sh S=core/skills/ai-dlc/steps/gate-validation.md; [ -f "$S" ] || exit 9; SEC="$(awk '/^## .*[Gg]ate [Ll]og/{f=1} f&&/^## /&&!/[Gg]ate [Ll]og/{exit} f' "$S")"; [ -n "$SEC" ] || SEC="$(grep -A40 -E 'Gate Log: Sprint' "$S")"; [ -n "$SEC" ] || exit 9; grep -qiE 'check ?5' <<<"$SEC" || exit 1; grep -qiE 'reachable|no longer skip|stops skipping|becomes enforceable' <<<"$SEC" || exit 1; grep -qiE 'USER-CONFIRMED|playwright' <<<"$SEC" || exit 1; exit 0
+**The shipped receipt DRIVES the shipping validator and does not key on the step file's headings
+at all.** It builds three probe trees under `mktemp` differing only in the gate-log header text and
+the changed web file's basename, runs `validate-mandatory-rules.sh` in each, and asserts a
+non-conforming header SKIPs on the isolation, a conforming header with a non-test remainder reaches
+`CHECK 5: FAIL` or `PASS`, and a conforming header with a test-only diff SKIPs on the carve-out.
+`cmp -s` controls assert the three trees differ where they must and agree where they must. The
+prose arm isolates on the header-prescription SENTENCE, not on a heading, so promoting or renaming
+step 12's heading cannot flip it. The probe trees scrub `GIT_DIR` and the inherited-worktree git
+variables before `git init`: run unscrubbed under an armed `GIT_DIR`, this receipt takes a
+10-entry victim index to 7.
+
+verify: sh S=core/skills/ai-dlc/steps/gate-validation.md; V=core/scripts/validate-mandatory-rules.sh; [ -f "$S" ] && [ -f "$V" ] || exit 9; SEC="$(awk '/Open the entry with a level-two heading that BEGINS/{f=1} f&&/^###? /{exit} f{if(/<!--/)c=1; if(!c)print; if(/-->/)c=0}' "$S")"; [ -n "$SEC" ] || exit 9; grep -qF 'Check5_VISUAL_UI' <<<"$SEC" || exit 1; grep -qF 'USER-CONFIRMED' <<<"$SEC" || exit 1; grep -qi 'playwright' <<<"$SEC" || exit 1; R="$PWD"; B="$(mktemp -d)" || exit 9; mk(){ d="$B/$1"; mkdir -p "$d/core/scripts" "$d/core/schemas" "$d/_bmad-output/implementation-artifacts" "$d/web/src"; cp "$R/core/scripts/validate-mandatory-rules.sh" "$R/core/scripts/validate-audit-anchors.sh" "$d/core/scripts/" && cp "$R/core/schemas/audit-anchors.json" "$R/core/schemas/sprint-status.json" "$d/core/schemas/" || return 9; ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY; cd "$d" && git init -q . && git -c user.email=p@p -c user.name=p commit -q --allow-empty -m base && printf '## Entries\n\n- sprint: 499\n  sha: %s\n' "$(git rev-parse HEAD)" > _bmad-output/audit-anchors.md && printf 'export default function App(){return null}\n' > "web/src/$3" && printf '# Gate Log\n\n%s\n\nDeploy Status Report: deployed.\n' "$2" > _bmad-output/implementation-artifacts/gate-log.md && git add -A && git -c user.email=p@p -c user.name=p commit -q -m s500 && bash core/scripts/validate-mandatory-rules.sh 500 2>&1 | grep -E '^  CHECK 5:' ); }; A="$(mk a '## Gate: deploy-validate — Sprint 500' App.jsx)"; C="$(mk c '## Gate Log: Sprint 500 — deploy-validate' App.jsx)"; T="$(mk t '## Gate Log: Sprint 500 — deploy-validate' App.test.jsx)"; G=_bmad-output/implementation-artifacts/gate-log.md; cmp -s "$B/a/web/src/App.jsx" "$B/c/web/src/App.jsx" || exit 9; cmp -s "$B/a/$G" "$B/c/$G" && exit 9; cmp -s "$B/c/$G" "$B/t/$G" || exit 9; rm -rf "$B"; grep -qF 'SKIP (could not isolate' <<<"$A" || exit 1; grep -qE 'CHECK 5: (FAIL|PASS)' <<<"$C" || exit 1; grep -qF 'SKIP (test-only' <<<"$T" || exit 1; exit 0
