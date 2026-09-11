@@ -37,6 +37,100 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
+### BATCH 85 SHIPPED AS `v0.545.0`, ONE RELEASE CARRYING ONE PC-BACKED SUBJECT — AND **THE SWEEP ITSELF WAS THE DEFECT: THIS BATCH READ THE CONSUMER'S LEDGER AT THE WRONG REF AND RECORDED A LIVE FILING AS ABSENT, TWICE, IN OPPOSITE DIRECTIONS.** THE CANDIDATE'S DIAGNOSIS WAS ONE LEVEL SHORT OF THE DEFECT: THE IGNORE PATTERN IT ASKED FOR WAS ALREADY DECLARED, AND WHAT NEVER RUNS IS THE **RENDER**. THE GAP IS **THREE**, PENDING **3**, AND THE PULL IS **REQUIRED** — CARRIED OVER FROM BATCH 83 AND UNCHANGED.
+
+This block replaces the batch-84 record below it. Every figure was re-derived after the merge
+against the working tree with controls in the same invocation; re-derive them again rather than
+reading them.
+
+**`VERSION` IS `0.545.0`, SO BATCH 86 RELEASES AS `0.546.0`.** Re-derive `VERSION` and add one.
+Batch 85 merged once, carrying
+`PC-S310-HANDOFF-ENTRY-MARKER-COMMITTED-NEVER-DISCHARGES-CROSS-SESSION`, cited verbatim in the
+release commit message. `BL-229` is filed, fixed and ROTATED.
+
+**THE SUBJECT, AND THE FILED REMEDY WAS RIGHT IN SHAPE AND POINTED AT THE WRONG LAYER.** The
+candidate reads as a `handoff.md` step-ordering problem — step 1 writes `.handoff-in-progress`,
+step 2's broad `git add` commits it, step 5's `rm -f` records no deletion — and asks for a
+`.gitignore` pattern. **That pattern is already declared**, in `pipeline-state-paths.json`, whose
+own `reason` fields name this exact failure. What never runs is the RENDER:
+`sync-transient-ignore.sh` is the only thing projecting declarations into a consumer's
+`.gitignore`, and its sole invocation site in the distribution is `install.sh` — the NEW-consumer
+path. Zero callers under `core/skills/ai-dlc-update/**`, zero in `core/git-hooks/`, against a
+control of 15 files naming `validate-hook-registration`. **The renderer's own header claims it was
+lifted out of `install.sh` so existing consumers would be reached; moving it made it REACHABLE
+there and nothing made it RUN.** `I95(d)` binds `install.sh` to invoke it and no arm binds the
+update path, so the invariant covers the half that already worked.
+
+**WHAT SHIPPED**: `transient_ignore_row()` in `apply.sh`, sited beside `hook_registration_row()`
+and shaped like it — the same "other half of a delivery this tool does not do", one schema over.
+It NAMES the work rather than doing it, because `.gitignore` is user-owned and this driver has no
+channel for the operator's gate on that edit.
+
+**AND `--check` IS BLIND TO HALF ITS OWN SUBJECT, FOUND BY DRIVING IT.** It returns at the block
+comparison while the still-TRACKED scan sits below on the write path, so on a tree with the marker
+tracked AND the block current it prints `OK: transient-state block current` and exits **0** while
+`git ls-files` returns the marker in the same invocation. An ignore rule does nothing to a file git
+already tracks. **A row keyed on `--check` alone reports clean over exactly the state where the
+guard fires forever**, which is why arm 2 asks the consumer's index directly and runs whatever arm
+1 answered.
+
+**THE BATCH'S OWN LESSON IS A ZERO TAKEN AGAINST THE WRONG REF, AND IT COST TWO WRONG RECORDS
+BEFORE THE CONSUMER CORRECTED IT.** That consumer branches per sprint and merges at the retro, so a
+candidate filed AFTER the sprint's PR merges sits committed and pushed on the sprint branch and is
+ABSENT FROM `main` until the retro. The sweep's `lids()` reads the WORKING file — whatever is
+checked out at that instant — and the `-S` date check keys on `main`. This batch read the entry in
+full at 02:00 with the sprint tree checked out, then read 0 twice after the consumer checked out
+`main`, and recorded the filing first as UNCOMMITTED, then as WITHDRAWN. **Two instruments agreed
+on a wrong answer because both pointed at the wrong ref, which is the shape that reads most
+convincingly.** The derive block now resolves the sprint branch and reads the ledger with
+`git show`, with a control asserting `main`'s live set is a SUBSET of the tip's. **ASK WHICH REF A
+LEDGER ZERO WAS TAKEN AGAINST before calling a filing absent.**
+
+**MY OWN FIX CARRIED THREE DEFECTS AND NO MECHANISM MISSED ONE, WHILE READING CAUGHT NONE.** The
+first fixture arm was VACUOUS — it asserted `--check` exits 0, which a subject with its check
+branch deleted also does — and its mutant said so. The first mutant then belonged to a DIFFERENT
+arm: disabling the mode branch makes `--check` re-render, which is `check_discriminates`'s subject,
+so both arms killed it and the harness reported entanglement. And the row's first gate keyed on the
+RENDERER's absence, which over-fired on every pre-`0.410.0` consumer and failed
+`apply-restamp-worklist`'s C4 (whose consumer asserts ZERO hand-back rows) — corrected to gate on
+the DECLARATION, since renderer and schema shipped together at `0.410.0`, so "schema present,
+renderer absent" is a real split and "neither" is just an older consumer. **I also hit I54 in my own
+arm**, four lines below the comment warning about it: `render | grep -q` gave a false FAIL on the
+correct subject.
+
+**THE FP SET WAS MEASURED BEFORE SHIPPING AND IS EMPTY** on four correct-consumer shapes: durable
+artifacts tracked, transient files present on disk but untracked (the common mid-pipeline state), a
+consumer's own extra `.gitignore` rules outside the block, and a current block with nothing tracked.
+
+**THE GAP IS THREE, PENDING 3, AND THE PULL IS REQUIRED.** Consumer installed `0.542.0`,
+distribution `0.545.0`. The requirement is carried over from batch 83 and unchanged. **Do not
+dispatch the pull** — it is operator-initiated and readiness is not authorization. The operator was
+asked at this batch's open and chose REPORT ONLY, no runbook.
+
+**THE SWEEP FOR BATCH 86. Live 51, cited 33, unfiled 18, archive 202, partition control 0**, all
+derived at the sprint tip. DISCHARGED 2 / in-flight 31 / untouched 18, summing to 51 after the
+4-id overlap; TERMINAL 86; discharged-but-invisible 1. **THE AVAILABLE PC-BACKED RESIDUE IS ZERO**:
+of the 18 unfiled, 4 are named in `origin/main` release commits, 11 carry `NOT-UPSTREAM`, the
+`PC-S309-PRE-PUSH` pair is WITHDRAWN and `PC-S340-RETRO-AUDIT-SCANS-…` is REFUTED. Run the sweep
+anyway — and run it against the SPRINT TIP, which is the whole point of this batch's correction.
+
+**THE CONSUMER REPAIRED ITS OWN TREE MID-BATCH AND THAT IS NOT THIS FIX.** It ran `git rm --cached`
+on both markers and re-rendered its block (`21100b72f`, `567cfc9dc`), after this session answered
+its direct question about whether the markers should be tracked. Its own `--check` now exits 0 with
+zero tracked transient paths. **That repairs one tree and gives the pull path no caller**, so the
+next pull adding a transient declaration drifts again, there and everywhere else. The pre-fix state
+is recoverable at `567cfc9dc^`: 16 declared, 13 rendered, both handoff markers absent (control:
+`pipeline-paused.flag` present).
+
+**AND READ `BL-227` BEFORE BUILDING ANY RECEIPT.** Unchanged from batch 84. The ranked no-`PC`
+entries, readiest first, are `BL-225`, `BL-217`, `BL-222`, `BL-224`, `BL-220`, `BL-218`, `BL-219`,
+`BL-221`, `BL-223` — **every one of their receipts needs repairing before it is trusted**.
+`BL-229`'s own receipt was scored by building three non-fixes: a prose-only copy naming every row
+in comments, a copy defining the function but never dispatching it, and a `--check`-only copy that
+never asks the index. All three are rejected. **One known limit, stated rather than hidden: the
+receipt cannot see WHICH schema the index arm reads**, so a copy pointed at the distribution's
+declaration still closes it; the fixture covers that arm.
+
 ### BATCH 84 SHIPPED AS `v0.544.0`, ONE RELEASE CARRYING ONE PC-BACKED SUBJECT — AND **FIVE ADVERSARIAL PASSES WERE RUN, OF WHICH FOUR FOUND A REAL DEFECT ON A GATE-GREEN, PUSHED BRANCH.** THE FILED CANDIDATE'S OWN PROPOSED REMEDY WAS REFUTED BY MEASUREMENT: BUILDING IT MAKES THE CONSUMER **WORSE**. THE GAP IS **TWO**, PENDING **2**, AND THE PULL IS **REQUIRED** — CARRIED OVER FROM BATCH 83, WHOSE THREE DATED FIRINGS ARE STILL UNDELIVERED.
 
 This block replaces the batch-83 record below it. Every figure was re-derived after the merge
@@ -7617,8 +7711,37 @@ D=/Users/n8/git/graph/_bmad-output/ai-dlc-update
 lids() { { grep -hE '^#{2,6} PC-' "$1" | sed -E 's/^#+ (PC-[A-Z0-9][A-Z0-9.-]*).*/\1/'
            grep -hE '^-? ?\*\*PC-[A-Z0-9]' "$1" | sed -E 's/^-? ?\*\*(PC-[A-Z0-9][A-Z0-9.-]*).*/\1/'
          } | sort -u; }
-lids "$D/push-candidate-ledger.md"         > /tmp/live.txt
-lids "$D/push-candidate-ledger.archive.md" > /tmp/arch.txt
+# READ THE LEDGER AT THE CONSUMER'S SPRINT TIP, NOT FROM ITS WORKING TREE, AND NOT FROM `main`.
+# Measured at batch 85, which got this wrong TWICE IN ONE SESSION and in opposite directions.
+# That consumer branches per sprint and merges back at the retro, so a candidate filed AFTER the
+# sprint's PR merges sits on the sprint branch, committed and pushed, and is absent from `main`
+# until the retro merge. The working file answers with whatever is CHECKED OUT at that instant,
+# which the consumer changes while a batch is running.
+#
+# Batch 85 read the entry in full from the working tree at 02:00 (sprint tree checked out), then
+# read 0 twice afterwards (main checked out) and recorded the filing first as UNCOMMITTED and then
+# as WITHDRAWN. Two instruments agreed on a wrong answer because both were pointed at the wrong
+# ref. The consumer session supplied the correction; nothing in this derivation could have.
+# `git log -S ... -- <path>` keyed on `main` fails the same way and is the other half of the trap.
+#
+# So: resolve the sprint branch, and read the ledger THERE with `git show`. Report both counts
+# when they differ -- the delta IS the set of filings not yet on main, which is exactly the set a
+# sweep is looking for.
+SB="$(git -C /Users/n8/git/graph for-each-ref --sort=-committerdate --format='%(refname:short)' \
+        'refs/heads/ai-dlc/feature/*' 'refs/heads/*sprint*' | head -1)"
+[ -n "$SB" ] || SB=main    # no sprint branch today; main is then the whole answer
+git -C /Users/n8/git/graph show "${SB}:_bmad-output/ai-dlc-update/push-candidate-ledger.md"         > /tmp/led_live.md
+git -C /Users/n8/git/graph show "${SB}:_bmad-output/ai-dlc-update/push-candidate-ledger.archive.md" > /tmp/led_arch.md
+lids /tmp/led_live.md > /tmp/live.txt
+lids /tmp/led_arch.md > /tmp/arch.txt
+# THE CONTROL THAT MAKES THE REF CHOICE VISIBLE: main's live set must be a SUBSET of the sprint
+# tip's, and the difference is the not-yet-merged filings. A non-zero left side means the sprint
+# branch is BEHIND main and `$SB` resolved to a stale branch -- re-derive it before reading on.
+git -C /Users/n8/git/graph show "main:_bmad-output/ai-dlc-update/push-candidate-ledger.md" > /tmp/led_main.md
+lids /tmp/led_main.md > /tmp/live_main.txt
+echo "sprint branch: $SB"
+comm -23 /tmp/live_main.txt /tmp/live.txt | wc -l   # control: must be 0 -- on main and NOT at the tip
+comm -13 /tmp/live_main.txt /tmp/live.txt           # the filings ahead of main. THIS is the new work.
 grep -rohE 'PC-[A-Z0-9][A-Z0-9-]+' docs/backlog.md docs/backlog.archive.md | sort -u > /tmp/filed.txt
 wc -l < /tmp/live.txt                                 # LIVE candidates -- the denominator
 wc -l < /tmp/arch.txt                                 # already closed upstream, NOT our workload
@@ -8371,8 +8494,9 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below), RANK THE UNFILED CANDIDATES,
-   THEN SCOPE BATCH 83 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED YOU.** Operator
+1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below) AGAINST THE CONSUMER'S SPRINT TIP,
+   RANK THE UNFILED CANDIDATES, THEN SCOPE BATCH 86 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED
+   YOU.** Operator
    instruction, given at batch 52. **If the one-liner was TYPED BY THE OPERATOR**, report the
    candidates with a marked recommendation and ask, as every batch before has. **If it ARRIVED
    FROM ANOTHER SESSION** — a cross-session message carrying `READ and FOLLOW …`, which is
@@ -8400,6 +8524,19 @@ so no block written before it changes verdict.
    residue — several are cheap, and `BL-222` is plausibly a one-line render on a PASS path.
    **Do not re-derive their findings**; each carries a bidirectional receipt and the measurement
    that produced it.
+
+   **BATCH 85's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.**
+   `PC-S310-HANDOFF-ENTRY-MARKER-COMMITTED-NEVER-DISCHARGES-CROSS-SESSION` shipped ALONE as
+   `v0.545.0`, closing `BL-229`, cited verbatim in the release commit message. It shipped alone
+   because `apply.sh` is a BOOTSTRAPPING file and the machinery slice — derived by RUNNING the
+   shipping `machinery_paths()`, 129 paths — contains both it and the renderer.
+
+   **AND RUN THE SWEEP AGAINST THE SPRINT TIP.** Batch 85's own lesson: that consumer files onto
+   its sprint branch after the sprint's PR has merged, so a filing is committed, pushed and ABSENT
+   from `main` until the retro merge. Reading the working file answers with whatever is checked out
+   at that instant, and the consumer changes that while a batch runs. Batch 85 recorded one live
+   filing as UNCOMMITTED and then as WITHDRAWN before the consumer session corrected it. The derive
+   block now resolves the branch itself and carries the subset control.
 
    **BATCH 84's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.**
    `PC-S310-GATE-ADJUDICATION-ROTATION-HAS-NO-BACKFILL-PATH-FOR-PRE-MECHANISM-SPRINTS` shipped
@@ -9343,13 +9480,21 @@ so no block written before it changes verdict.
    `^#{2,6}`. If those two disagree again, ask which of them changed before concluding anything
    about the consumer.
 
-   **THE BASELINE IS 50 LIVE CANDIDATES, 32 CITED, 18 UNFILED** — re-derived at batch 84's close
-   after the merge at `5b829554` (md5 `179790fe…`, archive 202, partition control 0, all four
-   presence controls 1, absence control 0). **DISCHARGED 2 / in-flight 30 / untouched 18, summing to
-   50 after subtracting the 4-id overlap; TERMINAL 86; discharged-but-invisible 1.** The consumer
-   wrote a verdict mid-batch but filed NO candidate — the ledger md5 is UNMOVED from batch 83's, so
-   the id set is unchanged and only batch 84's own citation moved cited 31 → 32 and unfiled 19 → 18.
-   **All 18 unfiled are adjudicated and the AVAILABLE residue is ZERO.** The paragraph below is the
+   **THE BASELINE IS 51 LIVE CANDIDATES, 33 CITED, 18 UNFILED** — re-derived at batch 85's close
+   **AT THE SPRINT TIP** (archive 202, partition control 0, all five presence controls 1, absence
+   control 0). **DISCHARGED 2 / in-flight 31 / untouched 18, summing to 51 after subtracting the
+   4-id overlap; TERMINAL 86; discharged-but-invisible 1.** **All 18 unfiled are adjudicated and
+   the AVAILABLE residue is ZERO.**
+
+   **THAT 51 READS 50 AT `main`, AND THE ONE-CANDIDATE DIFFERENCE IS BATCH 85's WHOLE LESSON.** The
+   consumer files onto its sprint branch once that sprint's PR has merged, so the filing is
+   committed and pushed and invisible at `main` until the retro merge. Batch 85 read it at 02:00
+   from the working tree (sprint checked out), read 0 twice afterwards (main checked out), and
+   recorded it first as UNCOMMITTED and then as WITHDRAWN — two instruments agreeing on a wrong
+   answer because both pointed at the wrong ref. **The md5 line below is a working-tree reading and
+   inherits that defect**: it answers about whatever is checked out, so a moved md5 can mean the
+   consumer switched branches rather than wrote anything. Take the id SET from the sprint tip, as
+   the derive block now does; use the md5 only as a secondary tell and say which ref it came from. The paragraph below is the
    batch-81 reading and records how the counts moved: the batch-81 baseline was 75 / 55 / 20,
    re-derived at that batch's close
    after the merge at `732db5a5` (md5 `21cbc866…`, archive 175, partition control 0, all four
