@@ -55,6 +55,53 @@ have gone green, and would have reported "still open" forever.
 never the word anywhere in prose, because an entry that merely discusses landing something is
 not a closed entry.
 
+## BL-230 — `reconcile-emit-report`'s E1 kill-set arm fails intermittently under the pool, and its success message describes a different assertion than the one it makes
+
+**Found 2026-09-11** during batch 85, when E1 failed a gate run on a branch whose change cannot
+reach it. Two separate defects in one arm; the second is what makes the first expensive.
+
+**THE FLAKE.** `v_kill E1 "V-R V-U"` (`run.sh:1129`) asserts a mutant moves EXACTLY two worlds. On
+one 12-way pool run it reported `[V-R V-U V-HC]` and failed; the same tree run solo from the repo
+root passes with E1 green, and a second pool run passed. **It is not caused by the change that was
+in flight**: `reconcile-emit-report` never executes `apply.sh` — `grep -cE 'bash .*apply\.sh|\$APPLY'`
+returns **0** against a control of **24** in `apply-restamp-worklist` — and its scorer
+(`v_render`, `:614`) calls `emit-report.sh` alone. The causal path from the branch's two new
+`say WORKLIST` sites to the region V-HC edits is severed.
+
+**WHY V-HC IS THE PLAUSIBLE UNSTABLE MEMBER.** `v_kill` scores by whole-world set difference, so one
+world with an unstable score pollutes the set. V-HC is built by deleting the first
+`^HARD-UNREGISTERED-CORE-DRIFT` line from a rendered region, and the arm beside it at `:1102` exists
+because *"the difference is being taken over RAW lines"* is its known failure mode. The fixture's own
+`CONTROL(V)` arm already anticipates slot-dependent instability here, in as many words: the control
+and shipped copies *"were computed in different parallel slots, so it is also the arm that would
+catch the scoring racing with itself."*
+
+**THE SECOND DEFECT, AND IT IS THE ONE WITH A RECEIPT.** E1's success message reads *"the THREE
+worlds that read 3 go red and no other"* while its assertion passes `"V-R V-U"` — **two**. Derived:
+the assertion set has 2 members, the message says three. One of them is wrong, and a reader
+debugging a failure reads the message. This is `verification-discipline.md`'s "text about a program
+is not the program", inside an arm whose whole subject is set membership.
+
+**WHY THIS IS FILED RATHER THAN FIXED HERE.** The two defects have different owners. The message/
+assertion mismatch is a one-line correction, but WHICH one is wrong is not derivable from the arm —
+it needs whoever knows whether a third world should be in that set, and if one should, the arm has
+been under-asserting since it was written. The flake needs the pool to reproduce and may be a
+property of `v_diffset` rather than of E1.
+
+**The cost is misattribution, and it was nearly paid.** A gate-green branch was blocked by this arm
+and the first hypothesis was that the change caused it. Two measurements and an adversarial pass
+were spent proving otherwise. **An intermittent arm on a shared fixture charges its cost to whichever
+change happens to be in flight**, which is the failure this entry exists to stop repeating.
+
+**Receipt limits, stated.** The receipt scores ONLY the message/assertion mismatch, because that is
+the half that is mechanically checkable: it counts the worlds in E1's `v_kill` argument and refuses
+while the adjacent `ok` line says "three". **It does not and cannot score the flake** — an
+intermittent failure has no deterministic receipt, and a receipt that ran the fixture once would
+report green on the common case. Closing this needs the mismatch fixed AND a stated finding about
+the flake, and the second half is not receipt-enforceable. Exit 9 if the arm or its message is gone.
+
+verify: sh f=core/fixtures/reconcile-emit-report/run.sh; [ -f "$f" ] || exit 9; l=$(grep -n 'v_kill E1 ' "$f" | head -1 | cut -d: -f1); [ -n "$l" ] || exit 9; set=$(sed -n "${l}p" "$f" | sed -E 's/.*v_kill E1 "([^"]*)".*/\1/'); [ -n "$set" ] || exit 9; n=$(printf '%s' "$set" | wc -w | tr -d ' '); msg=$(sed -n "$((l+1))p" "$f"); grep -q 'three worlds' <<<"$msg" || exit 0; [ "$n" -eq 3 ] && exit 0; exit 1
+
 ## BL-099 — the exec-bit audit is one-directional, so a consumer file that upstream STOPPED shipping executable is never reported
 
 **`apply.sh`'s EXEC-BIT AUDIT is LEVEL-triggered and covers exactly one of the two directions
