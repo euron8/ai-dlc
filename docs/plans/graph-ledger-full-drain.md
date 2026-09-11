@@ -37,14 +37,15 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
-### BATCH 86 SHIPPED AS `v0.548.0`, ONE RELEASE CARRYING THREE PC-BACKED SUBJECTS — AND **THE SWEEP'S OWN SUBSET CONTROL FIRED, BECAUSE THE CONSUMER'S SPRINT BRANCH AND `main` HAVE EACH DIVERGED FROM THE OTHER AND NEITHER REF IS THE LIVE SET.** THE FILED REMEDY FOR THE HEADLINE CANDIDATE WAS REFUTED BY BUILDING IT: READ LITERALLY IT ACQUITS **129 OF 129** MACHINERY PATHS, A TOTAL DISARM OF THE ARM IT MEANS TO NARROW. MY OWN FIX THEN CARRIED **TWO** DEFECTS, BOTH FOUND BY DRIVING IT AND NEITHER BY READING IT. THE GAP IS **ONE**, PENDING **4**, AND THE PULL IS **NOT REQUIRED** — THE CONSUMER PULLED TO `0.547.0` MID-BATCH AND THE BOOTSTRAPPING HAZARD IS MEASURED CLEAN FOR THIS RANGE.
+### BATCH 86 SHIPPED AS `v0.548.0`, CORRECTED BY `v0.548.1`, ONE RELEASE CARRYING THREE PC-BACKED SUBJECTS — AND **THE SWEEP'S OWN SUBSET CONTROL FIRED, BECAUSE THE CONSUMER'S SPRINT BRANCH AND `main` HAVE EACH DIVERGED FROM THE OTHER AND NEITHER REF IS THE LIVE SET.** THE FILED REMEDY FOR THE HEADLINE CANDIDATE WAS REFUTED BY BUILDING IT: READ LITERALLY IT ACQUITS **129 OF 129** MACHINERY PATHS, A TOTAL DISARM OF THE ARM IT MEANS TO NARROW. MY OWN FIX THEN CARRIED **TWO** DEFECTS, BOTH FOUND BY DRIVING IT AND NEITHER BY READING IT. THE GAP IS **ONE**, PENDING **4**, AND THE PULL IS **NOT REQUIRED** — THE CONSUMER PULLED TO `0.547.0` MID-BATCH AND THE BOOTSTRAPPING HAZARD IS MEASURED CLEAN FOR THIS RANGE.
 
 This block replaces the batch-85 record below it. Every figure was re-derived after the merge
 against the working tree with controls in the same invocation; re-derive them again rather than
 reading them.
 
-**`VERSION` IS `0.548.0`, SO BATCH 87 RELEASES AS `0.549.0`.** Re-derive `VERSION` and add one.
-Batch 86 merged ONCE, at `e26a1c7b` (PR #706), carrying three candidates in one release:
+**`VERSION` IS `0.548.1`, SO BATCH 87 RELEASES AS `0.549.0`.** Re-derive `VERSION` and add one.
+Batch 86 merged TWICE — `v0.548.0` at `e26a1c7b` (PR #706) and the correction `v0.548.1` at
+`968d4544` (PR #708) — carrying three candidates in one release:
 `PC-S311-SELF-UPDATE-FIXTURES-ARM-3-PREWRITTEN-HAS-NO-SPLIT-STAMP-SUPPRESSION`,
 `PC-S310-CHECK5-GATE-LOG-HEADER-CONVENTION-UNDOCUMENTED-AND-UNSATISFIABLE`, and the
 `PC-S310-RETRO-PERSONA-MARKER-VOCABULARY-NOT-DOCUMENTED-IN-STEP-FILE` /
@@ -196,6 +197,25 @@ path-name exemption — fix-shaped, wrong, and invisible to a prose attack — w
 Part G14b fails against it, because G14b and G14c assert over ONE path and differ only in the
 recorded `skill_commit`. **Make the acquitted case and the control case use the SAME path**; a
 name-keyed exemption then has to produce two verdicts for one name.
+
+**AND A FOURTH HAND FOUND A THIRD WRONG FIGURE AFTER THE MERGE, WHICH COST `v0.548.1`.** The
+`0.548.0` entry said Check 5 SKIPs on a consumer with "8 entries under its own `## Gate:` shape, 0
+under this one". Check 5 reads ONE path — `_bmad-output/implementation-artifacts/gate-log.md` — and
+on that consumer it is 11 bytes with ZERO entries of either shape, because the log is rotated per
+sprint. The 8 came from ARCHIVED per-sprint logs the check never opens. **The finding held and the
+evidence was for a different claim than the one beside it.** That is three corrected figures in one
+band, every one arithmetically right about the wrong set: **ASK WHICH POPULATION A NUMBER WAS TAKEN
+OVER, and say it in the sentence that carries the number.**
+
+**TWO HANDS DISAGREED ABOUT A BLOCKER AND THE ONE THAT DROVE THE PROGRAM WAS RIGHT.** One reported
+that a recorded `skill_commit` of `theirs^` acquits "3 of 3 eligible rows including `apply.sh`",
+which would make the new exemption a disarm. Driven against the real gate record: `apply.sh` fails
+ARM 3's FOURTH conjunct — its recorded digest is not the theirs blob — so the arm never reaches it
+under ANY recorded value; only 2 rows are eligible and the consumer's true stamp already acquits
+both. Rows a forged value could newly acquit: **0**. That hand said in its own report that it had
+REIMPLEMENTED the predicate rather than driving it, and the reimplementation dropped a conjunct;
+the hand that drove the shipping runner withdrew its matching note unprompted. **A second
+implementation of a predicate is an opinion; the thing that runs the input is the answer.**
 
 **THE HANDS' EARLIER SILENCE WAS AN INSTRUMENT DEFECT, NOT A CHOICE.** One reported it had NO
 `SendMessage` tool in its session, which is why two of its drains arrived empty. All three payloads
@@ -8613,7 +8633,8 @@ so no block written before it changes verdict.
    `PC-S310-CHECK5-GATE-LOG-HEADER-CONVENTION-UNDOCUMENTED-AND-UNSATISFIABLE` and the
    `PC-S310-RETRO-PERSONA-MARKER-VOCABULARY-NOT-DOCUMENTED-IN-STEP-FILE` /
    `PC-S310-RETRO-STEP6A-COMMIT-LIST-OMITS-AMBIENT-SESSION-LOGS` pair shipped as ONE release,
-   `v0.548.0` at `e26a1c7b` (PR #706), all four cited verbatim in the release commit message,
+   `v0.548.0` at `e26a1c7b` (PR #706), corrected by `v0.548.1` at `968d4544` (PR #708), all four
+   cited verbatim in the release commit message,
    closing `BL-231`, `BL-232` and `BL-233`, all three rotated. They batched because no receipt is
    closed by a sibling's fix and the range's only bootstrapping files are the two this batch's own
    subject required. **The filed remedy for `PC-S311` was REFUTED by building it** — keyed on the
