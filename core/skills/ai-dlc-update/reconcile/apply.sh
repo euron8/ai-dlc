@@ -1703,6 +1703,19 @@ fi
 transient_ignore_row() {
 TI_RENDERER="$CONSUMER/scripts/ai-dlc/sync-transient-ignore.sh"
 TI_SCHEMA="$CONSUMER/.claude/schemas/pipeline-state-paths.json"
+# GATED ON THE DECLARATION, NOT ON THE RENDERER, AND THE DIFFERENCE IS A MEASURED FALSE POSITIVE.
+# The first cut keyed its "not a silent skip" branch on the RENDERER's absence, mirroring the hook
+# row above. That row's absent-branch fires only on a consumer whose validator is missing, which is
+# rare; this one fired on EVERY consumer predating the mechanism, because a tree with neither half
+# is not a defect -- it is a tree this release has nothing to say about. It failed
+# `apply-restamp-worklist`'s C4, whose consumer asserts ZERO hand-back rows, and that fixture was
+# right: a row on that tree is noise an operator cannot act on.
+#
+# The declaration and the renderer shipped in the same release, so "schema present, renderer
+# absent" is a real and reportable split -- the declaration arrived and the thing that renders it
+# did not -- while "neither present" is simply an older consumer. Gate on the schema and the two
+# states stop reading alike.
+[ -f "$TI_SCHEMA" ] || return 0
 if [ -f "$TI_RENDERER" ]; then
   ti_out="$(bash "$TI_RENDERER" --check --root "$CONSUMER" 2>&1)"; ti_rc=$?
   if [ "$ti_rc" = "1" ]; then
