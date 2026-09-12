@@ -282,7 +282,9 @@ PROSE = re.compile(r"(?<![\w-])(owed|still owed|deferred|remediation|follow-?up|
 # cue occurrences all sit inside a resolvable `OWED-<id>` token. That removes 0 of 29, because a
 # cue occurrence INSIDE such a token is unconstructible: the `(?![\w-])` lookahead above already
 # refuses it. Control: `OWED-DEBT` and `OWED-DEFERRED-X` — ids built entirely out of cue words —
-# yield zero cue matches, while `debt deferred` standing alone yields two. The citation shape is
+# yield zero cue matches, while `debt deferred` standing alone yields two. The surviving half of
+# that filing — a STANDALONE cue beside a citation — is the fifth class below, and it is keyed on
+# the row rather than on the token for exactly the reason stated here. The citation shape is
 # real, but the cue is always a SEPARATE word elsewhere in the reason, so the filing named a
 # mechanism that cannot fire.
 NEGATED = re.compile(r"\bno\b|\brather than\b|\binstead of\b", re.I)
@@ -358,6 +360,56 @@ def cue_denied(reason, m):
 # one arm up. The derivation sits BELOW the loop header rather than beside `owed_entries`
 # because the loop is its only consumer, and because an absorption receipt that reads this arm's
 # body is otherwise blind to a fix made just above it.
+#
+# A FIFTH CLASS, AND IT IS THE ONE THAT PROMPTS A WRONG WRITE RATHER THAN A GLANCE. The four
+# above cost the reader a look. This one costs the reader an ACT: the remedy this report prints
+# is "re-record each with an `owed` object", and a row whose reason CITES an obligation some
+# other row already declares is told to declare a SECOND id for the same work.
+#
+# THE HANDLE IS THE DECLARING ROW ITSELF, NOT THE OPEN ARM'S OUTPUT, and getting that backwards
+# is how this acquittal gets keyed wrongly. An `owed.id` is the only digest-independent handle
+# in this register — the paragraph opening this file's contradicts-core arm says so — and it
+# stays addressable through its discharge: `owed.id -> closes_owed` is a join over the whole
+# append-only history, so the declaring row and the row that paid it are both findable by id
+# long after the OPEN arm stops listing it. A citing row therefore names work that is already
+# ON THE RECORD under an id, and the remedy would put it on the record a second time under a
+# different one.
+#
+# SO THE JOIN IS AGAINST EVERY DECLARED id, DISCHARGED OR NOT, AND `declared - closed` WAS
+# CONSIDERED AND REFUSED. Telling an adjudicator to "re-record with an `owed` object" a row
+# citing a CLOSED id re-opens finished work under a new id, which is the same wrong write one
+# step worse. This also matches the scope of the entry-scoped acquittal above it, which turns
+# on `owed_entries` — declared ids regardless of closure — so the two acquittals in this loop
+# cannot disagree about what counts as declared. Measured on the reference consumer: all 36
+# declared ids are discharged there, so `declared - closed` is EMPTY and that key is a no-op,
+# 7 rows reported before and after; the committed key takes it to 6.
+#
+# RESOLVABILITY IS A JOIN AGAINST `declared`, DERIVED, NEVER A TOKEN GRAMMAR. Spelling
+# `OWED-[A-Za-z0-9-]+` here would acquit a citation of NOTHING — a row that invents an id no row
+# declares has no handle either, and is exactly the genuine offender this arm exists to name.
+# `declared` is the OPEN arm's own key, so the acquittal and that arm cannot disagree about
+# which ids the register declares. With no declarations the pattern is None and the arm is
+# unchanged.
+#
+# ROW SCOPE, NOT CLAUSE SCOPE, AND THE TABLE IS WHY. Both keys were built on copies and scored
+# on the only register that exists — the reference consumer's, 471 rows, 44 declaring rows, 36
+# distinct ids — and on a seven-row seed register, at OCCURRENCE grain as the `instead of`
+# measurement above requires. Of 19 cue occurrences on the 189 candidate rows, 7 survive
+# `cue_denied`; CLAUSE scope acquits 0 of those 7 and ROW scope acquits 1. The single mover is
+# `checks/gate-validation-push-914.md`, whose reason cites `OWED-S330-914-RETRO-SCOPE` —
+# declared by a row on `checks/gate-validation-push.md`, the entry it was split out of — while
+# its surviving cue is `remediation routing`, a DIFFERENT clause describing core's delta. Clause
+# scope cannot reach it, so on the live corpus it is a fix that fixes nothing, and a check that
+# moves no cell is the vacuous guard `mechanism-design.md` refuses. Row scope's cost is measured
+# and stated rather than assumed: it silences a row that cites one obligation and states a
+# SECOND in prose, which the seed register seeds as its discriminating case. That is the same
+# exposure the entry-scoped acquittal above already carries and states, at the same scope and on
+# the same ground — a cited obligation is on the record under an id, and putting it there twice
+# under two ids is the failure being fixed.
+CITED = (re.compile(r"(?<![\w-])(?:%s)(?![\w-])"
+                    % "|".join(re.escape(i) for i in sorted(declared, key=len, reverse=True)))
+         if declared else None)
+
 undeclared = []
 owed_any_entry = {e for _c, e in owed_entries}
 for r in rows:
@@ -368,6 +420,15 @@ for r in rows:
     if r.get("entry") in owed_any_entry:
         continue
     reason = r.get("reason", "") or ""
+    # A CITATION OF A DECLARED id IS A HANDLE, so this row's prose is a REFERENCE to an
+    # obligation some row of this register declares — discharged or not — and not an undeclared
+    # one. The handle is that declaring row, findable by id through the whole append-only
+    # history; it is NOT this run's OPEN list, which drops an id the moment it is paid. Sited
+    # here rather than
+    # inside the cue filter deliberately: the discount is per ROW because the handle is, and the
+    # `hits` comprehension below is the per-OCCURRENCE rule, which this is not.
+    if CITED is not None and CITED.search(reason):
+        continue
     # The surviving cues, not every cue. What is reported is what still reads as an obligation,
     # so the `cues:` column names the words that actually earned the row its place.
     hits = sorted({m.group(0).lower() for m in PROSE.finditer(reason)

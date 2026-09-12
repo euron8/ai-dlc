@@ -4223,7 +4223,104 @@ before the check ships. The reference consumer carries no live layer-debt regist
 **Tiered DEFECT.** Consumer-facing; the arm ships in `core/scripts/`. Its consequence is a
 duplicate obligation filed under a new id, which is a wrong WRITE prompted by a false finding.
 
-verify: sh set -e; V=core/scripts/audit-layer-debt.sh; [ -f "$V" ] || exit 9; d=$(mktemp -d); trap 'rm -rf "$d"' EXIT; printf '{"clause":"LC-E4","entry":"e1","subject_digest":"x","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"The narrowing is owed under OWED-X."}\n{"clause":"LC-E4","entry":"e2","subject_digest":"y","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","owed":{"id":"OWED-X","what":"w"}}\n' > "$d/r.jsonl"; o="$(bash "$V" --register "$d/r.jsonl" 2>/dev/null)" || true; printf '%s' "$o" | grep -q 'OPEN (1)' || exit 9; printf '%s' "$o" | grep -q 'UNDECLARED (1)' && exit 1; exit 0
+**THE CORPUS BLOCKER HAS EXPIRED, AND IT WAS THE ONLY THING HOLDING THE FIX.** The paragraph above
+says the reference consumer carries no live register. It carries one now:
+`_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl`, **471 rows**, 44 of them declaring
+an `owed.id` over 36 distinct ids. Derived by running the shipping arm against it, control in the
+same invocation: 26 tracked `.jsonl` files in that consumer, and an id no row carries returns 0
+where the cited one returns 1 declaring row and 3 mentions. So the measurement the entry deferred
+is now available, and it is the table below.
+
+**WHICH CLAIMS SURVIVE.** The headline survives — a citing row was filed in the same bucket as a
+genuine offender. The refutation of the original filed remedy survives and is now stated in the
+script beside the fix. **The corpus claim is dead.** **And the prescription in bold above is
+REFUTED BY MEASUREMENT**: "ADJACENT TO" was read as CLAUSE scope, built, and it moves NOTHING on
+the only register that exists.
+
+**FALSE-POSITIVE SET, MEASURED AT OCCURRENCE GRAIN** as this arm's own header requires, because a
+row-grain null hides every misfire that was outvoted. The arm loops 189 candidate rows carrying 19
+cue occurrences, of which 7 survive `cue_denied` and are reported. **Exactly 1 of those 7 is a
+false positive of this class**: `extensions/checks/gate-validation-push-914.md` (register line
+425), whose reason cites `OWED-S330-914-RETRO-SCOPE` — declared by a row on
+`extensions/checks/gate-validation-push.md`, the entry it was split out of — while its surviving
+cue is `remediation`, in the clause `and remediation routing` describing core's delta. The other 6
+cite no resolvable id at all and are untouched by either key.
+
+**THAT CITED ID IS DISCHARGED, AND ON THIS REGISTER EVERY DECLARED ID IS.** Derived with its
+control in the same invocation: 36 declared ids, 37 closed ids, **declared AND NOT closed = 0**,
+declared AND closed = 36, closed-but-never-declared = 1 (`OWED-S309-921-FAST-TRACK-PREDICATE`). So
+`OPEN (0)` on the live register, and **a key of `declared - closed` would acquit nothing at all
+there** — 7 → 7, a measured no-op. The committed key joins every declared id regardless of
+closure, taking the live corpus **7 → 6**. `declared - closed` was built and refused: an
+adjudicator told to "re-record with an `owed` object" a row citing a CLOSED id re-opens finished
+work under a new id, which is the wrong write this entry exists to prevent, one step worse. It is
+also the scope `owed_entries` already uses one acquittal up, so the two cannot disagree about what
+counts as declared.
+
+**ON THE LIVE REGISTER K2 AND THE ANY-TOKEN MUTANT PRODUCE THE IDENTICAL SET** — both 6 rows,
+identical line numbers. The register is not blind to unresolvable tokens in general (4 of the 24
+distinct `OWED-` tokens in reason prose resolve to nothing), but **only ONE candidate row carries
+an `OWED-` token at all**, and its token is resolvable; the rows that would separate the two keys
+number **0**. So the over-broad mutant is killed by seed s2 and by nothing in the real data, and
+K1 is a measured no-op on real data. Both facts are why the seeds, not the corpus, are what
+discriminate here.
+
+**BOTH KEYS WERE BUILT ON COPIES AND SCORED BEFORE EITHER WAS COMMITTED.** K1 = CLAUSE scope (a
+resolvable token in the cue's own clause, bounded by `CLAUSE_END`); K2 = ROW scope (the reason
+cites one anywhere).
+
+    input                                          HEAD      K1 (clause)   K2 (row)
+    consumer live register, rows reported            7            7            6
+    consumer live register, occurrences acquitted    -            0            1
+    seed s1  cue beside a RESOLVABLE citation     reported   ACQUITTED    ACQUITTED
+    seed s2  citation of an id nothing declares   reported    reported     reported
+    seed s3  genuine, no citation                 reported    reported     reported
+    seed s4  cue only INSIDE the token            silent      silent       silent
+    seed s5  one cited + a SECOND stated in prose reported    reported    ACQUITTED
+    seed s6  the declaring row, OPEN (1)           OPEN(1)     OPEN(1)      OPEN(1)
+    seed s7  cue denied by `no` beside a token     silent      silent       silent
+    seed s8  cue beside a DISCHARGED citation     reported    ACQUITTED    ACQUITTED
+
+**K2 IS COMMITTED AND K1 IS REFUSED, on the middle row.** K1 acquits **0 of 7** surviving
+occurrences on the live corpus: the cue and the citation sit in different sentences on the one row
+that matters, which is what the entry's own subject description could not see. A check that moves
+no cell is the vacuous guard `mechanism-design.md` refuses, and it would have shipped reading
+exactly like a fix. **K2's cost is the s5 row and it is stated rather than assumed** — a row citing
+one obligation and stating a second in prose goes silent. That is the same exposure the
+entry-scoped acquittal already in the arm carries and declares, at the same scope and on the same
+ground: a cited obligation is on the record under an id, findable through the whole append-only
+history by the `owed.id -> closes_owed` join, and putting it on the record twice under two ids is
+the failure being fixed.
+
+**THE OVER-BROAD NON-FIX BL-227 NAMES IS BUILT AND KILLED.** BL-227 measured this entry's old
+receipt closing on "blanket acquittal of any row citing any `OWED-` token". That variant is mutant
+M1 in the fixture, and seed s2 kills it: a row inventing an id nothing declares has no handle
+either, so the join is against `declared` — the OPEN arm's own key — and never against an `OWED-`
+spelling. Three more mutants sit beside it: M2 joins against `closes_owed` instead of `owed.id`,
+M4 is the refused `declared - closed` key, and M3 disables the fix. Two seeds exist solely to give
+M2 and M4 subjects no other mutant moves — a citation of an id that is closed and never declared
+(without it M2 and M3 moved an identical four cells), and a citation of an id that was declared
+and then paid.
+
+**Receipt scored against eight builds, every mutation carrying a `cmp -s` control that it applied.**
+
+    HEAD                                       1
+    the committed fix (K2)                     0
+    K1  clause scope                           1   (s5 present fails)
+    M1  acquit on ANY OWED- token              1   (s2 present fails)
+    M2  join against closes_owed               1
+    M3  the fix disabled (`if False`)          1
+    M4  the refused `declared - closed` key    1   (s8 present fails)
+    a bare comment naming the subject          1
+    no subject present                         9
+
+**The receipt separates the two candidate keys**, which an earlier cut of it did not: it carries
+the s5 row (one cited obligation, a second stated in prose) and the s8 discharged-citation pair,
+and asserts the reported set by entry name rather than a count. `verification-discipline.md` holds
+that a receipt accepting two candidate fixes has established neither — this one now accepts
+exactly one. The fixture goes red on K1 and on all four mutants, each with a distinct fingerprint.
+
+verify: sh set -e; V=core/scripts/audit-layer-debt.sh; [ -f "$V" ] || exit 9; d=$(mktemp -d); trap 'rm -rf "$d"' EXIT; B='"clause":"LC-E4","subject_digest":"x","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z"'; printf '{%s,"entry":"e1","reason":"The narrowing is owed under OWED-X."}\n{%s,"entry":"e2","owed":{"id":"OWED-X","what":"w"}}\n{%s,"entry":"e3","reason":"The narrowing is owed under OWED-NOPE."}\n{%s,"entry":"e4","reason":"A narrowing is still owed here."}\n{%s,"entry":"e5","reason":"Filed under OWED-X. A second narrowing is still owed."}\n{%s,"entry":"e8","reason":"The narrowing is owed under OWED-C."}\n{%s,"entry":"e9","owed":{"id":"OWED-C","what":"w2"}}\n{%s,"entry":"e10","reason":"Debt discharged.","closes_owed":["OWED-C"]}\n' "$B" "$B" "$B" "$B" "$B" "$B" "$B" "$B" > "$d/r.jsonl"; bash "$V" --register "$d/r.jsonl" --json > "$d/o.json" 2>/dev/null || exit 9; python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); u=[x["entry"] for x in d["undeclared"]]; o=sorted(k["id"] for k in d["open"]); sys.exit(9) if (d["rows"]!=8 or d["malformed"] or o!=["OWED-X"]) else sys.exit(0 if (u==["e3","e4"]) else 1)' "$d/o.json"
 
 ## BL-219 — a transcript corpus that is PRESENT but lacks the citation fails CLOSED, while one that is ABSENT fails OPEN
 
