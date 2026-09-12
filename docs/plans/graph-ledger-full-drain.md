@@ -100,11 +100,11 @@ row is a finding the consumer cannot see and it moves no verdict today. Bootstra
 the range: `reconcile/ledger-reverify.sh` (release 1), `reconcile/apply.sh` gains one worklist
 row (release 2); zero mode-only changes.
 
-**THREE FIXTURE DIRECTORIES ARE UNMAPPED IN THE READ-SET MAP** and run on every push:
-`agent-definition-render` (new this batch), `fanout-payload-channel`,
-`mandatory-rules-snapshot-position`. The deriver needs root; the operator runs
-`sudo bash core/scripts/derive-fixture-readsets.sh --list "agent-definition-render fanout-payload-channel mandatory-rules-snapshot-position"`
-and commits the map.
+**THE READ-SET MAP WAS RE-DERIVED BY THE OPERATOR THIS BATCH** for `agent-definition-render`
+and `mandatory-rules-snapshot-position`. `fanout-payload-channel` traces no reads and stays
+unmapped, as do `check-h1-recursion`, `check-manifest-bypass` and `lib`; the runner treats an
+unmapped directory as run-always, which is safe. Derive the unmapped set, never quote it:
+`comm -23 <(ls -d core/fixtures/*/ | sed 's#core/fixtures/##; s#/##' | sort) <(grep -v '^#' .ai-dlc-fixture-readsets.tsv | cut -f1 | sort -u)`.
 
 **THE READIEST NO-`PC` WORK** is now `BL-224`, `BL-221`, `BL-223`, `BL-220`, `BL-219`, `BL-218`.
 Read `BL-227` first. `BL-019`'s remaining half — the write sits above the effort decision — is
