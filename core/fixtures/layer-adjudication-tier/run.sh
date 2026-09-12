@@ -226,6 +226,398 @@ else
 fi
 rm -rf "$NGC"
 
+# --- Part 3c: the SPENT note reaches the WARN title-join row too (LC-E19) ---------------------
+#
+# THE DEFECT PART 3b CANNOT SEE. Every arm above reads the note through a field-1 match pinned to
+# `HARD-LAYER-ADJUDICATION-MISSING`, which is the one row `adj_check` emits — so the whole of Part
+# 3b passes against a build in which `adj_spent_note` has exactly one call site and every other
+# row that prescribes a digest-keyed verdict prints an undecided-looking message forever. An
+# oracle hard-pinned to the one covered code cannot fail on an uncovered one: this repo's
+# "a check that cannot fire reads exactly like one that passed", in a fixture.
+#
+# LC-E19 IS THAT UNCOVERED ROW AND IT IS NOT MOOT FOR BEING AT WARN. It prescribes an entry
+# disposition AND a register record keyed on the entry's own bytes in one sentence, so an
+# operator following it in order spends the verdict they just wrote.
+#
+# ITS OWN CONSUMER WORLD, and a FRESH entry rather than Part 10's dual-keyed one, so the LC-E19
+# row is the ONLY keyed row this entry produces. Reusing the dual-keyed entry would key the same
+# subject at LC-E4 as well, and a note appearing anywhere in that entry's rows could then be the
+# HARD row's — the arm would pass against exactly the one-call-site build it exists to reject.
+# The entry hooks a core file whose OTHER section moved, and names the section that did NOT, so
+# it takes no hook drift; every count assertion in Parts 0-9 is keyed to $CONS having one entry.
+TMCONS="$ROOT/consumer-titlematch"
+rm -rf "$TMCONS"
+cp -R "$CONS" "$TMCONS"
+TMREG="$TMCONS/_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl"
+rm -f "$TMREG"
+TMENTRY=".claude/skills/ai-dlc/extensions/titlematch.md"
+cat > "$TMCONS/$TMENTRY" <<'TMEOF'
+---
+kind: qualifier
+hooks: steps/demo.md
+extends: '#Alpha gate'
+position: append
+reason: seeded entry whose heading names the core section that did NOT move across the range, so its only keyed row is the LC-E19 title-join
+---
+
+## Alpha gate
+
+Body this entry adds under a heading core already has.
+TMEOF
+git -C "$TMCONS" add -A >/dev/null 2>&1
+git -C "$TMCONS" commit -qm "seed the title-join entry" >/dev/null 2>&1
+
+tm_run()    { bash "${1:-$DRIFT}" "$DIST" "$BASE" "$THEIRS" "$TMCONS" 2>/dev/null; }
+tm_detail() { tm_run "${1:-$DRIFT}" | awk -F'\t' -v e="$TMENTRY" \
+                '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2==e {print $4; exit}'; }
+tm_rows()   { tm_run | awk -F'\t' -v e="$TMENTRY" \
+                '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2==e {c++} END{print c+0}'; }
+tm_record() { # $1 digest, [$2 clause, default LC-E19] -> one record for this entry
+  printf '{"clause":"%s","entry":"%s","subject_digest":"%s","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"seeded"}\n' \
+    "${2:-LC-E19}" "$TMENTRY" "$1"
+}
+
+# (a) PRECONDITION. One row, and a key in it — the note is only meaningful where a verdict can be
+# recorded at all, and an unkeyable row must never acquire it.
+TMROWS="$(tm_rows)"
+TMDIG="$(tm_detail | grep -o 'subject_digest [0-9a-f]\{40\}' | awk '{print $2}' | head -1)"
+if [ "$TMROWS" -eq 1 ] && [ ${#TMDIG} -eq 40 ]; then
+  ok "Part 3c precondition: the title-join entry produces exactly 1 EXTENSION-TITLE-MATCHES-CORE row carrying a 40-hex subject_digest — a verdict is recordable against it, so a spent one is reachable"
+else
+  bad "Part 3c precondition failed: $TMROWS title-join row(s) and digest '$TMDIG'. Without one keyed row every arm below would measure the wrong thing"
+fi
+
+# The record has to be READ, or (b) below re-fires for the trivial reason that nothing ever
+# cleared. Stated as its own arm rather than assumed: this is the Part-2 property at LC-E19.
+tm_record "$TMDIG" > "$TMREG"
+if [ "$(tm_rows)" -eq 0 ]; then
+  ok "Part 3c precondition: an LC-E19 verdict recorded under that digest takes the row to 0, so the re-fire below is the digest moving and not a register nobody reads"
+else
+  bad "Part 3c precondition failed: an LC-E19 record under the row's own digest left $(tm_rows) row(s). The re-fire below would then prove nothing about spending a verdict"
+fi
+
+# (b) THE SUBJECT. Follow the row in the order it lists — record, then make the edit it prescribes
+# — and the row must say the verdict was SPENT rather than never written.
+printf '\n' >> "$TMCONS/$TMENTRY"
+if [ "$(tm_rows)" -eq 1 ]; then
+  ok "Part 3c: entry body +1 byte after recording — the title-join row fires again under the new key"
+else
+  bad "Part 3c: the entry changed and the LC-E19 row did not re-fire ($(tm_rows) row(s)), so its verdict is keyed to the path rather than the subject state"
+fi
+case "$(tm_detail)" in
+  *"SPENT verdict rather than an unanswered one"*)
+    ok "Part 3c: the re-fired LC-E19 row names the prior verdict as SPENT — the note reaches the WARN row that prescribes the edit, not only the HARD row" ;;
+  *)
+    bad "Part 3c: the re-fired LC-E19 row is byte-indistinguishable from one that was never adjudicated. An operator who followed this row's own instruction in order spent their verdict and is told only to record another: $(tm_detail | tail -c 120)" ;;
+esac
+
+# (c) CONTROL 1 — no prior record, same dirty entry. A note printed unconditionally tells the
+# operator nothing and accuses every first adjudication of spending something.
+mv "$TMREG" "$TMREG.hold"
+case "$(tm_detail)" in
+  *"SPENT verdict rather than an unanswered one"*)
+    bad "Part 3c control 1: with the register held aside the same dirty entry still claims a verdict was spent — the note is unconditional on this row" ;;
+  *)
+    ok "Part 3c control 1: with no prior verdict recorded the same dirty entry carries no spent-verdict note" ;;
+esac
+mv "$TMREG.hold" "$TMREG"
+
+# (d) CONTROL 2 — THE ONE THAT DISCRIMINATES, for the reason Part 3b's second control states: with
+# the register cleared, a helper appending its note unconditionally prints nothing anyway. Prior
+# record PRESENT and entry CLEAN is ordinary cross-pull expiry, and that is the state a missing
+# dirty-guard turns into a false accusation on every long-lived entry.
+git -C "$TMCONS" add -A >/dev/null 2>&1
+git -C "$TMCONS" commit -qm "operator committed the entry; the register still holds the older key" >/dev/null 2>&1
+if git -C "$TMCONS" diff --quiet -- "$TMENTRY"; then
+  case "$(tm_detail)" in
+    *"SPENT verdict rather than an unanswered one"*)
+      bad "Part 3c control 2: the entry is CLEAN with a stale record present — ordinary cross-pull expiry — and the LC-E19 row still accuses the operator of spending a verdict" ;;
+    *)
+      ok "Part 3c control 2: prior verdict recorded and the entry CLEAN — no note, so on this row too the note keys on the operator's own uncommitted edit rather than on expiry" ;;
+  esac
+else
+  bad "Part 3c control 2 could not reach its state: the entry is still dirty after a commit, so the arm would measure what control 1 does and could not see an unconditional note"
+fi
+
+# (d2) CONTROL 3 — A PRIOR RECORD UNDER A DIFFERENT CLAUSE ONLY. An entry accumulates verdicts
+# under several clauses, so `tail -1` keyed on the entry alone answers with whichever question was
+# decided LAST. Measured on the reference consumer's register (471 rows): 8 entries carry an LC-E19
+# record and for 3 of them the latest record is LC-E4 or LC-E14 — the note would quote a ruling
+# about a different question and tell the operator to re-record it. Controls 1 and 2 are both blind
+# to this: one clears the register and the other cleans the entry.
+printf '\n' >> "$TMCONS/$TMENTRY"   # dirty again, which is the state the note needs
+TMDIG2="$(tm_detail | grep -o 'subject_digest [0-9a-f]\{40\}' | awk '{print $2}' | head -1)"
+tm_record "${TMDIG2:-nodigest}0" LC-E4 > "$TMREG"
+if [ "$(tm_rows)" -eq 1 ] && ! git -C "$TMCONS" diff --quiet -- "$TMENTRY"; then
+  case "$(tm_detail)" in
+    *"SPENT verdict rather than an unanswered one"*)
+      bad "Part 3c control 3: the entry's ONLY prior record is an LC-E4 verdict and the LC-E19 row reports it as a spent verdict for THIS clause. Measured on the reference consumer that is 3 of 8 LC-E19 entries, each told to re-record a ruling made about a different question" ;;
+    *)
+      ok "Part 3c control 3: a prior record under a DIFFERENT clause only, same dirty entry — no note, so the lookup is keyed on the clause and not on the entry alone" ;;
+  esac
+else
+  bad "Part 3c control 3 could not reach its state: $(tm_rows) title-join row(s) with the entry dirty=$(git -C "$TMCONS" diff --quiet -- "$TMENTRY"; echo $?), so the arm would not be measuring a cross-clause record at all"
+fi
+
+# MUTANT FOR CONTROL 3 — the clause conjunct dropped from the jq select, nothing else. Scored HERE,
+# while the cross-clause state is live. Without it control 3 is an absence assertion that passes
+# against any build, including the one that motivated the narrowing.
+MCLDIR="$ROOT/reconcile-mutant-clauseconj"
+rm -rf "$MCLDIR"; mkdir -p "$MCLDIR"
+cp "$(dirname "$DRIFT")"/* "$MCLDIR"/ 2>/dev/null
+MCL="$MCLDIR/layer-drift.sh"
+MCL_OLD=' and .clause == $c'
+MCL_OLD="$MCL_OLD" python3 -c 'import os,sys
+s=open(sys.argv[1]).read()
+old=os.environ["MCL_OLD"]
+if s.count(old)==1: open(sys.argv[2],"w").write(s.replace(old,"",1))' \
+  "$DRIFT" "$MCL" 2>/dev/null
+if [ ! -s "$MCL" ] || cmp -s "$DRIFT" "$MCL"; then
+  bad "FIXTURE ERROR: the clause-conjunct mutation matched nothing, or matched more than once, so Part 3c control 3 is an absence assertion nothing can falsify. Update MCL_OLD to match adj_spent_note's real jq select"
+else
+  mcl_rows="$(bash "$MCL" "$DIST" "$BASE" "$THEIRS" "$TMCONS" 2>/dev/null | awk -F'\t' -v e="$TMENTRY" '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2==e {c++} END{print c+0}')"
+  if [ "$mcl_rows" -ne 1 ]; then
+    bad "Part 3c MUTANT (clause) — the copy emitted $mcl_rows title-join row(s), want 1, so its verdict is a dead harness rather than a widened lookup"
+  else
+    case "$(tm_detail "$MCL")" in
+      *"SPENT verdict rather than an unanswered one"*)
+        ok "Part 3c MUTANT (clause) — without the clause conjunct the LC-E4-only record IS reported as this row's spent verdict: control 3 discriminates, and the narrowing is what stops the cross-clause quote" ;;
+      *)
+        bad "Part 3c MUTANT (clause) — dropping the clause conjunct changed nothing, so control 3 passes against a lookup keyed on the entry alone and asserts nothing" ;;
+    esac
+  fi
+fi
+rm -rf "$MCLDIR"
+
+# (d3) CONTROL 4 — THE ONLY RECORD IS UNDER THE ROW'S CURRENT DIGEST. Every world above seeds the
+# prior record under a DIFFERENT digest, so none of them sits on the input that discriminates the
+# `.subject_digest != $d` conjunct: a mutant dropping it passed the whole fixture and the receipt.
+# The state is reachable at THIS emit and only at this one — `adj_lookup` answers 1 for a verdict
+# outside the schema's vocabulary, so the `continue` above the emit does not fire and the row is
+# still printed while a record under its own key exists. Without the conjunct the helper quotes
+# the operator's own current record back at them and accuses them of spending it.
+TMDIG3="$(tm_detail | grep -o 'subject_digest [0-9a-f]\{40\}' | awk '{print $2}' | head -1)"
+printf '{"clause":"LC-E19","entry":"%s","subject_digest":"%s","verdict":"looks-fine-to-me","recorded_utc":"2026-01-01T00:00:00Z","reason":"seeded"}\n' \
+  "$TMENTRY" "${TMDIG3:-nodigest}" > "$TMREG"
+if [ ${#TMDIG3} -eq 40 ] && [ "$(tm_rows)" -eq 1 ] && ! git -C "$TMCONS" diff --quiet -- "$TMENTRY"; then
+  ok "Part 3c control 4 precondition: a record under the row's OWN digest with an off-vocabulary verdict leaves the row firing, so the current-digest state is reachable at this emit"
+  case "$(tm_detail)" in
+    *"SPENT verdict rather than an unanswered one"*)
+      bad "Part 3c control 4: the entry's ONLY record is under THIS row's CURRENT digest and the row reports it as a SPENT verdict. Nothing was spent — the operator is being accused over the record they are looking at" ;;
+    *)
+      ok "Part 3c control 4: the only record is under the row's own current digest — no note, so the lookup excludes the CURRENT key and quotes only a superseded one" ;;
+  esac
+
+  # MUTANT FOR CONTROL 4 — the current-digest exclusion dropped, nothing else. Scored here, while
+  # that state is live; after the register is restored the discriminating input no longer exists.
+  MDGDIR="$ROOT/reconcile-mutant-curdigest"
+  rm -rf "$MDGDIR"; mkdir -p "$MDGDIR"
+  cp "$(dirname "$DRIFT")"/* "$MDGDIR"/ 2>/dev/null
+  MDG="$MDGDIR/layer-drift.sh"
+  MDG_OLD=' and .subject_digest != $d'
+  MDG_OLD="$MDG_OLD" python3 -c 'import os,sys
+s=open(sys.argv[1]).read()
+old=os.environ["MDG_OLD"]
+if s.count(old)==1: open(sys.argv[2],"w").write(s.replace(old,"",1))' \
+    "$DRIFT" "$MDG" 2>/dev/null
+  if [ ! -s "$MDG" ] || cmp -s "$DRIFT" "$MDG"; then
+    bad "FIXTURE ERROR: the current-digest mutation matched nothing, or matched more than once, so control 4 is an absence assertion nothing can falsify. Update MDG_OLD to match adj_spent_note's real jq select"
+  else
+    mdg_rows="$(bash "$MDG" "$DIST" "$BASE" "$THEIRS" "$TMCONS" 2>/dev/null | awk -F'\t' -v e="$TMENTRY" '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2==e {c++} END{print c+0}')"
+    if [ "$mdg_rows" -ne 1 ]; then
+      bad "Part 3c MUTANT (current digest) — the copy emitted $mdg_rows title-join row(s), want 1, so its verdict is a dead harness rather than a widened lookup"
+    else
+      case "$(tm_detail "$MDG")" in
+        *"SPENT verdict rather than an unanswered one"*)
+          ok "Part 3c MUTANT (current digest) — without the exclusion the row's OWN record IS reported as a spent verdict: control 4 discriminates, and the conjunct is what stops the false accusation" ;;
+        *)
+          bad "Part 3c MUTANT (current digest) — dropping the .subject_digest != \$d conjunct changed nothing, so control 4 passes against a lookup that cannot tell the current key from a superseded one" ;;
+      esac
+    fi
+  fi
+  rm -rf "$MDGDIR"
+else
+  bad "Part 3c control 4 could not reach its state: digest '$TMDIG3', $(tm_rows) title-join row(s), entry dirty=$(git -C "$TMCONS" diff --quiet -- "$TMENTRY"; echo $?). Without a record under the row's own live digest nothing here measures the current-digest exclusion"
+fi
+
+# (d4) CONTROL 5 — AN UNRESOLVABLE CLAUSE REACHES THE HELPER AS EMPTY, and the guard is what
+# produces the silence. The contract at THEIRS is the source of the id, so a contract that
+# declares no clause for this code is a real state; the call site must hand the helper an EMPTY
+# string there, which is why it calls `adj_clause_of` and not `adj_clause_cell` — the cell form
+# prints a 135-character sentence and the guard could then never fire, which reads exactly like a
+# guard that works. A prior record under a DIFFERENT digest is seeded so the ONLY thing that can
+# suppress the note is the clause, and the mutant that deletes the guard must print it.
+NOC="$ROOT/dist-noclause"
+rm -rf "$NOC"; cp -R "$DIST" "$NOC"
+NOCC="$NOC/core/skills/ai-dlc/layer-contract.yaml"
+python3 - "$NOCC" <<'NOCPY' 2>/dev/null
+import sys
+p=sys.argv[1]; s=open(p).read()
+i=s.find("  - id: LC-E19"); j=s.find("  - id: LC-E3")
+if i!=-1 and j!=-1 and i<j: open(p,"w").write(s[:i]+s[j:])
+NOCPY
+noc_e19="$(grep -c 'LC-E19' "$NOCC")" || noc_e19=0
+noc_ctl="$(grep -c 'LC-E3' "$NOCC")"  || noc_ctl=0
+if [ "$noc_e19" -ne 0 ] || [ "$noc_ctl" -lt 1 ]; then
+  bad "FIXTURE ERROR: the LC-E19 clause strip left $noc_e19 mention(s) and $noc_ctl LC-E3 control mention(s), want 0 and >=1, so control 5 is not measuring an unresolvable clause"
+else
+  git -C "$NOC" add -A >/dev/null 2>&1
+  git -C "$NOC" commit -qm "strip LC-E19 from the contract" >/dev/null 2>&1
+  NOCT="$(git -C "$NOC" rev-parse --short HEAD)"
+  noc_detail() { bash "${1:-$DRIFT}" "$NOC" "$BASE" "$NOCT" "$TMCONS" 2>/dev/null \
+                 | awk -F'\t' -v e="$TMENTRY" '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2==e {print $4; exit}'; }
+  NOCDIG="$(noc_detail | grep -o 'subject_digest [0-9a-f]\{40\}' | awk '{print $2}' | head -1)"
+  tm_record "${NOCDIG:-nodigest}0" > "$TMREG"   # a SUPERSEDED key, so only the clause can silence it
+  case "$(noc_detail)" in
+    *"carries code 'EXTENSION-TITLE-MATCHES-CORE'"*) noc_pre=ok ;;
+    *) noc_pre=no ;;
+  esac
+  if [ "$noc_pre" != ok ]; then
+    bad "Part 3c control 5 precondition failed: with LC-E19 absent from the contract the row does not report the code as unresolvable, so the helper is not being handed an unmapped clause at all"
+  else
+    ok "Part 3c control 5 precondition: with LC-E19 stripped from the contract at theirs the row states the code maps to no clause — the helper's clause argument is empty here"
+    # TWO VALUES, TWO JOBS, AND THE PRECONDITION ABOVE IS HALF OF THAT ASSERTION. The note's
+    # argument became `adj_clause_of` so the guard has an empty string to read; the row's own
+    # `clause` CELL must stay `adj_clause_cell`'s stated-absence sentence, which is what an
+    # operator needs in order to go fix the contract. Computing ONE value and using it twice
+    # cannot satisfy both: the cell would lose its sentence, or the note would take that sentence
+    # as a clause id and start matching. The precondition established the sentence is still
+    # printed on this very row, and control 5 below establishes the note is silent on it — those
+    # two together are the split.
+    #
+    # THE REMAINING HALF IS THAT THE CELL STILL RESOLVES A DECLARED CODE. A cell function that had
+    # degraded to printing the absence sentence unconditionally would satisfy the precondition
+    # too, so the HARD row in the SAME run — whose clause the stripped contract still declares —
+    # is read for a resolved id.
+    noc_hard="$(bash "$DRIFT" "$NOC" "$BASE" "$NOCT" "$TMCONS" 2>/dev/null \
+                | awk -F'\t' '$1=="HARD-LAYER-ADJUDICATION-MISSING" {print $4; exit}')"
+    case "$noc_hard" in
+      *"with clause LC-"*|*"is clause LC-"*)
+        ok "Part 3c control 5: the HARD row in the same run prints a RESOLVED clause id — the cell is not printing its absence sentence unconditionally, so the precondition above is reading a real unresolvable-clause state" ;;
+      *"carries code '"*)
+        bad "Part 3c control 5: the HARD row's clause cell degraded to the stated-absence sentence for a code the contract DOES declare. Either the cell is unconditional or it and the note's argument are one value doing two jobs" ;;
+      *)
+        bad "Part 3c control 5: the HARD row's message carries no clause cell at all ('$(printf '%s' "$noc_hard" | cut -c1-60)'), so nothing here establishes that adj_clause_cell still renders the row text" ;;
+    esac
+    case "$(noc_detail)" in
+      *"SPENT verdict rather than an unanswered one"*)
+        bad "Part 3c control 5: with the clause unresolvable the row STILL quotes a prior verdict. An empty clause must match no record rather than every one — this is the cross-clause quote arriving through the unmapped door" ;;
+      *)
+        ok "Part 3c control 5: an unresolvable clause silences the note — the empty argument matches no record rather than acting as a wildcard" ;;
+    esac
+    # THE PAIRED DIRECTION, IN THE SAME BLOCK AND ONE PROPERTY APART. Control 5 is absence-shaped,
+    # so on its own it passes against a build whose clause map is EMPTY at this call site — every
+    # status would resolve to nothing and every row would be silent, which reads identically. The
+    # same entry, the same register, the same superseded key, against the UNSTRIPPED contract must
+    # print the note. That is also the assertion that ADJ_CLAUSE_MAP is populated where
+    # `adj_clause_of` runs: the note can only appear if the map resolved this code to the clause
+    # the seeded record carries.
+    tm_record "${TMDIG:-nodigest}0" > "$TMREG"
+    case "$(tm_detail)" in
+      *"SPENT verdict rather than an unanswered one"*)
+        ok "Part 3c control 5 PAIRING: the same entry and a superseded record DO produce the note when the contract declares the clause — the map is populated at this call site and control 5's silence is the unresolvable code, not an empty map" ;;
+      *)
+        bad "Part 3c control 5 PAIRING: the note is absent under the UNSTRIPPED contract too, so control 5 above discriminates nothing. Either ADJ_CLAUSE_MAP is empty where adj_clause_of runs, or the lookup is failing for a reason that has nothing to do with the clause" ;;
+    esac
+    # (d5) CONTROL 6 — THE GUARD'S OWN SUBJECT, WHICH IS NARROWER THAN THE CONJUNCT'S.
+    # MEASURED while building this: seeding control 5 with an ordinary LC-E19 record does NOT
+    # establish the guard, because with an empty `$c` the jq conjunct already excludes every
+    # record carrying a real clause — the guard-removed mutant survived that world. `.clause == $c`
+    # with `$c=""` matches exactly one shape: a record whose `clause` is the EMPTY STRING. The
+    # register schema lists `clause` in `required`, which constrains the key's PRESENCE and not
+    # its value, so `"clause":""` is a conforming row a hand-edited register can carry; the
+    # reference consumer has 0 of them against a control of 471 rows that do carry one. That is
+    # the guard's whole population, and without this seed the guard is a line whose removal
+    # changes nothing.
+    printf '{"clause":"","entry":"%s","subject_digest":"%s","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"seeded"}\n' \
+      "$TMENTRY" "${NOCDIG:-nodigest}0" > "$TMREG"
+    case "$(noc_detail)" in
+      *"SPENT verdict rather than an unanswered one"*)
+        bad "Part 3c control 6: the register's only record carries an EMPTY clause and the unresolvable-clause row quotes it back. An empty clause argument is matching an empty clause FIELD, so a malformed row is reported as this row's spent verdict" ;;
+      *)
+        ok "Part 3c control 6: a record whose clause is the EMPTY STRING is not quoted on a row whose clause is unresolvable — the guard refuses the lookup rather than letting empty match empty" ;;
+    esac
+
+    # MUTANT — delete the empty-clause guard, against control 6's world. Control 5's world cannot
+    # kill it and that is the finding above, not a fixture defect: the jq conjunct covers control
+    # 5 on its own. This is also the arm that separates `adj_clause_of` from `adj_clause_cell` at
+    # the call site — under the cell form `$3` is a 135-character sentence, never empty, the guard
+    # can never fire, and this mutant survives while reading exactly like a guard that works.
+    MGDIR="$ROOT/reconcile-mutant-clauseguard"
+    rm -rf "$MGDIR"; mkdir -p "$MGDIR"
+    cp "$(dirname "$DRIFT")"/* "$MGDIR"/ 2>/dev/null
+    MG="$MGDIR/layer-drift.sh"
+    MG_OLD='  [ -n "${3:-}" ] || return 0
+'
+    MG_OLD="$MG_OLD" python3 -c 'import os,sys
+s=open(sys.argv[1]).read()
+old=os.environ["MG_OLD"]
+if s.count(old)==1: open(sys.argv[2],"w").write(s.replace(old,"",1))' \
+      "$DRIFT" "$MG" 2>/dev/null
+    if [ ! -s "$MG" ] || cmp -s "$DRIFT" "$MG"; then
+      bad "FIXTURE ERROR: the empty-clause-guard mutation matched nothing, or matched more than once, so control 5 does not establish that the guard is what produces the silence. Update MG_OLD to match adj_spent_note's real guard line"
+    else
+      mg_rows="$(bash "$MG" "$NOC" "$BASE" "$NOCT" "$TMCONS" 2>/dev/null | awk -F'\t' -v e="$TMENTRY" '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2==e {c++} END{print c+0}')"
+      if [ "$mg_rows" -ne 1 ]; then
+        bad "Part 3c MUTANT (clause guard) — the copy emitted $mg_rows title-join row(s), want 1, so its verdict is a dead harness rather than a removed guard"
+      else
+        case "$(noc_detail "$MG")" in
+          *"SPENT verdict rather than an unanswered one"*)
+            ok "Part 3c MUTANT (clause guard) — with the guard deleted the unresolvable-clause row DOES quote control 6's empty-clause record: the guard is load-bearing, and it can fire at all only because the call site passes adj_clause_of" ;;
+          *)
+            bad "Part 3c MUTANT (clause guard) — deleting the empty-clause guard changed nothing. Then the guard is vacuous and control 5's silence comes from somewhere else — check that the call site passes adj_clause_of rather than adj_clause_cell, whose unresolvable branch prints a sentence and is never empty" ;;
+        esac
+      fi
+    fi
+    rm -rf "$MGDIR"
+  fi
+fi
+rm -rf "$NOC"
+
+tm_record "$TMDIG" > "$TMREG"   # restore the LC-E19 record state (e) needs
+
+# (e) MUTANT — the appended call removed, nothing else. The whole reconcile/ directory is copied
+# for Part 7's reason: layer-drift.sh sources lib.sh beside itself, a lone copy dies at the source
+# line and emits nothing, and no note from a script that never ran reads exactly like the note
+# being absent for the right reason. The unmutated copy is scored first and PRESENCE-shaped.
+printf '\n' >> "$TMCONS/$TMENTRY"   # back to the (b) state: stale record present, entry dirty
+M3CDIR="$ROOT/reconcile-mutant-titlenote"
+rm -rf "$M3CDIR"; mkdir -p "$M3CDIR"
+cp "$(dirname "$DRIFT")"/* "$M3CDIR"/ 2>/dev/null
+M3C="$M3CDIR/layer-drift.sh"
+CTL3C="$M3CDIR/layer-drift-unmutated.sh"; cp "$DRIFT" "$CTL3C" 2>/dev/null
+M3C_OLD='$([ -n "$tm_digest" ] && adj_spent_note "$entry" "$tm_digest" "$(adj_clause_of EXTENSION-TITLE-MATCHES-CORE)")'
+M3C_OLD="$M3C_OLD" python3 -c 'import os,sys
+s=open(sys.argv[1]).read()
+old=os.environ["M3C_OLD"]
+if s.count(old)==1: open(sys.argv[2],"w").write(s.replace(old,"",1))' \
+  "$DRIFT" "$M3C" 2>/dev/null
+case "$(tm_detail "$CTL3C")" in
+  *"SPENT verdict rather than an unanswered one"*)
+    ctl3c=ok ;;
+  *) ctl3c=no ;;
+esac
+if [ ! -s "$M3C" ] || cmp -s "$DRIFT" "$M3C"; then
+  bad "FIXTURE ERROR: the title-note mutation matched nothing, or matched more than once, so Part 3c proves nothing. Update M3C_OLD to match the appended adj_spent_note call at the EXTENSION-TITLE-MATCHES-CORE emit"
+elif [ "$ctl3c" != ok ]; then
+  bad "FIXTURE ERROR: the UNMUTATED copy in $M3CDIR does not print the spent-verdict note in the state (b) established above, so the copied directory is not a working harness and the mutant verdict is not attributable"
+else
+  ok "Part 3c CONTROL: an unmutated copy in the same directory still prints the note — the mutant verdict below is its edit, not the copy"
+  m3c_note="$(tm_detail "$M3C")"
+  m3c_rows="$(bash "$M3C" "$DIST" "$BASE" "$THEIRS" "$TMCONS" 2>/dev/null | awk -F'\t' -v e="$TMENTRY" '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2==e {c++} END{print c+0}')"
+  if [ "$m3c_rows" -ne 1 ]; then
+    bad "Part 3c MUTANT — the copy with the call removed emitted $m3c_rows title-join row(s), want 1, so its silence is a dead harness rather than the missing note"
+  else
+    case "$m3c_note" in
+      *"SPENT verdict rather than an unanswered one"*)
+        bad "Part 3c MUTANT — removing the appended adj_spent_note call left the note on the row, so arm (b) is satisfied by something other than that call and is vacuous" ;;
+      *)
+        ok "Part 3c MUTANT — with the appended call removed the same state prints no note while the row still fires: arm (b) is testing that call and nothing else" ;;
+    esac
+  fi
+fi
+rm -rf "$M3CDIR" "$TMCONS"
+
 # --- Part 4a: a verdict OUTSIDE the schema's enum does not discharge it -------
 if DIG="$(need_digest 'Part 4a')"; then
 record "$DIG" looks-fine-to-me > "$REG"

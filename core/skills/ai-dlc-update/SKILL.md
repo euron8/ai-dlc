@@ -1559,6 +1559,11 @@ prose is itself generated rather than composed.
    re-merge. Read the entry against the new core text and record a verdict per entry —
    **still-additive**, **contradicts-core**, or **retire**.
 
+   **ORDER: make every edit this pull prescribes for the entry FIRST, then read the digest from a
+   fresh run, then record.** Recording before an edit to the same entry spends the record you just
+   wrote: the digest covers the entry's bytes, so the row re-fires under a new key and the verdict
+   you wrote is addressed to text that no longer exists.
+
    **Recording is now the mechanism, not a note to self.** `layer-contract.yaml` carries these
    clauses at `level: ADJUDICATED`: the candidate set is mechanized and the verdict is yours.
    `layer-drift.sh` emits `HARD-LAYER-ADJUDICATION-MISSING` (**LC-A1**) for every such row with

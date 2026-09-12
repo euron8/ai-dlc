@@ -4509,7 +4509,100 @@ prescription is issued, which is a separate edit in `SKILL.md`.
 **Tiered DEFECT.** An operator who follows an LC-E19 row in the order it lists spends their own
 verdict and is told only to record another.
 
-verify: sh L=core/skills/ai-dlc-update/reconcile/layer-drift.sh; F=core/fixtures/layer-adjudication-tier/run.sh; [ -f "$L" ] && [ -f "$F" ] || exit 9; grep -q "adj_spent_note() {" "$L" || exit 9; n="$(grep -c "adj_spent_note" "$L")" || n=0; [ "$n" -ge 2 ] || exit 9; c="$(grep -c 'EXTENSION-TITLE-MATCHES-CORE' "$F")" || c=0; a="$(awk '/adj_spent_note/ {n++} END{print n+0}' "$L")"; [ "$a" -ge 3 ] && exit 0; [ "$c" -ge 2 ] && exit 0; exit 1
+**2026-09-12 — fixed.** Re-derived at HEAD before building: `adj_spent_note()` had one call site,
+inside `adj_check`, and the LC-E19 row emitted at the title-join computed a digest and looked it up
+without ever reaching the helper. The row's detail column is read by `apply.sh` (copied whole into
+`WORKLIST extension-title-match`), by `emit-report.sh` (fields 1 and 2 only) and by two fixtures
+that match `NEW-THIS-PULL`/`PRE-EXISTING` as PREFIXES, so appending to the string breaks none of
+them — asserted by running `layer-title-join` and `absorbed-specifics-survive` after the change.
+The consumer's register carries 65 LC-E19 rows, so the note has a real population.
+
+Four edits. The helper call is APPENDED to the LC-E19 detail string, guarded on a non-empty
+`tm_digest`: `adj_spent_note`'s `.subject_digest != $d` would otherwise match every prior record
+of the entry, so an unkeyable row would carry a false accusation. `SKILL.md` gains one ordering
+sentence where the operator reads BEFORE recording, not inside the spend-rule paragraph. The
+fixture gains Part 3c — its own consumer world seeded with a FRESH entry whose heading names the
+core section that did NOT move, chosen over Part 10's dual-keyed entry precisely because that one
+is also keyed at LC-E4, and a note anywhere in its rows could then be the HARD row's, passing
+against the one-call-site build the Part exists to reject. Part 3c asserts the precondition (one
+keyed row, 40-hex digest, and a record under it clearing the row), the subject, three controls,
+and two mutants.
+
+**The fourth edit is a NARROWING the first cut needed and did not have, found by the adversary
+against the consumer's live register and re-derived here over all 471 rows.** `adj_spent_note`
+selected on `.entry` and `.subject_digest != $d` with `tail -1`, and did not filter by clause — so
+on a row of one clause it answers with whichever question was decided LAST. Eight entries carry an
+LC-E19 record and for THREE of them the most recent record is LC-E4 or LC-E14
+(`retro-push-validator-preflight.md`, `route-push.md`, `stories-test-strategy-push.md`), with the
+other five as the control. Each would have been told to re-record a ruling made about a different
+question. The helper now takes the clause as a third argument and the jq select carries
+`and .clause == $c`; an empty clause argument is SILENCE rather than a wildcard, because a caller
+that cannot name its clause is exactly the case where cross-clause quoting is guaranteed. Both
+call sites pass a derived id — the existing `${cl}` at the HARD row, `adj_clause_cell
+EXTENSION-TITLE-MATCHES-CORE` at the new one, never a literal. Part 3c gains control 3 (a prior
+record under a DIFFERENT clause only, same dirty entry, no note) and the mutant that drops the jq
+conjunct and makes that control go red — without it control 3 is an absence assertion that passes
+against the very build the narrowing exists to reject.
+
+**Two more, both from the adversary against the branch tip, both confirmed by construction before
+being fixed.** First: every world above seeded the prior record under a DIFFERENT digest, so
+nothing sat on the input that discriminates `.subject_digest != $d` — a mutant dropping it passed
+the fixture AND the receipt. That state is reachable at this emit and only here: `adj_lookup`
+answers 1 for a verdict outside the schema's vocabulary, so the `continue` above the emit does not
+fire while a record under the row's own key exists, and the mutant then quotes the operator's own
+current record back and accuses them of spending it. Control 4 seeds exactly that, with its own
+mutant.
+
+Second, the empty-clause guard could not fire. Both call sites passed `adj_clause_cell`, whose
+unresolvable branch printfs a 135-character sentence, so `$3` was never empty and the silence on
+an unresolvable clause came from that sentence matching no register row — a guard that cannot fire
+reading exactly like one that works. Both sites now pass `adj_clause_of`, which returns empty.
+**Giving that guard a subject took a seed nothing predicted**: with `$c` empty the jq conjunct
+already excludes every record carrying a real clause, so control 5's world could not kill the
+guard-removed mutant and the first cut of this arm went red for a true reason. `.clause == $c`
+with `$c=""` matches exactly one shape — a record whose `clause` is the EMPTY STRING, which the
+schema permits because `required` constrains the key's presence and not its value. The reference
+consumer has 0 such rows against a control of 471 that do carry a clause. Control 6 seeds one, and
+the guard mutant dies on it.
+
+**`adj_clause_of` replaces `adj_clause_cell` in the ARGUMENT only.** The `${cl}` interpolated into
+each row's own message text stays the cell form, so a code the contract does not declare still
+prints its stated-absence sentence to the operator — two values doing two jobs, never one computed
+twice. Control 5 asserts both halves in one run: the unresolvable row still carries that sentence
+while the note is silent on it, and the HARD row beside it — whose clause the same contract does
+declare — still prints a RESOLVED id, which is what separates a working cell from one degraded to
+printing the absence unconditionally. Control 5's PAIRING arm supplies the other direction and
+doubles as the assertion that `ADJ_CLAUSE_MAP` is populated where `adj_clause_of` runs: the same
+entry, the same superseded record, against the UNSTRIPPED contract DOES print the note, so the
+silence is the unresolvable code rather than an empty map. Both arms were proven able to fail — a
+mutant putting `adj_clause_cell` back at the call site, and one making `adj_clause_of` always
+return empty, take Part 3c red.
+
+**The whole new Part goes red against the pre-fix script.** Driven with a HEAD copy of
+`layer-drift.sh` in a full `reconcile/` directory copy (a lone copy dies sourcing `lib.sh`):
+exit 1, 58 ok, and `FAIL Part 3c: the re-fired LC-E19 row is byte-indistinguishable from one that
+was never adjudicated`.
+
+**Receipt scoring — bound to the emission site, not to a word.** Four arms: the line immediately
+after the single `^ *emit EXTENSION-TITLE-MATCHES-CORE ` line carries the three-argument call
+spelled with `adj_clause_of`; the jq select inside `adj_spent_note` carries BOTH the clause
+conjunct and the current-digest exclusion; the empty-clause guard is present in that function; and
+`SKILL.md` carries the ordering phrase outside an HTML comment. Every case built on a copy tree,
+the pre-branch blobs taken at `01fea66c`:
+
+    pre-branch base, untouched                               1
+    a comment naming the call beside the emit                1
+    the call added on the HARD row a SECOND time instead     1
+    the TWO-ARGUMENT form, no clause narrowing               1
+    the correct fix                                          0
+
+Eight further controls, each one property short: clause conjunct dropped `1`; current-digest
+conjunct dropped `1`; empty-clause guard deleted `1`; `adj_clause_cell` at the call site `1`;
+correct code with `SKILL.md` at base `1`; correct `SKILL.md` with the code at base `1`; the
+sentence moved inside an HTML comment `1`; correct fix with the ordering sentence REWORDED around
+the phrase `0`. The emit anchor is unique (1 match) against an impossible-code control at 0.
+
+verify: sh L=core/skills/ai-dlc-update/reconcile/layer-drift.sh; S=core/skills/ai-dlc-update/SKILL.md; [ -f "$L" ] && [ -f "$S" ] || exit 9; e="$(grep -cE '^ *emit EXTENSION-TITLE-MATCHES-CORE ' "$L")" || e=0; [ "$e" -eq 1 ] || exit 9; a="$(awk '/^ *emit EXTENSION-TITLE-MATCHES-CORE /{n=1;next} n==1{n=0; if (index($0,"adj_spent_note \"$entry\" \"$tm_digest\" \"$(adj_clause_of EXTENSION-TITLE-MATCHES-CORE)\"")) c++} END{print c+0}' "$L")"; j="$(awk '/^adj_spent_note\(\) \{/{n=1} n==1 && index($0,".clause == $c") && index($0,".subject_digest != $d"){c++} n==1 && /^\}/{n=0} END{print c+0}' "$L")"; g="$(awk '/^adj_spent_note\(\) \{/{n=1} n==1 && index($0,"[ -n \"${3:-}\" ] || return 0"){c++} n==1 && /^\}/{n=0} END{print c+0}' "$L")"; p="$(awk '/<!--/{h=1} h==0 && tolower($0) ~ /make every edit this pull prescribes for the entry first/{c++} /-->/{h=0} END{print c+0}' "$S")"; [ "$a" -ge 1 ] && [ "$j" -ge 1 ] && [ "$g" -ge 1 ] && [ "$p" -ge 1 ] && exit 0; exit 1
 
 ## BL-227 — nine of batch 82's ten receipts are satisfied by something that is not a fix, and the rule forbidding it has no enforcer
 
