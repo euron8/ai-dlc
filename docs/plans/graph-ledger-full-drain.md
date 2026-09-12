@@ -37,6 +37,80 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
+### BATCH 93 SHIPPED AS `v0.558.0` AND `v0.559.0`, TWO RELEASES, THREE NO-`PC` SUBJECTS — AND **THE ADVERSARY FOUND THREE BLOCKERS IN THE CONTRACT BEFORE ANY BUILD, THEN A FOURTH ON A TIP THAT PASSED EVERY SEED, AND EVERY REMAINING GAP WAS A MISSING SEED RATHER THAN A MISSING ARM.** THE SWEEP WAS EMPTY OF PC WORK. THE PREVIOUS RELEASE HAD SHIPPED MERGE-CONFLICT MARKERS IN `CHANGELOG.md`. THE CONSUMER PULLED ITSELF TO `0.557.0` MID-BATCH; THE GAP IS **TWO**, PENDING **1**, AND THE PULL IS **NOT REQUIRED**.
+
+This block replaces the batch-92 record below it. Re-derive every figure rather than reading it.
+
+**`VERSION` IS `0.559.0`, SO BATCH 94 RELEASES AS `0.560.0`.** Re-derive `VERSION` and add one.
+Batch 93 merged TWICE — `v0.558.0` at `f3d7cb57` (PR #727) closing `BL-019` and `BL-242`, and
+`v0.559.0` at `dafcbe6e` (PR #728) closing `BL-224` — each id verbatim in its release commit message
+(control: an impossible `BL-` id returns 0). All three are ROTATED; archive moved **149 → 152**, live
+**93 → 90**. `BL-019` discharges `PC-S303-EFFORT-BINDING-COMMANDS-A-SLASH-COMMAND-THAT-RESOLVES-TO-NOTHING`.
+
+**THE SUBJECTS WERE TAKEN ON THIS SESSION'S OWN RANKING** because the one-liner arrived from a
+peer. `BL-224` was the readiest no-`PC` entry and shipped alone because it edits
+`reconcile/layer-drift.sh` and the update skill's `SKILL.md`. `BL-019`'s remaining half and
+`BL-242` batched into release 1. Separability was zero overlap between the two file sets, NOT an
+absence of machinery: release 1 touches four machinery paths (the dispatch guard, the spawn-ledger
+validator, the consumer pre-push hook, `apply.sh`), derived with the shipping `machinery_paths()`.
+
+**THE `0.557.0` SQUASH SHIPPED THREE MERGE-CONFLICT MARKERS IN `CHANGELOG.md`**, with the
+`## [0.555.0]` heading separated from its body, and arms A–C of `validate-release-version.sh` read it
+GREEN because each keys on heading text. The sections were restored, each byte-identical modulo
+blank lines to its source commit, and arm E now fails the push on a tracked file carrying both a
+line-leading `<<<<<<< ` and a line-leading `>>>>>>> `. FP set at the branch that added it: exactly
+that one true positive. Its header records that a truncated one-marker conflict is outside the
+intersect, and that a fixture writing a whole conflict block inside a `printf` escapes only by
+position.
+
+**THE ADVERSARY ATTACKED THE CONTRACT BEFORE THE BUILDERS AND FOUND THREE BLOCKERS.** The `BL-242`
+probe mutant as specified deleted the only statement in an `if` body and was a syntax error, so the
+guard would have scored a dead copy; the condition rewritten to `if false; then` runs and emits one
+row fewer. The `BL-224` spent-note helper filtered on entry and digest but not clause, so on the
+LC-E19 row it quoted another clause's verdict for three of the eight consumer entries carrying an
+LC-E19 record. The `BL-019` effort arm was scoped on `definition_bound`, which the guard sets only
+when the definition's effort equals the config's, so repointing the comparison at the ledger changed
+nothing on the judged population. On the `BL-224` tip it found a fourth: every fixture world seeded
+the prior record under a DIFFERENT digest, so a mutant dropping the current-digest exclusion passed
+fixture and receipt while accusing the operator on their own live record. The empty-clause guard's
+only reachable population turned out to be a register record whose `clause` is the empty string,
+which the schema permits and the consumer has zero of.
+
+**WHAT THE `BL-019` FIX DOES AND DOES NOT DO, MEASURED AFTER THE MERGE ON THE CONSUMER'S REAL
+24-ROW SPRINT LEDGER.** Installed and shipped validators both report 2 verified / 0 mismatch /
+4 PENDING; a seeded row with a bound effort whose probe disagreed slipped past both, because the
+scored branch still requires the flag. What moved is the UNDECLARED bucket, 0 → 18, and the COUNTS
+line now sums to the row total. The guard change IS live-observable: on a dispatch whose rendered
+definition has drifted from settings, the installed guard stamps the configured effort and the
+shipped one writes null, and the consumer's own spawn ledger already carries one such `tea` row.
+The archived entry states this limit.
+
+**THE SWEEP AT THIS BATCH'S CLOSE, ref `ai-dlc/carry-over/chunk-max-usd-swap-sizing` (one filing
+ahead of `main`).** Live **56**, cited **37**, unfiled **19**, archive **206**, partition control 0,
+ledger md5 unchanged across the batch. All 19 unfiled are the adjudicated set. TERMINAL **89**
+(88 at the open; the two releases widened the archived-and-cited join); discharged-but-INVISIBLE 1
+(`PC-S308-GATE-METRICS-CHECK2-STALE-VERDICT-READ-ORDER`).
+
+**THE INCIDENTAL-CLOSE CHECK WAS RUN AND FOUND NOTHING.** Receipt histogram at the open: 2×0, 78×1,
+1×9 over 81. After both fixes and before rotation: 4×0 (`BL-236`, `BL-238`, `BL-019`, `BL-242`),
+76×1, 1×9; `BL-224` read 0 on its own branch. After rotation: 2×0, 75×1, 1×9 over 78.
+
+**THE PULL IS NOT REQUIRED AND THE GAP IS TWO.** The consumer reconciled `0.553.0 → 0.557.0` itself
+at `9a7873d77` (2026-09-12 12:32 local) while this batch ran; stamp `0.557.0` / `01fea66c` on all
+four fields, shipped `0.559.0`. Bootstrapping paths in the range: `core/git-hooks/pre-push`, the
+dispatch guard, `reconcile/apply.sh` (release 1), `reconcile/layer-drift.sh` and the update skill's
+`SKILL.md` (release 2); zero mode-only changes. The second test's rows are report-only: the guard
+difference above moves no verdict, and the `layer-drift.sh` differential against a scratch copy of
+the consumer's tree is recorded in the batch-93 close commit's message.
+
+**THE CONSUMER'S PORCELAIN MOVED 1 → 23 DURING THE BATCH**, all its own sprint-311 writes under its
+own HEAD; nothing here wrote to it (asserted after every phase).
+
+**THE READIEST NO-`PC` WORK** is now `BL-221`, `BL-223`, `BL-220`, `BL-219`, `BL-218`. Read
+`BL-227` first. Two receipt residuals are recorded rather than owed: `BL-242`'s and `BL-224`'s
+archived receipts are weaker than their fixtures (a disabled helper scores 0 on each), and the
+fixture is the binding channel in both.
+
 ### BATCH 92 SHIPPED AS `v0.556.0` AND `v0.557.0`, TWO RELEASES, TWO NO-`PC` SUBJECTS — AND **THE OPERATOR-RANKED ENTRY'S REMEDY WAS RIGHT ON THE PATH IT PROBED AND UNREACHABLE ON THE PATH THE CONSUMER DISPATCHES THROUGH, WHICH FOURTEEN PROBES AND ONE BINARY LITERAL SETTLED BEFORE THE CONTRACT WAS WRITTEN.** THE SWEEP WAS EMPTY OF PC WORK. THE GAP IS **FOUR**, PENDING **1**, AND THE PULL IS **NOT REQUIRED**.
 
 This block replaces the batch-91 record below it. Re-derive every figure rather than reading it.
@@ -110,7 +184,8 @@ unmapped directory as run-always, which is safe. Derive the unmapped set, never 
 
 **THE READIEST NO-`PC` WORK** is now `BL-224`, `BL-221`, `BL-223`, `BL-220`, `BL-219`, `BL-218`.
 Read `BL-227` first. `BL-019`'s remaining half — the write sits above the effort decision — is
-small and could batch with any of them.
+small and could batch with any of them. (Superseded by the block above: `BL-224` and `BL-019`
+shipped in batch 93.)
 
 ### BATCH 91 SHIPPED AS `v0.555.0`, ONE RELEASE, ONE NO-`PC` SUBJECT — AND **THE ADVERSARY FOUND THREE BLOCKERS IN THE CONTRACT BEFORE THE BUILD, ALL THREE IN THE RECEIPT AND SEED DESIGN, AND THE CORRECT FIX SCORED 1 AGAINST A RECEIPT THAT SCORED TWO WRONG FIXES 0.** THE SWEEP WAS EMPTY OF PC WORK. THE GAP IS **TWO**, PENDING **1**, AND THE PULL IS **NOT REQUIRED**.
 
@@ -9104,11 +9179,19 @@ given at batch 90.
    rebuilt in one release: the originals closed on an empty file, on a dead arm, and on a
    positional window.
 
+   **BATCH 93's THREE SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope any of them.** `BL-019`
+   and `BL-242` shipped together as `v0.558.0` and `BL-224` ALONE as `v0.559.0`, each cited in its
+   release commit message. None carries a `PC-` id. `BL-019` discharges
+   `PC-S303-EFFORT-BINDING-COMMANDS-A-SLASH-COMMAND-THAT-RESOLVES-TO-NOTHING`, already archived on
+   the consumer's side. The `0.557.0` squash had shipped three merge-conflict markers in
+   `CHANGELOG.md`; the sections are restored and arm E of the release-version validator refuses a
+   committed marker pair.
+
    **BATCH 92's TWO SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope either.** `BL-241` shipped
    ALONE as `v0.556.0` and `BL-240` ALONE as `v0.557.0`, each cited in its release commit
    message. Neither carries a `PC-` id, so no ledger row moves on the consumer's next pull; what
    moves is that every role-bound spawn on the consumer is rewritten onto a rendered
-   `.claude/agents/<role>.md` definition once it pulls and renders. `BL-019` is NOT closed.
+   `.claude/agents/<role>.md` definition once it pulls and renders.
 
    **BATCH 91's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.** `BL-225` shipped ALONE as
    `v0.555.0` at `bc5d73d8` (PR #722), cited in the release commit message. It carried no `PC-`
@@ -9204,8 +9287,8 @@ given at batch 90.
    two whose receipts DRIVE their subject — and driving is NECESSARY, NOT SUFFICIENT**: both were
    then closed by an over-broad fix, so an arm must also assert the CONTROL case still DENIES.
    `verification-discipline.md:154` states this rule and has no enforcer, which is why `BL-227`
-   exists. The ranked no-`PC` set, readiest first, is `BL-224`, `BL-220`, `BL-218`, `BL-219`,
-   `BL-221`, `BL-223` (`BL-225`, `BL-217`, `BL-222`, `BL-240` and `BL-241` have shipped) — **every one of their receipts needs repairing
+   exists. The ranked no-`PC` set, readiest first, is `BL-220`, `BL-218`, `BL-219`,
+   `BL-221`, `BL-223` (`BL-225`, `BL-217`, `BL-222`, `BL-240`, `BL-241`, `BL-224`, `BL-019` and `BL-242` have shipped) — **every one of their receipts needs repairing
    before its verdict means anything.** `BL-222`'s owed FP measurement is already taken and small
    (one fixture, four substring assertions, none anchored; `retro.md` reads that PASS line zero
    times). `BL-218` is blocked on a corpus that does not exist — zero live layer-debt registers in

@@ -11026,3 +11026,285 @@ entry and a presence-shaped arm before the reset ships.
 **Tiered NOTE.** A wrong suffix on a row's detail; no verdict moves.
 
 verify: sh R=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; S=core/fixtures/ledger-reverify/seed.sh; [ -f "$R" ] && [ -f "$S" ] || exit 9; out="$(bash "$S")" || exit 9; D="$(printf '%s\n' "$out" | cut -d' ' -f1)"; B="$(printf '%s\n' "$out" | cut -d' ' -f2)"; C="$(printf '%s\n' "$out" | cut -d' ' -f3)"; T="$(printf '%s\n' "$out" | cut -d' ' -f4)"; L="$C/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; [ -n "$D" ] && [ -f "$L" ] || exit 9; printf '\nverify: theirs_lacks core/skills/ai-dlc/SKILL.md "RECEIPT_ZZ_SECOND"\n' >> "$L"; o="$(bash "$R" "$D" "$B" "$C" "$T" 2>/dev/null)"; case "$D" in */ledger-reverify-*/dist) rm -rf "$(dirname "$D")" ;; esac; printf '%s\n' "$o" | awk -F'\t' '$1=="ENTRY-SWALLOWED"{c++} END{exit !(c>0)}' || exit 9; printf '%s\n' "$o" | awk -F'\t' '$1!="ENTRY-SWALLOWED" && $1!="RECEIPTS-UNDECIDED" && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/{c++} END{exit !(c>0)}' || exit 9; printf '%s\n' "$o" | awk -F'\t' '($1=="ENTRY-SWALLOWED"||$1=="RECEIPTS-UNDECIDED") && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/{c++} END{exit !(c>0)}' && exit 1; exit 0
+## BL-019
+
+**LANDED (v0.558.0, verified f3d7cb57).**
+**`effort_bound` records the config rather than the dispatch, and nothing reads it.**
+`core/hooks/ai-dlc-dispatch-guard.sh:329` writes `effort_bound` into the spawn ledger from
+`--arg effort "${PIN_EFFORT:-}"` at `:318`. `PIN_EFFORT` is the value read out of settings at
+`:228-238`; whether the guard actually appends an effort line is decided at `:355-380`, and the guard
+returns without appending anything at `:384`. The write sits above the decision it purports to record,
+so the field carries the CONFIG on every dispatch the guard leaves untouched — including those exiting
+at `:335` for an unreadable role file, recorded before the guard can know whether it will correct
+anything.
+
+Nothing reads it. Measured with a control in the same invocation over `core/*`: files naming
+`effort_bound` other than the writer = **0**; files naming `model_bound` other than the writer = **6**
+(`validate-spawn-ledger.sh`, `check-22-spawn-ledger/run.sh`, `dispatch-model-guard/run.sh`,
+`subagent-probe/run.sh`, `enforcement-map.yaml`, `gate-validation.md`). Same search, same corpus, one
+field has readers and the other has none.
+
+**`CHANGELOG.md:562-563` concedes the field and discharges nothing.** It reads: "`effort_bound` still
+records what the guard appended and is still read by nothing; that is a separate filing and is not
+addressed here." Two grounds, both measured. **The separate filing does not exist** — `effort_bound`
+occurs at exactly one line across the consumer's ledger and archive, and that line is inside the entry
+being deferred; in ai-dlc it appears only in the CHANGELOG, the writer, two plan files and a verdicts
+TSV, and nowhere in this backlog until now. **And the concession misdescribes what it concedes**: the
+field does not record what the guard appended, it records what was CONFIGURED, which is the sub-claim
+itself. This entry is the filing that pointer named.
+
+Discharges `PC-S303-EFFORT-BINDING-COMMANDS-A-SLASH-COMMAND-THAT-RESOLVES-TO-NOTHING`. A close of that
+entry is GATED on this filing — its headline is fixed at `:369` and fixture-guarded.
+
+The receipt takes either fix: it exits 0 when the field is gone from the hook, or when the write sits
+below the effort decision AND at least one file under `core/` reads it. `model_bound` is the control,
+so a search that has stopped working reports STILL-LIVE rather than closing. **A fix that moves the
+write and leaves it unread still reports STILL-LIVE, deliberately** — a ledger field nobody reads is
+the other half of the claim.
+
+**2026-09-12 — the "reader" was a projection with no consumer, and the receipt could not see it.**
+Measured at `01fea66c`. **The line citations above are stale — every one of the six has moved — and
+the "readers = 0" figure is now 4** (`validate-spawn-ledger.sh`, `check-22-spawn-ledger/run.sh`,
+`core/git-hooks/pre-push`, `apply.sh`); do not re-derive from either. What the count concealed:
+`validate-spawn-ledger.sh` projected `effort_bound` into a shell variable, defaulted it, and never
+used it, its effort arm reading `.aiDlcRoles[$r].effort` out of settings at VALIDATE time. So one of
+the four "readers" was the file whose read was dead, and a fix satisfying `LW > LD` and `W >= 1` would
+have shipped with the field still unread.
+
+**`DEFINITION_BOUND` is set only when the rendered definition AGREES with settings on effort**, so on
+every row the old arm judged, the ledger's `effort_bound` under this fix equals the settings value it
+was already comparing against. **The change therefore compares nothing different on the rows the arm
+previously reached.** What it buys is two things measured separately. Prose-only rows become
+self-describing: `effort_bound` is now null where HEAD wrote the configured level, so a dispatch that
+bound no effort stops claiming one — measured over the fixture's six definition states, `defok` records
+`high` and a stale render, an absent one, an unmarked one and a role declaring no effort all record
+null, a drifted definition never being selected. And the comparison becomes immune to a settings edit
+between dispatch and validate, which is the only way the two sides can disagree at all.
+
+Fix: the `NEEDS_MODEL`/`NEEDS_TYPE`/`NEEDS_EFFORT` decision block moved above the ledger write
+byte-preserved (verified as a pure line permutation — same line count, same sorted bytes, `cmp -s` on
+the moved region); `effort_bound` mirrors `model_bound`; and the arm is **scoped on the field rather
+than on the flag**. That scoping changes what is COUNTED, not what is DETECTED: measured after the
+merge on the consumer's real 24-row sprint ledger, installed and shipped validators both report 2
+verified / 0 mismatch / 4 PENDING, and a seeded `definition_bound:false` row with a bound effort whose
+probe disagreed slipped past both, because the scored branch still requires the flag. What moved is
+the UNDECLARED bucket, 0 to 18, and the COUNTS line now sums to the row total where the installed one
+did not. A row that bound no effort is
+now UNDECLARED and COUNTED rather than skipped in silence, so a sprint whose every row bound nothing
+no longer reads like one where every row was verified. `EFF_DECLARED` and the settings read are gone;
+their four sites were all inside this arm and nothing else in the tree read them.
+
+**E7's ledger-`high`/settings-`low` row is hand-written and no guard can emit it against those
+settings** — reaching that state on a consumer takes a settings edit between the dispatch and the gate,
+which is unconstructible in one snapshot of a tree and is precisely the sequence under test. Reachable
+under the mechanism's contract, not from a single reading of the config; the fixture comment says so
+at the seed.
+
+Receipt scoring, each case a full copy of the tree at `01fea66c` made into its own git repo so
+`git grep` resolves there: base **1**; step 1 alone (block moved, field still the config, validator
+untouched) **1**; steps 1+2 with the validator still reading settings **1** — the case the old receipt
+was blind to; the full fix **0**; the settings read kept with `effortbound` named twice in a comment
+beside it, 4 mentions in the file **1**; a second correct spelling routing the same comparison through
+a renamed local **0**; the ledger compared but the scope narrowed back to `definition_bound`, undoing
+the widening **1**.
+
+verify: sh H=core/hooks/ai-dlc-dispatch-guard.sh; V=core/scripts/validate-spawn-ledger.sh; C=$(git grep -l "model_bound" -- "core/*" | grep -vxF "$H" | wc -l | tr -d " "); [ "$C" -ge 1 ] || exit 1; X=$(grep -c "SETTINGS" "$V") || X=0; [ "$X" -ge 1 ] || exit 1; LW=$(grep -n "effort_bound:" "$H" | head -1 | cut -d: -f1); LD=$(grep -n "^NEEDS_EFFORT=false" "$H" | head -1 | cut -d: -f1); [ -n "$LW" ] && [ -n "$LD" ] && [ "$LW" -gt "$LD" ] || exit 1; W=$(git grep -l "effort_bound" -- "core/*" | grep -vxF "$H" | wc -l | tr -d " "); [ "$W" -ge 1 ] || exit 1; E=$(grep -c '^[^#]*--arg effort.*PIN_EFFORT' "$H") || E=0; [ "$E" -eq 0 ] || exit 1; A=$(awk '/^  # --- THE EFFORT ARM/{a=1} /^done <<EOF$/{a=0} a && /^[^#]*effortbound/{n++} END{print n+0}' "$V"); S=$(awk '/^  # --- THE EFFORT ARM/{a=1} /^done <<EOF$/{a=0} a && /^[^#]*(SETTINGS|aiDlcRoles\[)/{n++} END{print n+0}' "$V"); Z=$(awk '/^  # --- THE EFFORT ARM/{a=1} /^done <<EOF$/{a=0} a && /^[^#]*-z[^#]*effortbound/{n++} END{print n+0}' "$V"); [ "$A" -ge 2 ] && [ "$S" -eq 0 ] && [ "$Z" -ge 1 ]
+
+## BL-224 — `layer-drift.sh`'s spent-verdict note reaches ONE row, and the fixture that proves it works cannot see the others
+
+**LANDED (v0.559.0, verified dafcbe6e).**
+**Found 2026-09-09** adjudicating
+`PC-S342-ADJUDICATION-ROW-PRESCRIBES-AN-ENTRY-EDIT-THAT-SPENDS-ITS-OWN-VERDICT` against HEAD,
+re-derived here. `v0.528.0` genuinely fixed the row the entry's receipt keys on: `adj_spent_note()`
+(`core/skills/ai-dlc-update/reconcile/layer-drift.sh:695`) distinguishes a SPENT verdict from a
+never-recorded one. **It has exactly ONE call site**, at `:812`.
+
+Derived by driving the shipping tool rather than reading the contract:
+
+    layer-drift.sh --adjudicated-codes <repo> HEAD
+      -> OVERRIDE-SUPERSEDED, EXTENSION-HOOK-DRIFT, EXTENSION-ANCHOR-DRIFT,
+         EXTENSION-RETIRE-CANDIDATE
+    EXTENSION-TITLE-MATCHES-CORE in that set:  0   <- the row the filing named
+
+All four ADJUDICATED codes route `emit()` -> `adj_check()` -> the `:812` row, so they get the
+note. `EXTENSION-TITLE-MATCHES-CORE` (LC-E19) is WARN-level and unreached. **WARN does not make it
+moot**: it still prescribes an entry edit AND a digest-keyed verdict in one sentence, so it can be
+spent by following it in order, re-fires on the new digest, and says nothing about why.
+
+**AND THE FIXTURE IS GREEN BECAUSE IT ASSERTS NOTHING ABOUT THAT PATH.** Every SPENT assertion in
+`core/fixtures/layer-adjudication-tier/run.sh` reads the row through an `awk` field-1 match pinned
+to one code (`run.sh:167`, `$1 == "HARD-LAYER-ADJUDICATION-MISSING"`). Derived: that code appears
+11 times in the fixture, `EXTENSION-TITLE-MATCHES-CORE` once and never in a spent-note arm. A
+fixture whose oracle is hard-pinned to the one covered code cannot fail on an uncovered one — this
+repo's own "a check that cannot fire reads exactly like one that passed", in a fixture rather than
+a validator.
+
+**The second residue is the ordering clause.** The instruction to record the verdict BEFORE making
+the prescribed edit exists only INSIDE the conditional note, so it reaches the operator after they
+have already spent one. `SKILL.md:1597` states the spend rule with no ordering consequence beside
+it, unchanged by the release.
+
+**Not fixed here.** Widening the note to WARN rows changes what a WARN row prints, and the
+population that reads those strings is unmeasured; the ordering clause belongs where the
+prescription is issued, which is a separate edit in `SKILL.md`.
+
+**Tiered DEFECT.** An operator who follows an LC-E19 row in the order it lists spends their own
+verdict and is told only to record another.
+
+**2026-09-12 — fixed.** Re-derived at HEAD before building: `adj_spent_note()` had one call site,
+inside `adj_check`, and the LC-E19 row emitted at the title-join computed a digest and looked it up
+without ever reaching the helper. The row's detail column is read by `apply.sh` (copied whole into
+`WORKLIST extension-title-match`), by `emit-report.sh` (fields 1 and 2 only) and by two fixtures
+that match `NEW-THIS-PULL`/`PRE-EXISTING` as PREFIXES, so appending to the string breaks none of
+them — asserted by running `layer-title-join` and `absorbed-specifics-survive` after the change.
+The consumer's register carries 65 LC-E19 rows, so the note has a real population.
+
+Four edits. The helper call is APPENDED to the LC-E19 detail string, guarded on a non-empty
+`tm_digest`: `adj_spent_note`'s `.subject_digest != $d` would otherwise match every prior record
+of the entry, so an unkeyable row would carry a false accusation. `SKILL.md` gains one ordering
+sentence where the operator reads BEFORE recording, not inside the spend-rule paragraph. The
+fixture gains Part 3c — its own consumer world seeded with a FRESH entry whose heading names the
+core section that did NOT move, chosen over Part 10's dual-keyed entry precisely because that one
+is also keyed at LC-E4, and a note anywhere in its rows could then be the HARD row's, passing
+against the one-call-site build the Part exists to reject. Part 3c asserts the precondition (one
+keyed row, 40-hex digest, and a record under it clearing the row), the subject, three controls,
+and two mutants.
+
+**The fourth edit is a NARROWING the first cut needed and did not have, found by the adversary
+against the consumer's live register and re-derived here over all 471 rows.** `adj_spent_note`
+selected on `.entry` and `.subject_digest != $d` with `tail -1`, and did not filter by clause — so
+on a row of one clause it answers with whichever question was decided LAST. Eight entries carry an
+LC-E19 record and for THREE of them the most recent record is LC-E4 or LC-E14
+(`retro-push-validator-preflight.md`, `route-push.md`, `stories-test-strategy-push.md`), with the
+other five as the control. Each would have been told to re-record a ruling made about a different
+question. The helper now takes the clause as a third argument and the jq select carries
+`and .clause == $c`; an empty clause argument is SILENCE rather than a wildcard, because a caller
+that cannot name its clause is exactly the case where cross-clause quoting is guaranteed. Both
+call sites pass a derived id — the existing `${cl}` at the HARD row, `adj_clause_cell
+EXTENSION-TITLE-MATCHES-CORE` at the new one, never a literal. Part 3c gains control 3 (a prior
+record under a DIFFERENT clause only, same dirty entry, no note) and the mutant that drops the jq
+conjunct and makes that control go red — without it control 3 is an absence assertion that passes
+against the very build the narrowing exists to reject.
+
+**Two more, both from the adversary against the branch tip, both confirmed by construction before
+being fixed.** First: every world above seeded the prior record under a DIFFERENT digest, so
+nothing sat on the input that discriminates `.subject_digest != $d` — a mutant dropping it passed
+the fixture AND the receipt. That state is reachable at this emit and only here: `adj_lookup`
+answers 1 for a verdict outside the schema's vocabulary, so the `continue` above the emit does not
+fire while a record under the row's own key exists, and the mutant then quotes the operator's own
+current record back and accuses them of spending it. Control 4 seeds exactly that, with its own
+mutant.
+
+Second, the empty-clause guard could not fire. Both call sites passed `adj_clause_cell`, whose
+unresolvable branch printfs a 135-character sentence, so `$3` was never empty and the silence on
+an unresolvable clause came from that sentence matching no register row — a guard that cannot fire
+reading exactly like one that works. Both sites now pass `adj_clause_of`, which returns empty.
+**Giving that guard a subject took a seed nothing predicted**: with `$c` empty the jq conjunct
+already excludes every record carrying a real clause, so control 5's world could not kill the
+guard-removed mutant and the first cut of this arm went red for a true reason. `.clause == $c`
+with `$c=""` matches exactly one shape — a record whose `clause` is the EMPTY STRING, which the
+schema permits because `required` constrains the key's presence and not its value. The reference
+consumer has 0 such rows against a control of 471 that do carry a clause. Control 6 seeds one, and
+the guard mutant dies on it.
+
+**`adj_clause_of` replaces `adj_clause_cell` in the ARGUMENT only.** The `${cl}` interpolated into
+each row's own message text stays the cell form, so a code the contract does not declare still
+prints its stated-absence sentence to the operator — two values doing two jobs, never one computed
+twice. Control 5 asserts both halves in one run: the unresolvable row still carries that sentence
+while the note is silent on it, and the HARD row beside it — whose clause the same contract does
+declare — still prints a RESOLVED id, which is what separates a working cell from one degraded to
+printing the absence unconditionally. Control 5's PAIRING arm supplies the other direction and
+doubles as the assertion that `ADJ_CLAUSE_MAP` is populated where `adj_clause_of` runs: the same
+entry, the same superseded record, against the UNSTRIPPED contract DOES print the note, so the
+silence is the unresolvable code rather than an empty map. Both arms were proven able to fail — a
+mutant putting `adj_clause_cell` back at the call site, and one making `adj_clause_of` always
+return empty, take Part 3c red.
+
+**The whole new Part goes red against the pre-fix script.** Driven with a HEAD copy of
+`layer-drift.sh` in a full `reconcile/` directory copy (a lone copy dies sourcing `lib.sh`):
+exit 1, 58 ok, and `FAIL Part 3c: the re-fired LC-E19 row is byte-indistinguishable from one that
+was never adjudicated`.
+
+**Receipt scoring — bound to the emission site, not to a word.** Four arms: the line immediately
+after the single `^ *emit EXTENSION-TITLE-MATCHES-CORE ` line carries the three-argument call
+spelled with `adj_clause_of`; the jq select inside `adj_spent_note` carries BOTH the clause
+conjunct and the current-digest exclusion; the empty-clause guard is present in that function; and
+`SKILL.md` carries the ordering phrase outside an HTML comment. Every case built on a copy tree,
+the pre-branch blobs taken at `01fea66c`:
+
+    pre-branch base, untouched                               1
+    a comment naming the call beside the emit                1
+    the call added on the HARD row a SECOND time instead     1
+    the TWO-ARGUMENT form, no clause narrowing               1
+    the correct fix                                          0
+
+Eight further controls, each one property short: clause conjunct dropped `1`; current-digest
+conjunct dropped `1`; empty-clause guard deleted `1`; `adj_clause_cell` at the call site `1`;
+correct code with `SKILL.md` at base `1`; correct `SKILL.md` with the code at base `1`; the
+sentence moved inside an HTML comment `1`; correct fix with the ordering sentence REWORDED around
+the phrase `0`. The emit anchor is unique (1 match) against an impossible-code control at 0.
+
+verify: sh L=core/skills/ai-dlc-update/reconcile/layer-drift.sh; S=core/skills/ai-dlc-update/SKILL.md; [ -f "$L" ] && [ -f "$S" ] || exit 9; e="$(grep -cE '^ *emit EXTENSION-TITLE-MATCHES-CORE ' "$L")" || e=0; [ "$e" -eq 1 ] || exit 9; a="$(awk '/^ *emit EXTENSION-TITLE-MATCHES-CORE /{n=1;next} n==1{n=0; if (index($0,"adj_spent_note \"$entry\" \"$tm_digest\" \"$(adj_clause_of EXTENSION-TITLE-MATCHES-CORE)\"")) c++} END{print c+0}' "$L")"; j="$(awk '/^adj_spent_note\(\) \{/{n=1} n==1 && index($0,".clause == $c") && index($0,".subject_digest != $d"){c++} n==1 && /^\}/{n=0} END{print c+0}' "$L")"; g="$(awk '/^adj_spent_note\(\) \{/{n=1} n==1 && index($0,"[ -n \"${3:-}\" ] || return 0"){c++} n==1 && /^\}/{n=0} END{print c+0}' "$L")"; p="$(awk '/<!--/{h=1} h==0 && tolower($0) ~ /make every edit this pull prescribes for the entry first/{c++} /-->/{h=0} END{print c+0}' "$S")"; [ "$a" -ge 1 ] && [ "$j" -ge 1 ] && [ "$g" -ge 1 ] && [ "$p" -ge 1 ] && exit 0; exit 1
+
+## BL-242 — the `ledger-reverify` fixture's mutant-wreckage guard has no subject and cannot fire
+
+**LANDED (v0.558.0, verified f3d7cb57).**
+**Found 2026-09-12** by the adversary re-verifying `BL-241`'s build on the tip, by driving every
+shipped mutant through the fixture and counting how often the guard's branch was taken.
+
+`core/fixtures/ledger-reverify/run.sh`'s `sfx_kill()` compares each mutant's emitted row count
+against the unmutated baseline and reports "wreckage" on a mismatch, so a copy that crashed is
+not scored as a kill. It was written for the crash that deleting BOTH `RSFX=""` lines produces
+under `set -u`. The builder then re-anchored the delete mutation on the reset's own comment
+block, which was the right fix and which removed this guard's only subject: all six shipped
+mutants preserve the row count exactly, so the branch fires zero times on a clean run. A tree
+with both lines deleted now dies only on the argument-error path the fixture never drives; on a
+good invocation it emits a full row set and is caught honestly through shape A.
+
+Measured: with every shipped mutant applied in turn, the guard reported wreckage on none; with
+the reset neutered so no ordinal is emitted anywhere, all three shapes and all three acquittals
+went RED while the guard stayed silent. A vacuous guard is the loaded gun
+`.claude/rules/mechanism-design.md` names: it changes no outcome today and will change one when
+the surrounding row counts move, with nobody looking.
+
+**Not fixed here.** Either give it a subject — a mutant that genuinely emits a different row
+count, such as one that drops the `RECEIPTS-UNDECIDED` emitter, asserted as wreckage rather than
+as a kill — or delete the branch and record that the anchor fix made it inert.
+
+**Tiered DEFECT.** Distribution-side fixture only; no consumer verdict moves.
+
+**2026-09-12 — given a subject rather than deleted, and the receipt is bound in two halves.**
+
+Measured at the tip before building: all six shipped mutants emit exactly the baseline's 90 rows,
+so the guard's branch is taken zero times on a clean run. The predicate is now `sfx_wrecked()`,
+called by `sfx_kill` and by a new probe sited above the first `sfx_kill`, and the probe drives it
+in both directions in one block — it FIRES on a copy one row short, and stays QUIET on the
+unmutated `acquit-shipped` copy. The probe scores no kill and moves `FAILURES` only when the
+guard cannot fire or fires on the shipped copy. `SFX_SHIPPED` moved above the probe rather than
+being defaulted: under `set -u` a reference to it from the probe's position would have been an
+unbound-variable error, and defaulting it to empty would have put the control in a branch that
+never runs.
+
+**The obvious probe mutant does not work, and the measurement is why the mutation is sited on the
+CONDITION.** Deleting `ledger-reverify.sh`'s `emit RECEIPTS-UNDECIDED` line leaves its
+`if … then … fi` with an empty body: `bash -n` exits 2, the copy dies, and the row-count
+difference the guard would then report comes from a syntax error rather than from a dropped row.
+Measured on the same seed against a baseline of 90 rows — deletion: `bash -n` 2, run exit 2, 80
+rows; the condition rewritten to `if false; then`: `bash -n` 0, run exit 0, 89 rows. The probe
+uses the second, asserts the copy PARSES before scoring it, asserts the mutation changed exactly
+two lines, and does not go through `sfx_mutant` — that helper prepends the reset strip, which
+would have made the copy differ by ten lines where one property is under test.
+
+**Receipt scoring, six cases, each built on a copy:** HEAD (inline guard) 1; definition only with
+no callers 1; definition plus the `sfx_kill` call but no probe 1; the full fix 0; a comment naming
+`sfx_wrecked` twice 1; `sfx_wrecked`'s body replaced by `return 1` **0**.
+
+**That sixth row is the receipt's limit, stated rather than hidden.** A call site is TEXT, and a
+probe sited inside a branch that never executes satisfies a call-site count exactly as a live one
+does. The receipt's text half therefore cannot see a gutted predicate — case 6 reads 0 — and what
+binds there is the FIXTURE: the same copy run once through `core/fixtures/ledger-reverify/run.sh`
+exits 1 with `FAIL  wreckage-subject  the guard stayed SILENT on a parseable copy emitting 89 rows
+against the baseline 90`, one of 212 assertions wrong and no other arm disturbed.
+
+verify: sh F=core/fixtures/ledger-reverify/run.sh; [ -f "$F" ] || exit 9; grep -q '^sfx_wrecked() {' "$F" || exit 1; n="$(awk '/^sfx_wrecked\(\) \{/{d=1} d&&/^\}/{d=0;next} !d && /^[^#]*sfx_wrecked[ \t]/{c++} END{print c+0}' "$F")"; [ "$n" -ge 2 ] || exit 1; grep -qE '^[^#]*"wreckage-subject"' "$F" || exit 1; exit 0
+
