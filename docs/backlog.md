@@ -4597,6 +4597,9 @@ verify: sh B=docs/backlog.md; [ -f "$B" ] || exit 9; grep -q '^## BL-227' "$B" |
 
 ## BL-241 — `ledger-reverify.sh` leaks the last entry's `[receipt n/n]` suffix onto every run-scoped and ENTRY-SWALLOWED row
 
+**LANDED (v0.556.0, verified a4c00c9a).** Fixed by one `RSFX=""` after the receipt loop; the
+fixture seed gained a second receipt inside its open EOF fence and three arms over two shapes.
+
 **Found 2026-09-12** by the adversary on batch 91, re-derived here by driving the shipping tool
 on the `ledger-reverify` fixture's seeded ledger with one entry appended. `RSFX` is set per
 receipt inside the receipt loop and never reset after `done <<< "$ENTRIES"`. When the LAST entry
@@ -4613,4 +4616,4 @@ entry and a presence-shaped arm before the reset ships.
 
 **Tiered NOTE.** A wrong suffix on a row's detail; no verdict moves.
 
-verify: sh R=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; S=core/fixtures/ledger-reverify/seed.sh; [ -f "$R" ] && [ -f "$S" ] || exit 9; out="$(bash "$S")" || exit 9; set -- $out; L="$3/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; printf '\n- **Entry ZZ-LAST-TWO** — two receipts.\n  <br>p.\n  verify: theirs_has core/skills/ai-dlc/SKILL.md "rule one"\n  verify: theirs_has core/skills/ai-dlc/SKILL.md "rule one"\n\n- **The lead-in:** annotation.\n' >> "$L"; o="$(bash "$R" "$1" "$2" "$3" "$4" 2>/dev/null)"; rm -rf "$(dirname "$1")"; printf '%s\n' "$o" | grep -q '^ENTRY-SWALLOWED' || exit 9; printf '%s\n' "$o" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/ {f=1} END{exit !f}' && exit 1; exit 0
+verify: sh R=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; S=core/fixtures/ledger-reverify/seed.sh; [ -f "$R" ] && [ -f "$S" ] || exit 9; out="$(bash "$S")" || exit 9; D="$(printf '%s\n' "$out" | cut -d' ' -f1)"; B="$(printf '%s\n' "$out" | cut -d' ' -f2)"; C="$(printf '%s\n' "$out" | cut -d' ' -f3)"; T="$(printf '%s\n' "$out" | cut -d' ' -f4)"; L="$C/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; [ -n "$D" ] && [ -f "$L" ] || exit 9; printf '\nverify: theirs_lacks core/skills/ai-dlc/SKILL.md "RECEIPT_ZZ_SECOND"\n' >> "$L"; o="$(bash "$R" "$D" "$B" "$C" "$T" 2>/dev/null)"; case "$D" in */ledger-reverify-*/dist) rm -rf "$(dirname "$D")" ;; esac; printf '%s\n' "$o" | awk -F'\t' '$1=="ENTRY-SWALLOWED"{c++} END{exit !(c>0)}' || exit 9; printf '%s\n' "$o" | awk -F'\t' '$1!="ENTRY-SWALLOWED" && $1!="RECEIPTS-UNDECIDED" && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/{c++} END{exit !(c>0)}' || exit 9; printf '%s\n' "$o" | awk -F'\t' '($1=="ENTRY-SWALLOWED"||$1=="RECEIPTS-UNDECIDED") && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/{c++} END{exit !(c>0)}' && exit 1; exit 0

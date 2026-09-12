@@ -2072,6 +2072,256 @@ fence_kill mutation-no-reset "$(fence_mutant no-reset 's@if (ledger_entry_id(lin
   "without the id-keyed reset an unterminated fence hides the id-keyed entry after it — the 47-entry desync, reproduced" \
   "PC-FIXTURE-AFTER-QUOTE STILL-LIVE"
 
+# --- THE RECEIPT SUFFIX DOES NOT OUTLIVE THE RECEIPT LOOP --------------------------------------
+# THE DEFECT. `RSFX` holds the ` [receipt n/n]` suffix, is set per receipt INSIDE the receipt
+# loop, and is read by `emit()` on every call in the file. So every row emitted BELOW that loop
+# wears whatever the final iteration left behind: the run-scoped RECEIPTS-UNDECIDED row, which
+# belongs to no entry at all, and every ENTRY-SWALLOWED row, which belongs to an annotation. The
+# operator is handed an attribution naming a receipt that did not produce the row, on the two
+# statuses whose whole job is to say "this is not a receipt verdict".
+#
+# WHY IT WAS INVISIBLE UNTIL THE SEED MOVED. A single-receipt entry sets `RSFX` to the EMPTY
+# string, so a ledger ending on one leaks nothing and every arm below reads clean. The seed's
+# last entry now carries two receipts for exactly this reason.
+#
+# THREE SHAPES, AND EACH ONE EXISTS BECAUSE A WRONG FIX SURVIVED THE OTHERS. Nine candidate
+# implementations were built and scored before these arms were written; the three that a single
+# shape cannot separate are named beside the shape that catches them.
+#
+#   A  the seeded ledger, whose `theirs_has` receipts leave the undecided bucket non-empty.
+#      Catches the reset deleted, the reset moved to the TOP of the loop body (measured RED:
+#      the value still survives the loop's last iteration), a reset placed only beside the
+#      unterminated-fence emit, and a comment-only non-fix.
+#   B  the same ledger with every `theirs_has` receipt stripped, so no RECEIPTS-UNDECIDED row is
+#      emitted at all. This is the shape that refuses a reset sited INSIDE the
+#      `if [ "$th_undecided" -gt 0 ]` block: on shape A that placement runs and reads clean,
+#      and here it never executes while seven ENTRY-SWALLOWED rows still carry the suffix.
+#   C  PC-FIXTURE-NAMED-MANUAL, a multi-receipt entry that also emits NAMED-UPSTREAM. This is
+#      the shape that refuses a reset sited inside `emit()` itself, which clears the leak on
+#      both ledgers above and pays for it by stripping the ordinal off a LEGITIMATE row — that
+#      entry's first HAND-REVIEW loses `[receipt 1/2]` while NAMED-UPSTREAM keeps it.
+#
+# EVERY ARM IS PRESENCE-SHAPED IN BOTH DIRECTIONS. An arm that only asserts the post-loop rows
+# carry NO suffix passes identically against a tool that stopped emitting suffixes ANYWHERE,
+# including the receipt accumulation the `receipt-ordinal` arm above guards. So each shape
+# carries a control that a suffix-less tool cannot satisfy, and each control is asserted BEFORE
+# the absence it qualifies.
+
+# SHAPE A — the seeded ledger, undecided bucket non-empty.
+ASSERTIONS=$((ASSERTIONS + 1))
+sfxA_post="$(printf '%s\n' "$OUT" | awk -F'\t' '$1=="ENTRY-SWALLOWED" || $1=="RECEIPTS-UNDECIDED" {c++} END{print c+0}')"
+sfxA_leak="$(printf '%s\n' "$OUT" | awk -F'\t' '($1=="ENTRY-SWALLOWED" || $1=="RECEIPTS-UNDECIDED") && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/ {c++} END{print c+0}')"
+sfxA_ctl="$(printf '%s\n' "$OUT" | awk -F'\t' '$1!="ENTRY-SWALLOWED" && $1!="RECEIPTS-UNDECIDED" && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/ {c++} END{print c+0}')"
+if [ "$sfxA_post" -eq 0 ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s no ENTRY-SWALLOWED or RECEIPTS-UNDECIDED row was emitted at all, so this arm has no population\n' "suffix-shape-a"
+elif [ "$sfxA_ctl" -eq 0 ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s no row OUTSIDE the post-loop statuses carries an ordinal — suffixes are not being emitted at all, so a clean post-loop reading proves nothing\n' "suffix-shape-a"
+elif [ "$sfxA_leak" -eq 0 ]; then
+  printf '  ok    %-22s all %s post-loop rows carry no receipt suffix, while %s receipt-scoped rows still carry theirs\n' "suffix-shape-a" "$sfxA_post" "$sfxA_ctl"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s %s of %s post-loop rows wear the last entry ordinal — a run-scoped or annotation row attributed to a receipt that did not produce it\n' "suffix-shape-a" "$sfxA_leak" "$sfxA_post"
+  printf '%s\n' "$OUT" | awk -F'\t' '($1=="ENTRY-SWALLOWED" || $1=="RECEIPTS-UNDECIDED") && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/ {print $1"\t"$2}' | sed 's/^/          | /'
+fi
+
+# SHAPE B — the same ledger with every `theirs_has` receipt removed, so the undecided bucket is
+# EMPTY and its row is never emitted. The control is that emptiness itself: a run that still
+# produced a RECEIPTS-UNDECIDED row never reached the state this shape exists to test, and its
+# clean reading would be shape A's answer a second time.
+LED_NOUND="$CONS/_bmad-output/ai-dlc-update/no-undecided-ledger.md"
+grep -v 'verify: theirs_has' "$CONS/_bmad-output/ai-dlc-update/push-candidate-ledger.md" > "$LED_NOUND"
+nou_out="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$LED_NOUND" 2>/dev/null)"
+nou_und="$(printf '%s\n' "$nou_out" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{c++} END{print c+0}')"
+nou_sw="$(printf '%s\n' "$nou_out" | awk -F'\t' '$1=="ENTRY-SWALLOWED"{c++} END{print c+0}')"
+nou_leak="$(printf '%s\n' "$nou_out" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/ {c++} END{print c+0}')"
+nou_ctl="$(printf '%s\n' "$nou_out" | awk -F'\t' '$1!="ENTRY-SWALLOWED" && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/ {c++} END{print c+0}')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ "$nou_und" -ne 0 ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the stripped ledger still emitted %s RECEIPTS-UNDECIDED row(s), so this shape never reached the empty-bucket state it exists to test\n' "suffix-shape-b" "$nou_und"
+elif [ "$nou_sw" -eq 0 ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the stripped ledger produced no ENTRY-SWALLOWED row, so this arm has no population\n' "suffix-shape-b"
+elif [ "$nou_ctl" -eq 0 ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s no receipt-scoped row on the stripped ledger carries an ordinal — suffixes are absent entirely, so the absence below proves nothing\n' "suffix-shape-b"
+elif [ "$nou_leak" -eq 0 ]; then
+  printf '  ok    %-22s with the undecided bucket EMPTY, all %s ENTRY-SWALLOWED rows are still suffix-free (a reset sited inside that block never runs here)\n' "suffix-shape-b" "$nou_sw"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s %s of %s ENTRY-SWALLOWED rows wear an ordinal when no RECEIPTS-UNDECIDED row is emitted — the reset is sited inside a block this ledger never enters\n' "suffix-shape-b" "$nou_leak" "$nou_sw"
+fi
+rm -f "$LED_NOUND"
+
+# SHAPE C — a multi-receipt entry whose rows are NOT all receipt verdicts. PC-FIXTURE-NAMED-MANUAL
+# emits NAMED-UPSTREAM plus one HAND-REVIEW per receipt, and EVERY one of those rows is attributable
+# to the receipt whose iteration produced it. A reset inside emit() satisfies both shapes above and
+# breaks exactly this: the first row consumes the suffix and the second reads empty.
+ASSERTIONS=$((ASSERTIONS + 1))
+nm_tot="$(printf '%s\n' "$OUT" | awk -F'\t' '$2 ~ /PC-FIXTURE-NAMED-MANUAL/{c++} END{print c+0}')"
+nm_sfx="$(printf '%s\n' "$OUT" | awk -F'\t' '$2 ~ /PC-FIXTURE-NAMED-MANUAL/ && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/{c++} END{print c+0}')"
+if [ "$nm_tot" -lt 3 ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s PC-FIXTURE-NAMED-MANUAL emitted %s row(s), want at least 3 (one NAMED-UPSTREAM and one HAND-REVIEW per receipt) — the seed lost this arm subject\n' "suffix-shape-c" "$nm_tot"
+elif [ "$nm_sfx" -eq "$nm_tot" ]; then
+  printf '  ok    %-22s every one of PC-FIXTURE-NAMED-MANUAL %s rows carries its own receipt ordinal, NAMED-UPSTREAM included\n' "suffix-shape-c" "$nm_tot"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s only %s of PC-FIXTURE-NAMED-MANUAL %s rows carry an ordinal — a legitimate row lost its attribution, which is a reset consuming the suffix rather than scoping it\n' "suffix-shape-c" "$nm_sfx" "$nm_tot"
+  printf '%s\n' "$OUT" | grep -F 'PC-FIXTURE-NAMED-MANUAL' | sed 's/^/          | /'
+fi
+
+# --- THE MUTANTS: seven wrong fixes, every one of which passed at least one shape --------------
+# WHOLE-DIRECTORY copies, because ledger-reverify.sh sources lib.sh beside itself and a lone copy
+# is silent for a reason that has nothing to do with the clause.
+#
+# THE DELETE MUTATION IS ANCHORED ON THE COMMENT, NOT ON THE ASSIGNMENT. `^RSFX=""$` matches TWO
+# lines in the fixed file — the definition above the argument bail, and the post-loop reset — and
+# a mutation eating the first makes the tool die `RSFX: unbound variable` at its first emit under
+# `set -u`. That crash emits nothing, which reads as a kill while proving only that a broken copy
+# is quiet. So the strip is keyed on the reset's own comment block, its match count is asserted to
+# be exactly one, and every kill below requires a CONTROL row to survive in the mutant's output.
+sfx_strip='/^# RESET, BECAUSE THE LOOP LEAVES/ {skip=1} skip && /^RSFX=""$/ {skip=0; next} skip && (/^#/ || /^$/) {next}'
+ASSERTIONS=$((ASSERTIONS + 1))
+sfx_anchor_n="$(grep -c '^# RESET, BECAUSE THE LOOP LEAVES' "$CLOSER")" || sfx_anchor_n=0
+sfx_impossible_n="$(grep -c '^# RESET, BECAUSE THE LOOP NEVER LEAVES' "$CLOSER")" || sfx_impossible_n=0
+if [ "$sfx_anchor_n" -eq 1 ] && [ "$sfx_impossible_n" -eq 0 ]; then
+  printf '  ok    %-22s the reset comment anchor is unique in the closer (control: an impossible anchor matches 0)\n' "suffix-anchor"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the reset anchor matched %s lines (want 1) and the impossible control matched %s (want 0) — the mutations below would cut the wrong line or none\n' "suffix-anchor" "$sfx_anchor_n" "$sfx_impossible_n"
+fi
+
+sfx_mutant() { # <name> <awk-body-appended-after-the-strip>  -> dir on stdout, empty if unchanged
+  local n="$1" body="$2" d
+  d="$(dirname "$DIST")/mut-sfx-$n"; rm -rf "$d"; mkdir -p "$d"
+  cp "$(dirname "$CLOSER")"/*.sh "$d/" 2>/dev/null
+  awk "$sfx_strip $body {print}" "$CLOSER" > "$d/ledger-reverify.sh"
+  if cmp -s "$CLOSER" "$d/ledger-reverify.sh"; then return 1; fi
+  [ -f "$d/lib.sh" ] || return 1
+  printf '%s' "$d"
+}
+
+# A mutant is KILLED when at least one of the three shapes goes red on it. Each shape's control is
+# re-evaluated against the MUTANT's own output, so a copy that died — emitting nothing, or emitting
+# rows with no ordinals anywhere — is reported as wreckage rather than scored as a kill.
+sfx_kill() { # <name> <dir-or-empty> <why-this-fix-is-wrong>
+  local n="$1" d="$2" why="$3" ma mb mc a_leak a_ctl b_leak b_und b_sw c_tot c_sfx red
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ -z "$d" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutation did not apply (or its copy has no lib.sh), so this wrong fix was never scored\n' "$n"
+    return
+  fi
+  ma="$(bash "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>/dev/null)"
+  grep -v 'verify: theirs_has' "$CONS/_bmad-output/ai-dlc-update/push-candidate-ledger.md" > "$LED_NOUND"
+  mb="$(bash "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$LED_NOUND" 2>/dev/null)"
+  rm -f "$LED_NOUND"
+  # WRECKAGE GUARD, and it is the control the anchor note above demands: the mutant must still
+  # produce the baseline's row COUNT on shape A. A crash under set -u prints nothing at all.
+  if [ "$(printf '%s\n' "$ma" | grep -c .)" -ne "$(printf '%s\n' "$OUT" | grep -c .)" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutant emitted %s rows against the baseline %s — it broke the tool rather than moving the reset, so its verdict is wreckage\n' \
+      "$n" "$(printf '%s\n' "$ma" | grep -c .)" "$(printf '%s\n' "$OUT" | grep -c .)"
+    return
+  fi
+  a_leak="$(printf '%s\n' "$ma" | awk -F'\t' '($1=="ENTRY-SWALLOWED"||$1=="RECEIPTS-UNDECIDED") && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/{c++} END{print c+0}')"
+  a_ctl="$(printf '%s\n' "$ma" | awk -F'\t' '$1!="ENTRY-SWALLOWED" && $1!="RECEIPTS-UNDECIDED" && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/{c++} END{print c+0}')"
+  b_und="$(printf '%s\n' "$mb" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{c++} END{print c+0}')"
+  b_sw="$(printf '%s\n' "$mb" | awk -F'\t' '$1=="ENTRY-SWALLOWED"{c++} END{print c+0}')"
+  b_leak="$(printf '%s\n' "$mb" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/{c++} END{print c+0}')"
+  c_tot="$(printf '%s\n' "$ma" | awk -F'\t' '$2 ~ /PC-FIXTURE-NAMED-MANUAL/{c++} END{print c+0}')"
+  c_sfx="$(printf '%s\n' "$ma" | awk -F'\t' '$2 ~ /PC-FIXTURE-NAMED-MANUAL/ && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/{c++} END{print c+0}')"
+  red=""
+  [ "$a_ctl" -eq 0 ] && red="$red A(control: no ordinal survives anywhere)"
+  [ "$a_leak" -gt 0 ] && red="$red A(leak=$a_leak)"
+  [ "$b_und" -ne 0 ] && red="$red B(shape not reached)"
+  [ "$b_leak" -gt 0 ] && red="$red B(leak=$b_leak of $b_sw)"
+  [ "$c_tot" -lt 3 ] && red="$red C(population lost)"
+  [ "$c_tot" -ge 3 ] && [ "$c_sfx" -ne "$c_tot" ] && red="$red C($c_sfx of $c_tot attributed)"
+  if [ -n "$red" ]; then
+    printf '  ok    %-22s %s — caught by:%s\n' "$n" "$why" "$red"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s %s, and all three shapes read GREEN on it — the arms above do not discriminate this wrong fix\n' "$n" "$why"
+  fi
+}
+
+sfx_kill mut-delete-reset "$(sfx_mutant delete-reset '')" \
+  "the reset deleted outright"
+sfx_kill mut-topreset "$(sfx_mutant topreset '/^  \[ -n "\$directive" \] \|\| continue$/ { print "  RSFX=\"\""; print; next }')" \
+  "reset at the TOP of the loop body, which the last iteration still overwrites"
+# CONDITIONAL ON THE LEFTOVER ORDINAL, and it is scored as a CORRECT fix rather than a mutant.
+# `case "${ord:-}" in 1/1|"") RSFX="" ;; esac` after the loop READS as a wrong fix — a reset that
+# fires only in the case that already left the suffix empty — and was built as one. It is not:
+# `read` clears its variables when it hits EOF, so `$ord` is EMPTY after `done` on every input and
+# the guard fires unconditionally. Measured directly; both arms of the case were driven. Keeping
+# it in the kill list would assert a fixture failure against an implementation that works, so it
+# sits with the correct fixes below and the wrong-fix family it was meant to represent is covered
+# by mut-inblock, whose condition genuinely does not always hold.
+sfx_kill mut-inblock "$(sfx_mutant inblock '/^if \[ "\$\{th_undecided:-0\}" -gt 0 \]; then$/ { print; print "  RSFX=\"\""; next }')" \
+  "reset INSIDE the undecided block, so it never runs on a ledger with no undecided receipts"
+sfx_kill mut-emitreset "$(sfx_mutant emitreset '/^emit\(\) \{ printf / { print "emit() { printf '"'"'%s\\t%s\\t%s\\n'"'"' \"$1\" \"$2\" \"$3$RSFX\"; RSFX=\"\"; }"; next }')" \
+  "reset inside emit(), which clears the leak by stripping legitimate rows of their ordinal"
+sfx_kill mut-swallowedonly "$(sfx_mutant swallowedonly '/^      emit ENTRY-SWALLOWED "\$sw_label" "this entry opens a fenced/ { print "      RSFX=\"\""; print; next }')" \
+  "reset beside one ENTRY-SWALLOWED emit only, leaving every sibling row leaking"
+sfx_kill mut-comment-only "$(sfx_mutant comment-only '/^done <<< "\$ENTRIES"$/ { print; print ""; print "# RSFX still holds the last entry receipt suffix here."; next }')" \
+  "a COMMENT naming RSFX beside the loop and no code change"
+
+# THE ACQUITTALS, AND THEY ARE WHAT STOPS THE SEVEN KILLS ABOVE READING AS A GUARD THAT REFUSES
+# EVERYTHING. Seven mutants all going red is the same observation whether the shapes discriminate
+# or whether they reject any tree that is not byte-identical to this one. Two DIFFERENT correct
+# implementations are therefore driven through the identical scorer and must come back clean: the
+# reset where it ships (immediately after `done`), and the reset moved down to just above the
+# undecided `if`. Both are outside the loop and before the first post-loop emit, which is the
+# actual property; the shapes must not care where between those two points it sits.
+sfx_pass() { # <name> <dir-or-empty> <what-this-fix-is>
+  local n="$1" d="$2" what="$3" pa pb a_leak a_ctl b_leak b_und c_tot c_sfx bad
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ -z "$d" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the variant did not build, so this acquittal was never scored\n' "$n"
+    return
+  fi
+  pa="$(bash "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>/dev/null)"
+  grep -v 'verify: theirs_has' "$CONS/_bmad-output/ai-dlc-update/push-candidate-ledger.md" > "$LED_NOUND"
+  pb="$(bash "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$LED_NOUND" 2>/dev/null)"
+  rm -f "$LED_NOUND"
+  a_leak="$(printf '%s\n' "$pa" | awk -F'\t' '($1=="ENTRY-SWALLOWED"||$1=="RECEIPTS-UNDECIDED") && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/{c++} END{print c+0}')"
+  a_ctl="$(printf '%s\n' "$pa" | awk -F'\t' '$1!="ENTRY-SWALLOWED" && $1!="RECEIPTS-UNDECIDED" && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/{c++} END{print c+0}')"
+  b_und="$(printf '%s\n' "$pb" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{c++} END{print c+0}')"
+  b_leak="$(printf '%s\n' "$pb" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/{c++} END{print c+0}')"
+  c_tot="$(printf '%s\n' "$pa" | awk -F'\t' '$2 ~ /PC-FIXTURE-NAMED-MANUAL/{c++} END{print c+0}')"
+  c_sfx="$(printf '%s\n' "$pa" | awk -F'\t' '$2 ~ /PC-FIXTURE-NAMED-MANUAL/ && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/{c++} END{print c+0}')"
+  bad=""
+  [ "$a_leak" -gt 0 ] && bad="$bad A(leak=$a_leak)"
+  [ "$a_ctl" -eq 0 ] && bad="$bad A(no ordinal survives)"
+  [ "$b_und" -ne 0 ] && bad="$bad B(shape not reached)"
+  [ "$b_leak" -gt 0 ] && bad="$bad B(leak=$b_leak)"
+  [ "$c_tot" -lt 3 ] && bad="$bad C(population lost)"
+  [ "$c_tot" -ge 3 ] && [ "$c_sfx" -ne "$c_tot" ] && bad="$bad C($c_sfx of $c_tot)"
+  if [ -z "$bad" ]; then
+    printf '  ok    %-22s %s reads clean on all three shapes — the arms discriminate rather than refusing every edit\n' "$n" "$what"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s %s is a CORRECT fix and the shapes rejected it:%s — the arms are keyed on the placement, not on the property\n' "$n" "$what" "$bad"
+  fi
+}
+# The shipped tree, copied whole so it is driven through the SAME scorer as every mutant. Not
+# read off $OUT: a scorer applied to one input and a verdict read from another are two programs.
+SFX_SHIPPED="$(dirname "$DIST")/acquit-shipped"
+rm -rf "$SFX_SHIPPED"; mkdir -p "$SFX_SHIPPED"
+cp "$(dirname "$CLOSER")"/*.sh "$SFX_SHIPPED/" 2>/dev/null
+[ -f "$SFX_SHIPPED/ledger-reverify.sh" ] || SFX_SHIPPED=""
+sfx_pass acquit-shipped "$SFX_SHIPPED" \
+  "the reset immediately after the loop (as shipped)"
+sfx_pass acquit-before-if "$(sfx_mutant before-if '/^if \[ "\$\{th_undecided:-0\}" -gt 0 \]; then$/ { print "RSFX=\"\""; print; next }')" \
+  "the reset moved down to just above the undecided if"
+sfx_pass acquit-cond-ord "$(sfx_mutant cond-ord '/^done <<< "\$ENTRIES"$/ { print; print "case \"${ord:-}\" in 1\/1|\"\") RSFX=\"\" ;; esac"; next }')" \
+  "a reset guarded on the leftover ordinal, which read fires unconditionally clears at EOF"
+
 # --- A BACKSLASH IN THE ANCHOR — PC-S308-LEDGER-REVERIFY-READS-ESCAPED-BACKTICKS-LITERALLY -----
 # THE DEFECT. The substring grammar is literal and has no escape mechanism, and nothing said so:
 # a receipt whose backticks were markdown-escaped was searched for WITH its backslashes, found at
