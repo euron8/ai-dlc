@@ -984,11 +984,23 @@ verify: sh case 'a\b' in *\\*) exit 0 ;; *) exit 1 ;; esac
 ## PC-FIXTURE-EOF-FENCE — a fence still open at the end of the ledger
 
 THE LAST ENTRY, and its fence never closes. No id-keyed line follows, so no reset can report
-it; reverify's END rule does, under ENTRY-SWALLOWED with the unterminated signal. The receipt
-below sits inside the open fence and still parses, because a verify: line is not a boundary.
+it; reverify's END rule does, under ENTRY-SWALLOWED with the unterminated signal. The receipts
+below sit inside the open fence and still parse, because a verify: line is not a boundary.
+
+TWO RECEIPTS, AND THAT IS WHAT LETS THIS LEDGER EXPRESS THE RECEIPT-SUFFIX LEAK. The suffix is
+set per receipt inside reverify's receipt loop, so every row emitted after that loop wears
+whatever the final iteration left behind. A one-receipt last entry leaves it EMPTY and the leak
+is invisible; only a last entry carrying more than one makes those rows wear a receipt that did
+not produce them. The shape has to sit on THIS entry, which is already last by construction: a
+two-receipt entry seeded ahead of this heading is followed by this entry's own single receipt,
+whose ordinal resets the suffix to empty before the loop ends, and one seeded after it takes the
+unterminated fence's claim to being last and leaves the END-rule arm with no subject. Both were
+driven; the earlier placement leaked zero rows against this one's seven. The two anchors differ
+so the pair cannot classify alike for a reason unrelated to the accumulation.
 
 ```
 verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A_SECOND_ANCHOR"
 LEDGER
 
 printf '%s %s %s %s\n' "$DIST" "$BASE" "$CONS" "$THEIRS"
