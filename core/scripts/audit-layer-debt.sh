@@ -364,15 +364,32 @@ def cue_denied(reason, m):
 # A FIFTH CLASS, AND IT IS THE ONE THAT PROMPTS A WRONG WRITE RATHER THAN A GLANCE. The four
 # above cost the reader a look. This one costs the reader an ACT: the remedy this report prints
 # is "re-record each with an `owed` object", and a row whose reason CITES an obligation some
-# other row already declares is told to declare a SECOND id for the same work. A duplicate
-# obligation under a new id is worse than the noise, because the OPEN arm above then enumerates
-# a debt nobody owes and no discharge row will ever name.
+# other row already declares is told to declare a SECOND id for the same work.
+#
+# THE HANDLE IS THE DECLARING ROW ITSELF, NOT THE OPEN ARM'S OUTPUT, and getting that backwards
+# is how this acquittal gets keyed wrongly. An `owed.id` is the only digest-independent handle
+# in this register — the paragraph opening this file's contradicts-core arm says so — and it
+# stays addressable through its discharge: `owed.id -> closes_owed` is a join over the whole
+# append-only history, so the declaring row and the row that paid it are both findable by id
+# long after the OPEN arm stops listing it. A citing row therefore names work that is already
+# ON THE RECORD under an id, and the remedy would put it on the record a second time under a
+# different one.
+#
+# SO THE JOIN IS AGAINST EVERY DECLARED id, DISCHARGED OR NOT, AND `declared - closed` WAS
+# CONSIDERED AND REFUSED. Telling an adjudicator to "re-record with an `owed` object" a row
+# citing a CLOSED id re-opens finished work under a new id, which is the same wrong write one
+# step worse. This also matches the scope of the entry-scoped acquittal above it, which turns
+# on `owed_entries` — declared ids regardless of closure — so the two acquittals in this loop
+# cannot disagree about what counts as declared. Measured on the reference consumer: all 36
+# declared ids are discharged there, so `declared - closed` is EMPTY and that key is a no-op,
+# 7 rows reported before and after; the committed key takes it to 6.
 #
 # RESOLVABILITY IS A JOIN AGAINST `declared`, DERIVED, NEVER A TOKEN GRAMMAR. Spelling
 # `OWED-[A-Za-z0-9-]+` here would acquit a citation of NOTHING — a row that invents an id no row
 # declares has no handle either, and is exactly the genuine offender this arm exists to name.
-# `declared` is the OPEN arm's own key, so the acquittal and the enumeration cannot disagree
-# about which ids exist. With no declarations the pattern is None and the arm is unchanged.
+# `declared` is the OPEN arm's own key, so the acquittal and that arm cannot disagree about
+# which ids the register declares. With no declarations the pattern is None and the arm is
+# unchanged.
 #
 # ROW SCOPE, NOT CLAUSE SCOPE, AND THE TABLE IS WHY. Both keys were built on copies and scored
 # on the only register that exists — the reference consumer's, 471 rows, 44 declaring rows, 36
@@ -386,9 +403,9 @@ def cue_denied(reason, m):
 # moves no cell is the vacuous guard `mechanism-design.md` refuses. Row scope's cost is measured
 # and stated rather than assumed: it silences a row that cites one obligation and states a
 # SECOND in prose, which the seed register seeds as its discriminating case. That is the same
-# exposure the entry-scoped acquittal three paragraphs up already carries and states, on the
-# same ground — a cited obligation is a handle the OPEN arm enumerates, so the reader is already
-# on the operator's list, and being on it twice under two ids is the failure being fixed.
+# exposure the entry-scoped acquittal above already carries and states, at the same scope and on
+# the same ground — a cited obligation is on the record under an id, and putting it there twice
+# under two ids is the failure being fixed.
 CITED = (re.compile(r"(?<![\w-])(?:%s)(?![\w-])"
                     % "|".join(re.escape(i) for i in sorted(declared, key=len, reverse=True)))
          if declared else None)
@@ -404,7 +421,10 @@ for r in rows:
         continue
     reason = r.get("reason", "") or ""
     # A CITATION OF A DECLARED id IS A HANDLE, so this row's prose is a REFERENCE to an
-    # obligation the OPEN arm already enumerates, not an undeclared one. Sited here rather than
+    # obligation some row of this register declares — discharged or not — and not an undeclared
+    # one. The handle is that declaring row, findable by id through the whole append-only
+    # history; it is NOT this run's OPEN list, which drops an id the moment it is paid. Sited
+    # here rather than
     # inside the cue filter deliberately: the discount is per ROW because the handle is, and the
     # `hits` comprehension below is the per-OCCURRENCE rule, which this is not.
     if CITED is not None and CITED.search(reason):

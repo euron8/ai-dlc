@@ -30,7 +30,7 @@ WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 REG="$WORK/register.jsonl"
 
-EXPECTED_ASSERTIONS=26
+EXPECTED_ASSERTIONS=29
 fails=0; made=0
 ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
@@ -342,10 +342,21 @@ r("extensions/c7.md", "No owed beyond OWED-CIT-X.")
 print(json.dumps(dict(base, entry="extensions/c8.md", reason="Debt discharged.",
                       closes_owed=["OWED-CIT-OTHER"])))
 # c9 — M2'S OWN SUBJECT, and it exists because no other seed can see that mutant. A standalone
-# cue beside a citation of `OWED-CIT-OTHER`, an id that is CLOSED and never DECLARED. The fix
-# reports it (a discharged id is not a live handle); a join taken against `closes_owed` acquits
-# it. No mutation of the derivation reaches this row, and no other row separates the two sets.
+# cue beside a citation of `OWED-CIT-OTHER`, an id that is CLOSED and never DECLARED — so it
+# was never on the record as an obligation at all, and a citation of it is a citation of
+# nothing. The fix REPORTS it; a join taken against `closes_owed` acquits it. No mutation of
+# the derivation reaches this row, and no other row separates the two id sets.
 r("extensions/c9.md", "The narrowing is owed under OWED-CIT-OTHER.")
+# c10/c11/c12 — THE DISCHARGED-CITATION SHAPE, which is what the live register actually holds:
+# on the reference consumer all 36 declared ids are discharged, so a key of `declared - closed`
+# would be EMPTY there and acquit nothing. c10 cites `OWED-C`, c11 declares it, c12 pays it.
+# c10 must be ACQUITTED — telling an adjudicator to re-record it with a NEW `owed` object
+# re-opens finished work under a second id. Read against c9 this pair is the whole distinction:
+# c10's id was DECLARED and then paid, c9's was only ever named in a discharge.
+r("extensions/c10.md", "The narrowing is owed under OWED-C.")
+r("extensions/c11.md", "declaring the second migration", {"id":"OWED-C","what":"split C out"})
+print(json.dumps(dict(base, entry="extensions/c12.md", reason="Debt discharged.",
+                      closes_owed=["OWED-C"])))
 PY
 cit_out="$(bash "$AUDIT" --register "$CIT_REG" 2>&1)"
 cit_und="$(awk '/^UNDECLARED/,/^$/' <<<"$cit_out")"
@@ -367,12 +378,25 @@ grep -q 'c4\.md' <<<"$cit_und" \
   && ok "a genuine undeclared obligation carrying no citation is still reported" \
   || { bad "the genuine obligation vanished — the acquittal reaches rows that cite nothing"; sed 's/^/        /' <<<"$cit_out"; }
 
-# 18 — the VERDICT, asserted as the exact reported set rather than as a count. A count of 2 is
-# reachable by two wrong rows; the names are not.
-cit_names="$(grep -oE 'c[0-9]\.md' <<<"$cit_und" | sort -u | tr '\n' ' ')"
+# 18 — the VERDICT, asserted as the exact reported set rather than as a count. A count is
+# reachable by the wrong rows; the names are not.
+cit_names="$(grep -oE 'c[0-9]+\.md' <<<"$cit_und" | sort -u | tr '\n' ' ')"
 [ "$cit_names" = "c3.md c4.md c9.md " ] \
   && ok "the reported set is exactly {c3,c4,c9} — the rows with no resolvable handle" \
   || { bad "the reported set was '$cit_names', expected 'c3.md c4.md c9.md '"; sed 's/^/        /' <<<"$cit_out"; }
+
+# 18b — THE DISCHARGED CITATION IS ACQUITTED. This is the shape the live register actually
+# holds; a key of `declared - closed` acquits NOTHING there, because every declared id is paid.
+grep -q 'c10\.md' <<<"$cit_und" \
+  && { bad "a row citing a DISCHARGED obligation was filed as undeclared — obeying the remedy re-opens finished work under a new id"; sed 's/^/        /' <<<"$cit_out"; } \
+  || ok "a row citing an obligation that was declared and later DISCHARGED is acquitted — the handle is the declaring row, not this run's OPEN list"
+
+# 18c — CONTROL, one property apart from 18b: `c9` cites an id that is closed and NEVER
+# declared, so it was never on the record as an obligation. It must stay reported. Without this
+# twin, 18b passes equally against a key joined on `closed` — which is the acquittal inverted.
+grep -q 'c9\.md' <<<"$cit_und" \
+  && ok "CONTROL: a citation of an id that is CLOSED but never DECLARED is still reported — the discharge join is not a declaration" \
+  || { bad "CONTROL: the closed-but-never-declared citation was acquitted — the key reads discharges as declarations"; sed 's/^/        /' <<<"$cit_out"; }
 
 # 19 — THE ACQUITTAL DOES NOT REACH THE OPEN ARM. The declared debt must still be enumerated;
 # an acquittal that silenced the declaration would satisfy this section by deleting its subject.
@@ -429,6 +453,28 @@ else
   fi
 fi
 
+# 22b — M4, THE REFUSED KEY: `declared - closed`, i.e. acquit only on an id that is still OPEN.
+# It is the reading a hand arrives at from the phrase "an obligation the report already
+# enumerates", and it is the reason that phrasing is not in this file. Scored on `c10`, its own
+# subject — no other mutant here moves that row. On the reference consumer this key acquits
+# NOTHING at all, every declared id there being discharged, so without a seeded discharged
+# citation it is a wrong answer no corpus could expose.
+M_CIT4="$(mkmut cit4 'in sorted(declared, key=len, reverse=True)))
+         if declared else None)' 'in sorted(set(declared) - closed, key=len, reverse=True)))
+         if (set(declared) - closed) else None)')"
+if [ -z "$M_CIT4" ]; then
+  bad "FIXTURE ERROR: the open-only mutation DID NOT APPLY — assertion 18b proves nothing"
+else
+  m4_und="$(awk '/^UNDECLARED/,/^$/' <<<"$(bash "$M_CIT4" --register "$CIT_REG" 2>&1)")"
+  if grep -q 'c10\.md' <<<"$m4_und"; then
+    grep -q 'c1\.md' <<<"$m4_und" \
+      && bad "MUTATION M4: acquitting only on OPEN ids moved the live citation too — assertion 18b is entangled with assertion 15" \
+      || ok "MUTATION M4: acquitting only on ids still OPEN files the discharged citation as undeclared again (so assertion 18b is live), while the open citation stays acquitted"
+  else
+    bad "MUTATION M4: the discharged citation stayed acquitted under an OPEN-only key — assertion 18b passes whichever half of the declared set is joined"
+  fi
+fi
+
 # 23 — M3, the fix DISABLED at its only reader. Both absence-shaped arms (15 and 20) must be
 # unable to tell this from the fix, and assertion 15 must go RED. Anchored on the `continue`
 # rather than on the `CITED =` assignment so it reverts the BEHAVIOUR and not the derivation —
@@ -450,14 +496,14 @@ else
   fi
 fi
 
-# 24 — UNMUTATED CONTROL, necessary and not sufficient, so it carries a POSITIVE conjunct: a
-# copy taken and invoked exactly as the three mutants are must still NAME the baseline rows. A
+# 25 — UNMUTATED CONTROL, necessary and not sufficient, so it carries a POSITIVE conjunct: a
+# copy taken and invoked exactly as the four mutants are must still NAME the baseline rows. A
 # subject replaced by `exit 0` fails this, which is what stops silence above scoring as a kill.
 CIT_CTL="$WORK/control-cit.sh"
 cp "$AUDIT" "$CIT_CTL"
 ctl_out="$(bash "$CIT_CTL" --register "$CIT_REG" 2>&1)"; ctl_rc=$?
 if [ "$ctl_rc" -eq 0 ] && grep -q 'c4\.md' <<<"$ctl_out" && grep -q 'OWED-CIT-X' <<<"$ctl_out"; then
-  ok "CONTROL: an UNMUTATED copy, taken and invoked exactly as M1/M2/M3 are, still names the baseline rows — so the kills above are the mutations and not the harness"
+  ok "CONTROL: an UNMUTATED copy, taken and invoked exactly as M1/M2/M3/M4 are, still names the baseline rows — so the kills above are the mutations and not the harness"
 else
   bad "CONTROL: an unmutated copy did not reproduce the baseline (rc=$ctl_rc) — every kill above may be the harness failing to run the subject"
   sed 's/^/        /' <<<"$ctl_out"
