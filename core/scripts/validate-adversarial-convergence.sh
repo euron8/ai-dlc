@@ -1045,11 +1045,43 @@ validate_record() { # $1 record, $2 divergent-pass, $3 index-of-divergent-pass -
   # empty for a field carrying no parseable timestamp and the bound is then omitted.
   # Passed unconditionally, empty meaning no bound, so the literal sits on the invocation where
   # **I109** joins it to `--cite`.
-  local auth_ts
+  local auth_ts cite_out
   auth_ts="$(cite_ts "$auth")"
-  bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$auth_quote" \
-    --since "${P_AT[$idx]:-}" --authorized-at "$auth_ts" --quiet >/dev/null 2>&1
+  # STDOUT IS CAPTURED, NOT DISCARDED, and that is the whole of the third state's mechanism.
+  # `--cite` emits `NOMATCH-NO-RECORDS` when the corpus held ZERO parseable operator-side
+  # records and `NOMATCH` when it held records that did not carry the quote. Both exit 2, so
+  # the status alone cannot separate them and the three other readers of this predicate are
+  # unaffected by the distinction existing.
+  cite_out="$(bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$auth_quote" \
+    --since "${P_AT[$idx]:-}" --authorized-at "$auth_ts" --quiet 2>/dev/null)"
   cite_rc=$?
+  # A CORPUS THAT HELD NOTHING IS THE ABSENT CORPUS, ONE STEP LATER. `steer_dir_has_transcript`
+  # answers whether a `*.jsonl` is READABLE, never whether it holds a record, so a directory
+  # of empty or sidechain-only transcripts sets STEER_FLAG, skips the two-tier branch above and
+  # DENIES -- while passing no flag at all fails open. An operator who supplies MORE ground
+  # truth was worse off than one who supplied none, which inverts the posture the fail-open
+  # exists to hold.
+  #
+  # THE NARROWING IS TO "HELD NO RECORD", NOT TO "LACKED THE CITATION", and the difference is
+  # the whole check. A corpus holding operator records that do not carry the quote has REFUTED
+  # the citation; that is S290 and it keeps denying below. Only a corpus that could not have
+  # verified anything -- files were opened and nothing was read -- is unverifiable in the sense
+  # the branch above means. Acquitting the other one is the over-broad fix the entry warns
+  # against.
+  #
+  # AND THE TOKEN IS WITHHELD WHEN THE FILE LIST IS EMPTY, which is what stops this being a
+  # fail-open on `--since`. That bound is `${P_AT[$idx]}` -- `invoked_at` from a pass file the
+  # LEAD writes -- and the predicate drops whole files below it by mtime, so a forged FUTURE
+  # `invoked_at` empties the corpus over a tree that holds the operator's real message.
+  # The owner refuses the token in that state; read its note beside the `files.length` test.
+  #
+  # AND ONLY IN --cycle-state. The gate still fails closed on it, one branch down: the RELEASE
+  # surface must not open on a claim nothing checked, which is the same two-tier posture the
+  # no-transcript case already takes.
+  if [ "$cite_rc" -eq 2 ] && [ "$cite_out" = "NOMATCH-NO-RECORDS" ] && [ "$CYCLE_STATE" -eq 1 ]; then
+    echo "ADVERSARIAL_CITATION_UNVERIFIABLE $rec (corpus held no operator record)" >&2
+    return 0
+  fi
   if [ "$cite_rc" -eq 2 ]; then
     # NAME THE CORPUS THAT WAS SEARCHED. The sibling prints its own corpus identity, and this
     # caller discards it -- `--quiet >/dev/null 2>&1` reads only the status. So "the operator

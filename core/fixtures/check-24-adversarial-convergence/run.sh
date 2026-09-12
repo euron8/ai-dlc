@@ -300,6 +300,268 @@ else
   echo "  FAIL  cross-session (with dir): expected RESOLVED, got '$got_dir'" >&2; FAILURES=$((FAILURES + 1))
 fi
 
+# --- A CORPUS THAT HELD NO RECORD IS THE ABSENT CORPUS, ONE STEP LATER ----------
+# `steer_dir_has_transcript` asks whether a `*.jsonl` is READABLE, never whether it holds a
+# record. So a directory of empty or sidechain-only transcripts set STEER_FLAG, skipped the
+# two-tier fail-open, ran the predicate and DENIED -- while passing NO flag at all failed
+# open. Supplying MORE ground truth than the passing case requires wedged the pipeline.
+#
+# THE NARROWING IS THE ASSERTION, AND IT IS WHY EVERY ARM HERE COMES IN A PAIR. "Held no
+# record" fails open; "held operator records that do not carry the quote" keeps denying,
+# because that corpus REFUTED the citation and that is S290. A fix that cannot tell the two
+# apart acquits the forgery, so each acquitted world below sits beside a denied one that
+# differs from it in exactly one property.
+CORP="$ROOT/corpora"; mkdir -p "$CORP"
+# no-records: a directory holding a transcript FILE with nothing parseable in it. The
+# motivating world, kept as its own case: a dir with no `*.jsonl` at all does not reach the
+# predicate (steer_dir_has_transcript refuses it), so it cannot exercise this branch.
+mkdir -p "$CORP/no-records"; : > "$CORP/no-records/session-a.jsonl"
+# sidechain-only: parseable lines, every one dropped by the reader's `!r.isSidechain` filter.
+# A subagent's turns are not the operator's, and a corpus made only of them read ZERO.
+mkdir -p "$CORP/sidechain"
+printf '%s\n' '{"type":"user","isSidechain":true,"timestamp":"2026-07-12T03:00:00Z","message":{"content":"Revert the p1 to p2 repair wholesale — it made the check unfalsifiable."}}' \
+  > "$CORP/sidechain/session-a.jsonl"
+# assistant-only: THE NEAR-MISS, and it must DENY. Records parse and are read; none of them
+# is an operator turn. That is the S290 shape exactly -- the machine spoke, the human did
+# not -- and it is one property from `sidechain` above, which is acquitted.
+mkdir -p "$CORP/assistant"
+printf '%s\n' '{"type":"assistant","timestamp":"2026-07-12T03:00:00Z","message":{"content":[{"type":"text","text":"Revert the p1 to p2 repair wholesale — it made the check unfalsifiable."}]}}' \
+  > "$CORP/assistant/session-a.jsonl"
+# operator-no-quote: the other near-miss. A real human turn, in the window, that simply does
+# not carry the cited words. The ground truth is present and refutes the record.
+mkdir -p "$CORP/operator-no-quote"
+printf '%s\n' '{"type":"user","timestamp":"2026-07-12T03:00:00Z","message":{"content":"Something this resolution record does not quote, at ample length."}}' \
+  > "$CORP/operator-no-quote/session-a.jsonl"
+# since-excluded: THE ONE THAT MUST KEEP DENYING, and it is not obvious. The corpus holds the
+# GENUINE operator turn; its file's MTIME predates the bound, so `--since` drops the FILE and
+# the reader sees zero records. That zero is a fact about the BOUND, not about the corpus --
+# and the bound is `invoked_at` from a pass file the LEAD writes. Acquitting it would hand the
+# lead a one-field fail-open over ground truth that refutes nothing. The predicate withholds
+# the token when the file LIST is empty, which is exactly this state.
+mkdir -p "$CORP/since-excluded"
+cp "$ROOT/prior-session-transcript.jsonl" "$CORP/since-excluded/session-a.jsonl"
+touch -t 200001010000 "$CORP/since-excluded/session-a.jsonl"
+
+# $1 label  $2 corpus-dir  $3 expected STATE  $4 expected rc  $5 stderr expectation (UNVERIFIABLE|quiet)  $6 why
+# ASSERTS THE MESSAGE, not only the state. A fail-open that stops SAYING it is unverifiable
+# is indistinguishable from a verified citation in the flow log, which is the whole reason
+# the no-transcript branch prints one.
+corp_state() {
+  local label="$1" cdir="$2" want_state="$3" want_rc="$4" want_err="$5" why="$6" out rc state err
+  ASSERTIONS=$((ASSERTIONS + 1))
+  out="$(bash "$VALIDATOR" --series "$ROOT/stalled-resolved/s1-adversarial-p" --cycle-state \
+         --transcript-dir "$cdir" 2>"$ROOT/corp.err")"
+  rc=$?
+  state="$(printf '%s' "$out" | cut -f1)"
+  err="quiet"
+  grep -qF 'ADVERSARIAL_CITATION_UNVERIFIABLE' "$ROOT/corp.err" && err="UNVERIFIABLE"
+  if [ "$state" = "$want_state" ] && [ "$rc" -eq "$want_rc" ] && [ "$err" = "$want_err" ]; then
+    printf '  ok    %-28s %s/%s %s  (%s)\n' "$label" "$state" "$rc" "$err" "$why"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s %s/%s %s want=%s/%s %s  (%s)\n' \
+      "$label" "${state:-<none>}" "$rc" "$err" "$want_state" "$want_rc" "$want_err" "$why"
+  fi
+}
+
+# THE CONTROL FIRST. The real corpus VERIFIES, so every deny below is a deny about the
+# citation and not a series that could never resolve.
+corp_state corpus-real          "$ROOT"                  RESOLVED 0 quiet        "CONTROL: the genuine operator turn is in this corpus -- the record verifies"
+corp_state corpus-no-records    "$CORP/no-records"       RESOLVED 0 UNVERIFIABLE "THE SUBJECT: a present transcript holding zero records could not have verified anything -- fail OPEN, and say so"
+corp_state corpus-sidechain     "$CORP/sidechain"        RESOLVED 0 UNVERIFIABLE "every line dropped as a sidechain: FILES were opened and zero records came back, same fact"
+corp_state corpus-since-excluded "$CORP/since-excluded"  STALLED  3 quiet        "THE BOUND, NOT THE CORPUS: --since dropped the only FILE, so zero is a fact about a lead-written field -- DENIED"
+corp_state corpus-assistant     "$CORP/assistant"        STALLED  3 quiet        "THE NEAR-MISS: records WERE read and none is an operator turn -- the S290 shape, still DENIED"
+corp_state corpus-operator-quiet "$CORP/operator-no-quote" STALLED 3 quiet       "THE NEAR-MISS: a real operator turn that does not carry the quote REFUTES the record -- still DENIED"
+
+# THE PROOF THAT since-excluded IS A LIVE ATTACK AND NOT A CURIOSITY. Unbounded, that SAME
+# corpus verifies that SAME citation -- so its zero came from the bound, over ground truth
+# that refutes nothing. Without this arm the deny above is indistinguishable from a corpus
+# that simply never held the words, and the `files.length` conjunct would read as decoration.
+ASSERTIONS=$((ASSERTIONS + 1))
+STEER_FOR_SINCE="$(cd "$(dirname "$VALIDATOR")" && pwd)/validate-steering-budget.sh"
+since_out="$(bash "$STEER_FOR_SINCE" --dir "$CORP/since-excluded" \
+  --cite "Cut the claim and re-verify" --authorized-at "" --quiet 2>/dev/null)"
+since_rc=$?
+if [ "$since_rc" -eq 0 ]; then
+  printf '  ok    %-28s %s  (%s)\n' "since-excluded-unbounded" "MATCH" "unbounded, the SAME corpus verifies -- so the deny above came from the BOUND, not from an absent operator"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-28s got %s/%s want MATCH/0 -- the seed never held the quote, so the since arm above proves nothing\n' \
+    "since-excluded-unbounded" "${since_out:-<none>}" "$since_rc"
+fi
+
+# THE FORGED BOUND, END TO END, through the SHIPPING validator. The arm above drives the
+# predicate directly; this one drives the attack as a lead would actually mount it -- by
+# rewriting `invoked_at` on the pass the resolution record resolves, which is the sole source
+# of `--since`. It must stay STALLED, and it is the discriminating case: a token emitted
+# without the `files.length` conjunct reports RESOLVED/UNVERIFIABLE here over a corpus holding
+# the operator's real message, which is a fail-open on a field the lead writes.
+ASSERTIONS=$((ASSERTIONS + 1))
+FORGE="$ROOT/forged-since"; mkdir -p "$FORGE"
+cp -R "$ROOT/stalled-resolved" "$FORGE/series"
+cp "$ROOT"/*.jsonl "$FORGE/" 2>/dev/null
+sed -i.bak 's/^invoked_at: .*/invoked_at: 2099-01-01T00:00:00Z/' "$FORGE/series/s1-adversarial-p4.md"
+rm -f "$FORGE/series/s1-adversarial-p4.md.bak"
+forge_out="$(bash "$VALIDATOR" --series "$FORGE/series/s1-adversarial-p" --cycle-state \
+  --transcript-dir "$ROOT" 2>/dev/null)"
+forge_rc=$?
+forge_state="$(printf '%s' "$forge_out" | cut -f1)"
+if [ "$forge_state" = "STALLED" ] && [ "$forge_rc" -eq 3 ]; then
+  printf '  ok    %-28s %s/%s  (%s)\n' "forged-invoked-at" "$forge_state" "$forge_rc" "a future invoked_at empties the corpus by mtime; the third state must NOT open on a bound the lead controls"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-28s %s/%s want STALLED/3  (%s)\n' "forged-invoked-at" "${forge_state:-<none>}" "$forge_rc" "a lead-forged invoked_at bought a fail-open over a corpus holding the operator's real message"
+fi
+
+# GATE MODE STILL FAILS CLOSED ON THE THIRD STATE. The RELEASE surface must not open on a
+# claim nothing checked. `divergent-resolved` is the series used because it PASSES the gate
+# on the real corpus -- `stalled-resolved` exits 1 whatever the corpus says, so a deny read
+# off it would be non-discriminating and its agreement would mean nothing.
+gate_corp() { # $1 label  $2 corpus  $3 want rc  $4 why
+  local label="$1" cdir="$2" want="$3" why="$4" got
+  ASSERTIONS=$((ASSERTIONS + 1))
+  bash "$VALIDATOR" --series "$ROOT/divergent-resolved/s1-adversarial-p" \
+    --transcript-dir "$cdir" >/dev/null 2>&1
+  got=$?
+  if [ "$got" -eq "$want" ]; then
+    printf '  ok    %-28s exit=%s  (%s)\n' "$label" "$got" "$why"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s exit=%s want=%s  (%s)\n' "$label" "$got" "$want" "$why"
+  fi
+}
+gate_corp gate-corpus-real       "$ROOT"            0 "CONTROL: the gate PASSES this series on the real corpus, so the denies below are about the corpus"
+gate_corp gate-corpus-no-records "$CORP/no-records" 1 "the gate still fails CLOSED on the third state -- a release never opens on an unverifiable claim"
+gate_corp gate-corpus-sidechain  "$CORP/sidechain"  1 "same, by the other route to zero records"
+
+# --- MUTATION: the third state, three ways it goes wrong ------------------------
+# THE COPIES NEED THEIR SIBLING. `STEER_SCRIPT` resolves as `$(dirname "$0")/…`, so a lone
+# copy finds no predicate, every citation becomes UNVERIFIABLE (rc!=2 branch) and --cycle-state
+# fails OPEN on everything -- which would score `corpus-assistant` as acquitted and read as a
+# kill it did not earn. m3 mutates the PREDICATE, so its copy needs its own directory with a
+# convergence validator beside it.
+MWORK="$ROOT/third-state-mutants"; mkdir -p "$MWORK"
+SRC_DIR="$(cd "$(dirname "$VALIDATOR")" && pwd)"
+cp "$VALIDATOR" "$MWORK/validate-adversarial-convergence.sh"
+cp "$SRC_DIR/validate-steering-budget.sh" "$MWORK/validate-steering-budget.sh"
+
+# $1 convergence-script  $2 corpus -> "<STATE>/<rc>/<err>"
+ts_probe() {
+  local v="$1" cdir="$2" out rc state err
+  out="$(bash "$v" --series "$ROOT/stalled-resolved/s1-adversarial-p" --cycle-state \
+         --transcript-dir "$cdir" 2>"$ROOT/ts.err")"
+  rc=$?
+  state="$(printf '%s' "$out" | cut -f1)"
+  err="quiet"; grep -qF 'ADVERSARIAL_CITATION_UNVERIFIABLE' "$ROOT/ts.err" && err="UNVERIFIABLE"
+  printf '%s/%s/%s' "${state:-NONE}" "$rc" "$err"
+}
+# The five worlds every mutant is scored on, in order. One acquitted, three denied, plus the
+# verifying control -- a mutant that moves only one cell is attributable, and one that moves
+# all five is not a finding about this branch. The three denied worlds fail for THREE
+# DIFFERENT reasons (no operator turn / the quote is absent / the bound emptied the file
+# list), which is what lets each mutant below name its own subject.
+TS_CORPORA="$ROOT $CORP/no-records $CORP/assistant $CORP/operator-no-quote $CORP/since-excluded"
+TS_REAL="RESOLVED/0/quiet RESOLVED/0/UNVERIFIABLE STALLED/3/quiet STALLED/3/quiet STALLED/3/quiet"
+
+ts_row() { # ts_row <convergence-script> -> the four verdicts, space separated
+  local v="$1" c row=""
+  for c in $TS_CORPORA; do row="$row $(ts_probe "$v" "$c")"; done
+  echo $row
+}
+
+# THE UNMUTATED CONTROL, in the mutants' own directory. A partial copy tree makes every
+# mutant "survive" and this control pass too, because two inert runs compare equal -- so the
+# control carries a POSITIVE conjunct: it must reproduce the acquittal AND both denies.
+ASSERTIONS=$((ASSERTIONS + 1))
+ts_ctrl="$(ts_row "$MWORK/validate-adversarial-convergence.sh")"
+if [ "$ts_ctrl" = "$(echo $TS_REAL)" ]; then
+  printf '  ok    %-28s [%s]\n' "CONTROL third-state copy" "$ts_ctrl"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-28s got [%s] want [%s] -- the copy tree is what fails; every mutant below is vacuous\n' \
+    "CONTROL third-state copy" "$ts_ctrl" "$(echo $TS_REAL)"
+fi
+
+# $1 label  $2 which-file (conv|pred)  $3 old  $4 new  $5 expected four verdicts  $6 why
+ts_mutate() {
+  local label="$1" which="$2" old="$3" new="$4" want="$5" why="$6"
+  local mdir="$ROOT/tsm-$label"
+  ASSERTIONS=$((ASSERTIONS + 1))
+  mkdir -p "$mdir"
+  cp "$VALIDATOR" "$mdir/validate-adversarial-convergence.sh"
+  cp "$SRC_DIR/validate-steering-budget.sh" "$mdir/validate-steering-budget.sh"
+  local target="$mdir/validate-adversarial-convergence.sh"
+  [ "$which" = pred ] && target="$mdir/validate-steering-budget.sh"
+  local src="$VALIDATOR"
+  [ "$which" = pred ] && src="$SRC_DIR/validate-steering-budget.sh"
+  if ! MUT_OLD="$old" MUT_NEW="$new" python3 -c 'import os,sys; s=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(s.replace(os.environ["MUT_OLD"],os.environ["MUT_NEW"],1))' \
+       "$src" "$target"; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s the mutation DID NOT APPLY -- a mutant that never existed scores every arm as a kill\n' "MUTATION $label"
+    return
+  fi
+  if cmp -s "$src" "$target"; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s the mutation matched NOTHING -- this assertion proves nothing\n' "MUTATION $label"
+    return
+  fi
+  # A mutant that is no longer a PROGRAM emits nothing, and nothing scores as a kill.
+  if [ "$which" = conv ] && ! bash -n "$target" 2>/dev/null; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s the mutant is not a valid shell script -- its silence is not a kill\n' "MUTATION $label"
+    return
+  fi
+  local got
+  got="$(ts_row "$mdir/validate-adversarial-convergence.sh")"
+  if [ "$got" = "$(echo $want)" ]; then
+    printf '  ok    %-28s [%s]  (%s)\n' "MUTATION $label" "$got" "$why"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s got [%s] want [%s]  (%s)\n' "MUTATION $label" "$got" "$(echo $want)" "$why"
+  fi
+}
+
+# m1 -- THE OVER-BROAD ACQUITTAL the entry itself warns against: every rc=2 is unverifiable,
+# so a corpus that REFUTED the citation acquits it too. Both near-misses must flip; that is
+# the fix this branch is deliberately not.
+ts_mutate over-broad conv \
+  'if [ "$cite_rc" -eq 2 ] && [ "$cite_out" = "NOMATCH-NO-RECORDS" ] && [ "$CYCLE_STATE" -eq 1 ]; then' \
+  'if [ "$cite_rc" -eq 2 ] && [ "$CYCLE_STATE" -eq 1 ]; then' \
+  "RESOLVED/0/quiet RESOLVED/0/UNVERIFIABLE RESOLVED/0/UNVERIFIABLE RESOLVED/0/UNVERIFIABLE RESOLVED/0/UNVERIFIABLE" \
+  "treating ALL rc=2 as unverifiable acquits the S290 forgery AND the forged bound -- every deny flips, which is the over-broad fix"
+
+# m2 -- THE FIX DISABLED. The token is never matched, so the third state denies again: the
+# shipped defect on demand. Only the zero-records world moves, which is what makes m1's
+# two-cell flip attributable to the WIDENING and not to the branch existing.
+ts_mutate disabled conv \
+  '[ "$cite_out" = "NOMATCH-NO-RECORDS" ]' \
+  '[ "$cite_out" = "ZZ-UNREACHABLE-TOKEN-ZZ" ]' \
+  "RESOLVED/0/quiet STALLED/3/quiet STALLED/3/quiet STALLED/3/quiet STALLED/3/quiet" \
+  "without the branch a present-but-empty corpus DENIES again -- worse off for supplying ground truth"
+
+# m3 -- THE PREDICATE emits the token on BOTH NOMATCH paths, which is the same acquittal as
+# m1 reached from the other side of the interface. It proves the branch keys on a distinction
+# the PREDICATE draws, not on one the caller invented: mutate the producer and the caller
+# widens with it. Anchored on the `console.log` line the no-quote path owns -- the zero-records
+# path's own log line is a different string, so this cannot edit both.
+ts_mutate token-on-both pred \
+  '  console.log("NOMATCH"); process.exit(2);' \
+  '  console.log("NOMATCH-NO-RECORDS"); process.exit(2);' \
+  "RESOLVED/0/quiet RESOLVED/0/UNVERIFIABLE RESOLVED/0/UNVERIFIABLE RESOLVED/0/UNVERIFIABLE STALLED/3/quiet" \
+  "a predicate that cannot tell its two NOMATCHes apart hands the caller the over-broad acquittal. The since-excluded cell is UNMOVED and that is the point: this mutation edits only the records-PRESENT path, so m4 below is the only arm that can see the files.length conjunct"
+
+# m4 -- THE SECURITY CONJUNCT REMOVED, and the reason it needs its own mutant is that the
+# three above cannot see it: they all leave `files.length` in place, so an author could delete
+# it and every one of them stays green. A zero produced by the BOUND then wears the same token
+# as a zero produced by the corpus, and `--since` -- a lead-written `invoked_at` -- becomes a
+# one-field fail-open. ONLY the since-excluded cell moves, which is what makes it attributable.
+ts_mutate since-acquitted pred \
+  'console.log(files.length ? "NOMATCH-NO-RECORDS" : "NOMATCH");' \
+  'console.log("NOMATCH-NO-RECORDS");' \
+  "RESOLVED/0/quiet RESOLVED/0/UNVERIFIABLE STALLED/3/quiet STALLED/3/quiet RESOLVED/0/UNVERIFIABLE" \
+  "without files.length a forged future --since acquits itself over a corpus holding the operator's real message"
+
+echo
 # --- arm J: RE-OPEN ------------------------------------------------------------
 expect reopen-unrecorded 1 "a pass ran after EXIT_CONDITION_MET reporting 1C/2M -- RE-OPEN, FAIL (J)" s1-adversarial-p
 expect reopen-same-bytes 0 "THE DECOY: p1 MET -> p2 MET at the SAME artifact_sha -- same bytes, same residue, not a re-open" s1-adversarial-p
