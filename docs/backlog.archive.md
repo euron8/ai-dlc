@@ -10928,3 +10928,101 @@ every token 1, an over-broad reporter 9.
 
 verify: sh R=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -f "$R" ] || exit 9; A=$PWD; d=$(mktemp -d) || exit 9; mkdir -p "$d/c/_bmad-output/ai-dlc-update"; L="$d/c/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; printf '# L\n\n## Open\n\n- **Entry X**\n  <br>prose then verify: theirs_has core/VERSION "0"\n\n- **Entry Y**\n  <br>prose with `verify: manual` in backticks only\n' > "$L"; o="$(cd "$d/c" && bash "$A/$R" "$A" HEAD "$d/c" HEAD 2>/dev/null)"; rm -rf "$d"; printf '%s\n' "$o" | awk -F'\t' '$2=="Entry Y"{f=1} END{exit !f}' && exit 9; printf '%s\n' "$o" | awk -F'\t' '$1=="NEEDS-REVIEW" && $2=="Entry X" && $3 ~ /^mid-line receipt/{f=1} END{exit !f}' && exit 0; exit 1
 
+## BL-240 — a role's configured effort is never APPLIED: a definition-less subagent runs at the session's `--effort` launch flag, not by inheriting the parent's own effort, and the harness mechanism that would override that flag — a rendered `.claude/agents/<role>.md` definition — is one ai-dlc does not render
+
+**OPERATOR RANKING: HIGHEST-PRIORITY OPEN ENTRY, above every PC-backed row.** This file has
+no priority field, so the ranking is stated here, in the entry itself. Read this entry before
+`BL-227` and before the no-`PC` set. Ruled 2026-09-12.
+
+**LANDED (v0.557.0, verified de09aa7e).** `render-agent-definitions.sh` projects `aiDlcRoles` into
+`.claude/agents/<role>.md`; the dispatch guard selects the definition and removes `name` and
+`model`; the subagent probe and Check 22 join on `tool_use_id` and compare the transcript effort.
+
+**Found 2026-09-12** by joining the reference consumer's spawn ledger to the harness's own
+subagent transcripts for sprint s311, mid-sprint, read-only.
+
+**THE MEASUREMENT.** Every assistant record Claude Code writes carries a top-level `effort`
+field, and every subagent gets its own transcript under
+`~/.claude/projects/<project>/<session>/subagents/agent-<name>.jsonl` with the same field. That
+is the effort the API call was made at. Fourteen s311 rows in `_bmad-output/spawn-ledger.jsonl`
+carry `effort_bound` of `medium` (8) or `high` (6) from `aiDlcRoles`; the dispatch guard's
+sentence *"Your configured reasoning effort for this role is X"* is present in each subagent's
+first user message with the matching value; and the `effort` field on every assistant record in
+all fourteen transcripts is `high`, which is the parent session's value. Widened to the whole
+project — 1071 subagent transcripts across 213 sessions — the child's effort equals the parent's
+in every case, and no transcript changes effort mid-session. Control: 167 records read `xhigh`
+(3–6 Sept), so the field is not a constant.
+
+| directive in prompt | transcript effort | count |
+|---|---|---|
+| high | high | 750 |
+| medium | high | 157 |
+| xhigh | high | 50 |
+| none | high | 114 |
+
+**THE MECHANISM THAT DOES BIND IT, MEASURED.** The sub-agents reference documents an `effort`
+key in `.claude/agents/<name>.md` frontmatter (`low|medium|high|xhigh|max`, "overrides session
+level"), and the model-config page says subagents inherit the session's effort "unless you
+specify otherwise in their frontmatter". Probed on CC 2.1.269 in a scratch repo: two agents on
+sonnet, one with `effort: low` and one with no key, spawned from a parent at `high`. The
+`effort: low` agent's transcript reads `low`; the other reads `high`. The Agent tool's own
+description on that build says each agent type's "model, reasoning effort, and tools come from
+its definition". The binary's definition parser accepts `effort` as a level or an integer.
+
+**WHY AI-DLC CANNOT USE IT TODAY.** No `.claude/agents/` directory exists in core, in the
+reference consumer, or at the operator's user level. Roles live in `.claude/team-roles/*.md`,
+which the harness does not read as agent definitions. The s311 session dispatched all thirty
+spawns as `subagent_type: general-purpose`; where a session ever passed a role name as the type
+it resolved to nothing. `ai-dlc-dispatch-guard.sh:388` injects only `model` and the prompt
+sentence, and its header says the prompt is "the only channel that reaches the subagent" — which
+was true when written and is no longer. `effort_bound` in the ledger is therefore a
+self-declaration Check 22 cannot verify, and `BL-019` already files that half.
+
+**CC 2.1.259/2.1.267 bear on WHEN the field can be trusted, not on this measurement.** Those
+releases fixed `effort:` on models whose launch effort is pinned (Opus 4.7, Opus 4.8, Fable 5).
+The consumer's roles map only to claude-opus-5 and claude-sonnet-5, neither pinned, and both the
+s311 evidence and the probe ran on 2.1.269. Any validator reading `effort` off a transcript must
+also read the record's `version` field and refuse to score a pinned model below 2.1.267.
+
+**Remedy shape.** `render-agent-definitions` projects `aiDlcRoles` into one
+`.claude/agents/<role>.md` per role that declares a model, as a generated region with a
+`--check` mode at the gate, so the definition cannot drift from the config it renders. The
+dispatch guard rewrites a role-bound dispatch's `subagent_type` to the rendered definition and
+deletes both `name` and `model` from the call — the definition becomes the one source for
+both, and it refuses the rewrite when the definition's frontmatter disagrees with
+`aiDlcRoles.<role>` rather than selecting a stale render silently. `ai-dlc-subagent-probe.sh`
+and gate-validation Check 22 gain the join this needed: the probe reads the transcript's
+`effort` field and the definition it ran under, and Check 22 asserts they agree with
+`aiDlcRoles.<role>.effort` for every guard row recording a definition-bound dispatch, reporting
+PENDING rather than failing where no probe row has matched yet.
+
+**Receipt.** Drives the shipping guard on a synthetic layered consumer whose settings pin
+`adversary` to `opus`/`medium` and carries a rendered, marked definition, and asks whether the
+corrected input's `subagent_type` names the role with `name` and `model` both REMOVED — the
+definition is the one source. Exit 9 only when the guard emits nothing at all, so a disarmed
+guard cannot read as a fix; a guard that rewrites the type but keeps `model` reads 1.
+
+verify: sh h=core/hooks/ai-dlc-dispatch-guard.sh; [ -f "$h" ] || exit 9; command -v jq >/dev/null || exit 9; d=$(mktemp -d) || exit 9; X(){ rm -rf "$d"; exit "$1"; }; mkdir -p "$d/.claude/team-roles" "$d/.claude/agents" || X 9; printf "version: 0.0.0\n" > "$d/.claude/.ai-dlc-version"; printf "# Role: Adversary\n" > "$d/.claude/team-roles/adversary.md"; printf "%s\n" "{\"aiDlcModels\":{\"opus\":\"claude-opus-5[1m]\"},\"aiDlcRoles\":{\"adversary\":{\"model\":\"opus\",\"effort\":\"medium\"}}}" > "$d/.claude/settings.json"; printf -- "---\nname: adversary\ndescription: probe\nmodel: opus\neffort: medium\n---\n<!-- AI/DLC GENERATED: rendered by scripts/ai-dlc/render-agent-definitions.sh from .claude/settings.json aiDlcRoles.adversary. Edit the settings entry, then re-render. -->\nbody\n" > "$d/.claude/agents/adversary.md"; J=$(jq -nc "{tool_name:\"Agent\",tool_input:{prompt:\"Your operating contract is .claude/team-roles/adversary.md. Read it first.\",subagent_type:\"general-purpose\",name:\"adversary-probe\",model:\"sonnet\"}}"); o=$(printf "%s" "$J" | CLAUDE_PROJECT_DIR="$d" AI_DLC_STATE_DIR=state bash "$h" 2>/dev/null); [ -n "$o" ] || X 9; t=$(printf "%s" "$o" | jq -r ".hookSpecificOutput.updatedInput.subagent_type // empty" 2>/dev/null); hm=$(printf "%s" "$o" | jq -r ".hookSpecificOutput.updatedInput | has(\"model\")" 2>/dev/null); hn=$(printf "%s" "$o" | jq -r ".hookSpecificOutput.updatedInput | has(\"name\")" 2>/dev/null); [ "$t" = adversary ] && [ "$hm" = false ] && [ "$hn" = false ] && X 0; X 1
+
+## BL-241 — `ledger-reverify.sh` leaks the last entry's `[receipt n/n]` suffix onto every run-scoped and ENTRY-SWALLOWED row
+
+**LANDED (v0.556.0, verified a4c00c9a).** Fixed by one `RSFX=""` after the receipt loop; the
+fixture seed gained a second receipt inside its open EOF fence and three arms over two shapes.
+
+**Found 2026-09-12** by the adversary on batch 91, re-derived here by driving the shipping tool
+on the `ledger-reverify` fixture's seeded ledger with one entry appended. `RSFX` is set per
+receipt inside the receipt loop and never reset after `done <<< "$ENTRIES"`. When the LAST entry
+carries more than one receipt, the value it leaves behind is appended by `emit()` to every row
+produced after the loop: `RECEIPTS-UNDECIDED`, which is run-scoped and belongs to no receipt, and
+every `ENTRY-SWALLOWED` row, which belongs to an annotation. Measured: a two-receipt last entry
+followed by an annotation bullet renders `… [receipt 3/3]` on one `RECEIPTS-UNDECIDED` row and on
+eight `ENTRY-SWALLOWED` rows, against a control of zero when the last entry carries one receipt.
+The mid-line pass added in `0.555.0` resets `RSFX` itself and is not affected.
+
+**Not fixed here.** The fix is one reset after the receipt loop, but the fixture's seeded ledger
+ends on a one-receipt entry today, so no arm can fire on it — the seed needs a two-receipt last
+entry and a presence-shaped arm before the reset ships.
+
+**Tiered NOTE.** A wrong suffix on a row's detail; no verdict moves.
+
+verify: sh R=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; S=core/fixtures/ledger-reverify/seed.sh; [ -f "$R" ] && [ -f "$S" ] || exit 9; out="$(bash "$S")" || exit 9; D="$(printf '%s\n' "$out" | cut -d' ' -f1)"; B="$(printf '%s\n' "$out" | cut -d' ' -f2)"; C="$(printf '%s\n' "$out" | cut -d' ' -f3)"; T="$(printf '%s\n' "$out" | cut -d' ' -f4)"; L="$C/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; [ -n "$D" ] && [ -f "$L" ] || exit 9; printf '\nverify: theirs_lacks core/skills/ai-dlc/SKILL.md "RECEIPT_ZZ_SECOND"\n' >> "$L"; o="$(bash "$R" "$D" "$B" "$C" "$T" 2>/dev/null)"; case "$D" in */ledger-reverify-*/dist) rm -rf "$(dirname "$D")" ;; esac; printf '%s\n' "$o" | awk -F'\t' '$1=="ENTRY-SWALLOWED"{c++} END{exit !(c>0)}' || exit 9; printf '%s\n' "$o" | awk -F'\t' '$1!="ENTRY-SWALLOWED" && $1!="RECEIPTS-UNDECIDED" && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/{c++} END{exit !(c>0)}' || exit 9; printf '%s\n' "$o" | awk -F'\t' '($1=="ENTRY-SWALLOWED"||$1=="RECEIPTS-UNDECIDED") && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/{c++} END{exit !(c>0)}' && exit 1; exit 0
