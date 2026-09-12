@@ -4603,6 +4603,34 @@ decide whether its own fix worked, and nine of them cannot tell a fix from a com
 verify: sh B=docs/backlog.md; [ -f "$B" ] || exit 9; grep -q '^## BL-227' "$B" || exit 9; grep -qE 'receipt-emission-site|scores every backlog receipt against a seeded|verify-receipt-binding' scripts/*.sh 2>/dev/null && exit 0; exit 1
 
 
+## BL-242 — the `ledger-reverify` fixture's mutant-wreckage guard has no subject and cannot fire
+
+**Found 2026-09-12** by the adversary re-verifying `BL-241`'s build on the tip, by driving every
+shipped mutant through the fixture and counting how often the guard's branch was taken.
+
+`core/fixtures/ledger-reverify/run.sh`'s `sfx_kill()` compares each mutant's emitted row count
+against the unmutated baseline and reports "wreckage" on a mismatch, so a copy that crashed is
+not scored as a kill. It was written for the crash that deleting BOTH `RSFX=""` lines produces
+under `set -u`. The builder then re-anchored the delete mutation on the reset's own comment
+block, which was the right fix and which removed this guard's only subject: all six shipped
+mutants preserve the row count exactly, so the branch fires zero times on a clean run. A tree
+with both lines deleted now dies only on the argument-error path the fixture never drives; on a
+good invocation it emits a full row set and is caught honestly through shape A.
+
+Measured: with every shipped mutant applied in turn, the guard reported wreckage on none; with
+the reset neutered so no ordinal is emitted anywhere, all three shapes and all three acquittals
+went RED while the guard stayed silent. A vacuous guard is the loaded gun
+`.claude/rules/mechanism-design.md` names: it changes no outcome today and will change one when
+the surrounding row counts move, with nobody looking.
+
+**Not fixed here.** Either give it a subject — a mutant that genuinely emits a different row
+count, such as one that drops the `RECEIPTS-UNDECIDED` emitter, asserted as wreckage rather than
+as a kill — or delete the branch and record that the anchor fix made it inert.
+
+**Tiered DEFECT.** Distribution-side fixture only; no consumer verdict moves.
+
+verify: sh F=core/fixtures/ledger-reverify/run.sh; [ -f "$F" ] || exit 9; grep -q '^sfx_kill()' "$F" || exit 9; n="$(awk '/^sfx_kill\(\)/{f=1} f && /-ne "\$\(printf .%s.n. "\$OUT" \| grep -c \.\)"/{c++} END{print c+0}' "$F")"; [ "$n" -eq 0 ] && exit 0; grep -qE 'wreckage-subject|drops the RECEIPTS-UNDECIDED emitter|mut-wreck' "$F" && exit 0; exit 1
+
 ## BL-241 — `ledger-reverify.sh` leaks the last entry's `[receipt n/n]` suffix onto every run-scoped and ENTRY-SWALLOWED row
 
 **LANDED (v0.556.0, verified a4c00c9a).** Fixed by one `RSFX=""` after the receipt loop; the
