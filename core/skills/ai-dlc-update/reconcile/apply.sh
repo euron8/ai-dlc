@@ -1791,9 +1791,9 @@ fi
 # it. A prompt cannot set effort: measured on the reference consumer, every spawn ran at the
 # effort the SESSION resolved -- from its launch flag, or from the user's
 # `effortLevel`/`modelSettings` -- and never at the role's, whatever directive the prompt
-# carried. A role with no definition is a role running at that session-resolved level, and
-# nothing about the spawn says so: the ledger records `effort_bound` from the config either
-# way, which is a self-declaration and not a measurement.
+# carried. A role with no definition is a role running at that session-resolved level, and the
+# ledger says so by recording `effort_bound` null -- which names the state without naming its
+# cause, since a drifted definition and an absent one are both null there.
 #
 # GATED ON `aiDlcRoles`, NOT ON THE RENDERER, for `transient_ignore_row`'s measured reason: a
 # tree with neither half is not a defect, it is a tree this release has nothing to say about,

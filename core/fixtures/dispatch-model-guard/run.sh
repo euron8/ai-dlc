@@ -465,6 +465,37 @@ raw "$CONSUMER" "$DEFJT" >/dev/null
   && ok "  ledger records tool_use_id — the order-free join key Check 22's effort arm needs" \
   || bad "  tool_use_id='$(lfield .tool_use_id)', expected 'toolu_FIXTURE_1'; without it the effort arm joins on an ORDERED key and mis-pairs two same-role spawns that finish out of order"
 
+# `effort_bound` MIRRORS `model_bound`: the DISPATCH, not the config. Read from the seeded
+# definition rather than written here, for the reason model_bound is read from the file — a
+# hardcoded expectation is satisfied by a guard that copies settings whenever settings and
+# the definition agree, which is every green tree.
+DEFOK_EFFORT="$(awk '/^effort:[[:space:]]/{sub(/^effort:[[:space:]]*/,""); print; exit}' \
+                   "$CONSUMER/.claude/agents/defok.md")"
+[ -n "$DEFOK_EFFORT" ] \
+  && ok "  CONTROL: the seeded defok.md declares an effort ($DEFOK_EFFORT) — the arm below has a value to compare"  \
+  || bad "  CONTROL is dead: .claude/agents/defok.md carries no effort: line, so the assertion below compares nothing"
+[ "$(lfield .effort_bound)" = "$DEFOK_EFFORT" ] \
+  && ok "  effort_bound is the definition's effort: line, which is what the harness applies" \
+  || bad "  effort_bound='$(lfield .effort_bound)', expected '$DEFOK_EFFORT' from .claude/agents/defok.md"
+
+# THE DISCRIMINATING SEED. `defnodef` pins an effort in settings and has NO rendered
+# definition, so nothing binds an effort for it: the configured level reaches the teammate as
+# the guard's prompt sentence, which is advisory and applies nothing. A row claiming an effort
+# was bound there is the defect — it is what makes an unbound dispatch read as a bound one,
+# and it is what this guard recorded before `effort_bound` moved off the config.
+NODEF_PIN="$(jq -r '.aiDlcRoles.defnodef.effort // ""' "$CONSUMER/.claude/settings.json")"
+[ -n "$NODEF_PIN" ] && [ ! -e "$CONSUMER/.claude/agents/defnodef.md" ] \
+  && ok "  CONTROL: defnodef pins effort '$NODEF_PIN' in settings AND has no rendered definition — the two states the arm below separates" \
+  || bad "  CONTROL is dead: defnodef pins '$NODEF_PIN' and its definition is $( [ -e "$CONSUMER/.claude/agents/defnodef.md" ] && echo present || echo absent ) — a null here would prove nothing"
+rm -f "$LEDGER"; raw "$CONSUMER" "$(mkjson Agent defnodef)" >/dev/null
+[ "$(lfield .effort_bound)" = "null" ] \
+  && ok "  a dispatch with no definition records effort_bound=null even though its role pins one — the prompt line is advisory and binds nothing" \
+  || bad "  effort_bound='$(lfield .effort_bound)' on a dispatch that bound no effort, expected null: the field is recording the CONFIG, so a row nothing applied an effort to reads as one that did"
+# ...and the row exists, so the null above is a recorded null and not an unwritten row.
+[ "$(lfield .role)" = "defnodef" ] \
+  && ok "  CONTROL: that dispatch wrote a row at all — the null is a recorded value, not a missing one" \
+  || bad "  CONTROL: no row was written for the defnodef dispatch, so the null above is the absence of a row"
+
 # --- 13f. A STALE DEFINITION IS NOT SELECTED --------------------------------
 # A rendered file that no longer projects the config would run the teammate on a value
 # nobody declared. The guard falls back to today's behaviour and SAYS so. Both stale

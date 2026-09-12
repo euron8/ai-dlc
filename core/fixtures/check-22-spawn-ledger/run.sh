@@ -669,8 +669,9 @@ fi
 # --- E2. disagreement FAILS, names both values, and names the remedy ----------
 R="$(evsl e-disagree.jsonl e-disagree.probe)"
 if [ "$(ercv "$R")" -eq 1 ] && grep -q "records effort='low'" <<<"$R" \
-   && grep -q "aiDlcRoles.dev.effort=" <<<"$R" && grep -q 'effort: 0 verified.*1 mismatch' <<<"$R"; then
-  ok "a definition-bound row whose transcript records a DIFFERENT effort FAILS, naming the declared level, the observed one, and the re-render remedy -- this is BL-240's whole subject, and nothing could see it before"
+   && grep -q "effort_bound=" <<<"$R" && grep -q "'high'" <<<"$R" \
+   && grep -q "aiDlcRoles.dev.effort" <<<"$R" && grep -q 'effort: 0 verified.*1 mismatch' <<<"$R"; then
+  ok "a definition-bound row whose transcript records a DIFFERENT effort FAILS, naming the LEDGER's bound level, the observed one, and the re-render remedy -- this is BL-240's whole subject, and nothing could see it before"
 else
   bad "the disagreeing row did not fail as expected: $R"
 fi
@@ -695,12 +696,25 @@ else
   bad "an invocation without --probe did not say so: $R"
 fi
 
-# --- E4. the arm is SCOPED to definition_bound, and that is not decoration ----
+# --- E4. a row that bound NO effort is UNDECLARED: never a FAIL, and never silent ------
+# The prose-only dispatch got its configured level as a sentence the guard appended, which
+# the Agent tool has no parameter to apply, so the teammate ran at whatever its session
+# resolved. Its probe row DISAGREES on purpose: an arm that judged this row would fail it.
 R="$(evsl e-prose.jsonl e-prose.probe)"
 if [ "$(ercv "$R")" -eq 0 ] && ! grep -q '^FAIL: \[' <<<"$R"; then
-  ok "a row that is NOT definition-bound is not judged on effort even when its transcript disagrees -- the guard's prompt sentence is advisory by construction and failing it would be a FAIL on correct data"
+  ok "a row that bound no effort is not judged on it even when its transcript disagrees -- the guard's prompt sentence is advisory by construction and failing it would be a FAIL on correct data"
 else
-  bad "a non-definition-bound row was judged on effort: $R"
+  bad "a row that bound no effort was judged on effort: $R"
+fi
+# ...AND IT IS COUNTED, which is the half that stops the acquittal from being a skip. A row
+# passed over in silence and a row examined and found to have bound nothing print the same
+# verdict otherwise, and a sprint whose every row bound nothing would read exactly like one
+# where every row was verified. The COUNTS line is what tells them apart.
+if grep -q '1 row(s) that bound no effort' <<<"$R" \
+   && grep -q 'effort: 0 verified' <<<"$R"; then
+  ok "  and the COUNTS line REPORTS it as a row that bound no effort rather than passing over it -- 'nothing to verify' and 'nothing found wrong' cannot read alike"
+else
+  bad "  the row that bound no effort was acquitted without being counted, so it is indistinguishable from a row the arm never reached: $R"
 fi
 
 # --- E5. THE DISCRIMINATING SEED: two SAME-ROLE spawns, out of order ----------
@@ -765,9 +779,100 @@ else
   bad "  CONTROL: the pinned model at 2.1.269 was not scored, so the refusal is wider than the version floor: $R"
 fi
 
-# --- E7. MUTANTS. Each arm above is PRESENCE-shaped, so a validator emitting nothing
+# --- E7. WHICH SIDE THE COMPARISON READS, and no arm above can tell. Every seed so far
+# gives the ledger and the settings block the SAME effort, so a validator reading either one
+# scores identically on all of them -- the classic non-discriminating seed. The pair below
+# makes them DISAGREE, which is the state a role reconfigured between the spawn and the gate
+# is in, and it is the only input that separates the two readings.
+#
+# THE ROW IS A FACT ABOUT THE PAST. `effort_bound` says what the harness was asked to apply
+# to THAT dispatch; settings at gate time says what the role is configured for NOW. Scoring a
+# dispatch against a configuration written after it ran fails a teammate that did exactly what
+# it was told, and passes one that did not, depending only on which way the edit went. Both
+# directions are seeded here, in the same run, because one alone reads identically under a
+# validator that has simply stopped comparing.
+#
+# THESE TWO ROWS ARE HAND-WRITTEN AND NO GUARD CAN EMIT THEM AGAINST THESE SETTINGS, WHICH IS
+# THE POINT AND IS STATED SO NOBODY READS THEM AS OBSERVED DISPATCHES. The guard sets
+# `definition_bound` only when the rendered definition agrees with settings on effort, so a
+# row it wrote carries an `effort_bound` equal to the configured level AT DISPATCH. Reaching
+# this state on a real consumer takes a settings edit BETWEEN the dispatch and the gate, which
+# leaves the ledger untouched and is exactly the sequence under test -- unconstructible in one
+# snapshot of a tree, so the row is written directly. It is reachable under the mechanism's own
+# contract; it is only unreachable from a single reading of the config.
+cat > "$WORK/settings-reconfigured.json" <<'JSON'
+{
+  "aiDlcModels": { "opus": "claude-opus-5[1m]", "sonnet": "claude-sonnet-5" },
+  "aiDlcRoles": {
+    "dev": { "model": "sonnet", "effort": "low" },
+    "protected-path-editor": { "model": "opus" },
+    "adversary": { "model": "opus" },
+    "tea": { "effort": "medium" }
+  }
+}
+JSON
+# CONTROL, and it runs before the arms: the two settings files must actually disagree on the
+# field under test, or both arms below are asking one question twice.
+S_OLD="$(jq -r '.aiDlcRoles.dev.effort' "$WORK/settings.json")"
+S_NEW="$(jq -r '.aiDlcRoles.dev.effort' "$WORK/settings-reconfigured.json")"
+if [ "$S_OLD" = "high" ] && [ "$S_NEW" = "low" ]; then
+  ok "E7 CONTROL: the two settings files declare dev.effort as '$S_OLD' and '$S_NEW' -- the sides of this differential differ, so a null below would mean something"
+else
+  bad "E7 CONTROL is dead: settings declare '$S_OLD' and '$S_NEW'; with the two agreeing, neither arm below can discriminate"
+fi
+
+evslx() { # evslx <ledger> <probe> <settings> -> "<rc>\n<output>"
+  local o r
+  o="$(bash "$VSL" --ledger "$WORK/$1" --sprint 900 --settings "$WORK/$3" --probe "$WORK/$2" 2>&1)"; r=$?
+  printf '%s\n%s' "$r" "$o"
+}
+
+# The row bound `high` and the teammate ran at `high`: the dispatch did exactly what it was
+# asked. Settings now say `low`. A validator reading the LEDGER verifies it; one reading
+# SETTINGS reports a mismatch against a level no dispatch ever carried.
+erow dev sonnet true true dev-reconf true high toolu_RECONF > "$WORK/e-reconf.jsonl"
+prow toolu_RECONF high claude-sonnet-5 2.1.269              > "$WORK/e-reconf.probe"
+R="$(evslx e-reconf.jsonl e-reconf.probe settings-reconfigured.json)"
+if [ "$(ercv "$R")" -eq 0 ] && grep -q 'effort: 1 verified' <<<"$R" \
+   && ! grep -q '^FAIL: \[' <<<"$R"; then
+  ok "E7 a row that bound 'high' and ran at 'high' is VERIFIED even though settings now say 'low' -- the comparison reads what the dispatch was asked to apply, not what the role was reconfigured to afterwards"
+else
+  bad "E7 the reconfigured-role row was not verified against its own effort_bound: $R"
+fi
+
+# THE MIRROR, same run, the disagreement inverted. The row bound `low`, the teammate ran at
+# `high`, and settings say `high`: the dispatch did NOT get what it bound. A validator reading
+# settings passes it; one reading the ledger fails it. Without this half the arm above is
+# satisfied by a validator that stopped judging effort at all.
+erow dev sonnet true true dev-reconf2 true low toolu_RECONF2 > "$WORK/e-reconf2.jsonl"
+prow toolu_RECONF2 high claude-sonnet-5 2.1.269              > "$WORK/e-reconf2.probe"
+R="$(evsl e-reconf2.jsonl e-reconf2.probe)"
+if [ "$(ercv "$R")" -eq 1 ] && grep -q 'FAIL: \[dev-reconf2\]' <<<"$R" \
+   && grep -q "'low'" <<<"$R" && grep -q "records effort='high'" <<<"$R" \
+   && grep -q 'effort: 0 verified.*1 mismatch' <<<"$R"; then
+  ok "E7 MIRROR a row that bound 'low' and ran at 'high' FAILS while settings declare 'high' -- the ledger value is the one compared, in both directions"
+else
+  bad "E7 MIRROR the row that bound 'low' was not failed against its own effort_bound: $R"
+fi
+
+# A row flagged definition-bound and carrying NO effort_bound bound nothing, so it is
+# UNDECLARED rather than a mismatch against whatever settings happen to say. Its probe row
+# JOINS and disagrees with settings, so a validator that fell back to the settings read would
+# fail it -- which is what makes this the arm that separates the two readings on a row the old
+# scope test DID judge.
+erow dev sonnet true true dev-noeffort true '' toolu_NOEFFORT > "$WORK/e-noeffort.jsonl"
+prow toolu_NOEFFORT low claude-sonnet-5 2.1.269               > "$WORK/e-noeffort.probe"
+R="$(evsl e-noeffort.jsonl e-noeffort.probe)"
+if [ "$(ercv "$R")" -eq 0 ] && grep -q '1 row(s) that bound no effort' <<<"$R" \
+   && ! grep -q '^FAIL: \[' <<<"$R"; then
+  ok "E7 a row flagged definition-bound with a NULL effort_bound is UNDECLARED and counted, not scored against settings -- the scope key is the field, not the flag"
+else
+  bad "E7 the null-effort_bound row was not reported UNDECLARED: $R"
+fi
+
+# --- E8. MUTANTS. Each arm above is PRESENCE-shaped, so a validator emitting nothing
 # fails them -- but that does not establish which LINE produced each verdict.
-sed 's/^  if \[ "\$defbound" = "true" \]; then$/  if false; then/' "$VSL" > "$WORK/noeffortarm.sh"
+sed 's/^  if \[ -z "\$effortbound" \] || \[ "\$defbound" != "true" \]; then$/  if true; then/' "$VSL" > "$WORK/noeffortarm.sh"
 if cmp -s "$VSL" "$WORK/noeffortarm.sh"; then
   bad "FIXTURE BROKEN: the effort arm's scope test was renamed, so this mutant proves nothing"
 else

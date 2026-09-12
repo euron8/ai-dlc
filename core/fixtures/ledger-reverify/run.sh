@@ -2204,6 +2204,17 @@ sfx_mutant() { # <name> <awk-body-appended-after-the-strip>  -> dir on stdout, e
   printf '%s' "$d"
 }
 
+# THE WRECKAGE PREDICATE, LIFTED OUT OF `sfx_kill` SO IT CAN BE PROBED. Inline it had no
+# reachable subject: every mutant below preserves the row count exactly, so the branch fired
+# zero times on a clean run and its removal would have changed no verdict. A condition that
+# changes no outcome today changes one when the surrounding row counts move, with nobody
+# looking. Extracted, the probe two blocks down drives it in both directions on a copy built
+# for that purpose, and the guard reading `sfx_wrecked` is the SAME program the probe scored.
+sfx_wrecked() { # <mutant-output> -> 0 when the row count differs from the baseline $OUT
+  [ "$(printf '%s\n' "$1" | grep -c .)" -ne "$(printf '%s\n' "$OUT" | grep -c .)" ]
+}
+sfx_rowcount() { printf '%s\n' "$1" | grep -c .; }
+
 # A mutant is KILLED when at least one of the three shapes goes red on it. Each shape's control is
 # re-evaluated against the MUTANT's own output, so a copy that died — emitting nothing, or emitting
 # rows with no ordinals anywhere — is reported as wreckage rather than scored as a kill.
@@ -2221,10 +2232,10 @@ sfx_kill() { # <name> <dir-or-empty> <why-this-fix-is-wrong>
   rm -f "$LED_NOUND"
   # WRECKAGE GUARD, and it is the control the anchor note above demands: the mutant must still
   # produce the baseline's row COUNT on shape A. A crash under set -u prints nothing at all.
-  if [ "$(printf '%s\n' "$ma" | grep -c .)" -ne "$(printf '%s\n' "$OUT" | grep -c .)" ]; then
+  if sfx_wrecked "$ma"; then
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s the mutant emitted %s rows against the baseline %s — it broke the tool rather than moving the reset, so its verdict is wreckage\n' \
-      "$n" "$(printf '%s\n' "$ma" | grep -c .)" "$(printf '%s\n' "$OUT" | grep -c .)"
+      "$n" "$(sfx_rowcount "$ma")" "$(sfx_rowcount "$OUT")"
     return
   fi
   a_leak="$(printf '%s\n' "$ma" | awk -F'\t' '($1=="ENTRY-SWALLOWED"||$1=="RECEIPTS-UNDECIDED") && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/{c++} END{print c+0}')"
@@ -2248,6 +2259,100 @@ sfx_kill() { # <name> <dir-or-empty> <why-this-fix-is-wrong>
     printf '  FAIL  %-22s %s, and all three shapes read GREEN on it — the arms above do not discriminate this wrong fix\n' "$n" "$why"
   fi
 }
+
+# --- THE WRECKAGE GUARD'S OWN PROBE, AND IT RUNS BEFORE THE FIRST KILL ------------------------
+# `sfx_wrecked` is an ABSENCE-shaped guard: on every mutant below it says nothing, because every
+# one of them preserves the row count. That silence is indistinguishable from a guard that cannot
+# fire, and it WAS one — the guard was written for the crash that deleting both `RSFX=""` lines
+# produced under `set -u`, and re-anchoring the delete mutation on the reset's comment block
+# removed its only subject. So a copy is built here whose sole purpose is to emit a DIFFERENT row
+# count, and the guard is driven on it in both directions in the same block.
+#
+# IT IS NOT A KILL AND IT IS NOT SCORED AS ONE. A dropped RECEIPTS-UNDECIDED row is not a wrong
+# placement of the reset; it is a tool emitting less. The wrecked copy is never handed to
+# `sfx_kill`, and FAILURES moves only when the guard is SILENT on the wrecked copy (it cannot
+# fire) or FIRES on the shipped copy (it refuses everything).
+#
+# IT DOES NOT GO THROUGH `sfx_mutant`, AND BOTH REASONS ARE MEASURED. That helper prepends
+# `$sfx_strip`, so a copy built with it also loses the reset — ten changed lines where one
+# property is under test. And the obvious mutation, DELETING the `emit RECEIPTS-UNDECIDED` line,
+# leaves `if [ "${th_undecided:-0}" -gt 0 ]; then … fi` with an empty body: `bash -n` exits 2 and
+# the copy dies, which is a row-count difference produced by a syntax error rather than by an
+# emitter. Measured, same seed, against a baseline of 90 rows: deletion `bash -n` 2 / run exit 2;
+# the CONDITION rewritten to `if false; then` `bash -n` 0 / run exit 0 / 89 rows. So the mutation
+# is sited on the condition, the copy's parseability is ASSERTED before it is scored, and a dead
+# copy can never satisfy this arm.
+wr_mutant() { # <name> <awk-body> -> dir on stdout, empty if unchanged. NO strip.
+  local n="$1" body="$2" d
+  d="$(dirname "$DIST")/wreck-$n"; rm -rf "$d"; mkdir -p "$d"
+  cp "$(dirname "$CLOSER")"/*.sh "$d/" 2>/dev/null
+  awk "$body {print}" "$CLOSER" > "$d/ledger-reverify.sh"
+  if cmp -s "$CLOSER" "$d/ledger-reverify.sh"; then return 1; fi
+  [ -f "$d/lib.sh" ] || return 1
+  printf '%s' "$d"
+}
+
+ASSERTIONS=$((ASSERTIONS + 1))
+wr_anchor_n="$(grep -c '^if \[ "${th_undecided:-0}" -gt 0 \]; then$' "$CLOSER")" || wr_anchor_n=0
+wr_impossible_n="$(grep -c '^if \[ "${th_neverdecided:-0}" -gt 0 \]; then$' "$CLOSER")" || wr_impossible_n=0
+if [ "$wr_anchor_n" -eq 1 ] && [ "$wr_impossible_n" -eq 0 ]; then
+  printf '  ok    %-22s the undecided-condition anchor is unique in the closer (control: an impossible anchor matches 0)\n' "wreck-anchor"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the condition anchor matched %s lines (want 1) and the impossible control matched %s (want 0) — the wreckage probe below would cut the wrong line or none\n' "wreck-anchor" "$wr_anchor_n" "$wr_impossible_n"
+fi
+
+# The shipped tree, copied whole so the guard's NEGATIVE direction is scored on a copy driven
+# through the identical invocation rather than on `$OUT` itself. Built here rather than beside
+# the acquittals below because this probe is the first thing that needs it; `sfx_pass
+# acquit-shipped` reuses it.
+SFX_SHIPPED="$(dirname "$DIST")/acquit-shipped"
+rm -rf "$SFX_SHIPPED"; mkdir -p "$SFX_SHIPPED"
+cp "$(dirname "$CLOSER")"/*.sh "$SFX_SHIPPED/" 2>/dev/null
+[ -f "$SFX_SHIPPED/ledger-reverify.sh" ] || SFX_SHIPPED=""
+
+ASSERTIONS=$((ASSERTIONS + 1))
+wr_dir="$(wr_mutant drop-undecided '/^if \[ "\$\{th_undecided:-0\}" -gt 0 \]; then$/{ print "if false; then"; next }')"
+# EXACTLY THE INTENDED LINES, not merely "something changed". `cmp -s` inside the builder sees a
+# mutation that matched nothing; it cannot see one that matched more than it meant to, and a copy
+# differing by nine lines would score this arm for a property nobody chose.
+wr_difflines=0
+[ -n "$wr_dir" ] && { wr_difflines="$(diff "$CLOSER" "$wr_dir/ledger-reverify.sh" | grep -c '^[<>]')" || wr_difflines=0; }
+if [ -z "$wr_dir" ] || [ -z "$SFX_SHIPPED" ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the wreckage copy did not build (or the shipped copy has no lib.sh), so the guard was never driven in either direction\n' "wreckage-subject"
+elif [ "$wr_difflines" -ne 2 ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the wreckage mutation changed %s line(s) (want 2: one condition out, one in) — it is testing more than the emitter and its verdict is not attributable\n' "wreckage-subject" "$wr_difflines"
+elif ! bash -n "$wr_dir/ledger-reverify.sh" 2>/dev/null; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the wreckage copy does not PARSE, so a row-count difference below would be a syntax error rather than a dropped row — the guard would be scored on the wrong property\n' "wreckage-subject"
+else
+  wr_out="$(bash "$wr_dir/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>/dev/null)"
+  wr_ship="$(bash "$SFX_SHIPPED/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>/dev/null)"
+  wr_fired=1; sfx_wrecked "$wr_out"  && wr_fired=0
+  wr_quiet=1;  sfx_wrecked "$wr_ship" && wr_quiet=0
+  # POSITIVE CONJUNCT ON THE CONTROL. A shipped copy that died is "not wrecked" only if it emitted
+  # nothing and $OUT did too — so the control asserts the rows are THERE, not merely that the
+  # guard stayed quiet. Two inert runs compare equal.
+  wr_ship_rows="$(sfx_rowcount "$wr_ship")"
+  if [ "$wr_fired" -ne 0 ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the guard stayed SILENT on a parseable copy emitting %s rows against the baseline %s — it cannot fire, so every quiet verdict it gives below is unreadable\n' \
+      "wreckage-subject" "$(sfx_rowcount "$wr_out")" "$(sfx_rowcount "$OUT")"
+  elif [ "$wr_ship_rows" -lt 3 ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s CONTROL: the shipped copy emitted only %s row(s), so its quiet reading is a copy that never ran rather than a guard that discriminates\n' \
+      "wreckage-subject" "$wr_ship_rows"
+  elif [ "$wr_quiet" -ne 1 ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s CONTROL: the guard FIRED on the unmutated shipped copy (%s rows against the baseline %s) — it reports wreckage on any copy, which is not discrimination\n' \
+      "wreckage-subject" "$wr_ship_rows" "$(sfx_rowcount "$OUT")"
+  else
+    printf '  ok    %-22s the guard FIRES on a parseable copy one row short (%s vs baseline %s) and stays QUIET on the shipped copy (%s rows) — it has a subject and it discriminates\n' \
+      "wreckage-subject" "$(sfx_rowcount "$wr_out")" "$(sfx_rowcount "$OUT")" "$wr_ship_rows"
+  fi
+fi
 
 sfx_kill mut-delete-reset "$(sfx_mutant delete-reset '')" \
   "the reset deleted outright"
@@ -2311,10 +2416,7 @@ sfx_pass() { # <name> <dir-or-empty> <what-this-fix-is>
 }
 # The shipped tree, copied whole so it is driven through the SAME scorer as every mutant. Not
 # read off $OUT: a scorer applied to one input and a verdict read from another are two programs.
-SFX_SHIPPED="$(dirname "$DIST")/acquit-shipped"
-rm -rf "$SFX_SHIPPED"; mkdir -p "$SFX_SHIPPED"
-cp "$(dirname "$CLOSER")"/*.sh "$SFX_SHIPPED/" 2>/dev/null
-[ -f "$SFX_SHIPPED/ledger-reverify.sh" ] || SFX_SHIPPED=""
+# $SFX_SHIPPED is built above, where the wreckage probe needs it as its negative direction.
 sfx_pass acquit-shipped "$SFX_SHIPPED" \
   "the reset immediately after the loop (as shipped)"
 sfx_pass acquit-before-if "$(sfx_mutant before-if '/^if \[ "\$\{th_undecided:-0\}" -gt 0 \]; then$/ { print "RSFX=\"\""; print; next }')" \

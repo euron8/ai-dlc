@@ -1189,7 +1189,48 @@ so a search that has stopped working reports STILL-LIVE rather than closing. **A
 write and leaves it unread still reports STILL-LIVE, deliberately** — a ledger field nobody reads is
 the other half of the claim.
 
-verify: sh H=core/hooks/ai-dlc-dispatch-guard.sh; C=$(git grep -l "model_bound" -- "core/*" | grep -vxF "$H" | wc -l | tr -d " "); [ "$C" -ge 1 ] || exit 1; LW=$(grep -n "effort_bound:" "$H" | head -1 | cut -d: -f1); [ -z "$LW" ] && exit 0; LD=$(grep -n "^NEEDS_EFFORT=false" "$H" | head -1 | cut -d: -f1); W=$(git grep -l "effort_bound" -- "core/*" | grep -vxF "$H" | wc -l | tr -d " "); [ "$LW" -gt "$LD" ] && [ "$W" -ge 1 ]
+**2026-09-12 — the "reader" was a projection with no consumer, and the receipt could not see it.**
+Measured at `01fea66c`. **The line citations above are stale — every one of the six has moved — and
+the "readers = 0" figure is now 4** (`validate-spawn-ledger.sh`, `check-22-spawn-ledger/run.sh`,
+`core/git-hooks/pre-push`, `apply.sh`); do not re-derive from either. What the count concealed:
+`validate-spawn-ledger.sh` projected `effort_bound` into a shell variable, defaulted it, and never
+used it, its effort arm reading `.aiDlcRoles[$r].effort` out of settings at VALIDATE time. So one of
+the four "readers" was the file whose read was dead, and a fix satisfying `LW > LD` and `W >= 1` would
+have shipped with the field still unread.
+
+**`DEFINITION_BOUND` is set only when the rendered definition AGREES with settings on effort**, so on
+every row the old arm judged, the ledger's `effort_bound` under this fix equals the settings value it
+was already comparing against. **The change therefore compares nothing different on the rows the arm
+previously reached.** What it buys is two things measured separately. Prose-only rows become
+self-describing: `effort_bound` is now null where HEAD wrote the configured level, so a dispatch that
+bound no effort stops claiming one — measured over the fixture's six definition states, `defok` records
+`high` and a stale render, an absent one, an unmarked one and a role declaring no effort all record
+null, a drifted definition never being selected. And the comparison becomes immune to a settings edit
+between dispatch and validate, which is the only way the two sides can disagree at all.
+
+Fix: the `NEEDS_MODEL`/`NEEDS_TYPE`/`NEEDS_EFFORT` decision block moved above the ledger write
+byte-preserved (verified as a pure line permutation — same line count, same sorted bytes, `cmp -s` on
+the moved region); `effort_bound` mirrors `model_bound`; and the arm is **scoped on the field rather
+than on the flag**, which is where its discriminating power comes from. A row that bound no effort is
+now UNDECLARED and COUNTED rather than skipped in silence, so a sprint whose every row bound nothing
+no longer reads like one where every row was verified. `EFF_DECLARED` and the settings read are gone;
+their four sites were all inside this arm and nothing else in the tree read them.
+
+**E7's ledger-`high`/settings-`low` row is hand-written and no guard can emit it against those
+settings** — reaching that state on a consumer takes a settings edit between the dispatch and the gate,
+which is unconstructible in one snapshot of a tree and is precisely the sequence under test. Reachable
+under the mechanism's contract, not from a single reading of the config; the fixture comment says so
+at the seed.
+
+Receipt scoring, each case a full copy of the tree at `01fea66c` made into its own git repo so
+`git grep` resolves there: base **1**; step 1 alone (block moved, field still the config, validator
+untouched) **1**; steps 1+2 with the validator still reading settings **1** — the case the old receipt
+was blind to; the full fix **0**; the settings read kept with `effortbound` named twice in a comment
+beside it, 4 mentions in the file **1**; a second correct spelling routing the same comparison through
+a renamed local **0**; the ledger compared but the scope narrowed back to `definition_bound`, undoing
+the widening **1**.
+
+verify: sh H=core/hooks/ai-dlc-dispatch-guard.sh; V=core/scripts/validate-spawn-ledger.sh; C=$(git grep -l "model_bound" -- "core/*" | grep -vxF "$H" | wc -l | tr -d " "); [ "$C" -ge 1 ] || exit 1; X=$(grep -c "SETTINGS" "$V") || X=0; [ "$X" -ge 1 ] || exit 1; LW=$(grep -n "effort_bound:" "$H" | head -1 | cut -d: -f1); LD=$(grep -n "^NEEDS_EFFORT=false" "$H" | head -1 | cut -d: -f1); [ -n "$LW" ] && [ -n "$LD" ] && [ "$LW" -gt "$LD" ] || exit 1; W=$(git grep -l "effort_bound" -- "core/*" | grep -vxF "$H" | wc -l | tr -d " "); [ "$W" -ge 1 ] || exit 1; E=$(grep -c '^[^#]*--arg effort.*PIN_EFFORT' "$H") || E=0; [ "$E" -eq 0 ] || exit 1; A=$(awk '/^  # --- THE EFFORT ARM/{a=1} /^done <<EOF$/{a=0} a && /^[^#]*effortbound/{n++} END{print n+0}' "$V"); S=$(awk '/^  # --- THE EFFORT ARM/{a=1} /^done <<EOF$/{a=0} a && /^[^#]*(SETTINGS|aiDlcRoles\[)/{n++} END{print n+0}' "$V"); Z=$(awk '/^  # --- THE EFFORT ARM/{a=1} /^done <<EOF$/{a=0} a && /^[^#]*-z[^#]*effortbound/{n++} END{print n+0}' "$V"); [ "$A" -ge 2 ] && [ "$S" -eq 0 ] && [ "$Z" -ge 1 ]
 
 ## BL-020
 
@@ -4553,5 +4594,38 @@ as a kill — or delete the branch and record that the anchor fix made it inert.
 
 **Tiered DEFECT.** Distribution-side fixture only; no consumer verdict moves.
 
-verify: sh F=core/fixtures/ledger-reverify/run.sh; [ -f "$F" ] || exit 9; grep -q '^sfx_kill()' "$F" || exit 9; n="$(awk '/^sfx_kill\(\)/{f=1} f && /-ne "\$\(printf .%s.n. "\$OUT" \| grep -c \.\)"/{c++} END{print c+0}' "$F")"; [ "$n" -eq 0 ] && exit 0; grep -qE 'wreckage-subject|drops the RECEIPTS-UNDECIDED emitter|mut-wreck' "$F" && exit 0; exit 1
+**2026-09-12 — given a subject rather than deleted, and the receipt is bound in two halves.**
+
+Measured at the tip before building: all six shipped mutants emit exactly the baseline's 90 rows,
+so the guard's branch is taken zero times on a clean run. The predicate is now `sfx_wrecked()`,
+called by `sfx_kill` and by a new probe sited above the first `sfx_kill`, and the probe drives it
+in both directions in one block — it FIRES on a copy one row short, and stays QUIET on the
+unmutated `acquit-shipped` copy. The probe scores no kill and moves `FAILURES` only when the
+guard cannot fire or fires on the shipped copy. `SFX_SHIPPED` moved above the probe rather than
+being defaulted: under `set -u` a reference to it from the probe's position would have been an
+unbound-variable error, and defaulting it to empty would have put the control in a branch that
+never runs.
+
+**The obvious probe mutant does not work, and the measurement is why the mutation is sited on the
+CONDITION.** Deleting `ledger-reverify.sh`'s `emit RECEIPTS-UNDECIDED` line leaves its
+`if … then … fi` with an empty body: `bash -n` exits 2, the copy dies, and the row-count
+difference the guard would then report comes from a syntax error rather than from a dropped row.
+Measured on the same seed against a baseline of 90 rows — deletion: `bash -n` 2, run exit 2, 80
+rows; the condition rewritten to `if false; then`: `bash -n` 0, run exit 0, 89 rows. The probe
+uses the second, asserts the copy PARSES before scoring it, asserts the mutation changed exactly
+two lines, and does not go through `sfx_mutant` — that helper prepends the reset strip, which
+would have made the copy differ by ten lines where one property is under test.
+
+**Receipt scoring, six cases, each built on a copy:** HEAD (inline guard) 1; definition only with
+no callers 1; definition plus the `sfx_kill` call but no probe 1; the full fix 0; a comment naming
+`sfx_wrecked` twice 1; `sfx_wrecked`'s body replaced by `return 1` **0**.
+
+**That sixth row is the receipt's limit, stated rather than hidden.** A call site is TEXT, and a
+probe sited inside a branch that never executes satisfies a call-site count exactly as a live one
+does. The receipt's text half therefore cannot see a gutted predicate — case 6 reads 0 — and what
+binds there is the FIXTURE: the same copy run once through `core/fixtures/ledger-reverify/run.sh`
+exits 1 with `FAIL  wreckage-subject  the guard stayed SILENT on a parseable copy emitting 89 rows
+against the baseline 90`, one of 212 assertions wrong and no other arm disturbed.
+
+verify: sh F=core/fixtures/ledger-reverify/run.sh; [ -f "$F" ] || exit 9; grep -q '^sfx_wrecked() {' "$F" || exit 1; n="$(awk '/^sfx_wrecked\(\) \{/{d=1} d&&/^\}/{d=0;next} !d && /^[^#]*sfx_wrecked[ \t]/{c++} END{print c+0}' "$F")"; [ "$n" -ge 2 ] || exit 1; grep -qE '^[^#]*"wreckage-subject"' "$F" || exit 1; exit 0
 
