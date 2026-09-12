@@ -15,6 +15,43 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.559.0] - 2026-09-12
+
+### The spent-verdict note reaches the title-join row, keyed on its own clause
+
+Batch 93, release 2, one no-`PC` subject, shipped alone because it edits
+`core/skills/ai-dlc-update/reconcile/layer-drift.sh` and the update skill's `SKILL.md`.
+
+#### `BL-224`
+
+`adj_spent_note()` had one call site, the `HARD-LAYER-ADJUDICATION-MISSING` row, so an operator
+who followed an `EXTENSION-TITLE-MATCHES-CORE` (LC-E19) row in the order it lists spent their own
+verdict and was told only to record another. The note is now appended to the LC-E19 detail too,
+guarded on a non-empty digest. `SKILL.md` states the recording ORDER where the operator reads
+before recording: make every prescribed edit first, read the digest from a fresh run, then record.
+
+Two narrowings the first cut needed, both found by the adversary against the consumer's live
+register and confirmed by construction before being fixed. The helper selected on entry and digest
+with `tail -1` and never on clause, so on a row of one clause it answered with whichever question
+was decided last; three of the eight consumer entries carrying an LC-E19 record have a more recent
+LC-E4 or LC-E14 record and would have been told to re-record another clause's ruling. The helper
+takes the clause as a third argument and the select carries it; both call sites pass
+`adj_clause_of`, which returns empty on an unresolvable code and makes the empty-clause guard
+load-bearing, while the `${cl}` in each row's message text stays `adj_clause_cell` so the
+stated-absence sentence still prints. And every seed had put the prior record under a DIFFERENT
+digest, so a mutant dropping the current-digest exclusion passed the fixture and the receipt while
+accusing the operator on their own live record; that state is reachable at this emit because an
+off-vocabulary verdict leaves the row firing with a current-digest record present.
+
+`core/fixtures/layer-adjudication-tier/run.sh` gains Part 3c: a fresh entry whose heading names a
+core section that did not move (chosen over the dual-keyed entry, which is also keyed at LC-E4 and
+would let the HARD row's note pass for this one), the subject, six controls and four mutants,
+including a record whose `clause` is the empty string, the only population on which the guard can
+fire. Fixture 70 ok, 19 Part 3c arms; a pre-branch copy of the detector goes red on five of them.
+Receipt bound to the emission site in four arms and scored on thirteen cases; the entry records
+them. `layer-title-join` and `absorbed-specifics-survive`, which read the detail column as a
+prefix, are unaffected.
+
 ## [0.558.0] - 2026-09-12
 
 ### The spawn ledger records the effort that was BOUND, and a wreckage guard gets a subject
