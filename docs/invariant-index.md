@@ -128,3 +128,4 @@ To change this file, change the arm header it came from and re-run the renderer.
 | I108 | the derived-fence grammar is taught in ONE passage, and its EXAMPLE is what the reader accepts |
 | I109 | every citation query passes the citation's own timestamp |
 | I110 | the In-Flight `status` token set is ONE set across its owner and its readers |
+| I111 | the reasoning-effort level set is ONE set across every file that validates it |

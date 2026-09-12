@@ -55,11 +55,15 @@ have gone green, and would have reported "still open" forever.
 never the word anywhere in prose, because an entry that merely discusses landing something is
 not a closed entry.
 
-## BL-240 — a role's configured effort is never APPLIED: every subagent runs at the parent session's effort, and the harness mechanism that would bind it is one ai-dlc does not use
+## BL-240 — a role's configured effort is never APPLIED: a definition-less subagent runs at the session's `--effort` launch flag, not by inheriting the parent's own effort, and the harness mechanism that would override that flag — a rendered `.claude/agents/<role>.md` definition — is one ai-dlc does not render
 
 **OPERATOR RANKING: HIGHEST-PRIORITY OPEN ENTRY, above every PC-backed row.** This file has
 no priority field, so the ranking is stated here, in the entry itself. Read this entry before
 `BL-227` and before the no-`PC` set. Ruled 2026-09-12.
+
+**LANDED (v0.557.0, verified de09aa7e).** `render-agent-definitions.sh` projects `aiDlcRoles` into
+`.claude/agents/<role>.md`; the dispatch guard selects the definition and removes `name` and
+`model`; the subagent probe and Check 22 join on `tool_use_id` and compare the transcript effort.
 
 **Found 2026-09-12** by joining the reference consumer's spawn ledger to the harness's own
 subagent transcripts for sprint s311, mid-sprint, read-only.
@@ -107,21 +111,25 @@ The consumer's roles map only to claude-opus-5 and claude-sonnet-5, neither pinn
 s311 evidence and the probe ran on 2.1.269. Any validator reading `effort` off a transcript must
 also read the record's `version` field and refuse to score a pinned model below 2.1.267.
 
-**Remedy shape.** Render one `.claude/agents/<role>.md` per `aiDlcRoles` entry — `name`,
-`description`, `model`, `effort`, and a body that binds the role to its `team-roles` file — as a
-generated region with a `--check` mode at the gate, so the definition cannot drift from the
-config it renders. Have the dispatch guard rewrite `subagent_type` to the role name it already
-derives, alongside the `model` it already binds. Then `effort_bound` records a value the harness
-applied, and a fixture that spawns a definition with an off-default effort and asserts the
-transcript field keeps the feature from regressing silently a second time. Confirm before
-building: that a definition's `model` and the guard's injected `model` parameter compose as the
-tool description claims, and that the interactive path matches the `-p` path the probe used.
+**Remedy shape.** `render-agent-definitions` projects `aiDlcRoles` into one
+`.claude/agents/<role>.md` per role that declares a model, as a generated region with a
+`--check` mode at the gate, so the definition cannot drift from the config it renders. The
+dispatch guard rewrites a role-bound dispatch's `subagent_type` to the rendered definition and
+deletes both `name` and `model` from the call — the definition becomes the one source for
+both, and it refuses the rewrite when the definition's frontmatter disagrees with
+`aiDlcRoles.<role>` rather than selecting a stale render silently. `ai-dlc-subagent-probe.sh`
+and gate-validation Check 22 gain the join this needed: the probe reads the transcript's
+`effort` field and the definition it ran under, and Check 22 asserts they agree with
+`aiDlcRoles.<role>.effort` for every guard row recording a definition-bound dispatch, reporting
+PENDING rather than failing where no probe row has matched yet.
 
 **Receipt.** Drives the shipping guard on a synthetic layered consumer whose settings pin
-`adversary` to `opus`/`medium`, and asks whether the corrected input's `subagent_type` names the
-role. Exit 9 if the guard did not bind the model, so a disarmed guard cannot read as a fix.
+`adversary` to `opus`/`medium` and carries a rendered, marked definition, and asks whether the
+corrected input's `subagent_type` names the role with `name` and `model` both REMOVED — the
+definition is the one source. Exit 9 only when the guard emits nothing at all, so a disarmed
+guard cannot read as a fix; a guard that rewrites the type but keeps `model` reads 1.
 
-verify: sh h=core/hooks/ai-dlc-dispatch-guard.sh; [ -f "$h" ] || exit 9; command -v jq >/dev/null || exit 9; d=$(mktemp -d) || exit 9; X(){ rm -rf "$d"; exit "$1"; }; mkdir -p "$d/.claude/team-roles" "$d/.claude/agents" || X 9; printf "version: 0.0.0\n" > "$d/.claude/.ai-dlc-version"; printf "# Role: Adversary\n" > "$d/.claude/team-roles/adversary.md"; printf "%s\n" "{\"aiDlcModels\":{\"opus\":\"claude-opus-5[1m]\"},\"aiDlcRoles\":{\"adversary\":{\"model\":\"opus\",\"effort\":\"medium\"}}}" > "$d/.claude/settings.json"; printf -- "---\nname: adversary\ndescription: probe\nmodel: opus\neffort: medium\n---\n" > "$d/.claude/agents/adversary.md"; J=$(jq -nc "{tool_name:\"Agent\",tool_input:{prompt:\"Your operating contract is .claude/team-roles/adversary.md. Read it first.\",subagent_type:\"general-purpose\",name:\"adversary-probe\"}}"); o=$(printf "%s" "$J" | CLAUDE_PROJECT_DIR="$d" AI_DLC_STATE_DIR=state bash "$h" 2>/dev/null); t=$(printf "%s" "$o" | jq -r ".hookSpecificOutput.updatedInput.subagent_type // empty" 2>/dev/null); m=$(printf "%s" "$o" | jq -r ".hookSpecificOutput.updatedInput.model // empty" 2>/dev/null); [ "$m" = opus ] || X 9; [ "$t" = adversary ] || X 1; X 0
+verify: sh h=core/hooks/ai-dlc-dispatch-guard.sh; [ -f "$h" ] || exit 9; command -v jq >/dev/null || exit 9; d=$(mktemp -d) || exit 9; X(){ rm -rf "$d"; exit "$1"; }; mkdir -p "$d/.claude/team-roles" "$d/.claude/agents" || X 9; printf "version: 0.0.0\n" > "$d/.claude/.ai-dlc-version"; printf "# Role: Adversary\n" > "$d/.claude/team-roles/adversary.md"; printf "%s\n" "{\"aiDlcModels\":{\"opus\":\"claude-opus-5[1m]\"},\"aiDlcRoles\":{\"adversary\":{\"model\":\"opus\",\"effort\":\"medium\"}}}" > "$d/.claude/settings.json"; printf -- "---\nname: adversary\ndescription: probe\nmodel: opus\neffort: medium\n---\n<!-- AI/DLC GENERATED: rendered by scripts/ai-dlc/render-agent-definitions.sh from .claude/settings.json aiDlcRoles.adversary. Edit the settings entry, then re-render. -->\nbody\n" > "$d/.claude/agents/adversary.md"; J=$(jq -nc "{tool_name:\"Agent\",tool_input:{prompt:\"Your operating contract is .claude/team-roles/adversary.md. Read it first.\",subagent_type:\"general-purpose\",name:\"adversary-probe\"}}"); o=$(printf "%s" "$J" | CLAUDE_PROJECT_DIR="$d" AI_DLC_STATE_DIR=state bash "$h" 2>/dev/null); [ -n "$o" ] || X 9; t=$(printf "%s" "$o" | jq -r ".hookSpecificOutput.updatedInput.subagent_type // empty" 2>/dev/null); hm=$(printf "%s" "$o" | jq -r ".hookSpecificOutput.updatedInput | has(\"model\")" 2>/dev/null); hn=$(printf "%s" "$o" | jq -r ".hookSpecificOutput.updatedInput | has(\"name\")" 2>/dev/null); [ "$t" = adversary ] && [ "$hm" = false ] && [ "$hn" = false ] && X 0; X 1
 
 ## BL-238 — the consumer ledger's `theirs`-ref receipt grammar cannot key on an ARM's body, so a receipt written to ask a behavioural question is satisfied by a comment
 

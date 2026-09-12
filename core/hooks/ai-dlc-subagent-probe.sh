@@ -39,7 +39,8 @@
 # level are the exact complement, 233 false and 0 true.
 #
 # EMITS  ${AI_DLC_STATE_DIR:-_bmad-output}/subagent-context.jsonl
-#   {v, ts, sprint, agent_id, model, role, turns, peak_tokens, compactions, duration_s}
+#   {v, ts, sprint, agent_id, model, role, turns, peak_tokens, compactions, duration_s,
+#    effort, definition, tool_use_id, transcript_version}
 # One line per teammate completion. Append-only. Read it with:
 #   jq -s 'max_by(.peak_tokens)'            <- the closest any teammate came
 #   jq -s 'map(select(.compactions>0))'     <- teammates that actually compacted
@@ -135,21 +136,69 @@ AGENT_ID="$(printf '%s' "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null || tru
 # defect being fixed, and a row of nothing is already recorded elsewhere -- the
 # spawn ledger is the dispatch record, this file is the telemetry record.
 #
-# THIS NARROWS THE POPULATION, AND IT IS DECLARED HERE BECAUSE NO READER WOULD
-# OTHERWISE SEE IT. Two `agent_id` shapes reach this hook: a NAMED dispatch
-# (`adev-s303-4-<hex>`), which the dispatch guard also records in the spawn ledger,
-# and a BARE one (`a` + 16 hex) from an unnamed Explore / Plan / general-purpose /
-# fork spawn. Measured on the reference consumer, restricted to rows inside a session
-# window whose `subagents/` directory still exists so that reaping is controlled for:
-# named resolve 557 of 557, bare 40 of 646, and bare rows join the spawn ledger 0 of
-# 717 against 557 of 562 for named. So from `v:2` this file records NAMED TEAMMATES,
-# and the bare class -- 56% of recent `v:1` rows -- stops appearing. Nothing of value
-# is lost, because every `v:1` value that class carried was the lead's. But a reader
-# comparing row counts across the stamp will see a large drop, and THIS is it, not a
-# regression.
+# THE POPULATION, AND WHY IT WIDENED AGAIN AT `v:3`.
+#
+# Two `agent_id` shapes reach this hook: a NAMED dispatch (`adev-s303-4-<hex>`), which
+# the dispatch guard also recorded in the spawn ledger, and a BARE one (`a` + 16 hex)
+# from an unnamed spawn. At `v:2` this file recorded NAMED TEAMMATES ONLY, on a
+# measurement taken on the reference consumer with reaping controlled for: named resolve
+# 557 of 557, bare 40 of 646, and bare rows joined the spawn ledger 0 of 717 against 557
+# of 562 for named. That was correct about the world it was measured in, and the
+# `definition_bound` release INVERTS it.
+#
+# A ROLE-BOUND DISPATCH IS NOW A BARE-ID SPAWN BY CONSTRUCTION. The guard deletes `name`
+# so the harness selects `.claude/agents/<role>.md` — a NAME routes the spawn to the
+# in-process teammate runner, which spreads the definition's model and NOT its effort.
+# So the very dispatches Check 22 exists to verify land in exactly the class `v:2`
+# dropped, and a release that shipped both halves unchanged would have deleted the key
+# its own verification joins on. Both the filter and the join move together or neither
+# does.
+#
+# `v:3`: a bare-id row is IN the population when its meta declares a definition. That is
+# the discriminator rather than the id's shape, because the shape cannot tell a
+# role-bound spawn from an ad-hoc Explore — and the ad-hoc class is the one `v:2` was
+# right to drop. Censused over the harness's own `agent-*.meta.json` corpus, the two
+# classes are cleanly separable: EVERY unnamed spawn carries `toolUseId`, and EVERY named
+# in-process teammate carries `teamName` and no `toolUseId`. The counts are in the
+# CHANGELOG, which dates them; one quoted here would decay silently.
+#
+# A reader comparing row counts across either stamp sees a step, and THIS is it, not a
+# regression: down at `v:2`, back up at `v:3` over a different subset.
 LEAD_TRANSCRIPT="$TRANSCRIPT"
 TRANSCRIPT="${LEAD_TRANSCRIPT%.jsonl}/subagents/agent-${AGENT_ID}.jsonl"
 [ -r "$TRANSCRIPT" ] || exit 0
+
+# --- THE META SIDECAR: the definition, and the join key ------------------------
+# `agent-<id>.meta.json` sits beside the transcript, 1:1 with it, and is written by the
+# harness rather than by anything here — which is what makes it evidence. Three reads:
+#
+#   DEFINITION. `customAgentType` on a NAMED teammate row, `agentType` on an UNNAMED one.
+#   Read definition-first (`customAgentType // agentType`) because on a named row
+#   `agentType` carries the generic harness type and `customAgentType` carries the
+#   definition; taking `agentType` alone would record `general-purpose` for a spawn that
+#   ran on a role definition. On an unnamed row `customAgentType` is absent and
+#   `agentType` IS the definition, so one expression covers both.
+#
+#   toolUseId. THE JOIN KEY, and it is the only one that is not ORDERED. The ledger is
+#   written at PreToolUse in DISPATCH order; this hook fires at SubagentStop in
+#   COMPLETION order. Two same-role spawns that finish out of order defeat any join keyed
+#   on (role, most-recent-unmatched-row) — and because they share a configured effort,
+#   Check 22's arm PASSES on the mis-pairing and reports an agreement it never
+#   established. Measured on CC 2.1.269 with two same-definition spawns driven both ways
+#   round: joining on this id paired 4 of 4 correctly, verified by CONTENT; the
+#   order-keyed join paired 2 of 4, right on one ordering and wrong on the other.
+#
+#   It is ABSENT on named in-process teammates, which carry `teamName` instead, and PRESENT
+#   on unnamed spawns — measured across the whole meta corpus with no exception in either
+#   direction. A role-bound dispatch is unnamed from this release — the guard deletes `name`
+#   — so the key resolves exactly where the verification needs it, and its absence marks the
+#   class that has no definition to verify.
+META="${LEAD_TRANSCRIPT%.jsonl}/subagents/agent-${AGENT_ID}.meta.json"
+DEFINITION=""; TOOL_USE_ID=""
+if [ -r "$META" ]; then
+  DEFINITION="$(jq -r '.customAgentType // .agentType // empty' "$META" 2>/dev/null || true)"
+  TOOL_USE_ID="$(jq -r '.toolUseId // empty' "$META" 2>/dev/null || true)"
+fi
 
 # Bounded reverse tail-read, same discipline as ai-dlc-context-sensor.sh: a
 # teammate transcript can be megabytes and a single tool_result line can be huge,
@@ -157,7 +206,7 @@ TRANSCRIPT="${LEAD_TRANSCRIPT%.jsonl}/subagents/agent-${AGENT_ID}.jsonl"
 # want the PEAK across the whole run, not the latest reading — a teammate that
 # compacted and came back down still spent time at the ceiling, and that peak is
 # the number the ceiling decision needs.
-PEAK=0; TURNS=0; COMPACTIONS=0; MODEL=""; END_TS=""
+PEAK=0; TURNS=0; COMPACTIONS=0; MODEL=""; END_TS=""; EFFORT=""; TVERSION=""
 for N in ${AI_DLC_PROBE_TAIL_BYTES:-1048576} 4194304 16777216; do
   READ="$(tail -c "$N" "$TRANSCRIPT" 2>/dev/null | jq -Rsc '
       (split("\n") | map(fromjson?)) as $a
@@ -173,6 +222,33 @@ for N in ${AI_DLC_PROBE_TAIL_BYTES:-1048576} 4194304 16777216; do
                           | select(.type == "system" and .subtype == "compact_boundary")
                         ] | length),
           model: ([ $a[] | select(.type == "assistant") | .message.model // empty ] | last // ""),
+          # NO APOSTROPHE MAY APPEAR IN ANY COMMENT BELOW. This whole program is one
+          # single-quoted shell word, so a possessive CLOSES it; the text after it is
+          # read by the SHELL, where a leading # comments out the rest of the line
+          # including the apostrophe that would reopen the quote. The program then ends
+          # early, jq returns nothing, PEAK stays 0 and the hook exits WITHOUT WRITING A
+          # ROW -- silently, because every arm here is 2>/dev/null. Measured: it cost
+          # every assertion in core/fixtures/subagent-probe at once.
+          #
+          # THE EFFORT THE API CALL WAS ACTUALLY MADE AT, which is the whole point of
+          # this field: everything else about effort in this pipeline is a
+          # self-declaration. It is a top-level STRING on an assistant record -- sampled
+          # across the transcript corpus it is a string or absent, never an object -- and
+          # it is NOT inside .message, and NOT the effort object the hook INPUT carries.
+          # That last one describes the LEAD session, which is the same wrong-subject read
+          # the header of this file records at length.
+          #
+          # LAST, not first, for the reason model is last: a run that changed effort
+          # mid-flight ran most recently at the later value. A unique would hide a change
+          # behind an arbitrary pick, and a first-read would report a value the teammate
+          # has stopped using.
+          effort: ([ $a[] | select(.type == "assistant") | .effort // empty ] | last // ""),
+          # THE BUILD THAT WROTE THE RECORD. CC 2.1.259/2.1.267 fixed the effort field on
+          # models whose launch effort is pinned, so a value read off an older record is
+          # not evidence about what applied. Recorded rather than judged: this hook
+          # decides nothing, and the refusal belongs in the gate-time reader that HAS the
+          # pin.
+          version: ([ $a[] | .version // empty ] | last // ""),
           end_ts: ([ $a[] | .timestamp // empty ] | last // "")
         }
     ' 2>/dev/null)"
@@ -192,6 +268,8 @@ for N in ${AI_DLC_PROBE_TAIL_BYTES:-1048576} 4194304 16777216; do
   COMPACTIONS="$(printf '%s' "$READ" | jq -r '.compactions' 2>/dev/null)"
   MODEL="$(printf '%s' "$READ" | jq -r '.model' 2>/dev/null)"
   END_TS="$(printf '%s' "$READ" | jq -r '.end_ts' 2>/dev/null)"
+  EFFORT="$(printf '%s' "$READ" | jq -r '.effort' 2>/dev/null)"
+  TVERSION="$(printf '%s' "$READ" | jq -r '.version' 2>/dev/null)"
   # A tail that captured no assistant turn means the window was too small for
   # even one record — escalate. Otherwise this reading stands.
   case "${TURNS:-0}" in ''|0) continue ;; esac
@@ -263,23 +341,54 @@ fi
 # and it is the role the guard BOUND. Prefer it; keep the prose read as the
 # fallback for teammates dispatched before the ledger existed.
 #
-# JOIN. The probe sees `agent_id` (`appe-hb-s298-1-disposition-db3a97…`), the
-# ledger sees the dispatch `name` (`ppe-hb-s298-1-disposition`), and the id embeds
-# the name. Match on containment and take the LONGEST matching name, so a short
-# generic name (`dev`) cannot outrank a specific one that also matches.
+# THE JOIN, IN TWO ARMS, AND THE ORDER BETWEEN THEM IS THE WHOLE DESIGN.
+#
+# ARM 1 -- `tool_use_id`, EXACT. The guard records the PreToolUse `tool_use_id` on every
+# row; the harness writes the same value as `toolUseId` in the meta sidecar read above.
+# It is a per-call identity, so it is immune to the thing every other key here is not:
+# the ledger is written in DISPATCH order and this hook fires in COMPLETION order, and
+# two same-role spawns finishing out of order mis-pair under any order-derived key. That
+# mis-pairing is SILENT at the gate, because two spawns of one role share a configured
+# effort and the comparison passes on the wrong row. Measured, CC 2.1.269, two
+# same-definition spawns driven both ways round and scored by CONTENT: this key paired
+# 4/4; the name-and-recency key paired 2/4.
+#
+# ARM 2 -- the NAME containment read, kept as the fallback and unchanged. The probe sees
+# `agent_id` (`appe-hb-s298-1-disposition-db3a97…`), the ledger sees the dispatch `name`
+# (`ppe-hb-s298-1-disposition`), and the id embeds the name. Longest match wins so a
+# short generic name (`dev`) cannot outrank a specific one. It is the fallback and not
+# the primary because a NAMED spawn is one the harness routed to the teammate runner,
+# which carries no `toolUseId` at all -- so this arm covers the pre-release rows and the
+# named class, and arm 1 covers everything a definition-bound dispatch produces.
+#
+# ARM 1 IS TRIED FIRST AND ITS MISS DOES NOT FALL THROUGH TO A GUESS: a row matched on an
+# exact id is the right row, and a row matched on a name is the best available one.
 SPAWN_LEDGER="${STATE_DIR}/spawn-ledger.jsonl"
-if [ -n "${AGENT_ID:-}" ] && [ "${AGENT_ID}" != "unknown" ] && [ -r "$SPAWN_LEDGER" ]; then
-  LEDGER_ROLE="$(jq -rs --arg id "$AGENT_ID" '
-      [ .[]
-        | select(type == "object")
-        | select((.name // "") != "")
-        | select(.role != null)
-        | select(.name as $n | $id | contains($n))
-      ]
-      | sort_by(.name | length) | last | .role // empty
-    ' "$SPAWN_LEDGER" 2>/dev/null || true)"
+LEDGER_ROW=""
+if [ -r "$SPAWN_LEDGER" ]; then
+  if [ -n "${TOOL_USE_ID:-}" ]; then
+    LEDGER_ROW="$(jq -rsc --arg t "$TOOL_USE_ID" '
+        [ .[]
+          | select(type == "object")
+          | select((.tool_use_id // "") == $t)
+        ] | last // empty
+      ' "$SPAWN_LEDGER" 2>/dev/null || true)"
+  fi
+  if [ -z "${LEDGER_ROW:-}" ] && [ -n "${AGENT_ID:-}" ] && [ "${AGENT_ID}" != "unknown" ]; then
+    LEDGER_ROW="$(jq -rsc --arg id "$AGENT_ID" '
+        [ .[]
+          | select(type == "object")
+          | select((.name // "") != "")
+          | select(.role != null)
+          | select(.name as $n | $id | contains($n))
+        ]
+        | sort_by(.name | length) | last // empty
+      ' "$SPAWN_LEDGER" 2>/dev/null || true)"
+  fi
+fi
+if [ -n "${LEDGER_ROW:-}" ]; then
+  LEDGER_ROLE="$(printf '%s' "$LEDGER_ROW" | jq -r '.role // empty' 2>/dev/null || true)"
   [ -n "${LEDGER_ROLE:-}" ] && ROLE="$LEDGER_ROLE"
-
 fi
 
 # Seconds, not milliseconds: the spread being measured runs minutes to hours,
@@ -308,14 +417,22 @@ jq -nc --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
        --arg m "${MODEL:-}" \
        --arg r "${ROLE:-}" \
        --arg d "${DURATION:-}" \
+       --arg e "${EFFORT:-}" \
+       --arg def "${DEFINITION:-}" \
+       --arg tui "${TOOL_USE_ID:-}" \
+       --arg tv "${TVERSION:-}" \
        --argjson turns "${TURNS:-0}" \
        --argjson peak "${PEAK:-0}" \
        --argjson comp "${COMPACTIONS:-0}" \
-  '{v:2, ts:$ts, sprint:(if $s=="" then null else ($s|tonumber) end),
+  '{v:3, ts:$ts, sprint:(if $s=="" then null else ($s|tonumber) end),
     agent_id:$a, model:(if $m=="" then null else $m end),
     role:(if $r=="" then null else $r end),
     turns:$turns, peak_tokens:$peak, compactions:$comp,
-    duration_s:(if $d=="" then null else ($d|tonumber) end)}' \
+    duration_s:(if $d=="" then null else ($d|tonumber) end),
+    effort:(if $e=="" then null else $e end),
+    definition:(if $def=="" then null else $def end),
+    tool_use_id:(if $tui=="" then null else $tui end),
+    transcript_version:(if $tv=="" then null else $tv end)}' \
   >> "$OUT" 2>/dev/null || true
 
 exit 0

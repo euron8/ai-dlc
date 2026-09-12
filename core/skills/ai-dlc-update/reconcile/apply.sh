@@ -1779,6 +1779,59 @@ else
 fi
 }
 
+# --- AGENT DEFINITIONS: a third DECLARATION delivered in two halves --------------------------
+#
+# THE SAME SHAPE AS THE TRANSIENT-IGNORE ROW ABOVE, one declaration over. `aiDlcRoles` reaches a
+# consumer through the settings merge; `.claude/agents/<role>.md` is `render-agent-definitions.sh`
+# projecting that declaration, and on a PULL nothing calls it -- its only invocation site in the
+# distribution is `scripts/install.sh`, the path a NEW consumer takes.
+#
+# WHAT AN UNRENDERED PROJECTION COSTS. The definition is the ONLY channel that binds a role's
+# reasoning EFFORT, and it OUTRANKS the session's own resolution rather than filling a gap in
+# it. A prompt cannot set effort: measured on the reference consumer, every spawn ran at the
+# effort the SESSION resolved -- from its launch flag, or from the user's
+# `effortLevel`/`modelSettings` -- and never at the role's, whatever directive the prompt
+# carried. A role with no definition is a role running at that session-resolved level, and
+# nothing about the spawn says so: the ledger records `effort_bound` from the config either
+# way, which is a self-declaration and not a measurement.
+#
+# GATED ON `aiDlcRoles`, NOT ON THE RENDERER, for `transient_ignore_row`'s measured reason: a
+# tree with neither half is not a defect, it is a tree this release has nothing to say about,
+# and a row on it is noise the operator cannot act on. Here the renderer answers that question
+# ITSELF -- exit 3 is NOT APPLICABLE -- so the gate is the renderer's own verdict rather than a
+# second copy of the applicability test in this file. A restated predicate drifts; this one
+# cannot, because there is only one.
+#
+# WHY A `WORKLIST` ROW AND NOT A CALL. `.claude/agents/` is a user-owned directory and the
+# renderer DELETES stale generated files in it. This driver has no channel to obtain the
+# operator's gate on that edit -- the same reason `settings-merge.sh` is named rather than
+# called by the hook row. `--check` never writes, so it is safe from a driver.
+agent_definitions_row() {
+AD_RENDERER="$CONSUMER/scripts/ai-dlc/render-agent-definitions.sh"
+AD_SETTINGS="$CONSUMER/.claude/settings.json"
+# The renderer is what decides applicability, but it must EXIST to decide it. A consumer whose
+# settings pin roles and whose renderer never arrived is the reportable split -- and it is
+# exactly the state every consumer predating this mechanism is in, which is why the absent
+# branch is gated on the declaration rather than firing on every older tree.
+if [ -f "$AD_RENDERER" ]; then
+  ad_out="$(bash "$AD_RENDERER" --check --root "$CONSUMER" 2>&1)"; ad_rc=$?
+  case "$ad_rc" in
+    0|3) : ;;
+    1)
+      say WORKLIST agent-definitions ".claude/agents/" \
+        "the rendered agent definitions do not match \`aiDlcRoles\` in this consumer's settings. A role with no current definition runs at the session's launch-flag or settings-resolved reasoning effort, not at the one \`aiDlcRoles\` configures for it — the definition's \`effort:\` frontmatter is the only channel that binds the role's own level, and the dispatch guard's prompt sentence measurably does not. Re-render: \`bash scripts/ai-dlc/render-agent-definitions.sh\` (it writes only \`.claude/agents/<role>.md\` for roles \`aiDlcRoles\` declares with a model, removes its own stale projections, and leaves any hand-written definition alone). Detail: $(printf '%s' "$ad_out" | tr '\n' ' ')" ;;
+    *)
+      say DECISION agent-definitions-unreadable ".claude/agents/" \
+        "the agent-definition check could not run, so whether this consumer's roles bind their configured effort is UNKNOWN — and unknown reads exactly like clean. Detail: $(printf '%s' "$ad_out" | tr '\n' ' ')" ;;
+  esac
+elif [ -f "$AD_SETTINGS" ] && command -v jq >/dev/null 2>&1 \
+     && [ "$(jq -r 'has("aiDlcRoles")' "$AD_SETTINGS" 2>/dev/null)" = "true" ]; then
+  # NOT a silent skip -- the same reason the two rows above state their own absence.
+  say DECISION agent-definitions-unchecked ".claude/agents/" \
+    "scripts/ai-dlc/render-agent-definitions.sh is not on this consumer, so nothing rendered the agent definitions its \`aiDlcRoles\` declares, so every role's spawns run at the session's launch-flag or settings-resolved reasoning effort rather than the role's own. It is delivered by install.sh's copy loop over core/scripts/; run a fresh install of that script, then \`bash scripts/ai-dlc/render-agent-definitions.sh\`."
+fi
+}
+
 # --- THE TWO ORDERS, DISPATCHED ONCE ---------------------------------------------------------
 #
 # Ordinary apply: stamp, then the hook row. The hook row cannot gate the stamp here because the
@@ -1794,14 +1847,26 @@ fi
 # moment -- unlike the hook row it depends on no later step-7 bullet, because the declaration it
 # checks was written by the pure-apply phase above -- so it takes the hook row's position rather
 # than introducing a third ordering for a reader to reason about.
+#
+# THE AGENT-DEFINITION ROW RIDES BESIDE IT AND IS NOT ANSWERABLE THE SAME WAY IN BOTH ORDERS,
+# which is stated rather than smoothed over. Its declaration is `aiDlcRoles` in
+# `.claude/settings.json`, written by the settings MERGE -- a later step-7 bullet, exactly like
+# the hook row's subject. On an ordinary apply it therefore reads the PRE-merge settings, and on
+# `--finish` it reads the post-merge ones. Both answers are about a real state of the consumer
+# and neither is withheld: a definition stale against the old settings is stale against the new
+# ones too whenever the merge did not touch `aiDlcRoles`, and where the merge DID move a role,
+# `--finish` is the invocation that sees it. Gating the stamp on the earlier answer is what
+# would be wrong, and `say` never does that for a WORKLIST row on the ordinary path.
 if [ "$FINISH" = 1 ]; then
   hook_registration_row
   transient_ignore_row
+  agent_definitions_row
   write_stamp
 else
   write_stamp
   hook_registration_row
   transient_ignore_row
+  agent_definitions_row
 fi
 
 exit 0

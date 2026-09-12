@@ -81,13 +81,42 @@
 #   `claude-opus-5[1m]`. The guard injects the key; the value it maps to is what a
 #   teammate would type at `/model`. A Bedrock consumer changes only the value.
 #
-#   `effort` has NO tool parameter, so it cannot be bound the same way. The guard
-#   STATES the configured level in the dispatch PROMPT — the only channel that
-#   reaches the subagent. Without that, config would be authoritative for the
-#   model and merely advisory for effort, and a teammate would have to read
-#   settings.json to learn its own effort. It is a statement of fact rather than a
-#   directive to run something, because no `/effort` command is defined anywhere in
-#   this distribution and the guard must not depend on one existing in the harness.
+#   `effort` has NO tool parameter. THE PROMPT IS NO LONGER THE ONLY CHANNEL THAT
+#   REACHES THE SUBAGENT, AND THIS PARAGRAPH SAID IT WAS. A `.claude/agents/<role>.md`
+#   definition's `effort:` frontmatter key IS applied by the harness — measured on CC
+#   2.1.269, twice, on two same-definition spawns whose transcripts read `low` under a
+#   parent session at `high`. The prompt line is therefore the WEAK channel: it states
+#   the configured level as a fact the teammate operates under, which is advisory, while
+#   the definition BINDS it. Both are kept. The prompt line is what a teammate dispatched
+#   before the renderer existed still gets, and it is a statement of fact rather than a
+#   directive to run something, because no `/effort` command is defined anywhere in this
+#   distribution and the guard must not depend on one existing in the harness.
+#
+#   THE DEFINITION IS THE BINDING; THIS GUARD IS THE NET. `.claude/agents/<role>.md` is
+#   RENDERED from the same `aiDlcRoles.<role>` entry this guard reads, so the two are
+#   projections of one declaration rather than two sources. On a role-bound dispatch whose
+#   definition exists AND carries the generated marker, the guard rewrites `subagent_type`
+#   to the role, DELETES `name`, and DELETES `model`:
+#
+#     * `name` routes the spawn to the in-process teammate runner, and THAT RUNNER
+#       SPREADS THE DEFINITION'S MODEL AND NOT ITS EFFORT — measured: a named spawn's
+#       meta carries `teamName` and no `toolUseId`, and its transcript takes the session
+#       effort. A name is exactly what makes the definition's effort stop applying, so a
+#       role-bound dispatch passes none.
+#     * `model` as an explicit Agent-tool parameter OUTRANKS the definition's `model:`.
+#       The definition's `effort:` still applies when the param overrides the model
+#       (measured), so this deletion is not a correctness requirement — it is the
+#       one-value-one-source rule. Two live sources for a teammate's model is the drift
+#       the `aiDlcRoles` block was introduced to remove.
+#
+#   A STALE DEFINITION IS NEVER SELECTED. Before rewriting, the guard reads the
+#   definition's own frontmatter and compares it against settings. Disagreement means the
+#   rendered file no longer projects the config, and binding to it would run the teammate
+#   on a value nobody declared — so the guard records `definition_stale: true` and falls
+#   to the no-definition branch, where today's behaviour (bind `model`, state the effort)
+#   still applies. An ABSENT or UNMARKED definition is the same fall-through with
+#   `definition_bound: false`; `subagent_type` is never rewritten to a name the harness
+#   cannot resolve, because that errors the spawn rather than mis-binding it.
 #
 #   FAIL-OPEN on any ambiguity: no prompt, no role binding, unreadable or unpinned
 #   role file, an unreadable/invalid settings.json, a missing `aiDlcModels` block,
@@ -101,6 +130,14 @@
 #   effort binds like any other role's; their model is left alone. A missing model
 #   is a normal configured state here, not an error, which is why the two resolve
 #   independently rather than one gating the other.
+#
+#   AND THE RENDERER SKIPS THEM FOR THAT REASON. `render-agent-definitions.sh` writes a
+#   definition only for a role whose `model` key resolves, so a model-less persona gets
+#   no `.claude/agents/<role>.md` at all. This is where that decision belongs, because
+#   the consequence is here: a model-less definition would still carry an `effort:` key,
+#   and the harness would bind it on the very spawns `/bmad-party-mode` controls and this
+#   guard is told to leave alone. The renderer cites this paragraph rather than restating
+#   the four names — one list, in the config, read by both.
 #
 # INSTALL: wired by templates/settings.json.template (PreToolUse matcher
 #   "Agent|Task"); upserted by reconcile/settings-merge.sh on pull.
@@ -250,6 +287,59 @@ PIN_MODEL=""
 
 REQUESTED="$(printf '%s' "$INPUT" | jq -r '.tool_input.model // empty' 2>/dev/null)"
 
+# --- THE RENDERED DEFINITION ---------------------------------------------------
+# `.claude/agents/<role>.md`, written by `scripts/ai-dlc/render-agent-definitions.sh`
+# from the SAME `aiDlcRoles.<role>` entry resolved above. Three states, and they must
+# stay three: BOUND (present, marked, and agreeing with settings), STALE (present and
+# marked but disagreeing), ABSENT (missing, or present without the marker).
+#
+# THE MARKER IS THE OWNERSHIP TEST AND IT IS NOT OPTIONAL. `.claude/agents/` is a
+# consumer-writable directory — a consumer may keep its own hand-written agents there,
+# and one of them may share a name with an AI/DLC role. Rewriting `subagent_type` to
+# select a file this distribution did not render would bind a teammate to a body nobody
+# here wrote, so an UNMARKED file is left strictly alone and takes the absent branch.
+#
+# THE FRONTMATTER IS READ FROM THE FILE, NEVER FROM SETTINGS. `model_bound` records what
+# the HARNESS will apply, and on a definition-bound dispatch that is the definition's
+# `model:` line. Reading settings for that value and calling it "what the definition
+# binds" is a record of INTENT compared against its own input — the tautology
+# mechanism-design.md names — and it would report agreement on exactly the stale render
+# this block exists to refuse.
+DEF_FILE="$PROJECT_DIR/.claude/agents/$ROLE.md"
+DEF_MARKER='AI/DLC GENERATED:'
+DEFINITION_BOUND=false
+DEFINITION_STALE=false
+DEF_MODEL=""
+DEF_EFFORT=""
+if [ -r "$DEF_FILE" ] && grep -qF "$DEF_MARKER" "$DEF_FILE" 2>/dev/null; then
+  # BOUNDED TO THE FRONTMATTER BLOCK, not read file-wide. The body below the closing
+  # `---` is prose that names the role and could name a model in a sentence; a file-wide
+  # `sed -n 's/^model: //p'` would then read a word out of a paragraph and compare it
+  # against the config. `awk` exits at the closing fence so the body cannot be reached.
+  DEF_MODEL="$(awk 'NR==1 && $0!="---"{exit} NR==1{next} /^---$/{exit}
+                    /^model:[[:space:]]/{sub(/^model:[[:space:]]*/,""); print; exit}' \
+                 "$DEF_FILE" 2>/dev/null || true)"
+  DEF_EFFORT="$(awk 'NR==1 && $0!="---"{exit} NR==1{next} /^---$/{exit}
+                     /^effort:[[:space:]]/{sub(/^effort:[[:space:]]*/,""); print; exit}' \
+                  "$DEF_FILE" 2>/dev/null || true)"
+  # AGREEMENT IS ON BOTH KEYS AND IT IS EXACT. `matches_pin`'s containment tolerance is
+  # right for a REQUEST (a caller may legitimately pass a full model string carrying the
+  # key) and wrong here: the renderer writes the KEY, so anything else is a render that
+  # did not come from this config. An empty `DEF_EFFORT` agrees with an empty
+  # `PIN_EFFORT` — the renderer omits the line for a role with no valid effort — and
+  # disagrees with a configured one, which is the drift a re-render fixes.
+  if [ "$DEF_MODEL" = "$EXPECT" ] && [ "$DEF_EFFORT" = "$PIN_EFFORT" ]; then
+    DEFINITION_BOUND=true
+  else
+    DEFINITION_STALE=true
+  fi
+fi
+# A definition that resolves NO model binds nothing the harness can select, and the
+# renderer never writes one (see the PARTY PERSONAS paragraph in the header). Treating a
+# model-less marked file as bindable would rewrite `subagent_type` for exactly the party
+# seats `/bmad-party-mode` controls, so it falls to the absent branch here too.
+[ -n "$DEF_MODEL" ] || DEFINITION_BOUND=false
+
 # --- SPAWN LEDGER --------------------------------------------------------------
 # PURE INSTRUMENTATION, written at DISPATCH time. Nothing below bounds, denies or
 # warns; the decision logic is unchanged and follows.
@@ -289,7 +379,15 @@ SPAWN_SNAPSHOT="${SPAWN_STATE_DIR}/pipeline-snapshot.md"
 # to correct it, otherwise whatever was requested. `inherit` names the documented
 # no-param case (the Agent tool inherits, and the record cannot say what that
 # resolved to) so the field is never silently empty.
-if [ -n "$EXPECT" ] && ! matches_pin "$REQUESTED"; then
+#
+# ON A DEFINITION-BOUND DISPATCH THE ANSWER COMES FROM THE DEFINITION FILE, because that
+# is what the harness reads. The guard deletes the `model` param on that path, so the
+# value the tool call carries is not the value that runs; recording `EXPECT` here would
+# be recording what the config SAYS rather than what the file the harness selects
+# DECLARES, and those diverge on exactly the stale render the branch above refuses.
+if [ "$DEFINITION_BOUND" = true ]; then
+  SPAWN_BOUND="$DEF_MODEL"
+elif [ -n "$EXPECT" ] && ! matches_pin "$REQUESTED"; then
   SPAWN_BOUND="$EXPECT"
 elif [ -n "$REQUESTED" ]; then
   SPAWN_BOUND="$REQUESTED"
@@ -298,6 +396,43 @@ else
 fi
 
 SPAWN_NAME="$(printf '%s' "$INPUT" | jq -r '.tool_input.name // .tool_input.subagent_type // empty' 2>/dev/null || true)"
+
+# THE JOIN KEY BETWEEN THIS ROW AND THE TELEMETRY THE PROBE WRITES, and it is the reason
+# Check 22's effort arm can exist at all. The probe runs at SubagentStop and sees an
+# `agent_id` this hook cannot know at PreToolUse; this hook sees a `name` the probe's
+# population is about to stop carrying, because a definition-bound dispatch has its
+# `name` deleted below. Every other candidate key is ORDERED and the two events are not:
+# the ledger is written in DISPATCH order and SubagentStop fires in COMPLETION order, so
+# a join on (role, latest-unmatched-timestamp) mis-pairs two same-role spawns that finish
+# out of order — and because they share an expected effort, the arm PASSES on the wrong
+# pairing and reports agreement it never established.
+#
+# MEASURED, CC 2.1.269, two same-definition spawns dispatched in one block, driven both
+# ways round: `tool_use_id` here equals `toolUseId` in the harness's own
+# `agent-<id>.meta.json`, 4 of 4 pairings correct across a reverse-completion pair and a
+# forward-completion pair, verified by CONTENT (the agent whose transcript ran the seeded
+# `sleep` joined to the dispatch whose prompt asked for it). The order-keyed join scored
+# 2 of 4 on the same two runs — right on one ordering, wrong on the other, which is
+# exactly the shape that reads as working.
+#
+# ITS ABSENCE IS THE NAMED CASE, NOT A GAP, AND THE TWO CLASSES ARE CLEANLY SEPARABLE.
+# Censused over the harness's own `agent-*.meta.json` corpus: `toolUseId` is present on
+# EVERY unnamed spawn and absent from EVERY named in-process teammate, which carries
+# `teamName` instead. Deleting `name` is therefore what MAKES this key resolvable, and the
+# two halves of this release are one change. The counts are in the CHANGELOG, which dates
+# them; a figure quoted here would decay silently and read exactly like a fresh one.
+SPAWN_TUI="$(printf '%s' "$INPUT" | jq -r '.tool_use_id // empty' 2>/dev/null || true)"
+
+# THE DELETED NAME IS RECORDED, NEVER MERELY DROPPED. A lead reading the ledger back sees
+# `name` as the dispatch's identity across every sprint of history; a definition-bound row
+# whose name simply vanished would read as an unnamed dispatch rather than as a named one
+# the guard un-named. It is recorded only when the deletion actually happens, so the field
+# is a record of an ACT and not of an intention — a row carrying it is a row where
+# `subagent_type` was rewritten.
+SPAWN_NAME_STRIPPED=""
+if [ "$DEFINITION_BOUND" = true ]; then
+  SPAWN_NAME_STRIPPED="$(printf '%s' "$INPUT" | jq -r '.tool_input.name // empty' 2>/dev/null || true)"
+fi
 # THE DECORATION IS NOT PART OF THE FIELD. This read used to require the field
 # name wrapped in emphasis markers; the snapshot's writer emits the plain
 # `- sprint_id: N` whenever nothing re-emphasises it, and the two forms alternate
@@ -335,8 +470,12 @@ jq -nc \
    --arg req "${REQUESTED:-}" \
    --arg bound "$SPAWN_BOUND" \
    --arg effort "${PIN_EFFORT:-}" \
+   --arg tui "${SPAWN_TUI:-}" \
+   --arg stripped "${SPAWN_NAME_STRIPPED:-}" \
    --argjson cited "$ROLE_CONTRACT_CITED" \
-   --argjson readable "$ROLE_FILE_READABLE" '{
+   --argjson readable "$ROLE_FILE_READABLE" \
+   --argjson defbound "$DEFINITION_BOUND" \
+   --argjson defstale "$DEFINITION_STALE" '{
      v: 1, ts: $ts,
      sprint: (if $sprint == "" then null else ($sprint | tonumber? // null) end),
      name: (if $name == "" then null else $name end),
@@ -347,7 +486,11 @@ jq -nc \
      model_bound: $bound,
      effort_bound: (if $effort == "" then null else $effort end),
      role_contract_cited: $cited,
-     role_file_readable: $readable
+     role_file_readable: $readable,
+     definition_bound: $defbound,
+     definition_stale: $defstale,
+     name_stripped: (if $stripped == "" then null else $stripped end),
+     tool_use_id: (if $tui == "" then null else $tui end)
    }' >> "$SPAWN_LEDGER" 2>/dev/null || true
 # --- end SPAWN LEDGER ---------------------------------------------------------
 
@@ -364,12 +507,39 @@ if [ -n "$EXPECT" ] && ! matches_pin "$REQUESTED"; then
   NEEDS_MODEL=true
 fi
 
-# EFFORT has no tool parameter, so it is appended to the dispatch PROMPT, which is the
-# only channel that reaches the subagent. Skipped when the caller already carried the
-# directive: that keeps the guard IDEMPOTENT, so a well-formed dispatch emits no
-# decision at all and keeps whatever approval posture it would otherwise have. Without
-# that check the guard would emit on every dispatch and quietly change the posture of
-# calls it has nothing to correct.
+# ON A DEFINITION-BOUND DISPATCH THE MODEL PARAM IS DELETED RATHER THAN SET, so this flag
+# is cleared: the two paths are mutually exclusive by construction rather than by the
+# order of two `if`s further down. The definition already carries the model — that is
+# what agreement with settings was checked for — and an explicit param would OUTRANK it,
+# leaving a teammate's model with two live sources again.
+NEEDS_TYPE=false
+if [ "$DEFINITION_BOUND" = true ]; then
+  NEEDS_MODEL=false
+  # IDEMPOTENCE, THE SAME DISCIPLINE THE EFFORT DEDUPE BELOW KEEPS. A dispatch that
+  # already names the role as its `subagent_type` and carries neither `name` nor `model`
+  # needs nothing rewritten, and emitting on it would change the approval posture of a
+  # call the guard has nothing to correct. All three conditions are read, not just the
+  # type: a correct type beside a surviving `name` is exactly the dispatch that routes to
+  # the teammate runner and loses its effort.
+  _dg_type="$(printf '%s' "$INPUT" | jq -r '.tool_input.subagent_type // empty' 2>/dev/null || true)"
+  _dg_hasname="$(printf '%s' "$INPUT" | jq -r 'if (.tool_input | has("name")) then "y" else "n" end' 2>/dev/null || true)"
+  _dg_hasmodel="$(printf '%s' "$INPUT" | jq -r 'if (.tool_input | has("model")) then "y" else "n" end' 2>/dev/null || true)"
+  if [ "$_dg_type" != "$ROLE" ] || [ "$_dg_hasname" = y ] || [ "$_dg_hasmodel" = y ]; then
+    NEEDS_TYPE=true
+  fi
+fi
+
+# EFFORT has no tool parameter, so it is appended to the dispatch PROMPT. That is the WEAK
+# channel and it is no longer the only one: the BINDING channel is the rendered
+# `.claude/agents/<role>.md` definition, whose `effort:` key the harness applies, which the
+# branch above selects by rewriting `subagent_type`. The prompt line states the configured
+# level as a fact the teammate operates under -- advisory, and what a dispatch with no
+# usable definition still gets. Both are emitted; see the header.
+#
+# Skipped when the caller already carried the directive: that keeps the guard IDEMPOTENT, so
+# a well-formed dispatch emits no decision at all and keeps whatever approval posture it
+# would otherwise have. Without that check the guard would emit on every dispatch and quietly
+# change the posture of calls it has nothing to correct.
 EFFORT_LINE=""
 NEEDS_EFFORT=false
 if [ -n "$PIN_EFFORT" ]; then
@@ -400,7 +570,7 @@ if [ -n "$PIN_EFFORT" ]; then
 fi
 
 # Nothing to set — exit 0 with no decision.
-[ "$NEEDS_MODEL" = true ] || [ "$NEEDS_EFFORT" = true ] || exit 0
+[ "$NEEDS_MODEL" = true ] || [ "$NEEDS_EFFORT" = true ] || [ "$NEEDS_TYPE" = true ] || exit 0
 
 # OTHERWISE the model is ABSENT, a WRONG key, or a value that does not carry the pinned key —
 # none of which is what the role file pins. SET it, do not deny it. This is the v0.79.x flip:
@@ -433,6 +603,18 @@ emit() {
     [ -n "$updated" ] || exit 0
   fi
 
+  # THE DEFINITION-BOUND REWRITE. `subagent_type` becomes the role, and `name` and `model`
+  # are DELETED — `del()` and not set-to-null, because the harness reads the KEY's presence
+  # and a null `name` is still a `name`. One jq for all three so a partial application is
+  # not constructible: a rewrite that set the type and left the name would route to the
+  # teammate runner under a definition it cannot apply the effort of, which is the exact
+  # state this release exists to leave.
+  if [ "$NEEDS_TYPE" = true ]; then
+    updated="$(printf '%s' "$updated" | jq -c --arg t "$ROLE" \
+      '. + {subagent_type: $t} | del(.name) | del(.model)' 2>/dev/null)"
+    [ -n "$updated" ] || exit 0
+  fi
+
   if [ "$NEEDS_EFFORT" = true ]; then
     # APPENDED, never prepended. implementation.md's dispatch-prompt cache discipline
     # keeps a byte-identical shared block at the FRONT of every prompt; adding to the
@@ -444,12 +626,24 @@ emit() {
 
   reason="AI/DLC dispatch guard: bound \`${ROLE}\` from \`aiDlcRoles.${ROLE}\` in .claude/settings.json."
   [ "$NEEDS_MODEL" = true ] && reason="${reason} Set \`model\` to \"${EXPECT}\" (${PIN_MODEL}) — ${note}."
+  [ "$NEEDS_TYPE" = true ] && reason="${reason} Set \`subagent_type\` to \"${ROLE}\" and removed \`name\` and \`model\`, so .claude/agents/${ROLE}.md is selected: a definition binds the role's effort, which no tool parameter can, and a \`name\` routes the spawn to the teammate runner that drops it."
   [ "$NEEDS_EFFORT" = true ] && reason="${reason} Stated the configured reasoning effort (${PIN_EFFORT}) in the prompt, because the Agent tool has no effort parameter and the config is the only source for it."
   reason="${reason} Config is authoritative for both; a call site does not override it. To change either value, edit that config entry."
 
   ctx="dispatch-guard: ${ROLE} bound from aiDlcRoles.${ROLE}"
   [ "$NEEDS_MODEL" = true ] && ctx="${ctx} — model=${EXPECT} (${PIN_MODEL}), requested: ${REQUESTED:-<absent>}"
-  [ "$NEEDS_EFFORT" = true ] && ctx="${ctx} — effort=${PIN_EFFORT} appended to the prompt"
+  [ "$NEEDS_TYPE" = true ] && ctx="${ctx} — subagent_type=${ROLE} (definition .claude/agents/${ROLE}.md: model=${DEF_MODEL}, effort=${DEF_EFFORT:-<none>}); name and model params removed"
+  # THE MISSING DEFINITION IS REPORTED, NOT SILENTLY TOLERATED, and the remedy is NAMED.
+  # This is the one path where the configured effort reaches the teammate only as prose,
+  # so a lead reading its own context can see that the binding half did not happen and can
+  # run the renderer. A STALE render is reported separately: the two have different
+  # remedies (render one vs re-render the drifted one) and reading them as one state is how
+  # a drifted definition gets left in place.
+  if [ "$DEFINITION_STALE" = true ]; then
+    ctx="${ctx} — NOTE: .claude/agents/${ROLE}.md is STALE (it declares model=${DEF_MODEL:-<none>}/effort=${DEF_EFFORT:-<none>} against aiDlcRoles.${ROLE}'s ${EXPECT:-<none>}/${PIN_EFFORT:-<none>}), so it was NOT selected and this role's effort is advisory prose only. Re-render: scripts/ai-dlc/render-agent-definitions.sh"
+  elif [ "$DEFINITION_BOUND" != true ] && [ -n "$PIN_EFFORT" ]; then
+    ctx="${ctx} — NOTE: no rendered .claude/agents/${ROLE}.md, so the configured effort reaches this teammate as prose only and the harness will not apply it. Render it: scripts/ai-dlc/render-agent-definitions.sh"
+  fi
 
   # PROVENANCE MARKER -- PC-S306-UNSOLICITED-CONTEXT-HAS-NO-PROVENANCE-SIGNAL. The
   # library is a SIBLING in both layouts (core/hooks/, .claude/hooks/), so this is a

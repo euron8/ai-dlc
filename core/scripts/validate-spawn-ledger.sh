@@ -42,6 +42,30 @@
 #     fail. That is Check 22's own rule: the guard caught the slip and the teammate ran
 #     on the key its role names.
 #
+# THE EFFORT ARM IS THE FIRST THING HERE THAT READS GROUND TRUTH RATHER THAN A RECORD OF
+# INTENT, and that is why it is a separate arm rather than a fourth field comparison.
+# Every other arm compares two things the dispatch guard wrote, or one of them against
+# the config the guard read -- so a guard that bound the wrong value writes a row that
+# agrees with itself. `effort_bound` is exactly that: `BL-019` files it as a field
+# recording the CONFIG with nothing reading it. This arm joins it to the `effort` the
+# subagent probe read off the teammate's OWN transcript, which is the effort the API call
+# was made at and is written by the harness, not by us.
+#
+# --probe IS OPTIONAL AND ITS ABSENCE IS PENDING, NEVER PASS. A consumer that pulls this
+# release mid-sprint has a ledger full of rows and a telemetry file whose first row is the
+# next completion, exactly as PRE-LEDGER describes one level up. Failing those rows would
+# wedge live work; passing them would report a verification that did not happen. The arm
+# reports PENDING per row and the counts line carries the number, so "every row verified"
+# and "no row could be verified" cannot read alike.
+#
+# AND IT REFUSES TO SCORE A RECORD OLDER THAN THE FIX THAT MADE THE FIELD MEAN ANYTHING.
+# CC 2.1.259/2.1.267 fixed `effort:` on models whose launch effort is PINNED, so on such a
+# model a value read off an earlier build is not evidence. The refusal is narrow by
+# measurement, not by caution: it fires only where the row's model is one of the pinned
+# family AND the transcript version is below 2.1.267, because on an unpinned model the
+# field was already correct and refusing there would discard the whole population this
+# release exists to verify.
+#
 # WHAT IT JUDGES, and the reason the scope is derived rather than listed. A row is in
 # Rule 19 scope when it CITED a role contract, or when its role is declared in
 # `aiDlcRoles`. Rows outside that -- the harness's own built-in agent types, which the
@@ -60,6 +84,7 @@
 #
 # USAGE
 #   validate-spawn-ledger.sh --ledger <spawn-ledger.jsonl> --sprint <N> --settings <settings.json>
+#                            [--probe <subagent-context.jsonl>]
 #
 # EXIT
 #   0  every row for this sprint carries a resolvable role file, a Rule 19(b) contract
@@ -74,6 +99,7 @@ set -u
 LEDGER=""
 SPRINT=""
 SETTINGS=""
+PROBE=""
 while [ $# -gt 0 ]; do
   # No MODE_DISPATCH markers here on purpose. I49 and I53 bind the MODES of core-paths.sh
   # and validate-escalation-resolution.sh -- verbs another file names in prose and calls by
@@ -84,6 +110,10 @@ while [ $# -gt 0 ]; do
     --ledger)   LEDGER="${2:-}"; shift 2 ;;
     --sprint)   SPRINT="${2:-}"; shift 2 ;;
     --settings) SETTINGS="${2:-}"; shift 2 ;;
+    # OPTIONAL, and deliberately not promoted to a fourth required argument. Every
+    # existing caller passes three; making it four would turn every one of them into the
+    # exit-2 usage fault this block exists to keep distinguishable from a finding.
+    --probe)    PROBE="${2:-}"; shift 2 ;;
     -h|--help)  sed -n '2,62p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -187,7 +217,19 @@ if [ -f "$LEDGER" ]; then
           # line somebody appended. The guard emits `v` on every row from one `jq -nc`
           # (ai-dlc-dispatch-guard.sh, SPAWN LEDGER block); a row without it was written
           # by something else, and its ABSENT fields are not evidence about a dispatch.
-          (if (.v | type) == "number" then "guard" else "foreign" end) ]
+          (if (.v | type) == "number" then "guard" else "foreign" end),
+          # THE THREE FIELDS THE EFFORT ARM READS, carrying the same `tok` sentinel as
+          # every other. NO APOSTROPHE ANYWHERE IN THIS COMMENT: the whole projection is
+          # one single-quoted jq program, so a possessive here CLOSES it and the shell
+          # reports a syntax error two hundred lines further down, in an unrelated `echo`.
+          # `definition_bound` is absent on every row written before this release,
+          # and `tok` renders that absence as the sentinel rather than as the string
+          # "null" -- which the loop would otherwise compare against "true" and get the
+          # right answer for the wrong reason, silently, on a field whose absence is
+          # exactly the pre-migration state the PENDING path exists for.
+          (.definition_bound | tok),
+          (.effort_bound | tok),
+          (.tool_use_id | tok) ]
       | @tsv
     ' "$LEDGER" 2>/dev/null || true)"
 fi
@@ -220,6 +262,16 @@ OUTSCOPE_ROLES=""
 SUSPECT=0
 FOREIGN=0
 FOREIGN_ROLES=""
+# The effort arm's four outcomes, counted separately because they carry four different
+# remedies: verified, no ground truth yet, ground truth refused on a build where the
+# field is not evidence, and a role with no declared effort to compare against. A single
+# "not checked" bucket would make the second and third read alike, and only the third is
+# a statement about the record's trustworthiness.
+EFFORT_OK=0
+EFFORT_PENDING=0
+EFFORT_REFUSED=0
+EFFORT_MISMATCH=0
+EFFORT_UNDECLARED=0
 
 # THE LEDGER HOLDS ROWS RULE 19 DOES NOT BIND, AND JUDGING THEM IS A FALSE FAIL ON
 # CORRECT DATA. The dispatch guard derives `role` from `subagent_type` when the prompt
@@ -301,12 +353,51 @@ name_role() {  # dispatch name -> the longest declared role it is named after, o
   printf '%s' "$nr_best"
 }
 
-while IFS="$(printf '\t')" read -r name role bound requested cited readable schema; do
+# --- THE EFFORT ARM'S GROUND TRUTH ---------------------------------------------
+# `probe_effort <tool_use_id>` -> the effort the teammate's own transcript recorded, or
+# empty when no probe row joins. THE JOIN IS THE EXACT TOOL-USE ID AND NOTHING ELSE.
+#
+# The ordered alternatives were measured and rejected: the ledger is written at dispatch
+# and the telemetry at completion, so a join on (role, most-recent-unmatched) mis-pairs
+# two same-role spawns that finish out of order -- and since those two share a configured
+# effort, the comparison below PASSES on the wrong pairing. Measured on CC 2.1.269 with
+# two same-definition spawns driven in both completion orders and scored by content: the
+# id join paired 4 of 4, the ordered join 2 of 4. A join that is right on one ordering is
+# not a join; it is a coin the gate cannot see.
+#
+# REFUSAL, NOT SILENCE, ON A PINNED-EFFORT MODEL BELOW 2.1.267. That build fixed `effort:`
+# on models whose launch effort is pinned, so the field is not evidence there. It returns
+# the sentinel `__REFUSED__` rather than empty, because empty means "no row joined" and
+# routes to PENDING -- two different facts with two different remedies, and collapsing
+# them is how an unverifiable row reads as an unwritten one.
+PROBE_READABLE=false
+[ -n "$PROBE" ] && [ -r "$PROBE" ] && PROBE_READABLE=true
+probe_effort() {  # tool_use_id
+  [ "$PROBE_READABLE" = true ] || return 0
+  [ -n "$1" ] || return 0
+  jq -rs --arg t "$1" '
+      [ .[] | select(type == "object") | select((.tool_use_id // "") == $t) ] | last
+      | if . == null then ""
+        # The pinned family, named here because it is the population the version floor
+        # applies to. An unpinned model carried a correct `effort` on every build, so
+        # widening the refusal to every model would discard the rows this arm exists for.
+        elif ((.model // "") | test("opus-4-7|opus-4-8|fable-5"))
+             and (((.transcript_version // "0") | split(".") | map(tonumber? // 0))
+                  < [2,1,267])
+          then "__REFUSED__"
+        else (.effort // "") end
+    ' "$PROBE" 2>/dev/null || true
+}
+
+while IFS="$(printf '\t')" read -r name role bound requested cited readable schema defbound effortbound tui; do
   [ -n "$name" ] || continue
   [ "$name" = "__NONE__" ] && name="<unnamed>"
   [ "$role" = "__NONE__" ] && role=""
   [ "$bound" = "__NONE__" ] && bound=""
   [ "$requested" = "__NONE__" ] && requested=""
+  [ "${defbound:-__NONE__}" = "__NONE__" ] && defbound=""
+  [ "${effortbound:-__NONE__}" = "__NONE__" ] && effortbound=""
+  [ "${tui:-__NONE__}" = "__NONE__" ] && tui=""
 
   # A ROW THE GUARD DID NOT WRITE IS NOT A DISPATCH RECORD, and judging one manufactures
   # violations out of ABSENT fields rather than observed ones. `--ledger` names an
@@ -396,6 +487,43 @@ while IFS="$(printf '\t')" read -r name role bound requested cited readable sche
     echo "      corrected it to '${bound}' before dispatch. Recorded, not a failure."
     CORRECTED=$((CORRECTED + 1))
   fi
+
+  # --- THE EFFORT ARM. Scoped to `definition_bound: true`, which is the only class where
+  # the harness was asked to APPLY an effort. On every other row the configured level
+  # reached the teammate as prose the guard appended, which is advisory by construction --
+  # failing those would be failing correct data for doing what it was designed to do.
+  if [ "$defbound" = "true" ]; then
+    EFF_DECLARED="$(jq -r --arg r "$role" '.aiDlcRoles[$r].effort // empty' "$SETTINGS" 2>/dev/null || true)"
+    if [ -z "$EFF_DECLARED" ]; then
+      # A definition-bound row whose role declares no effort has nothing to compare, and
+      # the renderer omits the key for exactly that case. Counted, not judged.
+      EFFORT_UNDECLARED=$((EFFORT_UNDECLARED + 1))
+    else
+      EFF_OBSERVED="$(probe_effort "$tui")"
+      if [ "$EFF_OBSERVED" = "__REFUSED__" ]; then
+        echo "PENDING: [$name] ran on a pinned-effort model against a transcript below"
+        echo "      CC 2.1.267, where the recorded \`effort\` is not evidence about what"
+        echo "      applied. Not scored, and not a pass."
+        EFFORT_REFUSED=$((EFFORT_REFUSED + 1))
+      elif [ -z "$EFF_OBSERVED" ]; then
+        # PENDING, NOT FAIL. No probe row joined: no --probe was passed, the telemetry
+        # predates this row, or the teammate is still running. A consumer that pulls this
+        # release mid-sprint is in exactly this state for every row already dispatched,
+        # and failing it would wedge the sprint on a verification that could not have run.
+        EFFORT_PENDING=$((EFFORT_PENDING + 1))
+      elif [ "$EFF_OBSERVED" = "$EFF_DECLARED" ]; then
+        EFFORT_OK=$((EFFORT_OK + 1))
+      else
+        echo "FAIL: [$name] was dispatched definition-bound against aiDlcRoles.${role}.effort=" >&2
+        echo "      '${EFF_DECLARED}', and its own transcript records effort='${EFF_OBSERVED}'." >&2
+        echo "      The definition did not apply: the teammate ran at a level nothing declared." >&2
+        echo "      This is ground truth from the harness's own record, not a self-report --" >&2
+        echo "      re-render .claude/agents/${role}.md and confirm the dispatch passed no" >&2
+        echo "      \`name\`, which routes the spawn to the runner that drops effort." >&2
+        VIOL=$((VIOL + 1)); EFFORT_MISMATCH=$((EFFORT_MISMATCH + 1))
+      fi
+    fi
+  fi
 done <<EOF
 $RECORDS
 EOF
@@ -407,6 +535,18 @@ echo "COUNTS: examined ${CHECKED} S${SPRINT_NUM} spawn row(s) of ${TOTAL} in ${L
 echo "  ${UNREADABLE} unreadable role file(s), ${UNCITED} missing Rule 19(b) citation(s),"
 echo "  ${MISMATCH} tier mismatch(es), ${CORRECTED} guard-corrected request(s) (not failures),"
 echo "  ${UNPINNED} row(s) whose role pins no model in ${SETTINGS},"
+# THE EFFORT ARM REPORTS WHAT IT COMPARED ON EVERY PATH, for the reason the line above it
+# exists: a run that verified nothing and a run that found nothing print the same verdict
+# otherwise, and on this arm "nothing to verify" is the NORMAL state of a consumer that
+# has not yet pulled the renderer. The PENDING figure is what tells the two apart.
+# ONE expansion, not `${PROBE:+…}${PROBE:-…}` — those are not the two halves of an
+# either-or. `:+` fires on a SET value and `:-` on an UNSET one, but `:-` substitutes its
+# word only when the variable is empty, so with `PROBE` set BOTH expanded and the line
+# printed the path twice, concatenated. Caught by reading the arm's own output.
+if [ -n "$PROBE" ]; then PROBE_NOTE="probe: ${PROBE}"; else PROBE_NOTE="no --probe was passed"; fi
+echo "  effort: ${EFFORT_OK} verified against the teammate's own transcript, ${EFFORT_MISMATCH} mismatch(es),"
+echo "  ${EFFORT_PENDING} PENDING (no probe row joined; ${PROBE_NOTE}), ${EFFORT_REFUSED} refused on a pre-2.1.267 pinned-effort record,"
+echo "  ${EFFORT_UNDECLARED} definition-bound row(s) whose role declares no effort;"
 OUTSCOPE_LIST="$(printf '%s' "$OUTSCOPE_ROLES" | tr '\n' ' ')"
 OUTSCOPE_LIST="${OUTSCOPE_LIST% }"
 FOREIGN_LIST="$(printf '%s' "$FOREIGN_ROLES" | tr '\n' ' ')"

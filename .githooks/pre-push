@@ -193,6 +193,38 @@ step "write-format steering (every shared append-only artifact declares its entr
 step "fixture git-env scrub (a directly-run fixture cannot clobber the caller's index)" \
   bash scripts/validate-fixture-git-env.sh --max-unscrubbed 0
 
+# 2d. THE SHIPPED RENDERER, DRIVEN AGAINST THIS TREE. `.claude/agents/<role>.md` frontmatter is
+#     the only channel that binds a role's reasoning EFFORT to its subagent. A prompt cannot set
+#     effort -- measured on the reference consumer, every spawn ran at the effort the SESSION
+#     resolved, from its launch flag or the user's `effortLevel`/`modelSettings`, never the
+#     role's -- and a rendered definition OUTRANKS that resolution rather than filling a gap.
+#
+#     THIS TREE DECLARES NO `aiDlcRoles` AND THE ARM STILL RUNS, which is the point. The
+#     distribution is not a consumer: it has no `.claude/settings.json` at all, so the renderer
+#     answers NOT APPLICABLE here and this arm prints that rather than a pass. A green line over
+#     a check that had nothing to look at is the failure this repository names most often, and
+#     the three outcomes are kept distinct in the renderer's own exit codes (3 not applicable, 0
+#     current, 1 drifted) rather than in a second copy of the test written here.
+#
+#     THE VALUE ON THIS SIDE IS THE PROGRAM, NOT THE VERDICT. A syntax error, a broken root walk
+#     or an absent jq makes the renderer exit 2, and this arm goes red -- so the copy that reaches
+#     every consumer is driven on every push here, where it can be fixed, rather than first on a
+#     consumer's gate where it cannot.
+agent_definitions_dist() {
+  local out rc
+  out="$(bash core/scripts/render-agent-definitions.sh --check --root . 2>&1)"; rc=$?
+  printf '%s\n' "$out"
+  case "$rc" in
+    3) printf '   NOT APPLICABLE -- the distribution declares no aiDlcRoles. This is NOT a pass:\n'
+       printf '   nothing here verified a rendered definition, only that the renderer ran and said so.\n'
+       return 0 ;;
+    0) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+step "agent definitions (the shipped renderer runs, and says which of its three states this tree is in)" \
+  agent_definitions_dist
+
 # 3. Every fixture is an adversarial self-test for one gate check. A fixture that is
 #    never driven is a green light nobody earned.
 #

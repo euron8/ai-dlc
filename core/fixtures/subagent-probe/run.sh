@@ -97,12 +97,16 @@ chk "  and a non-numeric value stays null (no sprint is assigned yet)" "$(sprint
 printf -- '- **sprint_id:** 291\n' > "$PROJ/_bmad-output/pipeline-snapshot.md"
 reset; fire "$PROJ" calm.jsonl >/dev/null 2>&1
 chk "  records agent_id" "$(last .agent_id)" "adversary-s291-p1"
-# v2, not v1: every row a consumer already holds was derived from the LEAD's
-# transcript, and nothing but its timestamp separates those rows from corrected
-# ones. The bump is what lets a reader tell them apart. Nothing machine-reads this
-# field -- the writer, this assertion and two comments are its only mentions -- so
-# it costs nothing and it is the only durable mark the correction leaves.
-chk "  schema-stamped" "$(last .v)" "2"
+# v3, not v2: the stamp marks a POPULATION change, and it has now marked two. At v2
+# every row a consumer already held was derived from the LEAD's transcript, and nothing
+# but its timestamp separated those from corrected ones. v3 is the second such break: v2
+# recorded NAMED teammates only, and a role-bound dispatch is now UNNAMED by construction
+# -- the dispatch guard deletes `name` so the harness selects `.claude/agents/<role>.md`,
+# a definition being the only thing that binds the role's effort. So the class v2 dropped
+# is exactly the class Check 22's effort arm has to read, and the filter and the join
+# moved in one change. Nothing machine-reads this field; it is the only durable mark
+# either correction leaves, which is why the assertion is on the literal.
+chk "  schema-stamped" "$(last .v)" "3"
 chk "  no compaction seen" "$(last .compactions)" "0"
 
 # --- 3. THE MEASUREMENT THAT MATTERS: a teammate that crowded the ceiling -----
