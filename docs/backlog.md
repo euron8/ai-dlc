@@ -3642,32 +3642,6 @@ tree, and 0 against a scratch copy with every citation redacted.
 
 verify: sh n=0; for f in $(git ls-files "core/**/*.md"); do a=$(grep -coE "\`[a-zA-Z0-9._/-]+\.(sh|md|yaml|json):[0-9]+" "$f"); b=$(grep -coE "\`:[0-9]+" "$f"); n=$((n+a+b)); done; [ "$n" -eq 0 ] && exit 0; exit 1
 
-## BL-137 — `sed`'s own `w` command writes a file, and the write-flag scan only reads option words
-
-Pre-existing, independent of `v0.474.0`, and it fires on both sides of that release —
-measured with the same canary harness:
-
-    sed -n 'w canary' data.txt      HEAD: RAN, canary created.   pre-v0.474.0: RAN, canary created.
-
-The allowlist's write-and-exec predicates test OPTION WORDS — `sed:-i`, `find:-delete`,
-`sort:-o`, `git:-O` — by iterating `$seg` and matching `${first}:${w}`. `sed`'s writing
-verbs live inside the SCRIPT argument, not in an option: `w file` and `W file` write, and
-GNU's `e` executes. None is an option word, so none is reachable by that scan.
-
-Same class as the awk finding in `BL-136` and stated as its own entry rather than folded in:
-**the allowlist admits programs whose argument is itself a program**, and it currently guards
-only the option surface of that argument. `sed`, `awk` and `find` all have one.
-
-Not fixed here. `BL-136` was a regression with a two-hour-old cause and was taken on that
-basis; this is older, needs its own false-positive measurement over the reference corpus
-(how many real `sed -n '...p'` scripts would a `w`-detecting arm touch), and folding it in
-would have made one release carry two subjects.
-
-**Tiered DEFECT.** Arbitrary file WRITE, not arbitrary execution, and it has been reachable
-for as long as the allowlist has existed.
-
-verify: sh set -e; d=$(mktemp -d); trap 'rm -rf "$d"' EXIT; V=$PWD/core/scripts/validate-artifact-derivations.sh; cd "$d"; printf 'alpha\n' > f.txt; printf '```derived\n$ sed -n \047w canary\047 f.txt\n0\n```\n' > a.md; AI_DLC_PROJECT_ROOT="$d" bash "$V" a.md >/dev/null 2>&1 || true; [ -e canary ] && exit 1; exit 0
-
 ## BL-140 — the ledger's close vocabulary has one token and it asserts the opposite of a rejection
 
 **Surfaced by the operator carrying an adjudication into the reference consumer**, 2026-09-02, and

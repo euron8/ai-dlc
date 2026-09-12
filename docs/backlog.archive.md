@@ -11556,3 +11556,31 @@ bare comment on HEAD 1.
 
 verify: sh V=core/scripts/validate-adversarial-convergence.sh; F=core/fixtures/check-24-adversarial-convergence; [ -f "$V" ] && [ -f "$F/seed.sh" ] || exit 9; R="$(bash "$F/seed.sh" | tail -1)"; S="$R/stalled-resolved/s1-adversarial-p"; [ -f "${S}4.md" ] || exit 9; Z="$R/z"; Q="$R/q"; mkdir -p "$Z" "$Q"; : > "$Z/a.jsonl"; printf %s\\n "{\"type\":\"user\",\"timestamp\":\"2026-07-12T05:00:00Z\",\"message\":{\"content\":\"a genuine operator turn that does not carry the cited words\"}}" > "$Q/a.jsonl"; C="$(bash "$V" --series "$S" --cycle-state --transcript-dir "$R" 2>/dev/null | cut -f1)"; O="$(bash "$V" --series "$S" --cycle-state --transcript-dir "$Z" 2>"$R/e" | cut -f1)"; U=0; grep -q ADVERSARIAL_CITATION_UNVERIFIABLE "$R/e" && U=1; N="$(bash "$V" --series "$S" --cycle-state --transcript-dir "$Q" 2>/dev/null | cut -f1)"; X="$R/x"; mkdir -p "$X"; cp "$R/prior-session-transcript.jsonl" "$X/a.jsonl"; touch -t 200001010000 "$X/a.jsonl"; B="$(bash "$V" --series "$S" --cycle-state --transcript-dir "$X" 2>/dev/null | cut -f1)"; rm -rf "$R"; [ "$C" = RESOLVED ] || exit 9; [ "$O" != STALLED ] && [ "$U" = 1 ] && [ "$N" = STALLED ] && [ "$B" = STALLED ] && exit 0; exit 1
 
+## BL-137 — `sed`'s own `w` command writes a file, and the write-flag scan only reads option words
+
+**LANDED (v0.561.0, verified 0bdd68f4).**
+
+Pre-existing, independent of `v0.474.0`, and it fires on both sides of that release —
+measured with the same canary harness:
+
+    sed -n 'w canary' data.txt      HEAD: RAN, canary created.   pre-v0.474.0: RAN, canary created.
+
+The allowlist's write-and-exec predicates test OPTION WORDS — `sed:-i`, `find:-delete`,
+`sort:-o`, `git:-O` — by iterating `$seg` and matching `${first}:${w}`. `sed`'s writing
+verbs live inside the SCRIPT argument, not in an option: `w file` and `W file` write, and
+GNU's `e` executes. None is an option word, so none is reachable by that scan.
+
+Same class as the awk finding in `BL-136` and stated as its own entry rather than folded in:
+**the allowlist admits programs whose argument is itself a program**, and it currently guards
+only the option surface of that argument. `sed`, `awk` and `find` all have one.
+
+Not fixed here. `BL-136` was a regression with a two-hour-old cause and was taken on that
+basis; this is older, needs its own false-positive measurement over the reference corpus
+(how many real `sed -n '...p'` scripts would a `w`-detecting arm touch), and folding it in
+would have made one release carry two subjects.
+
+**Tiered DEFECT.** Arbitrary file WRITE, not arbitrary execution, and it has been reachable
+for as long as the allowlist has existed.
+
+verify: sh set -e; d=$(mktemp -d); trap 'rm -rf "$d"' EXIT; V=$PWD/core/scripts/validate-artifact-derivations.sh; cd "$d"; printf 'alpha\n' > f.txt; printf '```derived\n$ sed -n \047w canary\047 f.txt\n0\n```\n' > a.md; AI_DLC_PROJECT_ROOT="$d" bash "$V" a.md >/dev/null 2>&1 || true; [ -e canary ] && exit 1; exit 0
+
