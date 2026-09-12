@@ -4468,7 +4468,46 @@ prescription is issued, which is a separate edit in `SKILL.md`.
 **Tiered DEFECT.** An operator who follows an LC-E19 row in the order it lists spends their own
 verdict and is told only to record another.
 
-verify: sh L=core/skills/ai-dlc-update/reconcile/layer-drift.sh; F=core/fixtures/layer-adjudication-tier/run.sh; [ -f "$L" ] && [ -f "$F" ] || exit 9; grep -q "adj_spent_note() {" "$L" || exit 9; n="$(grep -c "adj_spent_note" "$L")" || n=0; [ "$n" -ge 2 ] || exit 9; c="$(grep -c 'EXTENSION-TITLE-MATCHES-CORE' "$F")" || c=0; a="$(awk '/adj_spent_note/ {n++} END{print n+0}' "$L")"; [ "$a" -ge 3 ] && exit 0; [ "$c" -ge 2 ] && exit 0; exit 1
+**2026-09-12 — fixed.** Re-derived at HEAD before building: `adj_spent_note()` had one call site,
+inside `adj_check`, and the LC-E19 row emitted at the title-join computed a digest and looked it up
+without ever reaching the helper. The row's detail column is read by `apply.sh` (copied whole into
+`WORKLIST extension-title-match`), by `emit-report.sh` (fields 1 and 2 only) and by two fixtures
+that match `NEW-THIS-PULL`/`PRE-EXISTING` as PREFIXES, so appending to the string breaks none of
+them — asserted by running `layer-title-join` and `absorbed-specifics-survive` after the change.
+The consumer's register carries 65 LC-E19 rows, so the note has a real population.
+
+Three edits. The helper call is APPENDED to the LC-E19 detail string, guarded on a non-empty
+`tm_digest`: `adj_spent_note`'s `.subject_digest != $d` would otherwise match every prior record
+of the entry, so an unkeyable row would carry a false accusation. `SKILL.md` gains one ordering
+sentence where the operator reads BEFORE recording, not inside the spend-rule paragraph. The
+fixture gains Part 3c — its own consumer world seeded with a FRESH entry whose heading names the
+core section that did NOT move, chosen over Part 10's dual-keyed entry precisely because that one
+is also keyed at LC-E4, and a note anywhere in its rows could then be the HARD row's, passing
+against the one-call-site build the Part exists to reject. Part 3c asserts the precondition (one
+keyed row, 40-hex digest, and a record under it clearing the row), the subject, both of Part 3b's
+controls at this row, and a mutant with the appended call stripped.
+
+**The whole new Part goes red against the pre-fix script.** Driven with a HEAD copy of
+`layer-drift.sh` in a full `reconcile/` directory copy (a lone copy dies sourcing `lib.sh`):
+exit 1, 58 ok, and `FAIL Part 3c: the re-fired LC-E19 row is byte-indistinguishable from one that
+was never adjudicated`.
+
+**Receipt scoring — bound to the emission site, not to a word.** It requires the line immediately
+after the single `^ *emit EXTENSION-TITLE-MATCHES-CORE ` line to contain the helper call, AND
+`SKILL.md` to carry the ordering phrase outside an HTML comment. Each case built on a copy tree
+from HEAD blobs:
+
+    HEAD, untouched                                          1
+    a comment naming adj_spent_note beside the emit          1
+    the call added on the HARD row a SECOND time instead     1
+    the correct fix                                          0
+    correct fix, SKILL.md sentence REWORDED, phrase kept     0
+
+Three further controls, each one property short of the fix: correct code with `SKILL.md` at HEAD
+`1`; correct `SKILL.md` with the code at HEAD `1`; correct code with the sentence moved inside an
+HTML comment `1`. The anchor is unique (1 match) against an impossible-code control at 0.
+
+verify: sh L=core/skills/ai-dlc-update/reconcile/layer-drift.sh; S=core/skills/ai-dlc-update/SKILL.md; [ -f "$L" ] && [ -f "$S" ] || exit 9; e="$(grep -cE '^ *emit EXTENSION-TITLE-MATCHES-CORE ' "$L")" || e=0; [ "$e" -eq 1 ] || exit 9; a="$(awk '/^ *emit EXTENSION-TITLE-MATCHES-CORE /{n=1;next} n==1{n=0; if (index($0,"adj_spent_note \"$entry\" \"$tm_digest\"")) c++} END{print c+0}' "$L")"; p="$(awk '/<!--/{h=1} h==0 && tolower($0) ~ /make every edit this pull prescribes for the entry first/{c++} /-->/{h=0} END{print c+0}' "$S")"; [ "$a" -ge 1 ] && [ "$p" -ge 1 ] && exit 0; exit 1
 
 ## BL-227 — nine of batch 82's ten receipts are satisfied by something that is not a fix, and the rule forbidding it has no enforcer
 
