@@ -42,9 +42,11 @@ own heading.
 This block replaces the batch-91 record below it. Re-derive every figure rather than reading it.
 
 **`VERSION` IS `0.557.0`, SO BATCH 93 RELEASES AS `0.558.0`.** Re-derive `VERSION` and add one.
-Batch 92 merged TWICE — `v0.556.0` closing `BL-241` and `v0.557.0` closing `BL-240` — each id
-verbatim in its release commit message (control: an impossible `BL-` id returns 0). Both are
-ROTATED after the merge; archive moves **147 → 149**. `BL-019` gained a reader for
+Batch 92 merged TWICE — `v0.556.0` at `9cb272f6` (PR #724) closing `BL-241` and `v0.557.0` at
+`419f5473` (PR #725) closing `BL-240` — each id verbatim in its release commit message (control:
+an impossible `BL-` id returns 0). Both are ROTATED; archive moved **147 → 149**, live **94 →
+93** because `BL-242` (the inert mutant-wreckage guard in the `ledger-reverify` fixture, found by
+the BL-241 adversary on the tip) is filed LIVE and not fixed. `BL-019` gained a reader for
 `effort_bound` and is NOT rotated: its receipt still reads 1.
 
 **THE SUBJECTS WERE TAKEN ON THIS SESSION'S OWN RANKING** because the one-liner arrived from a
