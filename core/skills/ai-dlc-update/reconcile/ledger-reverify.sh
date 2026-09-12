@@ -120,11 +120,13 @@
 #                    receipt's verdict, never instead of it — see THE NAME IS THE THIRD SIGNAL.
 #   STILL-LIVE       the entry still reproduces at theirs; stays open (filtered from the report).
 #   HAND-REVIEW      the entry declares `verify: manual` — no mechanical predicate by design.
-#   NEEDS-REVIEW     the receipt itself is at fault. THREE causes, and the DETAIL names which:
-#                    `unresolved:` (malformed line, unresolvable path, empty sh, an sh
+#   NEEDS-REVIEW     the receipt itself is at fault, and the DETAIL names the cause by its
+#                    prefix: `unresolved:` (malformed line, unresolvable path, empty sh, an sh
 #                    one-liner that does not PARSE, unknown verb), `vacuous predicate:`,
-#                    `unfalsifiable predicate:`. Hand-review, as an entry without a verify
-#                    line would be.
+#                    `unfalsifiable predicate:`, `mis-anchored predicate:`, and `mid-line
+#                    receipt:` (a real receipt the anchored grammar cannot see; the pass at
+#                    the foot of this file). Hand-review, as an entry without a verify line
+#                    would be.
 #
 #   INPUT-UNRESOLVED an ARGUMENT does not resolve — the consumer root is not a directory, or an
 #                    explicitly-supplied arg-5 ledger path is not a readable file. Run-scoped,
