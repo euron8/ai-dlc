@@ -207,10 +207,32 @@ Run these integrity checks in order:
 
    Wait for the user's reply before dispatching.
 
-If all six checks pass (budget within threshold, snapshot loaded,
+7. **The snapshot is not STRANDED at `deploy-validate.md` on a closed
+   sprint.** Read `_bmad-output/implementation-artifacts/sprint-status.yaml`.
+   Fire only when BOTH hold: its `status:` is `done`, AND the loaded
+   `current_step_file`, reduced to a bare basename (strip any directory,
+   surrounding backticks, and any trailing prose after the filename — the
+   same reduction `ai-dlc-recover.sh` performs), is `deploy-validate.md`.
+   That pair is the sprint whose closing step never advanced the snapshot:
+   the envelope flipped to `done` at retro §4a while the position still
+   names the step before retro. Surface it:
+   > *"Snapshot is at `current_step_file: deploy-validate.md` but
+   > `sprint-status.yaml` records sprint {N} as `status: done`. The sprint
+   > shipped and the snapshot was never advanced, so resuming would re-enter
+   > closed deploy work. Reply `archive` to move this snapshot aside and
+   > start fresh, `proceed` to resume anyway, or `abort` to stop."*
+
+   Wait for the user's reply before dispatching.
+
+   **BOTH clauses are required and the second is what makes this check
+   usable.** The envelope flips to `done` at retro §4a, and §5b, §5c, §6 and
+   §7 all run after it — so `status: done` ALONE fires on every mid-retro
+   resume, and on the terminal position retro §7a-post itself writes.
+
+If all seven checks pass (budget within threshold, snapshot loaded,
 integrity verified, branch matches or user confirmed, recency
-acceptable), continue with the Step 0 path 2 dispatch. Otherwise the
-user's reply directs the next action.
+acceptable, snapshot not stranded on a closed sprint), continue with the
+Step 0 path 2 dispatch. Otherwise the user's reply directs the next action.
 
 ### Step 1: Read Project State
 

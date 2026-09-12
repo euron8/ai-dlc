@@ -55,6 +55,60 @@ have gone green, and would have reported "still open" forever.
 never the word anywhere in prose, because an entry that merely discusses landing something is
 not a closed entry.
 
+## BL-239 — the pipeline snapshot's Pipeline Position is never advanced past `deploy-validate.md`, so every closed sprint reads as pending deploy work on the next resume
+
+**Found 2026-09-11**, filed by the reference consumer as
+`PC-S311-SNAPSHOT-NEVER-ADVANCES-PAST-DEPLOY-VALIDATE-AT-SPRINT-CLOSE` after a session resumed
+from a sprint-310 snapshot that said `current_step_file: deploy-validate.md` while the sprint's
+retro PR was already merged. Re-derived here against HEAD.
+
+**THE ENTRY IS RIGHT AND THE CAUSE IS ONE LAYER DEEPER THAN IT SAYS.** `gate-validation.md`
+Check 14 is the only prescribed writer of `current_step_file`, `last_completed_step` and
+`last_gate_passed`, and it runs at gate passages. Derived: `Pipeline Position` and
+`current_step_file` each score **0** in `core/skills/ai-dlc/steps/retro.md` and in
+`deploy-validate.md`, against **1** and **2** in `gate-validation.md`. The `GATE_MANIFEST`
+declares a `retro` gate type whose universal core includes Check 14 — but the one sentence
+prescribing it (`retro.md`, step 5c: *"When running gate validation … at sprint close"*) is
+conditional and sits inside a step that calls itself *"the only completeness check retro
+performs"*. `deploy-validate` has no manifest row at all. On the reference consumer the `retro`
+gate has run **0** times across 164 sprint archives, against 29 `sprint-review` and 28
+`deploy-validate` `^## Gate:` headers in the same corpus. So the last Check 14 write of any
+sprint is the sprint-review gate's, and the position it leaves — `deploy-validate.md`, not yet
+started — is what the next session reads.
+
+**THE CONSUMER'S WORKAROUND IS A HAND-WRITTEN COMMIT, AND SPRINT 310 IS THE ONE NOBODY WROTE.**
+Its `main` carries 509 snapshot commits, **20** with a subject of the form *"finalize snapshot —
+sprint closed"*, the latest for sprint 309. Sprint 310's retro squash `937c4a24e` carries a
+snapshot at `current_step_file: deploy-validate.md` beside a `sprint-status.yaml` reading
+`status: done` with a `sprint_310_housekeeping:` block in the same commit. The two records
+disagree inside one tree, and the resume path reads only the one that is wrong.
+
+**WHAT SHIPPED.** Three writes and one guard, no new gate:
+`deploy-validate.md` §7 advances the position to `retro.md` when routing to retro;
+`retro.md` §7a-post writes the terminal position after the rotation commit;
+`validate-mandatory-rules.sh` Check 8 fails retro's 5c gate when the position on disk names any
+step other than `retro.md`, keyed on the field alternation `ai-dlc-recover.sh` already accepts
+(loud SKIP only when the section or field is absent); and `route.md` Step 0a check 7 refuses to
+dispatch silently from a snapshot stranded at `deploy-validate.md` against an envelope reading
+`status: done`. The `retro` gate stays unrun by design — making it run is a separate behaviour
+change.
+
+**THE TERMINAL WRITE DOES NOT REACH THE REFERENCE CONSUMER, AND THAT IS RECORDED RATHER THAN
+RE-SITED.** Its override `steps__retro__domain-sections.md` shadows the whole of §7, so the step 8
+write is replaced at load time there. The fix itself survives: the deploy-validate §7 write is
+unshadowed and Check 8 enforces it before the merge, so what the shadow loses is the refined
+terminal form, not the advance past `deploy-validate.md`. The pull surfaces the changed section
+as `HARD-OVERRIDE-DRIFT-SECTION`, which is the moment the consumer re-adjudicates it.
+
+**Receipt limits, stated.** The receipt drives the shipping validator against two synthetic
+trees under `mktemp` and requires it to discriminate — FAIL on a `deploy-validate.md` position,
+PASS on `retro.md` — so a disabled or vacuous check exits 1 and a widened grammar that matches
+`retro.md` anywhere in the file is caught by the fixture's mutant, not here. It does not score
+the three prose writes; `audit-rule-files.sh` and the two step-file fixtures do. Exit 9 if the
+validator is gone.
+
+verify: sh V=core/scripts/validate-mandatory-rules.sh; [ -f "$V" ] || exit 9; d=$(mktemp -d) || exit 9; mkdir -p "$d/_bmad-output/implementation-artifacts"; printf '# Pipeline Snapshot\n\n## Pipeline Position\n- current_step_file: deploy-validate.md\n\n## Sprint Context\n- sprint_id: 1\n' > "$d/_bmad-output/pipeline-snapshot.md"; a=$(cd "$d" && bash "$OLDPWD/$V" 1 2>&1 | grep -c 'CHECK 8: FAIL'); printf '# Pipeline Snapshot\n\n## Pipeline Position\n- current_step_file: retro.md\n\n## Sprint Context\n- sprint_id: 1\n' > "$d/_bmad-output/pipeline-snapshot.md"; b=$(cd "$d" && bash "$OLDPWD/$V" 1 2>&1 | grep -c 'CHECK 8: PASS'); rm -rf "$d"; [ "$a" -eq 1 ] && [ "$b" -eq 1 ] && exit 0; exit 1
+
 ## BL-238 — the consumer ledger's `theirs`-ref receipt grammar cannot key on an ARM's body, so a receipt written to ask a behavioural question is satisfied by a comment
 
 **Found 2026-09-11** while closing a consumer candidate whose own receipt was built to avoid an

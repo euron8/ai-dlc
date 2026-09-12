@@ -253,7 +253,7 @@ fi
 # `/ai-dlc resume` loads the whole file, reads this section as its resume procedure, obeys
 # "proceed to the next pipeline action", never reads the router, and is denied its first
 # write by ai-dlc-acknowledge.sh Check 2z -- whose remedy is exactly the Read this section
-# did not name. Step 0a's six snapshot integrity checks are skipped on the same path.
+# did not name. Step 0a's seven snapshot integrity checks are skipped on the same path.
 #
 # Measured on the reference consumer (PC-S308-POST-COMPACT-RECOVERY-PROTOCOL-SKIPS-ROUTE-MD):
 # 10 of 41 `/ai-dlc resume` sessions over two days were denied before ever reading the

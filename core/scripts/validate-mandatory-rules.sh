@@ -4,7 +4,7 @@
 # Usage: ./scripts/ai-dlc/validate-mandatory-rules.sh <sprint-number>
 # Example: ./scripts/ai-dlc/validate-mandatory-rules.sh 138
 #
-# Implements 6 retro-compliance checks for Rule 18 enforcement (Sprint 139
+# Implements 8 retro-compliance checks for Rule 18 enforcement (Sprint 139
 # retro Item 366 / Story 140-1). Verifies that the AI/DLC pipeline was
 # structurally followed for the given sprint — not just asserted in prose.
 #
@@ -12,7 +12,7 @@
 # Sprint 140 Story 140-1 (layers 2-5). Layer 1 shipped as CLAUDE.md Rule 18
 # at commit cbedff11.
 #
-# The 6 checks:
+# The 8 checks:
 #   Check 1: Party mode transcript exists and is SHA-cited in retro doc
 #             (delegates to scripts/ai-dlc/validate-retro-evidence.sh <branch> <n>)
 #   Check 2: Cycle commit count for retro artifacts
@@ -29,6 +29,10 @@
 #             (reads story files + docs/escalations/pending.md)
 #   Check 7: The retro branch is not BEHIND origin/main (SKIP when no origin/main
 #             ref resolves in this checkout)
+#   Check 8: The pipeline snapshot's position is at retro (reads
+#             _bmad-output/pipeline-snapshot.md `## Pipeline Position`
+#             `current_step_file:`; SKIP when the snapshot is absent, carries no
+#             such field, or the field names no step file)
 #
 # Exit codes:
 #   0  -- all checks pass
@@ -727,6 +731,98 @@ else
 fi
 
 # ============================================================================
+# Check 8: the pipeline snapshot's position is at retro
+#
+#   `_bmad-output/pipeline-snapshot.md`'s `## Pipeline Position` fields are
+#   written by gate-validation.md Check 14 at each gate passage. The LAST gate a
+#   sprint runs is `sprint-review`; `deploy-validate.md` and `retro.md` run none,
+#   so nothing advanced the position past `deploy-validate.md` and the snapshot
+#   that OUTLIVES the sprint said a shipped sprint was pending deploy work.
+#   Measured on the reference consumer at sprint 310: the retro squash carried a
+#   snapshot at `current_step_file: deploy-validate.md` while the sprint-status
+#   envelope in that same commit read `status: done`.
+#
+#   THIS CHECK RUNS AT retro.md STEP 5c, BEFORE THE RETRO MERGE, so its subject is
+#   deploy-validate.md's routing write (`current_step_file: retro.md`), not
+#   retro.md's own terminal write at Step 8 -- that one happens after this gate.
+#   The value it demands is therefore `retro.md` and never `retro.md (closed)`.
+#
+#   SKIP, LOUDLY, ON AN UNREADABLE POSITION. A tree with no snapshot, a snapshot
+#   with no `## Pipeline Position` section, a section carrying no position field
+#   at all, or a field whose value names no step file is "cannot check", not
+#   "wrong". Failing those would block every retro on a consumer whose snapshot
+#   predates the field, which is a gate that can never pass rather than a gate.
+#
+#   THE KEY GRAMMAR IS THE HOOK'S, CITED AND NOT RESTATED.
+#   `core/hooks/ai-dlc-recover.sh` already reads this field off a real snapshot
+#   and already knows the spellings in the wild: its alternation
+#   (`current_step_file|current[ _]step|current[ _]phase`, case-insensitive) and
+#   its two-stage strip are what this uses. A SECOND grammar over an artifact
+#   that already has a reader is the drift this repo keeps paying for, and the
+#   narrower one loses silently: MEASURED over all 510 historical revisions of the
+#   reference consumer's `_bmad-output/pipeline-snapshot.md`, a strict
+#   `current_step_file:`-only key resolves a value on 167 of them, while the
+#   hook's alternation resolves 496. The dominant spelling this check would
+#   otherwise be blind to is `- **Current step file:** deploy-validate.md` --
+#   which is the DEFECT, so a strict key would have SKIPped the exact population
+#   it exists to catch and reported a floor instead of a failure.
+#
+#   THE SECTION ANCHOR STAYS, and it is the half the hook does not need. Whole-file
+#   matching was measured and REFUSED: `retro.md` occurs in Recent Activity, in
+#   Open Items and inside the Pipeline Position section's own prose (31 revisions
+#   carry the shape `current_step_file: deploy-validate.md` with "routing to
+#   retro.md next" a few lines below it), so a file-wide grammar acquits the exact
+#   defect. Mutant `widened` in core/fixtures/mandatory-rules-snapshot-position/
+#   builds that and arm (f) kills it.
+#
+#   THE VALUE TEST, AND THE FALSE-POSITIVE SET BEHIND IT. After the hook's strip
+#   the value is the first whitespace-delimited token, with trailing markdown
+#   punctuation and any directory prefix removed -- the last because a fully
+#   qualified `.claude/skills/ai-dlc/steps/retro.md` occurs 3 times. PASS iff the
+#   result is `retro.md`. Over the same 510 revisions the resolved values are all
+#   step-file basenames except `STOP` (4), `CLOSED` (4), `NONE`/`none` (5), a
+#   leading `✅` on one closed-sprint line, an uninitialised `<!-- FILL: -->`
+#   template comment and one `COMPLETE`. Every one of those is a closed or
+#   not-yet-started pipeline writing a terminal word by hand, none of them names a
+#   step file, and all of them therefore SKIP: this check runs while a retro is in
+#   flight, and failing a sprint for having closed is not its job.
+# ============================================================================
+echo "[Check 8] Pipeline snapshot position is at retro..."
+SNAPSHOT_MD="_bmad-output/pipeline-snapshot.md"
+if [ ! -f "$SNAPSHOT_MD" ]; then
+  echo "  CHECK 8: SKIP (no ${SNAPSHOT_MD} — no snapshot to read a pipeline position from)"
+  SKIPPED_CHECKS="$SKIPPED_CHECKS 8"
+else
+  # Section-anchored to `## Pipeline Position` (to the next `## `), then the key alternation and
+  # the strip sequence ai-dlc-recover.sh:72-74 publishes, then first token / trailing
+  # punctuation / directory prefix.
+  C8_POS="$(awk '/^## Pipeline Position/{f=1; next} f && /^## /{exit} f' "$SNAPSHOT_MD" 2>/dev/null \
+    | grep -m1 -iE '(current_step_file|current[ _]step|current[ _]phase)' \
+    | sed -E 's/^[^:]*://; s/^[-*[:space:]]+//; s/[[:space:]]*$//' \
+    | sed -E 's/^`([^`]+)`.*/\1/; s/^([^[:space:]]+)[[:space:]]+—.*/\1/' \
+    | sed -E 's/^[`*]+//; s/[`*]+$//' \
+    | awk '{print $1}' | sed 's/[`*,.;:)]*$//; s|^.*/||')"
+  case "$C8_POS" in
+    '')
+      echo "  CHECK 8: SKIP (${SNAPSHOT_MD} carries no pipeline-position field under a '## Pipeline Position' section — an older snapshot format is 'cannot check', not 'wrong')"
+      SKIPPED_CHECKS="$SKIPPED_CHECKS 8"
+      ;;
+    *.md)
+      if [ "$C8_POS" = "retro.md" ]; then
+        echo "  CHECK 8: PASS — pipeline position is at retro.md"
+      else
+        echo "  CHECK 8: FAIL — pipeline position is at ${C8_POS}, not retro.md"
+        fail "Check8_SNAPSHOT_POSITION" "${SNAPSHOT_MD} '## Pipeline Position' reads 'current_step_file: ${C8_POS}' but this retro is in flight, so the position should already name 'retro.md'. gate-validation.md Check 14 writes these fields at a GATE, and the last gate a sprint runs is sprint-review — deploy-validate.md runs no gate-validation.md gate, so it must refresh the position itself when it routes to retro (deploy-validate.md §7 Post-Validation Routing). Left at '${C8_POS}', the snapshot that outlives this sprint tells a later session a shipped sprint is still pending ${C8_POS} work. Fix the snapshot's Pipeline Position (current_step_file: retro.md, last_completed_step_file: deploy-validate.md, last_gate_passed unchanged) and re-run."
+      fi
+      ;;
+    *)
+      echo "  CHECK 8: SKIP (${SNAPSHOT_MD} 'current_step_file' reads '${C8_POS}', which names no step file — a terminal or free-text position cannot be compared to retro.md)"
+      SKIPPED_CHECKS="$SKIPPED_CHECKS 8"
+      ;;
+  esac
+fi
+
+# ============================================================================
 # Final summary
 # ============================================================================
 #
@@ -774,12 +870,12 @@ echo ""
 if [ $FAILURES -eq 0 ]; then
   if [ "$SKIPPED_UNIQUE" -eq 0 ]; then
     echo "VALIDATE-MANDATORY-RULES: PASS"
-    echo "  Sprint ${SPRINT_N}: all 7 checks passed"
+    echo "  Sprint ${SPRINT_N}: all 8 checks passed"
   else
     echo "VALIDATE-MANDATORY-RULES: PASS WITH SKIPS"
-    echo "  Sprint ${SPRINT_N}: $((7 - SKIPPED_UNIQUE)) of 7 checks verified; ${SKIPPED_UNIQUE} SKIPPED (check ${SKIPPED_LIST})."
+    echo "  Sprint ${SPRINT_N}: $((8 - SKIPPED_UNIQUE)) of 8 checks verified; ${SKIPPED_UNIQUE} SKIPPED (check ${SKIPPED_LIST})."
     echo "  A skipped check is not a passed one. Each skip is legitimate on its own terms,"
-    echo "  but the verified floor here is $((7 - SKIPPED_UNIQUE)), not 7 -- read the CHECK lines above."
+    echo "  but the verified floor here is $((8 - SKIPPED_UNIQUE)), not 8 -- read the CHECK lines above."
   fi
   exit 0
 else

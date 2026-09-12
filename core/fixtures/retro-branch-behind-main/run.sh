@@ -210,13 +210,20 @@ world() { # world <name> <source-tree> -> path
   cp -R "$2" "$w" || { echo "FIXTURE ERROR: could not build world $1" >&2; exit 2; }
   printf '%s' "$w"
 }
-artifacts() { # artifacts <world> — the untracked retro evidence checks 2, 4 and 5 read.
+artifacts() { # artifacts <world> — the untracked retro evidence checks 2, 4, 5 and 8 read.
   printf '## Gate Log: Sprint 900\n\n| Gate | Result | Notes |\n|------|--------|-------|\n| Deploy Status Report | PASS | USER-CONFIRMED visual verification captured |\n' \
     > "$1/_bmad-output/implementation-artifacts/gate-log.md"
   printf -- '- sprint: 899\n  sha: %s\n- sprint: 900\n  sha: <PENDING-S900-RETRO>\n' "$PRIOR_SHA" \
     > "$1/_bmad-output/audit-anchors.md"
   printf '# Validation Cycle Log\n\n- sprint 900: three cycles\n' \
     > "$1/_bmad-output/validation-cycle-log.md"
+  # Check 8 reads the snapshot's pipeline position. Seeded at `retro.md` — the value
+  # deploy-validate.md's routing write leaves — so Check 8 runs its live PASS path in every
+  # world and this fixture's verdicts stay statements about Check 7. Without it every world
+  # would carry a Check 8 SKIP and the summary class would report a floor, which is a different
+  # fixture's subject arriving in all eight of this one's tokens.
+  printf '# Pipeline Snapshot\n\n## Pipeline Position\n- current_step_file: retro.md\n- last_completed_step_file: deploy-validate.md\n\n## Recent Activity\n- retro in flight\n' \
+    > "$1/_bmad-output/pipeline-snapshot.md"
 }
 
 # A — the SANITY world: retro branch cut from the merged trunk, exactly as retro.md Step 1 says.
@@ -307,7 +314,7 @@ toolchain() { # <dir> <script-to-install-as-validate-mandatory-rules.sh>
   chmod +x "$1"/*.sh
 }
 
-D_SUMMARY="Sprint 900: $((7 - 1)) of 7 checks verified; 1 SKIPPED (check 7)."
+D_SUMMARY="Sprint 900: $((8 - 1)) of 8 checks verified; 1 SKIPPED (check 7)."
 
 # battery <toolchain-dir> -> eight space-separated tokens, one per world.
 #
@@ -345,7 +352,7 @@ battery() {
     if grep -qF 'git merge origin/main' <<<"$out"; then rmd=m; else rmd="-"; fi
     sm="$(summ)"
     case "$sm" in
-      "Sprint 900: all 7 checks passed") sm=all7 ;;
+      "Sprint 900: all 8 checks passed") sm=all7 ;;
       "$D_SUMMARY")                      sm=skip7 ;;
       "")                                sm=nosumm ;;
       *)                                 sm="other[$sm]" ;;
@@ -409,8 +416,8 @@ OUT="$( cd "$WD" && bash "$WORK/bin/validate-mandatory-rules.sh" 900 2>&1 )"; RC
 if [ "$RC" -eq 0 ] \
    && grep -qx 'VALIDATE-MANDATORY-RULES: PASS WITH SKIPS' <<<"$OUT" \
    && grep -qF '1 SKIPPED (check 7).' <<<"$OUT" \
-   && grep -qF 'the verified floor here is 6, not 7' <<<"$OUT"; then
-  ok "an unmeasurable checkout gets PASS WITH SKIPS naming check 7 and a floor of 6 — an unmeasurable branch is not certified fresh"
+   && grep -qF 'the verified floor here is 7, not 8' <<<"$OUT"; then
+  ok "an unmeasurable checkout gets PASS WITH SKIPS naming check 7 and a floor of 7 — an unmeasurable branch is not certified fresh"
 else
   bad "the skip world did not carry the skip headline and floor — rc=$RC, got: $OUT"
 fi
@@ -506,7 +513,7 @@ mutate deleted \
   'echo "[Check 7] Retro branch not behind origin/main..."' \
   '/^echo "\[Check 7\] Retro branch not behind origin\/main\.\.\."$/,/^  esac$/{ /^  esac$/{N;d;}; d; }' \
   "a:$_NONE b:$_NONE c:$_NONE d:$_NONE e:$_NONE f:$_NONE g:$_NONE h:$_NONE" \
-  "with the block gone every world reports rc 0 and no CHECK 7 line at all, the defect world included, and the skip world claims all 7 checks passed"
+  "with the block gone every world reports rc 0 and no CHECK 7 line at all, the defect world included, and the skip world claims all 8 checks passed"
 
 # --- reversed: `origin/main..HEAD` counts what HEAD has that origin/main lacks, which is
 # divergence in the wrong direction: it acquits the defect world (reporting 1, not ${BEHIND}) and

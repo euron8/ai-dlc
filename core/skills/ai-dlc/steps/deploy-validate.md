@@ -338,4 +338,13 @@ After human validates:
   **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/sprint-review-next.md`
 
 - If **single sprint or final sprint:** Proceed to retro.
-  **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/retro.md`
+
+  1. Refresh `## Pipeline Position` in `_bmad-output/pipeline-snapshot.md`
+     FIRST: `current_step_file: retro.md`,
+     `last_completed_step_file: deploy-validate.md` (production validation
+     checkpoint confirmed). Leave `last_gate_passed` as it stands — this step
+     runs no `gate-validation.md` gate, so there is no new gate to record, and
+     overwriting it would claim one. Without this write the last field on disk
+     still names this step, and a later session reads a shipped sprint as
+     pending deploy work.
+  2. **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/retro.md`
