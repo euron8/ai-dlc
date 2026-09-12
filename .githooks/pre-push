@@ -141,6 +141,32 @@ step "claude-rules joins (tracked paths, live globs, paths-only frontmatter, poi
 step "backlog depth (docs/backlog.md stays a queue, not a log)" \
   bash scripts/validate-backlog-size.sh
 
+# 1h. The step above bounds the ledger's DEPTH and never opens a receipt. This one asks whether
+#     the receipts MEAN anything: each is the instrument the next batch uses to decide whether
+#     its own fix worked, and measured over one batch's ranked set, nine of ten were satisfied
+#     by a bare comment, a pure line reflow, or one word inside an unrelated string.
+#     `.claude/rules/verification-discipline.md` says "bind to the line that EMITS the thing"
+#     and nothing enforced it. Push is the seam: it is the last point before those receipts
+#     become the evidence a later session closes work on.
+#
+#     STANDALONE, AND NOT AN ARM INSIDE validate-enforcement-map.sh, for a stronger reason than
+#     its siblings carry. That validator is driven through ~20 and ~17 mutants by the two sharded
+#     batteries, and this arm runs a detached checkout of HEAD -- twice -- for every receipt in
+#     the ledger. It is ~19s at 8-way here, which is the most expensive validator in this hook;
+#     multiplied by thirty it would be the suite's pole on its own.
+#
+#     THE CEILINGS ARE RATCHETS AND ONLY EVER MOVE DOWN. Each is the count the arm READ on the
+#     tree that registered it, not a policy number -- every receipt under one is a filed defect
+#     awaiting per-entry work, and rewriting them is not this step's job. There are three of
+#     them plus a floor because ONE ceiling is escapable by leaving the population: building the
+#     pattern from a variable, moving it into an awk body, adding an `|| exit 9`, rewriting
+#     `verify: sh` as `verify: manual`, or deleting the receipt line all lower the headline
+#     count and fix nothing. Lower a number here when the work is done; never raise one.
+step "backlog receipts (a receipt a COMMENT can satisfy is not a receipt)" \
+  bash scripts/validate-backlog-receipts.sh \
+    --max-prose-closable 9 --max-unscorable 28 --max-out-of-population 1 \
+    --min-sh-receipts 76 --min-entries 88
+
 # 1g. The bash-3.2 / BSD-userland floor for every shipped shell file. GNU-only idioms do not
 #     error here, they return the WRONG ANSWER quietly -- `sed -i` takes the script as a
 #     backup suffix, `\s` matches a literal `s`, `mapfile` reads nothing. Every arm reports
