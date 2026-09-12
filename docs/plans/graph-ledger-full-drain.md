@@ -8432,8 +8432,13 @@ Derive the gap; it is not optional bookkeeping:
 ```
 awk -F': ' '/^version:/{print $2; exit}' /Users/n8/git/graph/.claude/.ai-dlc-version   # installed
 cat VERSION                                                                            # shipped
-# per discharged id, the release that FIRST named it -- named_absorbed() takes tail -1
-git log --format='%H' -F --grep="<id>" origin/main | tail -1                            # then git show "${sha}:VERSION"
+# per discharged id, the release that FIRST named it -- named_absorbed() takes tail -1.
+# Loop over the DISCHARGED set derived above; the id is a variable, never a literal placeholder
+# (a `<id>` typed verbatim matches the string "<id>" and returns a real, meaningless commit).
+for id in $(comm -12 /tmp/live.txt /tmp/closed_here); do
+  sha="$(git log --format='%H' -F --grep="$id" origin/main | tail -1)"
+  printf '%s\t%s\n' "$id" "$( [ -n "$sha" ] && git show "${sha}:VERSION" || echo UNNAMED )"
+done                                                                                   # control: an impossible id prints UNNAMED
 ```
 
 **NO RUNBOOK IS LIVE.** Every `docs/plans/graph-pull-*` file is retitled `DO NOT EXECUTE` at its
