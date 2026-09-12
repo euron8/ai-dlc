@@ -37,6 +37,81 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
+### BATCH 95 SHIPPED AS `v0.561.0`, ONE RELEASE, ONE NO-`PC` SUBJECT — AND **THE ADVERSARY FOUND THREE BLOCKERS IN THE CONTRACT BEFORE THE BUILD, TWO OF THEM WRITE VECTORS THE ENTRY NEVER NAMED, AND A TRACKED SIDECAR SHIPPING A SECOND UNFIXED ALLOWLIST TO EVERY CONSUMER.** THE SWEEP WAS EMPTY OF PC WORK. FOUR ENTRIES WERE MEASURED AND NOT TAKEN. THE GAP IS **FOUR**, PENDING **1**, AND THE PULL IS **NOT REQUIRED**.
+
+This block replaces the batch-94 record below it. Re-derive every figure rather than reading it.
+
+**`VERSION` IS `0.561.0`, SO BATCH 96 RELEASES AS `0.562.0`.** Re-derive `VERSION` and add one.
+Batch 95 merged ONCE — `v0.561.0` at `0bdd68f4` (PR #732) — closing `BL-137`, verbatim in its
+release commit message (control: an impossible `BL-` id returns 0; `BL-137` also resolves to three
+earlier docs commits that mention it while reporting, which `named_absorbed()` lists beside the
+release and does not mis-attribute). `BL-137` is ROTATED; archive moved **154 → 155**, live
+**89 → 88**. No entry was filed.
+
+**THE SUBJECT WAS TAKEN ON THIS SESSION'S OWN RANKING** because the one-liner arrived from a peer.
+A scope hand measured six candidates first and built the non-fix for each receipt. `BL-137` was the
+only one whose fix was built and verified end to end before scoping closed, and the only live
+arbitrary-file-write. `BL-148` was already archived (LANDED at 0.560.0). The other four were
+measured and refused, and each entry now carries the measurement: `BL-243`'s own stated fix is
+refuted by building six variants (the shipped negator set cannot spell its receipt's seed; widening
+it breaks the cue rule); `BL-221`'s receipt closes on a bare comment and its narrowing keeps 2 false
+positives of 4; `BL-223`'s real fix moves no cell the entry objects to; `BL-227` option (a) was
+prototyped over the 76 live receipts — a generic comment seed flips 0, a token-carrying seed flips
+7, and 30 receipts are unscorable by name — and is READY-WITH-DESIGN-CALL (gate or report).
+
+**THE ADVERSARY ATTACKED THE CONTRACT BEFORE THE BUILDER AND FOUND THREE BLOCKERS.** The
+contract's grammar was scoped to script-internal verbs: `sed -n -f evil.sed` writes TODAY on BSD sed
+because the verb is in a file the validator never opens (`--file=`, `--expression=` on GNU); a
+joined `-i` suffix with no dot (`-ibak`, `-nibak`) overwrote the input file because the shipped
+`sed:-i.*` arm required the dot; and the natural unanchored `s///` scan carries 5 corpus false
+positives that only anchoring to command position removes — "narrow until zero" would have invited
+dropping the GNU `e` clause. The lead's first amendment then said to blanket-refuse `-e`, and the
+builder and adversary independently measured 33 legitimate multi-`-e` derivations in the consumer
+corpus against 0 `-f`, so `-e` scripts are scanned and `-f` is refused outright. A first cut of the
+adversary's reference fix consumed `{` as a command and let `-e '1{w canary' -e '}'` through while
+every other vector was refused. On the tip: no blocker, no defect, seven mutants killed including
+the blanket `sed:*` deny that had passed the receipt AND all five fixtures at base.
+
+**THE SIDECAR `core/scripts/validate-artifact-derivations.sh.fn` IS RETIRED.** Tracked since
+0.474.0, sourced by nothing, carrying its own drifted allowlist, and shipped to every consumer by
+`install.sh`'s derived glob — the reference consumer holds it today at `scripts/ai-dlc/`. Its 20
+rows in `.ai-dlc-fixture-readsets.tsv` sit beside 3356 rows already naming absent paths and fail in
+the safe direction (the fixture is selected, never skipped).
+
+**THE SWEEP AT THIS BATCH'S CLOSE, ref `ai-dlc/carry-over/chunk-max-usd-swap-sizing` (consumer HEAD
+`cab7f9af6`).** Live **56**, cited **37**, unfiled **19**, archive **206**, partition control 0,
+ledger md5 `6d87be63…` unchanged since batch 93. All 19 unfiled are the adjudicated set. The
+consumer-history hand's one apparently-new id, `PC-S311-SNAPSHOT-NEVER-ADVANCES-…`, is batch 90's
+subject, cited in `0.554.0` at `2a2c4cd3`. TERMINAL **89**; DISCHARGED corrected **7**;
+discharged-but-INVISIBLE 1.
+
+**THE INCIDENTAL-CLOSE CHECK WAS RUN AND FOUND NOTHING.** Histogram before the fix: 2×0 (`BL-236`,
+`BL-238`), 73×1, 1×9 over 76 live receipts. After the fix, before rotation: 3×0 adding `BL-137`. After
+rotation: 2×0, 73×1, 1×9.
+
+**THE PULL IS NOT REQUIRED AND THE GAP IS FOUR.** Stamp `0.557.0` / `01fea66c` on all four
+fields, shipped `0.561.0`. The second test discriminates: on a scratch fence carrying
+`sed -n 'w canary' data.txt`, the consumer's installed `validate-artifact-derivations.sh` exits 1
+AND creates the canary, the shipped one exits 1 and does not (`cmp -s` control: the two differ).
+That is a write the consumer's own derivation-capture hook can be made to perform by an Edit; it is
+report-only because no consumer artifact carries such a fence today (fp-sweep: 0 refusals over
+~1660 segments). Eleven machinery paths in `01fea66c..origin/main` derived with the manifest's
+`machinery:` grammar (this batch adds `validate-artifact-derivations.sh` and deletes its `.fn`);
+three bootstrapping paths, all from batch 93; zero mode-only changes (control: 19 raw rows).
+
+**THE CONSUMER'S PORCELAIN MOVED 29 → 34 DURING THE BATCH**, all its own sprint-311
+architecture-phase writes under its own HEAD; nothing here wrote to it (asserted by three hands
+and the lead, by path list).
+
+**THE POLE WAS NOT TOUCHED.** `derivation-capture-mutants`, the unit that multiplies this validator
+most, read 25s/25s before and 24s/25s after, interleaved in the worktree with sides asserted to
+differ; the spread is the size of any effect. The gate ran all 197 fixtures because the new
+`fp-sweep.sh` sits in no read-set; the map was derived 11 commits ago.
+
+**THE READIEST NO-`PC` WORK** is now `BL-227` option (a) (a design call, measured), then `BL-243`
+(needs a ruling on a citation-local negator vocabulary), `BL-221` (rotate its receipt first),
+`BL-223`, `BL-220`. Read `BL-227` first, and read each entry's batch-95 paragraph before scoping it.
+
 ### BATCH 94 SHIPPED AS `v0.560.0`, ONE RELEASE, TWO NO-`PC` SUBJECTS — AND **THE ADVERSARY FOUND A BLOCKER ON EACH SUBJECT BEFORE EITHER SHIPPED: THE ACQUITTAL KEY JOINED A SET WHOSE EVERY MEMBER IS DISCHARGED ON THE ONLY CORPUS, AND THE FAIL-OPEN TOKEN WOULD HAVE ACQUITTED A FORGED PASS TIMESTAMP.** THE SWEEP WAS EMPTY OF PC WORK. ONE ENTRY WAS FILED AND NOT FIXED. THE GAP IS **THREE**, PENDING **1**, AND THE PULL IS **NOT REQUIRED**.
 
 This block replaces the batch-93 record below it. Re-derive every figure rather than reading it.
@@ -9234,7 +9309,7 @@ given at batch 90.
    - **Never merge while a hand is out**, and never read a hand's idle state as its report.
 
 1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below) AGAINST THE REF THAT CARRIES THE
-   LIVE LEDGER, RANK THE UNFILED CANDIDATES, THEN SCOPE BATCH 91 — AND HOW YOU SCOPE IT DEPENDS ON
+   LIVE LEDGER, RANK THE UNFILED CANDIDATES, THEN SCOPE BATCH 96 — AND HOW YOU SCOPE IT DEPENDS ON
    WHO INVOKED YOU.** Operator
    instruction, given at batch 52. **If the one-liner was TYPED BY THE OPERATOR**, report the
    candidates with a marked recommendation and ask, as every batch before has. **If it ARRIVED
@@ -9267,6 +9342,11 @@ given at batch 90.
    **DO NOT TREAT A BATCH-82 RECEIPT AS TRUSTWORTHY BECAUSE IT EXISTS.** Three of them were
    rebuilt in one release: the originals closed on an empty file, on a dead arm, and on a
    positional window.
+
+   **BATCH 95's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.** `BL-137` shipped ALONE as
+   `v0.561.0` at `0bdd68f4` (PR #732), cited in the release commit message. It carries no `PC-`
+   id. The `.fn` sidecar is retired in the same release. `BL-243`, `BL-221`, `BL-223` and
+   `BL-227` each carry a batch-95 measurement paragraph; read it before scoping any of them.
 
    **BATCH 94's TWO SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope either.** `BL-218` and
    `BL-219` shipped together as `v0.560.0`, cited in the release commit message. Neither carries a
@@ -9380,9 +9460,9 @@ given at batch 90.
    two whose receipts DRIVE their subject — and driving is NECESSARY, NOT SUFFICIENT**: both were
    then closed by an over-broad fix, so an arm must also assert the CONTROL case still DENIES.
    `verification-discipline.md:154` states this rule and has no enforcer, which is why `BL-227`
-   exists. The ranked no-`PC` set, readiest first, is `BL-220`, `BL-221`, `BL-223` (`BL-225`,
-   `BL-217`, `BL-222`, `BL-240`, `BL-241`, `BL-224`, `BL-019`, `BL-242`, `BL-218` and `BL-219` have
-   shipped) — **every one of their receipts needs repairing before its verdict means anything.**
+   exists. The ranked no-`PC` set, readiest first, is `BL-227` (a), `BL-243`, `BL-221`, `BL-223`, `BL-220`
+   (`BL-225`, `BL-217`, `BL-222`, `BL-240`, `BL-241`, `BL-224`, `BL-019`, `BL-242`, `BL-218`, `BL-219`
+   and `BL-137` have shipped) — **every one of their receipts needs repairing before its verdict means anything.**
    Batch 94 measured all three: `BL-220`'s only shippable shape is an `--allow-missing` opt-out
    that leaves the default alone (a homes-keyed fail-closed fires on 450 correct files); `BL-221`'s
    positive-binding arm carries 3 false positives of 6 and moves the suite pole; `BL-223` needs a
