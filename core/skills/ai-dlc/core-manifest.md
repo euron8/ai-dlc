@@ -249,6 +249,7 @@ core_manifest:
   - fixtures/ledger-rotate/**
   - fixtures/mandatory-rules-clean-tree/**
   - fixtures/mandatory-rules-skip-accounting/**
+  - fixtures/mandatory-rules-snapshot-position/**
   - fixtures/mutation-red-replay/**
   - fixtures/trunk-audit-classes/**
   - fixtures/story-fields-derive/**

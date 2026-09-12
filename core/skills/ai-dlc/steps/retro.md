@@ -965,7 +965,7 @@ core-layer-immutability).
 3. **Mandatory rules validation.** Run:
    `scripts/ai-dlc/validate-mandatory-rules.sh <N>` (where N is the sprint
    number). It runs `validate-retro-evidence.sh` (Check 1) and inline
-   Checks 3/5/6/7; Checks 2 (`validate-cycle-commits.sh`) and 4
+   Checks 3/5/6/7/8; Checks 2 (`validate-cycle-commits.sh`) and 4
    (`validate-retro-prereq.sh`) are consumer-provided and SKIP when their
    sibling script is absent from core. Check 3 reads the envelope you closed
    in the Close-Out Sweep above via `sprint-status.sh close`. Check 7
