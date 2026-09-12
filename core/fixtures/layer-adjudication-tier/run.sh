@@ -272,9 +272,9 @@ tm_detail() { tm_run "${1:-$DRIFT}" | awk -F'\t' -v e="$TMENTRY" \
                 '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2==e {print $4; exit}'; }
 tm_rows()   { tm_run | awk -F'\t' -v e="$TMENTRY" \
                 '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2==e {c++} END{print c+0}'; }
-tm_record() { # $1 digest -> one LC-E19 record for this entry
-  printf '{"clause":"LC-E19","entry":"%s","subject_digest":"%s","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"seeded"}\n' \
-    "$TMENTRY" "$1"
+tm_record() { # $1 digest, [$2 clause, default LC-E19] -> one record for this entry
+  printf '{"clause":"%s","entry":"%s","subject_digest":"%s","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"seeded"}\n' \
+    "${2:-LC-E19}" "$TMENTRY" "$1"
 }
 
 # (a) PRECONDITION. One row, and a key in it — the note is only meaningful where a verdict can be
@@ -339,6 +339,58 @@ else
   bad "Part 3c control 2 could not reach its state: the entry is still dirty after a commit, so the arm would measure what control 1 does and could not see an unconditional note"
 fi
 
+# (d2) CONTROL 3 — A PRIOR RECORD UNDER A DIFFERENT CLAUSE ONLY. An entry accumulates verdicts
+# under several clauses, so `tail -1` keyed on the entry alone answers with whichever question was
+# decided LAST. Measured on the reference consumer's register (471 rows): 8 entries carry an LC-E19
+# record and for 3 of them the latest record is LC-E4 or LC-E14 — the note would quote a ruling
+# about a different question and tell the operator to re-record it. Controls 1 and 2 are both blind
+# to this: one clears the register and the other cleans the entry.
+printf '\n' >> "$TMCONS/$TMENTRY"   # dirty again, which is the state the note needs
+TMDIG2="$(tm_detail | grep -o 'subject_digest [0-9a-f]\{40\}' | awk '{print $2}' | head -1)"
+tm_record "${TMDIG2:-nodigest}0" LC-E4 > "$TMREG"
+if [ "$(tm_rows)" -eq 1 ] && ! git -C "$TMCONS" diff --quiet -- "$TMENTRY"; then
+  case "$(tm_detail)" in
+    *"SPENT verdict rather than an unanswered one"*)
+      bad "Part 3c control 3: the entry's ONLY prior record is an LC-E4 verdict and the LC-E19 row reports it as a spent verdict for THIS clause. Measured on the reference consumer that is 3 of 8 LC-E19 entries, each told to re-record a ruling made about a different question" ;;
+    *)
+      ok "Part 3c control 3: a prior record under a DIFFERENT clause only, same dirty entry — no note, so the lookup is keyed on the clause and not on the entry alone" ;;
+  esac
+else
+  bad "Part 3c control 3 could not reach its state: $(tm_rows) title-join row(s) with the entry dirty=$(git -C "$TMCONS" diff --quiet -- "$TMENTRY"; echo $?), so the arm would not be measuring a cross-clause record at all"
+fi
+
+# MUTANT FOR CONTROL 3 — the clause conjunct dropped from the jq select, nothing else. Scored HERE,
+# while the cross-clause state is live. Without it control 3 is an absence assertion that passes
+# against any build, including the one that motivated the narrowing.
+MCLDIR="$ROOT/reconcile-mutant-clauseconj"
+rm -rf "$MCLDIR"; mkdir -p "$MCLDIR"
+cp "$(dirname "$DRIFT")"/* "$MCLDIR"/ 2>/dev/null
+MCL="$MCLDIR/layer-drift.sh"
+MCL_OLD=' and .clause == $c'
+MCL_OLD="$MCL_OLD" python3 -c 'import os,sys
+s=open(sys.argv[1]).read()
+old=os.environ["MCL_OLD"]
+if s.count(old)==1: open(sys.argv[2],"w").write(s.replace(old,"",1))' \
+  "$DRIFT" "$MCL" 2>/dev/null
+if [ ! -s "$MCL" ] || cmp -s "$DRIFT" "$MCL"; then
+  bad "FIXTURE ERROR: the clause-conjunct mutation matched nothing, or matched more than once, so Part 3c control 3 is an absence assertion nothing can falsify. Update MCL_OLD to match adj_spent_note's real jq select"
+else
+  mcl_rows="$(bash "$MCL" "$DIST" "$BASE" "$THEIRS" "$TMCONS" 2>/dev/null | awk -F'\t' -v e="$TMENTRY" '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2==e {c++} END{print c+0}')"
+  if [ "$mcl_rows" -ne 1 ]; then
+    bad "Part 3c MUTANT (clause) — the copy emitted $mcl_rows title-join row(s), want 1, so its verdict is a dead harness rather than a widened lookup"
+  else
+    case "$(tm_detail "$MCL")" in
+      *"SPENT verdict rather than an unanswered one"*)
+        ok "Part 3c MUTANT (clause) — without the clause conjunct the LC-E4-only record IS reported as this row's spent verdict: control 3 discriminates, and the narrowing is what stops the cross-clause quote" ;;
+      *)
+        bad "Part 3c MUTANT (clause) — dropping the clause conjunct changed nothing, so control 3 passes against a lookup keyed on the entry alone and asserts nothing" ;;
+    esac
+  fi
+fi
+rm -rf "$MCLDIR"
+
+tm_record "$TMDIG" > "$TMREG"   # restore the LC-E19 record state (e) needs
+
 # (e) MUTANT — the appended call removed, nothing else. The whole reconcile/ directory is copied
 # for Part 7's reason: layer-drift.sh sources lib.sh beside itself, a lone copy dies at the source
 # line and emits nothing, and no note from a script that never ran reads exactly like the note
@@ -349,7 +401,7 @@ rm -rf "$M3CDIR"; mkdir -p "$M3CDIR"
 cp "$(dirname "$DRIFT")"/* "$M3CDIR"/ 2>/dev/null
 M3C="$M3CDIR/layer-drift.sh"
 CTL3C="$M3CDIR/layer-drift-unmutated.sh"; cp "$DRIFT" "$CTL3C" 2>/dev/null
-M3C_OLD='$([ -n "$tm_digest" ] && adj_spent_note "$entry" "$tm_digest")'
+M3C_OLD='$([ -n "$tm_digest" ] && adj_spent_note "$entry" "$tm_digest" "$(adj_clause_cell EXTENSION-TITLE-MATCHES-CORE)")'
 M3C_OLD="$M3C_OLD" python3 -c 'import os,sys
 s=open(sys.argv[1]).read()
 old=os.environ["M3C_OLD"]
