@@ -63,6 +63,13 @@ reached afterwards by `SendMessage` to its agent id (resume-by-id, measured). Th
 uniform `high` is its `--effort high` launch flag pinning definition-less spawns, not
 inheritance, which the entry's title said and now does not.
 
+**A TIP ADVERSARY FOUND FOUR MORE ON THE GATE-GREEN, PUSHED BRANCH** — a probe header
+declaring a narrowing no line performed, two comments deferring a census to a CHANGELOG that
+did not carry it, an invariant whose grammar excluded the very file its header named, and a
+receipt whose seed passed no `model` so the keeps-`model` wrong fix read as a fix. Plus a
+fixture writing no meta sidecar, so a probe reading the join key by the wrong spelling passed
+both fixtures with every effort row `PENDING`. All fixed before the merge.
+
 **THE ADVERSARIES FOUND EVERY DESIGN DEFECT BEFORE THE BUILD.** BL-241: the contract's seed
 ordering did not reproduce the leak, the receipt's exit 9 was a zsh word-split rather than the
 fenced probe it named, and a reset inside the undecided `if` passed the first arm shape — three
