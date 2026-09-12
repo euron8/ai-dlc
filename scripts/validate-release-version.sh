@@ -89,6 +89,54 @@
 #      main is how those commits reach origin, and an arm that fires on the remedy
 #      is an arm that gets turned off.
 #
+# A THIRD THING A SQUASH BREAKS, AND IT IS NOT A RANGE PROPERTY AT ALL.
+#
+#   E. No tracked file at HEAD carries BOTH a `^<<<<<<< ` line and a `^>>>>>>> `
+#      line. A conflict resolved by committing the markers is a file that still
+#      reads as prose and is wrong in a way no reader notices until they need the
+#      section that was cut in half.
+#
+#      MEASURED, and it is why this arm is here rather than in a lint: the
+#      `0.557.0` squash shipped CHANGELOG.md to origin/main carrying `<<<<<<< HEAD`,
+#      a `=======` and a `>>>>>>> worktree-agent-...`, with the `## [0.555.0]`
+#      heading separated from its own body. Arms A, B and C all read that tree
+#      GREEN -- the top heading, VERSION and the subject agreed, and the range
+#      added one heading -- because every one of them keys on heading TEXT and a
+#      conflict marker is not a heading.
+#
+#      FALSE-POSITIVE SET, measured over every tracked path at HEAD on the branch
+#      that added this arm: ONE file, CHANGELOG.md, and it is the true positive
+#      above. The narrowing that got it there:
+#
+#        - BOTH markers are required, intersected per file. Either alone is a
+#          prose shape somebody writes on purpose; the pair is not.
+#        - The OPEN marker requires its trailing space, because git always writes
+#          a label after it. Without that requirement a bare `<<<<<<<` rule line
+#          would join the population.
+#        - `^=======$` IS DELIBERATELY NOT IN THE GRAMMAR. It is the setext H1
+#          underline, so a markdown file with a title reads as a conflict under a
+#          grammar that includes it, and the probe below pins that acquittal. The
+#          pair above already identifies the file; the middle marker adds nothing
+#          to the join and would only widen it.
+#
+#      TWO THINGS THIS ARM DOES NOT SEE, STATED BECAUSE A BLIND SPOT NOBODY WROTE
+#      DOWN IS READ AS COVERAGE.
+#
+#        - A TRUNCATED conflict, carrying one marker and not the other, is outside
+#          the grammar by construction: the intersect requires both. The probe
+#          below asserts that silence on a seeded open-marker-only file, which
+#          documents the gap rather than acquitting it.
+#        - `core/fixtures/layer-readopt-gate/run.sh:514` writes a whole conflict
+#          block -- both markers and the middle one -- as a `printf` argument, and
+#          escapes this arm only because none of the three is LINE-LEADING in the
+#          file. That exemption rests on position and nothing else, so a fixture
+#          that seeds a marker at column 0 of a tracked file becomes a finding
+#          here and is expected to move to a heredoc or a built-up string.
+#
+#      Evaluated in EVERY mode -- an explicit `--range` or `--commit` is a
+#      question about those commits, and this arm's subject is the tree that is
+#      about to be pushed either way.
+#
 # USAGE
 #   scripts/validate-release-version.sh [--range A..B] [--commit SHA]
 #
@@ -98,11 +146,22 @@
 #
 # EXIT
 #   0  every checked commit's three names agree, the range carries one release,
-#      and the branch inherits nothing unpushed from local main
-#   1  a disagreement, a multi-release range, an unpushed-main inheritance, or a
-#      commit that could not be read
+#      the branch inherits nothing unpushed from local main, and no tracked file
+#      carries conflict markers
+#   1  a disagreement, a multi-release range, an unpushed-main inheritance, a
+#      committed conflict, or a commit that could not be read
 
 set -uo pipefail
+
+# THE REPOSITORY ENVIRONMENT IS SCRUBBED BEFORE ANY GIT CALL. Git exports GIT_DIR
+# absolute into a hook run from a linked worktree, and this program is both
+# hook-dispatched and run directly. Arm E's self-probe builds a scratch repository
+# under mktemp and relies on git's upward DISCOVERY to find it -- the branch git
+# takes only when this environment is unset -- and its `git add` would otherwise
+# write the CALLER's index. The corpus reads below take the same redirection
+# silently. NOTHING ABOVE THIS LINE MAY CALL GIT.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+
 cd "$(git rev-parse --show-toplevel 2>/dev/null)" || {
   echo "FAIL: not inside a git repository" >&2; exit 1; }
 
@@ -146,9 +205,11 @@ fails=0
 checked=0
 range_fail=0
 base_fail=0
+conflict_fail=0
 arm_c_ran=0
 arm_d_ran=0
 arm_d_why=""
+arm_e_ran=0
 
 semver_of() { printf '%s' "$1" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1; }
 
@@ -235,6 +296,86 @@ else
   fi
 fi
 
+# ---------------------------------------------------------------------------
+# E. NO TRACKED FILE CARRIES A COMMITTED MERGE CONFLICT.
+#
+# Evaluated in every mode -- see the header for the measurement, for the
+# false-positive set, and for why `^=======$` is not in the grammar.
+#
+# THE CONDITION IS SPELLED `[ -n "$conflict_list" ]` ON PURPOSE. The
+# release-version-triple fixture neuters arm C by rewriting `-ge 2 ]; then` and
+# arm D by rewriting `-gt 0 ]; then`, each on a copy. A count comparison here
+# would share one of those anchors, so a mutation aimed at one arm would move two
+# cells and score a kill it did not earn.
+# ---------------------------------------------------------------------------
+conflict_files_in() { # <repo-dir> -> tracked paths at HEAD carrying BOTH markers
+  # BOTH markers, intersected per FILE. `git grep -l <pat> HEAD` prefixes each
+  # path with `HEAD:`, which is stripped here; `-e` rather than a bare pattern so
+  # a leading `^` can never be read as an option.
+  local d="$1"
+  comm -12 \
+    <(git -C "$d" grep -l -e '^<<<<<<< ' HEAD 2>/dev/null | sed 's|^HEAD:||' | sort -u) \
+    <(git -C "$d" grep -l -e '^>>>>>>> ' HEAD 2>/dev/null | sed 's|^HEAD:||' | sort -u)
+}
+
+# THE SELF-PROBE RUNS BEFORE THE CORPUS, and it fires in both directions. An arm
+# reporting no offenders without first proving it can produce one has established
+# that it ran, not that the tree is clean. Built under mktemp, never on the real
+# corpus.
+#
+# EACH NEAR-MISS IS ONE PROPERTY FROM THE OFFENDER, never two. `setext.md` is the
+# rejected widening -- an H1 underline, quiet only because `^=======$` is not in
+# the grammar. `nospace.md` carries a REAL close marker, so the only thing keeping
+# it quiet is the open marker's missing trailing space. `openonly.md` carries a
+# real open marker WITH its trailing space, so the only thing keeping it quiet is
+# the intersection -- and that silence is the TRUNCATED-conflict blind spot named
+# in the header, pinned here so a later author reads it as a measured limit rather
+# than as coverage. A near-miss short of two properties discriminates against
+# neither.
+probe_e="$(mktemp -d 2>/dev/null)" || {
+  echo "FAIL: arm E could not create its probe directory" >&2; exit 1; }
+trap 'rm -rf "$probe_e"' EXIT
+(
+  cd "$probe_e" || exit 1
+  git init -q . || exit 1
+  git config user.email probe@example.com
+  git config user.name probe
+  git config commit.gpgsign false
+  printf '<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> other-branch\n' > offender.md
+  # A setext H1 underline. This is the shape that would join the population if
+  # `^=======$` were in the grammar, and it is why it is not.
+  printf 'A Heading\n=======\n\nbody text\n'                          > setext.md
+  printf '<<<<<<<\nours\n>>>>>>> other-branch\n'                      > nospace.md
+  # A TRUNCATED conflict: a real open marker, trailing space and all, with no
+  # closing marker. The arm is silent on it BY CONSTRUCTION, and that silence is
+  # asserted so the gap is on the record.
+  printf '<<<<<<< HEAD\nours\n'                                       > openonly.md
+  git add -A
+  git commit -q -m 'probe corpus'
+) >/dev/null 2>&1
+
+probe_hits="$(conflict_files_in "$probe_e")"
+probe_bad=""
+grep -qxF 'offender.md' <<<"$probe_hits" \
+  || probe_bad="the seeded offender was NOT reported"
+for nm in setext.md nospace.md openonly.md; do
+  if grep -qxF "$nm" <<<"$probe_hits"; then
+    probe_bad="${probe_bad:+$probe_bad; }the near-miss $nm WAS reported"
+  fi
+done
+
+if [ -n "$probe_bad" ]; then
+  echo "FAIL  arm E's own probe did not discriminate -- $probe_bad. Every conflict verdict below would then be an empty set produced by a scan that cannot find an offender, which reads exactly like a clean tree." >&2
+  conflict_fail=1
+else
+  arm_e_ran=1
+  conflict_list="$(conflict_files_in .)"
+  if [ -n "$conflict_list" ]; then
+    echo "FAIL  tracked file(s) carry committed merge-conflict markers: $(printf '%s\n' "$conflict_list" | tr '\n' ' ')" >&2
+    conflict_fail=1
+  fi
+fi
+
 for c in $COMMITS; do
   short="$(git rev-parse --short "$c")"
   subject="$(git log -1 --format=%s "$c" 2>/dev/null)"
@@ -315,7 +456,23 @@ if [ "$base_fail" -ne 0 ]; then
 EOF
 fi
 
-if [ "$fails" -ne 0 ] || [ "$range_fail" -ne 0 ] || [ "$base_fail" -ne 0 ]; then
+if [ "$conflict_fail" -ne 0 ]; then
+  cat >&2 <<'EOF'
+
+      A conflict resolved by committing its markers leaves a file that still reads
+      as prose. The 0.557.0 squash shipped CHANGELOG.md to origin/main that way,
+      with one release's heading separated from its own body, and the three arms
+      above all read it GREEN -- they key on heading text, and a conflict marker is
+      not a heading.
+
+      Remedy: open each file named above, resolve the sections by hand, and delete
+      every `<<<<<<<`, `=======` and `>>>>>>>` line. `git grep -n -e '^<<<<<<< '
+      HEAD` locates them.
+EOF
+fi
+
+if [ "$fails" -ne 0 ] || [ "$range_fail" -ne 0 ] || [ "$base_fail" -ne 0 ] \
+  || [ "$conflict_fail" -ne 0 ]; then
   exit 1
 fi
 
@@ -329,5 +486,7 @@ if [ "$arm_d_ran" -eq 1 ]; then summary="$summary; no unpushed main commits inhe
 elif [ "$arm_d_why" = "on-main" ]; then summary="$summary; branch-base arm n/a on main"
 elif [ "$arm_d_why" = "scoped-out" ]; then summary="$summary; branch-base arm n/a for an explicit range"
 else                            summary="$summary; BRANCH-BASE ARM NOT EVALUATED"; fi
+if [ "$arm_e_ran" -eq 1 ]; then summary="$summary; no committed conflict markers (probe fired both ways)"
+else                            summary="$summary; CONFLICT-MARKER ARM NOT EVALUATED"; fi
 echo "$summary."
 exit 0
