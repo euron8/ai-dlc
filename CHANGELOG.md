@@ -15,6 +15,56 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.552.0] - 2026-09-11
+
+### A document whose job is to be retyped into a shell said nothing about the shell
+
+Batch 89, release 1 of 2. The consumer filed three candidates on 2026-09-11, two of them after
+batch 88 had closed and one of those after its resume block was written — so the sweep that
+opened this batch found three available candidates where the plan named two. This release carries
+the one whose subject is a bootstrapping file and therefore ships alone.
+
+#### `PC-S341-SKILL-MD-SHIPS-REV-PATH-COMMANDS-WITH-NO-SHELL-HAZARD-NOTE`
+
+`core/skills/ai-dlc-update/SKILL.md` hands the operator rev-path commands to transcribe, all of
+them correctly brace-delimited, and never said why the braces are load-bearing. `grep -ci zsh`
+over that file was **0** against a control of 176 occurrences of `theirs`. The operator's shell
+is zsh, where a bare `$theirs:core/...` applies a history modifier that eats the colon plus the
+next character: `core/`, `scripts/`, `templates/` and `tests/` mangle while `docs/` does not,
+which is exactly why the form survives a read-through. The consumer reproduced it twice in one
+`/ai-dlc-update` run with a memory file stating the rule loaded in context both times — three
+fixture writes truncated and a 15-row derived table rendered entirely from truncated reads.
+
+Not a defect in the shipped scripts: the two files carrying the bare form are both
+`#!/usr/bin/env bash`, where `:c` is not a modifier. The remedy is one sentence, and it sits in
+the `theirs` definition bullet rather than beside each command — there are **five** rev-path
+sites, not the four the candidate names, and the fifth binds a different variable, so a per-site
+note would be a five-way restatement with one member that is not about `theirs` at all. The rule
+is already stated by arm `S8` of `validate-shell-portability.sh`, which does not ship; the note
+states the behaviour without restating the enforcer.
+
+Also measured while scoping it: `reconcile/classify-block.md` carries the bare form in a
+shebang-less file and is SAFE, because the character after the colon is `$`, which is not a
+modifier letter. Filed as a NOTE rather than a defect, and it is why a naive `\$[A-Za-z_]+:`
+arm would ship a non-empty false-positive set.
+
+#### `BL-236` — filed, not fixed
+
+`S8` keys on an angle-bracket placeholder, so the `$VAR:` spelling a reader actually mistypes is
+outside its grammar by construction: extracting `S8_PAT` from the shipping file and running it
+scores the mistyped form **0** against **1** for the placeholder form. The note therefore has no
+mechanism behind it. Widening `S8` touches an arm whose false-positive set is recorded EMPTY and
+whose corpus interacts with a battery exclusion derived from the validator's own name, so the
+entry records what a successor arm must discriminate instead of guessing at one.
+
+The entry's receipt was attacked twice, by the hand that wrote it and independently by the lead
+with seeds chosen apart from the arm. It rejects `zsh` as a command inside a fence, a sentence
+denying the hazard, the correct note placed below the last command site, `zsh` inside a URL, and
+a pure reflow; both degenerate trees — truncated to empty, and file deleted — exit 9 rather than
+0, which is the batch-88 shape that closed three receipts on non-fixes. It **does** close on a
+note asserting the braces are cosmetic: the arm binds position and vocabulary, never semantics,
+and the entry now says so.
+
 ## [0.551.0] - 2026-09-11
 
 ### Three receipts that could not tell a fix from a comment, and the three defects behind them

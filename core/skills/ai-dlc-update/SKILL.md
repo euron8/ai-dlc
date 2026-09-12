@@ -50,6 +50,16 @@ STOP — you don't; you diff text and classify it.
   the schema above. Never drop `upstream`/`installed_at` when re-stamping.
 - **theirs** = distribution `core/` at the **target ref**, which the operator may
   name (see *Invocation* below). Default upstream HEAD.
+
+  **Every rev-path below writes `"${theirs}:<path>"` BRACED, and the braces are
+  load-bearing.** This skill runs in the operator's shell, which is zsh, and there a
+  bare `$theirs:core/...` applies a history modifier that eats the colon plus the
+  character after it: `core/`, `scripts/`, `templates/` and `tests/` all mangle while
+  `docs/` does not, so a read-through of the unbraced form looks fine. Quoting does not
+  fix it; only the braces do. Unbraced, git either reports the ref absent or resolves
+  the truncated name and answers confidently about a DIFFERENT file, and a `>` redirect
+  on the same line still creates its target as the 0-byte file the next step reads.
+  Keep the braces when you retype one of these commands.
 - **ours**  = the consumer's live tree (`.claude/…`, plus `scripts/` for
   `core/scripts/…`).
 
