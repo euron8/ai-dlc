@@ -73,6 +73,7 @@ core_manifest:
   - core/skills/ai-dlc-setup/**
   - core/skills/ai-dlc-update/**
   - core/scripts/ai-dlc/*
+  - core/fixtures/agent-definition-render/**
   - core/fixtures/adversarial-citation/**
   - core/fixtures/apply-drift-after-write/**
   - core/fixtures/apply-drift-refile/**

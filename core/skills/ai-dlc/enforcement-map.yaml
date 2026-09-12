@@ -1225,6 +1225,7 @@ non_catalog_units:
     hard_block: true
     enforcer:
       - core/hooks/ai-dlc-dispatch-guard.sh
+      - core/scripts/render-agent-definitions.sh
     call_sites:
       - site: ai-dlc-dispatch-guard.sh (PreToolUse Agent|Task) — THE ONLY TEETH
         posture: runtime DENY of a role-bound dispatch whose model tier disagrees
@@ -1254,6 +1255,15 @@ non_catalog_units:
         excludes: roles that declare no pin (cis/sm/tea/ux) — a role file that
           declares nothing cannot bind anything; closing that needs new setup
           placeholders (the v0.63.0 unregistered-drift surface) and is deferred
+      - id: effort-applied
+        asserts: for every guard ledger row with `definition_bound: true`, the
+          matching subagent-probe row's transcript `effort` equals
+          `aiDlcRoles.<role>.effort`
+        protects: against BL-240's measured gap — a configured effort that is
+          recorded but never reaches the API call. Adjudicated at gate-validation
+          Check 22's effort arm (`core/scripts/validate-spawn-ledger.sh`), not here;
+          this row states the property, that script's own row carries its
+          enforcer and fixtures
     fixtures: [tests/fixtures/dispatch-model-guard]
     ci_workflow: ~
 

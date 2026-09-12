@@ -180,6 +180,49 @@ if [ -f scripts/ai-dlc/validate-write-format-steering.sh ]; then
     bash scripts/ai-dlc/validate-write-format-steering.sh --report
 fi
 
+# 3e. A ROLE'S CONFIGURED EFFORT IS BOUND BY ITS AGENT DEFINITION AND BY NOTHING ELSE.
+#     `.claude/agents/<role>.md` frontmatter is the only channel that reaches a subagent's
+#     reasoning effort. The dispatch guard STATES the effort in the prompt because the Agent
+#     tool has no parameter for it, and a prompt cannot set effort -- measured on the reference
+#     consumer, every spawn ran at the effort the SESSION resolved, from its launch flag or the
+#     user's `effortLevel`/`modelSettings`, and never at the role's. The directive was read and
+#     had no effect. The definition OUTRANKS that resolution rather than filling a gap in it.
+#
+#     SO A DRIFTED DEFINITION IS SILENT IN BOTH DIRECTIONS. A role whose settings entry moved
+#     keeps running at the old level, and one whose definition was never rendered runs at the
+#     session's resolved effort rather than its own, while the spawn ledger records
+#     `effort_bound` from the config either way. Nothing in a transcript, a ledger row or a gate
+#     log distinguishes the two. This arm is what does.
+#
+#     THREE OUTCOMES AND THEY ARE DISTINCT, which is the whole reason the renderer has a third
+#     exit code. A consumer with no `aiDlcRoles` is NOT APPLICABLE and prints as such; one whose
+#     definitions are current PASSes; one whose definitions drifted FAILs with the one command
+#     that clears it. Collapsing the first into a pass is this repository's named defect.
+#
+#     Decidable from disk, which is why it belongs here and not at a gate.
+if [ -f scripts/ai-dlc/render-agent-definitions.sh ]; then
+  #     `--root .` RATHER THAN THE RENDERER'S OWN WALK, and the two are not interchangeable
+  #     here. This hook has already `cd`-ed to `git rev-parse --show-toplevel`, so the root is
+  #     resolved by git itself; the walk is the fallback for a hand invocation and answers by
+  #     looking for `.git` or `VERSION` above the SCRIPT. Passing the root git gave us means a
+  #     tree where that walk would answer differently -- a submodule, a `--git-dir` pointing
+  #     elsewhere -- cannot make this arm check a different project than the one being pushed.
+  agent_definitions() {
+    local out rc
+    out="$(bash scripts/ai-dlc/render-agent-definitions.sh --check --root . 2>&1)"; rc=$?
+    printf '%s\n' "$out"
+    case "$rc" in
+      3) printf '   NOT APPLICABLE -- this project declares no aiDlcRoles, so it pins no role\n'
+         printf '   models or efforts and there are no agent definitions to render.\n'
+         return 0 ;;
+      0) return 0 ;;
+      *) return 1 ;;
+    esac
+  }
+  step "agent definitions (a role's configured effort binds through .claude/agents/, or not at all)" \
+    agent_definitions
+fi
+
 if [ -f scripts/ai-dlc/validate-hook-registration.sh ]; then
   step "hook registration (a hook on disk that nothing registers never fires)" \
     bash scripts/ai-dlc/validate-hook-registration.sh

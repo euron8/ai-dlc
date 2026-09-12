@@ -595,6 +595,43 @@ else
   echo "    Transient pipeline state under _bmad-output/ will be reported as untracked changes."
 fi
 
+# Render the agent definitions that bind each role's model AND its reasoning effort.
+#
+# THE GAP THIS CLOSES. `aiDlcRoles.<role>.effort` had no channel that reached the subagent. The
+# dispatch guard binds `model` through the Agent tool's parameter and STATES the effort in the
+# prompt, because that tool has no effort parameter -- and a prompt cannot set effort. Measured
+# on the reference consumer, every spawn ran at the effort the SESSION resolved (its launch
+# flag, or the user's `effortLevel`/`modelSettings`) and never at the role's, whatever the
+# prompt directive said. `.claude/agents/<role>.md` frontmatter is the channel that does bind
+# it -- it OUTRANKS the session's resolution rather than filling a gap in it -- and this
+# renderer is what writes it.
+#
+# RUN AFTER THE SETTINGS MERGE ABOVE, DELIBERATELY. `aiDlcRoles` is the input, and the merge is
+# what puts it there on a consumer that did not have it. Rendering before that step would read
+# the pre-merge file and write definitions for whatever set it happened to hold.
+#
+# THE CONSUMER'S COPY IS THE ONE DRIVEN, exactly as the transient-ignore call below does: it is
+# the copy that runs from now on, and a difference between it and this distribution's is worth
+# finding here rather than on the consumer's next pull.
+#
+# EXIT 3 IS `NOT APPLICABLE` AND IS NOT A FAILURE. A project whose settings declare no
+# `aiDlcRoles` pins no roles; that is a normal state and the renderer says so in its own words.
+echo "Installing agent definitions (role model + reasoning effort)..."
+RENDER_AGENTS="$PROJECT_ROOT/scripts/ai-dlc/render-agent-definitions.sh"
+if [ -x "$RENDER_AGENTS" ]; then
+  bash "$RENDER_AGENTS" --root "$PROJECT_ROOT"; ra_rc=$?
+  case "$ra_rc" in
+    0|3) : ;;
+    *) echo "  WARNING: agent definitions were not fully rendered (exit $ra_rc, see above). Roles"
+       echo "    with no .claude/agents/<role>.md run at the session's launch-flag or"
+       echo "    settings-resolved effort, not at the role's." ;;
+  esac
+else
+  echo "  SKIPPED: $RENDER_AGENTS is absent or not executable, so no agent definitions were written."
+  echo "    Every role's spawns will run at the session's launch-flag or settings-resolved"
+  echo "    reasoning effort, not at the one aiDlcRoles configures for that role."
+fi
+
 # Install the unconditional rule files that Claude Code's own loader reads.
 #
 # NO VERSION GATE HERE, DELIBERATELY, AND THE FIRST VERSION OF THIS BLOCK HAD ONE.

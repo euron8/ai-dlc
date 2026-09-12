@@ -610,6 +610,210 @@ else
   fi
 fi
 
+# ============================================================================
+# THE EFFORT ARM. Every other arm in this file compares two things the dispatch guard
+# WROTE, so a guard that bound the wrong value writes a row agreeing with itself. This one
+# joins the ledger's `effort_bound` to the `effort` the subagent probe read off the
+# TEAMMATE'S OWN transcript -- the effort the API call was made at, written by the harness.
+# ============================================================================
+erow() { # role bound cited readable name definition_bound effort tool_use_id
+  jq -nc --arg r "$1" --arg b "$2" --argjson c "$3" --argjson k "$4" --arg n "$5" \
+         --argjson d "$6" --arg e "$7" --arg t "$8" \
+    '{v:1, sprint:900, name:$n, role:$r, model_bound:$b, model_requested:$b,
+      role_contract_cited:$c, role_file_readable:$k,
+      definition_bound:$d, definition_stale:false, name_stripped:$n,
+      effort_bound:(if $e == "" then null else $e end),
+      tool_use_id:(if $t == "" then null else $t end)}'
+}
+prow() { # tool_use_id effort model transcript_version
+  jq -nc --arg t "$1" --arg e "$2" --arg m "$3" --arg v "$4" \
+    '{v:3, sprint:900, agent_id:("a" + $t), tool_use_id:$t,
+      effort:$e, model:$m, transcript_version:$v,
+      peak_tokens:1000, turns:1, compactions:0, duration_s:10}'
+}
+evsl() { # evsl <ledger> [probe] -> "<rc> <output>"
+  local o r
+  if [ -n "${2:-}" ]; then
+    o="$(bash "$VSL" --ledger "$WORK/$1" --sprint 900 --settings "$WORK/settings.json" --probe "$WORK/$2" 2>&1)"; r=$?
+  else
+    o="$(bash "$VSL" --ledger "$WORK/$1" --sprint 900 --settings "$WORK/settings.json" 2>&1)"; r=$?
+  fi
+  printf '%s\n%s' "$r" "$o"
+}
+ercv() { printf '%s' "$1" | head -1; }
+
+# `dev` pins effort high in the settings block every arm here resolves against.
+erow dev sonnet true true dev-agree    true high toolu_AGREE    > "$WORK/e-agree.jsonl"
+prow toolu_AGREE high claude-sonnet-5 2.1.269                   > "$WORK/e-agree.probe"
+erow dev sonnet true true dev-disagree true high toolu_DISAGREE > "$WORK/e-disagree.jsonl"
+prow toolu_DISAGREE low claude-sonnet-5 2.1.269                 > "$WORK/e-disagree.probe"
+# The PENDING seed's probe carries a row for a DIFFERENT dispatch. An EMPTY probe file
+# would let a reader that never opened it score the same way -- the emptiness would be
+# doing the work, not the join.
+erow dev sonnet true true dev-pending  true high toolu_PENDING  > "$WORK/e-pending.jsonl"
+prow toolu_SOMEONE_ELSE high claude-sonnet-5 2.1.269            > "$WORK/e-pending.probe"
+# NOT definition-bound: the configured effort reached this teammate as prose the guard
+# appended, which is advisory by construction. Its probe row DISAGREES, so an arm that
+# ignored `definition_bound` would fail it.
+erow dev sonnet true true dev-prose    false high toolu_PROSE   > "$WORK/e-prose.jsonl"
+prow toolu_PROSE low claude-sonnet-5 2.1.269                    > "$WORK/e-prose.probe"
+
+# --- E1. agreement is VERIFIED, and the verdict says against what -------------
+R="$(evsl e-agree.jsonl e-agree.probe)"
+if [ "$(ercv "$R")" -eq 0 ] && grep -q 'effort: 1 verified' <<<"$R"; then
+  ok "a definition-bound row whose own transcript records the configured effort is VERIFIED, and COUNTS says so -- the first thing in this check that reads ground truth rather than a record the guard wrote"
+else
+  bad "the agreeing row was not verified: $R"
+fi
+
+# --- E2. disagreement FAILS, names both values, and names the remedy ----------
+R="$(evsl e-disagree.jsonl e-disagree.probe)"
+if [ "$(ercv "$R")" -eq 1 ] && grep -q "records effort='low'" <<<"$R" \
+   && grep -q "aiDlcRoles.dev.effort=" <<<"$R" && grep -q 'effort: 0 verified.*1 mismatch' <<<"$R"; then
+  ok "a definition-bound row whose transcript records a DIFFERENT effort FAILS, naming the declared level, the observed one, and the re-render remedy -- this is BL-240's whole subject, and nothing could see it before"
+else
+  bad "the disagreeing row did not fail as expected: $R"
+fi
+
+# --- E3. no joined probe row is PENDING, never FAIL and never a silent pass ---
+# A consumer that pulls this release mid-sprint is in exactly this state for every row
+# already dispatched. Failing it would wedge the sprint on a verification that could not
+# have run; passing it silently would report a check that did not happen.
+R="$(evsl e-pending.jsonl e-pending.probe)"
+if [ "$(ercv "$R")" -eq 0 ] && grep -q '1 PENDING (no probe row joined' <<<"$R" \
+   && ! grep -q '^FAIL: \[' <<<"$R"; then
+  ok "a definition-bound row with no joined probe row is PENDING and COUNTED -- 'verified nothing' and 'found nothing' cannot read alike"
+else
+  bad "the unjoined row was not reported PENDING: $R"
+fi
+
+# ...and with NO --probe at all, which is every caller that has not been updated.
+R="$(evsl e-pending.jsonl)"
+if [ "$(ercv "$R")" -eq 0 ] && grep -q 'no --probe was passed' <<<"$R"; then
+  ok "  and a caller passing no --probe is told so by name, rather than getting a clean-looking verdict over an arm that never ran"
+else
+  bad "an invocation without --probe did not say so: $R"
+fi
+
+# --- E4. the arm is SCOPED to definition_bound, and that is not decoration ----
+R="$(evsl e-prose.jsonl e-prose.probe)"
+if [ "$(ercv "$R")" -eq 0 ] && ! grep -q '^FAIL: \[' <<<"$R"; then
+  ok "a row that is NOT definition-bound is not judged on effort even when its transcript disagrees -- the guard's prompt sentence is advisory by construction and failing it would be a FAIL on correct data"
+else
+  bad "a non-definition-bound row was judged on effort: $R"
+fi
+
+# --- E5. THE DISCRIMINATING SEED: two SAME-ROLE spawns, out of order ----------
+# THE CASE EVERY ORDERED JOIN GETS WRONG, AND THE REASON THIS ARM EXISTS AT ALL. The
+# ledger is written at DISPATCH; the probe fires at COMPLETION. Two `dev` spawns that
+# finish in reverse dispatch order are indistinguishable to a join keyed on (role,
+# most-recent-unmatched) -- and because both pin the SAME configured effort, the
+# comparison PASSES on the wrong pairing and reports an agreement it never established.
+#
+# A seed with two DIFFERENT roles resolves 100% under any join and discriminates nothing,
+# which is why both rows here are `dev`. `dev-first` ran at the wrong level; `dev-second`
+# ran correctly; the telemetry is written in the order they COMPLETED, which is second
+# then first.
+{ erow dev sonnet true true dev-first  true high toolu_FIRST
+  erow dev sonnet true true dev-second true high toolu_SECOND; } > "$WORK/e-sameRole.jsonl"
+{ prow toolu_SECOND high claude-sonnet-5 2.1.269
+  prow toolu_FIRST  low  claude-sonnet-5 2.1.269; } > "$WORK/e-sameRole.probe"
+R="$(evsl e-sameRole.jsonl e-sameRole.probe)"
+if [ "$(ercv "$R")" -eq 1 ] && grep -q 'FAIL: \[dev-first\]' <<<"$R" \
+   && ! grep -q 'FAIL: \[dev-second\]' <<<"$R" \
+   && grep -q 'effort: 1 verified.*1 mismatch' <<<"$R"; then
+  ok "E5 two SAME-ROLE spawns completing in REVERSE dispatch order: the offender is named as dev-first and dev-second is verified -- the join resolves on the tool-use id, which no completion order can permute"
+else
+  bad "E5 the same-role out-of-order pair was mis-scored: $R"
+fi
+
+# THE MIRROR, in the same run. Reversing the TELEMETRY order must not move the verdict:
+# that invariance IS the property, and a single ordering cannot establish it -- an ordered
+# join is right on one of the two and wrong on the other, which reads exactly like working.
+{ prow toolu_FIRST  low  claude-sonnet-5 2.1.269
+  prow toolu_SECOND high claude-sonnet-5 2.1.269; } > "$WORK/e-sameRole2.probe"
+R2="$(evsl e-sameRole.jsonl e-sameRole2.probe)"
+if [ "$(ercv "$R2")" -eq 1 ] && grep -q 'FAIL: \[dev-first\]' <<<"$R2" \
+   && ! grep -q 'FAIL: \[dev-second\]' <<<"$R2"; then
+  ok "  and reversing the telemetry order names the SAME offender -- order-invariance asserted, not assumed"
+else
+  bad "  reversing the telemetry order changed the verdict, so the join IS order-dependent: $R2"
+fi
+
+# --- E6. the pre-2.1.267 refusal, with its own control -----------------------
+# CC 2.1.259/2.1.267 fixed `effort:` on models whose launch effort is PINNED, so a value
+# read off an earlier build is not evidence there. REFUSED is its own outcome and not
+# PENDING: "no ground truth yet" and "ground truth I will not trust" have different
+# remedies, and collapsing them makes an unverifiable row read as an unwritten one.
+erow dev sonnet true true dev-pinned true high toolu_PINNED > "$WORK/e-pinned.jsonl"
+prow toolu_PINNED low claude-opus-4-8 2.1.250               > "$WORK/e-old.probe"
+prow toolu_PINNED low claude-opus-4-8 2.1.269               > "$WORK/e-new.probe"
+R="$(evsl e-pinned.jsonl e-old.probe)"
+if [ "$(ercv "$R")" -eq 0 ] && grep -q '1 refused on a pre-2.1.267' <<<"$R" \
+   && grep -q 'PENDING: \[dev-pinned\]' <<<"$R"; then
+  ok "a pinned-effort model on a pre-2.1.267 transcript is REFUSED and named, not scored -- the field is not evidence on that build"
+else
+  bad "the pre-2.1.267 pinned row was not refused: $R"
+fi
+# THE CONTROL, and it is the half that proves the floor DISCRIMINATES. Same row, same
+# disagreement, same model -- only the version differs. Without it the refusal could be
+# refusing on the model alone, or on everything, and both read identically.
+R="$(evsl e-pinned.jsonl e-new.probe)"
+if [ "$(ercv "$R")" -eq 1 ] && grep -q '1 mismatch' <<<"$R"; then
+  ok "  CONTROL: the SAME pinned model at 2.1.269 IS scored and fails -- the refusal keys on the version, not on the model alone"
+else
+  bad "  CONTROL: the pinned model at 2.1.269 was not scored, so the refusal is wider than the version floor: $R"
+fi
+
+# --- E7. MUTANTS. Each arm above is PRESENCE-shaped, so a validator emitting nothing
+# fails them -- but that does not establish which LINE produced each verdict.
+sed 's/^  if \[ "\$defbound" = "true" \]; then$/  if false; then/' "$VSL" > "$WORK/noeffortarm.sh"
+if cmp -s "$VSL" "$WORK/noeffortarm.sh"; then
+  bad "FIXTURE BROKEN: the effort arm's scope test was renamed, so this mutant proves nothing"
+else
+  bash "$WORK/noeffortarm.sh" --ledger "$WORK/e-disagree.jsonl" --sprint 900 \
+       --settings "$WORK/settings.json" --probe "$WORK/e-disagree.probe" >/dev/null 2>&1; rc=$?
+  if [ "$rc" -eq 0 ]; then
+    ok "MUTANT noeffortarm: dropping the arm turns a teammate that demonstrably ran at the wrong effort into a clean exit 0 -- E2 is load-bearing"
+  else
+    bad "MUTANT noeffortarm survived: rc=$rc without the arm, so E2 cannot be what produced the 1"
+  fi
+fi
+
+# THE JOIN KEY ITSELF. Replacing the exact id match with a ROLE match is the ordered join
+# this design rejected, expressed as a mutation: on the same-role pair it pairs both stops
+# with whichever row jq returns last, so one of the two is scored against the other's
+# transcript. The assertion is on the OFFENDER'S NAME, not on the exit code, because both
+# implementations exit 1 here -- a code-only arm would score this mutant as killed while
+# the mis-pairing went unseen.
+sed 's@select((.tool_use_id // "") == \$t) \] | last@select(true) ] | last@' "$VSL" > "$WORK/rolejoin.sh"
+if cmp -s "$VSL" "$WORK/rolejoin.sh"; then
+  bad "FIXTURE BROKEN: the tool_use_id join expression was renamed, so this mutant proves nothing"
+else
+  out="$(bash "$WORK/rolejoin.sh" --ledger "$WORK/e-sameRole.jsonl" --sprint 900 \
+         --settings "$WORK/settings.json" --probe "$WORK/e-sameRole.probe" 2>&1)"
+  if grep -q 'FAIL: \[dev-second\]' <<<"$out" || ! grep -q 'FAIL: \[dev-first\]' <<<"$out"; then
+    ok "MUTANT unjoined: with the id match removed the same-role pair is scored against the wrong transcript and the verdict names the wrong spawn -- E5 is what catches it, and an exit-code-only arm could not"
+  else
+    bad "MUTANT unjoined survived: the offender was still named correctly without the id match, so E5's join assertion is not load-bearing: $out"
+  fi
+fi
+
+# The version floor, on its own copy: without it a pre-2.1.267 pinned record is scored as
+# though the field meant something, and E6's refusal becomes a mismatch.
+sed 's@< \[2,1,267\])@< [0,0,0])@' "$VSL" > "$WORK/nofloor.sh"
+if cmp -s "$VSL" "$WORK/nofloor.sh"; then
+  bad "FIXTURE BROKEN: the version floor was renamed, so this mutant proves nothing"
+else
+  bash "$WORK/nofloor.sh" --ledger "$WORK/e-pinned.jsonl" --sprint 900 \
+       --settings "$WORK/settings.json" --probe "$WORK/e-old.probe" >/dev/null 2>&1; rc=$?
+  if [ "$rc" -eq 1 ]; then
+    ok "MUTANT nofloor: without the 2.1.267 floor a pinned-effort record from a build where the field was wrong is scored as a finding -- E6 is what stops a false FAIL on correct data"
+  else
+    bad "MUTANT nofloor survived: rc=$rc, so the floor is not what produced E6's refusal"
+  fi
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then
   echo "check-22-spawn-ledger: PASS ($asserted assertions)"

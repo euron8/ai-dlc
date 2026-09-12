@@ -37,6 +37,79 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
+### BATCH 92 SHIPPED AS `v0.556.0` AND `v0.557.0`, TWO RELEASES, TWO NO-`PC` SUBJECTS — AND **THE OPERATOR-RANKED ENTRY'S REMEDY WAS RIGHT ON THE PATH IT PROBED AND UNREACHABLE ON THE PATH THE CONSUMER DISPATCHES THROUGH, WHICH FOURTEEN PROBES AND ONE BINARY LITERAL SETTLED BEFORE THE CONTRACT WAS WRITTEN.** THE SWEEP WAS EMPTY OF PC WORK. THE GAP IS **FOUR**, PENDING **1**, AND THE PULL IS **NOT REQUIRED**.
+
+This block replaces the batch-91 record below it. Re-derive every figure rather than reading it.
+
+**`VERSION` IS `0.557.0`, SO BATCH 93 RELEASES AS `0.558.0`.** Re-derive `VERSION` and add one.
+Batch 92 merged TWICE — `v0.556.0` closing `BL-241` and `v0.557.0` closing `BL-240` — each id
+verbatim in its release commit message (control: an impossible `BL-` id returns 0). Both are
+ROTATED after the merge; archive moves **147 → 149**. `BL-019` gained a reader for
+`effort_bound` and is NOT rotated: its receipt still reads 1.
+
+**THE SUBJECTS WERE TAKEN ON THIS SESSION'S OWN RANKING** because the one-liner arrived from a
+peer. `BL-240` was ranked highest by the operator in the entry itself; `BL-241` was the readiest
+no-`PC` entry. They shipped separately because `BL-241` touches `ledger-reverify.sh`, a
+bootstrapping file.
+
+**THE `BL-240` REMEDY WAS PROBED BEFORE IT WAS BUILT, AND THE PROBE FOUND THE PATH THE ENTRY
+HAD NOT TESTED.** A `.claude/agents/<role>.md` definition's `effort:` is applied by the harness
+on the plain subagent path — in `-p` and interactive sessions, with and without agent teams,
+and it beats a `--effort` launch flag in both directions. A spawn that passes a `name` under
+agent teams takes the in-process-teammate runner, whose config literal spreads the definition's
+`model` and has no `effort` key; the consumer's lead names every spawn. So the guard now
+rewrites `subagent_type` to the rendered definition and REMOVES `name` and `model`; the hand is
+reached afterwards by `SendMessage` to its agent id (resume-by-id, measured). The consumer's
+uniform `high` is its `--effort high` launch flag pinning definition-less spawns, not
+inheritance, which the entry's title said and now does not.
+
+**A TIP ADVERSARY FOUND FOUR MORE ON THE GATE-GREEN, PUSHED BRANCH** — a probe header
+declaring a narrowing no line performed, two comments deferring a census to a CHANGELOG that
+did not carry it, an invariant whose grammar excluded the very file its header named, and a
+receipt whose seed passed no `model` so the keeps-`model` wrong fix read as a fix. Plus a
+fixture writing no meta sidecar, so a probe reading the join key by the wrong spelling passed
+both fixtures with every effort row `PENDING`. All fixed before the merge.
+
+**THE ADVERSARIES FOUND EVERY DESIGN DEFECT BEFORE THE BUILD.** BL-241: the contract's seed
+ordering did not reproduce the leak, the receipt's exit 9 was a zsh word-split rather than the
+fenced probe it named, and a reset inside the undecided `if` passed the first arm shape — three
+seed shapes and nine variants settled it. BL-240: the explicit `model` param defeats the
+definition, the `[1m]` string in a definition was unprobed, no fixture can observe the property,
+the probe's own header excludes the bare-id class the release creates, and party personas are
+not inert under rendering. The lead's own findings: the delivered BL-241 receipt measured the
+fixture SEED rather than the fix (old tool plus old seed read 0), and the BL-240 receipt seeded a
+definition without the marker the guard keys on and exited 9 on a guard that keeps `model`.
+
+**THE SWEEP AT THIS BATCH'S OPEN, ref `ai-dlc/carry-over/chunk-max-usd-swap-sizing` (one filing
+ahead of `main`).** Live **56**, cited **37**, unfiled **19**, archive **206**, partition control
+0. All 19 unfiled are the adjudicated set. TERMINAL **88**; discharged-but-INVISIBLE 1
+(`PC-S308-GATE-METRICS-CHECK2-STALE-VERDICT-READ-ORDER`). A consumer-history hand reported "148
+unabsorbed PC ids" — a false alarm from comparing branch tips against `main`'s LIVE ledger only;
+against live plus archive the difference is two ids, both named in `origin/main` release commits.
+
+**THE INCIDENTAL-CLOSE CHECK WAS RUN AND FOUND NOTHING.** Receipt histogram before: 2×0, 79×1,
+1×9. After both fixes and before rotation: 3×0 (`BL-236`, `BL-238`, both deliberately not
+rotated, plus `BL-241`), 77×1, 2×9; `BL-240` reads 0 after its receipt was rebuilt.
+
+**THE PULL IS NOT REQUIRED AND THE GAP IS FOUR.** Stamp `0.553.0`, shipped `0.557.0`. The second
+test discriminates: the consumer's installed `ai-dlc-dispatch-guard.sh` differs from the
+distribution's (`cmp -s`), and on a scratch copy of the consumer's settings with definitions
+rendered, the installed guard leaves a `remediator` dispatch as `general-purpose` with its
+`name` and `model` while the distribution's rewrites it to the definition and strips both. That
+row is a finding the consumer cannot see and it moves no verdict today. Bootstrapping paths in
+the range: `reconcile/ledger-reverify.sh` (release 1), `reconcile/apply.sh` gains one worklist
+row (release 2); zero mode-only changes.
+
+**THE READ-SET MAP WAS RE-DERIVED BY THE OPERATOR THIS BATCH** for `agent-definition-render`
+and `mandatory-rules-snapshot-position`. `fanout-payload-channel` traces no reads and stays
+unmapped, as do `check-h1-recursion`, `check-manifest-bypass` and `lib`; the runner treats an
+unmapped directory as run-always, which is safe. Derive the unmapped set, never quote it:
+`comm -23 <(ls -d core/fixtures/*/ | sed 's#core/fixtures/##; s#/##' | sort) <(grep -v '^#' .ai-dlc-fixture-readsets.tsv | cut -f1 | sort -u)`.
+
+**THE READIEST NO-`PC` WORK** is now `BL-224`, `BL-221`, `BL-223`, `BL-220`, `BL-219`, `BL-218`.
+Read `BL-227` first. `BL-019`'s remaining half — the write sits above the effort decision — is
+small and could batch with any of them.
+
 ### BATCH 91 SHIPPED AS `v0.555.0`, ONE RELEASE, ONE NO-`PC` SUBJECT — AND **THE ADVERSARY FOUND THREE BLOCKERS IN THE CONTRACT BEFORE THE BUILD, ALL THREE IN THE RECEIPT AND SEED DESIGN, AND THE CORRECT FIX SCORED 1 AGAINST A RECEIPT THAT SCORED TWO WRONG FIXES 0.** THE SWEEP WAS EMPTY OF PC WORK. THE GAP IS **TWO**, PENDING **1**, AND THE PULL IS **NOT REQUIRED**.
 
 This block replaces the batch-90 record below it. Re-derive every figure rather than reading it.
@@ -9029,6 +9102,12 @@ given at batch 90.
    rebuilt in one release: the originals closed on an empty file, on a dead arm, and on a
    positional window.
 
+   **BATCH 92's TWO SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope either.** `BL-241` shipped
+   ALONE as `v0.556.0` and `BL-240` ALONE as `v0.557.0`, each cited in its release commit
+   message. Neither carries a `PC-` id, so no ledger row moves on the consumer's next pull; what
+   moves is that every role-bound spawn on the consumer is rewritten onto a rendered
+   `.claude/agents/<role>.md` definition once it pulls and renders. `BL-019` is NOT closed.
+
    **BATCH 91's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.** `BL-225` shipped ALONE as
    `v0.555.0` at `bc5d73d8` (PR #722), cited in the release commit message. It carried no `PC-`
    id, so no ledger row moves on the consumer's next pull; what moves is that the consumer's own
@@ -9124,7 +9203,7 @@ given at batch 90.
    then closed by an over-broad fix, so an arm must also assert the CONTROL case still DENIES.
    `verification-discipline.md:154` states this rule and has no enforcer, which is why `BL-227`
    exists. The ranked no-`PC` set, readiest first, is `BL-224`, `BL-220`, `BL-218`, `BL-219`,
-   `BL-221`, `BL-223` (`BL-225`, `BL-217` and `BL-222` have shipped) — **every one of their receipts needs repairing
+   `BL-221`, `BL-223` (`BL-225`, `BL-217`, `BL-222`, `BL-240` and `BL-241` have shipped) — **every one of their receipts needs repairing
    before its verdict means anything.** `BL-222`'s owed FP measurement is already taken and small
    (one fixture, four substring assertions, none anchored; `retro.md` reads that PASS line zero
    times). `BL-218` is blocked on a corpus that does not exist — zero live layer-debt registers in

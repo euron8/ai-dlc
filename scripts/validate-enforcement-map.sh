@@ -347,7 +347,23 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   +13 being the `architecture-fast-track` fixture directory and nothing else. Headroom is
 #   now 38 forks, which is LESS than one further directory at this rate. The next fixture
 #   directory raises the budget or takes the I87 reduction; there is no third option left.
-FORK_BUDGET=8060
+#
+#   0.557.0: 8060 -> 8090, the raise the line above says is owed. ATTRIBUTED in two REAL
+#   CLONES of the branch point and the branch tip, checked out the same way and interleaved,
+#   with the validator's own bytes asserted byte-identical on both sides in the same
+#   invocation -- so the delta is corpus and cannot be this file. Branch point 8043 twice, tip
+#   8075/8074, +32/+31. AN ARCHIVE EXTRACTION IS THE WRONG INSTRUMENT HERE and reading one
+#   nearly bought a phantom reduction: `git archive | tar -x` carries no `.git`, arms of this
+#   validator shell out to git, and the same tip read 8055 that way -- 20 under the number the
+#   gate actually reads. Measure in a tree that has a repository.
+#
+#   TWO PATHS, BOTH MEASURED, AND THE FIXTURE DIRECTORY IS THE SMALLER ONE. Removing the new
+#   fixture directory alone accounts for 9 and removing the new `core/scripts/` entry alone
+#   accounts for 23: this validator walks `core/scripts/*` in several arms, so a SCRIPT costs
+#   more here than a fixture does, which the per-directory rate the notes above quote does not
+#   predict. NO REDUCTION TAKEN with this raise either; the target remains I87's per-directory
+#   pipeline in `i87_exposed_in`. Headroom is 15, still under one further directory.
+FORK_BUDGET=8090
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
@@ -9495,6 +9511,173 @@ EOF
       err "I110: check_inflight_status accepts status token(s) no core file teaches:$i110_missing. A member of the set that appears in no step file, no SKILL.md rule and no hook is one a lead can never learn to write, so the whitelist is enforcing a value nothing produces -- which is how the FIRST spelling of this column (\`idle-reusable\`) survived its own rename. Teach it in the reader that owns the transition, or remove it from the whitelist."
     fi
   fi
+fi
+
+# --- I111: the reasoning-effort level set is ONE set across every file that validates it ---
+# vocabulary: reasoning effort levels
+# vocabulary-invariant: I111
+# vocabulary-owner: core/hooks/ai-dlc-dispatch-guard.sh
+# vocabulary-extract: effort-levels
+# vocabulary-readers: scripts/validate-enforcement-map.sh, core/scripts/render-agent-definitions.sh
+#
+# WHAT IT BINDS. `low|medium|high|xhigh|max` is a closed set with three consumers now, and
+# BL-240 is the release that gave it a third. The dispatch guard validates a configured
+# level before stating it to a teammate and DROPS an unrecognised one (`ai-dlc-dispatch-
+# guard.sh`, the `case "$PIN_EFFORT"` arm) -- it is the OWNER, because it is the only copy
+# that decides what a live dispatch does. I22 validates the same set against
+# `templates/settings.json.template` so a fresh install cannot ship a level the guard will
+# silently drop. And `render-agent-definitions.sh` now writes the level into
+# `.claude/agents/<role>.md` frontmatter, where the HARNESS applies it.
+#
+# WHY THE SET CANNOT SIMPLY BE SOURCED. Each copy sits in a file that must work when the
+# others are absent: the guard is a hook that fails open on a partial install (I25's rule),
+# the validator is distribution-only and never ships, and the renderer runs on a consumer
+# that has neither. Two of the three cannot see each other at runtime, so the binding is an
+# assertion rather than a shared helper -- the same shape as I56 one file over, and for the
+# same reason stated in its header.
+#
+# THE FAILURE IT CATCHES IS ASYMMETRIC AND THAT IS WHY BOTH DIRECTIONS ARE REPORTED. A copy
+# that LOSES a member silently drops a legitimately configured level: the guard stops
+# stating it, the renderer stops writing it, and the teammate runs at the session default
+# with every gate green -- BL-240's own defect, one level down. A copy that GAINS one
+# accepts a value the harness does not implement and writes it into frontmatter, where it
+# is either ignored or rejected. Neither is visible from reading any single file.
+#
+# THE POPULATION IS DERIVED, NOT LISTED, IN TWO STAGES. Stage one finds every `case` ARM of
+# the shape `<alt>) ;;` at the head of a line; stage two keeps the ones whose alternation
+# CONTAINS at least one known level. Two stages rather than one pattern because a grammar
+# keyed on the full five-member set cannot see the defect it exists to catch -- a copy that
+# lost `xhigh` no longer matches and scores as a non-instance. The SET COMPARISON does the
+# work; the grammar only has to find the sites.
+#
+# THE `) ;;` ANCHOR IS LOAD-BEARING AND ITS ABSENCE WAS MEASURED. Written as a bare
+# alternation anywhere on a line, the grammar selected the vocabulary renderer's own
+# extractor regex and this arm's own `i111_re` assignment -- lines that MENTION the set
+# rather than validate against it. Text about a program is not the program, and both
+# happened to carry the canonical five, so the arm passed by accident rather than by
+# agreement. Requiring the case-arm punctuation removes both.
+#
+# FALSE-POSITIVE SET, MEASURED BEFORE THIS SHIPPED, over `core/`, `scripts/` and
+# `.githooks/`. Stage one selects 5 files carrying a case arm of this shape; stage two
+# keeps 2, and both are genuine members of this vocabulary (`ai-dlc-dispatch-guard.sh` and
+# this file). The 3 it correctly drops are real case arms of identical SHAPE whose members
+# are not levels -- `allow|forbid`, `confirmed|corrected`, `true|false` -- so the filter is
+# demonstrably discriminating rather than selecting everything it reaches. FP set EMPTY,
+# with a non-empty rejected set beside it. Negative control in the same run: an impossible
+# arm returned 0. Cost: one recursive grep, 0.07s.
+i111_re='^[[:space:]]*[a-z]+(\|[a-z]+)+\)[^;]*;;'
+i111_canon='high,low,max,medium,xhigh'
+# The set a single site declares, normalised: split the alternation, sort, de-duplicate.
+# ONE implementation used by the probe and by the corpus, so a probe that passes cannot be
+# passing against a different reader than the one the findings come from.
+# BYTE-IDENTICAL IN SHAPE TO vocab_extract_effort_levels IN scripts/render-vocabulary-index.sh,
+# which renders this row of docs/vocabulary-index.md. Two readers of one grammar, and the
+# renderer's own two-way probe is what keeps them from drifting apart silently.
+# ONE PIPELINE OVER THE WHOLE POPULATION, NEVER ONE PER FILE. The first cut called a six-stage
+# pipeline once per shaped file, twice over, and cost 95 forks -- the fork-budget fixture
+# refused it. This runs grep once over every path it is handed and emits `file<TAB>set` rows,
+# one per file, with the set comma-joined in C-locale order, so the caller compares strings
+# in bash and forks nothing per file. An alternation is kept whole when ANY member is a
+# level, so a copy that GAINED a foreign member still renders that member into its set.
+i111_sets_in() {  # <path>... -> "file<TAB>member,member,..." one row per file carrying a level arm
+  grep -roE "$i111_re" --include='*.sh' "$@" 2>/dev/null \
+    | awk -F: '{
+        f=$1; alt=$0; sub(/^[^:]*:/,"",alt); sub(/^[[:space:]]*/,"",alt); sub(/\)[^;]*;;$/,"",alt)
+        n=split(alt,a,"|"); hit=0
+        for(i=1;i<=n;i++) if (a[i]=="low"||a[i]=="medium"||a[i]=="high"||a[i]=="xhigh"||a[i]=="max") hit=1
+        if (hit) for(i=1;i<=n;i++) if (a[i]!="") print f "\t" a[i]
+      }' \
+    | LC_ALL=C sort -u \
+    | awk -F'\t' '{ if ($1!=prev) { if (prev!="") print prev "\t" set; prev=$1; set=$2 } else set=set "," $2 }
+                  END { if (prev!="") print prev "\t" set }'
+}
+i111_set_of() {  # file -> that file's set, comma-joined (empty when it declares none)
+  i111_sets_in "$1" | awk -F'\t' 'NR==1{print $2}'
+}
+# SELF-PROBE FIRST, BOTH DIRECTIONS, under mktemp and never against the real corpus. An arm
+# that reports zero findings without first proving it can produce one has established that
+# it ran, not that the tree agrees.
+i111_probe="$(mktemp -d 2>/dev/null)"
+if [ -z "$i111_probe" ] || [ ! -d "$i111_probe" ]; then
+  err "I111 could not create its probe directory, so its self-probe did not run. A scan whose probe did not fire reports agreement it never established; this fails rather than reporting a clean corpus."
+else
+  # THE SEEDS ARE ASSEMBLED, NEVER TYPED, AND THAT IS NOT A STYLE CHOICE. A literal
+  # `low|medium|high|xhigh|max)` written here is matched by this arm's OWN corpus grep,
+  # which scans `scripts/` -- so the offender seed put `ultra` into this file's declared
+  # set and the arm reported itself as the forked site, correctly and uselessly. A scan
+  # whose findings are its own probe is a scan whose real findings are unreadable.
+  # Measured: the first run of this arm emitted exactly that.
+  i111_mk() {  # i111_mk <outfile> <level>...
+    i111_out="$1"; shift
+    i111_alt=""
+    for i111_w in "$@"; do
+      if [ -z "$i111_alt" ]; then i111_alt="$i111_w"; else i111_alt="${i111_alt}|${i111_w}"; fi
+    done
+    printf '  %s) ;;\n' "$i111_alt" > "$i111_out"
+  }
+  i111_mk "$i111_probe/good.sh"   low medium high xhigh max
+  printf '    low|medium|high|xhigh|max) return 0 ;;\n' > "$i111_probe/goodcmd.sh"
+  i111_mk "$i111_probe/lost.sh"   low medium high max
+  i111_mk "$i111_probe/gained.sh" low medium high xhigh max ultra
+  # NEAR-MISS ONE: a case arm of the same SHAPE carrying no level at all. `allow|forbid`
+  # is not hypothetical -- it is validate-artifact-budget.sh:596, one of three such arms
+  # the corpus filter must reject. If this were selected the arm would fire on every
+  # alternation in the tree and its findings would be noise.
+  i111_mk "$i111_probe/nearmiss.sh" allow forbid
+  # NEAR-MISS TWO: a line that MENTIONS the canonical set without validating against it,
+  # which is what the `) ;;` anchor exists to exclude. Both real instances carried the
+  # correct five, so an arm that selected them passed by accident; seeded here so the
+  # anchor cannot be relaxed without this probe going red.
+  printf "i111_re='(low|medium|high|xhigh|max)'\n" > "$i111_probe/mentions.sh"
+  # One pass over the probe directory answers all five seeds; the sets are read back by name.
+  i111_pg=""; i111_pc=""; i111_pl=""; i111_pn=""; i111_pm=""; i111_px=""
+  while IFS="$(printf '\t')" read -r i111_pf i111_ps; do
+    case "$i111_pf" in
+      */good.sh)     i111_pg="$i111_ps" ;;
+      */goodcmd.sh)  i111_pc="$i111_ps" ;;
+      */lost.sh)     i111_pl="$i111_ps" ;;
+      */gained.sh)   i111_pn="$i111_ps" ;;
+      */nearmiss.sh) i111_pm="$i111_ps" ;;
+      */mentions.sh) i111_px="$i111_ps" ;;
+    esac
+  done <<EOF_I111
+$(i111_sets_in "$i111_probe")
+EOF_I111
+  if [ "$i111_pg" != "$i111_canon" ] || [ "$i111_pc" != "$i111_canon" ]; then
+    err "I111 SELF-PROBE FAILED: the canonical seed extracted '${i111_pg}' rather than the five levels. The reader cannot spell its own subject, so every zero below is a floor of unknown depth rather than a finding of agreement."
+  elif [ "$i111_pl" = "$i111_pg" ] || [ "$i111_pn" = "$i111_pg" ]; then
+    err "I111 SELF-PROBE FAILED: a seed that LOST a member and one that GAINED one did not differ from the canonical seed. The comparison below cannot discriminate and would report agreement on any corpus."
+  elif [ -n "$i111_pm" ]; then
+    err "I111 SELF-PROBE FAILED: the near-miss seed (a case arm carrying no effort level, the shape validate-artifact-budget.sh:596 actually has) was selected and yielded '${i111_pm}'. The population grammar matches alternations that are not this vocabulary, so its findings would be noise."
+  elif [ -n "$i111_px" ]; then
+    err "I111 SELF-PROBE FAILED: a line that MENTIONS the level set without validating against it was selected and yielded '${i111_px}'. Text about a program is not the program: that shape carries the canonical five and would make this arm pass by accident on a tree where the real copies had forked. The \`) ;;\` anchor is what excludes it."
+  else
+    # THE CORPUS. Derived in one recursive grep plus the stage-two filter, never
+    # hand-listed, so a fourth copy added by a later release is in scope on the push that
+    # adds it. Membership is decided by `i111_set_of` -- the same reader the comparison
+    # uses -- so a file cannot be IN the population by one grammar and read by another.
+    i111_rows="$(cd "$REPO_ROOT" 2>/dev/null && i111_sets_in core scripts .githooks || true)"
+    i111_n=0; i111_bad=""
+    while IFS="$(printf '\t')" read -r i111_f i111_got; do
+      [ -n "$i111_f" ] || continue
+      i111_n=$((i111_n+1))
+      [ "$i111_got" = "$i111_canon" ] || i111_bad="${i111_bad} ${i111_f}[${i111_got}]"
+    done <<EOF_I111
+$i111_rows
+EOF_I111
+    if [ "$i111_n" -lt 2 ]; then
+      # A GLOB THAT MATCHES NOTHING MUST NOT REPORT SUCCESS, and here fewer than two sites
+      # is the same fault: with one site or none there is no pair to compare and the arm
+      # passes having established nothing. The guard's own validation arm is a permanent
+      # member, so below two means the grammar stopped matching, not that the tree changed.
+      err "I111 found ${i111_n} site(s) declaring the reasoning-effort level set, and a binding needs at least two to compare. The dispatch guard's own \`case \"\$PIN_EFFORT\"\` arm is a permanent member of this population, so this means the population grammar no longer matches it -- the zero is a broken scan, not agreement. Repair the grammar before trusting any verdict from this arm."
+    else
+      if [ -n "$i111_bad" ]; then
+        err "I111 the reasoning-effort level set has FORKED. Canonical is low/medium/high/xhigh/max, owned by core/hooks/ai-dlc-dispatch-guard.sh. Disagreeing site(s):${i111_bad}. A copy that LOST a member silently drops a legitimately configured level -- the guard stops stating it, render-agent-definitions.sh stops writing it into .claude/agents/<role>.md frontmatter, and the teammate runs at the session default with every gate green. A copy that GAINED one accepts a value the harness does not implement. Make every site declare the same five."
+      fi
+    fi
+  fi
+  rm -rf "$i111_probe" 2>/dev/null || true
 fi
 
 # --- Verdict ------------------------------------------------------------------

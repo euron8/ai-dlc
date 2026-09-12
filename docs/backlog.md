@@ -55,11 +55,15 @@ have gone green, and would have reported "still open" forever.
 never the word anywhere in prose, because an entry that merely discusses landing something is
 not a closed entry.
 
-## BL-240 — a role's configured effort is never APPLIED: every subagent runs at the parent session's effort, and the harness mechanism that would bind it is one ai-dlc does not use
+## BL-240 — a role's configured effort is never APPLIED: a definition-less subagent runs at the session's `--effort` launch flag, not by inheriting the parent's own effort, and the harness mechanism that would override that flag — a rendered `.claude/agents/<role>.md` definition — is one ai-dlc does not render
 
 **OPERATOR RANKING: HIGHEST-PRIORITY OPEN ENTRY, above every PC-backed row.** This file has
 no priority field, so the ranking is stated here, in the entry itself. Read this entry before
 `BL-227` and before the no-`PC` set. Ruled 2026-09-12.
+
+**LANDED (v0.557.0, verified de09aa7e).** `render-agent-definitions.sh` projects `aiDlcRoles` into
+`.claude/agents/<role>.md`; the dispatch guard selects the definition and removes `name` and
+`model`; the subagent probe and Check 22 join on `tool_use_id` and compare the transcript effort.
 
 **Found 2026-09-12** by joining the reference consumer's spawn ledger to the harness's own
 subagent transcripts for sprint s311, mid-sprint, read-only.
@@ -107,21 +111,25 @@ The consumer's roles map only to claude-opus-5 and claude-sonnet-5, neither pinn
 s311 evidence and the probe ran on 2.1.269. Any validator reading `effort` off a transcript must
 also read the record's `version` field and refuse to score a pinned model below 2.1.267.
 
-**Remedy shape.** Render one `.claude/agents/<role>.md` per `aiDlcRoles` entry — `name`,
-`description`, `model`, `effort`, and a body that binds the role to its `team-roles` file — as a
-generated region with a `--check` mode at the gate, so the definition cannot drift from the
-config it renders. Have the dispatch guard rewrite `subagent_type` to the role name it already
-derives, alongside the `model` it already binds. Then `effort_bound` records a value the harness
-applied, and a fixture that spawns a definition with an off-default effort and asserts the
-transcript field keeps the feature from regressing silently a second time. Confirm before
-building: that a definition's `model` and the guard's injected `model` parameter compose as the
-tool description claims, and that the interactive path matches the `-p` path the probe used.
+**Remedy shape.** `render-agent-definitions` projects `aiDlcRoles` into one
+`.claude/agents/<role>.md` per role that declares a model, as a generated region with a
+`--check` mode at the gate, so the definition cannot drift from the config it renders. The
+dispatch guard rewrites a role-bound dispatch's `subagent_type` to the rendered definition and
+deletes both `name` and `model` from the call — the definition becomes the one source for
+both, and it refuses the rewrite when the definition's frontmatter disagrees with
+`aiDlcRoles.<role>` rather than selecting a stale render silently. `ai-dlc-subagent-probe.sh`
+and gate-validation Check 22 gain the join this needed: the probe reads the transcript's
+`effort` field and the definition it ran under, and Check 22 asserts they agree with
+`aiDlcRoles.<role>.effort` for every guard row recording a definition-bound dispatch, reporting
+PENDING rather than failing where no probe row has matched yet.
 
 **Receipt.** Drives the shipping guard on a synthetic layered consumer whose settings pin
-`adversary` to `opus`/`medium`, and asks whether the corrected input's `subagent_type` names the
-role. Exit 9 if the guard did not bind the model, so a disarmed guard cannot read as a fix.
+`adversary` to `opus`/`medium` and carries a rendered, marked definition, and asks whether the
+corrected input's `subagent_type` names the role with `name` and `model` both REMOVED — the
+definition is the one source. Exit 9 only when the guard emits nothing at all, so a disarmed
+guard cannot read as a fix; a guard that rewrites the type but keeps `model` reads 1.
 
-verify: sh h=core/hooks/ai-dlc-dispatch-guard.sh; [ -f "$h" ] || exit 9; command -v jq >/dev/null || exit 9; d=$(mktemp -d) || exit 9; X(){ rm -rf "$d"; exit "$1"; }; mkdir -p "$d/.claude/team-roles" "$d/.claude/agents" || X 9; printf "version: 0.0.0\n" > "$d/.claude/.ai-dlc-version"; printf "# Role: Adversary\n" > "$d/.claude/team-roles/adversary.md"; printf "%s\n" "{\"aiDlcModels\":{\"opus\":\"claude-opus-5[1m]\"},\"aiDlcRoles\":{\"adversary\":{\"model\":\"opus\",\"effort\":\"medium\"}}}" > "$d/.claude/settings.json"; printf -- "---\nname: adversary\ndescription: probe\nmodel: opus\neffort: medium\n---\n" > "$d/.claude/agents/adversary.md"; J=$(jq -nc "{tool_name:\"Agent\",tool_input:{prompt:\"Your operating contract is .claude/team-roles/adversary.md. Read it first.\",subagent_type:\"general-purpose\",name:\"adversary-probe\"}}"); o=$(printf "%s" "$J" | CLAUDE_PROJECT_DIR="$d" AI_DLC_STATE_DIR=state bash "$h" 2>/dev/null); t=$(printf "%s" "$o" | jq -r ".hookSpecificOutput.updatedInput.subagent_type // empty" 2>/dev/null); m=$(printf "%s" "$o" | jq -r ".hookSpecificOutput.updatedInput.model // empty" 2>/dev/null); [ "$m" = opus ] || X 9; [ "$t" = adversary ] || X 1; X 0
+verify: sh h=core/hooks/ai-dlc-dispatch-guard.sh; [ -f "$h" ] || exit 9; command -v jq >/dev/null || exit 9; d=$(mktemp -d) || exit 9; X(){ rm -rf "$d"; exit "$1"; }; mkdir -p "$d/.claude/team-roles" "$d/.claude/agents" || X 9; printf "version: 0.0.0\n" > "$d/.claude/.ai-dlc-version"; printf "# Role: Adversary\n" > "$d/.claude/team-roles/adversary.md"; printf "%s\n" "{\"aiDlcModels\":{\"opus\":\"claude-opus-5[1m]\"},\"aiDlcRoles\":{\"adversary\":{\"model\":\"opus\",\"effort\":\"medium\"}}}" > "$d/.claude/settings.json"; printf -- "---\nname: adversary\ndescription: probe\nmodel: opus\neffort: medium\n---\n<!-- AI/DLC GENERATED: rendered by scripts/ai-dlc/render-agent-definitions.sh from .claude/settings.json aiDlcRoles.adversary. Edit the settings entry, then re-render. -->\nbody\n" > "$d/.claude/agents/adversary.md"; J=$(jq -nc "{tool_name:\"Agent\",tool_input:{prompt:\"Your operating contract is .claude/team-roles/adversary.md. Read it first.\",subagent_type:\"general-purpose\",name:\"adversary-probe\",model:\"sonnet\"}}"); o=$(printf "%s" "$J" | CLAUDE_PROJECT_DIR="$d" AI_DLC_STATE_DIR=state bash "$h" 2>/dev/null); [ -n "$o" ] || X 9; t=$(printf "%s" "$o" | jq -r ".hookSpecificOutput.updatedInput.subagent_type // empty" 2>/dev/null); hm=$(printf "%s" "$o" | jq -r ".hookSpecificOutput.updatedInput | has(\"model\")" 2>/dev/null); hn=$(printf "%s" "$o" | jq -r ".hookSpecificOutput.updatedInput | has(\"name\")" 2>/dev/null); [ "$t" = adversary ] && [ "$hm" = false ] && [ "$hn" = false ] && X 0; X 1
 
 ## BL-238 — the consumer ledger's `theirs`-ref receipt grammar cannot key on an ARM's body, so a receipt written to ask a behavioural question is satisfied by a comment
 
@@ -4594,6 +4602,34 @@ decide whether its own fix worked, and nine of them cannot tell a fix from a com
 
 verify: sh B=docs/backlog.md; [ -f "$B" ] || exit 9; grep -q '^## BL-227' "$B" || exit 9; grep -qE 'receipt-emission-site|scores every backlog receipt against a seeded|verify-receipt-binding' scripts/*.sh 2>/dev/null && exit 0; exit 1
 
+
+## BL-242 — the `ledger-reverify` fixture's mutant-wreckage guard has no subject and cannot fire
+
+**Found 2026-09-12** by the adversary re-verifying `BL-241`'s build on the tip, by driving every
+shipped mutant through the fixture and counting how often the guard's branch was taken.
+
+`core/fixtures/ledger-reverify/run.sh`'s `sfx_kill()` compares each mutant's emitted row count
+against the unmutated baseline and reports "wreckage" on a mismatch, so a copy that crashed is
+not scored as a kill. It was written for the crash that deleting BOTH `RSFX=""` lines produces
+under `set -u`. The builder then re-anchored the delete mutation on the reset's own comment
+block, which was the right fix and which removed this guard's only subject: all six shipped
+mutants preserve the row count exactly, so the branch fires zero times on a clean run. A tree
+with both lines deleted now dies only on the argument-error path the fixture never drives; on a
+good invocation it emits a full row set and is caught honestly through shape A.
+
+Measured: with every shipped mutant applied in turn, the guard reported wreckage on none; with
+the reset neutered so no ordinal is emitted anywhere, all three shapes and all three acquittals
+went RED while the guard stayed silent. A vacuous guard is the loaded gun
+`.claude/rules/mechanism-design.md` names: it changes no outcome today and will change one when
+the surrounding row counts move, with nobody looking.
+
+**Not fixed here.** Either give it a subject — a mutant that genuinely emits a different row
+count, such as one that drops the `RECEIPTS-UNDECIDED` emitter, asserted as wreckage rather than
+as a kill — or delete the branch and record that the anchor fix made it inert.
+
+**Tiered DEFECT.** Distribution-side fixture only; no consumer verdict moves.
+
+verify: sh F=core/fixtures/ledger-reverify/run.sh; [ -f "$F" ] || exit 9; grep -q '^sfx_kill()' "$F" || exit 9; n="$(awk '/^sfx_kill\(\)/{f=1} f && /-ne "\$\(printf .%s.n. "\$OUT" \| grep -c \.\)"/{c++} END{print c+0}' "$F")"; [ "$n" -eq 0 ] && exit 0; grep -qE 'wreckage-subject|drops the RECEIPTS-UNDECIDED emitter|mut-wreck' "$F" && exit 0; exit 1
 
 ## BL-241 — `ledger-reverify.sh` leaks the last entry's `[receipt n/n]` suffix onto every run-scoped and ENTRY-SWALLOWED row
 

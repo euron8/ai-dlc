@@ -147,9 +147,14 @@ seed() {
   printf '%s\n' '      if (tok == "seed-one") next' '      if (tok == "seed-two") next' \
                 '      if (s == "not-a-status") next' \
                 '      The set is seed-three, seed-one and seed-two.' > "$d/owners/budget.sh"
+  # The effort-level owner: a validating `case` arm carrying the set, beside a comment naming a
+  # level the arm does not carry and a prose line naming all of them. The extractor must read
+  # the ARM and nothing else -- an extractor reading prose would render `gone` into the row.
+  printf '%s\n' '  low|medium|high|xhigh|max) ;;' '  # low|medium|gone) ;;' \
+                '  An unrecognised level among low, medium, high, xhigh and max is dropped.' > "$d/owners/guard.sh"
 
   # --- the readers each vocabulary is joined to ---
-  for r in ledger kinds contract cycle skill hook emap budget; do
+  for r in ledger kinds contract cycle skill hook emap budget guard; do
     printf 'reader\n' > "$d/readers/$r.md"
   done
 
@@ -219,6 +224,13 @@ err "I810 fired"
 # vocabulary-extract: inflight-statuses
 # vocabulary-readers: readers/budget.md
 err "I811 fired"
+# --- I812: the reasoning-effort level set is ONE set ------------------------
+# vocabulary: reasoning effort levels
+# vocabulary-invariant: I812
+# vocabulary-owner: owners/guard.sh
+# vocabulary-extract: effort-levels
+# vocabulary-readers: readers/guard.md
+err "I812 fired"
 # --- I808: an ordinary arm, and a NEAR MISS -- it binds ONE string, not a set -
 # The wording is deliberate. `one string` is one character-class away from `one set`, which
 # is what the demand arm keys on, so this line is the seed's standing proof that the arm
@@ -231,7 +243,7 @@ EOF
   # --- the invariant index the markers' citations resolve against ---
   {
     printf '# Invariant index\n\n| ID | What it binds |\n|----|---------------|\n'
-    for i in 801 802 803 804 805 806 807 808 810 811; do printf '| I%s | seeded |\n' "$i"; done
+    for i in 801 802 803 804 805 806 807 808 810 811 812; do printf '| I%s | seeded |\n' "$i"; done
   } > "$d/docs/invariant-index.md"
 
   # --- one schema, so the second table is non-empty ---
@@ -256,8 +268,8 @@ fi
 # --- controlB: the synthetic seed renders and round-trips --------------------
 seed "$TMP/controlB"
 outB="$(render_in "$TMP/controlB")"
-if ! grep -q "9 cross-file vocabular(ies), 1 schema enum(s)" <<<"$outB"; then
-  note "FIXTURE BROKEN: the synthetic seed did not render 9 vocabularies and 1 schema enum."
+if ! grep -q "10 cross-file vocabular(ies), 1 schema enum(s)" <<<"$outB"; then
+  note "FIXTURE BROKEN: the synthetic seed did not render 10 vocabularies and 1 schema enum."
   printf '%s\n' "$outB" | sed 's/^/      /' | head -6
   exit 1
 fi
@@ -533,7 +545,7 @@ fi
 seed "$TMP/n1"
 if mutate "$TMP/n1/$MAP" '/^# --- I802: the kind vocabulary is one set/d'; then
   green_check "n1  block-scope    two adjacent blocks, one field each" "$TMP/n1" \
-    "9 cross-file vocabular(ies), 1 schema enum(s)" '| ledger statuses |' '| kinds |'
+    "10 cross-file vocabular(ies), 1 schema enum(s)" '| ledger statuses |' '| kinds |'
 else
   note "SKIP  n1 -- sed matched nothing; no mutation occurred"; rc=1
 fi

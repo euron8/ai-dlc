@@ -414,6 +414,209 @@ sprint_of() { # sprint_of <snapshot-line>  -> the .sprint the guard recorded
 # cannot pass on agreement alone.
 printf -- '- **sprint_id:** 291\n' > "$CONSUMER/_bmad-output/pipeline-snapshot.md"
 
+# --- 13e. THE RENDERED DEFINITION: subagent_type rewrite, name and model deleted ----
+# A definition's `effort:` is APPLIED by the harness where the guard's prompt sentence is
+# only advisory, so this is the binding half of the release. Three properties, and all
+# three must hold together or the dispatch silently loses its effort:
+#
+#   * `subagent_type` names the role, so the harness selects `.claude/agents/<role>.md`;
+#   * `name` is GONE, because a name routes the spawn to the in-process teammate runner,
+#     which spreads the definition's model and NOT its effort;
+#   * `model` is GONE, because an explicit param outranks the definition's `model:`.
+#
+# EACH IS ASSERTED SEPARATELY AND THE WRONG FIXES ARE SEEDED BELOW. A single arm reading
+# "the type was rewritten" passes against a guard that rewrites the type and leaves the
+# name — which is the shape that reads as working and delivers nothing.
+defout() { raw "$CONSUMER" "$1"; }
+defui()  { defout "$1" | jq -c '.hookSpecificOutput.updatedInput' 2>/dev/null; }
+
+DEFJ="$(mkjson Agent defok sonnet)"
+[ "$(defui "$DEFJ" | jq -r '.subagent_type // "<unset>"')" = "defok" ] \
+  && ok "definition-bound: subagent_type rewritten to the role (the harness selects .claude/agents/defok.md)" \
+  || bad "definition-bound: subagent_type is '$(defui "$DEFJ" | jq -r '.subagent_type // "<unset>"')', expected 'defok' — the definition is not selected and its effort cannot apply"
+defui "$DEFJ" | jq -e 'has("name") | not' >/dev/null 2>&1 \
+  && ok "  and \`name\` is DELETED (a name routes to the teammate runner, which drops effort)" \
+  || bad "  \`name\` SURVIVED the rewrite: $(defui "$DEFJ" | jq -r '.name') — the spawn goes to the runner that ignores the definition's effort"
+defui "$DEFJ" | jq -e 'has("model") | not' >/dev/null 2>&1 \
+  && ok "  and \`model\` is DELETED (an explicit param outranks the definition's model:)" \
+  || bad "  \`model\` SURVIVED the rewrite: $(defui "$DEFJ" | jq -r '.model') — two live sources for one value"
+# The prompt is amended, never replaced — same property the model path asserts.
+defui "$DEFJ" | jq -e '.prompt | contains("team-roles/defok.md")' >/dev/null 2>&1 \
+  && ok "  and the original prompt/role binding survives the rewrite" \
+  || bad "  the rewrite dropped the prompt — the guard is replacing the input, not amending it"
+
+# THE LEDGER RECORDS THE ACT. `name_stripped` carries the deleted value, so a reader can
+# still identify the dispatch; `model_bound` is read from the DEFINITION FILE, not from
+# settings, because the file is what the harness selects and the two diverge on a stale
+# render. `tool_use_id` is the join key Check 22's effort arm resolves on.
+rm -f "$LEDGER"
+DEFJT="$(printf '%s' "$DEFJ" | jq -c '. + {tool_use_id: "toolu_FIXTURE_1"}')"
+raw "$CONSUMER" "$DEFJT" >/dev/null
+[ "$(lfield .definition_bound)" = "true" ] \
+  && ok "  ledger records definition_bound=true" \
+  || bad "  ledger recorded definition_bound='$(lfield .definition_bound)', expected true"
+[ "$(lfield .name_stripped)" = "teammate-s291-1" ] \
+  && ok "  ledger records the name it deleted (name_stripped), so the dispatch stays identifiable" \
+  || bad "  name_stripped='$(lfield .name_stripped)', expected 'teammate-s291-1' — the deletion is unrecorded"
+[ "$(lfield .model_bound)" = "opus" ] \
+  && ok "  model_bound is the definition's model: line, which is what the harness applies" \
+  || bad "  model_bound='$(lfield .model_bound)', expected 'opus'"
+[ "$(lfield .tool_use_id)" = "toolu_FIXTURE_1" ] \
+  && ok "  ledger records tool_use_id — the order-free join key Check 22's effort arm needs" \
+  || bad "  tool_use_id='$(lfield .tool_use_id)', expected 'toolu_FIXTURE_1'; without it the effort arm joins on an ORDERED key and mis-pairs two same-role spawns that finish out of order"
+
+# --- 13f. A STALE DEFINITION IS NOT SELECTED --------------------------------
+# A rendered file that no longer projects the config would run the teammate on a value
+# nobody declared. The guard falls back to today's behaviour and SAYS so. Both stale
+# shapes are asserted — model-disagrees and effort-disagrees — because the agreement test
+# is a conjunction and a seed exercising one half leaves the other droppable.
+for _r in defstalemodel defstaleeffort; do
+  _j="$(mkjson Agent "$_r")"
+  [ "$(defui "$_j" | jq -r '.subagent_type // "<unset>"')" = "<unset>" ] \
+    && ok "stale definition ($_r): subagent_type NOT rewritten — a drifted render is never selected" \
+    || bad "stale definition ($_r): the guard selected it anyway (subagent_type=$(defui "$_j" | jq -r '.subagent_type'))"
+  rm -f "$LEDGER"; raw "$CONSUMER" "$_j" >/dev/null
+  [ "$(lfield .definition_stale)" = "true" ] && [ "$(lfield .definition_bound)" = "false" ] \
+    && ok "  and the row says definition_stale=true, definition_bound=false" \
+    || bad "  row recorded stale='$(lfield .definition_stale)' bound='$(lfield .definition_bound)', expected true/false"
+done
+# ...and the drift is REPORTED to the lead, with the remedy named. A silent fallback is
+# how a drifted definition stays drifted.
+# Captured, not piped into `grep -q` — see the I54 note on the absent-definition arm below.
+STALE_CTX="$(raw "$CONSUMER" "$(mkjson Agent defstalemodel)" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null)"
+grep -q 'STALE' <<<"$STALE_CTX" \
+  && ok "  and the lead is told the definition is STALE and how to re-render it" \
+  || bad "  the stale fallback is silent — nothing tells the lead the binding half did not happen"
+
+# --- 13g. AN UNMARKED FILE IS A CONSUMER'S OWN AND IS LEFT ALONE -------------
+# `.claude/agents/` is consumer-writable. The seeded `defunmarked.md` AGREES with settings
+# in every field and differs from a rendered one only by the marker, so this arm can only
+# be satisfied by a guard that keys on the marker — not by one that keys on disagreement.
+[ "$(defui "$(mkjson Agent defunmarked)" | jq -r '.subagent_type // "<unset>"')" = "<unset>" ] \
+  && ok "an UNMARKED .claude/agents file is never selected, even though it agrees with settings" \
+  || bad "the guard selected a file this distribution did not render — the marker is not being read"
+
+# --- 13h. ABSENT DEFINITION: today's behaviour, and the lead is told why -----
+# THE FAIL-OPEN DIRECTION. `subagent_type` must never be rewritten to a name the harness
+# cannot resolve: that ERRORS the spawn, which is worse than mis-binding it.
+ABSJ="$(mkjson Agent defnodef)"
+[ "$(defui "$ABSJ" | jq -r '.subagent_type // "<unset>"')" = "<unset>" ] \
+  && ok "absent definition: subagent_type NOT rewritten (a type the harness cannot resolve errors the spawn)" \
+  || bad "absent definition: the guard rewrote subagent_type to a definition that does not exist"
+[ "$(defui "$ABSJ" | jq -r '.model // "<unset>"')" = "opus" ] \
+  && ok "  and today's behaviour still applies — the model is bound as before" \
+  || bad "  the absent branch stopped binding the model: got '$(defui "$ABSJ" | jq -r '.model // "<unset>"')'"
+rm -f "$LEDGER"; raw "$CONSUMER" "$ABSJ" >/dev/null
+[ "$(lfield .definition_bound)" = "false" ] && [ "$(lfield .definition_stale)" = "false" ] \
+  && ok "  row records definition_bound=false with definition_stale=false — absent and drifted are different facts" \
+  || bad "  row recorded bound='$(lfield .definition_bound)' stale='$(lfield .definition_stale)', expected false/false"
+# NO `| grep -q` OFF A PIPELINE (I54): grep leaves at its first match while the writer is
+# still pushing, and under pipefail the pipeline answers with the writer's EPIPE — NOT-FOUND
+# on input that contains the pattern, above a size threshold and with no symptom. Capture,
+# then feed the reader a here-string.
+ABS_CTX="$(raw "$CONSUMER" "$ABSJ" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null)"
+grep -q 'no rendered .claude/agents/defnodef.md' <<<"$ABS_CTX" \
+  && ok "  and the lead is told the definition is MISSING and given the render command" \
+  || bad "  the missing definition is not reported — the lead cannot see that the effort binding did not happen"
+
+# A role whose settings declare NO effort, rendered with no `effort:` line: absent must
+# AGREE with absent. Without this, every such render reads as stale and binds nothing.
+[ "$(defui "$(mkjson Agent defnoeffort)" | jq -r '.subagent_type // "<unset>"')" = "defnoeffort" ] \
+  && ok "a definition with no effort: line AGREES with a role declaring no effort (absent == absent)" \
+  || bad "a role declaring no effort was called stale against a render that correctly omits the key"
+
+# --- 13i. IDEMPOTENCE ON THE DEFINITION PATH --------------------------------
+# The rewrite emits `allow` to carry `updatedInput`, so it must not fire on a dispatch
+# already in the target shape, or every correct call has its approval posture changed.
+IDEMDEF="$(jq -nc --arg p "Your operating contract is \`.claude/team-roles/defok.md\`.
+
+Your configured reasoning effort for this role is high. Operate at that level." \
+  '{tool_name:"Agent",tool_input:{subagent_type:"defok",prompt:$p}}')"
+expect_untouched "$CONSUMER" "$IDEMDEF" \
+  "a dispatch already carrying the rewritten type, no name and no model"
+
+# ...and the three conditions are read SEPARATELY. A guard that keyed idempotence on the
+# type alone would leave a surviving `name` in place — the exact state that drops effort —
+# while reporting nothing. Each near-miss differs from the idempotent call by ONE property.
+IDEM_NAME="$(printf '%s' "$IDEMDEF" | jq -c '.tool_input.name = "surviving-name"')"
+[ -n "$(raw "$CONSUMER" "$IDEM_NAME")" ] \
+  && ok "  a correct type WITH a surviving name still fires (the name is what drops the effort)" \
+  || bad "  a dispatch carrying a name was read as already-correct — it routes to the teammate runner and the definition's effort never applies"
+IDEM_MODEL="$(printf '%s' "$IDEMDEF" | jq -c '.tool_input.model = "opus"')"
+[ -n "$(raw "$CONSUMER" "$IDEM_MODEL")" ] \
+  && ok "  a correct type WITH a surviving model param still fires (the param outranks the definition)" \
+  || bad "  a dispatch carrying a model param was read as already-correct — two live sources for one value"
+
+# --- 13j. MUTANTS: the three wrong fixes, each seeded and asserted RED -------
+# Every arm above is PRESENCE-shaped, so a guard that emits nothing fails them. These
+# prove the arms discriminate between the RIGHT fix and three plausible wrong ones — each
+# of which passes at least one arm above and is caught only by the arm it breaks.
+mut_drive() { # mut_drive <script> <json> -> updatedInput
+  printf '%s' "$2" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" 2>/dev/null \
+    | jq -c '.hookSpecificOutput.updatedInput' 2>/dev/null
+}
+DEFCTL="$WORK/guard-def-control.sh"; cp "$HOOK" "$DEFCTL"
+[ "$(mut_drive "$DEFCTL" "$DEFJ" | jq -r '.subagent_type // "<unset>"')" = "defok" ] \
+  && ok "MUTANT CONTROL: an unmutated copy still rewrites the type (a mutant's silence is the mutation, not the copy)" \
+  || bad "MUTANT CONTROL is dead — a copy of the guard behaves differently from the original, so the kills below are unearned"
+
+# WRONG FIX 1: rewrite the type, keep the name. Passes the type arm; the spawn still goes
+# to the teammate runner and the effort is still dropped.
+M1="$WORK/guard-keepname.sh"
+sed "s@'. + {subagent_type: \$t} | del(.name) | del(.model)'@'. + {subagent_type: \$t} | del(.model)'@" "$HOOK" > "$M1"
+if cmp -s "$HOOK" "$M1"; then
+  bad "MUTANT keepname matched nothing (cmp -s guard) — the name-deletion arm proves nothing"
+else
+  if [ "$(mut_drive "$M1" "$DEFJ" | jq -r '.name // "<unset>"')" != "<unset>" ] \
+     && [ "$(mut_drive "$M1" "$DEFJ" | jq -r '.subagent_type // "<unset>"')" = "defok" ]; then
+    ok "MUTANT keepname: rewriting the type WITHOUT deleting the name leaves the spawn on the teammate runner — the name arm is what catches it, and the type arm cannot"
+  else
+    bad "MUTANT keepname survived: the name arm is not load-bearing"
+  fi
+fi
+
+# WRONG FIX 2: delete the name, never rewrite the type. Passes the name arm; the harness
+# selects no definition at all, so nothing binds the effort.
+M2="$WORK/guard-notype.sh"
+sed "s@'. + {subagent_type: \$t} | del(.name) | del(.model)'@'del(.name) | del(.model)'@" "$HOOK" > "$M2"
+if cmp -s "$HOOK" "$M2"; then
+  bad "MUTANT notype matched nothing (cmp -s guard) — the type-rewrite arm proves nothing"
+else
+  if [ "$(mut_drive "$M2" "$DEFJ" | jq -r '.subagent_type // "<unset>"')" = "<unset>" ] \
+     && [ "$(mut_drive "$M2" "$DEFJ" | jq -r '.name // "<unset>"')" = "<unset>" ]; then
+    ok "MUTANT notype: deleting the name WITHOUT rewriting the type selects no definition — the type arm is what catches it, and the name arm cannot"
+  else
+    bad "MUTANT notype survived: the type arm is not load-bearing"
+  fi
+fi
+
+# WRONG FIX 3: rewrite whenever the file exists, marker and agreement unread. This is the
+# dangerous one: it selects a consumer's hand-written agent AND a drifted render, and it
+# passes every arm in 13e.
+M3="$WORK/guard-noagree.sh"
+sed 's/^if \[ -r "\$DEF_FILE" \] && grep -qF "\$DEF_MARKER" "\$DEF_FILE" 2>\/dev\/null; then$/if [ -r "$DEF_FILE" ]; then/' "$HOOK" > "$M3"
+if cmp -s "$HOOK" "$M3"; then
+  bad "MUTANT nomarker matched nothing (cmp -s guard) — the marker arm proves nothing"
+else
+  if [ "$(mut_drive "$M3" "$(mkjson Agent defunmarked)" | jq -r '.subagent_type // "<unset>"')" = "defunmarked" ]; then
+    ok "MUTANT nomarker: without the marker test the guard binds a teammate to a file this distribution never rendered — 13g is what catches it"
+  else
+    bad "MUTANT nomarker survived: the unmarked file stayed unselected without the marker test, so 13g asserts nothing"
+  fi
+fi
+
+M4="$WORK/guard-nostale.sh"
+sed 's/^  if \[ "\$DEF_MODEL" = "\$EXPECT" \] \&\& \[ "\$DEF_EFFORT" = "\$PIN_EFFORT" \]; then$/  if true; then/' "$HOOK" > "$M4"
+if cmp -s "$HOOK" "$M4"; then
+  bad "MUTANT nostale matched nothing (cmp -s guard) — the staleness arm proves nothing"
+else
+  if [ "$(mut_drive "$M4" "$(mkjson Agent defstaleeffort)" | jq -r '.subagent_type // "<unset>"')" = "defstaleeffort" ]; then
+    ok "MUTANT nostale: without the agreement test a DRIFTED render is selected and the teammate runs at a level nothing declared — 13f is what catches it"
+  else
+    bad "MUTANT nostale survived: the stale definition stayed unselected without the agreement test, so 13f asserts nothing"
+  fi
+fi
+
 # The ledger must never be able to block a spawn.
 rm -rf "$CONSUMER/_bmad-output"
 OUT_RO="$(setmodel "$CONSUMER" "$(mkjson Agent remediator sonnet)")"

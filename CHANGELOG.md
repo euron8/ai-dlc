@@ -15,56 +15,76 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
-## [0.556.0] - 2026-09-12
+<<<<<<< HEAD
+## [0.557.0] - 2026-09-12
 
-### The last entry's receipt ordinal leaked onto every row emitted after the receipt loop
+### A role's configured effort reaches the API call
 
-Batch 92, release 1, one no-`PC` subject. The sweep returned no new PC-backed work — every one
-of the 19 unfiled ids re-derives as adjudicated, and the two ids on consumer branches ahead of
-`main` are both named in `origin/main` release commits — so the subject was taken on this
-session's ranking, the one-liner having arrived from a peer session.
+Batch 92, release 2, shipped alone after `BL-241`'s bootstrapping-file release — nothing here
+touches `preclassify.sh`, `apply.sh`'s classifier, or `ledger-reverify.sh`.
 
-#### `BL-241`
+#### `BL-240`
 
-`ledger-reverify.sh` sets `RSFX` per receipt inside its receipt loop and never reset it after
-`done <<< "$ENTRIES"`, so when the LAST entry the loop processed carried more than one receipt,
-its `[receipt n/n]` suffix was appended by `emit()` to every row produced after the loop:
-`RECEIPTS-UNDECIDED`, which is run-scoped, and every `ENTRY-SWALLOWED` row, which belongs to an
-annotation. Measured on the fixture's seeded ledger with a second receipt appended inside its
-open EOF fence: one `RECEIPTS-UNDECIDED` and seven `ENTRY-SWALLOWED` rows carried `[receipt
-2/2]`, against zero with a one-receipt last entry. The fix is one `RSFX=""` after the loop.
+The gap `BL-240` measured: a definition-less subagent resolves effort from the session's own
+`--effort` launch flag, not by inheriting the parent's, so ai-dlc's per-role `effort` config
+never reached an API call regardless of what the dispatch guard's prompt line claimed.
+`render-agent-definitions` now projects `aiDlcRoles` into one `.claude/agents/<role>.md` per
+role that declares a model — a rendered definition is a harness-native binding, so a
+role-bound dispatch naming it as `subagent_type` runs on its `model:` and its `effort:` both,
+ahead of the session's launch flag. `ai-dlc-dispatch-guard.sh` rewrites the dispatch onto that definition and deletes both
+`name` and `model` from the call, refusing the rewrite when the definition's frontmatter
+disagrees with `aiDlcRoles.<role>` rather than selecting a stale render silently. `name` is
+dropped because passing one routes the spawn to the teammate runner instead of the
+resume-by-id path a definition-bound dispatch depends on, and that runner drops the effort
+half of the binding; a role-bound hand is reached afterward by `SendMessage` to the agent id
+`ListAgents` reports.
 
-The fixture could not express the leak because its seeded ledger ended on a one-receipt entry.
-The seed change is one line — a second `verify:` inside the existing open fence, so
-`PC-FIXTURE-EOF-FENCE` becomes a two-receipt last entry with no reordering and no new heading,
-which the tiny-ledger arm's heading-keyed cut would otherwise have tripped on. Three arms over
-two ledger shapes: shape A (undecided row present) asserts no post-loop row carries an ordinal
-with a control that a non-swallowed row still does; shape B (every `theirs_has` stripped, so
-the undecided bucket is empty) is the one that separates two conditional-reset wrong fixes
-from a real one; shape C asserts every row of a multi-receipt entry that also emits
-`NAMED-UPSTREAM` keeps its own ordinal, which is what catches a reset inside `emit()` — that
-variant clears the leak, drops a legitimate ordinal on `PC-FIXTURE-NAMED-MANUAL`, and left the
-whole fixture green. Six wrong fixes read RED, two correct fixes read GREEN, including
-`case "${ord:-}" in 1/1|"")` after the loop, which the contract listed as wrong and which
-measures correct because `read` clears its variables at EOF. The delete mutant is anchored on
-the fix's comment, not on `^RSFX=""$`, which matches two lines after the fix; deleting both
-crashes the tool under `set -u` and reads as a kill.
+The probe-to-ledger join is the harness's own `tool_use_id`, present in the guard's PreToolUse
+input and written to every subagent's `agent-<id>.meta.json` as `toolUseId`. Censused over the
+1707 meta files on the operator's machine: 1274 named in-process teammates, none carrying
+`toolUseId` (they carry `teamName`); 433 unnamed spawns, 431 carrying it and 2 ad-hoc
+`general-purpose` spawns carrying neither key. A role-bound dispatch is unnamed from this
+release, so the join resolves exactly where Check 22 needs it; the two exceptions are the class
+it never scores. Seeded as two same-role spawns completing in reverse dispatch order, the
+`tool_use_id` join resolves 4 of 4 pairings where a role-plus-latest-timestamp join resolves 2.
 
-The entry's filed receipt was rebuilt twice. As filed it appended its probe entry after the
-open EOF fence, so the text was fenced and never became the loop's last entry; and it read the
-seed's four fields with `set -- $out`, which zsh does not word-split, so under the operator's
-shell it exited 9 and left a fixture world in the temp root on every run. As first rebuilt it
-scored 0 on the fix only because the fixture seed changed in the same commit: against the old
-tool it read 1 with the new seed and 0 with the old, so it measured the seed. It now appends
-its own second receipt to the seeded ledger, reads its fields with `cut`, cleans up under bash
-and zsh, and scores 1/1 on the old tool and 0/0 on the new across both seeds; 1 on a
-comment-only non-fix; 9 only when the tool or seed is absent.
+`ai-dlc-subagent-probe.sh` and gate-validation Check 22 gain the join `BL-019` filed as unmet:
+the probe reads a transcript's `effort` field against the definition it ran under, and Check 22
+asserts agreement with `aiDlcRoles.<role>.effort` for every guard row recording a
+definition-bound dispatch, PENDING where no probe row has matched yet. This closes `BL-019`'s
+"nothing reads it" half — `effort_bound` now has a reader — without rotating that entry, which
+stays open until its own receipt goes 0.
 
-The delivery-gap fence in `docs/plans/graph-ledger-full-drain.md` carried a literal `<id>`
-placeholder that a hand running the block verbatim searched for as a string; it now loops over
-the derived DISCHARGED set with an impossible-id control.
+The tip adversary found four more before the merge. The probe's `v:3` header declared a
+population narrowing no line performed; it now says what the code does — every readable
+spawn writes a row, `definition` and `tool_use_id` say what kind, and Check 22 scores only rows
+that join a definition-bound ledger row. Two resident comments deferred a census to a
+CHANGELOG that did not carry it, and the claim they deferred was false by two ad-hoc spawns;
+the census is above. `I111`'s case-arm grammar required `) ;;` with nothing between, so the
+renderer's `) return 0 ;;` arm was outside the population it named — both the arm and the
+vocabulary extractor now accept a command between the two, the self-probe seeds that shape,
+and a renderer that drops or gains a level fails the push. `BL-240`'s receipt seeded a dispatch
+with no `model` param, so a guard that kept the param passed its `has("model")` assertion;
+the seed now carries one. And the `subagent-probe` fixture wrote no meta sidecar, so a probe
+reading the join key by the wrong spelling passed it and turned every effort row `PENDING`;
+three fires now differ only in the meta and assert the two keys.
 
-## [0.555.0] - 2026-09-12
+`BL-242` files a finding from the `BL-241` re-verification: the `ledger-reverify` fixture's
+mutant-wreckage guard lost its only subject when the delete mutation was re-anchored on the
+reset's comment, so its branch fires zero times on every shipped mutant. Not fixed; a vacuous
+guard is the loaded gun the mechanism rules name.
+
+The first cut of `I111` called a six-stage pipeline once per shaped file and cost 95 forks,
+which the fork-budget fixture refused; it is one recursive grep over the population now and
+costs 11, and `FORK_BUDGET` is raised only by the 30 the new script and fixture directory
+account for. The `vocabulary-index` fixture's synthetic seed gains an owner and a marker for
+the `effort-levels` extractor, because the renderer refuses an extractor no marker names.
+
+`SKILL.md` Rule 19 gains (c): a role-bound dispatch passes no `name`. `implementation.md` Step 2
+and the QUICKSTART "How Teammates Get Their Model" section cite the same renderer and guard
+rather than restating the binding. `enforcement-map.yaml`'s `dispatch-model-binding` row gains
+the renderer as a second enforcer and an `effort-applied` check pointing at Check 22's arm.
+>>>>>>> worktree-agent-aa67e6bce3c30ea38
 
 ### A receipt written mid-sentence was invisible to the ledger closer
 
@@ -122,6 +142,57 @@ express it.
 Operator-filed: a role's configured effort is never applied to its subagent. Receipt drives the
 dispatch guard and reads STILL-LIVE.
 
+## [0.556.0] - 2026-09-12
+
+### The last entry's receipt ordinal leaked onto every row emitted after the receipt loop
+
+Batch 92, release 1, one no-`PC` subject. The sweep returned no new PC-backed work — every one
+of the 19 unfiled ids re-derives as adjudicated, and the two ids on consumer branches ahead of
+`main` are both named in `origin/main` release commits — so the subject was taken on this
+session's ranking, the one-liner having arrived from a peer session.
+
+#### `BL-241`
+
+`ledger-reverify.sh` sets `RSFX` per receipt inside its receipt loop and never reset it after
+`done <<< "$ENTRIES"`, so when the LAST entry the loop processed carried more than one receipt,
+its `[receipt n/n]` suffix was appended by `emit()` to every row produced after the loop:
+`RECEIPTS-UNDECIDED`, which is run-scoped, and every `ENTRY-SWALLOWED` row, which belongs to an
+annotation. Measured on the fixture's seeded ledger with a second receipt appended inside its
+open EOF fence: one `RECEIPTS-UNDECIDED` and seven `ENTRY-SWALLOWED` rows carried `[receipt
+2/2]`, against zero with a one-receipt last entry. The fix is one `RSFX=""` after the loop.
+
+The fixture could not express the leak because its seeded ledger ended on a one-receipt entry.
+The seed change is one line — a second `verify:` inside the existing open fence, so
+`PC-FIXTURE-EOF-FENCE` becomes a two-receipt last entry with no reordering and no new heading,
+which the tiny-ledger arm's heading-keyed cut would otherwise have tripped on. Three arms over
+two ledger shapes: shape A (undecided row present) asserts no post-loop row carries an ordinal
+with a control that a non-swallowed row still does; shape B (every `theirs_has` stripped, so
+the undecided bucket is empty) is the one that separates two conditional-reset wrong fixes
+from a real one; shape C asserts every row of a multi-receipt entry that also emits
+`NAMED-UPSTREAM` keeps its own ordinal, which is what catches a reset inside `emit()` — that
+variant clears the leak, drops a legitimate ordinal on `PC-FIXTURE-NAMED-MANUAL`, and left the
+whole fixture green. Six wrong fixes read RED, two correct fixes read GREEN, including
+`case "${ord:-}" in 1/1|"")` after the loop, which the contract listed as wrong and which
+measures correct because `read` clears its variables at EOF. The delete mutant is anchored on
+the fix's comment, not on `^RSFX=""$`, which matches two lines after the fix; deleting both
+crashes the tool under `set -u` and reads as a kill.
+
+The entry's filed receipt was rebuilt twice. As filed it appended its probe entry after the
+open EOF fence, so the text was fenced and never became the loop's last entry; and it read the
+seed's four fields with `set -- $out`, which zsh does not word-split, so under the operator's
+shell it exited 9 and left a fixture world in the temp root on every run. As first rebuilt it
+scored 0 on the fix only because the fixture seed changed in the same commit: against the old
+tool it read 1 with the new seed and 0 with the old, so it measured the seed. It now appends
+its own second receipt to the seeded ledger, reads its fields with `cut`, cleans up under bash
+and zsh, and scores 1/1 on the old tool and 0/0 on the new across both seeds; 1 on a
+comment-only non-fix; 9 only when the tool or seed is absent.
+
+The delivery-gap fence in `docs/plans/graph-ledger-full-drain.md` carried a literal `<id>`
+placeholder that a hand running the block verbatim searched for as a string; it now loops over
+the derived DISCHARGED set with an impossible-id control.
+
+## [0.555.0] - 2026-09-12
+=======
 ## [0.554.0] - 2026-09-12
 
 ### A closed sprint whose snapshot still said the deploy had not started

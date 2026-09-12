@@ -42,7 +42,8 @@ printf 'version: 0.70.0\ncommit: fixture\n' > "$CONSUMER/.claude/.ai-dlc-version
 # `model` is a KEY into `aiDlcModels`, and the guard injects the KEY as the Agent
 # tool's `model` parameter — that parameter is an enum and rejects a full model
 # string. `effort` has no tool parameter at all, so the guard appends a `/effort`
-# directive to the dispatch prompt, the only channel that reaches the subagent.
+# directive to the dispatch prompt; the rendered definition under .claude/agents/ is the
+# channel that binds it (see the RENDERED AGENT DEFINITIONS block below).
 cat > "$CONSUMER/.claude/settings.json" <<'SETTINGS'
 {
   "aiDlcModels": {
@@ -57,7 +58,13 @@ cat > "$CONSUMER/.claude/settings.json" <<'SETTINGS'
     "dev-escalated":    { "model": "opus",   "effort": "high" },
     "architect":        { "model": "ghostkey", "effort": "high" },
     "tea":              { "effort": "high" },
-    "badeffort":        { "model": "sonnet", "effort": "reallyhigh" }
+    "badeffort":        { "model": "sonnet", "effort": "reallyhigh" },
+    "defok":            { "model": "opus",   "effort": "high" },
+    "defstalemodel":    { "model": "opus",   "effort": "high" },
+    "defstaleeffort":   { "model": "opus",   "effort": "high" },
+    "defunmarked":      { "model": "opus",   "effort": "high" },
+    "defnodef":         { "model": "opus",   "effort": "high" },
+    "defnoeffort":      { "model": "opus" }
   },
   "env": { "ENABLE_PROMPT_CACHING_1H": "1" }
 }
@@ -80,6 +87,74 @@ ROLE
 for r in gate-adjudicator remediator analyst dev dev-escalated architect tea badeffort nocfg; do
   render_role "$r"
 done
+
+# --- RENDERED AGENT DEFINITIONS ------------------------------------------------
+# `.claude/agents/<role>.md`, the projection of `aiDlcRoles.<role>` that the HARNESS
+# reads. The guard binds a role's `subagent_type` to one of these and strips `name` and
+# `model`, because a definition's `effort:` is applied by the harness where the guard's
+# prompt sentence is only advisory.
+#
+# EVERY DEFINITION BELONGS TO A ROLE NO OTHER ARM USES, AND THAT IS THE POINT. The
+# absent-definition branch is "today's behaviour", so every pre-existing arm in run.sh IS
+# its regression test — attaching a definition to `gate-adjudicator` or `dev` would flip
+# those arms to the new path and delete the coverage of the old one in the same change,
+# leaving the fail-open branch asserted by nothing. The `def*` roles below carry the new
+# branch; the roles above carry the old one; neither can be dropped without an arm going
+# red.
+#
+# THE FORMAT IS SEEDED HERE AND THE RENDERER IS NOT RUN, deliberately. This fixture drives
+# the GUARD, and a seed produced by the renderer would only establish that the guard
+# accepts whatever that renderer emits — the reader agreeing with its own writer, which is
+# the seeding defect `fixture-mutants.md` names. The bytes below are the format the guard
+# is contracted to read; if the renderer ever stops emitting them, the guard's own arms
+# here stay honest and the renderer's own fixture is where that divergence shows.
+mkdir -p "$CONSUMER/.claude/agents"
+DEF_MARKER='<!-- AI/DLC GENERATED: rendered by scripts/ai-dlc/render-agent-definitions.sh from .claude/settings.json aiDlcRoles.<role>. Edit the settings entry, then re-render. -->'
+render_def() {            # render_def <name> <model-key> [effort]
+  {
+    printf -- '---\n'
+    printf 'name: %s\n' "$1"
+    printf 'description: AI/DLC role %s — rendered from aiDlcRoles.%s; do not edit by hand\n' "$1" "$1"
+    printf 'model: %s\n' "$2"
+    [ -n "${3-}" ] && printf 'effort: %s\n' "$3"
+    printf -- '---\n'
+    printf '%s\n' "$DEF_MARKER"
+    printf 'Your operating contract is `.claude/team-roles/%s.md`. Read it and follow it as your\n' "$1"
+    printf 'FIRST action before any other work.\n'
+  } > "$CONSUMER/.claude/agents/$1.md"
+}
+
+for r in defok defstalemodel defstaleeffort defunmarked defnodef defnoeffort; do
+  render_role "$r"
+done
+
+# AGREES on both keys -> BOUND.
+render_def defok opus high
+
+# STALE on MODEL, effort agreeing.
+render_def defstalemodel sonnet high
+
+# STALE on EFFORT, model agreeing. BOTH stale shapes are seeded because the agreement test
+# is a conjunction: a seed that only ever disagreed on model leaves the effort half
+# unexercised, and dropping that half would go unnoticed.
+render_def defstaleeffort opus low
+
+# A role whose settings entry declares NO effort, rendered with no `effort:` line. The
+# empty-to-empty comparison must AGREE — the renderer omits the key for exactly this case,
+# so a comparison that treated absent-vs-absent as a disagreement would call every such
+# render stale and bind none of them.
+render_def defnoeffort opus
+
+# UNMARKED: a consumer's own hand-written agent sharing a role name. The guard must leave
+# it strictly alone rather than select a body this distribution did not write. Byte-identical
+# to a rendered one EXCEPT for the marker, and it AGREES with settings — so the arm that
+# skips it can only be keyed on the marker, never on disagreement.
+{
+  printf -- '---\nname: defunmarked\ndescription: a consumer wrote this by hand\nmodel: opus\neffort: high\n---\n'
+  printf 'Hand-written. No generated marker.\n'
+} > "$CONSUMER/.claude/agents/defunmarked.md"
+
+# NO definition at all for `defnodef`, nor for tea/architect/badeffort/nocfg.
 
 # A consumer whose settings.json carries NO aiDlcRoles block at all — a file that
 # predates it, or was hand-trimmed. Nothing resolves for any role, so the guard must

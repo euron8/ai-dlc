@@ -33,12 +33,17 @@ Spawn the following teammates using role files in `.claude/team-roles/`.
 Each spawn MUST bind the FULL role contract, not just the model
 (SKILL.md Rule 19):
 
-**(a) Model.** Every Agent tool invocation MUST include the `model`
-parameter, set to `aiDlcRoles.<role>.model` in `.claude/settings.json` —
-do NOT hardcode a role-to-model table here. That key is what the parameter
-takes; `aiDlcModels` maps it to the model string. The role file states no
-model of its own. Omitted `model` inherits from the parent conversation
-and bypasses the role contract.
+**(a) Model.** Every Agent tool invocation dispatching a role with a
+rendered `.claude/agents/<role>.md` MUST name that role as
+`subagent_type`; the definition is the binding for both model and
+effort (SKILL.md Rule 19(a)), and the dispatch guard deletes any
+`model` param on that path rather than injecting one. For a role with
+no matching definition, the `model` parameter MUST still be set
+explicitly, to `aiDlcRoles.<role>.model` in `.claude/settings.json`, as
+the dispatch-guard-enforced net on that fallback path — do NOT
+hardcode a role-to-model table here. Omitted `model` on the fallback
+path inherits from the parent conversation and bypasses the role
+contract.
 
 **(b) Role contract.** Every dispatch prompt MUST carry the standing
 line — byte-identical across dispatches, in the shared block (see
@@ -48,8 +53,13 @@ action before any other work."* The subagent reads its own
 identity/ownership/constraints/escalation from that file (Rule 19(b));
 the lead does not restate them per dispatch.
 
-Violation of (a) or (b) fails gate-validation Check 22 on detection at
-retro. Per SKILL.md Rule 19.
+**(c) No `name`.** A role-bound dispatch MUST NOT pass a `name`
+parameter (SKILL.md Rule 19(c)) — doing so drops the definition's
+effort binding. Reach the spawned hand afterward by `SendMessage` to its
+`ListAgents` agent id.
+
+Violation of (a), (b), or (c) fails gate-validation Check 22 on
+detection at retro. Per SKILL.md Rule 19.
 
 **Pre-dispatch routing (Rule 28).** Before dispatching for any story,
 the lead MUST inspect the story's frontmatter for a **routing tag** and,

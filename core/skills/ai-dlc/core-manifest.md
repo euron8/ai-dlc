@@ -157,6 +157,7 @@ core_manifest:
   - skills/ai-dlc-setup/**
   - skills/ai-dlc-update/**
   - scripts/ai-dlc/*
+  - fixtures/agent-definition-render/**
   - fixtures/adversarial-citation/**
   - fixtures/apply-drift-after-write/**
   - fixtures/apply-drift-refile/**

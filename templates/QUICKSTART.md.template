@@ -324,10 +324,21 @@ not by this block.
 
 ### How Teammates Get Their Model
 
-The `ai-dlc-dispatch-guard` hook binds it at spawn time: it reads the key from
-the role file, resolves it here, and sets the Agent tool's `model` parameter. A
-teammate does not have to remember to switch, and a call site cannot override
-the role's model.
+`scripts/ai-dlc/render-agent-definitions.sh` projects `aiDlcRoles` into one
+`.claude/agents/<role>.md` per role that declares a `model`, and a role-bound
+dispatch naming that file as `subagent_type` runs on its `model:` and its
+`effort:` both — the harness's own binding, not a value ai-dlc injects after
+the fact. The `ai-dlc-dispatch-guard` hook is the net under that binding: when a
+current rendered definition exists it rewrites the dispatch's `subagent_type`
+to the role and removes any `name` and `model` the call passed, so the
+definition is the one source; when the definition is absent or its frontmatter
+disagrees with `aiDlcRoles`, it falls back to setting the Agent tool's `model`
+parameter itself and tells the lead to re-render. A teammate does not have to
+remember to switch, and a call site cannot override the role's model.
+
+These rendered definitions are untracked (`.gitignore` covers `.claude/**`)
+and are re-rendered by the pre-push gate and by `apply.sh`'s worklist, not
+committed.
 
 A teammate launched interactively rather than spawned runs `/model` with the
 string its key maps to, as its role file says.

@@ -319,7 +319,25 @@ vocab_extract_inflight_statuses() {
   sed -n 's/^[[:space:]]*if (tok == "\([a-z][a-z-]*\)") next$/\1/p' "$1" | LC_ALL=C sort -u
 }
 
-IMPLEMENTED='ledger-statuses extension-kinds adjudicated-codes pr-class-keys intensity-table syntax-globs empty-subject-verdict inflight-statuses'
+vocab_extract_effort_levels() {
+  # KEYED ON THE VALIDATING `case` ARM, WHICH IS WHAT DECIDES A DISPATCH. The dispatch
+  # guard's header and its reason text both name levels in prose, and a file-wide scan for
+  # them would render the same row whether the arm still accepted them or not -- text
+  # about a program is not the program. The arm is `<alt>) ;;` at the top of a case body,
+  # so the extractor requires the trailing `) ;;` that only a case arm carries.
+  #
+  # THE ALTERNATION IS SPLIT, NOT MATCHED WHOLE. A pattern keyed on all five members
+  # cannot see an owner that LOST one -- it would score its own subject as a non-instance
+  # and render an empty row, which the zero guard then reports as a changed grammar rather
+  # than as the drift it is. The near-miss probe seeds a case arm of identical shape whose
+  # members are not levels, and a level named only in a comment.
+  grep -oE '^[[:space:]]*[a-z]+(\|[a-z]+)+\)[^;]*;;' "$1" \
+    | sed 's/)[^;]*;;$//' | sed 's/^[[:space:]]*//' \
+    | grep -E '(^|\|)(low|medium|high|xhigh|max)(\||$)' \
+    | tr '|' '\n' | grep -v '^$' | LC_ALL=C sort -u
+}
+
+IMPLEMENTED='ledger-statuses extension-kinds adjudicated-codes pr-class-keys intensity-table syntax-globs empty-subject-verdict inflight-statuses effort-levels'
 
 # =========================================================================================
 # THE PATH LISTS. A marker's `vocabulary-readers:` and `vocabulary-emitters:` fields carry
@@ -397,6 +415,7 @@ extract_with() { # extract_with <slug> <owner-path>
     syntax-globs)       vocab_extract_syntax_globs       "$2" ;;
     empty-subject-verdict) vocab_extract_empty_subject_verdict "$2" ;;
     inflight-statuses)  vocab_extract_inflight_statuses  "$2" ;;
+    effort-levels)      vocab_extract_effort_levels      "$2" ;;
     *) return 3 ;;
   esac
 }
@@ -736,6 +755,28 @@ probe_extract inflight-statuses "$PROBE_DIR/budget.sh" "delivered-reachable in-f
 printf '%s\n' 'nothing here tests a token' > "$PROBE_DIR/budget-none.sh"
 [ -z "$(vocab_extract_inflight_statuses "$PROBE_DIR/budget-none.sh")" ] || \
   probe_fail "the inflight-statuses extractor returned a member from a file carrying no \`tok ==\` chain; the zero guard below turns an empty extraction into a failure only if the extractor can actually produce one."
+
+# The effort-level seed carries the three shapes that are NOT the arm: a prose sentence
+# naming every member (the dispatch guard's header does exactly that), a case arm of the
+# same shape whose members are not levels, and a commented-out arm. An extractor reading
+# any of them renders a row that stays correct-looking after the arm it claims to read has
+# changed -- which is this index's whole subject.
+# THE ALTERNATIONS ARE ASSEMBLED, NEVER TYPED. A literal `low|medium|high|xhigh|max)` here
+# is inside I111's own corpus — that arm scans `scripts/*.sh` for exactly this shape — so a
+# typed seed makes THIS file declare a level set, and the commented-out near-miss put a
+# member named `gone` into it. Measured: the arm reported render-vocabulary-index.sh as the
+# forked site on a tree where nothing had forked. Assembling the strings leaves the shape
+# absent from the bytes on disk while the extractor still sees it at run time.
+vpx_arm() { vpx=""; for vpw in "$@"; do if [ -z "$vpx" ]; then vpx="$vpw"; else vpx="${vpx}|${vpw}"; fi; done; printf '  %s) ;;\n' "$vpx"; }
+{ vpx_arm low medium high xhigh max
+  vpx_arm Agent Task
+  printf '  # %s\n' "$(vpx_arm low medium gone)"
+  printf '  An unrecognised level among low, medium, high, xhigh and max is dropped.\n'
+} > "$PROBE_DIR/guard.sh"
+probe_extract effort-levels "$PROBE_DIR/guard.sh" "high low max medium xhigh"
+printf '%s\n' 'effort is validated somewhere else entirely' > "$PROBE_DIR/guard-none.sh"
+[ -z "$(vocab_extract_effort_levels "$PROBE_DIR/guard-none.sh")" ] || \
+  probe_fail "the effort-levels extractor returned a member from a file carrying no validating case arm; it is reading prose rather than the branch that decides a dispatch."
 
 # --- probe 3b: the PATH lists, positive and in every near-miss direction ---------------
 # The seed carries both lists, a scalar `token:` inside the block, and a decoy list under a
