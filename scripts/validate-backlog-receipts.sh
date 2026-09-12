@@ -169,13 +169,26 @@ if [ "${1:-}" = "--score-one" ]; then
   }
   trap cleanup_trees EXIT INT TERM
 
+  # `git worktree add` TAKES A LOCK ON THE PARENT REPOSITORY, so under the pool it can lose a
+  # race and exit non-zero with nothing wrong. A single attempt turns that into a BROKEN
+  # verdict -- a refusal the caller reads as a harness failure -- for a receipt that is
+  # perfectly scorable. Measured under 8-way dispatch: retries are rare and always succeed on
+  # the second attempt. The retry is bounded so a genuinely broken repository still refuses
+  # rather than spinning.
   mktree() { # mktree <suffix> -> echoes a fresh detached worktree at HEAD, or empty
     _d="$W/t/$n.$1"
-    rm -rf "$_d"
-    if git -C "$SR" worktree add --detach -q "$_d" HEAD >/dev/null 2>&1; then
-      printf '%s\n' "$_d" >> "$BR_TREELIST"
-      printf '%s' "$_d"
-    fi
+    _try=0
+    while [ "$_try" -lt 5 ]; do
+      rm -rf "$_d"
+      if git -C "$SR" worktree add --detach -q "$_d" HEAD >/dev/null 2>&1; then
+        printf '%s\n' "$_d" >> "$BR_TREELIST"
+        printf '%s' "$_d"
+        return 0
+      fi
+      _try=$(( _try + 1 ))
+      sleep 1
+    done
+    return 1
   }
 
   wr() { printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$LABEL" "$2" "${3:-paths=}" "${4:-tokens=}" > "$W/out/$n"; }
