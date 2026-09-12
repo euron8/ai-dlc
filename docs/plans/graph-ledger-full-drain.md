@@ -6,6 +6,9 @@
 This section is the ONLY CURRENT STATUS RECORD in this file.** It tells you WHERE THINGS STAND.
 It does not tell you what to do.
 
+**BEFORE ANY OF THAT: THE LEAD DOES NOT RUN THE SWEEP ITSELF. Spawn hands first — action 0 under
+`### NEXT ACTIONS` says how.** `ListAgents`, then one parallel `Agent` block, then read.
+
 **YOUR INSTRUCTIONS ARE FIVE SECTIONS, AND THEY ARE NOT ALL NEXT TO THIS ONE. READ ALL FIVE
 BEFORE ACTING:**
 
@@ -8973,6 +8976,25 @@ at the close of that work was: **stop measuring the pipeline, build the fix.**
 so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
+
+**0. DISPATCH HANDS BEFORE YOU RUN A SINGLE SWEEP COMMAND YOURSELF.** Operator instruction,
+given at batch 90.
+
+   - Your FIRST tool calls are `ListAgents` and then `Agent` spawns, in ONE parallel block:
+     a **sweep hand** (`sonnet`, findings as text) that runs the derive block verbatim and
+     returns the counts, the unfiled list with filing dates, and every control's value; and a
+     **consumer-history hand** (`sonnet`) that reads the READ-ONLY consumer for the state the
+     sweep cannot see — unpushed branches ahead of `main`, the porcelain set, the stamp. Run
+     nothing they are running. Do the read/write boundary check and read the five live sections
+     while they work.
+   - The moment a subject is chosen: **adversary** (`opus`, read-only, no worktree) attacking the
+     DESIGN before it is built, and one **builder** per separable file set (`opus`,
+     `isolation: "worktree"`), from one written contract in the scratchpad, all in ONE spawn
+     block. The lead does not build; the lead writes the contract, collects by content, cuts the
+     release commit, and pings.
+   - Every spawn names its model and the one-clause reason. `fork` ignores `model`; do not use
+     it for a hand whose wrong answer would be silent.
+   - **Never merge while a hand is out**, and never read a hand's idle state as its report.
 
 1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below) AGAINST THE REF THAT CARRIES THE
    LIVE LEDGER, RANK THE UNFILED CANDIDATES, THEN SCOPE BATCH 90 — AND HOW YOU SCOPE IT DEPENDS ON
