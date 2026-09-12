@@ -15,6 +15,80 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.560.0] - 2026-09-12
+
+### A cited obligation is a handle, and a transcript corpus that held nothing fails open
+
+Batch 94, one release, two no-`PC` subjects. The sweep returned no new PC-backed work (live 56,
+unfiled 19, all adjudicated, ledger byte-identical to batch 93's close); the subjects were taken
+on this session's own ranking because the one-liner arrived from a peer session. The two file
+sets have zero overlap and neither touches a bootstrapping file. Three machinery paths are in the
+range (`audit-layer-debt.sh`, `validate-adversarial-convergence.sh`, `validate-steering-budget.sh`),
+derived with the manifest's `machinery:` grammar; zero mode-only changes.
+
+#### `BL-218`
+
+`core/scripts/audit-layer-debt.sh`'s UNDECLARED arm filed a row whose reason CITES an `OWED-` id
+some other row declares in the same bucket as a genuine undeclared obligation, and its printed
+remedy told the adjudicator to declare a second id for work already on the record. The arm now
+acquits a row whose reason carries a token in the DECLARED id set, joined against `owed_entries`
+(the OPEN arm's own key, never an `OWED-` spelling: a citation of an id nothing declares has no
+handle and stays reported).
+
+The entry's corpus blocker had expired: the reference consumer carries a live 471-row register,
+and the arm reports 7 there, exactly one of which cites a declared id. Two keys were built on
+copies and scored before either was committed. Clause scope, the entry's own "adjacent to"
+prescription, acquits 0 of the 7 surviving cue occurrences on that register because the one row's
+cue and citation sit in different sentences; it would have shipped reading as a fix that moves no
+cell. Row scope, the committed key, takes the live corpus 7 → 6, and its cost — a row citing one
+obligation and stating a second in prose goes silent — is seeded and stated rather than assumed.
+Every declared id on that register is discharged (declared and not closed = 0), so a
+`declared - closed` key was built too and refused: it acquits nothing on the only corpus, and a
+row told to re-record a closed debt re-opens finished work under a new id, one step worse than
+the defect.
+
+`core/fixtures/layer-debt-ledger/run.sh` gains the seeds (a resolvable citation, an unresolvable
+one, a genuine obligation, a cue inside a token, a two-obligation row, a discharged citation, a
+closed-but-never-declared citation) and four mutants: the any-token acquittal BL-227 named, a join
+against `closes_owed`, the refused `declared - closed` key, and the fix disabled. Each kills its own
+cells; two seeds exist solely to give M2 and M4 subjects no other mutant moves. Fixture 16 → 29
+assertions. Receipt scored on nine builds and now separates the two candidate keys, which its
+first cut did not; the entry records the table. On the live register the committed key and the
+any-token mutant produce the identical set, so the mutant is killed by seed alone, and the entry
+says so.
+
+#### `BL-219`
+
+`core/scripts/validate-adversarial-convergence.sh` failed CLOSED on a transcript directory that
+was present but yielded no citable record, while failing OPEN in `--cycle-state` on an absent one.
+The entry's headline narrows: `validate-steering-budget.sh --cite` emits two different NOMATCHes
+on exit 2 — files opened and zero records read, versus records read and none carrying the quote —
+and only the first is the absent-corpus case. The second is the S290 fabrication and keeps
+denying; the entry's "more ground truth is worse off" claim is REFUTED for it.
+
+The predicate now prints `NOMATCH-NO-RECORDS` on stdout when files were opened and yielded zero
+non-sidechain records, and `NOMATCH` otherwise, exit 2 on both. The convergence caller captures
+stdout and, in `--cycle-state` only, reports `ADVERSARIAL_CITATION_UNVERIFIABLE` on the token;
+gate mode still denies. No caller parses `--cite` stdout — the other three readers send it to
+`/dev/null` and the escalation validator's redirect order captures stderr, whose lines are
+byte-identical — so their exit codes are unchanged, verified on three corpora each.
+`steer_dir_has_transcript` is untouched; **I92** holds its four copies to one text.
+
+`files.length > 0` is part of the key, found by the adversary before the build: `--since` is
+`invoked_at` from the resolution's own pass file, bounded only by monotonicity, and the corpus
+filter drops whole files by mtime, so a forged future `invoked_at` empties the corpus over a tree
+holding the operator's real message. Without the conjunct the token acquits that (RESOLVED/0);
+with it the shipped validator denies (STALLED/3), same as before. A sidechain-only corpus takes the
+zero-records path and is acquitted; an assistant-only corpus parsed records and stays denied.
+
+`core/fixtures/check-24-adversarial-convergence/run.sh` gains six corpus arms, the
+unbounded-`--since` discriminator, the forged-`invoked_at` arm, three gate arms on
+`divergent-resolved` (an arm on `stalled-resolved` would be vacuous, since arm H denies it
+whatever the corpus says), an unmutated control, and four mutants: the over-broad acquittal, the
+fix disabled, the token on both paths, and the `files.length` conjunct deleted. 130 → 146
+assertions, 52s → 65s. `check-25-steering-conduct` compares that stdout at eleven sites, all on
+record-bearing corpora, and is unchanged. Receipt scored on six builds; the entry records them.
+
 ## [0.559.0] - 2026-09-12
 
 ### The spent-verdict note reaches the title-join row, keyed on its own clause
