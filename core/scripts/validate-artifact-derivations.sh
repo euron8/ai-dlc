@@ -265,6 +265,15 @@ cmd_is_safe() { # $1 command -> 0 safe, 1 refused (reason in REFUSED)
     # and execute a second program; refusing it costs 0 derivations in the corpus (measured
     # below) and a derivation whose script is not in the derivation is not self-contained.
     #
+    # `-e`/`--expression` IS NOT REFUSED AS A FAMILY, and the asymmetry with `-f` is measured
+    # rather than aesthetic. A `-e` argument CAN carry the verb -- `sed -n -e 'w canary' -e
+    # 'p'` writes, and so does `sed -n -e '1{w canary' -e '}'`, where a `-e` pair splits a
+    # brace block -- so the tempting fix is to refuse the option. But the reference corpus
+    # carries 33 legitimate `-e` sed derivations against 0 `-f` ones. So EVERY `-e` and
+    # `--expression` argument is collected and the script grammar runs over EACH of them,
+    # which is also why `{` and `}` RESET command position instead of consuming a character:
+    # a grammar that steps past the brace swallows the `w` immediately after it.
+    #
     # FALSE-POSITIVE SET: 0, over the population this arm actually runs on. Derived by
     # extracting every pipeline segment whose first word is `sed` from every `$ `-prefixed
     # line of the reference consumer's planning artifacts, using THIS function's own

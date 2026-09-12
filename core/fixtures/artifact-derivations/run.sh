@@ -335,6 +335,19 @@ abs_contained sed-w-abspath "sed -n 'w @ABS@' data.txt"
 # even the command's first word. Both write today.
 exec_contained sed-pipe-second "sed -n 'p' data.txt | sed -n 'w canary'"
 exec_contained sed-pipe-after-cat "cat data.txt | sed -n 'w canary'"
+# `{` AND `}` RESET COMMAND POSITION, THEY DO NOT CONSUME IT. A `-e` pair can split a brace
+# block across two script arguments, so the `w` sits immediately after the `{` in the FIRST
+# one. A grammar that treats `{` as a command and steps past the next character swallows the
+# `w` and allows this -- and it writes.
+exec_contained sed-brace-split-e "sed -n -e '1{w canary' -e '}' data.txt"
+# AND EVERY `-e` ARGUMENT IS SCANNED, not just the first. The verb here is in the first of
+# two, which a scan keyed on the LAST script argument misses.
+exec_contained sed-e-first-of-two "sed -n -e 'w canary' -e 'p' data.txt"
+# ALTERNATE `s` DELIMITERS. `s/` is not the only spelling: any character after `s` is the
+# delimiter, so a grammar hard-coding `/` sees no s/// at all and never reaches its flags.
+exec_contained sed-s-comma-delim "sed 's,a,b,w canary' data.txt"
+exec_contained sed-s-letter-delim "sed 'sXaXbXw canary' data.txt"
+exec_contained sed-s-hash-delim  "sed 's#a#b#w canary' data.txt"
 
 # --- H2. `-i` REWRITES THE INPUT, AND A JOINED SUFFIX WITH NO DOT IS THE MISSED FORM ------
 # `sed -i.bak` was refused; `sed -ibak`, `sed -iX`, `sed -nibak` and `sed -ni.bak` were not,
@@ -448,6 +461,24 @@ sed_allowed range-p     "sed -n '1,3p' src/w-forms.txt | wc -l"            "    
 # `p;;w canary` are in the exec set above by way of `bash -c`, where they ARE reachable --
 # but a must-allow seed using either would be asserting about the ban, not about sed.
 sed_allowed not-matched "sed -n '/ZZ_NO_SUCH/p' src/w-forms.txt | wc -l"    "       0" 9
+# `-e` IS NOT REFUSED AS A FAMILY, and this is the arm that holds that open. A `-e` can carry
+# a write verb (seeded as an exec arm above), so the tempting fix is to refuse the option --
+# but the reference consumer's corpus carries 33 legitimate `-e` sed derivations and 0 `-f`
+# ones, measured by `fp-sweep.sh`. `-f` is therefore refused outright while every `-e`
+# argument is COLLECTED and scanned, and these two seeds fail the moment that inverts.
+sed_allowed multi-e      "sed -n -e '1p' -e '3p' src/w-forms.txt | wc -l"    "       2" 9
+sed_allowed joined-e     "sed -n -e'1p' src/w-forms.txt"                     "alpha"   9
+# NOT SEEDED AS A MUST-ALLOW, and stated so the gap is visible rather than found: BSD sed
+# rejects `--expression` outright (`illegal option -- -`, exit 1), so a green must-allow arm
+# for it is unobtainable on this machine and a red one would assert about sed's option parser
+# rather than about this grammar. `sed --expression='w canary'` IS in the verdict-refusal set
+# above, which is the direction that matters -- the grammar collects a long-form script
+# argument, and a consumer on GNU sed gets that coverage.
+# AND THE ALTERNATE DELIMITERS MUST STAY ALLOWED when their flags are read-only. The write
+# forms of the same spellings are exec arms above, so these two separate "parses alternate
+# delimiters" from "refuses anything that is not `s/`".
+sed_allowed s-pipe-delim "sed 's|wow|WOW|' src/w-forms.txt | wc -l"          "       4" 9
+sed_allowed s-comma-del  "sed 's,wow,WOW,g' src/w-forms.txt | wc -l"         "       4" 9
 
 # The refused writers above must not have run, exactly as section C asserts for its own.
 if [ -s "$WORK/src/three-lines.txt" ] && ! [ -e "$WORK/src/three-lines.txt.bak" ]; then
