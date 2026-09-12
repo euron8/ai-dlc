@@ -1809,7 +1809,7 @@ awk -v DASH=' — ' "$(ledger_entry_awk)$(ledger_entry_id_awk)${CLOSE_AWK}"'
 # one refuses it, and the reason is the harm this reports: such an entry already emits a row per
 # anchored receipt, so it is not SILENT in this defects sense and the operator is not being told
 # nothing. Measured across the four corpora, the only entry of that shape is this defects own
-# backlog entry in `docs/backlog.md`.
+# entry in the distribution backlog.
 #
 # TWO MID-LINE RECEIPTS IN ONE ENTRY EMIT ONE ROW, naming the FIRST. The finding is that the entry
 # is silent, which is one fact about the entry; a row per offending line would repeat it.
