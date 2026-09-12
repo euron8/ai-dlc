@@ -37,6 +37,127 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
+### BATCH 89 SHIPPED AS `v0.552.0` AND `v0.553.0`, TWO RELEASES CARRYING THREE PC-BACKED SUBJECTS — AND **THE RESUME BLOCK NAMED TWO OF THEM, BECAUSE THE CONSUMER FILED A THIRD AFTER BATCH 88 CLOSED.** THE SWEEP FOUND IT; READING THE BLOCK WOULD NOT HAVE. **THE DERIVE BLOCK'S OWN SPRINT-REF HEURISTIC IS BROKEN IN TWO INDEPENDENT WAYS AND ITS SUBSET CONTROL FIRED AT 7** — `main` IS THE AUTHORITATIVE LEDGER REF TODAY, MEASURED OVER ALL 22 CONSUMER BRANCHES. ONE REMEDY WAS **REFUTED BY BUILDING IT** AND ONE CANDIDATE'S **LITERAL WORDING WAS WRONG**. THE GAP IS **THREE**, PENDING **3**, AND THE PULL IS **NOT REQUIRED**.
+
+This block replaces the batch-88 record below it. Every figure was re-derived after both merges
+against `origin/main` with controls in the same invocation; re-derive them again rather than
+reading them.
+
+**`VERSION` IS `0.553.0`, SO BATCH 90 RELEASES AS `0.554.0`.** Re-derive `VERSION` and add one.
+Batch 89 merged TWICE — `v0.552.0` at `feb75148` (PR #717) and `v0.553.0` at `98fb460a` (PR #718).
+Release 1 carried `PC-S341-SKILL-MD-SHIPS-REV-PATH-COMMANDS-WITH-NO-SHELL-HAZARD-NOTE` ALONE
+because `SKILL.md` is inside the update skill; release 2 carried
+`PC-S341-AUDIT-LAYER-DEBT-UNDECLARED-ARM-IS-ROW-KEYED-AND-CANNOT-BE-CLEARED` and
+`PC-S341-CONTENT-KEY-DECLARATION-IS-UNSHIPPABLE-SO-EVERY-CONSUMER-PUSH-RUNS-THE-WHOLE-SUITE`.
+All three are cited verbatim in their own release commit messages, each appearing in EXACTLY ONE
+commit with `VERSION` at that commit equal to the release, so `named_absorbed()` attributes all
+three correctly (control: an impossible id returns 0 from the same join). `BL-237` is ROTATED;
+archive moved **144 → 145**, live **94 → 93**.
+
+**THE SWEEP'S REF CHOICE IS WRONG AND THE PLAN'S OWN CONTROL IS WHAT CAUGHT IT.** The derive
+block resolves the consumer's sprint branch with `--sort=-committerdate | head -1`, which picked a
+branch **BEHIND** `main`: the subset control that must return 0 returned **7**. The obvious repair
+— "the last branch ahead of `main`" — picks a branch that carries **no ledger file at all** and
+answers **0 live**, silently. Measured over all 22 consumer branches: **no ref is a superset of
+`main`.** Four carry a ledger and every one is a stale snapshot whose extra ids (22, 17, 52) are
+ALL in `main`'s archive — they predate closes, they are not unmerged filings. **Read the ledger at
+`main` and check ahead-of-main before trusting any branch**; the recency heuristic cannot discover
+that no branch qualifies, and its answer looks exactly like a correct one.
+
+**`PC-S999-NEVER` IS NO LONGER USABLE AS AN IMPOSSIBLE-ID CONTROL ON COMMIT MESSAGES.** It returns
+**3** against `git log -F --grep` — this repo's own prose about that control is committed, which is
+the hazard `CLAUDE.md` records about controls. `PC-S998-NO-SUCH-CANDIDATE-EVER-FILED-B89` was
+verified absent on all four channels before use, beside a positive control of 2.
+
+**THE CONTENT-KEY CANDIDATE'S IMPLIED REMEDY WAS REFUTED BY BUILDING IT, AND BOTH QUESTIONS IT
+LEFT UNVERIFIED DECIDED THE DISPOSITION.** The declaration has **no opinion about
+`_bmad-output/`** — zero matching lines against a control of one for `CHANGELOG`, because
+`.gitignore` ignores that path here so it could never enter the two-tree mutation measurement its
+lines are earned from. Through the shipped filter against the real changed-path set of the filing
+commit: survivors **1 with the declaration and 1 without, byte-identical**. Shipping it would not
+have shortened the push that filed the report. And withholding it is deliberate and recorded —
+shipping it removes 550 paths from the consumer's read-set universe, 8 of them FILES its fixtures
+read as INPUT, and on the worst cell a change to a file **20** fixtures read makes `.changed` come
+back EMPTY and the hook take its **WHOLE-SUITE SKIP**. Three of four options refuted, including
+both that fix the reported symptom. **What shipped is the record, not a behaviour change.**
+
+**A CANDIDATE'S LITERAL REMEDY WORDING IS A HYPOTHESIS TOO.** The layer-debt entry said to subtract
+"exactly as `unowned` does", and `unowned` keys on the `(clause, entry)` PAIR — built that way the
+arm leaves **8**, not 7, because a cue row under one clause cannot be cleared by a declaration
+under another. Same unsatisfiability, one column narrower. An entry-keyed but only-undischarged
+variant removes **0** and is a pure no-op. All three were BUILT and scored; the fixture's new
+mutant kills the pair-keyed one. On the consumer's live 451-row register, md5 verified unchanged by
+every run: **32 → 7**.
+
+**BOTH FILED RECEIPTS WERE CLOSABLE BY NON-FIXES, WHICH IS NOW FOUR CONSECUTIVE BATCHES.** The
+layer-debt receipt accepted a comment naming its own key inside its `awk` window, a suppressed arm
+reporting zero forever, the pair-keyed variant, and the name inside a string literal — and did NOT
+close on the correct fix as first written, because the derivation sat one line above the window.
+The content-key receipt carried **three false closes and one miss**: keyed on a basename under
+`core/`, it closes on a relocation that leaves the consumer exactly as broken and misses shipping
+the declaration at its current path. Every mutant was `cmp -s`-asserted APPLIED before its verdict
+was read.
+
+**A RECEIPT THAT SURVIVES ITS AUTHOR'S ATTACK CAN STILL FAIL A STRANGER'S, AND THE GAP IS
+SEMANTICS.** `BL-236`'s receipt rejected six non-fixes chosen independently of the arm and exits 9
+on both degenerate trees — including truncated-to-empty, the batch-88 shape. It **closes on a note
+asserting the braces are cosmetic**: right position, both keywords, wrong claim. The arm binds
+POSITION and VOCABULARY, never truth. Score a receipt with seeds the author did not choose.
+
+**THE GATE'S ZERO MEANS NOTHING UNTIL YOU PROVE IT CAN FAIL, AND A WORKING-TREE MUTATION CANNOT
+PROBE IT.** Setting `VERSION` to `0.999.0` in the working tree left the release-version phase
+reporting PASS — correctly, because the arm reads `git show "$c:VERSION"` per commit. A malformed
+receipt and an over-depth backlog also passed, neither being a phase's subject. A **committed
+syntax error** produced exit 1, two failing phases and a `BLOCKED` banner. Probe with a COMMITTED
+defect a named phase actually reads.
+
+**`validate-release-version.sh` REFUSED THE TWO-RELEASE BRANCH AND WAS RIGHT.** Both releases were
+assembled onto one branch and the range arm failed it: two CHANGELOG headings is a multi-version
+branch, and a squash takes only the first version in its subject. Its own text says the triple
+cannot see this, because a squash deletes the commits that would disagree. Split into two
+single-version branches off `origin/main`, merged in order.
+
+**THREE HANDS DERIVED `BL-236` INDEPENDENTLY AND ALL THREE WERE RIGHT** — the id was free across
+both corpora at the moment each looked. Renumbered 236 / 237 / 238 on assembly, and **the duplicate
+survived one conflict resolution**, caught by a `uniq -d` check rather than by reading the file.
+**When hands file in parallel, give each its id or check for the collision mechanically.**
+
+**THE SWEEP AT THIS BATCH'S CLOSE, ref `main`.** Live **57**, cited **36**, unfiled **21**,
+archive **204**, partition control 0, ledger md5 `a0055563`. DISCHARGED 6 corrected / in-flight 30
+/ untouched 21 after the 4-id overlap; sum 61 − 4 = 57 = denominator. TERMINAL **88**;
+discharged-but-INVISIBLE 1 (`PC-S308-GATE-METRICS-CHECK2-STALE-VERDICT-READ-ORDER`).
+
+**THE UNFILED 21 IS NOT THE AVAILABLE RESIDUE — SEVEN ARE NAMED IN `origin/main` RELEASE COMMITS,
+THREE OF THEM THIS BATCH'S OWN.** A candidate closed by a release commit message and never cited
+by a backlog ENTRY stays in the "unfiled" column forever, because that join reads entries. So the
+available set is **14**, and `unfiled` is a CEILING on it. The three shipped this batch are in that
+seven; do not re-scope them.
+
+**THE INCIDENTAL-CLOSE CHECK WAS RUN AND FOUND NOTHING.** Receipt histogram before: 78×1 and 1×9
+over 79 live receipts. After: **3×0**, 78×1 and 1×9 over 94 — the three zeros are exactly this
+batch's subjects, and `backlog-reverify.sh` confirms by id. No entry closed without meaning to.
+
+**`BL-236` AND `BL-238` ARE DELIBERATELY NOT ROTATED AND BOTH REPORT `CLOSE-CANDIDATE`.** Each says
+why in its own text. `BL-236`'s owed half is the ENFORCEMENT — closing it needs `S8` widened or a
+successor arm, and `S8` is byte-unchanged across both releases. `BL-238`'s subject is the
+receipt-grammar defect, and closing it needs a stated finding about what the ledger engine gained,
+which no `sh` predicate can observe. **A `CLOSE-CANDIDATE` is the instrument saying the fix is
+present, never the close** — read the entry's own claims before rotating it.
+
+**THE PULL IS NOT REQUIRED AND THE GAP IS THREE.** The consumer's stamp reads **`0.550.0`** and
+ships **`0.553.0`**; PENDING is **3**. Its stamp carries THREE fields, not the four this plan's
+prose assumes — `version`, `commit`, `skill_commit`. **The second test was NOT run this batch**: it
+is a differential of the consumer's installed `validate-layer-entries.sh` against this
+distribution's copy, and neither release touches that file. Say that rather than reporting a null
+from a test that was never run. Release 2 touches `core/git-hooks/pre-push`, which SHIPS, so the
+consumer's next pull changes its gate's comment and nothing it executes.
+
+**THE CONSUMER'S OWN SESSION WAS RUNNING THROUGHOUT AND ITS TREE MOVED 6 → 7 PATHS.** All seven are
+its pipeline state — `arm-log.jsonl`, `spawn-ledger.jsonl`, a self-update-gate report, retro
+artifacts. **None was written by this session**; the boundary held. Record the porcelain count at
+the open and expect it to MOVE, because that consumer writes while a batch runs. A changed count is
+not by itself a boundary violation — read WHAT changed.
+
 ### BATCH 88 SHIPPED AS `v0.551.0`, ONE RELEASE CARRYING THREE NO-`PC` SUBJECTS — AND **ALL THREE RECEIPTS WERE REBUILT, BECAUSE ALL THREE CLOSED ON SOMETHING THAT WAS NOT A FIX.** ONE PASSED ON AN **EMPTY SUBJECT FILE**; ONE CARRIED A **DEAD PRIMARY ARM** THAT HAD NEVER DECIDED A SINGLE RUN; ONE **REJECTED A CORRECT FIX** ON LINE DISTANCE ALONE. THE SWEEP WAS EMPTY OF PC WORK AT THE OPEN AND **IS NOT EMPTY NOW — THE CONSUMER FILED TWO NEW `PC-S341-*` CANDIDATES MID-BATCH AND BOTH ARE AVAILABLE.** THE GAP IS **ONE**, PENDING **1**, AND THE PULL IS **NOT REQUIRED** — THE CONSUMER PULLED ITSELF TO `0.550.0` DURING THE BATCH.
 
 This block replaces the batch-87 record below it. Every figure was re-derived after the merge
@@ -8049,21 +8170,49 @@ lids() { { grep -hE '^#{2,6} PC-' "$1" | sed -E 's/^#+ (PC-[A-Z0-9][A-Z0-9.-]*).
 # So: resolve the sprint branch, and read the ledger THERE with `git show`. Report both counts
 # when they differ -- the delta IS the set of filings not yet on main, which is exactly the set a
 # sweep is looking for.
-SB="$(git -C /Users/n8/git/graph for-each-ref --sort=-committerdate --format='%(refname:short)' \
-        'refs/heads/ai-dlc/feature/*' 'refs/heads/*sprint*' | head -1)"
-[ -n "$SB" ] || SB=main    # no sprint branch today; main is then the whole answer
+# RECENCY IS THE WRONG KEY AND IT SHIPPED A WRONG ANSWER AT BATCH 89. `--sort=-committerdate |
+# head -1` picked a branch that was BEHIND main, and the subset control below fired at 7. The
+# obvious repair -- "the newest branch AHEAD of main" -- picked a branch carrying NO LEDGER FILE,
+# and `git show` on an absent path answers empty: live=0, silently, with every other control still
+# passing. Measured over all 22 consumer branches at batch 89: NO ref was a superset of main. Four
+# carried a ledger and each was a stale snapshot whose "extra" ids were ALL in main's ARCHIVE --
+# they predate closes and are not unmerged filings, which is the same output as a real filing.
+#
+# So qualify a ref on the PROPERTY that matters -- it carries the ledger AND its live set contains
+# main's -- and fall back to main, which is the answer whenever the retro has merged. Report the
+# candidates rather than electing one silently.
+SB=main
+for b in $(git -C /Users/n8/git/graph for-each-ref --format='%(refname:short)' \
+             'refs/heads/ai-dlc/feature/*' 'refs/heads/*sprint*'); do
+  git -C /Users/n8/git/graph cat-file -e "${b}:_bmad-output/ai-dlc-update/push-candidate-ledger.md" 2>/dev/null || continue
+  git -C /Users/n8/git/graph show "${b}:_bmad-output/ai-dlc-update/push-candidate-ledger.md" > /tmp/cand.md
+  git -C /Users/n8/git/graph show "main:_bmad-output/ai-dlc-update/push-candidate-ledger.md" > /tmp/mainled.md
+  lids /tmp/cand.md > /tmp/cand.txt; lids /tmp/mainled.md > /tmp/mainled.txt
+  # a qualifying ref is missing NOTHING main has; anything else is a stale snapshot
+  [ "$(comm -23 /tmp/mainled.txt /tmp/cand.txt | wc -l | tr -d ' ')" -eq 0 ] || continue
+  [ "$(comm -13 /tmp/mainled.txt /tmp/cand.txt | wc -l | tr -d ' ')" -gt 0 ] && SB="$b"
+done
+echo "ledger ref: $SB"   # `main` here is CORRECT, not a fallback failure
 git -C /Users/n8/git/graph show "${SB}:_bmad-output/ai-dlc-update/push-candidate-ledger.md"         > /tmp/led_live.md
 git -C /Users/n8/git/graph show "${SB}:_bmad-output/ai-dlc-update/push-candidate-ledger.archive.md" > /tmp/led_arch.md
 lids /tmp/led_live.md > /tmp/live.txt
 lids /tmp/led_arch.md > /tmp/arch.txt
-# THE CONTROL THAT MAKES THE REF CHOICE VISIBLE: main's live set must be a SUBSET of the sprint
-# tip's, and the difference is the not-yet-merged filings. A non-zero left side means the sprint
-# branch is BEHIND main and `$SB` resolved to a stale branch -- re-derive it before reading on.
+# THE SUBSET ASSERTION IS NOW A PROPERTY OF THE LOOP ABOVE, SO IT CANNOT FIRE HERE AND MUST NOT BE
+# READ AS A CONTROL. The loop only accepts a ref missing nothing main has, so this line is 0 by
+# construction -- a check that cannot fail reads exactly like one that passed. It stays as an
+# ASSERTION on the loop (a non-zero means the loop is broken, not that the ledger moved), and the
+# discriminating control is the one below it: the PRESENCE arm, which must be non-zero on main.
 git -C /Users/n8/git/graph show "main:_bmad-output/ai-dlc-update/push-candidate-ledger.md" > /tmp/led_main.md
 lids /tmp/led_main.md > /tmp/live_main.txt
-echo "sprint branch: $SB"
-comm -23 /tmp/live_main.txt /tmp/live.txt | wc -l   # control: must be 0 -- on main and NOT at the tip
+echo "ledger ref: $SB   (main is the answer whenever the retro has merged)"
+comm -23 /tmp/live_main.txt /tmp/live.txt | wc -l   # assertion on the LOOP: 0, or the loop is broken
 comm -13 /tmp/live_main.txt /tmp/live.txt           # the filings ahead of main. THIS is the new work.
+wc -l < /tmp/live_main.txt                          # CONTROL: must be NON-ZERO. A zero here means
+                                                    # the ref carried no ledger and `git show`
+                                                    # answered empty -- which is what the "newest
+                                                    # branch ahead of main" repair did at batch 89,
+                                                    # reporting live=0 with every other control
+                                                    # still passing.
 grep -rohE 'PC-[A-Z0-9][A-Z0-9-]+' docs/backlog.md docs/backlog.archive.md | sort -u > /tmp/filed.txt
 wc -l < /tmp/live.txt                                 # LIVE candidates -- the denominator
 wc -l < /tmp/arch.txt                                 # already closed upstream, NOT our workload
@@ -8816,9 +8965,9 @@ so no block written before it changes verdict.
 
 ### NEXT ACTIONS — numbered, in order
 
-1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below) AGAINST THE CONSUMER'S SPRINT TIP,
-   RANK THE UNFILED CANDIDATES, THEN SCOPE BATCH 89 — AND HOW YOU SCOPE IT DEPENDS ON WHO INVOKED
-   YOU.** Operator
+1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below) AGAINST THE REF THAT CARRIES THE
+   LIVE LEDGER, RANK THE UNFILED CANDIDATES, THEN SCOPE BATCH 90 — AND HOW YOU SCOPE IT DEPENDS ON
+   WHO INVOKED YOU.** Operator
    instruction, given at batch 52. **If the one-liner was TYPED BY THE OPERATOR**, report the
    candidates with a marked recommendation and ask, as every batch before has. **If it ARRIVED
    FROM ANOTHER SESSION** — a cross-session message carrying `READ and FOLLOW …`, which is
@@ -8854,12 +9003,26 @@ so no block written before it changes verdict.
    receipts were REBUILT** — the originals closed on an empty file, on a dead arm, and on a
    positional window — so do not treat a batch-82 receipt as trustworthy because it exists.
 
-   **AND THE SWEEP IS NOT EMPTY: TWO NEW `PC-S341-*` CANDIDATES WERE FILED MID-BATCH AND BOTH ARE
-   AVAILABLE.** `PC-S341-AUDIT-LAYER-DEBT-UNDECLARED-ARM-IS-ROW-KEYED-AND-CANNOT-BE-CLEARED` and
-   `PC-S341-SKILL-MD-SHIPS-REV-PATH-COMMANDS-WITH-NO-SHELL-HAZARD-NOTE`, both dated 2026-09-11,
-   both unnamed in any `origin/main` commit and absent from the `NOT-UPSTREAM` brief. They are
-   batch 89's ranked subject and they outrank every no-`PC` entry. Re-derive them from the sweep
-   rather than trusting this sentence.
+   **BATCH 89's THREE SUBJECTS ARE SHIPPED — do not re-scope any of them.** All three `PC-S341-*`
+   candidates shipped:
+   `PC-S341-SKILL-MD-SHIPS-REV-PATH-COMMANDS-WITH-NO-SHELL-HAZARD-NOTE` ALONE as `v0.552.0` at
+   `feb75148` (PR #717), because `SKILL.md` is inside the update skill; and
+   `PC-S341-AUDIT-LAYER-DEBT-UNDECLARED-ARM-IS-ROW-KEYED-AND-CANNOT-BE-CLEARED` with
+   `PC-S341-CONTENT-KEY-DECLARATION-IS-UNSHIPPABLE-SO-EVERY-CONSUMER-PUSH-RUNS-THE-WHOLE-SUITE` as
+   `v0.553.0` at `98fb460a` (PR #718), batched on a DERIVED separability diagonal. `BL-237` is
+   rotated; `BL-236` and `BL-238` are filed, LIVE, and deliberately not rotated — read their own
+   text before treating either `CLOSE-CANDIDATE` as a close.
+
+   **THE THIRD ONE WAS NOT IN THE BLOCK THAT SCOPED THE BATCH, AND THAT IS THE STANDING LESSON.**
+   The batch-88 resume block named TWO available candidates; the consumer filed the content-key one
+   AFTER that block was written, and only the sweep found it. **Run the sweep and rank what it
+   returns. Never take a subject count from a resume block** — including this one.
+
+   **AND THE `unfiled` COLUMN IS A CEILING ON THE AVAILABLE SET, NOT THE SET.** At batch 89's close
+   it reads 21 while **7 of those are named in `origin/main` release commit messages** — three of
+   them batch 89's own. That join reads backlog ENTRIES, so a candidate closed by a release commit
+   and never cited by an entry stays "unfiled" permanently. Split the column before ranking it: the
+   available residue at this close is **14**.
 
    **BATCH 87's TWO SUBJECTS ARE SHIPPED — do not re-scope either of them.**
    `PC-S341-STEP-3F-ANCHOR-RULE-HAS-NO-LINT-AND-A-ONE-CHARACTER-MISS-IS-INVISIBLE` shipped as
