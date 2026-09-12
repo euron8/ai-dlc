@@ -69,6 +69,11 @@ the seed now carries one. And the `subagent-probe` fixture wrote no meta sidecar
 reading the join key by the wrong spelling passed it and turned every effort row `PENDING`;
 three fires now differ only in the meta and assert the two keys.
 
+`BL-242` files a finding from the `BL-241` re-verification: the `ledger-reverify` fixture's
+mutant-wreckage guard lost its only subject when the delete mutation was re-anchored on the
+reset's comment, so its branch fires zero times on every shipped mutant. Not fixed; a vacuous
+guard is the loaded gun the mechanism rules name.
+
 The first cut of `I111` called a six-stage pipeline once per shaped file and cost 95 forks,
 which the fork-budget fixture refused; it is one recursive grep over the population now and
 costs 11, and `FORK_BUDGET` is raised only by the 30 the new script and fixture directory
