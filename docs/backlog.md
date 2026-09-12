@@ -4581,7 +4581,15 @@ is the smaller and is probably right; it also measures (b)'s population before (
 **Tiered DEFECT.** Consumer-facing. Its consequence is an entry that is never adjudicated by any
 pull, indistinguishable from one deliberately left manual.
 
-verify: sh R=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -f "$R" ] || exit 9; grep -q 'verify:' "$R" || exit 9; grep -qE 'no row of any kind|produced no row|receipt-invisible|entries with no emitted row' "$R" && exit 0; exit 1
+**The over-broad fix is the one to guard against, and it is the shape a hand builds by accident.**
+Predicate (a) written as "report every entry that emits no row" is the predicate `ledger-reverify.sh`'s
+own ENTRY-SWALLOWED header already enumerates as unshippable at **58 entries** on the reference
+consumer. So the receipt below DRIVES the shipping tool over a two-entry corpus and requires the
+near-miss entry — whose only mention sits inside backticks — to stay SILENT, which a prose closer
+and an over-broad one both fail. Built and scored: correct fix 0, unfixed HEAD 1, a comment naming
+every token 1, an over-broad reporter 9.
+
+verify: sh R=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -f "$R" ] || exit 9; A=$PWD; d=$(mktemp -d) || exit 9; mkdir -p "$d/c/_bmad-output/ai-dlc-update"; L="$d/c/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; printf '# L\n\n## Open\n\n- **Entry X**\n  <br>prose then verify: theirs_has core/VERSION "0"\n\n- **Entry Y**\n  <br>prose with `verify: manual` in backticks only\n' > "$L"; o="$(cd "$d/c" && bash "$A/$R" "$A" HEAD "$d/c" HEAD 2>/dev/null)"; rm -rf "$d"; printf '%s\n' "$o" | awk -F'\t' '$2=="Entry Y"{f=1} END{exit !f}' && exit 9; printf '%s\n' "$o" | awk -F'\t' '$1=="NEEDS-REVIEW" && $2=="Entry X" && $3 ~ /^mid-line receipt/{f=1} END{exit !f}' && exit 0; exit 1
 
 ## BL-227 — nine of batch 82's ten receipts are satisfied by something that is not a fix, and the rule forbidding it has no enforcer
 
