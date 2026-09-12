@@ -55,6 +55,74 @@ have gone green, and would have reported "still open" forever.
 never the word anywhere in prose, because an entry that merely discusses landing something is
 not a closed entry.
 
+## BL-240 — a role's configured effort is never APPLIED: every subagent runs at the parent session's effort, and the harness mechanism that would bind it is one ai-dlc does not use
+
+**OPERATOR RANKING: HIGHEST-PRIORITY OPEN ENTRY, above every PC-backed row.** This file has
+no priority field, so the ranking is stated here, in the entry itself. Read this entry before
+`BL-227` and before the no-`PC` set. Ruled 2026-09-12.
+
+**Found 2026-09-12** by joining the reference consumer's spawn ledger to the harness's own
+subagent transcripts for sprint s311, mid-sprint, read-only.
+
+**THE MEASUREMENT.** Every assistant record Claude Code writes carries a top-level `effort`
+field, and every subagent gets its own transcript under
+`~/.claude/projects/<project>/<session>/subagents/agent-<name>.jsonl` with the same field. That
+is the effort the API call was made at. Fourteen s311 rows in `_bmad-output/spawn-ledger.jsonl`
+carry `effort_bound` of `medium` (8) or `high` (6) from `aiDlcRoles`; the dispatch guard's
+sentence *"Your configured reasoning effort for this role is X"* is present in each subagent's
+first user message with the matching value; and the `effort` field on every assistant record in
+all fourteen transcripts is `high`, which is the parent session's value. Widened to the whole
+project — 1071 subagent transcripts across 213 sessions — the child's effort equals the parent's
+in every case, and no transcript changes effort mid-session. Control: 167 records read `xhigh`
+(3–6 Sept), so the field is not a constant.
+
+| directive in prompt | transcript effort | count |
+|---|---|---|
+| high | high | 750 |
+| medium | high | 157 |
+| xhigh | high | 50 |
+| none | high | 114 |
+
+**THE MECHANISM THAT DOES BIND IT, MEASURED.** The sub-agents reference documents an `effort`
+key in `.claude/agents/<name>.md` frontmatter (`low|medium|high|xhigh|max`, "overrides session
+level"), and the model-config page says subagents inherit the session's effort "unless you
+specify otherwise in their frontmatter". Probed on CC 2.1.269 in a scratch repo: two agents on
+sonnet, one with `effort: low` and one with no key, spawned from a parent at `high`. The
+`effort: low` agent's transcript reads `low`; the other reads `high`. The Agent tool's own
+description on that build says each agent type's "model, reasoning effort, and tools come from
+its definition". The binary's definition parser accepts `effort` as a level or an integer.
+
+**WHY AI-DLC CANNOT USE IT TODAY.** No `.claude/agents/` directory exists in core, in the
+reference consumer, or at the operator's user level. Roles live in `.claude/team-roles/*.md`,
+which the harness does not read as agent definitions. The s311 session dispatched all thirty
+spawns as `subagent_type: general-purpose`; where a session ever passed a role name as the type
+it resolved to nothing. `ai-dlc-dispatch-guard.sh:388` injects only `model` and the prompt
+sentence, and its header says the prompt is "the only channel that reaches the subagent" — which
+was true when written and is no longer. `effort_bound` in the ledger is therefore a
+self-declaration Check 22 cannot verify, and `BL-019` already files that half.
+
+**CC 2.1.259/2.1.267 bear on WHEN the field can be trusted, not on this measurement.** Those
+releases fixed `effort:` on models whose launch effort is pinned (Opus 4.7, Opus 4.8, Fable 5).
+The consumer's roles map only to claude-opus-5 and claude-sonnet-5, neither pinned, and both the
+s311 evidence and the probe ran on 2.1.269. Any validator reading `effort` off a transcript must
+also read the record's `version` field and refuse to score a pinned model below 2.1.267.
+
+**Remedy shape.** Render one `.claude/agents/<role>.md` per `aiDlcRoles` entry — `name`,
+`description`, `model`, `effort`, and a body that binds the role to its `team-roles` file — as a
+generated region with a `--check` mode at the gate, so the definition cannot drift from the
+config it renders. Have the dispatch guard rewrite `subagent_type` to the role name it already
+derives, alongside the `model` it already binds. Then `effort_bound` records a value the harness
+applied, and a fixture that spawns a definition with an off-default effort and asserts the
+transcript field keeps the feature from regressing silently a second time. Confirm before
+building: that a definition's `model` and the guard's injected `model` parameter compose as the
+tool description claims, and that the interactive path matches the `-p` path the probe used.
+
+**Receipt.** Drives the shipping guard on a synthetic layered consumer whose settings pin
+`adversary` to `opus`/`medium`, and asks whether the corrected input's `subagent_type` names the
+role. Exit 9 if the guard did not bind the model, so a disarmed guard cannot read as a fix.
+
+verify: sh h=core/hooks/ai-dlc-dispatch-guard.sh; [ -f "$h" ] || exit 9; command -v jq >/dev/null || exit 9; d=$(mktemp -d) || exit 9; X(){ rm -rf "$d"; exit "$1"; }; mkdir -p "$d/.claude/team-roles" "$d/.claude/agents" || X 9; printf "version: 0.0.0\n" > "$d/.claude/.ai-dlc-version"; printf "# Role: Adversary\n" > "$d/.claude/team-roles/adversary.md"; printf "%s\n" "{\"aiDlcModels\":{\"opus\":\"claude-opus-5[1m]\"},\"aiDlcRoles\":{\"adversary\":{\"model\":\"opus\",\"effort\":\"medium\"}}}" > "$d/.claude/settings.json"; printf -- "---\nname: adversary\ndescription: probe\nmodel: opus\neffort: medium\n---\n" > "$d/.claude/agents/adversary.md"; J=$(jq -nc "{tool_name:\"Agent\",tool_input:{prompt:\"Your operating contract is .claude/team-roles/adversary.md. Read it first.\",subagent_type:\"general-purpose\",name:\"adversary-probe\"}}"); o=$(printf "%s" "$J" | CLAUDE_PROJECT_DIR="$d" AI_DLC_STATE_DIR=state bash "$h" 2>/dev/null); t=$(printf "%s" "$o" | jq -r ".hookSpecificOutput.updatedInput.subagent_type // empty" 2>/dev/null); m=$(printf "%s" "$o" | jq -r ".hookSpecificOutput.updatedInput.model // empty" 2>/dev/null); [ "$m" = opus ] || X 9; [ "$t" = adversary ] || X 1; X 0
+
 ## BL-238 — the consumer ledger's `theirs`-ref receipt grammar cannot key on an ARM's body, so a receipt written to ask a behavioural question is satisfied by a comment
 
 **Found 2026-09-11** while closing a consumer candidate whose own receipt was built to avoid an
