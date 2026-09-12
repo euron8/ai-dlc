@@ -297,6 +297,66 @@ cat > "$LED" <<'LEDGER'
   Base carries `rule one` but NOT `MARKER_B`, so the close is real, not vacuous.
   verify: theirs_lacks core/skills/ai-dlc/SKILL.md "rule one" "MARKER_B"
 
+- **Entry ONLY-IN-TICKS** the mention sits inside an inline code span and nothing else does.
+  A body explaining the convention has to quote it, and the ledger is full of bodies that do.
+  This entry declares `verify: manual` only in that span, so it declares no receipt at all and
+  must emit NO row of any kind — exactly like Entry D.
+
+- **Entry ROW-ANCHORED-PLUS-MENTION** carries a real line-anchored receipt AND a bare mid-line
+  mention of the token in a summary line.
+  <br>status: live · merge: standalone · verify: manual — a summary line an operator writes at
+  the top of a long entry, and it is not a second receipt.
+  <br>The anchored receipt below RAN, so this entry is not silent and the mid-line report must
+  stay quiet on it. Reporting it would tell the operator to move a receipt that already works.
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+- **Entry ORPHAN-RECEIPT-MIDLINE** is THE SUBJECT, seeded in the shape the real producer wrote
+  it: a body paragraph whose author reached the end of a sentence and appended the receipt to
+  it rather than opening a line.
+  <br>A session resuming from that snapshot reads a fully-shipped sprint as pending work. verify: theirs_has core/skills/ai-dlc/SKILL.md "MARKER_A"
+  <br>The anchored grammar cannot see that line, so the receipt was never run and this entry
+  emits no verdict — byte-identical to an entry that declares no receipt.
+
+- **Entry ZAPPED-CLOSED-MIDLINE — ADOPTED UPSTREAM (v0.99.0, verified for the fixture)** the
+  close annotation sits on the ENTRY LINE, which is where the fork-retirement records carry it.
+  <br>Its body then carries the same mid-line shape as the subject above. A closed entry is
+  skipped by the classifier by design, so a receipt it never runs costs nothing. Prose here, and then verify: theirs_has core/skills/ai-dlc/SKILL.md "MARKER_A"
+  <br>THE ENTRY-LINE CLOSE RULE IS THE ONE THAT DECIDES THIS ONE. The body rule is anchored at
+  the line start and a boundary line begins `- **`, so the body rule is INERT here.
+
+- **Entry WALLED-BY-BODY-ANNOTATION** is the other half of the close conjunct, and it needs its
+  own entry because the two close predicates are different rules with different anchors.
+  <br>**ADOPTED UPSTREAM (v0.99.0, verified for the fixture).** Upstream took it.
+  <br>Prose that ends in the same mid-line shape, and it must stay quiet. verify: theirs_has core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+- **Entry PENNED-IN-A-FENCE** carries its only mid-line mention inside a fenced block, where it
+  is recorded OUTPUT rather than a directive. The consumer archive carries worked examples of
+  exactly this shape — a transcript of the tool being driven, quoted back into the ledger.
+
+  ```
+  $ printf 'prose then verify: theirs_has core/VERSION "0"' > "$t"; reverify "$t"
+  NEEDS-REVIEW	PC-CTRL	mid-line receipt: …
+  ```
+
+  Nothing above is a receipt, so this entry must emit no row.
+
+- **Entry QUOTED-IN-A-BLOCKQUOTE** quotes somebody else's receipt inside a blockquote, which is
+  how a defect report against another entry is written.
+
+  > verify: theirs_has core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+  A quotation is not a directive and must stay silent, or the report tells the operator to move
+  a receipt that was never one.
+
+- **Entry NOTED-IN-AN-HTML-COMMENT** carries a commented-out receipt, which the rendered
+  document does not even show. <!-- verify: theirs_has core/skills/ai-dlc/SKILL.md "MARKER_A" -->
+  <br>Same ruling as the blockquote above: silent.
+
+- **Entry TWO-MIDLINE-RECEIPTS** carries the offending shape TWICE, and the finding is one fact
+  about the entry rather than one per line.
+  <br>The first offending body line, and it is the one the row must name. verify: theirs_has core/skills/ai-dlc/SKILL.md "MARKER_A"
+  <br>A second one further down, which must NOT produce a second row. verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_B"
+
 ---
 
 - **Entry SH-MOVED runs an `sh` receipt whose subject no longer exists.** A RENAMED subject

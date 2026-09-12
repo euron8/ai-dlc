@@ -976,7 +976,7 @@ prose is itself generated rather than composed.
    - `HAND-REVIEW` → the entry declares `verify: manual`. No mechanical predicate exists for
      it BY DESIGN; adjudicate the body against theirs. This is NOT an entry with no `verify:`
      line — that emits no row at all.
-   - `NEEDS-REVIEW` → THREE causes. The DETAIL field names which; report them separately.
+   - `NEEDS-REVIEW` → FOUR causes. The DETAIL field names which; report them separately.
      - *unresolved* — the `verify:` line is malformed, its path resolves neither as given
        nor by unique basename at theirs, or an `sh` one-liner does not PARSE (the engine
        reads ONE line, so a receipt written across two arrives cut inside its quote; the row
@@ -992,6 +992,13 @@ prose is itself generated rather than composed.
        `verify: manual` if the entry is a proposal nobody has built yet. **Never drain on
        this verdict.** A DETAIL reporting reachability NOT checked means unchecked, not
        clean.
+     - *mid-line receipt* — the entry has no line-anchored `verify:` line but its body carries
+       `verify: <verb>` mid-sentence. The anchored grammar cannot see it (deliberately: a prose
+       mention is not a receipt), so the receipt was never run and the entry emitted no row —
+       indistinguishable from one with no receipt. Move it to its own line, then re-run. A
+       mention inside backticks, inside a fence, inside a blockquote or inside an HTML comment
+       is a quotation and is not reported; nor is an entry that also carries a real anchored
+       receipt, which is not silent.
    - `ENTRY-SWALLOWED` → a line-leading `- **…**` **annotation** inside an entry body. The
      entry-boundary rule opens a new entry on any such line, so the annotation truncates the
      entry it was annotating: everything below it — **including the `verify:` receipt** — is

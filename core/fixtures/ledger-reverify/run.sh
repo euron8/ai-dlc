@@ -1507,6 +1507,259 @@ else
   printf '  FAIL  %-22s unmutated copy emitted %s rows against %s in place (want equal, and >= 2) — a copy that cannot run scores as a kill\n' "swallow-control" "$ctl_sw" "$own_sw"
 fi
 
+# --- NEEDS-REVIEW / mid-line receipt: a real receipt the anchored grammar cannot spell --------
+# THE DEFECT. The receipt rule is anchored at the start of the line, deliberately — unanchored it
+# reads a PROSE MENTION as a receipt, and 20 of 85 lines carrying the token on the reference
+# consumer are prose. But an author who reaches the end of a body sentence and appends the receipt
+# to it has written a real receipt the grammar cannot see, so the entry emits NO row of any kind:
+# byte-identical to an entry that declares no receipt, and the receipt is never run. The consumer
+# filed exactly that shape.
+#
+# NINE SEEDS AND NINE ARMS, and the eight silent ones are what make the reporting one mean
+# something: predicate "an entry that emits no row" is 58 entries on the reference consumer, so
+# every conjunct here subtracts a class that really exists in the corpus.
+row_has "Entry ORPHAN-RECEIPT-MIDLINE" NEEDS-REVIEW \
+  "a receipt appended to the end of a body sentence is REPORTED, not silently dropped"
+row_lacks "Entry ORPHAN-RECEIPT-MIDLINE" STILL-LIVE \
+  "and the receipt was NOT run — a mid-line receipt that produced a verdict would mean the grammar had been widened"
+row_lacks "Entry ORPHAN-RECEIPT-MIDLINE" CLOSE-CANDIDATE \
+  "in particular it must not CLOSE, which is the direction that loses information permanently"
+
+# The DETAIL must carry the cause token, the LINE and the VERB, or the operator has a complaint
+# and no subject. The cause token is what makes the four NEEDS-REVIEW causes greppable apart.
+ASSERTIONS=$((ASSERTIONS + 1))
+ml_det="$(printf '%s\n' "$OUT" | awk -F'\t' '$2=="Entry ORPHAN-RECEIPT-MIDLINE" && $1=="NEEDS-REVIEW" {print $3; exit}')"
+if [ -z "$ml_det" ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s no NEEDS-REVIEW row for the subject at all — the detail arms below cannot discriminate\n' "midline-detail"
+elif ! grep -q '^mid-line receipt: ' <<<"$ml_det"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the detail does not OPEN with the cause token, so this cause cannot be told from the other three: %s\n' "midline-detail" "$(printf '%s' "$ml_det" | cut -c1-100)"
+elif ! grep -qE 'line [0-9]+ of its body' <<<"$ml_det"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the detail names no line number: %s\n' "midline-detail" "$(printf '%s' "$ml_det" | cut -c1-120)"
+elif ! grep -q 'verify: theirs_has' <<<"$ml_det"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the detail names no verb, so the operator cannot tell which receipt went unrun: %s\n' "midline-detail" "$(printf '%s' "$ml_det" | cut -c1-120)"
+else
+  printf '  ok    %-22s the row opens with the cause token and names the line and the verb\n' "midline-detail"
+fi
+
+# AND THE LINE NUMBER IS THE OFFENDING LINE, not merely a number. Derived from the seeded ledger
+# rather than hardcoded: a literal would go stale the release somebody edits the seed above it,
+# and would still read as a passing assertion.
+ASSERTIONS=$((ASSERTIONS + 1))
+LED_ML="$CONS/_bmad-output/ai-dlc-update/push-candidate-ledger.md"
+ml_want="$(awk '/^  <br>A session resuming from that snapshot reads a fully-shipped sprint as pending work\. verify: theirs_has/{print NR; exit}' "$LED_ML")"
+ml_got="$(printf '%s' "$ml_det" | sed -n 's/.*line \([0-9][0-9]*\) of its body.*/\1/p')"
+if [ -n "$ml_want" ] && [ "$ml_want" = "$ml_got" ]; then
+  printf '  ok    %-22s the reported line %s IS the offending body line in the seeded ledger\n' "midline-line" "$ml_got"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s reported line %s, offending line in the ledger is %s (empty = the seed line moved and this arm lost its subject)\n' "midline-line" "${ml_got:-<none>}" "${ml_want:-<none>}"
+fi
+
+# THE EIGHT SILENT CLASSES. Each is a REAL shape in the corpora and each would be reported by a
+# predicate one conjunct short of this one.
+row_lacks "Entry ONLY-IN-TICKS" NEEDS-REVIEW \
+  "a mention inside an inline code span is a body QUOTING the convention — the ledger is full of those"
+row_lacks "Entry ONLY-IN-TICKS" STILL-LIVE \
+  "and it emits nothing at all, exactly like Entry D: the backtick strip must not turn a quotation into a receipt either"
+row_lacks "Entry ROW-ANCHORED-PLUS-MENTION" NEEDS-REVIEW \
+  "an entry with a REAL anchored receipt is not silent, whatever its summary line says — reporting it would say move a receipt that already ran"
+row_is "Entry ROW-ANCHORED-PLUS-MENTION" STILL-LIVE \
+  "...and its anchored receipt still produces its own verdict, so the silence is not bought by the entry disappearing"
+row_lacks "Entry ZAPPED-CLOSED-MIDLINE" NEEDS-REVIEW \
+  "closed on its ENTRY LINE — the classifier skips it by design, so a receipt it never runs costs nothing"
+row_lacks "Entry WALLED-BY-BODY-ANNOTATION" NEEDS-REVIEW \
+  "closed by a BODY annotation, which is a different rule with a different anchor from the one above"
+row_lacks "Entry PENNED-IN-A-FENCE" NEEDS-REVIEW \
+  "inside a fence it is recorded OUTPUT, not a directive — the consumer archive carries worked examples of exactly this"
+row_lacks "Entry QUOTED-IN-A-BLOCKQUOTE" NEEDS-REVIEW \
+  "a blockquote is a quotation of somebody else's receipt; reporting it says move a receipt that was never one"
+row_lacks "Entry NOTED-IN-AN-HTML-COMMENT" NEEDS-REVIEW \
+  "an HTML comment is text the rendered document does not show, so it is not a directive either"
+
+# ONE ROW PER ENTRY, NOT PER OFFENDING LINE. The finding is that the ENTRY is silent, which is one
+# fact; a row per line repeats it. Asserted as a NUMBER, and the row must name the FIRST offence —
+# a last-match-wins reader gives the same row count and points at the wrong line.
+ASSERTIONS=$((ASSERTIONS + 1))
+ml_two_n="$(printf '%s\n' "$OUT" | awk -F'\t' '$2=="Entry TWO-MIDLINE-RECEIPTS" && $1=="NEEDS-REVIEW" && $3 ~ /^mid-line receipt/{c++} END{print c+0}')"
+ml_two_v="$(printf '%s\n' "$OUT" | awk -F'\t' '$2=="Entry TWO-MIDLINE-RECEIPTS" && $1=="NEEDS-REVIEW" {print $3; exit}')"
+if [ "$ml_two_n" = 1 ] && grep -q 'verify: theirs_has' <<<"$ml_two_v"; then
+  printf '  ok    %-22s two offending lines in one entry emit ONE row, naming the FIRST (theirs_has, not the theirs_lacks below it)\n' "midline-one-row"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s %s row(s) for the two-offence entry, naming: %s (want 1 row naming theirs_has)\n' "midline-one-row" "$ml_two_n" "$(printf '%s' "$ml_two_v" | sed -n 's/.*carries .verify: \([a-z_]*\).*/\1/p')"
+fi
+
+# --- THE MID-LINE MUTANTS ---------------------------------------------------------------------
+# NINE MUTANTS ON A TINY LEDGER, cut from the seeded one by bullet range so no receipt is restated
+# here. A full-ledger run is ~6s and this fixture is already one of the suite's longer units; the
+# tiny corpus runs in ~1s, which is the difference between nine mutants costing a minute and
+# costing ten seconds. Entry A rides along in the cut as the DEAD-COPY CONTROL: every kill below
+# requires its STILL-LIVE row to SURVIVE, so a copy that could not source lib.sh — which emits
+# nothing and would otherwise score as a kill of every absence arm — is caught instead.
+ML_TINY="$(dirname "$DIST")/tiny-midline-ledger.md"
+awk '/^- \*\*Entry A still lacked/{p=1} p; p && /verify: theirs_lacks/{exit}' "$LED_ML" > "$ML_TINY"
+printf '\n' >> "$ML_TINY"
+awk '/^- \*\*Entry ONLY-IN-TICKS/{p=1} /^- \*\*Entry SH-MOVED/{p=0} p' "$LED_ML" >> "$ML_TINY"
+ASSERTIONS=$((ASSERTIONS + 1))
+ml_tiny_n="$(grep -c '^- \*\*Entry ' "$ML_TINY")" || ml_tiny_n=0
+if [ "$ml_tiny_n" -eq 10 ]; then
+  printf '  ok    %-22s the tiny ledger carries Entry A plus the nine mid-line entries\n' "midline-tiny-ledger"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the tiny ledger carries %s bullets, not 10 — the mutants below would run over the wrong corpus\n' "midline-tiny-ledger" "$ml_tiny_n"
+fi
+
+# EVERY MUTATION ANCHOR ASSERTED UNIQUE FIRST, with an IMPOSSIBLE anchor beside them as the
+# control: a counter that reports 1 for a string no file carries is a broken counter, and its
+# nine agreeing answers above would be meaningless. A mutation matching two sites edits a line
+# this fixture never reads and scores a kill it did not earn.
+ml_anchor_n() { grep -cF "$1" "$CLOSER" 2>/dev/null || true; }
+ASSERTIONS=$((ASSERTIONS + 1))
+ml_bad="$(ml_anchor_n 'ZZQQ_NO_SUCH_ANCHOR_IN_THIS_FILE')"
+ml_uniq=1; ml_why=""
+for a in \
+  '"$(ledger_entry_awk)${CLOSE_AWK}${ELC_AWK}"' \
+  'if (label != "" && !anchored && !closed && midnr > 0)' \
+  '    if (__lef_in) next' \
+  '    if (ledger_entry_line_closes($0)) closed = 1' \
+  '    if (ledger_body_closes($0)) closed = 1' \
+  '    if ($0 ~ /^[ \t]*>/) next' \
+  '    gsub(/<!--([^-]|-[^-])*-->/, "", t)' \
+  '    if (midnr == 0 && match(t, '; do
+  n="$(ml_anchor_n "$a")"
+  [ "$n" = 1 ] || { ml_uniq=0; ml_why="$ml_why [$n x '$a']"; }
+done
+# The backtick strip is counted separately: a backtick inside a double-quoted assertion string
+# would run as a command, so its literal is built from its own character code.
+ml_bt="$(awk -v BT='`' 'index($0, "gsub(/" BT "[^" BT "]*" BT "/, \"\", t)"){c++} END{print c+0}' "$CLOSER")"
+[ "$ml_bt" = 1 ] || { ml_uniq=0; ml_why="$ml_why [$ml_bt x backtick-strip]"; }
+if [ "$ml_uniq" = 1 ] && [ "$ml_bad" = 0 ]; then
+  printf '  ok    %-22s all nine mutation anchors are unique in the closer, and an impossible anchor returns 0\n' "midline-anchors"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s anchor counts wrong:%s ; impossible-anchor control returned %s (want 0)\n' "midline-anchors" "${ml_why:- none}" "$ml_bad"
+fi
+
+# THE UNMUTATED CONTROL, WITH A POSITIVE CONJUNCT. A copy that cannot source lib.sh emits nothing,
+# and "no mid-line row" is what eight of the nine arms below assert — so silence would score as a
+# kill for every one of them. This copy must reproduce BOTH baseline observables on the tiny
+# corpus: the subject reported, and Entry A still classified.
+ML_CTL="$(dirname "$DIST")/ctl-midline"
+rm -rf "$ML_CTL"; mkdir -p "$ML_CTL"
+cp "$(dirname "$CLOSER")"/*.sh "$ML_CTL/" 2>/dev/null
+ml_ctl_out="$(bash "$ML_CTL/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$ML_TINY" 2>&1)"
+ASSERTIONS=$((ASSERTIONS + 1))
+if printf '%s\n' "$ml_ctl_out" | awk -F'\t' '$2=="Entry ORPHAN-RECEIPT-MIDLINE" && $1=="NEEDS-REVIEW" && $3 ~ /^mid-line receipt/{a=1} $2 ~ /Entry A still lacked/ && $1=="STILL-LIVE"{b=1} END{exit !(a && b)}'; then
+  # TWO expected rows on this corpus, and they are ENUMERATED rather than counted: the subject,
+  # and the two-offence entry the last-match-wins mutant needs. A count alone would be satisfied
+  # by two rows against the wrong entries, which is the state seven of the arms below assert is
+  # impossible.
+  ml_ctl_mid="$(printf '%s\n' "$ml_ctl_out" | awk -F'\t' '$3 ~ /^mid-line receipt/{c++} END{print c+0}')"
+  ml_ctl_lbl="$(printf '%s\n' "$ml_ctl_out" | awk -F'\t' '$3 ~ /^mid-line receipt/{print $2}' | LC_ALL=C sort | tr '\n' '|')"
+  if [ "$ml_ctl_mid" = 2 ] && [ "$ml_ctl_lbl" = "Entry ORPHAN-RECEIPT-MIDLINE|Entry TWO-MIDLINE-RECEIPTS|" ]; then
+    printf '  ok    %-22s unmutated copy on the tiny ledger: exactly the 2 expected mid-line rows and Entry A STILL-LIVE\n' "midline-control"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s unmutated copy emitted %s mid-line rows on the tiny ledger (%s), want exactly the 2 expected — the silence arms below are unreadable\n' "midline-control" "$ml_ctl_mid" "${ml_ctl_lbl:-<none>}"
+    printf '%s\n' "$ml_ctl_out" | sed 's/^/          | /'
+  fi
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the unmutated copy does not reproduce the subject row AND Entry A on the tiny ledger — every kill below would be scored against wreckage\n' "midline-control"
+  printf '%s\n' "$ml_ctl_out" | sed 's/^/          | /'
+fi
+
+ml_mutant() { # <name> <awk-program>  -> dir on stdout, empty if the program changed nothing
+  local n="$1" prog="$2" d
+  d="$(dirname "$DIST")/mut-$n"; rm -rf "$d"; mkdir -p "$d"
+  cp "$(dirname "$CLOSER")"/*.sh "$d/" 2>/dev/null
+  awk "$prog" "$CLOSER" > "$d/ledger-reverify.sh" || return 1
+  if cmp -s "$CLOSER" "$d/ledger-reverify.sh"; then return 1; fi
+  printf '%s' "$d"
+}
+ml_kill() { # <name> <dir-or-empty> <kill-awk> <kill-msg>
+  local n="$1" d="$2" kill="$3" kmsg="$4" out
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ -z "$d" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutation DID NOT APPLY (matched nothing, or awk died), so the arm it targets is unproven\n' "$n"
+    return
+  fi
+  out="$(bash "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$ML_TINY" 2>&1)"
+  # THE DEAD-COPY CONTROL, IN THE SAME RUN. Entry A is unrelated to this pass, so a mutant that
+  # broke the closer rather than the guard loses it and its verdict is wreckage rather than a kill.
+  if ! printf '%s\n' "$out" | awk -F'\t' '$2 ~ /Entry A still lacked/ && $1=="STILL-LIVE"{f=1} END{exit !f}'; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s Entry A lost its STILL-LIVE row too — the mutant broke the closer, not the guard\n' "$n"
+    printf '%s\n' "$out" | sed 's/^/          | /'
+  elif printf '%s\n' "$out" | awk -F'\t' "$kill"; then
+    printf '  ok    %-22s %s\n' "$n" "$kmsg"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the guard was changed and the arm it protects did NOT change verdict — that arm cannot fire\n' "$n"
+    printf '%s\n' "$out" | awk -F'\t' '$1=="NEEDS-REVIEW"' | sed 's/^/          | /'
+  fi
+}
+
+# 1. THE PASS ITSELF UNREACHABLE. The absence-shaped arms all pass against a subject that emits
+#    nothing, so the one PRESENCE-shaped arm needs a mutant that proves the pass runs at all.
+ml_kill mutation-midline-off \
+  "$(ml_mutant midline-off 'index($0, "$(ledger_entry_awk)${CLOSE_AWK}${ELC_AWK}") { print "exit 0   # MUTANT: the mid-line pass is unreachable" } { print }')" \
+  '$3 ~ /^mid-line receipt/{f=1} END{exit f}' \
+  "with the pass unreachable the subject emits NO row — the reporting arm is watching a program that runs"
+# 2. THE BACKTICK STRIP REMOVED. A body that QUOTES the convention becomes a receipt, which is the
+#    class the anchoring exists to exclude arriving through the back door.
+ml_kill mutation-midline-backtick \
+  "$(ml_mutant midline-backtick 'BEGIN { BT = sprintf("%c", 96) } index($0, "gsub(/" BT "[^" BT "]*" BT "/, \"\", t)") { next } { print }')" \
+  '$2=="Entry ONLY-IN-TICKS" && $1=="NEEDS-REVIEW" && $3 ~ /^mid-line receipt/{f=1} END{exit !f}' \
+  "without the span strip a body quoting the convention is reported as an unrun receipt — the strip is load-bearing"
+# 3. THE no-anchored-receipt CONJUNCT DROPPED. An entry whose receipt RAN is then told to move it.
+ml_kill mutation-midline-anchored \
+  "$(ml_mutant midline-anchored 'index($0, "if (label != \"\" && !anchored && !closed && midnr > 0)") { sub(/!anchored && /, "") } { print }')" \
+  '$2=="Entry ROW-ANCHORED-PLUS-MENTION" && $1=="NEEDS-REVIEW" && $3 ~ /^mid-line receipt/{f=1} END{exit !f}' \
+  "without the anchored conjunct an entry whose receipt already ran is told to move it — the conjunct is load-bearing"
+# 4. THE FENCE SKIP DROPPED. Recorded OUTPUT inside a fence becomes a directive.
+ml_kill mutation-midline-fence \
+  "$(ml_mutant midline-fence '$0 == "    if (__lef_in) next" { next } { print }')" \
+  '$2=="Entry PENNED-IN-A-FENCE" && $1=="NEEDS-REVIEW" && $3 ~ /^mid-line receipt/{f=1} END{exit !f}' \
+  "without the fence skip a worked example inside a fence is reported as an unrun receipt"
+# 5. THE ENTRY-LINE CLOSE RULE DROPPED, and it is its OWN mutant rather than a second assertion on
+#    the body rule below: the two are different predicates with different anchors, and lib.sh
+#    records that testing a BOUNDARY line with the body rule is not merely wrong but INERT. If one
+#    mutant killed both cells they would be one guard; they are two, and each has a subject the
+#    other cannot see.
+ml_kill mutation-midline-elc \
+  "$(ml_mutant midline-elc '$0 == "      if (ledger_entry_line_closes($0)) closed = 1" { next } { print }')" \
+  '$2 ~ /Entry ZAPPED-CLOSED-MIDLINE/ && $1=="NEEDS-REVIEW" && $3 ~ /^mid-line receipt/{f=1} $2=="Entry WALLED-BY-BODY-ANNOTATION" && $3 ~ /^mid-line receipt/{g=1} END{exit !(f && !g)}' \
+  "without the ENTRY-LINE close rule an entry closed on its own bullet is reported, and the body-closed one is NOT — two rules, two subjects"
+# 6. THE BODY CLOSE RULE DROPPED. The mirror, and the entry closed by a `<br>**ADOPTED UPSTREAM`
+#    body annotation is the one it owns.
+ml_kill mutation-midline-body \
+  "$(ml_mutant midline-body '$0 == "    if (ledger_body_closes($0)) closed = 1" { next } { print }')" \
+  '$2=="Entry WALLED-BY-BODY-ANNOTATION" && $1=="NEEDS-REVIEW" && $3 ~ /^mid-line receipt/{f=1} $2 ~ /Entry ZAPPED-CLOSED-MIDLINE/ && $3 ~ /^mid-line receipt/{g=1} END{exit !(f && !g)}' \
+  "without the BODY close rule an entry closed by a body annotation is reported, and the entry-line-closed one is NOT"
+# 7. THE BLOCKQUOTE SKIP DROPPED. A quotation of somebody else's receipt becomes a directive.
+ml_kill mutation-midline-blockquote \
+  "$(ml_mutant midline-blockquote '$0 == "    if ($0 ~ /^[ \\t]*>/) next" { next } { print }')" \
+  '$2=="Entry QUOTED-IN-A-BLOCKQUOTE" && $1=="NEEDS-REVIEW" && $3 ~ /^mid-line receipt/{f=1} END{exit !f}' \
+  "without the blockquote skip a quoted receipt is reported and the operator is told to move it"
+# 8. THE HTML-COMMENT STRIP DROPPED. Text the rendered document does not show becomes a directive.
+ml_kill mutation-midline-comment \
+  "$(ml_mutant midline-comment 'index($0, "gsub(/<!--([^-]|-[^-])*-->/, \"\", t)") { next } { print }')" \
+  '$2=="Entry NOTED-IN-AN-HTML-COMMENT" && $1=="NEEDS-REVIEW" && $3 ~ /^mid-line receipt/{f=1} END{exit !f}' \
+  "without the comment strip a commented-out receipt is reported as an unrun one"
+# 9. THE FIRST-MATCH GUARD DROPPED, so the scalar is last-match-wins. The ROW COUNT does not move —
+#    which is exactly why this needs its own arm: the observable is the VERB the row names, and an
+#    arm keyed on the count alone would pass against a reader pointing at the wrong line.
+ml_kill mutation-midline-lastwins \
+  "$(ml_mutant midline-lastwins 'index($0, "if (midnr == 0 && match(t, ") { sub(/midnr == 0 && /, "") } { print }')" \
+  '$2=="Entry TWO-MIDLINE-RECEIPTS" && $3 ~ /carries .verify: theirs_lacks/{f=1} END{exit !f}' \
+  "a last-match-wins reader emits the same ONE row and names the SECOND receipt — the count cannot see this, the verb can"
+
 
 # MUTATION — remove the moved-subject guard. Entry SH-SUBJECT-GONE must fall back to
 # CLOSE-CANDIDATE, and Entry SH-REAL must stay CLOSE-CANDIDATE either way: without the second
