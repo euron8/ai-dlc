@@ -15,6 +15,69 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.561.0] - 2026-09-12
+
+### The derivation allowlist refuses sed's script-argument write verbs
+
+Batch 95, one release, one no-`PC` subject. The sweep returned no new PC-backed work (live 56,
+unfiled 19, all adjudicated, ledger byte-identical to batch 94's close); the subject was taken on
+this session's own ranking because the one-liner arrived from a peer session. One machinery path
+changes (`validate-artifact-derivations.sh`) and one is deleted (its tracked `.fn` sidecar);
+no bootstrapping file is touched; zero mode-only changes.
+
+#### `BL-137`
+
+`core/scripts/validate-artifact-derivations.sh` refused the write and exec OPTION WORDS of its
+read-only allowlist (`sed -i`, `find -delete`, `sort -o`, `awk system()`) and nothing else, so
+`sed -n 'w canary' data.txt` ran through the validator and created the file. Measured before the
+fix: the `w` and `W` commands, the `w` flag on `s///`, an absolute or `../` target (the eval runs
+from the project root and sed resolves the path, so the write lands anywhere the user can write),
+an existing target TRUNCATED (md5 before and after), the script delivered by `-f file`,
+`-fscript`, `--file=` and `--expression=`, a joined `-i` suffix with no dot (`-ibak`, `-iX`,
+`-nibak`, `-ni.bak` — the shipped `sed:-i.*` arm required the dot), and the second stage of a
+pipeline. `core/hooks/ai-dlc-derivation-capture.sh` runs the same eval inside the tool call that
+writes a fence-carrying file, so the trigger is an Edit.
+
+The arm is a PARSER over sed's own grammar, not a regex, and it fails closed. A `w` is a write
+only in COMMAND position — at script start, after `{`, `}`, `!` or an address — and an
+unanchored `s(.)…\1…\1<flags>` scan matched inside `/regex/=` addresses and captured prose as a
+flag cluster, refusing 5 real corpus lines; anchoring is what makes "refuse GNU `e`" and "zero
+false positives" compatible. Every `-e`/`--expression` argument is collected and scanned as its
+own script, because the reference corpus carries 33 legitimate multi-`-e` derivations and a
+blanket `-e` refusal — the contract's first instruction — would have broken every one; `-f` has
+zero instances and is refused outright. Alternate `s` delimiters, bracket expressions carrying
+the delimiter, arbitrary whitespace before the filename, and `-u`/`-z` between `sed` and the
+script are handled; `{` and `}` RESET command position rather than consume it, which a first
+cut got wrong while every other vector was refused. GNU `W` and `e` are refused by verdict and
+are not live on BSD sed, so they are never seeded as canary arms.
+
+The false-positive set is 0, and the instrument that measured it ships beside the fixture:
+`core/fixtures/artifact-derivations/fp-sweep.sh` extracts the shipping validator's own splitter
+and predicate — never a restatement — and runs them over every `$ sed` segment in a corpus given
+as its argument, with a seeded-write positive control and an impossible-token negative control
+in the same invocation. On the reference consumer's planning artifacts (4415 files, ~1770 sed
+segments, ~1660 reaching the arm; the corpus moves while its pipeline runs, so re-run the
+sweep rather than quoting the figure) it reports 0 incremental refusals: the only refused
+segments are four real `sed -i ''` commands the shipped option table already refused.
+
+`core/fixtures/artifact-derivations/run.sh` gains canary arms for every vector that writes on
+this machine (each first run by bash directly, so a contained vector is proven to be one), verdict
+arms for the GNU-only forms and for the three-way `/w/p` (read-only) versus `/alpha/w/p` (writes
+`/p`) versus `/alpha/wp` (writes `p`) distinction, a must-allow arm over the legitimate corpus
+forms, and two mutants: the blanket `sed:*` deny — which closed the receipt AND passed all five
+fixtures that drive this validator before this release, so the mutant arm asserting the
+must-allow case fails AS AN ALLOWLIST REFUSAL is the only thing in the tree separating the fix
+from the over-broad non-fix — and the predicate deleted. 51 → 124 assertions. `;` and a literal
+newline never reach the sed grammar (the metacharacter ban and the fence grammar refuse them
+first), and `sed -n 'w' canary` does not write (the word becomes an input file); each is
+recorded as a non-seed rather than cited as covered.
+
+The tracked sidecar `core/scripts/validate-artifact-derivations.sh.fn` is retired. Sourced by
+nothing since it landed in `v0.474.0`, it carried its own drifted copy of the allowlist, and
+`install.sh`'s derived `core/scripts/*` glob shipped it to every consumer as an executable. A
+release whose subject is "the allowlist refuses sed's writes" does not ship a second, unfixed
+allowlist beside it.
+
 ## [0.560.0] - 2026-09-12
 
 ### A cited obligation is a handle, and a transcript corpus that held nothing fails open
