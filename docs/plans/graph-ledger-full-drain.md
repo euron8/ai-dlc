@@ -15,10 +15,8 @@ BEFORE ACTING:**
 1. **`## Start here`** — the two repos and the READ/WRITE boundary. **Read this FIRST, before any
    command.** One of those repos is READ ONLY and a write there is the most expensive mistake
    available in this program.
-2. **`### NEXT ACTIONS — numbered, in order`** — what to do, starting at action 1. This is roughly
-   4,800 lines below this block; jump to the heading BY NAME, do not scroll and do not trust
-   this figure — it is advisory, it has been stale before, it was 700 lines out when batch 49
-   re-derived it, and every resume block added above it moves it again.
+2. **`### NEXT ACTIONS — numbered, in order`** — what to do, starting at action 1. Jump to the
+   heading BY NAME; do not scroll.
 3. **`### Ping the operator`** — when to stop and report.
 4. **`## Hazards`** and **`### Done when`** — what will bite you, and what finishing looks like.
 5. **`### Derive the state; do not trust the numbers below`** — the command block actions 1b and 6
@@ -26,12 +24,11 @@ BEFORE ACTING:**
    the numbered actions and above `## Context`, so it is LIVE despite its position; jump to it by
    name like the others.
 
-**THE HISTORY BOUNDARY IS BY HEADING, NOT BY POSITION, and an earlier revision of this block got
-that wrong in the direction that matters.** It said "everything from `## Context` down is
-HISTORY" — but `## Start here`, `## Hazards`, `## Verdict vocabulary` and `### Done when` all sit
-BELOW `## Context`, so a session obeying that sentence literally would skip its own read/write
-boundary and write to the consumer. `scripts/validate-plan-shape.sh:73` cannot catch this: it
-greps that `## Start here` EXISTS and never asks whether the reader was told to ignore it.
+**THE HISTORY BOUNDARY IS BY HEADING, NOT BY POSITION.** `## Start here`, `## Hazards`,
+`## Verdict vocabulary` and `### Done when` all sit BELOW `## Context`, so a rule reading
+"everything from `## Context` down is HISTORY" would skip this plan's own read/write boundary and
+write to the consumer. `scripts/validate-plan-shape.sh:73` cannot catch this: it greps that
+`## Start here` EXISTS and never asks whether the reader was told to ignore it.
 
 So: the five sections above are LIVE. Everything else below `## Context` — the `## Status record`
 band, the per-batch records, `## Phases`, `## What the pull produced` — is HISTORY: measured
@@ -8033,10 +8030,9 @@ each one's controls are explained there, not in the fence:
    DISCHARGED;
 4. the delivery-gap block (`.ai-dlc-version` vs `VERSION`).
 
-The others are worked examples: the three ledger RECORD FORMS, the batch-14 grammar table, the
-mode-only `git diff --raw` recipe, and the receipt histogram one-liner action 5 owns. A fresh
-session that concatenates every fence in this section gets a syntax error on the record-forms
-example, which is how this note came to exist.
+The others are worked examples: the three ledger RECORD FORMS, the grammar table, the
+mode-only `git diff --raw` recipe, and the receipt histogram one-liner action 5 owns. Concatenating
+every fence in this section gets a syntax error on the record-forms example.
 
 ```
 git -C /Users/n8/git/ai-dlc log --oneline -1 origin/main
@@ -8050,20 +8046,16 @@ commands describe the INSTRUMENT. This one describes the SUBJECT, and until batc
 this file derived it:
 
 **READ THE ARCHIVE, AND KEY IT ON BOTH RECORD FORMS. A BARE TOKEN GREP IS NOT A CANDIDATE
-COUNT, AND NEITHER IS A HEADING GREP.** This block has now been wrong twice, in opposite
-directions, and the second time is the instructive one.
+COUNT, AND NEITHER IS A HEADING GREP.**
 
-The first version grepped every `PC-`-shaped token out of the live ledger and called the result
-"candidates". It counted **82** where the headings give **40**: the surplus is bare sprint
-prefixes (`PC-S296`, `PC-S333`), truncations (`PC-S3`, `PC-S295-`), and cross-references in prose
-to candidates that now live in the ARCHIVE. It also never opened
-`push-candidate-ledger.archive.md` — so every mention of an already-closed candidate scored as an
-unexamined one.
+A bare `PC-`-shaped token grep over the live ledger counts **82** where the headings give **40**:
+the surplus is bare sprint prefixes (`PC-S296`, `PC-S333`), truncations (`PC-S3`, `PC-S295-`), and
+cross-references in prose to candidates that now live in the ARCHIVE. It also misses
+`push-candidate-ledger.archive.md` entirely, so every mention of an already-closed candidate
+scores as an unexamined one.
 
-**BATCH 13 REPLACED IT WITH A `^## PC-` HEADING GREP, AND THAT GRAMMAR CANNOT SPELL A THIRD OF
-THE LEDGER. BATCH 14 ADDED A BULLET ARM AND IT STILL MISSED A THIRD FORM.** The consumer records
-a candidate in THREE forms. This grammar has now been wrong THREE TIMES, each time in a way that
-returned a clean, plausible number:
+**A `^## PC-` HEADING GREP CANNOT SPELL A THIRD OF THE LEDGER, AND A HEADING-PLUS-BULLET ARM
+STILL MISSES A THIRD FORM.** The consumer records a candidate in THREE forms:
 
 ```
 ## PC-S314-PRECLASSIFY-BUCKETS-A-MODE-ONLY-CHANGE-...
@@ -8073,9 +8065,9 @@ returned a clean, plausible number:
 ```
 
 **The third form closes its bold IMMEDIATELY after the id**, where the second continues into
-prose. Batch 14's bullet arm required a trailing SPACE after the id (`^- \*\*PC-[A-Z0-9-]+ `),
-so it scored every bare-bold entry as a non-instance. Measured at v0.425.0, both directions, with
-the partition and an impossible id as controls:
+prose. A bullet arm requiring a trailing SPACE after the id (`^- \*\*PC-[A-Z0-9-]+ `) scores every
+bare-bold entry as a non-instance. Measured, both directions, with the partition and an impossible
+id as controls:
 
 ```
               batch 14's grammar    actual    invisible
@@ -8087,10 +8079,10 @@ archive               92             122         30
 `PC-S305-BARE-BOLD-ENTRY-IS-INVISIBLE-TO-EVERY-REVERIFY`, in bare-bold form, describing this exact
 defect — and it was invisible to this grammar BECAUSE of the defect it describes.
 
-**DO NOT READ THAT ENTRY'S TITLE AS OVERSTATED. A REVISION OF THIS BLOCK DID, AND IT WAS WRONG.**
-The reasoning was that `ledger-reverify` still emits a `HAND-REVIEW` row for the entry, so
-"invisible to EVERY reverify" must be too strong. That **conflates the entry's own FORM with its
-SUBJECT**. The entry is written as a dashed bullet, so of course reverify sees it; its subject is
+**DO NOT READ THAT ENTRY'S TITLE AS OVERSTATED.** `ledger-reverify` still emits a `HAND-REVIEW`
+row for the entry, which does not make "invisible to EVERY reverify" too strong — that
+**conflates the entry's own FORM with its SUBJECT**. The entry is written as a dashed bullet, so
+of course reverify sees it; its subject is
 the DASH-LESS `**<id>**` at column 0, and for that form the title is exact. Measured here: one such
 line exists in the archive today. **Ask what a finding's subject is before scoring its title against
 the artifact that carries it** — the carrier and the claim are different objects.
@@ -8107,41 +8099,33 @@ counts are complete rather than merely larger — live **22 = 9 spaced + 13 bare
 **41 = 11 + 30**.
 
 **A cited id that resolves to nothing is a claim about your GRAMMAR before it is a claim about the
-ledger.** Point the grammar at its own subject before believing its zero, and note that the two
-earlier repairs both PASSED their own controls — a control drawn from the form you already know
-about cannot discover the form you do not.
+ledger.** Point the grammar at its own subject before believing its zero — a control drawn from
+the form you already know about cannot discover the form you do not.
 
-**A FIFTH FORM, AND IT IS THE PROOF OF THAT LAST SENTENCE. THE HEADING ARM WAS `^## PC-` AND AN
-ENTRY IS FREE TO BE `### PC-`.** The consumer files a candidate NESTED under another entry's
-heading, at heading level three, and `^## ` cannot match it — the third character is `#`, not a
-space. Measured at batch 43, both ledgers, with every prior control still passing: the live count
-goes **71 → 72** and the archive is unchanged at 142. The single recovered id is
-`PC-S308-DISPATCH-GUARD-SPRINT-FIELD-INTERMITTENTLY-NULL`.
-
-**IT HAD BEEN IN THE LEDGER SINCE THE `6d84cbec…` ANCHOR AND THREE CONSECUTIVE SWEEPS CALLED THE
-LEDGER EMPTY OF NEW WORK.** It was present at every md5 this file records for batches 41 and 42.
-The md5-and-counts test was not the thing that failed — the ledger's md5 was genuinely unmoved,
-so "nothing was filed" was TRUE — the GRAMMAR is what failed, and the two tests answer different
-questions. **A sweep that reports no new work has made a claim about its own grammar first.**
-It became this batch's subject, so the cost of the blind spot was a full batch of delay on a
-defect that was breaking a gate on the consumer's live sprint.
+**A FIFTH FORM: AN ENTRY IS FREE TO BE `### PC-`.** The consumer files a candidate NESTED under
+another entry's heading, at heading level three, and `^## ` cannot match it — the third character
+is `#`, not a space. Measured, both ledgers, with every prior control still passing: the live
+count goes **71 → 72** and the archive is unchanged at 142. The single recovered id is
+`PC-S308-DISPATCH-GUARD-SPRINT-FIELD-INTERMITTENTLY-NULL`, which sat in the ledger while three
+consecutive sweeps called it empty of new work — the md5 was genuinely unmoved, so "nothing was
+filed" was TRUE, and the GRAMMAR is what failed. **A sweep that reports no new work has made a
+claim about its own grammar first.**
 
 The arm is `^#{2,6}` for that reason, which is also the range `ledger_entry_shape()` in
 `core/skills/ai-dlc-update/reconcile/lib.sh:278` has always used. **The SHIPPING tooling was never
-blind to this form; only this file's hand-rolled copy of its grammar was** — which is the standing
-"cite, do not restate" rule collecting its debt. If you touch this function again, check it
-against `ledger_entry_shape()` rather than against your own reading of the ledger.
+blind to this form; only this file's hand-rolled copy of its grammar was.** If you touch this
+function again, check it against `ledger_entry_shape()` rather than against your own reading of
+the ledger.
 
-**`sed -E '...;t;d'` IS NOT PORTABLE AND THE FIRST CUT OF THIS BLOCK USED IT.** BSD sed answers
-`undefined label ';d'`, both files come back EMPTY, and the partition control — *"must be 0"* —
-comes back 0 and AGREES. Only the PRESENCE control, which must come back 1, catches it. That is
-why both controls are here and why one of them is positive.
+**`sed -E '...;t;d'` IS NOT PORTABLE.** BSD sed answers `undefined label ';d'`, both files come
+back EMPTY, and the partition control — *"must be 0"* — comes back 0 and AGREES. Only the PRESENCE
+control, which must come back 1, catches it. That is why both controls are here and why one of
+them is positive.
 
 **KEY THE OTHER SIDE ON A BACKLOG ENTRY, NOT ON `docs/`.** A grep over all of `docs/` counts
 `docs/reviews/graph-ledger-*`, which is the ADJUDICATION corpus and mentions very nearly every
-candidate by construction — so it scores the whole ledger as covered and reports 3 unnamed.
-Worse, it is not even stable: writing an id into this plan MOVES it from unnamed to named, and
-the first cut of this block did exactly that to all three of its own findings. A candidate is
+candidate by construction — so it scores the whole ledger as covered and reports 3 unnamed. It is
+not stable either: writing an id into this plan MOVES it from unnamed to named. A candidate is
 taken up when a BACKLOG ENTRY cites it. Prose is not a filing.
 
 ```
@@ -8269,21 +8253,14 @@ grep -cx 'PC-S300-SEVEN-VALIDATORS-SHIPPED-NON-EXECUTABLE-AT-0.242.0' /tmp/arch.
 grep -cx 'PC-S999-NEVER' /tmp/filed.txt                                                  # control: 0
 ```
 
-Re-derived at v0.434.0: **65 live candidates, 132 archived**, partition control 0, all three
-presence controls 1, absence control 0. **The live count rose from 60 to 65 and then to 66
-across two consecutive ai-dlc sessions** — graph sessions filed sprint 306's candidates while
-this file was being edited, and the ledger's md5 moved four times in all, twice while a batch
-was running against it. **It moves when the CONSUMER WRITES, not only when they close**, so a
-figure here is a snapshot of a file someone else is holding open. Batch 14's figures — 49
-live, 90 archived — were the same ledger read through a grammar missing one record form.
+**The ledger moves when the CONSUMER WRITES, not only when they close**, so a figure here is a
+snapshot of a file someone else is holding open.
 
 **"CITED" IS STILL NOT THE PROGRESS METRIC, AND THIS IS THE LAST STEP OF THE DERIVATION.** A
 candidate cited by a LIVE entry is work in flight; one cited by an entry in the ARCHIVE has been
-discharged. Splitting the cited set is what turns this block into a measurement of the goal instead of a
-measurement of coverage — and the operator has had to say so twice, because every report of this
-program has led with `docs/backlog.md`'s live count, which moves for reasons that have nothing to
-do with the ledger. **Report the partition below. Never report live/archive entry counts as
-progress.**
+discharged. Splitting the cited set is what turns this block into a measurement of the goal
+instead of a measurement of coverage. **Report the partition below. Never report live/archive
+entry counts as progress.**
 
 ```
 pc() { grep -rohE 'PC-[A-Z0-9][A-Z0-9-]+' "$1" | sort -u; }
@@ -8302,24 +8279,17 @@ comm -12 /tmp/live.txt /tmp/closed_here | comm -23 - /tmp/in_msgs   # discharged
 comm -12 /tmp/arch.txt /tmp/closed_here | wc -l
 ```
 
-Re-derived at v0.436.0 by running the commands: **13 DISCHARGED, 22 in flight, 32 untouched**,
-summing to **67 against a live denominator of 65**, **0 discharged-but-unnamed**, and **24
-TERMINAL**. The two-over is EXPECTED and both causes are named — `PC-S303-STUB-AUDIT-MARKER-...`
-and `PC-S307-AWK-CANT-OPEN-FILE-...`, each cited by an archived entry AND by a live one. Do not
-read that sum as a partition failure; compute the overlap, as the control above now says. That unnamed line is a real
-failure mode and not a formality: a fix that ships without its id in the commit MESSAGE discharges
-the candidate and produces no row anywhere, so the consumer never learns of it.
+A sum over the denominator is EXPECTED, not a partition failure. The discharged-but-unnamed line
+is a real failure mode and not a formality: a fix that ships without its id in the commit MESSAGE
+discharges the candidate and produces no row anywhere, so the consumer never learns of it.
 
-**THE PARTITION CONTROL FIRED FOR THE FIRST TIME AT v0.428.0, AND THE CAUSE IS A CITATION THAT
-MEANS THE OPPOSITE OF WHAT THE JOIN ASSUMES.** The three buckets summed to **67** against a live
-denominator of **66**. `DISCHARGED` and `IN-FLIGHT` are not disjoint: an id cited by an ARCHIVED
-entry AND by a LIVE one lands in both. The overlapping id is
-`PC-S303-STUB-AUDIT-MARKER-REGEX-MATCHES-LOCAL-VAR-NAMED-STUB`, and `BL-109` cites it **to say
-it is a DIFFERENT candidate that its own fix does not close** — the sibling entry that motivated
-the distinction. **A `PC-` token in an entry is not a claim of ownership; `pc()` cannot tell
-"I close this" from "I am not this".** Subtract the overlap from `DISCHARGED`, never from
-`IN-FLIGHT`: a live entry citing an id is work in flight whatever an archived entry said about
-it. Corrected, the batch reads 12 / 22 / 32 = 66.
+**A CITATION CAN MEAN THE OPPOSITE OF WHAT THE JOIN ASSUMES.** `DISCHARGED` and `IN-FLIGHT` are
+not disjoint: an id cited by an ARCHIVED entry AND by a LIVE one lands in both. Measured on
+`PC-S303-STUB-AUDIT-MARKER-REGEX-MATCHES-LOCAL-VAR-NAMED-STUB`, which `BL-109` cites **to say
+it is a DIFFERENT candidate that its own fix does not close**. **A `PC-` token in an entry is not
+a claim of ownership; `pc()` cannot tell "I close this" from "I am not this".** Subtract the
+overlap from `DISCHARGED`, never from `IN-FLIGHT`: a live entry citing an id is work in flight
+whatever an archived entry said about it.
 
 ```
 comm -12 /tmp/live.txt /tmp/closed_here > /tmp/d.txt
@@ -8329,39 +8299,26 @@ comm -23 /tmp/d.txt <(comm -12 /tmp/d.txt /tmp/f.txt) | wc -l   # DISCHARGED, co
 ```
 
 **Do not "fix" this by narrowing the grammar.** A citation's INTENT is not derivable from the
-token, and a grammar that tried would be the fourth wrong spelling this block has shipped. The
-overlap is small, enumerable, and worth reading by hand.
+token. The overlap is small, enumerable, and worth reading by hand.
 
-**THE `DISCHARGED` LINE FALLS WHEN THIS PROGRAM SUCCEEDS, AND THAT IS WHY `TERMINAL` IS NOW BESIDE
+**THE `DISCHARGED` LINE FALLS WHEN THIS PROGRAM SUCCEEDS, AND THAT IS WHY `TERMINAL` IS BESIDE
 IT.** `DISCHARGED` intersects our archive with the LIVE ledger, so the moment a consumer closes a
-candidate it leaves `live.txt` and drops out of the numerator. The count went **7 → 5** across the
-pull that closed two candidates — the program's own scoreboard resets on success. This is
-`mechanism-design.md`'s "a fix that satisfies a join by deleting the join's subject reads as green
-forever", inverted: here the subject's deletion reads as REGRESS.
+candidate it leaves `live.txt` and drops out of the numerator. This is `mechanism-design.md`'s "a
+fix that satisfies a join by deleting the join's subject reads as green forever", inverted: here
+the subject's deletion reads as REGRESS.
 
 **REPORT `TERMINAL` AS THE DELIVERED TOTAL AND `DISCHARGED` AS WORK AWAITING THE CONSUMER'S OWN
-CLOSE.** They are disjoint, because `live.txt` and `arch.txt` partition. At v0.433.0 that is
-**24 delivered and closed, 9 delivered and awaiting close — 33 in total against a headline of 9.**
-The bundled `0.432.0 -> 0.434.0` pull moved two more across, and DISCHARGED fell 10 → 9 as it did:
-the headline drops every time this program actually succeeds, which is why TERMINAL sits beside it.
-The 0.430.1 -> 0.432.0 pull is what moved eight of them from the second bucket to the first, and
-the headline FELL from 17 to 10 as it did — which is the scoreboard resetting on success, exactly
-as the paragraph above says it does.
-Both figures are ceilings on coverage rather than adjudications, for the reason the next paragraph
-gives: a citation is a filing, not a disposition.
+CLOSE.** They are disjoint, because `live.txt` and `arch.txt` partition. Both figures are ceilings
+on coverage rather than adjudications: a citation is a filing, not a disposition.
 
-**TWO CANDIDATES REACHED TERMINAL STATE AND NO COUNT THIS PROGRAM EVER MADE INCLUDED THEM** —
-`PC-S329-NAMED-UPSTREAM-DETAIL-INSTRUCTS-THE-CLOSE-ITS-OWN-STATUS-FORBIDS` and
-`PC-S330-LEDGER-ROTATE-STUCK-SET-CONTRADICTS-THE-SKIP-RULE-IT-CITES`. Both are bare-bold in the
-consumer's ARCHIVE, so the old grammar could not see them there, and both are cited by an archived
-backlog entry here, so the `DISCHARGED` line could not see them either. Delivered, closed, counted
-nowhere. They are the reason both repairs in this block had to land together: fixing the grammar
-alone would still have left them in no bucket.
+**A CANDIDATE CAN REACH TERMINAL STATE AND APPEAR IN NO COUNT THIS PROGRAM MAKES** — bare-bold in
+the consumer's ARCHIVE, so the old grammar could not see it there, and cited by an archived
+backlog entry here, so the `DISCHARGED` line could not see it either. Delivered, closed, counted
+nowhere. Both repairs in this block had to land together for that reason: fixing the grammar alone
+still leaves such a candidate in no bucket.
 
-**TWELVE OF SIXTY-SIX, OR TWENTY-SIX OF ONE HUNDRED AND EIGHTY-EIGHT, DEPENDING ON WHICH QUESTION
-YOU ASKED.**
-State which. Every progress figure quoted before v0.425.0 was against a denominator 28% too small
-and a numerator that silently shed its own successes.
+**STATE WHICH DENOMINATOR A PROGRESS FIGURE IS AGAINST** — the live set or the whole corpus. The
+two answers differ by a factor.
 
 **AND "DISCHARGED" IS STILL A CLAIM ABOUT THIS TREE, NOT ABOUT THE CONSUMER.** A consumer runs
 its OWN installed engine. Until graph PULLS, none of this reaches it, its ledger does not move,
@@ -8375,41 +8332,20 @@ cat VERSION                                                                     
 git log --format='%H' -F --grep="<id>" origin/main | tail -1                            # then git show "${sha}:VERSION"
 ```
 
-**THE GAP CLOSED AND THEN REOPENED AT ONE RELEASE. AT v0.433.0 IT IS ONE RELEASE AND ONE
-CANDIDATE.** The deferred pull RAN: the consumer reconciled `0.430.1 -> 0.432.0` on 2026-08-28
-and `.claude/.ai-dlc-version` reads **0.432.0** on all four fields. That pull is what moved eight
-candidates from DISCHARGED to TERMINAL. Consumer installed **0.432.0**, distribution **0.433.0**,
-pending set **`PC-S307`** from `v0.433.0`. Derived per-id against an impossible-id control of 0.
+**NO RUNBOOK IS LIVE.** Every `docs/plans/graph-pull-*` file is retitled `DO NOT EXECUTE` at its
+first line. Read them as worked examples, never as live plans, and check the first line of any you
+open. **Keep measuring the gap and reporting it; do not run the pull, and do not treat its growth
+as a reason to reorder the work.**
 
-**The range is NOT wide, and the bootstrapping hazard IS live and has been measured rather than
-warned about.** One release, three core paths, `self-update-gate.sh` returns `SELF-UPDATE-OK`
-because no `core/scripts/` path is in the range, and zero mode-only changes. The specific hazard:
-`apply.sh` now resolves a second declaration out of its sibling `layer-drift.sh` and is FATAL when
-it cannot, so landing one without the other aborts every later apply — **both are in the range and
-both bucket the same way, so the split cannot occur here.** That is a measurement on a `file://`
-clone of both trees, not a reading of the code.
-
-**NO RUNBOOK IS OWED TODAY AND NONE OF THEM IS LIVE.** The gap is ZERO — the `0.482.0 → 0.489.0`
-pull ran on the operator's authorization on 2026-09-03, without a runbook, invoked bare so the ref
-resolved to `HEAD`. Every `docs/plans/graph-pull-*` file is retitled `DO NOT EXECUTE` at its first
-line; `graph-pull-0432-to-0433.md`, which an earlier revision of this paragraph called written,
-rehearsed and NOT STARTED, was replaced by `graph-pull-0432-to-0434.md` and says so in its own
-title. Read them as worked examples, never as live plans, and check the first line of any you open.
-**Keep measuring the gap and reporting it; do not run the pull, and do not treat its growth as a
-reason to reorder the work.**
-
-**EVERY PENDING CANDIDATE IS FROM A SPRINT THE CONSUMER IS STILL RUNNING.** That raises what the
-deferral costs; it does not change whose call it is. Report the number and stop.
+**A PENDING CANDIDATE FROM A SPRINT THE CONSUMER IS STILL RUNNING** raises what the deferral
+costs; it does not change whose call it is. Report the number and stop.
 
 **AND THE REHEARSAL IS NOT OPTIONAL BOOKKEEPING — IT IS WHERE THIS PROGRAM'S ONLY CONSUMER-FACING
 DEFECT WAS CAUGHT.** `v0.429.0`'s rehearsal found a `WORKLIST` row instructing every consumer to
 register a sourced library as a hook. Re-rehearse before writing any figure into a runbook.
 
-The gap was ZERO at v0.425.0, which was the first time in the program it had been closed. **A ZERO
-GAP IS A STATE, NOT AN ACHIEVEMENT THAT STAYS TRUE**, and it went non-zero on the very next release
-that discharged anything. Re-derive it every batch rather than reading any
-sentence here. `PC-S333` and `PC-S314` remain CLOSED in the consumer's own ledger (live=0,
-archive=1 for each), reached by the `0.415.0 → 0.425.0` pull.
+**A ZERO GAP IS A STATE, NOT AN ACHIEVEMENT THAT STAYS TRUE** — it goes non-zero on the very next
+release that discharges anything. Re-derive it every batch rather than reading any sentence here.
 
 **THE PULL IS NOT YOURS TO RUN.** `.claude/rules/consumer-boundary.md` is unconditional — an
 ai-dlc session never writes to a consumer. The pull happens in a GRAPH session the operator
@@ -8421,117 +8357,70 @@ ABOUT IT.** A fix to a step can never be delivered by that step: the broken vers
 that runs the delivery. `PC-S314` repaired `preclassify.sh`, which IS the program the pull runs,
 so the consumer's unfixed copy classifies the very pull carrying its own repair — and its defect
 is a MODE-ONLY change bucketing `UPSTREAM-ONLY` forever, which is a non-terminating step 2.
+**`PC-S314`'s fix takes effect on the pull AFTER the one that delivers it** — say so in the brief
+rather than claiming the next pull is protected by it.
 
-Measured for this pull rather than asserted, and it comes back CLEAN:
+Measure it rather than asserting it:
 
 ```
 git diff --raw <installed-commit>..origin/main -- core/    # mode-only = modes differ, blobs equal
 ```
-**0 mode-only changes** across 38 changed core paths. The three mode changes in the range are all
-`000000 -> 100755` file ADDS, which take the `A` branch, not the `M` branch the defect lives in.
-So the hazard is real in general and does not bite this pull. **`PC-S314`'s fix takes effect on
-the pull AFTER the one that delivers it** — say so in the brief rather than claiming the next
-pull is protected by it.
+A `000000 -> 100755` file ADD takes the `A` branch, not the `M` branch the defect lives in, so it
+is not a mode-only change.
 
-**THE "FIVE UNRESOLVABLE FULL SLUGS" WERE ALL GRAMMAR ARTIFACTS, AND THAT CLAIM IS WITHDRAWN.**
-Batch 14 reported eleven ids cited by live entries resolving to NEITHER ledger file, of which six
-were citation-grep noise (`PC-S308`, `PC-S334`, `PC-S336`, `PC-S900-`, two `PC-S999-` probe
-tokens) and **five were said to be real slugs naming candidates the ledger does not contain**:
-`BL-039`, `BL-066`, `BL-016`, `BL-049`, `BL-017`. Re-measured at v0.425.0 under the corrected
-grammar, **every one of the five has a resolving citation** — `BL-016`, `BL-017` and `BL-049`
-resolve 1 of 1, `BL-039` 1 of 2, `BL-066` 4 of 8. The candidates were in the ledger the whole time,
-in a record form the grammar could not spell.
+**A NON-RESOLVING CITATION IS A HYPOTHESIS ABOUT THE GRAMMAR FIRST.** A missing candidate and an
+unspellable one are the same output. Establish that a citation resolves before picking an entry
+as a batch subject — but run the CORRECTED grammar.
 
-**That is the same defect scoring its own subject as absent, one level over.** A missing candidate
-and an unspellable one are the same output. Still establish that a citation resolves before picking
-an entry as a batch subject — but run the CORRECTED grammar, and treat a non-resolving citation as
-a hypothesis about the grammar first.
-
-**Two of those 20 are new to this block at batch 14**, because they are bullet-form and the
-heading grammar could not see them: `PC-S295-RETRO-PARALLEL-OPEN-COUNT-METHOD` and
-`PC-S304-STUB-MARKER-REGEX-MATCHES-DOCSTRING-PROSE-AND-BARE-IDENTIFIERS`. Neither has been
-examined by any batch.
-
-**Two of the 20 are already dead upstream** — `PC-S300-ORIGIN-TAG-GATE-HAS-NO-WAIVER-FOR-TRACEABILITY-CITATIONS`
-is **WITHDRAWN 2026-07-25, the premise was false**, and
-`PC-S305-CHECK-17-BYPASS-CONSUMER-CASES-V8-V9-AND-A-PASSING-CONTROL` is **WITHDRAWN 2026-07-27,
-REFUTED — its premise was a case-sensitivity artifact**. **Ten more are one sprint's cluster**,
-`PC-S312-*`, several of which describe themselves as falsifiability probes for a retirement
-rather than as defects. **Read each one's own status line before treating it as work** — that
-is what this block has been asking for since batch 1, and the reason it never happened is that
-the number it asked about was never a count of candidates.
+**READ EACH CANDIDATE'S OWN STATUS LINE BEFORE TREATING IT AS WORK.** Some are already WITHDRAWN
+or REFUTED upstream, and several of the `PC-S312-*` cluster describe themselves as falsifiability
+probes for a retirement rather than as defects.
 
 **THE ID GRAMMAR IS `PC-<SLUG>`, NOT `PC-<NUMBER>`, and getting that wrong returns a clean zero
-from BOTH sides.** A first pass keyed on `PC-[0-9]+` reported 0 ids in the ledger AND 0 in the
-backlog, which reads as "the join is dead" rather than "the grammar is wrong". The control that
-catches it is running the same expression against the ledger itself: if the SOURCE has none
-either, the grammar is the defect. This is `verification-discipline.md`'s "point a search grammar
-at its own subject before trusting its zero", met in the wild an hour after it was written down.
+from BOTH sides.** A pass keyed on `PC-[0-9]+` reports 0 ids in the ledger AND 0 in the backlog,
+which reads as "the join is dead" rather than "the grammar is wrong". The control that catches it
+is running the same expression against the ledger itself: if the SOURCE has none either, the
+grammar is the defect. `verification-discipline.md` owns this rule.
 
-**"Cited" IS NOT "adjudicated".** A backlog entry naming an id is a FILING, not a disposition —
-so the **29** is a ceiling on coverage, not a measurement of it. The **20** is the solid half:
-those have not been examined at all. Their status in the consumer's own ledger is **NOT
-ESTABLISHED**; some may already be `WITHDRAWN` or `ADOPTED` upstream. **Establish that before
-treating 20 as a workload.**
+**"Cited" IS NOT "adjudicated".** A backlog entry naming an id is a FILING, not a disposition, so
+the cited count is a ceiling on coverage rather than a measurement of it. The unfiled column is
+the solid half: those have not been examined at all, and their status in the consumer's own ledger
+is NOT ESTABLISHED. **Establish that before treating the column as a workload.**
 
-Re-derived at v0.434.0 by running the commands, not by editing the sentence: **73 live / 47
-archived**, against an impossible-verdict control of 0 and a `BL-006`-still-live control of 1.
-Batch 16 filed six (`BL-104`–`BL-109`) and rotated all six in the same release, so live went
-70 → 76 → 70 and the archive went 33 → 39. **Batch 14 recorded 31 archived and the rotation of
-`BL-101` moved it to 32 without the sentence being updated** — which is this block's own failure
-mode, one release after it was written down.
+**THE BACKLOG CEILING IS A LEVER, NOT A REASON TO FILE FEWER FINDINGS.**
+`validate-backlog-size.sh` caps the live file; the gate reads the WORKING TREE at push time, so an
+intermediate commit over the cap is not itself a failure. Rotation is the lever.
 
-**THE CEILING BOUND THIS BATCH AND IT WILL BIND THE NEXT ONE.** `validate-backlog-size.sh` caps
-the live file at **75** entries. Batch 16 opened at 72, filed six to reach 76 — over — and came
-back to 70 only because every entry it filed was also fixed in the same release. **A batch that
-files more than three entries it does not close breaches the ceiling**, and the gate reads the
-WORKING TREE at push time, so an intermediate commit over the cap is not itself a failure.
-Rotation is the lever; the ceiling is not a reason to file fewer findings.
+**A RISING LIVE COUNT ACROSS A BATCH THAT CLOSED AN ENTRY IS THE NORMAL CASE, NOT AN ERROR** —
+asking whether the entry being closed was WIDER than filed routinely files more. Read the ARCHIVE
+count, which only ever moves on a real close.
 
-**THE LIVE COUNT WENT UP ACROSS A BATCH THAT CLOSED AN ENTRY, AND THAT IS THE NORMAL CASE RATHER
-THAN AN ERROR.** Batch 12 closed and rotated one (`BL-094`) and filed FOUR (`BL-095`, `BL-096`,
-`BL-097`, `BL-098`), every one found by asking whether the entry being closed was WIDER than
-filed. Do not read a rising live count as a batch that failed; read the ARCHIVE count, which only
-ever moves on a real close.
-
-**THE LEDGER NOW REPORTS ZERO `CLOSE-CANDIDATE`, AND THAT IS A RESULT RATHER THAN AN ABSENCE.**
-The one it used to carry was `BL-006`, and it was FALSE — the receipt exited 0 on two COMMENT
-lines in `scripts/validate-claude-rules.sh`, one of which said the mechanism "was offered and
-declined for now". Batch 10 re-anchored it, so a zero here now means what it says. **If a
-`CLOSE-CANDIDATE` appears, it is a hypothesis and not a verdict**: run the entry's receipt
-directly, read the raw exit code, and ask what ELSE satisfies it before closing anything.
+**A `CLOSE-CANDIDATE` IS A HYPOTHESIS AND NOT A VERDICT**: run the entry's receipt directly, read
+the raw exit code, and ask what ELSE satisfies it before closing anything.
 
 **A `STILL-LIVE` ROW IS NOT EVIDENCE THAT THE ENTRY IS LIVE, AND `BL-089` IS THE ENTRY THAT SAYS
 SO.** `backlog-reverify.sh` maps every non-zero `sh` exit to `STILL-LIVE  … "still reproduces
 here"`, but this corpus's receipts use **exit 9** to mean *"a precondition moved and I measured
-nothing"*. The two are one row. Measured at batch 14's close: **58 exit 1, 1 exit 9, 0 exit 0**
-across 59 `sh` receipts — the 9 is `BL-066`, whose receipt is broken shell. Batch 9 rebuilt the other one; `BL-076`'s had been unable to measure
-anything for 28 releases and read as `STILL-LIVE` the whole time.
-Derive the current pair rather than trusting that one; the count of live `sh` receipts moves
-with every batch and the control is the entries declaring `verify: manual`, which the engine
+nothing"*. The two are one row. One receipt was unable to measure anything for 28 releases and
+read as `STILL-LIVE` the whole time. Derive the current pair; the count of live `sh` receipts
+moves with every batch and the control is the entries declaring `verify: manual`, which the engine
 does route to HAND-REVIEW.
 
-**DERIVE THAT CONTROL FROM THE ENGINE, NOT FROM A GREP, AND HERE IS WHY BOTH GREPS ARE WRONG.**
-`^verify: manual` returns 6 — it misses the three entries that INDENT the line, which
-`backlog-reverify.sh`'s own grammar (`^[ \t]*verify:`) accepts. Fixing the indent gives 9, which
-is also wrong: both counts include the `verify: manual` line in the `## Receipts` LEGEND at
-`docs/backlog.md:25`, which is prose about the grammar and not an entry. The true number at
-v0.419.0 is **8**, and the only reader that gets it right is the engine, because it starts
-entries at a `BL-` id and never counts the preamble. An earlier revision of this block quoted 5
-from the unindented grep; the revision after it fixed the PROSE and left the COMMAND, so the
-file stated 7 beside a command returning 5. Every figure in this block was re-derived at
-v0.419.0 by running the commands, not by reading the sentences. Run the engine:
+**DERIVE THAT CONTROL FROM THE ENGINE, NOT FROM A GREP, AND BOTH GREPS ARE WRONG.**
+`^verify: manual` misses the entries that INDENT the line, which `backlog-reverify.sh`'s own
+grammar (`^[ \t]*verify:`) accepts. Fixing the indent is also wrong: both counts include the
+`verify: manual` line in the `## Receipts` LEGEND at `docs/backlog.md:25`, which is prose about
+the grammar and not an entry. The only reader that gets it right is the engine, because it starts
+entries at a `BL-` id and never counts the preamble. Run the engine:
 
 This one is a LOOP, so run it through `bash -c` — your shell is zsh, where an unquoted `$var`
 is not word-split and a loop written for bash iterates once over the whole string.
 
 **IT GATES ON A `## BL-` HEADING FOR THE SAME REASON THE CONTROL BELOW USES THE ENGINE.** A bare
-`grep "^verify: sh "` returns 56 against a true count of 55, because it also matches the
-`verify: sh <one-liner>` line in the `## Receipts` LEGEND at `docs/backlog.md:22` — prose about
-the grammar, which then gets EVALUATED as though it were a receipt and lands in the histogram as
-a real exit code. It misses indented receipts too. Both halves of this block have now been wrong
-in that same way, once each; the ledger's preamble is a receipt-shaped trap and every reader of
-this file must skip it:
+`grep "^verify: sh "` also matches the `verify: sh <one-liner>` line in the `## Receipts` LEGEND
+at `docs/backlog.md:22` — prose about the grammar, which then gets EVALUATED as though it were a
+receipt and lands in the histogram as a real exit code. It misses indented receipts too. The
+ledger's preamble is a receipt-shaped trap and every reader of this file must skip it:
 
 ```
 bash -c 'while IFS= read -r l; do ( eval "$l" ) >/dev/null 2>&1; echo "$?"; done \
@@ -9027,12 +8916,9 @@ given at batch 90.
    **Do not re-derive their findings**; each carries a bidirectional receipt and the measurement
    that produced it.
 
-   **BATCH 88's THREE SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope any of them.** `BL-217`,
-   `BL-222` and `BL-235` shipped as ONE release, `v0.551.0` at `864c37d9` (PR #716), none carrying
-   a `PC-` id, all three rotated. They batched because the derived separability diagonal showed no
-   receipt closed by a sibling's fix and no bootstrapping file is in the range. **All three
-   receipts were REBUILT** — the originals closed on an empty file, on a dead arm, and on a
-   positional window — so do not treat a batch-82 receipt as trustworthy because it exists.
+   **DO NOT TREAT A BATCH-82 RECEIPT AS TRUSTWORTHY BECAUSE IT EXISTS.** Three of them were
+   rebuilt in one release: the originals closed on an empty file, on a dead arm, and on a
+   positional window.
 
    **BATCH 89's THREE SUBJECTS ARE SHIPPED — do not re-scope any of them.** All three `PC-S341-*`
    candidates shipped:
@@ -9055,17 +8941,6 @@ given at batch 90.
    and never cited by an entry stays "unfiled" permanently. Split the column before ranking it: the
    available residue at this close is **14**.
 
-   **BATCH 87's TWO SUBJECTS ARE SHIPPED — do not re-scope either of them.**
-   `PC-S341-STEP-3F-ANCHOR-RULE-HAS-NO-LINT-AND-A-ONE-CHARACTER-MISS-IS-INVISIBLE` shipped as
-   `v0.549.0` at `795274e2` (PR #713), closing `BL-234`, which is ROTATED; and
-   `PC-S341-0548-1-CONFORMANCE-FIGURE-IS-TAKEN-OVER-A-TEST-FIXTURE-POPULATION` shipped as
-   `v0.550.0` at `3020f4f0` (PR #714), carrying no `BL-` entry to rotate. Both are cited verbatim
-   in their own release commit messages and both join to their own version. They did NOT batch:
-   release 1 touches `ledger-reverify.sh`, a bootstrapping file, which action 2 requires to ship
-   alone. **`BL-235` was filed beside release 2 and deliberately NOT fixed** — step 12 prescribes
-   the gate-log header and never says that conforming it makes Check 5 reachable, which flips a
-   `web/**` sprint from SKIP to FAIL. It is the readiest no-`PC` work.
-
    **READ THE BATCH-87 RESUME BLOCK BEFORE WRITING ANY FIXTURE ARM THIS BATCH.** Eight wrong
    implementations passed that fixture across three rounds and every one was a SEED gap, not an
    arm defect — including one that left the whole fixture green while breaking the release's own
@@ -9073,28 +8948,9 @@ given at batch 90.
    members. Ask of every generator set whether one seed isolates each member, and assert the
    VERDICT CLASS wherever the remedy text does not depend on it.
 
-   **BATCH 86's THREE SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope any of them.**
-   `PC-S311-SELF-UPDATE-FIXTURES-ARM-3-PREWRITTEN-HAS-NO-SPLIT-STAMP-SUPPRESSION`,
-   `PC-S310-CHECK5-GATE-LOG-HEADER-CONVENTION-UNDOCUMENTED-AND-UNSATISFIABLE` and the
-   `PC-S310-RETRO-PERSONA-MARKER-VOCABULARY-NOT-DOCUMENTED-IN-STEP-FILE` /
-   `PC-S310-RETRO-STEP6A-COMMIT-LIST-OMITS-AMBIENT-SESSION-LOGS` pair shipped as ONE release,
-   `v0.548.0` at `e26a1c7b` (PR #706), corrected by `v0.548.1` at `968d4544` (PR #708), all four
-   cited verbatim in the release commit message,
-   closing `BL-231`, `BL-232` and `BL-233`, all three rotated. They batched because no receipt is
-   closed by a sibling's fix and the range's only bootstrapping files are the two this batch's own
-   subject required. **The filed remedy for `PC-S311` was REFUTED by building it** — keyed on the
-   LIVE stamp it is a total disarm — and **three adversarial hands found four defects on the
-   gate-green pushed branch**, all in shipped prose, corrected at `a98835a4` and `70b443c2` before
-   the merge. Read the batch-86 resume block before writing any figure into a comment: two of those
-   four were MY OWN numbers, swapped, taken from a probe that compared a value with itself.
-
-   **BATCH 85's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.**
-   `PC-S310-HANDOFF-ENTRY-MARKER-COMMITTED-NEVER-DISCHARGES-CROSS-SESSION` shipped ALONE as
-   `v0.545.0` at `ef20d75a` (PR #701), closing `BL-229`, cited verbatim in the release commit
-   message, and was corrected by `v0.546.0` at `3cce29b6` (PR #702) and `v0.547.0` at `3e7c5707`
-   (PR #704). It shipped alone
-   because `apply.sh` is a BOOTSTRAPPING file and the machinery slice — derived by RUNNING the
-   shipping `machinery_paths()`, 129 paths — contains both it and the renderer.
+   **READ THE BATCH-86 RESUME BLOCK BEFORE WRITING ANY FIGURE INTO A COMMENT.** Three adversarial
+   hands found four defects on a gate-green pushed branch, all in shipped prose; two of the four
+   were the lead's own numbers, swapped, taken from a probe that compared a value with itself.
 
    **THE POOL WIDTH IS `AI_DLC_FIXTURE_JOBS`, DEFAULT 12, AND FOUR WIDTHS WERE MEASURED THIS
    BATCH — DO NOT READ THEM AS A CONCURRENCY CURVE.** Totals for a complete `NO_SKIP` run, 195
@@ -9131,19 +8987,8 @@ given at batch 90.
    filing as UNCOMMITTED and then as WITHDRAWN before the consumer session corrected it. The derive
    block now resolves the branch itself and carries the subset control.
 
-   **BATCH 84's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.**
-   `PC-S310-GATE-ADJUDICATION-ROTATION-HAS-NO-BACKFILL-PATH-FOR-PRE-MECHANISM-SPRINTS` shipped
-   ALONE as `v0.544.0` at `5b829554` (PR #699), closing `BL-228`, cited verbatim in the release
-   commit message and appearing in exactly one commit on the range. **Its own proposed remedy was
-   REFUTED** — building the backfill naively makes the consumer worse — so what shipped is the
-   refusal plus the `--legacy-through` escape. **The backfill has NOT been run on any consumer and
-   that is the consumer's call, not upstream's.**
-
-   **BATCH 83's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.**
-   `PC-S310-SELF-UPDATE-FIXTURES-OVER-ARM-CONVICTS-A-SET-IT-COULD-NOT-PARSE` shipped ALONE as
-   `v0.543.0` at `2b6901d9` (PR #697), closing `BL-226`, cited verbatim in the release commit
-   message and appearing in exactly one commit on the range. `BL-227` was filed beside it and
-   deliberately NOT fixed.
+   **THE GATE-ADJUDICATION BACKFILL HAS NOT BEEN RUN ON ANY CONSUMER AND THAT IS THE CONSUMER'S
+   CALL, NOT UPSTREAM'S.** What shipped is the refusal plus the `--legacy-through` escape.
 
    **THE AVAILABLE PC-BACKED RESIDUE IS ZERO.** All 18 unfiled re-derive as adjudicated — 4 named in
    `origin/main` release commits, 11 `NOT-UPSTREAM`, the `PC-S309-PRE-PUSH` pair WITHDRAWN, and
@@ -9175,13 +9020,8 @@ given at batch 90.
    available** — two of batch 74's five apparently-available candidates were a withdrawn pair whose
    titles read like live defects.
 
-   **BATCH 81's TWO SUBJECTS ARE SHIPPED — do not re-scope either of them.**
-   `PC-S309-STORY-NO-SPRINT-REMEDY-IS-RENAME-ONLY-WHILE-THE-FIXTURE-RATIONALE-CLAIMS-OUT-OF-BAND-DERIVATION`
-   and `PC-S309-VALIDATE-MANDATORY-RULES-CHECK5-TEST-ONLY-WEB-DIFF-FALSE-FAIL` shipped as ONE
-   release, `v0.542.0` at `732db5a5`, both cited verbatim in the release commit message. Neither
-   has a `BL-` entry to rotate — both came straight from the consumer's ledger.
-
-   **TWO OF THE THREE MID-BATCH FILINGS REMAIN AVAILABLE AND BOTH ARE ADJUDICATED NOT-READY.**
+   **TWO OF BATCH 81's THREE MID-BATCH FILINGS REMAIN AVAILABLE AND BOTH ARE ADJUDICATED
+   NOT-READY.**
    `ADR-DEFERRED-WORK-HAS-NO-CARRIER-INTO-BACKLOG` is refuted at its headline and has no
    constructible enforcer (`BL-215`); `RETRO-CLOSURE-QUOTATION-NOT-VERBATIM-BOUND` is real but its
    filed remedy is a false negative on its own motivating case, and choosing between the two
@@ -9197,17 +9037,9 @@ given at batch 90.
    across 44 headings and therefore CONTENDS with the batch's own filings and rotation — do not
    batch it with anything that files an entry.
 
-   **BATCH 80's TWO SUBJECTS ARE SHIPPED — do not re-scope either of them.** `BL-088` and
-   `BL-087` shipped as ONE release, `v0.541.0` at `274efdae` (PR #695), neither carrying a `PC-`
-   id. `BL-088` is ROTATED (`LANDED (v0.541.0)`). **`BL-087` is deliberately NOT rotated and is
-   NOT work**: it is a recorded ANSWER — a schema-invalid tool call is invisible to the hook
-   system — with no fix to ship, and its only open half is the unmeasured coercion partition.
-   They batched because the range's machinery slice is fixture files only.
-
-   **THE CONSUMER FILED MID-BATCH AND THAT FILING IS THE READIEST SUBJECT.**
-   `PC-S309-STORY-NO-SPRINT-REMEDY-IS-RENAME-ONLY-WHILE-THE-FIXTURE-RATIONALE-CLAIMS-OUT-OF-BAND-DERIVATION`,
-   dated 2026-09-09, took unfiled 18 → 19 and is available PC-backed work. It outranks the
-   no-`PC` set. Re-derive it from the sweep rather than trusting this sentence.
+   **`BL-087` IS DELIBERATELY NOT ROTATED AND IS NOT WORK**: it is a recorded ANSWER — a
+   schema-invalid tool call is invisible to the hook system — with no fix to ship, and its only
+   open half is the unmeasured coercion partition.
 
    **ASK OF ANY PROBE WHAT IT COUNTS, AND WHETHER THAT IS THE PROPERTY OR MERELY NEXT TO IT.**
    Batch 80's concurrency probe was wrong four times in one direction — a variable, wall-clock
@@ -9219,52 +9051,17 @@ given at batch 90.
    workers died on a variable that no longer existed as a defect. Assert the sha is identical at
    start and end.
 
-   **BATCH 79's TWO SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope either of them.** `BL-086`
-   shipped ALONE as `v0.539.0` (PR #692), no `PC-` id, bootstrapping; `BL-213` shipped ALONE as
-   `v0.540.0` (PR #693) citing
-   `PC-S309-STUB-AUDIT-PROSE-MARKER-FIRES-ON-NEGATION-AND-TEST-DOUBLE-REFERENCE` verbatim; both
-   rotated. **Every gate-green branch this batch carried a finding an adversary had to
-   surface** — read the batch-79 resume block before trusting a warm-cost figure or a receipt
-   that no built wrong fix has been scored against. The readiest no-`PC` entries now are
-   `BL-195`, `BL-087`, `BL-088`; run the sweep first, a PC-backed candidate outranks all three.
+   **READ THE BATCH-79 RESUME BLOCK BEFORE TRUSTING A WARM-COST FIGURE OR A RECEIPT THAT NO BUILT
+   WRONG FIX HAS BEEN SCORED AGAINST.** Every gate-green branch that batch carried a finding an
+   adversary had to surface.
 
-   **BATCH 78's TWO SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope either of them.** `BL-155`
-   and `BL-212` shipped as ONE release, `v0.538.0` (PR #690), neither carrying a `PC-` id, both
-   rotated. They batched because both live in `self-update-gate.sh` and neither receipt is
-   closed by the other's fix; the release touches three bootstrapping files, so it shipped with
-   nothing else. **The first integrated cut passed the full gate green and would have refused
-   every legitimate self-update** — read the batch-78 resume block's four refutations before
-   writing any join keyed on "unchanged since"; the discriminator is WHICH input moved and
-   TOWARD WHAT. The readiest no-`PC` entries now are `BL-195` and `BL-086`; run the sweep first,
-   a PC-backed candidate outranks both.
+   **READ THE BATCH-78 RESUME BLOCK'S FOUR REFUTATIONS BEFORE WRITING ANY JOIN KEYED ON "UNCHANGED
+   SINCE".** Its first integrated cut passed the full gate green and would have refused every
+   legitimate self-update; the discriminator is WHICH input moved and TOWARD WHAT.
 
-   **BATCH 77's THREE SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope any of them.** `BL-188`,
-   `BL-189` and `BL-211` shipped as ONE release, `v0.537.0` (PR #688), none carrying a `PC-` id,
-   all three rotated. They batched because the machinery slice over the range — derived by
-   RUNNING the shipping `machinery_paths()` globs — is `validate-reattach-budget.sh` alone and no
-   bootstrapping file is in it. `BL-211` was FOUND during the batch, by the census hand briefing
-   `BL-189`, and was fixed rather than filed under the batch-72 ruling. **Every one of the three
-   commits was corrected once after its adversary reported**, and each correction defeated a claim
-   the commit message itself made — read the batch-77 resume block before writing a claim about
-   a property into a commit, and ask which cell would refute it. The readiest no-`PC` entries now
-   are `BL-155` and `BL-195`; run the sweep first, a PC-backed candidate outranks both.
-
-   **BATCH 76's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.** `BL-113` shipped ALONE as
-   `v0.536.0` (PR #687), no `PC-` id because it carries none, rotated. Its owed FP measurement
-   is taken (0 of 234) and its receipt was rewritten at close because a comment closed the
-   original. **`BL-122` and `BL-148` are ARCHIVED** (`LANDED (v0.523.0)`), so the ranking that
-   earlier paragraphs below carry — "then `BL-155`, `BL-122`, `BL-148`" — names two entries the
-   sweep cannot find live; the readiest no-`PC` entries now are `BL-155`, `BL-188`, `BL-189`,
-   `BL-195`. Run the sweep first; a PC-backed candidate outranks all of them.
-
-   **BATCH 75's TWO SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope either of them.**
-   `PC-S309-READOPT-STAMP-REFUSES-A-CLEAN-MERGE-WHEN-A-DELETED-CORE-LINE-IS-A-SUFFIX-OF-ITS-REFLOWED-REPLACEMENT`
-   (`BL-209`) shipped ALONE as `v0.534.0` at `327f1d78` (PR #684) and
-   `PC-S343-ADJUDICATION-ROW-WITHHOLDS-THE-ONE-FIELD-ITS-RECORD-REQUIRES` (`BL-210`) shipped ALONE
-   as `v0.535.0` at `505c3dc3` (PR #685), both machinery-slice, both cited verbatim in their
-   release commit messages, both rotated. **THE AVAILABLE PC-BACKED RESIDUE IS ZERO** — all 18
-   unfiled re-derive as adjudicated. Run the sweep anyway; `BL-113` is the readiest no-`PC` entry
-   and ships ALONE, and its owed FP measurement is taken and empty.
+   **READ THE BATCH-77 RESUME BLOCK BEFORE WRITING A CLAIM ABOUT A PROPERTY INTO A COMMIT, AND ASK
+   WHICH CELL WOULD REFUTE IT.** Every one of that batch's three commits was corrected once after
+   its adversary reported, and each correction defeated a claim the commit message itself made.
 
    **BUILD THE NON-FIXES AND SCORE THE RECEIPT AGAINST EACH BEFORE READING ITS ZERO.** Batch 75's
    receipt accepted the filing's own suggested fix and then the bare-containment first cut, each
@@ -9274,18 +9071,7 @@ given at batch 90.
    batch 75's mutants survived on a degenerate range and a mis-cased seed respectively; both arms
    now assert their seed's discriminating property before any verdict is read.
 
-   **BATCH 74's THREE SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope any of them.**
-   `PC-S309-PROVENANCE-FORBIDDEN-LIST-EXACT-MATCH-MISSES-DECORATED-PLACEHOLDERS` (`BL-199`) and
-   `PC-S309-CHECK29-33-NO-SCOPE-CLAUSE-FOR-CARRY-OVER-OPENING-GATE` (`BL-200`) shipped as
-   `v0.527.0` at `4ccba0ec` (PR #671); `PC-S342-ADJUDICATION-ROW-PRESCRIBES-AN-ENTRY-EDIT-THAT-SPENDS-ITS-OWN-VERDICT`
-   (`BL-201`) shipped ALONE as `v0.528.0` at `d0affb32` (PR #672), because `layer-drift.sh` is in
-   the machinery slice — derived by RUNNING the shipping `machinery_paths()`, never by hand.
-   All three are cited verbatim in their release commit messages and all three are rotated.
-   **THE AVAILABLE PC-BACKED RESIDUE IS ZERO**: all 18 unfiled re-derive as adjudicated — 4 named
-   in `origin/main` release commits, 11 `NOT-UPSTREAM` in the adjudication brief, 1 refuted at
-   `182817fb`, and 2 WITHDRAWN by the consumer itself. Run the sweep anyway, because the consumer
-   filed three candidates in one day during batch 73; expect it empty and rank the no-`PC` set
-   without waiting. `BL-113` is the readiest and ships ALONE.
+   **DERIVE A MACHINERY SLICE BY RUNNING THE SHIPPING `machinery_paths()`, NEVER BY HAND.**
 
    **READ A CANDIDATE'S OWN STATUS LINE BEFORE SCORING IT AS AVAILABLE.** Two of batch 74's five
    apparently-available candidates were a WITHDRAWN/superseded pair whose titles read like live
@@ -9300,28 +9086,14 @@ given at batch 90.
    `PC-S342`'s filing named a WARN-level row as its sharpest case; the rows that actually BLOCK
    were ones it never mentioned.
 
-   **BATCH 73's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.**
-   `PC-S341-SETTINGS-TEMPLATE-MATERIALIZE-SNIPPET-BREAKS-UNDER-ZSH` shipped as `v0.526.0` at
-   `c44ed80c` (PR #670) closing `BL-198`, cited verbatim in the release commit message, rotated.
-   **TWO `PC-S309-*` REMAIN AND BOTH ARE AVAILABLE**, ranked with their measurements in the
-   batch-73 resume block: `PROVENANCE-FORBIDDEN-LIST-...` is the recommendation (reproduced on the
-   consumer's real artifact, with a bare-literal control) and `CHECK29-33-...` is the weaker
-   (adjudicator burden; its own filing concedes the false-FAIL is hypothetical). **Do not take a
-   fix shape from this file without scoring it** — batch 73's filed remedy was right about the
-   symptom and one level short of the defect, and the arm that already owned the subject was
-   shipping a remedy that does not work.
+   **DO NOT TAKE A FIX SHAPE FROM THIS FILE WITHOUT SCORING IT** — batch 73's filed remedy was
+   right about the symptom and one level short of the defect, and the arm that already owned the
+   subject was shipping a remedy that does not work.
 
-   **BATCH 72's SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope them.**
-   `PC-S309-VALIDATE-LAYER-ENTRIES-W7-CANNOT-SEE-A-HOOK-IMPLEMENTED-CHECK` shipped as `v0.525.0`
-   at `7a562971` (PR #669) closing `BL-196`, cited verbatim in the release commit message, plus
-   `BL-197` beside it on the operator's mid-batch ruling. The other two `PC-S309-*` are a
-   withdrawn/superseded PAIR the consumer retracted itself; its reasoning is false and its
-   conclusion holds, both measured — **do not re-open that pair.** Batch 71's are shipped too:
-   `BL-194` (shipped) plus `BL-195` (filed unfixed, all four remedies refuted and each recorded so
-   they are not rebuilt). Of the 18 unfiled that remain, four are already named in an `origin/main`
-   commit message
-   (fixed without being filed — the instrument gap, not work), and of the 13 that remain,
-   **ELEVEN WERE ALREADY ADJUDICATED `NOT-UPSTREAM`** in
+   **THE WITHDRAWN/SUPERSEDED `PC-S309-*` PAIR THE CONSUMER RETRACTED ITSELF: do not re-open it.**
+   Its reasoning is false and its conclusion holds, both measured. `BL-195` is filed unfixed with
+   all four remedies refuted, each recorded so they are not rebuilt.
+   **ELEVEN OF THE UNFILED SET WERE ALREADY ADJUDICATED `NOT-UPSTREAM`** in
    `docs/reviews/graph-ledger-adjudication-brief.md`, whose own words are *"There is no upstream
    work and none is coming."* Batch 68 derived that join, with controls, and it had never been made
    before — the S312/S297 cluster this file has called unread since batch 1 WAS read; the answer was
@@ -9346,91 +9118,11 @@ given at batch 90.
    `RE-VERIFY OPEN` remainder — why the 2026-07-22 failure happened at all — is that consumer's
    follow-on work, not upstream's.
 
-   **BATCH 69's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.** `BL-191` closed the `git init`
-   clobber class as `v0.521.0` at `cb9c8fb6` (PR #663) and corrected by `v0.522.0` at `6885ba21` (PR #664), no `PC-` id cited because it carries none.
-   The seam is `core/fixtures/lib/preamble.sh`, the binding is the standalone
-   `scripts/validate-fixture-git-env.sh` at `--max-unscrubbed 0`, the fixture is
-   `core/fixtures/fixture-git-env-seam/`. **Two of the entry's own figures had expired, one of them
-   in the commit that FILED it** (the partition is 40 of 45, not 42), and **its receipt was rejected
-   by the correct fix while three non-fixes closed it** — including 30 files containing nothing but
-   a comment. Both are corrected in the archived entry. **The readiest remaining entries are
-   `BL-187`, then `BL-113` (ALONE, bootstrapping), `BL-122`, `BL-148`** — all four scored against
-   BL-191's fix and none is closed by it, so any may batch.
+   **RE-DERIVE A FILING'S SPLIT BEFORE BUILDING TO IT.** Batch 68's had EXPIRED, and the
+   correction WIDENED the defect.
 
-   **BATCH 68's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.**
-   `PC-S340-AUDIT-RULE-FILES-DRIFT-FINDINGS-IN-CORE-PROSE-ARE-NOT-CONSUMER-FIXABLE` shipped as
-   `v0.520.0` at `69618a55` (PR #662) closing `BL-193`, cited verbatim in the release commit
-   message, rotated. Its consumer-owned half stays that consumer's carry-over and is not upstream
-   work. **The filing's own split had EXPIRED, and the correction WIDENED the defect** — it claims
-   two consumer-fixable files; today all 14 finding files are core-owned and the consumer can fix
-   none. Re-derive a filing's split before building to it.
-
-   **BATCH 67's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.**
-   `PC-S308-EMIT-REPORT-RUNS-LAYER-DRIFT-AND-UNREGISTERED-DRIFT-TWICE` shipped as `v0.519.0` at
-   `09aa8af9` (PR #660) closing `BL-192`, cited verbatim in the release commit message, rotated.
-   **AND THE FIX SHAPE THIS BLOCK USED TO RECOMMEND FOR IT WAS REFUTED BY BUILDING IT** — see the
-   batch-67 resume block. If you take a fix shape from a recommendation in this file, score it
-   first; one of them was wrong in the direction that reads as safe.
-
-   **`BL-191` IS THE READIEST NO-`PC` ALTERNATIVE and it is real work** — 45 files run `git init`,
-   42 scrub nothing, 8 of 8 fixtures clobbered a 757-entry index when run DIRECTLY and 6 did it at
-   exit 0 with zero FAILs. Its remedy is a `core/fixtures/lib/preamble.sh` seam plus a binding that
-   fails the push when a `run.sh` does not source it, touching 40 shipped files and their ship
-   declarations; its detector's FP set measures 41 flagged of 45, so it ships REPORT-ONLY with a
-   downward ratchet. `BL-187`, `BL-113` (ships alone, bootstrapping), `BL-122` and `BL-148` rank
-   after it. All carry no `PC-` id, so any PC-backed candidate the sweep turns up outranks them.
-
-   **BATCH 66's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.** `BL-190` closed the
-   `validate-claude-rules.sh` `GIT_DIR` defect that blocked every worktree hand's push. **Its
-   CLASS is live as `BL-191`** — 45 files run `git init`, 42 scrub nothing, 8 of 8 fixtures
-   clobber when run directly and 6 do it at exit 0 — and it is the strongest no-`PC` alternative.
-   Batch 66 is SHIPPED as ONE release — `v0.518.0` at `11ebb342` (PR #659) closing `BL-190`, no
-   `PC-` id cited, rotated, `BL-191` filed and `BL-189` amended, no correction release.
-   Batch 65 is SHIPPED as ONE release — `v0.517.0` at `db078cbe` (PR #658) closing `BL-185` and
-   `BL-186`, BOTH PC-backed, both rotated, `BL-187`/`BL-188`/`BL-189` filed and not fixed, no
-   correction release; the two batched because neither receipt was closed by the other's fix,
-   scored in both directions across two spellings of each fix. Batch 64 is SHIPPED as ONE release —
-   `v0.516.0` at `a4a64e53` (PR #656) closing `BL-184`, `BL-163` and `BL-161`, none PC-backed,
-   all rotated, nothing filed, no correction release; the three batched because no reader set
-   reached a bootstrapping file and no receipt was closed by a sibling's fix. Batch 63 is SHIPPED as
-   TWO releases — `v0.514.0` at `56a104cd` (PR #653) closing `BL-171` and `v0.515.0` at
-   `24b957e4` (PR #654) closing `BL-176`, neither PC-backed, both rotated, `BL-184` filed and
-   not fixed, no correction release; the pair did not batch because BL-176's adversarial
-   review landed after the merged branch was green. Batch 62 is SHIPPED as TWO releases — `v0.512.0` at
-   `db7cc1a1` (PR #650) closing `BL-181` and `v0.513.0` at `81c17d1a` (PR #651) closing `BL-179`,
-   neither PC-backed, both rotated, nothing filed, no correction release; the pair did not batch
-   because `BL-181`'s derived class touched two reconcile scripts. Batch 61 is SHIPPED — `v0.511.0` at `86566b0e` (PR #648),
-   `PC-S335-NO-DETECTOR-REACHES-A-RETIRED-STATUS-TOKEN-REUSED-IN-A-LAYER-BODY` closed as
-   `BL-183`, rotated, nothing filed, no correction release; batch 60 is SHIPPED — `v0.510.0` at `5a29d41a` (PR #646),
-   `PC-S305-UNION-GATE-UNPASSABLE-ON-ANY-PULL-THAT-HAD-A-BLOCKER` closed as `BL-182`, rotated,
-   nothing filed, no correction release; batch 59 is SHIPPED — `v0.509.0` at `68fa7e95` (PR #644),
-   `PC-S308-SUPPRESSION-LIFETIME-RESOLVES-GATE-METRICS-FROM-CWD-BEFORE-PROJECT-ROOT` closed
-   as `BL-178` and `PC-S337-RETRO-PROCESS-IMPROVEMENTS-RULE-EXERCISE-AUDIT` as `BL-180`, both
-   rotated, `BL-179` and `BL-181` filed and not fixed, no correction release; batch 58 is SHIPPED — `v0.508.0` at
-   `d6cf1a97` (PR #641), `PC-S337-RETIRED-TOKENS-CANNOT-SAY-IT-SCANNED-NOTHING` closed as
-   `BL-177`, rotated, no correction release, and the consumer pulled to `0.507.0` mid-batch;
-   batch 57 is SHIPPED — `v0.507.0` at `3520fbb4` (PR #639),
-   `PC-S305-RETRO-BRANCH-CUT-FROM-STALE-PARENT-NOT-MAIN` closed as `BL-173`,
-   `PC-S305-NARRATIVE-DRIFT-FALSE-POSITIVE-USED-TO` as `BL-174` and
-   `PC-S305-GATE-VALIDATION-PREFER-IT-SOFT-LANGUAGE` as `BL-175`, all rotated, `BL-176` filed
-   and not fixed, no correction release; batch 56 is SHIPPED — `v0.506.0` at `3e59c856`
-   (PR #637), `PC-S308-LEDGER-REVERIFY-READS-ESCAPED-BACKTICKS-LITERALLY` closed as `BL-172`,
-   rotated, no correction release; batch 55 is SHIPPED — `v0.505.0` at `288d0e53`
-   (PR #635), `PC-S308-RULE-11-AMBIGUITY-QUESTIONS-HAVE-NO-MANDATED-PRESENTATION-TOOL` closed as
-   `BL-170` and the no-`PC` `BL-169` beside it, both rotated, `BL-171` filed and not fixed, no
-   correction release; batch 54 is
-   SHIPPED — `v0.504.0` at `6fc38a46` (PR #633), `PC-S308-CHECK26-NO-SUPPRESSED-CARVEOUT`
-   closed as `BL-167` and `PC-S308-RESUME-SNAPSHOT-BUDGET-ASKS-INSTEAD-OF-AUTO-TRIMMING` as
-   `BL-168`, both rotated, `BL-169` filed and not fixed, no correction release; batch 53 is
-   SHIPPED — `v0.503.0` at `69010ae9` (PR #630),
-   `PC-S308-VALIDATE-ADVERSARIAL-CONVERGENCE-SCOPE-GREW-MISFIRES-ON-PASS-1` closed as `BL-165`
-   and `PC-S308-CHECK-5-DERIVE-STORIES-REMEDY-CANNOT-CREATE-AN-ENTRY` as `BL-166`, both rotated,
-   `BL-152` closed incidentally, no correction release; batch 52 is SHIPPED — `v0.502.0`
-   at `4dc8d791` (PR #627), `PC-S308-HANDOFF-INTENT-PATTERN-MISSES-TRAILING-TERSE-PHRASING`
-   closed as `BL-164`; batch 51 is SHIPPED — `v0.500.0`
-   at `2dca4815` (PR #622), `BL-162`, corrected by `v0.501.0` at `e06836ca` (PR #624), `BL-163`;
-   batch 50 is SHIPPED — `v0.499.0` at `13502c45` (PR #619), `BL-160`, `BL-161`. Do not
-   re-scope onto any of them.
+   **IF YOU TAKE A FIX SHAPE FROM A RECOMMENDATION IN THIS FILE, SCORE IT FIRST** — batch 67's
+   was refuted by building it, wrong in the direction that reads as safe.
 
    **SEED BOTH SIDES OF ANY WINDOW, AND PIN EACH HAND'S INVARIANT ID IN ITS BRIEF.** Batch 64's
    citation window was one-sided in a wrong fix that passed the receipt and four fixtures,
@@ -9491,10 +9183,6 @@ given at batch 90.
    removal was correct about its own case and, built and driven over the consumer's archive,
    turned two true findings into nine. A hand is authoritative about the symptom it measured and
    evidence about nothing else — that includes its fix.
-
-   **A `grep -c … || echo 0` HELPER PRINTS TWO LINES ON ZERO MATCHES**, and an arithmetic test on
-   it aborts the whole `if` with no verdict either way. Capture first, default on failure. The
-   fixture hand found that arm dead on a green run in both layouts.
 
    **THE STATE YOU MEASURED IS THE COUNTEREXAMPLE UNTIL PROVEN OTHERWISE.** Batch 49 listed the
    consumer's `.driver/` directory, saw the stale signal beside a stale idle marker, and still
@@ -9581,11 +9269,7 @@ given at batch 90.
    `ledger_entry_shape()` at `core/skills/ai-dlc-update/reconcile/lib.sh:278` rather than against
    your own reading of the ledger.
 
-   **BATCH 44's SUBJECT IS SPENT AND THE SWEEP NO LONGER SHOWS IT — IT IS THE ONE THAT CLOSED.**
-   `PC-S308-HANDOFF-STOPPED-STATUS-NOT-IN-VALIDATOR-WHITELIST` shipped as `v0.483.0`, is cited by
-   `BL-147` in `docs/backlog.archive.md`, and the `0.482.0 → 0.489.0` pull annotated it **ADOPTED
-   UPSTREAM (v0.483.0, verified 2026-09-03)** and rotated it into the consumer's archive. Derived
-   here: live 0, archive 1. Do not re-scope onto it. **`BL-148` IS NEW, LIVE AND DELIBERATELY NOT FIXED** — the In-Flight
+   **`BL-148` IS LIVE AND DELIBERATELY NOT FIXED** — the In-Flight
    token set is declared in four core files, is absent from `docs/vocabulary-index.md` and is
    bound by no invariant, which is why a one-token miss reached a consumer. Its arm would live in
    `scripts/validate-enforcement-map.sh`, which the suite POLE invokes, so it is a wall-clock
@@ -9595,36 +9279,18 @@ given at batch 90.
    carries no `PC-` id, so it ranks BELOW any PC-backed entry the sweep turns up. Its receipt
    exits 1 today; run it raw before scoping.
 
-   **BATCH 43's SUBJECT IS SPENT AND THE SWEEP WILL STILL SHOW BOTH IDS.**
-   `PC-S308-DISPATCH-GUARD-SPRINT-FIELD-INTERMITTENTLY-NULL` and
-   `PC-S305-DISPATCH-GUARD-SED-PATTERN-BOLD-MISMATCH` shipped as `v0.481.0`, cited by `BL-146`.
-   Do not re-scope onto them. **`PC-S303-SCOPE-CONFIRMATION-FIELD-OF-MISSES-BOLD-MARKDOWN-GRAMMAR`
-   IS RESOLVED, FIXED AND RELEASED AT `v0.376.0` — AND THIS BLOCK CALLED IT REFUTED FOR SEVEN
-   BATCHES, WHICH WAS WRONG IN THE DIRECTION THAT DISCARDS A REAL FILING.** Not available work
-   either way, so the scoping advice was harmless and the LABEL was not: `REFUTED` reads as "the
-   premise was never true", and the premise was true when filed and was FIXED. Re-derived at batch
-   82 by lifting both implementations and driving them on byte-identical bold input — pre-fix
-   (`9b18af4d^`) returns `[**]`, which is the entry's own reproduction; HEAD returns
-   `[confirmed]`; `cmp -s` control asserts the two function bodies differ. `git log -L` over the
-   function returns exactly TWO commits ever: `69a22e6b` (created it) and `9b18af4d` (2026-08-17,
-   fixed it). **`v0.482.0` touches this file ZERO times** against a
-   control of 5 files it does touch — it only OBSERVED the state and withdrew a recommendation.
+   **`REFUTED` AND `FIXED` ARE DIFFERENT VERDICTS, AND CONFUSING THEM DISCARDS A REAL FILING.**
+   `PC-S303-SCOPE-CONFIRMATION-FIELD-OF-MISSES-BOLD-MARKDOWN-GRAMMAR` was called REFUTED for seven
+   batches; it was RESOLVED, FIXED and RELEASED at `v0.376.0`. Ask whether a premise is false NOW
+   or was false WHEN FILED; a fix makes the first true and says nothing about the second, and only
+   a pre-fix control separates them.
 
-   **AND THE VERSION HERE READ `0.375.0` UNTIL THE CONSUMER CORRECTED IT.** `9b18af4d` CARRIES
-   `VERSION=0.375.0` because it PRECEDES its own release bump; the release CONTAINING it is
-   `363b5f29` / **`0.376.0`**, which is where `CHANGELOG.md` documents the fix and what the closer's
-   `NAMED-UPSTREAM` text mandates. **Resolve the release that CONTAINS a fix commit; never read
-   `VERSION` AT it** — that is the same off-by-one action 8 exists to prevent, reached from the
-   other side. The re-check of the other 19 then produced a FALSE POSITIVE of its own:
-   `grep -nF <id> CHANGELOG.md | head -1` flagged `PC-S340-DERIVATION-CAPTURE` as `0.475.0`, but
-   that id is mentioned under BOTH headings and `head -1` took the NEWEST — `0.474.0` shipped the
-   fix and `0.475.0` was the correction after it. **A `head -1` over repeated mentions answers
-   about ORDER, not provenance.**
-   **The lesson is not the one this block used to draw.** It read the fix's effect, saw the
-   defect absent, and wrote REFUTED — a verdict about the FILING — when the measurement only ever
-   supported a verdict about the TREE. Ask whether a premise is false NOW or was false WHEN
-   FILED; a fix makes the first true and says nothing about the second, and only a pre-fix
-   control separates them.
+   **RESOLVE THE RELEASE THAT CONTAINS A FIX COMMIT; NEVER READ `VERSION` AT IT.** A fix commit
+   PRECEDES its own release bump, so `VERSION` at it is one release short — the same off-by-one
+   action 8 exists to prevent, reached from the other side. And
+   `grep -nF <id> CHANGELOG.md | head -1` is a false positive where an id is mentioned under BOTH
+   a release heading and its correction's: **a `head -1` over repeated mentions answers about
+   ORDER, not provenance.**
 
    **AND THERE IS NO REMAINING SIBLING IN THAT CLASS.** An adversarial hand swept every `core/`
    site parsing a markdown field with a decoration-requiring grammar and the answer is NONE
@@ -9640,39 +9306,14 @@ given at batch 90.
    `PC-S336-STEP-1-AUTOPUSH-IS-THE-UNGUARDED-TWIN-OF-THE-PUSH-STEP-2-HARDENED` as EVIDENCE in a
    table. They are available work. The join cannot tell a citation from a claim.
 
-   **BATCH 42's SUBJECT IS SPENT AND THE SWEEP WILL STILL SHOW IT.**
-   `PC-S340-VALIDATE-ESCALATION-RESOLUTION-NONDETERMINISTIC-ON-BYTE-IDENTICAL-INPUT` shipped as
-   `v0.480.0` and is cited by `BL-144`. Do not re-scope onto it. **Its filing was wrong about
-   its own mechanism AND about its own premise** — read the resume block before you trust any
-   filing's description of what it observed.
-
    **DRIVE THE PROGRAM, NOT THE PREDICATE, BEFORE CALLING A MOVEMENT A BEHAVIOUR.** Batch 42
    published a live false accusation removed, on a citation whose `--cite` verdict really does
    move; driving the validator showed an earlier arm refuses that record, so the citation arm is
    never reached. Two corrections in one release.
 
-   **BATCH 41's SUBJECT IS SPENT AND THE SWEEP WILL STILL SHOW IT.**
-   `PC-S340-UNDECLARED-CUE-CANNOT-TELL-A-REFERENCE-FROM-A-DECLARATION` shipped as `v0.478.0` and is
-   cited by `BL-141` in `docs/backlog.archive.md`, so it reads DISCHARGED rather than UNFILED — but
-   it stays live in the consumer's ledger until they pull. Do not re-scope onto it. Its two
-   surviving false-positive classes — the cue naming a CORE CONSTRUCT, and the cue in a clause
-   citing a resolvable `OWED-` id — are STATED LIMITS, not deferred work; fifteen of the nineteen
-   rows it still reports are false, and the arm's own header declares a deliberate recall bias.
-
-   **BATCH 40's SUBJECT IS SPENT TOO.**
-   `PC-S340-STAMP-READOPT-GATE-IS-BLIND-TO-AN-ADDITIVE-CHANGE-AND-TO-A-REWRITTEN-BODY` shipped as
-   `v0.476.0`, corrected by `v0.477.0`, and is cited by `BL-138`/`BL-139`. Do not re-scope onto it.
-   Its REWORD half is stated as unfixed and unfixable by containment, not deferred.
-
-   **THE SWEEP CAME BACK EMPTY OF NEW WORK FOR THE SECOND CONSECUTIVE BATCH**, so batch 41 took the
-   standing `PC-S340-*` corpus ranked by consequence rather than a fresh filing. Expect the same:
-   the remaining FOUR are enumerated in the resume block with the reason each was passed over, and
-   every one of their status lines has now been read.
-
-   **BUILD THE FILED REMEDY AND SCORE IT — FOUR CONSECUTIVE BATCHES HAVE NOW REFUTED ONE.** Batch
-   41's was VACUOUS: it named a predicate that cannot fire, and building it removed 0 of 29. Ask
-   what a proposed remedy's predicate can SPELL before building it, not merely whether the defect
-   is real.
+   **BUILD THE FILED REMEDY AND SCORE IT.** Batch 41's was VACUOUS: it named a predicate that
+   cannot fire, and building it removed 0 of 29. Ask what a proposed remedy's predicate can SPELL
+   before building it, not merely whether the defect is real.
 
    **A PEER SESSION IS A SUBJECT CHANNEL, AND CHECKING IT COSTS ONE CALL.** Batch 37's subject
    arrived as a message from a blocked consumer session, not from the ledger — the sweep could not
@@ -9708,19 +9349,13 @@ given at batch 90.
    not authorization, a `PENDING` count is not a decision about WHEN, and one is never handed to a
    peer session. `operator-rulings.md` governs.
 
-   **BATCH 39's SUBJECT IS SPENT AND THE SWEEP WILL STILL SHOW ITS SIBLINGS.**
-   `PC-S340-DERIVATION-CAPTURE-HOOK-ROLLS-BACK-THE-WHOLE-FILE-ON-A-REJECTED-BLOCK` shipped as
-   `v0.474.0`, was CORRECTED by `v0.475.0`, and is cited by `BL-135` and `BL-136` in
-   `docs/backlog.archive.md`, so it reads DISCHARGED rather than UNFILED — but it stays live in the
-   consumer's ledger until they pull. Do not re-scope onto it. **Read `BL-136` before you touch
-   this validator at all**: `v0.474.0` removed a false refusal and ACQUITTED five
-   arbitrary-execution paths in the same edit, because the quote-blind `tr '|' '\n'` had been
-   refusing two awk exec vectors and three `$'...'` constructs by accident. `v0.475.0` closed them.
-   The gate and the fixture were green through the whole regression.
-   **Only its PARSE half was fixed; its ROLLBACK half is REFUTED, not deferred** — the hook has no
-   write path against the target, measured. Do not re-open the rollback claim without new evidence
-   from the consumer about what actually destroyed that file, which is a question this side cannot
-   answer.
+   **READ `BL-136` BEFORE YOU TOUCH THE DERIVATION-CAPTURE VALIDATOR AT ALL**: `v0.474.0` removed
+   a false refusal and ACQUITTED five arbitrary-execution paths in the same edit, because the
+   quote-blind `tr '|' '\n'` had been refusing two awk exec vectors and three `$'...'` constructs
+   by accident. `v0.475.0` closed them. The gate and the fixture were green through the whole
+   regression. **Its ROLLBACK half is REFUTED, not deferred** — the hook has no write path against
+   the target, measured. Do not re-open the rollback claim without new evidence from the consumer
+   about what actually destroyed that file, which is a question this side cannot answer.
 
    **THE SEVEN REMAINING UNFILED `PC-S340-*` ARE THE STANDING CORPUS, and their own status lines
    have STILL not all been read** — a thing this block has asked for since batch 1. Batch 39 read
@@ -9754,30 +9389,11 @@ given at batch 90.
    if a hand reports after the merge, read it against what shipped — a late hand has twice been
    right and cost a release.
 
-   **BATCH 38's SUBJECT IS SPENT AND THE SWEEP WILL STILL SHOW IT.**
-   `PC-S340-VALIDATE-SPAWN-LEDGER-OVERSHOOTS-CHECK-22-DECLARED-ROLE-SCOPE` shipped as `v0.472.0`,
-   corrected by `v0.473.0`, and is cited by `BL-134` in `docs/backlog.archive.md`, so it now reads
-   DISCHARGED rather than UNFILED — but it stays live in the consumer's ledger until they pull, and
-   its own receipt there reports STILL-LIVE for a reason recorded above. Do not re-scope onto it.
-
-   **Its filed remedy was REFUTED by building it**: Check 22's five roles as the row scope drops
-   the finding set from 122 arms to 2 by silencing every role outside the five — `adversary`,
-   `remediator`, `pm`, `architect`, `gate-adjudicator`, `tea`, `ux` and `pm-escalated` are all
-   bound by Rule 19 and none of them is in that list. That is the general case, not a special one:
-   build the filed remedy and score it before you prefer your own, and ask what it ACQUITS rather
-   than only whether the defect is real.
-
-   **DO NOT CARRY `v0.472.0`'s GLOSS ON THAT NUMBER.** That release described the narrowing as
-   "acquitting 23 of the 25 genuine findings", and `v0.473.0` showed 24 of those 25 were themselves
-   false — rows the dispatch guard never wrote. The refutation of the filed remedy stands on the
-   roles it silences, not on a residue count that has since been corrected.
-
-   **`v0.471.0`'s SUBJECT IS ALSO SPENT AND THE SWEEP WILL STILL SHOW IT. DO NOT RE-SCOPE ONTO IT.**
-   `PC-S308-STEP1A-ROTATE-REMEDY-NO-SPRINT-START-DESTINATION` is fixed, cited, DELIVERED and
-   confirmed working on the consumer — and it is still LIVE in their ledger (1 live / 0
-   archived), because the pull did not rotate it. Its remaining half, the Check 915 exemption
-   regex, is a CONSUMER extension already filed there as that consumer's own carry-over.
-   Neither half is available upstream work.
+   **ASK WHAT A FILED REMEDY ACQUITS, NOT ONLY WHETHER THE DEFECT IS REAL.** Batch 38's was
+   refuted by building it: Check 22's five roles as the row scope drops the finding set from 122
+   arms to 2 by silencing every role outside the five — `adversary`, `remediator`, `pm`,
+   `architect`, `gate-adjudicator`, `tea`, `ux` and `pm-escalated` are all bound by Rule 19 and
+   none of them is in that list.
 
    **VALIDATE A PEER'S ROOT CAUSE BEFORE ACTING ON IT, AND EXPECT THE HEADLINE TO BE WRONG.**
    Batch 37's reporting session was right that its pipeline was blocked and wrong about why: it
