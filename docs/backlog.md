@@ -4476,7 +4476,7 @@ that match `NEW-THIS-PULL`/`PRE-EXISTING` as PREFIXES, so appending to the strin
 them — asserted by running `layer-title-join` and `absorbed-specifics-survive` after the change.
 The consumer's register carries 65 LC-E19 rows, so the note has a real population.
 
-Three edits. The helper call is APPENDED to the LC-E19 detail string, guarded on a non-empty
+Four edits. The helper call is APPENDED to the LC-E19 detail string, guarded on a non-empty
 `tm_digest`: `adj_spent_note`'s `.subject_digest != $d` would otherwise match every prior record
 of the entry, so an unkeyable row would carry a false accusation. `SKILL.md` gains one ordering
 sentence where the operator reads BEFORE recording, not inside the spend-rule paragraph. The
@@ -4484,8 +4484,24 @@ fixture gains Part 3c — its own consumer world seeded with a FRESH entry whose
 core section that did NOT move, chosen over Part 10's dual-keyed entry precisely because that one
 is also keyed at LC-E4, and a note anywhere in its rows could then be the HARD row's, passing
 against the one-call-site build the Part exists to reject. Part 3c asserts the precondition (one
-keyed row, 40-hex digest, and a record under it clearing the row), the subject, both of Part 3b's
-controls at this row, and a mutant with the appended call stripped.
+keyed row, 40-hex digest, and a record under it clearing the row), the subject, three controls,
+and two mutants.
+
+**The fourth edit is a NARROWING the first cut needed and did not have, found by the adversary
+against the consumer's live register and re-derived here over all 471 rows.** `adj_spent_note`
+selected on `.entry` and `.subject_digest != $d` with `tail -1`, and did not filter by clause — so
+on a row of one clause it answers with whichever question was decided LAST. Eight entries carry an
+LC-E19 record and for THREE of them the most recent record is LC-E4 or LC-E14
+(`retro-push-validator-preflight.md`, `route-push.md`, `stories-test-strategy-push.md`), with the
+other five as the control. Each would have been told to re-record a ruling made about a different
+question. The helper now takes the clause as a third argument and the jq select carries
+`and .clause == $c`; an empty clause argument is SILENCE rather than a wildcard, because a caller
+that cannot name its clause is exactly the case where cross-clause quoting is guaranteed. Both
+call sites pass a derived id — the existing `${cl}` at the HARD row, `adj_clause_cell
+EXTENSION-TITLE-MATCHES-CORE` at the new one, never a literal. Part 3c gains control 3 (a prior
+record under a DIFFERENT clause only, same dirty entry, no note) and the mutant that drops the jq
+conjunct and makes that control go red — without it control 3 is an absence assertion that passes
+against the very build the narrowing exists to reject.
 
 **The whole new Part goes red against the pre-fix script.** Driven with a HEAD copy of
 `layer-drift.sh` in a full `reconcile/` directory copy (a lone copy dies sourcing `lib.sh`):
@@ -4493,21 +4509,24 @@ exit 1, 58 ok, and `FAIL Part 3c: the re-fired LC-E19 row is byte-indistinguisha
 was never adjudicated`.
 
 **Receipt scoring — bound to the emission site, not to a word.** It requires the line immediately
-after the single `^ *emit EXTENSION-TITLE-MATCHES-CORE ` line to contain the helper call, AND
-`SKILL.md` to carry the ordering phrase outside an HTML comment. Each case built on a copy tree
-from HEAD blobs:
+after the single `^ *emit EXTENSION-TITLE-MATCHES-CORE ` line to carry the THREE-argument call,
+the jq select inside `adj_spent_note` to carry the clause conjunct, AND `SKILL.md` to carry the
+ordering phrase outside an HTML comment. Every case built on a copy tree, the pre-branch blobs
+taken at `01fea66c`:
 
-    HEAD, untouched                                          1
-    a comment naming adj_spent_note beside the emit          1
+    pre-branch base, untouched                               1
+    a comment naming the call beside the emit                1
     the call added on the HARD row a SECOND time instead     1
+    the TWO-ARGUMENT form, no clause narrowing               1
     the correct fix                                          0
-    correct fix, SKILL.md sentence REWORDED, phrase kept     0
 
-Three further controls, each one property short of the fix: correct code with `SKILL.md` at HEAD
-`1`; correct `SKILL.md` with the code at HEAD `1`; correct code with the sentence moved inside an
-HTML comment `1`. The anchor is unique (1 match) against an impossible-code control at 0.
+Five further controls, each one property short: the third argument passed but the jq conjunct
+dropped `1`; correct code with `SKILL.md` at base `1`; correct `SKILL.md` with the code at base
+`1`; the sentence moved inside an HTML comment `1`; correct fix with the ordering sentence
+REWORDED around the phrase `0`. The emit anchor is unique (1 match) against an impossible-code
+control at 0.
 
-verify: sh L=core/skills/ai-dlc-update/reconcile/layer-drift.sh; S=core/skills/ai-dlc-update/SKILL.md; [ -f "$L" ] && [ -f "$S" ] || exit 9; e="$(grep -cE '^ *emit EXTENSION-TITLE-MATCHES-CORE ' "$L")" || e=0; [ "$e" -eq 1 ] || exit 9; a="$(awk '/^ *emit EXTENSION-TITLE-MATCHES-CORE /{n=1;next} n==1{n=0; if (index($0,"adj_spent_note \"$entry\" \"$tm_digest\"")) c++} END{print c+0}' "$L")"; p="$(awk '/<!--/{h=1} h==0 && tolower($0) ~ /make every edit this pull prescribes for the entry first/{c++} /-->/{h=0} END{print c+0}' "$S")"; [ "$a" -ge 1 ] && [ "$p" -ge 1 ] && exit 0; exit 1
+verify: sh L=core/skills/ai-dlc-update/reconcile/layer-drift.sh; S=core/skills/ai-dlc-update/SKILL.md; [ -f "$L" ] && [ -f "$S" ] || exit 9; e="$(grep -cE '^ *emit EXTENSION-TITLE-MATCHES-CORE ' "$L")" || e=0; [ "$e" -eq 1 ] || exit 9; a="$(awk '/^ *emit EXTENSION-TITLE-MATCHES-CORE /{n=1;next} n==1{n=0; if (index($0,"adj_spent_note \"$entry\" \"$tm_digest\" \"$(adj_clause_cell EXTENSION-TITLE-MATCHES-CORE)\"")) c++} END{print c+0}' "$L")"; j="$(awk '/^adj_spent_note\(\) \{/{n=1} n==1 && index($0,".clause == $c"){c++} n==1 && /^\}/{n=0} END{print c+0}' "$L")"; p="$(awk '/<!--/{h=1} h==0 && tolower($0) ~ /make every edit this pull prescribes for the entry first/{c++} /-->/{h=0} END{print c+0}' "$S")"; [ "$a" -ge 1 ] && [ "$j" -ge 1 ] && [ "$p" -ge 1 ] && exit 0; exit 1
 
 ## BL-227 — nine of batch 82's ten receipts are satisfied by something that is not a fix, and the rule forbidding it has no enforcer
 
