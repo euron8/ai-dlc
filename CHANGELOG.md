@@ -15,6 +15,64 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.555.0] - 2026-09-12
+
+### A receipt written mid-sentence was invisible to the ledger closer
+
+Batch 91, one release, one no-`PC` subject. The sweep returned no new PC-backed work; the readiest
+entry was taken on this session's own ranking because the one-liner arrived from a peer session.
+
+#### `BL-225`
+
+`ledger-reverify.sh`'s receipt rule is line-anchored on purpose — unanchored, a prose mention of
+`verify:` becomes a receipt, and the reference consumer's live ledger carries 20 such mentions
+against 65 anchored receipts. But a receipt appended to the end of a body sentence, which is how
+the consumer filed its `PC-S311` entry, is then invisible: the entry emits **no row of any kind**,
+byte-identical to an entry that declares no receipt, and the receipt is never run.
+
+The fix is a REPORT, not a grammar change, for the reason the `ENTRY-SWALLOWED` pass already
+records: a diagnostic must not perturb the receipt parse. A separate pass at the foot of the
+closer emits `NEEDS-REVIEW` with a `mid-line receipt:` detail for an OPEN entry that has no
+anchored receipt and whose body carries `verify: <verb>` outside backticks, fences, blockquotes
+and HTML comments. It reuses the status step 8 already gives a disposition to, so I39's vocabulary
+is unchanged and `validate-enforcement-map.sh` timed byte-identical before and after (22.87s
+against 22.80s, interleaved). The entry-line close rule is now lifted from `lib.sh` as its own
+variable beside `CLOSE_AWK`, because the body rule is inert on a boundary line and the two cannot
+share one variable without defining the function twice in `ledger-rotate.sh`.
+
+Measured over four corpora with the shipping pass, each zero with a seeded-offender control of
+one in the same run: consumer live ledger **1** (the `PC-S311` filing), consumer archive **0**,
+`docs/backlog.md` **0**, `docs/backlog.archive.md` **0**. An entry carrying BOTH an anchored and a
+mid-line receipt stays silent by design; the only one in any corpus is `BL-225`'s own entry.
+
+Fixture `ledger-reverify` gains nine seeded entries and nine mutants of a whole-directory copy,
+each moving exactly one cell, each anchor asserted unique against an impossible anchor. The
+last-match-wins mutant leaves the row set unchanged and is caught by the verb in the detail.
+
+The contract was wrong three times before it was built, and the adversary found all three on the
+design: the receipt's seeded entry put the mid-line receipt on the BOUNDARY line, which every pass
+consumes with `next`, so the correct fix scored 1 while two wrong fixes scored 0; the success regex
+could not cross the label's trailing period and the tab; and five seed names were prefixes of one
+another under the fixture's unanchored row helpers. `BL-225`'s receipt now drives the tool on a
+synthetic ledger and scores 0 on the fix, 1 on HEAD and on a comment-only non-fix, and 9 on an
+over-broad pass that reports every no-receipt entry.
+
+#### Step 3f no longer counts its causes, and `BL-241` is filed
+
+The adversary's re-verification found SKILL.md step 3f saying FOUR `NEEDS-REVIEW` causes against
+an emitter producing five detail prefixes, one of which (`mis-anchored predicate:`) had never had
+a sub-bullet. The numeral is gone from both the step and the closer's own header, and the missing
+bullet is added; a join over free-prose italic bullets was refused as the extraction shape this
+repo calls a zero waiting to happen. `BL-241` files a pre-existing leak the same pass found: the
+last entry's `[receipt n/n]` suffix is appended to every `RECEIPTS-UNDECIDED` and
+`ENTRY-SWALLOWED` row emitted after the receipt loop. Not fixed; the fixture seed cannot yet
+express it.
+
+#### `BL-240`
+
+Operator-filed: a role's configured effort is never applied to its subagent. Receipt drives the
+dispatch guard and reads STILL-LIVE.
+
 ## [0.554.0] - 2026-09-12
 
 ### A closed sprint whose snapshot still said the deploy had not started

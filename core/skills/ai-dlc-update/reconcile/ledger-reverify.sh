@@ -120,11 +120,13 @@
 #                    receipt's verdict, never instead of it — see THE NAME IS THE THIRD SIGNAL.
 #   STILL-LIVE       the entry still reproduces at theirs; stays open (filtered from the report).
 #   HAND-REVIEW      the entry declares `verify: manual` — no mechanical predicate by design.
-#   NEEDS-REVIEW     the receipt itself is at fault. THREE causes, and the DETAIL names which:
-#                    `unresolved:` (malformed line, unresolvable path, empty sh, an sh
+#   NEEDS-REVIEW     the receipt itself is at fault, and the DETAIL names the cause by its
+#                    prefix: `unresolved:` (malformed line, unresolvable path, empty sh, an sh
 #                    one-liner that does not PARSE, unknown verb), `vacuous predicate:`,
-#                    `unfalsifiable predicate:`. Hand-review, as an entry without a verify
-#                    line would be.
+#                    `unfalsifiable predicate:`, `mis-anchored predicate:`, and `mid-line
+#                    receipt:` (a real receipt the anchored grammar cannot see; the pass at
+#                    the foot of this file). Hand-review, as an entry without a verify line
+#                    would be.
 #
 #   INPUT-UNRESOLVED an ARGUMENT does not resolve — the consumer root is not a directory, or an
 #                    explicitly-supplied arg-5 ledger path is not a readable file. Run-scoped,
@@ -155,6 +157,21 @@ SELF="$(cd "$(dirname "$0")" && pwd)"
 # byte-indistinguishable from a corpus with nothing in it. MEASURED before this guard existed:
 # rc=0 with 0 rows on the refusal path, against rc=0 with 1 row when the lift resolves.
 CLOSE_AWK="$(ledger_close_awk)" || exit 2
+
+# THE ENTRY-LINE CLOSE RULE, LIFTED FOR THE SAME REASON AND GUARDED THE SAME WAY. The mid-line
+# receipt pass at the foot of this file asks "would this entry be skipped as closed", and that
+# question has TWO predicates: the BODY rule above, anchored at the line start, and the ENTRY-LINE
+# rule, deliberately unanchored because a boundary line carries its marker mid-line after the
+# title. lib.sh records that a caller testing a boundary line with the body rule gets a predicate
+# that is not merely wrong but INERT -- it answers "not closed" for every entry line ever passed
+# to it, silently. Lifted rather than restated: this file OWNS the grammar, and a second spelling
+# of it here would be the least defensible copy in the tree.
+#
+# SEPARATE FROM CLOSE_AWK, not appended to it, because `ledger-rotate.sh` and
+# `warn-shadowed-local-validators.sh` interpolate CLOSE_AWK and rotate defines
+# `ledger_entry_line_closes` itself -- concatenating both into one variable would define that
+# function twice there, which is an awk error.
+ELC_AWK="$(ledger_entry_line_close_awk)" || exit 2
 
 DIST="${1:?usage: ledger-reverify.sh <dist-repo> <base-sha> <consumer-root> <theirs-ref> [ledger-path]}"
 BASE="${2:?}"
@@ -1743,6 +1760,124 @@ awk -v DASH=' — ' "$(ledger_entry_awk)$(ledger_entry_id_awk)${CLOSE_AWK}"'
       sw_why="its bold span is not an id, it CAPTURED a receipt, and the id-keyed entry above it emitted NO row of its own — the signature of an entry losing its only row to the line below. The bold span does NOT end in a colon, which is why the colon signal alone cannot see this one"
     fi
     emit ENTRY-SWALLOWED "$sw_label" "this bullet is an annotation lead-in, not an entry title — ${sw_why}. A line-leading '- **…**' opens a NEW entry, so this line truncates the entry above it (nearest id-shaped entry above: ${sw_prev}) ${sw_harm}. Re-indent the annotation so it does not start a line, or drop the bold, then re-run and confirm the entry reports under its own id."
+  done
+
+# ---------------------------------------------------------------------------
+# NEEDS-REVIEW / mid-line receipt — a real receipt the anchored grammar cannot spell
+# ---------------------------------------------------------------------------
+# THE DEFECT. The receipt rule above is anchored at the start of the line, and its own header
+# records why: unanchored, a PROSE MENTION becomes a receipt, and on the reference consumer 20 of
+# 85 lines carrying the token are prose. But an operator writing a body paragraph reaches the end
+# of a sentence and appends the receipt to it -- the consumer filed exactly that shape -- and the
+# anchored rule then sees no receipt at all. The entry emits NO row of any kind, which is
+# byte-identical to an entry that declares no receipt, so the operator is told nothing and the
+# receipt is never run.
+#
+# WHY THIS IS A REPORT AND NOT A GRAMMAR CHANGE. Widening the anchor re-admits every prose
+# mention, which is the defect the anchor exists to prevent, measured. So the parse above is left
+# byte-alone and the harm is REPORTED instead -- the same trade the ENTRY-SWALLOWED block above
+# records making twice, for the same reason: a diagnostic must not perturb the receipt parse this
+# whole file exists to get right.
+#
+# WHY NOT PREDICATE (1), "an entry that emits no row". The ENTRY-SWALLOWED header enumerates that
+# one as unshippable: an entry with no receipt legitimately emits nothing, and that is 58 entries
+# on the reference consumer. This predicate is the strict subset of it that carries EVIDENCE the
+# author meant to write a receipt -- the verb is there, in the body, in the wrong position.
+#
+# NEEDS-REVIEW, NOT A NEW STATUS. The finding is a defect in the RECEIPT, which is exactly what
+# that status already means here and what SKILL.md step 8 already tells the operator to do with
+# one (repair the receipt, close nothing on it). Routing this through the row that exists costs
+# no vocabulary and no new disposition; the DETAIL names the cause, as the other three do.
+#
+# THE FOUR CONJUNCTS, AND EACH SUBTRACTS A CLASS THAT REALLY EXISTS IN THE CORPUS:
+#
+#   no line-anchored receipt   an entry WITH a receipt whose body also mentions the token
+#                              mid-line is a normal entry, and its receipt ran.
+#   not closed                 a closed entry is skipped by the classifier by design, so a
+#                              never-run receipt inside one costs nothing.
+#   outside a fence            a receipt inside a fenced block is recorded OUTPUT or a worked
+#                              example, not a directive. The consumer archive carries such lines.
+#   outside inline backticks   a body that QUOTES the token (`verify: manual`) while explaining
+#                              the convention is prose, and this ledger is full of that.
+#
+# TWO MORE QUOTING SHAPES ARE SILENT, AND THAT IS A RULING RATHER THAN AN OVERSIGHT. A BLOCKQUOTED
+# line (`> verify: …`) is a quotation of somebody elses receipt or of this tools own output -- the
+# ledger quotes both -- and an HTML COMMENT (`<!-- verify: … -->`) is text the rendered document
+# does not even show. Neither is a receipt anyone expects to run, so reporting one would tell the
+# operator to MOVE a receipt that never was one. Comment spans are stripped exactly as backtick
+# spans are; a line whose first non-blank character is `>` is skipped whole.
+#
+# AN ENTRY CARRYING BOTH AN ANCHORED RECEIPT AND A MID-LINE ONE STAYS SILENT, BY DESIGN. Conjunct
+# one refuses it, and the reason is the harm this reports: such an entry already emits a row per
+# anchored receipt, so it is not SILENT in this defects sense and the operator is not being told
+# nothing. Measured across the four corpora, the only entry of that shape is this defects own
+# entry in the distribution backlog.
+#
+# TWO MID-LINE RECEIPTS IN ONE ENTRY EMIT ONE ROW, naming the FIRST. The finding is that the entry
+# is silent, which is one fact about the entry; a row per offending line would repeat it.
+#
+# FALSE-POSITIVE SET, MEASURED WITH THIS PASS over four corpora and reported beside the arm as
+# `verification-discipline.md` requires: the reference consumer live ledger 1 -- the motivating
+# entry, and it is a true positive -- its archive 0, and both distribution backlog files 0.
+#
+# A SEPARATE PASS, for the ENTRY-SWALLOWED block`s reason. It reuses the single-homed boundary
+# rule, the single-homed body close rule and the single-homed ENTRY-LINE close rule, and runs its
+# own scan.
+# (No apostrophes anywhere below: the awk program is a single-quoted shell string.)
+#
+# THE FENCE STATE IS lib.sh`s, NOT A LOCAL TOGGLE. `ledger_entry_shape()` maintains `__lef_in` per
+# line and its header records that the obvious global-parity toggle is the WRONG form -- measured,
+# it hid 6 live ids and 59 archived ones on the reference consumer, because that corpus carries an
+# odd number of delimiters. Calling the shape rule on every line and reading its flag is what
+# keeps this pass and the parse above agreeing about what is fenced.
+awk -v DASH=' — ' "$(ledger_entry_awk)${CLOSE_AWK}${ELC_AWK}"'
+  function flush() {
+    if (label != "" && !anchored && !closed && midnr > 0)
+      printf "%s\t%s\t%s\n", label, midnr, midverb
+    label=""; anchored=0; closed=0; midnr=0; midverb=""
+  }
+  {
+    shape = ledger_entry_shape($0)
+    if (shape != "") {
+      flush()
+      l = $0
+      if (shape == "bullet") { sub(/^- \*\*/, "", l); sub(/\*\*.*/, "", l) }
+      else                   { sub(/^#+[ \t]*/, "", l) }
+      p = index(l, DASH); if (p > 0) l = substr(l, 1, p-1)
+      sub(/[[:space:]]+$/, "", l)
+      gsub(/`/, "", l)
+      label = l
+      if (ledger_entry_line_closes($0)) closed = 1
+      next
+    }
+    if (label == "") next
+    if (ledger_body_closes($0)) closed = 1
+    # INSIDE A FENCE: not a directive. Read AFTER the shape call above, which is what maintains it.
+    if (__lef_in) next
+    if ($0 ~ /^[ \t]*(<br[ \t]*\/?[ \t]*>)?[ \t]*[-*]?[ \t]*`?verify:/) { anchored = 1; next }
+    # A BLOCKQUOTED LINE IS A QUOTATION, WHOLE. Tested BEFORE the span strips, because a quoted
+    # receipt carries no backticks of its own and would otherwise reach the match.
+    if ($0 ~ /^[ \t]*>/) next
+    # INLINE CODE SPANS AND HTML COMMENT SPANS STRIPPED BEFORE THE TEST, never after: a body that
+    # quotes the token while explaining the convention is prose, and a commented-out receipt is
+    # text the rendered document does not show. FIRST match kept, so the row names the earliest
+    # offence.
+    t = $0
+    gsub(/`[^`]*`/, "", t)
+    gsub(/<!--([^-]|-[^-])*-->/, "", t)
+    if (midnr == 0 && match(t, /verify:[ \t]*(sh|manual|theirs_has|theirs_lacks)([^A-Za-z0-9_]|$)/)) {
+      midnr = FNR
+      midverb = substr(t, RSTART, RLENGTH)
+      sub(/^verify:[ \t]*/, "", midverb)
+      sub(/[^A-Za-z0-9_]$/, "", midverb)
+    }
+  }
+  END { flush() }
+' "$LEDGER" 2>/dev/null \
+| while IFS="$(printf '\t')" read -r ml_label ml_nr ml_verb; do
+    [ -n "${ml_label:-}" ] || continue
+    RSFX=""
+    emit NEEDS-REVIEW "$ml_label" "mid-line receipt: this entry declares no line-anchored verify: line, but line ${ml_nr} of its body carries \`verify: ${ml_verb}\` mid-sentence. The anchored grammar (deliberately — a prose mention must not be a receipt) cannot see it, so the receipt was NEVER RUN and the entry emits no verdict at all, which reads exactly like an entry with nothing to report. Move the receipt to its own line (\`verify: ${ml_verb} …\` at line start) and re-run."
   done
 
 exit 0   # classifier — the while-pipe's status is irrelevant; a close never blocks
