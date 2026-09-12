@@ -1554,6 +1554,15 @@ EOF
   esac
 done <<< "$ENTRIES"
 
+# RESET, BECAUSE THE LOOP LEAVES ITS LAST ENTRY'S SUFFIX BEHIND. `RSFX` is set per receipt
+# INSIDE the loop above and read by `emit()` everywhere, so whatever the final iteration left in
+# it is appended to every row emitted BELOW this line. Those rows belong to no receipt at all:
+# RECEIPTS-UNDECIDED is run-scoped, and an ENTRY-SWALLOWED row belongs to an annotation. A suffix
+# there names a receipt that did not produce the row, which is an attribution an operator cannot
+# check against anything. The single-receipt case hid this — it leaves the variable empty — so
+# the leak appears only when the last entry the loop processes carries more than one.
+RSFX=""
+
 # --- RECEIPTS-UNDECIDED: how much of the STILL-LIVE column this pull actually measured ------
 #
 # THE STATE THIS MAKES VISIBLE. `theirs_has` reports STILL-LIVE when the substring is present at
