@@ -15,6 +15,95 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.553.0] - 2026-09-11
+
+### A finding that cannot be cleared, and a remedy that would have installed a cached green
+
+Batch 89, release 2 of 2. Two candidates, batched because the separability diagonal was DERIVED
+rather than asserted: nine cells plus three controls, each receipt run against each sibling's fix
+applied ALONE from a pristine `origin/main` extraction. Every receipt opens on pristine and closes
+only in its own column. Neither subject is a bootstrapping file.
+
+#### `PC-S341-AUDIT-LAYER-DEBT-UNDECLARED-ARM-IS-ROW-KEYED-AND-CANNOT-BE-CLEARED`
+
+`audit-layer-debt.sh` scoped its CONTRADICTS-CORE arm to the ENTRY and its UNDECLARED arm to the
+ROW, and the comment above the first one already explained why the second was wrong: the register
+is append-only, so "this row declares no `owed`" is unsatisfiable the instant the row is written.
+A historical row cannot grow an `owed`, cannot grow a `closes_owed`, and its `reason` is frozen —
+so the arm named the same rows forever with no act available to clear them, on a list step 7 tells
+the operator to put in every pull report.
+
+Measured on the reference consumer's live 451-row register, md5 verified unchanged by the run:
+**32 reported, 25 of them on an entry that already declares an `owed` elsewhere** — the migration
+the report asks for had been performed and the rows were still named. Entry-keyed, the arm reports
+**7**, on 6 entries that declare nothing anywhere. The subtraction is derived from the sibling
+arm's `owed_entries` rather than restated, because two spellings of "which entries declare a debt"
+are two chances to disagree about one row.
+
+**The candidate's literal wording is wrong and the fix diverges from it.** It says "exactly as
+`unowned` does", and `unowned` keys on the `(clause, entry)` PAIR — built that way the arm leaves
+**8**, because a cue row under one clause cannot be cleared by a declaration under another, which
+is the same unsatisfiability one column narrower. An entry-keyed-but-only-undischarged variant
+removes **0** and is a pure no-op. Both were built and scored; the fixture's new M14 mutant kills
+the pair-keyed one.
+
+The false-positive set of the acquittal is 25 rows across 12 entries, each read in full: **0 sit
+on an entry whose declared debt is still undischarged**, so none was the only handle on live work.
+The residual exposure is the one the sibling arm already states — an entry declaring one obligation
+and leaving a second in prose is acquitted on the first.
+
+`core/fixtures/layer-debt-due-and-discharge/run.sh` goes from 32 to 37 assertions, adding the
+discriminating pair whose two registers carry byte-identical prose and differ only in whether a
+LATER row declares an `owed`.
+
+#### `PC-S341-CONTENT-KEY-DECLARATION-IS-UNSHIPPABLE-SO-EVERY-CONSUMER-PUSH-RUNS-THE-WHOLE-SUITE`
+
+The candidate's mechanical half is correct and **its implied remedy is refuted by building it.**
+`core/git-hooks/pre-push` ships, resolves its skip-exclusion set from `scripts/suite-content-key.sh`,
+and that path is at the distribution's repo root — outside every mapping row, named in neither the
+manifest nor the copy loop, so no consumer can receive it. The inner skip is therefore inert on
+every consumer and its documented degraded path is the only path a consumer can be on.
+
+Both questions the candidate left unverified were answered, and they refute three of the four
+options it lists. **The declaration has no opinion about `_bmad-output/`**: its EXCLUDE block is
+`.git CHANGELOG.md VERSION docs CLAUDE.md`, zero lines matching `_bmad` against a control of one
+matching `CHANGELOG`, because `.gitignore` ignores that path here so it could never enter the
+two-tree mutation measurement those lines are earned from. Driven through the shipped hook's own
+filter against the real changed-path set of the commit that filed the report: survivors 1 with the
+declaration and 1 without, byte-identical. **Shipping it would not have shortened that push.**
+
+And withholding it is deliberate, recorded with its reason — shipping the skip on an unverified
+superset installs a cached green. That reason is now MEASURED on the consumer rather than
+asserted: shipping the declaration verbatim removes 550 paths from that consumer's read-set
+universe, 8 of them files its fixtures read as INPUT, and 26 of its 178 mapped fixtures lose at
+least one. End to end on the worst cell — a content change to a file **20** of its fixtures read —
+`.changed` comes back EMPTY and the hook takes its WHOLE-SUITE SKIP. Twenty fixtures do not run
+and the push reports green.
+
+So the full run a consumer pays is correct behaviour, and what was missing was the record. This
+release adds it at the resolve site, noting that the declaration path is deliberately unclaimed —
+which is what makes a consumer's own narrower declaration the available remedy, verified to work
+today with no upstream change. `I66` compares the two hooks on executable lines only, so the
+comment does not fork them.
+
+#### The receipts
+
+Both candidates' filed receipts were closable by non-fixes and both were replaced. The
+layer-debt one accepted a comment naming `owed_entries` inside its own `awk` window, a suppressed
+arm reporting zero forever, the pair-keyed variant, and the name inside a string literal — and it
+did NOT close on the correct fix as first written, because the derivation sat one line above the
+window. The content-key one carried **three false closes and one miss**: it keys on a basename
+under `core/`, so relocating the file without teaching the hook to find it closes the receipt while
+leaving the consumer exactly as broken, and shipping the declaration at its current path — a real
+delivery — does not close it at all. Every mutant was `cmp -s`-asserted APPLIED before its verdict
+was read.
+
+#### `BL-237` and `BL-238`
+
+Three hands derived `BL-236` independently and correctly in one batch — the id was free across
+both corpora at the moment each looked. `BL-236` shipped in `0.552.0`; these two were renumbered
+on assembly, and the duplicate survived one conflict resolution before a `uniq -d` check caught it.
+
 ## [0.552.0] - 2026-09-11
 
 ### A document whose job is to be retyped into a shell said nothing about the shell

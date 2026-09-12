@@ -337,6 +337,31 @@ FAILLOG_RECORD=".git/ai-dlc-fixture-failures"
 # EMPTY and this reduces to the previous behaviour exactly. Both hooks run this same code and
 # I66 compares them on executable lines.
 #
+# THE EMPTY CONSUMER SET IS A DECISION, AND SHIPPING THE DISTRIBUTION'S DECLARATION WOULD BE A
+# FIDELITY LOSS RATHER THAN A SPEED-UP. CONSUMER FIXTURES READ files under tops this
+# declaration excludes. Measured on the reference consumer against the shipped hook's own two
+# functions above: shipping `scripts/suite-content-key.sh` verbatim removes 550 paths from that
+# consumer's read-set universe, 8 of which are FILES its fixtures read as INPUT, and 26 of its
+# 178 mapped fixtures lose at least one. Driven end to end on one of them -- a content change
+# to `docs/architecture-index.md`, which 20 consumer fixtures read -- the filter with the
+# declaration present drops the path from the manifest, `.changed` comes back EMPTY, and the
+# hook takes its whole-suite skip. Twenty fixtures do not run and the push reports green.
+# Without the declaration the same change selects those twenty and they run. The exclusion set
+# earns its lines from a two-tree mutation measurement taken over THIS repository's fixtures;
+# a consumer's fixtures are a different population and nothing has measured them.
+#
+# SO THE FULL RUN A CONSUMER PAYS IS THE CORRECT BEHAVIOUR, not an oversight. Its cost on the
+# reference consumer is one pole, not the sum over the pool -- derive it from the top of
+# .git/ai-dlc-fixture-durations rather than quoting a figure here.
+#
+# AND THE PATH ABOVE IS DELIBERATELY UNCLAIMED, which is what makes a consumer's own set the
+# available remedy. `install.sh` writes nothing to it, so a consumer that wants a narrower
+# suite authors its own declaration there -- the only thing read out of that file is the
+# EXCLUDE_BEGIN/EXCLUDE_END block, and every entry must be a BARE TOP-LEVEL name, since the
+# filter above compares for exact equality and I55 arm 1 refuses a slashed entry in this
+# repository for the same reason. A consumer excluding its own pipeline-state top gets the
+# inner skip; one that ships upstream's set gets a cached green.
+#
 # `.git` is dropped here because it is already excluded, separately and on different grounds,
 # at both of the sites below.
 readset_excluded_re() {

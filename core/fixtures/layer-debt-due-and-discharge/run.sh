@@ -50,7 +50,7 @@ command -v python3 >/dev/null 2>&1 || { echo "FIXTURE ERROR: python3 absent" >&2
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
-EXPECTED_ASSERTIONS=32
+EXPECTED_ASSERTIONS=37
 fails=0; made=0
 ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
@@ -98,8 +98,14 @@ PY
 # fix is free to choose: the parse boundary (which decides what every later reader can see) and
 # the head of the migration loop (which decides what that one arm examines).
 ANCHOR_PARSE='            rows.append(json.loads(line))'
-ANCHOR_UND='undeclared = []
-for r in rows:'
+# THE HEAD OF THE MIGRATION LOOP IS `for r in rows:` ALONE, NOT the `undeclared = []` line above
+# it. A two-line anchor spanning both went stale the release a derivation landed BETWEEN them,
+# and `mkmut` then refused three no-ops at once — the fixture working, not failing, but it reads
+# as a regression in the change under test. `for r in rows:` at column 0 is unique in this file
+# (the contradicts-core join uses a comprehension), so the anchor survives an insertion either
+# side of it. Control: the arm below asserts each mutation APPLIED before any verdict is read.
+ANCHOR_UND='for r in rows:
+    if isinstance(r.get("owed"), dict):'
 
 # =============================================================================================
 # HARNESS POSITIVE CONTROL — before any assertion, prove the subject runs at all.
@@ -131,6 +137,9 @@ python3 "$WORK/mkreg.py" "$DREG" <<'SPEC'
 {"entry":"extensions/both.md","reason":"Debt discharged. A follow-up split is still deferred.","closes_owed":["OWED-D3"],"owed":{"id":"OWED-B1","what":"refile as an override"}}
 {"entry":"extensions/ride.md","reason":"Debt discharged. A follow-up split is still deferred.","closes_owed":["OWED-D3"]}
 {"entry":"extensions/clean.md","reason":"additive; core says nothing about this surface"}
+{"entry":"extensions/later.md","reason":"The narrowing this row proposes is still deferred to a later pull.","recorded_utc":"2026-08-01T00:00:00Z"}
+{"entry":"extensions/later.md","reason":"declaring the migration the earlier row left in prose","recorded_utc":"2026-08-09T00:00:00Z","clause":"LC-O15","subject_digest":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","owed":{"id":"OWED-LATER-1","what":"refile as an override"}}
+{"entry":"extensions/never.md","reason":"The narrowing this row proposes is still deferred to a later pull.","recorded_utc":"2026-08-01T00:00:00Z"}
 SPEC
 dout="$(run "$DREG")"
 und_block() { awk '/^UNDECLARED/{f=1} /^CONTRADICTS-CORE/{f=0} f' <<<"$1"; }
@@ -155,13 +164,13 @@ else
   show "$dund"
 fi
 
-# --- 3. and the count is exactly the two rows that earn it ------------------------------------
+# --- 3. and the count is exactly the three rows that earn it ----------------------------------
 # A count on its own passes against an arm that flags everything and against one that flags
 # nothing; it is asserted here only as a conjunct to the identities either side of it.
-if grep -qE '^UNDECLARED \(2\)' <<<"$dout"; then
-  ok "exactly 2 of the 5 cue-carrying rows are reported — the other 3 discharge a debt"
+if grep -qE '^UNDECLARED \(3\)' <<<"$dout"; then
+  ok "exactly 3 of the cue-carrying rows are reported — the rest discharge a debt or sit on an entry that declares one"
 else
-  bad "the undeclared count is not 2; the arm is not partitioning discharge rows from obligations"
+  bad "the undeclared count is not 3; the arm is not partitioning discharge rows from obligations"
   show "$dout"
 fi
 
@@ -207,7 +216,10 @@ if grep -q 'both\.md' <<<"$dund"; then
 else
   ok "a discharge row carrying an explicit \`owed\` is exempt from the suspicion arm"
 fi
-if grep -qE '^OPEN \(1\)' <<<"$dout" && grep -q 'OWED-B1' <<<"$dout"; then
+# THE COUNT IS A CONJUNCT AND `OWED-B1` IS THE CLAIM. It reads 2 rather than 1 because the
+# satisfiability seeds below declare `OWED-LATER-1` and nothing discharges it, so it is genuinely
+# open; the identity is what establishes that the DISCHARGE row's commitment survived.
+if grep -qE '^OPEN \(2\)' <<<"$dout" && grep -q 'OWED-B1' <<<"$dout"; then
   ok "ACQUITTAL PROBE: and its explicit commitment is still OPEN — the exemption left the route to the arm's own subject reachable"
 else
   bad "the new obligation declared on a discharge row vanished — the exemption closed the only way to report the arm's subject"
@@ -243,6 +255,46 @@ if grep -q 'clean\.md' <<<"$dout"; then
   show "$dout"
 else
   ok "CONTROL: a row with neither a debt nor a cue is silent"
+fi
+
+# =============================================================================================
+# THE SATISFIABILITY CLASS — the arm is scoped to the ENTRY, because a historical ROW can never
+# clear itself.
+#
+# Everything above is a PRECISION property: which rows deserve reporting. This is a different
+# axis. The register is APPEND-ONLY, so none of the three row-local clearances is reachable by a
+# row already written — it cannot grow an `owed`, it cannot grow a `closes_owed`, and its
+# `reason` is frozen. A row-scoped arm therefore names the same rows on every run forever with
+# no act available to clear them, and the remedy the report PRINTS — "re-record each with an
+# `owed` object" — is invisible to it. The contradicts-core arm one section up already made
+# exactly this argument over `owed_entries`; it was not applied here until the reference
+# consumer measured 32 reported rows of which 25 sat on an entry that already declared an
+# `owed`, i.e. an actionable count of 0 against a reported 32 on a list SKILL.md step 7 puts in
+# every pull report.
+#
+# THE PAIR IS THE ARM. `later.md` and `never.md` carry BYTE-IDENTICAL reason prose and differ in
+# exactly one property: whether a LATER row on the same entry declares an `owed`. A separate run
+# could ask whether the subtraction fires; only this pair asks whether it fires on the right
+# entry, and an implementation that simply suppressed the arm passes the first arm and fails the
+# second.
+
+# --- 7b. THE OFFENDER: the migration was PERFORMED, so the row must stop being named -----------
+if grep -q 'later\.md' <<<"$dund"; then
+  bad "a row whose ENTRY declares an \`owed\` on a LATER row was still filed as undeclared — the register is append-only, so that row can never clear itself and the finding is unsatisfiable by construction"
+  show "$dund"
+else
+  ok "SATISFIABLE: a cue-carrying row is cleared by a LATER row declaring an \`owed\` on the same entry — the act the report asks for"
+fi
+
+# --- 7c. THE NEAR-MISS, BESIDE IT, IN THE SAME RUN --------------------------------------------
+# Byte-identical reason to `later.md`. The ONLY difference is that no row anywhere declares an
+# `owed` on this entry, so the obligation really is undeclared. A subtraction that swallows this
+# row has suppressed the arm rather than scoped it, and no separate run could ask the question.
+if grep -q 'never\.md' <<<"$dund"; then
+  ok "NEAR-MISS: the same prose on an entry that declares NO \`owed\` anywhere is still reported"
+else
+  bad "the entry-keyed subtraction swallowed a genuine undeclared obligation — the arm is suppressed, not scoped"
+  show "$dund"
 fi
 
 # --- 8. cwd-invariance ------------------------------------------------------------------------
@@ -416,26 +468,68 @@ score() { # score <label> <path-or-empty> <register> <describe> <present|absent>
 
 # M1 — the migration arm made blind to `closes_owed`, i.e. the behaviour this fixture's subject
 # replaced. Rebinding `rows` at the head of that loop reaches nothing above it: `open_items` and
-# the contradicts-core join are both already computed, so this mutant can only move arms 1/3/5.
-score M1 "$(mkmut m1 "$ANCHOR_UND" 'undeclared = []
-rows = [ {k: v for k, v in _r.items() if k != "closes_owed"} for _r in rows ]
-for r in rows:')" "$DREG" \
-  "with the discharge field hidden from the migration arm, the discharge row is filed as undeclared again" \
-  present 'dis\.md'
+# the contradicts-core join are both already computed, so this mutant can only move the migration
+# arm's own cells.
+#
+# SCORED ON `str.md`, NOT ON `dis.md`, AND THE MOVE IS THE ENTRY-SCOPING CHANGE'S DOING. Once the
+# arm subtracts entries that declare an `owed`, `dis.md` is silenced TWICE over — by its own
+# `closes_owed` and by `OWED-D1` declared on the same entry — so hiding one of the two changes no
+# cell and this mutant SURVIVED, which reads exactly like an arm that never fired. `str.md` is the
+# discharge row the entry-keyed subtraction cannot reach: its entry declares no `owed` anywhere,
+# so the `closes_owed` skip is the ONLY thing silencing it. **This is the "give every guard a
+# subject the other guards cannot see" rule applied after a second guard landed on top of the
+# first**; the exclusive subject was derived rather than guessed — on the reference register, 0 of
+# 32 discharge rows sit on an entry declaring no `owed`, so the shape is reachable but does not
+# occur there, and the seed manufactures it.
+score M1 "$(mkmut m1 "$ANCHOR_UND" 'rows = [ {k: v for k, v in _r.items() if k != "closes_owed"} for _r in rows ]
+for r in rows:
+    if isinstance(r.get("owed"), dict):')" "$DREG" \
+  "with the discharge field hidden from the migration arm, the discharge row whose entry declares nothing is filed as undeclared again" \
+  present 'str\.md'
+
+# M12 — THE ENTRY-KEYED SUBTRACTION REMOVED, i.e. the row-scoped behaviour this section replaced.
+# Scored on `later.md` REAPPEARING, which is a positive outcome and the only arm that can see it:
+# every other cell in this register is silenced by the `closes_owed` skip or carries no cue.
+score M12 "$(mkmut m12 '    if r.get("entry") in owed_any_entry:
+        continue' '    if False:
+        continue')" "$DREG" \
+  "without the entry-keyed subtraction the already-migrated row is named again, forever, with no act available to clear it" \
+  present 'later\.md'
+
+# M13 — THE SUBTRACTION WIDENED INTO A SUPPRESSION. The plausible over-broad fix, and it is the
+# one the near-miss arm exists for: keyed on whether ANY row anywhere declares an `owed` rather
+# than on THIS entry, it acquits every cue-carrying row on any register that declares one debt.
+# Scored on the genuine undeclared obligation VANISHING — the direction that costs the thing this
+# file exists to prevent, and the direction a count-only arm cannot distinguish from a fix.
+score M13 "$(mkmut m13 '    if r.get("entry") in owed_any_entry:
+        continue' '    if owed_any_entry:
+        continue')" "$DREG" \
+  "a subtraction keyed on the register rather than on the entry acquits an entry that declares nothing" \
+  absent 'never\.md'
+
+# M14 — THE SUBTRACTION KEYED ON THE WRONG COLUMN, which is the shape the filed remedy's literal
+# wording invites: `unowned` subtracts a (clause, entry) PAIR, and reusing that key here leaves
+# any row whose clause differs from the declaring row's reported forever. `later.md` declares
+# under `LC-O15` and its cue row is `LC-E4`, so a pair-keyed subtraction cannot clear it — which
+# is the defect this change closes, one column narrower. Measured on the reference register: the
+# pair key leaves 8 rows where the entry key leaves 7, and the extra row is exactly this shape.
+score M14 "$(mkmut m14 'owed_any_entry = {e for _c, e in owed_entries}' 'owed_any_entry = owed_entries')" "$DREG" \
+  "a subtraction keyed on the (clause, entry) pair cannot clear a debt declared under a different clause" \
+  present 'later\.md'
 
 # M2 — THE DISARM. The loop still runs, the script still exits 0, the report still prints a tidy
 # `UNDECLARED (0)` — and zero rows were examined. This is the shape that reads as a fix, and
 # every absence-shaped arm above passes against it.
-score M2 "$(mkmut m2 "$ANCHOR_UND" 'undeclared = []
-for r in rows:
-    continue')" "$DREG" \
+score M2 "$(mkmut m2 "$ANCHOR_UND" 'for r in rows:
+    continue
+    if isinstance(r.get("owed"), dict):')" "$DREG" \
   "an arm that examines zero rows and reports a clean tree loses the genuine obligation" \
   absent 'nom\.md'
 
 # M3 — the exemption widened from a discharge to the mere presence of the key.
-score M3 "$(mkmut m3 "$ANCHOR_UND" 'undeclared = []
-rows = [ (dict(_r, closes_owed=["X"]) if "closes_owed" in _r else _r) for _r in rows ]
-for r in rows:')" "$DREG" \
+score M3 "$(mkmut m3 "$ANCHOR_UND" 'rows = [ (dict(_r, closes_owed=["X"]) if "closes_owed" in _r else _r) for _r in rows ]
+for r in rows:
+    if isinstance(r.get("owed"), dict):')" "$DREG" \
   "an exemption keyed on the KEY rather than on a discharge acquits the empty-array row" \
   absent 'emp\.md'
 
