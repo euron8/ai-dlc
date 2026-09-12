@@ -228,10 +228,6 @@ Run these integrity checks in order:
    usable.** The envelope flips to `done` at retro §4a, and §5b, §5c, §6 and
    §7 all run after it — so `status: done` ALONE fires on every mid-retro
    resume, and on the terminal position retro §7a-post itself writes.
-   Measured over the reference consumer's snapshot history: the status
-   clause alone fires on 35 states, 23 of them legitimate mid-retro resumes;
-   with the position clause it fires on 3, all of them the stranded state
-   this check exists for, and on none of the four control states.
 
 If all seven checks pass (budget within threshold, snapshot loaded,
 integrity verified, branch matches or user confirmed, recency
