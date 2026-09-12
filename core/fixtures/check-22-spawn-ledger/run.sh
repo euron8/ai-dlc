@@ -696,12 +696,25 @@ else
   bad "an invocation without --probe did not say so: $R"
 fi
 
-# --- E4. the arm is SCOPED to definition_bound, and that is not decoration ----
+# --- E4. a row that bound NO effort is UNDECLARED: never a FAIL, and never silent ------
+# The prose-only dispatch got its configured level as a sentence the guard appended, which
+# the Agent tool has no parameter to apply, so the teammate ran at whatever its session
+# resolved. Its probe row DISAGREES on purpose: an arm that judged this row would fail it.
 R="$(evsl e-prose.jsonl e-prose.probe)"
 if [ "$(ercv "$R")" -eq 0 ] && ! grep -q '^FAIL: \[' <<<"$R"; then
-  ok "a row that is NOT definition-bound is not judged on effort even when its transcript disagrees -- the guard's prompt sentence is advisory by construction and failing it would be a FAIL on correct data"
+  ok "a row that bound no effort is not judged on it even when its transcript disagrees -- the guard's prompt sentence is advisory by construction and failing it would be a FAIL on correct data"
 else
-  bad "a non-definition-bound row was judged on effort: $R"
+  bad "a row that bound no effort was judged on effort: $R"
+fi
+# ...AND IT IS COUNTED, which is the half that stops the acquittal from being a skip. A row
+# passed over in silence and a row examined and found to have bound nothing print the same
+# verdict otherwise, and a sprint whose every row bound nothing would read exactly like one
+# where every row was verified. The COUNTS line is what tells them apart.
+if grep -q '1 row(s) that bound no effort' <<<"$R" \
+   && grep -q 'effort: 0 verified' <<<"$R"; then
+  ok "  and the COUNTS line REPORTS it as a row that bound no effort rather than passing over it -- 'nothing to verify' and 'nothing found wrong' cannot read alike"
+else
+  bad "  the row that bound no effort was acquitted without being counted, so it is indistinguishable from a row the arm never reached: $R"
 fi
 
 # --- E5. THE DISCRIMINATING SEED: two SAME-ROLE spawns, out of order ----------
@@ -778,6 +791,15 @@ fi
 # it was told, and passes one that did not, depending only on which way the edit went. Both
 # directions are seeded here, in the same run, because one alone reads identically under a
 # validator that has simply stopped comparing.
+#
+# THESE TWO ROWS ARE HAND-WRITTEN AND NO GUARD CAN EMIT THEM AGAINST THESE SETTINGS, WHICH IS
+# THE POINT AND IS STATED SO NOBODY READS THEM AS OBSERVED DISPATCHES. The guard sets
+# `definition_bound` only when the rendered definition agrees with settings on effort, so a
+# row it wrote carries an `effort_bound` equal to the configured level AT DISPATCH. Reaching
+# this state on a real consumer takes a settings edit BETWEEN the dispatch and the gate, which
+# leaves the ledger untouched and is exactly the sequence under test -- unconstructible in one
+# snapshot of a tree, so the row is written directly. It is reachable under the mechanism's own
+# contract; it is only unreachable from a single reading of the config.
 cat > "$WORK/settings-reconfigured.json" <<'JSON'
 {
   "aiDlcModels": { "opus": "claude-opus-5[1m]", "sonnet": "claude-sonnet-5" },
@@ -833,24 +855,24 @@ else
   bad "E7 MIRROR the row that bound 'low' was not failed against its own effort_bound: $R"
 fi
 
-# A definition-bound row carrying NO effort_bound has nothing to compare and is UNDECLARED,
-# never a mismatch against whatever settings happen to say. This is the row the fixed guard
-# writes for every dispatch that bound no effort, so without this arm the change turns a whole
-# population into findings. Its probe row JOINS and disagrees with settings, so a validator
-# that fell back to the settings read would fail it.
+# A row flagged definition-bound and carrying NO effort_bound bound nothing, so it is
+# UNDECLARED rather than a mismatch against whatever settings happen to say. Its probe row
+# JOINS and disagrees with settings, so a validator that fell back to the settings read would
+# fail it -- which is what makes this the arm that separates the two readings on a row the old
+# scope test DID judge.
 erow dev sonnet true true dev-noeffort true '' toolu_NOEFFORT > "$WORK/e-noeffort.jsonl"
 prow toolu_NOEFFORT low claude-sonnet-5 2.1.269               > "$WORK/e-noeffort.probe"
 R="$(evsl e-noeffort.jsonl e-noeffort.probe)"
-if [ "$(ercv "$R")" -eq 0 ] && grep -q '1 definition-bound row(s) carrying no effort_bound' <<<"$R" \
+if [ "$(ercv "$R")" -eq 0 ] && grep -q '1 row(s) that bound no effort' <<<"$R" \
    && ! grep -q '^FAIL: \[' <<<"$R"; then
-  ok "E7 a definition-bound row with a NULL effort_bound is UNDECLARED and counted, not scored against settings -- that row is what the guard writes whenever nothing bound an effort"
+  ok "E7 a row flagged definition-bound with a NULL effort_bound is UNDECLARED and counted, not scored against settings -- the scope key is the field, not the flag"
 else
   bad "E7 the null-effort_bound row was not reported UNDECLARED: $R"
 fi
 
 # --- E8. MUTANTS. Each arm above is PRESENCE-shaped, so a validator emitting nothing
 # fails them -- but that does not establish which LINE produced each verdict.
-sed 's/^  if \[ "\$defbound" = "true" \]; then$/  if false; then/' "$VSL" > "$WORK/noeffortarm.sh"
+sed 's/^  if \[ -z "\$effortbound" \] || \[ "\$defbound" != "true" \]; then$/  if true; then/' "$VSL" > "$WORK/noeffortarm.sh"
 if cmp -s "$VSL" "$WORK/noeffortarm.sh"; then
   bad "FIXTURE BROKEN: the effort arm's scope test was renamed, so this mutant proves nothing"
 else
