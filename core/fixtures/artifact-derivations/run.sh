@@ -282,11 +282,17 @@ exec_contained sed-s-gw-flag "sed 's/a/b/gw canary' data.txt"
 # `-f` PUTS THE VERB IN A FILE, SO NO SCAN OF THE SEGMENT CAN SEE IT. The segment carries no
 # `w` at all; the script does. This is why the option is refused outright rather than
 # followed. The canary name differs because the sed script in the file names it.
+#
+# THE TWO SEEDS ARE NAMED DIFFERENTLY ON PURPOSE. With both named `evil.sed`, a mutant that
+# removed the `-f` refusal was still killed -- by the VERB rule, reading the leading `e` of
+# the filename as GNU's exec command -- so one arm of the pair passed for a reason unrelated to
+# `-f`. Measured: renaming the seed to `prog.sed` swapped which arm fired. `prog.sed` opens
+# with `p`, a harmless verb, so the arm below is refused by the `-f` rule or by nothing.
 mkdir -p "$WORK/h"
 printf 'w canaryF\n' > "$WORK/h/evil.sed"
 exec_contained sed-script-file "sed -n -f evil.sed data.txt"
-printf 'w canaryF\n' > "$WORK/h/evil.sed"
-exec_contained sed-script-file-joined "sed -n -fevil.sed data.txt"
+printf 'w canaryF\n' > "$WORK/h/prog.sed"
+exec_contained sed-script-file-joined "sed -n -fprog.sed data.txt"
 # ARBITRARY WHITESPACE SITS BETWEEN THE VERB AND ITS FILENAME, in both forms, and both write.
 # A grammar keyed on `w<space><name>` misses these; this one returns at the verb in command
 # position and never parses the filename, so the whitespace cannot matter -- which is a claim
