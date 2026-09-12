@@ -700,9 +700,22 @@ adj_lookup() { # $1 digest -> 0 if a record with a vocabulary verdict exists
 # an unnarrowed note would quote a ruling about a different question and tell the operator to
 # re-record it. The control is the other 5, whose latest record IS the clause being reported.
 #
-# AN ABSENT CLAUDE ARGUMENT IS SILENCE, NOT A WILDCARD. A caller that cannot name its clause is
+# AN ABSENT CLAUSE ARGUMENT IS SILENCE, NOT A WILDCARD. A caller that cannot name its clause is
 # the case where cross-clause quoting is guaranteed, so the empty string matches no record rather
 # than every one -- a note is a courtesy and is never worth a false one.
+#
+# BOTH CALL SITES PASS `adj_clause_of`, NEVER `adj_clause_cell`, AND THE GUARD BELOW IS WHY. The
+# CELL form prints a 135-character sentence on the unresolvable branch ("<no clause in ... carries
+# code ...>"), so `$3` would never be empty, the guard could never fire, and the silence on an
+# unresolvable clause would be produced by that sentence matching no register row instead. That
+# reads identically to a guard that works and is this repo's check-that-cannot-fire shape: the
+# cell's text is a MESSAGE for an operator and is not a clause id. `adj_clause_of` returns empty.
+#
+# THE CURRENT-DIGEST EXCLUSION IS LOAD-BEARING AND NOT A TIDINESS CLAUSE. A record under the row's
+# OWN digest is reachable at the title-join emit -- `adj_lookup` answers 1 there for a verdict
+# outside the schema's vocabulary and the `continue` does not fire -- so without `.subject_digest
+# != $d` the helper quotes the operator's own current record back at them and accuses them of
+# spending a verdict they have not spent.
 adj_spent_note() { # $1 entry (consumer-relative), $2 the CURRENT digest, $3 the clause id -> prints a note, or nothing
   local prior
   [ -f "$ADJ_REGISTER" ] || return 0
@@ -821,7 +834,7 @@ adj_check() { # $1 status, $2 entry, $3 target
     2) emit_raw HARD-LAYER-ADJUDICATION-MISSING "$2" "$3" \
          "row '$1' is clause ${cl} and needs a recorded verdict, and jq is not on PATH, so ${ADJ_REGISTER#"$CONSUMER"/} cannot be read. A register that cannot be read is not an empty one." ;;
     *) emit_raw HARD-LAYER-ADJUDICATION-MISSING "$2" "$3" \
-         "row '$1' is the layer conformance adjudication: its candidate set is mechanized and its verdict is yours. Record one line in ${ADJ_REGISTER#"$CONSUMER"/} with clause ${cl} and subject_digest ${d} and a verdict of $(printf '%s' "$ADJ_VERDICTS" | tr '\n' '|' | sed 's/|$//'), plus a reason. Both of those are COPIED from this row, not derived: the clause is the code this status maps to in ${ADJ_CONTRACT_REL} at ${THEIRS}, and a different clause produces a textually similar row. The digest covers this entry AND the core file it hooks at ${THEIRS}, so the verdict is spent the next time either one moves — it is not an exemption for the path.$(adj_spent_note "$2" "$d" "$cl")" ;;
+         "row '$1' is the layer conformance adjudication: its candidate set is mechanized and its verdict is yours. Record one line in ${ADJ_REGISTER#"$CONSUMER"/} with clause ${cl} and subject_digest ${d} and a verdict of $(printf '%s' "$ADJ_VERDICTS" | tr '\n' '|' | sed 's/|$//'), plus a reason. Both of those are COPIED from this row, not derived: the clause is the code this status maps to in ${ADJ_CONTRACT_REL} at ${THEIRS}, and a different clause produces a textually similar row. The digest covers this entry AND the core file it hooks at ${THEIRS}, so the verdict is spent the next time either one moves — it is not an exemption for the path.$(adj_spent_note "$2" "$d" "$(adj_clause_of "$1")")" ;;
   esac
 }
 
@@ -1800,12 +1813,13 @@ while IFS= read -r f; do
       # digest-keyed verdict in one sentence, so an operator following it in order spends the record
       # they just wrote and the row returns looking never-adjudicated. The call is GUARDED on a
       # non-empty digest because `adj_spent_note`'s `.subject_digest != ""` would match every prior
-      # record of the entry, turning an unkeyable row into a false accusation. The clause is passed
-      # through `adj_clause_cell` rather than written as a literal, for the reason the row's own
-      # `clause` cell is: a literal here and a derived id in the message would disagree the first
-      # time the contract renamed the clause, and the note would then quote a verdict silently.
+      # record of the entry, turning an unkeyable row into a false accusation. The clause is
+      # DERIVED through `adj_clause_of` rather than written as a literal -- a literal here and a
+      # derived id in the row's own cell would disagree the first time the contract renamed the
+      # clause -- and it is `adj_clause_of` rather than `adj_clause_cell` because only the former
+      # answers EMPTY when the code resolves to nothing, which is what the helper's guard reads.
       emit EXTENSION-TITLE-MATCHES-CORE "$entry" "$hooks" \
-        "${when}: this entry's heading '$ut' names the same section as core's '$hit' in '$hooks', matched on TEXT because neither side carries a number. ${extra}. THREE dispositions, and the entry decides which: if the body DUPLICATES core's section, retire it per Rule 27(b) — an absorbed-but-kept entry starts as an exact copy and diverges from there. If it AUGMENTS that section, record it in ${ADJ_REGISTER#"$CONSUMER"/} with clause $(adj_clause_cell EXTENSION-TITLE-MATCHES-CORE) and subject_digest ${tm_digest:-<unkeyable: entry or target unreadable>} and a verdict of $(printf '%s' "$ADJ_VERDICTS" | tr '\n' '|' | sed 's/|$//'), plus a reason -- that is what clears this row, and it is the only thing that does. The digest covers this entry AND the core file it hooks at ${THEIRS}, so the verdict is spent the next time either one moves; it is a record of a reading, not an exemption for the path. If it REPRODUCES core's section in order to append to it, neither of those is the answer and the grain is: \`kind: qualifier\` with \`extends: '#${hit}'\` and \`position: append\`, which renders your addition INSIDE core's section and carries no obligation on the prose you did not write. Recording an augmenting verdict on a reproduction clears this row and leaves the copy frozen, and a frozen copy cannot receive an upstream improvement -- measured on the reference consumer at this exact clause: 165 lines reproducing a 133-line core section to carry 49 additive ones, and core's step 1 had already gained guidance the copy never received. That is Rule 27(c)'s silent fork, and the verdict channel is not where it gets fixed. Declaring \`extends: '#${hit}'\` (spelled as the core heading actually reads) is worth doing anyway because it narrows the DRIFT subject to that span, but it does NOT silence this row and never has: \`extends:\` answers 'which span do I augment', never 'does core now carry my body'. Weaker than EXTENSION-RESTATES-CORE on purpose: a numbered anchor is an identity claim, a prose heading is not, so this reports the match and does not prescribe the delete.$([ -n "$tm_digest" ] && adj_spent_note "$entry" "$tm_digest" "$(adj_clause_cell EXTENSION-TITLE-MATCHES-CORE)")"
+        "${when}: this entry's heading '$ut' names the same section as core's '$hit' in '$hooks', matched on TEXT because neither side carries a number. ${extra}. THREE dispositions, and the entry decides which: if the body DUPLICATES core's section, retire it per Rule 27(b) — an absorbed-but-kept entry starts as an exact copy and diverges from there. If it AUGMENTS that section, record it in ${ADJ_REGISTER#"$CONSUMER"/} with clause $(adj_clause_cell EXTENSION-TITLE-MATCHES-CORE) and subject_digest ${tm_digest:-<unkeyable: entry or target unreadable>} and a verdict of $(printf '%s' "$ADJ_VERDICTS" | tr '\n' '|' | sed 's/|$//'), plus a reason -- that is what clears this row, and it is the only thing that does. The digest covers this entry AND the core file it hooks at ${THEIRS}, so the verdict is spent the next time either one moves; it is a record of a reading, not an exemption for the path. If it REPRODUCES core's section in order to append to it, neither of those is the answer and the grain is: \`kind: qualifier\` with \`extends: '#${hit}'\` and \`position: append\`, which renders your addition INSIDE core's section and carries no obligation on the prose you did not write. Recording an augmenting verdict on a reproduction clears this row and leaves the copy frozen, and a frozen copy cannot receive an upstream improvement -- measured on the reference consumer at this exact clause: 165 lines reproducing a 133-line core section to carry 49 additive ones, and core's step 1 had already gained guidance the copy never received. That is Rule 27(c)'s silent fork, and the verdict channel is not where it gets fixed. Declaring \`extends: '#${hit}'\` (spelled as the core heading actually reads) is worth doing anyway because it narrows the DRIFT subject to that span, but it does NOT silence this row and never has: \`extends:\` answers 'which span do I augment', never 'does core now carry my body'. Weaker than EXTENSION-RESTATES-CORE on purpose: a numbered anchor is an identity claim, a prose heading is not, so this reports the match and does not prescribe the delete.$([ -n "$tm_digest" ] && adj_spent_note "$entry" "$tm_digest" "$(adj_clause_of EXTENSION-TITLE-MATCHES-CORE)")"
     done <<< "$(printf '%s' "$cand" | awk -F"$TAB" 'NF>=3 { if ($1 > d[$3]) { d[$3]=$1; r[$3]=$0 } } END { for (k in r) print r[k] }')"
   fi
 
