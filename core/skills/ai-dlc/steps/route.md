@@ -207,10 +207,24 @@ Run these integrity checks in order:
 
    Wait for the user's reply before dispatching.
 
-If all six checks pass (budget within threshold, snapshot loaded,
+7. **The snapshot does not describe a CLOSED sprint.** Read
+   `_bmad-output/implementation-artifacts/sprint-status.yaml`. If its
+   `sprint:` equals the sprint the loaded Sprint Context names AND its
+   `status:` is `done`, the sprint this snapshot describes has already
+   shipped — resuming into `current_step_file` would re-run work that is
+   closed. Surface it:
+   > *"Snapshot describes sprint {N}, which `sprint-status.yaml` records as
+   > `status: done`. Resuming would re-enter a closed sprint. Reply
+   > `archive` to move this snapshot aside and start fresh, `proceed` to
+   > resume anyway, or `abort` to stop."*
+
+   Wait for the user's reply before dispatching. This check holds even when
+   the closing step skipped its terminal Pipeline Position write.
+
+If all seven checks pass (budget within threshold, snapshot loaded,
 integrity verified, branch matches or user confirmed, recency
-acceptable), continue with the Step 0 path 2 dispatch. Otherwise the
-user's reply directs the next action.
+acceptable, sprint not closed), continue with the Step 0 path 2 dispatch.
+Otherwise the user's reply directs the next action.
 
 ### Step 1: Read Project State
 

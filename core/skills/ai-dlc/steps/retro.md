@@ -1207,6 +1207,17 @@ follow their audit, these must follow the merge.
 7. Commit to `main`:
    `chore(s<N>): rotate gate-log, compaction-log and gate-adjudication post-retro-merge`.
    The commit touches only those files.
+8. **Write the TERMINAL Pipeline Position.** The snapshot outlives the sprint
+   (7d), so this write is what makes the outliving copy true. In
+   `_bmad-output/pipeline-snapshot.md`'s `## Pipeline Position`, set
+   `current_step_file: retro.md` and
+   `last_completed_step_file: retro.md (sprint <N> closed — retro PR merged,
+   records rotated)`. Leave `last_gate_passed` as it stands. DROP the routing
+   record fields — they belong to the sprint that just closed and the next
+   `route.md` Step 6 writes its own. Commit to `main`:
+   `chore(s<N>): finalize snapshot — sprint <N> closed`. Without this write the
+   snapshot still names `deploy-validate.md` and the next session reads a
+   shipped sprint as pending deploy work.
 
 **7b. Assemble next-sprint inputs.**
 
