@@ -331,8 +331,8 @@ vocab_extract_effort_levels() {
   # and render an empty row, which the zero guard then reports as a changed grammar rather
   # than as the drift it is. The near-miss probe seeds a case arm of identical shape whose
   # members are not levels, and a level named only in a comment.
-  grep -oE '^[[:space:]]*[a-z]+(\|[a-z]+)+\)[[:space:]]*;;' "$1" \
-    | sed 's/)[[:space:]]*;;$//' | sed 's/^[[:space:]]*//' \
+  grep -oE '^[[:space:]]*[a-z]+(\|[a-z]+)+\)[^;]*;;' "$1" \
+    | sed 's/)[^;]*;;$//' | sed 's/^[[:space:]]*//' \
     | grep -E '(^|\|)(low|medium|high|xhigh|max)(\||$)' \
     | tr '|' '\n' | grep -v '^$' | LC_ALL=C sort -u
 }

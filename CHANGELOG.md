@@ -39,12 +39,35 @@ resume-by-id path a definition-bound dispatch depends on, and that runner drops 
 half of the binding; a role-bound hand is reached afterward by `SendMessage` to the agent id
 `ListAgents` reports.
 
+The probe-to-ledger join is the harness's own `tool_use_id`, present in the guard's PreToolUse
+input and written to every subagent's `agent-<id>.meta.json` as `toolUseId`. Censused over the
+1707 meta files on the operator's machine: 1274 named in-process teammates, none carrying
+`toolUseId` (they carry `teamName`); 433 unnamed spawns, 431 carrying it and 2 ad-hoc
+`general-purpose` spawns carrying neither key. A role-bound dispatch is unnamed from this
+release, so the join resolves exactly where Check 22 needs it; the two exceptions are the class
+it never scores. Seeded as two same-role spawns completing in reverse dispatch order, the
+`tool_use_id` join resolves 4 of 4 pairings where a role-plus-latest-timestamp join resolves 2.
+
 `ai-dlc-subagent-probe.sh` and gate-validation Check 22 gain the join `BL-019` filed as unmet:
 the probe reads a transcript's `effort` field against the definition it ran under, and Check 22
 asserts agreement with `aiDlcRoles.<role>.effort` for every guard row recording a
 definition-bound dispatch, PENDING where no probe row has matched yet. This closes `BL-019`'s
 "nothing reads it" half — `effort_bound` now has a reader — without rotating that entry, which
 stays open until its own receipt goes 0.
+
+The tip adversary found four more before the merge. The probe's `v:3` header declared a
+population narrowing no line performed; it now says what the code does — every readable
+spawn writes a row, `definition` and `tool_use_id` say what kind, and Check 22 scores only rows
+that join a definition-bound ledger row. Two resident comments deferred a census to a
+CHANGELOG that did not carry it, and the claim they deferred was false by two ad-hoc spawns;
+the census is above. `I111`'s case-arm grammar required `) ;;` with nothing between, so the
+renderer's `) return 0 ;;` arm was outside the population it named — both the arm and the
+vocabulary extractor now accept a command between the two, the self-probe seeds that shape,
+and a renderer that drops or gains a level fails the push. `BL-240`'s receipt seeded a dispatch
+with no `model` param, so a guard that kept the param passed its `has("model")` assertion;
+the seed now carries one. And the `subagent-probe` fixture wrote no meta sidecar, so a probe
+reading the join key by the wrong spelling passed it and turned every effort row `PENDING`;
+three fires now differ only in the meta and assert the two keys.
 
 The first cut of `I111` called a six-stage pipeline once per shaped file and cost 95 forks,
 which the fork-budget fixture refused; it is one recursive grep over the population now and

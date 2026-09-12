@@ -154,13 +154,18 @@ AGENT_ID="$(printf '%s' "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null || tru
 # its own verification joins on. Both the filter and the join move together or neither
 # does.
 #
-# `v:3`: a bare-id row is IN the population when its meta declares a definition. That is
-# the discriminator rather than the id's shape, because the shape cannot tell a
-# role-bound spawn from an ad-hoc Explore — and the ad-hoc class is the one `v:2` was
-# right to drop. Censused over the harness's own `agent-*.meta.json` corpus, the two
-# classes are cleanly separable: EVERY unnamed spawn carries `toolUseId`, and EVERY named
-# in-process teammate carries `teamName` and no `toolUseId`. The counts are in the
-# CHANGELOG, which dates them; one quoted here would decay silently.
+# `v:3`: NO ROW IS DROPPED ON ID SHAPE, AND NONE EVER WAS. The `v:2` paragraph above reads as
+# a filter and no line here performed one -- what narrowed the useful population at `v:2` was
+# the LEDGER JOIN, which a bare id could never satisfy. From `v:3` every spawn with a readable
+# transcript writes a row, and two fields say what kind it was: `definition` is what the meta
+# declared (`customAgentType` on a named teammate, `agentType` otherwise -- a role name for a
+# role-bound dispatch, `general-purpose`/`Explore`/`fork` for an ad-hoc one), and
+# `tool_use_id` is the exact join to the guard's ledger row. Check 22 scores only rows that
+# join a `definition_bound` ledger row, so an ad-hoc row is telemetry and never a verdict.
+# Censused over the harness's own `agent-*.meta.json` corpus: `toolUseId` is absent from
+# every named in-process teammate and present on unnamed spawns with a handful of ad-hoc
+# `general-purpose` exceptions carrying neither; the census with its exceptions is in the
+# 0.557.0 CHANGELOG entry, which dates it.
 #
 # A reader comparing row counts across either stamp sees a step, and THIS is it, not a
 # regression: down at `v:2`, back up at `v:3` over a different subset.
@@ -189,8 +194,8 @@ TRANSCRIPT="${LEAD_TRANSCRIPT%.jsonl}/subagents/agent-${AGENT_ID}.jsonl"
 #   order-keyed join paired 2 of 4, right on one ordering and wrong on the other.
 #
 #   It is ABSENT on named in-process teammates, which carry `teamName` instead, and PRESENT
-#   on unnamed spawns — measured across the whole meta corpus with no exception in either
-#   direction. A role-bound dispatch is unnamed from this release — the guard deletes `name`
+#   on unnamed spawns -- measured across the whole meta corpus, with a handful of ad-hoc
+#   `general-purpose` spawns carrying neither key (recorded in the 0.557.0 CHANGELOG). A role-bound dispatch is unnamed from this release — the guard deletes `name`
 #   — so the key resolves exactly where the verification needs it, and its absence marks the
 #   class that has no definition to verify.
 META="${LEAD_TRANSCRIPT%.jsonl}/subagents/agent-${AGENT_ID}.meta.json"

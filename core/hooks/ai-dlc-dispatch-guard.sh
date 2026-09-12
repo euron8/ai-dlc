@@ -416,11 +416,12 @@ SPAWN_NAME="$(printf '%s' "$INPUT" | jq -r '.tool_input.name // .tool_input.suba
 # exactly the shape that reads as working.
 #
 # ITS ABSENCE IS THE NAMED CASE, NOT A GAP, AND THE TWO CLASSES ARE CLEANLY SEPARABLE.
-# Censused over the harness's own `agent-*.meta.json` corpus: `toolUseId` is present on
-# EVERY unnamed spawn and absent from EVERY named in-process teammate, which carries
-# `teamName` instead. Deleting `name` is therefore what MAKES this key resolvable, and the
-# two halves of this release are one change. The counts are in the CHANGELOG, which dates
-# them; a figure quoted here would decay silently and read exactly like a fresh one.
+# Censused over the harness's own `agent-*.meta.json` corpus: `toolUseId` is absent from
+# every named in-process teammate, which carries `teamName` instead, and present on unnamed
+# spawns with a handful of ad-hoc `general-purpose` exceptions that carry neither -- none of
+# them a role-bound dispatch. Deleting `name` is therefore what MAKES this key resolvable,
+# and the two halves of this release are one change. The census with its exceptions is in
+# the 0.557.0 CHANGELOG entry, which dates it; a figure quoted here would decay silently.
 SPAWN_TUI="$(printf '%s' "$INPUT" | jq -r '.tool_use_id // empty' 2>/dev/null || true)"
 
 # THE DELETED NAME IS RECORDED, NEVER MERELY DROPPED. A lead reading the ledger back sees

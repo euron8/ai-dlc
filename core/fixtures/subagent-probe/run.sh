@@ -51,6 +51,18 @@ fire() {
   if [ -f "$WORKDIR/$_f_seed" ]; then
     mkdir -p "$WORKDIR/lead-${_f_aid}/subagents"
     cp "$WORKDIR/$_f_seed" "$WORKDIR/lead-${_f_aid}/subagents/agent-${_f_aid}.jsonl"
+    # THE META SIDECAR, when a case asks for one: `agentType` (or `customAgentType` for a named
+    # teammate) is where the DEFINITION is read from and `toolUseId` is the ledger join. Seeded
+    # from the harness's own shape, so an arm below can assert the probe reads those two keys
+    # and not some other spelling -- a probe reading `.tool_use_id` off the meta is byte-for-byte
+    # plausible, records null, and turns every Check 22 effort row into PENDING with both
+    # fixtures green. Absent when no fourth argument is given, which is the pre-existing world.
+    rm -f "$WORKDIR/lead-${_f_aid}/subagents/agent-${_f_aid}.meta.json"
+    if [ -n "${4:-}" ]; then
+      jq -nc --arg t "$4" --arg u "${5:-}" --arg c "${6:-}" \
+        '{agentType:$t} + (if $u != "" then {toolUseId:$u} else {} end) + (if $c != "" then {customAgentType:$c} else {} end)' \
+        > "$WORKDIR/lead-${_f_aid}/subagents/agent-${_f_aid}.meta.json"
+    fi
   else
     rm -rf "$WORKDIR/lead-${_f_aid}"
   fi
@@ -135,8 +147,26 @@ reset
 fire "$PROJ" stalled.jsonl >/dev/null
 chk "records duration_s (the field peak_tokens cannot substitute for)" "$(last .duration_s)" "7200"
 chk "  records the Rule 19 role binding from the dispatch prompt" "$(last .role)" "dev"
+
 chk "  peak still reads CALM, which is why duration is not redundant" "$(last .peak_tokens)" "45000"
 chk "  turns-per-hour is the discriminator, not duration alone" "$(last .turns)" "2"
+
+# --- 2m. the META sidecar is the source of `definition` and `tool_use_id` -------------------
+# Three fires on the same transcript, differing only in the meta: none, an unnamed
+# definition spawn (`agentType` + `toolUseId`), and a named teammate (`customAgentType`
+# beside a name-shaped `agentType`, no `toolUseId`). The three rows must differ in exactly
+# the fields the meta supplies, or the probe is reading the meta by the wrong key.
+fire "$PROJ" calm.jsonl adversary-s291-m0 >/dev/null 2>&1
+chk "2m no meta sidecar -> definition null" "$(raw .definition)" "null"
+chk "2m no meta sidecar -> tool_use_id null" "$(raw .tool_use_id)" "null"
+fire "$PROJ" calm.jsonl adversary-s291-m1 dev toolu_01SEEDED >/dev/null 2>&1
+chk "2m unnamed definition spawn -> definition from agentType" "$(last .definition)" "dev"
+chk "2m unnamed definition spawn -> tool_use_id from toolUseId" "$(last .tool_use_id)" "toolu_01SEEDED"
+fire "$PROJ" calm.jsonl adversary-s291-m2 dev-s291-story2 "" dev >/dev/null 2>&1
+chk "2m named teammate -> definition from customAgentType, not the name-shaped agentType" "$(last .definition)" "dev"
+chk "2m named teammate -> tool_use_id null (the harness writes teamName instead)" "$(raw .tool_use_id)" "null"
+chk "2m a transcript with no effort field records null, not an empty string" "$(raw .effort)" "null"
+
 
 # A field that is ALWAYS null looks exactly like a field with nothing to report.
 # These two prove the null is a reading, not the only thing the code can emit.

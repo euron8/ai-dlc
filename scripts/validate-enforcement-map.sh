@@ -9518,7 +9518,7 @@ fi
 # vocabulary-invariant: I111
 # vocabulary-owner: core/hooks/ai-dlc-dispatch-guard.sh
 # vocabulary-extract: effort-levels
-# vocabulary-readers: scripts/validate-enforcement-map.sh
+# vocabulary-readers: scripts/validate-enforcement-map.sh, core/scripts/render-agent-definitions.sh
 #
 # WHAT IT BINDS. `low|medium|high|xhigh|max` is a closed set with three consumers now, and
 # BL-240 is the release that gave it a third. The dispatch guard validates a configured
@@ -9565,7 +9565,7 @@ fi
 # demonstrably discriminating rather than selecting everything it reaches. FP set EMPTY,
 # with a non-empty rejected set beside it. Negative control in the same run: an impossible
 # arm returned 0. Cost: one recursive grep, 0.07s.
-i111_re='^[[:space:]]*[a-z]+(\|[a-z]+)+\)[[:space:]]*;;'
+i111_re='^[[:space:]]*[a-z]+(\|[a-z]+)+\)[^;]*;;'
 i111_canon='high,low,max,medium,xhigh'
 # The set a single site declares, normalised: split the alternation, sort, de-duplicate.
 # ONE implementation used by the probe and by the corpus, so a probe that passes cannot be
@@ -9582,7 +9582,7 @@ i111_canon='high,low,max,medium,xhigh'
 i111_sets_in() {  # <path>... -> "file<TAB>member,member,..." one row per file carrying a level arm
   grep -roE "$i111_re" --include='*.sh' "$@" 2>/dev/null \
     | awk -F: '{
-        f=$1; alt=$0; sub(/^[^:]*:/,"",alt); sub(/^[[:space:]]*/,"",alt); sub(/\)[[:space:]]*;;$/,"",alt)
+        f=$1; alt=$0; sub(/^[^:]*:/,"",alt); sub(/^[[:space:]]*/,"",alt); sub(/\)[^;]*;;$/,"",alt)
         n=split(alt,a,"|"); hit=0
         for(i=1;i<=n;i++) if (a[i]=="low"||a[i]=="medium"||a[i]=="high"||a[i]=="xhigh"||a[i]=="max") hit=1
         if (hit) for(i=1;i<=n;i++) if (a[i]!="") print f "\t" a[i]
@@ -9616,6 +9616,7 @@ else
     printf '  %s) ;;\n' "$i111_alt" > "$i111_out"
   }
   i111_mk "$i111_probe/good.sh"   low medium high xhigh max
+  printf '    low|medium|high|xhigh|max) return 0 ;;\n' > "$i111_probe/goodcmd.sh"
   i111_mk "$i111_probe/lost.sh"   low medium high max
   i111_mk "$i111_probe/gained.sh" low medium high xhigh max ultra
   # NEAR-MISS ONE: a case arm of the same SHAPE carrying no level at all. `allow|forbid`
@@ -9629,10 +9630,11 @@ else
   # anchor cannot be relaxed without this probe going red.
   printf "i111_re='(low|medium|high|xhigh|max)'\n" > "$i111_probe/mentions.sh"
   # One pass over the probe directory answers all five seeds; the sets are read back by name.
-  i111_pg=""; i111_pl=""; i111_pn=""; i111_pm=""; i111_px=""
+  i111_pg=""; i111_pc=""; i111_pl=""; i111_pn=""; i111_pm=""; i111_px=""
   while IFS="$(printf '\t')" read -r i111_pf i111_ps; do
     case "$i111_pf" in
       */good.sh)     i111_pg="$i111_ps" ;;
+      */goodcmd.sh)  i111_pc="$i111_ps" ;;
       */lost.sh)     i111_pl="$i111_ps" ;;
       */gained.sh)   i111_pn="$i111_ps" ;;
       */nearmiss.sh) i111_pm="$i111_ps" ;;
@@ -9641,7 +9643,7 @@ else
   done <<EOF_I111
 $(i111_sets_in "$i111_probe")
 EOF_I111
-  if [ "$i111_pg" != "$i111_canon" ]; then
+  if [ "$i111_pg" != "$i111_canon" ] || [ "$i111_pc" != "$i111_canon" ]; then
     err "I111 SELF-PROBE FAILED: the canonical seed extracted '${i111_pg}' rather than the five levels. The reader cannot spell its own subject, so every zero below is a floor of unknown depth rather than a finding of agreement."
   elif [ "$i111_pl" = "$i111_pg" ] || [ "$i111_pn" = "$i111_pg" ]; then
     err "I111 SELF-PROBE FAILED: a seed that LOST a member and one that GAINED one did not differ from the canonical seed. The comparison below cannot discriminate and would report agreement on any corpus."
