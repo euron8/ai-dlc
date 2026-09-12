@@ -46,6 +46,12 @@ definition-bound dispatch, PENDING where no probe row has matched yet. This clos
 "nothing reads it" half — `effort_bound` now has a reader — without rotating that entry, which
 stays open until its own receipt goes 0.
 
+The first cut of `I111` called a six-stage pipeline once per shaped file and cost 95 forks,
+which the fork-budget fixture refused; it is one recursive grep over the population now and
+costs 11, and `FORK_BUDGET` is raised only by the 30 the new script and fixture directory
+account for. The `vocabulary-index` fixture's synthetic seed gains an owner and a marker for
+the `effort-levels` extractor, because the renderer refuses an extractor no marker names.
+
 `SKILL.md` Rule 19 gains (c): a role-bound dispatch passes no `name`. `implementation.md` Step 2
 and the QUICKSTART "How Teammates Get Their Model" section cite the same renderer and guard
 rather than restating the binding. `enforcement-map.yaml`'s `dispatch-model-binding` row gains

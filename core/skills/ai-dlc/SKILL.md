@@ -709,10 +709,10 @@ Check 22 records at retro.
 
 **Config is authoritative.** `aiDlcRoles.<role>` states the model and the
 effort; the rendered definition (a) is what binds both. The guard also
-appends the `/effort` directive to the prompt -- the Agent tool has no
-effort parameter for the guard to set directly, so on a role dispatched
-without a definition that line is the fallback signal, not a
-harness-enforced value. Evaluate neither value. An `-escalated` role MAY
+appends a sentence stating the configured effort to the prompt -- the
+Agent tool has no effort parameter for the guard to set directly, so on a
+role dispatched without a definition that sentence is the fallback signal,
+not a harness-enforced value. Evaluate neither value. An `-escalated` role MAY
 name the same model and the same effort as its base role; that is valid
 config. Do not flag, question, or negotiate either -- not in a dispatch
 prompt, a gate log, a handoff, or a retro. Config is the operator's to

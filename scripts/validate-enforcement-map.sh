@@ -9566,23 +9566,33 @@ fi
 # with a non-empty rejected set beside it. Negative control in the same run: an impossible
 # arm returned 0. Cost: one recursive grep, 0.07s.
 i111_re='^[[:space:]]*[a-z]+(\|[a-z]+)+\)[[:space:]]*;;'
-i111_canon='high
-low
-max
-medium
-xhigh'
+i111_canon='high,low,max,medium,xhigh'
 # The set a single site declares, normalised: split the alternation, sort, de-duplicate.
 # ONE implementation used by the probe and by the corpus, so a probe that passes cannot be
 # passing against a different reader than the one the findings come from.
 # BYTE-IDENTICAL IN SHAPE TO vocab_extract_effort_levels IN scripts/render-vocabulary-index.sh,
 # which renders this row of docs/vocabulary-index.md. Two readers of one grammar, and the
 # renderer's own two-way probe is what keeps them from drifting apart silently.
-i111_set_of() {  # file -> the sorted level set it declares, one per line
-  grep -oE "$i111_re" "$1" 2>/dev/null \
-    | sed 's/)[[:space:]]*;;$//' | sed 's/^[[:space:]]*//' \
-    | grep -E '(^|\|)(low|medium|high|xhigh|max)(\||$)' \
-    | tr '|' '\n' | grep -v '^$' \
-    | LC_ALL=C sort -u
+# ONE PIPELINE OVER THE WHOLE POPULATION, NEVER ONE PER FILE. The first cut called a six-stage
+# pipeline once per shaped file, twice over, and cost 95 forks -- the fork-budget fixture
+# refused it. This runs grep once over every path it is handed and emits `file<TAB>set` rows,
+# one per file, with the set comma-joined in C-locale order, so the caller compares strings
+# in bash and forks nothing per file. An alternation is kept whole when ANY member is a
+# level, so a copy that GAINED a foreign member still renders that member into its set.
+i111_sets_in() {  # <path>... -> "file<TAB>member,member,..." one row per file carrying a level arm
+  grep -roE "$i111_re" --include='*.sh' "$@" 2>/dev/null \
+    | awk -F: '{
+        f=$1; alt=$0; sub(/^[^:]*:/,"",alt); sub(/^[[:space:]]*/,"",alt); sub(/\)[[:space:]]*;;$/,"",alt)
+        n=split(alt,a,"|"); hit=0
+        for(i=1;i<=n;i++) if (a[i]=="low"||a[i]=="medium"||a[i]=="high"||a[i]=="xhigh"||a[i]=="max") hit=1
+        if (hit) for(i=1;i<=n;i++) if (a[i]!="") print f "\t" a[i]
+      }' \
+    | LC_ALL=C sort -u \
+    | awk -F'\t' '{ if ($1!=prev) { if (prev!="") print prev "\t" set; prev=$1; set=$2 } else set=set "," $2 }
+                  END { if (prev!="") print prev "\t" set }'
+}
+i111_set_of() {  # file -> that file's set, comma-joined (empty when it declares none)
+  i111_sets_in "$1" | awk -F'\t' 'NR==1{print $2}'
 }
 # SELF-PROBE FIRST, BOTH DIRECTIONS, under mktemp and never against the real corpus. An arm
 # that reports zero findings without first proving it can produce one has established that
@@ -9618,12 +9628,20 @@ else
   # correct five, so an arm that selected them passed by accident; seeded here so the
   # anchor cannot be relaxed without this probe going red.
   printf "i111_re='(low|medium|high|xhigh|max)'\n" > "$i111_probe/mentions.sh"
-  i111_pg="$(i111_set_of "$i111_probe/good.sh" | tr '\n' ' ')"
-  i111_pl="$(i111_set_of "$i111_probe/lost.sh" | tr '\n' ' ')"
-  i111_pn="$(i111_set_of "$i111_probe/gained.sh" | tr '\n' ' ')"
-  i111_pm="$(i111_set_of "$i111_probe/nearmiss.sh" | tr '\n' ' ')"
-  i111_px="$(i111_set_of "$i111_probe/mentions.sh" | tr '\n' ' ')"
-  if [ "$i111_pg" != "high low max medium xhigh " ]; then
+  # One pass over the probe directory answers all five seeds; the sets are read back by name.
+  i111_pg=""; i111_pl=""; i111_pn=""; i111_pm=""; i111_px=""
+  while IFS="$(printf '\t')" read -r i111_pf i111_ps; do
+    case "$i111_pf" in
+      */good.sh)     i111_pg="$i111_ps" ;;
+      */lost.sh)     i111_pl="$i111_ps" ;;
+      */gained.sh)   i111_pn="$i111_ps" ;;
+      */nearmiss.sh) i111_pm="$i111_ps" ;;
+      */mentions.sh) i111_px="$i111_ps" ;;
+    esac
+  done <<EOF_I111
+$(i111_sets_in "$i111_probe")
+EOF_I111
+  if [ "$i111_pg" != "$i111_canon" ]; then
     err "I111 SELF-PROBE FAILED: the canonical seed extracted '${i111_pg}' rather than the five levels. The reader cannot spell its own subject, so every zero below is a floor of unknown depth rather than a finding of agreement."
   elif [ "$i111_pl" = "$i111_pg" ] || [ "$i111_pn" = "$i111_pg" ]; then
     err "I111 SELF-PROBE FAILED: a seed that LOST a member and one that GAINED one did not differ from the canonical seed. The comparison below cannot discriminate and would report agreement on any corpus."
@@ -9636,15 +9654,15 @@ else
     # hand-listed, so a fourth copy added by a later release is in scope on the push that
     # adds it. Membership is decided by `i111_set_of` -- the same reader the comparison
     # uses -- so a file cannot be IN the population by one grammar and read by another.
-    i111_shaped="$(cd "$REPO_ROOT" 2>/dev/null && grep -rlE "$i111_re" \
-                    --include='*.sh' core scripts .githooks 2>/dev/null | LC_ALL=C sort || true)"
-    i111_files=""
-    for i111_f in $i111_shaped; do
-      [ -n "$(i111_set_of "$REPO_ROOT/$i111_f")" ] && i111_files="${i111_files}${i111_f}
-"
-    done
-    i111_n="$(printf '%s\n' "$i111_files" | grep -c . || true)"
-    case "$i111_n" in ''|*[!0-9]*) i111_n=0 ;; esac
+    i111_rows="$(cd "$REPO_ROOT" 2>/dev/null && i111_sets_in core scripts .githooks || true)"
+    i111_n=0; i111_bad=""
+    while IFS="$(printf '\t')" read -r i111_f i111_got; do
+      [ -n "$i111_f" ] || continue
+      i111_n=$((i111_n+1))
+      [ "$i111_got" = "$i111_canon" ] || i111_bad="${i111_bad} ${i111_f}[${i111_got}]"
+    done <<EOF_I111
+$i111_rows
+EOF_I111
     if [ "$i111_n" -lt 2 ]; then
       # A GLOB THAT MATCHES NOTHING MUST NOT REPORT SUCCESS, and here fewer than two sites
       # is the same fault: with one site or none there is no pair to compare and the arm
@@ -9652,11 +9670,6 @@ else
       # member, so below two means the grammar stopped matching, not that the tree changed.
       err "I111 found ${i111_n} site(s) declaring the reasoning-effort level set, and a binding needs at least two to compare. The dispatch guard's own \`case \"\$PIN_EFFORT\"\` arm is a permanent member of this population, so this means the population grammar no longer matches it -- the zero is a broken scan, not agreement. Repair the grammar before trusting any verdict from this arm."
     else
-      i111_bad=""
-      for i111_f in $i111_files; do
-        i111_got="$(i111_set_of "$REPO_ROOT/$i111_f")"
-        [ "$i111_got" = "$i111_canon" ] || i111_bad="${i111_bad} ${i111_f}[$(printf '%s' "$i111_got" | tr '\n' ',' | sed 's/,$//')]"
-      done
       if [ -n "$i111_bad" ]; then
         err "I111 the reasoning-effort level set has FORKED. Canonical is low/medium/high/xhigh/max, owned by core/hooks/ai-dlc-dispatch-guard.sh. Disagreeing site(s):${i111_bad}. A copy that LOST a member silently drops a legitimately configured level -- the guard stops stating it, render-agent-definitions.sh stops writing it into .claude/agents/<role>.md frontmatter, and the teammate runs at the session default with every gate green. A copy that GAINED one accepts a value the harness does not implement. Make every site declare the same five."
       fi
