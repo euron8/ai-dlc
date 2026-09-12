@@ -8181,9 +8181,18 @@ lids() { { grep -hE '^#{2,6} PC-' "$1" | sed -E 's/^#+ (PC-[A-Z0-9][A-Z0-9.-]*).
 # So qualify a ref on the PROPERTY that matters -- it carries the ledger AND its live set contains
 # main's -- and fall back to main, which is the answer whenever the retro has merged. Report the
 # candidates rather than electing one silently.
+#
+# THE GLOB WAS THE THIRD WRONG KEY, MEASURED AT BATCH 90. `ai-dlc/feature/*` and `*sprint*` are
+# two of the consumer's branch prefixes; its sprints also run under `ai-dlc/carry-over/*` (135
+# branches), `ai-dlc/bug/*` (19), `ai-dlc/fix-forward/*` and others. Batch 90's filing sat on
+# `ai-dlc/carry-over/chunk-max-usd-swap-sizing`, two commits ahead of main and UNPUSHED, and the
+# loop never visited it: `ledger ref: main`, every control green, live=55, and the filing invisible.
+# The candidate set is EVERY local branch ahead of main; the property test below is what keeps that
+# cheap and correct (a branch behind main fails the subset arm and is skipped).
 SB=main
-for b in $(git -C /Users/n8/git/graph for-each-ref --format='%(refname:short)' \
-             'refs/heads/ai-dlc/feature/*' 'refs/heads/*sprint*'); do
+for b in $(git -C /Users/n8/git/graph for-each-ref --format='%(refname:short)' refs/heads); do
+  [ "$b" = main ] && continue
+  git -C /Users/n8/git/graph merge-base --is-ancestor main "$b" 2>/dev/null || continue
   git -C /Users/n8/git/graph cat-file -e "${b}:_bmad-output/ai-dlc-update/push-candidate-ledger.md" 2>/dev/null || continue
   git -C /Users/n8/git/graph show "${b}:_bmad-output/ai-dlc-update/push-candidate-ledger.md" > /tmp/cand.md
   git -C /Users/n8/git/graph show "main:_bmad-output/ai-dlc-update/push-candidate-ledger.md" > /tmp/mainled.md
