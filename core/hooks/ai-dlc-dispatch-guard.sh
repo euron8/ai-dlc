@@ -340,6 +340,79 @@ fi
 # seats `/bmad-party-mode` controls, so it falls to the absent branch here too.
 [ -n "$DEF_MODEL" ] || DEFINITION_BOUND=false
 
+# TWO THINGS CAN NEED SETTING, and a role may need either, both, or neither.
+#
+# MODEL is bound as the Agent tool's `model` parameter. Unresolvable config — no
+# `aiDlcRoles` entry, no `model` in it, or a key absent from `aiDlcModels` — leaves it
+# unbound rather than guessing. The party personas (cis/sm/tea/ux) legitimately have an
+# effort but no model, so a missing model is a normal state, not an error.
+NEEDS_MODEL=false
+if [ -n "$EXPECT" ] && ! matches_pin "$REQUESTED"; then
+  NEEDS_MODEL=true
+fi
+
+# ON A DEFINITION-BOUND DISPATCH THE MODEL PARAM IS DELETED RATHER THAN SET, so this flag
+# is cleared: the two paths are mutually exclusive by construction rather than by the
+# order of two `if`s further down. The definition already carries the model — that is
+# what agreement with settings was checked for — and an explicit param would OUTRANK it,
+# leaving a teammate's model with two live sources again.
+NEEDS_TYPE=false
+if [ "$DEFINITION_BOUND" = true ]; then
+  NEEDS_MODEL=false
+  # IDEMPOTENCE, THE SAME DISCIPLINE THE EFFORT DEDUPE BELOW KEEPS. A dispatch that
+  # already names the role as its `subagent_type` and carries neither `name` nor `model`
+  # needs nothing rewritten, and emitting on it would change the approval posture of a
+  # call the guard has nothing to correct. All three conditions are read, not just the
+  # type: a correct type beside a surviving `name` is exactly the dispatch that routes to
+  # the teammate runner and loses its effort.
+  _dg_type="$(printf '%s' "$INPUT" | jq -r '.tool_input.subagent_type // empty' 2>/dev/null || true)"
+  _dg_hasname="$(printf '%s' "$INPUT" | jq -r 'if (.tool_input | has("name")) then "y" else "n" end' 2>/dev/null || true)"
+  _dg_hasmodel="$(printf '%s' "$INPUT" | jq -r 'if (.tool_input | has("model")) then "y" else "n" end' 2>/dev/null || true)"
+  if [ "$_dg_type" != "$ROLE" ] || [ "$_dg_hasname" = y ] || [ "$_dg_hasmodel" = y ]; then
+    NEEDS_TYPE=true
+  fi
+fi
+
+# EFFORT has no tool parameter, so it is appended to the dispatch PROMPT. That is the WEAK
+# channel and it is no longer the only one: the BINDING channel is the rendered
+# `.claude/agents/<role>.md` definition, whose `effort:` key the harness applies, which the
+# branch above selects by rewriting `subagent_type`. The prompt line states the configured
+# level as a fact the teammate operates under -- advisory, and what a dispatch with no
+# usable definition still gets. Both are emitted; see the header.
+#
+# Skipped when the caller already carried the directive: that keeps the guard IDEMPOTENT, so
+# a well-formed dispatch emits no decision at all and keeps whatever approval posture it
+# would otherwise have. Without that check the guard would emit on every dispatch and quietly
+# change the posture of calls it has nothing to correct.
+EFFORT_LINE=""
+NEEDS_EFFORT=false
+if [ -n "$PIN_EFFORT" ]; then
+  # DECLARATIVE, NOT AN IMPERATIVE TO RUN A COMMAND. This line used to read
+  # "Run `/effort <level>` as your FIRST action, before reading your role file." — an
+  # instruction to invoke a slash command, delivered ahead of the teammate's role-contract
+  # read. NOTHING IN THIS DISTRIBUTION DEFINES AN `effort` SKILL OR COMMAND, and whether the
+  # harness provides one is not knowable from the repository, so the guard's correctness rested
+  # on an assumption no file here states or checks: if the harness has it, the line worked by
+  # luck of the environment; if it does not, every teammate began by trying to execute
+  # something that resolves to nothing, and what a model does then is undefined. Stating the
+  # configured effort as a FACT the teammate operates under needs no command to exist, and is
+  # exactly as authoritative — the channel was always advisory prose either way, because the
+  # Agent tool has no effort parameter to bind. Filed by the graph consumer as
+  # PC-S303-EFFORT-BINDING-COMMANDS-A-SLASH-COMMAND-THAT-RESOLVES-TO-NOTHING.
+  EFFORT_LINE="Your configured reasoning effort for this role is ${PIN_EFFORT}. Operate at that level."
+  # THE DEDUPE MOVES WITH THE LINE, and it is not optional. This case keys on a substring of
+  # what the guard appends; leaving it matching the old `/effort <level>` form while the line
+  # says something else means an already-corrected dispatch never matches, NEEDS_EFFORT stays
+  # true forever, and the guard emits a decision on EVERY dispatch — the posture change the
+  # comment above this block exists to prevent. The level is inside the matched substring on
+  # purpose, so a role reconfigured from high to xhigh is correctly re-stamped rather than
+  # read as already carrying its effort.
+  case "$PROMPT" in
+    *"reasoning effort for this role is ${PIN_EFFORT}"*) : ;;
+    *) NEEDS_EFFORT=true ;;
+  esac
+fi
+
 # --- SPAWN LEDGER --------------------------------------------------------------
 # PURE INSTRUMENTATION, written at DISPATCH time. Nothing below bounds, denies or
 # warns; the decision logic is unchanged and follows.
@@ -393,6 +466,24 @@ elif [ -n "$REQUESTED" ]; then
   SPAWN_BOUND="$REQUESTED"
 else
   SPAWN_BOUND="inherit"
+fi
+
+# THE EFFORT FIELD MIRRORS `model_bound`: it records what the harness is asked to APPLY,
+# never what the config says. Only a DEFINITION-BOUND dispatch binds an effort at all — the
+# harness reads `effort:` out of `.claude/agents/<role>.md`, which is the file the rewrite
+# above selects — so the value is the DEFINITION's, for `SPAWN_BOUND`'s reason: the config is
+# what the render was checked AGAINST, and a record of the input compared against itself is
+# the tautology mechanism-design.md names.
+#
+# ON EVERY OTHER PATH IT IS NULL, AND THAT IS THE FIELD'S WHOLE CONTENT. The configured level
+# still reaches such a dispatch, as the prompt sentence below appends — but a prompt line is
+# ADVISORY: the Agent tool has no effort parameter, nothing applies it, and the teammate runs
+# at the effort its session resolved. Recording the configured level there would state that an
+# effort was bound when none was, which is the reading `validate-spawn-ledger.sh`'s effort arm
+# now rests on.
+SPAWN_EFFORT=""
+if [ "$DEFINITION_BOUND" = true ]; then
+  SPAWN_EFFORT="$DEF_EFFORT"
 fi
 
 SPAWN_NAME="$(printf '%s' "$INPUT" | jq -r '.tool_input.name // .tool_input.subagent_type // empty' 2>/dev/null || true)"
@@ -470,7 +561,7 @@ jq -nc \
    --arg tier "${EXPECT:-}" \
    --arg req "${REQUESTED:-}" \
    --arg bound "$SPAWN_BOUND" \
-   --arg effort "${PIN_EFFORT:-}" \
+   --arg effort "${SPAWN_EFFORT:-}" \
    --arg tui "${SPAWN_TUI:-}" \
    --arg stripped "${SPAWN_NAME_STRIPPED:-}" \
    --argjson cited "$ROLE_CONTRACT_CITED" \
@@ -485,6 +576,11 @@ jq -nc \
      tier_pinned: (if $tier == "" then null else $tier end),
      model_requested: (if $req == "" then null else $req end),
      model_bound: $bound,
+     # Mirrors `model_bound` above: the DISPATCH, not the config. Non-null only on a
+     # definition-bound row, where the harness applies the `effort:` key of the rendered
+     # definition; null everywhere else, because the prompt line is advisory and binds
+     # nothing. NO APOSTROPHE IN THIS COMMENT: the whole object is one single-quoted
+     # shell argument, so a possessive here CLOSES it and bash reports a syntax error.
      effort_bound: (if $effort == "" then null else $effort end),
      role_contract_cited: $cited,
      role_file_readable: $readable,
@@ -496,79 +592,6 @@ jq -nc \
 # --- end SPAWN LEDGER ---------------------------------------------------------
 
 [ "$ROLE_FILE_READABLE" = true ] || exit 0   # recorded above; never correct blind
-
-# TWO THINGS CAN NEED SETTING, and a role may need either, both, or neither.
-#
-# MODEL is bound as the Agent tool's `model` parameter. Unresolvable config — no
-# `aiDlcRoles` entry, no `model` in it, or a key absent from `aiDlcModels` — leaves it
-# unbound rather than guessing. The party personas (cis/sm/tea/ux) legitimately have an
-# effort but no model, so a missing model is a normal state, not an error.
-NEEDS_MODEL=false
-if [ -n "$EXPECT" ] && ! matches_pin "$REQUESTED"; then
-  NEEDS_MODEL=true
-fi
-
-# ON A DEFINITION-BOUND DISPATCH THE MODEL PARAM IS DELETED RATHER THAN SET, so this flag
-# is cleared: the two paths are mutually exclusive by construction rather than by the
-# order of two `if`s further down. The definition already carries the model — that is
-# what agreement with settings was checked for — and an explicit param would OUTRANK it,
-# leaving a teammate's model with two live sources again.
-NEEDS_TYPE=false
-if [ "$DEFINITION_BOUND" = true ]; then
-  NEEDS_MODEL=false
-  # IDEMPOTENCE, THE SAME DISCIPLINE THE EFFORT DEDUPE BELOW KEEPS. A dispatch that
-  # already names the role as its `subagent_type` and carries neither `name` nor `model`
-  # needs nothing rewritten, and emitting on it would change the approval posture of a
-  # call the guard has nothing to correct. All three conditions are read, not just the
-  # type: a correct type beside a surviving `name` is exactly the dispatch that routes to
-  # the teammate runner and loses its effort.
-  _dg_type="$(printf '%s' "$INPUT" | jq -r '.tool_input.subagent_type // empty' 2>/dev/null || true)"
-  _dg_hasname="$(printf '%s' "$INPUT" | jq -r 'if (.tool_input | has("name")) then "y" else "n" end' 2>/dev/null || true)"
-  _dg_hasmodel="$(printf '%s' "$INPUT" | jq -r 'if (.tool_input | has("model")) then "y" else "n" end' 2>/dev/null || true)"
-  if [ "$_dg_type" != "$ROLE" ] || [ "$_dg_hasname" = y ] || [ "$_dg_hasmodel" = y ]; then
-    NEEDS_TYPE=true
-  fi
-fi
-
-# EFFORT has no tool parameter, so it is appended to the dispatch PROMPT. That is the WEAK
-# channel and it is no longer the only one: the BINDING channel is the rendered
-# `.claude/agents/<role>.md` definition, whose `effort:` key the harness applies, which the
-# branch above selects by rewriting `subagent_type`. The prompt line states the configured
-# level as a fact the teammate operates under -- advisory, and what a dispatch with no
-# usable definition still gets. Both are emitted; see the header.
-#
-# Skipped when the caller already carried the directive: that keeps the guard IDEMPOTENT, so
-# a well-formed dispatch emits no decision at all and keeps whatever approval posture it
-# would otherwise have. Without that check the guard would emit on every dispatch and quietly
-# change the posture of calls it has nothing to correct.
-EFFORT_LINE=""
-NEEDS_EFFORT=false
-if [ -n "$PIN_EFFORT" ]; then
-  # DECLARATIVE, NOT AN IMPERATIVE TO RUN A COMMAND. This line used to read
-  # "Run `/effort <level>` as your FIRST action, before reading your role file." — an
-  # instruction to invoke a slash command, delivered ahead of the teammate's role-contract
-  # read. NOTHING IN THIS DISTRIBUTION DEFINES AN `effort` SKILL OR COMMAND, and whether the
-  # harness provides one is not knowable from the repository, so the guard's correctness rested
-  # on an assumption no file here states or checks: if the harness has it, the line worked by
-  # luck of the environment; if it does not, every teammate began by trying to execute
-  # something that resolves to nothing, and what a model does then is undefined. Stating the
-  # configured effort as a FACT the teammate operates under needs no command to exist, and is
-  # exactly as authoritative — the channel was always advisory prose either way, because the
-  # Agent tool has no effort parameter to bind. Filed by the graph consumer as
-  # PC-S303-EFFORT-BINDING-COMMANDS-A-SLASH-COMMAND-THAT-RESOLVES-TO-NOTHING.
-  EFFORT_LINE="Your configured reasoning effort for this role is ${PIN_EFFORT}. Operate at that level."
-  # THE DEDUPE MOVES WITH THE LINE, and it is not optional. This case keys on a substring of
-  # what the guard appends; leaving it matching the old `/effort <level>` form while the line
-  # says something else means an already-corrected dispatch never matches, NEEDS_EFFORT stays
-  # true forever, and the guard emits a decision on EVERY dispatch — the posture change the
-  # comment above this block exists to prevent. The level is inside the matched substring on
-  # purpose, so a role reconfigured from high to xhigh is correctly re-stamped rather than
-  # read as already carrying its effort.
-  case "$PROMPT" in
-    *"reasoning effort for this role is ${PIN_EFFORT}"*) : ;;
-    *) NEEDS_EFFORT=true ;;
-  esac
-fi
 
 # Nothing to set — exit 0 with no decision.
 [ "$NEEDS_MODEL" = true ] || [ "$NEEDS_EFFORT" = true ] || [ "$NEEDS_TYPE" = true ] || exit 0

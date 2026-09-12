@@ -190,9 +190,10 @@ fi
 #
 #     SO A DRIFTED DEFINITION IS SILENT IN BOTH DIRECTIONS. A role whose settings entry moved
 #     keeps running at the old level, and one whose definition was never rendered runs at the
-#     session's resolved effort rather than its own, while the spawn ledger records
-#     `effort_bound` from the config either way. Nothing in a transcript, a ledger row or a gate
-#     log distinguishes the two. This arm is what does.
+#     session's resolved effort rather than its own; the spawn ledger records `effort_bound`
+#     null for both, because a drifted definition is never selected and an absent one binds
+#     nothing, so a ledger row says an effort was not bound and never says which of the two
+#     states it was. This arm is what does.
 #
 #     THREE OUTCOMES AND THEY ARE DISTINCT, which is the whole reason the renderer has a third
 #     exit code. A consumer with no `aiDlcRoles` is NOT APPLICABLE and prints as such; one whose
