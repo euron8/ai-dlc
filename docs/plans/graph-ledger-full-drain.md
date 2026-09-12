@@ -37,6 +37,55 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
+### BATCH 91 SHIPPED AS `v0.555.0`, ONE RELEASE, ONE NO-`PC` SUBJECT — AND **THE ADVERSARY FOUND THREE BLOCKERS IN THE CONTRACT BEFORE THE BUILD, ALL THREE IN THE RECEIPT AND SEED DESIGN, AND THE CORRECT FIX SCORED 1 AGAINST A RECEIPT THAT SCORED TWO WRONG FIXES 0.** THE SWEEP WAS EMPTY OF PC WORK. THE GAP IS **TWO**, PENDING **1**, AND THE PULL IS **NOT REQUIRED**.
+
+This block replaces the batch-90 record below it. Re-derive every figure rather than reading it.
+
+**`VERSION` IS `0.555.0`, SO BATCH 92 RELEASES AS `0.556.0`.** Re-derive `VERSION` and add one.
+Batch 91 merged ONCE — `v0.555.0` at `bc5d73d8` (PR #722) — closing `BL-225`, which carries no
+`PC-` id (`BL-225` appears in the release commit message; control: an impossible `BL-` id returns
+0). `BL-225` is ROTATED; archive moved **146 → 147**. `BL-240` (operator-filed) and `BL-241`
+(adversary-filed, the `[receipt n/n]` suffix leak) are filed LIVE and not fixed; live is **94**.
+
+**THE SUBJECT WAS TAKEN ON THIS SESSION'S OWN RANKING** because the one-liner arrived from a peer.
+Before choosing it, the consumer's checked-out branch was diffed against its `main` for `PC-` ids:
+the only one ahead was batch 90's, so the PC-backed residue was zero before the sweep confirmed it.
+
+**THE CONTRACT WAS WRONG THREE TIMES AND THE ADVERSARY FOUND ALL THREE ON THE DESIGN.** The
+receipt's seeded entry put the mid-line receipt on the BOUNDARY line, which every pass consumes
+with `next`, so the correct fix scored 1 (same as HEAD and a comment) while two wrong fixes scored
+0 — an inverted receipt. The success regex could not cross the label's trailing period plus the
+tab. Five seed names were prefixes of one another under the fixture's unanchored `$2 ~ l` row
+helpers. It also found the entry-line close rule is LOCAL to the main pass and the body rule is
+INERT on a boundary line, so a new pass needs `ledger_entry_line_close_awk` lifted separately.
+**Spawn the adversary on the contract before the builders**, and ask it to re-verify on the tip.
+
+**THE MID-LINE PASS REUSES `NEEDS-REVIEW`.** No status was added, so I39's vocabulary is
+unchanged and `validate-enforcement-map.sh` timed byte-identical. Step 3f no longer states a
+COUNT of causes; it lists them, and the `mis-anchored predicate:` cause that never had a bullet
+now has one. A join over free-prose italic bullets was refused.
+
+**THE SWEEP AT THIS BATCH'S OPEN, ref `ai-dlc/carry-over/chunk-max-usd-swap-sizing` (one filing
+ahead of `main`).** Live **56**, cited **37**, unfiled **19**, archive **206**, partition control
+0. All 19 unfiled are the adjudicated set. TERMINAL **88**; discharged-but-INVISIBLE 1
+(`PC-S308-GATE-METRICS-CHECK2-STALE-VERDICT-READ-ORDER`). The consumer committed twice mid-batch
+(s311 snapshot finalize); neither commit touched its ledger.
+
+**THE INCIDENTAL-CLOSE CHECK WAS RUN AND FOUND NOTHING.** Receipt histogram before: 2×0, 78×1,
+1×9 over 81 sh receipts; after rotation: 2×0, 79×1, 1×9 over 82. The two zeros are `BL-236` and
+`BL-238`, both deliberately not rotated, as before.
+
+**THE PULL IS NOT REQUIRED AND THE GAP IS TWO.** Stamp `0.553.0`, shipped `0.555.0`. The second
+test discriminates: the consumer's installed `ledger-reverify.sh` differs from the distribution's
+(`cmp -s`), and against a scratch copy of the consumer's live ledger the installed copy emits 0
+`mid-line receipt` rows while the distribution's emits 1 — the consumer's own `PC-S311` filing,
+whose receipt has never been run. That row is a finding the consumer cannot see, but it is
+report-only and moves no verdict. Bootstrapping paths in the range: `SKILL.md`,
+`reconcile/ledger-reverify.sh`, `reconcile/setup-sites.md`; zero mode-only changes.
+
+**THE READIEST NO-`PC` WORK** is now `BL-224`, `BL-221`, `BL-223`, `BL-220`, `BL-219`, `BL-218`.
+Read `BL-227` first. `BL-241` is a one-line reset plus a seed, and could batch with any of them.
+
 ### BATCH 90 SHIPPED AS `v0.554.0`, ONE RELEASE, ONE PC-BACKED SUBJECT — AND **THE SWEEP'S REF LOOP COULD NOT SEE IT: THE FILING SAT ON AN UNPUSHED `ai-dlc/carry-over/*` BRANCH, A PREFIX THE LOOP'S GLOB NEVER NAMED.** THE LOOP NOW VISITS EVERY BRANCH AHEAD OF `main`. THE CONTRACT WAS WRONG TWICE, THE ADVERSARY FOUND TWO BLOCKERS ON THE DESIGN BEFORE IT WAS BUILT, AND THE PLAN'S LIVE SECTIONS WERE CUT TO INSTRUCTIONS BY OPERATOR RULING. THE GAP IS **ONE**, PENDING **1**, AND THE PULL IS **NOT REQUIRED**.
 
 This block replaces the batch-89 record below it. Re-derive every figure rather than reading it.
@@ -90,7 +139,7 @@ requirements.md`. That FAIL is correct for a sprint mid-flight and is not a find
 declaration gaining the new fixture — and zero mode-only changes.
 
 **THE READIEST NO-`PC` WORK** is unchanged: `BL-225` (ships alone, bootstrapping), `BL-224`,
-`BL-221`, `BL-223`, `BL-220`, `BL-219`, `BL-218`. Read `BL-227` first.
+`BL-221`, `BL-223`, `BL-220`, `BL-219`, `BL-218`. Read `BL-227` first. (Superseded by the block above: `BL-225` shipped in batch 91.)
 
 ### BATCH 89 SHIPPED AS `v0.552.0` AND `v0.553.0`, TWO RELEASES CARRYING THREE PC-BACKED SUBJECTS — AND **THE RESUME BLOCK NAMED TWO OF THEM, BECAUSE THE CONSUMER FILED A THIRD AFTER BATCH 88 CLOSED.** THE SWEEP FOUND IT; READING THE BLOCK WOULD NOT HAVE. **THE DERIVE BLOCK'S OWN SPRINT-REF HEURISTIC IS BROKEN IN TWO INDEPENDENT WAYS AND ITS SUBSET CONTROL FIRED AT 7** — `main` IS THE AUTHORITATIVE LEDGER REF TODAY, MEASURED OVER ALL 22 CONSUMER BRANCHES. ONE REMEDY WAS **REFUTED BY BUILDING IT** AND ONE CANDIDATE'S **LITERAL WORDING WAS WRONG**. THE GAP IS **THREE**, PENDING **3**, AND THE PULL IS **NOT REQUIRED**.
 
@@ -8975,6 +9024,11 @@ given at batch 90.
    rebuilt in one release: the originals closed on an empty file, on a dead arm, and on a
    positional window.
 
+   **BATCH 91's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.** `BL-225` shipped ALONE as
+   `v0.555.0` at `bc5d73d8` (PR #722), cited in the release commit message. It carried no `PC-`
+   id, so no ledger row moves on the consumer's next pull; what moves is that the consumer's own
+   `PC-S311` entry, whose receipt sits mid-sentence, will report `NEEDS-REVIEW mid-line receipt`.
+
    **BATCH 90's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.**
    `PC-S311-SNAPSHOT-NEVER-ADVANCES-PAST-DEPLOY-VALIDATE-AT-SPRINT-CLOSE` shipped ALONE as
    `v0.554.0` at `2a2c4cd3` (PR #720), closing `BL-239`, cited verbatim in the release commit message. The consumer's
@@ -9064,8 +9118,8 @@ given at batch 90.
    two whose receipts DRIVE their subject — and driving is NECESSARY, NOT SUFFICIENT**: both were
    then closed by an over-broad fix, so an arm must also assert the CONTROL case still DENIES.
    `verification-discipline.md:154` states this rule and has no enforcer, which is why `BL-227`
-   exists. The ranked no-`PC` set, readiest first, is `BL-225`, `BL-217`, `BL-222`, `BL-224`,
-   `BL-220`, `BL-218`, `BL-219`, `BL-221`, `BL-223` — **every one of their receipts needs repairing
+   exists. The ranked no-`PC` set, readiest first, is `BL-224`, `BL-220`, `BL-218`, `BL-219`,
+   `BL-221`, `BL-223` (`BL-225`, `BL-217` and `BL-222` have shipped) — **every one of their receipts needs repairing
    before its verdict means anything.** `BL-222`'s owed FP measurement is already taken and small
    (one fixture, four substring assertions, none anchored; `retro.md` reads that PASS line zero
    times). `BL-218` is blocked on a corpus that does not exist — zero live layer-debt registers in
