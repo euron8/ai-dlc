@@ -37,6 +37,60 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
+### BATCH 90 SHIPPED AS `v0.554.0`, ONE RELEASE, ONE PC-BACKED SUBJECT — AND **THE SWEEP'S REF LOOP COULD NOT SEE IT: THE FILING SAT ON AN UNPUSHED `ai-dlc/carry-over/*` BRANCH, A PREFIX THE LOOP'S GLOB NEVER NAMED.** THE LOOP NOW VISITS EVERY BRANCH AHEAD OF `main`. THE CONTRACT WAS WRONG TWICE, THE ADVERSARY FOUND TWO BLOCKERS ON THE DESIGN BEFORE IT WAS BUILT, AND THE PLAN'S LIVE SECTIONS WERE CUT TO INSTRUCTIONS BY OPERATOR RULING. THE GAP IS **ONE**, PENDING **1**, AND THE PULL IS **NOT REQUIRED**.
+
+This block replaces the batch-89 record below it. Re-derive every figure rather than reading it.
+
+**`VERSION` IS `0.554.0`, SO BATCH 91 RELEASES AS `0.555.0`.** Re-derive `VERSION` and add one.
+Batch 90 merged ONCE, closing `PC-S311-SNAPSHOT-NEVER-ADVANCES-PAST-DEPLOY-VALIDATE-AT-SPRINT-CLOSE`,
+cited verbatim in the release commit message and in exactly one commit on the range (control: an
+impossible id returns 0). `BL-239` is filed and ROTATED.
+
+**THE CANDIDATE SET FOR THE LEDGER REF IS EVERY LOCAL CONSUMER BRANCH AHEAD OF `main`.** The old
+glob named two prefixes; the consumer has more than a dozen. The subset arm still rejects stale
+snapshots, so the widening costs nothing. The filing was committed and UNPUSHED, so an
+`ls-remote` reading would also have missed it — read the consumer's LOCAL refs.
+
+**THE OPERATOR RULED THAT THE LEAD DISPATCHES HANDS BEFORE RUNNING THE SWEEP, AND THAT THE PLAN
+CARRIES INSTRUCTIONS WITHOUT RATIONALE.** Action 0 is the first ruling. The second cut the live
+sections from 2503 lines to 1858 with every fenced command byte-identical and every citation still
+resolving; the history sections were not touched. Do not put a rationale back into a live section.
+
+**THE ADVERSARY ATTACKED THE DESIGN, NOT THE BUILD, AND BOTH BLOCKERS WERE IN THE CONTRACT.** The
+validator check as specified would have SKIPped most of the consumer's real corpus, because the
+snapshot spells its position field two ways and the contract named one; and the resume guard as
+specified fired on every mid-retro resume and on the terminal state the same release writes.
+Both are measured in the CHANGELOG. **Spawn the adversary on the CONTRACT, before the builders
+start** — that is the cheapest moment a design defect has ever been found in this program.
+
+**THE TERMINAL WRITE DOES NOT REACH THE REFERENCE CONSUMER.** Its retro override shadows the whole
+of §7. Recorded in `BL-239` and the CHANGELOG, not re-sited: the deploy-validate write is
+unshadowed and Check 8 enforces it. The pull reports `HARD-OVERRIDE-DRIFT-SECTION` for that
+section; the consumer adjudicates it then.
+
+**THE SWEEP AT THIS BATCH'S CLOSE, ref `ai-dlc/carry-over/chunk-max-usd-swap-sizing` (one filing
+ahead of `main`).** Live **56**, cited **37**, unfiled **19**, archive **206**, partition control
+0. All 19 unfiled are adjudicated: 5 named in `origin/main` release commits, 11 `NOT-UPSTREAM`,
+the `S309-PRE-PUSH` pair withdrawn, `S340-RETRO-AUDIT` refuted. **Available PC-backed residue:
+ZERO.** Run the sweep anyway. TERMINAL **88**; discharged-but-INVISIBLE 1
+(`PC-S308-GATE-METRICS-CHECK2-STALE-VERDICT-READ-ORDER`).
+
+**THE INCIDENTAL-CLOSE CHECK WAS RUN AND FOUND NOTHING.** Receipt histogram before: 2×0, 78×1,
+1×9 over 82; after: 3×0, 78×1, 1×9 over 83. The three zeros are `BL-236`, `BL-238` (both
+deliberately not rotated, as before) and `BL-239`.
+
+**THE PULL IS NOT REQUIRED AND THE GAP IS ONE.** Stamp `0.553.0`, shipped `0.554.0`. The second
+test discriminates this time: the consumer's installed `validate-mandatory-rules.sh` differs from
+the distribution's (`cmp -s`), and against a scratch copy of the consumer's live tree the installed
+copy emits no Check 8 row while the distribution's emits `CHECK 8: FAIL — pipeline position is at
+requirements.md`. That FAIL is correct for a sprint mid-flight and is not a finding; it is what the
+5c gate will say until deploy-validate advances the position. One path under
+`core/skills/ai-dlc-update/` is in the range — `reconcile/setup-sites.md`, a manifest glob
+declaration gaining the new fixture — and zero mode-only changes.
+
+**THE READIEST NO-`PC` WORK** is unchanged: `BL-225` (ships alone, bootstrapping), `BL-224`,
+`BL-221`, `BL-223`, `BL-220`, `BL-219`, `BL-218`. Read `BL-227` first.
+
 ### BATCH 89 SHIPPED AS `v0.552.0` AND `v0.553.0`, TWO RELEASES CARRYING THREE PC-BACKED SUBJECTS — AND **THE RESUME BLOCK NAMED TWO OF THEM, BECAUSE THE CONSUMER FILED A THIRD AFTER BATCH 88 CLOSED.** THE SWEEP FOUND IT; READING THE BLOCK WOULD NOT HAVE. **THE DERIVE BLOCK'S OWN SPRINT-REF HEURISTIC IS BROKEN IN TWO INDEPENDENT WAYS AND ITS SUBSET CONTROL FIRED AT 7** — `main` IS THE AUTHORITATIVE LEDGER REF TODAY, MEASURED OVER ALL 22 CONSUMER BRANCHES. ONE REMEDY WAS **REFUTED BY BUILDING IT** AND ONE CANDIDATE'S **LITERAL WORDING WAS WRONG**. THE GAP IS **THREE**, PENDING **3**, AND THE PULL IS **NOT REQUIRED**.
 
 This block replaces the batch-88 record below it. Every figure was re-derived after both merges
@@ -8886,7 +8940,7 @@ given at batch 90.
    - **Never merge while a hand is out**, and never read a hand's idle state as its report.
 
 1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below) AGAINST THE REF THAT CARRIES THE
-   LIVE LEDGER, RANK THE UNFILED CANDIDATES, THEN SCOPE BATCH 90 — AND HOW YOU SCOPE IT DEPENDS ON
+   LIVE LEDGER, RANK THE UNFILED CANDIDATES, THEN SCOPE BATCH 91 — AND HOW YOU SCOPE IT DEPENDS ON
    WHO INVOKED YOU.** Operator
    instruction, given at batch 52. **If the one-liner was TYPED BY THE OPERATOR**, report the
    candidates with a marked recommendation and ask, as every batch before has. **If it ARRIVED
@@ -8919,6 +8973,11 @@ given at batch 90.
    **DO NOT TREAT A BATCH-82 RECEIPT AS TRUSTWORTHY BECAUSE IT EXISTS.** Three of them were
    rebuilt in one release: the originals closed on an empty file, on a dead arm, and on a
    positional window.
+
+   **BATCH 90's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.**
+   `PC-S311-SNAPSHOT-NEVER-ADVANCES-PAST-DEPLOY-VALIDATE-AT-SPRINT-CLOSE` shipped ALONE as
+   `v0.554.0`, closing `BL-239`, cited verbatim in the release commit message. The consumer's
+   retro override shadows the terminal write; that is recorded, not owed.
 
    **BATCH 89's THREE SUBJECTS ARE SHIPPED — do not re-scope any of them.** All three `PC-S341-*`
    candidates shipped:
