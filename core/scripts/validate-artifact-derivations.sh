@@ -113,7 +113,7 @@ fail() { printf 'FAIL (%s): %s\n' "$1" "$2" >&2; fails=$((fails + 1)); }
 # permitted because a count is routinely `grep ... | wc -l`, and every element of the
 # pipe is checked against the allowlist independently.
 cmd_is_safe() { # $1 command -> 0 safe, 1 refused (reason in REFUSED)
-  local c="$1" seg first sub segs scan_rc=0
+  local c="$1" seg first sub segs scan_rc=0 sed_verdict
   REFUSED=""
   case "$c" in
     *';'*|*'&'*|*'>'*|*'<'*|*'`'*|*'$('*|*'${'*|*'||'*)
@@ -221,7 +221,7 @@ cmd_is_safe() { # $1 command -> 0 safe, 1 refused (reason in REFUSED)
       case "${first}:${w}" in
         find:-delete|find:-exec|find:-execdir|find:-ok|find:-okdir|\
         find:-fls|find:-fprint|find:-fprint0|find:-fprintf|\
-        sed:-i|sed:-i.*|sed:--in-place|sed:--in-place=*|\
+        sed:-i*|sed:--in*|\
         sort:-o|sort:--output|sort:--output=*|\
         git:-O|git:-O?*|git:--open-files-in-pager|git:--open-files-in-pager=*|\
         git:--output|git:--output=*)
@@ -231,6 +231,239 @@ cmd_is_safe() { # $1 command -> 0 safe, 1 refused (reason in REFUSED)
     case "$first:$seg" in
       awk:*system\(*) printf 'BADOPT:awk system()\n'; break ;;
     esac
+    # SED'S WRITING VERBS LIVE INSIDE THE SCRIPT ARGUMENT, WHERE NO OPTION-WORD SCAN CAN
+    # REACH THEM. The `for w in $seg` loop above matches `${first}:${w}`, so it sees
+    # `sed -i` and is structurally blind to `w file`, `W file` and the `w file` FLAG on
+    # `s///` -- none of which is an option word. Measured against bash on this machine, in
+    # a sandbox, each creating its canary at exit 0 through the pre-fix validator:
+    #
+    #     sed -n 'w canary' data.txt        sed 's/a/b/w canary' data.txt
+    #     sed '/a/w canary' data.txt        sed 's/a/b/gw canary' data.txt
+    #     sed -n '$w canary' data.txt       sed -n '1,3w canary' data.txt
+    #     sed -n '2!w canary' data.txt      sed -n '1{w canary<NL>}' data.txt
+    #     sed -n '/alpha/wp' data.txt       sed -n -f evil.sed data.txt
+    #
+    # GNU's `e` command and `s///e` flag are refused too and are NOT live here -- BSD sed
+    # exits 1 on both -- because a consumer may run GNU sed, where they are arbitrary
+    # execution. `W` is likewise refused and likewise inert on BSD.
+    #
+    # WHY A PARSER AND NOT A REGEX. A `w` is a write only in COMMAND position. Every other
+    # position is legitimate and common: inside a regex (`/w/p`), inside a replacement
+    # (`s/x/\w/`), inside a filename (`a-w-file.md`), inside an s/// pattern (`s/wow/wew/`).
+    # A regex cannot tell those apart, because finding command position means consuming
+    # addresses, delimiters and bracket expressions -- `s/[/]/x/w f` has a LITERAL `/`
+    # inside `[...]`, and `/alpha/w/p` writes to a file named `/p` while `/w/p` prints.
+    # An unanchored `s(.)...\1...\1<flags>` scan was built first and carried 5 false
+    # positives over the reference corpus, all inside `/regex/=` addresses whose text
+    # happened to end in a letter the scan read as a flag. So this consumes sed's grammar
+    # and FAILS CLOSED: a construct it cannot parse is refused, never guessed at, because
+    # guessing is the direction that fails open.
+    #
+    # `-f`/`--file` IS REFUSED OUTRIGHT rather than followed. `sed -n -f evil.sed data.txt`
+    # carries no `w` in the segment at all -- the verb is in a file -- and it wrote its
+    # canary through the pre-fix validator. Following the file would make the checker read
+    # and execute a second program; refusing it costs 0 derivations in the corpus (measured
+    # below) and a derivation whose script is not in the derivation is not self-contained.
+    #
+    # FALSE-POSITIVE SET: 0, over the population this arm actually runs on. Derived by
+    # extracting every pipeline segment whose first word is `sed` from every `$ `-prefixed
+    # line of the reference consumer's planning artifacts, using THIS function's own
+    # quote-aware splitter, and scoring each with this predicate:
+    #
+    #   bash core/fixtures/artifact-derivations/fp-sweep.sh /Users/n8/git/graph/_bmad-output
+    #
+    #   4415 markdown files -> 9748 `$ ` lines -> 1767 sed segments (1406 distinct).
+    #   1656 survive this function's metacharacter ban and so reach this arm; 111 do not.
+    #   Of those 1656: 1652 ALLOWED, 4 refused. All 4 are `sed -i '' ...` -- real in-place
+    #   writes the SHIPPED `sed:-i*` table above already refuses, so the INCREMENTAL false
+    #   positive set of this arm is 0.
+    #   POSITIVE CONTROL, same invocation: 9 seeded write/exec forms, 9 refused.
+    #   NEGATIVE CONTROL, same invocation: `sed -n 'p' ZZQQ9_NEVER_SED_TOKEN.txt` ALLOWED,
+    #   and that token is absent from the corpus (grep: 0) so the control cannot pass by
+    #   matching real text.
+    #   This repo's own `docs/**` and `core/**` hold 12 `$ ` lines and 0 sed segments;
+    #   CONTROL in the same run, 7 of those 12 are `grep` lines, so the zero is a real
+    #   absence of sed and not a broken extraction.
+    #
+    # `core/fixtures/artifact-derivations/fp-sweep.sh` IS the deriver and it EXTRACTS this
+    # function's awk program from this file rather than restating it, so the figures above
+    # cannot be measured against a second copy of the grammar.
+    if [ "$first" = "sed" ]; then
+      sed_verdict="$(printf '%s\n' "$seg" | awk '
+        function shwords(line, W,   i, n, ch, c2, word, nw) {
+          n = length(line); i = 1; nw = 0
+          while (i <= n) {
+            ch = substr(line, i, 1)
+            if (ch == " " || ch == "\t") { i++; continue }
+            word = ""
+            while (i <= n) {
+              ch = substr(line, i, 1)
+              if (ch == " " || ch == "\t") break
+              if (ch == BS) { i++; if (i <= n) { word = word substr(line, i, 1); i++ }; continue }
+              if (ch == SQ) { i++; while (i <= n && substr(line, i, 1) != SQ) { word = word substr(line, i, 1); i++ }; i++; continue }
+              if (ch == DQ) { i++
+                while (i <= n && substr(line, i, 1) != DQ) {
+                  c2 = substr(line, i, 1)
+                  if (c2 == BS && index(DQ BS "$", substr(line, i+1, 1)) > 0) { i++; word = word substr(line, i, 1); i++ }
+                  else { word = word c2; i++ }
+                }
+                i++; continue }
+              word = word ch; i++
+            }
+            nw++; W[nw] = word
+          }
+          return nw
+        }
+        function consume_bracket(s, i,   ch, j, k) {
+          i++
+          if (substr(s, i, 1) == "^") i++
+          if (substr(s, i, 1) == "]") i++
+          while (i <= length(s)) {
+            ch = substr(s, i, 1); k = substr(s, i+1, 1)
+            if (ch == "[" && (k == ":" || k == "." || k == "=")) {
+              j = index(substr(s, i+2), k "]"); if (j == 0) return 0
+              i = i + 2 + j + 1; continue
+            }
+            if (ch == "]") return i + 1
+            i++
+          }
+          return 0
+        }
+        function consume_regex(s, i, delim,   ch) {
+          while (i <= length(s)) {
+            ch = substr(s, i, 1)
+            if (ch == BS) { i += 2; continue }
+            if (ch == "[") { i = consume_bracket(s, i); if (i == 0) return 0; continue }
+            if (ch == delim) return i + 1
+            i++
+          }
+          return 0
+        }
+        function consume_flat(s, i, delim,   ch) {
+          while (i <= length(s)) {
+            ch = substr(s, i, 1)
+            if (ch == BS) { i += 2; continue }
+            if (ch == delim) return i + 1
+            i++
+          }
+          return 0
+        }
+        function skipb(s, i) { while (substr(s, i, 1) == " " || substr(s, i, 1) == "\t") i++; return i }
+        function script_verb(s,   i, n, ch, c, delim, j, flag) {
+          i = 1; n = length(s)
+          while (i <= n) {
+            ch = substr(s, i, 1)
+            if (ch == " " || ch == "\t" || ch == NL || ch == ";") { i++; continue }
+            if (ch == "#") { j = index(substr(s, i), NL); if (j == 0) return ""; i = i + j; continue }
+            while (1) {
+              ch = substr(s, i, 1)
+              if (ch ~ /[0-9]/) {
+                while (i <= n && substr(s, i, 1) ~ /[0-9]/) i++
+                if (substr(s, i, 1) == "~") { i++; while (i <= n && substr(s, i, 1) ~ /[0-9]/) i++ }
+              }
+              else if (ch == "$") i++
+              else if (ch == "+" || ch == "~") { i++; while (substr(s, i, 1) ~ /[0-9]/) i++ }
+              else if (ch == "/") {
+                i = consume_regex(s, i+1, "/"); if (i == 0) return "?an unterminated address regex"
+                while (substr(s, i, 1) == "I" || substr(s, i, 1) == "M") i++
+              }
+              else if (ch == BS) {
+                delim = substr(s, i+1, 1); if (delim == "") return "?an unterminated address regex"
+                i = consume_regex(s, i+2, delim); if (i == 0) return "?an unterminated address regex"
+                while (substr(s, i, 1) == "I" || substr(s, i, 1) == "M") i++
+              }
+              else break
+              i = skipb(s, i)
+              if (substr(s, i, 1) == ",") { i = skipb(s, i+1); continue }
+              break
+            }
+            while (substr(s, i, 1) == "!") i = skipb(s, i+1)
+            i = skipb(s, i)
+            c = substr(s, i, 1)
+            if (c == "") return ""
+            if (c == "w") return "sed script command `w`, which WRITES the named file"
+            if (c == "W") return "sed script command `W`, which WRITES the named file"
+            if (c == "e") return "sed script command `e`, which RUNS a shell command (GNU)"
+            if (c == "s") {
+              i++; delim = substr(s, i, 1); if (delim == "") return "?an s/// with no delimiter"
+              i = consume_regex(s, i+1, delim); if (i == 0) return "?an unterminated s/// pattern"
+              i = consume_flat(s, i, delim);    if (i == 0) return "?an unterminated s/// replacement"
+              while (i <= n) {
+                flag = substr(s, i, 1)
+                if (flag == "w") return "the `w` FLAG on an s/// command, which WRITES the named file"
+                if (flag == "e") return "the `e` FLAG on an s/// command, which RUNS the replacement (GNU)"
+                if (flag ~ /[0-9gpiImM]/) { i++; continue }
+                break
+              }
+              continue
+            }
+            if (c == "y") {
+              i++; delim = substr(s, i, 1); if (delim == "") return "?a y/// with no delimiter"
+              i = consume_flat(s, i+1, delim); if (i == 0) return "?an unterminated y/// source"
+              i = consume_flat(s, i, delim);   if (i == 0) return "?an unterminated y/// target"
+              continue
+            }
+            if (c == "a" || c == "i" || c == "c") {
+              i++
+              while (i <= n) { if (substr(s, i, 1) == BS) { i += 2; continue }; if (substr(s, i, 1) == NL) break; i++ }
+              continue
+            }
+            if (c == "r" || c == "R") { j = index(substr(s, i), NL); if (j == 0) return ""; i = i + j; continue }
+            if (c == "b" || c == "t" || c == "T" || c == ":") {
+              i++
+              while (i <= n && substr(s, i, 1) != ";" && substr(s, i, 1) != NL && substr(s, i, 1) != "}") i++
+              continue
+            }
+            if (c == "q" || c == "Q" || c == "l" || c == "L") { i++; while (i <= n && substr(s, i, 1) ~ /[0-9 \t]/) i++; continue }
+            if (c == "{" || c == "}") { i++; continue }
+            if (index("pPdDgGhHnNxzF=v", c) > 0) { i++; continue }
+            return "?the sed command `" c "`, which this grammar does not model"
+          }
+          return ""
+        }
+        function sed_scan(seg,   W, SCR, OPD, nw, k, wd, ns, no, p, oc, expect, endopt, v) {
+          nw = shwords(seg, W)
+          ns = 0; no = 0; expect = ""; endopt = 0
+          for (k = 2; k <= nw; k++) {
+            wd = W[k]
+            if (expect == "script") { ns++; SCR[ns] = wd; expect = ""; continue }
+            if (endopt) { no++; OPD[no] = wd; continue }
+            if (wd == "--") { endopt = 1; continue }
+            if (substr(wd, 1, 2) == "--") {
+              if (wd ~ /^--expression=/) { ns++; SCR[ns] = substr(wd, 14); continue }
+              if (wd == "--expression")  { expect = "script"; continue }
+              if (wd ~ /^--file(=|$)/)   return "`-f`/`--file`, which reads the sed script from a FILE this checker cannot see"
+              if (wd ~ /^--(quiet|silent|regexp-extended|separate|unbuffered|null-data|posix|debug|sandbox|help|version|follow-symlinks|binary|zero-terminated)$/) continue
+              return "?the sed option `" wd "`, whose arity this grammar does not know"
+            }
+            if (substr(wd, 1, 1) == "-" && length(wd) > 1) {
+              for (p = 2; p <= length(wd); p++) {
+                oc = substr(wd, p, 1)
+                if (oc == "e") { if (p < length(wd)) { ns++; SCR[ns] = substr(wd, p+1) } else expect = "script"; break }
+                if (oc == "f") return "`-f`/`--file`, which reads the sed script from a FILE this checker cannot see"
+                if (oc == "i") return "`-i`/`--in-place`, which REWRITES the input file"
+                if (index("nrEsuzagb", oc) > 0) continue
+                return "?the sed option `-" oc "`, whose arity this grammar does not know"
+              }
+              continue
+            }
+            no++; OPD[no] = wd
+          }
+          if (expect == "script") return "?a `-e` with no script after it"
+          if (ns == 0 && no >= 1) { ns = 1; SCR[1] = OPD[1] }
+          for (k = 1; k <= ns; k++) { v = script_verb(SCR[k]); if (v != "") return v }
+          return ""
+        }
+        BEGIN { SQ = sprintf("%c", 39); DQ = sprintf("%c", 34); BS = sprintf("%c", 92); NL = sprintf("%c", 10) }
+        { v = sed_scan($0)
+          if (v == "") next
+          if (substr(v, 1, 1) == "?") print "a construct this checker cannot parse -- " substr(v, 2)
+          else print v
+          exit }')"
+      if [ -n "$sed_verdict" ]; then
+        printf 'BADOPT:sed -- %s\n' "$sed_verdict"; break
+      fi
+    fi
     # AWK TAKES A PROGRAM AS ITS ARGUMENT, AND A BAR INSIDE THAT PROGRAM IS AN EXEC
     # VECTOR THIS CHECKER CANNOT TELL FROM AN ALTERNATION. `print ... | "cmd"` and
     # `"cmd" | getline` are awk's pipes to a shell -- arbitrary execution, needing no

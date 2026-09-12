@@ -268,6 +268,187 @@ exec_contained ansic-3  "grep -c \$'a\\'b' data.txt | xargs touch canary\\'"
 exec_contained awk-print   "awk 'BEGIN{print \"\" | \"touch canary\"}'"
 exec_contained awk-getline "awk 'BEGIN{\"touch canary\" | getline x}'"
 
+# SED'S OWN WRITING VERBS LIVE INSIDE THE SCRIPT ARGUMENT. The allowlist's write predicates
+# iterate `$seg` matching `${first}:${w}`, so they read OPTION WORDS and are structurally
+# blind to `w file`, `W file` and the `w file` FLAG on `s///` -- none of which is an option.
+# Measured on this machine, pre-fix: every one of these created its canary at exit 0 with
+# the validator in the loop. The canary is the assertion, exactly as above.
+exec_contained sed-w-cmd     "sed -n 'w canary' data.txt"
+exec_contained sed-s-w-flag  "sed 's/a/b/w canary' data.txt"
+exec_contained sed-addr-w    "sed '/a/w canary' data.txt"
+exec_contained sed-brace-w   "sed -n '1{w canary
+}' data.txt"
+exec_contained sed-s-gw-flag "sed 's/a/b/gw canary' data.txt"
+# `-f` PUTS THE VERB IN A FILE, SO NO SCAN OF THE SEGMENT CAN SEE IT. The segment carries no
+# `w` at all; the script does. This is why the option is refused outright rather than
+# followed. The canary name differs because the sed script in the file names it.
+mkdir -p "$WORK/h"
+printf 'w canaryF\n' > "$WORK/h/evil.sed"
+exec_contained sed-script-file "sed -n -f evil.sed data.txt"
+printf 'w canaryF\n' > "$WORK/h/evil.sed"
+exec_contained sed-script-file-joined "sed -n -fevil.sed data.txt"
+# ARBITRARY WHITESPACE SITS BETWEEN THE VERB AND ITS FILENAME, in both forms, and both write.
+# A grammar keyed on `w<space><name>` misses these; this one returns at the verb in command
+# position and never parses the filename, so the whitespace cannot matter -- which is a claim
+# these two arms settle rather than assert.
+exec_contained sed-w-spaces   "sed -n 'w   canary' data.txt"
+exec_contained sed-s-w-spaces "sed 's/a/b/w   canary' data.txt"
+exec_contained sed-w-tab      "sed -n 'w	canary' data.txt"
+# `-u` (BSD) AND `-z` (GNU) PASS THE SCRIPT THROUGH UNTOUCHED, on either side of `-n`. The
+# predicate is sited on the SEGMENT and models option arity, so an unknown option cannot
+# shift which word it reads as the script -- seeded because "handled automatically" is a
+# claim about the implementation, not a measurement.
+exec_contained sed-u-before   "sed -u -n 'w canary' data.txt"
+exec_contained sed-u-after    "sed -n -u 'w canary' data.txt"
+
+# A `w` TARGET ON AN ABSOLUTE PATH WRITES OUTSIDE THE ARTIFACT'S OWN DIRECTORY. The eval runs
+# from the project root and sed resolves the path itself, so containment inside the story's
+# directory is not the property -- the property is that the write does not happen at all.
+# `exec_contained` globs `$WORK/h/canary*` and structurally cannot see an absolute target, so
+# this arm names the target and checks it directly.
+abs_contained() { # $1 label  $2 command-with-$ABS  (ABS is the absolute canary path)
+  mkdir -p "$WORK/h-abs"
+  ABS="$WORK/h-abs/abs-canary"
+  rm -f "$ABS"
+  printf 'a\nb\nc\n' > "$WORK/h-abs/data.txt"
+  local c; c="$(printf '%s' "$2" | "${SED:-sed}" "s#@ABS@#$ABS#g")"
+  ( cd "$WORK/h-abs" && bash -c "$c" ) >/dev/null 2>&1
+  if [ ! -e "$ABS" ]; then
+    bad "h-$1 CONTROL: bash itself did not write the absolute target, so containing it proves nothing: $c"
+    return
+  fi
+  rm -f "$ABS"
+  { printf '```derived\n$ %s\n0\n```\n' "$c"; } > "$WORK/h-abs/story.md"
+  ( cd "$WORK/h-abs" && AI_DLC_PROJECT_ROOT="$WORK/h-abs" bash "$VALIDATOR" "$WORK/h-abs/story.md" ) >/dev/null 2>&1
+  if [ -e "$ABS" ]; then
+    bad "h-$1 WROTE an ABSOLUTE path through the validator: $c"
+  else
+    ok "h-$1        bash writes the absolute target; the checker does not"
+  fi
+  rm -f "$ABS"
+}
+abs_contained sed-w-abspath "sed -n 'w @ABS@' data.txt"
+
+# A PIPELINE PUTS THE WRITER IN A LATER SEGMENT. A predicate written against the whole
+# COMMAND rather than against `$seg` passes the first of these -- the bar and the leading
+# `sed -n 'p'` change nothing about the second stage -- and the second, where `sed` is not
+# even the command's first word. Both write today.
+exec_contained sed-pipe-second "sed -n 'p' data.txt | sed -n 'w canary'"
+exec_contained sed-pipe-after-cat "cat data.txt | sed -n 'w canary'"
+
+# --- H2. `-i` REWRITES THE INPUT, AND A JOINED SUFFIX WITH NO DOT IS THE MISSED FORM ------
+# `sed -i.bak` was refused; `sed -ibak`, `sed -iX`, `sed -nibak` and `sed -ni.bak` were not,
+# because the shipped table listed `sed:-i` and `sed:-i.*` and neither pattern spells a
+# joined suffix with no dot or a BUNDLED `-ni`. These cannot be scored by a canary whose
+# name the fixture chooses -- `-i` creates `data.txtbak`, not `canary` -- so the observable
+# is the INPUT FILE ITSELF: bash rewrites it, and the validator must not.
+inplace_contained() { # $1 label  $2 command
+  mkdir -p "$WORK/h2"
+  printf 'a\nb\nc\n' > "$WORK/h2/data.txt"
+  cp "$WORK/h2/data.txt" "$WORK/h2/.orig"
+  ( cd "$WORK/h2" && bash -c "$2" ) >/dev/null 2>&1
+  if cmp -s "$WORK/h2/.orig" "$WORK/h2/data.txt"; then
+    bad "h2-$1 CONTROL: bash itself did not rewrite data.txt, so containing it proves nothing: $2"
+    return
+  fi
+  rm -rf "$WORK/h2"; mkdir -p "$WORK/h2"
+  printf 'a\nb\nc\n' > "$WORK/h2/data.txt"
+  cp "$WORK/h2/data.txt" "$WORK/h2/.orig"
+  { printf '```derived\n$ %s\n0\n```\n' "$2"; } > "$WORK/h2/story.md"
+  ( cd "$WORK/h2" && AI_DLC_PROJECT_ROOT="$WORK/h2" bash "$VALIDATOR" "$WORK/h2/story.md" ) >/dev/null 2>&1
+  if cmp -s "$WORK/h2/.orig" "$WORK/h2/data.txt"; then
+    ok "h2-$1            bash rewrites data.txt in place; the checker does not"
+  else
+    bad "h2-$1 REWROTE data.txt through the validator -- the in-place option was not refused: $2"
+  fi
+}
+inplace_contained i-joined-nodot  "sed -ibak 's/a/b/' data.txt"
+inplace_contained i-joined-letter "sed -iX 's/a/b/' data.txt"
+inplace_contained i-bundled       "sed -nibak 's/a/b/' data.txt"
+inplace_contained i-bundled-dot   "sed -ni.bak 's/a/b/' data.txt"
+inplace_contained i-dot-suffix    "sed -i.bak 's/a/b/' data.txt"
+
+# --- H3. THE FORMS BSD CANNOT RUN ARE ASSERTED BY VERDICT, NOT BY CANARY ------------------
+# `W`, GNU's `e` command and the `s///e` flag DO NOT write or exec on the BSD sed this
+# machine ships -- it exits 1 on each -- so `exec_contained`'s bash-runs-it control cannot
+# fire and putting them there reports FIXTURE BROKEN. They are refused anyway because a
+# CONSUMER may run GNU sed, where `e` is arbitrary execution. The observable is therefore
+# the validator's own refusal message. `/alpha/w/p` is here for the opposite reason: it is
+# a genuine write (to a file named `/p`) that only a command-position parser separates from
+# the read-only `/w/p`, and on this machine it fails on the unwritable path rather than on
+# the grammar.
+sed_refused() { # $1 command
+  mkdir -p "$WORK/h3"
+  printf 'a\nb\nc\n' > "$WORK/h3/data.txt"
+  { printf '```derived\n$ %s\n0\n```\n' "$1"; } > "$WORK/h3/story.md"
+  out="$(AI_DLC_PROJECT_ROOT="$WORK/h3" bash "$VALIDATOR" "$WORK/h3/story.md" 2>&1)"; rc=$?
+  if [ "$rc" -eq 1 ] && grep -q 'writes a file or runs a command' <<< "$out"; then
+    ok "h3-verdict             exit=1  refused by verdict ($1)"
+  else
+    bad "h3-verdict expected exit 1 naming the write/exec refusal for '$1', got $rc: $out"
+  fi
+}
+sed_refused "sed -n 'W canary' data.txt"
+sed_refused "sed '1e touch canary' data.txt"
+sed_refused "sed 's/a/b/e' data.txt"
+sed_refused "sed -n '/alpha/w/p' data.txt"
+sed_refused "sed -n '/alpha/wp' data.txt"
+sed_refused "sed --expression='w canary' data.txt"
+sed_refused "sed -n '\$w canary' data.txt"
+sed_refused "sed -n '1,3w canary' data.txt"
+sed_refused "sed -n '2!w canary' data.txt"
+sed_refused "sed 's|a|b|w canary' data.txt"
+sed_refused "sed 's/a/b/pw canary' data.txt"
+sed_refused "sed --file=script.sed data.txt"
+# NOT A VECTOR, and recorded so it is not seeded later as one: `sed -n 'w' canary data.txt`
+# does NOT write. The script is the bare `w`, whose filename operand is missing, so `canary`
+# is read as an INPUT file and sed exits 1. The predicate refuses it anyway -- a bare `w` in
+# command position is a write verb whatever follows it -- but a canary arm for it would fail
+# as a BROKEN CONTROL, because bash creates nothing.
+sed_refused "sed -n 'w' canary data.txt"
+
+# --- H4. THE MUST-ALLOW SET, ASSERTED BY VERDICT -----------------------------------------
+# THE OVER-BROAD FIX IS THE ONE THIS ARM EXISTS TO KILL. A blanket `sed:*` deny closes the
+# filed receipt and refuses every legitimate sed derivation in the reference corpus -- 1652
+# of them measured by `fp-sweep.sh`. A canary cannot express "ran and was permitted", so the
+# observable is the VERDICT: each of these must reproduce and exit 0, and the pair with a
+# wrong recorded value must come back STALE so the green half is shown to have executed.
+#
+# THE `w` IS IN EVERY LEGITIMATE POSITION A REGEX CANNOT TELL FROM COMMAND POSITION: inside
+# an address regex (`/w/p`), inside an s/// pattern (`s/wow/wew/`), inside a replacement
+# (`s/x/\w/`), and inside a FILENAME. `-n '/w/p'` is the only read-only form of that shape --
+# `/alpha/wp` writes a file named `p` and `/alpha/w/p` writes `/p`, both asserted above.
+printf 'alpha\n  beta\nwow\nwidget\n' > "$WORK/src/w-forms.txt"
+printf 'alpha\nwow\n'                 > "$WORK/src/has-w-in-name.txt"
+sed_allowed() { # $1 label  $2 command  $3 true output  $4 wrong output
+  mkdir -p "$WORK/h4"
+  { printf '```derived\n$ %s\n%s\n```\n' "$2" "$3"; } > "$WORK/h4/$1-true.md"
+  out="$(run "$WORK/h4/$1-true.md")"; rc=$?
+  [ "$rc" -eq 0 ] && ok "h4-$1 (allowed)   exit=0  $2" \
+    || bad "h4-$1 MUST BE ALLOWED and reproduce -- a blanket sed deny or a wrong grammar refuses it. got $rc: $out"
+  { printf '```derived\n$ %s\n%s\n```\n' "$2" "$4"; } > "$WORK/h4/$1-stale.md"
+  out="$(run "$WORK/h4/$1-stale.md")"; rc=$?
+  [ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" \
+    && ok "h4-$1 (twin)      exit=1  STALE -- so the allowed half really executed" \
+    || bad "h4-$1 twin must be STALE for '$2', got $rc: $out"
+}
+sed_allowed blank-strip "sed 's/^[[:blank:]]*//' src/w-forms.txt | wc -l"   "       4" 9
+sed_allowed w-in-regex  "sed -n '/w/p' src/w-forms.txt | wc -l"            "       2" 9
+sed_allowed w-in-pat    "sed 's/wow/WOW/' src/w-forms.txt | wc -l"         "       4" 9
+sed_allowed w-in-repl   "sed 's/alpha/\\\\w/' src/w-forms.txt | wc -l"     "       4" 9
+sed_allowed s-X-p       "sed -n 's/alph//p' src/w-forms.txt"               "a"       9
+sed_allowed last-line-d "sed '\$d' src/w-forms.txt | wc -l"                "       3" 9
+sed_allowed w-in-fname  "sed -n '2p' src/has-w-in-name.txt"                "wow"     9
+sed_allowed y-transform "sed 'y/abc/xyz/' src/has-w-in-name.txt | wc -l"   "       2" 9
+sed_allowed range-p     "sed -n '1,3p' src/w-forms.txt | wc -l"            "       3" 9
+# NOT SEEDED HERE, and stated rather than left to be found: a `{` block and a `;`-joined
+# script are both UNREACHABLE through this validator. The metacharacter ban refuses a `;`
+# before any segment is scanned, and a literal newline splits the `$ ` line so the quote
+# scanner refuses the fragment. The grammar models both positions -- `1{w canary<NL>}` and
+# `p;;w canary` are in the exec set above by way of `bash -c`, where they ARE reachable --
+# but a must-allow seed using either would be asserting about the ban, not about sed.
+sed_allowed not-matched "sed -n '/ZZ_NO_SUCH/p' src/w-forms.txt | wc -l"    "       0" 9
+
 # The refused writers above must not have run, exactly as section C asserts for its own.
 if [ -s "$WORK/src/three-lines.txt" ] && ! [ -e "$WORK/src/three-lines.txt.bak" ]; then
   ok "g-hidden               the refused writers never touched the tree"
@@ -376,6 +557,108 @@ out="$(run "$WORK/j-ind-stale.md")"; rc=$?
 [ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" \
   && ok "j-ind-stale            exit=1  STALE (the same, wrapped inside a list item)" \
   || bad "j-ind-stale expected exit 1 STALE -- the indented prose line swallowed the real block: $rc: $out"
+
+# --- K. THE MUTANTS: WHAT SEPARATES THE FIX FROM THE OVER-BROAD NON-FIX -------------------
+# THE FILED RECEIPT IS CLOSED BY A BLANKET `sed:*` DENY, which refuses all 1652 legitimate
+# sed derivations in the reference corpus. Nothing else in this repo separates that non-fix
+# from the real one: the receipt passes under it and so do the other four fixtures that drive
+# this validator. So the separation lives HERE, and it is the reason section H4 scores the
+# must-allow set by verdict rather than trusting the exec arms alone.
+#
+# Two mutants, each a COPY guarded by `cmp -s` so a `sed` that matched nothing cannot pass as
+# a mutation, and each asserted on a DIFFERENT observable:
+#
+#   M1  blanket `sed:*` deny replacing the new predicate  -> H4 must go RED, H must stay green
+#   M2  the new predicate DELETED                         -> H must go RED
+#
+# M1's assertion is not merely a flipped exit. A flipped exit is produced by any breakage;
+# the assertion is that the failure names the ALLOWLIST refusal, which is what an over-broad
+# deny produces and what a STALE or a crash does not.
+mkdir -p "$WORK/k"
+VBASE="$(basename "$VALIDATOR")"
+
+mut_copy() { # $1 dest  $2..  sed expressions -> 0 mutated, 1 DID NOT APPLY
+  local dest="$1"; shift
+  cp "$VALIDATOR" "$dest" || return 1
+  local e
+  for e in "$@"; do
+    "${SED:-sed}" "$e" "$dest" > "$dest.new" 2>/dev/null || { rm -f "$dest.new"; return 1; }
+    mv "$dest.new" "$dest"
+  done
+  if cmp -s "$VALIDATOR" "$dest"; then return 1; fi
+  return 0
+}
+
+# M1 — the blanket deny. Every `sed` segment is refused, whatever its script. The mutation
+# REPLACES the predicate's guard line with one that always fires, so the predicate's body
+# becomes unreachable and its narrowness is gone.
+M1="$WORK/k/m1-$VBASE"
+if mut_copy "$M1" 's|^    if \[ "\$first" = "sed" \]; then$|    if [ "$first" = "sed" ]; then printf "BADOPT:sed (blanket)\\n"; break; fi; if false; then|'; then
+  ok "k-m1 applied          (cmp -s: the blanket-deny mutation changed the file)"
+  # The must-ALLOW half must go RED, and name the allowlist refusal.
+  mkdir -p "$WORK/k/m1w"
+  { printf '```derived\n$ sed -n '"'"'/w/p'"'"' src/w-forms.txt | wc -l\n       2\n```\n'; } > "$WORK/k/m1w/story.md"
+  out="$(AI_DLC_PROJECT_ROOT="$WORK" bash "$M1" "$WORK/k/m1w/story.md" 2>&1)"; rc=$?
+  if [ "$rc" -eq 1 ] && grep -q 'FAIL (ALLOWLIST)' <<< "$out" \
+     && grep -q 'writes a file or runs a command' <<< "$out"; then
+    ok "k-m1 KILLED           the blanket deny refuses a legitimate \`sed -n '/w/p'\` as an ALLOWLIST failure"
+  else
+    bad "k-m1 SURVIVED: a blanket \`sed:*\` deny did not make the must-allow case fail as an ALLOWLIST refusal (rc=$rc): $out"
+  fi
+  # UNMUTATED CONTROL, same seed, same invocation shape: the real fix ALLOWS it. Without this
+  # the arm above passes against a validator that refuses everything for any reason at all.
+  out="$(AI_DLC_PROJECT_ROOT="$WORK" bash "$VALIDATOR" "$WORK/k/m1w/story.md" 2>&1)"; rc=$?
+  [ "$rc" -eq 0 ] && ok "k-m1 CONTROL          the unmutated validator ALLOWS the same seed (so the kill is the mutation's)" \
+    || bad "k-m1 CONTROL: the unmutated validator also refused the must-allow seed (rc=$rc): $out"
+  # AND THE EXEC HALF MUST STAY GREEN UNDER M1. A mutant that broke the whole boundary would
+  # also pass the arm above; this says the blanket deny is over-broad, not simply broken.
+  mkdir -p "$WORK/k/m1e"
+  printf 'a\nb\nc\n' > "$WORK/k/m1e/data.txt"
+  rm -f "$WORK/k/m1e/canary"*
+  { printf '```derived\n$ sed -n '"'"'w canary'"'"' data.txt\n0\n```\n'; } > "$WORK/k/m1e/story.md"
+  ( cd "$WORK/k/m1e" && AI_DLC_PROJECT_ROOT="$WORK/k/m1e" bash "$M1" "$WORK/k/m1e/story.md" ) >/dev/null 2>&1
+  if ls "$WORK/k/m1e/canary"* >/dev/null 2>&1; then
+    bad "k-m1 the blanket deny let the write EXECUTE -- the mutation broke the boundary instead of widening it"
+  else
+    ok "k-m1 exec half        still contained (the blanket deny is OVER-BROAD, not broken)"
+  fi
+  rm -f "$WORK/k/m1e/canary"*
+else
+  bad "k-m1 DID NOT APPLY -- the blanket-deny mutation matched nothing, so no verdict was scored"
+fi
+
+# M2 — the predicate DELETED. The `if [ "$first" = "sed" ]` guard is made unreachable with
+# its body intact, which is the shape of "this fix was never written": the write must then
+# execute through the validator.
+M2="$WORK/k/m2-$VBASE"
+if mut_copy "$M2" 's|^    if \[ "\$first" = "sed" \]; then$|    if false; then|'; then
+  ok "k-m2 applied          (cmp -s: the predicate-deleted mutation changed the file)"
+  mkdir -p "$WORK/k/m2e"
+  printf 'a\nb\nc\n' > "$WORK/k/m2e/data.txt"
+  rm -f "$WORK/k/m2e/canary"*
+  { printf '```derived\n$ sed -n '"'"'w canary'"'"' data.txt\n0\n```\n'; } > "$WORK/k/m2e/story.md"
+  ( cd "$WORK/k/m2e" && AI_DLC_PROJECT_ROOT="$WORK/k/m2e" bash "$M2" "$WORK/k/m2e/story.md" ) >/dev/null 2>&1
+  if ls "$WORK/k/m2e/canary"* >/dev/null 2>&1; then
+    ok "k-m2 KILLED           with the predicate gone, \`sed -n 'w canary'\` EXECUTES through the validator"
+  else
+    bad "k-m2 SURVIVED: deleting the sed predicate did not re-open the write -- the exec arms are not keyed on it"
+  fi
+  rm -f "$WORK/k/m2e/canary"*
+  # UNMUTATED CONTROL on the identical seed, so "no canary" above cannot be a dead harness.
+  mkdir -p "$WORK/k/m2c"
+  printf 'a\nb\nc\n' > "$WORK/k/m2c/data.txt"
+  rm -f "$WORK/k/m2c/canary"*
+  { printf '```derived\n$ sed -n '"'"'w canary'"'"' data.txt\n0\n```\n'; } > "$WORK/k/m2c/story.md"
+  ( cd "$WORK/k/m2c" && AI_DLC_PROJECT_ROOT="$WORK/k/m2c" bash "$VALIDATOR" "$WORK/k/m2c/story.md" ) >/dev/null 2>&1
+  if ls "$WORK/k/m2c/canary"* >/dev/null 2>&1; then
+    bad "k-m2 CONTROL: the UNMUTATED validator also executed the write -- the fix is not in the tree being tested"
+  else
+    ok "k-m2 CONTROL          the unmutated validator contains the same seed (so the kill is the mutation's)"
+  fi
+  rm -f "$WORK/k/m2c/canary"*
+else
+  bad "k-m2 DID NOT APPLY -- the predicate-deleted mutation matched nothing, so no verdict was scored"
+fi
 
 echo
 if [ "$fails" -gt 0 ]; then
