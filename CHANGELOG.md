@@ -57,6 +57,17 @@ another under the fixture's unanchored row helpers. `BL-225`'s receipt now drive
 synthetic ledger and scores 0 on the fix, 1 on HEAD and on a comment-only non-fix, and 9 on an
 over-broad pass that reports every no-receipt entry.
 
+#### Step 3f no longer counts its causes, and `BL-241` is filed
+
+The adversary's re-verification found SKILL.md step 3f saying FOUR `NEEDS-REVIEW` causes against
+an emitter producing five detail prefixes, one of which (`mis-anchored predicate:`) had never had
+a sub-bullet. The numeral is gone from both the step and the closer's own header, and the missing
+bullet is added; a join over free-prose italic bullets was refused as the extraction shape this
+repo calls a zero waiting to happen. `BL-241` files a pre-existing leak the same pass found: the
+last entry's `[receipt n/n]` suffix is appended to every `RECEIPTS-UNDECIDED` and
+`ENTRY-SWALLOWED` row emitted after the receipt loop. Not fixed; the fixture seed cannot yet
+express it.
+
 #### `BL-240`
 
 Operator-filed: a role's configured effort is never applied to its subagent. Receipt drives the

@@ -4647,3 +4647,23 @@ decide whether its own fix worked, and nine of them cannot tell a fix from a com
 
 verify: sh B=docs/backlog.md; [ -f "$B" ] || exit 9; grep -q '^## BL-227' "$B" || exit 9; grep -qE 'receipt-emission-site|scores every backlog receipt against a seeded|verify-receipt-binding' scripts/*.sh 2>/dev/null && exit 0; exit 1
 
+
+## BL-241 — `ledger-reverify.sh` leaks the last entry's `[receipt n/n]` suffix onto every run-scoped and ENTRY-SWALLOWED row
+
+**Found 2026-09-12** by the adversary on batch 91, re-derived here by driving the shipping tool
+on the `ledger-reverify` fixture's seeded ledger with one entry appended. `RSFX` is set per
+receipt inside the receipt loop and never reset after `done <<< "$ENTRIES"`. When the LAST entry
+carries more than one receipt, the value it leaves behind is appended by `emit()` to every row
+produced after the loop: `RECEIPTS-UNDECIDED`, which is run-scoped and belongs to no receipt, and
+every `ENTRY-SWALLOWED` row, which belongs to an annotation. Measured: a two-receipt last entry
+followed by an annotation bullet renders `… [receipt 3/3]` on one `RECEIPTS-UNDECIDED` row and on
+eight `ENTRY-SWALLOWED` rows, against a control of zero when the last entry carries one receipt.
+The mid-line pass added in `0.555.0` resets `RSFX` itself and is not affected.
+
+**Not fixed here.** The fix is one reset after the receipt loop, but the fixture's seeded ledger
+ends on a one-receipt entry today, so no arm can fire on it — the seed needs a two-receipt last
+entry and a presence-shaped arm before the reset ships.
+
+**Tiered NOTE.** A wrong suffix on a row's detail; no verdict moves.
+
+verify: sh R=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; S=core/fixtures/ledger-reverify/seed.sh; [ -f "$R" ] && [ -f "$S" ] || exit 9; out="$(bash "$S")" || exit 9; set -- $out; L="$3/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; printf '\n- **Entry ZZ-LAST-TWO** — two receipts.\n  <br>p.\n  verify: theirs_has core/skills/ai-dlc/SKILL.md "rule one"\n  verify: theirs_has core/skills/ai-dlc/SKILL.md "rule one"\n\n- **The lead-in:** annotation.\n' >> "$L"; o="$(bash "$R" "$1" "$2" "$3" "$4" 2>/dev/null)"; rm -rf "$(dirname "$1")"; printf '%s\n' "$o" | grep -q '^ENTRY-SWALLOWED' || exit 9; printf '%s\n' "$o" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/ {f=1} END{exit !f}' && exit 1; exit 0

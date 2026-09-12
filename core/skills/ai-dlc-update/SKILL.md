@@ -976,7 +976,8 @@ prose is itself generated rather than composed.
    - `HAND-REVIEW` → the entry declares `verify: manual`. No mechanical predicate exists for
      it BY DESIGN; adjudicate the body against theirs. This is NOT an entry with no `verify:`
      line — that emits no row at all.
-   - `NEEDS-REVIEW` → FOUR causes. The DETAIL field names which; report them separately.
+   - `NEEDS-REVIEW` → the receipt is at fault. The DETAIL field opens with the cause; report
+     them separately.
      - *unresolved* — the `verify:` line is malformed, its path resolves neither as given
        nor by unique basename at theirs, or an `sh` one-liner does not PARSE (the engine
        reads ONE line, so a receipt written across two arrives cut inside its quote; the row
@@ -992,6 +993,10 @@ prose is itself generated rather than composed.
        `verify: manual` if the entry is a proposal nobody has built yet. **Never drain on
        this verdict.** A DETAIL reporting reachability NOT checked means unchecked, not
        clean.
+     - *mis-anchored predicate* — a `theirs_lacks` substring absent at base AND at theirs
+       while a near-miss spelling of it is absent at base and PRESENT at theirs: upstream
+       moved, and the receipt anchors on a token the fix was not written with. Re-anchor on
+       the reported spelling and re-run; the spelling is never adopted automatically.
      - *mid-line receipt* — the entry has no line-anchored `verify:` line but its body carries
        `verify: <verb>` mid-sentence. The anchored grammar cannot see it (deliberately: a prose
        mention is not a receipt), so the receipt was never run and the entry emitted no row —
