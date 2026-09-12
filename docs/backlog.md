@@ -1189,7 +1189,34 @@ so a search that has stopped working reports STILL-LIVE rather than closing. **A
 write and leaves it unread still reports STILL-LIVE, deliberately** — a ledger field nobody reads is
 the other half of the claim.
 
-verify: sh H=core/hooks/ai-dlc-dispatch-guard.sh; C=$(git grep -l "model_bound" -- "core/*" | grep -vxF "$H" | wc -l | tr -d " "); [ "$C" -ge 1 ] || exit 1; LW=$(grep -n "effort_bound:" "$H" | head -1 | cut -d: -f1); [ -z "$LW" ] && exit 0; LD=$(grep -n "^NEEDS_EFFORT=false" "$H" | head -1 | cut -d: -f1); W=$(git grep -l "effort_bound" -- "core/*" | grep -vxF "$H" | wc -l | tr -d " "); [ "$LW" -gt "$LD" ] && [ "$W" -ge 1 ]
+**2026-09-12 — the "reader" was a projection with no consumer, and the receipt could not see it.**
+Measured at `01fea66c`: `validate-spawn-ledger.sh` projects `effort_bound` into a shell variable and
+defaults it, and then never uses it — its effort arm read `.aiDlcRoles[$r].effort` out of settings at
+VALIDATE time. So the four files the old receipt counted as readers included the one file whose read
+was dead, and a fix satisfying `LW > LD` and `W >= 1` would have shipped with the field still unread.
+Two grounds for making the ledger the compared side rather than settings: the field acquires its only
+consumer, and a row is a fact about the PAST — settings read at the gate is what the role is
+configured for now, and the two diverge for every row dispatched before a reconfiguration, failing a
+teammate that did what it was told and passing one that did not, depending only on which way the edit
+went.
+
+Fix: the `NEEDS_MODEL`/`NEEDS_TYPE`/`NEEDS_EFFORT` decision block moved above the ledger write
+byte-preserved (verified as a pure line permutation: same line count, same sorted bytes, `cmp -s` on
+the moved region); `effort_bound` now mirrors `model_bound` by recording the DEFINITION's `effort:` on
+a definition-bound dispatch and null everywhere else. Measured across all six seeded definition states:
+`defok` records `high`, and a stale render, an absent one, an unmarked one and a role declaring no
+effort all record null — a drifted definition is never selected, so the field says an effort was not
+bound and never says which of the two reasons applied. `EFF_DECLARED` was deleted; its four sites were
+all inside the arm being rewritten, with no other reader in the tree.
+
+Receipt scoring, each case built as a full copy of the tree at `01fea66c` made into its own git repo,
+so `git grep` resolves there: HEAD **1**; step 1 alone (block moved, field still the config, validator
+untouched) **1**; steps 1+2 with the validator still reading settings **1** — the case the old receipt
+was blind to; the full fix **0**; the settings read kept with `effortbound` named twice in a comment
+beside it (4 mentions in the file) **1**; a second correct spelling routing the same comparison through
+a renamed local **0**.
+
+verify: sh H=core/hooks/ai-dlc-dispatch-guard.sh; V=core/scripts/validate-spawn-ledger.sh; C=$(git grep -l "model_bound" -- "core/*" | grep -vxF "$H" | wc -l | tr -d " "); [ "$C" -ge 1 ] || exit 1; X=$(grep -c "SETTINGS" "$V") || X=0; [ "$X" -ge 1 ] || exit 1; LW=$(grep -n "effort_bound:" "$H" | head -1 | cut -d: -f1); LD=$(grep -n "^NEEDS_EFFORT=false" "$H" | head -1 | cut -d: -f1); [ -n "$LW" ] && [ -n "$LD" ] && [ "$LW" -gt "$LD" ] || exit 1; W=$(git grep -l "effort_bound" -- "core/*" | grep -vxF "$H" | wc -l | tr -d " "); [ "$W" -ge 1 ] || exit 1; E=$(grep -c '^[^#]*--arg effort.*PIN_EFFORT' "$H") || E=0; [ "$E" -eq 0 ] || exit 1; A=$(awk '/^  if \[ "\$defbound" = "true" \]; then$/{a=1} a && /^[^#]*effortbound/{n++} a && /^  fi$/{a=0} END{print n+0}' "$V"); S=$(awk '/^  if \[ "\$defbound" = "true" \]; then$/{a=1} a && /^[^#]*(SETTINGS|aiDlcRoles\[)/{n++} a && /^  fi$/{a=0} END{print n+0}' "$V"); [ "$A" -ge 1 ] && [ "$S" -eq 0 ]
 
 ## BL-020
 
