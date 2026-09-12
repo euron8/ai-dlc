@@ -330,11 +330,42 @@ def cue_denied(reason, m):
 # so such a row declares the new debt explicitly and lands in the register proper. Requiring
 # that explicit `owed` keeps the case in scope instead of exempting it — which is why the
 # skip below reads `closes_ids`, not "mentions a debt".
+#
+# A FOURTH CLASS, AND IT IS THE SATISFIABILITY ONE THE contradicts-core ARM ABOVE ALREADY
+# SOLVED. Everything above scopes this arm to the ROW, and the reasoning printed over
+# `owed_entries` applies here word for word: the register is APPEND-ONLY, so "this row
+# declares no owed" is unsatisfiable by construction the instant the row is written. None of
+# the three row-local clearances is reachable by a historical row — it cannot grow an `owed`,
+# it cannot grow a `closes_owed`, and its `reason` is frozen — so the arm names the same rows
+# on every run forever with no act available to clear them. The ENTRY is the satisfiable unit
+# here for exactly the reason it is there: a LATER row can still speak for it, and declaring
+# the debt on a later row is how every real obligation in the reference register was in fact
+# declared. The remedy this report prints is "re-record each with an `owed` object", and a
+# row-scoped arm cannot see that remedy being performed.
+#
+# MEASURED ON THE REFERENCE CONSUMER'S REGISTER, 451 rows: the arm reported 32 rows, of which
+# 25 sit on an entry that already declares an `owed` elsewhere — the migration this report asks
+# for was performed and the rows were still named. The remaining 7 survive, on 6 entries that
+# declare nothing anywhere. So the acquittal is 25 rows across 12 entries, and its
+# false-acquittal exposure is the same one the contradicts-core arm carries and states: an
+# entry that declares one obligation and leaves a SECOND in prose is acquitted on the first.
+# That is accepted on the same ground — a declared debt is a handle the OPEN arm above
+# enumerates and a reader can close, so the entry is already on the operator's list.
+#
+# DERIVED FROM `owed_entries`, NEVER RESTATED, AND SITED WITH ITS ONLY READER. Two readers of
+# "which entries declare a debt" that spell the isinstance guard twice are two chances to
+# disagree about the same row, which is the defect `closes_ids` was lifted into a helper to end
+# one arm up. The derivation sits BELOW the loop header rather than beside `owed_entries`
+# because the loop is its only consumer, and because an absorption receipt that reads this arm's
+# body is otherwise blind to a fix made just above it.
 undeclared = []
+owed_any_entry = {e for _c, e in owed_entries}
 for r in rows:
     if isinstance(r.get("owed"), dict):
         continue
     if closes_ids(r)[0]:
+        continue
+    if r.get("entry") in owed_any_entry:
         continue
     reason = r.get("reason", "") or ""
     # The surviving cues, not every cue. What is reported is what still reads as an obligation,
@@ -370,7 +401,7 @@ else:
     print("OPEN (0) — no row declares an undischarged `owed` object.")
 print()
 if undeclared:
-    print("UNDECLARED (%d) — reason prose reads like an obligation, row declares no `owed`:" % len(undeclared))
+    print("UNDECLARED (%d) — reason prose reads like an obligation, entry declares no `owed`:" % len(undeclared))
     for u in undeclared:
         print("  %-44s %-16s cues: %s" % (u["entry"].split("/")[-1][:44], u["verdict"], ",".join(u["cues"])))
     print()
