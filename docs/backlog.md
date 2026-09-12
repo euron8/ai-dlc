@@ -4597,6 +4597,9 @@ verify: sh B=docs/backlog.md; [ -f "$B" ] || exit 9; grep -q '^## BL-227' "$B" |
 
 ## BL-241 — `ledger-reverify.sh` leaks the last entry's `[receipt n/n]` suffix onto every run-scoped and ENTRY-SWALLOWED row
 
+**LANDED (v0.556.0, verified a4c00c9a).** Fixed by one `RSFX=""` after the receipt loop; the
+fixture seed gained a second receipt inside its open EOF fence and three arms over two shapes.
+
 **Found 2026-09-12** by the adversary on batch 91, re-derived here by driving the shipping tool
 on the `ledger-reverify` fixture's seeded ledger with one entry appended. `RSFX` is set per
 receipt inside the receipt loop and never reset after `done <<< "$ENTRIES"`. When the LAST entry
