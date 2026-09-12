@@ -4553,5 +4553,38 @@ as a kill — or delete the branch and record that the anchor fix made it inert.
 
 **Tiered DEFECT.** Distribution-side fixture only; no consumer verdict moves.
 
-verify: sh F=core/fixtures/ledger-reverify/run.sh; [ -f "$F" ] || exit 9; grep -q '^sfx_kill()' "$F" || exit 9; n="$(awk '/^sfx_kill\(\)/{f=1} f && /-ne "\$\(printf .%s.n. "\$OUT" \| grep -c \.\)"/{c++} END{print c+0}' "$F")"; [ "$n" -eq 0 ] && exit 0; grep -qE 'wreckage-subject|drops the RECEIPTS-UNDECIDED emitter|mut-wreck' "$F" && exit 0; exit 1
+**2026-09-12 — given a subject rather than deleted, and the receipt is bound in two halves.**
+
+Measured at the tip before building: all six shipped mutants emit exactly the baseline's 90 rows,
+so the guard's branch is taken zero times on a clean run. The predicate is now `sfx_wrecked()`,
+called by `sfx_kill` and by a new probe sited above the first `sfx_kill`, and the probe drives it
+in both directions in one block — it FIRES on a copy one row short, and stays QUIET on the
+unmutated `acquit-shipped` copy. The probe scores no kill and moves `FAILURES` only when the
+guard cannot fire or fires on the shipped copy. `SFX_SHIPPED` moved above the probe rather than
+being defaulted: under `set -u` a reference to it from the probe's position would have been an
+unbound-variable error, and defaulting it to empty would have put the control in a branch that
+never runs.
+
+**The obvious probe mutant does not work, and the measurement is why the mutation is sited on the
+CONDITION.** Deleting `ledger-reverify.sh`'s `emit RECEIPTS-UNDECIDED` line leaves its
+`if … then … fi` with an empty body: `bash -n` exits 2, the copy dies, and the row-count
+difference the guard would then report comes from a syntax error rather than from a dropped row.
+Measured on the same seed against a baseline of 90 rows — deletion: `bash -n` 2, run exit 2, 80
+rows; the condition rewritten to `if false; then`: `bash -n` 0, run exit 0, 89 rows. The probe
+uses the second, asserts the copy PARSES before scoring it, asserts the mutation changed exactly
+two lines, and does not go through `sfx_mutant` — that helper prepends the reset strip, which
+would have made the copy differ by ten lines where one property is under test.
+
+**Receipt scoring, six cases, each built on a copy:** HEAD (inline guard) 1; definition only with
+no callers 1; definition plus the `sfx_kill` call but no probe 1; the full fix 0; a comment naming
+`sfx_wrecked` twice 1; `sfx_wrecked`'s body replaced by `return 1` **0**.
+
+**That sixth row is the receipt's limit, stated rather than hidden.** A call site is TEXT, and a
+probe sited inside a branch that never executes satisfies a call-site count exactly as a live one
+does. The receipt's text half therefore cannot see a gutted predicate — case 6 reads 0 — and what
+binds there is the FIXTURE: the same copy run once through `core/fixtures/ledger-reverify/run.sh`
+exits 1 with `FAIL  wreckage-subject  the guard stayed SILENT on a parseable copy emitting 89 rows
+against the baseline 90`, one of 212 assertions wrong and no other arm disturbed.
+
+verify: sh F=core/fixtures/ledger-reverify/run.sh; [ -f "$F" ] || exit 9; grep -q '^sfx_wrecked() {' "$F" || exit 1; n="$(awk '/^sfx_wrecked\(\) \{/{d=1} d&&/^\}/{d=0;next} !d && /^[^#]*sfx_wrecked[ \t]/{c++} END{print c+0}' "$F")"; [ "$n" -ge 2 ] || exit 1; grep -qE '^[^#]*"wreckage-subject"' "$F" || exit 1; exit 0
 
