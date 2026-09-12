@@ -583,9 +583,38 @@ if (CITE) {
           .filter(Boolean).filter(r => !r.isSidechain));
     } catch { /* an unreadable member is not a verdict; the count below shows the scan */ }
   }
+  // THE TWO NOMATCHES CARRY DIFFERENT STDOUT TOKENS AND THE SAME EXIT CODE, and the split is
+  // load-bearing exactly once -- on the convergence gate's --cycle-state path.
+  //
+  //   the token            FILES WERE OPENED and yielded zero parseable non-sidechain
+  //                        records. Nothing in the corpus could have verified anything,
+  //                        whatever it said: a present-but-empty `.jsonl`, a corpus wholly
+  //                        sidechain. Reading zero here is a fact about the CORPUS.
+  //   the branch below     records WERE read and none of them carried the quote. That is the
+  //                        S290 fabrication: the ground truth exists and REFUTES the citation.
+  //                        An assistant-only corpus lands THERE, not here -- the records
+  //                        parsed, the human simply did not speak, and denying is the posture.
+  //
+  // `files.length > 0` IS A SECURITY CONJUNCT, NOT A TIDINESS ONE, and without it this token
+  // is a fail-open on a field the LEAD writes. `--since` is the convergence caller's
+  // `invoked_at` from the resolution's own pass file, bounded only by monotonicity against the
+  // pass before it, and the filter above drops whole FILES by mtime. A forged FUTURE
+  // `invoked_at` therefore excludes every transcript, `files` is empty, and zero records is
+  // then a fact about the BOUND rather than about the corpus -- over a corpus that holds the
+  // genuine operator message and would have refuted nothing. Measured on the seeded
+  // `stalled-resolved` series with p4's `invoked_at` rewritten to 2099: the shipped validator
+  // denies (STALLED/3) and a token emitted without this conjunct acquits it (RESOLVED/0,
+  // UNVERIFIABLE). An empty file LIST keeps the plain `NOMATCH` and keeps denying.
+  //
+  // EXIT 2 IS UNCHANGED ON BOTH, deliberately. Three of the four readers
+  // (`validate-escalation-resolution.sh`, `validate-gate-adjudication.sh`,
+  // `core/hooks/ai-dlc-gate-remediation-guard.sh`) key on the status alone and send this
+  // stdout to /dev/null, so a new exit tier would change four programs' behaviour to give one
+  // of them a distinction. The token is additive: a reader that does not look for it cannot
+  // see it, and `NOMATCH` stays the prefix so a `case NOMATCH*` reader is unmoved.
   if (!recs.length) {
     console.error(`NOMATCH (0 records across ${files.length} transcript(s) from ${CORPUS_ID})`);
-    console.log("NOMATCH"); process.exit(2);
+    console.log(files.length ? "NOMATCH-NO-RECORDS" : "NOMATCH"); process.exit(2);
   }
   // Which tool_use ids are AskUserQuestion calls. Resolved by PAIRING, never by sniffing the
   // result text: any subagent can emit a string that looks like an answer block, and only the

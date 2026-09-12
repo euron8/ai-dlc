@@ -4368,7 +4368,67 @@ inversion — so the fix must not be applied blindly across all four copies.
 **Tiered DEFECT.** Consumer-facing; all four readers ship. Its consequence is a pipeline wedged by
 supplying MORE ground truth than the passing case requires.
 
-verify: sh set -e; V=core/scripts/validate-adversarial-convergence.sh; [ -f "$V" ] || exit 9; grep -q 'steer_dir_has_transcript "$TRANSCRIPT_DIR"' "$V" || exit 9; grep -q 'ADVERSARIAL_CITATION_UNVERIFIABLE' "$V" || exit 9; n="$(grep -rlc 'steer_dir_has_transcript() {' core/ | wc -l)"; [ "$n" -ge 4 ] || exit 9; grep -qE 'citation-less|present-but-unquoted|lacks the citation' "$V" && exit 0; exit 1
+---
+
+**ADJUDICATED. The headline NARROWS and one of the two claims is REFUTED.** Enumerated against the
+shipping predicate, driven on the fixture-seeded `stalled-resolved` series:
+
+- *"present but lacks the citation fails closed"* — **NARROWED to "present but holds no citable
+  record"**. `--cite` emits two different NOMATCHes on exit 2: `NOMATCH (0 records across N
+  transcript(s) …)` when files were opened and yielded nothing, and `no genuine operator message
+  carried it` when records were read and none carried the quote. Only the first is the absent-corpus
+  case. The entry treated them as one.
+- *"an operator who supplies more ground truth is worse off"* — **REFUTED for the records-present
+  case.** A corpus holding operator turns that do not carry the quote has REFUTED the citation, not
+  failed to check it. That is S290 exactly, and denying is the posture. The claim survives only
+  where the corpus held nothing.
+- *"any fix touches four files"* — **survives, and the fix does not touch the helper.**
+  `steer_dir_has_transcript` is unchanged in all four copies; **I92** holds them to one text and the
+  distinction is drawn one step later, where only the convergence caller reads it.
+
+**Mechanism: the predicate prints a distinct stdout token (`NOMATCH-NO-RECORDS`) on the
+zero-records path while KEEPING exit 2, and the convergence caller captures stdout and branches on
+it in `--cycle-state` only.** No caller parses `--cite` stdout — the other three
+(`validate-escalation-resolution.sh:407`, `validate-gate-adjudication.sh:507`,
+`core/hooks/ai-dlc-gate-remediation-guard.sh`, twice) redirect it to `/dev/null` and key on the
+status; the escalation validator's `2>&1 >/dev/null` captures STDERR, whose lines are byte-identical.
+Verified byte-identical exit codes before and after on all three, on a verifying control corpus and
+both NOMATCH corpora.
+
+**`files.length > 0` IS PART OF THE KEY, and without it the fix is a fail-open on a field the lead
+writes.** `--since` is `invoked_at` from the resolution's own pass file, and the corpus filter drops
+whole FILES below it by mtime — so a forged FUTURE `invoked_at` empties the corpus over a tree that
+holds the operator's real message. Measured on the seeded series with p4's `invoked_at` rewritten to
+2099: HEAD `STALLED/3`, a token emitted without the conjunct `RESOLVED/0 UNVERIFIABLE`, the shipped
+fix `STALLED/3`. A zero produced by the BOUND is not a fact about the corpus.
+
+The (i)–(iv) verdict table, each row driven end-to-end through `--cycle-state`:
+
+    (i)   only isSidechain records     RESOLVED/0 UNVERIFIABLE  MOVED. `!r.isSidechain` filters
+                                                                before the length test, so files
+                                                                were opened and zero records read.
+    (ii)  only assistant records       STALLED/3                UNMOVED. Records parsed and were
+                                                                read; no human spoke. S290's shape.
+    (iii) an empty-but-present .jsonl  RESOLVED/0 UNVERIFIABLE  MOVED. The motivating world.
+    (iv)  all records older than       STALLED/3                UNMOVED. The file list is EMPTY, so
+          --since (excluded by mtime)                           the zero is about the bound, not the
+                                                                corpus — and the bound is lead-written.
+
+**Gate mode still fails closed on the third state**, asserted on `divergent-resolved` because that
+series PASSES the gate on a real corpus (0) and denies on both zero-record corpora (1); an arm on
+`stalled-resolved` would have been vacuous, since arm H denies it whatever the corpus says.
+
+**Fixture**: six corpus arms, the unbounded-`--since` discriminator, the forged-`invoked_at` arm,
+three gate arms, an unmutated control in the mutants' own directory, and four mutants — the
+over-broad acquittal, the fix disabled, the predicate emitting the token on both paths, and the
+`files.length` conjunct deleted. Each kills exactly its own cells. The fourth exists because the
+other three all leave `files.length` in place and stay green without it.
+
+**Receipt scored against six candidates, every mutation carrying a `cmp -s` control:** HEAD 1, the
+fix 0, the over-broad mutant 1, the token-on-both mutant 1, the `files.length`-deleted mutant 1, a
+bare comment on HEAD 1.
+
+verify: sh V=core/scripts/validate-adversarial-convergence.sh; F=core/fixtures/check-24-adversarial-convergence; [ -f "$V" ] && [ -f "$F/seed.sh" ] || exit 9; R="$(bash "$F/seed.sh" | tail -1)"; S="$R/stalled-resolved/s1-adversarial-p"; [ -f "${S}4.md" ] || exit 9; Z="$R/z"; Q="$R/q"; mkdir -p "$Z" "$Q"; : > "$Z/a.jsonl"; printf %s\\n "{\"type\":\"user\",\"timestamp\":\"2026-07-12T05:00:00Z\",\"message\":{\"content\":\"a genuine operator turn that does not carry the cited words\"}}" > "$Q/a.jsonl"; C="$(bash "$V" --series "$S" --cycle-state --transcript-dir "$R" 2>/dev/null | cut -f1)"; O="$(bash "$V" --series "$S" --cycle-state --transcript-dir "$Z" 2>"$R/e" | cut -f1)"; U=0; grep -q ADVERSARIAL_CITATION_UNVERIFIABLE "$R/e" && U=1; N="$(bash "$V" --series "$S" --cycle-state --transcript-dir "$Q" 2>/dev/null | cut -f1)"; X="$R/x"; mkdir -p "$X"; cp "$R/prior-session-transcript.jsonl" "$X/a.jsonl"; touch -t 200001010000 "$X/a.jsonl"; B="$(bash "$V" --series "$S" --cycle-state --transcript-dir "$X" 2>/dev/null | cut -f1)"; rm -rf "$R"; [ "$C" = RESOLVED ] || exit 9; [ "$O" != STALLED ] && [ "$U" = 1 ] && [ "$N" = STALLED ] && [ "$B" = STALLED ] && exit 0; exit 1
 
 ## BL-220 — `validate-provenance-block.sh` exits 0 on an ordinary file with no marker and no flag, and there is no opt-out to require otherwise
 
