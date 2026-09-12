@@ -37,6 +37,94 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
+### BATCH 94 SHIPPED AS `v0.560.0`, ONE RELEASE, TWO NO-`PC` SUBJECTS — AND **THE ADVERSARY FOUND A BLOCKER ON EACH SUBJECT BEFORE EITHER SHIPPED: THE ACQUITTAL KEY JOINED A SET WHOSE EVERY MEMBER IS DISCHARGED ON THE ONLY CORPUS, AND THE FAIL-OPEN TOKEN WOULD HAVE ACQUITTED A FORGED PASS TIMESTAMP.** THE SWEEP WAS EMPTY OF PC WORK. ONE ENTRY WAS FILED AND NOT FIXED. THE GAP IS **THREE**, PENDING **1**, AND THE PULL IS **NOT REQUIRED**.
+
+This block replaces the batch-93 record below it. Re-derive every figure rather than reading it.
+
+**`VERSION` IS `0.560.0`, SO BATCH 95 RELEASES AS `0.561.0`.** Re-derive `VERSION` and add one.
+Batch 94 merged ONCE — `v0.560.0` at `03595917` (PR #730) — closing `BL-218` and `BL-219`, each
+id verbatim in its release commit message (control: an impossible `BL-` id returns 0; `BL-218` also
+resolves to the batch-82 filing commit `85d4889f`, which `named_absorbed()` would read at
+`0.542.0` — a docs commit, not a release, and neither carries a `PC-` id so no ledger row is
+affected). Both are ROTATED; archive moved **152 → 154**. `BL-243` is filed LIVE and not fixed, so
+live moved **90 → 89**.
+
+**THE SUBJECTS WERE TAKEN ON THIS SESSION'S OWN RANKING** because the one-liner arrived from a
+peer. A scope hand measured all five no-`PC` candidates first. `BL-218`'s corpus blocker had
+EXPIRED — the consumer carries a live 471-row layer-debt register and the shipping arm reported 7
+UNDECLARED there, one citing a declared id — and `BL-219` reproduced exactly with the fix confined
+to the caller, since **I92** byte-binds the helper. The two file sets are disjoint and touch no
+bootstrapping file. `BL-220` was refused because a homes-keyed fail-closed fires on 450 correct
+files and its only shippable shape is an opt-out that closes nothing; `BL-221` because the
+positive-binding arm carries 3 false positives of 6 and moves the pole; `BL-223` because its
+population join key is already occupied. Each entry now records that measurement.
+
+**THE ADVERSARY ATTACKED THE CONTRACT AND THEN EACH TIP, AND BOTH SUBJECTS CHANGED.** On
+`BL-218` the acquittal joins the DECLARED id set, and on the live register every one of the 36
+declared ids is discharged (`OPEN (0)`), so the builder's rationale — "an obligation the OPEN arm
+already enumerates" — was false on the only corpus. The lead RULED to keep that join: the
+entry-scoped acquittal one line up already ignores closure, and a row told to re-record a
+discharged debt re-opens finished work under a new id. The `declared - closed` key was built as a
+fourth mutant and acquits nothing there. Clause scope, the entry's own "adjacent to" prescription,
+acquits 0 of 7 surviving cue occurrences because the one row's cue and citation sit in different
+sentences; row scope takes the live register 7 → 6. On that register the committed key and the
+any-token mutant produce the IDENTICAL set, so the mutant is killed by seed alone and the entry
+says so. On `BL-219` the contract's third state was "files opened, zero records", but `--since` is
+the lead-written `invoked_at` bounded only by monotonicity, and a forged future value excludes every
+transcript by mtime — the naive token fails OPEN over a corpus holding the operator's real message
+(HEAD STALLED/3, naive RESOLVED/0). The token is emitted only when `files.length > 0`, in the
+predicate, and the forgery still denies on the tip. A sidechain-only corpus is acquitted; the
+adversary attacked that and ruled it grants nothing an empty directory did not already.
+
+**`BL-243` IS THE ONE NEW FILING**: the row-scoped acquittal is satisfied by a clause that DENIES
+the handle it names (*"not tracked under OWED-C and a narrowing is still owed"* goes silent). Zero
+instances on the live register; 12 rows already write the adjacent idiom. Filed on the adversary's
+recommendation rather than fixed, because the fix reopens the acquittal just settled. Its receipt
+is scored: release tree 1, pre-fix auditor 9, a disarm 9, and the obvious `cue_denied`-reuse fix
+ALSO 1 — that fix is NOT sufficient as a one-liner, which is recorded so nobody ships it as one.
+
+**THE SWEEP AT THIS BATCH'S CLOSE, ref `ai-dlc/carry-over/chunk-max-usd-swap-sizing` (one filing
+ahead of `main`, consumer HEAD `cab7f9af6`).** Live **56**, cited **37**, unfiled **19**, archive
+**206**, partition control 0, ledger md5 `6d87be63…` unchanged across the batch and identical at
+the working tree and at the sprint tip. All 19 unfiled are the adjudicated set (5 named in
+`origin/main` release commits, 11 `NOT-UPSTREAM`, the withdrawn `PC-S309-PRE-PUSH` pair, the refuted
+`PC-S340-RETRO-AUDIT-SCANS`). A consumer-history hand found a second branch carrying
+`PC-S310-HANDOFF-ENTRY-MARKER-COMMITTED-NEVER-DISCHARGES-CROSS-SESSION`; that is batch 85's
+subject, archived as `BL-229` and named in the `0.545.0` release commit — not new work. TERMINAL
+**89**; DISCHARGED corrected **7**; discharged-but-INVISIBLE 1
+(`PC-S308-GATE-METRICS-CHECK2-STALE-VERDICT-READ-ORDER`).
+
+**THE INCIDENTAL-CLOSE CHECK WAS RUN AND FOUND NOTHING.** Receipt histogram at the open: 2×0
+(`BL-236`, `BL-238`, both deliberately not rotated). After both fixes and before rotation: 4×0
+adding `BL-218` and `BL-219`, 73×1, 1×9. After rotation and the new filing: 2×0, 74×1, 1×9. A
+run of `origin/main`'s receipts against the FIXED working tree read a third zero — `BL-218`'s OLD
+receipt, which the fix satisfies — and that is the histogram's known blindness to which tree the
+receipts were evaluated on, not an incidental close.
+
+**THE PULL IS NOT REQUIRED AND THE GAP IS THREE.** Stamp `0.557.0` / `01fea66c` on all four
+fields, shipped `0.560.0`. The second test discriminates: the consumer's installed
+`audit-layer-debt.sh` differs from the distribution's (`cmp -s`), and on the consumer's own live
+register the installed copy reports UNDECLARED (7) where the shipped one reports (6) — the
+consumer is being told to re-declare an obligation it already tracks. That row is a finding it
+cannot see; it is report-only and moves no verdict. Nine machinery paths in the range
+`01fea66c..origin/main`, derived with the manifest's `machinery:` grammar (three from this batch:
+`audit-layer-debt.sh`, `validate-adversarial-convergence.sh`, `validate-steering-budget.sh`);
+zero mode-only changes.
+
+**THE CONSUMER'S PORCELAIN MOVED 23 → 24 DURING THE BATCH**, one gate-adjudication verdict file
+written by its own sprint-311 pipeline under its own HEAD; nothing here wrote to it (asserted by
+three hands and the lead, by path list not count).
+
+**THE POLE COULD NOT BE RESOLVED THIS BATCH.** Interleaved reps of `validate-enforcement-map.sh`
+spread wider within a side than between sides while the hands ran; the adversary's quiet-machine
+reading earlier in the batch was 23–24s on both a base worktree and the Subject A tip. The
+distribution's own working tree reads ~29s because it carries sibling worktrees under
+`.claude/worktrees/` — never compare it against a worktree figure. Re-time on a quiet machine if a
+number is needed.
+
+**THE READIEST NO-`PC` WORK** is now `BL-220`, `BL-221`, `BL-223`, and `BL-243`. Read `BL-227`
+first, and read each entry's batch-94 measurement paragraph before scoping it.
+
 ### BATCH 93 SHIPPED AS `v0.558.0` AND `v0.559.0`, TWO RELEASES, THREE NO-`PC` SUBJECTS — AND **THE ADVERSARY FOUND THREE BLOCKERS IN THE CONTRACT BEFORE ANY BUILD, THEN A FOURTH ON A TIP THAT PASSED EVERY SEED, AND EVERY REMAINING GAP WAS A MISSING SEED RATHER THAN A MISSING ARM.** THE SWEEP WAS EMPTY OF PC WORK. THE PREVIOUS RELEASE HAD SHIPPED MERGE-CONFLICT MARKERS IN `CHANGELOG.md`. THE CONSUMER PULLED ITSELF TO `0.557.0` MID-BATCH; THE GAP IS **TWO**, PENDING **1**, AND THE PULL IS **NOT REQUIRED**.
 
 This block replaces the batch-92 record below it. Re-derive every figure rather than reading it.
@@ -109,7 +197,8 @@ own HEAD; nothing here wrote to it (asserted after every phase).
 **THE READIEST NO-`PC` WORK** is now `BL-221`, `BL-223`, `BL-220`, `BL-219`, `BL-218`. Read
 `BL-227` first. Two receipt residuals are recorded rather than owed: `BL-242`'s and `BL-224`'s
 archived receipts are weaker than their fixtures (a disabled helper scores 0 on each), and the
-fixture is the binding channel in both.
+fixture is the binding channel in both. (Superseded by the block above: `BL-218` and `BL-219`
+shipped in batch 94.)
 
 ### BATCH 92 SHIPPED AS `v0.556.0` AND `v0.557.0`, TWO RELEASES, TWO NO-`PC` SUBJECTS — AND **THE OPERATOR-RANKED ENTRY'S REMEDY WAS RIGHT ON THE PATH IT PROBED AND UNREACHABLE ON THE PATH THE CONSUMER DISPATCHES THROUGH, WHICH FOURTEEN PROBES AND ONE BINARY LITERAL SETTLED BEFORE THE CONTRACT WAS WRITTEN.** THE SWEEP WAS EMPTY OF PC WORK. THE GAP IS **FOUR**, PENDING **1**, AND THE PULL IS **NOT REQUIRED**.
 
@@ -9179,6 +9268,10 @@ given at batch 90.
    rebuilt in one release: the originals closed on an empty file, on a dead arm, and on a
    positional window.
 
+   **BATCH 94's TWO SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope either.** `BL-218` and
+   `BL-219` shipped together as `v0.560.0`, cited in the release commit message. Neither carries a
+   `PC-` id. `BL-243` was filed and not fixed.
+
    **BATCH 93's THREE SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope any of them.** `BL-019`
    and `BL-242` shipped together as `v0.558.0` and `BL-224` ALONE as `v0.559.0`, each cited in its
    release commit message. None carries a `PC-` id. `BL-019` discharges
@@ -9287,12 +9380,15 @@ given at batch 90.
    two whose receipts DRIVE their subject — and driving is NECESSARY, NOT SUFFICIENT**: both were
    then closed by an over-broad fix, so an arm must also assert the CONTROL case still DENIES.
    `verification-discipline.md:154` states this rule and has no enforcer, which is why `BL-227`
-   exists. The ranked no-`PC` set, readiest first, is `BL-220`, `BL-218`, `BL-219`,
-   `BL-221`, `BL-223` (`BL-225`, `BL-217`, `BL-222`, `BL-240`, `BL-241`, `BL-224`, `BL-019` and `BL-242` have shipped) — **every one of their receipts needs repairing
-   before its verdict means anything.** `BL-222`'s owed FP measurement is already taken and small
-   (one fixture, four substring assertions, none anchored; `retro.md` reads that PASS line zero
-   times). `BL-218` is blocked on a corpus that does not exist — zero live layer-debt registers in
-   either tree, against a control of 10 other tracked `_bmad-output` jsonl files on the consumer.
+   exists. The ranked no-`PC` set, readiest first, is `BL-220`, `BL-221`, `BL-223` (`BL-225`,
+   `BL-217`, `BL-222`, `BL-240`, `BL-241`, `BL-224`, `BL-019`, `BL-242`, `BL-218` and `BL-219` have
+   shipped) — **every one of their receipts needs repairing before its verdict means anything.**
+   Batch 94 measured all three: `BL-220`'s only shippable shape is an `--allow-missing` opt-out
+   that leaves the default alone (a homes-keyed fail-closed fires on 450 correct files); `BL-221`'s
+   positive-binding arm carries 3 false positives of 6 and moves the suite pole; `BL-223` needs a
+   decision on the population join key, which `ai-dlc-update` already occupies. `BL-243`, filed at
+   batch 94, is a zero-instance defect in the acquittal `BL-218` shipped; read it before touching
+   `audit-layer-debt.sh` again.
 
    **THE OTHER THREE APPARENTLY-AVAILABLE UNFILED IDS ARE NOT WORK.** The
    `PC-S309-PRE-PUSH-FLAG-MISMATCH-ORIGINAL-TEXT` / `PC-S309-PRE-PUSH-STILL-CALLS-FAIL-ON-DETERMINISTIC-AFTER-RETRO-MOVED-TO-LOCAL`

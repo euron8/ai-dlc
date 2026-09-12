@@ -4251,6 +4251,17 @@ binding — every validator with an empty-subject path must emit the declared to
 negative scan for novel spellings, but that inverts the arm and needs its own population measured
 first.
 
+**A FOURTH SPELLING IS ALREADY IN THE TREE, measured at batch 94.** `core/scripts/validate-cycle-commits.sh:185,191,201`
+emits *"Nothing was audited"* on three WORKLIST paths that exit 0 — a near-miss on the retired
+`AUDITED NOTHING` that I93's enumeration cannot spell, which is the exact case the map's own comment
+predicted. Two more undeclared empty-subject emitters sit beside it: `validate-fixture-drivability.sh:147-149`
+(*"contains no fixture directories — nothing to judge"*, exit 0) and
+`validate-write-format-steering.sh:374-381` (`SKIP — … NO artifact was judged`, exit 0). A positive-binding
+arm over the 38 validators was prototyped and its heuristic (empty-subject guard followed by exit 0)
+carried 3 false positives of 6 — a formatting `echo`, a `return 1` failure path, an UNPROVEN verdict at
+exit 1 — so it is not shippable as written; the narrowing needed is "exit 0 AND the guard's subject is
+a corpus count". The arm belongs as a fifth arm of I93, whose arm D already runs the reverse join.
+
 **Related, not folded in:** `core/scripts/validate-scope-confirmation.sh:214,221` emits `PENDING:`
 for a genuine empty-subject state, undeclared and uncaught — one instance of the same gap.
 
@@ -4359,3 +4370,42 @@ decide whether its own fix worked, and nine of them cannot tell a fix from a com
 verify: sh B=docs/backlog.md; [ -f "$B" ] || exit 9; grep -q '^## BL-227' "$B" || exit 9; grep -qE 'receipt-emission-site|scores every backlog receipt against a seeded|verify-receipt-binding' scripts/*.sh 2>/dev/null && exit 0; exit 1
 
 
+
+## BL-243 — the row-scoped citation acquittal in `audit-layer-debt.sh` is satisfied by a clause that DENIES the handle it names
+
+**Found 2026-09-12** by the batch-94 adversary re-verifying `BL-218`'s fix on its tip, and
+reproduced here on the release tree against the pre-fix auditor as control. `v0.560.0` acquits an
+UNDECLARED row whose reason cites an id in the declared set (`CITED` at
+`core/scripts/audit-layer-debt.sh:392`, joined against `owed_entries`). The join reads the id
+ANYWHERE in the reason, including inside a clause that disclaims it.
+
+Driven through the shipping auditor with `--json`, one register, one invocation per row:
+
+    e20  "This is not tracked under OWED-C and a narrowing is still owed."   pre-fix: reported   v0.560.0: ACQUITTED
+    e21  "A narrowing is still owed."                                          pre-fix: reported   v0.560.0: reported
+    CONTROL  e20 with the id mention removed, nothing else changed             v0.560.0: reported
+
+The mention is doing the silencing. The row states in as many words that the work is NOT on the
+record under that id, and the acquittal reads the mention as proof that it is. Same class as the
+`cue_denied` discount the arm already carries at cue grain — a negator governing the thing being
+matched — applied at row grain where nothing checks for it.
+
+**Reachability on the reference consumer's live register, measured both directions:** 39 rows
+mention a declared id; 12 of those carry a negator within 60 characters before the mention, four
+in the exact idiom *"Separately and not part of this verdict, OWED-<id>"* and one reading *"This
+verdict does not discharge OWED-S308-SKILL-PUSH-925-RETIRE"*; **0 of the 12 sit in the candidate
+set with a surviving cue.** So the live instance count is zero today, and the shape is one
+adjudicator sentence away, and permanent when it lands because the register is append-only.
+
+**Not fixed in `v0.560.0`, by the lead's scope call on the adversary's recommendation**: the fix
+reopens the acquittal that release settled after two keys and four mutants were scored, and the
+instance count is zero. The cheapest fix reuses `cue_denied`'s own machinery against the CITATION
+rather than writing a second rule — acquit only when at least one declared-id occurrence is not
+itself preceded by a negator in its clause — and needs the 12-row set above re-scored under it,
+with the *"Separately and not part of this verdict"* idiom seeded as the case that must NOT
+acquit.
+
+**Tiered DEFECT.** Consumer-facing; the arm ships in `core/scripts/`. A false acquittal here is
+silent and permanent.
+
+verify: sh V=core/scripts/audit-layer-debt.sh; [ -f "$V" ] || exit 9; d=$(mktemp -d) || exit 9; B='"clause":"LC-E4","subject_digest":"x","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z"'; printf '{%s,"entry":"e20","reason":"This is not tracked under OWED-C and a narrowing is still owed."}\n{%s,"entry":"e21","reason":"A narrowing is still owed."}\n{%s,"entry":"e22","reason":"The narrowing is owed under OWED-C."}\n{%s,"entry":"e9","owed":{"id":"OWED-C","what":"w"}}\n' "$B" "$B" "$B" "$B" > "$d/r.jsonl"; o="$(bash "$V" --register "$d/r.jsonl" --json 2>/dev/null)"; rm -rf "$d"; u="$(printf '%s' "$o" | python3 -c 'import json,sys; print(" ".join(sorted(r["entry"] for r in json.load(sys.stdin)["undeclared"])))')" || exit 9; case " $u " in *" e21 "*) : ;; *) exit 9 ;; esac; case " $u " in *" e22 "*) exit 9 ;; esac; case " $u " in *" e20 "*) exit 0 ;; esac; exit 1
