@@ -42,7 +42,8 @@ own heading.
 This block replaces the batch-89 record below it. Re-derive every figure rather than reading it.
 
 **`VERSION` IS `0.554.0`, SO BATCH 91 RELEASES AS `0.555.0`.** Re-derive `VERSION` and add one.
-Batch 90 merged ONCE, closing `PC-S311-SNAPSHOT-NEVER-ADVANCES-PAST-DEPLOY-VALIDATE-AT-SPRINT-CLOSE`,
+Batch 90 merged ONCE — `v0.554.0` at `2a2c4cd3` (PR #720) — closing
+`PC-S311-SNAPSHOT-NEVER-ADVANCES-PAST-DEPLOY-VALIDATE-AT-SPRINT-CLOSE`,
 cited verbatim in the release commit message and in exactly one commit on the range (control: an
 impossible id returns 0). `BL-239` is filed and ROTATED.
 
@@ -8976,7 +8977,7 @@ given at batch 90.
 
    **BATCH 90's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.**
    `PC-S311-SNAPSHOT-NEVER-ADVANCES-PAST-DEPLOY-VALIDATE-AT-SPRINT-CLOSE` shipped ALONE as
-   `v0.554.0`, closing `BL-239`, cited verbatim in the release commit message. The consumer's
+   `v0.554.0` at `2a2c4cd3` (PR #720), closing `BL-239`, cited verbatim in the release commit message. The consumer's
    retro override shadows the terminal write; that is recorded, not owed.
 
    **BATCH 89's THREE SUBJECTS ARE SHIPPED — do not re-scope any of them.** All three `PC-S341-*`
