@@ -15,6 +15,76 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.554.0] - 2026-09-12
+
+### A closed sprint whose snapshot still said the deploy had not started
+
+Batch 90, one release, one subject. The sweep found it on a consumer branch the derive block's
+ref loop could not visit — two prefix globs against a consumer whose sprints run under a third
+prefix — so the plan's loop now visits every local branch ahead of `main`.
+
+#### `PC-S311-SNAPSHOT-NEVER-ADVANCES-PAST-DEPLOY-VALIDATE-AT-SPRINT-CLOSE`
+
+`gate-validation.md` Check 14 is the only prescribed writer of the snapshot's Pipeline Position,
+and it runs at gate passages. The last gate a sprint runs is `sprint-review`, and neither
+`deploy-validate.md` nor `retro.md` writes the position afterwards — `Pipeline Position` and
+`current_step_file` each grep **0** in both, against 1 and 2 in `gate-validation.md`. The
+manifest declares a `retro` gate type, but the one sentence prescribing it is conditional and
+sits inside a step that calls itself the only completeness check retro performs; on the
+reference consumer that gate has run **0** times across 164 sprint archives, against 29
+`sprint-review` and 28 `deploy-validate`. So the last write of every sprint leaves
+`current_step_file: deploy-validate.md`, and the next session reads a shipped sprint as pending
+deploy work. The consumer's workaround was a hand-written finalize commit, 20 of 509 snapshot
+commits; sprint 310 is the one nobody wrote, and its retro squash carries that stale position
+beside a `sprint-status.yaml` reading `status: done` in the same tree.
+
+Three writes and one guard, no new gate:
+
+- `deploy-validate.md` §7 advances the position to `retro.md` before routing to retro. Every
+  dispatch into retro passes through that one `READ AND FOLLOW`, in every pipeline variant.
+- `retro.md` §7a-post step 8 writes the terminal position after the rotation commit, dropping
+  the routing record as the close already did by convention.
+- `validate-mandatory-rules.sh` Check 8 fails retro's 5c gate when the position names any step
+  other than `retro.md`. It keys on the field alternation `ai-dlc-recover.sh` already accepts
+  rather than the schema spelling alone: over 509 revisions of the consumer's snapshot the
+  strict key resolves in 166, and 327 of the rest spell it the hook's second way — 294 of those
+  naming a step other than retro. A check keyed on the schema alone SKIPs most of the corpus,
+  and the spelling is recency-stratified, so a probe on recent data reads fully covered. The
+  value is reduced to a basename; five candidate grammars scored 9, 13, 23, 26 and 30 on the
+  same 166 real values before that choice. SKIP is loud and counted, and the "7 checks" literal
+  moved to 8 in five files, one of them inside an assertion string the first sweep missed.
+- `route.md` Step 0a check 7 refuses to dispatch silently from a snapshot stranded at
+  `deploy-validate.md` while the envelope reads `status: done`. The first cut fired on
+  `status: done` alone: the envelope flips at retro §4a and every later retro step runs after
+  it, so that predicate fires on 35 states in the consumer's history, 23 of them legitimate
+  mid-retro resumes, and on the terminal state step 8 itself writes. Narrowed to the position,
+  it fires on 3, all the stranded state, and on none of four controls.
+
+**What the reference consumer does not receive, recorded rather than deferred silently.** Its
+override `steps__retro__domain-sections.md` shadows the whole of retro §7 with a frozen copy, so
+step 8 is replaced at load time there. The advance past `deploy-validate.md` still lands — the
+§7 write in `deploy-validate.md` is unshadowed and Check 8 enforces it before the merge — and
+the pull surfaces the changed section as `HARD-OVERRIDE-DRIFT-SECTION` for re-adjudication.
+
+Fixture `mandatory-rules-snapshot-position` ships: six arms across both spellings, the
+consumer's trailing-prose and fully-qualified forms, absent field and absent file; four mutants
+of a copied validator, each `cmp -s`-asserted applied — disabled, widened to a whole-file
+mention, SKIP-as-PASS, and counter deleted — all killed. Three of the four were wrong on their
+first cut; one died at parse time and read as a kill of every cell at once until the battery's
+presence token caught it.
+
+#### The contract was wrong twice and the hands found both
+
+The field is `last_completed_step_file`, not `last_completed_step`; the contract's spelling
+resolves 0 times in `core/` against 3. And a shipping fixture must not walk up for `VERSION` —
+**I106** refuses it because a consumer carries none — which the contract prescribed and the
+builder replaced with the sibling fixtures' form before it reached the gate.
+
+#### `BL-239`
+
+Filed with the derivation above and a receipt that drives the shipping validator against two
+synthetic trees and requires it to discriminate. Rotated at close.
+
 ## [0.553.0] - 2026-09-11
 
 ### A finding that cannot be cleared, and a remedy that would have installed a cached green
