@@ -4538,59 +4538,6 @@ verdict and is told only to record another.
 
 verify: sh L=core/skills/ai-dlc-update/reconcile/layer-drift.sh; F=core/fixtures/layer-adjudication-tier/run.sh; [ -f "$L" ] && [ -f "$F" ] || exit 9; grep -q "adj_spent_note() {" "$L" || exit 9; n="$(grep -c "adj_spent_note" "$L")" || n=0; [ "$n" -ge 2 ] || exit 9; c="$(grep -c 'EXTENSION-TITLE-MATCHES-CORE' "$F")" || c=0; a="$(awk '/adj_spent_note/ {n++} END{print n+0}' "$L")"; [ "$a" -ge 3 ] && exit 0; [ "$c" -ge 2 ] && exit 0; exit 1
 
-## BL-225 — a receipt written mid-line is invisible to `ledger-reverify.sh`, and an entry with no receipt is silent in exactly the same way
-
-**Found 2026-09-09** by the consumer session executing the hand-review close, and re-derived here.
-Six of the twenty rows in that close emitted NO closer row at all before the write, which broke a
-criterion the worklist had asserted was reachable.
-
-`ledger_entry_awk()`'s receipt rule (`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:1099`)
-is line-anchored:
-
-    /^[ \t]*(<br[ \t]*\/?[ \t]*>)?[ \t]*[-*]?[ \t]*`?verify:/
-
-**The anchoring is correct and must not simply be relaxed.** Its own header at `:1087` records why:
-an unanchored match treats a PROSE MENTION of a receipt as a receipt, and this ledger is full of
-them — `status: live · merge: standalone · verify: theirs_has` summary lines, and
-`**Why `verify: manual`.**` rationale headers. Measured on the live ledger: 85 lines mention
-`verify:` and only 65 are anchored receipts, so 20 of them are prose.
-
-**But a real receipt can sit mid-line, and then it is silent.** Measured, keying on `verify:`
-followed by an actual verb rather than on the bare token:
-
-    mid-line receipts   live ledger 12    archive 40
-    line-anchored       live ledger 64    archive 198
-
-Two of the closed twenty are worked examples, both in the archive at the refs above: a `verify:
-manual — re-run a worktree-isolated dev dispatch …` and a `verify: manual — inspect whether …`,
-each ending a prose sentence rather than opening a line.
-
-**The failure mode is the one this repo names most often.** An entry whose receipt the grammar
-cannot spell emits no row, and that is BYTE-IDENTICAL to an entry that genuinely declares no
-receipt. The reverify's summary counts neither, so a ledger can carry a dozen entries nothing has
-ever adjudicated while every count reads complete. The consumer's own close is the evidence: the
-criterion "HAND-REVIEW falls by 20" was unsatisfiable and nobody could have known which 6 were
-missing without diffing the row sets by hand.
-
-**Not fixed here, and the fix is not the obvious one.** Widening the anchor re-admits the 20 prose
-mentions. The tractable shapes are (a) a REPORTING arm — count entries in the corpus that produce
-no row of any kind and name them, which needs no grammar change and cannot false-positive, or (b)
-a producer-side rule that a receipt occupies its own line, enforced where entries are written. (a)
-is the smaller and is probably right; it also measures (b)'s population before (b) is built.
-
-**Tiered DEFECT.** Consumer-facing. Its consequence is an entry that is never adjudicated by any
-pull, indistinguishable from one deliberately left manual.
-
-**The over-broad fix is the one to guard against, and it is the shape a hand builds by accident.**
-Predicate (a) written as "report every entry that emits no row" is the predicate `ledger-reverify.sh`'s
-own ENTRY-SWALLOWED header already enumerates as unshippable at **58 entries** on the reference
-consumer. So the receipt below DRIVES the shipping tool over a two-entry corpus and requires the
-near-miss entry — whose only mention sits inside backticks — to stay SILENT, which a prose closer
-and an over-broad one both fail. Built and scored: correct fix 0, unfixed HEAD 1, a comment naming
-every token 1, an over-broad reporter 9.
-
-verify: sh R=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -f "$R" ] || exit 9; A=$PWD; d=$(mktemp -d) || exit 9; mkdir -p "$d/c/_bmad-output/ai-dlc-update"; L="$d/c/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; printf '# L\n\n## Open\n\n- **Entry X**\n  <br>prose then verify: theirs_has core/VERSION "0"\n\n- **Entry Y**\n  <br>prose with `verify: manual` in backticks only\n' > "$L"; o="$(cd "$d/c" && bash "$A/$R" "$A" HEAD "$d/c" HEAD 2>/dev/null)"; rm -rf "$d"; printf '%s\n' "$o" | awk -F'\t' '$2=="Entry Y"{f=1} END{exit !f}' && exit 9; printf '%s\n' "$o" | awk -F'\t' '$1=="NEEDS-REVIEW" && $2=="Entry X" && $3 ~ /^mid-line receipt/{f=1} END{exit !f}' && exit 0; exit 1
-
 ## BL-227 — nine of batch 82's ten receipts are satisfied by something that is not a fix, and the rule forbidding it has no enforcer
 
 **Found 2026-09-10** scoping batch 83, by building the non-fix for every candidate receipt in the
