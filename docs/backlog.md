@@ -4265,6 +4265,18 @@ a corpus count". The arm belongs as a fifth arm of I93, whose arm D already runs
 **Related, not folded in:** `core/scripts/validate-scope-confirmation.sh:214,221` emits `PENDING:`
 for a genuine empty-subject state, undeclared and uncaught — one instance of the same gap.
 
+**RE-MEASURED at batch 95, and two things block it independently.** First, this entry's own receipt
+below closes on a BARE COMMENT — confirmed twice, appended past the validator's final `exit 1` (dead
+code) and inserted mid-file inside the I93 block, exit 0 both times — so it is one of the nine
+`BL-227` indicts and certifies nothing until rotated. Second, the corpus-count narrowing named above
+does not reach zero: over the 38 validators, 17 empty-subject sites exit 0, 4 survive the narrowing,
+and **2 of those 4 are false positives** — `validate-artifact-paths.sh` (`N_BLOCK` is a findings
+count and the block already prints its corpus size) and `validate-snapshot-conservation.sh`
+(`REMOVED`, likewise). A numerator discriminator takes that to 1 of 3 and no further. The arm's home,
+`scripts/validate-enforcement-map.sh`, runs at 27.0–27.4s across three reps from inside the repo and
+is invoked by 26 fixtures; the suite pole (`ledger-reverify`, ~317s) does not invoke it, so the cost
+multiplies across those 26 rather than moving the pole directly.
+
 **Tiered DEFECT.** The vocabulary index reads as complete and the invariant reads as binding, while
 a new emitter may spell the verdict however it likes.
 
@@ -4307,6 +4319,18 @@ add a duty.
 **Not fixed here.** Writing the entry grammar down is a schema addition plus a format file, and
 the grammar itself is contested: `ledger_entry_shape()` accepts five record forms, and declaring
 one as canonical would make the other four undeclared drift on an artifact the consumer owns.
+
+**RE-MEASURED at batch 95.** The join key is `paths[].name` in `core/schemas/pipeline-state-paths.json`
+— 36 members, 20 at `transient:false`, each carrying `name`, `transient`, `producer`, `reason`; neither
+`push-candidate` nor `register` occupies a name, so a declaration needs all four fields. The receipt
+below closes on two non-fixes, each with a `cmp -s` control: the word appended to an unrelated
+`reason`, and a member declared `transient:true` — the sharp one, because it satisfies the receipt
+while staying OUTSIDE the population the enforcer scans. And the real fix moves no cell this entry
+objects to: with a proper `transient:false` member added, `validate-write-format-steering.sh` reports
+5 of 21 artifacts carrying a declared format instead of 5 of 20, exit 0 both ways, same PASS line.
+Both premises hold on HEAD: `upstream-routing.md` is byte-unchanged (md5 `91e84d42…`) and names the
+ledger at line 44, and `ai-dlc-update` is already a `transient:false` member whose reason covers the
+register. Taking this entry means declaring the FORMAT, not admitting the member.
 
 **Tiered DEFECT.** The enforcer's PASS line reads as coverage of the shared append-only artifacts
 while the ledger this program exists to drain is not among them.
@@ -4364,6 +4388,20 @@ filing time. (a) is the smaller and measures (b)'s population as a side effect. 
 false-positive set for (a) is unmeasured over the 79 live receipts** and `CLAUDE.md` requires that
 before the check ships.
 
+**Option (a) MEASURED at batch 95, over the 76 live `sh` receipts in a `git archive HEAD` extraction
+(66 at base exit 1).** A GENERIC seed — `# probe` appended to every existing file each receipt names —
+flips **0 of 76**, so the arm as first described cannot fire; the seed must carry the receipt's own
+grep tokens. Under that seed **7 receipts flip 1 → 0**: `BL-021`, `BL-022`, `BL-023`, `BL-044`,
+`BL-124`, `BL-216`, `BL-221`. A flip is its own proof, so the false-positive set of the arm is 0 by
+construction. **The unmeasurable remainder is the larger finding**: 30 receipts name no seedable path
+or carry no extractable grep token (`BL-006`, `BL-007`, `BL-010`, `BL-015`, `BL-017`, `BL-018`,
+`BL-024`, `BL-028`, `BL-029`, `BL-034`, `BL-038`, `BL-043`, `BL-053`, `BL-054`, `BL-057`, `BL-062`,
+`BL-066`, `BL-067`, `BL-082`, `BL-097`, `BL-098`, `BL-100`, `BL-119`, `BL-133`, `BL-137`, `BL-140`,
+`BL-143`, `BL-220`, `BL-238`, `BL-243`), and five have a base exit that is neither 0 nor 1 (`BL-006`,
+`BL-095`, `BL-100` at 9; `BL-143` at 128). Shipping (a) is a REPORTING arm keyed on the token seed
+with those 30 declared out of population by name; the design call left open is whether the seven
+flips gate the push or are reported, and that is decided when the arm ships, not here.
+
 **Tiered DEFECT.** Every receipt in the ranked set is the instrument the next batch will use to
 decide whether its own fix worked, and nine of them cannot tell a fix from a comment.
 
@@ -4404,6 +4442,27 @@ rather than writing a second rule — acquit only when at least one declared-id 
 itself preceded by a negator in its clause — and needs the 12-row set above re-scored under it,
 with the *"Separately and not part of this verdict"* idiom seeded as the case that must NOT
 acquit.
+
+**THE STATED FIX IS REFUTED BY BUILDING IT, measured at batch 95.** Six variants — the shipped
+`NEGATED` set and the set widened with `not`/`never`, each under comma-bounded, sentence-only and
+row-scope bounds — built on `git archive HEAD` copies with a `cmp -s` control per mutation, and an
+assertion that the generated negator matches its own subject (the first run returned six rows
+identical to HEAD because a doubled backslash made `\bno\b` literal). **With the shipped negator set
+the receipt above stays at 1 under every bound**: its seeded offender reads *"This is **not** tracked
+under OWED-C"*, and `not` is excluded from `NEGATED` at `core/scripts/audit-layer-debt.sh:273-277`
+for a recorded reason, so reusing `cue_denied`'s machinery verbatim cannot spell this entry's own
+subject. Widening the shared set closes the receipt (0 in all three bounds) but reaches the
+per-occurrence cue filter too, because `cue_denied` is one function: the seed *"This verdict does not
+discharge OWED-C. A narrowing is still owed."* goes from acquitted to REPORTED under sentence and
+row bounds. The working shape is a citation-local negator vocabulary separate from `NEGATED`, which
+is a new controlled vocabulary and not the reuse described above. Two figures above also do not
+reproduce on the 471-row live register: rows carrying a negator within 60 characters of a declared-id
+mention measure **2** with the shipped set (13 only after admitting `not`/`never`), and all 3
+instances of the *"Separately and not part of this verdict"* idiom sit OUTSIDE the candidate set
+because their entries declare an `owed` elsewhere — so it is not acquitted today and is not the
+must-not-acquit seed. Exactly 1 candidate row is acquitted on the live register and no variant flips
+it; UNDECLARED reads 6 under every variant. The receipt itself is robust: bare comment 1, pure reflow
+1, acquittal deleted 9, `CITED` gutted to `None` 9.
 
 **Tiered DEFECT.** Consumer-facing; the arm ships in `core/scripts/`. A false acquittal here is
 silent and permanent.
