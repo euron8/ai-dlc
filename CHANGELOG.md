@@ -15,6 +15,78 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.558.0] - 2026-09-12
+
+### The spawn ledger records the effort that was BOUND, and a wreckage guard gets a subject
+
+Batch 93, release 1, two no-`PC` subjects. The sweep returned no new PC-backed work (live 56,
+unfiled 19, all adjudicated); the subjects were taken on this session's own ranking because the
+one-liner arrived from a peer session. Release 2 of this batch carries `BL-224` alone, because it
+touches the update skill; the two file sets have zero overlap, which is what makes them separable,
+not an absence of machinery paths here (this release touches the dispatch guard, the spawn-ledger
+validator, the consumer pre-push hook and `apply.sh`, all four in the manifest's `machinery:` set).
+
+#### `BL-019`
+
+`core/hooks/ai-dlc-dispatch-guard.sh` wrote `effort_bound` into the spawn ledger from the
+CONFIG (`PIN_EFFORT`) above the decision that decides whether any effort is bound. The field is
+now written after that decision and mirrors `model_bound`: the rendered definition's `effort:`
+on a definition-bound dispatch, null on every other row. A prose-only dispatch therefore stops
+claiming an effort it did not bind, and a stale, absent, unmarked or effort-less definition all
+record null.
+
+The entry's own "readers = 0" figure had aged to four files, and one of the four,
+`core/scripts/validate-spawn-ledger.sh`, projected the field into a shell variable and never
+used it: its effort arm compared the probe's transcript value against settings read at VALIDATE
+time. Measured at the tip and stated in the entry: `DEFINITION_BOUND` is set only when the
+definition's effort equals the config's, so on every row the old arm judged, the ledger value and
+the settings value are the same string. Repointing the comparison at the ledger changes nothing on
+that population. What the release buys is stated as what it is: the arm is now scoped on a
+NON-EMPTY `effort_bound` rather than on the `definition_bound` flag, a row that bound no effort
+is counted UNDECLARED rather than skipped in silence, and the comparison is immune to a settings
+edit between dispatch and gate. The settings read is gone from the arm.
+
+`core/fixtures/dispatch-model-guard/run.sh` seeds the discriminating case (a prose-only dispatch
+whose role has a configured effort and no rendered definition records null, where the old guard
+recorded the config value). `core/fixtures/check-22-spawn-ledger/run.sh` adds E7, a hand-written
+row whose ledger effort and settings effort disagree — unreachable from any single dispatch,
+reachable by a settings edit after it — and its mirror, plus the UNDECLARED count assertion on
+E4. Both prose sites that said the ledger records the config "either way"
+(`core/git-hooks/pre-push`, `reconcile/apply.sh`) now say what null means and that it does not
+name its cause. Receipt rebuilt and scored on seven cases; the entry records them, including the
+narrowing-undone case that scored 0 until the widening was bound at its emission site.
+
+`BL-019` discharges `PC-S303-EFFORT-BINDING-COMMANDS-A-SLASH-COMMAND-THAT-RESOLVES-TO-NOTHING`,
+whose headline was already fixed and fixture-guarded; this closes the half that entry was gated on.
+
+#### `BL-242`
+
+`core/fixtures/ledger-reverify/run.sh`'s mutant scorer carried a row-count "wreckage" guard that
+no shipped mutant could reach: all six emit exactly the baseline's 90 rows. The predicate is now
+`sfx_wrecked()`, called by the scorer and by a probe above the first kill that drives it in both
+directions in one block — it fires on a parseable copy one row short and stays quiet on the
+shipped copy. The obvious probe mutant, deleting the `emit RECEIPTS-UNDECIDED` line, leaves an
+empty `if` body and is a syntax error (`bash -n` 2, zero stdout rows); the probe mutates the
+CONDITION to `if false; then` instead, asserts the copy parses, asserts exactly two lines changed,
+and does not go through the helper that would also strip the reset. The receipt is bound in two
+halves and says which one binds: a call-site count, which a dead branch satisfies, and the
+fixture's own red line under a `return 1` mutant, which it does not. Suite tally 210 to 212.
+
+#### The previous release shipped merge-conflict markers, and the release validator now refuses them
+
+The `0.557.0` squash landed `CHANGELOG.md` on `origin/main` with `<<<<<<< HEAD`, `=======` and
+`>>>>>>> worktree-agent-…` in it and the `## [0.555.0]` heading separated from its body, which
+sat inside the `0.557.0` section. Arms A–C of `scripts/validate-release-version.sh` read that
+tree green, because each keys on heading text and a marker is not a heading. The sections are
+restored to `0.557.0`, `0.556.0`, `0.555.0`, `0.554.0`, each byte-identical modulo blank lines to
+the commit that introduced it. Arm E fails the push on any tracked file carrying both a
+line-leading `<<<<<<< ` and a line-leading `>>>>>>> `; its false-positive set at the branch that
+added it was exactly that one true positive. Its header records the two things the grammar does
+not see: a fixture that writes a whole conflict block inside a `printf` argument escapes only
+because neither marker is line-leading, and a truncated conflict carrying one marker is outside
+the intersect. Self-probe on a scratch repo, offender plus three near-misses, runs before the
+corpus scan.
+
 ## [0.557.0] - 2026-09-12
 
 ### A role's configured effort reaches the API call
