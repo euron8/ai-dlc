@@ -8253,6 +8253,12 @@ esv_sites() {
 #               own probe. 0 of the 30 declared token emissions redirect to a path (they go to
 #               stdout or to `&2`), so the clause cannot acquit a conforming one either. It is
 #               keyed on a `/` after the `>` for exactly that reason: `>&2` is not a path.
+# THE EMISSION-VERB LIST IS SIX, AND TWO REAL SHAPES SIT OUTSIDE IT: a `cat <<EOF` heredoc
+# BODY line, and a `sys.stderr.write(` call. A verdict spelled through either escapes this arm.
+# Both are empty today, each against a control in the same pass: 0 verdict phrases inside a
+# heredoc body over 11 opened heredocs and 228 body lines, and 0 through `sys.stderr.write(`
+# while 11 files call it, against 146 verdict-phrase lines overall.
+#
 #   `there is   a HYPOTHETICAL clause -- "without a floor THERE IS NOTHING TO compare a sprint
 #    nothing    against" (validate-spec-adoption.sh:107, a malformed-declaration `return 1`) --
 #    to ...`    argues about what a state would mean; it does not report that this run examined
@@ -8737,9 +8743,26 @@ EOF
     # This arm reads the SAME two populations with the same awk, so a path awk cannot open ends
     # this walk too -- and it would then report over a corpus nobody finished reading, beside
     # the scan-status arm's finding, giving one cause two findings pointing at two files.
+    #
+    # AN EXEMPT PATH IS SKIPPED, AND THAT IS A PARTITION RATHER THAN A HOLE. This arm's whole
+    # remedy is "emit the token and ADD THE FILE TO `emitters:`" -- and for an exempt path the
+    # second half is the one thing that must never happen, because these three do not ship and
+    # a declared path would resolve nowhere in a consumer. So on an exempt file this arm can
+    # only ever print a remedy that contradicts the exemption two arms up.
+    #
+    # THE STATE IS NOT UNGUARDED, IT IS OWNED ELSEWHERE. An exempt file that stops emitting the
+    # token is exactly what arm D's exemption CONTROL exists to catch, and it says so in its own
+    # words ("the exemption is vestigial and must be deleted, or the sweep is not reading its
+    # population"). Measured: mutating the token out of the one exempt file that carries it
+    # produced BOTH findings for one cause, arm D's naming the right question and this arm's
+    # naming a remedy that is forbidden for that path. Two arms that overlap are made to
+    # disagree here rather than left to fire together, and the assertion beside A38's stand-down
+    # now COUNTS the findings so a future overlap cannot pass on a message grep alone.
     if [ "$esv_rev_ok" -ne 0 ] && [ "$esv_scan_rc" -eq 0 ]; then
       while IFS= read -r esv_nv; do
         [ -n "$esv_nv" ] || continue
+        esv_nv_rel="${esv_nv%%:*}"; esv_nv_rel="${esv_nv_rel#$REPO_ROOT/}"
+        in_lines "$esv_nv_rel" "$esv_exempt_paths" && continue
         err "I93: ${esv_nv#$REPO_ROOT/} states an empty-subject verdict in a spelling of its own and prints '$esv_tok' nowhere. This is the fourth-spelling state the vocabulary exists to prevent: an operator reading a gate log has to know one more grammar to recognise one state, and docs/vocabulary-index.md reports a set this run is not in. Emit '$esv_tok' on that line -- keeping this validator's OWN exit code and its own prose after the token, since the codes are per-validator caller contracts and are deliberately not unified -- and add the file to \`empty_subject_verdict: emitters:\` in $MAP. If the line is a FAILURE message rather than a run that examined nothing, it is not this verdict and the emission-site grammar at esv_novel should already acquit it; a line reported here that is genuinely a failure path is a defect in that grammar, not a case for an exemption."
       done <<EOF
 $(esv_novel "$esv_tok" "${esv_rev_core[@]}" "${esv_rev_dist[@]}")

@@ -4529,13 +4529,17 @@ FULL run reads 25.01/24.77/24.94s at base against 24.65/24.54/24.98s at the tip 
 that **cannot resolve the effect**, because the spread across reps is larger than the thing being
 measured. `--arms I93` alone, five reps interleaved, does resolve it: **0.493s → 0.625s median,
 +0.13s**, which across the 26 fixtures that invoke this validator is roughly **+3.4s of
-suite-wide CPU**, spread across the pool rather than added to the pole. **The 27.0–27.4s figure in
-the batch-95 paragraph above does not reproduce here**: re-measured from inside the repo, base and
-tip both read 24–25s across three interleaved reps on the LIVE tree and the same on a
-`git archive` extraction, so the figure is stale in an unknown direction. A third party measured
-33.8–34.2s on this same subject during this batch; that number is NOT re-derived here and is
-recorded only as the reason to quote none of the three without naming the tree it was taken on
-and the load it was taken under.
+suite-wide CPU**, spread across the pool rather than added to the pole.
+
+**A VALIDATOR TIMING IS A PROPERTY OF THE WORKING TREE IT IS TAKEN IN, AND THE MAIN CHECKOUT IS
+THE WRONG ONE.** Two hands measured this validator during batch 100 and disagreed by 35% —
+33.8–34.2s against 24–25s — with no revision between them. The cause is that
+`/Users/n8/git/ai-dlc` holds the session's agent worktrees under `.claude/worktrees/`, and this
+validator's tree-walking arms pay for every one of them: derived, **16167 files on disk in the main
+checkout against 782 in a detached worktree, across 18 nested worktrees**. So the 27.0–27.4s
+figure in the batch-95 paragraph above is not a drifted number either — it is a number whose
+tree nobody recorded. **Take a validator timing in a detached worktree, and say which tree it was
+taken in**; a figure from the main checkout measures the session's own scratch space.
 
 **The receipt above was REWRITTEN to drive the subject** and scored six ways, each on its own
 extraction: base `e1cf1718` **1**; tip **0**; a comment carrying the receipt's own literals
