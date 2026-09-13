@@ -571,6 +571,12 @@ fi
 
 # MUTATION: revert the narrowing so every hit line opens a section again, and demand the
 # cross-section story goes GREEN -- the defect on demand. Copy-built and cmp -s guarded.
+#
+# BOTH LAYERS COME OUT, BECAUSE THE FIX IS LAYERED AND A PARTIAL REVERT PROVES THE LAYER
+# LEFT IN PLACE. Reverting only heading-wins leaves the preamble hit a MENTION, which the
+# fallback bound then stops at the next heading of any depth -- so the cross-section story
+# stays red and the mutant reads as "the narrowing is not what catches it". Measured
+# exactly that way before this second replacement was added.
 MUT9="$WORK/mut-all-hit-window.sh"; cp "$VALIDATOR" "$MUT9"
 MUT_OLD='    heading_hits = [i for i in hits if HEADING_RE.match(lines[i])]
     if heading_hits:
@@ -578,9 +584,16 @@ MUT_OLD='    heading_hits = [i for i in hits if HEADING_RE.match(lines[i])]
 ' MUT_NEW='' \
 python3 -c 'import os,sys; s=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(s.replace(os.environ["MUT_OLD"],os.environ["MUT_NEW"],1))' \
   "$VALIDATOR" "$MUT9"
+MUT_OLD='            if not i_is_heading or len(hm.group(1)) <= depth:' \
+MUT_NEW='            if len(hm.group(1)) <= depth:' \
+python3 -c 'import os,sys; s=open(sys.argv[1]).read(); open(sys.argv[1],"w").write(s.replace(os.environ["MUT_OLD"],os.environ["MUT_NEW"],1))' \
+  "$MUT9"
 if cmp -s "$VALIDATOR" "$MUT9"; then
   echo "FAIL: MUTATION setup — the anchor-window narrowing was not reverted, so the arm below proves nothing" >&2
   rc=1
+elif grep -q 'if not i_is_heading' "$MUT9"; then
+  echo "FIXTURE ERROR: only ONE of the two window layers was reverted — the mutant would prove the layer left in place" >&2
+  rc=2
 elif bash "$MUT9" "$COB/s302/stories/carry-over-cross.md" >/dev/null 2>&1; then
   echo "ok: MUTATION — with every hit line opening a section, the preamble mention widens the window to EOF and the cross-section quotation passes (the defect, on demand)"
 else
@@ -595,18 +608,65 @@ else
   echo "FAIL: MUTATION PAIRING — the mutant reds the honest carry-over story too; the assertions are entangled" >&2
   rc=1
 fi
-# FALLBACK CONTROL: an anchor carried by NO heading must still resolve, or the narrowing
-# broke the unstructured-brief case it is explicitly required to preserve.
-printf '%s\n' "# Brief" "" "Loose text carrying LR-FLAT-1 and its requirement." "" \
-  "- LR-FLAT-1: the flat requirement stated in full." > "$COB/s302/stories/product-brief.md"
-printf '%s\n' "<!-- LOCKED_REQUIREMENTS -->" \
-  "full_text_source: product-brief.md:LR-FLAT-1" \
-  "- LR-FLAT-1: the flat requirement stated in full." \
-  "<!-- END LOCKED_REQUIREMENTS -->" > "$COB/s302/stories/flat-anchor.md"
+# FALLBACK: an anchor carried by NO heading must still resolve -- AND ITS WINDOW MUST STILL
+# BE BOUNDED. The heading-wins rule cannot help an id that has no heading anywhere, so the
+# same-or-shallower walk from a depth-1 mention runs to EOF and reproduces the whole-file
+# window on exactly those ids. Measured on a reference consumer: of six ids named in the
+# preamble, five carry their own heading and one does not, and that one's window was 3553
+# lines of a 3575-line file. A non-heading hit therefore runs to the next heading of ANY
+# depth. This brief is long enough to HAVE somewhere foreign to quote from -- a positive
+# arm alone cannot see the bound, because a flat brief with one bullet has no second
+# region to reach into.
+printf '%s\n' "# Brief" \
+  "" "Loose text carrying LR-FLAT-1 and its requirement." \
+  "" "- LR-FLAT-1: the flat requirement stated in full." \
+  "" "### An unrelated later section" \
+  "" "- LR-OTHER-9: a requirement that belongs to a different subject entirely." \
+  > "$COB/s302/stories/product-brief.md"
+flat_story() { # flat_story <file> <bullet>
+  printf '%s\n' "<!-- LOCKED_REQUIREMENTS -->" \
+    "full_text_source: product-brief.md:LR-FLAT-1" "$2" \
+    "<!-- END LOCKED_REQUIREMENTS -->" > "$1"
+}
+flat_story "$COB/s302/stories/flat-anchor.md"  "- LR-FLAT-1: the flat requirement stated in full."
+flat_story "$COB/s302/stories/flat-cross.md"   "- LR-OTHER-9: a requirement that belongs to a different subject entirely."
 if "$VALIDATOR" "$COB/s302/stories/flat-anchor.md" >/dev/null 2>&1; then
   echo "ok: carry-over — FALLBACK: an anchor in NO heading still resolves (the all-hits reading is kept for unstructured artifacts)"
 else
   echo "FAIL: carry-over — FALLBACK: the narrowing broke a heading-less anchor, which it is required to preserve" >&2
+  rc=1
+fi
+if FC_OUT="$("$VALIDATOR" "$COB/s302/stories/flat-cross.md" 2>&1)"; then
+  echo "FAIL: carry-over — FALLBACK: a bullet past a later heading was accepted under a heading-less anchor; the fallback window is unbounded" >&2
+  rc=1
+elif grep -qF "not byte-present" <<<"$FC_OUT"; then
+  echo "ok: carry-over — FALLBACK: a bullet past the next heading is REJECTED (a mention's window stops at the next heading of ANY depth)"
+else
+  echo "FAIL: carry-over — FALLBACK: the cross-region quotation was refused for the WRONG reason: $FC_OUT" >&2
+  rc=1
+fi
+# MUTATION: revert the fallback bound so a mention walks to the next SAME-OR-SHALLOWER
+# heading again, and demand the cross-region story goes GREEN. Without this the two arms
+# above cannot tell a bounded window from a lucky one.
+MUT10="$WORK/mut-unbounded-mention.sh"; cp "$VALIDATOR" "$MUT10"
+MUT_OLD='            if not i_is_heading or len(hm.group(1)) <= depth:' \
+MUT_NEW='            if len(hm.group(1)) <= depth:' \
+python3 -c 'import os,sys; s=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(s.replace(os.environ["MUT_OLD"],os.environ["MUT_NEW"],1))' \
+  "$VALIDATOR" "$MUT10"
+if cmp -s "$VALIDATOR" "$MUT10"; then
+  echo "FAIL: MUTATION setup — the fallback bound was not reverted, so the fallback arms prove nothing" >&2
+  rc=1
+elif bash "$MUT10" "$COB/s302/stories/flat-cross.md" >/dev/null 2>&1; then
+  echo "ok: MUTATION — with a mention walking to the next same-or-shallower heading, the cross-region quotation passes (the whole-file window, on demand)"
+else
+  echo "FAIL: MUTATION — the cross-region story still reds with the bound reverted; the bound is not what catches it" >&2
+  rc=1
+fi
+# PAIRING: the same mutant must still accept the honest heading-less quotation.
+if bash "$MUT10" "$COB/s302/stories/flat-anchor.md" >/dev/null 2>&1; then
+  echo "ok: MUTATION PAIRING — the same mutant still accepts the honest flat quotation (it fails only its own assertion)"
+else
+  echo "FAIL: MUTATION PAIRING — the mutant reds the honest flat story too; the assertions are entangled" >&2
   rc=1
 fi
 

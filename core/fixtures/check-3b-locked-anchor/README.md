@@ -36,6 +36,8 @@ Run `run.sh` to reproduce.
 | `carry-over` PASS line | the new-SoR story's PASS text | still prescribes `locked-requirements.md` — a tuple that merely REORDERS admits an identical set and changes no exit code, so only the string can see it |
 | `carry-over` cross-section | a bullet from the `## [CO-S302-DECOY]` section, cited under the PROBE id | REFUSED, and refused at the byte-match — the window is the cited heading's section, not every line mentioning the id |
 | `carry-over` FALLBACK | an anchor carried by no heading at all | still resolves, so the narrowing did not break the unstructured-brief case it must preserve |
+| `carry-over` FALLBACK cross-region | a bullet past a later heading of any depth, under that same heading-less anchor | REFUSED — a mention's window stops at the next heading of ANY depth, so the fallback is bounded rather than whole-file |
+| `MUT10` + pairing | the fallback bound reverted to same-or-shallower | the cross-region quotation passes (the whole-file window on demand) while the honest flat one still passes |
 | `MUT8` + pairing | the validator with `carry-over-backlog.md` dropped | the carry-over story reds while `locked-requirements.md` is still accepted |
 | `MUT9` + pairing | the anchor-window narrowing reverted | the cross-section quotation PASSES (the defect on demand) while the in-section one still passes |
 | `MUT6` + pairing | the validator collapsed to one name | the legacy citation reds while `locked-requirements.md` is still accepted |

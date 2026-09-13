@@ -4301,22 +4301,47 @@ in this batch.
 the backlog put a document shaped unlike a brief into a window function written for briefs.
 `anchor_window`'s token branch takes EVERY line carrying the anchor, opens a section at each, and
 unions them. That is correct while an id appears once; a carry-over backlog is the corpus where it
-does not. Measured on the reference consumer's file: **160 distinct `CO-` ids, 52 on more than one
-line, and 6 named in the depth-1 PREAMBLE** — a summary sentence under the single `# ` title, above
-the first `##`. A preamble mention has depth 1, so its section runs to the next depth-1 heading,
-which is EOF, and the window becomes the whole document. For one of the six the widened window was
-**3518 of 3540 lines**. Driven against the shipping script, not reasoned: over the five of those six
-that carry their own heading, **125 of 125** foreign bullets — quoted from sections the citation does
-not name — were ACCEPTED by the widening alone. The byte-match had degenerated back to co-presence,
-which is the exact defect the anchor window was built to end.
+does not. Re-derived on the consumer's file at its current head: **161 distinct `CO-` ids in 3575
+lines, 52 on more than one line, and 6 named in the depth-1 PREAMBLE** — a summary sentence under the
+single `# ` title, above the first `##`. A preamble mention has depth 1, so its section runs to the
+next depth-1 heading, which is EOF, and the window becomes the whole document. Driven against the
+shipping script, not reasoned: over the five of those six that carry their own heading, **125 of 125**
+foreign bullets — quoted from sections the citation does not name — were ACCEPTED by the widening
+alone. The byte-match had degenerated back to co-presence, the exact defect the anchor window was
+built to end.
 
-**The narrowing: a HEADING hit wins over a mention.** When at least one hit line is itself a markdown
-heading carrying the anchor, only those heading sections form the window; the all-hits reading stays
-as the FALLBACK for an anchor that appears in no heading at all, so an unstructured brief still
-resolves. Re-measured after: **0 of those 125** foreign quotations survive, every honest in-section
-quotation still passes, and a heading-less anchor still resolves (its own fixture arm). The sixth
-preamble id carries no heading anywhere and correctly takes the fallback — which is why the fallback
-is a measured branch and not a hedge. The 114-file consumer vectors are unchanged by the narrowing.
+**The narrowing is TWO rules, because one of them could not reach the sixth id.** First, a HEADING
+hit wins over a mention: when any hit line is itself a heading carrying the anchor, only those
+heading sections form the window. That kills 125 of 125 on the five ids that have headings. Second,
+the FALLBACK — which keeps a heading-less anchor resolving at all, and so keeps unstructured briefs
+working — needed its own bound, because the heading rule is silent exactly where there is no heading.
+The sixth preamble id, `CO-S299-USDC-TEL-POOL-IDS-NO-RUNTIME-ASSERTION`, has no heading anywhere: its
+window was still **3553 of 3575 lines**, and a story citing it while quoting a real bullet 280 lines
+away exited **0**, with the same bullet one character changed exiting 1 — genuinely byte-matching
+against the whole document. A NON-HEADING hit now runs to the next heading of ANY depth, EOF only
+when none follows; that span is **11 lines** (23-33). A heading hit keeps the same-or-shallower rule,
+because a heading legitimately owns its subsections.
+
+Re-measured across all six ids after both rules, 25 foreign quotations each: **150 tried, 0
+accepted**, against **25 accepted** by the heading rule alone on the sixth — so the second rule is
+load-bearing on exactly the id the first cannot see. Honest in-span and in-section quotations still
+pass. The six narrowed spans: 86, 244, 39, 58 and 75 lines for the five heading-carrying ids
+(unchanged by either rule), and 3553 → 11 for the heading-less one.
+
+**The narrowing REMOVES QUOTATION TARGETS, and that is the honest way to state it.** Of the **105**
+ids carrying their own heading, **31** lost window area and **12** of those lost regions hold
+quotable bullets. Every one of those bullets sits in another item's section — **0** of the 31 lost
+any part of the id's own heading section. So the property is "in-section quotations pass,
+cross-section quotations are refused", never "every honest quotation still passes": a document that
+today quotes another item's text under this id's anchor will now fail, correctly, and that is a
+verdict change rather than a no-op.
+
+**THE RECEIPT IS NOT THE ACCEPTANCE TEST FOR ANY OF THIS.** Scored against three window mutants built
+on the tip — the heading filter INVERTED (mentions win over headings), the heading walk changed from
+same-or-shallower to EXACT depth, and the fallback bound reverted — the receipt exits **0 on all
+three**, because its probe artifact has one mention of one id and no second region to quote from. The
+fixture kills all three (exit 1 each). The channel that accepts the window rules is the fixture, and
+the receipt would close this entry over a broken window without noticing.
 
 **The fixture's own-directory failure was PRE-EXISTING, isolated, and is repaired here.** The SoR
 block seeded its brief two directories above the story, so only the walk-up could find it — and this

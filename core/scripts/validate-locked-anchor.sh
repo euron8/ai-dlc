@@ -334,6 +334,23 @@ def anchor_window(source_text, anchor):
     that appears in no heading at all. That fallback is what keeps an unstructured brief
     working, and it is why this narrows rather than requiring a heading: an anchor with
     no heading anywhere is still resolvable, exactly as before.
+
+    AND THE FALLBACK NEEDS ITS OWN BOUND, BECAUSE THE HEADING RULE DOES NOT REACH IT.
+    A mention in a depth-1 preamble is still a mention when the id has no heading at
+    all, so the same-or-shallower walk runs it to EOF and reproduces the whole-file
+    window on exactly the ids the heading rule cannot help. Measured: of the six
+    preamble-named ids on a reference consumer's backlog, five carry their own heading
+    and one does not, and that one's window was 3553 lines of a 3575-line file -- a
+    story citing it while quoting a real bullet 280 lines away passed, and the same
+    bullet with one character changed failed, so it was genuinely byte-matching against
+    the whole document.
+
+    A NON-HEADING hit therefore runs to the next heading of ANY depth, EOF only when
+    none follows. A mention is a sentence, not a section: it owns the prose around it
+    up to wherever the document next changes subject, and nothing about it claims the
+    sections below. That takes the measured case from 3553 lines to 11. A HEADING hit
+    keeps the same-or-shallower rule, because a heading legitimately owns its
+    subsections.
     """
     lines = source_text.splitlines()
     ranged = LINE_RANGE_RE.match(anchor)
@@ -350,6 +367,7 @@ def anchor_window(source_text, anchor):
         hits = heading_hits
     sections = []
     for i in hits:
+        i_is_heading = bool(HEADING_RE.match(lines[i]))
         depth = 99
         for j in range(i, -1, -1):
             hm = HEADING_RE.match(lines[j])
@@ -359,7 +377,12 @@ def anchor_window(source_text, anchor):
         end = len(lines)
         for j in range(i + 1, len(lines)):
             hm = HEADING_RE.match(lines[j])
-            if hm and len(hm.group(1)) <= depth:
+            if not hm:
+                continue
+            # A heading hit owns its subsections and stops at the next same-or-shallower
+            # heading. A MENTION owns only the prose it sits in and stops at the next
+            # heading of ANY depth -- see the docstring for what the unbounded form cost.
+            if not i_is_heading or len(hm.group(1)) <= depth:
                 end = j
                 break
         sections.append("\n".join(lines[i:end]))
