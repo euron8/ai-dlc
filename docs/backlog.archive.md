@@ -11785,3 +11785,198 @@ here stops the advance.
 verify: sh ( U=core/skills/ai-dlc-update/reconcile/unregistered-drift.sh; P=core/skills/ai-dlc-update/reconcile/preclassify.sh; [ -r "$U" ] && [ -r "$P" ] || exit 9; W="$(mktemp -d)" || exit 9; D="$W/d"; C="$W/c"; mkdir -p "$D/core/hooks" "$D/core/skills/ai-dlc/steps" "$C/.claude/hooks" "$C/.claude/skills/ai-dlc/steps" || { rm -rf "$W"; exit 9; }; printf '#!/usr/bin/env bash\n# The epsilon hook fires on every dispatched teammate beat in the sprint.\n' > "$D/core/hooks/ai-dlc-epsilon.sh"; printf '#!/usr/bin/env bash\n# The zeta hook records the beat that closed each dispatched brief today.\n' > "$D/core/hooks/ai-dlc-zeta.sh"; printf '# Eta step\n\nThe lead reads this file at the top of the eta phase every sprint.\n' > "$D/core/skills/ai-dlc/steps/eta.md"; printf '9.9.9\n' > "$D/VERSION"; git -C "$D" init -q && git -C "$D" -c user.email=f@f -c user.name=f add -A && git -C "$D" -c user.email=f@f -c user.name=f commit -q -m base || { rm -rf "$W"; exit 9; }; B="$(git -C "$D" rev-parse HEAD)"; printf '#!/usr/bin/env bash\n# The epsilon hook fires on every dispatched teammate beat in the sprint.\n# The declared sprint is read from the canonical envelope, never searched.\n' > "$D/core/hooks/ai-dlc-epsilon.sh"; printf '# Eta step\n\nThe lead reads this file at the top of the eta phase every sprint.\nThe eta phase closes only once its own gate has been adjudicated fully.\n' > "$D/core/skills/ai-dlc/steps/eta.md"; git -C "$D" -c user.email=f@f -c user.name=f add -A && git -C "$D" -c user.email=f@f -c user.name=f commit -q -m theirs || { rm -rf "$W"; exit 9; }; T="$(git -C "$D" rev-parse HEAD)"; git -C "$D" diff --quiet "$B" "$T" -- core/hooks/ai-dlc-epsilon.sh && { rm -rf "$W"; exit 9; }; git -C "$D" diff --quiet "$B" "$T" -- core/skills/ai-dlc/steps/eta.md && { rm -rf "$W"; exit 9; }; git -C "$D" diff --quiet "$B" "$T" -- core/hooks/ai-dlc-zeta.sh || { rm -rf "$W"; exit 9; }; git -C "$D" show "${B}:core/hooks/ai-dlc-epsilon.sh" > "$C/.claude/hooks/ai-dlc-epsilon.sh"; printf '# Consumer hardening: refuse a sprint the operator has paused mid-beat.\n' >> "$C/.claude/hooks/ai-dlc-epsilon.sh"; git -C "$D" show "${B}:core/hooks/ai-dlc-zeta.sh" > "$C/.claude/hooks/ai-dlc-zeta.sh"; printf '# Consumer hardening: a brief closed twice is a defect in the caller.\n' >> "$C/.claude/hooks/ai-dlc-zeta.sh"; git -C "$D" show "${B}:core/skills/ai-dlc/steps/eta.md" > "$C/.claude/skills/ai-dlc/steps/eta.md"; printf 'The domain requires one extra review beat before the eta gate closes.\n' >> "$C/.claude/skills/ai-dlc/steps/eta.md"; printf 'version: 0.0.1\ncommit: %s\n' "$B" > "$C/.claude/.ai-dlc-version"; bash "$U" "$D" "$B" "$C" "$T" > "$W/o" 2>/dev/null; : > "$W/mt"; bash "$U" --bucket-rows "$W/mt" "$D" "$B" "$C" "$T" > "$W/f" 2>/dev/null; cut -f1,2 "$W/o" > "$W/o2"; cut -f1,2 "$W/f" > "$W/f2"; awk -F'\t' '$2=="hooks/ai-dlc-epsilon.sh"{print $3}' "$W/o" > "$W/ed"; n=0; for p in hooks/ai-dlc-epsilon.sh hooks/ai-dlc-zeta.sh skills/ai-dlc/steps/eta.md; do c="$(grep -c "	${p}\$" "$W/o2")" || c=0; n=$((n+c)); done; [ "$n" = 3 ] || { rm -rf "$W"; exit 9; }; r=1; if grep -qx 'HARD-UNREGISTERED-CORE-DRIFT	hooks/ai-dlc-zeta.sh' "$W/o2" && grep -qx 'HARD-UNREGISTERED-CORE-DRIFT	skills/ai-dlc/steps/eta.md' "$W/o2" && grep -qx 'CORE-MACHINERY-CARRIED	hooks/ai-dlc-epsilon.sh' "$W/o2" && grep -q 'semantic-merge' "$W/ed" && ! grep -qx 'CORE-MACHINERY-CARRIED	hooks/ai-dlc-epsilon.sh' "$W/f2"; then r=0; fi; rm -rf "$W"; exit "$r" ); a=$?; [ "$a" -eq 0 ] || exit "$a"; ( G="${BL124_GATE:-core/skills/ai-dlc-update/reconcile/self-update-gate.sh}"; R="core/skills/ai-dlc-update/reconcile"; [ -r "$G" ] && [ -d "$R" ] || exit 9; d=$(mktemp -d) || exit 9; trap 'rm -rf "$d"' EXIT; D="$d/dist"; C="$d/cons"; X="$D/$R"; mkdir -p "$X" "$D/core/scripts" "$D/core/git-hooks" "$D/core/hooks" || exit 9; cp "$R"/*.sh "$R"/setup-sites.md "$X/" || exit 9; cp "$G" "$X/self-update-gate.sh" || exit 9; U="$d/eng-empty"; mkdir -p "$U" || exit 9; cp "$R"/*.sh "$R"/setup-sites.md "$U/" || exit 9; cp "$G" "$U/self-update-gate.sh" || exit 9; awk '/^machinery:/{print; s=1; next} s && /^[a-z_]+:/{s=0} !s' "$U/setup-sites.md" > "$U/.t" && mv "$U/.t" "$U/setup-sites.md" || exit 9; git -C "$D" init -q && git -C "$D" config user.email r@f && git -C "$D" config user.name r || exit 9; cp "$X/preclassify.sh" "$d/pre.base"; for v in BASE MID THEIRS; do case $v in BASE) n=0.100.0;; MID) n=0.101.0;; THEIRS) n=0.102.0;; esac; printf "#!/bin/sh\n# %s landed\nexit 0\n" "$v" > "$D/core/hooks/ai-dlc-landed.sh"; printf "#!/bin/sh\n# %s carry\nexit 0\n" "$v" > "$D/core/hooks/ai-dlc-carry.sh"; { cat "$d/pre.base"; printf "# %s\n" "$v"; } > "$X/preclassify.sh"; [ "$v" = THEIRS ] && printf "#!/bin/sh\n# new finding\nexit 1\n" > "$D/core/scripts/gate-defer.sh" || printf "#!/bin/sh\nexit 0\n" > "$D/core/scripts/gate-defer.sh"; printf "#!/bin/sh\nexit 0\n" > "$D/core/git-hooks/pre-push"; printf "%s\n" "$n" > "$D/VERSION"; git -C "$D" add -A >/dev/null && git -C "$D" commit -qm "$v" || exit 9; eval "$v=$(git -C "$D" rev-parse HEAD)"; done; b() { rm -rf "$C"; mkdir -p "$C/.claude/hooks" "$C/scripts/ai-dlc" "$C/.githooks" "$C/.claude/skills/ai-dlc-update/reconcile"; git -C "$C" init -q; git -C "$D" show "$MID:core/hooks/ai-dlc-landed.sh" > "$C/.claude/hooks/ai-dlc-landed.sh"; git -C "$D" show "$MID:core/hooks/ai-dlc-carry.sh" > "$C/.claude/hooks/ai-dlc-carry.sh"; git -C "$D" show "$MID:$R/preclassify.sh" > "$C/.claude/skills/ai-dlc-update/reconcile/preclassify.sh"; case "$1" in carried) { git -C "$D" show "$BASE:core/hooks/ai-dlc-carry.sh"; echo "# CONSUMER-OWNED LINE THE PREVIOUS CYCLE CARRIED"; } > "$C/.claude/hooks/ai-dlc-carry.sh";; precls) { git -C "$D" show "$BASE:$R/preclassify.sh"; echo "# CONSUMER-OWNED LINE THE PREVIOUS CYCLE CARRIED"; } > "$C/.claude/skills/ai-dlc-update/reconcile/preclassify.sh";; esac; git -C "$D" show "$BASE:core/scripts/gate-defer.sh" > "$C/scripts/ai-dlc/gate-defer.sh"; printf "#!/usr/bin/env bash\nset -uo pipefail\nbash scripts/ai-dlc/gate-defer.sh\n" > "$C/.githooks/pre-push"; chmod +x "$C/.githooks/pre-push" "$C/scripts/ai-dlc/gate-defer.sh"; printf "version: 0.100.0\ncommit: %s\nskill_version: 0.101.0\nskill_commit: %s\ninstalled_at: 2026-01-01T00:00:00Z\nupstream: file://%s\n" "$BASE" "$MID" "$D" > "$C/.claude/.ai-dlc-version"; }; g() { bash "$X/self-update-gate.sh" "$D" "$BASE" "$THEIRS" "$C" 2>/dev/null; }; u() { bash "$U/self-update-gate.sh" "$D" "$BASE" "$THEIRS" "$C" 2>/dev/null; }; A="SPLIT BUYS NOTHING HERE"; b carried; O=$(g); printf "%s\n" "$O" | grep -q SELF-UPDATE-CARRY || { echo "CONTROL FAILED: no CARRY row"; exit 9; }; printf "%s\n" "$O" | grep -q SELF-UPDATE-SAFE-STOP || { echo "CONTROL FAILED: no SAFE-STOP row"; exit 9; }; b precls; P=$(g); printf "%s\n" "$P" | awk -F'\t' '$1=="SELF-UPDATE-CARRY" && $2 ~ /preclassify\.sh$/' | grep -q . || { echo "CONTROL FAILED: the classifier engine itself was not carried, so the worst case is unseeded"; exit 9; }; printf "%s\n" "$P" | grep -q SELF-UPDATE-SAFE-STOP || { echo "CONTROL FAILED: no SAFE-STOP row on the preclassify world"; exit 9; }; b carried; E=$(u); printf "%s\n" "$E" | grep -q SELF-UPDATE-UNDECIDED || { echo "CONTROL FAILED: the machinery-set-empty engine still decided, so the undecided world is unseeded"; exit 9; }; printf "%s\n" "$E" | grep -q SELF-UPDATE-CARRY && { echo "CONTROL FAILED: the undecided engine emitted a CARRY row, so this world is not the one being tested"; exit 9; }; printf "%s\n" "$E" | grep -q SELF-UPDATE-SAFE-STOP || { echo "CONTROL FAILED: no SAFE-STOP row on the undecided world"; exit 9; }; b clean; K=$(g); printf "%s\n" "$K" | grep -q SELF-UPDATE-CARRY && { echo "CONTROL FAILED: clean tree emitted a CARRY row"; exit 9; }; printf "%s\n" "$K" | grep -qF "$A" || { echo "CONTROL FAILED: acquittal absent without a carry, so withdrawing it proves nothing"; exit 9; }; printf "%s\n" "$O" | grep -qF "$A" && exit 1; printf "%s\n" "$P" | grep -qF "$A" && exit 1; printf "%s\n" "$E" | grep -qF "$A" && exit 1; exit 0 )
 
 
+## BL-054
+
+**LANDED (v0.565.0, verified 20e7dc63).** Both PC filings discharged: the attestation match is bounded at both ends on one shared grammar, the table-cell form verifies, a same-sprint span inside failure prose is refused, and the citation is the extracted span.
+
+**`--verify` anchors the H2 attestation at line start, so any markdown decoration on a line the
+script tells a human to transcribe by hand reads as "no attestation ever existed".**
+`core/scripts/validate-h2-attestation.sh:158` and `:164` both match
+`grep -qE "^H2_ATTESTED v1 sprint=..."`. The line is not written by the script — `:32` says it
+prints the line "for the lead to append to the gate log" and `:207-209` emit it as copy text — so a
+model retypes it into a markdown file. Measured against the shipping script at the real fixture
+digest `a0d56175be56e329`, five gate logs differing only in the decoration around one byte-identical
+attestation line:
+
+| gate log | exit | first line of output |
+|---|---|---|
+| bare (**CONTROL**) | **0** | `PASS  H2 attested for sprint 999 at fixture digest a0d56175be56e329.` |
+| `` `…` `` backticks | 1 | `RE-DRIVE: no H2 attestation for sprint 999 — this is the sprint's first gate.` |
+| `- ` list item | 1 | (identical) |
+| four-space indent | 1 | (identical) |
+| `> ` blockquote | 1 | (identical) |
+
+**The filing is right about the defect and understates it twice.** It named backticks; the class is
+every leading markdown decoration, four measured, because the anchor tolerates nothing before the
+token. And it named the cost as a false RE-DRIVE; the second arm at `:164` is anchored identically,
+so a decorated line ALSO cannot reach the digest-mismatch branch. Measured with a control in the
+same invocation on a STALE digest: the bare line reports *"sprint 999 has an attestation, but the
+fixture set CHANGED"*, and the backticked one reports *"no H2 attestation for sprint 999 — this is
+the sprint's first gate."* The operator is not merely told to redo work; they are told the sprint
+has never attested when it has, and told the fixtures are unchanged when they moved. That is a
+wrong diagnostic, not a redundant one.
+
+**Do not take the filing's prescribed fix.** Transcribed literally — "tolerate optional surrounding
+backticks", i.e. a backtick in the pattern — it makes the script unparseable: an unescaped backtick
+inside the double-quoted `grep -qE` argument opens command substitution, and `bash -n` on the
+patched copy exits **2** with `line 163: syntax error near unexpected token 'fi'` against **exit 0,
+no output** on the unpatched original in the same invocation. The fix has to avoid a bare backtick
+in that string. `^[^A-Za-z]*H2_ATTESTED` does, and under it all three receipt arms exit 0.
+
+Nothing in-tree catches this. Only two files in `core/` anchor `^H2_ATTESTED` — this script and
+`core/fixtures/h2-attest-scripts-dir/run.sh:154` — against four naming `H2_ATTESTED` at all, and the
+fixture anchors the SCRIPT'S OWN STDOUT, which is undecorated by construction. The fixture asserts
+the emitter and is structurally blind to the reader.
+
+**Why the anchor is the anchor.** A receipt using only the backtick arm goes green under a
+backtick-only fix and leaves the bullet, indent and blockquote cases live — and the filing's own
+wording invites exactly that narrow fix. Carrying two decorations, gated on the bare control, means
+the receipt can only close on a fix that tolerates the class. Proven satisfiable: with the anchor
+replaced by `^[^A-Za-z]*H2_ATTESTED` on a copy, `bare=0 tick=0 bullet=0` and the receipt exits 0;
+the two sides were asserted to differ first (`orig=3 fixed=0` plain anchors).
+
+Discharges the consumer entry `PC-S296-H2-ATTESTED-ANCHOR-DEFEATED-BY-BACKTICKS` at pinned ledger
+line 673.
+
+**RECURRED 2026-09-12 IN A CLASS THE ORIGINAL MEASUREMENT DID NOT REACH, and the entry's own
+prescribed grammar does not fix it.** The consumer filed the instance at sprint 311's
+architecture gate as
+`PC-S311-H2-ATTESTATION-VERIFY-REQUIRES-COLUMN-1-BUT-ATTEST-OUTPUT-INVITES-A-TABLE-CELL`. A
+gate log's check rows are markdown TABLE rows, so the attestation went into the H2 row's
+Evidence cell — `| H2 | core | PASS | \`H2_ATTESTED v1 sprint=311 …\`. |` — and the cell prefix
+carries LETTERS. `^[^A-Za-z]*H2_ATTESTED`, the grammar this entry prescribed above, was built
+and measured against that row: **cell = 1**. The four decorations originally measured all
+happen to be non-alphabetic, so the narrower fix passes every one of them and leaves the
+shape the consumer actually produces.
+
+**AND THE OBVIOUS WIDENING IS WORSE THAN THE ANCHOR IT REPLACES.** A leading token boundary
+alone (`(^|[^0-9A-Za-z_])H2_ATTESTED v1 …`) verifies the cell, and it also verifies this, from
+the consumer's own committed gate log:
+
+> the `H2_ATTESTED v1 sprint=311 digest=<D> … mechanical=check-17-bypass:PASS` line from the
+> requirements gate was embedded in a table cell rather than at column 1. **THIS GATE FAILED**
+> — re-drive required.
+
+Measured at the live fixture digest, against a control with the token removed reading 1: that
+sentence **exits 0**. A gate log's narrative QUOTES the line it is complaining about, at the
+same sprint and the same digest, so a boundary-only reader manufactures an attestation out of
+a report that the gate failed — strictly worse than a false RE-DRIVE, because it is a false
+PASS on a check that was never driven.
+
+**The grammar is therefore bounded at BOTH ends, and the trailing bound is cell-scoped rather
+than line-scoped.** Measured over every `H2_ATTESTED` line in the consumer's whole gate-log
+history — all revisions of all 108 gate-log files, 155 distinct lines, 28 distinct
+(sprint, digest) pairs — scored per PAIR, which is the unit deciding whether a sprint can cite
+rather than re-drive:
+
+| grammar | pairs verifiable | the failure sentence |
+|---|---|---|
+| shipped `^` | 26 / 28 | refused |
+| `^[^A-Za-z]*` (this entry's own) | 26 / 28, and **not** the table cell | refused |
+| leading boundary only | 28 / 28 | **ACCEPTED** |
+| boundary + end-of-line decoration | 27 / 28 | refused |
+| boundary + **cell-bounded** decoration | **28 / 28** | refused |
+
+The fourth row loses sprint 309's `aab08e34184faa3d` outright — its only record is a table row
+ending `. | 1033 |`, so anchoring the tail on end of line reintroduces the defect one column
+further right. The shipped form is the fifth. Its accept set over that corpus is 58 lines whose
+tails are decoration only (28 empty, the rest backticks, `. |`, `**`, `. | 1033 |`) and its 22
+refusals are all prose continuing into a sentence: **false-positive set empty, enumerated**.
+
+**The trailing fields are optional, and that is measured too.** Requiring the whole emitted
+span regresses sprint 308's `5ddce3ec7bb9805c`, whose only record stops after `items=` — the
+emitter has not always printed the same fields, and a reader keyed on today's tail refuses
+yesterday's attestation.
+
+**Both `--verify` arms carry the bound, not just the accepting one.** Guarding only the digest
+arm moves the failure sentence from a false PASS to a false CHANGED, which still tells an
+operator the sprint attested and the fixtures moved when neither happened.
+
+**And `--verify` now cites the SPAN rather than the matching line.** Once the reader admits a
+table cell the matching line is the whole markdown row — 891 bytes on the consumer's own log
+against 117 for the span — and that output is copy text an operator pastes into the next gate
+log. `grep -oE` makes the citation byte-identical from either placement.
+
+**The receipt below is extended, not replaced.** The bare/tick/bullet arms stay; it adds the
+consumer's verbatim cell shape, a wrong-digest cell that must name `CHANGED`, the failure
+sentence that must reach the FIRST-GATE message, and a `NOT_H2_ATTESTED` cell that must not
+verify. Scored against eight subjects, each a copy with its mutation `cmp -s`-asserted applied
+before its verdict was read: fix **0**; unfixed **1**; this entry's own `^[^A-Za-z]*` grammar
+**1**; leading boundary with no trailing bound **1**; leading boundary dropped entirely **1**;
+only the accepting arm widened **1**; instruction text only **1**; a comment carrying the
+receipt's own literals **1**; subject deleted **9**.
+
+Also discharges the consumer entry
+`PC-S311-H2-ATTESTATION-VERIFY-REQUIRES-COLUMN-1-BUT-ATTEST-OUTPUT-INVITES-A-TABLE-CELL`.
+`core/fixtures/h2-attest-scripts-dir` carries the reader arms and three mutants; before this
+change that fixture asserted only the EMITTER, whose output is undecorated by construction.
+
+
+verify: sh V=core/scripts/validate-h2-attestation.sh; [ -f "$V" ] || exit 9; D="$(bash "$V" --digest --fixtures core/fixtures 2>/dev/null)"; case "$D" in [0-9a-f][0-9a-f]*) : ;; *) exit 9 ;; esac; W="$(mktemp -d)" || exit 9; A="H2_ATTESTED v1 sprint=311 digest=$D at=2026-01-01T00:00:00Z items=1,2,3 mechanical=check-17-bypass:PASS"; B="H2_ATTESTED v1 sprint=311 digest=0000000000000000 at=2026-01-01T00:00:00Z items=1,2,3 mechanical=check-17-bypass:PASS"; printf '%s\n' "$A" > "$W/bare.md"; printf '\140%s\140\n' "$A" > "$W/tick.md"; printf -- '- %s\n' "$A" > "$W/bul.md"; printf '| H2 | core | PASS | \140%s\140. |\n' "$A" > "$W/cell.md"; printf '| H2 | core | PASS | \140%s\140. | 1033 |\n' "$B" > "$W/stale.md"; printf 'the \140%s\140 line was embedded in a table cell rather than at column 1. THIS GATE FAILED -- re-drive required.\n' "$A" > "$W/prose.md"; printf '| H2 | core | PASS | \140NOT_%s\140. |\n' "$A" > "$W/deny.md"; cmp -s "$W/cell.md" "$W/prose.md" && { rm -rf "$W"; exit 9; }; cmp -s "$W/cell.md" "$W/deny.md" && { rm -rf "$W"; exit 9; }; r() { bash "$V" --verify --sprint 311 --fixtures core/fixtures --gate-log "$W/$1.md" 2>&1; }; r bare >/dev/null 2>&1; b=$?; r tick >/dev/null 2>&1; t=$?; r bul >/dev/null 2>&1; u=$?; r cell >/dev/null 2>&1; c=$?; r deny >/dev/null 2>&1; n=$?; o="$(r stale)"; s=$?; p="$(r prose)"; q=$?; rm -rf "$W"; [ "$s" -eq 1 ] || exit 1; grep -q 'the fixture set CHANGED' <<<"$o" || exit 1; [ "$q" -eq 1 ] || exit 1; grep -q 'first gate' <<<"$p" || exit 1; [ "$n" -eq 1 ] || exit 1; [ "$b" -eq 0 ] || exit 1; [ "$t" -eq 0 ] && [ "$u" -eq 0 ] && [ "$c" -eq 0 ]
+## BL-245 — the snapshot's seven-section schema is checked at the HEADING and never at the CONTENT, so a dated activity entry filed under the wrong section is invisible to every gate
+
+**LANDED (v0.565.0, verified dd350ff5).** One aggregate WARN names every dated activity entry filed outside `Recent Activity`, exit status unchanged, false-positive set empty over the reference consumer's snapshot history.
+
+**Found 2026-09-13** by the consumer at sprint 311's resume, filed as
+`PC-S311-SNAPSHOT-SEVEN-SECTION-SCHEMA-HAS-A-READER-CHECK-BUT-NO-WRITER-CHECK`, and re-derived
+here against `origin/main` before any fix. The writer is `core/skills/ai-dlc/steps/_gate-procedures.md:25-28`
+("Append a one-line entry to **Recent Activity** … with timestamp"); the reader is `route.md:159`
+Check 3, which reads HEADINGS. `validate-artifact-budget.sh` owns the closed seven-section set and
+its `check_snapshot_sections` greps `^## ` and nothing else. So no program anywhere looks UNDER a
+heading, and a dated activity entry filed beneath `## Sprint Context` satisfies every check that
+exists: the heading is canonical, the bytes are priced like any other prose, and the recovery path
+that whole-reads the snapshot reads the misfile as sprint context.
+
+Driven through the shipping validator, one property varied, `--only pipeline-snapshot.md` against a
+`mktemp` root:
+
+    a dated entry under ## Sprint Context      pre-fix: silent, exit 0    fixed: WARN, exit 0
+    the same line under ## Recent Activity     pre-fix: silent, exit 0    fixed: silent, exit 0
+    CONTROL an invented ## heading              pre-fix: FAIL,   exit 1    fixed: FAIL,   exit 1
+
+The control is the heading channel firing in the same invocation, so the pre-fix silence is a
+property of the CONTENT check's absence and not of a run that did nothing.
+
+**Reachability on the reference consumer, measured over all 514 revisions of
+`_bmad-output/pipeline-snapshot.md` on its first-parent history by running the SHIPPING validator
+against each one, not a re-implementation of its grammar:** 2 revisions carry the defect — `66d0eb165`
+with 29 dated entries under `## Sprint Context`, and `580f156cc` with 7 under `## Context Reminders`.
+Both are real misfiles; neither section's schema has anything to do with a dated log line. The
+false-positive set over that corpus is EMPTY, and the narrowing that got it there is recorded beside
+the arm. Two candidate widenings were built and measured rather than reasoned about: dropping the
+leading anchor indicts 396 of the 514 at `## Pipeline Position`, whose rows legitimately carry a
+timestamp mid-line; admitting leading blanks before the bullet adds 178 soft-wrapped continuation
+lines across four sections. Requiring a column-1 bullet takes `## In-Flight Teammates` from 8 to 0 —
+all 8 are ONE line, `ff5920ff3:151`, the second line of a sentence beginning on the line above — so
+that section is excluded by the GRAMMAR and not exempted as a section, and a genuinely bulleted dated
+entry there is still reported.
+
+**The finding is a WARN that never writes RC, on any flag including `--fail-on`.** This script runs
+on the BLOCKING sub-step path (`_gate-procedures.md` step 5, "Exit 1 → TRIM NOW"). A misfiled line is
+a filing error the lead fixes by moving one line; wedging a pipeline over it is the
+safeguard-that-blocks-throughput failure. That posture is also why the arm needs mutants: a copy of it
+that reports nothing produces byte-identical exit codes on every input forever, and no gate downstream
+reads its output. A self-probe runs before the corpus and fails the script closed in four directions.
+
+**One aggregate line, and that is a constraint imposed by `verdict.sh`, not a formatting choice.**
+`core/scripts/verdict.sh:122` surfaces at most `AI_DLC_VERDICT_LINES` (6) lines matching
+`^[[:space:]]*(ok|warn|OK:|PASS|WARN|OVER)` after `PASS <name>`, and that window is what
+`gate-validation.md` Check 14 pastes into its evidence cell. Measured by building it: one WARN per
+misfiled line pushes `PASS  every measured living artifact is within its Rule 25(d) budget.` out of
+the verdict entirely on the 29-line revision. The arm emits one aggregate line carrying the count and
+a per-section breakdown, before the summary; the detail rows open with `misfiled` and cannot match
+that grammar.
+
+**A second defect was found by running the shipping code against the real corpus rather than a
+synthetic seed, and is fixed in the same change.** BSD `cut` aborts with `Illegal byte sequence` on
+the multibyte characters real snapshot prose carries, having already printed the rows before the
+first one: on `66d0eb165` it emitted 8 of 29 detail rows, wrote its complaint to the same stderr the
+rows go to, and the run still exited 0 — a truncated finding list that reads exactly like a complete
+one. Every reader of the channel now runs under `LC_ALL=C`, and the aggregate count is derived from
+`wc -l` over the same records, so a future truncation disagrees with its own count instead of
+shrinking quietly.
+
+**Tiered DEFECT.** Consumer-facing; the arm ships in `core/scripts/`. The misfile is silent, and the
+section that is supposed to hold the activity log stops holding it.
+
+verify: sh V=core/scripts/validate-artifact-budget.sh; [ -f "$V" ] || exit 9; d="$(mktemp -d)" || exit 9; mkdir -p "$d/_bmad-output" || exit 9; s="$d/_bmad-output/pipeline-snapshot.md"; w() { printf '## Pipeline Position\n- last_gate_passed: planning at 2026-09-12T22:14:00Z\n## Sprint Context\n%s\n## Recent Activity\n%s\n## Open Items\n## Locked Decisions\n## In-Flight Teammates\n## Context Reminders\n' "$1" "$2" > "$s"; }; w '- 2026-09-12T02:53Z: a misfiled activity entry' '- 2026-09-12T03:00Z: correctly filed'; bash "$V" --root "$d" --only pipeline-snapshot.md > "$d/bad.txt" 2>&1; a=$?; w '- sprint_id: 311' '- 2026-09-12T03:00Z: correctly filed'; bash "$V" --root "$d" --only pipeline-snapshot.md > "$d/good.txt" 2>&1; b=$?; [ "$a" = 0 ] && [ "$b" = 0 ] || { rm -rf "$d"; exit 1; }; grep -q 'dated entry under ##' "$d/good.txt" && { rm -rf "$d"; exit 1; }; grep -q 'line 4: dated entry under ## Sprint Context' "$d/bad.txt" || { rm -rf "$d"; exit 1; }; rm -rf "$d"; exit 0
