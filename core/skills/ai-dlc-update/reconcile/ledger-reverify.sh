@@ -969,7 +969,14 @@ theirs_tree() { # 0 = $THEIRS_TREE holds a tree at THEIRS; 1 = UNAVAILABLE, noth
   THEIRS_TREE_STATE=unavailable
   THEIRS_TREE_WHY="a temp directory for the materialized theirs tree could not be created"
   local _d _tar
-  _d="$(mktemp -d 2>/dev/null)" || return 1
+  # NAMED WITH THIS ENGINE'S OWN PREFIX, and that is not cosmetic. A bare `mktemp -d` is
+  # indistinguishable from every other process's temp directory, so anything asking "did THIS
+  # run materialize a tree" has to count the host's whole `tmp.*` population -- which any other
+  # process moves, at any moment, for reasons that have nothing to do with this engine.
+  # MEASURED: the fixture's laziness arm, written that way, went red once in three runs on a
+  # busy host, and under a twelve-wide pool that is a guaranteed intermittent. The prefix makes
+  # the question answerable by name.
+  _d="$(mktemp -d "${TMPDIR:-/tmp}/ledger-reverify-theirs.XXXXXX" 2>/dev/null)" || return 1
   [ -n "$_d" ] && [ -d "$_d" ] || return 1
   # BOTH SET HERE AND NOWHERE ELSE: `_OWNED` is what the EXIT handler removes, so it records the
   # directory this process CREATED rather than whatever `$THEIRS_TREE` is currently bound to.

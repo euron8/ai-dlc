@@ -2880,11 +2880,16 @@ if [ -n "$dp_base" ]; then
   fi
 fi
 
-# D. LAZINESS. A ledger with no $THEIRS_TREE receipt must materialize nothing. Asserted on the
-# MATERIALIZER'S OWN SIDE CHANNEL rather than by counting temp directories, which every other
-# process on the machine also writes to: a tree-free ledger is driven and the state variable's
-# only observable — a NEEDS-REVIEW naming the materializer, or any row at all mentioning it —
-# must be absent, while the control row proves the run happened.
+# D. LAZINESS. A ledger with no $THEIRS_TREE receipt must materialize nothing.
+#
+# COUNTED BY THIS ENGINE'S OWN PREFIX, NEVER BY THE HOST'S WHOLE TMP POPULATION. The first cut
+# counted every `${TMPDIR}/tmp.*` on the machine, so any other process creating a temp directory
+# during the run failed the arm — MEASURED: red once in three reps on a busy host, and under the
+# twelve-way pool that is a guaranteed intermittent, which is a fixture that cries wolf rather
+# than a check. The materializer now names its tree `ledger-reverify-theirs.XXXXXX`, so the
+# question "did THIS run materialize a tree" is answerable by name and no other process can
+# answer it. The DELTA is reported, never the host's raw totals, which are meaningless off-box.
+tt_count() { ls -d "${TMPDIR:-/tmp}"/ledger-reverify-theirs.* 2>/dev/null | grep -c . || true; }
 LED_NOTREE="$(dirname "$DIST")/no-theirs-tree-ledger.md"
 {
   printf '# probe\n\n'
@@ -2893,12 +2898,10 @@ LED_NOTREE="$(dirname "$DIST")/no-theirs-tree-ledger.md"
   printf '## PC-FIXTURE-NOTREE-B — the git -C control in the same ledger\n\n'
   printf 'verify: sh git -C "$DIST" cat-file -e "${THEIRS}:VERSION"\n'
 } > "$LED_NOTREE"
-# The tree the materializer would build is identified by its CONTENT, not by a count: it is the
-# only mktemp dir carrying a `core/` from this dist. Recorded before and after so a directory some
-# other process created cannot be read as a leak from this run.
-nt_before="$(ls -d "${TMPDIR:-/tmp}"/tmp.* 2>/dev/null | wc -l | tr -d ' ')"
+nt_before="$(tt_count)"
 nt_out="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$LED_NOTREE" 2>&1)"
-nt_after="$(ls -d "${TMPDIR:-/tmp}"/tmp.* 2>/dev/null | wc -l | tr -d ' ')"
+nt_after="$(tt_count)"
+nt_delta=$((nt_after - nt_before))
 ASSERTIONS=$((ASSERTIONS + 1))
 if ! printf '%s\n' "$nt_out" | awk -F'\t' '$2 ~ /NOTREE-B/ && $1=="STILL-LIVE" {f=1} END{exit !f}'; then
   FAILURES=$((FAILURES + 1))
@@ -2908,12 +2911,28 @@ elif grep -q THEIRS_TREE <<<"$nt_out"; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s a ledger naming no $THEIRS_TREE receipt still produced a row mentioning the materializer\n' "theirs-tree-lazy"
   printf '%s\n' "$nt_out" | sed 's/^/          | /'
-elif [ "$nt_after" -gt "$nt_before" ]; then
+elif [ "$nt_delta" -ne 0 ]; then
   FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the mktemp directory count rose from %s to %s across a ledger with no $THEIRS_TREE receipt — something was materialized and not cleaned\n' "theirs-tree-lazy" "$nt_before" "$nt_after"
+  printf '  FAIL  %-22s this engine left %+d of its own theirs-trees behind across a ledger with no $THEIRS_TREE receipt — something was materialized and not cleaned\n' "theirs-tree-lazy" "$nt_delta"
 else
-  printf '  ok    %-22s a ledger with no $THEIRS_TREE receipt materializes nothing (no materializer row, mktemp count %s -> %s) while its control row still reports\n' "theirs-tree-lazy" "$nt_before" "$nt_after"
+  printf '  ok    %-22s a ledger with no $THEIRS_TREE receipt materializes nothing (no materializer row, this engine'"'"'s own theirs-tree count delta %+d) while its control row still reports\n' "theirs-tree-lazy" "$nt_delta"
 fi
+# THE OTHER DIRECTION, AND WITHOUT IT THE ARM ABOVE IS SATISFIED BY A PREFIX NOTHING EVER USES.
+# A count that is always zero reads exactly like a count that is correctly zero, so the same
+# counter must be shown to RISE while a $THEIRS_TREE receipt is being evaluated. The receipt
+# itself is the observer: it records the tree's path while the tree is live, so the presence of
+# a directory carrying this engine's prefix at that moment is what the count would have seen.
+ASSERTIONS=$((ASSERTIONS + 1))
+tt_live="$(cat "$CONS/theirs-tree-path.txt" 2>/dev/null)"
+case "$tt_live" in
+  */ledger-reverify-theirs.*)
+    printf '  ok    %-22s a run WITH a $THEIRS_TREE receipt builds a tree carrying this engine'"'"'s own prefix (%s), so the zero above is a measured zero and not an unused counter\n' \
+      "theirs-tree-prefix" "$(basename "$tt_live")" ;;
+  *)
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the materialized tree does not carry this engine'"'"'s prefix (%s), so the laziness counter above can never rise and its zero establishes nothing\n' \
+      "theirs-tree-prefix" "${tt_live:-<none recorded>}" ;;
+esac
 
 # --- THE BOOTSTRAPPING WINDOW: AN OLD ENGINE DOES NOT EXPORT $THEIRS_TREE ----------------------
 #
@@ -3175,23 +3194,34 @@ else
   printf '  FAIL  %-22s the closer installs %s EXIT traps; bash traps REPLACE each other, so all but the last are dead and their temporaries leak with no symptom\n' "one-exit-trap" "$trap_n"
 fi
 # m5 — EAGER materialization: the `case $rest in *THEIRS_TREE*` gate widened to everything, so a
-# tree is built for every sh receipt. Killed by arm D, which reads the tree-free ledger.
+# tree is built for every sh receipt.
+#
+# DRIVEN AGAINST A REF THAT DOES NOT RESOLVE, WHICH IS THE ONLY OBSERVABLE THE TRAP CANNOT ERASE.
+# A count of live trees cannot see this: the mutant materializes AND cleans up, so the delta is
+# zero either way and the arm's first cut passed down BOTH its branches — a check that could not
+# fire, reading exactly like one that discriminates. Against an unresolvable theirs the
+# materializer FAILS, and the two engines then differ in a VERDICT: the lazy one never attempts a
+# tree for a ledger naming none and reports normally, the eager one attempts one for every `sh`
+# receipt and refuses each with the materializer's own reason.
 dp_mut_eager="$(dp_mutant tt-eager '        *THEIRS_TREE*)' '        *)')"
 ASSERTIONS=$((ASSERTIONS + 1))
 if [ -z "$dp_mut_eager" ]; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s the eager mutation DID NOT APPLY, so the laziness arm is unproven\n' "mutation-tt-eager"
 else
-  eg_before="$(ls -d "${TMPDIR:-/tmp}"/tmp.* 2>/dev/null | wc -l | tr -d ' ')"
-  eg_out="$(bash "$dp_mut_eager/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$LED_NOTREE" 2>&1)"
-  eg_after="$(ls -d "${TMPDIR:-/tmp}"/tmp.* 2>/dev/null | wc -l | tr -d ' ')"
-  if ! printf '%s\n' "$eg_out" | awk -F'\t' '$2 ~ /NOTREE-B/ {f=1} END{exit !f}'; then
+  eg_badref=0000000000000000000000000000000000000000
+  eg_out="$(bash "$dp_mut_eager/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$eg_badref" "$LED_NOTREE" 2>&1)"
+  eg_ctl="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$eg_badref" "$LED_NOTREE" 2>&1)"
+  if grep -q 'could not be materialized' <<<"$eg_ctl"; then
     FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s the control row is gone too — the eager mutant broke the closer rather than the laziness gate\n' "mutation-tt-eager"
-  elif [ "$eg_after" -gt "$eg_before" ]; then
-    printf '  ok    %-22s eager materialization builds a tree for a ledger that names none (mktemp %s -> %s) — arm D reads that, and no row does\n' "mutation-tt-eager" "$eg_before" "$eg_after"
+    printf '  FAIL  %-22s the SHIPPED closer also reports a materialization failure on a ledger naming no $THEIRS_TREE receipt — it is not lazy, so this arm cannot attribute the mutant'"'"'s row to the mutation\n' "mutation-tt-eager"
+    printf '%s\n' "$eg_ctl" | sed 's/^/          | /'
+  elif grep -q 'could not be materialized' <<<"$eg_out"; then
+    printf '  ok    %-22s eager materialization attempts a tree for a ledger that names none and refuses on the unresolvable ref, where the shipped closer attempts nothing — a verdict the cleanup trap cannot erase\n' "mutation-tt-eager"
   else
-    printf '  ok    %-22s eager materialization built and cleaned a tree for a ledger naming none; the count is unchanged because the trap still fires, and the laziness arm reads the materializer row instead\n' "mutation-tt-eager"
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the gate was widened to every receipt and no materialization was attempted anyway — the laziness arm cannot fire\n' "mutation-tt-eager"
+    printf '%s\n' "$eg_out" | sed 's/^/          | /'
   fi
 fi
 # m6 — THE REFUSAL SITED AFTER THE RUN, on the rc=0 path. The residue is a STILL-LIVE that reads
