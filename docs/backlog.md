@@ -4413,3 +4413,74 @@ silent and permanent.
 verify: sh V=core/scripts/audit-layer-debt.sh; [ -f "$V" ] || exit 9; d=$(mktemp -d) || exit 9; B='"clause":"LC-E4","subject_digest":"x","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z"'; printf '{%s,"entry":"e20","reason":"This is not tracked under OWED-C and a narrowing is still owed."}\n{%s,"entry":"e21","reason":"A narrowing is still owed."}\n{%s,"entry":"e22","reason":"The narrowing is owed under OWED-C."}\n{%s,"entry":"e9","owed":{"id":"OWED-C","what":"w"}}\n' "$B" "$B" "$B" "$B" > "$d/r.jsonl"; o="$(bash "$V" --register "$d/r.jsonl" --json 2>/dev/null)"; rm -rf "$d"; u="$(printf '%s' "$o" | python3 -c 'import json,sys; print(" ".join(sorted(r["entry"] for r in json.load(sys.stdin)["undeclared"])))')" || exit 9; case " $u " in *" e21 "*) : ;; *) exit 9 ;; esac; case " $u " in *" e22 "*) exit 9 ;; esac; case " $u " in *" e20 "*) exit 0 ;; esac; exit 1
 
 
+
+## BL-247 — `derive-fixture-readsets.sh --list` with ONE fixture cannot pass its own discrimination control, so a single-fixture refresh has been impossible since the control shipped
+
+**Found 2026-09-13** by the operator running the three `--list` refreshes owed from batches 98 and
+99, each of which failed identically:
+
+    reconcile-blocking-list             53 paths
+    FAIL  CONTROL: every read-set covers the whole 53-path universe -- this map selects everything on every change and skips nothing
+    ERROR: controls failed; the map was NOT written
+
+The control at `core/scripts/derive-fixture-readsets.sh:359-370` derives its universe from
+`$WORK/map`, the map holding ONLY the fixtures this run traced, and passes when at least one
+traced read-set is a proper subset of that universe. Under `--list "<one fixture>"` the traced map
+holds one fixture, its read-set IS the universe by construction, and the control fails on every
+input. The control was added at `fe64a47a`; every commit to the map since has been an `--all` run,
+so no single-fixture refresh has landed in the map's history.
+
+Replicated on the control's own arithmetic, three inputs in one invocation:
+
+    one fixture, 3 paths                          universe 3   proper 0   FAIL
+    two synthetic fixtures                        universe 4   proper 2   PASS
+    two real fixtures from the committed map      universe 53  proper 2   PASS
+
+The workaround is to list more than one fixture, and the operator's rerun with all four owed
+fixtures in one list passed (`4 of 4 read-set(s) are a PROPER subset of the 152-path universe`)
+and wrote the map. The fix is to compute the universe over the MERGED map (`$MERGED`, built at
+line 376, which already exists at the point the control needs it) so a single-fixture refresh is
+judged against the whole suite's paths rather than its own. Move the control below the merge, or
+build the merged universe first; either way the `--all` reading is unchanged because under `--all`
+the traced map and the merged map are the same set.
+
+The fixture `readset-skip` extracts and drives `readset_merge_map` between its sentinels and
+never reaches this control, because the rest of the script needs root. The control block has no
+sentinel pair, so no fixture can drive it today; the fix should put one around the control so the
+fixture can assert the single-fixture case passes and the all-universe case still fails.
+
+**Tiered DEFECT.** The map is what lets the suite skip; a refresh that cannot run leaves the map
+stale in the direction that runs everything, which is safe and silent, and the `--list` mode the
+header advertises has been dead for every single-fixture call since it was guarded.
+
+verify: sh f=core/scripts/derive-fixture-readsets.sh; [ -f "$f" ] || exit 9; grep -qF 'cut -f2 "$MERGED" | sort -u > "$WORK/.universe"' "$f" && awk '/^MERGED=/{m=NR} /^cut -f2 "\$MERGED" \| sort -u > "\$WORK\/\.universe"/{u=NR} /^  cat "\$MERGED"/{w=NR} END{exit !(m && u && w && m<u && u<w)}' "$f"
+
+## BL-248 — ten staged consumer receipts under `docs/reviews/` read the distribution checkout through `$DIST`, and two of the six distinct shapes are the exact false-close form the consumer filed
+
+**Found 2026-09-13** by the batch-101 adversary sweeping the refusal grammar shipped in `v0.567.0`
+over every `verify: sh` corpus in the tree. `docs/reviews/graph-ledger-adjudication-brief.md` and
+`docs/reviews/graph-ledger-adjudication-data/**` hold 76 `sh` receipts staged to be carried into
+the consumer's ledger; 10 lines hit, six distinct receipts duplicated between the brief and its
+batch files:
+
+- `AI_DLC_PROJECT_ROOT="$DIST" bash "$W/h2.sh" …` and its escalation-vocabulary twin, at
+  `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-8.md:158` and `:213`, and
+  `docs/reviews/graph-ledger-adjudication-brief.md:525` and `:541`. These are the consumer's two
+  measured false closes, staged here before they were filed there.
+- `cd "$DIST" || exit 127; S="$DIST/core/scripts"` at `…/batch-14.md:65` and `:144`, and the
+  brief at `:957` and `:973`. A checkout read in a second shape.
+- `…/batch-7.md:75` and the brief at `:461` (layer-drift): `git -C` rev-spec reads into a
+  `mktemp`, false positives of the naive grammar that the shipped grammar must re-score.
+
+Nothing scores these today: they are documents, not a ledger any engine reads, and the review
+directory is not in any fixture's population. The hazard is the drain that carries one into the
+consumer, where the consumer's engine will score it against its own checkout. Rewrite the four
+real ones onto `$THEIRS_TREE` with the `exit 127` guard the `v0.567.0` header prescribes, and
+confirm the two layer-drift ones are clean under the shipped grammar.
+
+**Tiered NOTE.** No engine reads these files; the defect becomes live only on a hand-carry.
+
+The receipt reads the brief, which carries every one of the six distinct receipts once; the batch
+files under `graph-ledger-adjudication-data/` are its inputs and are rewritten in the same pass.
+
+verify: sh f=docs/reviews/graph-ledger-adjudication-brief.md; [ -f "$f" ] || exit 9; ! grep -qF 'AI_DLC_PROJECT_ROOT="$DIST"' "$f" && ! grep -qF 'S="$DIST/core/scripts"' "$f"

@@ -77,6 +77,18 @@ it was handed off:
   choice in its first ping, batches multiple items into one release wherever the plan's
   separability conditions allow, and delegates generously so the lead's context stays on plan
   execution.
+- **A dispatch action that FANS OUT by deliverable, with the adversary's contract pass BEFORE the
+  builders spawn.** Operator instruction at batch 101, on a build measured at over an hour serial:
+  one builder carried the fix, the fixture, the backlog entry, the docs carriers and four
+  independent measurements in nine numbered steps, and the adversary's five contract blockers
+  landed after it had started, so finished parts were rebuilt. A subject that ships ALONE is
+  one release, not one hand. The plan's dispatch action names the deliverables the contract
+  separates and assigns each its own hand: one FIX hand first; on its first commit sha, in one
+  spawn block, a FIXTURE hand, a DOCS-AND-ENTRY hand, and a MEASUREMENT hand (timing in a
+  detached worktree, consumer rehearsal, reverify diff), each rebasing onto that sha; the lead
+  collects by content. The adversary attacks the CONTRACT in its own block before the fix hand
+  spawns, and attacks the TIP after collection. Wall clock is the fix plus the longest fan-out
+  arm, never the sum.
 
 None of that is about writing quality. Each one makes the file produce WRONG WORK when
 followed literally, which is the only thing a handoff is for.

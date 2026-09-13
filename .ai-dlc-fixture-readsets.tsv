@@ -9,8 +9,7 @@
 # every other fixture's entries alone, so refreshing one fixture costs its own runtime
 # rather than a full re-derivation.
 #
-# fixtures mapped: 196    entries: 22135
-# OMITTED by the last run (always run): fanout-payload-channel
+# fixtures mapped: 197    entries: 22167
 absorbed-specifics-survive	.git/HEAD
 absorbed-specifics-survive	.git/config
 absorbed-specifics-survive	.git/index
@@ -821,6 +820,30 @@ backlog-ledger	scripts
 backlog-ledger	scripts/VERSION
 backlog-ledger	scripts/backlog-reverify.sh
 backlog-ledger	scripts/backlog-rotate.sh
+backlog-receipt-binding	.git/HEAD
+backlog-receipt-binding	.git/config
+backlog-receipt-binding	.git/index
+backlog-receipt-binding	.git/info/exclude
+backlog-receipt-binding	.git/objects/90/b09901e644b0409ead8c7c5dffb82e75beef38
+backlog-receipt-binding	.git/objects/e5/4f5cefe079e1ab1c49e8db3e083298df04f743
+backlog-receipt-binding	.git/objects/info/commit-graphs/commit-graph-chain
+backlog-receipt-binding	.git/objects/info/commit-graphs/graph-557ab13406c35f81e219fa357a521c0b2459cc27.graph
+backlog-receipt-binding	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
+backlog-receipt-binding	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
+backlog-receipt-binding	.git/objects/pack/multi-pack-index
+backlog-receipt-binding	.git/packed-refs
+backlog-receipt-binding	.git/refs/heads/main
+backlog-receipt-binding	.gitignore
+backlog-receipt-binding	core
+backlog-receipt-binding	core/fixtures
+backlog-receipt-binding	core/fixtures/backlog-receipt-binding
+backlog-receipt-binding	core/fixtures/backlog-receipt-binding/run.sh
+backlog-receipt-binding	core/scripts/validate-backlog-receipts.sh
+backlog-receipt-binding	core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
+backlog-receipt-binding	core/skills/ai-dlc-update/reconcile/lib.sh
+backlog-receipt-binding	docs/backlog.md
+backlog-receipt-binding	scripts/backlog-reverify.sh
+backlog-receipt-binding	scripts/validate-backlog-receipts.sh
 backlog-rotate-fence-guard	.git/HEAD
 backlog-rotate-fence-guard	.git/config
 backlog-rotate-fence-guard	.git/index
@@ -9588,10 +9611,11 @@ h2-attest-scripts-dir	.git/HEAD
 h2-attest-scripts-dir	.git/config
 h2-attest-scripts-dir	.git/index
 h2-attest-scripts-dir	.git/info/exclude
-h2-attest-scripts-dir	.git/objects/1f/8b14df11619cb9535811183c99efc7eb7721ae
-h2-attest-scripts-dir	.git/objects/81/ec5c44f746c82e0d68547907987919297a5afa
+h2-attest-scripts-dir	.git/objects/90/b09901e644b0409ead8c7c5dffb82e75beef38
+h2-attest-scripts-dir	.git/objects/e5/4f5cefe079e1ab1c49e8db3e083298df04f743
 h2-attest-scripts-dir	.git/objects/info/commit-graphs/commit-graph-chain
-h2-attest-scripts-dir	.git/objects/info/commit-graphs/graph-05ea45fbd6011b75f0dd4523cdedbd27f2a36c0c.graph
+h2-attest-scripts-dir	.git/objects/info/commit-graphs/graph-557ab13406c35f81e219fa357a521c0b2459cc27.graph
+h2-attest-scripts-dir	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
 h2-attest-scripts-dir	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
 h2-attest-scripts-dir	.git/objects/pack/multi-pack-index
 h2-attest-scripts-dir	.git/packed-refs
@@ -9642,6 +9666,7 @@ h2-attest-scripts-dir	core/scripts/derive-fixture-readsets.sh
 h2-attest-scripts-dir	core/scripts/gen-architecture-index.js
 h2-attest-scripts-dir	core/scripts/lib/meta-gate.sh
 h2-attest-scripts-dir	core/scripts/migrate-artifact-paths.sh
+h2-attest-scripts-dir	core/scripts/render-agent-definitions.sh
 h2-attest-scripts-dir	core/scripts/report-propagation-fanout.sh
 h2-attest-scripts-dir	core/scripts/rotate-gate-adjudication.sh
 h2-attest-scripts-dir	core/scripts/rotate-snapshot-archive.sh
@@ -15229,10 +15254,11 @@ reconcile-blocking-list	.git/HEAD
 reconcile-blocking-list	.git/config
 reconcile-blocking-list	.git/index
 reconcile-blocking-list	.git/info/exclude
-reconcile-blocking-list	.git/objects/1f/8b14df11619cb9535811183c99efc7eb7721ae
-reconcile-blocking-list	.git/objects/81/ec5c44f746c82e0d68547907987919297a5afa
+reconcile-blocking-list	.git/objects/90/b09901e644b0409ead8c7c5dffb82e75beef38
+reconcile-blocking-list	.git/objects/e5/4f5cefe079e1ab1c49e8db3e083298df04f743
 reconcile-blocking-list	.git/objects/info/commit-graphs/commit-graph-chain
-reconcile-blocking-list	.git/objects/info/commit-graphs/graph-05ea45fbd6011b75f0dd4523cdedbd27f2a36c0c.graph
+reconcile-blocking-list	.git/objects/info/commit-graphs/graph-557ab13406c35f81e219fa357a521c0b2459cc27.graph
+reconcile-blocking-list	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
 reconcile-blocking-list	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
 reconcile-blocking-list	.git/objects/pack/multi-pack-index
 reconcile-blocking-list	.git/packed-refs
@@ -15240,12 +15266,15 @@ reconcile-blocking-list	.git/refs/heads/main
 reconcile-blocking-list	.gitignore
 reconcile-blocking-list	core
 reconcile-blocking-list	core/fixtures
+reconcile-blocking-list	core/fixtures/lib
+reconcile-blocking-list	core/fixtures/lib/preamble.sh
 reconcile-blocking-list	core/fixtures/reconcile-blocking-list
 reconcile-blocking-list	core/fixtures/reconcile-blocking-list/run.sh
 reconcile-blocking-list	core/fixtures/reconcile-blocking-list/seed.sh
 reconcile-blocking-list	core/skills
 reconcile-blocking-list	core/skills/ai-dlc-update
 reconcile-blocking-list	core/skills/ai-dlc-update/reconcile
+reconcile-blocking-list	core/skills/ai-dlc-update/reconcile/.rbl-machinery-probe.sh
 reconcile-blocking-list	core/skills/ai-dlc-update/reconcile/adopt-extension-checks.sh
 reconcile-blocking-list	core/skills/ai-dlc-update/reconcile/apply.sh
 reconcile-blocking-list	core/skills/ai-dlc-update/reconcile/classify-block.md
@@ -17911,10 +17940,11 @@ snapshot-section-schema	.git/HEAD
 snapshot-section-schema	.git/config
 snapshot-section-schema	.git/index
 snapshot-section-schema	.git/info/exclude
-snapshot-section-schema	.git/objects/1f/8b14df11619cb9535811183c99efc7eb7721ae
-snapshot-section-schema	.git/objects/81/ec5c44f746c82e0d68547907987919297a5afa
+snapshot-section-schema	.git/objects/90/b09901e644b0409ead8c7c5dffb82e75beef38
+snapshot-section-schema	.git/objects/e5/4f5cefe079e1ab1c49e8db3e083298df04f743
 snapshot-section-schema	.git/objects/info/commit-graphs/commit-graph-chain
-snapshot-section-schema	.git/objects/info/commit-graphs/graph-05ea45fbd6011b75f0dd4523cdedbd27f2a36c0c.graph
+snapshot-section-schema	.git/objects/info/commit-graphs/graph-557ab13406c35f81e219fa357a521c0b2459cc27.graph
+snapshot-section-schema	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
 snapshot-section-schema	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
 snapshot-section-schema	.git/objects/pack/multi-pack-index
 snapshot-section-schema	.git/packed-refs
@@ -17932,6 +17962,7 @@ snapshot-section-schema	core/scripts/.claude
 snapshot-section-schema	core/scripts/.git
 snapshot-section-schema	core/scripts/core/skills/ai-dlc
 snapshot-section-schema	core/scripts/validate-artifact-budget.sh
+snapshot-section-schema	core/scripts/verdict.sh
 snapshot-supersession-marker	.git
 snapshot-supersession-marker	.git/HEAD
 snapshot-supersession-marker	.git/config
