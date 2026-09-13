@@ -1114,13 +1114,23 @@ moment.
 Discharges `PC-S319-SUBJECT-DIGEST-IS-UNREADABLE-ONCE-ITS-OWN-ROW-STOPS-BLOCKING`. A close of that
 entry is GATED on this filing — the entry names two carriers and only one was repaired.
 
-Anchored on the flag name a fix cannot omit. JSON carries no comments, so the token cannot land in a
-note recording the change while the description stays wrong: any occurrence is inside a description
-string, which IS the text a consumer reads. `subject_digest` is the read control — it survives any
+Anchored on the flag name a fix cannot omit. `subject_digest` is the read control — it survives any
 repair, so a receipt that stops finding it has failed to read the file rather than found the fix. Shown
 able to fire: the same predicate exits 0 against `SKILL.md`.
 
-verify: sh f=core/schemas/layer-adjudication-register.json; [ "$(grep -c subject_digest "$f")" -ge 1 ] || exit 1; grep -qF -e "--list-adjudications" "$f"
+**The receipt PARSES the schema and reads `subject_digest`'s own `description` string, rather than
+grepping the file.** The claim is about the field a consumer opens while writing a register record,
+and a whole-file grep is satisfied by any other description in the document. Measured in a pristine
+copy, five ways: HEAD **1**; a comment line carrying the receipt's grep literal appended to the file
+**1**; the flag added to the schema's TOP-LEVEL `description` — a well-formed JSON edit and the
+sharpest over-broad non-fix, since it satisfies a whole-file grep while leaving the read field
+untouched — **1**; the flag appended to `subject_digest`'s own description **0**; a token-free line
+appended, which is the validator's JSON second control, **1**. That last reading is what keeps this
+receipt out of FORMAT-SENSITIVE. **The exit on a broken or absent document is 1, not 9, and that is
+deliberate**: measured at **1** for both an unparseable append and a deleted schema, so the receipt
+reports STILL-LIVE rather than leaving its own population.
+
+verify: sh f=core/schemas/layer-adjudication-register.json; d="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["properties"]["subject_digest"]["description"])' "$f")" || exit 1; [ -n "$d" ] || exit 1; grep -qF -- '--list-adjudications' <<<"$d"
 
 ## BL-018
 
@@ -1236,12 +1246,43 @@ one core uses. The control is `validation_intensity`, chosen because it is the t
 in the SAME row that core DID absorb, so a control hit proves the search reaches the exact file
 where an absorption of this class lands.
 
+**The receipt's subject file is `carry-over-evaluation.md`, not `gate-validation.md`, and the move
+is the point.** The absorbed clause governs how a DEFERRED carry-over's staleness is dispositioned,
+so it lands in `### 4. Deferral Handling` of the carry-over step — the section the third paragraph
+above already names as the one carrying neither `staleness` nor `ceiling`. `gate-validation.md`
+keeps its old role as the control token's home only. Both headings were verified verbatim before
+the slice was written (`### 4. Deferral Handling` to `### 5. Close Invalid Items`, 27 lines today).
+
+**A window narrows WHERE the token sits and says nothing about WHAT KIND of text carries it, so the
+slice alone was not enough.** Measured against the window-only form: `<!-- rare_event: ceiling NOT
+absorbed -->` inside section 4 closed it at **0**, and so did the sentence "The rare_event: ceiling
+is NOT specified in this step." The shipped form therefore drops every line containing `<!--` and
+keeps only lines shaped like a MANDATE — a bullet, a table row, or a bold-led block. **The token is
+required in its KEY form, `rare_event:`**, because the absorbed clause cannot be written without the
+frontmatter key; a bare `rare_event` in a bullet reads **1**.
+
+Measured in pristine copies, ten ways. HEAD **1**. A comment line carrying every grep literal
+appended to both files the receipt names **1**. The HTML comment inside the window **1**, and the
+same comment on a bullet **1**. The disclaimer sentence **1**. A correctly-shaped bullet in
+section 2, outside the window, **1**. A bare `rare_event` with no colon, correctly shaped and inside
+the window, **1**. `rare_event` written into sections 2 and 6 and the file tail — three real prose
+additions outside the deferral slice, and the case a core-wide `grep -rqF` would have closed on —
+**1**, with the token present 3 times and 0 times inside the slice. Both natural shapes of the real
+fix inside section 4, a bullet and a bold-led block, **0**. The control fires: with
+`validation_intensity` renamed in `gate-validation.md` the receipt exits **9**.
+
+**A heading renumber or a case change in the windowed step file pins this receipt at exit 9, and no
+other arm notices.** Measured: recasing `### 4. Deferral Handling` to `### 4. Deferral handling`
+takes the receipt to **9** — out of population, not a finding — while the step file stays valid and
+every other gate stays green. The two headings are load-bearing input to this receipt and nothing
+binds them.
+
 Discharges the consumer entry `extensions/checks/gate-validation-push.md` at pinned ledger
 line 226. That row carries no `PC-` id and no receipt, so nothing re-derives it; the three
 corrections above are the reason it survived two drains.
 
 
-verify: sh grep -qF 'validation_intensity' core/skills/ai-dlc/steps/gate-validation.md || exit 1; grep -rqF 'rare_event' core/
+verify: sh f=core/skills/ai-dlc/steps/carry-over-evaluation.md; grep -qF 'validation_intensity' core/skills/ai-dlc/steps/gate-validation.md || exit 9; s="$(awk '/^### 4. Deferral Handling/{n=1} n&&/^### 5. Close Invalid Items/{exit} n' "$f" | grep -v '<!--' | grep -E '^[[:blank:]]*([-*|]|\*\*)')"; [ -n "$s" ] || exit 9; grep -qF 'rare_event:' <<<"$s"
 ## BL-022
 
 **Fix-Forward Cluster Accounting is absent from core's deploy-validate step entirely, and the
@@ -1280,11 +1321,46 @@ anyone looked. If a future absorption sites the rule in `gate-validation.md` ins
 must be repointed rather than read as still-live — that is the one failure mode this anchor buys
 its tightness with.
 
+**The anchor is scoped to the PVC SECTION, not to the file, because the siting is the claim.** The
+receipt slices `### 5. Production Validation Checkpoint` up to `### 6. Wait for Human` — both
+headings verified verbatim, 34 lines today — and asks for `fix-forward` inside that slice; `smoke`
+file-wide is the control in the same invocation.
+
+**A window narrows WHERE a token sits and says nothing about WHAT KIND of text carries it, so the
+slice alone was not enough.** Measured against the window-only form: an HTML comment inside
+section 5 reading `<!-- TODO: fix-forward cluster accounting not written yet -->` closed it at
+**0**, and so did the sentence "Fix-forward accounting is NOT specified in this step." Both are
+prose about the absent rule satisfying a receipt for the rule. The shipped form therefore drops
+every line containing `<!--` and keeps only lines shaped like a MANDATE — a bullet, a table row, or
+a bold-led block — which is the shape every other rule in that step is written in.
+
+Measured in pristine copies, ten ways. HEAD **1**. A comment line carrying the receipt's own grep
+literals appended to the file **1**. The HTML comment inside the window **1**, and the same comment
+written onto a bullet **1**. The disclaimer sentence **1**. A correctly-shaped bullet in the
+neighbouring section 4b **1** — the sharpest over-broad non-fix, and the one a file-wide anchor
+would have closed on. All three natural shapes of the real fix inside section 5 — the bullet
+`- Fix-forward PRs: [count]`, a bold-led block, and a table row — **0**. The control fires: with
+every `smoke` renamed the receipt exits **9**.
+
+**THE SHAPE FILTER SEPARATES PROSE FROM MANDATES, NOT ASSERTION FROM DENIAL, and a mandate-shaped
+DENIAL closes this receipt.** Measured, all three at **0**: `**Note:** fix-forward accounting is NOT
+specified in this step.`, `| fix-forward | not specified |`, and `- fix-forward is NOT specified
+here`. A negation filter was considered and refused — it is a heuristic carrying its own
+false-positive set, and an unmeasured lint is one the operator turns off. The limit is recorded here
+instead, so a reader scoring a close against this receipt checks that the matched line MANDATES the
+accounting rather than denying it.
+
+**A heading renumber or a case change in the windowed step file pins this receipt at exit 9, and no
+other arm notices.** Measured: renaming `### 5. Production Validation Checkpoint` to
+`### 5a. Production validation checkpoint` takes the receipt to **9** — out of population, not a
+finding — while the step file itself stays valid and every other gate stays green. The two headings
+are load-bearing input to this receipt and nothing binds them.
+
 Discharges the consumer entry `extensions/steps-domain/deploy-validate-push.md` at pinned ledger
 line 252.
 
 
-verify: sh grep -qF 'smoke' core/skills/ai-dlc/steps/deploy-validate.md || exit 1; grep -qF 'fix-forward' core/skills/ai-dlc/steps/deploy-validate.md
+verify: sh f=core/skills/ai-dlc/steps/deploy-validate.md; grep -qiF 'smoke' "$f" || exit 9; s="$(awk '/^### 5. Production Validation Checkpoint/{n=1} n&&/^### 6. Wait for Human/{exit} n' "$f" | grep -v '<!--' | grep -E '^[[:blank:]]*([-*|]|\*\*)')"; [ -n "$s" ] || exit 9; grep -qiF 'fix-forward' <<<"$s"
 ## BL-023
 
 **Core creates the retro branch off the current HEAD, not off `origin/main`, and the
@@ -1328,12 +1404,42 @@ base is missing. Appending ` origin/main` makes the anchor a token the fix canno
 without, since the fix IS the base argument. Both arms run in one invocation, so a receipt that
 cannot see the file fails on the control rather than reporting a green absence.
 
+**Both arms are scoped to the FIRST FENCED BLOCK — the canonical branch-creation block at
+`retro.md:21-25` — and neither is a whole-file grep.** A line-anchored whole-file match was built
+and rejected: measured, a bare `git checkout -b ai-dlc/retro/sprint-<N> origin/main` appended at
+end of file closed it, and so would the same line under an "Appendix: what NOT to do". The slice
+is what refuses both.
+
+**The match accepts every natural spelling of the fix, and that is a correctness property, not a
+convenience.** A tight literal was built first and it sent four ordinary fixes — the branch name
+quoted, `switch -c`, `checkout -B`, and the command indented inside the fence — to exit **9**, which
+is OUT-OF-POPULATION; that count sits at its ceiling of 1, so a correct fix landing later would
+have failed the push. The receipt therefore strips quotes from the slice and matches
+`(checkout -[bB]|switch -c) ai-dlc/retro/sprint-<N> origin/main`.
+
+**A SHELL COMMENT INSIDE THE FENCE IS STILL PROSE, and slicing to the fence does not exclude it.**
+Measured against the slice-only form: `# git checkout -b ai-dlc/retro/sprint-<N> origin/main
+(NOT YET DONE)` written into the canonical block closed it at **0** — a note recording that the fix
+has not happened, satisfying the receipt for the fix. The shipped form therefore drops every line
+whose first non-blank character is `#` before matching, which is the same content-versus-commentary
+cut the two windowed receipts below make.
+
+Measured in pristine copies, fourteen ways. HEAD **1**. A comment line carrying the receipt's own
+grep literals appended to the file **1**. A bare correct command appended at end of file **1**. An
+appendix section carrying the command in prose AND in a second fenced block **1** — the sharpest
+over-broad non-fix, since it puts the whole literal in the file twice. The commented-out command
+inside the fence **1**, and the same line indented **1**. All six spellings of the real fix inside
+the canonical fence — plain, double-quoted, single-quoted, `switch -c`, `checkout -B`, and two-space
+indented — **0**, and a real fix landing beside a leftover commented-out line **0**. Two control arms
+fire: with the branch name changed the receipt exits **9**, and with the whole fence commented out it
+exits **9** rather than reporting a green absence.
+
 Discharges the consumer entry `extensions/steps-domain/retro-push.md` at pinned ledger line 255.
 The row should additionally be repointed to the six live `retro-push-*.md` files before any
 future push-mine reads it.
 
 
-verify: sh grep -qF 'ai-dlc/retro/sprint-<N>' core/skills/ai-dlc/steps/retro.md || exit 1; grep -qF 'ai-dlc/retro/sprint-<N> origin/main' core/skills/ai-dlc/steps/retro.md
+verify: sh f=core/skills/ai-dlc/steps/retro.md; t="$(printf '\140\140\140')"; b="$(awk -v t="$t" 'index($0,t)==1{n++;next} n==1' "$f" | grep -vE '^[[:blank:]]*#' | tr -d '\042\047')"; [ -n "$b" ] || exit 9; grep -qE 'ai-dlc/retro/sprint-<N>' <<<"$b" || exit 9; grep -qE '(checkout -[bB]|switch -c) ai-dlc/retro/sprint-<N> origin/main' <<<"$b"
 ## BL-024
 
 **This repo already adjudicated all five blocks of the `implementation-push` row, wrote
@@ -1981,11 +2087,34 @@ The receipt reaches 0 when an arm binding the set is added and the index re-rend
 retires `CHANGES-REQUESTED` from `gate-validation.md:188` still reports STILL-LIVE, deliberately** —
 removing today's non-member leaves the set as free to choose as the CHANGELOG found it.
 
+**The receipt DRIVES the renderer before it reads the file it renders**, because reading a generated
+artifact without asserting it is in sync is exactly the closable-by-prose shape: a hand-typed row is
+text about a program, not the program. `render-vocabulary-index.sh --check` byte-compares first, so a
+hand edit fails the receipt rather than satisfying it.
+
+**The positive direction was BUILT, not assumed.** On a throwaway copy: a real `# vocabulary:` marker
+block naming this set, a real extractor keyed on the owner's template line, both indexes re-rendered.
+The row renders `APPROVED BLOCKED NEEDS_REWORK` and the receipt exits **0**; the new arm is not
+vacuous — run against the tree it names, it reports the live `CHANGES-REQUESTED` non-member by name.
+The other three readings, all in pristine copies: HEAD **1**; a comment line carrying both grep
+literals appended to every file the receipt names **1**; a hand-written row carrying `NEEDS_REWORK`
+pasted into the generated index — the sharpest non-fix, and the one a bare `grep -qF` closes on —
+**1**, because `--check` refuses it. Retiring `CHANGES-REQUESTED` and nothing else also reads **1**,
+as stated above.
+
+**What an UNRELATED stale index does to this receipt, stated because a driven receipt can lie in that
+state.** It reads **1** — STILL-LIVE — and never 0: measured by dropping a member from the
+reasoning-effort owner, which fails `--check` for a reason having nothing to do with this set. So the
+failure direction is safe, and the cost is that this receipt cannot be read as evidence about its own
+subject while any other vocabulary is out of sync. The `EXIT_CONDITION_MET` control can still fire:
+with that member retired from its schema and the index re-rendered so `--check` passes, the receipt
+exits **9**.
+
 Discharges the consumer entry `PC-S299-UPSTREAM-SHIPS-TWO-REVIEW-VERDICT-VOCABULARIES` at pinned ledger
 line 1571.
 
 
-verify: sh grep -qF "EXIT_CONDITION_MET" docs/vocabulary-index.md || exit 1; grep -qF "NEEDS_REWORK" docs/vocabulary-index.md
+verify: sh bash scripts/render-vocabulary-index.sh --check >/dev/null 2>&1 || exit 1; grep -qF 'EXIT_CONDITION_MET' docs/vocabulary-index.md || exit 9; grep -qF 'NEEDS_REWORK' docs/vocabulary-index.md
 ## BL-047
 
 **A Pipeline Position carrying two `Current step file` values makes `ai-dlc-recover.sh` mandate
@@ -4147,10 +4276,39 @@ byte-present. Its honest limit: it does not catch an author who quotes without d
 **Not fixed here.** Choosing between the two shapes is design work, and the entry exists so the
 refuted one is not built.
 
+**The receipt DRIVES the validator rather than grepping its SoR tuple.** It builds a story and a
+`carry-over-backlog.md` beside it under `mktemp`, runs the shipped script three times, and takes a
+verdict only from the exits. Measured: at HEAD it exits 1 on the SoR refusal, whose emitted text it
+matches (`the byte-verbatim source of record is`); against the SoR-set extension it exits 0. Three
+non-fixes were built and all three stay at 1. A comment carrying the receipt's own literal, appended
+to both files it names — the shape a prose closer takes and the shape this ledger's own receipt
+validator seeds — moves nothing, because a comment inside the script cannot change what the script
+answers about a story. Making the SoR test unconditional-accept — the sharp over-broad non-fix,
+which admits `carry-over-backlog.md` by admitting everything — is refused by the `prd.md` control
+arm, which must keep denying. And the entry's own motivating case, the same bullet quoted with an
+ellipsis, is refused by the third arm; that is the case that must stay red after any fix.
+
+**The path resolution the receipt depends on is the story's own directory, and it is measured, not
+assumed.** `resolve_artifact()` at `core/scripts/validate-locked-anchor.sh:347-397` tries
+`story_dir` before `os.getcwd()`, so the probe's `carry-over-backlog.md` beside the story wins over
+a divergent same-basename file in the caller's cwd. Both directions were run under the extension and
+they differ: with the file beside the story a cwd decoy is ignored and the run PASSES; with no file
+beside the story the cwd copy resolves and the run FAILS on the bullet, proving the decoy was
+actually read rather than skipped. So the probe stories the receipt builds are insensitive to where
+the receipt was invoked from.
+
+**The RECEIPT itself is root-relative, which is a different claim and the weaker one.** It names
+`core/scripts/validate-locked-anchor.sh` relatively, so it exits 9 from any cwd but the repository
+root — measured at `<root>/core`, `<root>/scripts` and `/tmp`, all 9, against the root's 1. That
+matches every neighbouring receipt rather than departing from it: of the live `sh` receipts, none
+walks up for `VERSION` and none resolves a root, and six consecutive neighbours run at the root and
+answer 9 from `<root>/core` in the same measurement. The ledger's receipt validator runs each receipt
+from a detached checkout's ROOT, which is the cwd the convention is written for.
+
 **Tiered DEFECT.** A closure claim can assert a condition met that its own document declines to meet,
 and no mechanism reads it.
 
-verify: sh set -e; V=core/scripts/validate-locked-anchor.sh; [ -f "$V" ] || exit 9; n="$(grep -c 'carry-over-backlog' "$V")" || n=0; c="$(grep -c 'product-brief\|prd\.md' "$V")" || c=0; [ "$c" -gt 0 ] || exit 9; [ "$n" -eq 0 ] && exit 1; exit 0
+verify: sh V=core/scripts/validate-locked-anchor.sh; [ -f "$V" ] || exit 9; bash "$V" core/fixtures/check-3b-locked-anchor/good-story.md >/dev/null 2>&1 || exit 9; d="$(mktemp -d)"; B="- CO-PROBE: the operative closure clause stated in full."; printf "%s\n" "# Carry-over backlog" "" "## CO-PROBE" "" "$B" > "$d/carry-over-backlog.md"; cp "$d/carry-over-backlog.md" "$d/prd.md"; printf "%s\n" "<!-- LOCKED_REQUIREMENTS -->" "<!-- Source: user input -->" "full_text_source: carry-over-backlog.md:CO-PROBE" "$B" "<!-- END LOCKED_REQUIREMENTS -->" > "$d/s.md"; printf "%s\n" "<!-- LOCKED_REQUIREMENTS -->" "<!-- Source: user input -->" "full_text_source: prd.md:CO-PROBE" "$B" "<!-- END LOCKED_REQUIREMENTS -->" > "$d/n.md"; printf "%s\n" "<!-- LOCKED_REQUIREMENTS -->" "<!-- Source: user input -->" "full_text_source: carry-over-backlog.md:CO-PROBE" "- CO-PROBE: the operative closure clause ... in full." "<!-- END LOCKED_REQUIREMENTS -->" > "$d/e.md"; o="$(bash "$V" "$d/s.md" 2>&1)"; rc=$?; bash "$V" "$d/n.md" >/dev/null 2>&1; nrc=$?; bash "$V" "$d/e.md" >/dev/null 2>&1; erc=$?; rm -rf "$d"; [ "$nrc" -ne 0 ] || exit 1; [ "$erc" -ne 0 ] || exit 1; grep -qF "the byte-verbatim source of record is" <<<"$o" && exit 1; exit $rc
 
 
 
@@ -4306,10 +4464,56 @@ Both premises hold on HEAD: `upstream-routing.md` is byte-unchanged (md5 `91e84d
 ledger at line 44, and `ai-dlc-update` is already a `transient:false` member whose reason covers the
 register. Taking this entry means declaring the FORMAT, not admitting the member.
 
+**The receipt DRIVES the enforcer and reads its `--report` table, not the schema text.** The
+`declared` column is emitted at `validate-write-format-steering.sh:398` as
+`'  declared   %-34s %s\n'`, once per artifact the join scores OK, so a row exists only when a
+member of the `transient:false` population carries a `declared_in` file that is present in some
+layout AND still contains its anchor. The receipt asserts that row for `push-candidate`, guarded by
+the same row for `ai-dlc-update` — a control that already exists at HEAD and must keep printing, so
+a run that reached no table exits 9 rather than reporting an absence.
+
+**A `declared` row is not sufficient on its own, because a declaration can BORROW another
+member's.** A `formats[]` entry for `push-candidate` whose `declared_in` and `anchor` are copied
+from an existing row — `core/schemas/audit-anchors.json` and its own anchor — resolves, carries the
+anchor, and prints `declared push-candidate core/schemas/audit-anchors.json`, declaring no format
+for this ledger at all. **`PASS — 6 of 21` is therefore NOT the fix condition**: the borrowed
+declaration and an honest one print that same line, so the count moving is a consequence of the fix
+and never evidence of it. The receipt closes this by deriving the CLAIMED set from the report
+itself — it reads the `declared_in` path off the `push-candidate` row and requires exactly one
+`declared` row to carry that path. Every `declared_in` at HEAD is claimed once, so a borrowed one
+reads 2 and is refused without any hand-written list of paths.
+
+**A SELF-REFERENTIAL declaration defeats that arm and needs its own.** Pointing `declared_in` at
+the population schema with anchor `push-candidate` resolves, carries the anchor — the member's own
+name puts it there — and is claimed by nobody else, so it reads exactly one claimant and prints a
+`declared` row while declaring the ledger's format to be the file that merely lists the ledger. The
+last arm therefore refuses a row whose path basenames to the population schema, and that name is
+DERIVED from `join.population_schema` in the steering schema, the same field
+`validate-write-format-steering.sh:369` reads to pick the file it joins, so the two cannot drift.
+
+**The gate's own seed does not establish this binding, and the entry says so rather than letting
+the BOUND verdict imply it.** The seeder appends one comment line to every path the receipt names,
+and this receipt names both the validator script and the steering schema, so the seed lands in the
+JSON too and the run exits 9 on an UNPARSED document — a refusal, not a demonstration. Seeded on the
+script alone it stays at 1. Either way the seed reaches no `formats[]` entry, so what shows the
+receipt discriminates is the five constructed non-fixes below, never the ledger validator's verdict.
+
+Measured, each on its own detached checkout: HEAD 1, with the row absent and the guard present. A
+comment carrying the receipt's own literals appended to the file it names exits 9 — the appended
+line breaks the JSON the script reads, the reader reports UNPARSED, and the guard row never prints;
+a stub cannot reach 0. Five non-fixes stay at 1. The self-referential declaration and the borrowed
+one are the sharp pair — both print a `declared push-candidate` row, and they are separated by the
+population-schema arm and the claimant count respectively. A member declared `transient:true` plus a
+steering format satisfies a schema-text grep while staying outside the scanned population: the
+enforcer calls it a GHOST, exits 1, and the non-zero-exit arm refuses it. A `transient:true` member
+with no format prints nothing. A `transient:false` member with no format prints
+`UNDECLARED push-candidate`, not `declared`. Only a `transient:false` member plus a format declared
+in a file of its own, carrying its own anchor and claimed by no other member, reaches 0.
+
 **Tiered DEFECT.** The enforcer's PASS line reads as coverage of the shared append-only artifacts
 while the ledger this program exists to drain is not among them.
 
-verify: sh S=core/schemas/pipeline-state-paths.json; R=core/rules/upstream-routing.md; [ -f "$S" ] && [ -f "$R" ] || exit 9; grep -q "pipeline-snapshot-history" "$S" || exit 9; n="$(grep -c "push-candidate" "$S")" || n=0; [ "$n" -gt 0 ] && exit 0; exit 1
+verify: sh S="$(python3 -c 'import json,sys;print((json.load(open(sys.argv[1])).get("join") or {}).get("population_schema") or "")' core/schemas/write-format-steering.json)" || exit 9; [ -n "$S" ] || exit 9; o="$(bash core/scripts/validate-write-format-steering.sh --report 2>&1)"; rc=$?; grep -qE '^ +declared +ai-dlc-update' <<<"$o" || exit 9; [ "$rc" -eq 0 ] || exit 1; grep -qE '^ +declared +push-candidate' <<<"$o" || exit 1; p="$(awk '$1=="declared" && $2=="push-candidate"{print $3}' <<<"$o")"; [ -n "$p" ] || exit 1; [ "$(basename "$p")" != "$S" ] || exit 1; n="$(awk -v p="$p" '$1=="declared" && $3==p' <<<"$o" | grep -c .)" || n=0; [ "$n" -eq 1 ]
 
 ## BL-243 — the row-scoped citation acquittal in `audit-layer-debt.sh` is satisfied by a clause that DENIES the handle it names
 
