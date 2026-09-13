@@ -1969,9 +1969,22 @@ mv "$MAPY.orig" "$MAPY"
 # VALIDATOR, since the exemption list lives there. The run also reports the now-unexempted
 # file as undeclared, which is correct and is why the assertion is on this arm's OWN wording:
 # a grep for the undeclared-emitter message would be satisfied by arm D's ordinary finding.
-cp "$V" "$V.orig"
-sed "s@^\\([[:space:]]*ESV_EXEMPT='\\)\\([^ ']*\\) [^']*'@\\1\\2'@" "$V.orig" > "$V"
-if cmp -s "$V.orig" "$V"; then
+#
+# THE MUTATION IS ANCHORED ON THE OPENING LINE ALONE AND KEEPS THE STRING OPEN. ESV_EXEMPT is
+# a MULTI-LINE single-quoted string -- one `<path> <reason>` per line -- so a pattern that
+# required the closing quote on the same line matched nothing the moment a second exemption
+# was added, and `cmp -s` reported FIXTURE BROKEN rather than silently passing. Stripping the
+# reason off the FIRST line only, and leaving the newline and every later line untouched, is
+# what makes this a one-exemption mutation on a list of any length.
+#
+# THE BACKUP LIVES OUTSIDE THE SEEDED TREE for the reason recorded at A39 arm 5: `$V.orig`
+# beside `$V` puts a second copy of the validator into `$ROOT/scripts/`, which is half the
+# population arms D and E sweep, and that copy is an undeclared emitter of the declared token.
+esv_bak="$(mktemp)" || { bad "FIXTURE BROKEN: mktemp failed, so this mutant has nowhere to keep its backup outside the swept tree"; return; }
+cp "$V" "$esv_bak"
+sed "s@^\\([[:space:]]*ESV_EXEMPT='[^ ']*\\) [^']*\$@\\1@" "$esv_bak" > "$V"
+if cmp -s "$esv_bak" "$V"; then
+  rm -f "$esv_bak"
   bad "FIXTURE BROKEN: the I93 unreasoned-exemption mutation matched nothing in the validator, so this assertion is unproven"
 else
   out="$(vrun)"
@@ -1981,7 +1994,8 @@ else
     bad "arm D accepted an exemption with no reason — a hole in the guard can be opened with no record of why, and the next author reading it cannot tell it from an omission"
   fi
 fi
-mv "$V.orig" "$V"
+cp "$esv_bak" "$V"
+rm -f "$esv_bak"
 }
 
 # --- Assertion 37: I93 — arm D's four SELF-PROBE bits can actually fire ---------
@@ -2102,6 +2116,150 @@ else
   fi
 fi
 mv "$XP.orig" "$XP"
+}
+
+
+# --- Assertion 39: I93 arm E -- a FOURTH spelling of the empty-subject verdict ------
+# Arm C refuses three RETIRED spellings BY NAME and an enumeration cannot reach a spelling
+# nobody has written yet; arm D joins on files that print the DECLARED token, so a file
+# spelling the verdict its own way is outside its population by construction. Measured before
+# arm E: a seeded validator whose only emission was `NOTHING TO EXAMINE HERE` drove the
+# validator to rc 0 with no finding, while the same seed carrying the RETIRED `AUDITED
+# NOTHING` from the same position WAS caught -- so the escape was the grammar, not the seat.
+#
+# THE SPELLING IS NOVEL BY CONSTRUCTION, NOT BY ASSERTION. The seed's phrase must be one no
+# declared or retired spelling contains, or the arm-1 kill could be arm A's or arm C's. It is
+# built from the DERIVED token and checked against it: if the token ever becomes the seed's
+# own words this arm says FIXTURE BROKEN rather than scoring a kill it did not earn.
+#
+# FIVE ARMS, AND THE LAST TWO ARE WHY THE FIRST THREE MEAN ANYTHING. A fire-only battery
+# passes against an arm that reports every `echo`, which would red the tree on every
+# validator's diagnostics; a quiet-only battery passes against an arm deleted outright.
+A39_i93_novel_spelling() {
+esv_tok="$(i93_token)"
+if [ -z "$esv_tok" ]; then
+  bad "FIXTURE BROKEN: could not derive empty_subject_verdict.token, so arm E's seeds would be scored against nothing"
+  return
+fi
+esv_novel_say='NOTHING TO EXAMINE HERE'
+case "$esv_tok" in
+  *"$esv_novel_say"*) bad "FIXTURE BROKEN: the declared token now CONTAINS this arm's novel phrase, so arm 1's kill could belong to arm A or arm C rather than to arm E"; return ;;
+esac
+
+# ARM 1 — A NOVEL SPELLING UNDER core/scripts/. Not named validate-*.sh, for arm 35's reason:
+# arm E's population is every FILE in the directory, and a name matching the convention would
+# leave this unable to tell that from a narrower grammar.
+esv_core_new="$ROOT/core/scripts/esv-fourth.sh"
+printf '%s\n' '#!/usr/bin/env bash' "echo \"esv-fourth: $esv_novel_say — the corpus was empty.\"" 'exit 0' > "$esv_core_new"
+out="$(vrun)"
+if grep -q "core/scripts/esv-fourth.sh:2 states an empty-subject verdict in a spelling of its own" <<<"$out"; then
+  ok "a core/scripts/ validator stating the empty-subject verdict in a FOURTH spelling FAILS I93, reported by LINE (arm C's enumeration cannot reach a spelling nobody has written yet)"
+else
+  bad "a novel empty-subject spelling under core/scripts/ did not fail I93 — the fourth spelling seeds clean exactly as it did before arm E, and the vocabulary index reads as complete while a new emitter spells the verdict however it likes"
+fi
+
+# ARM 2 — THE SAME SEED UNDER scripts/. The distribution-only half of arm D's population, and
+# the half where two of arm E's three real exemptions live.
+rm -f "$esv_core_new"
+esv_dist_new="$ROOT/scripts/esv-fourth-dist.sh"
+printf '%s\n' '#!/usr/bin/env bash' "echo \"esv-fourth: $esv_novel_say — the corpus was empty.\"" 'exit 0' > "$esv_dist_new"
+out="$(vrun)"
+if grep -q "scripts/esv-fourth-dist.sh:2 states an empty-subject verdict" <<<"$out"; then
+  ok "the same novel spelling under scripts/ FAILS I93 too (arm E sweeps the distribution-only half, not just core/scripts/)"
+else
+  bad "a novel spelling under scripts/ did not fail I93 — arm E has narrowed to core/scripts/, and two of its three exemptions live in the half it stopped reading"
+fi
+rm -f "$esv_dist_new"
+
+# ARM 3 — THE NEAR-MISSES, four shapes in ONE file, because each is a real thing in this
+# corpus and any one of them firing reds the tree on a conforming validator:
+#   a `#` comment      -- every emitter's exit-code table
+#   an `err` argument  -- a FAILURE message, which is not the empty-subject state; eight lines
+#                         INSIDE the I93 unit itself are this shape
+#   a `%-Ns` row       -- sprint-status.sh's per-view report line
+#   a `> path` write   -- a probe seeding a fixture tree, including arm E's own six seeds
+printf '%s\n' '#!/usr/bin/env bash' \
+  "#   0 = $esv_novel_say, in an exit-code table" \
+  'err "the corpus is empty: found nothing to scan. Failing closed."' \
+  'print("  %-15s no key — nothing to compare" % view)' \
+  'printf "%s\n" "audited nothing" > "$TMP/seed.sh"' > "$esv_core_new"
+out="$(vrun)"
+if grep -q 'esv-fourth.sh' <<<"$out"; then
+  bad "arm E fired on a comment, an err() argument, a padded table row or a probe seed write — each is a live shape in this corpus, so the arm would red the tree on validators that are conforming, and the first one alone appears eight times inside the I93 unit it lives in"
+elif grep -q '^OK: enforcement-map.yaml in sync' <<<"$out"; then
+  ok "a file carrying the phrase ONLY as a comment, an err() argument, a %-Ns table row and a file-redirected seed write does NOT fail I93, and the run still reaches its verdict (the narrowing is the emission site, not the words)"
+else
+  bad "the near-miss tree neither failed on the seeded path nor reached I93's OK verdict — the run did not get far enough for this arm's silence to mean anything"
+fi
+
+# ARM 4 — A FILE THAT ALREADY EMITS THE DECLARED TOKEN IS NOT REPORTED, even when it also
+# states an empty subject in its own words elsewhere. This is validate-bmad-invocations.sh's
+# real shape: it prints the token at one line for one state and says "nothing to resolve
+# against" at another for a different one. Without this, arm E tells a conforming emitter to
+# converge on a token it already prints.
+printf '%s\n' '#!/usr/bin/env bash' "echo \"DISARMED — $esv_tok — no corpus.\"" \
+  "echo \"and separately: $esv_novel_say\"" > "$esv_core_new"
+out="$(vrun)"
+if grep -q "esv-fourth.sh.* states an empty-subject verdict" <<<"$out"; then
+  bad "arm E reported a file that ALREADY emits the declared token — a conforming emitter is told to adopt a token it prints, and every declared emitter carrying prose about an empty subject would red the tree"
+else
+  ok "a file already emitting the declared token is NOT reported by arm E even when it states an empty subject in its own words elsewhere (the join is per FILE, which is what the arm actually asks)"
+fi
+
+# ARM 5 — THE MUTANT, AND WHAT IT ESTABLISHES THAT ARM 1 DOES NOT. Arm 1 asserts a message
+# appears; it cannot tell whether arm E produced it. So arm E's reporter is neutered with the
+# SAME seed in place and both halves are asserted: the seeded path is no longer named, AND the
+# run still reaches its own OK verdict. The second half is what stops this being an absence.
+#
+# ANCHORED ON `states an empty-subject verdict in a spelling of its own`, which is arm E's
+# reporter alone. Arm A's message and arm D's both contain "outside a comment"; a mutation
+# keyed on a shared phrase would edit more than one arm.
+#
+# THE BACKUP LIVES OUTSIDE THE SEEDED TREE, and that is arm E's own subject biting the idiom
+# every assertion above uses. `cp "$V" "$V.orig"` puts a SECOND copy of the validator in
+# `$ROOT/scripts/`, which is half of the population arms D and E sweep -- so the backup is
+# itself an undeclared emitter of the declared token, arm D reports it, and the run goes red
+# for a reason this arm never seeded. Measured: with `$V.orig` beside `$V` the mutant run
+# printed one finding naming `scripts/validate-enforcement-map.sh.orig` and neither named the
+# seed nor reached the OK verdict, which reads exactly like a mutant that broke the wrong arm.
+esv_bak="$(mktemp)" || { bad "FIXTURE BROKEN: mktemp failed, so arm E's mutant has nowhere to keep its backup outside the swept tree"; return; }
+printf '%s\n' '#!/usr/bin/env bash' "echo \"esv-fourth: $esv_novel_say — the corpus was empty.\"" 'exit 0' > "$esv_core_new"
+cp "$V" "$esv_bak"
+sed 's@^\( *\)err "I93: .*states an empty-subject verdict in a spelling of its own.*@\1:@' "$esv_bak" > "$V"
+if cmp -s "$esv_bak" "$V"; then
+  bad "FIXTURE BROKEN: the arm E reporter mutation matched nothing in the validator, so arm 1 above is a message somebody observed and not a finding attributed to arm E"
+else
+  out="$(vrun)"
+  if grep -q 'esv-fourth.sh' <<<"$out"; then
+    bad "arm E's reporter was neutered and the seeded novel spelling was STILL named — the finding arm 1 scores as arm E's kill comes from somewhere else, and deleting arm E would leave this battery green"
+  elif grep -q '^OK: enforcement-map.yaml in sync' <<<"$out"; then
+    ok "neutering arm E's reporter makes the SAME seeded novel spelling go unreported while the rest of I93 still reaches its verdict (arm 1's kill belongs to arm E, and the seed trips no other arm)"
+  else
+    bad "with arm E's reporter neutered the run neither named the seed nor reached I93's OK verdict — the mutant broke something other than the arm it aimed at"
+  fi
+fi
+cp "$esv_bak" "$V"
+
+# ARM 6 — THE OPPOSITE MUTANT: an arm E that flags EVERY emission. A fire-only battery cannot
+# tell a discriminating grammar from one that reports the whole corpus, and the over-broad
+# form is the likelier wrong build: it passes arms 1 and 2 and reds the tree on ~30 conforming
+# lines. The verdict phrase test is replaced with an unconditional match, the seed is REMOVED
+# so the tree is the clean one, and the run must still be green.
+rm -f "$esv_core_new"
+cp "$V" "$esv_bak"
+sed 's@^      if (u !~ VERD) next$@      if (0) next@' "$esv_bak" > "$V"
+if cmp -s "$esv_bak" "$V"; then
+  bad "FIXTURE BROKEN: the arm E over-broad mutation matched nothing, so this arm cannot tell a discriminating grammar from one that flags every echo"
+else
+  out="$(vrun)"
+  if grep -q 'states an empty-subject verdict in a spelling of its own' <<<"$out"; then
+    ok "an arm E whose verdict-phrase test is removed REDS the clean tree (the phrase grammar is load-bearing, not decoration on a scan that flags every emission)"
+  else
+    bad "arm E with its verdict-phrase test removed still passed the clean tree — the grammar is doing no work, which means arm 1's kill would be scored by a scan that reports every echo and the arm has no false-positive story at all"
+  fi
+fi
+cp "$esv_bak" "$V"
+rm -f "$esv_bak"
 }
 
 

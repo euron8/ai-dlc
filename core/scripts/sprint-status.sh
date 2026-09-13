@@ -721,7 +721,7 @@ def check_stories():
     want = os.environ.get("SPRINT")
     target = int(want) if want else declared_sprint()     # exits 3 if the copies disagree
     if target is None:
-        print("sprint-status: check-stories COMPARED NOTHING (exit 4) — no canonical on disk "
+        print("sprint-status: check-stories EXAMINED NOTHING — COMPARED NOTHING (exit 4) — no canonical on disk "
               "carries a `sprint:` key, so there is no sprint whose stories could be compared.")
         return 4
 
@@ -825,7 +825,7 @@ def check_stories():
               % (len(findings), compared, entries_total, "y" if entries_total == 1 else "ies"))
         return 1
     if compared == 0:
-        print("sprint-status: check-stories COMPARED NOTHING (exit 4) — %d canonical cop%s on "
+        print("sprint-status: check-stories EXAMINED NOTHING — COMPARED NOTHING (exit 4) — %d canonical cop%s on "
               "disk, %d story entr%s for sprint %d. This is not a pass. Check 5 fails a gate on "
               "it from Phase 4 on; before stories exist it is that check's planning exemption."
               % (views_present, "y" if views_present == 1 else "ies",
@@ -1180,7 +1180,7 @@ def derive_stories():
               "PASS." % len(roundtrip))
         return 1
     if zero_comparison:
-        print("sprint-status: derive-stories COMPARED NOTHING for %d stor%s (exit 4) — %s. Every "
+        print("sprint-status: derive-stories EXAMINED NOTHING — COMPARED NOTHING for %d stor%s (exit 4) — %s. Every "
               "declared field, `status` included, was unreadable for %s. 'Matched files but "
               "verified nothing' is the same failure as 'matched no files' and must not print a "
               "clean line."

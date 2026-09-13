@@ -112,7 +112,7 @@ done
 say() { [ "$QUIET" -eq 1 ] || printf '%s\n' "$*"; }
 
 if [ ! -d "$FIX_DIR" ]; then
-  say "no fixture tree at ${FIX_DIR} — nothing to judge."
+  say "EXAMINED NOTHING — no fixture tree at ${FIX_DIR} — nothing to judge."
   exit 0
 fi
 
@@ -145,7 +145,7 @@ done
 # skipped fixture reads as a pass; silence over an empty subject set would be the
 # same defect one level up.
 if [ "$total" -eq 0 ]; then
-  say "${FIX_DIR} contains no fixture directories — nothing to judge."
+  say "EXAMINED NOTHING — ${FIX_DIR} contains no fixture directories — nothing to judge."
   exit 0
 fi
 

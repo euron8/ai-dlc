@@ -163,7 +163,7 @@ hookdir  = os.path.join(root, ".claude", "hooks")
 
 # --- the tree may legitimately not be an ai-dlc consumer. Say so; never pass silently.
 if not os.path.isfile(settings):
-    say("hook-registration: SKIP — no .claude/settings.json under %s." % root)
+    say("hook-registration: SKIP — EXAMINED NOTHING — no .claude/settings.json under %s." % root)
     say("  Nothing to judge: this is not an installed ai-dlc consumer tree.")
     sys.exit(0)
 

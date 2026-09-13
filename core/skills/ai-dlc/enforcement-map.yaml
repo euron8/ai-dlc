@@ -81,6 +81,15 @@ empty_subject_verdict:
     - core/scripts/validate-bmad-invocations.sh
     - core/scripts/validate-spec-join.sh
     - core/scripts/validate-snapshot-conservation.sh
+    - core/scripts/core-paths.sh
+    - core/scripts/sprint-status.sh
+    - core/scripts/validate-audit-anchors.sh
+    - core/scripts/validate-cycle-commits.sh
+    - core/scripts/validate-fixture-drivability.sh
+    - core/scripts/validate-hook-registration.sh
+    - core/scripts/validate-scope-confirmation.sh
+    - core/scripts/validate-spawn-ledger.sh
+    - core/scripts/validate-write-format-steering.sh
   readers:
     - core/skills/ai-dlc/steps/gate-validation.md
     - core/skills/ai-dlc/steps/retro.md

@@ -589,7 +589,7 @@ if [ -n "$ARMS_SEL" ]; then
   fi
   arms_prog="$(awk -v want="$ARMS_SEL" -v src="$0" "$ARMS_SELECT_AWK" <<<"$arms_map")"
   if [ "$?" -ne 0 ] || [ -z "$arms_prog" ]; then
-    echo "validate-enforcement-map: --arms '$ARMS_SEL' selected no runnable subprogram. Nothing was checked." >&2
+    echo "validate-enforcement-map: EXAMINED NOTHING — --arms '$ARMS_SEL' selected no runnable subprogram. Nothing was checked." >&2
     exit 2
   fi
   set --
@@ -8184,6 +8184,108 @@ esv_sites() {
   ' "$@"
 }
 
+# `esv_novel <token> <file>...` -> "file:line" for the FIRST line of each file that states an
+# empty subject in a spelling of its own and whose file carries the declared token NOWHERE
+# outside a comment. This is arm E's whole decision, factored out so the probe below can drive
+# it in six directions before the corpus is read.
+#
+# ONE awk over the whole file list, and the SAME population arm D sweeps -- every file in
+# core/scripts/ and scripts/, at any extension. Arm D's own header records why the extension
+# is not the population: a `.js` validator can join this vocabulary too, and `scripts/ab-lead-
+# model.js:272` is a live instance of exactly that, so an `*.sh` narrowing here would
+# reintroduce one grain over the blindness arm D exists to delete.
+#
+# THE GRAMMAR IS A VERDICT PHRASE AT AN EMISSION SITE, AND BOTH HALVES WERE MEASURED.
+#
+# The PHRASE is four alternations over one verb list -- "<verb>ed nothing", "nothing was
+# <verb>ed", "nothing to <verb>", "no <noun> was <verb>ed" -- where the verb is one of the
+# nineteen this corpus actually uses for adjudication. It is deliberately not the bare word
+# "nothing": measured over the two directories, 446 non-comment lines carry it and 21 are
+# verdict phrases, so a bare-word scan is a 21-in-446 signal and a hand list of 425
+# exemptions. The verb list is what takes it to 21.
+#
+# The EMISSION SITE is the narrowing that takes the remainder to zero false positives, and it
+# is the same narrowing arm D already uses one grain finer. esv_sites drops a `#` comment
+# because an exit-code TABLE is not an emission; this additionally requires the line to BE a
+# call to one of the six output verbs this corpus emits through (echo/printf/say/note/print/
+# console.log), at the start of a statement. That acquits, by grammar and with no hand list:
+#   - `err "...nothing below was read..."` and its seven siblings INSIDE THIS UNIT, plus every
+#     other validator's err/fail/warn/die argument. A failure message is not the empty-subject
+#     verdict, and this arm must not be exempted from its own host file -- an ESV_EXEMPT line
+#     for scripts/validate-enforcement-map.sh would acquit every future real emitter added
+#     here, which is the shape mechanism-design.md calls a mechanism defending its own defect.
+#   - a Python docstring (core/scripts/report-propagation-fanout.sh:343) and an awk-program
+#     comment inside a shell string (validate-artifact-budget.sh:893), neither of which is a
+#     statement beginning with an output verb.
+#   - `# ... nothing to compare` comment prose in ten fixtures and two reconcile helpers.
+#
+# TWO NARROWINGS WERE BUILT AND REFUTED BY MEASUREMENT, and they are recorded because both
+# read as obviously right. (1) DROP STDERR: `>&2` looks like the diagnostic channel, and 19 of
+# the 30 non-comment lines that emit the DECLARED token today go to stderr -- audit-upstream-
+# routing.sh and validate-spec-join.sh emit every one of theirs there. A stderr narrowing
+# therefore acquits the majority of the vocabulary's own conforming emissions and would be a
+# blind spot the size of the arm. (2) KEY ON `exit 0` PROXIMITY: 17 of those same 30 sit at
+# exit 2 and one at 78, and the map's own comment says 4, 0 and 78 all carry this token, so an
+# exit-code key contradicts the declaration it enforces.
+#
+# ONE FINDING PER FILE LISTING EVERY LINE, and the file is skipped entirely when it already
+# emits the declared token somewhere outside a comment. Both follow from what the arm asks:
+# whether a FILE has joined the vocabulary. validate-cycle-commits.sh states its worklist
+# verdict on four lines and validate-bmad-invocations.sh -- a declared emitter -- says
+# "nothing to resolve against" at :123 for a DIFFERENT state than the token it prints at :160,
+# so a per-line finding would demand four separate convergences for one verdict and would fire
+# on a conforming emitter. The LINES are still all named, because a finding that reports only
+# the first leaves the reader converging one line of four and reading the arm's next run as a
+# regression; it also hides that a file's first candidate can be a FAILURE path (core-paths.sh
+# :158) while its real empty-subject verdict is elsewhere (:182).
+#
+# TWO NARROWING CLAUSES REMAIN, AND EACH WAS MEASURED AGAINST THE CONFORMING SET BEFORE IT
+# SHIPPED -- which is the question that matters, since a clause that acquits a real emission is
+# a blind spot and reads exactly like one that acquits only noise.
+#
+#   `%-Ns`      sprint-status.sh prints a per-VIEW report ROW -- `"  %-15s no \`stories:\` key
+#               -- nothing to compare"` -- which is one item's line in a table, not the run's
+#               verdict; that run's own verdict is three lines away and this arm reports it.
+#               0 of the 30 declared token emissions carry a `%-Ns` field.
+#   `> path/`   a line whose output is REDIRECTED INTO A FILE is writing a fixture or a probe
+#               seed, not reporting to an operator -- this unit's own six arm-E seeds are
+#               `printf ... > "$ESV_TMP/novel.sh"`, and without this clause the arm reports its
+#               own probe. 0 of the 30 declared token emissions redirect to a path (they go to
+#               stdout or to `&2`), so the clause cannot acquit a conforming one either. It is
+#               keyed on a `/` after the `>` for exactly that reason: `>&2` is not a path.
+#   `there is   a HYPOTHETICAL clause -- "without a floor THERE IS NOTHING TO compare a sprint
+#    nothing    against" (validate-spec-adoption.sh:107, a malformed-declaration `return 1`) --
+#    to ...`    argues about what a state would mean; it does not report that this run examined
+#               nothing. BL-221's own entry names a `return 1` failure path as one of the three
+#               false positives that sank the earlier prototype, and this is that row. The
+#               discriminator is the existential subject: a verdict says "nothing WAS compared"
+#               about the run just made, while this says "there is nothing to compare" about a
+#               hypothetical one. 0 of the 30 declared token emissions use the existential form.
+esv_novel() {
+  esv_n_t="$1"; shift
+  awk -v t="$esv_n_t" '
+    BEGIN {
+      PAST = "EXAMINED|AUDITED|JUDGED|CHECKED|VERIFIED|COMPARED|INSPECTED|VALIDATED|ADJUDICATED|CONFIRMED|ASSESSED|EVALUATED|REVIEWED|SCORED|MEASURED|CLASSIFIED|SCANNED|TESTED|RESOLVED"
+      BASE = "EXAMINE|AUDIT|JUDGE|CHECK|VERIFY|COMPARE|INSPECT|VALIDATE|ADJUDICATE|CONFIRM|ASSESS|EVALUATE|REVIEW|SCORE|MEASURE|CLASSIFY|SCAN|TEST|RESOLVE"
+      VERD = "(" PAST ") NOTHING|NOTHING (WAS|WERE|HAS BEEN|HAVE BEEN) (" PAST ")|NOTHING TO (" BASE ")|NO [A-Z]+ (WAS|WERE) (" PAST ")"
+      HYPO = "THERE (IS|WAS|ARE|WERE) NOTHING TO"
+      EMIT = "(^|[;)&|{}][[:blank:]]*)(echo|printf|say|note|print|console\\.log)[[:blank:](]"
+    }
+    { s = $0; sub(/^[[:blank:]]+/, "", s)
+      if (substr(s, 1, 1) == "#") next
+      if (index($0, t) > 0) { tok[FILENAME] = 1; next }
+      if (s !~ EMIT) next
+      if ($0 ~ /%-[0-9]+(\.[0-9]+)?s/) next
+      if ($0 ~ /\>[[:blank:]]*"?\$?[A-Za-z0-9_.{}]*\//) next
+      u = toupper($0)
+      if (u !~ VERD) next
+      if (u ~ HYPO) next
+      if (!(FILENAME in hit)) ord[++n] = FILENAME
+      hit[FILENAME] = (FILENAME in hit) ? hit[FILENAME] "," FNR : "" FNR }
+    END { for (i = 1; i <= n; i++) if (!(ord[i] in tok)) print ord[i] ":" hit[ord[i]] }
+  ' "$@"
+}
+
 # `esv_glob_matched <count> <first-element>` -> 0 if a `*` glob matched, 1 if it did not.
 #
 # WHY THIS EXISTS RATHER THAN A PER-FILE `[ -f ]` FILTER. The obvious idiom --
@@ -8267,6 +8369,38 @@ printf '%s\n' '#   4 = PROBE93 TOKEN, in an exit-code table' \
               '    # PROBE93 TOKEN, indented comment' > "$ESV_TMP/comment.sh"
 printf '%s\n' 'echo "nothing to see"' > "$ESV_TMP/silent.sh"
 
+# ARM E's six seeds. Each is the SHAPE of one real thing in the corpus, not a paraphrase:
+# novel.sh is the receipt's own seed; novel.py is a python heredoc emitting on a sys.exit(0)
+# path, which is how six of the nine converged files state their verdict; failpath.sh is an
+# err() argument at exit 1, which is what eight lines INSIDE this very unit look like;
+# nearmiss.sh puts the same words in a comment and in a docstring; conforming.sh emits the
+# declared token AND carries a novel phrase, which is validate-bmad-invocations.sh's real
+# shape; tablerow.sh is sprint-status.sh's per-view padded report row.
+#
+# WRITTEN THROUGH A HELPER RATHER THAN BY `printf ... > file` DIRECTLY, and that is arm E's
+# own subject reaching this unit. Arm E sweeps this file like any other and acquits a
+# file-redirected emission by grammar, but awk is LINE-oriented: a `printf` whose redirect
+# sits on a backslash continuation puts the verdict prose and the `>` on two different lines,
+# and the arm correctly reports the first. Routing the seeds through `esv_seed` -- which is
+# not an output verb -- puts the seed text in an ARGUMENT to an ordinary function call, which
+# is the same thing the grammar already does for every `err "..."` in this unit. The
+# alternative was an ESV_EXEMPT line for this file, which would acquit every future real
+# emitter added to it.
+esv_seed() { esv_s_p="$1"; shift; printf '%s\n' "$@" > "$esv_s_p"; }
+esv_seed "$ESV_TMP/novel.sh" '#!/usr/bin/env bash' \
+  'echo "probe93: NOTHING TO EXAMINE HERE — the corpus was empty."' 'exit 0'
+esv_seed "$ESV_TMP/novel.py" 'python3 <<PY' \
+  'print("probe93: this run compared nothing at all.")' 'sys.exit(0)' 'PY'
+esv_seed "$ESV_TMP/failpath.sh" '#!/usr/bin/env bash' \
+  'err "the corpus is empty: found nothing to scan. Failing closed."' 'exit 1'
+esv_seed "$ESV_TMP/nearmiss.sh" '#!/usr/bin/env bash' \
+  '#   0 = nothing was audited, in an exit-code table' \
+  '  """A missing file EXITS: nothing was judged."""'
+esv_seed "$ESV_TMP/conforming.sh" '#!/usr/bin/env bash' \
+  'echo "DISARMED — PROBE93 TOKEN — no corpus."' \
+  'echo "could not locate the oracle, so there is nothing to resolve against."'
+esv_seed "$ESV_TMP/tablerow.sh" 'print("  %-15s no key — nothing to compare" % view)'
+
 esv_p_rows="$(esv_rows "$ESV_TMP/map.yaml")"
 esv_score=0
 [ "$(esv_val token "$esv_p_rows")" = "PROBE93 TOKEN" ] || esv_score=$((esv_score + 1))
@@ -8287,10 +8421,22 @@ in_lines 'core/scripts/undeclared.sh' "$esv_p_und"    || esv_score=$((esv_score 
 ! in_lines 'core/scripts/declared.sh' "$esv_p_und"    || esv_score=$((esv_score + 10000000))
 ! in_lines 'scripts/exempt.sh' "$esv_p_und"           || esv_score=$((esv_score + 100000000))
 [ "$esv_p_und" = 'core/scripts/undeclared.sh' ]       || esv_score=$((esv_score + 1000000000))
+
+# ARM E's decision, driven in SIX directions, each its own power of ten. Fires on a novel
+# spelling in shell and in a python heredoc; silent on a failure path, on comment/docstring
+# prose, on a file already emitting the token, and on a padded table row.
+esv_p_nov="$(esv_novel 'PROBE93 TOKEN' "$ESV_TMP/novel.sh" "$ESV_TMP/novel.py" \
+  "$ESV_TMP/failpath.sh" "$ESV_TMP/nearmiss.sh" "$ESV_TMP/conforming.sh" "$ESV_TMP/tablerow.sh")"
+case "$esv_p_nov" in *"$ESV_TMP/novel.sh:"*)      : ;; *) esv_score=$((esv_score + 10000000000)) ;; esac
+case "$esv_p_nov" in *"$ESV_TMP/novel.py:"*)      : ;; *) esv_score=$((esv_score + 100000000000)) ;; esac
+case "$esv_p_nov" in *"$ESV_TMP/failpath.sh:"*)   esv_score=$((esv_score + 1000000000000)) ;; esac
+case "$esv_p_nov" in *"$ESV_TMP/nearmiss.sh:"*)   esv_score=$((esv_score + 10000000000000)) ;; esac
+case "$esv_p_nov" in *"$ESV_TMP/conforming.sh:"*) esv_score=$((esv_score + 100000000000000)) ;; esac
+case "$esv_p_nov" in *"$ESV_TMP/tablerow.sh:"*)   esv_score=$((esv_score + 1000000000000000)) ;; esac
 rm -rf "$ESV_TMP"
 
 if [ "$esv_score" -ne 0 ]; then
-  err "I93's probe scored $esv_score where 0 is the only correct total, so nothing below was read by a working reader. +1 the block reader lost the token or picked up a decoy \`token:\` outside the block; +10 it read the wrong number of emitters, so the list grammar moved; +100 it did not strip the quotes off a retired spelling, so arm C would search for a literal with quotes in it and find nothing forever; +1000 esv_sites found no emission in a file whose only line EMITS the token, which makes arm A pass by finding nothing; +10000 it counted a COMMENT as an emission, which is the whole of this arm's false-positive narrowing and makes arm C fire on every exit-code table; +100000 it reported a site in a file carrying no token at all; +1000000 arm D's reverse join did not report a seeded UNDECLARED emitter, which is the whole of that arm and makes it a check that cannot fire; +10000000 it reported a DECLARED emitter, so arm D would fire on every conforming file; +100000000 it reported an EXEMPT emitter, so the exemption is inert and the arm fails the tree as it stands; +1000000000 it returned something other than the one expected path, so it is double-reporting a file cited twice or carrying a path it was not given."
+  err "I93's probe scored $esv_score where 0 is the only correct total, so nothing below was read by a working reader. +1 the block reader lost the token or picked up a decoy \`token:\` outside the block; +10 it read the wrong number of emitters, so the list grammar moved; +100 it did not strip the quotes off a retired spelling, so arm C would search for a literal with quotes in it and find nothing forever; +1000 esv_sites found no emission in a file whose only line EMITS the token, which makes arm A pass by finding nothing; +10000 it counted a COMMENT as an emission, which is the whole of this arm's false-positive narrowing and makes arm C fire on every exit-code table; +100000 it reported a site in a file carrying no token at all; +1000000 arm D's reverse join did not report a seeded UNDECLARED emitter, which is the whole of that arm and makes it a check that cannot fire; +10000000 it reported a DECLARED emitter, so arm D would fire on every conforming file; +100000000 it reported an EXEMPT emitter, so the exemption is inert and the arm fails the tree as it stands; +1000000000 it returned something other than the one expected path, so it is double-reporting a file cited twice or carrying a path it was not given; +10000000000 arm E did not report a file whose only emission is a NOVEL spelling of the empty-subject verdict, which is the whole of that arm and makes a fourth spelling seed clean exactly as it does today; +100000000000 arm E missed the same spelling inside a PYTHON heredoc, so it is blind to how six of the nine converged validators state their verdict and its silence over them would read as a unified tree; +1000000000000 it reported an \`err\` FAILURE path, which is not the empty-subject state and would make this arm fire on eight lines of its own unit and on every validator's diagnostics; +10000000000000 it reported COMMENT or DOCSTRING prose, which is the false-positive class that sinks the whole arm; +100000000000000 it reported a file that already emits the DECLARED token, so a conforming emitter would be told to converge on a token it already prints; +1000000000000000 it reported a padded \`%-Ns\` TABLE ROW, which is a per-item report line and not a run verdict."
 else
   esv_rows_all="$(esv_rows "$MAP")"
   esv_tok="$(esv_val token "$esv_rows_all")"
@@ -8435,10 +8581,18 @@ EOF
     # that is BOTH declared and exempt fails. That last one is the state that satisfies neither
     # reading of the declaration.
     #
-    # ONE LINE PER EXEMPTION, `<path> <reason>`. There is exactly one today and it is the file
-    # that PROVED this arm was missing, which is the shape the entry that filed this predicted:
-    # the only file demonstrating the gap is also the only file that must not be declared.
-    ESV_EXEMPT='scripts/validate-plan-shape.sh does not ship, while core/skills/ai-dlc/enforcement-map.yaml does, so declaring it would write an emitter path into every consumer tree that resolves nowhere and can never be falsified at the only place it is wrong.'
+    # ONE LINE PER EXEMPTION, `<path> <reason>`. Every one is a `scripts/` file, and they are
+    # all here for ONE reason with one shape: the map SHIPS and these do not, so declaring any
+    # of them writes an emitter path into every consumer tree that resolves nowhere and can
+    # never be falsified at the only place it is wrong. The first is the file that PROVED arm D
+    # was missing, which is the shape the entry that filed it predicted: the only file
+    # demonstrating the gap is also the only file that must not be declared. The other two
+    # joined when arm E converged them -- and note that the exemption is keyed on the
+    # DISTRIBUTION-ONLY property, never on the file being this arm's host. An exemption for
+    # this script because arm E lives in it would acquit every future real emitter added here.
+    ESV_EXEMPT='scripts/validate-plan-shape.sh does not ship, while core/skills/ai-dlc/enforcement-map.yaml does, so declaring it would write an emitter path into every consumer tree that resolves nowhere and can never be falsified at the only place it is wrong.
+scripts/validate-enforcement-map.sh does not ship either -- it checks the distribution s own two writers against each other, which a consumer has neither of -- so the same reason holds: a declared path would resolve nowhere in a consumer tree.
+scripts/ab-lead-model.js does not ship; it prices this repository s own transcript corpus against two model tiers and no consumer has that corpus, so a declared path would resolve nowhere in one.'
 
     esv_exempt_paths=""
     while IFS= read -r esv_x; do
@@ -8510,7 +8664,16 @@ EOF
     # OWNS that case; this one owns the case where the scan COMPLETED and the exemption is
     # genuinely stale. Two arms that overlap are made to disagree here rather than left to fire
     # together.
-    [ "$esv_scan_rc" -eq 0 ] || esv_exempt_paths=""
+    #
+    # THE STAND-DOWN IS A SEPARATE VARIABLE, NEVER A BLANKING OF esv_exempt_paths. That list is
+    # ALSO the third argument to the reverse join below, so clearing it stands the control down
+    # AND un-exempts every exempt file in one move -- the join then reports each of them as an
+    # undeclared emitter, and the aborted sweep yields one finding per exemption instead of the
+    # one the scan-status arm owns. That was latent while there was exactly one exemption whose
+    # file the aborted sweep had not reached; measured the moment a second was added, on a
+    # dangling-symlink tree: 2 findings, the second naming a file whose exemption is sound.
+    esv_exempt_ctl="$esv_exempt_paths"
+    [ "$esv_scan_rc" -eq 0 ] || esv_exempt_ctl=""
     while IFS= read -r esv_xp; do
       [ -n "$esv_xp" ] || continue
       if [ ! -f "$REPO_ROOT/$esv_xp" ]; then
@@ -8519,7 +8682,7 @@ EOF
         err "I93: arm D exempts '$esv_xp' and arm D's own sweep found no line of it outside a comment printing '$esv_tok'. Either the file stopped emitting the verdict -- in which case the exemption is vestigial and must be deleted, since a guard whose removal changes nothing is not load-bearing -- or the sweep is not reading its population and every zero it reports below is worthless."
       fi
     done <<EOF
-$esv_exempt_paths
+$esv_exempt_ctl
 EOF
 
     while IFS= read -r esv_u; do
@@ -8528,6 +8691,60 @@ EOF
     done <<EOF
 $(esv_undeclared "$esv_all_hits" "$esv_emitters" "$esv_exempt_paths" "$REPO_ROOT")
 EOF
+
+    # ARM E -- NO VALIDATOR STATES THE EMPTY-SUBJECT VERDICT IN A SPELLING OF ITS OWN.
+    #
+    # WHY IT IS A FIFTH ARM AND NOT A WIDENING OF ARM C. Arm C refuses three RETIRED
+    # spellings BY NAME, and an enumeration cannot reach a spelling nobody has written yet.
+    # The map's own comment predicted this in as many words -- "a fourth spelling is how this
+    # became three" -- and the debt was collected: measured on a `git archive HEAD` copy, a
+    # seeded validator whose only emission was `NOTHING TO EXAMINE HERE` drove this script to
+    # rc 0 with no finding, while the identical seed carrying the RETIRED `AUDITED NOTHING`
+    # from the same position was caught. The escape was a property of the GRAMMAR, not of
+    # where the probe sat. Arm D is the other half and cannot see this either: it joins on
+    # files that print the DECLARED token, so a file that spells the verdict its own way is
+    # outside arm D's population by construction.
+    #
+    # THE POPULATION IS ARM D's, EXACTLY. Same two directories, same any-extension sweep,
+    # same excluded core/fixtures/ and docs/, and the same reasons -- which are stated at arm
+    # D and not restated here. One consequence is load-bearing: `scripts/ab-lead-model.js` is
+    # a live finding of this arm, so the `*.sh` narrowing arm D refuses would have shipped
+    # this arm blind to a real instance on the day it landed.
+    #
+    # ITS OWN HOST FILE IS IN ITS OWN POPULATION, DELIBERATELY. `scripts/validate-enforcement-
+    # map.sh` is swept by this arm like any other, and the eight `err` strings inside this
+    # unit that carry empty-subject prose are acquitted by the emission-site grammar rather
+    # than by a path exemption. An ESV_EXEMPT line for this file would acquit every real
+    # emitter a later author adds to it, which is a mechanism defending its own defect; the
+    # probe seeds that exact pair (`failpath.sh` against `novel.sh`) to prove the grammar
+    # separates them and not the path.
+    #
+    # THE GRAMMAR AND THE FALSE-POSITIVE NARROWING ARE RECORDED AT `esv_novel`, above,
+    # including the two narrowings that were built and REFUTED on measurement (stderr, and
+    # exit-code proximity). FALSE-POSITIVE SET MEASURED AT 0 over the two directories at the
+    # release tip: the arm reports nothing, every one of the nine files it reported before the
+    # convergence now emits the declared token, and the three shapes it must never report --
+    # a failure path, comment prose, a conforming emitter -- are each a seed in the probe
+    # above rather than a claim here.
+    #
+    # A FINDING IS A CONVERGENCE, NOT AN EXEMPTION, AND THE REMEDY SAYS SO. The exit code
+    # stays whatever that validator's own caller contract says (4, 0, 3 and 78 all carry this
+    # token today) and the file's own prose stays after it; what changes is that one state has
+    # one name. The one shape that is NOT converged is a failure message, and the grammar
+    # already acquits those, so this arm has no exemption list of its own by construction.
+    #
+    # IT STANDS DOWN WHEN ARM D's SWEEP DID NOT FINISH, for arm D's own reason one arm over.
+    # This arm reads the SAME two populations with the same awk, so a path awk cannot open ends
+    # this walk too -- and it would then report over a corpus nobody finished reading, beside
+    # the scan-status arm's finding, giving one cause two findings pointing at two files.
+    if [ "$esv_rev_ok" -ne 0 ] && [ "$esv_scan_rc" -eq 0 ]; then
+      while IFS= read -r esv_nv; do
+        [ -n "$esv_nv" ] || continue
+        err "I93: ${esv_nv#$REPO_ROOT/} states an empty-subject verdict in a spelling of its own and prints '$esv_tok' nowhere. This is the fourth-spelling state the vocabulary exists to prevent: an operator reading a gate log has to know one more grammar to recognise one state, and docs/vocabulary-index.md reports a set this run is not in. Emit '$esv_tok' on that line -- keeping this validator's OWN exit code and its own prose after the token, since the codes are per-validator caller contracts and are deliberately not unified -- and add the file to \`empty_subject_verdict: emitters:\` in $MAP. If the line is a FAILURE message rather than a run that examined nothing, it is not this verdict and the emission-site grammar at esv_novel should already acquit it; a line reported here that is genuinely a failure path is a defect in that grammar, not a case for an exemption."
+      done <<EOF
+$(esv_novel "$esv_tok" "${esv_rev_core[@]}" "${esv_rev_dist[@]}")
+EOF
+    fi
   fi
 fi
 

@@ -269,7 +269,7 @@ const sonnetArm = rows.filter(r => r.tier === 'sonnet');
 const opusArm = rows.filter(r => r.tier === 'opus');
 if (!AS_JSON) {
   console.log();
-  if (!sonnetArm.length) console.log('NO SONNET ARM PRESENT — nothing to compare. (not parity: absence)');
+  if (!sonnetArm.length) console.log('NO SONNET ARM PRESENT — EXAMINED NOTHING — nothing to compare. (not parity: absence)');
   if (!opusArm.length) console.log('NO OPUS-LEAD ARM PRESENT in this transcript corpus — the measured baseline');
   if (!opusArm.length) console.log('  is unavailable; only the counterfactual re-price below is defined.');
 }

@@ -237,7 +237,7 @@ if mode == "trunk-push":
     refs = [ln.split() for ln in os.environ.get("REFS", "").splitlines() if ln.strip()]
     if not refs:
         # Not a pass. Say which question went unasked, in wording no passing run emits.
-        print(f"--trunk-push: NO REF LINES ON STDIN — nothing was judged. This mode reads git's "
+        print(f"--trunk-push: EXAMINED NOTHING — NO REF LINES ON STDIN — nothing was judged. This mode reads git's "
               f"pre-push protocol; reaching it with empty stdin means the caller is not a pre-push "
               f"hook (or the hook consumed stdin before this arm).")
         sys.exit(0)

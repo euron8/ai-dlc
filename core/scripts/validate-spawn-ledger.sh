@@ -595,7 +595,7 @@ echo "  ${FOREIGN} row(s) the dispatch guard did not write${FOREIGN_LIST:+ (role
 # filter above would turn a settings.json that lost its `aiDlcRoles` block into a silent
 # exit 0 on a sprint full of uncited dispatches.
 if [ "$CHECKED" -eq 0 ]; then
-  echo "NO ROLE-BOUND ROWS: ${INSPRINT} S${SPRINT_NUM} row(s) exist and NONE of them was judged"
+  echo "NO ROLE-BOUND ROWS: EXAMINED NOTHING — ${INSPRINT} S${SPRINT_NUM} row(s) exist and NONE of them was judged"
   echo "  -- ${OUTSCOPE} out of Rule 19 scope${OUTSCOPE_LIST:+ (roles: ${OUTSCOPE_LIST})} and ${FOREIGN} not written by the dispatch"
   echo "  guard${FOREIGN_LIST:+ (roles: ${FOREIGN_LIST})}. This is not a pass: nothing was compared. If a real team"
   echo "  role is named in the out-of-scope list, that settings file has lost its aiDlcRoles"
