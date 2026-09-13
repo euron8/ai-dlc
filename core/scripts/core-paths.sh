@@ -178,7 +178,7 @@ if [ "$MODE" = "--audit-diff" ]; then
       || dormant_why="no .claude/skills/ai-dlc/${d}/ layer directory"
   done
   if [ -n "$dormant_why" ]; then
-    echo "DORMANT: not a layered consumer at ${BASE_REF} (${dormant_why})."
+    echo "DORMANT: EXAMINED NOTHING — not a layered consumer at ${BASE_REF} (${dormant_why})."
     echo "  Nothing was classified. This is the gate check's own activation rule; a"
     echo "  distribution checkout and a pre-layer-split consumer both land here, and"
     echo "  neither is evidence that no core file was edited."

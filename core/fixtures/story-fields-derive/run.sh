@@ -315,9 +315,16 @@ printf 'no frontmatter, no Status header\n' > "$R4/_bmad-output/planning-artifac
 out4b="$(run "$R4")"; rc4b="$(arc)"
 [ "$rc4b" -eq 4 ] && ok "a story that yielded ZERO comparisons exits 4, and 4 is not 3" \
                   || bad "a story compared on nothing exited $rc4b — 'verified nothing' printed as clean"
-grep -q 'COMPARED NOTHING' <<<"$out4b" && grep -q 'story-42-1' <<<"$out4b" \
-  && ok "the exit-4 line NAMES the story it verified nothing about" \
-  || bad "exit 4 did not name its subject"
+# THE TOKEN IS ASSERTED BESIDE THE OLD WORDING, NOT INSTEAD OF IT. `EXAMINED NOTHING` is the
+# declared empty-subject verdict token (enforcement-map.yaml `empty_subject_verdict:`, bound by
+# I93); this line is one of its emissions and the vocabulary is what makes one state one name
+# across every validator. `COMPARED NOTHING` stays because it is this mode's own prose after
+# the token and says WHICH comparison did not happen -- I93 binds the token and deliberately
+# leaves each validator its own wording and its own exit code.
+grep -q 'EXAMINED NOTHING' <<<"$out4b" && grep -q 'COMPARED NOTHING' <<<"$out4b" \
+  && grep -q 'story-42-1' <<<"$out4b" \
+  && ok "the exit-4 line carries the declared empty-subject token AND NAMES the story it verified nothing about" \
+  || bad "exit 4 did not carry the declared token or did not name its subject"
 
 # ---- 16 & 17: the two silent states are DIFFERENT, and both exit 0
 R6="$WORK/r6"; mkc "$R6" "$ENV" 'none'; seed_stories "$R6"

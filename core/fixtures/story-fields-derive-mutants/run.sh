@@ -89,7 +89,7 @@ expect_set exit3-becomes-clean 8 'resolved no story file exited|exit 3 printed n
 
 # M3 — exit 4 collapses. Distinct from M2 and that is the point: "found nothing to read" and
 # "read nothing from what it found" have different remedies and must not share a code.
-expect_set exit4-becomes-clean 2 'compared on nothing exited|exit 4 did not name its subject' \
+expect_set exit4-becomes-clean 2 'compared on nothing exited|exit 4 did not (carry the declared token or did not )?name its subject' \
   's@^    if zero_comparison:@    if False:@'
 
 # M4 — the floor stops coming from the schema. `status` is then derivable only if the consumer
@@ -223,7 +223,7 @@ expect_set zero-entry-write-creates 1 'edited a canonical over a run that matche
 # zeroed AFTER the loop, so every write still happens and every VALUE assertion still holds while
 # each verdict becomes exit 3. The clause itself stays keyed, so the target arm reddens on its
 # rc conjunct, not on its clause conjunct — M18 is the mutant that owns the clause conjunct.
-expect_set resolving-path-forced-to-exit3 14 'did not name the drift|check exited 3|successful derive exited 3|did not pass after a successful derive|resolving run took the zero-entry branch|compared on nothing exited 3|exit 4 did not name its subject|silenced .status. too|does not read back as itself|unwritable value was accepted|summary counted per view|distinct count is not a union|check FAIL prints no entry count|check PASS prints no entry count' \
+expect_set resolving-path-forced-to-exit3 14 'did not name the drift|check exited 3|successful derive exited 3|did not pass after a successful derive|resolving run took the zero-entry branch|compared on nothing exited 3|exit 4 did not (carry the declared token or did not )?name its subject|silenced .status. too|does not read back as itself|unwritable value was accepted|summary counted per view|distinct count is not a union|check FAIL prints no entry count|check PASS prints no entry count' \
   's@^    stories_n = len(seen_resolved)@    files_matched = 0; stories_n = len(seen_resolved)@'
 
 if [ "$fails" -eq 0 ]; then echo "PASS story-fields-derive-mutants"; exit 0; fi

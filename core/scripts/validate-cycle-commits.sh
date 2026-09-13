@@ -182,13 +182,13 @@ if [ "${1:-}" = "--audit-trunk" ]; then
   # A contract that PREDATES the declaration is not a consumer failing to adopt
   # this. v0.228.0 recorded what happens to an arm that cannot tell those apart.
   if [ -z "$A_PRC_REL" ]; then
-    echo "AUDIT-TRUNK: WORKLIST -- $(basename "$A_LC") declares no 'consumer_pr_class_file:', so this project's contract predates the trunk audit. Nothing was audited and nothing is wrong; the next pull ships the declaration."
+    echo "AUDIT-TRUNK: WORKLIST -- EXAMINED NOTHING -- $(basename "$A_LC") declares no 'consumer_pr_class_file:', so this project's contract predates the trunk audit. Nothing was audited and nothing is wrong; the next pull ships the declaration."
     exit 0
   fi
 
   A_PRC="$AROOT/$A_PRC_REL"
   if [ ! -f "$A_PRC" ]; then
-    echo "AUDIT-TRUNK: WORKLIST -- $A_PRC_REL: no PR-class taxonomy has been scaffolded, so this project has not declared what its trunk classes are or what each owes. install.sh and the pull driver both create it from core's template; until one has run, nothing states the taxonomy and nothing can be audited against it. Nothing was audited: that is a worklist item, not a clean trunk."
+    echo "AUDIT-TRUNK: WORKLIST -- EXAMINED NOTHING -- $A_PRC_REL: no PR-class taxonomy has been scaffolded, so this project has not declared what its trunk classes are or what each owes. install.sh and the pull driver both create it from core's template; until one has run, nothing states the taxonomy and nothing can be audited against it. Nothing was audited: that is a worklist item, not a clean trunk."
     exit 0
   fi
 
@@ -198,11 +198,11 @@ if [ "${1:-}" = "--audit-trunk" ]; then
   A_BLOCK="$(awk '/^```/{f=!f; next} f' "$A_PRC" 2>/dev/null \
     | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -v '^#' | grep -E '.' || true)"
   if [ -z "$A_BLOCK" ]; then
-    echo "AUDIT-TRUNK: WORKLIST -- $A_PRC_REL: carries no taxonomy block at all, not even the literal 'none'. An undeclared taxonomy and an empty one must not look alike: state 'none' if this project declares no classes, or write one stanza per class. Nothing was audited."
+    echo "AUDIT-TRUNK: WORKLIST -- EXAMINED NOTHING -- $A_PRC_REL: carries no taxonomy block at all, not even the literal 'none'. An undeclared taxonomy and an empty one must not look alike: state 'none' if this project declares no classes, or write one stanza per class. Nothing was audited."
     exit 0
   fi
   if [ "$A_BLOCK" = "none" ]; then
-    echo "AUDIT-TRUNK: WORKLIST -- $A_PRC_REL declares 'none', so this project recognises no trunk classes yet and the audit has nothing to resolve commits against. That is a complete answer and it is not a clean trunk: declare the classes to start auditing."
+    echo "AUDIT-TRUNK: WORKLIST -- EXAMINED NOTHING -- $A_PRC_REL declares 'none', so this project recognises no trunk classes yet and the audit has nothing to resolve commits against. That is a complete answer and it is not a clean trunk: declare the classes to start auditing."
     exit 0
   fi
 

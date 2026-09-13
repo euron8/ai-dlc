@@ -211,7 +211,7 @@ field_of() {
 # `name:` -- the consumer grammar above names the field and then describes it in
 # prose, with the colon nowhere near it.
 if ! grep -q 'user_request_verbatim' "$SNAPSHOT"; then
-  say "PENDING: the snapshot carries no routing record, so it was written before the"
+  say "PENDING: EXAMINED NOTHING — the snapshot carries no routing record, so it was written before the"
   say "         router recorded one. Nothing to confirm; this is not a skipped pause point."
   exit 3
 fi

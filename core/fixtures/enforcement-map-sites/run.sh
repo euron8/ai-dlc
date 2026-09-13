@@ -89,6 +89,33 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 # now. It no longer runs between assertions -- each gets its own tree at entry.
 restore() { local old="$ROOT"; seed_tree; rm -rf "$old"; }
 
+# `mkbak <path>` -> a backup of <path> OUTSIDE the seeded tree, printing the backup's path.
+#
+# THE OBVIOUS IDIOM PUTS A SECOND COPY OF THE SUBJECT INSIDE THE POPULATION UNDER TEST, and
+# that is a fixture defect this file shipped for as long as it has had mutants. `cp "$X"
+# "$X.orig"` leaves `$ROOT/core/scripts/<name>.sh.orig` or `$ROOT/scripts/<name>.sh.orig` on
+# disk for the duration of the arm -- and those two directories are exactly the population
+# I93's arms D and E sweep. The copy is a file emitting the declared token that the map
+# declares nowhere, so arm D reports it; and when the arm has mutated the ORIGINAL to stop
+# emitting, arm E reports the mutated original as a novel spelling as well.
+#
+# MEASURED, on the exemption arm at assertion 38: one `cp "$XP" "$XP.orig"` produced THREE
+# I93 findings where the arm beside it asserts exactly 1 -- the wanted exemption finding, the
+# `.orig` copy as an undeclared emitter, and arm E on the mutated original. It passed anyway
+# because that arm greps for its own message rather than counting, which is why the count
+# assertion now sits beside it.
+#
+# THE OTHER EIGHT WERE SILENT FOR A REASON THAT IS NOT SAFETY. Each of them neuters the very
+# reporter that would name its own copy, so the extra finding had nowhere to print. That is a
+# property of what each mutation happens to break, not of the idiom -- so the idiom is
+# removed from every in-population site rather than from the one that showed.
+mkbak() {
+  local b
+  b="$(mktemp)" || { echo "FIXTURE ERROR: mktemp failed for a backup of $1" >&2; exit 2; }
+  cp "$1" "$b" || { echo "FIXTURE ERROR: could not back up $1" >&2; exit 2; }
+  printf '%s\n' "$b"
+}
+
 # ONE VALIDATOR RUN PER ASSERTION, AND THE ARM IT SELECTS IS DERIVED FROM THE CALLER'S NAME.
 # `validate-enforcement-map.sh --arms I<n>` runs one selectable unit plus the prologue and the
 # verdict block. Every assertion below already declares the invariant it tests in its own
@@ -720,9 +747,9 @@ restore
 # reason: an unreadable BAND_ALPHA_PREFIX makes every core alphabetic id conforming,
 # which is this arm's PASS. It has to fail loudly instead.
 VLE="$ROOT/core/scripts/validate-layer-entries.sh"
-cp "$VLE" "$VLE.orig"
-sed 's/^BAND_ALPHA_PREFIX=/BAND_ALPHA_SUFFIX=/' "$VLE.orig" > "$VLE"
-if cmp -s "$VLE.orig" "$VLE"; then
+VLE_BAK="$(mkbak "$VLE")"
+sed 's/^BAND_ALPHA_PREFIX=/BAND_ALPHA_SUFFIX=/' "$VLE_BAK" > "$VLE"
+if cmp -s "$VLE_BAK" "$VLE"; then
   bad "FIXTURE BROKEN: the I45 alphabetic-prefix mutation matched nothing, so its vacuity assertion is unproven"
 else
   out="$(vrun)"
@@ -738,9 +765,9 @@ VLE="$ROOT/core/scripts/validate-layer-entries.sh"
 # ARM 2 — VACUITY, the floor. Rename BAND_FLOOR and I45 can no longer say which
 # numbers are core's. Reporting nothing would be indistinguishable from a conforming
 # tree, and it would stay that way through every later release.
-cp "$VLE" "$VLE.orig"
-sed 's/^BAND_FLOOR=/BAND_CEILING=/' "$VLE.orig" > "$VLE"
-if cmp -s "$VLE.orig" "$VLE"; then
+VLE_BAK="$(mkbak "$VLE")"
+sed 's/^BAND_FLOOR=/BAND_CEILING=/' "$VLE_BAK" > "$VLE"
+if cmp -s "$VLE_BAK" "$VLE"; then
   bad "FIXTURE BROKEN: the I45 floor mutation matched nothing, so the vacuity assertion is unproven"
 else
   out="$(vrun)"
@@ -758,9 +785,9 @@ VLE="$ROOT/core/scripts/validate-layer-entries.sh"
 # complements — but it also means a renamed extractor returns an empty catalog, and an
 # empty catalog contains nothing above the floor. That is I45's PASS reached by finding
 # nothing, which is this repo's named defect class sitting inside the invariant.
-cp "$VLE" "$VLE.orig"
-sed 's/^defined_anchors() {/defined_anchor_set() {/' "$VLE.orig" > "$VLE"
-if cmp -s "$VLE.orig" "$VLE"; then
+VLE_BAK="$(mkbak "$VLE")"
+sed 's/^defined_anchors() {/defined_anchor_set() {/' "$VLE_BAK" > "$VLE"
+if cmp -s "$VLE_BAK" "$VLE"; then
   bad "FIXTURE BROKEN: the I45 extractor mutation matched nothing, so the catalog vacuity assertion is unproven"
 else
   out="$(vrun)"
@@ -793,9 +820,9 @@ VLE="$ROOT/core/scripts/validate-layer-entries.sh"
 # ARM 1 — FORK. Narrow the resolver's copy to headings of two or more digits. That
 # is a real regression shape rather than a nonsense one: it still matches, still
 # looks like the grammar, and silently drops every single-digit check definition.
-cp "$VGM" "$VGM.orig"
-sed "s/^CHECK_HEAD_RE='.*\$/CHECK_HEAD_RE='^#{2,4}[[:space:]]+(Check[[:space:]]+)?[0-9][0-9]+[a-z-]*\\\\.'/" "$VGM.orig" > "$VGM"
-if cmp -s "$VGM.orig" "$VGM"; then
+VGM_BAK="$(mkbak "$VGM")"
+sed "s/^CHECK_HEAD_RE='.*\$/CHECK_HEAD_RE='^#{2,4}[[:space:]]+(Check[[:space:]]+)?[0-9][0-9]+[a-z-]*\\\\.'/" "$VGM_BAK" > "$VGM"
+if cmp -s "$VGM_BAK" "$VGM"; then
   bad "FIXTURE BROKEN: the I47 fork mutation matched nothing, so this assertion is unproven"
 else
   out="$(vrun)"
@@ -811,9 +838,9 @@ VLE="$ROOT/core/scripts/validate-layer-entries.sh"
 
 # ARM 2 — VACUITY. Rename the assignment in the linter and I47 locates one side of
 # the join. Comparing against nothing is its PASS.
-cp "$VLE" "$VLE.orig"
-sed "s/^CHECK_HEAD_RE=/CHECK_HEADING_RE=/" "$VLE.orig" > "$VLE"
-if cmp -s "$VLE.orig" "$VLE"; then
+VLE_BAK="$(mkbak "$VLE")"
+sed "s/^CHECK_HEAD_RE=/CHECK_HEADING_RE=/" "$VLE_BAK" > "$VLE"
+if cmp -s "$VLE_BAK" "$VLE"; then
   bad "FIXTURE BROKEN: the I47 vacuity mutation matched nothing, so the second arm is unproven"
 else
   out="$(vrun)"
@@ -839,11 +866,11 @@ VLE="$ROOT/core/scripts/validate-layer-entries.sh"
 # There is no fourth arm for the "cannot find ANCHOR_RE" branch on purpose. I15 reads the
 # same assignment, so deleting or renaming it fails both invariants and neither mutant
 # would be attributable — assertion 21 above already proves that absence fails loudly.
-cp "$VGM" "$VGM.orig"; cp "$VLE" "$VLE.orig"
+VGM_BAK="$(mkbak "$VGM")"; VLE_BAK="$(mkbak "$VLE")"
 NARROW="CHECK_HEAD_RE='^#{2,4}[[:space:]]+(Check[[:space:]]+)?[0-9]+[a-z-]*\\\\.'"
-sed "s|^CHECK_HEAD_RE=.*|$NARROW|" "$VGM.orig" > "$VGM"
-sed "s|^CHECK_HEAD_RE=.*|$NARROW|" "$VLE.orig" > "$VLE"
-if cmp -s "$VGM.orig" "$VGM" || cmp -s "$VLE.orig" "$VLE"; then
+sed "s|^CHECK_HEAD_RE=.*|$NARROW|" "$VGM_BAK" > "$VGM"
+sed "s|^CHECK_HEAD_RE=.*|$NARROW|" "$VLE_BAK" > "$VLE"
+if cmp -s "$VGM_BAK" "$VGM" || cmp -s "$VLE_BAK" "$VLE"; then
   bad "FIXTURE BROKEN: the I47 pair-of-pairs mutation matched nothing in one or both detectors, so this assertion is unproven"
 elif ! cmp -s "$VGM" "$VLE" && ! diff <(grep '^CHECK_HEAD_RE=' "$VGM") <(grep '^CHECK_HEAD_RE=' "$VLE") >/dev/null; then
   bad "FIXTURE BROKEN: the two narrowed detectors are not byte-identical, so arm 1 could fire and this assertion would not be attributable"
@@ -900,9 +927,9 @@ GV="$ROOT/core/skills/ai-dlc/steps/gate-validation.md"
 
 # ARM 2 — UNDOCUMENTED MODE. Drop a mode from usage(). The callers are prose, updated by
 # whoever read the usage text, so a mode missing from it is a mode no rename can reach.
-cp "$CP" "$CP.orig"
-grep -v 'core-paths.sh --list \[<manifest>\]" >&2' "$CP.orig" > "$CP"
-if cmp -s "$CP.orig" "$CP"; then
+CP_BAK="$(mkbak "$CP")"
+grep -v 'core-paths.sh --list \[<manifest>\]" >&2' "$CP_BAK" > "$CP"
+if cmp -s "$CP_BAK" "$CP"; then
   bad "FIXTURE BROKEN: the I49 undocumented-mode mutation matched nothing, so the second arm is unproven"
 else
   out="$(vrun)"
@@ -920,9 +947,9 @@ GV="$ROOT/core/skills/ai-dlc/steps/gate-validation.md"
 # ABSENCE (nothing cited that is not dispatched), and an empty dispatched set makes every
 # citation a ghost — or, without the zero guard, makes `comm` compare against nothing and
 # report agreement it never computed.
-cp "$CP" "$CP.orig"
-sed 's@# MODE_DISPATCH_BEGIN@# MODE_TABLE_BEGIN@' "$CP.orig" > "$CP"
-if cmp -s "$CP.orig" "$CP"; then
+CP_BAK="$(mkbak "$CP")"
+sed 's@# MODE_DISPATCH_BEGIN@# MODE_TABLE_BEGIN@' "$CP_BAK" > "$CP"
+if cmp -s "$CP_BAK" "$CP"; then
   bad "FIXTURE BROKEN: the I49 vacuity mutation matched nothing, so the third arm is unproven"
 else
   out="$(vrun)"
@@ -1088,9 +1115,9 @@ FDS="$ROOT/core/scripts/validate-fixture-drivability.sh"
 # ARM 1 — DIVERGENCE. The realistic shape: the marker is reworded in one home. Asserted
 # on the GHOST text, not on the word "differs", so the vacuity arm below cannot satisfy it.
 ghost_m="No \`driver.sh\`"", deliberately"
-cp "$FDS" "$FDS.orig"
-sed "s@^EXEMPT_MARKER='.*'\$@EXEMPT_MARKER='${ghost_m}'@" "$FDS.orig" > "$FDS"
-if cmp -s "$FDS.orig" "$FDS"; then
+FDS_BAK="$(mkbak "$FDS")"
+sed "s@^EXEMPT_MARKER='.*'\$@EXEMPT_MARKER='${ghost_m}'@" "$FDS_BAK" > "$FDS"
+if cmp -s "$FDS_BAK" "$FDS"; then
   bad "FIXTURE BROKEN: the I52 divergence mutation matched nothing, so this assertion is unproven"
 else
   out="$(vrun)"
@@ -1100,15 +1127,15 @@ else
     bad "the shipped validator's exemption marker diverged from I20's and I52 stayed silent — core's own fixtures would start failing consumers who changed nothing"
   fi
 fi
-mv "$FDS.orig" "$FDS"
+cp "$FDS_BAK" "$FDS"; rm -f "$FDS_BAK"
 
 # ARM 2 — VACUITY. I52 compares two EXTRACTED strings, and the extraction is a sed over a
 # line shape. Break the shape and both sides can come back empty, where `!=` is false and
 # the join reports an agreement it never computed. Asserted on I52's own read-failure
 # wording, which names the file it could not read — arm 1's message never contains it.
-cp "$FDS" "$FDS.orig"
-sed "s@^EXEMPT_MARKER=.*\$@EXEMPT_MARKER=\"whatever\"@" "$FDS.orig" > "$FDS"
-if cmp -s "$FDS.orig" "$FDS"; then
+FDS_BAK="$(mkbak "$FDS")"
+sed "s@^EXEMPT_MARKER=.*\$@EXEMPT_MARKER=\"whatever\"@" "$FDS_BAK" > "$FDS"
+if cmp -s "$FDS_BAK" "$FDS"; then
   bad "FIXTURE BROKEN: the I52 vacuity mutation matched nothing, so the zero guard is unproven"
 else
   out="$(vrun)"
@@ -1118,7 +1145,7 @@ else
     bad "I52 could not extract the shipped validator's marker and passed anyway — it compared nothing against nothing"
   fi
 fi
-mv "$FDS.orig" "$FDS"
+cp "$FDS_BAK" "$FDS"; rm -f "$FDS_BAK"
 }
 
 # --- Assertion 26: I53 — a mode one core script asks another for is one it dispatches --
@@ -1137,9 +1164,9 @@ CPS="$ROOT/core/scripts/core-paths.sh"
 # written out: I53 excludes core/fixtures/ from its citation corpus, and a fixture leaning on
 # that exclusion to hold its own text goes red the day the exclusion is reconsidered.
 i53_ghost="--any-authorize""d-by"
-cp "$CPS" "$CPS.orig"
-sed "s@validate-escalation-resolution\\.sh\" --any-authorized@validate-escalation-resolution.sh\" ${i53_ghost}@" "$CPS.orig" > "$CPS"
-if cmp -s "$CPS.orig" "$CPS"; then
+CPS_BAK="$(mkbak "$CPS")"
+sed "s@validate-escalation-resolution\\.sh\" --any-authorized@validate-escalation-resolution.sh\" ${i53_ghost}@" "$CPS_BAK" > "$CPS"
+if cmp -s "$CPS_BAK" "$CPS"; then
   bad "FIXTURE BROKEN: the I53 ghost-mode mutation matched nothing, so this assertion is unproven"
 else
   out="$(vrun)"
@@ -1149,13 +1176,13 @@ else
     bad "core-paths.sh called an escalation mode that does not exist and I53 stayed silent — the core-layer-immutability backstop would FAIL trees that are clean"
   fi
 fi
-mv "$CPS.orig" "$CPS"
+cp "$CPS_BAK" "$CPS"; rm -f "$CPS_BAK"
 
 # ARM 2 — UNDOCUMENTED MODE. Drop a mode from the USAGE block. The delegation is code, but
 # the operator reproducing it by hand reads that block.
-cp "$ESR" "$ESR.orig"
-grep -v '^#   validate-escalation-resolution.sh --any-authorized' "$ESR.orig" > "$ESR"
-if cmp -s "$ESR.orig" "$ESR"; then
+ESR_BAK="$(mkbak "$ESR")"
+grep -v '^#   validate-escalation-resolution.sh --any-authorized' "$ESR_BAK" > "$ESR"
+if cmp -s "$ESR_BAK" "$ESR"; then
   bad "FIXTURE BROKEN: the I53 undocumented-mode mutation matched nothing, so the second arm is unproven"
 else
   out="$(vrun)"
@@ -1165,13 +1192,13 @@ else
     bad "a mode vanished from the USAGE block and I53 reported clean — the discoverable set and the dispatched set can now diverge"
   fi
 fi
-mv "$ESR.orig" "$ESR"
+cp "$ESR_BAK" "$ESR"; rm -f "$ESR_BAK"
 
 # ARM 3 — VACUITY. Rename the sentinel bounding the dispatch extraction. I53 reports an
 # ABSENCE, and an empty dispatched set makes `comm` compare against nothing and agree.
-cp "$ESR" "$ESR.orig"
-sed 's@# MODE_DISPATCH_BEGIN@# ARG_TABLE_BEGIN@' "$ESR.orig" > "$ESR"
-if cmp -s "$ESR.orig" "$ESR"; then
+ESR_BAK="$(mkbak "$ESR")"
+sed 's@# MODE_DISPATCH_BEGIN@# ARG_TABLE_BEGIN@' "$ESR_BAK" > "$ESR"
+if cmp -s "$ESR_BAK" "$ESR"; then
   bad "FIXTURE BROKEN: the I53 vacuity mutation matched nothing, so the third arm is unproven"
 else
   out="$(vrun)"
@@ -1181,7 +1208,7 @@ else
     bad "the escalation dispatch extraction found nothing and I53 did not say so — it was comparing against an empty set and calling it agreement"
   fi
 fi
-mv "$ESR.orig" "$ESR"
+cp "$ESR_BAK" "$ESR"; rm -f "$ESR_BAK"
 }
 
 A29_i54_early_exit_reader() {
@@ -1225,9 +1252,9 @@ fi
 # same clean line as a tree with no defect. It carries a probe of the banned shape and
 # must refuse when its own grammar stops matching it. Asserted on that refusal's wording,
 # which arm 1's message never contains.
-cp "$V" "$V.orig"
-sed 's@\[|\]\[\[:space:\]\]\*grep@[|][[:space:]]*NOSUCHREADER@' "$V.orig" > "$V"
-if cmp -s "$V.orig" "$V"; then
+V_BAK="$(mkbak "$V")"
+sed 's@\[|\]\[\[:space:\]\]\*grep@[|][[:space:]]*NOSUCHREADER@' "$V_BAK" > "$V"
+if cmp -s "$V_BAK" "$V"; then
   bad "FIXTURE BROKEN: the I54 grammar mutation matched nothing, so the vacuity guard is unproven"
 else
   out="$(vrun)"
@@ -1237,18 +1264,18 @@ else
     bad "I54's grammar was broken and it reported a clean tree — it was scanning for a shape it could no longer match"
   fi
 fi
-mv "$V.orig" "$V"
+cp "$V_BAK" "$V"; rm -f "$V_BAK"
 
 # ARM 4 — OVER-WIDTH. The opposite failure: a grammar loose enough to match any pipe
 # would fire on nearly every script. I54 carries a probe of the PERMITTED shape too and
 # must refuse when it starts matching that. Asserted on its own distinct wording.
-cp "$V" "$V.orig"
+V_BAK="$(mkbak "$V")"
 # The realistic over-width is a "simplification": drop the writer and its quoted
 # argument and keep only the pipe-into-reader tail. A mutation that merely adds an
 # alternative to the writer group changes bytes without widening anything -- cmp -s
 # passes it and the assertion below is what catches it, which is the recorded trap.
-sed 's@^i54_re=".*\[|\]@i54_re="[|]@' "$V.orig" > "$V"
-if cmp -s "$V.orig" "$V"; then
+sed 's@^i54_re=".*\[|\]@i54_re="[|]@' "$V_BAK" > "$V"
+if cmp -s "$V_BAK" "$V"; then
   bad "FIXTURE BROKEN: the I54 over-width mutation matched nothing, so the false-positive guard is unproven"
 else
   out="$(vrun)"
@@ -1258,7 +1285,7 @@ else
     bad "I54's grammar was widened to match ordinary pipelines and it did not object — its false-positive set is unguarded"
   fi
 fi
-mv "$V.orig" "$V"
+cp "$V_BAK" "$V"; rm -f "$V_BAK"
 }
 
 A30_i55_suite_content_key() {
@@ -1275,9 +1302,9 @@ if [ ! -f "$KEY" ] || [ ! -f "$PREPUSH" ]; then
 fi
 
 # --- arm 1: an exclusion that is not a bare top-level name excludes NOTHING ----
-cp "$KEY" "$KEY.orig"
-sed 's@^docs$@docs/analysis@' "$KEY.orig" > "$KEY"
-if cmp -s "$KEY.orig" "$KEY"; then
+KEY_BAK="$(mkbak "$KEY")"
+sed 's@^docs$@docs/analysis@' "$KEY_BAK" > "$KEY"
+if cmp -s "$KEY_BAK" "$KEY"; then
   bad "FIXTURE BROKEN: the I55 arm-1 mutation matched nothing, so the exclusion-shape arm is unproven"
 else
   out="$(vrun)"
@@ -1287,12 +1314,12 @@ else
     bad "suite-content-key.sh declared an exclusion that its own exact-match filter can never apply, and the build stayed green"
   fi
 fi
-mv "$KEY.orig" "$KEY"
+cp "$KEY_BAK" "$KEY"; rm -f "$KEY_BAK"
 
 # --- arm 2: dropping .git from the exclusion set --------------------------------
-cp "$KEY" "$KEY.orig"
-sed '/^# EXCLUDE_BEGIN$/,/^# EXCLUDE_END$/{/^\.git$/d;}' "$KEY.orig" > "$KEY"
-if cmp -s "$KEY.orig" "$KEY"; then
+KEY_BAK="$(mkbak "$KEY")"
+sed '/^# EXCLUDE_BEGIN$/,/^# EXCLUDE_END$/{/^\.git$/d;}' "$KEY_BAK" > "$KEY"
+if cmp -s "$KEY_BAK" "$KEY"; then
   bad "FIXTURE BROKEN: the I55 arm-2 mutation matched nothing, so the .git arm is unproven"
 else
   out="$(vrun)"
@@ -1302,7 +1329,7 @@ else
     bad "the content key was widened to cover the object store and nothing objected — the suite skip became unreachable silently"
   fi
 fi
-mv "$KEY.orig" "$KEY"
+cp "$KEY_BAK" "$KEY"; rm -f "$KEY_BAK"
 
 # --- arm 3: a fixture reaching an EXCLUDED path at the distribution root ---------
 # Written into a real fixture's run.sh, because that is the corpus arm 3 reads.
@@ -1390,9 +1417,9 @@ fi
 # Dropping the containment case is the exact divergence I56 exists to catch: both files still
 # run and both still answer, but the gate now reports a Rule 19(a) mismatch on every spawn the
 # guard bound from a full model string (`claude-opus-5[1m]` against the key `opus`).
-cp "$LEDGERV" "$LEDGERV.orig"
-sed 's@^    \*"\$EXPECT"\*) return 0 ;;@    *"$EXPECT"*) return 1 ;;@' "$LEDGERV.orig" > "$LEDGERV"
-if cmp -s "$LEDGERV.orig" "$LEDGERV"; then
+LEDGERV_BAK="$(mkbak "$LEDGERV")"
+sed 's@^    \*"\$EXPECT"\*) return 0 ;;@    *"$EXPECT"*) return 1 ;;@' "$LEDGERV_BAK" > "$LEDGERV"
+if cmp -s "$LEDGERV_BAK" "$LEDGERV"; then
   bad "FIXTURE BROKEN: the I56 fork mutation matched nothing, so this assertion is unproven"
 else
   out="$(vrun)"
@@ -1402,14 +1429,14 @@ else
     bad "matches_pin() forked between the dispatch guard and the gate validator and I56 stayed silent — Check 22 would fail spawns the guard bound correctly"
   fi
 fi
-mv "$LEDGERV.orig" "$LEDGERV"
+cp "$LEDGERV_BAK" "$LEDGERV"; rm -f "$LEDGERV_BAK"
 
 # --- arm 2: VACUITY. Delete one subject outright. ---------------------------
 # I56 LOCATES its subjects by name. A rename or a deletion makes it find nothing, and
 # "found nothing" reads exactly like "found two identical bodies" unless it says so.
-cp "$LEDGERV" "$LEDGERV.orig"
-awk 'BEGIN{s=0} /^pin_key\(\) \{/{s=1} s==0{print} /^\}/{if(s==1){s=2; next}}' "$LEDGERV.orig" > "$LEDGERV"
-if cmp -s "$LEDGERV.orig" "$LEDGERV"; then
+LEDGERV_BAK="$(mkbak "$LEDGERV")"
+awk 'BEGIN{s=0} /^pin_key\(\) \{/{s=1} s==0{print} /^\}/{if(s==1){s=2; next}}' "$LEDGERV_BAK" > "$LEDGERV"
+if cmp -s "$LEDGERV_BAK" "$LEDGERV"; then
   bad "FIXTURE BROKEN: the I56 deletion mutation matched nothing, so the vacuity arm is unproven"
 else
   out="$(vrun)"
@@ -1419,7 +1446,7 @@ else
     bad "pin_key() was deleted from the gate validator and I56 did not report a zero count — the binding can be retired by a rename"
   fi
 fi
-mv "$LEDGERV.orig" "$LEDGERV"
+cp "$LEDGERV_BAK" "$LEDGERV"; rm -f "$LEDGERV_BAK"
 
 # --- arm 3: DUPLICATE. Define matches_pin() twice in the guard. -------------
 # The state the guard actually shipped in until v0.211.0. Byte-identity alone passes it,
@@ -1525,9 +1552,9 @@ restore
 # it. `required/` occurs exactly once in the validator (the closing delimiter pins it to the
 # end of I57's own regex), so the smallest span that carries the semantics is also unique,
 # and an edit to the case class, the quantifiers or the digit class no longer kills the probe.
-cp "$V" "$V.orig"
-sed 's@\[ \]+required/@[ ]+requiredZZZ/@' "$V.orig" > "$V"
-if cmp -s "$V.orig" "$V"; then
+V_BAK="$(mkbak "$V")"
+sed 's@\[ \]+required/@[ ]+requiredZZZ/@' "$V_BAK" > "$V"
+if cmp -s "$V_BAK" "$V"; then
   bad "FIXTURE BROKEN: the I57 grammar mutation matched nothing, so the liveness arm is unproven"
 else
   out="$(vrun)"
@@ -1537,7 +1564,7 @@ else
     bad "I57's posture grammar was broken so that it matches nothing, and the invariant still printed clean — the liveness probe is not wired, and this check would silently stop firing on its first grammar edit"
   fi
 fi
-mv "$V.orig" "$V"
+cp "$V_BAK" "$V"; rm -f "$V_BAK"
 restore
 
 # --- arm 5: THE NARROWNESS PROBE. Widen it back to the legend form. ---------
@@ -1549,9 +1576,9 @@ restore
 # grammar exists to avoid, and this arm asserts the probe's message, not the count.)
 # Same narrowed target as arm 4, for the same reason: widen the posture ALTERNATIVE only,
 # and let the case class and quantifiers ahead of it change without killing this probe.
-cp "$V" "$V.orig"
-sed 's@\[ \]+required/@[ ]+(required|=)/@' "$V.orig" > "$V"
-if cmp -s "$V.orig" "$V"; then
+V_BAK="$(mkbak "$V")"
+sed 's@\[ \]+required/@[ ]+(required|=)/@' "$V_BAK" > "$V"
+if cmp -s "$V_BAK" "$V"; then
   bad "FIXTURE BROKEN: the I57 grammar widening matched nothing, so the narrowness arm is unproven"
 else
   out="$(vrun)"
@@ -1561,7 +1588,7 @@ else
     bad "I57's posture grammar was widened to match 'exit 0 = ...' and the negative probe stayed silent — nothing stops this check from growing back onto delegations that are correctly carried under reads:"
   fi
 fi
-mv "$V.orig" "$V"
+cp "$V_BAK" "$V"; rm -f "$V_BAK"
 }
 
 # --- Assertion 33: I59 — a dispatched mode is a documented mode ---------------
@@ -1616,9 +1643,9 @@ restore
 # so dropping it changed bytes and changed nothing: `cmp -s` passed, the mutant ran, and
 # the arm reported a real failure against a validator that was still working. A byte
 # guard proves the sed matched; only the assertion proves the mutant BITES.
-cp "$V" "$V.orig"
-sed "s@grep '\^--'@grep '\^ZZ'@" "$V.orig" > "$V"
-if cmp -s "$V.orig" "$V"; then
+V_BAK="$(mkbak "$V")"
+sed "s@grep '\^--'@grep '\^ZZ'@" "$V_BAK" > "$V"
+if cmp -s "$V_BAK" "$V"; then
   bad "FIXTURE BROKEN: the I59 grammar mutation matched nothing, so the liveness arm is unproven"
 else
   out="$(vrun)"
@@ -1628,15 +1655,15 @@ else
     bad "I59's mode extraction was broken so that it matches nothing and the invariant still printed clean — it would stop firing on its first grammar edit and no one would learn of it"
   fi
 fi
-mv "$V.orig" "$V"
+cp "$V_BAK" "$V"; rm -f "$V_BAK"
 restore
 
 # ARM 3 — THE EXEMPTION DIES. `--help` is the ONE enumerated carve-out and it is what makes
 # the measured false-positive set empty: six scripts dispatch `-h|--help` to print their own
 # header. Remove it and those six become findings — the shape that gets a lint turned off.
-cp "$V" "$V.orig"
-grep -v 'I59_HELP_EXEMPTION' "$V.orig" > "$V"
-if cmp -s "$V.orig" "$V"; then
+V_BAK="$(mkbak "$V")"
+grep -v 'I59_HELP_EXEMPTION' "$V_BAK" > "$V"
+if cmp -s "$V_BAK" "$V"; then
   bad "FIXTURE BROKEN: the I59 exemption mutation matched nothing, so the carve-out arm is unproven"
 else
   out="$(vrun)"
@@ -1646,15 +1673,15 @@ else
     bad "I59's --help exemption was deleted and the probe stayed silent — six scripts that dispatch -h|--help to print their own header become findings, and the carve-out is unheld"
   fi
 fi
-mv "$V.orig" "$V"
+cp "$V_BAK" "$V"; rm -f "$V_BAK"
 restore
 
 # ARM 4 — THE CORPUS COLLAPSES. The subject set is derived by `find`, not `git ls-files`,
 # precisely because this fixture seeds a copy with no `.git` — and an empty corpus prints
 # the same clean line as a fully documented one. The floor is what refuses.
-cp "$V" "$V.orig"
-sed "s@-type f -name '\*\.sh' -not -path@-type f -name '*.zzz' -not -path@" "$V.orig" > "$V"
-if cmp -s "$V.orig" "$V"; then
+V_BAK="$(mkbak "$V")"
+sed "s@-type f -name '\*\.sh' -not -path@-type f -name '*.zzz' -not -path@" "$V_BAK" > "$V"
+if cmp -s "$V_BAK" "$V"; then
   bad "FIXTURE BROKEN: the I59 corpus mutation matched nothing, so the floor arm is unproven"
 else
   out="$(vrun)"
@@ -1664,7 +1691,7 @@ else
     bad "I59's corpus derivation matched no files and the invariant reported clean — every mode in core/ was unchecked and the run said so nowhere"
   fi
 fi
-mv "$V.orig" "$V"
+cp "$V_BAK" "$V"; rm -f "$V_BAK"
 }
 
 # --- Assertion 34: I60 — a CITED mode is a mode the target dispatches ---------
@@ -1711,9 +1738,9 @@ restore
 # finding — the measured non-empty false-positive set that blocked this generalisation for
 # two programs. The probe target dispatches one mode each way precisely so this regression
 # is loud instead of quiet.
-cp "$V" "$V.orig"
-sed "s@grep -oE '==\?\[\[:space:\]\]+\"--\[a-z\]\[a-z0-9-\]\*\"'@grep -oE '--zzz-no-such-form'@" "$V.orig" > "$V"
-if cmp -s "$V.orig" "$V"; then
+V_BAK="$(mkbak "$V")"
+sed "s@grep -oE '==\?\[\[:space:\]\]+\"--\[a-z\]\[a-z0-9-\]\*\"'@grep -oE '--zzz-no-such-form'@" "$V_BAK" > "$V"
+if cmp -s "$V_BAK" "$V"; then
   bad "FIXTURE BROKEN: the I60 non-case-dispatch mutation matched nothing, so the false-positive arm is unproven"
 else
   out="$(vrun)"
@@ -1723,14 +1750,14 @@ else
     bad "I60's non-case dispatch form was removed and the probe stayed silent — six shipped scripts become false findings, which is the shape that gets a lint turned off"
   fi
 fi
-mv "$V.orig" "$V"
+cp "$V_BAK" "$V"; rm -f "$V_BAK"
 restore
 
 # ARM 3 — THE CITATION GRAMMAR DIES. A regex that matches nothing returns the same empty
 # ghost set as a tree with no ghost in it. Break it and the PROBE is what fails.
-cp "$V" "$V.orig"
-sed "s@\[A-Za-z0-9_.-\]+\\\\\.sh\"?\[\[:space:\]\]+--\[a-z\]\[a-z0-9-\]\*@zzz-matches-no-citation@" "$V.orig" > "$V"
-if cmp -s "$V.orig" "$V"; then
+V_BAK="$(mkbak "$V")"
+sed "s@\[A-Za-z0-9_.-\]+\\\\\.sh\"?\[\[:space:\]\]+--\[a-z\]\[a-z0-9-\]\*@zzz-matches-no-citation@" "$V_BAK" > "$V"
+if cmp -s "$V_BAK" "$V"; then
   bad "FIXTURE BROKEN: the I60 citation-grammar mutation matched nothing, so the liveness arm is unproven"
 else
   out="$(vrun)"
@@ -1740,7 +1767,7 @@ else
     bad "I60's citation extraction was broken so that it matches nothing and the invariant still printed clean — it would stop firing on its first grammar edit and no one would learn of it"
   fi
 fi
-mv "$V.orig" "$V"
+cp "$V_BAK" "$V"; rm -f "$V_BAK"
 restore
 
 # ARM 4 — THE CORPUS COLLAPSES. The floor is what refuses a derivation that returns almost
@@ -1753,9 +1780,9 @@ restore
 # first, the floor was never reached, and the arm failed against a floor that was working.
 # A guard downstream of a liveness probe can only be tested on an input the probe still
 # passes.
-cp "$V" "$V.orig"
-sed 's@i60_citations "$REPO_ROOT"@i60_citations "$REPO_ROOT/nonexistent"@g' "$V.orig" > "$V"
-if cmp -s "$V.orig" "$V"; then
+V_BAK="$(mkbak "$V")"
+sed 's@i60_citations "$REPO_ROOT"@i60_citations "$REPO_ROOT/nonexistent"@g' "$V_BAK" > "$V"
+if cmp -s "$V_BAK" "$V"; then
   bad "FIXTURE BROKEN: the I60 corpus mutation matched nothing, so the floor arm is unproven"
 else
   out="$(vrun)"
@@ -1765,7 +1792,7 @@ else
     bad "I60's citation corpus matched no files and the invariant reported clean — every cited mode in the tree was unchecked and the run said so nowhere"
   fi
 fi
-mv "$V.orig" "$V"
+cp "$V_BAK" "$V"; rm -f "$V_BAK"
 }
 # `i93_token` -> the declared empty-subject verdict token, read out of the SEED's own owner.
 #
@@ -1874,9 +1901,9 @@ rm -f "$esv_js_new"
 # message and the exemption arm's both contain "outside a comment"; a mutation keyed on the
 # shared phrase would edit more than one arm and move cells this assertion never earned.
 printf '%s\n' '#!/usr/bin/env bash' "echo \"$esv_tok: this run opened no file\"" > "$esv_core_new"
-cp "$V" "$V.orig"
-sed 's@^\( *\)err "I93: .*declares it neither an emitter.*@\1:@' "$V.orig" > "$V"
-if cmp -s "$V.orig" "$V"; then
+V_BAK="$(mkbak "$V")"
+sed 's@^\( *\)err "I93: .*declares it neither an emitter.*@\1:@' "$V_BAK" > "$V"
+if cmp -s "$V_BAK" "$V"; then
   bad "FIXTURE BROKEN: the arm D reporter mutation matched nothing in the validator, so arm 1 above is a message somebody observed and not a finding attributed to arm D"
 else
   out="$(vrun)"
@@ -1888,7 +1915,7 @@ else
     bad "with arm D's reporter neutered the run neither named the seeded emitter nor reached I93's OK verdict — the mutant broke something other than the arm it aimed at, so it proves nothing about arm D"
   fi
 fi
-mv "$V.orig" "$V"
+cp "$V_BAK" "$V"; rm -f "$V_BAK"
 rm -f "$esv_core_new"
 }
 
@@ -1927,9 +1954,9 @@ fi
 # ARM 2 — THE EXEMPT FILE NO LONGER EMITS. Two readings, and the arm must refuse both: the
 # exemption has gone vestigial, or the sweep is not reading its population. Mutating the
 # token OUT of the file (rather than deleting the file) is what separates this from arm 1.
-cp "$ROOT/$esv_xp" "$ROOT/$esv_xp.orig"
-sed "s@$esv_tok@REDACTED BY THE FIXTURE@g" "$ROOT/$esv_xp.orig" > "$ROOT/$esv_xp"
-if cmp -s "$ROOT/$esv_xp.orig" "$ROOT/$esv_xp"; then
+esv_xp_bak="$(mkbak "$ROOT/$esv_xp")"
+sed "s@$esv_tok@REDACTED BY THE FIXTURE@g" "$esv_xp_bak" > "$ROOT/$esv_xp"
+if cmp -s "$esv_xp_bak" "$ROOT/$esv_xp"; then
   bad "FIXTURE BROKEN: the arm D positive-control mutation matched nothing in $esv_xp, so this assertion is unproven"
 else
   out="$(vrun)"
@@ -1939,7 +1966,7 @@ else
     bad "the one file arm D's sweep is REQUIRED to find emitting stopped emitting and I93 said nothing — every 'no undeclared emitter' verdict from this arm is now a zero taken over a corpus nobody proved was read"
   fi
 fi
-mv "$ROOT/$esv_xp.orig" "$ROOT/$esv_xp"
+cp "$esv_xp_bak" "$ROOT/$esv_xp"; rm -f "$esv_xp_bak"
 
 # ARM 3 — BOTH DECLARED AND EXEMPT. Two opposite claims about one file, and nothing
 # downstream can tell which was meant. Inserted into the owner's emitters list, scoped to the
@@ -1969,9 +1996,21 @@ mv "$MAPY.orig" "$MAPY"
 # VALIDATOR, since the exemption list lives there. The run also reports the now-unexempted
 # file as undeclared, which is correct and is why the assertion is on this arm's OWN wording:
 # a grep for the undeclared-emitter message would be satisfied by arm D's ordinary finding.
-cp "$V" "$V.orig"
-sed "s@^\\([[:space:]]*ESV_EXEMPT='\\)\\([^ ']*\\) [^']*'@\\1\\2'@" "$V.orig" > "$V"
-if cmp -s "$V.orig" "$V"; then
+#
+# THE MUTATION IS ANCHORED ON THE OPENING LINE ALONE AND KEEPS THE STRING OPEN. ESV_EXEMPT is
+# a MULTI-LINE single-quoted string -- one `<path> <reason>` per line -- so a pattern that
+# required the closing quote on the same line matched nothing the moment a second exemption
+# was added, and `cmp -s` reported FIXTURE BROKEN rather than silently passing. Stripping the
+# reason off the FIRST line only, and leaving the newline and every later line untouched, is
+# what makes this a one-exemption mutation on a list of any length.
+#
+# THE BACKUP LIVES OUTSIDE THE SEEDED TREE for the reason recorded at A39 arm 5: `$V.orig`
+# beside `$V` puts a second copy of the validator into `$ROOT/scripts/`, which is half the
+# population arms D and E sweep, and that copy is an undeclared emitter of the declared token.
+esv_bak="$(mkbak "$V")"
+sed "s@^\\([[:space:]]*ESV_EXEMPT='[^ ']*\\) [^']*\$@\\1@" "$esv_bak" > "$V"
+if cmp -s "$esv_bak" "$V"; then
+  rm -f "$esv_bak"
   bad "FIXTURE BROKEN: the I93 unreasoned-exemption mutation matched nothing in the validator, so this assertion is unproven"
 else
   out="$(vrun)"
@@ -1981,7 +2020,8 @@ else
     bad "arm D accepted an exemption with no reason — a hole in the guard can be opened with no record of why, and the next author reading it cannot tell it from an omission"
   fi
 fi
-mv "$V.orig" "$V"
+cp "$esv_bak" "$V"
+rm -f "$esv_bak"
 }
 
 # --- Assertion 37: I93 — arm D's four SELF-PROBE bits can actually fire ---------
@@ -2004,9 +2044,9 @@ A37_i93_probe_arm_d_bits() {
 # expected path). The declared/exempt suppression bits must stay quiet: an empty result
 # contains neither, and a total that included them would mean the probe cannot tell a join
 # that reports nothing from one that reports everything.
-cp "$V" "$V.orig"
-sed 's@^esv_undeclared() {$@esv_undeclared() { return 0@' "$V.orig" > "$V"
-if cmp -s "$V.orig" "$V"; then
+V_BAK="$(mkbak "$V")"
+sed 's@^esv_undeclared() {$@esv_undeclared() { return 0@' "$V_BAK" > "$V"
+if cmp -s "$V_BAK" "$V"; then
   bad "FIXTURE BROKEN: the I93 esv_undeclared neutering mutation matched nothing, so the probe's arm D bits are unproven"
 else
   out="$(vrun)"
@@ -2016,7 +2056,7 @@ else
     bad "esv_undeclared was neutered to return nothing and I93's probe still scored 0 — the four bits guarding arm D cannot fire, so arm D's silence over the real tree establishes only that it ran"
   fi
 fi
-mv "$V.orig" "$V"
+cp "$V_BAK" "$V"; rm -f "$V_BAK"
 
 # ARM 2 — THE JOIN REPORTS EVERYTHING. The two membership tests are anchored on the argument
 # that SEPARATES them ($2 the declared list, $3 the exempt list), never on the shared call
@@ -2026,10 +2066,10 @@ mv "$V.orig" "$V"
 # back, so the exemption is inert) +1000000000 (the result is not the one expected path). The
 # +1000000 bit must stay quiet here: the undeclared path IS reported, and a total carrying it
 # would mean the probe is scoring the mutation rather than the behaviour.
-cp "$V" "$V.orig"
+V_BAK="$(mkbak "$V")"
 sed -e 's@in_lines "$esv_u_p" "$2" && continue@:@' \
-    -e 's@in_lines "$esv_u_p" "$3" && continue@:@' "$V.orig" > "$V"
-if cmp -s "$V.orig" "$V"; then
+    -e 's@in_lines "$esv_u_p" "$3" && continue@:@' "$V_BAK" > "$V"
+if cmp -s "$V_BAK" "$V"; then
   bad "FIXTURE BROKEN: the I93 esv_undeclared widening mutation matched nothing, so the probe's suppression bits are unproven"
 else
   out="$(vrun)"
@@ -2039,7 +2079,7 @@ else
     bad "esv_undeclared was widened to report every file it was handed and I93's probe did not score it — arm D could fail the tree as it stands, on files the map declares, with nothing upstream to catch it"
   fi
 fi
-mv "$V.orig" "$V"
+cp "$V_BAK" "$V"; rm -f "$V_BAK"
 }
 
 
@@ -2088,20 +2128,210 @@ fi
 # THE STAND-DOWN MUST NOT HAVE DISARMED THE EXEMPTION CONTROL. Same tree, no dangling link,
 # exempt file mutated to stop emitting: the control it just stood aside for must still fire on
 # its OWN case. Without this, deleting the exemption check entirely would pass the arm above.
-XP="$ROOT/scripts/validate-plan-shape.sh"
-cp "$XP" "$XP.orig"
-sed "s@$esv_tok@REDACTED BY THE FIXTURE@g" "$XP.orig" > "$XP"
-if cmp -s "$XP.orig" "$XP"; then
+# DERIVED from the validator's own ESV_EXEMPT line rather than typed, for the reason A36
+# derives it: a hand-copied path stays green after the exemption moves. The literal below was
+# correct while there was one exemption and would have silently stopped matching the arm's
+# subject the moment the list grew.
+esv_xp="$(awk -F"'" '/^[[:space:]]*ESV_EXEMPT=/ { split($2, a, " "); print a[1]; exit }' "$V")"
+if [ -z "$esv_xp" ] || [ ! -f "$ROOT/$esv_xp" ]; then
+  bad "FIXTURE BROKEN: could not derive an existing exempt path from the validator, so the stand-down's counterpart has no subject"
+  return
+fi
+XP="$ROOT/$esv_xp"
+XP_BAK="$(mkbak "$XP")"
+sed "s@$esv_tok@REDACTED BY THE FIXTURE@g" "$XP_BAK" > "$XP"
+if cmp -s "$XP_BAK" "$XP"; then
   bad "FIXTURE BROKEN: the exempt-file mutation matched nothing, so the stand-down's counterpart is unproven"
 else
   out="$(vrun)"
-  if grep -q "arm D exempts .* and arm D's own sweep found no line of it" <<<"$out"; then
-    ok "the exemption control still fires on its OWN case when the sweep COMPLETED (the stand-down narrowed it to the aborted-scan case rather than switching it off)"
-  else
+  esv_n2="$(printf '%s\n' "$out" | grep -c '^FAIL: I93')"
+  if ! grep -q "arm D exempts .* and arm D's own sweep found no line of it" <<<"$out"; then
     bad "the exemption control no longer fires when an exempt file stops emitting -- the stand-down disarmed arm D's positive control, and every zero it licenses is now unproven"
+  elif grep -q "$esv_xp:.* states an empty-subject verdict in a spelling of its own" <<<"$out"; then
+    bad "arm E reported the EXEMPT file as needing a declaration -- its remedy says 'add the file to emitters:', which is the one thing an exempt path must never do, so the run now prints two contradictory instructions for one cause"
+  elif [ "$esv_n2" -ne 1 ]; then
+    # THE COUNT, AND WHY IT IS A SEPARATE CONJUNCT FROM THE MESSAGE ABOVE. The grep is
+    # satisfied by its own finding no matter what ELSE the run reported, which is how this
+    # arm passed for as long as the fixture backed a file up beside itself: measured, the
+    # `cp "$XP" "$XP.orig"` idiom produced THREE I93 findings here -- the wanted one, the
+    # `.orig` copy read as an undeclared emitter, and arm E reading the MUTATED original as
+    # a novel spelling -- and the message assertion could not see either of the extras. One
+    # seeded cause must yield one finding; anything else means the seed is tripping arms it
+    # was never aimed at, and a reader cannot tell which arm owns the case.
+    bad "a mutated exempt file produced $esv_n2 I93 finding(s) where exactly 1 is correct -- the seed is tripping arms beyond the exemption control, so this arm's kill is not attributable to it"
+  else
+    ok "the exemption control still fires on its OWN case when the sweep COMPLETED, and on that case ALONE (the stand-down narrowed it to the aborted-scan case rather than switching it off, and the seed trips nothing else)"
   fi
 fi
-mv "$XP.orig" "$XP"
+cp "$XP_BAK" "$XP"; rm -f "$XP_BAK"
+}
+
+
+# --- Assertion 39: I93 arm E -- a FOURTH spelling of the empty-subject verdict ------
+# Arm C refuses three RETIRED spellings BY NAME and an enumeration cannot reach a spelling
+# nobody has written yet; arm D joins on files that print the DECLARED token, so a file
+# spelling the verdict its own way is outside its population by construction. Measured before
+# arm E: a seeded validator whose only emission was `NOTHING TO EXAMINE HERE` drove the
+# validator to rc 0 with no finding, while the same seed carrying the RETIRED `AUDITED
+# NOTHING` from the same position WAS caught -- so the escape was the grammar, not the seat.
+#
+# THE SPELLING IS NOVEL BY CONSTRUCTION, NOT BY ASSERTION. The seed's phrase must be one no
+# declared or retired spelling contains, or the arm-1 kill could be arm A's or arm C's. It is
+# built from the DERIVED token and checked against it: if the token ever becomes the seed's
+# own words this arm says FIXTURE BROKEN rather than scoring a kill it did not earn.
+#
+# FIVE ARMS, AND THE LAST TWO ARE WHY THE FIRST THREE MEAN ANYTHING. A fire-only battery
+# passes against an arm that reports every `echo`, which would red the tree on every
+# validator's diagnostics; a quiet-only battery passes against an arm deleted outright.
+A39_i93_novel_spelling() {
+esv_tok="$(i93_token)"
+if [ -z "$esv_tok" ]; then
+  bad "FIXTURE BROKEN: could not derive empty_subject_verdict.token, so arm E's seeds would be scored against nothing"
+  return
+fi
+esv_novel_say='NOTHING TO EXAMINE HERE'
+case "$esv_tok" in
+  *"$esv_novel_say"*) bad "FIXTURE BROKEN: the declared token now CONTAINS this arm's novel phrase, so arm 1's kill could belong to arm A or arm C rather than to arm E"; return ;;
+esac
+
+# ARM 1 — A NOVEL SPELLING UNDER core/scripts/. Not named validate-*.sh, for arm 35's reason:
+# arm E's population is every FILE in the directory, and a name matching the convention would
+# leave this unable to tell that from a narrower grammar.
+esv_core_new="$ROOT/core/scripts/esv-fourth.sh"
+printf '%s\n' '#!/usr/bin/env bash' "echo \"esv-fourth: $esv_novel_say — the corpus was empty.\"" 'exit 0' > "$esv_core_new"
+out="$(vrun)"
+if grep -q "core/scripts/esv-fourth.sh:2 states an empty-subject verdict in a spelling of its own" <<<"$out"; then
+  ok "a core/scripts/ validator stating the empty-subject verdict in a FOURTH spelling FAILS I93, reported by LINE (arm C's enumeration cannot reach a spelling nobody has written yet)"
+else
+  bad "a novel empty-subject spelling under core/scripts/ did not fail I93 — the fourth spelling seeds clean exactly as it did before arm E, and the vocabulary index reads as complete while a new emitter spells the verdict however it likes"
+fi
+
+# ARM 2 — THE SAME SEED UNDER scripts/. The distribution-only half of arm D's population, and
+# the half where two of arm E's three real exemptions live.
+rm -f "$esv_core_new"
+esv_dist_new="$ROOT/scripts/esv-fourth-dist.sh"
+printf '%s\n' '#!/usr/bin/env bash' "echo \"esv-fourth: $esv_novel_say — the corpus was empty.\"" 'exit 0' > "$esv_dist_new"
+out="$(vrun)"
+if grep -q "scripts/esv-fourth-dist.sh:2 states an empty-subject verdict" <<<"$out"; then
+  ok "the same novel spelling under scripts/ FAILS I93 too (arm E sweeps the distribution-only half, not just core/scripts/)"
+else
+  bad "a novel spelling under scripts/ did not fail I93 — arm E has narrowed to core/scripts/, and two of its three exemptions live in the half it stopped reading"
+fi
+rm -f "$esv_dist_new"
+
+# ARM 3 — THE NEAR-MISSES, four shapes in ONE file, because each is a real thing in this
+# corpus and any one of them firing reds the tree on a conforming validator:
+#   a `#` comment      -- every emitter's exit-code table
+#   an `err` argument  -- a FAILURE message, which is not the empty-subject state; eight lines
+#                         INSIDE the I93 unit itself are this shape
+#   a `%-Ns` row       -- sprint-status.sh's per-view report line
+#   a `> path` write   -- a probe seeding a fixture tree, including arm E's own six seeds
+printf '%s\n' '#!/usr/bin/env bash' \
+  "#   0 = $esv_novel_say, in an exit-code table" \
+  'err "the corpus is empty: found nothing to scan. Failing closed."' \
+  'print("  %-15s no key — nothing to compare" % view)' \
+  'printf "%s\n" "audited nothing" > "$TMP/seed.sh"' > "$esv_core_new"
+out="$(vrun)"
+if grep -q 'esv-fourth.sh' <<<"$out"; then
+  bad "arm E fired on a comment, an err() argument, a padded table row or a probe seed write — each is a live shape in this corpus, so the arm would red the tree on validators that are conforming, and the first one alone appears eight times inside the I93 unit it lives in"
+elif grep -q '^OK: enforcement-map.yaml in sync' <<<"$out"; then
+  ok "a file carrying the phrase ONLY as a comment, an err() argument, a %-Ns table row and a file-redirected seed write does NOT fail I93, and the run still reaches its verdict (the narrowing is the emission site, not the words)"
+else
+  bad "the near-miss tree neither failed on the seeded path nor reached I93's OK verdict — the run did not get far enough for this arm's silence to mean anything"
+fi
+
+# ARM 4 — A FILE THAT ALREADY EMITS THE DECLARED TOKEN IS NOT REPORTED, even when it also
+# states an empty subject in its own words elsewhere. This is validate-bmad-invocations.sh's
+# real shape: it prints the token at one line for one state and says "nothing to resolve
+# against" at another for a different one. Without this, arm E tells a conforming emitter to
+# converge on a token it already prints.
+printf '%s\n' '#!/usr/bin/env bash' "echo \"DISARMED — $esv_tok — no corpus.\"" \
+  "echo \"and separately: $esv_novel_say\"" > "$esv_core_new"
+out="$(vrun)"
+if grep -q "esv-fourth.sh.* states an empty-subject verdict" <<<"$out"; then
+  bad "arm E reported a file that ALREADY emits the declared token — a conforming emitter is told to adopt a token it prints, and every declared emitter carrying prose about an empty subject would red the tree"
+else
+  ok "a file already emitting the declared token is NOT reported by arm E even when it states an empty subject in its own words elsewhere (the join is per FILE, which is what the arm actually asks)"
+fi
+
+# ARM 4b — THE EXEMPT-SKIP DOES NOT COVER ARM E's OWN SUBJECT. Arm E skips a path arm D
+# exempts, because its remedy ("add the file to `emitters:`") is forbidden for one -- and an
+# exemption is a hole, so the question mechanism-design.md asks of every hole is what ELSE it
+# acquits. The seed is a NOVEL SPELLING placed in an exempt file, which is the case the skip
+# must NOT swallow silently: arm D's exemption control is required to find that file emitting
+# the declared token, so a file that stops emitting it is reported there, by name, in the same
+# run. Both halves are asserted -- arm E stays quiet AND arm D speaks -- because arm E's
+# silence alone is what a skip that covers everything also looks like.
+esv_xp2="$(awk -F"'" '/^[[:space:]]*ESV_EXEMPT=/ { split($2, a, " "); print a[1]; exit }' "$V")"
+if [ -z "$esv_xp2" ] || [ ! -f "$ROOT/$esv_xp2" ]; then
+  bad "FIXTURE BROKEN: could not derive an existing exempt path from the validator, so the exempt-skip's own acquittal is unproven"
+else
+  esv_xp2_bak="$(mkbak "$ROOT/$esv_xp2")"
+  printf '%s\n' '#!/usr/bin/env bash' "echo \"exempt-but-novel: $esv_novel_say\"" 'exit 0' > "$ROOT/$esv_xp2"
+  out="$(vrun)"
+  if grep -q "$esv_xp2:.* states an empty-subject verdict" <<<"$out"; then
+    bad "arm E reported an EXEMPT path, so the skip is not in force and the arm prints a remedy (declare it) that contradicts the exemption"
+  elif grep -q "arm D exempts '$esv_xp2' and arm D's own sweep found no line of it" <<<"$out"; then
+    ok "an exempt file that swaps the declared token for a NOVEL spelling is reported by arm D's exemption control, not by arm E (the skip hands the case to the arm whose remedy is legal, and does not swallow it)"
+  else
+    bad "an exempt file that stopped emitting the declared token was reported by NEITHER arm -- arm E's skip has acquitted arm E's own subject and arm D's control did not pick it up, so this state is now unguarded in both directions"
+  fi
+  cp "$esv_xp2_bak" "$ROOT/$esv_xp2"; rm -f "$esv_xp2_bak"
+fi
+
+# ARM 5 — THE MUTANT, AND WHAT IT ESTABLISHES THAT ARM 1 DOES NOT. Arm 1 asserts a message
+# appears; it cannot tell whether arm E produced it. So arm E's reporter is neutered with the
+# SAME seed in place and both halves are asserted: the seeded path is no longer named, AND the
+# run still reaches its own OK verdict. The second half is what stops this being an absence.
+#
+# ANCHORED ON `states an empty-subject verdict in a spelling of its own`, which is arm E's
+# reporter alone. Arm A's message and arm D's both contain "outside a comment"; a mutation
+# keyed on a shared phrase would edit more than one arm.
+#
+# THE BACKUP LIVES OUTSIDE THE SEEDED TREE, and that is arm E's own subject biting the idiom
+# every assertion above uses. `V_BAK="$(mkbak "$V")"` puts a SECOND copy of the validator in
+# `$ROOT/scripts/`, which is half of the population arms D and E sweep -- so the backup is
+# itself an undeclared emitter of the declared token, arm D reports it, and the run goes red
+# for a reason this arm never seeded. Measured: with `$V.orig` beside `$V` the mutant run
+# printed one finding naming `scripts/validate-enforcement-map.sh.orig` and neither named the
+# seed nor reached the OK verdict, which reads exactly like a mutant that broke the wrong arm.
+printf '%s\n' '#!/usr/bin/env bash' "echo \"esv-fourth: $esv_novel_say — the corpus was empty.\"" 'exit 0' > "$esv_core_new"
+esv_bak="$(mkbak "$V")"
+sed 's@^\( *\)err "I93: .*states an empty-subject verdict in a spelling of its own.*@\1:@' "$esv_bak" > "$V"
+if cmp -s "$esv_bak" "$V"; then
+  bad "FIXTURE BROKEN: the arm E reporter mutation matched nothing in the validator, so arm 1 above is a message somebody observed and not a finding attributed to arm E"
+else
+  out="$(vrun)"
+  if grep -q 'esv-fourth.sh' <<<"$out"; then
+    bad "arm E's reporter was neutered and the seeded novel spelling was STILL named — the finding arm 1 scores as arm E's kill comes from somewhere else, and deleting arm E would leave this battery green"
+  elif grep -q '^OK: enforcement-map.yaml in sync' <<<"$out"; then
+    ok "neutering arm E's reporter makes the SAME seeded novel spelling go unreported while the rest of I93 still reaches its verdict (arm 1's kill belongs to arm E, and the seed trips no other arm)"
+  else
+    bad "with arm E's reporter neutered the run neither named the seed nor reached I93's OK verdict — the mutant broke something other than the arm it aimed at"
+  fi
+fi
+cp "$esv_bak" "$V"
+
+# ARM 6 — THE OPPOSITE MUTANT: an arm E that flags EVERY emission. A fire-only battery cannot
+# tell a discriminating grammar from one that reports the whole corpus, and the over-broad
+# form is the likelier wrong build: it passes arms 1 and 2 and reds the tree on ~30 conforming
+# lines. The verdict phrase test is replaced with an unconditional match, the seed is REMOVED
+# so the tree is the clean one, and the run must still be green.
+rm -f "$esv_core_new"
+esv_bak="$(mkbak "$V")"
+sed 's@^      if (u !~ VERD) next$@      if (0) next@' "$esv_bak" > "$V"
+if cmp -s "$esv_bak" "$V"; then
+  bad "FIXTURE BROKEN: the arm E over-broad mutation matched nothing, so this arm cannot tell a discriminating grammar from one that flags every echo"
+else
+  out="$(vrun)"
+  if grep -q 'states an empty-subject verdict in a spelling of its own' <<<"$out"; then
+    ok "an arm E whose verdict-phrase test is removed REDS the clean tree (the phrase grammar is load-bearing, not decoration on a scan that flags every emission)"
+  else
+    bad "arm E with its verdict-phrase test removed still passed the clean tree — the grammar is doing no work, which means arm 1's kill would be scored by a scan that reports every echo and the arm has no false-positive story at all"
+  fi
+fi
+cp "$esv_bak" "$V"
+rm -f "$esv_bak"
 }
 
 

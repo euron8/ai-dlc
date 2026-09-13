@@ -371,14 +371,18 @@ distinguish two citation forms — they are NOT interchangeable:
 
 Do NOT cite a condensed index (e.g. `prd.md`) as `full_text_source`
 "for full text" — the PRD's LR entries are §2a-propagated, and
-`s<N>/locked-requirements.md` is the byte-verbatim source of record.
+`s<N>/locked-requirements.md` is the byte-verbatim source of record for a
+locked requirement.
 
-**The spec layer does not add an anchor target.** `full_text_source` resolves to
-the sprint's `locked-requirements.md` and nothing else. Locked-requirement text
-originates there, written by `discovery.md` §4a; the spec is DERIVED from it, so
-a spec artifact is a downstream restatement — the same category as `prd.md`,
-which is already forbidden here. Cite the spec with `requires_context:` when a
-dev needs it loaded.
+**The spec layer does not add an anchor target.** The accepted sources are the
+ones `validate-locked-anchor.sh` enumerates and it is the authority on that set:
+the sprint's `locked-requirements.md`, the legacy `product-brief.md`, and
+`carry-over-backlog.md` for a quoted closure condition. A spec artifact is not
+among them. Locked-requirement text originates in the sprint slot, written by
+`discovery.md` §4a; the spec is DERIVED from it, so a spec artifact is a
+downstream restatement — the same category as `prd.md`, which is already
+forbidden here. Cite the spec with `requires_context:` when a dev needs it
+loaded.
 
 **A CROSS-SPRINT ANCHOR IS LEGAL, AND THE ANCHOR IS WHAT PICKS THE SLOT.** Rule 13
 makes locked requirements cumulative, so a story can honestly cite a requirement
@@ -400,9 +404,9 @@ would otherwise have been rejected for the wrong reason.
 **`product-brief.md` is still ACCEPTED and is on its way out.** §4a used to append
 each sprint's block to the durable brief, so stories written before that changed
 cite it — 31 of 62 anchored citations on the reference consumer, all resolvable and
-none defective. `validate-locked-anchor.sh` accepts both names and reports how many
-claims are still at the legacy one, so the migration is something a run measures
-rather than something an operator estimates. **Write new citations against
+none defective. `validate-locked-anchor.sh` accepts it and reports how many claims
+are still at the legacy name, so the migration is something a run measures rather
+than something an operator estimates. **Write new citations against
 `locked-requirements.md`.**
 
 `SPEC.md` is the worst possible anchor: `bmad-spec` is its sole writer and

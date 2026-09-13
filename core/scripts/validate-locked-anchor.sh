@@ -39,8 +39,10 @@
 # For each `full_text_source: <artifact>:<anchor>` in a block, three checks:
 #   (a) Source-of-record — the artifact must be the byte-verbatim source of
 #       record: basename `locked-requirements.md` (the sprint slot, where
-#       discovery.md §4a now writes the block) or, transitionally, the legacy
-#       `product-brief.md`. `--sor` replaces both with one name.
+#       discovery.md §4a now writes the block), the legacy `product-brief.md`
+#       transitionally, or `carry-over-backlog.md` — the verbatim record for a
+#       carried item's own text, including its closure condition. `--sor`
+#       replaces all three with one name.
 #       A citation resolving to any other artifact, or to one that self-declares
 #       `locked_requirements_fidelity: index` / a "condensed index" provenance,
 #       FAILS. Catches "cite prd.md for full text" when prd.md is an index.
@@ -129,21 +131,41 @@ sor_override = sys.argv[2] or None
 # Source-of-record basenames: where discovery.md §4a writes the byte-verbatim
 # LOCKED_REQUIREMENTS block by construction.
 #
-# TWO NAMES, AND THE SECOND ONE IS TRANSITIONAL BY DESIGN. §4a used to append the
-# block to the durable brief, one per sprint; it now writes it to that sprint's own
-# slot as `s<N>/locked-requirements.md`. Accepting ONLY the new name would fail every
-# story already carrying `full_text_source: product-brief.md#LR-...` -- measured on
-# the reference consumer at 31 of 62 anchored citations, all resolvable, none
-# defective. Refusing them would be this check reporting a migration as a fabrication.
+# THREE NAMES, AND EACH IS HERE FOR A DIFFERENT REASON.
+#
+# THE SECOND IS TRANSITIONAL BY DESIGN. §4a used to append the block to the durable
+# brief, one per sprint; it now writes it to that sprint's own slot as
+# `s<N>/locked-requirements.md`. Accepting ONLY the new name would fail every story
+# already carrying `full_text_source: product-brief.md#LR-...` -- measured on the
+# reference consumer at 31 of 62 anchored citations, all resolvable, none defective.
+# Refusing them would be this check reporting a migration as a fabrication.
+#
+# THE THIRD IS A CORPUS THIS SCRIPT'S POPULATION STRUCTURALLY EXCLUDED. A carry-over
+# item's closure condition is verbatim text in `carry-over-backlog.md`, and a document
+# that quotes one is making the same full-text claim a story makes about a locked
+# requirement. This script is the only byte-verbatim quotation checker in core, and
+# with the backlog refused by BASENAME no mechanism could reach such a quotation at
+# all: a closure condition could be quoted with its operative clause elided, asserting
+# a condition met that the quoting document itself declines to meet, and the check
+# that would have caught it declared the artifact out of scope before reading a byte.
+# Extending the set is a JOIN and needs no intent predicate -- the declaring act is the
+# author writing `full_text_source: carry-over-backlog.md:CO-S<n>-<id>`, and the
+# existing anchor-window plus byte-match machinery then adjudicates the quotation. Its
+# honest limit: it does not reach an author who quotes without declaring.
 #
 # `prd.md` and every other condensed index stay refused, which is the property this
-# test exists for; widening from one name to two does not weaken it.
+# test exists for; widening the name set does not weaken it, and the fixture's
+# `prd.md` control arm is what holds that open.
+#
+# The third name is NEITHER legacy NOR the name messages prescribe. `LEGACY_SOR_BASENAME`
+# stays `product-brief.md` because only that one is burning down, and `sor_basename`
+# stays the sprint slot because that is where a remedy must tell an author to write.
 #
 # REMOVE `product-brief.md` WHEN, and not before: a consumer's brief holds no
 # LOCKED_REQUIREMENTS block (`--emit-blocks` over it returns none) and its story
 # corpus carries no `full_text_source` naming it. Both are measurable in one run, so
 # this deprecation has a test rather than a date.
-DEFAULT_SOR_BASENAMES = ("locked-requirements.md", "product-brief.md")
+DEFAULT_SOR_BASENAMES = ("locked-requirements.md", "product-brief.md", "carry-over-backlog.md")
 LEGACY_SOR_BASENAME = "product-brief.md"
 if sor_override:
     sor_basenames = (os.path.basename(sor_override),)
@@ -294,6 +316,41 @@ def anchor_window(source_text, anchor):
     anchor selects, for every line carrying it, that line through the next markdown
     heading at the same-or-shallower depth (EOF when there is none) -- so an anchor in
     an unstructured brief widens to the whole remainder rather than to nothing.
+
+    A HEADING HIT WINS OVER A MENTION, AND WITHOUT THAT THE WINDOW DEGENERATES TO THE
+    WHOLE FILE. Taking every hit line and concatenating is correct only while an id
+    appears once. In a real carry-over backlog it does not: measured on a reference
+    consumer's `carry-over-backlog.md`, 160 distinct `CO-` ids, 52 of them on more than
+    one line, and 6 named in the file's depth-1 PREAMBLE -- a summary sentence sitting
+    under the single `# ` title, above the first `##`. A preamble mention has depth 1,
+    so its section runs to the next depth-1 heading, which is EOF; the union then holds
+    the entire document and the byte-match at (c) proves co-presence again, which is the
+    exact failure the anchor window exists to stop. For one of those six the widened
+    window was 3518 lines of a 3540-line file, and a story citing that id while quoting a
+    bullet from an unrelated section 1700 lines away exited 0.
+
+    So when at least one hit line is ITSELF a heading carrying the anchor, only those
+    heading sections are the window; the all-hits reading is the FALLBACK for an anchor
+    that appears in no heading at all. That fallback is what keeps an unstructured brief
+    working, and it is why this narrows rather than requiring a heading: an anchor with
+    no heading anywhere is still resolvable, exactly as before.
+
+    AND THE FALLBACK NEEDS ITS OWN BOUND, BECAUSE THE HEADING RULE DOES NOT REACH IT.
+    A mention in a depth-1 preamble is still a mention when the id has no heading at
+    all, so the same-or-shallower walk runs it to EOF and reproduces the whole-file
+    window on exactly the ids the heading rule cannot help. Measured: of the six
+    preamble-named ids on a reference consumer's backlog, five carry their own heading
+    and one does not, and that one's window was 3553 lines of a 3575-line file -- a
+    story citing it while quoting a real bullet 280 lines away passed, and the same
+    bullet with one character changed failed, so it was genuinely byte-matching against
+    the whole document.
+
+    A NON-HEADING hit therefore runs to the next heading of ANY depth, EOF only when
+    none follows. A mention is a sentence, not a section: it owns the prose around it
+    up to wherever the document next changes subject, and nothing about it claims the
+    sections below. That takes the measured case from 3553 lines to 11. A HEADING hit
+    keeps the same-or-shallower rule, because a heading legitimately owns its
+    subsections.
     """
     lines = source_text.splitlines()
     ranged = LINE_RANGE_RE.match(anchor)
@@ -305,8 +362,12 @@ def anchor_window(source_text, anchor):
     hits = [i for i, ln in enumerate(lines) if anchor in ln]
     if not hits:
         return None
+    heading_hits = [i for i in hits if HEADING_RE.match(lines[i])]
+    if heading_hits:
+        hits = heading_hits
     sections = []
     for i in hits:
+        i_is_heading = bool(HEADING_RE.match(lines[i]))
         depth = 99
         for j in range(i, -1, -1):
             hm = HEADING_RE.match(lines[j])
@@ -316,7 +377,12 @@ def anchor_window(source_text, anchor):
         end = len(lines)
         for j in range(i + 1, len(lines)):
             hm = HEADING_RE.match(lines[j])
-            if hm and len(hm.group(1)) <= depth:
+            if not hm:
+                continue
+            # A heading hit owns its subsections and stops at the next same-or-shallower
+            # heading. A MENTION owns only the prose it sits in and stops at the next
+            # heading of ANY depth -- see the docstring for what the unbounded form cost.
+            if not i_is_heading or len(hm.group(1)) <= depth:
                 end = j
                 break
         sections.append("\n".join(lines[i:end]))

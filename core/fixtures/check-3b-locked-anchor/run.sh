@@ -390,15 +390,15 @@ else
   fi
 fi
 
-# --- THE SOURCE OF RECORD IS TWO NAMES, AND THE SECOND IS ON ITS WAY OUT -----------
+# --- THE LEGACY SOURCE OF RECORD IS ACCEPTED AND IS ON ITS WAY OUT -----------------
 # discovery.md §4a used to append each sprint's LOCKED block to the durable brief and
-# now writes it to `s<N>/locked-requirements.md`. Both names are accepted: refusing the
-# legacy one would fail every story written before the move -- 31 of 62 anchored
+# now writes it to `s<N>/locked-requirements.md`. The legacy name is still accepted:
+# refusing it would fail every story written before the move -- 31 of 62 anchored
 # citations on the reference consumer, all resolvable, none defective -- which is this
 # check reporting a migration as a fabrication.
 #
-# THREE ARMS, BECAUSE ACCEPTING TWO NAMES IS ONLY SAFE IF IT IS STILL REFUSING THE
-# THIRD. A widening that also lets `prd.md` through has not widened, it has broken.
+# THREE ARMS, BECAUSE A WIDER NAME SET IS ONLY SAFE IF IT IS STILL REFUSING AN INDEX.
+# A widening that also lets `prd.md` through has not widened, it has broken.
 SOR="$WORK/sor"; mkdir -p "$SOR/s302/stories" || exit 2
 cat > "$SOR/s302/locked-requirements.md" <<'SOREOF'
 <!-- LOCKED_REQUIREMENTS — DO NOT MODIFY DURING VALIDATION -->
@@ -409,6 +409,15 @@ cat > "$SOR/s302/locked-requirements.md" <<'SOREOF'
 SOREOF
 cp "$SOR/s302/locked-requirements.md" "$SOR/product-brief.md"
 cp "$SOR/s302/locked-requirements.md" "$SOR/s302/prd.md"
+# AND BESIDE THE STORY, WHICH IS WHAT MAKES THESE ARMS CWD-INVARIANT. `resolve_artifact`
+# tries the story's own directory, THEN the caller's cwd, THEN the walk-up. With the brief
+# only two directories up, the walk-up is the candidate that finds it -- and THIS FIXTURE
+# DIRECTORY SHIPS A `product-brief.md` DECOY carrying LR-1/LR-2, so running from here the
+# cwd candidate won first and the legacy arm failed on `anchor 'LR-S302-1' not found`.
+# Measured: rc=1 from this directory, rc=0 from the repo root, for years, on an arm that is
+# correct either way. A story-local copy makes the FIRST candidate the right file, so every
+# arm in this block answers the same from any cwd.
+cp "$SOR/s302/locked-requirements.md" "$SOR/s302/stories/product-brief.md"
 sor_story() { # sor_story <file> <cited-basename>
   cat > "$1" <<STOREOF
 # Story
@@ -439,8 +448,253 @@ if "$VALIDATOR" "$SOR/s302/stories/index-sor.md" >/dev/null 2>&1; then
   echo "FAIL: SoR — prd.md was accepted as a full-text source; the widening broke the refusal" >&2
   rc=1
 else
-  echo "ok: SoR — CONTROL: prd.md is still refused, so accepting two names has not weakened (a)"
+  echo "ok: SoR — CONTROL: prd.md is still refused, so widening the name set has not weakened (a)"
 fi
+
+# --- A CARRY-OVER BACKLOG IS A SOURCE OF RECORD, AND prd.md STILL IS NOT -----------
+# A carry-over item's closure condition is verbatim text in `carry-over-backlog.md`, and
+# a document quoting one makes the same full-text claim a story makes about a locked
+# requirement. While the backlog was refused BY BASENAME, the only byte-verbatim
+# quotation checker in core could not reach such a quotation at all: a condition could
+# be quoted with its operative clause elided -- asserting a condition met that the
+# quoting document itself declines to meet -- and the check that would have caught it
+# declared the artifact out of scope before reading a byte.
+#
+# The world below MIRRORS the consumer's layout: the backlog sits TWO directories above
+# the story, which is where `resolve_artifact`'s walk-up reaches it, under the `## [id]`
+# heading shape the backlog actually carries.
+#
+# THE FILE IS PREAMBLE-SHAPED, AND THAT IS THE DISCRIMINATING PART. A real carry-over
+# backlog names its active ids in a summary sentence under the single `# ` title, ABOVE
+# the first `##`. That mention has depth 1, so its section runs to the next depth-1
+# heading -- EOF -- and an `anchor_window` that unions EVERY hit line then returns the
+# whole document. The byte-match degenerates to co-presence: a story cites one item and
+# quotes a bullet from an unrelated one hundreds of lines away, and passes. So this world
+# mentions the probe id TWICE -- once in the preamble, once as its own `## [id]` heading
+# -- and puts a DIFFERENT bullet inside the preamble's section-to-EOF span.
+COB="$WORK/carryover"; mkdir -p "$COB/s302/stories" || exit 2
+cat > "$COB/carry-over-backlog.md" <<'COBEOF'
+# Carry-Over Backlog
+
+The active items this sprint (`CO-S302-PROBE`) carry forward under triage.
+
+## [CO-S302-DECOY] [lead] - 2026-01-01T00:00:00Z
+
+- Closure condition: the indexer drops its stale cursor before the next epoch boundary.
+
+## [CO-S302-PROBE] [lead] - 2026-01-01T00:00:00Z
+
+- Closure condition: the rebalancer publishes a per-epoch delta (feeds a future sprint's scope).
+COBEOF
+# The decoy must BE a decoy: the probe id has to appear both as a non-heading mention and
+# as a heading, and the foreign bullet must sit outside the heading's own section. If the
+# world ever stops having that shape the arms below still pass, having tested nothing.
+co_pre="$(grep -c '^The active items this sprint' "$COB/carry-over-backlog.md")" || co_pre=0
+co_head="$(grep -c '^## \[CO-S302-PROBE\]' "$COB/carry-over-backlog.md")" || co_head=0
+if [ "$co_pre" -ne 1 ] || [ "$co_head" -ne 1 ]; then
+  echo "FIXTURE ERROR: the carry-over world is no longer preamble-shaped (preamble mention=$co_pre, heading=$co_head)." >&2
+  echo "  the narrowing arms below cannot distinguish a heading hit from a mention." >&2
+  rc=2
+fi
+# THE DECOY BASENAME: identical text, identical anchor, a name that is not a source of
+# record. This is the arm that separates "a third name was added" from "every name is
+# now accepted" -- the over-broad non-fix satisfies every other assertion in this block.
+cp "$COB/carry-over-backlog.md" "$COB/prd.md"
+co_story() { # co_story <file> <cited-basename> <bullet>
+  cat > "$1" <<COSEOF
+# Story
+<!-- LOCKED_REQUIREMENTS -->
+full_text_source: $2:CO-S302-PROBE
+$3
+<!-- END LOCKED_REQUIREMENTS -->
+COSEOF
+}
+CO_FULL="- Closure condition: the rebalancer publishes a per-epoch delta (feeds a future sprint's scope)."
+CO_ELIDED="- Closure condition: the rebalancer publishes a per-epoch delta ..."
+# The CROSS-SECTION quotation: byte-present in the file, under a heading the citation does
+# NOT name, and inside the span the preamble mention would open.
+CO_FOREIGN="- Closure condition: the indexer drops its stale cursor before the next epoch boundary."
+co_story "$COB/s302/stories/carry-over-sor.md"    "carry-over-backlog.md" "$CO_FULL"
+co_story "$COB/s302/stories/carry-over-elided.md" "carry-over-backlog.md" "$CO_ELIDED"
+co_story "$COB/s302/stories/carry-over-index.md"  "prd.md"                "$CO_FULL"
+co_story "$COB/s302/stories/carry-over-cross.md"  "carry-over-backlog.md" "$CO_FOREIGN"
+
+if "$VALIDATOR" "$COB/s302/stories/carry-over-sor.md" >/dev/null 2>&1; then
+  echo "ok: carry-over — a closure-condition quotation citing carry-over-backlog.md is ACCEPTED"
+else
+  echo "FAIL: carry-over — a byte-verbatim closure-condition quotation was refused" >&2
+  rc=1
+fi
+# THE MOTIVATING CASE, and the REASON matters as much as the verdict. The operative
+# clause is replaced by an ellipsis; it must fail, and it must fail at the BYTE-MATCH.
+# A rejection at (a) would mean the quotation was never adjudicated -- which is exactly
+# the state this widening exists to leave, scoring green while proving nothing.
+if CO_OUT="$("$VALIDATOR" "$COB/s302/stories/carry-over-elided.md" 2>&1)"; then
+  echo "FAIL: carry-over — an elided closure condition PASSED; the operative clause is unbound" >&2
+  rc=1
+elif grep -qF "not byte-present" <<<"$CO_OUT"; then
+  echo "ok: carry-over — an elided closure condition is REJECTED as not byte-present"
+else
+  echo "FAIL: carry-over — the elided quotation was refused for the WRONG reason (not the byte-match): $CO_OUT" >&2
+  rc=1
+fi
+if "$VALIDATOR" "$COB/s302/stories/carry-over-index.md" >/dev/null 2>&1; then
+  echo "FAIL: carry-over CONTROL — prd.md carrying the SAME anchor and the SAME text was accepted; the widening is accept-everything" >&2
+  rc=1
+else
+  echo "ok: carry-over — CONTROL: prd.md is refused on identical text, so the NAME SET is what admits the backlog"
+fi
+# THE THIRD NAME IS NOT THE NAME MESSAGES PRESCRIBE. `sor_basename` is what every PASS
+# line and every remedy names, and it must stay the sprint slot. A tuple that merely
+# REORDERS admits an identical set -- every exit code above is unchanged by it -- while
+# telling every author to write the wrong file. rc cannot see that, so assert the STRING.
+if NS_OUT="$("$VALIDATOR" "$SOR/s302/stories/new-sor.md" 2>&1)" \
+   && grep -qF "verified against 'locked-requirements.md'" <<<"$NS_OUT"; then
+  echo "ok: carry-over — the PASS line still prescribes locked-requirements.md as the record"
+else
+  echo "FAIL: carry-over — the PASS line no longer prescribes locked-requirements.md: $NS_OUT" >&2
+  rc=1
+fi
+# THE ANCHOR WINDOW IS THE HEADING'S SECTION, NOT EVERY LINE MENTIONING THE ID. The
+# quotation below is byte-present in the artifact, under a heading the citation does not
+# name. It must red -- and it must red at the byte-match, because a rejection anywhere
+# earlier would mean the window was never the thing under test.
+if CX_OUT="$("$VALIDATOR" "$COB/s302/stories/carry-over-cross.md" 2>&1)"; then
+  echo "FAIL: carry-over — a bullet from a section the citation does not name PASSED; the window is the whole file and the byte-match proves only co-presence" >&2
+  rc=1
+elif grep -qF "not byte-present" <<<"$CX_OUT"; then
+  echo "ok: carry-over — a cross-section quotation is REJECTED (the window is the cited heading's section)"
+else
+  echo "FAIL: carry-over — the cross-section quotation was refused for the WRONG reason: $CX_OUT" >&2
+  rc=1
+fi
+
+# MUTATION: revert the narrowing so every hit line opens a section again, and demand the
+# cross-section story goes GREEN -- the defect on demand. Copy-built and cmp -s guarded.
+#
+# BOTH LAYERS COME OUT, BECAUSE THE FIX IS LAYERED AND A PARTIAL REVERT PROVES THE LAYER
+# LEFT IN PLACE. Reverting only heading-wins leaves the preamble hit a MENTION, which the
+# fallback bound then stops at the next heading of any depth -- so the cross-section story
+# stays red and the mutant reads as "the narrowing is not what catches it". Measured
+# exactly that way before this second replacement was added.
+MUT9="$WORK/mut-all-hit-window.sh"; cp "$VALIDATOR" "$MUT9"
+MUT_OLD='    heading_hits = [i for i in hits if HEADING_RE.match(lines[i])]
+    if heading_hits:
+        hits = heading_hits
+' MUT_NEW='' \
+python3 -c 'import os,sys; s=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(s.replace(os.environ["MUT_OLD"],os.environ["MUT_NEW"],1))' \
+  "$VALIDATOR" "$MUT9"
+MUT_OLD='            if not i_is_heading or len(hm.group(1)) <= depth:' \
+MUT_NEW='            if len(hm.group(1)) <= depth:' \
+python3 -c 'import os,sys; s=open(sys.argv[1]).read(); open(sys.argv[1],"w").write(s.replace(os.environ["MUT_OLD"],os.environ["MUT_NEW"],1))' \
+  "$MUT9"
+if cmp -s "$VALIDATOR" "$MUT9"; then
+  echo "FAIL: MUTATION setup — the anchor-window narrowing was not reverted, so the arm below proves nothing" >&2
+  rc=1
+elif grep -q 'if not i_is_heading' "$MUT9"; then
+  echo "FIXTURE ERROR: only ONE of the two window layers was reverted — the mutant would prove the layer left in place" >&2
+  rc=2
+elif bash "$MUT9" "$COB/s302/stories/carry-over-cross.md" >/dev/null 2>&1; then
+  echo "ok: MUTATION — with every hit line opening a section, the preamble mention widens the window to EOF and the cross-section quotation passes (the defect, on demand)"
+else
+  echo "FAIL: MUTATION — the cross-section story still reds with the narrowing reverted; the narrowing is not what catches it" >&2
+  rc=1
+fi
+# PAIRING: the same mutant must still accept the honest in-section quotation, or it died
+# of something other than its own edit.
+if bash "$MUT9" "$COB/s302/stories/carry-over-sor.md" >/dev/null 2>&1; then
+  echo "ok: MUTATION PAIRING — the same mutant still accepts the in-section quotation (it fails only its own assertion)"
+else
+  echo "FAIL: MUTATION PAIRING — the mutant reds the honest carry-over story too; the assertions are entangled" >&2
+  rc=1
+fi
+# FALLBACK: an anchor carried by NO heading must still resolve -- AND ITS WINDOW MUST STILL
+# BE BOUNDED. The heading-wins rule cannot help an id that has no heading anywhere, so the
+# same-or-shallower walk from a depth-1 mention runs to EOF and reproduces the whole-file
+# window on exactly those ids. Measured on a reference consumer: of six ids named in the
+# preamble, five carry their own heading and one does not, and that one's window was 3553
+# lines of a 3575-line file. A non-heading hit therefore runs to the next heading of ANY
+# depth. This brief is long enough to HAVE somewhere foreign to quote from -- a positive
+# arm alone cannot see the bound, because a flat brief with one bullet has no second
+# region to reach into.
+printf '%s\n' "# Brief" \
+  "" "Loose text carrying LR-FLAT-1 and its requirement." \
+  "" "- LR-FLAT-1: the flat requirement stated in full." \
+  "" "### An unrelated later section" \
+  "" "- LR-OTHER-9: a requirement that belongs to a different subject entirely." \
+  > "$COB/s302/stories/product-brief.md"
+flat_story() { # flat_story <file> <bullet>
+  printf '%s\n' "<!-- LOCKED_REQUIREMENTS -->" \
+    "full_text_source: product-brief.md:LR-FLAT-1" "$2" \
+    "<!-- END LOCKED_REQUIREMENTS -->" > "$1"
+}
+flat_story "$COB/s302/stories/flat-anchor.md"  "- LR-FLAT-1: the flat requirement stated in full."
+flat_story "$COB/s302/stories/flat-cross.md"   "- LR-OTHER-9: a requirement that belongs to a different subject entirely."
+if "$VALIDATOR" "$COB/s302/stories/flat-anchor.md" >/dev/null 2>&1; then
+  echo "ok: carry-over — FALLBACK: an anchor in NO heading still resolves (the all-hits reading is kept for unstructured artifacts)"
+else
+  echo "FAIL: carry-over — FALLBACK: the narrowing broke a heading-less anchor, which it is required to preserve" >&2
+  rc=1
+fi
+if FC_OUT="$("$VALIDATOR" "$COB/s302/stories/flat-cross.md" 2>&1)"; then
+  echo "FAIL: carry-over — FALLBACK: a bullet past a later heading was accepted under a heading-less anchor; the fallback window is unbounded" >&2
+  rc=1
+elif grep -qF "not byte-present" <<<"$FC_OUT"; then
+  echo "ok: carry-over — FALLBACK: a bullet past the next heading is REJECTED (a mention's window stops at the next heading of ANY depth)"
+else
+  echo "FAIL: carry-over — FALLBACK: the cross-region quotation was refused for the WRONG reason: $FC_OUT" >&2
+  rc=1
+fi
+# MUTATION: revert the fallback bound so a mention walks to the next SAME-OR-SHALLOWER
+# heading again, and demand the cross-region story goes GREEN. Without this the two arms
+# above cannot tell a bounded window from a lucky one.
+MUT10="$WORK/mut-unbounded-mention.sh"; cp "$VALIDATOR" "$MUT10"
+MUT_OLD='            if not i_is_heading or len(hm.group(1)) <= depth:' \
+MUT_NEW='            if len(hm.group(1)) <= depth:' \
+python3 -c 'import os,sys; s=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(s.replace(os.environ["MUT_OLD"],os.environ["MUT_NEW"],1))' \
+  "$VALIDATOR" "$MUT10"
+if cmp -s "$VALIDATOR" "$MUT10"; then
+  echo "FAIL: MUTATION setup — the fallback bound was not reverted, so the fallback arms prove nothing" >&2
+  rc=1
+elif bash "$MUT10" "$COB/s302/stories/flat-cross.md" >/dev/null 2>&1; then
+  echo "ok: MUTATION — with a mention walking to the next same-or-shallower heading, the cross-region quotation passes (the whole-file window, on demand)"
+else
+  echo "FAIL: MUTATION — the cross-region story still reds with the bound reverted; the bound is not what catches it" >&2
+  rc=1
+fi
+# PAIRING: the same mutant must still accept the honest heading-less quotation.
+if bash "$MUT10" "$COB/s302/stories/flat-anchor.md" >/dev/null 2>&1; then
+  echo "ok: MUTATION PAIRING — the same mutant still accepts the honest flat quotation (it fails only its own assertion)"
+else
+  echo "FAIL: MUTATION PAIRING — the mutant reds the honest flat story too; the assertions are entangled" >&2
+  rc=1
+fi
+
+# --- THE SoR ARMS ARE CWD-INVARIANT, AND THEY ASSERT IT THEMSELVES ------------------
+# The block above used to answer differently from this directory than from the repo root,
+# because the legacy story's brief was only reachable by the walk-up and THIS DIRECTORY
+# SHIPS A DECOY of that basename. Seeding a story-local copy fixed it; this asserts the
+# fix rather than trusting it, because the driver's choice of cwd is what hid it before.
+for cwd_label in "decoy (this fixture dir)|$DIR" "empty|$EMPTY"; do
+  cl="${cwd_label%%|*}"; cp_="${cwd_label#*|}"
+  for case_spec in \
+    "legacy-sor|$SOR/s302/stories/legacy-sor.md|0" \
+    "new-sor|$SOR/s302/stories/new-sor.md|0" \
+    "index-sor (prd.md)|$SOR/s302/stories/index-sor.md|1" \
+    "carry-over|$COB/s302/stories/carry-over-sor.md|0" \
+    "carry-over cross-section|$COB/s302/stories/carry-over-cross.md|1"; do
+    cn="${case_spec%%|*}"; rest="${case_spec#*|}"
+    cf="${rest%%|*}"; want="${rest##*|}"
+    ( cd "$cp_" && bash "$VALIDATOR" "$cf" >/dev/null 2>&1 )
+    got=$?
+    if [ "$got" -eq "$want" ]; then
+      echo "ok: SoR CWD INVARIANCE — $cn answers rc=$want from cwd '$cl'"
+    else
+      echo "FAIL: SoR CWD INVARIANCE — $cn from cwd '$cl': expected rc=$want, got rc=$got" >&2
+      rc=1
+    fi
+  done
+done
 
 # --- A CROSS-SPRINT ANCHOR READS THE SPRINT THE ANCHOR NAMES --------------------
 # Rule 13 makes locked requirements cumulative, so a story can honestly cite an
@@ -500,7 +754,30 @@ else
   rc=1
 fi
 
-# MUTATION: collapse the pair back to one name and demand the OTHER one reds. Built as
+# MUTATION: drop the THIRD name and demand the carry-over story reds. Built as a copy
+# and guarded with cmp -s so a sed that matched nothing cannot pass as a change. Without
+# this arm the acceptance above is satisfied by anything that resolves the file, and the
+# name set is not what is being tested.
+MUT8="$WORK/mut-no-carryover-sor.sh"; cp "$VALIDATOR" "$MUT8"
+sed -i.bak 's/^DEFAULT_SOR_BASENAMES = .*/DEFAULT_SOR_BASENAMES = ("locked-requirements.md", "product-brief.md")/' "$MUT8" && rm -f "$MUT8.bak"
+if cmp -s "$VALIDATOR" "$MUT8"; then
+  echo "FAIL: MUTATION setup — DEFAULT_SOR_BASENAMES was not mutated to the two-name tuple, so the arm below proves nothing" >&2
+  rc=1
+elif bash "$MUT8" "$COB/s302/stories/carry-over-sor.md" >/dev/null 2>&1; then
+  echo "FAIL: MUTATION — the carry-over citation passed with carry-over-backlog.md removed; the name set is not what admits it" >&2
+  rc=1
+else
+  echo "ok: MUTATION — dropping carry-over-backlog.md reds the carry-over story (the acceptance is the tuple, not the resolver)"
+fi
+# PAIRING: the same mutant must still accept the NEW name, or it died of something else.
+if bash "$MUT8" "$SOR/s302/stories/new-sor.md" >/dev/null 2>&1; then
+  echo "ok: MUTATION PAIRING — the same mutant still accepts locked-requirements.md (it fails only its own assertion)"
+else
+  echo "FAIL: MUTATION PAIRING — the mutant rejected the new name too; the assertions are entangled" >&2
+  rc=1
+fi
+
+# MUTATION: collapse the set back to one name and demand the OTHER one reds. Built as
 # a copy and guarded with cmp -s so a sed that matched nothing cannot pass as a change.
 MUT6="$WORK/mut-single-sor.sh"; cp "$VALIDATOR" "$MUT6"
 sed -i.bak 's/^DEFAULT_SOR_BASENAMES = .*/DEFAULT_SOR_BASENAMES = ("locked-requirements.md",)/' "$MUT6" && rm -f "$MUT6.bak"

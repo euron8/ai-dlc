@@ -375,7 +375,7 @@ if [ -z "$POP" ]; then
   # A CONSUMER THAT HAS NOT PULLED THE POPULATION SCHEMA IS A SKIP, NOT A FAILURE. It has
   # nothing to check, and wedging its push before it can pull is the shape of check an
   # operator turns off. It says which question went unasked, in wording no passing run emits.
-  echo "validate-write-format-steering: SKIP — the population schema (${POP_NAME:-pipeline-state-paths.json})"
+  echo "validate-write-format-steering: SKIP — EXAMINED NOTHING — the population schema (${POP_NAME:-pipeline-state-paths.json})"
   echo "  is not in this tree, so NO artifact was judged. This is not a pass: the join that"
   echo "  selects the shared append-only artifacts had no left-hand side."
   exit 0
