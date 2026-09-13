@@ -78,9 +78,60 @@ grep -qF "$DRIFT_REL" <<<"$post" \
   && ok "CONTROL: a real consumer in-place edit still blocks under --post-apply" \
   || bad "CONTROL: --post-apply suppressed a genuine HARD blocker — the flag disarms the detector instead of rebasing it"
 
+# --- Assertion 2d: the SAME shape on a MACHINERY path is CARRIED, not blocked ---------------
+# THIS ARM EXISTS BECAUSE THE WORLD ABOVE USED TO BE THIS ONE. The wrong-base artefact was
+# `schemas/moved.json` until `core/schemas/*.json` — a `machinery:` glob — met
+# `unregistered-drift.sh`'s CORE-MACHINERY-CARRIED row: preclassify buckets it
+# `BOTH-CHANGED->CLASSIFY` against the pull's base, `self-update-gate.sh`'s arm C would carry it
+# out of step 2's slice, `apply.sh` emits a `WORKLIST semantic-merge` row for it, and the scan
+# stopped calling it drift. That is CORRECT, and it took assertion 2c's subject with it: the
+# blocking list renders only `HARD-` rows, so the pre side no longer named the file.
+#
+# Rather than delete the world, it is asserted in its own right. The precedence this documents:
+# a token-substituted file on a MACHINERY path in the range is carried; the identical shape on a
+# NON-machinery scanned path is still unregistered drift. Both are read from ONE run, so the
+# contrast is between two paths and not between two invocations.
+md_pre="$(bash "$HB" "$DIST" "$BASE" "$CONSUMER" "$THEIRS_ADV" 2>/dev/null)"
+md_ud="$(bash "$(dirname "$HB")/unregistered-drift.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS_ADV" 2>/dev/null)"
+md_st="$(awk -F'\t' -v p="$MACH_REL" '$2==p{print $1}' <<<"$md_ud")"
+# CONTROL FIRST: the scan reached the file at all. Absent, every claim below is about an empty
+# string and the non-HARD assertion passes for the wrong reason.
+if [ -z "$md_st" ]; then
+  bad "the scan emitted NO row for the machinery artefact ($MACH_REL), so 'it is not HARD' below would be a statement about nothing"
+else
+  case "$md_st" in
+    CORE-MACHINERY-CARRIED)
+      ok "a token-substituted MACHINERY template in the range reads CORE-MACHINERY-CARRIED — apply is already merging it" ;;
+    HARD-*)
+      bad "the machinery artefact read $md_st — arm C carries this path, so the blocking list and the worklist would give the operator opposite instructions for one file" ;;
+    *)
+      bad "the machinery artefact read $md_st, neither the carried row nor a HARD status — the precedence this arm documents has moved" ;;
+  esac
+fi
+# ...and being non-HARD is exactly what keeps it OFF the blocking list, which is this wrapper's
+# own subject. Asserted against the list, not re-read off the status string.
+if grep -qF "$MACH_REL" <<<"$md_pre"; then
+  bad "the carried machinery path is on the BLOCKING list — hard-blockers renders only HARD- rows, so either the row regained the prefix or the wrapper stopped filtering on it"
+else
+  ok "...so it is absent from the blocking list, while the non-machinery artefact in the SAME run is on it"
+fi
+# THE CONTRAST IS THE CONTROL. Without this the arm above passes against a wrapper that renders
+# an empty list, or a scan that carries everything.
+grep -qF "$MOVED_REL" <<<"$md_pre" \
+  && ok "CONTROL: the NON-machinery artefact of the identical shape IS on that same list" \
+  || bad "CONTROL: the non-machinery artefact is missing from the list too, so the absence above says nothing about machinery membership"
+# ...and under --post-apply the machinery twin reads as the substitution it is: the range is
+# empty at base==theirs, no bucket is emitted, and the carried row cannot claim it.
+md_post="$(bash "$(dirname "$HB")/unregistered-drift.sh" "$DIST" "$THEIRS_ADV" "$CONSUMER" "$THEIRS_ADV" 2>/dev/null)"
+md_pst="$(awk -F'\t' -v p="$MACH_REL" '$2==p{print $1}' <<<"$md_post")"
+[ "$md_pst" = "CORE-TEMPLATE-SUBSTITUTED" ] \
+  && ok "...and under --post-apply it reads CORE-TEMPLATE-SUBSTITUTED: the empty range emits no bucket, so nothing is carried" \
+  || bad "post-apply the machinery artefact read '${md_pst:-<no row>}', not CORE-TEMPLATE-SUBSTITUTED — the post side of this precedence has moved"
+
 # --- Assertion 3: no drift → print says 0, --check passes any report ----------
 git -C "$DIST" show "$BASE:core/$DRIFT_REL" > "$CONSUMER/.claude/$DRIFT_REL"   # revert consumer edit
 git -C "$DIST" show "$BASE:core/$MOVED_REL" > "$CONSUMER/.claude/$MOVED_REL"   # and the range-drifted one
+git -C "$DIST" show "$BASE:core/$MACH_REL"  > "$CONSUMER/.claude/$MACH_REL"    # and its machinery twin
 out="$(bash "$HB" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
 if grep -q "0 HARD blockers" <<<"$out"; then
   bash "$HB" --check "$REPORT_BAD" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>&1
