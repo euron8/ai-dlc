@@ -817,8 +817,34 @@ mkdir -p "$P/.probehooks"
   echo 'exit 0'
 } > "$P/.probehooks/post-checkout"
 chmod +x "$P/.probehooks/post-checkout"
-git -C "$P" config core.hooksPath "$P/.probehooks" >/dev/null 2>&1 || {
+# SCRUBBED LIKE THE `git init` ABOVE, AND FOR A WORSE REASON THAN THAT ONE HAD.
+#
+# `git -C <dir>` DOES NOT OVERRIDE AN INHERITED `GIT_DIR`; the environment wins, for reads and
+# for WRITES. MEASURED on two throwaway repositories: `GIT_DIR=A/.git git -C B log` reports A's
+# commit, and `GIT_DIR=A/.git git -C B config probe.marker x` writes the key into A/.git/config
+# and leaves B's untouched. So this line -- unscrubbed, `-C "$P"` notwithstanding -- wrote
+# `core.hooksPath=<a mktemp probe directory>` into the CALLER'S repository whenever the gate ran
+# from a linked worktree, where git exports GIT_DIR into every hook. The caller's own pre-push
+# hook was then pointed at a directory this run deletes on exit, and a later push ran NO GATE AT
+# ALL while reporting success. Measured on this repo: a release landed on origin ungated.
+#
+# The failure is silent in both directions -- the probe below still passes, because its
+# unwritable-subject arm reads a `post-checkout` the probe repo never needed to find, and the
+# caller shows nothing until the next push quietly skips its hooks.
+# ON ONE LINE, DELIBERATELY. The fixture arm that binds this scrub reverts it by replacing this
+# single line; spread across three, a mutation has to edit a `(`, a `)` and the lines between,
+# and a `sed` that catches only some of them yields a mutant that does not PARSE -- which fails
+# every arm for a reason the mutation does not own and scores as a kill nobody earned.
+_br_scrub_config() { ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY; git -C "$1" config "$2" "$3" ); }
+_br_scrub_config "$P" core.hooksPath "$P/.probehooks" >/dev/null 2>&1 || {
   echo "$(me): SELF-PROBE FAILED -- the probe repository would not take a hooks path, so its unwritable-subject probe has no subject." >&2; exit 2; }
+# AND IT LANDED IN THE PROBE'S OWN CONFIG, ASSERTED BY PATH. `--file "$P/.git/config"` cannot be
+# redirected by an environment variable, which is the whole point: a read that goes through
+# GIT_DIR would confirm the write by looking at the very repository the write may have gone to
+# by mistake, and would read as a pass in exactly the case this guard exists to catch.
+_probe_hp="$(git config --file "$P/.git/config" --get core.hooksPath 2>/dev/null)" || _probe_hp=""
+[ "$_probe_hp" = "$P/.probehooks" ] || {
+  echo "$(me): SELF-PROBE FAILED -- the probe repository's own .git/config does not carry core.hooksPath (read by path: '${_probe_hp:-<unset>}', expected '$P/.probehooks'). The write went somewhere else -- under an inherited GIT_DIR that somewhere is the CALLER'S repository, whose pre-push hook would then point at a directory this run deletes." >&2; exit 2; }
 
 probe_status() { printf '%s\n' "$1" | awk -F'\t' -v id="$2" '$2 == id { print $1 }'; }
 probe_detail() { printf '%s\n' "$1" | awk -F'\t' -v id="$2" '$2 == id { print $3 }'; }
