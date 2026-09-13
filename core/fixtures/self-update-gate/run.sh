@@ -433,6 +433,376 @@ ss_assert "ss-partial-mut-C" "$(ss_ack "$SSM/mut/self-update-gate.sh" "$SS_R4")"
 ss_marker off
 ss_stamp -
 
+# --- THE STAMP IS AHEAD BECAUSE A PATH WAS CARRIED, SO THE ACQUITTAL IS WITHHELD -------------
+# The sibling of the partial-tree guard above, and the two are decided on different facts. That
+# one reads a MARKER `apply.sh` leaves on disk. This one reads a row THIS RUN emitted.
+#
+# Step 2 advances `skill_version`/`skill_commit` to `theirs` on every cycle it completes,
+# INCLUDING one where arm C carried a machinery path out of the slice -- and a carried path is
+# precisely the one the cycle deliberately did not write. No program corrects the stamp for it:
+# `apply.sh`'s re-stamp and `install.sh` are the only writers of those fields, both at step 7 or
+# install. So `machinery_at_or_past()`'s ancestry test comes back TRUE on a tree where a machinery
+# path is still the consumer's own, and the acquittal it gates tells the operator "its machinery
+# has already landed" about exactly the path that did not.
+#
+# ITS OWN MINIATURE DISTRIBUTION, AND THE REASON IS THE SEED AND NOT TIDINESS. The `$SS` tree
+# above holds ONE machinery path (`core/rules/ss.md`) that is never touched again, so no
+# base..theirs diff can reach it and no consumer edit to it can produce a bucket -- a CARRY row is
+# unconstructible there, which is the state every arm above was written under. These arms need a
+# CARRY row and a SAFE-STOP row in ONE output.
+#
+# THREE WORLDS, ONE STAMP. All three carry `skill_commit` at r1, which is at-or-past the ref the
+# walk names, so every one of them ENTERS the acquittal branch on the unfixed gate and the only
+# thing separating them is whether a path was carried.
+SC="$(dirname "$DIST")/sc"; rm -rf "$SC"
+mkdir -p "$SC/dist/core/skills/ai-dlc/steps" "$SC/dist/core/rules" \
+         "$SC/dist/core/skills/ai-dlc-update/reconcile"
+git -C "$SC/dist" init -q
+sc_commit() { git -C "$SC/dist" add -A >/dev/null 2>&1
+              git -C "$SC/dist" -c user.email=f@x -c user.name=f commit -qm "$1" >/dev/null 2>&1
+              git -C "$SC/dist" rev-parse HEAD; }
+
+printf '1.0.0\n'      > "$SC/dist/VERSION"
+gvv 1 2               > "$SC/dist/core/skills/ai-dlc/steps/gate-validation.md"
+printf 'carry base\n' > "$SC/dist/core/rules/sc-carry.md"
+# THE LANDED PATH IS NOT DECORATION. Without a machinery path the consumer really is at, world B
+# would be "no machinery moved" rather than "machinery moved and landed", and its acquittal would
+# be right for a reason that has nothing to do with the guard under test.
+printf 'landed base\n' > "$SC/dist/core/rules/sc-landed.md"
+# `preclassify.sh` AS A CARRIED PATH IS ITS OWN WORLD, world C below. It is machinery by the
+# `core/skills/ai-dlc-update/**` entry, and it is the case where the acquittal's sentence is at
+# its most false: the row would be telling the operator that the classifier engine has landed
+# while the consumer's copy of the classifier is the very path this run refused to write. The
+# GATE resolves preclassify.sh beside ITSELF, in the distribution, so a consumer-side edit to it
+# changes no derivation here -- only the bucket that edit produces.
+printf 'preclassify base\n' > "$SC/dist/core/skills/ai-dlc-update/reconcile/preclassify.sh"
+SC_BASE="$(sc_commit base)"
+
+# r1 -- a release moving all three machinery paths. This is the ref the walk names, and the ref
+# every consumer's `skill_commit` claims to be at.
+printf '1.1.0\n'             > "$SC/dist/VERSION"
+printf 'carry r1\n'          > "$SC/dist/core/rules/sc-carry.md"
+printf 'landed r1\n'         > "$SC/dist/core/rules/sc-landed.md"
+printf 'preclassify r1\n'    > "$SC/dist/core/skills/ai-dlc-update/reconcile/preclassify.sh"
+SC_R1="$(sc_commit r1)"
+
+# r2 -- THEIRS. Declares a CHECK_LOADED anchor the consumer's rulebook does not carry, so
+# base..r2 DEFERS and the advisory runs at all. Without a DEFER there is no SAFE-STOP row and
+# every arm below is an absence over an empty output.
+printf '1.2.0\n' > "$SC/dist/VERSION"; gvv 1 2 3 > "$SC/dist/core/skills/ai-dlc/steps/gate-validation.md"
+SC_R2="$(sc_commit r2)"
+
+sc_cons() { # sc_cons <clean|carry|preclassify> -> a consumer at r1 with that path diverged
+  local C="$SC/cons" mode="$1"
+  rm -rf "$C"
+  mkdir -p "$C/.claude/rules" "$C/.claude/skills/ai-dlc/steps" "$C/.githooks" \
+           "$C/.claude/skills/ai-dlc-update/reconcile"
+  gvv 1 2 > "$C/.claude/skills/ai-dlc/steps/gate-validation.md"
+  printf '#!/usr/bin/env bash\n# invokes no scripts/ai-dlc/ validator, so the gating set is empty\nexit 0\n' \
+    > "$C/.githooks/pre-push"
+  # THE WHOLE CONSUMER STATE IS REWRITTEN EVERY TIME, never patched: a helper that only writes
+  # what its mode changes leaves the previous world's files behind, and the next arm then reads a
+  # shape nobody seeded.
+  printf 'carry r1\n'       > "$C/.claude/rules/sc-carry.md"
+  printf 'landed r1\n'      > "$C/.claude/rules/sc-landed.md"
+  printf 'preclassify r1\n' > "$C/.claude/skills/ai-dlc-update/reconcile/preclassify.sh"
+  case "$mode" in
+    carry)       printf 'carry r1\nCONSUMER-OWNED LINE\n'       > "$C/.claude/rules/sc-carry.md" ;;
+    preclassify) printf 'preclassify r1\nCONSUMER-OWNED LINE\n' > "$C/.claude/skills/ai-dlc-update/reconcile/preclassify.sh" ;;
+  esac
+  # THE STAMP IS ADVANCED IN ALL THREE, which is the point: step 2 advances it whether or not a
+  # path was carried, so the stamp cannot be what separates these worlds.
+  printf 'version: 1.0.0\ncommit: %s\nskill_version: 1.1.0\nskill_commit: %s\n' "$SC_BASE" "$SC_R1" \
+    > "$C/.claude/.ai-dlc-version"
+}
+
+# sc_ack <gate> -> "row=<0|1> acq=<n> pf=<n> carry=<n>" off one run's rows.
+#
+# SCORED AS A TUPLE, AND `row=` AND `pf=` ARE BOTH POSITIVE CONJUNCTS. The property under test is
+# an ABSENCE (`acq=0`), which is the shape a gate replaced by `exit 0` satisfies for free. So the
+# same tuple demands the SAFE-STOP row EXIST and demands the honest pull-first wording be the
+# thing that replaced the acquittal -- a subject that emits nothing fails on both.
+#
+# `pf` KEYS ON "its slice self-updates cleanly" for the reason `ss_ack` does: the acquittal's own
+# text also tells the operator to pull, so the short token cannot separate the two rows.
+sc_ack() {
+  local o d
+  o="$(bash "$1" "$SC/dist" "$SC_BASE" "$SC_R2" "$SC/cons" 2>/dev/null)"
+  d="$(printf '%s\n' "$o" | awk -F'\t' '$1=="SELF-UPDATE-SAFE-STOP" {print $3; exit}')"
+  printf 'row=%s acq=%s pf=%s carry=%s\n' \
+    "$([ -n "$d" ] && printf 1 || printf 0)" \
+    "$(printf '%s' "$d" | grep -c 'SPLIT BUYS NOTHING')" \
+    "$(printf '%s' "$d" | grep -c 'its slice self-updates cleanly')" \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1=="SELF-UPDATE-CARRY"' | grep -c .)"
+}
+
+# PRECONDITION, and without it every arm below is vacuous in a way that reads as discrimination:
+# the walk must NAME r1, since the acquittal compares `skill_commit` against the named ref and a
+# walk answering anything else takes all three worlds out of the branch under test.
+sc_cons clean
+ss_assert "sc-walk-names-r1" \
+  "$(bash "$GATE" --safe-stop "$SC/dist" "$SC_BASE" "$SC_R2" "$SC/cons" 2>/dev/null)" "$SC_R1" \
+  "the walk names r1, which is the ref all three worlds' skill_commit sits at"
+
+# B -- THE CONTROL, AND IT RUNS FIRST. No path carried, stamp at r1: the acquittal FIRES. Without
+# this the withheld arms below are claims about a sentence that might never appear on this tree.
+ss_assert "sc-nocarry" "$(sc_ack "$GATE")" "row=1 acq=1 pf=0 carry=0" \
+  "no carry row and a stamp at or past the named ref: the acquittal fires, unchanged"
+
+# A -- OFFENDER. One machinery path carried, same stamp, same range. The acquittal is withheld and
+# the original pull-first advice stands in its place.
+sc_cons carry
+ss_assert "sc-carried" "$(sc_ack "$GATE")" "row=1 acq=0 pf=1 carry=1" \
+  "a carried machinery path withholds the acquittal: the stamp is ahead of a path that did not land"
+
+# C -- THE SAME GUARD ON THE SEED WHERE THE ROW'S RATIONALE IS MOST FALSE. `preclassify.sh` IS the
+# classifier engine the acquittal claims has landed. Kept as its own world rather than folded into
+# A because a fix keyed on the path's DIRECTORY -- `core/rules/` say -- passes A and fails here.
+sc_cons preclassify
+ss_assert "sc-carried-preclassify" "$(sc_ack "$GATE")" "row=1 acq=0 pf=1 carry=1" \
+  "the carried path being preclassify.sh itself is withheld too -- the engine the row says landed"
+
+# THE WALK IS UNAFFECTED, and this is the arm that would catch the refusal leaking into the nested
+# classify runs. Arm C is suppressed under AI_DLC_GATE_IN_SAFE_STOP, so GATE_CARRY_STATE stays
+# `cold` inside a walk and no candidate's verdict can move -- a refusal sited where the walk could
+# see it would change which ref the operator is handed, which is a verdict and not advisory wording.
+ss_assert "sc-walk-unmoved" \
+  "$(bash "$GATE" --safe-stop "$SC/dist" "$SC_BASE" "$SC_R2" "$SC/cons" 2>/dev/null)" "$SC_R1" \
+  "the walk still names r1 on the carried consumer -- the refusal is advisory-only"
+
+# --- ARM C CANNOT DECIDE, AND UNKNOWN IS NOT CLEAN --------------------------------------------
+# The arms above all run against an arm C that DECIDED. Arm C has two UNDECIDED terminals of its
+# own, and on both of them it emits no CARRY row while a carried path may be sitting in the tree.
+# A refusal keyed on the CARRY row alone therefore acquits exactly where the gate has just said it
+# does not know -- the acquittal and the UNDECIDED row printed in the SAME output, contradicting
+# each other. Measured before the three-state was built: with a carried path and an advanced
+# stamp, an intact engine withheld and both UNDECIDED engines acquitted.
+#
+# ARM C FAILS CLOSED ON ITS OWN ROW AND THAT CLOSURE IS NOT INHERITED. The UNDECIDED rows are
+# arm C being careful; a downstream reader keyed on the absence of a CARRY row converts that care
+# into silence. So the state carries `undecided` as a value of its own and only `clean` acquits.
+#
+# THE ENGINE IS SABOTAGED, NEVER THE CONSUMER, and that is what makes these worlds the UNDECIDED
+# ones rather than merely quiet: the consumer is byte-identical to the carried world above -- the
+# same diverged path, the same advanced stamp -- so the ONLY difference is arm C's ability to see
+# it. A seed that instead removed the divergence would test nothing, because a tree with nothing
+# to carry has nothing to withhold.
+sc_engine() { # sc_engine <name> <nomanifest|norows|nopre> -> a gate copy whose arm C cannot decide
+  local E="$SC/eng-$1" mode="$2"
+  rm -rf "$E"; mkdir -p "$E"
+  cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$E"/ 2>/dev/null
+  case "$mode" in
+    # `machinery:` emptied -> machinery_paths() resolves EMPTY -> the setup-sites.md terminal.
+    nomanifest) awk '/^machinery:/{print; skip=1; next} skip && /^[a-z_]+:/{skip=0} !skip' \
+                  "$E/setup-sites.md" > "$E/.t" && mv "$E/.t" "$E/setup-sites.md" ;;
+    # preclassify prints no rows while the range moves core/ -> the preclassify.sh terminal. Its
+    # two eval'd functions are KEPT, or the machinery set resolves empty and this world collapses
+    # into the one above -- two seeds reaching one terminal, which is one seed.
+    norows)     printf '#!/usr/bin/env bash\n%s\n%s\nexit 0\n' \
+                  "$(awk '/^machinery_paths\(\) \{/,/^\}/' "$E/preclassify.sh")" \
+                  "$(awk '/^map_consumer\(\) \{/,/^\}/' "$E/preclassify.sh")" > "$E/preclassify.sh" ;;
+    # the engine is absent outright -- the shape a partial install leaves.
+    nopre)      rm -f "$E/preclassify.sh" ;;
+  esac
+  printf '%s\n' "$E/self-update-gate.sh"
+}
+
+# sc_und <gate> -> "row=<0|1> acq=<n> pf=<n> und=<n>" on the CARRIED consumer.
+#
+# PRESENCE-SHAPED ON BOTH HALVES. `und=1` demands arm C's UNDECIDED row be in the same output as
+# the withheld advisory -- without it a gate that simply printed nothing would satisfy `acq=0`,
+# and `pf=1` demands the honest pull-first wording actually replaced the acquittal.
+sc_und() {
+  local o d
+  o="$(bash "$1" "$SC/dist" "$SC_BASE" "$SC_R2" "$SC/cons" 2>/dev/null)"
+  d="$(printf '%s\n' "$o" | awk -F'\t' '$1=="SELF-UPDATE-SAFE-STOP" {print $3; exit}')"
+  printf 'row=%s acq=%s pf=%s und=%s\n' \
+    "$([ -n "$d" ] && printf 1 || printf 0)" \
+    "$(printf '%s' "$d" | grep -c 'SPLIT BUYS NOTHING')" \
+    "$(printf '%s' "$d" | grep -c 'its slice self-updates cleanly')" \
+    "$(printf '%s\n' "$o" | awk -F'\t' '$1=="SELF-UPDATE-UNDECIDED"' | grep -c .)"
+}
+
+SC_E_NOMAN="$(sc_engine noman nomanifest)"
+SC_E_NOROW="$(sc_engine norow norows)"
+SC_E_NOPRE="$(sc_engine nopre nopre)"
+
+# SELF-PROBE FIRST: each sabotaged engine must actually reach an UNDECIDED terminal AND stop
+# emitting the CARRY row. Without this the three arms below are absences over engines that might
+# simply be working, and they would pass against a gate that never looked.
+sc_cons carry
+for sc_p in "noman=$SC_E_NOMAN" "norow=$SC_E_NOROW" "nopre=$SC_E_NOPRE"; do
+  ss_assert "sc-und-probe-${sc_p%%=*}" \
+    "$(bash "${sc_p#*=}" "$SC/dist" "$SC_BASE" "$SC_R2" "$SC/cons" 2>/dev/null |
+         awk -F'\t' '$1=="SELF-UPDATE-UNDECIDED"{u++} $1=="SELF-UPDATE-CARRY"{c++}
+                     END {printf "und=%d carry=%d", u+0, c+0}')" \
+    "und=1 carry=0" "the sabotaged engine really cannot decide, and really emits no CARRY row"
+done
+
+# THE THREE OFFENDERS. Same consumer, same range, same advanced stamp -- only arm C's sight differs.
+ss_assert "sc-und-nomanifest" "$(sc_und "$SC_E_NOMAN")" "row=1 acq=0 pf=1 und=1" \
+  "machinery set EMPTY: the acquittal is withheld beside the UNDECIDED row, not printed against it"
+ss_assert "sc-und-norows" "$(sc_und "$SC_E_NOROW")" "row=1 acq=0 pf=1 und=1" \
+  "bucket derivation returns no rows over a moving range: withheld for the same reason"
+ss_assert "sc-und-nopre" "$(sc_und "$SC_E_NOPRE")" "row=1 acq=0 pf=1 und=1" \
+  "preclassify.sh absent entirely: withheld -- a partial install must not read as a landed one"
+
+# THE CONTROL THAT SITES THE STATE RATHER THAN A BLANKET REFUSAL, and it is the one that would
+# catch `machinery_at_or_past` simply returning 1. Intact engine, CLEAN consumer, same stamp: the
+# acquittal must still FIRE. `sc-nocarry` above asserts this on the shipped gate; this re-asserts
+# it in the same block as the three withholdings, where a blanket refusal would be visible.
+sc_cons clean
+ss_assert "sc-und-clean-control" "$(sc_und "$GATE")" "row=1 acq=1 pf=0 und=0" \
+  "an intact engine on a clean consumer still acquits -- the refusal is keyed on the state, not blanket"
+
+# --- MUTANTS on the carry refusal -------------------------------------------------------
+#
+# THE COPY IS THE WHOLE DIRECTORY. The gate resolves setup-sites.md and preclassify.sh by
+# `dirname "$0"`; a lone copy resolves an EMPTY machinery set, emits no CARRY row for want of a
+# subject, and every mutant scores a kill it did not earn.
+SCM="$(dirname "$DIST")/scmut"
+rm -rf "$SCM"; mkdir -p "$SCM/ctl"
+cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$SCM/ctl"/ 2>/dev/null
+
+# THE UNMUTATED CONTROL, PRESENCE-SHAPED, AND IT RUNS BEFORE ANY MUTANT. It asserts the carried
+# world's full tuple off a plain copy: a copy that died sourcing its siblings prints nothing, and
+# "nothing" is what two of the three mutants below are expected to stop producing.
+sc_cons carry
+ss_assert "sc-mut-control" "$(sc_ack "$SCM/ctl/self-update-gate.sh")" "row=1 acq=0 pf=1 carry=1" \
+  "an UNMUTATED copy beside its siblings reproduces the withheld row, so a mutant's shift is the mutation"
+
+# ONE STRING SERVES THE GREP AND THE SED for each anchor, so the uniqueness proved below is a
+# property of the expression that actually mutates.
+SC_A1='^  \[ "\${GATE_CARRY_STATE:-cold}" = clean \] || return 1$'
+SC_A2='^        GATE_CARRY_STATE=carried$'
+SC_A3='^    if machinery_at_or_past "\$_ss"; then$'
+# m4's anchor is the pair of UNDECIDED sites, keyed on the SUBJECT'S OWN predicate -- both are
+# `GATE_CARRY_STATE=undecided` and nothing else in the file is. A hand-named site list goes
+# vacuous the release somebody adds a third terminal, and nothing announces it.
+SC_A4='^\([[:blank:]]*\)GATE_CARRY_STATE=undecided$'
+ss_assert "sc-anchor-1" "$(grep -c "$SC_A1" "$GATE")" "1" "the refusal is exactly one line"
+ss_assert "sc-anchor-2" "$(grep -c "$SC_A2" "$GATE")" "1" "the carried SET site is exactly one line, distinct from the cold initializer"
+ss_assert "sc-anchor-3" "$(grep -c "$SC_A3" "$GATE")" "1" "the acquittal branch is exactly one line"
+# CONTROLS: a grammar that cannot spell its own subject returns 0 on the real anchor too, so each
+# 1 above needs a 0 of the SAME shape beside it.
+ss_assert "sc-anchor-1-ctl" "$(grep -c '^  \[ "\${GATE_NOT_A_STATE:-cold}" = clean \] || return 1$' "$GATE")" "0" \
+  "an impossible anchor of the same shape returns 0"
+ss_assert "sc-anchor-2-ctl" "$(grep -c '^        GATE_CARRY_STATE=hauled$' "$GATE")" "0" \
+  "and a same-shaped impossible SET site returns 0"
+ss_assert "sc-anchor-3-ctl" "$(grep -c '^    if machinery_never_at_or_past "\$_ss"; then$' "$GATE")" "0" \
+  "and a same-shaped impossible branch returns 0"
+# m4's anchor is a SET, not a line, so it is asserted as a count with a floor -- and the count is
+# derived rather than written, so a third UNDECIDED terminal joins the mutation silently instead
+# of leaving it partial. The post-mutation count is asserted 0 inside sc_kill's `cmp -s`.
+ss_assert "sc-anchor-4" \
+  "$(grep -c "$SC_A4" "$GATE" | awk '{print ($1 >= 2) ? "two-or-more" : "under"}')" "two-or-more" \
+  "both of arm C's UNDECIDED terminals set the state, so the mutation cannot strip only one"
+ss_assert "sc-anchor-4-ctl" "$(grep -c '^\([[:blank:]]*\)GATE_CARRY_STATE=unknowable$' "$GATE")" "0" \
+  "and a same-shaped impossible state value returns 0"
+
+# sc_kill <label> <sed-expr> <clean-want> <carry-want> <pre-want> <why>
+#
+# EVERY MUTANT IS SCORED ON ALL THREE WORLDS, and the mutant is killed only when the whole
+# 3-tuple matches. A mutant that moved a cell nobody expected reads as a kill under a
+# single-world score; here it reads as the entanglement it is.
+#
+# THE CARRIED-PRECLASSIFY WORLD IS A SEED, NOT A SECOND GUARD, so m1 and m2 move it in lockstep
+# with the carried world by construction and that is not entanglement. What would be entanglement
+# is either of them moving the CLEAN world, which is why that cell is in the tuple.
+sc_kill() {
+  local label="$1" expr="$2" wc="$3" wa="$4" wp="$5" why="$6" d="$SCM/$1" got want
+  rm -rf "$d"; mkdir -p "$d"
+  cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$d"/ 2>/dev/null
+  if ! sed "$expr" "$GATE" > "$d/self-update-gate.sh"; then
+    ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s sed DID NOT APPLY -- the mutant never existed and its arm is unproven\n' "$label"
+    return
+  fi
+  if cmp -s "$GATE" "$d/self-update-gate.sh"; then
+    ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s mutation matched nothing, so the arm it scores is unproven\n' "$label"
+    return
+  fi
+  sc_cons clean;       got="clean[$(sc_ack "$d/self-update-gate.sh")]"
+  sc_cons carry;       got="$got carry[$(sc_ack "$d/self-update-gate.sh")]"
+  sc_cons preclassify; got="$got pre[$(sc_ack "$d/self-update-gate.sh")]"
+  want="clean[$wc] carry[$wa] pre[$wp]"
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ "$got" = "$want" ]; then
+    printf '  ok    %-16s KILLED (%s)\n' "$label" "$why"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]  %s\n' "$label" "$got" "$want" "$why"
+  fi
+}
+
+# m1 -- the refusal itself is gone. The flag is still set; nothing reads it.
+sc_kill "sc-mut-return" "s@${SC_A1}@  :@" \
+  "row=1 acq=1 pf=0 carry=0" "row=1 acq=1 pf=0 carry=1" "row=1 acq=1 pf=0 carry=1" \
+  "without the return the acquittal comes back on both carried worlds and the clean world is untouched"
+
+# m2 -- the state is never raised to `carried`. The reader survives and reads a `clean` the emit
+# can no longer downgrade, which is the shape a refusal sited on a value nobody writes takes.
+# `clean` keeps the mutation inside arm C rather than deleting a line `set -u` would report.
+sc_kill "sc-mut-noset" "s@${SC_A2}@        GATE_CARRY_STATE=clean@" \
+  "row=1 acq=1 pf=0 carry=0" "row=1 acq=1 pf=0 carry=1" "row=1 acq=1 pf=0 carry=1" \
+  "a state the emit never raises leaves the acquittal firing beside a CARRY row"
+
+# m3 -- the acquittal branch is dead everywhere. This is the fix-by-deletion that satisfies every
+# withheld arm above for free, and only the CLEAN world can tell it from the shipped guard.
+sc_kill "sc-mut-iffalse" "s@${SC_A3}@    if false; then@" \
+  "row=1 acq=0 pf=1 carry=0" "row=1 acq=0 pf=1 carry=1" "row=1 acq=0 pf=1 carry=1" \
+  "killing the acquittal everywhere moves the CLEAN world, which the shipped guard leaves alone"
+
+# m4 -- THE UNDECIDED TERMINALS STOP RECORDING THEMSELVES, which is precisely the first cut of
+# this fix: a state raised only at the CARRY emit, leaving `clean` standing on the runs where arm
+# C said it could not tell. Scored on a DIFFERENT axis from m1-m3 -- the three sabotaged engines
+# rather than the three consumer worlds -- because that is the axis it moves, and it must leave
+# the consumer-world axis alone.
+#
+# `clean` IS THE MUTATION AND NOT A DELETION. Removing the lines would leave `cold` standing at
+# both terminals, which withholds for the WRONG reason and scores a kill the arm did not earn --
+# a mutant that fails closed proves nothing about a guard whose job is failing closed. Writing
+# `clean` reproduces the shipped defect exactly.
+SCM4="$SCM/sc-mut-undec"
+rm -rf "$SCM4"; mkdir -p "$SCM4"
+cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$SCM4"/ 2>/dev/null
+sed "s@${SC_A4}@\1GATE_CARRY_STATE=clean@" "$GATE" > "$SCM4/self-update-gate.sh"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$GATE" "$SCM4/self-update-gate.sh"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-16s mutation matched nothing, so the arm it scores is unproven\n' "sc-mut-undec"
+elif [ "$(grep -c "$SC_A4" "$SCM4/self-update-gate.sh")" != 0 ]; then
+  # A MUTATION THAT APPLIES CAN STILL BE PARTIAL, and `cmp -s` cannot see it: one terminal
+  # stripped and one left leaves half the defect and reads as a kill.
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-16s mutation was PARTIAL -- %s undecided site(s) survive, so the defect was only half reproduced\n' \
+    "sc-mut-undec" "$(grep -c "$SC_A4" "$SCM4/self-update-gate.sh")"
+else
+  # The three sabotaged engines are rebuilt around the MUTATED gate: sc_engine copies the shipped
+  # one, so the mutant has to be dropped in on top of each.
+  sc_m4_got=""
+  for sc_m4 in noman:nomanifest norow:norows nopre:nopre; do
+    sc_m4_e="$(sc_engine "m4-${sc_m4%%:*}" "${sc_m4#*:}")"
+    cp "$SCM4/self-update-gate.sh" "$sc_m4_e"
+    sc_cons carry
+    sc_m4_got="$sc_m4_got ${sc_m4%%:*}[$(sc_und "$sc_m4_e")]"
+  done
+  # ...and the consumer-world axis must be UNMOVED, which is what makes this m4's own assertion
+  # rather than a second copy of m1's.
+  sc_cons carry;  sc_m4_got="$sc_m4_got carried[$(sc_ack "$SCM4/self-update-gate.sh")]"
+  sc_cons clean;  sc_m4_got="$sc_m4_got clean[$(sc_ack "$SCM4/self-update-gate.sh")]"
+  sc_m4_want=" noman[row=1 acq=1 pf=0 und=1] norow[row=1 acq=1 pf=0 und=1] nopre[row=1 acq=1 pf=0 und=1]"
+  sc_m4_want="$sc_m4_want carried[row=1 acq=0 pf=1 carry=1] clean[row=1 acq=1 pf=0 carry=0]"
+  if [ "$sc_m4_got" = "$sc_m4_want" ]; then
+    printf '  ok    %-16s KILLED (%s)\n' "sc-mut-undec" \
+      "with the UNDECIDED terminals recording clean, the acquittal returns on all three -- printed beside the row saying the gate cannot tell"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s SURVIVED: got=[%s] want=[%s]\n' "sc-mut-undec" "$sc_m4_got" "$sc_m4_want"
+  fi
+fi
+
 # --- ARM C: SELF-UPDATE-CARRY, one row per machinery path the consumer diverged on ----
 #
 # Step 2 justifies its autonomy -- no operator gate, auto-merged PR -- on the claim that the

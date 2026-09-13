@@ -92,6 +92,14 @@ land, then pull the rest. **Do not hunt for that ref by hand:** every `DEFER`
 now carries a `SELF-UPDATE-SAFE-STOP` row naming it, derived by running the gate
 against each release in the range. Take the ref from that row.
 
+That row acquits itself — "SPLIT BUYS NOTHING HERE ... its machinery has already
+landed" — when the consumer's own `skill_commit` is at or past the ref it names,
+**and ONLY on a run where the gate's carry arm reached a clean decision.** A
+`SELF-UPDATE-CARRY` row withholds it: a carried machinery path is one the stamp
+says landed and step 2 deliberately did not write. So does a `SELF-UPDATE-UNDECIDED`
+row from that arm, because a gate that cannot tell whether a path was carried has
+not established that none was. The original pull-first advice stands in both cases.
+
 **VALIDATE `<ref>` BEFORE USING IT — all four, and report which failed:**
 
 1. It resolves in the **distribution** repo. A ref that resolves only in the
@@ -475,6 +483,16 @@ prose is itself generated rather than composed.
      of the installed tool version — it is bookkeeping tied to the (already
      autonomous) self-update, and never touches `version`/`commit` (the rulebook
      base stays put until a gated apply).
+
+     **The pair advances even on a cycle that CARRIED a path, and that is what the gate's
+     `GATE_CARRY_STATE` refusal compensates for.** A carried path is the one thing this cycle
+     did not write, so the advanced `skill_commit` then attests machinery that did not
+     land; nothing here corrects it, because the correction would need per-path granularity
+     the stamp has no field for. `machinery_at_or_past()` in
+     `reconcile/self-update-gate.sh` therefore refuses on the carry row instead of on the
+     stamp, so the SAFE-STOP acquittal is withheld on the runs where the stamp is ahead of
+     the tree. Do NOT hand-hold the stamp back — the carry row already reaches the operator
+     and step 7's gated apply is what closes it.
 
      **A derived fixture is a consumer edit when, and only when, `preclassify.sh`'s BUCKET for
      that path says so — never overwrite one that is.** Report the path, leave the file, and
@@ -892,16 +910,29 @@ prose is itself generated rather than composed.
      never drift. A row here is the tell that the base passed in was stale.
    - `CORE-AT-SELF-UPDATE` → byte-identical to the distribution at `skill_commit`, the OTHER
      sha in this consumer's own stamp. **Not drift, and no action.** Step 2's autonomous
-     self-update rewrites the whole MACHINERY set, so on a multi-hop pull those files sit at
-     an INTERMEDIATE ref while `commit` — the base every predicate here measures against —
-     stays where it was. **28 files are in both the machinery set and this scan** (control:
-     72 machinery files are outside it), and without this row each one reads as a consumer
+     self-update writes the `base→theirs` diff RESTRICTED to the MACHINERY set — not the whole
+     set, and minus whatever arm C carried out of the slice — so on a multi-hop pull the files
+     it did write sit at an INTERMEDIATE ref while `commit` — the base every predicate here
+     measures against — stays where it was. **41 files are in both the machinery set and this
+     scan** (control: 88 machinery files are outside it; both sides derived, neither
+     hand-listed), and without this row each one reads as a consumer
      edit and draws a HARD status whose printed remedy is to revert upstream's own text.
      Reproduced at ground truth on the distribution's own history: the same file at the
      intermediate ref gives `HARD-CORE-DRIFT-ABSORBED`, and at base gives `CORE-OK`.
      The script reads `skill_commit` from the stamp ITSELF rather than taking it as an
      argument — a fifth argument is a fifth thing a caller can omit, and step 7 below records
      what that cost the last time one instruction had to be remembered for two scripts.
+   - `CORE-MACHINERY-CARRIED` → a machinery path `reconcile/self-update-gate.sh`'s arm C
+     CARRIED out of step 2's autonomous slice: the consumer diverged on it, so step 2 refused
+     to write `theirs` over it and handed it to this gated apply. **Not drift, and the action
+     is elsewhere** — `apply` already emits a `WORKLIST semantic-merge` row for the same path
+     off the same preclassify bucket, which the row names verbatim. Do NOT refile it as an
+     override and do NOT act on the drift remedy; do the worklist row. Without this row one
+     path draws two contradictory instructions in one report, and for a hook there is no
+     override grain to refile into at all. Non-blocking. It is the LAST specific status:
+     `HARD-CORE-BEHIND` still wins (a stale copy has no residual to merge), and
+     `HARD-CORE-DRIFT-ABSORBED` wins only when absorption is TOTAL — on a partially absorbed
+     carried path that row's whole-file revert would delete the lines upstream did not take.
    - `HARD-DRIFT-SCAN-UNAVAILABLE` → **blocks `apply`**. The scan could not load its path
      mapper, so it scanned NOTHING and its empty output is not a clean tree. Restore
      `reconcile/preclassify.sh` beside `unregistered-drift.sh` and re-run.

@@ -3243,53 +3243,6 @@ be located or the keep run emits nothing.
 
 verify: sh set -e; a=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$a" ] || exit 9; t=$(mktemp -d); sed -n '/^while IFS="$TAB_CH" read -r ext detail; do$/,/^EOF$/p' "$a" > "$t/l.sh"; [ -s "$t/l.sh" ] || exit 9; { echo 'TAB_CH="$(printf "\t")"'; echo 'say(){ printf "%s %s\n" "$1" "$2"; }'; echo 'ADJ_ROW_TOKEN=adjudicated'; echo 'ADJ_KEEP_VERDICT=still-additive'; echo 'LD_HOOK="$(printf "extensions/e.md\t%s" "$D")"'; echo '. "$T/l.sh"'; } > "$t/d.sh"; r=$(T="$t" D="adjudicated=retire :: p" bash "$t/d.sh" 2>&1) || exit 9; k=$(T="$t" D="adjudicated=still-additive :: p" bash "$t/d.sh" 2>&1) || exit 9; rm -rf "$t"; [ -n "$k" ] || exit 9; [ "$r" = "$k" ] && exit 1; exit 0
 
-## BL-124
-
-**Arm C's carry list falsifies a premise `unregistered-drift.sh` states in its own remedy text, and
-that file was not touched by the change that broke it.**
-`core/skills/ai-dlc-update/SKILL.md:722` describes the `CORE-AT-SELF-UPDATE` row as resting on
-"Step 2's autonomous self-update rewrites the whole MACHINERY set", and
-`core/skills/ai-dlc-update/reconcile/unregistered-drift.sh:359` prints the same claim to the
-operator — "the autonomous self-update (step 2) wrote it ... No action: `apply` carries it to theirs
-with the rest of the machinery."
-
-**THE QUOTED PREMISE WAS ALREADY LOOSE, AND v0.436.0 WIDENED THE GAP RATHER THAN OPENING IT.**
-Step 2 has never written the whole machinery set: it writes the `base→theirs` diff RESTRICTED to
-that set, and `SKILL.md:233` has said so since 2026-07-26 — derived with `git log -S` against a
-control string that resolves to nothing. So the sentence both files print was inexact before this
-release, which is worth stating because an earlier revision of THIS entry repeated it and had to be
-withdrawn. What v0.436.0 changed is the size of the discrepancy: `self-update-gate.sh`'s ARM C emits
-a `SELF-UPDATE-CARRY` row for every machinery path the consumer has diverged on and step 2 writes
-none of them, so the written set is now that diff MINUS the carried paths. A carried path is
-byte-identical to neither `base` nor `skill_commit` nor `theirs`. It therefore falls past the `CORE-AT-SELF-UPDATE` arm into an ordinary drift status whose
-printed remedy is to re-adopt upstream's text — against the one path the consumer deliberately owns
-and which step 7 is already carrying as a `WORKLIST semantic-merge` item.
-
-**Not claimed:** that this loses data. The path is reported twice rather than zero times, and the
-second report argues for the opposite action from the first. The consequence is a contradictory
-worklist, not an overwrite — which is why this is filed rather than folded into the release that
-caused it. The remedy is a row in `unregistered-drift.sh`'s own vocabulary for a path the gate
-carried, and that is a different subsystem from the one v0.436.0 changed.
-
-**The stamp is the second half and is stated separately.** Step 2 advances
-`skill_version`/`skill_commit` to `theirs` on a cycle that carried a path, so
-`self-update-gate.sh`'s `machinery_at_or_past()` then reads a stamp asserting machinery landed that
-did not. Its only consumer is the SAFE-STOP advisory wording, so the cost is a misleading sentence
-rather than a wrong verdict — but the two halves want one answer, not two.
-
-**The receipt's limit, stated rather than discovered later.** It keys on the emission LINE and on
-the row's own description block, and it carries a control that exits 9 if arm C is absent — without
-arm C nothing falsifies the premise and the entry is not yet live. Scored three ways: unfixed 1,
-the claim withdrawn from the emitter 0, the file taught the `SELF-UPDATE-CARRY` token 0. **That
-last arm is a whole-file `grep` and a COMMENT naming the token satisfies it** — the same weakness
-`BL-051` was closed for. It is accepted here because the alternative keys on wording a fix is free
-to rephrase, and because the first two arms cannot be closed by prose. Whoever takes this entry
-should replace the third arm with one that drives `unregistered-drift.sh` against a seeded tree
-holding a carried path, the way `BL-051`'s receipt drives the gate.
-
-verify: sh U=core/skills/ai-dlc-update/reconcile/unregistered-drift.sh; S=core/skills/ai-dlc-update/SKILL.md; G=core/skills/ai-dlc-update/reconcile/self-update-gate.sh; [ -r "$U" ] && [ -r "$S" ] && [ -r "$G" ] || exit 9; grep -qF 'SELF-UPDATE-CARRY' "$G" || { echo 'CONTROL FAILED: arm C absent, so nothing falsifies the premise'; exit 9; }; e=$(awk 'index($0,"emit CORE-AT-SELF-UPDATE")' "$U"); r=$(awk 'index($0,"CORE-AT-SELF-UPDATE"){f=1} f{print} f && index($0,"HARD-DRIFT-SCAN-UNAVAILABLE"){exit}' "$S"); [ -n "$e" ] && [ -n "$r" ] || { echo 'CONTROL FAILED: emission site or row description not found'; exit 9; }; grep -qF 'SELF-UPDATE-CARRY' "$U" && exit 0; printf '%s\n' "$r" | grep -qF 'SELF-UPDATE-CARRY' && exit 0; printf '%s\n' "$e" | grep -qF 'with the rest of the machinery' || exit 0; printf '%s\n' "$r" | grep -qF 'rewrites the whole MACHINERY set' || exit 0; exit 1
-
-
 ## BL-123 — the read-failure collapse is unfixed on `layer-contract.yaml`, and its message tells the operator the file is malformed
 
 **Same class as `PC-S307-AWK-CANT-OPEN-FILE-MISREAD-AS-MISSING-FRONTMATTER`, one level up, and

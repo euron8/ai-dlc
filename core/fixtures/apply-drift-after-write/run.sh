@@ -17,6 +17,13 @@
 # indistinguishable from these — a poisoned signal, not a spurious one.
 set -uo pipefail
 
+# HERMETIC — scrub the operator's tuning before reading anything (I10). This fixture's seed
+# builds `core/hooks/ai-dlc-*.sh` paths and assertion 5 drives `hard-blockers.sh` over them,
+# so it reads as a hook-driving fixture and is held to the same bar: a consumer that pins any
+# AI_DLC_* tunable in settings.json exports it into every `git push`, and the gate would then
+# run these assertions against machinery configured differently from what they assume.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
@@ -31,9 +38,16 @@ echo "apply-drift-after-write:"
 
 # --- Assertion 0: SANITY — the pull really is clean before the run ------------
 # Everything below is meaningless if the seed shipped a consumer that HAD drift.
+# SCOPED TO THIS ASSERTION'S OWN SUBJECTS, and the scoping is the point rather than a
+# loosening. The original fixture's whole world was drift-free, so "no HARD row anywhere" and
+# "no HARD row on alpha or beta" were the same sentence. Assertion 5's cells are DELIBERATELY
+# diverged machinery paths, so the tree-wide form now fails on the fixture's own seed — and
+# widening it back would take assertion 5's subjects away. The subjects this arm owns are
+# alpha and beta, and they are named.
 PRE="$(bash "$DRIFT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
-if grep -q '^HARD-' <<<"$PRE"; then
-  bad "FIXTURE BROKEN — the consumer carries drift before apply.sh runs: $(printf '%s\n' "$PRE" | grep '^HARD-' | head -1)"
+PRE_AB="$(printf '%s\n' "$PRE" | awk -F'\t' '$2=="skills/ai-dlc/steps/alpha.md" || $2=="skills/ai-dlc/steps/beta.md"')"
+if grep -q '^HARD-' <<<"$PRE_AB"; then
+  bad "FIXTURE BROKEN — the consumer carries drift on alpha/beta before apply.sh runs: $(printf '%s\n' "$PRE_AB" | grep '^HARD-' | head -1)"
   echo; echo "apply-drift-after-write: FIXTURE BROKEN" >&2; exit 2
 fi
 if grep -qc 'CORE-OK.*alpha.md' >/dev/null <<<"$PRE" && grep -q 'CORE-OK.*beta.md' <<<"$PRE"; then
@@ -51,6 +65,15 @@ else
   echo; echo "apply-drift-after-write: FIXTURE BROKEN" >&2; exit 2
 fi
 
+# --- Assertion 5's subject is the PRE-APPLY state, so it is captured here -----
+# `unregistered-drift.sh` is what step 3d runs BEFORE the operator authorises the write, and
+# that is the state whose rows assertion 5 is about. Captured before the driver below rather
+# than after it, because phase 1 WRITES theta — a machinery path in the range the consumer
+# never touched — and a post-write scan then reads it at theirs. The product behaviour is
+# right; the arm would have lost its subject, which is the failure 3c's own header records
+# happening to gamma once already.
+UD5="$(bash "$DRIFT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
+
 # --- Run the resolution driver -----------------------------------------------
 MANIFEST="$(bash "$APPLY" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
 
@@ -61,13 +84,17 @@ MANIFEST="$(bash "$APPLY" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
 # delta, and now it buckets `UPSTREAM-ONLY` and applies. Asserted BY NAME rather than by count
 # alone — a count arm cannot tell three right rows from two right ones plus a wrong one, and
 # this arm has already had to move once.
+# FOUR since assertion 5's cells arrived, and the fourth is theta — a machinery path IN the
+# range whose consumer copy is UNTOUCHED. It buckets UPSTREAM-ONLY and applies, exactly as it
+# should; it is seeded for assertion 5, where its job is to be claimed by an EARLIER arm than
+# the carried one. Named rather than counted, for the reason this arm already carries.
 PURE="$(printf '%s\n' "$MANIFEST" | grep 'RESOLVED.*pure-apply' || true)"
-if [ "$(printf '%s\n' "$PURE" | grep -c .)" -eq 3 ] \
+if [ "$(printf '%s\n' "$PURE" | grep -c .)" -eq 4 ] \
    && grep -q 'alpha\.md' <<<"$PURE" && grep -q 'beta\.md' <<<"$PURE" \
-   && grep -q 'ai-dlc-gamma\.sh' <<<"$PURE"; then
-  ok "manifest: alpha, beta and the at-\`skill_commit\` machinery file all RESOLVED pure-apply"
+   && grep -q 'ai-dlc-gamma\.sh' <<<"$PURE" && grep -q 'ai-dlc-theta\.sh' <<<"$PURE"; then
+  ok "manifest: alpha, beta, the at-\`skill_commit\` machinery file and the untouched machinery file all RESOLVED pure-apply"
 else
-  bad "expected 3 pure-apply rows (alpha, beta, gamma), got: $(printf '%s\n' "$PURE" | tr '\n' ' ')"
+  bad "expected 4 pure-apply rows (alpha, beta, gamma, theta), got: $(printf '%s\n' "$PURE" | tr '\n' ' ')"
 fi
 # ...and delta must NOT be among them: it is byte-identical across the range, so nothing should
 # emit a bucket for it at all. This is the arm that fails if the seed ever drifts delta into
@@ -79,10 +106,17 @@ else
 fi
 
 # --- Assertion 2: THE FIX — a clean pull produces no drift decision -----------
-if grep -q 'DECISION[[:space:]]*drift' <<<"$MANIFEST"; then
-  bad "apply.sh reported ITS OWN WRITE as consumer drift on a clean pull: $(printf '%s\n' "$MANIFEST" | grep 'DECISION.*drift' | head -1)"
+# SCOPED TO THE PATHS PHASE 1 WROTE, which is what this assertion has always been about: a
+# file apply.sh overwrote from THEIRS being reported back as the consumer's own edit. Assertion
+# 5's cells are diverged BY DESIGN and their DECISION rows are correct, so the tree-wide form
+# now fails on the fixture's own seed. It is narrowed to the four pure-apply paths rather than
+# to "not epsilon", so a NEW spurious row on any of them still fails it.
+DEC2="$(printf '%s\n' "$MANIFEST" | grep 'DECISION[[:space:]]*drift' \
+        | grep -E 'alpha\.md|beta\.md|ai-dlc-gamma\.sh|ai-dlc-theta\.sh' || true)"
+if [ -n "$DEC2" ]; then
+  bad "apply.sh reported ITS OWN WRITE as consumer drift on a clean pull: $(printf '%s\n' "$DEC2" | head -1)"
 else
-  ok "no DECISION drift on a clean pull — the drift set was measured before phase 1 wrote"
+  ok "no DECISION drift on any path phase 1 wrote — the drift set was measured before phase 1 wrote"
 fi
 
 # --- Assertion 2b: EXTENSION-HOOK-DRIFT is handed back as WORK, not stated as prose ---
@@ -185,8 +219,15 @@ cp "$(dirname "$DRIFT")/preclassify.sh" "$WORK/preclassify.sh"
 awk '/^      if \[ -n "\$THEIRS" \] && git -C "\$DIST" cat-file -e "\$\{THEIRS\}:\$\{cp\}" 2>\/dev\/null \\$/ {skip=6}
      skip > 0 {skip--; next}
      {print}' "$DRIFT" > "$NOGUARD"
-if [ "$(grep -c 'CORE-AT-THEIRS' "$NOGUARD")" -gt 1 ]; then
+# KEYED ON THE EMITTER, NOT ON A WHOLE-FILE MENTION COUNT. The count was `> 1` when the file
+# named the status exactly twice — once in the header table, once at the emitter — so a
+# stripped copy left one. Any new prose naming the status breaks that arithmetic while the
+# strip is working perfectly, which reads as a reshaped subject. The property the strip has to
+# achieve is that the EMISSION SITE is gone; that is what is asserted.
+if grep -q 'emit CORE-AT-THEIRS' "$NOGUARD"; then
   bad "FIXTURE STALE: could not strip the CORE-AT-THEIRS guard — unregistered-drift.sh was reshaped"
+elif cmp -s "$DRIFT" "$NOGUARD"; then
+  bad "FIXTURE STALE: the CORE-AT-THEIRS strip changed nothing, so assertion 3 is tested against the original"
 else
   RAW="$(bash "$NOGUARD" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
   if grep -q 'HARD-CORE-DRIFT-ABSORBED.*alpha.md' <<<"$RAW" \
@@ -258,16 +299,177 @@ case "$NOFIELD" in
   *)      bad "a stamp with no \`skill_commit\` still suppressed the row, so the guard is matching something it did not read. Got: ${NOFIELD:-<nothing>}" ;;
 esac
 
+# --- Assertion 5: CORE-MACHINERY-CARRIED — one path, one instruction ----------
+# `self-update-gate.sh`'s arm C removes a diverged MACHINERY path from step 2's autonomous
+# slice and hands it to this gated apply, where apply.sh emits `WORKLIST semantic-merge` for
+# it. The same path is byte-identical to none of base, theirs or `skill_commit`, so before
+# this status it also drew HARD-UNREGISTERED-CORE-DRIFT — whose remedy is "refile as an
+# override, or revert", the OPPOSITE instruction, for the same file, in the same report. For
+# a hook no override grain exists at all, so "refile" is impossible and "revert" deletes the
+# consumer edit arm C exists to protect.
+#
+# ASSERTED BY NAME AND BY STATUS, never by count: a count cannot tell four right rows from
+# three right ones and a wrong one, and every cell here differs from its neighbour by exactly
+# one property.
+# `$UD5` was captured ABOVE, before the driver ran. See the note at its assignment.
+st5() { printf '%s\n' "$UD5" | awk -F'\t' -v p="$1" '$2==p{print $1}'; }
+dt5() { printf '%s\n' "$UD5" | awk -F'\t' -v p="$1" '$2==p{print $3}'; }
+
+# THE SCAN PRODUCED ROWS AT ALL. A scan that exits early prints nothing, and every "is not
+# HARD" assertion below passes vacuously against an empty string. This is the arm that refuses
+# that reading, and it is required because the new status's derivation runs preclassify.
+N5="$(printf '%s\n' "$UD5" | grep -c .)" || N5=0
+if [ "$N5" -ge 8 ]; then
+  ok "the scan produced $N5 rows (a silent scan cannot pass the arms below by default)"
+else
+  bad "FIXTURE VACUOUS — the scan produced only $N5 rows, so every status assertion below is about an empty string: $(printf '%s\n' "$UD5" | tr '\n' '|' | cut -c1-200)"
+fi
+
+# epsilon: machinery, IN the range, consumer-edited -> the new row.
+if [ "$(st5 hooks/ai-dlc-epsilon.sh)" = "CORE-MACHINERY-CARRIED" ]; then
+  ok "a CARRIED machinery path reads CORE-MACHINERY-CARRIED, not unregistered drift"
+else
+  bad "the carried machinery path did not draw the new row. Got: $(st5 hooks/ai-dlc-epsilon.sh) <blank means no row at all>"
+fi
+# ...and it must NOT be HARD-, because hard-blockers.sh and apply.sh both key on that prefix.
+case "$(st5 hooks/ai-dlc-epsilon.sh)" in
+  HARD-*) bad "the carried row is HARD- — it blocks the pull and restores the DECISION row it exists to remove" ;;
+  "")     bad "no row at all for the carried path, so its prefix cannot be asserted" ;;
+  *)      ok "...and it is non-blocking: the worklist row is the disposition" ;;
+esac
+# ...and its detail must POINT at the disposition rather than state a remedy of its own.
+DT5E="$(dt5 hooks/ai-dlc-epsilon.sh)"
+if grep -q 'semantic-merge' <<<"$DT5E"; then
+  ok "...and its detail names the WORKLIST semantic-merge disposition"
+else
+  bad "the carried row does not name the semantic-merge disposition, so it tells the operator nothing to do: ${DT5E}"
+fi
+# ...and it must name the preclassify BUCKET verbatim: the class includes
+# UPSTREAM-DELETED+consumer-modified->CLASSIFY, where a blanket "do not revert" would be
+# advice about a file upstream is removing.
+if grep -q 'CLASSIFY' <<<"$DT5E"; then
+  ok "...and it names the preclassify bucket, so the operator can see WHY it was carried"
+else
+  bad "the carried row does not name its bucket: ${DT5E}"
+fi
+
+# zeta: machinery, OUT of the range -> arm C carries nothing, so the drift finding is real.
+if [ "$(st5 hooks/ai-dlc-zeta.sh)" = "HARD-UNREGISTERED-CORE-DRIFT" ]; then
+  ok "a machinery path the pull does NOT touch keeps HARD-UNREGISTERED-CORE-DRIFT"
+else
+  bad "the out-of-range machinery path was acquitted — nothing is merging it, so its edit really is unregistered. Got: $(st5 hooks/ai-dlc-zeta.sh)"
+fi
+# eta.md: NON-machinery, IN the range -> arm C never sees it; the drift finding is the
+# ordinary one this scan exists for.
+if [ "$(st5 skills/ai-dlc/steps/eta.md)" = "HARD-UNREGISTERED-CORE-DRIFT" ]; then
+  ok "a NON-machinery scanned file in the range keeps HARD-UNREGISTERED-CORE-DRIFT"
+else
+  bad "the non-machinery edited file was acquitted — step 2 never threatened it and arm C never saw it. Got: $(st5 skills/ai-dlc/steps/eta.md)"
+fi
+# theta: machinery, IN the range, UNTOUCHED. It is claimed by CORE-OK long before the new
+# arm, which is exactly why the range alone cannot key this status — asserted rather than
+# assumed, because it is the cell that makes a range-only implementation look correct.
+if [ "$(st5 hooks/ai-dlc-theta.sh)" = "CORE-OK" ]; then
+  ok "an untouched machinery path in the range is CORE-OK — the new arm never reaches it"
+else
+  bad "the untouched machinery path did not read CORE-OK: $(st5 hooks/ai-dlc-theta.sh)"
+fi
+# partial: machinery, IN the range, PARTIALLY absorbed. ABSORBED's remedy is a whole-file
+# revert, which on a carried path deletes the lines upstream did NOT take while apply is
+# merging the same file. Full absorption keeps ABSORBED; partial does not.
+if [ "$(st5 hooks/ai-dlc-partial.sh)" = "CORE-MACHINERY-CARRIED" ]; then
+  ok "a PARTIALLY absorbed carried path draws the carried row, not a destructive revert"
+else
+  bad "a partially absorbed carried path read $(st5 hooks/ai-dlc-partial.sh) — ABSORBED's whole-file revert would delete the lines upstream did not take"
+fi
+# delta keeps its own, more specific claim: this change must not have moved it.
+if [ "$(st5 hooks/ai-dlc-delta.sh)" = "CORE-AT-SELF-UPDATE" ]; then
+  ok "...and delta still reads CORE-AT-SELF-UPDATE — the new arm did not steal an earlier claim"
+else
+  bad "delta moved to $(st5 hooks/ai-dlc-delta.sh) — the new arm is claiming rows that belong to an earlier one"
+fi
+
+# --- Assertion 5b: apply.sh emits ONE instruction for the carried path --------
+# The whole point of the status: the contradictory DECISION row is gone, and the WORKLIST row
+# that was always there remains. zeta is the CONTROL in the same run — it still draws its
+# DECISION row, so the absence above is the status discriminating rather than apply.sh having
+# stopped emitting drift decisions altogether.
+M5="$(bash "$APPLY" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
+if grep -q 'WORKLIST[[:space:]]*semantic-merge.*ai-dlc-epsilon' <<<"$M5"; then
+  ok "apply: the carried path is on the worklist as a semantic merge"
+else
+  bad "apply emitted no semantic-merge row for the carried path: $(printf '%s\n' "$M5" | grep -i epsilon | tr '\n' '|')"
+fi
+if grep -q 'DECISION[[:space:]]*drift.*ai-dlc-epsilon' <<<"$M5"; then
+  bad "apply STILL emits the contradictory DECISION drift row for the carried path — refile-or-revert beside a semantic merge, for one file"
+else
+  ok "...and no DECISION drift row for it: one path, one instruction"
+fi
+if grep -q 'DECISION[[:space:]]*drift.*ai-dlc-zeta' <<<"$M5"; then
+  ok "CONTROL: the out-of-range path DOES still draw its DECISION drift row in the same run"
+else
+  bad "the control failed — zeta drew no DECISION drift row either, so the absence above says nothing about the new status: $(printf '%s\n' "$M5" | grep 'DECISION' | tr '\n' '|' | cut -c1-200)"
+fi
+
+# --- Assertion 5c: the buckets may be HANDED IN, and it changes no answer -----
+# apply.sh passes `--bucket-rows` because it already holds preclassify's output; a scan that
+# answered differently under the flag would make apply's report disagree with a standalone
+# run of the same scan on the same tree. Compared row-for-row, with a control that the rows
+# are non-empty — two empty outputs compare equal.
+#
+# BOTH SIDES RUN NOW, against the tree as it stands after the driver above. `$UD5` was taken
+# BEFORE the apply and comparing against it would be comparing two TREES rather than two
+# invocations — apply writes gamma, so its row legitimately moves from the at-`skill_commit`
+# status to the at-theirs one between the two captures, and that difference has nothing to do
+# with the flag. Measured: read that way this arm fails on a correct implementation.
+PCF="$WORK/pc-rows"
+bash "$PRECLASSIFY" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" > "$PCF" 2>/dev/null
+UD5N="$(bash "$DRIFT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
+UD5F="$(bash "$DRIFT" --bucket-rows "$PCF" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
+if [ "$(printf '%s\n' "$UD5F" | grep -c .)" -gt 0 ] && [ "$UD5F" = "$UD5N" ]; then
+  ok "--bucket-rows changes no verdict: the flagged and standalone runs agree row-for-row"
+elif [ "$(printf '%s\n' "$UD5F" | grep -c .)" -eq 0 ]; then
+  bad "the flagged run produced NO rows — apply would read that as a clean tree"
+else
+  bad "the flagged and standalone runs DISAGREE, so apply's report and a hand-run scan would differ: $(diff <(printf '%s\n' "$UD5N") <(printf '%s\n' "$UD5F") | head -4 | tr '\n' '|')"
+fi
+# ...and an EMPTY rows file must NOT acquit. This is the fail-closed cell, and it is the ONLY
+# input on which a range-only implementation differs from this one: a `git diff` needs nothing
+# from preclassify, so it goes on acquitting when the bucket derivation is unavailable.
+UD5E="$(bash "$DRIFT" --bucket-rows /dev/null "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null \
+        | awk -F'\t' '$2=="hooks/ai-dlc-epsilon.sh"{print $1}')"
+if [ "$UD5E" = "HARD-UNREGISTERED-CORE-DRIFT" ]; then
+  ok "an EMPTY --bucket-rows file does not acquit: the carried path falls back to its HARD row"
+else
+  bad "with the bucket derivation unavailable the path was still acquitted — a scan that cannot read its subject must not clear it. Got: ${UD5E:-<no row>}"
+fi
+
 # --- Assertion 4: MUTANT — put the capture back below phase 1 and it must fire -
 # A FRESH seed is load-bearing. The run above already applied both files, so a mutant pointed
 # at that tree finds every bucket ALREADY-AT-THEIRS, writes nothing, and cannot reproduce the
 # defect — it would score a false PASS for a reason unrelated to ordering.
 MUTDIR="$WORK/reconcile-mutant"
 mkdir -p "$MUTDIR"
-cp "$RECONCILE"/*.sh "$MUTDIR/" 2>/dev/null
+# THE `.md` SIBLINGS TRAVEL TOO. `setup-sites.md` is where `machinery_paths()` and the
+# core_manifest globs are declared, and both preclassify.sh and unregistered-drift.sh resolve
+# it as `$(dirname "$0")/setup-sites.md` — this directory. Copying only `*.sh` leaves every
+# manifest resolution EMPTY, which changes the mutant's pure-apply count for a reason that has
+# nothing to do with the ordering defect it exists to reproduce.
+cp "$RECONCILE"/*.sh "$RECONCILE"/*.md "$MUTDIR/" 2>/dev/null
+if [ ! -s "$MUTDIR/setup-sites.md" ]; then
+  bad "FIXTURE BROKEN — the ordering mutant's directory has no setup-sites.md, so its manifest resolves empty and its counts are about the copy rather than about the mutation"
+fi
+# THE CAPTURE IS NOW A BLOCK, NOT A LINE. apply.sh writes preclassify's rows to a temp file and
+# branches on whether that write succeeded, so the whole `UD_PC`/`UD_FLAG`/`if` region moves as
+# a unit. Anchored on the region's first and last lines rather than on the single `UD=` line
+# the earlier shape had; a mutation that matched nothing is caught by the `mut_ud_line` check
+# below, which is why that check reads the MUTANT rather than the original.
 awk '
-  /^UD="\$\(bash "\$SELF\/unregistered-drift\.sh"/ { ud=$0; next }
-  /^# -+ 2\. drift refile/                         { print; if (ud != "") { print ud; ud="" } ; next }
+  /^UD_PC="\$\(mktemp/                             { cap=1 }
+  cap==1                                           { blk = blk $0 "\n"
+                                                     if ($0 ~ /^\[ -n "\$UD_PC" \] && rm -f "\$UD_PC"$/) cap=2
+                                                     next }
+  /^# -+ 2\. drift refile/                         { print; if (blk != "") { printf "%s", blk; blk="" } ; next }
   { print }
 ' "$APPLY" > "$MUTDIR/apply.sh"
 # BOTH defences must go, or the mutant cannot reproduce the defect: with the detector guard
@@ -275,7 +477,7 @@ awk '
 # would score a false PASS for a reason unrelated to ordering.
 cp "$NOGUARD" "$MUTDIR/unregistered-drift.sh"
 
-mut_ud_line="$(grep -n '^UD="\$(bash "\$SELF/unregistered-drift.sh"' "$MUTDIR/apply.sh" | cut -d: -f1)"
+mut_ud_line="$(grep -n '^UD_PC="\$(mktemp' "$MUTDIR/apply.sh" | cut -d: -f1)"
 mut_loop_line="$(grep -n '^# -* 1\. buckets' "$MUTDIR/apply.sh" | cut -d: -f1)"
 W2="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: second seed failed" >&2; exit 2; }
 eval "$(sed 's/^/M_/' "$W2/env.sh")"
@@ -284,7 +486,7 @@ if [ -z "$mut_ud_line" ] || [ -z "$mut_loop_line" ] || [ "$mut_ud_line" -lt "$mu
   bad "FIXTURE STALE: could not build the ordering mutant — apply.sh's UD capture or phase markers were renamed (ud=${mut_ud_line:-none}, phase1=${mut_loop_line:-none})"
 else
   MUT_OUT="$(bash "$MUTDIR/apply.sh" "$M_DIST" "$M_BASE" "$M_CONSUMER" "$M_THEIRS" 2>/dev/null)"
-  if [ "$(printf '%s\n' "$MUT_OUT" | grep -c 'RESOLVED.*pure-apply')" -ne 2 ]; then
+  if [ "$(printf '%s\n' "$MUT_OUT" | grep -c 'RESOLVED.*pure-apply')" -ne 4 ]; then
     bad "FIXTURE BROKEN — the mutant did not apply both files, so any drift row below would have a different cause"
   elif grep -q 'DECISION[[:space:]]*drift.*beta.md' <<<"$MUT_OUT"; then
     ok "mutant: measuring after the write turns a clean pull into 'refile-as-override or revert' — the fixture can fail"
@@ -293,6 +495,144 @@ else
   fi
 fi
 rm -rf "$W2"
+
+# --- Assertion 6: MUTANTS of the CORE-MACHINERY-CARRIED arm -------------------
+# Five arms above are ABSENCE-shaped ("is not HARD", "no DECISION row"), and an absence passes
+# identically against a subject that emits nothing. Only a mutant establishes that each
+# conjunct discriminates at all.
+#
+# EVERY MUTANT IS A COPY OF THE WHOLE reconcile/ DIRECTORY. The scan evals map_consumer() AND
+# machinery_paths() out of a sibling preclassify.sh, reads a sibling setup-sites.md, and now
+# RUNS preclassify.sh. A lone copy finds no sibling, reports nothing, and its silence scores as
+# a kill on every absence-shaped arm here.
+M6DIR="$WORK/mut-carried"
+mkdir -p "$M6DIR"
+cp "$RECONCILE"/*.sh "$RECONCILE"/*.md "$M6DIR/" 2>/dev/null
+m6_sib=0
+for _s in preclassify.sh setup-sites.md; do [ -s "$M6DIR/$_s" ] && m6_sib=$((m6_sib+1)); done
+if [ "$m6_sib" -ne 2 ]; then
+  bad "FIXTURE BROKEN — the mutant directory is missing a sibling the scan resolves ($m6_sib of 2), so every mutant below would be silent for a reason unrelated to its mutation"
+else
+  ok "mutant tree carries both siblings the scan resolves"
+fi
+
+# THE UNMUTATED CONTROL, and it carries a POSITIVE conjunct. rc=0-with-no-findings is exactly
+# what a copy that died at startup looks like, so this requires a baseline row to be THERE.
+M6C="$(bash "$M6DIR/unregistered-drift.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
+if grep -q '^CORE-MACHINERY-CARRIED	hooks/ai-dlc-epsilon.sh' <<<"$M6C" \
+   && grep -q '^HARD-UNREGISTERED-CORE-DRIFT	hooks/ai-dlc-zeta.sh' <<<"$M6C"; then
+  ok "unmutated control in the copy tree reproduces both baseline rows"
+else
+  bad "FIXTURE BROKEN — the unmutated copy did not reproduce the baseline rows, so no mutant verdict below is evidence about anything: $(printf '%s\n' "$M6C" | tr '\n' '|' | cut -c1-200)"
+fi
+
+# mut <name> <awk-program> -> writes $M6DIR/<name>.sh, cmp-asserted applied and parseable.
+mut() {
+  _mn="$1"; shift
+  awk "$1" "$DRIFT" > "$M6DIR/$_mn.sh" 2>/dev/null
+  if cmp -s "$DRIFT" "$M6DIR/$_mn.sh"; then
+    bad "MUTANT $_mn DID NOT APPLY — its anchor is gone from unregistered-drift.sh, so the arm it guards is untested"
+    return 1
+  fi
+  if ! bash -n "$M6DIR/$_mn.sh" 2>/dev/null; then
+    bad "MUTANT $_mn DOES NOT PARSE — a mutant that cannot run scores every arm as a kill it did not earn"
+    return 1
+  fi
+  cp "$M6DIR/$_mn.sh" "$M6DIR/unregistered-drift.sh"
+  return 0
+}
+m6run() { bash "$M6DIR/unregistered-drift.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null \
+          | awk -F'\t' -v p="$1" '$2==p{print $1}'; }
+m6restore() { cp "$RECONCILE/unregistered-drift.sh" "$M6DIR/unregistered-drift.sh"; }
+
+# m1 — STRIP THE ARM ENTIRELY. epsilon must return to HARD.
+if mut m1 '/^      if \[ -n "\$carried_b" \]; then$/ {skip=1; next} skip==1 && /^      fi$/ {skip=0; next} skip==1 {next} {print}'; then
+  if [ "$(m6run hooks/ai-dlc-epsilon.sh)" = "HARD-UNREGISTERED-CORE-DRIFT" ]; then
+    ok "m1 (arm stripped): the carried path returns as HARD — the arm is what suppresses it"
+  else
+    bad "m1 SURVIVED — with the whole arm removed the carried path still read $(m6run hooks/ai-dlc-epsilon.sh), so assertion 5 proves nothing"
+  fi
+fi
+m6restore
+
+# m2 — DROP THE MACHINERY-MEMBERSHIP CONJUNCT. The non-machinery edited file is acquitted.
+if mut m2 '/grep -xF -f "\$CARRY_TMP\/mach"/ {print "          cut -f1 \"$CARRY_TMP/cls\" > \"$CARRY_TMP/keep\" 2>/dev/null || : > \"$CARRY_TMP/keep\""; s=1; next} s==1 && /CARRY_TMP\/keep/ {s=0; next} {print}'; then
+  if [ "$(m6run skills/ai-dlc/steps/eta.md)" != "HARD-UNREGISTERED-CORE-DRIFT" ]; then
+    ok "m2 (machinery conjunct dropped): the NON-machinery file is acquitted — the conjunct is load-bearing"
+  else
+    bad "m2 SURVIVED — dropping the machinery membership test changed no verdict, so that conjunct is vacuous"
+  fi
+fi
+m6restore
+
+# m3 — DROP THE BUCKET CONJUNCT, keeping the range. Measured: on an ordinary run this changes
+# NO verdict, because every in-range machinery path outside arm C's bucket class is claimed by
+# an earlier arm. The cell that separates them is the fail-closed one, so that is where this
+# mutant is scored — with the ordinary run asserted UNCHANGED first, so the arm records that
+# the two forms are indistinguishable there rather than quietly relying on it.
+if mut m3 '/^        if \[ -n "\$BUCKET_ROWS" \]; then$/ {d=1} d==1 && /^        _cb_nm=/ {d=0} d==1 {next} /^        _cb_np=.*CARRY_TMP\/pc/ {next} /^        if \[ "\$_cb_nm" -gt 0 \]/ {print "        if [ \"$_cb_nm\" -gt 0 ]; then"; s=1; next} s==1 && /^          awk -F/ {print "          git -C \"$DIST\" diff --name-only \"${BASE}..${THEIRS}\" -- core/ 2>/dev/null \\"; print "            | sed \"s/$/\\tIN-RANGE/\" > \"$CARRY_TMP/cls\" 2>/dev/null || : > \"$CARRY_TMP/cls\""; s=2; next} s==2 && /CARRY_TMP\/cls/ {s=0; next} {print}'; then
+  M3E="$(bash "$M6DIR/unregistered-drift.sh" --bucket-rows /dev/null "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null \
+         | awk -F'\t' '$2=="hooks/ai-dlc-epsilon.sh"{print $1}')"
+  if [ "$M3E" != "HARD-UNREGISTERED-CORE-DRIFT" ]; then
+    ok "m3 (bucket conjunct dropped): with the derivation unavailable it still acquits — the conjunct is what fails closed"
+  else
+    bad "m3 SURVIVED — a range-only key behaved identically on the fail-closed input, so nothing here tests the bucket conjunct"
+  fi
+fi
+m6restore
+
+# m4 — GIVE THE ROW A `HARD-` PREFIX, and score it at the reader the prefix actually decides.
+#
+# THE OBVIOUS SIGNAL WAS WRONG AND THE MUTANT SAID SO. apply.sh's phase-2 loop keys on the
+# EXACT string `HARD-UNREGISTERED-CORE-DRIFT` (`:505`), not on the prefix, so a renamed status
+# draws no DECISION row whatever it is called — this mutant scored SURVIVED against an
+# apply-side assertion, correctly. The reader that keys on the PREFIX is `hard-blockers.sh`,
+# whose `collect()` filters `$1 ~ /^HARD-/` and whose list is what SKILL.md tells the operator
+# blocks the apply. That is where a `HARD-` spelling turns a non-blocking row into a stopped
+# pull, so that is where the mutant is scored.
+if mut m4 '{gsub(/emit CORE-MACHINERY-CARRIED /, "emit HARD-CORE-MACHINERY-CARRIED "); print}'; then
+  M4DIR="$WORK/mut-hardprefix"
+  mkdir -p "$M4DIR"; cp "$RECONCILE"/*.sh "$RECONCILE"/*.md "$M4DIR/" 2>/dev/null
+  cp "$M6DIR/unregistered-drift.sh" "$M4DIR/unregistered-drift.sh"
+  HB_OK="$(bash "$RECONCILE/hard-blockers.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
+  HB_MUT="$(bash "$M4DIR/hard-blockers.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
+  # CONTROL FIRST: the unmutated blocker list must be non-empty and must NOT carry the carried
+  # path. Two empty lists compare equal, and "epsilon absent" from a list that is absent
+  # entirely says nothing about the prefix.
+  if ! grep -q 'HARD-UNREGISTERED-CORE-DRIFT.*ai-dlc-zeta' <<<"$HB_OK"; then
+    bad "CONTROL FAILED — the unmutated blocker list carries no HARD row at all, so m4's comparison is between two empty lists: $(printf '%s\n' "$HB_OK" | tr '\n' '|' | cut -c1-160)"
+  elif grep -q 'ai-dlc-epsilon' <<<"$HB_OK"; then
+    bad "the carried path is ALREADY a hard blocker at base — the non-blocking claim is false"
+  elif grep -q 'ai-dlc-epsilon' <<<"$HB_MUT"; then
+    ok "m4 (HARD- prefix): the carried path becomes a hard blocker — the prefix is what keeps the pull moving"
+  else
+    bad "m4 SURVIVED — prefixing the row HARD- did not put it on the blocker list, so nothing here tests the prefix: $(printf '%s\n' "$HB_MUT" | tr '\n' '|' | cut -c1-200)"
+  fi
+fi
+m6restore
+
+# m5 — MAKE apply.sh PASS THE FLAG AND WRITE NOTHING. The pass-through must fail CLOSED: the
+# carried path returns to HARD and its DECISION row comes back, rather than the empty file
+# being read as "no buckets, nothing carried".
+M5DIR="$WORK/mut-emptyrows"
+mkdir -p "$M5DIR"; cp "$RECONCILE"/*.sh "$RECONCILE"/*.md "$M5DIR/" 2>/dev/null
+awk '/^  printf .%s\\n. "\$PC" > "\$UD_PC"$/ { print "  : > \"$UD_PC\""; next } {print}' \
+  "$APPLY" > "$M5DIR/apply.sh" 2>/dev/null
+if cmp -s "$APPLY" "$M5DIR/apply.sh"; then
+  bad "MUTANT m5 DID NOT APPLY — apply.sh's rows-file write was renamed, so the pass-through is untested"
+elif ! bash -n "$M5DIR/apply.sh" 2>/dev/null; then
+  bad "MUTANT m5 DOES NOT PARSE"
+else
+  W5="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: m5 seed failed" >&2; exit 2; }
+  eval "$(sed 's/^/E_/' "$W5/env.sh")"
+  M5OUT="$(bash "$M5DIR/apply.sh" "$E_DIST" "$E_BASE" "$E_CONSUMER" "$E_THEIRS" 2>/dev/null)"
+  if grep -q 'DECISION[[:space:]]*drift.*ai-dlc-epsilon' <<<"$M5OUT"; then
+    ok "m5 (rows file written empty): the scan falls back to HARD rather than acquitting on a derivation that did not run"
+  else
+    bad "m5 SURVIVED — an EMPTY rows file still acquitted the carried path, so a failed write reads as a clean tree: $(printf '%s\n' "$M5OUT" | grep -i epsilon | tr '\n' '|')"
+  fi
+  rm -rf "$W5"
+fi
 
 # --- EXTENSION-FIXTURE-UNBOUND — a declared binding that resolves to nothing ---------
 # `fixtures:` is how a CONSUMER check's adversarial fixture reaches core H1's derived coverage

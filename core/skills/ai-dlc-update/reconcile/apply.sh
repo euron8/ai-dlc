@@ -484,7 +484,31 @@ if [ "$FINISH" = 0 ]; then
 # -- and every core-side comparison resolves through `git -C "$DIST" show`, never the
 # installed file. Leaving its call where it is keeps that visible.
 PC="$(bash "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null || true)"
-UD="$(bash "$SELF/unregistered-drift.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | awk -F'\t' '$1=="HARD-UNREGISTERED-CORE-DRIFT"{print $2}')"
+
+# THE BUCKETS ARE HANDED DOWN, NOT RE-DERIVED. `unregistered-drift.sh`'s CORE-MACHINERY-CARRIED
+# arm needs exactly the rows already in `$PC` -- same four arguments, same program -- and running
+# preclassify a second time costs ~1.1s on any pull where the scan reaches a file past its
+# byte-identity arms, carried or not (the derivation is lazy, so a consumer with no in-place core
+# edit never pays it). Written
+# to a file rather than passed as an argument because the rows are multi-line TSV. Same shape as
+# `hard-blockers.sh`'s `--ud-rows`, and it does not change the scan's answer: without the flag
+# the scan derives the identical rows itself, which the fixture asserts row-for-row.
+#
+# AN EMPTY FILE IS NOT AN ACQUITTAL. The scan's own guard refuses to read "no buckets" as "nothing
+# diverged" while the range still moves core/, so a write that failed here leaves every carried
+# path at its HARD row rather than silently clearing it.
+UD_PC="$(mktemp "${TMPDIR:-/tmp}/apply-pc.XXXXXX" 2>/dev/null)" || UD_PC=""
+UD_FLAG=""
+if [ -n "$UD_PC" ]; then
+  printf '%s\n' "$PC" > "$UD_PC"
+  UD_FLAG="--bucket-rows"
+fi
+if [ -n "$UD_FLAG" ]; then
+  UD="$(bash "$SELF/unregistered-drift.sh" "$UD_FLAG" "$UD_PC" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | awk -F'\t' '$1=="HARD-UNREGISTERED-CORE-DRIFT"{print $2}')"
+else
+  UD="$(bash "$SELF/unregistered-drift.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | awk -F'\t' '$1=="HARD-UNREGISTERED-CORE-DRIFT"{print $2}')"
+fi
+[ -n "$UD_PC" ] && rm -f "$UD_PC"
 
 # A FIXTURE IS A TEST OF CORE, so it must never be written before the thing it tests.
 # preclassify emits in path order, which puts core/fixtures/ FIRST -- 13 of the 25 paths in

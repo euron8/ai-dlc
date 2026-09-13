@@ -592,7 +592,43 @@ advise_safe_stop() {
 # guard whose removal changes no answer is a check that cannot fire, which this repo treats as
 # indistinguishable from one that passed. The two states are still asserted in the fixture — what
 # holds them is the ancestry test, which is the honest place for them to be held.
+#
+# A STAMP ADVANCED PAST A CARRIED PATH ATTESTS MACHINERY THAT DID NOT LAND, AND THE CARRY ROW IS
+# THE FACT THAT SAYS SO. Step 2 advances `skill_version`/`skill_commit` to `theirs` on every cycle
+# it completes, INCLUDING one where arm C carried a machinery path out of the slice — that path is
+# the one thing the cycle deliberately did not write, and no program corrects the stamp for it
+# (`apply.sh`'s re-stamp and `install.sh` are the only writers, both at step 7 or install). So the
+# ancestry test can be true on a tree where a machinery path is still the consumer's own, and the
+# acquittal it gates would then tell the operator "its machinery has already landed" about exactly
+# the path that did not. THE DECIDING FACT IS ALREADY IN HAND: arm C runs above, at this script's
+# top level, before either `advise_safe_stop` call site, and records what it found in
+# `GATE_CARRY_STATE`. Refusing on it costs one un-taken split and never a wrong acquittal, which
+# is the same asymmetry the withheld-row guard below is decided on.
+#
+# THE STATE IS THREE-VALUED BECAUSE A BOOLEAN GETS THE UNDECIDED RUNS WRONG, AND THAT WAS
+# MEASURED, NOT REASONED. The first cut set a flag at the CARRY emit alone, so a run where arm C
+# emitted SELF-UPDATE-UNDECIDED instead of deciding — the machinery set resolving EMPTY, or
+# preclassify returning no rows over a range that moves core/ — left the flag at its initial value
+# and the acquittal PRINTED beside a genuinely carried path in the tree. Built and driven both
+# ways: with a carried path and an advanced stamp, an intact engine withholds and both UNDECIDED
+# engines acquit. **Arm C fails CLOSED on its own row and that closure is not inherited by
+# anything reading a flag it never set.** So this reads a state, and only ONE of its values is an
+# acquittal:
+#
+#   clean      the bucket loop RAN TO COMPLETION and carried nothing -> the only acquitting value.
+#   carried    a SELF-UPDATE-CARRY row was emitted -> the stamp is ahead of a path that did not land.
+#   undecided  arm C could not tell -> unknown is not clean, same doctrine as the rows it emits.
+#   cold       arm C did not run at all -> it decided nothing, so nothing here may acquit on it.
+#
+# COLD IS REFUSED RATHER THAN ACQUITTED, AND THE `--safe-stop` CASE IS WHY IT COSTS NOTHING.
+# Inside a walk arm C is skipped and the state stays cold — but `advise_safe_stop` returns at its
+# own first line under the SAME variable, so no advisory exists there for this refusal to be
+# missing from. **It is therefore FALSE that every run which can print the acquittal is a run in
+# which arm C decided**: any future path reaching the advisory with arm C skipped for some other
+# reason lands on cold, and cold withholds. That is the fail-closed direction and it is
+# deliberate; the cost of being wrong is one un-taken split.
 machinery_at_or_past() {
+  [ "${GATE_CARRY_STATE:-cold}" = clean ] || return 1
   _sk=""
   _st="$CONSUMER/.claude/.ai-dlc-version"
   [ -f "$_st" ] || return 1
@@ -601,6 +637,12 @@ machinery_at_or_past() {
   # `--is-ancestor` is true for equality too, which is the "at" in "at or past".
   git -C "$DIST" merge-base --is-ancestor "$1" "$_sk" 2>/dev/null
 }
+
+# INITIALIZED TO `cold` AND NOT TO `clean`, WHICH IS THE WHOLE DIFFERENCE. `set -u` is on and the
+# reader runs on paths this arm never reaches, so it needs a value -- but the value a run that
+# NEVER LOOKED leaves behind must not be the one that acquits. "Arm C carried nothing" and "arm C
+# did not run" are different facts and the initializer is the only place they can be told apart.
+GATE_CARRY_STATE=cold
 
 # ---- ARM C: A MACHINERY PATH THE CONSUMER HAS DIVERGED ON ------------------------------
 # Step 2 justifies autonomy -- no operator gate, auto-merged PR -- on the declaration that the
@@ -701,6 +743,11 @@ EOF
   # byte-identical output to a clean pull. It is the same doctrine as the preclassify-empty
   # guard below: a gate that cannot read its own subject must not return OK.
   if [ -z "$C_PATHS" ]; then
+    # UNKNOWN IS NOT CLEAN, and this is one of the two sites where forgetting that put the
+    # acquittal back. The row below says whether a machinery path is consumer-modified is
+    # UNKNOWN; a downstream reader that treats the absence of a CARRY row as "nothing was
+    # carried" contradicts this row while quoting the same run.
+    GATE_CARRY_STATE=undecided
     emit SELF-UPDATE-UNDECIDED "setup-sites.md" "the machinery path set resolved EMPTY, so whether any machinery path is consumer-modified is UNKNOWN. \`machinery_paths()\` is loaded out of preclassify.sh; if that function was renamed, moved off column 0, or its \`machinery:\` block emptied, this arm compares against nothing and its silence would read exactly like a clean pull."
   fi
 
@@ -716,8 +763,15 @@ EOF
     # never silently OK.
     if [ -z "$c_out" ] \
        && [ -n "$(git -C "$DIST" diff --name-only "${BASE}..${THEIRS}" -- core/ 2>/dev/null)" ]; then
+      GATE_CARRY_STATE=undecided
       emit SELF-UPDATE-UNDECIDED "preclassify.sh" "the bucket derivation returned no rows while ${BASE}..${THEIRS} changes core/ paths, so whether any machinery path is consumer-modified is UNKNOWN. An empty bucket set reads exactly like a clean one; a gate that cannot read its own subject must not return OK."
     else
+      # `clean` IS CLAIMED BEFORE THE LOOP AND DOWNGRADED INSIDE IT, NEVER THE REVERSE. Reaching
+      # here means the derivation produced rows (or the range genuinely moves nothing), so this
+      # run DID look -- which is the fact `cold` lacks. A `clean` written AFTER the loop instead
+      # would overwrite the `carried` the loop just set, and the acquittal would return on exactly
+      # the runs this exists to stop.
+      GATE_CARRY_STATE=clean
       while IFS="$(printf '\t')" read -r c_st c_path c_cons c_bucket; do
         [ -n "${c_bucket:-}" ] && [ -n "${c_path:-}" ] || continue
         case "$c_bucket" in
@@ -727,6 +781,13 @@ EOF
         grep -qxF "$c_path" <<EOF || continue
 $C_PATHS
 EOF
+        # THE ROW AND THE STATE ARE ONE STATEMENT, so they are written on adjacent lines and the
+        # state is set from the same branch that emits. `machinery_at_or_past` reads it to withhold
+        # the SAFE-STOP acquittal, whose sentence claims this consumer's machinery has landed --
+        # false of exactly the path this row is carrying. The loop is fed by a HEREDOC and not a
+        # pipe, so this assignment survives into the caller; a `|` here would lose it to a
+        # subshell and the acquittal would return with nothing saying so.
+        GATE_CARRY_STATE=carried
         emit SELF-UPDATE-CARRY "$c_path" "the consumer's copy at ${c_cons:-?} has DIVERGED (status ${c_st:-?}, bucket $c_bucket). This is a machinery path, so the self-update would write \`theirs\` over it autonomously and auto-merge the result. Do NOT write it: drop it from the slice, report it, and carry it to the step-7 gated apply, which emits a WORKLIST semantic-merge row for it. The rest of the slice is unaffected by this row."
       done <<EOF
 $c_out
