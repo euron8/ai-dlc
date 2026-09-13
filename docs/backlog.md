@@ -4434,10 +4434,96 @@ count and the block already prints its corpus size) and `validate-snapshot-conse
 is invoked by 26 fixtures; the suite pole (`ledger-reverify`, ~317s) does not invoke it, so the cost
 multiplies across those 26 rather than moving the pole directly.
 
+**TAKEN AT BATCH 100 as arm E of I93, and the census was re-derived rather than read off the
+filing above.** Over `core/scripts/*` and `scripts/*`, non-comment lines, case-insensitive: 446
+lines carry the bare word *nothing* and 21 are verdict phrases, which is why the shipped grammar
+is a nineteen-verb phrase list and not the word. Twelve files were reported. **Nine converged** —
+the declared token was added to the emission, each keeping its own exit code and its own prose
+after it, and each was added to `empty_subject_verdict: emitters:`: `validate-cycle-commits.sh`
+(four `AUDIT-TRUNK: WORKLIST` paths, exit 0), `sprint-status.sh` (three `COMPARED NOTHING`
+verdicts, exit 4), `validate-fixture-drivability.sh` (two, exit 0), `core-paths.sh` (`DORMANT`,
+exit 0), `validate-audit-anchors.sh` (`--trunk-push` empty stdin, exit 0),
+`validate-hook-registration.sh` (exit 0), `validate-scope-confirmation.sh` (`PENDING:`, exit 3),
+`validate-spawn-ledger.sh` (`NO ROLE-BOUND ROWS`, exit 3), `validate-write-format-steering.sh`
+(`SKIP`, exit 0). **Three were converged and EXEMPTED** rather than declared, because
+`enforcement-map.yaml` ships and they do not, so a declared path would resolve nowhere in a
+consumer: `scripts/validate-enforcement-map.sh:592` (`--arms` selected nothing, exit 2),
+`scripts/ab-lead-model.js:272`, and the pre-existing `scripts/validate-plan-shape.sh`.
+
+**The filing's own line numbers were wrong in four places and one true positive was missing.**
+`validate-bmad-invocations.sh:123` is NOT one: that file is already a declared emitter and prints
+the token at `:160` for a different state, so the file-grain join correctly leaves it alone.
+`scripts/ab-lead-model.js:272` is a true positive the census missed — a `.js` file inside the
+swept population, which is why arm E inherits arm D's any-extension sweep rather than an `*.sh`
+narrowing.
+
+**THE TWO OBVIOUS NARROWINGS WERE BUILT AND REFUTED BY MEASUREMENT, both against the CONFORMING
+set rather than against the candidates.** Dropping `>&2` acquits 19 of the 30 non-comment lines
+that emit the declared token today — `audit-upstream-routing.sh` and `validate-spec-join.sh` emit
+every one of theirs there — so a stderr narrowing is a blind spot the size of the arm. Keying on
+`exit 0` proximity is worse: 17 of those 30 sit at exit 2 and one at 78, and the map's own
+comment says 4, 0 and 78 all carry this token, so the exit code contradicts the declaration it
+would enforce. What discriminates is the EMISSION SITE — a call to one of six output verbs at the
+start of a statement — which acquits by grammar the eight `err` strings inside I93's own unit, a
+python docstring at `report-propagation-fanout.sh:343`, an awk comment at
+`validate-artifact-budget.sh:893`, and `err`-argument prose in `validate-adversarial-convergence.sh`.
+Three further clauses, each measured at 0 of 30 against the conforming set: a `%-Ns` padded table
+row (`sprint-status.sh:750`, a per-view report line, not a run verdict), an output redirected into
+a file path (a probe seeding a fixture tree), and the existential *"there is nothing to"* form
+(`validate-spec-adoption.sh:107`, a malformed-declaration `return 1` — the exact false-positive
+class the batch-95 paragraph above names). **False-positive set MEASURED AT 0** on the release tip.
+
+**The arm is NOT exempted from its own host file, and that is deliberate.** An `ESV_EXEMPT` line
+for `scripts/validate-enforcement-map.sh` would acquit every real emitter a later author adds to
+it. The three exemptions are keyed on the distribution-only property alone, and the probe seeds
+the discriminating pair — an `err` failure path against a novel-spelling `echo`, in the same file
+shape — to show the grammar separates them and not the path.
+
+**Two latent arm-D defects surfaced under a second exemption and are fixed in the same change.**
+The aborted-scan stand-down blanked `esv_exempt_paths`, which the reverse join ALSO reads, so one
+dangling symlink produced one finding per exemption instead of the one the scan-status arm owns —
+measured: 2 findings, the second naming a file whose exemption is sound. And the fixture's
+`cp "$V" "$V.orig"` idiom put a second copy of the validator inside `$ROOT/scripts/`, which is
+half the swept population, where it reads as an undeclared emitter; the backups now live under
+`mktemp`.
+
+**READERS.** In this tree, `core/fixtures/story-fields-derive/run.sh:318` asserts on
+`COMPARED NOTHING` and was changed in the same commit to assert the token beside it. On the
+read-only consumer, the installed copies of all nine converged validators carry the old wording
+and keep working — the token is ADDITIVE and no prose was removed — as do
+`tests/fixtures/story-fields-derive/run.sh`, `.claude/skills/ai-dlc/steps/gate-validation.md:1473`
+and `.claude/skills/ai-dlc-update/reconcile/predicate-differential.sh:182`, which restate
+spawn-ledger's exit-3 wording. Three committed gate-adjudication verdict JSONs and two archived
+gate logs quote `COMPARED NOTHING` from runs that predate this; they are history and stay
+readable under the old spelling.
+
+**Cost.** `FORK_BUDGET=8120`; the tree moved 8098 → 8109, so arm E and its six probe seeds cost
+**11 forks of 22 headroom**. Timing, both sides extracted alike into real repos and interleaved
+(a `mktemp` extraction timed against the live repo compares two trees, not two revisions): the
+FULL run reads 25.01/24.77/24.94s at base against 24.65/24.54/24.98s at the tip — a null, and one
+that **cannot resolve the effect**, because the spread across reps is larger than the thing being
+measured. `--arms I93` alone, five reps interleaved, does resolve it: **0.493s → 0.625s median,
++0.13s**, which across the 26 fixtures that invoke this validator is roughly **+3.4s of
+suite-wide CPU**, spread across the pool rather than added to the pole. **The 27.0–27.4s figure in
+the batch-95 paragraph above had drifted** — re-measured from inside the repo it reads 33.8–34.2s
+on the live tree and ~24.9s on a `git archive` extraction, so neither the old number nor a single
+new one should be quoted without its tree.
+
+**The receipt above was REWRITTEN to drive the subject** and scored six ways, each on its own
+extraction: base `e1cf1718` **1**; tip **0**; a comment carrying the receipt's own literals
+appended to the validator — **1 at base** (the stub cannot close it) and 0 at the tip, where the
+real arm is present; an arm E with its verdict-phrase test removed so it flags every emission —
+**9**, refused by the comment control. The python-heredoc arm and the failure-path arm are the
+two the contract's amendment added, and they are what separate arm E from an `exit 0`-proximity
+build: six of the nine converged files state their verdict from a python heredoc or at a non-zero
+exit. At the gate the entry moved from `PROSE-CLOSABLE` to `ALREADY-PASSING`, and
+`prose-closable` fell from **1/9 to 0/9** — measured on both trees, with the base run naming
+`BL-221` as the row.
+
 **Tiered DEFECT.** The vocabulary index reads as complete and the invariant reads as binding, while
 a new emitter may spell the verdict however it likes.
 
-verify: sh set -e; M=core/skills/ai-dlc/enforcement-map.yaml; E=scripts/validate-enforcement-map.sh; [ -f "$M" ] && [ -f "$E" ] || exit 9; grep -q "EXAMINED NOTHING" "$M" || exit 9; grep -q "I93" "$E" || exit 9; grep -qE 'retired:' "$M" || exit 9; grep -qE 'empty-subject-emitter-positive|every emitter of an empty-subject|emits the declared token' "$E" && exit 0; exit 1
+verify: sh set -u; W="$(mktemp -d)"; trap 'rm -rf "$W"' EXIT; git archive HEAD | tar -x -C "$W" || exit 9; V="$W/scripts/validate-enforcement-map.sh"; [ -f "$V" ] || exit 9; N="$W/core/scripts/esv-probe-fourth.sh"; ( cd "$W" && bash scripts/validate-enforcement-map.sh --arms I93 ) >"$W/base.txt" 2>&1 || exit 9; printf '%s\n' '#!/usr/bin/env bash' 'echo "esv-probe: NOTHING TO EXAMINE HERE - the corpus was empty."' 'exit 0' >"$N"; ( cd "$W" && bash scripts/validate-enforcement-map.sh --arms I93 ) >"$W/seed.txt" 2>&1; grep -q 'core/scripts/esv-probe-fourth.sh' "$W/seed.txt" || exit 1; printf '%s\n' '#!/usr/bin/env bash' '# esv-probe: NOTHING TO EXAMINE HERE - the corpus was empty.' >"$N"; ( cd "$W" && bash scripts/validate-enforcement-map.sh --arms I93 ) >"$W/cmt.txt" 2>&1; ! grep -q 'core/scripts/esv-probe-fourth.sh' "$W/cmt.txt" || exit 9; printf '%s\n' '#!/usr/bin/env bash' 'python3 <<PY' 'print("esv-probe: this run compared nothing at all.")' 'sys.exit(0)' 'PY' >"$N"; ( cd "$W" && bash scripts/validate-enforcement-map.sh --arms I93 ) >"$W/py.txt" 2>&1; grep -q 'core/scripts/esv-probe-fourth.sh' "$W/py.txt" || exit 1; printf '%s\n' '#!/usr/bin/env bash' 'err "the corpus is empty: found nothing to scan. Failing closed."' 'exit 1' >"$N"; ( cd "$W" && bash scripts/validate-enforcement-map.sh --arms I93 ) >"$W/fp.txt" 2>&1; ! grep -q 'core/scripts/esv-probe-fourth.sh' "$W/fp.txt" || exit 9; exit 0
 
 ## BL-223 — the push-candidate ledger is outside `validate-write-format-steering.sh`'s population by construction, and `upstream-routing.md` steers no format
 
