@@ -999,6 +999,11 @@ A `warn` line (over budget, inside the grace band) does **not** fail the gate â€
 at your next natural pause. See Rule 25(d), "Warn at 100%, block at 100% + grace."
 The schema verdict has no grace band: an invented section is never a near miss.
 
+The validator also WARNs when a dated activity entry is filed under a section other
+than `Recent Activity`, naming each line. The remedy is to MOVE those lines to
+`Recent Activity`; the WARN does not change the exit status and does not fail this
+check.
+
 **`--warn-only` is not available here, and "run it with `--warn-only` for now" is not a
 deferral this check offers.** The flag exists for `retro.md`'s sprint-end audit, where the
 sprint is over and blocking helps nobody. At a gate the sprint is still running and the
@@ -1952,6 +1957,9 @@ all three items below in full, then:
 
 which re-drives the mechanical fixture itself and, on success, prints the
 `H2_ATTESTED v1` line to append to the gate log. If it exits 1, **the gate FAILS**.
+
+Append that line as its own line at column 1, or inside the H2 row's evidence
+cell. Both verify; nothing else about the line may change.
 
 The three items:
 

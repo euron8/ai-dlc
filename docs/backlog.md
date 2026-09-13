@@ -2273,59 +2273,6 @@ ledger line 654.
 
 
 verify: sh D=$(mktemp -d); V=core/scripts/validate-escalation-status-vocabulary.sh; S=core/skills/ai-dlc/escalations.md; printf "## S999 Lead\n**Status:** HARD_BLOCK\n**Resolution:**\n**Status:** BOGUS_TOKEN\n" > "$D/a.md"; printf "## S999 Lead\n**Context:** was **Status:** RESOLVED once\n**Status:** BOGUS_TOKEN\n" > "$D/b.md"; printf "## S999 Lead\n**Status:** BOGUS_TOKEN\n" > "$D/c.md"; bash "$V" "$D/c.md" "$S" >/dev/null 2>&1; c=$?; bash "$V" "$D/a.md" "$S" >/dev/null 2>&1; a=$?; bash "$V" "$D/b.md" "$S" >/dev/null 2>&1; b=$?; rm -rf "$D"; [ "$c" -eq 1 ] || exit 1; [ "$a" -eq 1 ] && [ "$b" -eq 1 ]
-## BL-054
-
-**`--verify` anchors the H2 attestation at line start, so any markdown decoration on a line the
-script tells a human to transcribe by hand reads as "no attestation ever existed".**
-`core/scripts/validate-h2-attestation.sh:158` and `:164` both match
-`grep -qE "^H2_ATTESTED v1 sprint=..."`. The line is not written by the script — `:32` says it
-prints the line "for the lead to append to the gate log" and `:207-209` emit it as copy text — so a
-model retypes it into a markdown file. Measured against the shipping script at the real fixture
-digest `a0d56175be56e329`, five gate logs differing only in the decoration around one byte-identical
-attestation line:
-
-| gate log | exit | first line of output |
-|---|---|---|
-| bare (**CONTROL**) | **0** | `PASS  H2 attested for sprint 999 at fixture digest a0d56175be56e329.` |
-| `` `…` `` backticks | 1 | `RE-DRIVE: no H2 attestation for sprint 999 — this is the sprint's first gate.` |
-| `- ` list item | 1 | (identical) |
-| four-space indent | 1 | (identical) |
-| `> ` blockquote | 1 | (identical) |
-
-**The filing is right about the defect and understates it twice.** It named backticks; the class is
-every leading markdown decoration, four measured, because the anchor tolerates nothing before the
-token. And it named the cost as a false RE-DRIVE; the second arm at `:164` is anchored identically,
-so a decorated line ALSO cannot reach the digest-mismatch branch. Measured with a control in the
-same invocation on a STALE digest: the bare line reports *"sprint 999 has an attestation, but the
-fixture set CHANGED"*, and the backticked one reports *"no H2 attestation for sprint 999 — this is
-the sprint's first gate."* The operator is not merely told to redo work; they are told the sprint
-has never attested when it has, and told the fixtures are unchanged when they moved. That is a
-wrong diagnostic, not a redundant one.
-
-**Do not take the filing's prescribed fix.** Transcribed literally — "tolerate optional surrounding
-backticks", i.e. a backtick in the pattern — it makes the script unparseable: an unescaped backtick
-inside the double-quoted `grep -qE` argument opens command substitution, and `bash -n` on the
-patched copy exits **2** with `line 163: syntax error near unexpected token 'fi'` against **exit 0,
-no output** on the unpatched original in the same invocation. The fix has to avoid a bare backtick
-in that string. `^[^A-Za-z]*H2_ATTESTED` does, and under it all three receipt arms exit 0.
-
-Nothing in-tree catches this. Only two files in `core/` anchor `^H2_ATTESTED` — this script and
-`core/fixtures/h2-attest-scripts-dir/run.sh:154` — against four naming `H2_ATTESTED` at all, and the
-fixture anchors the SCRIPT'S OWN STDOUT, which is undecorated by construction. The fixture asserts
-the emitter and is structurally blind to the reader.
-
-**Why the anchor is the anchor.** A receipt using only the backtick arm goes green under a
-backtick-only fix and leaves the bullet, indent and blockquote cases live — and the filing's own
-wording invites exactly that narrow fix. Carrying two decorations, gated on the bare control, means
-the receipt can only close on a fix that tolerates the class. Proven satisfiable: with the anchor
-replaced by `^[^A-Za-z]*H2_ATTESTED` on a copy, `bare=0 tick=0 bullet=0` and the receipt exits 0;
-the two sides were asserted to differ first (`orig=3 fixed=0` plain anchors).
-
-Discharges the consumer entry `PC-S296-H2-ATTESTED-ANCHOR-DEFEATED-BY-BACKTICKS` at pinned ledger
-line 673.
-
-
-verify: sh D=$(mktemp -d); V=core/scripts/validate-h2-attestation.sh; G=$(bash "$V" --digest --fixtures core/fixtures); L="H2_ATTESTED v1 sprint=999 digest=$G at=2026-01-01T00:00:00Z items=1,2,3 mechanical=check-17-bypass:PASS"; printf "%s\n" "$L" > "$D/bare.md"; printf "\140%s\140\n" "$L" > "$D/tick.md"; printf "%s\n" "- $L" > "$D/bul.md"; bash "$V" --verify --sprint 999 --fixtures core/fixtures --gate-log "$D/bare.md" >/dev/null 2>&1; b=$?; bash "$V" --verify --sprint 999 --fixtures core/fixtures --gate-log "$D/tick.md" >/dev/null 2>&1; t=$?; bash "$V" --verify --sprint 999 --fixtures core/fixtures --gate-log "$D/bul.md" >/dev/null 2>&1; u=$?; rm -rf "$D"; [ "$b" -eq 0 ] || exit 1; [ "$t" -eq 0 ] && [ "$u" -eq 0 ]
 ## BL-055
 
 **Check 16's element 2 accepts `OPEN` as a bare substring anywhere on the backlog line, so a
@@ -4527,3 +4474,5 @@ it; UNDECLARED reads 6 under every variant. The receipt itself is robust: bare c
 silent and permanent.
 
 verify: sh V=core/scripts/audit-layer-debt.sh; [ -f "$V" ] || exit 9; d=$(mktemp -d) || exit 9; B='"clause":"LC-E4","subject_digest":"x","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z"'; printf '{%s,"entry":"e20","reason":"This is not tracked under OWED-C and a narrowing is still owed."}\n{%s,"entry":"e21","reason":"A narrowing is still owed."}\n{%s,"entry":"e22","reason":"The narrowing is owed under OWED-C."}\n{%s,"entry":"e9","owed":{"id":"OWED-C","what":"w"}}\n' "$B" "$B" "$B" "$B" > "$d/r.jsonl"; o="$(bash "$V" --register "$d/r.jsonl" --json 2>/dev/null)"; rm -rf "$d"; u="$(printf '%s' "$o" | python3 -c 'import json,sys; print(" ".join(sorted(r["entry"] for r in json.load(sys.stdin)["undeclared"])))')" || exit 9; case " $u " in *" e21 "*) : ;; *) exit 9 ;; esac; case " $u " in *" e22 "*) exit 9 ;; esac; case " $u " in *" e20 "*) exit 0 ;; esac; exit 1
+
+

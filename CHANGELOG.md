@@ -15,6 +15,77 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.565.0] - 2026-09-13
+
+### The H2 attestation is found inside a table cell and refused inside a sentence, and a dated entry filed under the wrong snapshot section is named
+
+Batch 99, one release, two PC-backed subjects. The sweep returned two candidates the consumer
+filed at its `26bfe9fee` during batch 98's close (live 58, cited 37, unfiled 21, of which 19 are
+adjudicated); both were taken on this session's own ranking because the one-liner arrived from a
+peer session. Neither touches a bootstrapping file, so they ship together. Also carried: the
+handoff at the end of every live plan now iterates over local `ai-dlc-*` sessions on an explicit
+`REFUSED` reply rather than stopping at the first spent one (`de2fcea0`, operator instruction at
+batch 99).
+
+#### `BL-054` — discharges `PC-S311-H2-ATTESTATION-VERIFY-REQUIRES-COLUMN-1-BUT-ATTEST-OUTPUT-INVITES-A-TABLE-CELL` and `PC-S296-H2-ATTESTED-ANCHOR-DEFEATED-BY-BACKTICKS`
+
+`validate-h2-attestation.sh --attest` prints the `H2_ATTESTED v1` line for a human to paste
+into a markdown gate log, and all three `--verify` greps anchored it at `^`. The reference
+consumer's gate log keeps its check rows in a table, so the line landed in the H2 row's evidence
+cell and `--verify` answered "this is the sprint's first gate" — the wrong one of its two
+messages, since the CHANGED arm carried the same anchor. The fixture drive re-ran at every later
+gate, silently.
+
+The match is now bounded at BOTH ends on one shared grammar. A leading boundary alone was
+built and refuted: the consumer's own committed log quotes the full same-sprint, same-digest
+line inside a finding that ends "THIS GATE FAILED", and under a front-only boundary that
+sentence verifies. The trailing bound is cell-scoped rather than line-scoped, because an
+end-of-line bound refused a real row ending `` `. | 1033 |``. Measured per `(sprint, digest)`
+pair over every revision of all 108 consumer gate-log files: the shipped grammar accepts 28 of
+28 pairs and refuses the failure sentence; its accept set is 58 lines whose tails are decoration
+only, its 22 refusals all prose continuing into a sentence. The trailing fields are optional
+because one sprint's only record stops after `items=`. The citation printed on PASS is the
+extracted span, not the raw row. `--attest` and the H2 step say where the line may go.
+
+Receipt rewritten with a table-cell arm, a wrong-digest-in-cell control that must name CHANGED,
+and a `NOT_H2_ATTESTED` arm that exists because without it a fix dropping the boundary outright
+scored 0. Scored: fix 0; unfixed, `BL-054`'s own earlier `^[^A-Za-z]*` prescription, front-only
+boundary, boundary dropped, accepting-arm-only, instruction-only and comment-only all 1; subject
+deleted 9. `h2-attest-scripts-dir` gains ten arms and three wrong-fix mutants, each killed by a
+named arm and each still passing the bare-line arm so a broken mutant cannot score an unearned
+kill.
+
+#### `BL-245` — discharges `PC-S311-SNAPSHOT-SEVEN-SECTION-SCHEMA-HAS-A-READER-CHECK-BUT-NO-WRITER-CHECK`
+
+The snapshot's seven-section schema was checked at the heading and never at the content, so a
+dated activity entry filed under `## Sprint Context` satisfied every check that exists.
+`validate-artifact-budget.sh` now reports such an entry by section and line, as ONE aggregate
+`WARN` line per artifact that never changes the exit status, emitted before the summary line.
+One line rather than one per offender because `verdict.sh` surfaces six matching lines and a
+per-line form evicted the budget summary Check 14 pastes as evidence — built and measured.
+
+The false-positive set is empty, measured by running the shipping validator over all 514
+revisions of the reference consumer's snapshot: two revisions carry the defect and both are real
+misfiles (29 lines under `Sprint Context`, 7 under `Context Reminders`). The narrowing is
+recorded beside the arm: no leading anchor indicts 396 revisions at `Pipeline Position`, whose
+rows carry a timestamp mid-line; admitting leading blanks adds 178 soft-wrapped continuations;
+requiring a column-1 bullet excludes the one wrapped sentence under `In-Flight Teammates`. The
+bold and backticked timestamp forms are admitted. Channel readers run under `LC_ALL=C`, which
+surfaced BSD `cut` aborting on multibyte prose with exit 0 after eight of 29 rows; the count is
+now derived from the same records the rows are, so a truncation disagrees with its own line.
+
+Receipt drives the shipping validator over a seeded snapshot and asserts both the offender
+report and its absence once the line moves; an adversary's hard-coded stub printing the
+receipt's own token died on the control arm. `snapshot-section-schema` gains twelve arms and
+six mutants, including the FAIL-instead-of-WARN and anchor-dropped wrong fixes. Validator
+timing +0.05s, `FORK_BUDGET` 8098 of 8120.
+
+#### Consumer state at this close
+
+Stamp `0.557.0` / `01fea66c`; the consumer began its own pull to `0.564.0` during this batch
+(self-update gate record at 13:48Z, both rows `SELF-UPDATE-OK`). Its porcelain moved 13 → 0 → 2
+on its own commits and hooks; nothing here wrote to it.
+
 ## [0.564.0] - 2026-09-13
 
 ### A carried machinery path is reported once, and the safe-stop acquittal is withheld beside it
