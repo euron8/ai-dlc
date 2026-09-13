@@ -92,6 +92,12 @@ land, then pull the rest. **Do not hunt for that ref by hand:** every `DEFER`
 now carries a `SELF-UPDATE-SAFE-STOP` row naming it, derived by running the gate
 against each release in the range. Take the ref from that row.
 
+That row acquits itself — "SPLIT BUYS NOTHING HERE ... its machinery has already
+landed" — when the consumer's own `skill_commit` is at or past the ref it names,
+**except on a run that also emitted a `SELF-UPDATE-CARRY` row**, where a carried
+machinery path is one the stamp says landed and step 2 deliberately did not write.
+The acquittal is withheld there and the original pull-first advice stands.
+
 **VALIDATE `<ref>` BEFORE USING IT — all four, and report which failed:**
 
 1. It resolves in the **distribution** repo. A ref that resolves only in the
@@ -475,6 +481,16 @@ prose is itself generated rather than composed.
      of the installed tool version — it is bookkeeping tied to the (already
      autonomous) self-update, and never touches `version`/`commit` (the rulebook
      base stays put until a gated apply).
+
+     **The pair advances even on a cycle that CARRIED a path, and that is what the gate's
+     `GATE_CARRIED` refusal compensates for.** A carried path is the one thing this cycle
+     did not write, so the advanced `skill_commit` then attests machinery that did not
+     land; nothing here corrects it, because the correction would need per-path granularity
+     the stamp has no field for. `machinery_at_or_past()` in
+     `reconcile/self-update-gate.sh` therefore refuses on the carry row instead of on the
+     stamp, so the SAFE-STOP acquittal is withheld on the runs where the stamp is ahead of
+     the tree. Do NOT hand-hold the stamp back — the carry row already reaches the operator
+     and step 7's gated apply is what closes it.
 
      **A derived fixture is a consumer edit when, and only when, `preclassify.sh`'s BUCKET for
      that path says so — never overwrite one that is.** Report the path, leave the file, and

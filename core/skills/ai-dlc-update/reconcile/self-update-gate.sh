@@ -592,7 +592,26 @@ advise_safe_stop() {
 # guard whose removal changes no answer is a check that cannot fire, which this repo treats as
 # indistinguishable from one that passed. The two states are still asserted in the fixture — what
 # holds them is the ancestry test, which is the honest place for them to be held.
+#
+# A STAMP ADVANCED PAST A CARRIED PATH ATTESTS MACHINERY THAT DID NOT LAND, AND THE CARRY ROW IS
+# THE FACT THAT SAYS SO. Step 2 advances `skill_version`/`skill_commit` to `theirs` on every cycle
+# it completes, INCLUDING one where arm C carried a machinery path out of the slice — that path is
+# the one thing the cycle deliberately did not write, and no program corrects the stamp for it
+# (`apply.sh`'s re-stamp and `install.sh` are the only writers, both at step 7 or install). So the
+# ancestry test can be true on a tree where a machinery path is still the consumer's own, and the
+# acquittal it gates would then tell the operator "its machinery has already landed" about exactly
+# the path that did not. THE DECIDING FACT IS ALREADY IN HAND: arm C runs above, at this script's
+# top level, before either `advise_safe_stop` call site, and sets `GATE_CARRIED=1` beside every
+# `SELF-UPDATE-CARRY` row it emits. Refusing on it costs one un-taken split and never a wrong
+# acquittal, which is the same asymmetry the withheld-row guard below is decided on.
+#
+# THE SUPPRESSION UNDER `AI_DLC_GATE_IN_SAFE_STOP` COSTS NOTHING HERE, and that is a property of
+# the two guards being the SAME guard, not a gap. Arm C is skipped inside a `--safe-stop` walk, so
+# `GATE_CARRIED` stays 0 there — and `advise_safe_stop` returns at its own first line under that
+# same variable, so no advisory is produced in a walk for this refusal to be missing from. Every
+# run that can PRINT the acquittal is a run in which arm C already decided.
 machinery_at_or_past() {
+  [ "${GATE_CARRIED:-0}" = 1 ] && return 1
   _sk=""
   _st="$CONSUMER/.claude/.ai-dlc-version"
   [ -f "$_st" ] || return 1
@@ -601,6 +620,12 @@ machinery_at_or_past() {
   # `--is-ancestor` is true for equality too, which is the "at" in "at or past".
   git -C "$DIST" merge-base --is-ancestor "$1" "$_sk" 2>/dev/null
 }
+
+# SET HERE AND NOT INSIDE THE ARM, because `set -u` is on and the reader below runs on paths the
+# arm never reaches -- a `--safe-stop` walk skips arm C entirely. 0 means "this run carried
+# nothing", which is what a run that never looked also reports; the two are the same answer only
+# because a run that never looked cannot print the acquittal either.
+GATE_CARRIED=0
 
 # ---- ARM C: A MACHINERY PATH THE CONSUMER HAS DIVERGED ON ------------------------------
 # Step 2 justifies autonomy -- no operator gate, auto-merged PR -- on the declaration that the
@@ -727,6 +752,13 @@ EOF
         grep -qxF "$c_path" <<EOF || continue
 $C_PATHS
 EOF
+        # THE ROW AND THE FLAG ARE ONE STATEMENT, so they are written on adjacent lines and the
+        # flag is set from the same branch that emits. `machinery_at_or_past` reads it to withhold
+        # the SAFE-STOP acquittal, whose sentence claims this consumer's machinery has landed --
+        # false of exactly the path this row is carrying. The loop is fed by a HEREDOC and not a
+        # pipe, so this assignment survives into the caller; a `|` here would lose it to a
+        # subshell and the acquittal would return with nothing saying so.
+        GATE_CARRIED=1
         emit SELF-UPDATE-CARRY "$c_path" "the consumer's copy at ${c_cons:-?} has DIVERGED (status ${c_st:-?}, bucket $c_bucket). This is a machinery path, so the self-update would write \`theirs\` over it autonomously and auto-merge the result. Do NOT write it: drop it from the slice, report it, and carry it to the step-7 gated apply, which emits a WORKLIST semantic-merge row for it. The rest of the slice is unaffected by this row."
       done <<EOF
 $c_out
