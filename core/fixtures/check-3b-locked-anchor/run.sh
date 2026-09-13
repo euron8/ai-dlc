@@ -442,6 +442,82 @@ else
   echo "ok: SoR — CONTROL: prd.md is still refused, so accepting two names has not weakened (a)"
 fi
 
+# --- A CARRY-OVER BACKLOG IS A SOURCE OF RECORD, AND prd.md STILL IS NOT -----------
+# A carry-over item's closure condition is verbatim text in `carry-over-backlog.md`, and
+# a document quoting one makes the same full-text claim a story makes about a locked
+# requirement. While the backlog was refused BY BASENAME, the only byte-verbatim
+# quotation checker in core could not reach such a quotation at all: a condition could
+# be quoted with its operative clause elided -- asserting a condition met that the
+# quoting document itself declines to meet -- and the check that would have caught it
+# declared the artifact out of scope before reading a byte.
+#
+# The world below MIRRORS the consumer's layout: the backlog sits TWO directories above
+# the story, which is where `resolve_artifact`'s walk-up reaches it, under the `## [id]`
+# heading shape the backlog actually carries.
+COB="$WORK/carryover"; mkdir -p "$COB/s302/stories" || exit 2
+cat > "$COB/carry-over-backlog.md" <<'COBEOF'
+# Carry-Over Backlog
+
+## [CO-S302-PROBE] [lead] - 2026-01-01T00:00:00Z
+
+- Closure condition: the rebalancer publishes a per-epoch delta (feeds a future sprint's scope).
+COBEOF
+# THE DECOY BASENAME: identical text, identical anchor, a name that is not a source of
+# record. This is the arm that separates "a third name was added" from "every name is
+# now accepted" -- the over-broad non-fix satisfies every other assertion in this block.
+cp "$COB/carry-over-backlog.md" "$COB/prd.md"
+co_story() { # co_story <file> <cited-basename> <bullet>
+  cat > "$1" <<COSEOF
+# Story
+<!-- LOCKED_REQUIREMENTS -->
+full_text_source: $2:CO-S302-PROBE
+$3
+<!-- END LOCKED_REQUIREMENTS -->
+COSEOF
+}
+CO_FULL="- Closure condition: the rebalancer publishes a per-epoch delta (feeds a future sprint's scope)."
+CO_ELIDED="- Closure condition: the rebalancer publishes a per-epoch delta ..."
+co_story "$COB/s302/stories/carry-over-sor.md"    "carry-over-backlog.md" "$CO_FULL"
+co_story "$COB/s302/stories/carry-over-elided.md" "carry-over-backlog.md" "$CO_ELIDED"
+co_story "$COB/s302/stories/carry-over-index.md"  "prd.md"                "$CO_FULL"
+
+if "$VALIDATOR" "$COB/s302/stories/carry-over-sor.md" >/dev/null 2>&1; then
+  echo "ok: carry-over — a closure-condition quotation citing carry-over-backlog.md is ACCEPTED"
+else
+  echo "FAIL: carry-over — a byte-verbatim closure-condition quotation was refused" >&2
+  rc=1
+fi
+# THE MOTIVATING CASE, and the REASON matters as much as the verdict. The operative
+# clause is replaced by an ellipsis; it must fail, and it must fail at the BYTE-MATCH.
+# A rejection at (a) would mean the quotation was never adjudicated -- which is exactly
+# the state this widening exists to leave, scoring green while proving nothing.
+if CO_OUT="$("$VALIDATOR" "$COB/s302/stories/carry-over-elided.md" 2>&1)"; then
+  echo "FAIL: carry-over — an elided closure condition PASSED; the operative clause is unbound" >&2
+  rc=1
+elif grep -qF "not byte-present" <<<"$CO_OUT"; then
+  echo "ok: carry-over — an elided closure condition is REJECTED as not byte-present"
+else
+  echo "FAIL: carry-over — the elided quotation was refused for the WRONG reason (not the byte-match): $CO_OUT" >&2
+  rc=1
+fi
+if "$VALIDATOR" "$COB/s302/stories/carry-over-index.md" >/dev/null 2>&1; then
+  echo "FAIL: carry-over CONTROL — prd.md carrying the SAME anchor and the SAME text was accepted; the widening is accept-everything" >&2
+  rc=1
+else
+  echo "ok: carry-over — CONTROL: prd.md is refused on identical text, so the NAME SET is what admits the backlog"
+fi
+# THE THIRD NAME IS NOT THE NAME MESSAGES PRESCRIBE. `sor_basename` is what every PASS
+# line and every remedy names, and it must stay the sprint slot. A tuple that merely
+# REORDERS admits an identical set -- every exit code above is unchanged by it -- while
+# telling every author to write the wrong file. rc cannot see that, so assert the STRING.
+if NS_OUT="$("$VALIDATOR" "$SOR/s302/stories/new-sor.md" 2>&1)" \
+   && grep -qF "verified against 'locked-requirements.md'" <<<"$NS_OUT"; then
+  echo "ok: carry-over — the PASS line still prescribes locked-requirements.md as the record"
+else
+  echo "FAIL: carry-over — the PASS line no longer prescribes locked-requirements.md: $NS_OUT" >&2
+  rc=1
+fi
+
 # --- A CROSS-SPRINT ANCHOR READS THE SPRINT THE ANCHOR NAMES --------------------
 # Rule 13 makes locked requirements cumulative, so a story can honestly cite an
 # earlier sprint's requirement. With the block now in `s<N>/locked-requirements.md`
@@ -500,7 +576,30 @@ else
   rc=1
 fi
 
-# MUTATION: collapse the pair back to one name and demand the OTHER one reds. Built as
+# MUTATION: drop the THIRD name and demand the carry-over story reds. Built as a copy
+# and guarded with cmp -s so a sed that matched nothing cannot pass as a change. Without
+# this arm the acceptance above is satisfied by anything that resolves the file, and the
+# name set is not what is being tested.
+MUT8="$WORK/mut-no-carryover-sor.sh"; cp "$VALIDATOR" "$MUT8"
+sed -i.bak 's/^DEFAULT_SOR_BASENAMES = .*/DEFAULT_SOR_BASENAMES = ("locked-requirements.md", "product-brief.md")/' "$MUT8" && rm -f "$MUT8.bak"
+if cmp -s "$VALIDATOR" "$MUT8"; then
+  echo "FAIL: MUTATION setup — DEFAULT_SOR_BASENAMES was not mutated to the two-name tuple, so the arm below proves nothing" >&2
+  rc=1
+elif bash "$MUT8" "$COB/s302/stories/carry-over-sor.md" >/dev/null 2>&1; then
+  echo "FAIL: MUTATION — the carry-over citation passed with carry-over-backlog.md removed; the name set is not what admits it" >&2
+  rc=1
+else
+  echo "ok: MUTATION — dropping carry-over-backlog.md reds the carry-over story (the acceptance is the tuple, not the resolver)"
+fi
+# PAIRING: the same mutant must still accept the NEW name, or it died of something else.
+if bash "$MUT8" "$SOR/s302/stories/new-sor.md" >/dev/null 2>&1; then
+  echo "ok: MUTATION PAIRING — the same mutant still accepts locked-requirements.md (it fails only its own assertion)"
+else
+  echo "FAIL: MUTATION PAIRING — the mutant rejected the new name too; the assertions are entangled" >&2
+  rc=1
+fi
+
+# MUTATION: collapse the set back to one name and demand the OTHER one reds. Built as
 # a copy and guarded with cmp -s so a sed that matched nothing cannot pass as a change.
 MUT6="$WORK/mut-single-sor.sh"; cp "$VALIDATOR" "$MUT6"
 sed -i.bak 's/^DEFAULT_SOR_BASENAMES = .*/DEFAULT_SOR_BASENAMES = ("locked-requirements.md",)/' "$MUT6" && rm -f "$MUT6.bak"

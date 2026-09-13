@@ -39,8 +39,10 @@
 # For each `full_text_source: <artifact>:<anchor>` in a block, three checks:
 #   (a) Source-of-record — the artifact must be the byte-verbatim source of
 #       record: basename `locked-requirements.md` (the sprint slot, where
-#       discovery.md §4a now writes the block) or, transitionally, the legacy
-#       `product-brief.md`. `--sor` replaces both with one name.
+#       discovery.md §4a now writes the block), the legacy `product-brief.md`
+#       transitionally, or `carry-over-backlog.md` — the verbatim record for a
+#       carried item's own text, including its closure condition. `--sor`
+#       replaces all three with one name.
 #       A citation resolving to any other artifact, or to one that self-declares
 #       `locked_requirements_fidelity: index` / a "condensed index" provenance,
 #       FAILS. Catches "cite prd.md for full text" when prd.md is an index.
@@ -129,21 +131,41 @@ sor_override = sys.argv[2] or None
 # Source-of-record basenames: where discovery.md §4a writes the byte-verbatim
 # LOCKED_REQUIREMENTS block by construction.
 #
-# TWO NAMES, AND THE SECOND ONE IS TRANSITIONAL BY DESIGN. §4a used to append the
-# block to the durable brief, one per sprint; it now writes it to that sprint's own
-# slot as `s<N>/locked-requirements.md`. Accepting ONLY the new name would fail every
-# story already carrying `full_text_source: product-brief.md#LR-...` -- measured on
-# the reference consumer at 31 of 62 anchored citations, all resolvable, none
-# defective. Refusing them would be this check reporting a migration as a fabrication.
+# THREE NAMES, AND EACH IS HERE FOR A DIFFERENT REASON.
+#
+# THE SECOND IS TRANSITIONAL BY DESIGN. §4a used to append the block to the durable
+# brief, one per sprint; it now writes it to that sprint's own slot as
+# `s<N>/locked-requirements.md`. Accepting ONLY the new name would fail every story
+# already carrying `full_text_source: product-brief.md#LR-...` -- measured on the
+# reference consumer at 31 of 62 anchored citations, all resolvable, none defective.
+# Refusing them would be this check reporting a migration as a fabrication.
+#
+# THE THIRD IS A CORPUS THIS SCRIPT'S POPULATION STRUCTURALLY EXCLUDED. A carry-over
+# item's closure condition is verbatim text in `carry-over-backlog.md`, and a document
+# that quotes one is making the same full-text claim a story makes about a locked
+# requirement. This script is the only byte-verbatim quotation checker in core, and
+# with the backlog refused by BASENAME no mechanism could reach such a quotation at
+# all: a closure condition could be quoted with its operative clause elided, asserting
+# a condition met that the quoting document itself declines to meet, and the check
+# that would have caught it declared the artifact out of scope before reading a byte.
+# Extending the set is a JOIN and needs no intent predicate -- the declaring act is the
+# author writing `full_text_source: carry-over-backlog.md:CO-S<n>-<id>`, and the
+# existing anchor-window plus byte-match machinery then adjudicates the quotation. Its
+# honest limit: it does not reach an author who quotes without declaring.
 #
 # `prd.md` and every other condensed index stay refused, which is the property this
-# test exists for; widening from one name to two does not weaken it.
+# test exists for; widening the name set does not weaken it, and the fixture's
+# `prd.md` control arm is what holds that open.
+#
+# The third name is NEITHER legacy NOR the name messages prescribe. `LEGACY_SOR_BASENAME`
+# stays `product-brief.md` because only that one is burning down, and `sor_basename`
+# stays the sprint slot because that is where a remedy must tell an author to write.
 #
 # REMOVE `product-brief.md` WHEN, and not before: a consumer's brief holds no
 # LOCKED_REQUIREMENTS block (`--emit-blocks` over it returns none) and its story
 # corpus carries no `full_text_source` naming it. Both are measurable in one run, so
 # this deprecation has a test rather than a date.
-DEFAULT_SOR_BASENAMES = ("locked-requirements.md", "product-brief.md")
+DEFAULT_SOR_BASENAMES = ("locked-requirements.md", "product-brief.md", "carry-over-backlog.md")
 LEGACY_SOR_BASENAME = "product-brief.md"
 if sor_override:
     sor_basenames = (os.path.basename(sor_override),)

@@ -4208,6 +4208,71 @@ from a detached checkout's ROOT, which is the cwd the convention is written for.
 **Tiered DEFECT.** A closure claim can assert a condition met that its own document declines to meet,
 and no mechanism reads it.
 
+**The join shipped, and the receipt could not see the plausible wrong version of it.**
+`DEFAULT_SOR_BASENAMES` is now `("locked-requirements.md", "product-brief.md", "carry-over-backlog.md")`.
+`LEGACY_SOR_BASENAME` is unchanged and `sor_basename` is still `sor_basenames[0]`, so every PASS line
+and every remedy keeps prescribing the sprint slot. Receipt scored four ways against the shipping
+script, each on its own `git archive HEAD` copy: base **1**, fix **0**, the over-broad non-fix that
+accepts ANY basename **1** (the `prd.md` control arm refuses it, as the entry above predicted), and
+the third name placed FIRST in the tuple **0** — the receipt does NOT catch that one. It cannot: the
+reorder admits an identical SET, so every exit code in the receipt is unchanged while the PASS line
+now reads `verified against 'carry-over-backlog.md'` and tells every author to write the wrong file.
+A receipt reading only exits is blind to a defect that moves only a string, so the fixture carries
+the arm instead, asserting the PASS text of the new-SoR story names `locked-requirements.md`. Scored:
+that arm is the ONLY failure against the reordered tuple, and it fires.
+
+**Fixture.** `core/fixtures/check-3b-locked-anchor/run.sh` gains a world mirroring the consumer's
+layout — `carry-over-backlog.md` two directories above the story, `## [CO-S302-PROBE]` heading,
+story at `s302/stories/` — with four arms and a mutant. Accepted when byte-verbatim; refused when the
+operative clause is replaced by an ellipsis, AND asserted to be refused at the byte-match rather than
+at (a), because a refusal at (a) would mean the quotation was never adjudicated and the arm would
+read green while proving nothing; a `prd.md` decoy carrying the SAME anchor and the SAME text still
+refused, which is what separates a third name from accept-everything; and the PASS-line arm above.
+`MUT8` drops the third name and reds the carry-over story while its pairing arm keeps
+`locked-requirements.md` accepted. Fixture exits: **0** from the repo root, **1** from inside its own
+directory — that second failure is PRE-EXISTING and unrelated, measured identically on an unmodified
+`git archive HEAD` copy (one FAIL, the `legacy-sor` arm, `anchor 'LR-S302-1' not found in
+'product-brief.md'`; this fixture directory ships a decoy `product-brief.md` and that arm resolves it
+from the caller's cwd). `core/fixtures/context-mode-protect/run.sh` and
+`core/fixtures/spec-join-integrity/run.sh`, both of which invoke the validator, exit **0** from the
+root. `scripts/validate-backlog-receipts.sh` exits 0 with `prose-closable=1/9 bound=43` and prints no
+row for this entry, which is the report's spelling of BOUND.
+
+**Consumer rehearsal: a null, and it was a REACHABLE measurement, not an unmeasurable one.** Over the
+114 tracked files carrying `full_text_source:` under `_bmad-output/` at the read-only consumer's HEAD,
+the fixed validator and the consumer's own installed `scripts/ai-dlc/validate-locked-anchor.sh` return
+**identical exit-code vectors** — 82 zeros and 32 ones on both sides, zero differing files. The two
+scripts were asserted to differ by `cmp -s` first (md5 `ff348017…` shipped against `e4bfcd21…` fixed;
+the shipped copy is byte-identical to core at HEAD), and the differential was shown able to RESOLVE
+the effect by a synthesized carry-over citation in scratch, on which the two sides read 1 and 0. So
+the null is a property of the corpus: today no consumer document declares a carry-over citation. The
+three `full_text_source:.*carry-over` grep hits were read and all three are prose — a story's
+comparison table quoting the uncheckable-guard message, and two gate-adjudication verdict JSONs whose
+single-line bodies put the two tokens in one grep window while naming `locked-requirements.md` as the
+cited artifact. Zero lines anywhere in that tree match `^\s*full_text_source:\s*\S*carry-over`, against
+a control of 67 real key lines naming some artifact. The fix therefore creates an affordance and moves
+no consumer verdict.
+
+**TWO SHIPPING RESTATEMENTS OF THE NAME SET ARE NOW STALE, AND NEITHER IS REPAIRED HERE.** Grepped
+for before shipping, against a control: `core/skills/ai-dlc/steps/gate-validation.md:458` enumerates
+the accepted set as the sprint slot "or transitionally the legacy `product-brief.md`" and is NEWLY
+incomplete — it was correct at HEAD and this change made it wrong. `core/skills/ai-dlc/steps/
+stories-test-strategy.md:374-377` says `full_text_source` resolves to the sprint's
+`locked-requirements.md` "and nothing else", which ALREADY contradicted its emitter at HEAD (the
+legacy name has been accepted since the migration) and now contradicts it by two names. Both are
+restatements of a set the validator owns, which is the drift `mechanism-design.md` names. They are
+left untouched deliberately: they sit outside this change's declared file set, and `gate-validation.md`
+is a file the concurrent enforcement-map work may also be editing, so a blind edit here risks a
+conflict that buys nothing. Nothing mechanically binds those sentences to `DEFAULT_SOR_BASENAMES`
+today, which is why they could go stale unnoticed — the durable repair is a join, not a re-wording.
+
+**Two limits, both reachable and both stated.** The fix does not reach an author who quotes without
+declaring: the join's key IS the `full_text_source:` line, so a document that paraphrases a closure
+condition with no declaration is invisible to it exactly as it was before. And the ADR that motivated
+this entry carries no `LOCKED_REQUIREMENTS` block at all, so this validator would not have read it
+even with the backlog in the SoR set — what shipped is the mechanism by which such a quotation CAN be
+bound, not a mechanism that binds the filed instance retroactively.
+
 verify: sh V=core/scripts/validate-locked-anchor.sh; [ -f "$V" ] || exit 9; bash "$V" core/fixtures/check-3b-locked-anchor/good-story.md >/dev/null 2>&1 || exit 9; d="$(mktemp -d)"; B="- CO-PROBE: the operative closure clause stated in full."; printf "%s\n" "# Carry-over backlog" "" "## CO-PROBE" "" "$B" > "$d/carry-over-backlog.md"; cp "$d/carry-over-backlog.md" "$d/prd.md"; printf "%s\n" "<!-- LOCKED_REQUIREMENTS -->" "<!-- Source: user input -->" "full_text_source: carry-over-backlog.md:CO-PROBE" "$B" "<!-- END LOCKED_REQUIREMENTS -->" > "$d/s.md"; printf "%s\n" "<!-- LOCKED_REQUIREMENTS -->" "<!-- Source: user input -->" "full_text_source: prd.md:CO-PROBE" "$B" "<!-- END LOCKED_REQUIREMENTS -->" > "$d/n.md"; printf "%s\n" "<!-- LOCKED_REQUIREMENTS -->" "<!-- Source: user input -->" "full_text_source: carry-over-backlog.md:CO-PROBE" "- CO-PROBE: the operative closure clause ... in full." "<!-- END LOCKED_REQUIREMENTS -->" > "$d/e.md"; o="$(bash "$V" "$d/s.md" 2>&1)"; rc=$?; bash "$V" "$d/n.md" >/dev/null 2>&1; nrc=$?; bash "$V" "$d/e.md" >/dev/null 2>&1; erc=$?; rm -rf "$d"; [ "$nrc" -ne 0 ] || exit 1; [ "$erc" -ne 0 ] || exit 1; grep -qF "the byte-verbatim source of record is" <<<"$o" && exit 1; exit $rc
 
 
