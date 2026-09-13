@@ -99,12 +99,19 @@ half's worktree alone, three reps each. Fixtures `apply-drift-after-write` (41 a
 a pole of 524s) and `reconcile-blocking-list` all pass from the root.
 
 **THE SWEEP AT THIS BATCH'S CLOSE, ref `ai-dlc/carry-over/chunk-max-usd-swap-sizing` (consumer HEAD
-`e700dab0f`, unmoved since batch 96).** Live **56**, cited **37**, unfiled **19**, archive **206**,
-partition control 0; ledger md5 `6d87be63…` unchanged since batch 93. The 19 unfiled are the
-adjudicated set (5 named in `origin/main` release commits, 12 `NOT-UPSTREAM`, one withdrawn,
-one superseded, one refuted) — available residue ZERO. One `PC-S311-H2-ATTESTATION-…` id sits
-UNCOMMITTED in the consumer's working tree only. TERMINAL **89**; DISCHARGED corrected **7**;
-discharged-but-INVISIBLE 1 (`PC-S308-GATE-METRICS-CHECK2-STALE-VERDICT-READ-ORDER`, unchanged).
+`26bfe9fee`, which moved from `e700dab0f` by two consumer commits AFTER the release merged).**
+Live **58**, cited **37**, unfiled **21**, archive **206**, partition control 0; ledger md5
+`7418e4ad…`, moved from `6d87be63…` for the first time since batch 93. **TWO NEW PC-BACKED
+CANDIDATES ARE AVAILABLE**, filed by the consumer at `26bfe9fee` on 2026-09-13 and named by no
+`origin/main` commit (control: the `PC-S311-SNAPSHOT-NEVER-ADVANCES…` sibling resolves to
+`v0.554.0`):
+`PC-S311-H2-ATTESTATION-VERIFY-REQUIRES-COLUMN-1-BUT-ATTEST-OUTPUT-INVITES-A-TABLE-CELL` and
+`PC-S311-SNAPSHOT-SEVEN-SECTION-SCHEMA-HAS-A-READER-CHECK-BUT-NO-WRITER-CHECK`. The other 19
+unfiled are the adjudicated set (5 named in release commits, 12 `NOT-UPSTREAM`, one withdrawn,
+one superseded, one refuted). The batch-98 block's first cut said residue ZERO; the post-merge
+sweep hand corrected it before the handoff was acted on. TERMINAL **89**; DISCHARGED corrected
+**7**; discharged-but-INVISIBLE 1 (`PC-S308-GATE-METRICS-CHECK2-STALE-VERDICT-READ-ORDER`,
+unchanged).
 
 **THE INCIDENTAL-CLOSE CHECK WAS RUN AND FOUND NOTHING.** Histogram before rotation: 3×0
 (`BL-236`, `BL-238`, `BL-124`), 71×1, 1×9 over 75 receipts; after rotation 2×0, 71×1, 1×9 over
@@ -130,7 +137,9 @@ gate and the ref NOT on origin; the third push, on the unchanged content key, la
 — its seed now reads `preclassify.sh` and `setup-sites.md`. The read-set map was 17 commits stale
 at this gate and selected 55 of 198.
 
-**THE READIEST NO-`PC` WORK** is now `BL-221` (the LAST prose-closable receipt the gate names;
+**THE READIEST WORK IS PC-BACKED AGAIN**: the two `PC-S311` filings above, provenance first per
+action 1's selection rule; read each entry's own status line and drive its receipt on the
+distribution path before scoping. **THE READIEST NO-`PC` WORK** is `BL-221` (the LAST prose-closable receipt the gate names;
 its receipt and its fix are one change, the positive-binding arm carries 3 false positives of 6
 and moves the pole's neighbour), then `BL-243` (needs a ruling on a citation-local negator
 vocabulary), `BL-223` and `BL-216` (receipts bound; fixes wait on the grammar ruling and the
@@ -9737,7 +9746,9 @@ given at batch 90.
    **THE GATE-ADJUDICATION BACKFILL HAS NOT BEEN RUN ON ANY CONSUMER AND THAT IS THE CONSUMER'S
    CALL, NOT UPSTREAM'S.** What shipped is the refusal plus the `--legacy-through` escape.
 
-   **THE AVAILABLE PC-BACKED RESIDUE IS ZERO.** All 18 unfiled re-derive as adjudicated — 4 named in
+   **THE AVAILABLE PC-BACKED RESIDUE WAS ZERO UNTIL THE CONSUMER FILED TWO `PC-S311` CANDIDATES
+AT `26bfe9fee` DURING BATCH 98's CLOSE — see the batch-98 block; the sweep decides.** Before
+that, all 18 unfiled re-derived as adjudicated — 4 named in
    `origin/main` release commits, 11 `NOT-UPSTREAM`, the `PC-S309-PRE-PUSH` pair WITHDRAWN, and
    `PC-S340-RETRO-AUDIT-SCANS-…` REFUTED. Run the sweep anyway, because the consumer files while
    nobody is looking; expect it empty and rank the no-`PC` set without waiting for permission.
