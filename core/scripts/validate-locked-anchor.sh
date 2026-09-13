@@ -316,6 +316,24 @@ def anchor_window(source_text, anchor):
     anchor selects, for every line carrying it, that line through the next markdown
     heading at the same-or-shallower depth (EOF when there is none) -- so an anchor in
     an unstructured brief widens to the whole remainder rather than to nothing.
+
+    A HEADING HIT WINS OVER A MENTION, AND WITHOUT THAT THE WINDOW DEGENERATES TO THE
+    WHOLE FILE. Taking every hit line and concatenating is correct only while an id
+    appears once. In a real carry-over backlog it does not: measured on a reference
+    consumer's `carry-over-backlog.md`, 160 distinct `CO-` ids, 52 of them on more than
+    one line, and 6 named in the file's depth-1 PREAMBLE -- a summary sentence sitting
+    under the single `# ` title, above the first `##`. A preamble mention has depth 1,
+    so its section runs to the next depth-1 heading, which is EOF; the union then holds
+    the entire document and the byte-match at (c) proves co-presence again, which is the
+    exact failure the anchor window exists to stop. For one of those six the widened
+    window was 3518 lines of a 3540-line file, and a story citing that id while quoting a
+    bullet from an unrelated section 1700 lines away exited 0.
+
+    So when at least one hit line is ITSELF a heading carrying the anchor, only those
+    heading sections are the window; the all-hits reading is the FALLBACK for an anchor
+    that appears in no heading at all. That fallback is what keeps an unstructured brief
+    working, and it is why this narrows rather than requiring a heading: an anchor with
+    no heading anywhere is still resolvable, exactly as before.
     """
     lines = source_text.splitlines()
     ranged = LINE_RANGE_RE.match(anchor)
@@ -327,6 +345,9 @@ def anchor_window(source_text, anchor):
     hits = [i for i, ln in enumerate(lines) if anchor in ln]
     if not hits:
         return None
+    heading_hits = [i for i in hits if HEADING_RE.match(lines[i])]
+    if heading_hits:
+        hits = heading_hits
     sections = []
     for i in hits:
         depth = 99

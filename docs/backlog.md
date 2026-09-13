@@ -4229,11 +4229,23 @@ at (a), because a refusal at (a) would mean the quotation was never adjudicated 
 read green while proving nothing; a `prd.md` decoy carrying the SAME anchor and the SAME text still
 refused, which is what separates a third name from accept-everything; and the PASS-line arm above.
 `MUT8` drops the third name and reds the carry-over story while its pairing arm keeps
-`locked-requirements.md` accepted. Fixture exits: **0** from the repo root, **1** from inside its own
-directory — that second failure is PRE-EXISTING and unrelated, measured identically on an unmodified
-`git archive HEAD` copy (one FAIL, the `legacy-sor` arm, `anchor 'LR-S302-1' not found in
-'product-brief.md'`; this fixture directory ships a decoy `product-brief.md` and that arm resolves it
-from the caller's cwd). `core/fixtures/context-mode-protect/run.sh` and
+`locked-requirements.md` accepted, and `MUT9` reverts the anchor-window narrowing and must let the
+cross-section quotation through while still accepting the in-section one. The carry-over world is
+PREAMBLE-SHAPED by construction — the probe id mentioned once above the first `##` and once as its
+own heading, with a different bullet inside the preamble's span — and the fixture refuses if that
+shape is ever lost, because every arm would still pass while testing nothing.
+
+**Two adversary findings recorded; the second holds and the first does not.** The ellipsis story is
+refused under every variant built, including the over-broad one (both exit 1), so it does not
+discriminate against that non-fix — the `prd.md` control is the only arm that does, which is why the
+rehearsal's synthetic `prd.md` arm exists. The claim that `prd.md` reads **0** on all three
+`INDEX_MARKER_RE` alternatives is REFUTED on this fixture's own file: re-derived against a control,
+`condensed index` matches **2** and `INDEXING, not weakening` matches **1**; only
+`locked_requirements_fidelity: index` is 0. So the shipped fixture's `prd.md` is refused by TWO
+independent properties, the basename tuple and the self-declaration branch, and an arm keyed on it
+cannot attribute which. The scratch `prd.md` the rehearsal and the carry-over control build carry no
+marker at all, so those two ARE keyed on the tuple alone — the attribution lives there, not here. Fixture exits: **0** from the repo root and **0** from inside its own
+directory, against a base-commit control of root 0 / own-dir 1. `core/fixtures/context-mode-protect/run.sh` and
 `core/fixtures/spec-join-integrity/run.sh`, both of which invoke the validator, exit **0** from the
 root. `scripts/validate-backlog-receipts.sh` exits 0 with `prose-closable=1/9 bound=43` and prints no
 row for this entry, which is the report's spelling of BOUND.
@@ -4241,11 +4253,20 @@ row for this entry, which is the report's spelling of BOUND.
 **Consumer rehearsal: a null, and it was a REACHABLE measurement, not an unmeasurable one.** Over the
 114 tracked files carrying `full_text_source:` under `_bmad-output/` at the read-only consumer's HEAD,
 the fixed validator and the consumer's own installed `scripts/ai-dlc/validate-locked-anchor.sh` return
-**identical exit-code vectors** — 82 zeros and 32 ones on both sides, zero differing files. The two
-scripts were asserted to differ by `cmp -s` first (md5 `ff348017…` shipped against `e4bfcd21…` fixed;
-the shipped copy is byte-identical to core at HEAD), and the differential was shown able to RESOLVE
-the effect by a synthesized carry-over citation in scratch, on which the two sides read 1 and 0. So
-the null is a property of the corpus: today no consumer document declares a carry-over citation. The
+**identical exit-code vectors** — 82 zeros and 32 ones on both sides, zero differing files, re-run
+after the anchor-window narrowing below. The two scripts were asserted to differ by `cmp -s` first
+(shipped md5 `ff348017…`, byte-identical to core at the base commit), and the differential was shown
+able to RESOLVE the effect by a synthesized carry-over citation, on which the two sides read 1 and 0.
+
+**AND THAT PAIR ALONE IS NOT A CONTROL FOR THIS NULL.** Measured in the same run: the correct fix and
+the over-broad non-fix that accepts EVERY basename produce **identical vectors on all 114** — 82/32
+each, zero differing files — because no consumer story cites a refused basename, so the corpus cannot
+tell a correct widening from an unconditional one. The discriminating arm is therefore synthetic and
+runs beside the null: a story citing `prd.md`, on which the fix exits **1**, the over-broad non-fix
+exits **0**, and the installed copy exits **1**. Three distinct programs, asserted distinct by `cmp -s`
+before the comparison. So the
+
+null is a property of the corpus: today no consumer document declares a carry-over citation. The
 three `full_text_source:.*carry-over` grep hits were read and all three are prose — a story's
 comparison table quoting the uncheckable-guard message, and two gate-adjudication verdict JSONs whose
 single-line bodies put the two tokens in one grep window while naming `locked-requirements.md` as the
@@ -4275,6 +4296,35 @@ the identifier. So the repair above is a re-wording and re-wordings are exactly 
 fourth copy of a set with no binding is a fourth chance to drift, which is why the second site was
 changed to CITE rather than to restate. The durable repair is a join, and it is deliberately not built
 in this batch.
+
+**THE WIDENING ALONE SHIPPED A SECOND DEFECT, AND IT IS THE ONE THE ENTRY EXISTS TO STOP.** Admitting
+the backlog put a document shaped unlike a brief into a window function written for briefs.
+`anchor_window`'s token branch takes EVERY line carrying the anchor, opens a section at each, and
+unions them. That is correct while an id appears once; a carry-over backlog is the corpus where it
+does not. Measured on the reference consumer's file: **160 distinct `CO-` ids, 52 on more than one
+line, and 6 named in the depth-1 PREAMBLE** — a summary sentence under the single `# ` title, above
+the first `##`. A preamble mention has depth 1, so its section runs to the next depth-1 heading,
+which is EOF, and the window becomes the whole document. For one of the six the widened window was
+**3518 of 3540 lines**. Driven against the shipping script, not reasoned: over the five of those six
+that carry their own heading, **125 of 125** foreign bullets — quoted from sections the citation does
+not name — were ACCEPTED by the widening alone. The byte-match had degenerated back to co-presence,
+which is the exact defect the anchor window was built to end.
+
+**The narrowing: a HEADING hit wins over a mention.** When at least one hit line is itself a markdown
+heading carrying the anchor, only those heading sections form the window; the all-hits reading stays
+as the FALLBACK for an anchor that appears in no heading at all, so an unstructured brief still
+resolves. Re-measured after: **0 of those 125** foreign quotations survive, every honest in-section
+quotation still passes, and a heading-less anchor still resolves (its own fixture arm). The sixth
+preamble id carries no heading anywhere and correctly takes the fallback — which is why the fallback
+is a measured branch and not a hedge. The 114-file consumer vectors are unchanged by the narrowing.
+
+**The fixture's own-directory failure was PRE-EXISTING, isolated, and is repaired here.** The SoR
+block seeded its brief two directories above the story, so only the walk-up could find it — and this
+fixture directory ships a `product-brief.md` DECOY, which the cwd candidate reached first. Measured
+at the base commit: root **0**, own directory **1**, on an arm that is correct either way. A
+story-local copy makes the first candidate the right file, and the block now asserts cwd-invariance
+in its own arms across two cwds and five cases rather than inheriting it from how the suite is
+driven. Both cwds read **0** at the tip.
 
 **Two limits, both reachable and both stated.** The fix does not reach an author who quotes without
 declaring: the join's key IS the `full_text_source:` line, so a document that paraphrases a closure
