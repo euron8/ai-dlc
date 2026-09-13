@@ -15,6 +15,46 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.567.0] - 2026-09-13
+
+### PC-S342-SH-RECEIPT-DOLLAR-DIST-READS-THE-CHECKOUT-NOT-THEIRS — a `verify: sh` receipt reading `$DIST` as a filesystem path measures the distribution CHECKOUT rather than the ref being pulled, and the row claims it measured theirs
+
+`ledger-reverify.sh`'s header stated as fact that `$CONSUMER` is the only exported value a
+receipt may read as a path, because `$DIST` "is handed to `git -C` and is form-insensitive".
+Nothing enforced it, and a receipt is an arbitrary `bash -c` string. Measured on the reference
+consumer pulling 0.557.0 -> 0.564.0 with its checkout three commits past theirs: of 37 `sh`
+receipts, 28 name `$DIST`, 26 conforming and 2 reading it as a path, and both of those flipped
+STILL-LIVE -> CLOSE-CANDIDATE in one run, on fixes that landed a release PAST the pull.
+
+A receipt naming `$DIST` anywhere but as a `git -C` argument (or `cd "$DIST" && git`) is now
+refused as `NEEDS-REVIEW` before it runs, downgrade-never-create, so a conforming receipt is
+byte-unchanged. `$THEIRS_TREE`, a `git archive` of theirs materialized lazily into a temp
+directory and removed on exit, is exported as the path-readable view of the distribution. A
+receipt adopting it opens `[ -n "${THEIRS_TREE:-}" ] || exit 127;`, because a consumer runs its
+own installed engine for one more pull and that engine reads an unset variable as a false close.
+Closes `BL-246`. The receipt fix for `PC-S309-RETRO-CLOSURE-QUOTATION-NOT-VERBATIM-BOUND` shipped
+in 0.566.0 as `BL-216` and is named here so the consumer's closer can see it.
+
+### The backlog receipt gate wrote its probe's hooks path into the CALLER's repository
+
+`validate-backlog-receipts.sh` scrubbed `GIT_DIR` only around its probe's `git init`; every later
+`git -C` in the file, including the `core.hooksPath` write and the per-receipt `worktree add`, ran
+under whatever `GIT_DIR` the caller exported. Git exports it into a hook invoked from a linked
+worktree, and `git -C` does not override it, so a gate run from an agent worktree pointed the main
+repository's pre-push hook at a deleted temp directory, and the next push from that repository
+landed with no gate at all. The environment is now scrubbed once for the whole process, the
+probe's own config is asserted by file path rather than through `GIT_DIR`, and a new
+`backlog-receipt-binding` arm runs the gate under an exported `GIT_DIR` and asserts the caller's
+hooks path is byte-unchanged; its mutant reproduces the failure.
+
+### The fixture's laziness arm counted every temp directory on the host
+
+Under a loaded pool that arm failed once in three reps on another process's `mktemp`. The
+materializer's tree now carries a `ledger-reverify-theirs.` prefix and the arm counts only that
+prefix, in both directions. The eager-materialization mutant could not fire under the old count
+and is now driven against a theirs ref that does not resolve, where the two engines differ in a
+verdict the cleanup cannot erase.
+
 ## [0.566.0] - 2026-09-13
 
 ### BL-216 — a carry-over backlog is a byte-verbatim source of record, so a quoted closure condition can be bound to the text it quotes
