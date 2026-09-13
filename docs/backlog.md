@@ -4505,9 +4505,12 @@ that **cannot resolve the effect**, because the spread across reps is larger tha
 measured. `--arms I93` alone, five reps interleaved, does resolve it: **0.493s → 0.625s median,
 +0.13s**, which across the 26 fixtures that invoke this validator is roughly **+3.4s of
 suite-wide CPU**, spread across the pool rather than added to the pole. **The 27.0–27.4s figure in
-the batch-95 paragraph above had drifted** — re-measured from inside the repo it reads 33.8–34.2s
-on the live tree and ~24.9s on a `git archive` extraction, so neither the old number nor a single
-new one should be quoted without its tree.
+the batch-95 paragraph above does not reproduce here**: re-measured from inside the repo, base and
+tip both read 24–25s across three interleaved reps on the LIVE tree and the same on a
+`git archive` extraction, so the figure is stale in an unknown direction. A third party measured
+33.8–34.2s on this same subject during this batch; that number is NOT re-derived here and is
+recorded only as the reason to quote none of the three without naming the tree it was taken on
+and the load it was taken under.
 
 **The receipt above was REWRITTEN to drive the subject** and scored six ways, each on its own
 extraction: base `e1cf1718` **1**; tip **0**; a comment carrying the receipt's own literals
