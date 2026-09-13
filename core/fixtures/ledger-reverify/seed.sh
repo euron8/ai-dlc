@@ -125,6 +125,13 @@ printf 'landed\n' > "$DIST/docs/s906-note.md"
 git -C "$DIST" add -A
 git -C "$DIST" commit -q -m 'docs(ledger): record PC-S906-TWO-NAMING-COMMITS-NOTHING-HIDDEN as landed'
 
+# THE NAMING COMMIT FOR THE ENTRY WHOSE RECEIPT IS REFUSED. `NAMED-UPSTREAM` is emitted above the
+# verb dispatch, so a refusal that `continue`s must leave it standing; without a naming commit the
+# arm asserting that has no subject and would pass against an engine that dropped the row.
+printf '#!/bin/sh\necho s907 fixed\n' > "$DIST/core/scripts/s907-subject.sh"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'fix: absorb PC-S907-NAMED-UPSTREAM-SURVIVES-A-REFUSED-RECEIPT'
+
 # --- base: neither marker present ---
 printf '# SKILL\nrule one\nrule two\n' > "$SK"
 printf '0.100.0\n' > "$DIST/VERSION"
@@ -188,6 +195,34 @@ printf '0.103.0\n' > "$DIST/VERSION"
 git -C "$DIST" add -A
 git -C "$DIST" commit -qm theirs
 THEIRS="$(git -C "$DIST" rev-parse HEAD)"
+
+# --- past-theirs: THE CHECKOUT IS NOT THE REF BEING PULLED -------------------------------------
+#
+# `$DIST` is the distribution WORKING TREE, checked out wherever the operator left it, and it is
+# under no obligation to sit at `$THEIRS`. Until this commit existed the seed's dist HEAD WAS
+# theirs, so a receipt reading `$DIST/VERSION` as a filesystem path and one reading it through
+# `git -C "$DIST" show "${THEIRS}:VERSION"` agreed on every run and the whole class was invisible
+# to this fixture. Measured on the reference consumer pulling 0.557.0 -> 0.564.0 with its
+# distribution checkout three commits past theirs: two `sh` receipts read the checkout, both
+# flipped STILL-LIVE -> CLOSE-CANDIDATE, and CLOSE is the verdict this tool's own header names as
+# the direction that loses information permanently.
+#
+# ONE COMMIT PAST, NOT A DETACHED ONE: the defect is that HEAD is a DIFFERENT TREE from theirs,
+# and one commit expresses that as fully as ten. VERSION moves to 0.104.0 so a path read and a
+# rev-spec read return DIFFERENT STRINGS -- if they returned the same string the arms below could
+# not tell a fixed engine from a broken one. PAST_MARKER is the second observable, so an arm is
+# not forced to key on a version number that other arms already read for a different reason.
+printf '0.104.0\n' > "$DIST/VERSION"
+printf 'PAST_THEIRS_MARKER only the checkout carries this\n' > "$DIST/core/skills/ai-dlc/past-theirs.md"
+git -C "$DIST" add -A
+git -C "$DIST" commit -qm 'past-theirs: the checkout moves on, THEIRS stays where it was'
+PAST="$(git -C "$DIST" rev-parse HEAD)"
+# ASSERTED, NOT ASSUMED. A seed whose HEAD silently equals THEIRS again -- a later edit moving
+# this block, a `git checkout` added above -- would make every DIST-as-path arm below pass for
+# the wrong reason, and a fixture that cannot express its defect proves nothing.
+[ "$PAST" != "$THEIRS" ] || { echo 'seed: dist HEAD equals THEIRS, so no arm can see a $DIST path read' >&2; exit 1; }
+[ "$(cat "$DIST/VERSION")" = "0.104.0" ] || { echo 'seed: the checkout does not read 0.104.0' >&2; exit 1; }
+[ "$(git -C "$DIST" show "${THEIRS}:VERSION")" = "0.103.0" ] || { echo 'seed: VERSION at THEIRS is not 0.103.0' >&2; exit 1; }
 
 # --- consumer ledger ---
 LED="$CONS/_bmad-output/ai-dlc-update/push-candidate-ledger.md"
@@ -397,6 +432,135 @@ cat > "$LED" <<'LEDGER'
   the paired control: a genuinely absent CONSUMER path in the same position must still be flagged,
   or this arm is satisfied by an extractor that sees nothing at all.
   verify: sh git -C "$DIST" show "$THEIRS:core/scripts/validate-artifact-derivations.sh" >/dev/null 2>&1; exit 1
+
+---
+
+- **Entry SH-THEIRS-TREE reads the distribution AT THEIRS through `$THEIRS_TREE`.** The
+  materialized tree carries VERSION 0.103.0 (theirs) while the distribution CHECKOUT this seed
+  builds sits one commit past it at 0.104.0. Exit 0 -> STILL-LIVE, and it can only be 0 if the
+  engine handed the receipt a tree at theirs rather than the checkout; bound to `$DIST` instead,
+  the same receipt reads 0.104.0 and the entry flips to CLOSE-CANDIDATE. That flip is the whole
+  defect: a close on a ref the pull is not pulling, in the direction this tool's header names as
+  permanent.
+  <br>THE `exit 127` GUARD IS PART OF THE RECEIPT, not decoration. Re-verify runs on the engine
+  the consumer LAST INSTALLED, and for one pull after this value ships that engine does not
+  export it — unguarded, `$THEIRS_TREE/VERSION` reads `/VERSION`, exits non-zero, and the OLD
+  engine scores that as CLOSE-CANDIDATE. 127 is the status every shipped engine already turns
+  into NEEDS-REVIEW. The BASE-ENGINE arm in run.sh drives exactly that pair.
+  verify: sh [ -n "${THEIRS_TREE:-}" ] || exit 127; [ "$(cat "$THEIRS_TREE/VERSION")" = "0.103.0" ]
+
+---
+
+- **Entry SH-THEIRS-TREE-BRACED is the same read in the BRACED spelling.** `${THEIRS}` requires a
+  `}` right after `THEIRS`, so `${THEIRS_TREE}` does NOT match the rc=0 partition's `$THEIRS`
+  alternations while the UNBRACED `$THEIRS_TREE` matches one of them by accident, being a prefix.
+  Without its own alternation this receipt falls into the consumer-only partition and is accused
+  of being unfalsifiable while it is reading upstream at theirs. The unbraced entry above is the
+  near-miss that cannot see it.
+  verify: sh [ -n "${THEIRS_TREE:-}" ] || exit 127; [ "$(cat "${THEIRS_TREE}/VERSION")" = "0.103.0" ]
+
+---
+
+- **Entry SH-THEIRS-TREE-PATH names DISTRIBUTION paths beneath `$THEIRS_TREE`.** The
+  `SH-DIST-PATH` pairing one spelling along: `receipt_absent_subjects` must not read
+  `$THEIRS_TREE/docs/<x>` or `$THEIRS_TREE/scripts/<x>` as consumer subjects that do not exist.
+  The `docs/` and `scripts/` forms are seeded deliberately and `core/` is not the only one,
+  because those two ARE consumer top-level homes and are exactly what the whitelist would claim.
+  It exits non-zero on a path absent at theirs, which is a legitimate close, and a consumer-path
+  reader would downgrade it to NEEDS-REVIEW instead. SH-SUBJECT-GONE is the paired control: a
+  genuinely absent CONSUMER path in the same position must still be flagged.
+  verify: sh [ -n "${THEIRS_TREE:-}" ] || exit 127; test -e "$THEIRS_TREE/docs/no-such-doc.md" || test -e "$THEIRS_TREE/scripts/no-such-script.sh"
+
+---
+
+- **Entry SH-THEIRS-TREE-LEAK records where the temp tree lived, so the fixture can assert it is
+  gone.** The materializer removes its tree on EXIT, and a leak is invisible from the row set:
+  the run reports identically whether the directory survives or not, and under a twelve-wide
+  fixture pool a leak per invocation fills the temp filesystem silently. This receipt writes the
+  path to a file the consumer root already owns and exits 0.
+  verify: sh [ -n "${THEIRS_TREE:-}" ] || exit 127; printf '%s\n' "$THEIRS_TREE" > "$CONSUMER/theirs-tree-path.txt"; test -d "$THEIRS_TREE"
+
+---
+
+- **Entry SH-DIST-AS-PATH reads `$DIST` as a filesystem path — the SLASH shape.** THE RECEIPT IS
+  WRITTEN AS AN HONEST TEST OF THEIRS: it asks whether the distribution reads 0.103.0, which is
+  the version AT theirs. `$DIST` is the CHECKOUT, at 0.104.0 here, so the comparison fails, the
+  entry exits 1 and reads CLOSE-CANDIDATE — a confident close, naming theirs, taken against a ref
+  the pull is not pulling. That is the measured consumer failure verbatim, and the arm asserts it
+  as the BASE reading so the refusal at tip is shown to discriminate rather than to be the only
+  behaviour this fixture has ever seen.
+  verify: sh [ "$(cat "$DIST/VERSION")" = "0.103.0" ]
+
+---
+
+- **Entry SH-DIST-AS-ENV reads `$DIST` with NO SLASH after it — the shape the consumer wrote.**
+  Both live offenders on the reference consumer were `AI_DLC_PROJECT_ROOT="$DIST" bash "$W/v.sh"`,
+  where `$DIST` is followed by a quote and never by a `/`. A refusal keyed on `$DIST/` misses
+  every one of them while passing the entry above, which is why both shapes are seeded and why
+  they are separate entries rather than two arms of one receipt. Same false close at base.
+  verify: sh AI_DLC_PROJECT_ROOT="$DIST" bash -c '[ "$(cat "$AI_DLC_PROJECT_ROOT/VERSION")" = "0.103.0" ]'
+
+---
+
+- **Entry SH-DIST-AS-PATH-ZERO reads `$DIST` as a path and EXITS 0 at the checkout.** The two
+  entries above exit 1, so a refusal sited AFTER the run would leave a CLOSE-CANDIDATE behind and
+  be caught by its verdict. This one leaves a STILL-LIVE behind instead, which is the residue
+  that reads as healthy. Both directions are seeded because a refusal that fails to WITHHOLD is
+  invisible from whichever side the fixture happens not to carry.
+  verify: sh [ "$(cat "$DIST/VERSION")" = "0.104.0" ]
+
+---
+
+- **PC-S907-NAMED-UPSTREAM-SURVIVES-A-REFUSED-RECEIPT** — a refused receipt must still carry its
+  `NAMED-UPSTREAM` row. That row is emitted above the verb dispatch and is a signal about the
+  ENTRY, not about the receipt: it is the one signal a rewording cannot defeat, and a refusal
+  that took it with it would silence the highest-value pair this tool prints — an entry upstream
+  has named AND a receipt that cannot decide it. Its id is carried by exactly ONE seeded commit
+  and by no other entry, so the row is derivable from history rather than from the receipt, while
+  the receipt itself is a `$DIST` path read and must be refused.
+  verify: sh [ "$(cat "$DIST/VERSION")" = "0.103.0" ]
+
+---
+
+- **Entry SH-DIST-REVSPEC hands `$DIST` to `git -C` and is BYTE-UNCHANGED by the refusal.** The
+  over-fire control for the two entries above, and the reason the grammar strips the `git -C`
+  form rather than flagging every mention of `$DIST`: 26 of the reference consumer's 28
+  `$DIST`-naming receipts are written exactly this way, and a refusal that caught them all would
+  file 26 healthy receipts as broken. Exit 0 -> STILL-LIVE, reading theirs (0.103.0) and not the
+  checkout.
+  verify: sh [ "$(git -C "$DIST" show "${THEIRS}:VERSION")" = "0.103.0" ]
+
+---
+
+- **Entry SH-DIST-REVSPEC-BRACED is the same control in the BRACED spelling.** `$DIST` is not a
+  substring of `${DIST}`, so one strip pattern cannot cover the other, and the braced form is the
+  one this distribution's own rev-path rule requires. A grammar that strips only the unbraced
+  spelling refuses this receipt, which is a false positive on the form the rules mandate.
+  verify: sh git -C "${DIST}" cat-file -e "${THEIRS}:core/skills/ai-dlc/SKILL.md"
+
+---
+
+- **Entry SH-DIST-CD-GIT reads theirs by `cd`ing to the repo first.** `cd "$DIST" && git show
+  "${THEIRS}:…"` reads the same blob as `git -C "$DIST" show` and is equally correct; the
+  reference consumer's ARCHIVE carries six receipts in this form, so a grammar exempting only the
+  `git -C` spelling would accuse every one of them the moment a rotation brought one back. Exit 0
+  -> STILL-LIVE, reading theirs and not the checkout.
+  verify: sh cd "$DIST" && git show "${THEIRS}:VERSION" | grep -qx 0.103.0
+
+---
+
+- **Entry SH-DIST-CD-BARE `cd`s to `$DIST` and then reads the CHECKOUT relatively.** THE
+  NEAR-MISS the entry above needs, ONE property apart: same `cd "$DIST"`, no `git` after it. The
+  `cd` exemption REQUIRES the `git ` that follows, and without that requirement this receipt is
+  acquitted by the exemption written for the one above — an exemption covering its own arm's
+  subject.
+  <br>IT NAMES `$DIST` EXACTLY ONCE, and that is what makes it a near-miss rather than a second
+  offender. Written `cd "$DIST" …; cat "$DIST/VERSION"` it carries a SECOND `$DIST` that the
+  refusal catches on its own merits, so a mutant widening the `cd` exemption would leave the
+  verdict unmoved and the arm would score a kill it did not earn — measured, exactly that, on
+  this battery's first cut. The read after the `cd` is therefore RELATIVE, which is also how the
+  shape appears in the wild.
+  verify: sh cd "$DIST" || exit 127; [ "$(cat VERSION)" = "0.103.0" ]
 
 ---
 
