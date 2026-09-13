@@ -2808,6 +2808,15 @@ row_lacks "Entry SH-THEIRS-TREE-BRACED" NEEDS-REVIEW \
 # checked". A status-only assertion here passes against the very mutant written to kill it.
 detail_lacks "Entry SH-THEIRS-TREE-BRACED" "falsifiability NOT checked" \
   "and it is decided by the UPSTREAM partition, not by the consumer-only branch that cannot settle it"
+# ...and the braced receipt that ALSO names an upstream-shipped subject diverges by STATUS, not
+# merely by detail. The entry above names no path-shaped subject, so both partitions reach
+# STILL-LIVE and only the wording separates them; this one resolves through the derived
+# consumer->core table, so the falsifiability branch ACCUSES it. Two observables for one
+# property, and the status-keyed one is the half a detail-only arm cannot supply.
+row_is "Entry SH-THEIRS-TREE-BRACED-SUBJECT" STILL-LIVE \
+  "a braced \$THEIRS_TREE receipt naming an upstream-shipped subject is decided by the upstream partition"
+row_lacks "Entry SH-THEIRS-TREE-BRACED-SUBJECT" NEEDS-REVIEW \
+  "and is never accused of being unfalsifiable — it reads theirs through the materialized tree"
 
 # B. $DIST READ AS A PATH IS REFUSED — both consumer shapes, and both exit directions.
 row_is "Entry SH-DIST-AS-PATH " NEEDS-REVIEW \
@@ -3117,10 +3126,19 @@ dp_m8="$(dp_mutant partition-no-tt '            *'"'"'$THEIRS'"'"'*|*'"'"'${THEI
 # "unfalsifiable predicate" row — and the observable that separates the two partitions on every
 # such receipt is the DETAIL. Measured: status identical, detail divergent.
 dp_kill mutation-partition-no-tt "$dp_m8" \
-  '$2 ~ /SH-THEIRS-TREE-BRACED/ && index($3,"falsifiability NOT checked")>0 {f=1} END{exit !f}' \
+  '$2 ~ /SH-THEIRS-TREE-BRACED / && index($3,"falsifiability NOT checked")>0 {f=1} END{exit !f}' \
   '$2 ~ /SH-THEIRS-TREE / && $1=="STILL-LIVE" && index($3,"falsifiability NOT checked")==0 {f=1} END{exit !f}' \
-  'without its own alternation the BRACED $THEIRS_TREE receipt falls OUT of the upstream-consulting partition and into the falsifiability branch — same status, different reasoning, and one seed away from an unfalsifiable accusation' \
+  'without its own alternation the BRACED $THEIRS_TREE receipt falls OUT of the upstream-consulting partition and into the falsifiability branch — same status, different DETAIL' \
   'the unbraced SH-THEIRS-TREE still in the upstream partition'
+# ...AND THE SAME MUTANT, KILLED BY A STATUS. The kill above reads a DETAIL because its subject
+# names no path-shaped subject and both partitions reach STILL-LIVE for it. The seed one entry
+# along DOES name an upstream-shipped subject, so the falsifiability branch accuses it outright —
+# a verdict flip, which is the observable that survives a rewording of the detail text.
+dp_kill mutation-partition-no-tt-status "$dp_m8" \
+  '$2 ~ /SH-THEIRS-TREE-BRACED-SUBJECT/ && $1=="NEEDS-REVIEW" && index($3,"unfalsifiable")>0 {f=1} END{exit !f}' \
+  '$2 ~ /SH-THEIRS-TREE / && $1=="STILL-LIVE" {f=1} END{exit !f}' \
+  'the same partition mutant ACCUSES the braced receipt that names an upstream-shipped subject — a STATUS flip to NEEDS-REVIEW unfalsifiable, not merely a reworded detail' \
+  'the unbraced SH-THEIRS-TREE still STILL-LIVE'
 # m4 — no EXIT cleanup for the materialized tree. Killed by arm A's cleanup half, which is the
 # only observable: the ROW SET is byte-identical whether the tree survives or not. The NEW line is
 # empty, which this helper reads as "delete the line".

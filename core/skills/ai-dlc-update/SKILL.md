@@ -1109,7 +1109,13 @@ prose is itself generated rather than composed.
    it. Measured on the reference consumer: 2 of 28 `$DIST`-naming receipts (of 37 `sh` receipts)
    read it as a path and both produced a false `CLOSE-CANDIDATE` in one run.
    `cd "$DIST" && git show "${THEIRS}:…"` is the same correct read in another form and is
-   accepted; a bare `cd "$DIST"` followed by anything else is refused.
+   accepted; a bare `cd "$DIST"` followed by anything else is refused. **The accepted spelling
+   is exact** — `cd "$DIST" && git …` or `cd "$DIST"; git …`, one space before `git`. A
+   `cd "$DIST" || exit 127; git show …`, an unquoted `cd $DIST`, a `cd -- "$DIST"`, and a
+   double space or a tab before `git` are all refused as `NEEDS-REVIEW` even though they read
+   theirs correctly. That is the safe direction — a refusal costs one read, an acquittal costs
+   an entry — but write one of the two accepted forms, or use the `git -C "$DIST"` rev-spec,
+   and the question does not arise.
 
    **A `$THEIRS_TREE` receipt opens with `[ -n "${THEIRS_TREE:-}" ] || exit 127;`.** Re-verify
    runs on the engine the consumer LAST INSTALLED, so for one pull after `$THEIRS_TREE` ships the

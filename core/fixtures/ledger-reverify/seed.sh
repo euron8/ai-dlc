@@ -461,6 +461,19 @@ cat > "$LED" <<'LEDGER'
 
 ---
 
+- **Entry SH-THEIRS-TREE-BRACED-SUBJECT is the braced read that ALSO names a consumer
+  path-shaped subject upstream ships.** The entry above diverges from the tip only in its
+  DETAIL, because a receipt naming no path-shaped subject reaches STILL-LIVE down either
+  partition. This one names `scripts/ai-dlc/validate-thing.sh`, which `map_consumer()` derives
+  from `core/scripts/validate-thing.sh` — a file this seed's dist ships at theirs — so under a
+  partition missing the `${THEIRS_TREE}` alternations it falls through to the falsifiability
+  branch, finds an upstream-shipped subject, and reads NEEDS-REVIEW "unfalsifiable predicate".
+  A STATUS divergence, which is the observable an arm keyed on status can see and the
+  detail-only pair above cannot.
+  verify: sh [ -n "${THEIRS_TREE:-}" ] || exit 127; [ "$(cat "${THEIRS_TREE}/VERSION")" = "0.103.0" ] && [ ! -e scripts/ai-dlc/validate-thing.sh ]
+
+---
+
 - **Entry SH-THEIRS-TREE-PATH names DISTRIBUTION paths beneath `$THEIRS_TREE`.** The
   `SH-DIST-PATH` pairing one spelling along: `receipt_absent_subjects` must not read
   `$THEIRS_TREE/docs/<x>` or `$THEIRS_TREE/scripts/<x>` as consumer subjects that do not exist.
