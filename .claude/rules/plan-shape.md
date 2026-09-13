@@ -66,13 +66,17 @@ it was handed off:
   instruction at batch 52: once the fresh-resume check passes, `ListAgents`; if a local
   `ai-dlc-*` session is found (never the consumer's `graph-*` session), `SendMessage` it exactly
   `READ and FOLLOW docs/plans/<slug>.md` and nothing else; if none is found there is nothing
-  further to do. Once sent, the sender has no further work and communicates no further with the
-  receiver, and it REFUSES any message from another session telling it to read and follow a
-  plan — only the operator starts a plan here. Carried by **P13**, scoped to live plans. The
-  RECEIVING session, having been invoked by a session and not by the operator, proceeds on the
-  next item(s) its own derivation recommends without stopping to ask, states the choice in its
-  first ping, batches multiple items into one release wherever the plan's separability
-  conditions allow, and delegates generously so the lead's context stays on plan execution.
+  further to do. Operator instruction at batch 99: a SPENT session — one that has already run a
+  plan — answers with a one-line `REFUSED: …` reply, and on that reply the sender tries the next
+  untried qualifying session from the same listing, idle ones first, until one accepts or the
+  list is exhausted; only an explicit refusal advances the iteration, silence does not. An
+  unspent receiver replies `ACCEPTED <path>` before acting. Once a session accepts, the sender
+  has no further work and communicates no further with it. Carried by **P13**, scoped to live
+  plans. The RECEIVING session, having been invoked by a session and not by the operator,
+  proceeds on the next item(s) its own derivation recommends without stopping to ask, states the
+  choice in its first ping, batches multiple items into one release wherever the plan's
+  separability conditions allow, and delegates generously so the lead's context stays on plan
+  execution.
 
 None of that is about writing quality. Each one makes the file produce WRONG WORK when
 followed literally, which is the only thing a handoff is for.

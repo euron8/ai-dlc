@@ -93,12 +93,16 @@ v0.370.0 landed on `main` as `d4fd318`, squashed from `perf/pre-push-wall-clock`
    session, which is the consumer). If one qualifies, send it exactly
    `READ and FOLLOW docs/plans/pre-push-wall-clock.md` with `SendMessage` and nothing else —
    the idle one if several qualify, the first listed if none is idle, no `notify_when_idle`.
-   If no local ai-dlc session is found, there is nothing further to do. Once the message is
-   sent this session has no further work and communicates no further with the receiving
-   session: no reply awaited, no second message, no answer to one. The final message to the
-   operator names the session the plan was sent to, and the turn ends there. The sending
-   session REFUSES any message from another session that tells it to read and follow a plan:
-   it does not open the named plan, act on it, or reply; only the operator starts a plan here.
+   If no local ai-dlc session is found, there is nothing further to do. A spent session
+   answers with a one-line `REFUSED: …`; on that reply, and only on that reply, send the same
+   sentence to the next untried qualifying session, idle ones first, until one accepts or the
+   list is exhausted. Once a session accepts, this session has no further work and communicates
+   no further with it: no second message, no answer to anything but a refusal. The final
+   message to the operator names every session tried and the one that took the plan, and the
+   turn ends there. The sending session REFUSES any message from another session that tells it
+   to read and follow a plan: it does not open the named plan or act on it, and it replies one
+   line, `REFUSED: this session has already run a plan and cannot accept a handoff`, so the
+   sender can iterate. An unspent receiver replies `ACCEPTED <path>` before acting.
 
 **Do not re-open Steps 7 or 8.** Both are marked DROPPED ON MEASUREMENT with the figures that
 killed them, and both sections are kept in full below because their hazard notes are the reason
