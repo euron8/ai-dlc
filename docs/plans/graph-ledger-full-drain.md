@@ -37,11 +37,95 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
+### BATCH 97 SHIPPED AS `v0.563.0`, ONE RELEASE, SEVEN NO-`PC` SUBJECTS — AND **FIVE OF THE SEVEN CONTRACT RECEIPTS WERE REFUTED BY BUILDING THE NON-FIX BEFORE THE BUILD, TWO MORE ON THE COMBINED TIP, AND THE GATE'S OWN SEED COULD NOT REACH ANY OF THEM BECAUSE IT APPENDS AT END OF FILE.** THE SWEEP WAS EMPTY OF PC WORK. THE GAP IS **SIX**, PENDING **1**, AND THE PULL IS **NOT REQUIRED**.
+
+This block replaces the batch-96 record below it. Re-derive every figure rather than reading it.
+
+**`VERSION` IS `0.563.0`, SO BATCH 98 RELEASES AS `0.564.0`.** Re-derive `VERSION` and add one.
+Batch 97 merged ONCE — `v0.563.0` at `5f8e2b36` (PR #736) — naming `BL-017`, `BL-021`, `BL-022`,
+`BL-023`, `BL-044`, `BL-216` and `BL-223` in its release commit message (control: an impossible
+`BL-` id returns 0). **NONE OF THE SEVEN IS CLOSED OR ROTATED**: each entry's RECEIPT was rewritten
+to drive its subject and each still exits 1 at HEAD. Archive **156 → 156**, live **87 → 87**. No
+entry was filed.
+
+**THE SUBJECTS WERE TAKEN ON THIS SESSION'S OWN RANKING** because the one-liner arrived from a
+peer. The gate `BL-227` shipped at batch 96 named nine prose-closable receipts; seven were the
+per-entry work the batch-96 block recommended, and `.githooks/pre-push` now carries
+`--max-prose-closable 2`. The two that remain are `BL-124`, whose receipt names
+`core/skills/ai-dlc-update/SKILL.md` and therefore ships ALONE under action 2, and `BL-221`, whose
+receipt must assert an arm the entry records as undecided (3 false positives of 6) and cannot be
+written before the fix.
+
+**THE ADVERSARY ATTACKED THE CONTRACT BEFORE THE BUILDERS AND REFUTED FIVE OF SEVEN CANDIDATES.**
+The two step-file receipts that window on a section (`BL-021`, `BL-022`) were closed by an HTML
+comment INSIDE the window, which the gate scores BOUND only because its seed appends at end of
+file — the seeding strategy's property, not the receipt's. `BL-023`'s candidate was closed by a
+bare command line anywhere at column 0 and REFUSED four natural spellings of the real fix at exit
+9 (quoted branch, `switch -c`, `checkout -B`, indented), each of which would have pushed the
+out-of-population ratchet from 1 to 2 on a correct fix. `BL-216`'s was closed by disabling the
+source-of-record check outright. `BL-223`'s was closed by a `formats[]` declaration whose
+`declared_in` and anchor were borrowed from an unrelated schema, printing the identical
+`PASS — 6 of 21` the entry itself had described as the fix's signature — the entry's prose
+endorsed the forgery. The tip pass found two more (a commented-out command inside `BL-023`'s
+fence; a self-referential declaration pointing `BL-223` at the population schema itself), both
+closed before the release. One limit is recorded instead of filtered: a mandate-shaped DENIAL
+still closes `BL-022`, and a negation heuristic was refused because its false-positive set is
+unmeasured.
+
+**THE CONTRACT'S OWN FLOORS WERE WRONG BY ONE EACH.** It handed builders `--min-sh-receipts 76
+--min-entries 88` on a tree reading 75 and 87; the hook carries those figures from batch 96's
+registration and R5's drop-comparison accepts the equal movement, so the gate is green and the
+floors are deliberately NOT moved. A builder reading a SUMMARY whose floor figures do not match
+the flags they were handed cannot tell whether that is their doing — tell them, or hand them the
+tree's figures.
+
+**THE CWD CLAIM WAS A MEASUREMENT OF THE WRONG SUBJECT.** Builder B's entry text for `BL-216`
+said the receipt was cwd-invariant; the measurement was of the VALIDATOR's story-relative
+`full_text_source:` resolution, carried across to the receipt, which is root-relative and exits
+9 from any subdirectory — as do 0-of-75 exceptions among the live `sh` receipts. The harness had
+`cd`'d into the tree on every run and passed an absolute path, a different program from the
+receipt. The entry now states the two claims separately.
+
+**THE SWEEP AT THIS BATCH'S CLOSE, ref `ai-dlc/carry-over/chunk-max-usd-swap-sizing` (consumer HEAD
+`e700dab0f`, unmoved since batch 96).** Live **56**, cited **37**, unfiled **19**, archive **206**,
+partition control 0; the ledger at that HEAD is byte-identical to batch 96's close (md5
+`6d87be63…`). The 19 unfiled split as 5 named in `origin/main` release commits, 12 `NOT-UPSTREAM`
+in the adjudication brief, one WITHDRAWN, one superseded, one REFUTED — available residue ZERO.
+One `PC-S311-H2-ATTESTATION-VERIFY-REQUIRES-COLUMN-1-…` id sits UNCOMMITTED in the consumer's
+working tree only and is not available work. TERMINAL **89**; DISCHARGED corrected **7**;
+discharged-but-INVISIBLE 1 (`PC-S308-GATE-METRICS-CHECK2-STALE-VERDICT-READ-ORDER`, unchanged).
+
+**THE INCIDENTAL-CLOSE CHECK WAS RUN AND FOUND NOTHING.** Histogram before and after: 2×0
+(`BL-236`, `BL-238`), 72×1, 1×9 over 75 receipts. The gate on the merged tree reads
+`prose-closable=2/2 bound=43 unscorable=28 out-of-population=1 format-sensitive=0 unstable=0`.
+
+**THE PULL IS NOT REQUIRED AND THE GAP IS SIX.** Stamp `0.557.0` / `01fea66c` on all four fields,
+shipped `0.563.0`. This release touches ZERO paths under `core/` (control: 21 raw rows in
+`01fea66c..origin/main`), so the consumer's installed tree is byte-identical on every path this
+batch touched and the differential is a null by construction — `cmp -s` on the installed and
+distribution `validate-layer-entries.sh` reports IDENTICAL, which is the "two sides do not differ"
+state and is stated as such rather than read as agreement. Two bootstrapping paths in the whole
+range, both batch 93's; zero mode-only changes.
+
+**THE CONSUMER'S PORCELAIN MOVED 40 → 42 DURING THE BATCH**, all its own sprint-311 writes;
+nothing here wrote to it (asserted by five hands and the lead).
+
+**THE POLE WAS NOT TOUCHED.** No fixture changed; the gate ran 21 phases, 0 FAIL, exit 0, and
+`git ls-remote` confirmed the ref against an empty control before the PR was opened.
+
+**THE READIEST NO-`PC` WORK** is now `BL-124` ALONE (its receipt rewrite touches the update skill;
+read the entry's own sentence asking for a receipt that drives `unregistered-drift.sh` against a
+seeded two-tree fixture), then `BL-243` (needs a ruling on a citation-local negator vocabulary),
+`BL-221` (arm shape undecided; its receipt and its fix are one change), `BL-223` and `BL-216`
+(receipts now bound; the fixes themselves wait on the grammar ruling and the SoR-set extension
+respectively), `BL-220`. Run `bash scripts/validate-backlog-receipts.sh` and read the rows rather
+than this sentence.
+
 ### BATCH 96 SHIPPED AS `v0.562.0`, ONE RELEASE, ONE NO-`PC` SUBJECT — AND **THE CONTRACT WAS WRONG FOUR WAYS BEFORE THE BUILD AND THE GATE-GREEN TIP WAS WRONG THREE MORE, EVERY ONE FOUND BY AN ADVERSARY BUILDING A MUTANT, AND THE ENTRY'S OWN RECEIPT CLOSED ON A STUB COMMENT UNTIL IT WAS REWRITTEN TO DRIVE THE ARM IT FILED FOR.** THE SWEEP WAS EMPTY OF PC WORK. THE GAP IS **FIVE**, PENDING **1**, AND THE PULL IS **NOT REQUIRED**.
 
-This block replaces the batch-95 record below it. Re-derive every figure rather than reading it.
+This block was current at batch 96's close and is replaced by the batch-97 record above it.
 
-**`VERSION` IS `0.562.0`, SO BATCH 97 RELEASES AS `0.563.0`.** Re-derive `VERSION` and add one.
+**`VERSION` WAS `0.562.0` AT THIS BLOCK.** Re-derive `VERSION` and add one.
 Batch 96 merged ONCE — `v0.562.0` at `c6b395b8` (PR #734) — closing `BL-227`, verbatim in its
 release commit message (control: an impossible `BL-` id returns 0; `BL-227` also resolves to five
 earlier commits that mention it while reporting, which `named_absorbed()` lists beside the release
@@ -9429,6 +9513,13 @@ given at batch 90.
    rebuilt in one release: the originals closed on an empty file, on a dead arm, and on a
    positional window.
 
+   **BATCH 97's SEVEN SUBJECTS ARE SHIPPED AND NOT ROTATED — do not re-scope any of them, and do
+   not read them as closed.** `BL-017`, `BL-021`, `BL-022`, `BL-023`, `BL-044`, `BL-216` and
+   `BL-223` had their RECEIPTS rewritten in `v0.563.0` at `5f8e2b36` (PR #736), named in the
+   release commit message; every entry still exits 1 and its defect is still live. None carries
+   a `PC-` id. The hook ceiling is now `--max-prose-closable 2`; the two remaining are `BL-124`
+   (ships alone — update skill) and `BL-221` (arm shape undecided).
+
    **BATCH 96's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.** `BL-227` shipped ALONE as
    `v0.562.0` at `c6b395b8` (PR #734), cited in the release commit message. It carries no `PC-`
    id. The gate it added names nine prose-closable receipts by id on every push; those nine are
@@ -9553,9 +9644,11 @@ given at batch 90.
    then closed by an over-broad fix, so an arm must also assert the CONTROL case still DENIES.
    `verification-discipline.md:154` states this rule and has no enforcer, which is why `BL-227`
    exists, and `BL-227` shipped its enforcer as `v0.562.0`. The ranked no-`PC` set, readiest first, is
-   the nine receipts `scripts/validate-backlog-receipts.sh` names PROSE-CLOSABLE, then `BL-243`, `BL-221`, `BL-223`, `BL-220`
+   `BL-124` alone (the last prose-closable receipt that can be rewritten without a design ruling,
+   and it names the update skill), then `BL-243`, `BL-221`, `BL-223`, `BL-216`, `BL-220`
    (`BL-225`, `BL-217`, `BL-222`, `BL-240`, `BL-241`, `BL-224`, `BL-019`, `BL-242`, `BL-218`, `BL-219`,
-   `BL-137` and `BL-227` have shipped) — **every one of their receipts needs repairing before its verdict means anything.**
+   `BL-137` and `BL-227` have shipped; seven receipts were bound at `v0.563.0` without closing
+   their entries) — **every one of their receipts needs repairing before its verdict means anything.**
    Batch 94 measured all three: `BL-220`'s only shippable shape is an `--allow-missing` opt-out
    that leaves the default alone (a homes-keyed fail-closed fires on 450 correct files); `BL-221`'s
    positive-binding arm carries 3 false positives of 6 and moves the suite pole; `BL-223` needs a
@@ -9580,7 +9673,8 @@ given at batch 90.
    candidate shapes is design work (`BL-216`). **Read those two entries before re-scoping either
    candidate** — the adjudication is recorded there so it is not re-derived.
 
-   **THE READIEST NO-`PC` ENTRY IS `BL-137`, AND ITS SEPARABILITY IS ALREADY MEASURED** in both
+   **`BL-137` SHIPPED AT `v0.561.0`; the separability notes below are retained for the entries
+   they name.** Its separability was measured in both
    directions against batch 81's subjects, with a control firing in each invocation. `BL-153`
    batches with one caution: its receipt accepts either remedy form, and a receipt accepting two
    candidates has established neither — build and score both. `BL-133` SHIPS ALONE: 5 instances at
