@@ -17,6 +17,13 @@
 # indistinguishable from these — a poisoned signal, not a spurious one.
 set -uo pipefail
 
+# HERMETIC — scrub the operator's tuning before reading anything (I10). This fixture's seed
+# builds `core/hooks/ai-dlc-*.sh` paths and assertion 5 drives `hard-blockers.sh` over them,
+# so it reads as a hook-driving fixture and is held to the same bar: a consumer that pins any
+# AI_DLC_* tunable in settings.json exports it into every `git push`, and the gate would then
+# run these assertions against machinery configured differently from what they assume.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
@@ -331,18 +338,19 @@ case "$(st5 hooks/ai-dlc-epsilon.sh)" in
   *)      ok "...and it is non-blocking: the worklist row is the disposition" ;;
 esac
 # ...and its detail must POINT at the disposition rather than state a remedy of its own.
-if printf '%s' "$(dt5 hooks/ai-dlc-epsilon.sh)" | grep -q 'semantic-merge'; then
+DT5E="$(dt5 hooks/ai-dlc-epsilon.sh)"
+if grep -q 'semantic-merge' <<<"$DT5E"; then
   ok "...and its detail names the WORKLIST semantic-merge disposition"
 else
-  bad "the carried row does not name the semantic-merge disposition, so it tells the operator nothing to do: $(dt5 hooks/ai-dlc-epsilon.sh)"
+  bad "the carried row does not name the semantic-merge disposition, so it tells the operator nothing to do: ${DT5E}"
 fi
 # ...and it must name the preclassify BUCKET verbatim: the class includes
 # UPSTREAM-DELETED+consumer-modified->CLASSIFY, where a blanket "do not revert" would be
 # advice about a file upstream is removing.
-if printf '%s' "$(dt5 hooks/ai-dlc-epsilon.sh)" | grep -q 'CLASSIFY'; then
+if grep -q 'CLASSIFY' <<<"$DT5E"; then
   ok "...and it names the preclassify bucket, so the operator can see WHY it was carried"
 else
-  bad "the carried row does not name its bucket: $(dt5 hooks/ai-dlc-epsilon.sh)"
+  bad "the carried row does not name its bucket: ${DT5E}"
 fi
 
 # zeta: machinery, OUT of the range -> arm C carries nothing, so the drift finding is real.
@@ -511,8 +519,8 @@ fi
 # THE UNMUTATED CONTROL, and it carries a POSITIVE conjunct. rc=0-with-no-findings is exactly
 # what a copy that died at startup looks like, so this requires a baseline row to be THERE.
 M6C="$(bash "$M6DIR/unregistered-drift.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
-if printf '%s\n' "$M6C" | grep -q '^CORE-MACHINERY-CARRIED	hooks/ai-dlc-epsilon.sh' \
-   && printf '%s\n' "$M6C" | grep -q '^HARD-UNREGISTERED-CORE-DRIFT	hooks/ai-dlc-zeta.sh'; then
+if grep -q '^CORE-MACHINERY-CARRIED	hooks/ai-dlc-epsilon.sh' <<<"$M6C" \
+   && grep -q '^HARD-UNREGISTERED-CORE-DRIFT	hooks/ai-dlc-zeta.sh' <<<"$M6C"; then
   ok "unmutated control in the copy tree reproduces both baseline rows"
 else
   bad "FIXTURE BROKEN — the unmutated copy did not reproduce the baseline rows, so no mutant verdict below is evidence about anything: $(printf '%s\n' "$M6C" | tr '\n' '|' | cut -c1-200)"
