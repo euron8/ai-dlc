@@ -4247,10 +4247,39 @@ byte-present. Its honest limit: it does not catch an author who quotes without d
 **Not fixed here.** Choosing between the two shapes is design work, and the entry exists so the
 refuted one is not built.
 
+**The receipt DRIVES the validator rather than grepping its SoR tuple.** It builds a story and a
+`carry-over-backlog.md` beside it under `mktemp`, runs the shipped script three times, and takes a
+verdict only from the exits. Measured: at HEAD it exits 1 on the SoR refusal, whose emitted text it
+matches (`the byte-verbatim source of record is`); against the SoR-set extension it exits 0. Three
+non-fixes were built and all three stay at 1. A comment carrying the receipt's own literal, appended
+to both files it names — the shape a prose closer takes and the shape this ledger's own receipt
+validator seeds — moves nothing, because a comment inside the script cannot change what the script
+answers about a story. Making the SoR test unconditional-accept — the sharp over-broad non-fix,
+which admits `carry-over-backlog.md` by admitting everything — is refused by the `prd.md` control
+arm, which must keep denying. And the entry's own motivating case, the same bullet quoted with an
+ellipsis, is refused by the third arm; that is the case that must stay red after any fix.
+
+**The path resolution the receipt depends on is the story's own directory, and it is measured, not
+assumed.** `resolve_artifact()` at `core/scripts/validate-locked-anchor.sh:347-397` tries
+`story_dir` before `os.getcwd()`, so the probe's `carry-over-backlog.md` beside the story wins over
+a divergent same-basename file in the caller's cwd. Both directions were run under the extension and
+they differ: with the file beside the story a cwd decoy is ignored and the run PASSES; with no file
+beside the story the cwd copy resolves and the run FAILS on the bullet, proving the decoy was
+actually read rather than skipped. So the probe stories the receipt builds are insensitive to where
+the receipt was invoked from.
+
+**The RECEIPT itself is root-relative, which is a different claim and the weaker one.** It names
+`core/scripts/validate-locked-anchor.sh` relatively, so it exits 9 from any cwd but the repository
+root — measured at `<root>/core`, `<root>/scripts` and `/tmp`, all 9, against the root's 1. That
+matches every neighbouring receipt rather than departing from it: of the live `sh` receipts, none
+walks up for `VERSION` and none resolves a root, and six consecutive neighbours run at the root and
+answer 9 from `<root>/core` in the same measurement. The ledger's receipt validator runs each receipt
+from a detached checkout's ROOT, which is the cwd the convention is written for.
+
 **Tiered DEFECT.** A closure claim can assert a condition met that its own document declines to meet,
 and no mechanism reads it.
 
-verify: sh set -e; V=core/scripts/validate-locked-anchor.sh; [ -f "$V" ] || exit 9; n="$(grep -c 'carry-over-backlog' "$V")" || n=0; c="$(grep -c 'product-brief\|prd\.md' "$V")" || c=0; [ "$c" -gt 0 ] || exit 9; [ "$n" -eq 0 ] && exit 1; exit 0
+verify: sh V=core/scripts/validate-locked-anchor.sh; [ -f "$V" ] || exit 9; bash "$V" core/fixtures/check-3b-locked-anchor/good-story.md >/dev/null 2>&1 || exit 9; d="$(mktemp -d)"; B="- CO-PROBE: the operative closure clause stated in full."; printf "%s\n" "# Carry-over backlog" "" "## CO-PROBE" "" "$B" > "$d/carry-over-backlog.md"; cp "$d/carry-over-backlog.md" "$d/prd.md"; printf "%s\n" "<!-- LOCKED_REQUIREMENTS -->" "<!-- Source: user input -->" "full_text_source: carry-over-backlog.md:CO-PROBE" "$B" "<!-- END LOCKED_REQUIREMENTS -->" > "$d/s.md"; printf "%s\n" "<!-- LOCKED_REQUIREMENTS -->" "<!-- Source: user input -->" "full_text_source: prd.md:CO-PROBE" "$B" "<!-- END LOCKED_REQUIREMENTS -->" > "$d/n.md"; printf "%s\n" "<!-- LOCKED_REQUIREMENTS -->" "<!-- Source: user input -->" "full_text_source: carry-over-backlog.md:CO-PROBE" "- CO-PROBE: the operative closure clause ... in full." "<!-- END LOCKED_REQUIREMENTS -->" > "$d/e.md"; o="$(bash "$V" "$d/s.md" 2>&1)"; rc=$?; bash "$V" "$d/n.md" >/dev/null 2>&1; nrc=$?; bash "$V" "$d/e.md" >/dev/null 2>&1; erc=$?; rm -rf "$d"; [ "$nrc" -ne 0 ] || exit 1; [ "$erc" -ne 0 ] || exit 1; grep -qF "the byte-verbatim source of record is" <<<"$o" && exit 1; exit $rc
 
 
 
@@ -4406,10 +4435,39 @@ Both premises hold on HEAD: `upstream-routing.md` is byte-unchanged (md5 `91e84d
 ledger at line 44, and `ai-dlc-update` is already a `transient:false` member whose reason covers the
 register. Taking this entry means declaring the FORMAT, not admitting the member.
 
+**The receipt DRIVES the enforcer and reads its `--report` table, not the schema text.** The
+`declared` column is emitted at `validate-write-format-steering.sh:398` as
+`'  declared   %-34s %s\n'`, once per artifact the join scores OK, so a row exists only when a
+member of the `transient:false` population carries a `declared_in` file that is present in some
+layout AND still contains its anchor. The receipt asserts that row for `push-candidate`, guarded by
+the same row for `ai-dlc-update` — a control that already exists at HEAD and must keep printing, so
+a run that reached no table exits 9 rather than reporting an absence.
+
+**A `declared` row is not sufficient on its own, because a declaration can BORROW another
+member's.** A `formats[]` entry for `push-candidate` whose `declared_in` and `anchor` are copied
+from an existing row — `core/schemas/audit-anchors.json` and its own anchor — resolves, carries the
+anchor, and prints `declared push-candidate core/schemas/audit-anchors.json`, declaring no format
+for this ledger at all. **`PASS — 6 of 21` is therefore NOT the fix condition**: the borrowed
+declaration and an honest one print that same line, so the count moving is a consequence of the fix
+and never evidence of it. The receipt's last arm closes this by deriving the CLAIMED set from the
+report itself — it reads the `declared_in` path off the `push-candidate` row and requires exactly
+one `declared` row to carry that path. Every `declared_in` at HEAD is claimed once, so a borrowed
+one reads 2 and is refused without any hand-written list of paths.
+
+Measured, each on its own detached checkout: HEAD 1, with the row absent and the guard present. A
+comment carrying the receipt's own literals appended to the file it names exits 9 — the appended
+line breaks the JSON the script reads, the reader reports UNPARSED, and the guard row never prints;
+a stub cannot reach 0. Five non-fixes stay at 1. The borrowed declaration above is the sharp one and
+reads 2 claimants. A member declared `transient:true` plus a steering format satisfies a schema-text
+grep while staying outside the scanned population: the enforcer calls it a GHOST, exits 1, and the
+non-zero-exit arm refuses it. A `transient:true` member with no format prints nothing. A
+`transient:false` member with no format prints `UNDECLARED push-candidate`, not `declared`. Only a
+`transient:false` member plus a format declared in a file no other member claims reaches 0.
+
 **Tiered DEFECT.** The enforcer's PASS line reads as coverage of the shared append-only artifacts
 while the ledger this program exists to drain is not among them.
 
-verify: sh S=core/schemas/pipeline-state-paths.json; R=core/rules/upstream-routing.md; [ -f "$S" ] && [ -f "$R" ] || exit 9; grep -q "pipeline-snapshot-history" "$S" || exit 9; n="$(grep -c "push-candidate" "$S")" || n=0; [ "$n" -gt 0 ] && exit 0; exit 1
+verify: sh o="$(bash core/scripts/validate-write-format-steering.sh --report 2>&1)"; rc=$?; grep -qE '^ +declared +ai-dlc-update' <<<"$o" || exit 9; [ "$rc" -eq 0 ] || exit 1; grep -qE '^ +declared +push-candidate' <<<"$o" || exit 1; p="$(awk '$1=="declared" && $2=="push-candidate"{print $3}' <<<"$o")"; [ -n "$p" ] || exit 1; n="$(awk -v p="$p" '$1=="declared" && $3==p' <<<"$o" | grep -c .)" || n=0; [ "$n" -eq 1 ]
 
 ## BL-243 — the row-scoped citation acquittal in `audit-layer-debt.sh` is satisfied by a clause that DENIES the handle it names
 
