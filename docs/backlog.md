@@ -55,6 +55,78 @@ have gone green, and would have reported "still open" forever.
 never the word anywhere in prose, because an entry that merely discusses landing something is
 not a closed entry.
 
+## BL-246 — a `verify: sh` receipt reading `$DIST` as a filesystem path measures the distribution CHECKOUT, not the ref being pulled, and the row says it measured theirs
+
+**Found 2026-09-13** by the reference consumer and filed there as
+`PC-S342-SH-RECEIPT-DOLLAR-DIST-READS-THE-CHECKOUT-NOT-THEIRS`; re-derived here against that
+consumer's live ledger before any fix.
+
+`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh` exports `DIST`/`BASE`/`THEIRS`/`CONSUMER`
+to every `verify: sh` receipt, and its header stated the safety argument as a fact: `$CONSUMER` is
+"the only one of the four exported values a receipt can read AS A PATH" because `$DIST` "is handed
+to `git -C` and is form-insensitive". That is a claim about how receipts are WRITTEN and nothing
+enforced it. A receipt is an arbitrary `bash -c` string, so `$DIST/core/scripts/x.sh` and
+`AI_DLC_PROJECT_ROOT="$DIST" bash …` are ordinary reads of the distribution's WORKING TREE — which
+sits at whatever the operator last checked out and is under no obligation to be at `$THEIRS`. The
+row then reads "no longer reproduces at theirs (<version>)" about a ref it never opened, and
+CLOSE is the verdict that file's own header names as the direction that loses information
+permanently.
+
+**Re-derived on the consumer's live ledger**, by stripping every `git -C` form of `$DIST` from each
+receipt and asking whether a mention survives: **37** anchored `sh` receipts, **28** naming `$DIST`,
+**26** conforming and **2** offending. Both offenders had flipped STILL-LIVE → CLOSE-CANDIDATE in
+one real run, on fixes that landed one release PAST the pull, with that consumer's checkout three
+commits ahead of theirs. The 26 are the control in the same invocation: a grammar that merely
+flagged `$DIST` would have refused all 28. This repo's own backlog: 72 `sh` receipts, 2 name
+`$DIST`, 0 offend.
+
+**The fix, in three parts.** `$THEIRS_TREE` is exported beside the other four — a `git archive` of
+`$THEIRS` extracted into a `mktemp` directory, built LAZILY on the first receipt naming it, removed
+by the single EXIT handler, and NEEDS-REVIEW rather than a verdict if it cannot be materialized. A
+receipt naming `$DIST` anywhere other than as a `git -C` argument (or a `cd "$DIST" && git …`) is
+refused as NEEDS-REVIEW before it runs, which is downgrade-never-create: it can replace a verdict
+with a review and can never manufacture a close. The header sentence that asserted the unenforced
+convention is gone, replaced by the five-value table and the measurement.
+
+**The false-positive set on the population this runs on is EMPTY**, and one corpus over it is not,
+so it is enumerated rather than claimed clean. The consumer's ARCHIVE — closed entries this engine
+never reads, but which a rotation could return — holds 51 `sh` receipts, 45 naming `$DIST`, 10
+refused: **5 true** (`cd "$DIST" || exit 127; S="$DIST/core/scripts"` and `V="$DIST/core/…"`, real
+checkout reads) and **5 false**, in three shapes — `cd "$DIST" && [ "$(git show …)" ]` where the
+`git` is not adjacent to the `&&` (2), `$DIST` passed as a positional argument to another program
+(2), and `$DIST` inside a single-quoted grep pattern (1). None is exempted, because each exemption
+acquits the defect one frame down: an "argument to a program" exemption acquits handing the
+checkout to a validator as its root, which is this entry's own subject.
+
+**THE LIMIT, and it cannot be closed from this side.** Re-verification runs on the engine the
+consumer LAST INSTALLED, so for one pull after this lands, a receipt using `$THEIRS_TREE` runs
+under an engine that does not export it: the value expands to nothing, the read fails, and that
+engine scores the non-zero exit as CLOSE-CANDIDATE — a false close on the very pull delivering the
+fix. `set -u` does not fire, `bash -n` parses it, and `receipt_absent_subjects` skips the token
+because it carries a `$`. The convention that closes it is that every `$THEIRS_TREE` receipt opens
+`[ -n "${THEIRS_TREE:-}" ] || exit 127;` — 127 being the status every shipped engine already turns
+into NEEDS-REVIEW — and the fixture drives a guarded and an unguarded receipt through an engine
+with the export removed to prove the pair splits. **The residue is a receipt written WITHOUT that
+guard between this release and a consumer's pull of it. Nothing in this release can refuse it,
+because the engine that would is the one not yet installed.**
+
+**Three shapes the `git -C "$DIST"` exemption ACQUITS**, stated because an unstated exemption is a
+mechanism defending its own defect: `git -C "$DIST" grep <pat>` with no ref, `git -C "$DIST" show
+HEAD:<path>`, and `git -C "$DIST" show :<path>`. All three read the checkout. Measured across the
+consumer's live ledger and archive and this repo's backlog and archive: **ZERO** instances, against
+a control of 18 `git -C "$DIST" show "${THEIRS}:…"` receipts in the live ledger alone. Separating
+them needs a parser for git's own command line, which that file's header already refuses to build.
+
+verify: sh r=$(pwd); while [ ! -f "$r/VERSION" ] && [ "$r" != / ]; do r=$(dirname "$r"); done; E="${AI_DLC_TEST_CLOSER:-$r/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh}"; [ -f "$E" ] || exit 1; grep -qF 'receipt_reads_dist_as_path' core/skills/ai-dlc-update/reconcile/ledger-reverify.sh || exit 1; W=$(mktemp -d) || exit 1; trap "rm -rf \"$W\"" EXIT; D="$W/d"; K="$W/c/_bmad-output/ai-dlc-update"; mkdir -p "$D" "$K" || exit 1; git -C "$D" init -q || exit 1; git -C "$D" config user.email b@b; git -C "$D" config user.name b; mkdir -p "$D/core/skills/ai-dlc"; printf x > "$D/core/skills/ai-dlc/SKILL.md"; printf '9.0.0\n' > "$D/VERSION"; git -C "$D" add -A >/dev/null 2>&1; git -C "$D" commit -qm b >/dev/null 2>&1 || exit 1; B=$(git -C "$D" rev-parse HEAD); printf '9.1.0\n' > "$D/VERSION"; git -C "$D" add -A >/dev/null 2>&1; git -C "$D" commit -qm t >/dev/null 2>&1 || exit 1; T=$(git -C "$D" rev-parse HEAD); printf '9.2.0\n' > "$D/VERSION"; git -C "$D" add -A >/dev/null 2>&1; git -C "$D" commit -qm a >/dev/null 2>&1 || exit 1; [ "$(cat "$D/VERSION")" = 9.2.0 ] && [ "$(git -C "$D" show "${T}:VERSION")" = 9.1.0 ] || exit 1; printf '# L\n\n## A-TREE - reads theirs through THEIRS_TREE\n\nverify: sh [ -n "${THEIRS_TREE:-}" ] || exit 127; [ "$(cat "$THEIRS_TREE/VERSION")" = 9.1.0 ]\n\n---\n\n## B-PATH - reads the checkout as a path\n\nverify: sh AI_DLC_PROJECT_ROOT="$DIST" bash -c %s[ \\"\\$(cat \\"\\$AI_DLC_PROJECT_ROOT/VERSION\\")\\" = 9.1.0 ]%s\n\n---\n\n## C-GITC - the conforming control\n\nverify: sh [ "$(git -C "$DIST" show "${THEIRS}:VERSION")" = 9.1.0 ]\n' "'" "'" > "$K/push-candidate-ledger.md"; O=$(bash "$E" "$D" "$B" "$W/c" "$T" 2>&1); printf '%s' "$O" | awk -F'\t' '$2 ~ /A-TREE/ && $1=="STILL-LIVE"{a=1} $2 ~ /B-PATH/ && $1=="NEEDS-REVIEW"{b=1} $2 ~ /C-GITC/ && $1=="STILL-LIVE"{c=1} END{exit !(a&&b&&c)}'
+
+**The receipt asserts all three rows, not the two wrong ones.** A receipt keyed only on the two
+offenders is satisfied by an engine that refuses EVERY `$DIST` mention, which is the 26-of-28
+regression — scored: tip 0, base 1, comment-only stub 1, `THEIRS_TREE=$DIST` 1, `$DIST/`-only
+refusal 1, refuse-`git -C`-too 1. It walks up for `VERSION` rather than counting `..`, so it
+answers the same from the repo root and from a sandbox that copied it.
+
+---
+
 ## BL-238 — the consumer ledger's `theirs`-ref receipt grammar cannot key on an ARM's body, so a receipt written to ask a behavioural question is satisfied by a comment
 
 **Found 2026-09-11** while closing a consumer candidate whose own receipt was built to avoid an
@@ -4341,3 +4413,74 @@ silent and permanent.
 verify: sh V=core/scripts/audit-layer-debt.sh; [ -f "$V" ] || exit 9; d=$(mktemp -d) || exit 9; B='"clause":"LC-E4","subject_digest":"x","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z"'; printf '{%s,"entry":"e20","reason":"This is not tracked under OWED-C and a narrowing is still owed."}\n{%s,"entry":"e21","reason":"A narrowing is still owed."}\n{%s,"entry":"e22","reason":"The narrowing is owed under OWED-C."}\n{%s,"entry":"e9","owed":{"id":"OWED-C","what":"w"}}\n' "$B" "$B" "$B" "$B" > "$d/r.jsonl"; o="$(bash "$V" --register "$d/r.jsonl" --json 2>/dev/null)"; rm -rf "$d"; u="$(printf '%s' "$o" | python3 -c 'import json,sys; print(" ".join(sorted(r["entry"] for r in json.load(sys.stdin)["undeclared"])))')" || exit 9; case " $u " in *" e21 "*) : ;; *) exit 9 ;; esac; case " $u " in *" e22 "*) exit 9 ;; esac; case " $u " in *" e20 "*) exit 0 ;; esac; exit 1
 
 
+
+## BL-247 — `derive-fixture-readsets.sh --list` with ONE fixture cannot pass its own discrimination control, so a single-fixture refresh has been impossible since the control shipped
+
+**Found 2026-09-13** by the operator running the three `--list` refreshes owed from batches 98 and
+99, each of which failed identically:
+
+    reconcile-blocking-list             53 paths
+    FAIL  CONTROL: every read-set covers the whole 53-path universe -- this map selects everything on every change and skips nothing
+    ERROR: controls failed; the map was NOT written
+
+The control at `core/scripts/derive-fixture-readsets.sh:359-370` derives its universe from
+`$WORK/map`, the map holding ONLY the fixtures this run traced, and passes when at least one
+traced read-set is a proper subset of that universe. Under `--list "<one fixture>"` the traced map
+holds one fixture, its read-set IS the universe by construction, and the control fails on every
+input. The control was added at `fe64a47a`; every commit to the map since has been an `--all` run,
+so no single-fixture refresh has landed in the map's history.
+
+Replicated on the control's own arithmetic, three inputs in one invocation:
+
+    one fixture, 3 paths                          universe 3   proper 0   FAIL
+    two synthetic fixtures                        universe 4   proper 2   PASS
+    two real fixtures from the committed map      universe 53  proper 2   PASS
+
+The workaround is to list more than one fixture, and the operator's rerun with all four owed
+fixtures in one list passed (`4 of 4 read-set(s) are a PROPER subset of the 152-path universe`)
+and wrote the map. The fix is to compute the universe over the MERGED map (`$MERGED`, built at
+line 376, which already exists at the point the control needs it) so a single-fixture refresh is
+judged against the whole suite's paths rather than its own. Move the control below the merge, or
+build the merged universe first; either way the `--all` reading is unchanged because under `--all`
+the traced map and the merged map are the same set.
+
+The fixture `readset-skip` extracts and drives `readset_merge_map` between its sentinels and
+never reaches this control, because the rest of the script needs root. The control block has no
+sentinel pair, so no fixture can drive it today; the fix should put one around the control so the
+fixture can assert the single-fixture case passes and the all-universe case still fails.
+
+**Tiered DEFECT.** The map is what lets the suite skip; a refresh that cannot run leaves the map
+stale in the direction that runs everything, which is safe and silent, and the `--list` mode the
+header advertises has been dead for every single-fixture call since it was guarded.
+
+verify: sh f=core/scripts/derive-fixture-readsets.sh; [ -f "$f" ] || exit 9; grep -qF 'cut -f2 "$MERGED" | sort -u > "$WORK/.universe"' "$f" && awk '/^MERGED=/{m=NR} /^cut -f2 "\$MERGED" \| sort -u > "\$WORK\/\.universe"/{u=NR} /^  cat "\$MERGED"/{w=NR} END{exit !(m && u && w && m<u && u<w)}' "$f"
+
+## BL-248 — ten staged consumer receipts under `docs/reviews/` read the distribution checkout through `$DIST`, and two of the six distinct shapes are the exact false-close form the consumer filed
+
+**Found 2026-09-13** by the batch-101 adversary sweeping the refusal grammar shipped in `v0.567.0`
+over every `verify: sh` corpus in the tree. `docs/reviews/graph-ledger-adjudication-brief.md` and
+`docs/reviews/graph-ledger-adjudication-data/**` hold 76 `sh` receipts staged to be carried into
+the consumer's ledger; 10 lines hit, six distinct receipts duplicated between the brief and its
+batch files:
+
+- `AI_DLC_PROJECT_ROOT="$DIST" bash "$W/h2.sh" …` and its escalation-vocabulary twin, at
+  `docs/reviews/graph-ledger-adjudication-data/step19-receipts/batch-8.md:158` and `:213`, and
+  `docs/reviews/graph-ledger-adjudication-brief.md:525` and `:541`. These are the consumer's two
+  measured false closes, staged here before they were filed there.
+- `cd "$DIST" || exit 127; S="$DIST/core/scripts"` at `…/batch-14.md:65` and `:144`, and the
+  brief at `:957` and `:973`. A checkout read in a second shape.
+- `…/batch-7.md:75` and the brief at `:461` (layer-drift): `git -C` rev-spec reads into a
+  `mktemp`, false positives of the naive grammar that the shipped grammar must re-score.
+
+Nothing scores these today: they are documents, not a ledger any engine reads, and the review
+directory is not in any fixture's population. The hazard is the drain that carries one into the
+consumer, where the consumer's engine will score it against its own checkout. Rewrite the four
+real ones onto `$THEIRS_TREE` with the `exit 127` guard the `v0.567.0` header prescribes, and
+confirm the two layer-drift ones are clean under the shipped grammar.
+
+**Tiered NOTE.** No engine reads these files; the defect becomes live only on a hand-carry.
+
+The receipt reads the brief, which carries every one of the six distinct receipts once; the batch
+files under `graph-ledger-adjudication-data/` are its inputs and are rewritten in the same pass.
+
+verify: sh f=docs/reviews/graph-ledger-adjudication-brief.md; [ -f "$f" ] || exit 9; ! grep -qF 'AI_DLC_PROJECT_ROOT="$DIST"' "$f" && ! grep -qF 'S="$DIST/core/scripts"' "$f"

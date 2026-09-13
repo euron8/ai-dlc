@@ -9775,10 +9775,21 @@ given at batch 90.
      sweep cannot see — unpushed branches ahead of `main`, the porcelain set, the stamp. Run
      nothing they are running. Do the read/write boundary check and read the five live sections
      while they work.
-   - The moment a subject is chosen: **adversary** (`opus`, read-only, no worktree) attacking the
-     DESIGN before it is built, and one **builder** per separable file set (`opus`,
-     `isolation: "worktree"`), from one written contract in the scratchpad, all in ONE spawn
-     block. The lead does not build; the lead writes the contract, collects by content, cuts the
+   - The moment a subject is chosen, write the contract in the scratchpad and spawn the
+     **adversary** (`opus`, read-only, no worktree) against the CONTRACT, alone, and fold its
+     blockers into the contract before any builder starts. Operator instruction at batch 101:
+     the adversary and the builder were spawned in one block, five contract blockers landed after
+     the build had begun, and finished parts were rebuilt.
+   - Then FAN OUT BY DELIVERABLE, never one builder per subject. A subject that ships ALONE is
+     one release, not one hand. Spawn one **fix hand** (`opus`, `isolation: "worktree"`) for the
+     engine change only; on its first commit sha, in ONE spawn block, a **fixture hand** (seed
+     change, arms, mutants), a **docs-and-entry hand** (every carrier of the changed contract,
+     the backlog entry, the receipt scored against tip/base/stub/mutants) and a **measurement
+     hand** (fixture timing base vs tip in a detached worktree, the consumer rehearsal with its
+     `cmp -s` control, the reverify diff), each `opus` in its own worktree, each rebasing onto
+     that sha. Wall clock is the fix plus the longest arm, never the sum. Batch 101 measured the
+     serial shape at over an hour for nine steps a fan-out would have run in the fixture's time.
+     The lead does not build; the lead writes the contract, collects by content, cuts the
      release commit, and pings.
    - Every spawn names its model and the one-clause reason. `fork` ignores `model`; do not use
      it for a hand whose wrong answer would be silent.

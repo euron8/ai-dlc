@@ -2738,6 +2738,503 @@ bs_kill mutation-bs-no-path-guard \
   '$2 ~ /PC-FIXTURE-CLEAN-PATH/ && $1=="CLOSE-CANDIDATE" {f=1} END{exit !f}' \
   "without the path guard the escaped path is guessed right by basename and the entry CLOSES — the guard is what stops the guess" \
   "PC-FIXTURE-CLEAN-PATH CLOSE-CANDIDATE"
+# --- $DIST IS THE CHECKOUT, NOT THE REF BEING PULLED ------------------------------------------
+#
+# `ledger-reverify.sh` exports `$DIST` to every `sh` receipt, and its header used to say `$DIST`
+# "is handed to `git -C` and is form-insensitive" — a claim about how receipts are WRITTEN, with
+# nothing enforcing it. A receipt is an arbitrary `bash -c` string, so `$DIST/VERSION` and
+# `AI_DLC_PROJECT_ROOT="$DIST"` are ordinary reads of the distribution's WORKING TREE, which sits
+# wherever the operator last checked out. Measured on the reference consumer pulling 0.557.0 ->
+# 0.564.0 with the checkout three commits past theirs: of 28 `sh` receipts naming `$DIST`, 26
+# handed it only to `git -C` and 2 read it as a path — and BOTH of those flipped STILL-LIVE ->
+# CLOSE-CANDIDATE in one run, on fixes that had landed a release PAST the pull.
+#
+# THIS FIXTURE COULD NOT SEE THE CLASS UNTIL THE SEED MOVED. The seed's dist HEAD WAS `$THEIRS`,
+# so a path read and a rev-spec read returned the same bytes and every wrong engine passed. The
+# seed now commits once past theirs (VERSION 0.104.0 at the checkout, 0.103.0 at theirs), which
+# is the precondition asserted first below: with HEAD == THEIRS the six arms after it are
+# vacuous and would read exactly as they do now.
+ASSERTIONS=$((ASSERTIONS + 1))
+dist_head_v="$(cat "$DIST/VERSION" 2>/dev/null)"
+dist_theirs_v="$(git -C "$DIST" show "${THEIRS}:VERSION" 2>/dev/null)"
+if [ -n "$dist_head_v" ] && [ -n "$dist_theirs_v" ] && [ "$dist_head_v" != "$dist_theirs_v" ]; then
+  printf '  ok    %-22s the checkout reads %s and theirs reads %s — a $DIST path read and a rev-spec read return DIFFERENT bytes, so the arms below can discriminate\n' \
+    "checkout-past-theirs" "$dist_head_v" "$dist_theirs_v"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the checkout (%s) and theirs (%s) read the same VERSION, so every $DIST-as-path arm below passes for the wrong reason and proves nothing\n' \
+    "checkout-past-theirs" "${dist_head_v:-<none>}" "${dist_theirs_v:-<none>}"
+fi
+
+# A. $THEIRS_TREE IS A TREE AT THEIRS. A positive outcome, not the absence of a failure: the
+# receipt demands the tree read 0.103.0, so a mutant binding THEIRS_TREE to $DIST reads 0.104.0
+# and the entry flips. An arm asserting only "not CLOSE-CANDIDATE" would pass against a tree that
+# was never built, because the refusal above also withholds the close.
+row_is "Entry SH-THEIRS-TREE " STILL-LIVE \
+  "\$THEIRS_TREE reads the distribution AT THEIRS (0.103.0) while the checkout is at 0.104.0"
+# ...and the tree does not outlive the run. Invisible from the row set — the run reports
+# identically whether the directory survives — and under a twelve-wide pool a leak per invocation
+# fills the temp filesystem with no symptom. The path comes from the receipt's own side channel.
+ASSERTIONS=$((ASSERTIONS + 1))
+tt_rec="$CONS/theirs-tree-path.txt"
+tt_path="$(cat "$tt_rec" 2>/dev/null)"
+if [ -z "$tt_path" ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s no receipt recorded a $THEIRS_TREE path, so the materializer never ran and this arm has no subject\n' "theirs-tree-cleanup"
+elif [ -d "$tt_path" ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the materialized tree %s SURVIVED the run — the EXIT trap did not remove it, and a pool twelve-wide leaks one per invocation with no symptom\n' "theirs-tree-cleanup" "$tt_path"
+else
+  printf '  ok    %-22s the materialized tree was removed on EXIT (recorded path is gone, and the receipt asserted it existed while running)\n' "theirs-tree-cleanup"
+fi
+# ...and a DISTRIBUTION path under $THEIRS_TREE is not a consumer subject. The SH-DIST-PATH
+# pairing one spelling along: an extractor reading `$THEIRS_TREE/core/...` as a missing consumer
+# path would downgrade a legitimate close to NEEDS-REVIEW. SH-SUBJECT-GONE is the paired control
+# above — a genuinely absent CONSUMER path in the same position must still be flagged.
+row_is "Entry SH-THEIRS-TREE-PATH" CLOSE-CANDIDATE \
+  "a \$THEIRS_TREE/docs/... and /scripts/... token names no consumer subject; reading one out of it would withhold a close on a receipt that works"
+# ...and the BRACED spelling reaches the same partition. `${THEIRS}` needs a `}` right after
+# `THEIRS`, so `${THEIRS_TREE}` matches none of the rc=0 partition's original alternations while
+# the UNBRACED form matches one by accident. Without its own alternation this entry is accused of
+# being unfalsifiable while it reads upstream at theirs — a NEEDS-REVIEW, not a wrong status,
+# which is why the arm reads the STATUS and not merely the presence of a row.
+row_is "Entry SH-THEIRS-TREE-BRACED" STILL-LIVE \
+  "\${THEIRS_TREE} braced reaches the upstream-consulting partition; without its own alternation it falls into the falsifiability branch"
+row_lacks "Entry SH-THEIRS-TREE-BRACED" NEEDS-REVIEW \
+  "and is never filed as an unfalsifiable receipt — it consults theirs"
+# THE STATUS CANNOT SEE THIS ONE. Both partitions emit STILL-LIVE for a receipt naming no
+# path-shaped subject, so the arm reads the DETAIL, which is where they diverge: the upstream
+# partition says only "still reproduces", the falsifiability branch appends "falsifiability NOT
+# checked". A status-only assertion here passes against the very mutant written to kill it.
+detail_lacks "Entry SH-THEIRS-TREE-BRACED" "falsifiability NOT checked" \
+  "and it is decided by the UPSTREAM partition, not by the consumer-only branch that cannot settle it"
+# ...and the braced receipt that ALSO names an upstream-shipped subject diverges by STATUS, not
+# merely by detail. The entry above names no path-shaped subject, so both partitions reach
+# STILL-LIVE and only the wording separates them; this one resolves through the derived
+# consumer->core table, so the falsifiability branch ACCUSES it. Two observables for one
+# property, and the status-keyed one is the half a detail-only arm cannot supply.
+row_is "Entry SH-THEIRS-TREE-BRACED-SUBJECT" STILL-LIVE \
+  "a braced \$THEIRS_TREE receipt naming an upstream-shipped subject is decided by the upstream partition"
+row_lacks "Entry SH-THEIRS-TREE-BRACED-SUBJECT" NEEDS-REVIEW \
+  "and is never accused of being unfalsifiable — it reads theirs through the materialized tree"
+
+# B. $DIST READ AS A PATH IS REFUSED — both consumer shapes, and both exit directions.
+row_is "Entry SH-DIST-AS-PATH " NEEDS-REVIEW \
+  "the slash shape (\$DIST/VERSION) is refused, not scored"
+detail_has "Entry SH-DIST-AS-PATH " "reads \$DIST as a filesystem path" \
+  "and the refusal names the cause"
+detail_has "Entry SH-DIST-AS-PATH " "THEIRS_TREE" \
+  "and its remedy names the value that IS path-readable"
+row_is "Entry SH-DIST-AS-ENV" NEEDS-REVIEW \
+  "the no-slash shape (AI_DLC_PROJECT_ROOT=\"\$DIST\") is refused — this is the shape BOTH live consumer offenders were written in"
+row_is "Entry SH-DIST-AS-PATH-ZERO" NEEDS-REVIEW \
+  "a \$DIST path read that EXITS 0 is refused too — a refusal sited after the run leaves this one as a healthy-looking STILL-LIVE"
+# C. A CONFORMING RECEIPT IS BYTE-UNCHANGED. 26 of the reference consumer's 28 `$DIST`-naming
+# receipts are the `git -C` form, so a grammar that flagged every mention of `$DIST` would file 26
+# healthy receipts as broken. Both spellings, because `$DIST` is not a substring of `${DIST}`.
+row_is "Entry SH-DIST-REVSPEC " STILL-LIVE \
+  "git -C \"\$DIST\" show \"\${THEIRS}:...\" is the conforming form and is untouched"
+row_is "Entry SH-DIST-REVSPEC-BRACED" STILL-LIVE \
+  "git -C \"\${DIST}\" is the spelling this distribution's rev-path rule REQUIRES and is untouched"
+# ...and the `cd "$DIST" && git` form, which the reference consumer's ARCHIVE carries six of.
+# Its NEAR-MISS sits one property apart — same `cd "$DIST"`, no `git` after it — so an exemption
+# that acquits the good form without requiring the `git ` acquits its own arm's subject too.
+row_is "Entry SH-DIST-CD-GIT" STILL-LIVE \
+  "cd \"\$DIST\" && git show \"\${THEIRS}:...\" reads the same blob as git -C and is accepted"
+row_is "Entry SH-DIST-CD-BARE" NEEDS-REVIEW \
+  "a bare cd \"\$DIST\" NOT followed by git reads the CHECKOUT and is refused — the exemption requires the git that follows"
+
+# THE `NAMED-UPSTREAM` ROW SURVIVES A REFUSAL. That row is emitted above the verb dispatch and is
+# a signal about the ENTRY; a refusal that took it with it would silence the highest-value pair
+# this tool prints. Both halves asserted on one entry: the receipt is refused AND the name stands.
+row_has "PC-S907-NAMED-UPSTREAM-SURVIVES" NEEDS-REVIEW \
+  "the entry's \$DIST-path receipt is refused"
+row_has "PC-S907-NAMED-UPSTREAM-SURVIVES" NAMED-UPSTREAM \
+  "and its NAMED-UPSTREAM row still stands — the refusal continues past the verb dispatch, it does not abandon the entry"
+
+# THE BASE READING, and it is what proves the refusal discriminates rather than being the only
+# behaviour ever measured. The two exit-1 offenders are scored by a closer without the guard, and
+# both come back CLOSE-CANDIDATE — the false close, reproduced here on demand.
+dp_base="$(dirname "$DIST")/mut-dist-base"
+rm -rf "$dp_base"; mkdir -p "$dp_base"
+cp "$(dirname "$CLOSER")"/*.sh "$dp_base/" 2>/dev/null
+awk '/^      if receipt_reads_dist_as_path "\$rest"; then$/ { $0 = "      if false; then" } { print }' \
+  "$CLOSER" > "$dp_base/ledger-reverify.sh"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$CLOSER" "$dp_base/ledger-reverify.sh"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the base build DID NOT APPLY (the refusal call site did not match), so the base reading below is the tip reading\n' "dist-base-build"
+  dp_base=""
+else
+  printf '  ok    %-22s base build differs from the tip (cmp -s), so the two sides of this differential are two programs\n' "dist-base-build"
+fi
+if [ -n "$dp_base" ]; then
+  dp_out="$(bash "$dp_base/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if printf '%s\n' "$dp_out" | awk -F'\t' '$2 ~ /SH-DIST-AS-PATH / && $1=="CLOSE-CANDIDATE" {a=1} $2 ~ /SH-DIST-AS-ENV/ && $1=="CLOSE-CANDIDATE" {b=1} $2 ~ /SH-DIST-REVSPEC / && $1=="STILL-LIVE" {c=1} END{exit !(a && b && c)}'; then
+    printf '  ok    %-22s without the refusal BOTH $DIST-path receipts read CLOSE-CANDIDATE — the measured false close, reproduced — while the git -C control stays STILL-LIVE\n' "dist-base-reading"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the base reading is not the false close this fix exists for, so the tip verdicts above are not evidence the refusal changed anything\n' "dist-base-reading"
+    printf '%s\n' "$dp_out" | grep -E 'SH-DIST-AS|SH-DIST-REVSPEC' | sed 's/^/          | /'
+  fi
+fi
+
+# D. LAZINESS. A ledger with no $THEIRS_TREE receipt must materialize nothing.
+#
+# COUNTED BY THIS ENGINE'S OWN PREFIX, NEVER BY THE HOST'S WHOLE TMP POPULATION. The first cut
+# counted every `${TMPDIR}/tmp.*` on the machine, so any other process creating a temp directory
+# during the run failed the arm — MEASURED: red once in three reps on a busy host, and under the
+# twelve-way pool that is a guaranteed intermittent, which is a fixture that cries wolf rather
+# than a check. The materializer now names its tree `ledger-reverify-theirs.XXXXXX`, so the
+# question "did THIS run materialize a tree" is answerable by name and no other process can
+# answer it. The DELTA is reported, never the host's raw totals, which are meaningless off-box.
+tt_count() { ls -d "${TMPDIR:-/tmp}"/ledger-reverify-theirs.* 2>/dev/null | grep -c . || true; }
+LED_NOTREE="$(dirname "$DIST")/no-theirs-tree-ledger.md"
+{
+  printf '# probe\n\n'
+  printf '## PC-FIXTURE-NOTREE-A — a receipt naming no THEIRS_TREE\n\n'
+  printf 'verify: sh true\n\n---\n\n'
+  printf '## PC-FIXTURE-NOTREE-B — the git -C control in the same ledger\n\n'
+  printf 'verify: sh git -C "$DIST" cat-file -e "${THEIRS}:VERSION"\n'
+} > "$LED_NOTREE"
+nt_before="$(tt_count)"
+nt_out="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$LED_NOTREE" 2>&1)"
+nt_after="$(tt_count)"
+nt_delta=$((nt_after - nt_before))
+ASSERTIONS=$((ASSERTIONS + 1))
+if ! printf '%s\n' "$nt_out" | awk -F'\t' '$2 ~ /NOTREE-B/ && $1=="STILL-LIVE" {f=1} END{exit !f}'; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the tree-free ledger produced no control row, so this run establishes nothing about laziness\n' "theirs-tree-lazy"
+  printf '%s\n' "$nt_out" | sed 's/^/          | /'
+elif grep -q THEIRS_TREE <<<"$nt_out"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s a ledger naming no $THEIRS_TREE receipt still produced a row mentioning the materializer\n' "theirs-tree-lazy"
+  printf '%s\n' "$nt_out" | sed 's/^/          | /'
+elif [ "$nt_delta" -ne 0 ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s this engine left %+d of its own theirs-trees behind across a ledger with no $THEIRS_TREE receipt — something was materialized and not cleaned\n' "theirs-tree-lazy" "$nt_delta"
+else
+  printf '  ok    %-22s a ledger with no $THEIRS_TREE receipt materializes nothing (no materializer row, this engine'"'"'s own theirs-tree count delta %+d) while its control row still reports\n' "theirs-tree-lazy" "$nt_delta"
+fi
+# THE OTHER DIRECTION, AND WITHOUT IT THE ARM ABOVE IS SATISFIED BY A PREFIX NOTHING EVER USES.
+# A count that is always zero reads exactly like a count that is correctly zero, so the same
+# counter must be shown to RISE while a $THEIRS_TREE receipt is being evaluated. The receipt
+# itself is the observer: it records the tree's path while the tree is live, so the presence of
+# a directory carrying this engine's prefix at that moment is what the count would have seen.
+ASSERTIONS=$((ASSERTIONS + 1))
+tt_live="$(cat "$CONS/theirs-tree-path.txt" 2>/dev/null)"
+case "$tt_live" in
+  */ledger-reverify-theirs.*)
+    printf '  ok    %-22s a run WITH a $THEIRS_TREE receipt builds a tree carrying this engine'"'"'s own prefix (%s), so the zero above is a measured zero and not an unused counter\n' \
+      "theirs-tree-prefix" "$(basename "$tt_live")" ;;
+  *)
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the materialized tree does not carry this engine'"'"'s prefix (%s), so the laziness counter above can never rise and its zero establishes nothing\n' \
+      "theirs-tree-prefix" "${tt_live:-<none recorded>}" ;;
+esac
+
+# --- THE BOOTSTRAPPING WINDOW: AN OLD ENGINE DOES NOT EXPORT $THEIRS_TREE ----------------------
+#
+# Re-verification runs on the engine the CONSUMER LAST INSTALLED, so for one pull after
+# `$THEIRS_TREE` ships, the engine evaluating a `$THEIRS_TREE` receipt is one that never exports
+# it. Unguarded, `$THEIRS_TREE/VERSION` expands to `/VERSION`, the read fails, the receipt exits
+# non-zero, and that engine reads non-zero as "no longer reproduces" — a false CLOSE on the very
+# pull that delivers the fix. Nothing in the new engine can refuse it; the engine that would is
+# the one not yet installed.
+#
+# THE CONVENTION THAT CLOSES IT, AND THIS ARM IS WHAT PROVES IT WORKS: every `$THEIRS_TREE`
+# receipt opens `[ -n "${THEIRS_TREE:-}" ] || exit 127;`. 127 is the "subject renamed or deleted"
+# status the `126|127)` arm has turned into NEEDS-REVIEW since that arm was written, so a guarded
+# receipt degrades to a review on an OLD engine instead of a close.
+#
+# DRIVEN AGAINST A REAL OLD ENGINE, not against a description of one: the blob at HEAD of the
+# distribution repo this fixture runs in. `git show` of that blob is the pre-fix engine whenever
+# this fixture runs before the fix commits, and after it the arm SKIPS rather than asserting
+# against a copy of itself — an arm comparing the tip to the tip proves nothing and must say so.
+BOOT_DIR="$(dirname "$DIST")/boot-engine"
+rm -rf "$BOOT_DIR"; mkdir -p "$BOOT_DIR"
+cp "$(dirname "$CLOSER")"/*.sh "$BOOT_DIR/" 2>/dev/null
+# The OLD engine is built by DELETING THE EXPORT from the shipped one. That single edit is the
+# whole of what a pre-fix engine looks like FROM A RECEIPT'S SIDE — the value is simply not in its
+# environment — and it is available whatever this repo's HEAD happens to be, unlike a git blob of
+# the pre-fix file, which stops existing as an old engine the moment the fix is committed.
+printf '%s\n' 's| THEIRS_TREE="$THEIRS_TREE"||' > "$BOOT_DIR/.boot.sed"
+sed -f "$BOOT_DIR/.boot.sed" "$CLOSER" > "$BOOT_DIR/ledger-reverify.sh"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$CLOSER" "$BOOT_DIR/ledger-reverify.sh"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the old-engine build DID NOT APPLY, so the bootstrapping arm below would compare the tip against itself\n' "boot-engine-build"
+  BOOT_DIR=""
+elif grep -qF 'THEIRS_TREE="$THEIRS_TREE"' "$BOOT_DIR/ledger-reverify.sh"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the old-engine build still EXPORTS $THEIRS_TREE, so it is not an old engine and the arm cannot fire\n' "boot-engine-build"
+  BOOT_DIR=""
+elif ! bash -n "$BOOT_DIR/ledger-reverify.sh" 2>/dev/null; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the old-engine build does not PARSE, so it emits nothing on every input and both halves of the pair below would fail for that reason\n' "boot-engine-build"
+  BOOT_DIR=""
+else
+  printf '  ok    %-22s the old-engine build parses, differs from the tip (cmp -s) and exports no $THEIRS_TREE — the two sides of this differential are two programs\n' "boot-engine-build"
+fi
+if [ -n "$BOOT_DIR" ]; then
+  # Two receipts, one property apart: the GUARD. Both read the tree; only one opens with 127.
+  LED_BOOT="$(dirname "$DIST")/boot-ledger.md"
+  {
+    printf '# probe\n\n'
+    printf '## PC-FIXTURE-BOOT-GUARDED — the guarded form, which an old engine must REVIEW\n\n'
+    printf 'verify: sh [ -n "${THEIRS_TREE:-}" ] || exit 127; [ "$(cat "$THEIRS_TREE/VERSION")" = "0.103.0" ]\n\n---\n\n'
+    printf '## PC-FIXTURE-BOOT-UNGUARDED — the same read WITHOUT the guard: the false close\n\n'
+    printf 'verify: sh [ "$(cat "$THEIRS_TREE/VERSION")" = "0.103.0" ]\n'
+  } > "$LED_BOOT"
+  boot_out="$(bash "$BOOT_DIR/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$LED_BOOT" 2>&1)"
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if printf '%s\n' "$boot_out" | awk -F'\t' '$2 ~ /BOOT-GUARDED/ && $1=="NEEDS-REVIEW" {a=1} $2 ~ /BOOT-UNGUARDED/ && $1=="CLOSE-CANDIDATE" {b=1} END{exit !(a && b)}'; then
+    printf '  ok    %-22s on an engine that does not export $THEIRS_TREE the GUARDED receipt reads NEEDS-REVIEW while the UNGUARDED one reads CLOSE-CANDIDATE — the guard is what stops the bootstrapping false close\n' "boot-guard"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the guarded/unguarded pair does not split on an old engine, so the exit-127 convention is unproven and every $THEIRS_TREE receipt written before a consumer pulls is at risk of a false close\n' "boot-guard"
+    printf '%s\n' "$boot_out" | sed 's/^/          | /'
+  fi
+  # ...and the NEW engine refuses a $THEIRS_TREE receipt it could not materialize a tree for,
+  # rather than scoring its non-zero exit. Driven by pointing the closer at a ref that does not
+  # resolve in this dist, which is the only reachable materialization failure.
+  ASSERTIONS=$((ASSERTIONS + 1))
+  badref_out="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "0000000000000000000000000000000000000000" "$LED_BOOT" 2>&1)"
+  if printf '%s\n' "$badref_out" | awk -F'\t' '$2 ~ /BOOT-GUARDED/ && $1=="NEEDS-REVIEW" {a=1} $2 ~ /BOOT-GUARDED/ && $1=="CLOSE-CANDIDATE" {b=1} END{exit !(a && !b)}'; then
+    printf '  ok    %-22s with the tree unmaterializable the receipt is NEEDS-REVIEW, never CLOSE — a tool failure must not manufacture the verdict that loses data\n' "theirs-tree-unavailable"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s a $THEIRS_TREE receipt whose tree could not be materialized did not read NEEDS-REVIEW; every read inside an absent tree fails, so this is a close manufactured from a tool failure\n' "theirs-tree-unavailable"
+    printf '%s\n' "$badref_out" | sed 's/^/          | /'
+  fi
+fi
+
+# --- SIX MUTANTS, EACH KILLED BY THE ARM THAT OWNS IT -----------------------------------------
+#
+# Each is a whole-DIRECTORY copy so the closer finds `lib.sh` and `preclassify.sh` beside it — a
+# lone copy dies sourcing lib.sh, emits nothing, and "no output" otherwise scores as a kill. Each
+# carries a `cmp -s` control proving the mutation applied, and each kill REQUIRES a control row to
+# survive, so a mutant that broke the closer rather than the guard cannot score. The anchors are
+# asserted unique first: a mutation matching two sites edits a line no arm reads.
+dp_anchors_bad=""
+for a in \
+  'if receipt_reads_dist_as_path "$rest"; then' \
+  '_RD_GITC3='"'"'git -C "$DIST"'"'"'' \
+  '_RD_CD3='"'"'cd "$DIST" && git '"'"'' \
+  '  THEIRS_TREE="$_d"' \
+  '  [ -n "${THEIRS_TREE_OWNED:-}" ] && rm -rf "$THEIRS_TREE_OWNED"' \
+  '        *THEIRS_TREE*)' ; do
+  n="$(grep -cF "$a" "$CLOSER")" || n=0
+  [ "$n" -eq 1 ] || dp_anchors_bad="$dp_anchors_bad [$a -> $n]"
+done
+# THE CONTROL: a token no closer carries. Without it a grep that had silently stopped matching
+# everything would read as "all anchors unique" — the same zero a clean corpus produces.
+dp_ctl_n="$(grep -cF 'ZZ-NO-SUCH-ANCHOR-EVER-IN-THIS-FILE' "$CLOSER")" || dp_ctl_n=0
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ -z "$dp_anchors_bad" ] && [ "$dp_ctl_n" -eq 0 ]; then
+  printf '  ok    %-22s all six mutation anchors are UNIQUE in the closer (control: an impossible anchor returns %s)\n' "dist-anchors" "$dp_ctl_n"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s a mutation anchor is not unique (%s) or the impossible control matched (%s); the mutants below would edit a line no arm reads and score kills they did not earn\n' "dist-anchors" "${dp_anchors_bad:-none}" "$dp_ctl_n"
+fi
+# THE MUTATION IS A LINE REPLACEMENT READ FROM STDIN, NOT AN INLINE awk OR sed PROGRAM.
+#
+# Every anchor in this battery carries `$`, `"`, `'` and `\` together. Passed through the shell
+# into `awk '…'` each one costs a level of escaping in each direction, and MEASURED on this
+# battery's first cut THREE of six mutations died with `awk: illegal statement` and were reported
+# as DID NOT APPLY — which reads exactly like an anchor that moved, on a change that was correct.
+# `sed` is no better: the target lines contain `|`, `&` and `/`, so every delimiter is taken and
+# an `&` in a replacement re-inserts the whole match.
+#
+# So the mutation is DATA: the exact OLD line and the exact NEW line as SINGLE-QUOTED ARGUMENTS,
+# matched and substituted by a fixed-string compare in awk with both sides passed through ENVIRON,
+# which no layer reprocesses. The anchor is a literal, so it is what the uniqueness assertion
+# above checked, byte for byte.
+#
+# ARGUMENTS AND NOT A HEREDOC. A `<<'MUT'` body inside a `$( )` is NOT protected by its quoted
+# delimiter here — MEASURED while writing this: the assignment
+# `x="$(f <<'MUT' … $THEIRS … MUT )"` died with `THEIRS: unbound variable` under `set -u`, so the
+# body was expanded despite the quoting. A single-quoted argument cannot be.
+dp_mutant() { # <name> <OLD-line> [NEW-line] -> dir on stdout, empty if nothing changed
+  local n="$1" old="$2" new="${3:-}" d
+  d="$(dirname "$DIST")/mut-$n"; rm -rf "$d"; mkdir -p "$d"
+  cp "$(dirname "$CLOSER")"/*.sh "$d/" 2>/dev/null
+  [ -f "$d/lib.sh" ] || return 1
+  DP_OLD="$old" DP_NEW="$new" awk '
+    $0 == ENVIRON["DP_OLD"] { if (ENVIRON["DP_NEW"] != "") print ENVIRON["DP_NEW"]; next }
+    { print }
+  ' "$CLOSER" > "$d/ledger-reverify.sh" || return 1
+  if cmp -s "$CLOSER" "$d/ledger-reverify.sh"; then return 1; fi
+  # A MUTATION THAT APPLIED MUST STILL PARSE. A mutant with a syntax error emits nothing on every
+  # input, and "no rows" scores as a kill against every presence-shaped arm while the control arm
+  # fails for the same reason — which reads as entanglement rather than as a broken mutant.
+  bash -n "$d/ledger-reverify.sh" 2>/dev/null || return 1
+  printf '%s' "$d"
+}
+dp_kill() { # <name> <dir-or-empty> <kill-awk> <control-awk> <kill-msg> <ctl-msg>
+  local n="$1" d="$2" kill="$3" ctl="$4" kmsg="$5" cmsg="$6" out
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ -z "$d" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutation DID NOT APPLY (matched nothing, awk died, or the sibling copy is incomplete), so the arm it targets is unproven\n' "$n"
+    return
+  fi
+  out="$(bash "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
+  if ! printf '%s\n' "$out" | awk -F'\t' "$ctl"; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the control row is gone too (%s) — the mutant broke the closer rather than the guard, so its verdict is wreckage\n' "$n" "$cmsg"
+    printf '%s\n' "$out" | grep -E 'SH-DIST|SH-THEIRS-TREE' | sed 's/^/          | /'
+  elif printf '%s\n' "$out" | awk -F'\t' "$kill"; then
+    printf '  ok    %-22s %s\n' "$n" "$kmsg"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutation applied and the arm it targets did NOT change verdict — that arm cannot fire\n' "$n"
+    printf '%s\n' "$out" | grep -E 'SH-DIST|SH-THEIRS-TREE' | sed 's/^/          | /'
+  fi
+}
+# m1 — THEIRS_TREE bound to $DIST. Killed by arm A: the tree then reads the checkout (0.104.0),
+# the receipt's equality against 0.103.0 fails, and the entry closes on a ref nobody pulled.
+#
+# THIS MUTANT IS ALSO WHY THE EXIT HANDLER REMOVES `$THEIRS_TREE_OWNED` AND NOT `$THEIRS_TREE`.
+# Written against a handler keyed on `$THEIRS_TREE`, it made the closer `rm -rf` the fixture's own
+# DISTRIBUTION REPOSITORY on exit, and six arms downstream failed with symptoms that pointed at
+# the guard rather than at the `rm`. The mutation is unchanged; the subject was fixed.
+dp_m1="$(dp_mutant tt-is-dist '  THEIRS_TREE="$_d"' '  THEIRS_TREE="$DIST"')"
+dp_kill mutation-tt-is-dist "$dp_m1" \
+  '$2 ~ /SH-THEIRS-TREE / && $1=="CLOSE-CANDIDATE" {f=1} END{exit !f}' \
+  '$2 ~ /SH-DIST-REVSPEC / && $1=="STILL-LIVE" {f=1} END{exit !f}' \
+  'THEIRS_TREE bound to $DIST reads the CHECKOUT and the entry closes on a ref nobody pulled — arm A reads the tree'"'"'s CONTENT, not its existence' \
+  'SH-DIST-REVSPEC STILL-LIVE'
+# m2 — the refusal keyed on `$DIST/` only. Killed by arm B's no-slash entry, which is the shape
+# BOTH live consumer offenders were written in; the slash entry alone would score this green.
+dp_m2="$(dp_mutant refuse-slash-only '    *'"'"'$DIST'"'"'*|*'"'"'${DIST}'"'"'*) return 0 ;;' '    *'"'"'$DIST/'"'"'*|*'"'"'${DIST}/'"'"'*) return 0 ;;')"
+dp_kill mutation-refuse-slash-only "$dp_m2" \
+  '$2 ~ /SH-DIST-AS-ENV/ && $1!="NEEDS-REVIEW" {f=1} END{exit !f}' \
+  '$2 ~ /SH-DIST-AS-PATH / && $1=="NEEDS-REVIEW" {f=1} END{exit !f}' \
+  'a refusal keyed on $DIST/ misses the AI_DLC_PROJECT_ROOT="$DIST" shape — the shape BOTH live offenders used — while still catching the slash one' \
+  'SH-DIST-AS-PATH still refused'
+# m3 — the refusal ALSO refuses `git -C "$DIST"`, by pointing the quoted-form strip pattern at a
+# path no receipt carries. THIS IS THE SHAPE AN INLINE UNQUOTED PATTERN PRODUCES BY ACCIDENT:
+# written `${t//git -C "$DIST"/}` the pattern EXPANDS, becomes the operator's real checkout path,
+# matches nothing, and refuses all 28. Killed by arm C: the conforming control moves, which is the
+# 26-of-28 false-positive direction.
+dp_m3="$(dp_mutant refuse-git-c '_RD_GITC3='"'"'git -C "$DIST"'"'"'' '_RD_GITC3='"'"'git -C "/no/such/expanded/checkout"'"'"'')"
+dp_kill mutation-refuse-git-c "$dp_m3" \
+  '$2 ~ /SH-DIST-REVSPEC / && $1=="NEEDS-REVIEW" {f=1} END{exit !f}' \
+  '$2 ~ /SH-DIST-AS-ENV/ && $1=="NEEDS-REVIEW" {f=1} END{exit !f}' \
+  'a strip pattern that does not match the quoted git -C form refuses the CONFORMING receipt too — 26 of the reference consumer'"'"'s 28 are written that way, and arm C is what sees it' \
+  'SH-DIST-AS-ENV still refused'
+# m7 — the `cd "$DIST" && git` exemption WIDENED to a bare `cd "$DIST"`, which is how an
+# exemption comes to acquit its own arm's subject. Killed by the near-miss entry, which the
+# good-form entry alone cannot see.
+dp_m7="$(dp_mutant cd-exempt-bare '_RD_CD3='"'"'cd "$DIST" && git '"'"'' '_RD_CD3='"'"'cd "$DIST"'"'"'')"
+dp_kill mutation-cd-exempt-bare "$dp_m7" \
+  '$2 ~ /SH-DIST-CD-BARE/ && $1!="NEEDS-REVIEW" {f=1} END{exit !f}' \
+  '$2 ~ /SH-DIST-AS-ENV/ && $1=="NEEDS-REVIEW" {f=1} END{exit !f}' \
+  'an exemption for a bare cd "$DIST" acquits the checkout read it was written beside — the near-miss is what separates the two' \
+  'SH-DIST-AS-ENV still refused'
+# m8 — the rc=0 partition WITHOUT the two $THEIRS_TREE alternations. Killed by the braced entry
+# alone: the unbraced spelling matches `*$THEIRS*` by accident and cannot see this.
+dp_m8="$(dp_mutant partition-no-tt '            *'"'"'$THEIRS'"'"'*|*'"'"'${THEIRS}'"'"'*|*'"'"'$DIST'"'"'*|*'"'"'${DIST}'"'"'*|*'"'"'$THEIRS_TREE'"'"'*|*'"'"'${THEIRS_TREE}'"'"'*)' '            *'"'"'$THEIRS'"'"'*|*'"'"'${THEIRS}'"'"'*|*'"'"'$DIST'"'"'*|*'"'"'${DIST}'"'"'*)')"
+# THE KILL IS ON THE DETAIL, NOT ON THE STATUS, AND THAT IS THE FINDING THIS MUTANT PRODUCED.
+# Both partitions emit STILL-LIVE for this entry, so a status-only arm scores the mutant green:
+# the falsifiability branch reaches its own STILL-LIVE with a "falsifiability NOT checked" detail
+# because the receipt names no path-shaped subject it can see. The DEFECT is real and one seed
+# away — an entry whose $THEIRS_TREE receipt DOES name such a subject lands on the NEEDS-REVIEW
+# "unfalsifiable predicate" row — and the observable that separates the two partitions on every
+# such receipt is the DETAIL. Measured: status identical, detail divergent.
+dp_kill mutation-partition-no-tt "$dp_m8" \
+  '$2 ~ /SH-THEIRS-TREE-BRACED / && index($3,"falsifiability NOT checked")>0 {f=1} END{exit !f}' \
+  '$2 ~ /SH-THEIRS-TREE / && $1=="STILL-LIVE" && index($3,"falsifiability NOT checked")==0 {f=1} END{exit !f}' \
+  'without its own alternation the BRACED $THEIRS_TREE receipt falls OUT of the upstream-consulting partition and into the falsifiability branch — same status, different DETAIL' \
+  'the unbraced SH-THEIRS-TREE still in the upstream partition'
+# ...AND THE SAME MUTANT, KILLED BY A STATUS. The kill above reads a DETAIL because its subject
+# names no path-shaped subject and both partitions reach STILL-LIVE for it. The seed one entry
+# along DOES name an upstream-shipped subject, so the falsifiability branch accuses it outright —
+# a verdict flip, which is the observable that survives a rewording of the detail text.
+dp_kill mutation-partition-no-tt-status "$dp_m8" \
+  '$2 ~ /SH-THEIRS-TREE-BRACED-SUBJECT/ && $1=="NEEDS-REVIEW" && index($3,"unfalsifiable")>0 {f=1} END{exit !f}' \
+  '$2 ~ /SH-THEIRS-TREE / && $1=="STILL-LIVE" {f=1} END{exit !f}' \
+  'the same partition mutant ACCUSES the braced receipt that names an upstream-shipped subject — a STATUS flip to NEEDS-REVIEW unfalsifiable, not merely a reworded detail' \
+  'the unbraced SH-THEIRS-TREE still STILL-LIVE'
+# m4 — no EXIT cleanup for the materialized tree. Killed by arm A's cleanup half, which is the
+# only observable: the ROW SET is byte-identical whether the tree survives or not. The NEW line is
+# empty, which this helper reads as "delete the line".
+dp_mut_leak="$(dp_mutant tt-no-cleanup '  [ -n "${THEIRS_TREE_OWNED:-}" ] && rm -rf "$THEIRS_TREE_OWNED"')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ -z "$dp_mut_leak" ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the no-cleanup mutation DID NOT APPLY, so the cleanup arm is unproven\n' "mutation-tt-no-cleanup"
+else
+  rm -f "$CONS/theirs-tree-path.txt"
+  leak_out="$(bash "$dp_mut_leak/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
+  leak_path="$(cat "$CONS/theirs-tree-path.txt" 2>/dev/null)"
+  if ! printf '%s\n' "$leak_out" | awk -F'\t' '$2 ~ /SH-DIST-REVSPEC / && $1=="STILL-LIVE" {f=1} END{exit !f}'; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the control row is gone too — the mutant broke the closer rather than the trap\n' "mutation-tt-no-cleanup"
+  elif [ -n "$leak_path" ] && [ -d "$leak_path" ]; then
+    printf '  ok    %-22s without the extended trap the tree SURVIVES (%s) — the cleanup arm reads the directory, which no row can\n' "mutation-tt-no-cleanup" "$leak_path"
+    rm -rf "$leak_path"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the trap was removed and the tree was cleaned anyway — the cleanup arm cannot fire\n' "mutation-tt-no-cleanup"
+  fi
+fi
+# ...and the closer installs exactly ONE EXIT trap. bash traps REPLACE each other, so a second
+# `trap … EXIT` added for the tree would silently delete the consumer->core table's cleanup and
+# leak that file on every run — a regression with no row and no symptom. Asserted on the SHIPPED
+# closer rather than on a mutant, because the failure is a future edit, not a current behaviour.
+ASSERTIONS=$((ASSERTIONS + 1))
+trap_n="$(grep -cE '^trap .* EXIT$' "$CLOSER")" || trap_n=0
+if [ "$trap_n" -eq 1 ]; then
+  printf '  ok    %-22s the closer installs exactly ONE EXIT trap, and its handler removes BOTH temporaries — a second trap would silently replace the first\n' "one-exit-trap"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the closer installs %s EXIT traps; bash traps REPLACE each other, so all but the last are dead and their temporaries leak with no symptom\n' "one-exit-trap" "$trap_n"
+fi
+# m5 — EAGER materialization: the `case $rest in *THEIRS_TREE*` gate widened to everything, so a
+# tree is built for every sh receipt.
+#
+# DRIVEN AGAINST A REF THAT DOES NOT RESOLVE, WHICH IS THE ONLY OBSERVABLE THE TRAP CANNOT ERASE.
+# A count of live trees cannot see this: the mutant materializes AND cleans up, so the delta is
+# zero either way and the arm's first cut passed down BOTH its branches — a check that could not
+# fire, reading exactly like one that discriminates. Against an unresolvable theirs the
+# materializer FAILS, and the two engines then differ in a VERDICT: the lazy one never attempts a
+# tree for a ledger naming none and reports normally, the eager one attempts one for every `sh`
+# receipt and refuses each with the materializer's own reason.
+dp_mut_eager="$(dp_mutant tt-eager '        *THEIRS_TREE*)' '        *)')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ -z "$dp_mut_eager" ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the eager mutation DID NOT APPLY, so the laziness arm is unproven\n' "mutation-tt-eager"
+else
+  eg_badref=0000000000000000000000000000000000000000
+  eg_out="$(bash "$dp_mut_eager/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$eg_badref" "$LED_NOTREE" 2>&1)"
+  eg_ctl="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$eg_badref" "$LED_NOTREE" 2>&1)"
+  if grep -q 'could not be materialized' <<<"$eg_ctl"; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the SHIPPED closer also reports a materialization failure on a ledger naming no $THEIRS_TREE receipt — it is not lazy, so this arm cannot attribute the mutant'"'"'s row to the mutation\n' "mutation-tt-eager"
+    printf '%s\n' "$eg_ctl" | sed 's/^/          | /'
+  elif grep -q 'could not be materialized' <<<"$eg_out"; then
+    printf '  ok    %-22s eager materialization attempts a tree for a ledger that names none and refuses on the unresolvable ref, where the shipped closer attempts nothing — a verdict the cleanup trap cannot erase\n' "mutation-tt-eager"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the gate was widened to every receipt and no materialization was attempted anyway — the laziness arm cannot fire\n' "mutation-tt-eager"
+    printf '%s\n' "$eg_out" | sed 's/^/          | /'
+  fi
+fi
+# m6 — THE REFUSAL SITED AFTER THE RUN, on the rc=0 path. The residue is a STILL-LIVE that reads
+# as healthy, which is exactly why SH-DIST-AS-PATH-ZERO exists: it exits 0 at the checkout, so a
+# late refusal leaves it unrefused while the two exit-1 offenders are still caught by their own
+# non-zero status. Killed by arm B's zero-exit entry alone.
+dp_m6="$(dp_mutant refuse-after-run '      if receipt_reads_dist_as_path "$rest"; then' '      if receipt_reads_dist_as_path "$rest" && ! DIST="$DIST" BASE="$BASE" THEIRS="$THEIRS" CONSUMER="$CONSUMER" bash -c "$sh_prog" >/dev/null 2>&1; then')"
+dp_kill mutation-refuse-after-run "$dp_m6" \
+  '$2 ~ /SH-DIST-AS-PATH-ZERO/ && $1!="NEEDS-REVIEW" {f=1} END{exit !f}' \
+  '$2 ~ /SH-DIST-REVSPEC / && $1=="STILL-LIVE" {f=1} END{exit !f}' \
+  'a refusal that also requires a non-zero exit leaves the zero-exit $DIST reader as a healthy-looking STILL-LIVE — the residue an exit-1-only seed cannot see' \
+  'SH-DIST-REVSPEC STILL-LIVE'
+
 echo
 if [ "$FAILURES" -gt 0 ]; then
   echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong."

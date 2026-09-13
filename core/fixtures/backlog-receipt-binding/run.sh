@@ -425,7 +425,18 @@ mkdir -p "$TMP/m5/.probehooks"
   echo 'exit 0'
 } > "$TMP/m5/.probehooks/post-checkout"
 chmod +x "$TMP/m5/.probehooks/post-checkout"
-git -C "$TMP/m5" config core.hooksPath "$TMP/m5/.probehooks"
+# SCRUBBED AT THE CALL, not only at the top of this file. Line 60 unsets the repository
+# environment for THIS process, which is enough while nobody re-exports it -- but the arm below
+# deliberately DOES, to drive the subject under an inherited GIT_DIR, and `git -C` does not
+# override that variable for reads or for writes. Scrubbing here makes the site correct however
+# the surrounding file evolves, rather than correct-by-distance from one unset.
+( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+  git -C "$TMP/m5" config core.hooksPath "$TMP/m5/.probehooks" )
+# Read BY PATH: a read through GIT_DIR would confirm the write by consulting the repository the
+# write may wrongly have gone to.
+[ "$(git config --file "$TMP/m5/.git/config" --get core.hooksPath 2>/dev/null)" = "$TMP/m5/.probehooks" ] || {
+  note "FAIL  m5 -- the probe repository's own .git/config does not carry core.hooksPath, so its unwritable-subject seed has no subject and the UNSEEDED assertion below would pass for the wrong reason."
+  rc=1; }
 m5_base="$(run_v "" "$TMP/m5" $DEF)"
 m5_801="$(cls "$m5_base" BL-801)"
 if [ "$m5_801" != "UNSEEDED" ]; then
@@ -909,6 +920,118 @@ elif [ "$q1_rows" -ne 0 ]; then
   note "FAIL  q1 -- --quiet still printed $q1_rows finding row(s), so it is not quiet"; rc=1
 else
   note "ok    q1 -- --quiet drops the finding rows and keeps the provenance clause"
+fi
+
+# --- THE SELF-PROBE MUST NOT WRITE TO THE CALLER'S REPOSITORY -------------------------------
+#
+# `git -C <dir>` DOES NOT OVERRIDE AN INHERITED `GIT_DIR` -- the environment wins, for reads and
+# for WRITES. MEASURED on two throwaway repositories: `GIT_DIR=A/.git git -C B config k v`
+# writes into A's config and leaves B's untouched. Git exports GIT_DIR, ABSOLUTE, into every
+# hook run from a LINKED WORKTREE, and this repo's gate runs the subject from one.
+#
+# So the subject's own self-probe -- which builds a throwaway repository and points it at a
+# `.probehooks` directory -- wrote `core.hooksPath=<a mktemp path>` into the CALLER'S
+# repository. The caller's pre-push hook was then aimed at a directory the run deletes on exit,
+# and its next push ran NO GATE AT ALL while printing success. Measured on this repository: a
+# release landed on origin ungated, found only because someone read the config by hand.
+#
+# THE ARM IS THE ONLY CHANNEL THAT COULD HAVE SEEN IT. The subject's self-probe still PASSES
+# with the bug -- the probe repo does not need the hook it never finds -- and the caller shows
+# nothing until a later, unrelated push quietly skips its hooks. Neither side reports.
+#
+# A THROWAWAY CALLER, NEVER A REAL ONE: the arm's whole subject is a repository being written
+# to by mistake, so the repository it offers up must be one nothing depends on.
+#
+# THE THROWAWAY CALLER NEEDS A COMMIT, and that is not housekeeping. Under an inherited GIT_DIR
+# the subject's `git -C "$SUBJECT_ROOT" rev-parse HEAD` reads the CALLER, not the subject tree --
+# the same precedence this arm exists to demonstrate -- so an empty caller makes the subject exit
+# at "has no HEAD commit" long before its self-probe, and the mutant then moves nothing for a
+# reason the mutation does not own. MEASURED: exactly that, and it reported as "the arm cannot
+# fire", which is the mutant doing its job.
+gd_caller="$TMP/gd-caller"
+mkdir -p "$gd_caller"
+( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+  cd "$gd_caller" && git init -q . >/dev/null 2>&1 \
+    && git config core.hooksPath .githooks >/dev/null 2>&1 \
+    && echo caller > callerfile.txt \
+    && git add -A >/dev/null 2>&1 \
+    && git -c user.email=c@local -c user.name=c commit -q -m caller >/dev/null 2>&1 )
+gd_before="$(git config --file "$gd_caller/.git/config" --get core.hooksPath 2>/dev/null)" || gd_before=""
+if [ ! -d "$gd_caller/.git" ] || [ "$gd_before" != ".githooks" ]; then
+  note "FAIL  gitdir -- the throwaway caller did not build with a hooks path (got '${gd_before:-<unset>}'), so this arm has no subject and its 'unchanged' below would be vacuous"
+  rc=1
+else
+  # The subject is driven with GIT_DIR pointed at the throwaway caller, which is exactly the
+  # environment git hands a hook running from a linked worktree.
+  seed "$TMP/gd1"
+  gd_out="$(run_v "GIT_DIR=$gd_caller/.git" "$TMP/gd1" $DEF --quiet 2>&1)"; gd_rc=$?
+  gd_after="$(git config --file "$gd_caller/.git/config" --get core.hooksPath 2>/dev/null)" || gd_after=""
+  if [ "$gd_after" = "$gd_before" ]; then
+    note "ok    gitdir -- the subject run under an inherited GIT_DIR leaves the caller's core.hooksPath byte-unchanged ($gd_after)"
+  else
+    note "FAIL  gitdir -- the subject REWROTE the caller's core.hooksPath from '$gd_before' to '$gd_after'. The caller's own pre-push hook now points at a directory this run deletes, so its next push runs no gate and reports success."
+    rc=1
+  fi
+  # AND THE SUBJECT MUST STILL HAVE SCORED ITS OWN TREE. The hooks-path half above is satisfied
+  # by a subject that redirects everything ELSE at the caller too -- `worktree add --detach HEAD`
+  # under an inherited GIT_DIR checks out the CALLER'S HEAD for every receipt, so each one is
+  # scored against a tree that carries none of the seeded subjects. MEASURED at the gate: that
+  # surfaced as the self-probe's seeded receipts reading OUT-OF-POPULATION with base exits of 2,
+  # which reads as a broken scorer rather than as a redirected one. So the arm asserts the run
+  # SUCCEEDED and registered no worktree in the caller.
+  gd_wt="$( ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+              git -C "$gd_caller" worktree list 2>/dev/null ) | grep -c . )" || gd_wt=0
+  if [ "${gd_rc:-1}" -eq 0 ] && [ "$gd_wt" -le 1 ]; then
+    note "ok    gitdir-scored -- under an inherited GIT_DIR the subject scored its OWN tree (exit 0) and registered no checkout in the caller (worktree rows: $gd_wt)"
+  else
+    note "FAIL  gitdir-scored -- the subject exited ${gd_rc:-?} and left $gd_wt worktree row(s) in the caller. Its receipt checkouts came from the CALLER'S HEAD, so every receipt was scored against a tree carrying none of its subjects."
+    printf '%s\n' "$gd_out" | tail -4 | sed 's/^/      /'
+    rc=1
+  fi
+  # THE MUTANT: the pre-fix line, restored. Without it the arm above passes whether the scrub is
+  # present or absent -- an arm that cannot fire reads exactly like one that discriminates.
+  # Reset the caller between the two drives, so the mutant is scored from the same start state.
+  ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+    git -C "$gd_caller" config core.hooksPath .githooks >/dev/null 2>&1 )
+  seed "$TMP/gd2"
+  # ONE LINE REVERTED -- the process-wide scrub, which is the whole fix. Anchored on the
+  # unconditional `unset` at column zero, asserted unique below, and replaced by a `:` so the
+  # mutant still PARSES: a mutant that fails to parse fails every arm for a reason the mutation
+  # does not own, and scores a kill nobody earned.
+  gd_anchor='^unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY$'
+  gd_anchor_n="$(grep -cE "$gd_anchor" "$TMP/gd2/scripts/validate-backlog-receipts.sh")" || gd_anchor_n=0
+  if [ "$gd_anchor_n" -ne 1 ]; then
+    note "FAIL  gitdir-mutant -- the scrub anchor matches $gd_anchor_n line(s), not 1, so the mutation below would edit the wrong site or none"
+    rc=1
+  elif mut "$TMP/gd2" 's|^unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY$|: # scrub removed by the fixture mutant|'; then
+    gd_mut_out="$(run_v "GIT_DIR=$gd_caller/.git" "$TMP/gd2" $DEF --quiet 2>&1)"; gd_mut_rc=$?
+    gd_mut="$(git config --file "$gd_caller/.git/config" --get core.hooksPath 2>/dev/null)" || gd_mut=""
+    # EITHER OBSERVABLE IS A KILL, AND THE FIRST ONE REACHED IS THE REDIRECTED CHECKOUT.
+    # Without the scrub, `worktree add --detach HEAD` checks out the CALLER'S HEAD before the
+    # self-probe's config write is ever reached, so the seeded receipts score against a tree
+    # carrying none of their subjects and the subject REFUSES at its own self-probe -- exit 2,
+    # with the seeded rows reading OUT-OF-POPULATION. That is byte-for-byte the failure this
+    # defect produced at the gate. The hooks-path rewrite is the same bug one step later, and is
+    # accepted as a kill too so the arm does not depend on which site is reached first.
+    if [ "$gd_mut_rc" -ne 0 ] && grep -q 'OUT-OF-POPULATION' <<<"$gd_mut_out"; then
+      note "ok    gitdir-mutant -- with the scrub removed the subject checks out the CALLER'S HEAD for every receipt, so its own seeded probes score OUT-OF-POPULATION and it refuses (exit $gd_mut_rc) — the gate failure this defect produced, reproduced on demand"
+    elif [ "$gd_mut" != "$gd_before" ]; then
+      note "ok    gitdir-mutant -- with the scrub removed the subject rewrites the caller's hooks path ('$gd_before' -> '$gd_mut'), so the arm above reads the scrub and not merely the absence of a crash"
+    else
+      note "FAIL  gitdir-mutant -- the scrub was removed and NEITHER observable moved: the caller's hooks path is unchanged and the subject exited $gd_mut_rc without redirected-checkout rows. The arm above cannot fire and proves nothing."
+      printf '%s\n' "$gd_mut_out" | tail -4 | sed 's/^/      /'
+      rc=1
+    fi
+    ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+      git -C "$gd_caller" config core.hooksPath .githooks >/dev/null 2>&1 )
+  fi
+  # BOTH DRIVES REGISTER WORKTREES IN THE THROWAWAY CALLER, for the same reason the arm exists:
+  # under an inherited GIT_DIR the subject's `worktree add` lands there rather than in the tree
+  # it was pointed at. They are pruned so this arm leaves the caller as it found it -- the
+  # directory is deleted with $TMP either way, but a registry left dirty is the shape the
+  # subject's own leak check reports, and a fixture must not model bad hygiene.
+  ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+    git -C "$gd_caller" worktree prune >/dev/null 2>&1 ) || true
 fi
 
 if [ "$rc" -eq 0 ]; then

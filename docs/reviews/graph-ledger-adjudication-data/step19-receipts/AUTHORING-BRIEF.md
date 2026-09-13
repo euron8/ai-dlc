@@ -54,10 +54,20 @@ An empty extraction, a missing file, a missing command: **127**, never a bare no
 ```
 DIST=/Users/n8/git/ai-dlc      CONSUMER=/Users/n8/git/graph
 BASE=adec9ae                   THEIRS=$(git -C "$DIST" rev-parse HEAD)
+THEIRS_TREE=<a materialized tree of the distribution at $THEIRS>
 ```
 
 The command runs with the process cwd at `$DIST`. Quoting is part of the predicate — the engine
 `eval`s the line, so write it as it must survive `eval`, and test it that way.
+
+**Only `$CONSUMER` and `$THEIRS_TREE` are paths.** `$DIST` is the distribution's CHECKOUT, which
+sits at whatever the operator last checked out and is under no obligation to be at `$THEIRS`, so
+it goes to `git -C` and nowhere else — `$DIST/core/…` and `AI_DLC_PROJECT_ROOT="$DIST"` both read
+a ref the pull is not pulling while the row claims theirs. `ledger-reverify.sh` refuses that form
+as `NEEDS-REVIEW` rather than scoring it. To read the distribution as a directory use
+`$THEIRS_TREE` (it carries no `.git`); to read one blob use
+`git -C "$DIST" show "${THEIRS}:<path>"`. `run-receipts.sh` exports the four above and NOT
+`$THEIRS_TREE`, so a receipt written against it must be driven through the engine.
 
 ## Reading your entry
 
