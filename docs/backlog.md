@@ -4253,18 +4253,28 @@ cited artifact. Zero lines anywhere in that tree match `^\s*full_text_source:\s*
 a control of 67 real key lines naming some artifact. The fix therefore creates an affordance and moves
 no consumer verdict.
 
-**TWO SHIPPING RESTATEMENTS OF THE NAME SET ARE NOW STALE, AND NEITHER IS REPAIRED HERE.** Grepped
-for before shipping, against a control: `core/skills/ai-dlc/steps/gate-validation.md:458` enumerates
-the accepted set as the sprint slot "or transitionally the legacy `product-brief.md`" and is NEWLY
-incomplete — it was correct at HEAD and this change made it wrong. `core/skills/ai-dlc/steps/
-stories-test-strategy.md:374-377` says `full_text_source` resolves to the sprint's
-`locked-requirements.md` "and nothing else", which ALREADY contradicted its emitter at HEAD (the
-legacy name has been accepted since the migration) and now contradicts it by two names. Both are
-restatements of a set the validator owns, which is the drift `mechanism-design.md` names. They are
-left untouched deliberately: they sit outside this change's declared file set, and `gate-validation.md`
-is a file the concurrent enforcement-map work may also be editing, so a blind edit here risks a
-conflict that buys nothing. Nothing mechanically binds those sentences to `DEFAULT_SOR_BASENAMES`
-today, which is why they could go stale unnoticed — the durable repair is a join, not a re-wording.
+**THREE SHIPPING RESTATEMENTS OF THE NAME SET WERE STALE AND ARE REPAIRED, AND NOTHING BINDS THEM.**
+Grepped for before shipping, against a control. `core/skills/ai-dlc/steps/gate-validation.md`
+enumerated the accepted set as the sprint slot "or transitionally the legacy `product-brief.md`" and
+was made NEWLY incomplete by this change — correct at HEAD, wrong after it. `core/skills/ai-dlc/
+steps/stories-test-strategy.md` said `full_text_source` resolves to the sprint's
+`locked-requirements.md` "and nothing else", which ALREADY contradicted its emitter at HEAD, the
+legacy name having been accepted since the migration, and now contradicted it by two. The first now
+names the third source in the same sentence shape it had; the second no longer restates the set as a
+closed list of its own but points at `validate-locked-anchor.sh` as the authority on it and names the
+three for the reader. A THIRD restatement was found only because the first two were being repaired —
+the same file's legacy-burn-down paragraph said the validator "accepts both names", a count that was
+correct at HEAD and silently wrong after; it now names no count. Three copies of one set in two files,
+none of them joined to it, is the measurement that makes the join the real repair.
+
+**The recorded limit: NOTHING JOINS THOSE SENTENCES TO `DEFAULT_SOR_BASENAMES`, and that is measured,
+not assumed.** `docs/vocabulary-index.md` carries no row for this set against a control of 18 rendered
+rows; `docs/invariant-index.md` names no arm over it against a control of 117; `enforcement-map.yaml`
+declares no vocabulary block for it; and no validator outside the script itself so much as mentions
+the identifier. So the repair above is a re-wording and re-wordings are exactly what goes stale — a
+fourth copy of a set with no binding is a fourth chance to drift, which is why the second site was
+changed to CITE rather than to restate. The durable repair is a join, and it is deliberately not built
+in this batch.
 
 **Two limits, both reachable and both stated.** The fix does not reach an author who quotes without
 declaring: the join's key IS the `full_text_source:` line, so a document that paraphrases a closure

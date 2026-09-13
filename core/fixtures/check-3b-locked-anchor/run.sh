@@ -390,15 +390,15 @@ else
   fi
 fi
 
-# --- THE SOURCE OF RECORD IS TWO NAMES, AND THE SECOND IS ON ITS WAY OUT -----------
+# --- THE LEGACY SOURCE OF RECORD IS ACCEPTED AND IS ON ITS WAY OUT -----------------
 # discovery.md §4a used to append each sprint's LOCKED block to the durable brief and
-# now writes it to `s<N>/locked-requirements.md`. Both names are accepted: refusing the
-# legacy one would fail every story written before the move -- 31 of 62 anchored
+# now writes it to `s<N>/locked-requirements.md`. The legacy name is still accepted:
+# refusing it would fail every story written before the move -- 31 of 62 anchored
 # citations on the reference consumer, all resolvable, none defective -- which is this
 # check reporting a migration as a fabrication.
 #
-# THREE ARMS, BECAUSE ACCEPTING TWO NAMES IS ONLY SAFE IF IT IS STILL REFUSING THE
-# THIRD. A widening that also lets `prd.md` through has not widened, it has broken.
+# THREE ARMS, BECAUSE A WIDER NAME SET IS ONLY SAFE IF IT IS STILL REFUSING AN INDEX.
+# A widening that also lets `prd.md` through has not widened, it has broken.
 SOR="$WORK/sor"; mkdir -p "$SOR/s302/stories" || exit 2
 cat > "$SOR/s302/locked-requirements.md" <<'SOREOF'
 <!-- LOCKED_REQUIREMENTS — DO NOT MODIFY DURING VALIDATION -->
@@ -439,7 +439,7 @@ if "$VALIDATOR" "$SOR/s302/stories/index-sor.md" >/dev/null 2>&1; then
   echo "FAIL: SoR — prd.md was accepted as a full-text source; the widening broke the refusal" >&2
   rc=1
 else
-  echo "ok: SoR — CONTROL: prd.md is still refused, so accepting two names has not weakened (a)"
+  echo "ok: SoR — CONTROL: prd.md is still refused, so widening the name set has not weakened (a)"
 fi
 
 # --- A CARRY-OVER BACKLOG IS A SOURCE OF RECORD, AND prd.md STILL IS NOT -----------

@@ -457,7 +457,8 @@ block distinguishes a full-text CLAIM from a load POINTER:
 every `full_text_source:` citation it asserts (a) the artifact is the
 byte-verbatim source of record — `locked-requirements.md` in the sprint slot,
 where discovery.md §4a writes the block, or transitionally the legacy
-`product-brief.md`, whose remaining claims the PASS line counts — and NOT a
+`product-brief.md`, whose remaining claims the PASS line counts, or
+`carry-over-backlog.md` for a quoted closure condition — and NOT a
 condensed index (e.g. prd.md, which is only §2a-propagated); (b) the anchor resolves in
 that artifact, as a token present in it or a line range within its
 length; (c) every requirement bullet in the block is byte-present
