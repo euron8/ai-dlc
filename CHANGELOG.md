@@ -56,7 +56,9 @@ is: arm C sets `GATE_CARRIED` at its emit, and `machinery_at_or_past()` returns 
 reading the stamp, so the SAFE-STOP "SPLIT BUYS NOTHING HERE" acquittal is withheld on exactly
 the runs where the stamp is ahead of the tree. Measured: the advanced and honest stamps had
 produced OPPOSITE advice on one tree while every exit code and the `--safe-stop` ref were
-identical, so this half moves wording only.
+identical, so this half moves wording only. The tip adversary then showed the boolean first cut still
+acquitted on arm C's two UNDECIDED terminals; the refusal is three-state and only a clean arm C
+acquits.
 
 The adversary refuted the contract five ways before the build, each by building it: a
 range-only fix with no bucket check closed the receipt (now the fail-closed cell separates
@@ -65,8 +67,11 @@ outside arm C's class is claimed by an earlier arm); the row sited before `HARD-
 replaced "take theirs" with a merge task on a zero-delta file; partial absorption survived the
 siting; `UPSTREAM-DELETED+consumer-modified` is in the population and "do not revert" was wrong
 for it; and a consumer with no `skill_commit` is fully in the population, so the receipt's
-stamp carries none. Running `preclassify.sh` inside the scan cost +1.15s on every pull of the
-reference consumer clone (three reps), which is why the buckets are passed in. The `HARD-`
+stamp carries none. Running `preclassify.sh` inside the scan costs about 1.1s on any pull where
+the scan reaches a file past its byte-identity arms (measured three reps on a clone of the
+reference consumer with one in-place edit seeded; the derivation is lazy, and the tip adversary
+showed the un-edited clone never invokes it at all), which is why the buckets are passed in
+rather than re-derived. The `HARD-`
 prefix mutant survived an apply-side assertion because `apply.sh` keys on the exact status
 string, not the prefix; it is scored on `hard-blockers.sh`'s prefix-keyed list instead.
 

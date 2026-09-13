@@ -19,7 +19,9 @@
 #                         `preclassify.sh` itself, which is correct and is what a standalone
 #                         invocation gets; the flag exists because `apply.sh` already holds that
 #                         exact output one line above its call here, and re-deriving it costs
-#                         every pull ~1.1s whether or not a carried path exists. Same shape as
+#                         ~1.1s on any pull where the scan reaches a file past the byte-identity
+#                         arms (the derivation is lazy, so a consumer with no in-place core edit
+#                         never pays it). Same shape as
 #                         `hard-blockers.sh`'s own `--ud-rows`: position-independent, before the
 #                         positional arguments.
 # Output: TSV — STATUS<TAB>FILE<TAB>DETAIL

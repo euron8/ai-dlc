@@ -487,7 +487,9 @@ PC="$(bash "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/n
 
 # THE BUCKETS ARE HANDED DOWN, NOT RE-DERIVED. `unregistered-drift.sh`'s CORE-MACHINERY-CARRIED
 # arm needs exactly the rows already in `$PC` -- same four arguments, same program -- and running
-# preclassify a second time costs every pull ~1.1s whether or not a carried path exists. Written
+# preclassify a second time costs ~1.1s on any pull where the scan reaches a file past its
+# byte-identity arms, carried or not (the derivation is lazy, so a consumer with no in-place core
+# edit never pays it). Written
 # to a file rather than passed as an argument because the rows are multi-line TSV. Same shape as
 # `hard-blockers.sh`'s `--ud-rows`, and it does not change the scan's answer: without the flag
 # the scan derives the identical rows itself, which the fixture asserts row-for-row.
