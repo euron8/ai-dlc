@@ -363,7 +363,15 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   more here than a fixture does, which the per-directory rate the notes above quote does not
 #   predict. NO REDUCTION TAKEN with this raise either; the target remains I87's per-directory
 #   pipeline in `i87_exposed_in`. Headroom is 15, still under one further directory.
-FORK_BUDGET=8090
+#
+#   0.562.0: 8090 -> 8120. ATTRIBUTED in four detached worktrees of the same repository,
+#   interleaved, two reps each, this validator byte-identical on every side: branch point
+#   8088/8089 (so the headroom the line above quotes had already fallen to one or two forks on
+#   corpus growth alone), tip 8103/8103. Removing the new fixture directory alone gives
+#   8097/8097 and removing the new repo-root `scripts/` entry alone gives 8095/8094 -- so
+#   again the SCRIPT costs more than the fixture, and the two together are the whole +14. NO
+#   REDUCTION TAKEN; the target remains I87's per-directory pipeline. Headroom is 17.
+FORK_BUDGET=8120
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

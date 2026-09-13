@@ -102,6 +102,7 @@
 #
 # Usage: validate-backlog-receipts.sh [<ledger>] [--root <dir>] [--quiet]
 #          [--max-prose-closable N] [--max-unscorable N] [--max-out-of-population N]
+#          [--max-unstable N]
 #          [--min-sh-receipts N] [--min-entries N]
 # Output: one TAB-delimited row per finding, then a summary and one OK line.
 #          STATUS <TAB> ENTRY <TAB> paths=... <TAB> tokens=...
@@ -128,10 +129,24 @@ CLASS_FUNC='receipt_path_tokens'
 DEFAULT_MAX_PC=9
 DEFAULT_MAX_UNSC=28
 DEFAULT_MAX_OOP=1
+# UNSTABLE SHIPS AT ZERO, and it is the one ceiling that is not a measured debt. A receipt
+# whose exit changes between two readings of the same commit cannot answer the question it
+# exists to answer -- not once, not on the run that matters -- so there is no population of
+# them to ratchet down. Zero is the standard, and a breach names the receipt.
+DEFAULT_MAX_UNSTABLE=0
 DEFAULT_MIN_SH=76
 DEFAULT_MIN_ENTRIES=88
 
 me() { printf 'validate-backlog-receipts'; }
+
+# THE PROVENANCE CLAUSE, AND IT IS A CONTRACT WITH THIS ARM'S CALLERS. It appears on the OK
+# line in both verbosities, including `--quiet`, because a caller asserting this arm ran needs
+# a token that a program which SEEDS NOTHING cannot honestly print. The clause names the
+# mechanism -- a detached checkout per receipt -- and it is emitted beside the count of
+# receipts actually scored, so a heuristic that classifies receipts by reading their text
+# cannot produce the pair. Callers may key on the exact string below; do not reword it
+# without a matching change to whatever greps it.
+PROVENANCE='detached checkout of HEAD'
 
 # ===========================================================================
 # WORKER MODE. One receipt, one process, dispatched by `xargs -P`. It is the SAME program
@@ -175,15 +190,35 @@ if [ "${1:-}" = "--score-one" ]; then
   # perfectly scorable. Measured under 8-way dispatch: retries are rare and always succeed on
   # the second attempt. The retry is bounded so a genuinely broken repository still refuses
   # rather than spinning.
+  # A CHECKOUT IS NOT USABLE BECAUSE `git worktree add` EXITED 0. Every receipt's verdict is a
+  # statement about the tree it ran in, so a tree that is incomplete produces a verdict about
+  # the checkout rather than about the receipt -- and the receipts most affected are exactly
+  # the ones guarding their preconditions with `|| exit 9`, which is a silent reclassification
+  # out of the population. The add is therefore followed by an assertion that the tree is
+  # COMPLETE: git reports it clean, and a file known to be in HEAD is present and non-empty.
+  # A tree that fails the assertion is discarded and re-added rather than used.
+  tree_complete() { # tree_complete <dir>
+    [ -d "$1" ] || return 1
+    [ -e "$1/.git" ] || return 1
+    [ -s "$1/$BR_SENTINEL" ] || return 1
+    _tc="$(git -C "$1" status --porcelain 2>/dev/null | grep -c .)" || _tc=0
+    [ "$_tc" -eq 0 ]
+  }
+
   mktree() { # mktree <suffix> -> echoes a fresh detached worktree at HEAD, or empty
     _d="$W/t/$n.$1"
     _try=0
     while [ "$_try" -lt 5 ]; do
       rm -rf "$_d"
       if git -C "$SR" worktree add --detach -q "$_d" HEAD >/dev/null 2>&1; then
-        printf '%s\n' "$_d" >> "$BR_TREELIST"
-        printf '%s' "$_d"
-        return 0
+        if tree_complete "$_d"; then
+          printf '%s\n' "$_d" >> "$BR_TREELIST"
+          printf '%s' "$_d"
+          return 0
+        fi
+        # Incomplete: unregister before retrying, or the registry fills with trees this
+        # function has already abandoned.
+        git -C "$SR" worktree remove --force "$_d" >/dev/null 2>&1 || rm -rf "$_d"
       fi
       _try=$(( _try + 1 ))
       sleep 1
@@ -257,7 +292,28 @@ if [ "${1:-}" = "--score-one" ]; then
   # question, so there is nothing for a seed to move. A base of 0 is carried THROUGH the
   # seed instead -- its 0 -> 1 direction has to be observed for the report to be able to say
   # it was not counted, and a branch that exits before the seed cannot say that.
+  # A NON-0/1 BASE IS RE-READ ONCE, IN A FRESH CHECKOUT, BEFORE IT IS CLASSIFIED. Measured
+  # under three-way contention: one receipt moved BOUND -> OUT-OF-POPULATION on a single run
+  # of thirty-three, taking R4 over its ceiling and failing the push by name -- a real push
+  # failure produced by a receipt that is fine. Exit 9 and exit 128 are the shapes a receipt
+  # uses to say "my preconditions were not met", so anything that perturbs the environment
+  # lands there rather than in a verdict.
+  #
+  # THE RE-READ IS DIAGNOSTIC AND IS NOT A RETRY. A retry would take the second reading as the
+  # answer and hide the disagreement -- and a receipt whose exit depends on when it ran is a
+  # defect in the RECEIPT, not noise to be smoothed away. So the two readings are compared: if
+  # they agree the verdict stands, and if they disagree the receipt is reported UNSTABLE with
+  # both exits, counted under its own ratchet, and counted under nothing else.
   if [ "$BASE_RC" -ne 0 ] && [ "$BASE_RC" -ne 1 ]; then
+    TR="$(mktree r)"
+    if [ -z "$TR" ]; then
+      wr BROKEN "no-reread-worktree"; exit 0
+    fi
+    ( cd "$TR" && eval "$REST" ) >/dev/null 2>&1
+    REREAD_RC=$?
+    if [ "$REREAD_RC" != "$BASE_RC" ]; then
+      wr UNSTABLE "base-exit=$BASE_RC/$REREAD_RC" "paths=${PL:-none}" "tokens=${TL:-none}"; exit 0
+    fi
     wr OUT-OF-POPULATION "base-exit=$BASE_RC" "paths=${PL:-none}" "tokens=${TL:-none}"; exit 0
   fi
 
@@ -342,7 +398,7 @@ fi
 # PARENT MODE
 # ===========================================================================
 QUIET=0; LEDGER=""; ROOT_ARG=""
-MAX_PC=""; MAX_UNSC=""; MAX_OOP=""; MIN_SH=""; MIN_ENTRIES=""
+MAX_PC=""; MAX_UNSC=""; MAX_OOP=""; MAX_UNSTABLE=""; MIN_SH=""; MIN_ENTRIES=""
 usage() { echo "usage: validate-backlog-receipts.sh [<ledger>] [--root <dir>] [--quiet] [--max-prose-closable N] [--max-unscorable N] [--max-out-of-population N] [--min-sh-receipts N] [--min-entries N]" >&2; }
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -351,6 +407,7 @@ while [ "$#" -gt 0 ]; do
     --max-prose-closable) MAX_PC="${2:-}"; shift 2 ;;
     --max-unscorable) MAX_UNSC="${2:-}"; shift 2 ;;
     --max-out-of-population) MAX_OOP="${2:-}"; shift 2 ;;
+    --max-unstable) MAX_UNSTABLE="${2:-}"; shift 2 ;;
     --min-sh-receipts) MIN_SH="${2:-}"; shift 2 ;;
     --min-entries) MIN_ENTRIES="${2:-}"; shift 2 ;;
     -*) usage; exit 2 ;;
@@ -398,11 +455,13 @@ num_or_die() { # num_or_die <value> <name>
 [ -n "$MAX_PC" ]      || MAX_PC="${AI_DLC_BACKLOG_MAX_PROSE_CLOSABLE:-$DEFAULT_MAX_PC}"
 [ -n "$MAX_UNSC" ]    || MAX_UNSC="${AI_DLC_BACKLOG_MAX_UNSCORABLE:-$DEFAULT_MAX_UNSC}"
 [ -n "$MAX_OOP" ]     || MAX_OOP="${AI_DLC_BACKLOG_MAX_OUT_OF_POPULATION:-$DEFAULT_MAX_OOP}"
+[ -n "$MAX_UNSTABLE" ] || MAX_UNSTABLE="${AI_DLC_BACKLOG_MAX_UNSTABLE:-$DEFAULT_MAX_UNSTABLE}"
 [ -n "$MIN_SH" ]      || MIN_SH="${AI_DLC_BACKLOG_MIN_SH_RECEIPTS:-$DEFAULT_MIN_SH}"
 [ -n "$MIN_ENTRIES" ] || MIN_ENTRIES="${AI_DLC_BACKLOG_MIN_ENTRIES:-$DEFAULT_MIN_ENTRIES}"
 num_or_die "$MAX_PC" --max-prose-closable
 num_or_die "$MAX_UNSC" --max-unscorable
 num_or_die "$MAX_OOP" --max-out-of-population
+num_or_die "$MAX_UNSTABLE" --max-unstable
 num_or_die "$MIN_SH" --min-sh-receipts
 num_or_die "$MIN_ENTRIES" --min-entries
 
@@ -434,9 +493,23 @@ mkdir -p "$WORK/out" "$WORK/rec" "$WORK/t"
 # verdict. The worktree count is read the same way, and for the same reason.
 # ---------------------------------------------------------------------------
 porcelain_count() { git -C "$SUBJECT_ROOT" status --porcelain 2>/dev/null | grep -c . ; }
-worktree_count()  { git -C "$SUBJECT_ROOT" worktree list 2>/dev/null | grep -c . ; }
+# THE REGISTRY IS ASKED ABOUT THIS RUN'S OWN CHECKOUTS, NEVER ABOUT ITS TOTAL SIZE. A count
+# over the whole registry is a count over a SHARED resource: the gate, another agent's
+# worktree, or a second copy of this arm can add or remove one mid-run, and the difference
+# then reports a leak that did not happen while the verdict beside it is correct. Measured on
+# two concurrent runs: identical SUMMARY lines, exit 2 and exit 0. Every checkout this run
+# makes lives under $WORK, which mktemp guarantees is unique to the process, so the question
+# with an answer is whether any path under THAT prefix is still registered.
+own_registered() { git -C "$SUBJECT_ROOT" worktree list 2>/dev/null | awk -v p="$WORK/" 'index($1, p) == 1' | grep -c . ; }
 PORC_BEFORE="$(porcelain_count)" || PORC_BEFORE=0
-WT_BEFORE="$(worktree_count)"    || WT_BEFORE=0
+# Asserted rather than assumed: `$WORK` is fresh from mktemp, so nothing under it can already
+# be registered. A non-zero reading here means the prefix is not unique to this run and the
+# arm's own leak check would be measuring another process's checkouts.
+WT_OWN_BEFORE="$(own_registered)" || WT_OWN_BEFORE=0
+if [ "$WT_OWN_BEFORE" -ne 0 ]; then
+  echo "$(me): FAIL -- $WT_OWN_BEFORE checkout(s) are already registered under this run's own working directory $WORK, which mktemp just created. The prefix is not unique to this process, so the leak check below would answer about somebody else's checkouts." >&2
+  exit 2
+fi
 
 # ---------------------------------------------------------------------------
 # The grep-literal grammar, defined ONCE. Both the self-probe and the corpus run this file.
@@ -619,9 +692,29 @@ EOF
   printf '%s %s\n' "$_sl_i" "$_sl_e" > "$WORK/counts"
   [ "$_sl_i" -eq 0 ] && return 0
 
+  # THE COMPLETENESS SENTINEL IS DERIVED FROM THE SUBJECT, NEVER NAMED. A hardcoded path is
+  # absent from some repository that this arm is pointed at, and every checkout then fails the
+  # completeness test for a reason that has nothing to do with the checkout. The first tracked
+  # file at HEAD is present by construction in any tree `git worktree add` produced.
+  # R1 runs this function TWICE over the same probe ledger (token seed, then generic), and
+  # BL-910's counter must see each run as a first run or the second one reads it already
+  # advanced and the receipt is stable-at-1. Resetting here rather than at the probe's
+  # creation keeps the two runs independent, which is what the pair is for.
+  # `printf 0`, never `: >`. An EMPTY file makes the receipt's `$(cat)` yield the empty
+  # string, which is not `0`, so its first-reading branch never fires and the probe is stable
+  # at 1 -- a seeded non-determinism that is not non-deterministic, and the arm it exists to
+  # exercise would go untested while every other probe passed.
+  [ -n "${BR_PROBE_COUNTER:-}" ] && printf 0 > "$BR_PROBE_COUNTER"
+
+  BR_SENTINEL="$(git -C "$_sl_root" ls-tree -r --name-only HEAD 2>/dev/null | sed -n '1p')"
+  if [ -z "$BR_SENTINEL" ]; then
+    echo "$(me): FAIL -- $_sl_root has no tracked files at HEAD, so no checkout can be proven complete." >&2
+    return 2
+  fi
+
   BR_WORK="$WORK"; BR_SUBJECT_ROOT="$_sl_root"; BR_PATH_CLASS="$PATH_CLASS"
   BR_TOKAWK="$TOKAWK"; BR_GENERIC_SEED="${BR_GENERIC_SEED:-0}"
-  export BR_WORK BR_SUBJECT_ROOT BR_PATH_CLASS BR_TOKAWK BR_GENERIC_SEED
+  export BR_WORK BR_SUBJECT_ROOT BR_PATH_CLASS BR_TOKAWK BR_GENERIC_SEED BR_SENTINEL
   find "$WORK/rec" -type f | sort | xargs -P "$JOBS" -n 1 bash "$SELF" --score-one
 
   # EVERY DISPATCHED RECEIPT MUST HAVE PRODUCED A VERDICT. A worker that died leaves no file,
@@ -658,6 +751,15 @@ read_counts() {
 #   BL-906 unwritable path  cannot be fully seeded, and a partial seed is not a reading
 #   BL-907 parses JSON      flips on ANY appended line, so the FORMAT control must claim it
 #   BL-908 reads git        proves the checkout is a real repository: base 1, never 128
+#   BL-910 exits 9 on its FIRST reading and 1 on its second, counting through a file OUTSIDE
+#          the checkout, so it is UNSTABLE and not OUT-OF-POPULATION. Without it the re-read
+#          has no subject: every other exit-9 receipt here answers 9 both times, so an arm
+#          that skipped the second reading entirely would pass every probe beside it.
+#   BL-909 TWO files, TWO literals, and it is the seed-COMPLETENESS probe. It flips only when
+#          BOTH paths are seeded AND both greps are extracted, so a scorer that seeds the
+#          first named path or reads the first grep and stops leaves it BOUND. Measured
+#          against the real ledger: those two shortcuts take a correct 9 findings to 6 and to
+#          3, silently, and every single-path single-grep probe above passes under both.
 # ---------------------------------------------------------------------------
 P="$WORK/probe"
 mkdir -p "$P/probe" "$P/docs"
@@ -666,6 +768,15 @@ printf 'alpha\nbeta\n' > "$P/probe/subject.txt"
 printf 'alpha\n' > "$P/probe/flip.txt"
 printf 'locked\n' > "$P/probe/locked.txt"
 printf '{\n  "k": "alpha"\n}\n' > "$P/probe/doc.json"
+# BL-909's two subjects. Neither carries its literal, so the receipt's base is 1 and it can
+# only reach 0 when BOTH files take BOTH tokens.
+printf 'first\n' > "$P/probe/one.txt"
+printf 'second\n' > "$P/probe/two.txt"
+# BL-910's counter lives OUTSIDE the checkout on purpose: each reading gets a fresh tree, so
+# state kept inside one cannot survive into the next and the receipt could not differ.
+BR_PROBE_COUNTER="$WORK/probe.counter"
+printf 0 > "$BR_PROBE_COUNTER"
+export BR_PROBE_COUNTER
 printf '#!/usr/bin/env bash\nprintf %%s\\\\n WAIT\n' > "$P/probe/tool.sh"
 {
   printf '# Probe ledger\n\n'
@@ -678,6 +789,8 @@ printf '#!/usr/bin/env bash\nprintf %%s\\\\n WAIT\n' > "$P/probe/tool.sh"
   printf '## BL-907\n\nverify: sh grep -q %s probe/doc.json || awk %s probe/doc.json\n\n' \
     "'JSONMARK'" "'END { exit (NR == 3 ? 1 : 0) }'"
   printf '## BL-908\n\nverify: sh git rev-parse HEAD >/dev/null 2>&1 || exit 9; grep -q %s probe/subject.txt\n\n' "'GITMARK'"
+  printf '## BL-909\n\nverify: sh grep -q %s probe/one.txt && grep -q %s probe/two.txt\n\n' "'MARKONE'" "'MARKTWO'"
+  printf '## BL-910\n\nverify: sh C="$BR_PROBE_COUNTER"; n=$(cat "$C" 2>/dev/null || echo 0); printf %%s $((n+1)) > "$C"; [ "$n" = "0" ] && exit 9; exit 1\n\n'
 } > "$P/docs/backlog.md"
 
 # A THROWAWAY REPOSITORY, and the git environment is scrubbed first: git exports GIT_DIR
@@ -719,7 +832,7 @@ R1_SH="$SH_RECEIPTS"
 
 r1_fail() { echo "$(me): SELF-PROBE FAILED -- $1" >&2; printf '%s\n' "$R1_OUT" | sed 's/^/    /' >&2; exit 2; }
 
-[ "$R1_SH" -eq 8 ] || r1_fail "the probe ledger parsed to $R1_SH sh receipts, not 8, so the entry grammar did not read the probe and nothing below is about the scorer."
+[ "$R1_SH" -eq 10 ] || r1_fail "the probe ledger parsed to $R1_SH sh receipts, not 10, so the entry grammar did not read the probe and nothing below is about the scorer."
 [ "$(probe_status "$R1_OUT" BL-901)" = "PROSE-CLOSABLE" ] || r1_fail "the seeded prose-closable receipt did NOT flip under a seed carrying its own grep literal (got: $(probe_status "$R1_OUT" BL-901)). The scorer cannot produce a finding, so a clean corpus below would mean only that it ran."
 [ "$(probe_status "$R1_OUT" BL-902)" = "BOUND" ] || r1_fail "the receipt that DRIVES its subject was reported $(probe_status "$R1_OUT" BL-902), not BOUND. An arm that flags a bound receipt puts every honest receipt in the finding set."
 [ "$(probe_status "$R1_OUT" BL-903)" = "OUT-OF-POPULATION" ] || r1_fail "the base-exit-9 receipt was reported $(probe_status "$R1_OUT" BL-903), not OUT-OF-POPULATION. A receipt answering a question about its own preconditions is not reproducing, and seeding it scores a flip that is not about prose."
@@ -736,7 +849,23 @@ esac
 [ "$(probe_status "$R1_OUT" BL-906)" = "UNSEEDED" ] || r1_fail "the receipt naming a path the seed cannot append to was reported $(probe_status "$R1_OUT" BL-906), not UNSEEDED. A seed that did not apply makes 'no flip' unreadable, and \`cmp -s\` is what separates the two."
 [ "$(probe_status "$R1_OUT" BL-907)" = "FORMAT-SENSITIVE" ] || r1_fail "the receipt that PARSES its structured subject was reported $(probe_status "$R1_OUT" BL-907), not FORMAT-SENSITIVE. It flips on any appended line, so counting it would attribute a broken document to prose-closability."
 [ "$(probe_status "$R1_OUT" BL-908)" = "PROSE-CLOSABLE" ] || r1_fail "the receipt that READS GIT was reported $(probe_status "$R1_OUT" BL-908) -- its base exit was not 1, so the checkout is not a faithful repository and the population of every git-reading receipt below is wrong."
-[ "$R1_N" -eq 2 ] || r1_fail "the probe ledger scored $R1_N prose-closable receipts, expected exactly 2."
+# THE SEED-COMPLETENESS ASSERTION, and it is the one that two whole classes of wrong scorer
+# fail. Both its paths must take the seed and both its literals must reach the seed line; a
+# scorer that stops at the first of either leaves this BOUND while every other probe here
+# still passes, and shrinks the real answer without saying so.
+[ "$(probe_status "$R1_OUT" BL-909)" = "PROSE-CLOSABLE" ] || r1_fail "the TWO-file TWO-literal receipt was reported $(probe_status "$R1_OUT" BL-909), not PROSE-CLOSABLE. It flips only when every path it names is seeded AND every grep it carries is extracted, so this is a scorer that stops at the first of one or the other -- which reports FEWER findings than exist and reads exactly like a cleaner ledger."
+[ "$R1_N" -eq 3 ] || r1_fail "the probe ledger scored $R1_N prose-closable receipts, expected exactly 3."
+# THE RE-READ HAS A SUBJECT. Every other exit-9 receipt here answers 9 both times, so an arm
+# that never took the second reading would pass every probe beside this one.
+[ "$(probe_status "$R1_OUT" BL-910)" = "UNSTABLE" ] || r1_fail "the receipt that exits 9 on its FIRST reading and 1 on its second was reported $(probe_status "$R1_OUT" BL-910), not UNSTABLE. A non-deterministic receipt filed as OUT-OF-POPULATION is a real push failure attributed to the wrong thing -- measured once in thirty-three runs under contention -- and one silently absorbed is a receipt nobody fixes."
+case "$(probe_detail "$R1_OUT" BL-910)" in
+  *"base-exit=9/"*) ;;
+  *) r1_fail "the unstable receipt is reported without BOTH of its exits, so the report cannot say what disagreed." ;;
+esac
+# ...and its NEAR-MISS twin: a receipt that exits 9 on BOTH readings is a precondition that is
+# genuinely unmet and must stay out of population. Without this, an arm calling every non-0/1
+# exit unstable would empty the class the re-read exists to protect.
+[ "$(probe_status "$R1_OUT" BL-903)" = "OUT-OF-POPULATION" ] || r1_fail "the receipt that exits 9 on EVERY reading was reported $(probe_status "$R1_OUT" BL-903) after the re-read, not OUT-OF-POPULATION."
 
 # THE SECOND DIRECTION. The generic seed carries no token, and the arm must go quiet on the
 # SAME ledger. Without it, an arm that flags everything and an arm that discriminates print
@@ -777,6 +906,7 @@ N_UNSC="$(n_of UNSCORABLE)"       || N_UNSC=0
 N_UNSEED="$(n_of UNSEEDED)"       || N_UNSEED=0
 N_OOP="$(n_of OUT-OF-POPULATION)" || N_OOP=0
 N_PASS="$(n_of ALREADY-PASSING)"  || N_PASS=0
+N_UNSTABLE="$(n_of UNSTABLE)"     || N_UNSTABLE=0
 N_BROKEN="$(n_of BROKEN)"         || N_BROKEN=0
 SCORED=$(( N_PC + N_BOUND + N_FS ))
 UNSCORED=$(( N_UNSC + N_UNSEED ))
@@ -800,9 +930,20 @@ if [ "$SCORED" -eq 0 ]; then
   exit 1
 fi
 
-printf '%s\n' "$OUT" | awk -F'\t' '$1 == "PROSE-CLOSABLE" || $1 == "FORMAT-SENSITIVE" || $1 == "UNSCORABLE" || $1 == "UNSEEDED" || $1 == "OUT-OF-POPULATION" || $1 == "ALREADY-PASSING" { printf "%s\t%s\t%s\t%s\n", $1, $2, $4, $5 }' | sort
-
-echo "SUMMARY entries=$ENTRIES sh-receipts=$SH_RECEIPTS scored=$SCORED prose-closable=$N_PC/$MAX_PC format-sensitive=$N_FS bound=$N_BOUND unscorable=$N_UNSC+unseeded=$N_UNSEED/$MAX_UNSC out-of-population=$N_OOP/$MAX_OOP already-passing=$N_PASS"
+# `--quiet` DROPS THE PER-RECEIPT ROWS AND THE SUMMARY, never the OK line's provenance clause
+# below. A FAILING run still prints its FAIL text on stderr, because a ceiling breach a caller
+# asked not to hear about is the one message that must always arrive.
+if [ "$QUIET" != "1" ]; then
+  # UNSTABLE carries its two exits in field 3, where every other status carries a detail the
+  # report drops. They ARE the finding -- "9 on one reading, 1 on the next" is the whole of
+  # what is wrong with the receipt -- so that row is rendered with the detail in place of the
+  # paths, and the fixed four-column shape is preserved.
+  printf '%s\n' "$OUT" | awk -F'\t' '
+    $1 == "UNSTABLE" { printf "%s\t%s\t%s\t%s\n", $1, $2, $3, $5; next }
+    $1 == "PROSE-CLOSABLE" || $1 == "FORMAT-SENSITIVE" || $1 == "UNSCORABLE" || $1 == "UNSEEDED" || $1 == "OUT-OF-POPULATION" || $1 == "ALREADY-PASSING" { printf "%s\t%s\t%s\t%s\n", $1, $2, $4, $5 }
+  ' | sort
+  echo "SUMMARY entries=$ENTRIES sh-receipts=$SH_RECEIPTS scored=$SCORED prose-closable=$N_PC/$MAX_PC format-sensitive=$N_FS bound=$N_BOUND unscorable=$N_UNSC+unseeded=$N_UNSEED/$MAX_UNSC out-of-population=$N_OOP/$MAX_OOP unstable=$N_UNSTABLE/$MAX_UNSTABLE already-passing=$N_PASS"
+fi
 
 RC=0
 if [ "$N_PC" -gt "$MAX_PC" ]; then
@@ -811,6 +952,10 @@ if [ "$N_PC" -gt "$MAX_PC" ]; then
 fi
 if [ "$UNSCORED" -gt "$MAX_UNSC" ]; then
   echo "FAIL: R3: $UNSCORED receipt(s) in $LEDGER could not be scored at all ($N_UNSC unscorable, $N_UNSEED unseeded), against a ceiling of $MAX_UNSC. THIS CEILING EXISTS BECAUSE THE ONE ABOVE IS ESCAPABLE: building the pattern from a variable, moving it into an awk body or a grep -f file, or naming a path the seed cannot append to all lower the prose-closable count and fix nothing. An unscorable receipt is UNSPELLED, never bound -- write the predicate so its literal is visible, or drive the subject. This ceiling is a RATCHET and only ever moves DOWN." >&2
+  RC=1
+fi
+if [ "$N_UNSTABLE" -gt "$MAX_UNSTABLE" ]; then
+  echo "FAIL: R6: $N_UNSTABLE receipt(s) in $LEDGER gave DIFFERENT exits on two readings of the SAME commit, against a ceiling of $MAX_UNSTABLE. Each is named above with both exits. A receipt whose answer depends on when it ran cannot answer the question it exists to answer -- not on the run that matters either -- so this is reported by name rather than smoothed away by taking the second reading. The usual cause is a precondition guard (\`|| exit 9\`) over something that is not guaranteed at the moment the receipt runs: a pipeline whose reader leaves early, a temp directory, a process the receipt does not own. REMEDY: make each guard read what it needs ONCE into a variable and test that variable, and keep exit 9 for a genuinely missing file. This ceiling ships at zero and is not a measured debt." >&2
   RC=1
 fi
 if [ "$N_OOP" -gt "$MAX_OOP" ]; then
@@ -835,15 +980,23 @@ fi
 # THE WORKTREE REGISTRY IS ASSERTED BACK. Each checkout registers in the subject repository,
 # and an abandoned registration outlives the process that made it.
 parent_cleanup_trees
-WT_AFTER="$(worktree_count)" || WT_AFTER=0
-if [ "$WT_AFTER" -gt "$WT_BEFORE" ]; then
-  echo "$(me): FAIL -- $(( WT_AFTER - WT_BEFORE )) checkout(s) are still registered in $SUBJECT_ROOT after this run. Run \`git worktree prune\`; the verdict above stands but the repository was left dirty." >&2
+WT_OWN_AFTER="$(own_registered)" || WT_OWN_AFTER=0
+if [ "$WT_OWN_AFTER" -ne 0 ]; then
+  echo "$(me): FAIL -- $WT_OWN_AFTER of this run's own checkout(s) under $WORK are still registered in $SUBJECT_ROOT. Run \`git worktree prune\`; the verdict above stands but the repository was left dirty. (Checkouts belonging to other processes are deliberately not counted -- the registry is shared, and a concurrent add would otherwise read as this run's leak.)" >&2
   exit 2
 fi
 
+_where="$LEDGER"
+[ "$DEFAULTED" = "1" ] && _where="docs/backlog.md"
 if [ "$QUIET" != "1" ]; then
-  _where="$LEDGER"
-  [ "$DEFAULTED" = "1" ] && _where="docs/backlog.md"
-  echo "OK: validate-backlog-receipts -- R2 ${N_PC}/${MAX_PC} prose-closable, R3 ${UNSCORED}/${MAX_UNSC} unscored, R4 ${N_OOP}/${MAX_OOP} out of population, R5 ${SH_RECEIPTS} sh receipts over ${ENTRIES} live entries in ${_where} (${N_BOUND} bound, ${N_FS} format-sensitive, ${N_PASS} already passing; R0 bound the path-split class to ${CLASS_SOURCE}; R1 fired both directions over 8 seeded receipts; every receipt ran in its own detached checkout of ${SUBJECT_ROOT}'s HEAD, ${WT_BEFORE} registered checkouts before and after, caller porcelain ${PORC_BEFORE} unchanged)."
+  echo "OK: validate-backlog-receipts -- R2 ${N_PC}/${MAX_PC} prose-closable, R3 ${UNSCORED}/${MAX_UNSC} unscored, R4 ${N_OOP}/${MAX_OOP} out of population, R6 ${N_UNSTABLE}/${MAX_UNSTABLE} unstable, R5 ${SH_RECEIPTS} sh receipts over ${ENTRIES} live entries in ${_where} (${N_BOUND} bound, ${N_FS} format-sensitive, ${N_PASS} already passing; R0 bound the path-split class to ${CLASS_SOURCE}; R1 fired both directions over 10 seeded receipts; every receipt ran in its own ${PROVENANCE}, ${WT_OWN_AFTER} of this run's own checkouts still registered, caller porcelain ${PORC_BEFORE} unchanged)."
+else
+  # `--quiet` SUPPRESSES THE FINDING ROWS, NEVER THE PROVENANCE. A caller that asks for quiet
+  # still has to be able to tell this arm's silence from a stub's: a fifteen-line heuristic
+  # that greps receipts for the word `grep` produces the same exit code and the same empty
+  # output, and there would be nothing to distinguish them. This line reports what the run
+  # actually DID -- how many receipts were checked out and scored -- which no implementation
+  # that seeds nothing can emit truthfully.
+  echo "OK: validate-backlog-receipts -- ${SCORED} receipt(s) scored in ${_where}, each in its own ${PROVENANCE}; ${N_PC}/${MAX_PC} prose-closable."
 fi
 exit 0

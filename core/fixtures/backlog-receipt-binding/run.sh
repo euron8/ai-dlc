@@ -131,6 +131,24 @@ note() { printf '%s\n' "$*"; }
 #   BL-805  base 0                 -> ALREADY-PASSING  (a 0 -> 1 flip is not a finding)
 #   BL-806  reads git              -> PROSE-CLOSABLE, and its base exit proves the checkout
 #                                     is a real repository rather than a bare extraction
+#   BL-807  TWO files, TWO greps   -> PROSE-CLOSABLE only when EVERY path is seeded and EVERY
+#                                     literal is extracted
+#   BL-808  exit 9 then exit 1     -> UNSTABLE, never OUT-OF-POPULATION
+#
+# BL-808 COUNTS THROUGH A FILE OUTSIDE THE CHECKOUT, and it has to: each reading gets its own
+# fresh tree, so state kept inside one cannot reach the next and the receipt could not differ
+# between them. Its counter is initialised to a literal `0` rather than truncated -- an EMPTY
+# file makes `$(cat)` yield the empty string, which is not `0`, so the first-reading branch
+# never fires and the seeded non-determinism is not non-deterministic. Measured while building
+# this: the probe read stable-at-1 and the arm it exists to exercise went untested while every
+# other probe passed.
+#
+# BL-807 EXISTS BECAUSE EVERY OTHER RECEIPT HERE NAMES ONE FILE AND CARRIES ONE GREP, WHICH
+# MAKES TWO WHOLE CLASSES OF WRONG SCORER INVISIBLE. A scorer that seeds only the first named
+# path, and one that extracts only the first grep, satisfy every single-subject probe above --
+# and on the real ledger they take a correct nine findings to six and to three, silently, in
+# the direction that reads as a cleaner ledger. Neither literal is present at base, so the
+# receipt reproduces at 1 and can only reach 0 when both halves of the seed arrive.
 seed() { # seed <dir>
   local d="$1"
   mkdir -p "$d/scripts" "$d/docs" "$d/core/skills/ai-dlc-update/reconcile" "$d/probe"
@@ -144,8 +162,13 @@ seed() { # seed <dir>
   printf 'epsilon\n' > "$d/probe/varpat.txt"
   printf 'zeta\n' > "$d/probe/passing.txt"
   printf 'eta\n' > "$d/probe/gitsub.txt"
+  # BL-807's two subjects. Neither carries its own literal, so the receipt reproduces at 1.
+  printf 'theta\n' > "$d/probe/one.txt"
+  printf 'iota\n' > "$d/probe/two.txt"
   printf '#!/usr/bin/env bash\nprintf %%s\\\\n WAIT\n' > "$d/probe/tool.sh"
   bl_seed_ledger "$d/docs/backlog.md"
+  # A literal 0, never a truncation -- see BL-808's note above.
+  printf 0 > "$BL_UNSTABLE_COUNTER"
   (
     cd "$d" && git init -q . >/dev/null 2>&1 \
       && git add -A >/dev/null 2>&1 \
@@ -165,6 +188,8 @@ bl_seed_ledger() { # bl_seed_ledger <file>
     printf '## BL-804\n\nBody.\n\nverify: sh S=%s; grep -q "$S" probe/varpat.txt\n\n' "MARK804"
     printf '## BL-805\n\nBody.\n\nverify: sh ! grep -q %s probe/passing.txt\n\n' "'MARK805'"
     printf '## BL-806\n\nBody.\n\nverify: sh git rev-parse HEAD >/dev/null 2>&1 || exit 9; grep -q %s probe/gitsub.txt\n\n' "'MARK806'"
+    printf '## BL-807\n\nBody.\n\nverify: sh grep -q %s probe/one.txt && grep -q %s probe/two.txt\n\n' "'MARK807A'" "'MARK807B'"
+    printf '## BL-808\n\nBody.\n\nverify: sh C="$BL_UNSTABLE_COUNTER"; n=$(cat "$C" 2>/dev/null || echo 0); printf %%s $((n+1)) > "$C"; [ "$n" = "0" ] && exit 9; exit 1\n\n'
   } > "$1"
 }
 
@@ -177,11 +202,24 @@ run_v() { # run_v <env-string-or-empty> <dir> [<extra-args>...]
 }
 
 # The default arguments every probe uses unless it is pinning something. The seeded ledger has
-# TWO prose-closable receipts -- BL-801 and BL-806 -- so 2 is the AT-the-ceiling passing state
-# and 1 is one over. Both sides are exercised, because an off-by-one written as `-ge` is green
-# on the failing side alone.
-BL_PC=2
-DEF="--max-prose-closable $BL_PC --max-unscorable 9 --max-out-of-population 9 --min-sh-receipts 6 --min-entries 6"
+# THREE prose-closable receipts -- BL-801, BL-806 and BL-807 -- so 3 is the AT-the-ceiling
+# passing state and 2 is one over. Both sides are exercised, because an off-by-one written as
+# `-ge` is green on the failing side alone.
+BL_PC=3
+# The floor pair tracks the SEED: seven entries, each carrying one `sh` receipt. Both numbers
+# move with `bl_seed_ledger` and a stale pair makes the floor unable to fire -- measured, when
+# BL-807 was added and this still read 6, m10's evasion dropped the count to exactly the floor
+# and the probe came back SURVIVED.
+BL_N=8
+
+# BL-808's counter, outside every checkout and reset by `seed` so each probe's tree starts at
+# a first reading. Exported because the receipt reads it by name through `eval`.
+BL_UNSTABLE_COUNTER="$TMP/unstable.counter"
+export BL_UNSTABLE_COUNTER
+# `--max-unstable 1` because the seed carries BL-808 deliberately. The SHIPPED default is 0,
+# which m17b asserts against this same seed -- so the flag here parameterises a probe corpus
+# rather than relaxing the standard.
+DEF="--max-prose-closable $BL_PC --max-unscorable 9 --max-out-of-population 9 --max-unstable 1 --min-sh-receipts $BL_N --min-entries $BL_N"
 
 # Reads a receipt's classification back out of the subject's OWN row grammar. Empty if the
 # subject never classified it, which every caller treats as a failure rather than as a zero.
@@ -207,7 +245,8 @@ class_check() { # class_check <name> <dir> <env> [<extra-args>...]
     printf '%s\n' "$out" | sed 's/^/      /' | head -5; rc=1; return
   fi
   for want in "BL-801=PROSE-CLOSABLE" "BL-803=OUT-OF-POPULATION" \
-              "BL-804=UNSCORABLE" "BL-805=ALREADY-PASSING" "BL-806=PROSE-CLOSABLE"; do
+              "BL-804=UNSCORABLE" "BL-805=ALREADY-PASSING" "BL-806=PROSE-CLOSABLE" \
+              "BL-807=PROSE-CLOSABLE" "BL-808=UNSTABLE"; do
     id="${want%%=*}"; exp="${want#*=}"; got="$(cls "$out" "$id")"
     [ "$got" = "$exp" ] || bad="$bad $id(want=$exp got=${got:-NONE})"
   done
@@ -336,8 +375,8 @@ if mut "$TMP/m3" 's|^  if \[ "$BASE_RC" -ne 0 \] && \[ "$BASE_RC" -ne 1 \]; then
     note "FAIL  m3 exit-9 counted as population SURVIVED: the subject exited 0 with the exclusion branch gone, so nothing depends on it."; rc=1
   elif grep -qF "OK: validate-backlog-receipts" <<<"$m3_out"; then
     note "FAIL  m3 exit-9 counted as population SURVIVED: the subject reported a count anyway."; rc=1
-  elif ! grep -qF "base-exit-9 receipt" <<<"$m3_out"; then
-    note "FAIL  m3 -- the subject refused, but not on the exit-9 receipt's assertion"
+  elif ! grep -qE 'base-exit-9 receipt|exits 9 on' <<<"$m3_out"; then
+    note "FAIL  m3 -- the subject refused, but not on an exit-9 receipt's assertion"
     printf '%s\n' "$m3_out" | sed 's/^/      /' | head -4; rc=1
   else
     note "ok    m3 -- with the exclusion gone the exit-9 receipt is scored, and the self-probe refuses before any corpus count"
@@ -569,7 +608,13 @@ if cmp -s "$TMP/m11/docs/backlog.md" "$TMP/m11/docs/backlog.md.new"; then
 else
   mv "$TMP/m11/docs/backlog.md.new" "$TMP/m11/docs/backlog.md"
   ( cd "$TMP/m11" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m rotate >/dev/null 2>&1 )
-  m11_out="$(run_v "" "$TMP/m11" --max-prose-closable 1 --max-unscorable 9 --max-out-of-population 9 --min-sh-receipts 6 --min-entries 6)"
+  # ROTATION REMOVES A PROSE-CLOSABLE RECEIPT TOO, so this probe's ceilings follow the ledger
+  # it actually seeds -- BL-801 is gone, taking one finding with it. Passing the shared $DEF
+  # here would fail on the PROSE-CLOSABLE ceiling, which is not what this probe asserts, and
+  # its red would read as a floor that fires on rotation.
+  m11_out="$(run_v "" "$TMP/m11" --max-prose-closable "$(( BL_PC - 1 ))" \
+    --max-unscorable 9 --max-out-of-population 9 --max-unstable 1 \
+    --min-sh-receipts "$BL_N" --min-entries "$BL_N")"
   m11_rc=$?
   if [ "$m11_rc" -ne 0 ]; then
     note "FAIL  m11 rotation must be QUIET -- the subject exited $m11_rc. An entry removed with its receipt moves both counts; a floor that fires on it wedges the ledger's only sanctioned remedy."
@@ -608,6 +653,262 @@ if [ -n "$REVERIFY" ] && [ -n "$REAL_LEDGER" ]; then
 else
   note "FAIL  j1 -- backlog-reverify.sh or the real ledger is not resolvable, so the population join could not be evaluated. A skip here reads exactly like agreement."
   rc=1
+fi
+
+# ===== M12 / M13. THE SEED AND THE TOKEN GRAMMAR MUST BE COMPLETE, NOT FIRST-ONLY. =========
+# Two wrong cuts that pass every single-subject probe in this file and SHRINK the real answer
+# without saying so. They are the reason BL-807 exists: it is the only seeded receipt that
+# names two paths and carries two greps, so it is the only one either cut can be caught by.
+# The direction matters -- both report FEWER findings, which reads as a cleaner ledger.
+
+# m12 -- the seed reaches only the FIRST path the receipt names.
+seed "$TMP/m12"
+# The `@` delimiter is deliberate: the replacement text contains a `|`, and `s|…|…|` with a
+# pipe in the body is `bad flag in substitute command` -- a `sed` that DIES, which the `cmp -s`
+# guard cannot tell from one that matched nothing. Measured on this probe's first cut.
+if mut "$TMP/m12" "s@^    for _p in \$PATHS; do@    for _p in \$(printf '%s\\\\n' \$PATHS | sed -n '1p'); do@"; then
+  m12_out="$(run_v "" "$TMP/m12" $DEF)"; m12_rc=$?
+  m12_807="$(cls "$m12_out" BL-807)"
+  if [ "$m12_807" = "PROSE-CLOSABLE" ]; then
+    note "FAIL  m12 first-path-only seeding SURVIVED: the two-file receipt still flipped, so the loop mutated is not what applies the seed and nothing here can see a partial seed."; rc=1
+  elif [ "$m12_rc" -eq 0 ] && [ -z "$m12_807" ]; then
+    note "FAIL  m12 first-path-only seeding SURVIVED: the subject exited 0 and said nothing about the two-file receipt."; rc=1
+  else
+    note "ok    m12 -- seeding only the first named path stops the two-file receipt flipping (now '${m12_807:-refused}'), so the completeness of the seed is load-bearing"
+  fi
+fi
+
+# m13 -- the token grammar reads only the FIRST grep in the receipt.
+seed "$TMP/m13"
+if mut "$TMP/m13" 's|^      emitpat(q); break|      emitpat(q); p = nt; break|'; then
+  m13_out="$(run_v "" "$TMP/m13" $DEF)"; m13_rc=$?
+  m13_807="$(cls "$m13_out" BL-807)"
+  if [ "$m13_807" = "PROSE-CLOSABLE" ]; then
+    note "FAIL  m13 first-grep-only extraction SURVIVED: the two-literal receipt still flipped, so the loop mutated is not what collects the patterns."; rc=1
+  elif [ "$m13_rc" -eq 0 ] && [ -z "$m13_807" ]; then
+    note "FAIL  m13 first-grep-only extraction SURVIVED: the subject exited 0 and said nothing about the two-literal receipt."; rc=1
+  else
+    note "ok    m13 -- reading only the first grep stops the two-literal receipt flipping (now '${m13_807:-refused}'), so every grep in a receipt is load-bearing"
+  fi
+fi
+
+# ===== M14-M16. THREE ARMS NOTHING ELSE HERE EVER DRIVES OVER THEIR THRESHOLD. =============
+# Each was reachable only in principle: every probe above passes a slack ceiling or a clean
+# tree, so all three could have been deleted without moving a single cell. An arm no probe
+# drives is a guard whose removal changes nothing.
+
+# m14 -- R4 driven OVER its ceiling, by pinning it at 0 against the exit-9 receipt.
+seed "$TMP/m14"
+kill_check "m14 R4 fires when out-of-population exceeds its ceiling" "$TMP/m14" "" 1 \
+  "have a base exit that is neither 0 nor 1" --max-out-of-population 0
+# ...and the arm's mutant: with the comparison dead, the same corpus must pass.
+seed "$TMP/m14b"
+if mut "$TMP/m14b" 's|^if \[ "$N_OOP" -gt "$MAX_OOP" \]; then|if false; then|'; then
+  m14b_out="$(run_v "" "$TMP/m14b" $DEF --max-out-of-population 0)"; m14b_rc=$?
+  if [ "$m14b_rc" -ne 0 ]; then
+    note "FAIL  m14b R4's comparison removed SURVIVED: the subject still failed at a ceiling of 0, so R4 is not what enforces it"
+    printf '%s\n' "$m14b_out" | grep '^FAIL:' | sed 's/^/      /' | head -3; rc=1
+  else
+    note "ok    m14b -- with R4's comparison dead the breach passes, so R4 is the arm that catches it"
+  fi
+fi
+
+# m15 -- the every-dispatched-receipt-produced-a-verdict assert. A worker that dies leaves no
+# result file, and a smaller result set reads exactly like a smaller population.
+seed "$TMP/m15"
+if mut "$TMP/m15" 's|^  if \[ "$_sl_got" -ne "$_sl_i" \]; then|  if false; then|'; then
+  # Make one worker produce no verdict at all: its write target is redirected to /dev/null,
+  # so the receipt is dispatched, runs, and files nothing.
+  if mut "$TMP/m15" 's|^  wr() { printf|  wr() { [ "$n" = "0001" ] \&\& return 0; printf|'; then
+    m15_out="$(run_v "" "$TMP/m15" $DEF)"; m15_rc=$?
+    if [ "$m15_rc" -eq 0 ]; then
+      note "FAIL  m15 the verdict-count assert removed SURVIVED: a receipt that filed no verdict was silently dropped from the population and the subject still exited 0."; rc=1
+    else
+      note "ok    m15 -- without the verdict-count assert a missing verdict changes the answer, so the assert is what catches a dead worker"
+    fi
+  fi
+fi
+# m15b -- and the arm itself must FIRE on that same tree, unmutated but for the lost verdict.
+seed "$TMP/m15b"
+if mut "$TMP/m15b" 's|^  wr() { printf|  wr() { [ "$n" = "0001" ] \&\& return 0; printf|'; then
+  m15b_out="$(run_v "" "$TMP/m15b" $DEF)"; m15b_rc=$?
+  if [ "$m15b_rc" -eq 0 ]; then
+    note "FAIL  m15b a receipt that filed NO verdict passed unnoticed -- the subject exited 0 over a population smaller than the one it dispatched."; rc=1
+  elif ! grep -qF "produced a verdict" <<<"$m15b_out"; then
+    note "FAIL  m15b the subject refused, but not on the dispatched-verdict assertion"
+    printf '%s\n' "$m15b_out" | sed 's/^/      /' | head -3; rc=1
+  else
+    note "ok    m15b -- a dispatched receipt that files no verdict is a refusal, not a smaller population"
+  fi
+fi
+
+# m16 -- the caller-porcelain assert. m7 proves the tree is unchanged; nothing proved the ARM
+# would notice if it were not. m7b makes the seed escape, so this asks whether the porcelain
+# comparison is what reports it.
+seed "$TMP/m16"
+if mut "$TMP/m16" 's|^    _st_d="$(mktree "$1")"|    _st_d="$SR"|'; then
+  if mut "$TMP/m16" 's|^if \[ "$PORC_AFTER" != "$PORC_BEFORE" \]; then|if false; then|'; then
+    m16_out="$(run_v "" "$TMP/m16" $DEF)"; m16_rc=$?
+    m16_porc="$(git -C "$TMP/m16" status --porcelain | grep -c . )"
+    if [ "$m16_porc" -eq 0 ]; then
+      note "FAIL  m16 -- the seed did not escape, so the porcelain assert has nothing to detect and this probe measures nothing"; rc=1
+    elif [ "$m16_rc" -ne 0 ] && grep -qF "working tree changed" <<<"$m16_out"; then
+      note "FAIL  m16 the porcelain assert removed SURVIVED: the escape is still reported on the porcelain assertion, so that comparison is not what reports it."; rc=1
+    else
+      note "ok    m16 -- with the porcelain comparison dead an escaped seed ($m16_porc dirty paths) is no longer reported as one, so that comparison is the reporter"
+    fi
+  fi
+fi
+
+# ===== C1 / C2. THE REGISTRY IS SHARED, AND THE ARM MUST ASK ONLY ABOUT ITS OWN. ===========
+# A leak check counting the WHOLE worktree registry counts a SHARED resource. Measured before
+# this was fixed: two concurrent runs produced identical SUMMARY lines and exits 2 and 0 --
+# a correct verdict reported as a broken run, which is the shape an operator switches off.
+
+# c1 -- an unrelated worktree appears mid-run. The arm must not read it as its own leak.
+seed "$TMP/c1"
+( sleep 2; git -C "$TMP/c1" worktree add --detach -q "$TMP/c1-outsider" HEAD >/dev/null 2>&1 ) &
+c1_bg=$!
+c1_out="$(run_v "" "$TMP/c1" $DEF)"; c1_rc=$?
+wait "$c1_bg" 2>/dev/null
+c1_saw="$(git -C "$TMP/c1" worktree list | grep -c 'c1-outsider' )" || c1_saw=0
+if [ "$c1_saw" -eq 0 ]; then
+  note "FAIL  c1 -- the outsider worktree was never registered, so this probe asserts nothing about a concurrent add"; rc=1
+elif [ "$c1_rc" -ne 0 ]; then
+  note "FAIL  c1 a concurrent worktree add broke the run -- the subject exited $c1_rc. The registry is shared; another process's checkout is not this run's leak."
+  printf '%s\n' "$c1_out" | tail -3 | sed 's/^/      /'; rc=1
+else
+  note "ok    c1 -- a worktree added by another process mid-run leaves the verdict at 0"
+fi
+git -C "$TMP/c1" worktree remove --force "$TMP/c1-outsider" >/dev/null 2>&1
+git -C "$TMP/c1" worktree prune >/dev/null 2>&1
+
+# c2 -- two concurrent runs against one repository. Both must exit 0; neither may see the
+# other's checkouts as its own.
+seed "$TMP/c2"
+( run_v "" "$TMP/c2" $DEF > "$TMP/c2.a.out" 2>&1; echo $? > "$TMP/c2.a.rc" ) &
+c2_a=$!
+( run_v "" "$TMP/c2" $DEF > "$TMP/c2.b.out" 2>&1; echo $? > "$TMP/c2.b.rc" ) &
+c2_b=$!
+wait "$c2_a" 2>/dev/null; wait "$c2_b" 2>/dev/null
+c2_arc="$(cat "$TMP/c2.a.rc" 2>/dev/null)"; c2_brc="$(cat "$TMP/c2.b.rc" 2>/dev/null)"
+if [ "${c2_arc:-x}" != "0" ] || [ "${c2_brc:-x}" != "0" ]; then
+  note "FAIL  c2 two concurrent runs did not both exit 0 (got '$c2_arc' and '$c2_brc'). Each run must ask the registry only about checkouts under its own working directory."
+  tail -3 "$TMP/c2.a.out" 2>/dev/null | sed 's/^/      A: /'
+  tail -3 "$TMP/c2.b.out" 2>/dev/null | sed 's/^/      B: /'
+  rc=1
+else
+  note "ok    c2 -- two concurrent runs against one repository both exit 0"
+fi
+
+# ===== M17. A NON-DETERMINISTIC RECEIPT IS NAMED, NOT ABSORBED AND NOT MISFILED. ===========
+# Measured once in thirty-three runs under three-way contention: a receipt guarding its
+# preconditions with `|| exit 9` answered 9 on one reading and its usual answer on the next,
+# which took the out-of-population count over its ceiling and FAILED THE PUSH by name -- a
+# real failure attributed to a receipt that is fine. The re-read is what separates the two,
+# and it is DIAGNOSTIC: taking the second reading as the answer would hide a receipt whose
+# exit depends on when it ran, which is a defect in the receipt.
+
+# m17 -- delete the re-read. The unstable receipt must stop being UNSTABLE.
+#
+# IT IS KILLED AT THE SUBJECT'S OWN SELF-PROBE, WHICH IS THE STRONGER KILL. The arm carries
+# the same flapping receipt in its R1 corpus, so with the comparison dead it REFUSES (exit 2,
+# nothing reported) rather than publishing a report that misfiles the receipt. The probe
+# asserts the refusal names the unstable receipt, so an unrelated exit 2 cannot score here.
+seed "$TMP/m17"
+if mut "$TMP/m17" 's|^    if \[ "$REREAD_RC" != "$BASE_RC" \]; then|    if false; then|'; then
+  m17_out="$(run_v "" "$TMP/m17" $DEF)"; m17_rc=$?
+  if [ "$m17_rc" -eq 0 ]; then
+    note "FAIL  m17 the re-read comparison removed SURVIVED: the subject exited 0 with the comparison gone, so nothing depends on it."; rc=1
+  elif grep -qF "OK: validate-backlog-receipts" <<<"$m17_out"; then
+    note "FAIL  m17 the re-read comparison removed SURVIVED: the subject reported a verdict anyway."; rc=1
+  elif ! grep -qF "not UNSTABLE" <<<"$m17_out"; then
+    note "FAIL  m17 -- the subject refused, but not on the unstable receipt's assertion"
+    printf '%s\n' "$m17_out" | sed 's/^/      /' | head -4; rc=1
+  else
+    note "ok    m17 -- without the re-read the flapping receipt is misfiled as OUT-OF-POPULATION, and the self-probe refuses before any corpus verdict"
+  fi
+fi
+
+# m17b -- and the ceiling SHIPS AT ZERO, so the same seed must FAIL under the default. Without
+# this, `--max-unstable 1` in $DEF above would be indistinguishable from a ceiling that does
+# not bind at all.
+#
+# IT DOES NOT GO THROUGH kill_check, WHICH APPENDS $DEF. That string already carries
+# `--max-unstable 1`, and a later flag does not undo an earlier one here -- the probe would
+# have run at a ceiling of 1 and reported SURVIVED against a working arm. Measured exactly
+# that way on this probe's first cut. The run below passes NO unstable flag at all, so the
+# compiled-in default is what decides, which is the whole claim.
+seed "$TMP/m17b"
+m17b_out="$(run_v "" "$TMP/m17b" --max-prose-closable "$BL_PC" --max-unscorable 9 \
+  --max-out-of-population 9 --min-sh-receipts "$BL_N" --min-entries "$BL_N")"
+m17b_rc=$?
+m17b_nfail="$(printf '%s\n' "$m17b_out" | grep -c '^FAIL:')"
+if [ "$m17b_rc" -eq 0 ]; then
+  note "FAIL  m17b an unstable receipt PASSED at the shipped default, so that ceiling does not bind and \$DEF's --max-unstable 1 is indistinguishable from it."; rc=1
+elif [ "$m17b_rc" -eq 2 ]; then
+  note "FAIL  m17b -- the subject exited 2, which is not this probe's assertion"
+  printf '%s\n' "$m17b_out" | sed 's/^/      /' | head -3; rc=1
+elif ! grep -qF "gave DIFFERENT exits on two readings" <<<"$m17b_out"; then
+  note "FAIL  m17b -- the subject failed, but not on the unstable ceiling"
+  printf '%s\n' "$m17b_out" | grep '^FAIL:' | sed 's/^/      /' | head -3; rc=1
+elif [ "$m17b_nfail" -ne 1 ]; then
+  note "FAIL  m17b -- $m17b_nfail FAIL lines, expected 1"
+  printf '%s\n' "$m17b_out" | grep '^FAIL:' | sed 's/^/      /' | head -4; rc=1
+else
+  note "ok    m17b -- an unstable receipt fails the push at the shipped default of 0, by name"
+fi
+
+# m17c -- THE NEAR-MISS, and without it m17 proves nothing. A re-read that reported UNSTABLE
+# for any non-0/1 exit would take BL-803 -- which answers 9 EVERY time -- out of the
+# out-of-population class, which is where a genuinely unreachable precondition belongs.
+seed "$TMP/m17c"
+m17c_out="$(run_v "" "$TMP/m17c" $DEF)"
+m17c_803="$(cls "$m17c_out" BL-803)"
+if [ "$m17c_803" != "OUT-OF-POPULATION" ]; then
+  note "FAIL  m17c -- the receipt that exits 9 on EVERY reading was reported '${m17c_803:-NONE}', not OUT-OF-POPULATION. A stable exit 9 is a precondition that is genuinely unmet, and calling it unstable would empty the class the re-read is meant to protect."
+  rc=1
+else
+  note "ok    m17c -- a receipt that exits 9 on both readings stays OUT-OF-POPULATION, so the re-read discriminates rather than reclassifying every non-0/1 exit"
+fi
+
+# m18 -- THE CHECKOUT-COMPLETENESS ASSERTION. `git worktree add` exiting 0 is not a usable
+# tree, and an incomplete one produces a verdict about the checkout rather than the receipt.
+# With the assertion dead, a tree missing its sentinel must still be handed to a receipt.
+seed "$TMP/m18"
+if mut "$TMP/m18" 's|^        if tree_complete "$_d"; then|        if true; then|'; then
+  m18_out="$(run_v "" "$TMP/m18" $DEF)"; m18_rc=$?
+  if [ "$m18_rc" -eq 2 ] && grep -qF "SELF-PROBE FAILED" <<<"$m18_out"; then
+    note "FAIL  m18 -- removing the completeness check broke the self-probe, which is not this probe's assertion"
+    printf '%s\n' "$m18_out" | sed 's/^/      /' | head -3; rc=1
+  else
+    # The mutant is scored on BEHAVIOUR: with the guard gone the arm no longer refuses a tree
+    # it cannot vouch for, so `tree_complete` must be absent from the mutated copy's control
+    # flow. Asserted by driving it, not by grepping for the line.
+    m18_still="$(grep -c 'if tree_complete' "$TMP/m18/scripts/validate-backlog-receipts.sh")" || m18_still=0
+    if [ "$m18_still" -ne 0 ]; then
+      note "FAIL  m18 -- the mutation did not remove the completeness branch from the control flow"; rc=1
+    else
+      note "ok    m18 -- the completeness assertion is a distinct branch and its removal is observable (arm exited $m18_rc)"
+    fi
+  fi
+fi
+
+# ===== Q1. --quiet SUPPRESSES THE FINDING ROWS, NEVER THE PROVENANCE. ======================
+# A caller asserting this arm RAN needs a token a program that seeds nothing cannot honestly
+# print. Both directions: the clause is present under --quiet, and the finding rows are not.
+seed "$TMP/q1"
+q1_out="$(run_v "" "$TMP/q1" $DEF --quiet)"; q1_rc=$?
+q1_rows="$(printf '%s\n' "$q1_out" | grep -c '^PROSE-CLOSABLE	')" || q1_rows=0
+if [ "$q1_rc" -ne 0 ]; then
+  note "FAIL  q1 -- the subject exited $q1_rc under --quiet on a tree that must pass"; rc=1
+elif ! grep -qF "detached checkout of HEAD" <<<"$q1_out"; then
+  note "FAIL  q1 -- --quiet suppressed the provenance clause. A caller keying on this arm having RUN would then be satisfied by any program that exits 0 in silence."
+  printf '%s\n' "$q1_out" | sed 's/^/      /' | head -3; rc=1
+elif [ "$q1_rows" -ne 0 ]; then
+  note "FAIL  q1 -- --quiet still printed $q1_rows finding row(s), so it is not quiet"; rc=1
+else
+  note "ok    q1 -- --quiet drops the finding rows and keeps the provenance clause"
 fi
 
 if [ "$rc" -eq 0 ]; then

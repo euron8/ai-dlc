@@ -264,7 +264,7 @@ Tiered **DEFECT**.
 Found while closing `BL-033` at `v0.423.0`; not a `PC-` candidate, so it ranks below the
 PC-backed set.
 
-verify: sh P=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$P" ] || exit 9; B="$(awk '/^NOEXEC="\$\($/{f=1} f{print} f && /^\)"$/{exit}' "$P" | sed 's/#.*//')"; [ -n "$B" ] || exit 9; printf '%s\n' "$B" | grep -q '100755' || exit 9; printf '%s\n' "$B" | grep -q '\[ -x' || exit 9; printf '%s\n' "$B" | grep -q '100644'
+verify: sh P=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$P" ] || exit 9; B="$(awk '/^NOEXEC="\$\($/{f=1} f{ sub(/#.*/,""); print } f && /^\)"$/{exit}' "$P")"; grep -q '100755' <<<"$B" || exit 1; grep -q '\[ -x' <<<"$B" || exit 1; grep -q '100644' <<<"$B"
 
 ## BL-100 — `--untangle` gives a mode-drifted consumer copy the same verdict as a correct one
 
@@ -4376,10 +4376,17 @@ or carry no extractable grep token (`BL-006`, `BL-007`, `BL-010`, `BL-015`, `BL-
 with those 30 declared out of population by name; the design call left open is whether the seven
 flips gate the push or are reported, and that is decided when the arm ships, not here.
 
+**The receipt below DRIVES the shipped arm on a seeded ledger inside a throwaway repository** and
+refuses a comment stub, an always-fail stub, a reporter that names every id, and a `grep`-mention
+heuristic that forges the OK line. It does NOT refuse a forgery that prints every row and the OK
+line verbatim for that exact seed — no receipt that reads output can — and that forgery is killed
+by `core/fixtures/backlog-receipt-binding/run.sh` at its unmutated control. The fixture is the
+gate; this receipt is the instrument that closes the entry.
+
 **Tiered DEFECT.** Every receipt in the ranked set is the instrument the next batch will use to
 decide whether its own fix worked, and nine of them cannot tell a fix from a comment.
 
-verify: sh B=docs/backlog.md; [ -f "$B" ] || exit 9; grep -q '^## BL-227' "$B" || exit 9; grep -qE 'receipt-emission-site|scores every backlog receipt against a seeded|verify-receipt-binding' scripts/*.sh 2>/dev/null && exit 0; exit 1
+verify: sh V=scripts/validate-backlog-receipts.sh; [ -f "$V" ] || exit 9; d="$(mktemp -d)" || exit 9; ( cd "$d" && git init -q && mkdir p && printf 'base\n' > p/s.txt && printf '#!/bin/sh\nexit 3\n' > p/t.sh && git add . && git -c user.name=p -c user.email=p@x commit -qm s && git update-ref refs/remotes/origin/main HEAD ) || exit 9; printf '%s\n' '## BL-900 — seeded' '' "verify: sh grep -q 'zzzmark' p/s.txt" '' '## BL-901 — seeded' '' "verify: sh sh p/t.sh; [ \$? -eq 0 ]" '' '## BL-902 — seeded' '' "verify: sh grep -q 'base' p/s.txt" > "$d/l.md"; o="$(bash "$V" "$d/l.md" --max-prose-closable 0 --max-unscorable 99 --max-out-of-population 99 --min-sh-receipts 0 --min-entries 0 2>&1)"; r0=$?; q="$(bash "$V" "$d/l.md" --quiet --max-prose-closable 1 --max-unscorable 99 --max-out-of-population 99 --min-sh-receipts 0 --min-entries 0 2>&1)"; r1=$?; rm -rf "$d"; [ "$r0" -eq 1 ] && [ "$r1" -eq 0 ] || exit 1; grep -q "^PROSE-CLOSABLE	BL-900	" <<< "$o" || exit 1; grep -q "^PROSE-CLOSABLE	BL-90[12]	" <<< "$o" && exit 1; grep -q "^ALREADY-PASSING	BL-902	" <<< "$o" || exit 1; grep -q "^OK: .*1 receipt(s) scored .* detached checkout of HEAD" <<< "$q" || exit 1; exit 0
 
 
 

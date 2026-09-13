@@ -15,6 +15,98 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.562.0] - 2026-09-12
+
+### A backlog receipt that a comment can satisfy fails the push
+
+Batch 96, one release, one no-`PC` subject. The sweep returned no new PC-backed work (live 56,
+cited 37, unfiled 19, all adjudicated; the ledger is byte-identical at the consumer's HEAD to
+batch 95's close); the subject was taken on this session's own ranking because the one-liner
+arrived from a peer session. No machinery path changes and no bootstrapping file is touched:
+everything here is repo-root `scripts/`, the distribution's own hook, and a `.dist-only` fixture.
+
+#### `BL-227`
+
+`scripts/validate-backlog-receipts.sh` runs every live `verify: sh` receipt in `docs/backlog.md`
+twice, each time in its own detached `git worktree` checkout of the ledger's `HEAD`: once
+untouched, and once after ONE comment line carrying the receipt's own grep literals has been
+appended to every file it names. A receipt that goes 1 -> 0 is `PROSE-CLOSABLE` — it cannot tell a
+fix from prose about a fix — and is reported by id with the paths seeded and the tokens carried.
+On this tree nine are: `BL-017`, `BL-021`, `BL-022`, `BL-023`, `BL-044`, `BL-124`, `BL-216`,
+`BL-221`, `BL-223`. A generic comment carrying no token flips none of the 76, so the seed must
+carry the receipt's own literal, and a flip is its own proof; the arm's false-positive set is
+zero by construction.
+
+The ceilings are ratchets registered at the values the arm read on the tree that registered
+them, and they only move down. There are three plus a floor, because one ceiling is escapable by
+leaving the population: a pattern built from a variable, an `awk` body, `grep -f`, an
+`|| exit 9`, a `verify: sh` rewritten as `verify: manual`, or a deleted receipt line each lower
+the headline count and fix nothing. `--max-unscorable` bounds the receipts the seed grammar cannot
+spell (28), `--max-out-of-population` bounds base exits that are neither 0 nor 1 (1, `BL-130`),
+and `--min-sh-receipts` with `--min-entries` refuses an `sh` count that falls further than the
+entry count did, so rotation stays quiet and a rewrite does not. Both evasion controls fire when
+seeded inside an entry; the false-positive set of the floor is empty over the last twenty commits
+touching the ledger. A base-0 receipt is `ALREADY-PASSING` and carries no ratchet, because pooling
+ordinary progress with the exit-9 escape would make a gate built for an evasion fire on a fix.
+
+Three design facts were measured rather than assumed, each by the adversary on the contract
+before the build. A `git archive` extraction has no `.git`, and eight of the 76 receipts change
+their base verdict in one — three of them to exit 0, which reads as a CLOSE — so the extraction is
+a real checkout; per receipt, `git worktree add --detach` costs 0.24s against 0.89s for
+`init`+commit and 1.02s for `clone`, and is the only cheap form that walks real history through
+`origin/main`. Appending a comment to a JSON or YAML document breaks the document as well as
+carrying the token, so every flip touching such a file is re-run against a token-free line that
+breaks the format the same way and is reported `FORMAT-SENSITIVE` rather than counted when it
+flips under that too; on this tree none does. And the entry's own receipt was satisfied by a stub
+carrying nothing but `# receipt-emission-site`, so it now DRIVES the validator on a seeded ledger
+inside a throwaway repository and asserts both that the seeded prose receipt is named and that
+the seeded driving receipt is not — scored against a comment stub, an always-fail stub, a
+reporter that names every id, and a heuristic that names any receipt containing `grep` while
+forging the OK line — all four at 1, the shipped arm at 0; the heuristic is caught by a seeded
+base-0 receipt the real arm reports `ALREADY-PASSING`. The limit is stated rather than hidden:
+a forgery that reproduces every row and the OK line verbatim for that seeded ledger scores 0,
+because a receipt that reads rendered output is closable by a program that prints it. That
+forgery is killed by the fixture's unmutated control, which is the gate; the receipt is the
+instrument that closes the entry and it does not carry the fixture's power.
+
+The hook step is standalone and deliberately not an arm inside `validate-enforcement-map.sh`: at
+~22s over 76 receipts at 8-way it is the most expensive validator in the hook, and the two sharded
+mutation batteries would multiply it by roughly thirty. `core/fixtures/backlog-receipt-binding/`
+is `.dist-only` and carries thirty-two probes plus an unmutated control, every mutation
+`cmp -s`-asserted applied, including the token-free seed, both sides of the ceiling and the
+`-ge` form, exit 9 counted, 0 -> 1 counted, the `cmp -s` applied-check removed, the path-split
+class drifted from `receipt_path_tokens()`, the seed landing in the working tree, a zero
+population, the two evasions, rotation, a two-file two-literal receipt that a first-path-only or first-grep-only seed reports as bound (each of those cuts passed the first battery green while shrinking the real set to 6 and 3), an unrelated worktree registered mid-run, two concurrent runs, each ratchet driven over its own ceiling, and a receipt whose base exit disagrees between two readings.
+
+A base exit that is neither 0 nor 1 is read a second time in a fresh checkout before it is
+classified. Two agreeing readings are `OUT-OF-POPULATION`; two disagreeing readings are
+`UNSTABLE`, counted under `--max-unstable`, registered at 0 — so a receipt that is not
+deterministic under load fails the push by name rather than being absorbed into a ceiling or
+hidden by a retry. The tip adversary observed `BL-099` flip from bound to exit 9 once in 33
+runs under three-way contention, at the shipped defaults, exiting 1 on the out-of-population
+ceiling; the checkout-incompleteness hypothesis did not reproduce over 96 adds and 18
+concurrent runs, so the cause is unattributed and the completeness assertion ships anyway. That
+entry's receipt is rewritten without pipelines in its guards and with exit 9 reserved for a
+missing file; it is not closed. The seed's unwritable-path probe is made unwritable by
+a `post-checkout` hook inside the probe repository, because git does not record a read-only bit
+and `chmod 444` does not survive a checkout.
+
+`.ai-dlc-fixture-readsets.tsv` has no row for the new fixture yet — the deriver needs root —
+so the runner selects it on every push until the operator runs
+`sudo bash core/scripts/derive-fixture-readsets.sh --list "backlog-receipt-binding"`.
+
+The hook registers `--max-prose-closable 9 --max-unscorable 28 --max-out-of-population 1
+--max-unstable 0 --min-sh-receipts 76 --min-entries 88`, every one the value the arm read on
+this tree, and each ceiling only moves down.
+
+`FORK_BUDGET` in `scripts/validate-enforcement-map.sh` moves 8090 -> 8120. The gate refused the
+first push at 8103, thirteen over. Attributed in four detached worktrees of one repository,
+interleaved, two reps each, with the validator byte-identical on every side: the branch point
+already read 8088/8089, so the fifteen forks of headroom the previous raise recorded had fallen
+to one or two on corpus growth alone; the tip reads 8103/8103; removing the new fixture
+directory alone gives 8097 and removing the new repo-root script alone gives 8095/8094, so the
+script costs more than the fixture and the two account for the whole delta. No reduction taken.
+
 ## [0.561.0] - 2026-09-12
 
 ### The derivation allowlist refuses sed's script-argument write verbs
