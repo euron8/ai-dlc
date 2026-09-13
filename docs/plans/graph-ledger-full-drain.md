@@ -37,11 +37,111 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
+### BATCH 98 SHIPPED AS `v0.564.0`, ONE RELEASE, ONE NO-`PC` SUBJECT IN BOTH ITS HALVES — AND **THE CONTRACT ADVERSARY REFUTED FIVE CANDIDATES BY BUILDING THEM BEFORE THE BUILD, THE COST MEASUREMENT CHANGED THE DESIGN, THE GATE WENT RED ON A FIXTURE THAT LOST ITS SUBJECT TO A RIGHT CHANGE, AND THE TIP ADVERSARY FOUND THE SECOND HALF STILL ACQUITTING ON ARM C'S UNDECIDED TERMINALS.** THE SWEEP WAS EMPTY OF PC WORK. THE GAP IS **SEVEN**, PENDING **1**, AND THE PULL IS **NOT REQUIRED** — BUT THE NEXT ONE CARRIES A BOOTSTRAPPING CHANGE.
+
+This block replaces the batch-97 record below it. Re-derive every figure rather than reading it.
+
+**`VERSION` IS `0.564.0`, SO BATCH 99 RELEASES AS `0.565.0`.** Re-derive `VERSION` and add one.
+Batch 98 merged ONCE — `v0.564.0` at `72f6ad8d` (PR #738) — closing `BL-124`, verbatim in its
+release commit message (control: an impossible `BL-` id returns 0; eight earlier commits name
+it — its filing at `0b060987`, five `v0.436.0`-era fix and plan commits, and two batch-97 commits
+that reported it — which `named_absorbed()` lists beside the release and does not
+mis-attribute; the consumer's step 8 takes the release from the commit carrying the fix). `BL-124` is ROTATED; archive moved **156 → 157**, live **87 → 86**. No entry was
+filed.
+
+**THE SUBJECT WAS TAKEN ON THIS SESSION'S OWN RANKING** because the one-liner arrived from a peer.
+`BL-124` was the readiest no-`PC` entry at batch 97's close and one of the two prose-closable
+receipts the `BL-227` gate still named; it touches the update skill, so it shipped ALONE. Its
+second half — the stamp advanced past a carried path — was scoped by its own hand, which refuted
+the "no constructible receipt" reading by building one that drives the gate (unfixed 1, comment
+stub 1, fix 0, acquittal deleted 9), so both halves shipped as one defect.
+
+**THE ADVERSARY ATTACKED THE CONTRACT BEFORE THE BUILDERS AND REFUTED FIVE CANDIDATES.** A fix
+keyed on "machinery AND in range" with no bucket check closed the contract's receipt (the bucket
+conjunct is not observable on an ordinary run because every in-range machinery path outside arm
+C's class is claimed by an earlier arm; the fail-closed cell is the only one that separates
+them). The row sited before `HARD-CORE-BEHIND` replaced "take theirs" with a merge task on a
+zero-delta file. Partial absorption on a carried path survived the siting (now `ABSORBED` wins
+only at `hits == total` for a carried path). `UPSTREAM-DELETED+consumer-modified` is in the
+population and "do not revert" was wrong for it. A consumer with no `skill_commit` is fully in
+the population, so the receipt's stamp carries none. The cost measurement changed the design:
+running `preclassify.sh` inside the scan is ~1.1s on a pull where the scan reaches a file past
+its byte-identity arms, so `apply.sh` hands the rows down through `--bucket-rows` and an empty
+file over a moving range does not acquit. One adversary claim did not reproduce: the bash-3.2
+`case`-in-substitution parse failure; the file-based collector shipped anyway.
+
+**THE GATE WENT RED ONCE, ON A FIXTURE THAT LOST ITS SUBJECT TO A RIGHT CHANGE.**
+`reconcile-blocking-list` seeded a token-substituted template under `core/schemas/*.json`, a
+machinery glob, as its wrong-base artefact; preclassify buckets it `BOTH-CHANGED->CLASSIFY` so
+the new row claimed it and `hard-blockers.sh` (HARD- rows only) no longer listed it. Passed at
+`origin/main` in a detached worktree, so the movement was this batch's. The artefact moved to a
+non-machinery scanned path with an eval'd `machinery_paths()` control in the seed, and the
+machinery case is kept as its own arm. A census of the seven fixtures asserting
+`HARD-UNREGISTERED-CORE-DRIFT`, each run solo from the root, found no other. On the real
+distribution the declared substitution-site set and the machinery set are disjoint (0 of 4,
+both sides derived) and nothing binds them so — recorded in the archived entry as a limit.
+
+**THE TIP ADVERSARY FOUND THE SECOND HALF STILL ACQUITTING ON A GATE-GREEN, PUSHED BRANCH.** The
+boolean `GATE_CARRIED` flag was set only at the CARRY emit, so on arm C's two UNDECIDED terminals
+(machinery set empty; preclassify returning no rows over a moving range) the acquittal printed
+beside the row saying the gate could not tell. The refusal is now three-state and only `clean`
+acquits; the receipt scores the boolean first cut 1. The tip adversary also refuted the "+1.15s
+on every pull" figure: the derivation is lazy and the un-edited reference consumer never invokes
+it (a logging shim counted 0 against a control of 1), so the claim now names its population. The
+consumer rehearsal on a clone showed old and new engines byte-identical in output (87 rows, 84
+`CORE-OK`, 3 `CORE-TEMPLATE-SUBSTITUTED`, zero carried, zero `HARD-`) against a control that the
+engines differ.
+
+**THE RECEIPT IS TWO PROGRAMS CONJOINED**, each building a throwaway distribution and consumer
+under `mktemp` and driving its subject: 0 only with both halves, 1 at `origin/main`, 1 on each
+half's worktree alone, three reps each. Fixtures `apply-drift-after-write` (41 arms),
+`self-update-gate` (188 arms, four mutants each red only on its own arms; 67s → 88s solo against
+a pole of 524s) and `reconcile-blocking-list` all pass from the root.
+
+**THE SWEEP AT THIS BATCH'S CLOSE, ref `ai-dlc/carry-over/chunk-max-usd-swap-sizing` (consumer HEAD
+`e700dab0f`, unmoved since batch 96).** Live **56**, cited **37**, unfiled **19**, archive **206**,
+partition control 0; ledger md5 `6d87be63…` unchanged since batch 93. The 19 unfiled are the
+adjudicated set (5 named in `origin/main` release commits, 12 `NOT-UPSTREAM`, one withdrawn,
+one superseded, one refuted) — available residue ZERO. One `PC-S311-H2-ATTESTATION-…` id sits
+UNCOMMITTED in the consumer's working tree only. TERMINAL **89**; DISCHARGED corrected **7**;
+discharged-but-INVISIBLE 1 (`PC-S308-GATE-METRICS-CHECK2-STALE-VERDICT-READ-ORDER`, unchanged).
+
+**THE INCIDENTAL-CLOSE CHECK WAS RUN AND FOUND NOTHING.** Histogram before rotation: 3×0
+(`BL-236`, `BL-238`, `BL-124`), 71×1, 1×9 over 75 receipts; after rotation 2×0, 71×1, 1×9 over
+74. The gate on the merged tree reads `prose-closable=1/1 bound=43 unscorable=28
+out-of-population=1 unstable=0`.
+
+**THE PULL IS NOT REQUIRED, THE GAP IS SEVEN, AND THE NEXT PULL CARRIES A BOOTSTRAPPING CHANGE.**
+Stamp `0.557.0` / `01fea66c` on all four fields, shipped `0.564.0`. The differential on a clone
+of the consumer: installed and distribution `validate-layer-entries.sh` are byte-identical
+(`cmp -s`), so that null is by construction and is stated as such. The range
+`01fea66c..origin/main` now touches 28 `core/` paths, five of them under the update skill
+(`SKILL.md`, `apply.sh`, `layer-drift.sh`, `self-update-gate.sh`, `unregistered-drift.sh`) —
+the consumer's INSTALLED 0.557.0 engine runs the pull that delivers them. Measured on the clone:
+the installed scan refuses `--bucket-rows` and emits nothing, but `apply.sh` resolves the scan
+as its own sibling under one machinery glob, so a new caller never pairs with an old callee.
+Zero mode-only changes (control: 28 raw rows).
+
+**THE CONSUMER'S PORCELAIN MOVED 43 → 13 DURING THE BATCH**, its own sprint-311 commits; nothing
+here wrote to it (asserted by every hand and the lead). `git push` exited 141 twice with a green
+gate and the ref NOT on origin; the third push, on the unchanged content key, landed it.
+
+**THE OPERATOR OWES** `sudo bash core/scripts/derive-fixture-readsets.sh --list "reconcile-blocking-list"`
+— its seed now reads `preclassify.sh` and `setup-sites.md`. The read-set map was 17 commits stale
+at this gate and selected 55 of 198.
+
+**THE READIEST NO-`PC` WORK** is now `BL-221` (the LAST prose-closable receipt the gate names;
+its receipt and its fix are one change, the positive-binding arm carries 3 false positives of 6
+and moves the pole's neighbour), then `BL-243` (needs a ruling on a citation-local negator
+vocabulary), `BL-223` and `BL-216` (receipts bound; fixes wait on the grammar ruling and the
+SoR-set extension), `BL-220`. Run `bash scripts/validate-backlog-receipts.sh` and read the rows
+rather than this sentence.
+
 ### BATCH 97 SHIPPED AS `v0.563.0`, ONE RELEASE, SEVEN NO-`PC` SUBJECTS — AND **FIVE OF THE SEVEN CONTRACT RECEIPTS WERE REFUTED BY BUILDING THE NON-FIX BEFORE THE BUILD, TWO MORE ON THE COMBINED TIP, AND THE GATE'S OWN SEED COULD NOT REACH ANY OF THEM BECAUSE IT APPENDS AT END OF FILE.** THE SWEEP WAS EMPTY OF PC WORK. THE GAP IS **SIX**, PENDING **1**, AND THE PULL IS **NOT REQUIRED**.
 
-This block replaces the batch-96 record below it. Re-derive every figure rather than reading it.
+This block was current at batch 97's close and is replaced by the batch-98 record above it.
 
-**`VERSION` IS `0.563.0`, SO BATCH 98 RELEASES AS `0.564.0`.** Re-derive `VERSION` and add one.
+**`VERSION` WAS `0.563.0` AT THIS BLOCK.** Re-derive `VERSION` and add one.
 Batch 97 merged ONCE — `v0.563.0` at `5f8e2b36` (PR #736) — naming `BL-017`, `BL-021`, `BL-022`,
 `BL-023`, `BL-044`, `BL-216` and `BL-223` in its release commit message (control: an impossible
 `BL-` id returns 0). **NONE OF THE SEVEN IS CLOSED OR ROTATED**: each entry's RECEIPT was rewritten
@@ -9479,7 +9579,7 @@ given at batch 90.
    - **Never merge while a hand is out**, and never read a hand's idle state as its report.
 
 1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below) AGAINST THE REF THAT CARRIES THE
-   LIVE LEDGER, RANK THE UNFILED CANDIDATES, THEN SCOPE BATCH 96 — AND HOW YOU SCOPE IT DEPENDS ON
+   LIVE LEDGER, RANK THE UNFILED CANDIDATES, THEN SCOPE BATCH 99 — AND HOW YOU SCOPE IT DEPENDS ON
    WHO INVOKED YOU.** Operator
    instruction, given at batch 52. **If the one-liner was TYPED BY THE OPERATOR**, report the
    candidates with a marked recommendation and ask, as every batch before has. **If it ARRIVED
@@ -9513,12 +9613,20 @@ given at batch 90.
    rebuilt in one release: the originals closed on an empty file, on a dead arm, and on a
    positional window.
 
+   **BATCH 98's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.** `BL-124` shipped ALONE, in
+   BOTH its halves, as `v0.564.0` at `72f6ad8d` (PR #738), cited in the release commit message.
+   It carries no `PC-` id. It touched the update skill (`unregistered-drift.sh`,
+   `self-update-gate.sh`, `apply.sh`, `SKILL.md`), so the next consumer pull carries a
+   bootstrapping change — action 7's hazard applies to that pull. The hook ceiling is now
+   `--max-prose-closable 1`; the one remaining is `BL-221`. The operator owes
+   `sudo bash core/scripts/derive-fixture-readsets.sh --list "reconcile-blocking-list"`.
+
    **BATCH 97's SEVEN SUBJECTS ARE SHIPPED AND NOT ROTATED — do not re-scope any of them, and do
    not read them as closed.** `BL-017`, `BL-021`, `BL-022`, `BL-023`, `BL-044`, `BL-216` and
    `BL-223` had their RECEIPTS rewritten in `v0.563.0` at `5f8e2b36` (PR #736), named in the
    release commit message; every entry still exits 1 and its defect is still live. None carries
-   a `PC-` id. The hook ceiling is now `--max-prose-closable 2`; the two remaining are `BL-124`
-   (ships alone — update skill) and `BL-221` (arm shape undecided).
+   a `PC-` id. The hook ceiling was `--max-prose-closable 2` at that close; batch 98 took `BL-124`
+   and lowered it to 1, leaving `BL-221` (arm shape undecided).
 
    **BATCH 96's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.** `BL-227` shipped ALONE as
    `v0.562.0` at `c6b395b8` (PR #734), cited in the release commit message. It carries no `PC-`
@@ -9644,11 +9752,12 @@ given at batch 90.
    then closed by an over-broad fix, so an arm must also assert the CONTROL case still DENIES.
    `verification-discipline.md:154` states this rule and has no enforcer, which is why `BL-227`
    exists, and `BL-227` shipped its enforcer as `v0.562.0`. The ranked no-`PC` set, readiest first, is
-   `BL-124` alone (the last prose-closable receipt that can be rewritten without a design ruling,
-   and it names the update skill), then `BL-243`, `BL-221`, `BL-223`, `BL-216`, `BL-220`
+   `BL-221` (the LAST prose-closable receipt the gate names; its receipt and its fix are one change
+   and the arm shape is undecided — 3 false positives of 6 measured at batch 95), then `BL-243`,
+   `BL-223`, `BL-216`, `BL-220`
    (`BL-225`, `BL-217`, `BL-222`, `BL-240`, `BL-241`, `BL-224`, `BL-019`, `BL-242`, `BL-218`, `BL-219`,
-   `BL-137` and `BL-227` have shipped; seven receipts were bound at `v0.563.0` without closing
-   their entries) — **every one of their receipts needs repairing before its verdict means anything.**
+   `BL-137`, `BL-227` and `BL-124` have shipped; seven receipts were bound at `v0.563.0` without
+   closing their entries) — **every one of their receipts needs repairing before its verdict means anything.**
    Batch 94 measured all three: `BL-220`'s only shippable shape is an `--allow-missing` opt-out
    that leaves the default alone (a homes-keyed fail-closed fires on 450 correct files); `BL-221`'s
    positive-binding arm carries 3 false positives of 6 and moves the suite pole; `BL-223` needs a
