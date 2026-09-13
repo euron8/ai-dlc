@@ -1098,6 +1098,26 @@ prose is itself generated rather than composed.
    to discuss the receipt, so quoting it closes the entry with nothing behind the close.
    Name the entry; describe what it asks for.
 
+   **Read the distribution through `$THEIRS_TREE` or a rev-spec, never through `$DIST/…`.** An
+   `sh` receipt runs with `$DIST`, `$BASE`, `$THEIRS`, `$CONSUMER` and `$THEIRS_TREE` exported,
+   and only two of those are paths: `$CONSUMER` and `$THEIRS_TREE`, a materialized tree of the
+   distribution at theirs (no `.git` in it, so use it as a directory). `$DIST` is the
+   distribution's CHECKOUT — it goes to `git -C` and nothing else, because the working tree under
+   it sits wherever the operator last left it and is under no obligation to be at theirs. A
+   receipt reading it as a path measures a ref the pull is not pulling while the row claims it
+   measured theirs; `ledger-reverify.sh` refuses that form as `NEEDS-REVIEW` rather than scoring
+   it. Measured on the reference consumer: 2 of 28 `$DIST`-naming receipts (of 37 `sh` receipts)
+   read it as a path and both produced a false `CLOSE-CANDIDATE` in one run.
+   `cd "$DIST" && git show "${THEIRS}:…"` is the same correct read in another form and is
+   accepted; a bare `cd "$DIST"` followed by anything else is refused.
+
+   **A `$THEIRS_TREE` receipt opens with `[ -n "${THEIRS_TREE:-}" ] || exit 127;`.** Re-verify
+   runs on the engine the consumer LAST INSTALLED, so for one pull after `$THEIRS_TREE` ships the
+   running engine does not export it: unguarded, the receipt reads `/…`, exits non-zero, and that
+   engine scores it `CLOSE-CANDIDATE`. `exit 127` is the "subject renamed or deleted" status every
+   shipped engine already turns into `NEEDS-REVIEW`, so the guard degrades the receipt to a review
+   instead of a false close.
+
    An entry with NO `verify:` line emits no row and is left to hand-review as today; the
    convention is opt-in and the ledger stays prose. The line is one of
    `theirs_lacks <core-path> "<substr>"` (innovation upstream lacks),

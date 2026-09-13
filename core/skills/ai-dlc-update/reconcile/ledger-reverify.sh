@@ -26,8 +26,10 @@
 #       The entry is a defect present UPSTREAM. Still live iff `theirs:<path>` still has
 #       <substr>. If it no longer does → upstream fixed it → CLOSE-CANDIDATE.
 #   verify: sh <one-liner>
-#       Escape hatch. Runs with $DIST/$BASE/$THEIRS/$CONSUMER exported. Exit 0 = the entry
-#       STILL reproduces at theirs (stays open); nonzero = it no longer does → CLOSE-CANDIDATE.
+#       Escape hatch. Runs with $DIST/$BASE/$THEIRS/$CONSUMER/$THEIRS_TREE exported. Exit 0 =
+#       the entry STILL reproduces at theirs (stays open); nonzero = it no longer does →
+#       CLOSE-CANDIDATE. WHICH OF THE FIVE MAY BE READ AS A PATH is not a convention: see
+#       FIVE EXPORTED VALUES below, and the refusal that enforces it.
 #   verify: manual
 #       No mechanical predicate exists for this entry — hand-review is the intent, not a
 #       defect → HAND-REVIEW. This verb used to fall through to `unknown verify verb`, which
@@ -182,9 +184,40 @@ THEIRS="${4:?}"
 # `sh` RECEIPT'S PREDICATE — and the failure it produced is a FALSE CLOSE, the one verdict this
 # file's header names as the direction that loses information permanently.
 #
-# `$CONSUMER` is the only one of the four exported values a receipt can read AS A PATH: `$DIST`
-# is handed to `git -C` and is form-insensitive, and the two refs are shas. Callers routinely
-# pass `.`, which is a valid consumer root. A receipt whose CLAIM is about absolute-path handling
+# FIVE EXPORTED VALUES, AND ONLY TWO OF THEM ARE PATHS.
+#
+#   $CONSUMER     a PATH. The consumer root, normalised absolute here.
+#   $THEIRS_TREE  a PATH. A materialized tree of the distribution AT `$THEIRS` — see
+#                 `theirs_tree()` below. It has NO `.git`, so `git -C "$THEIRS_TREE"` is wrong;
+#                 to run git against the distribution use `git -C "$DIST" … "${THEIRS}:…"`.
+#                 A RECEIPT USING IT OPENS WITH `[ -n "${THEIRS_TREE:-}" ] || exit 127;` —
+#                 re-verification runs on the engine the consumer LAST INSTALLED, which for one
+#                 pull after this release does not export the value, and an unguarded receipt
+#                 there reads `/…`, exits non-zero and is scored as a CLOSE. The guard turns that
+#                 into the 126/127 NEEDS-REVIEW every shipped engine already emits.
+#   $DIST         NOT a path to read. It is the distribution repository handed to `git -C`, and
+#                 the WORKING TREE under it sits at whatever the operator last checked out.
+#   $BASE         a sha.
+#   $THEIRS       a sha.
+#
+# THE `$DIST`-AS-A-PATH LINE WAS A CONVENTION WITH NOTHING BEHIND IT, AND IT PRODUCED A FALSE
+# CLOSE. A receipt is an arbitrary `bash -c` string, so `$DIST/core/scripts/foo.sh` and
+# `AI_DLC_PROJECT_ROOT="$DIST" bash …` are perfectly ordinary reads of the distribution's
+# CHECKOUT — a tree under no obligation to be at `$THEIRS`. The row then says "no longer
+# reproduces at theirs (<version>)" about a ref it never read. MEASURED on the reference consumer
+# pulling 0.557.0 -> 0.564.0 with the distribution checkout three commits past theirs: of 28 `sh`
+# receipts naming `$DIST`, 26 handed it only to `git -C` and 2 read it as a filesystem path —
+# and BOTH of those flipped STILL-LIVE -> CLOSE-CANDIDATE in the same run, on fixes that had
+# landed one release PAST the pull. The scarcity is the hazard: a rare form nobody audits, whose
+# failure direction is the one this file's header names as permanent.
+#
+# So the claim is now ENFORCED rather than stated. A receipt that names `$DIST` anywhere other
+# than as a `git -C` argument is refused as NEEDS-REVIEW `unresolved:` and never scored — the
+# downgrade-never-create direction the `sh` guards above already use. A conforming receipt is
+# byte-unchanged in verdict and in detail.
+#
+# `$CONSUMER` is normalised because its FORM is part of every `sh` receipt's predicate. Callers
+# routinely pass `.`, which is a valid consumer root. A receipt whose CLAIM is about absolute-path handling
 # then has its own subject handed to it in the wrong form — the two-arm predicate for
 # `PC-S312-STRAYS-DOES-NOT-NORMALIZE-AN-ABSOLUTE-PATH` requires the relative path to pass and the
 # absolute one to fail, and with `CONSUMER=.` the second arm receives `./docs/…`, which is still
@@ -672,6 +705,110 @@ base_holds() { all_present "$(base_show "$1")" "$2"; }
 # chance for the two to drift, and a drift here is silent in both directions at once.
 receipt_path_tokens() { printf '%s\n' "$1" | tr -c 'A-Za-z0-9_./$-' '\n' || true; }
 
+# receipt_reads_dist_as_path <sh-receipt> -> 0 when the receipt names `$DIST` somewhere other than
+# as a `git -C` argument; 1 when every occurrence is a `git -C` argument, or there is none.
+#
+# THE GRAMMAR IS SUBTRACTIVE, and that is what makes it safe in the only direction that matters.
+# It does not try to recognise a PATH read -- there is no finite list of them, and the two shapes
+# the reference consumer actually wrote (`cat "$DIST/VERSION"` and
+# `AI_DLC_PROJECT_ROOT="$DIST" bash …`, the second with no slash after `$DIST` at all) do not share
+# a spelling to key on. It removes the ONE use that is known-good, then asks whether any mention
+# survives. A use nobody anticipated is therefore refused rather than acquitted, which is the
+# downgrade-never-create direction: a wrong refusal costs the author one read, a wrong acquittal
+# costs an entry.
+#
+# EVERY SPELLING OF THE GOOD USE, because `$DIST` is not a substring of `${DIST}` and the braced
+# form is the one this distribution's own rev-path rule REQUIRES. A partial strip refuses
+# conforming receipts, which is how a check becomes one the operator turns off.
+#
+# TWO GOOD FORMS, NOT ONE. `cd "$DIST" && git show "${THEIRS}:…"` reads the same blob as
+# `git -C "$DIST" show` and is equally correct, and the reference consumer's ARCHIVE carries six
+# receipts written that way. Refusing them would accuse correct receipts the moment a rotation
+# brought one back. But a BARE `cd "$DIST"` NOT followed by `git` is the checkout read this
+# function exists to catch -- `cd "$DIST" || exit 127; S="$DIST/core/scripts"` is a live shape in
+# this repo's own staged review corpus -- so the `cd` strip requires the `git` after it.
+#
+# THE PATTERNS ARE SINGLE-QUOTED LITERALS IN VARIABLES, AND THAT IS LOAD-BEARING. In
+# `${t//PATTERN/}` the pattern is EXPANDED: written inline and unquoted, `$DIST` becomes the
+# operator's actual checkout path, the strip matches nothing, and every conforming receipt is
+# refused -- the exact mutant `m3` builds deliberately, arrived at by accident. A single-quoted
+# variable is substituted literally and cannot expand.
+#
+# SHELL PATTERN SUBSTITUTION, NOT `sed`. Every character in these literals -- `$`, `{`, `}`, `"`
+# -- is literal to a glob and metasyntax to a BRE, where a mid-pattern `$` is still an anchor on
+# BSD `sed` and matches nothing. That false zero is how this population was first miscounted.
+#
+# WHAT THE EXEMPTION ACQUITS, stated because an exemption nobody states is a mechanism defending
+# its own defect. `git -C "$DIST"` is stripped whatever SUBCOMMAND follows, so three shapes read
+# the CHECKOUT and are acquitted: `git -C "$DIST" grep <pat>` with no ref argument,
+# `git -C "$DIST" show HEAD:<path>`, and `git -C "$DIST" show :<path>` (the index). MEASURED
+# across the reference consumer's live ledger and archive and this repo's backlog and archive:
+# ZERO instances of any of the three. The grammar is deliberately NOT widened to catch them --
+# distinguishing "a ref argument is present" from "it is absent" means parsing git's own
+# command line, which is the parser this file's header already refuses to build for grep
+# patterns, and the residue is a latent acquittal rather than a live one.
+#
+# FALSE-POSITIVE SET, MEASURED before this shipped, over THE POPULATION THIS RUNS ON -- the
+# reference consumer's LIVE ledger: 37 anchored `sh` receipts, 28 of which name `$DIST`. 26 pass
+# (every occurrence a `git -C` argument) and 2 are refused -- the two this fix exists for, both of
+# which had produced a false CLOSE-CANDIDATE in the same run. Zero false positives. The 26 are the
+# control: a grammar that simply flagged `$DIST` would have refused all 28. This repo's own
+# backlog: 72 `sh` receipts, 2 name `$DIST`, 0 refused.
+#
+# AND THE SET IS NOT EMPTY ONE CORPUS OVER, SO IT IS ENUMERATED RATHER THAN CLAIMED CLEAN. The
+# consumer's ARCHIVE -- closed entries this tool never reads, but which a rotation could bring
+# back -- holds 51 `sh` receipts, 45 naming `$DIST`, 10 refused. FIVE are TRUE (`cd "$DIST" ||
+# exit 127; S="$DIST/core/scripts"` and `V="$DIST/core/..."`, genuine checkout reads). FIVE are
+# FALSE, in three shapes:
+#
+#   - `cd "$DIST" && [ "$(git show "$THEIRS":…)" …]` (2). Correct, and the `cd` strip cannot see
+#     it because the `git` is not adjacent to the `&&`.
+#   - `$DIST` passed as a positional ARGUMENT to another program (2) -- `bash "$x" "$DIST"
+#     "$BASE" …`, which hands the repo on to a `git -C` one level down.
+#   - `$DIST` inside a single-quoted grep PATTERN (1), searched for as literal text.
+#
+# NONE OF THE THREE IS EXEMPTED, DELIBERATELY, and the reason is what an exemption would ACQUIT.
+# An "argument to a program" exemption acquits `bash "$v.sh" "$DIST"` where that program treats
+# the value as a ROOT -- the defect itself, one call frame down. A "cd then git anywhere later"
+# exemption acquits `cd "$DIST" … && cat "$DIST/VERSION"`. A pattern-context exemption needs a
+# shell-quoting parser, which this file's header already refuses to build for grep patterns. So
+# the residue is five archived receipts that would each cost one read if rotated back, against a
+# live false-close rate this removes; the trade is recorded here rather than argued each time.
+# `receipt_reads_dist_as_path` is DOWNGRADE-ONLY, so every one of those five costs a review and
+# none of them costs an entry.
+_RD_GITC1='git -C "${DIST}"'
+_RD_GITC2='git -C ${DIST}'
+_RD_GITC3='git -C "$DIST"'
+_RD_GITC4='git -C $DIST'
+_RD_CD1='cd "${DIST}" && git '
+_RD_CD2='cd "${DIST}"; git '
+_RD_CD3='cd "$DIST" && git '
+_RD_CD4='cd "$DIST"; git '
+receipt_reads_dist_as_path() {
+  local t="$1"
+  # `cd` FORMS FIRST: each carries the `git ` that the `git -C` strips below would otherwise
+  # consume, leaving a `cd "$DIST"` this function would then correctly-but-uselessly refuse.
+  t="${t//$_RD_CD1/}"
+  t="${t//$_RD_CD2/}"
+  t="${t//$_RD_CD3/}"
+  t="${t//$_RD_CD4/}"
+  t="${t//$_RD_GITC1/}"
+  t="${t//$_RD_GITC2/}"
+  t="${t//$_RD_GITC3/}"
+  t="${t//$_RD_GITC4/}"
+  case "$t" in
+    *'$DIST'*|*'${DIST}'*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# A `$THEIRS_TREE/…` TOKEN IS A DISTRIBUTION PATH AND IS ALREADY EXCLUDED, BY THE `$` THE SPLIT
+# DELIBERATELY KEEPS — `$THEIRS_TREE/core/scripts/x.sh` arrives as ONE token and fails the
+# whitelist below on its first character, exactly as `$CONSUMER/…` survives as one token for the
+# opposite reason. NO SECOND GUARD IS ADDED HERE: one keyed on the `$THEIRS_TREE` token changes no
+# outcome today, and a guard whose removal changes nothing is not load-bearing. The property is
+# pinned by the `SH-THEIRS-TREE-*` seed instead, which is the same pairing `SH-DIST-PATH` already
+# provides for the `git -C` rev-spec form.
 receipt_absent_subjects() {
   local rest="$1" p out=""
   while IFS= read -r p; do
@@ -760,8 +897,104 @@ receipt_absent_subjects() {
 CORE_MAP=""          # <consumer-path><TAB><core-path> for every core file at THEIRS
 CORE_MAP_STATE=""    # "" not attempted yet | ok | unavailable
 CORE_MAP_WHY=""      # why it is unavailable, rendered verbatim into the undecidable row
-core_map_cleanup() { [ -n "${CORE_MAP:-}" ] && rm -f "$CORE_MAP"; return 0; }
+# THE ONE EXIT HANDLER, AND IT CLEANS BOTH TEMPORARIES. The materialized theirs tree is removed
+# here rather than by a second `trap … EXIT`: bash traps REPLACE each other, so a second
+# registration would silently delete this one and leak the consumer->core table on every run.
+#
+# IT REMOVES `$THEIRS_TREE_OWNED`, NEVER `$THEIRS_TREE`, AND THAT DISTINCTION IS NOT PEDANTRY.
+# `rm -rf` on whatever a variable happens to hold is one bad assignment away from deleting a real
+# tree, and the assignment does not have to be malicious: MEASURED while building this change's
+# own mutation battery, a mutant that bound `THEIRS_TREE="$DIST"` -- the obvious way to express
+# "the tree is the checkout" -- made this handler delete the fixture's distribution REPOSITORY,
+# and six arms downstream failed with symptoms that pointed at the guard rather than at the
+# `rm`. `THEIRS_TREE_OWNED` is written ONLY beside the `mktemp -d` that created the directory, so
+# the handler can only ever remove a directory this process made.
+THEIRS_TREE_OWNED=""
+core_map_cleanup() {
+  [ -n "${CORE_MAP:-}" ] && rm -f "$CORE_MAP"
+  [ -n "${THEIRS_TREE_OWNED:-}" ] && rm -rf "$THEIRS_TREE_OWNED"
+  return 0
+}
 trap core_map_cleanup EXIT
+
+# --- $THEIRS_TREE: THE DISTRIBUTION AT `theirs`, AS A DIRECTORY A RECEIPT MAY READ -------------
+#
+# The header records why this exists: `$DIST` is a CHECKOUT and a receipt that reads it as a path
+# measures whatever the operator last checked out. A receipt needs SOME path-readable view of the
+# distribution at theirs -- the two real shapes on the reference consumer both ran a validator
+# extracted from theirs with `AI_DLC_PROJECT_ROOT` pointed at a distribution root -- so refusing
+# the `$DIST` form without providing one would only move the defect into a receipt nobody can
+# write. This is that view.
+#
+# `git archive | tar -x`, NEVER `git worktree add`. A worktree WRITES to the distribution repo's
+# `.git/worktrees`, and this tool runs inside a fixture pool twelve-wide against one dist repo, so
+# a worktree per receipt is a mutation of the subject under test and a concurrency hazard besides.
+# `git archive` reads and writes nothing in the repo.
+#
+# LAZY, ON THE FIRST RECEIPT WHOSE TEXT NAMES IT -- the `core_map()` pattern above, for the same
+# reason: a ledger with no `$THEIRS_TREE` receipt pays nothing, and this fixture's own suite unit
+# is already the third-longest. Built once per invocation, not once per receipt: the failure is
+# set BEFORE the work so a failed build short-circuits instead of retrying an extraction per row.
+#
+# A FAILED MATERIALIZATION IS NEEDS-REVIEW, NEVER A VERDICT. An empty or missing tree would make
+# every read inside it fail, every receipt exit non-zero, and every entry read CLOSE-CANDIDATE --
+# the one verdict that loses data, manufactured from a tool failure. The caller below refuses.
+#
+# REMOVED BY `core_map_cleanup` ABOVE, WHICH IS THE SINGLE EXIT HANDLER. No second `trap` is
+# registered anywhere in this file, for the reason recorded at that function.
+#
+# A CONSUMER'S INSTALLED ENGINE PREDATES THIS VALUE, AND THAT CANNOT BE FIXED FROM HERE.
+# Re-verification runs on the engine the consumer LAST INSTALLED, so a receipt adopting
+# `$THEIRS_TREE` before the consumer has pulled this release runs under an engine that never
+# exports it: `$THEIRS_TREE/VERSION` expands to `/VERSION`, the read fails, the receipt exits
+# non-zero, and the old engine reads that as CLOSE-CANDIDATE. `set -u` does not fire (the engine
+# `bash -c`s the receipt without it), `bash -n` parses it happily, and
+# `receipt_absent_subjects` skips the token because it carries a `$`.
+#
+# SO EVERY `$THEIRS_TREE` RECEIPT OPENS WITH `[ -n "${THEIRS_TREE:-}" ] || exit 127;`. 127 is
+# already the "subject renamed or deleted" status the `126|127)` arm below turns into
+# NEEDS-REVIEW, in EVERY engine version that has ever shipped this verb — so the guarded receipt
+# degrades to a review on an old engine instead of a false close, using a path that is already
+# there rather than one this release would have to deliver. The residual window is a receipt
+# written WITHOUT the guard between this release and a consumer's pull of it; nothing in this
+# file can close that, because the engine that would refuse it is the one not yet installed.
+THEIRS_TREE=""       # the materialized tree, or "" when not built
+THEIRS_TREE_STATE="" # "" not attempted | ok | unavailable
+THEIRS_TREE_WHY=""   # why it is unavailable, rendered verbatim into the refusal row
+theirs_tree() { # 0 = $THEIRS_TREE holds a tree at THEIRS; 1 = UNAVAILABLE, nothing was built
+  case "$THEIRS_TREE_STATE" in
+    ok)          return 0 ;;
+    unavailable) return 1 ;;
+  esac
+  THEIRS_TREE_STATE=unavailable
+  THEIRS_TREE_WHY="a temp directory for the materialized theirs tree could not be created"
+  local _d _tar
+  _d="$(mktemp -d 2>/dev/null)" || return 1
+  [ -n "$_d" ] && [ -d "$_d" ] || return 1
+  # BOTH SET HERE AND NOWHERE ELSE: `_OWNED` is what the EXIT handler removes, so it records the
+  # directory this process CREATED rather than whatever `$THEIRS_TREE` is currently bound to.
+  THEIRS_TREE="$_d"
+  THEIRS_TREE_OWNED="$_d"
+  # `${THEIRS}` BRACED throughout: unbraced, zsh's history modifiers eat the next character and
+  # the ref resolves to garbage, which git reports as an EMPTY tree -- i.e. as a clean absence.
+  # A FILE, not a pipe: under `pipefail` a `git archive | tar` pipeline reports the reader's
+  # status, so an archive that failed mid-stream reads as a successful extraction of nothing.
+  THEIRS_TREE_WHY="'git archive ${THEIRS}' failed in '$DIST' (a bad ref, or a repository that does not resolve it)"
+  _tar="$_d/.theirs.tar"
+  git -C "$DIST" archive --format=tar "${THEIRS}" > "$_tar" 2>/dev/null || return 1
+  [ -s "$_tar" ] || return 1
+  THEIRS_TREE_WHY="the archive of ${THEIRS} could not be extracted"
+  tar -xf "$_tar" -C "$_d" 2>/dev/null || return 1
+  rm -f "$_tar"
+  # AN EMPTY TREE IS A FAILURE, NOT A MAPPING WITH NOTHING IN IT. A real distribution ref always
+  # carries `core/`, so an extraction that produced nothing is a bad ref or a broken tar, and
+  # answering a receipt from it would turn "the file is not there" into a close.
+  THEIRS_TREE_WHY="the materialized tree of ${THEIRS} came back EMPTY, which is a bad ref or a broken extraction rather than a distribution with nothing in it"
+  [ -d "$_d/core" ] || return 1
+  THEIRS_TREE_WHY=""
+  THEIRS_TREE_STATE=ok
+  return 0
+}
 core_map() { # 0 = $CORE_MAP holds the table; 1 = UNDECIDABLE, nothing was built
   case "$CORE_MAP_STATE" in
     ok)          return 0 ;;
@@ -1497,7 +1730,36 @@ while IFS="$(printf '\t')" read -r label ord directive; do
         emit NEEDS-REVIEW "$label" "unresolved: MALFORMED sh receipt — the one-liner does not parse ($(bash -n -c "$sh_prog" 2>&1 | head -1 | sed 's/^bash: -c: //')). This engine reads a receipt as ONE line, so a receipt written across two arrives here truncated at its first newline, usually inside a quote, a \$( ), after a trailing backslash or inside a heredoc. It was NOT evaluated, so this is not a verdict on the entry — and without this guard the syntax error's exit 2 would have read as CLOSE-CANDIDATE, the direction that retires a live entry. Rewrite the receipt on one line (printf '\\n' in place of a literal newline), then re-run."
         continue
       fi
-      DIST="$DIST" BASE="$BASE" THEIRS="$THEIRS" CONSUMER="$CONSUMER" \
+      # `$DIST` IS THE CHECKOUT, NOT THE REF BEING PULLED — REFUSED, NOT SCORED.
+      #
+      # Sited AFTER the empty-check and the parse-check and BEFORE the run, so a receipt whose
+      # text is malformed is still reported as malformed (the author's first repair) and a
+      # refused receipt never executes. See FIVE EXPORTED VALUES in this file's header for the
+      # measurement: 2 of 28 `$DIST`-naming receipts (of 37 `sh` receipts) on the reference
+      # consumer, both of them false CLOSE-CANDIDATEs produced in a single run because the
+      # distribution checkout sat three commits past theirs.
+      #
+      # `continue` HERE PRESERVES THE `NAMED-UPSTREAM` ROW, which is emitted above the verb
+      # dispatch and is a signal about the ENTRY rather than about the receipt. A refused receipt
+      # must not silence the one signal a rewording cannot defeat.
+      #
+      # DOWNGRADE-NEVER-CREATE: this can only replace a verdict with a review, never manufacture
+      # a close. A conforming receipt is byte-unchanged in status AND in detail.
+      if receipt_reads_dist_as_path "$rest"; then
+        emit NEEDS-REVIEW "$label" "unresolved: this receipt reads \$DIST as a filesystem path. \$DIST is the distribution's CHECKOUT — a working tree sitting at whatever the operator last checked out, under no obligation to be at theirs ($TV) — so the predicate measures a tree this pull is not pulling while the row would claim it measured theirs. Measured on the reference consumer: both receipts written this way flipped to CLOSE-CANDIDATE in one run, on fixes that landed a release PAST the pull, and a close is the verdict that loses information permanently. Read the distribution at theirs through \$THEIRS_TREE (a materialized tree of theirs, exported to every sh receipt; it has no .git, so use it as a directory) or through a rev-spec, 'git -C \"\$DIST\" show \"\${THEIRS}:<path>\"'. \$DIST itself is for 'git -C' and nothing else. This is a finding about the RECEIPT, not a verdict on the entry."
+        continue
+      fi
+      # MATERIALIZED ONLY WHEN THE RECEIPT ASKS FOR IT, and a failure to materialize is a review
+      # rather than a verdict: with the tree absent every read inside it fails, the receipt exits
+      # non-zero, and the `*)` arm below would read that as "no longer reproduces".
+      case "$rest" in
+        *THEIRS_TREE*)
+          if ! theirs_tree; then
+            emit NEEDS-REVIEW "$label" "unresolved: this receipt reads \$THEIRS_TREE and the tree could not be materialized ($THEIRS_TREE_WHY). The receipt was NOT run, so this is not a verdict on the entry — with the tree absent every read inside it would fail, the receipt would exit non-zero, and that is indistinguishable from the defect no longer reproducing. Check the theirs ref and the distribution repo, then re-run."
+            continue
+          fi ;;
+      esac
+      DIST="$DIST" BASE="$BASE" THEIRS="$THEIRS" CONSUMER="$CONSUMER" THEIRS_TREE="$THEIRS_TREE" \
         bash -c "$sh_prog" >/dev/null 2>&1
       sh_rc=$?
       case "$sh_rc" in
@@ -1510,7 +1772,13 @@ while IFS="$(printf '\t')" read -r label ord directive; do
           # cannot cover the other; the braced form is the one this repo's own rev-path rule
           # REQUIRES, and it is 17 of the 33 occurrences on the reference consumer.
           case "$rest" in
-            *'$THEIRS'*|*'${THEIRS}'*|*'$DIST'*|*'${DIST}'*)
+            # `$THEIRS_TREE` IS AN UPSTREAM REF TOO, AND BOTH ITS SPELLINGS ARE NAMED HERE. The
+            # unbraced `$THEIRS_TREE` matches the `*'$THEIRS'*` alternation by accident, being a
+            # prefix of it; the BRACED `${THEIRS_TREE}` does NOT -- `${THEIRS}` requires a `}`
+            # immediately after `THEIRS`. Without this alternation a braced receipt reading the
+            # materialized tree falls into the consumer-only partition below and is accused of
+            # being unfalsifiable while reading upstream at theirs, which is the opposite of true.
+            *'$THEIRS'*|*'${THEIRS}'*|*'$DIST'*|*'${DIST}'*|*'$THEIRS_TREE'*|*'${THEIRS_TREE}'*)
               # Bucket 1 -- consults upstream, so a pull can flip it. BYTE-UNCHANGED.
               emit STILL-LIVE "$label" "verify sh: still reproduces at theirs ($TV)" ;;
             *)
