@@ -37,11 +37,109 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
+### BATCH 99 SHIPPED AS `v0.565.0`, ONE RELEASE, TWO PC-BACKED SUBJECTS — AND **THE CONTRACT ADVERSARY FOUND THAT ONE SUBJECT WAS ALREADY FILED, THAT THE FILED ENTRY'S OWN PRESCRIBED FIX DID NOT FIX THE NEW INSTANCE, THAT THE CONTRACT'S OWN GRAMMAR DID NOT PARSE, AND THAT THE OBVIOUS FIX MANUFACTURED A FALSE ATTESTATION OUT OF FAILURE PROSE; THE FIRST BUILD SHIPPED THAT FALSE ATTESTATION ON A FIXTURE-GREEN TIP WITH A NON-DISCRIMINATING ARM.** THE CONSUMER PULLED ITSELF TO `0.564.0` MID-BATCH. THE GAP IS **ONE**, PENDING **1**, AND THE PULL IS **NOT REQUIRED**.
+
+This block replaces the batch-98 record below it. Re-derive every figure rather than reading it.
+
+**`VERSION` IS `0.565.0`, SO BATCH 100 RELEASES AS `0.566.0`.** Re-derive `VERSION` and add one.
+Batch 99 merged ONCE — `v0.565.0` at `cfa75199` (PR #742) — closing `BL-054` and `BL-245`,
+discharging `PC-S311-H2-ATTESTATION-VERIFY-REQUIRES-COLUMN-1-BUT-ATTEST-OUTPUT-INVITES-A-TABLE-CELL`,
+`PC-S311-SNAPSHOT-SEVEN-SECTION-SCHEMA-HAS-A-READER-CHECK-BUT-NO-WRITER-CHECK` and the older
+`PC-S296-H2-ATTESTED-ANCHOR-DEFEATED-BY-BACKTICKS`, each verbatim in the release commit message
+(control: an impossible `PC-` id returns 0). Both entries are ROTATED; archive **157 → 159**, live
+**86 → 85**. No entry was filed: `BL-244` was NOT created, because the adversary found the subject
+already filed as `BL-054`, which was extended instead. A docs commit on the same day, `de2fcea0`
+(PR #741), changed action 9: the handoff now iterates over local `ai-dlc-*` sessions on an
+explicit `REFUSED` reply (operator instruction, batch 99).
+
+**THE SUBJECTS WERE TAKEN ON THIS SESSION'S OWN RANKING** because the one-liner arrived from a
+peer. Both `PC-S311` candidates verified at `origin/main` before scoping; neither touched a
+bootstrapping file, so they batched into one release. Neither receipt in the consumer's filing was
+adopted: both were prose-closable.
+
+**THE ADVERSARY ATTACKED THE CONTRACT BEFORE THE BUILDERS AND FOUND FOUR BLOCKERS ON ONE
+CANDIDATE.** (1) The H2 subject was already `BL-054`, filed at sprint 296 for backticks, live,
+its receipt failing, and the contract did not name it. (2) `BL-054`'s own prescribed grammar
+`^[^A-Za-z]*H2_ATTESTED` does not match the table cell — the cell prefix carries letters — so a
+builder reaching for the in-tree prescription ships a non-fix its own receipt calls fixed.
+(3) The contract's suggested grammar carried a bare backtick inside a double-quoted `grep -E`
+argument and did not parse under `bash -n`, a trap `BL-054` itself records. (4) A leading
+token-boundary alone grants PASS to a sentence in the consumer's own committed gate log that
+quotes the full same-sprint, same-digest line while reporting the gate FAILED — strictly worse
+than the defect being fixed. The builder's FIRST tip shipped exactly that grammar, fixture green,
+because its prose arm seeded a DIFFERENT sprint number and so was refused by every grammar
+including the broken one. On candidate B the adversary built a per-line WARN and showed it
+evicts the budget summary line from `verdict.sh`'s six-line window, which is the evidence cell
+Check 14 pastes.
+
+**THE RE-CUT IS BOUNDED AT BOTH ENDS, CELL-SCOPED, AND THE BUILDER REFUTED THE AMENDMENT'S OWN
+TAIL.** An end-of-line trailing bound refused the consumer's real row ending `` `. | 1033 |``, the
+only record sprint 309 has; requiring the whole emitted span refused sprint 308's only record,
+which stops after `items=`. Measured per `(sprint, digest)` pair over every revision of all 108
+consumer gate-log files: shipped `^` 26/28, front-only 28/28 but accepts the failure sentence,
+front+EOL 27/28, front+cell-bounded 28/28 and refuses it. The tip pass proved arms L/M kill the
+unbounded-tail mutant. One NOTE stands, not a defect: a denial separated from the span by a
+SPACE still verifies; zero occurrences across 546 consumer gate-log revisions against a control
+of 101 span matches, and closing it needs prose semantics no grep has.
+
+**CANDIDATE B's FALSE-POSITIVE SET IS EMPTY OVER ALL 514 CONSUMER SNAPSHOT REVISIONS**, measured
+by running the shipping validator, not a re-implementation; the two hits are real misfiles
+(29 lines under `Sprint Context`, 7 under `Context Reminders`). The narrowing story is beside
+the arm: no leading anchor indicts 396 revisions at `Pipeline Position`, admitting leading
+blanks adds 178 soft-wrapped continuations, and the eight unbulleted hits are one wrapped
+`In-Flight Teammates` sentence. Running it over the real corpus also found BSD `cut` aborting on
+multibyte prose at exit 0 after eight of 29 rows; readers now run under `LC_ALL=C` and the count
+derives from the same records as the rows. `FORK_BUDGET` 8098 of 8120; validator +0.05s.
+
+**THE SWEEP AT THIS BATCH'S CLOSE, ref `ai-dlc/carry-over/chunk-max-usd-swap-sizing` (consumer HEAD
+`10f3889e6`, which moved from `26bfe9fee` by SIX consumer commits during the batch, two of them
+its own self-update and reconcile to `0.564.0`).** Live **58**, cited **39**, unfiled **19**,
+archive **206**, partition control 0; ledger md5 `7418e4ad…`, unchanged from batch 98's close.
+**THE AVAILABLE PC-BACKED RESIDUE IS ZERO**: all 19 unfiled re-derive as adjudicated (5 named in
+`origin/main` release commits, 12 `NOT-UPSTREAM`, one withdrawn, one superseded, one refuted);
+the impossible-id control on the commit join returns non-zero for `PC-S999-NEVER` because this
+repo's prose about that control is committed — use a different token. TERMINAL **89**;
+DISCHARGED corrected **10**; discharged-but-INVISIBLE 1
+(`PC-S308-GATE-METRICS-CHECK2-STALE-VERDICT-READ-ORDER`, unchanged).
+
+**THE INCIDENTAL-CLOSE CHECK WAS RUN AND FOUND NOTHING.** Histogram before rotation on the
+release tree: 4×0 (`BL-236`, `BL-238`, `BL-054`, `BL-245`), 70×1, 1×9; after rotation on `main`:
+2×0, 70×1, 1×9. The gate on the merged tree reads `prose-closable=1/1 bound=43 unscorable=27
+out-of-population=1 unstable=0` over 73 `sh` receipts and 85 entries; the hook's `--min-entries 88`
+and `--min-sh-receipts 76` floors are above the tree and the arm accepts an equal drop, so they
+are deliberately NOT moved.
+
+**THE CONSUMER PULLED ITSELF TO `0.564.0` DURING THIS BATCH, SO THE GAP IS ONE AND THE PULL IS NOT
+REQUIRED.** Stamp `0.564.0` / `efc7a5a6` on all four fields (was `0.557.0` / `01fea66c` at batch
+start); consumer commits `56c8d9dc2` (self-update) and `10f3889e6` (reconcile) landed on its
+sprint branch; its self-update gate record at 13:48Z read `SELF-UPDATE-OK` on both rows and
+carried the five update-skill paths batch 98 shipped. The differential: installed and
+distribution `validate-layer-entries.sh` are byte-identical (`cmp -s`) with identical output, a
+null by construction. The range `efc7a5a6..origin/main` touches six `core/` paths, ZERO under
+the update skill, zero mode-only changes (control: 34 raw rows from the previous stamp).
+
+**THE CONSUMER'S PORCELAIN MOVED 13 → 0 → 2 → 5 → 3 DURING THE BATCH**, every step its own sprint-311
+commits, pause hooks and pull; nothing here wrote to it (asserted by every hand and the lead).
+`git push` exited 141 once with a green 21-phase gate and the ref NOT on origin; the second
+push, on the unchanged content key, landed it.
+
+**THE OPERATOR STILL OWES** `sudo bash core/scripts/derive-fixture-readsets.sh --list "reconcile-blocking-list"`
+from batch 98, and now also `--list "snapshot-section-schema"` and `--list "h2-attest-scripts-dir"`,
+whose seeds gained readers this batch.
+
+**THE READIEST WORK IS NO-`PC` AGAIN**: `BL-221` (the LAST prose-closable receipt the gate names;
+its receipt and its fix are one change, the positive-binding arm carries 3 false positives of 6
+and moves the pole's neighbour), then `BL-243` (needs a ruling on a citation-local negator
+vocabulary), `BL-223` and `BL-216` (receipts bound; fixes wait on the grammar ruling and the
+SoR-set extension), `BL-220`. Run `bash scripts/validate-backlog-receipts.sh` and read the rows
+rather than this sentence. Run the sweep anyway: the consumer filed two candidates during batch
+98's close and none during batch 99, and the next one is not predictable from here.
+
 ### BATCH 98 SHIPPED AS `v0.564.0`, ONE RELEASE, ONE NO-`PC` SUBJECT IN BOTH ITS HALVES — AND **THE CONTRACT ADVERSARY REFUTED FIVE CANDIDATES BY BUILDING THEM BEFORE THE BUILD, THE COST MEASUREMENT CHANGED THE DESIGN, THE GATE WENT RED ON A FIXTURE THAT LOST ITS SUBJECT TO A RIGHT CHANGE, AND THE TIP ADVERSARY FOUND THE SECOND HALF STILL ACQUITTING ON ARM C'S UNDECIDED TERMINALS.** THE SWEEP WAS EMPTY OF PC WORK. THE GAP IS **SEVEN**, PENDING **1**, AND THE PULL IS **NOT REQUIRED** — BUT THE NEXT ONE CARRIES A BOOTSTRAPPING CHANGE.
 
-This block replaces the batch-97 record below it. Re-derive every figure rather than reading it.
+This block was current at batch 98's close and is replaced by the batch-99 record above it.
 
-**`VERSION` IS `0.564.0`, SO BATCH 99 RELEASES AS `0.565.0`.** Re-derive `VERSION` and add one.
+**`VERSION` WAS `0.564.0` AT THIS BLOCK.** Re-derive `VERSION` and add one.
 Batch 98 merged ONCE — `v0.564.0` at `72f6ad8d` (PR #738) — closing `BL-124`, verbatim in its
 release commit message (control: an impossible `BL-` id returns 0; eight earlier commits name
 it — its filing at `0b060987`, five `v0.436.0`-era fix and plan commits, and two batch-97 commits
@@ -9588,7 +9686,7 @@ given at batch 90.
    - **Never merge while a hand is out**, and never read a hand's idle state as its report.
 
 1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below) AGAINST THE REF THAT CARRIES THE
-   LIVE LEDGER, RANK THE UNFILED CANDIDATES, THEN SCOPE BATCH 99 — AND HOW YOU SCOPE IT DEPENDS ON
+   LIVE LEDGER, RANK THE UNFILED CANDIDATES, THEN SCOPE BATCH 100 — AND HOW YOU SCOPE IT DEPENDS ON
    WHO INVOKED YOU.** Operator
    instruction, given at batch 52. **If the one-liner was TYPED BY THE OPERATOR**, report the
    candidates with a marked recommendation and ask, as every batch before has. **If it ARRIVED
@@ -9621,6 +9719,14 @@ given at batch 90.
    **DO NOT TREAT A BATCH-82 RECEIPT AS TRUSTWORTHY BECAUSE IT EXISTS.** Three of them were
    rebuilt in one release: the originals closed on an empty file, on a dead arm, and on a
    positional window.
+
+   **BATCH 99's TWO SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope either.** `BL-054` (extended,
+   not re-filed as `BL-244`) and `BL-245` shipped together as `v0.565.0` at `cfa75199` (PR #742),
+   discharging both `PC-S311` filings and `PC-S296-H2-ATTESTED-ANCHOR-DEFEATED-BY-BACKTICKS`, each
+   cited in the release commit message. Neither touched a bootstrapping file. The consumer pulled
+   itself to `0.564.0` mid-batch, so the gap is ONE. The hook ceiling stays `--max-prose-closable
+   1` with `BL-221` the one remaining. The operator owes three `derive-fixture-readsets.sh --list`
+   runs (`reconcile-blocking-list`, `snapshot-section-schema`, `h2-attest-scripts-dir`).
 
    **BATCH 98's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.** `BL-124` shipped ALONE, in
    BOTH its halves, as `v0.564.0` at `72f6ad8d` (PR #738), cited in the release commit message.
@@ -9746,10 +9852,10 @@ given at batch 90.
    **THE GATE-ADJUDICATION BACKFILL HAS NOT BEEN RUN ON ANY CONSUMER AND THAT IS THE CONSUMER'S
    CALL, NOT UPSTREAM'S.** What shipped is the refusal plus the `--legacy-through` escape.
 
-   **THE AVAILABLE PC-BACKED RESIDUE WAS ZERO UNTIL THE CONSUMER FILED TWO `PC-S311` CANDIDATES
-AT `26bfe9fee` DURING BATCH 98's CLOSE — see the batch-98 block; the sweep decides.** Before
-that, all 18 unfiled re-derived as adjudicated — 4 named in
-   `origin/main` release commits, 11 `NOT-UPSTREAM`, the `PC-S309-PRE-PUSH` pair WITHDRAWN, and
+   **THE AVAILABLE PC-BACKED RESIDUE IS ZERO AGAIN AT BATCH 99's CLOSE — both `PC-S311` candidates
+   the consumer filed at `26bfe9fee` shipped in `v0.565.0`; the sweep decides.** All 19 unfiled
+   re-derive as adjudicated — 5 named in
+   `origin/main` release commits, 12 `NOT-UPSTREAM`, the `PC-S309-PRE-PUSH` pair WITHDRAWN, and
    `PC-S340-RETRO-AUDIT-SCANS-…` REFUTED. Run the sweep anyway, because the consumer files while
    nobody is looking; expect it empty and rank the no-`PC` set without waiting for permission.
 
