@@ -2895,7 +2895,7 @@ if ! printf '%s\n' "$nt_out" | awk -F'\t' '$2 ~ /NOTREE-B/ && $1=="STILL-LIVE" {
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s the tree-free ledger produced no control row, so this run establishes nothing about laziness\n' "theirs-tree-lazy"
   printf '%s\n' "$nt_out" | sed 's/^/          | /'
-elif printf '%s\n' "$nt_out" | grep -q THEIRS_TREE; then
+elif grep -q THEIRS_TREE <<<"$nt_out"; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s a ledger naming no $THEIRS_TREE receipt still produced a row mentioning the materializer\n' "theirs-tree-lazy"
   printf '%s\n' "$nt_out" | sed 's/^/          | /'
