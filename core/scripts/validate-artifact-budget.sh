@@ -523,16 +523,41 @@ is_not_artifact() {
 # 14's to judge, against a snapshot it has just written. INVENTION is this
 # script's: it is never legitimate, at any age.
 # -----------------------------------------------------------------------------
+# THE SEVEN ARE DATA, WRITTEN ONCE, AND THREE READERS LOAD THEM.
+# `is_canonical_section` asks "may this heading be here at all" (the seven PLUS a
+# project's declared additions). `is_core_section` asks the smaller question, "is
+# this one of core's own seven", which the entry-shape arm below needs because core
+# does not know what belongs under a name core does not define. The entry-shape arm
+# is an awk program and cannot call a shell function, so it takes the same string by
+# `-v`. A case list written three times is two chances to drift; this is one string.
+# The names are newline-delimited and matched as a PREFIX, exactly as before:
+# `## In-Flight Teammates (none)` is that section wearing a decoration.
+CORE_SECTIONS='Pipeline Position
+Sprint Context
+Recent Activity
+Open Items
+Locked Decisions
+In-Flight Teammates
+Context Reminders'
+
+# The one of the seven that a dated activity entry BELONGS under. Named once, and
+# read by the entry-shape arm and by its remedy text, so the arm and the remedy
+# cannot come to name different sections.
+ACTIVITY_SECTION='Recent Activity'
+
+is_core_section() {
+  local want
+  while IFS= read -r want; do
+    [ -n "$want" ] || continue
+    case "$1" in "$want"*) return 0 ;; esac
+  done <<EOF
+$CORE_SECTIONS
+EOF
+  return 1
+}
+
 is_canonical_section() {
-  case "$1" in
-    "Pipeline Position"*|\
-    "Sprint Context"*|\
-    "Recent Activity"*|\
-    "Open Items"*|\
-    "Locked Decisions"*|\
-    "In-Flight Teammates"*|\
-    "Context Reminders"*) return 0 ;;
-  esac
+  is_core_section "$1" && return 0
 
   # PROJECT-DECLARED ADDITIONS -- data, not a case list, so a consumer whose snapshot
   # legitimately carries an eighth section does not have to shadow the whole rule to
@@ -620,6 +645,128 @@ check_snapshot_sections() {
         is_canonical_section "$heading" && continue
         printf 'SCHEMA  %-32s unknown section: ## %s\n' "$2" "$heading" >> "$SCHEMA_FILE"
       done
+}
+
+# -----------------------------------------------------------------------------
+# A DATED ACTIVITY ENTRY BELONGS UNDER `Recent Activity`, AND ONLY THE HEADINGS
+# WERE EVER CHECKED.
+#
+# The seven-section schema above is a CLOSED SET OF HEADINGS. Nothing reads what
+# sits UNDER one. `_gate-procedures.md` "Sub-step snapshot update" tells the writer
+# to append a timestamped one-line entry to `Recent Activity`; `route.md` Check 3
+# reads headings only. So a dated activity entry filed under `## Sprint Context`
+# satisfies every check that exists: the heading is canonical, the bytes are priced
+# like any other prose, and the recovery path that whole-reads the snapshot reads
+# the misfile as sprint context. The section that is supposed to be the activity
+# log stops holding the activity, and nothing anywhere says so.
+#
+# WARN, NEVER A FAIL, AND NOT IN RC. This script runs on the BLOCKING sub-step path
+# (`_gate-procedures.md` step 5, "Exit 1 -> TRIM NOW"). A misfiled line is a filing
+# error a lead fixes by MOVING one line; wedging a gate over it is the
+# safeguard-that-blocks-throughput failure the grace band and the coverage WARN
+# above both already avoid. It is also why this is not folded into the SCHEMA
+# verdict: that one says DELETE the section, this one says MOVE the line, and a
+# lead reading the wrong remedy deletes a canonical section.
+#
+# THE FALSE-POSITIVE SET IS ZERO, AND HERE IS THE NARROWING THAT GOT IT THERE.
+# Measured over all 514 revisions of `_bmad-output/pipeline-snapshot.md` on the
+# reference consumer's first-parent history, by section, revisions carrying >=1
+# matching line:
+#
+#   grammar                                   RecentAct  InFlight  SprintCtx  CtxRem  PipelinePos
+#   no leading anchor (substring "T##:##")        343        80        18       76       396
+#   leading anchor, bullet OPTIONAL               239         8         1        1         0
+#   leading anchor, bullet REQUIRED               239         0         1        1         0
+#   + optional ` and ** after the bullet          249         0         1        1         0   <- shipped
+#
+# THE LEADING ANCHOR is what excludes `Pipeline Position`, whose rows legitimately
+# carry a timestamp MID-line (`last_gate_passed: ... 2026-09-12T22:14:00Z`) on 396
+# of the 514. Without it this arm indicts 77% of the corpus and is noise.
+#
+# THE LEADING ANCHOR IS ALSO STRICT ABOUT INDENT, and that is a second measurement.
+# Allowing `^[[:blank:]]*` before the bullet adds 178 lines across the corpus --
+# Pipeline Position 58, Locked Decisions 45, Context Reminders 12, Open Items 10 --
+# and every one is a soft-wrapped continuation whose predecessor line is non-empty.
+# A continuation is not an entry. The bullet must sit at column 1.
+#
+# THE REQUIRED BULLET is what excludes `In-Flight Teammates`, and the reason is
+# SOFT-WRAP, not that section's row schema. Its 8 hits are ONE line (`ff5920ff3:151`,
+# whose predecessor ends mid-sentence): a WRAPPED PROSE CONTINUATION inside that
+# section's parenthetical note --
+# `2026-09-09T14:05:45Z; \`dev-s309-review-fixforward\` (sonnet) delivered ...`,
+# the second line of a sentence that began on the line above. It is not an entry
+# and it is not a misfile; a grammar that indicts it indicts reflowed prose
+# everywhere. Requiring the bullet takes In-Flight to 0 and leaves the two real
+# misfiles standing, so In-Flight is NOT exempted by section -- it is excluded by
+# the grammar, and a genuinely bulleted dated entry there is still reported.
+#
+# The optional backtick and `**` after the bullet are the consumer's own two
+# decorations of a legitimate entry, added because a grammar that misses them
+# misses the offender wearing them; they cost nothing outside `Recent Activity`
+# (both columns stay at 1 and 0 above).
+#
+# THE TWO SURVIVORS ARE BOTH REAL MISFILES, inspected individually: `66d0eb165`
+# carries 29 dated entries under `## Sprint Context` and `580f156cc` carries 7
+# under `## Context Reminders`. Neither section's schema has anything to do with a
+# dated log line. The false-positive set is therefore EMPTY over the corpus, and
+# the finding set is 2 of 514.
+#
+# DECLARED EXTRA SECTIONS ARE OUT OF SCOPE. A project that declares a section under
+# `AI_DLC_SNAPSHOT_EXTRA_SECTIONS` owns its shape; core does not know what belongs
+# under a name core does not define. `is_core_section` is the predicate, not
+# `is_canonical_section`, and that is the whole difference between the two.
+# -----------------------------------------------------------------------------
+check_snapshot_entry_shape() {
+  # THE LIST CROSSES INTO awk THROUGH THE ENVIRONMENT, NOT THROUGH `-v`.
+  # `awk -v` carries no newline at all: the newline-delimited list arrives as a
+  # literal backslash-n or aborts with "newline in string", depending on the awk.
+  # `ENVIRON` passes the bytes through intact and needs no escaping of the data,
+  # which is the property that matters for a list a project can never edit but a
+  # future author might extend with a name carrying punctuation.
+  # `LC_ALL=C` for the same reason the reader below carries it: snapshot prose is
+  # full of em-dashes and arrows, and a BSD tool that decodes them can abort
+  # mid-file having already printed a partial answer.
+  LC_ALL=C CORE_SECTIONS="$CORE_SECTIONS" awk -v HOME_SECTION="$ACTIVITY_SECTION" '
+    BEGIN { n = split(ENVIRON["CORE_SECTIONS"], S, "\n") }
+    /^## / {
+      sec=$0; sub(/^##[[:space:]]*/,"",sec); sub(/[[:space:]]*$/,"",sec)
+      core=0
+      # PREFIX membership by substr() on LITERAL strings, never a regex built by
+      # concatenation: a section name carrying a `.` or a `(` is a metacharacter in
+      # a dynamic regex, and escaping a data list is the shape that has shipped
+      # wrong here before.
+      for (i=1; i<=n; i++)
+        if (S[i] != "" && substr(sec, 1, length(S[i])) == S[i]) core=1
+      # The activity log is the section this line BELONGS to; never report it there.
+      if (substr(sec, 1, length(HOME_SECTION)) == HOME_SECTION) core=0
+      next
+    }
+    core {
+      # Anchored at column 1: a bullet, then the entry, optionally wearing one
+      # backtick and/or bold. A timestamp anywhere else on the line is Pipeline
+      # Position row data or reflowed prose and is not an entry.
+      if ($0 !~ /^([-*]|[0-9]+\.)[[:blank:]]+/) next
+      p=$0
+      sub(/^([-*]|[0-9]+\.)[[:blank:]]+/,"",p)
+      sub(/^`/,"",p); sub(/^\*\*/,"",p); sub(/^`/,"",p)
+      if (p !~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]/) next
+      # THE DETAIL LINE OPENS WITH `misfiled`, AND THAT IS A CONTRACT WITH verdict.sh.
+      # NO APOSTROPHE MAY APPEAR IN THIS COMMENT: the awk program is single-quoted
+      # and one closes it, which bash then reports as a syntax error 20 lines away.
+      # verdict.sh:122 surfaces at most AI_DLC_VERDICT_LINES (6) lines matching
+      # ^[[:space:]]*(ok|warn|OK:|PASS|WARN|OVER) after PASS <name>, and that window
+      # is what the Check 14 evidence cell pastes. One WARN per misfiled line would
+      # fill it -- the reference consumer has a revision carrying 29 of them -- and
+      # push the budget summary line out of the verdict entirely. So this arm emits
+      # exactly ONE matching line per artifact, aggregated, and every detail line
+      # below it is deliberately unmatchable by that grammar.
+      # The leading `SEC<tab>` field is what the aggregate line below counts by
+      # section; it is stripped before the detail is printed. Deriving the tally
+      # from this channel rather than from a second awk pass means the count and
+      # the rows can never disagree -- they are the same records.
+      printf "SEC\t%s\t      misfiled  %s line %d: dated entry under ## %s -- %s\n", sec, ART, NR, sec, substr($0,1,60)
+    }
+  ' ART="$2" "$1" >> "$ENTRY_FILE"
 }
 
 # -----------------------------------------------------------------------------
@@ -896,9 +1043,86 @@ TMPROOT="$(mktemp -d 2>/dev/null)" || {
 trap 'rm -rf "$TMPROOT"' EXIT
 BREACH_FILE="$TMPROOT/breach"
 SCHEMA_FILE="$TMPROOT/schema"
+ENTRY_FILE="$TMPROOT/entry-shape"
 MARKER_FILE="$TMPROOT/marker"
 INFLIGHT_FILE="$TMPROOT/inflight"
 STATUS_FILE="$TMPROOT/inflight-status"
+
+# -----------------------------------------------------------------------------
+# THE ENTRY-SHAPE SELF-PROBE, AND IT RUNS BEFORE THE CORPUS.
+#
+# An arm reporting nothing without first proving it can produce a finding has
+# established that it ran, not that the snapshot is clean -- and this arm's whole
+# output is a WARN that changes no exit status, so a silently dead copy of it looks
+# exactly like a correctly quiet one on every green run there has ever been. There
+# is no exit code to notice its absence. That is why this probe is here and why it
+# is FATAL: nothing downstream would ever miss this arm.
+#
+# BOTH DIRECTIONS, on a mktemp file, never the real corpus:
+#   OFFENDER  a bulleted dated entry under `## Sprint Context`   -> must be reported
+#   NEAR-MISS four lines that must NOT be:
+#             - a MID-line timestamp under `## Pipeline Position` (real row data on
+#               396 of the consumer's 514 revisions; indicting it makes this noise)
+#             - an INDENTED line opening with a timestamp under `## Pipeline
+#               Position` (a soft-wrapped continuation; admitting leading blanks
+#               before the bullet flags 178 extra lines across the corpus, every one
+#               of them a continuation whose predecessor is non-empty)
+#             - a bulleted dated entry under `## Recent Activity` (its own section)
+#             - an UNBULLETED dated line under `## In-Flight Teammates` (a wrapped
+#               prose continuation; all 8 of the corpus's In-Flight hits are one)
+# An arm that flags the near-miss flags most of the corpus, which is a scan that
+# discriminates nothing and reads exactly like one that discriminates perfectly.
+# -----------------------------------------------------------------------------
+_probe_seed() { # _probe_seed <file>
+  {
+    printf '## Pipeline Position\n'
+    printf -- '- last_gate_passed: planning at 2026-09-12T22:14:00Z\n'
+    printf '  2026-09-12T22:20:00Z a soft-wrapped continuation, indented\n'
+    printf '## Sprint Context\n'
+    printf -- '- 2026-09-12T02:53Z: routed fresh, step 1a\n'
+    printf '## Recent Activity\n'
+    printf -- '- 2026-09-12T03:00Z: this one is where it belongs\n'
+    printf '## In-Flight Teammates\n'
+    printf '2026-09-09T14:05:45Z; a wrapped prose continuation, not an entry\n'
+    printf '## Open Items\n## Locked Decisions\n## Context Reminders\n'
+  } > "$1"
+}
+PROBE_FILE="$TMPROOT/probe-snapshot.md"
+_probe_seed "$PROBE_FILE"
+ENTRY_FILE_SAVE="$ENTRY_FILE"
+ENTRY_FILE="$TMPROOT/probe-entry"
+: > "$ENTRY_FILE"
+check_snapshot_entry_shape "$PROBE_FILE" "probe-snapshot.md"
+PROBE_OUT="$(cat "$ENTRY_FILE" 2>/dev/null)"
+rm -f "$ENTRY_FILE" "$PROBE_FILE"
+ENTRY_FILE="$ENTRY_FILE_SAVE"
+
+_probe_has() { case "$PROBE_OUT" in *"$1"*) return 0 ;; esac; return 1; }
+PROBE_RC=0
+if ! _probe_has 'under ## Sprint Context'; then
+  echo "FAIL: the entry-shape self-probe's OFFENDER was not reported. A bulleted dated" >&2
+  echo "  entry seeded under ## Sprint Context went unseen by the same function the" >&2
+  echo "  corpus arm runs, so its silence below would mean only that it executed." >&2
+  PROBE_RC=1
+fi
+if _probe_has 'under ## Pipeline Position'; then
+  echo "FAIL: the entry-shape self-probe's NEAR-MISS fired on a MID-line timestamp under" >&2
+  echo "  ## Pipeline Position. That is legitimate row data on most of the reference" >&2
+  echo "  consumer's snapshot revisions; this arm would report nearly all of them." >&2
+  PROBE_RC=1
+fi
+if _probe_has "under ## ${ACTIVITY_SECTION}"; then
+  echo "FAIL: the entry-shape self-probe reported an entry under ## ${ACTIVITY_SECTION}," >&2
+  echo "  which is the section such entries BELONG under. The arm indicts correct filing." >&2
+  PROBE_RC=1
+fi
+if _probe_has 'under ## In-Flight Teammates'; then
+  echo "FAIL: the entry-shape self-probe's NEAR-MISS fired on an UNBULLETED dated line." >&2
+  echo "  Every In-Flight hit in the measured corpus is a wrapped prose continuation;" >&2
+  echo "  the required bullet is what holds this arm's false-positive set at zero." >&2
+  PROBE_RC=1
+fi
+[ "$PROBE_RC" -eq 0 ] || exit 1
 
 say "bytes/token divisor : ${BPT} (calibrated with validate-reattach-budget.sh; under-counts 5-11% on this population)"
 say "project root        : ${ROOT}"
@@ -1016,6 +1240,7 @@ printf '%s\n' "$BUDGETS" | while IFS='|' read -r name budget remedy; do
     # of checking here is to catch it while it is still cheap.
     if [ "$name" = "pipeline-snapshot.md" ]; then
       check_snapshot_sections "$f" "$rel"
+      check_snapshot_entry_shape "$f" "$rel"
       check_inflight_rows "$f" "$rel"
       check_inflight_status "$f" "$rel"
       check_supersession_markers "$f" "$rel"
@@ -1154,6 +1379,68 @@ EOF
   [ "$WARN_ONLY" -eq 1 ] || RC=1
 fi
 rm -f "$SCHEMA_FILE"
+
+# A WARN THAT NEVER TOUCHES RC, ON EVERY PATH, INCLUDING --fail-on.
+#
+# The three verdicts above each become a FAIL without --warn-only. This one does
+# not, and the asymmetry is the point: each of those says an artifact is over
+# budget, carries a section that must not exist, or holds a row that no longer
+# says what it means. This one says one line is filed under the wrong heading.
+# The remedy is to MOVE it, it costs one edit, and the gate it would otherwise
+# wedge is the BLOCKING sub-step path. A lint that stops a pipeline over a
+# misfiled line is a lint the operator turns off.
+#
+# So RC is not written here at all -- not under --fail-on, which hardens an
+# artifact's BUDGET verdict and has never spoken to this one. A future author
+# adding `RC=1` inside this block changes the gate's behaviour, not its output;
+# `budget-summary-verdict` and `snapshot-entry-shape` both assert the exit status
+# is unchanged by this finding, in both directions.
+if [ -s "$ENTRY_FILE" ]; then
+  say ""
+  # ONE line matching verdict.sh's surface grammar, carrying the count AND the
+  # per-section breakdown, so the evidence cell says what was found without the
+  # rows. The rows follow on `misfiled` lines that grammar cannot match.
+  # EVERY READER OF THIS CHANNEL RUNS UNDER `LC_ALL=C`, AND THAT IS NOT STYLE.
+  # MEASURED against the reference consumer's `66d0eb165`: BSD `cut` aborts with
+  # "Illegal byte sequence" on the multibyte characters real snapshot prose carries,
+  # having printed only the rows before the first one. It emitted 8 of 29 detail
+  # rows, wrote its complaint to the same stderr the rows go to, and the run still
+  # exited 0 -- a truncated finding list that reads exactly like a complete one.
+  # Under `LC_ALL=C` the bytes are bytes and all 29 survive. The count comes from
+  # `wc -l` on the same records, so a future truncation disagrees with its own
+  # aggregate line instead of shrinking quietly.
+  ENTRY_N="$(wc -l < "$ENTRY_FILE" | tr -d ' ')"
+  ENTRY_BY_SEC="$(LC_ALL=C awk -F'\t' '{c[$2]++; if (!(($2) in o)) { o[$2]=++k } }
+    END { for (s in c) printf "%d\t%s %d\n", o[s], s, c[s] }' "$ENTRY_FILE" \
+    | LC_ALL=C sort -n | LC_ALL=C cut -f2- | tr '\n' ';' | sed -e 's/;$//' -e 's/;/, /g')"
+  echo "WARN: pipeline-snapshot.md files ${ENTRY_N} dated activity entr$( [ "$ENTRY_N" -eq 1 ] && echo y || echo ies ) outside ${ACTIVITY_SECTION} (${ENTRY_BY_SEC}) -- move each to ${ACTIVITY_SECTION}."
+  ENTRY_SHOWN="$(LC_ALL=C cut -f3- "$ENTRY_FILE" | tee /dev/stderr | wc -l | tr -d ' ')"
+  if [ "$ENTRY_SHOWN" != "$ENTRY_N" ]; then
+    echo "      (only ${ENTRY_SHOWN} of ${ENTRY_N} rows above were renderable -- the list is TRUNCATED)" >&2
+  fi
+  cat >&2 <<EOF
+
+      A line that opens with a bullet and a timestamp is an ACTIVITY ENTRY.
+      _gate-procedures.md "Sub-step snapshot update" appends those to
+      \`## ${ACTIVITY_SECTION}\` and nowhere else.
+
+      Remedy: MOVE each line above to \`## ${ACTIVITY_SECTION}\`. Do not delete it
+      and do not rename the heading it is under -- both of those are a different
+      remedy for a different finding.
+
+      Filed elsewhere it is invisible: the seven-section schema check reads
+      headings only and passes it, the byte budget prices it like any other prose,
+      and every whole-read at a gate, a resume or a recovery reads the section it
+      landed in as though a log entry were that section's content.
+
+      This does NOT change the exit status, at any flag. It is a filing error, and
+      the path this script runs on at a sub-step blocks the pipeline.
+
+      Sections a project DECLARES in AI_DLC_SNAPSHOT_EXTRA_SECTIONS are out of
+      scope: a project that names its own section owns what goes under it.
+EOF
+fi
+rm -f "$ENTRY_FILE"
 
 # A THIRD INDEPENDENT VERDICT, for the same reason the schema check is a second one.
 # Marked-superseded content is neither "over budget" nor "an invented section": it sits

@@ -242,6 +242,328 @@ else
   bad "any non-empty declaration admitted an undeclared section -- exit $got"
 fi
 
+# =============================================================================
+# ENTRY SHAPE: A DATED ACTIVITY ENTRY UNDER THE WRONG CANONICAL HEADING.
+#
+# The schema assertions above are about HEADINGS. These are about what sits
+# UNDER one, and the two are independent: every snapshot below carries exactly
+# the canonical seven, so the schema channel must stay silent through all of it
+# or these arms are measuring the wrong verdict.
+#
+# WHY THESE ARMS NEED A MUTANT AND THE ONES ABOVE DID NOT. This finding is a
+# WARN that never touches the exit status, on purpose -- the validator runs on
+# the blocking sub-step path and a filing error must not wedge a pipeline. So a
+# copy of the arm that reports nothing at all produces byte-identical exit codes
+# on every input, forever, and no gate anywhere would notice. The mutants at the
+# end of this block are the only thing standing between that and a green suite.
+# =============================================================================
+
+# Seven canonical headings, and whatever lines the caller wants under each.
+# Every arm seeds from the CONSUMER'S OWN observed shapes, never from what the
+# arm's regex accepts: plain, bold, backticked, ordered, mid-line, indented.
+seed_entries() { # seed_entries <pipeline-position-extra> <sprint-context-body> <recent-activity-body> <inflight-body> <context-reminders-body>
+  { printf '# Pipeline Snapshot\n\n'
+    printf '## Pipeline Position\n- variant: carry-over\n%s\n\n' "$1"
+    printf '## Sprint Context\n%s\n\n' "$2"
+    printf '## Recent Activity\n%s\n\n' "$3"
+    printf '## Open Items\nnone\n\n'
+    printf '## Locked Decisions\nnone\n\n'
+    printf '## In-Flight Teammates\n%s\n\n' "$4"
+    printf '## Context Reminders\n%s\n\n' "$5"
+  } > "$SNAP"
+}
+
+# The WARN and its detail rows both go to stderr/stdout of the same run; run_validator
+# already captures both into out.txt.
+entry_warn_count() { grep -c '^WARN: pipeline-snapshot.md files' "$WORK/out.txt" 2>/dev/null || true; }
+entry_rows_for()   { grep -c "dated entry under ## $1" "$WORK/out.txt" 2>/dev/null || true; }
+
+# --- E1. OFFENDER under Sprint Context is REPORTED, by section and by line -----
+seed_entries '' '- 2026-09-12T02:53Z: routed fresh, step 1a' '- 2026-09-12T03:00Z: this one belongs here' 'none' '- context_reminders_sent: none'
+got="$(run_validator)"
+n="$(entry_rows_for 'Sprint Context')"
+# The line number is DERIVED from the seeded file, never hardcoded: a hardcoded one
+# goes wrong the next time `seed_entries` gains a line, and a wrong constant beside a
+# correct arm reads as a regression in the subject.
+want_line="$(grep -n '2026-09-12T02:53Z' "$SNAP" | head -1 | cut -d: -f1)"
+if [ "$n" -ge 1 ] && [ -n "$want_line" ] && grep -q "line ${want_line}:" "$WORK/out.txt"; then
+  ok "ENTRY: a dated entry under ## Sprint Context is reported, at its real line ($want_line)"
+else
+  bad "ENTRY: the offender under ## Sprint Context was NOT reported at line ${want_line:-?} (rows=$n)"
+fi
+# It must be the ENTRY channel that fired, not the schema one -- these headings are canonical.
+if grep -q 'unknown section' "$WORK/out.txt"; then
+  bad "  CONFOUNDED: the schema channel also fired on the canonical seven"
+else
+  ok "  and the schema channel stayed quiet (the finding is the entry arm's alone)"
+fi
+
+# --- E2. THE EXIT STATUS IS UNCHANGED BY THE FINDING, ON EVERY FLAG ------------
+# This is the arm that kills the "make it a FAIL" wrong fix. The validator runs at
+# a sub-step where exit 1 means TRIM NOW; a misfiled line must not produce that.
+# --fail-on is included because it is the flag that hardens the BUDGET verdict, and
+# a future author reaching for it is the realistic way this becomes blocking.
+if [ "$got" = "0" ]; then
+  ok "ENTRY: the finding does not change the exit status (default run, exit 0)"
+else
+  bad "ENTRY: a misfiled line changed the exit status to $got -- it now wedges the sub-step path"
+fi
+bash "$VALIDATOR" --root "$WORK" --only pipeline-snapshot.md --fail-on pipeline-snapshot.md >"$WORK/out.txt" 2>&1
+failon_status=$?
+if [ "$failon_status" = "0" ] && [ "$(entry_warn_count)" = "1" ]; then
+  ok "ENTRY: --fail-on does not harden this finding either (exit 0, still reported)"
+else
+  bad "ENTRY: --fail-on turned the WARN into a failure (exit $failon_status) or silenced it"
+fi
+
+# --- E3. NEAR-MISS: a MID-LINE timestamp under Pipeline Position ---------------
+# Measured on the reference consumer: 396 of its 514 snapshot revisions carry one.
+# An arm that reports these reports 77% of the corpus and is noise.
+seed_entries '- last_gate_passed: planning at 2026-09-12T22:14:00Z' '- sprint_id: 311' '- 2026-09-12T03:00Z: belongs here' 'none' '- none'
+got="$(run_validator)"
+if [ "$(entry_rows_for 'Pipeline Position')" = "0" ] && [ "$got" = "0" ]; then
+  ok "ENTRY NEAR-MISS: a MID-line timestamp under ## Pipeline Position is not reported"
+else
+  bad "ENTRY NEAR-MISS: Pipeline Position row data was indicted -- this arm reports most of the corpus"
+fi
+
+# --- E4. NEAR-MISS: an INDENTED continuation line ------------------------------
+# Admitting leading blanks before the bullet adds 178 lines across the consumer's
+# history, every one a soft-wrapped continuation whose predecessor is non-empty.
+seed_entries '  2026-09-12T22:20:00Z continuation of the line above' '- sprint_id: 311' '- 2026-09-12T03:00Z: belongs here' 'none' '- none'
+run_validator >/dev/null
+if [ "$(entry_rows_for 'Pipeline Position')" = "0" ]; then
+  ok "ENTRY NEAR-MISS: an INDENTED dated continuation line is not reported"
+else
+  bad "ENTRY NEAR-MISS: an indented continuation was indicted -- soft-wrapped prose now reds"
+fi
+
+# --- E5. NEAR-MISS: an UNBULLETED dated line under In-Flight Teammates ---------
+# All 8 In-Flight hits in the consumer's history are ONE line: ff5920ff3:151, the
+# second line of a sentence that began on the line above. The required bullet is
+# what holds this arm's false-positive set at zero.
+seed_entries '' '- sprint_id: 311' '- 2026-09-12T03:00Z: belongs here' \
+  '2026-09-09T14:05:45Z; a wrapped prose continuation, not a row' '- none'
+run_validator >/dev/null
+if [ "$(entry_rows_for 'In-Flight Teammates')" = "0" ]; then
+  ok "ENTRY NEAR-MISS: an UNBULLETED dated line under ## In-Flight Teammates is not reported"
+else
+  bad "ENTRY NEAR-MISS: a wrapped prose continuation was indicted as a misfiled entry"
+fi
+# ...and the same section with a BULLET is still in scope. Without this, "In-Flight
+# is quiet" would pass equally against an arm that exempts the whole section, which
+# is a different and weaker mechanism than the one being shipped.
+seed_entries '' '- sprint_id: 311' '- 2026-09-12T03:00Z: belongs here' \
+  '- 2026-09-09T14:05:45Z: a genuinely bulleted dated entry' '- none'
+run_validator >/dev/null
+if [ "$(entry_rows_for 'In-Flight Teammates')" -ge 1 ]; then
+  ok "ENTRY: a BULLETED dated entry under ## In-Flight Teammates IS reported (excluded by grammar, not by section)"
+else
+  bad "ENTRY: In-Flight Teammates is exempt as a SECTION -- a real misfile there would be invisible"
+fi
+
+# --- E6. NEAR-MISS: the entry under its OWN section ----------------------------
+seed_entries '' '- sprint_id: 311' \
+  '- 2026-09-12T03:00Z: plain
+- **2026-09-12T04:00Z** bold
+1. `2026-09-12T05:00Z` ordered and backticked' 'none' '- none'
+got="$(run_validator)"
+if [ "$(entry_warn_count)" = "0" ] && [ "$got" = "0" ]; then
+  ok "ENTRY NEAR-MISS: plain, bold and ordered entries under ## Recent Activity are all silent"
+else
+  bad "ENTRY NEAR-MISS: correctly-filed entries were reported -- the arm indicts its own remedy"
+fi
+
+# --- E7. THE DECORATED FORMS ARE CAUGHT WHEN MISFILED --------------------------
+# The mirror of E6, and it is the arm that keeps the grammar honest: the consumer
+# writes entries bold and backticked, so a grammar that only spells the plain form
+# misses 10 of the 12 revisions carrying the bold one.
+seed_entries '' '- **2026-09-12T02:53Z** bold misfile
+1. `2026-09-12T02:54Z` ordered and backticked misfile
+* 2026-09-12T02:55Z star-bulleted misfile' '- 2026-09-12T03:00Z: belongs here' 'none' '- none'
+run_validator >/dev/null
+if [ "$(entry_rows_for 'Sprint Context')" = "3" ]; then
+  ok "ENTRY: bold, backticked, ordered and star-bulleted misfiles are all caught"
+else
+  bad "ENTRY: only $(entry_rows_for 'Sprint Context') of 3 decorated misfiles were caught"
+fi
+
+# --- E8. A DECLARED EXTRA SECTION IS OUT OF SCOPE ------------------------------
+# A project that names its own section owns what goes under it; core does not know
+# what belongs beneath a heading core does not define.
+seed_entries '' '- sprint_id: 311' '- 2026-09-12T03:00Z: belongs here' 'none' '- none'
+printf '## Deploy Baseline\n- 2026-09-12T06:00Z: the project owns this shape\n\n' >> "$SNAP"
+got="$(AI_DLC_SNAPSHOT_EXTRA_SECTIONS='Deploy Baseline' run_validator)"
+if [ "$(entry_rows_for 'Deploy Baseline')" = "0" ] && [ "$got" = "0" ]; then
+  ok "ENTRY: a DECLARED extra section is out of scope for the entry arm"
+else
+  bad "ENTRY: a declared section's own content was indicted -- exit $got"
+fi
+
+# --- E9. ONE LINE REACHES verdict.sh, AND THE BUDGET SUMMARY SURVIVES ----------
+# verdict.sh surfaces at most AI_DLC_VERDICT_LINES matching lines after `PASS <name>`,
+# and that window is what gate-validation.md Check 14 pastes into its evidence cell.
+# One WARN per misfiled line fills it and pushes the budget summary out of the
+# verdict entirely -- so the arm emits ONE aggregate line and the detail rows are
+# deliberately unmatchable by that grammar. This drives the REAL verdict.sh.
+VERDICT=""
+for cand in "$ROOT/core/scripts/verdict.sh" "$ROOT/scripts/ai-dlc/verdict.sh"; do
+  [ -f "$cand" ] && VERDICT="$cand" && break
+done
+if [ -z "$VERDICT" ]; then
+  bad "ENTRY: verdict.sh not found in either layout -- the surfacing arm cannot run"
+else
+  { printf '# Pipeline Snapshot\n\n## Pipeline Position\n- v: c\n\n## Sprint Context\n'
+    i=1
+    while [ "$i" -le 12 ]; do printf -- '- 2026-09-%02dT0%d:00Z: misfiled entry %d\n' "$i" $((i % 10)) "$i"; i=$((i+1)); done
+    printf '\n## Recent Activity\n- 2026-09-01T00:00Z: belongs here\n\n'
+    printf '## Open Items\nnone\n\n## Locked Decisions\nnone\n\n'
+    printf '## In-Flight Teammates\nnone\n\n## Context Reminders\n- none\n\n'
+  } > "$SNAP"
+  ( cd "$WORK" && AI_DLC_PROJECT_ROOT="$WORK" bash "$VERDICT" validate-artifact-budget --only pipeline-snapshot.md ) \
+    > "$WORK/verdict.txt" 2>&1
+  v_status=$?
+  v_summary="$(grep -c 'every measured living artifact is within its Rule 25(d) budget' "$WORK/verdict.txt")" || v_summary=0
+  v_warn="$(grep -c 'dated activity entr' "$WORK/verdict.txt")" || v_warn=0
+  if [ "$v_summary" -ge 1 ] && [ "$v_warn" = "1" ] && [ "$v_status" = "0" ]; then
+    ok "ENTRY: through verdict.sh, 12 misfiles render as ONE line and the budget summary SURVIVES"
+  else
+    bad "ENTRY: verdict.sh rendered summary=$v_summary misfile-lines=$v_warn status=$v_status -- the evidence cell is crowded"
+    sed 's/^/        /' "$WORK/verdict.txt" >&2
+  fi
+  # The detail rows must still be READABLE somewhere, or the aggregate is all a lead gets.
+  run_validator >/dev/null
+  if [ "$(entry_rows_for 'Sprint Context')" = "12" ]; then
+    ok "  and all 12 detail rows are present in the validator's own output"
+  else
+    ok_n="$(entry_rows_for 'Sprint Context')"
+    bad "  only $ok_n of 12 detail rows reached the output -- the list is silently truncated"
+  fi
+fi
+
+# --- E10. THE MUTANTS ----------------------------------------------------------
+# An absence-shaped WARN needs mutants: an arm that reports nothing has the same
+# exit code as one that works, on every input, and nothing downstream reads it.
+# Each mutant is a COPY, cmp -s-guarded, and each must fail only its own property.
+mut() { # mut <name> <awk-program>; echoes the mutant path or empty
+  _m="$WORK/mut-$1.sh"
+  awk "$2" "$VALIDATOR" > "$_m" 2>/dev/null || { echo ""; return; }
+  if cmp -s "$VALIDATOR" "$_m"; then echo ""; return; fi
+  echo "$_m"
+}
+
+# M-E1: the arm reports nothing at all (the silent-death case).
+M="$(mut dead '/printf "SEC\\t%s\\t      misfiled/ { next } { print }')"
+if [ -z "$M" ]; then
+  bad "MUTANT dead: DID NOT APPLY -- the report line was renamed; re-anchor this mutation"
+else
+  seed_entries '' '- 2026-09-12T02:53Z: routed fresh' '- 2026-09-12T03:00Z: belongs here' 'none' '- none'
+  m_status="$(run_validator "$M")"
+  if [ "$(entry_warn_count)" = "0" ]; then
+    ok "MUTANT dead: killed -- E1 goes silent when the arm cannot report"
+  else
+    bad "MUTANT dead: SURVIVED -- E1 passes against an arm that reports nothing"
+  fi
+  # THE SELF-PROBE IS WHAT MAKES THIS MUTANT LOUD, and that is the property under
+  # test. A silent arm is invisible to every exit code the corpus can produce --
+  # this WARN never writes RC, so nothing downstream would notice. The probe runs
+  # before the corpus, on a seeded offender, and refuses. Without it this mutant
+  # would exit 0 and E1 would be the only thing between it and a green suite.
+  if [ "$m_status" = "1" ] && grep -q 'self-probe' "$WORK/out.txt"; then
+    ok "  and the SELF-PROBE refused the silent arm (exit 1) rather than letting it run quiet"
+  else
+    bad "  the silent arm was not refused by the self-probe (exit $m_status) -- a dead arm would ship green"
+  fi
+fi
+
+# THE TWO WIDENINGS ARE INDEPENDENT, AND EACH NEEDS ITS OWN MUTANT.
+# The grammar has two separate narrowings and they catch different things:
+#   the BULLET requirement  excludes unbulleted wrapped prose (In-Flight, E5)
+#   the TIMESTAMP `^`       excludes mid-line stamps (Pipeline Position, E3)
+# Dropping the bullet does NOT admit a mid-line stamp and vice versa -- measured,
+# by building both. One mutant covering "the anchor" would kill only one arm and
+# leave the other proving nothing, which is exactly the silent-overlap failure.
+#
+# Each is scored TWICE: the self-probe refuses it before the corpus, and with the
+# probe suppressed the corpus-side near-miss arm catches it. Scoring only the probe
+# would make E3 and E5 vacuous the day the probe moves.
+PROBE_OFF='/^\[ "\$PROBE_RC" -eq 0 \] \|\| exit 1$/ { next }'
+
+# M-E2: the TIMESTAMP anchor dropped -- the line is searched anywhere (wrong fix b).
+M="$(mut nostamp '{ sub(/if \(p !~ \/\^\[0-9\]/, "if ($0 !~ /[0-9]") } { print }')"
+if [ -z "$M" ]; then
+  bad "MUTANT nostamp: DID NOT APPLY -- the timestamp test was rewritten; re-anchor this mutation"
+else
+  seed_entries '- last_gate_passed: planning at 2026-09-12T22:14:00Z' '- sprint_id: 311' '- 2026-09-12T03:00Z: belongs here' 'none' '- none'
+  m_status="$(run_validator "$M")"
+  if [ "$m_status" = "1" ] && grep -q 'NEAR-MISS fired on a MID-line' "$WORK/out.txt"; then
+    ok "MUTANT nostamp: killed by the self-probe -- a mid-line stamp is refused before the corpus"
+  else
+    bad "MUTANT nostamp: the self-probe did not refuse an unanchored timestamp (exit $m_status)"
+  fi
+  M2="$(mut nostamp-noprobe "{ sub(/if \(p !~ \/\^\[0-9\]/, \"if (\$0 !~ /[0-9]\") } $PROBE_OFF { print }")"
+  if [ -z "$M2" ]; then
+    bad "MUTANT nostamp: the probe-suppressing variant DID NOT APPLY -- re-anchor it"
+  else
+    run_validator "$M2" >/dev/null
+    if [ "$(entry_rows_for 'Pipeline Position')" -ge 1 ]; then
+      ok "  and E3's near-miss fires on the corpus too, with the probe out of the way"
+    else
+      bad "  E3's near-miss does NOT fire on an unanchored timestamp -- that arm proves nothing"
+    fi
+  fi
+fi
+
+# M-E2b: the BULLET requirement dropped -- wrapped prose becomes an entry.
+M="$(mut nobullet '/blank:\]\]\+\/\) next/ { next } { print }')"
+if [ -z "$M" ]; then
+  bad "MUTANT nobullet: DID NOT APPLY -- the bullet guard was rewritten; re-anchor this mutation"
+else
+  seed_entries '' '- sprint_id: 311' '- 2026-09-12T03:00Z: belongs here' \
+    '2026-09-09T14:05:45Z; a wrapped prose continuation, not a row' '- none'
+  m_status="$(run_validator "$M")"
+  if [ "$m_status" = "1" ] && grep -q 'NEAR-MISS fired on an UNBULLETED' "$WORK/out.txt"; then
+    ok "MUTANT nobullet: killed by the self-probe -- unbulleted prose is refused before the corpus"
+  else
+    bad "MUTANT nobullet: the self-probe did not refuse a grammar with no bullet requirement (exit $m_status)"
+  fi
+  M2="$(mut nobullet-noprobe "/blank:\]\]\+\/\) next/ { next } $PROBE_OFF { print }")"
+  if [ -z "$M2" ]; then
+    bad "MUTANT nobullet: the probe-suppressing variant DID NOT APPLY -- re-anchor it"
+  else
+    run_validator "$M2" >/dev/null
+    if [ "$(entry_rows_for 'In-Flight Teammates')" -ge 1 ]; then
+      ok "  and E5's near-miss fires on the corpus too, with the probe out of the way"
+    else
+      bad "  E5's near-miss does NOT fire on an unbulleted line -- that arm proves nothing"
+    fi
+  fi
+fi
+
+# M-E3: the WARN promoted to a FAIL (the "block the gate" wrong fix).
+M="$(mut blocking '/^  echo "WARN: pipeline-snapshot.md files \$\{ENTRY_N\}/ { print; print "  RC=1"; next } { print }')"
+if [ -z "$M" ]; then
+  bad "MUTANT blocking: DID NOT APPLY -- the WARN emitter was rewritten; re-anchor this mutation"
+else
+  seed_entries '' '- 2026-09-12T02:53Z: routed fresh' '- 2026-09-12T03:00Z: belongs here' 'none' '- none'
+  m_status="$(run_validator "$M")"
+  if [ "$m_status" = "1" ]; then
+    ok "MUTANT blocking: killed -- E2 catches the finding being promoted to a failure"
+  else
+    bad "MUTANT blocking: SURVIVED (exit $m_status) -- E2 cannot see a WARN becoming a FAIL"
+  fi
+fi
+
+# M-E4: UNMUTATED CONTROL, and it is PRESENCE-shaped. Two inert runs compare equal,
+# so this asserts a specific row APPEARS rather than that nothing went wrong.
+seed_entries '' '- 2026-09-12T02:53Z: routed fresh' '- 2026-09-12T03:00Z: belongs here' 'none' '- none'
+ctrl_status="$(run_validator)"
+if [ "$ctrl_status" = "0" ] && [ "$(entry_warn_count)" = "1" ] && [ "$(entry_rows_for 'Sprint Context')" = "1" ]; then
+  ok "CONTROL: the UNMUTATED validator reports the offender and exits 0 (the mutants above ran against a working subject)"
+else
+  bad "CONTROL: the unmutated validator did not produce the baseline row -- every mutant verdict above is void"
+fi
+
 echo ""
 if [ "$fails" -eq 0 ]; then
   echo "snapshot-section-schema: PASS"

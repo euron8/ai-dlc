@@ -4527,3 +4527,70 @@ it; UNDECLARED reads 6 under every variant. The receipt itself is robust: bare c
 silent and permanent.
 
 verify: sh V=core/scripts/audit-layer-debt.sh; [ -f "$V" ] || exit 9; d=$(mktemp -d) || exit 9; B='"clause":"LC-E4","subject_digest":"x","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z"'; printf '{%s,"entry":"e20","reason":"This is not tracked under OWED-C and a narrowing is still owed."}\n{%s,"entry":"e21","reason":"A narrowing is still owed."}\n{%s,"entry":"e22","reason":"The narrowing is owed under OWED-C."}\n{%s,"entry":"e9","owed":{"id":"OWED-C","what":"w"}}\n' "$B" "$B" "$B" "$B" > "$d/r.jsonl"; o="$(bash "$V" --register "$d/r.jsonl" --json 2>/dev/null)"; rm -rf "$d"; u="$(printf '%s' "$o" | python3 -c 'import json,sys; print(" ".join(sorted(r["entry"] for r in json.load(sys.stdin)["undeclared"])))')" || exit 9; case " $u " in *" e21 "*) : ;; *) exit 9 ;; esac; case " $u " in *" e22 "*) exit 9 ;; esac; case " $u " in *" e20 "*) exit 0 ;; esac; exit 1
+
+
+## BL-245 — the snapshot's seven-section schema is checked at the HEADING and never at the CONTENT, so a dated activity entry filed under the wrong section is invisible to every gate
+
+**Found 2026-09-13** by the consumer at sprint 311's resume, filed as
+`PC-S311-SNAPSHOT-SEVEN-SECTION-SCHEMA-HAS-A-READER-CHECK-BUT-NO-WRITER-CHECK`, and re-derived
+here against `origin/main` before any fix. The writer is `core/skills/ai-dlc/steps/_gate-procedures.md:25-28`
+("Append a one-line entry to **Recent Activity** … with timestamp"); the reader is `route.md:159`
+Check 3, which reads HEADINGS. `validate-artifact-budget.sh` owns the closed seven-section set and
+its `check_snapshot_sections` greps `^## ` and nothing else. So no program anywhere looks UNDER a
+heading, and a dated activity entry filed beneath `## Sprint Context` satisfies every check that
+exists: the heading is canonical, the bytes are priced like any other prose, and the recovery path
+that whole-reads the snapshot reads the misfile as sprint context.
+
+Driven through the shipping validator, one property varied, `--only pipeline-snapshot.md` against a
+`mktemp` root:
+
+    a dated entry under ## Sprint Context      pre-fix: silent, exit 0    fixed: WARN, exit 0
+    the same line under ## Recent Activity     pre-fix: silent, exit 0    fixed: silent, exit 0
+    CONTROL an invented ## heading              pre-fix: FAIL,   exit 1    fixed: FAIL,   exit 1
+
+The control is the heading channel firing in the same invocation, so the pre-fix silence is a
+property of the CONTENT check's absence and not of a run that did nothing.
+
+**Reachability on the reference consumer, measured over all 514 revisions of
+`_bmad-output/pipeline-snapshot.md` on its first-parent history by running the SHIPPING validator
+against each one, not a re-implementation of its grammar:** 2 revisions carry the defect — `66d0eb165`
+with 29 dated entries under `## Sprint Context`, and `580f156cc` with 7 under `## Context Reminders`.
+Both are real misfiles; neither section's schema has anything to do with a dated log line. The
+false-positive set over that corpus is EMPTY, and the narrowing that got it there is recorded beside
+the arm. Two candidate widenings were built and measured rather than reasoned about: dropping the
+leading anchor indicts 396 of the 514 at `## Pipeline Position`, whose rows legitimately carry a
+timestamp mid-line; admitting leading blanks before the bullet adds 178 soft-wrapped continuation
+lines across four sections. Requiring a column-1 bullet takes `## In-Flight Teammates` from 8 to 0 —
+all 8 are ONE line, `ff5920ff3:151`, the second line of a sentence beginning on the line above — so
+that section is excluded by the GRAMMAR and not exempted as a section, and a genuinely bulleted dated
+entry there is still reported.
+
+**The finding is a WARN that never writes RC, on any flag including `--fail-on`.** This script runs
+on the BLOCKING sub-step path (`_gate-procedures.md` step 5, "Exit 1 → TRIM NOW"). A misfiled line is
+a filing error the lead fixes by moving one line; wedging a pipeline over it is the
+safeguard-that-blocks-throughput failure. That posture is also why the arm needs mutants: a copy of it
+that reports nothing produces byte-identical exit codes on every input forever, and no gate downstream
+reads its output. A self-probe runs before the corpus and fails the script closed in four directions.
+
+**One aggregate line, and that is a constraint imposed by `verdict.sh`, not a formatting choice.**
+`core/scripts/verdict.sh:122` surfaces at most `AI_DLC_VERDICT_LINES` (6) lines matching
+`^[[:space:]]*(ok|warn|OK:|PASS|WARN|OVER)` after `PASS <name>`, and that window is what
+`gate-validation.md` Check 14 pastes into its evidence cell. Measured by building it: one WARN per
+misfiled line pushes `PASS  every measured living artifact is within its Rule 25(d) budget.` out of
+the verdict entirely on the 29-line revision. The arm emits one aggregate line carrying the count and
+a per-section breakdown, before the summary; the detail rows open with `misfiled` and cannot match
+that grammar.
+
+**A second defect was found by running the shipping code against the real corpus rather than a
+synthetic seed, and is fixed in the same change.** BSD `cut` aborts with `Illegal byte sequence` on
+the multibyte characters real snapshot prose carries, having already printed the rows before the
+first one: on `66d0eb165` it emitted 8 of 29 detail rows, wrote its complaint to the same stderr the
+rows go to, and the run still exited 0 — a truncated finding list that reads exactly like a complete
+one. Every reader of the channel now runs under `LC_ALL=C`, and the aggregate count is derived from
+`wc -l` over the same records, so a future truncation disagrees with its own count instead of
+shrinking quietly.
+
+**Tiered DEFECT.** Consumer-facing; the arm ships in `core/scripts/`. The misfile is silent, and the
+section that is supposed to hold the activity log stops holding it.
+
+verify: sh V=core/scripts/validate-artifact-budget.sh; [ -f "$V" ] || exit 9; d="$(mktemp -d)" || exit 9; mkdir -p "$d/_bmad-output" || exit 9; s="$d/_bmad-output/pipeline-snapshot.md"; w() { printf '## Pipeline Position\n- last_gate_passed: planning at 2026-09-12T22:14:00Z\n## Sprint Context\n%s\n## Recent Activity\n%s\n## Open Items\n## Locked Decisions\n## In-Flight Teammates\n## Context Reminders\n' "$1" "$2" > "$s"; }; w '- 2026-09-12T02:53Z: a misfiled activity entry' '- 2026-09-12T03:00Z: correctly filed'; bash "$V" --root "$d" --only pipeline-snapshot.md > "$d/bad.txt" 2>&1; a=$?; w '- sprint_id: 311' '- 2026-09-12T03:00Z: correctly filed'; bash "$V" --root "$d" --only pipeline-snapshot.md > "$d/good.txt" 2>&1; b=$?; [ "$a" = 0 ] && [ "$b" = 0 ] || { rm -rf "$d"; exit 1; }; grep -q 'dated entry under ##' "$d/good.txt" && { rm -rf "$d"; exit 1; }; grep -q 'line 4: dated entry under ## Sprint Context' "$d/bad.txt" || { rm -rf "$d"; exit 1; }; rm -rf "$d"; exit 0
