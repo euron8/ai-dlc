@@ -79,6 +79,41 @@ cat > "$DIST/core/hooks/ai-dlc-delta.sh" <<'MD'
 # The delta hook records the beat that closed each dispatched brief.
 # It writes one line per brief and never rewrites an earlier one.
 MD
+# --- the CORE-MACHINERY-CARRIED cells --------------------------------------
+# Four machinery hooks and one non-machinery step, seeded to separate the new row's two
+# conjuncts and its two precedence boundaries. Each is consumer-EDITED below except theta.
+#
+#   epsilon  machinery, IN the base..theirs diff, consumer-edited  -> CORE-MACHINERY-CARRIED
+#   zeta     machinery, OUT of the diff, consumer-edited           -> HARD-UNREGISTERED (range)
+#   theta    machinery, IN the diff, consumer copy == BASE         -> CORE-OK (claimed earlier;
+#            the arm never sees it, which is WHY the range alone cannot key this status)
+#   partial  machinery, IN the diff, PARTIALLY absorbed            -> CORE-MACHINERY-CARRIED
+#   eta.md   NON-machinery, IN the diff, consumer-edited           -> HARD-UNREGISTERED (member)
+cat > "$DIST/core/hooks/ai-dlc-epsilon.sh" <<'MD'
+#!/usr/bin/env bash
+# The epsilon hook fires on every dispatched teammate beat in the sprint.
+# Its first responsibility is to resolve the declared sprint envelope now.
+MD
+cat > "$DIST/core/hooks/ai-dlc-zeta.sh" <<'MD'
+#!/usr/bin/env bash
+# The zeta hook records the beat that closed each dispatched brief today.
+# It writes one line per brief and never rewrites an earlier line of it.
+MD
+cat > "$DIST/core/hooks/ai-dlc-theta.sh" <<'MD'
+#!/usr/bin/env bash
+# The theta hook validates the declared envelope before any dispatch runs.
+# It refuses an envelope whose sprint field is absent from the declaration.
+MD
+cat > "$DIST/core/hooks/ai-dlc-partial.sh" <<'MD'
+#!/usr/bin/env bash
+# The partial hook resolves the declared sprint from the canonical envelope.
+MD
+cat > "$DIST/core/skills/ai-dlc/steps/eta.md" <<'MD'
+# Eta step
+
+The lead reads this file at the top of the eta phase of every sprint here.
+Every numbered section below runs in the order it is written on this page.
+MD
 printf '9.9.9\n' > "$DIST/VERSION"
 # THE ADJUDICATION VERDICT VOCABULARY, WITHOUT WHICH A RECORDED VERDICT CANNOT BE HONOURED HERE.
 # `layer-drift.sh` derives it from `core/schemas/layer-adjudication-register.json` AT THEIRS, and
@@ -171,6 +206,38 @@ cat > "$DIST/core/hooks/ai-dlc-gamma.sh" <<'MD'
 # It refuses to resolve that sprint from the filesystem's mtime.
 # The declared sprint is read from the canonical envelope, never searched.
 MD
+# epsilon, theta, partial and eta.md all MOVE here; zeta deliberately does not.
+cat > "$DIST/core/hooks/ai-dlc-epsilon.sh" <<'MD'
+#!/usr/bin/env bash
+# The epsilon hook fires on every dispatched teammate beat in the sprint.
+# Its first responsibility is to resolve the declared sprint envelope now.
+# The declared sprint is read from the canonical envelope and never searched.
+MD
+cat > "$DIST/core/hooks/ai-dlc-theta.sh" <<'MD'
+#!/usr/bin/env bash
+# The theta hook validates the declared envelope before any dispatch runs.
+# It refuses an envelope whose sprint field is absent from the declaration.
+# An absent sprint field is a broken caller and never a default to invent.
+MD
+# partial: upstream takes THREE of the six lines the consumer added below, so
+# `absorbed_pct` clears its floors (3 hits, 50%) but hits != total. On a CARRIED path that
+# makes ABSORBED's whole-file revert destructive -- it would delete the other three -- so
+# the carried row claims it instead. On a NON-carried path the same shape still reads
+# ABSORBED, which is the behaviour this seed must not change.
+cat > "$DIST/core/hooks/ai-dlc-partial.sh" <<'MD'
+#!/usr/bin/env bash
+# The partial hook resolves the declared sprint from the canonical envelope.
+# CONSUMER HARDENING: refuse a sprint the operator has paused mid-beat here.
+# CONSUMER HARDENING: refuse a dispatch whose envelope names no sprint field.
+# CONSUMER HARDENING: refuse a brief whose deliverable path is not declared.
+MD
+cat > "$DIST/core/skills/ai-dlc/steps/eta.md" <<'MD'
+# Eta step
+
+The lead reads this file at the top of the eta phase of every sprint here.
+Every numbered section below runs in the order it is written on this page.
+The eta phase closes only once its own gate has been adjudicated in full.
+MD
 # delta goes BACK to its base text. Restored by `git show` rather than by re-typing the
 # heredoc, so the two blobs are identical by DERIVATION -- a retyped copy that drifted by one
 # byte would put delta into the base..theirs diff, apply would write it, and this fixture's
@@ -192,6 +259,23 @@ if git -C "$DIST" diff --quiet "$BASE" "$THEIRS" -- core/hooks/ai-dlc-gamma.sh; 
   echo "  count arm has no machinery subject." >&2
   exit 2
 fi
+# THE CARRIED-PATH ARMS' OWN PRECONDITION, asserted the same way. Their whole subject is the
+# split between "in the base..theirs diff" and "outside it": epsilon, theta, partial and the
+# non-machinery eta.md must be IN, and zeta must be OUT. If any of those inverts, the arms
+# below stop testing what they name and start agreeing for the wrong reason.
+for _p in core/hooks/ai-dlc-epsilon.sh core/hooks/ai-dlc-theta.sh core/hooks/ai-dlc-partial.sh \
+          core/skills/ai-dlc/steps/eta.md; do
+  if git -C "$DIST" diff --quiet "$BASE" "$THEIRS" -- "$_p"; then
+    echo "seed.sh: FIXTURE BROKEN — $_p is identical across the range, so no bucket is emitted" >&2
+    echo "  for it and the CORE-MACHINERY-CARRIED arms lose their subject." >&2
+    exit 2
+  fi
+done
+if ! git -C "$DIST" diff --quiet "$BASE" "$THEIRS" -- core/hooks/ai-dlc-zeta.sh; then
+  echo "seed.sh: FIXTURE BROKEN — zeta differs across the range, so it would be CARRIED and the" >&2
+  echo "  out-of-range near-miss has no subject." >&2
+  exit 2
+fi
 
 # ---- CONSUMER: byte-identical to BASE. Zero drift. -------------------------
 git -C "$DIST" show "$BASE:core/skills/ai-dlc/steps/alpha.md" > "$CONSUMER/.claude/skills/ai-dlc/steps/alpha.md"
@@ -199,6 +283,27 @@ git -C "$DIST" show "$BASE:core/skills/ai-dlc/steps/beta.md"  > "$CONSUMER/.clau
 mkdir -p "$CONSUMER/.claude/hooks"
 git -C "$DIST" show "$INTER:core/hooks/ai-dlc-gamma.sh" > "$CONSUMER/.claude/hooks/ai-dlc-gamma.sh"
 git -C "$DIST" show "$INTER:core/hooks/ai-dlc-delta.sh" > "$CONSUMER/.claude/hooks/ai-dlc-delta.sh"
+# The carried-path cells. Each consumer copy starts at BASE; the ones that must DIVERGE take
+# a hardening line the distribution never had. theta takes none -- it is the control proving
+# the base..theirs range alone does not key the new status.
+git -C "$DIST" show "$BASE:core/hooks/ai-dlc-epsilon.sh" > "$CONSUMER/.claude/hooks/ai-dlc-epsilon.sh"
+printf '%s\n' '# CONSUMER HARDENING: refuse a sprint the operator has paused mid-beat.' \
+  >> "$CONSUMER/.claude/hooks/ai-dlc-epsilon.sh"
+git -C "$DIST" show "$BASE:core/hooks/ai-dlc-zeta.sh" > "$CONSUMER/.claude/hooks/ai-dlc-zeta.sh"
+printf '%s\n' '# CONSUMER HARDENING: a brief closed twice is a defect in the caller.' \
+  >> "$CONSUMER/.claude/hooks/ai-dlc-zeta.sh"
+git -C "$DIST" show "$BASE:core/hooks/ai-dlc-theta.sh" > "$CONSUMER/.claude/hooks/ai-dlc-theta.sh"
+git -C "$DIST" show "$BASE:core/hooks/ai-dlc-partial.sh" > "$CONSUMER/.claude/hooks/ai-dlc-partial.sh"
+{ printf '%s\n' '# CONSUMER HARDENING: refuse a sprint the operator has paused mid-beat here.'
+  printf '%s\n' '# CONSUMER HARDENING: refuse a dispatch whose envelope names no sprint field.'
+  printf '%s\n' '# CONSUMER HARDENING: refuse a brief whose deliverable path is not declared.'
+  printf '%s\n' '# CONSUMER HARDENING: refuse a beat that names no dispatched teammate at all.'
+  printf '%s\n' '# CONSUMER HARDENING: refuse a retro whose sprint reference cannot resolve.'
+  printf '%s\n' '# CONSUMER HARDENING: refuse a gate whose adjudication record is not present.'
+} >> "$CONSUMER/.claude/hooks/ai-dlc-partial.sh"
+git -C "$DIST" show "$BASE:core/skills/ai-dlc/steps/eta.md" > "$CONSUMER/.claude/skills/ai-dlc/steps/eta.md"
+printf '%s\n' 'The domain requires one extra review beat before the eta gate closes here.' \
+  >> "$CONSUMER/.claude/skills/ai-dlc/steps/eta.md"
 # BOTH shas, which is the whole point: `commit` is the rulebook merge-base every predicate
 # measures against, `skill_commit` is where step 2's autonomous self-update left the machinery.
 printf 'version: 0.0.1\ncommit: %s\nskill_version: 0.0.2\nskill_commit: %s\n' "$BASE" "$INTER" > "$CONSUMER/.claude/.ai-dlc-version"
@@ -263,6 +368,7 @@ ALPHA="$CONSUMER/.claude/skills/ai-dlc/steps/alpha.md"
 BETA="$CONSUMER/.claude/skills/ai-dlc/steps/beta.md"
 GAMMA="$CONSUMER/.claude/hooks/ai-dlc-gamma.sh"
 STAMP="$CONSUMER/.claude/.ai-dlc-version"
+PRECLASSIFY="$RECONCILE/preclassify.sh"
 ENV
 
 printf '%s\n' "$WORK"

@@ -892,16 +892,29 @@ prose is itself generated rather than composed.
      never drift. A row here is the tell that the base passed in was stale.
    - `CORE-AT-SELF-UPDATE` → byte-identical to the distribution at `skill_commit`, the OTHER
      sha in this consumer's own stamp. **Not drift, and no action.** Step 2's autonomous
-     self-update rewrites the whole MACHINERY set, so on a multi-hop pull those files sit at
-     an INTERMEDIATE ref while `commit` — the base every predicate here measures against —
-     stays where it was. **28 files are in both the machinery set and this scan** (control:
-     72 machinery files are outside it), and without this row each one reads as a consumer
+     self-update writes the `base→theirs` diff RESTRICTED to the MACHINERY set — not the whole
+     set, and minus whatever arm C carried out of the slice — so on a multi-hop pull the files
+     it did write sit at an INTERMEDIATE ref while `commit` — the base every predicate here
+     measures against — stays where it was. **41 files are in both the machinery set and this
+     scan** (control: 88 machinery files are outside it; both sides derived, neither
+     hand-listed), and without this row each one reads as a consumer
      edit and draws a HARD status whose printed remedy is to revert upstream's own text.
      Reproduced at ground truth on the distribution's own history: the same file at the
      intermediate ref gives `HARD-CORE-DRIFT-ABSORBED`, and at base gives `CORE-OK`.
      The script reads `skill_commit` from the stamp ITSELF rather than taking it as an
      argument — a fifth argument is a fifth thing a caller can omit, and step 7 below records
      what that cost the last time one instruction had to be remembered for two scripts.
+   - `CORE-MACHINERY-CARRIED` → a machinery path `reconcile/self-update-gate.sh`'s arm C
+     CARRIED out of step 2's autonomous slice: the consumer diverged on it, so step 2 refused
+     to write `theirs` over it and handed it to this gated apply. **Not drift, and the action
+     is elsewhere** — `apply` already emits a `WORKLIST semantic-merge` row for the same path
+     off the same preclassify bucket, which the row names verbatim. Do NOT refile it as an
+     override and do NOT act on the drift remedy; do the worklist row. Without this row one
+     path draws two contradictory instructions in one report, and for a hook there is no
+     override grain to refile into at all. Non-blocking. It is the LAST specific status:
+     `HARD-CORE-BEHIND` still wins (a stale copy has no residual to merge), and
+     `HARD-CORE-DRIFT-ABSORBED` wins only when absorption is TOTAL — on a partially absorbed
+     carried path that row's whole-file revert would delete the lines upstream did not take.
    - `HARD-DRIFT-SCAN-UNAVAILABLE` → **blocks `apply`**. The scan could not load its path
      mapper, so it scanned NOTHING and its empty output is not a clean tree. Restore
      `reconcile/preclassify.sh` beside `unregistered-drift.sh` and re-run.

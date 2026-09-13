@@ -172,7 +172,7 @@ step "backlog depth (docs/backlog.md stays a queue, not a log)" \
 #     base exit once in a fresh checkout and reports the disagreement by name.
 step "backlog receipts (a receipt a COMMENT can satisfy is not a receipt)" \
   bash scripts/validate-backlog-receipts.sh \
-    --max-prose-closable 2 --max-unscorable 28 --max-out-of-population 1 \
+    --max-prose-closable 1 --max-unscorable 28 --max-out-of-population 1 \
     --max-unstable 0 --min-sh-receipts 76 --min-entries 88
 
 # 1g. The bash-3.2 / BSD-userland floor for every shipped shell file. GNU-only idioms do not
