@@ -11665,3 +11665,104 @@ verify: sh V=scripts/validate-backlog-receipts.sh; [ -f "$V" ] || exit 9; d="$(m
 
 
 
+## BL-124
+
+**LANDED (v0.564.0, verified aa8fc345).**
+**Arm C's carry list falsifies a premise `unregistered-drift.sh` states in its own remedy text, and
+that file was not touched by the change that broke it.**
+`core/skills/ai-dlc-update/SKILL.md:722` describes the `CORE-AT-SELF-UPDATE` row as resting on
+"Step 2's autonomous self-update rewrites the whole MACHINERY set", and
+`core/skills/ai-dlc-update/reconcile/unregistered-drift.sh:359` prints the same claim to the
+operator — "the autonomous self-update (step 2) wrote it ... No action: `apply` carries it to theirs
+with the rest of the machinery."
+
+**THE QUOTED PREMISE WAS ALREADY LOOSE, AND v0.436.0 WIDENED THE GAP RATHER THAN OPENING IT.**
+Step 2 has never written the whole machinery set: it writes the `base→theirs` diff RESTRICTED to
+that set, and `SKILL.md:233` has said so since 2026-07-26 — derived with `git log -S` against a
+control string that resolves to nothing. So the sentence both files print was inexact before this
+release, which is worth stating because an earlier revision of THIS entry repeated it and had to be
+withdrawn. What v0.436.0 changed is the size of the discrepancy: `self-update-gate.sh`'s ARM C emits
+a `SELF-UPDATE-CARRY` row for every machinery path the consumer has diverged on and step 2 writes
+none of them, so the written set is now that diff MINUS the carried paths. A carried path is
+byte-identical to neither `base` nor `skill_commit` nor `theirs`. It therefore falls past the `CORE-AT-SELF-UPDATE` arm into an ordinary drift status whose
+printed remedy is to re-adopt upstream's text — against the one path the consumer deliberately owns
+and which step 7 is already carrying as a `WORKLIST semantic-merge` item.
+
+**Not claimed:** that this loses data. The path is reported twice rather than zero times, and the
+second report argues for the opposite action from the first. The consequence is a contradictory
+worklist, not an overwrite — which is why this is filed rather than folded into the release that
+caused it. The remedy is a row in `unregistered-drift.sh`'s own vocabulary for a path the gate
+carried, and that is a different subsystem from the one v0.436.0 changed.
+
+**The stamp is the second half and is stated separately.** Step 2 advances
+`skill_version`/`skill_commit` to `theirs` on a cycle that carried a path, so
+`self-update-gate.sh`'s `machinery_at_or_past()` then reads a stamp asserting machinery landed that
+did not. Its only consumer is the SAFE-STOP advisory wording, so the cost is a misleading sentence
+rather than a wrong verdict — but the two halves want one answer, not two.
+
+**HALF 1 SHIPPED: `CORE-MACHINERY-CARRIED`.** `unregistered-drift.sh` now carries a
+non-blocking row for a scanned file that is BOTH in `machinery_paths()` (eval'd out of
+`preclassify.sh`, the same load `self-update-gate.sh:675` does) AND in a preclassify bucket
+matching arm C's own `->CLASSIFY` / `consumer-edited` class. Its detail names the bucket
+verbatim and points the operator at the `WORKLIST semantic-merge` row `apply.sh:539`/`:541`
+already emits, instead of at the `DECISION drift ... refile-as-override or revert` row
+`apply.sh:622` used to draw for the same path. It is sited LAST of the specific arms —
+`HARD-CORE-BEHIND` still precedes it, because a copy that best-matches a pre-base ancestor has
+no residual to merge and "take theirs" is the right remedy; `HARD-CORE-DRIFT-ABSORBED` precedes
+it only on FULL absorption (`hits == total`), because on a partially absorbed carried path that
+row's whole-file revert deletes the lines upstream did not take while apply is merging the same
+file. The false premise both files printed — that step 2 "rewrites the whole MACHINERY set" — is
+corrected in `unregistered-drift.sh`'s header, its `CORE-AT-SELF-UPDATE` emitter and `SKILL.md`'s
+step 3d row, to the statement `self-update-gate.sh:608` already carries.
+
+**The scan takes its buckets from the caller.** `--bucket-rows <file>` lets `apply.sh` hand down
+the `preclassify.sh` output it already holds one line above the call; without the flag the scan
+derives them itself, which is what a standalone run and the fixtures get. An EMPTY rows file
+over a range that still moves `core/` is the "derivation did not run" state and does NOT acquit —
+every carried path falls back to its HARD row, the same doctrine as `self-update-gate.sh:717`.
+
+**The receipt's limits, stated rather than discovered later.** It BUILDS a two-commit dist and a
+consumer under `mktemp` and DRIVES `unregistered-drift.sh` twice, reading only statuses the
+program emits; it reads no source file for a token, so a comment cannot close it. Three seeds in
+one run: a machinery hook in range and consumer-edited (must not be `HARD-*`, must name the
+semantic-merge disposition), a machinery hook OUT of range and consumer-edited, and a
+non-machinery scanned file in range and consumer-edited (both must stay
+`HARD-UNREGISTERED-CORE-DRIFT`), with an exit-9 control that all three rows were produced. Its
+second drive passes an empty `--bucket-rows` file and requires the in-range hook NOT to be
+acquitted, which is the only cell separating this fix from one keyed on the base..theirs range
+alone. **The bucket conjunct is not otherwise observable from a row's status**: every in-range
+machinery path whose bucket is outside arm C's class is claimed by an earlier arm (`CORE-OK`,
+`CORE-AT-THEIRS`, `CORE-AT-SELF-UPDATE`), so a seed built to separate the two on an ordinary run
+cannot, and that was measured by building the range-only implementation rather than reasoned.
+**The receipt's stamp carries NO `skill_commit`**, deliberately: arm C never reads that field, so
+the fix must hold on a consumer that has never self-updated. **Post-apply it is silent by
+construction** — `hard-blockers.sh --post-apply` passes base == theirs, the range is empty, no
+bucket is emitted for any path, and every carried path reverts to its HARD status; that is the
+state the wrapper wants and is not fixed here.
+
+**HALF 2 SHIPPED: THE ACQUITTAL IS WITHHELD BESIDE A CARRY ROW.** No program writes the stamp at
+step 2 — the only stamp writers are `apply.sh` at step 7 and `install.sh` — so the advance itself
+cannot be refused by a mechanism, and a receipt on the prose that performs it would be the
+prose-closable shape this entry was rewritten to escape. The fix is sited where the deciding fact
+already exists: arm C sets `GATE_CARRIED=1` at its `SELF-UPDATE-CARRY` emit, and
+`machinery_at_or_past()` returns 1 on that flag before it reads the stamp, so the SAFE-STOP
+"SPLIT BUYS NOTHING HERE" acquittal is withheld on exactly the runs where the stamp is ahead of
+the tree and stands everywhere else. Measured before the fix on one tree with one carried hook and
+one landed hook: the advanced stamp and the honest stamp produced OPPOSITE advice, while
+`--safe-stop`'s ref, the record's `# verdict:` trailer and the fixture runner's exit were identical
+under both — so this half moved wording only, which is why it is a DEFECT and not a BLOCKER. The
+sharpest case is the carried path being `preclassify.sh` itself: the row's rationale ("step 3
+would classify on the engine this pull replaces") is false about the very file it names and the
+row still acquitted. Arm C is suppressed under `AI_DLC_GATE_IN_SAFE_STOP`, and so is
+`advise_safe_stop` at its own first line, so no advisory exists inside a walk for the refusal to
+be missing from. The second receipt below builds base/mid/theirs and two consumers, drives the
+gate twice, and requires the acquittal WITHHELD beside a carry row and PRESENT on the no-carry
+control, with exit-9 controls that both runs reached the advisory; scored unfixed 1, a comment
+naming the flag above arm C 1, the fix 0, the acquittal deleted outright 9 — the last is what
+separates the shipped guard from fix-by-deletion. Its limit: it drives the gate, not step 2, so a
+consumer whose agent advances the pair by hand still gets the withheld acquittal and nothing
+here stops the advance.
+
+verify: sh ( U=core/skills/ai-dlc-update/reconcile/unregistered-drift.sh; P=core/skills/ai-dlc-update/reconcile/preclassify.sh; [ -r "$U" ] && [ -r "$P" ] || exit 9; W="$(mktemp -d)" || exit 9; D="$W/d"; C="$W/c"; mkdir -p "$D/core/hooks" "$D/core/skills/ai-dlc/steps" "$C/.claude/hooks" "$C/.claude/skills/ai-dlc/steps" || { rm -rf "$W"; exit 9; }; printf '#!/usr/bin/env bash\n# The epsilon hook fires on every dispatched teammate beat in the sprint.\n' > "$D/core/hooks/ai-dlc-epsilon.sh"; printf '#!/usr/bin/env bash\n# The zeta hook records the beat that closed each dispatched brief today.\n' > "$D/core/hooks/ai-dlc-zeta.sh"; printf '# Eta step\n\nThe lead reads this file at the top of the eta phase every sprint.\n' > "$D/core/skills/ai-dlc/steps/eta.md"; printf '9.9.9\n' > "$D/VERSION"; git -C "$D" init -q && git -C "$D" -c user.email=f@f -c user.name=f add -A && git -C "$D" -c user.email=f@f -c user.name=f commit -q -m base || { rm -rf "$W"; exit 9; }; B="$(git -C "$D" rev-parse HEAD)"; printf '#!/usr/bin/env bash\n# The epsilon hook fires on every dispatched teammate beat in the sprint.\n# The declared sprint is read from the canonical envelope, never searched.\n' > "$D/core/hooks/ai-dlc-epsilon.sh"; printf '# Eta step\n\nThe lead reads this file at the top of the eta phase every sprint.\nThe eta phase closes only once its own gate has been adjudicated fully.\n' > "$D/core/skills/ai-dlc/steps/eta.md"; git -C "$D" -c user.email=f@f -c user.name=f add -A && git -C "$D" -c user.email=f@f -c user.name=f commit -q -m theirs || { rm -rf "$W"; exit 9; }; T="$(git -C "$D" rev-parse HEAD)"; git -C "$D" diff --quiet "$B" "$T" -- core/hooks/ai-dlc-epsilon.sh && { rm -rf "$W"; exit 9; }; git -C "$D" diff --quiet "$B" "$T" -- core/skills/ai-dlc/steps/eta.md && { rm -rf "$W"; exit 9; }; git -C "$D" diff --quiet "$B" "$T" -- core/hooks/ai-dlc-zeta.sh || { rm -rf "$W"; exit 9; }; git -C "$D" show "${B}:core/hooks/ai-dlc-epsilon.sh" > "$C/.claude/hooks/ai-dlc-epsilon.sh"; printf '# Consumer hardening: refuse a sprint the operator has paused mid-beat.\n' >> "$C/.claude/hooks/ai-dlc-epsilon.sh"; git -C "$D" show "${B}:core/hooks/ai-dlc-zeta.sh" > "$C/.claude/hooks/ai-dlc-zeta.sh"; printf '# Consumer hardening: a brief closed twice is a defect in the caller.\n' >> "$C/.claude/hooks/ai-dlc-zeta.sh"; git -C "$D" show "${B}:core/skills/ai-dlc/steps/eta.md" > "$C/.claude/skills/ai-dlc/steps/eta.md"; printf 'The domain requires one extra review beat before the eta gate closes.\n' >> "$C/.claude/skills/ai-dlc/steps/eta.md"; printf 'version: 0.0.1\ncommit: %s\n' "$B" > "$C/.claude/.ai-dlc-version"; bash "$U" "$D" "$B" "$C" "$T" > "$W/o" 2>/dev/null; : > "$W/mt"; bash "$U" --bucket-rows "$W/mt" "$D" "$B" "$C" "$T" > "$W/f" 2>/dev/null; cut -f1,2 "$W/o" > "$W/o2"; cut -f1,2 "$W/f" > "$W/f2"; awk -F'\t' '$2=="hooks/ai-dlc-epsilon.sh"{print $3}' "$W/o" > "$W/ed"; n=0; for p in hooks/ai-dlc-epsilon.sh hooks/ai-dlc-zeta.sh skills/ai-dlc/steps/eta.md; do c="$(grep -c "	${p}\$" "$W/o2")" || c=0; n=$((n+c)); done; [ "$n" = 3 ] || { rm -rf "$W"; exit 9; }; r=1; if grep -qx 'HARD-UNREGISTERED-CORE-DRIFT	hooks/ai-dlc-zeta.sh' "$W/o2" && grep -qx 'HARD-UNREGISTERED-CORE-DRIFT	skills/ai-dlc/steps/eta.md' "$W/o2" && grep -qx 'CORE-MACHINERY-CARRIED	hooks/ai-dlc-epsilon.sh' "$W/o2" && grep -q 'semantic-merge' "$W/ed" && ! grep -qx 'CORE-MACHINERY-CARRIED	hooks/ai-dlc-epsilon.sh' "$W/f2"; then r=0; fi; rm -rf "$W"; exit "$r" ); a=$?; [ "$a" -eq 0 ] || exit "$a"; ( G="${BL124_GATE:-core/skills/ai-dlc-update/reconcile/self-update-gate.sh}"; R="core/skills/ai-dlc-update/reconcile"; [ -r "$G" ] && [ -d "$R" ] || exit 9; d=$(mktemp -d) || exit 9; trap 'rm -rf "$d"' EXIT; D="$d/dist"; C="$d/cons"; X="$D/$R"; mkdir -p "$X" "$D/core/scripts" "$D/core/git-hooks" "$D/core/hooks" || exit 9; cp "$R"/*.sh "$R"/setup-sites.md "$X/" || exit 9; cp "$G" "$X/self-update-gate.sh" || exit 9; git -C "$D" init -q && git -C "$D" config user.email r@f && git -C "$D" config user.name r || exit 9; cp "$X/preclassify.sh" "$d/pre.base"; for v in BASE MID THEIRS; do case $v in BASE) n=0.100.0;; MID) n=0.101.0;; THEIRS) n=0.102.0;; esac; printf "#!/bin/sh\n# %s landed\nexit 0\n" "$v" > "$D/core/hooks/ai-dlc-landed.sh"; printf "#!/bin/sh\n# %s carry\nexit 0\n" "$v" > "$D/core/hooks/ai-dlc-carry.sh"; { cat "$d/pre.base"; printf "# %s\n" "$v"; } > "$X/preclassify.sh"; [ "$v" = THEIRS ] && printf "#!/bin/sh\n# new finding\nexit 1\n" > "$D/core/scripts/gate-defer.sh" || printf "#!/bin/sh\nexit 0\n" > "$D/core/scripts/gate-defer.sh"; printf "#!/bin/sh\nexit 0\n" > "$D/core/git-hooks/pre-push"; printf "%s\n" "$n" > "$D/VERSION"; git -C "$D" add -A >/dev/null && git -C "$D" commit -qm "$v" || exit 9; eval "$v=$(git -C "$D" rev-parse HEAD)"; done; b() { rm -rf "$C"; mkdir -p "$C/.claude/hooks" "$C/scripts/ai-dlc" "$C/.githooks" "$C/.claude/skills/ai-dlc-update/reconcile"; git -C "$C" init -q; git -C "$D" show "$MID:core/hooks/ai-dlc-landed.sh" > "$C/.claude/hooks/ai-dlc-landed.sh"; git -C "$D" show "$MID:core/hooks/ai-dlc-carry.sh" > "$C/.claude/hooks/ai-dlc-carry.sh"; git -C "$D" show "$MID:$R/preclassify.sh" > "$C/.claude/skills/ai-dlc-update/reconcile/preclassify.sh"; case "$1" in carried) { git -C "$D" show "$BASE:core/hooks/ai-dlc-carry.sh"; echo "# CONSUMER-OWNED LINE THE PREVIOUS CYCLE CARRIED"; } > "$C/.claude/hooks/ai-dlc-carry.sh";; precls) { git -C "$D" show "$BASE:$R/preclassify.sh"; echo "# CONSUMER-OWNED LINE THE PREVIOUS CYCLE CARRIED"; } > "$C/.claude/skills/ai-dlc-update/reconcile/preclassify.sh";; esac; git -C "$D" show "$BASE:core/scripts/gate-defer.sh" > "$C/scripts/ai-dlc/gate-defer.sh"; printf "#!/usr/bin/env bash\nset -uo pipefail\nbash scripts/ai-dlc/gate-defer.sh\n" > "$C/.githooks/pre-push"; chmod +x "$C/.githooks/pre-push" "$C/scripts/ai-dlc/gate-defer.sh"; printf "version: 0.100.0\ncommit: %s\nskill_version: 0.101.0\nskill_commit: %s\ninstalled_at: 2026-01-01T00:00:00Z\nupstream: file://%s\n" "$BASE" "$MID" "$D" > "$C/.claude/.ai-dlc-version"; }; g() { bash "$X/self-update-gate.sh" "$D" "$BASE" "$THEIRS" "$C" 2>/dev/null; }; A="SPLIT BUYS NOTHING HERE"; b carried; O=$(g); printf "%s\n" "$O" | grep -q SELF-UPDATE-CARRY || { echo "CONTROL FAILED: no CARRY row"; exit 9; }; printf "%s\n" "$O" | grep -q SELF-UPDATE-SAFE-STOP || { echo "CONTROL FAILED: no SAFE-STOP row"; exit 9; }; b precls; P=$(g); printf "%s\n" "$P" | awk -F'\t' '$1=="SELF-UPDATE-CARRY" && $2 ~ /preclassify\.sh$/' | grep -q . || { echo "CONTROL FAILED: the classifier engine itself was not carried, so the worst case is unseeded"; exit 9; }; printf "%s\n" "$P" | grep -q SELF-UPDATE-SAFE-STOP || { echo "CONTROL FAILED: no SAFE-STOP row on the preclassify world"; exit 9; }; b clean; K=$(g); printf "%s\n" "$K" | grep -q SELF-UPDATE-CARRY && { echo "CONTROL FAILED: clean tree emitted a CARRY row"; exit 9; }; printf "%s\n" "$K" | grep -qF "$A" || { echo "CONTROL FAILED: acquittal absent without a carry, so withdrawing it proves nothing"; exit 9; }; printf "%s\n" "$O" | grep -qF "$A" && exit 1; printf "%s\n" "$P" | grep -qF "$A" && exit 1; exit 0 )
+
+

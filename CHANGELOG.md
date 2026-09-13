@@ -15,6 +15,69 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.564.0] - 2026-09-13
+
+### A carried machinery path is reported once, and the safe-stop acquittal is withheld beside it
+
+Batch 98, one release, one no-`PC` subject shipped in both its halves. The sweep returned no new
+PC-backed work (live 56, cited 37, unfiled 19, all adjudicated; the ledger is byte-identical at
+the consumer's HEAD to batch 97's close); the subject was taken on this session's own ranking
+because the one-liner arrived from a peer session. This release touches the update skill
+(`reconcile/unregistered-drift.sh`, `reconcile/self-update-gate.sh`, `reconcile/apply.sh`,
+`SKILL.md`) and two shipping fixtures, so it ships ALONE and the next consumer pull carries a
+bootstrapping change.
+
+#### `BL-124`
+
+Since `v0.436.0`, arm C of `self-update-gate.sh` emits `SELF-UPDATE-CARRY` for a machinery path
+the consumer diverged on and step 2 writes none of them, so a carried path is byte-identical to
+none of `base`, `skill_commit` or `theirs`. `unregistered-drift.sh` then fell through every
+specific arm into `HARD-UNREGISTERED-CORE-DRIFT`, `apply.sh` turned that into
+`DECISION drift ... refile-as-override or revert`, and the same run's `*CLASSIFY*` arm emitted
+`WORKLIST semantic-merge` for the same path — two contradictory instructions on one worklist,
+for a hook with no override grain to refile into. Reproduced on a three-file seed, with an
+out-of-range machinery hook and an in-range non-machinery file as near-misses in the same run.
+
+`unregistered-drift.sh` gains `CORE-MACHINERY-CARRIED`: non-blocking, for a scanned file that is
+in `machinery_paths()` (eval'd out of `preclassify.sh`, the load arm C already does) AND in a
+bucket of arm C's own `->CLASSIFY`/`consumer-edited` class; its detail names the bucket verbatim
+and points at the worklist row. It is sited LAST of the specific arms: `HARD-CORE-BEHIND` still
+wins (a stale copy has no residual to merge), and `HARD-CORE-DRIFT-ABSORBED` wins only on TOTAL
+absorption, because on a partially absorbed carried path that row's whole-file revert deletes
+the lines upstream never took. The scan takes its buckets from `apply.sh` through
+`--bucket-rows` (the caller already holds them one line above the call; standalone it derives
+them itself), and an empty rows file over a range that moves `core/` does not acquit. The false
+premise both files printed — step 2 "rewrites the whole MACHINERY set" — is corrected to the
+statement arm C's header already carries, and the stale intersection figure (28 of 72) is
+re-derived to 41 of 88.
+
+The stamp half ships too. No program writes the stamp at step 2, so the fix sits where the fact
+is: arm C sets `GATE_CARRIED` at its emit, and `machinery_at_or_past()` returns 1 on it before
+reading the stamp, so the SAFE-STOP "SPLIT BUYS NOTHING HERE" acquittal is withheld on exactly
+the runs where the stamp is ahead of the tree. Measured: the advanced and honest stamps had
+produced OPPOSITE advice on one tree while every exit code and the `--safe-stop` ref were
+identical, so this half moves wording only.
+
+The adversary refuted the contract five ways before the build, each by building it: a
+range-only fix with no bucket check closed the receipt (now the fail-closed cell separates
+them — the bucket conjunct is not otherwise observable, because every in-range machinery path
+outside arm C's class is claimed by an earlier arm); the row sited before `HARD-CORE-BEHIND`
+replaced "take theirs" with a merge task on a zero-delta file; partial absorption survived the
+siting; `UPSTREAM-DELETED+consumer-modified` is in the population and "do not revert" was wrong
+for it; and a consumer with no `skill_commit` is fully in the population, so the receipt's
+stamp carries none. Running `preclassify.sh` inside the scan cost +1.15s on every pull of the
+reference consumer clone (three reps), which is why the buckets are passed in. The `HARD-`
+prefix mutant survived an apply-side assertion because `apply.sh` keys on the exact status
+string, not the prefix; it is scored on `hard-blockers.sh`'s prefix-keyed list instead.
+
+The receipt is two programs conjoined: each builds a throwaway distribution and consumer under
+`mktemp` and drives its subject, reading only emitted statuses. Half 1 scored seven builds
+(unfixed and five non-fixes at 1, the fix at 0); half 2 scored four (unfixed 1, comment stub 1,
+fix 0, acquittal deleted 9). The conjunction reads 1 on either half alone and 0 only with both.
+`apply-drift-after-write` (41 arms, 8 scan drives) and `self-update-gate` (178 arms, three
+worlds, three mutants) both ship; `.githooks/pre-push` lowers `--max-prose-closable` 2 -> 1, and
+the one remaining is `BL-221`.
+
 ## [0.563.0] - 2026-09-13
 
 ### Seven prose-closable receipts now drive their subjects, and the ceiling ratchets 9 -> 2
