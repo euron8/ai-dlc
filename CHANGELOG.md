@@ -15,6 +15,102 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.566.0] - 2026-09-13
+
+### BL-216 — a carry-over backlog is a byte-verbatim source of record, so a quoted closure condition can be bound to the text it quotes
+
+`validate-locked-anchor.sh` is the only program in core doing byte-verbatim quotation
+checking, and its source-of-record set was two basenames. `carry-over-backlog.md` was
+refused BY BASENAME, so a carried item's closure condition — verbatim text, quoted by
+documents that assert the condition met — sat outside the check's population entirely:
+a quotation could elide its operative clause and no mechanism could read it.
+
+`DEFAULT_SOR_BASENAMES` now carries a third name. The declaring act is the author
+writing `full_text_source: carry-over-backlog.md:CO-S<n>-<id>`, and the existing
+anchor-window plus byte-match machinery then adjudicates the quotation; an elided clause
+fails as a bullet not byte-present. The filed remedy — banning an ellipsis — was refuted
+before this and is not what shipped: its false-positive ceiling was unenumerated and it
+was a false negative on its own motivating case.
+
+`product-brief.md` stays the legacy name and stays counted on the PASS line.
+`locked-requirements.md` stays the name every message prescribes — a tuple that merely
+REORDERS admits an identical set and changes no exit code while telling every author to
+write the wrong file, so `core/fixtures/check-3b-locked-anchor/` asserts the PASS text
+directly. `prd.md` and every other condensed index stay refused, including a decoy
+carrying the same anchor and the same text.
+
+Over the reference consumer's 114 files carrying `full_text_source:`, the fixed and
+installed validators return identical exit-code vectors. The change creates the
+affordance and moves no consumer verdict.
+
+### BL-221 — a FOURTH spelling of the empty-subject verdict is bound, and nine validators converge on the declared token
+
+`I93` enumerated three RETIRED spellings by name, and an enumeration cannot reach a spelling
+nobody has written yet. Its arm D joins on files that already PRINT the declared token, so a
+validator spelling the verdict its own way sat outside both populations by construction — the
+state the map's own comment predicted in as many words: *"a fourth spelling is how this became
+three."* Measured on a `git archive HEAD` copy, a seeded validator whose only emission was
+`NOTHING TO EXAMINE HERE` drove the script to rc 0 with no finding, while the same seed carrying
+the retired `AUDITED NOTHING` from the same position was caught. The escape was the grammar, not
+where the probe sat.
+
+**Arm E** reports any file in `core/scripts/` or `scripts/` that states an empty subject in a
+spelling of its own and prints the declared token nowhere. The grammar is a verdict PHRASE at an
+EMISSION SITE: four alternations over the nineteen adjudication verbs this corpus uses, on a line
+that is a call to one of six output verbs. Both obvious narrowings were built and REFUTED against
+the conforming set — 19 of the 30 lines that emit the declared token today go to `>&2`, and 17 of
+them sit at exit 2, so neither the channel nor the exit code can discriminate. The emission-site
+narrowing acquits by grammar, with no hand list: the eight `err` strings inside I93's own unit, a
+python docstring, an awk comment inside a program string, and `err`-argument prose elsewhere.
+Three further clauses, each measured at 0 of 30 against the conforming set: a `%-Ns` padded table
+row, an output redirected into a file path, and the existential *"there is nothing to"* form.
+False-positive set measured at 0 on this tip.
+
+**Nine validators converged** — `validate-cycle-commits.sh`, `sprint-status.sh`,
+`validate-fixture-drivability.sh`, `core-paths.sh`, `validate-audit-anchors.sh`,
+`validate-hook-registration.sh`, `validate-scope-confirmation.sh`, `validate-spawn-ledger.sh` and
+`validate-write-format-steering.sh` — and each is now declared in
+`enforcement-map.yaml` `empty_subject_verdict: emitters:`, so arms A and D bind them and
+`docs/vocabulary-index.md` re-renders from 15 emitters to 24. **The convergence is ADDITIVE**: the
+token is inserted and every validator keeps its own exit code (0, 3 and 4 all appear here) and its
+own prose after it, because those codes are per-validator caller contracts and I93 is explicit
+that they are not unified. Three distribution-only files carry reasoned `ESV_EXEMPT` lines
+instead, for the same reason the pre-existing one does: the map SHIPS and they do not, so a
+declared path would resolve nowhere in a consumer tree. The arm sweeps its own host file like any
+other and is NOT exempted from it — an exemption there would acquit every real emitter a later
+author adds to it.
+
+**Two latent arm-D defects surfaced under a second exemption and are fixed here.** The
+aborted-scan stand-down blanked the exemption list that the reverse join also reads, so one
+dangling symlink yielded one finding per exemption rather than the one the scan-status arm owns;
+and the fixture's `cp "$V" "$V.orig"` idiom put a second copy of the validator inside the swept
+population, where it reads as an undeclared emitter.
+
+**Consumer impact is a report-wording change and nothing else.** Nine installed validators will
+print the declared token beside their existing sentence on the pull that carries this; no exit
+code moves and no prose is removed, so a consumer reader keyed on the old wording keeps matching.
+`tests/fixtures/story-fields-derive/run.sh`,
+`.claude/skills/ai-dlc/steps/gate-validation.md` and
+`.claude/skills/ai-dlc-update/reconcile/predicate-differential.sh` each restate one of these
+sentences and are unaffected for that reason. **The consumer's archived gate logs and committed
+gate-adjudication verdict JSONs carry the PRE-CONVERGENCE spellings** — `COMPARED NOTHING` and
+`nothing was compared` appear in three verdict files and two `gate-log-archive.md` files — and
+stay readable under those spellings; the convergence is forward-only and rewrites no history.
+
+Fixture assertion 39 drives arm E in six arms, including both mutants: a neutered reporter must
+stop naming the seed while the run still reaches its verdict, and an arm E with its verdict-phrase
+test removed must RED the clean tree. `BL-221`'s receipt was rewritten to drive the subject — a
+`git archive` copy, a seeded novel-spelling emitter, and four controls — and the entry moved from
+`PROSE-CLOSABLE` to `ALREADY-PASSING`, taking the gate's prose-closable count from 1/9 to 0/9.
+
+Forks 8098 → 8109 of `FORK_BUDGET=8120`. `--arms I93` costs +0.13s (0.49s → 0.63s, five
+interleaved reps on like extractions); the full run's differential is a null the reps cannot
+resolve. Both figures were taken in a detached worktree, which is now the rule rather than a
+detail: two hands timing this validator in the same batch disagreed by 35% with no revision
+between them, because the main checkout carries the session's agent worktrees and this
+validator's tree-walking arms pay for all of them — 16167 files on disk there against 782 in a
+detached one.
+
 ## [0.565.0] - 2026-09-13
 
 ### The H2 attestation is found inside a table cell and refused inside a sentence, and a dated entry filed under the wrong snapshot section is named
