@@ -110,6 +110,31 @@
 #        2 = usage, environment, or a self-probe that did not fire.
 set -uo pipefail
 
+# SCRUB THE REPOSITORY ENVIRONMENT BEFORE ANYTHING ELSE, AND FOR THE WHOLE PROCESS.
+#
+# `git -C <dir>` DOES NOT OVERRIDE AN INHERITED `GIT_DIR` -- the environment wins, for reads and
+# for WRITES. MEASURED on two throwaway repositories: `GIT_DIR=A/.git git -C B log` reports A's
+# commit, and `GIT_DIR=A/.git git -C B config k v` writes into A/.git/config and leaves B's
+# untouched. Git exports GIT_DIR, ABSOLUTE, into every hook run from a LINKED WORKTREE, which is
+# how this program runs at the gate -- so EVERY `git -C` in this file was aimed at the caller's
+# repository rather than at the tree it named.
+#
+# TWO MEASURED CONSEQUENCES, and the second is why this sits at the top rather than around one
+# call. The self-probe's `config core.hooksPath` wrote a mktemp path into the CALLER'S config,
+# pointing that repository's own pre-push hook at a directory this run deletes -- a later push
+# then ran NO GATE AT ALL and reported success, and a release landed on origin ungated. And
+# `mktree`'s `worktree add --detach HEAD` checked out the CALLER'S HEAD for every receipt, so
+# each one was scored against the wrong tree; at the gate that surfaced as the self-probe's
+# seeded receipts reading OUT-OF-POPULATION with base exits of 2, which reads as a broken
+# scorer rather than as a redirected one.
+#
+# A PER-CALL SCRUB CANNOT BE COMPLETE. This file makes a dozen `git -C` calls across four
+# helpers and any new one inherits the defect silently, so the environment is cleared ONCE, for
+# the process, before a single git call is made. `core/fixtures/lib/preamble.sh` and the
+# `fixture git-env scrub` gate phase exist for exactly this class on the fixture side; this
+# program is not a fixture and had no such carrier.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+
 # ---------------------------------------------------------------------------
 # THE PATH-SPLIT CHARACTER CLASS. This is the ONE grammar in this file that also exists
 # somewhere else: `receipt_path_tokens()` in the consumer engine's ledger-reverify.sh, whose
