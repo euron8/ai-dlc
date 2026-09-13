@@ -1271,6 +1271,12 @@ additions outside the deferral slice, and the case a core-wide `grep -rqF` would
 fix inside section 4, a bullet and a bold-led block, **0**. The control fires: with
 `validation_intensity` renamed in `gate-validation.md` the receipt exits **9**.
 
+**A heading renumber or a case change in the windowed step file pins this receipt at exit 9, and no
+other arm notices.** Measured: recasing `### 4. Deferral Handling` to `### 4. Deferral handling`
+takes the receipt to **9** — out of population, not a finding — while the step file stays valid and
+every other gate stays green. The two headings are load-bearing input to this receipt and nothing
+binds them.
+
 Discharges the consumer entry `extensions/checks/gate-validation-push.md` at pinned ledger
 line 226. That row carries no `PC-` id and no receipt, so nothing re-derives it; the three
 corrections above are the reason it survived two drains.
@@ -1336,6 +1342,20 @@ would have closed on. All three natural shapes of the real fix inside section 5 
 `- Fix-forward PRs: [count]`, a bold-led block, and a table row — **0**. The control fires: with
 every `smoke` renamed the receipt exits **9**.
 
+**THE SHAPE FILTER SEPARATES PROSE FROM MANDATES, NOT ASSERTION FROM DENIAL, and a mandate-shaped
+DENIAL closes this receipt.** Measured, all three at **0**: `**Note:** fix-forward accounting is NOT
+specified in this step.`, `| fix-forward | not specified |`, and `- fix-forward is NOT specified
+here`. A negation filter was considered and refused — it is a heuristic carrying its own
+false-positive set, and an unmeasured lint is one the operator turns off. The limit is recorded here
+instead, so a reader scoring a close against this receipt checks that the matched line MANDATES the
+accounting rather than denying it.
+
+**A heading renumber or a case change in the windowed step file pins this receipt at exit 9, and no
+other arm notices.** Measured: renaming `### 5. Production Validation Checkpoint` to
+`### 5a. Production validation checkpoint` takes the receipt to **9** — out of population, not a
+finding — while the step file itself stays valid and every other gate stays green. The two headings
+are load-bearing input to this receipt and nothing binds them.
+
 Discharges the consumer entry `extensions/steps-domain/deploy-validate-push.md` at pinned ledger
 line 252.
 
@@ -1397,12 +1417,21 @@ is OUT-OF-POPULATION; that count sits at its ceiling of 1, so a correct fix land
 have failed the push. The receipt therefore strips quotes from the slice and matches
 `(checkout -[bB]|switch -c) ai-dlc/retro/sprint-<N> origin/main`.
 
-Measured in pristine copies, eleven ways. HEAD **1**. A comment line carrying both of the receipt's
-own grep literals appended to the file **1**. A bare correct command appended at end of file **1**.
-An appendix section carrying the command in prose AND in a second fenced block **1** — the sharpest
-over-broad non-fix, since it puts the whole literal in the file twice. All six spellings of the real
-fix inside the canonical fence — plain, double-quoted, single-quoted, `switch -c`, `checkout -B`,
-and two-space indented — **0**. The control arm fires: with the branch name changed the receipt
+**A SHELL COMMENT INSIDE THE FENCE IS STILL PROSE, and slicing to the fence does not exclude it.**
+Measured against the slice-only form: `# git checkout -b ai-dlc/retro/sprint-<N> origin/main
+(NOT YET DONE)` written into the canonical block closed it at **0** — a note recording that the fix
+has not happened, satisfying the receipt for the fix. The shipped form therefore drops every line
+whose first non-blank character is `#` before matching, which is the same content-versus-commentary
+cut the two windowed receipts below make.
+
+Measured in pristine copies, fourteen ways. HEAD **1**. A comment line carrying the receipt's own
+grep literals appended to the file **1**. A bare correct command appended at end of file **1**. An
+appendix section carrying the command in prose AND in a second fenced block **1** — the sharpest
+over-broad non-fix, since it puts the whole literal in the file twice. The commented-out command
+inside the fence **1**, and the same line indented **1**. All six spellings of the real fix inside
+the canonical fence — plain, double-quoted, single-quoted, `switch -c`, `checkout -B`, and two-space
+indented — **0**, and a real fix landing beside a leftover commented-out line **0**. Two control arms
+fire: with the branch name changed the receipt exits **9**, and with the whole fence commented out it
 exits **9** rather than reporting a green absence.
 
 Discharges the consumer entry `extensions/steps-domain/retro-push.md` at pinned ledger line 255.
@@ -1410,7 +1439,7 @@ The row should additionally be repointed to the six live `retro-push-*.md` files
 future push-mine reads it.
 
 
-verify: sh f=core/skills/ai-dlc/steps/retro.md; t="$(printf '\140\140\140')"; b="$(awk -v t="$t" 'index($0,t)==1{n++;next} n==1' "$f" | tr -d '\042\047')"; [ -n "$b" ] || exit 9; grep -qE 'ai-dlc/retro/sprint-<N>' <<<"$b" || exit 9; grep -qE '(checkout -[bB]|switch -c) ai-dlc/retro/sprint-<N> origin/main' <<<"$b"
+verify: sh f=core/skills/ai-dlc/steps/retro.md; t="$(printf '\140\140\140')"; b="$(awk -v t="$t" 'index($0,t)==1{n++;next} n==1' "$f" | grep -vE '^[[:blank:]]*#' | tr -d '\042\047')"; [ -n "$b" ] || exit 9; grep -qE 'ai-dlc/retro/sprint-<N>' <<<"$b" || exit 9; grep -qE '(checkout -[bB]|switch -c) ai-dlc/retro/sprint-<N> origin/main' <<<"$b"
 ## BL-024
 
 **This repo already adjudicated all five blocks of the `implementation-push` row, wrote
