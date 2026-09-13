@@ -15,6 +15,65 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.563.0] - 2026-09-13
+
+### Seven prose-closable receipts now drive their subjects, and the ceiling ratchets 9 -> 2
+
+Batch 97, one release, seven no-`PC` subjects. The sweep returned no new PC-backed work (live 56,
+cited 37, unfiled 19, all adjudicated: 5 closed by an `origin/main` release commit, 12
+`NOT-UPSTREAM`, one withdrawn, one superseded, one refuted; the one filing ahead of the consumer's
+`main` is already discharged); the subjects were taken on this session's own ranking because the
+one-liner arrived from a peer session. No machinery path changes and no bootstrapping file is
+touched: everything here is `docs/backlog.md` and the distribution's own hook.
+
+#### `BL-017`, `BL-021`, `BL-022`, `BL-023`, `BL-044`, `BL-216`, `BL-223`
+
+`v0.562.0`'s gate named nine live receipts that one comment line carrying their own grep literals
+satisfies. Seven are rewritten so each DRIVES its subject; none of the seven entries is fixed or
+closed, and every rewritten receipt exits 1 at HEAD. `.githooks/pre-push` lowers
+`--max-prose-closable` 9 -> 2, the value the arm reads on this tree; the two that remain are
+`BL-124`, whose receipt names the update skill and therefore ships alone, and `BL-221`, whose
+receipt must assert an arm the entry records as undecided.
+
+Every contract candidate was scored by building the non-fix before it shipped, and five of the
+seven were refuted that way. The two step-file receipts that window on a section (`BL-021`,
+`BL-022`) were closed by an HTML comment INSIDE the window, which the gate's end-of-file seed
+cannot reach; they now drop comment lines and require the token on a mandate-shaped line, and
+`BL-021` requires its key form. `BL-023`'s candidate was closed by a bare command line anywhere
+at column 0 and REFUSED four natural spellings of the real fix at exit 9 (quoted branch,
+`switch -c`, `checkout -B`, indented in the fence), each of which would have pushed the
+out-of-population ratchet over its ceiling on a correct fix; it now reads the first fenced block
+only and accepts all six spellings. `BL-216`'s candidate was closed by disabling the
+source-of-record check outright; it now drives `validate-locked-anchor.sh` three times against
+`mktemp` stories and requires the `prd.md` refusal to keep firing while the elided-quote case
+stays red. `BL-223`'s candidate was closed by a `formats[]` declaration whose `declared_in` and
+anchor were borrowed from an unrelated schema, which prints the identical `PASS — 6 of 21` the
+entry had described as the fix's signature; it now derives the claimed set from the report rows
+and refuses a path claimed twice, and the entry no longer describes the count as evidence.
+`BL-017` reads the value out of the parsed JSON rather than the file, so a broken document exits
+1 and the gate's format control keeps it out of `FORMAT-SENSITIVE`. `BL-044` requires the
+generated vocabulary index to pass its renderer's `--check` before it reads the token, so a
+hand-typed row is refused; its positive direction was built on a throwaway copy with a real
+`# vocabulary:` arm and reaches 0, and an unrelated stale index sends it to 1, the safe direction.
+
+The adversary's tip pass found three residues on the combined tree and two were closed
+before the release: `BL-023` was still satisfied by a commented-out command inside the canonical
+fence, so the slice now drops `#`-led lines, and `BL-223` was still satisfied by a declaration
+pointing at the population schema itself, so the receipt derives that schema's path from the
+steering file's own `join` and refuses it. The third is recorded as a limit rather than filtered:
+`BL-022`'s shape filter separates prose from mandates, not assertion from denial, and a
+mandate-shaped denial closes it; a negation heuristic was refused because its false-positive set
+is unmeasured. Two more limits are stated in the entries. Every live `sh` receipt is
+root-relative by convention — 0 of 75 walk up for `VERSION` — and `BL-216`'s is too, exiting 9
+from any subdirectory; the validator's own `full_text_source:` resolution is story-relative, and
+the two claims are now stated separately. A heading renumber or case change in either windowed
+step file pins `BL-021` or `BL-022` at exit 9 rather than 1, and no other arm notices.
+
+The gate on the combined tree reads `prose-closable=2/2 bound=43 unscorable=28
+out-of-population=1 format-sensitive=0 unstable=0`, against 9/9 and 36 bound at the base, in the
+same runner. `entries=87 sh-receipts=75` against floors of 88/76 is `v0.562.0`'s rotation moving
+both counts together, which the floor's escape clause accepts; the floors are not moved.
+
 ## [0.562.0] - 2026-09-12
 
 ### A backlog receipt that a comment can satisfy fails the push
