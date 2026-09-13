@@ -4478,25 +4478,42 @@ from an existing row — `core/schemas/audit-anchors.json` and its own anchor �
 anchor, and prints `declared push-candidate core/schemas/audit-anchors.json`, declaring no format
 for this ledger at all. **`PASS — 6 of 21` is therefore NOT the fix condition**: the borrowed
 declaration and an honest one print that same line, so the count moving is a consequence of the fix
-and never evidence of it. The receipt's last arm closes this by deriving the CLAIMED set from the
-report itself — it reads the `declared_in` path off the `push-candidate` row and requires exactly
-one `declared` row to carry that path. Every `declared_in` at HEAD is claimed once, so a borrowed
-one reads 2 and is refused without any hand-written list of paths.
+and never evidence of it. The receipt closes this by deriving the CLAIMED set from the report
+itself — it reads the `declared_in` path off the `push-candidate` row and requires exactly one
+`declared` row to carry that path. Every `declared_in` at HEAD is claimed once, so a borrowed one
+reads 2 and is refused without any hand-written list of paths.
+
+**A SELF-REFERENTIAL declaration defeats that arm and needs its own.** Pointing `declared_in` at
+the population schema with anchor `push-candidate` resolves, carries the anchor — the member's own
+name puts it there — and is claimed by nobody else, so it reads exactly one claimant and prints a
+`declared` row while declaring the ledger's format to be the file that merely lists the ledger. The
+last arm therefore refuses a row whose path basenames to the population schema, and that name is
+DERIVED from `join.population_schema` in the steering schema, the same field
+`validate-write-format-steering.sh:369` reads to pick the file it joins, so the two cannot drift.
+
+**The gate's own seed does not establish this binding, and the entry says so rather than letting
+the BOUND verdict imply it.** The seeder appends one comment line to every path the receipt names,
+and this receipt names both the validator script and the steering schema, so the seed lands in the
+JSON too and the run exits 9 on an UNPARSED document — a refusal, not a demonstration. Seeded on the
+script alone it stays at 1. Either way the seed reaches no `formats[]` entry, so what shows the
+receipt discriminates is the five constructed non-fixes below, never the ledger validator's verdict.
 
 Measured, each on its own detached checkout: HEAD 1, with the row absent and the guard present. A
 comment carrying the receipt's own literals appended to the file it names exits 9 — the appended
 line breaks the JSON the script reads, the reader reports UNPARSED, and the guard row never prints;
-a stub cannot reach 0. Five non-fixes stay at 1. The borrowed declaration above is the sharp one and
-reads 2 claimants. A member declared `transient:true` plus a steering format satisfies a schema-text
-grep while staying outside the scanned population: the enforcer calls it a GHOST, exits 1, and the
-non-zero-exit arm refuses it. A `transient:true` member with no format prints nothing. A
-`transient:false` member with no format prints `UNDECLARED push-candidate`, not `declared`. Only a
-`transient:false` member plus a format declared in a file no other member claims reaches 0.
+a stub cannot reach 0. Five non-fixes stay at 1. The self-referential declaration and the borrowed
+one are the sharp pair — both print a `declared push-candidate` row, and they are separated by the
+population-schema arm and the claimant count respectively. A member declared `transient:true` plus a
+steering format satisfies a schema-text grep while staying outside the scanned population: the
+enforcer calls it a GHOST, exits 1, and the non-zero-exit arm refuses it. A `transient:true` member
+with no format prints nothing. A `transient:false` member with no format prints
+`UNDECLARED push-candidate`, not `declared`. Only a `transient:false` member plus a format declared
+in a file of its own, carrying its own anchor and claimed by no other member, reaches 0.
 
 **Tiered DEFECT.** The enforcer's PASS line reads as coverage of the shared append-only artifacts
 while the ledger this program exists to drain is not among them.
 
-verify: sh o="$(bash core/scripts/validate-write-format-steering.sh --report 2>&1)"; rc=$?; grep -qE '^ +declared +ai-dlc-update' <<<"$o" || exit 9; [ "$rc" -eq 0 ] || exit 1; grep -qE '^ +declared +push-candidate' <<<"$o" || exit 1; p="$(awk '$1=="declared" && $2=="push-candidate"{print $3}' <<<"$o")"; [ -n "$p" ] || exit 1; n="$(awk -v p="$p" '$1=="declared" && $3==p' <<<"$o" | grep -c .)" || n=0; [ "$n" -eq 1 ]
+verify: sh S="$(python3 -c 'import json,sys;print((json.load(open(sys.argv[1])).get("join") or {}).get("population_schema") or "")' core/schemas/write-format-steering.json)" || exit 9; [ -n "$S" ] || exit 9; o="$(bash core/scripts/validate-write-format-steering.sh --report 2>&1)"; rc=$?; grep -qE '^ +declared +ai-dlc-update' <<<"$o" || exit 9; [ "$rc" -eq 0 ] || exit 1; grep -qE '^ +declared +push-candidate' <<<"$o" || exit 1; p="$(awk '$1=="declared" && $2=="push-candidate"{print $3}' <<<"$o")"; [ -n "$p" ] || exit 1; [ "$(basename "$p")" != "$S" ] || exit 1; n="$(awk -v p="$p" '$1=="declared" && $3==p' <<<"$o" | grep -c .)" || n=0; [ "$n" -eq 1 ]
 
 ## BL-243 — the row-scoped citation acquittal in `audit-layer-debt.sh` is satisfied by a clause that DENIES the handle it names
 
