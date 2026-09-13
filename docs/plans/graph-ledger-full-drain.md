@@ -37,11 +37,97 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
+### BATCH 96 SHIPPED AS `v0.562.0`, ONE RELEASE, ONE NO-`PC` SUBJECT — AND **THE CONTRACT WAS WRONG FOUR WAYS BEFORE THE BUILD AND THE GATE-GREEN TIP WAS WRONG THREE MORE, EVERY ONE FOUND BY AN ADVERSARY BUILDING A MUTANT, AND THE ENTRY'S OWN RECEIPT CLOSED ON A STUB COMMENT UNTIL IT WAS REWRITTEN TO DRIVE THE ARM IT FILED FOR.** THE SWEEP WAS EMPTY OF PC WORK. THE GAP IS **FIVE**, PENDING **1**, AND THE PULL IS **NOT REQUIRED**.
+
+This block replaces the batch-95 record below it. Re-derive every figure rather than reading it.
+
+**`VERSION` IS `0.562.0`, SO BATCH 97 RELEASES AS `0.563.0`.** Re-derive `VERSION` and add one.
+Batch 96 merged ONCE — `v0.562.0` at `c6b395b8` (PR #734) — closing `BL-227`, verbatim in its
+release commit message (control: an impossible `BL-` id returns 0; `BL-227` also resolves to five
+earlier commits that mention it while reporting, which `named_absorbed()` lists beside the release
+and does not mis-attribute). `BL-227` is ROTATED; archive moved **155 → 156**, live **88 → 87**.
+No entry was filed. `BL-099`'s receipt was rewritten without pipelines in its guards and that entry
+is NOT closed.
+
+**THE SUBJECT WAS TAKEN ON THIS SESSION'S OWN RANKING** because the one-liner arrived from a peer.
+`BL-227` option (a) was the readiest no-`PC` entry at batch 95's close and its design was already
+measured; the design call it left open is decided as a RATCHET — every prose-closable receipt is
+reported by id and the push fails only when a count grows past a ceiling registered at the value the
+arm read. The nine receipts that flip today are not rewritten; each is its own per-entry subject.
+
+**THE ADVERSARY ATTACKED THE CONTRACT BEFORE THE BUILDER AND FOUND FOUR BLOCKERS.** A `git archive`
+extraction has no `.git`, and eight of 76 receipts change their base verdict in one — three to exit
+0, which reads as a CLOSE — so the extraction is a detached `git worktree` (0.24s per receipt against
+0.89s for `init`+commit and 1.02s for `clone`, and the only cheap form that walks real history).
+The prose-closable set is NINE, not the seven batch 95 recorded (`BL-017`, `BL-223` are genuine: a
+token-free line that breaks the JSON leaves them at 1/9). ONE ceiling is escapable by leaving the
+population (variable pattern, `awk` body, `grep -f`, `|| exit 9`, `verify: manual`, a deleted
+receipt line), so there are three ratchets plus a floor. And `BL-227`'s own receipt was satisfied
+by a stub carrying `# receipt-emission-site`, which the contract told the builder to write into
+exactly that glob.
+
+**THE TIP ADVERSARY FOUND THREE MORE ON A GATE-GREEN, PUSHED BRANCH.** Two wrong cuts — seed
+only the first named path, extract tokens from only the first grep — passed all nineteen probes
+green while shrinking the real set to 6 and to 3, because every seeded receipt named one file and
+carried one grep (the gap was in the SEED; the fix is one two-file two-literal probe, and both cuts
+now die at the self-probe by name). The worktree-registry assertion counted the WHOLE registry, so
+an unrelated worktree added mid-run made a correct verdict exit 2 (fixed: own-prefix only; two,
+three and four concurrent runs exit 0). And `BL-099` flipped from bound to exit 9 ONCE in 33 runs
+under three-way contention, at the shipped defaults, exiting 1 on the out-of-population ceiling;
+the checkout-incompleteness hypothesis did not reproduce over 96 adds and 18 concurrent runs, so
+the cause is unattributed. What shipped: any non-0/1 base exit is re-read once and a disagreement is
+`UNSTABLE` at `--max-unstable 0`, a finding by name rather than a retry or an absorbed ceiling; and
+that receipt's guards no longer carry pipelines.
+
+**THE RECEIPT'S LIMIT IS RECORDED, NOT HIDDEN.** The rewritten receipt refuses a comment stub, an
+always-fail stub, a names-every-id reporter and a `grep`-mention heuristic that forges the OK line;
+it does NOT refuse a forgery that prints every row verbatim for that exact seed, because no receipt
+that reads output can. The fixture's unmutated control kills that forgery; the entry says so.
+
+**`FORK_BUDGET` MOVED 8090 → 8120.** The gate refused the first push at 8103. Attributed in four
+detached worktrees, interleaved, validator byte-identical: branch point 8088/8089, tip 8103/8103,
+minus the fixture 8097, minus the script 8095/8094; a fifth tree with both removed reads 8089, so the
+two are the whole +14. No reduction taken.
+
+**THE SWEEP AT THIS BATCH'S CLOSE, ref `ai-dlc/carry-over/chunk-max-usd-swap-sizing` (consumer HEAD
+`e700dab0f`, which moved from `cab7f9af6` mid-batch by the consumer's own commit).** Live **56**,
+cited **37**, unfiled **19**, archive **206**, partition control 0; the ledger file is byte-identical
+at that HEAD to batch 95's close. All 19 unfiled are the adjudicated set. One `PC-S311-H2-ATTESTATION-…`
+id sits UNCOMMITTED in the consumer's working tree only and is not available work. TERMINAL **89**;
+DISCHARGED corrected **7**; discharged-but-INVISIBLE 1. The sweep hand flagged that `PC-S999-NEVER`
+returns 1 as an absence control against `origin/main` COMMIT MESSAGES (this repo's own rule prose
+names it) while staying 0 against the ledger corpus.
+
+**THE INCIDENTAL-CLOSE CHECK WAS RUN AND FOUND NOTHING.** Histogram before: 2×0 (`BL-236`,
+`BL-238`), 73×1, 1×9 over 76 receipts. After the fix, before rotation: 3×0 adding `BL-227`. After
+rotation: 2×0, 72×1, 1×9.
+
+**THE PULL IS NOT REQUIRED AND THE GAP IS FIVE.** Stamp `0.557.0` / `01fea66c` on all four fields,
+shipped `0.562.0`. Nothing in this release changes a machinery path: the validator, the hook step and
+the fixture are all distribution-only, so the consumer's installed tree is byte-identical on every
+path this batch touched and the differential is a null by construction. Eleven machinery paths in
+`01fea66c..origin/main` are batch 95's and earlier; three bootstrapping paths, all from batch 93;
+zero mode-only changes (control: 19 raw rows).
+
+**THE CONSUMER'S PORCELAIN MOVED 35 → 40 DURING THE BATCH**, all its own sprint-311 writes;
+nothing here wrote to it (asserted by three hands and the lead).
+
+**THE POLE WAS NOT TOUCHED.** `backlog-receipt-binding` registers at 62s loaded against a pole of
+524s (`ledger-reverify`). The new validator step costs ~22s in the hook at 8-way. The gate ran all
+fixtures because the new directory sits in no read-set; the operator owes
+`sudo bash core/scripts/derive-fixture-readsets.sh --list "backlog-receipt-binding"`.
+
+**THE READIEST NO-`PC` WORK** is now the nine prose-closable receipts the new gate names — each a
+per-entry rewrite to DRIVE its subject, lowering `--max-prose-closable` in `.githooks/pre-push` in
+the same change — then `BL-243` (needs a ruling on a citation-local negator vocabulary), `BL-221`
+(rotate its receipt first; it is one of the nine), `BL-223` (also one of the nine), `BL-220`. Run
+`bash scripts/validate-backlog-receipts.sh` and read the rows rather than this sentence.
+
 ### BATCH 95 SHIPPED AS `v0.561.0`, ONE RELEASE, ONE NO-`PC` SUBJECT — AND **THE ADVERSARY FOUND THREE BLOCKERS IN THE CONTRACT BEFORE THE BUILD, TWO OF THEM WRITE VECTORS THE ENTRY NEVER NAMED, AND A TRACKED SIDECAR SHIPPING A SECOND UNFIXED ALLOWLIST TO EVERY CONSUMER.** THE SWEEP WAS EMPTY OF PC WORK. FOUR ENTRIES WERE MEASURED AND NOT TAKEN. THE GAP IS **FOUR**, PENDING **1**, AND THE PULL IS **NOT REQUIRED**.
 
-This block replaces the batch-94 record below it. Re-derive every figure rather than reading it.
+This block was current at batch 95's close and is replaced by the batch-96 record above it.
 
-**`VERSION` IS `0.561.0`, SO BATCH 96 RELEASES AS `0.562.0`.** Re-derive `VERSION` and add one.
+**`VERSION` WAS `0.561.0` AT THIS BLOCK.** Re-derive `VERSION` and add one.
 Batch 95 merged ONCE — `v0.561.0` at `0bdd68f4` (PR #732) — closing `BL-137`, verbatim in its
 release commit message (control: an impossible `BL-` id returns 0; `BL-137` also resolves to three
 earlier docs commits that mention it while reporting, which `named_absorbed()` lists beside the
@@ -9343,10 +9429,16 @@ given at batch 90.
    rebuilt in one release: the originals closed on an empty file, on a dead arm, and on a
    positional window.
 
+   **BATCH 96's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.** `BL-227` shipped ALONE as
+   `v0.562.0` at `c6b395b8` (PR #734), cited in the release commit message. It carries no `PC-`
+   id. The gate it added names nine prose-closable receipts by id on every push; those nine are
+   per-entry work and the readiest of the no-`PC` set. `BL-099`'s receipt was rewritten and that
+   entry is NOT closed.
+
    **BATCH 95's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.** `BL-137` shipped ALONE as
    `v0.561.0` at `0bdd68f4` (PR #732), cited in the release commit message. It carries no `PC-`
-   id. The `.fn` sidecar is retired in the same release. `BL-243`, `BL-221`, `BL-223` and
-   `BL-227` each carry a batch-95 measurement paragraph; read it before scoping any of them.
+   id. The `.fn` sidecar is retired in the same release. `BL-243`, `BL-221` and `BL-223` each
+   carry a batch-95 measurement paragraph; read it before scoping any of them.
 
    **BATCH 94's TWO SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope either.** `BL-218` and
    `BL-219` shipped together as `v0.560.0`, cited in the release commit message. Neither carries a
@@ -9451,7 +9543,7 @@ given at batch 90.
    `PC-S340-RETRO-AUDIT-SCANS-…` REFUTED. Run the sweep anyway, because the consumer files while
    nobody is looking; expect it empty and rank the no-`PC` set without waiting for permission.
 
-   **READ `BL-227` BEFORE YOU BUILD OR TRUST ANY RECEIPT THIS BATCH.** Batch 83 scored every
+   **RUN `bash scripts/validate-backlog-receipts.sh` BEFORE YOU BUILD OR TRUST ANY RECEIPT THIS BATCH — it is `BL-227`'s enforcer and it names the prose-closable receipts by id.** Batch 83 scored every
    candidate receipt in its ranked set by BUILDING the non-fix and running it: **nine of ten close
    on something that is not a fix.** Seven close on prose — a bare comment, a mention inside an
    unrelated string, and one PURE LINE REFLOW whose words are byte-identical to the original. Two
@@ -9460,9 +9552,10 @@ given at batch 90.
    two whose receipts DRIVE their subject — and driving is NECESSARY, NOT SUFFICIENT**: both were
    then closed by an over-broad fix, so an arm must also assert the CONTROL case still DENIES.
    `verification-discipline.md:154` states this rule and has no enforcer, which is why `BL-227`
-   exists. The ranked no-`PC` set, readiest first, is `BL-227` (a), `BL-243`, `BL-221`, `BL-223`, `BL-220`
-   (`BL-225`, `BL-217`, `BL-222`, `BL-240`, `BL-241`, `BL-224`, `BL-019`, `BL-242`, `BL-218`, `BL-219`
-   and `BL-137` have shipped) — **every one of their receipts needs repairing before its verdict means anything.**
+   exists, and `BL-227` shipped its enforcer as `v0.562.0`. The ranked no-`PC` set, readiest first, is
+   the nine receipts `scripts/validate-backlog-receipts.sh` names PROSE-CLOSABLE, then `BL-243`, `BL-221`, `BL-223`, `BL-220`
+   (`BL-225`, `BL-217`, `BL-222`, `BL-240`, `BL-241`, `BL-224`, `BL-019`, `BL-242`, `BL-218`, `BL-219`,
+   `BL-137` and `BL-227` have shipped) — **every one of their receipts needs repairing before its verdict means anything.**
    Batch 94 measured all three: `BL-220`'s only shippable shape is an `--allow-missing` opt-out
    that leaves the default alone (a homes-keyed fail-closed fires on 450 correct files); `BL-221`'s
    positive-binding arm carries 3 false positives of 6 and moves the suite pole; `BL-223` needs a

@@ -11584,3 +11584,84 @@ for as long as the allowlist has existed.
 
 verify: sh set -e; d=$(mktemp -d); trap 'rm -rf "$d"' EXIT; V=$PWD/core/scripts/validate-artifact-derivations.sh; cd "$d"; printf 'alpha\n' > f.txt; printf '```derived\n$ sed -n \047w canary\047 f.txt\n0\n```\n' > a.md; AI_DLC_PROJECT_ROOT="$d" bash "$V" a.md >/dev/null 2>&1 || true; [ -e canary ] && exit 1; exit 0
 
+## BL-227 — nine of batch 82's ten receipts are satisfied by something that is not a fix, and the rule forbidding it has no enforcer
+
+**LANDED (v0.562.0, verified c6b395b8).**
+
+**Found 2026-09-10** scoping batch 83, by building the non-fix for every candidate receipt in the
+ranked set and running it. Not a rediscovery: `.claude/rules/verification-discipline.md:154`
+already states *"A whole-file `grep -qF` is satisfied by a comment... Bind to the line that EMITS
+the thing"*. **The rule is right, it is written down, and nothing enforces it** — which is how one
+batch produced nine receipts that break it while certifying each as bidirectional.
+
+**Measured. Every mutation carries a `cmp -s` control asserting it applied, and every subject an
+unmutated control that stays at 1.**
+
+    BL-217   1 -> 0   a PURE LINE REFLOW, words byte-identical
+    BL-218   1 -> 0   blanket acquittal of any row citing any OWED- token
+    BL-219   1 -> 0   a bare comment
+    BL-220   1 -> 0   blanket deny, no opt-out
+    BL-221   1 -> 0   a bare comment
+    BL-222   1 -> 0   a bare comment -- AND it REJECTS a correct fix rendered after the OK line
+    BL-223   1 -> 0   one word inside an unrelated description string
+    BL-224   1 -> 0   a bare comment naming adj_spent_note
+    BL-225   1 -> 0   a bare comment
+    PC-S310  0 -> 1   a bare comment, and gutting the arm (consumer polarity: nonzero = CLOSE)
+
+**THE TWO CLASSES ARE NOT EQUALLY DANGEROUS.** Seven close on PROSE — a comment, a reflow, a
+mention — and those are caught by binding to the emission site. **BL-218 and BL-220 close on an
+OVER-BROAD VERSION OF THE REAL FIX**, which is the shape a hand is most likely to build by
+accident: BL-218's closer silences every genuine debt, BL-220's denies every ordinary file. Their
+receipts DRIVE the shipping tool, which defeats prose closers and not fix-shaped ones. **Driving
+the subject is necessary and not sufficient** — the arm must also assert the control case still
+DENIES, which BL-226's receipt does and theirs do not.
+
+**BL-217's closer is the sharpest and it is invisible to review.** After rewrapping one word
+earlier, `tr '\n' ' '` over both files yields the SAME STRING — the two are word-for-word
+identical and only the line break moved. A formatting pass closes that entry silently with the
+defect fully intact.
+
+**Two measurement errors of my own, both caught by controls rather than by reading**, and they
+are why the scoring is stated with its controls: an over-escaped `awk` returned `rc=1` on all
+three arms of one probe (a non-discriminating null that reads exactly like agreement), and a
+lone copy of a validator in a bare temp dir exited before reaching its arm — the "a copied
+validator needs its siblings" hazard — reading as all-1 a second time. A second hand hit the
+same hazard independently on BL-220 and self-corrected.
+
+**Not fixed here, and the shape needs deciding.** A mechanical arm over `verify: sh` lines cannot
+ask whether a receipt binds to an emission site — that is a judgment about what the predicate
+reads. The tractable forms are (a) a REPORTING arm that scores every backlog receipt against a
+seeded comment appended to each path it names, and fails the push on any that flips, which needs
+no judgment and cannot false-positive on a receipt that drives; or (b) a producer-side rule at
+filing time. (a) is the smaller and measures (b)'s population as a side effect. **The
+false-positive set for (a) is unmeasured over the 79 live receipts** and `CLAUDE.md` requires that
+before the check ships.
+
+**Option (a) MEASURED at batch 95, over the 76 live `sh` receipts in a `git archive HEAD` extraction
+(66 at base exit 1).** A GENERIC seed — `# probe` appended to every existing file each receipt names —
+flips **0 of 76**, so the arm as first described cannot fire; the seed must carry the receipt's own
+grep tokens. Under that seed **7 receipts flip 1 → 0**: `BL-021`, `BL-022`, `BL-023`, `BL-044`,
+`BL-124`, `BL-216`, `BL-221`. A flip is its own proof, so the false-positive set of the arm is 0 by
+construction. **The unmeasurable remainder is the larger finding**: 30 receipts name no seedable path
+or carry no extractable grep token (`BL-006`, `BL-007`, `BL-010`, `BL-015`, `BL-017`, `BL-018`,
+`BL-024`, `BL-028`, `BL-029`, `BL-034`, `BL-038`, `BL-043`, `BL-053`, `BL-054`, `BL-057`, `BL-062`,
+`BL-066`, `BL-067`, `BL-082`, `BL-097`, `BL-098`, `BL-100`, `BL-119`, `BL-133`, `BL-137`, `BL-140`,
+`BL-143`, `BL-220`, `BL-238`, `BL-243`), and five have a base exit that is neither 0 nor 1 (`BL-006`,
+`BL-095`, `BL-100` at 9; `BL-143` at 128). Shipping (a) is a REPORTING arm keyed on the token seed
+with those 30 declared out of population by name; the design call left open is whether the seven
+flips gate the push or are reported, and that is decided when the arm ships, not here.
+
+**The receipt below DRIVES the shipped arm on a seeded ledger inside a throwaway repository** and
+refuses a comment stub, an always-fail stub, a reporter that names every id, and a `grep`-mention
+heuristic that forges the OK line. It does NOT refuse a forgery that prints every row and the OK
+line verbatim for that exact seed — no receipt that reads output can — and that forgery is killed
+by `core/fixtures/backlog-receipt-binding/run.sh` at its unmutated control. The fixture is the
+gate; this receipt is the instrument that closes the entry.
+
+**Tiered DEFECT.** Every receipt in the ranked set is the instrument the next batch will use to
+decide whether its own fix worked, and nine of them cannot tell a fix from a comment.
+
+verify: sh V=scripts/validate-backlog-receipts.sh; [ -f "$V" ] || exit 9; d="$(mktemp -d)" || exit 9; ( cd "$d" && git init -q && mkdir p && printf 'base\n' > p/s.txt && printf '#!/bin/sh\nexit 3\n' > p/t.sh && git add . && git -c user.name=p -c user.email=p@x commit -qm s && git update-ref refs/remotes/origin/main HEAD ) || exit 9; printf '%s\n' '## BL-900 — seeded' '' "verify: sh grep -q 'zzzmark' p/s.txt" '' '## BL-901 — seeded' '' "verify: sh sh p/t.sh; [ \$? -eq 0 ]" '' '## BL-902 — seeded' '' "verify: sh grep -q 'base' p/s.txt" > "$d/l.md"; o="$(bash "$V" "$d/l.md" --max-prose-closable 0 --max-unscorable 99 --max-out-of-population 99 --min-sh-receipts 0 --min-entries 0 2>&1)"; r0=$?; q="$(bash "$V" "$d/l.md" --quiet --max-prose-closable 1 --max-unscorable 99 --max-out-of-population 99 --min-sh-receipts 0 --min-entries 0 2>&1)"; r1=$?; rm -rf "$d"; [ "$r0" -eq 1 ] && [ "$r1" -eq 0 ] || exit 1; grep -q "^PROSE-CLOSABLE	BL-900	" <<< "$o" || exit 1; grep -q "^PROSE-CLOSABLE	BL-90[12]	" <<< "$o" && exit 1; grep -q "^ALREADY-PASSING	BL-902	" <<< "$o" || exit 1; grep -q "^OK: .*1 receipt(s) scored .* detached checkout of HEAD" <<< "$q" || exit 1; exit 0
+
+
+
