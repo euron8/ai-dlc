@@ -1958,6 +1958,9 @@ all three items below in full, then:
 which re-drives the mechanical fixture itself and, on success, prints the
 `H2_ATTESTED v1` line to append to the gate log. If it exits 1, **the gate FAILS**.
 
+Append that line as its own line at column 1, or inside the H2 row's evidence
+cell. Both verify; nothing else about the line may change.
+
 The three items:
 
 1. **H1 recursion guard fires.** Re-invoke the H1 check with `H1_DEPTH=1` pre-set
