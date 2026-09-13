@@ -94,9 +94,11 @@ against each release in the range. Take the ref from that row.
 
 That row acquits itself — "SPLIT BUYS NOTHING HERE ... its machinery has already
 landed" — when the consumer's own `skill_commit` is at or past the ref it names,
-**except on a run that also emitted a `SELF-UPDATE-CARRY` row**, where a carried
-machinery path is one the stamp says landed and step 2 deliberately did not write.
-The acquittal is withheld there and the original pull-first advice stands.
+**and ONLY on a run where the gate's carry arm reached a clean decision.** A
+`SELF-UPDATE-CARRY` row withholds it: a carried machinery path is one the stamp
+says landed and step 2 deliberately did not write. So does a `SELF-UPDATE-UNDECIDED`
+row from that arm, because a gate that cannot tell whether a path was carried has
+not established that none was. The original pull-first advice stands in both cases.
 
 **VALIDATE `<ref>` BEFORE USING IT — all four, and report which failed:**
 
@@ -483,7 +485,7 @@ prose is itself generated rather than composed.
      base stays put until a gated apply).
 
      **The pair advances even on a cycle that CARRIED a path, and that is what the gate's
-     `GATE_CARRIED` refusal compensates for.** A carried path is the one thing this cycle
+     `GATE_CARRY_STATE` refusal compensates for.** A carried path is the one thing this cycle
      did not write, so the advanced `skill_commit` then attests machinery that did not
      land; nothing here corrects it, because the correction would need per-path granularity
      the stamp has no field for. `machinery_at_or_past()` in
