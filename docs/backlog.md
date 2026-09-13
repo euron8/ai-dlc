@@ -4147,10 +4147,32 @@ byte-present. Its honest limit: it does not catch an author who quotes without d
 **Not fixed here.** Choosing between the two shapes is design work, and the entry exists so the
 refuted one is not built.
 
+**The receipt DRIVES the validator rather than grepping its SoR tuple.** It builds a story and a
+`carry-over-backlog.md` beside it under `mktemp`, runs the shipped script three times, and takes a
+verdict only from the exits. Measured: at HEAD it exits 1 on the SoR refusal, whose emitted text it
+matches (`the byte-verbatim source of record is`); against the SoR-set extension it exits 0. Three
+non-fixes were built and all three stay at 1. A comment carrying the receipt's own literal, appended
+to both files it names — the shape a prose closer takes and the shape this ledger's own receipt
+validator seeds — moves nothing, because a comment inside the script cannot change what the script
+answers about a story. Making the SoR test unconditional-accept — the sharp over-broad non-fix,
+which admits `carry-over-backlog.md` by admitting everything — is refused by the `prd.md` control
+arm, which must keep denying. And the entry's own motivating case, the same bullet quoted with an
+ellipsis, is refused by the third arm; that is the case that must stay red after any fix.
+
+**The path resolution the receipt depends on is the story's own directory, and it is measured, not
+assumed.** `resolve_artifact()` tries `story_dir` before `os.getcwd()`, so the probe's
+`carry-over-backlog.md` beside the story wins over a divergent same-basename file in the caller's
+cwd. Both directions were run under the extension and they differ: with the file beside the story a
+cwd decoy is ignored and the run PASSES; with no file beside the story the cwd copy resolves and the
+run FAILS on the bullet, proving the decoy was actually read rather than skipped. The receipt is
+therefore cwd-invariant — repo root and an unrelated directory give the same three exits, which is
+what the ledger's receipt validator needs, since it runs every receipt from a detached checkout's
+root.
+
 **Tiered DEFECT.** A closure claim can assert a condition met that its own document declines to meet,
 and no mechanism reads it.
 
-verify: sh set -e; V=core/scripts/validate-locked-anchor.sh; [ -f "$V" ] || exit 9; n="$(grep -c 'carry-over-backlog' "$V")" || n=0; c="$(grep -c 'product-brief\|prd\.md' "$V")" || c=0; [ "$c" -gt 0 ] || exit 9; [ "$n" -eq 0 ] && exit 1; exit 0
+verify: sh V=core/scripts/validate-locked-anchor.sh; [ -f "$V" ] || exit 9; bash "$V" core/fixtures/check-3b-locked-anchor/good-story.md >/dev/null 2>&1 || exit 9; d="$(mktemp -d)"; B="- CO-PROBE: the operative closure clause stated in full."; printf "%s\n" "# Carry-over backlog" "" "## CO-PROBE" "" "$B" > "$d/carry-over-backlog.md"; cp "$d/carry-over-backlog.md" "$d/prd.md"; printf "%s\n" "<!-- LOCKED_REQUIREMENTS -->" "<!-- Source: user input -->" "full_text_source: carry-over-backlog.md:CO-PROBE" "$B" "<!-- END LOCKED_REQUIREMENTS -->" > "$d/s.md"; printf "%s\n" "<!-- LOCKED_REQUIREMENTS -->" "<!-- Source: user input -->" "full_text_source: prd.md:CO-PROBE" "$B" "<!-- END LOCKED_REQUIREMENTS -->" > "$d/n.md"; printf "%s\n" "<!-- LOCKED_REQUIREMENTS -->" "<!-- Source: user input -->" "full_text_source: carry-over-backlog.md:CO-PROBE" "- CO-PROBE: the operative closure clause ... in full." "<!-- END LOCKED_REQUIREMENTS -->" > "$d/e.md"; o="$(bash "$V" "$d/s.md" 2>&1)"; rc=$?; bash "$V" "$d/n.md" >/dev/null 2>&1; nrc=$?; bash "$V" "$d/e.md" >/dev/null 2>&1; erc=$?; rm -rf "$d"; [ "$nrc" -ne 0 ] || exit 1; [ "$erc" -ne 0 ] || exit 1; grep -qF "the byte-verbatim source of record is" <<<"$o" && exit 1; exit $rc
 
 
 
@@ -4306,10 +4328,29 @@ Both premises hold on HEAD: `upstream-routing.md` is byte-unchanged (md5 `91e84d
 ledger at line 44, and `ai-dlc-update` is already a `transient:false` member whose reason covers the
 register. Taking this entry means declaring the FORMAT, not admitting the member.
 
+**The receipt DRIVES the enforcer and reads its `--report` table, not the schema text.** The
+`declared` column is emitted at `validate-write-format-steering.sh:398` as
+`'  declared   %-34s %s\n'`, once per artifact the join scores OK, so a row exists only when a
+member of the `transient:false` population carries a `declared_in` file that is present in some
+layout AND still contains its anchor. The receipt asserts that row for `push-candidate`, guarded by
+the same row for `ai-dlc-update` — a control that already exists at HEAD and must keep printing, so
+a run that reached no table exits 9 rather than reporting an absence.
+
+Measured, each on its own detached checkout: HEAD 1, with the row absent and the guard present. A
+comment carrying the receipt's own literals appended to the file it names exits 9 — the appended
+line breaks the JSON the script reads, the reader reports UNPARSED, and the guard row never prints;
+a stub cannot reach 0. Three non-fixes stay at 1. A member declared `transient:true` plus a steering
+format is the sharp one, because it satisfies a schema-text grep while staying outside the scanned
+population: the enforcer calls it a GHOST, exits 1, and the receipt's non-zero-exit arm refuses it.
+A `transient:true` member with no format prints nothing and stays at 1. A `transient:false` member
+with no format prints `UNDECLARED push-candidate`, not `declared`, and stays at 1. Only the real fix
+— a `transient:false` member plus a resolving format declaration — reaches 0, and it moves the PASS
+line from 5 of 20 to 6 of 21.
+
 **Tiered DEFECT.** The enforcer's PASS line reads as coverage of the shared append-only artifacts
 while the ledger this program exists to drain is not among them.
 
-verify: sh S=core/schemas/pipeline-state-paths.json; R=core/rules/upstream-routing.md; [ -f "$S" ] && [ -f "$R" ] || exit 9; grep -q "pipeline-snapshot-history" "$S" || exit 9; n="$(grep -c "push-candidate" "$S")" || n=0; [ "$n" -gt 0 ] && exit 0; exit 1
+verify: sh o="$(bash core/scripts/validate-write-format-steering.sh --report 2>&1)"; rc=$?; grep -qE '^ +declared +ai-dlc-update' <<<"$o" || exit 9; [ "$rc" -eq 0 ] || exit 1; grep -qE '^ +declared +push-candidate' <<<"$o"
 
 ## BL-243 — the row-scoped citation acquittal in `audit-layer-debt.sh` is satisfied by a clause that DENIES the handle it names
 
