@@ -705,6 +705,28 @@ base_holds() { all_present "$(base_show "$1")" "$2"; }
 # chance for the two to drift, and a drift here is silent in both directions at once.
 receipt_path_tokens() { printf '%s\n' "$1" | tr -c 'A-Za-z0-9_./$-' '\n' || true; }
 
+# A `$THEIRS_TREE/…` TOKEN IS A DISTRIBUTION PATH AND IS ALREADY EXCLUDED, BY THE `$` THE SPLIT
+# DELIBERATELY KEEPS — `$THEIRS_TREE/core/scripts/x.sh` arrives as ONE token and fails the
+# whitelist below on its first character, exactly as `$CONSUMER/…` survives as one token for the
+# opposite reason. NO SECOND GUARD IS ADDED HERE: one keyed on the `$THEIRS_TREE` token changes no
+# outcome today, and a guard whose removal changes nothing is not load-bearing. The property is
+# pinned by the `SH-THEIRS-TREE-*` seed instead, which is the same pairing `SH-DIST-PATH` already
+# provides for the `git -C` rev-spec form.
+receipt_absent_subjects() {
+  local rest="$1" p out=""
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    p="${p#\$CONSUMER/}"
+    case "$p" in
+      docs/*|_bmad-output/*|scripts/*|.claude/*) ;;
+      *) continue ;;
+    esac
+    case "$p" in *'*'*|*'?'*|*'$'*) continue ;; esac
+    [ -e "$CONSUMER/$p" ] || case " $out " in *" $p "*) ;; *) out="$out $p" ;; esac
+  done < <(receipt_path_tokens "$rest")
+  printf '%s' "$out"
+}
+
 # receipt_reads_dist_as_path <sh-receipt> -> 0 when the receipt names `$DIST` somewhere other than
 # as a `git -C` argument; 1 when every occurrence is a `git -C` argument, or there is none.
 #
@@ -800,28 +822,6 @@ receipt_reads_dist_as_path() {
     *'$DIST'*|*'${DIST}'*) return 0 ;;
     *) return 1 ;;
   esac
-}
-
-# A `$THEIRS_TREE/…` TOKEN IS A DISTRIBUTION PATH AND IS ALREADY EXCLUDED, BY THE `$` THE SPLIT
-# DELIBERATELY KEEPS — `$THEIRS_TREE/core/scripts/x.sh` arrives as ONE token and fails the
-# whitelist below on its first character, exactly as `$CONSUMER/…` survives as one token for the
-# opposite reason. NO SECOND GUARD IS ADDED HERE: one keyed on the `$THEIRS_TREE` token changes no
-# outcome today, and a guard whose removal changes nothing is not load-bearing. The property is
-# pinned by the `SH-THEIRS-TREE-*` seed instead, which is the same pairing `SH-DIST-PATH` already
-# provides for the `git -C` rev-spec form.
-receipt_absent_subjects() {
-  local rest="$1" p out=""
-  while IFS= read -r p; do
-    [ -n "$p" ] || continue
-    p="${p#\$CONSUMER/}"
-    case "$p" in
-      docs/*|_bmad-output/*|scripts/*|.claude/*) ;;
-      *) continue ;;
-    esac
-    case "$p" in *'*'*|*'?'*|*'$'*) continue ;; esac
-    [ -e "$CONSUMER/$p" ] || case " $out " in *" $p "*) ;; *) out="$out $p" ;; esac
-  done < <(receipt_path_tokens "$rest")
-  printf '%s' "$out"
 }
 
 # --- IS AN `sh` RECEIPT FALSIFIABLE BY A PULL AT ALL? -------------------------------------------
