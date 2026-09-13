@@ -2324,8 +2324,81 @@ the two sides were asserted to differ first (`orig=3 fixed=0` plain anchors).
 Discharges the consumer entry `PC-S296-H2-ATTESTED-ANCHOR-DEFEATED-BY-BACKTICKS` at pinned ledger
 line 673.
 
+**RECURRED 2026-09-12 IN A CLASS THE ORIGINAL MEASUREMENT DID NOT REACH, and the entry's own
+prescribed grammar does not fix it.** The consumer filed the instance at sprint 311's
+architecture gate as
+`PC-S311-H2-ATTESTATION-VERIFY-REQUIRES-COLUMN-1-BUT-ATTEST-OUTPUT-INVITES-A-TABLE-CELL`. A
+gate log's check rows are markdown TABLE rows, so the attestation went into the H2 row's
+Evidence cell — `| H2 | core | PASS | \`H2_ATTESTED v1 sprint=311 …\`. |` — and the cell prefix
+carries LETTERS. `^[^A-Za-z]*H2_ATTESTED`, the grammar this entry prescribed above, was built
+and measured against that row: **cell = 1**. The four decorations originally measured all
+happen to be non-alphabetic, so the narrower fix passes every one of them and leaves the
+shape the consumer actually produces.
 
-verify: sh D=$(mktemp -d); V=core/scripts/validate-h2-attestation.sh; G=$(bash "$V" --digest --fixtures core/fixtures); L="H2_ATTESTED v1 sprint=999 digest=$G at=2026-01-01T00:00:00Z items=1,2,3 mechanical=check-17-bypass:PASS"; printf "%s\n" "$L" > "$D/bare.md"; printf "\140%s\140\n" "$L" > "$D/tick.md"; printf "%s\n" "- $L" > "$D/bul.md"; bash "$V" --verify --sprint 999 --fixtures core/fixtures --gate-log "$D/bare.md" >/dev/null 2>&1; b=$?; bash "$V" --verify --sprint 999 --fixtures core/fixtures --gate-log "$D/tick.md" >/dev/null 2>&1; t=$?; bash "$V" --verify --sprint 999 --fixtures core/fixtures --gate-log "$D/bul.md" >/dev/null 2>&1; u=$?; rm -rf "$D"; [ "$b" -eq 0 ] || exit 1; [ "$t" -eq 0 ] && [ "$u" -eq 0 ]
+**AND THE OBVIOUS WIDENING IS WORSE THAN THE ANCHOR IT REPLACES.** A leading token boundary
+alone (`(^|[^0-9A-Za-z_])H2_ATTESTED v1 …`) verifies the cell, and it also verifies this, from
+the consumer's own committed gate log:
+
+> the `H2_ATTESTED v1 sprint=311 digest=<D> … mechanical=check-17-bypass:PASS` line from the
+> requirements gate was embedded in a table cell rather than at column 1. **THIS GATE FAILED**
+> — re-drive required.
+
+Measured at the live fixture digest, against a control with the token removed reading 1: that
+sentence **exits 0**. A gate log's narrative QUOTES the line it is complaining about, at the
+same sprint and the same digest, so a boundary-only reader manufactures an attestation out of
+a report that the gate failed — strictly worse than a false RE-DRIVE, because it is a false
+PASS on a check that was never driven.
+
+**The grammar is therefore bounded at BOTH ends, and the trailing bound is cell-scoped rather
+than line-scoped.** Measured over every `H2_ATTESTED` line in the consumer's whole gate-log
+history — all revisions of all 108 gate-log files, 155 distinct lines, 28 distinct
+(sprint, digest) pairs — scored per PAIR, which is the unit deciding whether a sprint can cite
+rather than re-drive:
+
+| grammar | pairs verifiable | the failure sentence |
+|---|---|---|
+| shipped `^` | 26 / 28 | refused |
+| `^[^A-Za-z]*` (this entry's own) | 26 / 28, and **not** the table cell | refused |
+| leading boundary only | 28 / 28 | **ACCEPTED** |
+| boundary + end-of-line decoration | 27 / 28 | refused |
+| boundary + **cell-bounded** decoration | **28 / 28** | refused |
+
+The fourth row loses sprint 309's `aab08e34184faa3d` outright — its only record is a table row
+ending `. | 1033 |`, so anchoring the tail on end of line reintroduces the defect one column
+further right. The shipped form is the fifth. Its accept set over that corpus is 58 lines whose
+tails are decoration only (28 empty, the rest backticks, `. |`, `**`, `. | 1033 |`) and its 22
+refusals are all prose continuing into a sentence: **false-positive set empty, enumerated**.
+
+**The trailing fields are optional, and that is measured too.** Requiring the whole emitted
+span regresses sprint 308's `5ddce3ec7bb9805c`, whose only record stops after `items=` — the
+emitter has not always printed the same fields, and a reader keyed on today's tail refuses
+yesterday's attestation.
+
+**Both `--verify` arms carry the bound, not just the accepting one.** Guarding only the digest
+arm moves the failure sentence from a false PASS to a false CHANGED, which still tells an
+operator the sprint attested and the fixtures moved when neither happened.
+
+**And `--verify` now cites the SPAN rather than the matching line.** Once the reader admits a
+table cell the matching line is the whole markdown row — 891 bytes on the consumer's own log
+against 117 for the span — and that output is copy text an operator pastes into the next gate
+log. `grep -oE` makes the citation byte-identical from either placement.
+
+**The receipt below is extended, not replaced.** The bare/tick/bullet arms stay; it adds the
+consumer's verbatim cell shape, a wrong-digest cell that must name `CHANGED`, the failure
+sentence that must reach the FIRST-GATE message, and a `NOT_H2_ATTESTED` cell that must not
+verify. Scored against eight subjects, each a copy with its mutation `cmp -s`-asserted applied
+before its verdict was read: fix **0**; unfixed **1**; this entry's own `^[^A-Za-z]*` grammar
+**1**; leading boundary with no trailing bound **1**; leading boundary dropped entirely **1**;
+only the accepting arm widened **1**; instruction text only **1**; a comment carrying the
+receipt's own literals **1**; subject deleted **9**.
+
+Also discharges the consumer entry
+`PC-S311-H2-ATTESTATION-VERIFY-REQUIRES-COLUMN-1-BUT-ATTEST-OUTPUT-INVITES-A-TABLE-CELL`.
+`core/fixtures/h2-attest-scripts-dir` carries the reader arms and three mutants; before this
+change that fixture asserted only the EMITTER, whose output is undecorated by construction.
+
+
+verify: sh V=core/scripts/validate-h2-attestation.sh; [ -f "$V" ] || exit 9; D="$(bash "$V" --digest --fixtures core/fixtures 2>/dev/null)"; case "$D" in [0-9a-f][0-9a-f]*) : ;; *) exit 9 ;; esac; W="$(mktemp -d)" || exit 9; A="H2_ATTESTED v1 sprint=311 digest=$D at=2026-01-01T00:00:00Z items=1,2,3 mechanical=check-17-bypass:PASS"; B="H2_ATTESTED v1 sprint=311 digest=0000000000000000 at=2026-01-01T00:00:00Z items=1,2,3 mechanical=check-17-bypass:PASS"; printf '%s\n' "$A" > "$W/bare.md"; printf '\140%s\140\n' "$A" > "$W/tick.md"; printf -- '- %s\n' "$A" > "$W/bul.md"; printf '| H2 | core | PASS | \140%s\140. |\n' "$A" > "$W/cell.md"; printf '| H2 | core | PASS | \140%s\140. | 1033 |\n' "$B" > "$W/stale.md"; printf 'the \140%s\140 line was embedded in a table cell rather than at column 1. THIS GATE FAILED -- re-drive required.\n' "$A" > "$W/prose.md"; printf '| H2 | core | PASS | \140NOT_%s\140. |\n' "$A" > "$W/deny.md"; cmp -s "$W/cell.md" "$W/prose.md" && { rm -rf "$W"; exit 9; }; cmp -s "$W/cell.md" "$W/deny.md" && { rm -rf "$W"; exit 9; }; r() { bash "$V" --verify --sprint 311 --fixtures core/fixtures --gate-log "$W/$1.md" 2>&1; }; r bare >/dev/null 2>&1; b=$?; r tick >/dev/null 2>&1; t=$?; r bul >/dev/null 2>&1; u=$?; r cell >/dev/null 2>&1; c=$?; r deny >/dev/null 2>&1; n=$?; o="$(r stale)"; s=$?; p="$(r prose)"; q=$?; rm -rf "$W"; [ "$s" -eq 1 ] || exit 1; grep -q 'the fixture set CHANGED' <<<"$o" || exit 1; [ "$q" -eq 1 ] || exit 1; grep -q 'first gate' <<<"$p" || exit 1; [ "$n" -eq 1 ] || exit 1; [ "$b" -eq 0 ] || exit 1; [ "$t" -eq 0 ] && [ "$u" -eq 0 ] && [ "$c" -eq 0 ]
 ## BL-055
 
 **Check 16's element 2 accepts `OPEN` as a bare substring anywhere on the backlog line, so a
