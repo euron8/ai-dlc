@@ -67,6 +67,11 @@ is for CONVERGENCE cycles only. Review:
 - Walk through every change across all stories
 - Check for cross-cutting issues (inconsistent patterns, missing
   integration points, duplicated logic across stories)
+- Re-read the sprint's verbatim operator request — the one the snapshot's
+  Sprint Context quotes and that Check 33 reads from
+  `_bmad-output/operator-requests-history.md` — against the COMPOSED diff of
+  every story, not against each story's own ACs; a clause two
+  individually-correct stories fail jointly is visible only here
 - Apply all fixes autonomously. **Code changes are applied by dev teammates and
   planning-artifact repairs by a dispatched `remediator` (`_gate-procedures.md`,
   "Adversarial repair dispatch"), not inline by the lead (Rule 28); the lead owns
