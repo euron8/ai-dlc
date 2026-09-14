@@ -15,6 +15,74 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.568.0] - 2026-09-13
+
+### PC-S342-CHECK-20-IS-UNREACHABLE-AT-SPRINT-REVIEW-SO-NO-OVERRIDE-CAN-RELAX-IT-THERE — Check 20 joins the `sprint-review` manifest row, so an override shadowing it reaches that gate
+
+`GATE_MANIFEST` placed Check 20 in the `planning` row only, and an `overrides/` entry shadows a
+heading, so it loads exactly where the check it shadows loads. A consumer that needed Check 20
+relaxed at `sprint-review` could not express that as an override at all; the only construct with
+gate-row reach was an `extensions/checks/` entry with its own `gate_types:`, which restates core
+and draws `EXTENSION-RESTATES-CORE` on every pull. Measured on the reference consumer: its check
+921 is title-identical to core's 20, `layer-drift.sh` matches on title, and the row recurs on every
+pull with no consumer-side action that both clears it and keeps sprint-review enforcement.
+
+The `sprint-review` row is now `18, 20, 21` and the enforcement map binds 20 to
+`[planning, sprint-review]`. The heading is unchanged, because the consumer's override anchors on
+it byte-for-byte. Check 20's Scope names the gate and what it resolves there: at planning gates,
+Rule 8's per-planning-artifact minimum as before; at `sprint-review`, the minimum that step's own
+intensity gate declares, by reference, so a change to the step changes the check and no minimum is
+enumerated outside Rule 8 (I19 holds). A fixture arm binds the manifest ROW, which was the unbound
+side: I3 fails a map that omits a row's type and passes a map that names a type the row lacks, so a
+half-landed grant was green on both joins before this arm existed.
+
+Operator ruling at batch 102: the consumer's check 921 is being retired and this row is its
+prerequisite. On the consumer's next pull its override covers both gates and 921 is retirable;
+921's own body carries a "do NOT retire" instruction whose stated premise (Check 20 in the
+planning row only) this release makes false, and that sentence is what the next reader meets
+first. Two things the grant leaves in place, recorded rather than silent: the heading still
+reads `(all planning gates)` while the Scope names the sprint-review gate, because the consumer
+override anchors on that heading byte-for-byte; and between the pull landing and the override's
+readopt, the consumer's shadowed Check 20 loads at sprint-review carrying a body that says it does
+not fire there. The `HARD-OVERRIDE-DRIFT-SECTION` row on that override is what forces the
+readopt, and five `EXTENSION-HOOK-DRIFT` rows with their adjudication debts arrive beside it, as
+any edit to `gate-validation.md` produces. `sprint-review.md` Step 4 now names the two gate-log
+fields the check reads, beside the gate call.
+
+### PC-S342-CARRY-OVER-PROVENANCE-MENU-SKIP-IS-GENERALIZABLE-AND-CORE-LACKS-IT — REFUSED as filed; the clause relaxes a check that does not impose what it waives
+
+The ask was a Check 20 clause under which, at `standard` and `full`, the absence of
+`/bmad-create-epics-and-stories`, `/bmad-sprint-planning`, `/bmad-brainstorming` and `/bmad-tea`
+does not fail the check when every story traces to a pre-scoped carry-over FR. Measured at
+`0e5235a6`: core Check 20's span names none of those four (0; control `Party Mode` 2) and tests
+only Rule 8's minimum cycle, so the clause relaxes nothing Check 20 imposes. What core does
+require of those sub-skills lives in the step files' own invocations and intensity gates
+(`stories-test-strategy.md` invokes epics-and-stories unconditionally outside
+`carry-over-single`; the `carry-over-single` skips sit at `discovery.md` and three
+`stories-test-strategy.md` sites), and Check 30 depends downstream on the PRD's FR citations.
+`/bmad-tea` is not a core token (0 files; core's is `/bmad-testarch-test-design`, 13). The
+clause's precondition has no reader: `carry-over FR` appears nowhere in core (control
+`carry-over item` 20 files) and `requirements.md`'s Source marker records the item, not a gate
+verdict. The grain for a step-level skip under a project-defined precondition is
+`kind: qualifier` with `extends:` on each step gate; a Check 20 clause is the wrong site. No core
+change.
+
+### BL-247 — a single-fixture `derive-fixture-readsets.sh --list` refresh is judged against the merged map
+
+The discrimination control derived its universe from the fixtures this run traced, so under
+`--list <one>` the read-set was the universe by construction and the control failed on every
+input; no single-fixture refresh had landed since the control shipped. The merge now runs before
+the controls, the universe and every per-fixture count come from the merged map in one pass, and
+the control is a function between `# READSET_CONTROL_BEGIN` / `# READSET_CONTROL_END` sentinels
+so `readset-skip` drives it without root. The `--all` reading changes only where the committed
+map names a fixture absent from disk (0 today). The entry's receipt was a line-order grep that
+accepted three non-fixes and now drives the extracted control on three maps, and a fixture arm
+binds the CALL SITE to the merged map, because a caller passing the traced map reproduced the
+defect with the function byte-identical and every function-level channel green.
+
+`PC-S308-GATE-METRICS-CHECK2-STALE-VERDICT-READ-ORDER` is named here because it was discharged by
+an archived entry and no release commit had cited it.
+
 ## [0.567.0] - 2026-09-13
 
 ### PC-S342-SH-RECEIPT-DOLLAR-DIST-READS-THE-CHECKOUT-NOT-THEIRS — a `verify: sh` receipt reading `$DIST` as a filesystem path measures the distribution CHECKOUT rather than the ref being pulled, and the row claims it measured theirs
