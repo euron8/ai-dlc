@@ -2,7 +2,14 @@
 # validate-provenance-block.sh — the READER of SKILL_INVOCATION_PROVENANCE v1.
 #
 # Usage: ./scripts/ai-dlc/validate-provenance-block.sh <artifact-path> [--require-skill <skill-name>]
+#        ./scripts/ai-dlc/validate-provenance-block.sh <artifact-path> [--allow-missing]
 #        ./scripts/ai-dlc/validate-provenance-block.sh --strays [<path>...]
+#
+# `--allow-missing` is the call site's declaration that THIS artifact may legitimately carry no
+# block. It acquits exactly one rung — the artifact is not a retro, no requirement was stated,
+# and no marker is present at all. It does not acquit a retro with no block, a marker this
+# parser cannot read, or a block present and violating a rule. It contradicts `--require-skill`
+# and the two together are a usage error.
 #
 # TWO SCOPES, and the second one exists because the first cannot reach it. The default mode is
 # handed ONE artifact by a gate that already decided the artifact is in scope, and the scope rule
@@ -23,14 +30,23 @@
 # example in gate-validation.md, an example in team-roles/adversary.md -- with nothing
 # comparing them. They diverged. The role file taught a bare ``` fence with no terminator;
 # the adversary emitted exactly what it was shown; the regex here matched nothing; and this
-# script printed "no provenance block required or present" and exited 0. Two full adversarial
-# passes of the reference consumer's sprint 290 went unadjudicated and the gate called them
-# clean, because an unparseable block scores exactly like a clean artifact.
+# script used to print "no provenance block required or present" and exit 0. Two full
+# adversarial passes of the reference consumer's sprint 290 went unadjudicated and the gate
+# called them clean, because an unparseable block scores exactly like a clean artifact.
+#
+# ABSENCE IS A DENIAL BY DEFAULT. An artifact handed to this reader with no block at all and no
+# flag is a FAILURE, not an OK: the flagless caller had decided the artifact was in scope, and a
+# reader that answers OK to "I examined nothing" puts the burden of remembering a flag on every
+# gate. A call site that has genuinely decided an artifact may carry none says so, with
+# `--allow-missing`; a call site whose artifact class requires one says THAT, with
+# `--require-skill`. Both are declarations; silence is no longer one.
 #
 # Exit codes:
-#   0  -- every block present is well-formed, and any required block is present
-#   1  -- missing block, MALFORMED block, malformed field, unknown skill, or a rule violation
-#   2  -- usage error
+#   0  -- every block present is well-formed, and any required block is present; or no block is
+#         present and `--allow-missing` declared that acceptable
+#   1  -- missing block (including the flagless default), MALFORMED block, malformed field,
+#         unknown skill, or a rule violation
+#   2  -- usage error, including `--allow-missing` together with `--require-skill`
 #
 # Forgeability: this is pattern-match validation, not cryptographic attestation. A motivated
 # forger can paste a well-formed block without invoking anything. validate-retro-evidence.sh
@@ -40,11 +56,18 @@
 set -u
 
 USAGE="usage: ./scripts/ai-dlc/validate-provenance-block.sh <artifact-path> [--require-skill <skill-name>]
-       ./scripts/ai-dlc/validate-provenance-block.sh --strays [<path>...]"
+       ./scripts/ai-dlc/validate-provenance-block.sh <artifact-path> [--allow-missing]
+       ./scripts/ai-dlc/validate-provenance-block.sh --strays [<path>...]
+
+  --require-skill <skill-name>  the artifact MUST carry a block citing that skill
+  --allow-missing               this artifact may carry no block at all; acquits only the
+                                no-marker, non-retro, no-requirement case. Contradicts
+                                --require-skill; the two together are a usage error."
 
 MODE="artifact"
 ARTIFACT_PATH=""
 REQUIRE_SKILL=""
+ALLOW_MISSING=0
 STRAY_PATHS=()
 
 if [[ "${1:-}" == "--strays" ]]; then
@@ -65,12 +88,28 @@ else
                 REQUIRE_SKILL="$2"
                 shift 2
                 ;;
+            --allow-missing)
+                ALLOW_MISSING=1
+                shift
+                ;;
             *)
                 echo "ERROR: unknown argument: $1" >&2
                 exit 2
                 ;;
         esac
     done
+
+    # THE TWO FLAGS ARE CONTRADICTORY DECLARATIONS, so accepting both would mean silently
+    # picking one. `--require-skill` says the artifact MUST carry a block; `--allow-missing`
+    # says it need not. A caller that passes both has not decided, and a reader that resolves
+    # the contradiction on the caller's behalf makes the losing flag invisible.
+    if [[ -n "$REQUIRE_SKILL" && "$ALLOW_MISSING" -eq 1 ]]; then
+        echo "ERROR: --allow-missing contradicts --require-skill $REQUIRE_SKILL: one says this" >&2
+        echo "       artifact may carry no provenance block, the other says it must carry one." >&2
+        echo "       Pass exactly one." >&2
+        echo "$USAGE" >&2
+        exit 2
+    fi
 
     if [[ -z "$ARTIFACT_PATH" ]]; then
         echo "$USAGE" >&2
@@ -449,7 +488,7 @@ fi
 # shellcheck source=/dev/null
 [ -r "${PB_SCRIPT_DIR}/lib/meta-gate.sh" ] && . "${PB_SCRIPT_DIR}/lib/meta-gate.sh"
 
-python3 - "$ARTIFACT_PATH" "$REQUIRE_SKILL" "$SCHEMA" "$KNOWN_SKILLS_EXT" <<'PYEOF'
+python3 - "$ARTIFACT_PATH" "$REQUIRE_SKILL" "$SCHEMA" "$KNOWN_SKILLS_EXT" "$ALLOW_MISSING" <<'PYEOF'
 import json
 import os
 import re
@@ -459,6 +498,7 @@ artifact_path = sys.argv[1]
 require_skill = sys.argv[2] or None
 schema_path = sys.argv[3]
 ext_path = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] else None
+allow_missing = len(sys.argv) > 5 and sys.argv[5] == "1"
 
 with open(schema_path, "r", encoding="utf-8") as fh:
     S = json.load(fh)
@@ -526,7 +566,10 @@ if RETRO_PATH_RE.search("docs/retro/s301/retro-draft.md"):
 # NORMALISE BEFORE CLASSIFYING. The regex is anchored at its END only, and `search` reads the
 # RAW argument, so a spelling that denotes a retro without being spelled canonically -- measured
 # on `docs/retro/s301/./retro.md` -- classifies as NOT a retro, and a real retro doc carrying no
-# provenance block exits 0 "no provenance block required or present". Same fail-open as the
+# provenance block used to exit 0 "no provenance block required or present". That fall-through is
+# now closed: a blockless artifact with no flag FAILS whether or not this classifier recognises
+# it, so a misclassified retro costs the retro-specific message rather than the denial. Same
+# fail-open as the
 # caller-side path defect this file's retro rungs already had, reached by a different route. The
 # probes above test two canonical spellings and structurally cannot see it, so one more probe
 # below drives the non-canonical form.
@@ -545,7 +588,10 @@ is_retro = bool(RETRO_PATH_RE.search(os.path.normpath(artifact_path)))
 # This is the check that was not here. A marker the grep SEES and the parser CANNOT READ is
 # a malformed block, not an absent one. Without this, a block in a ``` fence fell through to
 # "no provenance block required or present", exit 0 — and every rung below (the enum, the
-# solo rejection, the verdict rules) sat downstream of a parse that never happened.
+# solo rejection, the verdict rules) sat downstream of a parse that never happened. That
+# fall-through no longer exits 0 for ANY input, but the two verdicts still must not be
+# confused: `--allow-missing` acquits the absent case and never this one, so a malformed block
+# under that flag keeps reporting MALFORMED and exiting 1.
 if not blocks and MARKER_RE.search(content):
     print(
         f"FAIL: {artifact_path} carries a {ENV['marker']} marker that this validator CANNOT "
@@ -575,8 +621,26 @@ if not blocks:
             file=sys.stderr,
         )
         sys.exit(1)
-    print(f"OK: no provenance block required or present in {artifact_path}.")
-    sys.exit(0)
+    if allow_missing:
+        print(f"OK: {artifact_path} carries no provenance block, and --allow-missing declared that acceptable.")
+        sys.exit(0)
+    # ABSENCE WITH NO DECLARATION IS A DENIAL. Not a distinct exit code from the malformed rung
+    # above -- the header says 1 covers both -- but a distinct MESSAGE, because the remedies are
+    # different: a block that exists and cannot be read is re-wrapped, while a block that is
+    # simply not there is either required or waived, and the caller is the only party that knows
+    # which.
+    print(
+        f"FAIL: {artifact_path} carries no {ENV['marker']} block, and no requirement was "
+        f"stated for it.\n"
+        f"      This reader was handed an artifact by a caller that had already decided it was "
+        f"in scope, so an absent block is a finding rather than a pass. Silence is not a "
+        f"decision.\n"
+        f"      FIX: pass --require-skill <skill> if this artifact class must cite an "
+        f"invocation, or --allow-missing if this call site has decided this artifact may carry "
+        f"none.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 
 def parse_block(block_text):
