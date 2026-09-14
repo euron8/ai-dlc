@@ -384,7 +384,18 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   produce the sets, and holding the walker's source in a variable took it to 16 with every
 #   probe, every mutant and both corpus directions reading identically before and after.
 #   Headroom is 8, which is where 0.562.0 left it.
-FORK_BUDGET=8135
+#
+#   0.574.0: 8135 -> 8155, and the whole of it is ONE CITED MODE. Measured with this fixture's
+#   own profiler, `--section by-arm`, in two detached worktrees of the same repository, this
+#   validator byte-identical on both sides: branch point 8133 (spread 8133-8133), tip 8146,
+#   +13, of which `by-arm` attributes 11 to I60 and 1 to I59, with 126 of 128 arms unchanged.
+#   I60 walks every (script, mode) pair the shipped corpus cites and the release added exactly
+#   one pair -- `validate-gate-adjudication.sh --coverage`, named by the role file, the
+#   dispatch procedure and the validator's own usage -- so the raise is one pair's cost in
+#   I60's per-pair pipeline and nothing else. NO REDUCTION TAKEN; the target remains I87's
+#   per-directory pipeline, and I60's per-pair cost is a second candidate now that one pair
+#   is measured at 11. Headroom is 9.
+FORK_BUDGET=8155
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

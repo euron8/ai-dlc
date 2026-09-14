@@ -1143,7 +1143,7 @@ fi
 #      is unchanged, so only assertion (k) can see this: the lead is blocked and handed the
 #      teammate remedy for a push that did not land.
 if mkmut m3-old-dispatch "$CONF" \
-     -e 's|^        if \[ "$PUSH_OK" != "1" \] && \[ "$TEAMMATES_OK" = "1" \] && \[ "$RESUME_OK" = "1" \]; then$|        if false; then|' \
+     -e 's|^        if \[ "$PUSH_OK" != "1" \] && \[ "$TEAMMATES_OK" = "1" \] && \[ "$INFLIGHT_OK" = "1" \] \\$|        if false \\|' \
      -e 's|^        if \[ "$TEAMMATES_OK" != "1" \]; then$|        if [ "$RESUME_OK" = "1" ]; then|'; then
   reset_state "$P_UNPUSHED"
   _m3="$(reason "$(drive "$P_UNPUSHED" "$SESS_A" "$T_REQ_OK" "$MUT_DIR")")"
