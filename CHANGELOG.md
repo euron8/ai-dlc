@@ -15,6 +15,84 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.572.0] - 2026-09-14
+
+Batch 106, one release, two subjects, no shared file: one touches a single step file, the
+other a single shipped validator. A third entry was re-measured and left open; the paragraph
+at the end of this section says why.
+
+### BL-250 — `route.md` Step 0 path 2 now names the program that arms the beat, and the flag that makes it correct across a session boundary
+
+Step 0 path 2 told a resuming lead to reconcile every `In-Flight Teammates` row and, where the
+deliverable is older or absent, that "the beat resumes". It named neither the program nor the
+flag. `scripts/ai-dlc/wait-for-deliverable.sh` is the program, and its own non-delivery output
+already asks for `--since <dispatched-at>` by name for exactly this case — a teammate dispatched
+before this session may have delivered before this session's join armed, and without the flag
+that delivery is invisible. The bullet now names the program, the flag and the row cell it comes
+from in one instruction, cites `_gate-procedures.md`'s bounded-join beat as the procedure rather
+than restating it, and records that liveness for a teammate dispatched by a PRIOR session is
+unavailable to that program because `CLAUDE_CODE_SESSION_ID` differs, so absence of liveness is
+not death. Insertions only; no existing byte of `route.md` changed.
+
+The entry's receipt reads the Step 0 window rather than the whole file, with the control in the
+same invocation that other step files name the program: base **1**, tip **0**, the two trees
+`cmp -s`-asserted to differ first. `BL-027`'s receipt, which scans the whole file for a
+reading-grammar this prose sits close to, is unchanged at exit 1 with its single arm-(b) hit.
+
+### BL-220 — an absent provenance block is now a denial by default, and `--allow-missing` is the declaration that waives it
+
+Handed an ordinary artifact with no `SKILL_INVOCATION_PROVENANCE` block and no flag,
+`core/scripts/validate-provenance-block.sh` printed OK and exited 0. The flagless caller had
+already decided the artifact was in scope, so that answer put the burden of remembering a flag
+on every gate: a call site that forgot one got a pass over a file nothing had examined.
+
+Absence with no declaration is now a FAIL to stderr, exit 1, naming the artifact, saying no
+block was found AND no requirement was stated, and giving both remedies. The message is distinct
+from the MALFORMED one and deliberately shares its exit code, which the header already documented
+as covering missing OR malformed. `--allow-missing` acquits exactly one rung — the artifact is
+not a retro, no requirement was stated, and no marker is present at all. It contradicts
+`--require-skill`, and the two together are a usage error at exit 2.
+
+Eight arms driven against the shipping script, base and tip, each with the base reading beside
+it and a schema-valid seed control asserted at 0 before any of them were read:
+
+    (a) ordinary .md, no block, no flag       0 -> 1
+    (b) same file, --allow-missing            2 -> 0
+    (c) retro path, no block, --allow-missing 2 -> 1
+    (d) MALFORMED marker, --allow-missing     2 -> 1
+    (e) --allow-missing --require-skill x     2 -> 2
+    (f) well-formed block, --allow-missing    2 -> 0
+    (g) `.txt` artifact, no block, no flag    0 -> 1
+    (h) `mode: solo` block, --allow-missing   2 -> 1
+
+Arms (b)–(f) and (h) read **2** at base because `--allow-missing` is an unknown argument there,
+so only the tip reading of those arms discriminates; (a) and (g) are the two that move on the
+default path. Arm (a)'s stderr names `--allow-missing` and carries neither `MALFORMED` nor
+`CANNOT PARSE`, checked against a malformed-file control in the same run that proves that
+grammar can fire. The entry's receipt reads base **1**, tip **0**.
+
+**The false-positive set is two fixture arms and nothing else**, measured by building the flip
+in a scratch tree with the sides `cmp -s`-asserted to differ and running every fixture that
+invokes the validator. `taught-schema` V3 ("an artifact with no block at all still passes") and
+`retro-compliance-workflow` A5's reachability control both encoded the old contract and are
+rewritten. Nine others are unchanged: check-1c-bypass, check-17-bypass, check-17-counts,
+h2-attest-scripts-dir, provenance-not-accessible, predicate-reclassification,
+self-update-join-gate, story-provenance, validator-path-resolution.
+
+**One flagless caller exists on a consumer and it is unreachable today.** The reference
+consumer's own `scripts/ci-local.sh:513` invokes the validator flagless on
+`docs/retro/sprint-${sprint_n}.md`, a legacy spelling `RETRO_PATH_RE` does not match. Measured
+read-only: that file does not exist for any current sprint, so the validator already exits 1
+there today on "artifact not found" and the new rung changes no reachable verdict. The only file
+of that spelling on disk is `sprint-131b.md`, whose name carries no numeric tail and cannot be
+derived by that script. The fix is the consumer's — repoint the call at
+`docs/retro/s<N>/retro.md` with `--require-skill bmad-party-mode` — and it belongs in the pull
+brief, not here.
+
+`BL-223` was re-measured at this batch and is NOT closed: its receipt turns out to be
+satisfiable only by declaring a producer for a path nothing writes, and the honest shape needs a
+schema change first. The entry carries the four-row table.
+
 ## [0.571.0] - 2026-09-14
 
 ### The In-Flight row readers disagreed with the template core itself ships (BL-249)
