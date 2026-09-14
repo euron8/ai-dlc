@@ -15,6 +15,106 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.569.0] - 2026-09-14
+
+### A declared-id citation denied in its own sentence stops acquitting the row that denies it, and ten staged consumer receipts stop reading the distribution checkout as a path
+
+Batch 103, one release, two no-`PC` subjects. The sweep returned no PC-backed work available:
+live **61**, cited **40**, unfiled **21**, archive **206**, partition control 0, read with the
+plan's own two-arm grammar (heading levels 2–6 plus the bold-bullet form) at the elected ref
+`dev/sprint-311/story-A`, whose ledger is a different snapshot from the consumer's current
+checkout. Of the 21 unfiled, **7 are named in an `origin/main` commit message**, **11 carry a
+`NOT-UPSTREAM` verdict** in `docs/reviews/graph-ledger-adjudication-brief.md` (the S297/S312
+cluster), and **3 sit outside the brief and are named by no commit**: the `PC-S309-PRE-PUSH-*`
+pair, whose own entries declare them WITHDRAWN and superseded, and
+`PC-S340-RETRO-AUDIT-SCANS-FIXTURE-FAILS-ONCE-AND-PASSES-ON-RETRY`, which carries
+`verify: manual` because its subject is intermittency and **is unadjudicated, not refuted** —
+its own text says neither, and a single run of it reports either verdict. 7 + 11 + 3 = 21;
+available PC-backed residue is ZERO because the only two candidates that were available
+shipped in the previous release. A heading-only
+grep against the working-tree file reads 46 and 26 instead and is the wrong instrument; the
+bold-bullet entries it cannot see are a named consumer defect in their own right. Both subjects
+were taken on this session's own ranking, because the one-liner arrived from a peer session.
+Neither touches a bootstrapping file (`preclassify.sh`, `apply.sh`, `ledger-reverify.sh`, the
+update skill), so they ship together. `core/` paths in range, derived with `git diff --stat`:
+`core/scripts/audit-layer-debt.sh` and `core/fixtures/layer-debt-ledger/run.sh`; subject B is
+`docs/` only.
+
+#### `BL-243`
+
+`audit-layer-debt.sh`'s row-scoped citation acquittal read a declared id ANYWHERE in a row's
+`reason`, so *"This is not tracked under OWED-C and a narrowing is still owed."* was silenced by
+the very mention that denies the handle. The remedy the entry first named — reusing `cue_denied`'s
+machinery — was refuted at batch 95 by building it: `not` is excluded from `NEGATED` for a
+recorded measurement of the CUE filter, so the shared set cannot spell this subject, and widening
+it closes the receipt while leaking into the cue filter.
+
+What shipped is a citation-local vocabulary, `CITATION_NEGATED`, separate from `NEGATED` and
+admitting `not`, bounded to the mention's own SENTENCE (`[.;:]`, not `CLAUSE_END`'s comma) and
+searching only the text before the mention; the acquittal is now per-occurrence, `any(not
+citation_denied(...))`, because one clean mention is a handle and because `all()` over an empty
+generator would acquit every row mentioning no declared id and silence the arm. The sentence bound
+is forced by the second idiom, *"Separately and not part of this verdict, OWED-<id>"*, where the
+comma sits between the negator and the mention. `NEGATED`, `CLAUSE_END`, `cue_denied` and `PROSE`
+are byte-unchanged.
+
+Behaviour on the only register that exists is unchanged in both directions, re-derived at base and
+at the fix from `git archive` copies `cmp -s`-asserted to differ, through the shipping script's own
+objects: 478 rows, 36 declared ids, 193 candidate rows, 1 acquitted by `CITED` on both, UNDECLARED
+6 on both, the same six entries. The new vocabulary's false-positive set is **0 on the candidate
+set** and 6 on the whole register, every one outside the candidate set; the sixth of those is
+acquitted today only because its ENTRY declares an `owed` on another row, which the entry records.
+
+The entry's receipt was INVERTED and is replaced. Its four-row register asserted three memberships
+and nothing about the rest of the set, so it returned 0 on nine wrong rules — the comma bound, the
+bound dropped, each of the three other vocabulary members dropped, a whole-reason negator search, a
+20-character window, a literal phrase match, and a sentence bound on both sides of the mention. The
+replacement asserts the EXACT undeclared set over a twelve-row register seeding one decision each,
+with a no-mention row asserted present as the arm-alive control before the comparison. The tip
+adversary then built nineteen implementations against the assembled release: seventeen died, and
+two — one blanking quoted spans and one blanking parenthesised spans before the negator search —
+passed all fifty fixture assertions and the receipt while acquitting *"This is 'not' tracked under
+OWED-C …"*. Every seed carried its negator in bare prose. Two seeds now carry it inside a quote and
+inside a parenthesis, both reported by the shipped subject, and the stripping non-fix reads 2 of
+50 red. Scored on
+detached copies with every mutation `cmp -s`-asserted to have applied: fix 0; base, comment-only,
+reflow-only, acquittal-deleted, `CITED`-gutted, MN1–MN7, MN9, MN10 and all four non-fixes 1; MN8
+(`any`→`all`) 9.
+
+#### `BL-248`
+
+Ten staged `verify: sh` receipts under `docs/reviews/` read the distribution CHECKOUT through
+`$DIST` — the exact form `v0.567.0`'s subtractive grammar refuses as `NEEDS-REVIEW` — and the
+hazard is the hand-carry that puts one into the consumer's ledger, where its engine scores it
+against whatever the operator last checked out. Eight are rewritten onto `$THEIRS_TREE`, each
+opening with the `[ -n "${THEIRS_TREE:-}" ] || exit 127;` guard the engine header prescribes, each
+brief/batch-file twin `cmp`-asserted byte-identical after the rewrite. The equivalence control ran
+every original beside its rewrite under the engine's exported values against a detached worktree
+and a `git archive` of the same sha (the two sides asserted to differ): every pair returns the same
+exit, none 127, and every rewrite exits 127 with `$THEIRS_TREE` unset.
+
+Two findings changed the shape while it was being built. The two layer-drift receipts and the
+fanout pair are FALSE POSITIVES of the shipped grammar that cannot be rewritten:
+`layer-drift.sh:225` binds `DIST="$1"` and hands it to `git -C`, and
+`report-propagation-fanout.sh:216` runs `git rev-parse --git-dir` on its project root, so a tree
+with no `.git` takes the layer-drift receipt from 0 to 127 and the fanout one likewise. The
+GIT_DIR-borrow workaround was built and refuted — `git ls-files` then answers from the checkout's
+INDEX, measured on a divergent tree pair — and the synthetic-repo shape replaces the engine's
+`${BASE}~1..${BASE}` scope. The fanout pair therefore moves only its subject read
+(`S=` onto `$THEIRS_TREE`) and keeps `AI_DLC_PROJECT_ROOT="$DIST"` as a repository handle. And
+the spec-join pair was a NULL at HEAD, pinned at 127 by a DISARM on a seed that mentioned `CAP-7`
+and defined none; the seed is repaired, the original then returns 1, and only then was it
+rewritten.
+
+The receipt now greps all three files for `S="$DIST/core/scripts"` and drives the shipped
+`receipt_reads_dist_as_path` — extracted from the engine at run time, exit 9 if it moves — over
+every `verify: sh` line of the three files, with the four expected refusals enumerated by content
+and a seeded control that must be refused in the same run. Scored: base 1, tip 0, comment carrying
+the literals 1, brief-only rewrite 1, fanout pair unrewritten 1, engine deleted 9. 45 lines driven,
+4 refused, 0 unexpected, against 8 before. The tip adversary then seeded a fourth offender spelled
+like the fanout exemption and the receipt acquitted it; the refused count is now bound to exactly
+three, and that seed reads 1.
+
 ## [0.568.0] - 2026-09-13
 
 ### PC-S342-CHECK-20-IS-UNREACHABLE-AT-SPRINT-REVIEW-SO-NO-OVERRIDE-CAN-RELAX-IT-THERE — Check 20 joins the `sprint-review` manifest row, so an override shadowing it reaches that gate

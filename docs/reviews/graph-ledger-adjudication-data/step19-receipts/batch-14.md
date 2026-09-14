@@ -26,15 +26,21 @@ the tree moved; consumer read-only. Nothing was written outside this file.
 the process cwd at `$DIST`; the emitter disagrees. `ledger-reverify.sh:1015` runs
 `bash -c "cd \"$CONSUMER\" && { $rest; }"`, so the consumer engine runs it at **`$CONSUMER`**, while
 `extract-receipts.sh` measures it at `$DIST` under `set -u`. Each receipt therefore opens with
-`cd "$DIST" || exit 127` and names no relative path, and both were measured rc=0 under **both**
-harnesses.
+`[ -n "${THEIRS_TREE:-}" ] || exit 127; cd "$THEIRS_TREE" || exit 127` and names no relative path.
+
+**The cwd is `$THEIRS_TREE` and not `$DIST`, because `$DIST` is a CHECKOUT.** `ledger-reverify.sh`'s
+header records that a receipt reading `$DIST` as a filesystem path measures whatever the operator
+last checked out rather than `theirs`, and the grammar at `ledger-reverify.sh:809` refuses that form
+as NEEDS-REVIEW. The subject each receipt runs — the script under `core/scripts/` — is therefore
+resolved from the materialized tree at theirs, and the opening guard degrades the receipt to a
+review rather than a false close on an engine that predates the value.
 
 **Neither receipt exposes a path to `receipt_absent_subjects`, and that took a deliberate spelling.**
 That guard (`ledger-reverify.sh:502-515`) extracts `(docs|_bmad-output|scripts|\.claude)/…` from the
 receipt text with an **unanchored** regex, so a receipt naming `core/scripts/x.sh` yields
 `scripts/x.sh`, which does not exist under the consumer root — turning a future genuine
 CLOSE-CANDIDATE into a NEEDS-REVIEW. Both receipts split the path at that boundary
-(`S="$DIST/core/scripts"; F="$S/…"`), and the guard's own regex run against both receipt texts
+(`S="$THEIRS_TREE/core/scripts"; F="$S/…"`), and the guard's own regex run against both receipt texts
 extracts **0** paths, against a control text (`scripts/ai-dlc/foo.sh`) from which the same
 invocation extracts one.
 
@@ -62,10 +68,16 @@ verify: (absent — this entry carries no directive, so flush() emits no row for
 **NEW**
 
 ```
-verify: sh cd "$DIST" || exit 127; S="$DIST/core/scripts"; V="$S/validate-spec-join.sh"; [ -f "$V" ] || exit 127; d=$(mktemp -d) || exit 127; mkdir -p "$d/bare" "$d/qual" || exit 127; printf "# PRD\n\n- FR-S303-1 the functional requirement, CAP-7\n- LR-S303-1 the locked requirement\n" > "$d/prd.md"; printf "# SPEC\n\nCAP-7 the capability\n" > "$d/bare/SPEC.md"; cp "$d/bare/SPEC.md" "$d/qual/SPEC.md" || exit 127; printf -- "- (capability) LR-S303-1 -> CAP-7\n" > "$d/bare/.memlog.md"; printf -- "- (capability by bmad-spec) LR-S303-1 -> CAP-7\n" > "$d/qual/.memlog.md"; cmp -s "$d/bare/.memlog.md" "$d/qual/.memlog.md" && { rm -rf "$d"; exit 127; }; bash "$V" --spec "$d/bare" --prd "$d/prd.md" >"$d/b.out" 2>&1; b=$?; bash "$V" --spec "$d/qual" --prd "$d/prd.md" >"$d/q.out" 2>&1; q=$?; [ "$b" -eq 0 ] || { rm -rf "$d"; exit 127; }; [ "$q" -eq 0 ] && { rm -rf "$d"; exit 1; }; [ "$q" -eq 2 ] || { rm -rf "$d"; exit 127; }; grep -q "no .(capability). entries" "$d/q.out" || { rm -rf "$d"; exit 127; }; rm -rf "$d"; exit 0
+verify: sh [ -n "${THEIRS_TREE:-}" ] || exit 127; cd "$THEIRS_TREE" || exit 127; S="$THEIRS_TREE/core/scripts"; V="$S/validate-spec-join.sh"; [ -f "$V" ] || exit 127; d=$(mktemp -d) || exit 127; mkdir -p "$d/bare" "$d/qual" || exit 127; printf "# PRD\n\n- FR-S303-1 the functional requirement, CAP-7\n- LR-S303-1 the locked requirement\n" > "$d/prd.md"; printf -- "# SPEC\n\n- **CAP-7** the capability\n" > "$d/bare/SPEC.md"; cp "$d/bare/SPEC.md" "$d/qual/SPEC.md" || exit 127; printf -- "- (capability) LR-S303-1 -> CAP-7\n" > "$d/bare/.memlog.md"; printf -- "- (capability by bmad-spec) LR-S303-1 -> CAP-7\n" > "$d/qual/.memlog.md"; cmp -s "$d/bare/.memlog.md" "$d/qual/.memlog.md" && { rm -rf "$d"; exit 127; }; bash "$V" --spec "$d/bare" --prd "$d/prd.md" >"$d/b.out" 2>&1; b=$?; bash "$V" --spec "$d/qual" --prd "$d/prd.md" >"$d/q.out" 2>&1; q=$?; [ "$b" -eq 0 ] || { rm -rf "$d"; exit 127; }; [ "$q" -eq 0 ] && { rm -rf "$d"; exit 1; }; [ "$q" -eq 2 ] || { rm -rf "$d"; exit 127; }; grep -q "no .(capability). entries" "$d/q.out" || { rm -rf "$d"; exit 127; }; rm -rf "$d"; exit 0
 ```
 
 **Measured today: rc=0 (STILL-LIVE).**
+
+**RE-MEASURED WHEN THIS RECEIPT MOVED ONTO `$THEIRS_TREE`: rc=1 (CLOSE-CANDIDATE), and before the
+seed repair below it was a NULL at rc=127.** Neither value is caused by the rewrite: original and
+rewritten forms were driven in the same invocation against a detached worktree and a `git archive`
+of the same commit, and agreed. The rc is a property of the subject, not of the harness's refs —
+re-run with `$BASE` at three distinct commits it reads 1 each time.
 
 **Two-sided probe.** Base rc=0 with the bare-form control at **0** and the qualified run at **2**;
 mutant rc=1, the mutation being the one literal `\((capability|capabilities)\)` widened to
@@ -93,6 +105,27 @@ adjudication upstream is where that residue is owed, not here. Secondarily, the 
 minimal, so a future arm added *above* `:164` that this corpus fails to satisfy would drop the
 control arm off 0 and the receipt would report NEEDS-REVIEW rather than STILL-LIVE — the safe
 direction, and it costs a read.
+
+**THAT SECOND HESITATION CAME TRUE, AND IT HAD MADE THE RECEIPT A NULL.** Re-measured while moving
+this receipt onto `$THEIRS_TREE`: an arm added above the subject — the `mentions CAP-<n> but DEFINES
+none` DISARM — refuses the seeded `SPEC.md`, which writes `CAP-7 the capability` as bare prose. Both
+arms exited 2, the control arm was therefore not 0, and the receipt exited **127** on its
+`[ "$b" -eq 0 ]` guard. A receipt pinned at 127 reports NEEDS-REVIEW on every run and can never
+report either verdict, so it measured nothing at all — the safe direction, as predicted, and still
+a dead receipt. **The repair is in the SEED, not in the arms**: the DISARM's own message names the
+shape it reads, so the seed now writes `- **CAP-7** the capability`, which the definition grammar at
+`:535` matches (verified by driving that one `sed` expression against the seed text, which yields
+`CAP-7`, and against the old seed text, which yields nothing). With that seed the control arm is
+**0** and the receipt is armed again.
+
+**And armed, it reads 1 — the subject was fixed upstream.** `CAP_ENTRIES` now lives at `:797` and
+already carries `([[:space:]][^)]*)?`, the exact widening this entry's mutant paragraph describes,
+so the qualified arm returns 0 and the receipt reports CLOSE-CANDIDATE. Driven four ways in one
+invocation, on a `mktemp` copy `cmp`-asserted to differ from the shipping file: shipping grammar
+with the repaired seed gives bare=0 qual=0; the grammar reverted to the entry's stated old form
+gives bare=0 qual=2. The two sides move on the grammar and not on the seed, so the `1` is this
+entry's own subject being gone rather than an artifact of the seed repair. Adjudicating that close
+is the upstream entry's, not this file's.
 
 ## Pin 4392 — `PC-S303-FANOUT-SCRIPT-ARGV-OVERFLOW-ON-LARGE-DIFF`
 
@@ -141,10 +174,18 @@ verify: (absent — this entry carries no directive, so flush() emits no row for
 **NEW**
 
 ```
-verify: sh cd "$DIST" || exit 127; S="$DIST/core/scripts"; F="$S/report-propagation-fanout.sh"; [ -f "$F" ] || exit 127; git -C "$DIST" ls-files --error-unmatch VERSION >/dev/null 2>&1 || exit 127; h=$(git -C "$DIST" -c core.quotepath=false diff -U0 "${BASE}~1" "$BASE" | grep -c "^@@ ") || exit 127; [ "$h" -ge 1 ] || exit 127; d=$(mktemp -d) || exit 127; printf "#!/bin/sh\ncat >/dev/null\nenv > %s/env\n" "$d" > "$d/python3" || exit 127; chmod +x "$d/python3" || exit 127; AI_DLC_PROJECT_ROOT="$DIST" PATH="$d:$PATH" bash "$F" "${BASE}~1" "$BASE" >/dev/null 2>&1; [ -s "$d/env" ] || { rm -rf "$d"; exit 127; }; grep -q "^PATH=" "$d/env" || { rm -rf "$d"; exit 127; }; f=$(grep -c '^VERSION$' "$d/env"); g=$(grep -c "^@@ " "$d/env"); rm -rf "$d"; { [ "$f" -ge 1 ] || [ "$g" -ge 1 ]; } || exit 1; exit 0
+verify: sh [ -n "${THEIRS_TREE:-}" ] || exit 127; cd "$THEIRS_TREE" || exit 127; S="$THEIRS_TREE/core/scripts"; F="$S/report-propagation-fanout.sh"; [ -f "$F" ] || exit 127; git -C "$DIST" ls-files --error-unmatch VERSION >/dev/null 2>&1 || exit 127; h=$(git -C "$DIST" -c core.quotepath=false diff -U0 "${BASE}~1" "$BASE" | grep -c "^@@ ") || exit 127; [ "$h" -ge 1 ] || exit 127; d=$(mktemp -d) || exit 127; printf "#!/bin/sh\ncat >/dev/null\nenv > %s/env\n" "$d" > "$d/python3" || exit 127; chmod +x "$d/python3" || exit 127; AI_DLC_PROJECT_ROOT="$DIST" PATH="$d:$PATH" bash "$F" "${BASE}~1" "$BASE" >/dev/null 2>&1; [ -s "$d/env" ] || { rm -rf "$d"; exit 127; }; grep -q "^PATH=" "$d/env" || { rm -rf "$d"; exit 127; }; f=$(grep -c '^VERSION$' "$d/env"); g=$(grep -c "^@@ " "$d/env"); rm -rf "$d"; { [ "$f" -ge 1 ] || [ "$g" -ge 1 ]; } || exit 1; exit 0
 ```
 
 **Measured today: rc=0 (STILL-LIVE).**
+**RE-MEASURED WHEN THIS RECEIPT'S SUBJECT READ MOVED ONTO `$THEIRS_TREE`: rc=1 (CLOSE-CANDIDATE).**
+The rewrite is not the cause: the original and rewritten forms were driven in one invocation against
+a detached worktree and a `git archive` of the same commit and both returned 1, and the value holds
+with `$BASE` at three distinct commits. It is the FULL fix arm described below, reached — both
+signatures read **0**, because `:323-324` now exports `FANOUT_DIFF_FILE` and `FANOUT_FILES_FILE`,
+two paths under a `mktemp`, and the python at `:359` and `:452` reads each payload from its file.
+Neither payload is on the environment channel the receipt measures. Adjudicating that close belongs
+to the upstream entry, not to this file.
 
 **Two-sided probe.** Three variants in one `mktemp -d`, pairwise `cmp`-asserted to differ (all three
 comparisons non-zero) before any output was read, and the fix shape leaves the `export` statement
@@ -176,6 +217,21 @@ receipt also pins `AI_DLC_PROJECT_ROOT="$DIST"`, which the tracked script does n
 resolves the same root from its own directory; the pin is there so the measurement cannot silently
 move if the receipt is ever run against a copy, and it does mean a regression in that resolver is
 invisible here.
+
+**AND THAT ONE `$DIST` STAYS, WHILE THE SUBJECT READ BESIDE IT MOVED TO `$THEIRS_TREE`.** The two
+uses are not the same kind of read. `S="$THEIRS_TREE/core/scripts"` resolves the SCRIPT UNDER TEST,
+which must come from theirs; `AI_DLC_PROJECT_ROOT` here is a REPOSITORY HANDLE, because
+`report-propagation-fanout.sh:216` runs `git rev-parse --git-dir` against that root and exits 2 when
+it is not a repository — and `$THEIRS_TREE` is a `git archive` extraction with no `.git`. Measured:
+the receipt with both halves moved exits **127**, which the engine scores NEEDS-REVIEW rather than
+STILL-LIVE, so the whole measurement is lost. Two workarounds were built and refuted. Borrowing
+`$DIST`'s `GIT_DIR` runs (rc=1) and still discriminates, but the corpus is `git ls-files`, so it
+answers from the CHECKOUT's index — measured on a deliberately divergent pair, the borrowed index
+lists a path absent from the tree the script reads, which is this defect one call frame down.
+Building a synthetic repository inside the receipt also discriminates, but it replaces the engine's
+exported `${BASE}~1..${BASE}` scope, whose immutability is the point stated above. So this line is a
+KNOWN false positive of the subtractive grammar at `ledger-reverify.sh:809`, which strips only the
+`git -C` form: carried into a ledger it reads NEEDS-REVIEW, which costs one read and never an entry.
 
 ## Where this differs from batch-13
 

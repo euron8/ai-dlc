@@ -30,7 +30,7 @@ WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 REG="$WORK/register.jsonl"
 
-EXPECTED_ASSERTIONS=29
+EXPECTED_ASSERTIONS=50
 fails=0; made=0
 ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
@@ -479,7 +479,23 @@ fi
 # unable to tell this from the fix, and assertion 15 must go RED. Anchored on the `continue`
 # rather than on the `CITED =` assignment so it reverts the BEHAVIOUR and not the derivation —
 # reverting only one layer of a two-layer change leaves a mutant that proves the other layer.
-M_CIT3="$(mkmut cit3 '    if CITED is not None and CITED.search(reason):
+#
+# THE ANCHOR MOVED WITH THE CITATION-NEGATION CHANGE AND THIS MUTATION FOLLOWED IT. The acquittal
+# was a whole-reason `CITED.search(reason)`; it is now a per-OCCURRENCE `any(not
+# citation_denied(...))` spanning two lines, so the old single-line anchor matches NOTHING and
+# `mkmut` refuses the no-op — the fixture goes red on the commit that fixes the defect, which
+# reads exactly like the fix being wrong. Re-anchored on the two-line form, SCORED THREE WAYS as
+# `fixture-mutants.md` requires:
+#   ANCHOR UNIQUE — the three-line literal below occurs once in the subject; the impossible-anchor
+#     control in the same derivation occurs zero times, so the 1 is a discriminating 1.
+#   RIGHT OBSERVABLE FOR THE RIGHT REASON — on `CIT_REG` it reports c1 (the citation acquittal is
+#     gone) and leaves c7 acquitted (the OLD `cue_denied` discount still runs), which is the
+#     conjunction below. On `CIT_NEG_REG` it reports EVERY row, the signature of a reader that
+#     consults no citation at all.
+#   FAILS ONLY ITS OWN ASSERTION — of the n-seeds it alone moves n0 and n9, and those two cells
+#     are moved by no other mutant in this file.
+M_CIT3="$(mkmut cit3 '    if CITED is not None and any(not citation_denied(reason, m)
+                                 for m in CITED.finditer(reason)):
         continue' '    if False:
         continue')"
 if [ -z "$M_CIT3" ]; then
@@ -494,6 +510,373 @@ else
   else
     bad "MUTATION M3: the cited row stayed acquitted with the key disabled — assertion 15 passes against a reader that never consults it"
   fi
+fi
+
+# --- 26-40. A DECLARED-ID CITATION DENIED IN ITS OWN SENTENCE IS NOT A HANDLE ----------------
+# THE DEFECT. The acquittal above was a whole-reason `CITED.search(reason)`, so ANY occurrence
+# of a declared id acquitted the row — including one inside a clause that DENIES the handle.
+# *"This is not tracked under OWED-CIT-X and a narrowing is still owed."* names a real,
+# undeclared obligation and says in as many words that the id is not its handle, and it was
+# silenced. That is the false-acquittal direction, which for a recall-biased arm is the
+# expensive one: the glance a false positive costs is nothing beside a debt that stops being
+# reported.
+#
+# THE SUBJECT IS A SECOND VOCABULARY, NOT A WIDER `NEGATED`. `CITATION_NEGATED` governs the
+# MENTION of a declared id and admits `not`; `NEGATED` governs a CUE and excludes it, on a
+# measurement recorded beside that regex. n8 and MN10 below are the pair that holds the two
+# apart — widening `NEGATED` reaches n8, and nothing else here does.
+#
+# WHAT EACH SEED ISOLATES, and each is here because it is the only row in this register that
+# dies under its own mutant:
+#   n0  live shape, ACQUITTED — an un-negated mention. The fix must not touch it. Only M_CIT3
+#       moves it, which is what makes the whole section a statement about the citation key.
+#   n1  the filed subject, REPORTED — `not` before the mention in its own sentence.
+#   n2  REPORTED — negator and mention straddle a COMMA. MN2's only cell; a comma-bounded
+#       search starts after the `not` and finds nothing, which is why this bound is `.;:`.
+#   n3  ACQUITTED — the negator sits in the PREVIOUS sentence and must not reach the mention.
+#       Carries a `PROSE` cue of its own, so it is a row the arm would otherwise report: a
+#       seed with no cue is acquitted by the cue filter and proves nothing about the bound.
+#   n4  REPORTED — isolates `no`. MN5's only cell.
+#   n5  REPORTED — isolates `rather than`. MN6's only cell.
+#   n6  REPORTED — isolates `instead of`. MN7's only cell.
+#   n7  ACQUITTED — one denied mention AND one clean mention. The per-OCCURRENCE `any` rule.
+#       Scored on its OWN register below, never here; see MN8.
+#   n8  CUE-SIDE CONTROL, REPORTED — `not` denying a cue with no citation anywhere. It is
+#       reported before and after, and MN10 is the only mutant that acquits it.
+#   n9  ACQUITTED — a `no` AFTER the mention. The search runs only BEFORE, so a negator
+#       downstream of the id cannot deny it. Only M_CIT3 moves it.
+#   n10 REPORTED — the sentence-initial `not` form, with no trailing `and ... still owed`
+#       clause. MN4/MN9's cell: they and MN1 are the only mutants that acquit it.
+CIT_NEG_REG="$WORK/register-citneg.jsonl"
+: >"$CIT_NEG_REG"
+python3 - >>"$CIT_NEG_REG" <<'PY'
+import json
+base = {"clause":"LC-E4","subject_digest":"0"*40,"verdict":"still-additive",
+        "recorded_utc":"2026-01-01T00:00:00Z"}
+def r(entry, reason, owed=None):
+    d = dict(base, entry=entry, reason=reason)
+    if owed: d["owed"] = owed
+    print(json.dumps(d))
+r("extensions/n0.md",  "The narrowing is owed under OWED-CIT-X.")
+r("extensions/n1.md",  "This is not tracked under OWED-CIT-X and a narrowing is still owed.")
+r("extensions/n2.md",  "Separately and not part of this verdict, OWED-CIT-X. A split is still deferred.")
+r("extensions/n3.md",  "No restatement of core here. The narrowing is owed under OWED-CIT-X.")
+r("extensions/n4.md",  "No handle under OWED-CIT-X; a split is still deferred.")
+r("extensions/n5.md",  "Tracked here rather than under OWED-CIT-X; the split is still deferred.")
+r("extensions/n6.md",  "Filed here instead of under OWED-CIT-X; the narrowing is still owed.")
+r("extensions/n7.md",  "Not under OWED-CIT-X; the narrowing is owed under OWED-CIT-X.")
+r("extensions/n8.md",  "A narrowing is not owed here.")
+r("extensions/n9.md",  "The narrowing is owed under OWED-CIT-X, and no second split is deferred.")
+r("extensions/n10.md", "Not tracked under OWED-CIT-X; a split is still deferred.")
+# n12/n13 — THE NEGATOR INSIDE A QUOTE OR A PARENTHESIS. Both REPORTED. Measured by the tip
+# adversary: an implementation that blanks quoted spans, or parenthesised spans, before searching
+# for a negator passed all fifty assertions above and the entry's receipt, because every seed above
+# carries its negator in bare prose. A quoted `not` is still a denial, and the live register's
+# sixth sentence-denied mention is exactly a `not` inside a quoted fragment.
+r("extensions/n12.md", "This is 'not' tracked under OWED-CIT-X and a narrowing is still owed.")
+r("extensions/n13.md", "Filed elsewhere (not under OWED-CIT-X) and a narrowing is still owed.")
+# THE DECLARING ROW. Without it `declared` is empty, `CITED` is None, and every arm above
+# passes for a reason that has nothing to do with the citation key.
+r("extensions/nd.md", "declaring the migration", {"id":"OWED-CIT-X","what":"split X out"})
+PY
+cn_out="$(bash "$AUDIT" --register "$CIT_NEG_REG" 2>&1)"
+cn_und="$(awk '/^UNDECLARED/,/^$/' <<<"$cn_out")"
+cn_names() { grep -oE 'n[0-9]+\.md' <<<"$1" | sort -u | tr '\n' ' '; }
+CN_EXPECT='n1.md n10.md n12.md n13.md n2.md n4.md n5.md n6.md n8.md '
+
+# 26 — THE VERDICT, as the EXACT reported set. A membership assertion is reachable by the wrong
+# rows; this names every cell of the register in one string, so any mutant that moves any row
+# either way is caught here whether or not its own arm below fires.
+cn_got="$(cn_names "$cn_und")"
+[ "$cn_got" = "$CN_EXPECT" ] \
+  && ok "the citation-negation reported set is exactly {n1,n2,n4,n5,n6,n8,n10,n12,n13} — every denied mention reported, every un-denied one acquitted" \
+  || { bad "the citation-negation set was '$cn_got', expected '$CN_EXPECT'"; sed 's/^/        /' <<<"$cn_out"; }
+
+# 27 — the filed SUBJECT, asserted on its own so a failure names the defect rather than a set.
+grep -q 'n1\.md' <<<"$cn_und" \
+  && ok "a row denying the handle in the mention's own sentence is still reported — a citation inside a clause that denies it is not a handle" \
+  || { bad "the denied-citation row was acquitted — ANY occurrence of a declared id silences a row that says the id does not track it"; sed 's/^/        /' <<<"$cn_out"; }
+
+# 28 — LIVE-SHAPE CONTROL, one property apart from 27: the same sentence without the negator.
+# This is the row the whole acquittal exists for, and the measured live register holds exactly
+# this shape. Without it every arm above is satisfied by a fix that acquits nothing at all.
+grep -q 'n0\.md' <<<"$cn_und" \
+  && { bad "CONTROL: the un-negated citation was reported — the new vocabulary reaches the live shape and the acquittal is gone"; sed 's/^/        /' <<<"$cn_out"; } \
+  || ok "CONTROL: a citation with no negator before it is still acquitted — the fix narrows the acquittal, it does not delete it"
+
+# 29 — the SENTENCE bound, from the acquitting side: a negator one sentence back does not reach.
+grep -q 'n3\.md' <<<"$cn_und" \
+  && { bad "CONTROL: a negator in the PREVIOUS sentence denied the mention — the search is unbounded and a `no` anywhere upstream silences a citation"; sed 's/^/        /' <<<"$cn_out"; } \
+  || ok "CONTROL: a negator in the previous sentence does not deny the mention — the search is bounded to the mention's own sentence"
+
+# 30 — and from the other side: a negator AFTER the mention does not reach it either. The bound
+# is directional, and 29 alone passes against a search that reads the whole reason backwards.
+grep -q 'n9\.md' <<<"$cn_und" \
+  && { bad "CONTROL: a `no` occurring AFTER the mention denied it — the search does not stop at the mention"; sed 's/^/        /' <<<"$cn_out"; } \
+  || ok "CONTROL: a negator occurring after the mention does not deny it — the search runs only on the text before"
+
+# 31 — THE CUE SIDE DID NOT MOVE. `not` denies a MENTION and must not deny a CUE; this row has
+# no citation at all, so only a widened `NEGATED` can acquit it. MN10 is its mutant.
+grep -q 'n8\.md' <<<"$cn_und" \
+  && ok "CONTROL: a \`not\`-denied CUE with no citation is still reported — \`not\` did not leak into \`NEGATED\`" \
+  || { bad "CONTROL: the cue-side row was acquitted — \`not\` reached the cue filter, and the two vocabularies have collapsed into one"; sed 's/^/        /' <<<"$cn_out"; }
+
+# 32 — STRUCTURAL: the citation vocabulary is its OWN compiled pattern. An alias
+# (`CITATION_NEGATED = NEGATED`) satisfies every behavioural arm above whose seed does not turn
+# on `not`, and reintroduces the coupling the split exists to refuse. MN9 is its mutant; this
+# arm is the byte-level statement beside it.
+n="$(grep -c '^CITATION_NEGATED = re\.compile(' "$AUDIT")" || n=0
+[ "$n" -eq 1 ] \
+  && ok "\`CITATION_NEGATED\` is its own \`re.compile(\` — the citation vocabulary is a separate set, not an alias of the cue one" \
+  || bad "\`CITATION_NEGATED = re.compile(\` occurred $n times, expected 1 — the citation vocabulary is aliased, aliased away, or declared twice"
+
+# 33 — STRUCTURAL: `NEGATED` is BYTE-IDENTICAL to the literal this change left it at. The
+# behavioural twin of 31, keyed on the line rather than on a row, so a widening is caught even
+# on a register that happens to seed no cue-only row.
+n="$(grep -cxF 'NEGATED = re.compile(r"\bno\b|\brather than\b|\binstead of\b", re.I)' "$AUDIT")" || n=0
+[ "$n" -eq 1 ] \
+  && ok "the \`NEGATED\` line is byte-identical to the cue vocabulary this change did not touch" \
+  || bad "the \`NEGATED\` line moved ($n exact matches, expected 1) — the cue vocabulary changed under a citation fix"
+
+# --- MUTANTS MN1-MN10 -----------------------------------------------------------------------
+# ONE CELL PER MUTANT, AND THE CELLS WERE DERIVED BY BUILDING ALL TEN AND READING THE MATRIX
+# rather than reasoned about. Reported cells on `CIT_NEG_REG`, subject then mutants, `x` marks
+# the cell each arm below is keyed on:
+#
+#             n0   n1   n2   n3   n4   n5   n6   n7   n8   n9   n10
+#   subject   acq  REP  REP  acq  REP  REP  REP  acq  REP  acq  REP
+#   MN1       acq  acq  acq  acq  acqx acq  acq  acq  REP  acq  acq
+#   MN2       acq  REP  acqx acq  REP  REP  REP  acq  REP  acq  REP
+#   MN3       acq  REP  REP  REPx REP  REP  REP  REP  REP  acq  REP
+#   MN4       acq  acq  acq  acq  REP  REP  REP  acq  REP  acq  acqx
+#   MN5       acq  REP  REP  acq  acqx REP  REP  acq  REP  acq  REP
+#   MN6       acq  REP  REP  acq  REP  acqx REP  acq  REP  acq  REP
+#   MN7       acq  REP  REP  acq  REP  REP  acqx acq  REP  acq  REP
+#   MN8       acq  REP  REP  acq  REP  REP  REP  REP  acq  acq  REP   (scored elsewhere)
+#   MN9       acq  acq  acq  acq  REP  REP  REP  acq  REP  acq  acq
+#   MN10      acq  acq  REP  acq  REP  REP  REP  acq  acqx acq  REP
+#   M_CIT3    REP  REP  REP  REP  REP  REP  REP  REPx REP  REPx REP
+#
+# MN3 MOVES n7 AS WELL AS n3, AND BOTH MOVEMENTS ARE TRUE OF THE SAME PROPERTY. Dropping the
+# bound makes the sentence-initial `Not` in n7 reach the SECOND mention too, so the row loses
+# its clean mention. Assertion 29 OWNS the bound and is keyed on n3; n7's arm is MN8's and is
+# scored on MN8's own register, where MN8 is the only mutant it reads. Neither arm is vacuous
+# and neither is keyed on a cell the other reads.
+#
+# MN1 AND MN4 SHARE n1, WHICH IS WHY NEITHER IS SCORED ON IT. MN1 (revert to a whole-reason
+# search) acquits six rows; MN4 (drop `not`) acquits three, all six of MN1's being a superset.
+# The separating cells are n4 — MN1 acquits it, MN4 does not — and n10, which MN4 acquits and
+# MN1 also does. So MN1 OWNS n4 and MN4 owns n10, and each arm below reads its own cell plus a
+# conjunct naming a cell the OTHER mutant moves, so neither can pass by moving everything.
+#
+# MN4 AND MN9 ARE BEHAVIOURALLY IDENTICAL ON THIS REGISTER — measured, the same three cells —
+# because `NEGATED` is `CITATION_NEGATED` minus `not` and the alias reproduces it exactly. That
+# is not a redundant mutant: MN9 is the one assertion 32 exists for, and the two are separated
+# STRUCTURALLY rather than behaviourally. Scored together, with 32 as the arm that tells them
+# apart, because inventing a behavioural difference between them would be inventing a seed the
+# subject cannot distinguish either.
+
+# 34 — MN1, THE REVERT: the per-occurrence rule dropped for a whole-reason search, which is the
+# state before this change. Its cell is n4.
+MN1="$(mkmut mn1 '    if CITED is not None and any(not citation_denied(reason, m)
+                                 for m in CITED.finditer(reason)):
+        continue' '    if CITED is not None and CITED.search(reason):
+        continue')"
+if [ -z "$MN1" ]; then
+  bad "FIXTURE ERROR: the whole-reason revert MN1 DID NOT APPLY — the citation-negation arms prove nothing"
+else
+  mn1_und="$(awk '/^UNDECLARED/,/^$/' <<<"$(bash "$MN1" --register "$CIT_NEG_REG" 2>&1)")"
+  if grep -q 'n4\.md' <<<"$mn1_und"; then
+    bad "MUTATION MN1: a whole-reason citation search still reported the \`no\`-denied row — the arms above cannot tell a per-occurrence rule from a search"
+  elif grep -q 'n8\.md' <<<"$mn1_und"; then
+    ok "MUTATION MN1: reverted to a whole-reason search every denied citation is acquitted (so the section is live), while the cue-only row survives"
+  else
+    bad "MUTATION MN1: the cue-only row vanished too — MN1 reaches \`NEGATED\`'s subject and the two vocabularies are entangled"
+  fi
+fi
+
+# 35 — MN2, the bound widened to the COMMA, i.e. `CLAUSE_END`'s set. Its cell is n2, whose
+# negator and mention straddle a comma; nothing else here separates the two bounds.
+MN2="$(mkmut mn2 'SENTENCE_END = re.compile(r"[.;:]")' 'SENTENCE_END = re.compile(r"[.;:,]")')"
+if [ -z "$MN2" ]; then
+  bad "FIXTURE ERROR: the comma-bound mutation MN2 DID NOT APPLY — assertion 26 proves nothing about the bound"
+else
+  mn2_und="$(awk '/^UNDECLARED/,/^$/' <<<"$(bash "$MN2" --register "$CIT_NEG_REG" 2>&1)")"
+  if grep -q 'n2\.md' <<<"$mn2_und"; then
+    bad "MUTATION MN2: a comma-bounded search still reported the comma-spliced denial — the bound is not what makes that row work"
+  elif grep -q 'n1\.md' <<<"$mn2_und"; then
+    ok "MUTATION MN2: bounded at the comma the comma-spliced denial is acquitted (so the sentence bound is live), while the single-clause denial survives"
+  else
+    bad "MUTATION MN2: the single-clause denial vanished too — MN2 moves two cells and the bound arm is entangled with assertion 27"
+  fi
+fi
+
+# 36 — MN3, the bound DROPPED entirely, so the search runs from the start of the reason. Its
+# cell is n3, whose negator sits in the previous sentence.
+MN3="$(mkmut mn3 '    for b in SENTENCE_END.finditer(reason, 0, m.start()):
+        start = b.end()
+' '')"
+if [ -z "$MN3" ]; then
+  bad "FIXTURE ERROR: the no-bound mutation MN3 DID NOT APPLY — assertion 29 proves nothing"
+else
+  mn3_und="$(awk '/^UNDECLARED/,/^$/' <<<"$(bash "$MN3" --register "$CIT_NEG_REG" 2>&1)")"
+  if grep -q 'n3\.md' <<<"$mn3_und"; then
+    grep -q 'n9\.md' <<<"$mn3_und" \
+      && bad "MUTATION MN3: the after-the-mention row moved too — MN3 reaches assertion 30's cell and the two bound arms are entangled" \
+      || ok "MUTATION MN3: with the bound dropped a negator in the PREVIOUS sentence denies the mention (so assertion 29 is live), while a negator after the mention still does not"
+  else
+    bad "MUTATION MN3: the previous-sentence row stayed acquitted with the bound removed — assertion 29 passes whatever the search window is"
+  fi
+fi
+
+# 37 — MN4, the vocabulary WITHOUT `not`, i.e. `NEGATED`'s member set spelled into the citation
+# regex. Its cell is n10; n1 is MN1's too and is read here only as a conjunct.
+MN4="$(mkmut mn4 'CITATION_NEGATED = re.compile(r"\bno\b|\bnot\b|\brather than\b|\binstead of\b", re.I)' 'CITATION_NEGATED = re.compile(r"\bno\b|\brather than\b|\binstead of\b", re.I)')"
+if [ -z "$MN4" ]; then
+  bad "FIXTURE ERROR: the drop-\`not\` mutation MN4 DID NOT APPLY — assertion 27 proves nothing about \`not\`"
+else
+  mn4_und="$(awk '/^UNDECLARED/,/^$/' <<<"$(bash "$MN4" --register "$CIT_NEG_REG" 2>&1)")"
+  if grep -q 'n10\.md' <<<"$mn4_und"; then
+    bad "MUTATION MN4: without \`not\` the sentence-initial denial was still reported — no arm here turns on \`not\` being in the citation vocabulary"
+  elif grep -q 'n4\.md' <<<"$mn4_und"; then
+    ok "MUTATION MN4: dropping \`not\` acquits the sentence-initial denial (so \`not\` is load-bearing), while the \`no\` form survives"
+  else
+    bad "MUTATION MN4: the \`no\` form vanished too — MN4 removed more than \`not\` and its cell is shared with MN5"
+  fi
+fi
+
+# 38-40 — MN5/MN6/MN7, one member of the vocabulary dropped each. Every member gets a seed that
+# isolates it and a mutant that drops it, so no member is in the set without a subject.
+#
+# THE REPLACEMENT REGEX IS SPELLED WITH ONE BACKSLASH AND THAT IS THE WHOLE TRAP. Written
+# `\\bno\\b` — the habit from an `awk -v` or a double-quoted context — python's raw string
+# takes it as a literal backslash, `CITATION_NEGATED` then matches NOTHING, every citation is
+# un-denied and the mutant acquits all seven reported rows at once. It applies cleanly, `cmp -s`
+# sees a real edit, and the kill is scored for a reason that has nothing to do with the dropped
+# member. Caught here by the survivor conjunct going red, which is what that conjunct is for.
+mn_member() { # mn_member <label> <regex-without-the-member> <own-cell> <survivor-cell> <member>
+  local m; m="$(mkmut "$1" 'CITATION_NEGATED = re.compile(r"\bno\b|\bnot\b|\brather than\b|\binstead of\b", re.I)' "CITATION_NEGATED = re.compile(r\"$2\", re.I)")"
+  if [ -z "$m" ]; then
+    bad "FIXTURE ERROR: the drop-\`$5\` mutation DID NOT APPLY — no arm proves \`$5\` is load-bearing"
+    return
+  fi
+  local u; u="$(awk '/^UNDECLARED/,/^$/' <<<"$(bash "$m" --register "$CIT_NEG_REG" 2>&1)")"
+  if grep -q "$3\.md" <<<"$u"; then
+    bad "MUTATION $1: dropping \`$5\` still reported $3 — that seed does not isolate \`$5\` and the member has no subject"
+  elif grep -q "$4\.md" <<<"$u"; then
+    ok "MUTATION $1: dropping \`$5\` from the citation vocabulary acquits $3 (so \`$5\` is load-bearing), while $4 survives"
+  else
+    bad "MUTATION $1: $4 vanished too — dropping \`$5\` moved a cell another member owns"
+  fi
+}
+mn_member MN5 '\bnot\b|\brather than\b|\binstead of\b' n4 n5 'no'
+mn_member MN6 '\bno\b|\bnot\b|\binstead of\b'          n5 n4 'rather than'
+mn_member MN7 '\bno\b|\bnot\b|\brather than\b'         n6 n4 'instead of'
+
+# 41 — MN8, `any` -> `all`, ON ITS OWN SINGLE-CANDIDATE REGISTER. `all()` over an EMPTY
+# generator is True, so on the shared register this mutant acquits every row that mentions no
+# declared id and silences the arm wholesale — a kill scored for a reason that has nothing to
+# do with the per-occurrence rule. This register holds n7 (one denied mention, one clean one),
+# a genuine obligation that cites nothing (n11, the row `all` wrongly acquits, which is what
+# makes the second conjunct a statement rather than a formality), and the declaring row.
+MN8_REG="$WORK/register-citneg-any.jsonl"
+: >"$MN8_REG"
+python3 - >>"$MN8_REG" <<'PY'
+import json
+base = {"clause":"LC-E4","subject_digest":"0"*40,"verdict":"still-additive",
+        "recorded_utc":"2026-01-01T00:00:00Z"}
+def r(entry, reason, owed=None):
+    d = dict(base, entry=entry, reason=reason)
+    if owed: d["owed"] = owed
+    print(json.dumps(d))
+# n7 — the SUBJECT: the second mention carries no negator in its sentence, so one clean mention
+# is a handle and the row is acquitted. Under `all` the denied first mention is enough to report it.
+r("extensions/n7.md", "Not under OWED-CIT-X; the narrowing is owed under OWED-CIT-X.")
+# n11 — the row `all` silences: a genuine obligation citing NOTHING, so its generator is empty
+# and `all()` is vacuously True. Reported by the subject and by every mutant except MN8.
+r("extensions/n11.md", "A narrowing is still owed here.")
+r("extensions/nd.md", "declaring the migration", {"id":"OWED-CIT-X","what":"split X out"})
+PY
+any_und="$(awk '/^UNDECLARED/,/^$/' <<<"$(bash "$AUDIT" --register "$MN8_REG" 2>&1)")"
+any_got="$(cn_names "$any_und")"
+[ "$any_got" = "n11.md " ] \
+  && ok "one clean mention beside a denied one is a handle — the rule is per OCCURRENCE, and the row citing nothing is still reported" \
+  || { bad "the per-occurrence register reported '$any_got', expected 'n11.md '"; sed 's/^/        /' <<<"$any_und"; }
+
+MN8="$(mkmut mn8 'any(not citation_denied(reason, m)' 'all(not citation_denied(reason, m)')"
+if [ -z "$MN8" ]; then
+  bad "FIXTURE ERROR: the \`all\` mutation MN8 DID NOT APPLY — the per-occurrence rule proves nothing"
+else
+  mn8_und="$(awk '/^UNDECLARED/,/^$/' <<<"$(bash "$MN8" --register "$MN8_REG" 2>&1)")"
+  if ! grep -q 'n7\.md' <<<"$mn8_und"; then
+    bad "MUTATION MN8: under \`all\` the row with one clean mention stayed acquitted — no arm distinguishes \`any\` from \`all\`"
+  elif grep -q 'n11\.md' <<<"$mn8_und"; then
+    bad "MUTATION MN8: the row citing nothing was reported too — \`all\` did not vacuously acquit it and this register cannot show the cost"
+  else
+    ok "MUTATION MN8: under \`all\` one denied mention condemns the row AND the citation-free row is vacuously acquitted — both halves of why the rule is \`any\`"
+  fi
+fi
+
+# 42 — MN9, the ALIAS: `CITATION_NEGATED = NEGATED`, with `NEGATED` itself untouched. It is the
+# collapse assertion 32 is keyed on, and it passes every arm whose seed does not turn on `not`.
+MN9="$(mkmut mn9 'CITATION_NEGATED = re.compile(r"\bno\b|\bnot\b|\brather than\b|\binstead of\b", re.I)' 'CITATION_NEGATED = NEGATED')"
+if [ -z "$MN9" ]; then
+  bad "FIXTURE ERROR: the alias mutation MN9 DID NOT APPLY — assertion 32 proves nothing"
+else
+  n="$(grep -c '^CITATION_NEGATED = re\.compile(' "$MN9")" || n=0
+  mn9_und="$(awk '/^UNDECLARED/,/^$/' <<<"$(bash "$MN9" --register "$CIT_NEG_REG" 2>&1)")"
+  if [ "$n" -ne 0 ]; then
+    bad "MUTATION MN9: the alias left a \`CITATION_NEGATED = re.compile(\` behind — assertion 32 cannot see an aliased vocabulary"
+  elif grep -q 'n1\.md' <<<"$mn9_und"; then
+    bad "MUTATION MN9: aliased to \`NEGATED\` the filed subject was still reported — the separate vocabulary is not what reports it"
+  else
+    ok "MUTATION MN9: aliased to \`NEGATED\` the vocabulary loses \`not\` and the filed subject is acquitted, and assertion 32's grep goes to 0 — so the separation is asserted structurally as well as behaviourally"
+  fi
+fi
+
+# 43 — MN10, the move MN9 inverts: `NEGATED` WIDENED with `not` instead of a second vocabulary.
+# Its cell is n8, the cue-only row — the leak into the cue filter, which no other mutant here
+# reaches and which assertion 33 asserts at the byte level.
+MN10="$(mkmut mn10 'NEGATED = re.compile(r"\bno\b|\brather than\b|\binstead of\b", re.I)' 'NEGATED = re.compile(r"\bno\b|\bnot\b|\brather than\b|\binstead of\b", re.I)')"
+if [ -z "$MN10" ]; then
+  bad "FIXTURE ERROR: the \`NEGATED\`-widening mutation MN10 DID NOT APPLY — assertion 31 proves nothing"
+else
+  mn10_und="$(awk '/^UNDECLARED/,/^$/' <<<"$(bash "$MN10" --register "$CIT_NEG_REG" 2>&1)")"
+  if grep -q 'n8\.md' <<<"$mn10_und"; then
+    bad "MUTATION MN10: widening \`NEGATED\` with \`not\` still reported the cue-only row — assertion 31 cannot see \`not\` leaking into the cue filter"
+  elif grep -q 'n2\.md' <<<"$mn10_und"; then
+    ok "MUTATION MN10: \`not\` admitted to \`NEGATED\` silences a cue the citation vocabulary must not reach (so assertion 31 is live), while the citation arms are unmoved"
+  else
+    bad "MUTATION MN10: the comma-spliced citation moved too — MN10 reaches the citation side and the two vocabularies are not independent here"
+  fi
+fi
+
+# 44 — M_CIT3 ON THE NEW REGISTER. The re-anchored disable mutant's third scoring: with the
+# citation key gone EVERY row of this register is reported, including the two the fix acquits
+# for reasons no other mutant here touches. That is the signature of a reader consulting no
+# citation at all, and it is what makes the acquittals above statements about this key.
+if [ -z "$M_CIT3" ]; then
+  bad "FIXTURE ERROR: the disable mutation DID NOT APPLY — the citation-negation acquittals prove nothing"
+else
+  m3n_und="$(awk '/^UNDECLARED/,/^$/' <<<"$(bash "$M_CIT3" --register "$CIT_NEG_REG" 2>&1)")"
+  m3n_got="$(cn_names "$m3n_und")"
+  [ "$m3n_got" = "n0.md n1.md n10.md n12.md n13.md n2.md n3.md n4.md n5.md n6.md n7.md n8.md n9.md " ] \
+    && ok "MUTATION M_CIT3 on the citation-negation register: with the key disabled every row is reported, including the four the fix acquits — so each acquittal above is this key's doing" \
+    || { bad "MUTATION M_CIT3 reported '$m3n_got' on the citation-negation register — the disabled key did not report every row, so some acquittal above is somebody else's"; sed 's/^/        /' <<<"$m3n_und"; }
+fi
+
+# 45 — UNMUTATED CONTROL FOR THIS SECTION, necessary and not sufficient, so it carries a
+# POSITIVE conjunct: a copy taken and invoked exactly as MN1-MN10 are must still report the
+# denied citation AND leave the live shape acquitted. A subject replaced by `exit 0` reports
+# nothing and fails the first half.
+CN_CTL="$WORK/control-citneg.sh"
+cp "$AUDIT" "$CN_CTL"
+cnc_out="$(bash "$CN_CTL" --register "$CIT_NEG_REG" 2>&1)"; cnc_rc=$?
+if [ "$cnc_rc" -eq 0 ] && [ "$(cn_names "$(awk '/^UNDECLARED/,/^$/' <<<"$cnc_out")")" = "$CN_EXPECT" ]; then
+  ok "CONTROL: an UNMUTATED copy, taken and invoked exactly as MN1-MN10 are, reproduces the exact baseline set — so the kills above are the mutations and not the harness"
+else
+  bad "CONTROL: an unmutated copy did not reproduce the citation-negation baseline (rc=$cnc_rc) — every kill in this section may be the harness failing to run the subject"
+  sed 's/^/        /' <<<"$cnc_out"
 fi
 
 # 25 — UNMUTATED CONTROL, necessary and not sufficient, so it carries a POSITIVE conjunct: a
