@@ -237,12 +237,35 @@ fi
 has_paths_key() { grep -qx 'paths' <<<"$(fm_keys "$1")"; }
 has_uncond()    { grep -q '<!-- *unconditional:' "$1"; }
 
+# EXACTLY ONCE MEANS ONCE, AND A REPEATED KEY IS THE THIRD WAY TO BREAK IT. The three
+# branches below covered neither/both/empty-reason; a file declaring `paths:` TWICE passed
+# all three and this arm printed `ok -- every rule declares its scope exactly once` over it.
+# YAML keeps the LAST duplicate key, so the earlier block is dead text that reads to a human
+# as the rule's scope -- the same byte-indistinguishable-states problem A3b already exists
+# for, one level down. `fm_keys` is the shared frontmatter extractor, so this counts the same
+# keys A3 and A3b's other branches read, in the same block.
+#
+# KEYED ON THE REPEAT, NOT ON A VALUE, A LINE OR A FILE. An arm matching the literal
+# `paths: core/**`, or line 2, or one rule file's name closes on the seed shape and leaves
+# every real file green -- measured as a non-fix. The property is `count > 1`.
+# `grep -c` PRINTS ITS ZERO AND EXITS 1, so capture first and default on FAILURE. The
+# `|| echo 0` form emits two zeros and the arithmetic below then aborts with no verdict.
+paths_key_count() { _pkc="$(grep -cx 'paths' <<<"$(fm_keys "$1")")" || _pkc=0; printf '%s' "$_pkc"; }
+
 printf -- '---\npaths:\n  - "x/**"\n---\nbody\n'            > "$probe/a3b_scoped.md"
 printf -- '<!-- unconditional: because reasons -->\nbody\n'  > "$probe/a3b_uncond.md"
 printf -- 'body only, no declaration\n'                      > "$probe/a3b_neither.md"
+# The DUPLICATE probe, and its near-miss. The offender carries two `paths:` keys with
+# DIFFERENT values at DIFFERENT positions -- nothing about the seed's value, line number or
+# filename may be what the arm reads. The near-miss carries a second `paths:` in the BODY,
+# below the closing `---`, which is prose and not a declaration: `fm_keys` must not count it.
+printf -- '---\npaths:\n  - "a/**"\nfoo: bar\npaths:\n  - "b/**"\n---\nbody\n' > "$probe/a3b_dup.md"
+printf -- '---\npaths:\n  - "a/**"\n---\nbody mentions paths: in prose\n'      > "$probe/a3b_dupmiss.md"
 if has_paths_key "$probe/a3b_scoped.md" && ! has_uncond "$probe/a3b_scoped.md" \
    && has_uncond "$probe/a3b_uncond.md" && ! has_paths_key "$probe/a3b_uncond.md" \
-   && ! has_paths_key "$probe/a3b_neither.md" && ! has_uncond "$probe/a3b_neither.md"; then
+   && ! has_paths_key "$probe/a3b_neither.md" && ! has_uncond "$probe/a3b_neither.md" \
+   && [ "$(paths_key_count "$probe/a3b_dup.md")" -gt 1 ] \
+   && [ "$(paths_key_count "$probe/a3b_dupmiss.md")" -eq 1 ]; then
   for f in $(rule_files); do
     # A3 OWNS THE CURSOR-KEY CASE, and this arm stands down for it. A file carrying
     # `globs:` has MISdeclared its scope, not failed to declare one, and both arms firing
@@ -259,10 +282,20 @@ if has_paths_key "$probe/a3b_scoped.md" && ! has_uncond "$probe/a3b_scoped.md" \
     elif [ "$u" = "1" ] && ! grep -qE '<!-- *unconditional:[[:space:]]*[^[:space:]>-]' "$f"; then
       err "A3b: $f carries an EMPTY \`unconditional:\` marker. Resident-in-every-session is the most expensive declaration in this repo and it is the one nobody can audit without a reason."
     fi
+    # THIS BRANCH IS SEPARATE FROM THE if/elif CHAIN ABOVE, DELIBERATELY. A file can carry
+    # two `paths:` keys AND a marker, and the chain's `p=1 u=1` branch would consume it and
+    # never report the duplicate. It also sits INSIDE this loop, not beside `rule_globs()`:
+    # measured, an arm placed there printed its FAIL and the validator still exited 0,
+    # because `err` sets `fail=1` and that assignment is lost to a command-substitution
+    # subshell. The exit is the verdict, so the arm has to run where `fail` survives.
+    n_paths="$(paths_key_count "$f")"
+    if [ "$n_paths" -gt 1 ]; then
+      err "A3b: $f declares \`paths:\` $n_paths times in its frontmatter. YAML keeps the LAST one, so every earlier block is dead text that reads to a human as this rule's scope while the loader obeys a different glob -- and A2 then validates a glob that decides nothing. Declare the scope once, in one \`paths:\` block."
+    fi
   done
-  say "  A3b ok  -- every rule declares its scope exactly once (probe fired all three ways)"
+  say "  A3b ok  -- every rule declares its scope exactly once (probe fired all five ways)"
 else
-  err "A3b's own probe did not fire: scoped/unconditional/neither were not told apart. The scope verdicts below are vacuous."
+  err "A3b's own probe did not fire: scoped/unconditional/neither/duplicate/prose-near-miss were not told apart. The scope verdicts below are vacuous."
 fi
 
 # ---------------------------------------------------------------------------
