@@ -11746,8 +11746,19 @@ pass the **absolute** consumer root:
 
 ```
 cd /Users/n8/git/graph && bash .claude/skills/ai-dlc-update/reconcile/ledger-reverify.sh \
-  /Users/n8/git/ai-dlc <base-sha> /Users/n8/git/graph <theirs-sha>
+  /Users/n8/git/ai-dlc <dist-base-ref> /Users/n8/git/graph <dist-theirs-ref>
 ```
+
+**BOTH REF ARGUMENTS ARE DISTRIBUTION REFS, AND PASSING A CONSUMER SHA AS `theirs` FAILS
+SILENTLY.** `theirs_show()` at `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:312` is
+`git -C "$DIST" show "${THEIRS}:$1"` — the ref resolves against the DISTRIBUTION, never the
+consumer, and the script's own usage line at `:117` reads
+`<dist-repo> <base-sha> <consumer-root> <theirs-ref>`. A consumer sha in that slot resolves to
+nothing, every `theirs_show` returns empty, and the run still **exits 0 and prints a full,
+plausible row set**. Measured at batch 105: the histogram was INVARIANT across eight different
+ref pairs, which is the tell — a resolution control that moves no verdict has established that
+the program read its argument, not that a row can move. `base` is the distribution ref the
+consumer INSTALLED (read its stamp), and `theirs` is the distribution ref under test.
 
 **Ping the operator** on any question, on any decision, on completion, and on any early stop.
 This program runs for many releases; from outside, a session that is thinking and a session that
