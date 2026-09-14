@@ -244,9 +244,98 @@ reading, and the prose this gap needs ("take the dispatch time from the row rath
 the beat's liveness line") sits squarely in that grammar's blast radius. It gets its own entry and
 its own before/after measurement, not a paragraph appended under a fix about pipe characters.
 
+### BATCH 107 SHIPPED AS `v0.573.0`, ONE RELEASE — **THE SWEEP WAS NOT EMPTY: FIVE PC-BACKED CANDIDATES WERE FILED ON THE CONSUMER THE SAME DAY, ALL CORE-OWNED, AFTER FOUR CONSECUTIVE BLOCKS DECLARED THE RESIDUE ZERO.** TWO WERE ADJUDICATED (BOTH REFUSED, ONE SHIPPING A NARROW HALF) AND **THREE WERE NOT ANALYSED AT ALL**. THE CONTRACT ADVERSARY FOUND FIVE BLOCKERS ACROSS TWO PASSES AND THE TWO THAT MATTERED WOULD BOTH HAVE SHIPPED GREEN. THE GAP IS **TWO**, AND THE PULL IS **NOT REQUIRED**.
+
+This block replaces the batch-106 record below it. Re-derive every figure rather than reading it.
+
+**`VERSION` IS `0.573.0`, SO BATCH 108 RELEASES AS `0.574.0`.** Re-derive `VERSION` and add one.
+Batch 107 merged ONCE — `v0.573.0` at `0b9aa8ae` (PR #757) — naming `BL-072`, `BL-095` and both
+adjudicated `PC-S311-*` ids verbatim in the release commit message (control: an impossible
+`BL-` id returns 0 on the same join). Both entries are ROTATED, archive **173 → 175**, live
+**76 → 74**. No bootstrapping file moved: the range `8dc03c41..origin/main` touches **0** paths
+under the update skill, against a control of 1 `core/` path in the same range.
+
+**THE SWEEP RETURNED WORK, AND THAT IS THE STANDING LESSON OF THIS BATCH.** Live moved 59 → 62
+and unfiled 21 → 25. Five `PC-S311-*` candidates were filed at sprint 311's retro on the same day
+this batch ran, every one core-owned with `Rule 27` forbidding a consumer-side fix, every one
+scoring 0 in `origin/main` commit messages AND 0 in both backlog files against a positive control
+of 1. **Four consecutive resume blocks had said the PC-backed residue was zero. Run the sweep.**
+
+**TWO WERE ADJUDICATED AND BOTH REFUSALS ARE IN THIS FILE'S `## Adjudication` SECTIONS, NOT IN
+`docs/backlog.md`.** That siting is a MEASURED constraint, not a style choice: base R5 headroom is
+ZERO, so ONE new backlog entry fires `12 > 11` and fails the push. Refusal verdicts go in the plan;
+rotation moves entries and receipts together and keeps R5 quiet (it read 14/14 at this close).
+
+**THREE OF THE FIVE WERE NEVER ANALYSED AND ARE NOT ADJUDICATED** —
+`PC-S311-GATE-ADJUDICATOR-CHECK-26-COVERAGE-MISS-NOT-SELF-VERIFIED`,
+`PC-S311-QA-ORPHANED-FUNCTION-CHECK-MISSES-REACHABILITY-REGRESSION`, and
+`PC-S311-PER-STORY-GATE-TOPOLOGY-CANNOT-SEE-CROSS-STORY-JOIN-PROPERTIES`. **The first is
+plausibly the one CONSTRUCTIBLE PC-backed subject of the five** — a verdict that skipped a
+declared check is distinguishable against the adjudicator's own declared check list, unlike the
+other two, which are `verify: manual` prose changes. That is the readiest work for batch 108.
+
+**WHAT SHIPPED FOR `BL-072`.** `validate-no-dead-doc-refs.sh` looped `docs/*.md` and searched for
+the BASENAME, so 90 of 122 files were outside the corpus AND a nested citation was unspellable by
+the key even where the loop reached it. Both halves ship; widening the loop alone is a NON-FIX
+that the old receipt CLOSED on. Figures re-derived (the entry's 31/105/74 had expired): **32
+top-level / 122 total / 90 uncovered**, control `find docs -maxdepth 1` = 32, equal to the glob.
+**The loop form is MANDATED in the entry, because two natural forms ship GREEN while broken**:
+under bash 3.2 there is no globstar, so `docs/**/*.md` means `docs/*/*.md` and enumerates 75 of
+122 while dropping ALL 32 top-level files at exit 0; and `find … | while read` loses `fail=1` to a
+subshell, printing findings and exiting 0. Cost **+6.81s on the SERIAL GATE** (2.699s → 9.506s,
+five interleaved reps per side, spread ±0.287s against a 6.81s effect, measured twice by two hands
+with different harnesses) — **suite makespan is UNCHANGED**, because 0 fixtures DRIVE the
+validator and the pole stays `ledger-reverify`. The arm has **no live subject today**: 58 nested
+paths cited from `core/`, 0 on disk.
+
+**WHAT SHIPPED FOR `BL-095`.** A `.claude/rules/*.md` file could declare `paths:` TWICE while A3b
+printed `ok -- every rule declares its scope exactly once`. It is not last-wins: `rule_globs`
+UNIONS both blocks while a YAML loader resolves the duplicate to one, so the validator could
+certify a glob the loader discards — two readers disagreeing in a direction nothing compares. The
+arm sits INSIDE A3b's `for f in $(rule_files)` loop, because an arm sited at
+command-substitution scope prints its FAIL and **exits 0**, `err()`'s `fail=1` lost to a subshell.
+FP set EMPTY across all 10 rule files.
+
+**BOTH RECEIPTS WERE REPLACED, AND THE SECOND ONE IS THE LESSON.** `BL-072`'s answered on an
+incidental syntactic property of how the fix was TYPED — a `find | while read` form exits 9
+(its `^for doc in` capture is empty) and a second-loop form exits 1 (`head -1` reads the original
+line), so it REJECTED two correct fixes while CLOSING on the loop-only non-fix. `BL-095`'s seeded
+an INVARIANT duplicate — always the literal `paths: core/**`, always line 2, always the `head -1`
+of a sorted glob — so an arm keyed on any ONE of those three incidental properties scored a close
+while leaving all 10 rule files green. **Ask of every receipt seed what is INVARIANT about it.**
+Each replacement now carries a second seed varying the property its predecessor held fixed.
+
+**THE ADVERSARY FOUND FIVE BLOCKERS AND THE TWO THAT MATTERED WOULD HAVE SHIPPED GREEN** — the
+globstar coverage reduction and the overfit-closable receipt, both above. It also refuted the
+lead's own reasoning twice: the I19 obstacle that withdrew `BL-095`'s sibling half was a CASE
+artefact of the lead's candidate wording (the grammar has no `-i`; the lowercase form scores 0
+against a control of 1), and the lead's stated reason the existing `lightweight` clause survives
+I19 was wrong in its mechanism. **A cited derivation was also empty**: `git log -S 'except where
+that step'` returns nothing because the file WRAPS mid-phrase, and its impossible-token control
+returned nothing too — two zeros reading as a clean result. Re-derived on `'intensity gate skips
+it'`, the repair is `b3debba3` / `v0.568.0`.
+
+**CONTROL TOKENS DECAY AND TWO ARE NOW DEAD.** `PC-S999-NEVER` returns **3** on
+`git log -F --grep` over `origin/main` and appears in 2 tracked files; `BL-999-NEVER-EXISTS-8817`
+is in 1 tracked file. Verify a token absent in BOTH channels — commit messages AND tracked files —
+before trusting a zero beside it, and write verdicts that say "an impossible token" rather than
+naming one, because recording the measurement is what destroys the instrument.
+
+**THE PULL IS NOT REQUIRED AND THE GAP IS TWO.** Consumer stamp `0.571.0`, shipped `0.573.0`.
+Neither changed validator SHIPS — both score 0 under `core/` and 0 in `scripts/install.sh` against
+a control of 1 — so the consumer effect is **ZERO BY CONSTRUCTION** and no differential was run;
+there is no null to report. Gate: 21 phases, 21 PASS, 0 FAIL, the three re-run fixtures read by
+name against an impossible-name control of 0, remote ref confirmed before the PR.
+
+**THE RELEASE TRIPLE FAILED ON THE FIRST CUT AND THE FIX WAS ORDERING, NOT AN EXCEPTION.** The
+CHANGELOG heading landed in an earlier commit than the `VERSION` bump, so three commits between
+them disagreed; arm B is unconditional for a recorded reason. Folding the heading into the release
+commit made the three names one claim. **Bump `VERSION` and add the `## [X.Y.Z]` heading in the
+SAME commit.**
+
 ### BATCH 106 SHIPPED AS `v0.572.0`, ONE RELEASE, TWO NO-BOOTSTRAPPING SUBJECTS — THE SWEEP WAS EMPTY OF PC WORK AGAIN AND BOTH SUBJECTS WERE NO-`PC` BACKLOG ENTRIES; THE CONTRACT ADVERSARY FOUND FOUR BLOCKERS BEFORE THE BUILD (ONE OF THEM THAT THE LEAD'S OWN BL-223 REFUTATION WAS WRONG), **AND THE TIP ADVERSARY FOUND THREE MORE ON A GATE-GREEN TREE, EVERY ONE A SEED GAP: EVERY ARM DROVE AN ABSOLUTE PATH WHILE THE CONSUMER'S ONE FLAGLESS CALLER PASSES A RELATIVE ONE; THE FIXTURE'S OWN `AI_DLC_` HERMETICITY SCRUB HID AN ENV BACK DOOR; AND THE CORRECT ROUTE.MD SENTENCE SOFT-WRAPPED FAILED ITS OWN ARM.** THE CONSUMER PULLED ITSELF TO `0.571.0` MID-BATCH. THE GAP IS **ONE**, PENDING **0**, AND THE PULL IS **NOT REQUIRED**.
 
-This block replaces the batch-105 record below it. Re-derive every figure rather than reading it.
+This block was current at batch 106's close and is replaced by the batch-107 record above it.
 
 **`VERSION` IS `0.572.0`, SO BATCH 107 RELEASES AS `0.573.0`.** Re-derive `VERSION` and add one.
 Batch 106 merged ONCE — `v0.572.0` at `1428dacb` (PR #755) — naming `BL-250` and `BL-220` verbatim
@@ -10551,6 +10640,39 @@ given at batch 90.
    **DO NOT TREAT A BATCH-82 RECEIPT AS TRUSTWORTHY BECAUSE IT EXISTS.** Three of them were
    rebuilt in one release: the originals closed on an empty file, on a dead arm, and on a
    positional window.
+
+   **BATCH 107's SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope any of them.** `BL-072` and
+   `BL-095` shipped as `v0.573.0` at `0b9aa8ae` (PR #757), each cited verbatim in the release
+   commit message beside the two adjudicated `PC-S311-*` ids. Both are ROTATED (archive 173 → 175,
+   live 76 → 74). No bootstrapping file moved. The gap is TWO and the pull is NOT required.
+
+   **THE SWEEP WAS NOT EMPTY AT THIS CLOSE, AFTER FOUR BLOCKS RUNNING SAID IT WOULD BE.** Five
+   `PC-S311-*` candidates were filed on the consumer at sprint 311's retro, all core-owned, all
+   `Rule 27`. **TWO ARE ADJUDICATED** — both REFUSED, with verdicts in this file's
+   `## Adjudication` sections; one of them shipped a narrow step-file half.
+   **THREE WERE NEVER ANALYSED AND ARE THE READIEST WORK FOR THIS BATCH**:
+   `PC-S311-GATE-ADJUDICATOR-CHECK-26-COVERAGE-MISS-NOT-SELF-VERIFIED` first — it is plausibly the
+   one CONSTRUCTIBLE candidate of the five, because a verdict that skipped a declared check is
+   distinguishable against the adjudicator's own declared check list — then
+   `PC-S311-QA-ORPHANED-FUNCTION-CHECK-MISSES-REACHABILITY-REGRESSION` and
+   `PC-S311-PER-STORY-GATE-TOPOLOGY-CANNOT-SEE-CROSS-STORY-JOIN-PROPERTIES`, both `verify: manual`
+   prose subjects. **Run the sweep anyway; it moved live 59 → 62 and unfiled 21 → 25 in one day.**
+
+   **A REFUSAL VERDICT GOES IN THIS FILE'S `## Adjudication` SECTION, NEVER INTO `docs/backlog.md`.**
+   Measured at this close: base R5 headroom is ZERO, so ONE new backlog entry fires `12 > 11` and
+   FAILS THE PUSH. Do not lower `--min-sh-receipts`/`--min-entries` to get around it — that is
+   loosening a ratchet, and rotation (which moves entries and receipts together) is what keeps R5
+   quiet.
+
+   **`BL-223` IS PC-BACKED AND IS A PROGRAM, NOT A RELEASE — and older paragraphs below call it
+   the readiest no-`PC` work, which is WRONG.** Its body cites
+   `PC-S308-WRITE-FORMAT-STEERING-APPLIED-AD-HOC-NOT-UNIVERSALLY` in its first sentence (control:
+   `BL-002` scores 0). `write-format-steering.json` genuinely cannot express N formats per member —
+   a second entry under one `name` is a hard `FAIL — FIELD: … declared twice` — so taking it means
+   a schema change, a reader change, a self-probe rebuild and a receipt rotation across a schema
+   ~23 fixtures read. **And the only thing satisfying its CURRENT receipt is a fabricated producer
+   line that takes I95, the receipt AND the full enforcement map to 0 for a path nothing writes.
+   Do not "close BL-223".**
 
    **BATCH 106's TWO SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope either.** `BL-250` and
    `BL-220` shipped together as `v0.572.0` at `1428dacb` (PR #755), each cited in the release commit
