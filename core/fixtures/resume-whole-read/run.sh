@@ -157,6 +157,50 @@ if [ -n "$MUTANT" ]; then
       awk '/wait-for-deliverable\.sh/ && /--since/ { t=$0; sub(/^[[:space:]]+/, "", t); print "     Do NOT run " t; next }
            { print }' "$ROUTE" > "$MUT"
       ;;
+    since-skip)
+      # NEGATION BY ANOTHER WORD. `since-negated` above covers the `not`/`never`
+      # family; this covers the family that carries no negative particle at all
+      # and still tells the reader the run is optional. A grammar keyed only on
+      # `not`/`never` passes this, which is why it is a mutant and not a comment.
+      # Must fail A10 ALONE.
+      awk '/wait-for-deliverable\.sh/ && /--since/ { t=$0; sub(/^[[:space:]]+/, "", t); print "     Skip running " t; next }
+           { print }' "$ROUTE" > "$MUT"
+      ;;
+    since-item3)
+      # SITING, INSIDE the window. `since-at-eof` moves the sentence OUT of Step 0
+      # entirely; this one keeps it in Step 0 and only changes which ITEM owns it,
+      # moving it into item 3 (the "snapshot exists but this is not a resume"
+      # branch). Unfenced, uncommented, non-negated, in-window -- every property
+      # the arm scored before this repair. Only the OWNING item differs, and a
+      # reader reconciling the ledger never reaches item 3. Must fail A10 ALONE.
+      awk '/wait-for-deliverable\.sh/ && /--since/ { t=$0; sub(/^[[:space:]]+/, "", t); saved=t; next }
+           /^3\. If the snapshot exists but user input does NOT indicate a resume/ {
+             print; if (saved != "") print "   " saved; next }
+           { print }' "$ROUTE" > "$MUT"
+      ;;
+    since-wrapped)
+      # FALSE-POSITIVE CONTROL, and the only mutant here that must PASS.
+      #
+      # The shipped instruction, wording unchanged to the byte, soft-wrapped
+      # across continuation lines at the ~70-column width every other bullet in
+      # route.md already uses. Nothing about the instruction changed; only where
+      # the newlines fall. An A10 that reads PHYSICAL lines fails this, so any
+      # reflow of route.md -- an edit with no behavioural content -- would turn
+      # the fixture red and read exactly like a regression. The verdict block
+      # below gives this mutant its own arm: `fails` must be ZERO.
+      awk '/wait-for-deliverable\.sh/ && /--since/ {
+             t = $0; sub(/^[[:space:]]+/, "", t)
+             n = split(t, w, " "); line = ""
+             for (i = 1; i <= n; i++) {
+               cand = (line == "" ? w[i] : line " " w[i])
+               if (length(cand) > 65 && line != "") { print "     " line; line = w[i] }
+               else { line = cand }
+             }
+             if (line != "") print "     " line
+             next
+           }
+           { print }' "$ROUTE" > "$MUT"
+      ;;
     since-other-program)
       # `--since` and `dispatched-at` attributed to a DIFFERENT program. The
       # flag is named, the cell is named, and the beat is never armed. Must fail
@@ -176,6 +220,7 @@ if [ -n "$MUTANT" ]; then
       echo "  known: section-read | no-budget | reorder | no-entry-line |" >&2
       echo "         no-handoff-token | no-since-route | since-at-eof |" >&2
       echo "         since-in-comment | since-in-fence | since-negated |" >&2
+      echo "         since-skip | since-item3 | since-wrapped |" >&2
       echo "         since-other-program | blank" >&2
       exit 2
       ;;
@@ -293,16 +338,50 @@ esac
 # deliverable is older or absent and named neither the program nor the flag
 # that makes it correct across a session boundary.
 #
-# WHAT A10 CAN AND CANNOT SCORE. It scores THREE properties and no others:
-# PRESENCE (the program, the flag and the cell are named), SITING (they are
-# named inside the Step 0 window, in text a reader following the file
-# executes -- not in a fenced example, not in an HTML comment, not elsewhere
-# in the file), and NON-NEGATION (the clause before the program name does not
-# tell the reader to skip it). It CANNOT score whether the instruction is
-# CORRECT -- whether `--since` takes that cell, whether the beat is the right
-# beat, whether the value is well-formed. A rewrite that names all three
-# tokens in one non-negated in-window sentence and gives wrong advice passes
-# this arm. Correctness is the reviewer's, and the arm claims no more.
+# WHAT A10 CAN AND CANNOT SCORE, PLAINLY. It scores THREE properties and no
+# others:
+#
+#   PRESENCE -- the program, the flag and the cell are all named in one
+#   LOGICAL line (see the unwrap below: a logical line is a list item with its
+#   soft-wrapped continuations joined, so where the newlines fall is not a
+#   property this arm reads).
+#
+#   SITING -- that logical line is inside the Step 0 window, in text a reader
+#   following the file executes (not in a fenced example, not in an HTML
+#   comment, not elsewhere in the file), AND it is the item that opens
+#   `Reconcile every `In-Flight Teammates` row` -- the same item A5 keys on.
+#   A reader reconciling the ledger is in that item and nowhere else, so an
+#   instruction filed under a sibling item is an instruction they never reach.
+#
+#   NON-NEGATION -- the clause before the program name, back to the previous
+#   sentence boundary, carries none of a LISTED set of negators.
+#
+# IT CANNOT SCORE WHETHER THE PROSE IS AN INSTRUCTION AT ALL. A bare see-also
+# list ("See also: `wait-for-deliverable.sh`, `--since`, `dispatched-at`.")
+# and a past-tense narrative sentence carrying the same three tokens both
+# PASS, and are both known to pass: they satisfy presence, siting and
+# non-negation while instructing nothing. No imperative-verb grammar is
+# attempted here -- English mood is not a property a token scan can read, and
+# a grammar that tried would flag wording changes with no behavioural content
+# while still missing the next paraphrase.
+#
+# IT CANNOT SCORE CORRECTNESS EITHER: whether `--since` takes that cell,
+# whether the beat is the right beat, whether the value is well-formed. A
+# rewrite naming all three tokens in one non-negated in-item sentence and
+# giving wrong advice passes.
+#
+# THE NEGATOR SET IS A LIST AND A LIST IS NEVER COMPLETE. It carries the
+# forms measured to matter -- ` not `, ` never `, `skip`, `avoid`,
+# `no reason`, `unnecessary`, `need not`, `without running`. A paraphrase
+# outside the list passes. So does a negator in a PRECEDING sentence: the
+# scan stops at the sentence boundary, and it must -- unscoped it reaches the
+# `never re-dispatch` three sentences earlier in this same item and refuses
+# the shipped file. Measured, both directions.
+#
+# For all four of those, THE READER IS THE ENFORCEMENT. This arm establishes
+# that the three tokens are named, unhidden, in the item that owns the work,
+# and not overtly waved off; a human reviewer establishes that the sentence
+# means what it should.
 #
 # THE WINDOW GRAMMAR IS `^###`, NOT `^##`. `^##[[:space:]]*Step 0` matches
 # nothing in route.md -- every step heading is `###` -- and that grammar
@@ -321,23 +400,67 @@ W10="$(awk '
   /^###[[:space:]]*Step 0:/           { inw = 1 }
 ' "$ROUTE")"
 
+# UNWRAP BEFORE SCANNING. Every bullet in route.md soft-wraps at ~70 columns,
+# and the shipped instruction is the one that does not -- 195 characters on a
+# single physical line. An arm reading physical lines therefore pins the
+# LINE BREAKS as well as the words: re-wrapping that sentence the way its
+# neighbours are wrapped changes no behaviour and would turn this red, which
+# reads exactly like the instruction having been deleted. The `since-wrapped`
+# mutant is that reflow and it must PASS.
+#
+# A line opening with `- ` or `N. ` at any indent OPENS an item; every
+# following indented non-blank line is appended to it with one space; a blank
+# line ends nothing (a continuation may follow it) but is never joined in.
+# Unindented prose outside any item passes through as its own logical line.
+L10="$(awk '
+  function flush() { if (open) { print buf; open = 0; buf = "" } }
+  /^[[:space:]]*-[[:space:]]/ || /^[[:space:]]*[0-9]+\.[[:space:]]/ {
+      flush(); buf = $0; open = 1; next }
+  /^[[:space:]]*$/            { next }
+  /^[[:space:]]/ && open      { t = $0; sub(/^[[:space:]]+/, "", t)
+                                buf = buf " " t; next }
+                              { flush(); print }
+  END                         { flush() }
+' <<<"$W10")"
+
 a10=0
-if [ -n "$W10" ]; then
-  # Every token on ONE line: the program, the flag, and the cell the flag is
-  # fed from. Split across three sentences they can each be about something
-  # else -- a bare see-also list carries all three and instructs nothing.
-  CAND10="$(awk '/wait-for-deliverable\.sh/ && /--since/ && /dispatched-at/' <<<"$W10")"
+if [ -n "$L10" ]; then
+  # Every token on ONE logical line: the program, the flag, and the cell the
+  # flag is fed from. Split across three items they can each be about
+  # something else.
+  CAND10="$(awk '/wait-for-deliverable\.sh/ && /--since/ && /dispatched-at/' <<<"$L10")"
   if [ -n "$CAND10" ]; then
-    # NON-NEGATION, read off the clause BEFORE the program name. Padded with
-    # spaces and lowercased so `not` inside `nothing` or `cannot` is not a
-    # match. A here-string throughout: `printf ... | grep -q` reports
-    # NOT-FOUND on matching input once the writer fills the pipe (I54/I54b).
     while IFS= read -r l10; do
       [ -n "$l10" ] || continue
-      pre10="$(awk '{ i = index($0, "wait-for-deliverable.sh"); print substr($0, 1, i - 1) }' <<<"$l10" \
+
+      # SITING inside the window: the logical line must BE the reconcile item.
+      # Joined text means the item's opening words are the line's opening
+      # words, so this is a prefix test on the same string A5 matches.
+      case "$l10" in
+        *'- Reconcile every `In-Flight Teammates` row'*) ;;
+        *) continue ;;
+      esac
+
+      # NON-NEGATION, read off the clause before the program name and back to
+      # the previous SENTENCE boundary. Unwrapping joined the whole item into
+      # one string, so an unscoped prefix would reach the `never re-dispatch`
+      # three sentences earlier and refuse the shipped file -- measured. Two
+      # spaces of padding and a lowercase fold so `not` inside `nothing` or
+      # `cannot` is not a match. A here-string throughout: `printf ... |
+      # grep -q` reports NOT-FOUND on matching input once the writer fills the
+      # pipe (I54/I54b).
+      pre10="$(awk '{ i = index($0, "wait-for-deliverable.sh")
+                      p = substr($0, 1, i - 1)
+                      c = 0
+                      for (k = length(p); k > 1; k--) {
+                        if (substr(p, k - 1, 2) == ". ") { c = k + 1; break }
+                      }
+                      if (c > 0) p = substr(p, c)
+                      print p }' <<<"$l10" \
                | tr '[:upper:]' '[:lower:]')"
       case " $pre10 " in
-        *' not '*|*' never '*|*' do not '*|*' never run '*) continue ;;
+        *' not '*|*' never '*|*skip*|*avoid*|*'no reason'*|*unnecessary*|*'need not'*|*'without running'*)
+          continue ;;
       esac
       a10=1
     done <<<"$CAND10"
@@ -350,6 +473,23 @@ else
 fi
 
 echo
+# `since-wrapped` is the FALSE-POSITIVE control and inverts this verdict: it is
+# a behaviour-preserving reflow of the shipped instruction, so the assertion
+# set must stay SILENT over it. Scored the usual way it would be reported as a
+# mutant that "slipped through", which is exactly the wrong verdict -- a
+# fixture that demands a failure here is a fixture demanding that route.md
+# never be re-wrapped.
+if [ "$MUTANT" = since-wrapped ]; then
+  if [ "$fails" -eq 0 ]; then
+    echo "FALSE-POSITIVE CONTROL HELD: the re-wrapped instruction passes every assertion."
+    exit 0
+  fi
+  echo "FALSE POSITIVE: re-wrapping the shipped instruction at the width every" >&2
+  echo "  other bullet in route.md uses broke $fails assertion(s). The arm is" >&2
+  echo "  pinning line breaks, not content." >&2
+  exit 1
+fi
+
 if [ -n "$MUTANT" ]; then
   if [ "$fails" -gt 0 ]; then
     echo "MUTANT REJECTED: $fails assertion(s) failed, as required."
