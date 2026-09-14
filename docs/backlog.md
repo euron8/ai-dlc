@@ -4428,9 +4428,92 @@ consumer, where the consumer's engine will score it against its own checkout. Re
 real ones onto `$THEIRS_TREE` with the `exit 127` guard the `v0.567.0` header prescribes, and
 confirm the two layer-drift ones are clean under the shipped grammar.
 
+**That last clause was the wrong prediction, and the measurement below is what corrected it.** The
+layer-drift pair is refused by the shipped grammar, not clean under it, and the fanout pair joins
+them as a third case that cannot move — both because the program on the far side of the `$DIST`
+argument needs a git repository, which a materialized tree at theirs is not.
+
 **Tiered NOTE.** No engine reads these files; the defect becomes live only on a hand-carry.
 
 The receipt reads the brief, which carries every one of the six distinct receipts once; the batch
 files under `graph-ledger-adjudication-data/` are its inputs and are rewritten in the same pass.
 
-verify: sh f=docs/reviews/graph-ledger-adjudication-brief.md; [ -f "$f" ] || exit 9; ! grep -qF 'AI_DLC_PROJECT_ROOT="$DIST"' "$f" && ! grep -qF 'S="$DIST/core/scripts"' "$f"
+**Measured. EIGHT of the ten rewritten, and the other two are FALSE POSITIVES of the shipped
+grammar that cannot be rewritten at all.** The eight are the escalation-vocabulary and H2 pairs
+(`AI_DLC_PROJECT_ROOT` moved to `$THEIRS_TREE`), the spec-join pair and the fanout pair
+(`S="$DIST/core/scripts"` moved to `$THEIRS_TREE/core/scripts`), each duplicated between the brief
+and its batch file, each opening with `[ -n "${THEIRS_TREE:-}" ] || exit 127;` and each twin
+`cmp`-asserted byte-identical to its partner after the rewrite, against a control pair of two
+different receipts that compares unequal in the same invocation.
+
+**The two layer-drift receipts are NOT rewritten, and that was established by building the
+rewrite rather than by reading the code.** `layer-drift.sh:225` binds `DIST="$1"` and hands it to
+`git -C`; `$THEIRS_TREE` is a `git archive` extraction with no `.git`. Driven against a detached
+worktree of the distribution and an archive of the same commit: the original returns **rc=0** and
+the extracted script emits **1279** bytes over **4** `cut -f1` rows tagged `EXTENSION-RESTATES-CORE`
+and `EXTENSION-OK`; the rewrite returns **rc=127** and the script emits **314** bytes over **2**
+rows, every one `EXTENSION-HOOK-MISSING` — it is not finding less drift, it is failing to resolve
+the tree at all.
+
+**And the fanout pair is a THIRD instance of the same class, found the same way.**
+`report-propagation-fanout.sh:216` runs `git rev-parse --git-dir` against its
+`AI_DLC_PROJECT_ROOT` and exits 2 when that root is not a repository, so moving both halves of
+that receipt returns **127**. Two workarounds were built and refuted. Borrowing `$DIST`'s `GIT_DIR`
+through an acquitted `git -C` read runs (rc=1) and still discriminates against a mutant, but the
+corpus is `git ls-files`: measured on a deliberately divergent pair of trees, the borrowed index
+lists a path that is absent from the tree the script reads, so the corpus still tracks the CHECKOUT
+— this defect one call frame down, and exactly the "argument to a program" exemption
+`ledger-reverify.sh:792-798` refuses to grant. Building a synthetic repository inside the receipt
+also discriminates (subject 1, mutant 0) but replaces the engine's exported `${BASE}~1..${BASE}`
+scope, whose immutability that receipt's own derivation states is the point. So the fanout pair
+keeps `AI_DLC_PROJECT_ROOT="$DIST"` as a REPOSITORY HANDLE while its SUBJECT read — the script
+under test — moves to `$THEIRS_TREE`, which is the half that was reading the wrong ref.
+
+**All four of those lines are known false positives of the subtractive grammar and will read
+NEEDS-REVIEW, never a close, if ever carried.** The grammar strips only the `git -C` and
+`cd … && git` forms, so a `$DIST` handed to another program as an argument survives the strip by
+design; `ledger-reverify.sh` records that residue as costing a read rather than an entry, and
+`receipt_reads_dist_as_path` is downgrade-only.
+
+**The spec-join pair was a NULL before it was rewritten, and the repair is in the SEED.** At HEAD
+the original exits **127** at its `[ "$b" -eq 0 ]` control guard, because `validate-spec-join.sh`
+DISARMS on the seeded `SPEC.md`: it mentions `CAP-7` and defines none in the
+`- **CAP-<n>** — <intent>` bullet shape the definition grammar at `:535` reads. A receipt pinned at
+127 reports NEEDS-REVIEW on every run and can never reach either verdict. The seed now writes
+`- **CAP-7** the capability`, verified by driving that one `sed` expression against both seed texts
+— it yields `CAP-7` on the new one and nothing on the old. With the repaired seed the ORIGINAL
+returns **1**, not 127, which is what licensed the rewrite; the `1` is this entry's subject having
+been fixed upstream (`CAP_ENTRIES` at `:797` already carries `([[:space:]][^)]*)?`), established by
+driving the repaired seed against both grammars on a `cmp`-asserted copy: shipping gives
+bare=0 qual=0, the reverted narrow form gives bare=0 qual=2, so the two sides move on the GRAMMAR
+and not on the seed.
+
+**Equivalence control**, `DIST` a detached worktree of HEAD, `THEIRS_TREE` a `git archive` of the
+same commit extracted to a `mktemp`, `BASE` HEAD~1, each receipt run as the engine runs it:
+
+| receipt | orig | rewritten | `THEIRS_TREE` unset |
+|---|---|---|---|
+| escalation-vocabulary (brief + batch-8) | 0 | 0 | 127 |
+| H2 attestation (brief + batch-8) | 1 | 1 | 127 |
+| spec-join (brief + batch-14) | 1 | 1 | 127 |
+| fanout (brief + batch-14) | 1 | 1 | 127 |
+
+Equal and non-127 on every row, 127 on every unset row. The three `1`s are ref-independent —
+re-run with `$BASE` at three distinct commits each reads 1 — so they are the subjects having moved
+upstream, not an artifact of the harness, and each is annotated at its own receipt.
+
+**Driving the shipped grammar** over every `verify: sh` line of the brief, `batch-8.md` and
+`batch-14.md`, with `receipt_reads_dist_as_path` and its eight `_RD_*` literals extracted from
+`ledger-reverify.sh` and sourced: **43** lines, **3** refused — one layer-drift and the two fanout
+— and **0** unexpected, against **8** unexpected before the rewrite. The self-probe fires both ways
+in the same run: a seeded `AI_DLC_PROJECT_ROOT="$DIST" bash x` returns 0 and a seeded
+`git -C "$DIST" show` near-miss returns 1.
+
+The receipt below drives that grammar rather than only grepping, and enumerates its expected
+refusals BY CONTENT so a line moving cannot silently satisfy it. Scored: tip 0; HEAD 1; a
+brief-only rewrite 1; the fanout pair left unrewritten 1; a comment appended to the brief carrying
+both literals **1**, not 0; the engine deleted 9; one `_RD_` assignment removed 9; the function
+renamed 9 — the last three against a control run on the unmutated tree reading 8 assignments, 1
+declaration and rc 0.
+
+verify: sh B=docs/reviews/graph-ledger-adjudication-brief.md; P=docs/reviews/graph-ledger-adjudication-data/step19-receipts; E=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; for f in "$B" "$P/batch-8.md" "$P/batch-14.md" "$E"; do [ -f "$f" ] || exit 9; done; g=$(mktemp) || exit 9; awk '/^_RD_[A-Z0-9]+=/{print;n++} /^receipt_reads_dist_as_path\(\) \{/{f=1} f{print; if($0=="}"){f=0;g++}} END{if(n!=8||g!=1)exit 9}' "$E" > "$g" || { rm -f "$g"; exit 9; }; . "$g" || { rm -f "$g"; exit 9; }; rm -f "$g"; receipt_reads_dist_as_path 'AI_DLC_PROJECT_ROOT="$DIST" bash x' || exit 9; receipt_reads_dist_as_path 'git -C "$DIST" show "${THEIRS}:core/x"' && exit 9; n=0; bad=0; for f in "$B" "$P/batch-8.md" "$P/batch-14.md"; do grep -qF 'S="$DIST/core/scripts"' "$f" && bad=$((bad+1)); while IFS= read -r t; do n=$((n+1)); receipt_reads_dist_as_path "$t" || continue; case "$t" in *'layer-drift.sh" "$DIST"'*) ;; *'AI_DLC_PROJECT_ROOT="$DIST" PATH='*) ;; *) bad=$((bad+1)) ;; esac; done < <(sed -n 's/^verify: sh //p' "$f"); done; [ "$n" -ge 40 ] || exit 9; [ "$bad" -eq 0 ]

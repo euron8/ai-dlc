@@ -19,6 +19,14 @@ brief says the command runs at `$DIST` while the engine's own exec line is
 `bash -c "cd \"$CONSUMER\" && { $rest; }"` (`ledger-reverify.sh:1015`) — every rc below was taken
 under the engine's form, cwd at `$CONSUMER`, not the runner's.
 
+**The two receipts that hand a validator a project ROOT point it at `$THEIRS_TREE`, not `$DIST`.**
+A blob read through `git -C "$DIST" show "${THEIRS}:…"` names the ref and is correct; an
+`AI_DLC_PROJECT_ROOT` is a DIRECTORY the validator walks, and `$DIST` is a CHECKOUT sitting at
+whatever the operator last checked out, so that form measures a ref the row does not claim.
+`ledger-reverify.sh:809` refuses it as NEEDS-REVIEW. Both receipts therefore open with
+`[ -n "${THEIRS_TREE:-}" ] || exit 127;`, which degrades to a review rather than a false close on an
+engine installed before that value existed.
+
 ## Pin 436 — `PC-S295-RETRO-STEP5C-DEADLOCK-ON-DEFERRED-RED`
 
 **Re-derivation.** Both deadlock sites are unchanged at `2db4035`. `retro.md:839` still carries
@@ -155,7 +163,7 @@ verify: (absent — this entry carries no directive, so flush() emits no row for
 **NEW**
 
 ```
-verify: sh set -u; W=$(mktemp -d) || exit 127; trap "rm -rf \"$W\"" EXIT; git -C "$DIST" show "${THEIRS}:core/scripts/validate-escalation-status-vocabulary.sh" > "$W/v.sh" || exit 127; git -C "$DIST" show "${THEIRS}:core/skills/ai-dlc/escalations.md" > "$W/spec.md" || exit 127; [ -s "$W/v.sh" ] && [ -s "$W/spec.md" ] || exit 127; printf "## E-1\n**Status:** HARD_BLOCK\nbody\n\n**Resolution**\n**Status:** BOGUS_APPENDED_TOKEN\n" > "$W/two.md"; printf "## E-1\n**Status:** BOGUS_APPENDED_TOKEN\n" > "$W/one.md"; cmp -s "$W/two.md" "$W/one.md" && exit 127; AI_DLC_PROJECT_ROOT="$DIST" bash "$W/v.sh" "$W/one.md" "$W/spec.md" >/dev/null 2>&1 && exit 127; AI_DLC_PROJECT_ROOT="$DIST" bash "$W/v.sh" "$W/two.md" "$W/spec.md" >/dev/null 2>&1
+verify: sh [ -n "${THEIRS_TREE:-}" ] || exit 127; set -u; W=$(mktemp -d) || exit 127; trap "rm -rf \"$W\"" EXIT; git -C "$DIST" show "${THEIRS}:core/scripts/validate-escalation-status-vocabulary.sh" > "$W/v.sh" || exit 127; git -C "$DIST" show "${THEIRS}:core/skills/ai-dlc/escalations.md" > "$W/spec.md" || exit 127; [ -s "$W/v.sh" ] && [ -s "$W/spec.md" ] || exit 127; printf "## E-1\n**Status:** HARD_BLOCK\nbody\n\n**Resolution**\n**Status:** BOGUS_APPENDED_TOKEN\n" > "$W/two.md"; printf "## E-1\n**Status:** BOGUS_APPENDED_TOKEN\n" > "$W/one.md"; cmp -s "$W/two.md" "$W/one.md" && exit 127; AI_DLC_PROJECT_ROOT="$THEIRS_TREE" bash "$W/v.sh" "$W/one.md" "$W/spec.md" >/dev/null 2>&1 && exit 127; AI_DLC_PROJECT_ROOT="$THEIRS_TREE" bash "$W/v.sh" "$W/two.md" "$W/spec.md" >/dev/null 2>&1
 ```
 
 **Measured today: rc=0 (STILL-LIVE).**
@@ -210,10 +218,21 @@ verify: (absent — this entry carries no directive, so flush() emits no row for
 **NEW**
 
 ```
-verify: sh set -u; W=$(mktemp -d) || exit 127; trap "rm -rf \"$W\"" EXIT; git -C "$DIST" show "${THEIRS}:core/scripts/validate-h2-attestation.sh" > "$W/h2.sh" || exit 127; [ -s "$W/h2.sh" ] || exit 127; D=$(AI_DLC_PROJECT_ROOT="$DIST" bash "$W/h2.sh" --digest 2>/dev/null | tail -1); [ -n "$D" ] || exit 127; L="H2_ATTESTED v1 sprint=999 digest=$D at=2026-01-01T00:00:00Z items=1,2,3 mechanical=check-17-bypass:PASS"; printf "## Gate 1\n%s\n" "$L" > "$W/bare.md"; printf "## Gate 1\n\140%s\140\n" "$L" > "$W/tick.md"; printf "## Gate 1\n   %s\n" "$L" > "$W/indent.md"; cmp -s "$W/bare.md" "$W/tick.md" && exit 127; cmp -s "$W/bare.md" "$W/indent.md" && exit 127; AI_DLC_PROJECT_ROOT="$DIST" bash "$W/h2.sh" --verify --sprint 999 --gate-log "$W/bare.md" >/dev/null 2>&1 || exit 127; AI_DLC_PROJECT_ROOT="$DIST" bash "$W/h2.sh" --verify --sprint 999 --gate-log "$W/tick.md" >/dev/null 2>&1; t=$?; AI_DLC_PROJECT_ROOT="$DIST" bash "$W/h2.sh" --verify --sprint 999 --gate-log "$W/indent.md" >/dev/null 2>&1; i=$?; [ "$t" != 0 ] || [ "$i" != 0 ]
+verify: sh [ -n "${THEIRS_TREE:-}" ] || exit 127; set -u; W=$(mktemp -d) || exit 127; trap "rm -rf \"$W\"" EXIT; git -C "$DIST" show "${THEIRS}:core/scripts/validate-h2-attestation.sh" > "$W/h2.sh" || exit 127; [ -s "$W/h2.sh" ] || exit 127; D=$(AI_DLC_PROJECT_ROOT="$THEIRS_TREE" bash "$W/h2.sh" --digest 2>/dev/null | tail -1); [ -n "$D" ] || exit 127; L="H2_ATTESTED v1 sprint=999 digest=$D at=2026-01-01T00:00:00Z items=1,2,3 mechanical=check-17-bypass:PASS"; printf "## Gate 1\n%s\n" "$L" > "$W/bare.md"; printf "## Gate 1\n\140%s\140\n" "$L" > "$W/tick.md"; printf "## Gate 1\n   %s\n" "$L" > "$W/indent.md"; cmp -s "$W/bare.md" "$W/tick.md" && exit 127; cmp -s "$W/bare.md" "$W/indent.md" && exit 127; AI_DLC_PROJECT_ROOT="$THEIRS_TREE" bash "$W/h2.sh" --verify --sprint 999 --gate-log "$W/bare.md" >/dev/null 2>&1 || exit 127; AI_DLC_PROJECT_ROOT="$THEIRS_TREE" bash "$W/h2.sh" --verify --sprint 999 --gate-log "$W/tick.md" >/dev/null 2>&1; t=$?; AI_DLC_PROJECT_ROOT="$THEIRS_TREE" bash "$W/h2.sh" --verify --sprint 999 --gate-log "$W/indent.md" >/dev/null 2>&1; i=$?; [ "$t" != 0 ] || [ "$i" != 0 ]
 ```
 
 **Measured today: rc=0 (STILL-LIVE).**
+
+**RE-MEASURED WHEN THIS RECEIPT MOVED ONTO `$THEIRS_TREE`: rc=1 (CLOSE-CANDIDATE).** The rewrite is
+not the cause — the receipt was driven in its ORIGINAL `$DIST` form and its rewritten form in the
+same invocation, against a detached worktree of the distribution and a `git archive` of the same
+commit, and both returned **1**. The value is a property of the subject and not of the harness's
+refs: re-run with `$BASE` at three distinct commits it reads 1 each time. The anchor is no longer
+either shape this entry probes: `validate-h2-attestation.sh:217-218` now reads
+`ATTEST_LEAD='(^|[^0-9A-Za-z_])'` with `ATTEST_TAIL='[^0-9A-Za-z|]*(\||$)'`, a word-boundary pair
+consumed at `:237` and `:248` — wider than the PARTIAL backtick-only fix and wider than the FULL
+leading-whitespace fix, and it admits the table-cell row the header at `:165` records. Adjudicating
+the close belongs to the upstream entry, not to this file.
 
 **Two-sided probe.** Real tree rc=0. PARTIAL mutant — all three anchors changed to
 ``^\`?H2_ATTESTED``, the exact backtick-only fix the filing prescribes — **rc=0, still live, which
