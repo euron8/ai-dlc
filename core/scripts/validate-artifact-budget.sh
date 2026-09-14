@@ -872,16 +872,48 @@ check_inflight_rows() {
 # entangles the two checks: struck rows historically carry a dash in the status
 # cell, so without this line every struck-row assertion would also be a status
 # assertion and neither would prove anything on its own.
+#
+# THE LEADING DELIMITER IS OPTIONAL, AND REQUIRING IT MADE THIS CHECK BLIND TO THE
+# ONE FILE IT EXISTS FOR. Markdown renders a table row with or without the opening
+# `|`, and the reference consumer writes the bare form. Measured on its live
+# snapshot: 5 lines in the section, 0 of them leading-pipe, so the gate admitted 0
+# rows against a control of 2 on the piped shape in the same invocation. Its rows
+# carry `delivered` and `stopped (...)`, and `delivered` is not a member of the set
+# above -- the PASS was this gate never seeing the rows, not the rows being legal.
+# The sibling check_inflight_rows never carried the gate (its awk is `f && /~~/`,
+# content-keyed on the strikethrough), so two of the section's three readers gated
+# on the delimiter and one did not, with nothing binding them to agree.
+#
+# THE HEADER IS PIPELESS TOO, AND SEPARATING IT FROM A DATA ROW IS THE WHOLE
+# NARROWING. Dropping the gate to a bare `/\|/` is what the shape suggests and it
+# is wrong: measured over the reference consumer's 9 In-Flight-bearing files, it
+# reports 7 where the shipped gate reports 3, and one of the 4 new findings is
+# PROSE -- an archived note ending `git log @{u}..HEAD --oneline | wc -l`, whose
+# last pipe-delimited field is a shell fragment. So a line with no leading `|` must
+# also carry the HEADER'S OWN COLUMN COUNT, recorded at the row that declares
+# `status`. That is derived from the table, not a fitted constant, and it takes the
+# false positive to zero: 6 findings, the 3 the gate already had plus exactly the 3
+# live consumer rows. The header itself still exits at the `s == "status"` arm one
+# line above, before any column test, so it is never scored as a data row.
+#
+# THE WIDTH TEST IS RESTRICTED TO PIPELESS LINES, AND THAT IS NOT COSMETIC. Applied
+# to every row it is a REGRESSION, because a piped row whose cell contains a stray
+# `|` splits one field wide and would be acquitted. Measured on the discriminating
+# input -- two piped rows with illegal tokens, one carrying `x|y` inside a cell --
+# the uniform form convicts 1 where the shipped gate convicts 2, and this form
+# convicts 2. Every finding the leading-pipe gate produced is still produced: the
+# relaxation is strictly additive, asserted as a superset over the same 9 files.
 # -----------------------------------------------------------------------------
 check_inflight_status() {
   awk '
-    /^## In-Flight Teammates/ { f=1; declared=0; next }
+    /^## In-Flight Teammates/ { f=1; declared=0; ncols=0; next }
     /^## /                    { f=0 }
     !f                        { next }
-    !/^[[:space:]]*\|/        { next }        # prose, "(none)", blank lines
+    !/\|/                     { next }        # prose, "(none)", blank lines
     /~~/                      { next }        # struck row: check_inflight_rows owns it
     {
       row = $0
+      piped = ($0 ~ /^[[:space:]]*\|/)         # leading-delimiter shape, or the bare one
       sub(/^[[:space:]]*\|/, "", row)
       sub(/\|[[:space:]]*$/, "", row)
       n = split(row, cell, "|")
@@ -889,8 +921,9 @@ check_inflight_status() {
       s = cell[n]
       gsub(/`/, "", s)
       gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
-      if (s == "status") { declared = 1; next } # the header declares the column
+      if (s == "status") { declared = 1; ncols = n; next } # the header declares the column
       if (!declared) next                      # no status column: nothing to check
+      if (!piped && n != ncols) next           # a pipeless line needs the header width
       if (s ~ /^:?-+:?$/) next                 # alignment separator
       tok = s
       sub(/[[:space:],;].*$/, "", tok)         # keep the leading token only

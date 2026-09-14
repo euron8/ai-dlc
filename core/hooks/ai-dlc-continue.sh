@@ -354,18 +354,46 @@ if [ "$HANDOFF_VOCAB_OK" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]
     # `## In-Flight Teammates` section, which is the `status` column route.md defines. The
     # last NON-EMPTY cell, because a markdown row's trailing pipe makes split() produce an
     # empty final field and a positional index would read that instead of the status.
+    #
+    # THE LEADING `|` IS OPTIONAL. Markdown renders a row with or without it and the
+    # reference consumer writes the bare form, so a gate keyed on it saw NONE of the rows
+    # in that section. Measured on the live snapshot: this arm found 1 in-flight row
+    # where the relaxed form finds 5, the 4 it could not see all being live teammates --
+    # a handoff allowed with teammates still running, which is the exact state this arm
+    # exists to block. The sibling check_inflight_status in validate-artifact-budget.sh
+    # carried the same gate and is relaxed in the same change; check_inflight_rows beside
+    # it never did, being content-keyed on the strikethrough.
+    #
+    # A PIPELESS LINE MUST CARRY THE COLUMN COUNT THE HEADER DECLARES, because that header is
+    # pipeless too and so is prose. Recorded at the row whose last cell is `status`, which
+    # is the table declaring its own width -- derived, not a fitted constant. Measured on
+    # the discriminating input: a section whose prose ends `... is | in-flight` is convicted
+    # by the bare `/\|/` form and not by this one, and that false positive would block every
+    # handoff in that sprint with no row to strike. The header exits at the `status` arm
+    # before any token test, so it is never read as a teammate.
+    #
+    # THE WIDTH TEST IS RESTRICTED TO PIPELESS LINES. Applied to every row it LOSES a
+    # finding this arm has today: a piped row carrying a stray `|` inside a cell splits one
+    # field wide, and the uniform form acquits it. Measured 1 hit against 1 for the shipped
+    # gate on that input; the relaxation is a strict superset over the consumer corpus.
     TEAMMATES_OK=1
     if [ -f "$SNAPSHOT_FILE" ]; then
       TEAMMATES_OK=$(awk '
-        /^##[[:space:]]+In-Flight Teammates/ { inb=1; next }
+        /^##[[:space:]]+In-Flight Teammates/ { inb=1; ncols=0; next }
         inb && /^##[[:space:]]/              { inb=0 }
-        inb && /^[[:space:]]*\|/ {
-          n = split($0, c, "|")
+        inb && /\|/ {
+          piped = ($0 ~ /^[[:space:]]*\|/)
+          row = $0
+          sub(/^[[:space:]]*\|/, "", row)
+          sub(/\|[[:space:]]*$/, "", row)
+          n = split(row, c, "|")
           last = ""
           for (i = n; i >= 1; i--) {
             gsub(/^[ \t]+/, "", c[i]); gsub(/[ \t]+$/, "", c[i])
             if (c[i] != "") { last = c[i]; break }
           }
+          if (tolower(last) == "status") { ncols = n; next }
+          if (!piped && n != ncols) next
           # LEADING TOKEN, NOT THE WHOLE CELL, and this was an equality test until
           # v0.483.0. check_inflight_status() in validate-artifact-budget.sh has always
           # split the leading token off, because the live rows of the reference consumer
