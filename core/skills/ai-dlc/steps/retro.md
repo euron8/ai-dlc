@@ -21,7 +21,7 @@ canonical name that `scripts/ai-dlc/validate-mandatory-rules.sh` expects:
 ```bash
 git fetch origin main && git checkout main && git merge --ff-only origin/main
 git rev-list --count HEAD..origin/main   # MUST be 0
-git checkout -b ai-dlc/retro/sprint-<N>
+git checkout -b ai-dlc/retro/sprint-<N> origin/main
 ```
 
 **The retro branch MUST be cut from `main` at `origin/main`, never from
@@ -36,8 +36,11 @@ Check 7 fails a retro branch that is behind `origin/main`.
 **Minimum mechanism (Rule 26(c)).** Failure caught: a retro PR that carries
 the sprint's diff a second time and cannot merge. False-positive cost: one
 `git fetch` per retro; the count is 0 in the steady state. Removal condition:
-retire only if branch creation is itself guarded so that a retro branch cannot
-be cut from a ref other than the merged trunk.
+the `checkout -b` above now names `origin/main` as its base, so a session
+running that line alone cuts from the trunk rather than from wherever it is —
+but `origin/main` is a local ref and the `fetch` is what makes it current, so
+the fetch and the `rev-list` assertion are NOT retired. Retire them only if the
+base ref is guaranteed fresh without a fetch.
 
 The branch name MUST contain `sprint-<N>` (literal word "sprint"
 followed by the sprint number). Abbreviated forms (`s<N>`,

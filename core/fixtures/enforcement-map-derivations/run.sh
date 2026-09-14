@@ -68,6 +68,11 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 
 SKILL_REL="core/skills/ai-dlc/SKILL.md"
 
+# I112's two subjects, named once. The arm compares a template line in the OWNER against one
+# bullet in the READER's Check 1 span, and scans that span for unowned tokens.
+CR_OWNER="core/team-roles/code-reviewer.md"
+CR_READER="core/skills/ai-dlc/steps/gate-validation.md"
+
 # seed_tree — build this process's own pristine tree and scratch dir. Called by --run-one
 # only, so a worker owns everything it touches and no two workers share a path.
 seed_tree() {
@@ -94,6 +99,32 @@ edit() {
   awk "$prog" "$f" > "$f.mut" || { bad "FIXTURE BROKEN — awk failed on $f"; return 1; }
   if cmp -s "$f" "$f.mut"; then
     bad "FIXTURE BROKEN — the mutation of ${f##*/} changed nothing; the assertion below would test a clean tree"
+    rm -f "$f.mut"; return 1
+  fi
+  mv "$f.mut" "$f"
+}
+
+# edit_json <file> <python program> — `edit`, for a file whose grammar is JSON.
+#
+# THE VALIDITY ASSERT IS THE POINT, and it is what an awk edit cannot give. A schema mutated
+# into unparseable JSON makes the walker that reads it yield NOTHING, the exclusion goes empty,
+# and the arm reports every enum token in the span -- a fire the assertion would score as its
+# own kill while the real cause was a broken seed. So the program is handed the parsed text and
+# its output is REPARSED before it lands. The `cmp -s` guard is `edit`'s, for `edit`'s reason.
+#
+# The program reads the file path as argv[1] and writes the new text to stdout.
+edit_json() {
+  local f="$1" prog="$2"
+  python3 -c "$prog" "$f" > "$f.mut" 2>/dev/null || {
+    bad "FIXTURE BROKEN — the python mutation of ${f##*/} failed; no tree was built and nothing below was tested"
+    rm -f "$f.mut"; return 1
+  }
+  if cmp -s "$f" "$f.mut"; then
+    bad "FIXTURE BROKEN — the mutation of ${f##*/} changed nothing; the assertion below would test a clean tree"
+    rm -f "$f.mut"; return 1
+  fi
+  if ! python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$f.mut" 2>/dev/null; then
+    bad "FIXTURE BROKEN — the mutation left ${f##*/} as invalid JSON. The renderer's walker would read NOTHING out of it, the enum exclusion would go empty, and the arm would report every enum token in the span — a fire this assertion would misread as its own."
     rm -f "$f.mut"; return 1
   fi
   mv "$f.mut" "$f"
@@ -181,6 +212,193 @@ assert_fires() {
     *"$want"*) ok "$label" ;;
     *)         bad "$label — the validator did NOT report it. The predicate no longer reaches this subject, and a corpus it cannot see reads exactly like a corpus with nothing wrong in it." ;;
   esac
+}
+
+# arm_of — the id the calling assertion declares, or FIXTURE BROKEN. Lifted out of
+# assert_fires so the counting forms below select their arm by the same derivation rather than
+# by a second copy of the walk.
+arm_of() {
+  local f id=""
+  for f in "${FUNCNAME[@]}"; do
+    id="$(arm_id_of "$f")"
+    [ -n "$id" ] && break
+  done
+  printf '%s' "$id"
+}
+
+# assert_fires_n <label> <want> <want_n> — assert_fires, plus the count of findings the run
+# produced.
+#
+# THE COUNT IS THE WHOLE OF "EXACTLY ONE DIRECTION", AND A SUBSTRING MATCH CANNOT SAY IT.
+# I112 reports three distinct findings out of one arm -- owner->reader, reader->owner, and the
+# span scan -- and a mutation that moves two of them is a mutation whose subject is shared
+# between two directions, which is `fixture-mutants.md`'s entangled-assertions rule with three
+# cells instead of two. `assert_fires` would print `ok` for every one of them. So the number of
+# `FAIL:` lines is asserted, and every line is required to NAME the selected arm: a finding
+# from the selector prologue is not this arm firing, and counting it as one would let a broken
+# `--arms` run satisfy an assertion about the corpus.
+assert_fires_n() {
+  local label="$1" want="$2" want_n="$3" out rc id n n_arm
+  id="$(arm_of)"
+  if [ -z "$id" ]; then
+    bad "FIXTURE BROKEN — no frame above assert_fires_n is named A<nn>_i<id>_<what>, so the arm to select cannot be derived and nothing was checked."
+    exit 2
+  fi
+  out="$(run_map "$id")"
+  rc=$?
+  sel_guard "$rc" "$id" "$out"
+  n="$(grep -c '^FAIL:' <<<"$out")" || n=0
+  n_arm="$(grep -c "^FAIL: $id" <<<"$out")" || n_arm=0
+  case "$out" in
+    *"$want"*) ;;
+    *) bad "$label — $id did NOT report it. The predicate no longer reaches this subject, and a corpus it cannot see reads exactly like a corpus with nothing wrong in it."
+       grep '^FAIL:' <<<"$out" | cut -c1-160 | sed 's/^/          | /'
+       return ;;
+  esac
+  if [ "$n" -ne "$want_n" ]; then
+    bad "$label — it fired, but the run produced $n finding(s) where $want_n was expected. Two of $id's three directions moving on one mutation means they share a subject and one of them is vacuous."
+    grep '^FAIL:' <<<"$out" | cut -c1-160 | sed 's/^/          | /'
+    return
+  fi
+  if [ "$n_arm" -ne "$n" ]; then
+    bad "$label — $n_arm of $n finding(s) name $id. The rest came from somewhere other than the arm under test, so the count above is not a statement about it."
+    return
+  fi
+  ok "$label"
+}
+
+# assert_silent <label> — the mutated tree produces NO finding, and the arm RAN.
+#
+# AN ABSENCE-SHAPED ASSERTION NEEDS A POSITIVE CONJUNCT OR A SUBJECT THAT NEVER RAN SATISFIES
+# IT. `fixture-mutants.md` records a control asserting rc=0-and-nothing-reported passing
+# against a subject replaced by `exit 0`. Here the positive conjunct is the validator's own
+# `OK:` line, which only a run that reached its verdict block can print -- and `sel_guard`
+# above has already refused the exit-2 case where `--arms` selected no subprogram at all.
+# The anchor stops before the catalog-check COUNT in that line, which is derived and moves.
+#
+# EVERY CALLER PAIRS THIS WITH AN ALLOW TWIN IN ITS OWN FRAME, one property apart. A silence
+# arm alone cannot tell an exclusion keyed on the right property from a scan that stopped
+# matching, and the two read identically.
+assert_silent() {
+  local label="$1" out rc id n
+  id="$(arm_of)"
+  if [ -z "$id" ]; then
+    bad "FIXTURE BROKEN — no frame above assert_silent is named A<nn>_i<id>_<what>, so the arm to select cannot be derived and nothing was checked."
+    exit 2
+  fi
+  out="$(run_map "$id")"
+  rc=$?
+  sel_guard "$rc" "$id" "$out"
+  n="$(grep -c '^FAIL:' <<<"$out")" || n=0
+  case "$out" in
+    *"OK: enforcement-map.yaml in sync with"*) ;;
+    *) bad "$label — the validator printed no verdict line, so it did not reach the end of its run and this silence is not evidence that $id acquitted anything."
+       return ;;
+  esac
+  if [ "$n" -ne 0 ]; then
+    bad "$label — the run produced $n finding(s) where the seeded token was supposed to be acquitted. $id is reporting on a tree the exclusion is meant to cover."
+    grep '^FAIL:' <<<"$out" | cut -c1-160 | sed 's/^/          | /'
+    return
+  fi
+  ok "$label"
+}
+
+# cr_after_check1 <line> — an awk program inserting <line> immediately after Check 1's heading.
+#
+# ONE INSERTION POINT FOR EVERY SPAN SEED, so the seeds below differ ONLY in the text they
+# carry. A seed placed at a different offset differs from its twin in two properties and the
+# pair stops being one property apart, which is the whole of what a DENY/ALLOW twin asserts.
+# The address is the heading the arm's own span extractor opens on, so a seed can never land
+# outside the span it is meant to be inside.
+cr_after_check1() {
+  printf '%s' '/^### 1\. Validation cycle complete\?/ && !d { print; print "'"$1"'"; d=1; next } { print }'
+}
+
+# cr_owner_members <owner file> — the template line's members, in template order.
+#
+# DERIVED FROM THE OWNER, NEVER WRITTEN DOWN HERE. The expected message text names members by
+# name, and a hand-typed list of them in this file would be a second declaration of the very
+# set I112 exists to keep single -- it would go stale in the release that changes the template
+# and the assertion would then read `ok` for a message about different members. The count is
+# guarded by every caller, because an extraction that stopped matching yields an empty want
+# string and a `case` on an empty pattern matches every output there is.
+cr_owner_members() {
+  awk '/^## Verdict$/ { on = 1; next }
+       on && /^[A-Z_]+( \| [A-Z_]+)+$/ { n = split($0, m, /[[:blank:]]*\|[[:blank:]]*/)
+                                         for (i = 1; i <= n; i++) print m[i]; exit }' "$1"
+}
+
+# cr_enum_unseen <tree root> — a screaming-compound schema enum member that Check 1's span does
+# NOT already carry, run out of the renderer's own SCHEMA_PY walker exactly as the arm derives
+# its exclusion.
+#
+# THE SEED FOR THE ENUM ACQUITTAL IS DERIVED BY RUNNING THE WALKER, not by naming a member of
+# it. A typed enum name is a claim about core/schemas/ that nothing rechecks: the day that
+# member is renamed, the seed stops being a schema enum member, the arm correctly reports it,
+# and the silence assertion fails looking exactly like a regression in the exclusion.
+#
+# AND IT MUST BE A MEMBER THE SPAN DOES NOT ALREADY HAVE, which is the half that makes the
+# assertion discriminate. The walker's FIRST member is `EXIT_CONDITION_MET` and Check 1 names
+# it on the real tree -- measured -- so a seed of that token re-exercises an acquittal the
+# UNMUTATED control already proves, and the assertion would pass against a mutated tree that
+# never acquitted anything new. `fixture-mutants.md`: seed the discriminating member, not the
+# first one. The scan is over the same span the arm extracts, so "already carried" is decided
+# against the text the arm reads rather than against the whole file.
+# cr_enum_all <tree root> — every screaming-compound enum member the renderer's walker yields.
+# The shared half of `cr_enum_unseen` and A41's precondition, so the three callers cannot
+# disagree about what "a schema enum member" means.
+cr_enum_all() {
+  local w
+  w="$(awk "/^SCHEMA_PY='\$/ { on = 1; next } on && /^'\$/ { exit } on { print }" \
+        "$1/scripts/render-vocabulary-index.sh")"
+  [ -n "$w" ] || return 1
+  python3 -c "$w" "$1/core/schemas" 2>/dev/null \
+    | awk -F'\t' '{ n = split($3, m, " ")
+                    for (i = 1; i <= n; i++)
+                      if (m[i] ~ /^[A-Z]+([-_][A-Z]+)+$/ && !(m[i] in s)) { s[m[i]] = 1; print m[i] } }'
+}
+
+# cr_enum_schema <tree root> — the schema file the walker reads a screaming-compound enum out
+# of, as a tree-relative path. ASKED OF THE WALKER rather than named here: a hand-named schema
+# is the same defect A41 exists to catch, correct today and silently wrong the release that
+# file is reorganised.
+#
+# THE WALKER'S FIRST COLUMN IS A BASENAME, NOT A PATH -- measured, `provenance-block.json` and
+# not `core/schemas/provenance-block.json`. The directory is re-attached here rather than
+# assumed, and the result is required to EXIST, because a path that resolves to nothing makes
+# the caller's mutation match nothing and `edit_json` would report a broken fixture for a
+# reason that has nothing to do with the schema.
+cr_enum_schema() {
+  local w base
+  w="$(awk "/^SCHEMA_PY='\$/ { on = 1; next } on && /^'\$/ { exit } on { print }" \
+        "$1/scripts/render-vocabulary-index.sh")"
+  [ -n "$w" ] || return 1
+  base="$(python3 -c "$w" "$1/core/schemas" 2>/dev/null \
+          | awk -F'\t' '{ n = split($3, m, " ")
+                          for (i = 1; i <= n; i++)
+                            if (m[i] ~ /^[A-Z]+([-_][A-Z]+)+$/) { print $1; exit } }')"
+  [ -n "$base" ] || return 1
+  base="core/schemas/${base##*/}"
+  [ -f "$1/$base" ] || return 1
+  printf '%s\n' "$base"
+}
+
+cr_enum_unseen() {
+  local w span
+  w="$(awk "/^SCHEMA_PY='\$/ { on = 1; next } on && /^'\$/ { exit } on { print }" \
+        "$1/scripts/render-vocabulary-index.sh")"
+  [ -n "$w" ] || return 1
+  span="$(awk '/^### 1\. Validation cycle complete\?/ { on = 1; next }
+               on && /^### / { exit }
+               on { print }' "$1/$CR_READER")"
+  [ -n "$span" ] || return 1
+  python3 -c "$w" "$1/core/schemas" 2>/dev/null \
+    | awk -F'\t' '{ n = split($3, m, " ")
+                    for (i = 1; i <= n; i++)
+                      if (m[i] ~ /^[A-Z]+([-_][A-Z]+)+$/ && !(m[i] in s)) { s[m[i]] = 1; print m[i] } }' \
+    | while IFS= read -r e; do
+        grep -qF "$e" <<<"$span" || { printf '%s\n' "$e"; break; }
+      done
 }
 
 # --- Assertion 0: CONTROL -----------------------------------------------------
@@ -643,6 +861,345 @@ A29_i86_writer_stops_emitting() {
        '{ gsub(/\$\{ADJ_ROW_TOKEN\}=/, "adjudicatedX=") } { print }'; then
     assert_fires "I86 a declared row token that is never written into a row is REPORTED" \
                  "never writes it into a row"
+  fi
+}
+
+# ============================================================================
+# I112 — the code-review verdict set, across its owner and the gate step that reads it
+# ============================================================================
+# WHY THESE LIVE HERE AND NOT IN A NEW DIRECTORY. I112's subject is an arm of
+# `scripts/validate-enforcement-map.sh`, which is this fixture's subject and nothing else's;
+# the fixture is already `.dist-only` for that reason, its shard partition DEALS a new
+# assertion out automatically, and the read-set map already lists both of I112's subject files
+# against both shards -- so these assertions run on a push that touches either of them, with no
+# hand-maintained list anywhere. A twelfth fixture directory would have cost the suite a new
+# unit, a `.dist-only` marker, a read-set trace only root can run, and a second copy of the
+# seed, to test one arm of a validator this file already drives thirty times.
+#
+# THE ARM REPORTS THREE DISTINCT FINDINGS AND THEY ARE NOT INTERCHANGEABLE. Owner->reader says
+# a declared member is unexplained by the step; reader->owner says the step teaches a value no
+# review file can carry; the span scan says a screaming compound token in Check 1 belongs to
+# neither vocabulary. Each assertion below asserts the message AND the finding COUNT, because
+# a mutation moving two cells means two directions share a subject and one of them proves
+# nothing -- and a substring match cannot see that.
+#
+# EVERY SEEDED TOKEN IS ASSEMBLED FROM PIECES, NEVER TYPED. I112's own corpus is Check 1's
+# span and this repo's files; I111's header records that arm reporting ITSELF because a
+# literal sat in its source. The same hazard reaches here through the RENDERED indexes: a
+# fixture spelling a non-member in one piece is a file in the tree carrying that token.
+#
+# THE SILENCE ASSERTIONS EACH HAVE AN ALLOW TWIN ONE PROPERTY APART, which is the half that
+# makes them mean anything. A33's comment-wrapped token is the same token A32 seeds in prose;
+# A34's schema-enum token differs from A33's only in being a member of an enum the walker
+# yields. A silence arm alone passes identically against an exclusion keyed on the right
+# property and a scan that stopped matching.
+
+# --- Assertion 30: I112 — the owner losing a member -------------------------
+# Direction 2 ALONE, and the direction is not the obvious one: dropping `BLOCKED` from the
+# template leaves Check 1's bullet still naming it, so the finding is "the step teaches a value
+# the owner does not declare". Direction 1 cannot also fire here -- the owner's set shrank, so
+# every remaining member is still named -- and the count is what says so.
+A30_i112_owner_loses_a_member() {
+  t="$(fresh)"
+  local members last
+  members="$(cr_owner_members "$t/$CR_OWNER")"
+  last="$(printf '%s\n' "$members" | tail -1)"
+  if [ -z "$last" ] || [ "$(printf '%s\n' "$members" | grep -c .)" -lt 3 ]; then
+    bad "FIXTURE BROKEN — the \`## Verdict\` template in $CR_OWNER yielded fewer than three members, so there is no member to drop and the expected message below cannot be built."
+    return
+  fi
+  if edit "$t/$CR_OWNER" \
+       '/^[A-Z_]+( \| [A-Z_]+)+$/ && !d { sub(/[[:blank:]]*\|[[:blank:]]*[A-Z_]+$/, ""); d=1 } { print }'; then
+    assert_fires_n "I112 a verdict the owner stops declaring while Check 1 still names it is REPORTED" \
+                   "does not declare: $last" 1
+  fi
+}
+
+# --- Assertion 31: I112 — the owner gaining a member ------------------------
+# The mirror, and DIRECTION 1 alone. A fourth member in the template that Check 1 never
+# explains is a value a reviewer can write and the gate has no stated behaviour for. The token
+# is assembled: written whole it would be a fourth verdict name sitting in the tree.
+A31_i112_owner_gains_an_untaught_member() {
+  t="$(fresh)"
+  local newm
+  newm="DEF"; newm="${newm}ERRED"
+  if edit "$t/$CR_OWNER" \
+       "/^[A-Z_]+( \\| [A-Z_]+)+\$/ && !d { \$0 = \$0 \" | $newm\"; d=1 } { print }"; then
+    assert_fires_n "I112 a verdict added to the owner template and never taught in Check 1 is REPORTED" \
+                   "never names: $newm" 1
+  fi
+}
+
+# --- Assertion 32: I112 — the motivating case, back in Check 1's prose ------
+# THIS IS THE DEFECT THE ARM SHIPPED FOR. `CHANGES-REQUESTED` sat in an ordinary sentence in
+# the one paragraph in the system about verdict VALUES -- not on the bullet, which is why the
+# set comparison alone could never have seen it and the span scan exists. The SPAN finding
+# fires and neither set direction moves, because the bullet and the template are untouched.
+A32_i112_nonmember_in_check1_prose() {
+  t="$(fresh)"
+  local tok
+  tok="CHANGES"; tok="${tok}-REQUESTED"
+  if edit "$t/$CR_READER" "$(cr_after_check1 "- A sentence naming $tok.")"; then
+    assert_fires_n "I112 a non-member verdict token in Check 1's PROSE is REPORTED by the span scan" \
+                   "schema enum member: $tok" 1
+  fi
+}
+
+# --- Assertion 33: I112 — a compound token in NO vocabulary at all ----------
+# A32's token is a real historical non-member, so an exclusion narrowed to acquit everything
+# EXCEPT that one string would still pass it. This one belongs to no enum, no template and no
+# history: it is assembled from two ordinary words, and the arm must report it for the shape of
+# the token rather than for its identity.
+A33_i112_unknown_compound_in_check1_prose() {
+  t="$(fresh)"
+  local tok
+  tok="NOT_A"; tok="${tok}_VERDICT"
+  if edit "$t/$CR_READER" "$(cr_after_check1 "- A sentence naming $tok.")"; then
+    assert_fires_n "I112 a screaming compound token in no vocabulary at all is REPORTED" \
+                   "schema enum member: $tok" 1
+  fi
+}
+
+# --- Assertion 34: I112 — the HTML-comment exclusion, A33's ALLOW twin ------
+# ONE PROPERTY APART FROM A33: same token, same insertion point, wrapped in a comment. Every
+# check in gate-validation.md opens with a `CHECK_LOADED` marker of exactly this shape, so an
+# arm without the exclusion reports a finding on a correct tree and gets turned off. Without
+# A33 beside it this assertion passes against a span scan that stopped matching anything.
+#
+# THE SEED IS INDENTED, AND THAT IS THE DISCRIMINATING PROPERTY RATHER THAN A DETAIL. The span
+# extractor's comment address is `^[[:blank:]]*<!--`; every comment on the real tree and every
+# comment the arm's own self-probe seeds sits at column zero, so the `[[:blank:]]*` is a clause
+# no input anywhere exercises and its removal changes nothing observable. Measured while
+# building this: narrowing the address to the `CHECK_LOADED` marker makes the arm's SELF-PROBE
+# fire, so the unmutated control dies too and no assertion's kill can be attributed. An
+# indented comment is a shape a markdown author writes, it keeps the baseline clean, and it is
+# the only seed in this file that dies alone when that clause is dropped.
+A34_i112_comment_wrapped_token_is_acquitted() {
+  t="$(fresh)"
+  local tok
+  tok="NOT_A"; tok="${tok}_VERDICT"
+  if edit "$t/$CR_READER" "$(cr_after_check1 "  <!-- $tok -->")"; then
+    assert_silent "I112 the same token inside an INDENTED HTML COMMENT is acquitted (A33's twin)"
+  fi
+}
+
+# --- Assertion 35: I112 — the schema-enum exclusion, also A33's twin --------
+# The second ALLOW twin, one property apart in the OTHER direction: a token in ordinary prose
+# exactly like A33's, differing only in being a member of an enum the renderer's own SCHEMA_PY
+# walker yields. Check 1 legitimately names one today, so this exclusion is load-bearing on the
+# real tree and not a hypothetical.
+#
+# THE TOKEN IS RUN OUT OF THE WALKER, NOT NAMED, and it is a member the span does NOT already
+# carry -- see `cr_enum_unseen` for the measurement that forced the second condition. A typed
+# enum member stops being one the day it is renamed, and this assertion would then fail reading
+# exactly like the exclusion breaking.
+A35_i112_schema_enum_token_is_acquitted() {
+  t="$(fresh)"
+  local tok
+  tok="$(cr_enum_unseen "$t")"
+  if [ -z "$tok" ]; then
+    bad "FIXTURE BROKEN — render-vocabulary-index.sh's SCHEMA_PY walker yielded no screaming-compound enum member that Check 1's span does not already carry, so this assertion would re-exercise an acquittal the unmutated control already proves rather than seeding a new one."
+    return
+  fi
+  if edit "$t/$CR_READER" "$(cr_after_check1 "- A sentence naming $tok.")"; then
+    assert_silent "I112 a SCHEMA ENUM member in Check 1's prose is acquitted (A33's twin, one property apart)"
+  fi
+}
+
+# --- Assertion 36: I112 — the owner's heading renamed -----------------------
+# THE ZERO GUARD, and it is the one that keeps every assertion above honest. Two empty sets
+# compare equal, so an owner extraction that stops matching makes both set directions report
+# agreement forever. Renaming the heading is how that happens in practice -- a role file
+# reorganised by someone who never heard of this arm.
+A36_i112_owner_heading_renamed() {
+  t="$(fresh)"
+  if edit "$t/$CR_OWNER" \
+       '/^## Verdict$/ && !d { $0 = $0 " Values"; d=1 } { print }'; then
+    assert_fires_n "I112 an owner whose \`## Verdict\` heading moved REPORTS rather than comparing two empty sets" \
+                   "could not derive the code-review verdict set: 0 member(s)" 1
+  fi
+}
+
+# --- Assertion 37: I112 — the reader's bullet deleted -----------------------
+# The reader-side zero, and it fails as DIRECTION 1 NAMING EVERY MEMBER rather than as its own
+# guard: with the bullet gone the reader set is empty and every declared member is unexplained.
+# So this asserts all three names, derived from the template rather than written here -- an
+# assertion naming one of them would pass against a bullet that lost two.
+A37_i112_reader_bullet_deleted() {
+  t="$(fresh)"
+  local members want n
+  members="$(cr_owner_members "$t/$CR_OWNER")"
+  n="$(printf '%s\n' "$members" | grep -c .)"
+  if [ "$n" -lt 3 ]; then
+    bad "FIXTURE BROKEN — the \`## Verdict\` template yielded $n member(s); the expected message below names the whole set, and a short set would make this assertion weaker than it reads."
+    return
+  fi
+  # The message lists the set SORTED, space-separated, which is the order the arm's own
+  # `LC_ALL=C sort -u` produces. Derived here the same way rather than assumed.
+  want="$(printf '%s\n' "$members" | LC_ALL=C sort -u | tr '\n' ' ' | sed 's/ $//' | sed 's/^/never names: /')"
+  if edit "$t/$CR_READER" '/^- \*\*Verdict values/ { next } { print }'; then
+    assert_fires_n "I112 deleting Check 1's \`- **Verdict values\` bullet REPORTS every declared member" \
+                   "$want" 1
+  fi
+}
+
+# --- Assertion 38: I112 — a member named BARE on the bullet -----------------
+# THE BULLET'S BACKTICK DELIMITERS, WHICH ARE INVISIBLE UNTIL SOMETHING ASSERTS THEM. The
+# reader extractor takes BACKTICKED screaming tokens off the one bullet, and the delimiters are
+# what stop it harvesting `FAILS` out of the surrounding prose. Stripping them from one member
+# leaves the member still spelled on the line and still readable by a human -- and direction 1
+# must fire anyway, because the arm reads the delimited form and nothing else. A widening of
+# that grammar to bare words passes every other assertion in this file.
+A38_i112_bullet_member_loses_its_delimiters() {
+  t="$(fresh)"
+  local members last
+  members="$(cr_owner_members "$t/$CR_OWNER")"
+  last="$(printf '%s\n' "$members" | LC_ALL=C sort -u | tail -1)"
+  if [ -z "$last" ]; then
+    bad "FIXTURE BROKEN — no member read out of the \`## Verdict\` template, so there is nothing to un-delimit on the bullet."
+    return
+  fi
+  if ! grep -q -- "- \*\*Verdict values.*\`$last\`" "$t/$CR_READER"; then
+    bad "FIXTURE BROKEN — Check 1's \`- **Verdict values\` bullet does not carry \`$last\` backticked, so stripping its delimiters is not the mutation this assertion describes."
+    return
+  fi
+  if edit "$t/$CR_READER" \
+       "/^- \\*\\*Verdict values/ && !d { gsub(/\`$last\`/, \"$last\"); d=1 } { print }"; then
+    assert_fires_n "I112 a member spelled BARE on the bullet is REPORTED — the backtick delimiters carry the reader set" \
+                   "never names: $last" 1
+  fi
+}
+
+# --- Assertion 39: I112 — a non-member named on the bullet ------------------
+# THE QUOTE-FORM QUESTION `fixture-mutants.md` REQUIRES ASKING, answered in the direction that
+# turned out to matter. The span scan's recorded limit is that a BARE SCREAMING NON-COMPOUND
+# token (no hyphen, no underscore) is invisible to it -- measured, and widening is refuted
+# because the span legitimately carries `FAIL` and `FAILS`. So a non-member of that shape can
+# only be caught on the BULLET, by the set comparison, and every other assertion in this file
+# seeds a COMPOUND token: without this one, the half of the arm that covers the uncatchable
+# shape has no subject at all.
+A39_i112_noncompound_nonmember_on_the_bullet() {
+  t="$(fresh)"
+  local tok
+  tok="REJ"; tok="${tok}ECTED"
+  if edit "$t/$CR_READER" \
+       "/^- \\*\\*Verdict values/ && !d { \$0 = \$0 \" \\\`$tok\\\` also fails it.\"; d=1 } { print }"; then
+    assert_fires_n "I112 a bare non-compound non-member TAUGHT on the bullet is REPORTED by the set comparison" \
+                   "does not declare: $tok" 1
+  fi
+}
+
+# --- Assertion 40: I112 — the same token in PROSE is the recorded limit -----
+# A39'S TWIN, AND IT ASSERTS A DOCUMENTED BLIND SPOT RATHER THAN A CAPABILITY. Same token, in
+# prose instead of on the bullet: the span scan's compound grammar scores it as a non-instance
+# and the arm is silent. That silence is DELIBERATE and its refutation is in the arm's header.
+# It is asserted here so the limit is a measured property rather than a sentence -- and so that
+# a later author widening the grammar to bare words finds this assertion failing and reads the
+# refutation before shipping the false positives it predicts.
+A40_i112_noncompound_nonmember_in_prose_is_the_limit() {
+  t="$(fresh)"
+  local tok
+  tok="REJ"; tok="${tok}ECTED"
+  if edit "$t/$CR_READER" "$(cr_after_check1 "- A sentence naming $tok.")"; then
+    assert_silent "I112 the same bare non-compound token in PROSE is silent — the recorded limit, asserted (A39's twin)"
+  fi
+}
+
+# --- Assertion 41: I112 — the enum exclusion must be DERIVED, not a typed list ---
+# A WRONG IMPLEMENTATION THAT PASSES EVERYTHING ABOVE. Replace the arm's `i112_walker` /
+# `i112_enum` derivation with the three enum members spelled out as literals, and every
+# assertion in this file stays green: A35 derives its own seed from the CURRENT schemas, so a
+# hand-list that is correct today acquits exactly what A35 seeds, today and forever. The list
+# goes wrong on the release that adds a member, and nothing announces it.
+#
+# SO THE SEED MOVES THE POPULATION RATHER THAN THE TOKEN. It adds a FOURTH screaming-compound
+# member to an enum the walker reads AND writes that token into Check 1's prose. A derived
+# exclusion picks the new member up in the same run and is silent. A typed list cannot, and
+# reports it -- which is the whole difference between the two implementations, invisible to
+# every other assertion here.
+#
+# THE ENUM IS FOUND BY RUNNING THE WALKER, not by naming a schema. `cr_enum_schema` asks which
+# file the walker actually reads a screaming-compound enum out of; a hand-named schema would be
+# the same defect this assertion exists to catch, one level down.
+#
+# THE ONE-PER-LINE LAYOUT IS LOAD-BEARING AND IS PRESERVED. The register schema's own
+# description says layer-drift.sh reads that array line by line. `edit_json` reparses the
+# result, so a seed that broke the file would be reported as a broken fixture rather than
+# scored as this assertion's kill.
+A41_i112_enum_exclusion_is_derived() {
+  t="$(fresh)"
+  local schema tok
+  schema="$(cr_enum_schema "$t")"
+  if [ -z "$schema" ]; then
+    bad "FIXTURE BROKEN — no schema under core/schemas/ yields a screaming-compound enum member through render-vocabulary-index.sh's walker, so there is no enum to extend and this assertion would prove nothing about how the exclusion is built."
+    return
+  fi
+  tok="SUPERSEDED_BY"; tok="${tok}_UPSTREAM"
+  # The insert is keyed on the enum's own LAST member, derived, so it cannot drift onto some
+  # other array in the file and it needs no hand-named anchor.
+  if ! edit_json "$t/$schema" '
+import json, re, sys
+p = sys.argv[1]
+s = open(p).read()
+tok = "SUPERSEDED_BY" + "_UPSTREAM"
+m = None
+for m in re.finditer(r"^(\s*)\"([A-Z]+(?:[-_][A-Z]+)+)\"\n(\s*\])", s, re.M):
+    pass
+assert m, "no one-per-line screaming-compound enum tail found"
+s = s[:m.start()] + "%s\"%s\",\n%s\"%s\"\n%s" % (m.group(1), m.group(2), m.group(1), tok, m.group(3)) + s[m.end():]
+json.loads(s)
+sys.stdout.write(s)
+'; then
+    return
+  fi
+  # The new member must actually reach the walker's output, or the silence below is a silence
+  # about a token that is not in any enum -- which is A33, passing under this name.
+  if ! grep -qF "$tok" <<<"$(cr_enum_all "$t")"; then
+    bad "FIXTURE BROKEN — the seeded fourth member is not in what render-vocabulary-index.sh's walker yields over the mutated schemas, so the silence below would be a silence about a token in NO enum. That is A33's subject, not this one."
+    return
+  fi
+  if edit "$t/$CR_READER" "$(cr_after_check1 "- A sentence naming $tok.")"; then
+    assert_silent "I112 a schema enum member added in the SAME tree is acquitted — the exclusion is derived, not a typed list"
+  fi
+}
+
+# --- Assertion 42: I112 — the owner grammar is ANCHORED, like the renderer's -----
+# THE SECOND WRONG IMPLEMENTATION THAT PASSES EVERYTHING ABOVE. Drop the `^`/`$` anchors from
+# `i112_owner_set` -- have it `match()` the alternation anywhere on a line instead of requiring
+# the line to BE one -- and every assertion above stays green, because on a tree that still has
+# its template line the anchored and unanchored grammars read the same set.
+#
+# THEY DIVERGE ON THE TREE WHERE THE TEMPLATE IS GONE, and that tree is one edit away.
+# code-reviewer.md writes the same three names a SECOND time, as a parenthesised alternation
+# inside a Communication sentence. Derived over this tree: the anchored shape matches exactly
+# ONE line, and the unanchored one matches that line plus the prose sentence. So deleting the
+# template leaves the anchored grammar with nothing -- its zero guard fires, correctly, because
+# the declaration a review file is written FROM is gone -- while the unanchored grammar
+# silently harvests the SENTENCE and reports a healthy three-member set. Text about a program
+# is not the program, and this is that rule with a set on the end of it.
+#
+# THE PRECONDITION IS ASSERTED, NOT ASSUMED. If the prose alternation is ever removed this
+# stops being a discriminating seed and quietly becomes a second copy of A36, so the mutated
+# owner is required to still CONTAIN an unanchored match before the verdict is read.
+A42_i112_owner_grammar_is_anchored() {
+  t="$(fresh)"
+  local anchored unanchored
+  anchored="$(grep -cE '^[A-Z_]+( \| [A-Z_]+)+$' "$t/$CR_OWNER")" || anchored=0
+  if [ "$anchored" -ne 1 ]; then
+    bad "FIXTURE BROKEN — $anchored line(s) in ${CR_OWNER##*/} ARE a verdict template; this assertion deletes the one template line and needs exactly one to delete."
+    return
+  fi
+  if edit "$t/$CR_OWNER" '/^[A-Z_]+( \| [A-Z_]+)+$/ && !d { d=1; next } { print }'; then
+    # THE DISCRIMINATING PROPERTY, CHECKED ON THE TREE THE VALIDATOR WILL READ. An unanchored
+    # grammar must still find something here, or the two implementations agree on this input
+    # and the assertion below is scored against a tree that cannot tell them apart.
+    unanchored="$(grep -cE '[A-Z_]+( \| [A-Z_]+)+' "$t/$CR_OWNER")" || unanchored=0
+    if [ "$unanchored" -lt 1 ]; then
+      bad "FIXTURE BROKEN — with the template line deleted, ${CR_OWNER##*/} carries NO unanchored verdict alternation either, so an unanchored grammar would read zero here too. The two implementations agree on this tree and this assertion has become a second copy of A36."
+      return
+    fi
+    assert_fires_n "I112 deleting the template line REPORTS, even though the prose alternation survives — the owner grammar is anchored" \
+                   "could not derive the code-review verdict set: 0 member(s)" 1
   fi
 }
 

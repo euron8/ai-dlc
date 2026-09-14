@@ -371,7 +371,20 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   8097/8097 and removing the new repo-root `scripts/` entry alone gives 8095/8094 -- so
 #   again the SCRIPT costs more than the fixture, and the two together are the whole +14. NO
 #   REDUCTION TAKEN; the target remains I87's per-directory pipeline. Headroom is 17.
-FORK_BUDGET=8120
+#
+#   0.570.0: 8120 -> 8135, and the whole of it is ONE ARM. Measured with this fixture's own
+#   profiler in one worktree, before and after, the tree otherwise identical: 8112 (spread
+#   8112-8112) against 8127 (spread 8126-8127), +15. `--section by-arm` attributes 16 to I112,
+#   the one arm added, so the raise is the arm and nothing else; the difference of one between
+#   the two instruments is the spread the second reading carries.
+#   A REDUCTION WAS TAKEN FIRST, AND IT WAS WORTH A THIRD OF THE ARM. I112's first cut cost 21:
+#   a `sort -u` per derived set (three of them), a second `grep -v` pipeline re-filtering the
+#   span the span extractor had already read, and a `cat` feeding the schema walker its own
+#   program. Folding the comment drop into the span `awk`, the ordering into the two awks that
+#   produce the sets, and holding the walker's source in a variable took it to 16 with every
+#   probe, every mutant and both corpus directions reading identically before and after.
+#   Headroom is 8, which is where 0.562.0 left it.
+FORK_BUDGET=8135
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
@@ -9928,6 +9941,288 @@ EOF_I111
   rm -rf "$i111_probe" 2>/dev/null || true
 fi
 
+
+# --- I112: the code-review verdict set is ONE set across its owner and the gate that reads it ---
+# vocabulary: code-review verdicts
+# vocabulary-invariant: I112
+# vocabulary-owner: core/team-roles/code-reviewer.md
+# vocabulary-extract: review-verdicts
+# vocabulary-readers: core/skills/ai-dlc/steps/gate-validation.md
+#
+# WHAT IT BINDS. `APPROVED | NEEDS_REWORK | BLOCKED` is a closed set of three, declared ONCE
+# as the template line under `## Verdict` in core/team-roles/code-reviewer.md -- the line a
+# reviewer copies into the review file. gate-validation.md's Check 1 is the READER: it
+# grep-sources that file's verdict line and decides whether the validation cycle is complete.
+# Nothing joined the two.
+#
+# THE FAILURE WAS SITTING IN THE READER'S OWN PARAGRAPH. Check 1's cautionary sentence about
+# a lead asserting a gate claim named `CHANGES-REQUESTED` as the value a review file "still
+# read" -- a token the owner has never declared and no reviewer can write. The one paragraph
+# in the system about verdict VALUES taught a non-member, while Check 1 validated the SHAPE
+# of a verdict line and never once compared its value against the set. A reviewer writing
+# `NEEDS_REWORK` and a lead reading Check 1 were working from two different vocabularies, and
+# every gate was green over that contradiction for the life of it.
+#
+# THE JOIN IS AN EQUALITY, NOT A SUBSET, AND BOTH DIRECTIONS HAVE A DISTINCT SUBJECT, which
+# is I110's shape one file over. A member the owner declares and the reader does not name is
+# a value the gate has no stated behaviour for. A token the reader names and the owner lacks
+# is a value the step teaches and no review file can carry.
+#
+# THE OWNER SET IS DERIVED FROM THE TEMPLATE LINE, NEVER HAND-LISTED HERE. The `awk` below is
+# byte-identical to `vocab_extract_review_verdicts` in scripts/render-vocabulary-index.sh,
+# which reads the same owner to render this vocabulary's row -- one expression, two readers.
+# It is keyed on the template because code-reviewer.md ALSO writes the same three names as a
+# parenthesised alternation inside a Communication bullet, and a grammar reading that renders
+# a set that stays correct-looking after the template has moved. Text about a program is not
+# the program; the template is what a review file is written FROM.
+#
+# THE READER SET IS ONE LINE OF FIXED SHAPE, a deliberate narrowing rather than a convenience.
+# Check 1 is prose, and a grammar harvesting every screaming token in it as a "named member"
+# would read `FAILS` and `APPROVED` alike. The bullet beginning `- **Verdict values` is the
+# single place the step states which values pass, so the reader extractor takes the BACKTICKED
+# screaming tokens on that one line. One line, one shape, so a bare member like `BLOCKED` is
+# readable without widening to bare words anywhere else.
+#
+# THE SPAN SCAN IS THE THIRD DIRECTION AND IT IS THE ONE THAT CATCHES THE MOTIVATING CASE. A
+# non-member does not have to sit on the bullet to do damage -- `CHANGES-REQUESTED` sat in an
+# ordinary sentence. So every `\b`-anchored SCREAMING COMPOUND token in Check 1's span that is
+# neither an owner member nor a schema enum member is reported.
+#
+# `/usr/bin/grep -oE`, NEVER `git grep -E`. git's ERE implements neither `\b` nor `\s` and
+# returns a CLEAN ZERO rather than an error, so the anchor would silently empty this scan --
+# `S9` of scripts/validate-shell-portability.sh is that hazard's arm. The anchor is
+# load-bearing and was measured both ways over the real span: ANCHORED it yields exactly
+# `CHANGES-REQUESTED` and `EXIT_CONDITION_MET` at the revision before this shipped;
+# UNANCHORED it additionally yields `A-Z`, harvested out of the bracket class inside Check 1's
+# own quoted grep pattern. That is this arm's false-positive measurement, and the exclusions
+# below are what take the anchored two down to zero:
+#   1. the owner set itself, which is what the comparison is about;
+#   2. HTML-comment lines -- Check 1 opens with `<!-- CHECK_LOADED: 1 -->`, a step-loader
+#      marker and not a verdict, and every check in that file carries one;
+#   3. the schema enum members, DERIVED by running render-vocabulary-index.sh's own
+#      `SCHEMA_PY` walker over core/schemas/, never restated. That set has THREE members
+#      today, and the count is stated so the narrowness of the acquittal is visible rather
+#      than implied: an exclusion that quietly grew to cover the arm's own subject is the
+#      shape mechanism-design.md's "ask what it ACQUITS" exists for. The walker is SOURCED out
+#      of the renderer rather than re-implemented, so a schema shape the renderer can read and
+#      this arm cannot is unconstructible.
+#
+# THE RECORDED LIMIT: A BARE SCREAMING NON-MEMBER IN THE SPAN IS INVISIBLE. A sentence
+# teaching `REJECTED` carries no hyphen and no underscore, so the compound grammar scores it
+# as a non-instance. WIDENING TO BARE WORDS IS REFUTED, not deferred: the span legitimately
+# carries `FAIL`, `FAILS` and `CONVERGED`, and `BLOCKED` -- a real member -- appears in more
+# than twenty core files, so a bare-word grammar over this span reports false positives on a
+# correct tree and an author turns the arm off. The bullet half still catches a bare
+# non-member on the line that STATES which values pass, which is where a vocabulary drift
+# lands.
+#
+# ONE PIPELINE PER STAGE OVER ONE SPAN, NEVER A LOOP OVER FILES. The reader is a single file
+# and its span is extracted once into a variable; every later stage reads it from memory.
+# CLAUDE.md records what a nested arm did to this validator's wall clock once.
+i112_owner="$REPO_ROOT/core/team-roles/code-reviewer.md"
+i112_reader="$REPO_ROOT/core/skills/ai-dlc/steps/gate-validation.md"
+i112_renderer="$REPO_ROOT/scripts/render-vocabulary-index.sh"
+
+# ONE implementation of each grammar, called by the probe and by the corpus. A second copy for
+# the probe would be this arm proving something about a reader other than the one its findings
+# come from.
+i112_owner_set() {  # <owner-file> -> one member per line
+  awk '/^## Verdict$/ { on = 1; next }
+       on && /^[A-Z_]+( \| [A-Z_]+)+$/ { n = split($0, m, /[[:blank:]]*\|[[:blank:]]*/)
+                                         for (i = 1; i <= n; i++) print m[i]; exit }' "$1" \
+    | LC_ALL=C sort -u
+}
+i112_span_of() {  # <reader-file> -> Check 1's span, heading exclusive, to the next `### `
+  # THE HTML-COMMENT DROP IS HERE, NOT IN A SECOND PIPELINE BELOW, so the span is filtered
+  # once for both readers of it and this arm pays one fork rather than one per scan. It costs
+  # the bullet reader nothing: a `- **Verdict values` line is never inside a comment.
+  awk '/^### 1\. Validation cycle complete\?/ { on = 1; next }
+       on && /^### / { exit }
+       on && /^[[:blank:]]*<!--/ { next }
+       on { print }' "$1"
+}
+i112_reader_set() {  # <span text> -> the backticked screaming tokens on the one bullet
+  # Sorted and de-duplicated INSIDE the awk, for I110's reason: one line's worth of tokens is
+  # not worth a `sort -u` fork, and this arm is charged against FORK_BUDGET above.
+  awk '/^- \*\*Verdict values/ { n = split($0, m, "`")
+                                 for (i = 2; i <= n; i += 2)
+                                   if (m[i] ~ /^[A-Z][A-Z_]*$/ && !(m[i] in s)) {
+                                     s[m[i]] = 1; k++; o[k] = m[i] }
+                                 exit }
+       END { for (i = 1; i <= k; i++)
+               for (j = i + 1; j <= k; j++)
+                 if (o[j] < o[i]) { t = o[i]; o[i] = o[j]; o[j] = t }
+             for (i = 1; i <= k; i++) print o[i] }' <<<"$1"
+}
+i112_strays() {  # <span text> <owner set> <enum set> -> unowned screaming compound tokens
+  # THE EXCLUSIONS ARE INSIDE THIS FUNCTION, NOT BESIDE ITS CALLER, and the first cut of this
+  # arm had them outside -- its probe scanned the raw token list and correctly reported that
+  # the seeded schema-enum member was NOT excluded, because the only copy of that exclusion
+  # lived in the corpus loop the probe never reached. A probe that exercises a grammar the
+  # findings do not come from is the shape verification-discipline.md's "run the shipping code"
+  # rule refuses; this way the acquittal is proven on every run.
+  # THE DEDUPE IS `in_lines` AGAINST THE ACCUMULATING OUTPUT, NOT A `sort -u`. A fork to order
+  # a list this size buys an ordering only the finding string depends on, and the fork budget
+  # this file declares about itself is measured in exactly these. `grep -oE` emits in document
+  # order, which is the order a reader opening Check 1 encounters the tokens in.
+  i112_s_out=""
+  while IFS= read -r i112_s_t; do
+    [ -n "$i112_s_t" ] || continue
+    in_lines "$i112_s_t" "$2" && continue
+    in_lines "$i112_s_t" "$3" && continue
+    in_lines "$i112_s_t" "$i112_s_out" && continue
+    if [ -z "$i112_s_out" ]; then i112_s_out="$i112_s_t"
+    else i112_s_out="$i112_s_out
+$i112_s_t"; fi
+  done <<EOF
+$(/usr/bin/grep -oE '\b[A-Z]+([-_][A-Z]+)+\b' <<<"$1")
+EOF
+  [ -z "$i112_s_out" ] || printf '%s\n' "$i112_s_out"
+}
+
+if [ ! -f "$i112_owner" ]; then
+  err "I112: $i112_owner is missing. It carries the \`## Verdict\` template line, the only declaration of the code-review verdict set, so there is no owner to compare the gate step against and a clean result here would mean nothing."
+elif [ ! -f "$i112_reader" ]; then
+  err "I112: $i112_reader is missing. Check 1 is the only reader of the code-review verdict set, so this arm would have nothing to compare the owner against."
+elif [ ! -f "$i112_renderer" ]; then
+  err "I112: $i112_renderer is missing. Its SCHEMA_PY walker is where this arm's schema-enum exclusion is derived from, and without it the span scan would report every enum token in Check 1 as an unowned verdict."
+else
+  i112_set="$(i112_owner_set "$i112_owner")"
+  i112_span="$(i112_span_of "$i112_reader")"
+  # THE SCHEMA ENUM SET, RUN RATHER THAN RESTATED. The walker is lifted out of the renderer by
+  # its own quoting -- the assignment line, its body, a lone closing quote -- so a change to
+  # the walker changes this exclusion in the same commit. A hand-copy here would be a second
+  # walker drifting from the one that renders the index, and its drift would surface only as
+  # this arm acquitting or reporting a token for a reason nobody could locate. The dedupe and
+  # the ordering are inside the awk for I110's reason: a `sort -u` here is a fork for an
+  # ordering nothing but a finding string depends on, and bash 3.2 has no associative arrays.
+  i112_walker="$(awk "/^SCHEMA_PY='\$/ { on = 1; next } on && /^'\$/ { exit } on { print }" \
+                   "$i112_renderer")"
+  i112_enum="$(python3 -c "$i112_walker" "$REPO_ROOT/core/schemas" 2>/dev/null \
+               | awk -F'\t' '{ n = split($3, m, " ")
+                               for (i = 1; i <= n; i++)
+                                 if (m[i] ~ /^[A-Z]+([-_][A-Z]+)+$/ && !(m[i] in s)) {
+                                   s[m[i]] = 1; k++; o[k] = m[i] }
+                             }
+                             END { for (i = 1; i <= k; i++)
+                                     for (j = i + 1; j <= k; j++)
+                                       if (o[j] < o[i]) { t = o[i]; o[i] = o[j]; o[j] = t }
+                                   for (i = 1; i <= k; i++) print o[i] }')"
+  i112_n_set=0; i112_n_enum=0; i112_enum_first=""
+  while IFS= read -r i112_l; do [ -n "$i112_l" ] && i112_n_set=$((i112_n_set + 1)); done <<EOF
+$i112_set
+EOF
+  while IFS= read -r i112_l; do
+    [ -n "$i112_l" ] || continue
+    i112_n_enum=$((i112_n_enum + 1))
+    [ -n "$i112_enum_first" ] || i112_enum_first="$i112_l"
+  done <<EOF
+$i112_enum
+EOF
+  if [ "$i112_n_set" -lt 2 ]; then
+    err "I112 could not derive the code-review verdict set: $i112_n_set member(s) read out of the \`## Verdict\` template line in core/team-roles/code-reviewer.md. Its heading or its template shape changed. A set of one or none compares equal to almost anything, so this reports rather than passing."
+  elif [ -z "$i112_span" ]; then
+    err "I112 could not locate Check 1's span in core/skills/ai-dlc/steps/gate-validation.md. The \`### 1. Validation cycle complete?\` heading moved or was reworded, and an empty span reports nothing in every direction -- which reads exactly like a step whose verdict vocabulary agrees with the role file's."
+  elif [ "$i112_n_enum" -lt 1 ]; then
+    err "I112 derived ZERO screaming-compound schema enum members by running render-vocabulary-index.sh's SCHEMA_PY over core/schemas/. That walker is the whole exclusion for the span scan below, and an empty exclusion makes every enum token in Check 1 a finding. Either the walker's quoting in the renderer changed or python3 refused it."
+  else
+    # SELF-PROBE, EVERY GRAMMAR AND BOTH DIRECTIONS, ON A mktemp TREE AND BEFORE THE CORPUS
+    # VERDICT IS READ. The seeds are ASSEMBLED from variables, never typed: a literal member
+    # name written here is inside this arm's own subject matter, and I111's header records
+    # that arm reporting ITSELF as the forked site for exactly that reason.
+    i112_probe="$(mktemp -d 2>/dev/null)"
+    if [ -z "$i112_probe" ] || [ ! -d "$i112_probe" ]; then
+      err "I112 could not build its probe tree, so none of its three grammars was proven this run. A grammar that has not been shown to fire is not evidence about the corpus below it."
+    else
+      i112_p="PROBE"
+      i112_a="${i112_p}_ALPHA"; i112_b="${i112_p}_BETA"; i112_c="${i112_p}_GAMMA"
+      i112_d="${i112_p}_DELTA"; i112_e="${i112_p}_EPSILON"
+      i112_h="${i112_p}_HIDDEN"; i112_o="${i112_p}_OUTSIDE"
+      # THE OWNER SEED CARRIES THE TWO SHAPES THAT ARE NOT THE TEMPLATE, and the first is not
+      # hypothetical: code-reviewer.md's Communication bullet writes the real three members as
+      # a parenthesised alternation inside a sentence. An extractor reading it derives a
+      # byte-identical set today and stays correct-looking after the template has moved.
+      { printf '# seed\n## Verdict\n%s | %s\n\n## Communication\n' "$i112_a" "$i112_b"
+        printf -- '- Send your verdict (%s | %s | %s, with severity).\n' "$i112_a" "$i112_b" "$i112_c"
+        printf -- '- %s appears only in this bullet.\n' "$i112_d"
+      } > "$i112_probe/owner.md"
+      # THE READER SEED CARRIES ONE OF EVERY INPUT THE SPAN SCAN MUST SEPARATE: a bullet naming
+      # a member AND a non-member; an unowned compound in ordinary prose, which is the
+      # motivating case; a real schema enum member in prose, which the derived exclusion must
+      # acquit; a compound inside an HTML comment, the shape Check 1's own `CHECK_LOADED`
+      # marker has; and a compound AFTER the next `### ` heading, which is the span boundary.
+      { printf '### 1. Validation cycle complete?\n'
+        printf -- '<!-- %s -->\n' "$i112_h"
+        printf -- '- **Verdict values are a set:** `%s` passes; `%s` does not.\n' "$i112_a" "$i112_e"
+        printf -- '- A sentence naming %s and %s.\n' "$i112_c" "$i112_enum_first"
+        printf '### 2. Something else\n'
+        printf -- '- %s lives past the boundary.\n' "$i112_o"
+      } > "$i112_probe/reader.md"
+      i112_po="$(i112_owner_set "$i112_probe/owner.md")"
+      i112_psp="$(i112_span_of "$i112_probe/reader.md")"
+      i112_pr="$(i112_reader_set "$i112_psp")"
+      # THE PROBE SCANS WITH THE SEEDED OWNER SET, NOT WITH THE REAL ONE. The seed's members
+      # are synthetic, so passing the corpus set here would leave every seeded token unowned
+      # and the positive direction would pass for the wrong reason.
+      i112_pt="$(i112_strays "$i112_psp" "$i112_po" "$i112_enum")"
+      rm -rf "$i112_probe" 2>/dev/null || true
+      i112_pf=""
+      in_lines "$i112_a" "$i112_po" && in_lines "$i112_b" "$i112_po" || \
+        i112_pf="${i112_pf} the owner grammar did not read the seeded template line back (got '$i112_po'), so it cannot spell its own subject and every zero below is a floor of unknown depth."
+      in_lines "$i112_c" "$i112_po" && \
+        i112_pf="${i112_pf} the owner grammar read a member out of the PARENTHESISED alternation the seed writes in prose. That is the shape code-reviewer.md's own Communication bullet has, so the owner set below would come from a sentence rather than from the template a review file is written from."
+      in_lines "$i112_d" "$i112_po" && \
+        i112_pf="${i112_pf} the owner grammar read a member named only in a BULLET. The template line is the declaration; a bullet is prose about it."
+      in_lines "$i112_a" "$i112_pr" && in_lines "$i112_e" "$i112_pr" || \
+        i112_pf="${i112_pf} the reader grammar did not read both backticked tokens off the seeded \`- **Verdict values\` bullet (got '$i112_pr'). Neither direction of the set comparison below could then fire."
+      in_lines "$i112_c" "$i112_pt" || \
+        i112_pf="${i112_pf} the span scan did not see a seeded unowned compound token in ordinary prose. That is the motivating case -- a non-member in a sentence, not on the bullet -- so a quiet scan below would be a scan that cannot spell it."
+      in_lines "$i112_enum_first" "$i112_pt" && \
+        i112_pf="${i112_pf} the span scan did not exclude a seeded SCHEMA ENUM member, which the derived exclusion exists to acquit. Check 1 legitimately names one, so without this the arm reports a finding on a correct tree."
+      in_lines "$i112_a" "$i112_pt" && \
+        i112_pf="${i112_pf} the span scan did not exclude a seeded OWNER MEMBER. Every legitimate verdict value in Check 1's span is a member, so an arm that reported them would fire on a correct tree and be turned off."
+      in_lines "$i112_h" "$i112_pt" && \
+        i112_pf="${i112_pf} the span scan read a compound token out of an HTML COMMENT. Every check in gate-validation.md opens with a \`CHECK_LOADED\` marker of exactly that shape, so this exclusion is what keeps the scan's false-positive set at zero."
+      in_lines "$i112_o" "$i112_pt" && \
+        i112_pf="${i112_pf} the span scan crossed the next \`### \` heading. Check 1's span ends there, and a scan running past it reports tokens belonging to checks this vocabulary does not bind."
+      if [ -n "$i112_pf" ]; then
+        err "I112 SELF-PROBE FAILED:${i112_pf}"
+      else
+        # THE CORPUS. Set equality both ways, then the span scan, each with its own remedy.
+        i112_rset="$(i112_reader_set "$i112_span")"
+        i112_toks="$(i112_strays "$i112_span" "$i112_set" "$i112_enum")"
+        i112_unread=""; i112_unowned=""; i112_stray=""
+        while IFS= read -r i112_m; do
+          [ -n "$i112_m" ] || continue
+          in_lines "$i112_m" "$i112_rset" || i112_unread="$i112_unread $i112_m"
+        done <<EOF
+$i112_set
+EOF
+        while IFS= read -r i112_m; do
+          [ -n "$i112_m" ] || continue
+          in_lines "$i112_m" "$i112_set" || i112_unowned="$i112_unowned $i112_m"
+        done <<EOF
+$i112_rset
+EOF
+        while IFS= read -r i112_m; do
+          [ -n "$i112_m" ] || continue
+          i112_stray="$i112_stray $i112_m"
+        done <<EOF
+$i112_toks
+EOF
+        if [ -n "$i112_unread" ]; then
+          err "I112: core/team-roles/code-reviewer.md declares code-review verdict(s) that gate-validation.md's Check 1 never names:$i112_unread. Check 1 is where a lead learns what a verdict value MEANS for the gate, and a member it does not name is a value the step has no stated behaviour for -- the lead meets it at a gate and decides, which is the recollection Check 1's own \`Read each verdict from its review file\` rule exists to delete. Name it on the \`- **Verdict values\` bullet, or stop declaring it in the role file's \`## Verdict\` template."
+        fi
+        if [ -n "$i112_unowned" ]; then
+          err "I112: gate-validation.md's Check 1 names verdict value(s) core/team-roles/code-reviewer.md does not declare:$i112_unowned. The \`## Verdict\` template is what a reviewer copies into the review file, so a value only the step knows about is one no review file can carry and one the grep in Check 1 can never read back. Add it to the template, or stop teaching it."
+        fi
+        if [ -n "$i112_stray" ]; then
+          err "I112: Check 1's span in core/skills/ai-dlc/steps/gate-validation.md carries screaming compound token(s) that are neither a code-review verdict nor a schema enum member:$i112_stray. That is exactly how \`CHANGES-REQUESTED\` lived in the one paragraph in the system about verdict VALUES -- a token no reviewer can write, taught beside a grep that validates a verdict line's SHAPE and never its value. Use a member of the set core/team-roles/code-reviewer.md declares under \`## Verdict\`, or move the token out of Check 1."
+        fi
+      fi
+    fi
+  fi
+fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"

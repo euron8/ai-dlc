@@ -15,6 +15,129 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.570.0] - 2026-09-14
+
+Batch 104, one release, three subjects, none of them touching a bootstrapping file. All three
+are receipt-bound entries with no available `PC-` residue: the sweep at open returned live
+**61**, cited **40**, unfiled **21**, archive **206**, partition control 0, and the 21 unfiled
+split 7 named on `origin/main`, 11 carrying a `NOT-UPSTREAM` verdict and 3 withdrawn or
+unadjudicated, so PC-backed residue is ZERO. The three file sets are disjoint — one touches the
+vocabulary renderer, the enforcement map and the gate step; one touches a single schema; one
+touches a single step file — so each landed as its own commit and only this section joins them.
+
+### `BL-044` / `PC-S299-UPSTREAM-SHIPS-TWO-REVIEW-VERDICT-VOCABULARIES` — the code-review verdict set gets an owner extractor, an invariant, and a reader that names its members
+
+`APPROVED | NEEDS_REWORK | BLOCKED` was declared once, as the template line under `## Verdict`
+in `core/team-roles/code-reviewer.md`, and `gate-validation.md`'s Check 1 was its reader —
+grep-sourcing a review file's verdict line, failing on zero matches and on two matches carrying
+different values, and never once comparing the VALUE against the set. Nothing joined the two,
+and the gap was sitting inside the reader's own paragraph: Check 1's cautionary sentence named
+`CHANGES-REQUESTED` as the value a review file "still read", a token the owner has never
+declared and no reviewer can write. The one paragraph in the system about verdict VALUES taught
+a non-member.
+
+Four pieces in one commit, because the vocabulary fixture's synthetic seed declares every
+implemented extractor and a fix landing the extractor without the seed is red on its own commit.
+`render-vocabulary-index.sh` gains `vocab_extract_review_verdicts`, keyed on the first
+`^[A-Z_]+( \| [A-Z_]+)+$` line after `^## Verdict$`. `validate-enforcement-map.sh` gains arm
+**I112**: an EQUALITY between the owner's template line and the backticked tokens on Check 1's
+new `- **Verdict values` bullet, in both directions, plus a span scan for any `\b`-anchored
+screaming compound token in Check 1's span that is neither an owner member nor a schema enum
+member. Check 1 replaces the non-member with `NEEDS_REWORK` and gains the bullet, which is what
+makes it validate MEMBERSHIP for the first time. Both indexes re-render.
+
+The arm is not vacuous, measured against a scratch tree carrying the pre-fix reader with the two
+sides `cmp -s`-asserted to differ first: it fires **two** messages, one naming
+`APPROVED BLOCKED NEEDS_REWORK` as members Check 1 never names and one naming
+`CHANGES-REQUESTED` as a compound token in no vocabulary. At the tip the same command exits 0.
+Eight mutants each fire exactly one direction, including the two silent ones — a non-member
+inside an HTML comment, and a schema enum member in prose. The enum exclusion is DERIVED by
+running the renderer's own `SCHEMA_PY` walker rather than restated, and has **three** members
+today; the header states the count so the acquittal's narrowness is visible. `--arms I112` costs
+0.243/0.246/0.238s over three reps. Forks 8112 → 8127, +15, attributed to this arm by
+`--section by-arm`; `FORK_BUDGET` 8120 → 8135, the measured delta exactly.
+
+**The recorded limit is that the span scan cannot see a BARE screaming non-member.** A sentence
+teaching `REJECTED` carries no hyphen and no underscore, so the compound grammar scores it as a
+non-instance. Widening to bare words is REFUTED rather than deferred: the span legitimately
+carries `FAIL` and `FAILS`, and `BLOCKED` — a real member — appears in 25 `core/` files at this
+tip (23 before this change; the last two are this release's own arm and its fixture naming the member), so a bare-word grammar reports false positives on a correct tree.
+The bullet half still catches a bare non-member on the line that STATES which values pass.
+
+**And one non-fix is invisible to the entry's receipt.** `code-reviewer.md` writes the same
+three names a second time as a parenthesised alternation inside a Communication bullet, and an
+extractor reading THAT renders a row byte-identical to the shipped one — measured, `cmp -s` on
+the two rendered rows reports identical — so the receipt, which greps the index for
+`NEEDS_REWORK`, exits 0 on it. What refuses it is the renderer's own near-miss probe, seeded
+with synthetic member names and a file carrying no `## Verdict` heading.
+
+### `BL-017` / `PC-S319-SUBJECT-DIGEST-IS-UNREADABLE-ONCE-ITS-OWN-ROW-STOPS-BLOCKING` — the register schema names the read path the digest survives its own row on
+
+`core/schemas/layer-adjudication-register.json` described `subject_digest` as "Copied verbatim
+from the blocking row", and its top-level description said `reconcile/layer-drift.sh` "prints the
+digest in the blocking row, so the operator copies a value rather than deriving one". Both are
+true only WHILE the row still blocks. Recording a verdict is what stops it blocking, so an
+operator adding an `owed` object to a verdict already recorded without one is sent to a row that
+is never emitted again. `--list-adjudications` is the mode that answers there, and the update
+skill named it at `SKILL.md:1669` while the artifact a consumer opens did not — `install.sh`
+copies `core/schemas/*.json` to `.claude/schemas/`, so the unrepaired half is the half they read.
+
+Both sentences now name `layer-drift.sh --list-adjudications <dist> <base> <theirs> <consumer>`
+as the read path after the first write. Text only: the verdict enum's one-value-per-line layout
+is load-bearing for `layer-drift.sh`, which reads that array, and it is byte-identical across the
+change under `cmp -s` against a whole-file control asserting the two sides differ. `json.load`
+accepts the result. `layer-adjudication-tier`, `taught-schema` and `layer-absorption-retire` all
+pass.
+
+**I113 was planned as this subject's carrier and is DROPPED, refuted by measurement.** The arm
+would have bound `layer-drift.sh`'s usage line to the schema and `SKILL.md`, on the premise that
+`sync-taught-schema.sh` is a second reader of this description; it is not — it carries no register
+schema at all, measured **0** against a control of **11** in the same invocation. And the mode is
+already driven by the `layer-adjudication-tier` and `apply-drift-after-write` fixtures, so a new
+arm would have been a restatement of a join that already runs. **The entry's receipt is
+therefore this subject's only carrier until rotation**, and the entry says so.
+
+### `BL-023` — the retro branch-creation command carries its base explicitly
+
+`retro.md`'s step-1 fence lands on the merged trunk — `git fetch origin main`, `checkout main`,
+`merge --ff-only origin/main`, then a `rev-list --count HEAD..origin/main` assertion — and then
+cut the branch with a bare `git checkout -b ai-dlc/retro/sprint-<N>`, leaving the base implicit
+in the three lines above it. Following the sequence gives the right branch; running the last line
+alone, or resolving a refused fast-forward by hand and continuing, cuts from wherever the session
+happens to be, while the prose two paragraphs down says the branch MUST be cut from `main` at
+`origin/main`. The command now says so itself.
+
+**Half of the entry's first claim had already expired and this release records which half.** The
+entry said core "creates the retro branch off the current HEAD, not off `origin/main`"; the fetch
+and ff-only lines arrived at `3520fbb4` (v0.507.0), so the branch IS cut from the trunk when the
+sequence is followed. The surviving half is the implicit base, and that is what this change
+repairs.
+
+The fetch, the ff-only and the `rev-list` assertion stay: `origin/main` is a LOCAL ref and the
+fetch is what makes it current, so naming it as a base does not retire them. The Rule 26(c)
+removal condition is reworded to say that rather than to claim a guard that does not exist, and
+it keeps the literal phrase `Removal condition`, which `audit-rule-files.sh` Class 1b keys on —
+replacing that phrase in a scratch copy of the same paragraph, sides asserted to differ first,
+produces `INCOMPLETE_26C: FLAGGED`. Tier-1 findings 0, 69 total, unchanged.
+
+**This subject ships with NO fixture and NO invariant, and the entry's receipt is its only
+carrier until rotation.** Nothing in the tree parses that fence: `retro/sprint-<N>` appears in
+one other script under `core/fixtures`, `core/scripts` and `scripts` — a comment in
+`cycle-commits-enforce` — and in three prose files (`layer-contract.yaml`, `artifact-path-grammar.md`,
+`extensions/README.md`) that name the branch and never its base; neither retro fixture reads the fence
+text. `retro-branch-behind-main` and `retro-compliance-workflow` both pass unchanged.
+
+**A consumer effect is measured on a scratch clone, not reasoned about.** The reference consumer's
+`extensions/steps-domain/retro-push-branch-creation.md` declares `extends: '#1. Context Loading'`
+on `steps/retro.md`, the section this edit lands in, so `layer-drift.sh` against this tip reads one
+new `EXTENSION-ANCHOR-DRIFT` row and its paired `HARD-LAYER-ADJUDICATION-MISSING` on clause `LC-E14`
+(HARD rows 7 at origin/main, 8 at the tip; the two `EXTENSION-TITLE-MATCHES-CORE` rows that surface
+beside it are self-labelled `PRE-EXISTING`). The entry no longer quotes core's command — it was
+trimmed under `OWED-S308-RETRO-900-TRIM-ABSORBED-HALF` — but its paraphrase of core's sequence ends
+in the unbased `git checkout -b ai-dlc/retro/sprint-<N>`, so that summary is stale from this
+release onward and the verdict it earns is `still-additive` with one word to add. `code-reviewer.md`
+and `gate-validation.md` produce no new consumer drift row.
+
 ## [0.569.0] - 2026-09-14
 
 ### A declared-id citation denied in its own sentence stops acquitting the row that denies it, and ten staged consumer receipts stop reading the distribution checkout as a path

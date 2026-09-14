@@ -4,7 +4,7 @@
 # scripts/validate-enforcement-map.sh plus every enum in core/schemas/*.json, and
 # byte-compares it at pre-push.
 #
-# Two controls, one near-miss control and a mutant per failure mode, each a throwaway repo
+# Two controls, two near-miss controls and a mutant per failure mode, each a throwaway repo
 # under a temp dir. Exit 0 iff every control is green AND every mutant is killed by its own arm.
 #
 #   controlA  the REAL repo: `--check` against the committed index      -> must PASS
@@ -152,9 +152,21 @@ seed() {
   # the ARM and nothing else -- an extractor reading prose would render `gone` into the row.
   printf '%s\n' '  low|medium|high|xhigh|max) ;;' '  # low|medium|gone) ;;' \
                 '  An unrecognised level among low, medium, high, xhigh and max is dropped.' > "$d/owners/guard.sh"
+  # The code-review verdict owner: the `## Verdict` template line a reviewer copies, beside the
+  # two shapes that are NOT it. The first is the seed's NEAR-MISS CONTROL and it is not
+  # hypothetical -- core/team-roles/code-reviewer.md writes the same three members a second
+  # time as a PARENTHESISED alternation inside a Communication sentence, so an extractor keyed
+  # on the alternation alone renders a byte-identical row today and stays correct-looking after
+  # the template it claims to read has changed. The second is a member named only in a bullet.
+  # `SEED-FOUR` is demanded ABSENT below; presence of `SEED-ONE` and absence of `SEED-FOUR` are
+  # one assertion in two halves, and either alone passes under a prose-reading extractor.
+  printf '%s\n' '# Code Review: <Story ID>' '' '## Verdict' 'SEED_ONE | SEED_TWO' '' \
+                '## Communication' \
+                '- Send your full verdict (SEED_ONE | SEED_TWO | SEED_FOUR, with severity).' \
+                '- SEED_FIVE is named only in this bullet.' > "$d/owners/reviewer.md"
 
   # --- the readers each vocabulary is joined to ---
-  for r in ledger kinds contract cycle skill hook emap budget guard; do
+  for r in ledger kinds contract cycle skill hook emap budget guard reviewer; do
     printf 'reader\n' > "$d/readers/$r.md"
   done
 
@@ -231,6 +243,13 @@ err "I811 fired"
 # vocabulary-extract: effort-levels
 # vocabulary-readers: readers/guard.md
 err "I812 fired"
+# --- I813: the code-review verdict vocabulary is one set ---------------------
+# vocabulary: code-review verdicts
+# vocabulary-invariant: I813
+# vocabulary-owner: owners/reviewer.md
+# vocabulary-extract: review-verdicts
+# vocabulary-readers: readers/reviewer.md
+err "I813 fired"
 # --- I808: an ordinary arm, and a NEAR MISS -- it binds ONE string, not a set -
 # The wording is deliberate. `one string` is one character-class away from `one set`, which
 # is what the demand arm keys on, so this line is the seed's standing proof that the arm
@@ -243,7 +262,7 @@ EOF
   # --- the invariant index the markers' citations resolve against ---
   {
     printf '# Invariant index\n\n| ID | What it binds |\n|----|---------------|\n'
-    for i in 801 802 803 804 805 806 807 808 810 811 812; do printf '| I%s | seeded |\n' "$i"; done
+    for i in 801 802 803 804 805 806 807 808 810 811 812 813; do printf '| I%s | seeded |\n' "$i"; done
   } > "$d/docs/invariant-index.md"
 
   # --- one schema, so the second table is non-empty ---
@@ -268,8 +287,8 @@ fi
 # --- controlB: the synthetic seed renders and round-trips --------------------
 seed "$TMP/controlB"
 outB="$(render_in "$TMP/controlB")"
-if ! grep -q "10 cross-file vocabular(ies), 1 schema enum(s)" <<<"$outB"; then
-  note "FIXTURE BROKEN: the synthetic seed did not render 10 vocabularies and 1 schema enum."
+if ! grep -q "11 cross-file vocabular(ies), 1 schema enum(s)" <<<"$outB"; then
+  note "FIXTURE BROKEN: the synthetic seed did not render 11 vocabularies and 1 schema enum."
   printf '%s\n' "$outB" | sed 's/^/      /' | head -6
   exit 1
 fi
@@ -277,7 +296,7 @@ fi
 # marker reader ran; six extractors could each be returning nothing and the row count would
 # be identical.
 missing=""
-for want in 'ALPHA' 'kind-one' 'CODE-A' 'keyone' 'heavy' 'one/\*.sh' 'YES' 'SEEDED NOTHING' 'seed-one'; do
+for want in 'ALPHA' 'kind-one' 'CODE-A' 'keyone' 'heavy' 'one/\*.sh' 'YES' 'SEEDED NOTHING' 'seed-one' 'SEED_ONE'; do
   grep -qE "$want" "$TMP/controlB/docs/vocabulary-index.md" || missing="$missing $want"
 done
 if [ -n "$missing" ]; then
@@ -294,6 +313,18 @@ fi
 if grep -q 'seed-three' "$TMP/controlB/docs/vocabulary-index.md"; then
   note "FIXTURE BROKEN: the inflight-statuses extractor rendered \`seed-three\`, which the seeded owner names only in prose and never tests for. It is reading what the file SAYS rather than the branch it TAKES."
   grep 'inflight' "$TMP/controlB/docs/vocabulary-index.md" | sed 's/^/      /'
+  exit 1
+fi
+# AND THE CODE-REVIEW ROW MUST NOT CARRY THE PROSE-ONLY MEMBERS. The seeded owner writes its
+# members a second time as a PARENTHESISED alternation inside a Communication sentence and
+# names a fifth in a bullet, which is the shape the real owner has: core/team-roles/code-
+# reviewer.md's Communication bullet carries all three verdict names in a sentence, so an
+# extractor reading the alternation renders a row byte-identical to a correct one today and
+# stays correct-looking after the `## Verdict` template a reviewer copies has changed.
+# Presence of `SEED_ONE` above and absence of both tokens here are one assertion in halves.
+if grep -qE 'SEED_FOUR|SEED_FIVE' "$TMP/controlB/docs/vocabulary-index.md"; then
+  note "FIXTURE BROKEN: the review-verdicts extractor rendered a member the seeded owner carries only in a parenthesised prose alternation or in a bullet. It is reading what the role file SAYS rather than the \`## Verdict\` template a review file is written FROM."
+  grep 'code-review' "$TMP/controlB/docs/vocabulary-index.md" | sed 's/^/      /'
   exit 1
 fi
 # The consumer-owned row must render WITHOUT members and must not have shifted its fields.
@@ -545,7 +576,7 @@ fi
 seed "$TMP/n1"
 if mutate "$TMP/n1/$MAP" '/^# --- I802: the kind vocabulary is one set/d'; then
   green_check "n1  block-scope    two adjacent blocks, one field each" "$TMP/n1" \
-    "10 cross-file vocabular(ies), 1 schema enum(s)" '| ledger statuses |' '| kinds |'
+    "11 cross-file vocabular(ies), 1 schema enum(s)" '| ledger statuses |' '| kinds |'
 else
   note "SKIP  n1 -- sed matched nothing; no mutation occurred"; rc=1
 fi
@@ -755,6 +786,6 @@ else
 fi
 
 if [ "$rc" -eq 0 ]; then
-  note "PASS  vocabulary-index -- 2 controls + 1 near-miss green, 22/22 mutants killed by their own arm"
+  note "PASS  vocabulary-index -- 2 controls + 2 near-miss green, 22/22 mutants killed by their own arm"
 fi
 exit "$rc"

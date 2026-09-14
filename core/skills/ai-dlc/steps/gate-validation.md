@@ -198,8 +198,9 @@ H1/H2 stay with the lead — a self-test is never escalated into the mechanism i
   a Git-tracked path `code-reviewer.md` guarantees and the story's Gate-status
   line cites), never from recollection — a lead-asserted gate claim is how a
   sprint ran deploy as APPROVED while its gate-1 review file on disk still read
-  CHANGES-REQUESTED. The value is the text after `:` on the matched line, or the
+  NEEDS_REWORK. The value is the text after `:` on the matched line, or the
   next non-blank line when the match is a bare heading.
+- **Verdict values are the set `code-reviewer.md` declares under `## Verdict`:** `APPROVED` passes this check; `NEEDS_REWORK` and `BLOCKED` fail it.
 - **Zero matches FAILS this check; it is never a fallback to recollection.** An
   unreadable verdict is an unmet validation, not an absent one. Name the file.
   Do not infer the verdict from the review's prose, from its existence, or from

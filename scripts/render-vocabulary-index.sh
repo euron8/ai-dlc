@@ -337,7 +337,32 @@ vocab_extract_effort_levels() {
     | tr '|' '\n' | grep -v '^$' | LC_ALL=C sort -u
 }
 
-IMPLEMENTED='ledger-statuses extension-kinds adjudicated-codes pr-class-keys intensity-table syntax-globs empty-subject-verdict inflight-statuses effort-levels'
+vocab_extract_review_verdicts() {
+  # KEYED ON THE TEMPLATE LINE THE ROLE FILE HANDS A REVIEWER, WHICH IS THE ONLY PLACE THE
+  # SET IS DECLARED AS A SET. code-reviewer.md carries the same three names twice more in
+  # prose -- a Communication bullet writes them as a PARENTHESISED alternation inside a
+  # sentence -- and a file-wide scan for the alternation renders the same row whether the
+  # template a reviewer actually copies still carries them or not. Text about a program is
+  # not the program, and the template IS the program here: it is what a review file is
+  # written from, and gate-validation.md's Check 1 greps that file's verdict line back out.
+  #
+  # THE FIRST MATCHING LINE AFTER THE HEADING, AND THEN `exit`. Anchoring on `^## Verdict$`
+  # and taking the first bare alternation below it is what separates the template from the
+  # prose: the prose forms all carry leading text on their line, so `^` refuses them without
+  # needing a list of the shapes to exclude. The near-miss probe seeds the parenthesised
+  # prose form and a member named only in a bullet; both must yield nothing.
+  #
+  # THE ALTERNATION IS SPLIT, NOT MATCHED WHOLE, for vocab_extract_effort_levels' reason: a
+  # pattern keyed on today's three members cannot see an owner that LOST one -- it would
+  # score its own subject as a non-instance and render an empty row, which the zero guard
+  # then reports as a changed grammar rather than as the drift it is.
+  awk '/^## Verdict$/ { on = 1; next }
+       on && /^[A-Z_]+( \| [A-Z_]+)+$/ { n = split($0, m, /[[:blank:]]*\|[[:blank:]]*/)
+                                         for (i = 1; i <= n; i++) print m[i]; exit }' "$1" \
+    | LC_ALL=C sort -u
+}
+
+IMPLEMENTED='ledger-statuses extension-kinds adjudicated-codes pr-class-keys intensity-table syntax-globs empty-subject-verdict inflight-statuses effort-levels review-verdicts'
 
 # =========================================================================================
 # THE PATH LISTS. A marker's `vocabulary-readers:` and `vocabulary-emitters:` fields carry
@@ -416,6 +441,7 @@ extract_with() { # extract_with <slug> <owner-path>
     empty-subject-verdict) vocab_extract_empty_subject_verdict "$2" ;;
     inflight-statuses)  vocab_extract_inflight_statuses  "$2" ;;
     effort-levels)      vocab_extract_effort_levels      "$2" ;;
+    review-verdicts)    vocab_extract_review_verdicts    "$2" ;;
     *) return 3 ;;
   esac
 }
@@ -777,6 +803,34 @@ probe_extract effort-levels "$PROBE_DIR/guard.sh" "high low max medium xhigh"
 printf '%s\n' 'effort is validated somewhere else entirely' > "$PROBE_DIR/guard-none.sh"
 [ -z "$(vocab_extract_effort_levels "$PROBE_DIR/guard-none.sh")" ] || \
   probe_fail "the effort-levels extractor returned a member from a file carrying no validating case arm; it is reading prose rather than the branch that decides a dispatch."
+
+# The review-verdict seed carries the three shapes that are NOT the template line, and the
+# first of them is the one this extractor exists to refuse: code-reviewer.md's own
+# Communication bullet writes the SAME THREE MEMBERS as a parenthesised alternation inside a
+# sentence, so an extractor keyed on the alternation alone renders a byte-identical row today
+# and stays correct-looking after the template a reviewer copies has changed. The other two
+# are a member named only in a bullet and a heading whose name is one character off.
+# THE MEMBER NAMES HERE ARE SYNTHETIC, so the seed cannot be mistaken for the real set and a
+# scan for the real tokens cannot be satisfied by this file.
+printf '%s\n' \
+  '## Summary' 'One paragraph.' \
+  '## Verdict' \
+  'PROBE_ONE | PROBE_TWO | PROBE_THREE' \
+  '## Communication' \
+  '- Send your full verdict (PROBE_ONE | PROBE_TWO | PROBE_FOUR, with per-finding severity).' \
+  '- PROBE_FIVE is named only in this bullet.' > "$PROBE_DIR/reviewer.md"
+probe_extract review-verdicts "$PROBE_DIR/reviewer.md" "PROBE_ONE PROBE_THREE PROBE_TWO"
+# NEAR-MISS, BOTH DIRECTIONS IN ONE FILE: the parenthesised prose alternation and the
+# bullet-only member, with NO `## Verdict` heading above them. A file-wide alternation reader
+# returns three members here; the shipped extractor must return none.
+printf '%s\n' \
+  '## Findings' \
+  '- Send your full verdict (PROBE_ONE | PROBE_TWO | PROBE_FOUR, with per-finding severity).' \
+  '- PROBE_FIVE is named only in this bullet.' \
+  '## Verdicts' \
+  'PROBE_SIX | PROBE_SEVEN' > "$PROBE_DIR/reviewer-none.md"
+[ -z "$(vocab_extract_review_verdicts "$PROBE_DIR/reviewer-none.md")" ] || \
+  probe_fail "the review-verdicts extractor returned a member from a file carrying no \`## Verdict\` template line; it is reading the parenthesised alternation the role file writes in prose, or a member named only in a bullet, rather than the template a review file is written from."
 
 # --- probe 3b: the PATH lists, positive and in every near-miss direction ---------------
 # The seed carries both lists, a scalar `token:` inside the block, and a decoy list under a
