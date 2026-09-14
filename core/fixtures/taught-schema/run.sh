@@ -208,13 +208,43 @@ else
 fi
 
 # ---------------------------------------------------------------------------------------
-# V3. No over-fire. A doc with genuinely no provenance block must still pass.
+# V3. MALFORMED != ABSENT, read from the OTHER side. V2 requires an unparseable marker to
+#     FAIL as malformed; V3 requires an artifact with genuinely no marker at all to fail as
+#     ABSENT, and to be acquitted by `--allow-missing`. The two verdicts share exit code 1
+#     by design — the header says 1 covers missing OR malformed — so the exit code alone
+#     cannot separate them and the arm reads the DIAGNOSIS.
+#
+#     THIS ARM USED TO ASSERT THE OPPOSITE. It required the blockless artifact to PASS, on
+#     the grounds that the malformed check must not over-fire. That contract is gone: a
+#     flagless caller has already decided the artifact is in scope, so an absent block is a
+#     finding and silence is not a declaration. The over-fire question it was asking is
+#     still asked here, and more precisely — over-firing would now mean reporting the absent
+#     case with the MALFORMED wording, which sends the caller to re-wrap a block that is not
+#     there.
+#
+#     BOTH DIRECTIONS IN ONE ARM, WITH A CONTROL. "The message does not carry MALFORMED" is
+#     satisfied by a validator that emits nothing at all, so the same grammar is fired at
+#     V2's fenced file in this same run: if it does not match THERE, the absence here is a
+#     scan that cannot spell its own subject.
 # ---------------------------------------------------------------------------------------
 printf '# a doc\n\nNo provenance here.\n' >"$TMP/none.md"
-if bash "$VALIDATOR" "$TMP/none.md" >/dev/null 2>&1; then
-    ok "V3 an artifact with no block at all still passes (the malformed check does not over-fire)"
+bash "$VALIDATOR" "$TMP/none.md" >"$TMP/v3" 2>&1
+v3_rc=$?
+bash "$VALIDATOR" "$TMP/none.md" --allow-missing >"$TMP/v3.allow" 2>&1
+v3_allow_rc=$?
+bash "$VALIDATOR" "$TMP/fenced.md" >"$TMP/v3.malctl" 2>&1
+if [ "$v3_rc" -eq 0 ]; then
+    bad "V3 an artifact with no block at all PASSED flagless — a reader that answers OK to 'I examined nothing' puts the burden of remembering a flag on every gate"
+elif ! grep -q -- '--allow-missing' "$TMP/v3"; then
+    bad "V3 the flagless-absent deny fired but never names --allow-missing, so the caller is told it failed and not what to do about it: $(head -1 "$TMP/v3")"
+elif ! grep -qE 'MALFORMED|CANNOT PARSE' "$TMP/v3.malctl"; then
+    bad "V3 CONTROL — the MALFORMED grammar did not match on the fenced file either, so the 'not malformed' half of this arm is a scan that cannot spell its own subject"
+elif grep -qE 'MALFORMED|CANNOT PARSE' "$TMP/v3"; then
+    bad "V3 the ABSENT case is reported with the MALFORMED wording — the two verdicts have different fixes and the caller is being sent to re-wrap a block that is not there"
+elif [ "$v3_allow_rc" -ne 0 ]; then
+    bad "V3 --allow-missing did not acquit the very case it exists for (exit $v3_allow_rc) — every call site that has legitimately decided its artifact carries no block is blocked: $(head -1 "$TMP/v3.allow")"
 else
-    bad "V3 an artifact with no block FAILED — the malformed check is over-firing"
+    ok "V3 an artifact with no block FAILS as ABSENT naming --allow-missing (not as MALFORMED — control: that grammar matches on V2's fenced file), and --allow-missing accepts it"
 fi
 
 # ---------------------------------------------------------------------------------------

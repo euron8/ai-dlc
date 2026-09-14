@@ -89,6 +89,12 @@ it was handed off:
   collects by content. The adversary attacks the CONTRACT in its own block before the fix hand
   spawns, and attacks the TIP after collection. Wall clock is the fix plus the longest fan-out
   arm, never the sum.
+- **Every hand's brief forbids `rm -rf` on a variable path.** Operator instruction at batch 106:
+  an adversary's scratch-tree build ran `rm -rf "$S/$d"` in a loop and the harness stopped it as
+  a dangerous delete on a possibly-empty variable, which is the one case that heuristic exists
+  for, so it is not to be allow-listed. A scratch copy goes into a fresh `mktemp -d` under the
+  scratchpad and is never deleted by the hand; anything that must be cleared names a literal
+  absolute path. The plan's dispatch action carries that sentence into every spawn prompt.
 
 None of that is about writing quality. Each one makes the file produce WRONG WORK when
 followed literally, which is the only thing a handoff is for.

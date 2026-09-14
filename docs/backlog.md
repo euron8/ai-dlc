@@ -109,6 +109,15 @@ reason, and the grammar was pointed at its own subject before its zero was belie
 (exit 9) only for a genuinely missing `route.md` or `wait-for-deliverable.sh`. It CANNOT score
 whether the instruction is CORRECT, only that it is present and sited.
 
+**LANDED (v0.572.0, verified c990cb0a).** The Step 0 path 2 bullet now names
+`scripts/ai-dlc/wait-for-deliverable.sh`, `--since` and the row's `dispatched-at` cell in one
+instruction, cites `_gate-procedures.md`'s bounded-join beat as the procedure rather than
+restating it, and records that liveness for a teammate dispatched by a PRIOR session is
+unavailable to that program because `CLAUDE_CODE_SESSION_ID` differs. Insertions only; no
+existing byte of `route.md` changed. Receipt base **1**, tip **0**, the two trees asserted to
+differ by `cmp -s` first. `BL-027`'s receipt, the hazard this entry names for its own fixer,
+still exits 1 with exactly ONE arm-(b) hit, unmoved by this prose.
+
 verify: sh R=core/skills/ai-dlc/steps/route.md; W=core/scripts/wait-for-deliverable.sh; [ -f "$R" ] || exit 9; [ -f "$W" ] || exit 9; grep -q -- '--since' "$W" || exit 9; n=0; for f in core/skills/ai-dlc/steps/*.md; do [ "$f" = "$R" ] && continue; if grep -q 'wait-for-deliverable' "$f"; then n=$((n+1)); fi; done; [ "$n" -ge 2 ] || exit 9; w="$(awk '/^###[[:space:]]*Step 0:/{f=1} f&&/^###[[:space:]]*Step 0a/{f=0} f' "$R")"; [ -n "$w" ] || exit 9; printf '%s' "$w" | grep -q 'wait-for-deliverable' || exit 1; printf '%s' "$w" | grep -q -- '--since' || exit 1; exit 0
 
 ## BL-238 — the consumer ledger's `theirs`-ref receipt grammar cannot key on an ARM's body, so a receipt written to ask a behavioural question is satisfied by a comment
@@ -3883,6 +3892,51 @@ false-positive set before the check ships.
 
 **Tiered DEFECT.** Consumer-facing; the validator ships in `core/scripts/`.
 
+**LANDED (v0.572.0, verified c990cb0a).** The flagless, non-retro, no-block branch FAILS to
+stderr at exit 1, naming the artifact and both remedies, and `--allow-missing` is the
+declaration a call site makes when its artifact may legitimately carry none. It acquits exactly
+one rung — a retro with no block, a MALFORMED marker and a present-but-violating block all still
+fail — and it contradicts `--require-skill` at exit 2. Receipt base **1**, tip **0**.
+
+**The arm table, re-derived here, and the base column is the part that needs reading.** Eight
+arms against the shipping script, with a schema-valid seed control asserted at 0 flagless first
+so a bad seed could not read as agreement: (a) ordinary `.md`, no block, no flag `0 -> 1`;
+(b) same file `--allow-missing` `2 -> 0`; (c) retro path, no block, `--allow-missing` `2 -> 1`;
+(d) MALFORMED marker, `--allow-missing` `2 -> 1`; (e) `--allow-missing --require-skill x`
+`2 -> 2`; (f) well-formed block, `--allow-missing` `2 -> 0`; (g) `.txt` artifact, no block, no
+flag `0 -> 1`; (h) `mode: solo` block, `--allow-missing` `2 -> 1`. **Arms (b)–(f) and (h) read 2
+at base because `--allow-missing` is an unknown argument there**, so those arms discriminate only
+on their TIP reading; (a) and (g) are the two that move on the default path, and (g) is what
+kills an `.md`-only fix. Arm (a)'s stderr names `--allow-missing` and carries neither `MALFORMED`
+nor `CANNOT PARSE`, against a malformed-file control in the same run that proves that grammar
+can fire.
+
+**The false-positive set was two fixture arms**, both encoding the old contract and both
+rewritten: `taught-schema` V3 and `retro-compliance-workflow` A5's reachability control. Nine
+other validator fixtures are unchanged — check-1c-bypass, check-17-bypass, check-17-counts,
+h2-attest-scripts-dir, provenance-not-accessible, predicate-reclassification,
+self-update-join-gate, story-provenance, validator-path-resolution.
+
+**One flagless caller exists on a consumer and it is unreachable today, measured read-only.**
+The reference consumer's `scripts/ci-local.sh:513` invokes the validator flagless on
+`docs/retro/sprint-${sprint_n}.md`, a legacy spelling `RETRO_PATH_RE` does not match. That file
+does not exist for any current sprint, so the validator already exits 1 there on "artifact not
+found" (`validate-provenance-block.sh:119-121`) and the new rung changes no reachable verdict.
+The only file of that spelling on disk is `sprint-131b.md`, whose name carries no numeric tail
+and cannot be derived by that script; driven directly it carries no block and flips 0 to 1 under
+the new rung, and the same flip becomes REACHABLE through the call site the moment the consumer
+writes its next block-less `docs/retro/sprint-<N>.md`. The repoint — `docs/retro/s<N>/retro.md` with
+`--require-skill bmad-party-mode` — is the CONSUMER's change and belongs in the pull brief.
+
+**And the receipt alone cannot score the acquittal's narrowness.** It closes on the flip and
+cannot distinguish an `--allow-missing` that acquits everything; arms (c), (d) and (h) are what
+kill that, and they live in the fixture. Nor can it see a path-shape or environment acquittal:
+it drives one absolute path off `mktemp -d` with no variable set, so a rung that acquits every
+RELATIVE path, or one that reads `AI_DLC_PROVENANCE_ALLOW_MISSING`, reads 0 here while the
+consumer's one flagless caller passes a relative path. The tip adversary built both; arms (a2),
+(a3) and (a4) of `provenance-flagless-default` are what kill them, driven per-invocation
+because that fixture's own hermeticity scrub unsets every `AI_DLC_` variable before the arms run.
+
 verify: sh V=core/scripts/validate-provenance-block.sh; [ -f "$V" ] || exit 9; grep -q -- "--require-skill" "$V" || exit 9; d=$(mktemp -d) || exit 9; printf 'ordinary file, no marker\n' > "$d/plain.md"; a=0; AI_DLC_PROJECT_ROOT="$d" bash "$V" "$d/plain.md" >/dev/null 2>&1 || a=$?; c=0; AI_DLC_PROJECT_ROOT="$d" bash "$V" "$d/plain.md" --require-skill bmad-review-adversarial-general >/dev/null 2>&1 || c=$?; rm -rf "$d"; [ "$c" -eq 1 ] || exit 9; [ "$a" -eq 0 ] && exit 1; exit 0
 
 ## BL-223 — the push-candidate ledger is outside `validate-write-format-steering.sh`'s population by construction, and `upstream-routing.md` steers no format
@@ -3980,6 +4034,37 @@ enforcer calls it a GHOST, exits 1, and the non-zero-exit arm refuses it. A `tra
 with no format prints nothing. A `transient:false` member with no format prints
 `UNDECLARED push-candidate`, not `declared`. Only a `transient:false` member plus a format declared
 in a file of its own, carrying its own anchor and claimed by no other member, reaches 0.
+
+**RE-MEASURED at batch 106, and the finding is that the receipt is satisfiable only by lying to
+I95.** The refusing arm is I95's PRODUCER arm, not the top-level-name key that batch 95 read it
+as. Four candidates, each built on its own `git archive` copy with the sides `cmp -s`-asserted
+to differ before any verdict was read:
+
+    base                                          I95 0   receipt 1
+    naive member + format                         I95 1   receipt 0
+    producer repointed at the naming script       I95 1   receipt 0
+    fabricated line constructing the path         I95 0   receipt 0
+
+The last row is the one that matters. I95 derives its population from non-comment lines
+constructing `${STATE_DIR}/<name>` or `_bmad-output/<name>` under `core/hooks`, `core/scripts`,
+`core/session-driver` and `core/git-hooks`, and checks a declared member's PRODUCER with that
+same grammar. `_bmad-output/push-candidate` is constructed by **0** such lines against a control
+of **7** for `_bmad-output/ai-dlc-update` in the same sweep — the ledger actually lives at
+`ai-dlc-update/push-candidate-ledger.md`, which `audit-upstream-routing.sh:311` names. So adding
+one non-comment line to a shipped script that constructs `_bmad-output/push-candidate/…` takes
+I95 to 0, the receipt to 0 and the FULL enforcement map to exit 0 — while declaring a producer
+for a path the machinery never creates, which is the state I95's own remedy text calls wrong.
+
+**The honest shape is a SECOND format under the existing `ai-dlc-update` member, and
+`write-format-steering.json` cannot express it**: `formats[]` carries one `declared_in` per
+`name`, and a repeated name is a FIELD failure at `validate-write-format-steering.sh:237`
+(`declared twice`). Taking this entry therefore means extending the steering schema to carry N
+formats per member FIRST, and rotating the receipt to a form that reads the report row for
+`ai-dlc-update` naming a SECOND `declared_in`. Not built this batch.
+
+**The receipt is kept as it stands, and that is a NOTE-tier hazard worth naming.** A receipt
+that stays at 1 forever is indistinguishable from a live defect nobody has reached, and the only
+thing separating them is this paragraph.
 
 **Tiered DEFECT.** The enforcer's PASS line reads as coverage of the shared append-only artifacts
 while the ledger this program exists to drain is not among them.

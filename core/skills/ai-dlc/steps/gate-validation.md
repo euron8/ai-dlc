@@ -1161,7 +1161,9 @@ the values, and a genuine zero is a valid reading. Fixture:
 `fixtures/check-17-counts/`.
 
 **Check.** Invoke `scripts/ai-dlc/validate-provenance-block.sh` against the
-gate's primary artifact.
+gate's primary artifact. An artifact carrying NO block at all is a FINDING by
+default, flag or no flag; `--allow-missing` is the only opt-out and it belongs
+to a caller that has decided this artifact class carries none.
 
 - **Retro gate:** run `scripts/ai-dlc/validate-provenance-block.sh
   docs/retro/s<N>/retro.md` AND `scripts/ai-dlc/validate-retro-evidence.sh

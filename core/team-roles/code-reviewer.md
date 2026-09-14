@@ -340,8 +340,11 @@ evaluation that artifact class requires>` exits 0 AND (for retro docs)
 (b) NEEDS_REWORK naming the missing block, missing field, or
 script failure output.
 
-**Run it WITH the flag, and pin the class's own skill.** Flagless, the
-script checks the block is well-formed and names a KNOWN skill — but never
+**Run it WITH the flag, and pin the class's own skill.** Flagless, an
+artifact with NO block at all FAILS unless `--allow-missing` declares that
+acceptable — so the missing-block condition above is caught either way. Where
+a block IS present, flagless checks it is well-formed and names a KNOWN
+skill — but never
 that it names the RIGHT one. So the precise condition this section calls
 Critical, a block naming a sanctioned skill that was not the evaluation
 this artifact required, is exactly the one the flagless check cannot
