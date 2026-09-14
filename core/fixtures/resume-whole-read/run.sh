@@ -123,15 +123,60 @@ if [ -n "$MUTANT" ]; then
       # feature. Must fail A9 ALONE.
       sed 's|^   - \*\*`handoff`\*\* .*|   - (removed)|' "$ROUTE" > "$MUT"
       ;;
+    no-since-route)
+      # The beat instruction deleted outright. Must fail A10 ALONE.
+      # Keyed on the SUBJECT'S OWN predicate -- the line that names the program
+      # AND the flag -- never on a line number or a quoted copy of the sentence,
+      # so a rewrap or a reword re-anchors itself and `cmp -s` below catches a
+      # predicate that has genuinely lost its subject.
+      awk '!(/wait-for-deliverable\.sh/ && /--since/)' "$ROUTE" > "$MUT"
+      ;;
+    since-at-eof)
+      # SITING. The same sentence, byte-identical, moved out of the Step 0
+      # window to the end of the file. Every token A10 looks for is still in
+      # route.md, so a whole-file grep passes and only a windowed read fails.
+      awk '/wait-for-deliverable\.sh/ && /--since/ { saved = saved $0 "\n"; next }
+           { print }
+           END { printf "%s", saved }' "$ROUTE" > "$MUT"
+      ;;
+    since-in-comment)
+      # The sentence wrapped in an HTML comment: present in the window, invisible
+      # to a reader following the file. Must fail A10 ALONE.
+      awk '/wait-for-deliverable\.sh/ && /--since/ { print "<!--"; print $0; print "-->"; next }
+           { print }' "$ROUTE" > "$MUT"
+      ;;
+    since-in-fence)
+      # The sentence wrapped in a fenced block: an EXAMPLE, not an instruction.
+      # Must fail A10 ALONE.
+      awk '/wait-for-deliverable\.sh/ && /--since/ { print "```"; print $0; print "```"; next }
+           { print }' "$ROUTE" > "$MUT"
+      ;;
+    since-negated)
+      # The instruction inverted. Every token survives and the sentence now says
+      # the opposite. Must fail A10 ALONE.
+      awk '/wait-for-deliverable\.sh/ && /--since/ { t=$0; sub(/^[[:space:]]+/, "", t); print "     Do NOT run " t; next }
+           { print }' "$ROUTE" > "$MUT"
+      ;;
+    since-other-program)
+      # `--since` and `dispatched-at` attributed to a DIFFERENT program. The
+      # flag is named, the cell is named, and the beat is never armed. Must fail
+      # A10 ALONE.
+      awk '/wait-for-deliverable\.sh/ && /--since/ { gsub(/wait-for-deliverable\.sh/, "validate-artifact-budget.sh") }
+           { print }' "$ROUTE" > "$MUT"
+      ;;
     blank)
       # Vacuity control. Must fail the POSITIVES while passing A2 -- the
-      # demonstration that a bare absence check proves nothing.
+      # demonstration that a bare absence check proves nothing. An empty Step 0
+      # window is an ordinary A10 failure, not a broken fixture, so this mutant
+      # stays a MUTANT REJECTED and does not exit 2.
       : > "$MUT"
       ;;
     *)
       echo "FIXTURE ERROR: unknown RESUME_FIXTURE_MUTANT '$MUTANT'" >&2
       echo "  known: section-read | no-budget | reorder | no-entry-line |" >&2
-      echo "         no-handoff-token | blank" >&2
+      echo "         no-handoff-token | no-since-route | since-at-eof |" >&2
+      echo "         since-in-comment | since-in-fence | since-negated |" >&2
+      echo "         since-other-program | blank" >&2
       exit 2
       ;;
   esac
@@ -242,6 +287,67 @@ case "$NORM" in
     ok "A9 route.md dispatches the handoff entry token to steps/handoff.md" ;;
   *) bad "A9 route.md dispatches the handoff entry token to steps/handoff.md" ;;
 esac
+
+# --- A10: the resume names the program that arms the beat, and its flag ------
+# Step 0 path 2 told a resuming lead that "the beat resumes" for a row whose
+# deliverable is older or absent and named neither the program nor the flag
+# that makes it correct across a session boundary.
+#
+# WHAT A10 CAN AND CANNOT SCORE. It scores THREE properties and no others:
+# PRESENCE (the program, the flag and the cell are named), SITING (they are
+# named inside the Step 0 window, in text a reader following the file
+# executes -- not in a fenced example, not in an HTML comment, not elsewhere
+# in the file), and NON-NEGATION (the clause before the program name does not
+# tell the reader to skip it). It CANNOT score whether the instruction is
+# CORRECT -- whether `--since` takes that cell, whether the beat is the right
+# beat, whether the value is well-formed. A rewrite that names all three
+# tokens in one non-negated in-window sentence and gives wrong advice passes
+# this arm. Correctness is the reviewer's, and the arm claims no more.
+#
+# THE WINDOW GRAMMAR IS `^###`, NOT `^##`. `^##[[:space:]]*Step 0` matches
+# nothing in route.md -- every step heading is `###` -- and that grammar
+# returned an EMPTY window, which read as a clean scan.
+#
+# An empty window is an ordinary `bad` here, never exit 2, so the `blank`
+# mutant keeps exiting 0 as MUTANT REJECTED. Exit 2 is reserved above, for
+# route.md itself being absent.
+W10="$(awk '
+  /^###[[:space:]]*Step 0a/           { inw = 0 }
+  inw && /^[[:space:]]*```/           { fence = !fence; next }
+  inw && fence                        { next }
+  inw && /<!--/                       { cmt = 1 }
+  inw && cmt                          { if (/-->/) cmt = 0; next }
+  inw                                 { print }
+  /^###[[:space:]]*Step 0:/           { inw = 1 }
+' "$ROUTE")"
+
+a10=0
+if [ -n "$W10" ]; then
+  # Every token on ONE line: the program, the flag, and the cell the flag is
+  # fed from. Split across three sentences they can each be about something
+  # else -- a bare see-also list carries all three and instructs nothing.
+  CAND10="$(awk '/wait-for-deliverable\.sh/ && /--since/ && /dispatched-at/' <<<"$W10")"
+  if [ -n "$CAND10" ]; then
+    # NON-NEGATION, read off the clause BEFORE the program name. Padded with
+    # spaces and lowercased so `not` inside `nothing` or `cannot` is not a
+    # match. A here-string throughout: `printf ... | grep -q` reports
+    # NOT-FOUND on matching input once the writer fills the pipe (I54/I54b).
+    while IFS= read -r l10; do
+      [ -n "$l10" ] || continue
+      pre10="$(awk '{ i = index($0, "wait-for-deliverable.sh"); print substr($0, 1, i - 1) }' <<<"$l10" \
+               | tr '[:upper:]' '[:lower:]')"
+      case " $pre10 " in
+        *' not '*|*' never '*|*' do not '*|*' never run '*) continue ;;
+      esac
+      a10=1
+    done <<<"$CAND10"
+  fi
+fi
+if [ "$a10" -eq 1 ]; then
+  ok "A10 Step 0 arms the beat by name: wait-for-deliverable.sh --since <dispatched-at>"
+else
+  bad "A10 Step 0 arms the beat by name: wait-for-deliverable.sh --since <dispatched-at>"
+fi
 
 echo
 if [ -n "$MUTANT" ]; then
