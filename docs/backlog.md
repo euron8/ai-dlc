@@ -131,6 +131,15 @@ a companion item, because the two would carry near-identical triads and a seat r
 would not know the other bound the same diff. A receipt that took the companion form would
 accept the shape the adjudication refused, which is a receipt that accepts two candidate fixes.
 
+**`validate-backlog-receipts.sh` reports this receipt ALREADY-PASSING, not PROSE-CLOSABLE**,
+because its base is `HEAD` and the clause is committed there — so its seed direction is 0 → 0
+and R2 never scores it. That classification says nothing about prose-closability on its own, so
+the arm's own seed was run directly against the base blob: the line
+`# early[ -]exit emission mutation-RED`, appended as that arm appends it, leaves the receipt at
+exit 1 (control: the unseeded base blob also exits 1, and the tip exits 0 in the same run). The
+seed lands after the file's last `- [ ]` bullet, outside the window, which is the same property
+mutant C tests from inside it.
+
 verify: sh f=core/team-roles/qa.md; [ -r "$f" ] || exit 9; t=$(mktemp) || exit 9; awk '/^- \[ \] \*\*Orphaned-function/ { w=1; next } w && /^- \[ \]/ { w=0 } w { if ($0 ~ /<!--/) c=1; if (!c) print; if ($0 ~ /-->/) c=0 }' "$f" > "$t"; w=$(grep -c . "$t") || w=0; [ "$w" -gt 0 ] || { rm -f "$t"; exit 9; }; a=$(grep -ciE 'early[ -]exit' "$t") || a=0; b=$(grep -ciE 'emission' "$t") || b=0; d=$(grep -ciE 'mutation-RED' "$t") || d=0; rm -f "$t"; [ "$a" -ge 1 ] && [ "$b" -ge 1 ] && [ "$d" -ge 1 ] || exit 1; exit 0
 ## BL-252 — the gate-adjudicator returned a verdict path with nothing between the write and the return that read the file, so a dropped escalated check cost a whole re-dispatch
 
