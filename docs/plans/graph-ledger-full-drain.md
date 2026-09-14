@@ -37,9 +37,82 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
+### BATCH 103 SHIPPED AS `v0.569.0`, ONE RELEASE, TWO NO-`PC` SUBJECTS — THE CONTRACT ADVERSARY FOUND SEVEN BLOCKERS AND THREE DEFECTS BEFORE THE BUILD, **THE TIP ADVERSARY THEN BUILT NINETEEN IMPLEMENTATIONS AGAINST THE ASSEMBLED RELEASE AND TWO PASSED FIFTY FIXTURE ASSERTIONS AND THE RECEIPT WHILE LEAVING THE DEFECT LIVE, BECAUSE EVERY SEED CARRIED ITS NEGATOR IN BARE PROSE**, AND A THIRD STRUCTURAL FALSE POSITIVE OF THE `$DIST` GRAMMAR WAS FOUND BY BUILDING THE REWRITE. THE SWEEP WAS EMPTY OF PC WORK. THE GAP IS **TWO**, PENDING **0**, AND THE PULL IS **NOT REQUIRED**.
+
+This block replaces the batch-102 record below it. Re-derive every figure rather than reading it.
+
+**`VERSION` IS `0.569.0`, SO BATCH 104 RELEASES AS `0.570.0`.** Re-derive `VERSION` and add one.
+Batch 103 merged ONCE — `v0.569.0` at `62094bcb` (PR #750) — naming `BL-243` and `BL-248`
+verbatim in the release commit message; neither carries a `PC-` id, so no consumer ledger row
+moves and the join `git log -F --grep` for any `PC-` id returns nothing new (control:
+`PC-S342-CHECK-20-…` still resolves to `b3debba3`). Both are ROTATED, archive **163 → 165**,
+live **84 → 82**. No bootstrapping file moved: the range `60a2beac..origin/main` touches 8
+`core/` paths, zero under the update skill, zero mode-only rows (control: 8 raw rows). The
+operator's owed `--list "extension-check-adoption"` refresh ran and is carried in this release:
+the map gained exactly the two reads batch 102 predicted, control 197 of 197.
+
+**THE SUBJECTS WERE TAKEN ON THIS SESSION'S OWN RANKING** because the one-liner arrived from a
+peer: the sweep reproduced batch 102's figures exactly (live 61, cited 40, unfiled 21, archive 206,
+partition 0, TERMINAL 89, DISCHARGED-corrected 12, discharged-but-invisible 0), and the 21 unfiled
+split 7 named on `origin/main`, 11 `NOT-UPSTREAM` in the adjudication brief, 3 outside both (the
+withdrawn/superseded `PC-S309-PRE-PUSH-*` pair and `PC-S340-RETRO-AUDIT-SCANS-…`, which is
+UNADJUDICATED with `verify: manual` — a hand first wrote "refuted" for it from this lead's join and
+corrected it against the entry's own text). The one 2026-09-13 filing the consumer-history hand
+surfaced (`PC-S311-SNAPSHOT-SEVEN-SECTION-SCHEMA-…`) was already archived here at `v0.565.0`.
+
+**WHAT SHIPPED FOR `BL-243`.** `CITATION_NEGATED` — `no|not|rather than|instead of` — is a
+citation-local vocabulary separate from `NEGATED` (which keeps excluding `not` for its recorded
+cue-filter reason), bounded to the mention's own SENTENCE (`[.;:]`, not `CLAUSE_END`'s comma,
+because *"Separately and not part of this verdict, OWED-X"* straddles a comma) and searched only
+BEFORE the mention; the acquittal is per-occurrence `any(...)`, because `all()` over an empty
+generator acquits every no-mention row. Live register unchanged in both directions with the
+`cmp -s` control: 478 rows, 193 candidates, 1 acquitted, UNDECLARED 6, byte-identical JSON. The
+new vocabulary fires on nothing live and does fire on a seeded offender. The entry's receipt was
+INVERTED — it returned 0 on nine wrong rules, one of them a two-word literal keyed on its own seed
+— and is replaced by a twelve-row exact-set receipt; fixture 29 → 50 assertions, ten new mutants
+each on its own cell, `M_CIT3` re-anchored (the fix commit alone leaves that fixture red, which is
+the expected shape when the fixture hand runs after the fix hand). Fixture 0.79s → 1.54s; pole
+unmoved at `ledger-reverify`.
+
+**THE TIP ADVERSARY'S FINDING IS THE STANDING LESSON.** Nineteen implementations built against
+the gate-green assembled release; seventeen died; two — blanking quoted spans, and blanking
+parenthesised spans, before the negator search — passed all fifty assertions AND the receipt while
+acquitting *"This is 'not' tracked under OWED-C …"*. Every seed in both channels carried its
+negator in bare prose. Two seeds now carry it inside a quote and a parenthesis; the stripping
+non-fix reads 2 of 50 red. Also on the tip: the `BL-248` receipt's by-content exemptions acquitted
+a NEWLY seeded offender spelled like the fanout exemption; the refused count is now bound to
+exactly three.
+
+**WHAT SHIPPED FOR `BL-248`.** Eight staged receipts moved onto `$THEIRS_TREE` behind
+`[ -n "${THEIRS_TREE:-}" ] || exit 127;`, twins byte-identical, equivalence controlled (equal exits,
+127 with the value unset). **The contract's own rewrite of the layer-drift pair was refuted by
+building it** (`layer-drift.sh:225` hands `DIST="$1"` to `git -C`; a tree with no `.git` takes the
+receipt 0 → 127), and the docs hand found the fanout pair is a THIRD instance
+(`report-propagation-fanout.sh:216` `git rev-parse --git-dir`); the GIT_DIR-borrow and
+synthetic-repo workarounds were built and refuted. The spec-join pair was a NULL at HEAD (127 by a
+DISARM on a seed that defined no `CAP-7`); repaired in the seed first. The receipt drives the
+shipped `receipt_reads_dist_as_path` over all three files: 45 lines, 4 refused by content, 0
+unexpected, against 8 before.
+
+**THE PULL IS NOT REQUIRED AND THE GAP IS TWO.** Stamp `0.567.0` / `60a2beac` on the consumer's
+HEAD lineage (it self-updated mid-batch 102; `main` lags at 0.553.0 and is a strict ancestor),
+shipped `0.569.0`; PENDING 0 (no `PC-` id discharged). Consumer rehearsal on a scratch clone, tip
+vs origin/main: 90 rows each side, zero rows move, histogram identical (CLOSE-CANDIDATE 4,
+STILL-LIVE 47, NEEDS-REVIEW 2, HAND-REVIEW 15), with a resolution control (a distant theirs moves
+25 rows). Installed and distribution `validate-layer-entries.sh` byte-identical, so that
+differential is a null by construction. `layer-drift.sh` reads 7 HARD rows on the consumer
+against origin/main (the check-20 override drift plus six `HARD-LAYER-ADJUDICATION-MISSING` on
+`LC-E4`), consumer-side adjudication as batch 102 predicted. The consumer moved to
+`ai-dlc/carry-over/chunk-max-usd-swap-sizing` and then advanced to `694b9e76` mid-batch, all its
+own `_bmad-output/` state; porcelain 7 throughout.
+
+**AVAILABLE PC-BACKED RESIDUE AT THIS CLOSE: ZERO KNOWN.** Run the sweep anyway. The readiest
+no-`PC` work is `BL-220` (only shippable shape is an `--allow-missing` opt-out), `BL-223` (declare
+the FORMAT, not the member), and the seven receipt-bound entries batch 97 left open.
+
 ### BATCH 102 SHIPPED AS `v0.568.0`, ONE RELEASE, THREE SUBJECTS — THE OPERATOR RULED GRANT ON A SCOPE QUESTION THE PREVIOUS BLOCK HAD DEFERRED, THE SECOND `PC-S342` CANDIDATE WAS REFUSED AS FILED, AND **THE TIP ADVERSARY FOUND THAT THE BL-247 RECEIPT AND FIXTURE BOTH PASSED A ONE-ARGUMENT CALLER NON-FIX WITH THE FUNCTION BYTE-IDENTICAL.** THE GAP IS **ONE**, PENDING **2**, AND THE PULL IS **NOT REQUIRED**.
 
-This block replaces the batch-101 record below it. Re-derive every figure rather than reading it.
+This block was current at batch 102's close and is replaced by the batch-103 record above it.
 
 **`VERSION` IS `0.568.0`, SO BATCH 103 RELEASES AS `0.569.0`.** Re-derive `VERSION` and add one.
 Batch 102 merged ONCE — `v0.568.0` at `b3debba3` (PR #748) — naming
@@ -10021,6 +10094,17 @@ given at batch 90.
    **DO NOT TREAT A BATCH-82 RECEIPT AS TRUSTWORTHY BECAUSE IT EXISTS.** Three of them were
    rebuilt in one release: the originals closed on an empty file, on a dead arm, and on a
    positional window.
+
+   **BATCH 103's TWO SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope either.** `BL-243` and
+   `BL-248` shipped together as `v0.569.0` at `62094bcb` (PR #750), each cited in the release
+   commit message. Neither carries a `PC-` id and neither touched a bootstrapping file. The
+   operator's owed `extension-check-adoption` read-set refresh is carried in the same release.
+   **The available PC-backed residue at this close is ZERO KNOWN — run the sweep and rank what it
+   returns.** The readiest no-`PC` work is `BL-220`, `BL-223` and the seven receipt-bound entries
+   batch 97 left open; read each entry's batch-94/95 measurement paragraph before scoping it.
+   **Before writing any fixture seed this batch, ask whether the negator, token or anchor it
+   carries sits in bare prose only** — batch 103's span-stripping non-fix passed fifty assertions
+   for that reason.
 
    **BATCH 102's THREE SUBJECTS ARE SHIPPED — do not re-scope any of them.**
    `PC-S342-CHECK-20-IS-UNREACHABLE-AT-SPRINT-REVIEW-SO-NO-OVERRIDE-CAN-RELAX-IT-THERE` was GRANTED
