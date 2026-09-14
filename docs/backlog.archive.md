@@ -12747,3 +12747,278 @@ lines across the three files, so a fourth is refused regardless of how it is spe
 offender reads 1 against it, the tip 0, base 1.
 
 verify: sh B=docs/reviews/graph-ledger-adjudication-brief.md; P=docs/reviews/graph-ledger-adjudication-data/step19-receipts; E=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; for f in "$B" "$P/batch-8.md" "$P/batch-14.md" "$E"; do [ -f "$f" ] || exit 9; done; g=$(mktemp) || exit 9; awk '/^_RD_[A-Z0-9]+=/{print;n++} /^receipt_reads_dist_as_path\(\) \{/{f=1} f{print; if($0=="}"){f=0;g++}} END{if(n!=8||g!=1)exit 9}' "$E" > "$g" || { rm -f "$g"; exit 9; }; . "$g" || { rm -f "$g"; exit 9; }; rm -f "$g"; receipt_reads_dist_as_path 'AI_DLC_PROJECT_ROOT="$DIST" bash x' || exit 9; receipt_reads_dist_as_path 'git -C "$DIST" show "${THEIRS}:core/x"' && exit 9; n=0; bad=0; r=0; for f in "$B" "$P/batch-8.md" "$P/batch-14.md"; do grep -qF 'S="$DIST/core/scripts"' "$f" && bad=$((bad+1)); while IFS= read -r t; do n=$((n+1)); receipt_reads_dist_as_path "$t" || continue; r=$((r+1)); case "$t" in *'layer-drift.sh" "$DIST"'*) ;; *'AI_DLC_PROJECT_ROOT="$DIST" PATH='*) ;; *) bad=$((bad+1)) ;; esac; done < <(sed -n 's/^verify: sh //p' "$f"); done; [ "$n" -ge 40 ] || exit 9; [ "$r" -eq 3 ] || exit 1; [ "$bad" -eq 0 ]
+## BL-017
+
+**LANDED (v0.570.0, verified b1b50b9e).**
+
+**The shipped schema still names the blocking row as the only source of `subject_digest`.**
+`core/schemas/layer-adjudication-register.json:29` describes `subject_digest` as "Copied verbatim from
+the blocking row", and `:5` says `reconcile/layer-drift.sh` "prints the digest in the blocking row, so
+the operator copies a value rather than deriving one". Recording a verdict is what stops the row
+blocking, so once any verdict exists for the current subject state the message carrying the key is
+never emitted again — exactly the case of adding an `owed` object to a verdict already recorded
+without one.
+
+`SKILL.md`'s half of that instruction was repaired: `core/skills/ai-dlc-update/SKILL.md:1669` sends the
+operator to `layer-drift.sh --list-adjudications`. The schema's half was not. Measured with a control
+in the same invocation: `grep -c list-adjudications` on the schema = **0**; `grep -c 'blocking row'` on
+the same file = **3**.
+
+The asymmetry is what makes it a defect rather than a duplicate. `scripts/install.sh:601-604` copies
+every `core/schemas/*.json` to `.claude/schemas/`, so the artifact a consumer opens while writing a
+register record is the unrepaired half, and the repaired half is in a file they are not reading at that
+moment.
+
+Discharges `PC-S319-SUBJECT-DIGEST-IS-UNREADABLE-ONCE-ITS-OWN-ROW-STOPS-BLOCKING`. A close of that
+entry is GATED on this filing — the entry names two carriers and only one was repaired.
+
+Anchored on the flag name a fix cannot omit. `subject_digest` is the read control — it survives any
+repair, so a receipt that stops finding it has failed to read the file rather than found the fix. Shown
+able to fire: the same predicate exits 0 against `SKILL.md`.
+
+**The receipt PARSES the schema and reads `subject_digest`'s own `description` string, rather than
+grepping the file.** The claim is about the field a consumer opens while writing a register record,
+and a whole-file grep is satisfied by any other description in the document. Measured in a pristine
+copy, five ways: base **1**; a comment line carrying the receipt's grep literal appended to the file
+**1**; the flag added to the schema's TOP-LEVEL `description` — a well-formed JSON edit and the
+sharpest over-broad non-fix, since it satisfies a whole-file grep while leaving the read field
+untouched — **1**; the flag appended to `subject_digest`'s own description **0**; a token-free line
+appended, which is the validator's JSON second control, **1**. That last reading is what keeps this
+receipt out of FORMAT-SENSITIVE. **The exit on a broken or absent document is 1, not 9, and that is
+deliberate**: measured at **1** for both an unparseable append and a deleted schema, so the receipt
+reports STILL-LIVE rather than leaving its own population.
+
+**Shipped at `v0.570.0`.** Both sentences now name
+`layer-drift.sh --list-adjudications <dist> <base> <theirs> <consumer>` as the read path after the
+first write. Text only — the verdict enum's one-value-per-line layout, which `layer-drift.sh` reads
+as an array, is byte-identical across the change under `cmp -s` against a whole-file control
+asserting the two sides differ, and `json.load` accepts the result. Re-scored on detached checkouts
+with every mutation `cmp -s`-asserted to have applied: base **1**, tip **0**,
+top-level-description-only **1**, comment append **1**, deleted schema **1**.
+
+**IT SHIPS WITH NO ARM, AND THAT WAS A MEASUREMENT RATHER THAN AN OMISSION.** The planned carrier
+bound `layer-drift.sh`'s usage line to this description and to `SKILL.md`, on the premise that
+`sync-taught-schema.sh` is a second reader of the string. It is not: it carries no register schema
+at all, measured **0** against a control of **11** in the same invocation. And the mode is already
+driven by the `layer-adjudication-tier` and `apply-drift-after-write` fixtures, so the arm would
+have restated a join that already runs. **This receipt is therefore the subject's only carrier
+until rotation** — after which nothing watches the description, and a later edit that drops the
+flag is silent.
+
+verify: sh f=core/schemas/layer-adjudication-register.json; d="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["properties"]["subject_digest"]["description"])' "$f")" || exit 1; [ -n "$d" ] || exit 1; grep -qF -- '--list-adjudications' <<<"$d"
+
+## BL-023
+
+**LANDED (v0.570.0, verified b1b50b9e).**
+
+**Core creates the retro branch off the current HEAD, not off `origin/main`, and the
+consumer-proved fix for that is the only clean survivor of a row whose named file no longer
+exists.** `core/skills/ai-dlc/steps/retro.md:24` emits `git checkout -b ai-dlc/retro/sprint-<N>`
+with no base argument. The consumer block
+`extensions/steps-domain/retro-push-branch-creation.md:11-19` emits
+`git fetch origin main` then `git checkout -b ai-dlc/retro/sprint-<N> origin/main`, on the measured
+ground that branching from the sprint lineage after a squash-merged sprint PR "guarantees
+artificial conflicts on every shared pipeline artifact at retro-PR time". Measured over `core/`
+with a control in the same invocation: `Create Retro Branch` = **0 files**, `Validator Contract
+Pre-Flight` = **0**, `terminality` = **0**, against `Sprint-Ship Verification` = **3** and
+`audit-rule-files` = **4**. The block also carries a fail-fast branch-name self-check and a
+`reset --hard` branch-guard (`PI-S271-6`), neither of which core has.
+
+**The row is stale in three separate ways and this is the most decayed entry in the batch.**
+(1) **The file it names does not exist.** `extensions/steps-domain/retro-push.md` is absent from
+the live consumer tree; it survives only under `.claude/worktrees/agent-a93b52245ff8bbb65/`. It was
+split into six `retro-push-*.md` files carrying `extends:` anchors, plus `retro-deferral-expiry.md`,
+which is now `push_candidate: false`. Per the brief's own rule a stale path form is a REPOINT, not
+a close. (2) **Two of the seven blocks it names are absorbed**, one of them recorded in the
+extension's own body: `retro-push-process-improvements.md:11` says "**Absorbed upstream at
+`v0.41.0` (dist 6c5830a)** … '## Empirical gate validation'", and core carries it at
+`core/skills/ai-dlc/steps/retro.md:335`; "skill-invocation-provenance" is core's Check 17 at
+`core/skills/ai-dlc/steps/gate-validation.md:1039`. (3) **Two more are misdescribed.** The
+"Sprint-Ship dual-counter" is core's — `retro.md:706` and `:728` carry both counters and the
+EITHER-reaches-5/5 rule, and the extension's own header says so; the residue is an `NFR-S176-1`
+template prefix. "audit-rule-files finding-classes" is not pushable at all: core owns
+`core/scripts/audit-rule-files.sh` and the Rule 18 classes, and the extension body ends **"Do not
+re-merge the exercise audit back into core's copy: that would re-fork a file upstream maintains,
+which is the exact condition this split resolved."** That clause is a refusal, and the ledger row
+proposes exactly what it forbids. **And the row omits a live push candidate it never named** —
+`retro-push-party-mode.md`, `push_candidate: true`, carrying the `PI-S194-1` topology mandate and
+guarded-merge merge-time enforcement. Four of seven named rows wrong, one live row missing, path
+dead: the correction moves in both directions at once.
+
+The anchor is the base ref inside core's own command, and the control is the same string without
+it. `ai-dlc/retro/sprint-<N>` matches core today — that is the measured false-close: an anchor on
+the branch NAME reports this closed right now, because core already writes the name and only the
+base is missing. Appending ` origin/main` makes the anchor a token the fix cannot be written
+without, since the fix IS the base argument. Both arms run in one invocation, so a receipt that
+cannot see the file fails on the control rather than reporting a green absence.
+
+**Both arms are scoped to the FIRST FENCED BLOCK — the canonical branch-creation block at
+`retro.md:21-25` — and neither is a whole-file grep.** A line-anchored whole-file match was built
+and rejected: measured, a bare `git checkout -b ai-dlc/retro/sprint-<N> origin/main` appended at
+end of file closed it, and so would the same line under an "Appendix: what NOT to do". The slice
+is what refuses both.
+
+**The match accepts every natural spelling of the fix, and that is a correctness property, not a
+convenience.** A tight literal was built first and it sent four ordinary fixes — the branch name
+quoted, `switch -c`, `checkout -B`, and the command indented inside the fence — to exit **9**, which
+is OUT-OF-POPULATION; that count sits at its ceiling of 1, so a correct fix landing later would
+have failed the push. The receipt therefore strips quotes from the slice and matches
+`(checkout -[bB]|switch -c) ai-dlc/retro/sprint-<N> origin/main`.
+
+**A SHELL COMMENT INSIDE THE FENCE IS STILL PROSE, and slicing to the fence does not exclude it.**
+Measured against the slice-only form: `# git checkout -b ai-dlc/retro/sprint-<N> origin/main
+(NOT YET DONE)` written into the canonical block closed it at **0** — a note recording that the fix
+has not happened, satisfying the receipt for the fix. The shipped form therefore drops every line
+whose first non-blank character is `#` before matching, which is the same content-versus-commentary
+cut the two windowed receipts below make.
+
+Measured in pristine copies, fourteen ways. HEAD **1**. A comment line carrying the receipt's own
+grep literals appended to the file **1**. A bare correct command appended at end of file **1**. An
+appendix section carrying the command in prose AND in a second fenced block **1** — the sharpest
+over-broad non-fix, since it puts the whole literal in the file twice. The commented-out command
+inside the fence **1**, and the same line indented **1**. All six spellings of the real fix inside
+the canonical fence — plain, double-quoted, single-quoted, `switch -c`, `checkout -B`, and two-space
+indented — **0**, and a real fix landing beside a leftover commented-out line **0**. Two control arms
+fire: with the branch name changed the receipt exits **9**, and with the whole fence commented out it
+exits **9** rather than reporting a green absence.
+
+Discharges the consumer entry `extensions/steps-domain/retro-push.md` at pinned ledger line 255.
+The row should additionally be repointed to the six live `retro-push-*.md` files before any
+future push-mine reads it.
+
+**Shipped at `v0.570.0`**, and the entry's first claim was HALF EXPIRED before it did. "Core creates
+the retro branch off the current HEAD" stopped being true at `3520fbb4` (`v0.507.0`), which gave the
+fence its `git fetch origin main && git checkout main && git merge --ff-only origin/main` line and
+its `git rev-list --count HEAD..origin/main` MUST-be-0 assertion: the branch IS cut from the trunk
+whenever the sequence is followed. **The surviving half is the implicit base** — a session running
+the `checkout -b` line alone, or resolving a refused fast-forward by hand and continuing, cuts from
+wherever it is, against prose two paragraphs down saying the branch MUST be cut from `main` at
+`origin/main`. That is the half this fix repairs, by naming `origin/main` as the base. The fetch and
+the assertion are NOT retired — `origin/main` is a local ref and the fetch is what makes it current
+— and the Rule 26(c) removal condition is reworded to say that rather than to claim a guard that
+does not exist, keeping the literal phrase `Removal condition` that `audit-rule-files.sh` Class 1b
+keys on. Re-scored on detached checkouts, every mutation `cmp -s`-asserted to have applied: base
+**1**, tip **0**, all six spellings of the fix inside the canonical fence **0**, appended at end of
+file **1**, commented out inside the fence **1**.
+
+**The consumer's `reset --hard` branch-guard is NOT taken here.** Core's
+`validate-mandatory-rules.sh:95` already validates the branch NAME (Check 7 plus the branch regex),
+which is the extension's other half; the reset guard is outside this receipt and outside this fix.
+
+**AND IT SHIPS WITH NO FIXTURE AND NO INVARIANT, so this receipt is the only carrier until
+rotation.** Nothing in the tree parses this fence — `retro/sprint-<N>` appears in one other script
+under `core/fixtures`, `core/scripts` and `scripts` (a comment in `cycle-commits-enforce`) and in three
+prose files that name the branch and never its base, and neither `retro-branch-behind-main` nor
+`retro-compliance-workflow` reads the fence text — so after rotation a later edit dropping the base
+argument is silent.
+
+**A consumer effect is recorded rather than fixed, and it was measured on a scratch clone.** The
+reference consumer's `extensions/steps-domain/retro-push-branch-creation.md` declares
+`extends: '#1. Context Loading'` on `steps/retro.md`, the section this edit lands in, so
+`layer-drift.sh` reads one new `EXTENSION-ANCHOR-DRIFT` row plus its `HARD-LAYER-ADJUDICATION-MISSING`
+pair on `LC-E14` at the consumer's next pull. That entry no longer quotes core's command; its
+paraphrase of core's sequence ends in the unbased `git checkout -b ai-dlc/retro/sprint-<N>`, so the
+summary is stale from this release onward and the adjudication is `still-additive`.
+
+
+verify: sh f=core/skills/ai-dlc/steps/retro.md; t="$(printf '\140\140\140')"; b="$(awk -v t="$t" 'index($0,t)==1{n++;next} n==1' "$f" | grep -vE '^[[:blank:]]*#' | tr -d '\042\047')"; [ -n "$b" ] || exit 9; grep -qE 'ai-dlc/retro/sprint-<N>' <<<"$b" || exit 9; grep -qE '(checkout -[bB]|switch -c) ai-dlc/retro/sprint-<N> origin/main' <<<"$b"
+## BL-044
+
+**LANDED (v0.570.0, verified b1b50b9e).**
+
+**The code-review verdict set has an owner and a reader and no invariant, and core already ships a
+non-member.** `core/team-roles/code-reviewer.md:86` declares `APPROVED | NEEDS_REWORK | BLOCKED` and
+repeats `NEEDS_REWORK` at `:323`, `:340`, `:377`, `:404`, `:514`, `:565`.
+`core/skills/ai-dlc/steps/gate-validation.md:186-212` is its reader: Check 1 grep-sources the verdict
+from the review file's own verdict line, fails on zero matches, and fails on two matches carrying
+different values — it validates the SHAPE of the answer and never its MEMBERSHIP. Nothing else reads
+the set. Measured with a control in the same invocation over `scripts/ core/scripts/ core/fixtures/`:
+files naming `NEEDS_REWORK` = **0**; files naming `CORE-AT-THEIRS` = **3**. Over `core/` it occurs in
+exactly **1** file, its own owner, against a control of **5** for `CORE-AT-THEIRS`; repo-wide it
+occurs in **6**, the other five being `CHANGELOG.md`, this ledger and three `docs/reviews/`
+artifacts. It appears in no row
+of `docs/vocabulary-index.md`, whose 7 cross-file rows include one (`validation intensities`) owned by
+a resident prose file, so a prose-declared set is squarely in that table's scope.
+
+**The repo has already conceded this in writing and built nothing.** `CHANGELOG.md:16723-16729`
+records `code-reviewer.md` carrying THREE verdict sets at once — `APPROVED | CHANGES REQUESTED |
+BLOCKED`, `APPROVED | APPROVED-WITH-FIXES | CHANGES-REQUIRED`, and `APPROVED | NEEDS_REWORK` — and
+resolves them by hand with the reason stated verbatim: "No script or gate check keys on any of them,
+so the set was free to choose." The set was unified; the binding that would keep it unified was not
+added, and the drift is documented as having already happened once.
+
+The fourth spelling survived that pass, because it was not in the file the pass edited.
+`CHANGES-REQUESTED` occurs exactly **once** in all of `core/` — `gate-validation.md:201` — inside the
+cautionary sentence teaching the lead to read verdicts from disk, presented as the value a review file
+on disk actually held. A resident step file therefore shows an agent a verdict token the only declared
+set does not contain, in the one paragraph about verdict values.
+
+**The filing got its stated mechanism wrong in the collapsing direction.** It claimed core "mandates
+`NEEDS_REWORK` in one file and `CHANGES-REQUESTED` in another at the same sha", with the consequence
+that "a reviewer following the role file emits a verdict the gate step does not name". Today only one
+file mandates anything: `gate-validation.md` names no verdict set at all, its Check 1 reads whatever
+value it finds, and its `CHANGES-REQUESTED` is a narrative example rather than a mandate. The
+two-mandates cause is dead. What survives is one level down and wider — the set is unbound, which is
+precisely why a non-member could sit in its reader unnoticed.
+
+The anchor is `docs/vocabulary-index.md` and not a grep over prose, because that file is GENERATED —
+rendered by `scripts/render-vocabulary-index.sh` from `# vocabulary:` arm markers and byte-compared at
+pre-push. It cannot be satisfied by a comment, by a mention, or by a hand edit, which is the failure
+mode a whole-file `grep -qF` has. The control in the same invocation is `EXIT_CONDITION_MET`, a member
+already rendered into that file: a missing or unreadable index reports STILL-LIVE rather than closing.
+
+The receipt reaches 0 when an arm binding the set is added and the index re-rendered. **A fix that only
+retires `CHANGES-REQUESTED` from `gate-validation.md:201` still reports STILL-LIVE, deliberately** —
+removing today's non-member leaves the set as free to choose as the CHANGELOG found it.
+
+**The receipt DRIVES the renderer before it reads the file it renders**, because reading a generated
+artifact without asserting it is in sync is exactly the closable-by-prose shape: a hand-typed row is
+text about a program, not the program. `render-vocabulary-index.sh --check` byte-compares first, so a
+hand edit fails the receipt rather than satisfying it.
+
+**The positive direction was BUILT, not assumed.** On a throwaway copy: a real `# vocabulary:` marker
+block naming this set, a real extractor keyed on the owner's template line, both indexes re-rendered.
+The row renders `APPROVED BLOCKED NEEDS_REWORK` and the receipt exits **0**; the new arm is not
+vacuous — run against the tree it names, it reports the live `CHANGES-REQUESTED` non-member by name.
+The other three readings, all in pristine copies: HEAD **1**; a comment line carrying both grep
+literals appended to every file the receipt names **1**; a hand-written row carrying `NEEDS_REWORK`
+pasted into the generated index — the sharpest non-fix, and the one a bare `grep -qF` closes on —
+**1**, because `--check` refuses it. Retiring `CHANGES-REQUESTED` and nothing else also reads **1**,
+as stated above.
+
+**What an UNRELATED stale index does to this receipt, stated because a driven receipt can lie in that
+state.** It reads **1** — STILL-LIVE — and never 0: measured by dropping a member from the
+reasoning-effort owner, which fails `--check` for a reason having nothing to do with this set. So the
+failure direction is safe, and the cost is that this receipt cannot be read as evidence about its own
+subject while any other vocabulary is out of sync. The `EXIT_CONDITION_MET` control can still fire:
+with that member retired from its schema and the index re-rendered so `--check` passes, the receipt
+exits **9**.
+
+Discharges the consumer entry `PC-S299-UPSTREAM-SHIPS-TWO-REVIEW-VERDICT-VOCABULARIES` at pinned ledger
+line 1571.
+
+**Shipped at `v0.570.0`.** `render-vocabulary-index.sh` gained the `review-verdicts` extractor keyed
+on the owner's template line, `validate-enforcement-map.sh` gained arm `I112` as an equality between
+that set and the backticked tokens on Check 1's new `- **Verdict values` bullet plus a span scan for
+screaming compound non-members, Check 1 replaced `CHANGES-REQUESTED` with `NEEDS_REWORK`, and both
+indexes re-rendered. Against a scratch tree carrying the pre-fix reader, sides `cmp -s`-asserted to
+differ, the arm fires two messages — the three unnamed members, and `CHANGES-REQUESTED` — and exits 0
+at the tip. Scored on detached checkouts, every mutation `cmp -s`-asserted to have applied: base
+**1**, tip **0**, comment stub **1**, retire-`CHANGES-REQUESTED`-only **1**, hand-pasted index row
+**1**.
+
+**The receipt is BLIND to one non-fix and the renderer's probe is what refuses it.** An extractor
+reading the parenthesised prose alternation at `code-reviewer.md:565` instead of the template line
+renders a row `cmp -s`-identical to the shipped one, so this receipt exits **0** on it. Built and
+measured: with the shipped near-miss probe in place `render-vocabulary-index.sh --check` exits **1**
+and refuses it; with that probe deleted the receipt closes. The probe, not the receipt, is this
+subject's guard against a set that stays correct-looking after the template has moved.
+
+**The recorded limit of `I112`'s span scan: a BARE screaming non-member is invisible.** `REJECTED`
+carries no hyphen and no underscore, so the compound grammar scores it as a non-instance, and
+widening to bare words is refuted rather than deferred — the span carries `FAIL` and `FAILS`, and
+`BLOCKED` is a real member appearing in 25 `core/` files at the tip (23 before this release). The bullet half still catches a bare
+non-member on the line that states which values pass.
+
+
+verify: sh bash scripts/render-vocabulary-index.sh --check >/dev/null 2>&1 || exit 1; grep -qF 'EXIT_CONDITION_MET' docs/vocabulary-index.md || exit 9; grep -qF 'NEEDS_REWORK' docs/vocabulary-index.md

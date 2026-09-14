@@ -37,9 +37,93 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
+### BATCH 104 SHIPPED AS `v0.570.0`, ONE RELEASE, THREE NO-BOOTSTRAPPING SUBJECTS, ONE OF THEM PC-BACKED ON A LIVE CONSUMER ROW — THE CONTRACT ADVERSARY FOUND FOUR BLOCKERS AND FIVE DEFECTS BEFORE THE BUILD (THE STATED FALSE-POSITIVE SET HAD NOT BEEN DERIVED FROM A RUN; TWO ARMS COVERED EACH OTHER; A PROPOSED INVARIANT WAS A RESTATEMENT AND WAS DROPPED), **AND THE TIP ADVERSARY BUILT NINE WRONG IMPLEMENTATIONS AGAINST THE ASSEMBLED RELEASE, TWO OF WHICH PASSED THE SELF-PROBE, ELEVEN FIXTURE ASSERTIONS, THE RENDERER FIXTURE AND THE RECEIPT — A TYPED COPY OF A DERIVED SET, AND AN OWNER GRAMMAR THAT DIVERGED FROM ITS RENDERER TWIN — BECAUSE EVERY SEED WAS DERIVED FROM THE CURRENT TREE.** THE SWEEP WAS EMPTY OF NEW PC WORK. THE CONSUMER PULLED ITSELF TO `0.569.0` MID-BATCH. THE GAP IS **ONE**, PENDING **1**, AND THE PULL IS **NOT REQUIRED**.
+
+This block replaces the batch-103 record below it. Re-derive every figure rather than reading it.
+
+**`VERSION` IS `0.570.0`, SO BATCH 105 RELEASES AS `0.571.0`.** Re-derive `VERSION` and add one.
+Batch 104 merged ONCE — `v0.570.0` at `b1b50b9e` (PR #752) — naming `BL-044`, `BL-017`, `BL-023`,
+`PC-S299-UPSTREAM-SHIPS-TWO-REVIEW-VERDICT-VOCABULARIES` and
+`PC-S319-SUBJECT-DIGEST-IS-UNREADABLE-ONCE-ITS-OWN-ROW-STOPS-BLOCKING` verbatim in the release
+commit message (control: `PC-S000-ZZQX-NOTHING` returns 0 on the same join). All three are ROTATED,
+archive **165 → 168**, live **82 → 79**. `PC-S299` is LIVE in the consumer's ledger and moves
+STILL-LIVE → CLOSE-CANDIDATE on its next pull; `PC-S319` is already in the consumer's archive
+(TERMINAL). No bootstrapping file moved: the range `132ea672..origin/main` touches 5 `core/` paths,
+zero under the update skill, zero mode-only rows.
+
+**THE SUBJECTS WERE TAKEN ON THIS SESSION'S OWN RANKING** because the one-liner arrived from a
+peer: the sweep reproduced batch 103's figures exactly (live 61, cited 40, unfiled 21, archive 206,
+partition 0, TERMINAL 89, DISCHARGED-corrected 12, discharged-but-invisible 0), the 21 unfiled
+split 7 named on `origin/main`, 11 `NOT-UPSTREAM`, 3 withdrawn/refuted, so the PC-backed residue
+was ZERO and the three readiest receipt-bound entries from batch 97 shipped together, ranked
+provenance-first. `BL-220` and `BL-223` were read and left, each for the reason its batch-94/95
+paragraph records.
+
+**WHAT SHIPPED FOR `BL-044`.** A `review-verdicts` extractor reads the template line under
+`## Verdict` in `code-reviewer.md`; arm I112 holds that set EQUAL to the members Check 1 of
+`gate-validation.md` teaches on one fixed-shape bullet, and reports any `\b`-anchored
+screaming-compound token in Check 1's span (HTML-comment lines dropped) outside the owner set and
+outside the schema-enum set the renderer's own walker yields — three members today. The recorded
+limit: a BARE screaming non-member (`REJECTED`) is invisible to the span scan, and widening is
+refuted (`FAIL`/`FAILS` sit in the span; `BLOCKED` in 25 `core/` files). Check 1 names
+`NEEDS_REWORK` where it showed the non-member `CHANGES-REQUESTED`. Thirteen assertions in
+`enforcement-map-derivations` (A00, A30–A42), each killing exactly one wrong build; `vocabulary-index`
+gained the slug's seed and a near-miss control in the SAME commit as the extractor, because that
+fixture is red on a fix commit that omits its seed. Forks 8112 → 8127, the arm attributed at 15/16,
+`FORK_BUDGET` 8120 → 8135. Wall clock: 23.87s → 24.32s median over five interleaved reps, a
+differential that cannot resolve a 0.25s arm and is reported as such; pole unmoved at `ledger-reverify`.
+
+**THE TIP ADVERSARY'S TWO FINDINGS ARE THE STANDING LESSON.** A typed three-member enum exclusion,
+byte-equal to what the walker yields today, passed every channel: A35 derived its seed from the
+CURRENT schemas, so a list correct today satisfied it forever. A42's twin: dropping the `^` anchor
+from the arm's copy of the owner grammar alone passed every channel while destroying the zero guard,
+because A36 renamed the heading rather than deleting the template line beside live prose. **A seed
+derived from the tree the arm reads cannot tell a derivation from a recitation of it.** A41 now ADDS
+an enum member in the mutated tree before seeding it; A42 deletes the template line and asserts the
+prose alternation still matches unanchored before reading the verdict.
+
+**WHAT SHIPPED FOR `BL-017`.** The register schema's `subject_digest` description and top-level
+description name `layer-drift.sh --list-adjudications` as the read path once a verdict exists;
+enum layout byte-untouched. **The proposed I113 was refuted as a restatement and dropped**:
+`sync-taught-schema.sh` carries no register schema (0 against control 11), and
+`layer-adjudication-tier` plus `apply-drift-after-write` already DRIVE the mode. The receipt is the
+carrier until rotation; note that of the three fixtures named beside it only
+`layer-absorption-retire` reads core's copy of that schema, and only for existence.
+
+**WHAT SHIPPED FOR `BL-023`.** `retro.md`'s first fence reads
+`git checkout -b ai-dlc/retro/sprint-<N> origin/main`; half of the entry's claim had expired at
+`v0.507.0` (the fetch/ff-only sequence) and the implicit base was the surviving half. It ships with
+NO fixture and NO invariant — nothing in the tree reads the fence — and `audit-rule-files.sh`
+Class 1b was proven to fire when the `Removal condition` phrase is reworded. Consumer effect,
+measured on a scratch clone: one new `EXTENSION-ANCHOR-DRIFT` row plus its
+`HARD-LAYER-ADJUDICATION-MISSING` pair on `retro-push-branch-creation.md` (HARD 7 → 8), whose
+paraphrase of core's sequence still ends in the unbased command; the verdict it earns is
+`still-additive`. The contract had named the row `EXTENSION-HOOK-DRIFT` and the extension's content
+a quotation; both were wrong and the measurement corrected them.
+
+**THE CONSUMER PULLED ITSELF MID-BATCH.** Porcelain 7 at open rose to 20 while the consumer ran its
+own `ai-dlc-update/0.569.0-reconcile-20260914T055128Z` branch, then settled at 8 on
+`ai-dlc/carry-over/chunk-max-usd-swap-sizing` with the stamp at `0.569.0` / `132ea672` on HEAD and
+in the working tree, and its own commit closing the granted `PC-S342-CHECK-20` entry. Nothing in
+this session wrote there. So the stamp moved 0.567.0 → 0.569.0 without any action here, and the
+next pull carries only this release.
+
+**THE PULL IS NOT REQUIRED AND THE GAP IS ONE.** Stamp `0.569.0` / `132ea672`, shipped `0.570.0`;
+PENDING 1 (`PC-S299`). Installed and distribution `validate-layer-entries.sh` byte-identical
+(`cmp -s` 0), a null by construction. Consumer rehearsal, tip vs origin/main: 90 rows each side,
+exactly one row moves, histogram otherwise identical; resolution control (theirs = the stamp) moves
+7 rows. `git push` exited 141 twice with a green 21-phase gate and the ref absent from origin; the
+third push landed it.
+
+**AVAILABLE PC-BACKED RESIDUE AT THIS CLOSE: ZERO KNOWN.** Run the sweep anyway. The readiest
+no-`PC` work is the three receipt-bound entries batch 97 left open — `BL-021`, `BL-022`, and
+`BL-223` (declare the FORMAT, not the member) — then `BL-220` (only shippable shape is an
+`--allow-missing` opt-out). **Before writing any fixture seed this batch, ask whether the seed is
+derived from the same tree the arm reads** — batch 104's two passing non-fixes were both that shape.
+
 ### BATCH 103 SHIPPED AS `v0.569.0`, ONE RELEASE, TWO NO-`PC` SUBJECTS — THE CONTRACT ADVERSARY FOUND SEVEN BLOCKERS AND THREE DEFECTS BEFORE THE BUILD, **THE TIP ADVERSARY THEN BUILT NINETEEN IMPLEMENTATIONS AGAINST THE ASSEMBLED RELEASE AND TWO PASSED FIFTY FIXTURE ASSERTIONS AND THE RECEIPT WHILE LEAVING THE DEFECT LIVE, BECAUSE EVERY SEED CARRIED ITS NEGATOR IN BARE PROSE**, AND A THIRD STRUCTURAL FALSE POSITIVE OF THE `$DIST` GRAMMAR WAS FOUND BY BUILDING THE REWRITE. THE SWEEP WAS EMPTY OF PC WORK. THE GAP IS **TWO**, PENDING **0**, AND THE PULL IS **NOT REQUIRED**.
 
-This block replaces the batch-102 record below it. Re-derive every figure rather than reading it.
+This block was current at batch 103's close and is replaced by the batch-104 record above it.
 
 **`VERSION` IS `0.569.0`, SO BATCH 104 RELEASES AS `0.570.0`.** Re-derive `VERSION` and add one.
 Batch 103 merged ONCE — `v0.569.0` at `62094bcb` (PR #750) — naming `BL-243` and `BL-248`
@@ -10094,6 +10178,18 @@ given at batch 90.
    **DO NOT TREAT A BATCH-82 RECEIPT AS TRUSTWORTHY BECAUSE IT EXISTS.** Three of them were
    rebuilt in one release: the originals closed on an empty file, on a dead arm, and on a
    positional window.
+
+   **BATCH 104's THREE SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope any of them.** `BL-044`,
+   `BL-017` and `BL-023` shipped together as `v0.570.0` at `b1b50b9e` (PR #752), each cited in the
+   release commit message beside `PC-S299-UPSTREAM-SHIPS-TWO-REVIEW-VERDICT-VOCABULARIES` and
+   `PC-S319-SUBJECT-DIGEST-IS-UNREADABLE-ONCE-ITS-OWN-ROW-STOPS-BLOCKING`. None touched a
+   bootstrapping file. The consumer pulled itself to `0.569.0` mid-batch, so the gap is ONE.
+   **The available PC-backed residue at this close is ZERO KNOWN — run the sweep and rank what it
+   returns.** The readiest no-`PC` work is `BL-021`, `BL-022`, `BL-223` and `BL-220`; read each
+   entry's batch-94/95 measurement paragraph before scoping it. **Before writing any fixture seed
+   this batch, ask whether the seed is derived from the same tree the arm reads** — batch 104's two
+   passing non-fixes (a typed copy of a derived set; an owner grammar diverged from its renderer
+   twin) each passed every channel for that reason.
 
    **BATCH 103's TWO SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope either.** `BL-243` and
    `BL-248` shipped together as `v0.569.0` at `62094bcb` (PR #750), each cited in the release
