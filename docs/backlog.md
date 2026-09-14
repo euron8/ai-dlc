@@ -55,6 +55,131 @@ have gone green, and would have reported "still open" forever.
 never the word anywhere in prose, because an entry that merely discusses landing something is
 not a closed entry.
 
+## BL-250 — `route.md` Step 0 path 2 tells a resuming lead to arm a beat and never names the program that arms it, so the `--since` affordance that exists for exactly this case is unreachable from the step
+
+**Found 2026-09-14**, as the surviving half of a refused consumer filing
+(`PC-S311-RESUME-INFLIGHT-ROW-HAS-NO-LIVENESS-PROBE-BEFORE-THE-JOIN-BEAT-IS-ARMED`, refused for
+the reason recorded in `docs/plans/graph-ledger-full-drain.md`'s `## Adjudication` section). The
+filing asked for a `TaskStop` liveness probe; that remedy is a no-op on its own motivating case.
+This is what was left after it was taken out.
+
+**THE GAP.** `core/skills/ai-dlc/steps/route.md` Step 0 path 2 instructs a resuming lead to
+reconcile every `In-Flight Teammates` row and, where the deliverable is older or absent, that "the
+beat resumes". `grep -c wait-for-deliverable core/skills/ai-dlc/steps/route.md` returns **0**.
+Control in the same sweep: **8** of the 22 step files DO name it — `_gate-procedures.md`,
+`carry-over-evaluation.md`, `discovery.md`, `gate-validation.md`, `handoff.md`,
+`implementation.md`, `requirements.md`, `sprint-review.md` — and a token no step file carries
+returns 0. So the step that tells a lead to arm a beat is the one step file that does not name the
+beat's program.
+
+**AND THE PROGRAM ALREADY SOLVES THE RESUMING LEAD'S PROBLEM.**
+`core/scripts/wait-for-deliverable.sh:729` prints, on the non-delivery path: "If your teammate may
+have delivered BEFORE this join armed (the normal shape when you are resuming a join after a
+compaction), re-run with the dispatch time from the snapshot's In-Flight Teammates row:
+`--since <epoch|ISO8601>`." That is the resume case by name, and the value it asks for is the
+`dispatched-at` cell of the row Step 0 path 2 is already reading. The affordance and the data are
+both present; the route from one to the other is not written anywhere.
+
+**WHY THE ALTERNATIVE READING DOES NOT COVER IT.** A lead that arms the beat blind cannot recover
+the answer from the beat's own output across a session boundary: `wait-for-deliverable.sh`
+resolves its teammate directory from `CLAUDE_CODE_SESSION_ID` (`:486-495`), so a teammate
+dispatched by the PRIOR session has no transcripts under this session's id and `say_liveness`
+prints `LIVENESS  unavailable` (`:523`) — on `say()` (`:335`), which `--quiet` suppresses, unlike
+the idle and non-delivery lines beside it. So the step file is the only place this can be fixed.
+
+**THE HAZARD THIS ENTRY CARRIES FOR ITS OWN FIXER, AND IT IS THE REASON THIS IS AN ENTRY RATHER
+THAN AN EDIT.** `route.md` is read by a SECOND live receipt, `BL-027`, whose arm (b) scans the
+WHOLE FILE for `unread|never read|not be read|without reading|do not read`. Measured before any
+edit: **1** hit, at `route.md:716` ("If project state cannot be read"), whole receipt exit 1. The
+prose this gap needs is prose about reading a value rather than reading a line, which is squarely
+inside that grammar. Run `BL-027`'s receipt before and after any edit here and record both exits;
+a second hit changes what that receipt is measuring.
+
+**Receipt limits, stated, and the window grammar is the part that was wrong first.** The receipt
+asserts the JOIN — that `route.md` names the beat program AND its `--since` flag, sited inside
+Step 0's own window rather than anywhere in the file — with the control in the same invocation
+that other step files name the program, so a rename of the script cannot satisfy it by emptying
+both sides. Scored by building each candidate as a real tree, sides asserted to differ by `cmp -s`
+before any verdict was read: base **1**, the fix seeded into Step 0's window **0**, the same
+sentence appended at END OF FILE **1**, and the program named inside the window with no `--since`
+**1**. The first cut of this receipt windowed on `^##[[:space:]]*Step 0` and returned an EMPTY
+window on every tree — route.md's step headings are `###` — so all four candidates exited 9 and
+the receipt could not fire in either direction. The window is asserted non-empty (exit 9) for that
+reason, and the grammar was pointed at its own subject before its zero was believed. It refuses
+(exit 9) only for a genuinely missing `route.md` or `wait-for-deliverable.sh`. It CANNOT score
+whether the instruction is CORRECT, only that it is present and sited.
+
+verify: sh R=core/skills/ai-dlc/steps/route.md; W=core/scripts/wait-for-deliverable.sh; [ -f "$R" ] || exit 9; [ -f "$W" ] || exit 9; grep -q -- '--since' "$W" || exit 9; n=0; for f in core/skills/ai-dlc/steps/*.md; do [ "$f" = "$R" ] && continue; if grep -q 'wait-for-deliverable' "$f"; then n=$((n+1)); fi; done; [ "$n" -ge 2 ] || exit 9; w="$(awk '/^###[[:space:]]*Step 0:/{f=1} f&&/^###[[:space:]]*Step 0a/{f=0} f' "$R")"; [ -n "$w" ] || exit 9; printf '%s' "$w" | grep -q 'wait-for-deliverable' || exit 1; printf '%s' "$w" | grep -q -- '--since' || exit 1; exit 0
+
+## BL-249 — the In-Flight row readers disagreed about whether the leading `|` is part of the grammar, and the two that required it were blind to every row core's own step file teaches a lead to write
+
+**Found 2026-09-14** while reading the reference consumer's snapshot at a resume. The subject is
+the DISAGREEMENT, not either reader: `## In-Flight Teammates` had three readers, two of them
+gated on `/^[[:space:]]*\|/` and one of them not, and nothing bound the three to agree.
+
+**THE SITES.** `core/scripts/validate-artifact-budget.sh` `check_inflight_status` and
+`core/hooks/ai-dlc-continue.sh` Check 0's teammate-sweep arm both required the leading delimiter.
+The third reader, `check_inflight_rows` in the same validator, never carried it — its awk is
+`f && /~~/`, content-keyed on the strikethrough — so it has always read the pipeless shape fine.
+Two readers of one section, one grammar each, no join.
+
+**AND THE SHAPE THEY REFUSED IS THE ONE CORE TEACHES, IN EVERY PLACE CORE TEACHES IT.** Three step
+files state the row template in prose, and **all three write it with NO leading pipe**:
+`route.md:662` (`agent | role | deliverable | dispatched-at | status`, in the instruction that
+creates the section), `gate-validation.md:902` (`agent name | role | deliverable path |
+dispatched-at | status`, in the Check 14 reconciliation) and `_gate-procedures.md:33` (the same,
+in the sub-step snapshot update). Not one of them shows the delimiter the two readers required. So
+a lead following ANY of the three produced rows those readers could not see, and the reference
+consumer does exactly that.
+
+**The carrier sweep that found one of those three was wrong, and the correction is the useful
+part.** A grammar keyed on the literal `agent *| *role *| *deliverable` returns `route.md:662`
+alone, because the other two spell the first two cells `agent name` and `deliverable path` and one
+of them wraps mid-template across a line break. Keyed instead on the column name `dispatched-at`
+— the one token every statement of the template must carry — all three appear, against a control
+of 0 for a column name nothing carries. A template scan that cannot spell two of its own three
+instances returns a clean zero for them.
+
+**WHAT THE BLINDNESS COST, MEASURED ON THE CONSUMER'S OWN COMMITTED HISTORY.** Over the reference
+consumer's In-Flight-bearing files under `_bmad-output/`, scored in one pass with the shipped gate
+and the relaxed gate side by side: 63 data rows admitted by the leading-pipe gate, 65 by the fix,
+and the 2 it could not see are pipeless rows in
+`_bmad-output/pipeline-history/pipeline-snapshot-archive.md` at lines 31051 and 31079, both
+carrying `stopped` — real teammate records, invisible to the status check and to the handoff
+guard for as long as they have existed. Controls in the same invocation: 52 files carry the
+section heading, 0 carry an impossible heading token.
+
+**THE LIVE FIGURE MOVES AND IS NOT THE CLAIM.** The consumer's live
+`_bmad-output/pipeline-snapshot.md` currently carries the section's header row and no data rows at
+all — its table was cleared during a gate pass, and both gates read 0 there. A figure taken from
+that file expires within hours. What does not expire is the committed archive above, and the fact
+that every row in it that the fix newly admits is pipeless.
+
+**THE NARROWING, AND WHY THE OBVIOUS FIX IS WRONG.** Dropping to a bare `/\|/` is what the shape
+suggests. Over the same corpus it admits 67 where the fix admits 65, and both extra lines are
+PROSE: `pipeline-snapshot-archive.md:23444`, an archived note ending
+`git log @{u}..HEAD --oneline | wc -l`, whose last pipe-delimited field is a shell fragment; and
+`:12686`, a paragraph carrying `|lifetime_IL|=120417.32` mid-sentence. Neither is a row. So a line
+with no leading `|` must ALSO carry the column count the header declares, recorded at the row
+whose last cell is `status` — the table declaring its own width, derived rather than fitted. That
+takes the false-positive set to zero, and the header exits at the `status` arm before any column
+test, so it is never scored as a data row.
+
+**AND THE WIDTH TEST IS RESTRICTED TO PIPELESS LINES.** Applied uniformly it is a REGRESSION: a
+piped row whose cell contains a stray `|` splits one field wide and is acquitted, which is a
+finding the leading-pipe gate has today.
+
+**Receipt limits, stated.** The receipt drives BOTH shipping programs on the four inputs that
+discriminate — a pipeless illegal token, a pipeless legal one, prose carrying a pipe, and a piped
+row with a stray `|` in a cell — and reads the validator's `unknown status:` count and the hook's
+`block`/`allow` decision. It refuses (exit 9) only for a genuinely missing file: the validator,
+the hook, and `core/schemas/pause-routing.json`, which Check 0 reads its handoff vocabulary from
+and without which the sweep arm never runs. It does NOT score the third reader
+`check_inflight_rows`, which was never gated and needs no change; and it does not observe the
+route.md template, which is the cause but not the defect.
+
+verify: sh V=core/scripts/validate-artifact-budget.sh; H=core/hooks/ai-dlc-continue.sh; S=core/schemas/pause-routing.json; [ -f "$V" ] || exit 9; [ -f "$H" ] || exit 9; [ -f "$S" ] || exit 9; d=$(mktemp -d) || exit 9; X(){ rm -rf "$d"; exit "$1"; }; mk(){ printf '%s\n' '# S' '' '## In-Flight Teammates' 'agent | role | deliverable | dispatched-at | status' "$2" '' '## Recent Activity' '- x' > "$d/$1.md"; }; pk(){ printf '%s\n' '# S' '' '## In-Flight Teammates' '| agent | role | deliverable | dispatched-at | status |' "$2" '' '## Recent Activity' '- x' > "$d/$1.md"; }; mk bare 'a1 | dev | d/x.md | 2026-01-01T00:00:00Z | delivered'; mk ok 'a1 | dev | d/x.md | 2026-01-01T00:00:00Z | stopped (done)'; mk live 'a1 | dev | d/x.md | 2026-01-01T00:00:00Z | in-flight, since 2026-01-01'; mk prose 'counted with `git log @{u}..HEAD --oneline | wc -l` so it is | in-flight'; pk vstray '| a1 | dev | d/x|y.md | 2026-01-01T00:00:00Z | delivered |'; pk hstray '| a1 | dev | d/x|y.md | 2026-01-01T00:00:00Z | in-flight |'; vn(){ p="$d/vp"; rm -rf "$p"; mkdir -p "$p/_bmad-output" || X 9; cp "$d/$1.md" "$p/_bmad-output/pipeline-snapshot.md" || X 9; AI_DLC_PROJECT_ROOT="$p" bash "$V" --root "$p" --only pipeline-snapshot.md 2>&1 | grep -c 'unknown status:'; }; t="$d/t.jsonl"; printf '%s\n' '{"message":{"role":"user","content":"hand off the sprint"}}' '{"message":{"role":"assistant","content":"Snapshot finalized.\n\n```\n----\n/ai-dlc resume\n----\n```\n"}}' > "$t" || X 9; hv(){ p="$d/hp"; rm -rf "$p"; mkdir -p "$p/_bmad-output/.driver" || X 9; cp "$d/$1.md" "$p/_bmad-output/pipeline-snapshot.md" || X 9; touch "$p/_bmad-output/pipeline-paused.flag"; : > "$p/_bmad-output/.driver/handoff"; o=$(printf '{"transcript_path":"%s","session_id":"fx"}' "$t" | CLAUDE_PROJECT_DIR="$p" AI_DLC_PAUSE_ROUTING_SCHEMA="$S" bash "$H" 2>/dev/null); case "$o" in *'"block"'*) printf block ;; *) printf allow ;; esac; }; [ "$(vn ok)" -eq 0 ] || X 1; [ "$(vn prose)" -eq 0 ] || X 1; [ "$(hv ok)" = allow ] || X 1; [ "$(hv prose)" = allow ] || X 1; [ "$(vn vstray)" -eq 1 ] || X 1; [ "$(hv hstray)" = block ] || X 1; [ "$(vn bare)" -eq 1 ] || X 1; [ "$(hv live)" = block ] || X 1; X 0
+
 ## BL-238 — the consumer ledger's `theirs`-ref receipt grammar cannot key on an ARM's body, so a receipt written to ask a behavioural question is satisfied by a comment
 
 **Found 2026-09-11** while closing a consumer candidate whose own receipt was built to avoid an

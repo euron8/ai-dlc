@@ -37,6 +37,79 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
+## Adjudication — `PC-S311-RESUME-INFLIGHT-ROW-HAS-NO-LIVENESS-PROBE-BEFORE-THE-JOIN-BEAT-IS-ARMED` is REFUSED as filed
+
+**Verdict: REFUSE.** The filing's diagnosis is right and its remedy is a no-op in the wrong
+direction on its own motivating case. A documentation gap survives and is filed separately; the
+`TaskStop` sub-step it asks for is not taken, at batch 105 or later, unless the entry is refiled
+against a case its own remedy could have helped.
+
+**PROVENANCE OF THE FILING.** It is COMMITTED in the consumer, not uncommitted as the brief
+carried: `_bmad-output/ai-dlc-update/push-candidate-ledger.md` holds 1 occurrence at
+`736e4cfc8` (the consumer's `main`) and 1 in the working tree, with `git status --porcelain` on
+that path empty. Control in the same invocation: an impossible id returns 0 against the real id's
+1. The `verify:` line is `manual`, so the consumer engine will never close it mechanically and the
+row stays STILL-LIVE with or without this verdict — which is the correct shape for a refusal.
+
+**GROUND ONE — THE REMEDY IS A NO-OP IN THE WRONG DIRECTION ON THE CASE THAT MOTIVATED IT.** The
+consumer's own snapshot records what actually happened, at
+`_bmad-output/pipeline-snapshot.md:52`: the `dev-escalated` dispatch `a2b2344be58b99e31` "had
+already completed its work when the operator ended the session, but was killed before it could
+write its deliverable file or update the snapshot." The teammate was DEAD at resume time. A
+`TaskStop` against it therefore finds nothing to stop — and the filing's own remedy text makes
+that outcome affirmative license to proceed: "a failed stop (nothing to stop) confirms
+non-delivery is real and licenses arming the beat as line 79 already directs." So on the one case
+in the record, the proposed probe returns the answer that authorizes the exact wasted beat the
+entry was filed to prevent. The entry's remedy cannot help its own motivating case; it can only
+consume one extra call before reaching the same decision.
+
+**GROUND TWO — IT ACQUIRES A DESTRUCTIVE PROBE IN THE ONE PLACE A LIVE TEAMMATE IS MOST LIKELY TO
+EXIST.** The probe's informative branch is the successful stop, and a successful stop means the
+teammate was working and the probe has now killed it. The filing says so plainly: "a successful
+stop means the teammate WAS alive and has now been stopped by the probe itself (fold to
+`stopped`, do not then also arm a beat on it)." That is a lead destroying in-progress work to
+learn that the work was in progress. `handoff.md` step 1 uses `TaskStop` for the opposite reason —
+there the intent IS to stop every teammate, because the session is ending, so the stop is the
+action and the liveness answer is a by-product. At resume the session is beginning and the
+intended outcome is to KEEP a working teammate working. Reusing the verb across those two sites
+reuses a call and not a semantics.
+
+**GROUND THREE — THE OBVIOUS ALTERNATIVE ALSO FAILS, AND THAT IS WHY THIS IS NOT A COUNTER-PROPOSAL.**
+"Just read the liveness line the beat already prints" does not survive a session boundary.
+`core/scripts/wait-for-deliverable.sh` resolves its teammate directory from
+`CLAUDE_CODE_SESSION_ID` (`:486-495`), globbing
+`$HOME/.claude/projects/*/$CLAUDE_CODE_SESSION_ID/subagents` — so a teammate dispatched by the
+PRIOR session has its transcripts under the prior session's id, `teammate_quiet_for` returns 1,
+and `say_liveness` prints `LIVENESS  unavailable` (`:523`). That branch is `say()`
+(`:335` — `[ "$QUIET" -eq 1 ] || echo`), so `--quiet` suppresses it, unlike the idle and
+non-delivery lines beside it which are deliberately `echo`. A resuming lead therefore cannot get a
+liveness answer out of the beat itself, by construction and by flag. Both candidate remedies fail;
+neither is worth building.
+
+**WHAT SURVIVES: A DOCUMENTATION GAP, AND IT IS NOT THE ONE THE ENTRY NAMES.**
+`grep -c wait-for-deliverable core/skills/ai-dlc/steps/route.md` returns **0**, against a control
+of **8** step files out of 22 that DO name it (`_gate-procedures.md`, `carry-over-evaluation.md`,
+`discovery.md`, `gate-validation.md`, `handoff.md`, `implementation.md`, `requirements.md`,
+`sprint-review.md`); a token no step file carries returns 0 in the same invocation. So `route.md`
+Step 0 path 2 tells a resuming lead to arm a beat and never names the program that arms it. And
+`wait-for-deliverable.sh` already documents the affordance that case needs, at `:729`: re-run with
+`--since <epoch|ISO8601>`, taking "the dispatch time from the snapshot's In-Flight Teammates row",
+explicitly for "the normal shape when you are resuming a join after a compaction". The tool
+already solves the resuming lead's problem and `route.md` never routes anyone to it. That is a
+routing omission in a step file, not a missing liveness probe.
+
+**DISPOSITION OF THE SURVIVING GAP: FILED AS `BL-250`, NOT SHIPPED IN THIS RELEASE.** Two reasons,
+and the second is the binding one. First, it is a different subject from the In-Flight row-grammar fix
+this release carries, and batching an unrelated step-file edit into it widens the release for no
+measured gain. Second, `route.md` is read by a SECOND receipt, `BL-027`, whose arm (b) scans the
+WHOLE FILE for `unread|never read|not be read|without reading|do not read`. Measured on this
+branch before any edit: **1 hit, at `route.md:716`** ("If project state cannot be read"), arm (a)
+exit 1, whole receipt exit 1 — the lead's baseline reproduced exactly. A route.md edit is
+therefore an edit under a live whole-file receipt whose grammar matches ordinary English about
+reading, and the prose this gap needs ("take the dispatch time from the row rather than reading
+the beat's liveness line") sits squarely in that grammar's blast radius. It gets its own entry and
+its own before/after measurement, not a paragraph appended under a fix about pipe characters.
+
 ### BATCH 104 SHIPPED AS `v0.570.0`, ONE RELEASE, THREE NO-BOOTSTRAPPING SUBJECTS, ONE OF THEM PC-BACKED ON A LIVE CONSUMER ROW — THE CONTRACT ADVERSARY FOUND FOUR BLOCKERS AND FIVE DEFECTS BEFORE THE BUILD (THE STATED FALSE-POSITIVE SET HAD NOT BEEN DERIVED FROM A RUN; TWO ARMS COVERED EACH OTHER; A PROPOSED INVARIANT WAS A RESTATEMENT AND WAS DROPPED), **AND THE TIP ADVERSARY BUILT NINE WRONG IMPLEMENTATIONS AGAINST THE ASSEMBLED RELEASE, TWO OF WHICH PASSED THE SELF-PROBE, ELEVEN FIXTURE ASSERTIONS, THE RENDERER FIXTURE AND THE RECEIPT — A TYPED COPY OF A DERIVED SET, AND AN OWNER GRAMMAR THAT DIVERGED FROM ITS RENDERER TWIN — BECAUSE EVERY SEED WAS DERIVED FROM THE CURRENT TREE.** THE SWEEP WAS EMPTY OF NEW PC WORK. THE CONSUMER PULLED ITSELF TO `0.569.0` MID-BATCH. THE GAP IS **ONE**, PENDING **1**, AND THE PULL IS **NOT REQUIRED**.
 
 This block replaces the batch-103 record below it. Re-derive every figure rather than reading it.
