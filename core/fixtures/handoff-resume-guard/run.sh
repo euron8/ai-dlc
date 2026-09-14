@@ -344,6 +344,260 @@ if hook_mut "$M_FIRSTROW" 's|if (tolower(last) == "status") { ncols = n; next }|
                    || bad "MUTANT HARNESS BROKEN — the copy allows a piped 'in-flight' row too ($r); it is not running, and the kill above is unreadable"
 fi
 
+# --- THE IN-FLIGHT ROW ARM ----------------------------------------------------------
+#
+# THE DEFECT. `steps/handoff.md` step 1 requires every dispatched teammate to be RECORDED
+# in the snapshot's In-Flight Teammates table. The sweep arm above convicts a row that
+# still reads `in-flight`; it is silent on a table with no rows at all, which is what a
+# handoff that skipped step 1 entirely leaves behind. Measured on the reference consumer:
+# 459 role-bound dispatches across sprints 307-311 and ZERO rows recorded over that span.
+# Every one of those handoffs passed the sweep arm, correctly -- it can only convict a row
+# somebody wrote.
+#
+# EACH CASE IS A WORLD, NOT A SNAPSHOT. The arm reads four files: the lead transcript
+# (Agent/Task tool_use records), `spawn-ledger.jsonl`, the harness meta sidecars under
+# `${TRANSCRIPT%.jsonl}/subagents/`, and `subagent-context.jsonl`. seed.sh builds each
+# world with its own four, so a case cannot be handed another case's ledger.
+#
+# THE SCRUB IS WHY THESE ARE FILES AND NOT ENV. This fixture unsets every `AI_DLC_*`
+# variable before driving anything (see the header). `AI_DLC_STATE_DIR` is one of them, so
+# a world that relocated the ledgers by exporting it would be driving a hook that had
+# forgotten the relocation -- the arm would read `_bmad-output/` and find nothing, and
+# every case would ALLOW for a reason no assertion states. The worlds therefore write to
+# the default `_bmad-output/` and the driver copies them in.
+drive_world() { # drive_world <world-dir> [hook] -> "block" or "allow" (stderr: raw reason)
+  local w="$1" hk="${2:-$HOOK}" out proj
+  proj="$(mktemp -d)"; mkdir -p "$proj/_bmad-output/.driver"
+  snap_from_body "$w/snapshot-body.md" > "$proj/_bmad-output/pipeline-snapshot.md"
+  touch "$proj/_bmad-output/pipeline-paused.flag"
+  cp "$w/_bmad-output/spawn-ledger.jsonl"     "$proj/_bmad-output/" 2>/dev/null || true
+  cp "$w/_bmad-output/subagent-context.jsonl" "$proj/_bmad-output/" 2>/dev/null || true
+  : > "$proj/_bmad-output/.driver/handoff"
+  out="$(jq -nc --arg t "$w/lead.jsonl" --arg s "fx" '{transcript_path:$t,session_id:$s}' \
+        | CLAUDE_PROJECT_DIR="$proj" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" \
+          bash "$hk" 2>/dev/null)"
+  rm -rf "$proj"
+  # THE REASON GOES TO STDERR SO THE VERDICT CAN STAY ON STDOUT, and the redirection
+  # ORDER is the whole trap: `2>/dev/null >&2` points stderr at /dev/null FIRST and then
+  # duplicates stdout onto that same discarded descriptor, so the reason vanishes and
+  # every text assertion below reads an empty file. Measured here — three assertions
+  # failed against a hook whose message was correct. Capture into a variable, then write
+  # it, rather than chaining redirections on one pipeline.
+  local reason; reason="$(printf '%s' "$out" | jq -r '.reason // ""' 2>/dev/null)" || reason=""
+  printf '%s\n' "$reason" >&2
+  if printf '%s' "$out" | jq -e '.decision=="block"' >/dev/null 2>&1; then
+    printf 'block'
+  else
+    printf 'allow'
+  fi
+}
+
+# The world seeds carry only the In-Flight BODY; the surrounding snapshot is written
+# here from the same seven-section shape seed.sh uses for the sweep cases, so a world
+# cannot differ from a sweep case in anything but that body.
+snap_from_body() {
+  printf '# Pipeline Snapshot\n\n## Pipeline Position\ncurrent_step_file: implementation.md\n\n'
+  printf '## Sprint Context\nsprint_id: 311\n\n## Recent Activity\n- gate 3 in progress\n\n'
+  printf '## Open Items\n- none\n\n## Locked Decisions\n- none\n\n## In-Flight Teammates\n'
+  cat "$1"
+  printf '\n\n## Context Reminders\ncontext_reminders_sent: none\n'
+}
+
+W_OFF="$(cat "$ROOT/.w_offender")"
+
+# (A) THE OFFENDER. A dispatch with a ledger row, a meta sidecar, no stop record, and an
+#     EMPTY table -> BLOCK, and the message must NAME the id: a block that says only
+#     "something is open" cannot be acted on, and this is the presence-shaped conjunct
+#     that a hook emitting nothing fails by construction.
+a_err="$(mktemp)"
+r="$(drive_world "$W_OFF" 2>"$a_err")"
+[ "$r" = block ] && ok "A: dispatch with no stop record + EMPTY In-Flight table -> BLOCK" \
+                 || bad "A: the offender world was ALLOWED ($r) — a handoff leaves an empty table with a teammate whose fate no later step can reconstruct"
+if grep -qF 'toolu_01FIXTUREoffender000000000' "$a_err"; then
+  ok "A: the block message NAMES the open tool_use_id"
+else
+  bad "A: the block message does NOT name the open tool_use_id — the lead is told a row is missing and not which row to write"
+fi
+if grep -qF 'dev-escalated' "$a_err"; then
+  ok "A: the block message carries the ledger name/role for the open id"
+else
+  bad "A: the block message carries no ledger name/role — the lead cannot fill the row's \`agent\` and \`role\` cells"
+fi
+# THE REMEDY IS THE ROW, NOT TaskStop, AND THAT IS A MEASUREMENT NOT A PREFERENCE. The
+# one true positive on the consumer FINISHED cleanly (its tool_result carries no error)
+# and wrote no stop record, so TaskStop can neither clear the state nor report anything.
+# A message that sent the lead to TaskStop would send it to a call that does nothing.
+if grep -qF 'TaskStop' "$a_err" && grep -qF 'Do NOT call' "$a_err"; then
+  ok "A: the message tells the lead to WRITE the row and explicitly NOT to call TaskStop"
+else
+  bad "A: the message does not steer away from TaskStop — a missing stop record is not evidence the teammate is running, and TaskStop cannot clear a record that was never written"
+fi
+rm -f "$a_err"
+
+# (B) THE TABLE CARRIES A MATCHING ROW -> ALLOW. One property from (A).
+r="$(drive_world "$(cat "$ROOT/.w_tablerow")" 2>/dev/null)"
+[ "$r" = allow ] && ok "B: the same dispatch RECORDED in the table -> ALLOW" \
+                 || bad "B: BLOCKED a handoff that wrote the row step 1 mandates ($r) — the arm fires on COMPLIANCE"
+
+# (C) THE STOP RECORD EXISTS -> ALLOW. The teammate returned and the probe wrote its row,
+#     so there is nothing outstanding and the empty table is correct.
+r="$(drive_world "$(cat "$ROOT/.w_ctxrow")" 2>/dev/null)"
+[ "$r" = allow ] && ok "C: the dispatch HAS a SubagentStop record -> ALLOW (empty table is correct)" \
+                 || bad "C: BLOCKED over a teammate that already returned ($r) — the stop-record difference is not being taken, and every completed dispatch would wedge a handoff"
+
+# (D) NEVER SPAWNED -> ALLOW. The guard writes the ledger row at PreToolUse, before
+#     anything can deny the call, so a Rule-29 denial and an agent type that does not
+#     exist both leave a row with no agent behind it. Measured: of the naive join's 3
+#     open ids on the consumer, 2 were Rule-29 denials and the meta narrowing removes
+#     exactly those, leaving 1.
+r="$(drive_world "$(cat "$ROOT/.w_nospawn")" 2>/dev/null)"
+[ "$r" = allow ] && ok "D: ledger row with NO meta sidecar (never spawned) -> ALLOW" \
+                 || bad "D: BLOCKED over a dispatch that never spawned ($r) — a Rule-29 denial would wedge the next handoff over a teammate that does not exist"
+
+# (E) A LIVE NAMED TEAMMATE -> ALLOW. THE STATED BLINDNESS, asserted rather than left
+#     implicit. A named dispatch routes to the in-process teammate runner, whose meta
+#     carries `teamName` and no `toolUseId`; partitioned over the harness corpus the two
+#     keys never co-occur (330 toolUseId-only, 672 teamName-only, 0 both, 0 neither). A
+#     name-keyed join was built and refuted — 115 false blocks over 303 rows. This cell
+#     flips the day somebody adds one, which is the point of asserting it.
+r="$(drive_world "$(cat "$ROOT/.w_namedteam")" 2>/dev/null)"
+[ "$r" = allow ] && ok "E: live NAMED teammate (no tool_use_id, meta has teamName) -> ALLOW (the stated blindness)" \
+                 || bad "E: BLOCKED on a named in-process teammate ($r) — that class carries no join key at all, so a block there is keyed on something the arm's header says it does not read"
+
+# (F) FAIL-OPEN WITH NO jq. A PATH stub that exits 127 for every invocation, which is
+#     what a consumer without jq looks like from inside the hook. The whole hook needs
+#     jq to emit a decision at all, so the assertion is that the run produces NO block
+#     text — an arm that convicted here would be reading an absence as a finding.
+JQSTUB="$ROOT/nojq"; mkdir -p "$JQSTUB"
+printf '#!/bin/sh\nexit 127\n' > "$JQSTUB/jq"; chmod +x "$JQSTUB/jq"
+f_out="$(jq -nc --arg t "$W_OFF/lead.jsonl" --arg s "fx" '{transcript_path:$t,session_id:$s}')"
+f_proj="$(mktemp -d)"; mkdir -p "$f_proj/_bmad-output/.driver"
+snap_from_body "$W_OFF/snapshot-body.md" > "$f_proj/_bmad-output/pipeline-snapshot.md"
+touch "$f_proj/_bmad-output/pipeline-paused.flag"
+cp "$W_OFF/_bmad-output/"*.jsonl "$f_proj/_bmad-output/" 2>/dev/null || true
+: > "$f_proj/_bmad-output/.driver/handoff"
+f_res="$(printf '%s' "$f_out" | PATH="$JQSTUB:$PATH" CLAUDE_PROJECT_DIR="$f_proj" \
+         AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" bash "$HOOK" 2>/dev/null)"
+rm -rf "$f_proj"
+# A HERE-STRING, NOT A PIPE INTO `grep -q`. `grep -q` leaves at its first match while the
+# writer is still pushing, and under this file's `pipefail` the pipeline then answers with
+# the writer's EPIPE and reports NOT-FOUND on input that contains the pattern. I54b of
+# validate-enforcement-map.sh fails the push on the piped form.
+if [ -z "$f_res" ] || ! grep -qF 'HANDOFF GUARD' <<<"$f_res"; then
+  ok "F: jq shadowed by a stub exiting 127 -> no block text (fail-open, a handoff is never wedged by bookkeeping)"
+else
+  bad "F: the guard emitted block text with jq unavailable — it is convicting on an absence it cannot read, and every consumer without jq wedges at its first handoff"
+fi
+# CONTROL for F, and it is what makes the silence above readable: the stub really does
+# shadow jq. Without it "no output" is equally consistent with the stub never being on
+# PATH and the hook running normally on a world that happens to allow.
+if PATH="$JQSTUB:$PATH" jq --version >/dev/null 2>&1; then
+  bad "F CONTROL: the jq stub did NOT shadow the real jq — case F proved nothing about the fail-open path"
+else
+  ok "F control: the stub genuinely shadows jq (so F's silence is the fail-open path)"
+fi
+
+# (G) THE TRANSCRIPT PATH NAMES NO FILE -> fail open. Built from the offender world with
+#     its transcript removed, so every other input still convicts.
+G_W="$(cat "$ROOT/.w_notranscript")"
+rm -f "$G_W/lead.jsonl"
+r="$(drive_world "$G_W" 2>/dev/null)"
+[ "$r" = allow ] && ok "G: transcript path names no file -> ALLOW (fail-open)" \
+                 || bad "G: BLOCKED with no transcript to read ($r) — the arm is producing a verdict from a set it never derived"
+
+# (H) NO META DIRECTORY beside the transcript -> fail open. A harness build that writes
+#     no sidecars, or a session predating them. Without the narrowing this world is the
+#     offender, so an arm that skipped the directory check would BLOCK here.
+r="$(drive_world "$(cat "$ROOT/.w_nometadir")" 2>/dev/null)"
+[ "$r" = allow ] && ok "H: no subagents/ meta directory -> ALLOW (fail-open)" \
+                 || bad "H: BLOCKED with no meta sidecars on disk ($r) — a consumer whose harness writes none would wedge at every handoff"
+
+# (I) ONE UNRELATED ROW IN THE TABLE -> ALLOW. THE STATED ACQUITTAL. The check is a
+#     PRESENCE test, not an identity join, and one row from any dispatch acquits the
+#     turn. The reason is coverage: over 647 tracked snapshot revisions on the reference
+#     consumer, 2 of 115 distinct In-Flight first cells resolve to a spawn meta at all
+#     and NEITHER reaches a ledger row, so an identity join false-positives on the whole
+#     historical population. Asserted so the acquittal is visible rather than latent.
+r="$(drive_world "$(cat "$ROOT/.w_unrelatedrow")" 2>/dev/null)"
+[ "$r" = allow ] && ok "I: table carries one UNRELATED row -> ALLOW (the stated acquittal: presence, not identity)" \
+                 || bad "I: BLOCKED with a row present in the table ($r) — the arm has become an identity join, which the header says it is not and which false-positives on 113 of 115 historical rows"
+
+# --- MUTANTS FOR THE IN-FLIGHT ROW ARM ----------------------------------------------
+#
+# FOUR MUTANTS, one per wrong implementation, each a COPY guarded by `cmp -s` and
+# `bash -n` through hook_mut above, each scored on the hook's block/allow decision, and
+# each carrying a CONTROL on a case it was not meant to touch. A copy that died on load
+# emits nothing and "no output" scores as ALLOW, which is indistinguishable from three of
+# the four kills.
+#
+# WHAT EACH KILLS:
+#   m1 drop the stop-record difference  -> C blocks (a returned teammate wedges a handoff)
+#   m2 drop the meta narrowing          -> D blocks (a never-spawned dispatch wedges one)
+#   m3 fire regardless of the row count  -> B and I block (every handoff wedges)
+#   m4 read `tail -n 200` of the transcript -> A allows (the dispatch is above the window)
+
+# m1: the set difference against the stop log is dropped, so a dispatch that RETURNED is
+#     still "open". Anchored on the assignment that computes OPEN_IDS.
+#     The candidate set is assigned straight through, which is the difference against an
+#     EMPTY stop log — one conjunct gone, not a script with a hole in it. The `|`, `$`
+#     and `/` inside the matched text are wildcarded with `.` rather than escaped, and
+#     the replacement carries no `&` (the whole match, under every sed) and no backslash
+#     (a `\n` there is a bare `n` under BSD sed). The delimiter is `|` and not `%`: BSD
+#     sed rejects an expression OPENING with `%` as an invalid command code, which is how
+#     this mutation first died — and `hook_mut` would have reported that as DID NOT APPLY.
+M_NOCTX="$ROOT/continue-noctx.sh"
+if hook_mut "$M_NOCTX" 's|OPEN_IDS="$(_if_minus "$_if_cand" "$_if_stop" . sed ./^$/d.)" .. OPEN_IDS=""|OPEN_IDS="$_if_cand"|' "m1 no-ctx-difference"; then
+  r="$(drive_world "$(cat "$ROOT/.w_ctxrow")" "$M_NOCTX" 2>/dev/null)"
+  [ "$r" = block ] && ok "m1 (drop the stop-record difference): case C now BLOCKS — that ALLOW is the difference, and without it every completed teammate wedges the next handoff" \
+                   || bad "MUTANT m1 DID NOT FAIL — case C still returned $r with the stop-record difference removed, so C proves nothing about it"
+  r="$(drive_world "$(cat "$ROOT/.w_tablerow")" "$M_NOCTX" 2>/dev/null)"
+  [ "$r" = allow ] && ok "m1 control: the same copy still ALLOWS case B — it loads and reads the table, so the kill above is a dropped difference and not a dead script" \
+                   || bad "MUTANT m1 HARNESS BROKEN — the copy blocks case B too ($r); it is not discriminating and the kill above is unreadable"
+fi
+
+# m2: the meta narrowing is dropped, so a ledger row for a dispatch that never spawned is
+#     "open". This is the naive join the FP measurement started from.
+M_NOMETA="$ROOT/continue-nometa.sh"
+if hook_mut "$M_NOMETA" 's|_if_cand="$(_if_isect "$_if_cand" "$_if_metaids")" .. _if_cand=""|_if_cand="$_if_cand"|' "m2 no-meta-narrowing"; then
+  r="$(drive_world "$(cat "$ROOT/.w_nospawn")" "$M_NOMETA" 2>/dev/null)"
+  [ "$r" = block ] && ok "m2 (drop the meta narrowing): case D now BLOCKS — the narrowing is what removes a dispatch that was denied before it ever spawned" \
+                   || bad "MUTANT m2 DID NOT FAIL — case D still returned $r with the meta narrowing removed, so that ALLOW comes from somewhere else"
+  r="$(drive_world "$(cat "$ROOT/.w_ctxrow")" "$M_NOMETA" 2>/dev/null)"
+  [ "$r" = allow ] && ok "m2 control: the same copy still ALLOWS case C — it loads and still takes the stop-record difference" \
+                   || bad "MUTANT m2 HARNESS BROKEN — the copy blocks case C too ($r); it is not running the rest of the predicate"
+fi
+
+# m3: the row-count conjunct is dropped, so the arm fires whenever anything is open
+#     regardless of what the table says. Killed by B AND by I, which are different
+#     properties: B writes the matching row, I writes an unrelated one.
+M_NOROWS="$ROOT/continue-norows.sh"
+if hook_mut "$M_NOROWS" 's|if \[ "$OPEN_N" -gt 0 \] \&\& \[ "$INFLIGHT_ROWS" -eq 0 \]; then|if [ "$OPEN_N" -gt 0 ]; then|' "m3 ignore-row-count"; then
+  r="$(drive_world "$(cat "$ROOT/.w_tablerow")" "$M_NOROWS" 2>/dev/null)"
+  [ "$r" = block ] && ok "m3 (fire regardless of the row count): case B now BLOCKS — the count conjunct is what lets a compliant handoff through" \
+                   || bad "MUTANT m3 DID NOT FAIL on B — case B still returned $r without the row-count test, so B is not scoring that conjunct"
+  r="$(drive_world "$(cat "$ROOT/.w_unrelatedrow")" "$M_NOROWS" 2>/dev/null)"
+  [ "$r" = block ] && ok "m3: case I also BLOCKS — the acquittal in I is the row COUNT, seeded one property away from B" \
+                   || bad "MUTANT m3 DID NOT FAIL on I — case I still returned $r, so the unrelated-row acquittal is not the count"
+  r="$(drive_world "$(cat "$ROOT/.w_ctxrow")" "$M_NOROWS" 2>/dev/null)"
+  [ "$r" = allow ] && ok "m3 control: the same copy still ALLOWS case C — nothing is open there, so the count was never consulted" \
+                   || bad "MUTANT m3 HARNESS BROKEN — the copy blocks case C too ($r), where the open set is empty; it is convicting unconditionally"
+fi
+
+# m4: the transcript is read through a `tail -n 200` window — the shape Check 0b uses for
+#     its pause-question prefilter, and the cheap wrong fix here. Measured on the
+#     reference consumer: across the sessions this arm was scored on, that window sees 1
+#     dispatch of 80, because dispatches are spread through a session rather than
+#     clustered at its end. The offender seed pads 400 records after the dispatch.
+M_TAIL="$ROOT/continue-tail200.sh"
+if hook_mut "$M_TAIL" 's|            . .id. "$TRANSCRIPT" 2>/dev/null . sort -u)" .. _if_disp=""|            \| .id'"'"' <(tail -n 200 "$TRANSCRIPT") 2>/dev/null \| sort -u)" \|\| _if_disp=""|' "m4 tail-200 window"; then
+  r="$(drive_world "$W_OFF" "$M_TAIL" 2>/dev/null)"
+  [ "$r" = allow ] && ok "m4 (tail -n 200 window): the OFFENDER is ALLOWED — the dispatch sits above the window, which is the real shape and why the transcript is read whole" \
+                   || bad "MUTANT m4 DID NOT FAIL — the offender still returned $r through a 200-record window, so the seed does not place the dispatch above it and the whole-file read is unasserted"
+  r="$(drive_world "$(cat "$ROOT/.w_tablerow")" "$M_TAIL" 2>/dev/null)"
+  [ "$r" = allow ] && ok "m4 control: the same copy still ALLOWS case B — it loads and runs" \
+                   || bad "MUTANT m4 HARNESS BROKEN — the copy blocks case B ($r); it is not running the arm at all"
+fi
+
 # --- Beat-before-stop arm -----------------------------------------------------------
 #
 # THE DEFECT THIS ARM EXISTS FOR. Measured on the reference consumer: an adversary pass
