@@ -55,6 +55,108 @@ have gone green, and would have reported "still open" forever.
 never the word anywhere in prose, because an entry that merely discusses landing something is
 not a closed entry.
 
+## BL-252 — the gate-adjudicator returned a verdict path with nothing between the write and the return that read the file, so a dropped escalated check cost a whole re-dispatch
+
+**Found 2026-09-14** adjudicating the consumer filing
+`PC-S311-GATE-ADJUDICATOR-CHECK-26-COVERAGE-MISS-NOT-SELF-VERIFIED`, re-derived here. The
+filing's claim is that an adjudicator dispatch can return a verdict that silently skipped a
+declared check and "nothing before the verdict catches it". **The second half of that claim is
+false and the first half is the entry.**
+
+**THE ENUMERATE-AND-DIFF ALREADY EXISTED AND FIRED ON THE MOTIVATING CASE.** Check 26's
+validator derives the expected set from `enforcement-map.yaml` and blocks on the difference. Run
+against the consumer's own `sprint-review-20260914T072634Z.verdict.json`, the verdict the filing
+was written about: exit **1**, `escalated check(s) NOT adjudicated: ['2']`. Control in the same
+invocation: `--expected sprint-review` prints **8** ids (`1 2 3 4 7 16 20 21`), so the derivation
+that produced the diff is live and non-empty. The filing's own remedy — that the verdict
+enumerate its ids and the dispatching step diff them — is what the gate already does.
+
+**WHAT SURVIVES IS WHERE THE DIFF RUNS, NOT WHETHER IT RUNS.** It runs in the LEAD's pass, after
+the adjudicator has returned and the dispatch is over, and there is no partial re-adjudication to
+fall back on — a gap found there throws the whole dispatch away. Nothing between writing the file
+and returning its path opened the file.
+
+**THE CAUSE IS IN THE ADJUDICATOR'S OWN TRANSCRIPT AND IT IS A GAP IN THE ROLE FILE.** The
+adjudicator RAN `--expected sprint-review`, its tool result printed all eight ids, and it then
+wrote that check 2 "was covered by scripted vocab/suppression already … but check 2 isn't in my
+worklist; only 1,3,4,7,16,20,21". It dropped the one `adjudication: llm` check that ALSO carries
+`enforcer:` scripts, which the lead runs at gate entry. `core/team-roles/gate-adjudicator.md` said
+"Evaluate only the derived set" and "never omit a check" and said nothing about a script-armed llm
+check staying in the set — measured before the fix, `grep -c -i 'script arm'` on that file = **0**,
+control `derived set` = 1. Check 2 and check 16 are the only two escalated sprint-review checks
+carrying an `enforcer:`; every other one is `enforcer: []`. So the dropped id was EXACTLY the class
+the role file did not address.
+
+**WHAT SHIPPED.** `core/scripts/validate-gate-adjudication.sh` gains `--coverage <gate_type>
+<verdict_path>`: the envelope arms plus the same `coverage_arms()` the adjudicate mode calls, one
+body and one set of `block()` texts with two callers, exiting 0 whatever the per-check verdicts
+say. The role file gains the self-check step bound to the path the lead handed the adjudicator,
+ending `<gate_nonce>.verdict.json`, with all three exit classes named; and the clause that a check
+whose script arm the lead already ran STAYS in the derived set. `_gate-procedures.md` records that
+the adjudicator self-verifies before returning, citing the mode rather than restating what it
+checks.
+
+**THE MEASURED VALUE IS LARGER THAN THE FILING'S, AND IT IS THE BINDING ARM'S MASK.** Over the
+consumer's 197 real verdict files, each run three ways with the base built from `origin/main` into
+its own tree and the two sides `cmp -s`-asserted to differ first:
+
+    tip_full == base_full                      197 of 197   <- the full mode is unchanged
+    tip_full != tip_coverage                    48          <- control: not one program
+    --coverage exit 0 / exit 1                  88 / 109
+
+FOUR of those files carry a real coverage defect that the full mode NEVER REACHES and never
+prints, because the dispatch-binding arm blocks first: `implementation-20260813T002442Z`,
+`…T003901Z` and `…T005355Z` each name a `2a` outside the escalated set, and
+`sprint-review-20260826T062500Z` is short of check `20`. `--coverage` reports all four by the
+right sentence. The binding arm is excluded from the mode on its own merits as well — its exit is
+unfixable by any edit to the verdict, so an adjudicator handed it would keep editing a correct
+file — but the mask is the stronger reason.
+
+**Grammar bind.** On the motivating verdict the full mode's sentence and the coverage mode's
+sentence are string-equal, because there is one `block()` text. Both print `escalated check(s) NOT
+adjudicated: ['2']`.
+
+**WHAT IS NOT MECHANISED, STATED RATHER THAN IMPLIED.** The mode is handed a path and CANNOT know
+which file its caller wrote: an adjudicator that writes a short verdict and self-checks a complete
+neighbour gets exit 0, truthfully, about the neighbour. Two things narrow it and neither closes it
+— the nonce/stem arm runs before the coverage join, so the file must carry the nonce its own
+filename claims, and the PASS line names the path it read, so a lead holding the dispatch's nonce
+can read one against the other. The rest is the role file naming the path verbatim, which is
+prose with no enforcer. A mechanism that could close it would have to know what the caller wrote,
+and nothing in the dispatch records that at the moment the adjudicator returns.
+
+**Receipt scoring.** The receipt DRIVES the mode. It derives the escalated set with `--expected`
+rather than hand-listing it, builds two verdicts in a `mktemp` tree — one short by the first
+derived id, one fully covered carrying one FAIL — and requires exit **1** naming that id on the
+first AND exit **0** on the second, in ONE run. The second seed is the discriminating one: the
+full mode's FAIL arm would exit 1 on it, so a receipt with only the first seed passes over a mode
+that merely re-runs the full validator. Each candidate was built as its own tree from `git
+archive` and `cmp -s`-asserted to differ from the tip before its verdict was read:
+
+    tip                                                  0
+    base (origin/main)                                   1   <- refuses --coverage, exit 2 as an unknown flag
+    stub: --coverage always exits 0                      1
+    mutant: `_cov_fails = []`, the join never called     1
+
+The receipt is NOT satisfiable by a comment, because it executes the validator rather than reading
+its text — and the ledger validator's own seed says so in the other direction: appending the
+receipt's literals to the three files it names breaks `gate-adjudication-verdict.json`, the
+validator refuses with exit 2, and the receipt exits **9**. Seeded on the validator SCRIPT alone,
+where the JSON stays parseable and the receipt reaches its question, it exits **0** both with and
+without the comment — the mode still runs, so the comment neither creates nor destroys the answer.
+Either way the ledger validator's seed demonstrates nothing here, and the four rows above are what
+establishes discrimination.
+
+**`validate-backlog-receipts.sh` reports this receipt ALREADY-PASSING rather than BOUND, and that
+is structural rather than a weakness.** That arm scores every receipt against the subject
+repository's own `HEAD`, and BOUND requires a base exit of **1**. This entry is filed in the same
+release as the fix it describes, so at `HEAD` the mode exists and the receipt reads 0 — the same
+bucket `BL-236` sits in. The status is a statement about when the entry was filed, not about
+whether the receipt discriminates; the scoring table above is, and it was taken on four trees
+none of which is `HEAD`.
+
+verify: sh V=core/scripts/validate-gate-adjudication.sh; S=core/schemas/gate-adjudication-verdict.json; M=core/skills/ai-dlc/enforcement-map.yaml; [ -f "$V" ] && [ -f "$S" ] && [ -f "$M" ] || exit 9; G=sprint-review; A=sprint-review-20260101T000001Z; B=sprint-review-20260101T000002Z; D="$(mktemp -d)" || exit 9; [ -n "$D" ] || exit 9; I="$(AI_DLC_ENFORCEMENT_MAP="$M" AI_DLC_VERDICT_SCHEMA="$S" bash "$V" --expected "$G" 2>/dev/null)" || exit 9; k="$(printf '%s\n' "$I" | grep -c .)" || k=0; [ "$k" -ge 2 ] || exit 9; x="$(printf '%s\n' "$I" | head -1)"; [ -n "$x" ] || exit 9; python3 -c 'import json,sys; d,g,a,b = sys.argv[1],sys.argv[2],sys.argv[3],sys.argv[4]; ids = sys.argv[5].split(); mk = lambda c,v: {"check_id": c, "verdict": v, "evidence": "receipt: check %s settled" % c}; env = lambda n,vs: {"schema_id": "GATE_ADJUDICATION_VERDICT v1", "gate_type": g, "gate_series_id": n, "gate_nonce": n, "generated_at": "2026-01-01T00:00:00Z", "adjudicator_agent_id": "agent-receipt-0001", "catalog": "core", "verdicts": vs}; json.dump(env(a, [mk(c, "PASS") for c in ids[1:]]), open(d + "/" + a + ".verdict.json", "w")); json.dump(env(b, [mk(c, "FAIL" if c == ids[0] else "PASS") for c in ids]), open(d + "/" + b + ".verdict.json", "w"))' "$D" "$G" "$A" "$B" "$I" || exit 9; [ -s "$D/$A.verdict.json" ] && [ -s "$D/$B.verdict.json" ] || exit 9; AI_DLC_ENFORCEMENT_MAP="$M" AI_DLC_VERDICT_SCHEMA="$S" bash "$V" --coverage "$G" "$D/$A.verdict.json" >/dev/null 2>"$D/a.err"; ra=$?; AI_DLC_ENFORCEMENT_MAP="$M" AI_DLC_VERDICT_SCHEMA="$S" bash "$V" --coverage "$G" "$D/$B.verdict.json" >/dev/null 2>&1; rb=$?; ae="$(cat "$D/a.err" 2>/dev/null)"; rm -f "$D/$A.verdict.json" "$D/$B.verdict.json" "$D/a.err"; rmdir "$D" 2>/dev/null; [ "$ra" -eq 1 ] || exit 1; grep -q 'NOT adjudicated' <<<"$ae" || exit 1; grep -qF "['$x']" <<<"$ae" || exit 1; [ "$rb" -eq 0 ] || exit 1; exit 0
+
 ## BL-238 — the consumer ledger's `theirs`-ref receipt grammar cannot key on an ARM's body, so a receipt written to ask a behavioural question is satisfied by a comment
 
 **Found 2026-09-11** while closing a consumer candidate whose own receipt was built to avoid an
