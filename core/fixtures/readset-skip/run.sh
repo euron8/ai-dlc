@@ -389,6 +389,7 @@ fi
 # the next, so an installed tree between those two pulls has the fixture and not the file. A
 # SKIP says so; passing silently would make a vanished arm and a satisfied arm identical.
 MERGE_ARMS=0
+CONTROL_ARMS=0
 DERIVER=""
 for _d in "$ROOT/scripts/ai-dlc/derive-fixture-readsets.sh" "$ROOT/core/scripts/derive-fixture-readsets.sh"; do
   [ -f "$_d" ] && DERIVER="$_d" && break
@@ -472,13 +473,203 @@ else
   else
     bad "MERGE MUTANT keepstale: the stale entry did not survive — arm 2 does not depend on the traced filter"
   fi
+
+  # ------------------------------------------- the deriver's discrimination control ----
+  # WHAT THIS CONTROL IS FOR. The map exists to let fixtures be SKIPPED. A map in which every
+  # read-set covers every path the map names selects the whole suite on every change and skips
+  # nothing -- correct, useless, and indistinguishable from a working map by any arm that reads
+  # the suite's verdict. The deriver refuses to WRITE such a map, and this is the arm that says
+  # so.
+  #
+  # THE DEFECT THESE ARMS EXIST BECAUSE OF, AND WHY IT COULD NOT BE SEEN. The control built its
+  # universe from the entries the run had just TRACED. Under `--list "<one fixture>"` that
+  # universe IS that one fixture's read-set: the subset test is false for every possible input,
+  # so the control refused every single-fixture refresh -- the mode the deriver's own header
+  # advertises -- while printing the same FAIL line a genuinely non-discriminating map produces.
+  # A wrong refusal and a right one read identically from outside, and the workaround (name more
+  # fixtures) made the refusal go away without anyone learning why. Arm (d) below is the
+  # motivating case and it is the one that would have been RED at base.
+  #
+  # THE CONTROL IS DRIVEN, NOT GREPPED. The rest of the deriver needs root and cannot run here,
+  # so the shipped logic is extracted between its own sentinels and called -- a line-order grep
+  # over the script would pass against a control that is present, correctly ordered, and wrong.
+  #
+  # A DERIVER PRESENT WITHOUT ITS CONTROL SPAN IS A FAILURE, NOT A SKIP, and the asymmetry with
+  # the block above is deliberate. The ships-ahead-of-its-subject case is the deriver being
+  # ABSENT, which is what a consumer sees between two pulls; a consumer never sees a deriver that
+  # arrived without part of itself, because install.sh copies core/scripts and core/fixtures in
+  # the same pull. Here, that state is a revision of this repo where the control has not landed.
+  CTL="$WORK/control.sh"
+  sed -n '/# READSET_CONTROL_BEGIN/,/# READSET_CONTROL_END/p' "$DERIVER" > "$CTL"
+  if ! grep -q 'readset_discrimination_control()' "$CTL"; then
+    bad "extracted no readset_discrimination_control from $DERIVER — the READSET_CONTROL span is absent, so the deriver's discrimination control cannot be driven and nothing below it ran"
+  else
+  # shellcheck disable=SC1090
+  . "$CTL"
+
+  # An independent recomputation of the control's own verdict, in shell rather than awk, so a
+  # number the function PRINTS can be compared against one derived some other way. Echoes the
+  # count of fixtures whose read-set is a PROPER subset of the map's union.
+  ctl_proper_by_hand() {
+    local map="$1" u f n p=0
+    u="$(cut -f2 "$map" | LC_ALL=C sort -u | grep -c .)" || u=0
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      n="$(awk -F'\t' -v x="$f" '$1 == x { print $2 }' "$map" | LC_ALL=C sort -u | grep -c .)" || n=0
+      [ "$n" -lt "$u" ] && p=$((p+1))
+    done < <(cut -f1 "$map" | LC_ALL=C sort -u)
+    printf '%s' "$p"
+  }
+  ctl_universe_of() { local n; n="$(cut -f2 "$1" | LC_ALL=C sort -u | grep -c .)" || n=0; printf '%s' "$n"; }
+  ctl_fixtures_of() { local n; n="$(cut -f1 "$1" | LC_ALL=C sort -u | grep -c .)" || n=0; printf '%s' "$n"; }
+
+  # SEEDS, each asserted to carry the property its arm turns on BEFORE any verdict is read. A
+  # seed that quietly lost its property produces an arm that agrees with every implementation.
+  printf 'alpha\tsrc/a\nalpha\tsrc/shared\nbeta\tsrc/b\nbeta\tsrc/shared\nbeta\tsrc/extra\n' > "$WORK/ctl.disc.map"
+  printf 'alpha\tsrc/a\nalpha\tsrc/b\nbeta\tsrc/a\nbeta\tsrc/b\n' > "$WORK/ctl.cover.map"
+  printf 'alpha\tsrc/NEW\n' > "$WORK/ctl.single.map"
+  printf 'alpha\tsrc/a\nalpha\tsrc/x\nbeta\tsrc/b\ngamma\tsrc/g\n' > "$WORK/ctl.old.map"
+  printf 'alpha\tsrc/ONLY\n' > "$WORK/ctl.new.map"
+  [ "$(ctl_fixtures_of "$WORK/ctl.disc.map")" -ge 2 ] && [ "$(ctl_proper_by_hand "$WORK/ctl.disc.map")" -gt 0 ] \
+    || broken "the discriminating seed carries no proper subset over >=2 fixtures; arm (a) would pass against a control that never compares anything"
+  [ "$(ctl_proper_by_hand "$WORK/ctl.cover.map")" -eq 0 ] && [ "$(ctl_fixtures_of "$WORK/ctl.cover.map")" -ge 2 ] \
+    || broken "the all-cover seed is not all-cover; arm (b) would be asserting a refusal of an input that ought to pass"
+  [ "$(ctl_fixtures_of "$WORK/ctl.single.map")" -eq 1 ] \
+    || broken "the single-fixture seed names more than one fixture; arm (c) tests the wrong shape"
+  # THE PROPERTY ARM (d) AND MUTANT m1 TURN ON. If the two maps' unions were equal, driving the
+  # control on the merged map and on the traced map would return the same verdict and neither
+  # arm could tell base from tip.
+  [ "$(ctl_universe_of "$WORK/ctl.old.map")" -gt "$(ctl_universe_of "$WORK/ctl.new.map")" ] \
+    || broken "the --list seeds' unions do not differ ($(ctl_universe_of "$WORK/ctl.old.map") vs $(ctl_universe_of "$WORK/ctl.new.map")); arm (d) and mutant m1 would agree on every implementation"
+  [ "$(ctl_proper_by_hand "$WORK/ctl.new.map")" -eq 0 ] \
+    || broken "the traced-alone seed already discriminates, so the base defect it stands in for cannot be expressed"
+
+  # (a) A MERGED MAP THAT DISCRIMINATES PASSES, and the verdict LINE is asserted, not just the
+  # status: a control replaced by `true` returns 0 with nothing printed, which an rc-only arm
+  # cannot tell from a control that looked.
+  CONTROL_ARMS=$((CONTROL_ARMS+1))
+  CA="$(readset_discrimination_control "$WORK/ctl.disc.map" 2>&1)"; CA_RC=$?
+  case "$CA_RC:$CA" in
+    0:*"PASS  CONTROL"*) ok "the deriver's control ACCEPTS a map in which a read-set is a proper subset of the union — the map can skip something" ;;
+    *) bad "a discriminating map was not accepted (rc $CA_RC): $(printf '%s' "$CA" | tr -d '\n')" ;;
+  esac
+
+  # (b) EVERY READ-SET EQUAL TO THE UNION IS REFUSED. This is the map the control exists to
+  # stop: it is written, it is correct, and it skips nothing.
+  CONTROL_ARMS=$((CONTROL_ARMS+1))
+  CB="$(readset_discrimination_control "$WORK/ctl.cover.map" 2>&1)"; CB_RC=$?
+  case "$CB_RC:$CB" in
+    1:*"FAIL  CONTROL"*) ok "  and it REFUSES a map in which every read-set covers the whole universe — that map would select the whole suite on every change" ;;
+    *) bad "a map that discriminates nothing was not refused (rc $CB_RC): $(printf '%s' "$CB" | tr -d '\n')" ;;
+  esac
+
+  # (c) THE FIX BOUGHT THE PASS BY MERGING, NOT BY DISABLING THE CONTROL. A one-fixture map is
+  # its own universe, so it still fails -- which is what makes arm (d) evidence about the merge
+  # rather than about a control that was loosened until `--list` stopped complaining.
+  CONTROL_ARMS=$((CONTROL_ARMS+1))
+  CC="$(readset_discrimination_control "$WORK/ctl.single.map" 2>&1)"; CC_RC=$?
+  case "$CC_RC:$CC" in
+    1:*"FAIL  CONTROL"*) ok "  and a ONE-FIXTURE map still fails, so the single-fixture refresh was fixed by merging rather than by relaxing the control" ;;
+    *) bad "a single-fixture map was accepted (rc $CC_RC) — the control was loosened, not the input widened: $(printf '%s' "$CC" | tr -d '\n')" ;;
+  esac
+
+  # (d) THE MOTIVATING CASE, COMPOSED FROM THE TWO SHIPPED BLOCKS. `--list "<one fixture>"`
+  # traces one fixture, merges its entries over the committed map, and the control judges the
+  # map the run will WRITE. Judged on the traced entries alone -- the base behaviour, which
+  # mutant m1 below reproduces -- this returns 1 and refuses a refresh that is entirely correct.
+  CONTROL_ARMS=$((CONTROL_ARMS+1))
+  readset_merge_map "$WORK/ctl.old.map" "$WORK/ctl.new.map" "alpha" | LC_ALL=C sort -u > "$WORK/ctl.merged.map"
+  if [ "$(ctl_fixtures_of "$WORK/ctl.merged.map")" -lt 2 ]; then
+    bad "the composed --list merge produced fewer than 2 fixtures, so arm (d) would test the single-fixture shape again instead of the merged one"
+  else
+    CD="$(readset_discrimination_control "$WORK/ctl.merged.map" 2>&1)"; CD_RC=$?
+    case "$CD_RC:$CD" in
+      0:*"PASS  CONTROL"*) ok "a --list refresh of ONE fixture is judged on the MERGED map and passes — the mode the deriver advertises is reachable" ;;
+      *) bad "a --list refresh of one fixture was refused on its merged map (rc $CD_RC): $(printf '%s' "$CD" | tr -d '\n')" ;;
+    esac
+  fi
+
+  # MUTANT m1 -- THE BASE DEFECT, REPRODUCED AS AN INPUT RATHER THAN AN EDIT. The base built the
+  # universe from the traced entries; driving the shipped function on the traced map alone is
+  # exactly that computation. It must refuse, or arm (d) is passing for a reason that has
+  # nothing to do with the merge and would have been green before the fix.
+  CONTROL_ARMS=$((CONTROL_ARMS+1))
+  CM1="$(readset_discrimination_control "$WORK/ctl.new.map" 2>&1)"; CM1_RC=$?
+  if [ "$CM1_RC" -eq 0 ]; then
+    bad "MUTANT m1: the traced map ALONE was accepted, so arm (d) cannot tell the merged judgement from the base one and would have been green at base"
+  else
+    ok "MUTANT m1 moves arm (d): judged on the TRACED entries alone the same refresh is refused — which is the base behaviour, and the arm discriminates base from tip"
+  fi
+
+  # MUTANT m2 -- AN ALWAYS-ACCEPTING CONTROL. Keyed on the verdict the function RETURNS, not on
+  # a spelling: a control that cannot refuse is the failure mode every arm above would otherwise
+  # score as a pass.
+  CONTROL_ARMS=$((CONTROL_ARMS+1))
+  CM2="$WORK/control.alwayspass.sh"
+  sed 's|exit 1|exit 0|' "$CTL" > "$CM2"
+  if cmp -s "$CTL" "$CM2"; then
+    bad "CONTROL MUTANT alwayspass: the edit matched nothing, so this mutant tests the unmutated function"
+  else
+    CM2_OUT="$( . "$CM2"; readset_discrimination_control "$WORK/ctl.cover.map" 2>&1 )"; CM2_RC=$?
+    if [ "$CM2_RC" -eq 0 ]; then
+      ok "CONTROL MUTANT alwayspass moves arm (b): a control that cannot refuse accepts the map that covers everything"
+    else
+      bad "CONTROL MUTANT alwayspass: the all-cover map was still refused (rc $CM2_RC) — arm (b) does not depend on the verdict the function returns"
+    fi
+  fi
+
+  # MUTANT m3 -- THE mC SHAPE: each fixture's own path count taken from a SMALLER map while the
+  # universe comes from the merged one. That is not a subset test at all. The smaller count is
+  # below the larger union for every input, so the mutant accepts the very map arm (b) refuses,
+  # and the fix would have shipped a control that judges nothing while reading as repaired.
+  CONTROL_ARMS=$((CONTROL_ARMS+1))
+  CM3="$WORK/control.splitsource.sh"
+  sed 's|if ((($1 SUBSEP $2) in seen) == 0)|if (FNR != NR) if ((($1 SUBSEP $2) in seen) == 0)|; s|if (($2 in path) == 0)|if (FNR == NR) if (($2 in path) == 0)|; s|"\$1"$|"$1" "${2:-$1}"|' "$CTL" > "$CM3"
+  if cmp -s "$CTL" "$CM3"; then
+    bad "CONTROL MUTANT splitsource: the edit matched nothing, so this mutant tests the unmutated function"
+  else
+    printf 'alpha\tsrc/a\n' > "$WORK/ctl.traced.map"
+    CM3_OUT="$( . "$CM3"; readset_discrimination_control "$WORK/ctl.cover.map" "$WORK/ctl.traced.map" 2>&1 )"; CM3_RC=$?
+    if [ "$CM3_RC" -eq 0 ]; then
+      ok "CONTROL MUTANT splitsource moves arm (b): counting each fixture's own paths from a smaller map than the universe ACQUITS the map that covers everything"
+    else
+      bad "CONTROL MUTANT splitsource: the all-cover map was still refused (rc $CM3_RC) — arm (b) does not depend on both counts coming from one file"
+    fi
+  fi
+
+  # AND THE SHIPPED FUNCTION'S OWN ANSWER IS DERIVED FROM ONE FILE. The mutant above proves the
+  # split-source shape is reachable; this proves the shipped one is not in it, by comparing the
+  # number the function PRINTS against the same number recomputed in shell over the same map --
+  # two independently derived values rather than one value read twice.
+  CONTROL_ARMS=$((CONTROL_ARMS+1))
+  CP_FN="$(readset_discrimination_control "$WORK/ctl.disc.map" 2>&1 | sed -n 's/.*CONTROL: \([0-9][0-9]*\) of .*/\1/p')"
+  CP_HAND="$(ctl_proper_by_hand "$WORK/ctl.disc.map")"
+  if [ -n "$CP_FN" ] && [ "$CP_FN" = "$CP_HAND" ]; then
+    ok "  and the proper-subset count it reports ($CP_FN) equals one recomputed independently over that same file — both sides of the comparison come from one map"
+  else
+    bad "  the reported proper-subset count ('$CP_FN') does not match the hand-derived one ($CP_HAND) over the same map — the two sides are not being counted from the same file"
+  fi
+
+  # UNMUTATED CONTROL FOR THE MUTANTS ABOVE, re-sourced from the extracted span after the
+  # mutants have been sourced in subshells. Presence-shaped on purpose: a function replaced by
+  # nothing returns 0 and prints nothing, which is what a `bad` here catches and an rc-only
+  # assertion would not.
+  CONTROL_ARMS=$((CONTROL_ARMS+1))
+  CTL_OUT="$( . "$CTL"; readset_discrimination_control "$WORK/ctl.disc.map" 2>&1 )"; CTL_RC=$?
+  case "$CTL_RC:$CTL_OUT" in
+    0:*"PROPER subset of the 4-path universe"*)
+      ok "CONTROL: the unmutated span still reports the baseline verdict over the 4-path universe, so the kills above are attributable" ;;
+    *)
+      bad "CONTROL: the unmutated span did not reproduce the baseline (rc $CTL_RC): $(printf '%s' "$CTL_OUT" | tr -d '\n') — every control mutant above is unattributable" ;;
+  esac
+  fi
 fi
 
 # THE SUMMARY IS ALSO A COMPLETENESS CHECK. This fixture once ended mid-file after an editing
 # mistake: it printed two thirds of its arms, never reached a verdict line, and exited 0 --
 # which the suite's worker records as `ok`. A fixture that dies silently reads exactly like one
 # that passed, so the arm count is asserted against the number this file actually carries.
-EXPECTED=$(( 18 + MERGE_ARMS ))
+EXPECTED=$(( 18 + MERGE_ARMS + CONTROL_ARMS ))
 if [ "$asserts" -lt "$EXPECTED" ]; then
   printf '  FAIL  only %s assertions ran; this fixture carries %s — it exited early and a short green run reads exactly like a passing one\n' "$asserts" "$EXPECTED"
   fails=$((fails+1))
