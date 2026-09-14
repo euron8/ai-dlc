@@ -437,6 +437,48 @@ verify: sh R=scripts/render-invariant-index.sh; M=scripts/validate-enforcement-m
 
 ## BL-095 — a rule file declaring `paths:` TWICE is accepted, and the arm named "declares its scope exactly once" is not about that
 
+**LANDED (v0.573.0, verified 445f9fc0).** A3b gained a fourth branch, `paths_key_count() > 1`,
+built on the shared `fm_keys` extractor so it counts the same frontmatter keys A3 and A3b's other
+branches read. The count is captured as `_pkc="$(grep -cx …)" || _pkc=0` — `grep -c` prints its
+zero AND exits 1, and the `|| echo 0` form emits two zeros and aborts the arithmetic with no
+verdict.
+
+**THE ARM GOES INSIDE A3b's `for f in $(rule_files)` LOOP, AND THE PLACEMENT IS THE FIX.** An arm
+placed beside `rule_globs()` printed its FAIL to stderr and the validator still exited **0**,
+because `err()` sets `fail=1` and that assignment is lost to a command-substitution subshell. It is
+also a SEPARATE branch rather than another `elif`: a file can carry two `paths:` keys AND an
+`<!-- unconditional: -->` marker, and the chain's both-declared branch would consume it and never
+report the duplicate.
+
+**THE ORIGINAL RECEIPT COULD NOT DISTINGUISH THE FIX FROM AN OVERFIT, AND THE REASON IS THAT ITS
+SEED WAS FULLY INVARIANT.** It seeded with `awk 'NR==1{print; print "paths: core/**"}'`, so the
+duplicate was ALWAYS the literal string `paths: core/**`, ALWAYS on line 2, and ALWAYS in the
+`head -1` of a sorted glob. An arm keyed on any one of those three incidental properties scores 0
+and leaves every rule file green. Built and confirmed: an arm matching the literal
+`^paths: core/\*\*` exits 0 on the real corpus and **CLOSES the original receipt at exit 0**. That
+is this repo's own one-seed-per-discriminating-shape defect, and the repair is a second seed, not
+another arm.
+
+**THE REPLACEMENT SEEDS TWICE AND VARIES ALL THREE PROPERTIES.** Seed A goes at line 2 of the FIRST
+scoped rule file with value `core/**`; seed B goes at the LAST line of the SECOND scoped rule
+file's frontmatter, with value `docs/**`, in a DIFFERENT file — and the receipt asserts that B's
+second `paths:` is not on line 2 before it reads any verdict. It then requires the validator to
+exit non-zero AND to name BOTH files in its A3b message, so an arm that reports one duplicate and
+misses the other cannot pass.
+
+**ONE TRAP, RECORDED BECAUSE IT PRODUCES A FALSE "THE ARM DID NOT FIRE".** The seed must land
+INSIDE the frontmatter, which closes at the SECOND `---`. Measured both ways on the shipped tree:
+a second `paths:` inserted before that line takes the validator to exit **1** with one A3b message;
+the same text APPENDED to the body leaves it at exit **0**, correctly, because `fm_keys` parses
+only between the first two `---` lines and a `paths:` in prose is not a declaration. The body seed
+reads exactly like a broken arm and is the arm working.
+
+**Scored against five implementations, each `cmp -s`-asserted applied and `bash -n`-parsed before
+its verdict was read, and each overfit separately confirmed to leave the REAL corpus at exit 0 so
+it is a plausible non-fix rather than a broken script:** the real fix **0**; the literal-value
+overfit **1**; a line-2-position overfit **1**; a first-rule-file-only overfit **1**; and the
+unmutated pre-fix validator **1**.
+
 **`BL-094`'s defect, one subsystem over, found by asking whether that entry was wider than filed.**
 A `.claude/rules/*.md` file may carry two `paths:` keys in its frontmatter and
 `scripts/validate-claude-rules.sh` exits **0**. Measured in a real `file://` clone, because this
@@ -480,7 +522,7 @@ readers were checked in the same pass and are NOT affected: an invariant ID clai
 headers is refused by `scripts/render-invariant-index.sh` with an explicit message, and
 `MARKER_AWK` is fixed as of `v0.421.0`.
 
-verify: sh V=scripts/validate-claude-rules.sh; [ -f "$V" ] || exit 9; git rev-parse --git-dir >/dev/null 2>&1 || exit 9; D="$(mktemp -d)" || exit 9; git clone -q --shared "file://$(pwd)" "$D/r" >/dev/null 2>&1 || { rm -rf "$D"; exit 9; }; tar --exclude=.git -cf - . 2>/dev/null | tar -xf - -C "$D/r" || { rm -rf "$D"; exit 9; }; ( cd "$D/r" && bash "$V" >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; F="$(cd "$D/r" && grep -l '^paths:' .claude/rules/*.md 2>/dev/null | head -1)"; [ -n "$F" ] || { rm -rf "$D"; exit 9; }; [ "$(grep -c '^paths:' "$D/r/$F")" -eq 1 ] || { rm -rf "$D"; exit 9; }; awk 'NR==1{print; print "paths: core/**"; next} {print}' "$D/r/$F" > "$D/t" || { rm -rf "$D"; exit 9; }; mv "$D/t" "$D/r/$F"; [ "$(grep -c '^paths:' "$D/r/$F")" -eq 2 ] || { rm -rf "$D"; exit 9; }; ( cd "$D/r" && bash "$V" >/dev/null 2>&1 ); rc=$?; rm -rf "$D"; [ "$rc" -eq 0 ] || exit 0; exit 1
+verify: sh V=scripts/validate-claude-rules.sh; [ -f "$V" ] || exit 9; git rev-parse --git-dir >/dev/null 2>&1 || exit 9; D="$(mktemp -d)" || exit 9; git clone -q --shared "file://$(pwd)" "$D/r" >/dev/null 2>&1 || exit 9; tar --exclude=.git -cf - . 2>/dev/null | tar -xf - -C "$D/r" || exit 9; ( cd "$D/r" && bash "$V" >/dev/null 2>&1 ) || exit 9; L="$(cd "$D/r" && grep -lx 'paths:' .claude/rules/*.md 2>/dev/null | sort)"; A="$(printf '%s\n' "$L" | head -1)"; B="$(printf '%s\n' "$L" | tail -1)"; [ -n "$A" ] && [ -n "$B" ] && [ "$A" != "$B" ] || exit 9; [ "$(grep -cx 'paths:' "$D/r/$A")" -eq 1 ] && [ "$(grep -cx 'paths:' "$D/r/$B")" -eq 1 ] || exit 9; awk 'NR==1{print; print "paths:"; print "  - \"core/**\""; next} {print}' "$D/r/$A" > "$D/ta" || exit 9; mv "$D/ta" "$D/r/$A" || exit 9; E="$(grep -nx -- '---' "$D/r/$B" | sed -n '2p' | cut -d: -f1)"; [ -n "$E" ] && [ "$E" -gt 3 ] || exit 9; awk -v e="$E" 'NR==e{print "paths:"; print "  - \"docs/**\""} {print}' "$D/r/$B" > "$D/tb" || exit 9; mv "$D/tb" "$D/r/$B" || exit 9; [ "$(grep -cx 'paths:' "$D/r/$A")" -eq 2 ] && [ "$(grep -cx 'paths:' "$D/r/$B")" -eq 2 ] || exit 9; [ "$(grep -nx 'paths:' "$D/r/$B" | sed -n '2p' | cut -d: -f1)" -ne 2 ] || exit 9; grep -q 'docs/\*\*' "$D/r/$B" || exit 9; ( cd "$D/r" && bash "$V" >"$D/o" 2>&1 ); [ $? -ne 0 ] || exit 1; grep -q "A3b: $A declares" "$D/o" && grep -q "A3b: $B declares" "$D/o"
 
 ## BL-092
 
