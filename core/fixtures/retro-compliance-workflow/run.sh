@@ -510,7 +510,7 @@ fi
 n_fix_tok="$(grep -c '^A[1-7]:' <<<"$probe_fixed")"
 if [ "$n_fix_fail" = 0 ] && [ "$n_fix_tok" = 7 ]; then
     ok "P2 self-probe: the synthetic FIXED workflow trips nothing, and all 7 arms reported"
-elif [ "$n_fix_tok" != 6 ]; then
+elif [ "$n_fix_tok" != 7 ]; then
     bad "P2 self-probe: only $n_fix_tok of 7 arms produced a verdict — arms went silent, which is not the same as passing"
 else
     bad "P2 self-probe: the synthetic FIXED workflow tripped $n_fix_fail arm(s); the arms are over-broad"
