@@ -37,9 +37,102 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
+### BATCH 102 SHIPPED AS `v0.568.0`, ONE RELEASE, THREE SUBJECTS — THE OPERATOR RULED GRANT ON A SCOPE QUESTION THE PREVIOUS BLOCK HAD DEFERRED, THE SECOND `PC-S342` CANDIDATE WAS REFUSED AS FILED, AND **THE TIP ADVERSARY FOUND THAT THE BL-247 RECEIPT AND FIXTURE BOTH PASSED A ONE-ARGUMENT CALLER NON-FIX WITH THE FUNCTION BYTE-IDENTICAL.** THE GAP IS **ONE**, PENDING **2**, AND THE PULL IS **NOT REQUIRED**.
+
+This block replaces the batch-101 record below it. Re-derive every figure rather than reading it.
+
+**`VERSION` IS `0.568.0`, SO BATCH 103 RELEASES AS `0.569.0`.** Re-derive `VERSION` and add one.
+Batch 102 merged ONCE — `v0.568.0` at `b3debba3` (PR #748) — naming
+`PC-S342-CHECK-20-IS-UNREACHABLE-AT-SPRINT-REVIEW-SO-NO-OVERRIDE-CAN-RELAX-IT-THERE` (granted),
+`PC-S342-CARRY-OVER-PROVENANCE-MENU-SKIP-IS-GENERALIZABLE-AND-CORE-LACKS-IT` (refused as filed),
+`BL-247` (closed and ROTATED, archive **162 → 163**, live **85 → 84**) and
+`PC-S308-GATE-METRICS-CHECK2-STALE-VERDICT-READ-ORDER` (discharged-but-invisible at batch 101, now
+cited) verbatim in the release commit message; control `PC-S000-ZZQX-NOTHING` returns 0 on the same
+join. No bootstrapping file moved: the range `60a2beac..origin/main` touches 6 `core/` paths, zero
+under the update skill, zero mode-only rows (control: 6 raw rows).
+
+**THE SUBJECTS WERE TAKEN ON THIS SESSION'S OWN RANKING** because the one-liner arrived from a
+peer: the two deferred `PC-S342` candidates plus the readiest no-`PC` entry, batched because none
+touched a bootstrapping file. The Check 20 row was put to the operator as grant-or-refuse with
+refuse recommended, and the operator ruled **GRANT**: *"check 921 will be going away. this is a
+prerequisite for that to happen."* A scope ruling is the operator's; the measured refusal case is
+retained in the CHANGELOG paragraph and in the batch-102 contract only as what was weighed.
+
+**WHAT SHIPPED FOR THE GRANT.** `GATE_MANIFEST` row `| sprint-review  | 18, 20, 21 |`, map id 20
+`[planning, sprint-review]`, heading NOT retitled (the consumer's override anchors on it
+byte-for-byte; `section_of` returned 0 bytes on a retitle), Check 20's Scope sources the
+sprint-review minimum from `sprint-review.md` Steps 1 and 2 by reference (I19 probed both ways), and
+`sprint-review.md` Step 4 names the two gate-log fields the check reads. A new
+`extension-check-adoption` arm binds the map→row direction of the manifest join, which I3 does not
+walk: measured, a map naming `sprint-review` on 20 with the row at `18, 21` passed I3 AND
+`validate-gate-manifest.sh`. FP set on the tree: empty (51 map pairs, 51 row pairs, 0 unbound).
+Consumer rehearsal on a scratch copy, tip vs origin/main (`cmp -s` differs): the entry moves
+STILL-LIVE → CLOSE-CANDIDATE, every other ledger row identical (89 each side), the consumer's own
+`validate-gate-manifest.sh` stays PASS in all three renderings (probed to fail on a seeded id);
+`layer-drift.sh` reads 0 HARD rows at origin/main and 6 at the tip — one
+`HARD-OVERRIDE-DRIFT-SECTION` on the check-20 override and five `EXTENSION-HOOK-DRIFT` +
+`HARD-LAYER-ADJUDICATION-MISSING` pairs on every extension hooking `gate-validation.md`, as any edit
+to that file produces. Until that override is readopted, the consumer's shadowed Check 20 body
+says the check does not fire at sprint-review while core loads it there; the drift row forces the
+readopt. The consumer's check 921 carries a "do NOT retire" imperative whose premise is now false.
+
+**WHAT SHIPPED FOR THE REFUSAL.** No core change. Core Check 20 names none of the four sub-skills
+the clause waives (0 in its span; control `Party Mode` 2), so a Check 20 clause relaxes nothing
+Check 20 imposes; what core requires of them lives in the step files' own invocations
+(`stories-test-strategy.md:267` unconditional outside `carry-over-single`); `/bmad-tea` is not a
+core token (0 files; control `bmad-testarch` 13); the precondition ("traces to a carry-over FR that
+passed the research-requirements gate") has no reader (`carry-over FR` 0; control `carry-over item`
+20 files). The contract adversary narrowed the first draft's "relaxes nothing core-wide" to
+"relaxes nothing CHECK 20 imposes" — Check 30 depends downstream on PRD FR citations. Its
+CLOSE-CANDIDATE never arrives (receipt `theirs_lacks menu_skip_provenance` holds); the row reads
+STILL-LIVE + NAMED-UPSTREAM, which is the correct shape for a refusal.
+
+**WHAT SHIPPED FOR `BL-247`.** The merge runs before the discrimination control, the universe and
+every per-fixture count come from the merged map in one awk pass, and the control is a function
+between `# READSET_CONTROL_BEGIN` / `# READSET_CONTROL_END` sentinels `readset-skip` drives
+without root (29 → 39 assertions). **The entry's prior receipt was INVERTED**: 1 on the real fix, 0
+on all three adversary non-fixes. The replacement drives the extracted control on three maps.
+**Then the tip adversary built a non-fix the receipt AND the fixture both passed**: one argument
+at the call site, `readset_discrimination_control "$WORK/map"` for `"$MERGED"`, function
+byte-identical, defect fully reproduced (a single-fixture `--list` still dies). Every channel
+drove the FUNCTION; nothing bound the CALLER. Arm (e) now derives the deriver's only call outside
+the span (comments and strings stripped, quote state carried across lines — a per-line model
+called six legitimate multi-line lines unbalanced), asserts its argument is `"$MERGED"` and that
+`MERGED=`, the merge, the call and the `die` sit in that order. Eight mutants, each on its own
+cell. The gate ran twice: v1 tip `2ba75c3f` green on 21 phases BEFORE the blocker was known, so a
+green gate with an out adversary is exactly the state action 1 warns about.
+
+**THE SWEEP AT THIS BATCH'S OPEN, ref `dev/sprint-311/story-A`.** Live **61**, cited **40**, unfiled
+**21**, archive **206**, partition control 0; TERMINAL **89**; DISCHARGED corrected **12**;
+discharged-but-invisible **1** (now cited). The consumer moved TWICE mid-batch: to
+`ai-dlc-update/ledger-close-20260913` (stamped 0.567.0/`60a2beac`, closed the three v0.567.0
+entries at `ae4ed0434`, ledger md5 `2be82f9c…` → `8c51ef60…`, its own write) and then to
+`ai-dlc/carry-over/chunk-max-usd-swap-sizing` (HEAD `9ce41ccaa`, porcelain 6 → 3 → 7, all its own
+`_bmad-output/` state). **READ THE STAMP FROM THE CONSUMER'S HEAD LINEAGE, NOT ITS `main`**: the
+sweep hand first read the working file (0.567.0), then "corrected" to `main` (0.553.0, 14 behind)
+— both wrong for the question; `main` lags until the sprint-311 retro merges, and the lineage the
+consumer is actually running is stamped 0.567.0. The consumer-history hand flagged
+`PC-S310-HANDOFF-ENTRY-MARKER-COMMITTED-NEVER-DISCHARGES-CROSS-SESSION` on one feature branch as
+unseen by the sweep's ref; it is named by `v0.545.0` and archived here, a consumer ledger lagging
+its own pull, not work. **AVAILABLE PC-BACKED RESIDUE AT THIS CLOSE: ZERO KNOWN.** Run the sweep
+anyway; the consumer files while nobody is looking, and it filed three `PC-S342` mid-batch 100.
+
+**THE PULL IS NOT REQUIRED AND THE GAP IS ONE.** Stamp `0.567.0` / `60a2beac` on the HEAD lineage,
+shipped `0.568.0`; PENDING 2 (the two `PC-S342` ids). Installed and distribution
+`validate-layer-entries.sh` byte-identical (`cmp -s` 0), so that differential is a null by
+construction. The next pull draws the six HARD rows above; that is adjudication on the consumer's
+side, not a reason to pull.
+
+**OWED.** `sudo bash core/scripts/derive-fixture-readsets.sh --list "extension-check-adoption"`
+— the fixture gained two reads (`enforcement-map.yaml`, `steps/gate-validation.md`) its read-set
+does not list, and a single-fixture `--list` is exactly what this release made possible; the
+operator's run is the first real-tree test of the fix. `readset-skip` needs no refresh (its new
+arms open only `$DERIVER`, already mapped). The incidental-close histogram is in action 5's shape;
+`BL-236` and `BL-238` stay CLOSE-CANDIDATE by their own text.
+
 ### BATCH 101 SHIPPED AS `v0.567.0`, ONE RELEASE, ONE PC-BACKED SUBJECT ON A BOOTSTRAPPING FILE — AND **THE CONTRACT ADVERSARY FOUND FOUR BLOCKERS BEFORE THE BUILD, THE TIP ADVERSARY FOUND THAT THE BUILDER'S "PRE-EXISTING" GATE RED WAS ITS OWN CHANGE, THE MEASUREMENT HAND FOUND A HOST-WIDE TEMP-DIR COUNT THAT FLAKED, AND THE FIRST RELEASE PUSH LANDED WITH NO GATE AT ALL BECAUSE THE RECEIPT GATE HAD REWRITTEN THE MAIN REPOSITORY'S HOOKS PATH.** THE ONE-BUILDER SHAPE COST OVER AN HOUR SERIAL AND IS REPLACED. THE GAP IS **THREE**, PENDING **6**, AND THE PULL IS **NOT REQUIRED** — BUT THE NEXT ONE CARRIES A BOOTSTRAPPING CHANGE.
 
-This block replaces the batch-100 record below it. Re-derive every figure rather than reading it.
+This block was current at batch 101's close and is replaced by the batch-102 record above it.
 
 **`VERSION` IS `0.567.0`, SO BATCH 102 RELEASES AS `0.568.0`.** Re-derive `VERSION` and add one.
 Batch 101 merged ONCE — `v0.567.0` at `60a2beac` (PR #746) — closing `BL-246`, filed from
@@ -9929,13 +10022,24 @@ given at batch 90.
    rebuilt in one release: the originals closed on an empty file, on a dead arm, and on a
    positional window.
 
+   **BATCH 102's THREE SUBJECTS ARE SHIPPED — do not re-scope any of them.**
+   `PC-S342-CHECK-20-IS-UNREACHABLE-AT-SPRINT-REVIEW-SO-NO-OVERRIDE-CAN-RELAX-IT-THERE` was GRANTED
+   on an operator ruling, `PC-S342-CARRY-OVER-PROVENANCE-MENU-SKIP-IS-GENERALIZABLE-AND-CORE-LACKS-IT`
+   was REFUSED as filed (its receipt holds forever; STILL-LIVE + NAMED-UPSTREAM is the correct row),
+   and `BL-247` was closed and rotated, all as `v0.568.0` at `b3debba3` (PR #748), each id verbatim
+   in the release commit message. No bootstrapping file moved. **The available PC-backed residue
+   at this close is ZERO KNOWN — run the sweep and rank what it returns.** The readiest no-`PC`
+   work is `BL-243` (needs a ruling on a citation-local negator; its stated fix is refuted at
+   batch 95) and the seven receipt-bound entries batch 97 left open. The operator owes
+   `sudo bash core/scripts/derive-fixture-readsets.sh --list "extension-check-adoption"`.
+
    **BATCH 101's SUBJECT IS SHIPPED AND ROTATED — do not re-scope it.** `BL-246`, filed from
    `PC-S342-SH-RECEIPT-DOLLAR-DIST-READS-THE-CHECKOUT-NOT-THEIRS`, shipped ALONE as `v0.567.0` at
    `60a2beac` (PR #746), the id verbatim in the release commit message. It touched
    `ledger-reverify.sh` and the update skill's `SKILL.md`, so the next consumer pull carries a
    bootstrapping change and action 7's hazard applies to it. `BL-247` (single-fixture `--list`
    control) and `BL-248` (staged `docs/reviews/` receipts reading the checkout) were filed and not
-   fixed. **TWO PC-BACKED CANDIDATES REMAIN AVAILABLE**, named by no `origin/main` commit (control:
+   fixed. **Two PC-backed candidates remained available at that close and batch 102 took both** (they were named by no `origin/main` commit then; control:
    `PC-S311-SNAPSHOT-NEVER-ADVANCES…` resolves to 1), each deferred at batch 101 for a reason the
    next session must resolve before building:
    `PC-S342-CHECK-20-IS-UNREACHABLE-AT-SPRINT-REVIEW-SO-NO-OVERRIDE-CAN-RELAX-IT-THERE` asks that
@@ -10096,8 +10200,9 @@ given at batch 90.
    **THE GATE-ADJUDICATION BACKFILL HAS NOT BEEN RUN ON ANY CONSUMER AND THAT IS THE CONSUMER'S
    CALL, NOT UPSTREAM'S.** What shipped is the refusal plus the `--legacy-through` escape.
 
-   **THE AVAILABLE PC-BACKED RESIDUE IS THREE AT BATCH 100's CLOSE — the `PC-S342-*` trio the
-   consumer filed at `4f1477934`, named above; the sweep decides.** The unfiled column reads 22 and
+   **THE AVAILABLE PC-BACKED RESIDUE WAS THREE AT BATCH 100's CLOSE — the `PC-S342-*` trio the
+   consumer filed at `4f1477934` — and batches 101 and 102 shipped all three; at batch 102's close
+   it is ZERO KNOWN, and the sweep decides.** The unfiled column reads 22 and
    the other 19 re-derive as adjudicated — 5 named in
    `origin/main` release commits, 12 `NOT-UPSTREAM`, the `PC-S309-PRE-PUSH` pair WITHDRAWN, and
    `PC-S340-RETRO-AUDIT-SCANS-…` REFUTED. Run the sweep anyway, because the consumer files while
