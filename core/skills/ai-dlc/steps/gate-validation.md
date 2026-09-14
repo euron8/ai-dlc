@@ -63,7 +63,7 @@ planning gate that edits `scripts/*.sh`.
 | planning       | 1c, 17, 20, 23, 24, 27, 28, 29, 32, 33, 34, 35                      |
 | story          | 3a, 3b, 5, 17, 24, 30, 31                                       |
 | implementation | 5, 6, 8, 9, 10, 11, 11a, 19, 22                                 |
-| sprint-review  | 18, 21                                                          |
+| sprint-review  | 18, 20, 21                                                      |
 | retro          | 8, 9, 17, core-layer-immutability                               |
 <!-- GATE_MANIFEST_END -->
 ```
@@ -1337,16 +1337,25 @@ redundant.
 ### 20. Validation-intensity compliance (all planning gates).
 <!-- CHECK_LOADED: 20 -->
 
-**Scope.** Fires at every planning-phase gate. Skips for implementation,
-deploy-validate, and retro gates.
+**Scope.** Fires at every planning-phase gate AND at the sprint-review
+gate. Skips for implementation, deploy-validate, and retro gates. The
+minimum this check resolves is sourced per gate type: at a planning gate
+it is the row **SKILL.md Rule 8's intensity table** gives for the
+declared intensity; at the sprint-review gate that table has no row to
+resolve, and the minimum is the one `sprint-review.md` declares for
+itself — its Step 1 Sprint-Level Adversarial Review, owed at every
+intensity, plus its Step 2 Sprint-Level Party Mode except where that
+step's own intensity gate skips it. Read that step and resolve the
+sprint-review minimum there, so a change to the step changes this check.
 
 **Check.** Read `validation_intensity` from the pipeline snapshot's
-Sprint Context. Resolve that intensity's minimum from **SKILL.md Rule 8's
-intensity table** — the `Minimum cycle per planning artifact` column is
-the single source, and this check deliberately does not restate it.
-Confirm the validation cycle run at this gate invoked at least every
-evaluation that row names. SKILL.md is resident at every gate, so the
-table is always readable here.
+Sprint Context. Resolve that intensity's minimum from the source
+**Scope** names for this gate type; at a planning gate that is
+**SKILL.md Rule 8's intensity table** — the `Minimum cycle per planning
+artifact` column is the single source, and this check deliberately does
+not restate it. Confirm the validation cycle run at this gate invoked at
+least every evaluation that minimum names. SKILL.md is resident at every
+gate, so the table is always readable here.
 
 An architecture gate that reaches a NO-CHANGES-NEEDED assessment MAY
 skip the validation cycle (fast-track) under `lightweight`, or at ANY
@@ -1368,7 +1377,8 @@ per-planning-artifact minimum for all three.
 
 **Minimum mechanism (Rule 26(c)).** Failure caught: a planning gate that
 under-ran its declared intensity by SKIPPING an evaluation its row names,
-silently downgrading operator-selected rigor. False-positive cost: a sanctioned fast-track
+or a sprint-review gate that skipped one its own step owes at the
+declared intensity, silently downgrading operator-selected rigor. False-positive cost: a sanctioned fast-track
 (architecture NO-CHANGES-NEEDED) counted as a miss — resolve by
 recording skip provenance in the gate log, not by failing. Removal
 condition: retire once validation-cycle invocation is made structurally

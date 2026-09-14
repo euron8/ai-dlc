@@ -177,6 +177,44 @@ readset_merge_map() {
 }
 # READSET_MERGE_END
 
+# READSET_CONTROL_BEGIN
+# THE MAP MUST DISCRIMINATE: at least one fixture's read-set is a PROPER subset of the union of
+# every path the map names.
+#   $1 the map to judge -- the MERGED map, never one run's traced entries alone (see the call
+#      site for why the distinction is the whole of this control's history)
+# Prints one PASS or FAIL line and returns 0 or 1. Nothing else here reads it, so a caller in
+# either layout gets the same verdict from the same bytes.
+#
+# BOTH SIDES OF THE COMPARISON ARE COUNTED FROM THE SAME FILE. A fixture's own path count taken
+# from one map while the universe is taken from a larger one is not a subset test at all: the
+# smaller count is below the larger union for every input, so the control passes on a map that
+# discriminates nothing.
+#
+# Kept as a standalone function between sentinels for the same reason the merge above is: the
+# rest of this script needs root and cannot run in the fixture suite, so the fixture extracts
+# THIS block and drives it, and the logic under test is the shipped logic rather than a
+# restatement of it.
+readset_discrimination_control() {
+  awk -F'\t' '
+    /^#/ { next }
+    NF >= 2 {
+      if ((($1 SUBSEP $2) in seen) == 0) { seen[$1 SUBSEP $2] = 1; own[$1]++ }
+      if (($2 in path) == 0) { path[$2] = 1; universe++ }
+    }
+    END {
+      proper = 0; nfix = 0
+      for (f in own) { nfix++; if (own[f] < universe) proper++ }
+      if (proper > 0) {
+        printf "  PASS  CONTROL: %d of %d read-set(s) are a PROPER subset of the %d-path universe -- the map discriminates\n", proper, nfix, universe
+        exit 0
+      }
+      printf "  FAIL  CONTROL: every read-set covers the whole %d-path universe -- this map selects everything on every change and skips nothing\n", universe
+      exit 1
+    }
+  ' "$1"
+}
+# READSET_CONTROL_END
+
 MODE="${1:---all}"
 [ "$(id -u)" = "0" ] || die "must run as root -- fs_usage needs it. Use: sudo bash $0 $MODE"
 command -v fs_usage >/dev/null || die "fs_usage not found; this derivation is macOS-only"
@@ -356,22 +394,23 @@ while IFS= read -r cfx; do
     echo "  FAIL  $cfx's read-set does not name its own driver $FIXTURE_ROOT/$cfx/run.sh"; FAIL=1
   fi
 done < <(cut -f1 "$WORK/map" | sort -u)
-cut -f2 "$WORK/map" | sort -u > "$WORK/.universe"
-N_UNIVERSE="$(grep -c . "$WORK/.universe" 2>/dev/null)"; case "$N_UNIVERSE" in ''|*[!0-9]*) N_UNIVERSE=0 ;; esac
-N_PROPER=0
-while IFS= read -r cfx; do
-  [ -n "$cfx" ] || continue
-  n_own="$(awk -F'\t' -v f="$cfx" '$1 == f' "$WORK/map" | wc -l | tr -d ' ')"
-  [ "$n_own" -lt "$N_UNIVERSE" ] && N_PROPER=$(( N_PROPER + 1 ))
-done < <(cut -f1 "$WORK/map" | sort -u)
-if [ "$N_PROPER" -gt 0 ]; then
-  echo "  PASS  CONTROL: $N_PROPER of $MAPPED read-set(s) are a PROPER subset of the $N_UNIVERSE-path universe -- the map discriminates"
-else
-  echo "  FAIL  CONTROL: every read-set covers the whole $N_UNIVERSE-path universe -- this map selects everything on every change and skips nothing"; FAIL=1
-fi
 
-[ "$FAIL" -eq 0 ] || die "controls failed; the map was NOT written"
-
+# THE MERGE HAPPENS HERE, ABOVE THE NEGATIVE CONTROL, BECAUSE THAT CONTROL JUDGES THE MAP THIS
+# RUN WILL WRITE -- which is the merged one, never the handful of fixtures this run traced.
+# Judged on the traced map alone, a `--list "<one fixture>"` run compares that fixture's set
+# against a universe built from that same set: the two are equal by construction, N_PROPER is 0
+# for every possible input, and the control fails every single-fixture refresh while looking
+# exactly like a map that discriminates nothing. Measured: three owed `--list` refreshes failed
+# identically, and the only workaround was to list more fixtures.
+#
+# THE ORDERING HAS A CONSEQUENCE AND IT IS DELIBERATE. The merge's "dropped '$f'" die now runs
+# BEFORE the control verdicts are read, so a run whose merge lost an untraced fixture reports
+# that die rather than a control line -- the earlier failure names the earlier fault, and the
+# map is unwritten either way.
+#
+# THE `--all` READING CHANGES ONLY WHERE THE COMMITTED MAP NAMES A FIXTURE THAT IS NO LONGER ON
+# DISK. Under `--all` every fixture on disk is traced, so the merged map adds nothing except
+# such a stale fixture's paths, which would widen the universe. Zero such fixtures today.
 MERGED="$WORK/merged"
 readset_merge_map "$MAP" "$WORK/map" "$LIST" | LC_ALL=C sort -u > "$MERGED"
 
@@ -400,6 +439,10 @@ if [ -s "$MAP" ]; then
       || die "merge dropped '$f', which this run never traced -- refusing to write a map that silently stops skipping"
   done < "$WORK/untouched"
 fi
+
+readset_discrimination_control "$MERGED" || FAIL=1
+
+[ "$FAIL" -eq 0 ] || die "controls failed; the map was NOT written"
 
 M_FIX="$(cut -f1 "$MERGED" | sort -u | wc -l | tr -d ' ')"
 M_ENT="$(wc -l < "$MERGED" | tr -d ' ')"

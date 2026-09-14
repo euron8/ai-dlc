@@ -300,6 +300,243 @@ c="$(code_of "$RC")"
                   || bad "CONTROL: the unmutated copy produced $c — every mutant verdict above is unattributable"
 rm -rf "$RC" "$MC"
 
+# --- 9. THE MAP->ROW DIRECTION OF THE GATE_MANIFEST JOIN ----------------------------
+# Subject: the live GATE_MANIFEST region and the live enforcement-map.yaml, joined in the
+# direction NOTHING ELSE WALKS.
+#
+# I3 (validate-enforcement-map.sh) walks ROW -> MAP: for every (gate type, check) pair the
+# manifest row declares, the map entry for that check must name that gate type. It has no
+# reverse loop, so a map entry declaring `gate_types: [planning, sprint-review]` against a
+# sprint-review row that never names the id is GREEN at I3 by construction.
+# validate-gate-manifest.sh does not close it either: its two arms join manifest ids to
+# CHECK_LOADED anchors, and an id absent from every row is an anchor question, not a
+# gate-type one. MEASURED on this tree, with the sprint-review row's `20` removed and the
+# map left at `[planning, sprint-review]`: `--arms I3` exit 0, validate-gate-manifest.sh
+# exit 0. Both controls fire in the same measurement — mutating the MAP instead (dropping
+# sprint-review from id 20) takes I3 to exit 1, and seeding an id no check anchors takes
+# validate-gate-manifest.sh to exit 1 — so the two zeros above are the gap and not a broken
+# run.
+#
+# What a wrong answer here COSTS: the row is what the loader reads. A check the map
+# declares for a gate type but whose row omits it is never loaded at that gate, and every
+# instrument reports the check as live. That is a check that cannot fire, and it reads
+# exactly like one that passed.
+#
+# This lives here rather than in enforcement-map-derivations because that fixture is
+# .dist-only (its subject, validate-enforcement-map.sh, does not ship) and both files
+# joined below DO ship — enforcement-map.yaml through install.sh's skill-root doc loop and
+# steps/*.md through the steps copy — so a consumer's own manifest and map are joinable and
+# this fixture is already the one resolving consumer-side skill paths in both layouts.
+# The join is DERIVED over every entry in the map, never over a named id.
+
+emroot=""
+for cand in \
+  "$DIR/../../skills/ai-dlc" \
+  "$DIR/../../../.claude/skills/ai-dlc" \
+  "$DIR/../../core/skills/ai-dlc"; do
+  [ -f "$cand/enforcement-map.yaml" ] && [ -f "$cand/steps/gate-validation.md" ] && emroot="$cand" && break
+done
+
+if [ -z "$emroot" ]; then
+  # Not an `ok`. A core fixture ships ahead of its subject, and a tree carrying neither
+  # file has not been checked — saying so beats a green line that claims it was.
+  printf '  SKIP  map->row join: no tree carrying BOTH enforcement-map.yaml and steps/gate-validation.md\n'
+else
+  EM_MAP="$emroot/enforcement-map.yaml"
+  EM_GV="$emroot/steps/gate-validation.md"
+
+  # map side, as `<gate-type> <id>` lines: every type in every entry's `gate_types:`
+  # list, over the whole `checks:` block. Derived, so an entry added tomorrow is joined
+  # the day it lands.
+  map_pairs() {
+    awk '
+      /^checks:/ {inck=1; next}
+      /^non_catalog_units:/ {inck=0}
+      inck && /^  - id:/ { id=$0; sub(/^  - id:[ ]*/,"",id); gsub(/"/,"",id); next }
+      inck && /^    gate_types:/ {
+        gt=$0; sub(/^    gate_types:[ ]*\[/,"",gt); sub(/\][ ]*$/,"",gt); gsub(/ /,"",gt)
+        n=split(gt, a, ","); for (i=1;i<=n;i++) if (a[i] != "" && id != "") print a[i]" "id
+      }' "$1"
+  }
+  # manifest side, same `<gate-type> <id>` shape, over the region the LOADER reads —
+  # between the two markers, never the whole file.
+  row_pairs() {
+    awk '
+      /<!-- GATE_MANIFEST v1 -->/{f=1;next} /<!-- GATE_MANIFEST_END -->/{f=0}
+      f && /^\|/ {
+        if ($0 ~ /Gate type/ || $0 ~ /-----/) next
+        n=split($0, c, "|"); gt=c[2]; ids=c[3]; gsub(/ /,"",gt); gsub(/ /,"",ids)
+        if (gt == "") next
+        m=split(ids, a, ","); for (i=1;i<=m;i++) if (a[i] != "") print gt" "a[i]
+      }' "$1"
+  }
+  # THE JOIN. Prints one line per map-declared pair the manifest row does not carry, and
+  # RECORDS the map it was handed, to a file. The LIVE arm reads that recording rather
+  # than naming the live path a second time: a guard that re-derives the path it wants to
+  # check cannot see an arm repointed at another tree, because both halves move together.
+  # What the join actually opened is the only thing that answers the question — and the
+  # record is a file because every call site captures this function in `$( )`, where an
+  # assignment is lost to the subshell.
+  JOINED_REC="$(mktemp "${TMPDIR:-/tmp}/gate-manifest-joined.XXXXXX")"
+  unbound() { # unbound <map> <gv>
+    local mp rp
+    printf '%s\n' "$1" > "$JOINED_REC"
+    mp="$(map_pairs "$1")"; rp="$(row_pairs "$2")"
+    while read -r pair; do
+      [ -z "$pair" ] && continue
+      grep -qxF -- "$pair" <<<"$rp" || printf 'UNBOUND %s\n' "$pair"
+    done <<<"$mp"
+  }
+
+  # Row rewriters for the seeds. Derived from the row's OWN id list rather than spelled as
+  # a literal, so a row whose ids or padding change still seeds; `cmp -s` reports a seed
+  # that matched nothing as DID NOT APPLY rather than letting it score.
+  row_edit() { # row_edit <file> <gate-type> <id> <drop|add>; `add` is idempotent
+    awk -v want="$2" -v tid="$3" -v mode="$4" '
+      /<!-- GATE_MANIFEST v1 -->/{f=1} /<!-- GATE_MANIFEST_END -->/{f=0}
+      {
+        if (f && /^\|/) {
+          n=split($0, c, "|"); gt=c[2]; gsub(/ /,"",gt)
+          if (gt == want) {
+            ids=c[3]; gsub(/ /,"",ids); out=""; seen=0
+            m=split(ids, a, ",")
+            for (i=1;i<=m;i++) {
+              if (a[i] == "") continue
+              if (a[i] == tid) { seen=1; if (mode == "drop") continue }
+              out = (out == "" ? a[i] : out ", " a[i])
+            }
+            if (mode == "add" && !seen) out = (out == "" ? tid : out ", " tid)
+            print "|" c[2] "| " out " |"
+            next
+          }
+        }
+        print
+      }' "$1"
+  }
+
+  # ---- the self-probe runs BEFORE the corpus, on a NORMALISED base ----------------
+  # The probe copies the real producer's bytes (a hand-written seed would be a second
+  # implementation of the manifest grammar) and then NORMALISES the one pair it seeds
+  # from, so the probe's verdict is a statement about the JOIN and never about today's
+  # corpus. Without that step the offender's own base carries the defect whenever the
+  # corpus does, the near-miss inherits it, and one wrong row moves three cells — which
+  # reads as entangled assertions rather than as the single live finding it is. The LIVE
+  # arm below is the one that owns the corpus, alone.
+  #
+  # The probe base also carries a SENTINEL pair — a gate type and check id that exist in
+  # neither shipped file — declared on BOTH sides so the base stays clean. It is what lets
+  # the LIVE arm below prove it read the LIVE files: the two are byte-identical whenever
+  # the corpus is clean, so an arm silently repointed at the probe base would otherwise be
+  # green forever and its mutant would survive for a corpus reason.
+  PW="$(mktemp -d "${TMPDIR:-/tmp}/gate-manifest-join.XXXXXX")"
+  SENT_GT="probe-only-gate"; SENT_ID="PROBE-SENTINEL"
+  row_edit "$EM_GV" sprint-review 20 add > "$PW/gv-pre.md"
+  awk -v gt="$SENT_GT" -v id="$SENT_ID" '
+    {print}
+    /<!-- GATE_MANIFEST v1 -->/{ print "| " gt " | " id " |" }' "$PW/gv-pre.md" > "$PW/gv.md"
+  awk -v gt="$SENT_GT" -v id="$SENT_ID" '
+    /^non_catalog_units:/ && !done {
+      print "  - id: \"" id "\""
+      print "    title: Probe sentinel"
+      print "    gate_types: [" gt "]"
+      print ""
+      done=1
+    } {print}' "$EM_MAP" > "$PW/map.yaml"
+
+  # The seed's subject must EXIST in the map, or the offender below is asserting about a
+  # world this tree does not have and its silence would read as a pass. This is the half
+  # normalisation must NOT paper over: the map is what the join reads FROM.
+  if grep -qxF -- "sprint-review 20" <<<"$(map_pairs "$PW/map.yaml")"; then
+    ok "SEED PRECONDITION: the map declares check 20 for gate type sprint-review"
+  else
+    bad "SEED PRECONDITION: the map does not declare (sprint-review, 20) — the offender below cannot express the defect"
+  fi
+
+  # CONTROL, with a positive conjunct: a derivation that reads ZERO pairs is silent for a
+  # reason that has nothing to do with the join, and rc=0-with-no-output is exactly what
+  # that looks like. Demand the pair be THERE on both sides, and demand the NORMALISED
+  # base be clean, before reading any silence below.
+  np="$(grep -c . <<<"$(map_pairs "$PW/map.yaml")")" || np=0
+  nr="$(grep -c . <<<"$(row_pairs "$PW/gv.md")")" || nr=0
+  base="$(unbound "$PW/map.yaml" "$PW/gv.md")"
+  if [ "$np" -gt 0 ] && [ "$nr" -gt 0 ] && [ -z "$base" ] \
+     && grep -qxF -- "sprint-review 20" <<<"$(row_pairs "$PW/gv.md")"; then
+    ok "CONTROL: both sides derive non-empty ($np map pairs, $nr row pairs), the normalised base is clean, and it carries (sprint-review, 20)"
+  else
+    bad "CONTROL: the probe base is not usable — $np map pairs / $nr row pairs, residue '$(tr '\n' ';' <<<"$base")' — every verdict below is unattributable"
+  fi
+
+  # OFFENDER — the exact shape both shipping validators pass. Drop 20 from the
+  # sprint-review ROW; leave the map declaring it.
+  row_edit "$PW/gv.md" sprint-review 20 drop > "$PW/gv-off.md"
+  if cmp -s "$PW/gv.md" "$PW/gv-off.md"; then
+    bad "SEED DID NOT APPLY: dropping 20 from the sprint-review row changed nothing — the arm below proves nothing"
+  else
+    off="$(unbound "$PW/map.yaml" "$PW/gv-off.md")"
+    if grep -qxF -- "UNBOUND sprint-review 20" <<<"$off"; then
+      ok "OFFENDER: a map type whose row omits the id is REPORTED, naming 20 and sprint-review (the direction I3 does not walk)"
+    else
+      bad "OFFENDER: dropping 20 from the sprint-review row was NOT reported — got: $(tr '\n' ';' <<<"$off")"
+    fi
+  fi
+
+  # OFFENDER 2 — the same omission, with a DECOY pipe table carrying the pair OUTSIDE the
+  # markers. The contract is "the region the loader reads", and a whole-file read answers
+  # identically on today's corpus because no second table happens to spell a gate-type row
+  # — a fact about this file today, not about the grammar. gate-validation.md is hand-
+  # written prose whose check bodies already carry pipe tables, so the world is reachable
+  # and is synthesised here rather than waited for. A region-blind reader goes quiet on
+  # this input; the region-bounded one must not.
+  awk '
+    /<!-- GATE_MANIFEST v1 -->/{
+      print "| Gate type      | Required checks |"
+      print "|----------------|-----------------|"
+      print "| sprint-review  | 20              |"
+      print ""
+    } {print}' "$PW/gv-off.md" > "$PW/gv-off2.md"
+  if cmp -s "$PW/gv-off.md" "$PW/gv-off2.md"; then
+    bad "DECOY SEED DID NOT APPLY: no table was inserted ahead of the manifest markers"
+  else
+    off2="$(unbound "$PW/map.yaml" "$PW/gv-off2.md")"
+    if grep -qxF -- "UNBOUND sprint-review 20" <<<"$off2"; then
+      ok "OFFENDER 2: a decoy table OUTSIDE the markers does not satisfy the join — the row is read from the region the loader reads"
+    else
+      bad "OFFENDER 2: a pipe table outside the GATE_MANIFEST markers silenced the join — the arm is reading the whole file, not the loader's region"
+    fi
+  fi
+
+  # NEAR-MISS — 20 ADDED to the retro row, which Check 20's own Scope lists as a Skip.
+  # The map does not name retro for 20, so the join must stay quiet: this arm is what
+  # separates "keys on the MAP's declaration" from "counts how many rows name 20".
+  # (I3 owns this direction and fires on it — measured: `map entry 20 omits gate_type
+  # 'retro'`. Two arms, two directions, neither covering the other's subject.)
+  row_edit "$PW/gv.md" retro 20 add > "$PW/gv-nm.md"
+  if cmp -s "$PW/gv.md" "$PW/gv-nm.md"; then
+    bad "NEAR-MISS DID NOT APPLY: adding 20 to the retro row changed nothing"
+  else
+    nm="$(unbound "$PW/map.yaml" "$PW/gv-nm.md")"
+    if [ -z "$nm" ]; then
+      ok "NEAR-MISS: an EXTRA row naming 20 is not this arm's business — it keys on what the MAP declares, not on how many rows name the id"
+    else
+      bad "NEAR-MISS: the arm fired on a row gaining an id the map never declared — it is counting rows, not reading the map: $(tr '\n' ';' <<<"$nm")"
+    fi
+  fi
+  # ---- and only now the live corpus ----------------------------------------------
+  # Read the live files, and PROVE it: the sentinel exists only in the probe base, so an
+  # arm repointed at that base sees it and an arm reading the shipped tree cannot. A clean
+  # join and a join over the wrong tree are otherwise the same empty output.
+  live="$(unbound "$EM_MAP" "$EM_GV")"
+  live_gts="$(map_pairs "$(cat "$JOINED_REC")")"
+  if grep -qF -- "$SENT_ID" <<<"$live_gts"; then
+    bad "LIVE: the sentinel pair appears in the joined map — this arm is reading the probe base, not the shipped tree, and its silence says nothing about the corpus"
+  elif [ -z "$live" ]; then
+    ok "LIVE: every check the map declares for a gate type is named by that type's manifest row (sentinel absent, so the shipped files are what was read)"
+  else
+    bad "LIVE: the map declares a gate type whose manifest row does not name the check, so the loader never loads it there — $(tr '\n' ';' <<<"$live")"
+  fi
+  rm -rf "$PW" "$JOINED_REC"
+fi
+
 echo
 if [ "$rc" -eq 0 ]; then echo "extension-check-adoption: PASS"; else echo "extension-check-adoption: FAILED" >&2; fi
 exit $rc
