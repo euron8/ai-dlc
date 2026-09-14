@@ -295,6 +295,145 @@ else
   ok "  and neither 'stopped' form is indicted (the printed remedy is followable)"
 fi
 
+# --- 4i-4l. THE PIPELESS ROW SHAPE ---------------------------------------------
+#
+# WHY EVERY ARM ABOVE THIS LINE IS A CONTROL AND NONE OF THEM IS A TEST OF THIS.
+# Derived over this file at the commit these arms were added: 22 seeded row lines,
+# 22 of them carrying a leading `|`, 0 pipeless. Markdown renders a table row with
+# or without the opening delimiter and the reference consumer writes the bare form,
+# so `check_inflight_status`'s `/^[[:space:]]*\|/` gate admitted 0 of that
+# consumer's rows against a control of 2 on the piped shape in the same invocation.
+# The check could not fail because no seed here carried the discriminating shape --
+# which is a gap in the SEED, not a missing arm, and a twenty-third piped seed would
+# not have found it.
+#
+# THE PIPELESS HEADER IS ITS OWN STRING AND DOES NOT TOUCH $HEADER. Every arm above
+# builds from that constant and they must keep passing byte-unchanged; they are the
+# evidence that the relaxation lost nothing.
+#
+# THE SEED IS THE PRODUCER'S SHAPE, NOT THE READER'S. No leading pipe, no trailing
+# pipe, no `|---|` separator, no backticks -- what the consumer writes, verbatim,
+# down to the `dispatched (fix-forward)` token that motivated the fix and is outside
+# the closed set of three declared above check_inflight_status.
+PHEADER='agent | role | deliverable | dispatched-at | status'
+PROW_BAD='a2b2344be58b99e31 | dev-escalated | /abs/path/report.md | 2026-09-14T04:20:00Z | dispatched (fix-forward)'
+PROW_OK='b7c1f0e2d3a4b5c69 | qa | /abs/path/qa.md | 2026-09-14T04:20:00Z | in-flight, since 2026-09-14T04:20:00Z'
+
+# 4i. PIPELESS + ILLEGAL beside PIPELESS + LEGAL, in ONE run.
+# Two cells of the matrix, and the pairing is what makes them readable: the
+# assertions are PRESENCE-shaped -- the illegal row must be NAMED and the legal one
+# must NOT be -- so a subject that emits nothing fails the first conjunct instead of
+# scoring the second. A pipeless seed alone would prove only that something
+# happened; the legal twin is what says the relaxation discriminates.
+seed "$PHEADER
+$PROW_BAD
+$PROW_OK"
+expect 1 "a PIPELESS row with an illegal token is refused (the arm that was dead)"
+if grep -q 'a2b2344be58b99e31' "$WORK/out.txt"; then
+  ok "  and the pipeless offender is named in the output"
+else
+  bad "  the pipeless offender is NOT named -- the check still cannot see a bare row"
+fi
+if grep -q 'b7c1f0e2d3a4b5c69' "$WORK/out.txt"; then
+  bad "  the LEGAL pipeless row was also indicted -- the relaxation convicts on shape, not on token"
+else
+  ok "  and the legal pipeless row beside it is not indicted"
+fi
+if grep -q 'over the Rule 25(d) budget' "$WORK/out.txt"; then
+  bad "  CONFOUNDED: the byte budget also fired -- exit 1 proves nothing here"
+else
+  ok "  and the byte budget stayed quiet (the red is the In-Flight check's alone)"
+fi
+
+# 4j. PIPELESS + LEGAL ALONE -> PASS.
+# The near-miss direction on its own. 4i's pairing shows the legal row is not NAMED;
+# this shows the run does not go red at all, which is the claim a wrong fix that
+# convicted every pipeless line would break. No mutant below kills this arm and that
+# is stated rather than papered over -- it is a both-directions control, and 4i and
+# 4k are what carry the mutants.
+seed "$PHEADER
+$PROW_OK"
+expect 0 "a PIPELESS row with a legal token passes (the relaxation did not convict everything)"
+
+# 4k. PIPED + ILLEGAL beside PIPED + LEGAL -> unchanged behaviour.
+# The other two cells. These are what the gate already did; they are here so the
+# matrix is a matrix, and so a mutant that moves the piped path is visible as an
+# entanglement rather than as a pipeless finding.
+seed "$HEADER
+| \`piped-bad-s105\` | \`dev-escalated\` | docs/x.md | 2026-09-14 | dispatched (fix-forward) |
+| \`piped-ok-s105\` | \`qa\` | docs/y.md | 2026-09-14 | in-flight, since 2026-09-14T04:20:00Z |"
+expect 1 "a PIPED row with an illegal token is still refused (existing behaviour)"
+if grep -q 'piped-bad-s105' "$WORK/out.txt"; then
+  ok "  and the piped offender is named"
+else
+  bad "  the piped offender is NOT named -- the relaxation LOST a finding the gate had"
+fi
+if grep -q 'piped-ok-s105' "$WORK/out.txt"; then
+  bad "  the legal piped row was also indicted -- existing behaviour regressed"
+else
+  ok "  and the legal piped row beside it is not indicted (existing behaviour)"
+fi
+
+# 4l. THE PIPELESS HEADER IS NEVER SCORED AS A DATA ROW.
+# The header carries no leading pipe either, and its last cell is the literal word
+# `status`, which is not a member of the closed set. A relaxation that lets it fall
+# through indicts the schema route.md writes -- a check no consumer can start a
+# pipeline with. Seeded ALONE, so nothing else in the section can produce the zero.
+seed "$PHEADER"
+expect 0 "a PIPELESS header with no data rows raises no status finding"
+if grep -q 'INFLIGHT' "$WORK/out.txt"; then
+  bad "  the pipeless header itself was reported -- route.md's own schema is indicted"
+else
+  ok "  and nothing at all is reported for it"
+fi
+
+# 4m. PROSE CARRYING A PIPE IS NOT A ROW.
+# THIS IS THE MEASURED FALSE POSITIVE, and it is why a bare `/\|/` gate is the wrong
+# fix rather than a simpler one. Over the reference consumer's In-Flight-bearing
+# files the bare form reported 4 findings the gate did not, and one was an archived
+# note ending in a shell fragment -- its last pipe-delimited field is `wc -l`, which
+# is outside the closed set and reads to a token check as an illegal status.
+# A line with no leading `|` must therefore also carry the column count the HEADER
+# declares. Seeded beside a legal row so the section is the shape a real one is.
+#
+# THE IDENTIFYING TOKEN LEADS THE LINE, AND THAT IS NOT COSMETIC. The check prints
+# `cut -c1-70` of whatever it indicts, so a grep keyed on the line's TAIL -- on
+# `wc -l`, the natural choice -- cannot fire: the truncation removes it, and the arm
+# reads green against a subject that IS convicting the prose. Measured here, by
+# mutant 5g's sibling below, which reported SURVIVED against a mutant that names the
+# line. Key on a token inside the first 70 bytes.
+seed "$PHEADER
+$PROW_OK
+prose-s105 note: the branch is ahead by \`git log @{u}..HEAD --oneline | wc -l\` commits."
+expect 0 "prose carrying a pipe is not admitted as a row"
+if grep -q 'prose-s105' "$WORK/out.txt"; then
+  bad "  the prose line was reported as an unknown status -- the measured false positive is back"
+else
+  ok "  and the prose line is not reported (the header-width narrowing holds)"
+fi
+
+# 4n. A STRAY `|` INSIDE A CELL OF A PIPED ROW IS STILL CONVICTED.
+# THE ARM THAT KILLS THE MOST PLAUSIBLE WRONG FIX. Applying the header-width test to
+# EVERY row rather than only to pipeless ones is the obvious simplification and it
+# is a REGRESSION: a piped row whose cell contains a `|` splits one field wide, fails
+# the width test, and is acquitted -- a finding the pre-fix gate already produced.
+# Both illegal rows are seeded in ONE run and both must be named; the uniform form
+# names exactly one.
+seed "$HEADER
+| \`stray-s105\` | \`qa\` | docs/x|y.md | 2026-09-14 | dispatched (fix-forward) |
+| \`plain-s105\` | \`qa\` | docs/z.md | 2026-09-14 | dispatched (fix-forward) |"
+expect 1 "a piped row with a stray pipe inside a cell still fails"
+if grep -q 'stray-s105' "$WORK/out.txt"; then
+  ok "  and the stray-pipe row is named (the width test did not leak onto piped rows)"
+else
+  bad "  the stray-pipe row was ACQUITTED -- the width test was applied uniformly and a finding the gate had is lost"
+fi
+if grep -q 'plain-s105' "$WORK/out.txt"; then
+  ok "  and the ordinary piped offender beside it is named too"
+else
+  bad "  the ordinary piped offender is NOT named either -- the check is not reading this table"
+fi
+
 # --- 5. THE MUTATION TEST — prove assertion 2's red came from the new code ------
 # Remove the In-Flight call from a COPY and re-run assertion 2's input. If it
 # still fails, something else was producing the red.
@@ -414,6 +553,180 @@ if [ "$tmutant_status" = "1" ] && grep -q 'stopped-s308-alpha' "$WORK/out.txt"; 
   ok "MUTATION: removing the stopped entry indicts the stopped row again"
 else
   bad "MUTATION: without the whitelist entry the stopped row exited $tmutant_status unnamed -- 4f proves nothing"
+fi
+
+# --- 5d-5g. THE MUTANTS FOR THE PIPELESS ARMS ----------------------------------
+#
+# Four mutants, each keyed on a LOCATION and scored on an OBSERVABLE BEHAVIOUR --
+# which row the check names -- never on a spelling in the output. Each is built as a
+# COPY, guarded by `cmp -s` so a `sed` that matched nothing reports FIXTURE STALE
+# rather than scoring a kill, and every arm is PRESENCE-shaped: a copy that died on
+# load emits nothing and exits non-zero, which is indistinguishable from the check
+# firing, so the kill is read off a NAMED ROW and not off an exit code.
+#
+# $CONTROL, the unmutated copy from 5b, is already shown alive above -- it names
+# `unknown-s308-beta` on a presence-shaped input. It is re-shown alive on each
+# PIPELESS input here, because being alive on the piped shape is exactly the
+# property the defect had.
+#
+# WHAT EACH ONE KILLS, and each kills exactly one wrong implementation:
+#   5d  the pre-fix gate            -> 4i goes red  (pipeless rows unreachable)
+#   5e  the bare `/\|/` fix         -> 4m goes red  (prose convicted)
+#   5f  the uniform width test      -> 4n goes red  (stray-pipe row acquitted)
+#   5g  ncols from the first row    -> 4i goes red  (width taken from a data row)
+mut_copy() { # mut_copy <dest> <sed-expr> <label>
+  sed "$2" "$VALIDATOR" > "$1" || { bad "MUTANT $3: sed DIED -- the mutation never existed"; return 1; }
+  if cmp -s "$VALIDATOR" "$1"; then
+    bad "FIXTURE STALE: mutation $3 matched nothing in $VALIDATOR -- re-anchor it on the real line"
+    return 1
+  fi
+  return 0
+}
+
+# 5d. REVERT THE GATE to the leading-pipe form. This is the pre-fix program.
+D_MUT="$WORK/mutant-gate.sh"
+# TWO BSD-sed traps, both of which produce a mutant that APPLIES and is WRONG, which
+# `cmp -s` cannot see.
+#
+# First, `|` cannot be this expression's delimiter: the anchor line carries one, BSD
+# sed reads it as the separator and reports `bad flag in substitute command`. `%` is
+# the delimiter, and the anchor is the trailing COMMENT -- the only thing separating
+# this line from every other `!`-guarded awk rule in the file.
+#
+# Second, THE BACKSLASH IN THE REPLACEMENT MUST BE DOUBLED. A single `\|` is consumed
+# by sed and the mutant lands as `/^[[:space:]]*|/`, which in awk is an ALTERNATION of
+# two empty branches: it matches every line, so `!` skips every line and the check
+# indicts NOTHING. That mutant kills every arm at once, which reads as a successful
+# revert and is a dead program. Measured: it took 4k and 4n down with 4i. The arm
+# below asserts the escape survived, byte-wise, before any verdict is read.
+if mut_copy "$D_MUT" 's%^    !.*# prose, %    !/^[[:space:]]*\\|/                { next }        # MUTANT pre-fix gate: %' "5d"; then
+  if grep -qF '!/^[[:space:]]*\|/' "$D_MUT"; then
+    ok "MUTANT 5d applied with its escape intact (not the match-everything alternation)"
+  else
+    bad "MUTANT 5d LOST ITS BACKSLASH -- the gate became an empty alternation matching every line, so the check indicts nothing and the kill below is a dead program, not a pre-fix revert"
+  fi
+  seed "$PHEADER
+$PROW_BAD
+$PROW_OK"
+  d_ctl="$(run_validator "$CONTROL")"
+  if [ "$d_ctl" = "1" ] && grep -q 'a2b2344be58b99e31' "$WORK/out.txt"; then
+    ok "CONTROL: the unmutated copy names the pipeless offender on 4i's own input"
+  else
+    bad "CONTROL: the unmutated copy exited $d_ctl without naming the pipeless row -- 5d proves nothing"
+  fi
+  d_out="$(run_validator "$D_MUT")"
+  if [ "$d_out" = "0" ]; then
+    ok "MUTANT 5d: the pre-fix leading-pipe gate cannot see the pipeless row -- 4i goes green, so 4i is what tests the relaxation"
+  else
+    bad "MUTANT 5d SURVIVED: the leading-pipe gate still exited $d_out on a pipeless row -- either the seed is not pipeless or 4i is fed by something else"
+  fi
+  # ISOLATION. A mutant that fails more than its own assertion means one of them is
+  # vacuous, and here it means something sharper: the pre-fix gate is the program that
+  # ran in production, and it CONVICTED piped offenders. A 5d that also takes 4k down
+  # is not a revert, it is a dead check -- exactly what the lost backslash produced.
+  seed "$HEADER
+| \`piped-bad-s105\` | \`dev-escalated\` | docs/x.md | 2026-09-14 | dispatched (fix-forward) |"
+  d_piped="$(run_validator "$D_MUT")"
+  if [ "$d_piped" = "1" ] && grep -q 'piped-bad-s105' "$WORK/out.txt"; then
+    ok "  and 5d still names the PIPED offender -- it reverts the gate, it does not disable the check"
+  else
+    bad "  MUTANT 5d also killed the piped arm (exit $d_piped) -- it is a dead program, not the pre-fix gate, so its kill on 4i is unreadable"
+  fi
+fi
+
+# 5e. DROP THE WIDTH TEST entirely, leaving the bare `/\|/` form.
+# Scored on 4m's prose seed. The mutation deletes the one line that separates a
+# pipeless ROW from a pipeless LINE, so the shell fragment's last field is read as a
+# status token.
+E_MUT="$WORK/mutant-nowidth.sh"
+if mut_copy "$E_MUT" '/if (!piped \&\& n != ncols) next/d' "5e"; then
+  seed "$PHEADER
+$PROW_OK
+prose-s105 note: the branch is ahead by \`git log @{u}..HEAD --oneline | wc -l\` commits."
+  e_ctl="$(run_validator "$CONTROL")"
+  if [ "$e_ctl" = "0" ]; then
+    ok "CONTROL: the unmutated copy passes 4m's prose seed"
+  else
+    bad "CONTROL: the unmutated copy exited $e_ctl on 4m's prose seed -- 5e proves nothing"
+  fi
+  e_out="$(run_validator "$E_MUT")"
+  if [ "$e_out" = "1" ] && grep -q 'prose-s105' "$WORK/out.txt"; then
+    ok "MUTANT 5e: without the width test the prose line is convicted BY NAME -- 4m is what holds the measured false positive at zero"
+  else
+    bad "MUTANT 5e SURVIVED: the bare-pipe form exited $e_out without naming the prose line -- 4m's seed is not reaching the gate"
+  fi
+fi
+
+# 5f. APPLY THE WIDTH TEST TO ALL ROWS, not only pipeless ones.
+# The most plausible wrong fix: it is simpler, it passes 4i, 4j, 4l and 4m, and it
+# silently drops a finding the PRE-fix gate already produced. Scored on 4n, where
+# the stray-`|` row splits one field wide.
+F_MUT="$WORK/mutant-uniform.sh"
+if mut_copy "$F_MUT" 's|if (!piped \&\& n != ncols) next|if (n != ncols) next|' "5f"; then
+  seed "$HEADER
+| \`stray-s105\` | \`qa\` | docs/x|y.md | 2026-09-14 | dispatched (fix-forward) |
+| \`plain-s105\` | \`qa\` | docs/z.md | 2026-09-14 | dispatched (fix-forward) |"
+  f_ctl="$(run_validator "$CONTROL")"
+  if [ "$f_ctl" = "1" ] && grep -q 'stray-s105' "$WORK/out.txt"; then
+    ok "CONTROL: the unmutated copy names the stray-pipe row on 4n's own input"
+  else
+    bad "CONTROL: the unmutated copy exited $f_ctl without naming the stray-pipe row -- 5f proves nothing"
+  fi
+  f_out="$(run_validator "$F_MUT")"
+  if grep -q 'stray-s105' "$WORK/out.txt"; then
+    bad "MUTANT 5f SURVIVED: the uniform width test still named the stray-pipe row (exit $f_out) -- 4n cannot distinguish the two forms"
+  elif grep -q 'plain-s105' "$WORK/out.txt"; then
+    ok "MUTANT 5f: the uniform width test ACQUITS the stray-pipe row while still naming the ordinary one -- 4n is what keeps the relaxation a superset"
+  else
+    bad "MUTANT 5f: the copy named NEITHER row (exit $f_out) -- it is dead, not discriminating, and the kill is unreadable"
+  fi
+fi
+
+# 5g. CAPTURE ncols FROM THE FIRST ROW instead of from the `status` header row.
+# The width then comes from whatever pipe-bearing line appears first rather than
+# from the table's own declaration. Scored on 4i: the mutation moves the `status`
+# arm's recording to the pre-header default, so the pipeless data row is measured
+# against a width nothing declared and falls through unchecked.
+G_MUT="$WORK/mutant-firstrow.sh"
+if mut_copy "$G_MUT" 's|{ declared = 1; ncols = n; next } # the header declares the column|{ declared = 1; next } # MUTANT: width not taken from the header|' "5g"; then
+  seed "$PHEADER
+$PROW_BAD
+$PROW_OK"
+  g_ctl="$(run_validator "$CONTROL")"
+  if [ "$g_ctl" = "1" ] && grep -q 'a2b2344be58b99e31' "$WORK/out.txt"; then
+    ok "CONTROL: the unmutated copy names the pipeless offender before 5g is read"
+  else
+    bad "CONTROL: the unmutated copy exited $g_ctl without naming the pipeless row -- 5g proves nothing"
+  fi
+  g_out="$(run_validator "$G_MUT")"
+  if [ "$g_out" = "0" ]; then
+    ok "MUTANT 5g: with ncols not taken from the header row the pipeless offender escapes -- 4i is bound to the DERIVED width, not to any width"
+  else
+    bad "MUTANT 5g SURVIVED: exit $g_out with the header's width recording deleted -- 4i passes under a width from somewhere else"
+  fi
+fi
+
+# 5h. LET THE HEADER FALL THROUGH instead of exiting at the `status` arm.
+# 4l is ABSENCE-shaped -- it asserts nothing is reported -- so it is the arm that
+# REQUIRES a mutant rather than a near-miss: with the subject replaced by a program
+# that emits nothing it would print `ok` forever. Removing the `next` leaves the
+# header's own last cell, the literal word `status`, to reach the token test, where
+# it is outside the closed set of three and is indicted BY ITS OWN TEXT.
+H_MUT="$WORK/mutant-headerrow.sh"
+if mut_copy "$H_MUT" 's|{ declared = 1; ncols = n; next } # the header declares the column|{ declared = 1; ncols = n } # MUTANT: header not exempted|' "5h"; then
+  seed "$PHEADER"
+  h_ctl="$(run_validator "$CONTROL")"
+  if [ "$h_ctl" = "0" ]; then
+    ok "CONTROL: the unmutated copy passes 4l's header-only seed"
+  else
+    bad "CONTROL: the unmutated copy exited $h_ctl on the pipeless header alone -- 5h proves nothing"
+  fi
+  h_out="$(run_validator "$H_MUT")"
+  if [ "$h_out" = "1" ] && grep -q 'dispatched-at | status' "$WORK/out.txt"; then
+    ok "MUTANT 5h: without its exemption the pipeless HEADER is itself indicted -- 4l is a real arm and not an absence that passes against a dead check"
+  else
+    bad "MUTANT 5h SURVIVED: exit $h_out with the header exemption removed and the header unnamed -- 4l would pass against a check that reports nothing"
+  fi
 fi
 
 echo ""
