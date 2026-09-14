@@ -75,7 +75,35 @@ reflow-only, acquittal-deleted, `CITED`-gutted, MN1–MN7, MN9, MN10 and all fou
 
 #### `BL-248`
 
-<!-- docs-248-hand fills this -->
+Ten staged `verify: sh` receipts under `docs/reviews/` read the distribution CHECKOUT through
+`$DIST` — the exact form `v0.567.0`'s subtractive grammar refuses as `NEEDS-REVIEW` — and the
+hazard is the hand-carry that puts one into the consumer's ledger, where its engine scores it
+against whatever the operator last checked out. Eight are rewritten onto `$THEIRS_TREE`, each
+opening with the `[ -n "${THEIRS_TREE:-}" ] || exit 127;` guard the engine header prescribes, each
+brief/batch-file twin `cmp`-asserted byte-identical after the rewrite. The equivalence control ran
+every original beside its rewrite under the engine's exported values against a detached worktree
+and a `git archive` of the same sha (the two sides asserted to differ): every pair returns the same
+exit, none 127, and every rewrite exits 127 with `$THEIRS_TREE` unset.
+
+Two findings changed the shape while it was being built. The two layer-drift receipts and the
+fanout pair are FALSE POSITIVES of the shipped grammar that cannot be rewritten:
+`layer-drift.sh:225` binds `DIST="$1"` and hands it to `git -C`, and
+`report-propagation-fanout.sh:216` runs `git rev-parse --git-dir` on its project root, so a tree
+with no `.git` takes the layer-drift receipt from 0 to 127 and the fanout one likewise. The
+GIT_DIR-borrow workaround was built and refuted — `git ls-files` then answers from the checkout's
+INDEX, measured on a divergent tree pair — and the synthetic-repo shape replaces the engine's
+`${BASE}~1..${BASE}` scope. The fanout pair therefore moves only its subject read
+(`S=` onto `$THEIRS_TREE`) and keeps `AI_DLC_PROJECT_ROOT="$DIST"` as a repository handle. And
+the spec-join pair was a NULL at HEAD, pinned at 127 by a DISARM on a seed that mentioned `CAP-7`
+and defined none; the seed is repaired, the original then returns 1, and only then was it
+rewritten.
+
+The receipt now greps all three files for `S="$DIST/core/scripts"` and drives the shipped
+`receipt_reads_dist_as_path` — extracted from the engine at run time, exit 9 if it moves — over
+every `verify: sh` line of the three files, with the four expected refusals enumerated by content
+and a seeded control that must be refused in the same run. Scored: base 1, tip 0, comment carrying
+the literals 1, brief-only rewrite 1, fanout pair unrewritten 1, engine deleted 9. 45 lines driven,
+4 refused, 0 unexpected, against 8 before.
 
 ## [0.568.0] - 2026-09-13
 
