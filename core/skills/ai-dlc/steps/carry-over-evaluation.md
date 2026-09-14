@@ -165,6 +165,21 @@ this sprint, not closed):
 - **Proceed with all non-deferred items** — do not block the pipeline
 - The human will review deferrals at the production validation checkpoint
 
+**A rare-and-maybe-never monitor carries `rare_event: true`.** When the
+healthy expected state of a carry-over's monitored event is non-firing,
+the item MUST carry that field, MUST name a staleness ceiling, and MUST
+state that non-firing is healthy. At the ceiling the lead re-decides
+the item's DISPOSITION — renew the monitor, downgrade the un-validated
+path to a documented operator-accepted risk, or investigate only if the
+event became expected and still did not fire — and MUST NOT raise it as
+a health escalation, which on a healthy system is a guaranteed false
+alarm. Catches: a probabilistic passive monitor left OPEN indefinitely
+because nothing bounds it, and the inverse — a bounded one reporting a
+defect every cycle while the system behaves correctly. False-positive
+cost: one disposition decision per `rare_event` item when its ceiling
+is reached. Remove when: carry-over items carry a machine-adjudicated
+expiry and the lead no longer dispositions staleness by hand.
+
 ### 4a. Recurrence-Promotes-Priority
 
 Any OPEN carry-over item whose underlying defect has **reproduced in a
