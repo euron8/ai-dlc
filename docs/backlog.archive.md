@@ -13022,3 +13022,235 @@ non-member on the line that states which values pass.
 
 
 verify: sh bash scripts/render-vocabulary-index.sh --check >/dev/null 2>&1 || exit 1; grep -qF 'EXIT_CONDITION_MET' docs/vocabulary-index.md || exit 9; grep -qF 'NEEDS_REWORK' docs/vocabulary-index.md
+## BL-249 — the In-Flight row readers disagreed about whether the leading `|` is part of the grammar, and the two that required it were blind to every row core's own step file teaches a lead to write
+
+**LANDED (v0.571.0, verified eabc9920).**
+
+**Found 2026-09-14** while reading the reference consumer's snapshot at a resume. The subject is
+the DISAGREEMENT, not either reader: `## In-Flight Teammates` had three readers, two of them
+gated on `/^[[:space:]]*\|/` and one of them not, and nothing bound the three to agree.
+
+**THE SITES.** `core/scripts/validate-artifact-budget.sh` `check_inflight_status` and
+`core/hooks/ai-dlc-continue.sh` Check 0's teammate-sweep arm both required the leading delimiter.
+The third reader, `check_inflight_rows` in the same validator, never carried it — its awk is
+`f && /~~/`, content-keyed on the strikethrough — so it has always read the pipeless shape fine.
+Two readers of one section, one grammar each, no join.
+
+**AND THE SHAPE THEY REFUSED IS THE ONE CORE TEACHES, IN EVERY PLACE CORE TEACHES IT.** Three step
+files state the row template in prose, and **all three write it with NO leading pipe**:
+`route.md:662` (`agent | role | deliverable | dispatched-at | status`, in the instruction that
+creates the section), `gate-validation.md:902` (`agent name | role | deliverable path |
+dispatched-at | status`, in the Check 14 reconciliation) and `_gate-procedures.md:33` (the same,
+in the sub-step snapshot update). Not one of them shows the delimiter the two readers required. So
+a lead following ANY of the three produced rows those readers could not see, and the reference
+consumer does exactly that.
+
+**The carrier sweep that found one of those three was wrong, and the correction is the useful
+part.** A grammar keyed on the literal `agent *| *role *| *deliverable` returns `route.md:662`
+alone, because the other two spell the first two cells `agent name` and `deliverable path` and one
+of them wraps mid-template across a line break. Keyed instead on the column name `dispatched-at`
+— the one token every statement of the template must carry — all three appear, against a control
+of 0 for a column name nothing carries. A template scan that cannot spell two of its own three
+instances returns a clean zero for them.
+
+**WHAT THE BLINDNESS COST, MEASURED ON THE CONSUMER'S OWN COMMITTED HISTORY.** Over the reference
+consumer's In-Flight-bearing files under `_bmad-output/`, scored in one pass with the shipped gate
+and the relaxed gate side by side: 63 data rows admitted by the leading-pipe gate, 65 by the fix,
+and the 2 it could not see are pipeless rows in
+`_bmad-output/pipeline-history/pipeline-snapshot-archive.md` at lines 31051 and 31079, both
+carrying `stopped` — real teammate records, invisible to the status check and to the handoff
+guard for as long as they have existed. Controls in the same invocation: 52 files carry the
+section heading, 0 carry an impossible heading token.
+
+**THE LIVE FIGURE MOVES AND IS NOT THE CLAIM.** The consumer's live
+`_bmad-output/pipeline-snapshot.md` currently carries the section's header row and no data rows at
+all — its table was cleared during a gate pass, and both gates read 0 there. A figure taken from
+that file expires within hours. What does not expire is the committed archive above, and the fact
+that every row in it that the fix newly admits is pipeless.
+
+**THE NARROWING, AND WHY THE OBVIOUS FIX IS WRONG.** Dropping to a bare `/\|/` is what the shape
+suggests. Over the same corpus it admits 67 where the fix admits 65, and both extra lines are
+PROSE: `pipeline-snapshot-archive.md:23444`, an archived note ending
+`git log @{u}..HEAD --oneline | wc -l`, whose last pipe-delimited field is a shell fragment; and
+`:12686`, a paragraph carrying `|lifetime_IL|=120417.32` mid-sentence. Neither is a row. So a line
+with no leading `|` must ALSO carry the column count the header declares, recorded at the row
+whose last cell is `status` — the table declaring its own width, derived rather than fitted. That
+takes the false-positive set to zero, and the header exits at the `status` arm before any column
+test, so it is never scored as a data row.
+
+**AND THE WIDTH TEST IS RESTRICTED TO PIPELESS LINES.** Applied uniformly it is a REGRESSION: a
+piped row whose cell contains a stray `|` splits one field wide and is acquitted, which is a
+finding the leading-pipe gate has today.
+
+**Receipt limits, stated.** The receipt drives BOTH shipping programs on the four inputs that
+discriminate — a pipeless illegal token, a pipeless legal one, prose carrying a pipe, and a piped
+row with a stray `|` in a cell — and reads the validator's `unknown status:` count and the hook's
+`block`/`allow` decision. It refuses (exit 9) only for a genuinely missing file: the validator,
+the hook, and `core/schemas/pause-routing.json`, which Check 0 reads its handoff vocabulary from
+and without which the sweep arm never runs. It does NOT score the third reader
+`check_inflight_rows`, which was never gated and needs no change; and it does not observe the
+route.md template, which is the cause but not the defect.
+
+verify: sh V=core/scripts/validate-artifact-budget.sh; H=core/hooks/ai-dlc-continue.sh; S=core/schemas/pause-routing.json; [ -f "$V" ] || exit 9; [ -f "$H" ] || exit 9; [ -f "$S" ] || exit 9; d=$(mktemp -d) || exit 9; X(){ rm -rf "$d"; exit "$1"; }; mk(){ printf '%s\n' '# S' '' '## In-Flight Teammates' 'agent | role | deliverable | dispatched-at | status' "$2" '' '## Recent Activity' '- x' > "$d/$1.md"; }; pk(){ printf '%s\n' '# S' '' '## In-Flight Teammates' '| agent | role | deliverable | dispatched-at | status |' "$2" '' '## Recent Activity' '- x' > "$d/$1.md"; }; mk bare 'a1 | dev | d/x.md | 2026-01-01T00:00:00Z | delivered'; mk ok 'a1 | dev | d/x.md | 2026-01-01T00:00:00Z | stopped (done)'; mk live 'a1 | dev | d/x.md | 2026-01-01T00:00:00Z | in-flight, since 2026-01-01'; mk prose 'counted with `git log @{u}..HEAD --oneline | wc -l` so it is | in-flight'; pk vstray '| a1 | dev | d/x|y.md | 2026-01-01T00:00:00Z | delivered |'; pk hstray '| a1 | dev | d/x|y.md | 2026-01-01T00:00:00Z | in-flight |'; vn(){ p="$d/vp"; rm -rf "$p"; mkdir -p "$p/_bmad-output" || X 9; cp "$d/$1.md" "$p/_bmad-output/pipeline-snapshot.md" || X 9; AI_DLC_PROJECT_ROOT="$p" bash "$V" --root "$p" --only pipeline-snapshot.md 2>&1 | grep -c 'unknown status:'; }; t="$d/t.jsonl"; printf '%s\n' '{"message":{"role":"user","content":"hand off the sprint"}}' '{"message":{"role":"assistant","content":"Snapshot finalized.\n\n```\n----\n/ai-dlc resume\n----\n```\n"}}' > "$t" || X 9; hv(){ p="$d/hp"; rm -rf "$p"; mkdir -p "$p/_bmad-output/.driver" || X 9; cp "$d/$1.md" "$p/_bmad-output/pipeline-snapshot.md" || X 9; touch "$p/_bmad-output/pipeline-paused.flag"; : > "$p/_bmad-output/.driver/handoff"; o=$(printf '{"transcript_path":"%s","session_id":"fx"}' "$t" | CLAUDE_PROJECT_DIR="$p" AI_DLC_PAUSE_ROUTING_SCHEMA="$S" bash "$H" 2>/dev/null); case "$o" in *'"block"'*) printf block ;; *) printf allow ;; esac; }; [ "$(vn ok)" -eq 0 ] || X 1; [ "$(vn prose)" -eq 0 ] || X 1; [ "$(hv ok)" = allow ] || X 1; [ "$(hv prose)" = allow ] || X 1; [ "$(vn vstray)" -eq 1 ] || X 1; [ "$(hv hstray)" = block ] || X 1; [ "$(vn bare)" -eq 1 ] || X 1; [ "$(hv live)" = block ] || X 1; X 0
+
+## BL-021
+
+**LANDED (v0.571.0, verified eabc9920).**
+
+**The rare-event ceiling for probabilistic passive-monitor carry-overs has no counterpart
+anywhere in core, and it is one of only two blocks left in the row that names it.** Measured
+over `core/` at HEAD with a control in the same invocation: files containing `rare_event` = **0**,
+files containing `staleness ceiling` = **0**, files containing `validation_intensity` = **12**.
+The consumer block is `extensions/checks/gate-validation-push.md:25-37` (`PI-S259-3`), and its
+operative clause — a carry-over whose monitored event is rare-and-maybe-never carries
+`rare_event: true`, and its ceiling fires a DISPOSITION-REVIEW rather than a health escalation —
+is the part core cannot express: `core/skills/ai-dlc/steps/carry-over-evaluation.md` contains
+neither `staleness` nor `ceiling` (0 hits, same invocation as the 12-hit control above).
+
+**The row is wrong about three of the six blocks it names, in two directions.** It names
+`2s, 3a, 7, 14, 18, 21`. The live file carries five `CHECK_LOADED` ids — `902s, 903a, 914, 918,
+921` — and **no block 7**: `non-vacuous` occurs nowhere in `extensions/checks/gate-validation-push.md`,
+its two consumer-side hits being `gate-validation-domain.md:552` and
+`overrides/steps__gate-validation__check-5.md:9`, neither of which is this file. **Block 21 is
+already absorbed and core says so in its own text** — `core/skills/ai-dlc/steps/gate-validation.md:1268-1271`
+reads "**Graph→distribution number mapping.** This is graph's Check 21 (validation-intensity)
+absorbed as distribution **Check 20**", and core's Check 20 at `:1244-1250` already carries the
+extension's whole innovation, that the minimum is READ from Rule 8's table and "this check
+deliberately does not restate it". **Block 3a is absorbed away from the gate**: `degenerate-but-type-valid`
+lives in `core/skills/ai-dlc/steps/stories-test-strategy.md`, `core/team-roles/qa.md` and
+`core/team-roles/code-reviewer.md`, and `Protective-direction` in `qa.md` — but core's Check 3a
+at `:347-390` is coverage-only ("identify which acceptance criterion covers it"), so the
+discrimination requirement exists in the authoring step and has no gate that enforces it. The
+correction is narrowing on 21, 7 and the bulk of 3a, and it leaves 902s plus 3a's SUT-pointer
+sub-clause (`_call_real_`, 0 hits in `core/`) as the residue. Block 14's two fields exist in core
+(`core/skills/ai-dlc/steps/retro.md`, `core/skills/ai-dlc/enforcement-map.yaml`,
+`core/schemas/gate-adjudication-verdict.json`) but not where the block puts them: `hard_block` is
+0 hits inside core's Check 14 region, lines 760-931, where `Context Reminders` hits twice at
+`:839` and `:855`. Block 18 is consumer-scoped by construction (`server/test_*.py`,
+`rebalancer/tests/**`) and is not pushable.
+
+The anchor is `rare_event` because it is the token the absorbed rule cannot be written without —
+it is the literal frontmatter key the carry-over must carry — and because the looser candidates
+false-close: `staleness` and `ceiling` are ordinary English, and an anchor on the extension's
+prose ("disposition review, not health escalation") is a phrasing the filing invented rather than
+one core uses. The control is `validation_intensity`, chosen because it is the token of the block
+in the SAME row that core DID absorb, so a control hit proves the search reaches the exact file
+where an absorption of this class lands.
+
+**The receipt's subject file is `carry-over-evaluation.md`, not `gate-validation.md`, and the move
+is the point.** The absorbed clause governs how a DEFERRED carry-over's staleness is dispositioned,
+so it lands in `### 4. Deferral Handling` of the carry-over step — the section the third paragraph
+above already names as the one carrying neither `staleness` nor `ceiling`. `gate-validation.md`
+keeps its old role as the control token's home only. Both headings were verified verbatim before
+the slice was written (`### 4. Deferral Handling` to `### 5. Close Invalid Items`, 27 lines today).
+
+**A window narrows WHERE the token sits and says nothing about WHAT KIND of text carries it, so the
+slice alone was not enough.** Measured against the window-only form: `<!-- rare_event: ceiling NOT
+absorbed -->` inside section 4 closed it at **0**, and so did the sentence "The rare_event: ceiling
+is NOT specified in this step." The shipped form therefore drops every line containing `<!--` and
+keeps only lines shaped like a MANDATE — a bullet, a table row, or a bold-led block. **The token is
+required in its KEY form, `rare_event:`**, because the absorbed clause cannot be written without the
+frontmatter key; a bare `rare_event` in a bullet reads **1**.
+
+Measured in pristine copies, ten ways. HEAD **1**. A comment line carrying every grep literal
+appended to both files the receipt names **1**. The HTML comment inside the window **1**, and the
+same comment on a bullet **1**. The disclaimer sentence **1**. A correctly-shaped bullet in
+section 2, outside the window, **1**. A bare `rare_event` with no colon, correctly shaped and inside
+the window, **1**. `rare_event` written into sections 2 and 6 and the file tail — three real prose
+additions outside the deferral slice, and the case a core-wide `grep -rqF` would have closed on —
+**1**, with the token present 3 times and 0 times inside the slice. Both natural shapes of the real
+fix inside section 4, a bullet and a bold-led block, **0**. The control fires: with
+`validation_intensity` renamed in `gate-validation.md` the receipt exits **9**.
+
+**A heading renumber or a case change in the windowed step file pins this receipt at exit 9, and no
+other arm notices.** Measured: recasing `### 4. Deferral Handling` to `### 4. Deferral handling`
+takes the receipt to **9** — out of population, not a finding — while the step file stays valid and
+every other gate stays green. The two headings are load-bearing input to this receipt and nothing
+binds them.
+
+Discharges the consumer entry `extensions/checks/gate-validation-push.md` at pinned ledger
+line 226. That row carries no `PC-` id and no receipt, so nothing re-derives it; the three
+corrections above are the reason it survived two drains.
+
+
+verify: sh f=core/skills/ai-dlc/steps/carry-over-evaluation.md; grep -qF 'validation_intensity' core/skills/ai-dlc/steps/gate-validation.md || exit 9; s="$(awk '/^### 4. Deferral Handling/{n=1} n&&/^### 5. Close Invalid Items/{exit} n' "$f" | grep -v '<!--' | grep -E '^[[:blank:]]*([-*|]|\*\*)')"; [ -n "$s" ] || exit 9; grep -qF 'rare_event:' <<<"$s"
+## BL-022
+
+**LANDED (v0.571.0, verified eabc9920).**
+
+**Fix-Forward Cluster Accounting is absent from core's deploy-validate step entirely, and the
+deferral triple the same row names is already core's — only its PVC siting is not.** Measured
+over `core/skills/ai-dlc/steps/deploy-validate.md` with a control in the same invocation,
+matching lines, case-insensitive: `fix-forward` = **0**, `cascade` = **0**, `EFFORT-BLOCKER` = **0**,
+`Post-smoke` = **0**, `smoke` = **27**. Core-wide by file, `cluster count`, `Cluster Accounting`,
+`cascade-depth` and `cascade depth` each match **0 files** while `smoke test` matches **15**, same
+invocation. The
+consumer block is `extensions/steps-domain/deploy-validate-push.md:107-233` — a cascade-depth
+threshold on fix-forward PRs, a pre-dispatch fetch mandate, stack-trace-first ordering, and
+three named exclusions from the cluster count (pre-merge `PI-S169-4`, pipeline-infrastructure,
+operator-directed revert).
+
+**The row misdescribes the second of its three items, narrowing it.** It names
+"deferral-justification triple (`PI-S272-1`)" as the push candidate. The triple is already in
+core: `core/skills/ai-dlc/steps/retro.md:410` is "**Deferral-justification triple (MANDATORY).**"
+and `:419` defines `EFFORT-BLOCKER` as one of its three slots. The extension's own body at
+`deploy-validate-push.md:91` cites it as "(retro.md §4a)" — it never claimed to own the triple.
+What is unabsorbed is the APPLICATION SITE: that the triple must be attached before the PVC lists
+any item as deferred, and that the operator catching a vacuous deferral at the PVC is a Rule-3
+lead-conduct violation. Core's `deploy-validate.md` mentions deferrals only as
+`DEFERRAL_REQUEST` counts to approve at `:300` and `:318`, with no justification precondition.
+**The row is also wrong about its own scope in the widening direction**: it names three items
+where the file carries thirteen bold sub-blocks, omitting root-cause-before-disposition (HARD),
+verify-tool discharge invocation-fidelity (HARD), the sprint-scope failure cross-check and the
+LR-closure traceback. Its parenthetical "sprint-boundary trip" resolves to two incidental prose
+uses at `:132` and `:150`, not to a named clause.
+
+The anchor is `fix-forward` scoped to `core/skills/ai-dlc/steps/deploy-validate.md`, because
+cluster accounting sited at the PVC cannot be written into that step without the term. A
+core-wide anchor was measured and rejected in the same invocation: `grep -rqF 'fix-forward' core/`
+exits **0 today**, satisfied by `core/team-roles/code-reviewer.md` and
+`core/skills/ai-dlc/steps/gate-validation.md`, so it would report this entry closed the moment
+anyone looked. If a future absorption sites the rule in `gate-validation.md` instead, the receipt
+must be repointed rather than read as still-live — that is the one failure mode this anchor buys
+its tightness with.
+
+**The anchor is scoped to the PVC SECTION, not to the file, because the siting is the claim.** The
+receipt slices `### 5. Production Validation Checkpoint` up to `### 6. Wait for Human` — both
+headings verified verbatim, 34 lines today — and asks for `fix-forward` inside that slice; `smoke`
+file-wide is the control in the same invocation.
+
+**A window narrows WHERE a token sits and says nothing about WHAT KIND of text carries it, so the
+slice alone was not enough.** Measured against the window-only form: an HTML comment inside
+section 5 reading `<!-- TODO: fix-forward cluster accounting not written yet -->` closed it at
+**0**, and so did the sentence "Fix-forward accounting is NOT specified in this step." Both are
+prose about the absent rule satisfying a receipt for the rule. The shipped form therefore drops
+every line containing `<!--` and keeps only lines shaped like a MANDATE — a bullet, a table row, or
+a bold-led block — which is the shape every other rule in that step is written in.
+
+Measured in pristine copies, ten ways. HEAD **1**. A comment line carrying the receipt's own grep
+literals appended to the file **1**. The HTML comment inside the window **1**, and the same comment
+written onto a bullet **1**. The disclaimer sentence **1**. A correctly-shaped bullet in the
+neighbouring section 4b **1** — the sharpest over-broad non-fix, and the one a file-wide anchor
+would have closed on. All three natural shapes of the real fix inside section 5 — the bullet
+`- Fix-forward PRs: [count]`, a bold-led block, and a table row — **0**. The control fires: with
+every `smoke` renamed the receipt exits **9**.
+
+**THE SHAPE FILTER SEPARATES PROSE FROM MANDATES, NOT ASSERTION FROM DENIAL, and a mandate-shaped
+DENIAL closes this receipt.** Measured, all three at **0**: `**Note:** fix-forward accounting is NOT
+specified in this step.`, `| fix-forward | not specified |`, and `- fix-forward is NOT specified
+here`. A negation filter was considered and refused — it is a heuristic carrying its own
+false-positive set, and an unmeasured lint is one the operator turns off. The limit is recorded here
+instead, so a reader scoring a close against this receipt checks that the matched line MANDATES the
+accounting rather than denying it.
+
+**A heading renumber or a case change in the windowed step file pins this receipt at exit 9, and no
+other arm notices.** Measured: renaming `### 5. Production Validation Checkpoint` to
+`### 5a. Production validation checkpoint` takes the receipt to **9** — out of population, not a
+finding — while the step file itself stays valid and every other gate stays green. The two headings
+are load-bearing input to this receipt and nothing binds them.
+
+Discharges the consumer entry `extensions/steps-domain/deploy-validate-push.md` at pinned ledger
+line 252.
+
+
+verify: sh f=core/skills/ai-dlc/steps/deploy-validate.md; grep -qiF 'smoke' "$f" || exit 9; s="$(awk '/^### 5. Production Validation Checkpoint/{n=1} n&&/^### 6. Wait for Human/{exit} n' "$f" | grep -v '<!--' | grep -E '^[[:blank:]]*([-*|]|\*\*)')"; [ -n "$s" ] || exit 9; grep -qiF 'fix-forward' <<<"$s"
