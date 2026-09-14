@@ -4037,3 +4037,110 @@ while the ledger this program exists to drain is not among them.
 
 verify: sh S="$(python3 -c 'import json,sys;print((json.load(open(sys.argv[1])).get("join") or {}).get("population_schema") or "")' core/schemas/write-format-steering.json)" || exit 9; [ -n "$S" ] || exit 9; o="$(bash core/scripts/validate-write-format-steering.sh --report 2>&1)"; rc=$?; grep -qE '^ +declared +ai-dlc-update' <<<"$o" || exit 9; [ "$rc" -eq 0 ] || exit 1; grep -qE '^ +declared +push-candidate' <<<"$o" || exit 1; p="$(awk '$1=="declared" && $2=="push-candidate"{print $3}' <<<"$o")"; [ -n "$p" ] || exit 1; [ "$(basename "$p")" != "$S" ] || exit 1; n="$(awk -v p="$p" '$1=="declared" && $3==p' <<<"$o" | grep -c .)" || n=0; [ "$n" -eq 1 ]
 
+
+## BL-253 — the In-Flight Teammates row is unenforced at dispatch, and both PreToolUse remedies are refuted; what ships is a Stop-time arm blind to named teammates
+
+Adjudicating `PC-S312-INFLIGHT-TEAMMATES-ROW-UNENFORCED-AT-DISPATCH`, whose ask was that a
+`PreToolUse` hook write or demand the row at the moment a teammate is dispatched. **Both halves of
+that are REFUSED on measurement**, and a Stop-time arm in `core/hooks/ai-dlc-continue.sh` ships in
+their place.
+
+**The demand half is undecidable at PreToolUse.** The row the filing wants carries a
+`deliverable`, and the dispatch does not know one: 0 of 1589 role-bound rows in the reference
+consumer's spawn ledger carry a `deliverable` field, and mining the prompt for one yields exactly
+one path-shaped candidate on 475 of 934 role-bound dispatches — a coin, not a key. **The write
+half cannot address the row it would write**: the table's `agent` column is populated after the
+fact and the `agent` id does not exist at PreToolUse at all, the harness mints it when the spawn
+starts. And no hook in the distribution mutates the pipeline snapshot today, so the write half
+would be the first, on the file every other mechanism reads.
+
+**The false-negative rate is what decided that something had to ship anyway**: 459 role-bound
+dispatches across sprints 307-311 on the reference consumer and ZERO In-Flight rows recorded over
+that span. The existing sweep arm in Check 0 was green on every one of them, correctly — it can
+only convict a row somebody wrote, and nobody wrote any.
+
+**What ships** is a second arm beside that one, blocking a handoff whose In-Flight table has zero
+data rows while a dispatch from this session has no stop record:
+
+    open = {Agent|Task tool_use ids in $TRANSCRIPT}
+         n {spawn-ledger rows v==1, role!=null, tool_use_id!=null}
+         n {ids with a meta.json under ${TRANSCRIPT%.jsonl}/subagents/ keyed .toolUseId}
+         \ {tool_use_id present in subagent-context.jsonl}
+
+The row count is a second output line of the sweep arm's own awk, so there is one table grammar
+and not two. Every failure path is fail-open, same posture as the arm beside it.
+
+**FP and TP, measured by DRIVING the shipping hook** against scratch copies of the consumer's real
+ledgers, session transcripts and harness meta sidecars — 8 sessions carry a dispatch from the
+`tool_use_id` era, 7 allow and 1 blocks. The narrowing story, each step with a control in the same
+invocation:
+
+    naive join (transcript n ledger, minus stop records)    3 open
+    minus the meta narrowing                                1 open
+    control: an impossible id against the meta set          0
+    control: narrowed set is a subset of the naive set      0 members outside it
+
+The two the narrowing removes are Rule-29 denials — the dispatch guard writes its ledger row at
+PreToolUse, BEFORE anything can refuse the call, so a denied dispatch leaves a row with no agent
+behind it. The survivor is a `dev-escalated` fix-forward that outlived its handoff. Reconstructed
+at the handoff instant (`subagent-context.jsonl` rows before `2026-09-14T18:06:47Z`, 4055 against
+4056 — a differential of exactly the row in question) a SECOND session blocks, which is the filed
+motivating case.
+
+**Two limits, both stated in the arm header and both seeded in the fixture rather than left
+implicit.**
+
+**It is a PRESENCE test on the table, not an identity join, so one unrelated row acquits the
+turn.** The reason is COVERAGE. Over every tracked revision of every
+`_bmad-output/pipeline-snapshot*` file on the reference consumer — 647 documents, parsed with the
+hook's own row grammar — 115 distinct In-Flight data-row first cells exist; **2 resolve to a spawn
+meta at all and NEITHER of those 2 reaches a ledger row**, the rest being dispatch names. An
+identity join would false-positive on essentially the whole historical population while catching
+nothing the presence test misses. Control in the same invocation: an impossible id resolves to 0
+metas, and the same extract carries 128 `dev-escalated` hits.
+
+**It is BLIND to named in-process teammates, permanently.** A NAMED dispatch routes to the
+in-process teammate runner, whose meta sidecar carries `teamName` and no `toolUseId`; partitioned
+over the harness's own meta corpus the two keys never co-occur — 330 `toolUseId`-only, 672
+`teamName`-only, 0 carrying both, 0 carrying neither. Of the last 96 role-bound ledger rows **17
+carry no `tool_use_id`**, and that figure is scoped: all 17 predate the first row that carries the
+key, and from that row onward 79 of 79 role-bound rows carry one. A name-keyed join was BUILT and
+REFUTED — 115 false blocks over 303 rows, prefixes ambiguous between dispatches, and
+`subagent-context.jsonl` carrying no name field at all (0 of 4056 rows). So a live named teammate
+at a handoff is invisible to this arm and the fixture asserts that ALLOW as a near-miss, so the
+cell is visible the day somebody proposes a name join.
+
+**A clean return does not guarantee a stop record, which is why the remedy is the ROW and not
+`TaskStop`.** The one true positive FINISHED — its `tool_result` carries no error — and wrote no
+`subagent-context.jsonl` row. Partitioned over the era dispatches in the replayed sessions: 63
+returned normally with a record, 1 returned with none, 2 were denied by Rule 29 before an agent
+existed. `TaskStop` cannot clear a state whose record was never written, so the block message
+names each open id with its ledger `name` and `role` and tells the lead to write the row per
+`steps/handoff.md` step 1 (`stopped`, or `delivered-reachable` if the deliverable landed).
+
+**DRIFT RISK, named because nothing mechanical holds it.** `probe_effort()` at
+`core/scripts/validate-spawn-ledger.sh:381` joins these same two ledgers on this same key, and its
+header carries the measurement that rejected every ordered alternative (id join 4 of 4, ordered
+join 2 of 4). A hook cannot source a standalone validator, so the arm REIMPLEMENTS that join and
+its header cites that function as the origin of the key choice rather than re-arguing it. **If the
+ledger's key moves, two sites move and no invariant joins them.** A binding would have to reach
+inside a hook's Check 0 and a validator's helper for the same jq selector, which is a grammar
+match on two different shapes; not built here.
+
+**Removal condition**: retire when the In-Flight row is written by a mechanism rather than by the
+lead, at which point the absence this arm detects is unconstructible.
+
+**The receipt DRIVES the hook**, on a seeded offender and a seeded named-teammate near-miss in one
+run, with a control (`.p_miss`, a handoff with no resume block) that must BLOCK first — so a run
+that reached a hook which cannot emit at all exits 9 rather than reporting a clean absence.
+**Scored against six built candidates**, each a `cmp -s`-guarded copy: tip 0, base (`origin/main`)
+1, and each of the four fixture mutants 1 — m1 dropping the stop-record difference, m2 dropping
+the meta narrowing, m3 ignoring the row count, m4 reading the transcript through a `tail -n 200`
+window. **It is NOT satisfiable by prose**: nothing it reads is a document, and the two verdicts
+it scores are the hook's own `decision` field on inputs the fixture seeder writes.
+
+**Tiered DEFECT.** The state the arm catches — an empty table with a dispatch outstanding — is
+indistinguishable from a session that dispatched nothing, and it is the one piece of state no
+later step can reconstruct.
+
+verify: sh H="${AI_DLC_BL253_HOOK:-core/hooks/ai-dlc-continue.sh}"; [ -f "$H" ] || exit 9; S="core/schemas/pause-routing.json"; [ -f "$S" ] || exit 9; R="$(bash core/fixtures/handoff-resume-guard/seed.sh)" || exit 9; [ -d "$R" ] || exit 9; drv() { p="$(mktemp -d)"; mkdir -p "$p/_bmad-output/.driver"; if [ -n "${2:-}" ]; then { printf '# Pipeline Snapshot\n\n## Pipeline Position\ncurrent_step_file: implementation.md\n\n## Sprint Context\nsprint_id: 311\n\n## Recent Activity\n- x\n\n## Open Items\n- none\n\n## Locked Decisions\n- none\n\n## In-Flight Teammates\n'; cat "$2/snapshot-body.md"; printf '\n\n## Context Reminders\ncontext_reminders_sent: none\n'; } > "$p/_bmad-output/pipeline-snapshot.md"; touch "$p/_bmad-output/pipeline-paused.flag"; cp "$2/_bmad-output/"*.jsonl "$p/_bmad-output/" 2>/dev/null; fi; : > "$p/_bmad-output/.driver/handoff"; o="$(jq -nc --arg t "$1" --arg s fx '{transcript_path:$t,session_id:$s}' | CLAUDE_PROJECT_DIR="$p" AI_DLC_PAUSE_ROUTING_SCHEMA="$S" bash "$H" 2>/dev/null)"; rm -rf "$p"; printf '%s' "$o"; }; w() { x="$(cat "$R/$1")"; [ -d "$x" ] || exit 9; drv "$x/lead.jsonl" "$x"; }; blk() { jq -e '.decision=="block"' >/dev/null 2>&1 <<<"$1"; }; blk "$(drv "$(cat "$R/.p_miss")")" || exit 9; off="$(w .w_offender)"; tab="$(w .w_tablerow)"; ctx="$(w .w_ctxrow)"; nsp="$(w .w_nospawn)"; nmd="$(w .w_namedteam)"; unr="$(w .w_unrelatedrow)"; rm -rf "$R"; blk "$off" || exit 1; r="$(jq -r '.reason // ""' <<<"$off" 2>/dev/null)"; grep -qF 'toolu_01FIXTUREoffender000000000' <<<"$r" || exit 1; grep -qF 'table has NO data rows' <<<"$r" || exit 1; grep -qF 'dev-escalated' <<<"$r" || exit 1; grep -qF 'Do NOT call' <<<"$r" || exit 1; blk "$nmd" && exit 1; blk "$ctx" && exit 1; blk "$nsp" && exit 1; blk "$tab" && exit 1; blk "$unr" && exit 1; exit 0
