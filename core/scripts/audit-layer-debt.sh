@@ -315,6 +315,53 @@ def cue_denied(reason, m):
     return bool(NEGATED.search(reason, start, m.start()))
 
 
+# A SEPARATE VOCABULARY FROM `NEGATED`, ON A DIFFERENT SUBJECT, AND THE SEPARATION IS WHAT
+# ADMITS `not`. `NEGATED` filters a CUE — the question it answers is whether this row's prose
+# asserts an obligation — and the exclusion of `not` recorded above is a measurement of that
+# filter on the live corpus: admitting it there acquits exactly one further row, accidentally,
+# on a `not` several clauses from the cue it would silence. This function answers a different
+# question about a different token: whether the sentence carrying a declared-id MENTION denies
+# that the mention is a handle. The idiom that motivates it is spelled with `not` — *"This is
+# not tracked under OWED-<id> and a narrowing is still owed."* — so the two sets are measured
+# separately and stay separate. Widening `NEGATED` instead would leak `not` into the cue
+# filter, which is the one move this split exists to refuse.
+#
+# THE BOUND IS THE SENTENCE, NOT `CLAUSE_END`'S COMMA, AND THE COMMA FORM CANNOT REACH THE
+# SUBJECT. The second idiom is *"Separately and not part of this verdict, OWED-<id>"*: the
+# comma sits BETWEEN the negator and the mention, so a comma-bounded search starts after the
+# `not` and finds nothing. A cue and a citation are denied at different grains — an adjudicator
+# writing a comma-spliced sentence still means the whole sentence to govern the id it names —
+# so this bound is `.;:` and the cue bound stays `[.;:,]`.
+#
+# `never` STAYS OUT for the reason it stays out of `NEGATED`: no seed in the corpus, and the
+# search runs only BEFORE the mention, where the idiom does not put it.
+#
+# PER OCCURRENCE WITH `any`, BECAUSE ONE CLEAN MENTION IS A HANDLE. A row that denies one
+# mention and cites the same id cleanly in the next clause has named a declaring row a reader
+# can find, so the acquittal survives — `any(not citation_denied(...))` is the rule, and
+# `all(...)` is not the same thing turned around: over an EMPTY generator `all()` is True, so
+# an `all` form would acquit every row that mentions no declared id at all and silence the arm
+# entirely.
+#
+# MEASURED ON THE REFERENCE REGISTER, 478 rows, 36 declared ids, 193 candidate rows reaching
+# this acquittal: 1 row is acquitted by `CITED` before this change and the SAME 1 after
+# (`checks/gate-validation-push-914.md`, whose mention carries no negator in its sentence), and
+# UNDECLARED reads 6 before and 6 after, the same six entries. The false-positive set of the new
+# vocabulary on that corpus is ZERO — no candidate row's mention is sentence-preceded by a
+# member — so its cost there is nothing and its subject is the constructible row the fixture
+# seeds. Both figures are the unchanged-behaviour control for this change.
+CITATION_NEGATED = re.compile(r"\bno\b|\bnot\b|\brather than\b|\binstead of\b", re.I)
+SENTENCE_END = re.compile(r"[.;:]")
+
+
+def citation_denied(reason, m):
+    """True when the declared-id mention's own sentence denies the handle before reaching it."""
+    start = 0
+    for b in SENTENCE_END.finditer(reason, 0, m.start()):
+        start = b.end()
+    return bool(CITATION_NEGATED.search(reason, start, m.start()))
+
+
 #
 # A SECOND FALSE-POSITIVE CLASS, AND IT IS STRUCTURAL WHERE THE ONE ABOVE IS LEXICAL. The
 # cue narrowing cannot reach it: the prose on a DISCHARGE row is genuinely about a debt, and
@@ -427,7 +474,8 @@ for r in rows:
     # here rather than
     # inside the cue filter deliberately: the discount is per ROW because the handle is, and the
     # `hits` comprehension below is the per-OCCURRENCE rule, which this is not.
-    if CITED is not None and CITED.search(reason):
+    if CITED is not None and any(not citation_denied(reason, m)
+                                 for m in CITED.finditer(reason)):
         continue
     # The surviving cues, not every cue. What is reported is what still reads as an obligation,
     # so the `cues:` column names the words that actually earned the row its place.
