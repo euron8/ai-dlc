@@ -55,6 +55,62 @@ have gone green, and would have reported "still open" forever.
 never the word anywhere in prose, because an entry that merely discusses landing something is
 not a closed entry.
 
+## BL-250 — `route.md` Step 0 path 2 tells a resuming lead to arm a beat and never names the program that arms it, so the `--since` affordance that exists for exactly this case is unreachable from the step
+
+**Found 2026-09-14**, as the surviving half of a refused consumer filing
+(`PC-S311-RESUME-INFLIGHT-ROW-HAS-NO-LIVENESS-PROBE-BEFORE-THE-JOIN-BEAT-IS-ARMED`, refused for
+the reason recorded in `docs/plans/graph-ledger-full-drain.md`'s `## Adjudication` section). The
+filing asked for a `TaskStop` liveness probe; that remedy is a no-op on its own motivating case.
+This is what was left after it was taken out.
+
+**THE GAP.** `core/skills/ai-dlc/steps/route.md` Step 0 path 2 instructs a resuming lead to
+reconcile every `In-Flight Teammates` row and, where the deliverable is older or absent, that "the
+beat resumes". `grep -c wait-for-deliverable core/skills/ai-dlc/steps/route.md` returns **0**.
+Control in the same sweep: **8** of the 22 step files DO name it — `_gate-procedures.md`,
+`carry-over-evaluation.md`, `discovery.md`, `gate-validation.md`, `handoff.md`,
+`implementation.md`, `requirements.md`, `sprint-review.md` — and a token no step file carries
+returns 0. So the step that tells a lead to arm a beat is the one step file that does not name the
+beat's program.
+
+**AND THE PROGRAM ALREADY SOLVES THE RESUMING LEAD'S PROBLEM.**
+`core/scripts/wait-for-deliverable.sh:729` prints, on the non-delivery path: "If your teammate may
+have delivered BEFORE this join armed (the normal shape when you are resuming a join after a
+compaction), re-run with the dispatch time from the snapshot's In-Flight Teammates row:
+`--since <epoch|ISO8601>`." That is the resume case by name, and the value it asks for is the
+`dispatched-at` cell of the row Step 0 path 2 is already reading. The affordance and the data are
+both present; the route from one to the other is not written anywhere.
+
+**WHY THE ALTERNATIVE READING DOES NOT COVER IT.** A lead that arms the beat blind cannot recover
+the answer from the beat's own output across a session boundary: `wait-for-deliverable.sh`
+resolves its teammate directory from `CLAUDE_CODE_SESSION_ID` (`:486-495`), so a teammate
+dispatched by the PRIOR session has no transcripts under this session's id and `say_liveness`
+prints `LIVENESS  unavailable` (`:523`) — on `say()` (`:335`), which `--quiet` suppresses, unlike
+the idle and non-delivery lines beside it. So the step file is the only place this can be fixed.
+
+**THE HAZARD THIS ENTRY CARRIES FOR ITS OWN FIXER, AND IT IS THE REASON THIS IS AN ENTRY RATHER
+THAN AN EDIT.** `route.md` is read by a SECOND live receipt, `BL-027`, whose arm (b) scans the
+WHOLE FILE for `unread|never read|not be read|without reading|do not read`. Measured before any
+edit: **1** hit, at `route.md:716` ("If project state cannot be read"), whole receipt exit 1. The
+prose this gap needs is prose about reading a value rather than reading a line, which is squarely
+inside that grammar. Run `BL-027`'s receipt before and after any edit here and record both exits;
+a second hit changes what that receipt is measuring.
+
+**Receipt limits, stated, and the window grammar is the part that was wrong first.** The receipt
+asserts the JOIN — that `route.md` names the beat program AND its `--since` flag, sited inside
+Step 0's own window rather than anywhere in the file — with the control in the same invocation
+that other step files name the program, so a rename of the script cannot satisfy it by emptying
+both sides. Scored by building each candidate as a real tree, sides asserted to differ by `cmp -s`
+before any verdict was read: base **1**, the fix seeded into Step 0's window **0**, the same
+sentence appended at END OF FILE **1**, and the program named inside the window with no `--since`
+**1**. The first cut of this receipt windowed on `^##[[:space:]]*Step 0` and returned an EMPTY
+window on every tree — route.md's step headings are `###` — so all four candidates exited 9 and
+the receipt could not fire in either direction. The window is asserted non-empty (exit 9) for that
+reason, and the grammar was pointed at its own subject before its zero was believed. It refuses
+(exit 9) only for a genuinely missing `route.md` or `wait-for-deliverable.sh`. It CANNOT score
+whether the instruction is CORRECT, only that it is present and sited.
+
+verify: sh R=core/skills/ai-dlc/steps/route.md; W=core/scripts/wait-for-deliverable.sh; [ -f "$R" ] || exit 9; [ -f "$W" ] || exit 9; grep -q -- '--since' "$W" || exit 9; n=0; for f in core/skills/ai-dlc/steps/*.md; do [ "$f" = "$R" ] && continue; if grep -q 'wait-for-deliverable' "$f"; then n=$((n+1)); fi; done; [ "$n" -ge 2 ] || exit 9; w="$(awk '/^###[[:space:]]*Step 0:/{f=1} f&&/^###[[:space:]]*Step 0a/{f=0} f' "$R")"; [ -n "$w" ] || exit 9; printf '%s' "$w" | grep -q 'wait-for-deliverable' || exit 1; printf '%s' "$w" | grep -q -- '--since' || exit 1; exit 0
+
 ## BL-238 — the consumer ledger's `theirs`-ref receipt grammar cannot key on an ARM's body, so a receipt written to ask a behavioural question is satisfied by a comment
 
 **Found 2026-09-11** while closing a consumer candidate whose own receipt was built to avoid an
@@ -1163,163 +1219,6 @@ inside the struck-row block of a copy, the same predicate exits 0.
 
 verify: sh d=$(mktemp -d); mkdir -p "$d/_bmad-output"; printf "## Pipeline Position\n- x\n## Sprint Context\n- x\n## Recent Activity\n- x\n## Open Items\n- x\n## Locked Decisions\n- x\n## In-Flight Teammates\n| teammate | deliverable | dispatched-at | note | status |\n| --- | --- | --- | --- | --- |\n| ~~a~~ | t | t | n | in-flight |\n## Context Reminders\n- x\n" > "$d/_bmad-output/pipeline-snapshot.md"; printf "tiny\n" > "$d/_bmad-output/gate-log.md"; o=$(bash core/scripts/validate-artifact-budget.sh --root "$d" --warn-only --fail-on pipeline-snapshot.md 2>&1); rm -rf "$d"; [ "$(grep -cF "WARN: In-Flight Teammates carries struck-through row(s)." <<<"$o")" -ge 1 ] || exit 1; [ "$(grep -cF "is NOT a clean result" <<<"$o")" -ge 1 ] || [ "$(grep -cxF "PASS  every measured living artifact is within its Rule 25(d) budget." <<<"$o")" -eq 0 ]
 
-## BL-021
-
-**The rare-event ceiling for probabilistic passive-monitor carry-overs has no counterpart
-anywhere in core, and it is one of only two blocks left in the row that names it.** Measured
-over `core/` at HEAD with a control in the same invocation: files containing `rare_event` = **0**,
-files containing `staleness ceiling` = **0**, files containing `validation_intensity` = **12**.
-The consumer block is `extensions/checks/gate-validation-push.md:25-37` (`PI-S259-3`), and its
-operative clause — a carry-over whose monitored event is rare-and-maybe-never carries
-`rare_event: true`, and its ceiling fires a DISPOSITION-REVIEW rather than a health escalation —
-is the part core cannot express: `core/skills/ai-dlc/steps/carry-over-evaluation.md` contains
-neither `staleness` nor `ceiling` (0 hits, same invocation as the 12-hit control above).
-
-**The row is wrong about three of the six blocks it names, in two directions.** It names
-`2s, 3a, 7, 14, 18, 21`. The live file carries five `CHECK_LOADED` ids — `902s, 903a, 914, 918,
-921` — and **no block 7**: `non-vacuous` occurs nowhere in `extensions/checks/gate-validation-push.md`,
-its two consumer-side hits being `gate-validation-domain.md:552` and
-`overrides/steps__gate-validation__check-5.md:9`, neither of which is this file. **Block 21 is
-already absorbed and core says so in its own text** — `core/skills/ai-dlc/steps/gate-validation.md:1268-1271`
-reads "**Graph→distribution number mapping.** This is graph's Check 21 (validation-intensity)
-absorbed as distribution **Check 20**", and core's Check 20 at `:1244-1250` already carries the
-extension's whole innovation, that the minimum is READ from Rule 8's table and "this check
-deliberately does not restate it". **Block 3a is absorbed away from the gate**: `degenerate-but-type-valid`
-lives in `core/skills/ai-dlc/steps/stories-test-strategy.md`, `core/team-roles/qa.md` and
-`core/team-roles/code-reviewer.md`, and `Protective-direction` in `qa.md` — but core's Check 3a
-at `:347-390` is coverage-only ("identify which acceptance criterion covers it"), so the
-discrimination requirement exists in the authoring step and has no gate that enforces it. The
-correction is narrowing on 21, 7 and the bulk of 3a, and it leaves 902s plus 3a's SUT-pointer
-sub-clause (`_call_real_`, 0 hits in `core/`) as the residue. Block 14's two fields exist in core
-(`core/skills/ai-dlc/steps/retro.md`, `core/skills/ai-dlc/enforcement-map.yaml`,
-`core/schemas/gate-adjudication-verdict.json`) but not where the block puts them: `hard_block` is
-0 hits inside core's Check 14 region, lines 760-931, where `Context Reminders` hits twice at
-`:839` and `:855`. Block 18 is consumer-scoped by construction (`server/test_*.py`,
-`rebalancer/tests/**`) and is not pushable.
-
-The anchor is `rare_event` because it is the token the absorbed rule cannot be written without —
-it is the literal frontmatter key the carry-over must carry — and because the looser candidates
-false-close: `staleness` and `ceiling` are ordinary English, and an anchor on the extension's
-prose ("disposition review, not health escalation") is a phrasing the filing invented rather than
-one core uses. The control is `validation_intensity`, chosen because it is the token of the block
-in the SAME row that core DID absorb, so a control hit proves the search reaches the exact file
-where an absorption of this class lands.
-
-**The receipt's subject file is `carry-over-evaluation.md`, not `gate-validation.md`, and the move
-is the point.** The absorbed clause governs how a DEFERRED carry-over's staleness is dispositioned,
-so it lands in `### 4. Deferral Handling` of the carry-over step — the section the third paragraph
-above already names as the one carrying neither `staleness` nor `ceiling`. `gate-validation.md`
-keeps its old role as the control token's home only. Both headings were verified verbatim before
-the slice was written (`### 4. Deferral Handling` to `### 5. Close Invalid Items`, 27 lines today).
-
-**A window narrows WHERE the token sits and says nothing about WHAT KIND of text carries it, so the
-slice alone was not enough.** Measured against the window-only form: `<!-- rare_event: ceiling NOT
-absorbed -->` inside section 4 closed it at **0**, and so did the sentence "The rare_event: ceiling
-is NOT specified in this step." The shipped form therefore drops every line containing `<!--` and
-keeps only lines shaped like a MANDATE — a bullet, a table row, or a bold-led block. **The token is
-required in its KEY form, `rare_event:`**, because the absorbed clause cannot be written without the
-frontmatter key; a bare `rare_event` in a bullet reads **1**.
-
-Measured in pristine copies, ten ways. HEAD **1**. A comment line carrying every grep literal
-appended to both files the receipt names **1**. The HTML comment inside the window **1**, and the
-same comment on a bullet **1**. The disclaimer sentence **1**. A correctly-shaped bullet in
-section 2, outside the window, **1**. A bare `rare_event` with no colon, correctly shaped and inside
-the window, **1**. `rare_event` written into sections 2 and 6 and the file tail — three real prose
-additions outside the deferral slice, and the case a core-wide `grep -rqF` would have closed on —
-**1**, with the token present 3 times and 0 times inside the slice. Both natural shapes of the real
-fix inside section 4, a bullet and a bold-led block, **0**. The control fires: with
-`validation_intensity` renamed in `gate-validation.md` the receipt exits **9**.
-
-**A heading renumber or a case change in the windowed step file pins this receipt at exit 9, and no
-other arm notices.** Measured: recasing `### 4. Deferral Handling` to `### 4. Deferral handling`
-takes the receipt to **9** — out of population, not a finding — while the step file stays valid and
-every other gate stays green. The two headings are load-bearing input to this receipt and nothing
-binds them.
-
-Discharges the consumer entry `extensions/checks/gate-validation-push.md` at pinned ledger
-line 226. That row carries no `PC-` id and no receipt, so nothing re-derives it; the three
-corrections above are the reason it survived two drains.
-
-
-verify: sh f=core/skills/ai-dlc/steps/carry-over-evaluation.md; grep -qF 'validation_intensity' core/skills/ai-dlc/steps/gate-validation.md || exit 9; s="$(awk '/^### 4. Deferral Handling/{n=1} n&&/^### 5. Close Invalid Items/{exit} n' "$f" | grep -v '<!--' | grep -E '^[[:blank:]]*([-*|]|\*\*)')"; [ -n "$s" ] || exit 9; grep -qF 'rare_event:' <<<"$s"
-## BL-022
-
-**Fix-Forward Cluster Accounting is absent from core's deploy-validate step entirely, and the
-deferral triple the same row names is already core's — only its PVC siting is not.** Measured
-over `core/skills/ai-dlc/steps/deploy-validate.md` with a control in the same invocation,
-matching lines, case-insensitive: `fix-forward` = **0**, `cascade` = **0**, `EFFORT-BLOCKER` = **0**,
-`Post-smoke` = **0**, `smoke` = **27**. Core-wide by file, `cluster count`, `Cluster Accounting`,
-`cascade-depth` and `cascade depth` each match **0 files** while `smoke test` matches **15**, same
-invocation. The
-consumer block is `extensions/steps-domain/deploy-validate-push.md:107-233` — a cascade-depth
-threshold on fix-forward PRs, a pre-dispatch fetch mandate, stack-trace-first ordering, and
-three named exclusions from the cluster count (pre-merge `PI-S169-4`, pipeline-infrastructure,
-operator-directed revert).
-
-**The row misdescribes the second of its three items, narrowing it.** It names
-"deferral-justification triple (`PI-S272-1`)" as the push candidate. The triple is already in
-core: `core/skills/ai-dlc/steps/retro.md:410` is "**Deferral-justification triple (MANDATORY).**"
-and `:419` defines `EFFORT-BLOCKER` as one of its three slots. The extension's own body at
-`deploy-validate-push.md:91` cites it as "(retro.md §4a)" — it never claimed to own the triple.
-What is unabsorbed is the APPLICATION SITE: that the triple must be attached before the PVC lists
-any item as deferred, and that the operator catching a vacuous deferral at the PVC is a Rule-3
-lead-conduct violation. Core's `deploy-validate.md` mentions deferrals only as
-`DEFERRAL_REQUEST` counts to approve at `:300` and `:318`, with no justification precondition.
-**The row is also wrong about its own scope in the widening direction**: it names three items
-where the file carries thirteen bold sub-blocks, omitting root-cause-before-disposition (HARD),
-verify-tool discharge invocation-fidelity (HARD), the sprint-scope failure cross-check and the
-LR-closure traceback. Its parenthetical "sprint-boundary trip" resolves to two incidental prose
-uses at `:132` and `:150`, not to a named clause.
-
-The anchor is `fix-forward` scoped to `core/skills/ai-dlc/steps/deploy-validate.md`, because
-cluster accounting sited at the PVC cannot be written into that step without the term. A
-core-wide anchor was measured and rejected in the same invocation: `grep -rqF 'fix-forward' core/`
-exits **0 today**, satisfied by `core/team-roles/code-reviewer.md` and
-`core/skills/ai-dlc/steps/gate-validation.md`, so it would report this entry closed the moment
-anyone looked. If a future absorption sites the rule in `gate-validation.md` instead, the receipt
-must be repointed rather than read as still-live — that is the one failure mode this anchor buys
-its tightness with.
-
-**The anchor is scoped to the PVC SECTION, not to the file, because the siting is the claim.** The
-receipt slices `### 5. Production Validation Checkpoint` up to `### 6. Wait for Human` — both
-headings verified verbatim, 34 lines today — and asks for `fix-forward` inside that slice; `smoke`
-file-wide is the control in the same invocation.
-
-**A window narrows WHERE a token sits and says nothing about WHAT KIND of text carries it, so the
-slice alone was not enough.** Measured against the window-only form: an HTML comment inside
-section 5 reading `<!-- TODO: fix-forward cluster accounting not written yet -->` closed it at
-**0**, and so did the sentence "Fix-forward accounting is NOT specified in this step." Both are
-prose about the absent rule satisfying a receipt for the rule. The shipped form therefore drops
-every line containing `<!--` and keeps only lines shaped like a MANDATE — a bullet, a table row, or
-a bold-led block — which is the shape every other rule in that step is written in.
-
-Measured in pristine copies, ten ways. HEAD **1**. A comment line carrying the receipt's own grep
-literals appended to the file **1**. The HTML comment inside the window **1**, and the same comment
-written onto a bullet **1**. The disclaimer sentence **1**. A correctly-shaped bullet in the
-neighbouring section 4b **1** — the sharpest over-broad non-fix, and the one a file-wide anchor
-would have closed on. All three natural shapes of the real fix inside section 5 — the bullet
-`- Fix-forward PRs: [count]`, a bold-led block, and a table row — **0**. The control fires: with
-every `smoke` renamed the receipt exits **9**.
-
-**THE SHAPE FILTER SEPARATES PROSE FROM MANDATES, NOT ASSERTION FROM DENIAL, and a mandate-shaped
-DENIAL closes this receipt.** Measured, all three at **0**: `**Note:** fix-forward accounting is NOT
-specified in this step.`, `| fix-forward | not specified |`, and `- fix-forward is NOT specified
-here`. A negation filter was considered and refused — it is a heuristic carrying its own
-false-positive set, and an unmeasured lint is one the operator turns off. The limit is recorded here
-instead, so a reader scoring a close against this receipt checks that the matched line MANDATES the
-accounting rather than denying it.
-
-**A heading renumber or a case change in the windowed step file pins this receipt at exit 9, and no
-other arm notices.** Measured: renaming `### 5. Production Validation Checkpoint` to
-`### 5a. Production validation checkpoint` takes the receipt to **9** — out of population, not a
-finding — while the step file itself stays valid and every other gate stays green. The two headings
-are load-bearing input to this receipt and nothing binds them.
-
-Discharges the consumer entry `extensions/steps-domain/deploy-validate-push.md` at pinned ledger
-line 252.
-
-
-verify: sh f=core/skills/ai-dlc/steps/deploy-validate.md; grep -qiF 'smoke' "$f" || exit 9; s="$(awk '/^### 5. Production Validation Checkpoint/{n=1} n&&/^### 6. Wait for Human/{exit} n' "$f" | grep -v '<!--' | grep -E '^[[:blank:]]*([-*|]|\*\*)')"; [ -n "$s" ] || exit 9; grep -qiF 'fix-forward' <<<"$s"
 ## BL-024
 
 **This repo already adjudicated all five blocks of the `implementation-push` row, wrote

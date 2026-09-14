@@ -180,6 +180,46 @@ r="$(drive "$SWEEP" "$(cat "$ROOT/.s_nosection")")"
 [ "$r" = allow ] && ok "snapshot with no In-Flight Teammates section -> ALLOW (route.md says it auto-heals)" \
                  || bad "BLOCKED a snapshot written before the In-Flight section existed ($r) — every pre-v0.50.0 snapshot would wedge at handoff"
 
+# --- THE PIPELESS ROW SHAPE ---------------------------------------------------------
+#
+# Every case above seeds a row with a leading `|`, which is why the sweep arm's
+# `/^[[:space:]]*\|/` gate could not fail: the reference consumer writes the BARE form
+# and no seed here carried it. Measured on its live snapshot, this arm found 1 in-flight
+# row where the relaxed form finds 5 — four live teammates invisible to the guard whose
+# whole job is to stop a handoff while teammates are running.
+#
+# FOUR CELLS, AND THE PAIRING IS WHAT MAKES ANY OF THEM READABLE. A pipeless BLOCK on
+# its own passes identically whether the guard reads the token or simply refuses every
+# bare row it can now see; its ALLOW twin, one property away, is what separates those.
+r="$(drive "$SWEEP" "$(cat "$ROOT/.s_pl_running")")"
+[ "$r" = block ] && ok "PIPELESS row reading 'in-flight' -> BLOCK (the cell that was dead)" \
+                 || bad "a PIPELESS 'in-flight' row was ALLOWED ($r) — this is the shape the reference consumer writes, and the handoff proceeds with teammates still running"
+
+r="$(drive "$SWEEP" "$(cat "$ROOT/.s_pl_stopped")")"
+[ "$r" = allow ] && ok "PIPELESS row reading 'stopped' -> ALLOW (the relaxation reads the token, it does not refuse the shape)" \
+                 || bad "BLOCKED a PIPELESS row that records its sweep exactly as steps/handoff.md step 1 mandates ($r) — the guard now fires on the bare SHAPE, and no edit to that row can satisfy it"
+
+# THE PIPELESS HEADER IS NOT A TEAMMATE. Its own last cell is the literal word
+# `status`, and a guard that scores it as a data row reads a teammate that does not exist.
+r="$(drive "$SWEEP" "$(cat "$ROOT/.s_pl_header")")"
+[ "$r" = allow ] && ok "PIPELESS header with no data rows -> ALLOW (the header is never a teammate)" \
+                 || bad "BLOCKED on a header row alone ($r) — an empty In-Flight table wedges every handoff, and there is no row to strike"
+
+# THE MEASURED FALSE POSITIVE. A bare `/\|/` gate reads this prose line's last
+# pipe-delimited field as a status cell, and that field is `in-flight`.
+r="$(drive "$SWEEP" "$(cat "$ROOT/.s_pl_prose")")"
+[ "$r" = allow ] && ok "prose ending '| in-flight' beside a swept row -> ALLOW (the header-width narrowing holds)" \
+                 || bad "BLOCKED on a PROSE line carrying a pipe ($r) — that is the measured false positive of the bare-pipe form, and it wedges every handoff in the sprint with no row to fix"
+
+# A STRAY `|` INSIDE A CELL OF A PIPED ROW MUST STILL BLOCK.
+# THE CASE THAT KILLS THE MOST PLAUSIBLE WRONG FIX: applying the header-width test to
+# every row instead of only to pipeless ones acquits this one, because the stray pipe
+# splits it one field wide. That is a BLOCK the pre-fix arm already produced, so the
+# uniform form is a regression rather than a simplification.
+r="$(drive "$SWEEP" "$(cat "$ROOT/.s_straypipe")")"
+[ "$r" = block ] && ok "PIPED 'in-flight' row with a stray pipe inside a cell -> BLOCK (the width test did not leak onto piped rows)" \
+                 || bad "a piped 'in-flight' row carrying a stray '|' was ALLOWED ($r) — the width test was applied uniformly and the relaxation LOST a block the pre-fix arm had"
+
 # --- MUTANT: delete the teammate arm and the BLOCK above must become an ALLOW -----------
 #
 # An ABSENCE-shaped verdict is what the arm produces on the two ALLOW cases, and both-
@@ -217,6 +257,91 @@ else
     [ "$r" = block ] && ok "mutant control: the same copy still BLOCKS a missing resume block — it loads and runs, so the kill above is a disarmed arm and not a dead script" \
                      || bad "MUTANT HARNESS BROKEN — the copy no longer blocks a missing resume block either ($r); it is not running, and the kill above is unreadable"
   fi
+fi
+
+# --- MUTANTS FOR THE PIPELESS ARMS --------------------------------------------------
+#
+# Four mutants, each keyed on a LOCATION in the sweep awk and scored on the hook's own
+# observable — its block/allow decision — never on a spelling. Each is a COPY guarded by
+# `cmp -s` and by `bash -n`, and each carries a CONTROL from the same copy on a case it
+# was not meant to touch: a copy that died on load emits nothing, and no output reads as
+# ALLOW, which is indistinguishable from three of the four kills below.
+#
+# WHAT EACH KILLS, one wrong implementation apiece:
+#   the pre-fix leading-pipe gate  -> the pipeless BLOCK becomes an ALLOW
+#   the bare `/\|/` form           -> the prose case becomes a BLOCK
+#   the uniform width test         -> the stray-pipe BLOCK becomes an ALLOW
+#   ncols taken from the first row -> the pipeless BLOCK becomes an ALLOW
+hook_mut() { # hook_mut <dest> <sed-expr> <label>  -> 0 if usable
+  sed "$2" "$HOOK" > "$1" || { bad "MUTANT $3: sed DIED — the mutation never existed"; return 1; }
+  if cmp -s "$HOOK" "$1"; then
+    bad "FIXTURE STALE: mutation $3 matched nothing in $HOOK — re-anchor it on the real line"
+    return 1
+  fi
+  if ! bash -n "$1" 2>/dev/null; then
+    bad "FIXTURE STALE: mutant $3 does not parse — a kill would be a syntax error, not a disarmed guard"
+    return 1
+  fi
+  return 0
+}
+
+# THE BACKSLASH IN A sed REPLACEMENT MUST BE DOUBLED, and this is not cosmetic: a single
+# `\|` is consumed, the mutant lands as `/^[[:space:]]*|/`, and in awk that is an
+# ALTERNATION OF TWO EMPTY BRANCHES matching every line. Measured while building the
+# sibling battery in inflight-row-shape: that mutant killed three arms at once and read
+# as a successful revert. The arm below asserts the escape survived, byte-wise.
+M_GATE="$ROOT/continue-prefixgate.sh"
+if hook_mut "$M_GATE" 's%^        inb && /\\|/ {%        inb \&\& /^[[:space:]]*\\|/ {%' "pre-fix gate"; then
+  if grep -qF 'inb && /^[[:space:]]*\|/ {' "$M_GATE"; then
+    ok "mutant (pre-fix gate) applied with its escape intact"
+  else
+    bad "MUTANT (pre-fix gate) LOST ITS BACKSLASH — the gate became an empty alternation matching every line, so the kill below is a dead program rather than the pre-fix guard"
+  fi
+  r="$(drive "$SWEEP" "$(cat "$ROOT/.s_pl_running")" "$M_GATE")"
+  [ "$r" = allow ] && ok "mutant (pre-fix gate): the PIPELESS 'in-flight' row is ALLOWED — that BLOCK is the relaxation's, and this is the program that shipped" \
+                   || bad "MUTANT DID NOT FAIL — the leading-pipe gate still returned $r on a pipeless row; either the seed is not pipeless or that BLOCK comes from elsewhere"
+  # CONTROL, and it is the same conjunct that makes this a REVERT rather than a
+  # disabled arm: the pre-fix guard blocked PIPED in-flight rows and must still do so.
+  r="$(drive "$SWEEP" "$(cat "$ROOT/.s_running")" "$M_GATE")"
+  [ "$r" = block ] && ok "mutant control (pre-fix gate): the same copy still BLOCKS a PIPED 'in-flight' row — it reverts the gate, it does not disable the arm" \
+                   || bad "MUTANT HARNESS BROKEN — the copy no longer blocks a piped 'in-flight' row either ($r); it is not running, and the kill above is unreadable"
+fi
+
+# DROP THE WIDTH TEST, leaving the bare `/\|/` form. Scored on the prose case, whose
+# last pipe-delimited field is `in-flight`.
+M_NOWIDTH="$ROOT/continue-nowidth.sh"
+if hook_mut "$M_NOWIDTH" '/if (!piped \&\& n != ncols) next/d' "bare-pipe"; then
+  r="$(drive "$SWEEP" "$(cat "$ROOT/.s_pl_prose")" "$M_NOWIDTH")"
+  [ "$r" = block ] && ok "mutant (bare-pipe): the PROSE line is read as a row and BLOCKS — the header-width narrowing is what holds that false positive at zero" \
+                   || bad "MUTANT DID NOT FAIL — without the width test the prose case still returned $r, so that ALLOW is not the narrowing's and the prose arm proves nothing"
+  r="$(drive "$SWEEP" "$(cat "$ROOT/.s_pl_stopped")" "$M_NOWIDTH")"
+  [ "$r" = allow ] && ok "mutant control (bare-pipe): the same copy still ALLOWS a swept pipeless row — it loads and reads tokens" \
+                   || bad "MUTANT HARNESS BROKEN — the copy blocks a legal pipeless row too ($r); it is not discriminating, and the kill above is unreadable"
+fi
+
+# APPLY THE WIDTH TEST TO EVERY ROW. The simpler fix, and a regression: it passes every
+# pipeless arm above and silently drops a BLOCK the pre-fix arm already produced.
+M_UNIFORM="$ROOT/continue-uniform.sh"
+if hook_mut "$M_UNIFORM" 's|if (!piped \&\& n != ncols) next|if (n != ncols) next|' "uniform width"; then
+  r="$(drive "$SWEEP" "$(cat "$ROOT/.s_straypipe")" "$M_UNIFORM")"
+  [ "$r" = allow ] && ok "mutant (uniform width): the stray-pipe row is ACQUITTED and the handoff proceeds — restricting the width test to pipeless lines is what keeps the relaxation a superset" \
+                   || bad "MUTANT DID NOT FAIL — the uniform width test still returned $r on the stray-pipe row, so that arm cannot distinguish the two forms"
+  r="$(drive "$SWEEP" "$(cat "$ROOT/.s_running")" "$M_UNIFORM")"
+  [ "$r" = block ] && ok "mutant control (uniform width): the same copy still BLOCKS an ordinary piped 'in-flight' row — the acquittal above is the stray pipe, not a dead arm" \
+                   || bad "MUTANT HARNESS BROKEN — the copy allows an ordinary piped 'in-flight' row too ($r); it is not running, and the kill above is unreadable"
+fi
+
+# TAKE ncols FROM THE FIRST ROW rather than from the row declaring `status`. The width
+# then comes from whatever pipe-bearing line appears first instead of from the table's
+# own declaration, and the pipeless data row is measured against a width nothing declared.
+M_FIRSTROW="$ROOT/continue-firstrow.sh"
+if hook_mut "$M_FIRSTROW" 's|if (tolower(last) == "status") { ncols = n; next }|if (tolower(last) == "status") { next }|' "ncols from first row"; then
+  r="$(drive "$SWEEP" "$(cat "$ROOT/.s_pl_running")" "$M_FIRSTROW")"
+  [ "$r" = allow ] && ok "mutant (ncols from first row): with the header's width recording gone the pipeless 'in-flight' row escapes — the arm is bound to the DERIVED width, not to any width" \
+                   || bad "MUTANT DID NOT FAIL — the pipeless row still returned $r with the header's ncols removed, so that BLOCK passes under a width from somewhere else"
+  r="$(drive "$SWEEP" "$(cat "$ROOT/.s_running")" "$M_FIRSTROW")"
+  [ "$r" = block ] && ok "mutant control (ncols from first row): the same copy still BLOCKS a PIPED 'in-flight' row — piped rows never consult ncols, so the escape above is the pipeless path alone" \
+                   || bad "MUTANT HARNESS BROKEN — the copy allows a piped 'in-flight' row too ($r); it is not running, and the kill above is unreadable"
 fi
 
 # --- Beat-before-stop arm -----------------------------------------------------------

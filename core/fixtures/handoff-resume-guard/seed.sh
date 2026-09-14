@@ -125,6 +125,58 @@ snap runningnote '| agent | role | deliverable | dispatched-at | status |
 |---|---|---|---|---|
 | tester-a | qa | docs/reviews/s305-qa.md | 2026-08-25T01:10:00Z | in-flight, since 2026-08-25T01:10:00Z |' > "$ROOT/.s_running_note"
 
+# ---------------------------------------------------------------------------
+# THE PIPELESS ROW SHAPE
+# ---------------------------------------------------------------------------
+# Every seed above writes the leading `|`, and that is why the sweep arm's
+# `/^[[:space:]]*\|/` gate survived: no seed here carried the shape that
+# discriminates. Markdown renders a table row with or without the opening delimiter
+# and the reference consumer writes the bare form, so on its live snapshot the arm
+# found 1 in-flight row where the relaxed form finds 5 -- four live teammates
+# invisible to the guard that exists to stop a handoff while they are running.
+#
+# THE PIPELESS SEEDS ARE THE PRODUCER'S SHAPE. No leading pipe, no trailing pipe, no
+# `|---|` separator, no backticks -- what the consumer writes. The header is pipeless
+# too, which is the whole reason the relaxation needs a width test rather than a bare
+# `/\|/`, and it is seeded as part of every one of these bodies.
+#
+# THE MATRIX IS FOUR CELLS AND THE PAIRING IS THE POINT. A pipeless BLOCK case alone
+# cannot tell a correctly-keyed guard from one that blocks every pipeless section, so
+# each pipeless case has its piped twin one property away.
+
+# (d) PIPELESS + in-flight -> must BLOCK. The cell that was dead.
+snap plrunning 'agent | role | deliverable | dispatched-at | status
+a2b2344be58b99e31 | dev-escalated | /abs/path/report.md | 2026-09-14T04:20:00Z | in-flight' > "$ROOT/.s_pl_running"
+
+# (e) PIPELESS + stopped -> must ALLOW. The near-miss: identical shape, legal token.
+#     Without it a BLOCK on (d) reads the same whether the guard reads the token or
+#     refuses every bare row it can now see.
+snap plstopped 'agent | role | deliverable | dispatched-at | status
+a2b2344be58b99e31 | dev-escalated | /abs/path/report.md | 2026-09-14T04:20:00Z | stopped (operator-requested handoff)' > "$ROOT/.s_pl_stopped"
+
+# (f) PIPELESS header, no data rows -> must ALLOW. The header's own last cell is the
+#     literal word `status`, and a relaxation that scores it as a data row reads a
+#     teammate that does not exist.
+snap plheader 'agent | role | deliverable | dispatched-at | status' > "$ROOT/.s_pl_header"
+
+# (g) PROSE carrying a pipe -> must ALLOW. THE MEASURED FALSE POSITIVE. A bare `/\|/`
+#     gate reads this line's last pipe-delimited field as a status cell; here that
+#     field is `in-flight`, so the guard would block every handoff in the sprint with
+#     no row to strike and nothing the lead could do to satisfy it.
+snap plprose 'agent | role | deliverable | dispatched-at | status
+a2b2344be58b99e31 | dev-escalated | /abs/path/report.md | 2026-09-14T04:20:00Z | stopped
+
+Note: the only teammate that is | in-flight' > "$ROOT/.s_pl_prose"
+
+# (h) PIPED + a stray `|` INSIDE a cell, token in-flight -> must BLOCK.
+#     THE SEED THAT KILLS THE MOST PLAUSIBLE WRONG FIX. Applying the header-width test
+#     to every row rather than only to pipeless ones acquits this row: the stray pipe
+#     splits one field wide, the width test rejects it, and a teammate genuinely still
+#     running passes the guard. That is a finding the PRE-fix arm already had.
+snap straypipe '| agent | role | deliverable | dispatched-at | status |
+|---|---|---|---|---|
+| tester-a | qa | docs/reviews/s305|qa.md | 2026-08-25T01:10:00Z | in-flight |' > "$ROOT/.s_straypipe"
+
 # (c) no In-Flight section at all. route.md says that section AUTO-HEALS, so a snapshot
 #     written by an older version legitimately lacks it and must not be blocked.
 cat > "$ROOT/snap-nosection.md" <<'EOF'
