@@ -128,5 +128,8 @@ seam reachable in-process before merge.
 Run auto-handoff evaluation at `Seam B` with the label
 `sprint-review end-of-step pre-gate` (see `_gate-procedures.md`
 \"Auto-handoff evaluation\"). If evaluation returns CONTINUE, run
-gate validation [sprint-review] (`gate-validation.md`), then:
+gate validation [sprint-review] (`gate-validation.md`). Check 20 loads at this
+gate and reads the minimum from Steps 1 and 2 above, so the gate log entry records
+`validation_intensity:` and `minimum_met:` here as it does at every planning gate.
+Then:
 **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/deploy-validate.md`
