@@ -3923,7 +3923,9 @@ The reference consumer's `scripts/ci-local.sh:513` invokes the validator flagles
 does not exist for any current sprint, so the validator already exits 1 there on "artifact not
 found" (`validate-provenance-block.sh:119-121`) and the new rung changes no reachable verdict.
 The only file of that spelling on disk is `sprint-131b.md`, whose name carries no numeric tail
-and cannot be derived by that script. The repoint — `docs/retro/s<N>/retro.md` with
+and cannot be derived by that script; driven directly it carries no block and flips 0 to 1 under
+the new rung, and the same flip becomes REACHABLE through the call site the moment the consumer
+writes its next block-less `docs/retro/sprint-<N>.md`. The repoint — `docs/retro/s<N>/retro.md` with
 `--require-skill bmad-party-mode` — is the CONSUMER's change and belongs in the pull brief.
 
 **And the receipt alone cannot score the acquittal's narrowness.** It closes on the flip and

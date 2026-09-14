@@ -85,7 +85,9 @@ consumer's own `scripts/ci-local.sh:513` invokes the validator flagless on
 read-only: that file does not exist for any current sprint, so the validator already exits 1
 there today on "artifact not found" and the new rung changes no reachable verdict. The only file
 of that spelling on disk is `sprint-131b.md`, whose name carries no numeric tail and cannot be
-derived by that script. The fix is the consumer's — repoint the call at
+derived by that script; driven directly it carries no block and flips 0 to 1, and that flip
+becomes reachable through the call site on the consumer's next block-less `sprint-<N>.md`. The
+fix is the consumer's — repoint the call at
 `docs/retro/s<N>/retro.md` with `--require-skill bmad-party-mode` — and it belongs in the pull
 brief, not here.
 
