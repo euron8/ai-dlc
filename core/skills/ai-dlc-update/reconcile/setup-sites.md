@@ -191,6 +191,7 @@ core_manifest:
   - core/fixtures/fanout-untracked-corpus/**
   - core/fixtures/preclassify-mode-bucket/**
   - core/fixtures/predicate-reclassification/**
+  - core/fixtures/provenance-flagless-default/**
   - core/fixtures/provenance-not-accessible/**
   - core/fixtures/reconcile-blocking-list/**
   - core/fixtures/reconcile-emit-report/**

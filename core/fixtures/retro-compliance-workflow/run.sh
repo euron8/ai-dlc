@@ -279,6 +279,9 @@ drive_provenance() {
     rc=$?
     echo "$rc"
 }
+# The step's combined output from the LAST drive_provenance call. A3 reads it, because an
+# exit code alone can no longer tell the two rejections apart.
+prov_out() { cat "$WORK/prov.out" 2>/dev/null; }
 
 # ---------------------------------------------------------------------------
 # THE ARMS, as one function so the self-probe exercises the SAME code as the corpus.
@@ -339,7 +342,29 @@ arms() {
             99) echo "$id:fail:no provenance step with a run: body" ;;
             98) echo "$id:fail:the provenance step does not consume steps.sprint.outputs.sprint" ;;
             2)  echo "$id:fail:validator exited 2 — it was pointed at a path that does not exist; that is a tool failure, NOT a rejection" ;;
-            "$want") echo "$id:pass" ;;
+            "$want")
+                # A3 READS THE DIAGNOSIS, NOT ONLY THE CODE, AND THE REASON IS A MEASUREMENT.
+                # Absence with no declaration is now a denial at EVERY path, so a blockless
+                # retro named at the LEGACY path exits 1 too — the exit code stopped
+                # separating the unfixed workflow from the fixed one, and A3 dropped out of
+                # P1's offender set on a template nothing had fixed. The two rejections carry
+                # different messages, and only one of them is Check 17 doing its job:
+                #
+                #   legacy, flagless   "carries no ... block, and no requirement was stated"
+                #                      the generic floor. The step said nothing about what
+                #                      this artifact class owes, and got the default.
+                #   migrated or        "Retro docs MUST cite at least one bmad-party-mode
+                #   --require-skill    invocation" / "--require-skill ... was specified"
+                #                      the RETRO requirement, which is what the workflow is
+                #                      for and is what site 5 exists to reach.
+                #
+                # So A3 requires the retro-specific rung. Keyed on `bmad-party-mode`, which
+                # both of the right messages name and the generic floor does not.
+                if [ "$id" = A3 ] && [ "$want" = 1 ] && ! grep -q 'bmad-party-mode' <<<"$(prov_out)"; then
+                    echo "A3:fail:blockless.md was rejected, but by the GENERIC flagless-absent floor rather than by the retro requirement — the step named the legacy path, where is_retro is false, so Check 17's party-mode rung is silently exempt and the workflow is rejecting for a reason that would fire on any file in the repository: $(prov_out | head -n 1)"
+                else
+                    echo "$id:pass"
+                fi ;;
             *)  if [ "$want" = 1 ]; then
                     echo "$id:fail:$doc.md ACCEPTED (rc=$r) — the step named the legacy path, where is_retro is false and the requirement is silently exempt"
                 else
@@ -381,33 +406,68 @@ arms() {
     fi
 
     # --- A5 the caller declares its own requirement ----------------------------
-    # MUTANT: is_retro forced false in a COPY of the validator. Everything the flag would
-    # reach via RETRO_PATH_RE is now gone, so only an explicit --require-skill can reject.
+    # MUTANT: every rung the VALIDATOR would use to reject a blockless retro on its own is
+    # removed in a COPY, so the only thing left that can reject is an explicit
+    # --require-skill from the caller. Two rungs, and BOTH must go — a partial revert
+    # produces a mutant that proves the layer left in place, and it comes out green:
+    #
+    #   is_retro                  the path-classifier rung. Anchored on the ASSIGNMENT, not
+    #                             on its right-hand side. An anchor quoting the
+    #                             RETRO_PATH_RE call is defeated by any change to how the
+    #                             path is normalised — measured: the first draft of this arm
+    #                             quoted `RETRO_PATH_RE.search(artifact_path)` and the real
+    #                             line wraps it in os.path.normpath(), so the disarm matched
+    #                             nothing and the arm was vacuous. RETRO_PATH_RE itself must
+    #                             NOT be disarmed: the validator self-tests the pattern and
+    #                             exits 2 if it stops matching, which is not a rejection.
+    #   the flagless-absent rung  added when absence became a denial by default. Anchored on
+    #                             the message that rung EMITS — its own predicate — rather
+    #                             than on a line number.
+    #
+    # WHY BOTH: with only is_retro disarmed the flagless-absent rung catches the blockless
+    # retro at every path, so the mutant rejects whether or not the caller declared anything
+    # and A5 passes on the legacy workflow — measured, and it took A5 out of P1's offender
+    # set. A5's claim is that the CALLER declares its requirement instead of depending on
+    # rungs in another file, so the mutant must remove the rungs in that other file. Both.
     local mut="$WORK/${tag}.mutant.sh"
-    # Anchored on the ASSIGNMENT, not on its right-hand side. An anchor quoting the
-    # RETRO_PATH_RE call is defeated by any change to how the path is normalised — measured:
-    # the first draft of this arm quoted `RETRO_PATH_RE.search(artifact_path)` and the real
-    # line wraps it in os.path.normpath(), so the disarm matched nothing and the arm was
-    # vacuous. Note also that RETRO_PATH_RE itself must NOT be disarmed: the validator
-    # self-tests the pattern and exits 2 if it stops matching, which is not a rejection.
-    python3 - "$VPUSE" "$mut" <<'PY' >/dev/null
+    local n_disarm
+    n_disarm="$(python3 - "$VPUSE" "$mut" <<'PY'
 import re, sys
 src, dst = sys.argv[1], sys.argv[2]
 s = open(src, encoding="utf-8").read()
-s2 = re.sub(r'(?m)^is_retro = .*$', 'is_retro = False', s)
-open(dst, "w", encoding="utf-8").write(s2)
+s, n1 = re.subn(r'(?m)^is_retro = .*$', 'is_retro = False', s)
+s, n2 = re.subn(r'\n    print\(\n        f"FAIL: \{artifact_path\} carries no ',
+                '\n    sys.exit(0)\n    print(\n        f"FAIL: {artifact_path} carries no ',
+                s, count=1)
+open(dst, "w", encoding="utf-8").write(s)
+print(f"{1 if n1 else 0}{1 if n2 else 0}")
 PY
+)"
     if cmp -s "$VPUSE" "$mut"; then
-        echo "A5:fail:the is_retro disarm matched nothing — validate-provenance-block.sh no longer computes is_retro that way, so this arm is vacuous and must be re-anchored"
+        echo "A5:fail:the disarm matched nothing — validate-provenance-block.sh no longer computes is_retro that way and no longer emits the flagless-absent message, so this arm is vacuous and must be re-anchored"
+    elif [ "$n_disarm" != 11 ]; then
+        # A PARTIAL DISARM IS THE DANGEROUS STATE, and `cmp -s` cannot see it: one of the two
+        # edits applied, the copy differs, and the surviving rung rejects the blockless retro
+        # for a reason the caller had nothing to do with. Refused by name.
+        echo "A5:fail:the disarm applied only PARTIALLY (is_retro+absent-rung = '$n_disarm', expected '11') — the surviving rung would reject the blockless retro on its own and A5 would pass without the caller declaring anything"
     else
         local rd="$WORK/${tag}.disarm"
         rm -rf "$rd"
         if ! build_repo "$rd" "$SEED/docs/blockless.md" both "$mut" >/dev/null; then
             echo "A5:fail:could not build the disarm repo (fixture broken, not a finding)"
         else
-            # REACHABILITY CONTROL: the disarmed validator, called DIRECTLY with no flag, must
-            # ACCEPT the blockless retro. If it still rejects, the disarm did not take and A5
-            # would pass for a reason that has nothing to do with the flag.
+            # REACHABILITY CONTROL: the disarmed validator, called DIRECTLY with no flag,
+            # must ACCEPT the blockless retro. If it still rejects, the disarm did not take
+            # and A5 would pass for a reason that has nothing to do with the caller.
+            #
+            # THE CONTROL STAYS FLAGLESS BECAUSE THE DISARM NEUTERS THE NEW RUNG. The other
+            # available shape — leaving the disarm at is_retro alone and passing
+            # `--allow-missing` here — makes the control read 0 while the mutant still
+            # rejects everything the workflow hands it flagless, so A5 passes on the legacy
+            # workflow and stops being an offender in P1. Measured both ways. This control
+            # asks the question A5 needs answered: with every validator-side rung gone, does
+            # anything still reject? A flagless call is the only call that asks it, so the
+            # rung has to be gone rather than waived.
             ( cd "$rd" && bash scripts/ai-dlc/validate-provenance-block.sh docs/retro/s302/retro.md ) >/dev/null 2>&1
             if [ $? -ne 0 ]; then
                 echo "A5:fail:CONTROL — the disarmed validator still rejects a blockless retro, so the mutant is not reached and this arm proves nothing"
