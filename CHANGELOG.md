@@ -68,7 +68,13 @@ and nothing about the rest of the set, so it returned 0 on nine wrong rules — 
 bound dropped, each of the three other vocabulary members dropped, a whole-reason negator search, a
 20-character window, a literal phrase match, and a sentence bound on both sides of the mention. The
 replacement asserts the EXACT undeclared set over a twelve-row register seeding one decision each,
-with a no-mention row asserted present as the arm-alive control before the comparison. Scored on
+with a no-mention row asserted present as the arm-alive control before the comparison. The tip
+adversary then built nineteen implementations against the assembled release: seventeen died, and
+two — one blanking quoted spans and one blanking parenthesised spans before the negator search —
+passed all fifty fixture assertions and the receipt while acquitting *"This is 'not' tracked under
+OWED-C …"*. Every seed carried its negator in bare prose. Two seeds now carry it inside a quote and
+inside a parenthesis, both reported by the shipped subject, and the stripping non-fix reads 2 of
+50 red. Scored on
 detached copies with every mutation `cmp -s`-asserted to have applied: fix 0; base, comment-only,
 reflow-only, acquittal-deleted, `CITED`-gutted, MN1–MN7, MN9, MN10 and all four non-fixes 1; MN8
 (`any`→`all`) 9.
@@ -103,7 +109,9 @@ The receipt now greps all three files for `S="$DIST/core/scripts"` and drives th
 every `verify: sh` line of the three files, with the four expected refusals enumerated by content
 and a seeded control that must be refused in the same run. Scored: base 1, tip 0, comment carrying
 the literals 1, brief-only rewrite 1, fanout pair unrewritten 1, engine deleted 9. 45 lines driven,
-4 refused, 0 unexpected, against 8 before.
+4 refused, 0 unexpected, against 8 before. The tip adversary then seeded a fourth offender spelled
+like the fanout exemption and the receipt acquitted it; the refused count is now bound to exactly
+three, and that seed reads 1.
 
 ## [0.568.0] - 2026-09-13
 

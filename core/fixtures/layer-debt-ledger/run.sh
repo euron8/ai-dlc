@@ -568,6 +568,13 @@ r("extensions/n7.md",  "Not under OWED-CIT-X; the narrowing is owed under OWED-C
 r("extensions/n8.md",  "A narrowing is not owed here.")
 r("extensions/n9.md",  "The narrowing is owed under OWED-CIT-X, and no second split is deferred.")
 r("extensions/n10.md", "Not tracked under OWED-CIT-X; a split is still deferred.")
+# n12/n13 — THE NEGATOR INSIDE A QUOTE OR A PARENTHESIS. Both REPORTED. Measured by the tip
+# adversary: an implementation that blanks quoted spans, or parenthesised spans, before searching
+# for a negator passed all fifty assertions above and the entry's receipt, because every seed above
+# carries its negator in bare prose. A quoted `not` is still a denial, and the live register's
+# sixth sentence-denied mention is exactly a `not` inside a quoted fragment.
+r("extensions/n12.md", "This is 'not' tracked under OWED-CIT-X and a narrowing is still owed.")
+r("extensions/n13.md", "Filed elsewhere (not under OWED-CIT-X) and a narrowing is still owed.")
 # THE DECLARING ROW. Without it `declared` is empty, `CITED` is None, and every arm above
 # passes for a reason that has nothing to do with the citation key.
 r("extensions/nd.md", "declaring the migration", {"id":"OWED-CIT-X","what":"split X out"})
@@ -575,14 +582,14 @@ PY
 cn_out="$(bash "$AUDIT" --register "$CIT_NEG_REG" 2>&1)"
 cn_und="$(awk '/^UNDECLARED/,/^$/' <<<"$cn_out")"
 cn_names() { grep -oE 'n[0-9]+\.md' <<<"$1" | sort -u | tr '\n' ' '; }
-CN_EXPECT='n1.md n10.md n2.md n4.md n5.md n6.md n8.md '
+CN_EXPECT='n1.md n10.md n12.md n13.md n2.md n4.md n5.md n6.md n8.md '
 
 # 26 — THE VERDICT, as the EXACT reported set. A membership assertion is reachable by the wrong
 # rows; this names every cell of the register in one string, so any mutant that moves any row
 # either way is caught here whether or not its own arm below fires.
 cn_got="$(cn_names "$cn_und")"
 [ "$cn_got" = "$CN_EXPECT" ] \
-  && ok "the citation-negation reported set is exactly {n1,n2,n4,n5,n6,n8,n10} — every denied mention reported, every un-denied one acquitted" \
+  && ok "the citation-negation reported set is exactly {n1,n2,n4,n5,n6,n8,n10,n12,n13} — every denied mention reported, every un-denied one acquitted" \
   || { bad "the citation-negation set was '$cn_got', expected '$CN_EXPECT'"; sed 's/^/        /' <<<"$cn_out"; }
 
 # 27 — the filed SUBJECT, asserted on its own so a failure names the defect rather than a set.
@@ -853,7 +860,7 @@ if [ -z "$M_CIT3" ]; then
 else
   m3n_und="$(awk '/^UNDECLARED/,/^$/' <<<"$(bash "$M_CIT3" --register "$CIT_NEG_REG" 2>&1)")"
   m3n_got="$(cn_names "$m3n_und")"
-  [ "$m3n_got" = "n0.md n1.md n10.md n2.md n3.md n4.md n5.md n6.md n7.md n8.md n9.md " ] \
+  [ "$m3n_got" = "n0.md n1.md n10.md n12.md n13.md n2.md n3.md n4.md n5.md n6.md n7.md n8.md n9.md " ] \
     && ok "MUTATION M_CIT3 on the citation-negation register: with the key disabled every row is reported, including the four the fix acquits — so each acquittal above is this key's doing" \
     || { bad "MUTATION M_CIT3 reported '$m3n_got' on the citation-negation register — the disabled key did not report every row, so some acquittal above is somebody else's"; sed 's/^/        /' <<<"$m3n_und"; }
 fi
