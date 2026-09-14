@@ -4285,7 +4285,7 @@ verify: sh S="$(python3 -c 'import json,sys;print((json.load(open(sys.argv[1])).
 **Found 2026-09-12** by the batch-94 adversary re-verifying `BL-218`'s fix on its tip, and
 reproduced here on the release tree against the pre-fix auditor as control. `v0.560.0` acquits an
 UNDECLARED row whose reason cites an id in the declared set (`CITED` at
-`core/scripts/audit-layer-debt.sh:392`, joined against `owed_entries`). The join reads the id
+`core/scripts/audit-layer-debt.sh:456`, joined against `owed_entries`). The join reads the id
 ANYWHERE in the reason, including inside a clause that disclaims it.
 
 Driven through the shipping auditor with `--json`, one register, one invocation per row:
@@ -4338,7 +4338,70 @@ it; UNDECLARED reads 6 under every variant. The receipt itself is robust: bare c
 **Tiered DEFECT.** Consumer-facing; the arm ships in `core/scripts/`. A false acquittal here is
 silent and permanent.
 
-verify: sh V=core/scripts/audit-layer-debt.sh; [ -f "$V" ] || exit 9; d=$(mktemp -d) || exit 9; B='"clause":"LC-E4","subject_digest":"x","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z"'; printf '{%s,"entry":"e20","reason":"This is not tracked under OWED-C and a narrowing is still owed."}\n{%s,"entry":"e21","reason":"A narrowing is still owed."}\n{%s,"entry":"e22","reason":"The narrowing is owed under OWED-C."}\n{%s,"entry":"e9","owed":{"id":"OWED-C","what":"w"}}\n' "$B" "$B" "$B" "$B" > "$d/r.jsonl"; o="$(bash "$V" --register "$d/r.jsonl" --json 2>/dev/null)"; rm -rf "$d"; u="$(printf '%s' "$o" | python3 -c 'import json,sys; print(" ".join(sorted(r["entry"] for r in json.load(sys.stdin)["undeclared"])))')" || exit 9; case " $u " in *" e21 "*) : ;; *) exit 9 ;; esac; case " $u " in *" e22 "*) exit 9 ;; esac; case " $u " in *" e20 "*) exit 0 ;; esac; exit 1
+**WHAT SHIPPED, AND THE PRIOR RECEIPT WAS INVERTED.** The refutation above named the working
+shape and this is it: a CITATION-LOCAL negator vocabulary, `CITATION_NEGATED`, separate from
+`NEGATED` and admitting `not`, bounded to the mention's own SENTENCE (`[.;:]`, not
+`CLAUSE_END`'s comma) and searching only the text BEFORE the mention; the acquittal becomes
+per-occurrence, `any(not citation_denied(reason, m) for m in CITED.finditer(reason))`. Each
+decision is forced by a case the others cannot reach. The separation is what admits `not`,
+because `NEGATED`'s exclusion of it is a measurement of the CUE filter and widening the shared
+set leaks into that filter — mutant MN10 does exactly that and the cue-side control seed goes
+from reported to acquitted. The sentence bound is forced by the second idiom, *"Separately and
+not part of this verdict, OWED-<id>"*, where the comma sits between the negator and the mention,
+so a comma-bounded search (MN2) starts after the `not` and finds nothing; dropping the bound
+altogether (MN3) lets a negator in the PREVIOUS sentence deny a clean mention. `any` and not
+`all` because one clean mention is a handle, and because `all()` over an empty generator is
+True — MN8 acquits every row mentioning no declared id and takes the arm to silence, which is
+why it scores 9 rather than 1.
+
+**RE-DERIVED ON THE LIVE REGISTER, BOTH REVISIONS, WITH THE TWO SCRIPTS `cmp -s`-ASSERTED TO
+DIFFER**, each driven from a `git archive` copy through the shipping script's own `declared`,
+`CITED`, `CITATION_NEGATED` and `citation_denied` rather than a second implementation: 478 rows,
+36 declared ids, 193 candidate rows reaching the acquittal, **1 acquitted by `CITED` on both**
+(`checks/gate-validation-push-914.md`), **UNDECLARED 6 on both** — `checks/validator-honesty.md`
+twice, `steps-domain/SKILL-domain.md`, `steps-domain/escalations-domain.md`,
+`steps-domain/party-mode-inline-relay.md`, `steps-domain/route-domain.md`. The behaviour on the
+only register that exists is unchanged, in both directions, and that is the control for the
+change rather than its result.
+
+**FALSE-POSITIVE SET OF THE NEW VOCABULARY: 0 on the candidate set, 6 on the whole register.**
+No candidate row carries a declared-id mention sentence-preceded by a member, so the new rule
+costs that corpus nothing. The six whole-register mentions are three instances of *"Separately
+and not part of this verdict"*, one *"No new owed is declared here because OWED-…"*, one *"This
+verdict does not discharge OWED-S308-SKILL-PUSH-925-RETIRE"*, and a sixth of a different shape —
+*"…thresholds live in the script, **not** here' — naming MIN_CHARS, MIN_PERSONAS, MIN_PHASES and
+PHASE_LABELS as POINTERS, never as values, and citing OWED-S309-PARTY-MODE-THRESHOLDS-RESTATED"*,
+where the `not` governs a quoted position several clauses from the id and the sentence bound
+still reaches it. All six are outside the candidate set, and **the sixth is acquitted today only
+because its ENTRY declares an `owed` on another row** (`LC-E19`,
+`owed.id=OWED-S309-PARTY-MODE-THRESHOLDS-RESTATED`) — the entry-scope guard, not this rule.
+Move that declaration and the row becomes a candidate whose only mention is sentence-denied. Its
+surviving-cue set is empty either way, so it is not reported today; the cue computation
+discriminates on the same register (62 of 478 rows carry at least one surviving cue), which is
+the control that empty set needs.
+
+**THE PRIOR RECEIPT IS REPLACED BECAUSE IT CLOSED ON NINE NON-FIXES.** Its four-row register
+asserted three memberships and nothing about the rest of the set, so any rule that merely
+reported `e20` satisfied it. Scored on detached copies, each mutation `cmp -s`-asserted to have
+applied, the OLD receipt returns 0 on: MN2 (comma bound), MN3 (bound dropped), MN5/MN6/MN7 (each
+dropping `no`, `rather than`, `instead of`), NF_WHOLE (whole-reason negator search), NF_ADJACENT
+(a 20-character window before the mention), NF_PHRASE (a literal `is not tracked under`) and
+NF_SENT_ONLY (sentence bound on BOTH sides of the mention). Nine wrong rules, indistinguishable
+from the fix. The replacement asserts the EXACT undeclared set `e20 e21 e23 e25 e26 e27 e29`
+over a twelve-row register seeding one decision each, with `e21` — a row carrying no mention at
+all — asserted present as the arm-alive control before the set comparison, so a broken auditor
+exits 9 rather than 1. Scored: fix tip **0**; base **1**; a bare comment carrying every receipt
+literal appended to the base auditor **1**; a pure reflow of the base acquittal **1**; the
+acquittal deleted (`if False:`) **1**; `CITED` forced to `None` **1**; MN1 (revert to
+`CITED.search`) **1**; MN2 **1**; MN3 **1**; MN4 (drop `not`) **1**; MN5 **1**; MN6 **1**; MN7
+**1**; MN8 (`any`→`all`) **9**; MN9 (`CITATION_NEGATED = NEGATED` alias) **1**; MN10 (`NEGATED`
+widened with `not`) **1**; NF_WHOLE **1**; NF_ADJACENT **1**; NF_PHRASE **1**; NF_SENT_ONLY
+**1**. Every non-fix is non-zero. The comment and reflow variants are built on the BASE auditor
+deliberately: appended to the FIXED one they read 0, correctly, because the fix is present and
+the prose is not what closed it — the question a prose-only variant asks is whether text ALONE
+satisfies the receipt, and only the base copy can ask it.
+
+verify: sh V=core/scripts/audit-layer-debt.sh; [ -f "$V" ] || exit 9; d=$(mktemp -d) || exit 9; B='"clause":"LC-E4","subject_digest":"x","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z"'; { printf '{%s,"entry":"e9","owed":{"id":"OWED-C","what":"w"}}\n' "$B"; printf '{%s,"entry":"e20","reason":"This is not tracked under OWED-C and a narrowing is still owed."}\n' "$B"; printf '{%s,"entry":"e21","reason":"A narrowing is still owed."}\n' "$B"; printf '{%s,"entry":"e22","reason":"The narrowing is owed under OWED-C."}\n' "$B"; printf '{%s,"entry":"e23","reason":"Separately and not part of this verdict, OWED-C. A split is still deferred."}\n' "$B"; printf '{%s,"entry":"e24","reason":"No restatement of core here. The narrowing is owed under OWED-C."}\n' "$B"; printf '{%s,"entry":"e25","reason":"No handle under OWED-C; a split is still deferred."}\n' "$B"; printf '{%s,"entry":"e26","reason":"Tracked here rather than under OWED-C; the split is still deferred."}\n' "$B"; printf '{%s,"entry":"e27","reason":"Filed here instead of under OWED-C; the narrowing is still owed."}\n' "$B"; printf '{%s,"entry":"e28","reason":"Not under OWED-C; the narrowing is owed under OWED-C."}\n' "$B"; printf '{%s,"entry":"e29","reason":"A narrowing is not owed here."}\n' "$B"; printf '{%s,"entry":"e30","reason":"The narrowing is owed under OWED-C, and no second split is deferred."}\n' "$B"; } > "$d/r.jsonl"; o="$(bash "$V" --register "$d/r.jsonl" --json 2>/dev/null)"; rm -rf "$d"; u="$(printf '%s' "$o" | python3 -c 'import json,sys; print(" ".join(sorted(r["entry"] for r in json.load(sys.stdin)["undeclared"])))')" || exit 9; case " $u " in *" e21 "*) : ;; *) exit 9 ;; esac; [ "$u" = "e20 e21 e23 e25 e26 e27 e29" ] || exit 1; exit 0
 
 
 
