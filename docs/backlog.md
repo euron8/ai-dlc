@@ -55,6 +55,83 @@ have gone green, and would have reported "still open" forever.
 never the word anywhere in prose, because an entry that merely discusses landing something is
 not a closed entry.
 
+## BL-251 — `qa.md`'s core-path wiring gate has no mechanical reader, so the clause it now carries about an early exit added above an existing emission is enforced by whoever reads the file
+
+**Found 2026-09-14** while adjudicating the reference consumer's candidate
+`PC-S311-QA-ORPHANED-FUNCTION-CHECK-MISSES-REACHABILITY-REGRESSION`. The prose half of that
+candidate landed with this entry; what is owed is a mechanism, and the reason it is owed is
+that nothing in this repo reads the bullet the clause sits in.
+
+**THE GAP.** The "Orphaned-function / core-path wiring (HARD GATE)" item asked for a
+mutation-RED wiring test for a NEW function whose spec says it runs from a loop, scheduler or
+entrypoint. An EXISTING emission that a diff strands behind a newly-inserted early exit is a
+different population: the function has callers, its own direct-call test still passes, and the
+caller grep the item specifies returns more than the definition line for it. The consumer's
+motivating case was a telemetry append in `rebalancer/execution.py` sitting behind an
+unconditional `continue`, unit-green throughout.
+
+**WHY THE CLAUSE IS WORDED ON THE HUNK AND NOT ON THE BLOCK.** A QA seat reads a unified diff,
+so the predicate has to be decidable from what a diff shows. Measured over the reference
+consumer's last ten code-bearing PR merges (`git diff -M --unified=3 <sha>^1 <sha>` over
+`*.py *.ts *.tsx *.js *.go *.rb *.java`; control: the first-parent pool the ten were selected
+from is 200 commits):
+
+```
+reading                                                 sites   diffs flagged
+LOOSE  (added early exit, emission anywhere in hunk)      223         5/10
+STRICT (added early exit, EXISTING emission BELOW it)       4         3/10
+```
+
+The loose reading is a REJECT surface no seat honours — 107 of its sites come from one merge.
+The strict reading's four sites are `736e4cfc8` (the motivating file), `6ee03ad8c` twice, and
+`4d93a0cc6`. That is why the shipped wording says *a line ABOVE an EXISTING emission line in
+that same hunk* rather than "in the same block": "same block" is not a thing a diff shows, and
+scoring it needs the whole file plus an indentation model.
+
+**THE FIRST DERIVATION OF THOSE FIGURES READ 0 AND 0.** `awk -v` strips one level of escaping,
+so `^\+[[:space:]]*(continue|…)` reached awk as `^+…(` and awk refused the regex on every
+merge, printing a clean zero per row. The doubled-backslash spelling is what produced the table
+above, and the run now refuses unless awk returns a numeric count for every merge.
+
+**NO MECHANICAL READER EXISTS, AND THAT IS THE SUBJECT.** `grep -rl 'Orphaned-function'` over
+`core/scripts core/hooks scripts` returns **0** files, against a control of **4** files naming
+`qa.md` in the same invocation (all three directories asserted present in that invocation:
+53, 23 and 24 entries). The one that looks like an enforcer is not one:
+`core/scripts/validate-mutation-red.sh` names `qa.md` exactly once and that reference is a
+COMMENT (`grep -n 'qa\.md' | grep -cv '^[0-9]*:#'` = 0) — it validates the SHAPE of a
+mutation-RED capture a story already carries, and decides nothing about which diffs owe one.
+So **no fixture arm can assert this clause fires**: there is no program to drive, and a fixture
+that greps the role file would be scoring the same text the receipt below already scores.
+Closing this entry needs a reachability check that runs at gate time — the item's own removal
+clause already names that condition — not another reader of the prose.
+
+**Receipt limits, stated.** The receipt scores PLACEMENT and VOCABULARY only: that the
+behavioural triple (early-exit + emission + mutation-RED) stands inside the HARD GATE bullet's
+own body, between its opener `**Orphaned-function / core-path wiring (HARD GATE).**` and the
+next `- [ ]` bullet, outside any HTML comment. It is case-insensitive and keyed on three
+independent tokens rather than one sentence, so a rewording that keeps the behaviour closes it
+and a sentence about something else does not. **It cannot score whether a QA seat applies the
+clause**, and it cannot score the absent mechanism. Exit 9 if the file is unreadable or the
+bullet window is empty — a moved or deleted subject is NEEDS-REVIEW, never a close.
+
+**Scored against five trees, each `cmp -s`-asserted applied against the `origin/main` blob
+before its verdict was read** (the tip was asserted to DIFFER from base in the same run):
+
+```
+tree  what                                                  expect  got
+A     tip — clause reshaped into the existing bullet           0      0
+B     base origin/main                                         1      1
+C     the clause in an HTML comment inside the bullet          1      1
+D     the clause in a NEW companion bullet                     1      1
+E     a second spelling of the clause, same bullet             0      0
+```
+
+**D exits 1 deliberately.** The adjudicated disposition was a RESHAPE of the existing item, not
+a companion item, because the two would carry near-identical triads and a seat reading one
+would not know the other bound the same diff. A receipt that took the companion form would
+accept the shape the adjudication refused, which is a receipt that accepts two candidate fixes.
+
+verify: sh f=core/team-roles/qa.md; [ -r "$f" ] || exit 9; t=$(mktemp) || exit 9; awk '/^- \[ \] \*\*Orphaned-function/ { w=1; next } w && /^- \[ \]/ { w=0 } w { if ($0 ~ /<!--/) c=1; if (!c) print; if ($0 ~ /-->/) c=0 }' "$f" > "$t"; w=$(grep -c . "$t") || w=0; [ "$w" -gt 0 ] || { rm -f "$t"; exit 9; }; a=$(grep -ciE 'early[ -]exit' "$t") || a=0; b=$(grep -ciE 'emission' "$t") || b=0; d=$(grep -ciE 'mutation-RED' "$t") || d=0; rm -f "$t"; [ "$a" -ge 1 ] && [ "$b" -ge 1 ] && [ "$d" -ge 1 ] || exit 1; exit 0
 ## BL-252 — the gate-adjudicator returned a verdict path with nothing between the write and the return that read the file, so a dropped escalated check cost a whole re-dispatch
 
 **Found 2026-09-14** adjudicating the consumer filing
