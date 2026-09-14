@@ -171,7 +171,10 @@ not block the operator), bound to `.claude/team-roles/gate-adjudicator.md` per S
 worklist with `scripts/ai-dlc/validate-gate-adjudication.sh --expected <gate_type>` (the SAME derivation
 Check 26 uses), reads each escalated check's body in `gate-validation.md` as the spec, and writes
 one `GATE_ADJUDICATION_VERDICT v1` JSON to the verdict path. No Skill, no provenance block — it is
-the native path with its own schema.
+the native path with its own schema. Before returning that path it runs
+`scripts/ai-dlc/validate-gate-adjudication.sh --coverage <gate_type> <verdict_path>` on the file it
+just wrote — its own role file governs what a non-zero exit obliges it to do, and that mode decides
+nothing about the gate.
 
 **A re-dispatch is a whole new dispatch.** The escalation preamble at the top of
 `gate-validation.md` governs: a fresh `gate_nonce`, every escalated check re-derived from current

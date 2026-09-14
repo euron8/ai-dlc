@@ -14,9 +14,54 @@
 #          against (see "the SUPPRESSED carve-out" below); --transcript-dir takes
 #          precedence, for the reason validate-escalation-resolution.sh gives. With a FAIL
 #          under an in-force entry and NO readable corpus the carve-out applies to nothing.
+#   ./scripts/ai-dlc/validate-gate-adjudication.sh --coverage <gate_type> <verdict_path>
+#        → THE ADJUDICATOR'S SELF-CHECK. The envelope and coverage arms of the mode above and
+#          nothing else, so it exits 0 whatever the per-check verdicts say. See "THE COVERAGE
+#          MODE".
 #   ./scripts/ai-dlc/validate-gate-adjudication.sh --series <dir|verdict>...
 #        → THE STALL RUNG. Groups every verdict found by gate_series_id and errors when one
 #          check_id holds FAIL across K consecutive passes of one gate. See "THE STALL RUNG".
+#
+# THE COVERAGE MODE (--coverage). WHAT IT IS FOR: the gate-adjudicator runs it on the verdict
+# it just wrote, before returning the path, so a coverage gap costs a same-dispatch fix
+# instead of a full re-dispatch. There is no partial re-adjudication to fall back on — a gap
+# found by the lead's run above throws the whole dispatch away — and the gap the motivating
+# case produced was a dropped `adjudication: llm` check that ALSO carries `enforcer:` scripts,
+# which the adjudicator read as already decided by the lead's script arm.
+#
+# IT IS THE SAME PROGRAM, NOT A SECOND ONE. It runs the same envelope arms and calls the same
+# `coverage_arms()` the adjudicate mode calls, so the derivation (`escalated_for`) and every
+# `block()` message are one text. A mode with its own grammar would drift tighter or looser
+# than the gate that actually decides, and the adjudicator would be self-checking against a
+# rule the lead does not apply.
+#
+# WHAT IT DOES NOT CHECK, and the adjudicator is told so where it is told to run it: the
+# DISPATCH BINDING, the SUPPRESSED carve-out, and whether any per-check verdict is FAIL. A
+# legitimate all-FAIL verdict exits 0 here. This mode answers one question — is this verdict
+# shaped right and does it cover exactly the derived set — and the lead's full run still
+# decides the gate.
+#
+# THE BINDING ARM IS EXCLUDED BECAUSE NO EDIT TO A VERDICT CAN SATISFY IT. It asks whether a
+# dispatch produced this file and whether that dispatch postdates the nonce, from records the
+# adjudicator does not write; its remedy is "re-run the gate", not "fix this file". An exit 1
+# an adjudicator cannot clear is an instruction to keep editing a correct file.
+#
+# AND IT MASKS THE DEFECT THIS MODE EXISTS TO FIND, which is the stronger reason. Measured
+# over the reference consumer's 197 verdict files by the arm each block NAMES, not by its exit
+# code — 157 blocked, of which 94 envelope, 39 per-check FAIL, 13 binding, 10 coverage, 1
+# nonce/stem. Of the 13 binding blocks, FOUR carry a coverage defect underneath it that the
+# full mode never reaches and never prints: three `implementation` verdicts naming a `2a` that
+# is not in the escalated set, and one `sprint-review` short of check `20`. This mode reports
+# all four. A verdict is short and unbound at the same time more often than either alone,
+# because both are what a hand-assembled verdict looks like.
+#
+# THE NONCE/STEM ARM RUNS BEFORE THE COVERAGE JOIN, and it is the reason the PASS line names
+# the path. The mode is handed a path and cannot know which file its caller wrote, so an
+# adjudicator that self-checks the wrong verdict gets an answer about the wrong verdict. What
+# the mode can establish is that the file it read carries the nonce its own filename claims —
+# so the path in the PASS line IS the nonce that was checked, and a lead holding the dispatch's
+# nonce can read one against the other. The role file closes the rest by naming the path
+# verbatim.
 #
 # THE SET IS DERIVED, NOT LISTED. The escalated set is
 #   escalate(check, gate_type) := check.adjudication == escalated_class
@@ -157,6 +202,21 @@ case "${1:-}" in
             exit 2
         fi
         ;;
+    --coverage)
+        MODE="coverage"
+        GATE_TYPE="${2:-}"
+        VERDICT_PATH="${3:-}"
+        if [ -z "$GATE_TYPE" ] || [ -z "$VERDICT_PATH" ]; then
+            echo "usage: $0 --coverage <gate_type> <verdict_path>" >&2
+            exit 2
+        fi
+        if [ "$#" -gt 3 ]; then
+            # No transcript flags here: this mode reads no transcript, because the only arm
+            # that would consume one is the SUPPRESSED carve-out, which it does not run.
+            echo "ERROR: unknown argument: $4" >&2
+            exit 2
+        fi
+        ;;
     --series)
         MODE="series"
         shift
@@ -168,6 +228,7 @@ case "${1:-}" in
         ;;
     "" )
         echo "usage: $0 --expected <gate_type>   |   $0 <gate_type> <verdict_path>" >&2
+        echo "       $0 --coverage <gate_type> <verdict_path>" >&2
         echo "       $0 --series <dir|verdict>..." >&2
         exit 2
         ;;
@@ -1189,6 +1250,73 @@ for f in ("adjudicator_agent_id", "catalog"):
         block(1, f"required field '{f}' is missing or empty.")
 
 
+# --- the verdicts/coverage join, as ONE function with TWO callers ------------------------
+# `--coverage` is this arm and the envelope arms above, and nothing below. It is a FUNCTION
+# rather than a hoist because a hoist reorders the adjudicate mode: with the arm lifted above
+# the dispatch binding, a verdict that is both unbound AND short reports the coverage gap
+# where it reports the binding failure today, and the gate's message changes for a reason
+# that has nothing to do with this mode. Called here, the adjudicate path below runs in the
+# order it always ran, and the two modes cannot drift because there is one body and one set
+# of block() texts.
+#
+# IT READS NOTHING THE BINDING ARM PRODUCES, which is what makes it safe to call before that
+# arm in one mode and after it in the other. Measured over the extracted function body:
+# `_binding` 0, `_window` 0, `BINDING_STATUSES` 0, `dispatch_binding` 0, against controls
+# `block(` 8 and `set(E)` 1 in the same extraction. Its free names are V, E, gate_type and
+# block(), every one of them resolved above the binding arm.
+def coverage_arms():
+    """Shape + coverage of the verdicts array. Returns the FAIL check_ids, in file order."""
+    verdicts = V.get("verdicts")
+    if not isinstance(verdicts, list):
+        block(1, "required field 'verdicts' is missing or not an array.")
+
+    seen = []
+    fails = []
+    for i, entry in enumerate(verdicts):
+        if not isinstance(entry, dict):
+            block(1, f"verdicts[{i}] is not an object.")
+        cid = entry.get("check_id")
+        if cid is None or (isinstance(cid, str) and not cid.strip()):
+            block(1, f"verdicts[{i}] has a missing or empty check_id.")
+        cid = str(cid)
+        if cid in seen:
+            block(1, f"check_id {cid!r} appears more than once — a duplicated verdict is ambiguous.")
+        seen.append(cid)
+        vd = entry.get("verdict")
+        if vd not in ("PASS", "FAIL"):
+            block(1, f"check_id {cid!r} has verdict {vd!r}, not PASS or FAIL. There is no third "
+                     f"value: a check you cannot evaluate is FAIL-with-reason.")
+        ev = entry.get("evidence")
+        if ev is None or (isinstance(ev, str) and not ev.strip()):
+            block(1, f"check_id {cid!r} has empty evidence. An unjustified verdict — even a PASS — "
+                     f"is the failure this path exists to prevent.")
+        if vd == "FAIL":
+            fails.append(cid)
+
+    expected = set(E)
+    got = set(seen)
+    missing = sorted(expected - got, key=lambda x: (len(x), x))
+    extra = sorted(got - expected, key=lambda x: (len(x), x))
+    if missing:
+        block(1, f"escalated check(s) NOT adjudicated: {missing}. Every escalated check must carry "
+                 f"a verdict — an omitted check is an unadjudicated check, which reads as clean.")
+    if extra:
+        block(1, f"verdict names check(s) {extra} that are not in the escalated set for "
+                 f"'{gate_type}'. The adjudicator evaluates exactly the derived worklist.")
+    return fails
+
+
+if mode == "coverage":
+    # The envelope arms above have already run, the nonce/stem arm among them, so the path
+    # named below is a path whose file agrees with its own filename about which gate pass it
+    # reports. Everything after this point is the LEAD's question, not the adjudicator's.
+    _cov_fails = coverage_arms()
+    print(f"VALIDATE-GATE-ADJUDICATION: COVERAGE-OK ({verdict_path}, {len(E)} escalated "
+          f"check(s) for {gate_type} all present, {len(_cov_fails)} FAIL verdict(s) not "
+          f"adjudicated by this mode)")
+    sys.exit(0)
+
+
 # --- the DISPATCH BINDING -------------------------------------------------------------------
 # Every field checked above is written by whoever wrote the file, the nonce and the stem
 # included, so the freshness anchor above anchors the file to ITSELF. This arm asks the one
@@ -1296,43 +1424,9 @@ if _binding.startswith("unbound"):
           f"THEN dispatch the gate-adjudicator.")
 
 # --- verdicts (exit 1 on any coverage/shape/FAIL defect) ---
-verdicts = V.get("verdicts")
-if not isinstance(verdicts, list):
-    block(1, "required field 'verdicts' is missing or not an array.")
-
-seen = []
-fails = []
-for i, entry in enumerate(verdicts):
-    if not isinstance(entry, dict):
-        block(1, f"verdicts[{i}] is not an object.")
-    cid = entry.get("check_id")
-    if cid is None or (isinstance(cid, str) and not cid.strip()):
-        block(1, f"verdicts[{i}] has a missing or empty check_id.")
-    cid = str(cid)
-    if cid in seen:
-        block(1, f"check_id {cid!r} appears more than once — a duplicated verdict is ambiguous.")
-    seen.append(cid)
-    vd = entry.get("verdict")
-    if vd not in ("PASS", "FAIL"):
-        block(1, f"check_id {cid!r} has verdict {vd!r}, not PASS or FAIL. There is no third "
-                 f"value: a check you cannot evaluate is FAIL-with-reason.")
-    ev = entry.get("evidence")
-    if ev is None or (isinstance(ev, str) and not ev.strip()):
-        block(1, f"check_id {cid!r} has empty evidence. An unjustified verdict — even a PASS — "
-                 f"is the failure this path exists to prevent.")
-    if vd == "FAIL":
-        fails.append(cid)
-
-expected = set(E)
-got = set(seen)
-missing = sorted(expected - got, key=lambda x: (len(x), x))
-extra = sorted(got - expected, key=lambda x: (len(x), x))
-if missing:
-    block(1, f"escalated check(s) NOT adjudicated: {missing}. Every escalated check must carry "
-             f"a verdict — an omitted check is an unadjudicated check, which reads as clean.")
-if extra:
-    block(1, f"verdict names check(s) {extra} that are not in the escalated set for "
-             f"'{gate_type}'. The adjudicator evaluates exactly the derived worklist.")
+# The shape and coverage half is `coverage_arms()` above, which `--coverage` also calls; the
+# FAIL half is below, and is the half that mode does not run.
+fails = coverage_arms()
 
 if not E:
     print(f"VALIDATE-GATE-ADJUDICATION: PASS — 0 escalated checks for {gate_type}; verdict "
