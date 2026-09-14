@@ -239,7 +239,9 @@ For each completed task, verify:
   --require-skill <the evaluation that artifact class requires>` exits 0.
   PRDs and stories require `ai-dlc-adversary-review`; a retro party-mode
   artifact requires `bmad-party-mode`. **The flag is not optional, and its
-  VALUE is per artifact class.** Flagless, the script checks the block is
+  VALUE is per artifact class.** Flagless, an artifact carrying NO block at
+  all FAILS (exit 1) unless the call site passes `--allow-missing` to declare
+  that acceptable. Where a block IS present, flagless checks it is
   well-formed and names a KNOWN skill — but never that it names the RIGHT
   one — so an artifact citing any sanctioned evaluation exits 0 and you
   pass a HARD GATE having verified nothing about which one actually ran; a
