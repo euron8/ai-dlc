@@ -37,6 +37,140 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
+## Adjudication — `PC-S311-PARTY-MODE-PERSONA-DISPATCH-HAS-NO-DISPATCH-TIME-DELIVERABLE-PATH-CHECK` is REFUSED as filed
+
+**Verdict: REFUSE.** The filing's diagnosis is right — a Rule 20 persona dispatch can fire with no
+file-deliverable path, run to completion, and return its verdict as a chat reply, which Rule 20
+names a violation. What it asks for is a check BEFORE the dispatch tool call fires. **There is no
+site for that check at any layer**, and the false-positive set could not be enumerated, so under
+`CLAUDE.md` it does not ship.
+
+**GROUND ONE — THE HOOK THAT LOOKS LIKE THE SITE FIRES ON THE WRONG TOOL.**
+`core/hooks/ai-dlc-dispatch-guard.sh` already inspects dispatch payloads before the call fires and
+already binds a teammate's MODEL to its role file, and it names `deliverable` **0** times against
+a control of **94** for `role` in the same invocation. But it is registered under `PreToolUse`
+matcher `Agent|Task` (`templates/settings.json.template:107-114`), and Rule 20 shape (i)
+dispatches through the **Skill** tool — `sprint-review.md:88`,
+`/bmad-party-mode --mode subagent --non-interactive`.
+
+**GROUND TWO — RE-REGISTERING IT UNDER `Skill` DOES NOT REACH THE SUBJECT.** The per-seat persona
+spawns happen INSIDE the sub-skill. A `PreToolUse` payload on the outer Skill call carries the
+slash-command invocation, not per-seat dispatch instructions, so at the only moment a hook fires
+there is nothing per-seat to inspect. The one hook that does see a `Skill` payload,
+`ai-dlc-acknowledge.sh`, records in its own header (`:212-215`) why it excludes `Skill` from its
+deny surface: *"The remedy is to READ the router, and the lead reaches it through Skill/Agent
+dispatch. A deny covering those would forbid the very act it demands and wedge the pipeline at its
+first step."*
+
+**GROUND THREE — NO ARTIFACT RECORDS THE DISPATCH, SO NO VALIDATOR CAN JOIN ON IT EITHER.** The
+consumer's `spawn-ledger.jsonl` carries a `deliverable` key on **14 of 1598** rows — and all 14
+lack `v`, which `core/scripts/validate-spawn-ledger.sh:410-420` defines as FOREIGN, hand-written
+rows rather than guard-written dispatch records. **0 of the 1584 guard-written rows carry one**
+(control: 1584 carry `name`; an impossible key returns 0). The ledger records intent by hand and
+never records the thing a check would read.
+
+**AND THE ACQUITTAL QUESTION HAS NO ANSWER, WHICH IS THE FATAL ONE.** Nothing in the corpus
+distinguishes a seat that OWES a file from one that legitimately reports in-band; `SKILL.md`
+lists party-mode invocations that are always required regardless of intensity, and no field
+separates the two cases. The false-positive set was therefore not enumerated, and it was not
+estimated either. `CLAUDE.md` ships a check only with that set empty or enumerated.
+
+**WHAT SURVIVES.** The recoverability of the motivating incident was incidental — the verdict
+happened to be quoted in a commit message and the snapshot history — and that is not a control.
+If a mechanism is ever wanted here it has to start by CREATING the record: a guard-written
+deliverable field on the dispatch row, which is prerequisite work with its own false-positive
+measurement, not this entry's fix.
+
+## Adjudication — `PC-S311-VALIDATION-INTENSITY-STEP-REQUIREMENT-NEVER-PRE-CHECKED`: the central remedy is REFUSED, one step-file sentence SHIPS
+
+**Verdict: REFUSE THE REMEDY, SHIP THE NARROW HALF.** The filing asks for a pre-dispatch check
+asserting that every step the declared intensity requires actually ran, before the first
+gate-adjudicator dispatch. That check is refused. A one-sentence gap in `sprint-review.md` §2 is
+real and ships as `v0.573.0`.
+
+**THE FILING'S LITERAL CLAIM IS TRUE, AND THE REFUSAL IS NOT "IT EXPIRED".** It asserts *"There is
+no pre-dispatch check anywhere in the pipeline that verifies 'the steps this declared intensity
+requires actually ran' before the gate-adjudicator is invoked."* Measured at HEAD: none exists.
+`validation_intensity` is read outside prose by exactly two files — `core/scripts/sprint-status.sh`
+(the WRITER, `:446`) and a distribution-side gate that never runs in a consumer pipeline — against
+a control of 16 files naming it under `core/`, and `minimum_met` has **0** mechanical readers
+across `core/scripts core/hooks core/session-driver core/git-hooks`. A refusal grounded on the
+premise being dead would be checkable by the consumer and would be wrong.
+
+**WHAT DID EXPIRE IS THE STATED COST.** Check 20 no longer keeps its own copy of the minimums: it
+resolves them per gate type and says so — *"this check deliberately does not restate it"* — and at
+the sprint-review gate it reads the minimum from `sprint-review.md`'s own gate
+(`core/skills/ai-dlc/steps/gate-validation.md:1344-1352`). That repair is `b3debba3` / **v0.568.0**
+(batch 102). Derivation, because the obvious one does NOT run: `git log -S 'except where that
+step'` returns nothing and so does its control — the file WRAPS mid-phrase at `:1350`, so that
+string exists in no commit. Keyed on the wrap-surviving `'intensity gate skips it'` over
+`core/skills/ai-dlc/steps/gate-validation.md` it resolves to `b3debba3`, with the string present
+in the file today as the positive control and an impossible token at 0 on the same pathspec.
+`git merge-base --is-ancestor b3debba3 d130cb98` confirms the consumer's installed `0.571.0`
+engine already carries it, against a failing reverse-direction control.
+
+**GROUND ONE — THE REMEDY IS REFUTED BY ITS OWN MOTIVATING CASE.** Scored over the 21 eligible
+`done` sprints that declare an intensity requiring sprint-review §2: it FIRES on **14**, quiet on
+7. The decisive row is `s308`, the only other `done` `carry-over-single` sprint — the filing's own
+intensity. Its transcripts are five `coe-*` files plus `retro.md`, with no sprint-review-named
+file, so the remedy fires; and its gate log records
+`validation_intensity: carry-over-single (minimum met: Party Mode -> Adversarial Review, both
+invoked)` at `_bmad-output/implementation-artifacts/s308/gate-log-archive.md:9`, with two more at
+`:357` and `:498` (control: 239 PASS/FAIL tokens in that file, impossible token 0). **The remedy
+would have hard-blocked, before the first adjudicator dispatch, a sprint Check 20 passed on
+recorded evidence.**
+
+**GROUND TWO — TWO OF ITS PREMISES DO NOT HOLD.** There is no completed-step record to join on:
+the only per-step artifact is a party-mode transcript FILENAME, and the spellings are ungoverned —
+eight spellings of one step across the 7 quiet sprints. Check 20 reads gate-log PROSE, which no
+join can spell. And the intensity-to-step mapping is prose-only: `carry-over-single` occurs **0**
+times in the four shipped script directories against **5** under `core/skills/`.
+
+**GROUND THREE — A CENTRAL CHECK IS CONTRARY TO RULE 8, AND NO CARRIER IS CONSTRUCTIBLE.**
+`SKILL.md` Rule 8: *"The per-intensity skips are enforced by each planning step's own intensity
+gate, not tracked centrally. Follow each step's gate."* Three candidate arms were built and all
+three refuted: a completeness join over Rule 8's members fires **5 of 5** gates including the three
+correct today (vacuous); a non-member typo guard fires **0 of 5** (no live subject); and the only
+arm that discriminates fires on `discovery.md:94`'s unqualified heading and **ACQUITS this
+entry's own motivating case** — a mechanism defending its own defect, which
+`mechanism-design.md` forbids. That third one is a real latent defect of the same class and is
+deliberately NOT paired with this fix.
+
+**WHAT SHIPS, AND IT CARRIES NO ENFORCER — WHICH THE ENTRY STATES RATHER THAN LEAVING TO BE
+ASSUMED.** Check 20 owes §2 at sprint-review *"except where that step's own intensity gate skips
+it"*, and §2's gate (`core/skills/ai-dlc/steps/sprint-review.md:83-86`) names ONLY `lightweight`,
+where it means SKIP. `carry-over-single` occurs **0** times in that file against a control of
+**3** for `lightweight`. So §2 is owed at `carry-over-single` and nothing says so where the reader
+is. One sentence fixes that. `Sprint-Level Party Mode` has **0** readers across the four shipped
+script directories, so Check 20 remains the only teeth and this half adds no mechanism.
+
+**THE WORDING IS CONSTRAINED BY I19 AND THE CONSTRAINT IS NOT WHAT IT FIRST APPEARED.**
+`scripts/validate-enforcement-map.sh:2417` forbids RESTATING a Rule 8 minimum in a step file, and
+its own header is explicit that *"Naming an intensity is fine and common; RESTATING what it
+requires is the defect."* Its grammar is case-sensitive with no `-i`. Measured against the real
+validator, each candidate in a `git archive` copy with the mutant `cmp -s`-asserted applied and
+the base zero controlled by seeding a file the grammar does fire on:
+
+    base                                                              0 hits   exit 0
+    "…this Sprint-Level Party Mode is REQUIRED."                      1 hit    exit 1
+    "…this sprint-level party mode is REQUIRED."                      0 hits   exit 0
+    "Per Rule 8, `carry-over-single` requires Party Mode -> …"        raw 1, acquitted only by the Rule-8 exclusion
+
+The cased form turns a green gate RED. **The "Per Rule 8" form is refused** — it survives only by
+containing the string the arm excludes, which is an evasion rather than a fix. The lowercase form
+is acquitted by the grammar itself, matches the register §2's own body already uses at `:85`, and
+names an intensity without restating any minimum. That is the permitted form and the one that
+ships.
+
+**A NOTE ON THE FIRST READING OF THIS, RECORDED SO IT IS NOT REPEATED.** The obstacle was first
+read as "any sentence naming the intensity is the duplication I19 exists to prevent", and the
+step-local half was withdrawn on that basis. It was a CASE artefact of the candidate wording. The
+reason the existing `lightweight` clause survives I19 was also first stated wrongly, as a line
+break between the intensity and the evaluation name: the split is in fact INSIDE the backtick pair
+(``When `validation_intensity ==`` / ``lightweight`, skip this…``), so no line carries a backticked
+intensity at all, and separately the only cased `Party Mode` nearby is the `### 2.` heading, which
+carries no intensity. Two acquittals, neither the one first named.
+
 ## Adjudication — `PC-S311-RESUME-INFLIGHT-ROW-HAS-NO-LIVENESS-PROBE-BEFORE-THE-JOIN-BEAT-IS-ARMED` is REFUSED as filed
 
 **Verdict: REFUSE.** The filing's diagnosis is right and its remedy is a no-op in the wrong

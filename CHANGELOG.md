@@ -15,6 +15,119 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.573.0] - 2026-09-14
+
+Batch 107, one release, two subjects, no shared file — both are dist-side validators, neither
+ships, and neither reads the other's corpus. Two consumer push-candidates were adjudicated in the
+same batch and BOTH are REFUSED as filed; their verdicts are in
+`docs/plans/graph-ledger-full-drain.md`'s adjudication band rather than in `docs/backlog.md`, for
+the measured reason at the end of this section.
+
+### BL-072 — the dead-doc-ref scan reads every `docs/` markdown file, and its search key can finally spell a nested citation
+
+`scripts/validate-no-dead-doc-refs.sh` looped `for doc in docs/*.md` and keyed its search on
+`$(basename "$doc")`. Both halves under-covered and **either repaired alone is a NON-FIX**: the
+loop saw 32 of 122 markdown files under `docs/` (control: `find docs -maxdepth 1 -name '*.md'` =
+32, equal to the glob exactly), and `grep -rlF "docs/$base"` with `base=x.md` can never match
+`see docs/analysis/x.md`, so widening the loop alone changes nothing about what is SEARCHED. The
+corpus is now `find docs -type f -name '*.md' | sort` and the key is `${doc#docs/}`.
+
+**The loop FORM is load-bearing and the two obvious alternatives both ship green while covering
+less.** `docs/**/*.md` is a coverage REDUCTION: `.githooks/pre-push` runs bash 3.2.57, where
+`shopt globstar` does not exist, so `**` is an ordinary `*`, the pattern means `docs/*/*.md`, and
+it enumerates 75 of 122 files — blind to all 32 top-level ones the arm covered before, at exit 0.
+`find … | while read` runs the body in a subshell, loses `fail=1`, and exits 0 with its findings
+printed to stderr. Both were built and driven against seeded dead references at three depths.
+
+**The false-positive set is EMPTY and the arm has no live subject on day one, which the entry says
+outright.** 58 distinct nested `docs/…/*.md` paths are cited from `core/` at any depth and 0 exist
+on disk; the control in the same derivation is the 37 distinct TOP-LEVEL cited paths, 4 of which
+do exist. `docs/backlog.md` is NOT the control for that and asserts the opposite — all 8 of its
+citing paths are inside `.dist-only` fixtures the validator exempts, and `install.sh` names it 0
+times. The control that discriminates is the FP set recomputed with the `.dist-only` exemption
+removed: it reads 4, so the arm can fire. This is an honest coverage extension, not a bug fix.
+
+**Cost is +6.81s on the SERIAL gate and suite makespan is unchanged.** Base median 2.699s, tip
+median 9.506s, five interleaved reps per side, both sides extracted alike and run from inside the
+repo with the trees `cmp -s`-asserted to differ first; spread ±0.287s against a 6.81s effect
+resolves it by roughly 24×. The cost is the corpus widening rather than the rekey — iterations go
+32 → 122 (3.81×) against a measured 3.52× wall ratio. The pole's invoker,
+`scripts/validate-enforcement-map.sh`, names the subject 0 times (control:
+`validate-artifact-budget` = 11), and the pole remains `ledger-reverify` at 313s loaded.
+
+**Blast radius is two different numbers.** 0 fixtures DRIVE the subject, so no fixture verdict can
+change; 16 rows in `.ai-dlc-fixture-readsets.tsv` NAME it (control: `validate-shell-portability` =
+17), because those fixtures copy `scripts/` wholesale and the tracer records the read. `scripts/`
+is not in `suite-content-key.sh`'s EXCLUDE set, so this batch moves the suite content key and
+those 16 re-run; their loaded pole is `validator-arm-selection` at 103s against a 313s suite pole.
+Consumer effect is zero BY CONSTRUCTION and no differential was run because none could move —
+the validator scores 0 under `core/` and 0 in `scripts/install.sh`, whose copy loop derives from
+`core/scripts/*`.
+
+### BL-095 — a rule file declaring `paths:` twice now fails the push, and the arm named "exactly once" is finally about that
+
+`scripts/validate-claude-rules.sh` arm A3b had three branches — no scope, both a `paths:` block
+and an `<!-- unconditional: -->` marker, and an empty reason — and a file carrying TWO `paths:`
+keys passed all three while the arm printed `ok -- every rule declares its scope exactly once`
+over it. YAML keeps the LAST duplicate key, so every earlier block is dead text that reads to a
+human as the rule's scope while the loader obeys a different glob, and A2 then certifies a glob
+that decides nothing. A fourth branch counts the key via the shared `fm_keys` extractor, so it
+reads the same frontmatter A3 and A3b's other branches read.
+
+**The placement is part of the fix.** The branch sits INSIDE A3b's `for f in $(rule_files)` loop:
+an arm placed beside `rule_globs()` printed its FAIL and the validator still exited 0, because
+`err()` sets `fail=1` and that assignment is lost to a command-substitution subshell. It is a
+separate branch rather than another `elif`, because a file can carry two `paths:` keys AND a
+marker, and the chain's both-declared branch would consume it and never report the duplicate. The
+count is captured as `_pkc="$(grep -cx …)" || _pkc=0`, since `grep -c` prints its zero and exits 1
+and the `|| echo 0` form emits two zeros and aborts the arithmetic with no verdict. False-positive
+set EMPTY across all ten rule files: five carry `paths:`, five carry a marker, and the corpus stays
+at exit 0.
+
+### Both entries' receipts were ROTATED, and in each case the old one could not tell the fix from a non-fix
+
+`BL-072`'s keyed on `grep -oE '^for doc in [^;]+' | head -1` — an incidental syntactic property of
+how the fix was written. It CLOSED on the loop-only non-fix at exit 0 and REJECTED two correct
+shapes, a `find | while read` form at exit 9 and a second-loop form at exit 1. The replacement
+drives the validator in a scratch tree, seeds one TOP-LEVEL and one NESTED dead reference from a
+`core/` file, and requires both named in ONE run — a single nested seed sits at the one depth
+where `docs/**/*.md` and `find` agree, which is this repo's own adjacent-seed defect.
+
+`BL-095`'s seeded a fully INVARIANT duplicate: always the literal `paths: core/**`, always line 2,
+always the `head -1` of a sorted glob. An arm keyed on any one of those three scores 0 and leaves
+every rule file green; built and confirmed, a literal-value overfit CLOSES that receipt. The
+replacement adds a second seed varying all three — a different value, a different line, a
+different rule file — and requires the validator to name BOTH files. One trap is recorded with it:
+the seed must land INSIDE the frontmatter, which closes at the second `---`; appended to the body
+it leaves the validator at exit 0, correctly, and reads exactly like an arm that did not fire.
+
+Each replacement was scored against five implementations, every mutant `cmp -s`-asserted applied
+before its verdict was read, and each overfit separately confirmed to leave the real corpus at
+exit 0 so it is a plausible non-fix rather than a broken script:
+
+    BL-072   real fix 0   loop-only 1   docs/**/*.md + rekey 1   while-read 1   pre-fix base 1
+    BL-095   real fix 0   value overfit 1   line-2 overfit 1   first-file overfit 1   pre-fix base 1
+
+### Two consumer push-candidates were adjudicated and both are REFUSED
+
+The verdicts are in `docs/plans/graph-ledger-full-drain.md`, not here and not in `docs/backlog.md`.
+A party-mode deliverable-path check has no site at any layer — the dispatch guard is registered
+under `Agent|Task` while Rule 20 dispatches through `Skill`, re-registering reaches nothing
+because the per-seat spawns are inside the sub-skill, and 0 of 1584 guard-written spawn-ledger
+rows carry a `deliverable` key to join on — and its acquittal question has no answer in the
+corpus, so the false-positive set could not be enumerated. A central pre-dispatch intensity check
+is refuted by its own motivating case: scored over 21 eligible `done` sprints it fires on 14, and
+the decisive row is the one other `carry-over-single` sprint whose gate log records the minimum
+met on recorded evidence. That filing's narrow half — one sentence in `sprint-review.md` §2's
+intensity gate, in the lowercase register I19's grammar acquits — is real and ships.
+
+**Neither refusal became a `docs/backlog.md` entry, and that is a measured constraint rather than
+a style choice.** Base R5 headroom in `scripts/validate-backlog-receipts.sh` is ZERO: the arm
+fires when `_sh_drop > _en_drop`, and ONE new `verify: manual` entry moves the entries side
+without moving the `sh`-receipts side, taking `12 > 11` and failing the push. Rotation moves both
+sides together, which is the shape R5 exists to permit. Lowering `--min-sh-receipts` or
+`--min-entries` was measured to work and was refused as loosening a ratchet.
+
 ## [0.572.0] - 2026-09-14
 
 Batch 106, one release, two subjects, no shared file: one touches a single step file, the

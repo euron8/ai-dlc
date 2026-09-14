@@ -435,53 +435,6 @@ Found by the scope hand of batch 12, asking whether `BL-094` was wider than file
 
 verify: sh R=scripts/render-invariant-index.sh; M=scripts/validate-enforcement-map.sh; [ -f "$R" ] && [ -f "$M" ] || exit 9; D="$(mktemp -d)" || exit 9; tar --exclude=.git -cf - . 2>/dev/null | tar -xf - -C "$D" || { rm -rf "$D"; exit 9; }; ( cd "$D" && bash "$R" --check >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; cp "$D/$M" "$D/m.orig" || { rm -rf "$D"; exit 9; }; printf '%s\n' '# --- I801: FIRSTCLAIM ------------------------------------------' '  err "I801 fired"' '# --- I801: SECONDCLAIM -----------------------------------------' '  err "I801 fired"' >> "$D/$M"; ( cd "$D" && bash "$R" >/dev/null 2>&1 ); solo=$?; cp "$D/m.orig" "$D/$M"; printf '%s\n' '# --- I802 / I803: FIRSTDESC ------------------------------------' '  err "I802 fired"; err "I803 fired"' '# --- I803 / I804: SECONDDESC -----------------------------------' '  err "I803 fired"; err "I804 fired"' >> "$D/$M"; ( cd "$D" && bash "$R" >/dev/null 2>&1 ); grp=$?; I="$D/docs/invariant-index.md"; f="$(grep -c '^| I803 | FIRSTDESC |' "$I" 2>/dev/null || true)"; s="$(grep -c '^| I803 | SECONDDESC |' "$I" 2>/dev/null || true)"; rm -rf "$D"; [ "$solo" -ne 0 ] || exit 9; [ "$grp" -eq 0 ] && [ "$f" -eq 1 ] && [ "$s" -eq 0 ] || exit 0; exit 1
 
-## BL-095 — a rule file declaring `paths:` TWICE is accepted, and the arm named "declares its scope exactly once" is not about that
-
-**`BL-094`'s defect, one subsystem over, found by asking whether that entry was wider than filed.**
-A `.claude/rules/*.md` file may carry two `paths:` keys in its frontmatter and
-`scripts/validate-claude-rules.sh` exits **0**. Measured in a real `file://` clone, because this
-validator needs `git ls-files` and a `git archive` extraction has no `.git` — control: the
-unseeded clone exits 0, and the seeded one exits 0 as well while `A3b` prints
-`ok -- every rule declares its scope exactly once (probe fired all three ways)`.
-
-**That arm is not about this, and its name is why the gap survives a reading.** `A3b`'s three
-branches are: no scope at all, BOTH a `paths:` block and an `<!-- unconditional: -->` marker, and
-an EMPTY `unconditional:` reason. A repeated `paths:` key is none of the three. `A3` checks that
-the frontmatter carries nothing BUT `paths:`, and `A2` checks that each declared glob matches a
-tracked path — so both are satisfied by two contradictory declarations that each resolve.
-
-**IT IS NOT LAST-WINS, AND THE DIFFERENCE IS THE WHOLE RISK.** `rule_globs` UNIONS both blocks, so
-the validator discards nothing and checks every glob from both. A YAML loader resolves a duplicate
-mapping key to exactly ONE of them. So the validator can certify a glob the loader then throws
-away — `A2` reports "this rule loads on these paths" about a block that never reaches the loader.
-That is worse than last-wins, because the two readers disagree in a direction nothing compares.
-
-**The harm.** The scope of a rule file decides whether it loads on a matching read or is
-re-injected on every compaction of every session, which is the most expensive declaration in this
-repo. Two `paths:` keys is a contradiction that no reader reports, and which of them the loader
-obeys is a property of a YAML parser this repo does not own.
-
-**NOT MEASURED, and it is measurable by someone with the harness**: which of the two keys Claude
-Code's own frontmatter parser actually takes. The finding here is that the contradiction is
-unreportable, not that a specific wrong scope results — the same framing `BL-094` was filed
-under, and the reason both are NOTE rather than DEFECT.
-
-**The fix is probably one arm, and its false-positive set is measured EMPTY**: a crude
-`grep -c '^paths:' > 1` loop over `.claude/rules/*.md` added ahead of `A3b` flips the receipt to
-0 and leaves the real corpus green. Whether it belongs as a fourth `A3b` branch rather than a new
-arm is the open question — `A3b` already owns "the scope declaration is well-formed", and
-`mechanism-design.md` prefers routing a new answer through the row that already exists.
-
-Tiered **NOTE**. Nothing emits a wrong verdict today; all ten rule files declare `paths:` at most
-once, which is why this has never fired.
-
-Found while re-deriving whether `BL-094` was wider than filed, during batch 12. Two neighbouring
-readers were checked in the same pass and are NOT affected: an invariant ID claimed by two arm
-headers is refused by `scripts/render-invariant-index.sh` with an explicit message, and
-`MARKER_AWK` is fixed as of `v0.421.0`.
-
-verify: sh V=scripts/validate-claude-rules.sh; [ -f "$V" ] || exit 9; git rev-parse --git-dir >/dev/null 2>&1 || exit 9; D="$(mktemp -d)" || exit 9; git clone -q --shared "file://$(pwd)" "$D/r" >/dev/null 2>&1 || { rm -rf "$D"; exit 9; }; tar --exclude=.git -cf - . 2>/dev/null | tar -xf - -C "$D/r" || { rm -rf "$D"; exit 9; }; ( cd "$D/r" && bash "$V" >/dev/null 2>&1 ) || { rm -rf "$D"; exit 9; }; F="$(cd "$D/r" && grep -l '^paths:' .claude/rules/*.md 2>/dev/null | head -1)"; [ -n "$F" ] || { rm -rf "$D"; exit 9; }; [ "$(grep -c '^paths:' "$D/r/$F")" -eq 1 ] || { rm -rf "$D"; exit 9; }; awk 'NR==1{print; print "paths: core/**"; next} {print}' "$D/r/$F" > "$D/t" || { rm -rf "$D"; exit 9; }; mv "$D/t" "$D/r/$F"; [ "$(grep -c '^paths:' "$D/r/$F")" -eq 2 ] || { rm -rf "$D"; exit 9; }; ( cd "$D/r" && bash "$V" >/dev/null 2>&1 ); rc=$?; rm -rf "$D"; [ "$rc" -eq 0 ] || exit 0; exit 1
-
 ## BL-092
 
 **The rev-path defence is keyed on a `core/` PREFIX, so a distribution path that does not start
@@ -2384,34 +2337,6 @@ seed must NOT be. Both already exist in that fixture and both are already assert
 Found while remediating `BL-035`, by that fixture, against its own author.
 
 verify: manual
-
-## BL-072
-
-**`validate-no-dead-doc-refs.sh` scans `docs/*.md` and nothing below it, so 74 of 105 tracked
-markdown files under `docs/` are outside the corpus it reports clean over.** The loop is
-`for doc in docs/*.md` at `scripts/validate-no-dead-doc-refs.sh:42`. Measured in one invocation:
-top-level `docs/*.md` = **31**; `find docs -name '*.md'` = **105**; the difference, **74**, is the
-population no run has ever read. Control: the same `find` restricted to the glob returns the same
-31, so the counts are taken over one tree and one tool.
-
-**This is a scope gap and was deliberately NOT widened when it was found.** The release that found
-it fixed four dead citations by hand — three inside the glob that the validator flagged, and four
-under `docs/analysis/…` that were the IDENTICAL dead reference sitting outside it and were fixed
-without any check having named them. Widening the glob was rejected in that release on one
-ground and it is still the live one: the false-positive set over `docs/**` is UNMEASURED, and this
-repo does not ship an unmeasured check.
-
-**So the work this entry names is the MEASUREMENT, not the one-character glob change.** Run the
-existing predicate over `docs/**/*.md`, enumerate what it flags, and separate genuine dead
-references from paths that are legitimately unresolvable in that subtree — plan and review
-documents quote paths that no longer exist ON PURPOSE, as the record of a tree that has moved,
-and a check that fails the push on a historical citation is one the operator turns off.
-
-The receipt keys on the LOOP, and carries a control so deleting the loop cannot close it: a fix
-that widens the corpus changes that line, and a fix that removes the scan entirely fails the
-control arm rather than passing it.
-
-verify: sh S=scripts/validate-no-dead-doc-refs.sh; [ -f "$S" ] || exit 9; g="$(grep -oE '^for doc in [^;]+' "$S" | head -1)"; [ -n "$g" ] || exit 9; case "$g" in *'docs/*.md'*) exit 1 ;; *) exit 0 ;; esac
 
 ## BL-074
 

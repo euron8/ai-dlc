@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# validate-no-dead-doc-refs.sh — no core/** file may cite a top-level docs/ design doc
-# that install.sh does not ship. Such a reference resolves for a maintainer in the dev
-# repo but is DEAD in every consumer tree, where core/ is installed under .claude/ and
+# validate-no-dead-doc-refs.sh — no core/** file may cite a dev-repo docs/ file, at any
+# depth, that install.sh does not ship. Such a reference resolves for a maintainer in the
+# dev repo but is DEAD in every consumer tree, where core/ is installed under .claude/ and
 # the dev-repo docs/ never travels with it.
 #
 # WHY (v0.87.0). SKILL.md cited `docs/v0.24.0-gate-validation-slicing-spec.md`, a design
@@ -12,10 +12,10 @@
 #
 # This is a dist-side guard (like validate-enforcement-map.sh): it runs at pre-push in the
 # distribution repo, never ships to consumers. It DERIVES the dead set — no hand-list:
-#   a top-level docs/<X>.md is dead-in-consumer iff it is referenced anywhere in core/
-#   AND install.sh does not ship it. Consumer-runtime docs (architecture.md, docs/reviews/…,
-#   docs/escalations/…) are not in the dev-repo docs/ root or are install-created, so they
-#   are correctly excluded.
+#   a docs/<P> markdown file, at ANY depth, is dead-in-consumer iff it is referenced
+#   anywhere in core/ AND install.sh does not ship it. Consumer-runtime docs
+#   (architecture.md and the like) are install-created, so a consumer's own copy is not the
+#   dev-repo file this arm is about.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -39,9 +39,25 @@ site_is_dist_only() {
   return 1
 }
 
-for doc in docs/*.md; do
+# THE CORPUS IS EVERY `docs/**` MARKDOWN FILE, AND THE KEY IS THE PATH RELATIVE TO `docs/`.
+# Both halves are load-bearing and either alone is a NON-FIX. The loop was `docs/*.md` (32 of
+# 122 files on the tree this was widened against) and the key was `$(basename "$doc")`, so a
+# citation written `docs/analysis/x.md` was never matched by the key `docs/x.md`: widening the
+# loop alone changes nothing about what is SEARCHED.
+#
+# THE LOOP FORM IS `for doc in $(find … | sort)` AND THE TWO OBVIOUS ALTERNATIVES BOTH SHIP
+# GREEN WHILE COVERING LESS:
+#   `docs/**/*.md` IS A COVERAGE REDUCTION. This runs under bash 3.2.57, where `shopt globstar`
+#   does not exist, so `**` is an ordinary `*` and the pattern means `docs/*/*.md` -- ONE level,
+#   which DROPS THE TOP LEVEL the validator covers today. Measured on this tree: 75 of 122 files,
+#   blind to all 32 top-level ones, at exit 0.
+#   `find … | while read` SWALLOWS THE VERDICT. The loop body runs in a SUBSHELL, so `fail=1`
+#   is lost and `exit "$fail"` reads 0. Measured: findings printed to stderr, exit 0.
+# A hand-written multi-level glob under-covers too -- this tree has files at depth 4. `find` is
+# the only form that does not need revisiting when a directory is added.
+for doc in $(find docs -type f -name '*.md' | sort); do
   [ -f "$doc" ] || continue
-  base="$(basename "$doc")"
+  base="${doc#docs/}"
   # shipped by install.sh ?  (install names the doc, or archives/creates it)
   grep -qF "$base" "$INSTALL" 2>/dev/null && continue
   live_sites=""
