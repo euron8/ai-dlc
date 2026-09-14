@@ -662,6 +662,94 @@ else
     *)
       bad "CONTROL: the unmutated span did not reproduce the baseline (rc $CTL_RC): $(printf '%s' "$CTL_OUT" | tr -d '\n') — every control mutant above is unattributable" ;;
   esac
+
+  # (e) THE CALL SITE, WHICH EVERY ARM ABOVE IS BLIND TO. Arms (a)-(d) and the three mutants
+  # all drive the EXTRACTED function; none of them reads the line that CALLS it. A non-fix that
+  # leaves the function byte-identical and passes the TRACED map at the call site --
+  # `readset_discrimination_control "$WORK/map"` instead of `"$MERGED"` -- reproduces the
+  # original defect exactly (every single-fixture `--list` refresh dies) and is green on all of
+  # them. Text about a program is not the program: the span proves what the function DOES, and
+  # this arm proves what the deriver ASKS it. Both halves of the fix are one shipped behaviour.
+  #
+  # DERIVED, NEVER HAND-LISTED. Line numbers move on every edit above them, so the facts are
+  # computed by one awk pass over the shipped file: the sentinel span is skipped so the
+  # definition's own name is not counted as a call, `#` comments and quoted text are stripped
+  # so neither a mention in prose nor one inside a string is counted as a call, and the
+  # remaining invocations are counted. Exactly one must survive, its argument must be the
+  # MERGED map, and both the assignment and the merge that fills it must sit above it -- a call
+  # above `MERGED=` reads an unset variable under `set -u` and one above the merge judges an
+  # empty file.
+  #
+  # THE QUOTE STATE IS CARRIED ACROSS LINES, which is the only correct model here: this deriver
+  # embeds a multi-line awk program, a multi-line `python3 -c`, and a `die` message wrapped over
+  # two lines. A per-line scanner calls all six of those lines unbalanced and then reports
+  # nothing about the call site. Balance is asserted at END instead, so a genuinely unterminated
+  # quote still refuses to answer rather than answering wrongly.
+  CONTROL_ARMS=$((CONTROL_ARMS+1))
+  CS="$(awk '
+    BEGIN { TOK = "readset_discrimination_control"; L = length(TOK); SQ = sprintf("%c", 39); BS = "\\" }
+    index($0, "# READSET_CONTROL_BEGIN") { span = 1; next }
+    span { if (index($0, "# READSET_CONTROL_END")) span = 0; next }
+    {
+      code = ""; skel = ""; prev = ""; n = length($0)
+      for (i = 1; i <= n; i++) {
+        c = substr($0, i, 1)
+        if (q == SQ) {
+          code = code c
+          if (c == SQ) { skel = skel c; q = "" }
+        } else if (q == "\"") {
+          code = code c
+          if (c == BS && i < n) { i++; code = code substr($0, i, 1); prev = c; continue }
+          if (c == "\"") { skel = skel c; q = "" }
+        } else {
+          if (c == "#" && (i == 1 || prev == " " || prev == "\t")) break
+          code = code c; skel = skel c
+          if (c == BS && i < n) { i++; code = code substr($0, i, 1); skel = skel substr($0, i, 1) }
+          else if (c == "\"" || c == SQ) q = c
+        }
+        prev = c
+      }
+      s = skel
+      while ((p = index(s, TOK)) > 0) {
+        ncall++; calls = calls " " FNR
+        if (ncall == 1) {
+          t = substr(code, index(code, TOK) + L)
+          sub(/^[[:blank:]]+/, "", t)
+          if (match(t, /^[^[:blank:]]+/)) arg = substr(t, 1, RLENGTH)
+          cline = FNR
+        }
+        s = substr(s, p + L)
+      }
+      if (mline == 0 && code ~ /^[[:blank:]]*MERGED=/) mline = FNR
+      if (rline == 0 && index(code, "readset_merge_map") && code ~ />[[:blank:]]*"\$MERGED"/) rline = FNR
+      if (dline == 0 && index(code, "die \"controls failed")) dline = FNR
+    }
+    END {
+      printf "%d %d %s %d %d %d %s\n", ncall, cline + 0, (arg == "" ? "-" : arg), \
+        mline + 0, rline + 0, dline + 0, (q == "" ? "-" : "UNTERMINATED-QUOTE")
+      printf "%s\n", (calls == "" ? "-" : calls)
+    }
+  ' "$DERIVER")"
+  CS_HEAD="$(printf '%s\n' "$CS" | sed -n 1p)"
+  CS_AT="$(printf '%s\n' "$CS" | sed -n 2p)"
+  read -r E_N E_CALL E_ARG E_MERGED E_RUN E_DIE E_UNBAL <<EOF
+$CS_HEAD
+EOF
+  if [ "$E_UNBAL" != "-" ]; then
+    bad "(e) the call-site scan could not parse $DERIVER — a quote is left unterminated at end of file, so its comment and string stripping is unreliable and its counts are not evidence"
+  elif [ "${E_N:-0}" -ne 1 ]; then
+    bad "(e) the deriver makes $E_N calls to readset_discrimination_control outside the READSET_CONTROL span (lines$CS_AT) — exactly one is expected, and a second call site is judged by nothing here"
+  elif [ "$E_ARG" != '"$MERGED"' ]; then
+    bad "(e) the deriver's only call passes $E_ARG at line $E_CALL, not \"\$MERGED\" — the control is being driven on a map other than the merged one, which is the base defect (a single-fixture --list refresh is refused) with the function left byte-identical"
+  elif [ "${E_MERGED:-0}" -eq 0 ] || [ "${E_RUN:-0}" -eq 0 ]; then
+    bad "(e) the deriver has no MERGED= assignment (line ${E_MERGED:-0}) or no 'readset_merge_map ... > \"\$MERGED\"' (line ${E_RUN:-0}) — the argument named at line $E_CALL is not filled by the merge at all"
+  elif [ "$E_MERGED" -ge "$E_CALL" ] || [ "$E_RUN" -ge "$E_CALL" ]; then
+    bad "(e) the call at line $E_CALL runs before MERGED= (line $E_MERGED) or before the merge that fills it (line $E_RUN) — it would judge an unset or empty map"
+  elif [ "${E_DIE:-0}" -eq 0 ] || [ "$E_CALL" -ge "$E_DIE" ]; then
+    bad "(e) the call at line $E_CALL does not precede the 'die \"controls failed' at line ${E_DIE:-0} — its verdict is read after the run has already decided, or that die is gone and no verdict stops the write"
+  else
+    ok "the deriver's ONLY call of the control (line $E_CALL) passes the MERGED map, built by the merge at line $E_RUN into the variable assigned at line $E_MERGED, and is read by the die at line $E_DIE — the call site is bound, not just the function"
+  fi
   fi
 fi
 
