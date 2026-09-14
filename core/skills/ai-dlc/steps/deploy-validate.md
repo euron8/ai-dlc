@@ -294,6 +294,11 @@ Present to the human:
 ### Gate Log
 See: _bmad-output/implementation-artifacts/gate-log.md
 
+### Fix-Forward Cluster
+- Cluster members: [enumerated PR subjects]
+- Cluster count: [count] against the project's declared threshold
+- Excluded: [PR, which exclusion, rationale]
+
 ### Escalation Log
 See: docs/escalations/pending.md
 - DECIDED_AUTONOMOUSLY entries: [count] — review recommended
@@ -305,6 +310,35 @@ See: docs/escalations/pending.md
 before proceeding to Sprint 2."]
 [If single sprint: "Sprint complete. Retro will run next."]
 ```
+
+**Fix-forward cluster accounting.** The checkpoint MUST report the
+post-deploy fix-forward PR cluster: the PRs merged to the trunk after
+this sprint's main merge commit and up to its retro merge. Enumerate the
+members by their commit SUBJECTS and report the count as `| wc -l` of
+that enumeration — a bare number is not auditable, and a merge-only walk
+cannot see a squash-merged fix-forward, which reaches the trunk as one
+non-merge commit. Compare the count against the cascade-depth threshold
+the project declares; over it, the lead MUST treat the sprint boundary
+as breached — stop the fix-forward loop, close this sprint by running
+its retro against the cluster-start state, and re-plan the remaining fix
+work as its own sprint. THREE classes are excluded from the count, and
+each exclusion MUST be recorded at the checkpoint with the PR and its
+rationale: pre-merge iterations on the sprint branch before the main PR
+merged (including a force-push rebuild, which counts as one PR);
+pipeline-infrastructure PRs that touch no service path and trigger no
+deployment; and operator-directed reverts of a DECLINED deliverable,
+where the whole revert-plus-cleanup event counts as zero. A revert of a
+deliverable that passed every gate and then regressed in production is a
+cluster member regardless of who approved the revert.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: a cascade of
+fix-forward PRs after deploy, each individually small and green, which
+no step ever counts — the sprint boundary dissolves and the instability
+the cluster is evidence of reaches the retro as a handful of unrelated
+fixes. False-positive cost: one `git log` enumeration at the checkpoint,
+plus one recorded line per excluded PR. Remove when: the trunk audit
+derives the cluster and its exclusions mechanically, so the checkpoint
+reads a computed count rather than an enumerated one.
 
 ### 6. Wait for Human
 
