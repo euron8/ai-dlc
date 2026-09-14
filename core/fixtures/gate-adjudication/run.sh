@@ -794,6 +794,430 @@ run "$VERDICT"
 [ "$RC" -eq 0 ] && ok "restored verdict after the binding arms → exit 0" || bad "the pristine verdict did not pass after the binding arms (rc=$RC)"
 
 # ============================================================================
+# C1–C8: THE --coverage MODE — the adjudicator's self-check on the file it just wrote.
+# ============================================================================
+# WHAT THIS MODE IS AND WHY IT NEEDS ITS OWN ARMS. The gate-adjudicator returns a verdict path
+# and nothing between the write and the return looks at the file, so a coverage gap — a dropped
+# escalated check id — is found by the LEAD's full run, where the only remedy is a whole new
+# dispatch. `--coverage` runs the envelope arms and the coverage join and stops, so the gap
+# costs a same-dispatch fix.
+#
+# THE DANGER IS THAT THIS MODE IS A SECOND PROGRAM. It shares `coverage_arms()` with the full
+# mode so the derivation and every block() text are one body with two callers, and the arms
+# below are what holds that: C3 asserts the two modes print the SAME sentence for the same
+# file, byte for byte, rather than two sentences that happen to agree today.
+#
+# EVERY ARM THAT ASSERTS AN EXIT 0 IS PRESENCE-SHAPED. `--coverage` exiting 0 is also what a
+# mode that never ran, or a flag silently ignored, produces; each exit-0 arm therefore demands
+# the `COVERAGE-OK` line, which only this mode's own print statement emits.
+#
+# THE ARMS ARE WRITTEN AS PREDICATES OVER A VALIDATOR PATH, not as inline bodies, because the
+# mutant battery at the end of this section scores each mutant against the SAME predicate the
+# arm asserts. A battery that re-implements the arm's check proves only that the copy
+# discriminates; running the arm's own function against the mutant is what says the ARM kills it.
+CV_OUT="$WORK/coverage.out"
+CV_ERR="$WORK/coverage.err"
+
+cov_run() { # cov_run <validator> <verdict_path> -> RC, $CV_OUT (stdout), $CV_ERR (stderr)
+  AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
+    bash "$1" --coverage "$GATE_TYPE" "$2" > "$CV_OUT" 2> "$CV_ERR"
+  RC=$?
+}
+# EVERY FULL-MODE DRIVE IN THIS SECTION NAMES ALL THREE CHANNELS, for the reason the carve-out
+# block above gives: unset, they resolve to the tree the validator walks up to, which on a
+# consumer holds real in-force suppressions. $ESC_EMPTY is an EXISTING file with no entry —
+# not the absent one — so these arms are not coupled to the fail-closed default that the
+# carve-out's own cases own.
+cov_full() { # cov_full <verdict_path> -> RC, $CV_OUT, $CV_ERR
+  AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
+  AI_DLC_ESCALATIONS="$ESC_EMPTY" AI_DLC_GATE_METRICS="$GM_BEFORE" \
+    bash "$VALIDATOR" "$GATE_TYPE" "$1" --transcript-dir "$TDIR" > "$CV_OUT" 2> "$CV_ERR"
+  RC=$?
+}
+cv_has() { # cv_has <file> <token>
+  local n; n="$(grep -cF -- "$2" "$1")" || n=0; [ "$n" -gt 0 ]
+}
+CV_OKLINE="VALIDATE-GATE-ADJUDICATION: COVERAGE-OK"
+# THE BLOCK'S OWN EMISSION, extracted from the stream it shares. `block()` writes its header
+# and its sentence and exits immediately, so everything it emits is the tail of stderr from
+# that header on — and anything the carve-out's sibling wrote sits ABOVE it. C3-bind compares
+# the two modes' TEXT for one defect, and comparing whole streams couples it to whether the
+# sibling was asked at all: measured, `gate-adjudication-mutants`' m13 (the caller asks the
+# sibling on a verdict with no FAIL) put a diagnostic on the full mode's stderr and only the
+# full mode's, and C3-bind joined m13's kill set for a reason that has nothing to do with the
+# coverage join. Keyed on the emitter, the two modes are compared and the sibling is not.
+cv_block_of() { # cv_block_of <stderr-file> <dest> — the block() emission, or empty
+  awk '/^VALIDATE-GATE-ADJUDICATION: FAIL/{f=1} f' "$1" > "$2"
+}
+CV_MISSING_SENT="escalated check(s) NOT adjudicated:"
+CV_NONCE_SENT="does not match the verdict filename stem"
+CV_UNBOUND_SENT="bound to NO dispatch"
+
+# THE THREE WORLDS THE PREDICATES BELOW ARE DRIVEN OVER, built once as files and copied into
+# place, so an arm cannot leave a half-mutated verdict behind for the next one.
+CV_COMPLETE="$WORK/cv-complete.json"     # the pristine, complete, all-PASS verdict
+CV_SHORT="$WORK/cv-short.json"           # one escalated id dropped
+CV_NONCESTEM="$WORK/cv-noncestem.json"   # CV_SHORT with the nonce moved off its own stem
+cp "$PRISTINE" "$CV_COMPLETE"
+restore
+py_edit 'doc["verdicts"] = doc["verdicts"][:-1]'
+cp "$VERDICT" "$CV_SHORT"
+py_edit 'doc["gate_nonce"] = "implementation-20260101T000000Z"'
+cp "$VERDICT" "$CV_NONCESTEM"
+restore
+cv_place() { cp "$1" "$VERDICT"; }
+
+# A world that is byte-identical to another discriminates nothing, and reads exactly like one
+# that does. Asserted before any predicate is read.
+cv_worlds_ok=1
+for _p in "$CV_COMPLETE:$CV_SHORT" "$CV_SHORT:$CV_NONCESTEM" "$CV_COMPLETE:$CV_NONCESTEM"; do
+  if cmp -s "${_p%%:*}" "${_p##*:}"; then
+    bad "C0: FIXTURE BROKEN — the coverage worlds ${_p%%:*} and ${_p##*:} are byte-identical, so every predicate below agrees for free"
+    cv_worlds_ok=0
+  fi
+done
+[ "$cv_worlds_ok" -eq 1 ] && ok "C0: the three coverage worlds (complete / short / nonce-off-stem) all differ from one another"
+
+# --- THE THREE PREDICATES ---------------------------------------------------
+# Each owns exactly one property of the mode, and each is driven with NO ledger present except
+# the binding one, which builds its own. The ledger state matters: with no ledger the binding
+# arm returns `nocorpus` and acquits, so the missing- and nonce-predicates below cannot be
+# satisfied or defeated by the binding arm's behaviour.
+cv_p_missing() { # <validator> — a verdict short one escalated id is refused, and NAMED
+  ga_clean_ledgers; cv_place "$CV_SHORT"
+  cov_run "$1" "$VERDICT"
+  [ "$RC" -eq 1 ] && cv_has "$CV_ERR" "$CV_MISSING_SENT"
+}
+cv_p_nonce() { # <validator> — a nonce off its own stem is refused BY THE NONCE ARM, which
+               # runs before the coverage join: the nonce sentence and NOT the coverage one,
+               # on a file that is ALSO short. Both sentences are reachable for this input, so
+               # the arm is the discriminator, never the exit code.
+  ga_clean_ledgers; cv_place "$CV_NONCESTEM"
+  cov_run "$1" "$VERDICT"
+  [ "$RC" -eq 1 ] && cv_has "$CV_ERR" "$CV_NONCE_SENT" && ! cv_has "$CV_ERR" "$CV_MISSING_SENT"
+}
+cv_p_binding() { # <validator> — the mode does NOT run the dispatch binding: a complete
+                 # all-PASS verdict whose nonce nothing binds passes, PRESENCE-asserted.
+  ga_clean_ledgers; cv_place "$CV_COMPLETE"
+  ga_ledger "2026-07-15T14:03:02Z"        # the dispatch 20s BEFORE the nonce → unbound
+  ga_writerow "2026-07-15T14:02:00Z" "$NONCE" "aseed-0123456789abcdef"
+  cov_run "$1" "$VERDICT"
+  local r=$RC
+  ga_clean_ledgers
+  [ "$r" -eq 0 ] && cv_has "$CV_OUT" "$CV_OKLINE"
+}
+
+# --- C1: a complete all-PASS verdict → exit 0, and the mode SAYS so ----------
+ga_clean_ledgers; cv_place "$CV_COMPLETE"
+cov_run "$VALIDATOR" "$VERDICT"
+if [ "$RC" -eq 0 ] && cv_has "$CV_OUT" "$CV_OKLINE"; then
+  ok "C1: a complete all-PASS verdict → --coverage exit 0 with the COVERAGE-OK line (the negatives below mean something)"
+else
+  bad "C1: the sanity baseline for --coverage did not pass (rc=$RC) or printed no COVERAGE-OK line — every C-arm below would be a false pass"
+fi
+
+# --- C2: ONE check FAILing → coverage 0 AND full 1, in the SAME arm ----------
+# THE DISCRIMINATING SEED. The mode's whole claim is that it answers a NARROWER question than
+# the gate: a legitimate FAIL verdict is a correct deliverable and the adjudicator must not be
+# sent back to edit it. A coverage mode that simply re-ran the gate would pass every other arm
+# in this section, so the two sides are asserted together and REQUIRED to differ — an arm
+# reading one side alone cannot tell a narrower question from the same one.
+ga_clean_ledgers; cv_place "$CV_COMPLETE"
+fail_on "$X"
+cov_run "$VALIDATOR" "$VERDICT"
+CV_C2_COV=$RC
+cv_c2_ok=0
+cv_has "$CV_OUT" "$CV_OKLINE" && cv_c2_ok=1
+cov_full "$VERDICT"
+CV_C2_FULL=$RC
+if [ "$CV_C2_COV" -eq 0 ] && [ "$cv_c2_ok" -eq 1 ] && [ "$CV_C2_FULL" -eq 1 ] \
+   && cv_has "$CV_ERR" "$BLOCK_X" && [ "$CV_C2_COV" -ne "$CV_C2_FULL" ]; then
+  ok "C2: a complete verdict with '$X' FAIL and non-empty evidence → --coverage 0 with COVERAGE-OK, full mode 1 naming '$X'; the two sides differ, so the mode asks the narrower question"
+else
+  bad "C2: the two modes did not split on a legitimate FAIL (coverage=$CV_C2_COV, full=$CV_C2_FULL) — either --coverage re-runs the gate and sends the adjudicator back to edit a correct verdict, or the full mode stopped blocking on a FAIL"
+fi
+
+# --- C3: an escalated id dropped → coverage 1, and the SAME sentence ---------
+# ONE BODY, TWO CALLERS, asserted as bytes. If the two modes ever print different text for the
+# same defect the adjudicator is self-checking against a rule the lead does not apply, and
+# nothing else in this suite would notice: both would still exit 1.
+if cv_p_missing "$VALIDATOR"; then
+  ok "C3: a verdict short one escalated id → --coverage exit 1, and the block names the missing check"
+else
+  bad "C3: a verdict missing an escalated check passed --coverage (rc=$RC) or did not say which — the gap this mode exists to find is invisible to it"
+fi
+cv_block_of "$CV_ERR" "$WORK/cv-c3-coverage.err"
+cov_full "$VERDICT"
+cv_block_of "$CV_ERR" "$WORK/cv-c3-full.err"
+if [ "$RC" -ne 1 ]; then
+  bad "C3-pre: FIXTURE BROKEN — the full mode did not refuse the same short verdict (rc=$RC), so there is no second sentence to compare against"
+elif [ ! -s "$WORK/cv-c3-coverage.err" ] || [ ! -s "$WORK/cv-c3-full.err" ]; then
+  bad "C3-bind: FIXTURE BROKEN — one of the two modes emitted no block() text at all, so the comparison below would be of two empty files, which compare equal"
+elif cmp -s "$WORK/cv-c3-coverage.err" "$WORK/cv-c3-full.err"; then
+  # THE CONTROL FOR A STRING EQUALITY. Two equal strings prove the comparison found them
+  # equal, never that the comparison can tell them apart. A token neither file carries must
+  # NOT compare equal in the same invocation.
+  printf 'nonsense-no-mode-prints-this\n' > "$WORK/cv-c3-control.err"
+  if cmp -s "$WORK/cv-c3-coverage.err" "$WORK/cv-c3-control.err"; then
+    bad "C3-bind: FIXTURE BROKEN — the coverage stderr compared EQUAL to a nonsense control, so the equality below says nothing"
+  else
+    ok "C3-bind: the coverage mode's block and the full mode's block for the same short verdict are byte-identical (control: a nonsense string does not compare equal) — one body, two callers"
+  fi
+else
+  bad "C3-bind: the two modes print DIFFERENT text for the same missing check — the coverage join has been duplicated rather than shared, and the adjudicator now self-checks against a rule the lead does not apply"
+fi
+
+# --- C4: an id that is NOT in the escalated set → exit 1 --------------------
+# The other direction of the same join. A mode that only asked "is every expected id present"
+# passes C3 and lets the adjudicator invent a check, which is a verdict about a worklist the
+# gate never derived.
+ga_clean_ledgers; cv_place "$CV_COMPLETE"
+py_edit 'doc["verdicts"].append({"check_id": "cv-not-escalated", "verdict": "PASS", "evidence": "fixture: an id outside the derived set"})'
+cov_run "$VALIDATOR" "$VERDICT"
+if [ "$RC" -eq 1 ] && cv_has "$CV_ERR" "cv-not-escalated"; then
+  ok "C4: a verdict naming an id outside the escalated set → --coverage exit 1, and the block names the extra id"
+else
+  bad "C4: an id the gate never derived was accepted (rc=$RC) — the join is one-sided and an invented check reads as adjudicated"
+fi
+
+# --- C5: a path that is not a verdict file → exit 2, both shapes ------------
+# 2 and not 1: non-delivery is a different claim from a defective verdict, and the adjudicator
+# must not "fix" a file it never wrote. The control is the SAME invocation shape against the
+# real path, so a 2 here cannot be a mode that refuses everything.
+ga_clean_ledgers; cv_place "$CV_COMPLETE"
+cov_run "$VALIDATOR" "$WORK/gate-adjudication/cv-does-not-exist.verdict.json"
+CV_ABSENT=$RC
+cov_run "$VALIDATOR" "$WORK/gate-adjudication"
+CV_DIR=$RC
+cov_run "$VALIDATOR" "$VERDICT"
+CV_REAL=$RC
+if [ "$CV_ABSENT" -eq 2 ] && [ "$CV_DIR" -eq 2 ] && [ "$CV_REAL" -eq 0 ]; then
+  ok "C5: an absent path → --coverage exit 2 and a DIRECTORY → exit 2, while the real verdict in the same shape → exit 0 (the 2s are about the path, not a mode that refuses everything)"
+else
+  bad "C5: absent=$CV_ABSENT directory=$CV_DIR real=$CV_REAL — a non-delivery is being reported as a defective verdict, or the control could not pass and the 2s say nothing"
+fi
+
+# --- C6: the nonce off its own stem → the NONCE sentence, not the coverage one
+# THE WRONG-PATH BINDING. The mode is handed a path and cannot know which file its caller
+# wrote, so an adjudicator that self-checks a NEIGHBOUR gets an answer about the neighbour.
+# What it can establish is that the file it read carries the nonce its own filename claims.
+# The world is ALSO short one id, so BOTH sentences are reachable for this input and the arm
+# is discriminating on WHICH arm fired — an exit code alone cannot separate them.
+if cv_p_nonce "$VALIDATOR"; then
+  ok "C6: a verdict whose gate_nonce is not its filename stem → --coverage exit 1 with the nonce/stem sentence and NOT the coverage sentence (the nonce arm runs first)"
+else
+  bad "C6: the nonce/stem arm did not own this file (rc=$RC) — either --coverage skipped the freshness anchor, or it reported the coverage gap of a file that is not the one its caller wrote"
+fi
+
+# --- C7: the mode does NOT run the dispatch binding → 0 where full is 1 -----
+# THE SECOND DISCRIMINATING PAIR, and the one with a measured false start: a sandbox carrying
+# NO ledger of any kind returns `nocorpus`, which the binding arm ACQUITS, so the full side
+# read 0 and the pair proved nothing. The world below carries a spawn ledger whose rows all
+# predate the nonce and a .verdict-writes row clocked before it, which is what makes the full
+# mode block; the two sides are asserted to differ before the arm is read.
+if cv_p_binding "$VALIDATOR"; then
+  CV_C7_COV=0
+else
+  CV_C7_COV=1
+fi
+ga_clean_ledgers; cv_place "$CV_COMPLETE"
+ga_ledger "2026-07-15T14:03:02Z"
+ga_writerow "2026-07-15T14:02:00Z" "$NONCE" "aseed-0123456789abcdef"
+cov_full "$VERDICT"
+CV_C7_FULL=$RC
+if [ "$CV_C7_COV" -eq 0 ] && [ "$CV_C7_FULL" -eq 1 ] && cv_has "$CV_ERR" "$CV_UNBOUND_SENT" \
+   && [ "$CV_C7_COV" -ne "$CV_C7_FULL" ]; then
+  ok "C7: a fully-covered all-PASS verdict whose nonce nothing binds → --coverage 0 with COVERAGE-OK, full mode 1 saying 'bound to NO dispatch'; the two sides differ"
+else
+  bad "C7: the binding arm was not excluded from --coverage (coverage=$CV_C7_COV, full=$CV_C7_FULL) — an adjudicator holding a correct file is told to keep editing it, and the exit it is given is one no edit can clear"
+fi
+
+# --- C8: the coverage join is STILL reached in that same unbound world ------
+# The near-miss C7 requires. Without it, "coverage exits 0 on an unbound verdict" is satisfied
+# by a mode that exits 0 on everything the binding arm would have refused — including a short
+# one, which is the defect the fix hand measured masked underneath that arm on four real
+# consumer verdicts.
+ga_clean_ledgers; cv_place "$CV_SHORT"
+ga_ledger "2026-07-15T14:03:02Z"
+ga_writerow "2026-07-15T14:02:00Z" "$NONCE" "aseed-0123456789abcdef"
+cov_run "$VALIDATOR" "$VERDICT"
+CV_C8=$RC
+ga_clean_ledgers
+if [ "$CV_C8" -eq 1 ] && cv_has "$CV_ERR" "$CV_MISSING_SENT"; then
+  ok "C8: the SAME unbound world, one id short → --coverage exit 1 naming the missing check — the coverage gap the binding arm masks is still reported"
+else
+  bad "C8: an unbound verdict that is ALSO short passed --coverage (rc=$CV_C8) — the mode is exiting 0 for whatever the binding arm would have refused, which is exactly the masking this mode exists to lift"
+fi
+
+# ============================================================================
+# THE COVERAGE MUTANTS — MA, MB, MC, and an unmutated control.
+# ============================================================================
+# WHY A BATTERY HERE AND NOT MORE ARMS. C3, C6 and C7 are each, in substance, a claim that ONE
+# named arm of the mode owns one input. Each of them would pass against a mode that reached the
+# right exit for the wrong reason, and C7 in particular asserts an exit 0, which is what a flag
+# that was silently ignored also produces. Only a mutant says the line doing the work is the
+# line anybody thinks it is.
+#
+# EACH MUTANT IS SCORED WITH THE ARM'S OWN PREDICATE, never a second copy of it. A battery that
+# re-implements the check establishes that the copy discriminates and nothing about the arm.
+# And each is scored against ALL THREE predicates: a mutant that fails more than its own has an
+# entangled assertion somewhere, and one that fails none has not been built.
+CV_SRCDIR="$(cd "$(dirname "$VALIDATOR")" && pwd)"
+
+cv_mutdir() { # cv_mutdir <name> — the validator AND the siblings it resolves beside itself
+  # A LONE SCRIPT COPY IS NOT THE PROGRAM. This validator resolves
+  # `validate-suppression-lifetime.sh`, `validate-steering-budget.sh` and
+  # `validate-adversarial-convergence.sh` from its own directory; a copy that finds none of
+  # them takes a different branch for a reason that has nothing to do with the mutation, and
+  # its silence scores as a kill.
+  #
+  # NAMED, NOT GLOBBED, and the reason is the read-set map. `.ai-dlc-fixture-readsets.tsv`
+  # records what this fixture opens and the runner cannot see a fixture that starts opening
+  # more; a `*.sh` copy of the whole scripts directory would read every validator in the
+  # distribution and silently expire that entry. These four are the ones the map already
+  # carries, and the copy is ASSERTED below rather than assumed.
+  local d="$WORK/cv-mut-$1" s
+  rm -rf "$d"; mkdir -p "$d"
+  for s in validate-gate-adjudication.sh validate-suppression-lifetime.sh \
+           validate-steering-budget.sh validate-adversarial-convergence.sh; do
+    [ -f "$CV_SRCDIR/$s" ] && cp "$CV_SRCDIR/$s" "$d/"
+  done
+  printf '%s' "$d"
+}
+cv_apply() { # cv_apply <file> <old> <new> — literal replace, occurrence count asserted at 1
+  CV_OLD="$2" CV_NEW="$3" python3 - "$1" <<'PY'
+import os, sys
+p = sys.argv[1]
+old, new = os.environ["CV_OLD"], os.environ["CV_NEW"]
+t = open(p, encoding="utf-8").read()
+n = t.count(old)
+if n != 1:
+    sys.stderr.write("ANCHOR MATCHED %d TIMES, EXPECTED 1\n" % n)
+    sys.exit(3)
+open(p, "w", encoding="utf-8").write(t.replace(old, new))
+PY
+}
+
+# The score: run all three predicates against a validator and print which held.
+cv_score() { # cv_score <label> <validator> <expected-dead: MISSING|NONCE|BINDING|NONE>
+  local label="$1" v="$2" want="$3" dead=""
+  cv_p_missing "$v" || dead="$dead MISSING"
+  cv_p_nonce   "$v" || dead="$dead NONCE"
+  cv_p_binding "$v" || dead="$dead BINDING"
+  dead="${dead# }"
+  if [ "$want" = "NONE" ]; then
+    if [ -z "$dead" ]; then
+      ok "$label: all three coverage predicates HOLD against an unmutated copy in the sandbox — the copy runs, so every kill below is attributable to its mutation and not to a broken harness"
+    else
+      bad "$label: the UNMUTATED copy failed [$dead]. The sandbox copy is not running the program this fixture scores, so every mutant verdict below is a verdict about nothing."
+    fi
+    return
+  fi
+  if [ -z "$dead" ]; then
+    bad "$label SURVIVED — all three predicates still hold with that property removed, so no arm in this section is watching the line the mutation edited"
+  elif [ "$dead" = "$want" ]; then
+    ok "$label: KILLED by $want, and by $want ALONE (the other two predicates still hold, so the arms are not entangled)"
+  else
+    bad "$label killed [$dead], expected exactly [$want] — either it was killed by an arm that does not own this property, or it reached an arm it has no business reaching and that arm's assertion is entangled"
+  fi
+}
+
+# --- the unmutated control, FIRST -------------------------------------------
+# NECESSARY AND NOT SUFFICIENT, so it is given a positive conjunct: it is the same three
+# predicates, two of which DEMAND a specific sentence. A copy replaced by `exit 0` fails
+# MISSING and NONCE by construction and cannot pass this.
+CV_M0="$(cv_mutdir m0)"
+cv_m0_missing=""
+for _s in validate-gate-adjudication.sh validate-suppression-lifetime.sh \
+          validate-steering-budget.sh validate-adversarial-convergence.sh; do
+  [ -f "$CV_M0/$_s" ] || cv_m0_missing="$cv_m0_missing $_s"
+done
+if [ -n "$cv_m0_missing" ]; then
+  bad "CV-M0: FIXTURE BROKEN — the sandbox is missing$cv_m0_missing. A copy that cannot resolve its siblings runs a different program, and its silence would score as a kill."
+else
+  ok "CV-M0-pre: the sandbox carries the validator and the three siblings it resolves beside itself"
+  cv_score "CV-M0 control (unmutated copy)" "$CV_M0/validate-gate-adjudication.sh" NONE
+fi
+
+# --- MA: the coverage join skipped — `_cov_fails = []` ----------------------
+# The shape anybody writes when wiring a new mode: run the envelope, print the line, never ask
+# the question. Owned by C3.
+CV_MA="$(cv_mutdir ma)"
+if ! cv_apply "$CV_MA/validate-gate-adjudication.sh" \
+     '    _cov_fails = coverage_arms()
+' '    _cov_fails = []
+'; then
+  bad "CV-MA: the mutation DID NOT APPLY — its anchor is absent from the validator or appears more than once. A mutant that was never built produces a green run that reads exactly like a surviving arm."
+elif cmp -s "$VALIDATOR" "$CV_MA/validate-gate-adjudication.sh"; then
+  bad "CV-MA: the mutated copy is byte-identical to the subject — that mutant discriminates nothing"
+else
+  cv_score "CV-MA (--coverage skips the join: _cov_fails = [])" "$CV_MA/validate-gate-adjudication.sh" MISSING
+fi
+
+# --- MB: the nonce/stem arm skipped in this mode ----------------------------
+# The wrong-path hole: with it gone, an adjudicator that self-checks a NEIGHBOURING verdict
+# gets exit 0 about the neighbour. Owned by C6.
+CV_MB="$(cv_mutdir mb)"
+if ! cv_apply "$CV_MB/validate-gate-adjudication.sh" \
+     'if V["gate_nonce"] != stem:
+' 'if mode != "coverage" and V["gate_nonce"] != stem:
+'; then
+  bad "CV-MB: the mutation DID NOT APPLY — the nonce/stem anchor is absent or not unique"
+elif cmp -s "$VALIDATOR" "$CV_MB/validate-gate-adjudication.sh"; then
+  bad "CV-MB: the mutated copy is byte-identical to the subject"
+else
+  cv_score "CV-MB (--coverage returns before the nonce/stem arm)" "$CV_MB/validate-gate-adjudication.sh" NONCE
+fi
+
+# --- MC: the mode's exit moved BELOW the dispatch binding -------------------
+# The reshape that reads as a simplification — one exit point, further down — and re-imposes on
+# the adjudicator an exit no edit to its own file can clear, while re-masking the coverage
+# defects the binding arm hides. Owned by C7.
+#
+# TWO EDITS, AND BOTH ARE THE MUTATION. Deleting the block alone leaves the mode falling
+# through to the full program, which is a different mutant; the insert is what puts the same
+# exit below the binding arm. The insert's anchor carries a LEADING NEWLINE because
+# `fails = coverage_arms()` appears TWICE in the file — measured, 2 — and the bare form would
+# edit whichever came first.
+CV_MC="$(cv_mutdir mc)"
+CV_MC_BLOCK='if mode == "coverage":
+    # The envelope arms above have already run, the nonce/stem arm among them, so the path
+    # named below is a path whose file agrees with its own filename about which gate pass it
+    # reports. Everything after this point is the LEAD'"'"'s question, not the adjudicator'"'"'s.
+    _cov_fails = coverage_arms()
+    print(f"VALIDATE-GATE-ADJUDICATION: COVERAGE-OK ({verdict_path}, {len(E)} escalated "
+          f"check(s) for {gate_type} all present, {len(_cov_fails)} FAIL verdict(s) not "
+          f"adjudicated by this mode)")
+    sys.exit(0)
+'
+CV_MC_LATE='if mode == "coverage":
+    _cov_fails = coverage_arms()
+    print(f"VALIDATE-GATE-ADJUDICATION: COVERAGE-OK ({verdict_path}, {len(E)} escalated "
+          f"check(s) for {gate_type} all present, {len(_cov_fails)} FAIL verdict(s) not "
+          f"adjudicated by this mode)")
+    sys.exit(0)
+'
+if ! cv_apply "$CV_MC/validate-gate-adjudication.sh" "$CV_MC_BLOCK" ""; then
+  bad "CV-MC: the DELETE half did not apply — the coverage block is absent from the validator or appears more than once"
+elif ! cv_apply "$CV_MC/validate-gate-adjudication.sh" '
+fails = coverage_arms()
+' "
+$CV_MC_LATE
+fails = coverage_arms()
+"; then
+  bad "CV-MC: the INSERT half did not apply — the full mode's coverage_arms() call site is absent or not unique. A half-applied mutation is a different mutant from the one declared."
+elif cmp -s "$VALIDATOR" "$CV_MC/validate-gate-adjudication.sh"; then
+  bad "CV-MC: the mutated copy is byte-identical to the subject"
+else
+  cv_score "CV-MC (--coverage runs the dispatch-binding arm)" "$CV_MC/validate-gate-adjudication.sh" BINDING
+fi
+
+ga_clean_ledgers
+restore
+run "$VERDICT"
+[ "$RC" -eq 0 ] && ok "restored verdict after the --coverage arms → exit 0" || bad "the pristine verdict did not pass after the --coverage arms (rc=$RC)"
+
+# ============================================================================
 # SCRIPT ARMS BEFORE THE ADJUDICATOR — the escalation preamble and the Gate
 # Failure re-run rule, asserted in the two step files that carry them.
 # ============================================================================

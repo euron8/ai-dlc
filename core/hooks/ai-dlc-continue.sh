@@ -376,7 +376,16 @@ if [ "$HANDOFF_VOCAB_OK" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]
     # finding this arm has today: a piped row carrying a stray `|` inside a cell splits one
     # field wide, and the uniform form acquits it. Measured 1 hit against 1 for the shipped
     # gate on that input; the relaxation is a strict superset over the consumer corpus.
+    #
+    # THE SAME awk ALSO COUNTS DATA ROWS, and there is deliberately no second table
+    # grammar. The In-Flight arm below needs to know whether the table has ANY data row,
+    # which is the identical parse this one already performs -- header detection, the
+    # derived width, the pipeless relaxation and all. A second reader written beside it
+    # would drift from this one silently and would be wrong in exactly the ways the four
+    # paragraphs above enumerate. The separator row is excluded from the COUNT alone and
+    # the sweep verdict is untouched by that: a separator can never carry the token.
     TEAMMATES_OK=1
+    INFLIGHT_ROWS=""
     if [ -f "$SNAPSHOT_FILE" ]; then
       TEAMMATES_OK=$(awk '
         /^##[[:space:]]+In-Flight Teammates/ { inb=1; ncols=0; next }
@@ -412,9 +421,154 @@ if [ "$HANDOFF_VOCAB_OK" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]
           tok = tolower(last)
           sub(/[[:space:],;].*$/, "", tok)
           if (tok == "in-flight") found = 1
+          # THE SEPARATOR IS NOT A DATA ROW, and it is excluded from the COUNT alone.
+          # `|---|---|` survives every test above -- its last cell is `---`, which is
+          # neither `status` nor an in-flight token -- so the sweep verdict never had
+          # to exclude it. A count that includes it reads EVERY table carrying a
+          # separator as having a row, which acquits exactly the empty table the arm
+          # below exists to catch.
+          if (row !~ /^[-:|[:space:]]+$/) rows++
         }
-        END { print (found ? "0" : "1") }' "$SNAPSHOT_FILE" 2>/dev/null || echo 1)
+        END { print (found ? "0" : "1"); print rows+0 }' "$SNAPSHOT_FILE" 2>/dev/null || printf "1\n0\n")
+      # TWO LINES OUT OF ONE PARSE. Line 1 is the sweep verdict this arm has always
+      # produced; line 2 is the data-row count the In-Flight arm below consumes. The
+      # order is read-then-overwrite so the assignment line above keeps its exact
+      # shape -- the fixture mutation battery anchors on it, and a rewrite of that
+      # line would re-anchor four mutants that have nothing to do with this change.
+      INFLIGHT_ROWS="$(printf '%s\n' "$TEAMMATES_OK" | sed -n '2p')"
+      TEAMMATES_OK="$(printf '%s\n' "$TEAMMATES_OK" | sed -n '1p')"
       [ -n "$TEAMMATES_OK" ] || TEAMMATES_OK=1
+    fi
+    case "${INFLIGHT_ROWS:-}" in ''|*[!0-9]*) INFLIGHT_ROWS=0 ;; esac
+
+    # THE IN-FLIGHT ROW ARM. The arm above asks whether a row that EXISTS still reads
+    # `in-flight`; it has nothing to say about a table with no rows at all, and an empty
+    # table is what a handoff that never wrote step 1 leaves behind. Measured on the
+    # reference consumer: 459 role-bound dispatches across sprints 307-311 and ZERO rows
+    # recorded in the In-Flight Teammates table over that span. The sweep arm was green on
+    # every one of them, correctly, because it can only convict a row somebody wrote.
+    #
+    # THE PREDICATE, and every set in it is DERIVED from a file some other event wrote:
+    #   open = { Agent|Task tool_use ids in this session TRANSCRIPT }
+    #        n { spawn-ledger rows with v==1, role!=null, tool_use_id!=null }
+    #        n { ids with a spawn meta.json under the transcript sibling subagents/ dir
+    #            whose .toolUseId matches }
+    #        \ { ids present in subagent-context.jsonl }
+    # BLOCK iff open is non-empty AND the In-Flight table carries ZERO data rows.
+    #
+    # THE KEY IS `tool_use_id` AND THE CHOICE IS NOT RE-ARGUED HERE. probe_effort() in
+    # core/scripts/validate-spawn-ledger.sh joins these same two ledgers on the same key,
+    # and its header carries the measurement that rejected every ordered alternative -- the
+    # ledger is written in DISPATCH order and the stop record in COMPLETION order, and the
+    # id join paired 4 of 4 where the ordered join paired 2 of 4. A hook cannot source a
+    # standalone validator, so this REIMPLEMENTS that join; the two are joined by nothing
+    # mechanical and the backlog entry records that drift risk by name.
+    #
+    # THE TABLE CHECK IS A PRESENCE TEST, NOT AN IDENTITY JOIN, AND THAT IS THE KNOWN
+    # ACQUITTAL: one unrelated row anywhere in the table acquits the whole turn. The reason
+    # is COVERAGE, not a missing key. Measured over every tracked revision of every
+    # `_bmad-output/pipeline-snapshot*` file on the reference consumer -- 647 documents --
+    # 115 distinct In-Flight data-row first cells exist and 2 of them resolve to a spawn
+    # meta at all; the other 113 are dispatch NAMES. Both of those 2 chain to a toolUseId
+    # that NO ledger row carries. So the `agent` column holds a name or an id the ledger
+    # row does not carry, and an identity join would false-positive on essentially the
+    # whole historical population while catching nothing extra.
+    #
+    # BLIND TO NAMED IN-PROCESS TEAMMATES, AS A FIRST-CLASS LIMIT RATHER THAN AN OVERSIGHT.
+    # A NAMED dispatch routes to the in-process teammate runner, whose meta sidecar carries
+    # `teamName` and NO `toolUseId` -- partitioned over the harness meta corpus: 330
+    # toolUseId-only, 672 teamName-only, 0 carrying both, 0 carrying neither. The ledger
+    # mirrors it: of the last 96 role-bound rows, 17 carry no `tool_use_id`, all 17 written
+    # before the ledger began recording the key at all. That scope matters and is stated
+    # rather than turned into a rate: from the first row carrying a `tool_use_id`, 79 of 79
+    # role-bound rows carry one. A NAME-keyed join was BUILT and REFUTED -- 115 false blocks
+    # over 303 rows, prefixes that are ambiguous between dispatches, and
+    # `subagent-context.jsonl` carrying no name field at all (0 of 4056 rows). So a live
+    # named teammate at a handoff is invisible to this arm, permanently, and the fixture
+    # seeds that case as a near-miss that must ALLOW.
+    #
+    # A CLEAN RETURN DOES NOT GUARANTEE A STOP RECORD, WHICH IS WHY THE RELEASE IS THE ROW
+    # AND NOT A TaskStop. The one true positive returned normally -- its tool_result carries
+    # no error -- and no `subagent-context.jsonl` row was ever written for it. Partitioned
+    # over the 79 era dispatches: 63 normal-with-record, 1 completed-with-no-record, 2
+    # denied by Rule 29 before the agent existed, and the rest outside the replayed
+    # sessions. TaskStop cannot clear a state whose record was never written, so the block
+    # message below tells the lead to WRITE the In-Flight row that steps/handoff.md step 1
+    # already requires. That row, not a tool call, is what the successor session reads.
+    #
+    # FAIL-OPEN ON EVERY ABSENCE: no jq, an unreadable transcript, no sibling subagents
+    # directory, no spawn ledger. Same posture as the sweep arm above and for the same
+    # reason -- a handoff must never be wedged by bookkeeping, and every one of these
+    # absences is a legitimate state (a consumer with no dispatch guard installed, a
+    # session whose transcript the harness has rotated, a fresh pipeline). An arm that
+    # convicts on a missing input converts an install gap into a blocked handoff.
+    #
+    # COST: the whole predicate measures 78ms on a 4.4MB session and the transcript scan
+    # alone 130ms on the consumer largest, a 22MB one. The transcript is read WHOLE and
+    # unconditionally. A `tail -n 200` prefilter of the shape Check 0b uses does NOT
+    # transfer: dispatches are spread through a session rather than clustered at its end,
+    # and across every session in the measured population the tail sees 1 dispatch of 80.
+    # The meta directory is read with ONE `jq -rs` over the glob (19ms) rather than a
+    # per-file loop (63ms).
+    #
+    # Removal condition: retire when the In-Flight row is written by a mechanism rather
+    # than by the lead, at which point the absence this arm detects is unconstructible.
+    OPEN_IDS=""
+    OPEN_N=0
+    if command -v jq >/dev/null 2>&1 && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
+      _if_meta="${TRANSCRIPT%.jsonl}/subagents"
+      _if_ledger="${LOG_DIR}/spawn-ledger.jsonl"
+      _if_ctx="${LOG_DIR}/subagent-context.jsonl"
+      if [ -d "$_if_meta" ] && [ -r "$_if_ledger" ]; then
+        _if_disp="$(jq -r 'select(.message.content | type == "array")
+            | .message.content[]
+            | select(type == "object" and .type == "tool_use"
+                     and (.name == "Agent" or .name == "Task"))
+            | .id' "$TRANSCRIPT" 2>/dev/null | sort -u)" || _if_disp=""
+        _if_led="$(jq -r 'select(type == "object" and .v == 1 and .role != null and .tool_use_id != null)
+            | .tool_use_id' "$_if_ledger" 2>/dev/null | sort -u)" || _if_led=""
+        # ONE SLURP OVER THE GLOB. `-s` also makes an empty glob harmless: with no
+        # matching file jq reads stdin, which is closed here, and the result is empty
+        # rather than an error -- the same answer the fail-open path would give.
+        _if_metaids="$(jq -rs '.[] | select(type == "object") | .toolUseId // empty' \
+            "$_if_meta"/agent-*.meta.json 2>/dev/null </dev/null | sort -u)" || _if_metaids=""
+        _if_stop="$(jq -r 'select(type == "object" and .tool_use_id != null)
+            | .tool_use_id' "$_if_ctx" 2>/dev/null | sort -u)" || _if_stop=""
+        # THE SET ALGEBRA IS THREE NAMED STEPS AND NOT ONE CHAINED PIPELINE. Each step
+        # is separately wrong in a way that reads as working -- dropping the stop-record
+        # difference blocks a teammate that returned, dropping the meta narrowing blocks a
+        # dispatch that never spawned -- and a fixture cannot anchor a mutation on a
+        # sub-expression of a single line without editing its neighbours too.
+        _if_isect() { comm -12 <(printf '%s\n' "$1") <(printf '%s\n' "$2"); }
+        _if_minus() { comm -23 <(printf '%s\n' "$1") <(printf '%s\n' "$2"); }
+        _if_cand="$(_if_isect "$_if_disp" "$_if_led")" || _if_cand=""
+        _if_cand="$(_if_isect "$_if_cand" "$_if_metaids")" || _if_cand=""
+        OPEN_IDS="$(_if_minus "$_if_cand" "$_if_stop" | sed '/^$/d')" || OPEN_IDS=""
+        OPEN_N="$(printf '%s\n' "$OPEN_IDS" | sed '/^$/d' | wc -l | tr -d ' ')"
+        case "${OPEN_N:-}" in ''|*[!0-9]*) OPEN_N=0 ;; esac
+      fi
+    fi
+    INFLIGHT_OK=1
+    OPEN_DETAIL=""
+    if [ "$OPEN_N" -gt 0 ] && [ "$INFLIGHT_ROWS" -eq 0 ]; then
+      INFLIGHT_OK=0
+      # THE MESSAGE NAMES THE ROW THE LEAD HAS TO WRITE, WHICH MEANS IT NEEDS THE
+      # LEDGER FIELDS. A bare tool-use id is not something a lead can turn into a table
+      # row: the `agent` and `role` cells come from the dispatch, and the dispatch is
+      # what the ledger recorded. Built here, once, and only on the blocking path -- the
+      # per-id lookups cost nothing on the turns that allow.
+      while IFS= read -r _oid; do
+        [ -n "$_oid" ] || continue
+        _orow="$(jq -rs --arg t "$_oid" '
+            [ .[] | select(type == "object") | select((.tool_use_id // "") == $t) ] | last
+            | if . == null then "" else ((.name // "<unnamed>") + " | " + (.role // "<no role>")) end
+          ' "${LOG_DIR}/spawn-ledger.jsonl" 2>/dev/null)" || _orow=""
+        [ -n "$_orow" ] || _orow="<no ledger row> | <no role>"
+        OPEN_DETAIL="${OPEN_DETAIL}
+  - \`${_oid}\` -- ${_orow}"
+      done <<EOF
+$OPEN_IDS
+EOF
     fi
 
     # THE PUSH ARM. Step 3 is the half of this procedure nothing has ever checked, and it is the
@@ -497,8 +651,8 @@ if [ "$HANDOFF_VOCAB_OK" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]
     MARKER_OK=1
     [ -f "${LOG_DIR}/.handoff-in-progress" ] && MARKER_OK=0
 
-    if [ "$RESUME_OK" != "1" ] || [ "$TEAMMATES_OK" != "1" ] || [ "$PUSH_OK" != "1" ] \
-       || [ "$DRIVER_OK" != "1" ] || [ "$MARKER_OK" != "1" ]; then
+    if [ "$RESUME_OK" != "1" ] || [ "$TEAMMATES_OK" != "1" ] || [ "$INFLIGHT_OK" != "1" ] \
+       || [ "$PUSH_OK" != "1" ] || [ "$DRIVER_OK" != "1" ] || [ "$MARKER_OK" != "1" ]; then
       H_LAST=0; H_CNT=0
       if [ -f "$HANDOFF_STATE" ]; then
         H_LAST=$(sed -n '1p' "$HANDOFF_STATE" 2>/dev/null); H_CNT=$(sed -n '2p' "$HANDOFF_STATE" 2>/dev/null)
@@ -511,6 +665,7 @@ if [ "$HANDOFF_VOCAB_OK" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]
       H_WHY=""
       [ "$RESUME_OK" != "1" ]    && H_WHY="no delimited /ai-dlc resume block"
       [ "$TEAMMATES_OK" != "1" ] && H_WHY="${H_WHY:+$H_WHY; }In-Flight Teammates still carries an \`in-flight\` row"
+      [ "$INFLIGHT_OK" != "1" ]  && H_WHY="${H_WHY:+$H_WHY; }step 1's In-Flight Teammates table is EMPTY while ${OPEN_N} dispatched teammate(s) have no stop record"
       [ "$PUSH_OK" != "1" ]      && H_WHY="${H_WHY:+$H_WHY; }step 3's push has not landed (branch unpublished or ahead of its upstream)"
       [ "$DRIVER_OK" != "1" ]    && H_WHY="${H_WHY:+$H_WHY; }step 4's driver signal was not touched (_bmad-output/.driver/handoff absent)"
       [ "$MARKER_OK" != "1" ]    && H_WHY="${H_WHY:+$H_WHY; }step 5's entry marker was not cleared (_bmad-output/.handoff-in-progress present)"
@@ -536,7 +691,8 @@ if [ "$HANDOFF_VOCAB_OK" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]
         # told the EARLIEST unsatisfied step rather than whichever arm this code tests first.
         # With two arms the old form could infer the cause from `RESUME_OK`; with three that
         # inference is wrong, and it would have answered a missing PUSH with the teammate text.
-        if [ "$PUSH_OK" != "1" ] && [ "$TEAMMATES_OK" = "1" ] && [ "$RESUME_OK" = "1" ]; then
+        if [ "$PUSH_OK" != "1" ] && [ "$TEAMMATES_OK" = "1" ] && [ "$INFLIGHT_OK" = "1" ] \
+           && [ "$RESUME_OK" = "1" ]; then
           jq -n --arg r "HANDOFF GUARD: the operator requested a handoff, the teammate sweep is recorded and the resume prompt is well-formed, but step 3's push has NOT landed -- this branch is either unpublished or still ahead of its upstream, so the commits this handoff just made exist only on this machine. Per steps/handoff.md step 3, run \`git push -u origin HEAD\` in the foreground with \`timeout: 600000\`. \`-u origin HEAD\`, never a bare \`git push\`: a bare push cannot succeed on a branch that has never been pushed, which is every sprint's FIRST handoff wherever a branch is cut per sprint.
 
 If the push genuinely cannot succeed -- no remote configured, offline, or a protected branch -- report that to the operator in ONE line and end the turn again; those three are environmental and the handoff is not blocked by them. A branch that merely has no upstream yet is NOT one of them. Do not resume pipeline work." '{decision:"block",reason:$r,suppressOutput:true}'
@@ -546,6 +702,19 @@ If the push genuinely cannot succeed -- no remote configured, offline, or a prot
           jq -n --arg r "HANDOFF GUARD: the operator requested a handoff and the resume prompt is well-formed, but the pipeline snapshot's \`## In-Flight Teammates\` section still carries a row whose status reads \`in-flight\`. ${H_FIX_TEAM}
 
 Then finalize the snapshot (step 3) and end the turn again. A handoff whose teammate sweep is not recorded looks identical to one that had no teammates." '{decision:"block",reason:$r,suppressOutput:true}'
+          exit 0
+        fi
+        # SAME STEP, THE OTHER HALF. The arm above convicts a row that still reads
+        # `in-flight`; this one convicts an EMPTY table with dispatches outstanding, and
+        # it is dispatched second because a table carrying a stale row is the more
+        # specific finding and its remedy is an edit rather than a new row.
+        if [ "$INFLIGHT_OK" != "1" ]; then
+          jq -n --arg r "HANDOFF GUARD: the operator requested a handoff and the resume prompt is well-formed, but the pipeline snapshot's \`## In-Flight Teammates\` table has NO data rows while ${OPEN_N} role-bound dispatch(es) from this session have no SubagentStop record:
+${OPEN_DETAIL}
+
+Per steps/handoff.md step 1, WRITE a row for each into the In-Flight Teammates table before ending the turn -- \`stopped\` if you stopped it, or \`delivered-reachable\` if its deliverable landed. Do NOT call \`TaskStop\` to satisfy this: the missing stop record is not evidence the teammate is running. A teammate that FINISHED cleanly can leave no record at all -- the case this arm was built on returned normally with no error and wrote none -- so TaskStop would neither clear the state nor tell you anything, and the successor session reads the ROW, not the tool call.
+
+An empty table with dispatches outstanding is the one state no later step can reconstruct: it is indistinguishable from a session that dispatched nothing. Write the rows, finalize the snapshot (step 3), and end the turn again. Do not resume pipeline work." '{decision:"block",reason:$r,suppressOutput:true}'
           exit 0
         fi
         if [ "$RESUME_OK" != "1" ]; then

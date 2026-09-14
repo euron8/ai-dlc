@@ -307,6 +307,21 @@ EOF
 ESC_MISSING="$WORK/esc/there-is-no-such-file.md"
 [ -e "$ESC_MISSING" ] && { echo "FIXTURE ERROR: the absent-escalations path exists" >&2; exit 2; }
 
+# --- an escalations file that EXISTS and holds no entry at all -----------------------------
+# The C-arms below drive the FULL mode as the other half of a differential, and what they are
+# about is the coverage join -- not the carve-out. An ABSENT file would work for them and
+# couples them to the fail-closed default: `gate-adjudication-mutants` scores its mutants on
+# WHICH case dies, and m5 (the caller fails OPEN when the sibling cannot be asked) keys on any
+# non-`ok:` status, so a C-arm reading $ESC_MISSING would join m5's kill set and that battery's
+# equality check would go red for a reason that has nothing to do with m5. An EXISTING empty
+# file yields `ok:` with zero rows, which every carve-out mutant leaves alone.
+ESC_EMPTY="$WORK/esc/no-entries.md"
+cat > "$ESC_EMPTY" <<'EOF'
+# Escalations — pending
+
+No entries.
+EOF
+
 # ---- the transcript corpus the operator citation is VERIFIED against ----------------------
 # validate-gate-adjudication.sh verifies each in-force row's `**Operator authorization:**`
 # quote with validate-steering-budget.sh --cite before the row can cover anything. The corpus
@@ -391,6 +406,7 @@ ESC_TWOQUOTES="$ESC_TWOQUOTES"
 ESC_STALE_TS="$ESC_STALE_TS"
 ESC_FUTURE_TS="$ESC_FUTURE_TS"
 ESC_MISSING="$ESC_MISSING"
+ESC_EMPTY="$ESC_EMPTY"
 TDIR="$TDIR"
 TDIR_FORGED="$TDIR_FORGED"
 TDIR_META="$TDIR_META"

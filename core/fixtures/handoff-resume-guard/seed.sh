@@ -202,4 +202,132 @@ context_reminders_sent: none
 EOF
 printf '%s' "$ROOT/snap-nosection.md" > "$ROOT/.s_nosection"
 
+# ---------------------------------------------------------------------------
+# THE IN-FLIGHT ROW ARM: an EMPTY table with a dispatch that has no stop record
+# ---------------------------------------------------------------------------
+# Every seed above varies the snapshot and holds the transcript fixed, because the
+# sweep arm reads the snapshot alone. This arm reads FOUR files that no seed here has
+# ever written -- the lead transcript (for `Agent` tool_use records), the spawn ledger,
+# the harness meta sidecars beside the transcript, and the subagent-context stop log --
+# so each case below is a WORLD, not a snapshot.
+#
+# THE WORLDS ARE BUILT UNDER `$ROOT/w-<name>/` AND EACH CARRIES ITS OWN FOUR FILES.
+# fixture-mutants.md: a fixture with more than one world records each world IN the
+# world. A shared `$LEDGER` overwritten per case hands case B case C's ledger, which
+# resolves to a set the case never seeded and reads as a withheld verdict rather than
+# as an error.
+#
+# THE TRANSCRIPT IS PADDED PAST 200 RECORDS AND THE DISPATCH SITS AT THE TOP. Measured
+# on the reference consumer: across every session in the population the arm was scored
+# on, a `tail -n 200` window sees 1 dispatch of 80, because dispatches are spread
+# through a session rather than clustered at its end. A seed whose dispatch sits in the
+# last 200 records cannot tell a whole-file read from a windowed one, and the windowed
+# implementation is the cheap wrong fix somebody will reach for.
+#
+# THE META SIDECAR PATH IS THE HARNESS'S, NOT A CONVENTION THIS FIXTURE INVENTED:
+# `<transcript-without-.jsonl>/subagents/agent-<id>.meta.json`, keyed `.toolUseId`.
+# ai-dlc-subagent-probe.sh reads exactly that path to find the join key.
+TUI="toolu_01FIXTUREoffender000000000"
+TUI2="toolu_01FIXTUREunrelated00000000"
+
+mkworld() { # mkworld <name> <ledger-jsonl> <ctx-jsonl> <meta-spec> <snapshot-body>
+  local name="$1" ledger="$2" ctx="$3" metaspec="$4" body="$5"
+  local w="$ROOT/w-$name"
+  mkdir -p "$w/_bmad-output"
+  local t="$w/lead.jsonl"
+
+  # THE DISPATCH RECORD FIRST, then 400 padding records, then the handoff turn. The
+  # hook reads the LAST user and LAST assistant message for the resume arm, so the
+  # padding must not carry either role's text -- it is `progress` records the reader
+  # skips, which is what a real session's tool_result traffic looks like to this jq.
+  jq -nc --arg id "$TUI" '{message:{role:"assistant",content:[
+      {type:"tool_use", id:$id, name:"Agent", input:{subagent_type:"dev-escalated"}}]}}' > "$t"
+  # ONE awk, NOT 400 `jq -n` calls. Eight worlds times four hundred records is 3200
+  # processes, and that loop measured 12.3s of the fixture wall clock against a 2.2s
+  # base -- a fixture that costs six times what it did is a change to the suite, and the
+  # padding records are literal JSON whose shape no jq expression is needed to produce.
+  awk 'BEGIN { for (i = 0; i < 400; i++) printf "{\"type\":\"progress\",\"n\":%d}\n", i }' >> "$t"
+  jq -nc '{message:{role:"user",content:"hand off the sprint"}}' >> "$t"
+  jq -nc '{message:{role:"assistant",content:"Snapshot finalized.\n\n```\n----\n/ai-dlc resume\n----\n```\n"}}' >> "$t"
+
+  [ -n "$ledger" ] && printf '%s\n' "$ledger" > "$w/_bmad-output/spawn-ledger.jsonl"
+  [ -n "$ctx" ]    && printf '%s\n' "$ctx"    > "$w/_bmad-output/subagent-context.jsonl"
+  # `${TRANSCRIPT%.jsonl}/subagents/` -- the harness's own path, the one
+  # ai-dlc-subagent-probe.sh reads to find the join key. The transcript here is
+  # `<w>/lead.jsonl`, so the sidecar dir is `<w>/lead/subagents/`.
+  if [ "$metaspec" != "NONE" ]; then
+    mkdir -p "$w/lead/subagents"
+    printf '%s\n' "$metaspec" > "$w/lead/subagents/agent-afixture0000000001.meta.json"
+  fi
+  printf '%s\n' "$body" > "$w/snapshot-body.md"
+  printf '%s' "$w"
+}
+
+# The snapshot body each world places in `## In-Flight Teammates`. Written in the
+# reference consumer's own PIPELESS shape, which is what its live snapshot carries.
+EMPTY_TABLE='agent | role | deliverable | dispatched-at | status'
+FILLED_TABLE='agent | role | deliverable | dispatched-at | status
+dev-escalated | dev-escalated | /abs/path/report.md | 2026-09-14T05:28:04Z | stopped'
+UNRELATED_TABLE='agent | role | deliverable | dispatched-at | status
+some-other-hand | qa | docs/reviews/other.md | 2026-09-14T01:00:00Z | stopped'
+
+LEDGER_ROW="$(jq -nc --arg t "$TUI" '{v:1, ts:"2026-09-14T05:28:04Z", name:"dev-escalated",
+   role:"dev-escalated", model_bound:"opus", definition_bound:true, tool_use_id:$t}')"
+CTX_ROW="$(jq -nc --arg t "$TUI" '{v:3, ts:"2026-09-14T05:31:00Z", agent_id:"afixture0000000001",
+   role:"dev-escalated", peak_tokens:1000, tool_use_id:$t}')"
+# A ctx row for a DIFFERENT dispatch. Every world needs the stop log to be non-empty,
+# or an arm that reads zero rows cannot be told from one that read a file that is not
+# there -- and the set difference against an empty set is the identity, which is the
+# same answer the broken reader gives.
+CTX_OTHER="$(jq -nc '{v:3, ts:"2026-09-13T00:00:00Z", agent_id:"aother000000000001",
+   role:"qa", peak_tokens:1000, tool_use_id:"toolu_01FIXTUREsomeoneelse00000"}')"
+META_TUI="$(jq -nc --arg t "$TUI" '{agentType:"dev-escalated", toolUseId:$t}')"
+# The NAMED in-process teammate: `teamName` and NO `toolUseId`. Partitioned over the
+# harness corpus the two keys never co-occur, so this is the producer's real shape.
+META_TEAM='{"agentType":"general-purpose","teamName":"party-dev"}'
+
+# (A) OFFENDER: dispatch in the transcript, a role-bound ledger row carrying its
+#     tool_use_id, a meta sidecar keyed on the same id, NO stop record, empty table.
+mkworld offender "$LEDGER_ROW" "$CTX_OTHER" "$META_TUI" "$EMPTY_TABLE" > "$ROOT/.w_offender"
+
+# (B) The table carries a MATCHING row -> ALLOW. One property from (A).
+mkworld tablerow "$LEDGER_ROW" "$CTX_OTHER" "$META_TUI" "$FILLED_TABLE" > "$ROOT/.w_tablerow"
+
+# (C) The stop record EXISTS -> ALLOW. The teammate returned and the probe wrote its row.
+mkworld ctxrow "$LEDGER_ROW" "$(printf '%s\n%s' "$CTX_OTHER" "$CTX_ROW")" "$META_TUI" "$EMPTY_TABLE" > "$ROOT/.w_ctxrow"
+
+# (D) NEVER SPAWNED: the ledger row exists (the guard writes it at PreToolUse, before
+#     anything can deny the call) and NO meta sidecar was ever created. This is the
+#     Rule-29-denied and agent-type-not-found class, and it is the reason the meta
+#     narrowing exists -- without it these block a handoff over a teammate that does
+#     not exist. The sidecar dir is present but holds a meta for an UNRELATED id, so
+#     the case discriminates the narrowing from a missing directory.
+mkworld nospawn "$LEDGER_ROW" "$CTX_OTHER" '{"agentType":"qa","toolUseId":"toolu_01FIXTUREunrelated00000000"}' "$EMPTY_TABLE" > "$ROOT/.w_nospawn"
+
+# (E) A LIVE NAMED TEAMMATE -> ALLOW, and this one is the STATED BLINDNESS rather than a
+#     case the arm handles. Its ledger row carries a `name` and a `role` and NO
+#     `tool_use_id`; its meta carries `teamName` and no `toolUseId`. Nothing joins, the
+#     open set is empty, and the empty table does not block. A future name-keyed join
+#     would flip this cell, which is why it is asserted rather than left implicit.
+mkworld namedteam \
+  "$(jq -nc '{v:1, ts:"2026-09-14T05:28:04Z", name:"party-dev", role:"dev",
+              model_bound:"opus", definition_bound:false, tool_use_id:null}')" \
+  "$CTX_OTHER" "$META_TEAM" "$EMPTY_TABLE" > "$ROOT/.w_namedteam"
+
+# (G) The transcript path names no file -> fail open. Built from (A) and then the
+#     transcript is removed, so every other input is the offender's.
+GW="$(mkworld notranscript "$LEDGER_ROW" "$CTX_OTHER" "$META_TUI" "$EMPTY_TABLE")"
+printf '%s' "$GW" > "$ROOT/.w_notranscript"
+
+# (H) No meta directory beside the transcript at all -> fail open. A consumer whose
+#     harness build does not write sidecars, or a session predating them.
+mkworld nometadir "$LEDGER_ROW" "$CTX_OTHER" "NONE" "$EMPTY_TABLE" > "$ROOT/.w_nometadir"
+
+# (I) The table carries ONE UNRELATED row -> ALLOW. THE STATED ACQUITTAL, seeded so it
+#     is asserted rather than discovered. The check is a PRESENCE test on the table and
+#     one row from any dispatch acquits the turn; a future identity join would flip this
+#     cell, and the header says why it is not one (2 of 115 historical first cells
+#     resolve to a spawn meta, and neither of those reaches a ledger row).
+mkworld unrelatedrow "$LEDGER_ROW" "$CTX_OTHER" "$META_TUI" "$UNRELATED_TABLE" > "$ROOT/.w_unrelatedrow"
+
 printf '%s\n' "$ROOT"

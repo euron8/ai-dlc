@@ -147,13 +147,23 @@ For each completed task, verify:
   "is called from" a loop / scheduler / entrypoint MUST ship a mutation-RED
   wiring test that drives the REAL entrypoint (call site removed → test RED),
   with the captured RED run in evidence; a direct-call unit test does NOT
-  satisfy this. A missing non-test caller, a missing or permanent
-  wired-later marker on a reachable path, or missing mutation-RED wiring
-  evidence = REJECT (inert-feature defect). Catches
-  a shipped-but-uncalled feature that is unit-green yet never runs in
-  production; false positive is a genuinely intentional public API (require
-  the named justification); remove when an automated reachability check
-  enforces this at gate time.
+  satisfy this. A SECOND POPULATION owes the same mutation-RED and the
+  caller check cannot see it: a diff hunk that ADDS or RELOCATES an early
+  exit (`continue`, `break`, `return`, `raise`) on a line ABOVE an EXISTING
+  telemetry / log / metric emission line in that same hunk. Force the early
+  exit and assert that emission goes RED, with the captured RED run in
+  evidence; a direct-call test of the emission does NOT satisfy it. A
+  missing non-test caller, a missing or permanent wired-later marker on a
+  reachable path, missing mutation-RED wiring evidence, or missing
+  mutation-RED evidence for an early exit added above an existing emission
+  = REJECT (inert-feature defect). Catches a shipped-but-uncalled feature
+  that is unit-green yet never runs in production, and a reachability
+  REGRESSION — an emission whose own direct-call test still passes while
+  the diff has stranded it behind a new early exit; false positive is a
+  genuinely intentional public API, or an early exit that is the intended
+  new behaviour for that path (require the named justification in either
+  case); remove when an automated reachability check enforces this at gate
+  time.
 - [ ] **Deferred-AC discharge predicate (HARD GATE).** Any AC marked
   deferred or deploy-pending — not verifiable at this gate — MUST name the
   EXACT downstream predicate that discharges it: the specific runnable

@@ -86,6 +86,65 @@ default is adjudicated against whatever that consumer suppressed this week.
 `core/fixtures/gate-adjudication-mutants/` scores these cases against thirteen wrong fixes and
 an unmutated control, and asserts for each one exactly which cases go red.
 
+## The `--coverage` mode (C0–C8, CV-M0/MA/MB/MC)
+
+The `gate-adjudicator` runs `--coverage <gate_type> <verdict_path>` on the file it just wrote,
+before returning the path. It runs the envelope arms and the coverage join and stops, so a
+dropped escalated id costs a same-dispatch fix instead of the whole new dispatch the lead's run
+would force. The danger is that it becomes a SECOND program with its own grammar, and then the
+adjudicator self-checks against a rule the lead does not apply.
+
+- **C0** the three worlds these arms are driven over (complete / short one id / nonce off its
+  own stem) are asserted to differ from one another before any predicate is read.
+- **C1** a complete all-PASS verdict → exit 0 **with the `COVERAGE-OK` line**. Every exit-0 arm
+  here is presence-shaped: exit 0 is also what an ignored flag produces.
+- **C2** the discriminating seed — one check `FAIL` with non-empty evidence → `--coverage` 0 and
+  the full mode 1, asserted in the SAME arm and required to differ. A mode that re-ran the gate
+  would pass every other arm in this section while sending the adjudicator back to edit a
+  correct verdict.
+- **C3** an escalated id dropped → exit 1 naming the check; **C3-bind** the coverage mode's
+  `block()` text and the full mode's, for the same file, are byte-identical (control: a nonsense
+  string does not compare equal). One body, two callers, asserted as bytes — two modes that
+  print different text for one defect would both still exit 1, and nothing else here would
+  notice. The comparison is keyed on the `block()` emission and not the whole stream, because
+  the carve-out's sibling writes above it: whole-stream, this arm joined `m13`'s kill set in
+  `gate-adjudication-mutants` for a reason unrelated to the coverage join.
+- **C4** an id outside the escalated set → exit 1. The other direction of the join; a mode
+  asking only "is every expected id present" lets the adjudicator invent a check.
+- **C5** an absent path → exit 2 and a DIRECTORY → exit 2, with the real verdict in the same
+  invocation shape → exit 0. Non-delivery is a different claim from a defective verdict, and
+  the control is what says the 2s are not a mode that refuses everything.
+- **C6** the wrong-path binding: a `gate_nonce` that is not its filename stem → exit 1 with the
+  NONCE sentence and NOT the coverage one, on a file that is ALSO short. Both sentences are
+  reachable for that input, so the arm discriminates on which arm fired rather than on the exit.
+- **C7** the binding arm is EXCLUDED: a fully-covered all-PASS verdict whose nonce nothing binds
+  → `--coverage` 0, full mode 1 (`bound to NO dispatch`), sides asserted to differ. An EMPTY
+  sandbox does not build this world — no ledger at all yields `nocorpus`, which the binding arm
+  acquits, so the full side reads 0 and the pair proves nothing; the seed carries a spawn ledger
+  and a `.verdict-writes.jsonl` whose rows all predate the nonce.
+- **C8** the near-miss C7 requires: the SAME unbound world, one id short → exit 1 naming the
+  missing check. Without it, "coverage exits 0 on an unbound verdict" is satisfied by a mode
+  that exits 0 on everything the binding arm would have refused — which is the masking measured
+  on four real consumer verdicts and the reason this mode exists.
+
+Three mutants score C3, C6 and C7, because each of those is a claim that one NAMED arm owns one
+input and each would pass against a mode reaching the right exit for the wrong reason. Each
+mutant is built as a copy of the validator plus the three siblings it resolves beside itself,
+the anchor's occurrence count asserted at exactly 1 and the copy `cmp -s`-asserted to differ,
+and each is scored with the ARM'S OWN predicate against ALL THREE — a mutant that kills more
+than its own has an entangled assertion, one that kills none was not built.
+
+- **CV-M0** the unmutated copy: all three predicates hold, so every kill below is attributable
+  to a mutation rather than to a copy that could not run.
+- **CV-MA** `_cov_fails = []` — the mode runs the envelope, prints the line, never asks the
+  question → killed by C3's predicate alone.
+- **CV-MB** the nonce/stem arm skipped in this mode → killed by C6's predicate alone.
+- **CV-MC** the mode's exit moved BELOW the dispatch binding — the reshape that reads as a
+  simplification and re-imposes an exit no edit to the adjudicator's own file can clear →
+  killed by C7's predicate alone. Two edits, both the mutation: the delete alone leaves the
+  mode falling through to the full program, which is a different mutant. The insert's anchor
+  carries a leading newline because `fails = coverage_arms()` appears twice in the file.
+
 ## Script arms before the adjudicator
 
 The last arm reads the two step files rather than the validator, because the defect it guards

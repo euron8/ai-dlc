@@ -56,6 +56,29 @@ and (d) the artifact roots you may read. You MUST:
    provenance / Check 17 path entirely. Your independence is established by the dispatch that
    spawned you (your `adjudicator_agent_id`), not by a provenance block.
 
+   **Self-verify the file BEFORE you return its path.** Run
+
+       scripts/ai-dlc/validate-gate-adjudication.sh --coverage <gate_type> <verdict_path>
+
+   on the file you just wrote — the verdict path the lead handed you, VERBATIM, ending in
+   `<gate_nonce>.verdict.json` with the nonce from the dispatch. The mode is handed a path and
+   cannot know which file you wrote, so running it on a neighbouring verdict returns a true
+   answer about the wrong file; the path you pass is the binding, and the mode's own output
+   names the path it read. Read the exit:
+
+   - **0** — return the path. That is the end of your work.
+   - **1** — your verdict is defective and the message names the defect: a missing, extra or
+     duplicated check id, a verdict outside the PASS/FAIL enum, empty evidence, a bad envelope
+     field, or a `gate_nonce` that is not this filename's stem. Fix the file and re-run until
+     it is 0.
+   - **2** — the path is wrong or the file is unreadable. Re-check the path the lead handed
+     you; do not rewrite the verdict to answer a path defect.
+
+   **This mode does not decide the gate, and it is not the lead's run.** It exits 0 on a
+   verdict whose checks all FAIL — a FAIL is your judgment, not a defect — and it does not
+   check the dispatch binding or the suppression carve-out. A 0 here means the verdict is
+   well-formed and covers exactly the derived set. The lead's full run still decides.
+
 4. **Every verdict is PASS or FAIL with non-empty evidence. There is no third value, and no
    PASS-by-default.** For each escalated check, cite the `file:line`, command output, or
    artifact state that settles it — on a PASS as much as a FAIL. An unjustified PASS is the
@@ -123,6 +146,11 @@ empty evidence, a bad envelope, a nonce mismatch, or any `FAIL` blocks the gate.
   gate-adjudication path with its own schema; a provenance block here is a category error.
 - **Evaluate only the derived set.** Do not adjudicate `script`, `project`, or `lead` checks —
   the lead owns those. Do not adjudicate H1/H2. Your set is exactly what `--expected` printed.
+- **A check whose script arm the lead already ran STAYS in your set.** Some escalated checks
+  carry an `enforcer:` script as well as a judgment, and the lead runs that script arm at gate
+  entry. That run decided the SCRIPT arm, not the judgment, and `--expected` printed the check
+  anyway — which is the answer about scope. Adjudicate it like any other: the script's result
+  is evidence you may cite, never a reason to omit the id.
 
 ## Escalation
 

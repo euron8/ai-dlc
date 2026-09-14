@@ -15,6 +15,227 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.574.0] - 2026-09-14
+
+Batch 108, one release, four subjects, no shared file: four consumer push-candidates adjudicated,
+three GRANTED narrowly with a mechanism or a rule-file clause, one REFUSED as filed with its
+surviving bullet shipped. None touches a bootstrapping file. Three backlog entries are filed;
+two are LANDED and rotated in this release, one (`BL-251`) stays live because what it owes is a
+mechanism no reader of the file can supply today. Every hand's claim below was re-derived by a
+second hand or the lead against the working tree with a control in the same invocation, and the
+two adversary passes that ran BEFORE any builder spawned each refuted a figure in the contract:
+one blocker moved the `--coverage` mode's exit above the dispatch-binding arm, one moved subject
+3's bullet off the artifact that did not carry its own motivating clause, and one adversary
+withdrew its own identity-join defect after running the third leg of the chain it had claimed.
+
+### BL-252 — the gate-adjudicator self-verifies its verdict's coverage before returning the path, and the mode reports four defects the full gate has never printed
+
+`core/scripts/validate-gate-adjudication.sh` gains `--coverage <gate_type> <verdict_path>`: the
+envelope arms plus the same `coverage_arms()` the adjudicate mode calls, exiting 0 whatever the
+per-check verdicts say. The gate-adjudicator runs it on the file it just wrote, so a dropped
+escalated check costs a same-dispatch fix rather than a whole new dispatch — there is no partial
+re-adjudication to fall back on. It is ONE body with two callers, extracted as a function rather
+than hoisted above the dispatch-binding arm, because a hoist reorders the full mode: a verdict
+that is both unbound AND short would report a different arm than it reports today.
+
+**The filing's second claim was false and the measurement is what separated the halves.** The
+enumerate-and-diff it asked for already existed and FIRED on its own motivating case — the
+consumer's `sprint-review-20260914T072634Z.verdict.json` exits 1 at Check 26 with `escalated
+check(s) NOT adjudicated: ['2']`, against a control in the same invocation of 8 ids printed by
+`--expected sprint-review`. What survives is WHERE the diff runs: in the lead's pass, after the
+dispatch is over.
+
+**The cause was a gap in the role file, not in the validator.** The adjudicator ran `--expected`,
+saw all eight ids, and dropped check 2 — the one `adjudication: llm` check that also carries
+`enforcer:` scripts the lead had already run. Measured before the fix, `grep -c -i 'script arm'`
+on `core/team-roles/gate-adjudicator.md` = 0 against a control of 1 for `derived set`. Checks 2
+and 16 are the only escalated sprint-review checks with a non-empty `enforcer:`, so the dropped id
+was exactly the class the role file did not address. That clause now ships beside the self-check
+step, which names all three exit classes and binds the path to `<gate_nonce>.verdict.json`.
+
+**The mode is worth more than the filing asked for, because the binding arm MASKS four real
+coverage defects.** Over the reference consumer's 197 verdict files, base built from `origin/main`
+into its own tree with the two sides `cmp -s`-asserted to differ first:
+
+    tip_full == base_full                     197 of 197   <- the full mode is unchanged
+    tip_full != tip_coverage                   48          <- control: the modes are not one program
+    --coverage exit 0 / exit 1                 88 / 109
+
+Of the rows the full mode blocks, the coverage mode clears the 39 per-check-FAIL rows and 9 of the
+13 binding rows. The other four carry a coverage defect UNDERNEATH the binding block that the full
+mode never reaches and never prints: `implementation-20260813T002442Z`, `…T003901Z` and
+`…T005355Z` each name a `2a` outside the escalated set, and `sprint-review-20260826T062500Z` is
+short of check `20`. Grammar bind: on the motivating verdict the two modes' sentences are
+string-equal, because there is one `block()` text.
+
+**What is NOT mechanised, and it is stated in the entry rather than implied.** The mode is handed
+a path and cannot know which file its caller wrote, so an adjudicator that writes a short verdict
+and self-checks a complete neighbour gets a true answer about the wrong file. The nonce/stem arm
+running before the coverage join and the PASS line naming the path it read both narrow it; neither
+closes it. The rest is the role file naming the path verbatim, which is prose with no enforcer.
+
+**The receipt DRIVES the mode and its second seed is the discriminating one.** It derives the
+escalated set with `--expected` rather than hand-listing it, seeds one verdict short by the first
+derived id and one fully covered carrying a FAIL, and requires exit 1 naming that id AND exit 0 on
+the second in one run — a receipt with only the first seed passes over a mode that merely re-runs
+the full validator, which exits 1 on a FAIL. Each candidate was its own `git archive` tree,
+`cmp -s`-asserted to differ from the tip before its verdict was read:
+
+    tip 0   base (origin/main) 1   stub (--coverage always 0) 1   `_cov_fails = []` mutant 1
+
+The base row is also the control that the mode is new: `origin/main` refuses `--coverage` as an
+unknown flag at exit 2, which the receipt maps to "not 1 on the first seed". A comment cannot
+satisfy the receipt because it executes the validator rather than reading its text, and the ledger
+validator's own seed demonstrates nothing either way here — appending the receipt's literals to
+the three files it names breaks `gate-adjudication-verdict.json` and the receipt exits 9, while
+seeding the validator script alone leaves it at 0 both with and without the comment. So the four
+rows above are what establishes discrimination.
+
+`validate-backlog-receipts.sh` reports the receipt ALREADY-PASSING rather than BOUND, because that
+arm scores against the subject repository's own `HEAD` and BOUND requires a base exit of 1. The
+entry ships in the same release as its fix, so at `HEAD` the mode exists and the receipt reads 0.
+The entry says so rather than letting the status imply a weakness; the four-tree table is the
+discrimination evidence and none of those trees is `HEAD`.
+
+### BL-251 — `qa.md`'s core-path wiring gate owes a mutation-RED for an early exit added above an existing emission, and the entry stays LIVE because nothing reads the bullet
+
+Adjudicating `PC-S311-QA-ORPHANED-FUNCTION-CHECK-MISSES-REACHABILITY-REGRESSION`. The consumer's
+motivating case was a telemetry append that sat behind an unconditional `continue` for three
+months in a financial execution path; the "Orphaned-function / core-path wiring (HARD GATE)" item
+scopes to EVERY NEW public method, so a function that HAS callers and whose emission a diff strands
+behind a new early exit was never its population. The item is RESHAPED rather than given a
+companion — two items would carry near-identical triads and a seat reading one would not learn
+the other bound the same diff.
+
+**The clause is worded on the HUNK, and the narrowing is the deliverable.** A QA seat reads a
+unified diff, and "same block" is not a thing a diff shows. Measured over the reference consumer's
+last ten code-bearing PR merges (`git diff -M --unified=3 <sha>^1 <sha>`; control: a first-parent
+pool of 200):
+
+    LOOSE  (added early exit, emission anywhere in the hunk)    223 sites   5 of 10 diffs
+    STRICT (added early exit, EXISTING emission BELOW it)         4 sites   3 of 10 diffs
+
+The loose reading is a REJECT surface no seat honours — 107 of its sites come from one merge —
+which `CLAUDE.md` says is worse than no check. The strict four sit in three merges, one of them
+the motivating file. The adversary's independent detector over the same ten merges read 170 / 9
+on a looser "after it" predicate; the direction and the diff sets agree, the entry carries the
+stricter figures. **The first derivation read 0 and 0** — `awk -v` stripped one level of escaping
+and awk refused the regex on every merge, printing a clean zero per row — and the run now refuses
+unless awk returns a numeric count for every merge.
+
+**No mechanical reader exists, and the entry says so.** `grep -rl 'Orphaned-function'` over
+`core/scripts`, `core/hooks` and `scripts` returns **0** files against a control of 4 files naming
+`qa.md` in the same invocation; `validate-mutation-red.sh` names `qa.md` once, in a comment, and
+validates the SHAPE of a capture without deciding which diffs owe one. So no fixture arm can
+assert the clause fires. The receipt scores PLACEMENT and VOCABULARY — the behavioural triple
+inside the bullet's own body, outside any HTML comment — against five trees, each `cmp -s`-asserted:
+
+    tip 0   base 1   clause in an HTML comment 1   clause in a NEW companion bullet 1   second spelling 0
+
+`validate-backlog-receipts.sh` reports it ALREADY-PASSING for the reason `BL-252`'s section
+gives; the arm's own seed run directly against the base blob leaves the receipt at exit 1 with and
+without the seeded comment, tip 0 in the same run. The entry is NOT rotated: what it owes is a
+reachability check at gate time, which is the item's own removal clause.
+
+### `PC-S311-PER-STORY-GATE-TOPOLOGY-CANNOT-SEE-CROSS-STORY-JOIN-PROPERTIES` — the cross-story pass is REFUSED as filed; one bullet in sprint-review §1 ships
+
+The filing asks for a new join-review pass after every story is gate-3-approved and before the
+sprint-overall PR. **The motivating CRITICAL-1 was found by the EXISTING §1 Sprint-Level
+Adversarial Review at exactly that point** (`sprint-review-adversarial.md:32`), and the
+re-baseline it cost was forced by WHERE the fix landed — one additive key inside a byte-guarded
+span, with the sprint's single authorized re-baseline already spent by `ADR-S311-4` — not by WHEN
+the defect was found; a pass run between gate-3 of the last story and the merge incurs it
+identically. A second pass at the same point finds the same defect at the same time.
+
+What survives: neither §1 nor §2 named the operator's own request as the thing to compare the
+sprint's COMPOSED output against. One bullet now does. **The artifact it names is the whole edit,
+and the contract's first wording had it wrong.** The CRITICAL-1 clause ("verifiable via
+`execution_log` rather than a live CloudWatch dig") lives in the consumer's operator-request
+record, which Check 33 already scans, and in the snapshot's verbatim-request line; on a scratch
+copy of the s311 record, `grep -c` per file with an impossible-token control:
+
+    operator-requests-history.md                 execution_log=3   telemetry_snapshot=1   impossible=0
+    pipeline-snapshot.md (## Sprint Context)     execution_log=1   telemetry_snapshot=0   impossible=0
+    s311/locked-requirements.md                  execution_log=0   telemetry_snapshot=1   impossible=0
+
+A bullet naming `locked-requirements.md` would have acquitted its own motivating case. The
+verdict is recorded in `docs/plans/graph-ledger-full-drain.md`'s adjudication band rather than as
+a backlog entry, for the R5 reason `0.573.0` records. `validate-enforcement-map.sh` exits 0 on the
+tip and its I19 arm is proven to reach the file (a seeded intensity restatement fires at
+`sprint-review.md:147`); all 19 fixtures whose read-set names the step file exit 0.
+
+### BL-253 — a handoff with an EMPTY In-Flight table is blocked while a dispatched teammate has no stop record; both dispatch-time remedies are refused
+
+Adjudicating `PC-S312-INFLIGHT-TEAMMATES-ROW-UNENFORCED-AT-DISPATCH`. Its `PreToolUse` halves —
+block a dispatch whose deliverable path is not about to be recorded, or write the row from the
+call — die on the ground the party-mode refusal in `0.573.0` established: **0 of 1589**
+guard-written spawn-ledger rows carry a deliverable (control: 1589 carry `role`); the prompt yields
+exactly one path-shaped candidate on **475 of 934** role-bound dispatches; the `agent` id does not
+exist at `PreToolUse`; and no hook mutates the snapshot today (0 of 14 naming it). The
+false-positive set is neither empty nor enumerable.
+
+**What decided the grant is the false-NEGATIVE rate of the prose rule.** Across sprints 307–311,
+**459** role-bound dispatches and **0** In-Flight rows recorded for any of them (control: 521
+snapshot revisions walked, the partition sums exactly). The existing Check 0 sweep arm was green on
+every handoff in that span, correctly — it convicts a row that reads `in-flight` and nobody wrote
+a row. The new arm beside it joins three records three different events wrote (the guard's ledger,
+the harness's spawn meta, the SubagentStop probe's context file) against the session transcript,
+and BLOCKS iff an open dispatch has no stop record AND the table has zero data rows. The row count
+is a second output line of the sweep arm's own awk, so there is one table grammar.
+
+**FP 0, TP 2, by DRIVING the shipping hook** against scratch copies of the consumer's real state:
+8 era sessions, 7 allow, 1 blocks — a `dev-escalated` fix-forward that returned cleanly and wrote
+no stop record. Naive join 3 → meta-narrowed 1; the two removed are Rule-29 denials whose ledger
+row the guard wrote before the call was refused (control: an impossible id against the meta set
+resolves 0; the narrowed set is a subset of the naive one). Reconstructed at the handoff instant
+(`subagent-context.jsonl` rows before `2026-09-14T18:06:47Z`, 4055 against 4056), a second
+session blocks: the filed motivating case.
+
+**Three limits, stated in the arm header and each seeded in the fixture.** It is a PRESENCE test,
+not an identity join, because over 647 tracked snapshot revisions 115 distinct In-Flight first
+cells exist, 2 resolve to a spawn meta and neither reaches a ledger row — an identity join would
+false-positive on the whole historical population. It is BLIND to named in-process teammates: that
+class carries `teamName` and no `toolUseId` (330 / 672 / 0 both / 0 neither), a name-keyed join
+was built and refuted at 115 false blocks over 303 rows, and of the last 96 role-bound ledger rows
+17 carry no key — all 17 predate it; 79 of 79 after. And a clean return does not guarantee a stop
+record, so the block message names each open id with its ledger `name`/`role` and tells the lead
+to WRITE the row per `handoff.md` step 1, explicitly not to call `TaskStop`. The adversary's first
+report claimed the identity chain was complete "7 of 7" and withdrew it after running the third
+leg: 0 of 7 reach a ledger row, because every one predates the ledger's first `tool_use_id`.
+
+The key choice cites `probe_effort()` in `validate-spawn-ledger.sh` as its origin rather than
+re-arguing it; a hook cannot source a standalone validator, so the join is reimplemented and the
+drift risk is named in the entry. Cost: the transcript is read WHOLE — a `tail -n 200` prefilter
+of Check 0b's shape sees 1 dispatch of 80 because dispatches are spread through a session —
+78ms on a 4.4MB session, 130ms on the consumer's largest at 22MB. Fail-open on absent `jq`, an
+unreadable transcript, no sidecar directory and no ledger, same posture as the arm beside it, and
+each of those is a fixture arm that asserts no block text appears. Fixture `handoff-resume-guard`:
+nine arms (offender BLOCK; matching row, stop record, never-spawned, live named teammate, `jq`
+at 127, absent transcript, absent meta dir, unrelated row → ALLOW), four mutants each killed by
+its owning arm; base 2.0s → tip 4.3s, first cut 14.5s from 3200 `jq -n` seed processes replaced
+by one `awk`. Receipt drives the hook: tip 0, base 1, each mutant 1.
+
+### Two gate findings on the first push, both attributed and neither a regression in a subject
+
+`validator-fork-budget` read 8146 against `FORK_BUDGET=8135`. `fork-profile.sh --section by-arm`
+in two detached worktrees, the validator byte-identical on both sides: I60 +11, I59 +1, 126 of
+128 arms unchanged. I60 walks every (script, mode) pair the shipped corpus cites, and this
+release adds exactly one pair — `validate-gate-adjudication.sh --coverage` — so the budget is
+raised to 8155 with that attribution beside it and no reduction taken.
+
+`handoff-completion-assertion` reported `MUTANT SURVIVED [m3]`. The mutant's `sed` anchored on
+the continue hook's one-line push-arm condition, and `BL-253`'s arm split that condition across
+two lines to add its own conjunct; the anchor matched nothing, `mkmut` correctly refused the
+no-op, and the fixture went red on the commit that shipped the fix — the shape
+`fixture-mutants.md` records. Re-anchored on the split line's first half; the anchor is unique
+in the tip hook (1), does not match the base hook (0), and m3 is killed by assertion (k) alone.
+
+### Rotation and the ratchet
+
+`BL-252` and `BL-253` are annotated LANDED and rotated in this release. `BL-251` is not. All three
+receipts are `verify: sh`, so R5's two sides moved together and the hook's `--min-sh-receipts 76
+--min-entries 88` floors are untouched.
+
 ## [0.573.0] - 2026-09-14
 
 Batch 107, one release, two subjects, no shared file — both are dist-side validators, neither
