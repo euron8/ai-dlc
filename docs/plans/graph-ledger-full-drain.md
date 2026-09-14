@@ -37,6 +37,58 @@ BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evid
 figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
 own heading.
 
+## Adjudication — `PC-S311-PER-STORY-GATE-TOPOLOGY-CANNOT-SEE-CROSS-STORY-JOIN-PROPERTIES`: the cross-story pass is REFUSED as filed, one §1 bullet SHIPS
+
+**Verdict: REFUSE THE PASS, SHIP THE BULLET.** The filing asks sprint-review for a new
+cross-story join-review pass, run once every story is gate-3-approved and before the
+sprint-overall PR, re-checking the operator's verbatim requirement against the COMPOSED diff.
+The pass is refused. One bullet in §1's review list is real and ships as `v0.574.0`.
+
+**GROUND ONE — THE MOTIVATING CASE WAS FOUND BY THE STEP THAT ALREADY EXISTS, AT THE POINT THE
+REMEDY ASKS FOR.** The consumer's `_bmad-output/planning-artifacts/s311/sprint-review-adversarial.md:32`
+opens `## CRITICAL-1 — the sprint's own success signal is invisible in execution_log; the
+verbatim request's telemetry clause is not met`. That file is the output of §1 Sprint-Level
+Adversarial Review, which `sprint-review.md` runs after every story has passed its three gates
+and before the sprint-overall PR — exactly where the filing sites its new pass. A second pass at
+the same point finds the same defect at the same time.
+
+**GROUND TWO — THE COST CLAIM DOES NOT HOLD, AND THE REASON IS WHERE THE FIX LANDED.** The
+filing says the fix-forward round and the re-baseline event `ADR-S311-5` were "both avoidable if
+the join property had been checked before the stories were presented as a completed pair". The
+adversary read `ADR-S311-5` and `ADR-S311-4`: closing CRITICAL-1 needed one additive key inside
+`_execute_layer_chunked`'s byte-guarded span, and the sprint's single authorized re-baseline had
+already been spent by `ADR-S311-4` on story-311-B's dev cycle. The second event is forced by
+where the fix lands, not by when the defect is found; a pass run between gate-3 of the last story
+and the merge incurs it identically. Answer to "would an earlier pass have avoided it": **NO**.
+
+**WHAT SURVIVES, AND THE FIRST WORDING OF IT WAS WRONG.** Neither §1 nor §2 named the operator's
+own request as the thing to compare the sprint's composed output against: §1 says "cross-cutting
+issues (inconsistent patterns, missing integration points, duplicated logic)" and §2 asks "Does
+the implementation match the requirements?" — both per-artifact readings. One bullet now says to
+re-read the verbatim operator request against the composed diff of every story, not each story's
+own ACs. **The contract's first draft named `locked-requirements.md`, and that bullet would have
+acquitted its own motivating case.** On a scratch copy of the consumer's s311 record, `grep -c`
+per file with an impossible-token control in the same invocation:
+
+    operator-requests-history.md                 execution_log=3   telemetry_snapshot=1   impossible=0
+    pipeline-snapshot.md (## Sprint Context)     execution_log=1   telemetry_snapshot=0   impossible=0
+    s311/locked-requirements.md                  execution_log=0   telemetry_snapshot=1   impossible=0
+
+The CRITICAL-1 clause ("verifiable via `execution_log` rather than a live CloudWatch dig") is in
+the operator-request record — the corpus gate-validation Check 33 already scans — and in the
+snapshot's verbatim-request line at line 32 (a 30-line head slice reads 0 and would have wrongly
+suggested the snapshot does not carry it). The bullet names that corpus the way Check 33 names it
+and cites rather than restates its flag list.
+
+**NOT A RESTATEMENT, BUT ADJACENT.** `sprint-review.md:68` and `:96` are the nearest sentences;
+the distinguishing words are "composed diff" against "each story's own ACs", and those words do
+all the work. I19 is proven to reach the file (a seeded intensity restatement fires at
+`sprint-review.md:147`); the shipped bullet leaves `validate-enforcement-map.sh` at exit 0, and
+all 19 fixtures whose read-set names the step file exit 0.
+
+**NO BACKLOG ENTRY, BY THE R5 RULE.** This verdict lives here; the id is cited verbatim in the
+`v0.574.0` release commit message and CHANGELOG, which is what `named_absorbed()` reads.
+
 ## Adjudication — `PC-S311-PARTY-MODE-PERSONA-DISPATCH-HAS-NO-DISPATCH-TIME-DELIVERABLE-PATH-CHECK` is REFUSED as filed
 
 **Verdict: REFUSE.** The filing's diagnosis is right — a Rule 20 persona dispatch can fire with no
@@ -10641,22 +10693,53 @@ given at batch 90.
    rebuilt in one release: the originals closed on an empty file, on a dead arm, and on a
    positional window.
 
+   **BATCH 108's FOUR SUBJECTS ARE SHIPPED — do not re-scope any of them.** All four consumer
+   candidates that were live and core-owned at batch 107's close shipped together as `v0.574.0`,
+   each cited verbatim in the release commit message:
+   `PC-S311-GATE-ADJUDICATOR-CHECK-26-COVERAGE-MISS-NOT-SELF-VERIFIED` (GRANTED narrowly →
+   `BL-252`, ROTATED), `PC-S312-INFLIGHT-TEAMMATES-ROW-UNENFORCED-AT-DISPATCH` (both dispatch-time
+   halves REFUSED, a handoff-time arm GRANTED → `BL-253`, ROTATED),
+   `PC-S311-QA-ORPHANED-FUNCTION-CHECK-MISSES-REACHABILITY-REGRESSION` (GRANTED as a role-file
+   clause → `BL-251`, LIVE — it owes a mechanism no reader of `qa.md` can supply), and
+   `PC-S311-PER-STORY-GATE-TOPOLOGY-CANNOT-SEE-CROSS-STORY-JOIN-PROPERTIES` (REFUSED as filed,
+   verdict in this file's `## Adjudication` band, one §1 bullet shipped). Archive 175 → 177, live
+   74 → 75. No bootstrapping file moved. The gap is THREE and the pull is NOT required.
+
+   **THE ADVERSARY RAN ON THE CONTRACT BEFORE ANY BUILDER SPAWNED, AND EVERY ONE OF ITS BLOCKERS
+   WAS REAL.** Two on the contract (the `--coverage` mode as specified inherited the
+   dispatch-binding arm and could not be satisfied by any edit to a verdict; the subject-3 bullet
+   named an artifact carrying its own motivating clause 0 times), two on subject 4's mechanism
+   (blind to named teammates — 672 of 1002 spawn metas carry `teamName` and no `toolUseId`; the
+   one true positive returned cleanly with no stop record, so the block is a wedge that only
+   writing the row releases). One adversary WITHDREW its own defect after running the third leg of
+   a chain it had reported as "7 of 7" on the first leg alone — 0 of 7 reach a ledger row. **Read
+   an adversary's chain claim leg by leg; a first-leg intersection reported as the whole chain
+   reads exactly like a measurement.**
+
+   **THE AVAILABLE PC-BACKED RESIDUE AT THIS CLOSE IS ZERO KNOWN — run the sweep and rank what it
+   returns.** The eighteen named-nowhere unfiled ids at this close partition as: 4 shipped this
+   batch; 10 adjudicated NOT-UPSTREAM in `docs/reviews/graph-ledger-full-adjudication.md` (the
+   `PC-S297-*` pair and eight `PC-S312-*` naming consumer-local scripts); 3 self-disposed in the
+   consumer's own ledger (`PC-S309-PRE-PUSH-*` pair WITHDRAWN/superseded,
+   `PC-S312-RETRO-REPLAY-HARNESS-*` REFUTED); and `PC-S340-RETRO-AUDIT-SCANS-*` refuted in this
+   file. The readiest no-`PC` work is `BL-251` (needs a gate-time reachability check; the entry
+   records why none exists) and then `BL-223`; read each entry's own measurement paragraph before
+   scoping. **Two things this batch left unmeasured and available:** whether the PreToolUse
+   write-ledger row is on disk before an adjudicator's next Bash call (one instrumented dispatch
+   in a consumer scratch copy), and a binding between the hook's `tool_use_id` join and
+   `probe_effort()` in `validate-spawn-ledger.sh`, which can now drift with no invariant firing.
+   The operator owes `sudo bash core/scripts/derive-fixture-readsets.sh --list "handoff-resume-guard"`
+   if that fixture's new inputs are to be traced.
+
    **BATCH 107's SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope any of them.** `BL-072` and
    `BL-095` shipped as `v0.573.0` at `0b9aa8ae` (PR #757), each cited verbatim in the release
    commit message beside the two adjudicated `PC-S311-*` ids. Both are ROTATED (archive 173 → 175,
    live 76 → 74). No bootstrapping file moved. The gap is TWO and the pull is NOT required.
 
-   **THE SWEEP WAS NOT EMPTY AT THIS CLOSE, AFTER FOUR BLOCKS RUNNING SAID IT WOULD BE.** Five
-   `PC-S311-*` candidates were filed on the consumer at sprint 311's retro, all core-owned, all
-   `Rule 27`. **TWO ARE ADJUDICATED** — both REFUSED, with verdicts in this file's
-   `## Adjudication` sections; one of them shipped a narrow step-file half.
-   **THREE WERE NEVER ANALYSED AND ARE THE READIEST WORK FOR THIS BATCH**:
-   `PC-S311-GATE-ADJUDICATOR-CHECK-26-COVERAGE-MISS-NOT-SELF-VERIFIED` first — it is plausibly the
-   one CONSTRUCTIBLE candidate of the five, because a verdict that skipped a declared check is
-   distinguishable against the adjudicator's own declared check list — then
-   `PC-S311-QA-ORPHANED-FUNCTION-CHECK-MISSES-REACHABILITY-REGRESSION` and
-   `PC-S311-PER-STORY-GATE-TOPOLOGY-CANNOT-SEE-CROSS-STORY-JOIN-PROPERTIES`, both `verify: manual`
-   prose subjects. **Run the sweep anyway; it moved live 59 → 62 and unfiled 21 → 25 in one day.**
+   **THE SWEEP WAS NOT EMPTY AT BATCH 107's CLOSE, AND BATCH 108 TOOK ALL FOUR LIVE CORE-OWNED IDS**
+   (three `PC-S311-*` filed at sprint 311's retro plus `PC-S312-INFLIGHT-*` filed at sprint 312). Every
+   one is shipped above. **Run the sweep anyway; the consumer filed six candidates in the two days
+   before this batch, and the block that said the residue was zero was wrong twice running.**
 
    **A REFUSAL VERDICT GOES IN THIS FILE'S `## Adjudication` SECTION, NEVER INTO `docs/backlog.md`.**
    Measured at this close: base R5 headroom is ZERO, so ONE new backlog entry fires `12 > 11` and
