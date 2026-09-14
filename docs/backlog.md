@@ -2387,12 +2387,89 @@ verify: manual
 
 ## BL-072
 
+**LANDED (v0.573.0, verified a952eb61).** The corpus is now `find docs -type f -name '*.md'` and
+the key is `${doc#docs/}`. **BOTH halves were required and either alone is a NON-FIX** — widening
+the loop while keeping `base="$(basename "$doc")"` changes nothing about what is SEARCHED, since a
+citation written `docs/analysis/x.md` is never matched by the key `docs/x.md`.
+
+**THE LOOP FORM IS LOAD-BEARING AND TWO OBVIOUS ALTERNATIVES SHIP GREEN WHILE COVERING LESS.**
+`docs/**/*.md` is a COVERAGE REDUCTION: `.githooks/pre-push` runs bash 3.2.57 where `shopt
+globstar` does not exist, so `**` is an ordinary `*`, the pattern means `docs/*/*.md`, and it drops
+the 32 top-level files the validator already covered — 75 of 122, at exit 0. `find … | while read`
+SWALLOWS THE VERDICT: the body runs in a subshell, `fail=1` is lost, and `exit "$fail"` reads 0
+with the findings on stderr. Both were built and driven against seeded dead references.
+
+**THE WIDENED ARM HAS NO LIVE SUBJECT TODAY, SO THIS IS AN HONEST COVERAGE EXTENSION AND NOT A BUG
+FIX.** **58** distinct nested `docs/…/*.md` paths are cited from `core/` at any depth — the grammar
+matching the widened arm's own corpus, which walks `find docs -name '*.md'`; a one-subdir grammar
+gives 35 — and **0** of them exist on disk. Control in the same invocation, on the same corpus:
+37 distinct TOP-LEVEL `docs/*.md` paths are cited and **4** of those DO exist, so the enumeration
+is reading the tree rather than returning an empty answer.
+
+**`docs/backlog.md` IS NOT THE CONTROL FOR THAT, AND USING IT ASSERTS THE OPPOSITE.** All **8** of
+its citing paths sit inside `.dist-only` fixtures — `backlog-rotate-fence-guard`,
+`backlog-receipt-binding`, `backlog-size-ceiling`, `backlog-ledger` — which the validator EXEMPTS
+at `:33-40`, and `scripts/install.sh` names `backlog.md` **0** times. **The control that
+discriminates** is the FP set recomputed with the `.dist-only` exemption removed: it reads **4**
+(`backlog.archive.md`, `backlog.md`, `invariant-index.md`, `vocabulary-index.md`) against the true
+set of 0, so the arm can fire on the widened corpus and its zero is a real absence.
+
+**A LATENT PROPERTY THE WIDENING INHERITS RATHER THAN CREATES.** The `grep -qF "$base" install.sh`
+exemption at `:62` is VACUOUS for all 122 docs files under BOTH keys: 0 files are exempt under the
+new path-relative key and 0 under the old basename key (control: `docs` occurs 19 times in
+`scripts/install.sh`, so the grep runs). Pre-existing, unchanged by this fix, and stated so the
+next reader does not discover it as a regression.
+
+**COST: +6.81s ON THE SERIAL GATE, SUITE MAKESPAN UNCHANGED.** Base median 2.699s, tip median
+9.506s, five interleaved reps per side, both sides extracted alike and run from inside the repo,
+`cmp -s`-asserted to differ before the comparison was read. Spread ±0.287s against a 6.81s effect,
+so the differential resolves it by roughly 24× and the figure is real rather than a null. The cost
+is the CORPUS WIDENING, not the rekey: the body is one `grep -rlF` over `core/` per non-shipped
+doc, iterations go 32 → 122 (3.81×) against a measured 3.52× wall ratio. **The POLE is untouched**
+— `scripts/validate-enforcement-map.sh`, the pole's invoker, names the subject **0** times
+(control: `validate-artifact-budget` = 11), and the pole remains `ledger-reverify` at 313s loaded.
+One of 21 serial pre-push phases grows; makespan does not.
+
+**BLAST RADIUS IS TWO DIFFERENT NUMBERS AND ONLY ONE OF THEM IS "READ".** **0 fixtures DRIVE the
+subject**, so no fixture verdict can change — that is the operative claim. But **16 rows in
+`.ai-dlc-fixture-readsets.tsv` NAME it** (control: `validate-shell-portability` = 17), because
+those fixtures `cp -R "$DIST/scripts"` wholesale and the tracer records the read. `scripts/` is not
+in `suite-content-key.sh`'s EXCLUDE set, so this batch moves the suite content key and those 16
+re-run; their loaded pole is `validator-arm-selection` at 103s against a 313s suite pole, so the
+re-run costs no makespan.
+
+**CONSUMER EFFECT IS ZERO BY CONSTRUCTION, AND NO DIFFERENTIAL WAS RUN BECAUSE NONE COULD MOVE.**
+Neither validator ships: both score 0 under `core/` and 0 in `scripts/install.sh` (control:
+`validate-provenance-block.sh` = 1 under `core/`), and `install.sh`'s copy loop is derived from
+`core/scripts/*`, which neither file is in. This is not an empty measurement — it is the absence of
+a measurable population.
+
+**THE RECEIPT BELOW IS A REPLACEMENT AND THE ORIGINAL COULD NOT SCORE ANY CORRECT FIX.** The old
+one keyed on `grep -oE '^for doc in [^;]+' | head -1`, an incidental syntactic property of how the
+fix was written: it CLOSED on the loop-only non-fix at exit 0, and it REJECTED two correct shapes —
+a `find | while IFS= read -r doc` form exits 9 because the capture is empty, and a
+second-loop-added form exits 1 because `head -1` reads the original line. **A single nested seed is
+not enough either**: a seed at `docs/<sub>/<file>.md` sits at the one depth where `docs/**/*.md`
+and `find` agree, which is this repo's own adjacent-seed defect. The replacement DRIVES the
+validator in a scratch tree, seeds **one TOP-LEVEL and one NESTED** dead reference cited from a
+`core/` file, and asserts both are named in ONE run, with an `exit 9` guard for a missing subject
+and a base-green precondition so a tree that was already failing cannot read as a pass.
+
+**Scored against five implementations, each `cmp -s`-asserted applied before its verdict was
+read:** the real fix **0**; loop-only widening with the basename key kept **1**; `docs/**/*.md`
+plus the rekey **1** (the one the single-seed version missed); `find | while read` **1**; and the
+unmutated pre-fix validator **1**.
+
+**Original entry text, retained for the record.**
+
 **`validate-no-dead-doc-refs.sh` scans `docs/*.md` and nothing below it, so 74 of 105 tracked
 markdown files under `docs/` are outside the corpus it reports clean over.** The loop is
 `for doc in docs/*.md` at `scripts/validate-no-dead-doc-refs.sh:42`. Measured in one invocation:
 top-level `docs/*.md` = **31**; `find docs -name '*.md'` = **105**; the difference, **74**, is the
 population no run has ever read. Control: the same `find` restricted to the glob returns the same
-31, so the counts are taken over one tree and one tool.
+31, so the counts are taken over one tree and one tool. **Those three figures EXPIRED between the
+filing and the fix**; re-derived on the tree this landed against they are **32 top-level / 122
+total / 90 uncovered**, control `find docs -maxdepth 1 -name '*.md'` = 32, equal to the glob.
 
 **This is a scope gap and was deliberately NOT widened when it was found.** The release that found
 it fixed four dead citations by hand — three inside the glob that the validator flagged, and four
@@ -2411,7 +2488,7 @@ The receipt keys on the LOOP, and carries a control so deleting the loop cannot 
 that widens the corpus changes that line, and a fix that removes the scan entirely fails the
 control arm rather than passing it.
 
-verify: sh S=scripts/validate-no-dead-doc-refs.sh; [ -f "$S" ] || exit 9; g="$(grep -oE '^for doc in [^;]+' "$S" | head -1)"; [ -n "$g" ] || exit 9; case "$g" in *'docs/*.md'*) exit 1 ;; *) exit 0 ;; esac
+verify: sh S=scripts/validate-no-dead-doc-refs.sh; [ -f "$S" ] || exit 9; D="$(mktemp -d)" || exit 9; R="$D/r"; mkdir -p "$R" || exit 9; tar --exclude=.git -cf - . 2>/dev/null | tar -xf - -C "$R" || exit 9; [ -f "$R/$S" ] && [ -d "$R/core" ] && [ -d "$R/docs" ] || exit 9; ( cd "$R" && bash "$S" >/dev/null 2>&1 ) || exit 9; mkdir -p "$R/docs/zzp" || exit 9; printf 'p\n' > "$R/docs/zzbltop.md" || exit 9; printf 'p\n' > "$R/docs/zzp/zzblnested.md" || exit 9; printf 'see docs/zzbltop.md and docs/zzp/zzblnested.md\n' > "$R/core/zzblprobe.md" || exit 9; ( cd "$R" && bash "$S" >/dev/null 2>"$D/o" ); rc=$?; t="$(grep -cF "docs/zzbltop.md" "$D/o")" || t=0; n="$(grep -cF "docs/zzp/zzblnested.md" "$D/o")" || n=0; [ "$rc" -ne 0 ] && [ "$t" -ge 1 ] && [ "$n" -ge 1 ]
 
 ## BL-074
 
