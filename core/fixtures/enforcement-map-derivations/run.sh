@@ -104,6 +104,32 @@ edit() {
   mv "$f.mut" "$f"
 }
 
+# edit_json <file> <python program> — `edit`, for a file whose grammar is JSON.
+#
+# THE VALIDITY ASSERT IS THE POINT, and it is what an awk edit cannot give. A schema mutated
+# into unparseable JSON makes the walker that reads it yield NOTHING, the exclusion goes empty,
+# and the arm reports every enum token in the span -- a fire the assertion would score as its
+# own kill while the real cause was a broken seed. So the program is handed the parsed text and
+# its output is REPARSED before it lands. The `cmp -s` guard is `edit`'s, for `edit`'s reason.
+#
+# The program reads the file path as argv[1] and writes the new text to stdout.
+edit_json() {
+  local f="$1" prog="$2"
+  python3 -c "$prog" "$f" > "$f.mut" 2>/dev/null || {
+    bad "FIXTURE BROKEN — the python mutation of ${f##*/} failed; no tree was built and nothing below was tested"
+    rm -f "$f.mut"; return 1
+  }
+  if cmp -s "$f" "$f.mut"; then
+    bad "FIXTURE BROKEN — the mutation of ${f##*/} changed nothing; the assertion below would test a clean tree"
+    rm -f "$f.mut"; return 1
+  fi
+  if ! python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$f.mut" 2>/dev/null; then
+    bad "FIXTURE BROKEN — the mutation left ${f##*/} as invalid JSON. The renderer's walker would read NOTHING out of it, the enum exclusion would go empty, and the arm would report every enum token in the span — a fire this assertion would misread as its own."
+    rm -f "$f.mut"; return 1
+  fi
+  mv "$f.mut" "$f"
+}
+
 # arm_id_of <name> — the invariant id a name DECLARES, or empty.
 #
 # EVERY ASSERTION IS NAMED `A<nn>_i<id>_<what>`, AND THAT EMBEDDED SEGMENT IS THE
@@ -318,6 +344,45 @@ cr_owner_members() {
 # never acquitted anything new. `fixture-mutants.md`: seed the discriminating member, not the
 # first one. The scan is over the same span the arm extracts, so "already carried" is decided
 # against the text the arm reads rather than against the whole file.
+# cr_enum_all <tree root> — every screaming-compound enum member the renderer's walker yields.
+# The shared half of `cr_enum_unseen` and A41's precondition, so the three callers cannot
+# disagree about what "a schema enum member" means.
+cr_enum_all() {
+  local w
+  w="$(awk "/^SCHEMA_PY='\$/ { on = 1; next } on && /^'\$/ { exit } on { print }" \
+        "$1/scripts/render-vocabulary-index.sh")"
+  [ -n "$w" ] || return 1
+  python3 -c "$w" "$1/core/schemas" 2>/dev/null \
+    | awk -F'\t' '{ n = split($3, m, " ")
+                    for (i = 1; i <= n; i++)
+                      if (m[i] ~ /^[A-Z]+([-_][A-Z]+)+$/ && !(m[i] in s)) { s[m[i]] = 1; print m[i] } }'
+}
+
+# cr_enum_schema <tree root> — the schema file the walker reads a screaming-compound enum out
+# of, as a tree-relative path. ASKED OF THE WALKER rather than named here: a hand-named schema
+# is the same defect A41 exists to catch, correct today and silently wrong the release that
+# file is reorganised.
+#
+# THE WALKER'S FIRST COLUMN IS A BASENAME, NOT A PATH -- measured, `provenance-block.json` and
+# not `core/schemas/provenance-block.json`. The directory is re-attached here rather than
+# assumed, and the result is required to EXIST, because a path that resolves to nothing makes
+# the caller's mutation match nothing and `edit_json` would report a broken fixture for a
+# reason that has nothing to do with the schema.
+cr_enum_schema() {
+  local w base
+  w="$(awk "/^SCHEMA_PY='\$/ { on = 1; next } on && /^'\$/ { exit } on { print }" \
+        "$1/scripts/render-vocabulary-index.sh")"
+  [ -n "$w" ] || return 1
+  base="$(python3 -c "$w" "$1/core/schemas" 2>/dev/null \
+          | awk -F'\t' '{ n = split($3, m, " ")
+                          for (i = 1; i <= n; i++)
+                            if (m[i] ~ /^[A-Z]+([-_][A-Z]+)+$/) { print $1; exit } }')"
+  [ -n "$base" ] || return 1
+  base="core/schemas/${base##*/}"
+  [ -f "$1/$base" ] || return 1
+  printf '%s\n' "$base"
+}
+
 cr_enum_unseen() {
   local w span
   w="$(awk "/^SCHEMA_PY='\$/ { on = 1; next } on && /^'\$/ { exit } on { print }" \
@@ -1037,6 +1102,104 @@ A40_i112_noncompound_nonmember_in_prose_is_the_limit() {
   tok="REJ"; tok="${tok}ECTED"
   if edit "$t/$CR_READER" "$(cr_after_check1 "- A sentence naming $tok.")"; then
     assert_silent "I112 the same bare non-compound token in PROSE is silent — the recorded limit, asserted (A39's twin)"
+  fi
+}
+
+# --- Assertion 41: I112 — the enum exclusion must be DERIVED, not a typed list ---
+# A WRONG IMPLEMENTATION THAT PASSES EVERYTHING ABOVE. Replace the arm's `i112_walker` /
+# `i112_enum` derivation with the three enum members spelled out as literals, and every
+# assertion in this file stays green: A35 derives its own seed from the CURRENT schemas, so a
+# hand-list that is correct today acquits exactly what A35 seeds, today and forever. The list
+# goes wrong on the release that adds a member, and nothing announces it.
+#
+# SO THE SEED MOVES THE POPULATION RATHER THAN THE TOKEN. It adds a FOURTH screaming-compound
+# member to an enum the walker reads AND writes that token into Check 1's prose. A derived
+# exclusion picks the new member up in the same run and is silent. A typed list cannot, and
+# reports it -- which is the whole difference between the two implementations, invisible to
+# every other assertion here.
+#
+# THE ENUM IS FOUND BY RUNNING THE WALKER, not by naming a schema. `cr_enum_schema` asks which
+# file the walker actually reads a screaming-compound enum out of; a hand-named schema would be
+# the same defect this assertion exists to catch, one level down.
+#
+# THE ONE-PER-LINE LAYOUT IS LOAD-BEARING AND IS PRESERVED. The register schema's own
+# description says layer-drift.sh reads that array line by line. `edit_json` reparses the
+# result, so a seed that broke the file would be reported as a broken fixture rather than
+# scored as this assertion's kill.
+A41_i112_enum_exclusion_is_derived() {
+  t="$(fresh)"
+  local schema tok
+  schema="$(cr_enum_schema "$t")"
+  if [ -z "$schema" ]; then
+    bad "FIXTURE BROKEN — no schema under core/schemas/ yields a screaming-compound enum member through render-vocabulary-index.sh's walker, so there is no enum to extend and this assertion would prove nothing about how the exclusion is built."
+    return
+  fi
+  tok="SUPERSEDED_BY"; tok="${tok}_UPSTREAM"
+  # The insert is keyed on the enum's own LAST member, derived, so it cannot drift onto some
+  # other array in the file and it needs no hand-named anchor.
+  if ! edit_json "$t/$schema" '
+import json, re, sys
+p = sys.argv[1]
+s = open(p).read()
+tok = "SUPERSEDED_BY" + "_UPSTREAM"
+m = None
+for m in re.finditer(r"^(\s*)\"([A-Z]+(?:[-_][A-Z]+)+)\"\n(\s*\])", s, re.M):
+    pass
+assert m, "no one-per-line screaming-compound enum tail found"
+s = s[:m.start()] + "%s\"%s\",\n%s\"%s\"\n%s" % (m.group(1), m.group(2), m.group(1), tok, m.group(3)) + s[m.end():]
+json.loads(s)
+sys.stdout.write(s)
+'; then
+    return
+  fi
+  # The new member must actually reach the walker's output, or the silence below is a silence
+  # about a token that is not in any enum -- which is A33, passing under this name.
+  if ! grep -qF "$tok" <<<"$(cr_enum_all "$t")"; then
+    bad "FIXTURE BROKEN — the seeded fourth member is not in what render-vocabulary-index.sh's walker yields over the mutated schemas, so the silence below would be a silence about a token in NO enum. That is A33's subject, not this one."
+    return
+  fi
+  if edit "$t/$CR_READER" "$(cr_after_check1 "- A sentence naming $tok.")"; then
+    assert_silent "I112 a schema enum member added in the SAME tree is acquitted — the exclusion is derived, not a typed list"
+  fi
+}
+
+# --- Assertion 42: I112 — the owner grammar is ANCHORED, like the renderer's -----
+# THE SECOND WRONG IMPLEMENTATION THAT PASSES EVERYTHING ABOVE. Drop the `^`/`$` anchors from
+# `i112_owner_set` -- have it `match()` the alternation anywhere on a line instead of requiring
+# the line to BE one -- and every assertion above stays green, because on a tree that still has
+# its template line the anchored and unanchored grammars read the same set.
+#
+# THEY DIVERGE ON THE TREE WHERE THE TEMPLATE IS GONE, and that tree is one edit away.
+# code-reviewer.md writes the same three names a SECOND time, as a parenthesised alternation
+# inside a Communication sentence. Derived over this tree: the anchored shape matches exactly
+# ONE line, and the unanchored one matches that line plus the prose sentence. So deleting the
+# template leaves the anchored grammar with nothing -- its zero guard fires, correctly, because
+# the declaration a review file is written FROM is gone -- while the unanchored grammar
+# silently harvests the SENTENCE and reports a healthy three-member set. Text about a program
+# is not the program, and this is that rule with a set on the end of it.
+#
+# THE PRECONDITION IS ASSERTED, NOT ASSUMED. If the prose alternation is ever removed this
+# stops being a discriminating seed and quietly becomes a second copy of A36, so the mutated
+# owner is required to still CONTAIN an unanchored match before the verdict is read.
+A42_i112_owner_grammar_is_anchored() {
+  t="$(fresh)"
+  local anchored unanchored
+  anchored="$(grep -cE '^[A-Z_]+( \| [A-Z_]+)+$' "$t/$CR_OWNER")" || anchored=0
+  if [ "$anchored" -ne 1 ]; then
+    bad "FIXTURE BROKEN — $anchored line(s) in ${CR_OWNER##*/} ARE a verdict template; this assertion deletes the one template line and needs exactly one to delete."
+    return
+  fi
+  if edit "$t/$CR_OWNER" '/^[A-Z_]+( \| [A-Z_]+)+$/ && !d { d=1; next } { print }'; then
+    # THE DISCRIMINATING PROPERTY, CHECKED ON THE TREE THE VALIDATOR WILL READ. An unanchored
+    # grammar must still find something here, or the two implementations agree on this input
+    # and the assertion below is scored against a tree that cannot tell them apart.
+    unanchored="$(grep -cE '[A-Z_]+( \| [A-Z_]+)+' "$t/$CR_OWNER")" || unanchored=0
+    if [ "$unanchored" -lt 1 ]; then
+      bad "FIXTURE BROKEN — with the template line deleted, ${CR_OWNER##*/} carries NO unanchored verdict alternation either, so an unanchored grammar would read zero here too. The two implementations agree on this tree and this assertion has become a second copy of A36."
+      return
+    fi
+    assert_fires_n "I112 deleting the template line REPORTS, even though the prose alternation survives — the owner grammar is anchored" \
+                   "could not derive the code-review verdict set: 0 member(s)" 1
   fi
 }
 
