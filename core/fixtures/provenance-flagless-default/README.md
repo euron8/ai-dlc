@@ -20,6 +20,10 @@ Every arm reads the exit code directly off the invocation, never after a pipe.
 |---|---|---|---|
 | f-ctl | `docs/valid.md`, schema-valid block | — | 0 |
 | a | `docs/prd.md`, no block | — | 1, stderr names `--allow-missing`, no `MALFORMED`/`CANNOT PARSE` |
+| a2 | `docs/prd.md` named RELATIVELY from a `cd`'d subshell | — | 1, same ABSENT verdict as (a) |
+| a3 | the same file named `./docs/prd.md` | — | 1, same ABSENT verdict as (a) |
+| a4 | `docs/prd.md`, `AI_DLC_PROVENANCE_ALLOW_MISSING=1` set in the invocation | — | 1, same ABSENT verdict as (a) |
+| a5 | the same with `PROVENANCE_ALLOW_MISSING=1`, then `ALLOW_MISSING=1` | — | 1 each |
 | b | `docs/prd.md`, no block | `--allow-missing` | 0 |
 | c | `docs/retro/s301/retro.md`, no block | `--allow-missing` | 1 |
 | d | `docs/fenced.md`, marker in a ``` fence | `--allow-missing` | 1, as MALFORMED |
@@ -49,6 +53,23 @@ scan that cannot spell its own subject and says nothing.
 **(c), (d) and (h) are three arms because the flag has three things it must not acquit.** An
 `--allow-missing` that short-circuits the whole reader satisfies any one of them read alone.
 
+**(a2)–(a5) differ from the arms above in INVOCATION SHAPE, not in assertion.** Each scores the
+same three properties (a) does, through the shared `absent_verdict` helper. They exist because
+two wrong neighbours are invisible to the driver rather than to the assertions:
+
+- Every other arm names its artifact absolutely, since the seeds live under `mktemp`. A deny
+  keyed on `os.path.isabs` holds all of them at 1 and acquits the consumer's ONLY flagless call
+  site — `scripts/ci-local.sh`'s retro-compliance check, which passes
+  `docs/retro/sprint-<N>.md` relative to the consumer root. (a2) drives the bare relative
+  spelling and (a3) the `./`-prefixed one, because a grammar special-casing one is a different
+  program from one keyed on absoluteness.
+- The hermeticity scrub unsets every `AI_DLC_*` name in the fixture's own process, so an
+  `AI_DLC_`-prefixed environment back door into the acquittal is unobservable by construction,
+  while an UNPREFIXED one is already caught by (a)/(g). (a4) therefore sets its name in the
+  INVOCATION — `env AI_DLC_PROVENANCE_ALLOW_MISSING=1 bash "$VALIDATOR" …` — which runs after
+  the scrub and touches only the child; the scrub is correct and stays. (a5) drives the two
+  unprefixed spellings so the arm covers the class rather than the one name a mutant picks.
+
 ## Mutants
 
 Each is a copy of the validator inside its own tree, with `cmp -s` asserting the copy differs.
@@ -63,15 +84,19 @@ with the mutation.
 | M1 | the flagless-absent rung reverted to `sys.exit(0)` | (a) and (g) |
 | M2 | `allow_missing` short-circuits above the retro and MALFORMED rungs | (c), (d) and (h) |
 | M3 | deny only when the path ends `.md` | (g) |
+| M4 | acquit when `not os.path.isabs(artifact_path)`, above the absent emitter | (a2) and (a3) |
+| M5 | `allow_missing` also reads `AI_DLC_PROVENANCE_ALLOW_MISSING` from the environment | (a4) |
 
 **M0's conjunct is positive.** Two inert runs compare equal: a tree where the driven subject
 bails at its own startup check makes every mutant "survive" AND the control "pass", because
 `rc=1` with nothing printed is what a copy that never ran looks like. M0 requires the deny
 message to be THERE.
 
-**M2 and M3 each carry a near-miss conjunct in the same run.** M2 must leave (a) and (g) at 1,
-M3 must leave (a) at 1 — a mutant that moved every cell would be M1 again, and the arm it
-claims to score would own nothing.
+**M2, M3, M4 and M5 each carry a near-miss conjunct in the same run.** M2 must leave (a) and (g)
+at 1, M3 must leave (a) at 1, M4 must leave (a), (g) and (a4) at 1, and M5 must leave (a), (a2)
+and both unprefixed names of (a5) at 1 — a mutant that moved every cell would be M1 again, and
+the arm it claims to score would own nothing. M5's unprefixed conjuncts are what separate a
+back door on ONE name from a reader honouring any `*ALLOW_MISSING` variable.
 
 ## Layouts
 

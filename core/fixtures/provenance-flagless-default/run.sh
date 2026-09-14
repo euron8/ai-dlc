@@ -27,6 +27,16 @@
 # `--allow-missing` and must NOT carry the MALFORMED wording, with a same-run control on a
 # genuinely malformed file proving that second grammar can fire at all.
 #
+# TWO MORE WRONG NEIGHBOURS ARE INVISIBLE TO THE SHAPE OF THE DRIVER RATHER THAN TO THE ARMS,
+# and they are why (a2)(a3) and (a4)(a5) exist. The seeds live under `mktemp`, so every arm above
+# names its artifact ABSOLUTELY — a deny keyed on `os.path.isabs` therefore holds every one of
+# them at 1 while acquitting the consumer's only flagless call site, which passes a path relative
+# to the consumer root. And the hermeticity scrub below unsets every AI_DLC_* name in this
+# process, so a reader honouring an AI_DLC_-prefixed environment variable as a second spelling of
+# `--allow-missing` is unobservable by construction, while a reader honouring an UNPREFIXED name
+# is already caught by (a)/(g). Neither gap is closed by another assertion about the same
+# invocation; both are closed by a different INVOCATION SHAPE, which is what (a2)–(a5) supply.
+#
 # (f-ctl) RUNS FIRST AND IS THE SEED CONTROL. Every arm below it is a statement about a
 # validator that works; a seed the validator rejects for an unrelated reason would make the
 # whole file read as agreement. The block it uses is the one check-17-bypass's seed emits,
@@ -80,6 +90,10 @@ if [ -z "$VALIDATOR" ] || [ -z "$SCHEMA" ]; then
   [ -z "$SCHEMA" ]    && miss="$miss provenance-block.json"
   for a in "f-ctl schema-valid block, flagless, ACCEPTED" \
            "a  ordinary .md, no block, no flag, DENIED naming --allow-missing" \
+           "a2 the same file named RELATIVELY from a cd'd cwd, no flag, DENIED" \
+           "a3 the same file named ./-relatively from a cd'd cwd, no flag, DENIED" \
+           "a4 flagless, no block, with AI_DLC_PROVENANCE_ALLOW_MISSING=1 in the env, DENIED" \
+           "a5 flagless, no block, with PROVENANCE_ALLOW_MISSING=1 and ALLOW_MISSING=1, DENIED" \
            "b  the same file under --allow-missing, ACCEPTED" \
            "c  a retro with no block under --allow-missing, DENIED" \
            "d  a MALFORMED marker under --allow-missing, DENIED as malformed" \
@@ -87,7 +101,7 @@ if [ -z "$VALIDATOR" ] || [ -z "$SCHEMA" ]; then
            "f  a schema-valid block under --allow-missing, ACCEPTED" \
            "g  an artifact with no .md extension, no block, no flag, DENIED" \
            "h  a block that VIOLATES a rule under --allow-missing, DENIED" \
-           "M0/M1/M2/M3 mutants"; do
+           "M0/M1/M2/M3/M4/M5 mutants"; do
     printf '  SKIP  %s — subject absent in both layouts:%s\n' "$a" "$miss"
   done
   exit 0
@@ -98,6 +112,10 @@ command -v python3 >/dev/null 2>&1 || { echo "FIXTURE ERROR: python3 not on PATH
 # HERMETICITY. The hooks honour a set of AI_DLC_* tunables and a consumer that sets one in
 # settings.json exports it into every session, so the fixture would be adjudicating the
 # operator's configuration rather than the code.
+#
+# IT ALSO BLINDS THIS FIXTURE TO AN AI_DLC_-NAMED BACK DOOR INTO THE ACQUITTAL, which is the
+# reason (a4) sets its variable in the INVOCATION rather than exporting one here. The scrub is
+# correct and stays; the arm works around it, and `drive_env` below is how.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
@@ -211,6 +229,43 @@ drive() {  # drive <validator> <args...> -> prints rc, leaves combined output in
   printf '%s\n' "$?"
 }
 
+# EVERY OTHER ARM NAMES ITS ARTIFACT ABSOLUTELY, because the seeds live under `mktemp`. That is
+# a property of the DRIVER, not of the subject, and it made an entire acquittal class invisible:
+# a guard reading `if not os.path.isabs(artifact_path)` above the absent emitter passes every
+# absolute arm here while acquitting the only flagless call site a consumer has — `ci-local.sh`'s
+# retro-compliance check, which hands this reader `docs/retro/sprint-<N>.md` relative to the
+# consumer's own root. The `cd` is subshelled and guarded: an unguarded one that fails leaves the
+# body running against the CALLER's working directory, and `exit 9` keeps a failed `cd` from
+# arriving at an arm as the rc=1 that arm expects.
+drive_rel() {  # drive_rel <cwd> <validator> <relative-args...> -> prints rc, output in $OUTF
+  local d
+  local v
+  d="$1"
+  v="$2"
+  shift 2
+  ( cd "$d" || exit 9; bash "$v" "$@" ) >"$OUTF" 2>&1
+  printf '%s\n' "$?"
+}
+
+# THE VARIABLE IS SET IN THE INVOCATION, AND THAT IS THE WHOLE POINT OF THIS HELPER.
+# The hermeticity scrub above unsets every AI_DLC_* name in this process before any arm runs, so
+# an `export` here would be undone for the driven child exactly as it is for every other arm —
+# which is what makes an AI_DLC_-prefixed environment back door STRUCTURALLY invisible to this
+# fixture: the scrub is a correct defence against adjudicating the operator's configuration, and
+# it doubles as a blindfold over the one acquittal shaped like the configuration it removes. A
+# non-prefixed twin is already caught by (a)/(g), which is the asymmetry that hides the prefixed
+# one. `env VAR=… bash …` sets it for the child only, after the scrub, so the rest of the file
+# keeps its hermeticity and this arm gets its subject.
+drive_env() {  # drive_env <VAR=VAL> <validator> <args...> -> prints rc, output in $OUTF
+  local e
+  local v
+  e="$1"
+  v="$2"
+  shift 2
+  env "$e" bash "$v" "$@" >"$OUTF" 2>&1
+  printf '%s\n' "$?"
+}
+
 # ---------------------------------------------------------------------------
 # (f-ctl) THE SEED CONTROL, FIRST. A bad seed cannot be allowed to read as agreement.
 # ---------------------------------------------------------------------------
@@ -251,6 +306,84 @@ elif grep -qE 'MALFORMED|CANNOT PARSE' <<<"$a_out"; then
 else
   ok "a  an ordinary .md with no block and no flag is DENIED (rc=1), naming --allow-missing and NOT as MALFORMED (control: that grammar matches on the fenced file in this same run)"
 fi
+
+# The ABSENT verdict, in one place, so (a2)–(a5) score the same three properties (a) does: the
+# deny fired, it named the remedy, and it is not the MALFORMED verdict. The malformed half keeps
+# the same control (a) established one arm above — the grammar matched on docs/fenced.md in this
+# same run — so an empty message here cannot satisfy it by silence.
+absent_verdict() {  # absent_verdict <rc> <output> -> 0 if the ABSENT deny, else prints why
+  if [ "$1" != 1 ]; then printf 'exited %s, expected 1' "$1"; return 1; fi
+  if ! grep -q -- '--allow-missing' <<<"$2"; then printf 'denied without naming --allow-missing'; return 1; fi
+  if grep -qE 'MALFORMED|CANNOT PARSE' <<<"$2"; then printf 'reported the ABSENT case with the MALFORMED wording'; return 1; fi
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# (a2)(a3) THE SAME BLOCK-LESS SEED, NAMED RELATIVELY. Every other arm in this file hands the
+# reader an absolute `$ART/...` path because the seeds live under `mktemp`, and that is a
+# property of this fixture rather than of any caller: the consumer's ONLY flagless call site,
+# `scripts/ci-local.sh`'s retro-compliance check, passes `docs/retro/sprint-<N>.md` relative to
+# its own root. A guard reading `if not os.path.isabs(artifact_path): print("OK: ..."); exit(0)`
+# above the absent emitter therefore acquits exactly the calls that reach this reader in
+# production while every absolute arm here holds at 1. Two spellings, because a path grammar
+# that special-cases `./` is a different program from one keyed on absoluteness, and one
+# spelling alone cannot tell them apart. M4 below is that guard.
+# ---------------------------------------------------------------------------
+rc_a2="$(drive_rel "$ART" "$VALIDATOR" docs/prd.md)"
+a2_out="$(cat "$OUTF")"
+if why="$(absent_verdict "$rc_a2" "$a2_out")"; then
+  ok "a2 the same block-less .md named RELATIVELY (docs/prd.md, from a cd'd cwd) is DENIED (rc=1) with the ABSENT verdict — the rung is keyed on the DECLARATION, not on how the caller spelled the path"
+else
+  bad "a2 the block-less .md named relatively as docs/prd.md $why — the deny is keyed on an ABSOLUTE path, and the consumer's only flagless call site (ci-local.sh's retro-compliance check) passes a relative one"
+  sed 's/^/        /' <<<"$a2_out" >&2
+fi
+
+rc_a3="$(drive_rel "$ART" "$VALIDATOR" ./docs/prd.md)"
+a3_out="$(cat "$OUTF")"
+if why="$(absent_verdict "$rc_a3" "$a3_out")"; then
+  ok "a3 the same file named ./docs/prd.md is DENIED (rc=1) with the ABSENT verdict — the two relative spellings agree, so the arm cannot be satisfied by a guard that only special-cases one of them"
+else
+  bad "a3 the block-less .md named relatively as ./docs/prd.md $why — a path grammar that handles one relative spelling and not the other is denying by accident"
+  sed 's/^/        /' <<<"$a3_out" >&2
+fi
+
+# ---------------------------------------------------------------------------
+# (a4)(a5) NO ENVIRONMENT VARIABLE IS A DECLARATION. `--allow-missing` is an argument because a
+# declaration has to be made per call site by the caller that decided the artifact is in scope;
+# an env var is made once, invisibly, by whoever exported it, and it reaches every artifact in
+# the session.
+#
+# THE HERMETICITY SCRUB AT THE TOP OF THIS FILE IS WHY THESE ARMS EXIST AND WHY THEY ARE SPELLED
+# THIS WAY. That loop unsets every AI_DLC_* name in the fixture's own process — correctly, so the
+# fixture adjudicates the code and not the operator's settings.json — and in doing so it makes an
+# AI_DLC_-PREFIXED back door structurally invisible: the variable is gone before any arm runs, so
+# a reader honouring `AI_DLC_PROVENANCE_ALLOW_MISSING` scores identically to one that ignores it.
+# A non-prefixed twin is not invisible at all — arms (a) and (g) would already catch a reader
+# honouring a variable nobody set — and that asymmetry is exactly what hides the prefixed case.
+# So the variable is set IN THE INVOCATION, `env VAR=1 bash "$VALIDATOR" …`, which runs after the
+# scrub and touches only the child. (a5) drives the two unprefixed spellings for the same
+# property under names the scrub never reached, so the arm covers the whole class rather than the
+# one name a mutant happens to pick.
+# ---------------------------------------------------------------------------
+rc_a4="$(drive_env AI_DLC_PROVENANCE_ALLOW_MISSING=1 "$VALIDATOR" "$ART/docs/prd.md")"
+a4_out="$(cat "$OUTF")"
+if why="$(absent_verdict "$rc_a4" "$a4_out")"; then
+  ok "a4 a block-less .md with AI_DLC_PROVENANCE_ALLOW_MISSING=1 in the invocation's environment is still DENIED (rc=1) with the ABSENT verdict — the acquittal is an ARGUMENT, and no exported name waives it"
+else
+  bad "a4 AI_DLC_PROVENANCE_ALLOW_MISSING=1 in the environment $why — the acquittal has an environment back door, and a consumer that exports the name in settings.json waives this rung for every artifact in every session"
+  sed 's/^/        /' <<<"$a4_out" >&2
+fi
+
+for _e in PROVENANCE_ALLOW_MISSING=1 ALLOW_MISSING=1; do
+  rc_a5="$(drive_env "$_e" "$VALIDATOR" "$ART/docs/prd.md")"
+  a5_out="$(cat "$OUTF")"
+  if why="$(absent_verdict "$rc_a5" "$a5_out")"; then
+    ok "a5 a block-less .md with $_e in the invocation's environment is still DENIED (rc=1) with the ABSENT verdict"
+  else
+    bad "a5 $_e in the environment $why — the acquittal reads an environment name, and the caller that made no declaration gets a pass over a file nothing examined"
+    sed 's/^/        /' <<<"$a5_out" >&2
+  fi
+done
 
 # ---------------------------------------------------------------------------
 # (b) --allow-missing is the declaration that acquits it
@@ -481,6 +614,82 @@ if [ "$rc_m3g" = 0 ] && [ "$rc_m3a" = 1 ]; then
     M3 deny only when path ends .md         killed by (g)"
 else
   mut_bad "M3 mutant SURVIVED or is not discriminating: with the deny keyed on .md, (g) read $rc_m3g and (a) read $rc_m3a — expected 0 and 1. If (a) also moved this is M1 over again and (g) owns nothing"
+fi
+
+# --- M4: acquit any artifact named by a RELATIVE path --------------------------------------
+# The path-shape non-fix. It passes every arm this fixture had before (a2)/(a3) existed, because
+# every one of those drives `$ART/...` off `mktemp` and is therefore absolute by construction —
+# and it acquits the consumer's only flagless call site, which names its artifact relative to the
+# consumer root. Anchored on the absent rung's own emitted text, the same anchor M1 and M3 use,
+# with `count=1` and the `cmp -s` guard: a mutation that matched nothing is a mutant that never
+# existed. Scored WITH (a), (g) and (a4) holding at 1 — a mutant that moved those would be M1
+# again and (a2)/(a3) would own nothing.
+M4="$(mut_tree m4)"
+python3 - "$M4" <<'PY'
+import re, sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s2, n = re.subn(
+    r'\n    print\(\n        f"FAIL: \{artifact_path\} carries no ',
+    '\n    if not os.path.isabs(artifact_path):\n'
+    '        print(f"OK: no provenance block required or present in {artifact_path}.")\n'
+    '        sys.exit(0)\n'
+    '    print(\n        f"FAIL: {artifact_path} carries no ',
+    s, count=1)
+if n == 1:
+    open(p, "w", encoding="utf-8").write(s2)
+PY
+if cmp -s "$VALIDATOR" "$M4"; then
+  echo "FIXTURE BROKEN: M4 matched nothing — the flagless-absent rung's emitter moved, so the relative-path-acquittal mutant does not exist and (a2)/(a3) would score a kill nobody earned" >&2
+  exit 2
+fi
+rc_m4a2="$(drive_rel "$ART" "$M4" docs/prd.md)"
+rc_m4a3="$(drive_rel "$ART" "$M4" ./docs/prd.md)"
+rc_m4a="$(drive "$M4" "$ART/docs/prd.md")"
+rc_m4g="$(drive "$M4" "$ART/docs/report.txt")"
+rc_m4a4="$(drive_env AI_DLC_PROVENANCE_ALLOW_MISSING=1 "$M4" "$ART/docs/prd.md")"
+if [ "$rc_m4a2" = 0 ] && [ "$rc_m4a3" = 0 ] && [ "$rc_m4a" = 1 ] && [ "$rc_m4g" = 1 ] && [ "$rc_m4a4" = 1 ]; then
+  ok "M4 mutant KILLED by (a2) and (a3): acquitting a relative artifact path flips both to 0 while (a), (g) and (a4) hold at 1 — the absolute-path arms structurally cannot see this one"
+  killed_by="${killed_by}
+    M4 acquit a RELATIVE artifact path       killed by (a2) and (a3)"
+else
+  mut_bad "M4 mutant SURVIVED or is entangled: the relative-path acquittal gave (a2)=$rc_m4a2 (a3)=$rc_m4a3 (expected 0 0) with (a)=$rc_m4a (g)=$rc_m4g (a4)=$rc_m4a4 (expected 1 1 1). If (a2)/(a3) held at 1 they are driving an absolute path after all; if (a) moved, this is M1 again and the relative arms own nothing"
+fi
+
+# --- M5: an environment back door into the acquittal ---------------------------------------
+# `--allow-missing` is an argument because a declaration is made per call site by the caller that
+# decided the artifact was in scope. This mutant makes an exported name make it instead, and it
+# is invisible to every arm that does not set the variable IN ITS OWN INVOCATION: the hermeticity
+# scrub above unsets every AI_DLC_* name in this process, so the fixture's own environment can
+# never carry it to a child. That scrub is correct and stays; (a4) works around it rather than
+# relaxing it. Scored with the two UNPREFIXED names holding at 1 — a mutant reading any variable
+# named *ALLOW_MISSING would be a different program, and (a5) is what tells the two apart.
+M5="$(mut_tree m5)"
+python3 - "$M5" <<'PY'
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+anchor = 'allow_missing = len(sys.argv) > 5 and sys.argv[5] == "1"\n'
+if s.count(anchor) == 1:
+    ins = ('allow_missing = (len(sys.argv) > 5 and sys.argv[5] == "1") or bool(\n'
+           '    os.environ.get("AI_DLC_PROVENANCE_ALLOW_MISSING"))\n')
+    open(p, "w", encoding="utf-8").write(s.replace(anchor, ins, 1))
+PY
+if cmp -s "$VALIDATOR" "$M5"; then
+  echo "FIXTURE BROKEN: M5 matched nothing — the line that reads the --allow-missing argument in the artifact-mode python block moved or was respelled, so the environment-back-door mutant does not exist and (a4) would score a kill nobody earned" >&2
+  exit 2
+fi
+rc_m5a4="$(drive_env AI_DLC_PROVENANCE_ALLOW_MISSING=1 "$M5" "$ART/docs/prd.md")"
+rc_m5a="$(drive "$M5" "$ART/docs/prd.md")"
+rc_m5a2="$(drive_rel "$ART" "$M5" docs/prd.md)"
+rc_m5n1="$(drive_env PROVENANCE_ALLOW_MISSING=1 "$M5" "$ART/docs/prd.md")"
+rc_m5n2="$(drive_env ALLOW_MISSING=1 "$M5" "$ART/docs/prd.md")"
+if [ "$rc_m5a4" = 0 ] && [ "$rc_m5a" = 1 ] && [ "$rc_m5a2" = 1 ] && [ "$rc_m5n1" = 1 ] && [ "$rc_m5n2" = 1 ]; then
+  ok "M5 mutant KILLED by (a4): honouring AI_DLC_PROVENANCE_ALLOW_MISSING flips it to 0 while (a), (a2) and both unprefixed names in (a5) hold at 1 — the scrub makes this invisible to every arm that does not set the name in its own invocation"
+  killed_by="${killed_by}
+    M5 env back door into --allow-missing    killed by (a4)"
+else
+  mut_bad "M5 mutant SURVIVED or is entangled: the environment back door gave (a4)=$rc_m5a4 (expected 0) with (a)=$rc_m5a (a2)=$rc_m5a2 (a5:PROVENANCE_ALLOW_MISSING)=$rc_m5n1 (a5:ALLOW_MISSING)=$rc_m5n2 (expected 1 1 1 1). (a4) reading 1 means the variable never reached the child — the scrub runs in THIS process, so the name must be set in the invocation, not exported here"
 fi
 
 echo
