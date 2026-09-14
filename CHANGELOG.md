@@ -15,6 +15,81 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.571.0] - 2026-09-14
+
+### The In-Flight row readers disagreed with the template core itself ships (BL-249)
+
+Two of the three readers of the pipeline snapshot's `## In-Flight Teammates`
+section gated on a leading `|`:
+
+- `core/scripts/validate-artifact-budget.sh`, `check_inflight_status`
+- `core/hooks/ai-dlc-continue.sh`, Check 0's teammate-sweep arm
+
+Markdown renders a table row with or without the opening delimiter, and the
+reference consumer writes the bare form — so both readers saw NONE of its rows.
+The third reader, `check_inflight_rows` in the same validator, never carried the
+gate (its awk is content-keyed on the strikethrough), so two of three readers
+gated on the delimiter, one did not, and nothing bound them to agree.
+
+**Core INSTRUCTS the shape its own readers rejected.** Three step files state the
+row template — `route.md`, `gate-validation.md` and `_gate-procedures.md` — and
+all three write it pipeless. The consumer was following the documented format.
+
+Measured on a consumer snapshot revision carrying rows in that shape: the hook's
+handoff guard went from `allow` to `BLOCK` on four `in-flight` teammates it could
+not previously see, and the validator from 0 findings to 6. Across the consumer's
+committed history the relaxation is strictly additive — 0 findings lost at either
+site.
+
+The narrowing is the whole fix. A bare `/\|/` is what the shape suggests and it
+is wrong: it admits prose, measured on an archived note ending `| wc -l`. A
+pipeless line must also carry the column count the HEADER declares, captured at
+the row whose last cell is `status` — derived from the table, never a fitted
+constant. The width test is restricted to pipeless lines because applying it
+uniformly ACQUITS a piped row with a stray `|` inside a cell, losing a finding
+the old gate caught.
+
+Every existing seed at both sites was piped — 22 of 22 — which is why the defect
+survived. The gap was in the SEED, not in a missing arm.
+
+### The rare-event ceiling for passive monitors (BL-021)
+
+`carry-over-evaluation.md` gains the rule its deferral handling had no word for:
+a carry-over whose monitored event is rare-and-maybe-never carries
+`rare_event: true`, names a staleness ceiling, and states that non-firing is
+healthy. At the ceiling the lead re-decides the item's DISPOSITION rather than
+raising a health escalation, which on a healthy system is a guaranteed false
+alarm.
+
+### Fix-forward cluster accounting at the production validation checkpoint (BL-022)
+
+`deploy-validate.md` gains cluster accounting: the checkpoint enumerates the
+fix-forward PRs merged after the sprint's main merge, compares the count against
+the project's declared cascade-depth threshold, and treats an over-threshold
+count as a breached sprint boundary. Three classes are excluded and each
+exclusion is recorded with its rationale. The threshold is declared by the
+project, never fixed in core.
+
+### Filed, not fixed
+
+- **BL-250** — `route.md` Step 0 path 2 names no program for the beat it tells a
+  resuming lead to arm, and never routes to `wait-for-deliverable.sh --since`,
+  which exists for exactly that case.
+
+### Adjudicated
+
+- `PC-S311-RESUME-INFLIGHT-ROW-HAS-NO-LIVENESS-PROBE-BEFORE-THE-JOIN-BEAT-IS-ARMED`
+  — **REFUSED as filed.** Its proposed `TaskStop` liveness probe returns the
+  wrong answer on its own motivating case: the consumer's snapshot records that
+  teammate as having completed its work before being killed, so the stop finds
+  nothing, and the filing's own remedy text makes a failed stop affirmative
+  license to arm the beat. It authorizes the wasted beat it was filed to prevent,
+  while acquiring a destructive probe in the one place a live teammate is most
+  likely to exist. The non-destructive alternative also fails: the beat's liveness
+  sensor is keyed on the current session id, so across the session boundary a
+  resume IS, it reports `unavailable`. What survives is a documentation gap, filed
+  as BL-250.
+
 ## [0.570.0] - 2026-09-14
 
 Batch 104, one release, three subjects, none of them touching a bootstrapping file. All three

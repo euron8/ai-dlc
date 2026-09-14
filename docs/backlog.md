@@ -113,6 +113,8 @@ verify: sh R=core/skills/ai-dlc/steps/route.md; W=core/scripts/wait-for-delivera
 
 ## BL-249 — the In-Flight row readers disagreed about whether the leading `|` is part of the grammar, and the two that required it were blind to every row core's own step file teaches a lead to write
 
+**LANDED (v0.571.0, verified PENDING).**
+
 **Found 2026-09-14** while reading the reference consumer's snapshot at a resume. The subject is
 the DISAGREEMENT, not either reader: `## In-Flight Teammates` had three readers, two of them
 gated on `/^[[:space:]]*\|/` and one of them not, and nothing bound the three to agree.
@@ -1290,6 +1292,8 @@ verify: sh d=$(mktemp -d); mkdir -p "$d/_bmad-output"; printf "## Pipeline Posit
 
 ## BL-021
 
+**LANDED (v0.571.0, verified PENDING).**
+
 **The rare-event ceiling for probabilistic passive-monitor carry-overs has no counterpart
 anywhere in core, and it is one of only two blocks left in the row that names it.** Measured
 over `core/` at HEAD with a control in the same invocation: files containing `rare_event` = **0**,
@@ -1368,6 +1372,8 @@ corrections above are the reason it survived two drains.
 
 verify: sh f=core/skills/ai-dlc/steps/carry-over-evaluation.md; grep -qF 'validation_intensity' core/skills/ai-dlc/steps/gate-validation.md || exit 9; s="$(awk '/^### 4. Deferral Handling/{n=1} n&&/^### 5. Close Invalid Items/{exit} n' "$f" | grep -v '<!--' | grep -E '^[[:blank:]]*([-*|]|\*\*)')"; [ -n "$s" ] || exit 9; grep -qF 'rare_event:' <<<"$s"
 ## BL-022
+
+**LANDED (v0.571.0, verified PENDING).**
 
 **Fix-Forward Cluster Accounting is absent from core's deploy-validate step entirely, and the
 deferral triple the same row names is already core's — only its PVC siting is not.** Measured
