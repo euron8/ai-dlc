@@ -9,7 +9,7 @@
 # every other fixture's entries alone, so refreshing one fixture costs its own runtime
 # rather than a full re-derivation.
 #
-# fixtures mapped: 197    entries: 22167
+# fixtures mapped: 197    entries: 22170
 absorbed-specifics-survive	.git/HEAD
 absorbed-specifics-survive	.git/config
 absorbed-specifics-survive	.git/index
@@ -8506,10 +8506,11 @@ extension-check-adoption	.git/HEAD
 extension-check-adoption	.git/config
 extension-check-adoption	.git/index
 extension-check-adoption	.git/info/exclude
-extension-check-adoption	.git/objects/1f/8b14df11619cb9535811183c99efc7eb7721ae
-extension-check-adoption	.git/objects/81/ec5c44f746c82e0d68547907987919297a5afa
+extension-check-adoption	.git/objects/0c/601e78de19e8f30c06d3369d9d7284bdbaeb61
+extension-check-adoption	.git/objects/8e/10acb24cebe61eecc99a23274ffd511a80ba54
 extension-check-adoption	.git/objects/info/commit-graphs/commit-graph-chain
-extension-check-adoption	.git/objects/info/commit-graphs/graph-05ea45fbd6011b75f0dd4523cdedbd27f2a36c0c.graph
+extension-check-adoption	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
+extension-check-adoption	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
 extension-check-adoption	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
 extension-check-adoption	.git/objects/pack/multi-pack-index
 extension-check-adoption	.git/packed-refs
@@ -8529,6 +8530,8 @@ extension-check-adoption	core/scripts/.git
 extension-check-adoption	core/scripts/core/skills/ai-dlc
 extension-check-adoption	core/scripts/validate-gate-manifest.sh
 extension-check-adoption	core/skills/ai-dlc-update/reconcile/adopt-extension-checks.sh
+extension-check-adoption	core/skills/ai-dlc/enforcement-map.yaml
+extension-check-adoption	core/skills/ai-dlc/steps/gate-validation.md
 fanout-untracked-corpus	.git/HEAD
 fanout-untracked-corpus	.git/config
 fanout-untracked-corpus	.git/index
