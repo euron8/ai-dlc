@@ -3930,7 +3930,12 @@ writes its next block-less `docs/retro/sprint-<N>.md`. The repoint — `docs/ret
 
 **And the receipt alone cannot score the acquittal's narrowness.** It closes on the flip and
 cannot distinguish an `--allow-missing` that acquits everything; arms (c), (d) and (h) are what
-kill that, and they live in the fixture.
+kill that, and they live in the fixture. Nor can it see a path-shape or environment acquittal:
+it drives one absolute path off `mktemp -d` with no variable set, so a rung that acquits every
+RELATIVE path, or one that reads `AI_DLC_PROVENANCE_ALLOW_MISSING`, reads 0 here while the
+consumer's one flagless caller passes a relative path. The tip adversary built both; arms (a2),
+(a3) and (a4) of `provenance-flagless-default` are what kill them, driven per-invocation
+because that fixture's own hermeticity scrub unsets every `AI_DLC_` variable before the arms run.
 
 verify: sh V=core/scripts/validate-provenance-block.sh; [ -f "$V" ] || exit 9; grep -q -- "--require-skill" "$V" || exit 9; d=$(mktemp -d) || exit 9; printf 'ordinary file, no marker\n' > "$d/plain.md"; a=0; AI_DLC_PROJECT_ROOT="$d" bash "$V" "$d/plain.md" >/dev/null 2>&1 || a=$?; c=0; AI_DLC_PROJECT_ROOT="$d" bash "$V" "$d/plain.md" --require-skill bmad-review-adversarial-general >/dev/null 2>&1 || c=$?; rm -rf "$d"; [ "$c" -eq 1 ] || exit 9; [ "$a" -eq 0 ] && exit 1; exit 0
 
