@@ -15,6 +15,8 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.569.0] - 2026-09-14
+
 ### A declared-id citation denied in its own sentence stops acquitting the row that denies it, and ten staged consumer receipts stop reading the distribution checkout as a path
 
 Batch 103, one release, two no-`PC` subjects. The sweep returned no PC-backed work available:
