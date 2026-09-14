@@ -4381,7 +4381,27 @@ fixture can assert the single-fixture case passes and the all-universe case stil
 stale in the direction that runs everything, which is safe and silent, and the `--list` mode the
 header advertises has been dead for every single-fixture call since it was guarded.
 
-verify: sh f=core/scripts/derive-fixture-readsets.sh; [ -f "$f" ] || exit 9; grep -qF 'cut -f2 "$MERGED" | sort -u > "$WORK/.universe"' "$f" && awk '/^MERGED=/{m=NR} /^cut -f2 "\$MERGED" \| sort -u > "\$WORK\/\.universe"/{u=NR} /^  cat "\$MERGED"/{w=NR} END{exit !(m && u && w && m<u && u<w)}' "$f"
+**Receipt rewritten at batch 102**: the prior receipt was a line-order grep that accepted three
+non-fixes (decorative line after the merge; universe moved but merge left below the die;
+proper-subset count taken from the traced map against a merged universe); this one drives the
+extracted control on two maps. Scored by building each of those three on a copy of the base
+script, the prior receipt read 1 on the REAL fix and 0 on all three — inverted, so it would have
+reported the fix unlanded and each non-fix closed. The replacement extracts the span between
+`# READSET_CONTROL_BEGIN` and `# READSET_CONTROL_END`, sources it, and drives
+`readset_discrimination_control` on three synthetic tab-separated maps: **M1** two fixtures where
+one is a proper subset of the union (must PASS), **M2** every fixture covering the whole union
+(must FAIL), and **M3** the mC-discriminating input — a one-fixture `$TRACED` map whose set equals
+its own union, supplied alongside M2, which a control counting `n_own` from the smaller map
+acquits and the shipped one must still refuse. All three arms are in the shipped one-liner. Each
+arm was proven able to fire: a span-carrying mutant whose control always PASSES fails M2 and M3, a
+mutant whose control always FAILS fails M1, and the `n_own`-from-`$TRACED` mutant passes M1 and M2
+and fails only M3 — so no arm is vacuous. **An absent span exits 1, not 9**: the sentinel pair is
+part of what this entry asks for, so a script without it is the defect still reproducing rather
+than an unmet precondition, and filing it as one would put the entry outside the receipts
+validator's population. Only an absent FILE is exit 9. Base and the three non-fixes therefore
+read 1.
+
+verify: sh f=core/scripts/derive-fixture-readsets.sh; [ -f "$f" ] || exit 9; n="$(grep -c '^# READSET_CONTROL_BEGIN$' "$f")" || n=0; [ "$n" = 1 ] || exit 1; d="$(mktemp -d)" || exit 9; sed -n '/^# READSET_CONTROL_BEGIN$/,/^# READSET_CONTROL_END$/p' "$f" > "$d/ctl.sh"; [ -s "$d/ctl.sh" ] || { rm -rf "$d"; exit 1; }; . "$d/ctl.sh" || { rm -rf "$d"; exit 1; }; type readset_discrimination_control >/dev/null 2>&1 || { rm -rf "$d"; exit 1; }; printf 'a\tp1\na\tp2\nb\tp1\nb\tp2\nb\tp3\n' > "$d/m1"; printf 'a\tp1\na\tp2\nb\tp1\nb\tp2\n' > "$d/m2"; printf 'a\tp1\n' > "$d/m3"; readset_discrimination_control "$d/m1" >/dev/null 2>&1 && r1=0 || r1=1; readset_discrimination_control "$d/m2" >/dev/null 2>&1 && r2=0 || r2=1; TRACED="$d/m3"; readset_discrimination_control "$d/m2" >/dev/null 2>&1 && r3=0 || r3=1; unset TRACED; rm -rf "$d"; [ "$r1" = 0 ] && [ "$r2" = 1 ] && [ "$r3" = 1 ]
 
 ## BL-248 — ten staged consumer receipts under `docs/reviews/` read the distribution checkout through `$DIST`, and two of the six distinct shapes are the exact false-close form the consumer filed
 
