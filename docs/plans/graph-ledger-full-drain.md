@@ -110,9 +110,87 @@ reading, and the prose this gap needs ("take the dispatch time from the row rath
 the beat's liveness line") sits squarely in that grammar's blast radius. It gets its own entry and
 its own before/after measurement, not a paragraph appended under a fix about pipe characters.
 
+### BATCH 105 SHIPPED AS `v0.571.0`, ONE RELEASE, THREE NO-BOOTSTRAPPING SUBJECTS — **THE HEADLINE SUBJECT WAS FOUND BY THE CONSUMER-HISTORY HAND IN AN UNCOMMITTED LEDGER FILING THE SWEEP STRUCTURALLY CANNOT SEE**, AND THE CONTRACT ADVERSARY THEN REFUTED THAT FILING'S OWN REMEDY BY SCORING IT AGAINST ITS OWN MOTIVATING CASE. THE SWEEP WAS EMPTY OF PC WORK. THE GAP IS **TWO**, PENDING **2**, AND THE PULL IS **NOT REQUIRED**.
+
+This block replaces the batch-104 record below it. Re-derive every figure rather than reading it.
+
+**`VERSION` IS `0.571.0`, SO BATCH 106 RELEASES AS `0.572.0`.** Re-derive `VERSION` and add one.
+Batch 105 merged ONCE — `v0.571.0` at `09286975` (PR #754) — naming `BL-249`, `BL-021`, `BL-022`,
+`BL-250` and
+`PC-S311-RESUME-INFLIGHT-ROW-HAS-NO-LIVENESS-PROBE-BEFORE-THE-JOIN-BEAT-IS-ARMED` verbatim in the
+release commit message (control: `BL-999-NEVER-EXISTS-8817` returns 0 on the same join). `BL-249`,
+`BL-021` and `BL-022` are ROTATED, archive **168 → 171**, live **81 → 78**. No bootstrapping file
+moved: the range `132ea672..origin/main` touches zero paths under the update skill.
+
+**THE SWEEP FOUND NOTHING AND THE WORK WAS REAL ANYWAY. THIS IS THE STANDING LESSON.** The sweep
+reproduced batch 104's figures exactly (live 61, cited 40, unfiled 21, archive 206, partition 0,
+TERMINAL 90, DISCHARGED-corrected 13, discharged-but-invisible 0), the 21 unfiled split 7 named on
+`origin/main`, 11 `NOT-UPSTREAM`, 3 withdrawn/refuted, so the PC-backed residue was ZERO. The
+batch's headline subject came from the CONSUMER-HISTORY hand, which read the consumer's WORKING
+TREE and found `PC-S311-RESUME-INFLIGHT-…` present there and absent from consumer HEAD and from
+the sprint branch (1/0/0, against a control id reading 2/2/2). **Every sweep instrument in this
+program reads COMMITTED state, so no amount of care on the derive block could have surfaced it.**
+Dispatch that hand every batch and ask it for the working tree specifically.
+
+**WHAT SHIPPED FOR `BL-249`.** Two of the three readers of the snapshot's `## In-Flight Teammates`
+section gated on `/^[[:space:]]*\|/` — `check_inflight_status` in `validate-artifact-budget.sh` and
+Check 0's sweep arm in `ai-dlc-continue.sh` — and the reference consumer writes rows with NO
+leading pipe, so both saw none of them. The third reader `check_inflight_rows` never carried the
+gate (`f && /~~/`), so two of three gated on the delimiter and nothing bound them to agree.
+**CORE INSTRUCTS THE SHAPE ITS OWN READERS REJECTED**: three step files state the row template —
+`route.md`, `gate-validation.md`, `_gate-procedures.md` — and all three write it pipeless; keyed on
+the literal template only `route.md` appears, keyed on `dispatched-at` all three do, control 0. The
+narrowing is the fix: a bare `/\|/` admits PROSE (an archived note ending `| wc -l`), so a pipeless
+line must also carry the column count the HEADER declares, and the width test is restricted to
+pipeless lines because applying it uniformly ACQUITS a piped row with a stray `|` in a cell.
+**THE GAP WAS IN THE SEED** — 22 of 22 seeded row lines were piped at both sites, so the arm could
+not fail. Six arms, nine mutants, fixture RED on the pre-fix engine and PASS on the tip.
+
+**THE FILING'S OWN REMEDY WAS REFUSED, AND SCORING IT AGAINST ITS MOTIVATING CASE IS WHY.**
+`PC-S311-RESUME-INFLIGHT-…` asked for a `TaskStop` liveness probe before arming a beat. The
+consumer's own snapshot records that teammate as having COMPLETED its work before being killed, so
+the stop finds nothing — and the filing's own remedy text makes a FAILED stop affirmative license
+to arm the beat. It authorizes the wasted beat it was filed to prevent, while acquiring a
+destructive probe where a live teammate is most likely to exist. The non-destructive alternative
+fails too: `wait-for-deliverable.sh` resolves its teammate directory from the CURRENT session id,
+so across the session boundary a resume IS, it reports `LIVENESS unavailable`, and that branch is
+`say()` — suppressible by `--quiet`, unlike the idle and non-delivery lines beside it. What
+survives is a documentation gap, filed as **`BL-250`**: `route.md` names `wait-for-deliverable`
+zero times against a control of 8 step files that do, and never routes to its `--since` affordance.
+
+**A PLAN DEFECT WAS FOUND AND FIXED: `## Start here` PRESCRIBED A SILENTLY-WRONG REVERIFY
+INVOCATION.** Both ref arguments are DISTRIBUTION refs — `theirs_show()` at
+`ledger-reverify.sh:312` is `git -C "$DIST" show`, and the usage line at `:117` reads
+`<dist-repo> <base-sha> <consumer-root> <theirs-ref>`. A consumer sha in the fourth slot resolves
+to nothing, every `theirs_show` returns empty, and the run still EXITS 0 with a full plausible row
+set. The tell: the verdict histogram was INVARIANT across eight ref pairs. The engine already calls
+this "the natural mistake" at `:278-284`. Corrected in the file.
+
+**THE PULL IS NOT REQUIRED AND THE GAP IS TWO.** Stamp `0.569.0` / `132ea672`, shipped `0.571.0`;
+PENDING 2 (`PC-S299`, `PC-S311-RESUME-INFLIGHT-…`; `PC-S319` is TERMINAL in the consumer's own
+archive and was never in PENDING). Installed and distribution `validate-artifact-budget.sh` DIFFER
+(`cmp -s` non-zero), so the differential is real rather than a null by construction — and the
+installed gate admits **0** rows while the live section is header-only, so the fix changes no
+verdict on live consumer state today. The fix's only true-positive input across 400 blobs on 736
+consumer refs is `18d1488a0`, which is not reachable from consumer HEAD; the FIXTURE is what keeps
+the arm observable. Gate: 21 phases, 198 ok, 0 FAIL, both changed fixtures read by name against an
+impossible-name control of 0.
+
+**AVAILABLE PC-BACKED RESIDUE AT THIS CLOSE: ZERO KNOWN, AND THE SWEEP SAID THAT LAST BATCH TOO.**
+Run the sweep, AND dispatch the consumer-history hand against the consumer's WORKING TREE — that is
+where this batch's subject was. The readiest no-`PC` work is `BL-250` (filed this batch, one
+`route.md` edit, but note `BL-027`'s arm (b) is a whole-file scan of that file — baseline exit 1,
+1 hit at `route.md:716`), then `BL-223` (declare the FORMAT, not the member) and `BL-220` (only
+shippable shape is an `--allow-missing` opt-out). **`BL-130` WAS SCOPED AND DELIBERATELY DROPPED**:
+its receipt exits 9 because its probe tree seeds no `core/fixtures/*/*.sh` and a fail-closed guard
+refuses an empty corpus, and R4 of `validate-backlog-receipts.sh` is a RATCHET at 1/1 — repairing
+the receipt WITHOUT shipping the missing arm converts a clean 1/1 into a permanent red. The arm's
+false-positive set is **7 unconsumed assignments**, not the 1 this lead first measured with a
+grammar that could not spell its own subject; narrowing it is real work.
+
 ### BATCH 104 SHIPPED AS `v0.570.0`, ONE RELEASE, THREE NO-BOOTSTRAPPING SUBJECTS, ONE OF THEM PC-BACKED ON A LIVE CONSUMER ROW — THE CONTRACT ADVERSARY FOUND FOUR BLOCKERS AND FIVE DEFECTS BEFORE THE BUILD (THE STATED FALSE-POSITIVE SET HAD NOT BEEN DERIVED FROM A RUN; TWO ARMS COVERED EACH OTHER; A PROPOSED INVARIANT WAS A RESTATEMENT AND WAS DROPPED), **AND THE TIP ADVERSARY BUILT NINE WRONG IMPLEMENTATIONS AGAINST THE ASSEMBLED RELEASE, TWO OF WHICH PASSED THE SELF-PROBE, ELEVEN FIXTURE ASSERTIONS, THE RENDERER FIXTURE AND THE RECEIPT — A TYPED COPY OF A DERIVED SET, AND AN OWNER GRAMMAR THAT DIVERGED FROM ITS RENDERER TWIN — BECAUSE EVERY SEED WAS DERIVED FROM THE CURRENT TREE.** THE SWEEP WAS EMPTY OF NEW PC WORK. THE CONSUMER PULLED ITSELF TO `0.569.0` MID-BATCH. THE GAP IS **ONE**, PENDING **1**, AND THE PULL IS **NOT REQUIRED**.
 
-This block replaces the batch-103 record below it. Re-derive every figure rather than reading it.
+This block was current at batch 104's close and is replaced by the batch-105 record above it.
 
 **`VERSION` IS `0.570.0`, SO BATCH 105 RELEASES AS `0.571.0`.** Re-derive `VERSION` and add one.
 Batch 104 merged ONCE — `v0.570.0` at `b1b50b9e` (PR #752) — naming `BL-044`, `BL-017`, `BL-023`,
@@ -10251,6 +10329,21 @@ given at batch 90.
    **DO NOT TREAT A BATCH-82 RECEIPT AS TRUSTWORTHY BECAUSE IT EXISTS.** Three of them were
    rebuilt in one release: the originals closed on an empty file, on a dead arm, and on a
    positional window.
+
+   **BATCH 105's THREE SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope any of them.** `BL-249`,
+   `BL-021` and `BL-022` shipped together as `v0.571.0` at `09286975` (PR #754), each cited in the
+   release commit message beside `BL-250` and
+   `PC-S311-RESUME-INFLIGHT-ROW-HAS-NO-LIVENESS-PROBE-BEFORE-THE-JOIN-BEAT-IS-ARMED`, which was
+   REFUSED as filed with a written verdict. None touched a bootstrapping file. The gap is TWO and
+   PENDING is 2; the pull is NOT required.
+   **THE AVAILABLE PC-BACKED RESIDUE AT THIS CLOSE IS ZERO KNOWN — run the sweep and rank what it
+   returns, AND dispatch the consumer-history hand against the consumer's WORKING TREE.** Batch
+   105's headline subject was an UNCOMMITTED ledger filing that every sweep instrument in this
+   program is structurally blind to, because they all read committed state. The readiest no-`PC`
+   work is `BL-250` (filed this batch), then `BL-223` and `BL-220`; read each entry's own
+   measurement paragraph before scoping it. **`BL-130` was scoped this batch and deliberately
+   dropped** — its receipt is out-of-population at exit 9, R4 is a ratchet at 1/1, and repairing
+   the receipt without shipping the missing arm converts a clean 1/1 into a permanent red.
 
    **BATCH 104's THREE SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope any of them.** `BL-044`,
    `BL-017` and `BL-023` shipped together as `v0.570.0` at `b1b50b9e` (PR #752), each cited in the
