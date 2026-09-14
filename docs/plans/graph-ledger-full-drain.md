@@ -110,6 +110,89 @@ reading, and the prose this gap needs ("take the dispatch time from the row rath
 the beat's liveness line") sits squarely in that grammar's blast radius. It gets its own entry and
 its own before/after measurement, not a paragraph appended under a fix about pipe characters.
 
+### BATCH 106 SHIPPED AS `v0.572.0`, ONE RELEASE, TWO NO-BOOTSTRAPPING SUBJECTS — THE SWEEP WAS EMPTY OF PC WORK AGAIN AND BOTH SUBJECTS WERE NO-`PC` BACKLOG ENTRIES; THE CONTRACT ADVERSARY FOUND FOUR BLOCKERS BEFORE THE BUILD (ONE OF THEM THAT THE LEAD'S OWN BL-223 REFUTATION WAS WRONG), **AND THE TIP ADVERSARY FOUND THREE MORE ON A GATE-GREEN TREE, EVERY ONE A SEED GAP: EVERY ARM DROVE AN ABSOLUTE PATH WHILE THE CONSUMER'S ONE FLAGLESS CALLER PASSES A RELATIVE ONE; THE FIXTURE'S OWN `AI_DLC_` HERMETICITY SCRUB HID AN ENV BACK DOOR; AND THE CORRECT ROUTE.MD SENTENCE SOFT-WRAPPED FAILED ITS OWN ARM.** THE CONSUMER PULLED ITSELF TO `0.571.0` MID-BATCH. THE GAP IS **ONE**, PENDING **0**, AND THE PULL IS **NOT REQUIRED**.
+
+This block replaces the batch-105 record below it. Re-derive every figure rather than reading it.
+
+**`VERSION` IS `0.572.0`, SO BATCH 107 RELEASES AS `0.573.0`.** Re-derive `VERSION` and add one.
+Batch 106 merged ONCE — `v0.572.0` at `1428dacb` (PR #755) — naming `BL-250` and `BL-220` verbatim
+in the release commit message (control: `BL-999-NEVER-EXISTS-8817` returns 0 on the same join).
+Both are ROTATED, archive **171 → 173**, live **78 → 76**. No bootstrapping file moved: the range
+`d130cb98..1428dacb` touches one path under the update skill, `setup-sites.md`, and that is a
+one-line glob addition registering the new fixture, not a change to `preclassify.sh`, `apply.sh` or
+`ledger-reverify.sh`.
+
+**THE SWEEP FOUND NOTHING AND THE CONSUMER'S WORKING TREE WAS CLEAN THIS TIME.** The sweep read
+live 59, cited 38, unfiled 21, archive 209, partition 0, TERMINAL 93, DISCHARGED-corrected 10,
+discharged-but-invisible 0; the 21 unfiled are the same adjudicated-or-deferred set as batch 105.
+The consumer-history hand read the working tree and found the ledger byte-identical to HEAD
+(md5 equal, `git diff HEAD` empty on both ledger files), so batch 105's blind spot did not recur —
+established by the diff being empty, not by a missing file. Dispatch that hand every batch anyway.
+
+**WHAT SHIPPED FOR `BL-250`.** Five lines inside `route.md`'s "Reconcile every `In-Flight
+Teammates` row" bullet name `scripts/ai-dlc/wait-for-deliverable.sh`, `--since` and the
+`dispatched-at` cell in one sentence, cite `_gate-procedures.md`, and state that liveness for a
+prior-session teammate is unavailable to that program. I110's token set over the In-Flight window
+is byte-identical before and after; `BL-027`'s receipt holds at 1 with one arm-(b) hit both sides.
+`resume-whole-read` gains A10 with nine mutants. **THE FIRST A10 WAS THE RECEIPT'S OWN PREDICATE
+AND FIVE NON-FIXES PASSED BOTH** (tokens in an HTML comment, in a fence, negated, `--since` on
+another program, a bare see-also list). The repaired A10 strips fences and comments and rejects a
+negator list; the tip adversary then showed the CORRECT sentence, soft-wrapped the way every other
+bullet wraps, FAILED it, a sentence sited in Step 0 item 3 passed, and four negation rewrites
+("Skip running", "Avoid running", …) passed. A10 now joins list items into logical lines before
+scanning, keys on the reconcile item, carries a widened negator list and a `since-wrapped`
+false-positive control, and DISCLOSES that it scores presence, siting and non-negation only — a
+see-also list or a narrative sentence carrying the three tokens passes, and the reader is the
+enforcement for that.
+
+**WHAT SHIPPED FOR `BL-220`.** `validate-provenance-block.sh`, handed an ordinary artifact with no
+block and no flag, printed `OK` and exited 0. It now FAILS naming both remedies, and
+`--allow-missing` is the opt-out for exactly that branch; a retro path, a malformed marker and a
+violating block still fail, and combining it with `--require-skill` is exit 2. Eight arms
+base → tip: (a) 0→1 (b) 2→0 (c) 2→1 (d) 2→1 (e) 2→2 (f) 2→0 (g) 0→1 (h) 2→1 — the 2s at base are
+the flag being unknown there, so only the tip reading of those arms discriminates. The FP set was
+measured by BUILDING the flip and running every fixture that reads the validator: two arms encoded
+the old contract (`taught-schema` V3, `retro-compliance-workflow` A5's reachability control) and
+are rewritten; nine other fixtures unchanged; zero shipping flagless call sites on an ordinary
+artifact. The consumer's own `ci-local.sh` (line 513 of the consumer's `scripts/` copy) is flagless on the legacy
+`docs/retro/sprint-<N>.md` path, which exists for no current sprint (already exit 1 there today);
+the one file of that spelling, `sprint-131b.md`, flips 0→1 only when driven directly. The repoint
+is the consumer's and belongs in the pull brief.
+
+**THE TIP ADVERSARY'S THREE BLOCKERS WERE ALL SEED GAPS, ON A TREE THE FULL GATE HAD PASSED.**
+A one-guard non-fix acquitting every RELATIVE path passed the receipt and all three fixtures,
+because every seed in the batch was driven as an absolute path off `mktemp -d` — and the
+consumer's only flagless caller passes a relative path. An `AI_DLC_PROVENANCE_ALLOW_MISSING` back
+door passed because the new fixture's hermeticity scrub unsets every `AI_DLC_` variable before the
+arms run (an unprefixed twin WAS caught, which is what showed the scrub was the cause). Arms
+(a2)–(a5), driven from a `cd`'d subshell and with the variable set per-invocation, and mutants M4/M5
+close both. **The receipt alone sees neither, and the entry says so.** Ask of every new fixture
+what its scrub makes invisible, and drive at least one seed the way the consumer's caller does.
+
+**THE LEAD'S BL-223 REFUTATION WAS WRONG AND THE CONTRACT ADVERSARY BUILT THE COUNTEREXAMPLE.** The
+contract said the receipt was unsatisfiable under I95 because the population key is the top-level
+name. I95's refusal was the PRODUCER arm, and it is satisfiable: one non-comment line constructing
+`_bmad-output/push-candidate/…` in a shipped script takes I95, the receipt and the full map to 0 —
+for a path nothing writes. So the receipt is satisfiable only by fabricating a producer, which is
+the entry's real finding; the honest shape needs `write-format-steering.json` to carry more than
+one `declared_in` per member. RE-MEASURED in the entry with the four-row table, left open.
+
+**A PLAN-SHAPE RULE WAS ADDED MID-BATCH ON OPERATOR INSTRUCTION.** A hand's scratch-tree build
+ran `rm -rf "$S/$d"` in a loop and the harness stopped the session on its dangerous-delete prompt.
+That prompt is not to be allow-listed; every spawn prompt now carries the sentence in action 0
+(`mktemp -d`, never delete), and `.claude/rules/plan-shape.md` carries the rule.
+
+**THE PULL IS NOT REQUIRED AND THE GAP IS ONE.** The consumer pulled itself to `0.571.0` /
+`d130cb98` mid-batch; shipped is `0.572.0`. PENDING by the above-stamp test is 0: every one of the
+10 corrected-DISCHARGED ids was first named at or below `0.571.0`. Installed and distribution
+`validate-layer-entries.sh` are BYTE-IDENTICAL (`cmp -s` exit 0), so that differential is a null of
+nothing; both 0.572.0 subjects fire only on a transient (a resume; a flagless block-less validation)
+and are invisible to any quiet-tree differential. `PC-S999-NEVER` as the impossible-id control
+resolved to `dc86c9c4` again — the CLAUDE.md trap — so the hand used a token it first verified absent.
+
+**OPERATOR OWES:** `sudo bash core/scripts/derive-fixture-readsets.sh --list "provenance-flagless-default"`
+(plus the batch-102 `extension-check-adoption` one). Until traced, the new directory runs on every push.
+
 ### BATCH 105 SHIPPED AS `v0.571.0`, ONE RELEASE, THREE NO-BOOTSTRAPPING SUBJECTS — **THE HEADLINE SUBJECT WAS FOUND BY THE CONSUMER-HISTORY HAND IN AN UNCOMMITTED LEDGER FILING THE SWEEP STRUCTURALLY CANNOT SEE**, AND THE CONTRACT ADVERSARY THEN REFUTED THAT FILING'S OWN REMEDY BY SCORING IT AGAINST ITS OWN MOTIVATING CASE. THE SWEEP WAS EMPTY OF PC WORK. THE GAP IS **TWO**, PENDING **2**, AND THE PULL IS **NOT REQUIRED**.
 
 This block replaces the batch-104 record below it. Re-derive every figure rather than reading it.
@@ -10334,6 +10417,19 @@ given at batch 90.
    **DO NOT TREAT A BATCH-82 RECEIPT AS TRUSTWORTHY BECAUSE IT EXISTS.** Three of them were
    rebuilt in one release: the originals closed on an empty file, on a dead arm, and on a
    positional window.
+
+   **BATCH 106's TWO SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope either.** `BL-250` and
+   `BL-220` shipped together as `v0.572.0` at `1428dacb` (PR #755), each cited in the release commit
+   message. Neither carries a `PC-` id and neither touched a bootstrapping file. The consumer pulled
+   itself to `0.571.0` mid-batch, so the gap is ONE and PENDING is 0; the pull is NOT required.
+   **THE AVAILABLE PC-BACKED RESIDUE AT THIS CLOSE IS ZERO KNOWN — run the sweep and rank what it
+   returns, AND dispatch the consumer-history hand against the consumer's WORKING TREE.** The
+   readiest no-`PC` work is `BL-223` (needs a steering-schema shape change first; read its batch-106
+   RE-MEASURED paragraph — the receipt is satisfiable only by fabricating a producer), then the
+   entries batch 97 left receipt-bound; read each entry's own measurement paragraph before scoping.
+   **Before writing any fixture seed this batch, drive at least one seed the way the consumer's
+   caller does (relative path, from its cwd) and ask what the fixture's own env scrub makes
+   invisible** — batch 106's two seed-gap non-fixes passed every channel for those reasons.
 
    **BATCH 105's THREE SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope any of them.** `BL-249`,
    `BL-021` and `BL-022` shipped together as `v0.571.0` at `09286975` (PR #754), each cited in the
