@@ -391,7 +391,7 @@ checks:
 
   - id: "20"
     title: Validation-intensity compliance
-    gate_types: [planning]
+    gate_types: [planning, sprint-review]
     adjudication: llm
     enforcer: []
     ci_workflow: ~
