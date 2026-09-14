@@ -10293,6 +10293,11 @@ given at batch 90.
      release commit, and pings.
    - Every spawn names its model and the one-clause reason. `fork` ignores `model`; do not use
      it for a hand whose wrong answer would be silent.
+   - Every spawn prompt carries this sentence verbatim: "Never run `rm -rf` on a variable path;
+     build each scratch copy into a fresh `mktemp -d` under the scratchpad and do not delete it;
+     anything that must be cleared names a literal absolute path." Operator instruction at
+     batch 106, after a hand's `rm -rf "$S/$d"` loop stopped the session on a harness prompt
+     that must not be allow-listed.
    - **Never merge while a hand is out**, and never read a hand's idle state as its report.
 
 1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below) AGAINST THE REF THAT CARRIES THE
