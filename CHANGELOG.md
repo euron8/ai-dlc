@@ -15,6 +15,33 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.581.0] - 2026-09-15
+
+**`find` does not descend a symlinked path argument, and a fixture arm had been dead under
+`sudo` since it shipped.** `core/fixtures/fanout-payload-channel/run.sh` counted its litter with
+`find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'fanout.*'`. On macOS `/tmp` is a symlink to
+`private/tmp`, so that returns **0 unconditionally** whenever `TMPDIR` is `/tmp` — which is
+exactly what `sudo` sets. Measured in one invocation against a control that drops when a
+directory is removed: `find /tmp` → 0, `find /tmp/` → 4, `find -H /tmp` → 4,
+`find /private/tmp` → 4.
+
+Arm 5 and its `m6-trap` mutant both read that count, so the arm could not fire, the mutant
+SURVIVED, and the fixture exited 1 for a reason having nothing to do with its subject. `TMPDIR`
+alone flipped the verdict on a byte-identical tree.
+
+**This is why the fixture was never mapped.** `derive-fixture-readsets.sh` runs each fixture
+under `sudo -n -u`, whose `TMPDIR` is `/tmp`; an interactive shell's is a real `/var/folders/…`
+path. The deriver omits any fixture exiting non-zero, so this one was omitted on every run since
+it shipped and the pool has run it on every push — 0 map entries at `439c0058` against a control
+of 21 for `plan-shape`. It passed from a developer shell and in the gate because neither sees the
+symlinked form.
+
+The temp root is now resolved once with `pwd -P`, and an unresolvable root exits 2 rather than
+letting the arms go quiet. Proven load-bearing both ways: fixed, both `TMPDIR` forms exit 0 and
+`m6-trap` is killed; reverted in a copy with the mutation asserted applied at 5 sites,
+`TMPDIR=/tmp` exits 1 and `m6-trap` survives again. This is a SHIPPING fixture, so consumers get
+the fix; it is the only one of 204 carrying the pattern.
+
 ## [0.580.0] - 2026-09-15
 
 Bound the plan channel. `docs/plans/graph-ledger-full-drain.md` had reached **1158744 bytes /
