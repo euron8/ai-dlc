@@ -107,7 +107,7 @@ Resume with: READ and FOLLOW docs/plans/probe.md
 
 LIVE-STARTHERE-SENTINEL. This is the first level-2 section, so it is this plan's declaration
 block, and the titles it names in backticks inside the numbered list below are its LIVE set.
-Everything else in the file is spent and may be rotated out to the archive.
+Every other section is finished history and may be rotated out to the archive.
 
 1. `## Start here` -- you are reading it now, and it is live by construction.
 2. `## Hazards` -- read this before touching anything at all in either tree.
@@ -204,7 +204,7 @@ Resume with: READ and FOLLOW docs/plans/probe.md
 
 LIVE-STARTHERE-SENTINEL. This is the first level-2 section, so it is this plan's declaration
 block, and the titles it names in backticks inside the numbered list below are its LIVE set.
-Everything else in the file is spent and may be rotated out to the archive.
+Every other section is finished history and may be rotated out to the archive.
 
 1. Start here -- you are reading it now, and it is live by construction.
 2. Hazards -- read this before touching anything at all in either tree.
@@ -344,6 +344,22 @@ S_ARM2OK="arm 2 multiset identity PASS"
 S_ARM3OK="arm 3 live-section set PASS"
 S_NOTHING="nothing to move"
 
+# THE POINTER IS KEYED ON THE ARCHIVE PATH, NOT ON THE SENTENCE AROUND IT, AND THAT IS A
+# REPAIR. The first cut of this file hardcoded `Spent sections are archived at` at six sites;
+# the rotator then had to change that opening — it spelled a discharge token, see the
+# `rotated-plan-stays-live` arm below — and three assertions here went red on a CORRECT fix,
+# reading exactly like a regression in the change under test.
+#
+# The archive path is what the pointer is FOR: an archived record nothing points at is
+# evidence no reader can find. The prose around it is presentation and has now moved once.
+# Measured on the real rotated plan, both figures in one invocation: `docs/plans/archive/`
+# appears exactly 1 time, and so does the pointer sentence — so keying on the path is not a
+# widening, it selects the same single line. The uniqueness is re-derived per run at the
+# `pointer` arm rather than assumed, because a plan that happened to cite the archive
+# directory in its prose would make the key ambiguous, and an ambiguous key must fail loudly
+# rather than silently match the wrong line.
+PTR_KEY='docs/plans/archive/probe.md'
+
 SENTS="$S_UNTERM
 $S_FENCECUT
 $S_NONAMED
@@ -478,7 +494,7 @@ LIVE_B="$(wc -c < "$LAST_PLAN" | tr -d ' ')"
 # halves do NOT sum to the original. What must hold is that every ORIGINAL line is present
 # exactly once across the two files: a multiset, which no pair of cancelling edits survives.
 LC_ALL=C sort "$WORK/seeds/base.md" > "$WORK/exp.sorted"
-{ cat "$LAST_PLAN"; cat "$LAST_ARCH"; } | LC_ALL=C grep -vF 'Spent sections are archived at' \
+{ cat "$LAST_PLAN"; cat "$LAST_ARCH"; } | LC_ALL=C grep -vF "$PTR_KEY" \
   | LC_ALL=C grep -vF 'archived sections' \
   | LC_ALL=C grep -vF 'rotated out of' \
   | LC_ALL=C grep -vF 'Nothing here is deleted' \
@@ -500,12 +516,10 @@ fi
 # which reads exactly like the evidence being gone. And it must be a PLAIN PATH: a `path:line`
 # citation into an archive that a later rotation re-numbers fails `validate-plan-shape.sh`'s
 # citation arm on a CORRECT rotation.
-PTR_N="$(LC_ALL=C grep -cF 'Spent sections are archived at' "$LAST_PLAN")" || PTR_N=0
-PTR_LINE="$(LC_ALL=C grep -F 'Spent sections are archived at' "$LAST_PLAN")"
+PTR_N="$(LC_ALL=C grep -cF "$PTR_KEY" "$LAST_PLAN")" || PTR_N=0
+PTR_LINE="$(LC_ALL=C grep -F "$PTR_KEY" "$LAST_PLAN")"
 if [ "$PTR_N" -ne 1 ]; then
   bad "pointer" "expected exactly one pointer line in the live plan, found $PTR_N"
-elif ! has 'docs/plans/archive/probe.md' "$PTR_LINE"; then
-  bad "pointer" "the pointer does not name the archive repo-relatively: $PTR_LINE"
 elif has "$WORK" "$PTR_LINE"; then
   bad "pointer" "the pointer carries an absolute sandbox path, which resolves on one machine only: $PTR_LINE"
 elif grep -qE 'docs/plans/archive/probe\.md:[0-9]' <<<"$PTR_LINE"; then
@@ -523,11 +537,11 @@ fi
 PR="$(mkroot pointer)" || broken "could not build the pointer sandbox root"
 drive "$PR" "$WORK/seeds/base.md" probe --ceiling "$CEIL_ONE_SPAN" --apply
 FIRST_RC="$LAST_RC"
-PTR_1="$(LC_ALL=C grep -F 'Spent sections are archived at' "$LAST_PLAN")"
+PTR_1="$(LC_ALL=C grep -F "$PTR_KEY" "$LAST_PLAN")"
 SECOND_OUT="$(bash "$PR/scripts/plan-rotate.sh" "$LAST_PLAN" --ceiling "$CEIL_STEP2" --apply 2>&1)"
 SECOND_RC=$?
-PTR_N2="$(LC_ALL=C grep -cF 'Spent sections are archived at' "$LAST_PLAN")" || PTR_N2=0
-PTR_2="$(LC_ALL=C grep -F 'Spent sections are archived at' "$LAST_PLAN")"
+PTR_N2="$(LC_ALL=C grep -cF "$PTR_KEY" "$LAST_PLAN")" || PTR_N2=0
+PTR_2="$(LC_ALL=C grep -F "$PTR_KEY" "$LAST_PLAN")"
 HDR_N2="$(LC_ALL=C grep -cF 'archived sections' "$LAST_ARCH")" || HDR_N2=0
 if [ "$FIRST_RC" -ne 0 ] || [ "$SECOND_RC" -ne 0 ]; then
   bad "pointer-refresh" "a two-step rotation was refused (first $FIRST_RC, second $SECOND_RC): $SECOND_OUT"
@@ -542,6 +556,150 @@ elif [ "$HDR_N2" -ne 1 ]; then
 else
   ok "pointer-refresh" "a second rotation appends to the one archive, refreshes the single pointer, and its range moves"
 fi
+
+# =============================================================================================
+# THE ROTATED PLAN MUST STILL READ AS **LIVE** TO `validate-plan-shape.sh`.
+#
+# THE DEFECT THIS ARM EXISTS FOR, AND THE FIRST CUT OF THIS FIXTURE COULD NOT HAVE CAUGHT IT.
+# The rotator's pointer opened `**Spent sections are archived at`, and
+# `validate-plan-shape.sh:165` is `DISCHARGE_BANNER='DISCHARGED|SPENT|DO NOT EXECUTE|SUPERSEDED'`,
+# read case-INSENSITIVELY over `head -12` by six sites. The pointer lands at line 3. So every
+# rotation wrote a discharge token into its own output, and the rotated plan read as SPENT --
+# silencing P9, P10, P11, P12 and P13 on the very file the rotation was performed to keep
+# healthy. THE GATE WENT GREEN BECAUSE FIVE ARMS STOPPED RUNNING, which is the exact shape of
+# `plan-shape.md`'s eleven-byte opt-out except that the TOOL wrote it automatically.
+#
+# Measured on the real plan with one discriminating mutant, P10's resume one-liner repointed at
+# an ancestor, the two pointers five bytes apart:
+#
+#     pointer "Spent ..."     P10 hits 0, rc=0   <- arm SILENCED
+#     pointer "Archived ..."  P10 hits 1, rc=1   <- arm FIRES
+#
+# Control, same invocation: the pre-rotation head window carries 0 banner hits while the same
+# grammar over the whole file returns 39 -- so that zero is a real absence and not a broken
+# search.
+#
+# WHY THIS ARM DRIVES THE VALIDATOR RATHER THAN GREPPING THE HEAD WINDOW. "Line 3 holds no
+# discharge token" tests a STRING; what was actually lost is a CONSEQUENCE -- five arms that
+# stopped running. A head-window grep also goes vacuous the moment the banner vocabulary gains a
+# word, and it would pass against a validator whose window moved. So the assertion is that a
+# liveness-scoped arm, driven for real against the rotated output, CAN STILL FIRE.
+#
+# BOTH DIRECTIONS, ONE PROPERTY APART. The seeded offender is a rotated plan whose resume line
+# names an ancestor: P10 must fire. The near-miss is the same rotated plan with its own resume
+# line intact: P10 must stay silent. Without the near-miss an arm that flagged every plan would
+# pass the offender direction identically.
+# =============================================================================================
+VPS="$REPO_ROOT/scripts/validate-plan-shape.sh"
+if [ ! -f "$VPS" ]; then
+  broken "cannot locate validate-plan-shape.sh at $VPS -- this arm's whole claim is about what that validator does with the rotated output, and a run that cannot invoke it would score green on every absence below"
+fi
+
+# Build a root, rotate for real, then drive the validator over the RESULT.
+LV="$(mkroot liveness)" || broken "could not build the liveness sandbox root"
+mkdir -p "$LV/scripts" || broken "could not create $LV/scripts"
+cp "$VPS" "$LV/scripts/validate-plan-shape.sh" || broken "could not copy the validator into the sandbox"
+drive "$LV" "$WORK/seeds/base.md" probe --ceiling "$CEIL" --apply
+[ "$LAST_RC" -eq 0 ] || broken "the liveness root's rotation was refused (exit $LAST_RC); there is no rotated output to check: $LAST_OUT"
+[ -f "$LAST_ARCH" ] || broken "the liveness root's rotation wrote no archive, so the pointer this arm is about was never written"
+ROTATED="$LAST_PLAN"
+
+# P10's OWN sentence, not `rc`. The rotated probe seed trips other arms of the validator for
+# reasons that have nothing to do with this claim -- it is a minimal plan, not a conforming one --
+# so an rc-keyed assertion would read those as evidence about P10. Anchored on the emitted text.
+P10_SAYS='does not carry its own resume one-liner'
+p10_hits() { # p10_hits <root> -> prints the number of P10 findings over the default corpus
+  local n out
+  out="$( cd "$1" && bash scripts/validate-plan-shape.sh 2>&1 )"
+  n="$(LC_ALL=C grep -cF -- "$P10_SAYS" <<<"$out")" || n=0
+  printf '%s' "$n"
+}
+
+# THE CORPUS IS DEPTH-1, SO THE ARCHIVE IS STRUCTURALLY OUTSIDE IT, AND THAT IS ASSERTED RATHER
+# THAN ASSUMED. `validate-plan-shape.sh:52` is `find docs/plans -maxdepth 1`. The archive file
+# DELIBERATELY keeps `Spent sections rotated out of ...` in its own header -- it genuinely is a
+# spent record -- so an arm written carelessly would flag it, and a validator whose corpus ever
+# went recursive would start reading a discharge banner off a file that is allowed to carry one.
+EXAMINED="$( cd "$LV" && bash scripts/validate-plan-shape.sh 2>&1 | LC_ALL=C sed -n 's/^validate-plan-shape: \([0-9][0-9]*\) plan(s) checked.*/\1/p' )"
+ARCH_SPENT="$(LC_ALL=C grep -ciE 'DISCHARGED|SPENT|DO NOT EXECUTE|SUPERSEDED' "$LAST_ARCH")" || ARCH_SPENT=0
+if [ "$EXAMINED" = "1" ] && [ "$ARCH_SPENT" -gt 0 ]; then
+  ok "archive-outside-corpus" "the validator examined 1 plan, not 2, while the archive carries $ARCH_SPENT discharge token(s) of its own — a spent record is allowed to say so, and the depth-1 corpus is why"
+else
+  bad "archive-outside-corpus" "expected 1 examined plan beside an archive carrying a discharge token; got examined='$EXAMINED' archive-tokens=$ARCH_SPENT"
+fi
+
+# THE SEED ITSELF MUST NOT CARRY A BANNER TOKEN, AND THIS IS A MEASURED DEFECT IN THIS ARM'S
+# FIRST CUT RATHER THAN A PRECAUTION. The declaration block read "Everything else in the file is
+# SPENT and may be rotated out" -- ordinary prose, and it landed at line 11, INSIDE the validator's
+# `head -12` window. So the seed pre-silenced P9..P13 before any rotation happened: P10 read 0
+# hits in BOTH directions, the offender arm failed, and the kill arm below scored a `0 -> 0`
+# transition as a kill. The arm was dead and reported a result anyway.
+#
+# So the precondition is asserted on the SEED, in this run, with a control in the same
+# invocation: the head window must hold zero banner tokens while the same grammar over the whole
+# seed returns non-zero, which is what says the grammar can see this file at all.
+SEED_HEAD_TOK="$(head -12 "$WORK/seeds/base.md" | LC_ALL=C grep -ciE 'DISCHARGED|SPENT|DO NOT EXECUTE|SUPERSEDED')" || SEED_HEAD_TOK=0
+SEED_ALL_TOK="$(LC_ALL=C grep -ciE 'DISCHARGED|SPENT|DO NOT EXECUTE|SUPERSEDED' "$WORK/seeds/base.md")" || SEED_ALL_TOK=0
+if [ "$SEED_HEAD_TOK" -eq 0 ] && [ "$SEED_ALL_TOK" -gt 0 ]; then
+  ok "seed-is-live" "the seed's head -12 window carries no discharge token, against a control of $SEED_ALL_TOK over the whole seed — so the zero is a real absence and the liveness arms below have a subject"
+else
+  broken "the conforming seed carries $SEED_HEAD_TOK discharge token(s) in its own head -12 window (whole seed: $SEED_ALL_TOK). The seed is ALREADY discharged, so P9..P13 never run on it and every liveness verdict below would be an absence with no subject. Reword the seed; the banner vocabulary is DISCHARGED|SPENT|DO NOT EXECUTE|SUPERSEDED, read case-insensitively."
+fi
+
+# THE NEAR-MISS DIRECTION: the rotated plan keeps its own resume line, so P10 has nothing to say.
+NM_HITS="$(p10_hits "$LV")"
+
+# THE OFFENDER DIRECTION: repoint the resume line at an ancestor. This is the discriminating
+# mutant, and it is seeded on the property P10 actually keys on — the BASENAME the sentence
+# names — rather than on the sentence's presence, which a bare deletion would test instead.
+LC_ALL=C sed 's|docs/plans/probe\.md|docs/plans/SOME-ANCESTOR.md|' "$ROTATED" > "$WORK/rotated-offender.md"
+if cmp -s "$WORK/rotated-offender.md" "$ROTATED"; then
+  broken "the resume-line mutation matched nothing in the rotated plan, so the offender direction has no subject"
+fi
+cp "$WORK/rotated-offender.md" "$ROTATED"
+OFF_HITS="$(p10_hits "$LV")"
+
+if [ "$OFF_HITS" -ge 1 ] && [ "$NM_HITS" -eq 0 ]; then
+  ok "rotated-plan-stays-live" "P10 FIRES on the rotated plan when its resume line names an ancestor ($OFF_HITS hit) and stays silent when it names itself — the rotation did not silence the liveness arms"
+elif [ "$OFF_HITS" -eq 0 ]; then
+  bad "rotated-plan-stays-live" "P10 is SILENT on a rotated plan whose resume line names an ancestor. The rotation wrote a DISCHARGE token into the validator's head -12 window, so P9/P10/P11/P12/P13 all stopped running on the file the rotation exists to keep healthy — a gate that goes green because five arms died. Check the pointer string for the discharge vocabulary."
+else
+  bad "rotated-plan-stays-live" "P10 fired on a rotated plan that names ITSELF ($NM_HITS hit(s)) — the arm flags everything and its offender verdict says nothing"
+fi
+
+# THE KILL, SEEDED IN THIS FIXTURE RATHER THAN LEFT TO THE SUBJECT. Re-seed the discharge-token
+# pointer the rotator used to write, into the offender plan that has just been shown to FIRE. The
+# only difference is the pointer's opening word. If P10 goes silent the arm above has been proven
+# to discriminate on exactly this property; if it still fires, the arm's green verdict is not
+# evidence about the pointer and this fixture would pass a regression.
+#
+# AND IT IS GATED ON THE OFFENDER HAVING FIRED, BECAUSE `0 -> 0` IS NOT A KILL. Measured on this
+# arm's first cut: with the seed pre-silenced P10 read 0 before and 0 after, and the kill arm
+# reported a kill on a transition that never happened. A kill is a CHANGE in the verdict, so the
+# before-state has to be non-zero for the after-state to mean anything.
+if [ "$OFF_HITS" -lt 1 ]; then
+  bad "spent-pointer-kill" "not scored: P10 read $OFF_HITS on the offender, so there is no verdict for the re-seeded pointer to silence and a '0 -> 0' reading would be a kill that never happened"
+elif LC_ALL=C sed 's|^\*\*Archived sections live at|**Spent sections are archived at|' "$ROTATED" > "$WORK/rotated-spent.md"; cmp -s "$WORK/rotated-spent.md" "$ROTATED"; then
+  bad "spent-pointer-kill" "the re-seed matched nothing — the pointer no longer opens with the string this arm knows how to attack, so the kill was not scored and the arm above is unproven"
+else
+  SPENT_LINE="$(LC_ALL=C grep -n 'Spent sections are archived at' "$WORK/rotated-spent.md" | cut -d: -f1)"
+  cp "$WORK/rotated-spent.md" "$ROTATED"
+  SPENT_HITS="$(p10_hits "$LV")"
+  # The head window is the DIAGNOSIS, printed beside the verdict; the verdict itself is the
+  # consequence. Control in the same invocation: the whole file against the same grammar.
+  HEAD_TOK="$(head -12 "$ROTATED" | LC_ALL=C grep -ciE 'DISCHARGED|SPENT|DO NOT EXECUTE|SUPERSEDED')" || HEAD_TOK=0
+  ALL_TOK="$(LC_ALL=C grep -ciE 'DISCHARGED|SPENT|DO NOT EXECUTE|SUPERSEDED' "$ROTATED")" || ALL_TOK=0
+  if [ "$SPENT_HITS" -eq 0 ] && [ "$HEAD_TOK" -gt 0 ]; then
+    KILLS=$((KILLS + 1))
+    ok "spent-pointer-kill" "rotated-plan-stays-live would FAIL: a pointer opening 'Spent' at line ${SPENT_LINE:-?} puts a discharge token in the head -12 window ($HEAD_TOK there, $ALL_TOK in the whole file) and P10 drops $OFF_HITS -> 0 on the identical plan"
+  elif [ "$SPENT_HITS" -ne 0 ]; then
+    bad "spent-pointer-kill" "the 'Spent' pointer did NOT silence P10 ($SPENT_HITS hit(s)); the live arm's verdict is therefore not evidence about the pointer's vocabulary, and this fixture would pass the regression it was written for"
+  else
+    bad "spent-pointer-kill" "P10 went silent with NO discharge token in the head window (head=$HEAD_TOK, whole file=$ALL_TOK) — it was silenced by something other than the banner, so the attribution is wrong"
+  fi
+fi
+# The plan is left mutated on disk deliberately: this root is not driven again, and restoring it
+# would invite a later arm to read a file whose provenance is two mutations deep.
 
 # --- REPORT MODE WRITES NOTHING ---------------------------------------------------------------
 # A report that says what would move and then moves it is the call nobody asked for.
@@ -907,11 +1065,15 @@ fi
 # a target: it exists to show the tautology flips no verdict on its own, which is what makes
 # m1t's verdict a measurement rather than an absence. Counting a twin as a kill counts the
 # control as a result.
+# `spent-pointer-kill` is the eighth kill and it is NOT a `.mutant-built` root: it mutates the
+# rotator's OUTPUT rather than the rotator, because the property it attacks is a string the tool
+# writes into a tracked file and reads by nobody but another program. So the two counts differ by
+# one BY CONSTRUCTION, and the accounting says which is which rather than hiding it.
 MUT_BUILT="$(/usr/bin/find "$WORK/roots" -name '.mutant-built' -type f 2>/dev/null | wc -l | tr -d ' ')"
-if [ "${MUT_BUILT:-0}" -eq 8 ] && [ "$KILLS" -eq 7 ]; then
-  ok "mutants" "8 mutants built (7 targets + m1's tautology twin) and all 7 targets killed the arm they name"
+if [ "${MUT_BUILT:-0}" -eq 8 ] && [ "$KILLS" -eq 8 ]; then
+  ok "mutants" "8 mutant roots built (7 targets + m1's tautology twin) and 8 kills — the 7 script mutants plus the re-seeded discharge pointer, which mutates the OUTPUT and so builds no root"
 else
-  bad "mutants" "$MUT_BUILT of 8 mutants built, $KILLS of 7 killed — an unkilled mutant means an arm cannot fire"
+  bad "mutants" "$MUT_BUILT of 8 mutant roots built, $KILLS of 8 kills — an unkilled mutant means an arm cannot fire"
 fi
 
 echo
