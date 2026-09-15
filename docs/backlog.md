@@ -3895,9 +3895,32 @@ key) may be less surface area and was not measured against this shape before the
 description calls prose "the weakest... class that decayed here," which is false for code four
 shipped scripts execute) and was not resolved either way.**
 
-**Tiered DEFECT.** The enforcer's PASS line reads as coverage of the shared append-only artifacts
-while the ledger this program exists to drain is not among them.
+**FIXED at batch 111, all four cited defects addressed.** `write-format-steering.json` now carries
+a second `formats[]` entry under the existing `ai-dlc-update` member — `declared_in:
+core/skills/ai-dlc-update/reconcile/lib.sh`, `anchor: function ledger_entry_shape(`, `kind: code`
+(a new enum value; the schema's `kind` description now states why code is the strongest tier
+rather than calling it prose). `validate-write-format-steering.sh`'s reader keys `declared` as a
+name-to-list-of-entries map — a true duplicate is now `(name, declared_in)` repeated, not the bare
+name, so two distinct formats sharing one member no longer collide (defect 2). `--report` prints
+the anchor on every OK row (`anchor=<literal>`), closing the gap defect (1) found: a receipt
+reading the table can now bind on the anchor itself, not merely on `declared_in` resolving, and
+two built non-fixes from the batch-111 adversary (`unquote() {`, an unrelated helper in the same
+file; `reconcile/lib.sh`, a substring of the file's own header comment) print a row but fail a
+receipt that checks the anchor literal. `MISSING` is now split into `SKIP` (the declaration's
+whole owning top-level component — `core/skills/`, here — is absent from the tree; a consumer
+between the schemas pull and the skills pull) and a real `MISSING`/fail (the component's directory
+is present and the specific file is not), which resolves defect (4): a mid-pull consumer with the
+schema half but not the skill half no longer wedges on a FAIL. The PASS line's "N of M" now counts
+distinct covered artifact NAMES via a dedicated names file, never `OK` rows, so one member printing
+two rows can no longer inflate the numerator past its own denominator (defect 3) — the row count is
+still printed separately, labelled as a row count. A build+adversary cycle ran this batch against
+this exact contract; all four defects were reverified fixed on the shipped code, not re-derived
+from the earlier refutation's prose.
 
-verify: sh S="$(python3 -c 'import json,sys;print((json.load(open(sys.argv[1])).get("join") or {}).get("population_schema") or "")' core/schemas/write-format-steering.json)" || exit 9; [ -n "$S" ] || exit 9; o="$(bash core/scripts/validate-write-format-steering.sh --report 2>&1)"; rc=$?; grep -qE '^ +declared +ai-dlc-update' <<<"$o" || exit 9; [ "$rc" -eq 0 ] || exit 1; grep -qE '^ +declared +push-candidate' <<<"$o" || exit 1; p="$(awk '$1=="declared" && $2=="push-candidate"{print $3}' <<<"$o")"; [ -n "$p" ] || exit 1; [ "$(basename "$p")" != "$S" ] || exit 1; n="$(awk -v p="$p" '$1=="declared" && $3==p' <<<"$o" | grep -c .)" || n=0; [ "$n" -eq 1 ]
+**Tiered DEFECT, now CLOSED.** The enforcer's PASS line no longer omits the ledger this program
+exists to drain from its declared population; `ai-dlc-update` carries both formats and `--report`
+shows both rows.
+
+verify: sh o="$(bash core/scripts/validate-write-format-steering.sh --report 2>&1)"; rc=$?; [ -n "$o" ] || exit 9; grep -qE '^ +declared +ai-dlc-update +core/schemas/layer-adjudication-register\.json ::' <<<"$o" || exit 9; [ "$rc" -eq 0 ] || exit 1; n="$(grep -cE '^ +declared +ai-dlc-update +' <<<"$o")" || n=0; [ "$n" -eq 2 ] || exit 1; row="$(awk '$1=="declared" && $2=="ai-dlc-update" && $3=="core/skills/ai-dlc-update/reconcile/lib.sh"' <<<"$o")"; [ -n "$row" ] || exit 1; a="${row#*anchor=}"; [ "$a" = 'function ledger_entry_shape(' ] || exit 1; exit 0
 
 
