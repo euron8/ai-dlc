@@ -13959,3 +13959,212 @@ seed lands after the file's last `- [ ]` bullet, outside the window, which is th
 mutant C tests from inside it.
 
 verify: sh f=core/team-roles/qa.md; [ -r "$f" ] || exit 9; t=$(mktemp) || exit 9; awk '/^- \[ \] \*\*Orphaned-function/ { w=1; next } w && /^- \[ \]/ { w=0 } w { if ($0 ~ /<!--/) c=1; if (!c) print; if ($0 ~ /-->/) c=0 }' "$f" > "$t"; w=$(grep -c . "$t") || w=0; [ "$w" -gt 0 ] || { rm -f "$t"; exit 9; }; a=$(grep -ciE 'early[ -]exit' "$t") || a=0; b=$(grep -ciE 'emission' "$t") || b=0; d=$(grep -ciE 'mutation-RED' "$t") || d=0; rm -f "$t"; [ "$a" -ge 1 ] && [ "$b" -ge 1 ] && [ "$d" -ge 1 ] || exit 1; exit 0
+## BL-223 — the push-candidate ledger is outside `validate-write-format-steering.sh`'s population by construction, and `upstream-routing.md` steers no format
+
+**Found 2026-09-09** adjudicating `PC-S308-WRITE-FORMAT-STEERING-APPLIED-AD-HOC-NOT-UNIVERSALLY`
+against HEAD, re-derived here. Two of that entry's claims are RESOLVED — the enforcer exists
+(`core/scripts/validate-write-format-steering.sh`, run at both pre-push hooks, population JOINED
+from `core/schemas/pipeline-state-paths.json` on `transient:false`), and
+`pipeline-snapshot-history.md`'s header format is now stated at `SKILL.md:1237`. **The third claim
+is the residue, and it covers one of the entry's own two motivating write attempts.**
+
+Derived, each with a control in the same invocation:
+
+    push-candidate in pipeline-state-paths.json   0   <- outside the population
+    CONTROL pipeline-snapshot-history             1   <- inside it
+    READ AND FOLLOW in core/rules/upstream-routing.md   0
+    CONTROL READ AND FOLLOW in SKILL.md                 9
+
+`upstream-routing.md` is BYTE-UNCHANGED by the release that closed the entry: md5
+`91e84d42…` at both `db078cbe^` and HEAD. So the file that tells a session to file a
+push-candidate still steers it to no format, and the ledger it writes into is not a member of the
+set the new enforcer scans — the one declared `ai-dlc-update` entry covers
+`layer-adjudication-register.jsonl` and says so verbatim: *"The pull LEDGERS that share this
+directory are not covered by it."*
+
+**The entry grammar therefore remains an unstated convention** across ~70 live entries, which is
+what the filing said and what a reader of the enforcer's PASS line would not learn.
+
+**A note on the shape, so it is not rebuilt.** The entry's suggested remedy — a standing rule that
+a write site must LOCATE its format first — was refuted on measurement and the reason is recorded
+at `validate-write-format-steering.sh:16-23`: a locate-duty is discharged by looking, fires on
+nothing where no format exists, and a vacuous one is spelled identically to a real one.
+Existence-and-declaration replaced it. **That refutation is sound and this entry does not reopen
+it** — the fix here is to DECLARE a format for the ledger and admit it to the population, not to
+add a duty.
+
+**Not fixed here.** Writing the entry grammar down is a schema addition plus a format file, and
+the grammar itself is contested: `ledger_entry_shape()` accepts five record forms, and declaring
+one as canonical would make the other four undeclared drift on an artifact the consumer owns.
+
+**RE-MEASURED at batch 95.** The join key is `paths[].name` in `core/schemas/pipeline-state-paths.json`
+— 36 members, 20 at `transient:false`, each carrying `name`, `transient`, `producer`, `reason`; neither
+`push-candidate` nor `register` occupies a name, so a declaration needs all four fields. The receipt
+below closes on two non-fixes, each with a `cmp -s` control: the word appended to an unrelated
+`reason`, and a member declared `transient:true` — the sharp one, because it satisfies the receipt
+while staying OUTSIDE the population the enforcer scans. And the real fix moves no cell this entry
+objects to: with a proper `transient:false` member added, `validate-write-format-steering.sh` reports
+5 of 21 artifacts carrying a declared format instead of 5 of 20, exit 0 both ways, same PASS line.
+Both premises hold on HEAD: `upstream-routing.md` is byte-unchanged (md5 `91e84d42…`) and names the
+ledger at line 44, and `ai-dlc-update` is already a `transient:false` member whose reason covers the
+register. Taking this entry means declaring the FORMAT, not admitting the member.
+
+**The receipt DRIVES the enforcer and reads its `--report` table, not the schema text.** The
+`declared` column is emitted at `validate-write-format-steering.sh:398` as
+`'  declared   %-34s %s\n'`, once per artifact the join scores OK, so a row exists only when a
+member of the `transient:false` population carries a `declared_in` file that is present in some
+layout AND still contains its anchor. The receipt asserts that row for `push-candidate`, guarded by
+the same row for `ai-dlc-update` — a control that already exists at HEAD and must keep printing, so
+a run that reached no table exits 9 rather than reporting an absence.
+
+**A `declared` row is not sufficient on its own, because a declaration can BORROW another
+member's.** A `formats[]` entry for `push-candidate` whose `declared_in` and `anchor` are copied
+from an existing row — `core/schemas/audit-anchors.json` and its own anchor — resolves, carries the
+anchor, and prints `declared push-candidate core/schemas/audit-anchors.json`, declaring no format
+for this ledger at all. **`PASS — 6 of 21` is therefore NOT the fix condition**: the borrowed
+declaration and an honest one print that same line, so the count moving is a consequence of the fix
+and never evidence of it. The receipt closes this by deriving the CLAIMED set from the report
+itself — it reads the `declared_in` path off the `push-candidate` row and requires exactly one
+`declared` row to carry that path. Every `declared_in` at HEAD is claimed once, so a borrowed one
+reads 2 and is refused without any hand-written list of paths.
+
+**A SELF-REFERENTIAL declaration defeats that arm and needs its own.** Pointing `declared_in` at
+the population schema with anchor `push-candidate` resolves, carries the anchor — the member's own
+name puts it there — and is claimed by nobody else, so it reads exactly one claimant and prints a
+`declared` row while declaring the ledger's format to be the file that merely lists the ledger. The
+last arm therefore refuses a row whose path basenames to the population schema, and that name is
+DERIVED from `join.population_schema` in the steering schema, the same field
+`validate-write-format-steering.sh:369` reads to pick the file it joins, so the two cannot drift.
+
+**The gate's own seed does not establish this binding, and the entry says so rather than letting
+the BOUND verdict imply it.** The seeder appends one comment line to every path the receipt names,
+and this receipt names both the validator script and the steering schema, so the seed lands in the
+JSON too and the run exits 9 on an UNPARSED document — a refusal, not a demonstration. Seeded on the
+script alone it stays at 1. Either way the seed reaches no `formats[]` entry, so what shows the
+receipt discriminates is the five constructed non-fixes below, never the ledger validator's verdict.
+
+Measured, each on its own detached checkout: HEAD 1, with the row absent and the guard present. A
+comment carrying the receipt's own literals appended to the file it names exits 9 — the appended
+line breaks the JSON the script reads, the reader reports UNPARSED, and the guard row never prints;
+a stub cannot reach 0. Five non-fixes stay at 1. The self-referential declaration and the borrowed
+one are the sharp pair — both print a `declared push-candidate` row, and they are separated by the
+population-schema arm and the claimant count respectively. A member declared `transient:true` plus a
+steering format satisfies a schema-text grep while staying outside the scanned population: the
+enforcer calls it a GHOST, exits 1, and the non-zero-exit arm refuses it. A `transient:true` member
+with no format prints nothing. A `transient:false` member with no format prints
+`UNDECLARED push-candidate`, not `declared`. Only a `transient:false` member plus a format declared
+in a file of its own, carrying its own anchor and claimed by no other member, reaches 0.
+
+**RE-MEASURED at batch 106, and the finding is that the receipt is satisfiable only by lying to
+I95.** The refusing arm is I95's PRODUCER arm, not the top-level-name key that batch 95 read it
+as. Four candidates, each built on its own `git archive` copy with the sides `cmp -s`-asserted
+to differ before any verdict was read:
+
+    base                                          I95 0   receipt 1
+    naive member + format                         I95 1   receipt 0
+    producer repointed at the naming script       I95 1   receipt 0
+    fabricated line constructing the path         I95 0   receipt 0
+
+The last row is the one that matters. I95 derives its population from non-comment lines
+constructing `${STATE_DIR}/<name>` or `_bmad-output/<name>` under `core/hooks`, `core/scripts`,
+`core/session-driver` and `core/git-hooks`, and checks a declared member's PRODUCER with that
+same grammar. `_bmad-output/push-candidate` is constructed by **0** such lines against a control
+of **7** for `_bmad-output/ai-dlc-update` in the same sweep — the ledger actually lives at
+`ai-dlc-update/push-candidate-ledger.md`, which `audit-upstream-routing.sh:311` names. So adding
+one non-comment line to a shipped script that constructs `_bmad-output/push-candidate/…` takes
+I95 to 0, the receipt to 0 and the FULL enforcement map to exit 0 — while declaring a producer
+for a path the machinery never creates, which is the state I95's own remedy text calls wrong.
+
+**The honest shape is a SECOND format under the existing `ai-dlc-update` member, and
+`write-format-steering.json` cannot express it**: `formats[]` carries one `declared_in` per
+`name`, and a repeated name is a FIELD failure at `validate-write-format-steering.sh:237`
+(`declared twice`). Taking this entry therefore means extending the steering schema to carry N
+formats per member FIRST, and rotating the receipt to a form that reads the report row for
+`ai-dlc-update` naming a SECOND `declared_in`. Not built this batch.
+
+**The receipt is kept as it stands, and that is a NOTE-tier hazard worth naming.** A receipt
+that stays at 1 forever is indistinguishable from a live defect nobody has reached, and the only
+thing separating them is this paragraph.
+
+**RE-MEASURED at batch 111, and the "N formats per member" shape is REFUTED by building it — do
+not rebuild this shape.** A contract was written proposing a second `formats[]` entry under the
+existing `ai-dlc-update` member, `declared_in` pointing at
+`core/skills/ai-dlc-update/reconcile/lib.sh`, anchor `function ledger_entry_shape(`. An adversary
+built it on a `git archive` copy and found it wrong four ways, each measured:
+
+1. **The receipt cannot see the anchor.** `--report`'s table prints `<name> <declared_in> ::
+   <kind>` and never the anchor, so a receipt reading that table (the entry's own established
+   discipline, ¶ above) cannot distinguish a correct anchor from any other substring present in
+   the same file. Built two non-fixes — `unquote() {` (an unrelated helper) and
+   `reconcile/lib.sh` (a substring of the file's own header comment) — both score `declared_in`
+   correctly, both print a second row, both pass a receipt shaped like §3's proposal. This is the
+   validator's own narrowing #2 (`validate-write-format-steering.sh:64-67`, "a whole-file check
+   is satisfied by the artifact's name appearing anywhere, including in a comment") recurring one
+   level up, in the receipt rather than the reader.
+2. **A same-name-different-anchor self-probe fires identically on the unfixed reader.** The
+   current reader's last-write-wins `declared[nm] = e` (line 238) still reaches the STALE arm
+   when the offending entry is placed second, so an offender/near-miss probe built the obvious
+   way passes on both the broken and the fixed reader — order-sensitive on the unfixed side, so
+   the same probe flips from non-discriminating to discriminating purely on array order. The
+   actual discriminator is the `FIELD ... declared twice` row, which the unfixed reader emits on
+   both probe sides and the fixed reader on neither; nothing proposed checks that row.
+3. **The PASS line's "N of 20" count silently becomes a row count.** `DECLARED_OK` increments per
+   OK row (line 397), not per distinct name; measured `PASS — 6 of 20` under the fix against
+   `PASS — 5 of 20` at HEAD, over an unchanged 5-name, 20-artifact population — the same
+   batch-95 finding ("PASS — 6 of 21 is NOT the fix condition") recurring in a new spelling, this
+   time for a reason that is not coverage at all.
+4. **Pointing `declared_in` into `core/skills/` crosses a pull-class boundary and WEDGES a
+   consumer between two pulls.** Every existing declaration points into `core/schemas/`, one
+   install.sh copy unit. Built a consumer layout carrying the schema half
+   (`.claude/schemas/write-format-steering.json`) without the skill half
+   (`reconcile/lib.sh` absent, the ordinary state between a schema pull and a skill pull): the
+   fixed validator answers `FAIL — MISSING ... (looked in 2 layout(s))`, exit 1 — the FAILING
+   tier this file's header says has "no false-positive path by design" now has one, on a
+   perfectly ordinary mid-pull consumer state. The existing SKIP narrowing only covers "the whole
+   schemas directory absent," which does not apply here.
+
+**Do not re-propose a second `formats[]` entry naming `core/skills/ai-dlc-update/reconcile/lib.sh`
+without first fixing (1) and (2) at the reader/receipt level and (4) at the schema-shape level —
+a receipt that reads only the report table cannot bind an anchor it never prints, so either the
+receipt must read the schema directly (which the entry's own discipline above forbids for a
+different, still-valid reason: `PASS — N of M` staying a schema-text grep) or the reader's report
+line must start emitting the anchor. Unresolved and not scoped as available work: whether "N
+formats per member" is the right general shape at all — the schema carries no `uniqueItems` and no
+external JSON-Schema validation, so uniqueness-per-name lives only in the reader's five-line
+`declared twice` check; a narrower field (e.g. `also_declared_in`, or a `(name, scope)` composite
+key) may be less surface area and was not measured against this shape before the build. `kind:
+"prose"` for an executable awk function was flagged as a live semantic mismatch (the schema's own
+description calls prose "the weakest... class that decayed here," which is false for code four
+shipped scripts execute) and was not resolved either way.**
+
+**FIXED at batch 111, all four cited defects addressed.** `write-format-steering.json` now carries
+a second `formats[]` entry under the existing `ai-dlc-update` member — `declared_in:
+core/skills/ai-dlc-update/reconcile/lib.sh`, `anchor: function ledger_entry_shape(`, `kind: code`
+(a new enum value; the schema's `kind` description now states why code is the strongest tier
+rather than calling it prose). `validate-write-format-steering.sh`'s reader keys `declared` as a
+name-to-list-of-entries map — a true duplicate is now `(name, declared_in)` repeated, not the bare
+name, so two distinct formats sharing one member no longer collide (defect 2). `--report` prints
+the anchor on every OK row (`anchor=<literal>`), closing the gap defect (1) found: a receipt
+reading the table can now bind on the anchor itself, not merely on `declared_in` resolving, and
+two built non-fixes from the batch-111 adversary (`unquote() {`, an unrelated helper in the same
+file; `reconcile/lib.sh`, a substring of the file's own header comment) print a row but fail a
+receipt that checks the anchor literal. `MISSING` is now split into `SKIP` (the declaration's
+whole owning top-level component — `core/skills/`, here — is absent from the tree; a consumer
+between the schemas pull and the skills pull) and a real `MISSING`/fail (the component's directory
+is present and the specific file is not), which resolves defect (4): a mid-pull consumer with the
+schema half but not the skill half no longer wedges on a FAIL. The PASS line's "N of M" now counts
+distinct covered artifact NAMES via a dedicated names file, never `OK` rows, so one member printing
+two rows can no longer inflate the numerator past its own denominator (defect 3) — the row count is
+still printed separately, labelled as a row count. A build+adversary cycle ran this batch against
+this exact contract; all four defects were reverified fixed on the shipped code, not re-derived
+from the earlier refutation's prose.
+
+**Tiered DEFECT, now CLOSED.** The enforcer's PASS line no longer omits the ledger this program
+exists to drain from its declared population; `ai-dlc-update` carries both formats and `--report`
+shows both rows.
+
+**LANDED (v0.576.0, verified f9158898).**
+
+verify: sh o="$(bash core/scripts/validate-write-format-steering.sh --report 2>&1)"; rc=$?; [ -n "$o" ] || exit 9; grep -qE '^ +declared +ai-dlc-update +core/schemas/layer-adjudication-register\.json ::' <<<"$o" || exit 9; [ "$rc" -eq 0 ] || exit 1; n="$(grep -cE '^ +declared +ai-dlc-update +' <<<"$o")" || n=0; [ "$n" -eq 2 ] || exit 1; row="$(awk '$1=="declared" && $2=="ai-dlc-update" && $3=="core/skills/ai-dlc-update/reconcile/lib.sh"' <<<"$o")"; [ -n "$row" ] || exit 1; a="${row#*anchor=}"; [ "$a" = 'function ledger_entry_shape(' ] || exit 1; exit 0
+
+
