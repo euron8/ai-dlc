@@ -989,8 +989,29 @@ env_override() {
 # The gate being logged right now is the one Check 15 is verifying.
 # -----------------------------------------------------------------------------
 if [ "$CHECK_EVIDENCE" -eq 1 ]; then
+  # DISCOVERY PREFERS THE CANONICAL LIVE PATH. The `find` below matches on
+  # BASENAME ALONE across the whole of `_bmad-output`, so any second
+  # `gate-log.md` anywhere under that tree qualifies -- and readdir order, not
+  # recency, decides which one wins. Measured on a real consumer holding three:
+  # the winner was `planning-artifacts/s300/archive/cycle-1/gate-log.md`, an
+  # archived copy from a closed sprint, and Check 15 printed a normal PASS on a
+  # row belonging to a different sprint while the live log's row cited no
+  # measurement at all. That is fails-open: the arm reported on a file nobody
+  # was gating.
+  #
+  # `archive/` is where those extra copies come from TODAY; it is not the
+  # condition. Excluding that one path segment would leave every other second
+  # copy winning, and would REGRESS the consumer whose only gate log is an
+  # archived one -- that tree passes today and must keep passing. So the
+  # preference is stated positively and the discovery below is kept UNCHANGED
+  # as the fallback: a tree with no canonical live log resolves exactly as it
+  # did before, and a tree with none at all still reaches the loud failure.
   if [ -z "$GATE_LOG" ]; then
-    GATE_LOG="$(find "$ROOT/_bmad-output" -type f -name 'gate-log.md' 2>/dev/null | head -1)"
+    if [ -f "$ROOT/_bmad-output/implementation-artifacts/gate-log.md" ]; then
+      GATE_LOG="$ROOT/_bmad-output/implementation-artifacts/gate-log.md"
+    else
+      GATE_LOG="$(find "$ROOT/_bmad-output" -type f -name 'gate-log.md' 2>/dev/null | head -1)"
+    fi
   fi
   [ -n "$GATE_LOG" ] && [ -f "$GATE_LOG" ] || {
     echo "FAIL: no gate-log.md found under $ROOT/_bmad-output (pass --gate-log PATH)" >&2

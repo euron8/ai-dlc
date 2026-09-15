@@ -1954,7 +1954,7 @@ verify: sh d=$(mktemp -d); for k in f h; do mkdir -p "$d/$k"; printf '# B\n\n## 
 
 **`--check-evidence` discovers its gate log by basename alone and reads an ARCHIVED sprint's copy,
 passing Check 15 on a number belonging to a different sprint.**
-`core/scripts/validate-artifact-budget.sh:777` resolves the target with
+`core/scripts/validate-artifact-budget.sh:993`, at base `26ecef11`, resolves the target with
 `find "$ROOT/_bmad-output" -type f -name 'gate-log.md' 2>/dev/null | head -1` — no sort, no
 `archive` exclusion, no preference for the canonical live path. Driven against the real validator
 on a probe root holding exactly the two files the entry names:
@@ -1971,31 +1971,85 @@ returns a different number — so the two sides genuinely differ and the archive
 not merely reachable. Check 15 exists to verify Check 14's assertion took effect by re-reading
 recorded state; it printed a normal PASS line on a row from an unrelated sprint.
 
-**The filing is corrected WIDER on its central mechanism.** It describes the failure as
-nondeterministic — "readdir-order, not sorted and not guaranteed stable call-to-call", observed
-flipping between a manual shell and a `bash -x` trace. Measured on 20 independently created probe
-roots each holding one live and one archived copy, `find` returned the ARCHIVED path first 20 times
-and the live path 0 times; the control, 20 roots holding only the live copy, returned live-first
-20 and archive-first 0, so the classifier reports both directions. On this filesystem the wrong
-answer is not intermittent, it is the reliable one, which removes the "may not reproduce" defence
-the entry's own framing invites. The exposure is wider than the entry's stated population too: the
-predicate is basename-only across all of `_bmad-output`, so any second `gate-log.md` anywhere under
-that tree qualifies — `archive/cycle-*/` is one source of them, not the condition.
+**THE COORDINATE MOVED AND THE MECHANISM DID NOT.** The filing's `:777` is LINE DRIFT, not
+expiry — the same `find` sat at `:993` at base and, kept as the fallback, at `:1013` after the
+fix; one occurrence in the file at every one of those revisions, against a control of 0 for an
+impossible token in the same invocation. Read a moved citation here as a stale coordinate, never
+as an absorbed defect, and re-derive it rather than trusting any of these three numbers.
 
-**Why the anchor is the anchor.** The receipt asserts the CITED NUMBER, not the chosen path, and
-seeds the two files with different numbers (5881 live, 4385 archived) so that no gate log other
-than the live one can satisfy it. An anchor on the path string would false-close on a fix that
-merely reordered `find` without preferring the canonical location, and an anchor on the
-`find … | head -1` source text would be satisfied by a comment recording its removal — the dominant
-failure mode here, since fixes in this tree document what they deleted. It reaches 0 when discovery
-prefers `_bmad-output/implementation-artifacts/gate-log.md` or excludes `archive/` segments; that
-end state is already demonstrated by the control arm, which prints `cites 5881 tok` today.
+**THE DEFECT IS CONSUMER-VISIBLE TODAY, AND IT MISFIRES WORSE THERE THAN ON ANY PROBE.** Driven
+against the reference consumer with `--root`, the shipping validator selects
+`_bmad-output/planning-artifacts/s300/archive/cycle-1/gate-log.md` and exits 0 on `cites 4385 tok`
+— a closed sprint's row — while that consumer's LIVE log, at `implementation-artifacts/gate-log.md`
+line 130, cites no measurement at all and would FAIL. So Check 15 is not latently wrong there; it
+is fails-open there, now, and has been reporting on a file nobody was gating.
+
+**The filing is corrected on its central mechanism, and the correction changes what a seed has to
+look like.** It describes the failure as nondeterministic — "readdir-order, not sorted and not
+guaranteed stable call-to-call", observed flipping between a manual shell and a `bash -x` trace.
+Measured with `/usr/bin/find` over independently created probe roots, in BOTH creation orders,
+output identical: order on this filesystem is **NAME-HASH based — neither creation order nor
+lexical order**. It is therefore stable per name set and reproducible, not intermittent, which
+removes the "may not reproduce" defence the entry's own framing invites; and "returned first by
+`find`" and "sorts lexically first" are INDEPENDENT properties of a directory name, so a seed must
+measure both rather than assume they coincide. **An ordering figure taken through a tool call is
+void** — the Bash tool's interactive `find` is a shell function wrapping `bfs -S dfs` and returns a
+different first path than `/usr/bin/find` on the same tree.
+
+The exposure is wider than the entry's stated population too: the predicate is basename-only
+across all of `_bmad-output`, so any second `gate-log.md` anywhere under that tree qualifies —
+`archive/cycle-*/` is one source of them, not the condition. A fix keyed on the string `archive`
+addresses a symptom, and it REGRESSES the consumer whose only gate log is an archived one.
+
+**THE RECEIPT BELOW REPLACES ONE THAT WAS INVERTED ON BOTH SIDES, AND THE REPLACEMENT IS SCORED
+RATHER THAN ARGUED.** The old receipt seeded one live copy citing `5881 tok` and one archived copy
+citing `4385 tok` under `planning-artifacts/s300/archive/cycle-1/`, and asserted the output carried
+`cites 5881 tok`. Built as full script copies, each asserted APPLIED by `cmp -s` against base and
+parseable by `bash -n` before any verdict was read, it CLOSED on four changes that fix nothing —
+`sort` (order the candidates), `tail -1` (take the last), `hard` (literal canonical path, discovery
+deleted) and `uncond` (echo the string, measure nothing) — and REJECTED `refuse`, a defensible fix
+that declines to choose when discovery is ambiguous and so emits no `cites` line at all. The old
+entry's own sentence, *"no gate log other than the live one can satisfy it"*, was FALSE: `uncond`
+satisfies it without opening either file.
+
+**Three properties make the replacement discriminate, and none of them is an extra arm.** The
+gap in the old receipt was its SEED, and the old seed was ADJACENT to the discriminating input.
+
+- **The live copy cites a number that appears NOWHERE in the receipt's own text** (`5120 tok`).
+  A hardcoded emission cannot produce a number the receipt never mentions, so `uncond` dies here
+  and nowhere else.
+- **Two decoys STRADDLE the canonical directory**, and the receipt asserts the straddle before it
+  reads any verdict: with three gate logs seeded, `implementation-artifacts` must be neither the
+  first nor the last path `/usr/bin/find` returns, and must not sort first either. Measured, the
+  decoy names `000` (readdir-first AND lexically-first) and `zzz-legacy` (readdir-last) hold that
+  against `implementation-artifacts`. A world with ONE decoy cannot kill `tail`: readdir happened
+  to place the canonical copy last on every two-log world tried, so `tail` scored identically to
+  the fix by accident. Three logs, straddling, is the smallest world in which `head`, `sort` and
+  `tail` all land on a decoy while the fix lands on the live file.
+- **An ARCHIVED-ONLY world must still PASS.** Base passes it; `hard` fails it. Without this arm a
+  receipt cannot tell a fix from a regression that deletes discovery, and the regression is the
+  one that breaks a real consumer.
+
+A fourth arm carries the tightening rather than hiding it: a world whose LIVE cell cites nothing
+while its decoys cite numbers must FAIL, and must fail with no `cites` line. That is the
+fails-open closing, and it is the only arm on which the fix is stricter than base.
+
+**Why the anchor is still the CITED NUMBER.** An anchor on the chosen PATH false-closes on a fix
+that merely reordered `find`; an anchor on the `find … | head -1` SOURCE TEXT is satisfied by a
+comment recording its removal, which is the dominant failure mode in this tree because fixes here
+document what they deleted — and the shipped fix does exactly that, in seventeen lines of comment
+directly above the discovery it kept. What changed is not the anchor but the WORLDS it is read in.
+
+**What this receipt still declines to decide.** `refuse` remains a fix this receipt scores as a
+non-fix, deliberately: the entry's subject is reading the WRONG file, not reading ambiguously, and
+a receipt anchored on a cited number cannot score a candidate that cites nothing. That is stated
+rather than repaired, because a receipt accepting both shapes would establish neither.
 
 Discharges the consumer entry `PC-S303-BUDGET-CHECK-EVIDENCE-FIND-PICKS-A-STALE-GATE-LOG` at
 pinned ledger line 4313.
 
 
-verify: sh R=$(mktemp -d); mkdir -p "$R/_bmad-output/implementation-artifacts" "$R/_bmad-output/planning-artifacts/s300/archive/cycle-1"; printf "| [core] 14 - Update pipeline snapshot | PASS (lead) | 5881 tok |\n" > "$R/_bmad-output/implementation-artifacts/gate-log.md"; printf "| [core] 14 - Update pipeline snapshot | PASS (lead) | 4385 tok |\n" > "$R/_bmad-output/planning-artifacts/s300/archive/cycle-1/gate-log.md"; out=$(bash core/scripts/validate-artifact-budget.sh --root "$R" --check-evidence 2>&1); rm -rf "$R"; case "$out" in *"cites 5881 tok"*) true;; *) false;; esac
+verify: sh F=/usr/bin/find; [ -x "$F" ] || exit 9; V=core/scripts/validate-artifact-budget.sh; [ -f "$V" ] || exit 9; row() { printf '| [core] 14 - Update pipeline snapshot | PASS (lead) | %s |\n' "$1"; }; mk() { R=$(mktemp -d); mkdir -p "$R/.claude" "$R/_bmad-output/implementation-artifacts" "$R/_bmad-output/000/archive/cycle-1" "$R/_bmad-output/zzz-legacy/archive/cycle-1"; row "$1" > "$R/_bmad-output/implementation-artifacts/gate-log.md"; row "4385 tok" > "$R/_bmad-output/000/archive/cycle-1/gate-log.md"; row "3070 tok" > "$R/_bmad-output/zzz-legacy/archive/cycle-1/gate-log.md"; L="$("$F" "$R/_bmad-output" -type f -name gate-log.md)"; [ "$(printf '%s\n' "$L" | grep -c .)" = 3 ] || return 9; case "$(printf '%s\n' "$L" | head -1)" in */implementation-artifacts/*) return 9;; esac; case "$(printf '%s\n' "$L" | tail -1)" in */implementation-artifacts/*) return 9;; esac; case "$(printf '%s\n' "$L" | sort | head -1)" in */implementation-artifacts/*) return 9;; esac; }; mk "5120 tok" || exit 9; a="$(bash "$V" --root "$R" --check-evidence 2>&1)"; ra=$?; rm -rf "$R"; mk "-" || exit 9; c="$(bash "$V" --root "$R" --check-evidence 2>&1)"; rc=$?; rm -rf "$R"; R=$(mktemp -d); mkdir -p "$R/.claude" "$R/_bmad-output/000/archive/cycle-1"; row "4385 tok" > "$R/_bmad-output/000/archive/cycle-1/gate-log.md"; b="$(bash "$V" --root "$R" --check-evidence 2>&1)"; rb=$?; rm -rf "$R"; [ "$ra" = 0 ] || exit 1; case "$a" in *"cell cites 5120 tok"*) ;; *) exit 1;; esac; [ "$rb" = 0 ] || exit 1; case "$b" in *"cell cites 4385 tok"*) ;; *) exit 1;; esac; [ "$rc" = 0 ] && exit 1; case "$c" in *"cell cites"*) exit 1;; esac; exit 0
 
 ## BL-066 — the `named_absorbed` half landed at v0.387.0; the SIBLING half did not, and the release notes say it did
 
@@ -3732,4 +3786,76 @@ question to answer first.
 re-opened blind.
 
 verify: manual
+
+## BL-255 — `BL-005` names a pole that was displaced four releases before it was read, and the entry that measured the displacement filed it in the ARCHIVE
+
+**DEFECT.** `BL-005`'s heading asserts *"`validator-arm-selection` is the pre-push pole, at 166s
+of a 217s wall"*. Both halves are false at HEAD. Re-derived from
+`.git/ai-dlc-fixture-durations` in one invocation: `ledger-reverify` **493**,
+`fixture-git-env-seam` 239, `validator-arm-selection` **229**, `validator-fork-budget` 212,
+`gate-adjudication-mutants` 211, `validator-arm-selection-b` 206. The entry's subject is third,
+and the wall it quotes is less than half the current pole. A session scoping performance work
+off this entry optimizes a fixture that is not the pole.
+
+**THE DISPLACEMENT WAS MEASURED AND IT WAS NOT MISSED — IT WAS FILED WHERE THE LIVE ENTRY IS
+NOT.** The archived `BL-088` records, in its own `**LANDED (v0.541.0, verified 274efdae)**`
+paragraph, *"The pole fell from 480 to 97 and the suite pole is now `ledger-reverify` at 427"*.
+So the correct figure has been written down since `v0.541.0` — in `docs/backlog.archive.md`,
+which no live-entry reader opens. `BL-088` also says *"`BL-005`'s `validator-arm-selection` pole
+is untouched by this and remains separate"*, which was true of the FIX and false of the
+HEADLINE in the same breath: after that change `validator-arm-selection` was no longer the pole,
+and the sentence reads as though the entry had been checked.
+
+**THIS IS THE `DISCHARGED`-vs-`TERMINAL` SHAPE ONE LEVEL UP.** An archived entry can correct a
+live one, and nothing joins the two directions. `BL-088` cites `BL-005` twice
+(`docs/backlog.archive.md:9763`, `:9803`) and neither citation reaches the live file.
+
+**WHAT HAS CHANGED SINCE, AND IT IS THE FIXTURE, NOT THE VALIDATOR.**
+`core/fixtures/ledger-reverify/run.sh` was **2142** lines at `274efdae` and is **3643** at HEAD
+— five commits, every one a release adding receipt-grammar coverage (`v0.555.0`, `v0.556.0`,
+`v0.558.0`, `v0.567.0`, `v0.578.0`). The fixture drives **105** invocations of the script under
+test across **108** assertion arms. 427 → 493 is that growth, and the subject is both the suite
+pole and a BOOTSTRAPPING file, so each addition was correct in isolation and none was costed
+against the wall clock.
+
+**TWO PROPERTIES OF THE INSTRUMENT, BOTH OF WHICH MAKE A NAIVE RECEIPT WRONG.**
+`.git/ai-dlc-fixture-durations` is UNTRACKED and per-clone — `git log` over it returns 0 against
+a control of 1 for a tracked path — so no ref carries it and a fresh clone has none. And
+`.githooks/pre-push` MERGES each run's timings over the prior file
+(`awk 'NF == 2 { c[$1] = $2 }'`), keeping old rows for fixtures that did not run: this batch's
+own push selected 31 of 200 and `ledger-reverify` was NOT among the verdicts (control:
+`snapshot-evidence-cell` appears as `ok` at that shape in the same log), so the **493 is carried
+forward from an earlier run and its age is not derivable**. A row is a floor of unknown vintage,
+never a fresh measurement.
+
+**WHAT IS OWED.** Correct `BL-005`'s heading and its 166s/217s figures, or retire it in favour
+of an entry naming the real pole. Its third claim — shard `b`'s ~47.8s solo floor and the two
+measured routes below it — is a SEPARATE SUBJECT and is untested here; **an entry with two
+subjects expires only when both do**, so do not close `BL-005` on this finding alone.
+
+**THE RECEIPT KEYS ON TRACKED TEXT, NOT ON THE TIMING FILE, AND THE FIRST DRAFT OF THIS ENTRY
+GOT THAT WRONG.** It declared `verify: manual` on the grounds that a receipt cannot read
+`.git/ai-dlc-fixture-durations` — true, and beside the point. That file is untracked, per-clone,
+and merged forward across runs, so a predicate keyed on it would measure the runner's clone
+rather than the claim; R5 also runs every receipt in its own DETACHED CHECKOUT of HEAD, where
+the file is the caller's or absent. But **the defect is a contradiction between two TRACKED
+files** — a live heading asserting a pole that an archived entry measured away — and that is
+checkable.
+
+**THE ANCHOR IS THE HEADING LINE, AND THE LOOSE FORM DOES NOT DISCRIMINATE.** This entry quotes
+`BL-005`'s heading verbatim one paragraph up, so a whole-file grep is satisfied by its own text
+— measured at **3** hits for the bare phrase against **1** for the heading-anchored form. And
+the anchor must carry `validator-arm-selection`: a corrected heading naming the REAL pole still
+contains `is the pre-push pole`, so the short anchor scores 1 on the repaired tree as well.
+Scored against three plausible repair shapes, the shipped anchor returns 0 on all three.
+
+**POLARITY, AND THE FIRST DRAFT HAD IT BACKWARDS.** In this ledger exit 0 means the fix is
+PRESENT and non-zero means the entry still reproduces — the opposite of the `ledger-reverify`
+convention for the consumer's ledger. The first cut exited 0 while the defect was live and
+`backlog-reverify.sh` duly reported this entry as `CLOSE-CANDIDATE` on the commit that filed
+it. It now exits **1** while the heading still makes the claim. The archived counter-record is
+a PRECONDITION: if `BL-088`'s measurement ever leaves the archive the receipt exits **9**
+rather than reporting a false close.
+
+verify: sh L=docs/backlog.md; A=docs/backlog.archive.md; [ -f "$L" ] && [ -f "$A" ] || exit 9; a="$(grep -c 'The pole fell from' "$A")" || a=0; [ "$a" -ge 1 ] || exit 9; h="$(grep -c '^## BL-005.*validator-arm-selection.*is the pre-push pole' "$L")" || h=0; [ "$h" -ge 1 ] && exit 1; exit 0
 
