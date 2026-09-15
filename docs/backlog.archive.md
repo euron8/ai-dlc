@@ -13807,3 +13807,155 @@ indistinguishable from a session that dispatched nothing, and it is the one piec
 later step can reconstruct.
 
 verify: sh H="${AI_DLC_BL253_HOOK:-core/hooks/ai-dlc-continue.sh}"; [ -f "$H" ] || exit 9; S="core/schemas/pause-routing.json"; [ -f "$S" ] || exit 9; R="$(bash core/fixtures/handoff-resume-guard/seed.sh)" || exit 9; [ -d "$R" ] || exit 9; drv() { p="$(mktemp -d)"; mkdir -p "$p/_bmad-output/.driver"; if [ -n "${2:-}" ]; then { printf '# Pipeline Snapshot\n\n## Pipeline Position\ncurrent_step_file: implementation.md\n\n## Sprint Context\nsprint_id: 311\n\n## Recent Activity\n- x\n\n## Open Items\n- none\n\n## Locked Decisions\n- none\n\n## In-Flight Teammates\n'; cat "$2/snapshot-body.md"; printf '\n\n## Context Reminders\ncontext_reminders_sent: none\n'; } > "$p/_bmad-output/pipeline-snapshot.md"; touch "$p/_bmad-output/pipeline-paused.flag"; cp "$2/_bmad-output/"*.jsonl "$p/_bmad-output/" 2>/dev/null; fi; : > "$p/_bmad-output/.driver/handoff"; o="$(jq -nc --arg t "$1" --arg s fx '{transcript_path:$t,session_id:$s}' | CLAUDE_PROJECT_DIR="$p" AI_DLC_PAUSE_ROUTING_SCHEMA="$S" bash "$H" 2>/dev/null)"; rm -rf "$p"; printf '%s' "$o"; }; w() { x="$(cat "$R/$1")"; [ -d "$x" ] || exit 9; drv "$x/lead.jsonl" "$x"; }; blk() { jq -e '.decision=="block"' >/dev/null 2>&1 <<<"$1"; }; blk "$(drv "$(cat "$R/.p_miss")")" || exit 9; off="$(w .w_offender)"; tab="$(w .w_tablerow)"; ctx="$(w .w_ctxrow)"; nsp="$(w .w_nospawn)"; nmd="$(w .w_namedteam)"; unr="$(w .w_unrelatedrow)"; rm -rf "$R"; blk "$off" || exit 1; r="$(jq -r '.reason // ""' <<<"$off" 2>/dev/null)"; grep -qF 'toolu_01FIXTUREoffender000000000' <<<"$r" || exit 1; grep -qF 'table has NO data rows' <<<"$r" || exit 1; grep -qF 'dev-escalated' <<<"$r" || exit 1; grep -qF 'Do NOT call' <<<"$r" || exit 1; blk "$nmd" && exit 1; blk "$ctx" && exit 1; blk "$nsp" && exit 1; blk "$tab" && exit 1; blk "$unr" && exit 1; exit 0
+## BL-251 — `qa.md`'s core-path wiring gate has no mechanical reader, so the clause it now carries about an early exit added above an existing emission is enforced by whoever reads the file
+
+**LANDED (v0.574.0, verified 6282f729), MECHANISM DECLINED ON OPERATOR RULING.** The prose bullet
+this entry's own filing asked for shipped in that commit and stands. The mutation-RED wiring
+mechanism this entry says is still owed is **not being built**: batch 109 tried and found the
+population does not reproduce under either candidate scope (file vs. hunk, 4:1 apart), and the
+one motivating case (`736e4cfc8`) scores **zero** under the shipped clause's own wording — its
+"stranded" lines are all newly ADDED by that same diff, not pre-existing emissions, so neither
+reading catches the case that founded the entry. The 223-site "loose" figure that first
+motivated a wider net is unreproducible at any grammar width tried (13/58/124/103). With the
+founding case unreproducible and no other confirmed instance, there is no current evidence this
+regression class is live; a detector built now would be scoped by guesswork rather than
+population. If the underlying bug recurs, file it fresh, with the reproducing diff attached —
+that is the evidence this entry was missing.
+
+**Found 2026-09-14** while adjudicating the reference consumer's candidate
+`PC-S311-QA-ORPHANED-FUNCTION-CHECK-MISSES-REACHABILITY-REGRESSION`. The prose half of that
+candidate landed with this entry; what is owed is a mechanism, and the reason it is owed is
+that nothing in this repo reads the bullet the clause sits in.
+
+**THE GAP.** The "Orphaned-function / core-path wiring (HARD GATE)" item asked for a
+mutation-RED wiring test for a NEW function whose spec says it runs from a loop, scheduler or
+entrypoint. An EXISTING emission that a diff strands behind a newly-inserted early exit is a
+different population: the function has callers, its own direct-call test still passes, and the
+caller grep the item specifies returns more than the definition line for it. The consumer's
+motivating case was a telemetry append in `rebalancer/execution.py` sitting behind an
+unconditional `continue`, unit-green throughout.
+
+**WHY THE CLAUSE IS WORDED ON THE HUNK AND NOT ON THE BLOCK.** A QA seat reads a unified diff,
+so the predicate has to be decidable from what a diff shows. Measured over the reference
+consumer's last ten code-bearing PR merges (`git diff -M --unified=3 <sha>^1 <sha>` over
+`*.py *.ts *.tsx *.js *.go *.rb *.java`; control: the first-parent pool the ten were selected
+from is 200 commits):
+
+```
+reading                                                 sites   diffs flagged
+LOOSE  (added early exit, emission anywhere in hunk)      223         5/10
+STRICT (added early exit, EXISTING emission BELOW it)       4         3/10
+```
+
+The loose reading is a REJECT surface no seat honours — 107 of its sites come from one merge.
+The strict reading's four sites are `736e4cfc8` (the motivating file), `6ee03ad8c` twice, and
+`4d93a0cc6`. That is why the shipped wording says *a line ABOVE an EXISTING emission line in
+that same hunk* rather than "in the same block": "same block" is not a thing a diff shows, and
+scoring it needs the whole file plus an indentation model.
+
+**CORRECTION — THE SITE LIST ABOVE IS WRONG BY IDENTITY, AND THE TABLE'S 4 IS A CARDINALITY
+COINCIDENCE.** Re-derived while scoping a detector against this entry, over a pool rebuilt to the
+paragraph's own recipe (controls in the same invocation: pool size 10, and all three cited shas
+present in it). Attributing the STRICT sites BY IDENTITY rather than counting them:
+
+```
+                        entry claims        re-derived
+736e4cfc8                        1                   0
+6ee03ad8c                        2                   2
+4d93a0cc6                        1                   1
+84451b892                        —                   1
+                        ------------        ----------
+                                 4                   4
+```
+
+**The motivating sha contributes NOTHING under the predicate the table states.** At `736e4cfc8`
+every emission sitting below an added early exit is ITSELF ADDED — `logger.critical(`,
+`logger.info(`, and one arithmetic `_ts_math.log(` — with zero context-prefixed emissions, against
+a control of 75 added early exits in that diff. The STRICT row says *EXISTING* emission, and an
+added line is not one. The fourth site is `84451b892`, which this entry never cites. **Same total,
+different population** — which is why a receipt or a measurement plan keyed on "reproduce the 4"
+establishes nothing, and why the count was believed for as long as it was.
+
+**AND THE MEASUREMENT BEHIND THE TABLE IS FILE-SCOPED, WHILE THE SHIPPED CLAUSE IS HUNK-SCOPED.**
+Over that same pool, the identical grammar scored both ways: **file scope 4, hunk scope 1.** So
+`qa.md`'s *"in that same hunk"* does not describe the run that produced the 4 — the table's
+population is pairs whose emission sits anywhere BELOW the early exit in the same FILE. The two
+readings differ by a factor of four on the only corpus either has been run against. Neither the
+clause nor the table is edited here: which one is authoritative is an adjudication, and this
+records that they disagree rather than silently picking one.
+
+**THE OBVIOUS REPAIR FOR THE CROSS-SCOPE FALSE POSITIVE IS REFUTED, MEASURED.** A same-file
+predicate pairs an early exit with an emission in a DIFFERENT function, so the candidate fix is an
+indentation-depth rule: skip a pair whose emission is shallower than its early exit. Scored against
+the real pairs at the three sites, it **excludes 4 of 8 — including all three sites this entry and
+the re-derivation agree on** (`6ee03ad8c` twice at exit-depth 16 against emission-depth 8, and the
+`84451b892` pair at 28 against 24). The rule is backwards for the dominant idiom: a deeper
+`if …: continue` guard skips a SHALLOWER line later in the same loop body, so "emission shallower
+than exit" is the signature of a genuine stranding rather than of a scope escape. A detector
+carrying it would be silent on most known sites while passing a fixture written to match it.
+
+**THE LOOSE FIGURE IS NOT REPRODUCIBLE EITHER.** 223 could not be recovered at any grammar width:
+the narrow set gives 13, adding `.append(` gives 58, adding `record_`/`details[` gives 124, and a
+bare `log|metric|telemetry` mention gives 103 (control: an impossible token gives 0 at every
+width). The emission grammar that produced 223 is not stated in this entry and is not derivable
+from it.
+
+**WHAT THIS CHANGES ABOUT CLOSING THE ENTRY.** Nothing about the GAP — no mechanical reader still
+exists, and that claim re-derives clean (below). What it changes is that the population a detector
+must be built against is not yet pinned: the predicate's scope is undecided, its emission grammar
+is unstated, and 3 of the 4 sites remain unadjudicated as true regressions. Those are inputs a
+mechanism needs and this entry does not yet carry.
+
+**THE FIRST DERIVATION OF THOSE FIGURES READ 0 AND 0.** `awk -v` strips one level of escaping,
+so `^\+[[:space:]]*(continue|…)` reached awk as `^+…(` and awk refused the regex on every
+merge, printing a clean zero per row. The doubled-backslash spelling is what produced the table
+above, and the run now refuses unless awk returns a numeric count for every merge.
+
+**NO MECHANICAL READER EXISTS, AND THAT IS THE SUBJECT.** `grep -rl 'Orphaned-function'` over
+`core/scripts core/hooks scripts` returns **0** files, against a control of **4** files naming
+`qa.md` in the same invocation (all three directories asserted present in that invocation:
+53, 23 and 24 entries). The one that looks like an enforcer is not one:
+`core/scripts/validate-mutation-red.sh` names `qa.md` exactly once and that reference is a
+COMMENT (`grep -n 'qa\.md' | grep -cv '^[0-9]*:#'` = 0) — it validates the SHAPE of a
+mutation-RED capture a story already carries, and decides nothing about which diffs owe one.
+So **no fixture arm can assert this clause fires**: there is no program to drive, and a fixture
+that greps the role file would be scoring the same text the receipt below already scores.
+Closing this entry needs a reachability check that runs at gate time — the item's own removal
+clause already names that condition — not another reader of the prose.
+
+**Receipt limits, stated.** The receipt scores PLACEMENT and VOCABULARY only: that the
+behavioural triple (early-exit + emission + mutation-RED) stands inside the HARD GATE bullet's
+own body, between its opener `**Orphaned-function / core-path wiring (HARD GATE).**` and the
+next `- [ ]` bullet, outside any HTML comment. It is case-insensitive and keyed on three
+independent tokens rather than one sentence, so a rewording that keeps the behaviour closes it
+and a sentence about something else does not. **It cannot score whether a QA seat applies the
+clause**, and it cannot score the absent mechanism. Exit 9 if the file is unreadable or the
+bullet window is empty — a moved or deleted subject is NEEDS-REVIEW, never a close.
+
+**Scored against five trees, each `cmp -s`-asserted applied against the `origin/main` blob
+before its verdict was read** (the tip was asserted to DIFFER from base in the same run):
+
+```
+tree  what                                                  expect  got
+A     tip — clause reshaped into the existing bullet           0      0
+B     base origin/main                                         1      1
+C     the clause in an HTML comment inside the bullet          1      1
+D     the clause in a NEW companion bullet                     1      1
+E     a second spelling of the clause, same bullet             0      0
+```
+
+**D exits 1 deliberately.** The adjudicated disposition was a RESHAPE of the existing item, not
+a companion item, because the two would carry near-identical triads and a seat reading one
+would not know the other bound the same diff. A receipt that took the companion form would
+accept the shape the adjudication refused, which is a receipt that accepts two candidate fixes.
+
+**`validate-backlog-receipts.sh` reports this receipt ALREADY-PASSING, not PROSE-CLOSABLE**,
+because its base is `HEAD` and the clause is committed there — so its seed direction is 0 → 0
+and R2 never scores it. That classification says nothing about prose-closability on its own, so
+the arm's own seed was run directly against the base blob: the line
+`# early[ -]exit emission mutation-RED`, appended as that arm appends it, leaves the receipt at
+exit 1 (control: the unseeded base blob also exits 1, and the tip exits 0 in the same run). The
+seed lands after the file's last `- [ ]` bullet, outside the window, which is the same property
+mutant C tests from inside it.
+
+verify: sh f=core/team-roles/qa.md; [ -r "$f" ] || exit 9; t=$(mktemp) || exit 9; awk '/^- \[ \] \*\*Orphaned-function/ { w=1; next } w && /^- \[ \]/ { w=0 } w { if ($0 ~ /<!--/) c=1; if (!c) print; if ($0 ~ /-->/) c=0 }' "$f" > "$t"; w=$(grep -c . "$t") || w=0; [ "$w" -gt 0 ] || { rm -f "$t"; exit 9; }; a=$(grep -ciE 'early[ -]exit' "$t") || a=0; b=$(grep -ciE 'emission' "$t") || b=0; d=$(grep -ciE 'mutation-RED' "$t") || d=0; rm -f "$t"; [ "$a" -ge 1 ] && [ "$b" -ge 1 ] && [ "$d" -ge 1 ] || exit 1; exit 0
