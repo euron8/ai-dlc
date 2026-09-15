@@ -95,6 +95,14 @@ it was handed off:
   for, so it is not to be allow-listed. A scratch copy goes into a fresh `mktemp -d` under the
   scratchpad and is never deleted by the hand; anything that must be cleared names a literal
   absolute path. The plan's dispatch action carries that sentence into every spawn prompt.
+- **Every `Agent` spawn, read-only or writing, passes `isolation: "remote"`.** Operator
+  instruction at batch 108's close: a hand was spawned in-process/local, the operator said so
+  explicitly ("I want them locally running but remote") and asked that this apply to the plan
+  and to future plans, not just the one spawn. This SUPERSEDES the older per-hand distinction
+  elsewhere in this file and in the "model by cost" section — "a read-only hand does not need
+  isolation" governed `worktree` specifically, for the write-collision reason stated there; it
+  does not license skipping `remote`. Every dispatch action's spawn instructions name
+  `isolation: "remote"` for every hand regardless of job.
 
 None of that is about writing quality. Each one makes the file produce WRONG WORK when
 followed literally, which is the only thing a handoff is for.

@@ -15,6 +15,58 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.575.0] - 2026-09-14
+
+Batch 109, one release, one subject, and the subject is a CORRECTION to a measurement this repo
+shipped one release ago. No mechanism ships. `BL-251` stays live and is amended: the site list
+behind its STRICT table is wrong by identity, the predicate its table measured is not the
+predicate `qa.md` states, and the obvious repair for the resulting false-positive class is
+refuted by building it. Every figure below was re-derived against the reference consumer with a
+control in the same invocation, on a read-only clone.
+
+### BL-251 — the STRICT table's 4 is a cardinality coincidence, its scope is file not hunk, and the indentation repair is backwards
+
+Scoping a gate-time reachability detector against this entry required reproducing the population
+the entry measured. It does not reproduce. Attributing the STRICT sites BY IDENTITY over a pool
+rebuilt to the entry's own recipe — controls in the same invocation: pool size 10, all three cited
+shas present — gives `84451b892` x1, `6ee03ad8c` x2, `4d93a0cc6` x1. The entry claims `736e4cfc8`
+x1, `6ee03ad8c` x2, `4d93a0cc6` x1. **Same total, one different commit, and the different one is
+the MOTIVATING sha.**
+
+`736e4cfc8` scores zero under the predicate the table states. Every emission below an added early
+exit in that diff is itself ADDED — `logger.critical(`, `logger.info(`, and an arithmetic
+`_ts_math.log(` — with zero context-prefixed emissions, against a control of 75 added early exits
+in the same diff. The STRICT row says EXISTING emission; an added line is not one. So a
+measurement plan or receipt keyed on "reproduce the 4" is satisfied by a population that excludes
+the case the entry was filed from.
+
+**The table is file-scoped and the shipped clause is hunk-scoped.** The identical grammar over the
+identical pool scores **file 4, hunk 1**. `qa.md`'s "in that same hunk" does not describe the run
+that produced the 4. Neither is edited here — which one is authoritative is an adjudication, and
+this records the disagreement rather than silently resolving it.
+
+**The indentation repair is refuted by measurement, which is why it is recorded rather than
+shipped.** A same-file predicate pairs an early exit with an emission in another function, so the
+candidate fix is "skip a pair whose emission is shallower than its early exit". Scored against the
+real pairs, it excludes **4 of 8, including all three sites both readings agree on**. A deeper
+`if ...: continue` guard skips a SHALLOWER line later in the same loop body, so that depth relation
+is the signature of a true stranding, not of a scope escape. Shipped, it would have produced a
+detector silent on most known sites and green against a fixture written to match it.
+
+**The LOOSE 223 is not reproducible at any grammar width** — narrow 13, plus `.append(` 58, plus
+`record_`/`details[` 124, a bare mention 103, against an impossible-token control of 0 at every
+width. The grammar that produced 223 is neither stated in the entry nor derivable from it.
+
+The GAP itself is unchanged and re-derives clean: no mechanical reader exists. What the correction
+changes is that the population a detector must be built against is not yet pinned — scope
+undecided, emission grammar unstated, and 3 of 4 sites unadjudicated as true regressions.
+
+**Two adversary passes ran before any builder spawned, and neither build happened because of what
+they found.** The first refused a citation-gate design on the entry's own text ("not another reader
+of the prose"); the second refuted the detector contract that replaced it, including that `-U3`
+does not pin what a hunk is (`diff.interHunkContext=20` merges 42 hunks to 29 on this repo) and
+that the proposed pin control could not fail.
+
 ## [0.574.0] - 2026-09-14
 
 Batch 108, one release, four subjects, no shared file: four consumer push-candidates adjudicated,
