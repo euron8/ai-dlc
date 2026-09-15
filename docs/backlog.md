@@ -1822,7 +1822,7 @@ verify: manual
 wins, and the one that adjudicates the closed vocabulary picks the line the resolution replaced.**
 `core/scripts/validate-escalation-status-vocabulary.sh:159` carries
 `if (status != "") next  # first Status line in an entry wins`;
-`core/scripts/validate-escalation-resolution.sh:153-158` has no such guard and therefore takes the
+`core/scripts/validate-escalation-resolution.sh:272` has no such guard and therefore takes the
 LAST. Measured behaviourally against the shipping validator and the real
 `core/skills/ai-dlc/escalations.md` vocabulary, three arms in one invocation, on an entry whose
 terminal status is the out-of-vocabulary token `BOGUS_TOKEN`:
@@ -1846,9 +1846,9 @@ outranks the entry's real field and shields it. The widening was written to catc
 instead created.
 
 That same comment cites `validate-escalation-resolution.sh:82-100` as the idiom it mirrors. Lines
-82-100 there are the `# EXIT` comment block and the opening of argument parsing; the awk idiom is at
-`:137-178`, and on the one axis that decides this it is the OPPOSITE. The citation is stale in
-position and wrong in substance.
+82-100 there are the `# EXIT` comment block and the opening of argument parsing; the awk Status
+block is at `:272`, and on the one axis that decides this it is the OPPOSITE. The citation is stale
+in position and wrong in substance.
 
 **What the consumer filing got wrong, and the direction is toward a worse defect.** It named the
 consequence as a wrong COUNT — "any status grep overcounts" — a human-legibility problem in a
@@ -1871,20 +1871,41 @@ LAST canonical `**Status:**` authoritative — the one reading consistent with
 differ in the same invocation before the comparison was read (`orig=1 fixed=0` occurrences of the
 tie-break comment).
 
+**AND THAT IS WHY THREE ARMS WERE NOT ENOUGH. The implementation this entry advertises as proof
+of satisfiability is a NON-FIX, and the three-armed receipt closed on it.** Deleting `:159` alone
+makes the LAST match anywhere win, which carries the MIRRORED defect: a `**Status:**` inside prose
+occurring BELOW the real field then outranks the field. Measured read-only on the reference
+consumer, with a control in the same invocation (134 `**Status:**` fields in `pending.md`; an
+impossible token 0): that implementation emits `FAIL: out-of-vocabulary status 'I'` against an
+entry whose real field is `DECIDED_AUTONOMOUSLY`, scraping the token out of the words "It
+therefore" in the entry's own prose — a FALSE FINDING on the file the gate reads.
+
+**The discriminating input is a NEAR-MISS PAIR, and a bad-token-below-the-field input is not it.**
+On an entry whose field is BAD with prose below, the correct fix and the last-anywhere non-fix
+BOTH exit 1 — right verdict, wrong reason, and the arm cannot tell them apart. The arm that
+discriminates seeds a GOOD field with prose below it and requires **exit 0**: the correct fix
+reads the field, the non-fix reads the prose. Arm **(M)** is required beside it, because an
+entry whose only `**Status:**` is not at line start must still be adjudicated — that is the
+property `core/fixtures/escalation-status-vocabulary/run.sh:57` already asserts, and dropping it
+lets a line-anchoring fix through. Every candidate was BUILT and scored against the five-arm
+receipt run verbatim, each mutant asserted applied before any verdict was read: shipped fix
+**exit 0**; first-wins base **1**; delete-`:159` last-anywhere **1**; last-canonical-only **1**
+(it breaks M); first-canonical **1**.
+
 Discharges the consumer entry `PC-S296-ESCALATION-STATUS-APPENDS-INSTEAD-OF-REPLACING` at pinned
 ledger line 654.
 
 
-verify: sh D=$(mktemp -d); V=core/scripts/validate-escalation-status-vocabulary.sh; S=core/skills/ai-dlc/escalations.md; printf "## S999 Lead\n**Status:** HARD_BLOCK\n**Resolution:**\n**Status:** BOGUS_TOKEN\n" > "$D/a.md"; printf "## S999 Lead\n**Context:** was **Status:** RESOLVED once\n**Status:** BOGUS_TOKEN\n" > "$D/b.md"; printf "## S999 Lead\n**Status:** BOGUS_TOKEN\n" > "$D/c.md"; bash "$V" "$D/c.md" "$S" >/dev/null 2>&1; c=$?; bash "$V" "$D/a.md" "$S" >/dev/null 2>&1; a=$?; bash "$V" "$D/b.md" "$S" >/dev/null 2>&1; b=$?; rm -rf "$D"; [ "$c" -eq 1 ] || exit 1; [ "$a" -eq 1 ] && [ "$b" -eq 1 ]
+verify: sh D=$(mktemp -d) || exit 9; V=core/scripts/validate-escalation-status-vocabulary.sh; S=core/skills/ai-dlc/escalations.md; [ -r "$V" ] && [ -r "$S" ] || exit 9; printf '## S999 Lead\n**Status:** HARD_BLOCK\n**Resolution:**\n**Status:** BOGUS_TOKEN\n' > "$D/a.md"; printf '## S999 Lead\n**Context:** was **Status:** RESOLVED once\n**Status:** BOGUS_TOKEN\n' > "$D/b.md"; printf '## S999 Lead\n**Status:** BOGUS_TOKEN\n' > "$D/c.md"; printf '## S999 Lead\n**Status:** HARD_BLOCK\nIt carried no **Status:** line from filing until later. It therefore matched no branch.\n' > "$D/d.md"; printf '## S999 Lead\nCarried from the prior sprint. **Status:** BOGUS_TOKEN once.\n' > "$D/m.md"; bash "$V" "$D/c.md" "$S" >/dev/null 2>&1; c=$?; bash "$V" "$D/a.md" "$S" >/dev/null 2>&1; a=$?; bash "$V" "$D/b.md" "$S" >/dev/null 2>&1; b=$?; bash "$V" "$D/d.md" "$S" >/dev/null 2>&1; d=$?; bash "$V" "$D/m.md" "$S" >/dev/null 2>&1; m=$?; [ "$c" -eq 1 ] || exit 9; [ "$a" -eq 1 ] && [ "$b" -eq 1 ] && [ "$m" -eq 1 ] && [ "$d" -eq 0 ]
 ## BL-055
 
 **Check 16's element 2 accepts `OPEN` as a bare substring anywhere on the backlog line, so a
 `(CLOSED)` carry-over item launders a stub through the gate.** The status test at
-`core/scripts/validate-stub-audit.sh:217` is `[[ $bl =~ ^-\ Item\ [0-9]+.*(OPEN|IN\ SPRINT\ [0-9]+) ]]`
+`core/scripts/validate-stub-audit.sh:480` is `[[ $bl =~ ^-\ Item\ [0-9]+.*(OPEN|IN\ SPRINT\ [0-9]+) ]]`
 — the `.*` is unbounded and the token is bound to nothing, so any occurrence of the four
 characters `OPEN` after the item number satisfies it. Driven through the shipping script on the
 fixture's own V7 (`core/fixtures/check-15-bypass`, whose seed writes `- Item 7 — retired ack shim
-(CLOSED)` and whose `run.sh:122` expects `element2-item-open`): unmutated the validator returns
+(CLOSED)` and whose `run.sh:140` expects `element2-item-open`): unmutated the validator returns
 **rc=1** with `FINDING src/v7_item_closed.py:5 element2-item-open`; with the single word of the
 title changed to `retire the OPENAPI ack shim`, still `(CLOSED)`, it returns **rc=0, 0 finding(s)**.
 Two controls in the same invocation — the unmutated tree (rc=1) and a lowercase near-miss,
@@ -1908,20 +1929,50 @@ anchored or not.
 The anchor is behavioural and drives the shipping script through the fixture's own seed, because
 every textual anchor here false-closes: a fix to this line will be committed with a comment
 quoting the old regex, and `grep`ing for the regex text would then match the record of its own
-removal. The `grep -qF 'OPENAPI ack shim (CLOSED)'` arm is a sanity guard, not decoration — if the
-seed's wording moves, the substitution silently no-ops and the receipt would otherwise read the
-control's rc=1 as a fix; with the guard it exits non-zero and the entry stays open.
+removal. Each substitution is asserted APPLIED with `cmp -s` and a `grep -qF` on the new title,
+not decoration — if the seed's wording moves, the substitution silently no-ops and the receipt
+would otherwise read the control's rc=1 as a fix; with the guards it exits 9 and the entry stays
+open.
 
-Proposed fix measured, false-positive set **empty**: binding the status to a trailing
-parenthesised field (`[[ $bl =~ \((OPEN|IN\ SPRINT\ [0-9]+)\)[[:space:]]*$ ]]`) on a patched copy
-of `core/scripts/` returns verdicts identical to the shipping script on all eight seeded
-variants — V1, V2, V3, V4, V6, V7, V12 at rc=1 and the honest control V5 at rc=0 — and flips the
-defect case from rc=0 to rc=1.
+**ONE SUBSTITUTION CASE IS NOT ENOUGH, because a TOKEN BLACKLIST closes it while shipping the
+defect.** Built and scored: `… ^-\ Item\ [0-9]+.*(OPEN|…) ]] && ! [[ $bl =~ OPENAPI ]]` leaves the
+unbounded `.*` untouched, excludes one literal, and takes a one-case receipt to rc=1. So does a
+non-alphanumeric-boundary form with no paren bind. The receipt therefore carries a SECOND case in
+the same invocation, on a title no literal exclusion can be keyed on — `the OPEN question of the
+ack shim`. Scored verbatim, every mutant asserted applied and staged with its `core-paths.sh`
+sibling (a copied validator missing it exits 2, which is a refusal reading exactly like a fix that
+rejects everything): shipped fix **exit 0**; unbounded-`.*` base **1**; blacklist **1**;
+word-boundary **1**. Against a ONE-case receipt the blacklist and the word-boundary form both
+close.
+
+Proposed fix measured, false-positive set **empty ON THE SEEDED CORPUS** — that is the population
+the figure was taken over, and the seed carries exactly ONE status shape, `(OPEN)` at end of line.
+Binding the status to a trailing parenthesised field
+(`[[ $bl =~ \((OPEN|IN\ SPRINT\ [0-9]+)\)[[:space:]]*$ ]]`) on a patched copy of `core/scripts/`
+returns verdicts identical to the shipping script on all eight seeded variants — V1, V2, V3, V4,
+V6, V7, V12 at rc=1 and the honest control V5 at rc=0 — and flips the defect case from rc=0 to
+rc=1.
+
+**Driven against real-shaped backlog lines instead, that anchor REFUSES 8 of 13 lines it should
+ACCEPT** — `(OPEN).`, `(OPEN) — blocked on infra`, `**(OPEN)**`, `[OPEN]`, bare `OPEN`,
+`- status: OPEN`, `(IN SPRINT 43) carried from 42` and one more. Each is a false element-2 finding
+against an honest stub whose item genuinely IS open, which is a check that errors on correct data
+and reaches consumers. The tolerant anchor `\)([[:space:]]|[.,;]|$)` ships instead: it is wrong on
+0 of 5 reject-rows and still wrong on 4 of 11 accept-rows — `**(OPEN)**`, `[OPEN]`, bare `OPEN`,
+`- status: OPEN`.
+
+**THAT RESIDUE IS A KNOWN SCOPE QUESTION, NOT A CLOSED ONE.** A trailing parenthesised field is
+only the right anchor if the backlog is REQUIRED to use it, and nothing requires it: eight step
+files write carry-over backlog lines and no prescribed item-line format exists in any of the 22
+files under `core/skills/ai-dlc/steps/` (control: 49 files under `core/scripts/` match a `validate`
+token in the same sweep). So the residual FP set is "every item written in a format no producer
+mandates", which is unbounded and unmeasured, and widening the anchor is a scope decision rather
+than a bug fix.
 
 Discharges the consumer entry `PC-S297-CHECK16-ELEMENT2-REGEX-DEAD` at pinned ledger line 1093.
 
 
-verify: sh d=$(mktemp -d) && t=$(bash core/fixtures/check-15-bypass/seed.sh "$d" | tail -1) && b="$t/_bmad-output/planning-artifacts/carry-over-backlog.md" && sed 's/retired ack shim/retire the OPENAPI ack shim/' "$b" > "$b.n" && mv "$b.n" "$b" && grep -qF 'OPENAPI ack shim (CLOSED)' "$b" && { bash core/scripts/validate-stub-audit.sh --root "$t" src/v7_item_closed.py >/dev/null 2>&1; rc=$?; rm -rf "$d"; [ "$rc" -eq 1 ]; }
+verify: sh S=core/fixtures/check-15-bypass/seed.sh; V=core/scripts/validate-stub-audit.sh; [ -r "$S" ] && [ -r "$V" ] || exit 9; d1=$(mktemp -d) || exit 9; t1=$(bash "$S" "$d1" | tail -1) || exit 9; b1="$t1/_bmad-output/planning-artifacts/carry-over-backlog.md"; cp "$b1" "$b1.pre" || exit 9; awk '/^- Item 7 /{ print "- Item 7 — retire the OPENAPI ack shim (CLOSED)"; next } { print }' "$b1.pre" > "$b1"; cmp -s "$b1" "$b1.pre" && exit 9; grep -qF 'OPENAPI ack shim (CLOSED)' "$b1" || exit 9; d2=$(mktemp -d) || exit 9; t2=$(bash "$S" "$d2" | tail -1) || exit 9; b2="$t2/_bmad-output/planning-artifacts/carry-over-backlog.md"; cp "$b2" "$b2.pre" || exit 9; awk '/^- Item 7 /{ print "- Item 7 — the OPEN question of the ack shim (CLOSED)"; next } { print }' "$b2.pre" > "$b2"; cmp -s "$b2" "$b2.pre" && exit 9; grep -qF 'the OPEN question of the ack shim (CLOSED)' "$b2" || exit 9; bash "$V" --root "$t1" src/v5_honest.py >/dev/null 2>&1; [ $? -eq 0 ] || exit 9; bash "$V" --root "$t1" src/v7_item_closed.py >/dev/null 2>&1; r1=$?; bash "$V" --root "$t2" src/v7_item_closed.py >/dev/null 2>&1; r2=$?; [ "$r1" -eq 1 ] && [ "$r2" -eq 1 ]
 ## BL-057
 
 **A LOCKED_REQUIREMENTS block whose bullets are pure agent fabrication scores byte-identically to
