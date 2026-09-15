@@ -10693,6 +10693,47 @@ given at batch 90.
    rebuilt in one release: the originals closed on an empty file, on a dead arm, and on a
    positional window.
 
+   **BATCH 111 SHIPPED NO RELEASE — THE SWEEP CONFIRMED ZERO AVAILABLE PC-BACKED RESIDUE
+   INDEPENDENTLY OF BATCH 110, AND `BL-223`'S CONTRACT WAS REFUTED BY BUILDING IT, A FOURTH TIME.**
+   Invoked by a cross-session `READ and FOLLOW` handoff; accepted per action 9's protocol, no
+   operator question needed to start. A sweep hand and a consumer-history hand ran in parallel per
+   action 0 and both corroborate batch 110's close rather than finding new work: all 23 unfiled
+   PC-ids re-resolve to the same already-settled dispositions (NOT-UPSTREAM, already-fixed,
+   withdrawn, refused/shipped in this file's `## Adjudication` section); DISCHARGED corrects to
+   12 after the 4-id overlap with IN-FLIGHT; the delivery gap is confirmed ONE
+   (`0.574.0` installed against distribution `0.575.0`). The consumer-history hand's one finding —
+   `main`'s `.ai-dlc-version` stamp reads `0.571.0` while the checked-out sprint branch
+   (`ai-dlc/carry-over/epic-crs-fvs-carryover-priorities`) reads `0.574.0`, because that branch's
+   reconcile commit (`91cbd92dd`, PR #1077) has not merged back — is corroborating, not
+   actionable: it explains why a `main`-only stamp read would misstate the gap as FOUR, and does
+   not change the gap this file already carries. That branch's ledger has zero live ids beyond
+   `main`'s (49 of 49 already on `main`), so nothing unseen sits there either. Porcelain on the
+   consumer was 15, all expected `_bmad-output/` churn, none of it the ledger file.
+
+   **`BL-223` WAS TAKEN AS THE READIEST NO-`PC` WORK PER BATCH 110's RANKING, AND ITS CONTRACT WAS
+   REFUTED BY BUILDING IT — see the batch-111 paragraph now in the entry itself
+   (`docs/backlog.md`).** A contract proposing a second `formats[]` entry under the existing
+   `ai-dlc-update` steering member (pointed at `ledger_entry_shape()` in
+   `core/skills/ai-dlc-update/reconcile/lib.sh`) was attacked by an adversary on a `git archive`
+   copy before any builder spawned, per action 0's ordering, and failed four ways: the receipt
+   cannot see the anchor because `--report`'s table never prints it (two constructed non-fixes
+   passed); a same-name-different-anchor self-probe fires identically on the unfixed reader,
+   order-sensitively; the PASS line's "N of 20" silently becomes a row count once one name can
+   carry multiple declarations; and the proposed `declared_in` crosses a pull-class boundary
+   (`core/skills/` vs the existing `core/schemas/`-only declarations) that fails a consumer's push
+   in the ordinary window between a schema pull and a skill pull, where the validator's FAILING
+   tier has "no false-positive path by design" today. **This is the entry's fourth refuted
+   attempt (batch 95, batch 106, and now batch 111's two sub-findings) — do not re-propose the
+   "N formats per member" shape without first fixing the receipt's anchor-blindness and the
+   reader's count semantics; the read/write boundary crossing is a fifth open question the entry
+   now states explicitly.** No release ships. `BL-223` remains the only ranked no-`PC` candidate
+   and is not close to buildable in its current shape — read its full text, not a summary, before
+   scoping it again.
+
+   **THE AVAILABLE PC-BACKED RESIDUE AT THIS CLOSE IS ZERO KNOWN, RE-CONFIRMED — run the sweep
+   anyway; the consumer files while nobody is looking.** No no-`PC` work is ready. The next batch
+   opens with nothing scoped.
+
    **BATCH 110 SHIPPED NO RELEASE — `BL-251` IS RETIRED ON OPERATOR RULING, DOCS ONLY.**
    `3a749e2d` on `main`, pushed and confirmed on `origin/main`. Live **75 → 74**, archive
    **177 → 178** (control: an impossible heading form scores 0). No `VERSION` bump — nothing
