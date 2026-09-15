@@ -1,0 +1,12 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Its subject is scripts/plan-rotate.sh, which is not in install.sh's copy loop and lands
+nowhere in an installed tree — the loop ships core/scripts/, and this rotator lives in
+scripts/ beside validate-plan-shape.sh, whose own fixture carries this marker for the same
+reason. The corpus it bounds, docs/plans/, is this repository's alone: a consumer tree gets
+no docs/plans/, no plan-shape validator and no promotion rule, which CLAUDE.md states in as
+many words.
+
+So on a consumer this fixture would resolve no subject. Its first arm would exit 2 on
+"cannot locate plan-rotate.sh" — deliberately, because a missing subject is not a pass —
+and the consumer's suite would carry a unit that can only ever refuse.

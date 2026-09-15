@@ -9,8 +9,7 @@
 # every other fixture's entries alone, so refreshing one fixture costs its own runtime
 # rather than a full re-derivation.
 #
-# fixtures mapped: 199    entries: 35940
-# OMITTED by the last run (always run): fanout-payload-channel
+# fixtures mapped: 200    entries: 35965
 absorbed-specifics-survive	.git/HEAD
 absorbed-specifics-survive	.git/config
 absorbed-specifics-survive	.git/index
@@ -23758,6 +23757,31 @@ pause-write-allowlist-mutants	core/fixtures/divergence-hard-block/run.sh
 pause-write-allowlist-mutants	core/fixtures/pause-write-allowlist-mutants
 pause-write-allowlist-mutants	core/fixtures/pause-write-allowlist-mutants/run.sh
 pause-write-allowlist-mutants	core/hooks/ai-dlc-acknowledge.sh
+plan-rotate	.git/HEAD
+plan-rotate	.git/config
+plan-rotate	.git/index
+plan-rotate	.git/info/exclude
+plan-rotate	.git/objects/24/ba220eeb16a36612f3f99a0dbdc108ff5d90a7
+plan-rotate	.git/objects/b8/21415f194276ef030814d99d861c00508b9087
+plan-rotate	.git/objects/info/commit-graphs/commit-graph-chain
+plan-rotate	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
+plan-rotate	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
+plan-rotate	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
+plan-rotate	.git/objects/info/commit-graphs/graph-fa7bbe6bcd67e84c678384cfb84f17a16d6fa8fa.graph
+plan-rotate	.git/objects/pack/multi-pack-index
+plan-rotate	.git/packed-refs
+plan-rotate	.git/refs/heads/ai-dlc/plan-channel-ceiling
+plan-rotate	.gitignore
+plan-rotate	VERSION
+plan-rotate	core
+plan-rotate	core/VERSION
+plan-rotate	core/fixtures
+plan-rotate	core/fixtures/VERSION
+plan-rotate	core/fixtures/plan-rotate
+plan-rotate	core/fixtures/plan-rotate/VERSION
+plan-rotate	core/fixtures/plan-rotate/run.sh
+plan-rotate	scripts/plan-rotate.sh
+plan-rotate	scripts/validate-plan-shape.sh
 plan-shape	.git/HEAD
 plan-shape	.git/config
 plan-shape	.git/index

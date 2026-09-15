@@ -15,6 +15,49 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.580.0] - 2026-09-15
+
+Bound the plan channel. `docs/plans/graph-ledger-full-drain.md` had reached **1158744 bytes /
+14764 lines** across 276 commits of monotone growth — it had never once shrunk — with its genuine
+instruction under 4% of the file. Nothing bounded that channel, and `scripts/backlog-rotate.sh:10`
+had already recorded as much: the A6 ceiling covers only `CLAUDE.md` and `.claude/rules/`, and
+`docs/plans/retire-graph-consumer-layer.md` reached 384817 bytes with no push ever failing over it.
+
+- **`scripts/plan-rotate.sh`** moves spent sections of a plan to `docs/plans/archive/<slug>.md`
+  and leaves a pointer line behind. It MOVES and never deletes, inheriting
+  `backlog-rotate.sh:13`'s asymmetry: a section wrongly kept costs one more read; one wrongly
+  archived costs the work it recorded. Its acceptance test is three arms, because the first two
+  cannot see the failure that matters — byte conservation and multiset identity both PASS on a
+  split that archives a live section, so a third arm derives the live-section set from the plan's
+  own declaration block, in a pass sharing no state with the splitter.
+- **Its fence grader implements the CommonMark info-string rule rather than a naive toggle.**
+  Measured on the subject file: the naive `^``` ` toggle scores 10 fenced headings where the
+  correct rule scores 1. Two paragraphs whose backtick run carries a backtick in its info string
+  invert the toggle's state across an 1100-line band, misreading nine real `### BATCH` headings as
+  fenced. `reconcile/lib.sh` is deliberately NOT sourced here and the header says why: its grader
+  finds 36 delimiters against this file's 17 real pairs.
+- **`P8` in `scripts/validate-plan-shape.sh`** bounds every depth-1 plan at 150000 bytes,
+  `AI_DLC_PLAN_BYTES` overriding. **Scoped to spent plans as well as live ones, deliberately.**
+  Every other arm there exempts a discharged plan, so a banner in the head window silences five at
+  once — measured at eleven bytes, one word, taking a firing arm from one hit to zero. Those arms'
+  remedy is a sentence; this one's is a rotation, and an escape hatch cheaper than the remedy is an
+  instruction that ships its own opt-out. The false-positive set was measured non-empty — 2 of 39,
+  control 37 under — and both members are rotated below rather than exempted.
+- **Both plans rotated**: the drain plan 1158744 -> 138435, and `retire-graph-consumer-layer.md`
+  384817 -> 52982. Conservation re-derived independently of the tool on each. The corpus is 39
+  plans, 0 errors, 0 warnings, and P8 still fires on all 39 at a 1000-byte ceiling.
+- **`core/fixtures/plan-rotate/`** (`.dist-only`) guards the fence grader, the live-section set and
+  the arm-3 tautology, and asserts the rotated plan still reads LIVE by driving the real validator.
+- `BL-256` filed.
+
+**The defect this release nearly shipped, kept because the shape recurs.** The rotator's own
+pointer opened `**Spent sections are archived at`, and `validate-plan-shape.sh:165` matches
+`DISCHARGED|SPENT|DO NOT EXECUTE|SUPERSEDED` case-insensitively over `head -12`. Every rotation
+therefore wrote a discharge token into line 3 of its own output, so the rotated plan read as SPENT
+and P9–P13 all stopped running — **the gate went green BECAUSE five arms died.** Found by driving a
+discriminating mutant, five bytes apart: pointer "Spent" gives P10 0 hits and rc=0; pointer
+"Archived" gives 1 hit and rc=1.
+
 ## [0.579.0] - 2026-09-15
 
 Batch 115, one release, one subject. **This release TIGHTENS a gate that passes today**: a

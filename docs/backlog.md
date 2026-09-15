@@ -3758,3 +3758,76 @@ rather than reporting a false close.
 
 verify: sh L=docs/backlog.md; A=docs/backlog.archive.md; [ -f "$L" ] && [ -f "$A" ] || exit 9; a="$(grep -c 'The pole fell from' "$A")" || a=0; [ "$a" -ge 1 ] || exit 9; h="$(grep -c '^## BL-005.*validator-arm-selection.*is the pre-push pole' "$L")" || h=0; [ "$h" -ge 1 ] && exit 1; exit 0
 
+## BL-256 — the plan channel had no ceiling, and the one arm family that could have carried it is silenced by an eleven-byte word
+
+**DEFECT, AND IT IS A CHANNEL WITH NO BOUND RATHER THAN A FILE THAT GOT LONG.** A plan under
+`docs/plans/` is a HANDOFF that also accumulates a retrospective record. The instruction does
+not grow; the record grows every batch. Nothing in this repo bounded that, and
+`scripts/backlog-rotate.sh:8` had already said so in as many words before this entry existed.
+Re-derived over all **39** depth-1 plans at a ceiling of 150000 bytes, in one invocation with
+both halves reported: **2** over — `graph-ledger-full-drain.md` at **1158744** and
+`retire-graph-consumer-layer.md` at **384817** — against a control of **37** at or under it,
+summing to the corpus size. The larger file carries 276 commits of MONOTONE growth, has never
+once shrunk, and its genuine instruction is under 4% of the bytes.
+
+**WHY THE EXISTING ARMS COULD NOT BE EXTENDED, MEASURED ON THE REAL FILE THROUGH THE SHIPPING
+VALIDATOR.** `P9`, `P10`, `P11`, `P12` and `P13` all open with the same `head -12` liveness
+test, so each is scoped away by a discharge banner. Driven as a pair of mutants, each asserted
+to have applied: the resume line repointed at an ancestor plan makes `P10` fire with **1** hit;
+the same input plus `**SPENT.**` at line 2 takes it to **0**. The byte delta between the two
+inputs is **11**. Control: an impossible arm name returns 0 on both. One word silences all five
+together. For those arms that is correct — their remedy is a sentence. A size ceiling joining
+that family would have an escape hatch of eleven bytes against a remedy of hours, which is the
+opt-out shape `CLAUDE.md` names.
+
+**THE FIX, AND IT IS TWO PROGRAMS BECAUSE A CEILING WITHOUT A REMEDY IS A WEDGE.**
+`scripts/plan-rotate.sh` moves spent sections to `docs/plans/archive/<slug>.md` — it MOVES and
+never deletes, refuses rather than guessing on a cut that lands inside a fence, and leaves a
+pointer line in the live file. Arm **P8** of `scripts/validate-plan-shape.sh` is the gate:
+`PLAN_MAX="${AI_DLC_PLAN_BYTES:-150000}"`, ERROR tier, scoped to EVERY depth-1 plan with **no**
+`DISCHARGE_BANNER` guard, self-probed before the corpus in both directions and asserting
+`[ over -gt N ] && [ at -le N ]` so the comparison is known to discriminate at the boundary.
+
+**THE FALSE-POSITIVE SET IS THE TWO FILES ABOVE AND IT IS NOT EMPTY.** The arm ships RED on
+both, by design and stated in its header rather than exempted. The first is rotated by the
+release that adds the arm, to a live remainder of 138157 bytes. The second is fully spent,
+carries 102 fence delimiters, and rotating it is separate work — a fence-dense file is exactly
+where the rotator refuses rather than guesses. No exemption list exists and one must not be
+added: an exemption keyed on either filename would acquit the arm's own subject.
+
+**WHAT P8 ACQUITS.** Every plan at or under the ceiling, saying nothing about whether such a
+plan is resumable — that is `P1`, `P2` and `P9`–`P13`. It also cannot tell a section that was
+MOVED from one that was DELETED; the conservation and live-section arms inside
+`plan-rotate.sh --check` own that, and this arm deliberately does not restate them.
+
+**THE RECEIPT KEYS ON THE EMITTING LINE, NOT ON A FILE THAT MENTIONS THE ARM, AND IT DRIVES THE
+VALIDATOR RATHER THAN GREPPING IT.** A whole-file `grep -qF` for `PLAN_MAX` or `plan-rotate.sh`
+is satisfied by a comment — measured: a STUB carrying both tokens as a one-line comment appended
+to the base validator scores **1**, the same as the base. So the receipt RUNS the shipping
+script on two seeded plans under `AI_DLC_PLAN_BYTES=100` and reads its emitted ERROR text,
+asserting four things at once: the arm fires on a plain oversized plan, it fires identically on
+one carrying a discharge banner, it stays SILENT at a ceiling the file is under, and the remedy
+it prints names `plan-rotate.sh`. The banner arm is the one that discriminates — a live-only
+P8 is the shape ruling 2 forbids and it is otherwise indistinguishable from the shipped one.
+
+**POLARITY, this ledger's and not `ledger-reverify`'s:** exit **0** means the fix is PRESENT,
+non-zero means the entry still reproduces, and **9** is a precondition. Scored against six
+trees, each mutant asserted to have applied: **tip 0**, base at `852641b2` (rotator present, no
+P8) **1**, base at `6f433c61` (neither present) **9**, comment-only stub **1**, live-only-scoped
+P8 **1**, remedy no longer naming the rotator **1**, dead per-file comparison **1**, hardcoded
+ceiling ignoring the override **1**.
+
+**ONE MUTANT SURVIVES THE RECEIPT AND IT IS NAMED RATHER THAN PAPERED OVER.** Replacing the
+self-probe's discriminating assertion with `[ -ge 0 ]` — a probe that can no longer fail —
+leaves every emitted verdict correct, so the receipt scores **0** on it. That is a coverage
+boundary of the receipt, not of the arm: the probe's own kill is a fixture's job, and it was
+verified separately by forcing the probe's two measurements to a constant, which takes the
+validator to exit **2** with `P8 SELF-PROBE FAILED` against a control run of the unmutated
+script on the same tree that does not refuse.
+
+**WHAT IS OWED.** Rotate `retire-graph-consumer-layer.md`, which is the remaining red and is
+fully spent. Until then P8 is a gate with one known standing failure, which is a state the
+operator accepted when setting the ceiling, not a defect in the arm.
+
+verify: sh V=scripts/validate-plan-shape.sh; [ -f "$V" ] && [ -f scripts/plan-rotate.sh ] || exit 9; d="$(mktemp -d)" || exit 9; printf '%*s' 400 '' > "$d/p.md"; printf '**SPENT.** DISCHARGED. DO NOT EXECUTE.\n%*s' 400 '' > "$d/s.md"; lo="$(AI_DLC_PLAN_BYTES=100 bash "$V" "$d/p.md" 2>&1)"; sp="$(AI_DLC_PLAN_BYTES=100 bash "$V" "$d/s.md" 2>&1)"; hi="$(AI_DLC_PLAN_BYTES=100000 bash "$V" "$d/p.md" 2>&1)"; f="$(printf '%s\n' "$lo" | grep -c 'bytes against a ceiling of 100\.')" || f=0; g="$(printf '%s\n' "$sp" | grep -c 'bytes against a ceiling of 100\.')" || g=0; q="$(printf '%s\n' "$hi" | grep -c 'against a ceiling of')" || q=0; r="$(printf '%s\n' "$lo" | grep -c 'plan-rotate\.sh')" || r=0; [ "$f" -ge 1 ] && [ "$g" -ge 1 ] && [ "$q" -eq 0 ] && [ "$r" -ge 1 ] && exit 0; exit 1
+

@@ -404,7 +404,18 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   of the total in I87, whose per-directory pipeline is the standing reduction target and is what
 #   makes a directory cost this much; the raise is that pipeline's per-directory cost and nothing
 #   else. NO REDUCTION TAKEN -- I87 remains the target. Headroom is 10.
-FORK_BUDGET=8174
+#
+#   0.580.0: 8174 -> 8197, and the whole of it is ONE NEW FIXTURE DIRECTORY again. Measured the
+#   same way as the entry above -- `--section total --stable`, ONE tree, `core/fixtures/plan-rotate/`
+#   moved to a literal holdout path and moved back, with the two sides asserted to DIFFER by
+#   directory count before the comparison was read: without it 203 dirs at 8170 (spread
+#   8168-8170), with it 204 dirs at 8187 (spread 8185-8187), +17. That is the same per-directory
+#   rate the 0.576.0 entry measured at +19 and the 0.579.0 one predicted, so the raise is I87's
+#   per-directory pipeline cost and nothing else. A base-vs-tip control in two worktrees agrees:
+#   at 852641b2 the arm reads 8170 with 4 of headroom and PASSES, and the only diff between the
+#   two trees is the new fixture directory. NO REDUCTION TAKEN -- I87 remains the target, and it
+#   is now the third consecutive release to say so. Headroom is 10.
+FORK_BUDGET=8197
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
