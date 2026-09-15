@@ -10639,7 +10639,7 @@ given at batch 90.
      the adversary and the builder were spawned in one block, five contract blockers landed after
      the build had begun, and finished parts were rebuilt.
    - Then FAN OUT BY DELIVERABLE, never one builder per subject. A subject that ships ALONE is
-     one release, not one hand. Spawn one **fix hand** (`opus`, `isolation: "worktree"`) for the
+     one release, not one hand. Spawn one **fix hand** (`opus`, `isolation: "remote"`) for the
      engine change only; on its first commit sha, in ONE spawn block, a **fixture hand** (seed
      change, arms, mutants), a **docs-and-entry hand** (every carrier of the changed contract,
      the backlog entry, the receipt scored against tip/base/stub/mutants) and a **measurement
@@ -11959,14 +11959,23 @@ given at batch 90.
    characters, so ask for the tail by name. Waiting costs wall clock; merging without them has
    cost a release.
 
-   **EVERY HAND THAT WRITES GETS ITS OWN WORKTREE.** Pass `isolation: "worktree"` in the `Agent`
-   spawn. `--amend` names no commit, so it is only ever correct if you know what `HEAD` is, and
+   **EVERY HAND, WRITING OR NOT, SPAWNS WITH `isolation: "remote"`.** Operator instruction,
+   given at batch 108's close. Pass it in every `Agent` spawn regardless of the hand's job —
+   scope, adversary, census, map, fix, fixture, docs, measurement, all of it. This supersedes
+   the read-only-hands-don't-need-one carve-out below: that carve-out was about avoiding
+   `isolation: "worktree"`'s cost for a hand that never writes, and it does not extend to
+   skipping `"remote"` — the operator wants every spawn on that isolation regardless of whether
+   the collision risk below applies to it.
+
+   `--amend` names no commit, so it is only ever correct if you know what `HEAD` is, and
    in a shared checkout with a live peer you do not.
 
-   A READ-ONLY hand — scope, adversary, census, map — does not need one and is not harmed by
-   one; the collision is a property of WRITING. Isolate on the deliverable, not on the job title.
+   A READ-ONLY hand — scope, adversary, census, map — does not risk a commit collision the way a
+   writing hand does; that distinction still explains WHY a writing hand cannot share the lead's
+   checkout, but it is no longer the reason to pick an isolation mode, now that every hand uses
+   `"remote"` regardless of job.
 
-   **THE COST IS COLLECTION, AND IT IS YOURS.** A worktree hand's commits land on its own branch,
+   **THE COST IS COLLECTION, AND IT IS YOURS.** A remote or worktree hand's commits land on its own branch,
    not in your tree, so the work does not appear where you last saw it. Ask for the branch name
    and the commit shas in its final message, then collect them yourself and **verify the result
    by CONTENT** — `cmp -s` the files against what the hand said it wrote, and check the ship
