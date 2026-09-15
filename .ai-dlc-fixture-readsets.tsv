@@ -9,7 +9,7 @@
 # every other fixture's entries alone, so refreshing one fixture costs its own runtime
 # rather than a full re-derivation.
 #
-# fixtures mapped: 200    entries: 35965
+# fixtures mapped: 201    entries: 35985
 absorbed-specifics-survive	.git/HEAD
 absorbed-specifics-survive	.git/config
 absorbed-specifics-survive	.git/index
@@ -8829,6 +8829,26 @@ extension-check-adoption	core/scripts/validate-gate-manifest.sh
 extension-check-adoption	core/skills/ai-dlc-update/reconcile/adopt-extension-checks.sh
 extension-check-adoption	core/skills/ai-dlc/enforcement-map.yaml
 extension-check-adoption	core/skills/ai-dlc/steps/gate-validation.md
+fanout-payload-channel	.git/HEAD
+fanout-payload-channel	.git/config
+fanout-payload-channel	.git/index
+fanout-payload-channel	.git/info/exclude
+fanout-payload-channel	.git/objects/19/acdc980f414ab93e783f24c8a132a14995917b
+fanout-payload-channel	.git/objects/8b/f852a80d7e235edab107596e71042bcde64002
+fanout-payload-channel	.git/objects/info/commit-graphs/commit-graph-chain
+fanout-payload-channel	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
+fanout-payload-channel	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
+fanout-payload-channel	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
+fanout-payload-channel	.git/objects/info/commit-graphs/graph-fa7bbe6bcd67e84c678384cfb84f17a16d6fa8fa.graph
+fanout-payload-channel	.git/objects/pack/multi-pack-index
+fanout-payload-channel	.git/packed-refs
+fanout-payload-channel	.git/refs/heads/ai-dlc/fanout-tmpdir-symlink
+fanout-payload-channel	.gitignore
+fanout-payload-channel	core
+fanout-payload-channel	core/fixtures
+fanout-payload-channel	core/fixtures/fanout-payload-channel
+fanout-payload-channel	core/fixtures/fanout-payload-channel/run.sh
+fanout-payload-channel	core/scripts/report-propagation-fanout.sh
 fanout-untracked-corpus	.git/HEAD
 fanout-untracked-corpus	.git/config
 fanout-untracked-corpus	.git/index
