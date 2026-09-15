@@ -10638,6 +10638,25 @@ given at batch 90.
      blockers into the contract before any builder starts. Operator instruction at batch 101:
      the adversary and the builder were spawned in one block, five contract blockers landed after
      the build had begun, and finished parts were rebuilt.
+   - **AN ADVERSARY BLOCKER IS A FIX LIST, NOT A STOP SIGNAL, UNLESS IT NAMES SOMETHING
+     STRUCTURALLY UNCONSTRUCTIBLE.** Operator correction at batch 111: a contract adversary found
+     four real defects in a BL-223 design (a receipt blind to the anchor it needed to check; a
+     self-probe that fired identically on the broken and fixed reader; a coverage count that
+     silently became a row count; a declaration crossing a pull-class boundary with no skip path)
+     and the session's first instinct was to write the refutation into the entry AGAIN — a fifth
+     time — and defer, matching the pattern of batches 95 and 106 before it. Every one of those
+     four findings had a direct, boundable fix (bind the receipt to the anchor column the report
+     already had space to print; seed the self-probe on the property that discriminates, not one
+     that happens to pass; count distinct names instead of rows; add a per-declaration SKIP verdict
+     alongside the existing whole-directory one). **Before filing a fifth refutation, ask
+     specifically: does each blocker name a fix, or does it name a proof that no fix exists?** A
+     wrong anchor, a bad count, a missing verdict tier — these are bugs in a design, and the
+     adversary that found them is the fastest path to the corrected one, not a reason to stop.
+     Reserve deferral for a blocker that shows the state is genuinely unconstructible under the
+     population's real constraints (no schema validation available, a property provably
+     unobservable under the shipped control flow, a join that cannot be made to agree with
+     itself) — and say which of those applies, explicitly, rather than defaulting to "refuted, do
+     not rebuild" because a prior session's refutation pattern is sitting right there to copy.
    - Then FAN OUT BY DELIVERABLE, never one builder per subject. A subject that ships ALONE is
      one release, not one hand. Spawn one **fix hand** (`opus`, `isolation: "remote"`) for the
      engine change only; on its first commit sha, in ONE spawn block, a **fixture hand** (seed
