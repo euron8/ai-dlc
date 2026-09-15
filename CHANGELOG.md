@@ -15,6 +15,43 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.576.0] - 2026-09-15
+
+Batch 111, one release, one subject, `BL-223`, no `PC-` id. A contract adversary attacked the
+proposed fix before any build and found four blockers; every one had a direct repair, built and
+reverified the same batch rather than deferred as a fifth refutation.
+
+### BL-223 — the push-candidate ledger's entry grammar is now a declared format, and the enforcer that declares it fails correctly across a consumer's own pull boundary
+
+`write-format-steering.json`'s `formats[]` previously allowed exactly one `declared_in` per
+`name`. The push-candidate ledger needed a second declared format under the existing
+`ai-dlc-update` member — its own entry grammar, `ledger_entry_shape()` in
+`core/skills/ai-dlc-update/reconcile/lib.sh` — without touching the population join. The adversary
+built the obvious shape and found it wrong four ways: the receipt could not see the anchor because
+`--report`'s table never printed it, so any resolvable substring in the same file passed; a
+same-name-different-anchor self-probe fired identically on the broken and fixed reader; the
+`PASS — N of M` line silently became a row count once one name could carry multiple declarations;
+and the new `declared_in`, the first in this schema to point into `core/skills/` rather than
+`core/schemas/`, would fail a consumer's push in the ordinary window between a schema pull and a
+skill pull, where the validator's failing tier has "no false-positive path by design."
+
+All four are fixed. `validate-write-format-steering.sh`'s reader keys `declared` as a
+name-to-list-of-entries map, with a true duplicate now `(name, declared_in)` repeated rather than
+bare `name`. `--report` prints the anchor on every `OK` row, so a receipt can bind on the literal
+string rather than only on `declared_in` resolving. A declaration whose owning top-level directory
+is entirely absent from the tree is now a `SKIP`, not a `FAIL`, generalizing the existing
+whole-schemas-directory narrowing to any pull-class component; a directory-present-file-absent
+case still fails as a real broken pointer. The `PASS` line's coverage count is now distinct
+artifact names, never declaration rows. `formats[].kind` gained a `code` enum value for a format
+declared by an executable function rather than a schema or prose file.
+
+`core/fixtures/write-format-steering-multiformat` carries 21 assertions: the two receipt-blind
+non-fixes the adversary constructed, the true-duplicate rejection, both directions of the
+`SKIP`/`MISSING` split, and five mutations of the fixture's own machinery proving each assertion
+can fire. `FORK_BUDGET` moves 8155 → 8174, the whole of it one new fixture directory's cost in
+I87's per-directory pipeline, measured with a holdout-and-restore differential on one tree; no
+reduction taken.
+
 ## [0.575.0] - 2026-09-14
 
 Batch 109, one release, one subject, and the subject is a CORRECTION to a measurement this repo
