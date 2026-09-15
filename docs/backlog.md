@@ -88,6 +88,59 @@ The strict reading's four sites are `736e4cfc8` (the motivating file), `6ee03ad8
 that same hunk* rather than "in the same block": "same block" is not a thing a diff shows, and
 scoring it needs the whole file plus an indentation model.
 
+**CORRECTION — THE SITE LIST ABOVE IS WRONG BY IDENTITY, AND THE TABLE'S 4 IS A CARDINALITY
+COINCIDENCE.** Re-derived while scoping a detector against this entry, over a pool rebuilt to the
+paragraph's own recipe (controls in the same invocation: pool size 10, and all three cited shas
+present in it). Attributing the STRICT sites BY IDENTITY rather than counting them:
+
+```
+                        entry claims        re-derived
+736e4cfc8                        1                   0
+6ee03ad8c                        2                   2
+4d93a0cc6                        1                   1
+84451b892                        —                   1
+                        ------------        ----------
+                                 4                   4
+```
+
+**The motivating sha contributes NOTHING under the predicate the table states.** At `736e4cfc8`
+every emission sitting below an added early exit is ITSELF ADDED — `logger.critical(`,
+`logger.info(`, and one arithmetic `_ts_math.log(` — with zero context-prefixed emissions, against
+a control of 75 added early exits in that diff. The STRICT row says *EXISTING* emission, and an
+added line is not one. The fourth site is `84451b892`, which this entry never cites. **Same total,
+different population** — which is why a receipt or a measurement plan keyed on "reproduce the 4"
+establishes nothing, and why the count was believed for as long as it was.
+
+**AND THE MEASUREMENT BEHIND THE TABLE IS FILE-SCOPED, WHILE THE SHIPPED CLAUSE IS HUNK-SCOPED.**
+Over that same pool, the identical grammar scored both ways: **file scope 4, hunk scope 1.** So
+`qa.md`'s *"in that same hunk"* does not describe the run that produced the 4 — the table's
+population is pairs whose emission sits anywhere BELOW the early exit in the same FILE. The two
+readings differ by a factor of four on the only corpus either has been run against. Neither the
+clause nor the table is edited here: which one is authoritative is an adjudication, and this
+records that they disagree rather than silently picking one.
+
+**THE OBVIOUS REPAIR FOR THE CROSS-SCOPE FALSE POSITIVE IS REFUTED, MEASURED.** A same-file
+predicate pairs an early exit with an emission in a DIFFERENT function, so the candidate fix is an
+indentation-depth rule: skip a pair whose emission is shallower than its early exit. Scored against
+the real pairs at the three sites, it **excludes 4 of 8 — including all three sites this entry and
+the re-derivation agree on** (`6ee03ad8c` twice at exit-depth 16 against emission-depth 8, and the
+`84451b892` pair at 28 against 24). The rule is backwards for the dominant idiom: a deeper
+`if …: continue` guard skips a SHALLOWER line later in the same loop body, so "emission shallower
+than exit" is the signature of a genuine stranding rather than of a scope escape. A detector
+carrying it would be silent on most known sites while passing a fixture written to match it.
+
+**THE LOOSE FIGURE IS NOT REPRODUCIBLE EITHER.** 223 could not be recovered at any grammar width:
+the narrow set gives 13, adding `.append(` gives 58, adding `record_`/`details[` gives 124, and a
+bare `log|metric|telemetry` mention gives 103 (control: an impossible token gives 0 at every
+width). The emission grammar that produced 223 is not stated in this entry and is not derivable
+from it.
+
+**WHAT THIS CHANGES ABOUT CLOSING THE ENTRY.** Nothing about the GAP — no mechanical reader still
+exists, and that claim re-derives clean (below). What it changes is that the population a detector
+must be built against is not yet pinned: the predicate's scope is undecided, its emission grammar
+is unstated, and 3 of the 4 sites remain unadjudicated as true regressions. Those are inputs a
+mechanism needs and this entry does not yet carry.
+
 **THE FIRST DERIVATION OF THOSE FIGURES READ 0 AND 0.** `awk -v` strips one level of escaping,
 so `^\+[[:space:]]*(continue|…)` reached awk as `^+…(` and awk refused the regex on every
 merge, printing a clean zero per row. The doubled-backslash spelling is what produced the table
