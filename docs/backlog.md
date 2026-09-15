@@ -55,6 +55,75 @@ have gone green, and would have reported "still open" forever.
 never the word anywhere in prose, because an entry that merely discusses landing something is
 not a closed entry.
 
+## BL-254 — the `sh` receipt's base control is new, and nothing here asserts a consumer's INSTALLED engine ever runs it
+
+**DEFECT.** Filed against `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh` from the
+consumer-filed candidate
+`PC-S344-SH-RECEIPTS-GET-NO-BASE-CONTROL-SO-STILL-LIVE-CANNOT-BE-READ`, whose subject shipped in
+this release. What is owed is the half the fix cannot deliver: a consumer executes the engine it
+LAST INSTALLED, so the pull that carries this fix is classified by the engine WITHOUT it, and
+every `RECEIPTS-UNDECIDED` row an operator reads before that pull lands is missing the `sh`
+numerators entirely. The row is identical in shape either way — one line, same status token,
+same entry column — so the state "this engine has no `sh` base control" and the state "this run
+had no undecided `sh` receipts" are the same bytes on the operator's report.
+
+**WHY IT IS A DEFECT AND NOT A NOTE.** The `sh` verb is what most receipts use, and the count the
+row carries is the only thing separating a `STILL-LIVE` that measured something from one that
+restated the previous run. Measured on the reference consumer across `0.576.0→0.577.0`
+(`base..theirs` = 14 files): **20 of 20** eligible `sh` receipts undecided, **0** control-refused.
+A row absent for the engine-version reason reads as "nothing to report" on a corpus where the
+honest answer was twenty. `consumer-boundary.md` already states the general form — a core fixture
+ships ahead of its subject — and the specific consequence here is that the first post-fix report
+is the only one whose silence is trustworthy, and nothing tells the reader which report that is.
+
+**WHAT THE SHIPPED FIX ESTABLISHES AND WHAT IT DOES NOT.** Three helpers (`refs_differ`,
+`sh_base_eligible`, `sh_base_control`) resolve the base run three ways — exit 0 → undecided,
+126/127 → control-refused and counted separately, otherwise decided — at BOTH the `STILL-LIVE`
+site and the `CLOSE-CANDIDATE` site, folded into the existing `RECEIPTS-UNDECIDED` row with no
+new status token. That is verified by execution here. What is NOT established is that any
+consumer has an engine carrying it, and no predicate resolving against THIS tree can observe a
+consumer's installed copy.
+
+**Receipt limits, stated.** The receipt below drives the SHIPPED engine against a four-receipt
+synthetic ledger in a throwaway distribution repo, and requires the emitted row to carry all
+three `sh` clauses with their derived numerators — the still-live clause at `1 of 3`, the close
+clause at `1 of 1`, and a refused count of `1`. It asserts the four per-entry verdicts first, so
+a run whose corpus collapsed cannot satisfy it by emitting nothing. **It cannot score the
+delivery half**, which is the entry's actual subject: it says the engine in THIS tree computes
+the control, never that a consumer's installed engine does. Closing this needs a stated
+measurement from a consumer that has pulled the fix — a `RECEIPTS-UNDECIDED` row carrying a `sh`
+numerator, taken from that consumer's own run — and no `sh` predicate resolving here can observe
+it. **SO THE RECEIPT READS `CLOSE-CANDIDATE` FROM THE DAY IT IS FILED, and a drain acting on
+that row alone closes the delivery half unmeasured.** `validate-backlog-receipts.sh` classifies
+it `ALREADY-PASSING`, which is not a finding in either direction, and `BL-236` sits in the same
+class for the same reason — its receipt scores a prose half while its subject is an arm nobody
+built. Read the row as "the engine in this tree computes the control", never as "the entry is
+closable". **It also cannot score the ARITHMETIC against a real corpus.** The three numerators are
+derived from a seeded ledger whose every case the receipt planted; an engine mis-classifying a
+receipt shape this seed does not contain scores closed. Exit 9 if the engine file is absent or
+the seeded differential cannot be built — the mover is asserted present at theirs and absent at
+base BEFORE any comparison is read, because a differential whose two sides do not differ reports
+every receipt undecided and reads as a working control.
+
+**SCORED AGAINST FOUR BUILDS, each `cmp`-asserted to differ from the real fix and `bash -n`
+asserted to parse.** Polarity checked at the emitter: `scripts/backlog-reverify.sh:233` reads
+**exit 0 as CLOSE-CANDIDATE, the fix is present** — the OPPOSITE of the consumer engine this
+entry is about, whose `:1913`/`:1949` sites read exit 0 as STILL-LIVE.
+
+| build | receipt | which clause it loses |
+|---|---|---|
+| the real fix | **0 — present** | none; all three clauses satisfied |
+| pre-fix engine + a comment naming `base_show`, `base_holds` and `THEIRS="$BASE"` | 1 — absent | no row at all |
+| the fix with the `126\|127)` refusal arm deleted (two-arm, fails-open) | 1 — absent | the refused clause |
+| the fix with the CLOSE-path `sh_base_control` call deleted | 1 — absent | the close clause |
+
+Each non-fix loses a DIFFERENT clause, so none of the three fails for a reason it does not own.
+The comment-only build is the one PC-S344's own proposed receipt closed on: a whole-arm
+`grep -qE 'base_holds|base_show|THEIRS="\$BASE"'` is satisfied by that comment, which is why this
+receipt keys on the emitted row's derived content rather than on the arm's text.
+
+verify: sh E=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -f "$E" ] || exit 9; d=$(mktemp -d) || exit 9; D="$d/dist"; C="$d/cons"; mkdir -p "$D/core/scripts" "$C/_bmad-output/ai-dlc-update" || exit 9; git -C "$D" init -q || exit 9; printf 'SAME_AT_BOTH\n' > "$D/core/scripts/same.sh"; printf 'OLD\n' > "$D/core/scripts/moved.sh"; git -C "$D" add -A && git -C "$D" -c user.email=p@p -c user.name=p commit -qm base || exit 9; B=$(git -C "$D" rev-parse HEAD) || exit 9; printf 'NEW_ONLY_AT_THEIRS\n' > "$D/core/scripts/moved.sh"; git -C "$D" add -A && git -C "$D" -c user.email=p@p -c user.name=p commit -qm theirs || exit 9; T=$(git -C "$D" rev-parse HEAD) || exit 9; git -C "$D" show "${T}:core/scripts/moved.sh" | grep -q NEW_ONLY_AT_THEIRS || exit 9; git -C "$D" show "${B}:core/scripts/moved.sh" | grep -q NEW_ONLY_AT_THEIRS && exit 9; git -C "$D" show "${B}:core/scripts/same.sh" | grep -q SAME_AT_BOTH || exit 9; mkdir -p "$d/bin" || exit 9; printf '#!/bin/sh\nexit 0\n' > "$d/bin/tool-$T"; chmod +x "$d/bin/tool-$T" || exit 9; [ -x "$d/bin/tool-$B" ] && exit 9; printf '%s\n' '# p' '' '## PC-R1' '' 'verify: sh git -C "$DIST" show "${THEIRS}:core/scripts/same.sh" | grep -q SAME_AT_BOTH' '' '## PC-R2' '' 'verify: sh git -C "$DIST" show "${THEIRS}:core/scripts/moved.sh" | grep -q NEW_ONLY_AT_THEIRS' '' '## PC-R3' '' 'verify: sh git -C "$DIST" show "${THEIRS}:core/scripts/same.sh" | grep -q ABSENT_AT_BOTH_REFS' '' '## PC-R4' '' "verify: sh $d/bin/tool-\$THEIRS" > "$C/_bmad-output/ai-dlc-update/push-candidate-ledger.md" || exit 9; o=$(bash "$E" "$D" "$B" "$C" "$T" 2>/dev/null); [ "$(printf '%s\n' "$o" | grep -c '^STILL-LIVE	PC-R1	')" -eq 1 ] || exit 9; [ "$(printf '%s\n' "$o" | grep -c '^STILL-LIVE	PC-R2	')" -eq 1 ] || exit 9; [ "$(printf '%s\n' "$o" | grep -c '^CLOSE-CANDIDATE	PC-R3	')" -eq 1 ] || exit 9; [ "$(printf '%s\n' "$o" | grep -c '^STILL-LIVE	PC-R4	')" -eq 1 ] || exit 9; u=$(printf '%s\n' "$o" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{print $3; exit}'); [ -n "$u" ] || exit 1; case "$u" in *"1 of 3 'verify: sh' receipt(s) reported STILL-LIVE and exited 0"*) ;; *) exit 1 ;; esac; case "$u" in *"AND 1 of 1 'verify: sh' CLOSE-CANDIDATE(s) ALSO exited non-zero at BASE"*) ;; *) exit 1 ;; esac; case "$u" in *"1 'verify: sh' base control(s) REFUSED"*) ;; *) exit 1 ;; esac; exit 0
+
 ## BL-238 — the consumer ledger's `theirs`-ref receipt grammar cannot key on an ARM's body, so a receipt written to ask a behavioural question is satisfied by a comment
 
 **Found 2026-09-11** while closing a consumer candidate whose own receipt was built to avoid an
