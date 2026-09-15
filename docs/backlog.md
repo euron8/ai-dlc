@@ -1820,7 +1820,7 @@ verify: manual
 
 **Core's two readers of an escalation's `**Status:**` field disagree on which line in an entry
 wins, and the one that adjudicates the closed vocabulary picks the line the resolution replaced.**
-`core/scripts/validate-escalation-status-vocabulary.sh:159` carries
+`core/scripts/validate-escalation-status-vocabulary.sh` carried, at `:159` before this was fixed,
 `if (status != "") next  # first Status line in an entry wins`;
 `core/scripts/validate-escalation-resolution.sh:272` has no such guard and therefore takes the
 LAST. Measured behaviourally against the shipping validator and the real
@@ -1895,6 +1895,13 @@ receipt run verbatim, each mutant asserted applied before any verdict was read: 
 Discharges the consumer entry `PC-S296-ESCALATION-STATUS-APPENDS-INSTEAD-OF-REPLACING` at pinned
 ledger line 654.
 
+**LANDED (v0.577.0, verified 432a5f41).** The rule is LAST CANONICAL IF THE ENTRY HAS ONE, ELSE
+LAST ANYWHERE, a `canon` flag reset in the awk header rule, applied to this script and to
+`validate-suppression-lifetime.sh`, which carried the identical idiom. All four properties hold at
+once and no simpler reading holds all four. The receipt that closes it is the five-armed one above,
+which rejects every candidate scored against it including the delete-`:159` implementation this
+entry originally advertised.
+
 
 verify: sh D=$(mktemp -d) || exit 9; V=core/scripts/validate-escalation-status-vocabulary.sh; S=core/skills/ai-dlc/escalations.md; [ -r "$V" ] && [ -r "$S" ] || exit 9; printf '## S999 Lead\n**Status:** HARD_BLOCK\n**Resolution:**\n**Status:** BOGUS_TOKEN\n' > "$D/a.md"; printf '## S999 Lead\n**Context:** was **Status:** RESOLVED once\n**Status:** BOGUS_TOKEN\n' > "$D/b.md"; printf '## S999 Lead\n**Status:** BOGUS_TOKEN\n' > "$D/c.md"; printf '## S999 Lead\n**Status:** HARD_BLOCK\nIt carried no **Status:** line from filing until later. It therefore matched no branch.\n' > "$D/d.md"; printf '## S999 Lead\nCarried from the prior sprint. **Status:** BOGUS_TOKEN once.\n' > "$D/m.md"; bash "$V" "$D/c.md" "$S" >/dev/null 2>&1; c=$?; bash "$V" "$D/a.md" "$S" >/dev/null 2>&1; a=$?; bash "$V" "$D/b.md" "$S" >/dev/null 2>&1; b=$?; bash "$V" "$D/d.md" "$S" >/dev/null 2>&1; d=$?; bash "$V" "$D/m.md" "$S" >/dev/null 2>&1; m=$?; [ "$c" -eq 1 ] || exit 9; [ "$a" -eq 1 ] && [ "$b" -eq 1 ] && [ "$m" -eq 1 ] && [ "$d" -eq 0 ]
 ## BL-055
@@ -1921,7 +1928,7 @@ whose cited carry-over item is explicitly closed clearing a `gate_types: [univer
 The filing's cited home was also stale twice over: it named `steps/gate-validation.md`, and its
 own 2026-08-03 re-anchor note already repointed to this script.
 
-**The fixture cannot fire on this and reads as covering it.** `seed.sh:111` states V7 exists
+**The fixture cannot fire on this and reads as covering it.** `seed.sh:113-114` states V7 exists
 precisely so "an element 2 widened to accept CLOSED passes the whole fixture" is caught — but
 V7's title carries no `OPEN` substring, so the seeded corpus is green whether the status token is
 anchored or not.
@@ -1969,7 +1976,20 @@ token in the same sweep). So the residual FP set is "every item written in a for
 mandates", which is unbounded and unmeasured, and widening the anchor is a scope decision rather
 than a bug fix.
 
+**AND THE REFERENCE CONSUMER'S OWN BACKLOG IS OUTSIDE ELEMENT 2'S SUBJECT SET ENTIRELY.** Its
+`carry-over-backlog.md` carries ZERO lines matching `^- Item N` (controls in the same invocation:
+115 leading-dash lines, 121 occurrences of `OPEN`, 8 of `Item ` — all prose form). So element 2
+reaches no line there today and the anchor's residue is unreachable on that tree. That is the
+population every false-positive figure in this entry was taken over, and it is why the residue is
+a scope question rather than a shipped regression.
+
 Discharges the consumer entry `PC-S297-CHECK16-ELEMENT2-REGEX-DEAD` at pinned ledger line 1093.
+
+**LANDED (v0.577.0, verified 121d78d3).** The status token is bound to a trailing parenthesised
+field, `\)([[:space:]]|[.,;]|$)`, not to the entry's proposed `\)[[:space:]]*$` — that form
+refuses 8 of 13 real-shaped backlog lines it should accept, which is a check that errors on correct
+data. The receipt that closes it carries TWO substitution cases, so a token blacklist keyed on the
+first one no longer satisfies it.
 
 
 verify: sh S=core/fixtures/check-15-bypass/seed.sh; V=core/scripts/validate-stub-audit.sh; [ -r "$S" ] && [ -r "$V" ] || exit 9; d1=$(mktemp -d) || exit 9; t1=$(bash "$S" "$d1" | tail -1) || exit 9; b1="$t1/_bmad-output/planning-artifacts/carry-over-backlog.md"; cp "$b1" "$b1.pre" || exit 9; awk '/^- Item 7 /{ print "- Item 7 — retire the OPENAPI ack shim (CLOSED)"; next } { print }' "$b1.pre" > "$b1"; cmp -s "$b1" "$b1.pre" && exit 9; grep -qF 'OPENAPI ack shim (CLOSED)' "$b1" || exit 9; d2=$(mktemp -d) || exit 9; t2=$(bash "$S" "$d2" | tail -1) || exit 9; b2="$t2/_bmad-output/planning-artifacts/carry-over-backlog.md"; cp "$b2" "$b2.pre" || exit 9; awk '/^- Item 7 /{ print "- Item 7 — the OPEN question of the ack shim (CLOSED)"; next } { print }' "$b2.pre" > "$b2"; cmp -s "$b2" "$b2.pre" && exit 9; grep -qF 'the OPEN question of the ack shim (CLOSED)' "$b2" || exit 9; bash "$V" --root "$t1" src/v5_honest.py >/dev/null 2>&1; [ $? -eq 0 ] || exit 9; bash "$V" --root "$t1" src/v7_item_closed.py >/dev/null 2>&1; r1=$?; bash "$V" --root "$t2" src/v7_item_closed.py >/dev/null 2>&1; r2=$?; [ "$r1" -eq 1 ] && [ "$r2" -eq 1 ]
