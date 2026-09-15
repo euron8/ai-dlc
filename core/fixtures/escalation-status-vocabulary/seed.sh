@@ -96,6 +96,126 @@ Carried from the prior sprint. **Status:** TRIAGED — see the triage log.
 **Context:** filed against the wrong component
 MD
 
+# ---- WHICH OCCURRENCE OF `**Status:**` IS THE ENTRY'S STATUS -----------------
+# The four files below are one property each, and each is a PAIR: an offender that must
+# be reported and a near-miss that must not. One direction alone leaves a validator that
+# flags everything looking identical to one that discriminates.
+#
+# BOTH TOKENS ARE DERIVED, NOT TYPED. A hand-written in-vocabulary token welds this seed
+# to whatever escalations.md published the day it was written — the same coupling the
+# clean file above was rewritten to remove — and a hand-written out-of-vocabulary token
+# silently becomes a legitimate status the release someone publishes it, at which point
+# every offender here turns into a near-miss and the file goes quietly vacuous.
+VOCAB_ALL="$(awk '
+  /^\*\*Status:\*\*/ || /^\*\*Terminal statuses\*\*/ {
+    s = $0
+    sub(/^[^:]*:[[:space:]]*/, "", s); gsub(/`/, "", s)
+    n = split(s, parts, /[|]/)
+    for (j = 1; j <= n; j++) { t = parts[j]; gsub(/[^A-Z_]/, "", t); if (t != "") print t }
+  }
+' "$SPEC_SRC" | sort -u)"
+GOOD_TOK="$(printf '%s\n' "$VOCAB_ALL" | head -1)"
+BAD_TOK="NOT_A_PUBLISHED_STATUS"
+
+# Both halves of the pair are CHECKED, in the same invocation, because each one silently
+# inverts every assertion below if it is wrong. The out-of-vocabulary half is the one a
+# reader assumes: a token nobody has published today becomes a legitimate status the
+# release somebody publishes it, and on that day every offender here turns into a
+# near-miss while the file keeps printing `ok`.
+[ -n "$GOOD_TOK" ] || {
+  echo "FIXTURE ERROR: derived no in-vocabulary token from $SPEC_SRC; every near-miss below would assert nothing" >&2
+  exit 2
+}
+if grep -qx "$BAD_TOK" <<VOCAB
+$VOCAB_ALL
+VOCAB
+then
+  echo "FIXTURE ERROR: '$BAD_TOK' is now a PUBLISHED status in $SPEC_SRC. Every offender" >&2
+  echo "      below is a near-miss and this whole file asserts nothing. Pick another token." >&2
+  exit 2
+fi
+
+# (a) AN APPENDED RESOLUTION IS THE TOKEN ADJUDICATED.
+# Seeded from what the PRODUCER writes, never from what the reader accepts: escalations.md
+# prescribes "**Escalation entry format (append, do not overwrite):**" and its resolution
+# lifecycle sets the terminal status in a later edit, carrying the
+# `**Operator authorization:**` line with it. So the live status of a resolved entry is its
+# LAST field and the authorship token above it is the one it REPLACED. A first-wins reader
+# adjudicates the replaced token — which is how a validator whose entire job is rejecting an
+# out-of-vocabulary status came to report PASS on one.
+cat > "$WORK/pending-appended.md" <<MD
+# Pending Escalations
+
+## S300-7 Dev - 2026-07-21T16:00Z
+**Status:** HARD_BLOCK
+**Context:** needs an operator call
+**Operator authorization:** 2026-07-21T17:00Z | "go ahead and close it out"
+**Status:** $BAD_TOK
+MD
+
+cat > "$WORK/pending-appended-ok.md" <<MD
+# Pending Escalations
+
+## S300-7 Dev - 2026-07-21T16:00Z
+**Status:** HARD_BLOCK
+**Context:** needs an operator call
+**Operator authorization:** 2026-07-21T17:00Z | "go ahead and close it out"
+**Status:** $GOOD_TOK
+MD
+
+# (b) PROSE ABOVE THE FIELD DOES NOT OUTRANK IT.
+# The match is deliberately not line-anchored, so under a first-wins tie-break a
+# `**Status:**` written inside a sentence SHIELDS the real field below it: the widening
+# catches a case it also created. The near-miss is the same shape with the tokens swapped,
+# so a reader that simply prefers prose fails it.
+cat > "$WORK/pending-prose-above.md" <<MD
+# Pending Escalations
+
+## S300-8 Dev - 2026-07-21T18:00Z
+**Context:** this entry carried **Status:** $GOOD_TOK for one sprint before it was refiled.
+**Status:** $BAD_TOK
+MD
+
+cat > "$WORK/pending-prose-above-ok.md" <<MD
+# Pending Escalations
+
+## S300-8 Dev - 2026-07-21T18:00Z
+**Context:** this entry carried **Status:** $BAD_TOK for one sprint before it was refiled.
+**Status:** $GOOD_TOK
+MD
+
+# (d) PROSE BELOW THE FIELD DOES NOT OUTRANK IT EITHER, AND THE NEAR-MISS IS THE WHOLE ARM.
+# This pair is the one that separates the shipped reading from the minimal
+# last-match-ANYWHERE one, and the OFFENDER ALONE CANNOT DO IT: both readings report the
+# offender, one on the real bad token and one on a junk token it extracted from the prose —
+# the right verdict for the wrong reason. The near-miss is where they part. Its body is the
+# reference consumer's own shape, an entry whose field is a published status and whose prose
+# below mentions the field by name; last-anywhere reads the token `I` out of "It therefore"
+# and emits a FALSE FINDING on the file the gate actually reads.
+#
+# THE TRAILING SENTENCE SHARES A LINE WITH THE MENTION, AND THAT IS THE WHOLE PROPERTY.
+# The reader walks LINES: the junk token a last-anywhere reading extracts has to sit on a
+# line that ITSELF carries `**Status:**`. Soft-wrapping "It therefore" onto the next line —
+# which reads like an innocent reflow, and is how this pair was first written — moves the
+# token out of the mutant's reach, the near-miss goes quiet under BOTH readings, and the
+# canon-guard mutant scores as SURVIVED against an arm that is working. Measured: one line
+# gives rc=1 token=I, wrapped gives rc=0 token=none. Keep the sentence on this line.
+cat > "$WORK/pending-prose-below-ok.md" <<MD
+# Pending Escalations
+
+## S300-9 Dev - 2026-07-21T19:00Z
+**Status:** $GOOD_TOK
+**Context:** the entry carried NO \`**Status:**\` line from filing until 2026-07-20. It therefore matched no branch.
+MD
+
+cat > "$WORK/pending-prose-below.md" <<MD
+# Pending Escalations
+
+## S300-9 Dev - 2026-07-21T19:00Z
+**Status:** $BAD_TOK
+**Context:** the entry carried NO \`**Status:**\` line from filing until 2026-07-20. It therefore matched no branch.
+MD
+
 cat > "$WORK/env.sh" <<ENV
 VALIDATOR="$VALIDATOR"
 SPEC_SRC="$SPEC_SRC"
@@ -103,6 +223,14 @@ WORK="$WORK"
 CLEAN="$WORK/pending-clean.md"
 DRIFT="$WORK/pending-drift.md"
 MIDENTRY="$WORK/pending-midentry.md"
+GOOD_TOK="$GOOD_TOK"
+BAD_TOK="$BAD_TOK"
+APPENDED="$WORK/pending-appended.md"
+APPENDED_OK="$WORK/pending-appended-ok.md"
+PROSE_ABOVE="$WORK/pending-prose-above.md"
+PROSE_ABOVE_OK="$WORK/pending-prose-above-ok.md"
+PROSE_BELOW="$WORK/pending-prose-below.md"
+PROSE_BELOW_OK="$WORK/pending-prose-below-ok.md"
 ENV
 
 printf '%s\n' "$WORK"

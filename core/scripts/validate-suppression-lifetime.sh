@@ -223,8 +223,17 @@ fi
 # `## [<title>] [<author>] - <ts> — <summary>`, NOT the `## S<N>-` form an earlier reading
 # of this corpus recorded: a `^## S[0-9]+-` anchor matches 6 of ~22 real entries and fails
 # OPEN on the rest. So entries are flushed on ANY level-2/3 heading and every field is
-# matched ANYWHERE in the entry body, never at line start. Same idiom as
-# validate-escalation-status-vocabulary.sh:153-166.
+# matched ANYWHERE in the entry body, never at line start.
+#
+# THE STATUS RULE IS THE ONE IN validate-escalation-status-vocabulary.sh's section 3, AND
+# THE POINT OF THE POINTER IS THE RULE, NOT THE LINE RANGE. Both readers resolve an entry
+# to the LAST CANONICAL `**Status:**` if it has one and the LAST ANYWHERE otherwise; that
+# script's comment carries the four properties and the corpus measurement. This one used to
+# say "same idiom" while both took the FIRST occurrence, and first-wins is wrong HERE for a
+# consequence that script does not have: an appended `**Status:** SUPPRESSED` resolved to
+# the entry's FILING token, and that value is the join Check 2 and Check 26 use to decide
+# whether a suppression is in force. A suppression authorised by an appended line was read
+# as never having been authorised at all.
 #
 # Fields are emitted in an order no field name prefixes another's value, and each is
 # delimited, so a `Suppresses:` cannot cross-match `Suppresses-something:`.
@@ -233,11 +242,14 @@ RECORDS="$(awk '
     if (header != "")
       printf "%s\037%s\037%s\037%s\037%s\037%s\037%s\037%s\n", header, status, supp, expires, authts, named, suppcat, authline
   }
-  /^#{2,3} / { flush(); header=$0; status=""; supp=""; expires=""; authts=""; named=""; suppcat=""; authline=""; next }
+  /^#{2,3} / { flush(); header=$0; status=""; supp=""; expires=""; authts=""; named=""; suppcat=""; authline=""; canon=0; next }
   /\*\*[Ss]tatus:\*\*/ {
-    if (status == "") {
-      s=$0; sub(/^.*\*\*[Ss]tatus:\*\*[[:space:]]*/,"",s)
-      if (match(s,/[A-Z_]+/)) status=substr(s,RSTART,RLENGTH)
+    # A prose mention cannot displace a field, in either direction.
+    if (canon && $0 !~ /^\*\*[Ss]tatus:\*\*/) next
+    s=$0; sub(/^.*\*\*[Ss]tatus:\*\*[[:space:]]*/,"",s)
+    if (match(s,/[A-Z_]+/)) {
+      status=substr(s,RSTART,RLENGTH)
+      if ($0 ~ /^\*\*[Ss]tatus:\*\*/) canon=1
     }
     next
   }

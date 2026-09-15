@@ -14168,3 +14168,180 @@ shows both rows.
 verify: sh o="$(bash core/scripts/validate-write-format-steering.sh --report 2>&1)"; rc=$?; [ -n "$o" ] || exit 9; grep -qE '^ +declared +ai-dlc-update +core/schemas/layer-adjudication-register\.json ::' <<<"$o" || exit 9; [ "$rc" -eq 0 ] || exit 1; n="$(grep -cE '^ +declared +ai-dlc-update +' <<<"$o")" || n=0; [ "$n" -eq 2 ] || exit 1; row="$(awk '$1=="declared" && $2=="ai-dlc-update" && $3=="core/skills/ai-dlc-update/reconcile/lib.sh"' <<<"$o")"; [ -n "$row" ] || exit 1; a="${row#*anchor=}"; [ "$a" = 'function ledger_entry_shape(' ] || exit 1; exit 0
 
 
+## BL-053
+
+**Core's two readers of an escalation's `**Status:**` field disagree on which line in an entry
+wins, and the one that adjudicates the closed vocabulary picks the line the resolution replaced.**
+`core/scripts/validate-escalation-status-vocabulary.sh` carried, at `:159` before this was fixed,
+`if (status != "") next  # first Status line in an entry wins`;
+`core/scripts/validate-escalation-resolution.sh:272` has no such guard and therefore takes the
+LAST. Measured behaviourally against the shipping validator and the real
+`core/skills/ai-dlc/escalations.md` vocabulary, three arms in one invocation, on an entry whose
+terminal status is the out-of-vocabulary token `BOGUS_TOKEN`:
+
+- **(a)** filed `HARD_BLOCK`, resolved by an appended `**Status:** BOGUS_TOKEN` — **exit 0**,
+  `n=1`, reported "all escalation status tokens are in the derived set".
+- **(b)** a prose line mentioning `**Status:** RESOLVED` above a canonical
+  `**Status:** BOGUS_TOKEN` field — **exit 0**, `n=1`.
+- **(c) CONTROL**, the same token as the entry's only `**Status:**` occurrence — **exit 1**,
+  `FAIL: out-of-vocabulary status 'BOGUS_TOKEN'`.
+
+The arm fires. It fires on (c) and not on (a) or (b), and (a) is the shape
+`escalations.md:18` prescribes — "**Escalation entry format (append, do not overwrite):**" — while
+`escalations.md:65-66` makes the appended line the authoritative one ("status updated to RESOLVED").
+
+**(b) is the sharper half, because the validator's own stated purpose produces it.** Its comment at
+`:148-152` widens the match off line-start on the reasoning that "a token in a non-canonical
+position is exactly the one a naive line-anchored regex misses". Combined with the first-wins
+tie-break at `:159`, matching anywhere makes it strictly WORSE: a `**Status:**` inside prose now
+outranks the entry's real field and shields it. The widening was written to catch a case it
+instead created.
+
+That same comment cites `validate-escalation-resolution.sh:82-100` as the idiom it mirrors. Lines
+82-100 there are the `# EXIT` comment block and the opening of argument parsing; the awk Status
+block is at `:272`, and on the one axis that decides this it is the OPPOSITE. The citation is stale
+in position and wrong in substance.
+
+**What the consumer filing got wrong, and the direction is toward a worse defect.** It named the
+consequence as a wrong COUNT — "any status grep overcounts" — a human-legibility problem in a
+number nobody gates on. Measured upstream, the consequence is a CHECK THAT CANNOT FIRE on the
+token position that matters: the validator whose entire job is to reject an out-of-vocabulary
+status reports PASS on one. `gate-validation.md:230-243` orders that script run before Check 2's
+branches precisely because "a token the branches cannot reach is not a wrong verdict, it is a
+missing one" — and this is that state, reached through the validator meant to prevent it. The
+filing's prescribed fix (resolution REPLACES the status line) also does not apply here: core's
+prose already says the status is updated, and the defect survives it, because the file that
+matters is `pending.md` as it exists today, carrying entries written under the append reading.
+
+**Why these three arms are the anchor.** A receipt asserting only (a) would go green under a fix
+that re-anchored the match to line-start — which repairs (a), reintroduces the case `:148-152`
+exists to catch, and leaves (b). A receipt asserting only (b) goes green under a first-wins fix
+that keeps ignoring appended resolutions. Requiring both, gated on (c), forces a fix that makes the
+LAST canonical `**Status:**` authoritative — the one reading consistent with
+`validate-escalation-resolution.sh`. Proven satisfiable, not asserted: deleting the single line at
+`:159` from a copy takes the receipt to **exit 0** (`c=1 a=1 b=1`), with the two sides asserted to
+differ in the same invocation before the comparison was read (`orig=1 fixed=0` occurrences of the
+tie-break comment).
+
+**AND THAT IS WHY THREE ARMS WERE NOT ENOUGH. The implementation this entry advertises as proof
+of satisfiability is a NON-FIX, and the three-armed receipt closed on it.** Deleting `:159` alone
+makes the LAST match anywhere win, which carries the MIRRORED defect: a `**Status:**` inside prose
+occurring BELOW the real field then outranks the field. Measured read-only on the reference
+consumer, with a control in the same invocation (134 `**Status:**` fields in `pending.md`; an
+impossible token 0): that implementation emits `FAIL: out-of-vocabulary status 'I'` against an
+entry whose real field is `DECIDED_AUTONOMOUSLY`, scraping the token out of the words "It
+therefore" in the entry's own prose — a FALSE FINDING on the file the gate reads.
+
+**The discriminating input is a NEAR-MISS PAIR, and a bad-token-below-the-field input is not it.**
+On an entry whose field is BAD with prose below, the correct fix and the last-anywhere non-fix
+BOTH exit 1 — right verdict, wrong reason, and the arm cannot tell them apart. The arm that
+discriminates seeds a GOOD field with prose below it and requires **exit 0**: the correct fix
+reads the field, the non-fix reads the prose. Arm **(M)** is required beside it, because an
+entry whose only `**Status:**` is not at line start must still be adjudicated — that is the
+property `core/fixtures/escalation-status-vocabulary/run.sh:57` already asserts, and dropping it
+lets a line-anchoring fix through. Every candidate was BUILT and scored against the five-arm
+receipt run verbatim, each mutant asserted applied before any verdict was read: shipped fix
+**exit 0**; first-wins base **1**; delete-`:159` last-anywhere **1**; last-canonical-only **1**
+(it breaks M); first-canonical **1**.
+
+Discharges the consumer entry `PC-S296-ESCALATION-STATUS-APPENDS-INSTEAD-OF-REPLACING` at pinned
+ledger line 654.
+
+**LANDED (v0.577.0, verified 432a5f41).** The rule is LAST CANONICAL IF THE ENTRY HAS ONE, ELSE
+LAST ANYWHERE, a `canon` flag reset in the awk header rule, applied to this script and to
+`validate-suppression-lifetime.sh`, which carried the identical idiom. All four properties hold at
+once and no simpler reading holds all four. The receipt that closes it is the five-armed one above,
+which rejects every candidate scored against it including the delete-`:159` implementation this
+entry originally advertised.
+
+
+verify: sh D=$(mktemp -d) || exit 9; V=core/scripts/validate-escalation-status-vocabulary.sh; S=core/skills/ai-dlc/escalations.md; [ -r "$V" ] && [ -r "$S" ] || exit 9; printf '## S999 Lead\n**Status:** HARD_BLOCK\n**Resolution:**\n**Status:** BOGUS_TOKEN\n' > "$D/a.md"; printf '## S999 Lead\n**Context:** was **Status:** RESOLVED once\n**Status:** BOGUS_TOKEN\n' > "$D/b.md"; printf '## S999 Lead\n**Status:** BOGUS_TOKEN\n' > "$D/c.md"; printf '## S999 Lead\n**Status:** HARD_BLOCK\nIt carried no **Status:** line from filing until later. It therefore matched no branch.\n' > "$D/d.md"; printf '## S999 Lead\nCarried from the prior sprint. **Status:** BOGUS_TOKEN once.\n' > "$D/m.md"; bash "$V" "$D/c.md" "$S" >/dev/null 2>&1; c=$?; bash "$V" "$D/a.md" "$S" >/dev/null 2>&1; a=$?; bash "$V" "$D/b.md" "$S" >/dev/null 2>&1; b=$?; bash "$V" "$D/d.md" "$S" >/dev/null 2>&1; d=$?; bash "$V" "$D/m.md" "$S" >/dev/null 2>&1; m=$?; [ "$c" -eq 1 ] || exit 9; [ "$a" -eq 1 ] && [ "$b" -eq 1 ] && [ "$m" -eq 1 ] && [ "$d" -eq 0 ]
+## BL-055
+
+**Check 16's element 2 accepts `OPEN` as a bare substring anywhere on the backlog line, so a
+`(CLOSED)` carry-over item launders a stub through the gate.** The status test at
+`core/scripts/validate-stub-audit.sh:480` is `[[ $bl =~ ^-\ Item\ [0-9]+.*(OPEN|IN\ SPRINT\ [0-9]+) ]]`
+— the `.*` is unbounded and the token is bound to nothing, so any occurrence of the four
+characters `OPEN` after the item number satisfies it. Driven through the shipping script on the
+fixture's own V7 (`core/fixtures/check-15-bypass`, whose seed writes `- Item 7 — retired ack shim
+(CLOSED)` and whose `run.sh:140` expects `element2-item-open`): unmutated the validator returns
+**rc=1** with `FINDING src/v7_item_closed.py:5 element2-item-open`; with the single word of the
+title changed to `retire the OPENAPI ack shim`, still `(CLOSED)`, it returns **rc=0, 0 finding(s)**.
+Two controls in the same invocation — the unmutated tree (rc=1) and a lowercase near-miss,
+`reopen the api ack shim (CLOSED)` (rc=1) — so the discriminator is the literal uppercase
+substring and not the act of editing the line.
+
+**The filing has the sign backwards.** It reports element 2's regex as *dead against live
+content*, i.e. failing closed and producing findings it should not. Measured, the regex matches
+live content fine — the fixture's honest positive control `v5_honest.py` passes at rc=0 against
+`- Item 12 — connection pooling for the read path (OPEN)` — and the live defect is the opposite
+direction: it fails **open**. Consequence moves with the sign, from noisy-but-safe to a stub
+whose cited carry-over item is explicitly closed clearing a `gate_types: [universal]` check.
+The filing's cited home was also stale twice over: it named `steps/gate-validation.md`, and its
+own 2026-08-03 re-anchor note already repointed to this script.
+
+**The fixture cannot fire on this and reads as covering it.** `seed.sh:113-114` states V7 exists
+precisely so "an element 2 widened to accept CLOSED passes the whole fixture" is caught — but
+V7's title carries no `OPEN` substring, so the seeded corpus is green whether the status token is
+anchored or not.
+
+The anchor is behavioural and drives the shipping script through the fixture's own seed, because
+every textual anchor here false-closes: a fix to this line will be committed with a comment
+quoting the old regex, and `grep`ing for the regex text would then match the record of its own
+removal. Each substitution is asserted APPLIED with `cmp -s` and a `grep -qF` on the new title,
+not decoration — if the seed's wording moves, the substitution silently no-ops and the receipt
+would otherwise read the control's rc=1 as a fix; with the guards it exits 9 and the entry stays
+open.
+
+**ONE SUBSTITUTION CASE IS NOT ENOUGH, because a TOKEN BLACKLIST closes it while shipping the
+defect.** Built and scored: `… ^-\ Item\ [0-9]+.*(OPEN|…) ]] && ! [[ $bl =~ OPENAPI ]]` leaves the
+unbounded `.*` untouched, excludes one literal, and takes a one-case receipt to rc=1. So does a
+non-alphanumeric-boundary form with no paren bind. The receipt therefore carries a SECOND case in
+the same invocation, on a title no literal exclusion can be keyed on — `the OPEN question of the
+ack shim`. Scored verbatim, every mutant asserted applied and staged with its `core-paths.sh`
+sibling (a copied validator missing it exits 2, which is a refusal reading exactly like a fix that
+rejects everything): shipped fix **exit 0**; unbounded-`.*` base **1**; blacklist **1**;
+word-boundary **1**. Against a ONE-case receipt the blacklist and the word-boundary form both
+close.
+
+Proposed fix measured, false-positive set **empty ON THE SEEDED CORPUS** — that is the population
+the figure was taken over, and the seed carries exactly ONE status shape, `(OPEN)` at end of line.
+Binding the status to a trailing parenthesised field
+(`[[ $bl =~ \((OPEN|IN\ SPRINT\ [0-9]+)\)[[:space:]]*$ ]]`) on a patched copy of `core/scripts/`
+returns verdicts identical to the shipping script on all eight seeded variants — V1, V2, V3, V4,
+V6, V7, V12 at rc=1 and the honest control V5 at rc=0 — and flips the defect case from rc=0 to
+rc=1.
+
+**Driven against real-shaped backlog lines instead, that anchor REFUSES 8 of 13 lines it should
+ACCEPT** — `(OPEN).`, `(OPEN) — blocked on infra`, `**(OPEN)**`, `[OPEN]`, bare `OPEN`,
+`- status: OPEN`, `(IN SPRINT 43) carried from 42` and one more. Each is a false element-2 finding
+against an honest stub whose item genuinely IS open, which is a check that errors on correct data
+and reaches consumers. The tolerant anchor `\)([[:space:]]|[.,;]|$)` ships instead: it is wrong on
+0 of 5 reject-rows and still wrong on 4 of 11 accept-rows — `**(OPEN)**`, `[OPEN]`, bare `OPEN`,
+`- status: OPEN`.
+
+**THAT RESIDUE IS A KNOWN SCOPE QUESTION, NOT A CLOSED ONE.** A trailing parenthesised field is
+only the right anchor if the backlog is REQUIRED to use it, and nothing requires it: eight step
+files write carry-over backlog lines and no prescribed item-line format exists in any of the 22
+files under `core/skills/ai-dlc/steps/` (control: 49 files under `core/scripts/` match a `validate`
+token in the same sweep). So the residual FP set is "every item written in a format no producer
+mandates", which is unbounded and unmeasured, and widening the anchor is a scope decision rather
+than a bug fix.
+
+**AND THE REFERENCE CONSUMER'S OWN BACKLOG IS OUTSIDE ELEMENT 2'S SUBJECT SET ENTIRELY.** Its
+`carry-over-backlog.md` carries ZERO lines matching `^- Item N` (controls in the same invocation:
+115 leading-dash lines, 121 occurrences of `OPEN`, 8 of `Item ` — all prose form). So element 2
+reaches no line there today and the anchor's residue is unreachable on that tree. That is the
+population every false-positive figure in this entry was taken over, and it is why the residue is
+a scope question rather than a shipped regression.
+
+Discharges the consumer entry `PC-S297-CHECK16-ELEMENT2-REGEX-DEAD` at pinned ledger line 1093.
+
+**LANDED (v0.577.0, verified 121d78d3).** The status token is bound to a trailing parenthesised
+field, `\)([[:space:]]|[.,;]|$)`, not to the entry's proposed `\)[[:space:]]*$` — that form
+refuses 8 of 13 real-shaped backlog lines it should accept, which is a check that errors on correct
+data. The receipt that closes it carries TWO substitution cases, so a token blacklist keyed on the
+first one no longer satisfies it.
+
+
+verify: sh S=core/fixtures/check-15-bypass/seed.sh; V=core/scripts/validate-stub-audit.sh; [ -r "$S" ] && [ -r "$V" ] || exit 9; d1=$(mktemp -d) || exit 9; t1=$(bash "$S" "$d1" | tail -1) || exit 9; b1="$t1/_bmad-output/planning-artifacts/carry-over-backlog.md"; cp "$b1" "$b1.pre" || exit 9; awk '/^- Item 7 /{ print "- Item 7 — retire the OPENAPI ack shim (CLOSED)"; next } { print }' "$b1.pre" > "$b1"; cmp -s "$b1" "$b1.pre" && exit 9; grep -qF 'OPENAPI ack shim (CLOSED)' "$b1" || exit 9; d2=$(mktemp -d) || exit 9; t2=$(bash "$S" "$d2" | tail -1) || exit 9; b2="$t2/_bmad-output/planning-artifacts/carry-over-backlog.md"; cp "$b2" "$b2.pre" || exit 9; awk '/^- Item 7 /{ print "- Item 7 — the OPEN question of the ack shim (CLOSED)"; next } { print }' "$b2.pre" > "$b2"; cmp -s "$b2" "$b2.pre" && exit 9; grep -qF 'the OPEN question of the ack shim (CLOSED)' "$b2" || exit 9; bash "$V" --root "$t1" src/v5_honest.py >/dev/null 2>&1; [ $? -eq 0 ] || exit 9; bash "$V" --root "$t1" src/v7_item_closed.py >/dev/null 2>&1; r1=$?; bash "$V" --root "$t2" src/v7_item_closed.py >/dev/null 2>&1; r2=$?; [ "$r1" -eq 1 ] && [ "$r2" -eq 1 ]

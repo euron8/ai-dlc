@@ -146,20 +146,61 @@ fi
 }
 
 # ---- 3. Extract one <header>\t<STATUS> record per entry ---------------------
-# Same flush-on-header / first-ALL-CAPS-word-after-label idiom as
-# validate-escalation-resolution.sh:82-100. The Status field is matched anywhere in the
-# entry, not only at line start: a token in a non-canonical position is exactly the one a
-# naive line-anchored regex misses, and it is no less invisible to Check 2 for being there.
+# Same flush-on-header / first-ALL-CAPS-word-after-label idiom as the awk Status block in
+# validate-escalation-resolution.sh:272. The Status field is matched anywhere in the entry,
+# not only at line start: a token in a non-canonical position is exactly the one a naive
+# line-anchored regex misses, and it is no less invisible to Check 2 for being there.
+#
+# WHICH OCCURRENCE WINS: THE LAST CANONICAL ONE IF THE ENTRY HAS ANY, ELSE THE LAST ANYWHERE.
+# A canonical occurrence is one that OPENS its line — that is what a field is. This rule is
+# not the obvious one, and three simpler readings each fail a property the others satisfy:
+#
+#   (a) An APPENDED resolution status must be the token adjudicated. escalations.md:18
+#       prescribes "**Escalation entry format (append, do not overwrite):**", so the
+#       entry's live status is its LAST field, never its first. A first-wins tie-break
+#       adjudicates the token the resolution replaced, which is how the validator whose
+#       whole job is rejecting an out-of-vocabulary status came to report PASS on one.
+#   (b) A `**Status:**` inside PROSE ABOVE the real field must not outrank the field.
+#       First-wins plus a match-anywhere pattern makes prose SHIELD the field it precedes:
+#       the widening at the top of this comment was written to catch a case it instead
+#       created.
+#   (d) A `**Status:**` inside PROSE BELOW the real field must not outrank it either.
+#       This is (b) mirrored and it is the one a bare last-wins reading gets wrong. Not
+#       hypothetical: the reference consumer's pending.md carries an entry whose field
+#       reads DECIDED_AUTONOMOUSLY and whose body four lines down reads "carried NO
+#       `**Status:**` line from filing until 2026-07-20. It therefore matched no branch".
+#       Last-match-anywhere extracts the token `I` from "It therefore" and emits a FALSE
+#       FINDING on the file the gate actually reads.
+#   (M) A `**Status:**` NOT at line start must STILL be adjudicated when it is all the
+#       entry has. Ten entries in the reference consumer's archive carry their only status
+#       that way, including three HARD_BLOCKs and one token this script already reports.
+#       Anchoring the match to line start goes silent on every one of them, which is a
+#       coverage REGRESSION dressed as a fix, and it reds
+#       core/fixtures/escalation-status-vocabulary/run.sh's mid-entry assertion.
+#
+# The canon flag is what lets one pass satisfy all four: once a field-shaped occurrence has
+# been seen, prose can no longer displace it in EITHER direction, and an entry that never
+# had one still gets adjudicated on what it does have.
+#
+# FALSE POSITIVES, measured before this shipped, on the reference consumer's live corpus
+# read-only: pending.md 0 findings before and 0 after (control: 134 `**Status:**` fields in
+# that file, an impossible token 0). pending-archive.md 35 findings before and 48 after,
+# and the 35 are a strict SUBSET of the 48 — this reading loses no finding the previous one
+# made. Last-anywhere scores 1 on pending.md, and that one is the `I` above.
 RECORDS="$(awk '
   function flush() {
     if (header != "" && status != "") printf "%s\t%s\n", header, status
   }
-  /^#{2,3} / { flush(); header = $0; status = ""; next }
+  /^#{2,3} / { flush(); header = $0; status = ""; canon = 0; next }
   /\*\*[Ss]tatus:\*\*/ {
-    if (status != "") next            # first Status line in an entry wins
+    # A prose mention cannot displace a field, in either direction.
+    if (canon && $0 !~ /^\*\*[Ss]tatus:\*\*/) next
     s = $0
     sub(/^.*\*\*[Ss]tatus:\*\*[[:space:]]*/, "", s)
-    if (match(s, /[A-Z_]+/)) status = substr(s, RSTART, RLENGTH)
+    if (match(s, /[A-Z_]+/)) {
+      status = substr(s, RSTART, RLENGTH)
+      if ($0 ~ /^\*\*[Ss]tatus:\*\*/) canon = 1
+    }
     next
   }
   END { flush() }

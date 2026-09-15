@@ -15,6 +15,75 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.577.0] - 2026-09-15
+
+Batch 113, one release, two subjects in disjoint files, `BL-053` and `BL-055`. Both are
+fails-open acquittal defects: a validator whose whole job is rejecting a bad value reported PASS
+on one. Each entry's own receipt was satisfied by an implementation that ships the defect, and
+both receipts were rewritten and scored against every candidate before either fix was accepted.
+
+### `PC-S296-ESCALATION-STATUS-APPENDS-INSTEAD-OF-REPLACING` — an escalation's live status is its LAST canonical `**Status:**`, and prose can no longer displace a field in either direction
+
+`escalations.md` prescribes "**Escalation entry format (append, do not overwrite):**", so an
+entry's live status is its last field. Two readers took the FIRST occurrence in an entry and were
+wrong for the same reason in two different ways. `validate-escalation-status-vocabulary.sh` never
+examined an appended resolution, and — because its match is deliberately not line-anchored — a
+`**Status:**` occurring inside PROSE outranked and SHIELDED the entry's real field, so the
+widening written to catch a non-canonical token instead created a way to hide one.
+`validate-suppression-lifetime.sh` carried the identical idiom with a larger consequence: it
+resolved an appended `**Status:** SUPPRESSED` to the entry's FILING token, and that value is the
+join Check 2 and Check 26 use to decide whether a suppression is in force.
+
+The rule is LAST CANONICAL IF THE ENTRY HAS ONE, ELSE LAST ANYWHERE — a `canon` flag reset in the
+awk header rule. Four properties hold simultaneously and no simpler reading holds all four: an
+appended resolution is adjudicated; prose ABOVE the field does not outrank it; prose BELOW it does
+not either; and a `**Status:**` off line-start is still adjudicated when it is all the entry has.
+That last one is asserted by a shipping fixture, and ten entries in the reference consumer's
+archive — three of them HARD_BLOCKs — carry their only status that way, so line-anchoring is a
+coverage regression dressed as a fix.
+
+**The entry's own advertised fix was the non-fix.** Deleting the first-wins guard alone makes the
+last match anywhere win, which carries the mirrored defect; measured read-only on the reference
+consumer with controls in the same invocation, it emits a false `out-of-vocabulary status 'I'`
+against an entry whose real field reads `DECIDED_AUTONOMOUSLY`, scraping the token out of the
+words "It therefore" in that entry's own prose. The three-armed receipt closed on it.
+
+**The obvious fourth arm does not discriminate**, and this is the finding worth carrying forward:
+on an entry whose field is BAD with prose below, the correct reading and the last-anywhere reading
+both exit 1 — the right verdict for opposite reasons. The arm that discriminates is a NEAR-MISS
+PAIR, a GOOD field with prose below it, required to exit 0. Five implementations were built as
+mutants, each asserted applied before any verdict was read, and the receipt was run verbatim
+rather than re-implemented: the shipped fix closes it and first-wins, last-anywhere,
+last-canonical-only and first-canonical are all rejected.
+
+### `PC-S297-CHECK16-ELEMENT2-REGEX-DEAD` — Check 16's element-2 status token is bound to a trailing parenthesised field instead of floating in the line
+
+The test read `^- Item [0-9]+.*(OPEN|IN SPRINT [0-9]+)`, where the `.*` is unbounded and the token
+is bound to nothing, so any occurrence of the four characters `OPEN` after the item number
+satisfied it. A `(CLOSED)` carry-over item whose TITLE contains `OPEN` — `OPENAPI`, `reOPEN`, "the
+OPEN question" — laundered a stub through a `gate_types: [universal]` check. The filing had the
+sign backwards and read the regex as noisy-but-safe; it fails OPEN, and the consequence moves with
+the sign. The fixture read as covering this and could not fire, because its `(CLOSED)` variant's
+title carried no `OPEN` substring.
+
+The anchor is `\)([[:space:]]|[.,;]|$)`, NOT the `\)[[:space:]]*$` the entry proposed. That form's
+"false-positive set empty" was measured over the seeded corpus, which carries exactly ONE status
+shape; driven against thirteen real-shaped backlog lines it refuses eight it should accept, each
+becoming a false finding against an honest stub whose item genuinely IS open. The shipped anchor
+is wrong on none of the reject-rows and recovers most of the accepts.
+
+**A token blacklist closes the old receipt while shipping the defect**, and both candidates were
+built rather than argued about: excluding the literal `OPENAPI` leaves the `.*` intact and still
+accepts `reOPEN`, and a non-alphanumeric-boundary form still accepts "the OPEN question". The
+receipt now performs TWO substitutions in one invocation, the second on a title no literal
+exclusion can be keyed on, and asserts the honest positive control still passes.
+
+**The residue is named rather than hidden.** Four non-parenthesised spellings are still refused,
+and no producer mandates the parenthesised form: eight step files write carry-over backlog lines
+and no prescribed item-line format exists in any of the 22 step files. The reference consumer's own
+carry-over backlog carries ZERO lines element 2 can match, so that residue is unreachable there
+today. Widening the anchor is a scope decision rather than a bug fix.
+
 ## [0.576.0] - 2026-09-15
 
 Batch 111, one release, one subject, `BL-223`, no `PC-` id. A contract adversary attacked the
