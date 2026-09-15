@@ -477,7 +477,32 @@ for rel in "${paths[@]}"; do
     open=0
     for bl in ${backlog_lines[@]+"${backlog_lines[@]}"}; do
       [[ $bl =~ ^-\ Item\ ${item}([^0-9]|$) ]] || continue
-      [[ $bl =~ ^-\ Item\ [0-9]+.*(OPEN|IN\ SPRINT\ [0-9]+) ]] && open=1
+      # THE STATUS TOKEN IS BOUND TO A TRAILING PARENTHESISED FIELD, NOT LOOSE IN THE LINE.
+      # This test used to read `^- Item [0-9]+.*(OPEN|IN SPRINT [0-9]+)`, where the `.*` is
+      # unbounded and the token is bound to nothing: any occurrence of the four characters
+      # OPEN after the item number satisfied it, so a `(CLOSED)` carry-over item whose TITLE
+      # happens to contain OPEN -- `OPENAPI`, `reOPEN`, "the OPEN question" -- laundered a
+      # stub through a gate_types: [universal] check. It failed OPEN, not closed.
+      #
+      # A TOKEN BLACKLIST DOES NOT FIX THIS and closes the receipt anyway. Excluding the
+      # literal `OPENAPI` leaves the unbounded `.*` intact and still accepts `reOPEN`; a
+      # non-alphanumeric-boundary form still accepts "the OPEN question". Both were built
+      # and scored against the three titles above before this shape was chosen.
+      #
+      # WHY THE TRAILING CLASS AND NOT `\)[[:space:]]*$`. Anchoring hard to end-of-line was
+      # measured over thirteen real-shaped backlog lines and REFUSES eight it should accept
+      # -- `(OPEN).`, `(OPEN) - blocked on infra`, `(IN SPRINT 43) carried from 42` among
+      # them -- each becoming a false element-2 finding against an honest stub whose item
+      # genuinely IS open. Accepting a separator after the closing paren recovers those and
+      # still kills all three defect titles.
+      #
+      # THE RESIDUE IS NAMED, NOT HIDDEN. Four non-parenthesised spellings -- `**(OPEN)**`,
+      # `[OPEN]`, bare `OPEN`, `- status: OPEN` -- are still refused, and NO producer
+      # mandates the parenthesised form: eight step files write carry-over backlog lines and
+      # none prescribes an item-line format. So this is the narrowest binding that kills the
+      # defect, not a format the corpus is known to hold to, and widening it is a scope
+      # decision rather than a bug fix.
+      [[ $bl =~ \((OPEN|IN\ SPRINT\ [0-9]+)\)([[:space:]]|[.,;]|$) ]] && open=1
       break
     done
     if [ "$open" -eq 0 ]; then
