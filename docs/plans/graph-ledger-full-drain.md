@@ -10693,6 +10693,45 @@ given at batch 90.
    rebuilt in one release: the originals closed on an empty file, on a dead arm, and on a
    positional window.
 
+   **BATCH 109 SHIPPED A CORRECTION AND NO MECHANISM — `BL-251` IS AMENDED AND STILL LIVE.**
+   `v0.575.0` at `29c4c189` (PR #761). Nothing rotated, so live stays **75** and archive **177**
+   (controls in the same invocation: an impossible heading form scores 0). No bootstrapping file
+   moved — 0 of 6 changed files. The consumer is at `0.574.0` against `0.575.0` shipped, so the
+   gap is **ONE** and the pull is NOT required.
+
+   **DO NOT SCOPE `BL-251` AS A BUILD UNTIL ITS POPULATION IS PINNED, AND THE BLOCK BELOW SAYING
+   IT IS THE READIEST NO-`PC` WORK IS WHY THIS PARAGRAPH EXISTS.** Batch 109 tried to build the
+   detector and could not, because the entry's own STRICT table does not reproduce. Re-derived
+   over a pool rebuilt to the entry's recipe (controls: pool size 10, all three cited shas in it),
+   the sites attribute to `84451b892` ×1, `6ee03ad8c` ×2, `4d93a0cc6` ×1 — the entry claims
+   `736e4cfc8` ×1, `6ee03ad8c` ×2, `4d93a0cc6` ×1. **Same total, one different commit, and the
+   different one is the MOTIVATING sha**, which scores 0 because every emission below an added
+   early exit there is itself ADDED (control: 75 added early exits in that diff). Three things a
+   builder needs are therefore absent: the predicate's SCOPE is undecided (**file 4 against hunk 1**
+   on the same pool, while `qa.md` says "same hunk"), the emission GRAMMAR that produced LOOSE 223
+   is unstated and unreachable at any width tried (13 / 58 / 124 / 103, impossible-token control 0),
+   and 3 of the 4 sites are unadjudicated as true regressions. Pin those first, with the operator,
+   or the detector is built against a population nobody has agreed to.
+
+   **AND THE OBVIOUS CROSS-SCOPE REPAIR IS ALREADY REFUTED — do not re-propose it.** "Skip a pair
+   whose emission is shallower than its early exit" excludes **4 of 8** real pairs, including all
+   three sites both readings agree on: a deeper `if …: continue` guard skips a SHALLOWER line later
+   in the same loop body, so that depth relation is the signature of a true stranding rather than a
+   scope escape. It is recorded in the entry because building it is what refuted it.
+
+   **THE STANDING LESSON: A TABLE'S COUNT IS NOT ITS POPULATION.** `BL-251`'s 4 reproduced exactly
+   while naming a different commit set, and the sha it was missing was its own motivating case. No
+   amount of re-running the count would have surfaced that — only attributing the sites BY IDENTITY
+   did. **Ask what SET a number was taken over before treating a matching total as agreement**, and
+   never accept "reproduce the N" as a measurement plan.
+
+   **BOTH ADVERSARY PASSES RAN BEFORE ANY BUILDER SPAWNED, AND BOTH REFUTED THE DESIGN RATHER THAN
+   THE BUILD.** The first refused a citation-gate shape on the entry's own words ("not another
+   reader of the prose"); the second refuted the detector contract that replaced it, including that
+   `-U3` does not pin what a hunk is (`diff.interHunkContext=20` merges 42 hunks to 29 on this
+   repo) and that the pin control the contract proposed could not fail. **The fan-out cost nothing
+   because no hand was spawned to build a thing two passes had already killed.**
+
    **BATCH 108's FOUR SUBJECTS ARE SHIPPED — do not re-scope any of them.** All four consumer
    candidates that were live and core-owned at batch 107's close shipped together as `v0.574.0`,
    each cited verbatim in the release commit message:
@@ -10724,12 +10763,16 @@ given at batch 90.
    `PC-S312-RETRO-REPLAY-HARNESS-*` REFUTED); and `PC-S340-RETRO-AUDIT-SCANS-*` refuted in this
    file. The readiest no-`PC` work is `BL-251` (needs a gate-time reachability check; the entry
    records why none exists) and then `BL-223`; read each entry's own measurement paragraph before
-   scoping. **Two things this batch left unmeasured and available:** whether the PreToolUse
+   scoping. **THAT `BL-251` RECOMMENDATION IS SUPERSEDED BY THE BATCH-109 BLOCK ABOVE — batch 109
+   tried it, and the entry's population does not reproduce. Read that block before scoping it.**
+   **Two things this batch left unmeasured and available:** whether the PreToolUse
    write-ledger row is on disk before an adjudicator's next Bash call (one instrumented dispatch
    in a consumer scratch copy), and a binding between the hook's `tool_use_id` join and
    `probe_effort()` in `validate-spawn-ledger.sh`, which can now drift with no invariant firing.
    The operator owes `sudo bash core/scripts/derive-fixture-readsets.sh --list "handoff-resume-guard"`
-   if that fixture's new inputs are to be traced.
+   if that fixture's new inputs are to be traced. **DISCHARGED at batch 109** — the operator ran it
+   and the map landed in `v0.575.0`: 26 rows for that fixture at `origin/main`, entries
+   22170 → 22172, against an impossible-fixture-name control of 0. Do not re-ask for it.
 
    **BATCH 107's SUBJECTS ARE SHIPPED AND ROTATED — do not re-scope any of them.** `BL-072` and
    `BL-095` shipped as `v0.573.0` at `0b9aa8ae` (PR #757), each cited verbatim in the release
