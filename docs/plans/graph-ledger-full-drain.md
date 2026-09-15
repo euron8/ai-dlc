@@ -9942,9 +9942,30 @@ for b in $(git -C /Users/n8/git/graph for-each-ref --format='%(refname:short)' r
   git -C /Users/n8/git/graph show "${b}:_bmad-output/ai-dlc-update/push-candidate-ledger.md" > /tmp/cand.md
   git -C /Users/n8/git/graph show "main:_bmad-output/ai-dlc-update/push-candidate-ledger.md" > /tmp/mainled.md
   lids /tmp/cand.md > /tmp/cand.txt; lids /tmp/mainled.md > /tmp/mainled.txt
-  # a qualifying ref is missing NOTHING main has; anything else is a stale snapshot
-  [ "$(comm -23 /tmp/mainled.txt /tmp/cand.txt | wc -l | tr -d ' ')" -eq 0 ] || continue
+  # A QUALIFYING REF IS MISSING NOTHING MAIN HAS *THAT IT HAS NOT CLOSED*, and the second half of
+  # that sentence was absent until batch 113, where it cost the batch its headline. The bare subset
+  # arm was written at batch 89 to reject STALE snapshots, and it does — but a branch on which the
+  # consumer has been CLOSING candidates is missing exactly the same ids a stale one is, so it
+  # fails identically and the loop falls back to `main` with every control green. Measured:
+  # `ai-dlc/carry-over/epic-crs-fvs-carryover-priorities`, 27 commits unpushed, live 49 against
+  # main's 62 — and ALL 13 of the difference sat in that branch's own ARCHIVE, closed by
+  # `55a0b410b … close 14 absorbed entries (#1078)`. The sweep reported `ledger ref: main`,
+  # "filings ahead of main: empty", and a worklist of 22 where the true figure was 18.
+  #
+  # So read the ref's ARCHIVE too, and acquit an id that LEFT live by being CLOSED. A genuinely
+  # stale snapshot still fails: its missing ids are in neither of the ref's two files. The
+  # discrimination was verified by construction before this arm was written — 13 missing, 13 in
+  # the branch archive, so the two readings differ on this input rather than agreeing by luck.
+  git -C /Users/n8/git/graph cat-file -e "${b}:_bmad-output/ai-dlc-update/push-candidate-ledger.archive.md" 2>/dev/null \
+    && git -C /Users/n8/git/graph show "${b}:_bmad-output/ai-dlc-update/push-candidate-ledger.archive.md" > /tmp/cand_arch.md \
+    || : > /tmp/cand_arch.md
+  lids /tmp/cand_arch.md > /tmp/cand_arch.txt
+  # ids main has that the ref lacks, MINUS the ones the ref has archived == unexplained losses
+  comm -23 /tmp/mainled.txt /tmp/cand.txt | comm -23 - /tmp/cand_arch.txt > /tmp/lost.txt
+  [ "$(grep -c . /tmp/lost.txt || true)" -eq 0 ] || continue
+  # and it must ADD something main lacks, or CARRY closes main has not seen
   [ "$(comm -13 /tmp/mainled.txt /tmp/cand.txt | wc -l | tr -d ' ')" -gt 0 ] && SB="$b"
+  [ "$(comm -23 /tmp/mainled.txt /tmp/cand.txt | wc -l | tr -d ' ')" -gt 0 ] && SB="$b"
 done
 echo "ledger ref: $SB"   # `main` here is CORRECT, not a fallback failure
 git -C /Users/n8/git/graph show "${SB}:_bmad-output/ai-dlc-update/push-candidate-ledger.md"         > /tmp/led_live.md
@@ -10784,6 +10805,105 @@ given at batch 90.
    **DO NOT TREAT A BATCH-82 RECEIPT AS TRUSTWORTHY BECAUSE IT EXISTS.** Three of them were
    rebuilt in one release: the originals closed on an empty file, on a dead arm, and on a
    positional window.
+
+   **BATCH 113 SHIPPED AS `v0.577.0`, ONE RELEASE, TWO NO-`PC` SUBJECTS — `BL-053` AND `BL-055`
+   CLOSED AND ROTATED, AND THE BATCH'S BEST FINDING WAS THAT THE SWEEP'S OWN REF-ELECTION LOOP
+   CANNOT SEE A CONSUMER THAT HAS BEEN CLOSING CANDIDATES.** Invoked by a cross-session
+   `READ and FOLLOW` handoff from `ai-dlc-de`, whose socket was already stale when the `ACCEPTED`
+   reply was sent; the handoff itself was valid and was taken per action 9. Merged `7f1479d0`
+   (PR #763); the read-set re-derivation merged separately as `9cd4ef2b` (PR #764). Live **73 →
+   71**, archive **179 → 181**, controls in the same invocation (impossible heading form 0).
+
+   **THE REF-ELECTION LOOP IN `### Derive the state` REJECTS A CONSUMER BRANCH THAT HAS CLOSED
+   CANDIDATES, AND REPORTS `main` WITH EVERY CONTROL GREEN.** Its qualifying arm accepts a ref
+   "missing NOTHING main has" — written at batch 89 to reject stale snapshots. A branch where the
+   consumer has CLOSED candidates is missing exactly that, so it fails the arm identically. Measured
+   this batch: `ai-dlc/carry-over/epic-crs-fvs-carryover-priorities`, 27 commits unpushed, live
+   **49** against main's **62**, archive **225** against **211** — and all 13 of the difference sit
+   in that branch's own ARCHIVE (control: 0 in neither set). The consumer had closed them in
+   `55a0b410b chore(ai-dlc-update): repair 2 ledger receipts, close 14 absorbed entries (#1078)`.
+   The sweep hand ran the block verbatim, got `ledger ref: main`, "filings ahead of main: empty",
+   and a 22-entry worklist that matched batch 112's almost exactly — reading as a static ledger.
+   **Against the branch's live set the worklist is 18, not 22**: `BL-123`, `BL-126`, `BL-127` and
+   `BL-195` drop off. The three qualifying arms were re-run by hand to confirm the cause is arm 3
+   (subset) and not the ledger-absent arm.
+
+   **FOUR CONTESTED ENTRIES ADJUDICATED, NONE CLOSABLE — and the consumer's close of
+   `PC-S308-GATE-METRICS-CHECK2-STALE-VERDICT-READ-ORDER` IS A FALSE CLOSE THIS REPO CAUSED.**
+   `BL-123` `HOLDS` (candidate's subject was `fm()`, genuinely fixed at v0.435.0; this entry is one
+   level up). `BL-126` `HOLDS` (candidate had two claims, v0.441.0 fixed the first, this entry IS
+   the second). `BL-127` `HOLDS-MECHANISM-WRONG` (carries no `PC-` id at all; its motivating
+   instance was fixed incidentally by `BL-208`, and its claim-2 population narrows from 20 to 5,
+   none a real dependency — likely `FALSIFIED` on re-scope). `BL-195` `HOLDS-WIDER` and must NOT be
+   closed. The false close is recorded against `BL-145` in `9d766559`, folded into that entry: the
+   `v0.568.0` commit `b3debba3` names the id with the TRUE sentence *"discharged by an archived
+   entry and cited by no release commit until now"*, touches **6** `core/` paths, and does not touch
+   the subject at all (`validate-suppression-lifetime.sh` 0 in its diffstat against a control of 1
+   for `gate-validation.md`). **It therefore DEFEATS `BL-145`'s own proposed `touches core/` fix**,
+   whose six-row table is all docs-only commits (control: `aa819280` touches 0). Batch 71 withheld
+   that citation deliberately for this exact reason; batch 102 added it to clear a bookkeeping row;
+   the consumer closed 14 days later. Two standing obligations point opposite ways and only one is
+   mechanised.
+
+   **BOTH RECEIPTS WERE REWRITTEN BECAUSE BOTH CLOSED ON NON-FIXES.** `BL-053`'s three-arm receipt
+   was satisfied by deleting one line — the implementation the entry itself advertised as proof of
+   satisfiability — which reads a junk token out of prose and emits a false finding on the
+   consumer's live `pending.md:514`. At five arms (`c a b d M`) it rejects that, last-canonical-only
+   and first-canonical. `BL-055`'s single-substitution receipt was satisfied by a literal `OPENAPI`
+   blacklist; at two substitution cases it is not. **The contract's own proposed discriminating arm
+   was WRONG and two hands refuted it independently**: a BAD token with prose below does not
+   discriminate, because the fix and the non-fix both exit 1 on it for opposite reasons. The arm
+   that works is the NEAR-MISS PAIR — a GOOD field with prose below, required to exit **0**.
+
+   **THE CONTRACT ADVERSARY FOUND THREE BLOCKERS AND TWO DEFECTS BEFORE ANY BUILDER SPAWNED,
+   EVERY ONE A FIX.** The required behaviour as first written ("the LAST canonical `**Status:**`
+   wins") breaks `core/fixtures/escalation-status-vocabulary/run.sh:58`, a SHIPPING fixture the
+   contract never named, whose assertion 4 refutes every line-anchoring candidate. `BL-055`'s
+   entry-proposed anchor `\)[[:space:]]*$` refuses **8 of 13** real backlog line shapes that should
+   be ACCEPTED; the shipped tolerant form `\)([[:space:]]|[.,;]|$)` is wrong on 4 of 11 accept-rows
+   and 0 of 5 reject-rows, and the residue is unreachable in the reference consumer, whose
+   `carry-over-backlog.md` carries **0** `^- Item N` lines (controls 115/121/8). A third reader,
+   `validate-suppression-lifetime.sh:237`, carried byte-equivalent semantics and a comment declaring
+   the two the "same idiom"; it shipped in the same commit with its citation corrected.
+
+   **`validate-release-version.sh` CAUGHT A REAL DEFECT IN THE RELEASE SHAPE.** The docs hand put
+   the `0.577.0` CHANGELOG heading in its own commit while `VERSION` still read `0.576.0`; the
+   triple is PER-COMMIT, so the branch tip looking right is not the test. Split into an
+   annotations-only commit plus a release commit carrying `VERSION` and the heading together; the
+   post-repair tree hash is byte-identical to the pre-repair one, proving the repair moved history
+   and not content.
+
+   **THE DELIVERY GAP IS ZERO AND THE CONSUMER MOVED TWICE MID-BATCH.** It was `0.571.0`/`0.574.0`
+   at the opening sweep, pulled itself to `0.576.0`, and pulled again to **`0.577.0`
+   (`commit: 7f1479d0`)** — confirmed by CONTENT, not the stamp: the `canon` flag resolves 6 times
+   in its installed `validate-escalation-status-vocabulary.sh` against an impossible-token control
+   of 0. No bootstrapping file is in the release (0 each for `preclassify.sh`, `apply.sh`,
+   `ledger-reverify.sh`, the update skill, against a control of 12 files changed). **A stamp read at
+   the opening of a batch is stale by its close; re-derive it, never carry it forward.**
+
+   **`PC-S999-NEVER` IS DEAD AS AN IMPOSSIBLE-ID CONTROL AND THIS BATCH TRIPPED OVER IT AGAIN.** It
+   returns **3** on `origin/main` — this file's own prose about it is committed, including
+   `8b8343d8`, whose subject is the rule. This file already says so in six places and the lead
+   reached for the familiar token anyway. **Pick a token, verify it is absent, THEN trust the zero
+   beside it**: `PC-QX7K-ZZNOTREAL-4419` resolved 0 and the absorption join was re-run under it —
+   both closed ids resolve to `7f1479d0` at `VERSION=0.577.0`.
+
+   **THE READ-SET MAP WAS FULLY RE-DERIVED, operator-run, ~4h56m** (`9cd4ef2b`): 22248 → 35940
+   entries, 193 of 199 fixtures GAINED paths, 3 lost only rotating `.git/objects` shas and bare
+   directory stats — no `.sh`, `.md` or `.json` left any read-set, so no fixture gained a silent
+   skip. 203 directories, 199 mapped; three of the four unmapped carry no `run.sh` and are not
+   units, and `fanout-payload-channel` stays OMITTED (pre-existing, exits 1 under `fs_usage`).
+
+   **THE READIEST NO-`PC` WORK AT THIS CLOSE** is the 18-entry worklist derived against the
+   BRANCH live set, not the 22 derived against `main`. Eleven of the 18 have never been examined by
+   id in this file. `BL-034` must be RE-SCORED before anyone is assigned it: three of its four
+   omitted detectors are wired in today at `emit-report.sh:436`, `:441`, `:446` under a comment
+   describing that fix, `I105` binds the set, and only `--templates` remains — its receipt's
+   `N -eq 0` conjunction still exits 1, which is INDISTINGUISHABLE from the four-detector state the
+   entry describes. `BL-143`'s stated deferral block has expired (40 commits have touched
+   `ledger-reverify.sh` since, control 269 on `docs/backlog.md`) and `BL-140` instructs a hand to
+   pair with `BL-068`, which is ARCHIVED. Line-citation drift is near-universal in the older half —
+   ten entries measured, mechanism intact, coordinate moved in every case.
 
    **BATCH 111 SHIPPED AS `v0.576.0`, ONE RELEASE, ONE NO-`PC` SUBJECT — `BL-223` CLOSED,
    BUILT AND FAN-OUT-VERIFIED AFTER AN ADVERSARY'S FIRST-PASS CONTRACT WAS INITIALLY MISREAD AS A
