@@ -3844,6 +3844,57 @@ formats per member FIRST, and rotating the receipt to a form that reads the repo
 that stays at 1 forever is indistinguishable from a live defect nobody has reached, and the only
 thing separating them is this paragraph.
 
+**RE-MEASURED at batch 111, and the "N formats per member" shape is REFUTED by building it — do
+not rebuild this shape.** A contract was written proposing a second `formats[]` entry under the
+existing `ai-dlc-update` member, `declared_in` pointing at
+`core/skills/ai-dlc-update/reconcile/lib.sh`, anchor `function ledger_entry_shape(`. An adversary
+built it on a `git archive` copy and found it wrong four ways, each measured:
+
+1. **The receipt cannot see the anchor.** `--report`'s table prints `<name> <declared_in> ::
+   <kind>` and never the anchor, so a receipt reading that table (the entry's own established
+   discipline, ¶ above) cannot distinguish a correct anchor from any other substring present in
+   the same file. Built two non-fixes — `unquote() {` (an unrelated helper) and
+   `reconcile/lib.sh` (a substring of the file's own header comment) — both score `declared_in`
+   correctly, both print a second row, both pass a receipt shaped like §3's proposal. This is the
+   validator's own narrowing #2 (`validate-write-format-steering.sh:64-67`, "a whole-file check
+   is satisfied by the artifact's name appearing anywhere, including in a comment") recurring one
+   level up, in the receipt rather than the reader.
+2. **A same-name-different-anchor self-probe fires identically on the unfixed reader.** The
+   current reader's last-write-wins `declared[nm] = e` (line 238) still reaches the STALE arm
+   when the offending entry is placed second, so an offender/near-miss probe built the obvious
+   way passes on both the broken and the fixed reader — order-sensitive on the unfixed side, so
+   the same probe flips from non-discriminating to discriminating purely on array order. The
+   actual discriminator is the `FIELD ... declared twice` row, which the unfixed reader emits on
+   both probe sides and the fixed reader on neither; nothing proposed checks that row.
+3. **The PASS line's "N of 20" count silently becomes a row count.** `DECLARED_OK` increments per
+   OK row (line 397), not per distinct name; measured `PASS — 6 of 20` under the fix against
+   `PASS — 5 of 20` at HEAD, over an unchanged 5-name, 20-artifact population — the same
+   batch-95 finding ("PASS — 6 of 21 is NOT the fix condition") recurring in a new spelling, this
+   time for a reason that is not coverage at all.
+4. **Pointing `declared_in` into `core/skills/` crosses a pull-class boundary and WEDGES a
+   consumer between two pulls.** Every existing declaration points into `core/schemas/`, one
+   install.sh copy unit. Built a consumer layout carrying the schema half
+   (`.claude/schemas/write-format-steering.json`) without the skill half
+   (`reconcile/lib.sh` absent, the ordinary state between a schema pull and a skill pull): the
+   fixed validator answers `FAIL — MISSING ... (looked in 2 layout(s))`, exit 1 — the FAILING
+   tier this file's header says has "no false-positive path by design" now has one, on a
+   perfectly ordinary mid-pull consumer state. The existing SKIP narrowing only covers "the whole
+   schemas directory absent," which does not apply here.
+
+**Do not re-propose a second `formats[]` entry naming `core/skills/ai-dlc-update/reconcile/lib.sh`
+without first fixing (1) and (2) at the reader/receipt level and (4) at the schema-shape level —
+a receipt that reads only the report table cannot bind an anchor it never prints, so either the
+receipt must read the schema directly (which the entry's own discipline above forbids for a
+different, still-valid reason: `PASS — N of M` staying a schema-text grep) or the reader's report
+line must start emitting the anchor. Unresolved and not scoped as available work: whether "N
+formats per member" is the right general shape at all — the schema carries no `uniqueItems` and no
+external JSON-Schema validation, so uniqueness-per-name lives only in the reader's five-line
+`declared twice` check; a narrower field (e.g. `also_declared_in`, or a `(name, scope)` composite
+key) may be less surface area and was not measured against this shape before the build. `kind:
+"prose"` for an executable awk function was flagged as a live semantic mismatch (the schema's own
+description calls prose "the weakest... class that decayed here," which is false for code four
+shipped scripts execute) and was not resolved either way.**
+
 **Tiered DEFECT.** The enforcer's PASS line reads as coverage of the shared append-only artifacts
 while the ledger this program exists to drain is not among them.
 
