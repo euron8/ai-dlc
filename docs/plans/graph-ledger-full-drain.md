@@ -10760,20 +10760,31 @@ given at batch 90.
    measurement hand confirmed no regression on the real, unmodified `/Users/n8/git/graph`
    consumer (the fixed validator's report on the CONSUMER's still-old schema is byte-identical to
    the pre-fix validator's) and an immaterial ~8ms timing delta. Cited verbatim in the release
-   commit message. Live backlog count and archive unaffected (`BL-223` had no `PC-` id to retire
-   from the ledger). **THE STANDING LESSON, NOW RECORDED IN ACTION 0: an adversary blocker is a
-   fix list, not a stop signal, unless it names something structurally unconstructible.** Reserve
-   deferral for that narrower case and say which of its forms applies, explicitly, rather than
-   defaulting to a repeated refutation because a prior batch's pattern is sitting right there to
-   copy.
+   commit message. **`BL-223` is ROTATED** — annotated `**LANDED (v0.576.0, verified
+   f9158898).**`, `backlog-rotate.sh --check` confirmed exactly one closed entry with every other
+   verdict byte-identical across the rotation, then `--apply`: live **74 → 73**, archive
+   **178 → 179**. The incidental-close check (action 5) found two OTHER `CLOSE-CANDIDATE` rows,
+   `BL-236` and `BL-238` — both pre-date this batch (filed batch 89, unrelated subject) and each
+   entry's own text states its receipt cannot score whether its real claim holds; neither
+   annotated or rotated, because the verification each entry says a receipt alone cannot supply
+   was not done this batch. **THE STANDING LESSON, NOW RECORDED IN ACTION 0: an adversary blocker
+   is a fix list, not a stop signal, unless it names something structurally unconstructible.**
+   Reserve deferral for that narrower case and say which of its forms applies, explicitly, rather
+   than defaulting to a repeated refutation because a prior batch's pattern is sitting right there
+   to copy.
 
    **THE AVAILABLE PC-BACKED RESIDUE AT THIS CLOSE IS ZERO KNOWN, RE-CONFIRMED — run the sweep
    anyway; the consumer files while nobody is looking.** No PC-backed work is ready. The
    operator owes the read-set map registration for three fixture directories, one of them new
    this batch: `sudo bash core/scripts/derive-fixture-readsets.sh --list "fanout-payload-channel
-   provenance-flagless-default write-format-steering-multiformat"` — two of the three predate this
-   batch and were already owed. The next batch opens with nothing PC-backed scoped and no
-   ranked no-`PC` candidate recorded here; re-derive from `docs/backlog.md` directly.
+   provenance-flagless-default write-format-steering-multiformat"` — DISCHARGED at this close;
+   `write-format-steering-multiformat` and `provenance-flagless-default` now carry real read-sets
+   (42 and 34 paths), `fanout-payload-channel` stays OMITTED (exits 1 under the `fs_usage` tracing
+   harness despite passing standalone, 6/6 mutants) and always runs — a pre-existing gap, not new
+   this batch. **The readiest no-`PC` work at this close is `BL-236` or `BL-238`**, both
+   `CLOSE-CANDIDATE` on their receipts and both explicitly needing the real verification (not a
+   receipt re-run) their own text says a receipt cannot supply — read each in full before scoping.
+   The next batch opens with nothing PC-backed scoped.
 
    **BATCH 110 SHIPPED NO RELEASE — `BL-251` IS RETIRED ON OPERATOR RULING, DOCS ONLY.**
    `3a749e2d` on `main`, pushed and confirmed on `origin/main`. Live **75 → 74**, archive
