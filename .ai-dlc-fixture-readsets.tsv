@@ -9,7 +9,8 @@
 # every other fixture's entries alone, so refreshing one fixture costs its own runtime
 # rather than a full re-derivation.
 #
-# fixtures mapped: 197    entries: 22172
+# fixtures mapped: 199    entries: 22248
+# OMITTED by the last run (always run): fanout-payload-channel
 absorbed-specifics-survive	.git/HEAD
 absorbed-specifics-survive	.git/config
 absorbed-specifics-survive	.git/index
@@ -15198,6 +15199,40 @@ prepush-worktree-env-scrub	core/fixtures/prepush-worktree-env-scrub
 prepush-worktree-env-scrub	core/fixtures/prepush-worktree-env-scrub/run.sh
 prepush-worktree-env-scrub	core/git-hooks
 prepush-worktree-env-scrub	core/git-hooks/pre-push
+provenance-flagless-default	.claude/skills/ai-dlc/extensions/known-skills.json
+provenance-flagless-default	.git
+provenance-flagless-default	.git/HEAD
+provenance-flagless-default	.git/config
+provenance-flagless-default	.git/index
+provenance-flagless-default	.git/info/exclude
+provenance-flagless-default	.git/objects/c1/4fe5f6ca2ff3c06c1a32d895f9a4d0a4b23df7
+provenance-flagless-default	.git/objects/d9/51cd8adec9500a6df976997c2788e5bf01c3b2
+provenance-flagless-default	.git/objects/info/commit-graphs/commit-graph-chain
+provenance-flagless-default	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
+provenance-flagless-default	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
+provenance-flagless-default	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
+provenance-flagless-default	.git/objects/info/commit-graphs/graph-fa7bbe6bcd67e84c678384cfb84f17a16d6fa8fa.graph
+provenance-flagless-default	.git/objects/pack/multi-pack-index
+provenance-flagless-default	.git/packed-refs
+provenance-flagless-default	.git/refs/heads/main
+provenance-flagless-default	.gitignore
+provenance-flagless-default	core
+provenance-flagless-default	core/.claude
+provenance-flagless-default	core/.git
+provenance-flagless-default	core/core/skills/ai-dlc
+provenance-flagless-default	core/fixtures
+provenance-flagless-default	core/fixtures/check-17-bypass/seed.sh
+provenance-flagless-default	core/fixtures/provenance-flagless-default
+provenance-flagless-default	core/fixtures/provenance-flagless-default/run.sh
+provenance-flagless-default	core/schemas/provenance-block.json
+provenance-flagless-default	core/scripts
+provenance-flagless-default	core/scripts/.claude
+provenance-flagless-default	core/scripts/.git
+provenance-flagless-default	core/scripts/core/skills/ai-dlc
+provenance-flagless-default	core/scripts/lib/meta-gate.sh
+provenance-flagless-default	core/scripts/validate-provenance-block.sh
+provenance-flagless-default	core/skills/ai-dlc/extensions/known-skills.json
+provenance-flagless-default	skills/ai-dlc/extensions/known-skills.json
 provenance-not-accessible	.claude/skills/ai-dlc/extensions/known-skills.json
 provenance-not-accessible	.git
 provenance-not-accessible	.git/HEAD
@@ -22182,3 +22217,45 @@ whole-read-pool	core/scripts/.git
 whole-read-pool	core/scripts/core/skills/ai-dlc
 whole-read-pool	core/scripts/sprint-status.sh
 whole-read-pool	core/scripts/validate-artifact-budget.sh
+write-format-steering-multiformat	.git
+write-format-steering-multiformat	.git/HEAD
+write-format-steering-multiformat	.git/config
+write-format-steering-multiformat	.git/index
+write-format-steering-multiformat	.git/info/exclude
+write-format-steering-multiformat	.git/objects/c1/4fe5f6ca2ff3c06c1a32d895f9a4d0a4b23df7
+write-format-steering-multiformat	.git/objects/d9/51cd8adec9500a6df976997c2788e5bf01c3b2
+write-format-steering-multiformat	.git/objects/info/commit-graphs/commit-graph-chain
+write-format-steering-multiformat	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
+write-format-steering-multiformat	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
+write-format-steering-multiformat	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
+write-format-steering-multiformat	.git/objects/info/commit-graphs/graph-fa7bbe6bcd67e84c678384cfb84f17a16d6fa8fa.graph
+write-format-steering-multiformat	.git/objects/pack/multi-pack-index
+write-format-steering-multiformat	.git/packed-refs
+write-format-steering-multiformat	.git/refs/heads/main
+write-format-steering-multiformat	.gitignore
+write-format-steering-multiformat	core
+write-format-steering-multiformat	core/.claude
+write-format-steering-multiformat	core/.git
+write-format-steering-multiformat	core/core/skills/ai-dlc
+write-format-steering-multiformat	core/fixtures
+write-format-steering-multiformat	core/fixtures/lib
+write-format-steering-multiformat	core/fixtures/lib/preamble.sh
+write-format-steering-multiformat	core/fixtures/write-format-steering-multiformat
+write-format-steering-multiformat	core/fixtures/write-format-steering-multiformat/run.sh
+write-format-steering-multiformat	core/fixtures/write-format-steering-multiformat/seed.sh
+write-format-steering-multiformat	core/schemas
+write-format-steering-multiformat	core/schemas/audit-anchors.json
+write-format-steering-multiformat	core/schemas/gate-adjudication-verdict.json
+write-format-steering-multiformat	core/schemas/harness-origin.json
+write-format-steering-multiformat	core/schemas/layer-adjudication-register.json
+write-format-steering-multiformat	core/schemas/pause-routing.json
+write-format-steering-multiformat	core/schemas/pipeline-state-paths.json
+write-format-steering-multiformat	core/schemas/provenance-block.json
+write-format-steering-multiformat	core/schemas/sprint-status.json
+write-format-steering-multiformat	core/schemas/write-format-steering.json
+write-format-steering-multiformat	core/scripts
+write-format-steering-multiformat	core/scripts/.claude
+write-format-steering-multiformat	core/scripts/.git
+write-format-steering-multiformat	core/scripts/core/skills/ai-dlc
+write-format-steering-multiformat	core/scripts/validate-write-format-steering.sh
+write-format-steering-multiformat	core/skills/ai-dlc-update/reconcile/lib.sh
