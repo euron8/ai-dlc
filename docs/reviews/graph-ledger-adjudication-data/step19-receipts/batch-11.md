@@ -211,3 +211,29 @@ in the probe tree. It errs toward STILL-LIVE, never toward a close. The weakest 
 the seeded row's shape — if a future `--check-evidence` stops matching the compact
 `| [core] 14 - … |` form, the run emits no `gate log` line, the receipt exits 1, and that reads as
 a close; the `[ -n "$o" ]` guard catches an empty run but not a changed row grammar.
+
+**CORRECTION — THE HESITATION UNDERSTATED ITS OWN CONSEQUENCE, AND THE FIX HAS NOW LANDED.** The
+paragraph above reads the narrow probe as erring "toward STILL-LIVE, never toward a close", which
+is the safe direction and was the right call at the time. It is now the WRONG verdict rather than
+merely a cautious one. The shipped fix PREFERS `_bmad-output/implementation-artifacts/gate-log.md`
+and falls back to the unchanged `find`; the probe tree above seeds no canonical copy, so the
+fallback still selects the archived path, the `gate log :` line still names it, and this receipt
+still exits **0**. Measured by building both sides as full script copies: pre-fix 0, post-fix 0.
+Control in the same invocation, the same receipt against a tree carrying a canonical copy AS WELL:
+pre-fix 0, post-fix **1** — so the receipt does discriminate, and the probe tree is the reason it
+cannot here. **This receipt can therefore never report the absorption**, and a later reader taking
+its `STILL-LIVE` as evidence the defect survives would be reading a property of the seed.
+
+The receipt in the fenced block is left BYTE-UNCHANGED. It is the consumer's contract, rendered
+into the brief's section E and already present in that consumer's own ledger, and an ai-dlc
+session does not write a consumer's ledger. Recording the refutation is upstream's half; whether
+to re-anchor is the consumer's, and it needs the canonical copy in the probe tree to do it.
+
+The line citations above are also DRIFT, not expiry — `:777` and `:796` were true at `theirs`. The
+same discovery and the same `say "gate log …"` emitter sat at `:993` and `:1012` at base
+`26ecef11`, and at `:1013` and `:1033` after the fix, which kept the discovery as its fallback.
+Each is one occurrence at each revision, against a control of 0 for an impossible token in the
+same invocation. Re-derive the coordinate; do not carry any of these numbers forward.
+
+The distribution-side entry, whose receipt was replaced rather than re-anchored because it closed
+on four non-fixes, is `BL-062` in `docs/backlog.md`.

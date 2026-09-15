@@ -15,6 +15,59 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.579.0] - 2026-09-15
+
+Batch 115, one release, one subject. **This release TIGHTENS a gate that passes today**: a
+consumer whose live Check 14 row cites no budget measurement passes now and will FAIL on its next
+gate. That is the fails-open closing below, it is the reference consumer's own shape, and it is
+stated here so it is not discovered at a gate.
+
+### `PC-S303-BUDGET-CHECK-EVIDENCE-FIND-PICKS-A-STALE-GATE-LOG` — `--check-evidence` now prefers the canonical live gate log, so Check 15 stops verifying a closed sprint's row (BL-062)
+
+`--check-evidence` resolved its target with a BASENAME-ONLY `find` across the whole of
+`_bmad-output`, so any second `gate-log.md` anywhere under that tree qualified and readdir order
+decided which one won. Check 15 exists to verify that Check 14's assertion took effect by
+re-reading recorded state; it was re-reading whichever file the directory hash returned first.
+
+**This is not latent. It misfires on the reference consumer today, and in the direction that
+loses the signal.** Driving the shipping validator against that tree, three gate logs present: it
+selected `planning-artifacts/s300/archive/cycle-1/gate-log.md` and exited 0 on
+`PASS  Check 14 evidence cell cites 4385 tok` — a closed sprint's number. That consumer's LIVE
+log carries **0** `tok` citations against a control of **5** in the archived copy it was reading
+instead, so its own Check 14 row, at `implementation-artifacts/gate-log.md:130`, cites no
+measurement and would have failed. The arm was reporting on a file nobody was gating.
+
+Discovery now prefers `_bmad-output/implementation-artifacts/gate-log.md` — the path
+`gate-validation.md` Check 12 already prescribes as the one the lead appends to — and falls back
+to the existing `find`, byte-unchanged, when that file does not exist.
+
+**WHY NOT AN `archive/` EXCLUSION, which is the fix the filing suggests.** `archive/` is where the
+extra copies come from today; it is not the condition. Excluding that path segment leaves every
+other second copy winning, and it REGRESSES a consumer whose only gate log is an archived one —
+that tree passes today and must keep passing. The preference is stated positively for that reason.
+
+**The readdir framing in the filing is corrected, and the correction is what a seed has to
+respect.** The filing calls the order nondeterministic and "not guaranteed stable call-to-call".
+Measured with `/usr/bin/find` over independently created probe roots in both creation orders,
+output identical: order here is **name-hash based — neither creation order nor lexical order**. So
+the wrong answer is reliable rather than intermittent on a given tree, and "returned first by
+`find`" and "sorts lexically first" are independent properties that a probe must measure
+separately rather than assume coincide.
+
+**The fix was scored against four non-fixes**, each built as a full script copy asserted applied
+by `cmp -s` and parseable by `bash -n` before any verdict was read: ordering the candidates,
+taking the last one, hardcoding the canonical path with discovery deleted, and emitting the cited
+string unconditionally. All four are refused; the archived-only tree still passes; `--gate-log
+PATH` still short-circuits discovery; and a tree with zero gate logs still fails loudly.
+
+`BL-062`'s receipt was REPLACED rather than re-anchored. The filed one closed on all four
+non-fixes and rejected a defensible one, because its seed was adjacent to the discriminating
+input — one live copy and one decoy, in which readdir happened to place the live copy last, so
+"take the last" scored identically to the fix by accident. The replacement seeds three logs whose
+decoys STRADDLE the canonical directory in readdir order, asserts that straddle before reading any
+verdict, cites a live number that appears nowhere in the receipt's own text, and requires the
+archived-only tree to keep passing.
+
 ## [0.578.0] - 2026-09-15
 
 Batch 114, one release, one subject. `ledger-reverify.sh` is a bootstrapping file, so it ships
