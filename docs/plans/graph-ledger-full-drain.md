@@ -10811,6 +10811,52 @@ given at batch 90.
    rebuilt in one release: the originals closed on an empty file, on a dead arm, and on a
    positional window.
 
+   **BATCH 115 SHIPPED AS `v0.579.0`, ONE RELEASE, ONE PC-BACKED SUBJECT — `PC-S303` CLOSED, AND
+   THE BATCH'S BEST FINDING WAS THAT THE LEAD'S OWN CONSUMER MEASUREMENT WAS TAKEN THROUGH A
+   `find` SHIM AND INVERTED THE VERDICT.** Invoked by a cross-session `READ and FOLLOW` handoff;
+   taken per action 9. Merged `9d675903` (PR #769); the rotation merged separately as `eb62caa5`
+   (PR #770). Live **73 → 72**, archive **181 → 182**, confirmed by count movement.
+
+   **`find` IN A TOOL CALL IS A ZSH FUNCTION WRAPPING `bfs -S dfs`, AND IT RETURNS A DIFFERENT
+   FIRST PATH THAN `/usr/bin/find`.** The lead measured gate-log discovery order on the reference
+   consumer through it, concluded `BL-062`'s defect did not misfire there, and reported that to
+   the operator. The contract adversary refuted it. Driving the SHIPPING validator: base selects
+   `planning-artifacts/s300/archive/cycle-1/gate-log.md` and PASSES on `cites 4385 tok`, while the
+   live log at `implementation-artifacts/gate-log.md:130` cites no measurement and FAILS — a
+   consumer-visible fails-open, the opposite of the report. **Counts agreed 3/3 and a negative
+   control answered 0/0 both ways, so every control present PASSED while the ORDER — the only
+   property being read — was wrong.** Now in `tool-hazards.md`; the durable channel was raised
+   57344 → 62259 on an operator ruling to carry it (`ddc2bd9c`, PR #768).
+
+   **THE ENTRY'S RECEIPT WAS INVERTED ON BOTH SIDES.** It CLOSED on four changes that fix nothing
+   — `sort`, `tail -1`, a hardcoded path, and an unconditional echo — and REJECTED `refuse`, a
+   defensible fix. The gap was the SEED, not the arm count: the filed seed sat ADJACENT to the
+   discriminating input, and on every two-log world readdir placed the live copy LAST, so `tail`
+   picked it by accident. **Readdir order here is NAME-HASH based — neither creation nor lexical
+   order** — so "returned first by `find`" and "sorts lexically first" are independent properties
+   a seed must measure rather than assume coincide. The replacement uses three worlds (a live
+   number appearing nowhere in the receipt, two decoys STRADDLING the canonical directory, and an
+   archived-only world that must still PASS) and kills all four non-fixes.
+
+   **ACTION 8 WAS CAUGHT FAILING BEFORE THE PUSH.** The release commit carried the `PC-` id in
+   `CHANGELOG.md` and NOT in its message — the channel `named_absorbed()` actually reads. Reworded
+   via `git commit-tree` so both trees stayed byte-identical; the id now resolves in exactly one
+   `origin/main` commit message, and in none of the three commits preceding the bump.
+
+   **`BL-255` FILED: `BL-005` NAMES A POLE DISPLACED FOUR RELEASES BEFORE IT WAS READ.** Its
+   heading says `validator-arm-selection` is the pole at 166s of a 217s wall; re-derived, the pole
+   is `ledger-reverify` at 493 and that fixture is third at 229. The archived `BL-088` recorded the
+   correct figure at `v0.541.0` — in `docs/backlog.archive.md`, which no live-entry reader opens.
+   **An archived entry can correct a live one and nothing joins the two directions.** Do not close
+   `BL-005` on this alone: its shard-floor claim is a separate subject and is untested.
+
+   **THE WORKLIST IS 16 AND THE FILING JOIN IS 20; THEY ANSWER DIFFERENT QUESTIONS.** Receipt
+   histogram at this close: **3 exit 0, 56 exit 1, 1 exit 9**. Zero incidental closes — the
+   reverify diff moved exactly one row (`BL-062`), with `BL-236`/`BL-238`/`BL-254` already
+   `CLOSE-CANDIDATE` at base and not this change's doing. **The delivery gap is TWO** (`0.577.0`
+   installed against `0.579.0`), and `ledger-reverify.sh` — a BOOTSTRAPPING file — is in the
+   range from `v0.578.0`, so action 7's hazard applies to the next pull. Zero mode-only changes.
+
    **BATCH 114 SHIPPED AS `v0.578.0`, ONE RELEASE, ONE PC-BACKED SUBJECT — `PC-S344` CLOSED, AND
    THE BATCH'S BEST FINDING WAS THAT THE FAILS-OPEN MUTANT IS REACHABLE FROM ONE DIRECTION ONLY,
    SO A BATTERY SEEDED IN THE OTHER SCORES IT AS KILLED.** Invoked by a cross-session
