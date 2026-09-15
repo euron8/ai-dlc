@@ -3460,6 +3460,39 @@ lives under `core/` in every case. Deriving "did this commit change anything the
 installs" is the real predicate, and its false-positive set has not been measured. Scope that
 before building it.
 
+**A THIRD CLASS, MEASURED AT BATCH 113, AND IT DEFEATS THE CANDIDATE FIX ABOVE.** The six rows
+of the table are docs-only commits, and the `touches core/` predicate drops all six. It does NOT
+drop this one. `b3debba3` (`v0.568.0`) names
+`PC-S308-GATE-METRICS-CHECK2-STALE-VERDICT-READ-ORDER` in its message with the true sentence
+*"discharged by an archived entry and cited by no release commit until now"*, and it touches
+**6** `core/` paths — `core/scripts/derive-fixture-readsets.sh`,
+`core/skills/ai-dlc/steps/gate-validation.md` and four others. Control in the same invocation:
+`aa819280`, the table's own docs-only example, touches **0**; an impossible path prefix returns 0
+from the same commit. So the naming commit passes every reachability filter proposed here while
+the candidate's subject, `validate-suppression-lifetime.sh`, appears **0** times in its diffstat
+against a control of **1** for `gate-validation.md`.
+
+**The citation was TRUE and the close was still WRONG.** The archived entry it refers to,
+`BL-194`, says in its own provenance paragraph *"This is NOT that candidate's subject"* and names
+`BL-195` as the filed subject's disposition. `BL-195` is live and its premise re-derives in full.
+The consumer's sweep read the naming commits for explicit discharge language, found some, and
+closed the candidate 14 days later as `ADOPTED UPSTREAM (v0.568.0)`.
+
+**This program predicted it and then did it anyway.** `docs/plans/graph-ledger-full-drain.md`
+records the citation being DELIBERATELY WITHHELD at batch 71 for exactly this reason — *"a
+citation would make `named_absorbed()` emit a `NAMED-UPSTREAM` row telling the consumer to close
+an entry this release did not resolve"* — after which the resulting `discharged-but-INVISIBLE 1`
+row was carried as a bookkeeping irritant for ~28 batches until batch 102 cleared it by adding
+the citation. **Clearing that row is what caused the false close**, so the two obligations are in
+direct conflict and only one of them is mechanised.
+
+**What this means for the fix.** The real predicate is not "did the commit change something the
+consumer installs" but "does the commit change something THIS id's subject depends on", and a
+per-id subject path is a datum nothing currently records. Scope that before building either
+version. A weaker but constructible half: a release commit citing an id it does not FIX needs a
+distinguishable form, so the join can exclude it — which is a producer-side change, where there
+is one writer, rather than a reader-side heuristic over every historical message.
+
 **Sibling to `BL-089`** — a status that cannot distinguish "I measured nothing" from a genuine
 reproduction. Same class, and this is the absorption side of it.
 
