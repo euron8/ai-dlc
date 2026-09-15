@@ -107,6 +107,192 @@ else
   bad "severed from its vocabulary source the check returned rc=$lone_rc — it guessed a built-in set or reported clean"
 fi
 
+# --- Assertions 8-10: WHICH occurrence of `**Status:**` is the entry's status -----
+# Assertion 4 above establishes that a non-line-start token is READ. These three establish
+# which one is ADJUDICATED when an entry carries more than one, and each is a PAIR: the
+# offender must be reported, the near-miss must not.
+#
+# `rc_tok <file>` -> sets RC to the validator's exit and TOK to the token it named, so an
+# arm can assert the token and not merely the verdict. NOT a printing function called
+# through `$( )`: a command substitution runs in a SUBSHELL and the exit code assigned
+# inside it never reaches the caller, which would make every arm here read 0.
+RC=0; TOK=""
+rc_tok() {
+  local out
+  out="$(bash "$VALIDATOR" "$1" "$SPEC_SRC" 2>&1)"; RC=$?
+  TOK="$(sed -n "s@.*out-of-vocabulary status '\([^']*\)'.*@\1@p" <<<"$out" | head -1)"
+}
+
+# --- Assertion 8: (a) an APPENDED resolution is the token adjudicated -------------
+# escalations.md prescribes append-do-not-overwrite and sets the terminal status in a later
+# edit, so a resolved entry's live status is its LAST field and the authorship token above
+# it is the one it REPLACED. A first-wins reader adjudicates the replaced token and reports
+# PASS on the appended one — in the validator whose entire job is rejecting it.
+rc_tok "$APPENDED"
+if [ "$RC" -eq 1 ] && [ "$TOK" = "$BAD_TOK" ]; then
+  ok "(a) an appended resolution status is the token adjudicated"
+else
+  bad "(a) an appended out-of-vocabulary resolution was not adjudicated (rc=$RC, token '${TOK:-none}') — the reader takes the token the resolution REPLACED"
+fi
+rc_tok "$APPENDED_OK"
+if [ "$RC" -eq 0 ]; then
+  ok "(a) near-miss: an appended IN-vocabulary resolution is quiet"
+else
+  bad "(a) near-miss: an appended legitimate resolution was reported (rc=$RC, token '${TOK:-none}') — the check reds on a correctly resolved entry"
+fi
+
+# --- Assertion 9: (b) prose ABOVE the field does not outrank it -------------------
+# The match is deliberately not line-anchored (assertion 4), so under first-wins a
+# `**Status:**` written inside a sentence SHIELDS the real field beneath it: the widening
+# catches a case it also creates. The near-miss carries the same two tokens swapped, so a
+# reader that simply prefers prose fails it rather than passing both.
+rc_tok "$PROSE_ABOVE"
+if [ "$RC" -eq 1 ] && [ "$TOK" = "$BAD_TOK" ]; then
+  ok "(b) prose **Status:** ABOVE the field does not outrank the field"
+else
+  bad "(b) a bad field below a prose **Status:** was not adjudicated (rc=$RC, token '${TOK:-none}') — prose is SHIELDING the field"
+fi
+rc_tok "$PROSE_ABOVE_OK"
+if [ "$RC" -eq 0 ]; then
+  ok "(b) near-miss: a bad token in prose above a good field is not adjudicated"
+else
+  bad "(b) near-miss: prose above the field was adjudicated (rc=$RC, token '${TOK:-none}') — a mention is being read as the field"
+fi
+
+# --- Assertion 10: (d) prose BELOW the field, AND THE NEAR-MISS IS THE WHOLE ARM ---
+# THE OFFENDER ALONE DOES NOT DISCRIMINATE HERE, AND THAT IS WHY BOTH HALVES ARE ASSERTED
+# AND WHY THE OFFENDER'S ARM READS THE TOKEN. The shipped reading and the minimal
+# last-match-ANYWHERE one BOTH exit 1 on the offender — one on the entry's real bad field,
+# the other on a junk token it extracted from the prose. Right verdict, wrong reason, and
+# an arm reading only the exit code scores them identically.
+#
+# The near-miss is where they part: a GOOD field with prose below it. The shipped reading is
+# quiet; last-anywhere reads the token `I` out of "It therefore" and emits a FALSE FINDING.
+# That shape is the reference consumer's own pending.md, so this is the arm standing between
+# the gate and a finding against a correctly-filed entry.
+rc_tok "$PROSE_BELOW_OK"
+if [ "$RC" -eq 0 ]; then
+  ok "(d) THE DISCRIMINATING NEAR-MISS: a good field with prose below it is quiet"
+else
+  bad "(d) a correctly-filed entry with prose below its field was REPORTED (rc=$RC, token '${TOK:-none}') — a last-match-ANYWHERE reader is extracting a word out of the prose and failing the gate on it"
+fi
+rc_tok "$PROSE_BELOW"
+if [ "$RC" -eq 1 ] && [ "$TOK" = "$BAD_TOK" ]; then
+  ok "(d) prose **Status:** BELOW the field does not outrank it — and the token named is the FIELD's"
+else
+  bad "(d) the entry was judged on something other than its field (rc=$RC, token '${TOK:-none}', wanted '$BAD_TOK') — an exit 1 here is not evidence the field was read"
+fi
+
+# --- THE MUTANTS. Four properties, and no arm above proves ITSELF load-bearing ------
+# Assertions 8-10 each have an offender and a near-miss, which establishes that the arm
+# discriminates between two inputs — not that it discriminates at all. Only a mutant
+# establishes the second, so every candidate reading of `**Status:**` that a later hand
+# might take for a simplification is BUILT here and scored.
+#
+# Each mutant is keyed on ONE line of the awk record-builder and probed on ONE input, owned
+# by ONE arm. The `cmp -s` guard turns a mutation that matched nothing into a loud BAD: an
+# unmutated copy answers the baseline on every probe and scores a survival that reads
+# exactly like a working arm.
+#
+# THE MUTATIONS ARE APPLIED BY AWK PROGRAMS, NOT BY `sed` SUBSTITUTIONS. The replacement
+# text is awk source carrying `&` and backslashes, and an `&` in a sed replacement is the
+# whole matched line — a mutation that silently re-inserts the line inside itself applies
+# cleanly, passes `cmp -s`, and tests nothing.
+MUTD="$WORK/mut"; mkdir -p "$MUTD"
+
+# The CONTROL is presence-shaped and runs FIRST. A copy that cannot run at all reports
+# nothing, and an arm reading only "the offender was not reported" would score that silence
+# as a kill on every mutant below.
+cp "$VALIDATOR" "$MUTD/control.sh"
+rc_ctl_bad=0; rc_ctl_ok=0
+bash "$MUTD/control.sh" "$PROSE_BELOW" "$SPEC_SRC" >/dev/null 2>&1; rc_ctl_bad=$?
+bash "$MUTD/control.sh" "$PROSE_BELOW_OK" "$SPEC_SRC" >/dev/null 2>&1; rc_ctl_ok=$?
+if [ "$rc_ctl_bad" -eq 1 ] && [ "$rc_ctl_ok" -eq 0 ]; then
+  ok "mutant control: an unmutated copy REPORTS the offender and stays quiet on the near-miss"
+else
+  bad "mutant control: an unmutated copy answered offender=$rc_ctl_bad near-miss=$rc_ctl_ok — the mutants below would be scoring the harness, not the reader"
+fi
+
+# name | awk program | probe file | the exit the mutant must produce | the arm that owns it
+MUT_NAMES="canon-guard-deleted line-anchored first-canonical-wins first-wins-outright"
+
+mut_prog() {  # <name> -> writes the awk program for that mutant to stdout
+  case "$1" in
+    # (d): drop the guard entirely and the reader becomes LAST ANYWHERE.
+    canon-guard-deleted) cat <<'AWKP'
+/^[[:space:]]*if \(canon && / { hits++; next }
+{ print }
+AWKP
+      ;;
+    # (M): anchor the rule's own pattern to line start. This is the candidate that reads
+    # most like a tightening, and assertion 4 is the only thing in the repo that refuses it.
+    line-anchored) cat <<'AWKP'
+$0 == "  /\\*\\*[Ss]tatus:\\*\\*/ {" { hits++; print "  /^\\*\\*[Ss]tatus:\\*\\*/ {"; next }
+{ print }
+AWKP
+      ;;
+    # (a): keep the field-vs-prose distinction but take the FIRST field.
+    first-canonical-wins) cat <<'AWKP'
+/^[[:space:]]*if \(canon && / { hits++; print "    if (canon) next"; next }
+{ print }
+AWKP
+      ;;
+    # (b): the state this change replaced — first occurrence anywhere wins.
+    first-wins-outright) cat <<'AWKP'
+/^[[:space:]]*if \(canon && / { hits++; print "    if (status != \"\") next"; next }
+{ print }
+AWKP
+      ;;
+  esac
+}
+
+mut_probe() {   # <name> -> the input this mutant is scored on
+  case "$1" in
+    canon-guard-deleted)  printf '%s' "$PROSE_BELOW_OK" ;;
+    line-anchored)        printf '%s' "$MIDENTRY" ;;
+    first-canonical-wins) printf '%s' "$APPENDED" ;;
+    first-wins-outright)  printf '%s' "$PROSE_ABOVE_OK" ;;
+  esac
+}
+mut_want() {    # <name> -> the exit code the MUTANT produces on that input
+  case "$1" in
+    canon-guard-deleted)  printf '1' ;;
+    line-anchored)        printf '0' ;;
+    first-canonical-wins) printf '0' ;;
+    first-wins-outright)  printf '1' ;;
+  esac
+}
+mut_why() {     # <name> -> which arm owns the kill, and what the mutant costs
+  case "$1" in
+    canon-guard-deleted)
+      printf '%s' "(d)'s near-miss — last-match-ANYWHERE reads a word out of the prose and reports a correctly-filed entry" ;;
+    line-anchored)
+      printf '%s' "(M), assertion 4 — a mid-entry token goes unexamined, a coverage regression dressed as a tightening" ;;
+    first-canonical-wins)
+      printf '%s' "(a) — the appended resolution is ignored and the token it REPLACED is adjudicated" ;;
+    first-wins-outright)
+      printf '%s' "(b)'s near-miss — a prose mention above the field becomes the entry's status. (a) also moves under this mutant and stands down for (b): both are genuinely broken by first-wins, and (b) owns it because the near-miss is the cell no other mutant here reaches" ;;
+  esac
+}
+
+for mname in $MUT_NAMES; do
+  copy="$MUTD/$mname.sh"
+  mut_prog "$mname" > "$MUTD/$mname.awk"
+  awk -f "$MUTD/$mname.awk" "$VALIDATOR" > "$copy" 2>/dev/null
+  if cmp -s "$VALIDATOR" "$copy"; then
+    bad "MUTANT $mname — the anchor matched nothing, so no mutation applied and nothing was proven. The awk record-builder was reworded; re-anchor it on the line that spells the rule, never relax the assertion."
+    continue
+  fi
+  probe="$(mut_probe "$mname")"
+  want="$(mut_want "$mname")"
+  bash "$copy" "$probe" "$SPEC_SRC" >/dev/null 2>&1; got=$?
+  if [ "$got" -eq "$want" ]; then
+    ok "MUTANT $mname killed by $(mut_why "$mname")"
+  else
+    bad "MUTANT $mname SURVIVED — $(basename "$probe") answered rc=$got, wanted rc=$want. The arm that should own this reading is not reading it."
+  fi
+done
+
 echo
 if [ "$fails" -eq 0 ]; then echo "escalation-status-vocabulary: PASS"; exit 0; fi
 echo "escalation-status-vocabulary: $fails assertion(s) FAILED" >&2
