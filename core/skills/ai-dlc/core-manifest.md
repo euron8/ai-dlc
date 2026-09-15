@@ -302,6 +302,7 @@ core_manifest:
   - fixtures/wait-beat-liveness/**
   - fixtures/wait-stale-deliverable/**
   - fixtures/whole-read-pool/**
+  - fixtures/write-format-steering-multiformat/**
   - fixtures/artifact-path-migration/**
   - fixtures/artifact-path-conformance/**
   - fixtures/artifact-section-heading-level/**

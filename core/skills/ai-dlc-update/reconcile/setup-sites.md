@@ -230,6 +230,7 @@ core_manifest:
   - core/fixtures/wait-beat-liveness/**
   - core/fixtures/wait-stale-deliverable/**
   - core/fixtures/whole-read-pool/**
+  - core/fixtures/write-format-steering-multiformat/**
   - core/fixtures/notify-hook-channel/**
   - core/fixtures/updater-session-signals/**
   - core/fixtures/route-read-required/**

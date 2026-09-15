@@ -395,7 +395,16 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   I60's per-pair pipeline and nothing else. NO REDUCTION TAKEN; the target remains I87's
 #   per-directory pipeline, and I60's per-pair cost is a second candidate now that one pair
 #   is measured at 11. Headroom is 9.
-FORK_BUDGET=8155
+#
+#   0.576.0: 8155 -> 8174, and the whole of it is ONE NEW FIXTURE DIRECTORY. Measured with this
+#   fixture's own profiler, `--section total`, on ONE tree with the directory moved to a literal
+#   holdout path and moved back -- so both sides are the same checkout and the sides are asserted
+#   to differ: without `core/fixtures/write-format-steering-multiformat/` 8145 (spread 8145-8145),
+#   with it 8164 (spread 8164-8164), +19 over a directory count of 202 -> 203. `by-arm` puts 1826
+#   of the total in I87, whose per-directory pipeline is the standing reduction target and is what
+#   makes a directory cost this much; the raise is that pipeline's per-directory cost and nothing
+#   else. NO REDUCTION TAKEN -- I87 remains the target. Headroom is 10.
+FORK_BUDGET=8174
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
