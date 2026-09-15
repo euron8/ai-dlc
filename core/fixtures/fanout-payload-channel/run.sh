@@ -91,6 +91,31 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/fanout-payload.XXXXXX")" \
   || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
+# --- THE TEMP ROOT IS RESOLVED PHYSICALLY, AND ARM 5 IS DEAD WITHOUT IT --------------------
+# `/tmp` on macOS is a SYMLINK to `private/tmp`, and `find` does NOT descend a symlinked path
+# ARGUMENT -- it reports the link itself and stops. So `find "$TMPDIR" -maxdepth 1 -name
+# 'fanout.*'` returns 0 UNCONDITIONALLY whenever TMPDIR is `/tmp`, which is exactly what
+# `sudo` sets: measured, `find /tmp` -> 0 against `find /tmp/` -> 4, `find -H /tmp` -> 4 and
+# `find /private/tmp` -> 4, in one invocation with a control that drops when a directory is
+# removed. Arm 5 and its m6-trap mutant both read that count, so under sudo the arm could
+# never fire and the mutant SURVIVED -- the fixture failed, and it failed for a reason that
+# has nothing to do with its subject.
+#
+# THIS IS WHY THE FIXTURE WAS NEVER MAPPED. `derive-fixture-readsets.sh` runs each fixture as
+# `sudo -n -u "$RUN_AS"`, whose TMPDIR is `/tmp` where an interactive shell's is a real
+# `/var/folders/...` path. The deriver omits any fixture exiting non-zero, so this one was
+# omitted on every run since it shipped and the pool has run it on every push. It passed from
+# a developer shell and in the gate for the same reason: those never see the symlinked form.
+#
+# `pwd -P` resolves the link once, here, rather than at five call sites. A trailing slash or
+# `-H` would also work; this is preferred because the resolved value is then visible in the
+# failure text of every arm that reads it.
+TMP_ROOT="$(cd "${TMPDIR:-/tmp}" 2>/dev/null && pwd -P)" \
+  || { echo "FIXTURE ERROR: cannot resolve TMPDIR" >&2; exit 2; }
+# A MISSING SUBJECT IS NOT A PASS, AND NEITHER IS AN UNRESOLVABLE TEMP ROOT: if the line above
+# ever yields a path `find` cannot descend, arms 5 and m6 go quiet and report success.
+[ -d "$TMP_ROOT" ] || { echo "FIXTURE ERROR: TMP_ROOT is not a directory: $TMP_ROOT" >&2; exit 2; }
+
 fails=0
 ok()     { printf '  ok    %s\n' "$1"; }
 bad()    { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
@@ -318,9 +343,9 @@ fi
 # 5. THE PAYLOAD DIRECTORY IS REMOVED. Moving data to files creates litter, and a
 #    caller run per repair in a gate loop creates it repeatedly.
 # ----------------------------------------------------------------------------
-before=$(find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'fanout.*' -type d 2>/dev/null | wc -l | tr -d ' ')
+before=$(find "$TMP_ROOT" -maxdepth 1 -name 'fanout.*' -type d 2>/dev/null | wc -l | tr -d ' ')
 run "$SUBJ" "$SMALL" "$SBASE" >/dev/null 2>&1
-after=$(find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'fanout.*' -type d 2>/dev/null | wc -l | tr -d ' ')
+after=$(find "$TMP_ROOT" -maxdepth 1 -name 'fanout.*' -type d 2>/dev/null | wc -l | tr -d ' ')
 if [ "$after" -le "$before" ]; then
   ok "5. the payload directory does not survive the run (fanout.* dirs before $before, after $after)"
 else
@@ -452,15 +477,15 @@ fi
 # m6 — the cleanup trap removed. Arm 5 owns this and nothing else can see it.
 if mutate m6-trap -e 's|^trap .rm -rf "\$FANOUT_TMP". EXIT|: # trap removed|'; then
   m="$MUT"
-  b=$(find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'fanout.*' -type d 2>/dev/null | wc -l | tr -d ' ')
+  b=$(find "$TMP_ROOT" -maxdepth 1 -name 'fanout.*' -type d 2>/dev/null | wc -l | tr -d ' ')
   gout="$(run "$m" "$SMALL" "$SBASE")"
-  a=$(find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'fanout.*' -type d 2>/dev/null | wc -l | tr -d ' ')
+  a=$(find "$TMP_ROOT" -maxdepth 1 -name 'fanout.*' -type d 2>/dev/null | wc -l | tr -d ' ')
   if [ "$(sed -n 's/^rc=//p' <<<"$gout")" != 0 ] || [ "$(rows "$gout")" -lt 1 ]; then
     bad "MUTANT HARNESS BROKEN [m6-trap]: the copy no longer produces a worklist"
   elif [ "$a" -gt "$b" ]; then
     ok "  mutant [m6-trap] KILLED by assertion 5: the copy left $(( a - b )) payload directories behind"
     kills=$((kills+1))
-    find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'fanout.*' -type d -exec rm -rf {} + 2>/dev/null
+    find "$TMP_ROOT" -maxdepth 1 -name 'fanout.*' -type d -exec rm -rf {} + 2>/dev/null
   else
     bad "MUTANT SURVIVED [m6-trap]: removing the cleanup trap left nothing behind, so assertion 5 is watching a directory the subject does not create"
   fi
