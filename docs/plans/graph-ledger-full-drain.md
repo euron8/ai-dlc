@@ -10693,25 +10693,76 @@ given at batch 90.
    rebuilt in one release: the originals closed on an empty file, on a dead arm, and on a
    positional window.
 
-   **BATCH 109 SHIPPED A CORRECTION AND NO MECHANISM — `BL-251` IS AMENDED AND STILL LIVE.**
-   `v0.575.0` at `29c4c189` (PR #761). Nothing rotated, so live stays **75** and archive **177**
-   (controls in the same invocation: an impossible heading form scores 0). No bootstrapping file
-   moved — 0 of 6 changed files. The consumer is at `0.574.0` against `0.575.0` shipped, so the
-   gap is **ONE** and the pull is NOT required.
+   **BATCH 110 SHIPPED NO RELEASE — `BL-251` IS RETIRED ON OPERATOR RULING, DOCS ONLY.**
+   `3a749e2d` on `main`, pushed and confirmed on `origin/main`. Live **75 → 74**, archive
+   **177 → 178** (control: an impossible heading form scores 0). No `VERSION` bump — nothing
+   ships to consumers, so `named_absorbed()` has nothing to resolve for this batch and none is
+   owed. The consumer is at `0.574.0` against distribution `0.575.0`, so the gap is **ONE** and
+   the pull is NOT required, unchanged from batch 109's close.
 
-   **DO NOT SCOPE `BL-251` AS A BUILD UNTIL ITS POPULATION IS PINNED, AND THE BLOCK BELOW SAYING
-   IT IS THE READIEST NO-`PC` WORK IS WHY THIS PARAGRAPH EXISTS.** Batch 109 tried to build the
-   detector and could not, because the entry's own STRICT table does not reproduce. Re-derived
-   over a pool rebuilt to the entry's recipe (controls: pool size 10, all three cited shas in it),
-   the sites attribute to `84451b892` ×1, `6ee03ad8c` ×2, `4d93a0cc6` ×1 — the entry claims
-   `736e4cfc8` ×1, `6ee03ad8c` ×2, `4d93a0cc6` ×1. **Same total, one different commit, and the
-   different one is the MOTIVATING sha**, which scores 0 because every emission below an added
-   early exit there is itself ADDED (control: 75 added early exits in that diff). Three things a
-   builder needs are therefore absent: the predicate's SCOPE is undecided (**file 4 against hunk 1**
-   on the same pool, while `qa.md` says "same hunk"), the emission GRAMMAR that produced LOOSE 223
-   is unstated and unreachable at any width tried (13 / 58 / 124 / 103, impossible-token control 0),
-   and 3 of the 4 sites are unadjudicated as true regressions. Pin those first, with the operator,
-   or the detector is built against a population nobody has agreed to.
+   **THE SWEEP FOUND ZERO AVAILABLE PC-BACKED RESIDUE, AND EVERY ONE OF THE 23 "UNFILED" IDS
+   RESOLVES TO SOMETHING ALREADY SETTLED.** A sweep hand and a consumer-history hand ran in
+   parallel per action 0. Nine `PC-S312-*` and two `PC-S297-*` are `NOT-UPSTREAM` in
+   `docs/reviews/graph-ledger-full-adjudication.md`; `PC-S303-POSTCOMPACT-*` and two `PC-S307-*`
+   are already fixed (in v0.373.0 and v0.449.0/v0.450.0 respectively); two `PC-S309-PRE-PUSH-*`
+   are withdrawn by the consumer itself and a third `PC-S309-VALIDATE-MANDATORY-RULES-*` shipped
+   in v0.542.0; `PC-S340-RETRO-AUDIT-*` was refuted earlier in this file; `PC-S341-CONTENT-KEY-*`
+   shipped as a record-only entry in v0.553.0; `PC-S342-CARRY-OVER-PROVENANCE-*` was refused as
+   filed in v0.568.0; and the three `PC-S311-*` ids are the same three this file's own
+   `## Adjudication` section already disposed of (two REFUSE, one narrow ship), cited in
+   v0.573.0/v0.574.0 — they read as "unfiled" only because a REFUSE verdict correctly gets no
+   `docs/backlog.md` entry (the R5 rule). Every one of these was verified this batch against
+   `origin/main` commit messages or the adjudication doc directly, not read off a prior block.
+   The consumer-history hand found no filing invisible to a main-only sweep either: the one
+   candidate that looked like unseen live work,
+   `PC-S312-INFLIGHT-TEAMMATES-ROW-UNENFORCED-AT-DISPATCH`, is confirmed already landed at
+   v0.574.0 (`2267ae66`); the checked-out consumer branch (`ai-dlc/carry-over/epic-crs-fvs-carryover-priorities`,
+   9 commits ahead of main, verified as the only branch of 737 qualifying as ahead) simply hasn't
+   re-reconciled since. Porcelain on the consumer was **13** at the sweep, all expected
+   `_bmad-output/` pipeline churn, none of it the ledger file itself.
+
+   **`BL-251` IS RETIRED, NOT FIXED, AND THE REASON IS THE FOUNDING CASE SCORES ZERO UNDER ITS OWN
+   WORDING.** Operator ruling, given at batch 110, on the batch-109 finding immediately below
+   this paragraph (kept as HISTORY): a scope ruling between the two candidate readings (file vs.
+   hunk, 4:1 apart on the only corpus tried) would not have fixed anything, because BOTH readings
+   score **zero** on `736e4cfc8`, the motivating sha — its "stranded" lines are all newly ADDED by
+   that same diff, not pre-existing emissions, so neither reading catches the case that founded
+   the entry. The 223-site "loose" figure that first motivated a wider net does not reproduce at
+   any grammar width tried. With the founding case unreproducible and no other confirmed live
+   instance, there is no current evidence this regression class is happening, so no detector is
+   built now. The entry's prose bullet already shipped in `v0.574.0` (`6282f729`) and stands;
+   only the mechanism is declined. **If the underlying bug recurs, it gets filed fresh, with a
+   reproducing diff attached — that is the evidence this entry was missing.** Annotated
+   `**LANDED (v0.574.0, verified 6282f729), MECHANISM DECLINED ON OPERATOR RULING.**` and rotated
+   via `scripts/backlog-rotate.sh --apply`, whose own `--check` acceptance test passed first (no
+   other entry's verdict moved).
+
+   **THE READIEST NO-`PC` WORK IS NOW `BL-223` ALONE.** It needs a `write-format-steering.json`
+   schema change (a program, not a release): a new schema field, a new format-declaration file,
+   and defenses against five specific ways a declaration can be faked (self-referential pointer,
+   borrowed declaration, `transient:true` member, etc.) that the entry has already worked out.
+   Its current receipt is satisfiable only by a fabricated producer — read its own text in full
+   before scoping it; do not take "close BL-223" as a one-line task.
+
+   **BATCH 109 SHIPPED A CORRECTION AND NO MECHANISM — `BL-251` WAS AMENDED AND STAYED LIVE UNTIL
+   THIS BATCH RETIRED IT. KEPT AS HISTORY.** `v0.575.0` at `29c4c189` (PR #761). Nothing rotated
+   at that close, so live stayed **75** and archive **177** (controls in the same invocation: an
+   impossible heading form scores 0). No bootstrapping file moved — 0 of 6 changed files.
+
+   **DO NOT SCOPE `BL-251` AS A BUILD — IT IS RETIRED, NOT PENDING. KEPT FOR THE MEASUREMENT.**
+   Batch 109 tried to build the detector and could not, because the entry's own STRICT table does
+   not reproduce. Re-derived over a pool rebuilt to the entry's recipe (controls: pool size 10,
+   all three cited shas in it), the sites attribute to `84451b892` ×1, `6ee03ad8c` ×2,
+   `4d93a0cc6` ×1 — the entry claims `736e4cfc8` ×1, `6ee03ad8c` ×2, `4d93a0cc6` ×1. **Same total,
+   one different commit, and the different one is the MOTIVATING sha**, which scores 0 because
+   every emission below an added early exit there is itself ADDED (control: 75 added early exits
+   in that diff). Three things a builder needs are therefore absent: the predicate's SCOPE is
+   undecided (**file 4 against hunk 1** on the same pool, while `qa.md` says "same hunk"), the
+   emission GRAMMAR that produced LOOSE 223 is unstated and unreachable at any width tried
+   (13 / 58 / 124 / 103, impossible-token control 0), and 3 of the 4 sites are unadjudicated as
+   true regressions. Batch 110's ruling is that this makes the entry unbuildable, not that a
+   scope choice would have unblocked it — pinning file-vs-hunk does not fix the zero on the
+   founding case.
 
    **AND THE OBVIOUS CROSS-SCOPE REPAIR IS ALREADY REFUTED — do not re-propose it.** "Skip a pair
    whose emission is shallower than its early exit" excludes **4 of 8** real pairs, including all
