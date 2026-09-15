@@ -9972,15 +9972,20 @@ git -C /Users/n8/git/graph show "${SB}:_bmad-output/ai-dlc-update/push-candidate
 git -C /Users/n8/git/graph show "${SB}:_bmad-output/ai-dlc-update/push-candidate-ledger.archive.md" > /tmp/led_arch.md
 lids /tmp/led_live.md > /tmp/live.txt
 lids /tmp/led_arch.md > /tmp/arch.txt
-# THE SUBSET ASSERTION IS NOW A PROPERTY OF THE LOOP ABOVE, SO IT CANNOT FIRE HERE AND MUST NOT BE
-# READ AS A CONTROL. The loop only accepts a ref missing nothing main has, so this line is 0 by
-# construction -- a check that cannot fail reads exactly like one that passed. It stays as an
-# ASSERTION on the loop (a non-zero means the loop is broken, not that the ledger moved), and the
+# THE RAW SUBTRACTION IS NOT 0, AND A READER WHO "REPAIRS" IT BACK DELETES THE LOOP'S OWN
+# ACQUITTAL. The loop accepts a ref missing nothing main has THAT IT HAS NOT CLOSED -- the batch-113
+# repair -- so a ref on which the consumer has been closing candidates is LEGITIMATELY missing those
+# ids, and a bare `comm -23` counts every one of them. Measured at batch 114, sweep hand and lead
+# independently: raw **15**, all 15 in the elected ref's own ARCHIVE, UNEXPLAINED **0**. The line
+# below therefore subtracts the archive exactly as the loop does; the version without that
+# subtraction disagreed with its own premise and read as a broken loop on a correct derivation.
+# It is an ASSERTION on the loop, never a control -- a non-zero means the loop is broken, not that
+# the ledger moved, and a check that cannot fail reads exactly like one that passed. The
 # discriminating control is the one below it: the PRESENCE arm, which must be non-zero on main.
 git -C /Users/n8/git/graph show "main:_bmad-output/ai-dlc-update/push-candidate-ledger.md" > /tmp/led_main.md
 lids /tmp/led_main.md > /tmp/live_main.txt
 echo "ledger ref: $SB   (main is the answer whenever the retro has merged)"
-comm -23 /tmp/live_main.txt /tmp/live.txt | wc -l   # assertion on the LOOP: 0, or the loop is broken
+comm -23 /tmp/live_main.txt /tmp/live.txt | comm -23 - /tmp/arch.txt | wc -l   # assertion on the LOOP: 0, or the loop is broken
 comm -13 /tmp/live_main.txt /tmp/live.txt           # the filings ahead of main. THIS is the new work.
 wc -l < /tmp/live_main.txt                          # CONTROL: must be NON-ZERO. A zero here means
                                                     # the ref carried no ledger and `git show`
@@ -10805,6 +10810,44 @@ given at batch 90.
    **DO NOT TREAT A BATCH-82 RECEIPT AS TRUSTWORTHY BECAUSE IT EXISTS.** Three of them were
    rebuilt in one release: the originals closed on an empty file, on a dead arm, and on a
    positional window.
+
+   **BATCH 114 SHIPPED AS `v0.578.0`, ONE RELEASE, ONE PC-BACKED SUBJECT — `PC-S344` CLOSED, AND
+   THE BATCH'S BEST FINDING WAS THAT THE FAILS-OPEN MUTANT IS REACHABLE FROM ONE DIRECTION ONLY,
+   SO A BATTERY SEEDED IN THE OTHER SCORES IT AS KILLED.** Invoked by a cross-session
+   `READ and FOLLOW` handoff from `ai-dlc-a4`; taken per action 9. Merged `688d5287` (PR #766).
+   `ledger-reverify.sh`'s `sh)` arm exported `$BASE` to every receipt and evaluated nothing at it
+   (`base_holds|base_show` **0** in that arm against **4** in `theirs_*`), so `RECEIPTS-UNDECIDED`
+   was reachable from `theirs_has` alone while `sh` is the verb most receipts use. Three helpers,
+   a three-way resolve (0 undecided / 126|127 control-refused, counted apart / else decided),
+   applied at BOTH the STILL-LIVE and the CLOSE sites, folded into the existing row with no new
+   status token. Reference reading **20 of 20** undecided, **0** control-refused; the contract
+   predicted 21, which counted bucket 1 before its own `$BASE` exclusion. No per-entry verdict
+   moved and **zero** flips to `CLOSE-CANDIDATE` — the control runs after the row is decided, only
+   accumulates, and returns 0 unconditionally, so it cannot alter a verdict by construction.
+   `BL-254` filed for the delivery half. Backlog live **71 → 72**; worklist **16 → 17**.
+
+   **THE MUTANT THAT SURVIVED, AND WHY.** Collapsing the three-way resolve to two arms scored
+   SURVIVED on the first battery: past the unmatchable `126|127` arm a 127 control fails the
+   still-live side's `[ "$_brc" -eq 0 ]`, moves no numerator, and reads exactly like an arm that
+   cannot fire. The close side tests `-ne 0`, which 127 satisfies. A second seed that CLOSES at
+   theirs and REFUSES at base kills it — `1 of 3` becomes `2 of 3` with the refused count gone, a
+   close attributed to a pull on an evaluation that never happened. **The gap was in the SEED, not
+   in the arm count**, which is this repo's recurring shape.
+
+   **THE ASSERTION LINE IN `### Derive the state` WAS STALE AND IS REPAIRED IN THIS BATCH.** The
+   batch-113 repair taught the ref-election LOOP to acquit an id the ref had ARCHIVED, but the bare
+   `comm -23` printed beside it was never given the same subtraction, so it disagreed with its own
+   premise. Measured twice independently: raw **15**, all 15 in the elected ref's own archive,
+   UNEXPLAINED **0**. The command now subtracts the archive; a reader who "repairs" it back deletes
+   the loop's acquittal.
+
+   **`reconcile-emit-report` IS INTERMITTENT UNDER THE POOL AND CHARGED ITS COST TO THIS BATCH.**
+   Gate run 1 PASSED and run 2 failed E9 on a **byte-identical tree** (same tree sha); run 3 passed.
+   Attribution measured, not assumed: that fixture seeds **0** `theirs_has` and **0** `sh` receipts
+   (only `theirs_maybe`, which no arm dispatches), so this change renders no row in it; unmodified
+   `origin/main` also fails under contention, on a DIFFERENT arm. **`BL-230` already owns the class
+   but is filed narrower than the evidence** — it names `E1`/`V-HC`, and this was `E9` with `V-B`
+   as the extra world, plus a third arm failing on base.
 
    **BATCH 113 SHIPPED AS `v0.577.0`, ONE RELEASE, TWO NO-`PC` SUBJECTS — `BL-053` AND `BL-055`
    CLOSED AND ROTATED, AND THE BATCH'S BEST FINDING WAS THAT THE SWEEP'S OWN REF-ELECTION LOOP
@@ -11977,7 +12020,7 @@ given at batch 90.
    `predicate-differential.sh` fingerprints the corpus either side of its own run for exactly this
    reason; a hand-rolled measurement has no such guard.
 
-1a. **`docs/backlog.md` IS AT 94 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
+1a. **`docs/backlog.md` IS AT 72 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
    is not blocked. That is not licence to file rather than fix — the standing correction in the
    resume block still governs — but a filing no longer costs a rotation, and rotating still means
    CLOSING, which needs a measurement.

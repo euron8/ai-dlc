@@ -243,7 +243,7 @@ sentence, and this receipt only establishes that there is one to read.
 
 verify: sh f=core/skills/ai-dlc-update/SKILL.md; [ -r "$f" ] || exit 9; c=$(grep -nE 'show "\$\{[a-z]+\}:' "$f" | head -1 | cut -d: -f1); [ -n "$c" ] || exit 9; n=$(awk -v c="$c" 'BEGIN{bt=sprintf("%c%c%c",96,96,96)} { if (substr($0,1,3)==bt || substr($0,5,3)==bt) { fence=!fence; F[NR]=1 } else F[NR]=fence; L[NR]=tolower($0) } END { for (i=1;i<c;i++) { if (F[i] || L[i] !~ /zsh/ || L[i] ~ /<!--/) continue; lo=i-3; if (lo<1) lo=1; hi=i+5; if (hi>NR) hi=NR; for (j=lo;j<=hi;j++) if (!F[j] && L[j] ~ /brace/) { print i; exit } } }' "$f"); [ -n "$n" ] || exit 1; exit 0
 
-## BL-230 — `reconcile-emit-report`'s E1 kill-set arm fails intermittently under the pool, and its success message describes a different assertion than the one it makes
+## BL-230 — `reconcile-emit-report`'s kill-set arms fail intermittently under the pool — E1 and E9 both measured, on two different worlds — and E1's success message describes a different assertion than the one it makes
 
 **Found 2026-09-11** during batch 85, when E1 failed a gate run on a branch whose change cannot
 reach it. Two separate defects in one arm; the second is what makes the first expensive.
@@ -255,6 +255,26 @@ in flight**: `reconcile-emit-report` never executes `apply.sh` — `grep -cE 'ba
 returns **0** against a control of **24** in `apply-restamp-worklist` — and its scorer
 (`v_render`, `:614`) calls `emit-report.sh` alone. The causal path from the branch's two new
 `say WORKLIST` sites to the region V-HC edits is severed.
+
+**WIDER THAN FILED: E9 FAILS THE SAME WAY, ON A DIFFERENT WORLD, AND SO DOES AN ARM THAT IS NOT A
+KILL-SET AT ALL.** Measured at batch 114, which this arm charged for a second time. Gate run 1
+PASSED the fixture suite and gate run 2 failed `v_kill E9` on a **byte-identical tree** — same tree
+sha `b36117f5`, the two commits differing only in squash topology — and a third run passed. E9's
+expected set is `[V-R V-N V-H V-HA V-S V-U V-HC]` and it reported `[V-R V-N V-B V-H V-HA V-S V-U
+V-HC]`: the extra world was **V-B**, not the V-HC this entry predicts, though both arms score
+through the same `v_kill`/`v_diffset` whole-world set difference. Separately, four copies of the
+fixture run in parallel from **unmodified `origin/main`** put 1 of 4 red on a THIRD arm — the
+docs-only-move `--verify` assertion, which is not a kill set — against 3 green in the same
+invocation. So the population is "arms scored under pool contention", not "E1", and the entry's
+own title understated it.
+
+**THE ATTRIBUTION WAS MEASURED, NOT ASSUMED, AND IT COST THE BATCH A FULL GATE CYCLE.**
+`reconcile-emit-report` seeds **0** `verify: theirs_has` and **0** `verify: sh` receipts — only
+three `theirs_maybe`, which no arm of `ledger-reverify.sh` dispatches (control: an impossible verb
+also 0) — so the batch-114 change to that engine's `sh` arm renders no row in this fixture in
+either revision, and `unseen_rows()` keeps both spellings of the row it renames in any case. The
+causal path is severed for the same KIND of reason it was severed at batch 85, by a different
+mechanism.
 
 **WHY V-HC IS THE PLAUSIBLE UNSTABLE MEMBER.** `v_kill` scores by whole-world set difference, so one
 world with an unstable score pollutes the set. V-HC is built by deleting the first
