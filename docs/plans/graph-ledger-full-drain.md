@@ -10712,46 +10712,68 @@ given at batch 90.
    rebuilt in one release: the originals closed on an empty file, on a dead arm, and on a
    positional window.
 
-   **BATCH 111 SHIPPED NO RELEASE — THE SWEEP CONFIRMED ZERO AVAILABLE PC-BACKED RESIDUE
-   INDEPENDENTLY OF BATCH 110, AND `BL-223`'S CONTRACT WAS REFUTED BY BUILDING IT, A FOURTH TIME.**
-   Invoked by a cross-session `READ and FOLLOW` handoff; accepted per action 9's protocol, no
-   operator question needed to start. A sweep hand and a consumer-history hand ran in parallel per
-   action 0 and both corroborate batch 110's close rather than finding new work: all 23 unfiled
-   PC-ids re-resolve to the same already-settled dispositions (NOT-UPSTREAM, already-fixed,
-   withdrawn, refused/shipped in this file's `## Adjudication` section); DISCHARGED corrects to
-   12 after the 4-id overlap with IN-FLIGHT; the delivery gap is confirmed ONE
-   (`0.574.0` installed against distribution `0.575.0`). The consumer-history hand's one finding —
-   `main`'s `.ai-dlc-version` stamp reads `0.571.0` while the checked-out sprint branch
-   (`ai-dlc/carry-over/epic-crs-fvs-carryover-priorities`) reads `0.574.0`, because that branch's
-   reconcile commit (`91cbd92dd`, PR #1077) has not merged back — is corroborating, not
-   actionable: it explains why a `main`-only stamp read would misstate the gap as FOUR, and does
-   not change the gap this file already carries. That branch's ledger has zero live ids beyond
-   `main`'s (49 of 49 already on `main`), so nothing unseen sits there either. Porcelain on the
-   consumer was 15, all expected `_bmad-output/` churn, none of it the ledger file.
+   **BATCH 111 SHIPPED AS `v0.576.0`, ONE RELEASE, ONE NO-`PC` SUBJECT — `BL-223` CLOSED,
+   BUILT AND FAN-OUT-VERIFIED AFTER AN ADVERSARY'S FIRST-PASS CONTRACT WAS INITIALLY MISREAD AS A
+   REFUTATION RATHER THAN A FIX LIST.** Invoked by a cross-session `READ and FOLLOW` handoff;
+   accepted per action 9's protocol, no operator question needed to start. A sweep hand and a
+   consumer-history hand ran in parallel per action 0 and both corroborate batch 110's close
+   rather than finding new work: all 23 unfiled PC-ids re-resolve to the same already-settled
+   dispositions (NOT-UPSTREAM, already-fixed, withdrawn, refused/shipped in this file's
+   `## Adjudication` section); DISCHARGED corrects to 12 after the 4-id overlap with IN-FLIGHT;
+   the delivery gap is confirmed ONE (`0.574.0` installed against distribution `0.575.0` at the
+   sweep's own pin — this release moves the distribution to `0.576.0`, widening the gap to TWO).
+   The consumer-history hand's one finding — `main`'s `.ai-dlc-version` stamp reads `0.571.0`
+   while the checked-out sprint branch (`ai-dlc/carry-over/epic-crs-fvs-carryover-priorities`)
+   reads `0.574.0`, because that branch's reconcile commit (`91cbd92dd`, PR #1077) has not merged
+   back — is corroborating, not actionable. Porcelain on the consumer was 15, all expected
+   `_bmad-output/` churn, none of it the ledger file.
 
-   **`BL-223` WAS TAKEN AS THE READIEST NO-`PC` WORK PER BATCH 110's RANKING, AND ITS CONTRACT WAS
-   REFUTED BY BUILDING IT — see the batch-111 paragraph now in the entry itself
-   (`docs/backlog.md`).** A contract proposing a second `formats[]` entry under the existing
-   `ai-dlc-update` steering member (pointed at `ledger_entry_shape()` in
-   `core/skills/ai-dlc-update/reconcile/lib.sh`) was attacked by an adversary on a `git archive`
-   copy before any builder spawned, per action 0's ordering, and failed four ways: the receipt
-   cannot see the anchor because `--report`'s table never prints it (two constructed non-fixes
-   passed); a same-name-different-anchor self-probe fires identically on the unfixed reader,
-   order-sensitively; the PASS line's "N of 20" silently becomes a row count once one name can
-   carry multiple declarations; and the proposed `declared_in` crosses a pull-class boundary
-   (`core/skills/` vs the existing `core/schemas/`-only declarations) that fails a consumer's push
-   in the ordinary window between a schema pull and a skill pull, where the validator's FAILING
-   tier has "no false-positive path by design" today. **This is the entry's fourth refuted
-   attempt (batch 95, batch 106, and now batch 111's two sub-findings) — do not re-propose the
-   "N formats per member" shape without first fixing the receipt's anchor-blindness and the
-   reader's count semantics; the read/write boundary crossing is a fifth open question the entry
-   now states explicitly.** No release ships. `BL-223` remains the only ranked no-`PC` candidate
-   and is not close to buildable in its current shape — read its full text, not a summary, before
-   scoping it again.
+   **`BL-223`'S CONTRACT ADVERSARY FOUND FOUR BLOCKERS, EVERY ONE A FIX, NOT A DEAD END — AND THE
+   FIRST INSTINCT WAS TO WRITE A FIFTH REFUTATION AND DEFER. THE OPERATOR CORRECTED THIS
+   MID-BATCH.** The proposed shape — a second `formats[]` entry under the existing `ai-dlc-update`
+   steering member, pointed at `ledger_entry_shape()` in
+   `core/skills/ai-dlc-update/reconcile/lib.sh` — was attacked before any builder spawned and
+   failed four ways: the receipt could not see the anchor because `--report`'s table never printed
+   it; a same-name-different-anchor self-probe fired identically on the unfixed reader; the PASS
+   line's "N of 20" silently became a row count once one name could carry multiple declarations;
+   and the proposed `declared_in` crossed a pull-class boundary (`core/skills/` vs the existing
+   `core/schemas/`-only declarations) that would fail a consumer's push in the ordinary window
+   between a schema pull and a skill pull. **All four were fixed directly, the same batch**: the
+   reader now keys `declared` on `(name, declared_in)`; `--report` prints the anchor per row so a
+   receipt can bind on the literal; a declaration whose owning top-level directory is entirely
+   absent from the tree is a `SKIP`, generalizing the existing whole-schemas-directory narrowing
+   to any pull-class component, while a directory-present-file-absent case still fails as a real
+   broken pointer; and the PASS line counts distinct covered names, never rows. Verified
+   discriminating against both constructed non-fixes (`unquote() {`, an unrelated helper;
+   `reconcile/lib.sh`, the file's own header comment — both resolvable substrings the OLD receipt
+   shape could not tell from the right anchor) before shipping. Fanned out per action 0's
+   deliverable split: a fixture hand built `core/fixtures/write-format-steering-multiformat`
+   (21 assertions, five constructed mutants including both non-fixes, five mutations of the
+   fixture's own machinery proving each assertion can fire) and independently found the SAME
+   `docs/vocabulary-index.md` staleness (the schema's new `code` enum value had not been
+   re-rendered) that the fix commit's own author found separately — two channels catching one
+   derived-artifact gap is the mechanism working, not a coincidence to note and move past. The
+   fixture also raised `FORK_BUDGET` 8155 → 8174 with a measured, non-reduced holdout differential
+   for the one new directory's cost in I87's per-directory pipeline. A docs-and-entry hand rewrote
+   BL-223's receipt to bind on the anchor and verified it discriminates (PASS on the real fix,
+   FAIL on the anchor-swap non-fix, FAIL with the second row absent) before it shipped. A
+   measurement hand confirmed no regression on the real, unmodified `/Users/n8/git/graph`
+   consumer (the fixed validator's report on the CONSUMER's still-old schema is byte-identical to
+   the pre-fix validator's) and an immaterial ~8ms timing delta. Cited verbatim in the release
+   commit message. Live backlog count and archive unaffected (`BL-223` had no `PC-` id to retire
+   from the ledger). **THE STANDING LESSON, NOW RECORDED IN ACTION 0: an adversary blocker is a
+   fix list, not a stop signal, unless it names something structurally unconstructible.** Reserve
+   deferral for that narrower case and say which of its forms applies, explicitly, rather than
+   defaulting to a repeated refutation because a prior batch's pattern is sitting right there to
+   copy.
 
    **THE AVAILABLE PC-BACKED RESIDUE AT THIS CLOSE IS ZERO KNOWN, RE-CONFIRMED — run the sweep
-   anyway; the consumer files while nobody is looking.** No no-`PC` work is ready. The next batch
-   opens with nothing scoped.
+   anyway; the consumer files while nobody is looking.** No PC-backed work is ready. The
+   operator owes the read-set map registration for three fixture directories, one of them new
+   this batch: `sudo bash core/scripts/derive-fixture-readsets.sh --list "fanout-payload-channel
+   provenance-flagless-default write-format-steering-multiformat"` — two of the three predate this
+   batch and were already owed. The next batch opens with nothing PC-backed scoped and no
+   ranked no-`PC` candidate recorded here; re-derive from `docs/backlog.md` directly.
 
    **BATCH 110 SHIPPED NO RELEASE — `BL-251` IS RETIRED ON OPERATOR RULING, DOCS ONLY.**
    `3a749e2d` on `main`, pushed and confirmed on `origin/main`. Live **75 → 74**, archive
