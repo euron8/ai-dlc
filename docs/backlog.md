@@ -3825,9 +3825,85 @@ verified separately by forcing the probe's two measurements to a constant, which
 validator to exit **2** with `P8 SELF-PROBE FAILED` against a control run of the unmutated
 script on the same tree that does not refuse.
 
-**WHAT IS OWED.** Rotate `retire-graph-consumer-layer.md`, which is the remaining red and is
-fully spent. Until then P8 is a gate with one known standing failure, which is a state the
-operator accepted when setting the ceiling, not a defect in the arm.
+**WHAT IS OWED — DISCHARGED IN THE SAME RELEASE THAT FILED THIS, and the sentence above was
+written before it.** `retire-graph-consumer-layer.md` was rotated at `v0.580.0`, 384817 -> 52982
+bytes, after the operator ruled on it: a live-section declaration was added to that spent record
+and one operator-ping sentence with it, because rotating moves its ping text to the archive and
+P3b then fires on the remainder. P8 now reports **0** hits over 39 plans, and the arm is not
+thereby dead — at `AI_DLC_PLAN_BYTES=1000` it fires on all 39. Nothing is owed here.
 
 verify: sh V=scripts/validate-plan-shape.sh; [ -f "$V" ] && [ -f scripts/plan-rotate.sh ] || exit 9; d="$(mktemp -d)" || exit 9; printf '%*s' 400 '' > "$d/p.md"; printf '**SPENT.** DISCHARGED. DO NOT EXECUTE.\n%*s' 400 '' > "$d/s.md"; lo="$(AI_DLC_PLAN_BYTES=100 bash "$V" "$d/p.md" 2>&1)"; sp="$(AI_DLC_PLAN_BYTES=100 bash "$V" "$d/s.md" 2>&1)"; hi="$(AI_DLC_PLAN_BYTES=100000 bash "$V" "$d/p.md" 2>&1)"; f="$(printf '%s\n' "$lo" | grep -c 'bytes against a ceiling of 100\.')" || f=0; g="$(printf '%s\n' "$sp" | grep -c 'bytes against a ceiling of 100\.')" || g=0; q="$(printf '%s\n' "$hi" | grep -c 'against a ceiling of')" || q=0; r="$(printf '%s\n' "$lo" | grep -c 'plan-rotate\.sh')" || r=0; [ "$f" -ge 1 ] && [ "$g" -ge 1 ] && [ "$q" -eq 0 ] && [ "$r" -ge 1 ] && exit 0; exit 1
 
+
+
+## BL-257 — the suite pole grew 493 -> 573 in two releases and nothing watches it; a growth guard needs a TRACKED baseline, and `docs/` is where one can live
+
+**DEFECT.** The pre-push suite is POLE-BOUND — wall clock tracks the single longest fixture
+directory, not the sum — and the pole is unwatched. Re-derived from
+`.git/ai-dlc-fixture-durations` in one invocation: `ledger-reverify` **573**,
+`fixture-git-env-seam` 350, `gate-adjudication-mutants` 285, `reconcile-emit-report` 240,
+`validator-arm-selection` 233. Sum over 201 units is 5737s; the pole is 573s, so the pole is
+**10%** of the sum and **100%** of the wait. `BL-255` recorded the same pole at **493** at
+`v0.579.0`. That is **+16% in two releases**, and no mechanism observed it.
+
+**OPERATOR RULING, 2026-09-15: the guard is worth building.** Given after a session ran the full
+gate twice in one evening and the operator asked which batch performance work was scheduled for.
+The answer was none: `docs/plans/pre-push-wall-clock.md` is a LIVE plan whose next-action 2 still
+reads *"`validator-arm-selection` is the pole now, at 166s of a 217s wall"* — both halves false at
+HEAD, which is exactly what `BL-255` filed against `BL-005`. **A stale pole figure has now
+misdirected performance scoping in three places: `BL-005`, the wall-clock plan, and this entry's
+own precursor.**
+
+**THE INSTRUMENT IS HOSTILE TO THE OBVIOUS DESIGN, AND `BL-255` ALREADY MEASURED WHY.** Do not
+re-derive these; they are settled:
+
+- `.git/ai-dlc-fixture-durations` is **UNTRACKED and per-clone** — `git ls-files` names it 0 times
+  against a control of 790 tracked paths — so no ref carries it and a fresh clone has none.
+- `.githooks/pre-push:800` **MERGES** each run's timings over the prior file
+  (`awk 'NF == 2 { c[$1] = $2 }'`), keeping rows for fixtures that did not run. A row is therefore
+  **a floor of unknown vintage, never a fresh measurement**, and a guard that reads one as current
+  compares two different days.
+- A cost there is a **LOADED** cost measured under the pool. The same unit run solo gives a
+  different number — one shard measured 442s loaded against 112s solo — and the two must never be
+  compared.
+
+**WHY A TRACKED BASELINE IS POSSIBLE AT ALL, MEASURED THIS SESSION.** The three records under
+`.git/` are sited there deliberately: the content key hashes the working tree, so a cross-run
+record inside it would change the key that decides whether the suite runs. That argument does NOT
+extend to `docs/`, because `docs` is already in `suite-content-key.sh`'s `EXCLUDE` set. Driven,
+with the key computed three times in one invocation: appending a line to `docs/backlog.md` left
+the key byte-identical (`5f2a4318…` before, during, and after revert). **So a baseline committed
+under `docs/` is joinable by a guard and cannot wedge the skip.**
+
+**WHAT THE GUARD MUST NOT BE.** A check that fails the push whenever the pole moves is a check
+the operator switches off: the pole legitimately moves with load, and a LOADED figure varies run
+to run. The shape to reach for is the one `validate-write-format-steering.sh` already uses — a
+RATCHET that reports the current figure against a committed baseline, fails only on growth beyond
+a stated band, and whose baseline moves DOWN freely and UP only as a reviewed edit carrying its
+reason. Ask specifically what a wrong answer makes someone DO: a false red here trains the
+operator to bypass, which is worse than no guard.
+
+**A FALSE-POSITIVE SET MUST BE MEASURED BEFORE IT SHIPS, and this one is not yet enumerable** —
+the vintage problem above means today's 201 rows are of mixed age, so the first honest step is to
+establish how much a pole figure varies across consecutive full runs on an unchanged tree. Two
+full `AI_DLC_FIXTURE_NO_SKIP=1` runs of this repo's own gate cost about ten minutes each; that is
+the price of the calibration and it is not optional. **A band picked without it is a number
+invented before the measurement, which is the defect A6's own header records making twice.**
+
+**WHAT IS OWED.** Calibrate the run-to-run spread of the pole on an unchanged tree; commit a
+baseline under `docs/`; build the ratchet with a self-probe that fires in both directions and a
+measured FP set; and in the same change correct `BL-005`'s heading and
+`docs/plans/pre-push-wall-clock.md`'s next-action 2, both of which name a pole displaced four
+releases ago. `ledger-reverify` is 40% of the wall on its own and is the subject worth attacking
+once something watches it.
+
+**THE RECEIPT DRIVES THE GUARD RATHER THAN GREPPING FOR IT, and the first draft did not.** A
+receipt asserting the file exists and mentions `AI_DLC_POLE` was scored against a comment-only
+stub and returned **0** — comment-satisfiable, which this repo's own receipts arm exists to
+reject. The receipt below builds three durations files in a temp dir and requires the guard to
+FAIL on a grown pole, stay SILENT on an unchanged one, and NAME the offending figure. Scored four
+ways before filing: absent **1**, comment-only stub **1**, a guard replaced by `exit 0` **1**, a
+minimal honest implementation **0**. The always-zero non-fix is the one that matters — it is what
+a guard degrades into when somebody silences it.
+
+verify: sh V=scripts/validate-suite-pole.sh; B=docs/suite-pole-baseline.tsv; [ -x "$V" ] && [ -f "$B" ] || exit 1; d="$(mktemp -d)" || exit 1; printf 'ledger-reverify 100\n' > "$d/base.tsv"; printf 'ledger-reverify 1000\n' > "$d/now.tsv"; printf 'ledger-reverify 100\n' > "$d/same.tsv"; g="$(AI_DLC_POLE_BASELINE="$d/base.tsv" bash "$V" --durations "$d/now.tsv" 2>&1)"; grc=$?; q="$(AI_DLC_POLE_BASELINE="$d/base.tsv" bash "$V" --durations "$d/same.tsv" 2>&1)"; qrc=$?; [ "$grc" -ne 0 ] && [ "$qrc" -eq 0 ] && printf '%s' "$g" | grep -q 1000 && exit 0; exit 1
