@@ -643,12 +643,28 @@ cp "$LIVEF" "$PLAN"
 # happened to run in, which resolves on exactly one machine. Stripping the root makes the
 # pointer the same string whichever way the tool was invoked.
 # ---------------------------------------------------------------------------------------------
+# AND IT MUST NOT SPELL A DISCHARGE TOKEN, WHICH THE FIRST VERSION OF THIS LINE DID.
+# `validate-plan-shape.sh:165` is `DISCHARGE_BANNER='DISCHARGED|SPENT|DO NOT EXECUTE|SUPERSEDED'`,
+# read case-INSENSITIVELY over `head -12` by six sites. The pointer goes at line 3, so a pointer
+# opening "**Spent sections are archived at" put a discharge token inside that window and made
+# every rotated plan read as SPENT -- silencing P9, P10, P11, P12 and P13 on the very file the
+# rotation was performed to keep healthy. Measured on the real plan, one discriminating mutant
+# (P10's resume one-liner repointed at an ancestor), five bytes apart:
+#
+#     pointer "Spent ..."     P10 hits 0, rc=0   <- arm SILENCED
+#     pointer "Archived ..."  P10 hits 1, rc=1   <- arm FIRES
+#
+# Control: the pre-rotation head window carries 0 banner hits while the same grammar over the
+# whole file returns 40, so that zero was a real absence and not a broken search. This is the
+# eleven-byte opt-out that `plan-shape.md` records, except the TOOL wrote it automatically and
+# the gate went green BECAUSE five arms stopped running. Keep the discharge vocabulary out of
+# this string; the word is load-bearing.
 ARCHIVE_REL="${ARCHIVE#$REPO_ROOT/}"
 RANGES="$(LC_ALL=C awk -F'\t' '$1=="moving"{printf "%s%s..%s", (c++ ? ", " : ""), $2, $3}' "$WORK/meta.tsv")"
-POINTER="**Spent sections are archived at \`$ARCHIVE_REL\`** — rotated by \`scripts/plan-rotate.sh\`, original lines $RANGES. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do."
+POINTER="**Archived sections live at \`$ARCHIVE_REL\`** — rotated by \`scripts/plan-rotate.sh\`, original lines $RANGES. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do."
 LC_ALL=C awk -v P="$POINTER" '
   BEGIN { done = 0 }
-  /^\*\*Spent sections are archived at/ { if (!done) { print P; done = 1 }; next }
+  /^\*\*Archived sections live at/ { if (!done) { print P; done = 1 }; next }
   { print }
   END {
     if (!done) {
