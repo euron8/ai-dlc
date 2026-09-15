@@ -2126,12 +2126,20 @@ else
   printf '%s\n' "$OUT" | awk -F'\t' '($1=="ENTRY-SWALLOWED" || $1=="RECEIPTS-UNDECIDED") && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/ {print $1"\t"$2}' | sed 's/^/          | /'
 fi
 
-# SHAPE B — the same ledger with every `theirs_has` receipt removed, so the undecided bucket is
-# EMPTY and its row is never emitted. The control is that emptiness itself: a run that still
-# produced a RECEIPTS-UNDECIDED row never reached the state this shape exists to test, and its
-# clean reading would be shape A's answer a second time.
+# SHAPE B — the same ledger with every receipt that can FEED the undecided bucket removed, so the
+# bucket is EMPTY and its row is never emitted. The control is that emptiness itself: a run that
+# still produced a RECEIPTS-UNDECIDED row never reached the state this shape exists to test, and
+# its clean reading would be shape A's answer a second time.
+#
+# `sh` IS STRIPPED ALONGSIDE `theirs_has`, AND THE FIRST WORD OF THAT SENTENCE IS THE REASON. The
+# bucket used to be fed by one verb, so naming that verb and naming its FEEDERS were the same
+# string. They are not any more: an `sh` receipt now carries a base control of its own, so a corpus
+# stripped of `theirs_has` alone still emits the row and this shape silently stops reaching the
+# empty state it exists to test — which is the arm's own FAIL text, and it is what fired. The
+# predicate here is "no receipt that can populate the bucket", never a list of verbs; when a third
+# verb gains a base control this line moves with it.
 LED_NOUND="$CONS/_bmad-output/ai-dlc-update/no-undecided-ledger.md"
-grep -v 'verify: theirs_has' "$CONS/_bmad-output/ai-dlc-update/push-candidate-ledger.md" > "$LED_NOUND"
+grep -vE 'verify: (theirs_has|sh)' "$CONS/_bmad-output/ai-dlc-update/push-candidate-ledger.md" > "$LED_NOUND"
 nou_out="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$LED_NOUND" 2>/dev/null)"
 nou_und="$(printf '%s\n' "$nou_out" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{c++} END{print c+0}')"
 nou_sw="$(printf '%s\n' "$nou_out" | awk -F'\t' '$1=="ENTRY-SWALLOWED"{c++} END{print c+0}')"
@@ -2227,7 +2235,7 @@ sfx_kill() { # <name> <dir-or-empty> <why-this-fix-is-wrong>
     return
   fi
   ma="$(bash "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>/dev/null)"
-  grep -v 'verify: theirs_has' "$CONS/_bmad-output/ai-dlc-update/push-candidate-ledger.md" > "$LED_NOUND"
+  grep -vE 'verify: (theirs_has|sh)' "$CONS/_bmad-output/ai-dlc-update/push-candidate-ledger.md" > "$LED_NOUND"
   mb="$(bash "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$LED_NOUND" 2>/dev/null)"
   rm -f "$LED_NOUND"
   # WRECKAGE GUARD, and it is the control the anchor note above demands: the mutant must still
@@ -2391,7 +2399,7 @@ sfx_pass() { # <name> <dir-or-empty> <what-this-fix-is>
     return
   fi
   pa="$(bash "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>/dev/null)"
-  grep -v 'verify: theirs_has' "$CONS/_bmad-output/ai-dlc-update/push-candidate-ledger.md" > "$LED_NOUND"
+  grep -vE 'verify: (theirs_has|sh)' "$CONS/_bmad-output/ai-dlc-update/push-candidate-ledger.md" > "$LED_NOUND"
   pb="$(bash "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$LED_NOUND" 2>/dev/null)"
   rm -f "$LED_NOUND"
   a_leak="$(printf '%s\n' "$pa" | awk -F'\t' '($1=="ENTRY-SWALLOWED"||$1=="RECEIPTS-UNDECIDED") && $3 ~ /\[receipt [0-9]+\/[0-9]+\]$/{c++} END{print c+0}')"
