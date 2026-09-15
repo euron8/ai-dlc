@@ -720,7 +720,63 @@ fi
 # not run; the RATIONALE is wrong as written. Not changed here -- it is outside what this release was
 # asked to touch, and an arm right for a stated wrong reason is a finding to report, not to quietly
 # reword.
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-57344}"
+#
+# RAISED A FIFTEENTH TIME, 57344 -> 62259, ON AN EXPLICIT OPERATOR RULING ("raise the
+# compaction-durable rule channel"), FOR ONE RULE COSTING 560 BYTES. Sized to headroom in the
+# style of the fourteenth raise rather than to the incoming rule, which is what the operator
+# asked for both times.
+#
+# THE COST IS MEASURED AFTER DRAFTING, AND THE ESTIMATE WAS AGAIN WRONG. The rule was drafted
+# first and costed at 455 bytes as plain text; landed in `tool-hazards.md` with its markdown
+# emphasis and paragraph break it is 560 -- 23% over. The fourth raise records an author's
+# estimate missing by 100% and the fourteenth restates the standard; this is a third instance,
+# in the safe direction, and it is why the number below is derived from the channel AFTER the
+# write rather than from the draft.
+#
+# A6 WAS OBSERVED FAILING AT 57904/57344 BEFORE THE CEILING MOVED, so this raise responds to a
+# check that fired rather than to one assumed.
+#
+# THE NUMBER IS DERIVED. The channel is 57904 bytes across 70 `## ` sections -- 827 bytes per
+# section, re-measured rather than carried from the fourteenth raise's 769 (the mean moves as
+# the channel grows, and a divisor carried across populations is the calibration error
+# `verification-discipline.md` names). 62259 leaves 4355 bytes: FIVE AND A QUARTER sections at
+# the current mean. Deliberately not ten -- the guard has to keep firing.
+#
+# THE FIRST DRAFT OF THIS ENTRY CARRIED TWO WRONG FIGURES -- 71 sections and 815 bytes/section --
+# and they were caught by re-deriving them against the tree rather than re-reading the sentence.
+# Recorded because a rule header is exactly where a plausible wrong number survives review.
+#
+# THE RULE is `tool-hazards.md`'s `find` shim clause. Earned this batch: the Bash tool's zsh
+# defines `find` as a shell function wrapping `bfs -S dfs`, and it returned a DIFFERENT first
+# path than `/usr/bin/find` on the same tree. The lead measured gate-log discovery order on the
+# reference consumer through it, concluded the BL-062 defect did not misfire there, and reported
+# that to the operator. A contract adversary refuted it: driving the SHIPPING validator, the
+# archived gate log is selected and PASSES on `cites 4385 tok` while the live one cites no
+# measurement and would FAIL -- a consumer-visible fails-open, the opposite of what was reported.
+#
+# THE INSTRUCTIVE HALF IS THE CONTROL. Counts agreed 3/3 and a negative control answered 0/0
+# both ways, so every control present passed while the ORDER -- the only property being read --
+# was wrong. That is a control on a different property than the claim, and it is why the clause
+# says a count control does not validate an order claim.
+#
+# WHY IT CANNOT BE MECHANIZED OR SCOPED. 46 tracked files call `find`, and every one of them is
+# CORRECT: under `bash` the name resolves to `/usr/bin/find` (verified under
+# `env -i PATH=/usr/bin:/bin bash` against the interactive shell's own function definition as the
+# control). The hazard exists only in an ad-hoc tool call, which no tracked file records, so
+# there is nothing for an arm to scan -- the same reason the `ugrep` half of the neighbouring
+# clause reaches this channel. Prose only, so `resident-context.md` bars scoping it.
+#
+# THE SUBTRACTION POOL WAS SCANNED BEFORE THE RAISE, as the eleventh entry requires. Six tokens
+# across the seven durable files: `bfs` 0, `shell-snapshot` 0, `shell snapshot` 0, `traversal` 0,
+# `find ` 1, `ordering` 1 -- against a positive control finding a phrase known to sit in
+# `CLAUDE.md` and a negative control returning 0. Both near-matches were READ rather than
+# inferred from the count: `CLAUDE.md:72` is a `find` invocation inside a derive command, not
+# prose about `find`, and `operator-rulings.md:49` is "ordering work" in the scheduling sense.
+# Neither is this subject.
+#
+# WHAT IS STILL NOT COVERED. The judgement-per-passage vestigial form is STILL not exhaustively
+# enumerated. That debt is now five raises old and is stated rather than quietly carried forward.
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-62259}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done

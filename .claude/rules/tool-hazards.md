@@ -170,3 +170,10 @@ in a tracked file. SIP blocks `dtruss` but not `fs_usage`. The
 interactive `grep` is a `ugrep` shim that honours `.gitignore`, so an interactive search and
 a scripted one scan different sets. Measure under `env -i PATH=/usr/bin:/bin bash` when the
 answer has to hold for a shipped script.
+
+**`find` IS A SHIM TOO, AND IT ANSWERS IN A DIFFERENT ORDER.** Interactively it is a shell
+function wrapping `bfs -S dfs`; a shipped script gets `/usr/bin/find`. Measured on one tree,
+the two returned DIFFERENT first paths while their counts agreed 3/3 and a negative control
+answered 0/0 both ways — so the natural control passed and the only property being read was
+wrong. **A count control does not validate an ORDER claim.** Any `find`-ordering figure taken
+in a tool call is void; re-take it with `/usr/bin/find` and name the binary beside the number.
