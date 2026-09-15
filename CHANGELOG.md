@@ -15,6 +15,71 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.578.0] - 2026-09-15
+
+Batch 114, one release, one subject. `ledger-reverify.sh` is a bootstrapping file, so it ships
+alone: the pull that carries this fix is classified by the engine WITHOUT it, and only the pull
+after that reads a report the fix produced.
+
+### `PC-S344-SH-RECEIPTS-GET-NO-BASE-CONTROL-SO-STILL-LIVE-CANNOT-BE-READ` — the `sh` verb now gets the base control the `theirs_has` verb already had, so a `STILL-LIVE` says whether the pull measured anything
+
+`RECEIPTS-UNDECIDED` is the row that says *this pull moved neither side of the predicate, so the
+`STILL-LIVE` beside it is a restatement of the previous run rather than a measurement*. It was
+reachable from `theirs_has` alone. The `sh` arm exported `$BASE` to every receipt and then
+evaluated nothing at it — `base_holds|base_show` appeared **0** times in the `sh)` arm against
+**4** in `theirs_*`, and `th_undecided` incremented at exactly one site, inside `theirs_*`. `sh`
+is the verb most receipts use, so the row was structurally blind to most of the corpus it was
+written to describe.
+
+Three helpers now take the control: `refs_differ()` refuses a run where `$BASE` and `$THEIRS` are
+the same ref or `base..theirs` is empty — both sides would read one tree, every receipt would
+answer SAME, and a 100% undecided count would be a fact about the invocation rather than about
+the ledger. `sh_base_eligible()` admits the bucket-1 receipts and TALLIES each exclusion rather
+than merely applying it. `sh_base_control()` re-runs the receipt with `$THEIRS` rebound to
+`$BASE`, one binding apart from the evaluation site, and resolves THREE ways.
+
+**The third way is why the two-way version was refused.** A base control that exits 126/127 never
+ran, and a two-arm resolve reads "not exit 0 at base" as *decided* — a broken control scored as a
+measurement. Refused controls are counted separately, reported beside the numerators, and are in
+neither.
+
+**The control runs on the CLOSE path as well**, at the `CLOSE-CANDIDATE` emitter and not only at
+the `STILL-LIVE` one. That is the direction this file's own header names as the one that loses
+information permanently: a receipt already exiting non-zero at base had stopped reproducing
+BEFORE the pull, so `base..theirs` is not the event that absorbed it, and the row goes on to tell
+the operator to annotate a version. The first cut guarded only the exit-0 path, which left the
+new mechanism exempting the very acquittal it exists to catch.
+
+**Two exclusions are stated with their counts, not recited.** A receipt naming `$BASE` itself
+would compare base against base under the rebinding — seeded and measured, a `git diff "$BASE"
+"$THEIRS"` receipt reads rc 0 at theirs and rc 1 under the rebinding, so it does not merely
+mis-measure, it FLIPS to the close direction. A receipt reading `$THEIRS_TREE` has no base twin
+and the control would answer SAME by construction. Classes with no members are not mentioned; a
+stated exclusion with nothing in it is a sentence the operator cannot check against anything.
+
+**It is a run-scoped COUNT and deliberately not a per-row status.** Measured on the reference
+consumer at `0.576.0→0.577.0` (`base..theirs` = 14 files): **20 of 20** eligible `sh` receipts
+undecided, **0** control-refused, with exclusions of 1 naming neither ref and 1 naming `$BASE`.
+Widened to the archive for a base rate, **49 SAME against 1 MOVED** — roughly one receipt in
+fifty discriminates. A per-row accusation at that rate indicts the whole ledger; the count says
+which run measured something and only the operator can say which entry.
+
+No new status token. `RECEIPTS-UNDECIDED` is a closed-vocabulary member owned by
+`ledger-reverify.sh` and bound by **I39**, with `SKILL.md` and `emit-report.sh` as its readers, so
+a new token would have meant touching all three; the four counts are summed into `th_undecided`
+and the gate line is byte-unchanged, which also keeps three fixture mutations anchored on its
+exact text alive. Cost, nine interleaved reps: medians 6340ms → 6856ms, +516ms, non-overlapping
+spreads.
+
+`BL-254` is filed for what the fix cannot deliver. A consumer executes the engine it last
+installed, so a `RECEIPTS-UNDECIDED` row missing its `sh` numerators is byte-identical to a run
+that had none — and no predicate resolving against this tree can observe a consumer's installed
+copy. Its receipt drives the shipped engine against a seeded four-receipt ledger and reads the
+emitted row's derived numerators; it was scored against the real fix and three non-fixes, each of
+which loses a different clause. The candidate's own proposed receipt, a whole-arm
+`grep -qE 'base_holds|base_show|THEIRS="\$BASE"'`, is satisfied by a comment naming those tokens
+and was not used.
+
 ## [0.577.0] - 2026-09-15
 
 Batch 113, one release, two subjects in disjoint files, `BL-053` and `BL-055`. Both are

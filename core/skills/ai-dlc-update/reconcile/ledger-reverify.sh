@@ -824,6 +824,123 @@ receipt_reads_dist_as_path() {
   esac
 }
 
+# --- THE BASE CONTROL FOR AN `sh` RECEIPT ------------------------------------------------------
+#
+# THE STATE THIS MAKES VISIBLE, and it is the `theirs_has` question one verb along. The
+# RECEIPTS-UNDECIDED block at the foot of this file exists to say: this pull moved NEITHER side of
+# the predicate, so the verdict is a restatement of the last run rather than a new measurement.
+# That block was reachable from `theirs_has` alone. `sh` — the verb most receipts use, and the one
+# that runs arbitrary consumer-side commands — exported `$BASE` to every receipt's environment and
+# evaluated NOTHING at it, so a receipt that reads the same at both refs was indistinguishable from
+# one the pull genuinely moved.
+#
+# THE CONTROL IS THE RECEIPT ITSELF, RE-RUN WITH `$THEIRS` REBOUND TO `$BASE`, through the
+# byte-identical `$sh_prog` and the byte-identical env export list. Nothing else can answer the
+# question: the predicate is an arbitrary one-liner, so there is no text to parse and no second
+# implementation that would be anything but an opinion about it.
+#
+# THREE-WAY, NEVER TWO, AND TWO OF THE THREE ARMS FAIL OPEN. A base control that exits 126 or 127
+# NEVER RAN — that is the "command not found / subject renamed" status the `126|127)` arm below
+# already refuses to read as a fix — so "it reproduced at base as well" is FALSE for it, and a
+# two-arm rule would score the row *decided* on a control that produced no measurement. Refusals
+# are counted separately and enter no numerator.
+#
+# ELIGIBILITY, AND EACH EXCLUSION IS STATED IN THE EMITTED ROW rather than left to be inferred
+# from a number:
+#
+#   BUCKET 1 ONLY. A receipt naming neither `$THEIRS` nor `$DIST` reads only the consumer's
+#   installed tree, which re-verification has not touched; rebinding a ref it never mentions
+#   cannot move it, so the control would answer SAME on every one of them and the count would be
+#   a measure of the partition rather than of the pull.
+#
+#   MINUS RECEIPTS NAMING `$BASE`. The rebinding makes such a receipt compare base against base.
+#   MEASURED, seeded: a `git diff "$BASE" "$THEIRS"` receipt reads rc=0 at theirs and rc=1 under
+#   the rebinding — it does not merely mis-measure, it FLIPS to the CLOSE direction, which is the
+#   verdict this file's header names as the one that loses information permanently.
+#
+#   MINUS RECEIPTS READING `$THEIRS_TREE`. `theirs_tree()` materializes a tree AT THEIRS; there is
+#   no base twin, so the rebinding leaves such a receipt reading theirs on both sides and the
+#   control answers SAME by construction. Materializing a second tree is a second archive, a second
+#   extraction and a second cleanup owner for a partition the live corpus does not currently
+#   populate, so it is EXCLUDED and the exclusion is reported.
+#
+# AND THE DIFFERENTIAL IS GUARDED BEFORE IT IS READ. `refs_differ()` refuses a run where `$BASE`
+# and `$THEIRS` are the same ref, or where `base..theirs` is empty: both sides would then read the
+# same tree, every receipt would answer SAME, and a 100% undecided count would be a fact about the
+# invocation rather than about the ledger. A pull that moved nothing at all is a different claim,
+# and this block makes it by saying nothing.
+SH_DIFF_STATE=""       # "" not attempted | yes | no
+refs_differ() { # 0 = base..theirs is a real, non-empty differential; 1 = there is nothing to read
+  case "$SH_DIFF_STATE" in
+    yes) return 0 ;;
+    no)  return 1 ;;
+  esac
+  SH_DIFF_STATE=no
+  [ -n "$BASE" ] && [ -n "$THEIRS" ] || return 1
+  [ "$BASE" != "$THEIRS" ] || return 1
+  # NOT PIPED INTO `grep -c`: this file runs under `pipefail`, and the emptiness of the output is
+  # the whole answer, so it is read as a STRING rather than as a status.
+  local _d
+  _d="$(git -C "$DIST" diff --name-only "$BASE" "$THEIRS" 2>/dev/null)"
+  [ -n "$_d" ] || return 1
+  SH_DIFF_STATE=yes
+  return 0
+}
+sh_base_eligible() { # <receipt-text> -> 0 eligible; 1 not, TALLYING which exclusion refused it
+  # EACH EXCLUSION IS COUNTED, NOT MERELY APPLIED, so the row below can name the classes that
+  # ACTUALLY HAVE MEMBERS in this run rather than reciting all three on every ledger. A stated
+  # exclusion with nothing in it is a sentence the operator cannot check against anything, and
+  # three of them on a ledger where one applies is how a detail becomes one nobody reads.
+  #
+  # `$THEIRS_TREE` FIRST, because the unbraced spelling is a PREFIX of `$THEIRS` and would
+  # otherwise be admitted by the bucket-1 arm below by accident.
+  case "$1" in
+    *'$THEIRS_TREE'*|*'${THEIRS_TREE}'*)
+      sh_ex_tree=$(( ${sh_ex_tree:-0} + 1 )); return 1 ;;
+  esac
+  case "$1" in
+    *'$BASE'*|*'${BASE}'*)
+      sh_ex_base=$(( ${sh_ex_base:-0} + 1 )); return 1 ;;
+  esac
+  case "$1" in
+    *'$THEIRS'*|*'${THEIRS}'*|*'$DIST'*|*'${DIST}'*) return 0 ;;
+  esac
+  sh_ex_neither=$(( ${sh_ex_neither:-0} + 1 ))
+  return 1
+}
+sh_base_rc() { # <sh_prog> -> the receipt's status with $THEIRS REBOUND to $BASE
+  # THE EXPORT LIST IS THE ONE AT THE EVALUATION SITE, ONE BINDING APART. A control that also
+  # differed in its environment would be a second program, and its disagreement would say nothing
+  # about the refs.
+  DIST="$DIST" BASE="$BASE" THEIRS="$BASE" CONSUMER="$CONSUMER" THEIRS_TREE="$THEIRS_TREE" \
+    bash -c "$1" >/dev/null 2>&1
+}
+sh_base_control() { # <receipt-text> <sh_prog> <theirs-side rc> -- accumulates, emits nothing
+  refs_differ || return 0
+  sh_base_eligible "$1" || return 0
+  local _brc
+  sh_base_rc "$2"; _brc=$?
+  case "$3" in
+    0) sh_live_total=$(( ${sh_live_total:-0} + 1 )) ;;
+    *) sh_close_total=$(( ${sh_close_total:-0} + 1 )) ;;
+  esac
+  case "$_brc" in
+    126|127)
+      # THE CONTROL REFUSED. It never ran, so it decides nothing in either direction.
+      sh_refused=$(( ${sh_refused:-0} + 1 ))
+      return 0 ;;
+  esac
+  # SAME DIRECTION AT BOTH REFS = the pull moved neither side of this predicate. On the STILL-LIVE
+  # side that is an exit 0 at base as well; on the CLOSE side it is a non-zero at base as well,
+  # which means the receipt was ALREADY "no longer reproducing" before the pull.
+  if [ "$3" -eq 0 ]; then
+    [ "$_brc" -eq 0 ] && sh_live_undecided=$(( ${sh_live_undecided:-0} + 1 ))
+  else
+    [ "$_brc" -ne 0 ] && sh_close_undecided=$(( ${sh_close_undecided:-0} + 1 ))
+  fi
+  return 0
+}
+
 # --- IS AN `sh` RECEIPT FALSIFIABLE BY A PULL AT ALL? -------------------------------------------
 #
 # A `verify: sh` receipt runs `cd "$CONSUMER" && { … }`, so a receipt that names neither `$THEIRS`
@@ -1787,6 +1904,12 @@ while IFS="$(printf '\t')" read -r label ord directive; do
             # being unfalsifiable while reading upstream at theirs, which is the opposite of true.
             *'$THEIRS'*|*'${THEIRS}'*|*'$DIST'*|*'${DIST}'*|*'$THEIRS_TREE'*|*'${THEIRS_TREE}'*)
               # Bucket 1 -- consults upstream, so a pull can flip it. BYTE-UNCHANGED.
+              #
+              # ...AND THE BASE CONTROL IS TAKEN HERE, where the row is already decided. It
+              # accumulates a run-scoped COUNT and emits nothing: see THE BASE CONTROL FOR AN `sh`
+              # RECEIPT above for the three-way resolve and the exclusions, and the RECEIPTS-
+              # UNDECIDED block at the foot of this file for why this is a count and not a verdict.
+              sh_base_control "$rest" "$sh_prog" "$sh_rc"
               emit STILL-LIVE "$label" "verify sh: still reproduces at theirs ($TV)" ;;
             *)
               if ! core_map; then
@@ -1816,6 +1939,13 @@ EOF
           if [ -n "$_gone" ]; then
             emit NEEDS-REVIEW "$label" "unresolved: the receipt exited $sh_rc, but consumer-relative path(s) it names DO NOT EXIST:${_gone}. A receipt whose subject is missing exits non-zero for the ABSENCE, and that is indistinguishable from exiting non-zero because the defect is gone — so this status cannot be read as 'fixed'. Re-anchor it at the subject's current path and re-run. Measured on this ledger: an artifact-path migration moved one subject and the entry proposed closing a defect that still reproduced at the new path. (This detail states no mechanism the receipt was checked for: an earlier version asserted an \`&&\` chain short-circuiting, and the receipts it was shown against used \`;\` and explicit exit guards.)"
           else
+            # THE BASE CONTROL RUNS ON THE CLOSE PATH TOO, AND THIS IS THE DIRECTION IT MATTERS
+            # MOST IN. Everything above this line tests the RECEIPT; nothing tested whether the
+            # PULL is what changed its answer. A receipt that already exited non-zero at base was
+            # "no longer reproducing" BEFORE the pull, so `base..theirs` is not the event this row
+            # attributes the absorption to -- and the row goes on to name a version to annotate
+            # with. Counted, never silenced: the close still stands for the operator to confirm.
+            sh_base_control "$rest" "$sh_prog" "$sh_rc"
             emit CLOSE-CANDIDATE "$label" "verify sh: no longer reproduces at theirs ($TV) — likely absorbed. Confirm, then annotate 'ADOPTED UPSTREAM (v$TV, verified <date>)'. Do NOT delete the entry. Every consumer-relative path this receipt names still exists, so the exit is not a moved subject; a subject named in a form this cannot see is still possible, so confirm before draining."
           fi ;;
       esac
@@ -1881,6 +2011,34 @@ RSFX=""
 # so a ledger whose receipts are all well-anchored says nothing — and $th_total is the control
 # that makes that silence readable, because a run with no `theirs_has` receipts at all has an
 # empty bucket for a completely different reason.
+#
+# THE `sh` HALF IS THE SAME CLAIM ONE VERB ALONG, AND IT RIDES IN THIS ROW RATHER THAN IN A SECOND
+# ONE. `sh` is the verb most receipts use; until the base control above existed it was the verb
+# with no base-side measurement at all, so a `verify: sh` STILL-LIVE said "exit 0 at theirs" and
+# nothing whatever about whether this pull is what produced that. A SECOND run-scoped row was
+# considered and rejected: the two rows would carry one sentence in two spellings, and an operator
+# reading a report scrolls past the second. The DETAIL separates them; the ROW does not.
+#
+# COUNTS, NOT PER-ROW ACCUSATIONS, AND THE MEASUREMENT IS WHY. On the reference consumer's live
+# ledger every eligible `sh` receipt reads the same at both refs — widened to its archive, 49 of 50
+# — so a per-row status here would accuse the whole ledger and a NEEDS-REVIEW would make the
+# operator's worklist the ledger itself. Roughly one receipt in fifty discriminates; the count says
+# which run measured something, and only the operator can say which entry.
+#
+# THE REFUSED COUNT IS REPORTED BESIDE THE NUMERATOR AND IS NOT IN IT. A base control that exited
+# 126/127 never ran. Folding it into either side would make a broken control read as a measurement
+# — in one direction as "the pull moved this", in the other as "it did not" — and both are claims
+# about an evaluation that did not happen.
+#
+# THE FOUR COUNTS ARE SUMMED INTO `th_undecided` AND THE GATE LINE IS BYTE-UNCHANGED, deliberately.
+# Four `||`-joined tests spread across a continuation would read identically and would silently
+# retire three fixture mutations that anchor on this line by its exact text — a mutation that
+# matches nothing is a lost subject, and the arm it feeds then reads exactly like one that passed.
+# The `theirs_has` numerator moves to `$th_only`, which is that verb's own count and the only value
+# its sentence may print; the increment site inside the loop is untouched, so the mutation that
+# drops the base test there still moves the number it is written to move.
+th_only=$(( ${th_undecided:-0} ))
+th_undecided=$(( th_only + ${sh_live_undecided:-0} + ${sh_close_undecided:-0} + ${sh_refused:-0} ))
 if [ "${th_undecided:-0}" -gt 0 ]; then
   # THE ENTRY COLUMN IS A CONSTANT, NOT `$LEDGER`, AND THAT IS NOT COSMETIC. This row is
   # run-scoped, so it has no entry to name — and the obvious filler is the ledger path, which is
@@ -1888,7 +2046,38 @@ if [ "${th_undecided:-0}" -gt 0 ]; then
   # `ledger-reverify-unfalsifiable` fixture asserts precisely that a verdict cannot depend on the
   # addressing, and it caught this: `<consumer>/./_bmad-…/push-candidate-ledger.md` and an arg-5
   # copy elsewhere are the same run and must produce the same rows.
-  emit RECEIPTS-UNDECIDED "(theirs_has receipts)" "$th_undecided of $th_total 'theirs_has' receipt(s) reported STILL-LIVE on a substring present at BASE as well as at theirs ($TV), so THIS PULL MOVED NEITHER SIDE OF THEM: those verdicts are restatements of the previous run, not new measurements. A STILL-LIVE here is not evidence the defect survives — an anchor on text the fix KEEPS survives the fix, and the entry can then never close. Re-anchor each on a token the fix must REMOVE (step 3f), or read the code. Do not treat a zero CLOSE-CANDIDATE count from this run as evidence that nothing was absorbed."
+  #
+  # THE `theirs_has` SENTENCE OPENS THE DETAIL AND IS BYTE-UNCHANGED when its count is non-zero.
+  # The `sh` sentences are APPENDED. A row whose leading clause moved with the corpus would make
+  # every reader of this detail — the fixture's tally arm included — key on whichever verb
+  # happened to fire first.
+  _und_det=""
+  if [ "${th_only:-0}" -gt 0 ]; then
+    _und_det="$th_only of $th_total 'theirs_has' receipt(s) reported STILL-LIVE on a substring present at BASE as well as at theirs ($TV), so THIS PULL MOVED NEITHER SIDE OF THEM: those verdicts are restatements of the previous run, not new measurements. A STILL-LIVE here is not evidence the defect survives — an anchor on text the fix KEEPS survives the fix, and the entry can then never close. Re-anchor each on a token the fix must REMOVE (step 3f), or read the code. Do not treat a zero CLOSE-CANDIDATE count from this run as evidence that nothing was absorbed."
+  fi
+  if [ "${sh_live_undecided:-0}" -gt 0 ]; then
+    _und_det="$_und_det${_und_det:+ }AND THE SAME OF THE 'sh' VERB: $sh_live_undecided of ${sh_live_total:-0} 'verify: sh' receipt(s) reported STILL-LIVE and exited 0 with \$THEIRS REBOUND TO \$BASE as well, so base..theirs moved neither side of them either. The receipt re-ran byte-identically, one binding apart. Same remedy: anchor on something the fix must change, or read the code."
+  fi
+  if [ "${sh_close_undecided:-0}" -gt 0 ]; then
+    _und_det="$_und_det${_und_det:+ }AND $sh_close_undecided of ${sh_close_total:-0} 'verify: sh' CLOSE-CANDIDATE(s) ALSO exited non-zero at BASE, so the receipt was already 'no longer reproducing' BEFORE this pull and base..theirs is not the event that absorbed it. Establish what did before annotating a version — an absorption attributed to the wrong release is a permanent record, and a close is the verdict that cannot be taken back."
+  fi
+  if [ "${sh_refused:-0}" -gt 0 ]; then
+    _und_det="$_und_det${_und_det:+ }${sh_refused} 'verify: sh' base control(s) REFUSED (exit 126/127: command not found or not executable), which is what a renamed or deleted subject looks like at base. Those never ran, so they are in NO numerator above and nothing here says whether this pull moved them."
+  fi
+  # THE EXCLUSIONS ARE STATED WITH THEIR COUNTS, AND ONLY THE CLASSES THAT HAVE MEMBERS. Three
+  # classes of `sh` receipt get no base control at all, each for a reason that is a property of the
+  # RECEIPT rather than of the entry, and a denominator whose population is unstated is a count an
+  # operator cannot check. Derived from the tallies rather than recited: a class with nothing in it
+  # is a sentence with no subject, and on a ledger where one class applies the other two are
+  # exactly the "for the record" material that turns a finding into a paragraph to skim.
+  _und_ex=""
+  [ "${sh_ex_neither:-0}" -gt 0 ] && _und_ex="$_und_ex ${sh_ex_neither} naming neither \$THEIRS nor \$DIST (they read only the consumer's installed tree, which no rebinding moves);"
+  [ "${sh_ex_base:-0}" -gt 0 ] && _und_ex="$_und_ex ${sh_ex_base} naming \$BASE themselves (the rebinding would have them compare base against base, and a seeded 'git diff \$BASE \$THEIRS' receipt FLIPS to the close direction under it);"
+  [ "${sh_ex_tree:-0}" -gt 0 ] && _und_ex="$_und_ex ${sh_ex_tree} reading \$THEIRS_TREE (materialized at theirs, with no base twin, so the control would answer SAME by construction);"
+  if [ -n "$_und_det" ] && [ -n "$_und_ex" ]; then
+    _und_det="$_und_det THE 'sh' DENOMINATORS EXCLUDE, BY CONSTRUCTION:${_und_ex%;}."
+  fi
+  emit RECEIPTS-UNDECIDED "(receipt base controls)" "$_und_det"
 fi
 
 # ---------------------------------------------------------------------------
