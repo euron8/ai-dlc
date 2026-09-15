@@ -14,6 +14,9 @@ so the driver can assert *which* element rejects it:
 | V4 | padding-only reason — clears the 19+ length rule, fails density | 4 (reason) |
 | V6 | `src/pool.py:FIXME` — a file ref with no digits after the colon | 3 (file:line) |
 | V7 | cites `Item 7`, which is CLOSED | 2 (item OPEN/IN SPRINT) |
+| V35 | cites `Item 8` — CLOSED, title `reOPEN the ack shim later` | 2 (item OPEN/IN SPRINT) |
+| V36 | cites `Item 9` — CLOSED, title `the OPEN question of pooling` | 2 (item OPEN/IN SPRINT) |
+| V37 | cites `Item 10` — **OPEN**, same `OPEN question` title | none; near-miss |
 | V12 | a 16-char reason: clears the density floor, under the length floor | 4 (reason) |
 | V5 | honest stub — the positive control | none; passes all four |
 | V13 | a module docstring reading `Harmonization Phase 4` — prose | none; **not a marker** |
@@ -43,6 +46,34 @@ and the fixture would report success. V6 and V7 exist because a mutation run
 showed the original four did not cover element 3's digit-only rule or element
 2's CLOSED case — a loosened element 3 and a CLOSED-accepting element 2 both
 passed the fixture unchanged.
+
+**V35/V36/V37 are element 2's status token, and V7 could not reach it.** V7
+cites a CLOSED item whose title carries no `OPEN` substring, so the seeded
+corpus was green whether the token was bound to a field or loose in the line —
+the arm read as covering the case and could not fire on the widening that had
+actually shipped, an unbounded `.*` that accepted any occurrence of the four
+characters after the item number.
+
+V35 and V36 are not one variant twice: each refuses a wrong fix the other
+accepts. V35's item is titled `reOPEN the ack shim later`, which no literal
+token blacklist can be keyed on — a fix keeping the unbounded `.*` and merely
+excluding the word `OPENAPI` closes the receipt and ships the defect intact,
+and only a title like this one refuses it. V36's is `the OPEN question of
+pooling`, where `OPEN` is a standalone word, so it refuses a
+non-alphanumeric-boundary form as well, which V35 passes.
+
+**V37 is the near-miss, and it is what keeps the fix from being an
+over-tightening.** Its title is V36's verbatim and its status is `(OPEN)`, so
+the pair differs in exactly one property — the status field, never the title.
+Without it every arm above is satisfied by an element 2 that refuses any item
+whose title contains `OPEN`, which is a check that errors on correct data and
+refuses an honest stub whose item genuinely is open. V5 cannot stand in for it:
+V5's title carries no `OPEN` substring, so it is one property short of what
+such a regression keys on.
+
+Item 7 itself is left exactly as it was. Rewording it in place would make the
+fixture fire without the regex being fixed, and a receipt elsewhere substitutes
+on its literal title text.
 
 **V4 and V12 are element 4's pair**, and the same mutation run added V12 for
 the same reason. Element 4 has two independent floors — a 20-character length
@@ -164,6 +195,16 @@ Restoring the bare alternative flips V13 and V16; deleting the phase marker
 flips only V14; widening the absence vocabulary to match anything flips V13 and
 V16; dropping `NotImplementedError` from the other markers flips only V15, which
 no other arm here notices.
+
+**Element 2's status test has two mutants, and they are applied by `awk` rather
+than by `sed`.** Both replacement texts carry `&&`, and an `&` in a `sed`
+replacement is the whole matched line — such a substitution re-inserts the line
+inside itself, produces a copy that differs from the original, satisfies the
+`cmp -s` guard, and tests something nobody wrote. `element2-unbounded` restores
+the unbounded `.*` and is killed by V36; `element2-token-blacklist` keeps that
+form and merely excludes the literal word `OPENAPI`, which closes the receipt
+while shipping the defect intact, and is killed by V35 — the variant whose title
+no blacklist can be keyed on.
 
 The comment-gate and carve-out mutants follow the same construction. Every one
 was profiled against all thirty variants and an unmutated control, and nine move

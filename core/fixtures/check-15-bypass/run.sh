@@ -138,6 +138,24 @@ expect src/v3_no_file_line.sh   element3-file-line "V3 no-file-line"
 expect src/v4_reason_padding.py element4-reason    "V4 reason-padding"
 expect src/v6_file_no_digits.py element3-file-line "V6 file-no-digits"
 expect src/v7_item_closed.py    element2-item-open "V7 item-closed"
+# ELEMENT 2's STATUS TOKEN IS BOUND TO A FIELD, NOT LOOSE IN THE LINE. V7 above cites a
+# CLOSED item whose title carries no `OPEN` substring, so it is green whether the token is
+# bound or not — the arm read as covering this and could not fire. V35 and V36 cite CLOSED
+# items whose TITLES contain the four characters, and neither is keyable by a literal token
+# blacklist: V35's `reOPEN` defeats excluding the word `OPENAPI`, and V36's `the OPEN
+# question` defeats a non-alphanumeric-boundary form as well, because there `OPEN` is a
+# standalone word. Each refuses a wrong fix the other accepts.
+expect src/v35_item_closed_reopen_title.py \
+                                element2-item-open "V35 CLOSED item, 'reOPEN' in the title"
+expect src/v36_item_closed_open_word_title.py \
+                                element2-item-open "V36 CLOSED item, 'the OPEN question' in the title"
+# THE NEAR-MISS, and it is what stops the fix from being an over-tightening. V37's title is
+# V36's verbatim and its status is `(OPEN)`, so the two differ in ONE property — the status
+# field, never the title. Without it every arm above is satisfied by an element 2 that
+# refuses any item whose title contains `OPEN`, which refuses an honest stub whose item
+# genuinely IS open. V5 is one property short of this: its title carries no `OPEN` at all.
+expect src/v37_open_item_open_word_title.py \
+                                ok                 "V37 OPEN item with the same 'OPEN question' title (near-miss)"
 # Element 4's two floors are independent. V4 is under density only; V12 is under length
 # only. Without the pair, deleting either floor leaves every variant landing on the
 # other and the fixture stays green with one published floor untested.
@@ -329,6 +347,12 @@ fi
 # `negation-window-not-adjacency` moves V25 and V27, and both are genuinely acquitted by a
 # boundary-only negation: V25 owns the kill because strict adjacency is what it exists to
 # force, and V27 stands down for it. The other nine each move exactly one.
+#
+# THE TWO ELEMENT-2 MUTANTS ARE APPLIED BY AN AWK PROGRAM, NOT BY A `sed` SUBSTITUTION.
+# Their replacement text carries `&&`, and an `&` in a sed replacement is the whole matched
+# line — the substitution re-inserts the line inside itself, applies cleanly, passes the
+# `cmp -s` guard, and tests nothing. `mut_copy` below dispatches on the name for exactly
+# those two and every other mutant keeps its sed.
 MUT_NAME=(
   phase-alternative-restored phase-marker-dropped absence-widened
   notimplementederror-dropped prose-marker-unbounded prose-gate-on-raw-line
@@ -336,6 +360,7 @@ MUT_NAME=(
   negation-window-not-adjacency tests-path-skipped
   test-vocab-without-path-conjunct carve-outs-disarmed
   deferral-word-refusal-dropped negation-bound-widened vocab-window-widened
+  element2-unbounded element2-token-blacklist
 )
 MUT_SED=(
   "s@^CODE_MARKER='.*'\$@CODE_MARKER='(NotImplementedError|Phase [0-9])'@"
@@ -353,6 +378,8 @@ MUT_SED=(
   's@^    \[\[ \${BASH_REMATCH\[0\]} =~ \$STUB_NEGATION_DEFERRAL \]\] && return 0$@    :@'
   "s@\[\[:space:\]\]+){0,2}\$'\$@[[:space:]]+){0,5}\$'@"
   's@^TEST_VOCAB_LINES=10$@TEST_VOCAB_LINES=100@'
+  AWK-ELEMENT2-UNBOUNDED
+  AWK-ELEMENT2-BLACKLIST
 )
 MUT_PROBE=(
   src/v13_phase_prose_docstring.py src/v14_phase_deferral.py src/v16_phase_section_label.py
@@ -361,6 +388,7 @@ MUT_PROBE=(
   src/v25_neg_word_real_deferral.py tests/v26_test_real_deferral.py
   src/v30_mock_prose_nontest.py src/v23_negation.ts
   src/v31_neg_deferral_word.py src/v32_neg_three_words_out.py tests/v33_mock_eleven_up.py
+  src/v36_item_closed_open_word_title.py src/v35_item_closed_reopen_title.py
 )
 MUT_WANT=(
   element1-item-ref ok element1-item-ref
@@ -369,6 +397,7 @@ MUT_WANT=(
   ok ok
   ok element1-item-ref
   ok ok ok
+  ok ok
 )
 MUT_WHY=(
   "V13 — the sprint-306 docstring is a finding again the moment the alternative is matched on the raw line"
@@ -386,11 +415,36 @@ MUT_WHY=(
   "V31 — 'not implemented stub' is acquitted the moment the negation phrase stops being checked for deferral vocabulary; eight such prefixes reached the first cut"
   "V32 — a negation three words from the token acquits the moment the intervening-word bound widens; strict adjacency is what separates a denial from a qualifier of something else"
   "V33 — a mock eleven lines up acquits the moment the window widens; V24 at seven lines survives every window, so only this seed asserts the boundary"
+  "V36 — a CLOSED item whose title carries 'the OPEN question' is accepted again the moment the status token stops being bound to a trailing field; V7 cannot see this, its title carrying no OPEN substring at all"
+  "V35 — a CLOSED item titled 'reOPEN' is accepted again by a fix that keeps the unbounded .* and merely excludes the literal word OPENAPI; the exclusion closes the receipt and ships the defect, and only a title no blacklist can be keyed on refuses it"
 )
 
-for i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14; do
+# mut_copy <label> <sed-program> <dest> — write the mutated copy.
+#
+# EVERY MUTANT WHOSE REPLACEMENT TEXT CARRIES `&&` IS APPLIED BY AWK, NEVER BY `sed`. An `&`
+# in a sed replacement is the whole matched line, so such a substitution re-inserts the line
+# inside itself: the copy differs from the original, `cmp -s` is satisfied, and the mutant
+# tests something nobody wrote. The two element-2 mutants are the ones in that class, and
+# each is anchored on the single line opening `      [[ $bl =~ \(` — the shipped status
+# test. The awk program counts its own hits and the `cmp -s` guard below reports a lost
+# anchor as BAD rather than letting an unmutated copy score a survival.
+mut_copy() {
+  local label="$1" prog="$2" dest="$3"
+  case "$label" in
+    element2-unbounded)
+      awk '/^      \[\[ \$bl =~ \\\(/ { print "      [[ $bl =~ ^-\\ Item\\ [0-9]+.*(OPEN|IN\\ SPRINT\\ [0-9]+) ]] && open=1"; next } { print }' \
+        "$AUDIT" > "$dest" 2>/dev/null ;;
+    element2-token-blacklist)
+      awk '/^      \[\[ \$bl =~ \\\(/ { print "      [[ $bl =~ ^-\\ Item\\ [0-9]+.*(OPEN|IN\\ SPRINT\\ [0-9]+) ]] && ! [[ $bl =~ OPENAPI ]] && open=1"; next } { print }' \
+        "$AUDIT" > "$dest" 2>/dev/null ;;
+    *)
+      sed "$prog" "$AUDIT" > "$dest" 2>/dev/null ;;
+  esac
+}
+
+for i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do
   label="${MUT_NAME[$i]}"; copy="$MUT/$label.sh"
-  sed "${MUT_SED[$i]}" "$AUDIT" > "$copy" 2>/dev/null
+  mut_copy "$label" "${MUT_SED[$i]}" "$copy"
   # `cmp -s` first: a sed that matched nothing produces an unmutated copy, which answers
   # the baseline on every probe and scores a survival that reads as a working arm.
   if cmp -s "$AUDIT" "$copy"; then
@@ -408,7 +462,7 @@ done
 
 echo
 if [ "$fails" -eq 0 ]; then
-  echo "PASS  check-15-bypass: 34 variants correct against the shipping validator. Each"
+  echo "PASS  check-15-bypass: 37 variants correct against the shipping validator. Each"
   echo "      adversary is rejected on its intended element — absent item, CLOSED item, no"
   echo "      file:line, digitless file ref, and element 4's two floors separately (a"
   echo "      padded reason under density, a short reason under length) — the honest stub"
@@ -431,8 +485,15 @@ if [ "$fails" -eq 0 ]; then
   echo "      neighbours are still caught — deferral vocabulary that is not a denial, a real"
   echo "      deferral in a test file with no mock vocabulary, a negation qualifying another"
   echo "      noun, a negation after the token, a second bare occurrence, and mock prose in a"
-  echo "      file that is not a test. Fifteen mutants prove the phase rule's three lines, the"
-  echo "      prose gate's four, and the two carve-outs' seven load-bearing -- the last three at the boundaries an adversary found unasserted."
+  echo "      file that is not a test. Element 2's status token is bound to a trailing field"
+  echo "      rather than loose in the line: two CLOSED items whose TITLES carry the four"
+  echo "      characters OPEN are rejected -- one of them spelled so no literal token"
+  echo "      blacklist can be keyed on it -- while an item with the same title and an OPEN"
+  echo "      status still passes, so the binding cannot be an over-tightening. Seventeen"
+  echo "      mutants prove the phase rule's three lines, the prose gate's four, the two"
+  echo "      carve-outs' seven and element 2's status test load-bearing -- the last two"
+  echo "      refusing the unbounded form and the token blacklist that closes a receipt"
+  echo "      while shipping the defect intact."
   exit 0
 fi
 echo "FAIL  check-15-bypass: $fails assertion(s) wrong." >&2

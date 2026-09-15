@@ -47,12 +47,33 @@ rm -rf "$TREE"                     # idempotent re-seed
 # `tests/` would be acquitted or not for a reason no arm names.
 mkdir -p "$TREE/src" "$TREE/tests" "$TREE/_bmad-output/planning-artifacts"
 
+# ITEMS 8, 9 AND 10 CARRY THE FOUR CHARACTERS `OPEN` INSIDE THEIR TITLES, AND THAT IS THE
+# POINT. Element 2's status test used to read `^- Item [0-9]+.*(OPEN|IN SPRINT [0-9]+)`,
+# where the `.*` is unbounded and the token bound to nothing, so ANY occurrence of those
+# four characters after the item number satisfied it and a `(CLOSED)` item laundered a stub
+# through a `gate_types: [universal]` check.
+#
+# ITEM 7 IS LEFT EXACTLY AS IT WAS. Its title carries no `OPEN` substring, so the seeded
+# corpus was green whether the token was bound or not — the fixture read as covering this
+# and could not fire. The repair is these three items and their variants, NOT a reworded
+# Item 7: an existing receipt substitutes on the literal string `retired ack shim`, and
+# rewording it in place would close that receipt while changing nothing about the regex.
+#
+# NEITHER TITLE IS KEYABLE BY A LITERAL TOKEN BLACKLIST, WHICH IS WHY THEY ARE THESE TWO.
+# `OPENAPI` is excludable by name — a fix that leaves the unbounded `.*` intact and simply
+# refuses that one word closes the receipt and ships the defect. `reOPEN` defeats a literal
+# exclusion, and `the OPEN question` defeats a non-alphanumeric-boundary form too, because
+# there the token IS a standalone word. Both are needed: each kills a wrong fix the other
+# survives.
 cat > "$TREE/_bmad-output/planning-artifacts/carry-over-backlog.md" <<'EOF'
 # Carry-over backlog
 
 - Item 12 — connection pooling for the read path (OPEN)
 - Item 34 — queue driver pin (IN SPRINT 43)
 - Item 7 — retired ack shim (CLOSED)
+- Item 8 — reOPEN the ack shim later (CLOSED)
+- Item 9 — the OPEN question of pooling (CLOSED)
+- Item 10 — the OPEN question of sharding (OPEN)
 EOF
 
 # ---- V1: cites an item that is not in the backlog at all ---------------------
@@ -119,6 +140,50 @@ def retire_ack_shim():
     # Carry-over Item 7 — see src/ack.py:12
     # deferral-reason: the ack shim cannot be removed until the queue
     #   driver pin lands and the consumers redeploy.
+    raise NotImplementedError  # stub
+EOF
+
+# ---- V35 / V36: a CLOSED item whose TITLE carries the four characters `OPEN` ---
+# The defect V7 was written for and could not reach. V7 cites Item 7, whose title carries no
+# `OPEN` substring, so the seeded corpus was green whether element 2's status token was
+# bound to anything or not: `seed.sh` said V7 existed to catch "an element 2 widened to
+# accept CLOSED" and the arm could not fire on the widening that actually shipped.
+#
+# EACH OF THESE TWO KILLS A WRONG FIX THE OTHER SURVIVES, so neither is the other said
+# twice. V35 cites Item 8, `reOPEN the ack shim later (CLOSED)` — a title no literal token
+# blacklist can be keyed on, so it refuses the fix that leaves the unbounded `.*` in place
+# and excludes the single word `OPENAPI`. V36 cites Item 9, `the OPEN question of pooling
+# (CLOSED)`, where `OPEN` IS a standalone word — so it also refuses a
+# non-alphanumeric-boundary form, which V35 passes. Both are `(CLOSED)` and both must be
+# rejected on element 2.
+cat > "$TREE/src/v35_item_closed_reopen_title.py" <<'EOF'
+def reopen_ack_shim():
+    # Carry-over Item 8 — see src/ack.py:17
+    # deferral-reason: the ack shim cannot be reopened until the queue
+    #   driver pin lands and the consumers redeploy.
+    raise NotImplementedError  # stub
+EOF
+
+cat > "$TREE/src/v36_item_closed_open_word_title.py" <<'EOF'
+def answer_pooling_question():
+    # Carry-over Item 9 — see src/pool.py:63
+    # deferral-reason: the pooling question cannot be settled until the
+    #   production request-rate sample lands next sprint.
+    raise NotImplementedError  # stub
+EOF
+
+# ---- V37: THE NEAR-MISS, and the arm that stops the fix being an over-tightening
+# Item 10's title is V36's verbatim — `the OPEN question of sharding` — and its status is
+# `(OPEN)`. So V35/V36 and V37 differ in ONE property: the status field, not the title.
+# Without this variant every arm above is satisfied by an element 2 that simply refuses any
+# item whose title contains `OPEN`, which is a check that errors on correct data and refuses
+# an honest stub whose item genuinely IS open. V5 cannot cover it — V5's title carries no
+# `OPEN` substring at all, so it is one property short of what such a regression keys on.
+cat > "$TREE/src/v37_open_item_open_word_title.py" <<'EOF'
+def shard_the_read_path():
+    # Carry-over Item 10 — see src/shard.py:24
+    # deferral-reason: the sharding question needs the production
+    #   request-rate sample that lands next sprint.
     raise NotImplementedError  # stub
 EOF
 
