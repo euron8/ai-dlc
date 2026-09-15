@@ -3787,3 +3787,75 @@ re-opened blind.
 
 verify: manual
 
+## BL-255 — `BL-005` names a pole that was displaced four releases before it was read, and the entry that measured the displacement filed it in the ARCHIVE
+
+**DEFECT.** `BL-005`'s heading asserts *"`validator-arm-selection` is the pre-push pole, at 166s
+of a 217s wall"*. Both halves are false at HEAD. Re-derived from
+`.git/ai-dlc-fixture-durations` in one invocation: `ledger-reverify` **493**,
+`fixture-git-env-seam` 239, `validator-arm-selection` **229**, `validator-fork-budget` 212,
+`gate-adjudication-mutants` 211, `validator-arm-selection-b` 206. The entry's subject is third,
+and the wall it quotes is less than half the current pole. A session scoping performance work
+off this entry optimizes a fixture that is not the pole.
+
+**THE DISPLACEMENT WAS MEASURED AND IT WAS NOT MISSED — IT WAS FILED WHERE THE LIVE ENTRY IS
+NOT.** The archived `BL-088` records, in its own `**LANDED (v0.541.0, verified 274efdae)**`
+paragraph, *"The pole fell from 480 to 97 and the suite pole is now `ledger-reverify` at 427"*.
+So the correct figure has been written down since `v0.541.0` — in `docs/backlog.archive.md`,
+which no live-entry reader opens. `BL-088` also says *"`BL-005`'s `validator-arm-selection` pole
+is untouched by this and remains separate"*, which was true of the FIX and false of the
+HEADLINE in the same breath: after that change `validator-arm-selection` was no longer the pole,
+and the sentence reads as though the entry had been checked.
+
+**THIS IS THE `DISCHARGED`-vs-`TERMINAL` SHAPE ONE LEVEL UP.** An archived entry can correct a
+live one, and nothing joins the two directions. `BL-088` cites `BL-005` twice
+(`docs/backlog.archive.md:9763`, `:9803`) and neither citation reaches the live file.
+
+**WHAT HAS CHANGED SINCE, AND IT IS THE FIXTURE, NOT THE VALIDATOR.**
+`core/fixtures/ledger-reverify/run.sh` was **2142** lines at `274efdae` and is **3643** at HEAD
+— five commits, every one a release adding receipt-grammar coverage (`v0.555.0`, `v0.556.0`,
+`v0.558.0`, `v0.567.0`, `v0.578.0`). The fixture drives **105** invocations of the script under
+test across **108** assertion arms. 427 → 493 is that growth, and the subject is both the suite
+pole and a BOOTSTRAPPING file, so each addition was correct in isolation and none was costed
+against the wall clock.
+
+**TWO PROPERTIES OF THE INSTRUMENT, BOTH OF WHICH MAKE A NAIVE RECEIPT WRONG.**
+`.git/ai-dlc-fixture-durations` is UNTRACKED and per-clone — `git log` over it returns 0 against
+a control of 1 for a tracked path — so no ref carries it and a fresh clone has none. And
+`.githooks/pre-push` MERGES each run's timings over the prior file
+(`awk 'NF == 2 { c[$1] = $2 }'`), keeping old rows for fixtures that did not run: this batch's
+own push selected 31 of 200 and `ledger-reverify` was NOT among the verdicts (control:
+`snapshot-evidence-cell` appears as `ok` at that shape in the same log), so the **493 is carried
+forward from an earlier run and its age is not derivable**. A row is a floor of unknown vintage,
+never a fresh measurement.
+
+**WHAT IS OWED.** Correct `BL-005`'s heading and its 166s/217s figures, or retire it in favour
+of an entry naming the real pole. Its third claim — shard `b`'s ~47.8s solo floor and the two
+measured routes below it — is a SEPARATE SUBJECT and is untested here; **an entry with two
+subjects expires only when both do**, so do not close `BL-005` on this finding alone.
+
+**THE RECEIPT KEYS ON TRACKED TEXT, NOT ON THE TIMING FILE, AND THE FIRST DRAFT OF THIS ENTRY
+GOT THAT WRONG.** It declared `verify: manual` on the grounds that a receipt cannot read
+`.git/ai-dlc-fixture-durations` — true, and beside the point. That file is untracked, per-clone,
+and merged forward across runs, so a predicate keyed on it would measure the runner's clone
+rather than the claim; R5 also runs every receipt in its own DETACHED CHECKOUT of HEAD, where
+the file is the caller's or absent. But **the defect is a contradiction between two TRACKED
+files** — a live heading asserting a pole that an archived entry measured away — and that is
+checkable.
+
+**THE ANCHOR IS THE HEADING LINE, AND THE LOOSE FORM DOES NOT DISCRIMINATE.** This entry quotes
+`BL-005`'s heading verbatim one paragraph up, so a whole-file grep is satisfied by its own text
+— measured at **3** hits for the bare phrase against **1** for the heading-anchored form. And
+the anchor must carry `validator-arm-selection`: a corrected heading naming the REAL pole still
+contains `is the pre-push pole`, so the short anchor scores 1 on the repaired tree as well.
+Scored against three plausible repair shapes, the shipped anchor returns 0 on all three.
+
+**POLARITY, AND THE FIRST DRAFT HAD IT BACKWARDS.** In this ledger exit 0 means the fix is
+PRESENT and non-zero means the entry still reproduces — the opposite of the `ledger-reverify`
+convention for the consumer's ledger. The first cut exited 0 while the defect was live and
+`backlog-reverify.sh` duly reported this entry as `CLOSE-CANDIDATE` on the commit that filed
+it. It now exits **1** while the heading still makes the claim. The archived counter-record is
+a PRECONDITION: if `BL-088`'s measurement ever leaves the archive the receipt exits **9**
+rather than reporting a false close.
+
+verify: sh L=docs/backlog.md; A=docs/backlog.archive.md; [ -f "$L" ] && [ -f "$A" ] || exit 9; a="$(grep -c 'The pole fell from' "$A")" || a=0; [ "$a" -ge 1 ] || exit 9; h="$(grep -c '^## BL-005.*validator-arm-selection.*is the pre-push pole' "$L")" || h=0; [ "$h" -ge 1 ] && exit 1; exit 0
+
