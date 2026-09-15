@@ -9770,9 +9770,13 @@ in either repo, and tell every delegate the same.** Delegates work in `mktemp` c
 Every figure here is a HYPOTHESIS about a tree that has moved. The measured base rate of expired
 premises in this program is roughly one in two. Each command below carries its own control.
 
-**FOUR of this section's fenced blocks are RUNNABLE and the rest are EXAMPLES, so "run the derive
-block" names a set and not a fence.** Run them in this order, and read the prose between them —
-each one's controls are explained there, not in the fence:
+**SIX of this section's TEN fenced blocks are RUNNABLE and the rest are EXAMPLES, so "run the
+derive block" names a set and not a fence.** They group as the FIVE numbered steps below —
+**step 3 covers two adjacent fences**, which is why the fence count and the step count differ.
+Derive both rather than trusting this sentence: the fence total is
+`awk` over ` ``` ` markers between this heading and `### NEXT ACTIONS`, halved. Run them in this
+order, and read the prose between them — each one's controls are explained there, not in the
+fence:
 
 1. the four-command INSTRUMENT block immediately below (repo head, backlog counts, receipt
    histogram);
@@ -9780,7 +9784,9 @@ each one's controls are explained there, not in the fence:
    and carries the presence and absence controls — **actions 1b and 6 both depend on this one**;
 3. the `pc()` PARTITION block, then the four-line overlap block under it, which corrects
    DISCHARGED;
-4. the delivery-gap block (`.ai-dlc-version` vs `VERSION`).
+4. the **PC-BACKED WORKLIST** join, which is the SCOPING input and the only block here that
+   answers what work REMAINS;
+5. the delivery-gap block (`.ai-dlc-version` vs `VERSION`).
 
 The others are worked examples: the three ledger RECORD FORMS, the grammar table, the
 mode-only `git diff --raw` recipe, and the receipt histogram one-liner action 5 owns. Concatenating
@@ -10049,6 +10055,54 @@ comm -12 /tmp/live.txt /tmp/open_here   > /tmp/f.txt
 comm -12 /tmp/d.txt /tmp/f.txt          # the overlap. NOT zero, and not an error
 comm -23 /tmp/d.txt <(comm -12 /tmp/d.txt /tmp/f.txt) | wc -l   # DISCHARGED, corrected
 ```
+
+**THE PC-BACKED WORKLIST. THIS IS THE SCOPING INPUT, AND EVERY BLOCK ABOVE ANSWERS A DIFFERENT
+QUESTION.** The unfiled join (`comm -23 /tmp/live.txt /tmp/filed.txt`) answers *which candidates
+has nobody filed an entry for* — a measurement of FILING COVERAGE. This one answers *which live
+entries here are still owed to a candidate the consumer still carries* — a measurement of WORK
+REMAINING. **A session that reads the first as the second concludes the program is finished while
+the ledger is full.** Measured at batch 112: the unfiled join returned 23, every one already
+dispositioned, which was reported as "zero available"; this join returned **22 live entries, 20 of
+them with an `sh` receipt still exiting 1**, and the consumer's live ledger held 62 candidates at
+the same instant. Both numbers were correct. Only one of them was about the work.
+
+Run the JOIN, never the bare `awk` half — the `awk` alone answers a question about
+`docs/backlog.md` and says nothing about the consumer.
+
+```
+LC_ALL=C awk '/^## BL-[0-9]+/{if(id!=""){out()}; id=$2; pcs=""}
+     match($0,/PC-[A-Z0-9][A-Z0-9.-]+/){p=substr($0,RSTART,RLENGTH); if(index(pcs,p)==0) pcs=pcs (pcs?",":"") p}
+     END{if(id!=""){out()}}
+     function out(){ if(pcs!="") printf "%s\t%s\n", id, pcs }' docs/backlog.md > /tmp/entry_pcs.tsv
+wc -l < /tmp/entry_pcs.tsv     # INSTRUMENT: entries citing ANY PC id. NOT the worklist.
+[ -s /tmp/entry_pcs.tsv ] || echo "REFUSE: awk half matched nothing -- grammar, not corpus"
+: > /tmp/pc_backed.tsv
+while IFS="$(printf '\t')" read -r id pcs; do
+  for p in $(printf '%s' "$pcs" | tr ',' ' '); do
+    grep -qxF "$p" /tmp/live.txt && { printf '%s\t%s\n' "$id" "$p" >> /tmp/pc_backed.tsv; break; }
+  done
+done < /tmp/entry_pcs.tsv
+wc -l < /tmp/pc_backed.tsv     # THE WORKLIST: entries whose candidate is STILL LIVE upstream
+cat /tmp/pc_backed.tsv         # read it -- the ids are the batch's candidate set
+# controls, same invocation:
+wc -l < /tmp/live.txt                                            # must be NON-ZERO
+grep -cxF 'PC-S295-RETRO-CHECK5-SELF-REFERENTIAL' /tmp/live.txt  # a known-live id: 1
+grep -cxF 'PC-S999-NEVER-A-REAL-ID' /tmp/live.txt                # impossible id: 0
+```
+
+**`grep -qxF` reads a FILE here, never a pipe** — fed from a pipe it exits at first match and
+`pipefail` turns the writer's EPIPE into a false NOT-FOUND on a large ledger, which is this one.
+
+**THEN SCORE EACH WORKLIST ENTRY'S RECEIPT RAW, AND DO NOT READ AN EXIT 1 AS "LIVE".** This corpus
+uses **exit 9** for *"a precondition moved and I measured nothing"*, and `backlog-reverify.sh` maps
+every non-zero to `STILL-LIVE`; one receipt read that way for 28 releases. An entry with NO `sh`
+receipt scores neither and needs its premise re-derived by hand. **The measured base rate of
+expired premises in this program is roughly one in two, so re-derive the premise of whatever you
+pick before building anything.**
+
+**AND THE PLAN ALREADY RECORDS SOME OF THIS SET AS NOT-READY — read that before ranking, so a
+refuted remedy is not rebuilt.** `grep -F "<id>" docs/plans/graph-ledger-full-drain.md` per
+worklist id; entries the file says nothing about are the ones no batch has examined.
 
 **Do not "fix" this by narrowing the grammar.** A citation's INTENT is not derivable from the
 token. The overlap is small, enumerable, and worth reading by hand.
@@ -10690,6 +10744,25 @@ given at batch 90.
    hand you dispatched is still out, even on a green gate: batch 63's merged branch was green
    at every phase when its second adversary returned two BLOCKERs, and batch 66's was green
    when its adversary returned a BLOCKER establishing the shipped fix had made things WORSE.**
+
+   **"RESIDUE ZERO" MEANS NO CANDIDATE AWAITS A FIRST FILING. IT NEVER MEANS THE PC WORK IS
+   DONE, AND EVERY BLOCK BELOW SAYING "ZERO KNOWN" IS MAKING ONLY THE NARROW CLAIM.** Two joins,
+   two questions, and they are not interchangeable:
+
+   - **`comm -23 /tmp/live.txt /tmp/filed.txt`** — candidates NO backlog entry cites. This is
+     FILING COVERAGE. It goes to zero when every candidate has been examined once, which is the
+     normal healthy state and says nothing about whether the defects are fixed.
+   - **the PC-BACKED WORKLIST join** in `### Derive the state` — live entries whose cited
+     candidate is STILL LIVE in the consumer's ledger. **This is WORK REMAINING and it is the
+     scoping input.** Run it every batch.
+
+   **Measured at batch 112, which got this wrong:** the first join returned 23, all already
+   dispositioned, and the session reported "zero available PC work" and scoped two no-`PC`
+   entries. The second join returned 22 entries, 20 with receipts still exiting 1, against a
+   consumer ledger holding 62 live candidates. **Scoping a no-`PC` entry over those 22 inverts
+   the operator's provenance-first ruling**, which exists precisely because a session finds its
+   own discoveries readiest. Report BOTH numbers, say which question each answers, and scope off
+   the second.
 
    **NOTHING IS PRE-SCOPED. THE SWEEP DECIDES, AND IT HAS NOW RETURNED NEW WORK TWO BATCHES
    RUNNING AFTER TWO EARLIER BLOCKS DECLARED THE PC-BACKED SET EXHAUSTED.** That declaration was
@@ -11901,11 +11974,14 @@ given at batch 90.
 
    **THERE IS NO PARKED SUBJECT. THE SWEEP DECIDES.** Do not go looking for a parked branch.
 
-   **IF THE SWEEP FINDS NOTHING, TAKE A PC-BACKED ENTRY**; re-derive the set with the join below
-   rather than reading a count here, and none is pre-chosen. The selection rule is PROVENANCE
-   first, then consequence — never readiness. Rank the set yourself; re-derive that your pick's id
-   is live upstream, with the archive and impossible-id controls both 0, and run its receipt RAW
-   before scoping it.
+   **IF THE SWEEP FINDS NO NEW FILING, THAT IS NOT AN EMPTY BATCH — TAKE A PC-BACKED ENTRY.**
+   "The sweep found nothing" means no candidate awaits a FIRST filing; the PC-BACKED WORKLIST
+   join in `### Derive the state` is what says whether work remains, and it has been non-empty
+   every time it has been run. Re-derive the set with that join rather than reading a count
+   here, and none is pre-chosen. The selection rule is PROVENANCE first, then consequence —
+   **never readiness, and a no-`PC` entry ranks below every member of that worklist.** Rank the
+   set yourself; re-derive that your pick's id is live upstream, with the archive and
+   impossible-id controls both 0, and run its receipt RAW before scoping it.
 
    **ENUMERATE THE ENTRY'S DISTINCT CLAIMS BEFORE YOU BUILD, BECAUSE HALF OF ONE MAY HAVE
    EXPIRED.** Batch 24's subject was filed against a mechanism a later release had already removed
