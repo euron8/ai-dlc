@@ -40,6 +40,22 @@ it was handed off:
   after they had merged. A session told to FOLLOW the file would have redone them.
 - **Citations that resolve.** `path:line` is this repo's evidence form, and one that
   cannot be located at resume time is a promissory note against evidence.
+- **A file under the byte ceiling.** A plan is a handoff that also accumulates a retrospective
+  record: the instruction does not grow and the record grows every batch, so a fresh session
+  reading top-down eventually meets the record before the instruction. Measured on this repo's
+  longest plan — 1158744 bytes across 276 commits of monotone growth, never once shrinking, its
+  genuine instruction under 4% of the file. Carried by arm `P8` of
+  `scripts/validate-plan-shape.sh` at 150000 bytes, `AI_DLC_PLAN_BYTES` overriding.
+  `scripts/plan-rotate.sh` is the remedy: it MOVES spent sections to
+  `docs/plans/archive/<slug>.md`, never deletes, and leaves a pointer line behind.
+
+  **That arm is scoped to EVERY plan, spent ones included, and that is deliberate.** Every other
+  arm here exempts a discharged plan, so a discharge banner in the head window silences five of
+  them at once — measured at eleven bytes, one word, taking a firing arm from one hit to zero.
+  Those arms' remedy is a sentence; this one's is hours of rotation, and an escape hatch cheaper
+  than the remedy is an instruction that ships its own opt-out. A spent plan satisfies the
+  ceiling by being ROTATED, not by carrying a word. Rotate it rather than reaching for an
+  exemption; there is no exemption list and one must not be added.
 - **An operator-ping instruction.** The plan is executed by a session the operator cannot see,
   where "still working" and "stopped, waiting on you" look identical from outside — so silence
   is a stall found only by polling. Every plan tells its executor to ping on any question, on

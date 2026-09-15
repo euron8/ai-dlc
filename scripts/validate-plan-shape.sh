@@ -62,9 +62,141 @@ errs=0; warns=0
 err()  { printf 'ERROR %s: %s\n'   "$1" "$2"; errs=$((errs+1)); }
 warn() { printf 'WARN  %s: %s\n'   "$1" "$2"; warns=$((warns+1)); }
 
+# ===================================================================================
+# P8 -- A PLAN FILE HAS A BYTE CEILING, AND EVERY PLAN IS IN SCOPE.
+#
+# WHAT THIS BOUNDS AND WHY NOTHING ELSE DOES. A plan is a HANDOFF that also accumulates a
+# retrospective record. The instruction does not grow; the record grows every batch, and
+# nothing in this repo has ever bounded that. Measured on the subject that produced this arm:
+# `docs/plans/graph-ledger-full-drain.md` at 1158744 bytes / 14764 lines across 276 commits of
+# MONOTONE growth -- it has never once shrunk -- carrying 113 batch numbers, with its genuine
+# instruction under 4% of the file. `scripts/backlog-rotate.sh:8` already records the gap in as
+# many words: the A6 byte ceiling in `validate-claude-rules.sh` covers CLAUDE.md and
+# `.claude/rules/` only, and `docs/plans/retire-graph-consumer-layer.md` reached 384817 bytes
+# with no push ever failing over it.
+#
+# A PLAN THAT NOBODY READS END TO END IS NOT A HANDOFF. Every other arm in this file checks
+# that the resumable parts are PRESENT. None of them can see that those parts are buried under
+# a record twenty-five times their size, and a fresh session reading top-down meets the record
+# first. That is the same failure P1 exists for, at the scale of the whole file instead of the
+# first section.
+#
+# ===================================================================================
+# WHY THERE IS NO `DISCHARGE_BANNER` GUARD, AND DO NOT ADD ONE. P9, P10, P11, P12 and P13 all
+# open with the same `head -12` liveness test, so a spent plan is out of their scope by
+# construction. P8 deliberately does NOT join that family, and the reason is a measurement
+# taken by driving this validator on the real subject file:
+#
+#     resume line repointed at an ancestor plan        -> P10 fires, 1 hit
+#     the same file plus `**SPENT.**` at line 2        -> P10 fires, 0 hits
+#     byte delta between the two inputs                -> 11
+#     control: an impossible arm name returns 0 on both inputs
+#
+# ELEVEN BYTES, ONE WORD, AND IT SILENCES P9, P10, P11, P12 AND P13 TOGETHER. For those arms
+# that is correct: their remedy is to write a sentence, and a plan whose author has declared it
+# spent genuinely does not need a resume line. P8's remedy is HOURS of rotation work, and its
+# opt-out would be one word typed into the head window the author is already editing. An arm
+# whose escape hatch is cheaper than its remedy is an instruction that ships its own opt-out,
+# which CLAUDE.md names as not an instruction at all.
+#
+# SO THE SCOPE IS EVERY DEPTH-1 PLAN, LIVE AND SPENT. Under that scoping a spent plan satisfies
+# P8 by being ROTATED, not by carrying a word -- and rotating a spent plan is the case where
+# moving the record out is least contentious, because nothing in it is still being followed.
+# `scripts/plan-rotate.sh` MOVES and never deletes, so the record survives at
+# `docs/plans/archive/<slug>.md` with a pointer line left in the live file.
+#
+# ===================================================================================
+# THE FALSE-POSITIVE SET IS EXACTLY TWO FILES AND IT IS NOT EMPTY. Measured over all 39
+# depth-1 plans at the shipped ceiling, in one invocation, with both halves reported:
+#
+#     OVER   1158744  docs/plans/graph-ledger-full-drain.md
+#     OVER    384817  docs/plans/retire-graph-consumer-layer.md
+#     control: 37 files at or under the ceiling; 2 + 37 = 39, the corpus size
+#
+# The control is the part that makes the two a reading rather than a search that happened to
+# stop twice. Claiming an EMPTY set over this corpus would be claiming more than was measured,
+# and the honest statement is that the arm ships RED on two known files.
+#
+# HOW THE SET REACHED ITS ENUMERATED STATE, which the repo requires beside the arm rather than
+# in a commit message. It was not narrowed by a grammar at all -- there is no grammar here to
+# tune, only a comparison -- so the narrowing is entirely in the CEILING and the REMEDY:
+#
+#   - `graph-ledger-full-drain.md` is rotated by the release that ships this arm. Its live
+#     remainder measures 138157 bytes, which is under the ceiling with headroom, and that
+#     figure is what the ceiling was set to admit.
+#   - `retire-graph-consumer-layer.md` is FULLY SPENT and carries 102 fence delimiters.
+#     Rotating it is separate work and is deliberately not folded into this release, because a
+#     fence-dense file is exactly where `plan-rotate.sh` REFUSES rather than guesses. It is a
+#     known red, named here, and not an exemption.
+#
+# NO EXEMPTION LIST EXISTS AND NONE SHOULD BE ADDED. An exemption keyed on either filename
+# would acquit the arm's own subject -- the second file is over the ceiling for precisely the
+# reason the arm exists -- and an arm that defends its own defect is the shape this repo has
+# shipped before.
+#
+# WHAT THIS ARM ACQUITS, stated because catching is only half of it. It acquits every plan at
+# or under the ceiling, and it says NOTHING about whether such a plan's content is resumable;
+# that is P1, P2, P9 through P13. It also acquits a plan that reached the ceiling by deletion
+# rather than rotation -- this arm cannot tell a moved section from a destroyed one, which is
+# why `plan-rotate.sh` carries the conservation arms and this file does not try to.
+#
+# THE CEILING IS A POLICY NUMBER, NOT A MEASUREMENT, and it is the operator's to set.
+# `AI_DLC_PLAN_BYTES` overrides it exactly as `AI_DLC_DURABLE_BYTES` overrides A6's ceiling at
+# `scripts/validate-claude-rules.sh:779`. The override is also how a fixture fires this arm
+# without committing an oversized file -- `core/fixtures/claude-rules-joins/run.sh:214` drives
+# A6 the same way, at `AI_DLC_DURABLE_BYTES=10`, so the arm is tested at its real comparison
+# and not at its file arithmetic.
+#
+# WHY THIS FILE AND NOT ANOTHER, established before the arm was written. The corpus is already
+# enumerated here, with the zero-corpus refusal above it; this script already runs as its own
+# pre-push step at `.githooks/pre-push:117` and is NOT a suite arm, so the cost does not reach
+# the fixture pole. A6 cannot take it: A6 sums BYTES ACROSS a fixed set of rule files against
+# one total, where this is a PER-FILE cap over a glob, and the two comparisons cannot be added.
+# `validate-backlog-size.sh` bounds a different file in a different unit and its own header
+# records why a byte clause was withdrawn there.
+#
+# THE SELF-PROBE RUNS BEFORE THE CORPUS AND FIRES IN BOTH DIRECTIONS. An arm reporting "every
+# plan is under the ceiling" without first proving it can produce a breach has established that
+# it ran, not that the corpus is short. The probe tree is under `mktemp` and is never the real
+# corpus. THE SECOND ASSERTION IS THE ONE THAT MATTERS: `[ over -gt N ] && [ at -le N ]` is
+# `validate-backlog-size.sh:149`'s shape, and that one line is what caught a broken counter
+# there -- a probe that only checks the two sizes were WRITTEN says nothing about whether the
+# comparison discriminates at the boundary.
+# ===================================================================================
+PLAN_MAX="${AI_DLC_PLAN_BYTES:-150000}"
+case "$PLAN_MAX" in
+  ''|*[!0-9]*)
+    echo "validate-plan-shape: AI_DLC_PLAN_BYTES is '$PLAN_MAX', which is not a byte count. Refusing rather than defaulting -- a ceiling nobody can read is a check that cannot fire." >&2
+    exit 2 ;;
+esac
+p8probe="$(mktemp -d)" || { echo "validate-plan-shape: FAIL -- mktemp -d" >&2; exit 2; }
+trap 'rm -rf "$p8probe"' EXIT
+printf '%*s' "$((PLAN_MAX + 1))" '' > "$p8probe/over.md"
+printf '%*s' "$PLAN_MAX"         '' > "$p8probe/at.md"
+p8_over="$(wc -c < "$p8probe/over.md" | tr -d ' ')"
+p8_at="$(wc -c   < "$p8probe/at.md"   | tr -d ' ')"
+if [ "$p8_over" != "$((PLAN_MAX + 1))" ] || [ "$p8_at" != "$PLAN_MAX" ]; then
+  echo "validate-plan-shape: P8 SELF-PROBE FAILED -- the byte counter read ${p8_over}/$((PLAN_MAX + 1)) and ${p8_at}/${PLAN_MAX} on seeded files, so it cannot be trusted on a real plan and no size verdict below is a reading." >&2
+  exit 2
+fi
+if ! { [ "$p8_over" -gt "$PLAN_MAX" ] && [ "$p8_at" -le "$PLAN_MAX" ]; }; then
+  echo "validate-plan-shape: P8 SELF-PROBE FAILED -- the comparison does not discriminate $((PLAN_MAX + 1)) from ${PLAN_MAX} at a ceiling of ${PLAN_MAX}. A ceiling that admits its own breach reads exactly like a corpus that is clean." >&2
+  exit 2
+fi
+
 for f in "${FILES[@]}"; do
   [ -f "$f" ] || { err "$f" "not a readable file"; continue; }
   rel="${f#./}"
+
+  # --- P8: the byte ceiling (see the block above the loop for the whole argument) ----
+  # NOT SCOPED TO LIVE PLANS -- deliberately, and the reason is measured directly above.
+  # ERROR tier, with P1/P2/P3b: there is no false-positive PATH here, only two enumerated
+  # false-positive FILES, both named above and both fixable by rotation rather than by
+  # exemption. The remedy names the program that does it.
+  p8_bytes="$(wc -c < "$f" | tr -d ' ')"
+  if [ "${p8_bytes:-0}" -gt "$PLAN_MAX" ]; then
+    err "$rel" "is $p8_bytes bytes against a ceiling of $PLAN_MAX. A plan is a HANDOFF that also accumulates a retrospective record: the instruction does not grow and the record does, so past this depth a fresh session reading top-down meets the record before the instruction. Run 'bash scripts/plan-rotate.sh $rel' to see what would move, then '--apply' to move the spent sections to docs/plans/archive/ -- it MOVES and never deletes, and it leaves a pointer line in the live file. Raising AI_DLC_PLAN_BYTES is the operator's call and the last resort."
+  fi
 
   # --- P1: the entry point ---------------------------------------------------------
   # A resuming session reads top-down and acts on the first thing that looks like an
