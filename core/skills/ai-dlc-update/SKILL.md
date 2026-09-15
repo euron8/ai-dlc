@@ -1054,7 +1054,18 @@ prose is itself generated rather than composed.
      needs no report.
    - `RECEIPTS-UNDECIDED` → one row per run, emitted only when the count is non-zero: how many
      `theirs_has` receipts reported `STILL-LIVE` on a substring present at **base as well as
-     theirs**. This pull moved neither side of those predicates, so their verdicts are
+     theirs**. **The `sh` verb is counted here too, by a base control that re-runs the receipt
+     with `$THEIRS` rebound to `$BASE`** — same direction at both refs means the pull moved
+     neither side of it. The DETAIL carries a separate numerator per clause: `STILL-LIVE` and
+     exit 0 at base, `CLOSE-CANDIDATE` and non-zero at base (the receipt had already stopped
+     reproducing BEFORE the pull, so `base..theirs` is not the event to annotate a version
+     with), and a REFUSED count for controls that exited 126/127 — those never ran and are in
+     no numerator. Three `sh` classes get no control at all and the row names the ones with
+     members: receipts naming neither `$THEIRS` nor `$DIST`, receipts naming `$BASE`
+     themselves, and receipts reading `$THEIRS_TREE`. No control is taken when `$BASE` and
+     `$THEIRS` are the same ref or `base..theirs` is empty; a pull that moved nothing is a
+     different claim and the row makes it by staying silent.
+     This pull moved neither side of those predicates, so their verdicts are
      restatements of the previous run rather than new measurements — the entry may be live or
      long fixed, and this run did not distinguish them. **A `STILL-LIVE` in that set is not
      evidence the defect survives.** An anchor on text the fix KEEPS survives the fix, and the
