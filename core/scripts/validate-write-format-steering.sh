@@ -227,57 +227,99 @@ for i in range(0, len(args), 4):
               % (tag, pop_p, key, val))
         continue
 
+    # ONE NAME MAY CARRY MORE THAN ONE DECLARED FORMAT. A shared append-only artifact can
+    # accept more than one entry SHAPE -- the push-candidate ledger accepts five record forms
+    # through one shared grammar function, not one canonical shape -- so `declared` is a name
+    # to LIST-OF-ENTRIES map, never last-write-wins. A TRUE duplicate is the same (name,
+    # declared_in) pair twice -- a copy-paste accident, or two formats that happen to live in
+    # the same file with different anchors would NOT collide here, because that pair differs.
     declared = {}
+    seen_pairs = set()
     for e in (steer.get('formats') or []):
         nm = (e.get('name') or '').strip()
         if not nm:
             print('%s\tFIELD\t<unnamed>\tan entry declares no name' % tag)
             continue
-        if nm in declared:
-            print('%s\tFIELD\t%s\tdeclared twice' % (tag, nm))
-        declared[nm] = e
+        pair = (nm, (e.get('declared_in') or '').strip())
+        if pair in seen_pairs:
+            print('%s\tFIELD\t%s\tsame name and declared_in repeated: %s' % (tag, nm, pair[1]))
+            continue
+        seen_pairs.add(pair)
+        declared.setdefault(nm, []).append(e)
 
     for nm in sorted(declared):
-        e = declared[nm]
-        where = (e.get('declared_in') or '').strip()
-        anchor = (e.get('anchor') or '').strip()
-        if not where or not anchor:
-            print('%s\tFIELD\t%s\tdeclares no %s'
-                  % (tag, nm, 'declared_in' if not where else 'anchor'))
-            continue
-        # BOTH LAYOUTS. install.sh splits what shares a parent here:
-        # core/scripts/<x> -> scripts/ai-dlc/<x> while core/schemas/ -> .claude/schemas/.
-        # A declaration written as a distribution path resolves nowhere on a consumer, so
-        # the consumer spelling is tried too before anything is called missing.
-        cands = [os.path.join(root, where)]
-        if where.startswith('core/schemas/'):
-            cands.append(os.path.join(root, '.claude/schemas/', os.path.basename(where)))
-        if where.startswith('core/scripts/'):
-            cands.append(os.path.join(root, 'scripts/ai-dlc/', os.path.basename(where)))
-        if where.startswith('core/skills/'):
-            cands.append(os.path.join(root, '.claude/skills/',
-                                      where[len('core/skills/'):]))
-        hit = next((c for c in cands if os.path.isfile(c)), None)
-        if hit is None:
-            print('%s\tMISSING\t%s\t%s (looked in %d layout(s))'
-                  % (tag, nm, where, len(cands)))
-            continue
-        try:
-            body = io.open(hit, encoding='utf-8', errors='replace').read()
-        except Exception as exc:
-            print('%s\tUNREADABLE\t%s\t%s: %s' % (tag, nm, where, exc))
-            continue
-        if anchor not in body:
-            print('%s\tSTALE\t%s\t%s no longer contains %r'
-                  % (tag, nm, os.path.relpath(hit, root), anchor))
-            continue
-        print('%s\tOK\t%s\t%s :: %s' % (tag, nm, where, e.get('kind', '?')))
+        for e in declared[nm]:
+            where = (e.get('declared_in') or '').strip()
+            anchor = (e.get('anchor') or '').strip()
+            if not where or not anchor:
+                print('%s\tFIELD\t%s\tdeclares no %s'
+                      % (tag, nm, 'declared_in' if not where else 'anchor'))
+                continue
+            # BOTH LAYOUTS. install.sh splits what shares a parent here:
+            # core/scripts/<x> -> scripts/ai-dlc/<x>, core/schemas/ -> .claude/schemas/,
+            # core/skills/<x> -> .claude/skills/<x>. A declaration written as a distribution
+            # path resolves nowhere on a consumer, so the consumer spelling is tried too
+            # before anything is called missing.
+            cands = [os.path.join(root, where)]
+            if where.startswith('core/schemas/'):
+                cands.append(os.path.join(root, '.claude/schemas/', os.path.basename(where)))
+            if where.startswith('core/scripts/'):
+                cands.append(os.path.join(root, 'scripts/ai-dlc/', os.path.basename(where)))
+            if where.startswith('core/skills/'):
+                cands.append(os.path.join(root, '.claude/skills/',
+                                          where[len('core/skills/'):]))
+            hit = next((c for c in cands if os.path.isfile(c)), None)
+            if hit is None:
+                # A DECLARATION WHOSE OWNING TOP-LEVEL COMPONENT ISN'T ON THIS TREE AT ALL IS
+                # A SKIP, NOT A FAILURE -- the same reasoning the whole-schemas-directory
+                # narrowing already applies, generalised to any component. install.sh's pull
+                # classes land core/schemas/, core/scripts/ and core/skills/ separately, so a
+                # consumer between two pulls can legitimately have the declaring schema
+                # without yet having the file it points at. Absence of the WHOLE owning
+                # directory in every candidate layout is that state; presence of the
+                # directory with the specific file missing is a real broken pointer and still
+                # fails below.
+                owner_dirs = {os.path.dirname(c) for c in cands}
+                # widen to the top-level layout directory for the skip test specifically
+                owner_tops = set()
+                for c in cands:
+                    rel = os.path.relpath(c, root)
+                    parts = rel.split(os.sep)
+                    owner_tops.add(os.path.join(root, *parts[:2]) if len(parts) > 1 else os.path.join(root, parts[0]))
+                if not any(os.path.isdir(d) for d in owner_tops):
+                    print('%s\tSKIP\t%s\t%s not yet present in this layout (component absent, not broken)'
+                          % (tag, nm, where))
+                    continue
+                print('%s\tMISSING\t%s\t%s (looked in %d layout(s))'
+                      % (tag, nm, where, len(cands)))
+                continue
+            try:
+                body = io.open(hit, encoding='utf-8', errors='replace').read()
+            except Exception as exc:
+                print('%s\tUNREADABLE\t%s\t%s: %s' % (tag, nm, where, exc))
+                continue
+            if anchor not in body:
+                print('%s\tSTALE\t%s\t%s no longer contains %r'
+                      % (tag, nm, os.path.relpath(hit, root), anchor))
+                continue
+            # THE ANCHOR IS PRINTED, DELIBERATELY, so a receipt reading --report can bind on
+            # it rather than merely on declared_in resolving. A receipt asserting only that a
+            # row exists for (name, declared_in) cannot distinguish a correct anchor from any
+            # other substring that happens to be present in the same file -- this is the
+            # column that closes that gap.
+            print('%s\tOK\t%s\t%s :: %s :: anchor=%s' % (tag, nm, where, e.get('kind', '?'), anchor))
 
-    for nm in sorted(set(declared) - set(population)):
+    declared_names = set(declared)
+    for nm in sorted(declared_names - set(population)):
         print('%s\tGHOST\t%s\tdeclared here but not in the joined population' % (tag, nm))
-    for nm in sorted(set(population) - set(declared)):
+    for nm in sorted(set(population) - declared_names):
         print('%s\tUNDECLARED\t%s\t-' % (tag, nm))
-    print('%s\tPOP\t%d\t%d' % (tag, len(population), len(declared)))
+    # POP_N is the ARTIFACT count (distinct names with at least one resolved declaration),
+    # never the ROW count -- one name may now print more than one OK row, and a reader that
+    # summed rows would report coverage that does not match the population it is a fraction
+    # of. DECL_N is the row count, printed separately, for anyone who wants it.
+    row_count = sum(len(v) for v in declared.values())
+    print('%s\tPOP\t%d\t%d' % (tag, len(population), row_count))
 PY
 }
 
@@ -390,14 +432,19 @@ if [ -z "$OUT" ]; then
   exit 1
 fi
 
-FAILURES=0; UNDECLARED=0; DECLARED_OK=0; POP_N=0; DECL_N=0
+FAILURES=0; UNDECLARED=0; ROW_COUNT=0; POP_N=0; DECL_N=0
+OK_NAMES_FILE="$(mktemp "${TMPDIR:-/tmp}/wfs-ok-names.XXXXXX" 2>/dev/null)" || OK_NAMES_FILE=""
+SKIP_COUNT=0
 while IFS='	' read -r tag kind what where; do
   [ "$tag" = "live" ] || continue
   case "$kind" in
-    OK)         DECLARED_OK=$((DECLARED_OK + 1))
+    OK)         ROW_COUNT=$((ROW_COUNT + 1))
+                [ -n "$OK_NAMES_FILE" ] && printf '%s\n' "$what" >> "$OK_NAMES_FILE"
                 [ "$REPORT" -eq 1 ] && printf '  declared   %-34s %s\n' "$what" "$where" ;;
     UNDECLARED) UNDECLARED=$((UNDECLARED + 1))
                 [ "$REPORT" -eq 1 ] && printf '  UNDECLARED %-34s no entry format is declared anywhere\n' "$what" ;;
+    SKIP)       SKIP_COUNT=$((SKIP_COUNT + 1))
+                [ "$REPORT" -eq 1 ] && printf '  SKIP       %-34s %s\n' "$what" "$where" ;;
     POP)        POP_N="$what"; DECL_N="$where" ;;
     MISSING)
       echo "validate-write-format-steering: FAIL — '$what' declares its entry format in ${where}," >&2
@@ -442,15 +489,33 @@ if [ -n "$MAX_UNDECLARED" ] && [ "$UNDECLARED" -gt "$MAX_UNDECLARED" ]; then
 fi
 
 if [ "$FAILURES" -gt 0 ]; then
+  [ -n "$OK_NAMES_FILE" ] && rm -f "$OK_NAMES_FILE"
   echo "validate-write-format-steering: FAIL — ${FAILURES} finding(s) over ${POP_N} shared append-only artifact(s)." >&2
   exit 1
+fi
+
+# COVERAGE IS COUNTED BY DISTINCT ARTIFACT NAME, NEVER BY ROW. One name may now print more
+# than one OK row (an artifact accepting more than one entry shape declares each shape
+# separately), and a coverage figure that summed rows would report "N of 20" with N able to
+# exceed 20 -- a fraction whose numerator is not drawn from its denominator's population. This
+# is the batch-95 finding ("PASS — 6 of 21 is NOT the fix condition") in its general form:
+# derive the covered-name count from the SET of names that printed at least one OK row, not
+# from the row count.
+if [ -n "$OK_NAMES_FILE" ]; then
+  DECLARED_OK="$(sort -u "$OK_NAMES_FILE" | grep -c .)" || DECLARED_OK=0
+  rm -f "$OK_NAMES_FILE"
+else
+  DECLARED_OK="$ROW_COUNT"
 fi
 
 # Say what was judged, with its counts. A pass that names no population is indistinguishable
 # from a pass that compared nothing, and the DISARMED arm above is the only thing standing
 # between the two.
 echo "validate-write-format-steering: PASS — ${DECLARED_OK} of ${POP_N} shared append-only artifact(s)"
-echo "  carry a declared entry format that resolves; ${UNDECLARED} carry none (reported, not fatal)."
+echo "  carry a declared entry format that resolves (${ROW_COUNT} declaration row(s) total, some"
+echo "  artifacts carrying more than one accepted entry shape); ${UNDECLARED} carry none (reported,"
+echo "  not fatal); ${SKIP_COUNT} declaration(s) SKIPPED because the layout component they point"
+echo "  into is not yet on this tree (a consumer between two pulls, not a broken declaration)."
 echo "  The four Rule 25(a) planning histories are OUTSIDE this population — they nest under"
 echo "  'planning-artifacts', which the population schema declares only at top level. Reaching"
 echo "  them is a widening of that schema, not a gap in this join."
