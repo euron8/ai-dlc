@@ -734,6 +734,397 @@ else
   fi
 fi
 
+# --- THE `sh` BASE CONTROL: does a STILL-LIVE say the PULL measured anything? -----------------
+#
+# THE STATE UNDER TEST. `verify: sh` exported `$BASE` to every receipt and evaluated nothing at
+# it, so an `sh` STILL-LIVE said "exit 0 at theirs" and nothing about whether base..theirs is
+# what produced that. The engine now re-runs the receipt byte-identically with `$THEIRS` rebound
+# to `$BASE` and folds the result into the EXISTING RECEIPTS-UNDECIDED row.
+#
+# EVERY RECEIPT HERE IS ASSERTED BY ITS rc PAIR BEFORE ANY ROW IS READ, and that ordering is the
+# arm rather than a nicety. The adversary's own first positive control read SAME because its
+# anchor came back truncated from a `grep -o`: a truncated anchor matches at NEITHER ref, which
+# is byte-indistinguishable from a receipt the pull genuinely did not move. Without the rc pair
+# a ledger of 30 SAME readings reads as a working check forever.
+#
+# THE SEEDS VARY IN SHAPE, NOT ONLY IN OUTCOME. `theirs_has` receipts elsewhere in this fixture
+# are built one way, so a battery whose `sh` seeds were built that way too would agree with the
+# reader for that reason. These are a `git show | grep`, a `cat-file -e`, a command-substitution
+# string compare, an `&&` chain and a bare `false` -- five constructions across seven receipts.
+SBC="$(dirname "$DIST")/sh-base-control"
+mkdir -p "$SBC"
+
+# THE RECEIPT IS RUN THROUGH THE ENGINE'S OWN WRAPPER AND ITS OWN EXPORT LIST, one binding apart.
+# A precondition measured with a different environment is a second program, and its agreement
+# would be about that program.
+sbc_rc() { # <receipt-text> <theirs-value> -> the receipt's status
+  local prog
+  prog="cd \"$CONS\" && { $1
+}"
+  DIST="$DIST" BASE="$BASE" THEIRS="$2" CONSUMER="$CONS" THEIRS_TREE="" \
+    bash -c "$prog" >/dev/null 2>&1
+}
+# Receipt texts, held ONCE so the precondition and the ledger cannot drift apart. A precondition
+# measured on a receipt the ledger does not carry is the shape this avoids.
+SBC_MOVER='git -C "$DIST" show "${THEIRS}:core/skills/ai-dlc/SKILL.md" | LC_ALL=C grep -q MARKER_B'
+SBC_SAME='git -C "$DIST" cat-file -e "${THEIRS}:VERSION"'
+SBC_REFUSED='v=$(git -C "$DIST" show "${THEIRS}:VERSION"); [ "$v" = "0.103.0" ] || zznosuchcommandever'
+# THE REFUSAL SEED EXISTS IN BOTH DIRECTIONS, AND THE SECOND ONE IS THE ONLY ONE THAT CAN KILL
+# THE TWO-WAY MUTANT. Measured while building this battery: with the refusal arm made
+# unmatchable, a 127 base control reaches `[ "$_brc" -eq 0 ]` on the STILL-LIVE side and 127 is
+# not 0, so it enters no numerator and the numerator does not move -- the STILL-LIVE refusal seed
+# alone scores the fails-open mutant as SURVIVED. On the CLOSE side the test is
+# `[ "$_brc" -ne 0 ]`, which 127 SATISFIES, so the row is scored *decided* on an evaluation that
+# never happened. That is the exact failure C3 of the contract names, it is reachable from one
+# direction only, and a battery seeded in the other direction cannot see it.
+SBC_CREFUSED='v=$(git -C "$DIST" show "${THEIRS}:VERSION"); [ "$v" = "0.103.0" ] && exit 1; zznosuchcommandever'
+SBC_CUNDEC='[ "$(git -C "$DIST" show "${THEIRS}:VERSION")" = "9.9.9" ]'
+SBC_CMOVED='[ "$(git -C "$DIST" show "${THEIRS}:VERSION")" = "0.100.0" ]'
+SBC_EXBASE='git -C "$DIST" cat-file -e "${BASE}:VERSION" && git -C "$DIST" cat-file -e "${THEIRS}:VERSION"'
+# `test -f`, NOT `[ -f … ]`, AND THAT IS I106 RATHER THAN A PREFERENCE. This receipt reads a
+# file inside the materialized theirs-tree; the bracket spelling of that read is byte-identical
+# to the root-resolver walk I106 refuses in a SHIPPING fixture, and its grammar cannot tell the
+# two apart. Measured: the bracket form failed the gate at this line against a control of zero
+# on the revision before it. The invariant is right and the seed is what moves -- a shipping
+# fixture must not carry the string at all, whatever it means locally.
+SBC_EXTREE='[ -n "${THEIRS_TREE:-}" ] || exit 127; test -f "$THEIRS_TREE/VERSION"'
+SBC_EXNEITHER='false'
+
+# THE PRECONDITION. Seven receipts, fourteen statuses, every one asserted against the value the
+# arms below depend on. MARKER_B arrives inside base..theirs, so the mover is 0/1; VERSION exists
+# at both refs, so the same-reader is 0/0; the refused one runs a command that does not exist only
+# when the version does not match, which is true at base alone.
+ASSERTIONS=$((ASSERTIONS + 1))
+sbc_bad=""
+sbc_probe() { # <name> <text> <want-theirs> <want-base>
+  local rt rb
+  sbc_rc "$2" "$THEIRS"; rt=$?
+  sbc_rc "$2" "$BASE";   rb=$?
+  [ "$rt" = "$3" ] && [ "$rb" = "$4" ] || sbc_bad="$sbc_bad [$1 got $rt/$rb want $3/$4]"
+}
+sbc_probe MOVER      "$SBC_MOVER"     0 1
+sbc_probe SAME       "$SBC_SAME"      0 0
+sbc_probe REFUSED    "$SBC_REFUSED"   0 127
+sbc_probe CLOSE-REFUSED "$SBC_CREFUSED" 1 127
+sbc_probe CLOSE-UNDEC "$SBC_CUNDEC"   1 1
+sbc_probe CLOSE-MOVED "$SBC_CMOVED"   1 0
+sbc_probe EX-BASE    "$SBC_EXBASE"    0 0
+sbc_probe EX-NEITHER "$SBC_EXNEITHER" 1 1
+# THE CONTROL FOR THAT AGREEMENT: a receipt whose two sides are asserted to DIFFER from what the
+# seven claim. If `sbc_rc` had stopped running the receipt at all it would answer one constant,
+# every probe above would still be comparable, and this one catches that -- a receipt that reads
+# 0 at theirs and 0 at base, asserted to be NOT 0/1, cannot be satisfied by a constant 0/1.
+sbc_rc 'true' "$THEIRS"; sbc_ctl_t=$?
+sbc_rc 'exit 3' "$THEIRS"; sbc_ctl_f=$?
+if [ -z "$sbc_bad" ] && [ "$sbc_ctl_t" -eq 0 ] && [ "$sbc_ctl_f" -eq 3 ]; then
+  printf '  ok    %-22s all seven probe receipts carry the rc pair their arm depends on, measured through the engine own wrapper (control: a trivial receipt answers 0 and an exit-3 receipt answers 3, so the runner is not returning a constant)\n' "sbc-preconditions"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s a probe receipt does not carry the rc pair its arm assumes%s (runner control: %s/%s, want 0/3) -- a receipt that matches at NEITHER ref reads exactly like one the pull did not move, so every count below would be unreadable\n' "sbc-preconditions" "${sbc_bad:- none}" "$sbc_ctl_t" "$sbc_ctl_f"
+fi
+
+# THE LEDGER. One entry per class, so each count below has exactly one member and a number that
+# moves names which class moved it. A denominator with two members in a class cannot say which.
+SBC_LED="$SBC/probe-ledger.md"
+{
+  printf '# probe\n\n'
+  printf '## PC-PROBE-MOVER - the pull MOVED it: exit 0 at theirs, non-zero at base\n\n'
+  printf 'verify: sh %s\n\n---\n\n' "$SBC_MOVER"
+  printf '## PC-PROBE-SAME - reads the same at both refs\n\n'
+  printf 'verify: sh %s\n\n---\n\n' "$SBC_SAME"
+  printf '## PC-PROBE-REFUSED - the base control exits 127, so it never ran\n\n'
+  printf 'verify: sh %s\n\n---\n\n' "$SBC_REFUSED"
+  printf '## PC-PROBE-CLOSE-REFUSED - closes at theirs, and its base control exits 127\n\n'
+  printf 'verify: sh %s\n\n---\n\n' "$SBC_CREFUSED"
+  printf '## PC-PROBE-CLOSE-UNDECIDED - closes, and was already closed at base\n\n'
+  printf 'verify: sh %s\n\n---\n\n' "$SBC_CUNDEC"
+  printf '## PC-PROBE-CLOSE-MOVED - closes BECAUSE the pull moved it\n\n'
+  printf 'verify: sh %s\n\n---\n\n' "$SBC_CMOVED"
+  printf '## PC-PROBE-EX-BASE - names $BASE itself, so the rebinding would compare base to base\n\n'
+  printf 'verify: sh %s\n\n---\n\n' "$SBC_EXBASE"
+  printf '## PC-PROBE-EX-TREE - reads $THEIRS_TREE, materialized at theirs with no base twin\n\n'
+  printf 'verify: sh %s\n\n---\n\n' "$SBC_EXTREE"
+  printf '## PC-PROBE-EX-NEITHER - names neither ref, so no rebinding can move it\n\n'
+  printf 'verify: sh %s\n' "$SBC_EXNEITHER"
+} > "$SBC_LED"
+
+sbc_out="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$SBC_LED" 2>/dev/null)"
+sbc_det="$(printf '%s\n' "$sbc_out" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{print $3; exit}')"
+sbc_row() { # <label> <want-status>
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if printf '%s\n' "$sbc_out" | awk -F'\t' -v l="$1" -v s="$2" '$2 ~ l && $1 == s {f=1} END{exit !f}'; then
+    printf '  ok    %-22s %s\n' "$1" "$2"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s want %s, got: %s\n' "$1" "$2" "$(printf '%s\n' "$sbc_out" | awk -F'\t' -v l="$1" '$2 ~ l {print $1; exit}')"
+    printf '%s\n' "$sbc_out" | sed 's/^/          | /'
+  fi
+}
+sbc_det_has() { # <name> <substring> <why>
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ -n "$sbc_det" ] && [ "${sbc_det#*"$2"}" != "$sbc_det" ]; then
+    printf '  ok    %-22s %s\n' "$1" "$3"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the undecided detail does not carry "%s" (%s). Detail: %s\n' "$1" "$2" "$3" "${sbc_det:-<no row>}"
+  fi
+}
+sbc_det_lacks() { # <name> <substring> <why>
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ -z "$sbc_det" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s there is no undecided row at all, so this absence is not a measurement (%s)\n' "$1" "$3"
+  elif [ "${sbc_det#*"$2"}" = "$sbc_det" ]; then
+    printf '  ok    %-22s %s\n' "$1" "$3"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the undecided detail carries "%s" and must not (%s)\n' "$1" "$2" "$3"
+  fi
+}
+
+# THE VERDICTS FIRST. The count arms below read a number; these read the rows that number is
+# about, so a count that is right for the wrong reason is still caught.
+sbc_row PC-PROBE-MOVER           STILL-LIVE
+sbc_row PC-PROBE-SAME            STILL-LIVE
+sbc_row PC-PROBE-REFUSED         STILL-LIVE
+sbc_row PC-PROBE-CLOSE-REFUSED   CLOSE-CANDIDATE
+sbc_row PC-PROBE-CLOSE-UNDECIDED CLOSE-CANDIDATE
+sbc_row PC-PROBE-CLOSE-MOVED     CLOSE-CANDIDATE
+
+# THE NUMERATOR AND THE DENOMINATOR, AND WHICH RECEIPTS ARE IN EACH IS THE POINT. Three eligible
+# STILL-LIVE receipts reach the control: the mover, the same-reader and the refused one. Only the
+# same-reader is undecided -- the mover is a measurement, and the refused one never ran.
+sbc_det_has sbc-live-tally "1 of 3 'verify: sh' receipt(s) reported STILL-LIVE" \
+  "1 of 3: the SAME-reader is undecided, the MOVER is not, and the REFUSED one is in no numerator"
+sbc_det_has sbc-close-tally "1 of 3 'verify: sh' CLOSE-CANDIDATE(s) ALSO exited non-zero at BASE" \
+  "1 of 3 on the CLOSE path: the already-closed-at-base receipt is counted, while the one the pull MOVED and the one whose control REFUSED are not"
+sbc_det_has sbc-refused-counted "2 'verify: sh' base control(s) REFUSED" \
+  "both 127 controls -- one from each direction -- are reported separately, beside the numerators rather than inside either"
+sbc_det_has sbc-ex-base "1 naming \$BASE themselves" \
+  "the \$BASE-naming receipt is excluded and its class is NAMED in the row"
+sbc_det_has sbc-ex-tree "1 reading \$THEIRS_TREE" \
+  "the \$THEIRS_TREE receipt is excluded and its class is NAMED in the row"
+sbc_det_has sbc-ex-neither "1 naming neither \$THEIRS nor \$DIST" \
+  "the consumer-only receipt is excluded and its class is NAMED in the row"
+# ...AND THE OTHER DIRECTION, without which every arm above is satisfied by a row that recites
+# every class on every ledger. The `theirs_has` clause must be ABSENT here: this ledger carries
+# no `theirs_has` receipt, so a row opening with that verb would be reciting rather than counting.
+sbc_det_lacks sbc-no-th-clause "'theirs_has' receipt(s) reported STILL-LIVE" \
+  "no theirs_has clause on a ledger carrying no theirs_has receipt -- the clauses are counted, not recited"
+
+# SILENCE, ARM ONE: A LEDGER WHOSE RECEIPTS ALL MOVED. The row must not appear, or it is
+# decoration on every pull. The control is that the run still emitted its other rows -- an engine
+# that died reports no undecided row either, and that silence would read identically.
+SBC_MOV_LED="$SBC/movers-only.md"
+{
+  printf '# probe\n\n'
+  printf '## PC-PROBE-MOVER-A - moved in range\n\n'
+  printf 'verify: sh %s\n\n---\n\n' "$SBC_MOVER"
+  printf '## PC-PROBE-MOVER-B - the close direction, also moved in range\n\n'
+  printf 'verify: sh %s\n' "$SBC_CMOVED"
+} > "$SBC_MOV_LED"
+sbc_mv="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$SBC_MOV_LED" 2>/dev/null)"
+sbc_mv_u="$(printf '%s\n' "$sbc_mv" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{c++} END{print c+0}')"
+sbc_mv_r="$(printf '%s\n' "$sbc_mv" | awk -F'\t' '$1=="STILL-LIVE" || $1=="CLOSE-CANDIDATE"{c++} END{print c+0}')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ "$sbc_mv_r" -lt 2 ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the movers-only ledger produced %s verdict row(s), not 2 -- the run did not happen, so its silence establishes nothing\n' "sbc-silent-movers" "$sbc_mv_r"
+elif [ "$sbc_mv_u" -eq 0 ]; then
+  printf '  ok    %-22s a ledger whose receipts ALL moved in range emits no undecided row (control: both verdict rows still reported)\n' "sbc-silent-movers"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s %s undecided row(s) on a ledger where every receipt moved -- the count is a constant, not a finding\n' "sbc-silent-movers" "$sbc_mv_u"
+fi
+
+# SILENCE, ARM TWO: THE NULL DIFFERENTIAL. Driven with base == theirs, every receipt answers the
+# same at both sides BY CONSTRUCTION and a 100% count would be a fact about the invocation. The
+# same probe ledger is used, so the two silences differ in the REFS and in nothing else.
+sbc_nl="$(bash "$CLOSER" "$DIST" "$THEIRS" "$CONS" "$THEIRS" "$SBC_LED" 2>/dev/null)"
+sbc_nl_u="$(printf '%s\n' "$sbc_nl" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{c++} END{print c+0}')"
+sbc_nl_r="$(printf '%s\n' "$sbc_nl" | awk -F'\t' '$1!="RECEIPTS-UNDECIDED"{c++} END{print c+0}')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ "$sbc_nl_r" -eq 0 ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the null-differential run emitted no rows at all, so its silence is an engine that did not run\n' "sbc-silent-null"
+elif [ "$sbc_nl_u" -eq 0 ]; then
+  printf '  ok    %-22s base == theirs emits no undecided row (control: %s other rows still reported) -- a pull that moved nothing is a different claim, made by saying nothing\n' "sbc-silent-null" "$sbc_nl_r"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s %s undecided row(s) on a NULL differential -- every receipt reads one tree twice, so the count measures the invocation\n' "sbc-silent-null" "$sbc_nl_u"
+fi
+
+# --- SEVEN MUTANTS, KEYED ON LOCATION AND SCORED ON BEHAVIOUR ---------------------------------
+#
+# Each anchors on a line that DECIDES something, never on a spelling of the message: every arm
+# above reads a count or a class name, so a mutant that only reworded the row would score no kill
+# and a fix that rewords it breaks no arm. The anchors are asserted UNIQUE first, with an
+# impossible anchor as the control -- a grep that had silently stopped matching reads as "all
+# anchors unique", which is the same zero a clean file produces.
+#
+# COUNTED AS WHOLE LINES, WHICH IS WHAT THE MUTANT HELPER COMPARES, AND `grep -cF` IS THE WRONG
+# ORACLE FOR IT. Two of these eight are the same text at two indents -- the `126|127)` arm exists
+# in the base-control resolve and again in the verb dispatch, and the two call sites sit 14 and 12
+# spaces in -- so a substring count reads 2 for four of them and the whole battery would be
+# refused as non-unique while every mutation in fact applies to exactly one line. Measured while
+# building this arm: `grep -cF` said 2/2 where whole-line equality says 1/1.
+sbc_anch_bad=""
+for a in \
+  '  refs_differ || return 0' \
+  '    126|127)' \
+  "    *'\$BASE'*|*'\${BASE}'*)" \
+  "    *'\$THEIRS_TREE'*|*'\${THEIRS_TREE}'*)" \
+  '    [ "$_brc" -eq 0 ] && sh_live_undecided=$(( ${sh_live_undecided:-0} + 1 ))' \
+  '    *) sh_close_total=$(( ${sh_close_total:-0} + 1 )) ;;' \
+  '              sh_base_control "$rest" "$sh_prog" "$sh_rc"' \
+  '            sh_base_control "$rest" "$sh_prog" "$sh_rc"' ; do
+  n="$(SBC_A="$a" awk '$0 == ENVIRON["SBC_A"] {c++} END{print c+0}' "$CLOSER")" || n=0
+  [ "$n" -eq 1 ] || sbc_anch_bad="$sbc_anch_bad [$a -> $n]"
+done
+sbc_anch_ctl="$(SBC_A='ZZ-NO-SUCH-BASE-CONTROL-ANCHOR' awk '$0 == ENVIRON["SBC_A"] {c++} END{print c+0}' "$CLOSER")" || sbc_anch_ctl=0
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ -z "$sbc_anch_bad" ] && [ "$sbc_anch_ctl" -eq 0 ]; then
+  printf '  ok    %-22s all eight base-control mutation anchors are unique in the engine (control: an impossible anchor returns %s)\n' "sbc-anchors" "$sbc_anch_ctl"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s an anchor is not unique (%s) or the impossible control matched (%s) -- a mutation that edits two sites, or none, scores a kill it did not earn\n' "sbc-anchors" "${sbc_anch_bad:-none}" "$sbc_anch_ctl"
+fi
+
+# THE MUTANT IS A WHOLE-DIRECTORY COPY so the engine finds `lib.sh` and `preclassify.sh` beside
+# it: a lone copy dies sourcing lib.sh, emits nothing, and "no output" otherwise scores as a kill.
+# The replacement line travels through ENVIRON, never through a shell quoting layer, and the
+# result is refused unless it (a) differs from the shipped engine and (b) PARSES -- a mutant that
+# fails `bash -n` emits nothing on every input and is not a mutant.
+sbc_mutant() { # <name> <old-line> <new-line> -> dir on stdout, empty on failure
+  local n="$1" d
+  d="$SBC/mut-$n"; rm -rf "$d"; mkdir -p "$d"
+  cp "$(dirname "$CLOSER")"/*.sh "$d/" 2>/dev/null
+  SBC_OLD="$2" SBC_NEW="$3" awk '{ if ($0 == ENVIRON["SBC_OLD"]) print ENVIRON["SBC_NEW"]; else print }' \
+    "$CLOSER" > "$d/ledger-reverify.sh" || return 1
+  cmp -s "$CLOSER" "$d/ledger-reverify.sh" && return 1
+  bash -n "$d/ledger-reverify.sh" 2>/dev/null || return 1
+  printf '%s' "$d"
+}
+# THE KILL IS SCORED ON THE UNDECIDED DETAIL, AND A CONTROL ROW MUST SURVIVE. A mutant that broke
+# the engine produces no detail at all, which would otherwise satisfy any arm phrased as an
+# absence -- so every kill below demands a specific STRING to be PRESENT or a named verdict row
+# to still be there.
+sbc_kill() { # <name> <dir> <ledger> <want-substring-in-detail> <must-be-absent-or-empty> <why>
+  local n="$1" d="$2" led="$3" want="$4" bad="$5" why="$6" out det ctl
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ -z "$d" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutation DID NOT APPLY (matched nothing, changed nothing, or did not parse) -- the arm it targets is unproven\n' "$n"
+    return
+  fi
+  out="$(bash "$d/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$led" 2>/dev/null)"
+  ctl="$(printf '%s\n' "$out" | awk -F'\t' '$1=="STILL-LIVE" || $1=="CLOSE-CANDIDATE"{c++} END{print c+0}')"
+  det="$(printf '%s\n' "$out" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{print $3; exit}')"
+  if [ "$ctl" -eq 0 ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutant emitted no verdict row at all -- it broke the engine rather than the guard, so its reading is wreckage\n' "$n"
+    return
+  fi
+  if [ -n "$want" ] && { [ -z "$det" ] || [ "${det#*"$want"}" = "$det" ]; }; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the guard was removed and the row does NOT carry "%s" -- that arm cannot fire. Detail: %s\n' "$n" "$want" "${det:-<no row>}"
+    return
+  fi
+  if [ -n "$bad" ] && [ -n "$det" ] && [ "${det#*"$bad"}" != "$det" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutant still carries "%s", so the mutation changed nothing the arm reads\n' "$n" "$bad"
+    return
+  fi
+  printf '  ok    %-22s %s\n' "$n" "$why"
+}
+
+# M1 -- DROP THE `refs_differ` GUARD. Scored on the NULL-differential ledger, which is the only
+# input where the guard decides anything: with it gone, base == theirs produces a row saying
+# every receipt is undecided, which is a fact about the invocation wearing the shape of a finding.
+sbc_m1="$(sbc_mutant no-refs-guard '  refs_differ || return 0' '  :')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ -z "$sbc_m1" ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the mutation DID NOT APPLY, so the null-differential silence is unproven\n' "sbc-mut-refs-guard"
+else
+  m1_out="$(bash "$sbc_m1/ledger-reverify.sh" "$DIST" "$THEIRS" "$CONS" "$THEIRS" "$SBC_LED" 2>/dev/null)"
+  m1_u="$(printf '%s\n' "$m1_out" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{c++} END{print c+0}')"
+  m1_r="$(printf '%s\n' "$m1_out" | awk -F'\t' '$1!="RECEIPTS-UNDECIDED"{c++} END{print c+0}')"
+  if [ "$m1_r" -eq 0 ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutant emitted no other rows -- it broke the engine, not the guard\n' "sbc-mut-refs-guard"
+  elif [ "$m1_u" -gt 0 ]; then
+    printf '  ok    %-22s without refs_differ a NULL differential emits an undecided row (%s) where the shipped engine emits none -- the guard is load-bearing\n' "sbc-mut-refs-guard" "$m1_u"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the guard was removed and base == theirs STILL emitted no row -- the silence arm above cannot fire\n' "sbc-mut-refs-guard"
+  fi
+fi
+
+# M2 -- COLLAPSE THE THREE-WAY RESOLVE TO TWO, WHICH IS THE FAILS-OPEN CASE. The refusal arm's
+# pattern is made unmatchable, so a base control that exited 127 -- one that NEVER RAN -- falls
+# through to the decided test and is scored as a measurement.
+#
+# SCORED ON THE CLOSE CLAUSE, AND THAT IS A MEASUREMENT RATHER THAN A CHOICE. This mutant is
+# reachable from ONE direction only. Past the unmatchable arm a 127 reaches
+# `[ "$_brc" -eq 0 ]` on the still-live side -- false, so it enters no numerator and that clause
+# does not move -- and `[ "$_brc" -ne 0 ]` on the CLOSE side, which 127 satisfies. Built and
+# driven both ways on this seed set: keyed on the still-live clause the mutant scores SURVIVED
+# (1 of 3, unchanged) and reads exactly like an arm that cannot fire; keyed on the close clause
+# it dies, 1 of 3 -> 2 of 3, with the separately-reported refused count gone. The first cut of
+# this battery carried only the STILL-LIVE refusal seed and could never have killed it.
+sbc_kill sbc-mut-two-way "$(sbc_mutant two-way '    126|127)' '    zz-no-such-status)')" "$SBC_LED" \
+  "2 of 3 'verify: sh' CLOSE-CANDIDATE(s) ALSO exited non-zero at BASE" \
+  "base control(s) REFUSED" \
+  "with the refusal arm unmatchable a control that exited 127 is scored as a measurement on the CLOSE path: 1 of 3 becomes 2 of 3 and the refused count vanishes -- a close attributed to a pull on an evaluation that never happened"
+
+# M3 -- REMOVE THE `\$BASE` EXCLUSION. The rebinding then has a \$BASE-naming receipt compare base
+# against base, and it enters the denominator: 1 of 3 becomes 2 of 4, and the row stops naming the
+# class it silently swept in.
+sbc_kill sbc-mut-no-ex-base "$(sbc_mutant no-ex-base "    *'\$BASE'*|*'\${BASE}'*)" '    zz-no-such-pattern)')" "$SBC_LED" \
+  "2 of 4 'verify: sh' receipt(s) reported STILL-LIVE" \
+  "naming \$BASE themselves" \
+  "without the exclusion the \$BASE-naming receipt enters the denominator AND the numerator (1 of 3 -> 2 of 4) and its exclusion clause is gone"
+
+# M4 -- REMOVE THE \$THEIRS_TREE EXCLUSION. The tree is materialized AT THEIRS and the rebinding
+# does not move it, so such a receipt answers SAME by construction and inflates the count with a
+# reading that could never have differed.
+sbc_kill sbc-mut-no-ex-tree "$(sbc_mutant no-ex-tree "    *'\$THEIRS_TREE'*|*'\${THEIRS_TREE}'*)" '    zz-no-such-pattern)')" "$SBC_LED" \
+  "2 of 4 'verify: sh' receipt(s) reported STILL-LIVE" \
+  "reading \$THEIRS_TREE" \
+  "without the exclusion a receipt reading the theirs-materialized tree answers SAME by construction and inflates the count (1 of 3 -> 2 of 4)"
+
+# M5 -- DROP THE BASE TEST ON THE STILL-LIVE SIDE, so the numerator counts every eligible
+# still-live receipt including the one the pull MOVED. The number still looks like a finding,
+# which is what makes this mutant worth having.
+sbc_kill sbc-mut-no-base-test "$(sbc_mutant no-base-test \
+  '    [ "$_brc" -eq 0 ] && sh_live_undecided=$(( ${sh_live_undecided:-0} + 1 ))' \
+  '    sh_live_undecided=$(( ${sh_live_undecided:-0} + 1 ))')" "$SBC_LED" \
+  "2 of 3 'verify: sh' receipt(s) reported STILL-LIVE" \
+  "" \
+  "without the base test the MOVER is swept into the numerator (1 of 3 -> 2 of 3) -- a number that still reads like a finding"
+
+# M6 -- REMOVE THE CALL ON THE CLOSE PATH, which is the acquittal the contract names. Everything
+# above that line tests the RECEIPT; only this call tests whether the PULL is what changed its
+# answer, and the close is the verdict that cannot be taken back. The close clause disappears
+# while the still-live clause is byte-unchanged, so the kill is not a general loss of the row.
+sbc_kill sbc-mut-no-close-call "$(sbc_mutant no-close-call \
+  '            sh_base_control "$rest" "$sh_prog" "$sh_rc"' '            :')" "$SBC_LED" \
+  "1 of 3 'verify: sh' receipt(s) reported STILL-LIVE" \
+  "CLOSE-CANDIDATE(s) ALSO exited non-zero at BASE" \
+  "with the close-path call gone the close clause vanishes while the still-live clause is unchanged -- the direction this file own header calls permanently information-losing"
+
+# M7 -- COUNT EVERY ELIGIBLE RECEIPT AS A STILL-LIVE ONE, so the two denominators stop being
+# per-direction populations and become one running total. The still-live denominator reads 5
+# instead of 3 and the close clause loses its subject: a denominator whose population is not the
+# one the numerator was taken over is a count an operator cannot check.
+sbc_kill sbc-mut-one-total "$(sbc_mutant one-total \
+  '    *) sh_close_total=$(( ${sh_close_total:-0} + 1 )) ;;' \
+  '    *) sh_live_total=$(( ${sh_live_total:-0} + 1 )) ;;')" "$SBC_LED" \
+  "1 of 6 'verify: sh' receipt(s) reported STILL-LIVE" \
+  "" \
+  "folding both directions into one total reads 1 of 6 against a still-live population of 3 -- a denominator taken over a different set than its numerator"
+
 # --- THE CLOSE PREDICATE IS ANCHORED, like the verify: predicate beside it -------------
 # Unanchored, a PROSE MENTION of the vocabulary closed a live entry, and the failure was silent
 # in the worse direction: no row at all rather than a wrong one. Measured on the reference
