@@ -15,6 +15,56 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.586.0] - 2026-09-16
+
+### The push-candidate closer reads each blob once instead of once per entry (suite pole −30%)
+
+**`ledger-reverify.sh` re-ran the same `git show` up to 79 times in a single invocation.**
+`theirs_show`, `base_show` and `theirs_has_path` are called from the per-entry loop, so their cost
+scaled with the LEDGER's length while their distinct inputs scale with the number of SUBJECT PATHS
+the ledger names — a far smaller set. Measured by xtrace over one invocation against the fixture's
+own seeded ledger: **366 git calls, of which 170 `show` resolve to 9 distinct blobs and 49
+`cat-file -e` to 6 distinct paths.** Two blobs were read 79 times each. Separately,
+`consumer_scannable` probed one unchanging directory **35 times** per run.
+
+**Both are now memoized, and the totals are derived rather than asserted: 366 git calls → 133,
+`show` 170 → 14, `cat-file -e` 49 → 6, `is-inside-work-tree` 35 → 1.**
+
+**A filesystem cache, not `declare -A`.** The floor is bash 3.2, where an associative array is a
+parse error in some builds and a silent scalar in others; arm `S3` of
+`validate-shell-portability.sh` fails the push on one. Keys are built with parameter expansion
+alone and values read with `$(<file)` — an `md5`, `tr` or `cat` per lookup is a fork per lookup,
+which is the cost being removed.
+
+**The cache directory is created LAZILY, and that is what makes its cleanup correct rather than
+tidy.** The single EXIT handler is `core_map_cleanup`, registered below the memo's definitions, and
+this file's header records that no second `trap` is registered anywhere. A `mktemp -d` at
+definition time would leak its directory on every exit taken before that registration — and the
+input-validation arms above take exactly those exits.
+
+**A cache MISS and an EMPTY BLOB are different states, and the fixture's corpus cannot tell them
+apart.** `git show` of an absent path writes nothing and exits non-zero; of an empty blob, nothing
+and exits 0. Keying "already cached" on the content file being non-empty would re-run the
+empty-blob case on every call. The seeded ledger contains no empty blob, so the fixture scores that
+mutant IDENTICAL — measured. Scored instead on a constructed repo carrying one: **5 lookups cost 1
+git call under the shipped guard and 5 under the mutant, with a non-empty blob as the
+same-invocation control at 1 either way.** The status file is written LAST, so an interrupted fill
+reads as a miss rather than as a cached lie.
+
+**Equivalence, and the control on the differential itself.** Both sides confirmed to differ before
+the comparison was read. Output is byte-identical on stdout, stderr and exit code over the
+fixture's 104-row ledger. `core/fixtures/ledger-reverify/run.sh` reports **all 274 assertions
+correct**, and the assertion LABEL SET — not merely its count — is identical before and after. All
+eight fixtures that drive this file are green.
+
+**Measured effect.** One invocation, 4 interleaved reps from the repo root, disjoint ranges:
+**4.71–4.90s → 3.33–3.49s**. The fixture solo, `/usr/bin/time -p`: **306.81s → 215.21s**. A solo
+cost is never comparable with the loaded cost in `.git/ai-dlc-fixture-durations`.
+
+**This ships to consumers.** `install.sh` archives `reconcile/*` into
+`.claude/skills/ai-dlc-update/reconcile/`, so a consumer re-verifying a long ledger pays the same
+removed work — and a consumer's ledger is longer than the fixture's.
+
 ## [0.585.0] - 2026-09-16
 
 ### The fixture suite stops reading the Claude Code harness's own agent worktrees, and the copy that read them can no longer report a partial tree as green (`BL-264`)
