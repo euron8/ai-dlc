@@ -1,0 +1,11 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Its subject is scripts/validate-suite-pole.sh and the baseline it reads at
+docs/suite-pole-baseline.tsv. install.sh copies neither: the validator is not in
+core/scripts/, and a consumer tree has no docs/ of this repository's. On a consumer this
+fixture would resolve no validator and no baseline, so every arm below would be skipped
+and the run could only pass — a narrower check reading identically to a full one.
+
+The guard is dist-only for the same reason validate-plan-shape.sh is: its corpus is a
+figure about THIS repository's own fixture suite, taken under this box's pool width, and a
+consumer's suite is a different population entirely.
