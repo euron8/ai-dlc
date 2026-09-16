@@ -309,9 +309,85 @@ if [ ! -f "$LEDGER" ]; then
   exit 0
 fi
 
-theirs_show() { git -C "$DIST" show "${THEIRS}:$1" 2>/dev/null; }
-theirs_has_path() { git -C "$DIST" cat-file -e "${THEIRS}:$1" 2>/dev/null; }
-base_show() { git -C "$DIST" show "${BASE}:$1" 2>/dev/null; }
+# --- BLOB MEMO: the same blob is read once per ENTRY, and there are few distinct blobs ------
+#
+# `theirs_show`, `base_show` and `theirs_has_path` are called from the per-entry loop, so their
+# cost scales with the LEDGER's length while their distinct inputs scale with the number of
+# SUBJECT PATHS the ledger names -- a much smaller set. MEASURED on the fixture's own seeded
+# ledger, by xtrace over one invocation: 366 git calls, of which 170 `show` resolve to 9
+# distinct blobs and 49 `cat-file -e` to 6 distinct paths. Two blobs were read 79 times each.
+#
+# A FILESYSTEM CACHE, NOT `declare -A`. The floor is bash 3.2, where an associative array is a
+# parse error in some builds and a silent scalar in others; `S3` of
+# `validate-shell-portability.sh` fails the push on one.
+#
+# LAZY, AND THAT IS NOT A MICRO-OPTIMISATION -- IT IS WHAT MAKES THE CLEANUP CORRECT. The single
+# EXIT handler is `core_map_cleanup`, registered well below this point, and this file's header
+# records that no second `trap` is registered anywhere. A `mktemp -d` HERE would leak its
+# directory on every exit taken before that registration -- and the input-validation arms above
+# take exactly those exits. Created on first use instead, which is necessarily after the trap.
+#
+# THE KEY IS BUILT WITH PARAMETER EXPANSION AND NOTHING ELSE, and the value is read with
+# `$(<file)`. An `md5`, a `tr` or a `cat` per lookup is a fork per lookup, which is the cost
+# being removed -- a memo that forks to answer is slower than the call it replaces. `%` is
+# escaped BEFORE `/`, or the `/` escape would collide with a literal `%` already in a path.
+#
+# A MISS AND AN EMPTY BLOB ARE DIFFERENT STATES, and the status file is what separates them.
+# `git show` of an ABSENT path writes nothing and exits non-zero; `git show` of an EMPTY blob
+# writes nothing and exits 0. Keying "already cached" on the content file being non-empty would
+# re-run the empty-blob case on every call -- the memo would silently do nothing for exactly
+# the inputs it is there for. The status file is written LAST, so an interrupted fill reads as
+# a miss rather than as a cached lie.
+BLOB_MEMO=""         # the cache directory, or "" when not built
+BLOB_MEMO_STATE=""   # "" not attempted | ok | unavailable
+blob_memo() { # 0 = $BLOB_MEMO holds a directory; 1 = uncacheable, callers go direct
+  case "$BLOB_MEMO_STATE" in
+    ok)          return 0 ;;
+    unavailable) return 1 ;;
+  esac
+  BLOB_MEMO_STATE=unavailable
+  BLOB_MEMO="$(mktemp -d "${TMPDIR:-/tmp}/ledger-reverify-memo.XXXXXX" 2>/dev/null)" || return 1
+  [ -n "$BLOB_MEMO" ] && [ -d "$BLOB_MEMO" ] || return 1
+  BLOB_MEMO_OWNED="$BLOB_MEMO"
+  BLOB_MEMO_STATE=ok
+  return 0
+}
+BLOB_MEMO_OWNED=""   # what the EXIT handler removes -- see the note at core_map_cleanup
+
+# memo_show <ref> <path> -- the blob on stdout, git's own exit status preserved.
+memo_show() {
+  local _k _f _st
+  blob_memo || { git -C "$DIST" show "$1:$2" 2>/dev/null; return $?; }
+  _k="$1:$2"; _k="${_k//%/%25}"; _k="${_k//\//%2F}"
+  _f="$BLOB_MEMO/$_k"
+  if [ ! -f "$_f.s" ]; then
+    git -C "$DIST" show "$1:$2" > "$_f.c" 2>/dev/null
+    _st=$?
+    printf '%s' "$_st" > "$_f.s"
+  fi
+  printf '%s\n' "$(<"$_f.c")"
+  _st="$(<"$_f.s")"
+  return "$_st"
+}
+
+# memo_has_path <ref> <path> -- 0 when the path exists at the ref. THE STATUS IS THE ANSWER
+# here, unlike memo_show, so it is the only thing cached.
+memo_has_path() {
+  local _k _f _st
+  blob_memo || { git -C "$DIST" cat-file -e "$1:$2" 2>/dev/null; return $?; }
+  _k="e $1:$2"; _k="${_k//%/%25}"; _k="${_k//\//%2F}"
+  _f="$BLOB_MEMO/$_k"
+  if [ ! -f "$_f.s" ]; then
+    git -C "$DIST" cat-file -e "$1:$2" 2>/dev/null
+    printf '%s' "$?" > "$_f.s"
+  fi
+  _st="$(<"$_f.s")"
+  return "$_st"
+}
+
+theirs_show() { memo_show "${THEIRS}" "$1"; }
+theirs_has_path() { memo_has_path "${THEIRS}" "$1"; }
+base_show() { memo_show "${BASE}" "$1"; }
 
 # absorbed_at <path> <substring> -> the VERSION where <substring> FIRST appeared in <path>
 #
@@ -1030,6 +1106,7 @@ THEIRS_TREE_OWNED=""
 core_map_cleanup() {
   [ -n "${CORE_MAP:-}" ] && rm -f "$CORE_MAP"
   [ -n "${THEIRS_TREE_OWNED:-}" ] && rm -rf "$THEIRS_TREE_OWNED"
+  [ -n "${BLOB_MEMO_OWNED:-}" ] && rm -rf "$BLOB_MEMO_OWNED"
   return 0
 }
 trap core_map_cleanup EXIT
@@ -1272,9 +1349,21 @@ LEDGER_TOP="$(ledger_top_dir "$LEDGER")"
 # EXIT STATUS IS READ DIRECTLY, three ways: 0 found, 1 not found, anything else (bad
 # pathspec, not a repo) UNDECIDABLE. No pipe, so no early-exit SIGPIPE can turn a match into
 # a miss — the defect this file's all_present() carried for large files.
+# MEMOIZED, for the reason the blob memo above is: the answer is a property of $CONSUMER,
+# which no code in this file writes, so it cannot change within one run -- yet it is asked once
+# per SUBSTRING of every absent-at-both entry. MEASURED by xtrace on the fixture's own ledger:
+# 35 identical `rev-parse --is-inside-work-tree` probes per invocation, all of one directory.
+# A scalar, not a file: the answer is one bit and needs no cache directory to survive.
+CONSUMER_SCANNABLE=""   # "" not asked | 0 scannable | 1 not
 consumer_scannable() {
-  git -C "$CONSUMER" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1
-  [ -n "$(git -C "$CONSUMER" ls-files 2>/dev/null | head -1)" ]
+  if [ -z "$CONSUMER_SCANNABLE" ]; then
+    CONSUMER_SCANNABLE=1
+    if git -C "$CONSUMER" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+       && [ -n "$(git -C "$CONSUMER" ls-files 2>/dev/null | head -1)" ]; then
+      CONSUMER_SCANNABLE=0
+    fi
+  fi
+  return "$CONSUMER_SCANNABLE"
 }
 
 # True iff EVERY substring is found in at least one tracked consumer file. A predicate is
