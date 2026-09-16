@@ -78,6 +78,12 @@ derived from the notes emitted, with a floor refusing a battery that lost one â€
 count decaying inside the fixture whose subject is a hardcoded count decaying. Filed as
 `BL-265`, which survives the fix: the two fractions are still literals joined to nothing.
 
+Two receipts in this release were written prose-satisfiable and re-keyed on emission sites after
+being scored against a file of pure comments â€” `BL-265`'s returned 0 for a three-line file with no
+executable floor in it, and `BL-266`'s was satisfied by two unrelated comments about a hand-copied
+path. `BL-266` also records that the I59 corpus mutation is over-broad: it edits four arms'
+corpora, up from three at the parent, and `vrun` can only ever observe one of them.
+
 ## [0.587.0] - 2026-09-16
 
 ### I87 stopped forking once per fixture directory, and the reconcile engine stopped re-reading the same blobs across one render
