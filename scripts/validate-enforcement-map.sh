@@ -10280,6 +10280,177 @@ EOF
     fi
   fi
 fi
+# --- I113: the single-valued position-bullet COUNT is one grammar in three copies ---
+# =============================================================================
+# WHAT IT BINDS. `current_step_file` in the snapshot's `## Pipeline Position` section is
+# single-valued and overwritten in place (core/skills/ai-dlc/steps/gate-validation.md states
+# the rule). Three readers resolve that field and each now REFUSES rather than taking whichever
+# match came first: ai-dlc-recover.sh drops the post-compact mandate and writes
+# `step_file_resolved=0`, ai-dlc-continue.sh resolves empty, and Check 8 of
+# validate-mandatory-rules.sh SKIPs. Refusal is only coherent while the three agree on WHAT A
+# SECOND LIVE BULLET IS: a grammar that drifted in one copy would have the recovery hook refuse
+# a snapshot the retro gate decides on, or the reverse.
+#
+# COPIES RATHER THAN A SHARED SOURCE, for I104's reason exactly: install.sh lands core/hooks/ at
+# .claude/hooks/ and core/scripts/ at scripts/ai-dlc/, I33 fails the build on locating one core
+# file by walking up from another, and a hook that sources a missing helper fails OPEN. Three
+# hand-written copies are safe only while something asserts they are the same strings.
+#
+# FOUR STRINGS, NOT ONE, AND THE SET IS THE SUBJECT. The count is three clauses and a
+# reduction -- the section range, the bullet-key position, the label exclusion, and the
+# basename strip that makes AGREEMENT distinguishable from a duplicate -- and dropping any one
+# of them changes which snapshots refuse. Binding only the bullet regex would let the label
+# exclusion drift in one copy and report a clean tree.
+#
+# NOT A VOCABULARY, so no `# vocabulary:` marker: these are executable expressions, not an
+# enumerated membership a second reader restates. The LABELS inside the exclusion are a closed
+# list, but they are closed by this binding rather than by a separate owner file.
+#
+# THE FOURTH-COPY HALF AND ITS FALSE-POSITIVE SET. Byte-equality across three declared paths
+# cannot see a fourth reader written the pre-fix way in a fourth file, so the site list is
+# DERIVED as well as declared. The grammar keys on an EXTRACTION of the key alternation -- a
+# grep, sed or awk expression naming it -- which is what separates a reader from a producer:
+# the fixtures under core/fixtures/ write snapshot lines carrying this field on purpose, and
+# none of them is a member, measured. Over the real tree the scan returns exactly the three
+# declared sites, and this file, which carries the strings in its own probe.
+i113_declared='core/hooks/ai-dlc-recover.sh
+core/hooks/ai-dlc-continue.sh
+core/scripts/validate-mandatory-rules.sh'
+
+# The four canonical strings, spelled here exactly as the three copies assign them. Each is
+# compared with `grep -qF` against the assignment line, so a copy that reshapes the expression
+# fails rather than being read as equivalent.
+i113_sec="AI_DLC_POS_SECTION_AWK='/^## Pipeline Position/{f=1;next} /^## /{f=0} f'"
+i113_bul="AI_DLC_POS_BULLET_RE='^[[:space:]]*-[^:]*(current_step_file|current[ _]step|current[ _]phase)[^:]*:'"
+i113_lab="AI_DLC_POS_LABEL_RE='^[^:]*(prior|superseded|retained history)'"
+i113_bas='AI_DLC_POS_BASE_SED='"'"'s/[`*,.;:)]*$//; s|^.*/||'"'"
+
+# THE PRE-FIX BRITTLE READER, which the canonical bullet expression must NOT match. This is
+# I104's "+10" arm: the whole point of the binding is to catch a regression to first-match-wins,
+# and an expression that also matched the thing it replaces could not tell the two apart.
+i113_prefix="grep -m1 -iE '(current_step_file|current[ _]step|current[ _]phase)'"
+
+# A READER carries the key alternation in its REGEX spelling -- the bracket class in
+# `current[ _]step`, which only an expression can carry. That is what separates a reader from a
+# file that merely discusses the field: prose and snapshot seeds write `current_step_file` or
+# `Current step file`, never the bracket class, so the near-miss probes below stay quiet on
+# SHAPE alone and no directory exclusion for core/fixtures/ is needed.
+#
+# AN EARLIER, NARROWER GRAMMAR REQUIRED A `grep|sed|awk` ON THE SAME LINE and this arm's own
+# probe refused it: a conforming copy declares the bullet expression on a bare assignment line,
+# so the grammar scored its own subject as a non-instance and the fourth-copy half would have
+# been silent forever. `\b` is a GNU extension BSD grep does not honour, and `git grep -E`
+# honours neither `\b` nor `\s`, so this uses neither.
+i113_reader_re='current\[ _\]step'
+i113_sites() { grep -rlE -- "$i113_reader_re" "$@" 2>/dev/null; }
+
+# THE PROBE, RUN BEFORE THE CORPUS. Both halves are absence-shaped -- a needle that no longer
+# matches reports no drift, and a scan that no longer matches reports no fourth copy -- and both
+# silences read exactly like a conforming tree. So both are driven first over a tree with one
+# right answer, in BOTH directions: a seeded offender is reported and a seeded near-miss is not.
+#
+# CONTAINMENT IS A `case` GLOB OVER TEXT ALREADY IN MEMORY, NOT A `grep -qF` PER STRING. This
+# file declares FORK_BUDGET about itself and core/fixtures/validator-fork-budget/ fails the push
+# when a change crosses it; the first draft of this arm forked a grep per string per site and
+# measured 15 over. A whole-file read plus a quoted glob answers the same question with no
+# process at all, and the quoting is what keeps the needle LITERAL -- the four canonical strings
+# carry `*`, `[`, `?` and backticks, every one of which is a glob metacharacter unquoted.
+i113_has() { # i113_has <haystack> <needle> -> 0 when the needle occurs verbatim
+  case "$1" in *"$2"*) return 0 ;; *) return 1 ;; esac
+}
+#  a  a conforming copy, carrying all four strings as the real sites do.
+#
+#  EACH SEED IS ONE LINE, joined by `; ` where a real site spells the assignments on separate
+#  lines. The scan half below labels each seed and strips the label with `sed`, so a seed
+#  carrying an embedded newline would put its continuation lines into that pipeline unlabelled
+#  and the comparison would read junk -- measured, the probe scored 100 on exactly that.
+#  Containment is a glob, which does not care, and the scan regex is line-oriented, which does.
+i113_p_a="$i113_sec; $i113_bul; $i113_lab; $i113_bas"
+#  b  the PRE-FIX reader: whole-file first-match-wins, no count at all. The scan must SEE it as
+#     a reader and the equality half must call it drift -- this is the exact state the arm
+#     exists to report, and it is what shipped for the whole of the defect's life.
+i113_p_b="S=\"\$($i113_prefix \"\$SNAP\" | sed -E 's/^[^:]*://')\""
+#  c  NEAR-MISS for the scan half: the field MENTIONED in prose with no extraction. Must stay
+#     quiet, or the arm flags every file that discusses the field.
+i113_p_c='# current_step_file is single-valued and overwritten in place'
+#  d  NEAR-MISS for the scan half: an extraction of a DIFFERENT field. Must stay quiet, or the
+#     arm flags every snapshot reader for resembling this one.
+i113_p_d='D="$(grep -iE "(last_gate_passed|last[ _]gate)" "$SNAP" | head -1)"'
+#  e  a fixture-shaped SEED: writes a position bullet, never reads one. Must stay quiet on SHAPE
+#     alone -- it is the reason no directory exclusion is needed, and if the grammar ever stops
+#     discriminating it this arm fails rather than the exclusion silently covering for it.
+i113_p_e='printf -- "- **Current step file:** retro.md\n" > "$P/pipeline-snapshot.md"'
+#  f  NEAR-MISS for the equality half: a copy carrying three of the four strings. The fourth is
+#     the basename reduction, which is what makes agreement distinguishable from a duplicate --
+#     a binding that checked only the bullet regex would pass this and let the same-basename
+#     case diverge across the three copies.
+i113_p_f="$i113_sec; $i113_bul; $i113_lab"
+i113_score=0
+for i113_s in "$i113_sec" "$i113_bul" "$i113_lab" "$i113_bas"; do
+  i113_has "$i113_p_a" "$i113_s" || i113_score=$((i113_score + 1))
+done
+i113_has "$i113_p_b" "$i113_bul" && i113_score=$((i113_score + 10))
+i113_has "$i113_p_f" "$i113_bas" && i113_score=$((i113_score + 20))
+# THE SCAN HALF'S PROBE IS THE SAME REGEX THE CORPUS SCAN USES, applied to the six seeded bodies
+# rather than to a probe tree -- ONE `grep` reading a here-string, where the first draft built a
+# directory and walked it recursively. The seeds are labelled and the labels are collected in the
+# shell, so the pipeline is a single stage and nothing downstream of the match forks.
+i113_pm="$(grep -E -- "$i113_reader_re" <<EOF | cut -c1-1 | tr -d '\n'
+a:$i113_p_a
+b:$i113_p_b
+c:$i113_p_c
+d:$i113_p_d
+e:$i113_p_e
+f:$i113_p_f
+EOF
+)" || i113_pm=''
+[ "$i113_pm" = "abf" ] || i113_score=$((i113_score + 100))
+if [ "$i113_score" -ne 0 ]; then
+  err "I113's probe scored $i113_score where 0 is the only correct total, so the corpus below was not scanned. +1 per canonical string not found in a file that carries it verbatim, so the equality half would report drift on a conforming tree; +10 the canonical bullet expression matched the PRE-FIX whole-file \`grep -m1\` reader, so the half that exists to catch a regression to first-match-wins cannot tell the two apart; +20 the four-string check passed a copy carrying only three, so a copy could drop the basename reduction -- the clause that separates two bullets naming ONE file from two naming different ones -- and this arm would stay quiet; +100 the reader scan did not name exactly the three probe files carrying an extraction -- it either missed the brittle copy, or flagged a prose mention, a different field's reader, or a fixture that only SEEDS a position bullet. Any non-zero total means both halves of I113 would report a clean tree for the reason a broken reader does."
+else
+  # HALF ONE: every declared site carries all four canonical strings verbatim. Each file is read
+  # ONCE into memory and the four containments are globs against it, for the fork reason above.
+  i113_missing=''
+  while IFS= read -r i113_rel; do
+    [ -n "$i113_rel" ] || continue
+    if [ ! -r "$REPO_ROOT/$i113_rel" ]; then
+      i113_missing="$i113_missing ${i113_rel}(unreadable)"
+      continue
+    fi
+    i113_body="$(cat "$REPO_ROOT/$i113_rel")"
+    for i113_s in "$i113_sec" "$i113_bul" "$i113_lab" "$i113_bas"; do
+      i113_has "$i113_body" "$i113_s" || { i113_missing="$i113_missing ${i113_rel}"; break; }
+    done
+  done <<EOF
+$i113_declared
+EOF
+  [ -z "$i113_missing" ] || err "I113: the single-valued position-bullet count has forked or gone missing at:$i113_missing. All three readers refuse a snapshot whose \`## Pipeline Position\` names two different step files -- the recovery hook drops its mandate and its gate, the stop hook resolves empty, Check 8 skips -- and refusal is only coherent while the three agree on what a second live bullet IS. A copy that narrowed the key alternation un-resolves 94 of the reference consumer's 2218 snapshot revisions; a copy that dropped the label exclusion refuses every correctly-labelled prior; a copy that dropped the basename reduction refuses two bullets naming ONE file, which is the common stale-plus-live state. Make all four strings byte-identical across all three files, or move this arm with them."
+
+  # HALF TWO: no fourth reader, and none of the three regressed to the whole-file first-match
+  # spelling. THE POSITIVE CONTROL IS THIS FILE, read in the same invocation -- it carries the
+  # canonical strings and the pre-fix spelling in its own probe, so a scan that is not reading
+  # the roots it was handed shows up here rather than as a clean fourth-copy report.
+  i113_hits="$(i113_sites "$REPO_ROOT/core" "$REPO_ROOT/scripts" | LC_ALL=C sort)"
+  i113_self="$REPO_ROOT/scripts/validate-enforcement-map.sh"
+  case "$i113_hits" in
+    *"$i113_self"*) : ;;
+    *) err "I113's fourth-copy scan did not find scripts/validate-enforcement-map.sh, which carries the reader grammar in its own probe. The scan is not reading the roots it was handed, so its silence about a fourth copy means nothing." ;;
+  esac
+  i113_extra=''
+  while IFS= read -r i113_hit; do
+    [ -n "$i113_hit" ] || continue
+    [ "$i113_hit" = "$i113_self" ] && continue
+    i113_rel_hit="${i113_hit#$REPO_ROOT/}"
+    case "$i113_declared" in
+      *"$i113_rel_hit"*) ;;
+      *) i113_extra="$i113_extra ${i113_rel_hit}" ;;
+    esac
+  done <<EOF
+$i113_hits
+EOF
+  [ -z "$i113_extra" ] || err "I113: a FOURTH reader of the snapshot position field exists at:$i113_extra. Three copies are already the most this field can carry safely; a fourth written the pre-fix way takes whichever bullet came first and reproduces the coin-toss in a file no arm names. Add it to i113_declared here in the same change, carrying all four canonical strings, or route it through one of the three."
+fi
+
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"

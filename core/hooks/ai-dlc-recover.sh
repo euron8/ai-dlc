@@ -69,9 +69,112 @@ rm -f "${STATE_DIR}/.context-sensor-state" 2>/dev/null || true
 # Snapshots in the wild spell this two ways: the schema's `current_step_file:`
 # and a prose `- **Current step file:** \`x.md\``. Match `ai-dlc-continue.sh`'s
 # pattern rather than the schema alone.
-STEP_FILE="$(grep -m1 -iE '(current_step_file|current[ _]step|current[ _]phase)' "$SNAPSHOT" 2>/dev/null \
-  | sed -E 's/^[^:]*://; s/^[-*[:space:]]+//; s/[[:space:]]*$//')"
-STEP_FILE="$(printf '%s' "$STEP_FILE" | sed -E 's/^`([^`]+)`.*/\1/; s/^([^[:space:]]+)[[:space:]]+—.*/\1/' | sed -E 's/^[`*]+//; s/[`*]+$//')"
+#
+# AND THE FIELD IS SINGLE-VALUED, WHICH THIS READER USED TO DECIDE BY TAKING WHICHEVER MATCH
+# CAME FIRST. `grep -m1` over the whole file is an answer whatever the snapshot says: on a
+# Pipeline Position carrying a stale bullet above a live one it mandates the stale file, and
+# the excerpt built at the bottom of this hook is section-scoped and prints BOTH -- so one
+# block tells the lead to Read one step file while displaying another. First-match-wins is not
+# a reading of an ambiguous field, it is a coin toss the lead cannot see. Where the section
+# names two different step files this hook now REFUSES: no mandate, `step_file_resolved=0`,
+# and a disclosure that says how many it found, because "names two" and "names none" are
+# different states and the block below used to describe only the second.
+#
+# THE COUNT GRAMMAR IS THREE CLAUSES AND IT IS BYTE-IDENTICAL IN THREE FILES --
+# core/hooks/ai-dlc-recover.sh, core/hooks/ai-dlc-continue.sh and
+# core/scripts/validate-mandatory-rules.sh. Invariant I113 in scripts/validate-enforcement-map.sh
+# binds the three copies and refuses a fourth. It is copies rather than a sourced helper for
+# I33's reason: install.sh lands core/hooks/ at .claude/hooks/ and core/scripts/ at
+# scripts/ai-dlc/, walking between them is a build failure, and a hook that sources a missing
+# helper fails OPEN.
+#
+# THE KEY ALTERNATION IS NOT NARROWED, and that is the clause with a measurement behind it. A
+# strict `current_step_file:`-only key was scored against all 2218 revisions of the reference
+# consumer's `_bmad-output/pipeline-snapshot.md`: it un-resolves 94 revisions this hook resolves
+# today, because the consumer's dominant spellings are `- **Current step file:**` and the
+# backticked `- **\`current_step_file\`:**`. So the alternation below is the one this hook has
+# always carried, and the count is layered OVER it rather than replacing it.
+#
+# WHAT EACH CLAUSE EXCLUDES, measured on the same corpus:
+#   - the SECTION scope keeps Recent Activity and Open Items out of the count; 46 revisions
+#     carry no key inside the section at all and fall through to the unchanged reader below.
+#   - the BULLET-KEY position (a dash bullet whose key precedes the first colon) excludes the
+#     prose line that quotes the key name mid-sentence -- 1 revision, `c2ddf755`, where the
+#     second "match" is a paragraph about the block below it and not a position at all.
+#   - the LABEL exclusion is a DECLARED list. A superseded position is recorded under a
+#     labelled key and is not a second live value. `(LIVE)` is an inverse label and stays one.
+AI_DLC_POS_SECTION_AWK='/^## Pipeline Position/{f=1;next} /^## /{f=0} f'
+AI_DLC_POS_BULLET_RE='^[[:space:]]*-[^:]*(current_step_file|current[ _]step|current[ _]phase)[^:]*:'
+AI_DLC_POS_LABEL_RE='^[^:]*(prior|superseded|retained history)'
+AI_DLC_POS_BASE_SED='s/[`*,.;:)]*$//; s|^.*/||'
+
+# The live position bullets, one per line. `grep -c` prints its zero AND exits 1, so the count
+# is taken only on non-empty input and defaulted on failure.
+POSITION_BULLETS="$(awk "$AI_DLC_POS_SECTION_AWK" "$SNAPSHOT" 2>/dev/null \
+  | grep -iE "$AI_DLC_POS_BULLET_RE" 2>/dev/null \
+  | grep -ivE "$AI_DLC_POS_LABEL_RE" 2>/dev/null)"
+POSITION_COUNT=0
+if [ -n "$POSITION_BULLETS" ]; then
+  POSITION_COUNT="$(printf '%s\n' "$POSITION_BULLETS" | grep -c .)" || POSITION_COUNT=0
+fi
+
+# The value a position bullet names, and its basename. The strip sequence is the one this hook
+# has always published; `pos_base` is Check 8's own reduction, and it is what makes AGREEMENT
+# distinguishable from a duplicate -- two bullets naming one file are the common stale-plus-live
+# state and refusing on them would un-gate a recovery for nothing.
+pos_value() { # pos_value <line> -> the step file that line names
+  printf '%s\n' "$1" | sed -E 's/^[^:]*://; s/^[-*[:space:]]+//; s/[[:space:]]*$//' \
+    | sed -E 's/^`([^`]+)`.*/\1/; s/^([^[:space:]]+)[[:space:]]+—.*/\1/' \
+    | sed -E 's/^[`*]+//; s/[`*]+$//'
+}
+pos_base() { # pos_base <value> -> its basename, trailing markdown punctuation removed
+  printf '%s\n' "$1" | awk '{print $1}' | sed "$AI_DLC_POS_BASE_SED"
+}
+
+POSITION_AMBIGUOUS=0
+POSITION_NAMES=""
+if [ "$POSITION_COUNT" -ge 2 ]; then
+  _pos_bases=""
+  _pos_distinct=0
+  while IFS= read -r _pos_line; do
+    [ -n "$_pos_line" ] || continue
+    _pos_b="$(pos_base "$(pos_value "$_pos_line")")"
+    [ -n "$_pos_b" ] || continue
+    case " $_pos_bases " in
+      *" $_pos_b "*) ;;
+      *) _pos_bases="$_pos_bases $_pos_b"; _pos_distinct=$((_pos_distinct + 1)) ;;
+    esac
+  done <<EOF
+$POSITION_BULLETS
+EOF
+  if [ "$_pos_distinct" -ge 2 ]; then
+    POSITION_AMBIGUOUS="$_pos_distinct"
+    POSITION_NAMES="${_pos_bases# }"
+  fi
+fi
+
+if [ "$POSITION_AMBIGUOUS" -ge 2 ]; then
+  # REFUSED. Resolving empty is what routes every branch below to the disclosure path, and what
+  # keeps `ai-dlc-recover-gate.sh` stood down: a gate armed on one of two candidate files would
+  # deny the lead's way to the other.
+  #
+  # THIS ASSIGNMENT IS DELIBERATELY NOT SPELLED THE WAY THE UNRESOLVABLE-FALLBACK ONE BELOW IS.
+  # postcompact-rulebook-recovery builds its old-fallback mutant by rewriting the line
+  # `  STEP_FILE=""` and then asserts the rewrite was TOTAL by COUNTING that substring, so a
+  # second assignment spelled identically leaves the mutant reporting three layers where it has
+  # two and the fixture says FIXTURE STALE. Measured -- the same class the `_hcand` loop comment
+  # further down records, and for the same reason: the assertion is a substring count.
+  STEP_FILE=''
+elif [ "$POSITION_COUNT" -ge 1 ]; then
+  STEP_FILE="$(pos_value "$(printf '%s\n' "$POSITION_BULLETS" | sed -n '1p')")"
+else
+  # NOTHING THE COUNT CAN SPELL, so the reader is the one that shipped -- unchanged, whole-file,
+  # first match. This is the arm the 47 revisions above take, and narrowing it is the regression
+  # the strict-key draft would have shipped.
+  STEP_FILE="$(grep -m1 -iE '(current_step_file|current[ _]step|current[ _]phase)' "$SNAPSHOT" 2>/dev/null \
+    | sed -E 's/^[^:]*://; s/^[-*[:space:]]+//; s/[[:space:]]*$//')"
+  STEP_FILE="$(printf '%s' "$STEP_FILE" | sed -E 's/^`([^`]+)`.*/\1/; s/^([^[:space:]]+)[[:space:]]+—.*/\1/' | sed -E 's/^[`*]+//; s/[`*]+$//')"
+fi
 # A MANDATE MUST NAME SOMETHING THE LEAD CAN ACTUALLY READ, and this branch did not.
 # When the grep found nothing, STEP_FILE became the prose string below and the second mandate
 # rendered as: Your SECOND tool call MUST be `Read (named in Pipeline Position -- read the
@@ -178,8 +281,26 @@ compactions, the snapshot Read above lands 66% of the time and this one only 41%
 which is the gap this sentence exists to close. Do NOT re-Read completed step
 files or already-produced planning artifacts; Rule 23(a) still applies."
 
+#
+# AND "NAMES TWO" IS NOT "NAMES NONE". Both resolve to no mandate, and the text below used to
+# describe only the second -- so a lead recovering from an ambiguous snapshot was told the
+# snapshot named no step file, which is false, and would have reported that state to an
+# operator. The ambiguous branch names the count and the candidates and tells the lead to
+# decide and record the decision, because it is the one party that can.
 if [ "$STEP_FILE_RESOLVED" -eq 1 ]; then
   SECOND_MANDATE="**Your SECOND tool call MUST be \`Read ${STEP_FILE}\` in full.** ${_MANDATE_WHY}"
+elif [ "$POSITION_AMBIGUOUS" -ge 2 ]; then
+  SECOND_MANDATE="**This snapshot's Pipeline Position names ${POSITION_AMBIGUOUS} DIFFERENT step
+files -- ${POSITION_NAMES} -- so this hook refuses to pick one and the second
+mandate names an action instead of a path.** \`current_step_file\` is single-valued
+and overwritten in place; two live position bullets mean a stale one was never
+overwritten, and whichever a hook picked would be a coin toss you could not see.
+Read the Pipeline Position section, decide which of those files the pipeline is
+actually at, say WHICH you chose and WHY in your verification turn, and your
+SECOND tool call MUST be \`Read <that path>\` in full. Then repair the snapshot so
+it carries ONE live position bullet -- a superseded position is recorded under a
+labelled key (\`(prior)\`, \`superseded\`, \`retained history\`), never a second live
+bullet. ${_MANDATE_WHY}"
 else
   SECOND_MANDATE="**This snapshot does not name a current step file in a form this hook could
 resolve, so the second mandate names an action instead of a path.** Take the step
@@ -200,11 +321,28 @@ rather than noticed afterwards. Both files were confirmed readable before it
 armed, and a bounded Read -- \`limit\` or a late \`offset\` -- is refused the same
 way a wrong file is: complying is always available to you, which is why there is
 nothing to weigh."
+elif [ "$POSITION_AMBIGUOUS" -ge 2 ]; then
+  GATE_ASSURANCE="\`ai-dlc-recover-gate.sh\` CANNOT ARM for this recovery: the snapshot names
+${POSITION_AMBIGUOUS} step files and a gate armed on one of them would refuse your way to the
+other. Nothing mechanical is watching these two calls, so they are carried by your
+honesty alone -- which makes them stricter here, not weaker."
 else
   GATE_ASSURANCE="\`ai-dlc-recover-gate.sh\` CANNOT ARM for this recovery, for the reason in the
 disclosure paragraph below. Nothing mechanical is watching these two calls, so
 they are carried by your honesty alone -- which makes them stricter here, not
 weaker."
+fi
+
+# THE DISCLOSURE PARAGRAPH NAMES THE STATE, and the state has two shapes. Without this the
+# block says the gate stands down "when the snapshot names no resolvable step file" in a
+# recovery where the snapshot named two -- the lead reads that sentence, believes the field is
+# empty, and reports the wrong state in the verification turn the block asks it for.
+AMBIGUOUS_NOTE=""
+if [ "$POSITION_AMBIGUOUS" -ge 2 ]; then
+  AMBIGUOUS_NOTE="It also does not arm when the Pipeline Position names MORE THAN ONE live step
+file, which is this recovery: ${POSITION_AMBIGUOUS} of them (${POSITION_NAMES}). That is a
+snapshot defect, not an absent field -- do not report it as \"the snapshot names no
+step file\"."
 fi
 
 # A small, bounded excerpt so the lead can orient before its Read returns. This
@@ -241,7 +379,7 @@ reasons; they are the three shapes the skip has actually taken.
 
 WHERE THE GATE CANNOT REACH, DISCLOSE. It does not arm when the snapshot names no
 resolvable step file, or when a mandated path is missing -- enforcing a Read of
-something absent would deny every call you could make. In that case the MUSTs
+something absent would deny every call you could make. ${AMBIGUOUS_NOTE} In that case the MUSTs
 still bind and only your honesty carries them, so if you proceed without one, open
 your next output with:
 
