@@ -297,8 +297,8 @@ step "agent definitions (the shipped renderer runs, and says which of its three 
 # is recorded as one; the measurement establishes only that 12 is not slower.
 #
 # WHAT IS NOT ESTABLISHED HERE. That 12 beats 16 -- the ranges overlap and this does not claim
-# it. And the NINE INNER POOLS were not swept: nine fixtures open their own `xargs -P`
-# totalling 66 workers on top of this one, and they cannot be varied by an environment
+# it. And the INNER POOLS were not swept: ELEVEN fixtures open their own `xargs -P`
+# totalling 70 workers on top of this one, and they cannot be varied by an environment
 # variable, because `enforcement-map-sites/run.sh` scrubs every ambient AI_DLC_* name for I10
 # and I87 binds any key a shipped program dereferences. Sweeping them means editing constants
 # on a throwaway branch, and it is owed.

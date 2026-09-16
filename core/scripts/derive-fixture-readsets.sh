@@ -238,6 +238,45 @@ for line in sys.stdin:
 ' | LC_ALL=C sort -u
 }
 
+# A GITIGNORED PATH IS NOT A SUITE INPUT, AND RECORDING ONE MAKES THE MAP A FUNCTION OF WHAT
+# ELSE WAS ON THE DISK. `.claude/worktrees/` is the Claude Code harness's own agent checkouts:
+# not this project's state, not any project's state, present in whatever number of concurrent
+# sessions happened to be running. Traced, they entered the map as permanent per-fixture inputs
+# -- 12435 rows across the map, and one fixture's entry moved 4815 -> 26854 between two
+# derivations minutes apart for no reason but concurrent agents. A derived artifact whose
+# content depends on ambient activity cannot be reviewed, diffed, or reproduced.
+#
+# THE BOUNDARY IS THE REPOSITORY'S OWN `.gitignore`, READ BY GIT -- never a second list
+# maintained here, which would drift from it silently. `.claude/rules/**` is un-ignored by
+# negation and so SURVIVES this filter: fixtures do read those rule files, and the distinction
+# between "under .claude" and "ignored" is exactly what a hand-written prefix list gets wrong.
+#
+# WHY NOT `--others`/`ls-files`: the trace runs inside a COPY whose own index is the repo's, but
+# a path may legitimately be untracked-and-not-ignored (a file a fixture creates and reads back),
+# and that is a real dependency. Ignored is the narrower, correct predicate.
+#
+# FAILS OPEN BY DESIGN, and that is the safe direction here: if `git check-ignore` cannot run,
+# every path is kept, the read-set is a superset, and the fixture runs more often than it must.
+# The dangerous direction would be dropping a real input, which makes a fixture skip when its
+# subject moved.
+# STDIN IS BUFFERED BEFORE THE FILTER RUNS, because a pipeline consumes it exactly once and the
+# fail-open branch has nothing left to fall back on otherwise -- it would emit an EMPTY read-set,
+# which is the one direction this must never take.
+drop_ignored() { # reads paths on stdin (repo-relative), writes the non-ignored ones
+  local in keep
+  in="$(mktemp)" || { cat; return 0; }
+  keep="$(mktemp)" || { cat > "$in"; cat "$in"; rm -f "$in"; return 0; }
+  cat > "$in"
+  if ( cd "$TREE" && git check-ignore --stdin --non-matching --verbose < "$in" ) 2>/dev/null \
+       | sed -n 's/^::[[:space:]]*//p' | LC_ALL=C sort -u > "$keep" && [ -s "$keep" ]; then
+    cat "$keep"
+  else
+    # No usable verdict -- keep everything rather than silently emptying the read-set.
+    cat "$in"
+  fi
+  rm -f "$in" "$keep"
+}
+
 say "fs_usage runs as root; fixtures run as '$RUN_AS'"
 rm -rf "$TRACE_ROOT"; mkdir -p "$TREE" "$WORK" || die "cannot create $TRACE_ROOT"
 say "copying the tree to $TREE"
@@ -327,7 +366,7 @@ for fx in $LIST; do
     | grep -oE "$TREE/[^ ]*" | sed "s|^$TREE/*||" | grep -v '^-\?$' | norm > "$WORK/$fx.fs"
 
   cat "$WORK/$fx.at" "$WORK/$fx.fs" | LC_ALL=C sort -u \
-    | grep -v '^\.readset-sentinel$' > "$WORK/$fx.set"
+    | grep -v '^\.readset-sentinel$' | drop_ignored > "$WORK/$fx.set"
   n="$(grep -c . "$WORK/$fx.set" 2>/dev/null)"; case "$n" in ''|*[!0-9]*) n=0 ;; esac
 
   # FAIL CLOSED. Anything that makes this trace untrustworthy omits the fixture from the map,

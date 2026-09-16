@@ -15,6 +15,77 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.585.0] - 2026-09-16
+
+### The fixture suite stops reading the Claude Code harness's own agent worktrees, and the copy that read them can no longer report a partial tree as green (`BL-264`)
+
+**`.claude/worktrees/` is the harness's agent checkouts — not this project's state, and not any
+project's.** It is gitignored under `.claude/*`, `graph` carries one too, and this repository's own
+code names it only to record that `git ls-files` correctly drops it
+(`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:1205`). Two programs were reading it
+anyway.
+
+**The read-set deriver recorded it into a tracked artifact.** `core/scripts/derive-fixture-readsets.sh`
+wrote every traced path into `.ai-dlc-fixture-readsets.tsv` with no gitignore filter, so the map
+absorbed whatever agent checkouts happened to exist when it ran: **12435 of 36046 rows** point into
+`.claude/worktrees/`, plus 49 `.DS_Store` rows. Across the map, 3943 of 6605 distinct paths are
+gitignored and **12506 of 36036 data rows — roughly 35% — name paths no fixture depends on**.
+
+**The defect is reproducibility, not selection.** Two derivations of one fixture minutes apart
+returned 4815 rows and then 26854: a 5.6x move caused only by how many agents were live. The
+selection consequence is bounded and safe — an over-broad read-set makes a fixture run MORE often
+than it must, never less — but a tracked, derived artifact whose content tracks ambient activity
+cannot be reviewed or diffed. The filter's boundary is the repository's own `.gitignore` read by
+git, never a prefix list: `.claude/rules/**` is un-ignored by negation and IS tracked, fixtures read
+those files, and a string match keyed on `.claude` would drop them. It fails OPEN — no usable
+`check-ignore` verdict keeps every path, because the dangerous direction is dropping a real input.
+The stale rows are not hand-edited out; they clear on the next root-privileged re-derivation.
+
+### `core/fixtures/fixture-git-env-seam` copied 871M of harness state eight times per run, and was failing intermittently because of it
+
+**It had become the suite's CO-POLE without its own design changing.** `mktree` copied the whole
+working tree excluding only `./.git` and `./node_modules`, and ran **8 times** per fixture run. On
+one measured tree that meant 34 agent checkouts, **871M of a 1.0G copy, 15x the file count**.
+Copy cost, three interleaved reps with the two sides asserted to differ first (35937 against 1035
+stream entries): **~10s shipped against ~0-1s excluded**. Solo, from the repository root, the
+fixture went from 105s-and-climbing to **19s, 21 ok / 0 FAIL**. Those are SOLO figures and are not
+comparable with the loaded row in `docs/suite-pole-baseline.tsv`.
+
+**It was also racing other sessions, which is the only reason any of this was visible.** `tar`
+walks those directories while a concurrent session deletes one, the copy comes back incomplete, and
+the fixture exits 9 — `FIXTURE BROKEN`, which reads exactly like a regression in whatever change is
+under test.
+
+**AND THE GUARD COULD NOT SEE THE SILENT HALF.** `tar cf - | tar xf - || return 1` reads only the
+READER's status: there is no `pipefail` in this fixture or in `core/fixtures/lib/preamble.sh`, where
+`set -u` is the only `set` line. Constructed and measured: a writer failing on a missing member
+exits **1 alone and 0 through the pipe**, landing 50 of 51 files, and the two `[ -f ]` probes below
+it pass because they name two files out of thousands. That is precisely the state this fixture's own
+header calls undetectable — a partial tree makes the driven subject bail at startup, every mutant
+"survives" against an untouched victim, and the unmutated arm passes too because two inert runs
+compare equal. The copy now asserts its own COMPLETENESS by counting entries on both sides, failing
+closed on any shortfall and on a zero on either side. **The exclusion alone would have removed the
+trigger and left the broken detector permanently unexercised.**
+
+The count drops `tar`'s root `./` entry rather than subtracting a constant: the first cut of this
+assertion compared the raw streams, read 1048 against 1049 on a COMPLETE tree, and fired on a
+correct copy.
+
+### Two defects in the suite pole, found while profiling it
+
+**`core/fixtures/ledger-reverify/run.sh:184` ran a command substitution inside a diagnostic
+string.** Raw backticks around `` `core/scripts/<x>` `` inside a double-quoted argument: `bash -n`
+exits 0 and cannot see it, and at runtime every run emitted `syntax error near unexpected token`
+and printed the assertion's reason with its subject missing. The verdict was never wrong — `row_is`
+reads the captured output, not the why-string — so this was diagnostic quality only. Escaped, with
+the error reproduced at `264a95de` and absent after; the fixture still reports **274/274 assertions,
+exit 0**.
+
+**`.githooks/pre-push` described the suite's inner pools as "NINE ... totalling 66 workers".**
+Re-derived by joining the dispatch sites against the width declarations: **11 fixtures, 70 workers**.
+The line sits in the comment region above `FIXTURE_POOL_BEGIN`, which `I66` strips before comparing
+the two hooks, so correcting it does not fork them; the consumer copy never carried the phrase.
+
 ## [0.584.0] - 2026-09-16
 
 ### PC-S312-STEP-2-SPELLS-THE-DERIVED-FIXTURE-SET-IN-A-FORM-ITS-OWN-RUNNER-REFUSES
