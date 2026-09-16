@@ -558,7 +558,16 @@ memo_show() {
     _st=$?
     printf '%s' "$_st" > "$_f.s"
   fi
-  printf '%s\n' "$(<"$_f.c")"
+  # `cat`, NOT `printf '%s\n' "$(<f)"`. A command substitution strips EVERY trailing
+  # newline and the printf adds exactly one back, so a blob with none comes back one byte
+  # LONGER and a blob with three comes back two bytes shorter. Measured on this tree:
+  # core/hooks/ai-dlc-continue.sh 90735 -> 90736, core/schemas/provenance-block.json
+  # 26564 -> 26565, an empty blob 0 -> 1. The single-trailing-newline case -- every normal
+  # file -- is byte-identical either way, which is why the round trip reads correct.
+  # unregistered-drift.sh pipes this straight into `cmp -s -`, where the spurious byte
+  # reports a byte-identical consumer file as DRIFTED. One fork per hit is the price of
+  # serving bytes; the git call this replaces costs far more.
+  cat "$_f.c"
   _st="$(<"$_f.s")"
   return "$_st"
 }
@@ -592,7 +601,10 @@ memo_rev_parse() {
     _st=$?
     printf '%s' "$_st" > "$_f.s"
   fi
-  printf '%s\n' "$(<"$_f.c")"
+  # `cat` for the same reason memo_show uses it: a `$(<f)` round trip rewrites the trailing
+  # newline count. A failed rev-parse writes an EMPTY file, which the printf form served as
+  # a bare newline rather than as nothing.
+  cat "$_f.c"
   _st="$(<"$_f.s")"
   return "$_st"
 }
