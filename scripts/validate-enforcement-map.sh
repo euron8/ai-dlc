@@ -471,7 +471,22 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   before any fork for a directory that carries a run.sh, so the per-directory cost has fallen
 #   since those two raises and a raise sized by extrapolation from them would have bought ten forks
 #   of unearned headroom. Budget from the HIGH reading, 8219, plus the usual 6.
-FORK_BUDGET=8225
+#
+#   0.587.0, THE FIRST REDUCTION EVER TAKEN: 8225 -> 6425. Both I87 per-item loops replaced with
+#   one batched awk pass apiece -- `i87_readable` reads its whole file LIST once instead of forking
+#   a `grep` per file (430 files), and `i87_exposed_in`/`i87_exposed_batch` share one awk program
+#   that walks every fixture's `.sh` file(s) directly from a manifest instead of forking ~9
+#   externals per non-cleared directory. `--stable` on this tree: base (this file at the parent
+#   commit, run from a sibling path so both copies coexist) 8317 fork(s), 2/2 reproduced, spread
+#   8317-8317; fixed 6425, 2/2 reproduced, spread 6425-6425. `--section by-arm` attributes nearly
+#   the whole delta to I87 alone -- 1843 -> 48, -1795 -- with every other arm within the +/-1
+#   dropped-trace-line noise this file's own 0.583.0 entry above already characterises. The
+#   remaining ~1795 forks I87 still costs are the batched awk's own process spawns (one `mktemp`,
+#   one `find`, one `sort`, one `awk` per readable-key or per-directory call site) plus whatever
+#   the two functions are still called from -- the probe and the corpus loop each call
+#   `i87_readable`/`i87_exposed_in` once, and the corpus loop now calls `i87_exposed_batch` once
+#   instead of once per fixture directory. Budget from the HIGH reading, 6425, plus the usual 6.
+FORK_BUDGET=6431
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
@@ -7310,26 +7325,109 @@ fi
 # that must stay silent for the two different reasons the exclusions encode.
 #
 # ONE READER, used by the corpus scan AND by the probe. A probe exercising a copy proves the copy.
+#
+# BOTH FUNCTIONS BELOW ARE ONE-FORK AWK PASSES, REPLACING A FORK-PER-FILE AND A
+# FORK-PER-DIRECTORY SHAPE. i87_readable forked one `grep` per file across the whole
+# core/+scripts/ tree (430 files at this writing); i87_exposed_in forked ~9 externals
+# (cat, 2x grep -q, 2x grep+sort, 3x grep+sort, grep -Fxf) per fixture directory it did
+# not early-return from. Both awk programs implement the SAME four predicates the shell
+# pipelines did, verified against the extracted-verbatim prior implementation over a
+# seeded probe tree exercising all four (see the fork-budget entry above this function
+# for how that was measured) plus the live corpus, never retyped from memory.
+#
+# i87_exposed_in keeps its per-directory signature and callers (used by the probe below),
+# now driving the same awk program as the batched corpus scan so a probe exercising it
+# still exercises the one engine the corpus loop calls.
+I87_EXPOSED_AWK='
+  function flush(d,    k, out, any) {
+    if (d == "") return
+    if (cleared) return
+    any = 0; out = ""
+    for (k in named) {
+      if ((k in rk) && !(k in assigned)) { out = out k " "; any = 1 }
+    }
+    if (any) printf "%s\t%s\n", d, out
+  }
+  BEGIN {
+    while ((getline k < RKFILE) > 0) rk[k] = 1
+    close(RKFILE)
+    curdir = ""
+    while ((getline fpath < MANIFEST) > 0) {
+      d = fpath
+      sub(/\/[^\/]*$/, "", d)
+      if (d != curdir) {
+        flush(curdir)
+        curdir = d
+        cleared = 0
+        delete named
+        delete assigned
+      }
+      while ((getline line < fpath) > 0) {
+        # The clearing loop makes every key in this fixture safe at once.
+        if (index(line, "unset \"$_v\"") > 0) cleared = 1
+        if (index(line, "unset AI_DLC") > 0) cleared = 1
+        l2 = line
+        while (match(l2, /(^|[ \t]|;|export[ \t]+)AI_DLC_[A-Z0-9_]+=/)) {
+          seg = substr(l2, RSTART, RLENGTH)
+          if (match(seg, /AI_DLC_[A-Z0-9_]+/)) assigned[substr(seg, RSTART, RLENGTH)] = 1
+          l2 = substr(l2, RSTART + RLENGTH)
+        }
+        # LIVE LINES ONLY: not a comment, and not a line whose token sits inside single quotes.
+        is_comment = (line ~ /^[ \t]*#/)
+        has_squoted = (match(line, /\047[^\047]*AI_DLC_[A-Z0-9_]+[^\047]*\047/) > 0)
+        if (!is_comment && !has_squoted) {
+          l3 = line
+          while (match(l3, /AI_DLC_[A-Z0-9_]+/)) {
+            named[substr(l3, RSTART, RLENGTH)] = 1
+            l3 = substr(l3, RSTART + RLENGTH)
+          }
+        }
+      }
+      close(fpath)
+    }
+    close(MANIFEST)
+    flush(curdir)
+  }
+'
 i87_readable() {   # <root> -> AI_DLC_* keys a shipped program dereferences, one per line
-  { find "$1/core" "$1/scripts" -type f \( -name '*.sh' -o -name '*.js' -o -name '*.py' \) \
-       -not -path '*/core/fixtures/*' 2>/dev/null | while IFS= read -r _f; do
-      grep -ohE '\$\{?AI_DLC_[A-Z0-9_]+' "$_f" 2>/dev/null
-    done; } | sed -E 's/^\$\{?//' | sort -u
+  local _fl
+  _fl="$(mktemp)"
+  find "$1/core" "$1/scripts" -type f \( -name '*.sh' -o -name '*.js' -o -name '*.py' \) \
+       -not -path '*/core/fixtures/*' 2>/dev/null > "$_fl"
+  awk -v FLIST="$_fl" '
+    BEGIN {
+      while ((getline fn < FLIST) > 0) {
+        while ((getline line < fn) > 0) {
+          while (match(line, /\$\{?AI_DLC_[A-Z0-9_]+/)) {
+            tok = substr(line, RSTART, RLENGTH)
+            sub(/^\$\{?/, "", tok)
+            seen[tok] = 1
+            line = substr(line, RSTART + RLENGTH)
+          }
+        }
+        close(fn)
+      }
+      close(FLIST)
+      for (k in seen) print k
+    }
+  ' < /dev/null | sed -E 's/^\$\{?//' | sort -u
+  rm -f "$_fl"
 }
 i87_exposed_in() { # <fixture dir> <readable-key file> -> exposed keys, one per line
-  local d="$1" rk="$2" blob named assigned
-  blob="$(cat "$d"/*.sh 2>/dev/null)"
-  # The clearing loop makes every key in this fixture safe at once — that is its whole purpose.
-  grep -q 'unset "\$_v"' <<<"$blob" && return 0
-  grep -q 'unset AI_DLC' <<<"$blob" && return 0
-  assigned="$(grep -ohE '(^|[[:space:]]|;|export[[:space:]]+)AI_DLC_[A-Z0-9_]+=' <<<"$blob" 2>/dev/null \
-              | grep -ohE 'AI_DLC_[A-Z0-9_]+' | sort -u)"
-  # LIVE LINES ONLY: not a comment, and not a line whose token sits inside single quotes.
-  named="$(grep -vE '^[[:space:]]*#' <<<"$blob" \
-           | grep -vE "'[^']*AI_DLC_[A-Z0-9_]+[^']*'" \
-           | grep -ohE 'AI_DLC_[A-Z0-9_]+' | sort -u)"
-  [ -n "$named" ] || return 0
-  grep -Fxf "$rk" <<<"$named" 2>/dev/null | { [ -n "$assigned" ] && grep -Fxv "$assigned" || cat; }
+  local d="$1" rk="$2" manifest out
+  manifest="$(mktemp)"
+  find "$d" -maxdepth 1 -type f -name '*.sh' -not -name '.*' 2>/dev/null | sort > "$manifest"
+  out="$(awk -v RKFILE="$rk" -v MANIFEST="$manifest" "$I87_EXPOSED_AWK" < /dev/null)"
+  rm -f "$manifest"
+  [ -n "$out" ] || return 0
+  printf '%s\n' "${out#*$'\t'}" | tr ' ' '\n' | grep -v '^$'
+}
+i87_exposed_batch() { # <fixtures root> <readable-key file> -> "<dir>\t<space-joined keys>" per exposed dir
+  local root="$1" rk="$2" manifest
+  manifest="$(mktemp)"
+  find "$root" -mindepth 2 -maxdepth 2 -type f -name '*.sh' -not -name '.*' 2>/dev/null | sort > "$manifest"
+  awk -v RKFILE="$rk" -v MANIFEST="$manifest" "$I87_EXPOSED_AWK" < /dev/null
+  rm -f "$manifest"
 }
 
 i87_probe_dir="$(mktemp -d)"
@@ -7359,12 +7457,11 @@ else
     err "I87 derived $i87_nrk dereferenced AI_DLC_* key(s) across $i87_nfx fixture(s); counts this low mean one of the two sides stopped matching the tree, and an empty key set reports every fixture as safe without reading one."
   else
     i87_bad=""
-    while IFS= read -r i87_d; do
-      [ -n "$i87_d" ] || continue
-      i87_k="$(i87_exposed_in "$i87_d" "$i87_rk" | tr '\n' ' ')"
-      [ -n "${i87_k// /}" ] && i87_bad="${i87_bad}
-  $(basename "$i87_d")    ${i87_k}"
-    done < <(find "$REPO_ROOT/core/fixtures" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort)
+    while IFS="$(printf '\t')" read -r i87_dpath i87_k; do
+      [ -n "$i87_dpath" ] || continue
+      i87_bad="${i87_bad}
+  $(basename "$i87_dpath")    ${i87_k}"
+    done < <(i87_exposed_batch "$REPO_ROOT/core/fixtures" "$i87_rk")
     [ -n "$i87_bad" ] && err "I87 fixture(s) name an AI_DLC_* tunable a shipped program reads, without assigning it and without clearing the ambient environment:${i87_bad}
 
 Each one asserts against whatever the developer's .claude/settings.json happens to say — it passes for the wrong reason on the machine that set the key and fails on a correct build for the machine that set it differently. v0.289.0 fixed three fixtures in exactly that state. Add the clearing loop the suite already uses (\`for _v in \$(env | sed -n 's/^\\(AI_DLC_[A-Za-z0-9_]*\\)=.*/\\1/p'); do unset \"\$_v\"; done\`) or set the key explicitly."
