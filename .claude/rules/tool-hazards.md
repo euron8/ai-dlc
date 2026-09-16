@@ -34,6 +34,14 @@ lines landed of twenty-four. Write the body with the Write tool and pass it by `
 reports and writes nothing, and the run reads as "re-rendered". Run `--check` after, never
 instead.
 
+**A `$(date)` INSIDE `PS4` CHARGES ONE FORK PER TRACED LINE, so a per-line timing profile ranks
+loops by ITERATION COUNT — the artifact is the quantity being read.** Measured on the
+enforcement-map validator: the trace put 37s of a 47s run on two fork-free loops, 9498 and 2071
+iterations, and an ablation differential in CPU-seconds over 4 interleaved reps refuted both —
+base 29.75-30.30, the two ablations 29.30-30.34 and 28.97-30.39, every range overlapping. Use
+that PS4 to COUNT invocations, never to time them; for cost, drive `scripts/fork-profile.sh
+--stable` or ablate the block and difference CPU-seconds in worktrees at the SAME path.
+
 ## The Bash tool's OUTPUT is rewritten before you read it
 
 A compressor sits on Bash results and edits the text inside them, CODE INCLUDED. Measured on
