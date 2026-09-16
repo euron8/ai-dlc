@@ -88,8 +88,8 @@ SELF="$(cd "$(dirname "$0")" && pwd)"
 # hard-blockers.sh -> layer-drift.sh + unregistered-drift.sh, retired-tokens.sh once per CLASSIFY
 # file, relabel-extension-checks.sh, ledger-reverify.sh, predicate-differential.sh,
 # retired-fixtures.sh, the three retired-layer-*.sh, warn-shadowed-local-validators.sh) — each its
-# own bash process, each re-reading the SAME `git ls-tree -r --name-only <ref>` and
-# `git show <ref>:<path>` answers every sibling in this same render already read. Measured on the
+# own bash process, each re-reading the SAME `git ls-tree -r --name-only` and `git show` answers
+# (a ref-scoped path) every sibling in this same render already read. Measured on the
 # fixture's own 143-render matrix (13 programs x 11 worlds): 19219 total git invocations, 302
 # distinct. An in-process memo (the shape `ledger-reverify.sh` carried before this) cannot see
 # that repetition, because it never crosses the process boundary a `bash "$SELF/x.sh"` opens.
