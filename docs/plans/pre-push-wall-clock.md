@@ -42,25 +42,93 @@ apart is for the operator to ask.
 **Delegate.** The Delegation section below is not advisory: most of these steps are independent
 and should run as parallel named agents.
 
-### Next actions — **v0.370.0 IS MERGED TO `main`. TWO THINGS REMAIN.**
+### Next actions — **v0.370.0 IS MERGED. THE POLE IS NOW `ledger-reverify` AND IT IS WATCHED.**
 
 v0.370.0 landed on `main` as `d4fd318`, squashed from `perf/pre-push-wall-clock` (#547).
-`scripts/validate-release-version.sh` passes on the merged `main`, and the gate is green at
-**217.27s**. Everything below the "Ordered execution" table is the record of how it got there;
-**do not re-execute any of it.**
+`scripts/validate-release-version.sh` passes on the merged `main`. Everything below the "Ordered
+execution" table is the record of how it got there; **do not re-execute any of it.** The 217.27s
+wall this block used to quote is four releases stale and has been replaced by the calibrated
+figures in action 2.
 
-1. **The nine inner pools are owed, and the hook records them as owed.** 66 workers sit on top
-   of the outer pool. They cannot be swept with an environment variable — `enforcement-map-sites`
-   scrubs every ambient `AI_DLC_*` name for I10 and I87 binds any key a shipped program
-   dereferences — so it means editing the constants on a throwaway branch that is never pushed.
-   Use `sweep9.sh`'s design: pin the dispatched set, reset the durations record from one golden
-   copy before every run, visit cells round-robin, and take a difference as real only where two
-   cells' readings do not overlap.
-2. **`validator-arm-selection` is the pole now, at 166s of a 217s wall.** Its shard b has a
-   measured floor of ~47.8s solo set by three serial units — seeded run 16s → attribution sweep
-   11s → a mutant's three parallel full runs 18s. Going below it needs either a third directory
-   duplicating the 27s prerequisite, or overlapping the seeded run with the attribution sweep.
-   Both were measured; neither was taken. **This is the next program, not this one.**
+1. **The inner pools are owed, and the hook records them as owed.** Re-derived against the tree
+   today: **11** fixtures declare an inner pool width, and those widths sum to **70** workers
+   sitting on top of the outer pool of 12 (`FIXTURE_JOBS="${AI_DLC_FIXTURE_JOBS:-12}"`,
+   `.githooks/pre-push:319`). This block used to say nine; it was not re-derived for four
+   releases. Derive both sides and JOIN them, never quote either:
+
+   ```
+   grep -lE 'xargs( +-[^ ]+)* +-P' core/fixtures/*/run.sh | sort            # dispatch sites
+   grep -lE 'xargs( +-[^ ]+)* +-QQ' core/fixtures/*/run.sh | wc -l          # 0 -- control
+   grep -lE '^[A-Z_]*JOBS=[0-9"]' core/fixtures/*/run.sh | sort             # width declarations
+   grep -hE '^[A-Z_]*JOBS=[0-9"]' core/fixtures/*/run.sh \
+     | sed 's/.*=//; s/"//g' | awk '{s+=$1} END{print s}'                   # 70
+   ```
+
+   The eleven are `consumer-machinery-home` (7), `crosswalk-home-declaration` (5),
+   `enforcement-map-derivations` (4), `enforcement-map-sites` (8), `layer-contract-conformance`
+   (4), `layer-reference-resolution` (6), `ledger-status-vocabulary` (8), `self-update-join-gate`
+   (6), `trunk-audit-mutants` (8), `validator-arm-selection` (6), `wait-stale-deliverable` (8).
+   **Two traps in that derivation, both measured here.** `validator-arm-selection` writes
+   `xargs -0 -n1 -P`, so a grammar anchored on a bare `^xargs -P` drops it and returns ten — and
+   it holds TWO dispatch sites at one width, in sequential phases, so the site count is not the
+   worker count. And `consumer-suite-pool/run.sh` matches the dispatch grep while declaring no
+   width: its hit is a mutation string rewriting the HOOK's pool, not a pool of its own, which is
+   why the `comm` join above is the answer and either grep alone is not.
+
+   They cannot be swept with an environment variable — `enforcement-map-sites` scrubs every
+   ambient `AI_DLC_*` name for I10 and I87 binds any key a shipped program dereferences — so it
+   means editing the constants on a throwaway branch that is never pushed. The sweep design: pin
+   the dispatched set, reset the durations record from one golden copy before every run, visit
+   cells round-robin, and take a difference as real only where two cells' readings do not
+   overlap. No sweep script is tracked in this repo (`git log --all -- '**/sweep9.sh'` returns 0
+   against a control of 1 for a tracked path), so the harness is written fresh.
+
+2. **The pole is `ledger-reverify` at 628s loaded, and since `v0.583.0` a guard watches it.**
+   Calibrated on an unchanged tree by three serial full `AI_DLC_FIXTURE_NO_SKIP=1 bash
+   .githooks/pre-push` runs in a `file://` clone of `origin/main` at `83747ef4`, pool 12, 201
+   fixture directories: **628s** (wall 743s, load average 50.56 at start, gate green 21/21),
+   **563s** (wall 629s, load 9.06, gate red on one unrelated flake with the durations file
+   complete at 201 rows), **562s** (wall 627s, load 5.30, gate green 21/21).
+
+   `scripts/validate-suite-pole.sh` compares the last full green run's pole against
+   `docs/suite-pole-baseline.tsv` — row 628, band 20, ceiling 754 — and fails the push above the
+   ceiling. It SKIPs rather than fails on a partial dispatch or a different pool width, and has no
+   downward fail. Read the current row, and confirm the guard answers on it:
+
+   ```
+   grep -v '^#' docs/suite-pole-baseline.tsv        # ledger-reverify 628
+   bash scripts/validate-suite-pole.sh --root . \
+        --durations .git/ai-dlc-fixture-durations.last --jobs 12
+   ```
+
+   **The lever is the fixture itself.** `core/fixtures/ledger-reverify/run.sh` is **3643** lines
+   and drives the script under test from **60** static exec sites, serially, with no inner pool
+   of its own. Several of those sites sit inside helper functions called many times over, so 60
+   is a FLOOR on the runtime invocation count and not the count itself:
+
+   ```
+   wc -l < core/fixtures/ledger-reverify/run.sh                            # 3643
+   grep -cE 'bash +"(\$CLOSER|[^"]*ledger-reverify\.sh)"' \
+        core/fixtures/ledger-reverify/run.sh                               # 60 exec sites
+   grep -cE 'bash -n +"[^"]*ledger-reverify\.sh"' \
+        core/fixtures/ledger-reverify/run.sh                               # 4 of those are -n
+   grep -cE 'bash +"[^"]*qqq-absent\.sh"' \
+        core/fixtures/ledger-reverify/run.sh                               # 0 -- control
+   grep -cE 'xargs( +-[^ ]+)* +-P' core/fixtures/ledger-reverify/run.sh    # 0 -- no inner pool
+   ```
+
+   **A bare `grep -c 'ledger-reverify.sh'` answers 105 and is the wrong number** — it counts
+   `cmp`, `sed`, `cp` and comment mentions of the basename alongside the executions, which is the
+   text-about-a-program trap. Sharding this fixture, or overlapping its serial units, is the next
+   program.
+   Before sharding, read the `0.541.0` CHANGELOG entry: on the previous pole a shard was refuted
+   by measurement and an inner pool won, and nothing in `docs/invariant-index.md` binds the union
+   of a split fixture's assertion set.
+
+   `BL-005` is a SEPARATE subject and not this one — shard `b`'s ~47.8s solo floor, set by three
+   serial units (seeded run 16s, attribution sweep 11s, a mutant's three parallel full runs 18s).
+   Going below it needs either a third directory duplicating the 27s prerequisite, or overlapping
+   the seeded run with the attribution sweep. Both were measured; neither was taken.
 
 3. **AFTER ANY MERGE, BEFORE YOU STOP: re-derive this file's own resume block and prove it is
    still resumable.** Every figure above is a wall-clock measurement of a suite that moves with

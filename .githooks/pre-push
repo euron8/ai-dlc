@@ -318,6 +318,26 @@ step "agent definitions (the shipped renderer runs, and says which of its three 
 # FIXTURE_POOL_BEGIN
 FIXTURE_JOBS="${AI_DLC_FIXTURE_JOBS:-12}"
 DURATIONS_RECORD=".git/ai-dlc-fixture-durations"
+# THIS RUN'S COSTS, UNMERGED, AND THAT IS THE WHOLE DIFFERENCE FROM THE RECORD ABOVE.
+# DURATIONS_RECORD merges each run over the last one so a SKIPPED unit keeps the cost it had --
+# correct for scheduling, useless for measurement. Its rows are of mixed vintage and nothing in
+# it says which run wrote which, so reading a pole figure off it compares two different days.
+# This file holds only what THIS pool actually timed.
+#
+# TRUNCATED AT POOL ENTRY, so the file cannot outlive the run that wrote it. A reader finding it
+# non-empty has a measurement from a pool that entered, dispatched, and came back green; every
+# other path -- red unit, dead worker, mktemp failure, the empty-suite guard -- leaves it EMPTY,
+# which is the state a reader must treat as "nothing was measured" rather than as a figure.
+#
+# PUBLISHED ONLY ON A FULLY GREEN RUN OVER THE DISPATCHED LIST, gated exactly like
+# VERIFIED_RECORD below and for the same reason: a red run's timings are the timings of a suite
+# that did not finish, and a guard comparing them against a full-suite baseline would read a
+# short run as an improvement.
+#
+# THE CONTENT-KEY SKIP NEVER ENTERS THE POOL, so it neither truncates nor writes -- the PRIOR
+# run's file survives it. That is why the reader is the hook step, which stands down on
+# SUITE_SKIPPED rather than trusting the file's age.
+LASTRUN_RECORD=".git/ai-dlc-fixture-durations.last"
 READSET_MAP=".ai-dlc-fixture-readsets.tsv"
 # THE VERIFIED-STATE RECORD LIVES UNDER .git FOR I55 ARM 4'S REASON EXACTLY: the content key
 # hashes the working tree, so a cross-run record inside it would change the key that decides
@@ -631,6 +651,13 @@ run_fixtures() {
   # can ever be called `.dur` and land on top of this one. `.log` is the same shape and
   # gets its safety from the same dot.
   mkdir -p "$out/.dur" "$out/.log" || { rm -rf "$out"; return 1; }
+  # TRUNCATE THE THIS-RUN RECORD HERE, at the first line that can only run because the pool is
+  # entering. Every exit below this point -- the empty-suite guard, a red unit, a worker that
+  # died -- then leaves an EMPTY file, and a reader that finds one knows no complete measurement
+  # exists rather than reading a stale figure as this run's. `2>/dev/null` as every other write
+  # in this block carries: a record that cannot be written must not print over the suite's own
+  # output, and the publish below is what decides whether anything is there to read.
+  : > "$LASTRUN_RECORD" 2>/dev/null
 
   for d in core/fixtures/*/; do
     [ -f "$d/run.sh" ] || continue
@@ -808,6 +835,13 @@ run_fixtures() {
   # next push -- changing something else entirely -- would skip the fixture that is still
   # broken and report green.
   if [ "$rc" -eq 0 ] && [ -s "$out/.now" ]; then cp "$out/.now" "$VERIFIED_RECORD" 2>/dev/null; fi
+
+  # PUBLISH THIS RUN'S UNMERGED COSTS UNDER THE SAME GREEN-ONLY GATE, and copy the PRE-MERGE
+  # file: "$out/.durations" is exactly the units this pool timed, while "$out/.merged" one block
+  # up has already been folded over the prior record and carries rows nothing here measured.
+  # Gated on `rc` for the reason the line above is -- a red run's timings belong to a suite that
+  # stopped early, and a reader comparing them to a full-suite figure reads "short" as "fast".
+  if [ "$rc" -eq 0 ] && [ -s "$out/.durations" ]; then cp "$out/.durations" "$LASTRUN_RECORD" 2>/dev/null; fi
 
   # PUBLISH THE RED UNITS' CAPTURED OUTPUT BEFORE THE TEMP DIR GOES. Placed here, beside the
   # durations publish, for the same reason that one is here: it is the last point at which
@@ -988,6 +1022,40 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
 
 SUITE_SKIPPED=0
 step "fixture suite (${FIXTURE_JOBS}-way)" fixture_suite_step
+
+# 3a. THE SUITE'S WALL CLOCK IS ONE NUMBER AND NOTHING WATCHED IT. This suite is POLE-BOUND:
+#     the time you wait tracks the single longest fixture DIRECTORY, not the sum over the
+#     pool. That figure grew 493 -> 573 across two releases with no mechanism able to see it,
+#     and three separate places went on citing a pole that had been displaced four releases
+#     earlier. The guard reads the record the block above publishes and compares it against a
+#     tracked baseline, failing only on growth beyond a calibrated band.
+#
+#     IT STANDS DOWN ON THE CONTENT-KEY SKIP RATHER THAN TRUSTING THE FILE'S AGE. A skip never
+#     enters the pool, so it neither truncates LASTRUN_RECORD nor writes it -- the PRIOR run's
+#     file survives intact and reads exactly like a fresh one. Nothing in the file says which
+#     run wrote it, so the only thing that knows is this shell, here, and that is why the
+#     stand-down is a hook-side condition and not something the guard can work out for itself.
+#
+#     NOT ADDED TO core/git-hooks/pre-push, and it sits OUTSIDE the I66 block for the same
+#     reason: the baseline lives under docs/, which a consumer tree does not have, so a
+#     consumer running this step would refuse on a file that can never exist there.
+#
+#     ON A CONTENT-KEY SKIP THE GUARD STILL RUNS, AGAINST AN EMPTY DURATIONS FILE. docs/ is
+#     in the content key's EXCLUDE set, so a push that edits ONLY the baseline hits the key,
+#     skips the suite, and -- if this step stood down with it -- would land a malformed or
+#     stale-pole baseline that nothing parsed. The guard parses the baseline BEFORE it looks
+#     at durations and refuses (exit 2) on a bad one, then SKIPs on the empty file. So the
+#     baseline is read by a shipping program on every push regardless of the key, which is
+#     the reader I55 arm 3 requires for a docs/ input: the fixture suite cannot be it.
+pole_guard_step() {
+  if [ "${SUITE_SKIPPED:-0}" = 1 ]; then
+    printf '   (suite skipped on the content key -- parsing the baseline only; nothing was measured)\n'
+    bash scripts/validate-suite-pole.sh --durations /dev/null --jobs "$FIXTURE_JOBS"
+    return
+  fi
+  bash scripts/validate-suite-pole.sh --durations "$LASTRUN_RECORD" --jobs "$FIXTURE_JOBS"
+}
+step "suite pole (this run's loaded cost of the longest fixture against docs/suite-pole-baseline.tsv)" pole_guard_step
 
 # 4. A shipped script with a syntax error is a gate that cannot run at all.
 #    validate-enforcement-map.sh maps this glob set through map_consumer() and

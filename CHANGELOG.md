@@ -15,6 +15,77 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.583.0] - 2026-09-16
+
+**The fixture-suite pole is watched.** Batch 117 of the graph-ledger drain, invoked by a
+cross-session handoff; subject fixed by operator ruling at batch 116. No consumer-filed candidate
+closes in this release. Two entries close, both about the same unwatched number.
+
+### BL-257 — a ratchet on the suite pole, with a calibrated baseline under `docs/`
+
+The pre-push suite is pole-bound and nothing observed the pole: it read 490, 493 and 573 in three
+places across a week, each figure a merged-forward row of unknown vintage in an untracked file.
+Three changes, each its own commit:
+
+- **Both hooks publish THIS run's costs unmerged**, to `.git/ai-dlc-fixture-durations.last`,
+  truncated when the pool enters and written only when every unit came back green. Inside the
+  `I66` block, byte-identical in both hooks; the consumer gets a harmless extra record and no
+  reader. A non-empty file is therefore a full green pool by construction, and every other state
+  (red unit, killed push, empty suite, `mktemp` failure) leaves it empty.
+- **`scripts/validate-suite-pole.sh`** (distribution-only) compares that file's max row against
+  `docs/suite-pole-baseline.tsv`: one data row, `# band:`, `# jobs:` and `# fixtures:` directives,
+  the ratchet history as comments. A self-probe of 18 seeds runs BEFORE any real file is opened
+  and refuses (exit 2) on a comparator that cannot discriminate. Growth past
+  `B + ceil(B*band/100)` fails the push naming the figure; a partial dispatch, a different pool
+  width, or an empty record SKIPs with its reason, because a pole measured beside thirty units
+  is a near-solo figure and a false red trains the operator to bypass. There is deliberately NO
+  downward FAIL: a figure under half the baseline gets a NOTE to lower the row, because a FAIL
+  there would block the push that improves the suite.
+- **The hook step** runs after the fixture suite in `.githooks/pre-push` only. On a content-key
+  skip it still runs the guard against an empty durations file, so the baseline is parsed by a
+  shipping program on every push — `docs/` is in the content key's EXCLUDE set, so no fixture can
+  be that reader (`I55` arm 3 refused the first cut that tried).
+
+**Calibration**: three serial full `AI_DLC_FIXTURE_NO_SKIP=1` gate runs in a `file://` clone of
+`origin/main` at `83747ef4`, pool 12, 201 fixture directories, dispatch seeded longest-first:
+`ledger-reverify` 628s (load 50.56 at start, wall 743s), 563s (load 9.06, wall 629s), 562s (load
+5.30, wall 627s). Baseline row is the MAX, 628; band is the observed spread 12% plus 8 headroom,
+20; ceiling 754. The loaded spread across the three runs was 12%, and the row nobody watched
+moved 17% between the two figures that had been written down.
+
+**The filed receipt was replaced before the fix landed, and the contract adversary is why.**
+Scored against it, FOUR wrong implementations passed: a hardcoded threshold, a zero-tolerance
+compare, a `cmp -s`, and floor arithmetic. The filed one also exits 1 against the CORRECT guard —
+its baseline carries no directives and its one-row durations file is a partial dispatch — so it
+was inverted as well as permissive. The replacement adds the within-band seed (105 against 100 at
+band 15 must PASS) and drives the guard on a probe root. `core/fixtures/suite-pole-guard/` is the
+discriminating channel: 16 arms, 6 mutants each killed by one named arm, `.dist-only`.
+
+`FORK_BUDGET` 8208 → 8218 → 8225: +6 for the new shipped script joining four corpus scans
+(base 8206 ×3, tip 8212 ×3, in two clones — a `git archive` extraction reads 20 low because the
+git-shelling arms answer differently with no `.git`), then +7 for the fixture directory by holdout
+on one tree (8219/8218 with, 8211/8212 without), against the +17..+19 a directory cost two
+releases ago. `suite-dispatch-order` asserts the `.last` record alongside the merged one.
+
+### BL-255 — `BL-005`'s heading named a pole displaced four releases before it was read
+
+`BL-005` asserted `validator-arm-selection` was the pole at 166s of a 217s wall; the archived
+`BL-088` had recorded its displacement at `v0.541.0` and nothing joined the two. The heading now
+names the entry's surviving subject — shard `b`'s ~47.8s solo floor and the two measured routes
+below it — and its body states the real pole and what watches it. `BL-005` stays OPEN.
+`BL-255`'s anchor flips 1 → 0 on the corrected heading, and ALSO on a heading that merely drops
+the words `is the pre-push pole` while keeping the displaced figures, which is why the corrected
+text is quoted verbatim in the entry rather than asserted by the anchor alone.
+`docs/plans/pre-push-wall-clock.md`'s next actions are re-derived: the pole is `ledger-reverify`,
+the inner-pool count is 11 fixtures / 70 workers (the plan said nine / 66; a `^xargs -P` anchor
+misses `xargs -0 -n1 -P`), and the fixture's 3643-line `run.sh` executes the script under test at
+60 sites (the entry's 105 was a mention count).
+
+**Filed, not fixed:** calibration run 2 went red on `agent-definition-render`, whose
+`check-is-presence-only` mutant was killed by two arms instead of one, on an otherwise unchanged
+tree; runs 1 and 3 were green. The full 201-row durations file was still written on that run.
+Recorded here for the flake census; not filed as an entry in this release.
+
 ## [0.582.0] - 2026-09-16
 
 **Two consumer-filed candidates discharged in one release, both separable, neither touching a

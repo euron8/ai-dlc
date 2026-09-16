@@ -943,12 +943,25 @@ verify: manual
 
 ---
 
-## BL-005 — `validator-arm-selection` is the pre-push pole, at 166s of a 217s wall
+## BL-005 — `validator-arm-selection` shard `b` has a ~47.8s solo floor set by three serial units; two routes below it were measured and neither taken
 
 Its shard `b` has a measured floor of ~47.8s solo, set by three serial units: a seeded run at
 16s, an attribution sweep at 11s, and a mutant's three parallel full runs at 18s. Going below
 it needs either a third directory duplicating the 27s prerequisite, or overlapping the seeded
 run with the attribution sweep. Both were measured; neither was taken.
+
+**THIS ENTRY IS NOT ABOUT THE POLE, AND ITS HEADING SAID IT WAS UNTIL `v0.583.0`.** The pre-push
+pole is `ledger-reverify` at **628s loaded** — pool 12, full suite under
+`AI_DLC_FIXTURE_NO_SKIP=1`, taken as the MAX of three calibrated serial runs in a `file://`
+clone of `origin/main` at `83747ef4`: **628s** (wall 743s, load average 50.56 at start), **563s**
+(wall 629s, load 9.06), **562s** (wall 627s, load 5.30). Since `v0.583.0` that figure is watched
+by `scripts/validate-suite-pole.sh` against the tracked baseline
+`docs/suite-pole-baseline.tsv`, which is what `BL-257` built. The **166s / 217s** figures this
+entry's heading carried were displaced at **v0.541.0** by `BL-088`, whose own landing paragraph
+records the pole falling to `ledger-reverify` in the same change — four releases before
+`BL-255` read the heading and found it still asserting them. A session scoping performance work
+off this entry optimizes a fixture that is not the pole; shard `b`'s floor is a real and
+separate subject, and it is the only subject this entry has.
 
 Carried over from `docs/plans/pre-push-wall-clock.md`. This is a program, not a single fix.
 
@@ -3598,6 +3611,23 @@ verify: manual
 
 ## BL-255 — `BL-005` names a pole that was displaced four releases before it was read, and the entry that measured the displacement filed it in the ARCHIVE
 
+**LANDED (v0.583.0, verified 585cb154).** `BL-005`'s heading now reads *"`validator-arm-selection`
+shard `b` has a ~47.8s solo floor set by three serial units; two routes below it were measured
+and neither taken"*, and its body carries the real pole — `ledger-reverify` at 628s loaded — with
+the displacement dated to `v0.541.0` (`BL-088`). The filed receipt exits **0** on the corrected
+tree against **1** before it, re-run raw in the same session.
+
+**THE RECEIPT ALSO EXITS 0 ON A HEADING THAT IS STILL WRONG, AND THAT IS WHY THE CORRECTED TEXT
+IS QUOTED VERBATIM ABOVE.** Scored in the same invocation against a mutant heading reading
+`## BL-005 — validator-arm-selection is the pole, at 166s of a 217s wall`: exit **0**. The anchor
+requires the literal `is the pre-push pole`, so dropping those four words while keeping the
+displaced fixture name and both displaced figures satisfies it completely. The anchor is a
+NECESSARY condition on the repair and not a sufficient one — this entry's own filing paragraph
+established it discriminates against three plausible repair shapes, and a fourth, found by
+scoring it here, it does not. What closes the gap is not a tighter anchor: the corrected heading
+is quoted in full one paragraph up, where a reader can compare it, and the fixture hand's arm
+asserts that heading's text directly rather than the absence of a phrase.
+
 **DEFECT.** `BL-005`'s heading asserts *"`validator-arm-selection` is the pre-push pole, at 166s
 of a 217s wall"*. Both halves are false at HEAD. Re-derived from
 `.git/ai-dlc-fixture-durations` in one invocation: `ledger-reverify` **493**,
@@ -3748,6 +3778,72 @@ verify: sh V=scripts/validate-plan-shape.sh; [ -f "$V" ] && [ -f scripts/plan-ro
 
 ## BL-257 — the suite pole grew 493 -> 573 in two releases and nothing watches it; a growth guard needs a TRACKED baseline, and `docs/` is where one can live
 
+**LANDED (v0.583.0, verified 585cb154).** `scripts/validate-suite-pole.sh` reads the last full
+green run's unmerged durations record and compares the pole against the tracked baseline
+`docs/suite-pole-baseline.tsv`. The pole is `ledger-reverify`; the baseline row is **628**, the
+band **20**, the ceiling **754**.
+
+**THE CALIBRATION, WHICH IS WHAT THIS ENTRY SAID WAS NOT OPTIONAL.** Three serial full
+`AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push` runs on an unchanged tree, in a `file://`
+clone of `origin/main` at `83747ef4`, pool 12, 201 fixture directories, durations seeded from the
+operator clone's record so all three dispatched in the same longest-first order: **628s** (wall
+743s, load average 50.56 at start, gate green 21/21), **563s** (wall 629s, load 9.06, gate RED on
+one unrelated `agent-definition-render` mutant-attribution flake, durations file complete at 201
+rows so the pole figure is a full-dispatch reading), **562s** (wall 627s, load 5.30, gate green
+21/21). The next four rows moved together and in the same direction across all three —
+`reconcile-emit-report` 377/325/325, `gate-adjudication-mutants` 330/291/287,
+`check-24-adversarial-convergence` 246/186/192, `self-update-gate` 226/196/197 — which is what
+says the spread is LOAD rather than one unit misbehaving.
+
+**THE ROW IS THE MAX AND THE BAND IS THE SPREAD PLUS STATED HEADROOM.** n=3 under uncontrolled
+load gives no dispersion estimate; what it gives is an observed loaded ceiling, so the row is
+628, not the mean and not the quiet-box 562. A row at the minimum would sit under two of the
+three readings of an unchanged tree and go red on every busy push. Band =
+`ceil((628-562)/562*100)` = 12 observed, plus 8 points of headroom = 20. Ceiling =
+`628 + ceil(628*20/100)` = 754. Driven against a constructed 201-row durations file: 628 → exit
+0, 754 → exit 0, 755 → exit 1 naming 755, the ceiling and the band.
+
+**THE FILED RECEIPT WAS REPLACED BEFORE THE FIX LANDED, AND THE SHIPPED ONE IS BELOW.** The
+receipt filed with this entry exits **1** against a CORRECT guard, for two reasons that are both
+design requirements of the thing it was written to check. Its baseline carries no `# band:`,
+`# jobs:` or `# fixtures:` directive, and a missing directive is a refusal at exit 2 — a
+comparison with no stated terms is one a later reader cannot interpret. And its one-row durations
+file is a partial dispatch against this tree's 201 fixture directories, which is a SKIP at exit 0
+on both arms, so neither the grown case nor the unchanged case is ever compared. A receipt that
+fails on the correct implementation is not a weaker receipt; it is an inverted one, and shipping
+it would have reported this entry as reproducing forever. The replacement builds a probe root
+with a `VERSION` and a single `core/fixtures/ledger-reverify/run.sh` so the dispatch is complete
+at its own scale, passes `--root` at that tree, and carries a THIRD arm at 105 against a baseline
+of 100 with band 15 — within band, which is the seed the filed receipt structurally could not
+hold and the one that kills a zero-tolerance implementation.
+
+**THE RECEIPT IS AN ANCHOR AND THE FIXTURE IS THE DISCRIMINATING CHANNEL.** The adversary scored
+FOUR wrong implementations at receipt **0** on the FILED version: a hardcoded threshold, a
+zero-tolerance growth compare, a `cmp`-only equality, and floor instead of ceiling arithmetic.
+Each is silent rather than loud, which is the failure mode this entry's own filing paragraph
+named — the receipt drives one grown case and one unchanged case, and all four answer those two
+correctly. `core/fixtures/suite-pole-guard/` is what separates them: a within-band case kills
+zero-tolerance and `cmp`, an at-ceiling and ceiling+1 pair kills the hardcoded threshold, and
+small-baseline seeds (B=4 band 15 → 5 passes, 6 fails; B=7 band 15 → 9 passes) kill floor and
+round arithmetic. A receipt that accepts several candidate fixes has established none of them.
+
+**THERE IS NO DOWNWARD FAIL, DELIBERATELY.** A pole below the baseline is the outcome this guard
+exists to encourage, and failing on it would block the very push that improves the suite — and
+would fire on any quiet box, where a run at 562 against a row of 628 is correct and unremarkable.
+A figure less than half the baseline draws a non-failing NOTE that the row can come down. The
+check-cannot-fire property is therefore NOT inferred from a red run; it is owned by the
+self-probe, which drives the shipping comparator against seeded pairs in both directions before
+any real file is opened and REFUSES at exit 2 on a miss.
+
+**A PARTIAL DISPATCH OR A DIFFERENT POOL WIDTH SKIPS RATHER THAN FAILS.** A cost recorded under
+the pool is a LOADED cost, and the read-set skip narrows the suite in place: a pole scheduled
+beside thirty units instead of two hundred is a near-solo figure, and the two are not comparable
+in either direction — one shard has measured **442s loaded against 112s solo**. Comparing a
+narrowed run against a full-suite baseline gives a guaranteed false green, or a false red the
+other way round. A different `--jobs` is a different measurement for the same reason. Each such
+state exits 0 with its reason printed, because a false red here trains the operator to
+`--no-verify`, which is strictly worse than no guard at all.
+
 **DEFECT.** The pre-push suite is POLE-BOUND — wall clock tracks the single longest fixture
 directory, not the sum — and the pole is unwatched. Re-derived from
 `.git/ai-dlc-fixture-durations` in one invocation: `ledger-reverify` **573**,
@@ -3816,4 +3912,4 @@ ways before filing: absent **1**, comment-only stub **1**, a guard replaced by `
 minimal honest implementation **0**. The always-zero non-fix is the one that matters — it is what
 a guard degrades into when somebody silences it.
 
-verify: sh V=scripts/validate-suite-pole.sh; B=docs/suite-pole-baseline.tsv; [ -x "$V" ] && [ -f "$B" ] || exit 1; d="$(mktemp -d)" || exit 1; printf 'ledger-reverify 100\n' > "$d/base.tsv"; printf 'ledger-reverify 1000\n' > "$d/now.tsv"; printf 'ledger-reverify 100\n' > "$d/same.tsv"; g="$(AI_DLC_POLE_BASELINE="$d/base.tsv" bash "$V" --durations "$d/now.tsv" 2>&1)"; grc=$?; q="$(AI_DLC_POLE_BASELINE="$d/base.tsv" bash "$V" --durations "$d/same.tsv" 2>&1)"; qrc=$?; [ "$grc" -ne 0 ] && [ "$qrc" -eq 0 ] && printf '%s' "$g" | grep -q 1000 && exit 0; exit 1
+verify: sh V=scripts/validate-suite-pole.sh; B=docs/suite-pole-baseline.tsv; [ -x "$V" ] && [ -f "$B" ] || exit 1; d="$(mktemp -d)" || exit 1; mkdir -p "$d/core/fixtures/ledger-reverify" && : > "$d/core/fixtures/ledger-reverify/run.sh" && printf '0\n' > "$d/VERSION" || exit 1; printf '# band: 15\n# jobs: 12\n# fixtures: 1\nledger-reverify 100\n' > "$d/base.tsv"; printf 'ledger-reverify 1000\n' > "$d/now.tsv"; printf 'ledger-reverify 100\n' > "$d/same.tsv"; printf 'ledger-reverify 105\n' > "$d/band.tsv"; g="$(AI_DLC_POLE_BASELINE="$d/base.tsv" bash "$V" --root "$d" --durations "$d/now.tsv" 2>&1)"; grc=$?; q="$(AI_DLC_POLE_BASELINE="$d/base.tsv" bash "$V" --root "$d" --durations "$d/same.tsv" 2>&1)"; qrc=$?; w="$(AI_DLC_POLE_BASELINE="$d/base.tsv" bash "$V" --root "$d" --durations "$d/band.tsv" 2>&1)"; wrc=$?; [ "$grc" -ne 0 ] && [ "$qrc" -eq 0 ] && [ "$wrc" -eq 0 ] || exit 1; case "$g" in *1000*) exit 0 ;; *) exit 1 ;; esac

@@ -441,7 +441,37 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   call to buy back 11 forks re-opens the omission. I87's per-directory pipeline remains the
 #   standing target and I60's per-pair cost is still the second candidate, now twice measured
 #   at 11. Headroom is 10.
-FORK_BUDGET=8208
+#
+#   0.583.0: 8208 -> 8218, and the whole of it is ONE NEW SHIPPED SCRIPT -- `scripts/validate-suite-pole.sh`
+#   entering the shipped-`.sh` corpus that I83, I84, I87 and I93 each walk. That is a THIRD shape,
+#   neither the per-directory one of 0.576.0/0.580.0 nor the per-(script, mode) pair of 0.574.0/0.582.0.
+#   Isolated by a differential on ONE tree with the new script moved to a literal holdout path and
+#   moved back, the sides asserted to differ by shipped-script COUNT before the comparison was read:
+#   with it 23 scripts at 8212 (spread 8211-8212 both reps), without it 22 scripts at 8206 (spread
+#   8205-8206), +6. A base-vs-tip control in two `file://` clones checked out at 83747ef4 and at the
+#   branch tip, interleaved 3 reps, agrees exactly: base 8206 on all three, tip 8212 on all three.
+#   `--section by-arm` attributes the delta to those four corpus scans and nothing else -- I84
+#   523 -> 527, I87 1838 -> 1839, I83 133 -> 134, I93 55 -> 56 -- every other arm byte-identical.
+#
+#   BOTH SIDES MUST CARRY A `.git`. A `git archive` extraction of the same two revisions read 8186
+#   and 8192, twenty lower and with a delta of +6 that happened to agree; the arms that shell out to
+#   git answer differently in a tree with no repository, so the absolute number an archive produces
+#   is not the number this budget is about. Clones, not archives.
+#
+#   NO REDUCTION TAKEN. I87's per-directory pipeline remains the standing target, now for the fourth
+#   consecutive release, and the four arms above re-walking one shared corpus is a second candidate
+#   the next reduction pass should read together. The budget is set from the HIGH reading for the
+#   reason the paragraph above states. Headroom is 6.
+#
+#   0.583.0, SECOND RAISE IN THE SAME RELEASE: 8218 -> 8225, and this one IS the per-directory shape
+#   of 0.576.0/0.580.0 -- `core/fixtures/suite-pole-guard/` entering the fixture-directory corpus.
+#   Measured after the script raise above had landed, on ONE tree with the directory moved to a
+#   literal holdout path and back, interleaved two reps: with it 8219, 8218; without it 8211, 8212.
+#   +7, which is well under the +17..+19 a directory cost at 0.576.0/0.580.0 -- I20 `continue`s
+#   before any fork for a directory that carries a run.sh, so the per-directory cost has fallen
+#   since those two raises and a raise sized by extrapolation from them would have bought ten forks
+#   of unearned headroom. Budget from the HIGH reading, 8219, plus the usual 6.
+FORK_BUDGET=8225
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

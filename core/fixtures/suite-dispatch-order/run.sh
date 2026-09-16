@@ -189,15 +189,26 @@ fi
 # tree would be hashed by the distribution's own suite content key, so writing it would
 # move the key it is trying to match and the skip could never hit again. For a consumer
 # the same file would appear in every `git status` they ever ran.
+#
+# THE SAME HOLDS FOR THE THIS-RUN RECORD, and it is asserted here rather than left to the
+# substring match above. `.git/ai-dlc-fixture-durations.last` is a SECOND file written by
+# the same block, published only after a green pool; a copy of it at the tree root would be
+# hashed by the content key exactly as the merged record would, and neither the arm above
+# nor any other arm in this file looks at it. The positive conjunct (three rows, one per
+# dispatched unit) is what keeps this from passing against a publish that never happened --
+# an absent file is trivially not in the working tree.
 : > "$SDO_TRACE"
 rc="$(drive "$T" "$WORK/lpt4.out")"
 n_rec="$(grep -c . "$T/.git/ai-dlc-fixture-durations" 2>/dev/null)"
 case "$n_rec" in ''|*[!0-9]*) n_rec=0 ;; esac
+n_last="$(grep -c . "$T/.git/ai-dlc-fixture-durations.last" 2>/dev/null)"
+case "$n_last" in ''|*[!0-9]*) n_last=0 ;; esac
 if [ "$n_rec" -eq 3 ] && [ ! -f "$T/ai-dlc-fixture-durations" ] \
+   && [ "$n_last" -eq 3 ] && [ ! -f "$T/ai-dlc-fixture-durations.last" ] \
    && ! grep -q 'ai-dlc-fixture-durations' <<<"$(git -C "$T" status --porcelain 2>/dev/null)"; then
-  ok "the durations record holds one line per fixture under .git/ and git itself cannot see it"
+  ok "both cost records — the merged one and this run's .last — hold one line per fixture under .git/ and git itself cannot see either"
 else
-  bad "the durations record is not where it must be (lines=$n_rec under .git/, root copy present=$([ -f "$T/ai-dlc-fixture-durations" ] && echo yes || echo no)) — a record inside the tree is hashed by the key that decides whether the suite runs at all"
+  bad "a cost record is not where it must be (merged lines=$n_rec, .last lines=$n_last under .git/, root copies present=$([ -f "$T/ai-dlc-fixture-durations" ] && echo merged || echo no)/$([ -f "$T/ai-dlc-fixture-durations.last" ] && echo last || echo no)) — a record inside the tree is hashed by the key that decides whether the suite runs at all"
 fi
 unset SDO_TRACE
 
@@ -365,11 +376,17 @@ if mut m3 '/AI_DLC_FX_OUT\/\.dur\//d'; then M="$MUT"
   : > "$SDO_TRACE"
   rc="$(drive1 "$T" "$WORK/m3.out")"
   m3_order="$(tr '\n' ' ' < "$SDO_TRACE")"
+  # BOTH RECORDS, because both are fed from `$out/.dur/`. The merged record and this run's
+  # `.last` publish are two readers of one producer, and the mutation removes the producer.
+  # A `.last` left non-empty under M3 would be a file written from somewhere other than the
+  # workers' own costs — which is exactly what the pole guard would then be comparing against
+  # a full-suite baseline.
   if [ "$rc" = 0 ] && [ "$m3_order" = "aaa mmm zzz " ] \
-     && [ ! -s "$T/.git/ai-dlc-fixture-durations" ]; then
-    ok "M3 with the workers not recording their cost no record is written and the second run stays in glob order"
+     && [ ! -s "$T/.git/ai-dlc-fixture-durations" ] \
+     && [ ! -s "$T/.git/ai-dlc-fixture-durations.last" ]; then
+    ok "M3 with the workers not recording their cost neither the merged record nor .last is written and the second run stays in glob order"
   else
-    bad "M3 an order appeared without the workers recording anything (rc=$rc, order '$m3_order') — the record arm 1 reads is not the one the pool writes"
+    bad "M3 an order or a cost record appeared without the workers recording anything (rc=$rc, order '$m3_order', .last non-empty=$([ -s "$T/.git/ai-dlc-fixture-durations.last" ] && echo yes || echo no)) — the record arm 1 reads is not the one the pool writes"
   fi
   unset SDO_TRACE
 fi
