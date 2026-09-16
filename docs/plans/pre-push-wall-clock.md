@@ -56,10 +56,18 @@ awk '{s+=$2; n++} END{printf "%d over %d units, sum/12 = %.1f\n", s, n, s/12}' \
     .git/ai-dlc-fixture-durations                                          # the floor
 ```
 
-Measured at `v0.585.0`, full 202-fixture dispatch under `AI_DLC_FIXTURE_NO_SKIP=1`, pool 12:
-pole **620s** (the gate's own PASS line), total **6234 pool-seconds**, floor **`sum/12` = 519.5s**.
-The gap between the two is ~100s, and **that gap is all any pole work can ever return.** Zero out
-the pole entirely and the suite still cannot finish faster than the floor.
+Measured at `v0.586.0`, full 202-fixture dispatch under `AI_DLC_FIXTURE_NO_SKIP=1`, pool 12:
+pole **542s** (the gate's own PASS line), total **6350 pool-seconds**, floor **`sum/12` = 529.2s**.
+The gap between the two is now **~13s**, and **that gap is all any pole work can ever return.** Zero
+out the pole entirely and the suite still cannot finish faster than the floor. **The suite is now
+WORK-BOUND with essentially no scheduling headroom left, which is the strongest form of the ruling
+below.**
+
+**NEVER COMPARE A LOADED TOTAL ACROSS RUNS WITHOUT READING THE OTHER ONE.** Measured at this
+release: the pole read 491 before and 542 after a change that cut the fixture's SOLO cost 30%,
+because the whole run inflated — total 5496 → 6350, +15.5% across all 202 units on a busier box.
+Read the pole and the total together or neither; a pole that moved less than its run's total moved
+IMPROVED.
 
 **OPERATOR RULING AT BATCH 119, GIVEN IN AS MANY WORDS:** *"420 as a pole is not good enough.
 Neither is 346 on the next. Need to look deeper and refactor more aggressively in a future
@@ -84,6 +92,22 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    repeats INSIDE one program: `scripts/validate-enforcement-map.sh` is ~10500 lines with **384
    `grep`, 158 `awk`, 136 `sed`, 67 `find`** invocation sites (control: an impossible tool name
    returns 0), each a fresh walk of a corpus an earlier arm already walked.
+
+   **THIS LEVER IS PROVEN, NOT THEORETICAL — `v0.586.0` TOOK THE FIRST BITE AND IT IS THE PATTERN
+   TO REPEAT.** The repetition is not only across fixtures; it is inside ONE INVOCATION of one
+   program, where it is cheapest to remove because no cross-process coordination is needed. Profile
+   with xtrace and count TOTAL against DISTINCT before designing anything:
+
+   ```
+   PS4='+@${LINENO}@ ' bash -x <the program> <args> 2>/tmp/t.trace >/dev/null
+   grep -oE '@ git .*' /tmp/t.trace | sed 's/^@ //' > /tmp/g.txt
+   printf 'total=%s distinct=%s\n' "$(wc -l < /tmp/g.txt)" "$(sort -u /tmp/g.txt | wc -l)"
+   sort /tmp/g.txt | uniq -c | sort -rn | head        # what repeats, and how badly
+   ```
+
+   On `ledger-reverify.sh` that read **366 total / 112 distinct**, with two blobs read 79 times
+   each; memoizing took it to 133 git calls and the fixture from 306.81s to 215.21s SOLO. The same
+   profile has not been taken on the other heavy units, and that is the next action, not a rewrite.
 
    **SHARDING AND INNER POOLS DO NOT REMOVE WORK — THEY MOVE IT.** Measured on the tree today:
    `validator-arm-selection` 370 + its `-b` shard 158 = **528 pool-seconds for one subject**. A
@@ -135,7 +159,9 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    watches ONE row. It cannot say "the suite is work-bound, not pole-bound", it has no downward
    fail by design (`:30-34`), and a row pinned to a fixture that still exists but is no longer the
    wall-clock determinant passes silently with only a NOTE. So a green pole line is not evidence
-   that the wall clock is healthy, and at `v0.585.0` it was 620s against a floor of 519.5s.
+   that the wall clock is healthy, and at `v0.586.0` it was 542s against a floor of 529.2s — a
+   13-second gap, which is the guard reporting PASS on a suite where pole work has nothing left to
+   buy.
    **`docs/suite-pole-baseline.tsv` was deliberately NOT re-pointed at that release**: the seam
    fixture collapsed 498 -> 57 loaded, but untouched units moved +7%, +13%, +53% and -55% across
    the same two runs, so no cross-run figure was comparable and the row moves only on a quiet-box
@@ -177,8 +203,15 @@ ruling stands until the operator replaces it: **the subject is removing work, no
 
    **A bare `grep -c 'ledger-reverify.sh'` answers 105 and is the wrong number** — it counts
    `cmp`, `sed`, `cp` and comment mentions of the basename alongside the executions, which is the
-   text-about-a-program trap. Sharding this fixture, or overlapping its serial units, is the next
-   program.
+   text-about-a-program trap.
+
+   **"THE LEVER IS THE FIXTURE" WAS WRONG, AND `v0.586.0` MEASURED IT.** The 60 exec sites are
+   real, but the cost was inside the PROGRAM they drive, not in how the fixture drives them: one
+   invocation of the closer made 366 git calls of which only 112 were distinct, two blobs being
+   read 79 times each. Memoizing those reads cut the fixture 306.81s -> 215.21s SOLO **without
+   touching the fixture at all** — no shard, no inner pool, no assertion moved, all 274 still
+   correct with an identical label set. Attack the driven program before the driver; see action 1
+   for the profile that decides which.
    Before sharding, read the `0.541.0` CHANGELOG entry: on the previous pole a shard was refuted
    by measurement and an inner pool won, and nothing in `docs/invariant-index.md` binds the union
    of a split fixture's assertion set.
@@ -234,6 +267,34 @@ ruling stands until the operator replaces it: **the subject is removing work, no
 killed them, and both sections are kept in full below because their hazard notes are the reason
 to read them if the numbers ever change back.
 ### Discharged — do not re-execute
+
+**BATCH 120 SHIPPED AS `v0.586.0` (`78ebe40a`, PR #784). IT IS THE FIRST DELIVERY OF ACTION 1, AND
+IT REFUTED ACTION 2's OWN FRAMING.** The action-1 lever — repeated I/O over the same files — holds
+INSIDE one invocation of one program, which is where it is cheapest to remove.
+
+**`ledger-reverify.sh` read the same blob up to 79 times per invocation.** `theirs_show`,
+`base_show` and `theirs_has_path` are called from the per-entry loop, so their cost scales with the
+LEDGER's length while their distinct inputs scale with the number of SUBJECT PATHS it names. Xtrace
+over one invocation: **366 git calls, 112 distinct** — 170 `show` resolving to 9 blobs, 49
+`cat-file -e` to 6 paths, and `consumer_scannable` probing one unchanging directory 35 times.
+Memoized: **366 -> 133 calls; fixture 306.81s -> 215.21s SOLO**, one invocation 4.71–4.90s ->
+3.33–3.49s over 4 interleaved reps with disjoint ranges.
+
+**NO FIXTURE CHANGE, WHICH IS THE PART TO CARRY FORWARD.** No shard, no inner pool, no assertion
+touched — 274 assertions still correct with an IDENTICAL LABEL SET, not merely an identical count,
+and all eight fixtures driving that file green. Action 2 said "the lever is the fixture itself";
+the measurement says the lever was the program the fixture drives.
+
+**A MUTANT SCORING IDENTICAL MEANT THE CORPUS LACKED THE INPUT, NOT THAT THE GUARD WAS VACUOUS.**
+The memo separates a cache MISS from an EMPTY BLOB. The mutant conflating them returned
+byte-identical output AND the same call count, because the seeded ledger holds no empty blob —
+reading that as an acquittal would have deleted a correct guard. Scored on a constructed repo
+carrying one: 5 lookups cost 1 git call under the guard and 5 under the mutant, with a non-empty
+blob as the same-invocation control at 1 either way. Carried into
+`.claude/rules/verification-discipline.md`.
+
+**The loaded record is NOT the evidence here and nearly read backwards**: pole 491 -> 542 while the
+run's TOTAL went 5496 -> 6350 (+15.5%) on a busier box. See the caveat in the Next-actions header.
 
 **BATCH 119 SHIPPED AS `v0.585.0` (`389b6bdc`, PR #781). ITS SUBJECT WAS NOT THE POLE, AND THE
 REASON IS ACTION 1.** The batch opened under the batch-118 ruling naming this plan, found the
