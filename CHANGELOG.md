@@ -15,6 +15,83 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.582.0] - 2026-09-16
+
+**Two consumer-filed candidates discharged in one release, both separable, neither touching a
+bootstrapping file.** Batch 116 of the graph-ledger drain, invoked by a cross-session handoff.
+
+### PC-S315-EMIT-REPORT-REGION-OMITS-THREE-MANDATED-DETECTORS — step 3b's template pre-classification is rendered inside the mechanical region, and the classifier now refuses on an unreadable manifest
+
+The name undercounts by one; `BL-034` measured FOUR mandated detectors outside the
+`reconcile-mechanical` region at filing. Three of them (`retired-fixtures.sh`,
+`retired-layer-contract.sh`, `retired-layer-passage.sh`) were wired at `v0.489.0` by one commit.
+The fourth, step 3b's `preclassify.sh … --templates`, was still a pass the LLM was told to run and
+narrate under a "Template-changes list" heading, and on the reference consumer's live report that
+heading was one hand-written sentence. A finding the narrator can drop is a finding that gets
+dropped, and `--verify` byte-compares only what the region renders.
+
+`emit-report.sh` now drives the shipping classifier and renders its four rows
+(`BUCKET  consumer-path  <- template`) as a section sited between "Deletions" and "Scripts
+relocation" — after, not before, because `core/fixtures/reconcile-emit-report/run.sh:25` parses
+the orientation block by section ORDER and a section inside that range silently widened four of
+its arms while the fixture stayed green (measured by building it).
+
+**The classifier could not refuse, and that is part of the fix.** With `template-sites.md`
+absent, the `--templates` block let `awk` fail to stderr, read nothing, hit its own `exit 0`, and
+produced an EMPTY stdout — rc=0, 0 bytes — which any caller renders as `none`, indistinguishable
+from "four templates, nothing to sync". A manifest with no `template_manifest:` block did the same.
+Both shapes now exit 2 with a message, and the section renders `DETECTOR-REFUSED` on a non-zero rc
+exactly as the `retired-layer-token.sh` site does.
+
+Fixture: seed commits all four `templates/*.template` at base with two moved at theirs and a
+consumer missing one generated file, so every bucket is reached in one render (the prior seed
+reached only `CONSUMER-MISSING-NOOP`). Arms A1–A5 including an ORIENT siting guard that asserts
+its range is non-empty before asserting absence, six mutants killed and attributed. Receipt drives
+the driver on a seeded pair and greps the driven region — a comment-only stub scores 1/1 on a text
+grep and 0/0 driven. Consumer rehearsal (read-only): one hunk between base and tip renders, four
+`TEMPLATE-UNCHANGED-NOOP` rows. `FORK_BUDGET` 8197 → 8208: the first citation of the
+`--templates` mode anywhere in `core/` is one new (script, mode) pair for I60, +11 on every rep,
+and the fork reading spans three values across invocations so the budget is set from the high one.
+
+### PC-S296-PIPELINE-POSITION-MUST-BE-EDITED-IN-PLACE — a two-valued `Current step file` refuses to resolve instead of mandating the first match
+
+Three readers of the snapshot's position field were first-match-wins: `ai-dlc-recover.sh:72`
+(whole-file `grep -m1`, feeding the post-compact MANDATE and the marker the recover gate arms on),
+`ai-dlc-continue.sh:1246`, and Check 8 of `validate-mandatory-rules.sh` — a GATE that landed at
+`v0.554.0` after `BL-047` was filed and inherited the defect, FAILing a correctly positioned retro
+in one bullet order and PASSing a mis-positioned one in the other. The excerpt beside the mandate
+is section-scoped and prints both values, so one emitted block mandated one file and displayed the
+other. Nothing in `core/` said the field was single-valued.
+
+All three now count bullet-key lines in the `## Pipeline Position` section under the hook's
+EXISTING loose key alternation, excluding a declared label set (`prior|superseded|retained
+history`) and lines that quote the key mid-prose. One → resolve; two with the same basename →
+resolve (agreement is not a duplicate); two distinct → refuse: no mandate,
+`step_file_resolved=0`, a disclosure that says "names two" rather than "names none", and Check 8
+SKIPs naming both. The recover gate stands down on an unresolved marker (driven: `Read` of an
+unrelated path exits 0 with no deny, control on resolved=1 denies). The rule is stated once at
+`gate-validation.md`'s Pipeline Position bullet. **I113** binds the four grammar strings
+byte-identically across the three copies (a shared helper cannot ship: hooks and validators
+install to different trees and I33 forbids walking between them), with a derived fourth-copy scan
+and a probe asserting the canonical expression does not match the pre-fix reader.
+
+**The contract's first grammar would have been a regression, and the adversary's census caught it
+before a line was built.** A strict `- **Current step file:**` key un-resolves 94 of the consumer's
+2218 snapshot revisions the shipping hook resolves; a strict `current_step_file:` key un-resolves
+1416. The consumer writes eleven key spellings, the backticked one is already seeded in a shipping
+fixture, and 18 revisions carry an UNLABELLED duplicate. Shipped rule, driven as the real hook over
+all 2218 revisions (`/usr/bin/grep`, base and tip, joined by sha): tip and base never resolve
+DIFFERENT files (0), agree on 1463, both unresolved on 740, and tip refuses 15 where base resolved
+— every one a genuine two-distinct-basename duplicate, none the prose-quote shape, none a labelled
+prior. Loose two-plus control: 61.
+
+**Filed, not fixed:** `core/fixtures/reconcile-emit-report` is intermittently red on `origin/main`
+in the FALSE direction (a sound report accused of being stale; a mutant kill unattributed) at a low
+single-digit rate under the pool, reproduced at `49e5356d` with none of this release's code.
+`emit-report.sh:331,:373` use bare `mktemp` where `ledger-reverify.sh:1089-1096` records the same
+class as measured and prefixes its own. Neither hand's clean sweep was large enough to discriminate
+at that rate, and it is not folded into this release.
+
 ## [0.581.0] - 2026-09-15
 
 **`find` does not descend a symlinked path argument, and a fixture arm had been dead under
