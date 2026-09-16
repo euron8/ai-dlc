@@ -724,8 +724,11 @@ prose is itself generated rather than composed.
    proof every layer file survived the release.
 
 3b. **Template pre-classification** (the generated files outside `core/`):
-   run `reconcile/preclassify.sh <dist-repo> <base-sha> <theirs-ref>
-   <consumer-root> --templates`. The `core/` reconcile above never sees
+   `reconcile/emit-report.sh` runs `reconcile/preclassify.sh <dist-repo>
+   <base-sha> <theirs-ref> <consumer-root> --templates` for you and renders
+   its rows into the step-5 region's **Template pre-classification** section.
+   You do not run it and you do not narrate its rows; run it by hand only to
+   investigate a `DETECTOR-REFUSED` line. The `core/` reconcile above never sees
    `CLAUDE.md`, `docs/coding-conventions.md`, `QUICKSTART.md`, or
    `.claude/settings.json` — they are generated from `templates/*.template`
    and filled with consumer config, so an upstream edit to the template
@@ -1261,11 +1264,13 @@ prose is itself generated rather than composed.
    orphan, name the path it now lives at, so the operator can see the file is being
    retired, not lost), consumer untouched,
    each with its reason line, since applying one `git rm`s a consumer file
-   and is gated per-path at apply (step 7) — and a **template-changes
-   list**: every `TEMPLATE-PROSE-MERGE` / `TEMPLATE-JSON-MERGE` file from step
-   3b with a one-line summary of the upstream boilerplate delta being synced
-   (e.g. "CLAUDE.md: remove Context-Mode Usage section") and, for any file
-   that hit anchor-drift, its flag for adjudication — and, from step 3c, a
+   and is gated per-path at apply (step 7) — and, for the **template changes**,
+   the region's own "Template pre-classification" section carries every bucket
+   row, so you add ONLY what it does not: a one-line summary of the upstream
+   boilerplate delta being synced per `TEMPLATE-PROSE-MERGE` /
+   `TEMPLATE-JSON-MERGE` row (e.g. "CLAUDE.md: remove Context-Mode Usage
+   section"), and, for any file that hit anchor-drift, its flag for
+   adjudication. Do not restate the rows themselves — and, from step 3c, a
    **layer-drift list** (every `OVERRIDE-DRIFT-*` / `OVERRIDE-ANCHOR-UNRESOLVED` /
    `OVERRIDE-DELEGATES-INTO-SHADOW` /
    `EXTENSION-HOOK-DRIFT` / `EXTENSION-CHECK-NUMBER-COLLISION` entry with its target
@@ -1798,8 +1803,8 @@ prose is itself generated rather than composed.
      file upstream never shipped, the second the consumer edited, and the pull only
      ever proposes destroying bytes it can prove it wrote. Both go to the operator
      as conflicts, default keep-ours.
-   - `TEMPLATE-PROSE-MERGE` files (`CLAUDE.md`, `coding-conventions.md`,
-     `QUICKSTART.md` — from step 3b) → run the **marker-anchored mask/reinject
+   - `TEMPLATE-PROSE-MERGE` files (from step 3b, listed by name in the report
+     region's "Template pre-classification" section) → run the **marker-anchored mask/reinject
      transform** in `reconcile/template-sites.md`: capture the consumer's
      filled config at each `{token}` fill region, apply the upstream
      base→theirs boilerplate delta, reinject the captured config. The
@@ -1808,7 +1813,7 @@ prose is itself generated rather than composed.
      base-template token/marker not locatable in the consumer file), STOP and
      flag that file for operator adjudication — never best-effort-place a
      preserved value.
-   - `TEMPLATE-JSON-MERGE` (`.claude/settings.json` — from step 3b) → run
+   - `TEMPLATE-JSON-MERGE` (from step 3b, same section) → run
      `t=$(mktemp); git -C <dist> show "${theirs}:templates/settings.json.template" > "$t"`
      then `reconcile/settings-merge.sh --consumer .claude/settings.json --template
      "$t"`. `--template` is read with `-r` and
@@ -2369,7 +2374,9 @@ free of pull-only assumptions so the other three jobs can reuse it.
 - **Generated files outside `core/`** (`CLAUDE.md`, `coding-conventions.md`,
   `QUICKSTART.md`, `settings.json`) ARE now reconciled — step 3b's `--templates`
   pass + `reconcile/template-sites.md` sync the upstream template boilerplate
-  while preserving consumer config. This closed the gap where a template-only
+  while preserving consumer config, and `emit-report.sh` renders the buckets
+  inside the step-5 region, so a dropped row now fails `--verify` instead of
+  being narrated away. This closed the gap where a template-only
   upstream change (e.g. a removed CLAUDE.md section) never reached a consumer
   through the `core/`-only reconcile. (Consumer `enabledPlugins` is the
   exception — additive-only, never removed, per `template-sites.md`.)

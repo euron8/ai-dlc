@@ -59,7 +59,11 @@ post-compact response only.
 **Verification turn.** Immediately after the acknowledgment line, the
 agent MUST output:
 
-- Current step file (from snapshot `Pipeline Position`)
+- Current step file (from snapshot `Pipeline Position`, which carries
+  exactly ONE live `current_step_file` bullet — overwritten in place,
+  never a second one added; `steps/gate-validation.md`'s Pipeline
+  Position bullet states the rule and the labelled-key exception. If the
+  section names two, say so rather than picking one)
 - Last completed gate with timestamp (from snapshot `Pipeline
   Position`)
 - Any in-flight sub-step from `Recent Activity`, and every

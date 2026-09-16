@@ -855,7 +855,19 @@ the snapshot's shape (referenced by the SKILL.md Handoff Protocol and by
 - **Pipeline Position** — variant; update `current_step_file` (just
   completed), `last_completed_step_file`, `last_gate_passed` (gate name +
   timestamp), and `current_branch` (refresh from
-  `git branch --show-current`); plus any handoff-only resume instruction
+  `git branch --show-current`).
+  **`current_step_file` is SINGLE-VALUED and is OVERWRITTEN IN PLACE.** Edit
+  the existing bullet; never add a second live one above or below it. A
+  superseded position is recorded under a LABELLED key — `(prior)`,
+  `superseded`, or `retained history` in the key, before the colon — or it is
+  not recorded at all. Three readers resolve this field
+  (`ai-dlc-recover.sh`, `ai-dlc-continue.sh`, and Check 8 of
+  `validate-mandatory-rules.sh`); on two live bullets naming different step
+  files every one of them now REFUSES rather than taking whichever came
+  first, so a post-compact recovery loses its mandate and its gate, and the
+  retro's position check SKIPs instead of deciding. Invariant `I113` binds
+  the three copies of that rule byte-identically.
+  Plus any handoff-only resume instruction
   not derivable from the other fields (e.g., a bg watcher PID the
   successor must re-arm) so that a bare `/ai-dlc resume` is
   self-sufficient. This section also carries the **routing record**

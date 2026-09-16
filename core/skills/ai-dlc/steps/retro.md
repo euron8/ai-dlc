@@ -1212,7 +1212,10 @@ follow their audit, these must follow the merge.
    The commit touches only those files.
 8. **Write the TERMINAL Pipeline Position.** The snapshot outlives the sprint
    (7d), so this write is what makes the outliving copy true. In
-   `_bmad-output/pipeline-snapshot.md`'s `## Pipeline Position`, set
+   `_bmad-output/pipeline-snapshot.md`'s `## Pipeline Position`, OVERWRITE the
+   existing `current_step_file` bullet — never add a second live one; see
+   `steps/gate-validation.md`'s Pipeline Position bullet for the rule and its
+   labelled-key exception — setting
    `current_step_file: retro.md` and
    `last_completed_step_file: retro.md (sprint <N> closed — retro PR merged,
    records rotated)`. Leave `last_gate_passed` as it stands. DROP the routing

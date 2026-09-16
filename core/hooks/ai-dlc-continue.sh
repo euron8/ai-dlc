@@ -1243,7 +1243,70 @@ fi
 # Snapshots may format as "current_step_file: <path>" or
 # "- **current_step_file:** <path>". No line-start anchor; sed strips
 # markdown bullet/bold and the leading label.
-CURRENT_STEP=$(grep -iE "(current_step_file|current[ _]step|current[ _]phase)" "$SNAPSHOT_FILE" 2>/dev/null | head -1 | sed 's/^[^:]*://;s/^[-* ]*//;s/[-* ]*$//' || echo "")
+#
+# `head -1` IS FIRST-MATCH-WINS AND THE FIELD IS SINGLE-VALUED. Where the `## Pipeline Position`
+# section carries two live bullets naming DIFFERENT step files, the value appended to the block
+# reason -- "Current step: X." -- is whichever the file happened to list first, told to the lead
+# as a fact about where the pipeline is. Resolving EMPTY there is the honest answer: the reason
+# text simply omits the sentence, which is the same thing it does for a snapshot that carries no
+# such field at all. Nothing is added to the block for this: a Stop hook's reason is read under
+# pressure and a paragraph about snapshot hygiene there would compete with the instruction the
+# hook exists to give.
+#
+# THE COUNT GRAMMAR IS BYTE-IDENTICAL IN THREE FILES -- this one, core/hooks/ai-dlc-recover.sh
+# and core/scripts/validate-mandatory-rules.sh -- and I113 in scripts/validate-enforcement-map.sh
+# binds the three and refuses a fourth. Copies rather than a sourced helper for I33's reason:
+# install.sh splits core/hooks/ from core/scripts/ and a hook that sources a missing helper fails
+# OPEN. The key alternation is NOT narrowed: a strict `current_step_file:` key un-resolves 94 of
+# the reference consumer's 2218 snapshot revisions, so the count is layered over the reader this
+# hook already had rather than replacing it.
+AI_DLC_POS_SECTION_AWK='/^## Pipeline Position/{f=1;next} /^## /{f=0} f'
+AI_DLC_POS_BULLET_RE='^[[:space:]]*-[^:]*(current_step_file|current[ _]step|current[ _]phase)[^:]*:'
+AI_DLC_POS_LABEL_RE='^[^:]*(prior|superseded|retained history)'
+AI_DLC_POS_BASE_SED='s/[`*,.;:)]*$//; s|^.*/||'
+
+POSITION_BULLETS="$(awk "$AI_DLC_POS_SECTION_AWK" "$SNAPSHOT_FILE" 2>/dev/null \
+  | grep -iE "$AI_DLC_POS_BULLET_RE" 2>/dev/null \
+  | grep -ivE "$AI_DLC_POS_LABEL_RE" 2>/dev/null)"
+POSITION_COUNT=0
+if [ -n "$POSITION_BULLETS" ]; then
+  POSITION_COUNT="$(printf '%s\n' "$POSITION_BULLETS" | grep -c .)" || POSITION_COUNT=0
+fi
+
+pos_value() { # pos_value <line> -> the step file that line names
+  printf '%s\n' "$1" | sed -E 's/^[^:]*://; s/^[-*[:space:]]+//; s/[[:space:]]*$//' \
+    | sed -E 's/^`([^`]+)`.*/\1/; s/^([^[:space:]]+)[[:space:]]+—.*/\1/' \
+    | sed -E 's/^[`*]+//; s/[`*]+$//'
+}
+pos_base() { # pos_base <value> -> its basename, trailing markdown punctuation removed
+  printf '%s\n' "$1" | awk '{print $1}' | sed "$AI_DLC_POS_BASE_SED"
+}
+
+POSITION_AMBIGUOUS=0
+if [ "$POSITION_COUNT" -ge 2 ]; then
+  _pos_bases=""
+  _pos_distinct=0
+  while IFS= read -r _pos_line; do
+    [ -n "$_pos_line" ] || continue
+    _pos_b="$(pos_base "$(pos_value "$_pos_line")")"
+    [ -n "$_pos_b" ] || continue
+    case " $_pos_bases " in
+      *" $_pos_b "*) ;;
+      *) _pos_bases="$_pos_bases $_pos_b"; _pos_distinct=$((_pos_distinct + 1)) ;;
+    esac
+  done <<EOF
+$POSITION_BULLETS
+EOF
+  [ "$_pos_distinct" -ge 2 ] && POSITION_AMBIGUOUS="$_pos_distinct"
+fi
+
+if [ "$POSITION_AMBIGUOUS" -ge 2 ]; then
+  CURRENT_STEP=""
+elif [ "$POSITION_COUNT" -ge 1 ]; then
+  CURRENT_STEP="$(pos_value "$(printf '%s\n' "$POSITION_BULLETS" | sed -n '1p')")"
+else
+  CURRENT_STEP=$(grep -iE "(current_step_file|current[ _]step|current[ _]phase)" "$SNAPSHOT_FILE" 2>/dev/null | head -1 | sed 's/^[^:]*://;s/^[-* ]*//;s/[-* ]*$//' || echo "")
+fi
 LAST_GATE=$(grep -iE "(last_gate_passed|last[ _]gate)" "$SNAPSHOT_FILE" 2>/dev/null | head -1 | sed 's/^[^:]*://;s/^[-* ]*//;s/[-* ]*$//' || echo "")
 
 REASON="Pipeline is active. You ended your turn without a tool call. This may be legitimate (presenting results mid-phase before the next action) or a stall.

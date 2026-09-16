@@ -130,3 +130,4 @@ To change this file, change the arm header it came from and re-run the renderer.
 | I110 | the In-Flight `status` token set is ONE set across its owner and its readers |
 | I111 | the reasoning-effort level set is ONE set across every file that validates it |
 | I112 | the code-review verdict set is ONE set across its owner and the gate that reads it |
+| I113 | the single-valued position-bullet COUNT is one grammar in three copies |
