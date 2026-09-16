@@ -63,18 +63,32 @@ sort -k2,2nr "$D" | head -3                                                  # t
 awk '{s+=$2; n++} END{printf "%d over %d units, sum/12 = %.1f\n", s, n, s/12}' "$D"   # the floor
 ```
 
-Measured at `v0.586.0`, full 202-fixture dispatch under `AI_DLC_FIXTURE_NO_SKIP=1`, pool 12:
-pole **542s** (the gate's own PASS line), total **6350 pool-seconds**, floor **`sum/12` = 529.2s**.
-The gap between the two is now **~13s**, and **that gap is all any pole work can ever return.** Zero
-out the pole entirely and the suite still cannot finish faster than the floor. **The suite is now
+Measured at `v0.587.0`, full 202-fixture dispatch under `AI_DLC_FIXTURE_NO_SKIP=1`, pool 12:
+pole **561s** (the gate's own PASS line), total **6527 pool-seconds**, floor **`sum/12` = 543.9s**.
+The gap between the two is **~17s**, and **that gap is all any pole work can ever return.** Zero
+out the pole entirely and the suite still cannot finish faster than the floor. **The suite is
 WORK-BOUND with essentially no scheduling headroom left, which is the strongest form of the ruling
 below.**
 
-**NEVER COMPARE A LOADED TOTAL ACROSS RUNS WITHOUT READING THE OTHER ONE.** Measured at this
-release: the pole read 491 before and 542 after a change that cut the fixture's SOLO cost 30%,
+**THE LOADED POLE CANNOT RESOLVE A SINGLE RELEASE'S WORK, AND `v0.587.0` MEASURED THE SPREAD
+DIRECTLY.** Three full no-skip gate runs across that one batch, on trees differing by at most two
+commits, read the pole at **493s, 619s and 561s — a 126-second spread on essentially one tree.**
+Any release-over-release pole delta smaller than that is noise, and reading the first of those
+three alone would have bought a confident "−9%" that the second refutes. **Take three runs and
+read the spread before believing any pole movement**, exactly as `docs/suite-pole-baseline.tsv`'s
+own header requires for a re-point.
+
+**NEVER COMPARE A LOADED TOTAL ACROSS RUNS WITHOUT READING THE OTHER ONE.** Measured at `0.586.0`:
+the pole read 491 before and 542 after a change that cut the fixture's SOLO cost 30%,
 because the whole run inflated — total 5496 → 6350, +15.5% across all 202 units on a busier box.
 Read the pole and the total together or neither; a pole that moved less than its run's total moved
 IMPROVED.
+
+**SO THE NUMBERS THAT SURVIVE A RELEASE ARE THE LOAD-INDEPENDENT COUNTS.** `v0.587.0` shipped two
+work removals and neither is visible in the pole: I87's fork count 1842 → 48 and the validator's
+total 8219 → 6425 (`scripts/fork-profile.sh --stable`, spread 8219-8219 and 6424-6425, both sides
+in CLEAN worktrees), and the reconcile engine's git calls 19219 → 14490 (PATH-shadowed wrappers,
+impossible-tool control 0 in the same log). Quote counts, not seconds.
 
 **OPERATOR RULING AT BATCH 119, GIVEN IN AS MANY WORDS:** *"420 as a pole is not good enough.
 Neither is 346 on the next. Need to look deeper and refactor more aggressively in a future
@@ -96,25 +110,50 @@ ruling stands until the operator replaces it: **the subject is removing work, no
 
    The head of that distribution is opened by EVERY unit: `.gitignore`, `.git/index`, `.git/HEAD`,
    `.git/config`, `.git/packed-refs`, the commit-graph shards — 202 opens each. And the same shape
-   repeats INSIDE one program: `scripts/validate-enforcement-map.sh` is ~10500 lines with **384
-   `grep`, 158 `awk`, 136 `sed`, 67 `find`** invocation sites (control: an impossible tool name
-   returns 0), each a fresh walk of a corpus an earlier arm already walked.
+   repeats INSIDE one program: `scripts/validate-enforcement-map.sh` is ~10600 lines with **377
+   `grep`, 101 `awk`, 85 `sed`, 68 `find`** invocation sites (control: an impossible tool name
+   returns 0), each a fresh walk of a corpus an earlier arm already walked. Those four counts fell
+   at `v0.587.0` when I87's two per-item loops became one awk pass each; a STATIC site count is not
+   the runtime invocation count and never was — the multipliers are corpus-derived loop trip counts.
 
    **THIS LEVER IS PROVEN, NOT THEORETICAL — `v0.586.0` TOOK THE FIRST BITE AND IT IS THE PATTERN
    TO REPEAT.** The repetition is not only across fixtures; it is inside ONE INVOCATION of one
    program, where it is cheapest to remove because no cross-process coordination is needed. Profile
    with xtrace and count TOTAL against DISTINCT before designing anything:
 
+   **AN XTRACE UNDERCOUNTS ANY PROGRAM THAT SHELLS OUT, BECAUSE NESTED `bash` DOES NOT INHERIT
+   `-x`.** Measured with a positive control at `v0.587.0`: a top-level command traces, the same
+   command inside `bash inner.sh` does not. The reconcile engine read **28** git calls under xtrace
+   and **19219** under PATH-shadowed wrappers. Use xtrace only where the program does not invoke
+   `bash`; otherwise shadow the tool and let every layer log through it:
+
    ```
-   PS4='+@${LINENO}@ ' bash -x <the program> <args> 2>/tmp/t.trace >/dev/null
-   grep -oE '@ git .*' /tmp/t.trace | sed 's/^@ //' > /tmp/g.txt
-   printf 'total=%s distinct=%s\n' "$(wc -l < /tmp/g.txt)" "$(sort -u /tmp/g.txt | wc -l)"
-   sort /tmp/g.txt | uniq -c | sort -rn | head        # what repeats, and how badly
+   W=$(mktemp -d); mkdir -p "$W/bin"                      # the wrapper, for a process TREE
+   printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> '"$W"'/git.log\nexec /usr/bin/git "$@"\n' > "$W/bin/git"
+   chmod +x "$W/bin/git"
+   PATH="$W/bin:$PATH" bash <the fixture or program>
+   printf 'total=%s distinct=%s\n' "$(wc -l < "$W/git.log")" "$(sort -u "$W/git.log" | wc -l)"
+   sed -E 's|/var/folders/[^ ]*/dist|<DIST>|g; s/[0-9a-f]{7,40}/<SHA>/g' "$W/git.log" \
+     | sort | uniq -c | sort -rn | head                   # BUCKETED, which is the receipt
    ```
 
-   On `ledger-reverify.sh` that read **366 total / 112 distinct**, with two blobs read 79 times
-   each; memoizing took it to 133 git calls and the fixture from 306.81s to 215.21s SOLO. The same
-   profile has not been taken on the other heavy units, and that is the next action, not a rewrite.
+   **BUCKET BY NORMALISED CALL SHAPE, NEVER A BARE TOTAL.** A before/after total cannot tell a
+   complete fix from one that memoized the single largest line and stopped — measured at
+   `v0.587.0`, where the reconcile total fell 24.6% while 75% of the redundancy survived in shapes
+   the memo never covered, and only the bucketing showed it.
+
+   On `ledger-reverify.sh` this read **366 total / 112 distinct**, with two blobs read 79 times
+   each; memoizing took it to 133 git calls and the fixture from 306.81s to 215.21s SOLO.
+
+   **THE UNPROFILED HEAVY UNITS ARE THE NEXT ACTION, AND SO IS FINISHING THE RECONCILE MEMO.**
+   Profiled so far: `ledger-reverify.sh` (done, `0.586.0`), I87 in the enforcement-map validator
+   (done, `0.587.0`), `emit-report.sh` (PARTIAL, `0.587.0` — the surviving shapes are listed in the
+   discharged record below). Profiled and found NOT to have this shape:
+   `gate-adjudication-mutants`, where git is absent by design and the awk/grep repetition is spread
+   across 21 independently-necessary sandbox reruns. **Not yet profiled: `self-update-gate`**, where
+   a first census read 9032 git calls / 1091 distinct with one sha re-verified 79-86 times per run —
+   the same shape as the two fixes already taken. **`I60` at 1011 forks is the largest remaining arm
+   inside the validator.**
 
    **SHARDING AND INNER POOLS DO NOT REMOVE WORK — THEY MOVE IT.** Measured on the tree today:
    `validator-arm-selection` 370 + its `-b` shard 158 = **528 pool-seconds for one subject**. A
@@ -122,9 +161,11 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    the wall the suite now sits against. Every past pole win was bought this way and that is why
    the floor is where it is.
 
-   **Work concentrates, which is what makes this tractable:** top 10 units are **44.4%** of all
-   pool-seconds, top 20 are **62.2%**. Re-derive both before scoping — the membership moves, and
-   these two figures sat one release stale until action 3b re-ran them from a worktree:
+   **Work concentrates, which is what makes this tractable:** top 10 units are **46.3%** of all
+   pool-seconds, top 20 are **64.8%**. Re-derive both before scoping — the membership moves, these
+   two figures sat one release stale until action 3b re-ran them from a worktree, and they swing
+   with the run: the same tree read 42.0/60.3 and 46.3/64.8 from two different gate runs, so they
+   rank targets and do not size them:
 
    ```
    D="$(git rev-parse --git-common-dir)/ai-dlc-fixture-durations"
@@ -281,6 +322,48 @@ ruling stands until the operator replaces it: **the subject is removing work, no
 killed them, and both sections are kept in full below because their hazard notes are the reason
 to read them if the numbers ever change back.
 ### Discharged — do not re-execute
+
+**BATCH 121 SHIPPED AS `v0.587.0` (`14f5ecfb`). TWO SUBJECTS ON ACTION 1, AND THE SECOND ONE IS
+DELIBERATELY UNFINISHED.**
+
+**I87's two per-item loops became one awk pass each.** `i87_readable` forked one `grep` per file
+across 430 files; `i87_exposed_in` ran ~9 externals per fixture directory across 205 of them.
+**I87 1842 → 48 forks, the whole file 8219 → 6425**, `FORK_BUDGET` 8225 → 6431 taken from the
+fixture's own reading rather than by arithmetic. I87 no longer appears in the by-arm table and
+**`I60` is now the largest arm at 1011 forks — that is the next target on this lever.**
+
+**THE RECONCILE HALF IS A PARTIAL FIX AND SAYS SO.** A filesystem-backed blob/tree memo in
+`lib.sh`, shared across one `emit-report.sh` render through `AI_DLC_RECONCILE_MEMO` because the
+sub-detectors are separate processes and an in-process memo cannot reach them. Git calls
+**19219 → 14490 (−24.6%)**, distinct 302 → 300, so **75% of the original redundancy remains** in
+shapes the memo does not cover: `show <sha>:…/classes.md` 542, `ls-tree --name-only` 443,
+`cat-file -e` 375, `rev-parse -q --verify` 369 and 369, `ls-files --with-tree` 359, `hash-object`
+273. A single before/after TOTAL cannot tell a complete fix from one that memoized the biggest
+line and stopped; the census must be bucketed by normalised call shape, and only that bucketing
+revealed the partial-ness.
+
+**A MEMO THAT MOVES A CALL SITE MOVES EVERY MUTATION ANCHORED ON IT.** Relocating two git calls
+into `lib.sh` left `preclassify-rename-row`'s and `retired-layer-token`'s `sed` anchors on a
+fallback branch that never executes while `lib.sh` is present, so **both mutants silently ran the
+UNMUTATED path.** Verified by content: the anchor is present once in `preclassify.sh` at the parent
+commit, absent there now, present twice in `lib.sh`. Every other fixture that `sed`-mutates a
+reconcile detector was checked against the four relocated shapes; no third was orphaned.
+
+**THE TIP ADVERSARY FOUND A SHIPPING BLOCKER ON A FULLY GREEN BRANCH, WHICH IS WHY THAT PASS
+EXISTS.** `memo_show` and `memo_rev_parse` filled byte-correctly and served through
+`printf '%s\n' "$(<f)"`, which strips EVERY trailing newline and adds one back — a blob with none
+came back one byte LONGER, an empty blob as a bare newline. `unregistered-drift.sh` pipes that
+straight into `cmp -s -`, so a byte-identical consumer file read as DRIFTED. The
+single-trailing-newline case is every normal file, which is why the battery, the full gate and a
+consumer install rehearsal were all green over it. **The idiom came from this repo's own `0.586.0`
+release note**, which recommended `$(<file)` for cache reads — right for a VALUE, wrong for a BLOB.
+
+**TWO PROFILING HAZARDS, BOTH CARRIED INTO `.claude/rules/`.** A `$(date)` inside `PS4` charges one
+fork per traced line, so a per-line timing profile ranks loops by ITERATION COUNT — it attributed
+37s of a 47s run to two fork-free loops that an ablation differential then refuted, every range
+overlapping. And **nested `bash` does not inherit `-x`**, so an xtrace of a program that shells out
+undercounts everything below it: the reconcile census read 28 git calls under xtrace against 19219
+under PATH-shadowed wrappers.
 
 **BATCH 120 SHIPPED AS `v0.586.0` (`78ebe40a`, PR #784). IT IS THE FIRST DELIVERY OF ACTION 1, AND
 IT REFUTED ACTION 2's OWN FRAMING.** The action-1 lever — repeated I/O over the same files — holds
