@@ -196,6 +196,30 @@ uns_set() {
     | sed -n 's/^  \([A-Za-z0-9._-][A-Za-z0-9._-]*\) .*$/\1/p' | sort | tr '\n' ','
 }
 
+# THE SAME LIST READ WITHOUT A CHARACTER CLASS, and it exists because `uns_set` above CANNOT
+# SPELL THE SUBJECT OF A SLASH ROW. Its capture is `[A-Za-z0-9._-]` followed by a space, so a
+# row opening `core/fixtures/ — ...` matches nothing at all and the reader returns EMPTY —
+# byte-identical to a run that refused nothing. Measured on this branch: a path-shape refusal
+# scored `uns_set` empty while the row was present and correct. The subject an empty-name
+# argument must keep is exactly such a row, so the arm that asserts it needs a reader whose
+# grammar can spell it: the first whitespace-delimited token, whatever characters it carries.
+# A row that LOST its subject opens with the em dash instead, so the two states stay distinct.
+# `LC_ALL=C` because the order is compared as a string and a locale-sensitive sort would make
+# the same set read differently on another machine.
+uns_subj() {
+  { [ -n "${1:-}" ] && [ -f "$1" ]; } || return 0
+  sed -n '/^COVERAGE: the named set contains/,/^$/p' "$1" \
+    | sed -n 's/^  \([^ ][^ ]*\) .*$/\1/p' | LC_ALL=C sort | tr '\n' ','
+}
+
+# The per-fixture section names, IN ARGUMENT ORDER and deliberately not sorted. What two runs
+# of the same set in two argument SPELLINGS must agree on is the sequence the loop actually
+# walked, and a sort would hide a normalisation that reordered the positionals.
+sec_set() {
+  { [ -n "${1:-}" ] && [ -f "$1" ]; } || return 0
+  sed -n 's/^===== FIXTURE \(.*\) =====$/\1/p' "$1" | tr '\n' ','
+}
+
 # --- The throwaway DISTRIBUTION repo ------------------------------------------------------
 # `--no-verify` and an empty `init.templateDir` because this runs on an operator's machine:
 # a global hook path or commit template would otherwise decide whether the seed builds.
@@ -782,6 +806,33 @@ else
   bad "a joined-list argument was not refused under its own reason (rc=$rc). Either it is being convicted as a deleted driver — the filed defect, which sends the operator to a remedy that walks into the opposite refusal — or the arm no longer fires at all"
 fi
 
+# THE SAME JOINED LIST WRITTEN IN THE PATH FORM, AND IT IS THE ACQUITTING DIRECTION OF THE ARM
+# ABOVE. The runner now normalises `core/fixtures/<name>` to the bare name, and the one-line
+# wrong way to write that is a `case core/fixtures/*)` glob taking the basename: `*` matches a
+# space, so a fifteen-name joined list collapses to its LAST name and ONE fixture runs GREEN.
+# That is not a weaker version of the refusal above — it is the refusal INVERTED, and the seed
+# above cannot see it because a bare joined list matches no prefix and falls through untouched.
+#
+# THE ARGUMENT COUNT IS WHAT MAKES IT LEGIBLE: two names arrive in ONE argument, so an accepting
+# run reports one fixture and calls the slice covered. The assertion is the refusal, keyed on
+# the emitted row and on the ORIGINAL argument being its subject, for the reason Part 15b's
+# header gives — the remedy paragraph names every cause unconditionally.
+rm -f "$LOGDIR2"/self-update-fixtures-*.md
+ERR15BP="$CONS2/err-part15b-path.txt"
+bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
+     "core/fixtures/touched-shippable core/fixtures/green-one" cwd-probe \
+     >"$CONS2/out-part15b-path.txt" 2>"$ERR15BP"
+rcbp=$?
+L15BP="$(newest_log2)"
+if [ "$rcbp" -eq 2 ] \
+   && grep -qF '  core/fixtures/touched-shippable core/fixtures/green-one — not a fixture NAME' "$ERR15BP" \
+   && grep -qF 'it carries whitespace' "$ERR15BP" \
+   && [ -n "$L15BP" ] && ! grep -qF "===== FIXTURE " "$L15BP"; then
+  ok "a SPACE-joined list written in the path form is still refused under the WHITESPACE reason, with the whole argument as the row's subject — a prefix match that took the basename would have collapsed it to one name and run a green suite over half the slice"
+else
+  bad "a path-form joined list was not refused under the whitespace reason (rc=$rcbp, log sections $(grep -cF '===== FIXTURE ' "${L15BP:-/dev/null}" 2>/dev/null)). The normalisation is matching with a glob rather than a fixture-name character class, so PC-S310's joined list is now ACQUITTED — one name of it runs, the run exits 0, and step 2 reads that as the whole slice covered"
+fi
+
 # --- Part 15c: the NEWLINE-joined shape, which is the one the filing actually describes -------
 # THE ARM ABOVE SEEDS A SPACE-JOINED ARGUMENT AND THE FILED EPISODE IS NEWLINE-JOINED. Both
 # arrive as one argument under zsh, so the seed above is a reachable shape — but a channel that
@@ -812,6 +863,129 @@ else
   bad "a newline-joined (rc=$rc) or tab-joined (rc=$rcd) argument was not refused under the name-shape reason. A predicate keyed on a literal space passes Part 15b and leaves the filed mechanism — and every tab-delimited caller — still convicted as a deleted driver"
 fi
 
+# THE NEWLINE-JOINED LIST IN THE PATH FORM, which is the shape the reference consumer would
+# actually produce: step 2 derives its term as `core/fixtures/<dir>/` and zsh hands the whole
+# unquoted list over as one argument. A `case core/fixtures/*)` glob matches a NEWLINE as
+# happily as a space, so this seed and the space-joined one above are the same defect reached
+# by the two spellings the filing and the step each describe — one seed per channel.
+rm -f "$LOGDIR2"/self-update-fixtures-*.md
+ERR15CP="$CONS2/err-part15c-path.txt"
+NLP_ARG="core/fixtures/touched-shippable
+core/fixtures/green-one"
+bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
+     "$NLP_ARG" cwd-probe >"$CONS2/out-part15c-path.txt" 2>"$ERR15CP"
+rccp=$?
+L15CP="$(newest_log2)"
+# THE WHOLE ROW, WITH ITS NEWLINE, MATCHED AS ONE STRING. A multi-line `grep -F` pattern is a
+# list of ALTERNATIVES — it passes when EITHER line appears anywhere — so the obvious spelling
+# here accepts a run whose row lost its subject entirely. Measured on mutant N2 in the battery
+# below, which scored this shape correct while rewriting the argument out of the row. Both sides
+# are folded onto one line before the comparison.
+CP_FLAT="$(tr '\n' '\002' < "$ERR15CP")"
+CP_WANT="$(printf '  %s — not a fixture NAME: it carries whitespace' "$NLP_ARG" | tr '\n' '\002')"
+cp_row=0
+case "$CP_FLAT" in *"$CP_WANT"*) cp_row=1 ;; esac
+if [ "$rccp" -eq 2 ] && [ "$cp_row" -eq 1 ] \
+   && [ -n "$L15CP" ] && ! grep -qF "===== FIXTURE " "$L15CP"; then
+  ok "a NEWLINE-joined list in the path form is refused under the whitespace reason too, with BOTH its lines intact as the row's subject — the form step 2's own derivation produces cannot be collapsed to its last name by the prefix match"
+else
+  bad "a newline-joined path-form list was not refused under the whitespace reason with its whole argument as the row's subject (rc=$rccp, row matched=$cp_row, log sections $(grep -cF '===== FIXTURE ' "${L15CP:-/dev/null}" 2>/dev/null)). This is the exact shape step 2 hands an operator under zsh, so an accepting normalisation runs ONE fixture of the derived set and reports the cycle green"
+fi
+
+# --- Part 15c2: the PATH FORM IS ACCEPTED, and its run is the SAME RUN as the bare form -------
+# The positive direction, and without it every arm around here passes for a runner that refuses
+# the path form exactly as base did. Two runs of the same three-fixture set, one spelling per
+# run, and the assertion is that the two logs' FIXTURE SECTION NAMES are identical — never the
+# summary counts, which are equal for a run that normalised nothing and reported MISS on all
+# three as surely as for one that ran them all.
+#
+# THE RANGE IS `base..theirs`, WHOSE DIFF TOUCHES A NAMED FIXTURE, and that is what makes the
+# arm able to see a normalisation sited BELOW the coverage join. That join's membership test is
+# `case " $* " in *" ${d} "*`, so a path-form set that is COMPLETE is convicted as incomplete by
+# a mis-sited build and never reaches the loop at all. Over the quiet range the join has nothing
+# to say and the two spellings agree for a reason that is not the subject. The three names are
+# the whole diff-touched shippable set for this range — `touched-distonly` and `touched-deleted`
+# are exempt — so the set is complete and a correct build exits 0.
+rm -f "$LOGDIR2"/self-update-fixtures-*.md
+bash "$RUNNER" "$DIST" "$D_BASE" theirs-tag "$CONS2" \
+     core/fixtures/touched-shippable core/fixtures/touched-named core/fixtures/green-one \
+     >"$CONS2/out-part15c2-path.txt" 2>"$CONS2/err-part15c2-path.txt"
+rcp2=$?
+LP2="$(newest_log2)"
+SECP2="$(sec_set "$LP2")"
+NORMP2="$(grep -cE '^NORMALISED: ' "${LP2:-/dev/null}" 2>/dev/null)" || NORMP2=0
+rm -f "$LOGDIR2"/self-update-fixtures-*.md
+bash "$RUNNER" "$DIST" "$D_BASE" theirs-tag "$CONS2" \
+     touched-shippable touched-named green-one \
+     >"$CONS2/out-part15c2-bare.txt" 2>"$CONS2/err-part15c2-bare.txt"
+rcb2=$?
+LB2="$(newest_log2)"
+SECB2="$(sec_set "$LB2")"
+NORMB2="$(grep -cE '^NORMALISED: ' "${LB2:-/dev/null}" 2>/dev/null)" || NORMB2=0
+if [ "$rcp2" -eq 0 ] && [ "$rcb2" -eq 0 ] && [ -n "$SECB2" ] && [ "$SECP2" = "$SECB2" ] \
+   && [ "$NORMP2" -eq 3 ] && [ "$NORMB2" -eq 0 ]; then
+  ok "a COMPLETE set spelled core/fixtures/<name>, on a range whose diff TOUCHES a named fixture, exits 0 and produces the IDENTICAL fixture-section list as the bare-name run of the same set — with one NORMALISED line per rewritten argument and none for the bare run"
+else
+  bad "the path-form run and the bare-name run did not agree (path rc=$rcp2 sections '${SECP2:-empty}' normalised=$NORMP2; bare rc=$rcb2 sections '${SECB2:-empty}' normalised=$NORMB2, expected 3 and 0). rc=2 on the path form with the bare form green is a normalisation sited BELOW the coverage join, which convicts a correct set as incomplete; equal rcs with different section lists is a rewrite the loop never saw; rc=1 is a normalisation sited before \$LOG exists and dying on an unbound variable"
+fi
+
+# --- Part 15c3: the TRAILING SLASH and the tests/ PREFIX, which are two separate strips --------
+# Step 2 spells its term `core/fixtures/<dir>/` WITH the trailing slash, and the consumer half
+# of the same path is `tests/fixtures/<name>` — `install.sh` splits what shares a parent here.
+# A build that strips only `core/` leaves `fixtures/<name>`, one that strips only the
+# `core/fixtures/` prefix leaves the whole `tests/` form untouched, and one that forgets the
+# trailing slash leaves a name ending in `/`. All three still carry a slash, so all three are
+# refused — an rc=2 here is the wrong fix, and rc=0 with the section present is the subject.
+# Each shape runs alone so the three strips cannot cover for one another.
+#
+# EVERY OBSERVABLE IS CAPTURED AS A VALUE BEFORE THE NEXT RUN, and that is not tidiness. The
+# log's name carries a SECOND-resolution timestamp, so two runs inside one wall-clock second
+# resolve to the SAME path: holding the first run's path and grepping it after the second has
+# written reads the SECOND run's bytes. Measured here — this arm failed on its first draft with
+# both runs correct, because the trailing-slash log had already been overwritten by the tests/
+# one. It is the same hazard `seed_record`'s suffix argument exists for, one file down.
+p_normform() { # $1=argument $2=expected NORMALISED right-hand side -> "<rc> <sec> <norm>"
+  rm -f "$LOGDIR2"/self-update-fixtures-*.md
+  bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" "$1" \
+    >/dev/null 2>"$CONS2/err-normform.txt"
+  local r=$? lg s=0 n=0
+  lg="$(newest_log2)"
+  { [ -n "$lg" ] && grep -qF "===== FIXTURE ${2} =====" "$lg"; } && s=1
+  { [ -n "$lg" ] && grep -qF "NORMALISED: ${1} -> ${2}" "$lg"; } && n=1
+  printf '%s %s %s' "$r" "$s" "$n"
+}
+T3="$(p_normform "core/fixtures/green-one/" green-one)"
+S3="$(p_normform "tests/fixtures/green-one" green-one)"
+if [ "$T3" = "0 1 1" ] && [ "$S3" = "0 1 1" ]; then
+  ok "a TRAILING-SLASH argument and a tests/fixtures/<name> argument each run the named fixture and log their own rewrite — the trailing-slash strip and the second accepted prefix are separate properties and neither is covered by the other"
+else
+  bad "the trailing-slash form read '$T3' or the tests/fixtures form read '$S3', each expected '0 1 1' (rc, section present, rewrite logged). A strip keyed on 'core/' alone leaves 'fixtures/<name>', one keyed on 'core/fixtures/' alone leaves the whole consumer-layout spelling refused, and one that forgets the trailing slash leaves a name ending in '/': all three are a slash away from the name and all three refuse here, so an operator following step 2's own term is still wedged"
+fi
+
+# --- Part 15c4: the NORMALISED rows sit ABOVE any COVERAGE block ------------------------------
+# Not cosmetic, and it is why the runner writes them where it does. Both readers of this log
+# WINDOW from a `COVERAGE:` line to the next blank one — `cov_set` and `uns_set` at the head of
+# this file are that grammar — so a `NORMALISED:` row landing inside the window is parsed as a
+# refused directory and enters a set equality that has nothing to do with it. The run is driven
+# with a path-form set that is INCOMPLETE, so both a rewrite and a COVERAGE block exist in the
+# same log and their order can be read; a run with no refusal cannot express the ordering.
+rm -f "$LOGDIR2"/self-update-fixtures-*.md
+bash "$RUNNER" "$DIST" "$D_BASE" theirs-tag "$CONS2" \
+     core/fixtures/touched-named core/fixtures/green-one \
+     >/dev/null 2>"$CONS2/err-part15c4.txt"
+rcn4=$?
+LN4="$(newest_log2)"
+n4_norm="$(grep -n '^NORMALISED: ' "${LN4:-/dev/null}" 2>/dev/null | tail -1 | cut -d: -f1)" || n4_norm=""
+n4_cov="$(grep -n '^COVERAGE: ' "${LN4:-/dev/null}" 2>/dev/null | head -1 | cut -d: -f1)" || n4_cov=""
+n4_count="$(grep -cE '^NORMALISED: ' "${LN4:-/dev/null}" 2>/dev/null)" || n4_count=0
+n4_cov_read="$(cov_set "$LN4")"
+if [ "$rcn4" -eq 2 ] && [ -n "$n4_norm" ] && [ -n "$n4_cov" ] && [ "$n4_norm" -lt "$n4_cov" ] \
+   && [ "$n4_count" -eq 2 ] && [ "$n4_cov_read" = "touched-shippable," ]; then
+  ok "every NORMALISED row is written ABOVE the COVERAGE block — two rewrites logged, the refusal list still reads EXACTLY the omitted fixture, and a row landing inside the block's window would have entered that set as a directory nobody named"
+else
+  bad "the NORMALISED rows are not above the COVERAGE block or are miscounted (rc=$rcn4, last NORMALISED line ${n4_norm:-none}, first COVERAGE line ${n4_cov:-none}, rewrites $n4_count expected 2, refusal list '${n4_cov_read:-empty}' expected 'touched-shippable,'). The readers of this log window from a COVERAGE line to the next blank one, so a rewrite row inside that window is read as a refused directory"
+fi
+
 # --- Part 15d: a SLASH-bearing argument, which no other arm observes -------------------------
 # THE ONE-CHARACTER WRONG FIX IS DELETING THE `/` FROM THE PREDICATE'S CHARACTER CLASS, and
 # before this arm existed the ONLY thing that went red was Mutant 13b's `FIXTURE ERROR: the
@@ -834,6 +1008,67 @@ if [ "$rce" -eq 2 ] && grep -qE '^  touched-shippable/run\.sh — ' "$ERR15E" \
   ok "a SLASH-bearing argument is refused under the name-shape reason — deleting the slash from the predicate's class is a one-character wrong fix, and this is the only arm that sees it as behaviour rather than as a broken anchor"
 else
   bad "a slash-bearing argument was not refused under the name-shape reason (rc=$rce). The predicate's slash half is untested by behaviour, and the only thing standing between that wrong fix and a green suite is a mutant anchor an author is invited to re-key"
+fi
+
+# --- Part 15d2: THE SLASH FORMS THAT ARE STILL REFUSED, EACH WITH THE SHAPE IT SAW ------------
+# Accepting two prefixes is not accepting slashes, and the difference is one `case` arm wide.
+# Three shapes, each in its own run: a path under no accepted prefix, an ABSOLUTE path, and a
+# DEEPER path under an accepted one. A build that strips the basename off anything slash-bearing
+# takes all three, and the two above become `bar` and `x` — names no fixture carries, so the run
+# reports MISS and nothing says the argument was rewritten.
+#
+# THE ROW MUST NAME THE PATH SHAPE AND NOT THE WHITESPACE CAUSE. The remedy forks: a joined list
+# is fixed by word-splitting the caller's variable, a path by passing the name, and the single
+# sentence that used to serve both sent every path-form reader to a zsh remedy that changes
+# nothing. So the refused-shape half is asserted as an ABSENCE of the whitespace wording on a
+# row whose SUBJECT is the original argument — the presence conjunct beside it is what stops
+# that absence passing against a run that said nothing at all.
+p_pathshape() { # $1=argument $2=label
+  rm -f "$LOGDIR2"/self-update-fixtures-*.md
+  bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" "$1" cwd-probe \
+    >/dev/null 2>"$CONS2/err-pathshape.txt"
+  local r=$? lg subj why
+  lg="$(newest_log2)"
+  subj=0; grep -qF "  ${1} — not a fixture NAME" "$CONS2/err-pathshape.txt" && subj=1
+  why=0; grep -qF "  ${1} — not a fixture NAME: it carries whitespace" "$CONS2/err-pathshape.txt" && why=1
+  if [ "$r" -eq 2 ] && [ "$subj" -eq 1 ] && [ "$why" -eq 0 ] \
+     && [ -n "$lg" ] && ! grep -qF "===== FIXTURE " "$lg"; then
+    ok "$2 is refused with the ORIGINAL argument as the row's subject and a reason naming the path shape, not the zsh joined-list cause"
+  else
+    bad "$2 was not refused under a path-shape reason (rc=$r, row present=$subj, whitespace wording=$why). rc=0 is a normalisation that strips the basename off any slash-bearing argument — '${1}' then becomes a name no fixture carries and the run reports MISS; the whitespace wording is the pre-fix single sentence, which sends a path-form reader to a remedy about word-splitting that changes nothing about their argument"
+  fi
+}
+p_pathshape "foo/bar"             "a path under NO accepted prefix"
+p_pathshape "/abs/x"              "an ABSOLUTE path"
+p_pathshape "core/fixtures/deep/er" "a DEEPER path under an accepted prefix"
+
+# --- Part 15e: the EMPTY NAME keeps the ORIGINAL argument as its row's subject -----------------
+# `core/fixtures/` carries the accepted prefix and NO name. Stripping it yields the empty string,
+# and a refusal row whose subject were that remainder opens with a SPACE — the row loses its
+# subject entirely, every reader of this log keys on a row's first token, and `uns_set` scores
+# the refusal ABSENT. A run that refused correctly and a run that refused nothing then read the
+# same, which is the acquitting direction.
+#
+# READ WITH `uns_subj`, NOT `uns_set`: the latter's capture is a `[A-Za-z0-9._-]` class and
+# cannot spell a subject carrying slashes, so it returns empty on a perfectly good row. The
+# CONTROL for that is the same reader over Part 14's run, which must still show the bare name —
+# a reader that returned everything, or nothing, would pass this arm either way.
+rm -f "$LOGDIR2"/self-update-fixtures-*.md
+ERR15F="$CONS2/err-part15f.txt"
+bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
+     "core/fixtures/" cwd-probe >/dev/null 2>"$ERR15F"
+rcf=$?
+L15F="$(newest_log2)"
+SUBJF="$(uns_subj "$L15F")"
+rm -f "$LOGDIR2"/self-update-fixtures-*.md
+bash "$RUNNER" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" \
+     named-distonly green-one >/dev/null 2>/dev/null
+SUBJCTL="$(uns_subj "$(newest_log2)")"
+if [ "$rcf" -eq 2 ] && [ "$SUBJF" = "core/fixtures/," ] && [ "$SUBJCTL" = "named-distonly," ] \
+   && grep -qF '  core/fixtures/ — not a fixture NAME' "$ERR15F"; then
+  ok "an argument that is the bare prefix with NO name is refused with the literal 'core/fixtures/' as its row's subject, and the log's own refusal reader sees it (control: the same reader over a bare-name refusal reads 'named-distonly')"
+else
+  bad "the empty-name argument did not keep its subject (rc=$rcf, logged subject '${SUBJF:-empty}' expected 'core/fixtures/,'; control over a bare-name refusal read '${SUBJCTL:-empty}' expected 'named-distonly,'). A row whose subject is the STRIPPED remainder opens with a space and is invisible to every reader of this log — the refusal is emitted and scores as an absence, which is the acquitting direction"
 fi
 
 # --- Part 16: a wholly legitimate set does NOT trip the arm ----------------------------------
@@ -2336,6 +2571,308 @@ if mkmutant "$M13B" '  elif [ "$d" != "$(printf '"'"'%s'"'"' "$d" | tr -d '"'"'[
   fi
 else
   bad "FIXTURE ERROR: the name-shape probe anchor no longer occurs exactly once in the runner — Part 15b's discriminator is untested"
+fi
+
+# --- MUTANTS N1 to N8: the PATH-FORM NORMALISATION, scored as a VECTOR ------------------------
+# Eight wrong ways to accept the path form step 2 derives. An adversarial hand built four of them
+# against the suite as it stood and THREE CAME BACK GREEN, which is why the arms above exist and
+# why these are scored the way they are.
+#
+# EACH MUTANT IS SCORED ON THE WHOLE VECTOR, NOT ON ONE CELL. A wrong normalisation is wrong in
+# several places at once — it is one predicate feeding every argument — so an arm-at-a-time
+# scoring would let a mutant that moves three cells be signed off by whichever one was looked at.
+# `nsig` below drives the SAME eleven observables the arms above assert, through whatever runner
+# it is handed, and every mutant asserts an EXACT expected vector. The cells a mutant moves are
+# then a measurement rather than a prediction, the arm that OWNS each kill is named in the
+# message, and a mutant that starts moving a twelfth cell fails here instead of passing quietly.
+#
+# THE CONTROL IS THE FIRST THING SCORED. `nsig` over the unmutated copy must read the all-correct
+# vector; a harness that died, or a copy that emitted nothing, produces a vector of zeros that
+# would otherwise score as eight simultaneous kills.
+#
+# THE CELLS, in order — rc of a path-form COMPLETE set over a range whose diff TOUCHES a named
+# fixture; whether that run's fixture-section list equals the bare-name run's; how many arguments
+# it logged as rewritten; the trailing-slash form accepted and run; the tests/fixtures form
+# accepted and run; a space-joined path list refused under the whitespace reason with its whole
+# argument as the row's subject; the newline-joined form likewise; `foo/bar`, `/abs/x` and
+# `core/fixtures/deep/er` each refused under a PATH-SHAPE reason with the original argument as
+# subject; and `core/fixtures/` refused with that literal string as its row's subject.
+nsig() { # $1=runner path -> the eleven-cell signature
+  ns_a=2; ns_b=0; ns_n=0; ns_c=0; ns_d=0; ns_e=0; ns_f=0; ns_g1=0; ns_g2=0; ns_g3=0; ns_h=0
+  # A / B / N: the complete path-form set and its bare-name twin, over base..theirs.
+  rm -f "$LOGDIR2"/self-update-fixtures-*.md
+  bash "$1" "$DIST" "$D_BASE" theirs-tag "$CONS2" \
+       core/fixtures/touched-shippable core/fixtures/touched-named core/fixtures/green-one \
+       >/dev/null 2>&1
+  ns_a=$?
+  ns_lp="$(newest_log2)"
+  ns_secp="$(sec_set "$ns_lp")"
+  ns_n="$(grep -cE '^NORMALISED: ' "${ns_lp:-/dev/null}" 2>/dev/null)" || ns_n=0
+  rm -f "$LOGDIR2"/self-update-fixtures-*.md
+  bash "$1" "$DIST" "$D_BASE" theirs-tag "$CONS2" \
+       touched-shippable touched-named green-one >/dev/null 2>&1
+  ns_secb="$(sec_set "$(newest_log2)")"
+  { [ -n "$ns_secb" ] && [ "$ns_secp" = "$ns_secb" ]; } && ns_b=1
+  # C / D: the two prefix strips and the trailing-slash strip, each alone.
+  for ns_pair in "core/fixtures/green-one/:c" "tests/fixtures/green-one:d"; do
+    ns_arg="${ns_pair%:*}"; ns_cell="${ns_pair##*:}"
+    rm -f "$LOGDIR2"/self-update-fixtures-*.md
+    bash "$1" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" "$ns_arg" >/dev/null 2>&1
+    ns_r=$?; ns_l="$(newest_log2)"
+    if [ "$ns_r" -eq 0 ] && [ -n "$ns_l" ] \
+       && grep -qF "===== FIXTURE green-one =====" "$ns_l" \
+       && grep -qF "NORMALISED: ${ns_arg} -> green-one" "$ns_l"; then
+      [ "$ns_cell" = c ] && ns_c=1 || ns_d=1
+    fi
+  done
+  # E / F: the joined list in the path form, space-joined and newline-joined.
+  ns_sp="core/fixtures/touched-shippable core/fixtures/green-one"
+  ns_nl="core/fixtures/touched-shippable
+core/fixtures/green-one"
+  # THE ROW IS MATCHED WITH ITS NEWLINES SQUASHED, and a plain `grep -F` here is WRONG in the
+  # acquitting direction. A multi-line `-F` pattern is a list of ALTERNATIVES, not one string, so
+  # the newline-joined seed's row matched whenever EITHER half appeared anywhere in the output —
+  # measured on mutant N2, which rewrites the argument and destroys the row's subject, and still
+  # scored this cell correct because the second half of the pattern matched the row's tail. Both
+  # sides are folded onto one line first, so the comparison is the whole row or nothing.
+  for ns_cell in e f; do
+    [ "$ns_cell" = e ] && ns_arg="$ns_sp" || ns_arg="$ns_nl"
+    rm -f "$LOGDIR2"/self-update-fixtures-*.md
+    bash "$1" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" "$ns_arg" cwd-probe \
+      >/dev/null 2>"$CONS2/err-nsig.txt"
+    ns_r=$?; ns_l="$(newest_log2)"
+    ns_flat="$(tr '\n' '\002' < "$CONS2/err-nsig.txt")"
+    ns_want="$(printf '  %s — not a fixture NAME: it carries whitespace' "$ns_arg" | tr '\n' '\002')"
+    ns_row=0
+    case "$ns_flat" in *"$ns_want"*) ns_row=1 ;; esac
+    if [ "$ns_r" -eq 2 ] && [ -n "$ns_l" ] && ! grep -qF "===== FIXTURE " "$ns_l" \
+       && [ "$ns_row" -eq 1 ]; then
+      [ "$ns_cell" = e ] && ns_e=1 || ns_f=1
+    fi
+  done
+  # G1 / G2 / G3 / H: the slash forms that stay refused, and the empty name.
+  for ns_pair in "foo/bar:g1" "/abs/x:g2" "core/fixtures/deep/er:g3" "core/fixtures/:h"; do
+    ns_arg="${ns_pair%:*}"; ns_cell="${ns_pair##*:}"
+    rm -f "$LOGDIR2"/self-update-fixtures-*.md
+    bash "$1" "$DIST" "$D_THEIRS" "$D_QUIET" "$CONS2" "$ns_arg" cwd-probe \
+      >/dev/null 2>"$CONS2/err-nsig.txt"
+    ns_r=$?; ns_l="$(newest_log2)"
+    if [ "$ns_r" -eq 2 ] && [ -n "$ns_l" ] && ! grep -qF "===== FIXTURE " "$ns_l" \
+       && grep -qF "  ${ns_arg} — not a fixture NAME" "$CONS2/err-nsig.txt" \
+       && ! grep -qF "  ${ns_arg} — not a fixture NAME: it carries whitespace" "$CONS2/err-nsig.txt"; then
+      case "$ns_cell" in g1) ns_g1=1 ;; g2) ns_g2=1 ;; g3) ns_g3=1 ;; h) ns_h=1 ;; esac
+    fi
+  done
+  printf '%s-%s-%s-%s-%s-%s-%s-%s-%s-%s-%s' \
+    "$ns_a" "$ns_b" "$ns_n" "$ns_c" "$ns_d" "$ns_e" "$ns_f" "$ns_g1" "$ns_g2" "$ns_g3" "$ns_h"
+}
+
+NSIG_OK="0-1-3-1-1-1-1-1-1-1-1"
+NSIG_CTL="$(nsig "$CTL")"
+if [ "$NSIG_CTL" = "$NSIG_OK" ]; then
+  ok "CONTROL: the unmutated copy reads the all-correct normalisation vector $NSIG_OK — the eight verdicts below are their edits, not a copy that died"
+else
+  bad "FIXTURE ERROR: the unmutated copy reads '$NSIG_CTL', not '$NSIG_OK'. Every mutant vector below would be scored against a harness that is already wrong, and a copy emitting nothing reads as eight kills at once"
+fi
+
+# `mkmutant` counts its anchor and refuses anything but exactly one occurrence, so a mutation
+# that matched nothing is reported as DID NOT APPLY rather than surviving as a no-op. The block
+# relocations below cannot use it — they move text rather than replace it — so each one asserts
+# the copy is non-empty, differs from the original, and differs from its sibling relocation.
+n_score() { # $1=label $2=mutant path $3=expected vector $4=owning arm $5=what the mutant does
+  ns_got="$(nsig "$2")"
+  if [ "$ns_got" = "$3" ]; then
+    ok "MUTATION $1 — $5: vector $ns_got against the correct $NSIG_OK. $4"
+  else
+    bad "MUTATION $1 — $5, and the vector did not move as predicted (got '$ns_got', expected '$3', correct is '$NSIG_OK'). A cell that did NOT move is an arm above asserting something this wrong implementation cannot break; a cell that moved and was not predicted is a second defect nobody has read"
+  fi
+}
+
+# The whole normalisation block, lifted as text, for the two SITING mutants.
+NBLK_A='# --- THE ARGUMENT IS A BARE NAME'
+NBLK_B='# --- The COVERAGE join'
+
+# --- MUTANT N1: the CHARACTER CLASS replaced by a GLOB taking the basename ---------------------
+# The adversary's B1, and it is PC-S310 restored in the ACQUITTING direction. `core/fixtures/*`
+# matches a space and a newline, so a joined list of fifteen names collapses to its LAST one, ONE
+# fixture runs, the suite is green and step 2 reads the whole slice as covered. It is the mutation
+# an author reaches for first because it is shorter than the class, and three of the four mutants
+# the contract predicted were already green on this suite before the arms above were written.
+N1="$MUTDIR/n1-glob-takes-the-basename.sh"
+if mkmutant "$N1" '  _nb="$_na"
+  _nc=""
+  case "$_na" in
+    core/fixtures/*)  _nc="${_na%/}"; _nc="${_nc#core/fixtures/}" ;;
+    tests/fixtures/*) _nc="${_na%/}"; _nc="${_nc#tests/fixtures/}" ;;
+  esac
+  case "$_nc" in
+    ""|*[!A-Za-z0-9._-]*) ;;
+    *) _nb="$_nc" ;;
+  esac' \
+                  '  case "$_na" in
+    core/fixtures/*|tests/fixtures/*) _nb="${_na%/}"; _nb="${_nb##*/}" ;;
+    *) _nb="$_na" ;;
+  esac'; then
+  n_score N1 "$N1" "0-1-3-1-1-0-0-1-1-0-0" \
+    "Part 15b's path-form seed and Part 15c's newline one OWN this kill." \
+    "a \`case core/fixtures/*)\` glob taking the basename collapses a joined list to its last name and runs ONE fixture green"
+else
+  bad "FIXTURE ERROR: the normalisation's character-class anchor no longer occurs exactly once in the runner — the joined-list acquittal is untested, and it is the direction that reports a green suite over half a slice"
+fi
+
+# --- MUTANT N2: only the `core/` prefix stripped -----------------------------------------------
+# `core/fixtures/green-one` becomes `fixtures/green-one`, which still carries a slash and is still
+# refused — with a row that now names a REWRITTEN argument the operator never passed.
+N2="$MUTDIR/n2-strips-only-core.sh"
+if mkmutant "$N2" '  _nb="$_na"
+  _nc=""
+  case "$_na" in
+    core/fixtures/*)  _nc="${_na%/}"; _nc="${_nc#core/fixtures/}" ;;
+    tests/fixtures/*) _nc="${_na%/}"; _nc="${_nc#tests/fixtures/}" ;;
+  esac
+  case "$_nc" in
+    ""|*[!A-Za-z0-9._-]*) ;;
+    *) _nb="$_nc" ;;
+  esac' \
+                  '  _nb="${_na#core/}"'; then
+  n_score N2 "$N2" "2-0-3-0-0-0-0-1-1-0-0" \
+    "Part 15c2's complete-set run and Part 15c3's trailing-slash form OWN this kill." \
+    "stripping only the \`core/\` prefix leaves \`fixtures/<name>\`, which is still a slash away from the name"
+else
+  bad "FIXTURE ERROR: the normalisation's character-class anchor no longer occurs exactly once in the runner — a prefix strip that stops one component short is untested"
+fi
+
+# --- MUTANT N3: only the `core/fixtures/` prefix accepted --------------------------------------
+# The consumer-layout spelling is the half this one deletes, and `install.sh` splits exactly there:
+# what is `core/fixtures/<name>` here is `tests/fixtures/<name>` on a consumer, so an operator
+# reading the path off their own tree passes the form this copy refuses.
+N3="$MUTDIR/n3-core-prefix-only.sh"
+if mkmutant "$N3" '    tests/fixtures/*) _nc="${_na%/}"; _nc="${_nc#tests/fixtures/}" ;;
+' '' ; then
+  n_score N3 "$N3" "0-1-3-1-0-1-1-1-1-1-1" \
+    "Part 15c3's tests/fixtures form OWNS this kill." \
+    "accepting only the \`core/fixtures/\` prefix leaves the consumer-layout spelling refused"
+else
+  bad "FIXTURE ERROR: the tests/fixtures prefix arm no longer occurs exactly once in the runner — the second accepted prefix is untested, and it is the one a consumer's own tree spells"
+fi
+
+# --- MUTANT N4: the trailing slash never stripped ----------------------------------------------
+# Step 2's derived term ends in a slash. Without the `%/` the remainder is `<name>/`, which fails
+# the character class and falls through to the refusal — so the ONE form the step actually
+# produces is the one form this copy cannot take.
+N4="$MUTDIR/n4-no-trailing-slash-strip.sh"
+if mkmutant2 "$N4" '    core/fixtures/*)  _nc="${_na%/}"; _nc="${_nc#core/fixtures/}" ;;' \
+                   '    core/fixtures/*)  _nc="${_na#core/fixtures/}" ;;' \
+                   '    tests/fixtures/*) _nc="${_na%/}"; _nc="${_nc#tests/fixtures/}" ;;' \
+                   '    tests/fixtures/*) _nc="${_na#tests/fixtures/}" ;;'; then
+  n_score N4 "$N4" "0-1-3-0-1-1-1-1-1-1-1" \
+    "Part 15c3's trailing-slash form OWNS this kill." \
+    "leaving the trailing slash on refuses \`core/fixtures/<name>/\`, which is the exact term step 2 derives"
+else
+  bad "FIXTURE ERROR: one of the two trailing-slash strips no longer occurs exactly once in the runner — the form step 2 spells is untested"
+fi
+
+# --- MUTANT N5: the block sited BELOW the arms that read the positionals ------------------------
+# The siting mutant. MEASURED, rather than predicted: the refusal that fires is the
+# OVER-completeness arm's — `self-update-fixtures: the named set contains fixtures no consumer can
+# run`, with the path-form arguments convicted as unparsable NAMES — because that arm is the FIRST
+# reader of `$@` below the block's correct home, sitting above the coverage join rather than below
+# it. The prediction when this was written was the join's `case " $* " in *" ${d} "*` membership
+# test; it is the SECOND reader, and it never gets the chance. Either way a wholly correct
+# path-form set is refused and never reaches the loop, which is the property Part 15c2 asserts.
+#
+# N5 AND N7 SHARE A VECTOR, and that is reported rather than engineered away. Both leave `$@` in
+# the path form for every reader above the fixture loop, so the same arm convicts both on the same
+# input — they are one class reached two ways, not two subjects. What separates them is the repair:
+# N5's block is in the wrong PLACE and N7's is in the wrong SCOPE.
+N5="$MUTDIR/n5-sited-after-the-coverage-join.sh"
+NBLK_A="$NBLK_A" NBLK_B="$NBLK_B" python3 -c 'import os,sys
+s = open(sys.argv[1]).read()
+a, b = s.index(os.environ["NBLK_A"]), s.index(os.environ["NBLK_B"])
+blk, t = s[a:b], s[:a] + s[b:]
+c = t.index("n_run=0; n_ok=0")
+open(sys.argv[2], "w").write(t[:c] + blk + t[c:])' "$RUNNER" "$N5" 2>/dev/null
+if [ -s "$N5" ] && ! cmp -s "$RUNNER" "$N5"; then
+  n_score N5 "$N5" "2-0-0-0-0-1-1-1-1-1-1" \
+    "Part 15c2's rc=0 and its section-name equality OWN this kill." \
+    "sited below the arms that read the positionals, a COMPLETE path-form set is convicted by the over-completeness probe and never reaches the loop"
+else
+  bad "FIXTURE ERROR: the normalisation block could not be relocated below the coverage join — an anchor has moved, or the relocated copy is byte-identical to the original, and the siting Part 15c2 asserts proves nothing"
+fi
+
+# --- MUTANT N6: the positionals rewritten by `set -- $list` ------------------------------------
+# The adversary's B2. Word-splitting the rebuilt list is the very absence the joined-list refusal
+# detects, so this copy deletes that arm from INSIDE the fix — and `set -f` does not save it,
+# because the split is IFS and not glob. It is the idiom a shell author writes without thinking.
+N6="$MUTDIR/n6-set-dash-dash-word-splits.sh"
+if mkmutant2 "$N6" '_norm_n=$#
+_norm_i=0
+while [ "$_norm_i" -lt "$_norm_n" ]; do
+  _na="$1"; shift' \
+                   '_norm_list=""
+for _na in "$@"; do' \
+                   '  set -- "$@" "$_nb"
+  _norm_i=$((_norm_i + 1))
+done' \
+                   '  _norm_list="$_norm_list $_nb"
+done
+set -f; set -- $_norm_list; set +f'; then
+  n_score N6 "$N6" "0-1-3-1-1-0-0-1-1-1-1" \
+    "Part 15b's and Part 15c's joined-list seeds OWN this kill, in both spellings." \
+    "rebuilding the positionals with \`set -- \$list\` word-splits them and deletes the joined-list refusal"
+else
+  bad "FIXTURE ERROR: the rotation's head or tail no longer occurs exactly once in the runner — the one rewrite idiom that silently re-opens PC-S310 is untested"
+fi
+
+# --- MUTANT N7: the rewrite made LOOP-LOCAL ----------------------------------------------------
+# The adversary's D6. `$@` is left alone and only the fixture loop's own variable is normalised,
+# so every reader above the loop still sees the path form. It shares N5's vector for that reason —
+# see N5's header — and the arm that convicts it is the same over-completeness probe. Where the
+# two would diverge is a tree the over-arm acquits: there the loop runs, but the log's section
+# headings carry whatever `$@` holds, so a bare-name and a path-form run of the same set produce
+# DIFFERENT section lists while reporting IDENTICAL summary counts. That is why Part 15c2 compares
+# the section NAMES and not the totals.
+N7="$MUTDIR/n7-loop-local-rewrite.sh"
+NBLK_A="$NBLK_A" NBLK_B="$NBLK_B" python3 -c 'import os,sys
+s = open(sys.argv[1]).read()
+a, b = s.index(os.environ["NBLK_A"]), s.index(os.environ["NBLK_B"])
+t = s[:a] + s[b:]
+old = "for name in \"$@\"; do\n  dir=\"$CONSUMER/$FX_ROOT/$name\"\n"
+if t.count(old) != 1: sys.exit(3)
+new = ("for name in \"$@\"; do\n"
+       "  case \"$name\" in\n"
+       "    core/fixtures/*|tests/fixtures/*) name=\"${name%/}\"; name=\"${name##*/}\" ;;\n"
+       "  esac\n"
+       "  dir=\"$CONSUMER/$FX_ROOT/$name\"\n")
+open(sys.argv[2], "w").write(t.replace(old, new, 1))' "$RUNNER" "$N7" 2>/dev/null
+if [ -s "$N7" ] && ! cmp -s "$RUNNER" "$N7" && ! cmp -s "$N5" "$N7"; then
+  n_score N7 "$N7" "2-0-0-0-0-1-1-1-1-1-1" \
+    "Part 15c2's rc=0 and its section-NAME equality OWN this kill." \
+    "normalising only the loop's own variable leaves \$@ in the path form for every reader above the loop"
+else
+  bad "FIXTURE ERROR: the loop-local rewrite could not be built — the fixture loop's head has moved, or the copy is byte-identical to the relocation mutant, and the arm that reads section NAMES rather than counts proves nothing"
+fi
+
+# --- MUTANT N8: the block sited BEFORE `$LOG` EXISTS -------------------------------------------
+# The adversary's B4, and it is the one that fails LOUDLY — but only on an argument that gets
+# rewritten. `$LOG` is assigned below the usage block, so a normalisation hoisted above it dies
+# `LOG: unbound variable` at rc=1 the first time it logs a rewrite, and is perfectly quiet on a
+# bare-name set. Every existing arm in this file passes bare names and is green on this copy.
+N8="$MUTDIR/n8-sited-before-the-log-exists.sh"
+NBLK_A="$NBLK_A" NBLK_B="$NBLK_B" python3 -c 'import os,sys
+s = open(sys.argv[1]).read()
+a, b = s.index(os.environ["NBLK_A"]), s.index(os.environ["NBLK_B"])
+blk, t = s[a:b], s[:a] + s[b:]
+anchor = "TS=\"$(date -u +%Y%m%dT%H%M%SZ)\"\n"
+if t.count(anchor) != 1: sys.exit(3)
+c = t.index(anchor)
+open(sys.argv[2], "w").write(t[:c] + blk + t[c:])' "$RUNNER" "$N8" 2>/dev/null
+if [ -s "$N8" ] && ! cmp -s "$RUNNER" "$N8" && ! cmp -s "$N5" "$N8"; then
+  n_score N8 "$N8" "1-0-0-0-0-1-1-1-1-1-1" \
+    "Part 15c2's rc=0 OWNS this kill — every bare-name arm in this file is green on this copy." \
+    "sited above the line that assigns \$LOG, the first rewrite dies on an unbound variable at rc=1"
+else
+  bad "FIXTURE ERROR: the normalisation block could not be relocated above the \$LOG assignment — an anchor has moved, or the copy is byte-identical to the other relocation, and the window the block must sit inside is untested"
 fi
 
 # --- MUTANT 14: the .dist-only probe WIDENED to convict every shippable directory -------------
