@@ -32,12 +32,29 @@ BEFORE ACTING:**
 write to the consumer. `scripts/validate-plan-shape.sh:73` cannot catch this: it greps that
 `## Start here` EXISTS and never asks whether the reader was told to ignore it.
 
-So: the five sections above are LIVE. Everything else below `## Context` — the `## Status record`
-band, the per-batch records, `## Phases`, `## What the pull produced` — is HISTORY: measured
-episodes, refuted hypotheses, and status records that were current when written and that THIS
-BLOCK REPLACES. Read those when a rule looks arbitrary or when you need the evidence behind a
-figure. **Do not take an instruction from them.** Every one of them that is spent says so in its
-own heading.
+So: the five sections above are LIVE. Everything else is HISTORY: measured episodes, refuted
+hypotheses, and status records that were current when written and that THIS BLOCK REPLACES. Read
+those when a rule looks arbitrary or when you need the evidence behind a figure. **Do not take an
+instruction from them.**
+
+**MOST OF THAT HISTORY IS NO LONGER IN THIS FILE, AND THAT IS THE CHANGE YOU MOST NEED TO KNOW
+ABOUT.** At `v0.580.0` this file was rotated from **1158744 bytes to 138435** — the per-batch
+records, the adjudication register, `## Status record`, `## Phases` and `## Verdict vocabulary` all
+moved to `docs/plans/archive/graph-ledger-full-drain.md`, named by the pointer at the top. Nothing
+was deleted; conservation was asserted three ways. **Go there for the evidence behind any figure,
+and expect a rule here to cite a measurement whose story lives in the archive.** `## Context` and
+`## What the pull produced` are still in this file.
+
+**A CITATION INTO THE ARCHIVE IS A PLAIN PATH, NEVER `path:line`.** A later rotation re-numbers
+that file and a `path:line` into it would then fail `validate-plan-shape.sh`'s citation arm on a
+correct rotation.
+
+**THIS FILE IS NOW BOUND AT 150000 BYTES** by arm `P8` of `scripts/validate-plan-shape.sh`, which
+covers every plan in `docs/plans/` at depth 1 whether live or spent. When it fires, the remedy is
+`bash scripts/plan-rotate.sh docs/plans/graph-ledger-full-drain.md` to see what would move and
+`--apply` to move it — **never a discharge banner in the head window**, which would silence P9
+through P13 on this file. Rotating is the remedy; there is no exemption list and one must not be
+added.
 
 ### Derive the state; do not trust the numbers below
 
@@ -1032,7 +1049,7 @@ given at batch 90.
    - **Never merge while a hand is out**, and never read a hand's idle state as its report.
 
 1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below) AGAINST THE REF THAT CARRIES THE
-   LIVE LEDGER, RANK THE UNFILED CANDIDATES, THEN SCOPE BATCH 100 — AND HOW YOU SCOPE IT DEPENDS ON
+   LIVE LEDGER, RANK THE UNFILED CANDIDATES, THEN SCOPE THE BATCH — AND HOW YOU SCOPE IT DEPENDS ON
    WHO INVOKED YOU.** Operator
    instruction, given at batch 52. **If the one-liner was TYPED BY THE OPERATOR**, report the
    candidates with a marked recommendation and ask, as every batch before has. **If it ARRIVED
@@ -1044,6 +1061,31 @@ given at batch 90.
    hand you dispatched is still out, even on a green gate: batch 63's merged branch was green
    at every phase when its second adversary returned two BLOCKERs, and batch 66's was green
    when its adversary returned a BLOCKER establishing the shipped fix had made things WORSE.**
+
+   **BATCH 116 IS PREPARED AND UNSTARTED. ITS SWEEP HAS ALREADY BEEN RUN, AND THESE FIGURES ARE
+   HYPOTHESES THE MOMENT YOU READ THEM — RE-RUN THE DERIVE BLOCK RATHER THAN TRUSTING THEM.** Two
+   read-only hands ran on 2026-09-15 against `origin/main` at `6f433c61`, and their findings were
+   deliberately NOT acted on because the session that held them was cutting `v0.580.0`/`v0.581.0`
+   instead. What they measured, each figure owed a re-derivation:
+
+   - **The PC-BACKED WORKLIST — the scoping input — was 16**, of which `BL-254` was the only
+     receipt exiting 0; `BL-215` is `verify: manual`/HAND-REVIEW; the other 14 were STILL-LIVE.
+   - **Filing coverage was 20 unfiled** — a DIFFERENT question, per the two-joins passage below.
+   - **The ledger ref election landed on `ai-dlc/carry-over/epic-crs-fvs-carryover-priorities`**,
+     46 commits ahead of the consumer's `main` and 0 behind, live 49 / archive 227 against main's
+     62 / 211. **Its live set is SMALLER because the consumer CLOSED 15, not because it is stale**
+     — exactly the batch-113 shape, and the three qualifying arms discriminated it correctly this
+     time (arm 1 unexplained-losses 0, arm 2 adds 2, arm 3 carries 15).
+   - **The consumer closed 14 absorbed entries** in `55a0b410b` (2026-09-14), on that branch and
+     not on its `main`. A committed-ref sweep keyed on `main` cannot see it.
+   - **The delivery gap was 2** — consumer installed `0.577.0` against this repo's `0.579.0`, and
+     it is now **4**, because `v0.580.0` and `v0.581.0` shipped after those hands ran.
+
+   **THE DISTRIBUTION MOVED TWICE SINCE THAT SWEEP AND ONE OF THE TWO TOUCHES THIS FILE.**
+   `v0.580.0` rotated this plan and added arm `P8`; `v0.581.0` fixed a fixture whose cleanup arm
+   was dead under `sudo`. Neither is PC-backed and neither closed a ledger candidate, so the
+   worklist above should survive a re-derivation — but that is a prediction, and the derive block
+   is what settles it.
 
    **"RESIDUE ZERO" MEANS NO CANDIDATE AWAITS A FIRST FILING. IT NEVER MEANS THE PC WORK IS
    DONE, AND EVERY BLOCK BELOW SAYING "ZERO KNOWN" IS MAKING ONLY THE NARROW CLAIM.** Two joins,
