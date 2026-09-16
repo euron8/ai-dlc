@@ -44,6 +44,20 @@
 # Recent Activity would be killed by the section anchor alone and would say nothing about a
 # grammar that reads the whole section.
 #
+# THE FOUR ARMS ADDED FOR A TWO-VALUED SECTION, and why they are four rather than two.
+# `current_step_file` is single-valued and overwritten in place, and Check 8 used to resolve it
+# first-match-wins: on a section carrying two live bullets it PASSES a correctly positioned
+# retro in one order and FAILS it in the other, same tree, verdict decided by line order. So
+# arms (g) and (h) are the SAME two values in BOTH orders -- the pair is what makes the arm
+# non-vacuous, because either order alone is passed by a `head -1` reader that happens to be
+# pointed the right way. (i) and (j) are the same basename TWICE, and they are the opposite
+# claim: agreement is not a duplicate, it is the common stale-plus-live state and it is the
+# state Check 8 exists for, so it must still be DECIDED on -- (i) PASSing and (j) FAILing is
+# what stops the refusal from un-gating the check's own subject. Assertion 5's existing
+# backticked-KEY rows at the two `- **\`current_step_file\`:**` seeds below are untouched and
+# still answer PASS and FAIL, because the count is layered OVER the key alternation rather
+# than replacing it.
+#
 # CHECKS 1, 2 AND 4 ARE DRIVEN THROUGH STUBBED SIBLINGS, as in the sibling fixtures: this
 # fixture's subject is Check 8, and the contract those three publish is an exit code. The
 # unmutated CONTROL battery proves the stubs are live, and every arm is PRESENCE-shaped — each
@@ -196,7 +210,7 @@ toolchain() { # <dir> <script-to-install-as-validate-mandatory-rules.sh>
   chmod +x "$1"/*.sh
 }
 
-# battery <toolchain-dir> -> six space-separated tokens, one per arm.
+# battery <toolchain-dir> -> ten space-separated tokens, one per arm.
 #
 # TOKEN: <arm>:<verdict>/<names-the-value>/<summary-class>/<rc>
 #   verdict  PASS | FAIL | SKIP | NONE (no CHECK 8 line at all) | OTHER[<line>]
@@ -248,18 +262,34 @@ battery() {
   #     this; it is the arm the `widened` mutant dies on.
   snap_at 'deploy-validate.md' '- routing to retro.md (Step 7) next.'
   run; t="$t f:$(tok)"
+  # g/h — TWO LIVE BULLETS naming DIFFERENT step files, the same pair in BOTH orders. A
+  #     first-match-wins reader answers PASS on one and FAIL on the other from the same tree,
+  #     so a fixture seeding one order alone cannot tell a correct reader from a lucky one.
+  #     Both must SKIP, counted, and the reason must name both values.
+  snap_line '- **Current step file:** retro.md' '- **Current step file:** deploy-validate.md'
+  run; t="$t g:$(tok)"
+  snap_line '- **Current step file:** deploy-validate.md' '- **Current step file:** retro.md'
+  run; t="$t h:$(tok)"
+  # i/j — the SAME basename twice, in two key spellings: agreement, not a duplicate. This is
+  #     the common stale-plus-live state and the one the check exists for, so it stays DECIDED
+  #     — i PASSes because the position is retro.md and j FAILs because it is not. A refusal
+  #     here would un-gate the defect while reporting a floor.
+  snap_line '- **Current step file:** retro.md' '- current_step_file: retro.md'
+  run; t="$t i:$(tok)"
+  snap_line '- **Current step file:** deploy-validate.md' '- current_step_file: deploy-validate.md'
+  run; t="$t j:$(tok)"
 
   snap_at 'retro.md'
   printf '%s' "$t"
 }
 
-EXPECTED="a:PASS/-/all8/0 b:FAIL/d/nosumm/1 c:SKIP/-/skip8/0 d:SKIP/-/skip8/0 e:PASS/-/all8/0 f:FAIL/d/nosumm/1"
+EXPECTED="a:PASS/-/all8/0 b:FAIL/d/nosumm/1 c:SKIP/-/skip8/0 d:SKIP/-/skip8/0 e:PASS/-/all8/0 f:FAIL/d/nosumm/1 g:SKIP/d/skip8/0 h:SKIP/d/skip8/0 i:PASS/-/all8/0 j:FAIL/d/nosumm/1"
 
 # --- 1. the shipping validator answers every arm ------------------------------
 toolchain "$WORK/bin" "$VMR"
 GOT="$(battery "$WORK/bin")"
 if [ "$GOT" = "$EXPECTED" ]; then
-  ok "all six arms: a position at retro.md PASSes (bare and with trailing prose), a position at deploy-validate.md FAILs at rc=1 naming the value it found, a missing field and a missing snapshot each SKIP and are counted in the summary, and \`retro.md\` sitting in another section does not acquit the defect"
+  ok "all ten arms: a position at retro.md PASSes (bare and with trailing prose), a position at deploy-validate.md FAILs at rc=1 naming the value it found, a missing field and a missing snapshot each SKIP and are counted in the summary, \`retro.md\` sitting in another section does not acquit the defect, two live bullets naming DIFFERENT step files SKIP in BOTH orders, and the SAME basename twice is still decided — PASS at retro.md and FAIL at deploy-validate.md"
 else
   bad "battery: expected [$EXPECTED], got [$GOT]"
 fi
@@ -363,7 +393,7 @@ fi
 toolchain "$WORK/mut-control" "$VMR"
 CTL="$(battery "$WORK/mut-control")"
 if [ "$CTL" = "$EXPECTED" ]; then
-  ok "CONTROL: an unmutated copy in its own toolchain dir reproduces all six baseline rows (so a mutant's silence below is the mutation, not the copy)"
+  ok "CONTROL: an unmutated copy in its own toolchain dir reproduces all ten baseline rows (so a mutant's silence below is the mutation, not the copy)"
 else
   echo "FIXTURE ERROR: the unmutated control does not reproduce the battery — expected [$EXPECTED], got [$CTL]." >&2
   echo "  Every mutant verdict below would be meaningless." >&2
@@ -397,7 +427,7 @@ mutate() {  # <tag> <sed-program> <expected-battery> <what-it-proves>
 # whole finding: a tree that ships a stale position reports PASS WITH SKIPS.
 mutate disabled \
   's@^SNAPSHOT_MD="_bmad-output/pipeline-snapshot.md"$@SNAPSHOT_MD="_bmad-output/no-such-snapshot.md"@' \
-  'a:SKIP/-/skip8/0 b:SKIP/-/skip8/0 c:SKIP/-/skip8/0 d:SKIP/-/skip8/0 e:SKIP/-/skip8/0 f:SKIP/-/skip8/0' \
+  'a:SKIP/-/skip8/0 b:SKIP/-/skip8/0 c:SKIP/-/skip8/0 d:SKIP/-/skip8/0 e:SKIP/-/skip8/0 f:SKIP/-/skip8/0 g:SKIP/-/skip8/0 h:SKIP/-/skip8/0 i:SKIP/-/skip8/0 j:SKIP/-/skip8/0' \
   "pointing the check at a path nothing writes makes every arm take the absent-snapshot SKIP — the defect arms report PASS WITH SKIPS over a stale position, which is the pre-fix state wearing a floor"
 
 # widened — THE CONTAINMENT TEST. The extraction is left alone and the VERDICT is widened: the
@@ -416,7 +446,7 @@ mutate disabled \
 # is what caught it.
 mutate widened \
   's@^      if \[ "\$C8_POS" = "retro.md" \]; then$@      if grep -qi "retro[.]md" "$SNAPSHOT_MD"; then@' \
-  'a:PASS/-/all8/0 b:FAIL/d/nosumm/1 c:SKIP/-/skip8/0 d:SKIP/-/skip8/0 e:PASS/-/all8/0 f:PASS/-/all8/0' \
+  'a:PASS/-/all8/0 b:FAIL/d/nosumm/1 c:SKIP/-/skip8/0 d:SKIP/-/skip8/0 e:PASS/-/all8/0 f:PASS/-/all8/0 g:SKIP/d/skip8/0 h:SKIP/d/skip8/0 i:PASS/-/all8/0 j:FAIL/d/nosumm/1' \
   "widening the verdict from 'the resolved position IS retro.md' to 'the file mentions retro.md' ACQUITS a snapshot whose position is deploy-validate.md and whose own section says 'routing to retro.md next' — the exact shape 31 of the consumer's revisions carry"
 
 # skipispass — the SKIP branch for a field-less snapshot turned into a PASS. Only arm c moves: it is the
@@ -429,7 +459,7 @@ mutate widened \
 # a world that cannot exist.
 mutate skipispass \
   "/^      echo \"  CHECK 8: SKIP (\${SNAPSHOT_MD} carries no /{ s@.*@      echo \"  CHECK 8: PASS\"@; n; /SKIPPED_CHECKS 8/d; }" \
-  'a:PASS/-/all8/0 b:FAIL/d/nosumm/1 c:PASS/-/all8/0 d:SKIP/-/skip8/0 e:PASS/-/all8/0 f:FAIL/d/nosumm/1' \
+  'a:PASS/-/all8/0 b:FAIL/d/nosumm/1 c:PASS/-/all8/0 d:SKIP/-/skip8/0 e:PASS/-/all8/0 f:FAIL/d/nosumm/1 g:SKIP/d/skip8/0 h:SKIP/d/skip8/0 i:PASS/-/all8/0 j:FAIL/d/nosumm/1' \
   "turning the field-less SKIP into a PASS reports an unreadable position as a verified one and drops it from the skip accounting — a check that cannot fire reading exactly like one that passed"
 
 # nocount — the counter. The branch still SKIPs and still says so on its own line, but the summary
@@ -444,13 +474,39 @@ mutate skipispass \
 # assignment of that counter whatever its indent.
 mutate nocount \
   '/^[[:blank:]]*SKIPPED_CHECKS="\$SKIPPED_CHECKS 8"$/d' \
-  'a:PASS/-/all8/0 b:FAIL/d/nosumm/1 c:SKIP/-/all8/0 d:SKIP/-/all8/0 e:PASS/-/all8/0 f:FAIL/d/nosumm/1' \
+  'a:PASS/-/all8/0 b:FAIL/d/nosumm/1 c:SKIP/-/all8/0 d:SKIP/-/all8/0 e:PASS/-/all8/0 f:FAIL/d/nosumm/1 g:SKIP/d/all8/0 h:SKIP/d/all8/0 i:PASS/-/all8/0 j:FAIL/d/nosumm/1' \
   "not counting Check 8's skip returns both skipping arms to the unqualified 'all 8 checks passed' while the CHECK 8 line still says SKIP — the two roads to exit 0 sharing one sentence again"
+
+# firstwins — THE PRE-FIX GATE. The ambiguity branch is made unreachable, so a two-valued
+# section falls back to whichever bullet the file lists first. Arms g and h are the whole
+# finding and they move in OPPOSITE directions from ONE tree with the same two values in it:
+# g goes SKIP->PASS and h goes SKIP->FAIL. That is the defect stated as a pair, and it is why
+# one order alone could not have caught it — a fixture seeding only g would have read a PASS
+# and called the reader correct.
+# ANCHORED ON THE DISTINCT-COUNT BRANCH, not on the `C8_COUNT` one beside it: the two open with
+# similar text and a loose anchor would edit both, collapsing the count as well as the refusal
+# and moving cells this mutant does not own.
+mutate firstwins \
+  's@^  if \[ "\$C8_DISTINCT" -ge 2 \]; then$@  if false; then@' \
+  'a:PASS/-/all8/0 b:FAIL/d/nosumm/1 c:SKIP/-/skip8/0 d:SKIP/-/skip8/0 e:PASS/-/all8/0 f:FAIL/d/nosumm/1 g:PASS/-/all8/0 h:FAIL/d/nosumm/1 i:PASS/-/all8/0 j:FAIL/d/nosumm/1' \
+  "with the refusal gone the same two values PASS in one order and FAIL in the other — one tree, two verdicts, decided by which duplicate the file happened to list first, and neither of them a measurement of where the pipeline is"
+
+# agreementrefuses — THE OPPOSITE ERROR, and the reason (i) and (j) exist. The basename
+# de-duplication is made unreachable so two bullets naming ONE file count as two distinct
+# values and SKIP. Only i and j move: the gate stops deciding the common stale-plus-live state,
+# which is the state it was written for, and reports a floor where it owes a failure.
+# The replacement pattern can never match a basename, so the `case` arm is dead rather than
+# widened — a widened guard often produces the original's output and scores a kill it did not
+# earn.
+mutate agreementrefuses \
+  's@^        \*" \$_c8_b "\*) ;;$@        *"ZZ-unreachable-ZZ"*) ;;@' \
+  'a:PASS/-/all8/0 b:FAIL/d/nosumm/1 c:SKIP/-/skip8/0 d:SKIP/-/skip8/0 e:PASS/-/all8/0 f:FAIL/d/nosumm/1 g:SKIP/d/skip8/0 h:SKIP/d/skip8/0 i:SKIP/-/skip8/0 j:SKIP/d/skip8/0' \
+  "treating agreement as a duplicate makes the stale-plus-live state that names ONE file skip — including the deploy-validate.md pair, which is the defect Check 8 exists to fail, reported as a verified floor instead"
 
 echo
 # Liveness: a harness that silently stopped running assertions reads exactly like a clean pass.
-if [ "$asserted" -ne 10 ]; then
-  echo "mandatory-rules-snapshot-position: FIXTURE ERROR — ran $asserted assertions, expected 10" >&2
+if [ "$asserted" -ne 12 ]; then
+  echo "mandatory-rules-snapshot-position: FIXTURE ERROR — ran $asserted assertions, expected 12" >&2
   exit 2
 fi
 if [ "$fails" -eq 0 ]; then
