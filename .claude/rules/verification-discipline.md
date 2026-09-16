@@ -115,6 +115,14 @@ A `mktemp` extraction timed against the live repo compares two TREES, not two re
 Measured: that shape read +1.9s and nearly bought an optimisation pass against a regression
 that does not exist. Extracted alike and interleaved, five reps: 17.29s vs 17.10s.
 
+**A COUNT OVER A DERIVED CORPUS IS A FUNCTION OF WHAT IS ON DISK, AND IT GOES WRONG IN BOTH
+DIRECTIONS.** Arms that walk the shipped-`.sh` set — and one that walks the whole tree — count
+any extra copy, so a fork total moves with files nobody meant to measure. Measured in one batch:
+a builder kept a second copy of the subject on disk so each side could trace its own file and
+read 8317; I measured the other side in the main checkout, where 35 agent worktrees each carry a
+full tree. Both re-taken in clean `git worktree` checkouts: 8219 and 6425. Take such a count in a
+clean worktree and name the tree beside the number.
+
 ## Run the shipping code against the real corpus
 
 A hand-written probe is a second implementation whose bugs nobody finds. When a probe and
