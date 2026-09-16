@@ -1638,13 +1638,24 @@ restore
 # The invariant answers that with a probe file it writes itself; break the grammar and the
 # PROBE is what fails, not the corpus.
 #
-# The mutation targets the pipeline's FINAL filter, not the case-arm regex. The first
+# The mutation targets the extraction's FINAL filter, not the case-arm regex. The first
 # attempt at this arm edited the regex's leading alternation group — which is `(...)*`,
 # so dropping it changed bytes and changed nothing: `cmp -s` passed, the mutant ran, and
 # the arm reported a real failure against a validator that was still working. A byte
 # guard proves the sed matched; only the assertion proves the mutant BITES.
+#
+# RE-ANCHORED WHEN I59 BECAME ONE AWK PASS. The filter was a `grep '^--'` at the end of a
+# shell pipeline; it is now the `substr(...) == "--"` test inside `I59_UNDOC_AWK`, and the
+# shell function that held the old spelling was DELETED rather than left beside the awk —
+# left in place it would be a line nothing executes, and this `sed` would go on editing it
+# and scoring a kill it did not earn. Measured before re-anchoring: against the batched
+# implementation with that dead function still present, the old mutation applied cleanly
+# (`cmp -s` passed it) and `--arms I59` exited 0 printing the OK line. Scored three ways as
+# `.claude/rules/fixture-mutants.md` requires — the anchor is unique in the file (control:
+# the same test at a length no token has returns 0 occurrences), the mutant fails on the
+# PROBE rather than the corpus, and it fails only this arm.
 V_BAK="$(mkbak "$V")"
-sed "s@grep '\^--'@grep '\^ZZ'@" "$V_BAK" > "$V"
+sed 's@substr(parts\[i\], 1, 2) == "--"@substr(parts[i], 1, 2) == "ZZ"@' "$V_BAK" > "$V"
 if cmp -s "$V_BAK" "$V"; then
   bad "FIXTURE BROKEN: the I59 grammar mutation matched nothing, so the liveness arm is unproven"
 else
@@ -1738,8 +1749,17 @@ restore
 # finding — the measured non-empty false-positive set that blocked this generalisation for
 # two programs. The probe target dispatches one mode each way precisely so this regression
 # is loud instead of quiet.
+#
+# RE-ANCHORED WHEN I60 BECAME ONE AWK PASS. The non-case form was a `grep -oE` inside the
+# `i60_dispatches` pipeline; it is now the regex `i60_nc_form` prints, handed to the awk as
+# `NCFORM`. It is a FUNCTION rather than an inline literal precisely so this mutation has one
+# executable site to key on: the same regex appears in the prose above it, and a `sed` cannot
+# tell a program from a sentence about the program. Measured before re-anchoring: the old
+# mutation returned `cmp -s` equal — it matched NOTHING — so the arm would have reported
+# FIXTURE BROKEN on the commit that made the invariant faster, which reads exactly like the
+# change being wrong.
 V_BAK="$(mkbak "$V")"
-sed "s@grep -oE '==\?\[\[:space:\]\]+\"--\[a-z\]\[a-z0-9-\]\*\"'@grep -oE '--zzz-no-such-form'@" "$V_BAK" > "$V"
+sed "s@i60_nc_form() { printf '%s' '==?\[\[:space:\]\]+\"--\[a-z\]\[a-z0-9-\]\*\"'@i60_nc_form() { printf '%s' '--zzz-no-such-form'@" "$V_BAK" > "$V"
 if cmp -s "$V_BAK" "$V"; then
   bad "FIXTURE BROKEN: the I60 non-case-dispatch mutation matched nothing, so the false-positive arm is unproven"
 else

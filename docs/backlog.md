@@ -3756,6 +3756,52 @@ first.
 verify: sh f=core/skills/ai-dlc/steps/gate-validation.md; [ -f "$f" ] || exit 9; LC_ALL=C awk '/validate-spawn-ledger\.sh/{p=1} p && /--settings/{print; exit}' "$f" | grep -q . || exit 9; LC_ALL=C awk '/validate-spawn-ledger\.sh \\?$/{p=1} p{b=b $0 "\n"} p && /--settings/{exit} END{printf "%s", b}' "$f" | LC_ALL=C grep -qE -- '--probe' && exit 0; exit 1
 
 
+## BL-265 — the fork budget's A4 stale-high arm had become unreachable at its own committed budget, and the mutant that should have said so was wired to a derived value
+
+**`core/fixtures/validator-fork-budget/run.sh`'s `judge` evaluates A1 floor before A4
+stale-high.** A1 was a hardcoded `[ "$t" -le 5000 ]`, sized when the validator forked 8225. A4
+fires only when `t*10 < b*7`. So A4's window is `5000 < t < 0.7b`, which is EMPTY for every
+budget at or below 7143. Measured across the budgets this file has actually carried: at
+`FORK_BUDGET=8225` (0.583.0) the window was 5001..5756; at `6431` (0.587.0) there was **none**.
+A4 — whose own message reads *"a ceiling nothing can reach is a check that cannot fire, and it
+reads exactly like one that passed"* — had become exactly that, one release before anyone looked.
+
+**`m3` could not see it, and the reason is the mutant's wiring rather than its predicate.** It
+drives `judge` with `budget = T1 * 2`, where the window is non-empty under any floor, so it
+stayed green through the closure. The comment above it explains that mutants are wired to `$T1`
+rather than `$BUDGET` deliberately — measured, because entangling them with the committed budget
+made m5 and m6 fire on the ceiling arm. That reasoning is right for m2–m6 and it is precisely
+what left no arm watching the committed budget's own reachability.
+
+**Fixed in this release, both halves.** A1 is now `40%` of `FORK_BUDGET`, so the two bounds move
+together; `0.4b < 0.7b` for every positive budget, so A4 has a window at every budget this can
+carry. The floor still refuses every input it exists to refuse — measured in one invocation, the
+three real broken-tracer cases read **0** (a subject that forks nothing), **0** (the `PS4` marker
+neutered, where the profiler's own self-probe refuses first) and **1** (the validator truncated at
+line 400, the case A1's header names), against a control of **4767** for the live reading, which
+must and does pass. And `m8` asserts A4's reachability at the LIVE budget by constructing the
+midpoint of its window — the one mutant that must key on `$BUDGET`. Scored against the old
+constant floor it reports the FAIL at `b=6431` and `b=4773` and passes at `b=8225`, which is the
+closure it would have caught.
+
+**The trigger was a correct change reading as a broken one.** Taking I59 and I60 from 1724 forks
+to 66 put the true reading at 4767, under the constant, and the fixture reported
+`BROKEN ... a broken tracer, an unmatched marker or a validator that exited early` with m2, m3, m5
+and m6 all going off on A1 instead of their own arms — five failures from one improvement.
+
+**What is owed, and why this entry survives the fix.** The floor is now proportional but the
+FRACTIONS are still two literals (`4/10`, `7/10`) in one `judge`, and nothing joins them to the
+quantity they are about. A future ratchet that takes the budget far enough down makes `0.4b` a
+number a genuinely broken tracer could exceed — the tracer's failure modes read near zero today,
+but that is a property of the profiler's current shape, not a bound. The durable form derives the
+floor from what a BROKEN subject actually measures rather than from a fraction of the ceiling.
+
+**Tiered DEFECT.** No guard was removed and nothing shipped wrong; what it cost was one arm that
+could not fire for a release, and a correct change that had to be diagnosed before it could land.
+
+verify: sh f=core/fixtures/validator-fork-budget/run.sh; [ -f "$f" ] || exit 9; grep -q 'A4 stale-high' "$f" || exit 9; grep -qE '\$\(\(b \* 4 / 10\)\)' "$f" || exit 1; grep -q 'm8 A4-reachable' "$f" && exit 0; exit 1
+
+
 ## BL-264 — the read-set deriver records GITIGNORED paths, so a tracked map is a function of ambient harness activity
 
 **`core/scripts/derive-fixture-readsets.sh` traced every path a fixture touched and wrote all of
