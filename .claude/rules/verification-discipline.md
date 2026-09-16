@@ -31,6 +31,15 @@ self-probe, a receipt and twenty-one mutants, because every one seeded the dupli
 the original — the receipt could only ever do so. The gap is in the SEED; the repair is one seed
 per channel, never another arm.
 
+**A MUTANT THAT SCORES IDENTICAL MAY MEAN THE CORPUS LACKS THE DISCRIMINATING INPUT.** The
+reading that comes first — "the property is not load-bearing, drop the guard" — is the wrong
+direction, and it is the direction that deletes a correct guard. Measured: a memo separating a
+cache MISS from an EMPTY BLOB was probed by a mutant conflating the two, which returned
+byte-identical output AND the identical call count, because the seeded corpus contained no
+empty blob. Constructed one: 5 lookups cost 1 call under the guard and 5 under the mutant, with
+a non-empty blob as the same-invocation control at 1 either way. Ask what input would separate
+them and whether the corpus can hold it, BEFORE reading a null as an acquittal.
+
 ## Point a search grammar at its own subject before trusting its zero
 
 `CLAUDE.md`'s "prove it can fail" applied to a SCAN, where the failure is silent: the grammar
