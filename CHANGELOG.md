@@ -15,6 +15,75 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.588.0] - 2026-09-16
+
+### The enforcement-map validator's two largest arms stopped forking per item, and the fork gate's own floor arm was found to have killed the arm beside it
+
+`scripts/validate-enforcement-map.sh` is invoked well over a hundred times per full push, so
+its fork count is a large fraction of everything the fixture suite computes. After `0.587.0`
+took `I87` out of the by-arm table, the two arms left at the top were `I60` at **1011** forks
+and `I59` at **713** — 26.8% of the file's 6425 — and both carried the same per-item shape
+`I87` was fixed for.
+
+**Both are now one awk pass over a list.** `i59_undocumented_in` forked one `awk` per MODE
+across the 216 modes the 100 shipped scripts under `core/` dispatch, and `i59_modes_of` four
+externals per FILE; `i60_ghosts_in` forked a `find` and a `head` per CITATION to resolve a
+basename (97 each), then `i60_dispatches` at eight externals per resolved citation (84) over
+only 42 distinct target files. Measured with `scripts/fork-profile.sh --stable` in CLEAN
+`git worktree` checkouts on both sides: **6425 → 4767 forks (−1658, −25.8%)**, 2/2 reproduced
+each side, spreads 6425-6425 and 4767-4767. `--section by-arm` attributes the whole delta to
+the two arms — **I60 1011 → 46, I59 713 → 20** — with every other arm's count byte-identical
+across the two readings. `FORK_BUDGET` 6431 → 4773, taken from the fixture's own reading.
+
+**Equivalence was established on a corpus that can disagree, because the live one cannot.**
+Both arms report zero findings on this tree, so an oracle comparing findings compares two empty
+sets. The shipped implementations were extracted byte-identically (asserted, with a control
+proving the comparator can report a difference) and scored against the batched ones over the
+non-empty INTERMEDIATE sets — 216 modes, 164 dispatch rows — plus a seeded corpus built under
+`mktemp` that FIRES, asserted non-zero on the shipped side before comparing, with a
+fully-documented file as the same-invocation silent control.
+
+**An oracle that sets `pipefail` is not measuring a subject that does not.** The extraction
+first reported 53 ghosts against the validator's 0: `i60_ghosts_in` ends `… | sort -u |
+grep -qx`, and `grep -q` leaves at its first match while `sort` is still writing, so under
+`pipefail` every dispatched mode read as undispatched. The subject is `set -u`.
+
+**Two mutation anchors died and were re-anchored; six were verified live.**
+`enforcement-map-sites`' `I59` arm 2 keyed on a `grep '^--'` that leaves the file with
+`i59_modes_of`, and `I60` arm 2 on a `grep -oE` that leaves with `i60_dispatches`. Measured
+before re-anchoring, with the dead function deliberately left in place: the old mutation
+applied cleanly, `cmp -s` passed it, and `--arms I59` exited 0 printing the OK line — the
+silent-unmutated-run defect `0.587.0` shipped. `i59_modes_of` was deleted rather than kept
+beside the awk, and `i60_nc_form()` exists as a function so the battery has one executable
+site to key on. Both re-anchored mutants scored three ways: unique anchor with an impossible-
+anchor control at 0, the right observable for the right reason, and each failing ONLY its own
+arm (the other exits 0 in the same run).
+
+### `validator-fork-budget`'s A1 floor was a constant, and it had silently made A4 unreachable
+
+`judge` evaluates A1 floor before A4 stale-high. A1 was a hardcoded `5000`, sized when the
+validator forked 8225; A4 fires only below 70% of the budget. So A4's window is
+`5000 < t < 0.7b`, **empty for every budget at or below 7143** — at `0.583.0`'s 8225 it was
+5001..5756, and at `0.587.0`'s 6431 there was none. The arm whose own message reads *"a ceiling
+nothing can reach is a check that cannot fire"* had become one, a release before anyone looked,
+and `m3` could not see it because it drives `judge` at `T1 * 2`, where the window is never empty.
+
+The floor is now **40% of `FORK_BUDGET`**, so both bounds move together and A4 has a window at
+every budget. The floor still refuses every input it exists to refuse — measured in one
+invocation, the three real broken-tracer cases read 0, 0 and 1, against a control of 4767 for
+the live reading. New mutant **`m8`** constructs the midpoint of A4's window at the LIVE budget
+and is the one mutant keyed on `$BUDGET`; scored against the old constant floor it reports the
+FAIL at 6431 and 4773 and passes at 8225. The fixture's `8/8 mutants killed` tally is now
+derived from the notes emitted, with a floor refusing a battery that lost one — a hardcoded
+count decaying inside the fixture whose subject is a hardcoded count decaying. Filed as
+`BL-265`, which survives the fix: the two fractions are still literals joined to nothing.
+
+Two receipts in this release were written prose-satisfiable and re-keyed on emission sites after
+being scored against a file of pure comments — `BL-265`'s returned 0 for a three-line file with no
+executable floor in it, and `BL-266`'s was satisfied by two unrelated comments about a hand-copied
+path. `BL-266` also records that the I59 corpus mutation is over-broad: it edits four arms'
+corpora, up from three at the parent, and `vrun` can only ever observe one of them.
+
 ## [0.587.0] - 2026-09-16
 
 ### I87 stopped forking once per fixture directory, and the reconcile engine stopped re-reading the same blobs across one render

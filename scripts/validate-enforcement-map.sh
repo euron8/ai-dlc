@@ -486,7 +486,20 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   the two functions are still called from -- the probe and the corpus loop each call
 #   `i87_readable`/`i87_exposed_in` once, and the corpus loop now calls `i87_exposed_batch` once
 #   instead of once per fixture directory. Budget from the HIGH reading, 6425, plus the usual 6.
-FORK_BUDGET=6431
+#   0.587.0's reduction was I87's; this is the second, and it is the two arms that were left at
+#   the top of the by-arm table. `i59_undocumented_in` forked one `awk` per MODE (216 of them)
+#   and `i59_modes_of` four externals per FILE (100); `i60_ghosts_in` forked a `find` and a
+#   `head` per CITATION (97 each) and `i60_dispatches` eight externals per resolved citation
+#   (84) over only 42 distinct target files. Both are now one awk pass over a list, the same
+#   shape I87 took. `--stable` in CLEAN `git worktree` checkouts, both sides: base 6425
+#   fork(s), 2/2 reproduced, spread 6425-6425; fixed 4767, 2/2 reproduced, spread 4767-4767.
+#   `--section by-arm` attributes the whole delta to the two arms -- I60 1011 -> 46 and I59
+#   713 -> 20, -1658 together -- with every OTHER arm's count byte-identical across the two
+#   readings, so there is no residual drift to characterise this time. The forks those two
+#   arms still cost are the batched awk's own spawns: one `mktemp` and one `find` per call
+#   site, plus the `grep -r` that derives I60's citation corpus, which is unchanged.
+#   Budget from the HIGH reading, 4767, plus the usual 6.
+FORK_BUDGET=4773
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
@@ -1950,18 +1963,86 @@ fi
 #
 # ONE READER, used by the corpus scan AND by the probe below. A probe that exercises a copy
 # of the extraction proves the copy.
-i59_modes_of() {
-  grep -oE '^[[:space:]]*(--?[a-z][a-z0-9-]*\|)*--?[a-z][a-z0-9-]*\)' "$1" \
-    | tr -d ' )' | tr '|' '\n' | grep '^--' | sort -u
+# ONE AWK PASS OVER A FILE LIST, replacing a fork-per-FILE and a fork-per-MODE shape.
+# `i59_modes_of` forked 4 externals per file across the 100 shipped scripts under core/,
+# and `i59_undocumented_in` forked one `awk` per MODE across the 216 modes those files
+# dispatch. The arm cost 713 forks, second largest in this file. It is the same
+# transformation `I87` took at 0.587.0 and the same doctrine holds: the probe and the
+# corpus scan drive THIS program, so a probe exercising the extraction exercises the one
+# engine the corpus loop calls.
+#
+# THE THREE PREDICATES ARE THE SHELL PIPELINE'S, NOT A REINTERPRETATION OF IT, and each is
+# named here because a regex moved into awk is a regex two people must agree about:
+#   * the mode grammar is `^[[:space:]]*(--?[a-z][a-z0-9-]*\|)*--?[a-z][a-z0-9-]*\)` --
+#     `grep -oE` returns the LEFTMOST-LONGEST match on a line and at most one, which
+#     `match()` reproduces exactly; `tr -d ' )'` then `tr '|' '\n'` splits the alternation.
+#   * the long-option filter keeps only `--`-prefixed arms, so a lone `-h)` is dropped --
+#     retained below as the `substr(tok,1,2) == "--"` test, NOT as an anchored regex,
+#     because a token is a fixed string here and a regex over it would be a second grammar.
+#   * the documentation test is `index($0,m) && (comment || index($0,"usage"))`, a
+#     SUBSTRING test on both halves. It is preserved verbatim, deliberately: it means
+#     `--foo` is satisfied by a line documenting `--foobar`, which is a property of the
+#     shipped invariant and not this change's to fix.
+# `--help` keeps its exemption on the line marked I59_HELP_EXEMPTION, which is where the
+# battery's ARM 3 mutation strips it from.
+I59_UNDOC_AWK='
+  BEGIN {
+    while ((getline fn < FLIST) > 0) {
+      nm = 0
+      delete modes
+      delete documented
+      while ((getline line < fn) > 0) {
+        lines[++nl] = line
+        if (match(line, /^[ \t]*(--?[a-z][a-z0-9-]*\|)*--?[a-z][a-z0-9-]*\)/)) {
+          seg = substr(line, RSTART, RLENGTH)
+          gsub(/[ \t)]/, "", seg)
+          n = split(seg, parts, "|")
+          for (i = 1; i <= n; i++) {
+            if (substr(parts[i], 1, 2) == "--") {
+              if (parts[i] == "--help") continue   # I59_HELP_EXEMPTION
+              if (!(parts[i] in modes)) { modes[parts[i]] = 1; order[++nm] = parts[i] }
+            }
+          }
+        }
+      }
+      close(fn)
+      for (i = 1; i <= nl; i++) {
+        line = lines[i]
+        if (line ~ /^[ \t]*#/ || index(line, "usage")) {
+          for (m in modes) if (index(line, m)) documented[m] = 1
+        }
+      }
+      # SORTED, because the shell form ended in `sort -u` and a caller comparing two
+      # runs must not see an order that depends on awk hash iteration.
+      for (i = 1; i <= nm; i++) for (j = i + 1; j <= nm; j++)
+        if (order[j] < order[i]) { t = order[i]; order[i] = order[j]; order[j] = t }
+      for (i = 1; i <= nm; i++) if (!(order[i] in documented)) printf "%s\t%s\n", fn, order[i]
+      nl = 0
+      delete lines
+      delete order
+    }
+    close(FLIST)
+  }
+'
+i59_undocumented_batch() { # <file list> -> "<path>\t<undocumented mode>" per line
+  awk -v FLIST="$1" "$I59_UNDOC_AWK" < /dev/null
 }
+# `i59_modes_of` IS GONE RATHER THAN KEPT BESIDE THE AWK, and the deletion is required, not
+# tidiness. Left in place it is a function nothing calls, and this fixture's ARM 2 mutation
+# anchors on its long-option filter — so the battery would go on editing a line the run never
+# executes and score a kill it did not earn, which is precisely the defect `0.587.0` shipped
+# when a memo relocated two call sites out from under their `sed` anchors. Measured here
+# before deleting it: with the function still present, ARM 2's mutation applied cleanly and
+# `--arms I59` exited 0 and printed the OK line. The mutation is re-anchored on the awk's own
+# mode grammar, which the corpus scan and the probe both execute.
 i59_undocumented_in() {   # <file> -> one undocumented mode per line
-  local f="$1" m
-  while IFS= read -r m; do
-    [ -n "$m" ] || continue
-    if [ "$m" = "--help" ]; then continue; fi   # I59_HELP_EXEMPTION
-    awk -v m="$m" 'index($0,m) && ($0 ~ /^[[:space:]]*#/ || index($0,"usage")) { found=1; exit }
-                   END { exit !found }' "$f" || printf '%s\n' "$m"
-  done < <(i59_modes_of "$f")
+  local _fl _out
+  _fl="$(mktemp)"
+  printf '%s\n' "$1" > "$_fl"
+  _out="$(i59_undocumented_batch "$_fl")"
+  rm -f "$_fl"
+  [ -n "$_out" ] || return 0
+  printf '%s\n' "$_out" | sed 's/^.*	//'
 }
 
 # THE LIVENESS PROBE. This invariant reports an ABSENCE, and its extraction is a regex over a
@@ -1996,16 +2077,23 @@ else
   i59_undoc=""
   i59_n=0
   i59_files=0
-  while IFS= read -r i59_f; do
-    [ -n "$i59_f" ] || continue
-    i59_files=$((i59_files + 1))
-    while IFS= read -r i59_m; do
-      [ -n "$i59_m" ] || continue
-      i59_undoc="${i59_undoc}
+  i59_flist="$(mktemp)"
+  find "$REPO_ROOT/core" -type f -name '*.sh' -not -path "$REPO_ROOT/core/fixtures/*" | sort > "$i59_flist"
+  # COUNTED FROM THE LIST, not from the loop below, because the loop now iterates
+  # FINDINGS rather than files and a corpus of 100 clean scripts emits no rows. Counting
+  # the scanned set inside a loop over the reported set is how a floor guard silently
+  # becomes unreachable: it would read 0 on a healthy tree and fire every run.
+  i59_files="$(grep -c . "$i59_flist")" || i59_files=0
+  while IFS= read -r i59_row; do
+    [ -n "$i59_row" ] || continue
+    i59_f="${i59_row%%	*}"
+    i59_m="${i59_row#*	}"
+    [ -n "$i59_m" ] || continue
+    i59_undoc="${i59_undoc}
   ${i59_f#"$REPO_ROOT/"} $i59_m"
-      i59_n=$((i59_n + 1))
-    done < <(i59_undocumented_in "$i59_f")
-  done < <(find "$REPO_ROOT/core" -type f -name '*.sh' -not -path "$REPO_ROOT/core/fixtures/*" | sort)
+    i59_n=$((i59_n + 1))
+  done < <(i59_undocumented_batch "$i59_flist")
+  rm -f "$i59_flist"
   if [ "$i59_files" -lt 20 ]; then
     err "I59 found only $i59_files shipped script(s) under core/ to scan. The corpus is derived by find; a count this low means the tree is not the one this runs against, and an empty corpus reports the same clean line as a documented one."
   elif [ "$i59_n" -ne 0 ]; then
@@ -2075,20 +2163,105 @@ i60_citations() {   # <root> -> "<basename.sh> <--mode>" per line
     --exclude-dir=fixtures --exclude="$(basename "$0")" \
     | tr -d '"' | sed -E 's/[[:space:]]+/ /g' | sort -u
 }
-i60_dispatches() {  # <file> -> one dispatched mode per line, `=`-valued arms normalised
-  { grep -oE '^[[:space:]]*(--[a-z][a-z0-9-]*(=[a-zA-Z0-9|-]*)?\|)*--[a-z][a-z0-9-]*(=[a-zA-Z0-9-]*)?\)' "$1" \
-      | tr -d ' )' | tr '|' '\n'
-    grep -oE '==?[[:space:]]+"--[a-z][a-z0-9-]*"' "$1" | grep -oE -- '--[a-z][a-z0-9-]*'
-  } | sed -E 's/=.*//' | grep '^--' | sort -u
+# ONE AWK PASS OVER THE CITATION LIST, replacing a fork-per-CITATION shape three deep.
+# `i60_ghosts_in` forked a `find` and a `head` per citation to resolve a basename (97 of
+# each), then `i60_dispatches` at 8 externals per resolved citation (84 of them) over only
+# 42 distinct target files. The arm cost 1011 forks, the largest in this file. It is the
+# same transformation `I87` took at 0.587.0, and the ONE READER doctrine stated above is
+# preserved: the probe and the corpus scan drive THIS program.
+#
+# THE RESOLUTION SEMANTICS ARE `find … -name "$t" | head -1`, WHICH IS FIRST-IN-FIND-ORDER.
+# Reproduced by walking the tree ONCE in find's own order and keeping the FIRST path seen
+# for each basename. Measured on this tree: no basename under core/ outside fixtures occurs
+# twice (control: `uniq -d` over the same list is empty), so the tiebreak discriminates
+# nothing today — it is preserved because a second copy appearing tomorrow must not silently
+# change which file the join reads.
+#
+# THE TWO DISPATCH GRAMMARS ARE THE SHELL PIPELINE'S, restated here because a regex moved
+# into awk is a regex two people must agree about:
+#   * the `case`-arm form, leftmost-longest per line via `match()`, then all spaces and
+#     parens deleted and the alternation split on `|` — `tr -d ' )'` before `tr '|'`, in
+#     that order, because the shell form does it in that order;
+#   * the NON-CASE form `[ "$1" = "--x" ]`, which `grep -o` matches MORE THAN ONCE PER LINE,
+#     so the awk walks each line with `match()` in a loop rather than testing it once. This
+#     is the form whose loss is the measured false-positive set this invariant was blocked
+#     on for two programs, and `i60_nc_form()` below is where it lives.
+#   * `=`-valued arms are normalised by truncating at the first `=`, and only `--` tokens
+#     survive — the same two steps the `sed -E 's/=.*//'` and long-option filter performed.
+#
+# `i60_nc_form` IS A FUNCTION RATHER THAN AN INLINE REGEX so the battery has one executable
+# site to mutate. Inlining it would leave the fixture's ARM 2 anchoring on a literal that
+# also appears in this comment, and a `sed` cannot tell a program from prose about it.
+# `[[:space:]]`, NOT `[ \t]`: `awk -v` strips one level of escaping, so a `\t` written here
+# reaches the program as a literal `t` under some awks and as a tab under others, and the two
+# read identically in the source. The POSIX class carries no backslash and is what the shell
+# form used. Verified against a positive control (a line the form must match) and a negative
+# one (a line it must not) in the same invocation before this was written.
+i60_nc_form() { printf '%s' '==?[[:space:]]+"--[a-z][a-z0-9-]*"'; }
+I60_GHOST_AWK='
+  function dispatched_in(path,   line, seg, n, parts, i, tok, l2, m) {
+    if (path in loaded) return
+    loaded[path] = 1
+    while ((getline line < path) > 0) {
+      if (match(line, /^[ \t]*(--[a-z][a-z0-9-]*(=[a-zA-Z0-9|-]*)?\|)*--[a-z][a-z0-9-]*(=[a-zA-Z0-9-]*)?\)/)) {
+        seg = substr(line, RSTART, RLENGTH)
+        gsub(/[ \t)]/, "", seg)
+        n = split(seg, parts, "|")
+        for (i = 1; i <= n; i++) {
+          tok = parts[i]
+          sub(/=.*/, "", tok)
+          if (substr(tok, 1, 2) == "--") disp[path SUBSEP tok] = 1
+        }
+      }
+      l2 = line
+      while (match(l2, NCFORM)) {
+        m = substr(l2, RSTART, RLENGTH)
+        l2 = substr(l2, RSTART + RLENGTH)
+        if (match(m, /--[a-z][a-z0-9-]*/)) {
+          tok = substr(m, RSTART, RLENGTH)
+          sub(/=.*/, "", tok)
+          if (substr(tok, 1, 2) == "--") disp[path SUBSEP tok] = 1
+        }
+      }
+    }
+    close(path)
+  }
+  BEGIN {
+    # FIRST-WINS over find order, reproducing `find … -name "$t" | head -1`.
+    while ((getline p < PATHS) > 0) {
+      b = p
+      sub(/^.*\//, "", b)
+      if (!(b in where)) where[b] = p
+    }
+    close(PATHS)
+    while ((getline line < CITES) > 0) {
+      if (split(line, f, " ") < 2) continue
+      t = f[1]; m = f[2]
+      if (t == "" || m == "") continue
+      if (!(t in where)) continue          # unresolved targets are SKIPPED, not reported
+      dispatched_in(where[t])
+      if (!((where[t] SUBSEP m) in disp)) print t " " m
+    }
+    close(CITES)
+  }
+'
+i60_ghosts_batch() { # <root> <citation file> -> "<target.sh> <--mode>" per undispatched citation
+  local root="$1" cites="$2" _pl _out
+  _pl="$(mktemp)"
+  find "$root/core" -type f -name '*.sh' -not -path '*/core/fixtures/*' 2>/dev/null > "$_pl"
+  _out="$(awk -v PATHS="$_pl" -v CITES="$cites" -v NCFORM="$(i60_nc_form)" "$I60_GHOST_AWK" < /dev/null)"
+  rm -f "$_pl"
+  [ -n "$_out" ] || return 0
+  printf '%s\n' "$_out"
 }
 i60_ghosts_in() {   # <root> -> "<target.sh> <--mode>" per undispatched citation
-  local root="$1" t m f
-  while read -r t m; do
-    [ -n "$t" ] && [ -n "$m" ] || continue
-    f="$(find "$root/core" -type f -name "$t" -not -path '*/core/fixtures/*' 2>/dev/null | head -1)"
-    [ -n "$f" ] || continue
-    i60_dispatches "$f" | grep -qx -- "$m" || printf '%s %s\n' "$t" "$m"
-  done < <(i60_citations "$root")
+  local _cf _out
+  _cf="$(mktemp)"
+  i60_citations "$1" > "$_cf"
+  _out="$(i60_ghosts_batch "$1" "$_cf")"
+  rm -f "$_cf"
+  [ -n "$_out" ] || return 0
+  printf '%s\n' "$_out"
 }
 
 # THE LIVENESS PROBE. This invariant reports an ABSENCE across two regexes over shell

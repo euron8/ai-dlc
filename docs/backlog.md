@@ -3756,6 +3756,91 @@ first.
 verify: sh f=core/skills/ai-dlc/steps/gate-validation.md; [ -f "$f" ] || exit 9; LC_ALL=C awk '/validate-spawn-ledger\.sh/{p=1} p && /--settings/{print; exit}' "$f" | grep -q . || exit 9; LC_ALL=C awk '/validate-spawn-ledger\.sh \\?$/{p=1} p{b=b $0 "\n"} p && /--settings/{exit} END{printf "%s", b}' "$f" | LC_ALL=C grep -qE -- '--probe' && exit 0; exit 1
 
 
+## BL-266 — `enforcement-map-sites`' I59 corpus mutation edits four arms' corpora and the battery can only see one of them
+
+**The sed is `-type f -name '*.sh' -not -path`, with no line address, and `sed` applies `s///`
+once per matching line.** Measured on a seeded tree at `4feee7f9`: it applies to **4** lines and
+sends `--arms I59` (exit 1, `I59 found only 0 shipped script(s)`, its own assertion), `--arms I83`
+(exit 1) and `--arms I60` (exit 1) red together, with I84 unaffected at exit 0.
+
+**It is PRE-EXISTING and this release widened it by one.** Same mutation at the parent `5e5ff9e7`:
+3 lines, with I59 and I83 both red and I60 still green. `0.588.0` added I60's own corpus `find` in
+the batched rewrite, so the anchor picked up a fourth site.
+
+**The arm passes for its own reason and the collateral is invisible.** `vrun` derives `--arms I59`
+from the calling function's name, so the battery reads only I59's verdict and never observes that
+two other arms were disabled in the same breath. `.claude/rules/fixture-mutants.md` requires a
+mutant to fail ONLY its own assertion; this one cannot be seen to violate that, which is the part
+worth filing — the check that would notice is the one that does not exist.
+
+**What is owed.** Either the mutation is line-addressed to I59's own corpus line, or the battery
+asserts that the arms the mutation is NOT about stay green in the same run. The second is the
+stronger form and generalises: every mutation in this file could carry it.
+
+**Tiered NOTE.** No verdict is wrong today and no guard is removed; the mutation is over-broad
+rather than insufficient, which is the safe direction for a kill.
+
+The receipt keys on the two REMEDIES as executable forms — a line-addressed `sed` for the corpus
+mutation, or a `vrun`-style drive of a second arm inside assertion 33 — never on prose. Its first
+form asked for the words "stays green" and came back 0 immediately, satisfied by two unrelated
+comment lines about a hand-copied path; that is this repo's text-about-a-program trap, met while
+writing the entry that describes it.
+
+verify: sh f=core/fixtures/enforcement-map-sites/run.sh; v=scripts/validate-enforcement-map.sh; [ -f "$f" ] || exit 9; [ -f "$v" ] || exit 9; grep -q 'I59 grammar mutation' "$f" || exit 9; n="$(grep -c "name '\*\.sh' -not -path" "$v")" || n=0; [ "$n" -le 1 ] && exit 0; LC_ALL=C grep -qE "^[[:blank:]]*sed \"?'?[0-9]+s@-type f -name" "$f" && exit 0; LC_ALL=C grep -qE '^[[:blank:]]*bash "\$V" --arms I(60|83|84)' "$f" && exit 0; exit 1
+
+
+## BL-265 — the fork budget's A4 stale-high arm had become unreachable at its own committed budget, and the mutant that should have said so was wired to a derived value
+
+**`core/fixtures/validator-fork-budget/run.sh`'s `judge` evaluates A1 floor before A4
+stale-high.** A1 was a hardcoded `[ "$t" -le 5000 ]`, sized when the validator forked 8225. A4
+fires only when `t*10 < b*7`. So A4's window is `5000 < t < 0.7b`, which is EMPTY for every
+budget at or below 7143. Measured across the budgets this file has actually carried: at
+`FORK_BUDGET=8225` (0.583.0) the window was 5001..5756; at `6431` (0.587.0) there was **none**.
+A4 — whose own message reads *"a ceiling nothing can reach is a check that cannot fire, and it
+reads exactly like one that passed"* — had become exactly that, one release before anyone looked.
+
+**`m3` could not see it, and the reason is the mutant's wiring rather than its predicate.** It
+drives `judge` with `budget = T1 * 2`, where the window is non-empty under any floor, so it
+stayed green through the closure. The comment above it explains that mutants are wired to `$T1`
+rather than `$BUDGET` deliberately — measured, because entangling them with the committed budget
+made m5 and m6 fire on the ceiling arm. That reasoning is right for m2–m6 and it is precisely
+what left no arm watching the committed budget's own reachability.
+
+**Fixed in this release, both halves.** A1 is now `40%` of `FORK_BUDGET`, so the two bounds move
+together; `0.4b < 0.7b` for every positive budget, so A4 has a window at every budget this can
+carry. The floor still refuses every input it exists to refuse — measured in one invocation, the
+three real broken-tracer cases read **0** (a subject that forks nothing), **0** (the `PS4` marker
+neutered, where the profiler's own self-probe refuses first) and **1** (the validator truncated at
+line 400, the case A1's header names), against a control of **4767** for the live reading, which
+must and does pass. And `m8` asserts A4's reachability at the LIVE budget by constructing the
+midpoint of its window — the one mutant that must key on `$BUDGET`. Scored against the old
+constant floor it reports the FAIL at `b=6431` and `b=4773` and passes at `b=8225`, which is the
+closure it would have caught.
+
+**The trigger was a correct change reading as a broken one.** Taking I59 and I60 from 1724 forks
+to 66 put the true reading at 4767, under the constant, and the fixture reported
+`BROKEN ... a broken tracer, an unmatched marker or a validator that exited early` with m2, m3, m5
+and m6 all going off on A1 instead of their own arms — five failures from one improvement.
+
+**What is owed, and why this entry survives the fix.** The floor is now proportional but the
+FRACTIONS are still two literals (`4/10`, `7/10`) in one `judge`, and nothing joins them to the
+quantity they are about. A future ratchet that takes the budget far enough down makes `0.4b` a
+number a genuinely broken tracer could exceed — the tracer's failure modes read near zero today,
+but that is a property of the profiler's current shape, not a bound. The durable form derives the
+floor from what a BROKEN subject actually measures rather than from a fraction of the ceiling.
+
+**Tiered DEFECT.** No guard was removed and nothing shipped wrong; what it cost was one arm that
+could not fire for a release, and a correct change that had to be diagnosed before it could land.
+
+The receipt keys on the two EMITTING lines — the floor's own `if` test and the `kill_j` call
+that drives m8 — never on the file merely containing the fraction or the mutant's name. Its
+first form did the latter and was satisfied by a three-line file of pure comments carrying no
+executable floor at all; scored again on the emission sites it reads 0 on the real file, 1 on
+that prose file and 1 at the parent commit.
+
+verify: sh f=core/fixtures/validator-fork-budget/run.sh; [ -f "$f" ] || exit 9; grep -q 'A4 stale-high' "$f" || exit 9; grep -qE '^[[:blank:]]*if \[ "\$t" -le "\$\(\(b \* 4 / 10\)\)" \]; then' "$f" || exit 1; grep -qE '^[[:blank:]]*kill_j "m8 A4-reachable' "$f" && exit 0; exit 1
+
+
 ## BL-264 — the read-set deriver records GITIGNORED paths, so a tracked map is a function of ambient harness activity
 
 **`core/scripts/derive-fixture-readsets.sh` traced every path a fixture touched and wrote all of
