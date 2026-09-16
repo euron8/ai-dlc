@@ -15,6 +15,106 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.587.0] - 2026-09-16
+
+### I87 stopped forking once per fixture directory, and the reconcile engine stopped re-reading the same blobs across one render
+
+**Two subjects on one lever: remove total work, not scheduling.** The suite is work-bound, so its
+floor is `sum of unit costs / 12` and cutting a pole buys nothing the floor does not already
+concede. Both changes below remove work that was being done repeatedly over inputs that had not
+changed.
+
+**`validate-enforcement-map.sh`'s I87 arm ran two per-item shell loops.** `i87_readable` forked one
+`grep` per file across 430 files; `i87_exposed_in` ran ~9 externals per fixture directory across
+205 of them. Both are now one `awk` pass — a shared `I87_EXPOSED_AWK` driven from a manifest, with
+the directory boundary taken from the file list rather than from a fork per directory. Measured
+with `scripts/fork-profile.sh --stable`: **I87 1842 → 48 forks, whole-file total 8219 → 6425**, and
+`FORK_BUDGET` lowered 8225 → 6431 from the fixture's own reading rather than from arithmetic.
+I87 no longer appears in the by-arm table; `I60` is now the largest arm at 1011.
+
+**BOTH SIDES OF A FORK COUNT MUST COME FROM A CLEAN WORKTREE, AND THIS RELEASE GOT IT WRONG IN BOTH
+DIRECTIONS BEFORE IT GOT IT RIGHT.** I83, I84, I87 and I93 walk the shipped-`.sh` corpus and I54
+walks the whole tree, so any extra copy of a script on disk is counted. A base reading taken with a
+second copy of the validator alongside it read 8317; a tip reading taken in the main checkout,
+where the harness had 35 agent worktrees each carrying a full tree, was inflated the same way from
+the other side. Re-taken in clean `git worktree` checkouts the two sides are 8219 (spread
+8219-8219) and 6425 (spread 6424-6425). The file's own budget history already records this shape
+twice, at `0.583.0`.
+
+**AN EQUIVALENCE ORACLE OVER I87's LIVE CORPUS IS VACUOUS, WHICH IS THE ARM WORKING AS DESIGNED.**
+I87 is a regression guard whose correct answer is zero, and its header says so. Derived with a
+positive control: **0 of 205 fixture directories produce a non-empty answer** under either
+implementation, so "byte-identical across all 205" is empty-vs-empty 205 times and reads exactly
+like 205 proofs. The equivalence that was actually taken is over seeded directories exercising each
+predicate — an exposed key, an assigning fixture, a comment-only mention, a single-quoted mention,
+a cleared fixture, a multi-file fixture — where 2 of 6 answer non-empty, both implementations agree,
+and a deliberately broken variant disagrees on exactly one case.
+
+**`emit-report.sh` re-read the same blobs across its render fan-out.** One `render()` makes 4
+distinct git calls; the fixture drives 13 programs × 11 worlds = 143 full re-renders, each shelling
+out to ~13 sub-detectors that independently re-resolved the same `BASE`/`THEIRS` blobs. Because the
+sub-detectors are separate processes, an in-process memo of the kind `0.586.0` added to
+`ledger-reverify.sh` cannot reach them; the cache is therefore filesystem-backed in `lib.sh`
+(`memo_show`, `memo_has_path`, `memo_rev_parse`, `memo_ls_tree`, `memo_diff_name_status`) and shared
+across one render through `AI_DLC_RECONCILE_MEMO`. Measured with PATH-shadowed logging wrappers,
+with an impossible-tool control at 0 in the same log: **git calls 19219 → 14490 (−24.6%)**, distinct
+302 → 300.
+
+**THIS HALF IS A PARTIAL FIX AND IS SHIPPED AS ONE.** 75% of the original redundancy remains, and
+the receipt that shows it is a census bucketed by normalised call shape rather than a single
+before/after total — a total cannot distinguish a complete fix from one that memoized the largest
+line and stopped. The shapes still repeating are outside the memo: `show <sha>:…/classes.md` 542,
+`ls-tree --name-only <sha> core/scripts/` 443, `cat-file -e` 375, `rev-parse -q --verify` 369 and
+369, `ls-files --with-tree` 359, `hash-object` 273.
+
+### The memo served a `$(<file)` round trip and rewrote trailing newlines
+
+**`memo_show` and `memo_rev_parse` filled their cache byte-correctly and then served it back
+through `printf '%s\n' "$(<f)"`.** A command substitution strips EVERY trailing newline and the
+`printf` adds exactly one back, so a blob carrying none came back one byte LONGER, a blob carrying
+three came back two bytes shorter, and an empty blob came back as a bare newline. Measured on this
+tree: `core/hooks/ai-dlc-continue.sh` 90735 → 90736 and `core/schemas/provenance-block.json`
+26564 → 26565; exactly three files under `core/` have no trailing newline.
+
+**The single-trailing-newline case — every normal file — is byte-identical either way, which is why
+the fixture battery, the full gate and a consumer install rehearsal were all green over it.**
+
+**It reaches a verdict.** `unregistered-drift.sh`'s three acquittal arms pipe `git_show` straight
+into `cmp -s -` with no outer `$( )` to strip the spurious byte a second time, so a consumer file
+byte-identical to its distribution blob was reported as DRIFTED. Call sites that capture through
+`"$(git_show …)"` self-healed by stripping twice, which is luck and not design. Serving with `cat`
+returns the bytes that were stored, at one fork per cache hit.
+
+**The idiom came from this repo's own previous release note**, which recommended `$(<file)` for
+cache reads to avoid a fork per lookup. That advice is correct for a VALUE whose trailing
+whitespace is not significant and wrong for a BLOB, and the two uses sat in the same helper.
+
+### A memo that moves a call site moves every mutation anchored on it
+
+**Two fixtures' mutants had gone silently inert.** `preclassify-rename-row` and
+`retired-layer-token` build a mutant by copying `reconcile/` and `sed`-patching one detector, then
+assert the anchor is present in the original and absent from the mutant. Relocating
+`diff --no-renames --name-status` and `ls-tree -r --name-only` into `lib.sh` left both anchors on
+the memo helpers' uncacheable fallback branch, never exercised while `lib.sh` is present, so both
+mutants ran the UNMUTATED path. Verified by content, not by reading: the anchor is present once in
+`preclassify.sh` at the parent commit, absent there now and present twice in `lib.sh`. Both
+mutations are retargeted onto the copied `lib.sh`, preserving each one's exact intent, and both
+fail at the commit before the retargeting. Every other fixture that `sed`-mutates a reconcile
+detector was checked against the four relocated call shapes; no third fixture was orphaned.
+
+### Two profiling hazards, each measured and each carried into the rule channel
+
+**A `$(date)` inside `PS4` charges one fork per traced line, so a per-line timing profile ranks
+loops by ITERATION COUNT — the artifact is the quantity being read.** Such a trace attributed 37s
+of a 47s validator run to two fork-free loops of 9498 and 2071 iterations; an ablation differential
+in CPU-seconds over 4 interleaved reps refuted both, every range overlapping and one ablation
+reading ABOVE base. Use that trace to COUNT invocations, never to time them.
+
+**Nested `bash` does not inherit `-x`**, so an xtrace of a program that shells out undercounts
+everything below it — the reconcile census read 28 git calls under xtrace against 19219 under
+PATH-shadowed wrappers. Both hazards are now in `.claude/rules/`, with the fork-count contamination
+rule beside the other measurement disciplines.
+
 ## [0.586.0] - 2026-09-16
 
 ### The push-candidate closer reads each blob once instead of once per entry (suite pole −30%)
