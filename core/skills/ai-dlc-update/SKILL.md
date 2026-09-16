@@ -475,7 +475,13 @@ prose is itself generated rather than composed.
      gate record and the fixture log, which are this cycle's approval artifact** — **run the
      derived fixtures through
      `reconcile/self-update-fixtures.sh <dist> <base> <theirs> <consumer> <fixture>...`
-     and require green BEFORE the push**, push,
+     — each `<fixture>` is a bare fixture DIRECTORY NAME, one per argument; the
+     `core/fixtures/<name>` and `tests/fixtures/<name>` forms this step derives the set in are
+     also accepted, with or without a trailing slash, and the runner logs each rewrite. Any
+     other slash form, and any single argument holding more than one name, is refused —
+     **word-split the derived list explicitly**, because an unquoted variable holding a
+     newline-joined list arrives as ONE argument under zsh —
+     **and require green BEFORE the push**, push,
      open a PR, and **auto-merge (squash, delete branch)** — no operator gate (the
      step-1 git preflight confirmed the branch is in sync with `origin`, so this
      merge cannot strand local commits). If there is no remote / push fails,
@@ -541,7 +547,9 @@ prose is itself generated rather than composed.
      `reconcile/self-update-fixtures.sh` joins the diff-touched term against the set you pass
      it, so a fixture dropped from that set because you declined to overwrite it comes back as
      an omission and exits 2 on a pull that did nothing wrong. Name every derived fixture;
-     write only the ones the consumer has not edited.
+     write only the ones the consumer has not edited. **Pass each one as a SEPARATE argument** —
+     a bare directory name, or the `core/fixtures/<name>` / `tests/fixtures/<name>` form this
+     step derives it in, which the runner normalises. A whole list in one argument is refused.
 
      **A red derived fixture STOPS the self-update; it does not get pushed and sorted out
      later.** The machinery slice closes the common dependency case by construction — a

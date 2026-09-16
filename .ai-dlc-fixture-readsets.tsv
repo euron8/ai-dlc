@@ -9,7 +9,7 @@
 # every other fixture's entries alone, so refreshing one fixture costs its own runtime
 # rather than a full re-derivation.
 #
-# fixtures mapped: 201    entries: 35985
+# fixtures mapped: 202    entries: 36034
 absorbed-specifics-survive	.git/HEAD
 absorbed-specifics-survive	.git/config
 absorbed-specifics-survive	.git/index
@@ -27703,6 +27703,55 @@ suite-dispatch-order	core/fixtures/lib/preamble.sh
 suite-dispatch-order	core/fixtures/suite-dispatch-order
 suite-dispatch-order	core/fixtures/suite-dispatch-order/run.sh
 suite-dispatch-order	core/git-hooks/pre-push
+suite-pole-guard	.git/HEAD
+suite-pole-guard	.git/config
+suite-pole-guard	.git/index
+suite-pole-guard	.git/info/exclude
+suite-pole-guard	.git/objects/7f/33c97b6a0c87e7e985a4b90926733e2a86198c
+suite-pole-guard	.git/objects/83/0ca5d3189d5bcabde9205f772b416c9ba0d693
+suite-pole-guard	.git/objects/info/commit-graphs/commit-graph-chain
+suite-pole-guard	.git/objects/info/commit-graphs/graph-2e085ff44ca2ae7c5739806502100c553300cbbf.graph
+suite-pole-guard	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
+suite-pole-guard	.git/objects/pack/multi-pack-index
+suite-pole-guard	.git/packed-refs
+suite-pole-guard	.git/refs/heads/main
+suite-pole-guard	.gitignore
+suite-pole-guard	core
+suite-pole-guard	core/fixtures
+suite-pole-guard	core/fixtures/lib
+suite-pole-guard	core/fixtures/lib/preamble.sh
+suite-pole-guard	core/fixtures/scripts/validate-suite-pole.sh
+suite-pole-guard	core/fixtures/suite-pole-guard
+suite-pole-guard	core/fixtures/suite-pole-guard/run.sh
+suite-pole-guard	core/fixtures/suite-pole-guard/scripts/validate-suite-pole.sh
+suite-pole-guard	core/scripts/validate-suite-pole.sh
+suite-pole-guard	scripts
+suite-pole-guard	scripts/ab-lead-model.js
+suite-pole-guard	scripts/audit-machinery-efficacy.js
+suite-pole-guard	scripts/backlog-reverify.sh
+suite-pole-guard	scripts/backlog-rotate.sh
+suite-pole-guard	scripts/bootstrap-update-skill.sh
+suite-pole-guard	scripts/check-version.sh
+suite-pole-guard	scripts/fork-profile.sh
+suite-pole-guard	scripts/install.sh
+suite-pole-guard	scripts/plan-rotate.sh
+suite-pole-guard	scripts/render-invariant-index.sh
+suite-pole-guard	scripts/render-path-mapping.sh
+suite-pole-guard	scripts/render-postcompact-digest.sh
+suite-pole-guard	scripts/render-vocabulary-index.sh
+suite-pole-guard	scripts/suite-content-key.sh
+suite-pole-guard	scripts/uninstall.sh
+suite-pole-guard	scripts/validate-backlog-receipts.sh
+suite-pole-guard	scripts/validate-backlog-size.sh
+suite-pole-guard	scripts/validate-claude-rules.sh
+suite-pole-guard	scripts/validate-enforcement-map.sh
+suite-pole-guard	scripts/validate-fixture-git-env.sh
+suite-pole-guard	scripts/validate-no-dead-doc-refs.sh
+suite-pole-guard	scripts/validate-plan-shape.sh
+suite-pole-guard	scripts/validate-release-version.sh
+suite-pole-guard	scripts/validate-shell-portability.sh
+suite-pole-guard	scripts/validate-suite-pole.sh
+suite-pole-guard	scripts/verify-backlog-bl056.py
 suppression-lifetime	.git
 suppression-lifetime	.git/HEAD
 suppression-lifetime	.git/config

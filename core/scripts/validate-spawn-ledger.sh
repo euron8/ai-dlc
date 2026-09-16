@@ -27,12 +27,14 @@
 #
 # WHAT THIS DOES NOT DECIDE, deliberately. Check 22 stays `adjudication: llm`:
 #
-#   * A recorded tier mismatch has a CLEARING PATH with four arms, and arm 4 -- the
-#     escalation entry states the remediation and names its artifact -- is a judgement
-#     about content. Arm 3 is `validate-escalation-resolution.sh`, which this script
-#     does not invoke: the two answer different questions about different files and the
-#     gate runs both. This script reports the mismatch; the adjudicator decides whether
-#     it is cleared.
+#   * EVERY recorded violation this script FAILS on has the SAME CLEARING PATH with
+#     four arms -- a Rule 19(a) tier mismatch, a missing Rule 19(b) role-contract
+#     citation, an unreadable role file, and an effort mismatch, which are four routes
+#     into one exit code and not four dispositions. Arm 4 -- the escalation entry states
+#     the remediation and names its artifact -- is a judgement about content. Arm 3 is
+#     `validate-escalation-resolution.sh`, which this script does not invoke: the two
+#     answer different questions about different files and the gate runs both. This
+#     script reports the violation; the adjudicator decides whether it is cleared.
 #   * STORY ROUTING (a `protected_path_editor: true` story serviced by a
 #     `protected-path-editor` spawn) is mechanical in form but its subject set is the
 #     sprint's story files, which this script is not given and cannot derive -- the
@@ -95,8 +97,9 @@
 # EXIT
 #   0  every row for this sprint carries a resolvable role file, a Rule 19(b) contract
 #      citation, and a model matching its role's configured pin
-#   1  at least one row does not (a Rule 19 violation, clearable only per Check 22's
-#      four-arm disposition)
+#   1  at least one row does not, or its effort_bound disagrees with its own transcript
+#      (a Rule 19 violation on any of those four routes, clearable only per Check 22's
+#      four-arm disposition, which covers every one of them)
 #   2  bad arguments, an unreadable settings.json, or no jq -- nothing was compared
 #   3  NOTHING WAS COMPARED. Either PRE-LEDGER (the ledger names no row for this sprint)
 #      or every row it does name is outside Rule 19 scope. Not a pass either way.
@@ -460,6 +463,8 @@ while IFS="$(printf '\t')" read -r name role bound requested cited readable sche
   if [ "$readable" = "false" ]; then
     echo "FAIL: [$name] role_file_readable=false -- role '${role:-<none>}' resolved to no readable" >&2
     echo "      role file, so this teammate ran with no contract at all (Rule 19, fail-closed)." >&2
+    echo "      It is a fact about the past: clear it only through Check 22's" >&2
+    echo "      four-arm disposition, never by re-running the gate." >&2
     VIOL=$((VIOL + 1)); UNREADABLE=$((UNREADABLE + 1))
   fi
 
@@ -468,6 +473,8 @@ while IFS="$(printf '\t')" read -r name role bound requested cited readable sche
   if [ "$cited" != "true" ]; then
     echo "FAIL: [$name] role_contract_cited=false -- the dispatch named role '${role:-<none>}' via" >&2
     echo "      subagent_type alone and cited no Rule 19(b) role contract." >&2
+    echo "      It is a fact about the past: clear it only through Check 22's" >&2
+    echo "      four-arm disposition, never by re-running the gate." >&2
     VIOL=$((VIOL + 1)); UNCITED=$((UNCITED + 1))
   fi
 
@@ -553,6 +560,8 @@ while IFS="$(printf '\t')" read -r name role bound requested cited readable sche
       echo "      self-report. Re-render .claude/agents/${role}.md from aiDlcRoles.${role}.effort" >&2
       echo "      and confirm the dispatch passed no \`name\`, which routes the spawn to the" >&2
       echo "      runner that drops effort." >&2
+      echo "      The spawn that already ran is a fact about the past: clear it only through" >&2
+      echo "      Check 22's four-arm disposition, never by re-running the gate." >&2
       VIOL=$((VIOL + 1)); EFFORT_MISMATCH=$((EFFORT_MISMATCH + 1))
     fi
   fi

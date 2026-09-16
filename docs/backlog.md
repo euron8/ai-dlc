@@ -3611,6 +3611,8 @@ verify: manual
 
 ## BL-256 — the plan channel had no ceiling, and the one arm family that could have carried it is silenced by an eleven-byte word
 
+**LANDED (v0.580.0, verified 439c0058).** Both named plans rotated under the ceiling, P8 live at 0 hits over 39 plans and firing 39/39 at a 1000-byte override; receipt exits 0; nothing owed, as the entry itself records.
+
 **DEFECT, AND IT IS A CHANNEL WITH NO BOUND RATHER THAN A FILE THAT GOT LONG.** A plan under
 `docs/plans/` is a HANDOFF that also accumulates a retrospective record. The instruction does
 not grow; the record grows every batch. Nothing in this repo bounded that, and
@@ -3731,3 +3733,322 @@ of the words sits in a COMMENT exits 9, because the extraction is anchored on th
 close.
 
 verify: sh f=core/fixtures/agent-definition-render/run.sh; [ -f "$f" ] || exit 9; l="$(grep -E '^[[:blank:]]*bad "MUTANT \$label killed by \$want AND by:' "$f")"; [ -n "$l" ] || exit 9; case "$l" in *'$out'*|*'rc='*|*'observed'*) exit 0 ;; esac; exit 1
+
+## BL-262 — Check 22 has four FAIL routes into one exit code and only the tier-mismatch route named the clearing path, so a citation miss read as a gate that fails forever
+
+**DEFECT.** Filed from the consumer candidate
+`PC-S312-CHECK22-NO-CLEARING-PATH-FOR-19B-CITATION-MISS`, which was UNCOMMITTED in that
+consumer's working tree when it was read — `git show HEAD:` lacks it, so it carries no `-S`
+date and its id set was derived rather than taken from a commit message.
+
+**FOUR ROUTES, ONE EXIT, ONE NAMED REMEDY.** `core/scripts/validate-spawn-ledger.sh`
+increments the same `VIOL` counter — the one that exits 1 — from four places: an unreadable
+role file (`role_file_readable=false`, Rule 19's fail-closed arm), a missing Rule 19(b)
+role-contract citation (`role_contract_cited=false`), a Rule 19(a) tier mismatch, and an
+effort mismatch where the row's `effort_bound` disagrees with the effort the teammate's own
+transcript records. Driven on a seeded ledger carrying one row per class, the base validator
+at `86c30a49` emits **4** `FAIL:` lines and **1** of them names the four-arm disposition,
+against a negative control of **0** for a token no row carries. The step file matched: its
+disposition section was headed "Dispositioning a Rule 19(a) violation that already happened",
+its clearing sentence read "A recorded tier mismatch is CLEARED when all four hold", and arm
+4's remediations — "redone on the pinned tier", "verified against its source" — are remedies
+for a WRONG TIER. Redoing a spawn on the pinned tier fixes nothing for a citation miss: the
+model may have been right all along. So three of the four routes read as routes with no
+consumer action, which is the defect the clearing path was written to prevent — the step file
+says so itself, one paragraph up.
+
+**THE CONSUMER'S OWN RECEIPT IS A FALSE PASS, AND NOT FOR THE REASON ITS COUNTS SUGGEST.** The
+candidate's receipt windows the disposition section with `awk` and asks whether it carries
+`19(b)` or `citation`; exit 0 means STILL LIVE in that ledger's polarity. It reads 0 — STILL
+LIVE — at base AND at tip, and it read 0 before the defect existed, because arm 3 of the
+clearing procedure contains the sentence "the corpus is where its citation lives", which is
+about the OPERATOR-AUTHORIZATION citation that `validate-escalation-resolution.sh` verifies,
+not about a Rule 19(b) role-contract citation. Measured on the consumer's INSTALLED copy at
+`.claude/skills/ai-dlc/steps/gate-validation.md`: the window scores **1** for
+`tier mismatch|19(a)` and **1** for `19(b)|citation`, against a negative control of **0** in
+the same invocation — and the single `19(b)|citation` hit is that arm-3 line. The candidate's
+derived blocks reporting 6 and 0 do not reproduce against that copy; the receipt's rc=0 is a
+word collision, and no claim is made here about which copy produced 6 and 0.
+
+**THE EFFORT ROUTE IS PROBE-ONLY, AND THAT IS A SECOND SUBJECT.** `--probe` is what makes the
+effort arm reachable at all, and the invocation Check 22 publishes does not pass it, so a gate
+running the published command reaches three of the four routes. The step file now records that
+the route exists, that it is probe-only, and that the four arms clear it when it fires. Whether
+the published invocation should be widened to pass `--probe` is not decided here — see
+**BL-263**, which carries it as a NOTE.
+
+**THE CARRIERS, AND NO INVARIANT BINDS ANY OF THEM.** Four files restate the clearing path's
+scope: the step file's exit-1 sentence and disposition section
+(`core/skills/ai-dlc/steps/gate-validation.md`), the validator's four FAIL messages and its two
+header comments (`core/scripts/validate-spawn-ledger.sh:30` and `:99`, which scoped the path to
+a tier mismatch), and two sites in `core/skills/ai-dlc/enforcement-map.yaml` — the Check 22
+posture/why text and the second `call_site`'s "clearing a recorded Rule 19(a) mismatch". A
+search of `scripts/`, `core/scripts/` and `core/fixtures/` for `four-arm disposition` outside
+the validator returns **0**, against a control of **5** hits inside it; `check-22-spawn-ledger`
+scores **0** for the token against a control of **6** for `validate-spawn-ledger`. So nothing
+joins the four copies and a fifth route added later reaches exit 1 with no remedy sentence and
+no gate saying so. **A binding is NOT built in this release.** The fixture arm added alongside
+this entry derives the routes BEHAVIOURALLY — one seeded row per class, each class's FAIL token
+and the disposition sentence asserted in the same run — which catches a route that loses its
+sentence but is not an invariant over the four prose copies. Building that join is separate
+work.
+
+**CARDINALITY IS NOW EXPLICIT, BECAUSE THE MOTIVATING CASE NEEDED IT.** Arm 1 previously read
+"One entry clears one spawn", which a consumer facing ten uncited rows has to read as ten
+entries. It now reads "an entry clears exactly the spawns it names, and it may name several" —
+a waiver naming no spawn still clears nothing. The consumer's filed escalation
+`S312-GATE3-CHECK22-RULE19B` (HARD_BLOCK) is one entry naming ten spawns verbatim, which is the
+case the old wording could not resolve either way.
+
+**THE RECEIPT DRIVES THE SHIPPED VALIDATOR AND ASSERTS LIVENESS BEFORE NAMING.** Grepping the
+step file for a scope sentence is closable by prose, and grepping the validator for the
+disposition string is satisfied by a comment. So the receipt builds a throwaway dist under
+`mktemp -d`, seeds a four-row ledger — one row per `VIOL` class — plus a probe file and a
+settings.json, runs `core/scripts/validate-spawn-ledger.sh` from the tree under test, and
+**REFUSES with exit 9** unless the run exits 1 AND all four class tokens
+(`role_file_readable=false`, `role_contract_cited=false`, `Rule 19(a) tier`, `records effort=`)
+appear. Only past that gate does it compare the count of `FAIL:` lines against the count of
+lines naming the four-arm disposition, and require the step file to carry the scope sentence.
+A build that DELETES a FAIL route therefore scores REFUSE, never FIXED — which a receipt
+asking only "does every FAIL line name the disposition" cannot do, since deleting the route
+that does not name it satisfies that question perfectly.
+
+**POLARITY, this ledger's and not `ledger-reverify`'s:** exit **0** means the fix is PRESENT,
+**1** means it still reproduces, **9** is a precondition or a broken seed. Scored against six
+builds, each asserted to have applied and the two differential sides asserted to differ before
+the comparison was read:
+
+| Build | Exit | Reading |
+|---|---|---|
+| tip `9cd22c2b` | **0** | FIXED — 4 of 4 FAIL lines name the disposition, scope sentence present |
+| base `86c30a49` | **1** | STILL LIVE — 4 FAIL lines, 1 named, no scope sentence |
+| 19(b)-only (base validator, citation arm alone names the path) | **1** | STILL LIVE |
+| prose-only (base validator, tip step file) | **1** | STILL LIVE |
+| 19(b)-arm-deleted (tip validator, `cited` branch disabled) | **9** | REFUSE on liveness, never FIXED |
+| stricter-than-correct (tip validator, step file enumerating FIVE classes) | **0** | FIXED — the receipt binds a floor, not an exact count |
+
+**WHAT THE RECEIPT ACQUITS.** It does not check that arm 4's remediation is worded for each
+class — that is prose about content and it is the weaker half of this change, asserted only by
+the scope sentence's presence. It also cannot see a fifth `VIOL` route added later: its four
+class tokens are hand-written, so a new route arrives outside the population and the receipt
+stays green. The FIXTURE arm is where that gap is closed, and reading this receipt's zero as
+coverage of it would be reading a floor as a ceiling.
+
+**FILED AND FIXED IN THE SAME RELEASE.** The fix landed at `9cd22c2b` on the branch that
+carries this entry; the release annotation is written after the release commit exists.
+
+verify: sh V=core/scripts/validate-spawn-ledger.sh; G=core/skills/ai-dlc/steps/gate-validation.md; [ -f "$V" ] && [ -f "$G" ] || exit 9; command -v jq >/dev/null 2>&1 || exit 9; d="$(mktemp -d)" || exit 9; r='"v":1,"sprint":900,"role":"dev","model_requested":"sonnet","definition_bound":true,"definition_stale":false'; { printf '{%s,"name":"r-unreadable","model_bound":"sonnet","role_contract_cited":true,"role_file_readable":false,"effort_bound":"high","tool_use_id":"toolu_U"}\n' "$r"; printf '{%s,"name":"r-uncited","model_bound":"sonnet","role_contract_cited":false,"role_file_readable":true,"effort_bound":"high","tool_use_id":"toolu_C"}\n' "$r"; printf '{%s,"name":"r-mismatch","model_bound":"opus","role_contract_cited":true,"role_file_readable":true,"effort_bound":"high","tool_use_id":"toolu_M"}\n' "$r"; printf '{%s,"name":"r-effort","model_bound":"sonnet","role_contract_cited":true,"role_file_readable":true,"effort_bound":"high","tool_use_id":"toolu_E"}\n' "$r"; } > "$d/led.jsonl"; p='"v":3,"sprint":900,"model":"claude-sonnet-5","transcript_version":"2.1.269","peak_tokens":1,"turns":1,"compactions":0,"duration_s":1'; { printf '{%s,"agent_id":"aU","tool_use_id":"toolu_U","effort":"high"}\n' "$p"; printf '{%s,"agent_id":"aC","tool_use_id":"toolu_C","effort":"high"}\n' "$p"; printf '{%s,"agent_id":"aM","tool_use_id":"toolu_M","effort":"high"}\n' "$p"; printf '{%s,"agent_id":"aE","tool_use_id":"toolu_E","effort":"low"}\n' "$p"; } > "$d/probe.jsonl"; printf '{"aiDlcModels":{"opus":"claude-opus-5[1m]","sonnet":"claude-sonnet-5"},"aiDlcRoles":{"dev":{"model":"sonnet","effort":"high"}}}\n' > "$d/s.json"; o="$(bash "$V" --ledger "$d/led.jsonl" --sprint 900 --settings "$d/s.json" --probe "$d/probe.jsonl" 2>&1)"; rc=$?; [ "$rc" -eq 1 ] || exit 9; for t in 'role_file_readable=false' 'role_contract_cited=false' 'Rule 19(a) tier' 'records effort='; do case "$o" in *"$t"*) ;; *) exit 9 ;; esac; done; nf="$(grep -c '^FAIL: \[' <<<"$o")" || nf=0; nn="$(grep -c 'four-arm disposition' <<<"$o")" || nn=0; sc="$(grep -ci 'clear EVERY class' "$G")" || sc=0; [ "$nf" -ge 4 ] && [ "$nn" -ge "$nf" ] && [ "$sc" -ge 1 ] && exit 0; exit 1
+## BL-260 — the dispatch guard's effort prompt line is advisory prose with no verified effect, and the only fixture covering it checks that the sentence was appended
+
+**NOTE.** Filed from the consumer candidate
+`PC-S312-EFFORT-PROMPT-LINE-HAS-NO-VERIFIED-BEHAVIORAL-EFFECT`, read from the consumer's sprint
+branch ledger (not yet on its `main`). Not fixed here.
+
+`core/hooks/ai-dlc-dispatch-guard.sh:387-414` builds `EFFORT_LINE` — "Your configured reasoning
+effort for this role is `${PIN_EFFORT}`. Operate at that level." — and `:642-646` appends it to the
+dispatch prompt whenever `NEEDS_EFFORT` is true. The hook's own comment at `:376-381` says this is
+the WEAK channel: the `Agent` tool has no effort parameter, and the BINDING channel is the rendered
+`.claude/agents/<role>.md` definition's `effort:` key. The line exists for the dispatch that has no
+usable definition. Nothing in this tree measures whether a teammate that received the sentence
+behaves differently from one that did not: `core/fixtures/dispatch-model-guard/run.sh` carries
+`expect_effort` assertions (6 sites) and every one asserts the sentence's PRESENCE in the outgoing
+prompt.
+
+**The consumer's proposed disposition is to decommission the line** — drop `EFFORT_LINE`,
+`NEEDS_EFFORT` and the append branch, and the `expect_effort` assertions with them — so a role
+dispatched with no current definition carries no effort signal rather than an unverified one.
+
+**Why this is a NOTE and not yet a fix.** The claim "no verified behavioural effect" is true and
+unmeasurable from this repo, which is the same status as every other prompt sentence this
+distribution emits; deleting the fallback removes the only channel on the no-definition path and
+that path is what `BL-240`'s gap (a configured effort recorded but never reaching the API call)
+already covers from the other side. Whether an advisory sentence is worth its bytes on that path is
+a design ruling, not a measurement, and the entry records it for the operator rather than deciding
+it. The candidate also names `PC-S303-EFFORT-BINDING-COMMANDS-A-SLASH-COMMAND-THAT-RESOLVES-TO-NOTHING`'s
+fix as the origin of the current wording, which is correct (`:390-401`).
+
+**Receipt.** Closes when the line is gone from the hook, or when the tree carries a fixture arm
+that measures the teammate's behaviour rather than the prompt string. The second half is not
+mechanically distinguishable from the first by a one-liner, so the receipt keys on the first and a
+hand review is owed if a behavioural arm ever lands instead.
+
+verify: sh h=core/hooks/ai-dlc-dispatch-guard.sh; [ -f "$h" ] || exit 9; LC_ALL=C grep -qF 'EFFORT_LINE="Your configured reasoning effort for this role' "$h" && exit 1; exit 0
+
+## BL-261 — the `UserPromptSubmit` capture hook missed one session's opening prompt entirely, and nothing detects a session with zero captured requests
+
+**DEFECT.** Filed from the consumer candidate
+`PC-S312-USERPROMPTSUBMIT-HOOK-MISSES-SESSION-OPENING-PROMPT`, read from the consumer's sprint
+branch ledger (not yet on its `main`). Consumer receipt is `verify: manual`. Not fixed here.
+
+On the reference consumer, one session's opening message (921 bytes, the `/ai-dlc` invocation
+carrying a sprint's full scope) was never written to `_bmad-output/operator-requests-history.md`
+by `core/hooks/ai-dlc-pause.sh`. The consumer's control: three other sessions active in the same
+window had every prompt captured, including their own opening turns. The session itself ran (its
+tool calls are logged elsewhere from the same minute). Downstream, `route.md` Step 6 requires
+`user_request_cite` to resolve to a hook-written entry, and Check 33
+(`validate-request-coverage.sh`) reported `ERROR: no captured request carries SHA256 <hash>` rather
+than a PASS or a legible FAIL, several pipeline steps after the miss.
+
+**What this tree establishes.** The capture sits ABOVE the snapshot gate on purpose
+(`ai-dlc-pause.sh:188-192`) precisely so the first message of a project is kept, and its predicate
+is the prompt being non-empty once `<system-reminder>` blocks are stripped (`:167`, `:206`). So a
+first-turn miss on this code is not the gate; the candidate classes the consumer names — the
+harness delivering the opening message before the hook is attached on a resume-from-compact or
+CLI-with-initial-prompt path, or an ordering race in the session-start chain — are all OUTSIDE the
+hook's own control flow and cannot be reproduced from this repo. One instance, no reproduction,
+no root cause: the miss is recorded as MEASURED ONCE on the consumer and not as understood.
+
+**What is owed and is buildable here.** The second half of the consumer's proposal: a session with
+ZERO captured requests is a detectable state and today is silent. Check 33's `ERROR:` is the first
+reader that notices, and it notices at a gate several steps in. A `SessionStart`-side or
+first-gate-side arm that asserts the current session id appears at least once in
+`operator-requests-history.md` before routing proceeds would turn a silent miss into a named one,
+independent of root-causing the harness path. Site it where the routing record is written, since
+that is the reader that consumes the cite.
+
+**Receipt.** A detector for the zero-captured state, driven: seed a requests file carrying entries
+for two OTHER session ids and none for the current one; the shipped arm must report it. Until an
+arm exists, the receipt returns 1 with nothing measured — stated here so a `STILL-LIVE` row is read
+as "no detector", not as "the miss reproduced".
+
+verify: sh d=core/scripts; [ -d "$d" ] || exit 9; f=$(grep -lE 'operator-requests-history\.md' "$d"/validate-request-coverage.sh 2>/dev/null); [ -n "$f" ] || exit 9; LC_ALL=C grep -qiE 'zero captured|no captured request for (this|the current) session' "$f" && exit 0; exit 1
+
+## BL-263 — Check 22's effort-mismatch route is unreachable under the invocation the step file publishes
+
+**NOTE.** Found by the batch-118 contract adversary while attacking the clearing-path fix for
+`PC-S312-CHECK22-NO-CLEARING-PATH-FOR-19B-CITATION-MISS`. Not fixed here.
+
+`core/scripts/validate-spawn-ledger.sh` has four routes into its `VIOL` counter. The effort route
+(`records effort=`, near `:556`) is gated on `PROBE_READABLE` (`:379-382`), which is true only when
+`--probe <file>` is passed and readable; without it `probe_effort` returns empty and the row lands
+in `EFFORT_PENDING`, never in `VIOL`. The invocation `core/skills/ai-dlc/steps/gate-validation.md`
+publishes for Check 22 (`:1487-1490`) passes `--ledger`, `--sprint` and `--settings` and no
+`--probe`, and the step documents the effort arm nowhere (`effort_bound`, `effort mismatch` and
+`records effort` all return 0 against a positive control of 2 for `role_contract_cited`). So the
+route exists in the validator, is seeded in `core/fixtures/check-22-spawn-ledger` with `--probe`,
+and cannot fire for a consumer running the gate's own command. A clearing sentence written into its
+FAIL message is correct and vacuous today.
+
+**What is owed.** Either the published invocation passes `--probe` (making the route live at the
+gate, with the step file documenting what the probe file is and where the pipeline writes it), or
+the step file says in Check 22 that the effort arm is probe-only and names the reader that does
+pass it. The batch-118 fix takes the second, weaker form in one sentence; this entry holds the
+first.
+
+verify: sh f=core/skills/ai-dlc/steps/gate-validation.md; [ -f "$f" ] || exit 9; LC_ALL=C awk '/validate-spawn-ledger\.sh/{p=1} p && /--settings/{print; exit}' "$f" | grep -q . || exit 9; LC_ALL=C awk '/validate-spawn-ledger\.sh \\?$/{p=1} p{b=b $0 "\n"} p && /--settings/{exit} END{printf "%s", b}' "$f" | LC_ALL=C grep -qE -- '--probe' && exit 0; exit 1
+
+## BL-259 — step 2 derives the covering fixture set as `core/fixtures/<dir>/` and its own runner refused every argument carrying a slash, so a correct set produced a total refusal
+
+**DEFECT.** Filed from the consumer candidate
+`PC-S312-STEP-2-SPELLS-THE-DERIVED-FIXTURE-SET-IN-A-FORM-ITS-OWN-RUNNER-REFUSES`.
+
+**TWO HALVES, EACH RIGHT ON ITS OWN TERMS, AND THE PAIR WEDGED THE CYCLE.**
+`core/skills/ai-dlc-update/SKILL.md` step 2 spells its fixture term `core/fixtures/<dir>/` —
+that is the form the reader is told to grep for and the form the derivation produces — and the
+invocation line beside it reads `<dist> <base> <theirs> <consumer> <fixture>...` without saying
+`<fixture>` is a bare NAME. `reconcile/self-update-fixtures.sh` refused any argument carrying
+whitespace or a slash with `not a fixture NAME`, exit 2, nothing tested. An operator following
+the step therefore passed exactly what the runner was built to reject.
+
+**THE COST IS MEASURED ON THE REFERENCE CONSUMER, IN ITS OWN COMMITTED LOG.** The refusal block
+in `_bmad-output/ai-dlc-update/self-update-fixtures-20260916T004845Z.md` runs **25 lines**
+counting its blank terminator, of which **24** are `core/fixtures/<name> — not a fixture NAME`
+rows, each naming a real shippable fixture — against a negative control of **0** for a token
+that log does not carry. So the whole derived set was refused, and the second attempt with
+`sed 's#^core/fixtures/##'` went 24 green: the set was right the entire time.
+
+**AND THE DIAGNOSTIC NAMED ONE OF TWO LIVE CAUSES.** The remedy beside those rows sent the
+reader to the zsh joined-list cause — "an unquoted `$FIX` holding a newline-joined list arrives
+as ONE argument" — which is a DIFFERENT bug with the same symptom, and not the one they had.
+That cause is live too and is not hypothetical: a second committed log
+(`20260911T132414Z`) carries **1** refusal row that IS the joined list, against the same control
+of **0**. One sentence served two causes whose remedies are opposite — one is fixed in the
+caller's quoting, the other in the argument itself — so a reader of a path-form row who
+word-split their variable learned nothing and changed nothing.
+
+**WHAT THE FIX DOES.** The two path prefixes are normalised to the bare name, matched by a
+`[A-Za-z0-9._-]` CHARACTER CLASS and never by a `case core/fixtures/*)` glob: `*` matches a
+space and a newline, so a glob collapses a fifteen-name joined list to its last name and runs
+ONE fixture green — the acquitting direction of the very defect the shape probe exists to catch.
+The positionals are rewritten by ROTATION over a counted loop, never `set -- $list`, because
+word-splitting the positionals is exactly what the joined-list refusal detects the absence of
+and `set -f` does not save it (the split is IFS, not glob). The rewrite is sited AFTER `$LOG`
+exists and BEFORE the coverage join, because the join's membership test reads `$*` and the
+fixture loop reads the name as a path component — a normalisation below either one convicts a
+COMPLETE path-form set as incomplete or reports MISS on every fixture it was handed, and one
+sited above `$LOG` dies on an unbound variable. The refusal row now names WHICH of four shapes
+it saw and keeps the ORIGINAL argument as its subject, because `core/fixtures/` normalises to
+the empty string and a row opening with a space loses its subject to the log's readers. Each
+rewrite is written as a `NORMALISED:` line ABOVE any `COVERAGE:` block, outside the
+`COVERAGE:`-to-blank-line window the log's readers parse.
+
+**THE CONSUMER'S OWN RECEIPT IS SUPERSEDED, NOT SATISFIED, AND IT DOES NOT FLIP.** It asks
+whether `SKILL.md` contains `core/fixtures/<dir>/` AND the runner contains `not a fixture NAME`;
+in that ledger's polarity exit 0 means STILL LIVE. Driven at base `7f33c97b` and at tip
+`ecc0bb74`, both strings are present at both revisions and it returns **0** at both, against a
+negative control of **0** for a token neither file carries. Both strings are SUPPOSED to survive
+a correct fix: the descriptive prose is what the derivation greps for, and `foo/bar` is still
+refused under that exact phrase. The receipt keys on the co-occurrence of two true strings
+rather than on the behaviour, so its verdict is unmovable by any correct repair. The replacement
+binds on the EMISSION — drive the runner and read its verdict.
+
+**THE ONLY INVOCATION CARRIER IS `SKILL.md:477`.** `core/skills/ai-dlc-update/steps/` does not
+exist for this skill, so there is no step-file glob to check; the grep for the invocation string
+across `core/` returns that one line, against a control of 5 hits for the script's name in the
+same file. The descriptive prose at the two derivation sites keeps the directory form on
+purpose, because that is the form the derivation greps for.
+
+**THE RECEIPT DRIVES THE SHIPPED RUNNER AND NEVER GREPS PROSE.** It builds a throwaway
+distribution and consumer under `mktemp -d` — a git repo whose `base..theirs` range TOUCHES two
+named fixtures, a consumer tree carrying `tests/fixtures/<name>/run.sh`, and a seeded gate
+record for the range, without which the runner refuses before reaching any of this. It then
+runs four invocations and REFUSES with exit 9 unless the bare-name control run exits 0 having
+logged three `===== FIXTURE` sections — a precondition arm, so a runner that cannot run the
+suite at all scores REFUSE rather than STILL LIVE. Past that gate: the complete set in PATH
+form (mixed `core/fixtures/<n>`, `core/fixtures/<n>/` and `tests/fixtures/<n>`) must exit 0 and
+produce a section-name list byte-equal to the bare-name run's; a joined list in one argument
+must exit 2 naming whitespace; and `foo/bar` must exit 2 with a `not a fixture NAME` row that
+does NOT send the reader to the whitespace remedy.
+
+**POLARITY, this ledger's and not `ledger-reverify`'s:** exit **0** means the fix is PRESENT,
+**1** means it still reproduces, **9** is a precondition or a broken seed. Every build below was
+asserted to differ — thirteen distinct `md5` digests across thirteen runner copies — and each
+was run from a tree carrying the tip runner's reconcile siblings, so the only variable is the
+runner. The ARM each build fails at is reported beside its exit, because two builds failing for
+a reason NEITHER owns is a non-discriminating null:
+
+| Build | Exit | Arm it fails at | Reading |
+|---|---|---|---|
+| tip `ecc0bb74` and later | **0** | — | FIXED |
+| base `7f33c97b` | **1** | path form exits 2 | STILL LIVE |
+| naive (`core/fixtures/*` glob, `##*/`) | **1** | joined list acquitted, no whitespace row | STILL LIVE — runs ONE fixture green |
+| coreonly (strips `core/` only) | **1** | path form exits 2 | STILL LIVE |
+| corefx (strips `core/fixtures/` only) | **1** | `tests/fixtures/<n>` exits 2 | STILL LIVE |
+| notrail (no trailing slash) | **1** | `core/fixtures/<n>/` exits 2 | STILL LIVE |
+| after (below the shippability arm) | **1** | path form exits 2 | STILL LIVE |
+| midjoin (below the coverage join) | **1** | complete path set convicted incomplete | STILL LIVE |
+| prerun (below the join, above the loop) | **1** | path form exits 2 | STILL LIVE |
+| early (above `$LOG`) | **1** | dies `LOG: unbound variable`, rc=1 | STILL LIVE |
+| looplocal (`$d`-local, `$@` untouched) | **1** | path form exits 2 | STILL LIVE |
+| anyslash (strips any slash) | **1** | joined list acquitted | STILL LIVE — kills the `foo/bar` refusal |
+| correct2 (normalises, keeps one refusal sentence) | **1** | `foo/bar` still sent to the zsh remedy | STILL LIVE on the SECOND half |
+| stricter-than-correct (tip, refusing `tests/fixtures/`) | **1** | path form exits 2 | STILL LIVE — and this is CORRECT, see below |
+
+**THE STRICTER BUILD'S 1 IS A TRUE VERDICT, NOT A FALSE POSITIVE.** `tests/fixtures/<name>` is
+the form the CONSUMER's own tree spells — `map_consumer()` maps `core/fixtures/` to
+`tests/fixtures/` — so an operator reading the consumer-side path off their own disk produces
+exactly it. A build refusing that form leaves half the defect live, and the receipt is right to
+say so. A receipt that accepted it would be accepting two candidate fixes and establishing
+neither.
+
+**WHAT THE RECEIPT ACQUITS.** It does not read the `NORMALISED:` log lines, so a build that
+normalises correctly and logs nothing scores FIXED; the log line's placement outside the
+`COVERAGE:` window is asserted by the fixture, not here. It does not exercise the empty-name
+case (`core/fixtures/` alone), nor the newline form of the joined list — both are fixture arms.
+And its four shapes are hand-written, so a fifth accepted prefix added later arrives outside its
+population. Reading this zero as coverage of the whole change is reading a floor as a ceiling.
+
+**FILED AND FIXED IN THE SAME RELEASE.** The fix landed at `ecc0bb74` on the branch that carries
+this entry.
+
+verify: sh R=core/skills/ai-dlc-update/reconcile; F="$R/self-update-fixtures.sh"; [ -f "$F" ] && [ -f "$R/preclassify.sh" ] || exit 9; command -v git >/dev/null 2>&1 || exit 9; d="$(mktemp -d)" || exit 9; D="$d/dist"; C="$d/cons"; O="$C/_bmad-output/ai-dlc-update"; mkdir -p "$D/core/scripts" "$D/core/git-hooks" "$O" "$C/.githooks" "$C/scripts/ai-dlc" "$C/.claude" || exit 9; for f in touched-shippable touched-named green-one; do mkdir -p "$D/core/fixtures/$f" "$C/tests/fixtures/$f" || exit 9; printf 'at base\n' > "$D/core/fixtures/$f/run.sh"; printf '#!/usr/bin/env bash\nexit 0\n' > "$C/tests/fixtures/$f/run.sh"; done; printf 'at base\n' > "$D/core/scripts/machinery.sh"; printf '#!/usr/bin/env bash\nbash scripts/ai-dlc/machinery.sh\n' > "$D/core/git-hooks/pre-push"; printf '#!/usr/bin/env bash\nexit 0\n' > "$C/.githooks/pre-push"; git -c init.templateDir= init -q "$D" >/dev/null 2>&1 || exit 9; g() { git -C "$D" -c user.name=r -c user.email=r@invalid -c commit.gpgsign=false "$@" >/dev/null 2>&1; }; g add -A && g commit -q --no-verify -m base || exit 9; B="$(git -C "$D" rev-parse HEAD)" || exit 9; printf 'at theirs\n' > "$D/core/fixtures/touched-shippable/run.sh"; printf 'at theirs\n' > "$D/core/fixtures/touched-named/run.sh"; printf 'at theirs\n' > "$D/core/scripts/machinery.sh"; g add -A && g commit -q --no-verify -m theirs || exit 9; T="$(git -C "$D" rev-parse HEAD)" || exit 9; [ -n "$B" ] && [ -n "$T" ] && [ "$B" != "$T" ] || exit 9; git -C "$D" diff --name-only "$B" "$T" -- core/fixtures/ | grep -q 'touched-shippable' || exit 9; { printf '# base-sha: %s\n# theirs-sha: %s\n# input: .githooks/pre-push\t%s\tcore/git-hooks/pre-push\n\n# verdict: OK\n' "$B" "$T" "$(git hash-object "$C/.githooks/pre-push")"; } > "$O/self-update-gate-20260101T000000Z.md" || exit 9; run() { n="$1"; shift; bash "$F" "$D" "$B" "$T" "$C" "$@" >"$d/o$n.out" 2>"$d/o$n.err"; rc=$?; LC_ALL=C sed -n 's/^===== FIXTURE \(.*\) =====$/\1/p' "$(LC_ALL=C sed -n 's/^log: //p' "$d/o$n.out" | tail -1)" 2>/dev/null | LC_ALL=C sort > "$d/s$n"; echo "$rc"; }; r2="$(run 2 touched-shippable touched-named green-one)"; [ "$r2" = 0 ] && [ "$(grep -c . "$d/s2")" -eq 3 ] || exit 9; r1="$(run 1 core/fixtures/touched-shippable core/fixtures/touched-named/ tests/fixtures/green-one)"; r3="$(run 3 'core/fixtures/touched-shippable core/fixtures/green-one')"; r4="$(run 4 foo/bar)"; [ "$r1" = 0 ] || exit 1; cmp -s "$d/s1" "$d/s2" || exit 1; [ "$r3" = 2 ] && [ "$r4" = 2 ] || exit 1; LC_ALL=C grep -q 'not a fixture NAME.*whitespace' "$d/o3.err" || exit 1; LC_ALL=C grep -q 'not a fixture NAME' "$d/o4.err" || exit 1; LC_ALL=C grep -q 'not a fixture NAME.*whitespace' "$d/o4.err" && exit 1; exit 0

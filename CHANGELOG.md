@@ -15,6 +15,176 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.584.0] - 2026-09-16
+
+### PC-S312-STEP-2-SPELLS-THE-DERIVED-FIXTURE-SET-IN-A-FORM-ITS-OWN-RUNNER-REFUSES
+
+**`self-update-fixtures.sh` now accepts the fixture-path form step 2 derives the set in.** Step
+2 spells its fixture term `core/fixtures/<dir>/` — that is what its derivation greps for — and
+the runner refused every argument carrying a slash, so following the step produced a total
+refusal on a set that was correct. Your own committed log records the cost: the
+`20260916T004845Z` run's refusal block is 25 lines counting its blank terminator, 24 of them
+`core/fixtures/<name> — not a fixture NAME` rows, each naming a real shippable fixture. The
+retry with `sed 's#^core/fixtures/##'` went 24 green, which is the proof the set was right.
+
+**What the runner accepts now.** `core/fixtures/<name>`, `core/fixtures/<name>/`,
+`tests/fixtures/<name>` and `tests/fixtures/<name>/` are normalised to the bare name before
+anything reads the argument list. `tests/fixtures/` is included because that is where the
+consumer's own tree keeps them, so a path read off your disk works too.
+
+**What it still refuses, and why that has not moved.** A single argument holding more than one
+name is still exit 2 — under zsh an unquoted variable holding a newline-joined list arrives as
+ONE argument, and accepting it would run the last name alone and report green. The match is a
+`[A-Za-z0-9._-]` character class rather than a `core/fixtures/*` glob for exactly that reason:
+`*` matches a space and a newline. A deeper path, a prefix that is neither of the two, and a
+prefix with no name after it are all still refused.
+
+**What the refusal row says.** It now names WHICH of four shapes it saw — empty, whitespace,
+the fixture prefix with no single directory under it, or some other slash form — and keeps your
+ORIGINAL argument as its subject. Previously one sentence covered every case and sent every
+reader to the zsh word-splitting remedy, which is the right remedy for a joined list and useless
+for a path. Both causes are live in your logs: the `20260911T132414Z` run carries the joined-list
+row, the `20260916T004845Z` run carries twenty-four path rows.
+
+**What the log records.** Every rewrite is written as a `NORMALISED: <argument> -> <name>` line,
+placed ABOVE any `COVERAGE:` block so it lands outside the window a log reader parses. A reader
+of the committed log can therefore see what was passed and what actually ran.
+
+**What the step says.** `SKILL.md` step 2 says at the invocation line, and where it tells you to
+pass the set, that the runner takes bare directory names and also accepts the path form the step
+just derived, one per argument. The descriptive prose keeps the directory form, because that is
+what the derivation greps for.
+
+**Your own receipt for this candidate is SUPERSEDED, not satisfied.** It asks whether `SKILL.md`
+contains `core/fixtures/<dir>/` AND the runner contains `not a fixture NAME`:
+
+```
+grep -qF 'core/fixtures/<dir>/' SKILL.md \
+  && grep -qF 'not a fixture NAME' self-update-fixtures.sh && exit 0   # 0 = still live
+```
+
+Driven at base and at tip, that returns 0 — STILL LIVE — at both. Both strings are supposed to
+survive the fix: the descriptive prose is what the derivation reads, and `foo/bar` is still
+refused under that exact phrase. The receipt keys on two true strings co-occurring rather than
+on behaviour, so no correct repair can flip it.
+
+**A replacement receipt keyed on driving the runner.** Build a throwaway distribution and
+consumer, seed the gate record for the range, and compare a path-form run against a bare-name
+one:
+
+```
+bash reconcile/self-update-fixtures.sh "$D" "$B" "$T" "$C" \
+     core/fixtures/<a> core/fixtures/<b>/ tests/fixtures/<c>   # require rc=0
+bash reconcile/self-update-fixtures.sh "$D" "$B" "$T" "$C" <a> <b> <c>   # require rc=0
+# require the two logs' `===== FIXTURE` section names to be EQUAL
+bash reconcile/self-update-fixtures.sh "$D" "$B" "$T" "$C" "<a> <b>"     # require rc=2, whitespace
+bash reconcile/self-update-fixtures.sh "$D" "$B" "$T" "$C" foo/bar       # require rc=2, NOT whitespace
+```
+
+Assert the bare-name run works FIRST. Without that precondition, a runner that cannot run the
+suite at all satisfies "the path form was refused" perfectly. Compare the section NAMES rather
+than the summary counts: a normalisation applied per-loop-iteration leaves the argument list
+alone and reports MISS on every fixture while the counts still line up.
+
+**THE BOOTSTRAPPING HAZARD, STATED PLAINLY: THE PULL THAT DELIVERS THIS FIX IS STILL REFUSED ON
+THE PATH FORM.** Your installed runner is the one that executes the self-update carrying the
+fix — 0.581.0 at the time of writing — so on THIS pull the old refusal is what runs. Pass bare
+names for this one, or strip the prefix as you did before. The fix takes effect on the pull
+AFTER the one that installs it. Nothing here protects the delivering pull, and no change to this
+release could: a fix to a bootstrapping step can never be delivered by that step.
+
+### BL-256 — the plan-channel ceiling, closed incidentally
+
+`docs/backlog.md`'s BL-256 landed at v0.580.0 and is annotated as such. No work was owed in this
+release; the entry's own text says so and its receipt exits 0. It is recorded here because the
+annotation happened on this branch, not because anything shipped for it.
+
+### Filed
+
+Three entries filed in `docs/backlog.md` and deliberately NOT fixed in this release:
+
+- **BL-260** (NOTE) — the dispatch guard's effort prompt line is advisory prose with no verified
+  behavioural effect, and the only fixture covering it asserts the sentence was appended. Whether
+  an unverified advisory sentence is worth its bytes on the no-definition path is a design ruling
+  rather than a measurement, so the entry records it for the operator.
+- **BL-261** (DEFECT) — the `UserPromptSubmit` capture hook missed one session's opening prompt
+  entirely, and nothing detects a session with zero captured requests. One instance, no
+  reproduction: the candidate's classes sit outside the hook's own control flow. What is buildable
+  here is a detector for the zero-captured state, which today is silent until a gate several steps
+  later reports an unresolvable cite.
+- **BL-263** (NOTE) — Check 22's effort-mismatch route is unreachable under the invocation the step
+  file publishes. The route is gated on `--probe`, which Check 22's published command does not
+  pass, so a clearing sentence in its FAIL message is correct and vacuous today. Widening the
+  published invocation is the open half.
+
+### PC-S312-CHECK22-NO-CLEARING-PATH-FOR-19B-CITATION-MISS
+
+**Check 22's four-arm clearing path now covers every violation it fails on, not the tier
+mismatch alone.** `validate-spawn-ledger.sh` reaches exit 1 from four places — an unreadable
+role file, a missing Rule 19(b) role-contract citation, a Rule 19(a) tier mismatch, and an
+effort mismatch — and only the tier-mismatch message told you what to do about it. The other
+three read as routes that fail forever with nothing a consumer can do, which is exactly the
+state the clearing path was written to prevent. If your sprint is blocked on
+`role_contract_cited=false` rows today, the four arms clear them, and the check now says so
+in its own output.
+
+**What changed.**
+
+- `steps/gate-validation.md`: the exit-1 sentence and the disposition section name all four
+  classes. The section heading is "Dispositioning a recorded Rule 19 violation", not a Rule
+  19(a) one. Arm 4's remediation is worded per class — a citation miss or an unreadable role
+  file is remedied by reconstructing the role binding and verifying the output against that
+  role file's contract, not by redoing work on a tier that may already have been correct.
+- Arm 1 reads **"an entry clears exactly the spawns it names, and it may name several"**. One
+  escalation entry naming ten uncited spawns clears those ten. A waiver naming no spawn still
+  clears nothing. The other three arms are unchanged: `**Status:** OVERRIDDEN`, the
+  `validate-escalation-resolution.sh` invocation with all four flags, and a stated remediation
+  naming its artifact.
+- `validate-spawn-ledger.sh`: the 19(b), unreadable-role-file and effort FAIL messages each
+  name Check 22's four-arm disposition the way the 19(a) message always did, and the two
+  header comments stop scoping the path to a tier mismatch. **No exit code, counter or
+  `COUNTS:` line moved** — the change is what the failing run TELLS you, not what it decides.
+- `enforcement-map.yaml`: the Check 22 posture/why text and the second `call_site` stop saying
+  "Rule 19(a)" where they mean any recorded violation.
+
+**The effort route is probe-only.** It fires only when `--probe <telemetry>` is passed, and
+the invocation Check 22 publishes does not pass it — so a gate running the published command
+reaches three of the four routes. The step file now records that, and records that the four
+arms clear the effort route when it does fire. Widening the published invocation is separate
+work and is not in this release.
+
+**Your own receipt for this candidate is SUPERSEDED, not satisfied.** It windows the
+disposition section and asks whether it contains `19(b)` or `citation`:
+
+```
+awk '/A recorded tier mismatch is CLEARED when/,/It does not license the next one/' \
+  gate-validation.md | grep -qi '19(b)|citation' && exit 0
+```
+
+That reads STILL LIVE at both base and tip, and it read STILL LIVE before the defect existed.
+Arm 3 of the clearing procedure carries the sentence "the corpus is where its citation lives",
+about the OPERATOR-AUTHORIZATION citation that `validate-escalation-resolution.sh` verifies —
+a different citation entirely. The receipt keys on a word inside a range this fix does not
+touch, so its verdict is a word collision and never a measurement of the subject.
+
+**A replacement receipt keyed on the EMISSION.** Drive the validator on a ledger row that
+reproduces the class you care about and read the FAIL text it prints, rather than grepping the
+step file:
+
+```
+o="$(scripts/ai-dlc/validate-spawn-ledger.sh --ledger <seeded.jsonl> \
+       --sprint <N> --settings .claude/settings.json 2>&1)"
+nf="$(printf '%s\n' "$o" | grep -c '^FAIL: \[')" || nf=0
+nn="$(printf '%s\n' "$o" | grep -c 'four-arm disposition')" || nn=0
+[ "$nf" -ge 1 ] && [ "$nn" -ge "$nf" ] && exit 1   # ledger polarity: non-zero = absorbed
+exit 0
+```
+
+Assert first that the run still exits 1 and that your class's token
+(`role_contract_cited=false`, `role_file_readable=false`, `Rule 19(a) tier`, `records
+effort=`) is still in the output. Without that liveness arm, a build that DELETES the failing
+route satisfies "every FAIL line names the disposition" perfectly.
+
 ## [0.583.0] - 2026-09-16
 
 **The fixture-suite pole is watched.** Batch 117 of the graph-ledger drain, invoked by a

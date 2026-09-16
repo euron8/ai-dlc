@@ -428,13 +428,17 @@ checks:
           where model_bound gets its value, but a PreToolUse hook cannot run at a
           gate; pin_key() and matches_pin() are now shared byte-identically and I56
           binds them. The adjudication stays llm because the four-arm disposition of
-          a recorded tier mismatch turns on arm 4 (the entry states a remediation and
-          names its artifact), and because story routing needs the sprint's story
+          a recorded Rule 19 violation -- of any class that reaches exit 1, a tier
+          mismatch, a missing 19(b) citation, an unreadable role file or an effort
+          mismatch -- turns on arm 4 (the entry states a remediation and names its
+          artifact), and because story routing needs the sprint's story
           files, which the ledger does not name.
       - site: gate-validation.md Check 22 (clearing condition 3)
         posture: FAILS the gate (exit 0 required) on any spawn the operator is
           asked to have dispositioned
-        why: clearing a recorded Rule 19(a) mismatch asserts an operator
+        why: clearing any recorded Rule 19 violation -- a tier mismatch, a missing
+          19(b) citation, an unreadable role file or an effort mismatch, which are
+          four FAIL routes into one clearing path -- asserts an operator
           authorization, and the same invocation Check 2a makes is what makes that
           assertion unforgeable. Check 2a's row bound this validator and Check 22's
           named it under reads:, so a numbered clearing condition stating an exit
@@ -442,7 +446,7 @@ checks:
     reads:
       - _bmad-output/spawn-ledger.jsonl   # written at dispatch by ai-dlc-dispatch-guard.sh
       - core/team-roles/*.md              # the roles whose config pin each row is compared against
-      - docs/escalations/pending.md       # OVERRIDDEN entry dispositioning a recorded 19(a) violation
+      - docs/escalations/pending.md       # OVERRIDDEN entry dispositioning a recorded Rule 19 violation of any class
     ci_workflow: ~
     fixtures: [tests/fixtures/check-22-spawn-ledger, tests/fixtures/dispatch-model-guard, tests/fixtures/subagent-probe]
 
