@@ -793,16 +793,87 @@ if [ ! -f "$SNAPSHOT_MD" ]; then
   echo "  CHECK 8: SKIP (no ${SNAPSHOT_MD} — no snapshot to read a pipeline position from)"
   SKIPPED_CHECKS="$SKIPPED_CHECKS 8"
 else
+  # TWO LIVE POSITION BULLETS ARE A VERDICT THIS CHECK MUST NOT REACH, and `grep -m1` reached
+  # one anyway. On a section carrying a stale bullet and a live one, first-match-wins PASSes a
+  # correctly-positioned retro in one order and FAILs it in the other -- the same tree, two
+  # verdicts, decided by line order. A gate whose answer depends on which duplicate came first
+  # is not measuring the property it names, so where the section names two DIFFERENT step files
+  # this check SKIPs with a reason naming both.
+  #
+  # AGREEMENT IS NOT A DUPLICATE, AND THIS IS WHERE IT MATTERS MOST. Two bullets naming the SAME
+  # file is the common stale-plus-live state, and it is the state Check 8 exists for -- the
+  # position nobody advanced. Skipping it would un-gate the check's own subject, so the same
+  # basename twice is DECIDED on, exactly as one bullet is.
+  #
+  # THE COUNT GRAMMAR IS BYTE-IDENTICAL IN THREE FILES -- core/hooks/ai-dlc-recover.sh,
+  # core/hooks/ai-dlc-continue.sh and this one -- and I113 in scripts/validate-enforcement-map.sh
+  # binds the three and refuses a fourth. Copies rather than a sourced helper because install.sh
+  # lands core/hooks/ at .claude/hooks/ and core/scripts/ at scripts/ai-dlc/ and I33 fails the
+  # build on walking between them. The key alternation is NOT narrowed for the reason stated
+  # above: measured over 2218 reference-consumer revisions, a strict `current_step_file:` key
+  # un-resolves 94 that the hook's alternation resolves.
+  AI_DLC_POS_SECTION_AWK='/^## Pipeline Position/{f=1;next} /^## /{f=0} f'
+  AI_DLC_POS_BULLET_RE='^[[:space:]]*-[^:]*(current_step_file|current[ _]step|current[ _]phase)[^:]*:'
+  AI_DLC_POS_LABEL_RE='^[^:]*(prior|superseded|retained history)'
+  AI_DLC_POS_BASE_SED='s/[`*,.;:)]*$//; s|^.*/||'
+
+  C8_BULLETS="$(awk "$AI_DLC_POS_SECTION_AWK" "$SNAPSHOT_MD" 2>/dev/null \
+    | grep -iE "$AI_DLC_POS_BULLET_RE" 2>/dev/null \
+    | grep -ivE "$AI_DLC_POS_LABEL_RE" 2>/dev/null)"
+  C8_COUNT=0
+  if [ -n "$C8_BULLETS" ]; then
+    C8_COUNT="$(printf '%s\n' "$C8_BULLETS" | grep -c .)" || C8_COUNT=0
+  fi
+
+  c8_value() { # c8_value <line> -> the step file that line names
+    printf '%s\n' "$1" | sed -E 's/^[^:]*://; s/^[-*[:space:]]+//; s/[[:space:]]*$//' \
+      | sed -E 's/^`([^`]+)`.*/\1/; s/^([^[:space:]]+)[[:space:]]+—.*/\1/' \
+      | sed -E 's/^[`*]+//; s/[`*]+$//'
+  }
+  c8_base() { # c8_base <value> -> its basename, trailing markdown punctuation removed
+    printf '%s\n' "$1" | awk '{print $1}' | sed "$AI_DLC_POS_BASE_SED"
+  }
+
+  C8_DISTINCT=0
+  C8_NAMES=""
+  if [ "$C8_COUNT" -ge 2 ]; then
+    _c8_bases=""
+    while IFS= read -r _c8_line; do
+      [ -n "$_c8_line" ] || continue
+      _c8_b="$(c8_base "$(c8_value "$_c8_line")")"
+      [ -n "$_c8_b" ] || continue
+      case " $_c8_bases " in
+        *" $_c8_b "*) ;;
+        *) _c8_bases="$_c8_bases $_c8_b"; C8_DISTINCT=$((C8_DISTINCT + 1)) ;;
+      esac
+    done <<EOF
+$C8_BULLETS
+EOF
+    C8_NAMES="${_c8_bases# }"
+  fi
+
   # Section-anchored to `## Pipeline Position` (to the next `## `), then the key alternation and
-  # the strip sequence ai-dlc-recover.sh:72-74 publishes, then first token / trailing
-  # punctuation / directory prefix.
-  C8_POS="$(awk '/^## Pipeline Position/{f=1; next} f && /^## /{exit} f' "$SNAPSHOT_MD" 2>/dev/null \
-    | grep -m1 -iE '(current_step_file|current[ _]step|current[ _]phase)' \
-    | sed -E 's/^[^:]*://; s/^[-*[:space:]]+//; s/[[:space:]]*$//' \
-    | sed -E 's/^`([^`]+)`.*/\1/; s/^([^[:space:]]+)[[:space:]]+—.*/\1/' \
-    | sed -E 's/^[`*]+//; s/[`*]+$//' \
-    | awk '{print $1}' | sed 's/[`*,.;:)]*$//; s|^.*/||')"
+  # the strip sequence ai-dlc-recover.sh publishes, then first token / trailing
+  # punctuation / directory prefix. The whole-section `grep -m1` stays as the fallback reader for
+  # a section whose key line carries no dash bullet -- measured, 1 of the consumer's 2218
+  # revisions, and the shape this fixture's own seeds are written in.
+  if [ "$C8_COUNT" -ge 1 ]; then
+    C8_POS="$(c8_base "$(c8_value "$(printf '%s\n' "$C8_BULLETS" | sed -n '1p')")")"
+  else
+    C8_POS="$(awk "$AI_DLC_POS_SECTION_AWK" "$SNAPSHOT_MD" 2>/dev/null \
+      | grep -m1 -iE '(current_step_file|current[ _]step|current[ _]phase)' \
+      | sed -E 's/^[^:]*://; s/^[-*[:space:]]+//; s/[[:space:]]*$//' \
+      | sed -E 's/^`([^`]+)`.*/\1/; s/^([^[:space:]]+)[[:space:]]+—.*/\1/' \
+      | sed -E 's/^[`*]+//; s/[`*]+$//' \
+      | awk '{print $1}' | sed "$AI_DLC_POS_BASE_SED")"
+  fi
+  if [ "$C8_DISTINCT" -ge 2 ]; then
+    echo "  CHECK 8: SKIP (${SNAPSHOT_MD} '## Pipeline Position' carries ${C8_DISTINCT} live position bullets naming different step files — ${C8_NAMES} — so which one 'the position' is depends on line order; two live position bullets means a superseded position was left live instead of being overwritten in place or recorded under a labelled key, and this check cannot adjudicate it)"
+    SKIPPED_CHECKS="$SKIPPED_CHECKS 8"
+    C8_POS="__ambiguous__"
+  fi
   case "$C8_POS" in
+    __ambiguous__) : ;;
     '')
       echo "  CHECK 8: SKIP (${SNAPSHOT_MD} carries no pipeline-position field under a '## Pipeline Position' section — an older snapshot format is 'cannot check', not 'wrong')"
       SKIPPED_CHECKS="$SKIPPED_CHECKS 8"

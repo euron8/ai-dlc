@@ -88,13 +88,24 @@ INPUT="$(cat 2>/dev/null || true)"
 # whatever a consumer's tree happened to put there.
 mval() { sed -n "s/^$1=//p" "$MARKER" 2>/dev/null | head -1; }
 
+# THE UNARMABLE READ IS ONE FORK, NOT THREE, AND THE ORDER IS THE WHOLE REASON. A recovery the
+# injector REFUSED -- it names no step file, or its Pipeline Position named more than one and
+# ai-dlc-recover.sh declined to pick -- leaves a marker on disk for the rest of the session,
+# because that marker is ai-dlc-postcompact.sh's record that the injection happened and deleting
+# it would make the compaction log under-report. So `[ -f "$MARKER" ]` above stops being the
+# fast path for those sessions: every later tool call reaches here. Reading all three keys
+# before testing any of them spent two `sed` forks per call to learn something the first key
+# already decided. The stand-down checks are unchanged in effect and each still has its own
+# line, which is what keeps them separately mutable.
 STEP_RESOLVED="$(mval step_file_resolved)"
-SNAP_REL="$(mval snapshot_path)"
-STEP_REL="$(mval step_file)"
 
 # A marker written before this hook existed carries none of these keys. Treat that exactly as
 # "cannot arm" -- an older marker is not evidence about a mandate it never recorded.
 [ "$STEP_RESOLVED" = "1" ] || exit 0
+
+SNAP_REL="$(mval snapshot_path)"
+STEP_REL="$(mval step_file)"
+
 [ -n "$SNAP_REL" ] || exit 0
 [ -n "$STEP_REL" ] || exit 0
 
