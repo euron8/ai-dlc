@@ -14670,3 +14670,229 @@ ledger line 701.
 
 
 verify: sh D=$(mktemp -d); H=core/hooks/ai-dlc-recover.sh; [ -r "$H" ] || exit 9; mkdir -p "$D/_bmad-output" "$D/.claude/skills/ai-dlc/steps"; : > "$D/.claude/skills/ai-dlc/steps/stale.md"; : > "$D/.claude/skills/ai-dlc/steps/live.md"; rr() { printf '# S\n\n## Pipeline Position\n\n%b\n\n## Recent Activity\n\n- x\n' "$1" > "$D/_bmad-output/pipeline-snapshot.md"; rm -f "$D/_bmad-output/.recover-fired"; printf '%s' '{"source":"compact"}' | CLAUDE_PROJECT_DIR="$D" bash "$H" >/dev/null 2>&1; cat "$D/_bmad-output/.recover-fired" 2>/dev/null; }; g() { printf '%s\n' "$1" | sed -n "s/^$2=//p"; }; S1=$(rr '- **Current step file:** `stale.md`\n- **Current step file:** `live.md`'); S2=$(rr '- **`current_step_file`:** `live.md`'); S3=$(rr '- **Current step file:** `live.md`\n- **(prior) Current step file:** `stale.md`'); case "$S2" in *step_file_resolved=*) ;; *) exit 9 ;; esac; [ "$(g "$S1" step_file_resolved)" = 0 ] || exit 1; [ "$(g "$S2" step_file_resolved)" = 1 ] || exit 1; [ "$(g "$S3" step_file_resolved)" = 1 ] || exit 1; case "$(g "$S2" step_file)" in */steps/live.md) ;; *) exit 1 ;; esac; case "$(g "$S3" step_file)" in */steps/live.md) ;; *) exit 1 ;; esac
+## BL-255 — `BL-005` names a pole that was displaced four releases before it was read, and the entry that measured the displacement filed it in the ARCHIVE
+
+**LANDED (v0.583.0, verified 3c4c1b14).** `BL-005`'s heading now reads *"`validator-arm-selection`
+shard `b` has a ~47.8s solo floor set by three serial units; two routes below it were measured
+and neither taken"*, and its body carries the real pole — `ledger-reverify` at 628s loaded — with
+the displacement dated to `v0.541.0` (`BL-088`). The filed receipt exits **0** on the corrected
+tree against **1** before it, re-run raw in the same session.
+
+**THE RECEIPT ALSO EXITS 0 ON A HEADING THAT IS STILL WRONG, AND THAT IS WHY THE CORRECTED TEXT
+IS QUOTED VERBATIM ABOVE.** Scored in the same invocation against a mutant heading reading
+`## BL-005 — validator-arm-selection is the pole, at 166s of a 217s wall`: exit **0**. The anchor
+requires the literal `is the pre-push pole`, so dropping those four words while keeping the
+displaced fixture name and both displaced figures satisfies it completely. The anchor is a
+NECESSARY condition on the repair and not a sufficient one — this entry's own filing paragraph
+established it discriminates against three plausible repair shapes, and a fourth, found by
+scoring it here, it does not. What closes the gap is not a tighter anchor: the corrected heading
+is quoted in full one paragraph up, where a reader can compare it, and the fixture hand's arm
+asserts that heading's text directly rather than the absence of a phrase.
+
+**DEFECT.** `BL-005`'s heading asserts *"`validator-arm-selection` is the pre-push pole, at 166s
+of a 217s wall"*. Both halves are false at HEAD. Re-derived from
+`.git/ai-dlc-fixture-durations` in one invocation: `ledger-reverify` **493**,
+`fixture-git-env-seam` 239, `validator-arm-selection` **229**, `validator-fork-budget` 212,
+`gate-adjudication-mutants` 211, `validator-arm-selection-b` 206. The entry's subject is third,
+and the wall it quotes is less than half the current pole. A session scoping performance work
+off this entry optimizes a fixture that is not the pole.
+
+**THE DISPLACEMENT WAS MEASURED AND IT WAS NOT MISSED — IT WAS FILED WHERE THE LIVE ENTRY IS
+NOT.** The archived `BL-088` records, in its own `**LANDED (v0.541.0, verified 274efdae)**`
+paragraph, *"The pole fell from 480 to 97 and the suite pole is now `ledger-reverify` at 427"*.
+So the correct figure has been written down since `v0.541.0` — in `docs/backlog.archive.md`,
+which no live-entry reader opens. `BL-088` also says *"`BL-005`'s `validator-arm-selection` pole
+is untouched by this and remains separate"*, which was true of the FIX and false of the
+HEADLINE in the same breath: after that change `validator-arm-selection` was no longer the pole,
+and the sentence reads as though the entry had been checked.
+
+**THIS IS THE `DISCHARGED`-vs-`TERMINAL` SHAPE ONE LEVEL UP.** An archived entry can correct a
+live one, and nothing joins the two directions. `BL-088` cites `BL-005` twice
+(`docs/backlog.archive.md:9763`, `:9803`) and neither citation reaches the live file.
+
+**WHAT HAS CHANGED SINCE, AND IT IS THE FIXTURE, NOT THE VALIDATOR.**
+`core/fixtures/ledger-reverify/run.sh` was **2142** lines at `274efdae` and is **3643** at HEAD
+— five commits, every one a release adding receipt-grammar coverage (`v0.555.0`, `v0.556.0`,
+`v0.558.0`, `v0.567.0`, `v0.578.0`). The fixture drives **105** invocations of the script under
+test across **108** assertion arms. 427 → 493 is that growth, and the subject is both the suite
+pole and a BOOTSTRAPPING file, so each addition was correct in isolation and none was costed
+against the wall clock.
+
+**TWO PROPERTIES OF THE INSTRUMENT, BOTH OF WHICH MAKE A NAIVE RECEIPT WRONG.**
+`.git/ai-dlc-fixture-durations` is UNTRACKED and per-clone — `git log` over it returns 0 against
+a control of 1 for a tracked path — so no ref carries it and a fresh clone has none. And
+`.githooks/pre-push` MERGES each run's timings over the prior file
+(`awk 'NF == 2 { c[$1] = $2 }'`), keeping old rows for fixtures that did not run: this batch's
+own push selected 31 of 200 and `ledger-reverify` was NOT among the verdicts (control:
+`snapshot-evidence-cell` appears as `ok` at that shape in the same log), so the **493 is carried
+forward from an earlier run and its age is not derivable**. A row is a floor of unknown vintage,
+never a fresh measurement.
+
+**WHAT IS OWED.** Correct `BL-005`'s heading and its 166s/217s figures, or retire it in favour
+of an entry naming the real pole. Its third claim — shard `b`'s ~47.8s solo floor and the two
+measured routes below it — is a SEPARATE SUBJECT and is untested here; **an entry with two
+subjects expires only when both do**, so do not close `BL-005` on this finding alone.
+
+**THE RECEIPT KEYS ON TRACKED TEXT, NOT ON THE TIMING FILE, AND THE FIRST DRAFT OF THIS ENTRY
+GOT THAT WRONG.** It declared `verify: manual` on the grounds that a receipt cannot read
+`.git/ai-dlc-fixture-durations` — true, and beside the point. That file is untracked, per-clone,
+and merged forward across runs, so a predicate keyed on it would measure the runner's clone
+rather than the claim; R5 also runs every receipt in its own DETACHED CHECKOUT of HEAD, where
+the file is the caller's or absent. But **the defect is a contradiction between two TRACKED
+files** — a live heading asserting a pole that an archived entry measured away — and that is
+checkable.
+
+**THE ANCHOR IS THE HEADING LINE, AND THE LOOSE FORM DOES NOT DISCRIMINATE.** This entry quotes
+`BL-005`'s heading verbatim one paragraph up, so a whole-file grep is satisfied by its own text
+— measured at **3** hits for the bare phrase against **1** for the heading-anchored form. And
+the anchor must carry `validator-arm-selection`: a corrected heading naming the REAL pole still
+contains `is the pre-push pole`, so the short anchor scores 1 on the repaired tree as well.
+Scored against three plausible repair shapes, the shipped anchor returns 0 on all three.
+
+**POLARITY, AND THE FIRST DRAFT HAD IT BACKWARDS.** In this ledger exit 0 means the fix is
+PRESENT and non-zero means the entry still reproduces — the opposite of the `ledger-reverify`
+convention for the consumer's ledger. The first cut exited 0 while the defect was live and
+`backlog-reverify.sh` duly reported this entry as `CLOSE-CANDIDATE` on the commit that filed
+it. It now exits **1** while the heading still makes the claim. The archived counter-record is
+a PRECONDITION: if `BL-088`'s measurement ever leaves the archive the receipt exits **9**
+rather than reporting a false close.
+
+verify: sh L=docs/backlog.md; A=docs/backlog.archive.md; [ -f "$L" ] && [ -f "$A" ] || exit 9; a="$(grep -c 'The pole fell from' "$A")" || a=0; [ "$a" -ge 1 ] || exit 9; h="$(grep -c '^## BL-005.*validator-arm-selection.*is the pre-push pole' "$L")" || h=0; [ "$h" -ge 1 ] && exit 1; exit 0
+
+## BL-257 — the suite pole grew 493 -> 573 in two releases and nothing watches it; a growth guard needs a TRACKED baseline, and `docs/` is where one can live
+
+**LANDED (v0.583.0, verified 3c4c1b14).** `scripts/validate-suite-pole.sh` reads the last full
+green run's unmerged durations record and compares the pole against the tracked baseline
+`docs/suite-pole-baseline.tsv`. The pole is `ledger-reverify`; the baseline row is **628**, the
+band **20**, the ceiling **754**.
+
+**THE CALIBRATION, WHICH IS WHAT THIS ENTRY SAID WAS NOT OPTIONAL.** Three serial full
+`AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push` runs on an unchanged tree, in a `file://`
+clone of `origin/main` at `83747ef4`, pool 12, 201 fixture directories, durations seeded from the
+operator clone's record so all three dispatched in the same longest-first order: **628s** (wall
+743s, load average 50.56 at start, gate green 21/21), **563s** (wall 629s, load 9.06, gate RED on
+one unrelated `agent-definition-render` mutant-attribution flake, durations file complete at 201
+rows so the pole figure is a full-dispatch reading), **562s** (wall 627s, load 5.30, gate green
+21/21). The next four rows moved together and in the same direction across all three —
+`reconcile-emit-report` 377/325/325, `gate-adjudication-mutants` 330/291/287,
+`check-24-adversarial-convergence` 246/186/192, `self-update-gate` 226/196/197 — which is what
+says the spread is LOAD rather than one unit misbehaving.
+
+**THE ROW IS THE MAX AND THE BAND IS THE SPREAD PLUS STATED HEADROOM.** n=3 under uncontrolled
+load gives no dispersion estimate; what it gives is an observed loaded ceiling, so the row is
+628, not the mean and not the quiet-box 562. A row at the minimum would sit under two of the
+three readings of an unchanged tree and go red on every busy push. Band =
+`ceil((628-562)/562*100)` = 12 observed, plus 8 points of headroom = 20. Ceiling =
+`628 + ceil(628*20/100)` = 754. Driven against a constructed 201-row durations file: 628 → exit
+0, 754 → exit 0, 755 → exit 1 naming 755, the ceiling and the band.
+
+**THE FILED RECEIPT WAS REPLACED BEFORE THE FIX LANDED, AND THE SHIPPED ONE IS BELOW.** The
+receipt filed with this entry exits **1** against a CORRECT guard, for two reasons that are both
+design requirements of the thing it was written to check. Its baseline carries no `# band:`,
+`# jobs:` or `# fixtures:` directive, and a missing directive is a refusal at exit 2 — a
+comparison with no stated terms is one a later reader cannot interpret. And its one-row durations
+file is a partial dispatch against this tree's 201 fixture directories, which is a SKIP at exit 0
+on both arms, so neither the grown case nor the unchanged case is ever compared. A receipt that
+fails on the correct implementation is not a weaker receipt; it is an inverted one, and shipping
+it would have reported this entry as reproducing forever. The replacement builds a probe root
+with a `VERSION` and a single `core/fixtures/ledger-reverify/run.sh` so the dispatch is complete
+at its own scale, passes `--root` at that tree, and carries a THIRD arm at 105 against a baseline
+of 100 with band 15 — within band, which is the seed the filed receipt structurally could not
+hold and the one that kills a zero-tolerance implementation.
+
+**THE RECEIPT IS AN ANCHOR AND THE FIXTURE IS THE DISCRIMINATING CHANNEL.** The adversary scored
+FOUR wrong implementations at receipt **0** on the FILED version: a hardcoded threshold, a
+zero-tolerance growth compare, a `cmp`-only equality, and floor instead of ceiling arithmetic.
+Each is silent rather than loud, which is the failure mode this entry's own filing paragraph
+named — the receipt drives one grown case and one unchanged case, and all four answer those two
+correctly. `core/fixtures/suite-pole-guard/` is what separates them: a within-band case kills
+zero-tolerance and `cmp`, an at-ceiling and ceiling+1 pair kills the hardcoded threshold, and
+small-baseline seeds (B=4 band 15 → 5 passes, 6 fails; B=7 band 15 → 9 passes) kill floor and
+round arithmetic. A receipt that accepts several candidate fixes has established none of them.
+
+**THERE IS NO DOWNWARD FAIL, DELIBERATELY.** A pole below the baseline is the outcome this guard
+exists to encourage, and failing on it would block the very push that improves the suite — and
+would fire on any quiet box, where a run at 562 against a row of 628 is correct and unremarkable.
+A figure less than half the baseline draws a non-failing NOTE that the row can come down. The
+check-cannot-fire property is therefore NOT inferred from a red run; it is owned by the
+self-probe, which drives the shipping comparator against seeded pairs in both directions before
+any real file is opened and REFUSES at exit 2 on a miss.
+
+**A PARTIAL DISPATCH OR A DIFFERENT POOL WIDTH SKIPS RATHER THAN FAILS.** A cost recorded under
+the pool is a LOADED cost, and the read-set skip narrows the suite in place: a pole scheduled
+beside thirty units instead of two hundred is a near-solo figure, and the two are not comparable
+in either direction — one shard has measured **442s loaded against 112s solo**. Comparing a
+narrowed run against a full-suite baseline gives a guaranteed false green, or a false red the
+other way round. A different `--jobs` is a different measurement for the same reason. Each such
+state exits 0 with its reason printed, because a false red here trains the operator to
+`--no-verify`, which is strictly worse than no guard at all.
+
+**DEFECT.** The pre-push suite is POLE-BOUND — wall clock tracks the single longest fixture
+directory, not the sum — and the pole is unwatched. Re-derived from
+`.git/ai-dlc-fixture-durations` in one invocation: `ledger-reverify` **573**,
+`fixture-git-env-seam` 350, `gate-adjudication-mutants` 285, `reconcile-emit-report` 240,
+`validator-arm-selection` 233. Sum over 201 units is 5737s; the pole is 573s, so the pole is
+**10%** of the sum and **100%** of the wait. `BL-255` recorded the same pole at **493** at
+`v0.579.0`. That is **+16% in two releases**, and no mechanism observed it.
+
+**OPERATOR RULING, 2026-09-15: the guard is worth building.** Given after a session ran the full
+gate twice in one evening and the operator asked which batch performance work was scheduled for.
+The answer was none: `docs/plans/pre-push-wall-clock.md` is a LIVE plan whose next-action 2 still
+reads *"`validator-arm-selection` is the pole now, at 166s of a 217s wall"* — both halves false at
+HEAD, which is exactly what `BL-255` filed against `BL-005`. **A stale pole figure has now
+misdirected performance scoping in three places: `BL-005`, the wall-clock plan, and this entry's
+own precursor.**
+
+**THE INSTRUMENT IS HOSTILE TO THE OBVIOUS DESIGN, AND `BL-255` ALREADY MEASURED WHY.** Do not
+re-derive these; they are settled:
+
+- `.git/ai-dlc-fixture-durations` is **UNTRACKED and per-clone** — `git ls-files` names it 0 times
+  against a control of 790 tracked paths — so no ref carries it and a fresh clone has none.
+- `.githooks/pre-push:800` **MERGES** each run's timings over the prior file
+  (`awk 'NF == 2 { c[$1] = $2 }'`), keeping rows for fixtures that did not run. A row is therefore
+  **a floor of unknown vintage, never a fresh measurement**, and a guard that reads one as current
+  compares two different days.
+- A cost there is a **LOADED** cost measured under the pool. The same unit run solo gives a
+  different number — one shard measured 442s loaded against 112s solo — and the two must never be
+  compared.
+
+**WHY A TRACKED BASELINE IS POSSIBLE AT ALL, MEASURED THIS SESSION.** The three records under
+`.git/` are sited there deliberately: the content key hashes the working tree, so a cross-run
+record inside it would change the key that decides whether the suite runs. That argument does NOT
+extend to `docs/`, because `docs` is already in `suite-content-key.sh`'s `EXCLUDE` set. Driven,
+with the key computed three times in one invocation: appending a line to `docs/backlog.md` left
+the key byte-identical (`5f2a4318…` before, during, and after revert). **So a baseline committed
+under `docs/` is joinable by a guard and cannot wedge the skip.**
+
+**WHAT THE GUARD MUST NOT BE.** A check that fails the push whenever the pole moves is a check
+the operator switches off: the pole legitimately moves with load, and a LOADED figure varies run
+to run. The shape to reach for is the one `validate-write-format-steering.sh` already uses — a
+RATCHET that reports the current figure against a committed baseline, fails only on growth beyond
+a stated band, and whose baseline moves DOWN freely and UP only as a reviewed edit carrying its
+reason. Ask specifically what a wrong answer makes someone DO: a false red here trains the
+operator to bypass, which is worse than no guard.
+
+**A FALSE-POSITIVE SET MUST BE MEASURED BEFORE IT SHIPS, and this one is not yet enumerable** —
+the vintage problem above means today's 201 rows are of mixed age, so the first honest step is to
+establish how much a pole figure varies across consecutive full runs on an unchanged tree. Two
+full `AI_DLC_FIXTURE_NO_SKIP=1` runs of this repo's own gate cost about ten minutes each; that is
+the price of the calibration and it is not optional. **A band picked without it is a number
+invented before the measurement, which is the defect A6's own header records making twice.**
+
+**WHAT IS OWED.** Calibrate the run-to-run spread of the pole on an unchanged tree; commit a
+baseline under `docs/`; build the ratchet with a self-probe that fires in both directions and a
+measured FP set; and in the same change correct `BL-005`'s heading and
+`docs/plans/pre-push-wall-clock.md`'s next-action 2, both of which name a pole displaced four
+releases ago. `ledger-reverify` is 40% of the wall on its own and is the subject worth attacking
+once something watches it.
+
+**THE RECEIPT DRIVES THE GUARD RATHER THAN GREPPING FOR IT, and the first draft did not.** A
+receipt asserting the file exists and mentions `AI_DLC_POLE` was scored against a comment-only
+stub and returned **0** — comment-satisfiable, which this repo's own receipts arm exists to
+reject. The receipt below builds three durations files in a temp dir and requires the guard to
+FAIL on a grown pole, stay SILENT on an unchanged one, and NAME the offending figure. Scored four
+ways before filing: absent **1**, comment-only stub **1**, a guard replaced by `exit 0` **1**, a
+minimal honest implementation **0**. The always-zero non-fix is the one that matters — it is what
+a guard degrades into when somebody silences it.
+
+verify: sh V=scripts/validate-suite-pole.sh; B=docs/suite-pole-baseline.tsv; [ -x "$V" ] && [ -f "$B" ] || exit 1; d="$(mktemp -d)" || exit 1; mkdir -p "$d/core/fixtures/ledger-reverify" && : > "$d/core/fixtures/ledger-reverify/run.sh" && printf '0\n' > "$d/VERSION" || exit 1; printf '# band: 15\n# jobs: 12\n# fixtures: 1\nledger-reverify 100\n' > "$d/base.tsv"; printf 'ledger-reverify 1000\n' > "$d/now.tsv"; printf 'ledger-reverify 100\n' > "$d/same.tsv"; printf 'ledger-reverify 105\n' > "$d/band.tsv"; g="$(AI_DLC_POLE_BASELINE="$d/base.tsv" bash "$V" --root "$d" --durations "$d/now.tsv" 2>&1)"; grc=$?; q="$(AI_DLC_POLE_BASELINE="$d/base.tsv" bash "$V" --root "$d" --durations "$d/same.tsv" 2>&1)"; qrc=$?; w="$(AI_DLC_POLE_BASELINE="$d/base.tsv" bash "$V" --root "$d" --durations "$d/band.tsv" 2>&1)"; wrc=$?; [ "$grc" -ne 0 ] && [ "$qrc" -eq 0 ] && [ "$wrc" -eq 0 ] || exit 1; case "$g" in *1000*) exit 0 ;; *) exit 1 ;; esac
