@@ -44,6 +44,40 @@ mkdir -p "$DIST/core/scripts" "$CONSUMER/scripts/ai-dlc"
 printf '#!/usr/bin/env bash\necho MOVED-REF-PROBE base\n' > "$DIST/core/scripts/moved-ref-probe.sh"
 cp "$DIST/core/scripts/moved-ref-probe.sh" "$CONSUMER/scripts/ai-dlc/moved-ref-probe.sh"
 
+# THE FOUR TEMPLATES `template-sites.md`'s `template_manifest:` NAMES, at the paths it names them.
+#
+# Before this the seed committed no `templates/*.template` at all, so every row of step 3b's
+# classification bucketed CONSUMER-MISSING-NOOP — `ours_present` is tested FIRST, and with no
+# consumer file the template delta is never consulted. One bucket out of four, reached for a
+# reason that has nothing to do with the template delta the classifier exists to read.
+#
+# The four are seeded to reach ALL FOUR buckets in ONE render, which is what makes the row
+# assertion below a statement about the classifier rather than about its fallback:
+#   CLAUDE.md.template              CHANGED base->theirs, consumer HAS CLAUDE.md
+#                                     -> TEMPLATE-PROSE-MERGE   (token-prose kind)
+#   settings.json.template          CHANGED base->theirs, consumer HAS .claude/settings.json
+#                                     -> TEMPLATE-JSON-MERGE    (json-merge kind)
+#   coding-conventions.md.template  byte-IDENTICAL at both refs, consumer HAS the file
+#                                     -> TEMPLATE-UNCHANGED-NOOP
+#   QUICKSTART.md.template          present at both refs, consumer does NOT have QUICKSTART.md
+#                                     -> CONSUMER-MISSING-NOOP
+# The two MERGE buckets are the ones carrying step-7 actions that rewrite a live consumer file,
+# so they are the rows whose omission costs something; the two NOOPs are the near-misses that
+# stop "every row is a merge" from passing.
+#
+# `templates/` is OUTSIDE `core/`, which is the whole reason step 3b exists as a separate mode —
+# the core-manifest globs in setup-sites.md cannot see these paths, so nothing in the default
+# preclassify run buckets them and no other section of the region moves because they are here.
+mkdir -p "$DIST/templates" "$CONSUMER/docs" "$CONSUMER/.claude"
+printf '# {project_name}\n\nboilerplate at base.\n\n- Deploy command: `{deploy_command}`\n' \
+  > "$DIST/templates/CLAUDE.md.template"
+printf '# Coding conventions\n\nUnchanged boilerplate.\n\n- Style: `{style}`\n' \
+  > "$DIST/templates/coding-conventions.md.template"
+printf '# Quickstart\n\nboilerplate at base.\n\n- Start: `{start_command}`\n' \
+  > "$DIST/templates/QUICKSTART.md.template"
+printf '{\n  "hooks": {},\n  "env": {"AT": "base"}\n}\n' \
+  > "$DIST/templates/settings.json.template"
+
 git -C "$DIST" init -q
 git -C "$DIST" -c user.email=f@f -c user.name=fixture add -A
 git -C "$DIST" -c user.email=f@f -c user.name=fixture commit -q -m base
@@ -63,11 +97,30 @@ printf 'shared line\nSENTINEL-THEIRS-ONLY upstream process class\n' \
 # The moved-ref probe is upstream-modified in this same commit, so its bucket row is already in
 # the APPROVED render and a later content move cannot add one. See the block above.
 printf '#!/usr/bin/env bash\necho MOVED-REF-PROBE approved\n' > "$DIST/core/scripts/moved-ref-probe.sh"
+# TWO of the four templates move at theirs; the other two are left byte-identical DELIBERATELY.
+# A seed that moved all four could not tell TEMPLATE-UNCHANGED-NOOP from a classifier that never
+# compared the two refs, and a seed that moved none could not produce either MERGE bucket.
+printf '# {project_name}\n\nboilerplate at THEIRS, one line added.\n\n- Deploy command: `{deploy_command}`\n' \
+  > "$DIST/templates/CLAUDE.md.template"
+printf '{\n  "hooks": {"SessionStart": []},\n  "env": {"AT": "theirs"}\n}\n' \
+  > "$DIST/templates/settings.json.template"
 git -C "$DIST" -c user.email=f@f -c user.name=fixture add -A
 git -C "$DIST" -c user.email=f@f -c user.name=fixture commit -q -m theirs-adds-template
 THEIRS="$(git -C "$DIST" rev-parse HEAD)"
 printf 'shared line\nSENTINEL-OURS-ONLY consumer domain class\n' \
   > "$CONSUMER/.claude/skills/ai-dlc/templates/classes.md"
+
+# THREE OF THE FOUR GENERATED FILES, at the `consumer:` paths the manifest names. QUICKSTART.md
+# is left ABSENT on purpose: it is the only seed that reaches CONSUMER-MISSING-NOOP once the
+# templates exist, and without it that bucket is unreachable from this fixture. These carry
+# FILLED-IN token values, not the raw template bytes, because that is what a real consumer holds
+# and the classifier's contract is that it never hash-compares ours against the template.
+printf '# fixture-consumer\n\nboilerplate at base.\n\n- Deploy command: `make deploy`\n' \
+  > "$CONSUMER/CLAUDE.md"
+printf '# Coding conventions\n\nUnchanged boilerplate.\n\n- Style: `two-space`\n' \
+  > "$CONSUMER/docs/coding-conventions.md"
+printf '{\n  "hooks": {},\n  "env": {"AT": "consumer"}\n}\n' \
+  > "$CONSUMER/.claude/settings.json"
 
 # A SYMBOLIC spelling of theirs, parked at the same commit the sha-spelled assertions use.
 # `--verify` re-renders from whatever the caller passes, so a branch is the shape of theirs an
