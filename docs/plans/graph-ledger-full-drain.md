@@ -1062,63 +1062,63 @@ given at batch 90.
    at every phase when its second adversary returned two BLOCKERs, and batch 66's was green
    when its adversary returned a BLOCKER establishing the shipped fix had made things WORSE.**
 
-   **BATCH 117'S SUBJECT IS `BL-257`, BY OPERATOR RULING. THIS OVERRIDES THE PROVENANCE-FIRST
-   ORDERING FOR ONE BATCH AND IS NOT A CHOICE THE SWEEP MAKES.** Given during batch 116 after the
-   operator asked whether any performance improvement had been made and measured, and the answer
-   was none: "I absolutely want it taken up. It MUST be done in the next batch." `BL-257` is the
-   unwatched suite pole — `ledger-reverify` at the top of `.git/ai-dlc-fixture-durations`, grown
-   493 -> 573 across two releases with nothing observing it — and it carries an earlier ruling of
-   its own that the growth guard is worth building. `docs/plans/pre-push-wall-clock.md` is the LIVE
-   plan for the pole and its next actions are stale against today's top entry; re-derive that
-   file's own resume block as part of the batch rather than following it. Still run the sweep
-   (action 1b) and REPORT its worklist, because the consumer keeps filing and the report is owed
-   every batch; scope nothing from it unless the operator redirects.
+   **THE BATCH-117 RULING IS SPENT. `BL-257` SHIPPED AS `v0.583.0` AND IS ROTATED; THE
+   PROVENANCE-FIRST ORDERING GOVERNS AGAIN.** Batch 118 scopes off the PC-BACKED WORKLIST the
+   sweep derives, as every batch before 117 did. Do not look for performance work: the pole is
+   now WATCHED (`scripts/validate-suite-pole.sh` against `docs/suite-pole-baseline.tsv`, a step
+   in `.githooks/pre-push` after the suite), and cutting it is `docs/plans/pre-push-wall-clock.md`'s
+   program, whose next actions were re-derived in the same release — take that plan only on a
+   ruling.
 
-   **HOW TO MEASURE THE POLE, because every figure here decays.** A recorded cost in
-   `.git/ai-dlc-fixture-durations` is a LOADED cost under the pool; a solo run of the same unit
-   gives a different number and the two are never compared. Time a validator before and after
-   from inside the repo, interleave reps, and assert the two sides differ before reading a delta.
-   Batch 116 measured base-vs-tip fixture timing under a load average of 25-52 and the
-   within-side spread was several times any plausible effect; a differential that cannot resolve
-   the effect reports nothing, and both hands said so rather than reporting a delta. A growth
-   guard needs a TRACKED baseline — `.git/` is not tracked and a linked worktree cannot even write
-   it (`.git` is a file there, so every agent-worktree push re-runs all fixtures).
+   **BATCH 117 SHIPPED AS `v0.583.0` (`3c4c1b14`), ONE SUBJECT, TWO ENTRIES CLOSED, NO PC ID.**
+   `BL-257` closed: both hooks publish this run's fixture costs UNMERGED to
+   `.git/ai-dlc-fixture-durations.last`, truncated at pool entry and written green-only; the guard
+   compares that file's pole against a tracked baseline (row `ledger-reverify 628`, band 20,
+   ceiling 754) with an 18-seed self-probe before the corpus, SKIPs on partial dispatch or a
+   pool-width mismatch, and has NO downward FAIL; the hook step runs even on a content-key skip so
+   the baseline is parsed on every push. `BL-255` closed on `BL-005`'s corrected heading; `BL-005`
+   stays OPEN. Live **72 -> 71** (two rotated, `BL-258` filed), archive **184 -> 186**. Gate
+   `AI_DLC_FIXTURE_NO_SKIP=1`: 22 of 22 phases, 202 ok / 0 FAIL, `suite-pole-guard` read by name;
+   the pole step measured `ledger-reverify 493s` on that run. First push exit 141 with every gate
+   green and no ref on origin; re-push landed.
 
-   **BATCH 116 SHIPPED AS `v0.582.0`, TWO SUBJECTS IN ONE RELEASE.** `BL-034` closed
-   (`PC-S315-EMIT-REPORT-REGION-OMITS-THREE-MANDATED-DETECTORS`: step 3b's template
-   pre-classification renders inside the mechanical region; `preclassify.sh` refuses on an
-   unreadable manifest where it exited 0 with empty stdout) and `BL-047` closed
-   (`PC-S296-PIPELINE-POSITION-MUST-BE-EDITED-IN-PLACE`: three readers refuse a two-valued
-   `Current step file`; `I113` binds the grammar copies). Both contracts went to an adversary
-   BEFORE any builder spawned and both came back with fix-shaped blockers that were folded in:
-   the step 3b section's first siting silently widened four fixture arms while the fixture stayed
-   green, and the position fix's first grammar would have un-resolved 1416 of 2218 consumer
-   snapshot revisions. Neither reached a builder. Every spawn was `isolation: "remote"`.
+   **THE CALIBRATION IS THE MEASUREMENT THIS PROGRAM HAD BEEN MISSING, and it is recorded in the
+   baseline's own header.** Three serial full gate runs in a `file://` clone at `83747ef4`, pool 12,
+   201 fixture directories, dispatch seeded longest-first: pole 628s (load 50.56 at start), 563s
+   (load 9.06), 562s (load 5.30); walls 743 / 629 / 627. A loaded spread of 12% on an unchanged
+   tree. Runs 1 and 3 were green; run 2 went red on `agent-definition-render` alone, filed as
+   `BL-258`. Every prior figure this file carried for the pole (490, 493, 573) was a merged-forward
+   row of unknown age; **the number to read now is the guard's own PASS line in the gate log.**
 
-   **THE LEDGER REF ELECTION FELL BACK TO `main` THIS BATCH FOR A REASON THE LOOP CANNOT SEE.**
-   The consumer's sprint branch had DIVERGED from its `main` (6 behind, 50 ahead) after a
-   self-update was merged and reverted there, so the `merge-base --is-ancestor main` arm rejected
-   it while it was the branch the consumer was running. Re-derived against both refs by hand:
-   `main` gave a worklist of 19, the branch 16, and the four extra on `main` were candidates the
-   consumer had already closed. When the elected ref is `main` and the consumer's checked-out
-   branch is not, derive the worklist against BOTH and report the difference; the loop's ancestor
-   arm is a stale-snapshot guard, not a liveness test.
+   **THE FILED RECEIPT WAS INVERTED AND PERMISSIVE AT ONCE, AND ONLY BUILDING FOUND IT.** The
+   contract adversary scored FOUR wrong implementations at receipt 0 (hardcoded threshold,
+   zero-tolerance compare, `cmp -s`, floor arithmetic); the fix hand then found the same receipt
+   exits 1 against the CORRECT guard, because its baseline carries no directives and its one-row
+   durations file is a partial dispatch by the design's own rule. Replaced before the fix landed,
+   with a within-band seed the filed one could not carry. The fixture is the discriminating
+   channel; a receipt is an anchor.
 
-   **THE CONSUMER PULLED TO `0.581.0` ITSELF DURING THIS BATCH**, in a graph session nobody here
-   drove: self-update PR #1085 and reconcile PR #1086 on its sprint branch, stamp at `0.581.0` on
-   all four fields. The delivery gap at batch close is therefore whatever `v0.582.0` adds —
-   derive it. Its reconcile filed `PC-S312-STEP-2-SPELLS-THE-DERIVED-FIXTURE-SET-IN-A-FORM-ITS-OWN-RUNNER-REFUSES`
-   (committed) and its sprint session had
-   `PC-S312-EFFORT-PROMPT-LINE-HAS-NO-VERIFIED-BEHAVIORAL-EFFECT` UNCOMMITTED in the working tree
-   at close; neither is filed here. A porcelain count that moved during the batch was that
-   session's activity, established by content (ledger md5 and `git diff HEAD` on the ledger).
+   **`I55` ARM 3 REFUSED THE FIXTURE'S FIRST CUT, AND THE REFUSAL WAS RIGHT.** It read the tracked
+   baseline under `docs/` and walked up for `VERSION`, both in the content key's EXCLUDE set — a
+   fixture whose input can move without the suite re-running. The duty moved to the hook step,
+   which parses the baseline against an empty durations file on a content-key skip. **A `docs/`
+   input has exactly one reader that can see it, and it is not a fixture.**
+
+   **THE LEDGER REF ELECTION FELL BACK TO `main` AGAIN** — the consumer's sprint branch is still
+   diverged (6 behind, 54 ahead, 2 unpushed). Against `main` the worklist was 17, against the
+   branch 14: one filing only on the branch (`PC-S344-SH-RECEIPTS-GET-NO-BASE-CONTROL-SO-STILL-LIVE-CANNOT-BE-READ`,
+   already cited by `BL-254`) and four entries on `main` whose candidates the consumer has since
+   closed. Both `PC-S312` ids named at batch 116's close are now COMMITTED on the branch; neither
+   is filed here. Neither ledger file was dirty. Consumer stamp `0.581.0` on all four fields;
+   delivery gap is `v0.582.0` and `v0.583.0`, and `v0.583.0` carries no PC id and nothing
+   consumer-facing except the two `LASTRUN_RECORD` lines in the shipped hook.
 
    **FILED, NOT FIXED, AND NOT TO BE FOLDED INTO A RELEASE WHOSE SUBJECT IT IS NOT:**
    `core/fixtures/reconcile-emit-report` is intermittently red on `origin/main` in the FALSE
    direction at a low single-digit rate under the pool, reproduced at `49e5356d`; the lead is a
    bare `mktemp` at `emit-report.sh:331,:373` where `ledger-reverify.sh:1089-1096` records the same
    class and prefixes its own. File it as its own entry (grep for an existing one first — batch
-   114 avoided three duplicates that way).
+   114 avoided three duplicates that way). `BL-258` is the same shape on a second fixture.
 
    **"RESIDUE ZERO" MEANS NO CANDIDATE AWAITS A FIRST FILING. IT NEVER MEANS THE PC WORK IS
    DONE, AND EVERY BLOCK BELOW SAYING "ZERO KNOWN" IS MAKING ONLY THE NARROW CLAIM.** Two joins,
@@ -1147,7 +1147,7 @@ given at batch 90.
    **A sentence in this file saying the residue is zero is a snapshot of a file someone else is
    holding open. Run the sweep; never read that sentence for an answer.**
 
-1a. **`docs/backlog.md` IS AT 72 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
+1a. **`docs/backlog.md` IS AT 71 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
    is not blocked. That is not licence to file rather than fix — the standing correction in the
    resume block still governs — but a filing no longer costs a rotation, and rotating still means
    CLOSING, which needs a measurement.
