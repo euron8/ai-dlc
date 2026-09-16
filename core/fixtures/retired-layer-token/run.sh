@@ -326,8 +326,16 @@ SED
 
 # M11 — the theirs-side file list taken from the BASE tree, so a rulebook file created at
 # theirs is invisible and a token that moved into it reads as retired.
+#
+# batch 121: this used to patch retired-layer-token.sh's own `files_at()`, which called
+# `git ls-tree -r --name-only "$ref"` directly. That call is now `memo_ls_tree()` in
+# lib.sh, called with the SAME `$ref` (retired-layer-token.sh's positional `<ref>`
+# argument to `files_at`/`collect`), but lib.sh's own local copy of it is spelled
+# `$_ref`. Both occurrences in lib.sh -- the memo-miss fill and the uncacheable direct
+# fallback -- must flip together, or the guard that IS built (`ai_dlc_memo_dir` failing)
+# would leave one path unmutated and the mutant would survive by falling through to it.
 cat > "$MUTD/m11.sed" <<'SED'
-s#--name-only "$ref"#--name-only "$BASE"#
+s#--name-only "$_ref"#--name-only "$BASE"#g
 SED
 
 # M12 — the grammar's floor dropped to three characters.
@@ -364,14 +372,32 @@ s#^if \[ -z "$THEIRS_SET" \]; then#if false; then#
 SED
 
 mkmut() {  # name [-text|+text ...] -> mutant path on stdout
-  local name="$1"; shift
+  _mkmut_impl "$1" "$SCRIPT" "$(basename "$SCRIPT")" "${@:2}"
+}
+# batch 121: the `ls-tree -r --name-only "$ref"` line m11 mutates moved out of this
+# detector and into reconcile/lib.sh's shared `memo_ls_tree()`, which every reconcile/*.sh
+# now calls through `files_at()`'s `command -v memo_ls_tree` branch. `lib.sh` is copied
+# alongside the detector by the SAME `cp -R "$(dirname "$SCRIPT")"` mkmut already does, so
+# the mutant just needs its sed applied to the copied lib.sh instead of the copied
+# detector -- the property under test (a theirs-tree read keyed on the wrong ref) is
+# otherwise identical. `mkmut_lib` is `mkmut`'s twin, patching `lib.sh` in the same
+# mutant directory a bare `mkmut` call already builds.
+mkmut_lib() {  # name [-text|+text ...] -> mutant path on stdout (patches lib.sh, not SCRIPT)
+  local libpath="$(dirname "$SCRIPT")/lib.sh"
+  _mkmut_impl "$1" "$libpath" "lib.sh" "${@:2}"
+  # The RETURNED path must still be the DETECTOR's own path inside the mutant directory --
+  # every caller runs `bash "$mutant_path" ...`, and that has to resolve to the (unmutated)
+  # detector sourcing the (mutated) lib.sh beside it, not to lib.sh itself.
+}
+_mkmut_impl() {  # name target-src target-basename [-text|+text ...] -> mutant DETECTOR path
+  local name="$1" src="$2" base="$3"; shift 3
   local d="$WORK/mut-$name" m a t c
   cp -R "$(dirname "$SCRIPT")" "$d" \
     || { echo "FIXTURE ERROR: could not copy the reconcile dir for $name" >&2; exit 2; }
-  m="$d/$(basename "$SCRIPT")"
-  sed -f "$MUTD/$name.sed" "$SCRIPT" > "$m" \
+  m="$d/$base"
+  sed -f "$MUTD/$name.sed" "$src" > "$m" \
     || { echo "FIXTURE ERROR: mutation $name DID NOT APPLY (sed died)" >&2; exit 2; }
-  cmp -s "$SCRIPT" "$m" \
+  cmp -s "$src" "$m" \
     && { echo "FIXTURE ERROR: mutation $name matched nothing -- its anchor moved" >&2; exit 2; }
   bash -n "$m" 2>/dev/null \
     || { echo "FIXTURE ERROR: mutant $name does not parse" >&2; exit 2; }
@@ -383,7 +409,7 @@ mkmut() {  # name [-text|+text ...] -> mutant path on stdout
     t="${a#?}"
     # `-e` is not optional: an anchor whose text opens with `-` is read as a grep OPTION
     # otherwise, and the run dies with "Invalid argument" instead of scoring anything.
-    c="$(grep -cF -e "$t" "$SCRIPT")" || c=0
+    c="$(grep -cF -e "$t" "$src")" || c=0
     case "$a" in
       -*) [ "$c" -gt 0 ] || { echo "FIXTURE ERROR: mutation $name anchor absent from the ORIGINAL: $t" >&2; exit 2; }
           c="$(grep -cF -e "$t" "$m")" || c=0
@@ -393,7 +419,7 @@ mkmut() {  # name [-text|+text ...] -> mutant path on stdout
           [ "$c" -gt 0 ] || { echo "FIXTURE ERROR: mutation $name did not produce: $t" >&2; exit 2; } ;;
     esac
   done
-  printf '%s\n' "$m"
+  printf '%s\n' "$d/$(basename "$SCRIPT")"
 }
 
 PLAN="$WORK/plan.tsv"; : > "$PLAN"
@@ -447,7 +473,7 @@ plan m7  "$(mkmut m7  '-"$JOINED" "$WITNESSED"')"                         "11111
 plan m8  "$(mkmut m8  '-show_at "$THEIRS" "$f"' '+while IFS= read -r g')"  "00111111111110111"
 plan m9  "$(mkmut m9  '-"$JOINED" "$WITNESSED"')"                          "11111111110111111"
 plan m10 "$(mkmut m10 "-'^[[:space:]]*#'")"                               "11111111111010111"
-plan m11 "$(mkmut m11 '-ls-tree -r --name-only "$ref"')"                   "11111111111111101"
+plan m11 "$(mkmut_lib m11 '-ls-tree -r --name-only "$_ref"')"               "11111111111111101"
 plan m12 "$(mkmut m12 '-{3,}')"                                           "11111111111111011"
 plan m13 "$(mkmut m13 '-for dir in overrides extensions; do')"            "10111111010111111"
 plan m14 "$(mkmut m14 '-DROPPED="$(comm -23')"                            "11100111111111101"

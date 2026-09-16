@@ -140,15 +140,23 @@ fi
 # The pre-fix shape. Every arm must go red at once: A and B because neither path gets its
 # own row, C stays green (the M row is untouched) and is what proves the mutant did not
 # simply kill the whole pass, D because the joined row carries six fields.
+#
+# batch 121: `git diff --no-renames --name-status "$BASE" "$THEIRS" -- core/` moved out of
+# preclassify.sh's own body and into lib.sh's shared `memo_diff_name_status()`, called with
+# the SAME arguments through `memo_diff_name_status "$DIST" "$BASE" "$THEIRS" core/`. The
+# mutation therefore now patches lib.sh, copied into the SAME mutant directory this fixture
+# already builds -- preclassify.sh itself is untouched, exactly as its own header says only
+# the flag moves, not the caller.
 MUT="$WORK/mutant"
 cp -R "$RECON" "$MUT" || exit 2
-sed 's/diff --no-renames --name-status "\$BASE" "\$THEIRS" -- core\//diff --name-status "$BASE" "$THEIRS" -- core\//' \
-  "$RECON/preclassify.sh" > "$MUT/preclassify.sh"
-if cmp -s "$RECON/preclassify.sh" "$MUT/preclassify.sh"; then
+sed 's/diff --no-renames --name-status "\$_base" "\$_theirs" -- "\$@"/diff --name-status "$_base" "$_theirs" -- "$@"/g' \
+  "$RECON/lib.sh" > "$MUT/lib.sh"
+if cmp -s "$RECON/lib.sh" "$MUT/lib.sh"; then
   echo "FIXTURE ERROR: the mutation matched nothing -- the --no-renames line is not where this fixture expects it" >&2
   exit 2
 fi
 bash -n "$MUT/preclassify.sh" || { echo "FIXTURE ERROR: the mutant is not valid bash" >&2; exit 2; }
+bash -n "$MUT/lib.sh" || { echo "FIXTURE ERROR: the mutated lib.sh is not valid bash" >&2; exit 2; }
 mg="$(score "$MUT")"
 case "$mg" in
   ABD) ok "MUTANT (--no-renames removed) fails exactly [A B D]: both rename paths lose their bucket and a six-field row appears, while the M control stays green" ;;
