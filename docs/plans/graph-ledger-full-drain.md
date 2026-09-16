@@ -1062,64 +1062,87 @@ given at batch 90.
    at every phase when its second adversary returned two BLOCKERs, and batch 66's was green
    when its adversary returned a BLOCKER establishing the shipped fix had made things WORSE.**
 
-   **THE BATCH-117 RULING IS SPENT. `BL-257` SHIPPED AS `v0.583.0` AND IS ROTATED; THE
-   PROVENANCE-FIRST ORDERING GOVERNS AGAIN.** Batch 118 scopes off the PC-BACKED WORKLIST the
-   sweep derives, as every batch before 117 did. Do not look for performance work: the pole is
-   now WATCHED (`scripts/validate-suite-pole.sh` against `docs/suite-pole-baseline.tsv`, a step
-   in `.githooks/pre-push` after the suite), and cutting it is `docs/plans/pre-push-wall-clock.md`'s
-   program, whose next actions were re-derived in the same release — take that plan only on a
-   ruling.
+   **OPERATOR RULING AT BATCH 118: `docs/plans/pre-push-wall-clock.md` IS BATCH 119's SUBJECT.**
+   Given in as many words ("I hereby rule it batch 119's subject") after the operator asked whether
+   any release from `v0.576.0` to `v0.583.0` had cut the suite's wall clock and was told none had —
+   `v0.583.0` added a guard, which is a ceiling and not a cut. This overrides the provenance-first
+   ordering for ONE batch, the same shape as the batch-117 ruling for `BL-257`. Batch 119 opens with
+   THAT plan's own resume block, not this sweep: its two live actions are the `ledger-reverify` pole
+   (3643-line driver, 60 or more serial exec sites, no inner pool — overlap or shard it, and read the
+   `0.541.0` CHANGELOG entry first, where a shard was refuted and an inner pool won) and the
+   inner-pool sweep (11 fixtures declaring widths that sum to 70 over the 12-way outer pool). Pole
+   first, sweep second, because the makespan is one directory. The ruling is spent when batch 119
+   ships; this ordering governs again for batch 120.
 
-   **BATCH 117 SHIPPED AS `v0.583.0` (`3c4c1b14`), ONE SUBJECT, TWO ENTRIES CLOSED, NO PC ID.**
-   `BL-257` closed: both hooks publish this run's fixture costs UNMERGED to
-   `.git/ai-dlc-fixture-durations.last`, truncated at pool entry and written green-only; the guard
-   compares that file's pole against a tracked baseline (row `ledger-reverify 628`, band 20,
-   ceiling 754) with an 18-seed self-probe before the corpus, SKIPs on partial dispatch or a
-   pool-width mismatch, and has NO downward FAIL; the hook step runs even on a content-key skip so
-   the baseline is parsed on every push. `BL-255` closed on `BL-005`'s corrected heading; `BL-005`
-   stays OPEN. Live **72 -> 71** (two rotated, `BL-258` filed), archive **184 -> 186**. Gate
-   `AI_DLC_FIXTURE_NO_SKIP=1`: 22 of 22 phases, 202 ok / 0 FAIL, `suite-pole-guard` read by name;
-   the pole step measured `ledger-reverify 493s` on that run. First push exit 141 with every gate
-   green and no ref on origin; re-push landed.
+   **BATCH 118 SHIPPED AS `v0.584.0` (`a1979146`), TWO SUBJECTS, THREE ENTRIES CLOSED, TWO PC IDS
+   NAMED VERBATIM IN THE SQUASH MESSAGE.** `BL-259` closed, discharging
+   `PC-S312-STEP-2-SPELLS-THE-DERIVED-FIXTURE-SET-IN-A-FORM-ITS-OWN-RUNNER-REFUSES`:
+   `self-update-fixtures.sh` normalises `core/fixtures/<name>` and `tests/fixtures/<name>`, with or
+   without a trailing slash, to the bare name by character class, sited after `$LOG` exists and
+   before the coverage join, rotating the positionals; the refusal row names which shape it saw and
+   keeps the original argument as subject; `SKILL.md:477` says what the runner takes. `BL-262`
+   closed, discharging `PC-S312-CHECK22-NO-CLEARING-PATH-FOR-19B-CITATION-MISS`: Check 22's
+   four-arm disposition is scoped to every route into the validator's failure exit, arm 4 carries a
+   remediation per class, arm 1 says an entry clears exactly the spawns it names and may name
+   several, the effort route is documented probe-only, every FAIL message names the disposition.
+   `BL-256` closed incidentally (its own text said nothing was owed; receipt 0). `BL-260`, `BL-261`
+   and `BL-263` FILED, not fixed. Live **71 -> 73** (three rotated, five filed), archive
+   **186 -> 189**. Gate `AI_DLC_FIXTURE_NO_SKIP=1`: 22 of 22 phases, 202 ok / 0 FAIL, pole
+   `ledger-reverify 500s` against baseline 628s, four fixtures read by name against an
+   impossible-name control of 0. First push exit 141 with every gate green and no ref on origin;
+   re-push landed. Receipt histogram before and after: the same three zeros (`BL-254`, `BL-238`,
+   `BL-236`, each deliberately held open) — no further incidental close.
 
-   **THE CALIBRATION IS THE MEASUREMENT THIS PROGRAM HAD BEEN MISSING, and it is recorded in the
-   baseline's own header.** Three serial full gate runs in a `file://` clone at `83747ef4`, pool 12,
-   201 fixture directories, dispatch seeded longest-first: pole 628s (load 50.56 at start), 563s
-   (load 9.06), 562s (load 5.30); walls 743 / 629 / 627. A loaded spread of 12% on an unchanged
-   tree. Runs 1 and 3 were green; run 2 went red on `agent-definition-render` alone, filed as
-   `BL-258`. Every prior figure this file carried for the pole (490, 493, 573) was a merged-forward
-   row of unknown age; **the number to read now is the guard's own PASS line in the gate log.**
+   **THE SECOND SUBJECT WAS PULLED IN BY THE OPERATOR MID-BATCH AND WAS UNCOMMITTED IN THE
+   CONSUMER'S WORKING TREE WHEN READ.** `git show HEAD:` on the sprint branch lacked it; only the
+   working file carried it, so it had no `-S` date and the derived id set found it where the commit
+   message could not. Its own receipt was a FALSE PASS at base and tip: it greps the disposition
+   section for `19(b)|citation`, and arm 3 carries the word "citation" about the
+   operator-authorization citation. Its `derived` counts (6 and 0) reproduce on NO copy reachable
+   from here, the consumer's installed one included (1 and 1). `BL-262`'s receipt drives the
+   validator on a seeded four-row ledger and REFUSES if a class is deleted — the adversary showed a
+   naming-only receipt scores a build that deletes the 19(b) arm as FIXED.
 
-   **THE FILED RECEIPT WAS INVERTED AND PERMISSIVE AT ONCE, AND ONLY BUILDING FOUND IT.** The
-   contract adversary scored FOUR wrong implementations at receipt 0 (hardcoded threshold,
-   zero-tolerance compare, `cmp -s`, floor arithmetic); the fix hand then found the same receipt
-   exits 1 against the CORRECT guard, because its baseline carries no directives and its one-row
-   durations file is a partial dispatch by the design's own rule. Replaced before the fix landed,
-   with a within-band seed the filed one could not carry. The fixture is the discriminating
-   channel; a receipt is an anchor.
+   **BOTH CONTRACT ADVERSARIES FOUND BLOCKERS THAT NAMED FIXES, AND NONE WAS STRUCTURAL.** First
+   subject: a `case core/fixtures/*)` glob matches a space and a newline, so the contract's own
+   sentence acquitted the PC-S310 joined list and ran ONE fixture green over fourteen; `set -- $list`
+   word-splits and deletes the joined-list refusal; sited after the coverage join, a complete
+   path-form set is convicted incomplete; sited before `$LOG` exists the runner dies at rc=1, the
+   red-suite code, with the real fixture green on it. Three of the four contract mutants were
+   already green on the shipped suite. Second subject: the fixture's `VIOL=$((VIOL + 1))` grep is a
+   text-about-the-program trap (a one-space respelling empties it; a helper function keeps the
+   count at 4 with wrong membership), and the effort route is unreachable under the published
+   invocation (`BL-263`). Every one went into the contract before a builder started.
 
-   **`I55` ARM 3 REFUSED THE FIXTURE'S FIRST CUT, AND THE REFUSAL WAS RIGHT.** It read the tracked
-   baseline under `docs/` and walked up for `VERSION`, both in the content key's EXCLUDE set — a
-   fixture whose input can move without the suite re-running. The duty moved to the hook step,
-   which parses the baseline against an empty durations file on a content-key skip. **A `docs/`
-   input has exactly one reader that can see it, and it is not a fixture.**
+   **FOUR FAN-OUT HANDS STALLED AT ONCE ON A HARNESS WATCHDOG (no progress for 600s) AND ALL FOUR
+   RESUMED BY NAME WITH THEIR CONTEXT INTACT.** A stall that hits every hand in the same minute is
+   the harness, not the hands; `SendMessage` to the name resumes the agent from its transcript.
 
-   **THE LEDGER REF ELECTION FELL BACK TO `main` AGAIN** — the consumer's sprint branch is still
-   diverged (6 behind, 54 ahead, 2 unpushed). Against `main` the worklist was 17, against the
-   branch 14: one filing only on the branch (`PC-S344-SH-RECEIPTS-GET-NO-BASE-CONTROL-SO-STILL-LIVE-CANNOT-BE-READ`,
-   already cited by `BL-254`) and four entries on `main` whose candidates the consumer has since
-   closed. Both `PC-S312` ids named at batch 116's close are now COMMITTED on the branch; neither
-   is filed here. Neither ledger file was dirty. Consumer stamp `0.581.0` on all four fields;
-   delivery gap is `v0.582.0` and `v0.583.0`, and `v0.583.0` carries no PC id and nothing
-   consumer-facing except the two `LASTRUN_RECORD` lines in the shipped hook.
+   **THE LEDGER REF ELECTION FELL BACK TO `main` AGAIN** — the consumer's sprint branch
+   `ai-dlc/carry-over/epic-crs-fvs-carryover-priorities` is diverged (6 behind, 63 ahead, 11
+   unpushed at the sweep). Main-side worklist 17. Four filings only on the branch, all four now
+   filed here (`BL-254`, `BL-259`, `BL-260`, `BL-261`) plus the working-tree one (`BL-262`).
+   Consumer stamp `0.581.0`; delivery gap is `v0.582.0`, `v0.583.0`, `v0.584.0`, with 0 mode-only
+   changes across 25 raw diff rows and four bootstrapping files in the range (`SKILL.md`,
+   `emit-report.sh`, `preclassify.sh`, `self-update-fixtures.sh`). The consumer's installed runner
+   still refuses the path form on the pull that delivers `v0.584.0`; the fix takes effect on the
+   pull after.
 
-   **FILED, NOT FIXED, AND NOT TO BE FOLDED INTO A RELEASE WHOSE SUBJECT IT IS NOT:**
-   `core/fixtures/reconcile-emit-report` is intermittently red on `origin/main` in the FALSE
-   direction at a low single-digit rate under the pool, reproduced at `49e5356d`; the lead is a
-   bare `mktemp` at `emit-report.sh:331,:373` where `ledger-reverify.sh:1089-1096` records the same
-   class and prefixes its own. File it as its own entry (grep for an existing one first — batch
-   114 avoided three duplicates that way). `BL-258` is the same shape on a second fixture.
+   **ONE READ-SET ROW IS OWED AND NEEDS ROOT.** `check-22-spawn-ledger` now reads
+   `core/skills/ai-dlc/steps/gate-validation.md` and its map entry does not carry that path, so a
+   docs-only push can skip the fixture whose arm C2 watches that file. The operator runs
+   `sudo bash core/scripts/derive-fixture-readsets.sh --list "check-22-spawn-ledger"` and the next
+   batch commits the map change, as batch 118 did for `suite-pole-guard`.
 
+   **BATCH 117 SHIPPED AS `v0.583.0` (`3c4c1b14`)**: `BL-257` closed (the pole is watched by
+   `scripts/validate-suite-pole.sh` against `docs/suite-pole-baseline.tsv`, row `ledger-reverify
+   628`, band 20, ceiling 754, calibrated on three serial full runs with a 12% loaded spread),
+   `BL-255` closed, `BL-258` filed. The number to read for the pole is the guard's own PASS line in
+   the gate log, never a durations-record row.
+
+   **`core/fixtures/reconcile-emit-report`'s intermittent pool red IS ALREADY FILED AS `BL-230`**
+   — batch 118 grepped before filing and found it; do not file it again. `BL-258` is the same shape
+   on a second fixture.
    **"RESIDUE ZERO" MEANS NO CANDIDATE AWAITS A FIRST FILING. IT NEVER MEANS THE PC WORK IS
    DONE, AND EVERY BLOCK BELOW SAYING "ZERO KNOWN" IS MAKING ONLY THE NARROW CLAIM.** Two joins,
    two questions, and they are not interchangeable:
@@ -1147,7 +1170,7 @@ given at batch 90.
    **A sentence in this file saying the residue is zero is a snapshot of a file someone else is
    holding open. Run the sweep; never read that sentence for an answer.**
 
-1a. **`docs/backlog.md` IS AT 71 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
+1a. **`docs/backlog.md` IS AT 73 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
    is not blocked. That is not licence to file rather than fix — the standing correction in the
    resume block still governs — but a filing no longer costs a rotation, and rotating still means
    CLOSING, which needs a measurement.
