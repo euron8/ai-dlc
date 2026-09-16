@@ -50,10 +50,17 @@ one line: the pool's makespan cannot go below `sum of all unit costs / width`, a
 now within reach of the pole. Derive both before choosing any target — **a session that shaves a
 pole here delivers nothing and will not be able to tell.**
 
+**RESOLVE THE RECORD WITH `git rev-parse --git-common-dir`, NEVER A LITERAL `.git/`.** In a linked
+worktree — which action 3b REQUIRES you to be standing in — `.git` is a FILE, so
+`sort … .git/ai-dlc-fixture-durations` prints `sort: Not a directory` **and the pipeline still
+exits 0**. A stranger resuming there reads no pole, no floor and no failure. Measured at this
+release, by running 3b.
+
 ```
-sort -k2,2nr .git/ai-dlc-fixture-durations | head -3                       # the pole
-awk '{s+=$2; n++} END{printf "%d over %d units, sum/12 = %.1f\n", s, n, s/12}' \
-    .git/ai-dlc-fixture-durations                                          # the floor
+D="$(git rev-parse --git-common-dir)/ai-dlc-fixture-durations"
+[ -s "$D" ] || echo "NO RECORD -- run the gate once before reading a pole"   # the control
+sort -k2,2nr "$D" | head -3                                                  # the pole
+awk '{s+=$2; n++} END{printf "%d over %d units, sum/12 = %.1f\n", s, n, s/12}' "$D"   # the floor
 ```
 
 Measured at `v0.586.0`, full 202-fixture dispatch under `AI_DLC_FIXTURE_NO_SKIP=1`, pool 12:
