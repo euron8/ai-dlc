@@ -73,8 +73,13 @@ CONSUMER="${3:?}"
 THEIRS="${4:?}"
 
 SELF="$(cd "$(dirname "$0")" && pwd)"
-# shellcheck source=lib.sh
-. "$SELF/lib.sh" || { echo "emit-report: cannot source $SELF/lib.sh" >&2; exit 1; }
+# The shared library is deliberately NOT dot-sourced here: this file calls none of its
+# functions directly, only sets up the shared cache directory below and hands it to the
+# sub-detector PROCESSES it execs, several of which load that library themselves. Loading
+# it here too would add a second, unused emission of the exact source-line shape I105 keys
+# on to decide "invoked" -- and that library's own header carries an exemption marker, so a
+# second invocation site would read as one file that is both invoked and exempt, one of the
+# two stale. (Spelled around the literal dotted-source form on purpose, for the same reason.)
 
 # --- THE SHARED CROSS-PROCESS MEMO, OWNED HERE FOR THE WHOLE RENDER --------------------------
 #

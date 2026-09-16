@@ -338,69 +338,19 @@ fi
 # re-run the empty-blob case on every call -- the memo would silently do nothing for exactly
 # the inputs it is there for. The status file is written LAST, so an interrupted fill reads as
 # a miss rather than as a cached lie.
-# batch 121 / lib.sh's `ai_dlc_memo_dir()` generalized exactly this shape to cross a
-# PROCESS boundary: `emit-report.sh` execs this script as one of ~13 sub-detectors per
-# render, so a cache private to THIS process (the shape below, unmodified, until now)
-# starts cold on every render even though the same blobs were just read by a sibling
-# detector one process ago. PREFER the orchestrator's shared directory
-# (`AI_DLC_RECONCILE_MEMO`, exported by `emit-report.sh` for the whole render) and fall
-# back to this file's original private `mktemp -d` when nothing shared was handed down —
-# an operator invoking `ledger-reverify.sh` directly, or `apply.sh`, sees no change at all.
-BLOB_MEMO=""         # the cache directory, or "" when not built
-BLOB_MEMO_STATE=""   # "" not attempted | ok | unavailable
-blob_memo() { # 0 = $BLOB_MEMO holds a directory; 1 = uncacheable, callers go direct
-  case "$BLOB_MEMO_STATE" in
-    ok)          return 0 ;;
-    unavailable) return 1 ;;
-  esac
-  if [ -n "${AI_DLC_RECONCILE_MEMO:-}" ] && [ -d "${AI_DLC_RECONCILE_MEMO:-}" ]; then
-    BLOB_MEMO="$AI_DLC_RECONCILE_MEMO"
-    BLOB_MEMO_STATE=ok
-    return 0
-  fi
-  BLOB_MEMO_STATE=unavailable
-  BLOB_MEMO="$(mktemp -d "${TMPDIR:-/tmp}/ledger-reverify-memo.XXXXXX" 2>/dev/null)" || return 1
-  [ -n "$BLOB_MEMO" ] && [ -d "$BLOB_MEMO" ] || return 1
-  BLOB_MEMO_OWNED="$BLOB_MEMO"
-  BLOB_MEMO_STATE=ok
-  return 0
-}
-BLOB_MEMO_OWNED=""   # what the EXIT handler removes -- see the note at core_map_cleanup
-
-# memo_show <ref> <path> -- the blob on stdout, git's own exit status preserved.
-memo_show() {
-  local _k _f _st
-  blob_memo || { git -C "$DIST" show "$1:$2" 2>/dev/null; return $?; }
-  _k="$1:$2"; _k="${_k//%/%25}"; _k="${_k//\//%2F}"
-  _f="$BLOB_MEMO/$_k"
-  if [ ! -f "$_f.s" ]; then
-    git -C "$DIST" show "$1:$2" > "$_f.c" 2>/dev/null
-    _st=$?
-    printf '%s' "$_st" > "$_f.s"
-  fi
-  printf '%s\n' "$(<"$_f.c")"
-  _st="$(<"$_f.s")"
-  return "$_st"
-}
-
-# memo_has_path <ref> <path> -- 0 when the path exists at the ref. THE STATUS IS THE ANSWER
-# here, unlike memo_show, so it is the only thing cached.
-memo_has_path() {
-  local _k _f _st
-  blob_memo || { git -C "$DIST" cat-file -e "$1:$2" 2>/dev/null; return $?; }
-  _k="e $1:$2"; _k="${_k//%/%25}"; _k="${_k//\//%2F}"
-  _f="$BLOB_MEMO/$_k"
-  if [ ! -f "$_f.s" ]; then
-    git -C "$DIST" cat-file -e "$1:$2" 2>/dev/null
-    printf '%s' "$?" > "$_f.s"
-  fi
-  _st="$(<"$_f.s")"
-  return "$_st"
-}
-
-theirs_show() { memo_show "${THEIRS}" "$1"; }
-theirs_has_path() { memo_has_path "${THEIRS}" "$1"; }
-base_show() { memo_show "${BASE}" "$1"; }
+#
+# batch 121: this memo used to be a PRIVATE copy of exactly this shape, defined in this file.
+# lib.sh's `memo_show`/`memo_has_path`/`ai_dlc_memo_dir()` are now THE one home (I21 fails the
+# push on a second definition) -- generalized to take `<dist>` explicitly so it serves every
+# reconcile/*.sh, not just this one, and to prefer an orchestrator's shared cache directory
+# (`AI_DLC_RECONCILE_MEMO`, exported by `emit-report.sh` for one whole render) over building a
+# private one, which is what lets the same blob read by a SIBLING sub-detector process in the
+# same render answer here instead of forking `git` again. `theirs_show`/`theirs_has_path`/
+# `base_show` below are this file's own call-site spellings, adapted to lib.sh's `<dist,ref,path>`
+# signature; nothing downstream of them changed.
+theirs_show() { memo_show "$DIST" "${THEIRS}" "$1"; }
+theirs_has_path() { memo_has_path "$DIST" "${THEIRS}" "$1"; }
+base_show() { memo_show "$DIST" "${BASE}" "$1"; }
 
 # absorbed_at <path> <substring> -> the VERSION where <substring> FIRST appeared in <path>
 #
@@ -1119,7 +1069,13 @@ THEIRS_TREE_OWNED=""
 core_map_cleanup() {
   [ -n "${CORE_MAP:-}" ] && rm -f "$CORE_MAP"
   [ -n "${THEIRS_TREE_OWNED:-}" ] && rm -rf "$THEIRS_TREE_OWNED"
-  [ -n "${BLOB_MEMO_OWNED:-}" ] && rm -rf "$BLOB_MEMO_OWNED"
+  # lib.sh's `ai_dlc_memo_cleanup` removes ONLY `$AI_DLC_MEMO_OWNED` -- a directory THIS
+  # process's own `ai_dlc_memo_dir()` created with `mktemp -d` -- and is a no-op when this
+  # process instead borrowed `AI_DLC_RECONCILE_MEMO` from an orchestrator (`emit-report.sh`)
+  # that owns cleaning it up itself. Calling it unconditionally here is therefore safe on
+  # both paths; it replaces this file's own former private `BLOB_MEMO_OWNED` cleanup, which
+  # no longer exists now that `memo_show`/`memo_has_path` are lib.sh's alone (I21).
+  command -v ai_dlc_memo_cleanup >/dev/null 2>&1 && ai_dlc_memo_cleanup
   return 0
 }
 trap core_map_cleanup EXIT
