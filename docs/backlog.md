@@ -3755,3 +3755,52 @@ first.
 
 verify: sh f=core/skills/ai-dlc/steps/gate-validation.md; [ -f "$f" ] || exit 9; LC_ALL=C awk '/validate-spawn-ledger\.sh/{p=1} p && /--settings/{print; exit}' "$f" | grep -q . || exit 9; LC_ALL=C awk '/validate-spawn-ledger\.sh \\?$/{p=1} p{b=b $0 "\n"} p && /--settings/{exit} END{printf "%s", b}' "$f" | LC_ALL=C grep -qE -- '--probe' && exit 0; exit 1
 
+
+## BL-264 — the read-set deriver records GITIGNORED paths, so a tracked map is a function of ambient harness activity
+
+**`core/scripts/derive-fixture-readsets.sh` traced every path a fixture touched and wrote all of
+them into `.ai-dlc-fixture-readsets.tsv`, with no gitignore filter** — 0 `check-ignore` or
+`gitignore` sites in the deriver before this change, against a control of 2 after it. The tracer
+therefore recorded `.claude/worktrees/agent-*/`, which is the **Claude Code harness's own agent
+checkouts**: not this project's state, not any project's state, and present in whatever number of
+concurrent sessions happened to be running when the derivation ran.
+
+**Measured on the tracked map at `264a95de`: 12435 of 36046 rows point into
+`.claude/worktrees/`, plus 49 `.DS_Store` rows.** Re-derived across the whole map, 3943 of 6605
+distinct paths are gitignored and **12506 of 36036 data rows — roughly 35% — are paths no fixture
+depends on**. Control in the same derivation: `core/fixtures/ledger-reverify/run.sh` is present in
+the map and is NOT in the ignored set, so the filter discriminates rather than matching everything.
+
+**THE DEFECT IS REPRODUCIBILITY, NOT SELECTION.** Two derivations of one fixture minutes apart
+returned 4815 rows and then 26854 — a 5.6x move with no change to the fixture, caused only by how
+many agents were live. A derived artifact whose content depends on ambient activity cannot be
+reviewed, diffed, or reproduced, and the map is tracked, so every such run is a large spurious
+diff. The selection consequence is bounded and is in the SAFE direction: an over-broad read-set
+makes a fixture run MORE often than it must, never less.
+
+**The boundary is the repository's own `.gitignore`, read by git — never a hand-written prefix
+list.** `.claude/rules/**` is un-ignored by negation and IS tracked, and fixtures read those rule
+files; a prefix list keyed on `.claude` drops them. `git check-ignore` separates the two and a
+string match cannot. The filter FAILS OPEN by design: if `check-ignore` yields no usable verdict
+every path is kept, the read-set is a superset, and the fixture runs more often — the dangerous
+direction would be dropping a real input, which makes a fixture skip when its subject moved.
+
+**This is NOT `BL-127`, which is the opposite direction** — a mapped row OMITTING a file its
+`run.sh` opens, so the fixture is skipped on the change most likely to break it. That entry is
+about under-inclusion and silence; this one is about over-inclusion and irreproducibility. Both
+were checked before filing.
+
+**The 12435 stale rows are not cleared by this change.** The map is trace-derived and hand-editing
+it puts a second, drifting declaration beside the derivation — `BL-127` says so in as many words.
+They clear on the next `sudo bash core/scripts/derive-fixture-readsets.sh` run, which needs root
+and is the operator's to run, and which should be taken with no agent worktrees on disk so the
+result is stable.
+
+**Tiered DEFECT.** Nothing is corrupted and no guard is removed; what it costs is a 2.9MB tracked
+artifact that no reviewer can diff and that moves for reasons unrelated to the suite.
+
+The receipt keys on the filter EXISTING in the deriver, not on the map's row count reaching zero:
+the rows clear only on a root-privileged re-derivation, so a count-based receipt would be
+unattainable in this session and would read as a failure of a fix that works.
+
+verify: sh d=core/scripts/derive-fixture-readsets.sh; [ -f "$d" ] || exit 9; grep -q '^norm()' "$d" || exit 9; grep -q '^drop_ignored()' "$d" && grep -q 'check-ignore' "$d" && exit 0; exit 1

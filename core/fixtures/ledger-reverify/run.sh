@@ -181,7 +181,7 @@ row_is "Entry SH-SUBJECT-GONE" NEEDS-REVIEW "an && chain short-circuiting on a M
 # assertion: that entry names a consumer path that is genuinely absent and must stay flagged,
 # this one names a distribution path inside a rev-spec and must not be. An extractor that sees
 # neither passes the first arm alone; one that sees both passes the second alone.
-row_is "Entry SH-DIST-PATH" CLOSE-CANDIDATE "a `core/scripts/<x>` rev-spec names no consumer subject; reading one out of it withholds the close on a receipt that works"
+row_is "Entry SH-DIST-PATH" CLOSE-CANDIDATE "a \`core/scripts/<x>\` rev-spec names no consumer subject; reading one out of it withholds the close on a receipt that works"
 row_is "Entry SH-LIVE"  STILL-LIVE "exit 0 still means it reproduces"
 
 row_is "Entry M" CLOSE-CANDIDATE "two substrings, BOTH at theirs -> absorbed, must not stay open"

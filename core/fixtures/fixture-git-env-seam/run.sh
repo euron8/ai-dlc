@@ -158,13 +158,58 @@ victim_intact() { # victim_intact <n> <repo> <bare> <name>
 # pristine victim, which reads exactly like a seam that works. The tell was that
 # arm A passed too: in a partial tree BOTH worlds are inert, so the arm was
 # comparing two runs of nothing. Copy the whole tree.
+#
+# `.claude/worktrees` IS THE CLAUDE CODE HARNESS'S OWN AGENT CHECKOUTS, NOT THIS PROJECT'S
+# STATE AND NOT ANY PROJECT'S. It is gitignored under `.claude/*`, it appears in whatever
+# number of concurrent sessions happen to be running, and this repo's own code names it only
+# to record that `git ls-files` correctly drops it
+# (`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:1205`). Copying it made this
+# fixture's cost a function of ambient harness activity: measured on one tree, 34 agent
+# checkouts, 871M of a 1.0G copy, 15x the file count, 8 copies per run -- ~10s each against
+# ~0s with it excluded, three interleaved reps, sides asserted to differ first.
+#
+# IT ALSO RACED. `tar` walks those directories while another session is deleting one, which
+# is the ONLY reason the breakage below was ever observed rather than shipping silently.
+# The exclusion is narrow ON PURPOSE: `.claude/rules/**` is un-ignored by negation and is
+# tracked, so excluding all of `.claude` would drop files this tree legitimately carries.
 mktree() { # mktree <dest>
-  local dest="$1"
+  local dest="$1" src_n dst_n
   rm -rf "$dest"
   # `git archive HEAD` would miss the uncommitted seam on the branch that adds it.
   # Copy the working tree, excluding .git so the copy is not itself a repository.
   mkdir -p "$dest" || return 1
-  ( cd "$ROOT" && tar cf - --exclude='./.git' --exclude='./node_modules' . ) | ( cd "$dest" && tar xf - ) || return 1
+  ( cd "$ROOT" && tar cf - --exclude='./.git' --exclude='./node_modules' --exclude='./.claude/worktrees' . ) \
+    | ( cd "$dest" && tar xf - ) || return 1
+  # THE `||` ABOVE READS THE *READER* TAR'S STATUS AND NOTHING ELSE. There is no `pipefail`
+  # in this fixture or in `core/fixtures/lib/preamble.sh` (`set -u` at the top of this file is
+  # the only `set` line), so a WRITER that fails mid-walk -- a vanishing directory, an
+  # unreadable file -- exits non-zero into a reader that exits 0, and the pipeline reports 0.
+  # Constructed and measured: a writer failing on a missing member exits 1 alone and 0 through
+  # the pipe, landing 50 of 51 files. The two `[ -f ]` probes below pass on that tree, because
+  # they name two files out of thousands.
+  #
+  # THAT IS THE EXACT STATE THE HEADER ABOVE SAYS IS UNDETECTABLE: a partial tree makes the
+  # driven subject bail at its own startup check, every mutant "survives" against an untouched
+  # victim, and the unmutated arm passes too because two inert runs compare equal. So the copy
+  # asserts its own COMPLETENESS rather than the presence of two names. Counting entries both
+  # sides is cheap here -- the excluded copy is ~1000 entries, milliseconds -- and it fails
+  # CLOSED: any shortfall returns 1, which `broken` turns into FIXTURE BROKEN.
+  # COUNT THE SAME POPULATION ON BOTH SIDES. `tar tf -` emits a bare `./` for the root that
+  # `find -mindepth 1` does not, so a raw comparison is short by exactly one and the arm fires
+  # on a CORRECT copy -- measured, 1048 against 1049, on a complete tree. The root entry is
+  # dropped here rather than subtracting a constant: `-1` is an unexplained magic number that
+  # goes wrong the moment the stream's shape changes, and this repo's rule is to derive both
+  # sides rather than patch one. `grep -vx './'` also drops tar's trailing-slash directory
+  # spelling only for the ROOT, which is the single entry whose two spellings differ.
+  src_n="$( ( cd "$ROOT" && tar cf - --exclude='./.git' --exclude='./node_modules' --exclude='./.claude/worktrees' . 2>/dev/null ) | tar tf - 2>/dev/null | grep -vx '\./' | grep -c .)" || src_n=0
+  dst_n="$( ( cd "$dest" && find . -mindepth 1 2>/dev/null ) | grep -c .)" || dst_n=0
+  # A zero on either side is a broken measurement, never a clean one: it would make the
+  # comparison below pass by comparing two nothings, which is this fixture's own defect class.
+  [ "$src_n" -gt 0 ] && [ "$dst_n" -gt 0 ] || return 1
+  [ "$dst_n" -ge "$src_n" ] || {
+    printf '    copy is SHORT: %s entries landed of %s in the stream\n' "$dst_n" "$src_n" >&2
+    return 1
+  }
   [ -f "$dest/core/fixtures/lib/preamble.sh" ] || return 1
   [ -f "$dest/core/fixtures/$SUBJECT/run.sh" ] || return 1
 }
