@@ -1023,6 +1023,31 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
 SUITE_SKIPPED=0
 step "fixture suite (${FIXTURE_JOBS}-way)" fixture_suite_step
 
+# 3a. THE SUITE'S WALL CLOCK IS ONE NUMBER AND NOTHING WATCHED IT. This suite is POLE-BOUND:
+#     the time you wait tracks the single longest fixture DIRECTORY, not the sum over the
+#     pool. That figure grew 493 -> 573 across two releases with no mechanism able to see it,
+#     and three separate places went on citing a pole that had been displaced four releases
+#     earlier. The guard reads the record the block above publishes and compares it against a
+#     tracked baseline, failing only on growth beyond a calibrated band.
+#
+#     IT STANDS DOWN ON THE CONTENT-KEY SKIP RATHER THAN TRUSTING THE FILE'S AGE. A skip never
+#     enters the pool, so it neither truncates LASTRUN_RECORD nor writes it -- the PRIOR run's
+#     file survives intact and reads exactly like a fresh one. Nothing in the file says which
+#     run wrote it, so the only thing that knows is this shell, here, and that is why the
+#     stand-down is a hook-side condition and not something the guard can work out for itself.
+#
+#     NOT ADDED TO core/git-hooks/pre-push, and it sits OUTSIDE the I66 block for the same
+#     reason: the baseline lives under docs/, which a consumer tree does not have, so a
+#     consumer running this step would refuse on a file that can never exist there.
+pole_guard_step() {
+  if [ "${SUITE_SKIPPED:-0}" = 1 ]; then
+    printf '   SKIP -- suite skipped on the content key; nothing was measured\n'
+    return 0
+  fi
+  bash scripts/validate-suite-pole.sh --durations "$LASTRUN_RECORD" --jobs "$FIXTURE_JOBS"
+}
+step "suite pole (this run's loaded cost of the longest fixture against docs/suite-pole-baseline.tsv)" pole_guard_step
+
 # 4. A shipped script with a syntax error is a gate that cannot run at all.
 #    validate-enforcement-map.sh maps this glob set through map_consumer() and
 #    asserts it equals the set in core/git-hooks/pre-push. Add a class here and the
