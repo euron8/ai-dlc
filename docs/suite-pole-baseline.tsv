@@ -26,23 +26,38 @@
 # grown under the figure.
 #
 # CALIBRATION -- THREE SERIAL FULL RUNS OF `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`
-# ON AN UNCHANGED TREE, in a file:// clone of origin/main at 83747ef4, durations seeded so all
-# three dispatch in the same longest-first order:
+# ON AN UNCHANGED TREE, in a file:// clone of origin/main at 83747ef4, pool 12, 201 fixture
+# directories, durations seeded from the operator clone's record so all three dispatch in the
+# same longest-first order:
 #
-#   run 1: ledger-reverify 628s, wall 743s, gate green 21/21, load average 50.56 at start
-#   runs 2-3: PENDING -- the lead fills these in
+#   run 1: ledger-reverify 628s, wall 743s, load average 50.56 at start, gate green 21/21
+#   run 2: ledger-reverify 563s, wall 629s, load average  9.06 at start, gate RED on one
+#          unrelated fixture (agent-definition-render mutant-attribution flake); the durations
+#          file was complete at 201 rows, so the pole figure is a full-dispatch reading
+#   run 3: ledger-reverify 562s, wall 627s, load average  5.30 at start, gate green 21/21
 #
-# ##### THE ROW BELOW IS A PLACEHOLDER TAKEN FROM RUN 1 ALONE. #####
-# A single run gives an observed loaded figure and no spread at all, so the band beside it is
-# NOT yet calibrated: 25 is a holding value, not a measurement. The lead replaces the row, the
-# band and this block once runs 2 and 3 land -- row = MAX of the three, band = the observed
-# spread plus stated headroom. Until then this guard is watching a real number with an
-# unjustified tolerance, which is the honest state and is written here rather than implied.
+# The next four rows moved together and in the same direction across all three, which is what
+# says the spread is LOAD and not one unit misbehaving: reconcile-emit-report 377/325/325,
+# gate-adjudication-mutants 330/291/287, check-24-adversarial-convergence 246/186/192,
+# self-update-gate 226/196/197.
+#
+# HOW THE ROW AND THE BAND WERE DERIVED. n=3 under uncontrolled load gives no dispersion
+# estimate; what it gives is an OBSERVED LOADED CEILING, and that is what the row is -- the MAX
+# of the three, 628, not the mean and not the quiet-box figure. Taking the minimum would put
+# the baseline under two of the three readings of an unchanged tree, which is a red on every
+# busy push. The band is the observed spread, ceil((628-562)/562*100) = 12 percent, plus 8
+# points of stated headroom = 20. Ceiling therefore 628 + ceil(628*20/100) = 754: a run at 754
+# passes and a run at 755 fails.
+#
+# WHAT THIS ROW IS NOT COMPARABLE TO. Prior readings of this same row on other days, from the
+# merged-forward `.git/ai-dlc-fixture-durations` record, were 490, 493 and 573 -- rows of mixed
+# vintage, each a floor of unknown age. They are not three measurements of one quantity either,
+# which is why the calibration above was run rather than read off the record.
 #
 # RATCHET HISTORY -- one line per change to the row, with its measurement and the load beside it.
-#   v0.583.0  ledger-reverify 628  band 25  jobs 12  fixtures 201  (run 1, load 50.56; placeholder, see above)
+#   v0.583.0  ledger-reverify 628  band 20  jobs 12  fixtures 201  (max of 628/563/562, loads 50.56/9.06/5.30)
 #
-# band: 25
+# band: 20
 # jobs: 12
 # fixtures: 201
 ledger-reverify 628
