@@ -312,6 +312,16 @@ drivability() { bash scripts/ai-dlc/validate-fixture-drivability.sh; }
 # FIXTURE_POOL_BEGIN
 FIXTURE_JOBS="${AI_DLC_FIXTURE_JOBS:-12}"
 DURATIONS_RECORD=".git/ai-dlc-fixture-durations"
+# THIS RUN'S COSTS, UNMERGED. The record above merges each run over the last so a fixture that
+# was SKIPPED keeps the cost it had -- which is what the longest-first dispatch wants, and which
+# makes every row in it a floor of unknown age. If you want to know what your suite cost THIS
+# push, read this file: it holds only the units this pool actually timed.
+#
+# EMPTIED WHEN THE POOL STARTS AND WRITTEN ONLY IF EVERY UNIT CAME BACK GREEN. So an empty file
+# means "no complete measurement" -- a red unit, a killed push, or a suite that never ran -- and
+# a non-empty one means a full green pool. A red run's timings describe a suite that stopped
+# early, and treating those as a measurement reads a short run as a fast one.
+LASTRUN_RECORD=".git/ai-dlc-fixture-durations.last"
 READSET_MAP=".ai-dlc-fixture-readsets.tsv"
 # THE VERIFIED-STATE RECORD LIVES UNDER .git FOR I55 ARM 4'S REASON EXACTLY: the content key
 # hashes the working tree, so a cross-run record inside it would change the key that decides
@@ -644,6 +654,12 @@ run_fixtures() {
   # can ever be called `.dur` and land on top of this one. `.log` is the same shape and
   # gets its safety from the same dot.
   mkdir -p "$out/.dur" "$out/.log" || { rm -rf "$out"; return 1; }
+  # EMPTY THE THIS-RUN RECORD HERE, on the first line that only runs because the pool is
+  # starting. Anything that goes wrong after this -- no fixtures, a red unit, a dead worker --
+  # leaves the file empty, so finding it empty tells you no complete measurement exists instead
+  # of handing you last week's number as though it were today's. Errors are silenced the way
+  # every other write in this block silences them.
+  : > "$LASTRUN_RECORD" 2>/dev/null
 
   for d in tests/fixtures/*/; do
     [ -f "$d/run.sh" ] || continue
@@ -795,6 +811,13 @@ run_fixtures() {
   fi
 
   if [ "$rc" -eq 0 ] && [ -s "$out/.now" ]; then cp "$out/.now" "$VERIFIED_RECORD" 2>/dev/null; fi
+
+  # PUBLISH THIS RUN'S UNMERGED COSTS UNDER THE SAME GREEN-ONLY GATE. The file copied is the
+  # PRE-MERGE one -- "$out/.durations" holds exactly the units this pool timed, whereas
+  # "$out/.merged" above has already absorbed rows from earlier runs. Written only when every
+  # unit came back green, because timings from a suite that stopped early describe a shorter
+  # suite, not a faster one.
+  if [ "$rc" -eq 0 ] && [ -s "$out/.durations" ]; then cp "$out/.durations" "$LASTRUN_RECORD" 2>/dev/null; fi
 
   # COPY THE RED UNITS' OUTPUT OUT BEFORE THE TEMP DIR IS REMOVED. This is the last line at
   # which "$out" still exists; the `rm -rf` below is straight-line and there is no trap, so
