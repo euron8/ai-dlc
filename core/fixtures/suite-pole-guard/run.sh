@@ -34,12 +34,15 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
-# RESOLVE THE ROOT BY WALKING UP FOR `VERSION`, never by counting `..` hops: a hop count
-# answers differently from the repo root, from a subdirectory and from a sandbox copy, and
-# the sandbox answer is the silent one. This fixture is `.dist-only`, so there is no second
-# install layout to name — the subject exists in this tree or nowhere.
+# RESOLVE THE ROOT BY WALKING UP FOR THE SUBJECT ITSELF, never by counting `..` hops: a hop
+# count answers differently from the repo root, from a subdirectory and from a sandbox copy,
+# and the sandbox answer is the silent one. The marker is `scripts/validate-suite-pole.sh`
+# and not `VERSION`: VERSION is in the content key's EXCLUDE set, and I55 arm 3 refuses a
+# fixture that names an excluded path at the distribution root, because such a fixture's
+# input can change without the suite re-running. This fixture is `.dist-only`, so there is
+# no second install layout to name — the subject exists in this tree or nowhere.
 ROOT="$HERE"
-while [ "$ROOT" != "/" ] && [ ! -f "$ROOT/VERSION" ]; do ROOT="$(dirname "$ROOT")"; done
+while [ "$ROOT" != "/" ] && [ ! -f "$ROOT/scripts/validate-suite-pole.sh" ]; do ROOT="$(dirname "$ROOT")"; done
 
 fails=0
 asserts=0
@@ -52,7 +55,6 @@ broken() { printf '  FIXTURE BROKEN: %s\n' "$1" >&2; echo "suite-pole-guard: FIX
 
 echo "suite-pole-guard:"
 
-[ -f "$ROOT/VERSION" ] || broken "no VERSION marker walking up from $HERE, so the repo root could not be resolved"
 V="${1:-$ROOT/scripts/validate-suite-pole.sh}"
 [ -f "$V" ] || broken "cannot locate validate-suite-pole.sh at $V"
 # PRINT THE RESOLVED SUBJECT. A mutation applied to a copy the run never loads leaves every
@@ -493,62 +495,14 @@ $LIVE
 EOF
 
 # ---------------------------------------------------------------------------------------
-# SANITY ON THE REAL TREE. Everything above runs on synthesised trees, which cannot tell
-# whether the TRACKED baseline is readable by the shipping grammar. These two arms are the
-# join, and they are the two ways that file rots green.
+# THERE IS NO REAL-TREE ARM HERE, AND THAT IS I55 ARM 3'S RULING, NOT AN OMISSION. The first
+# cut asserted that the TRACKED docs/suite-pole-baseline.tsv parses under the shipping
+# grammar. docs/ is in the content key's EXCLUDE set, so a push editing only that file skips
+# the whole suite and an arm here could never see the edit -- a reader whose input can move
+# without it running. The reader that CAN see it is the pre-push step itself, which parses
+# the baseline on every push, content-key hit included (it runs the guard against an empty
+# durations file on a skip). Site the duty where it can fire; do not restate it here.
 # ---------------------------------------------------------------------------------------
-REAL_BASE="$ROOT/docs/suite-pole-baseline.tsv"
-if [ ! -f "$REAL_BASE" ]; then
-  bad "the tracked baseline is absent at ${REAL_BASE#"$ROOT"/} — the pre-push step reads it by default and would refuse on every push"
-else
-  # A FULL DURATIONS FILE CONSTRUCTED FROM THE REAL TREE: one row per real fixture directory,
-  # the baseline's own pole row carrying the baseline's own figure. Comparing that against the
-  # baseline must PASS — it is the same number — which exercises the real file through the
-  # whole program rather than grepping it.
-  REAL_FX="$(find "$ROOT/core/fixtures" -mindepth 2 -maxdepth 2 -name run.sh -type f 2>/dev/null | wc -l | tr -d ' ')"
-  case "$REAL_FX" in ''|*[!0-9]*) REAL_FX=0 ;; esac
-  [ "$REAL_FX" -gt 0 ] || broken "no fixture directories found under $ROOT/core/fixtures, so the real-tree arms have no population"
-  REAL_POLE="$(awk '/^[^#]/ && NF == 2 { print $1; exit }' "$REAL_BASE")"
-  REAL_SECS="$(awk '/^[^#]/ && NF == 2 { print $2; exit }' "$REAL_BASE")"
-  REAL_JOBS="$(sed -n 's/^#[[:blank:]]*jobs:[[:blank:]]*\([0-9][0-9]*\).*$/\1/p' "$REAL_BASE" | sed -n 1p)"
-  if [ -z "$REAL_POLE" ] || [ -z "$REAL_SECS" ] || [ -z "$REAL_JOBS" ]; then
-    bad "the tracked baseline yields pole='$REAL_POLE' secs='$REAL_SECS' jobs='$REAL_JOBS' — the arms below cannot be constructed from it"
-  else
-    RD="$WORK/real.durations"
-    : > "$RD"
-    # THE POLE ROW IS WRITTEN LAST AND THE OTHERS CARRY 1, so the max really is the baseline's
-    # figure and no other row can reach it. `find` ORDER is not read here; only the set is.
-    find "$ROOT/core/fixtures" -mindepth 2 -maxdepth 2 -name run.sh -type f 2>/dev/null \
-      | sed 's#/run\.sh$##; s#.*/##' \
-      | awk -v p="$REAL_POLE" -v s="$REAL_SECS" '{ if ($0 == p) { hit = 1; print $0, s } else print $0, 1 } END { if (!hit) exit 3 }' > "$RD"
-    awk_rc=$?
-    n_rd="$(grep -c . "$RD")" || n_rd=0
-    if [ "$awk_rc" -eq 3 ]; then
-      bad "the tracked baseline names pole '$REAL_POLE', which is not among this tree's $REAL_FX fixture directories — the guard refuses on it and every push would exit 2"
-    elif [ "$n_rd" -ne "$REAL_FX" ]; then
-      broken "constructed $n_rd durations rows against $REAL_FX fixture directories; the partial-dispatch precondition would SKIP and the sanity arm would assert nothing"
-    else
-      # `--root "$ROOT"` IS NOT OPTIONAL HERE, AND THE REPO-ROOT RUN CANNOT SEE THAT. Without
-      # it the subject walks up from the CWD for VERSION — which succeeds from the repo root
-      # and REFUSES from anywhere else. Measured: green from the repo root, `REFUSE -- no
-      # VERSION found walking up from /private/tmp` when the same fixture was driven from /tmp
-      # by absolute path. A fixture green only from one cwd is asserting about that cwd.
-      out="$(bash "$V" --root "$ROOT" --baseline "$REAL_BASE" --durations "$RD" --jobs "$REAL_JOBS" 2>&1)"; rc=$?
-      if [ "$rc" -eq 0 ] && grep -qF "pole $REAL_POLE $REAL_SECS" <<<"$out"; then
-        ok "the TRACKED baseline parses under the shipping grammar and compares clean against a full $REAL_FX-row durations file carrying its own figure"
-      else
-        bad "the tracked baseline did not survive the shipping program (rc=$rc): $(printf '%s\n' "$out" | sed -n 1p)"
-      fi
-    fi
-    # AND ITS POLE NAMES A DIRECTORY THAT EXISTS. Asserted directly as well as through the run
-    # above, because the run's refusal and a dozen other refusals share one exit code.
-    if [ -d "$ROOT/core/fixtures/$REAL_POLE" ]; then
-      ok "the tracked baseline's pole '$REAL_POLE' names an existing directory under core/fixtures/"
-    else
-      bad "the tracked baseline's pole '$REAL_POLE' is not a directory under core/fixtures/ — the guard exits 2 on every push until the row is re-pointed"
-    fi
-  fi
-fi
 
 # ---------------------------------------------------------------------------------------
 # MUTANTS. Each is a COPY of the WHOLE scripts directory — the subject resolves no siblings
@@ -725,9 +679,14 @@ mut probe-seed-set-deleted \
 # M4: THE ENV OVERRIDE IGNORED. The filed receipt SETS AI_DLC_POLE_BASELINE, so this mutation
 # makes the program read the real baseline while the receipt still passes — a receipt-green
 # non-fix. Only the decoy arm can see it.
+#
+# THE ANCHOR IS THE ENV TOKEN, NOT THE WHOLE ASSIGNMENT. The first cut quoted the subject's
+# default path verbatim, and the excluded top-level name inside a sed program is a string I55 arm 3 reads
+# as this fixture reaching a content-key-EXCLUDED path. The mutation deletes exactly the
+# `${AI_DLC_POLE_BASELINE:-...}` wrapper and nothing else, so the anchor is that wrapper.
 mut env-baseline-ignored \
-  'BASE="${OPT_BASE:-${AI_DLC_POLE_BASELINE:-$ROOT/docs/suite-pole-baseline.tsv}}"' \
-  's|BASE="\${OPT_BASE:-\${AI_DLC_POLE_BASELINE:-\$ROOT/docs/suite-pole-baseline.tsv}}"|BASE="${OPT_BASE:-$ROOT/docs/suite-pole-baseline.tsv}"|' \
+  '${AI_DLC_POLE_BASELINE:-' \
+  's|\${AI_DLC_POLE_BASELINE:-\([^}]*\)}|\1|' \
   env_override
 
 # M5: THE SELF-PROBE SHORT-CIRCUITED. `probe_expect` returns without comparing anything, so
@@ -795,9 +754,9 @@ printf '%s' "$MUT_TABLE" | sed 's/^/    /'
 # stale the release somebody adds an arm, and it goes stale SILENTLY in the direction that
 # matters — a fixture reporting fewer assertions than it has arms reads as a complete run.
 # The three addends are counted where they are produced: ARM_COUNT from $ARMS, MUT_COUNT
-# incremented by every `mut` call, and the two real-tree arms plus the control, which are
-# straight-line and cannot vary.
-EXPECTED_ASSERTIONS=$((ARM_COUNT + MUT_COUNT + 3))
+# incremented by every `mut` call, and the unmutated control, which is straight-line and
+# cannot vary.
+EXPECTED_ASSERTIONS=$((ARM_COUNT + MUT_COUNT + 1))
 if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then
   printf '  FAIL  %s assertions ran, %s expected — an arm did not execute\n' "$asserts" "$EXPECTED_ASSERTIONS"
   fails=$((fails + 1))

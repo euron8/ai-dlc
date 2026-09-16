@@ -462,7 +462,16 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   consecutive release, and the four arms above re-walking one shared corpus is a second candidate
 #   the next reduction pass should read together. The budget is set from the HIGH reading for the
 #   reason the paragraph above states. Headroom is 6.
-FORK_BUDGET=8218
+#
+#   0.583.0, SECOND RAISE IN THE SAME RELEASE: 8218 -> 8225, and this one IS the per-directory shape
+#   of 0.576.0/0.580.0 -- `core/fixtures/suite-pole-guard/` entering the fixture-directory corpus.
+#   Measured after the script raise above had landed, on ONE tree with the directory moved to a
+#   literal holdout path and back, interleaved two reps: with it 8219, 8218; without it 8211, 8212.
+#   +7, which is well under the +17..+19 a directory cost at 0.576.0/0.580.0 -- I20 `continue`s
+#   before any fork for a directory that carries a run.sh, so the per-directory cost has fallen
+#   since those two raises and a raise sized by extrapolation from them would have bought ten forks
+#   of unearned headroom. Budget from the HIGH reading, 8219, plus the usual 6.
+FORK_BUDGET=8225
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

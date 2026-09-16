@@ -1039,10 +1039,19 @@ step "fixture suite (${FIXTURE_JOBS}-way)" fixture_suite_step
 #     NOT ADDED TO core/git-hooks/pre-push, and it sits OUTSIDE the I66 block for the same
 #     reason: the baseline lives under docs/, which a consumer tree does not have, so a
 #     consumer running this step would refuse on a file that can never exist there.
+#
+#     ON A CONTENT-KEY SKIP THE GUARD STILL RUNS, AGAINST AN EMPTY DURATIONS FILE. docs/ is
+#     in the content key's EXCLUDE set, so a push that edits ONLY the baseline hits the key,
+#     skips the suite, and -- if this step stood down with it -- would land a malformed or
+#     stale-pole baseline that nothing parsed. The guard parses the baseline BEFORE it looks
+#     at durations and refuses (exit 2) on a bad one, then SKIPs on the empty file. So the
+#     baseline is read by a shipping program on every push regardless of the key, which is
+#     the reader I55 arm 3 requires for a docs/ input: the fixture suite cannot be it.
 pole_guard_step() {
   if [ "${SUITE_SKIPPED:-0}" = 1 ]; then
-    printf '   SKIP -- suite skipped on the content key; nothing was measured\n'
-    return 0
+    printf '   (suite skipped on the content key -- parsing the baseline only; nothing was measured)\n'
+    bash scripts/validate-suite-pole.sh --durations /dev/null --jobs "$FIXTURE_JOBS"
+    return
   fi
   bash scripts/validate-suite-pole.sh --durations "$LASTRUN_RECORD" --jobs "$FIXTURE_JOBS"
 }
