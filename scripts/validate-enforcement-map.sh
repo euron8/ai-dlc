@@ -415,7 +415,33 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   at 852641b2 the arm reads 8170 with 4 of headroom and PASSES, and the only diff between the
 #   two trees is the new fixture directory. NO REDUCTION TAKEN -- I87 remains the target, and it
 #   is now the third consecutive release to say so. Headroom is 10.
-FORK_BUDGET=8197
+#
+#   0.582.0: 8197 -> 8208, and the whole of it is ONE CITED (script, mode) PAIR -- the same
+#   shape as the 0.574.0 entry above, not the per-directory shape of the two between them.
+#   `emit-report.sh` gained a section driving `preclassify.sh ... --templates`, which is the
+#   FIRST citation of that mode anywhere in the shipped corpus: measured over `core/`, 0
+#   citations at 49e5356d against 3 at tip, with a control of 41 files citing `preclassify.sh`
+#   at all. Measured ONE tree, that file swapped to its 49e5356d blob and back, sides asserted
+#   to differ by line count before the comparison was read, interleaved 3 reps: base 8187 on
+#   all three, tip 8198 on all three, +11 every rep. `--section by-arm` puts the entire delta
+#   in I60 -- 1000 -> 1011, every other arm byte-identical -- which is I60's own per-pair rate,
+#   measured at 11 for one pair by the 0.574.0 entry and unchanged since.
+#
+#   THE READING SPANS THREE VALUES ACROSS INVOCATIONS AND `--stable` DOES NOT COVER IT. Five
+#   profiles of this one unchanged tree returned 8198, 8198, 8198, 8197, 8198. `--stable`
+#   guarantees a value repeated WITHIN one invocation; it says nothing run-to-run, and a
+#   dropped xtrace line can only subtract, so the HIGH reading is the true one. That matters
+#   here because the fixture read 8197 against FORK_BUDGET=8197 and printed PASS with 0 of
+#   headroom on a tree that is over budget on four readings in five -- a green that was one
+#   dropped trace line wide. The budget is set from the high reading, never from a run that
+#   happened to come back low.
+#
+#   NO REDUCTION TAKEN, and the citation is not available as one: it IS the fix. The section
+#   exists so step 3b's rows land inside the region `--verify` byte-compares, and removing the
+#   call to buy back 11 forks re-opens the omission. I87's per-directory pipeline remains the
+#   standing target and I60's per-pair cost is still the second candidate, now twice measured
+#   at 11. Headroom is 10.
+FORK_BUDGET=8208
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

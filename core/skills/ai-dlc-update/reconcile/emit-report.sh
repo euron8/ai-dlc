@@ -263,6 +263,38 @@ render() {
   del="$(printf '%s\n' "$pc" | awk -F'\t' '$4=="UPSTREAM-DELETED" || $4 ~ /^ORPHANED-RELOCATED/ {print $4"  "$2}' | sort -u)"
   none_or "$del"
 
+  # STEP 3b WAS THE FOURTH MANDATED DETECTOR OUTSIDE THIS REGION, AND THE ONLY ONE THE SKILL TOLD
+  # THE LLM TO RUN ITSELF. `preclassify.sh --templates` classifies the generated files that live
+  # OUTSIDE `core/` — the consumer's CLAUDE.md, docs/coding-conventions.md, QUICKSTART.md and
+  # .claude/settings.json — and its rows were narrated under a "Template-changes list" heading the
+  # author wrote by hand. On the reference consumer's report that section was one sentence. A
+  # narrated finding is one the narrator can drop, which is the whole reason this region exists,
+  # and `--verify` could not fail on the omission because the rows were never in the region to
+  # omit. `TEMPLATE-PROSE-MERGE` and `TEMPLATE-JSON-MERGE` both carry step-7 actions that rewrite
+  # a live consumer file, so a dropped row is an unperformed merge nobody can see afterwards.
+  #
+  # SITED AFTER "Deletions" DELIBERATELY. `core/fixtures/reconcile-emit-report/run.sh` extracts
+  # the orientation block with `awk '/Semantic worklist orientation/,/^\*\*Deletions/'` — a range
+  # over section ORDER, not over content. A section inserted inside that range silently widens
+  # what four of that fixture's arms read while every one of them stays green.
+  #
+  # PRECLASSIFY'S ARGUMENT ORDER, NOT THIS DRIVER'S. It takes <dist> <base> <theirs> <consumer>;
+  # emit-report's own positional args are <dist> <base> <consumer> <theirs>. Transposed, the
+  # classifier refuses at its `consumer-root not a directory` guard with a sha as the path — which
+  # the refusal arm below renders as REFUSED rather than as `none`.
+  #
+  # AND THE rc IS READ, for the reason the four sites below it state: this classifier exits 2 when
+  # it could not classify (an unreadable or empty template manifest), and a refusal rendered as
+  # `none` is the same defect one level down. The read is the detector's status only under this
+  # file's `set -o pipefail`, exactly as at the `retired-layer-token.sh` site.
+  sub "Template pre-classification (generated files outside core/ — step 3b; BUCKET  consumer-path  <- template):"
+  local tpl tpl_rc
+  tpl="$(bash "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" --templates 2>/dev/null | awk -F'\t' 'NF>=4 && $1=="T" {print $4"  "$3"  <- "$2}' | sort -u)"
+  tpl_rc=$?
+  if [ "$tpl_rc" -eq 0 ]; then none_or "$tpl"; else
+    echo "DETECTOR-REFUSED  preclassify.sh --templates exited ${tpl_rc} without classifying, so this section is NOT a finding of 'none'. Run it directly: reconcile/preclassify.sh <dist> <base> <theirs> <consumer> --templates"
+  fi
+
   # Rendered mechanically, inside the --verify'd region, precisely because the failure
   # this closes was a narrated report asserting OURS==BASE for all 25 validators against
   # a comparison that never ran. A +consumer-edited row means apply will overwrite a

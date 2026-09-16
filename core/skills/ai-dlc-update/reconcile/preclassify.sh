@@ -299,14 +299,28 @@ if [ "$MODE" = "--templates" ]; then
   # "did upstream change the template boilerplate since base?". Reads the
   # template_manifest from template-sites.md (co-located).
   MANIFEST="$(dirname "$0")/template-sites.md"
+  # AN UNREADABLE MANIFEST RENDERED AS A CLEAN `none`, AND THAT IS THE REFUSAL THIS ADDS.
+  # With `template-sites.md` absent the awk below printed to stderr, the loop read nothing, the
+  # block reached its own `exit 0`, and stdout was EMPTY at rc=0 — indistinguishable from "four
+  # templates, nothing to sync". A caller rendering this into an operator-facing report then
+  # prints `none` for a classifier that classified nothing. Measured: rc=0, 0 bytes.
+  #
+  # BOTH SHAPES REFUSE, because they are the same absence one level apart: the file missing, and
+  # the file present with no `template_manifest:` block for the awk to find (a rename of the key,
+  # a truncated copy, a manifest edited to nothing). The second is the one no `-r` test can see,
+  # so the parsed output is captured and asserted non-empty rather than piped straight into the
+  # loop — a pipeline's emptiness is not observable from inside the loop that reads it.
+  [ -r "$MANIFEST" ] || { echo "preclassify: --templates manifest unreadable: $MANIFEST" >&2; exit 2; }
   # Parse the YAML block: each entry has template:/consumer:/kind: lines.
-  awk '
+  TEMPLATE_ROWS="$(awk '
     /^template_manifest:/{f=1; next}
     f && /^  - template: /{t=$3; next}
     f && /^    consumer: /{c=$2; next}
     f && /^    kind: /{print t "\t" c "\t" $2; next}
     f && /^[^ ]/{exit}
-  ' "$MANIFEST" |
+  ' "$MANIFEST")"
+  [ -n "$TEMPLATE_ROWS" ] || { echo "preclassify: --templates manifest parsed to zero entries (no template_manifest: block?): $MANIFEST" >&2; exit 2; }
+  printf '%s\n' "$TEMPLATE_ROWS" |
   while IFS=$'\t' read -r tmpl cons kind; do
     [ -z "$tmpl" ] && continue
     base_h="$(blob_hash "$BASE" "$tmpl")"
