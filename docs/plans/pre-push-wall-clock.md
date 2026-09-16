@@ -122,8 +122,15 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    the wall the suite now sits against. Every past pole win was bought this way and that is why
    the floor is where it is.
 
-   **Work concentrates, which is what makes this tractable:** top 10 units are **42.2%** of all
-   pool-seconds, top 20 are **61.1%**. Re-derive both before scoping — the membership moves.
+   **Work concentrates, which is what makes this tractable:** top 10 units are **44.4%** of all
+   pool-seconds, top 20 are **62.2%**. Re-derive both before scoping — the membership moves, and
+   these two figures sat one release stale until action 3b re-ran them from a worktree:
+
+   ```
+   D="$(git rev-parse --git-common-dir)/ai-dlc-fixture-durations"
+   sort -k2,2nr "$D" | awk '{s+=$2;n++; if(n<=10)a+=$2; if(n<=20)b+=$2}
+     END{printf "top10=%.1f%% top20=%.1f%%\n", 100*a/s, 100*b/s}'
+   ```
 
 1b. **The inner pools, and they are NOT action 1.** Kept because the hook records them as owed and
    the join is the honest way to count them, but read action 1 first: widening or sweeping these
