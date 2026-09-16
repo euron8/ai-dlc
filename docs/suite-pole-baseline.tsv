@@ -1,0 +1,48 @@
+# suite-pole-baseline.tsv -- the fixture suite's POLE, and the only figure that decides how
+# long `git push` takes. Read by scripts/validate-suite-pole.sh at pre-push.
+#
+# WHAT A LOADED FIGURE IS, AND WHY NOTHING ELSE MAY BE PUT HERE. The number below is the cost
+# of one fixture directory measured WHILE THE WHOLE POOL WAS RUNNING -- twelve workers on this
+# box, every fixture dispatched. The same unit driven alone gives a completely different
+# number: one shard has measured 442s loaded against 112s solo. A solo timing and a loaded
+# timing are not two readings of one quantity and must never be written into the same row.
+#
+# WHY ONE ROW. The suite is POLE-BOUND: its wall clock tracks the single longest DIRECTORY,
+# not the sum over the pool. A file with a row per fixture is a file every push edits and
+# nobody reads, and the rows for units that are not the pole rot in place. The guard refuses a
+# second data row for that reason.
+#
+# THE RATCHET RULE. The row moves DOWN freely -- a faster suite needs no ceremony. It moves UP
+# only as a reviewed edit carrying a MEASUREMENT and the load average it was taken under, in
+# the same change as whatever made the suite slower, appended to the history below. A loaded
+# box is not a reason to raise the row; re-run the gate, which is what the band is for.
+#
+# `# band:` is the percent of growth tolerated above the row before the push fails. It is the
+# calibrated run-to-run spread plus stated headroom -- not a number chosen for comfort.
+# `# jobs:` is the pool width the figure was taken under; the guard SKIPS rather than compares
+# when the running width differs, because a different width is a different measurement.
+# `# fixtures:` is the fixture-directory count of the tree the figure was taken on. It is
+# reported and never compared -- it is there so a later reader can see whether the suite has
+# grown under the figure.
+#
+# CALIBRATION -- THREE SERIAL FULL RUNS OF `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`
+# ON AN UNCHANGED TREE, in a file:// clone of origin/main at 83747ef4, durations seeded so all
+# three dispatch in the same longest-first order:
+#
+#   run 1: ledger-reverify 628s, wall 743s, gate green 21/21, load average 50.56 at start
+#   runs 2-3: PENDING -- the lead fills these in
+#
+# ##### THE ROW BELOW IS A PLACEHOLDER TAKEN FROM RUN 1 ALONE. #####
+# A single run gives an observed loaded figure and no spread at all, so the band beside it is
+# NOT yet calibrated: 25 is a holding value, not a measurement. The lead replaces the row, the
+# band and this block once runs 2 and 3 land -- row = MAX of the three, band = the observed
+# spread plus stated headroom. Until then this guard is watching a real number with an
+# unjustified tolerance, which is the honest state and is written here rather than implied.
+#
+# RATCHET HISTORY -- one line per change to the row, with its measurement and the load beside it.
+#   v0.583.0  ledger-reverify 628  band 25  jobs 12  fixtures 201  (run 1, load 50.56; placeholder, see above)
+#
+# band: 25
+# jobs: 12
+# fixtures: 201
+ledger-reverify 628
