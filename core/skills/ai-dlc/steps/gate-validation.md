@@ -1500,7 +1500,10 @@ I56 binds them, so the gate cannot classify a binding differently from the hook
 that made it.
 
 **Exit 0 = clean. Exit 1 FAILS**, clearable only by the four-arm disposition
-below. **Exit 2 FAILS** — a fumbled invocation, an unreadable settings.json, or
+below — which covers every class of recorded violation that reaches this exit
+code: a Rule 19(a) tier mismatch, a missing Rule 19(b) role-contract citation,
+an unreadable role file, and an effort mismatch. **Exit 2 FAILS** — a fumbled
+invocation, an unreadable settings.json, or
 no `jq`; nothing was compared. **Exit 3 says nothing was compared** — either
 PRE-LEDGER, or every in-sprint row was out of scope; it is not a pass in
 either case. **The disposition is in the script's own message, which names
@@ -1517,22 +1520,37 @@ or how an escalated role's values compare to its base role's — per Rule 19(a)
 those are operator config, and an equal or lower escalated value is not a
 finding.
 
-**Dispositioning a Rule 19(a) violation that already happened.** A spawn that
-ran on the wrong tier is a fact about the past. No later action changes it, so
-without a clearing path this check fails forever on a sprint where it fired
-once — the gate becomes unpassable by any consumer action, which is a defect in
-the check and not a finding about the sprint. (Exactly that happened: a
+**Dispositioning a recorded Rule 19 violation that already happened.** A spawn
+that ran on the wrong tier, or with no contract cited, or against an unreadable
+role file, or at a level nothing bound is a fact about the past. No later action
+changes it, so without a clearing path this check fails forever on a sprint where
+it fired once — the gate becomes unpassable by any consumer action, which is a
+defect in the check and not a finding about the sprint. (Exactly that happened: a
 `protected-path-editor` ran on sonnet against an opus-5 pin, the lead
 self-reported it, and four gate attempts failed with nothing anyone could do —
 the operator could not clear it either, because this check did not read the
 escalation where an authorization would live.)
 
-A recorded tier mismatch is CLEARED when **all four** hold:
+These four arms clear EVERY class of recorded Rule 19 violation the script fails
+on, and the classes are its four FAIL routes into that one exit code, not four
+dispositions: a Rule 19(a) **tier mismatch**; a **missing Rule 19(b)
+role-contract citation** (`role_contract_cited=false`); an **unreadable role
+file** (`role_file_readable=false`, Rule 19's fail-closed case); and an **effort
+mismatch**, where the row's `effort_bound` disagrees with the effort the
+teammate's own transcript records. A class the arms did not cover would be a
+route that fails forever, which is the defect this section exists to prevent.
+
+**The effort route fires only when `--probe` is passed**, which the invocation
+published above does not pass, so it is probe-only today and a gate running that
+command reaches the other three routes alone.
+
+A recorded tier mismatch is CLEARED when **all four** hold, and so is a recorded
+violation of any of the other three:
 
 1. An escalation entry for the CURRENT sprint in `docs/escalations/pending.md`
    NAMES the offending spawn — its dispatch `name` / agent id appears verbatim
-   in the entry. One entry clears one spawn; a waiver that names no spawn
-   clears nothing.
+   in the entry. An entry clears exactly the spawns it names, and it may name
+   several; a waiver that names no spawn clears nothing.
 2. That entry's `**Status:**` is `OVERRIDDEN`.
 3. `scripts/ai-dlc/validate-escalation-resolution.sh --escalations
    docs/escalations/pending.md --sprint <N> --transcript <this session's
@@ -1550,16 +1568,24 @@ A recorded tier mismatch is CLEARED when **all four** hold:
    session transcript. The verdict on this arm is the validator's exit code,
    not the adjudicator's reading — which is what makes the disposition
    unforgeable.
-4. The entry states the REMEDIATION and names its artifact: either the work was
+4. The entry states the REMEDIATION and names its artifact, and the remediation
+   is worded for the CLASS that fired. For a **tier mismatch**: the work was
    redone on the pinned tier, or the teammate's output was independently
-   verified against its source. An `OVERRIDDEN` carrying no remediation is a
+   verified against its source. For a **missing 19(b) citation**: the dispatch's
+   role binding was reconstructed and the teammate's output verified against
+   that role file's contract — redoing the work "on the pinned tier" remedies
+   nothing here, because the tier may already have been right. For an
+   **unreadable role file**: likewise — the role file the dispatch should have
+   resolved is named, and the output is verified against its contract. For an
+   **effort mismatch**: the work was redone at the pinned effort, or the output
+   was independently verified. An `OVERRIDDEN` carrying no remediation is a
    content-free waiver — writable without anyone having looked at the output,
    which is the forgeable-evidence shape Check 26 exists to reject.
 
 **`DECIDED_AUTONOMOUSLY` does NOT clear this**, and that exclusion is the point:
 it is the lead dispositioning its own Rule 19 violation. A self-report is the
 right conduct and is not a clearing path. Missing any of the four arms → the
-mismatch still FAILS.
+violation still FAILS, whichever class it belongs to.
 
 This clears the RECORDED violation. It does not license the next one — the
 dispatch guard binds the model before the work runs, so a spawn made under the
