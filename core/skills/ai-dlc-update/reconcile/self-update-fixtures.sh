@@ -120,6 +120,53 @@ mkdir -p "$OUT_DIR" 2>/dev/null || { echo "self-update-fixtures: cannot create $
   echo ""
 } >> "$LOG"
 
+# --- THE ARGUMENT IS A BARE NAME, AND THE STEP THAT DERIVES IT SPELLS A PATH -------------
+# Step 2's fixture term is derived as `core/fixtures/<dir>/` — that is the form the reader is
+# told to grep for, and it is the form the reference consumer passed. Every one of those
+# arguments was refused below as an unparsable NAME, on a set that was otherwise correct. So
+# the path form is normalised to the bare name here, and the refusal keeps every input it had.
+#
+# THE MATCH IS A CHARACTER CLASS, NEVER A `case core/fixtures/*)` GLOB, and the difference is
+# the whole PC-S310 refusal. `*` matches a space and a newline, so a glob would collapse a
+# fifteen-name joined list to its last name and run ONE fixture green — the acquitting
+# direction of the very defect the shape probe below exists to catch. What may be stripped is
+# the `core/fixtures/` or `tests/fixtures/` prefix and at most one trailing slash, and only
+# when what remains is a single `[A-Za-z0-9._-]` name. Whitespace, a second slash, an empty
+# name, and every other slash form fall through untouched and are refused below.
+#
+# THE REWRITE IS A ROTATION, NEVER `set -- $list`. Word-splitting the positionals is exactly
+# what the joined-list refusal detects the absence of, so re-introducing it here would delete
+# that arm from inside the fix. `set -f` does not save it — the split is IFS, not glob. Each
+# argument is shifted off the front and pushed back on the end, $# unchanged.
+#
+# SITED HERE, ABOVE THE COVERAGE JOIN, because the join's membership test reads `$*` and the
+# fixture loop reads `$name` as a path component. A normalisation below either one convicts a
+# COMPLETE path-form set as incomplete, or reports MISS on every fixture it was handed.
+#
+# THE `NORMALISED:` ROWS GO ABOVE ANY `COVERAGE:` BLOCK, because the readers of this log window
+# from a `COVERAGE:` line to the next blank one; a row landing inside that window is read as a
+# refused directory.
+_norm_n=$#
+_norm_i=0
+while [ "$_norm_i" -lt "$_norm_n" ]; do
+  _na="$1"; shift
+  _nb="$_na"
+  _nc=""
+  case "$_na" in
+    core/fixtures/*)  _nc="${_na%/}"; _nc="${_nc#core/fixtures/}" ;;
+    tests/fixtures/*) _nc="${_na%/}"; _nc="${_nc#tests/fixtures/}" ;;
+  esac
+  case "$_nc" in
+    ""|*[!A-Za-z0-9._-]*) ;;
+    *) _nb="$_nc" ;;
+  esac
+  if [ "$_nb" != "$_na" ]; then
+    printf 'NORMALISED: %s -> %s\n' "$_na" "$_nb" >> "$LOG"
+  fi
+  set -- "$@" "$_nb"
+  _norm_i=$((_norm_i + 1))
+done
+
 # --- The COVERAGE join: every fixture the DIFF changes must be in the named set ----------
 # One side derived here from `base..theirs`, the other passed in by step 2. Run BEFORE the
 # fixtures, because an incomplete set that runs green is the state this arm exists to refuse
@@ -796,6 +843,20 @@ fi
 # before the tree lookups because it needs none, and the deleted-driver verdict keeps every
 # input it had before this change.
 #
+# THE PATH FORM REACHES THIS ARM NO LONGER, AND IT USED TO BE THE COMMON CASE. Step 2 spells
+# its fixture term `core/fixtures/<dir>/`, so an operator following the step passes exactly
+# what this probe was built to refuse: the reference consumer's committed log carries
+# twenty-four refusal rows, every one of them a `core/fixtures/<name>` argument naming a real
+# shippable fixture. Both halves were right on their own terms and the pair wedged the cycle
+# — which is why the repair is a NORMALISATION above the coverage join rather than a widened
+# predicate here. The two accepted prefixes are stripped there; everything that arrives here
+# with a slash is a form no reading of the step produces.
+#
+# THE ROW NAMES WHICH SHAPE IT SAW, because the remedy forks: whitespace sends the reader to
+# the caller's quoting, a slash sends them to the argument itself, and the earlier single
+# sentence sent both to the zsh remedy. A reader of a path-form row who follows a
+# word-splitting instruction learns nothing and changes nothing.
+#
 # `rev-parse -q --verify`, NOT `cat-file -e`, AND THE DIFFERENCE IS A SHIPPED FALSE CONVICTION.
 # `cat-file -e <rev>:<path>` requires the BLOB OBJECT to be present locally. On a
 # `--filter=blob:none` clone whose promisor is unreachable it answers ABSENT for a path that
@@ -813,8 +874,27 @@ for d in "$@"; do
     unshippable="$unshippable
   $d — carries .dist-only at ${THEIRS}: never shipped, so no consumer can hold it"
   elif [ "$d" != "$(printf '%s' "$d" | tr -d '[:space:]/')" ] || [ -z "$d" ]; then
+    # THE ROW SAYS WHICH SHAPE WAS SEEN, because the two causes take opposite remedies and one
+    # sentence cannot serve both. A joined list is fixed by word-splitting the caller's variable;
+    # a path that is not one of the two accepted prefixes is fixed by passing the name. Sending a
+    # reader of the second to the zsh remedy costs them the whole diagnosis.
+    #
+    # THE SUBJECT IS THE ORIGINAL ARGUMENT, and it is here because it can be empty. `core/fixtures/`
+    # carries the accepted prefix and NO name, so nothing is stripped from it — a row whose subject
+    # were the stripped remainder would open with a space, and the readers of this log key on a
+    # row's first token.
+    case "$d" in
+      "")
+        _nwhy="it is empty" ;;
+      *[[:space:]]*)
+        _nwhy="it carries whitespace — several names in ONE argument rather than one name" ;;
+      core/fixtures/*|tests/fixtures/*)
+        _nwhy="it carries the fixture path prefix but does not name exactly one directory under it" ;;
+      *)
+        _nwhy="it carries a slash and is neither core/fixtures/<name> nor tests/fixtures/<name>" ;;
+    esac
     unshippable="$unshippable
-  $d — not a fixture NAME: it carries whitespace or a slash, so it is an unparsable argument rather than a deleted driver"
+  $d — not a fixture NAME: $_nwhy, so it is an unparsable argument rather than a deleted driver"
   elif ! git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${d}/run.sh" >/dev/null 2>&1; then
     unshippable="$unshippable
   $d — no run.sh at ${THEIRS}: upstream deleted the driver, so there is nothing to write"
@@ -833,7 +913,12 @@ if [ -n "$unshippable" ]; then
   echo "  never ships — the RETIRED-FIXTURE-ORPHAN class. Drop them from the slice and re-run." >&2
   echo "  A 'not a fixture NAME' row is the EXCEPTION to that remedy: no such fixture was" >&2
   echo "  ever named, so dropping it drops nothing and the diff-side join then refuses the" >&2
-  echo "  omission. Fix the ARGUMENT instead — under zsh an unquoted \$FIX holding a" >&2
+  echo "  omission. Fix the ARGUMENT instead, and the row names WHICH of two causes it is." >&2
+  echo "  THE PATH FORM: 'core/fixtures/<name>' and 'tests/fixtures/<name>', with or without" >&2
+  echo "  a trailing slash, are ACCEPTED — they are normalised to the bare name above, and" >&2
+  echo "  every such rewrite is logged. A path row therefore means something else: a deeper" >&2
+  echo "  path, a prefix that is neither of those two, or no name after the prefix at all." >&2
+  echo "  Pass the fixture DIRECTORY NAME. THE JOINED LIST: under zsh an unquoted \$FIX holding a" >&2
   echo "  newline-joined list arrives as ONE argument; word-split it explicitly." >&2
   echo "  log: $LOG" >&2
   exit 2
