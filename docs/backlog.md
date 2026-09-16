@@ -1866,6 +1866,34 @@ entry evaluates as a CLOSE-CANDIDATE on a string whose presence is unrelated to 
 verify: sh P=core/skills/ai-dlc/steps/_gate-procedures.md; S(){ LC_ALL=C awk -v h="$1" 'index($0,h)==1{f=1;next} f&&/^## /{exit} f' "$P"; }; C=$(S "## Gate-adjudication dispatch"); [ "$(grep -cF run_in_background <<<"$C")" -ge 1 ] || exit 1; B=$(S "## Bounded-join beat"); [ "$(grep -cF run_in_background <<<"$B")" -ge 1 ]
 ## BL-047
 
+**RE-SCORED. Claim 4 of this entry is EXPIRED AND WIDER THAN IT WAS FILED, and the citations
+below have moved.** The entry names two first-match-wins readers. There are three: Check 8 of
+`core/scripts/validate-mandatory-rules.sh` landed after this filing and inherits the same
+defect as a GATE, so on a two-valued section it FAILs a correctly positioned retro in one line
+order and PASSes a mis-positioned one in the other — same tree, two verdicts, decided by which
+bullet came first. The citations in the paragraphs below read against the tree as it was:
+`ai-dlc-continue.sh:559` is now `:1246`, the recovery hook's section-scoped excerpt `:165` is
+now `:212`, and the schema clause `gate-validation.md:773` is now `:855` and no longer says
+only "update `current_step_file`" — it states the single-value rule, which is the carrier this
+entry measured as absent.
+
+**The consumer census, run by the fix hand with `/usr/bin/grep` over 2218 revisions of the
+reference consumer's `_bmad-output/pipeline-snapshot.md` (read-only), using the count rule
+EXTRACTED from the fixed hook rather than retyped.** Loose two-plus in-section, the control
+that shows the grammars differ: **61**. Refusals under the shipped rule — two live bullets
+naming DIFFERENT step files: **26**, every sampled member a genuine unlabelled duplicate, none
+the prose-quote shape and none a labelled prior; examples `5e23a232`, `66d0eb16`, `16f7a21d`,
+`4fd11a38`, `43e393f3`. Un-resolved where the pre-fix `grep -m1` reader resolves a value:
+**0**, which is the number that gates the ship.
+
+**A STRICT `current_step_file:`-only key was refuted on this corpus, and the correction is
+recorded because the first figure was wrong.** The contract's first draft predicted the strict
+grammar would un-resolve **94** revisions; measured against the shipping reader it un-resolves
+**1416** of the 2200 the loose reader resolves. The direction held and the magnitude was
+fifteen times larger — the consumer's dominant spellings are `- **Current step file:**` and
+the backticked `` - **`current_step_file`:** ``, so the count is layered OVER the existing
+alternation and never narrows it.
+
 **A Pipeline Position carrying two `Current step file` values makes `ai-dlc-recover.sh` mandate
 one step file while its own excerpt displays the other, in the same emitted block.** Driven
 against the shipping hook, not a re-implementation: `CLAUDE_PROJECT_DIR` pointed at a scratch
@@ -1901,19 +1929,47 @@ post-compact recovery mandate and it is what `ai-dlc-recover-gate.sh` reads to d
 may arm, so a first-match-wins resolution mandates a Read of the wrong step file and gates the
 lead's next tool call on it.
 
-The anchor is behavioural and drives the real hook because every substring available here
-describes a wanted fix rather than the defect. A seeded reader fix — the same script with the
-grep section-scoped and `tail -1` taking the live value — was built as a differential and
-asserted to differ before being read: identical line counts (354/354), exactly 4 differing
-lines, both inside the `STEP_FILE=` assignment. Against that copy the receipt returns **0**;
-against the shipping hook it returns **1**. The receipt also passes if the hook emits no step
-mandate at all, so a fix that refuses on a multi-valued field closes it too.
+**THE RECEIPT THIS ENTRY SHIPPED WAS SATISFIED BY A STUB AND HAS BEEN REPLACED.** It said so
+itself: "the receipt also passes if the hook emits no step mandate at all". A hook that resolves
+NOTHING — every snapshot, every shape — emitted no `steps/*.md` and scored 0, so the entry could
+have closed on a change that deleted the feature. It also read the hook's emitted TEXT, which is
+prose about a resolution rather than the resolution, where what the recovery gate actually arms on
+is the `_bmad-output/.recover-fired` marker.
+
+The replacement drives the shipping `core/hooks/ai-dlc-recover.sh` from a mktemp project
+(`CLAUDE_PROJECT_DIR` set, `.claude/skills/ai-dlc/steps/{stale,live}.md` present,
+`{"source":"compact"}` on stdin) on three distinct input SHAPES and reads the marker, not the
+text: **S1** two unlabelled `- **Current step file:**` bullets, stale above live, must write
+`step_file_resolved=0`; **S2b** a single backticked `` - **`current_step_file`:** `live.md` ``
+and **S3** a live bullet above a labelled `- **(prior) Current step file:**` must both write
+`step_file_resolved=1` with `step_file=` ending `steps/live.md`. The marker being absent
+entirely on S2b, or the hook file being unreadable, exits **9** — a precondition, not a verdict,
+and both arms were fired: a root with the hook deleted and a root whose hook is `exit 0` each
+returned 9.
+
+**Scored by BUILDING each candidate into its own `mktemp` copy of the tree** (archive of the
+scored ref, hook copy edited in place), `cmp`-asserted to differ from the tip copy, `bash -n`
+clean, and evaluated from that root:
+
+| Tree | Receipt | Where it fails |
+|------|---------|----------------|
+| tip `af296464` | **0** | — |
+| base `49e5356d` | 1 | S1 mandates `steps/stale.md`, `resolved=1` |
+| blanket-refuse stub (never resolves) | 1 | S2b and S3 both `resolved=0` |
+| R1 section-scoped `head -1` | 1 | S1 resolves `stale.md` |
+| R2 section-scoped `tail -1` | 1 | S1 resolves `live.md` where the marker must read `resolved=0` |
+| R3 strict `current_step_file:` key grammar | 1 | S2b `resolved=0` — the backticked spelling |
+| R4 label exclusion dropped | 1 | S3 refuses on a labelled prior |
+
+R2 is the one that had to be built rather than assumed: `tail -1` mandates the newest value on
+S1, which is the RIGHT file, and the receipt still fails it — refusal, not newest-wins, is what
+the marker records, and a reader that picks a winner from two live bullets is picking.
 
 Discharges the consumer entry `PC-S296-PIPELINE-POSITION-MUST-BE-EDITED-IN-PLACE` at pinned
 ledger line 701.
 
 
-verify: sh D=$(mktemp -d); mkdir -p "$D/_bmad-output" "$D/.claude/skills/ai-dlc/steps"; : > "$D/.claude/skills/ai-dlc/steps/stale.md"; : > "$D/.claude/skills/ai-dlc/steps/live.md"; printf '# S\n\n## Pipeline Position\n\n- **Current step file:** `stale.md`\n- **Current step file:** `live.md`\n\n## Recent Activity\n\n- x\n' > "$D/_bmad-output/pipeline-snapshot.md"; M=$(printf '%s' '{"source":"compact"}' | CLAUDE_PROJECT_DIR="$D" bash core/hooks/ai-dlc-recover.sh 2>&1 | grep -oE 'steps/[a-z]+\.md' | head -1); rm -rf "$D"; [ -z "$M" ] || [ "$M" = "steps/live.md" ]
+verify: sh D=$(mktemp -d); H=core/hooks/ai-dlc-recover.sh; [ -r "$H" ] || exit 9; mkdir -p "$D/_bmad-output" "$D/.claude/skills/ai-dlc/steps"; : > "$D/.claude/skills/ai-dlc/steps/stale.md"; : > "$D/.claude/skills/ai-dlc/steps/live.md"; rr() { printf '# S\n\n## Pipeline Position\n\n%b\n\n## Recent Activity\n\n- x\n' "$1" > "$D/_bmad-output/pipeline-snapshot.md"; rm -f "$D/_bmad-output/.recover-fired"; printf '%s' '{"source":"compact"}' | CLAUDE_PROJECT_DIR="$D" bash "$H" >/dev/null 2>&1; cat "$D/_bmad-output/.recover-fired" 2>/dev/null; }; g() { printf '%s\n' "$1" | sed -n "s/^$2=//p"; }; S1=$(rr '- **Current step file:** `stale.md`\n- **Current step file:** `live.md`'); S2=$(rr '- **`current_step_file`:** `live.md`'); S3=$(rr '- **Current step file:** `live.md`\n- **(prior) Current step file:** `stale.md`'); case "$S2" in *step_file_resolved=*) ;; *) exit 9 ;; esac; [ "$(g "$S1" step_file_resolved)" = 0 ] || exit 1; [ "$(g "$S2" step_file_resolved)" = 1 ] || exit 1; [ "$(g "$S3" step_file_resolved)" = 1 ] || exit 1; case "$(g "$S2" step_file)" in */steps/live.md) ;; *) exit 1 ;; esac; case "$(g "$S3" step_file)" in */steps/live.md) ;; *) exit 1 ;; esac
 ## BL-048
 
 **Two of the three dev-role checks this consumer carries have no upstream equivalent, and the
