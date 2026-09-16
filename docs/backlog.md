@@ -308,6 +308,21 @@ intermittent failure has no deterministic receipt, and a receipt that ran the fi
 report green on the common case. Closing this needs the mismatch fixed AND a stated finding about
 the flake, and the second half is not receipt-enforceable. Exit 9 if the arm or its message is gone.
 
+**WIDENED AT BATCH 116, AND THE WIDENING CARRIES A LEAD.** Two hands hit the flake independently
+on a gate-green branch whose change cannot reach it, and one reproduced it at `49e5356d`
+(`origin/main`, none of that batch's code): pooled over both hands, tip 0 of 48 red and base 1 of
+48, with the other hand's separate rounds at roughly 2 in 60. At that rate 48 runs expects 0.5
+events, so neither clean sweep discriminates and neither is reported as absence. Two surfaces, both
+in the FALSE direction — assertion 1 (`--verify failed a correct report`, a sound report accused of
+being stale) and the E9 mutant (`the kill is unattributed`) — two arms on two trees, which argues
+one shared cause. Ruled out so nobody repeats it: 48 concurrent `--verify` runs against one stored
+report went 0 red with a serial control at rc=0 in the same invocation, and 12 concurrent renders
+gave one md5, so neither `render()` nor `--verify` alone is the moving part. The lead is already in
+the tree: `ledger-reverify.sh:1089-1096` records this exact class as measured on a busy host and
+fixed it by prefixing its own temp dirs, while `emit-report.sh:331` and `:373` still call bare
+`mktemp`. Not folded into `v0.582.0`, whose subject was the step 3b section; the pre-existing
+intermittent charged to whichever change is in flight is the shape this entry exists to stop.
+
 verify: sh f=core/fixtures/reconcile-emit-report/run.sh; [ -f "$f" ] || exit 9; l=$(grep -n 'v_kill E1 ' "$f" | head -1 | cut -d: -f1); [ -n "$l" ] || exit 9; set=$(sed -n "${l}p" "$f" | sed -E 's/.*v_kill E1 "([^"]*)".*/\1/'); [ -n "$set" ] || exit 9; n=$(printf '%s' "$set" | wc -w | tr -d ' '); msg=$(sed -n "$((l+1))p" "$f"); grep -q 'three worlds' <<<"$msg" || exit 0; [ "$n" -eq 3 ] && exit 0; exit 1
 
 ## BL-099 — the exec-bit audit is one-directional, so a consumer file that upstream STOPPED shipping executable is never reported
@@ -1474,118 +1489,6 @@ Discharges the consumer entry `PC-S296-REJECTION-CARRIES-UNRELATED-GAPS` at pinn
 
 
 verify: sh bash -c 'c=core/skills/ai-dlc-update/reconcile/classify-block.md; b=$(LC_ALL=C awk "/^- [*][*]domain-local[*][*]/{f=1;print;next} f&&/^- [*][*]/{exit} f&&/^## /{exit} f" "$c"); [ -n "$b" ] || exit 3; grep -qi push <<< "$b"'
-## BL-034
-
-**RE-SCORED: three of the four had been wired before this batch, and only step 3b's `--templates`
-remained.** `retired-fixtures.sh`, `retired-layer-contract.sh` and `retired-layer-passage.sh` were
-all wired into `emit-report.sh` by one commit, `21bc76d5` at `v0.489.0` ("the report region promised
-every detector and carried eight of twenty-three"), derived per-name with
-`git log -S 'SELF/<name>' -- core/skills/ai-dlc-update/reconcile/emit-report.sh | tail -1` and
-`git show <sha>:VERSION`; the negative control (a `SELF/` name no commit carries) returned 0 commits
-against 1 for the positive control. So the count below is the count AT FILING and is retained as
-filed — the measurement and the reasoning about the widening are what the entry is for. What this
-batch closes is the fourth.
-
-**The adversary's finding, and it is part of the fix, not a note beside it.** The shipped
-classifier could not REFUSE: with `reconcile/template-sites.md` absent, `preclassify.sh --templates`
-let `awk` print to stderr, read nothing in its loop, reached its own literal `exit 0` and produced
-an EMPTY stdout — measured rc=0, 0 bytes — which a caller renders as `none`, indistinguishable from
-"four templates, nothing to sync". A manifest present but carrying no `template_manifest:` block
-does the same and no `-r` test can see it. Rendering the rows into the region on top of that would
-have shipped a section that reports a clean `none` for a detector that classified nothing, so the
-`preclassify.sh` refusal guard (both shapes, `exit 2`) and `emit-report.sh`'s rc read are one change
-with the render, not a follow-up.
-
-**The `reconcile-mechanical` region that `SKILL.md` calls "every mechanical finding, complete, from
-every detector" omits FOUR mandated detectors, not three.** Measured over
-`core/skills/ai-dlc-update/reconcile/emit-report.sh`, counting `SELF/<name>` invocations, with the
-sibling control in the same invocation:
-
-```
-SELF/retired-layer-contract.sh   0   <- SKILL.md:450  step 3a-iii
-SELF/retired-layer-passage.sh    0   <- SKILL.md:463  step 3a-iv
-SELF/retired-fixtures.sh         0   <- SKILL.md:480  step 3a-v
---templates                      0   <- SKILL.md:499  step 3b
-SELF/retired-tokens.sh           3   <- CONTROL: step 3a-ii, and it IS wired in
-```
-
-The control is what makes the zeros mean something: a sibling detector from the same step group is
-invoked three times, so detectors living outside the region is an omission and not a convention.
-`emit-report.sh` invokes exactly seven — `preclassify.sh:73`, `retired-tokens.sh:158`,
-`hard-blockers.sh:222`, `unregistered-drift.sh:226`, `layer-drift.sh:230`,
-`relabel-extension-checks.sh:237`, `ledger-reverify.sh:251`.
-
-**The filing said three and it is four — the correction is WIDER.** It named 3a-iii and "3a-iv
-`retired-fixtures.sh`". `retired-fixtures.sh` is step 3a-**v** today; step 3a-iv is
-`retired-layer-passage.sh`, a detector inserted into the mandated list after the filing and never
-wired into the region either. The gap is not stable — it grew by one while the entry sat open, which
-is the argument for binding the join rather than re-counting it.
-
-**And the filing's one explicitly unverified sub-claim holds, also wider.** It said "NOT verified:
-whether `hard-blockers.sh` picks [a `HARD-` row from `retired-fixtures.sh`] up by some other route."
-It does not: `hard-blockers.sh:71-72` collects from exactly two detectors, `unregistered-drift.sh`
-and `layer-drift.sh`. So `HARD-RETIRED-FIXTURE-SCAN-UNAVAILABLE`, emitted at
-`retired-fixtures.sh:57` and `:69`, reaches neither the rendered region nor the blocker wrapper —
-a `HARD-`-prefixed status with no reader anywhere, against a step 7 that binds `apply` to "any
-status whose name begins `HARD-`", matched "on the PREFIX, not on a list of names you remember".
-
-`SKILL.md:851` still carries the completeness claim verbatim, and gives the reason in the same
-breath: "a mechanical finding narrated by you is a finding you can drop, and one already was (a HARD
-core-schema drift, twice)." Because `--verify` re-derives and byte-matches only what the region
-renders, a dropped `RETIRED-FIXTURE-ORPHAN`, `RETIRED-LAYER-CONTRACT`, `RETIRED-LAYER-PASSAGE` or
-`TEMPLATE-PROSE-MERGE` leaves a report that passes the step-7 gate and reports itself complete.
-
-**The receipt DRIVES `emit-report.sh`; it reads no script text and no report on disk.** A text
-predicate over the driver is closable by a comment — measured on the previous receipt's own
-narrowing, where a naive whole-file `grep -cF` scored 1 for each detector name on a file where
-nothing was wired. So this one builds a seeded pair under `mktemp` (a dist repo carrying the four
-`templates/*.template` at base, with `CLAUDE.md.template` and `settings.json.template` changed at
-theirs; a consumer directory carrying `CLAUDE.md`, `.claude/settings.json` and
-`docs/coding-conventions.md` and NOT `QUICKSTART.md`; no stamp and no ledger are needed), runs the
-driver on it, extracts the `BEGIN/END GENERATED: reconcile-mechanical` range from the driven
-STDOUT with `sed`, and asserts the section header AND a `TEMPLATE-PROSE-MERGE  CLAUDE.md` row
-INSIDE that range.
-
-It asserts the mover DIFFERS base vs theirs, and the unchanged template does NOT, before it reads
-the render — `exit 9` otherwise, and `exit 9` if `emit-report.sh` is absent, so a pair that failed
-to build is never scored as a verdict. **It does not key on the ABSENCE of `DETECTOR-REFUSED`**:
-two other detectors (`unregistered-drift.sh` rc=1, `retired-layer-token.sh` rc=2) refuse on any
-minimal pair, measured in the same render, so an absence key would be unsatisfiable.
-
-**Polarity:** `scripts/backlog-reverify.sh:190-195` reads exit 0 as CLOSE-CANDIDATE. This file's
-direction, not the consumer ledger's.
-
-Scored, each variant built into its own `mktemp` copy (`git archive` of the ref, extracted, the
-mutation applied there, `cmp`-asserted different from the copy's own original) and the verify line
-evaluated with `bash -c` from that root:
-
-```
-tip      b9c81295                                                 0   <- the fix
-base     49e5356d                                                 1
-stub     base + a comment naming --templates, the header text
-         and a TEMPLATE-PROSE-MERGE row (cmp-differs)             1
-M2       tip, header kept, classifier call dropped, none rendered  1
-```
-
-The base 1 is an ASSERTION failure and not a build failure: the same receipt truncated to its
-build arms only exits 0 at base, measured in the same run.
-
-**M4 is out of the receipt's reach and is not claimed here.** M4 collapses the refusal arm (rc
-ignored, `none` on failure). On the receipt's well-formed pair M4 scores **0** — the rows render
-either way, so the arm being collapsed changes nothing the receipt reads. On the A3 shape
-(`template-sites.md` removed) M4 scores 1, but so does the TIP — with no manifest the section
-renders `DETECTOR-REFUSED` rather than the asserted row under both. The shape does not
-discriminate, and the refusal arm is bound by the fixture's A3/A4 arms, not here.
-
-What this receipt would MISS, carried forward from the consumer entry's own note: a fix that
-renders the rows from a DIFFERENT driver and leaves `emit-report.sh` untouched — re-anchor on the
-new driver rather than declaring it unfixed.
-
-Discharges the consumer entry `PC-S315-EMIT-REPORT-REGION-OMITS-THREE-MANDATED-DETECTORS` at pinned
-ledger line 3088. The name undercounts by one; the entry is the wider finding.
-
-
-verify: sh E=core/skills/ai-dlc-update/reconcile/emit-report.sh; [ -f "$E" ] || exit 9; d="$(mktemp -d)" || exit 9; D="$d/dist"; C="$d/cons"; mkdir -p "$D/templates" "$C/.claude" "$C/docs" || exit 9; for t in CLAUDE.md coding-conventions.md QUICKSTART.md settings.json; do printf 'base %s\n' "$t" > "$D/templates/$t.template" || exit 9; done; git -C "$D" init -q && git -C "$D" add -A && git -C "$D" -c user.email=r@r -c user.name=r commit -qm base || exit 9; B="$(git -C "$D" rev-parse HEAD)" || exit 9; printf 'theirs CLAUDE\n' > "$D/templates/CLAUDE.md.template"; printf 'theirs settings\n' > "$D/templates/settings.json.template"; git -C "$D" add -A && git -C "$D" -c user.email=r@r -c user.name=r commit -qm theirs || exit 9; T="$(git -C "$D" rev-parse HEAD)" || exit 9; [ "$(git -C "$D" rev-parse "${B}:templates/CLAUDE.md.template")" != "$(git -C "$D" rev-parse "${T}:templates/CLAUDE.md.template")" ] || exit 9; [ "$(git -C "$D" rev-parse "${B}:templates/coding-conventions.md.template")" = "$(git -C "$D" rev-parse "${T}:templates/coding-conventions.md.template")" ] || exit 9; : > "$C/CLAUDE.md"; : > "$C/.claude/settings.json"; : > "$C/docs/coding-conventions.md"; [ ! -e "$C/QUICKSTART.md" ] || exit 9; R="$(bash "$E" "$D" "$B" "$C" "$T" 2>/dev/null | sed -n '/BEGIN GENERATED: reconcile-mechanical/,/END GENERATED: reconcile-mechanical/p')"; [ -n "$R" ] || exit 9; grep -qF 'Template pre-classification (generated files outside core/' <<< "$R" || exit 1; grep -qF 'TEMPLATE-PROSE-MERGE  CLAUDE.md  <- templates/CLAUDE.md.template' <<< "$R" || exit 1
 ## BL-038
 
 **Core's sprint-review §3 lets a "genuinely environmental" integration seam defer with no
@@ -1864,112 +1767,6 @@ entry evaluates as a CLOSE-CANDIDATE on a string whose presence is unrelated to 
 
 
 verify: sh P=core/skills/ai-dlc/steps/_gate-procedures.md; S(){ LC_ALL=C awk -v h="$1" 'index($0,h)==1{f=1;next} f&&/^## /{exit} f' "$P"; }; C=$(S "## Gate-adjudication dispatch"); [ "$(grep -cF run_in_background <<<"$C")" -ge 1 ] || exit 1; B=$(S "## Bounded-join beat"); [ "$(grep -cF run_in_background <<<"$B")" -ge 1 ]
-## BL-047
-
-**RE-SCORED. Claim 4 of this entry is EXPIRED AND WIDER THAN IT WAS FILED, and the citations
-below have moved.** The entry names two first-match-wins readers. There are three: Check 8 of
-`core/scripts/validate-mandatory-rules.sh` landed after this filing and inherits the same
-defect as a GATE, so on a two-valued section it FAILs a correctly positioned retro in one line
-order and PASSes a mis-positioned one in the other — same tree, two verdicts, decided by which
-bullet came first. The citations in the paragraphs below read against the tree as it was:
-`ai-dlc-continue.sh:559` is now `:1246`, the recovery hook's section-scoped excerpt `:165` is
-now `:212`, and the schema clause `gate-validation.md:773` is now `:855` and no longer says
-only "update `current_step_file`" — it states the single-value rule, which is the carrier this
-entry measured as absent.
-
-**The consumer census, run by the fix hand with `/usr/bin/grep` over 2218 revisions of the
-reference consumer's `_bmad-output/pipeline-snapshot.md` (read-only), using the count rule
-EXTRACTED from the fixed hook rather than retyped.** Loose two-plus in-section, the control
-that shows the grammars differ: **61**. Refusals under the shipped rule — two live bullets
-naming DIFFERENT step files: **26**, every sampled member a genuine unlabelled duplicate, none
-the prose-quote shape and none a labelled prior; examples `5e23a232`, `66d0eb16`, `16f7a21d`,
-`4fd11a38`, `43e393f3`. Un-resolved where the pre-fix `grep -m1` reader resolves a value:
-**0**, which is the number that gates the ship.
-
-**A STRICT `current_step_file:`-only key was refuted on this corpus, and the correction is
-recorded because the first figure was wrong.** The contract's first draft predicted the strict
-grammar would un-resolve **94** revisions; measured against the shipping reader it un-resolves
-**1416** of the 2200 the loose reader resolves. The direction held and the magnitude was
-fifteen times larger — the consumer's dominant spellings are `- **Current step file:**` and
-the backticked `` - **`current_step_file`:** ``, so the count is layered OVER the existing
-alternation and never narrows it.
-
-**A Pipeline Position carrying two `Current step file` values makes `ai-dlc-recover.sh` mandate
-one step file while its own excerpt displays the other, in the same emitted block.** Driven
-against the shipping hook, not a re-implementation: `CLAUDE_PROJECT_DIR` pointed at a scratch
-project whose snapshot carries `stale.md` then `live.md` under `## Pipeline Position`, fed
-`{"source":"compact"}` on stdin. The post-compact mandate named **`steps/stale.md`** — the
-FIRST value, taken by the whole-file `grep -m1` at `core/hooks/ai-dlc-recover.sh:72` — while the
-Pipeline Position excerpt built twenty lines later at `:165`, which awk-scopes to the section
-and prints all of it, carried both bullets, so `live.md` appears in the same directive
-(occurrences: `stale.md` 1, `live.md` 1). Control in the same invocation: the identical hook
-against a single-valued snapshot mandated **`steps/live.md`**. The two sides differ.
-
-Nothing constrains the field. `grep -rl 'current_step_file|Current step file'` over
-`core/scripts/`, `scripts/`, `core/fixtures/*/run.sh` and `.githooks/` returns exactly one file,
-`core/fixtures/postcompact-rulebook-recovery/run.sh`, and at `:319` that file WRITES the field
-into a seeded snapshot — it is a producer, not a guard; the control token `pipeline-snapshot`
-over the same corpus returns **31** files. The nearest mechanism,
-`validate-artifact-budget.sh:515-524`, is a CLOSED-set check on `## ` section headings and its
-own header says so; a duplicated bullet inside a canonical section is invisible to it. The
-schema clause the filing points at, `core/skills/ai-dlc/steps/gate-validation.md:773`, says only
-"update `current_step_file`" and never says the field is single-valued or where a correction
-goes — measured as an absence over all of `core/`: 0 hits for `single-valued`,
-`overwrite in place`, `not an append` or `append-ordered`, against a control that returns hits
-in the same file.
-
-**The filing has the direction inverted and names the wrong reader, and the consequence is
-wider than it claims.** It reports that corrections appended ABOVE the live bullet leave the
-Stop hook quoting stale state. Measured against both readers' actual expressions, appending
-above is the SAFE direction: `ai-dlc-continue.sh:559` and `ai-dlc-recover.sh:72` both take the
-FIRST match, so a correction placed above WINS and the newest value is the one quoted. What goes
-stale is the ordinary markdown habit — appending the correction BELOW. And the consequence is
-not confined to a Stop hook's advisory text: `ai-dlc-recover.sh` resolves this value into the
-post-compact recovery mandate and it is what `ai-dlc-recover-gate.sh` reads to decide whether it
-may arm, so a first-match-wins resolution mandates a Read of the wrong step file and gates the
-lead's next tool call on it.
-
-**THE RECEIPT THIS ENTRY SHIPPED WAS SATISFIED BY A STUB AND HAS BEEN REPLACED.** It said so
-itself: "the receipt also passes if the hook emits no step mandate at all". A hook that resolves
-NOTHING — every snapshot, every shape — emitted no `steps/*.md` and scored 0, so the entry could
-have closed on a change that deleted the feature. It also read the hook's emitted TEXT, which is
-prose about a resolution rather than the resolution, where what the recovery gate actually arms on
-is the `_bmad-output/.recover-fired` marker.
-
-The replacement drives the shipping `core/hooks/ai-dlc-recover.sh` from a mktemp project
-(`CLAUDE_PROJECT_DIR` set, `.claude/skills/ai-dlc/steps/{stale,live}.md` present,
-`{"source":"compact"}` on stdin) on three distinct input SHAPES and reads the marker, not the
-text: **S1** two unlabelled `- **Current step file:**` bullets, stale above live, must write
-`step_file_resolved=0`; **S2b** a single backticked `` - **`current_step_file`:** `live.md` ``
-and **S3** a live bullet above a labelled `- **(prior) Current step file:**` must both write
-`step_file_resolved=1` with `step_file=` ending `steps/live.md`. The marker being absent
-entirely on S2b, or the hook file being unreadable, exits **9** — a precondition, not a verdict,
-and both arms were fired: a root with the hook deleted and a root whose hook is `exit 0` each
-returned 9.
-
-**Scored by BUILDING each candidate into its own `mktemp` copy of the tree** (archive of the
-scored ref, hook copy edited in place), `cmp`-asserted to differ from the tip copy, `bash -n`
-clean, and evaluated from that root:
-
-| Tree | Receipt | Where it fails |
-|------|---------|----------------|
-| tip `af296464` | **0** | — |
-| base `49e5356d` | 1 | S1 mandates `steps/stale.md`, `resolved=1` |
-| blanket-refuse stub (never resolves) | 1 | S2b and S3 both `resolved=0` |
-| R1 section-scoped `head -1` | 1 | S1 resolves `stale.md` |
-| R2 section-scoped `tail -1` | 1 | S1 resolves `live.md` where the marker must read `resolved=0` |
-| R3 strict `current_step_file:` key grammar | 1 | S2b `resolved=0` — the backticked spelling |
-| R4 label exclusion dropped | 1 | S3 refuses on a labelled prior |
-
-R2 is the one that had to be built rather than assumed: `tail -1` mandates the newest value on
-S1, which is the RIGHT file, and the receipt still fails it — refusal, not newest-wins, is what
-the marker records, and a reader that picks a winner from two live bullets is picking.
-
-Discharges the consumer entry `PC-S296-PIPELINE-POSITION-MUST-BE-EDITED-IN-PLACE` at pinned
-ledger line 701.
-
-
-verify: sh D=$(mktemp -d); H=core/hooks/ai-dlc-recover.sh; [ -r "$H" ] || exit 9; mkdir -p "$D/_bmad-output" "$D/.claude/skills/ai-dlc/steps"; : > "$D/.claude/skills/ai-dlc/steps/stale.md"; : > "$D/.claude/skills/ai-dlc/steps/live.md"; rr() { printf '# S\n\n## Pipeline Position\n\n%b\n\n## Recent Activity\n\n- x\n' "$1" > "$D/_bmad-output/pipeline-snapshot.md"; rm -f "$D/_bmad-output/.recover-fired"; printf '%s' '{"source":"compact"}' | CLAUDE_PROJECT_DIR="$D" bash "$H" >/dev/null 2>&1; cat "$D/_bmad-output/.recover-fired" 2>/dev/null; }; g() { printf '%s\n' "$1" | sed -n "s/^$2=//p"; }; S1=$(rr '- **Current step file:** `stale.md`\n- **Current step file:** `live.md`'); S2=$(rr '- **`current_step_file`:** `live.md`'); S3=$(rr '- **Current step file:** `live.md`\n- **(prior) Current step file:** `stale.md`'); case "$S2" in *step_file_resolved=*) ;; *) exit 9 ;; esac; [ "$(g "$S1" step_file_resolved)" = 0 ] || exit 1; [ "$(g "$S2" step_file_resolved)" = 1 ] || exit 1; [ "$(g "$S3" step_file_resolved)" = 1 ] || exit 1; case "$(g "$S2" step_file)" in */steps/live.md) ;; *) exit 1 ;; esac; case "$(g "$S3" step_file)" in */steps/live.md) ;; *) exit 1 ;; esac
 ## BL-048
 
 **Two of the three dev-role checks this consumer carries have no upstream equivalent, and the
