@@ -7,6 +7,17 @@
 # dropped from it, twice. Rendering the region is only half — the LLM could still omit it or edit it.
 # --verify byte-compares the report's region against a fresh render, so neither omission nor a
 # dropped-blocker edit survives.
+#
+# DISTINCT INPUT SHAPES IN THE STEP-3b BATTERY: FOUR. Arms and mutants are not shapes — channels
+# written by different hands converge on the obvious way to build the input and then agree for that
+# reason. These four differ in what the CLASSIFIER is handed:
+#   S1  the well-formed pair (four templates at base, two moved at theirs, three of the four
+#       generated files on the consumer)
+#   S2  the template manifest ABSENT
+#   S3  the manifest present with its `template_manifest:` block unparseable
+#   S4  a manifest row naming a template absent at BOTH refs
+# M3's transposed-argument refusal renders at rc=2, which is S2's shape, so it is counted there and
+# not as a fifth. The per-shape roster is beside the battery, at the "STEP 3b" banner below.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -533,6 +544,421 @@ elif [ -z "$i16_missing" ]; then
   ok "the five previously-narrated classifiers render as sections of the region (control: an impossible heading is absent)"
 else
   bad "these classifier sections are missing from the rendered region:$i16_missing — their findings are back to being narrated, where an omission cannot be caught by --verify"
+fi
+
+# =============================================================================
+# STEP 3b — THE FOURTH MANDATED DETECTOR, AND THE ONLY ONE THE SKILL NARRATED
+# =============================================================================
+#
+# THE DEFECT. `preclassify.sh --templates` classifies the generated files that live OUTSIDE
+# `core/` — the consumer's CLAUDE.md, docs/coding-conventions.md, QUICKSTART.md and
+# .claude/settings.json. SKILL.md step 3b told the LLM to run it and narrate the rows under a
+# hand-written "Template-changes list"; on the reference consumer's report that section was one
+# sentence. `TEMPLATE-PROSE-MERGE` and `TEMPLATE-JSON-MERGE` each carry a step-7 action that
+# REWRITES a live consumer file, so a dropped row is a merge nobody performed and nobody can see
+# was skipped. `--verify` could not fail on the omission because the rows were never in the
+# region to omit — which is the identical shape as assertion 16's five, one release later.
+#
+# THE FOUR INPUT SHAPES THIS BATTERY DRIVES, and they are four rather than seven because the
+# mutants share worlds with the arms:
+#   S1  the WELL-FORMED pair          — four templates at base, two moved at theirs, three of
+#                                       the four generated files on the consumer (the fixture's
+#                                       own seeded world). Arms A1, A2, A4, A5; mutants M1, M2, M5.
+#   S2  the manifest ABSENT           — a copy of reconcile/ with template-sites.md removed.
+#                                       Arm A3; mutants M4, M6.
+#   S3  the manifest PRESENT but its  — the same copy with the `template_manifest:` key renamed,
+#       `template_manifest:` block      so `-r` passes and the awk parses to nothing. Arm A3's
+#       unparseable                     second shape. This is the one no `-r` test can see.
+#   S4  a manifest row naming a        — a phantom entry whose template exists at NEITHER ref.
+#       template absent at BOTH refs    Arm A2b. base_h == theirs_h == empty, so it buckets
+#                                       TEMPLATE-UNCHANGED-NOOP and is indistinguishable in the
+#                                       rendered row from a real unchanged template.
+# M3 (args transposed) renders an rc=2 refusal, which is S2's shape and is counted there rather
+# than as a fifth; the contract says the same.
+#
+# EVERY ARM BELOW IS PRESENCE-SHAPED — each demands a specific row or message APPEAR — so a
+# subject replaced by `exit 0` fails them by construction rather than passing as a clean absence.
+T_SECT() { awk '/Template pre-classification/{f=1;next} f&&/^\*\*/{exit} f' "$1"; }
+
+# THE BATTERY RENDERS ITS OWN REGION, and that is not tidiness. `$REGION` was rendered by seed.sh
+# before assertions 12-14 seeded a ledger and two shadowed forks into `$CONSUMER`, so a `--verify`
+# against it FAILS on those sections — correctly, and for a reason A4 does not own. MEASURED: A4
+# scored good=1 against `$REGION` and 0 against a region rendered here. A stale input makes the
+# arm's two sides fail for a reason NEITHER of them names, and its 1-vs-1 null reads as agreement.
+T_REGION="$WORK/tpl-region.txt"
+bash "$EMIT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$T_REGION" 2>/dev/null
+T_SEC="$(T_SECT "$T_REGION")"
+
+# --- A1 POSITIVE CONTROL: the header renders INSIDE the BEGIN/END markers ------
+# It hard-exits. Every arm after it reads $T_SEC, and against an absent section they would all be
+# comparing empty to empty — which is the exact shape of the defect this section closes.
+#
+# The region is extracted by the BEGIN/END sed range FIRST. A header rendered outside the markers
+# is a header `--verify` cannot byte-compare, so it is droppable again, and a grep over the whole
+# stdout cannot tell the two apart.
+T_REGION_ONLY="$(sed -n '/BEGIN GENERATED: reconcile-mechanical/,/END GENERATED: reconcile-mechanical/p' "$T_REGION")"
+if [ -z "$T_REGION_ONLY" ]; then
+  bad "FIXTURE BROKEN — the BEGIN/END marker range extracted nothing from the render; every step-3b assertion below is unreadable"
+  echo; echo "reconcile-emit-report: FIXTURE BROKEN" >&2; exit 2
+elif grep -qF 'Template pre-classification (generated files outside core/ — step 3b' <<<"$T_REGION_ONLY"; then
+  ok "A1 step 3b renders a Template pre-classification section INSIDE the verified region (positive control — every step-3b assertion below depends on it)"
+else
+  bad "FIXTURE VACUOUS — no step-3b section inside the BEGIN/END markers. Either the driver does not run preclassify --templates, or the section renders outside the region where --verify cannot reach it and the LLM can drop it again."
+  echo; echo "reconcile-emit-report: FIXTURE VACUOUS" >&2; exit 2
+fi
+
+# --- A2: the four rows exactly, bucket AND consumer path AND template ----------
+# ALL FOUR BUCKETS IN ONE RENDER, which is what makes this an assertion about the classifier
+# rather than about its first branch. Before the seed carried `templates/*.template` every row
+# bucketed CONSUMER-MISSING-NOOP, because `ours_present` is tested first and the template delta
+# was never consulted — four rows, one bucket, and a classifier hardcoded to that bucket would
+# have passed.
+#
+# The TEMPLATE column is asserted too, not just the bucket and the consumer path. It is the join
+# key back to `template-sites.md`, and a row naming the wrong template sends the operator to
+# merge the wrong file.
+t_missing=""
+for t_row in "TEMPLATE-PROSE-MERGE  CLAUDE.md  <- templates/CLAUDE.md.template" \
+             "TEMPLATE-JSON-MERGE  .claude/settings.json  <- templates/settings.json.template" \
+             "TEMPLATE-UNCHANGED-NOOP  docs/coding-conventions.md  <- templates/coding-conventions.md.template" \
+             "CONSUMER-MISSING-NOOP  QUICKSTART.md  <- templates/QUICKSTART.md.template"; do
+  grep -qF "$t_row" <<<"$T_SEC" || t_missing="$t_missing | $t_row"
+done
+# NEAR-MISS IN THE SAME RUN: a row with the right bucket and the WRONG consumer path must not
+# match. Without it a grep loosened to the bucket alone reports all four present.
+if grep -qF "TEMPLATE-PROSE-MERGE  docs/coding-conventions.md" <<<"$T_SEC"; then
+  bad "FIXTURE BROKEN — the near-miss row (right bucket, wrong consumer path) matched, so A2's four positives prove nothing about the path column"
+elif [ -z "$t_missing" ]; then
+  ok "A2 all four buckets render in ONE section with their consumer path and their template (near-miss control: a right-bucket/wrong-path row is absent)"
+else
+  bad "A2 these step-3b rows are missing from the rendered section:$t_missing — a bucket carrying a step-7 merge action is not reaching the operator through the region, so it is narrated again and droppable"
+fi
+
+# --- A2b: the UNCHANGED-NOOP row's template EXISTS as a blob at base -----------
+# MEASURED, and it is why this arm is not redundant with A2. A manifest row naming a template
+# that exists at NEITHER ref gets base_h == theirs_h == empty, buckets TEMPLATE-UNCHANGED-NOOP,
+# and renders a row byte-indistinguishable from a real unchanged template. So a typo in
+# `template-sites.md` — or a template deleted upstream and left in the manifest — reads as
+# "upstream boilerplate identical, nothing to sync" forever.
+#
+# Shape S4 builds that world explicitly rather than reasoning about it: a copy of reconcile/
+# whose manifest carries a phantom entry, a consumer file at the phantom's path, and the
+# assertion that the classifier renders the phantom as UNCHANGED-NOOP exactly like the real one.
+# The arm that discriminates is the git blob test, in the same run.
+t_unchanged_tpl="$(awk '/^TEMPLATE-UNCHANGED-NOOP /{print $NF; exit}' <<<"$T_SEC")"
+if [ -z "$t_unchanged_tpl" ]; then
+  bad "A2b no TEMPLATE-UNCHANGED-NOOP row to check — A2 above should already have failed, and this arm has no subject"
+elif git -C "$DIST" cat-file -e "${BASE}:${t_unchanged_tpl}" 2>/dev/null; then
+  # CONTROL, same invocation: a path that cannot be a blob at base must fail the same test, or
+  # `cat-file -e` is answering yes to everything and the arm above proves nothing.
+  if git -C "$DIST" cat-file -e "${BASE}:templates/ZZ-NO-SUCH-TEMPLATE-ZZ.template" 2>/dev/null; then
+    bad "FIXTURE BROKEN — git cat-file -e resolved an impossible template path at base, so A2b's positive means nothing"
+  else
+    ok "A2b the UNCHANGED-NOOP row's template ($t_unchanged_tpl) is a real blob at base — a manifest typo naming a template absent at BOTH refs also buckets UNCHANGED-NOOP, and this is what separates the two (control: an impossible path does not resolve)"
+  fi
+else
+  bad "A2b the UNCHANGED-NOOP row names $t_unchanged_tpl, which is NOT a blob at base — that row is a manifest typo or a template deleted upstream reading as 'boilerplate identical, nothing to sync', which is the silent direction"
+fi
+
+# The S4 world, proving the hazard A2b guards is REAL and not reasoned: the phantom row renders
+# identically to the genuine one, so nothing in the SECTION can tell them apart.
+T_PHANTOM="$WORK/tpl-phantom"
+rm -rf "$T_PHANTOM"; cp -R "$(dirname "$EMIT")" "$T_PHANTOM"
+awk '/^  # structured config/{print "  - template: templates/ZZ-NO-SUCH-TEMPLATE-ZZ.template";
+                              print "    consumer: ZZ-PHANTOM.md";
+                              print "    kind: token-prose"} {print}' \
+  "$(dirname "$EMIT")/template-sites.md" > "$T_PHANTOM/template-sites.md"
+if cmp -s "$(dirname "$EMIT")/template-sites.md" "$T_PHANTOM/template-sites.md"; then
+  bad "A2b's S4 world DID NOT APPLY — the awk matched no insertion point in template-sites.md, so the hazard this arm guards is unproven"
+else
+  printf 'phantom consumer file\n' > "$CONSUMER/ZZ-PHANTOM.md"
+  t_ph_region="$WORK/tpl-phantom-region.txt"
+  bash "$T_PHANTOM/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$t_ph_region" 2>/dev/null
+  t_ph_sec="$(T_SECT "$t_ph_region")"
+  rm -f "$CONSUMER/ZZ-PHANTOM.md"
+  if grep -qF "TEMPLATE-UNCHANGED-NOOP  ZZ-PHANTOM.md  <- templates/ZZ-NO-SUCH-TEMPLATE-ZZ.template" <<<"$t_ph_sec" \
+     && grep -qF "TEMPLATE-UNCHANGED-NOOP  docs/coding-conventions.md" <<<"$t_ph_sec"; then
+    ok "A2b/S4 a manifest row whose template exists at NEITHER ref renders as TEMPLATE-UNCHANGED-NOOP beside the genuine one — the two are indistinguishable in the section, which is why A2b asserts the blob and not the row"
+  else
+    bad "A2b/S4 the phantom manifest entry did not render as an UNCHANGED-NOOP row beside the genuine one, so the blob assertion above is guarding a hazard this tree cannot produce. Section was: $(printf '%s' "$t_ph_sec" | tr '\n' ' ' | head -c 200)"
+  fi
+fi
+
+# --- A3: BOTH refusal shapes render DETECTOR-REFUSED, never `none` -------------
+# `none` and "the classifier could not classify" are the same empty output, and the whole region
+# exists because those two must never look alike to an operator. MEASURED before the fix: with
+# `template-sites.md` absent the awk printed to stderr, the loop read nothing, the block hit its
+# own `exit 0`, and stdout was EMPTY at rc=0 — so `none` rendered for a detector that classified
+# nothing, on a section whose two merge buckets rewrite live consumer files.
+#
+# TWO SHAPES, because they are the same absence one level apart and only one of them is visible
+# to a `-r` test. Each gets an UNMUTATED CONTROL through the same sandbox first: a sandbox copy
+# that simply died renders no rows either, and that is indistinguishable from the refusal branch
+# working.
+t_refuse_world() { # t_refuse_world <dir> <shape> -> builds a reconcile copy, prints nothing
+  rm -rf "$1"; cp -R "$(dirname "$EMIT")" "$1" || return 1
+  [ -f "$1/preclassify.sh" ] || return 1
+  case "$2" in
+    absent) rm -f "$1/template-sites.md" ;;
+    unparseable)
+      awk '/^template_manifest:/{print "template_manifest_RENAMED_BY_FIXTURE:"; next} {print}' \
+        "$(dirname "$EMIT")/template-sites.md" > "$1/template-sites.md" ;;
+  esac
+}
+t_refuse_check() { # t_refuse_check <label> <shape> <what-the-shape-is>
+  local d="$WORK/tpl-refuse-$2" ctl mut
+  t_refuse_world "$WORK/tpl-refuse-ctl-$2" none || { bad "$1 could not build the control sandbox"; return; }
+  ctl="$(T_SECT <(bash "$WORK/tpl-refuse-ctl-$2/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null))"
+  if ! grep -q 'TEMPLATE-PROSE-MERGE' <<<"$ctl"; then
+    bad "$1 CONTROL the UNMUTATED sandbox copy rendered no TEMPLATE-PROSE-MERGE row, so the refusal assertion below would pass for a sandbox that simply died"
+    return
+  fi
+  t_refuse_world "$d" "$2" || { bad "$1 could not build the $2 sandbox"; return; }
+  mut="$(T_SECT <(bash "$d/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null))"
+  if grep -q 'DETECTOR-REFUSED' <<<"$mut" && ! grep -qx 'none' <<<"$mut" && ! grep -q 'TEMPLATE-' <<<"$mut"; then
+    ok "$1 $3 renders DETECTOR-REFUSED and NOT 'none' (control: the unmutated copy beside it renders the real rows)"
+  else
+    bad "$1 $3 did not render DETECTOR-REFUSED (got: $(printf '%s' "$mut" | tr '\n' ' ' | head -c 140)) — a classifier that could not classify is putting a clean line in front of the operator, which is the defect this whole region exists to prevent, reintroduced by its newest section"
+  fi
+}
+t_refuse_check "A3a" absent      "the template manifest ABSENT"
+t_refuse_check "A3b" unparseable "the manifest PRESENT with its template_manifest: block unparseable (the shape no -r test can see)"
+
+# --- A4: --verify is 0 on the render and 1 with a step-3b row deleted ----------
+# The section being rendered is half of it. The reason it is rendered is that `--verify`
+# byte-compares it, so a row deleted by hand has to FAIL — otherwise the rows are back to being
+# droppable and this section is decoration inside a verified region.
+#
+# Offender and near-miss in the same pair: the PROSE-MERGE row deleted (offender, must fail) and
+# the untouched report (near-miss, must pass), one property apart.
+T_RPT_GOOD="$WORK/tpl-report-good.md"
+{ echo "# Reconcile report (fixture)"; echo; cat "$T_REGION"; } > "$T_RPT_GOOD"
+T_RPT_CUT="$WORK/tpl-report-row-cut.md"
+{ echo "# Reconcile report (fixture)"; echo; grep -vF 'TEMPLATE-PROSE-MERGE  CLAUDE.md' "$T_REGION"; } > "$T_RPT_CUT"
+if cmp -s "$T_RPT_GOOD" "$T_RPT_CUT"; then
+  bad "A4 the row-deletion produced an identical report — the PROSE-MERGE row is not in the region, so this arm has no subject"
+else
+  verify "$T_RPT_GOOD"; t_v_good="$RC"
+  verify "$T_RPT_CUT";  t_v_cut="$RC"
+  if [ "$t_v_good" -eq 0 ] && [ "$t_v_cut" -eq 1 ]; then
+    ok "A4 --verify PASSES the rendered report (0) and FAILS it with the TEMPLATE-PROSE-MERGE row hand-deleted (1) — a step-3b row cannot be dropped from an approved report"
+  else
+    bad "A4 --verify scored good=$t_v_good cut=$t_v_cut (want 0 and 1) — either a sound report is falsely accused, or a hand-deleted step-7 merge row survives the byte-compare and the rows are droppable again inside a region that claims they are not"
+  fi
+fi
+
+# --- A5: the section is sited OUTSIDE the ORIENT range -------------------------
+# THE SILENT ONE. `$ORIENT` at the top of this file is `awk '/Semantic worklist
+# orientation/,/^\*\*Deletions/'` — a range over section ORDER, not content. A step-3b section
+# placed inside it widens what assertions 4-7 read while all four stay green, because each of
+# them greps for something that is still there.
+#
+# THE RANGE MUST BE NON-EMPTY FIRST, and that is not a formality: this fixture's OTHER worlds
+# produce no CLASSIFY file, the range collapses to ZERO lines there, and "no header in an empty
+# range" is true of every possible siting. So this arm runs ONLY on the seeded world that
+# renders an orientation block, and the control is asserted before the absence is read.
+t_orient_lines="$(grep -c . <<<"$ORIENT")" || t_orient_lines=0
+t_region_buckets="$(grep -c 'TEMPLATE-PROSE-MERGE\|TEMPLATE-JSON-MERGE\|TEMPLATE-UNCHANGED-NOOP\|CONSUMER-MISSING-NOOP' "$REGION")" || t_region_buckets=0
+if [ "$t_orient_lines" -lt 2 ] || [ "$t_region_buckets" -eq 0 ]; then
+  bad "A5 CONTROL the ORIENT range holds $t_orient_lines line(s) and the whole region holds $t_region_buckets bucket token(s) — an empty range makes the absence below true of every siting, so this arm would be vacuous. It must run on the world that produces a CLASSIFY file."
+else
+  t_o_hdr="$(grep -c 'Template pre-classification' <<<"$ORIENT")" || t_o_hdr=0
+  t_o_bkt="$(grep -c 'TEMPLATE-PROSE-MERGE\|TEMPLATE-JSON-MERGE\|TEMPLATE-UNCHANGED-NOOP\|CONSUMER-MISSING-NOOP' <<<"$ORIENT")" || t_o_bkt=0
+  if [ "$t_o_hdr" -eq 0 ] && [ "$t_o_bkt" -eq 0 ]; then
+    ok "A5 the step-3b section sits OUTSIDE the ORIENT range: $t_orient_lines non-empty lines in the range, 0 header hits and 0 bucket hits inside it, against $t_region_buckets bucket hits in the whole region"
+  else
+    bad "A5 the step-3b section is INSIDE the range assertions 4-7 read ($t_o_hdr header hit(s), $t_o_bkt bucket hit(s) in $t_orient_lines lines) — those four arms are now reading a wider span than the orientation block and every one of them still passes, which is the silent widening this arm exists to catch"
+  fi
+fi
+
+# --- MUTANTS M1-M6 ------------------------------------------------------------
+# Each is a copy of the WHOLE reconcile directory: emit-report.sh resolves $SELF beside itself and
+# shells to preclassify.sh, so a lone script copy reads zero rows on every input and its silence
+# would score as a kill on every arm at once.
+#
+# M4 and M6 are scored on the ABSENT-MANIFEST world (S2), not on the well-formed pair. MEASURED:
+# with the manifest present M6 renders the same four rows as the shipped program — the guard it
+# reverts only fires when there is nothing to parse — so scored on S1 it survives for a reason
+# that has nothing to do with the predicate.
+TMD="$WORK/tpl-mutants"; mkdir -p "$TMD"
+T_APPLIED=""
+t_mk() { # t_mk <name> <victim: emit|preclassify> <expected-anchor-hits> <anchor-regex> <world> <sed-args...>
+  local n="$1" victim="$2" want="$3" anch="$4" world="$5"; shift 5
+  local d="$TMD/$n" src hits ctl out
+  case "$victim" in
+    emit)        src="$EMIT" ;;
+    preclassify) src="$(dirname "$EMIT")/preclassify.sh" ;;
+  esac
+  rm -rf "$d"; cp -R "$(dirname "$EMIT")" "$d" || { bad "$n could not copy the reconcile directory"; return 1; }
+  [ -f "$d/preclassify.sh" ] && [ -f "$d/template-sites.md" ] || {
+    bad "$n did not stage its siblings — a copy missing preclassify.sh or template-sites.md emits nothing and its silence would score as a kill"; return 1; }
+  case "$world" in absent) rm -f "$d/template-sites.md" ;; esac
+  hits="$(grep -c -e "$anch" "$src")" || hits=0
+  ctl="$(grep -c -e 'ZZ-NO-SUCH-TEMPLATE-ANCHOR-ZZ' "$src")" || ctl=0
+  if [ "$ctl" -ne 0 ]; then
+    bad "$n the impossible-anchor control matched $ctl line(s) in $(basename "$src"), so the uniqueness count below means nothing"; return 1
+  fi
+  if [ "$hits" -ne "$want" ]; then
+    bad "$n's anchor matches $hits line(s) in $(basename "$src"), not $want — the subject was respelled and this mutant edits something other than what it names. Re-anchor it; do NOT relax the assertion."; return 1
+  fi
+  case "$victim" in
+    emit)        out="$d/mutant-emit.sh" ;;
+    preclassify) out="$d/preclassify.sh" ;;
+  esac
+  if ! sed "$@" "$src" > "$out.tmp"; then
+    bad "$n DID NOT APPLY — sed failed, so no mutant exists and the arm it guards is unproven"; return 1
+  fi
+  if cmp -s "$src" "$out.tmp"; then
+    bad "$n DID NOT APPLY — the sed matched nothing, so the arm it guards is unproven"; return 1
+  fi
+  mv "$out.tmp" "$out"
+  T_APPLIED="$T_APPLIED $n"
+  return 0
+}
+t_mut_emit()  { local d="$TMD/$1"; [ -f "$d/mutant-emit.sh" ] && printf '%s\n' "$d/mutant-emit.sh" || printf '%s\n' "$d/emit-report.sh"; }
+t_mut_sect()  { # t_mut_sect <name> — the step-3b section as that mutant renders it
+  local d="$TMD/$1"
+  bash "$(t_mut_emit "$1")" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$d/region.txt" 2>/dev/null
+  T_SECT "$d/region.txt"
+}
+t_applied() { case " $T_APPLIED " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
+
+# M1 the whole section deleted. Range-delete keyed on the section's own `sub` line and the `fi`
+# that closes its refusal branch, so it removes the block and nothing else.
+t_mk M1 emit 1 '^  sub "Template pre-classification' none \
+  -e '/^  sub "Template pre-classification/,/^  fi$/d'
+# M2 header KEPT, the classifier call dropped — `none` rendered for a detector never invoked.
+# This is the shape A1 alone cannot catch, and the reason A2 demands rows rather than a heading.
+t_mk M2 emit 1 '^  tpl="\$(bash "\$SELF/preclassify.sh"' none \
+  -e 's@^  tpl="\$(bash "\$SELF/preclassify.sh".*@  tpl=""@'
+# M3 args transposed to emit-report's own order. preclassify refuses at its consumer-root guard
+# with a sha as the path, rc=2, and the refusal arm renders REFUSED where four rows belong.
+t_mk M3 emit 1 '"\$DIST" "\$BASE" "\$THEIRS" "\$CONSUMER" --templates' none \
+  -e 's@"\$DIST" "\$BASE" "\$THEIRS" "\$CONSUMER" --templates@"$DIST" "$BASE" "$CONSUMER" "$THEIRS" --templates@'
+# M4 the refusal arm collapsed — rc ignored, `none` rendered on a refusal. Scored on S2.
+t_mk M4 emit 1 '^  if \[ "\$tpl_rc" -eq 0 \]; then none_or "\$tpl"; else$' absent \
+  -e 's@^  if \[ "\$tpl_rc" -eq 0 \]; then none_or "\$tpl"; else$@  if true; then none_or "$tpl"; else@'
+# M6 BOTH of preclassify's manifest guards reverted — the layered fix undone in full, because a
+# partial revert leaves the layer still in place and comes out green. Scored on S2: with the
+# manifest present this mutant renders the identical four rows.
+t_mk M6 preclassify 1 '^  \[ -r "\$MANIFEST" \] ||' absent \
+  -e '/^  \[ -r "\$MANIFEST" \] ||/d' -e '/^  \[ -n "\$TEMPLATE_ROWS" \] ||/d'
+
+# M5 is a MOVE, not a substitution, so it is built with awk rather than through t_mk — and it is
+# checked the same three ways: the anchor is unique, the mutation applied, and the observable is
+# the right one for the right reason.
+T_M5="$TMD/M5"
+rm -rf "$T_M5"; cp -R "$(dirname "$EMIT")" "$T_M5"
+t_m5_a="$(grep -c '^  sub "Deletions (apply would git rm' "$EMIT")" || t_m5_a=0
+t_m5_b="$(grep -c '^  sub "Template pre-classification' "$EMIT")" || t_m5_b=0
+if [ "$t_m5_a" -ne 1 ] || [ "$t_m5_b" -ne 1 ]; then
+  bad "M5's anchors match $t_m5_a and $t_m5_b lines (want 1 and 1) — the section headers were respelled and this mutant would move something other than what it names"
+else
+  awk '
+    /^  sub "Deletions \(apply would git rm/ {hold=3}
+    hold>0 {buf[n++]=$0; hold--; next}
+    /^  sub "Template pre-classification/ {intpl=1}
+    {print}
+    intpl==1 && /^  fi$/ {for(i=0;i<n;i++) print buf[i]; n=0; intpl=0}
+  ' "$EMIT" > "$T_M5/mutant-emit.sh"
+  if cmp -s "$EMIT" "$T_M5/mutant-emit.sh"; then
+    bad "M5 DID NOT APPLY — the awk produced a byte-identical file, so A5 is unproven"
+  elif [ "$(grep -c . "$EMIT")" -ne "$(grep -c . "$T_M5/mutant-emit.sh")" ]; then
+    bad "M5 DID NOT APPLY CLEANLY — the move changed the non-blank line count ($(grep -c . "$EMIT") -> $(grep -c . "$T_M5/mutant-emit.sh")), so it deleted or duplicated something and its kill would be unattributed"
+  else
+    T_APPLIED="$T_APPLIED M5"
+  fi
+fi
+
+# CONTROL FIRST: an UNMUTATED copy in a fresh directory renders the four rows. Two inert runs
+# compare equal, so without this every kill below could be a battery comparing nothing to nothing.
+T_CTL="$TMD/ctl"; rm -rf "$T_CTL"; cp -R "$(dirname "$EMIT")" "$T_CTL"
+t_ctl_sec="$(T_SECT <(bash "$T_CTL/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null))"
+t_ctl_rows="$(grep -c 'TEMPLATE-PROSE-MERGE\|TEMPLATE-JSON-MERGE\|TEMPLATE-UNCHANGED-NOOP\|CONSUMER-MISSING-NOOP' <<<"$t_ctl_sec")" || t_ctl_rows=0
+if [ "$t_ctl_rows" -eq 4 ]; then
+  ok "CONTROL(T) an unmutated copy of reconcile/ in a fresh directory renders all four step-3b rows, so a mutant's changed section is the mutation and not the copy"
+else
+  bad "CONTROL(T) the unmutated copy rendered $t_ctl_rows step-3b row(s), not 4 — every mutant verdict below is unreadable, because a copy that never ran renders nothing and that is what a kill looks like"
+fi
+
+# M1 -> A1. The section gone entirely. Its OWN arm is the header; the second conjunct is what
+# stops this scoring as a kill of a subject that emits nothing at all.
+if t_applied M1; then
+  t_m1="$(t_mut_sect M1)"
+  if ! grep -q 'Template pre-classification' "$TMD/M1/region.txt" \
+     && grep -q 'HARD-UNREGISTERED-CORE-DRIFT' "$TMD/M1/region.txt" \
+     && grep -q 'Scripts relocation' "$TMD/M1/region.txt"; then
+    ok "M1 KILLED by A1: the section deleted renders no step-3b header, while the rest of the region (the HARD blocker, Scripts relocation) still renders — so the mutant removed the section and not the program"
+  else
+    bad "M1 SURVIVED A1 — either the header renders with the section deleted (impossible, so the mutation missed), or the mutant emits nothing at all and its silence is being read as a kill"
+  fi
+fi
+
+# M2 -> A2. Header kept, no call. The exact shape A1 cannot see.
+if t_applied M2; then
+  t_m2="$(t_mut_sect M2)"
+  if grep -q 'Template pre-classification' "$TMD/M2/region.txt" \
+     && grep -qx 'none' <<<"$t_m2" \
+     && ! grep -q 'TEMPLATE-PROSE-MERGE' <<<"$t_m2"; then
+    ok "M2 KILLED by A2: the header still renders and the section reads 'none' — a heading plus 'none' is exactly what an uninvoked detector looks like, and only the row assertion separates it from four templates with nothing to sync"
+  else
+    bad "M2 SURVIVED A2 — the dropped classifier call did not empty the section (got: $(printf '%s' "$t_m2" | tr '\n' ' ' | head -c 120))"
+  fi
+fi
+
+# M3 -> A2, via the refusal. Same input shape as A3 (an rc=2 refusal), counted there.
+if t_applied M3; then
+  t_m3="$(t_mut_sect M3)"
+  if grep -q 'DETECTOR-REFUSED' <<<"$t_m3" && ! grep -q 'TEMPLATE-PROSE-MERGE' <<<"$t_m3"; then
+    ok "M3 KILLED by A2: transposing the args to emit-report's own order makes preclassify refuse on a sha as its consumer root, and the section renders DETECTOR-REFUSED where the four rows belong — the argument-order quirk is load-bearing and not a comment"
+  else
+    bad "M3 SURVIVED A2 — the transposed call still produced rows, so the section is not reading preclassify's answer at all (got: $(printf '%s' "$t_m3" | tr '\n' ' ' | head -c 120))"
+  fi
+fi
+
+# M4 -> A3, on the ABSENT-MANIFEST world.
+if t_applied M4; then
+  t_m4="$(t_mut_sect M4)"
+  if grep -qx 'none' <<<"$t_m4" && ! grep -q 'DETECTOR-REFUSED' <<<"$t_m4"; then
+    ok "M4 KILLED by A3: with the rc ignored, a refusing classifier renders 'none' — the operator reads a clean line for a detector that classified nothing, over two buckets that rewrite live consumer files"
+  else
+    bad "M4 SURVIVED A3 — collapsing the refusal arm did not produce 'none' on the absent-manifest world (got: $(printf '%s' "$t_m4" | tr '\n' ' ' | head -c 120)), so A3 is carried by something other than the rc read"
+  fi
+fi
+
+# M5 -> A5. The ONLY arm that can see a re-sited section; every other arm greps the region.
+if t_applied M5; then
+  bash "$T_M5/mutant-emit.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$T_M5/region.txt" 2>/dev/null
+  t_m5_o="$(awk '/Semantic worklist orientation/,/^\*\*Deletions/' "$T_M5/region.txt")"
+  t_m5_hdr="$(grep -c 'Template pre-classification' <<<"$t_m5_o")" || t_m5_hdr=0
+  t_m5_rows="$(grep -c 'TEMPLATE-PROSE-MERGE' "$T_M5/region.txt")" || t_m5_rows=0
+  if [ "$t_m5_hdr" -ge 1 ] && [ "$t_m5_rows" -ge 1 ]; then
+    ok "M5 KILLED by A5: sited between Semantic worklist and Deletions the section falls INSIDE the ORIENT range ($t_m5_hdr header hit), while the rows still render ($t_m5_rows) — so every other arm here stays green and A5 is the only one that moves"
+  else
+    bad "M5 SURVIVED A5 — the re-sited section did not land inside the ORIENT range (header hits $t_m5_hdr, rows $t_m5_rows). If the rows are 0 the mutant broke the program rather than moving the section, and its kill would be unattributed."
+  fi
+fi
+
+# M6 -> A3's first shape. The preclassify guard is the LOAD-BEARING half of the layered fix: with
+# it reverted the classifier exits 0 having classified nothing, and emit-report's rc read — still
+# in place — correctly renders `none`. Both layers or neither.
+if t_applied M6; then
+  t_m6="$(t_mut_sect M6)"
+  if grep -qx 'none' <<<"$t_m6" && ! grep -q 'DETECTOR-REFUSED' <<<"$t_m6"; then
+    ok "M6 KILLED by A3: with preclassify's manifest guards reverted the classifier exits 0 on an absent manifest, emit-report's intact rc read sees success, and 'none' renders — the guard is load-bearing, and the driver's rc read alone cannot carry A3"
+  else
+    bad "M6 SURVIVED A3 — reverting both preclassify guards did not produce 'none' on the absent-manifest world (got: $(printf '%s' "$t_m6" | tr '\n' ' ' | head -c 120)), so A3's first shape is proven by something other than the guard it names"
+  fi
+fi
+
+# Every mutant staged must have been scored. A mutation that never applied skips its arms with no
+# verdict, and a battery that printed PASS over a mutant nobody scored is the shape this catches.
+t_want="M1 M2 M3 M4 M5 M6"
+t_got="$(printf '%s\n' $T_APPLIED | sort | tr '\n' ' ')"
+if [ "$t_got" = "$(printf '%s\n' $t_want | sort | tr '\n' ' ')" ]; then
+  ok "all six step-3b mutants applied and were scored (M1 M2 M3 M4 M5 M6)"
+else
+  bad "the step-3b mutants that applied were [${t_got:-none}] and had to be [$t_want] — a mutant that did not apply guards an arm nobody proved, and its absence reads exactly like a kill"
 fi
 
 # =============================================================================

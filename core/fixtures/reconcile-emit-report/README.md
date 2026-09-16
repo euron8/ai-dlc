@@ -23,7 +23,10 @@ or **hand-edited to drop a finding** fails. The operator can run `--verify` them
 - the driver renders a mechanical region carrying a real HARD blocker;
 - `--verify` **PASSES** a report whose region matches the driver;
 - `--verify` **FAILS** a report with no region (the narrated-report bug);
-- `--verify` **FAILS** a region hand-edited to drop the blocker (an edited render can't hide a finding).
+- `--verify` **FAILS** a region hand-edited to drop the blocker (an edited render can't hide a finding);
+- **step 3b** — `preclassify.sh --templates`, which classifies the generated files outside `core/` —
+  renders inside the region rather than being narrated, reaches all four of its buckets on one
+  seeded pair, and **refuses** rather than rendering `none` when it cannot read its manifest.
 
 ## Run
 
