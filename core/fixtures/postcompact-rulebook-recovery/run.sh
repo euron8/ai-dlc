@@ -21,6 +21,16 @@
 # REFUSES to ship a protocol that does not carry it. Either alone is a check that cannot fire:
 # a hook nobody guards can lose the paragraph in a reword, and a validator guarding prose that
 # never reaches the lead guards nothing.
+#
+# THE THIRD SUBJECT, far below: the hook's reading of `current_step_file`, which is
+# single-valued and was decided by whichever match came first. That section seeds SEVEN
+# DISTINCT INPUT SHAPES over ten snapshots -- two unlabelled live bullets, one live bullet, a
+# labelled prior, two bullets naming one file, a prose line quoting the key, the `(LIVE)`
+# inverse label, and mixed key spellings across a pair -- and counts shapes rather than arms
+# because channels written by different hands converge on the obvious seed and then agree for
+# that reason. Its mutants are copies OUTSIDE the tree: I113 binds the count grammar
+# byte-identically across three files, so a mutation applied in place would trip that invariant
+# as well and the fixture's verdict would no longer be attributable to the fixture.
 set -uo pipefail
 
 # The pre-push gate inherits every AI_DLC_* tunable a consumer set in settings.json. A fixture
@@ -1400,6 +1410,303 @@ else
     ok "mutant: restoring the \${STEP_FILE} fallback fails ONLY the second-mandate arm — byte-identical output where the step file resolves"
   fi
 fi
+
+# =============================================================================
+# THE POSITION COUNT — a `## Pipeline Position` naming TWO live step files
+#
+# THE DEFECT. `current_step_file` is single-valued and overwritten in place, and this hook
+# used to decide it with a whole-file `grep -m1`: on a section carrying a stale bullet above a
+# live one it mandated whichever came FIRST, while the excerpt at the bottom of the same block
+# printed BOTH. One block told the lead to Read one step file and displayed another, and the
+# gate armed on the coin toss. Where the section names two DIFFERENT step files the hook now
+# REFUSES: no mandate naming a path, `step_file_resolved=0`, and a disclosure that says it
+# found TWO -- because "names two" and "names none" are different states and the block used to
+# describe only the second.
+#
+# SEVEN DISTINCT INPUT SHAPES, not seven arms. Channels written by different hands converge on
+# the obvious seed and then agree for that reason; the gap is always in the SEED. The shapes:
+#
+#   1 TWO UNLABELLED live bullets naming different files   (S1, S1b)
+#   2 ONE live bullet                                      (S2, S2b, S2c)
+#   3 a LABELLED prior beside a live bullet                (S3 below it, S4 above it)
+#   4 TWO bullets naming the SAME file                     (S5)
+#   5 a PROSE line quoting the key name mid-sentence       (S6)
+#   6 an INVERSE label, `(LIVE)`                           (S7)
+#   7 MIXED key spellings across the two bullets           (S1b)
+#
+# Shapes 1 and 2 are the pair the whole refusal turns on and they are asserted to DIFFER in
+# this run, in one invocation: a hook that refused everything and a hook that refused nothing
+# both satisfy either seed alone.
+#
+# EVERY SEED IS SPELLED IN MORE THAN ONE KEY FORM, and that is measured rather than stylistic.
+# Over 2218 revisions of the reference consumer's snapshot the dominant spellings are
+# `- **Current step file:**` (1353) and the backticked `- **\`current_step_file\`:**` (18); a
+# strict `current_step_file:`-only key un-resolves 94 revisions this hook resolves today. S2b
+# and S2c are the seeds that kill that narrowing, and mutant M6 is the one that builds it.
+#
+# THE MUTANTS ARE COPIES OUTSIDE THE TREE, for a reason particular to this subject. The count
+# grammar is four strings byte-identical across three files and invariant I113 binds them, so a
+# mutation applied to the tracked hook would trip I113 as well as this fixture -- two programs
+# reporting one finding, and the fixture's verdict no longer attributable. The copies live
+# under $WORK and are driven through CLAUDE_PROJECT_DIR exactly as the arms above drive the
+# real hook, so each mutant is scored HERE and by nothing else.
+#
+# NOT ANCHORED ON THE UNRESOLVABLE-FALLBACK ASSIGNMENT. The old-fallback mutant at assertion 24
+# rewrites that exact assignment and asserts the rewrite was TOTAL by COUNTING the substring, so
+# the hook's refusal branch deliberately spells its own assignment the other way and no mutant
+# below may re-introduce the collision by anchoring there. This paragraph does not spell it
+# either: the count is over the mutated HOOK, but the same class has already fired three times
+# on prose, twice in the hook's own comments, and a near-miss is not worth the second reading.
+# =============================================================================
+
+# A project whose steps directory holds BOTH candidate files, so a snapshot naming either one
+# resolves and the refusal is about the COUNT rather than about a path that is not there.
+# Each seed is a WHOLE snapshot written from scratch: a world that edited only the position
+# line would leave the previous world's sections on disk and the next arm would read a shape
+# nobody seeded.
+posproj() { # posproj <tag> <position-line-1> [position-line-2] -> project dir
+  _pp="$(mktemp -d "$WORK/pos-$1.XXXXXX")" || return 1
+  mkdir -p "$_pp/_bmad-output" "$_pp/${STEPS_REL}"
+  printf 'live step body\n'  > "$_pp/${STEPS_REL}/live.md"
+  printf 'stale step body\n' > "$_pp/${STEPS_REL}/stale.md"
+  {
+    printf '# Pipeline Snapshot\n\n## Pipeline Position\n'
+    printf -- '- pipeline_variant: sprint\n'
+    printf '%s\n' "$2"
+    [ -n "${3:-}" ] && printf '%s\n' "$3"
+    printf -- '- last_gate_passed: planning-gate-2 @ 2026-08-04T10:00:00Z\n'
+    printf '\n## Sprint Context\n- sprint_id: 300\n'
+  } > "$_pp/_bmad-output/pipeline-snapshot.md"
+  printf 'in-flight edit work\n' > "$_pp/decoy.md"
+  printf '%s\n' "$_pp"
+}
+
+# postok <hook> <project> -> <resolved>/<basename the marker recorded>/<disclosed count>/<2nd mandate>
+#
+# EVERY FIELD IS A FACT THE HOOK EMITS, so a mutant that emits nothing scores DEAD and fails
+# every arm by construction rather than passing any. The mandate cell distinguishes a mandate
+# naming a PATH from one naming an ACTION from one rendering an EMPTY path -- M5's whole
+# subject is the third, and a cell reading only "is there a second mandate" could not see it.
+postok() { # postok <hook-path> <project>
+  _ph="$1"; _pp="$2"
+  rm -f "$_pp/_bmad-output/.recover-fired"
+  _pc="$(fire_at "$_ph" "$_pp")"
+  [ -n "$_pc" ] || { printf 'DEAD'; return; }
+  _p1="$(tr '\n' ' ' <<<"$_pc")"
+  _pr="$(sed -n 's/^step_file_resolved=//p' "$_pp/_bmad-output/.recover-fired" 2>/dev/null | head -1)"
+  [ -n "$_pr" ] || _pr=x
+  _ps="$(sed -n 's/^step_file=//p' "$_pp/_bmad-output/.recover-fired" 2>/dev/null | head -1)"
+  _pb="${_ps##*/}"; [ -n "$_pb" ] || _pb=-
+  _pd="$(sed -n 's/.*names \([0-9][0-9]*\) DIFFERENT step files.*/\1/p' <<<"$_p1" | head -1)"
+  [ -n "$_pd" ] || _pd=-
+  _pm="$(sed -n 's/.*SECOND tool call MUST be `Read \([^`]*\)`.*/\1/p' <<<"$_p1" | head -1)"
+  case "$_pm" in
+    '<that path>') _pm=ACTION ;;
+    '') grep -q 'SECOND tool call MUST be' <<<"$_p1" && _pm=EMPTY || _pm=NOMANDATE ;;
+    *)  _pm="${_pm%% *}"; _pm="${_pm##*/}" ;;
+  esac
+  printf '%s/%s/%s/%s' "$_pr" "$_pb" "$_pd" "$_pm"
+}
+
+# THE TEN SEEDS, SPELLED AS THE PRODUCER WRITES THEM, never as the reader accepts them. A seed
+# derived from the reader's own accept-set proves the reader accepts its own grammar and stays
+# green through a change to both.
+POS_LIVE='- **Current step file:** live.md'
+posbattery() { # posbattery <hook-path> -> one token per seed
+  _pt=""
+  _pt="$_pt S1:$(postok  "$1" "$(posproj s1  '- **Current step file:** stale.md' "$POS_LIVE")")"
+  _pt="$_pt S1b:$(postok "$1" "$(posproj s1b '- current_step_file: stale.md' '- **`current_step_file`:** `live.md`')")"
+  _pt="$_pt S2:$(postok  "$1" "$(posproj s2  "$POS_LIVE")")"
+  _pt="$_pt S2b:$(postok "$1" "$(posproj s2b '- **`current_step_file`:** `live.md`')")"
+  _pt="$_pt S2c:$(postok "$1" "$(posproj s2c '- Current step file: live.md')")"
+  _pt="$_pt S3:$(postok  "$1" "$(posproj s3  "$POS_LIVE" '- **(prior) Current step file:** stale.md')")"
+  _pt="$_pt S4:$(postok  "$1" "$(posproj s4  '- **(prior) Current step file:** stale.md' "$POS_LIVE")")"
+  _pt="$_pt S5:$(postok  "$1" "$(posproj s5  "$POS_LIVE" '- current_step_file: live.md')")"
+  _pt="$_pt S6:$(postok  "$1" "$(posproj s6  "$POS_LIVE" 'The block below records current_step_file: as its own key name, in prose.')")"
+  _pt="$_pt S7:$(postok  "$1" "$(posproj s7  '- **current_step_file (LIVE):** live.md')")"
+  printf '%s' "${_pt# }"
+}
+
+POS_EXPECTED="S1:0/-/2/ACTION S1b:0/-/2/ACTION S2:1/live.md/-/live.md S2b:1/live.md/-/live.md S2c:1/live.md/-/live.md S3:1/live.md/-/live.md S4:1/live.md/-/live.md S5:1/live.md/-/live.md S6:1/live.md/-/live.md S7:1/live.md/-/live.md"
+
+# --- Assertion 26: the ten seeds, against the REAL hook ----------------------
+POS_GOT="$(posbattery "$HOOK")"
+if [ "$POS_GOT" = "$POS_EXPECTED" ]; then
+  ok "position: two unlabelled bullets naming different step files REFUSE in both key spellings (no path in the mandate, step_file_resolved=0, the disclosure says TWO); a single bullet resolves in all three real spellings including the backticked KEY and the unbolded prose key; a labelled \`(prior)\` above or below a live bullet resolves; two bullets naming ONE file resolve; a prose line quoting the key mid-sentence does not count; and \`(LIVE)\` stays a live value"
+else
+  bad "position: the ten-seed battery did not answer as expected — wanted [$POS_EXPECTED], got [$POS_GOT]"
+fi
+
+# --- Assertion 26b: S1 and S2 DIFFER, in this invocation ---------------------
+# THE DISCRIMINATION IS THE CLAIM, and neither seed alone establishes it: a hook that refused
+# every snapshot passes S1, a hook that refused none passes S2, and each reads as a working
+# reader from the other's side. `verification-discipline.md` requires the two candidate
+# semantics computed and compared before either verdict is read.
+POS_S1="$(postok "$HOOK" "$(posproj d1 '- **Current step file:** stale.md' "$POS_LIVE")")"
+POS_S2="$(postok "$HOOK" "$(posproj d2 "$POS_LIVE")")"
+if [ "$POS_S1" = DEAD ] || [ "$POS_S2" = DEAD ]; then
+  bad "position: the hook emitted nothing for one of the two discriminating seeds, so their comparison measures nothing"
+elif [ "$POS_S1" = "$POS_S2" ]; then
+  bad "position: the two-bullet seed and the one-bullet seed BOTH answer [$POS_S1] — the count does not discriminate, and one of the two verdicts above is being read off a hook that answers the same way whatever the snapshot says"
+else
+  ok "position: the two-bullet and one-bullet seeds answer DIFFERENTLY in one invocation ([$POS_S1] vs [$POS_S2]) — the refusal is keyed on the count and not on a constant"
+fi
+
+# --- Assertion 26c: the REFUSAL's disclosure names the state, not an absence --
+# "Names two" and "names none" are different states, and the injected text described only the
+# second. A lead recovering from an ambiguous snapshot was told the snapshot named NO step
+# file, which is false, and was being asked in the same block to report its state.
+POS_A="$(fire_at "$HOOK" "$(posproj disc '- **Current step file:** stale.md' "$POS_LIVE")")"
+posmiss=""
+grep -q 'names 2 DIFFERENT step' <<<"$POS_A"  || posmiss="$posmiss says-how-many"
+grep -q 'stale\.md' <<<"$POS_A"               || posmiss="$posmiss names-the-first-candidate"
+grep -q 'live\.md'  <<<"$POS_A"               || posmiss="$posmiss names-the-second-candidate"
+grep -q 'CANNOT ARM' <<<"$POS_A"              || posmiss="$posmiss discloses-the-gate-stood-down"
+grep -q 'do not report it as' <<<"$POS_A"     || posmiss="$posmiss warns-against-reporting-an-absent-field"
+# THE NEAR-MISS IS IN THE SAME ARM. A single bullet must carry NONE of this, or the paragraph
+# is unconditional and the arm above would pass against a hook that discloses ambiguity always.
+POS_B="$(fire_at "$HOOK" "$(posproj disc1 "$POS_LIVE")")"
+posextra=""
+grep -q 'DIFFERENT step' <<<"$POS_B" && posextra="$posextra discloses-ambiguity-on-a-single-bullet"
+grep -q 'CANNOT ARM'     <<<"$POS_B" && posextra="$posextra stands-the-gate-down-on-a-single-bullet"
+if [ -z "$posmiss" ] && [ -z "$posextra" ]; then
+  ok "position: the refusal discloses the COUNT and both candidate files, says the gate cannot arm, and tells the lead not to report it as an absent field — and a single-bullet snapshot in the same run carries none of that"
+elif [ -n "$posmiss" ]; then
+  bad "position: the two-file disclosure is missing:$posmiss — the lead is told the snapshot names no step file, which is false, and it is the state it has just been asked to report"
+else
+  bad "position: the ambiguity disclosure fires on a snapshot with ONE live bullet:$posextra — the paragraph is unconditional, so the arm above proves nothing"
+fi
+
+# --- the position mutant scorer ---------------------------------------------
+# Each mutant is a COPY, guarded by `cmp -s` (a sed that matched nothing is not a mutation) and
+# by `bash -n` (a mutant that dies emits nothing, and silence would otherwise score as a kill).
+# It is scored by its FLIP SET against POS_EXPECTED: a mutant that flips more than its own set
+# means two arms are entangled and one is vacuous, and one that flips nothing means the seeds
+# it was built for cannot fire.
+posflips() { # posflips <battery> -> the seed names whose token differs from expected
+  _pf=""
+  for _pe in $POS_EXPECTED; do
+    case " $1 " in *" $_pe "*) ;; *) _pf="$_pf ${_pe%%:*}" ;; esac
+  done
+  printf '%s' "${_pf# }"
+}
+posmutant() { # posmutant <label> <mutant-path> <expected flip set> <what it proves>
+  if cmp -s "$HOOK" "$2"; then
+    bad "FIXTURE STALE: $1 — the mutant is byte-identical to the hook, so the mutation matched nothing and proves nothing"; return
+  fi
+  if ! bash -n "$2" 2>/dev/null; then
+    bad "FIXTURE STALE: $1 — the mutant is not valid shell; it would emit no directive, and that silence would score as a kill it did not earn"; return
+  fi
+  _pg="$(posbattery "$2")"
+  _pfl="$(posflips "$_pg")"
+  if [ "$_pfl" = "$3" ]; then
+    ok "MUTANT $1: flips exactly {$3} — $4"
+  elif [ -z "$_pfl" ]; then
+    bad "MUTANT SURVIVED: $1 — every seed answers as the fixed hook does, so {$3} cannot fire and $4 is unproven"
+  else
+    bad "MUTANT FLIP SET WRONG: $1 — expected {$3}, measured {$_pfl}; the seeds are entangled or one of them is vacuous. Battery: [$_pg]"
+  fi
+}
+
+# --- Assertion 27: UNMUTATED CONTROL, before any mutant verdict is read ------
+# TWO INERT RUNS COMPARE EQUAL. A copy of the hook that died at startup would make every mutant
+# below SURVIVE while this arm also passed, and the pair would read exactly like a fix that
+# works. So the control is PRESENCE-shaped: it must reproduce the whole battery, not merely
+# fail to complain.
+POS_CTRL="$WORK/recover-pos-control.sh"
+cp "$HOOK" "$POS_CTRL"
+POS_C="$(posbattery "$POS_CTRL")"
+if [ "$POS_C" = "$POS_EXPECTED" ]; then
+  ok "control: an unmutated copy of the hook, driven from a scratch project, reproduces all ten seed tokens — a mutant's flip below is its mutation and not the copy"
+else
+  bad "CONTROL FAILED — an unmutated copy answers [$POS_C], not the battery the real hook answers, so every position-mutant verdict below is uninterpretable"
+fi
+
+# --- Assertion 28: M1 — the whole-file `grep -m1` reader restored ------------
+# THE PRE-FIX HOOK. With the section count emptied every snapshot falls to the unchanged
+# whole-file first-match reader, which is an answer whatever the snapshot says. S4 is in the
+# flip set and it is the discriminating half: there the FIRST match in the file is the LABELLED
+# prior, so first-match-wins mandates a superseded position that the label exists to retire.
+MP1="$WORK/recover-pos-m1.sh"
+sed 's/^POSITION_BULLETS="\$(awk /POSITION_BULLETS=""; _unused="$(awk /' "$HOOK" > "$MP1"
+posmutant "M1 the whole-file first-match reader restored" "$MP1" "S1 S1b S4" \
+  "both two-file seeds mandate whichever bullet the file happened to list first, and the labelled-prior-above seed mandates the PRIOR — the coin toss the count replaced"
+
+# --- Assertion 29: M2 — section-scoped but `head -1` ------------------------
+# The half-fix. The count is computed and then ignored: the refusal branch never fires and the
+# first bullet wins. Only the two-file seeds may move — S4 stays green, which is what separates
+# this from M1 and makes each attributable.
+MP2="$WORK/recover-pos-m2.sh"
+sed 's/^  if \[ "\$_pos_distinct" -ge 2 \]; then$/  if false; then/' "$HOOK" > "$MP2"
+posmutant "M2 section-scoped, refusal dropped, first bullet wins" "$MP2" "S1 S1b" \
+  "a hook that counts two and mandates the first one anyway — the label exclusion still works, so only the unlabelled pair moves"
+
+# --- Assertion 30: M3 — section-scoped but `tail -1` ------------------------
+# NEWEST-WINS IS NOT THE FIX EITHER, and this mutant is what says so. It answers `live.md` on
+# both two-file seeds, which is the RIGHT file for the wrong reason: nothing in the snapshot
+# says the later bullet is the live one, and on a stale-below-live section the same rule
+# mandates the stale one. The arm demands a REFUSAL, so a hook that guessed correctly here
+# still dies.
+MP3="$WORK/recover-pos-m3.sh"
+sed -e 's/^  if \[ "\$_pos_distinct" -ge 2 \]; then$/  if false; then/' \
+    -e "s/| sed -n '1p'/| sed -n '\$p'/" "$HOOK" > "$MP3"
+posmutant "M3 section-scoped, refusal dropped, LAST bullet wins" "$MP3" "S1 S1b" \
+  "newest-wins names the file this seed happens to want and is still wrong — the arms assert a refusal, not a preferred guess"
+
+# --- Assertion 31: M4 — the label exclusion dropped -------------------------
+# A superseded position recorded under a labelled key is not a second live value, and this is
+# the mutant that proves the exclusion is load-bearing in BOTH directions: with it gone the two
+# labelled seeds refuse, and they are the only ones that move. S1/S1b stay red-free because
+# their bullets carry no label at all, which is what makes this mutant's kill attributable to
+# the exclusion rather than to the count.
+MP4="$WORK/recover-pos-m4.sh"
+sed "s/^AI_DLC_POS_LABEL_RE=.*$/AI_DLC_POS_LABEL_RE='zzz_no_such_label_zzz'/" "$HOOK" > "$MP4"
+posmutant "M4 the label exclusion dropped" "$MP4" "S3 S4" \
+  "a correctly labelled \`(prior)\` position becomes a second live bullet and the hook refuses a snapshot that is exactly right — the remedy it prints is the thing the consumer already did"
+
+# --- Assertion 32: M5 — refused, and the mandate emitted anyway -------------
+# THE HALF-REFUSAL, and it is worse than no refusal: `step_file_resolved=0` keeps the gate stood
+# down while the block still renders a SECOND mandate — with an EMPTY path, because there is no
+# value to interpolate. `Read ` in full is a MUST the lead cannot execute, and a MUST it cannot
+# execute is what teaches it the MUSTs in this block are negotiable. Only the mandate cell of
+# the two refusing seeds moves, which is why that cell distinguishes EMPTY from ACTION.
+MP5="$WORK/recover-pos-m5.sh"
+awk '!d && $0=="if [ \"$STEP_FILE_RESOLVED\" -eq 1 ]; then" {print "if true; then"; d=1; next} 1' "$HOOK" > "$MP5"
+posmutant "M5 the refusal keeps resolved=0 but emits the mandate anyway" "$MP5" "S1 S1b" \
+  "the block renders \`Read \` with an empty path where it refused to pick one — an unexecutable MUST, which is the standing the whole section depends on"
+
+# --- Assertion 33: M6 — the STRICT key grammar ------------------------------
+# THE CONSUMER-HISTORY MUTANT. This is the first draft of the fix, refuted by measurement: a
+# key matching only the bolded prose spelling un-resolves 94 of the reference consumer's 2218
+# snapshot revisions that the shipped alternation resolves. Both the bullet grammar and the
+# fallback reader are narrowed, because narrowing one alone leaves the other resolving and the
+# mutant would prove the layer left in place. Four seeds move and they are exactly the ones
+# whose key the strict grammar cannot spell.
+MP6="$WORK/recover-pos-m6.sh"
+sed -E -e "s@^AI_DLC_POS_BULLET_RE=.*\$@AI_DLC_POS_BULLET_RE='^[[:space:]]*-[[:space:]]*\\\\*\\\\*Current step file:\\\\*\\\\*'@" \
+       -e "s@grep -m1 -iE '\(current_step_file[^']*'@grep -m1 -iE '\\\\*\\\\*Current step file:\\\\*\\\\*'@" "$HOOK" > "$MP6"
+posmutant "M6 the key alternation narrowed to one spelling" "$MP6" "S1b S2b S2c S7" \
+  "the backticked KEY, the unbolded prose key, the \`(LIVE)\` spelling and the mixed-spelling pair all stop resolving — the 94-revision regression the first draft of this fix carried"
+
+# --- Assertion 34: M7 — the bullet-position clause dropped ------------------
+# The clause that requires the key to sit at a dash bullet before the first colon. Without it a
+# PROSE line that quotes the key name mid-sentence counts as a position, and the hook refuses a
+# snapshot carrying exactly one live bullet. Measured on the consumer: 1 revision of 2218 has
+# that shape, and it is the newest of the two-plus matches.
+MP7="$WORK/recover-pos-m7.sh"
+sed "s@^AI_DLC_POS_BULLET_RE='\^\[\[:space:\]\]\*-\[\^:\]\*@AI_DLC_POS_BULLET_RE='@" "$HOOK" > "$MP7"
+posmutant "M7 the bullet-key position clause dropped" "$MP7" "S6" \
+  "a paragraph that mentions the key name becomes a second live position and a correct snapshot is refused — only the prose seed moves, so the clause has its own subject"
+
+# --- Assertion 35: M8 — agreement treated as a duplicate --------------------
+# AGREEMENT IS NOT A DUPLICATE, and refusing on it would un-gate the common case for nothing.
+# Two bullets naming ONE file is the ordinary stale-plus-live state, and the basename reduction
+# is what separates it from a real ambiguity. The mutation makes the de-duplication test
+# unreachable so every repeated basename counts as distinct; only S5 moves.
+MP8="$WORK/recover-pos-m8.sh"
+sed 's|^      \*" \$_pos_b "\*) ;;$|      *"ZZ-unreachable-ZZ"*) ;;|' "$HOOK" > "$MP8"
+posmutant "M8 two bullets naming the SAME file refuse" "$MP8" "S5" \
+  "the stale-plus-live state that names one file is refused, which withholds a recovery the hook could have completed and leaves the lead with no mandate for no reason"
 
 # --- Assertion 25: the block states the rule the gate cannot enforce ---------
 # The gate reaches two of the three mandated Reads and none of the lead's prose. Where it
