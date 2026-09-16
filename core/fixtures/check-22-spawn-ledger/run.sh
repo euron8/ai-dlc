@@ -919,6 +919,258 @@ else
   fi
 fi
 
+# ============================================================================
+# THE CLEARING PATH, ON EVERY ROUTE INTO `VIOL`. Four FAIL routes reach one exit 1 -- a
+# Rule 19(a) tier mismatch, a missing Rule 19(b) citation, an unreadable role file, and an
+# effort mismatch. Only the tier route named a clearing path, so the other three read to a
+# consumer as routes that fail forever with nothing anyone can do, which is the defect the
+# clearing path exists to prevent.
+#
+# THE POPULATION IS DERIVED BEHAVIOURALLY, NOT FROM THE SOURCE. Counting `VIOL=$((VIOL + 1))`
+# sites is a grammar over the script's TEXT: a one-space respelling empties it and reads as
+# zero routes, and a helper function keeps the count at four with the wrong membership. One
+# SEEDED ROW PER CLASS is the population, and each arm asserts the class's own FAIL token and
+# the disposition sentence in the SAME run -- so a fifth route added later without the
+# sentence is caught by seeding a fifth row, which is a change to this file either way.
+#
+# OUTSIDE THE `battery()` TOKEN VECTOR, the way the E-series arms above are. These arms drive
+# the validator directly, so no EXPECTED token moves and every existing mutant expectation
+# stays where it is.
+#
+# LIVENESS BEFORE NAMING, in that order. A build that DELETES a class stops emitting its FAIL
+# token, and an arm that only asked "does every FAIL line name the disposition" would score
+# that build green over a route that no longer exists -- vacuously true of an empty set. Each
+# arm therefore refuses on rc != 1 or on a missing class token BEFORE it reads the sentence.
+# ============================================================================
+
+# `dev` pins sonnet and effort high in the settings block above. THE OFFENDER IS NOT FIRST in
+# any of these ledgers: a one-row ledger cannot tell "scanned the set" from "scanned its first
+# row", and it makes the subject its own epoch.
+row dev sonnet sonnet true true  cp-epoch                      >  "$WORK/cp-clean.jsonl"
+row dev sonnet sonnet true true  cp-clean2                     >> "$WORK/cp-clean.jsonl"
+row dev sonnet sonnet true true  cp-epoch                      >  "$WORK/cp-tier.jsonl"
+row dev opus   opus   true true  cp-tier                       >> "$WORK/cp-tier.jsonl"
+row dev sonnet sonnet true true  cp-epoch                      >  "$WORK/cp-cite.jsonl"
+row dev sonnet sonnet false true cp-cite                       >> "$WORK/cp-cite.jsonl"
+row dev sonnet sonnet true true  cp-epoch                      >  "$WORK/cp-unread.jsonl"
+row dev sonnet sonnet true false cp-unread                     >> "$WORK/cp-unread.jsonl"
+# The effort route is reachable ONLY with `--probe`, which the invocation published in
+# gate-validation.md does not pass. Seeded WITH one, because a route the fixture cannot reach
+# is a route the fixture says nothing about.
+row  dev sonnet sonnet true true cp-epoch                      >  "$WORK/cp-eff.jsonl"
+erow dev sonnet true true cp-eff true high toolu_CP            >> "$WORK/cp-eff.jsonl"
+prow toolu_CP low claude-sonnet-5 2.1.269                      >  "$WORK/cp-eff.probe"
+
+# The sentence every FAIL route owes its reader. Spelled ONCE, here, and read by the class
+# verdict below -- a per-arm copy is a second chance to drift.
+DISP='four-arm disposition, never by re-running the gate.'
+
+# cverdict <script> <ledger> <class-token> [probe] -> CLEAN-ish contract:
+#   DEAD(rc=N)   the route did not fail at all         -> the class was deleted or acquitted
+#   DEAD(token)  it failed without naming its class    -> a different route produced the 1
+#   LIVE+UNNAMED it failed, named its class, no remedy  -> the defect under test
+#   LIVE+NAMED   it failed, named its class AND the remedy
+cverdict() { # script ledger classtoken [probe]
+  local S="$1" L="$2" TOK="$3" P="${4:-}" o rc
+  if [ -n "$P" ]; then
+    o="$(bash "$S" --ledger "$WORK/$L" --sprint 900 --settings "$WORK/settings.json" --probe "$WORK/$P" 2>&1)"; rc=$?
+  else
+    o="$(bash "$S" --ledger "$WORK/$L" --sprint 900 --settings "$WORK/settings.json" 2>&1)"; rc=$?
+  fi
+  if [ "$rc" -ne 1 ]; then printf 'DEAD(rc=%s)' "$rc"; return; fi
+  grep -qF -- "$TOK" <<<"$o" || { printf 'DEAD(token)'; return; }
+  if grep -qF -- "$DISP" <<<"$o"; then printf 'LIVE+NAMED'; else printf 'LIVE+UNNAMED'; fi
+}
+
+# The CLEAN control, and it carries a POSITIVE conjunct. Asserting only "rc=0 and no
+# disposition sentence" passes against a validator replaced by `exit 0`; demanding the OK row
+# be THERE is what makes silence fail.
+cleanv() { # script -> CLEAN | clean(rc=N,disp=N)
+  local S="$1" o rc n
+  o="$(bash "$S" --ledger "$WORK/cp-clean.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"; rc=$?
+  n="$(grep -cF -- "$DISP" <<<"$o")" || n=0
+  if [ "$rc" -eq 0 ] && [ "$n" -eq 0 ] && grep -q 'OK: all 2 S900 spawn row' <<<"$o"; then
+    printf 'CLEAN'
+  else
+    printf 'clean(rc=%s,disp=%s)' "$rc" "$n"
+  fi
+}
+
+# cpvec <script> -> five space-separated cells, one per class plus the clean control.
+cpvec() {
+  printf '%s %s %s %s %s' \
+    "$(cleanv "$1")" \
+    "$(cverdict "$1" cp-tier.jsonl   'Rule 19(a) tier')" \
+    "$(cverdict "$1" cp-cite.jsonl   'role_contract_cited=false')" \
+    "$(cverdict "$1" cp-unread.jsonl 'role_file_readable=false')" \
+    "$(cverdict "$1" cp-eff.jsonl    'records effort=' cp-eff.probe)"
+}
+CP_EXPECTED="CLEAN LIVE+NAMED LIVE+NAMED LIVE+NAMED LIVE+NAMED"
+CP_NAMES="clean tier cite unread effort"
+
+cpmoved() { # got -> names of the differing cells
+  local got="$1" i=1 e m n out=""
+  for e in $CP_EXPECTED; do
+    m="$(printf '%s' "$got" | cut -d' ' -f$i)"
+    n="$(printf '%s' "$CP_NAMES" | cut -d' ' -f$i)"
+    [ "$e" != "$m" ] && out="$out $n"
+    i=$((i+1))
+  done
+  printf '%s' "${out# }"
+}
+
+# --- C1. every VIOL route FAILS, names its own class, AND names the clearing path ---
+CPGOT="$(cpvec "$VSL")"
+if [ "$CPGOT" = "$CP_EXPECTED" ]; then
+  ok "C1 all four routes into VIOL -- a Rule 19(a) tier mismatch, a missing Rule 19(b) citation, an unreadable role file, and an effort mismatch under --probe -- each exit 1, name their own class, and name Check 22's four-arm clearing path in the SAME run, against a clean two-row control that exits 0 with the OK row present and no clearing sentence at all"
+else
+  bad "C1 the clearing path is not named on every VIOL route: expected [$CP_EXPECTED], got [$CPGOT] (differing: $(cpmoved "$CPGOT"))"
+fi
+
+# --- C2. the STEP FILE's disposition section names all four classes -----------------
+# A WEAK PROSE ARM, and it is labelled one. It reads a document rather than driving a program,
+# so anything that satisfies its four literals satisfies it -- the shipping half of this
+# subject is C1 above, which drives the validator. This arm exists because the step file is
+# where a consumer LOOKS for the clearing procedure, and a section headed for one class tells
+# the other three that no path exists. Its m5 mutant is what proves it can fire.
+for _c in "$ROOT/core/skills/ai-dlc/steps" "$ROOT/.claude/skills/ai-dlc/steps"; do
+  [ -d "$_c" ] && { GVDIR="$_c"; break; }
+done
+if [ -z "${GVDIR:-}" ]; then
+  bad "FIXTURE BROKEN: the ai-dlc steps directory is in neither layout under $ROOT"
+else
+GV="$GVDIR/gate-validation.md"
+[ -f "$GV" ] || bad "FIXTURE BROKEN: gate-validation.md not found at $GV"
+
+# stepverdict <file> -> ALL-FOUR | HEADER-SCOPED-TO-TIER | MISSING:<tokens> | NOHEADER | NOEND
+# The section is bounded by its own header and by the sentence that closes it, so a class
+# named somewhere ELSE in a 3000-line file cannot satisfy this.
+stepverdict() {
+  local F="$1" h e sec miss="" t
+  h="$(grep -n '^\*\*Disposition' "$F" | head -1)"; h="${h%%:*}"
+  [ -n "$h" ] || { printf 'NOHEADER'; return; }
+  e="$(grep -n '^This clears the RECORDED violation' "$F" | head -1)"; e="${e%%:*}"
+  [ -n "$e" ] || { printf 'NOEND'; return; }
+  [ "$e" -gt "$h" ] || { printf 'BADRANGE'; return; }
+  # The HEADER itself, first: a section headed for one class has already told the reader the
+  # other three are out of scope, whatever its body goes on to list.
+  case "$(sed -n "${h}p" "$F")" in *'Rule 19(a)'*) printf 'HEADER-SCOPED-TO-TIER'; return ;; esac
+  sec="$(sed -n "${h},${e}p" "$F")"
+  for t in 'tier mismatch' 'role_contract_cited=false' 'role_file_readable=false' 'effort mismatch'; do
+    grep -qF -- "$t" <<<"$sec" || miss="$miss $t"
+  done
+  [ -n "$miss" ] && { printf 'MISSING:%s' "$miss"; return; }
+  printf 'ALL-FOUR'
+}
+
+SV="$(stepverdict "$GV")"
+if [ "$SV" = "ALL-FOUR" ]; then
+  ok "C2 (weak prose arm: this one READS the step file rather than driving a program, and C1 is the arm that binds behaviour) gate-validation.md's disposition section is headed for a recorded Rule 19 violation rather than a Rule 19(a) one, and names all four FAIL classes between that header and the sentence closing the section"
+else
+  bad "C2 gate-validation.md's disposition section does not scope to every VIOL route: $SV"
+fi
+
+# --- C3. MUTANTS ------------------------------------------------------------------
+# m1/m2/m3 drop the clearing sentence from ONE message each. m4 deletes a whole route. m5
+# reverts the step file's header. Each is a COPY guarded by `cmp -s`, each is asserted to have
+# applied, and each must move EXACTLY the cell its own arm owns.
+#
+# ANCHORED ON WHAT SEPARATES THE MESSAGES, NOT ON THE SENTENCE ITSELF. The 19(b) and
+# unreadable-role-file messages emit the clearing sentence as BYTE-IDENTICAL lines, so a `sed`
+# keyed on that text edits both, moves two cells, and scores a kill it did not earn. Each
+# mutation instead anchors on the LAST line unique to its own message and deletes the two
+# lines that follow it.
+#
+# `awk`, not `sed`: an `&` in a sed replacement is the whole match, and these message bodies
+# carry text a replacement expression would re-insert into itself.
+cpmut() { # name anchor -> writes $WORK/cp-<name>.sh, returns 1 if it did not apply
+  local n="$1" a="$2" M="$WORK/cp-$1.sh"
+  awk -v a="$a" 'BEGIN{n=0} { if (n>0) { n--; next } if (index($0,a)>0) { print; n=2; next } print }' \
+    "$WORK/mut/control.sh" > "$M" 2>/dev/null || return 1
+  cmp -s "$WORK/mut/control.sh" "$M" && return 1
+  bash -n "$M" 2>/dev/null || return 2
+  return 0
+}
+
+# cpscore <name> <expected-cell> <description>
+cpscore() {
+  local n="$1" cell="$2" desc="$3" M="$WORK/cp-$1.sh" got mv
+  got="$(cpvec "$M")"
+  mv="$(cpmoved "$got")"
+  if [ "$mv" = "$cell" ]; then
+    ok "MUTANT $n: $desc -- and it moves ONLY the $cell cell"
+  elif [ -z "$mv" ]; then
+    bad "MUTANT $n survived: $desc left all five cells unchanged, so the $cell arm cannot fire"
+  else
+    bad "MUTANT $n moved [$mv], expected only [$cell] -- entangled assertions, at least one of them vacuous"
+  fi
+}
+
+# A CONTROL ON THE MUTATION ITSELF, before any of them is scored: the source's disposition
+# emission count must be non-zero, or every "dropped it" mutant is dropping nothing. Derived
+# from the resolved script, never quoted.
+CPSRC="$(grep -cF -- "$DISP" "$WORK/mut/control.sh")" || CPSRC=0
+if [ "$CPSRC" -ge 4 ]; then
+  ok "CONTROL: the resolved validator at $VSL emits the clearing sentence $CPSRC times, so a mutant that removes one has a subject"
+else
+  bad "CONTROL: the validator emits the clearing sentence $CPSRC time(s); with fewer than four the mutants below remove nothing"
+fi
+
+if cpmut m1 'subagent_type alone and cited no Rule 19(b) role contract.'; then
+  cpscore m1 cite "dropping the clearing sentence from the 19(b) message alone leaves a consumer told its dispatch failed Rule 19(b) with no path out"
+else
+  bad "FIXTURE BROKEN: mutation m1 did not apply or does not parse -- the 19(b) message's last unique line was renamed, so this mutant proves nothing"
+fi
+
+if cpmut m2 'role file, so this teammate ran with no contract at all (Rule 19, fail-closed).'; then
+  cpscore m2 unread "dropping the clearing sentence from the unreadable-role-file message alone does the same for Rule 19's fail-closed route"
+else
+  bad "FIXTURE BROKEN: mutation m2 did not apply or does not parse -- the unreadable-role-file message's last unique line was renamed, so this mutant proves nothing"
+fi
+
+if cpmut m3 'runner that drops effort.'; then
+  cpscore m3 effort "dropping the clearing sentence from the effort message alone does the same for the probe-only route"
+else
+  bad "FIXTURE BROKEN: mutation m3 did not apply or does not parse -- the effort message's last unique line was renamed, so this mutant proves nothing"
+fi
+
+# m4 DELETES THE ROUTE, and it is the one that proves C1 asks about liveness before naming.
+# The gate passes an uncited row: no FAIL, no class token, rc=0. An arm that only asked
+# whether every FAIL line names the disposition would score this build GREEN over an empty
+# set. C1's cell must read DEAD, never LIVE+NAMED.
+sed 's/if \[ "\$cited" != "true" \]; then/if false; then/' "$WORK/mut/control.sh" > "$WORK/cp-m4.sh"
+if cmp -s "$WORK/mut/control.sh" "$WORK/cp-m4.sh"; then
+  bad "FIXTURE BROKEN: mutation m4 matched nothing -- the 19(b) arm's condition was renamed, so this mutant proves nothing"
+elif ! bash -n "$WORK/cp-m4.sh" 2>/dev/null; then
+  bad "FIXTURE BROKEN: mutation m4 does not parse -- the edit damaged the script rather than mutating it"
+else
+  M4="$(cpvec "$WORK/cp-m4.sh")"
+  M4CELL="$(printf '%s' "$M4" | cut -d' ' -f3)"
+  M4MV="$(cpmoved "$M4")"
+  if [ "$M4MV" = "cite" ] && [ "$M4CELL" != "${M4CELL#DEAD}" ]; then
+    ok "MUTANT m4: deleting the 19(b) route entirely passes an uncited row, and C1's cite cell reads [$M4CELL] -- caught by the rc=1-and-class-token half, which is why C1 asks about LIVENESS before it asks about NAMING; an arm scoring only 'every FAIL names the remedy' calls this build clean over a route that no longer exists"
+  else
+    bad "MUTANT m4: expected the cite cell to go DEAD and nothing else to move; cell=[$M4CELL], moved=[$M4MV]"
+  fi
+fi
+
+# m5 reverts the step file's section header to the tier-only wording -- the exact state the
+# fix replaced. It is C2's mutant and must move C2 alone; it edits no script, so C1's five
+# cells cannot move and are not re-scored here.
+awk '{ sub(/\*\*Dispositioning a recorded Rule 19 violation that already happened\.\*\*/, "**Dispositioning a Rule 19(a) violation that already happened.**"); print }' \
+  "$GV" > "$WORK/cp-m5.md"
+if cmp -s "$GV" "$WORK/cp-m5.md"; then
+  bad "FIXTURE BROKEN: mutation m5 matched nothing -- the disposition section's header was renamed, so this mutant proves nothing"
+else
+  M5="$(stepverdict "$WORK/cp-m5.md")"
+  if [ "$M5" = "HEADER-SCOPED-TO-TIER" ]; then
+    ok "MUTANT m5: reverting the section header to 'Dispositioning a Rule 19(a) violation' scores [$M5] -- C2 reads the header, so a section that lists four classes under a heading claiming one does not pass"
+  else
+    bad "MUTANT m5 survived: the tier-only header scored [$M5], so C2 is not reading the header"
+  fi
+fi
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then
   echo "check-22-spawn-ledger: PASS ($asserted assertions)"
