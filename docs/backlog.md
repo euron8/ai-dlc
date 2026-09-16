@@ -1476,6 +1476,26 @@ Discharges the consumer entry `PC-S296-REJECTION-CARRIES-UNRELATED-GAPS` at pinn
 verify: sh bash -c 'c=core/skills/ai-dlc-update/reconcile/classify-block.md; b=$(LC_ALL=C awk "/^- [*][*]domain-local[*][*]/{f=1;print;next} f&&/^- [*][*]/{exit} f&&/^## /{exit} f" "$c"); [ -n "$b" ] || exit 3; grep -qi push <<< "$b"'
 ## BL-034
 
+**RE-SCORED: three of the four had been wired before this batch, and only step 3b's `--templates`
+remained.** `retired-fixtures.sh`, `retired-layer-contract.sh` and `retired-layer-passage.sh` were
+all wired into `emit-report.sh` by one commit, `21bc76d5` at `v0.489.0` ("the report region promised
+every detector and carried eight of twenty-three"), derived per-name with
+`git log -S 'SELF/<name>' -- core/skills/ai-dlc-update/reconcile/emit-report.sh | tail -1` and
+`git show <sha>:VERSION`; the negative control (a `SELF/` name no commit carries) returned 0 commits
+against 1 for the positive control. So the count below is the count AT FILING and is retained as
+filed — the measurement and the reasoning about the widening are what the entry is for. What this
+batch closes is the fourth.
+
+**The adversary's finding, and it is part of the fix, not a note beside it.** The shipped
+classifier could not REFUSE: with `reconcile/template-sites.md` absent, `preclassify.sh --templates`
+let `awk` print to stderr, read nothing in its loop, reached its own literal `exit 0` and produced
+an EMPTY stdout — measured rc=0, 0 bytes — which a caller renders as `none`, indistinguishable from
+"four templates, nothing to sync". A manifest present but carrying no `template_manifest:` block
+does the same and no `-r` test can see it. Rendering the rows into the region on top of that would
+have shipped a section that reports a clean `none` for a detector that classified nothing, so the
+`preclassify.sh` refusal guard (both shapes, `exit 2`) and `emit-report.sh`'s rc read are one change
+with the render, not a follow-up.
+
 **The `reconcile-mechanical` region that `SKILL.md` calls "every mechanical finding, complete, from
 every detector" omits FOUR mandated detectors, not three.** Measured over
 `core/skills/ai-dlc-update/reconcile/emit-report.sh`, counting `SELF/<name>` invocations, with the
@@ -1515,20 +1535,57 @@ core-schema drift, twice)." Because `--verify` re-derives and byte-matches only 
 renders, a dropped `RETIRED-FIXTURE-ORPHAN`, `RETIRED-LAYER-CONTRACT`, `RETIRED-LAYER-PASSAGE` or
 `TEMPLATE-PROSE-MERGE` leaves a report that passes the step-7 gate and reports itself complete.
 
-The receipt skips comment lines, and that narrowing is measured rather than assumed. Seeded a copy
-of `emit-report.sh` with a two-line comment recording the three detector names and the flag as
-"wired in": a naive whole-file `grep -cF` returns **1 for each of the three** and would close the
-entry on a file where nothing was wired; this receipt returns exit 1. Both copies were asserted
-byte-different from the original before their outputs were read. Verified satisfiable: a copy with
-the four invocations actually added exits 0. What it would MISS, carried forward from the consumer
-entry's own note: a fix that renders the four from a DIFFERENT driver and leaves `emit-report.sh`
-untouched — re-anchor on the new driver rather than declaring it unfixed.
+**The receipt DRIVES `emit-report.sh`; it reads no script text and no report on disk.** A text
+predicate over the driver is closable by a comment — measured on the previous receipt's own
+narrowing, where a naive whole-file `grep -cF` scored 1 for each detector name on a file where
+nothing was wired. So this one builds a seeded pair under `mktemp` (a dist repo carrying the four
+`templates/*.template` at base, with `CLAUDE.md.template` and `settings.json.template` changed at
+theirs; a consumer directory carrying `CLAUDE.md`, `.claude/settings.json` and
+`docs/coding-conventions.md` and NOT `QUICKSTART.md`; no stamp and no ledger are needed), runs the
+driver on it, extracts the `BEGIN/END GENERATED: reconcile-mechanical` range from the driven
+STDOUT with `sed`, and asserts the section header AND a `TEMPLATE-PROSE-MERGE  CLAUDE.md` row
+INSIDE that range.
+
+It asserts the mover DIFFERS base vs theirs, and the unchanged template does NOT, before it reads
+the render — `exit 9` otherwise, and `exit 9` if `emit-report.sh` is absent, so a pair that failed
+to build is never scored as a verdict. **It does not key on the ABSENCE of `DETECTOR-REFUSED`**:
+two other detectors (`unregistered-drift.sh` rc=1, `retired-layer-token.sh` rc=2) refuse on any
+minimal pair, measured in the same render, so an absence key would be unsatisfiable.
+
+**Polarity:** `scripts/backlog-reverify.sh:190-195` reads exit 0 as CLOSE-CANDIDATE. This file's
+direction, not the consumer ledger's.
+
+Scored, each variant built into its own `mktemp` copy (`git archive` of the ref, extracted, the
+mutation applied there, `cmp`-asserted different from the copy's own original) and the verify line
+evaluated with `bash -c` from that root:
+
+```
+tip      b9c81295                                                 0   <- the fix
+base     49e5356d                                                 1
+stub     base + a comment naming --templates, the header text
+         and a TEMPLATE-PROSE-MERGE row (cmp-differs)             1
+M2       tip, header kept, classifier call dropped, none rendered  1
+```
+
+The base 1 is an ASSERTION failure and not a build failure: the same receipt truncated to its
+build arms only exits 0 at base, measured in the same run.
+
+**M4 is out of the receipt's reach and is not claimed here.** M4 collapses the refusal arm (rc
+ignored, `none` on failure). On the receipt's well-formed pair M4 scores **0** — the rows render
+either way, so the arm being collapsed changes nothing the receipt reads. On the A3 shape
+(`template-sites.md` removed) M4 scores 1, but so does the TIP — with no manifest the section
+renders `DETECTOR-REFUSED` rather than the asserted row under both. The shape does not
+discriminate, and the refusal arm is bound by the fixture's A3/A4 arms, not here.
+
+What this receipt would MISS, carried forward from the consumer entry's own note: a fix that
+renders the rows from a DIFFERENT driver and leaves `emit-report.sh` untouched — re-anchor on the
+new driver rather than declaring it unfixed.
 
 Discharges the consumer entry `PC-S315-EMIT-REPORT-REGION-OMITS-THREE-MANDATED-DETECTORS` at pinned
 ledger line 3088. The name undercounts by one; the entry is the wider finding.
 
 
-verify: sh E=core/skills/ai-dlc-update/reconcile/emit-report.sh; c() { LC_ALL=C awk -v p="$1" '/^[[:space:]]*#/{next} index($0,p){n++} END{exit !(n>0)}' "$E"; }; c "SELF/retired-tokens.sh" || exit 1; N=0; for d in retired-layer-contract.sh retired-layer-passage.sh retired-fixtures.sh; do c "SELF/$d" || N=$((N+1)); done; c "--templates" || N=$((N+1)); [ "$N" -eq 0 ]
+verify: sh E=core/skills/ai-dlc-update/reconcile/emit-report.sh; [ -f "$E" ] || exit 9; d="$(mktemp -d)" || exit 9; D="$d/dist"; C="$d/cons"; mkdir -p "$D/templates" "$C/.claude" "$C/docs" || exit 9; for t in CLAUDE.md coding-conventions.md QUICKSTART.md settings.json; do printf 'base %s\n' "$t" > "$D/templates/$t.template" || exit 9; done; git -C "$D" init -q && git -C "$D" add -A && git -C "$D" -c user.email=r@r -c user.name=r commit -qm base || exit 9; B="$(git -C "$D" rev-parse HEAD)" || exit 9; printf 'theirs CLAUDE\n' > "$D/templates/CLAUDE.md.template"; printf 'theirs settings\n' > "$D/templates/settings.json.template"; git -C "$D" add -A && git -C "$D" -c user.email=r@r -c user.name=r commit -qm theirs || exit 9; T="$(git -C "$D" rev-parse HEAD)" || exit 9; [ "$(git -C "$D" rev-parse "${B}:templates/CLAUDE.md.template")" != "$(git -C "$D" rev-parse "${T}:templates/CLAUDE.md.template")" ] || exit 9; [ "$(git -C "$D" rev-parse "${B}:templates/coding-conventions.md.template")" = "$(git -C "$D" rev-parse "${T}:templates/coding-conventions.md.template")" ] || exit 9; : > "$C/CLAUDE.md"; : > "$C/.claude/settings.json"; : > "$C/docs/coding-conventions.md"; [ ! -e "$C/QUICKSTART.md" ] || exit 9; R="$(bash "$E" "$D" "$B" "$C" "$T" 2>/dev/null | sed -n '/BEGIN GENERATED: reconcile-mechanical/,/END GENERATED: reconcile-mechanical/p')"; [ -n "$R" ] || exit 9; grep -qF 'Template pre-classification (generated files outside core/' <<< "$R" || exit 1; grep -qF 'TEMPLATE-PROSE-MERGE  CLAUDE.md  <- templates/CLAUDE.md.template' <<< "$R" || exit 1
 ## BL-038
 
 **Core's sprint-review §3 lets a "genuinely environmental" integration seam defer with no
