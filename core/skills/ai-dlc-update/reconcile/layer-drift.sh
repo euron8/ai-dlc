@@ -454,8 +454,12 @@ unclaimed_body_sections() { # unclaimed_body_sections <entry-file> <shadow_parts
 ticks_of() { grep -o '`[^`]\{3,60\}`' | tr 'A-Z' 'a-z' | sort -u; }
 rel() { printf '%s' "${1#"$CONSUMER"/}"; }
 
-git_show() { git -C "$DIST" show "$1:$2" 2>/dev/null; }
-have()     { git -C "$DIST" cat-file -e "$1:$2" 2>/dev/null; }
+# memo_show/memo_has_path (lib.sh) — a SHARED filesystem cache, keyed on <ref>:<path>, that
+# survives across the separate reconcile/*.sh PROCESSES one emit-report.sh render forks.
+# `git_show`/`have` are this file's own spellings so every existing call site (dozens) is
+# unchanged; only the two bodies below moved.
+git_show() { memo_show "$DIST" "$1" "$2"; }
+have()     { memo_has_path "$DIST" "$1" "$2"; }
 
 # supersessions_of <ref> — TSV rows `shadows<TAB>since<TAB>settings_env_key` from core's
 # `override_supersessions:` block at that ref. PARSED, not sourced: the contract is data
@@ -631,6 +635,11 @@ adj_digest() { # $1 entry (consumer-relative), $2 core-relative target, [$3 firi
   local ef tb dg cl
   cl="$(adj_clause_of "${3:-}")"
   ef="$(git -C "$DIST" hash-object "$CONSUMER/$1" 2>/dev/null)"
+  # NOT memo_rev_parse: that helper is `-q --verify`, and this call site is bare
+  # `rev-parse <ref>:<path>` deliberately unconverted (CLAUDE.md's own note: bare rev-parse on
+  # a missing path ECHOES ITS ARGUMENT and exits 128, `-q --verify` prints nothing — a different
+  # failure mode). Reusing memo_rev_parse here would be a correctness change riding on a caching
+  # change, not caching alone.
   tb="$(git -C "$DIST" rev-parse "$THEIRS:$(dist_path "$2")" 2>/dev/null)"
   if [ -z "$ef" ] || [ -z "$tb" ]; then
     [ -n "$ADJ_LIST_FILE" ] && printf '%s\t%s\t-\t%s\n' "$1" "$2" "$cl" >> "$ADJ_LIST_FILE"
@@ -1053,7 +1062,14 @@ rulebook_files_of() {
     !inblk { next }
     /^[[:space:]]*-[[:space:]]*/ { g=$0; sub(/^[[:space:]]*-[[:space:]]*/,"",g); print g }')"
   [ -n "$_globs" ] || return 1
-  _tree="$(git -C "$DIST" ls-tree -r --name-only "$1" -- core/ 2>/dev/null)"
+  # memo_ls_tree (lib.sh) caches the FULL, unfiltered `ls-tree -r --name-only <ref>` per
+  # <dist,ref> in the SHARED cross-process cache, so every other call site in this render
+  # that wants the same ref's tree (with a different or no pathspec) is a cache hit rather
+  # than a second `git ls-tree`. The `core/` prefix filter that used to be git's `-- core/`
+  # pathspec is applied here instead, on the cached full listing -- `ls-tree` matches a
+  # pathspec by literal PREFIX (never a glob), so this is byte-identical to what git would
+  # have returned for `-- core/`.
+  _tree="$(memo_ls_tree "$DIST" "$1" | grep '^core/' || true)"
   [ -n "$_tree" ] || return 1
   for _g in $_globs; do
     _dg="$(dist_path "$_g")"

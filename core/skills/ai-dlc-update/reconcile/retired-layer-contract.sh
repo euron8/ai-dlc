@@ -70,6 +70,8 @@ CONSUMER="${4:?}"
 # restate. Derived from setup-sites.md's own `rulebook:` list rather than restated,
 # so a rulebook file added upstream is covered without editing this script.
 SELF="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib.sh
+. "$SELF/lib.sh" 2>/dev/null || true
 SITES="$SELF/setup-sites.md"
 rulebook_globs() {
   awk '/^rulebook:/{on=1;next} on && /^[a-z_]+:/{exit} on && /^  - /{sub(/^  - /,"");print}' \
@@ -97,11 +99,15 @@ collect() {     # collect <ref> -> every shape+token across the rulebook at that
   # not in the caller's working tree is then silently skipped, and this detector reports a
   # smaller corpus with the same clean line.
   set -f
+  local _rlc_tree
+  if command -v memo_ls_tree >/dev/null 2>&1; then _rlc_tree="$(memo_ls_tree "$DIST" "$ref")"
+  else _rlc_tree="$(git -C "$DIST" ls-tree -r --name-only "$ref" 2>/dev/null)"; fi
   for glob in $(rulebook_globs); do
     # git ls-tree expands the glob against the tree at <ref>.
-    for f in $(git -C "$DIST" ls-tree -r --name-only "$ref" 2>/dev/null \
+    for f in $(printf '%s\n' "$_rlc_tree" \
                | { grep -E "^$(printf '%s' "$glob" | sed 's/\./\\./g; s/\*/[^\/]*/g')$" || true; }); do
-      body="$(git -C "$DIST" show "$ref:$f" 2>/dev/null || true)"
+      if command -v memo_show >/dev/null 2>&1; then body="$(memo_show "$DIST" "$ref" "$f")" || true
+      else body="$(git -C "$DIST" show "$ref:$f" 2>/dev/null || true)"; fi
       [ -n "$body" ] || continue
       all="$all$(shapes_of "$body")
 $(tokens_of "$body")

@@ -142,6 +142,19 @@ BASE="${2:?}"
 CONSUMER="${3:?}"
 THEIRS="${4:-}"
 
+# shellcheck source=lib.sh
+# NOT `|| exit 1`: this script's own contract is "0 always (a classifier, not a gate)", and
+# every git_show/git_tree call below falls back to a direct `git` call when the memo helpers
+# are unavailable, so an unsourceable lib.sh degrades this to its pre-cache behavior.
+SELF="$(cd "$(dirname "$0")" && pwd)"
+. "$SELF/lib.sh" 2>/dev/null || true
+# git_show <ref> <path> -- this file's own spelling of the shared memo, so every existing
+# `git -C "$DIST" show "${ref}:${path}"` call site becomes a one-line substitution.
+git_show() {
+  if command -v memo_show >/dev/null 2>&1; then memo_show "$DIST" "$1" "$2"
+  else git -C "$DIST" show "${1}:${2}" 2>/dev/null; fi
+}
+
 # --- the OTHER stamp field, and why this script has to read it itself ---------
 #
 # THE CONSUMER'S STAMP CARRIES TWO INDEPENDENTLY ADVANCING SHAS. `commit` is the rulebook
@@ -201,11 +214,11 @@ absorbed_pct() { # absorbed_pct <core-rel-path> <consumer-file> -> "<hits> <tota
   local cp="$1" cons="$2" only hits total
   only="$(comm -23 \
     <(sed 's/^[[:space:]]*//; s/[[:space:]]*$//' "$cons" | grep -vE '^.{0,24}$' | sort -u) \
-    <(git -C "$DIST" show "${BASE}:${cp}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -vE '^.{0,24}$' | sort -u))"
+    <(git_show "${BASE}" "${cp}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -vE '^.{0,24}$' | sort -u))"
   total="$(printf '%s' "$only" | grep -c . || true)"
   [ "${total:-0}" -eq 0 ] && { printf '0 0'; return; }
   hits="$(comm -12 <(printf '%s\n' "$only" | sort -u) \
-    <(git -C "$DIST" show "${THEIRS}:${cp}" 2>/dev/null | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | sort -u) | grep -c . || true)"
+    <(git_show "${THEIRS}" "${cp}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | sort -u) | grep -c . || true)"
   printf '%s %s' "${hits:-0}" "$total"
 }
 
@@ -224,12 +237,12 @@ absorbed_pct() { # absorbed_pct <core-rel-path> <consumer-file> -> "<hits> <tota
 # more useful thing to tell an operator, because the residual is what they must read.
 closest_ancestor_blob() {
   local cp="$1" cons="$2" sha best_sha="" best_n="" n base_n
-  base_n="$(git -C "$DIST" show "${BASE}:${cp}" 2>/dev/null | diff - "$cons" 2>/dev/null | grep -c '^[<>]' || true)"
+  base_n="$(git_show "${BASE}" "${cp}" | diff - "$cons" 2>/dev/null | grep -c '^[<>]' || true)"
   [ "${base_n:-0}" -gt 0 ] || return 0
   for sha in $(git -C "$DIST" log --format=%H "${BASE}" -- "$cp" 2>/dev/null); do
     [ "$sha" = "$(git -C "$DIST" rev-parse "$BASE" 2>/dev/null)" ] && continue
     git -C "$DIST" cat-file -e "${sha}:${cp}" 2>/dev/null || continue
-    n="$(git -C "$DIST" show "${sha}:${cp}" | diff - "$cons" 2>/dev/null | grep -c '^[<>]' || true)"
+    n="$(git_show "${sha}" "${cp}" | diff - "$cons" 2>/dev/null | grep -c '^[<>]' || true)"
     if [ -z "$best_n" ] || [ "${n:-0}" -lt "$best_n" ]; then best_n="$n"; best_sha="$sha"; fi
   done
   [ -n "$best_sha" ] || return 0
@@ -256,7 +269,7 @@ SITES_FILE="$(cd "$(dirname "$0")" && pwd)/setup-sites.md"
 exempt_ranges() {
   local cp="$1" base heading nexth hs ns nl out=""
   [ -f "$SITES_FILE" ] || { printf ''; return; }
-  base="$(git -C "$DIST" show "${BASE}:${cp}" 2>/dev/null)" || { printf ''; return; }
+  base="$(git_show "${BASE}" "${cp}")" || { printf ''; return; }
   while IFS="$(printf '\t')" read -r heading nexth; do
     [ -n "$heading" ] || continue
     # setup-sites values are YAML single-quoted; strip the surrounding quotes here (not in awk).
@@ -412,7 +425,7 @@ carried_bucket() {
 is_unregistered() {
   local cp="$1" cons="$2" ranges
   ranges="$(exempt_ranges "$cp")"
-  diff <(git -C "$DIST" show "${BASE}:${cp}") "$cons" 2>/dev/null | awk -v ranges="$ranges" '
+  diff <(git_show "${BASE}" "${cp}") "$cons" 2>/dev/null | awk -v ranges="$ranges" '
     function left_exempt(h,   p,left,n,LR,ls,le,m,RG,i,rr) {
       p = match(h, /[acd]/); if (p == 0) return 0
       left = substr(h, 1, p - 1)
@@ -445,8 +458,17 @@ is_unregistered() {
 # files. A reader of this file alone therefore concluded the fixture gap was an oversight and
 # filed it as a defect, when I12 had reviewed and exempted it with a stated reason. Two homes for
 # one list, and the unbound copy is the one that misleads.
-git -C "$DIST" ls-tree -r --name-only "$BASE" -- \
-      core/skills/ai-dlc core/skills/ai-dlc-setup core/team-roles core/hooks core/schemas 2>/dev/null \
+# memo_ls_tree (lib.sh) caches the FULL unfiltered listing per <dist,ref> and every call site
+# filters it locally by literal PREFIX -- byte-identical to git's own pathspec matching
+# (`tool-hazards.md`: `ls-tree` matches a pathspec by prefix, never a glob), so five
+# `-- <prefix>` arguments become five `grep -E '^prefix/'` alternatives against one cached read.
+# GROUPED so `||`'s short-circuit selects only the SOURCE of the tree listing, not the whole
+# downstream pipe: `A || B | C` would otherwise skip `| C` entirely whenever `A` succeeds.
+{ { command -v memo_ls_tree >/dev/null 2>&1 \
+    && memo_ls_tree "$DIST" "$BASE" \
+       | grep -E '^(core/skills/ai-dlc/|core/skills/ai-dlc-setup/|core/team-roles/|core/hooks/|core/schemas/)'; } \
+  || git -C "$DIST" ls-tree -r --name-only "$BASE" -- \
+      core/skills/ai-dlc core/skills/ai-dlc-setup core/team-roles core/hooks core/schemas 2>/dev/null; } \
   | grep -E '\.(md|sh|json)$' \
   | while IFS= read -r cp; do
       rel="${cp#core/}"
@@ -455,7 +477,7 @@ git -C "$DIST" ls-tree -r --name-only "$BASE" -- \
 
       git -C "$DIST" cat-file -e "${BASE}:${cp}" 2>/dev/null || continue
 
-      if git -C "$DIST" show "${BASE}:${cp}" | cmp -s - "$cons"; then
+      if git_show "${BASE}" "${cp}" | cmp -s - "$cons"; then
         emit CORE-OK "$rel" "byte-identical to ${BASE}"
         continue
       fi
@@ -473,7 +495,7 @@ git -C "$DIST" ls-tree -r --name-only "$BASE" -- \
       # theirs, whatever base was passed, so the wrong-base mistake announces itself here
       # instead of arriving as a plausible HARD row.
       if [ -n "$THEIRS" ] && git -C "$DIST" cat-file -e "${THEIRS}:${cp}" 2>/dev/null \
-         && git -C "$DIST" show "${THEIRS}:${cp}" | cmp -s - "$cons"; then
+         && git_show "${THEIRS}" "${cp}" | cmp -s - "$cons"; then
         emit CORE-AT-THEIRS "$rel" "byte-identical to ${THEIRS} — already at the incoming core, not drift. If you expected drift here, the base is stale: post-apply, re-run with base == theirs."
         continue
       fi
@@ -485,7 +507,7 @@ git -C "$DIST" ls-tree -r --name-only "$BASE" -- \
       # with theirs, and nothing consumer-authored is at stake. Reported rather than silent,
       # because a row the operator can see is how they learn the hop happened.
       if [ -n "$SELF_UPDATE_REF" ] && git -C "$DIST" cat-file -e "${SELF_UPDATE_REF}:${cp}" 2>/dev/null \
-         && git -C "$DIST" show "${SELF_UPDATE_REF}:${cp}" | cmp -s - "$cons"; then
+         && git_show "${SELF_UPDATE_REF}" "${cp}" | cmp -s - "$cons"; then
         emit CORE-AT-SELF-UPDATE "$rel" "byte-identical to ${SELF_UPDATE_REF}, the \`skill_commit\` in this consumer's own stamp — the autonomous self-update (step 2) wrote it, so it is upstream content at an intermediate ref, not consumer drift. No action: \`apply\` carries it to ${THEIRS:-theirs} with the rest of the machinery step 2 wrote. Step 2 writes the base→theirs diff restricted to the machinery set, minus the paths arm C carried; a carried path is not this row, it is CORE-MACHINERY-CARRIED."
         continue
       fi
@@ -496,7 +518,7 @@ git -C "$DIST" ls-tree -r --name-only "$BASE" -- \
       fi
 
       nl_c="$(wc -l < "$cons" | tr -d ' ')"
-      nl_b="$(git -C "$DIST" show "${BASE}:${cp}" | wc -l | tr -d ' ')"
+      nl_b="$(git_show "${BASE}" "${cp}" | wc -l | tr -d ' ')"
 
       # IS THIS PATH ONE ARM C CARRIED? Asked HERE, before absorption, and USED at three
       # different points below, because two of the three arms that follow have to know the

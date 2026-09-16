@@ -338,6 +338,14 @@ fi
 # re-run the empty-blob case on every call -- the memo would silently do nothing for exactly
 # the inputs it is there for. The status file is written LAST, so an interrupted fill reads as
 # a miss rather than as a cached lie.
+# batch 121 / lib.sh's `ai_dlc_memo_dir()` generalized exactly this shape to cross a
+# PROCESS boundary: `emit-report.sh` execs this script as one of ~13 sub-detectors per
+# render, so a cache private to THIS process (the shape below, unmodified, until now)
+# starts cold on every render even though the same blobs were just read by a sibling
+# detector one process ago. PREFER the orchestrator's shared directory
+# (`AI_DLC_RECONCILE_MEMO`, exported by `emit-report.sh` for the whole render) and fall
+# back to this file's original private `mktemp -d` when nothing shared was handed down —
+# an operator invoking `ledger-reverify.sh` directly, or `apply.sh`, sees no change at all.
 BLOB_MEMO=""         # the cache directory, or "" when not built
 BLOB_MEMO_STATE=""   # "" not attempted | ok | unavailable
 blob_memo() { # 0 = $BLOB_MEMO holds a directory; 1 = uncacheable, callers go direct
@@ -345,6 +353,11 @@ blob_memo() { # 0 = $BLOB_MEMO holds a directory; 1 = uncacheable, callers go di
     ok)          return 0 ;;
     unavailable) return 1 ;;
   esac
+  if [ -n "${AI_DLC_RECONCILE_MEMO:-}" ] && [ -d "${AI_DLC_RECONCILE_MEMO:-}" ]; then
+    BLOB_MEMO="$AI_DLC_RECONCILE_MEMO"
+    BLOB_MEMO_STATE=ok
+    return 0
+  fi
   BLOB_MEMO_STATE=unavailable
   BLOB_MEMO="$(mktemp -d "${TMPDIR:-/tmp}/ledger-reverify-memo.XXXXXX" 2>/dev/null)" || return 1
   [ -n "$BLOB_MEMO" ] && [ -d "$BLOB_MEMO" ] || return 1

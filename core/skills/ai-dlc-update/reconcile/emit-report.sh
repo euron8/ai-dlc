@@ -73,6 +73,43 @@ CONSUMER="${3:?}"
 THEIRS="${4:?}"
 
 SELF="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib.sh
+. "$SELF/lib.sh" || { echo "emit-report: cannot source $SELF/lib.sh" >&2; exit 1; }
+
+# --- THE SHARED CROSS-PROCESS MEMO, OWNED HERE FOR THE WHOLE RENDER --------------------------
+#
+# batch 121: a single `render()` call below makes exactly 4 distinct git calls itself, and shells
+# out to roughly a dozen INDEPENDENT reconcile/*.sh sub-detector SCRIPTS (preclassify.sh,
+# hard-blockers.sh -> layer-drift.sh + unregistered-drift.sh, retired-tokens.sh once per CLASSIFY
+# file, relabel-extension-checks.sh, ledger-reverify.sh, predicate-differential.sh,
+# retired-fixtures.sh, the three retired-layer-*.sh, warn-shadowed-local-validators.sh) — each its
+# own bash process, each re-reading the SAME `git ls-tree -r --name-only <ref>` and
+# `git show <ref>:<path>` answers every sibling in this same render already read. Measured on the
+# fixture's own 143-render matrix (13 programs x 11 worlds): 19219 total git invocations, 302
+# distinct. An in-process memo (the shape `ledger-reverify.sh` carried before this) cannot see
+# that repetition, because it never crosses the process boundary a `bash "$SELF/x.sh"` opens.
+#
+# ONE `mktemp -d` PER emit-report.sh INVOCATION, EXPORTED, so every child this process forks
+# shares it — `lib.sh`'s `ai_dlc_memo_dir()` and `ledger-reverify.sh`'s own `blob_memo()` both
+# prefer `AI_DLC_RECONCILE_MEMO` over building a private directory. SHARING IS OPT-IN ON THE
+# ENVIRONMENT, not a fixed path: an operator invoking any one sub-detector standalone, or
+# apply.sh, exports nothing and gets exactly the private-directory behavior each script already
+# had. Two concurrent renders (the fixture's own 12-wide fixture pool, or two operators pulling
+# at once) each make their OWN `mktemp -d` here and never share a directory, so they cannot
+# collide — the exact hazard CLAUDE.md's cleanup-glob incident warns about.
+#
+# CLEANED BY THIS PROCESS'S OWN EXIT TRAP, and only if THIS process created it
+# (`AI_DLC_MEMO_OWNED`, not `AI_DLC_MEMO_DIR`) — the same non-negotiable rule
+# `core_map_cleanup` states for `ledger-reverify.sh`'s own temporaries: `rm -rf` must never act on
+# a directory this process merely borrowed from a caller who intends to clean it up itself.
+export AI_DLC_RECONCILE_MEMO
+if [ -z "${AI_DLC_RECONCILE_MEMO:-}" ]; then
+  AI_DLC_RECONCILE_MEMO="$(mktemp -d "${TMPDIR:-/tmp}/reconcile-memo.XXXXXX" 2>/dev/null || true)"
+  if [ -n "$AI_DLC_RECONCILE_MEMO" ]; then
+    _er_memo_owned="$AI_DLC_RECONCILE_MEMO"
+    trap '[ -n "${_er_memo_owned:-}" ] && rm -rf "$_er_memo_owned"' EXIT
+  fi
+fi
 
 sub() { printf '\n**%s**\n' "$1"; }
 none_or() { if [ -n "$1" ]; then printf '%s\n' "$1"; else echo "none"; fi; }

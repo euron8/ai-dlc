@@ -112,6 +112,10 @@ THEIRS="${3:?}"
 CONSUMER="${4:?}"
 
 SELF="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib.sh
+# NOT `|| exit 1`: every call site below falls back to a direct `git` call when the memo
+# helpers are unavailable (see files_at/show_at), matching this script's own contract.
+. "$SELF/lib.sh" 2>/dev/null || true
 SITES="$SELF/setup-sites.md"
 rulebook_globs() {
   awk '/^rulebook:/{on=1;next} on && /^[a-z_]+:/{exit} on && /^  - /{sub(/^  - /,"");print}' \
@@ -146,7 +150,8 @@ code_toks() {
 # rulebook file that exists at the ref but not in the cwd is silently skipped.
 files_at() {
   local ref="$1" glob tree; shift
-  tree="$(git -C "$DIST" ls-tree -r --name-only "$ref" 2>/dev/null)" || return 0
+  if command -v memo_ls_tree >/dev/null 2>&1; then tree="$(memo_ls_tree "$DIST" "$ref")" || return 0
+  else tree="$(git -C "$DIST" ls-tree -r --name-only "$ref" 2>/dev/null)" || return 0; fi
   set -f
   for glob in "$@"; do
     printf '%s\n' "$tree" \
@@ -154,7 +159,10 @@ files_at() {
   done
   set +f
 }
-show_at() { git -C "$DIST" show "${1}:${2}" 2>/dev/null || true; }
+show_at() {
+  if command -v memo_show >/dev/null 2>&1; then memo_show "$DIST" "$1" "$2" || true
+  else git -C "$DIST" show "${1}:${2}" 2>/dev/null || true; fi
+}
 
 # collect <ref> -> every rulebook token at that ref.
 collect() {

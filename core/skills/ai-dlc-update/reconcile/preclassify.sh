@@ -37,6 +37,15 @@ set -u
 DIST="${1:?dist-repo}"; BASE="${2:?base-sha}"; THEIRS="${3:?theirs-ref}"; CONS="${4:?consumer-root}"
 MODE="${5:-}"
 
+# shellcheck source=lib.sh
+# NOT `|| exit 1` the way most siblings guard this: preclassify.sh is `set -u` only, no
+# `pipefail`, and every OTHER call site here already tolerates lib.sh's memo_* functions
+# being absent by falling back to a direct git call inside each function body — so an
+# unsourceable lib.sh degrades this script to exactly its pre-cache behavior rather than
+# refusing to run.
+SELF="$(cd "$(dirname "$0")" && pwd)"
+. "$SELF/lib.sh" 2>/dev/null || true
+
 # Resolve DIST and CONS to absolute paths up front. file_hash() feeds
 # "$CONS/<path>" to `git -C "$DIST" hash-object` — a RELATIVE consumer root
 # (e.g. `.`) is otherwise resolved relative to DIST, not the consumer, so
@@ -117,7 +126,12 @@ SETUP_SITED_PATHS="$(awk '/^[ \t]*file:[ \t]*core\//{sub(/^[ \t]*file:[ \t]*/,""
   "$(dirname "$0")/setup-sites.md" 2>/dev/null | sort -u)"
 setup_sited() { grep -qxF "$1" <<<"$SETUP_SITED_PATHS"; }
 
-blob_hash() { git -C "$DIST" rev-parse -q --verify "$1:$2" 2>/dev/null || echo MISSING; }
+# memo_rev_parse (lib.sh) is BYTE-IDENTICAL in semantics to the bare call this replaces --
+# both are `rev-parse -q --verify`, so a MISSING path still reads MISSING and a resolvable
+# one still returns its sha. The only change is that the SHARED cross-process cache
+# (populated once per <dist,spec> for the whole render, when emit-report.sh set one up)
+# answers repeats instead of forking `git` again.
+blob_hash() { local _h; _h="$(memo_rev_parse "$DIST" "$1:$2" 2>/dev/null)"; [ -n "$_h" ] && printf '%s' "$_h" || echo MISSING; }
 file_hash() { local f="$CONS/$1"; [ -f "$f" ] && git -C "$DIST" hash-object "$f" 2>/dev/null || echo MISSING; }
 
 # --- THE OTHER SHA IN THE STAMP, AND WHY THE `ours_h` COMPARISONS NEED IT ---------------
@@ -434,6 +448,10 @@ while IFS= read -r core_path; do
     bucket="RELOCATE-MOVE+consumer-edited"
   fi
   printf '%s\t%s\t%s\t%s\n' "R" "$core_path" "$old_cons" "$bucket -> now at $new_cons"
+# NOT memo_ls_tree: that helper caches the RECURSIVE `-r` listing and this call is
+# deliberately non-recursive (`ls-tree --name-only`, no `-r`) — it wants only the immediate
+# entries of core/scripts/, and filtering the recursive listing to depth 1 after the fact
+# is a different, larger rewrite than caching alone. Left as a direct call.
 done < <(git -C "$DIST" ls-tree --name-only "$THEIRS" core/scripts/ 2>/dev/null)
 
 # `--no-renames` IS LOAD-BEARING. Without it git pairs a delete and an add into one
@@ -449,7 +467,10 @@ done < <(git -C "$DIST" ls-tree --name-only "$THEIRS" core/scripts/ 2>/dev/null)
 # classify those correctly: UPSTREAM-DELETED (gated) for the old path, UPSTREAM-ONLY-ADD
 # for the new one. The fixture preclassify-rename-row drives a real rename through this
 # line and seeds the flag's removal as a mutant.
-git -C "$DIST" diff --no-renames --name-status "$BASE" "$THEIRS" -- core/ | while IFS=$'\t' read -r status path; do
+# memo_diff_name_status (lib.sh): the SHARED cross-process cache for this exact shape --
+# `<dist,base,theirs,pathspec>` is the whole key, git's own --no-renames name-status output
+# is cached verbatim, so this is byte-identical to the direct call it replaces.
+memo_diff_name_status "$DIST" "$BASE" "$THEIRS" core/ | while IFS=$'\t' read -r status path; do
   cons="$(map_consumer "$path")"
 
   # core/scripts/* is owned by the scripts-relocation pass above. On a pre-relocation

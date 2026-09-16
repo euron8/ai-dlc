@@ -486,6 +486,163 @@ ledger_close_awk() {
   printf 'function ledger_body_closes(l) { return (l ~ /%s/) }\n' "$_lca_pat"
 }
 
+# ---------------------------------------------------------------------------
+# THE CROSS-PROCESS BLOB/TREE MEMO — one cache, shared by every reconcile/*.sh process
+# a single emit-report.sh RENDER forks.
+# ---------------------------------------------------------------------------
+# `ledger-reverify.sh` carried a memo first, IN-PROCESS: the same blob read many times
+# inside one ledger walk. That does not touch the bigger repeat measured here (batch
+# 121) — `emit-report.sh` execs roughly a dozen independent sub-detector SCRIPTS per
+# render, each its own process with its own shell state, and every one of them
+# re-reads the same handful of `<ref>:<path>` blobs and `<ref>` tree listings every
+# OTHER sub-detector in the SAME render already read. A single render makes 4 distinct
+# git calls; the fixture's 143-render matrix (13 programs x 11 worlds) turned that into
+# 19219 total git invocations, 302 distinct — the repetition is ACROSS processes, not
+# within one, and an in-process memo cannot see it.
+#
+# A FILESYSTEM CACHE IS THE ONLY SHAPE THAT CROSSES A PROCESS BOUNDARY. `declare -A`
+# is unavailable on bash 3.2 for the reason this file's other notes give, and even on a
+# bash that has it, an associative array lives in ONE process's memory — a child
+# `bash "$SELF/x.sh"` starts a fresh interpreter that never sees it.
+#
+# THE CACHE DIRECTORY IS NEVER CREATED HERE — it is either handed down by an EXPORTED
+# `AI_DLC_RECONCILE_MEMO` (an orchestrator, `emit-report.sh`, made ONE `mktemp -d` for
+# the whole render and owns cleaning it up), or these functions fall back to
+# `ledger-reverify.sh`'s original per-process shape: lazily `mktemp -d` a PRIVATE
+# directory, cleaned by THIS process's own exit trap. Sharing is opt-in on the
+# ENVIRONMENT, never a hardcoded path — two concurrent consumer runs that never
+# exported the variable get two private directories and cannot collide, and a caller
+# with no orchestrator above it (an operator invoking ledger-reverify.sh directly, or
+# apply.sh) behaves exactly as it did before this cache existed.
+AI_DLC_MEMO_DIR=""     # the cache directory THIS PROCESS is using, or "" when not built
+AI_DLC_MEMO_STATE=""   # "" not attempted | ok | unavailable
+AI_DLC_MEMO_OWNED=""   # set only when THIS process's own mktemp made the directory —
+                        # a caller's cleanup trap must remove only what it created,
+                        # never a directory an orchestrator handed down and will clean
+                        # up itself.
+ai_dlc_memo_dir() { # 0 = $AI_DLC_MEMO_DIR holds a directory; 1 = uncacheable, go direct
+  case "$AI_DLC_MEMO_STATE" in
+    ok)          return 0 ;;
+    unavailable) return 1 ;;
+  esac
+  if [ -n "${AI_DLC_RECONCILE_MEMO:-}" ] && [ -d "${AI_DLC_RECONCILE_MEMO:-}" ]; then
+    AI_DLC_MEMO_DIR="$AI_DLC_RECONCILE_MEMO"
+    AI_DLC_MEMO_STATE=ok
+    return 0
+  fi
+  AI_DLC_MEMO_STATE=unavailable
+  AI_DLC_MEMO_DIR="$(mktemp -d "${TMPDIR:-/tmp}/reconcile-memo.XXXXXX" 2>/dev/null)" || return 1
+  [ -n "$AI_DLC_MEMO_DIR" ] && [ -d "$AI_DLC_MEMO_DIR" ] || return 1
+  AI_DLC_MEMO_OWNED="$AI_DLC_MEMO_DIR"
+  AI_DLC_MEMO_STATE=ok
+  return 0
+}
+# ai_dlc_memo_cleanup — a caller's job to invoke from ITS OWN exit trap, and only when
+# it did not inherit `AI_DLC_RECONCILE_MEMO` from an orchestrator that already owns
+# it. Removes `$AI_DLC_MEMO_OWNED`, never `$AI_DLC_MEMO_DIR` — the latter can hold a
+# directory this process merely BORROWED.
+ai_dlc_memo_cleanup() { [ -n "${AI_DLC_MEMO_OWNED:-}" ] && rm -rf "$AI_DLC_MEMO_OWNED"; return 0; }
+
+# memo_show <dist> <ref> <path> -- the blob on stdout, git's own exit status preserved.
+# A MISS AND AN EMPTY BLOB ARE DIFFERENT STATES, and the status file (`.s`) is what
+# separates them: `git show` of an ABSENT path writes nothing and exits non-zero,
+# `git show` of an EMPTY blob writes nothing and exits 0. The status file is written
+# LAST, so an interrupted fill reads as a miss rather than as a cached lie.
+memo_show() {
+  local _dist="$1" _ref="$2" _path="$3" _k _f _st
+  ai_dlc_memo_dir || { git -C "$_dist" show "${_ref}:${_path}" 2>/dev/null; return $?; }
+  _k="s $_dist $_ref:$_path"; _k="${_k//%/%25}"; _k="${_k//\//%2F}"
+  _f="$AI_DLC_MEMO_DIR/$_k"
+  if [ ! -f "$_f.s" ]; then
+    git -C "$_dist" show "${_ref}:${_path}" > "$_f.c" 2>/dev/null
+    _st=$?
+    printf '%s' "$_st" > "$_f.s"
+  fi
+  printf '%s\n' "$(<"$_f.c")"
+  _st="$(<"$_f.s")"
+  return "$_st"
+}
+
+# memo_has_path <dist> <ref> <path> -- 0 when the path exists at the ref. THE STATUS IS
+# THE ANSWER here, unlike memo_show, so it is the only thing cached.
+memo_has_path() {
+  local _dist="$1" _ref="$2" _path="$3" _k _f _st
+  ai_dlc_memo_dir || { git -C "$_dist" cat-file -e "${_ref}:${_path}" 2>/dev/null; return $?; }
+  _k="e $_dist $_ref:$_path"; _k="${_k//%/%25}"; _k="${_k//\//%2F}"
+  _f="$AI_DLC_MEMO_DIR/$_k"
+  if [ ! -f "$_f.s" ]; then
+    git -C "$_dist" cat-file -e "${_ref}:${_path}" 2>/dev/null
+    printf '%s' "$?" > "$_f.s"
+  fi
+  _st="$(<"$_f.s")"
+  return "$_st"
+}
+
+# memo_rev_parse <dist> <spec> -- `git rev-parse -q --verify <spec>`'s stdout (a sha, or
+# empty) on stdout, exit status preserved. <spec> is typically `<ref>:<path>` and it IS
+# the whole key, percent/slash-escaped exactly as memo_show's key is, so two different
+# specs never collide.
+memo_rev_parse() {
+  local _dist="$1" _spec="$2" _k _f _st
+  ai_dlc_memo_dir || { git -C "$_dist" rev-parse -q --verify "$_spec" 2>/dev/null; return $?; }
+  _k="r $_dist $_spec"; _k="${_k//%/%25}"; _k="${_k//\//%2F}"
+  _f="$AI_DLC_MEMO_DIR/$_k"
+  if [ ! -f "$_f.s" ]; then
+    git -C "$_dist" rev-parse -q --verify "$_spec" > "$_f.c" 2>/dev/null
+    _st=$?
+    printf '%s' "$_st" > "$_f.s"
+  fi
+  printf '%s\n' "$(<"$_f.c")"
+  _st="$(<"$_f.s")"
+  return "$_st"
+}
+
+# memo_ls_tree <dist> <ref> -- the FULL recursive `ls-tree -r --name-only <ref>`
+# listing (no pathspec), one line per path, on stdout. git's exit status preserved.
+#
+# EVERY CALL SITE THAT PASSED A PATHSPEC FILTERS THIS OUTPUT ITSELF, AFTERWARDS, WITH A
+# LITERAL-PREFIX GREP — never by asking git to filter a second time. `tool-hazards.md`:
+# `ls-tree` does not glob a pathspec; it matches by literal PREFIX, so `-- core/` and
+# `-- core/fixtures` are both exactly "every line of the unfiltered listing whose path
+# starts with that string". Filtering the cached full listing afterwards is
+# byte-identical to asking git to filter it a second time, and it is what lets several
+# call sites across several files, each with a DIFFERENT pathspec (or none), share one
+# cached read of the same `<dist,ref>` pair instead of one cached read per pathspec.
+memo_ls_tree() {
+  local _dist="$1" _ref="$2" _k _f _st
+  ai_dlc_memo_dir || { git -C "$_dist" ls-tree -r --name-only "$_ref" 2>/dev/null; return $?; }
+  _k="t $_dist $_ref"; _k="${_k//%/%25}"; _k="${_k//\//%2F}"
+  _f="$AI_DLC_MEMO_DIR/$_k"
+  if [ ! -f "$_f.s" ]; then
+    git -C "$_dist" ls-tree -r --name-only "$_ref" > "$_f.c" 2>/dev/null
+    _st=$?
+    printf '%s' "$_st" > "$_f.s"
+  fi
+  cat "$_f.c"
+  _st="$(<"$_f.s")"
+  return "$_st"
+}
+
+# memo_diff_name_status <dist> <base> <theirs> <pathspec...> -- `git diff --no-renames
+# --name-status <base> <theirs> -- <pathspec...>`'s stdout, exit status preserved. The
+# PATHSPEC is part of the key (unlike memo_ls_tree, git diff genuinely filters server-side
+# and there is exactly one call site of this shape today), so this does not need the
+# filter-the-full-answer-locally discipline memo_ls_tree uses.
+memo_diff_name_status() {
+  local _dist="$1" _base="$2" _theirs="$3" _k _f _st; shift 3
+  ai_dlc_memo_dir || { git -C "$_dist" diff --no-renames --name-status "$_base" "$_theirs" -- "$@" 2>/dev/null; return $?; }
+  _k="d $_dist $_base $_theirs $*"; _k="${_k//%/%25}"; _k="${_k//\//%2F}"; _k="${_k// /%20}"
+  _f="$AI_DLC_MEMO_DIR/$_k"
+  if [ ! -f "$_f.s" ]; then
+    git -C "$_dist" diff --no-renames --name-status "$_base" "$_theirs" -- "$@" > "$_f.c" 2>/dev/null
+    _st=$?
+    printf '%s' "$_st" > "$_f.s"
+  fi
+  cat "$_f.c"
+  _st="$(<"$_f.s")"
+  return "$_st"
+}
+
 # ledger_entry_line_close_awk() — the ENTRY-LINE close rule, lifted from the same single home.
 #
 # WHY A SECOND LIFT RATHER THAN REUSING THE FIRST. `ledger_body_closes()` is ANCHORED at `^[ \t]*`
