@@ -1062,30 +1062,63 @@ given at batch 90.
    at every phase when its second adversary returned two BLOCKERs, and batch 66's was green
    when its adversary returned a BLOCKER establishing the shipped fix had made things WORSE.**
 
-   **BATCH 116 IS PREPARED AND UNSTARTED. ITS SWEEP HAS ALREADY BEEN RUN, AND THESE FIGURES ARE
-   HYPOTHESES THE MOMENT YOU READ THEM — RE-RUN THE DERIVE BLOCK RATHER THAN TRUSTING THEM.** Two
-   read-only hands ran on 2026-09-15 against `origin/main` at `6f433c61`, and their findings were
-   deliberately NOT acted on because the session that held them was cutting `v0.580.0`/`v0.581.0`
-   instead. What they measured, each figure owed a re-derivation:
+   **BATCH 117'S SUBJECT IS `BL-257`, BY OPERATOR RULING. THIS OVERRIDES THE PROVENANCE-FIRST
+   ORDERING FOR ONE BATCH AND IS NOT A CHOICE THE SWEEP MAKES.** Given during batch 116 after the
+   operator asked whether any performance improvement had been made and measured, and the answer
+   was none: "I absolutely want it taken up. It MUST be done in the next batch." `BL-257` is the
+   unwatched suite pole — `ledger-reverify` at the top of `.git/ai-dlc-fixture-durations`, grown
+   493 -> 573 across two releases with nothing observing it — and it carries an earlier ruling of
+   its own that the growth guard is worth building. `docs/plans/pre-push-wall-clock.md` is the LIVE
+   plan for the pole and its next actions are stale against today's top entry; re-derive that
+   file's own resume block as part of the batch rather than following it. Still run the sweep
+   (action 1b) and REPORT its worklist, because the consumer keeps filing and the report is owed
+   every batch; scope nothing from it unless the operator redirects.
 
-   - **The PC-BACKED WORKLIST — the scoping input — was 16**, of which `BL-254` was the only
-     receipt exiting 0; `BL-215` is `verify: manual`/HAND-REVIEW; the other 14 were STILL-LIVE.
-   - **Filing coverage was 20 unfiled** — a DIFFERENT question, per the two-joins passage below.
-   - **The ledger ref election landed on `ai-dlc/carry-over/epic-crs-fvs-carryover-priorities`**,
-     46 commits ahead of the consumer's `main` and 0 behind, live 49 / archive 227 against main's
-     62 / 211. **Its live set is SMALLER because the consumer CLOSED 15, not because it is stale**
-     — exactly the batch-113 shape, and the three qualifying arms discriminated it correctly this
-     time (arm 1 unexplained-losses 0, arm 2 adds 2, arm 3 carries 15).
-   - **The consumer closed 14 absorbed entries** in `55a0b410b` (2026-09-14), on that branch and
-     not on its `main`. A committed-ref sweep keyed on `main` cannot see it.
-   - **The delivery gap was 2** — consumer installed `0.577.0` against this repo's `0.579.0`, and
-     it is now **4**, because `v0.580.0` and `v0.581.0` shipped after those hands ran.
+   **HOW TO MEASURE THE POLE, because every figure here decays.** A recorded cost in
+   `.git/ai-dlc-fixture-durations` is a LOADED cost under the pool; a solo run of the same unit
+   gives a different number and the two are never compared. Time a validator before and after
+   from inside the repo, interleave reps, and assert the two sides differ before reading a delta.
+   Batch 116 measured base-vs-tip fixture timing under a load average of 25-52 and the
+   within-side spread was several times any plausible effect; a differential that cannot resolve
+   the effect reports nothing, and both hands said so rather than reporting a delta. A growth
+   guard needs a TRACKED baseline — `.git/` is not tracked and a linked worktree cannot even write
+   it (`.git` is a file there, so every agent-worktree push re-runs all fixtures).
 
-   **THE DISTRIBUTION MOVED TWICE SINCE THAT SWEEP AND ONE OF THE TWO TOUCHES THIS FILE.**
-   `v0.580.0` rotated this plan and added arm `P8`; `v0.581.0` fixed a fixture whose cleanup arm
-   was dead under `sudo`. Neither is PC-backed and neither closed a ledger candidate, so the
-   worklist above should survive a re-derivation — but that is a prediction, and the derive block
-   is what settles it.
+   **BATCH 116 SHIPPED AS `v0.582.0`, TWO SUBJECTS IN ONE RELEASE.** `BL-034` closed
+   (`PC-S315-EMIT-REPORT-REGION-OMITS-THREE-MANDATED-DETECTORS`: step 3b's template
+   pre-classification renders inside the mechanical region; `preclassify.sh` refuses on an
+   unreadable manifest where it exited 0 with empty stdout) and `BL-047` closed
+   (`PC-S296-PIPELINE-POSITION-MUST-BE-EDITED-IN-PLACE`: three readers refuse a two-valued
+   `Current step file`; `I113` binds the grammar copies). Both contracts went to an adversary
+   BEFORE any builder spawned and both came back with fix-shaped blockers that were folded in:
+   the step 3b section's first siting silently widened four fixture arms while the fixture stayed
+   green, and the position fix's first grammar would have un-resolved 1416 of 2218 consumer
+   snapshot revisions. Neither reached a builder. Every spawn was `isolation: "remote"`.
+
+   **THE LEDGER REF ELECTION FELL BACK TO `main` THIS BATCH FOR A REASON THE LOOP CANNOT SEE.**
+   The consumer's sprint branch had DIVERGED from its `main` (6 behind, 50 ahead) after a
+   self-update was merged and reverted there, so the `merge-base --is-ancestor main` arm rejected
+   it while it was the branch the consumer was running. Re-derived against both refs by hand:
+   `main` gave a worklist of 19, the branch 16, and the four extra on `main` were candidates the
+   consumer had already closed. When the elected ref is `main` and the consumer's checked-out
+   branch is not, derive the worklist against BOTH and report the difference; the loop's ancestor
+   arm is a stale-snapshot guard, not a liveness test.
+
+   **THE CONSUMER PULLED TO `0.581.0` ITSELF DURING THIS BATCH**, in a graph session nobody here
+   drove: self-update PR #1085 and reconcile PR #1086 on its sprint branch, stamp at `0.581.0` on
+   all four fields. The delivery gap at batch close is therefore whatever `v0.582.0` adds —
+   derive it. Its reconcile filed `PC-S312-STEP-2-SPELLS-THE-DERIVED-FIXTURE-SET-IN-A-FORM-ITS-OWN-RUNNER-REFUSES`
+   (committed) and its sprint session had
+   `PC-S312-EFFORT-PROMPT-LINE-HAS-NO-VERIFIED-BEHAVIORAL-EFFECT` UNCOMMITTED in the working tree
+   at close; neither is filed here. A porcelain count that moved during the batch was that
+   session's activity, established by content (ledger md5 and `git diff HEAD` on the ledger).
+
+   **FILED, NOT FIXED, AND NOT TO BE FOLDED INTO A RELEASE WHOSE SUBJECT IT IS NOT:**
+   `core/fixtures/reconcile-emit-report` is intermittently red on `origin/main` in the FALSE
+   direction at a low single-digit rate under the pool, reproduced at `49e5356d`; the lead is a
+   bare `mktemp` at `emit-report.sh:331,:373` where `ledger-reverify.sh:1089-1096` records the same
+   class and prefixes its own. File it as its own entry (grep for an existing one first — batch
+   114 avoided three duplicates that way).
 
    **"RESIDUE ZERO" MEANS NO CANDIDATE AWAITS A FIRST FILING. IT NEVER MEANS THE PC WORK IS
    DONE, AND EVERY BLOCK BELOW SAYING "ZERO KNOWN" IS MAKING ONLY THE NARROW CLAIM.** Two joins,
