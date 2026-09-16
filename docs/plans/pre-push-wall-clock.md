@@ -42,19 +42,66 @@ apart is for the operator to ask.
 **Delegate.** The Delegation section below is not advisory: most of these steps are independent
 and should run as parallel named agents.
 
-### Next actions — **v0.370.0 IS MERGED. THE POLE IS NOW `ledger-reverify` AND IT IS WATCHED.**
+### Next actions — **THE SUITE IS NO LONGER POLE-BOUND. THE SUBJECT IS TOTAL WORK.**
 
-v0.370.0 landed on `main` as `d4fd318`, squashed from `perf/pre-push-wall-clock` (#547).
-`scripts/validate-release-version.sh` passes on the merged `main`. Everything below the "Ordered
-execution" table is the record of how it got there; **do not re-execute any of it.** The 217.27s
-wall this block used to quote is four releases stale and has been replaced by the calibrated
-figures in action 2.
+**THIS IS THE CHANGE THAT MATTERS AND IT INVALIDATES THE ORDERING EVERY EARLIER BLOCK USED.**
+Cutting the longest fixture used to cut the wall clock. It no longer does, and the arithmetic is
+one line: the pool's makespan cannot go below `sum of all unit costs / width`, and that floor is
+now within reach of the pole. Derive both before choosing any target — **a session that shaves a
+pole here delivers nothing and will not be able to tell.**
 
-1. **The inner pools are owed, and the hook records them as owed.** Re-derived against the tree
-   today: **11** fixtures declare an inner pool width, and those widths sum to **70** workers
-   sitting on top of the outer pool of 12 (`FIXTURE_JOBS="${AI_DLC_FIXTURE_JOBS:-12}"`,
-   `.githooks/pre-push:319`). This block used to say nine; it was not re-derived for four
-   releases. Derive both sides and JOIN them, never quote either:
+```
+sort -k2,2nr .git/ai-dlc-fixture-durations | head -3                       # the pole
+awk '{s+=$2; n++} END{printf "%d over %d units, sum/12 = %.1f\n", s, n, s/12}' \
+    .git/ai-dlc-fixture-durations                                          # the floor
+```
+
+Measured at `v0.585.0`, full 202-fixture dispatch under `AI_DLC_FIXTURE_NO_SKIP=1`, pool 12:
+pole **620s** (the gate's own PASS line), total **6234 pool-seconds**, floor **`sum/12` = 519.5s**.
+The gap between the two is ~100s, and **that gap is all any pole work can ever return.** Zero out
+the pole entirely and the suite still cannot finish faster than the floor.
+
+**OPERATOR RULING AT BATCH 119, GIVEN IN AS MANY WORDS:** *"420 as a pole is not good enough.
+Neither is 346 on the next. Need to look deeper and refactor more aggressively in a future
+batch."* Given after being shown that cutting BOTH co-poles bought ~85s of a 500s makespan. The
+ruling stands until the operator replaces it: **the subject is removing work, not scheduling it.**
+
+1. **REMOVE TOTAL WORK. The lever is repeated I/O over the same files, and it is the largest
+   single finding in this plan.** Operator's own lead at batch 119, confirmed by derivation:
+   every real input file is opened **~8.8 times per full suite run**, by different fixtures, for
+   different checks. Derive it, with the harness pollution excluded so the figure is about real
+   inputs:
+
+   ```
+   awk -F'\t' '$2 !~ /^\.claude\/worktrees\// && $2 !~ /\.DS_Store/ {rows++; p[$2]++}
+     END{ d=0; for(k in p) d++; printf "%d events / %d paths = %.1fx\n", rows, d, rows/d }' \
+     .ai-dlc-fixture-readsets.tsv                                          # 8.8x
+   awk -F'\t' '{print $2}' .ai-dlc-fixture-readsets.tsv | sort | uniq -c | sort -rn | head
+   ```
+
+   The head of that distribution is opened by EVERY unit: `.gitignore`, `.git/index`, `.git/HEAD`,
+   `.git/config`, `.git/packed-refs`, the commit-graph shards — 202 opens each. And the same shape
+   repeats INSIDE one program: `scripts/validate-enforcement-map.sh` is ~10500 lines with **384
+   `grep`, 158 `awk`, 136 `sed`, 67 `find`** invocation sites (control: an impossible tool name
+   returns 0), each a fresh walk of a corpus an earlier arm already walked.
+
+   **SHARDING AND INNER POOLS DO NOT REMOVE WORK — THEY MOVE IT.** Measured on the tree today:
+   `validator-arm-selection` 370 + its `-b` shard 158 = **528 pool-seconds for one subject**. A
+   shard splits a DIRECTORY, so it cuts the pole and leaves `sum/W` untouched, which is precisely
+   the wall the suite now sits against. Every past pole win was bought this way and that is why
+   the floor is where it is.
+
+   **Work concentrates, which is what makes this tractable:** top 10 units are **42.2%** of all
+   pool-seconds, top 20 are **61.1%**. Re-derive both before scoping — the membership moves.
+
+1b. **The inner pools, and they are NOT action 1.** Kept because the hook records them as owed and
+   the join is the honest way to count them, but read action 1 first: widening or sweeping these
+   is scheduling work, not work removal, and the floor above bounds what it can return.
+   Re-derived at `v0.585.0`: **11** fixtures declare an inner pool width, and those widths sum to
+   **70** workers sitting on top of the outer pool of 12
+   (`FIXTURE_JOBS="${AI_DLC_FIXTURE_JOBS:-12}"`, `.githooks/pre-push:319`). This block used to say
+   nine; it was not re-derived for four releases. Derive both sides and JOIN them, never quote
+   either:
 
    ```
    grep -lE 'xargs( +-[^ ]+)* +-P' core/fixtures/*/run.sh | sort            # dispatch sites
@@ -83,7 +130,18 @@ figures in action 2.
    overlap. No sweep script is tracked in this repo (`git log --all -- '**/sweep9.sh'` returns 0
    against a control of 1 for a tracked path), so the harness is written fresh.
 
-2. **The pole is `ledger-reverify` at 628s loaded, and since `v0.583.0` a guard watches it.**
+2. **The pole is STILL `ledger-reverify` and a guard watches it — but read action 1 first, because
+   the guard has no vocabulary for the state the suite is now in.** `validate-suite-pole.sh`
+   watches ONE row. It cannot say "the suite is work-bound, not pole-bound", it has no downward
+   fail by design (`:30-34`), and a row pinned to a fixture that still exists but is no longer the
+   wall-clock determinant passes silently with only a NOTE. So a green pole line is not evidence
+   that the wall clock is healthy, and at `v0.585.0` it was 620s against a floor of 519.5s.
+   **`docs/suite-pole-baseline.tsv` was deliberately NOT re-pointed at that release**: the seam
+   fixture collapsed 498 -> 57 loaded, but untouched units moved +7%, +13%, +53% and -55% across
+   the same two runs, so no cross-run figure was comparable and the row moves only on a quiet-box
+   calibration. Take three runs and the MAX, as its own header requires.
+
+   The calibration below is `v0.583.0`'s and is the row the guard still compares against.
    Calibrated on an unchanged tree by three serial full `AI_DLC_FIXTURE_NO_SKIP=1 bash
    .githooks/pre-push` runs in a `file://` clone of `origin/main` at `83747ef4`, pool 12, 201
    fixture directories: **628s** (wall 743s, load average 50.56 at start, gate green 21/21),
@@ -176,6 +234,45 @@ figures in action 2.
 killed them, and both sections are kept in full below because their hazard notes are the reason
 to read them if the numbers ever change back.
 ### Discharged — do not re-execute
+
+**BATCH 119 SHIPPED AS `v0.585.0` (`389b6bdc`, PR #781). ITS SUBJECT WAS NOT THE POLE, AND THE
+REASON IS ACTION 1.** The batch opened under the batch-118 ruling naming this plan, found the
+co-pole tie, and then found that the co-pole's cost was not its own design at all.
+
+**`fixture-git-env-seam` 498s -> 57s loaded**, full 202-fixture dispatch. `mktree` copied the whole
+working tree eight times per run excluding only `./.git` and `./node_modules`, so it copied
+`.claude/worktrees/` — the **Claude Code harness's own agent checkouts**, gitignored, and present
+in whatever number of concurrent sessions were running. On the measured tree that was 34 checkouts,
+871M of a 1.0G copy, 15x the file count. It was also RACING other sessions: `tar` walks those
+directories while another session deletes one, and the fixture exited 9 as `FIXTURE BROKEN`, which
+reads exactly like a regression in whatever change is under test.
+
+**AND ITS GUARD COULD NOT SEE THE SILENT HALF, WHICH IS THE PART TO CARRY FORWARD.**
+`tar cf - | tar xf - || return 1` reads only the READER's status — there is no `pipefail` in that
+fixture or in `core/fixtures/lib/preamble.sh`. Constructed: a writer failing on a missing member
+exits **1 alone and 0 through the pipe**, landing 50 of 51 files, and the two `[ -f ]` probes below
+it pass because they name two files out of thousands. The copy now asserts COMPLETENESS by counting
+entries on both sides. **The exclusion alone would have removed the trigger and left the broken
+detector permanently unexercised** — fixing a symptom and hiding the defect.
+
+**`core/scripts/derive-fixture-readsets.sh` was recording gitignored paths into a TRACKED map.**
+12435 of 36046 rows pointed into `.claude/worktrees/`; ~35% of all data rows named gitignored
+paths. Two derivations of one fixture minutes apart returned 4815 rows and then 26854 — a 5.6x move
+caused only by how many agents were live. Filed as `BL-264`. **The stale rows are still in the map**
+and clear only on a root-privileged re-derivation taken with no agent worktrees on disk; they are
+deliberately not hand-edited, per `BL-127`.
+
+**Two defects found while profiling the pole**: `ledger-reverify/run.sh:184` ran a command
+substitution inside a diagnostic string (raw backticks in a double-quoted argument, invisible to
+`bash -n`, wrong only in the message), and `.githooks/pre-push` described the inner pools as
+"NINE ... 66 workers" against a derived 11/70.
+
+**WHAT BATCH 119 DID NOT DO, DELIBERATELY:** it did not build the `ledger-reverify` inner pool the
+batch-118 ruling anticipated. Measured, that pool buys 4.08x on ONE directory and converts to almost
+nothing at suite level for the reason action 1 now states, and it carried the largest build risk in
+the contract (an assertion counter with no `EXPECTED_ASSERTIONS` floor, a host-`TMPDIR` glob, and a
+write-read-clear chain on a fixed path). The design work is in the contract and is not lost; the
+measurement is what deprioritised it.
 
 **The consumer rehearsal and the merge. DONE.** A tree built by running `scripts/install.sh`
 into an empty directory received both `layer-contract-conformance` and

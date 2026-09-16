@@ -1062,17 +1062,35 @@ given at batch 90.
    at every phase when its second adversary returned two BLOCKERs, and batch 66's was green
    when its adversary returned a BLOCKER establishing the shipped fix had made things WORSE.**
 
-   **OPERATOR RULING AT BATCH 118: `docs/plans/pre-push-wall-clock.md` IS BATCH 119's SUBJECT.**
+   **OPERATOR RULING AT BATCH 119, AND IT IS NOT SPENT: `docs/plans/pre-push-wall-clock.md` REMAINS
+   THE SUBJECT UNTIL THE SUITE'S WALL CLOCK ACTUALLY FALLS.** Given in as many words — *"420 as a
+   pole is not good enough. Neither is 346 on the next. Need to look deeper and refactor more
+   aggressively in a future batch."* — after the operator was shown that cutting BOTH co-poles
+   would buy roughly 85s of a 500s makespan. This supersedes the batch-118 ruling below, which
+   named the same plan for one batch only.
+
+   **The subject is REMOVING WORK, not scheduling it, and that is a change of kind.** The suite is
+   no longer pole-bound: at `v0.585.0` the pole was 620s against a work-conservation floor
+   (`sum of all unit costs / 12`) of 519.5s, so pole work of any size cannot return more than that
+   gap. **Do not open batch 120 by shaving a fixture.** Read that plan's action 1, which names the
+   lever the operator identified: every real input file is opened ~8.8 times per full run, and one
+   10500-line validator carries 384 `grep`, 158 `awk`, 136 `sed` and 67 `find` sites re-walking
+   corpora earlier arms already walked. Sharding and inner pools MOVE work between directories and
+   leave that floor untouched — measured, `validator-arm-selection` 370 plus its shard 158 is 528
+   pool-seconds for one subject.
+
+   Batch 119 shipped as `v0.585.0` (`389b6bdc`) and is recorded in that plan's discharged section;
+   it did not build the inner pool the batch-118 ruling anticipated, and the measurement for why is
+   there. **This ruling governs batch 120 and stays live until the operator replaces it.**
+
+   **SUPERSEDED — OPERATOR RULING AT BATCH 118: `docs/plans/pre-push-wall-clock.md` IS BATCH 119's
+   SUBJECT.** Kept for its lineage only; the block above replaces it.
    Given in as many words ("I hereby rule it batch 119's subject") after the operator asked whether
    any release from `v0.576.0` to `v0.583.0` had cut the suite's wall clock and was told none had —
-   `v0.583.0` added a guard, which is a ceiling and not a cut. This overrides the provenance-first
-   ordering for ONE batch, the same shape as the batch-117 ruling for `BL-257`. Batch 119 opens with
-   THAT plan's own resume block, not this sweep: its two live actions are the `ledger-reverify` pole
-   (3643-line driver, 60 or more serial exec sites, no inner pool — overlap or shard it, and read the
-   `0.541.0` CHANGELOG entry first, where a shard was refuted and an inner pool won) and the
-   inner-pool sweep (11 fixtures declaring widths that sum to 70 over the 12-way outer pool). Pole
-   first, sweep second, because the makespan is one directory. The ruling is spent when batch 119
-   ships; this ordering governs again for batch 120.
+   `v0.583.0` added a guard, which is a ceiling and not a cut. This overrode the provenance-first
+   ordering for ONE batch, the same shape as the batch-117 ruling for `BL-257`. Its two named
+   actions were the `ledger-reverify` pole and the inner-pool sweep, pole first "because the
+   makespan is one directory" — **which is the premise batch 119 measured and refuted.**
 
    **BATCH 118 SHIPPED AS `v0.584.0` (`a1979146`), TWO SUBJECTS, THREE ENTRIES CLOSED, TWO PC IDS
    NAMED VERBATIM IN THE SQUASH MESSAGE.** `BL-259` closed, discharging
