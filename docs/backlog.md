@@ -3833,6 +3833,119 @@ first.
 verify: sh f=core/skills/ai-dlc/steps/gate-validation.md; [ -f "$f" ] || exit 9; LC_ALL=C awk '/validate-spawn-ledger\.sh/{p=1} p && /--settings/{print; exit}' "$f" | grep -q . || exit 9; LC_ALL=C awk '/validate-spawn-ledger\.sh \\?$/{p=1} p{b=b $0 "\n"} p && /--settings/{exit} END{printf "%s", b}' "$f" | LC_ALL=C grep -qE -- '--probe' && exit 0; exit 1
 
 
+## BL-270 — the drain plan's ledger-ref election gates on an ancestor arm no branch can satisfy, so it always falls back to `main` and reports "no filings ahead" with every control green
+
+**DEFECT.** Found by running the derive block in
+`docs/plans/graph-ledger-full-drain.md` verbatim and comparing its verdict against the ref the
+previous batch actually worked from. **The election loop is a check that cannot fire.**
+
+**The arm.** Each candidate branch must pass
+`git -C <consumer> merge-base --is-ancestor main "$b"` before the loop will read its ledger — the
+branch must CONTAIN `main`. The consumer branches per sprint and `main` advances independently, so
+a sprint branch diverges rather than fast-forwarding. Measured against the consumer at
+`8990d8cad`: **0 of 723 non-main local branches pass that arm**, and **178 of the 723 carry a
+ledger**. The loop therefore `continue`s on every branch, elects `main`, and prints its own
+`main` here is CORRECT, not a fallback failure` reassurance beside the wrong answer.
+
+**WHY IT READS AS A CLEAN SWEEP, WHICH IS THE PART THAT MATTERS.** The block's assertion arm
+(`comm -23 live_main live | comm -23 - arch | wc -l`, "0 or the loop is broken") is computed
+against the ref the loop ELECTED, so it compares `main` with itself and answers 0 by construction.
+The presence control (`wc -l < live_main.txt`) reads 62 because `main` does carry a ledger. Both
+controls pass, `filings ahead of main` prints empty, and the sweep reports no new work.
+
+**WHAT IT COST, MEASURED.** The elected-`main` reading gives 62 live candidates and 23 unfiled.
+Scored against the sprint tip the previous batch used, the branch carries 53 live and adds **6**
+ids `main` lacks; the true unfiled set is **24**. One candidate,
+`PC-S312-ARTIFACT-PATH-GRAMMAR-HAS-NO-WRITE-TIME-ENFORCEMENT`, is visible through no other ref and
+is filed as `BL-271`. The other five were already filed by batch 123, which reached them by being
+handed the sprint ref rather than by deriving it — so this defect has been live for at least one
+batch and was invisible because a hand supplied the right answer out of band.
+
+**THE PROPERTY ARM ALREADY IN THE BLOCK IS THE CORRECT TEST AND IS UNREACHABLE BEHIND THE GATE.**
+Batch 113 added the acquittal that a qualifying ref may be missing ids it has CLOSED, read from
+that ref's own archive. Scored over all 178 ledger-carrying branches with the ancestor gate
+REMOVED and the property arm alone: **3 qualify** —
+`ai-dlc/carry-over/epic-crs-fvs-carryover-priorities` (53 live, 6 adds, 15 missing, **0
+unexplained**), `dev/sprint-312/story-1` and `dev/sprint-312/story-3` (51 live, 4 adds, 15 missing,
+0 unexplained each). A genuinely stale snapshot still fails, which is the discrimination the arm
+was written for. The election is also well-defined: the carry-over branch is a strict SUPERSET —
+the union of all three branches' adds equals its own, and neither story branch carries an id it
+lacks (both directions measured at 0).
+
+**What is owed.** Delete the ancestor gate and let the property arm decide, or replace it with a
+test the consumer's branching shape can satisfy. Whichever is taken, the assertion arm must be
+recomputed against the ELECTED ref and not against `main`, or it remains a tautology. The loop
+should report every qualifying ref rather than electing one silently, which the block's own prose
+already says and the code does not do.
+
+**Receipt.** Keys on the emission SITE — the `merge-base --is-ancestor main "$b"` line inside the
+election loop — not on prose about it, and not on a count that moves with the consumer. Scored
+before filing across four inputs: tip **1**, a prose-only file naming the arm in a sentence **0**,
+the fixed form with the line deleted **0**, a stub with no `lids()` **9**. Exit 9 if the plan or
+its grammar function is gone.
+
+verify: sh p=docs/plans/graph-ledger-full-drain.md; [ -f "$p" ] || exit 9; LC_ALL=C grep -q 'lids()' "$p" || exit 9; LC_ALL=C grep -qE '^[[:blank:]]*git -C [^ ]+ merge-base --is-ancestor main "\$b"' "$p" && exit 1; exit 0
+
+
+## BL-271 — no `PreToolUse` hook checks the artifact-path grammar, so a non-conforming path is created by `Write` and caught only at `pre-push`, after other artifacts have cited it
+
+**DEFECT.** Filed from the consumer candidate
+`PC-S312-ARTIFACT-PATH-GRAMMAR-HAS-NO-WRITE-TIME-ENFORCEMENT`, read from the consumer's sprint
+branch ledger at `8990d8cad`. **It is reachable through no other ref** — `main` does not carry it,
+and the drain plan's election loop cannot elect the branch that does (`BL-270`). Not fixed here.
+
+**The gap is timing, not absence.** `validate-artifact-paths.sh` exists and does catch a sprint
+token in a basename outside the reserved `s<N>/` slot, but it has exactly one call site:
+`.githooks/pre-push`. That is (a) opt-in — the consumer must set `core.hooksPath` — and (b)
+batched over everything already committed. The consumer's measured episode: a code-reviewer
+teammate wrote `docs/reviews/s312-story-2-1-gate1-review.md`, nothing stopped the `Write`, the
+file was committed, merged, and then cited by name in `pipeline-snapshot.md`,
+`pipeline-continuation-log.md` and a later gate-2 QA review that quoted the path verbatim as its
+own evidence trail. Detection came at `git push`.
+
+**The attachment point already exists and is already paid for.** Two `PreToolUse` hooks fire on
+every `Edit|Write|MultiEdit` in this distribution — `ai-dlc-core-guard.sh` and
+`ai-dlc-gate-remediation-guard.sh` — and neither checks the grammar.
+
+**Re-derived here, with controls.** The candidate's own receipt run against this tree exits **1**:
+neither guard names `artifact-path` or `artifact_path`. Both files exist (control: `ls` resolves
+both) and both are real hooks (control: 23 and 30 hits for `PreToolUse|tool_input|hook`), so the
+zero is an absence and not an unreadable file. Widening to all 23 files under `core/hooks/`, three
+name the token — `ai-dlc-protect.sh`, `ai-dlc-acknowledge.sh`, `ai-dlc-continue.sh` — and **all
+three are prose mentions inside comments**, not checks. A whole-file grep satisfied by a comment is
+the shape this repo's own rule warns about, which is why the receipt keys on the guard files the
+candidate names rather than on the hooks directory.
+
+**The consumer's proposed disposition, recorded not adopted.** Add a grammar check to one or both
+`Edit|Write|MultiEdit` guards, scoped to the area roots `validate-artifact-paths.sh` already scans,
+rejecting only the classes the migration script calls MOVABLE — a bare sprint-token-in-basename
+with an unambiguous `s<N>/` destination. The AMBIGUOUS and REFUSED classes need the same judgment
+they need today, so a write-time guard can fail open on those without regressing what `pre-push`
+covers.
+
+**WHAT IS NOT ESTABLISHED, AND IT IS THE SIZING.** The false-positive set of such a guard has not
+been measured here, and this repo does not ship a check before that set is empty or enumerated. The
+scoping is also not free: a `PreToolUse` deny on a write path is the strong mechanism, and the plan
+channel's own hook was held to a WARNING under exactly that constraint. Whether a deny is
+constructible here without wedging live work is the first thing the fix has to answer.
+
+**Relation to I82.** `scripts/validate-enforcement-map.sh`'s I82 enforces this same grammar over
+what core PRESCRIBES, at prose time; I82b covers the adjacent blindness where a prescription names
+no sprint at all. Neither reaches a consumer's `Write`. The subjects are the same declaration and
+the mechanisms do not overlap.
+
+**Receipt.** The candidate's own receipt is a whole-file `grep` over the two guards, and it is
+PROSE-CLOSABLE — `validate-backlog-receipts.sh` scored it so on filing, which is correct: all three
+of the hooks that name this token today name it in a COMMENT, so a fourth comment would close this
+entry having changed nothing. Narrowed to non-comment lines, the same way `I84` narrows for the
+same reason. Scored across four inputs before landing: tip **1**, a copy of the guard carrying only
+a `# TODO: add an artifact-path grammar check here` comment **1** (the discriminating input — the
+unnarrowed form closes here), a copy carrying an executable call to the validator **0**, a stub
+with no `tool_input` **9**.
+
+verify: sh a=core/hooks/ai-dlc-core-guard.sh; b=core/hooks/ai-dlc-gate-remediation-guard.sh; [ -f "$a" ] || exit 9; [ -f "$b" ] || exit 9; LC_ALL=C grep -q 'tool_input' "$a" || exit 9; LC_ALL=C grep -hv '^[[:blank:]]*#' "$a" "$b" | LC_ALL=C grep -qi 'artifact-path\|artifact_path' && exit 0; exit 1
+
+
 ## BL-268 — `fork-profile.sh --section by-line` misattributes forks across arm boundaries on bash 3.2, and the by-arm table inherits it
 
 **DEFECT.** Found by a contract adversary attacking a proposed four-arm fork cut at batch 123,
