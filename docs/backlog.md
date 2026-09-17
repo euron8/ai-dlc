@@ -3833,6 +3833,73 @@ first.
 verify: sh f=core/skills/ai-dlc/steps/gate-validation.md; [ -f "$f" ] || exit 9; LC_ALL=C awk '/validate-spawn-ledger\.sh/{p=1} p && /--settings/{print; exit}' "$f" | grep -q . || exit 9; LC_ALL=C awk '/validate-spawn-ledger\.sh \\?$/{p=1} p{b=b $0 "\n"} p && /--settings/{exit} END{printf "%s", b}' "$f" | LC_ALL=C grep -qE -- '--probe' && exit 0; exit 1
 
 
+## BL-268 — `fork-profile.sh --section by-line` misattributes forks across arm boundaries on bash 3.2, and the by-arm table inherits it
+
+**DEFECT.** Found by a contract adversary attacking a proposed four-arm fork cut at batch 123,
+and re-derived here independently. **The instrument this repo uses to decide WHICH arm to
+optimise can name the wrong arm.** Nothing was shipped against the wrong reading — the finding
+is recorded so the next session scoping that work does not re-derive it wrongly.
+
+**The measurement that was wrong.** `--section by-line` reported `7118 tr 94`, which was read as
+I84's cost. At the revision measured, line 7118 was a bare `fi` — the close of the I82/I82b/I99
+conditional chain — and I84 contains no `tr` at all. Re-derived at this tip (line numbers move;
+derive them, do not quote these): I84's range opens at `# --- I84:` and holds **0** `tr`; the
+real site is one `tr '/' '\n'` inside I82's per-component split, and the arm containing it opens
+at `# --- I82:`, the header before it. Control: an impossible `tr 'QQQ'` returns 0 in the same
+invocation.
+
+**The mechanism is a bash 3.2 `LINENO` artifact**, not a bug in the profiler's classifier: a
+`<(...)` process substitution nested inside a deep if/elif/fi chain reports its commands' line
+number as the chain's CLOSING line. So the forks are attributed to whatever arm's range happens
+to contain that `fi`.
+
+**THE BY-ARM TABLE INHERITS IT, WHICH IS THE PART THAT MATTERS.**
+`render-invariant-index.sh --arm-lines` buckets the closing line into the arm whose range
+contains it, so a per-arm column can be understated and its neighbour inflated by the same
+count with nothing announcing the swap. The by-arm table is this repo's only ranking that has
+predicted anything about fork cost; it is still the right instrument, and a single LINE citation
+taken from it is not evidence about which ARM owns the cost.
+
+**What is owed.** Either attribute a `<(...)` body to the line where the substitution is
+WRITTEN, or have `--section by-line` mark lines whose attribution is structurally ambiguous (a
+traced command whose reported line is a bare `fi`/`done`/`esac` cannot be the site that forked)
+so a reader cannot silently take one. Until then: before scoping an arm's cut from a by-line
+citation, confirm the named line is an executable fork site in that arm's range.
+
+**Receipt.** Keys on the ambiguity being MARKED or the attribution being fixed — not on the
+count, which moves with the corpus. Exit 9 if the profiler is gone.
+
+verify: sh f=scripts/fork-profile.sh; [ -f "$f" ] || exit 9; LC_ALL=C grep -qE 'process substitution|substitution is WRITTEN|ambiguous attribution|bare (fi|`fi`)' "$f" && exit 0; exit 1
+
+## BL-269 — I75 has no fixture anywhere, so the arm most at risk from a batching rewrite is the one with no equivalence oracle
+
+**DEFECT.** Found by the same contract adversary and re-derived here. `I75` in
+`validate-enforcement-map.sh` asserts that every `core/scripts/*.sh` consulting a project root
+does it through the canonical precedence chain, and that the chain fails closed.
+
+**No fixture exercises it.** Derived with a control in the same invocation: **33** fixtures
+name `validate-enforcement-map` at all, and `i75_norm`, `i75_chain` and `i75_failsclosed`
+return **0** each. The arm's only self-test is the two probes inline in its own body.
+
+**AND ITS FINDING SETS ARE EMPTY ON A CLEAN TREE** — all 26 subjects hash to the same modal
+chain, so `i75_drift` and `i75_open` are both empty. Comparing findings before and after any
+rewrite therefore compares two empty sets, which is the vacuous shape measured at 0-of-205 in
+`0.587.0`. I82, I33b and I84 each have a seeded mutation that flips their findings non-empty;
+I75 has none.
+
+**Why this is filed rather than fixed.** The oracle has to be built before the rewrite it
+would guard, and no rewrite is in flight. Whoever takes it: seed a synthetic `core/scripts/`
+copy whose root block is reordered (`CLAUDE_PROJECT_DIR` read before the override) or carries
+no terminal guard, and assert `i75_drift`/`i75_open` name it — then the batching has something
+to be equivalent to.
+
+**One design note measured while scoping, so it is not re-derived:** I75's per-subject
+`shasum` cannot collapse into a single awk pass — there is no SHA-256 in POSIX awk. The
+tractable form is dropping the hash and comparing normalised text directly, which is
+semantically identical and removes the per-subject external.
+
+verify: sh v=scripts/validate-enforcement-map.sh; [ -f "$v" ] || exit 9; LC_ALL=C grep -q 'i75_chain' "$v" || exit 9; n=$(grep -rl 'i75_norm\|i75_chain\|i75_failsclosed' core/fixtures/ --include='*.sh' 2>/dev/null | wc -l | tr -d ' '); [ "$n" -gt 0 ] && exit 0; exit 1
+
 ## BL-267 — `I59_UNDOC_AWK` buffers a whole file into `lines[]`, so its memory cost is the largest corpus file rather than a constant
 
 The shell form this replaced read each file twice through `grep` and `awk`, streaming both
