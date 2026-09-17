@@ -46,9 +46,20 @@ comparison did not happen", never as a pass.
 
 **Scoped against the consumer's SPRINT branch, not its `main`.** The candidate set was
 re-derived at `8990d8cad`: 53 live against `main`'s 62, and six candidates exist only on that
-ref. Of those six, `BL-259` and `BL-262` landed at `0.584.0` and `BL-254` at `0.578.0` — all
-three inside the consumer's unpulled `0.582.0`→`0.589.0` gap, so they read as live upstream
-because the consumer is eight releases behind, not because anything is owed.
+ref.
+
+**Of those six, TWO are closed and the third is NOT, and the distinction matters.** `BL-259`
+and `BL-262` landed at `0.584.0` and carry `**LANDED (v0.584.0, verified a1979146).**` in
+`docs/backlog.archive.md`. `BL-254` is a different case: the `sh_base_control` three-way
+resolve it asked for did ship at `0.578.0`, but the entry stays **open and headed `DEFECT`**
+at this tip, deliberately — it was filed AT that release to record the residual half the fix
+cannot deliver, because a consumer runs the engine it last installed and no predicate
+resolving against this tree can observe that copy. Reading all three as "landed" overstates
+one of them. Caught by the tip adversary on this branch.
+
+All three are nonetheless inside the consumer's unpulled `0.582.0`→`0.589.0` gap for the code
+half, so they read as live upstream because the consumer is eight releases behind, not because
+new work is owed here.
 
 ## [0.589.0] - 2026-09-16
 
