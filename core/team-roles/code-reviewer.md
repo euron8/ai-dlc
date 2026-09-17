@@ -76,6 +76,12 @@ put the sprint in the basename and never search the filesystem for the current o
 slot. A basename carrying the sprint blocks the push at `validate-artifact-paths.sh`, two
 gates and one deploy after you wrote it.
 
+**`<story-index>` IS THE BARE INDEX, NOT THE STORY ID.** The pipeline mints ids
+sprint-first (`s306-1`, `S292-1`), so resolving this placeholder to the id puts the sprint
+back into the basename one directory below where it was just removed: `s312/s312-1-code-review.md`
+is refused by the same rule, and the write-time guard denies it at the keystroke. Write
+`s312/1-code-review.md`.
+
 ```markdown
 # Code Review: <Story ID>
 

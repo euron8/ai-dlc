@@ -286,6 +286,11 @@ For each completed task, verify:
   `artifact-path-grammar.md` rule 2, and the reserved `s<N>/` directory is the only sprint
   slot. A basename carrying the sprint blocks the push at `validate-artifact-paths.sh`,
   two gates and one deploy after you wrote it.
+- **`<story-index>` is the BARE INDEX, not the story id.** The pipeline mints ids
+  sprint-first (`s306-1`, `S292-1`), so resolving this placeholder to the id puts the
+  sprint back into the basename one directory below where it was just removed:
+  `s312/s312-1-gate2-qa.md` is refused by the same rule and denied at the keystroke by the
+  write-time guard. Write `s312/1-gate2-qa.md`.
 
 ## Escalation Protocol
 

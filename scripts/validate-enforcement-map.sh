@@ -531,11 +531,21 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   **A FORK COUNT IS A PROXY FOR COST AND NOT THE COST.** Whole-validator wall clock, from
 #   inside the repo, 3 reps each: base 46.31/46.30/46.63s, tip 43.48/44.07/43.54s.
 #
-#   Budget from the HIGH reading, 3827, plus the usual 6. The admissible range at this
-#   measurement is 3827..5467 -- A3 needs `b >= t`, A4 needs `b <= t/0.7`, A1 needs
-#   `b < t/0.4` -- so 3833 sits near the bottom of a window that is open, which is what `m8`
+#   Budget from the HIGH reading, 3836, plus the usual 6. The admissible range at this
+#   measurement is 3836..5480 -- A3 needs `b >= t`, A4 needs `b <= t/0.7`, A1 needs
+#   `b < t/0.4` -- so 3842 sits near the bottom of a window that is open, which is what `m8`
 #   asserts at the COMMITTED value.
-FORK_BUDGET=3833
+#
+#   A SHIPPED HOOK IS A CORPUS ENTRY, AND THE 22nd ONE COST 9 FORKS. The release that added
+#   `core/hooks/ai-dlc-artifact-path-guard.sh` moved this 3827 -> 3836 without touching a line
+#   of this file: I13 and I14 both loop once per `core/hooks/ai-dlc-*.sh`, so a new hook pays a
+#   `basename` and a `grep` in one and a `basename`, `grep`, `git ls-files` and `awk` in the
+#   other. Attributed by a base/tip differential, both sides `--stable` with spreads 3827-3827
+#   and 3836-3836, base taken in a CLEAN worktree so the delta is the branch's: I14 90 -> 94,
+#   I84 271 -> 273, I13 49 -> 51, I83 134 -> 135 -- +4, +2, +2, +1, which sums to the whole +9
+#   with no unattributed remainder. Same class as the `0.590.0` entry where a prose-only commit
+#   moved this number by one.
+FORK_BUDGET=3842
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

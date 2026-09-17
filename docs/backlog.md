@@ -3969,34 +3969,140 @@ three are prose mentions inside comments**, not checks. A whole-file grep satisf
 the shape this repo's own rule warns about, which is why the receipt keys on the guard files the
 candidate names rather than on the hooks directory.
 
-**The consumer's proposed disposition, recorded not adopted.** Add a grammar check to one or both
-`Edit|Write|MultiEdit` guards, scoped to the area roots `validate-artifact-paths.sh` already scans,
-rejecting only the classes the migration script calls MOVABLE — a bare sprint-token-in-basename
-with an unambiguous `s<N>/` destination. The AMBIGUOUS and REFUSED classes need the same judgment
-they need today, so a write-time guard can fail open on those without regressing what `pre-push`
-covers.
+**The consumer's proposed disposition, recorded and then NARROWED ON MEASUREMENT.** It asked for a
+grammar check on one or both `Edit|Write|MultiEdit` guards rejecting the whole MOVABLE class. That
+scoping is too wide in two ways, and both were measured before anything was built.
 
-**WHAT IS NOT ESTABLISHED, AND IT IS THE SIZING.** The false-positive set of such a guard has not
-been measured here, and this repo does not ship a check before that set is empty or enumerated. The
-scoping is also not free: a `PreToolUse` deny on a write path is the strong mechanism, and the plan
-channel's own hook was held to a WARNING under exactly that constraint. Whether a deny is
-constructible here without wedging live work is the first thing the fix has to answer.
+**42 OF THE 73 BLOCKING PATHS ARE NOT ATTRIBUTABLE TO THE WRITE.** Population: 1882 paths ADDED
+under the scan roots after the 2026-08-07 grammar migration on the reference consumer,
+materialized as empty files in a scratch tree carrying that consumer's REAL grammar,
+`artifact-paths.md` and `layer-contract.yaml`, then judged by the SHIPPING validator (resolver
+agreement control: the scratch tree resolves the same 17 areas and 4 scan roots as the live one).
+**1806 CONFORMING / 73 NONCONFORMING / 3 AMBIGUOUS.** Splitting the 73 by the validator's own
+`component <bad>` detail rather than a second grammar: **31 the BASENAME is the offender, 26 an
+ancestor that is a well-formed `^s[0-9]+$` slot, 16 another ancestor.** Denying a `Write` because
+of a directory the author did not name in that call refuses a blameless basename and offers no
+action, so the guard denies only the 31.
+
+**AND THE ANCESTOR CLASS IS NOT A STABLE POPULATION, WHICH IS THE STRONGER REASON.** Declaring ONE
+depth-3 area (`_bmad-output/planning-artifacts/party-mode`) in the consumer's `artifact-paths.md`
+moves **73 → 47**, and the 26 rows that flip are EXACTLY the ancestor-bare-slot class (set
+comparison empty in both directions; area sets asserted to differ at 17 vs 18 BEFORE the
+verdicts were compared). Two legal remedies exist — move the slot up, or declare the deeper area —
+and the consumer chose the first. Picking one at write time is a judgment this guard cannot make,
+and `validate-enforcement-map.sh` I82b already owns that under-specification.
+
+**A FIRST-ORDER PURITY TEST CANNOT SEE THAT, AND MINE DID NOT.** Judging one path alone in an
+empty tree returns an identical verdict, and dropping the consumer file entirely ALSO returns 73 —
+the inference loop at `validate-artifact-paths.sh:227-237` recovers a depth-2 area from the scan
+root, so a depth-2 declaration is not discriminating. Only a DEPTH-3 area separates them, because
+inference takes exactly one component under the root. The verdict is a function of the path AND
+the declared area set; what is genuinely path-only is the BASENAME half, since a slot is always a
+directory and the basename is never at `slotidx`.
+
+**THE FALSE-POSITIVE SET IS EMPTY, AND THE CORPUS HAD TO BE CONSTRUCTED TO SAY SO.** Zero over the
+reference consumer's 6510 tracked files under the scan roots, zero over this distribution's 69.
+**That consumer tree PASSES today** — 6507 conforming, 0 blocking — so the live set holds no
+offender at all and could not discriminate. The population above was built from HISTORY for
+exactly that reason; a reader who sees only "FP set empty" would correctly read it as untested.
+
+**THE GAP COSTS REAL REMEDIATION, MEASURED: 62 OF THE 73 WERE RENAMED ONTO THE GRAMMAR BY HAND.**
+Joined against a 1192-pair rename map derived with `-M` across all refs since the migration
+(controls: a present pair joins LIVE, an absent path joins GONE): **62 RENAMED / 11 GONE / 0 still
+live at HEAD.** Destinations are conforming and are the same move the guard now suggests —
+`docs/reviews/s312-story-2-1-gate1-review.md` → `docs/reviews/s312/story-2-1-gate1-review.md`. So
+the harm rate is 3.3% of writes, not the single episode this entry was filed from, and it is a
+delivery fact rather than a projection. **An earlier figure of 1-of-73 in this entry's own working
+notes was WRONG** — a `--follow` query scoped too narrowly returns one pair where a proper rename
+map returns 1192.
+
+**DENY, NOT WARN, AND THE CONSTRAINT WAS CHECKED RATHER THAN INHERITED.** The plan-channel hook was
+held to a WARNING because plan mode's harness REQUIRES its path to exist, so a deny breaks the mode
+outright. No equivalent requirement exists here: every pipeline step prescribes a conforming
+destination, and I82 fails the build if core ever prescribes otherwise, so a deny cannot contradict
+an instruction core gives.
+
+**THE TIP ADVERSARY FOUND THE CONSUMER WEDGE THE CONTRACT PASS PREDICTED AND MISSED: A
+GITIGNORED PATH.** `validate-artifact-paths.sh:136-140` builds its corpus with `git ls-files`
+— the TRACKED set — while a write-time guard's corpus is whatever reaches `Write`. Those differ
+by exactly the ignored set, and the difference runs the dangerous way: for an ignored path the
+batched arm can NEVER render a verdict, so a deny is the only verdict and there is nothing to
+appeal to. Measured by driving the shipped hook over the reference consumer's ignored paths
+under the scan roots: **five denials**, all generated evidence the pipeline has written for
+hundreds of sprints (`s241-1-evidence-manifest.txt`, `sprint-148-smoke-test-*.log`,
+`cdk-diff-s310-services-stack.txt`), ignored by `*.txt` and `*.log`, and every future
+`sprint-NNN-*.log` would hit it. **The 0-of-6510 false-positive figure is correct and was
+measured over the TRACKED population, which is not the deny surface** — that is the gap. The
+guard now fails open on `git check-ignore`, and the arm discriminates in both directions:
+seeding `*.txt`/`*.log` flips the ignored paths to ALLOW while the tracked `.md` offender is
+unmoved.
+
+**THE SUGGESTED REMEDY WAS WRONG ON THE COMMONEST SHAPE, AND ONE REMEDY WAS REFUSED BY THE
+GUARD THAT ISSUED IT.** A token in the SUFFIX position ends at the `.`, so a strip whose
+trailing class carried `.` ate the extension separator: `review-s288.md` → `review-md`. That
+position is the COMMON one — `artifact-path-config.sh:106-108` records it as 173 files and it
+is why `TOKEN_RE` is not anchored to a whole component. And `sed` replaces once per expression,
+so `s12-s12-x.md` kept its second token and the suggestion was itself DENIED on the next
+keystroke — a mechanism defending its own defect. Fixed by splitting the extension off the stem
+and stripping to a fixed point; a basename that is ONLY a token now composes `s304/artifact.md`
+rather than re-inserting the token through the fallback. **Every suggestion over ten probed
+inputs is now ALLOWed by the guard that issued it (denied remedies: 0), and two match the
+consumer's own hand-migration byte-for-byte.**
+
+**THE FAIL-OPEN SET WAS CLAIMED ENUMERATED AND WAS NOT.** `./`, `//` and `/../` spellings that
+RESOLVE into a scan root bypassed the prefix test and were ALLOWED. `REL` is now normalised
+before the scan-root test — including a `//` collapse BEFORE the project-prefix match, since a
+doubled slash at the boundary defeats that match itself and was the one spelling still allowed
+after the first fix. A path that walks ABOVE the project keeps its `../`, matches no root, and
+correctly fails open.
+
+**AND THE GUARD TAXED EVERY WRITE IN THE CONSUMER.** It resolved three expressions before
+testing whether the path was its subject at all, so a `Write` to `src/main.ts` paid the full
+resolver cost: 64ms against a 9ms non-`Write` control, 20 reps. Only `--scan-roots` is needed to
+bail, so the scan-root test now precedes the token/slot resolution — **38ms**, discrimination
+unchanged across all six probe cases.
+
+**ONE PRESCRIPTION DID SEND AN AGENT TO A DENIED PATH, AND IT IS FIXED IN THE SAME CHANGE.**
+`code-reviewer.md` and `qa.md` prescribe `docs/reviews/s<N>/<story-index>-…md`, and the pipeline
+mints ids SPRINT-FIRST (`s306-1`), so an agent resolving `<story-index>` to the id writes
+`s312/s312-1-code-review.md` — measured NONCONFORMING with `s312/1-code-review.md` as the
+same-invocation conforming control. Both role files now state that the placeholder is the bare
+index. A deny whose remedy is a path core itself prescribes against is the shape that teaches an
+operator to turn a guard off.
 
 **Relation to I82.** `scripts/validate-enforcement-map.sh`'s I82 enforces this same grammar over
 what core PRESCRIBES, at prose time; I82b covers the adjacent blindness where a prescription names
 no sprint at all. Neither reaches a consumer's `Write`. The subjects are the same declaration and
 the mechanisms do not overlap.
 
-**Receipt.** The candidate's own receipt is a whole-file `grep` over the two guards, and it is
-PROSE-CLOSABLE — `validate-backlog-receipts.sh` scored it so on filing, which is correct: all three
-of the hooks that name this token today name it in a COMMENT, so a fourth comment would close this
-entry having changed nothing. Narrowed to non-comment lines, the same way `I84` narrows for the
-same reason. Scored across four inputs before landing: tip **1**, a copy of the guard carrying only
-a `# TODO: add an artifact-path grammar check here` comment **1** (the discriminating input — the
-unnarrowed form closes here), a copy carrying an executable call to the validator **0**, a stub
-with no `tool_input` **9**.
+**Receipt — REPLACED, because the filed one was closable by non-code AND refused the correct fix.**
+The original keyed a whole-file `grep` on the two named guards, narrowed to non-comment lines.
+`grep -v '^[[:blank:]]*#'` strips only WHOLE-LINE comments, so it was closable three ways that
+change nothing — measured: a trailing comment on a code line **0**, a dead variable
+`artifact_path_check_enabled=0` never read **0**, a heredoc body naming the token **0**. A dead
+variable closing the entry is precisely the failure the narrowing was added to prevent, one
+spelling over. And keying on those two filenames made it score **1** against a correct fix sited
+in a NEW hook — siting a mechanism by where a grep points is the tail wagging the dog.
 
-verify: sh a=core/hooks/ai-dlc-core-guard.sh; b=core/hooks/ai-dlc-gate-remediation-guard.sh; [ -f "$a" ] || exit 9; [ -f "$b" ] || exit 9; LC_ALL=C grep -q 'tool_input' "$a" || exit 9; LC_ALL=C grep -hv '^[[:blank:]]*#' "$a" "$b" | LC_ALL=C grep -qi 'artifact-path\|artifact_path' && exit 0; exit 1
+**AND THE FIRST REPLACEMENT WAS STILL CLOSED BY A GUARD THAT COULD NEVER RUN.** Keying on the
+EMISSION SITE plus the registration killed the prose forms but left five DEAD-GUARD states
+scoring 0, because all three conjuncts were lexical-presence tests: `permissionDecision` is
+satisfied by an `allow` emission, and naming the hook's basename anywhere in the template says
+nothing about WHICH matcher block holds it. The form now filed adds the deny VALUE
+(`permissionDecision[^)]*deny`), the `Write` tool gate, the token predicate, and a `jq` assertion
+that the hook sits in a `PreToolUse` block whose matcher actually matches `Write`.
+
+**Scored across nine inputs, every mutation asserted APPLIED in the same invocation** (two
+earlier readings were `sed` expressions that silently no-op'd and returned a meaningless 0 — the
+silent-unmutated-run defect, caught by a `cmp` guard): tip **0**; parent commit **1**; dead
+variable **1**; trailing comment **1**; UNREGISTERED **1**; deny emission deleted **1**;
+predicate INVERTED **1**; tool gate that can never match **1**; registered under a DEAD matcher
+**1**; guard that exits 0 immediately **1**; an unrelated allow-only hook resolving the same
+config with the real guard deleted **1**. The control that the grep can fire is
+`permissionDecision` in `ai-dlc-core-guard.sh`, which exits 9 if absent. The line as filed is
+byte-identical to the form scored, and runs verbatim from this file.
+
+verify: sh t=templates/settings.json.template; [ -f "$t" ] || exit 9; [ "$(LC_ALL=C grep -c 'permissionDecision' core/hooks/ai-dlc-core-guard.sh)" -gt 0 ] || exit 9; g=0; for f in core/hooks/*.sh; do b="${f##*/}"; n="$(LC_ALL=C grep -hv '^[[:blank:]]*#' "$f")"; printf '%s' "$n" | LC_ALL=C grep -q 'artifact-path-config\.sh' || continue; printf '%s' "$n" | LC_ALL=C grep -qE 'permissionDecision[^)]*deny' || continue; printf '%s' "$n" | LC_ALL=C grep -qF 'TOOL_NAME" = "Write"' || continue; printf '%s' "$n" | LC_ALL=C grep -qF 'TOKEN_RE" <<<"$BASE" || exit 0' || continue; jq -e --arg b "$b" '.hooks.PreToolUse[] | select(any(.hooks[]; .command | test($b))) | select(.matcher | test("(^|\\|)Write($|\\|)"))' "$t" >/dev/null 2>&1 || continue; g=1; done; [ "$g" -eq 1 ] && exit 0; exit 1
 
 
 ## BL-268 — `fork-profile.sh --section by-line` misattributes forks across arm boundaries on bash 3.2, and the by-arm table inherits it
