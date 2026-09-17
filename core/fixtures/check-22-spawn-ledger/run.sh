@@ -1081,9 +1081,17 @@ gv_flags() { # -> the published flag list, one line, from the fenced block only
   # second puts the literal ``` on the end of the command line; both the published run and
   # its no-probe control then die of a syntax error at rc=1, the two agree, and the arm
   # reports "not discriminating" — a broken extractor reading exactly like the defect.
+  # AND THE CONTINUATION IS HONOURED, NOT STRIPPED BLINDLY. An extractor that removes every
+  # trailing `\` and joins the lines is MORE FORGIVING THAN A SHELL: a block whose continuation
+  # was dropped mid-command still reassembles here into a valid command line, so the arm passes
+  # while a consumer copy-pasting that block loses every flag after the break. Measured on this
+  # branch, by the tip adversary and reproduced here: deleting the `\` after `--probe` leaves
+  # `--settings .claude/settings.json` orphaned on its own line, and the old extractor still
+  # scored C2b green. A line inside the fence that does NOT end in `\` therefore ENDS the
+  # command, exactly as the shell would read it.
   LC_ALL=C awk '/^scripts\/ai-dlc\/validate-spawn-ledger\.sh/{p=1}
                 p && /^```/{exit}
-                p{gsub(/\\$/,""); b=b $0 " "}
+                p{ cont = /\\$/; gsub(/\\$/,""); b = b $0 " "; if (!cont) exit }
                 END{printf "%s", b}' "$1"
 }
 GVF="$(gv_flags "$GV")"
