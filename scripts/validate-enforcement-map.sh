@@ -1989,11 +1989,19 @@ I59_UNDOC_AWK='
   BEGIN {
     while ((getline fn < FLIST) > 0) {
       nm = 0
+      nread = 0
       delete modes
       delete documented
+      # A FILE THAT COULD NOT BE OPENED IS COUNTED, NOT SKIPPED. `getline < fn` returns -1
+      # on an unreadable or absent file and 0 on an empty one, and awk raises nothing for
+      # either -- so a corpus the caller LISTED but this loop never READ would report the
+      # same clean line as a fully-scanned one, while the floor guard below counts the LIST.
+      # The shell form this replaced could not have this bug: `grep` wrote to stderr. Any
+      # count reaching the caller must be about what was SCANNED.
       while ((getline line < fn) > 0) {
+        nread++
         lines[++nl] = line
-        if (match(line, /^[ \t]*(--?[a-z][a-z0-9-]*\|)*--?[a-z][a-z0-9-]*\)/)) {
+        if (match(line, /^[[:space:]]*(--?[a-z][a-z0-9-]*\|)*--?[a-z][a-z0-9-]*\)/)) {
           seg = substr(line, RSTART, RLENGTH)
           gsub(/[ \t)]/, "", seg)
           n = split(seg, parts, "|")
@@ -2008,7 +2016,7 @@ I59_UNDOC_AWK='
       close(fn)
       for (i = 1; i <= nl; i++) {
         line = lines[i]
-        if (line ~ /^[ \t]*#/ || index(line, "usage")) {
+        if (line ~ /^[[:space:]]*#/ || index(line, "usage")) {
           for (m in modes) if (index(line, m)) documented[m] = 1
         }
       }
@@ -2017,15 +2025,26 @@ I59_UNDOC_AWK='
       for (i = 1; i <= nm; i++) for (j = i + 1; j <= nm; j++)
         if (order[j] < order[i]) { t = order[i]; order[i] = order[j]; order[j] = t }
       for (i = 1; i <= nm; i++) if (!(order[i] in documented)) printf "%s\t%s\n", fn, order[i]
+      if (nread > 0) scanned++
       nl = 0
       delete lines
       delete order
     }
     close(FLIST)
+    # The SCANNED count, to its OWN FILE rather than to stdout or stderr: stdout is the
+    # finding set and stderr belongs to the validator itself, so a count on either is a value
+    # some other reader has to learn to ignore. An empty file legitimately reads 0 lines, so
+    # this counts files that yielded at least one line.
+    #
+    # NO APOSTROPHE ANYWHERE IN THIS PROGRAM. It is a single-quoted shell literal, so one
+    # apostrophe in a comment closes it and the rest of the program executes as shell. The
+    # first draft of this block did exactly that, in a possessive form of the word validator,
+    # and the second draft did it again while WARNING about it by quoting the offending word.
+    if (SCANFILE != "") printf "%d\n", scanned + 0 > SCANFILE
   }
 '
-i59_undocumented_batch() { # <file list> -> "<path>\t<undocumented mode>" per line
-  awk -v FLIST="$1" "$I59_UNDOC_AWK" < /dev/null
+i59_undocumented_batch() { # <file list> [scan-count file] -> "<path>\t<undocumented mode>" per line
+  awk -v FLIST="$1" -v SCANFILE="${2:-}" "$I59_UNDOC_AWK" < /dev/null
 }
 # `i59_modes_of` IS GONE RATHER THAN KEPT BESIDE THE AWK, and the deletion is required, not
 # tidiness. Left in place it is a function nothing calls, and this fixture's ARM 2 mutation
@@ -2078,6 +2097,7 @@ else
   i59_n=0
   i59_files=0
   i59_flist="$(mktemp)"
+  i59_scanned_f="$(mktemp)"
   find "$REPO_ROOT/core" -type f -name '*.sh' -not -path "$REPO_ROOT/core/fixtures/*" | sort > "$i59_flist"
   # COUNTED FROM THE LIST, not from the loop below, because the loop now iterates
   # FINDINGS rather than files and a corpus of 100 clean scripts emits no rows. Counting
@@ -2092,10 +2112,19 @@ else
     i59_undoc="${i59_undoc}
   ${i59_f#"$REPO_ROOT/"} $i59_m"
     i59_n=$((i59_n + 1))
-  done < <(i59_undocumented_batch "$i59_flist")
-  rm -f "$i59_flist"
+  done < <(i59_undocumented_batch "$i59_flist" "$i59_scanned_f")
+  i59_scanned="$(cat "$i59_scanned_f" 2>/dev/null)"
+  case "$i59_scanned" in ''|*[!0-9]*) i59_scanned=-1 ;; esac
+  rm -f "$i59_flist" "$i59_scanned_f"
   if [ "$i59_files" -lt 20 ]; then
     err "I59 found only $i59_files shipped script(s) under core/ to scan. The corpus is derived by find; a count this low means the tree is not the one this runs against, and an empty corpus reports the same clean line as a documented one."
+  elif [ "$i59_scanned" -ne "$i59_files" ]; then
+    # THE FLOOR ABOVE COUNTS THE LIST; THIS COUNTS WHAT WAS READ, AND THEY ARE TWO CLAIMS.
+    # `getline < fn` returns -1 on an unreadable or absent file and raises nothing, so a
+    # corpus that was listed and never opened reports the same clean line as a scanned one --
+    # measured, 3 files listed and 2 scanned at awk exit 0 with an empty stderr. The shell
+    # form this replaced could not hide it because `grep` wrote to stderr.
+    err "I59 listed $i59_files shipped script(s) under core/ but SCANNED only $i59_scanned. The difference is files the extraction could not open — unreadable, deleted between the find and the read, or empty — and every mode in them went unchecked while the finding set below reported clean."
   elif [ "$i59_n" -ne 0 ]; then
     err "I59 found $i59_n dispatched mode(s) documented nowhere in their own file:$i59_undoc
   Each is a mode that exists and cannot be discovered. Name it in the script's usage block — an operator who reads that block and concludes the mode is absent files a correct instruction as a defect, which is the v0.213.1 case this invariant was derived from."
@@ -2203,7 +2232,7 @@ I60_GHOST_AWK='
     if (path in loaded) return
     loaded[path] = 1
     while ((getline line < path) > 0) {
-      if (match(line, /^[ \t]*(--[a-z][a-z0-9-]*(=[a-zA-Z0-9|-]*)?\|)*--[a-z][a-z0-9-]*(=[a-zA-Z0-9-]*)?\)/)) {
+      if (match(line, /^[[:space:]]*(--[a-z][a-z0-9-]*(=[a-zA-Z0-9|-]*)?\|)*--[a-z][a-z0-9-]*(=[a-zA-Z0-9-]*)?\)/)) {
         seg = substr(line, RSTART, RLENGTH)
         gsub(/[ \t)]/, "", seg)
         n = split(seg, parts, "|")
