@@ -63,11 +63,14 @@ sort -k2,2nr "$D" | head -3                                                  # t
 awk '{s+=$2; n++} END{printf "%d over %d units, sum/12 = %.1f\n", s, n, s/12}' "$D"   # the floor
 ```
 
-Measured at `v0.589.0`, full 202-fixture dispatch under `AI_DLC_FIXTURE_NO_SKIP=1`, pool 12:
-pole **504s**, total **5637 pool-seconds**, floor **`sum/12` = 469.8s**. The gap between the two
-is **~34s**, and **that gap is all any pole work can ever return.** Zero out the pole entirely and
+Re-derived at `v0.591.0`, full 202-fixture dispatch under `AI_DLC_FIXTURE_NO_SKIP=1`, pool 12:
+pole **501s**, total **5591 pool-seconds**, floor **`sum/12` = 465.9s**. The gap between the two
+is **~35s**, and **that gap is all any pole work can ever return.** Zero out the pole entirely and
 the suite still cannot finish faster than the floor. **The suite is WORK-BOUND with essentially no
-scheduling headroom left, which is the strongest form of the ruling below.**
+scheduling headroom left, which is the strongest form of the ruling below.** (At `v0.589.0` the
+same three read 504s, 5637 and 469.8s — a batch that shipped two releases moved none of them
+outside the wobble the caveats below describe, which is itself the point: neither release
+targeted total work.)
 
 **THE FLOOR MOVES WHEN WORK IS REMOVED, AND THAT IS THE WHOLE POINT.** It was `sum/12` = 543.9s at
 `v0.587.0` and is 469.8s now, against a total that went 6527 → 5637 pool-seconds. Read that
@@ -170,13 +173,46 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    (PARTIAL, `0.587.0` — the surviving shapes are listed in the discharged record below). Profiled
    and found NOT to have this shape: `gate-adjudication-mutants`, where git is absent by design and
    the awk/grep repetition is spread across 21 independently-necessary sandbox reruns.
-   **Not yet profiled: `self-update-gate`**, where a first census read 9032 git calls / 1091
-   distinct with one sha re-verified 79-86 times per run — the same shape as the three fixes
-   already taken.
+   **`self-update-gate` WAS PROFILED AT `v0.590.0` AND IT IS NOT THIS SHAPE. DO NOT TAKE IT AS
+   ACTION 1's NEXT TARGET.** The 9032 git calls / 1091 distinct reproduce exactly (PATH-shadowed
+   wrapper, control 1, rc 0, 188 assertions green) — but the redundancy is ACROSS invocations, in
+   separate processes, not inside one. **One invocation is 92 calls / 71 distinct = 1.30x**, and
+   the fixture drives ~98 of them (9032/92 = 98.2), 85 being safe-stop sub-walks. Compare
+   `ledger-reverify.sh`, the shape the three completed fixes share: 366 calls resolving to 112
+   distinct INSIDE one process, which a per-process memo cut to 133. A memo here buys ~21 calls
+   of 92 and cannot reach across the other 97 invocations. Timed on this tree: **1.08s per
+   invocation, 0.24s with `AI_DLC_GATE_IN_SAFE_STOP=1`** (3 reps each, disjoint ranges) — so its
+   cost is invocation COUNT, set by the release range `seed.sh` derives, and the lever is the
+   range or the walk, never a memo.
 
-   **Inside the validator the remaining arms are `I82` 653, `I33b` 645, `I84` 527 and `I75` 446**,
-   of a total of 4769. Re-derive that table before choosing — it is the only ranking that has
-   predicted anything here:
+   **THE LESSON GENERALISES AND IS THE REASON THIS CORRECTION IS HERE RATHER THAN DELETED: a
+   whole-fixture total/distinct ratio does not tell you which shape you have.** 8.28x across a
+   fixture and 1.30x within its unit of work are the same headline number and opposite subjects.
+   Take the census of ONE invocation before scoping a memo.
+
+   **Inside the validator the remaining arms are `I82` 657, `I33b` 645, `I84` 527 and `I75` 446**,
+   of a total of 4774 (`FORK_BUDGET` 4777 since `v0.590.0`). Re-derive that table before choosing
+   — it is the only ranking that has predicted anything here:
+
+   **AND DO NOT SCOPE AN ARM FROM A `--section by-line` CITATION WITHOUT CHECKING THE LINE IS AN
+   EXECUTABLE FORK SITE IN THAT ARM — `BL-268`.** On bash 3.2 a `<(...)` body reports its
+   commands' line number as the enclosing if/elif/fi chain's CLOSING line, so `by-line` can name
+   a bare `fi` and `--arm-lines` then buckets those forks into whichever arm's range contains it.
+   Measured: `tr 94` was read as I84's cost; I84 holds ZERO `tr` and the site is I82's
+   per-component split. One column understated, its neighbour inflated, nothing announcing it.
+
+   **`I75` HAS NO FIXTURE AT ALL AND EMPTY FINDING SETS — `BL-269`.** 33 fixtures name the
+   validator; `i75_norm`, `i75_chain` and `i75_failsclosed` return 0 each, and `i75_drift`/
+   `i75_open` are empty on a clean tree, so a before/after comparison compares two empty sets.
+   Build its oracle BEFORE batching it. Its per-subject `shasum` also cannot collapse into awk;
+   the tractable form is dropping the hash for a direct text compare.
+
+   **THE SEPARABILITY, from a contract adversary that attacked this four-arm cut before anything
+   was built:** `(I82 + I84)` first — both have real non-empty intermediates and no external
+   anchor; then `(I33b + its A27 edit)` — `enforcement-map-derivations/run.sh` anchors A27 by
+   REGEX onto `i33b_scan`'s per-variable `grep -qE`, so batching without co-editing it fails the
+   push as `FIXTURE BROKEN`, reading like an unrelated regression; then `(I75 + a new fixture)`.
+   Three releases, not one four-arm commit.
 
    ```
    W=$(mktemp -d); git worktree add -q --detach "$W/wt" HEAD    # CLEAN tree: the main checkout
@@ -189,8 +225,9 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    the wall the suite now sits against. Every past pole win was bought this way and that is why
    the floor is where it is.
 
-   **Work concentrates, which is what makes this tractable:** top 10 units are **41.6%** of all
-   pool-seconds, top 20 are **57.8%**. Re-derive both before scoping — the membership moves, these
+   **Work concentrates, which is what makes this tractable:** top 10 units are **40.7%** of all
+   pool-seconds, top 20 are **57.9%** (re-derived at `v0.591.0`; 41.6/57.8 at `v0.589.0`).
+   Re-derive both before scoping — the membership moves, these
    two figures sat one release stale until action 3b re-ran them from a worktree, and they swing
    with the run: one tree read 42.0/60.3 and 46.3/64.8 from two different gate runs, so they
    rank targets and do not size them:
@@ -350,6 +387,74 @@ ruling stands until the operator replaces it: **the subject is removing work, no
 killed them, and both sections are kept in full below because their hazard notes are the reason
 to read them if the numbers ever change back.
 ### Discharged — do not re-execute
+
+**BATCH 123 SHIPPED TWO RELEASES — `v0.590.0` (`e42340fd`) AND `v0.591.0` (`ec959797`) — AND ITS
+SUBJECT WAS NOT THIS PLAN.** The operator ruled the scope: the six candidates that exist ONLY on
+the consumer's SPRINT branch, re-derived at `8990d8cad`. That ref carries **53** live candidates
+against `main`'s **62**; the worklist stays 17 but its MEMBERSHIP moves, and three entries a
+main-keyed sweep cannot surface (`BL-260`, `BL-261`, `BL-263`) say so in their own text. The
+plan's own `lids()` block already mandates the sprint tip and records that batch 85 got this
+wrong twice in one session; a hand elected `main` anyway and the lead took it. **Read the block,
+not the hand.**
+
+**THREE OF THE SIX NEEDED NO WORK, AND THAT IS A DELIVERY FACT, NOT A DEFECT.** `BL-259` and
+`BL-262` landed at `0.584.0`, `BL-254`'s code half at `0.578.0` — all inside the consumer's
+unpulled `0.582.0`→`0.589.0` gap, so they read as live upstream because the consumer is eight
+releases behind. `BL-254` stays OPEN and headed `DEFECT` deliberately: it was filed AT that
+release for the residual half no predicate resolving against this tree can observe. A first
+draft of the release note called all three "landed"; the tip adversary caught it.
+
+**`v0.590.0` — Check 22's effort arm could not fire at the gate its own step file publishes.**
+`probe_effort()` returns empty without a readable `--probe`, so every row landed in
+`EFFORT_PENDING` and none reached `VIOL`. The published invocation passed three flags and no
+probe. Measured end to end, one seeded row (`effort_bound: high` against a probe recording
+`low`): **rc=1 with the probe, rc=0 without**, same ledger and settings, reproduced in a real
+`install.sh` consumer tree. `--probe` sits BEFORE `--settings` because `BL-263`'s receipt stops
+collecting at that flag — placed after it the fix is real and the receipt still reads 1.
+
+**THE FIXTURE COULD NOT HAVE SEEN IT, WHICH IS THE PART TO CARRY FORWARD.** Every arm built its
+own command line with `--probe` already on it, so **zero arms joined the published invocation to
+the validator** (control: 3 name the validator at all) while all 55 assertions were green. `C2b`
+now EXECUTES the fenced block — a grep for the token is satisfied by the prose around it, which
+carries `--probe` four times.
+
+**AND THAT ARM'S EXTRACTOR WAS WRONG TWICE, BOTH TIMES IN THE DIRECTION THAT READS AS WORKING.**
+First it appended the closing ``` before testing for it, so both sides died of a syntax error at
+rc=1 and the arm reported "not discriminating" — a broken extractor indistinguishable from the
+defect it hunts. Then, caught by the tip adversary: stripping every trailing `\` and joining
+made it MORE FORGIVING THAN A SHELL, so a block whose continuation was deleted mid-command still
+reassembled into a valid command line and scored green, while a consumer copy-pasting it loses
+every flag after the break. **An arm that executes a documented command is only as good as its
+transcription of that command.**
+
+**`v0.591.0` — a session with zero captured requests is now NAMED.** `BL-261`'s buildable half:
+`validate-request-coverage.sh --session <id>` refuses with exit 2 when the capture holds no entry
+for it. PENDING-shaped and opt-in, so Check 33's published invocation is byte-unaffected — a
+fail-closed default would wedge live work. The ALLOW TWIN is the arm that matters: a session the
+capture DOES hold exits 0 on the same command line, because a deny arm alone cannot tell a
+correctly-keyed guard from one refusing everything. The root cause is NOT established and the
+entry says so.
+
+**A PROSE-ONLY COMMIT MOVED THE FORK COUNT, AND THE GATE CAUGHT IT.** `0.590.0` touched no code
+in `validate-enforcement-map.sh` and still breached `FORK_BUDGET` by one. The documented path
+`_bmad-output/subagent-context.jsonl` sits under a declared scan root, so I82's extractor pulled
+it into `i82_seen` and charged two `grep -qE` per component: **I82 653 → 657, total 4769 → 4774**.
+Budget 4773 → 4777, with base measured at 4769 in a clean worktree to prove the delta was the
+branch's. **A DOCUMENTED PATH IS A CORPUS ENTRY HERE.**
+
+**`agent-definition-render`'s "rare flake" IS A ~90% CONCURRENCY DEFECT, AND IT BELONGS TO
+`main`.** It went red on a gate run and was nearly dispositioned as the `BL-230` class on nine
+green solo runs. **The solo runs are the outlier.** An 8-run sweep predicts 0.27 events at the
+rate `BL-258` claims — below one, so that clean sweep could not discriminate and was discarded
+rather than read as an acquittal. At a discriminating N: solo 0/9, width-12 5/12, **29/32 at tip
+and 29/32 at base**. Identical at the same N is what establishes ownership. Lead: `mut()`'s
+`cp "$SUBJ_DIR"/*` copies the LIVE `core/scripts/` per mutant while 105 fixtures naming that path
+share the pool — the destination is a private `mktemp -d`, the source is not. `BL-258` widened;
+the mutant and its entanglement check stay as they are.
+
+**TWO CONTRACT FINDINGS ABOUT THIS PLAN'S OWN ACTION 1 WERE FILED AS `BL-268` AND `BL-269`**, from
+an adversary that attacked the four-arm cut before anything was built. They are summarised in
+action 1 above and are the reason its arm table now carries a warning.
 
 **BATCH 122 ALSO SHIPPED `v0.589.0` (`bc1d75b7`, PR #789) — A CORRECTION, AND THE TIP ADVERSARY
 FOUND BOTH HALVES OF IT ON A GATE-GREEN BRANCH.**
