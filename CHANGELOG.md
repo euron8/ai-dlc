@@ -15,6 +15,41 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.590.0] - 2026-09-16
+
+### Check 22's effort arm could not fire at the gate its own step file publishes
+
+Found by the batch-118 contract adversary, filed as `BL-263`, and carried by the consumer as
+`PC-S312-CHECK22-NO-CLEARING-PATH-FOR-19B-CITATION-MISS`'s sibling. The batch-118 fix took the
+weaker of the two forms on offer — a sentence saying the arm is probe-only — and this takes the
+other one.
+
+**`probe_effort()` returns empty unless `--probe` names a readable file**, so every row lands in
+`EFFORT_PENDING` and none can reach `VIOL`. The invocation `gate-validation.md` published passed
+`--ledger`, `--sprint` and `--settings` and no `--probe`, so a consumer running the gate's own
+command got a clean-looking verdict over an arm that never ran. The route existed in the
+validator and was seeded in `core/fixtures/check-22-spawn-ledger` with `--probe`, so every
+fixture arm was green over a gate that could not reach it.
+
+**Measured end to end, one seeded row, `effort_bound: high` against a probe row recording
+`low`:** rc=**1** with the probe and rc=**0** without it, same ledger and same settings. The
+published invocation now passes `--probe _bmad-output/subagent-context.jsonl`, sited BEFORE
+`--settings` because `BL-263`'s own receipt stops collecting at that flag — placed after it, the
+fix is real and the receipt still reads 1. Receipt scores 0 at this tip and 1 at the parent.
+
+That file is written by `ai-dlc-subagent-probe.sh` into the same `_bmad-output/` the ledger
+lives in, is registered in the settings template, and its rows carry the `tool_use_id` the join
+keys on. An absent or unreadable probe stays PENDING rather than failing, so the flag is safe on
+every run, including before the sprint's first teammate returns; the `COUNTS:` line names which
+state it was in, and a run reporting `no --probe was passed` is to be read as "the effort
+comparison did not happen", never as a pass.
+
+**Scoped against the consumer's SPRINT branch, not its `main`.** The candidate set was
+re-derived at `8990d8cad`: 53 live against `main`'s 62, and six candidates exist only on that
+ref. Of those six, `BL-259` and `BL-262` landed at `0.584.0` and `BL-254` at `0.578.0` — all
+three inside the consumer's unpulled `0.582.0`→`0.589.0` gap, so they read as live upstream
+because the consumer is eight releases behind, not because anything is owed.
+
 ## [0.589.0] - 2026-09-16
 
 ### The two awk ports were not semantics-preserving, and the I59 corpus scan could skip a file silently

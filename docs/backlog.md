@@ -3733,8 +3733,18 @@ verify: sh d=core/scripts; [ -d "$d" ] || exit 9; f=$(grep -lE 'operator-request
 
 ## BL-263 — Check 22's effort-mismatch route is unreachable under the invocation the step file publishes
 
+**LANDED (v0.590.0, verified 803ccc69).** The published invocation now passes
+`--probe _bmad-output/subagent-context.jsonl`, sited BEFORE `--settings` because the receipt's
+own `awk` stops collecting at that flag. Driven end to end on one seeded row whose
+`effort_bound` is `high` and whose probe row records `low`: **rc=1 with the probe and rc=0
+without it, same ledger, same settings** — so the arm was genuinely unreachable at the gate and
+now fires. The file is written by `ai-dlc-subagent-probe.sh` into the same `_bmad-output/` the
+ledger lives in, is registered in the settings template, and its rows carry the `tool_use_id`
+`probe_effort()` joins on. An absent probe stays PENDING rather than failing, so the flag is
+safe on every run including before the sprint's first teammate returns.
+
 **NOTE.** Found by the batch-118 contract adversary while attacking the clearing-path fix for
-`PC-S312-CHECK22-NO-CLEARING-PATH-FOR-19B-CITATION-MISS`. Not fixed here.
+`PC-S312-CHECK22-NO-CLEARING-PATH-FOR-19B-CITATION-MISS`.
 
 `core/scripts/validate-spawn-ledger.sh` has four routes into its `VIOL` counter. The effort route
 (`records effort=`, near `:556`) is gated on `PROBE_READABLE` (`:379-382`), which is true only when
