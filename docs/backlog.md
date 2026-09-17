@@ -3833,6 +3833,59 @@ first.
 verify: sh f=core/skills/ai-dlc/steps/gate-validation.md; [ -f "$f" ] || exit 9; LC_ALL=C awk '/validate-spawn-ledger\.sh/{p=1} p && /--settings/{print; exit}' "$f" | grep -q . || exit 9; LC_ALL=C awk '/validate-spawn-ledger\.sh \\?$/{p=1} p{b=b $0 "\n"} p && /--settings/{exit} END{printf "%s", b}' "$f" | LC_ALL=C grep -qE -- '--probe' && exit 0; exit 1
 
 
+## BL-272 — `fork-profile.sh --section by-line` prints 60 of its rows and says nothing, so a by-line sum is silently partial and disagrees with the by-arm column it should equal
+
+**DEFECT.** Found by summing `--section by-line` per arm range, reading the result against the
+by-arm column, and taking the difference for a `BL-268` misattribution artifact. It was not one.
+**The by-line section is truncated and the header above it is identical to an untruncated one.**
+
+**The site.** `scripts/fork-profile.sh:360` is `head -60 "$RUN/by-line"`, under the header
+`--- forks-by-line ---` printed at `:359`. The full file holds **926** rows at this tip; the
+section prints **60**. Nothing in the output says which it is, and there is no count, no ellipsis
+and no total beside it.
+
+**THE ASYMMETRY IS WHAT MAKES IT WRONG RATHER THAN MERELY TERSE.** `emit_by_arm` is unbounded — it
+emits all **115** arm rows. So `--section all` prints a COMPLETE by-arm table beside a
+SILENTLY PARTIAL by-line table, under two headers of the same shape, and the natural reading is
+that both describe the same run at two granularities. They do, but only one of them is whole.
+
+**Measured, and it is the reason this is filed rather than noted.** Summing the printed 60 rows
+into the arm ranges resolved from `render-invariant-index.sh --arm-lines` gives
+`I82=642 I82b=0 I99=95 I83=129 I84=512`. Summing the same ranges over the untruncated file from
+`--dump` gives `I82=657 I82b=9 I99=97 I83=134 I84=527` — **byte-identical to the by-arm column**.
+The first reading invents a per-arm discrepancy of exactly the tail it could not see, and that
+discrepancy reads as a known, filed, real defect (`BL-268`) rather than as an instrument artifact.
+It cost a contract three wrong numbers before anything was built: a removable-fork target of 1108
+against a true 1203, a landing of ~3670 against a true 3571, and an arm attribution that moved 95
+forks out of I82 and into I99. Every done-when threshold keyed on those was unreachable.
+
+**`--dump` IS THE UNTRUNCATED SOURCE AND NOTHING SAYS SO.** `--dump <dir>` writes `by-line`,
+`by-arm` and `trace` whole. It appears in the usage line and nowhere else: the header comment
+explains `@N@`, the known undercount, and why the instrument is dynamic, and never mentions that
+the printed section is a preview. A reader who wants a sum has no way to learn from the program
+that the thing on screen is not it.
+
+**What is owed.** Any of three, and the cheapest is the first: print the row count and the total
+beside the header (`60 of 926 rows shown; --dump for all`), or emit the whole file as `by-arm`
+already does, or fail the section when a caller sums it. `BL-268`'s own remedy text — mark what is
+structurally unreliable rather than leaving a reader to take it — is the same shape and the two
+should be read together.
+
+**Relation to `BL-268`.** Distinct defects that produce one symptom. `BL-268` is a real
+`LINENO` artifact in which a `<(...)` body's forks are attributed to the enclosing chain's closing
+line; it is live at this tip (95 `tr` forks report at bare `fi` line 7132, while line 6838 — the
+only `tr` site in the range, negative control 0 — reports none). This entry is a display bound. A
+reader who hits both at once, as one did, reconciles the truncation artifact by blaming the
+attribution one and stops looking.
+
+**Receipt.** Keys on the emission site, not on prose about it, and not on the row counts — those
+move with the corpus. Scored before filing across four inputs: tip **1**, the section rewritten to
+`cat` **0**, a file mentioning `head -60 "$RUN/by-line"` only inside a comment **0**, a stub with
+no `forks-by-line` header **9**. Exit 9 if the profiler or that header is gone.
+
+verify: sh f=scripts/fork-profile.sh; [ -f "$f" ] || exit 9; LC_ALL=C grep -q 'forks-by-line' "$f" || exit 9; LC_ALL=C grep -qE '^[[:blank:]]*head -[0-9]+ "\$RUN/by-line"' "$f" && exit 1; exit 0
+
+
 ## BL-270 — the drain plan's ledger-ref election gates on an ancestor arm no branch can satisfy, so it always falls back to `main` and reports "no filings ahead" with every control green
 
 **DEFECT.** Found by running the derive block in
