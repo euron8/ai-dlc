@@ -15,6 +15,94 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.592.0] - 2026-09-17
+
+### The two arms left at the top of the by-arm table, and a fork-free rewrite refused on measurement
+
+`scripts/validate-enforcement-map.sh` total **4774 → 3827 forks**, `--stable` in a CLEAN
+`git worktree` both sides, spreads 4774-4774 and 3826-3827, stdout and stderr byte-identical
+to base. `FORK_BUDGET` 4777 → 3833. The suite runs this validator well over a hundred times
+per full push.
+
+**I82 657 → 61.** `i82_is_sprint_token` forked two `grep -qE` per COMPONENT across 316
+components; it is now `[[ =~ ]]`, the transform `I82b` one arm down already uses and whose
+header already carried the reason. **The RHS is unquoted on purpose and quoting it inverts the
+arm** — inside `[[ =~ ]]` a quoted right-hand side is a LITERAL, so every exemption would miss
+and every conforming prescription would be reported. Scored against the arm's own nine probes
+as failure counts: this form **0**, the quoted form **7**, the slot expression stripped of its
+anchors **4**, the exemption dropped **1** — with never-flags at 7 and always-flags at 2 as the
+two controls, and 0 disagreements against the shipped predicate across 24 inputs.
+
+**The five "intermediate sets" are not an oracle and were nearly used as one.** Areas, roots,
+paths, components and dirs are all computed BEFORE the predicate is first called and are not
+functions of it, so they agree between any two implementations — including the quoted-RHS port
+this release warns about. The live corpus is fully conforming and holds no discriminating input
+at all. What discriminates is the arm's own in-body probes.
+
+**The per-path split was a `printf | tr` per path across 95 paths**, now parameter expansion.
+**Those forks did not report at that line, which is why `I82b`'s own pass missed them**: on bash
+3.2 a `<(...)` body reports its `LINENO` as the enclosing if/elif/fi chain's CLOSING line, so all
+95 attributed to a bare `fi` two arms down and `--arm-lines` bucketed them into `I99` — an arm
+holding no `tr` at all. That is `BL-268`, and this is the site it was hiding.
+
+**I84 527 → 271, and it is DELIBERATELY NOT FORK-FREE.** The in-shell `read` loop removes all
+508 of its forks and is **3.7x slower** on the real corpus — 127 files, 78011 lines, interleaved
+reps: shipped **439-480ms** against in-shell **1698-2028ms**, every form agreeing on hits. The
+shipped shape pays its forks and scans in C; the fork-free shape runs 78011 bash loop iterations.
+**A fork budget cannot see that**, so the lower number would have bought a wall-clock regression
+measured in a currency the gate does not read. Folding each predicate's `grep -v | grep -q` into
+one `grep -qE` removes 3 of 4 forks per file and is slightly faster than both.
+
+**The comment narrowing is spelled as a prefix and its optional group is load-bearing.**
+`^[[:blank:]]*([^#[:blank:]].*)?` — without the `?` the form is a FALSE NEGATIVE when the path
+starts at column 0 (shipped 1, that form 0). Agreement measured at **0 disagreements across all
+127 corpus files** plus five seeded boundary cases: column-0, indented, `#` comment,
+space-then-`#` comment, tab-indented. `[[:blank:]]` and not `[ \t]`, which is the two-member
+class that shipped a false finding at `0.588.0`.
+
+It also closes the `I54` shape latent in the old form: both predicates fed `grep -q` from a pipe,
+which under `pipefail` answers with the writer's EPIPE on a MATCH. This file sets `set -u` and
+not `pipefail`, so it never bit.
+
+**A FORK COUNT IS A PROXY FOR COST AND NOT THE COST.** Whole-validator wall clock, from inside
+the repo, 3 reps each: base **46.31/46.30/46.63s**, tip **43.48/44.07/43.54s** — non-overlapping.
+Budget from the HIGH reading plus the usual 6; the admissible range at this measurement is
+3827..5467, so A4's window is open and `m8` asserts that at the COMMITTED value.
+`validator-fork-budget` 6 arms green, 9/9 mutants killed.
+
+### `BL-272` — the instrument that picks which arm to optimise prints 60 of its 926 rows and says nothing
+
+`scripts/fork-profile.sh:360` is `head -60 "$RUN/by-line"` under a header identical in shape to
+an untruncated one, while `emit_by_arm` is unbounded and emits all 115 rows. So `--section all`
+prints a COMPLETE by-arm table beside a SILENTLY PARTIAL by-line table.
+
+**Measured, and it is why this is filed rather than noted.** Summing the printed 60 rows into arm
+ranges gives `I82=642 I82b=0 I99=95 I83=129 I84=512`; summing the untruncated file from `--dump`
+gives `657/9/97/134/527` — byte-identical to the by-arm column. The truncated reading invents a
+per-arm discrepancy of exactly the tail it cannot see, and that discrepancy reads as `BL-268`,
+which is real, filed, and live. It cost this batch's contract three wrong numbers before anything
+was built. `--dump` is the untruncated source and appears in the usage line and nowhere else.
+
+### `BL-270`, `BL-271` — the ledger-ref election cannot fire, and the candidate that hid behind it
+
+`docs/plans/graph-ledger-full-drain.md`'s election loop gates each candidate branch on
+`merge-base --is-ancestor main "$b"`. The consumer branches per sprint and `main` advances
+independently, so no branch contains it: **0 of 723 non-main local branches pass that arm, and
+178 of them carry a ledger.** The loop elects `main` every time.
+
+**It reads as a clean sweep** because the block's assertion arm is computed against the ref the
+loop ELECTED, so it compares `main` with itself and answers 0 by construction, while the presence
+control reads 62 because `main` does carry a ledger. Both controls pass and "filings ahead of
+main" prints empty.
+
+Scored over all 178 ledger-carrying branches with the gate removed and the batch-113 property arm
+alone, **3 qualify**, and the sprint branch is a strict superset — the union of all three
+branches' adds equals its own, both directions measured at 0. `BL-271` is the one candidate
+visible through no other ref: no `PreToolUse` hook checks the artifact-path grammar, so a
+non-conforming path is created by `Write` and caught only at `pre-push`, after other artifacts
+have cited it. Its first receipt scored PROSE-CLOSABLE — all three hooks naming the token name it
+in a comment — and was re-keyed on non-comment lines.
+
 ## [0.591.0] - 2026-09-16
 
 ### A session whose prompts were never captured is now a named state instead of a silent one

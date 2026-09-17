@@ -167,9 +167,11 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    On `ledger-reverify.sh` this read **366 total / 112 distinct**, with two blobs read 79 times
    each; memoizing took it to 133 git calls and the fixture from 306.81s to 215.21s SOLO.
 
-   **`self-update-gate` IS THE NEXT TARGET, AND SO IS FINISHING THE RECONCILE MEMO.**
+   **FINISHING THE RECONCILE MEMO IS THE NEXT TARGET.**
    Profiled so far: `ledger-reverify.sh` (done, `0.586.0`), I87 in the enforcement-map validator
-   (done, `0.587.0`), I60 and I59 in the same validator (done, `0.588.0`), `emit-report.sh`
+   (done, `0.587.0`), I60 and I59 in the same validator (done, `0.588.0`), I82 and I84 in the same
+   validator (done, `0.592.0` — 4774 → 3827 forks, and the arm table in the block above is the
+   post-cut one), `emit-report.sh`
    (PARTIAL, `0.587.0` — the surviving shapes are listed in the discharged record below). Profiled
    and found NOT to have this shape: `gate-adjudication-mutants`, where git is absent by design and
    the awk/grep repetition is spread across 21 independently-necessary sandbox reruns.
@@ -190,14 +192,43 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    fixture and 1.30x within its unit of work are the same headline number and opposite subjects.
    Take the census of ONE invocation before scoping a memo.
 
-   **Inside the validator the remaining arms are `I82` 657, `I33b` 645, `I84` 527 and `I75` 446**,
-   of a total of 4774 (`FORK_BUDGET` 4777 since `v0.590.0`). Re-derive that table before choosing
-   — it is the only ranking that has predicted anything here:
+   **Inside the validator the remaining arms are `I33b` 645, `I75` 453 and `I84` 271**, of a
+   total of 3827 (`FORK_BUDGET` 3833 since `v0.592.0`). `I82` is GONE from this table — 657 → 61
+   at `v0.592.0`, which also took `I84` 527 → 271. Re-derive before choosing — it is the only
+   ranking that has predicted anything here:
+
+   **`I33b` IS NOW THE TOP ARM AND ITS FIXTURE ANCHOR IS THE WHOLE DIFFICULTY.** The separability
+   ruling below says `(I33b + its A27 edit)` is one release: `enforcement-map-derivations/run.sh`
+   anchors A27 by REGEX onto `i33b_scan`'s per-variable `grep -qE`, so batching without
+   co-editing it fails the push as `FIXTURE BROKEN`, reading like an unrelated regression.
+   Re-derived at `v0.592.0`: that anchor resolves to exactly ONE line, 4211, against a negative
+   control of 0 — and 4211 is also the single hottest LINE in the file at 304 `sed` + 304 `sort`.
+
+   **`I75` HAS NO ORACLE AND `BL-269` SAYS SO.** It is second on this table and the one arm where
+   a batching rewrite has nothing to be equivalent to. Build the oracle first.
+
+   **A FORK COUNT IS A PROXY FOR COST, NOT THE COST, AND `v0.592.0` MEASURED THE DIVERGENCE.**
+   `I84`'s fork-free rewrite removes all 508 of its forks and is **3.7x SLOWER** — 127 files,
+   78011 lines, interleaved reps, shipped 439-480ms against in-shell 1698-2028ms with every form
+   agreeing on hits. The shipped shape pays forks and scans in C; the fork-free shape runs 78011
+   bash loop iterations. **`validator-fork-budget` cannot see that**, so a lower number there can
+   buy a wall-clock regression in the currency this plan exists to move. Time the whole validator
+   from inside the repo, 3 reps, beside any fork delta — base 46.31/46.30/46.63s, tip
+   43.48/44.07/43.54s at that release.
 
    **AND DO NOT SCOPE AN ARM FROM A `--section by-line` CITATION WITHOUT CHECKING THE LINE IS AN
    EXECUTABLE FORK SITE IN THAT ARM — `BL-268`.** On bash 3.2 a `<(...)` body reports its
    commands' line number as the enclosing if/elif/fi chain's CLOSING line, so `by-line` can name
    a bare `fi` and `--arm-lines` then buckets those forks into whichever arm's range contains it.
+   Measured again at `v0.592.0`: the 95 `tr` forks reporting at bare `fi` 7132 belonged to
+   `I82`'s line 6838, two arms up, and had been read as `I99`'s.
+
+   **THE PRINTED `--section by-line` IS 60 ROWS OF 926 AND SAYS NOTHING — `BL-272`. TAKE SUMS
+   FROM `--dump <dir>`, NEVER FROM THE PRINTED SECTION.** `emit_by_arm` is unbounded, so
+   `--section all` shows a COMPLETE by-arm table beside a SILENTLY PARTIAL by-line one. Summing
+   the printed rows invents a per-arm discrepancy of exactly the tail it cannot see, and that
+   discrepancy reads as `BL-268`. It cost `v0.592.0`'s contract three wrong numbers before
+   anything was built.
    Measured: `tr 94` was read as I84's cost; I84 holds ZERO `tr` and the site is I82's
    per-component split. One column understated, its neighbour inflated, nothing announcing it.
 
@@ -387,6 +418,40 @@ ruling stands until the operator replaces it: **the subject is removing work, no
 killed them, and both sections are kept in full below because their hazard notes are the reason
 to read them if the numbers ever change back.
 ### Discharged — do not re-execute
+
+**BATCH 124 SHIPPED `v0.592.0` AND IT IS ACTION 1 AGAIN — THE LAST TWO ARMS AT THE TOP OF THE
+BY-ARM TABLE, PLUS A REWRITE THIS RELEASE REFUSED.** Validator total **4774 → 3827 forks**,
+`FORK_BUDGET` 4777 → 3833, stdout and stderr byte-identical to base.
+
+**I82 657 → 61**, by the `[[ =~ ]]` transform `I82b` one arm down already used, plus parameter
+expansion for the per-path split. The nine in-body probes are the oracle: this form 0 failures,
+the quoted-RHS form 7, the anchors stripped 4, the exemption dropped 1, with never-flags 7 and
+always-flags 2 as controls.
+
+**THE FIVE "INTERMEDIATE SETS" ARE NOT AN ORACLE AND WERE NEARLY USED AS ONE.** Areas, roots,
+paths, components and dirs are all computed BEFORE the predicate is first called and are not
+functions of it, so they agree between any two implementations — including the quoted-RHS port
+this release warns about. The live corpus is fully conforming and holds no discriminating input.
+
+**I84 527 → 271, AND THE FORK-FREE FORM WAS REFUTED BY MEASUREMENT.** The in-shell `read` loop
+removes all 508 forks and is **3.7x SLOWER** — 127 files, 78011 lines, interleaved reps: shipped
+439-480ms against in-shell 1698-2028ms, every form agreeing on hits. **`validator-fork-budget`
+cannot see that.** Whole-validator wall clock, 3 reps each from inside the repo: base
+46.31/46.30/46.63s, tip 43.48/44.07/43.54s. A fork count is a proxy for cost and not the cost.
+
+**THE CONTRACT CARRIED THREE WRONG NUMBERS INTO THE ADVERSARY PASS, AND ALL THREE CAME FROM ONE
+TRUNCATION.** `fork-profile.sh --section by-line` prints 60 rows of 926 under a header identical
+to an untruncated one, while `emit_by_arm` is unbounded. Summing the printed rows invented a
+per-arm discrepancy of exactly the tail it could not see, and that discrepancy reads as `BL-268`
+— real, filed, live. Filed as `BL-272`. **Take by-line sums from `--dump <dir>`.**
+
+**`BL-268` IS ALSO LIVE AND THIS RELEASE FOUND ITS HIDDEN SITE**: 95 `tr` forks reporting at bare
+`fi` 7132 belonged to `I82`'s line 6838 two arms up, and had been read as `I99`'s.
+
+**FILED, NOT FIXED: `BL-270`, `BL-271`, `BL-272`.** The drain plan's ledger-ref election gates on
+`merge-base --is-ancestor main "$b"` and **0 of 723 non-main consumer branches pass it** while 178
+carry a ledger, so it elects `main` every time and its assertion arm — computed against the ref it
+elected — answers 0 by construction. `BL-271` is the one candidate visible through no other ref.
 
 **BATCH 123 SHIPPED TWO RELEASES — `v0.590.0` (`e42340fd`) AND `v0.591.0` (`ec959797`) — AND ITS
 SUBJECT WAS NOT THIS PLAN.** The operator ruled the scope: the six candidates that exist ONLY on
