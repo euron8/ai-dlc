@@ -3756,6 +3756,28 @@ first.
 verify: sh f=core/skills/ai-dlc/steps/gate-validation.md; [ -f "$f" ] || exit 9; LC_ALL=C awk '/validate-spawn-ledger\.sh/{p=1} p && /--settings/{print; exit}' "$f" | grep -q . || exit 9; LC_ALL=C awk '/validate-spawn-ledger\.sh \\?$/{p=1} p{b=b $0 "\n"} p && /--settings/{exit} END{printf "%s", b}' "$f" | LC_ALL=C grep -qE -- '--probe' && exit 0; exit 1
 
 
+## BL-267 — `I59_UNDOC_AWK` buffers a whole file into `lines[]`, so its memory cost is the largest corpus file rather than a constant
+
+The shell form this replaced read each file twice through `grep` and `awk`, streaming both
+times. The batched form holds every line of the current file in `lines[]` so the documentation
+pass can revisit them after the mode set is complete, and frees it per file (`delete lines`).
+
+**Bounded and small today, and that is a fact about the corpus rather than about the program.**
+The largest file in I59's corpus is well under a megabyte and the loop holds exactly one file at
+a time, so the ceiling is one file's lines, not the corpus. But nothing states that bound and
+nothing checks it, and `awk`'s failure mode on exhaustion is not a clean refusal.
+
+**What is owed.** Either a second pass over the file (re-`getline` from the start, trading one
+extra read for a constant memory profile) or an assertion that the largest corpus member is
+under a stated size. The first is the honest form: the arm already pays one `find` and the file
+is in page cache by then.
+
+**Tiered NOTE.** Nothing is wrong today and no guard is weakened; this records a
+characteristic the change introduced so that a future corpus growth is not a surprise.
+
+verify: sh v=scripts/validate-enforcement-map.sh; [ -f "$v" ] || exit 9; grep -q 'I59_UNDOC_AWK' "$v" || exit 9; LC_ALL=C grep -qE '^[[:blank:]]*lines\[\+\+nl\] = line$' "$v" || exit 0; exit 1
+
+
 ## BL-266 — `enforcement-map-sites`' I59 corpus mutation edits four arms' corpora and the battery can only see one of them
 
 **The sed is `-type f -name '*.sh' -not -path`, with no line address, and `sed` applies `s///`

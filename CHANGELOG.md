@@ -15,6 +15,49 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.589.0] - 2026-09-16
+
+### The two awk ports were not semantics-preserving, and the I59 corpus scan could skip a file silently
+
+Both found by the tip adversary on the gate-green `0.588.0` branch, both verified here by
+driving the shipped validator against the parent on a seeded tree with controls in both
+directions. **`0.588.0` claimed the documentation predicate was "preserved verbatim,
+deliberately". It was not, and this corrects that claim.**
+
+**`[ \t]` is not `[[:space:]]`.** Three regex literals in the two new awk programs — the I59
+mode grammar, the I59 comment test, and the I60 case-arm grammar — were written with a
+two-member class where the shell grammars they replaced used the six-member POSIX class.
+Measured end to end: a file whose `# Usage:` line is FORM-FEED indented and correctly documents
+its mode was reported as UNDOCUMENTED by the tip and silently by the parent — a false finding,
+exit 1, invented by the port. All three literals restored; both sides now silent on that file,
+and both still report a genuinely undocumented mode as the same-invocation control. The tab
+direction the adversary also flagged is refuted: `awk` compiles `\t` inside a literal regex, so
+both grammars match a tab-indented arm. `awk -v` is where the escape is stripped, which is why
+`i60_nc_form` already used the class.
+
+**`getline < file` returns -1 on an unreadable file and awk raises nothing.** The I59 floor
+counts the `find` LIST while the scan reads the FILES, so a corpus that was listed and never
+opened reported the same clean line as a scanned one — the shell form could not hide it because
+`grep` wrote to stderr. Measured: 3 files listed, 2 scanned, awk exit 0, stderr empty; and on a
+seeded tree with one corpus file at mode 000 the parent exits **0** while the tip now reports
+`listed 100 shipped script(s) under core/ but SCANNED only 99` and exits 1. Control with
+everything readable: silent.
+
+**A single-quoted awk literal cannot contain an apostrophe, including in its comments.** The
+first draft of the scan-count block closed the literal on a possessive form of "validator" and
+the second draft did it again *while warning about it*, by quoting the offending word. Both
+caught by `bash -n` and by `--arms I59` exiting 2 — the selector's own refusal path, working.
+
+Fork total 4767 → **4769**; the two fixes cost two forks and the budget of 4773 is unchanged.
+Filed `BL-267` for the one characteristic left standing: `I59_UNDOC_AWK` buffers a whole file
+into `lines[]`, so its memory profile is the largest corpus member rather than a constant.
+
+**Two adversary findings were refuted by measurement and are recorded so they are not
+re-derived.** The derived mutant tally counts **9** over a real green run, not 5 — `kill_j`'s
+own messages match the counter's grammar, verified by driving the shipped `note()` over the
+exact lines a green run emits. And `BL-265`'s receipt is not prose-satisfiable; both its anchors
+resolve to executing lines.
+
 ## [0.588.0] - 2026-09-16
 
 ### The enforcement-map validator's two largest arms stopped forking per item, and the fork gate's own floor arm was found to have killed the arm beside it
