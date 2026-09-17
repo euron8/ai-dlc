@@ -15,6 +15,145 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.593.0] - 2026-09-17
+
+### A sprint-token basename is refused at the `Write`, not four artifacts later
+
+`artifact-path-grammar.md` rule 2 reserves the `s<N>/` DIRECTORY as the only sprint slot, and
+`validate-artifact-paths.sh` has enforced it since it shipped — from exactly one call site, the
+consumer pre-push. That is opt-in, batched, and reached AFTER the file is committed, merged and
+cited. The measured episode: a reviewer wrote `docs/reviews/s312-story-2-1-gate1-review.md`,
+nothing stopped the `Write`, and three later artifacts quoted the path verbatim as their own
+evidence trail before `git push` caught it. New `core/hooks/ai-dlc-artifact-path-guard.sh`, a
+`PreToolUse` hook on `Write`, registered in the settings template and delivered to existing
+consumers by `settings-merge.sh` (measured: 0 hits before, 1 after, user keys preserved).
+
+**WHAT BEING LATE COSTS, MEASURED RATHER THAN ASSERTED: 62 HAND MIGRATIONS.** Population is the
+1882 paths ADDED under the scan roots after the 2026-08-07 grammar migration on the reference
+consumer, materialized in a scratch tree carrying that consumer's REAL grammar, `artifact-paths.md`
+and `layer-contract.yaml`, then judged by the SHIPPING validator — 1806 CONFORMING / 73
+NONCONFORMING / 3 AMBIGUOUS, resolver agreeing on the same 17 areas and 4 roots as the live tree.
+Joined against a 1192-pair rename map: **62 RENAMED onto the grammar by hand, 11 deleted, 0 still
+live.** 3.3% of writes, each one a migration somebody paid for after the fact.
+
+**THE DENY IS NARROWED TO THE BASENAME, AND THAT IS THE RELEASE.** The entry proposed refusing the
+whole MOVABLE class. Only **31 of the 73** are blamed on the basename being written; **42 are
+blamed on an ANCESTOR DIRECTORY** the author did not name in that call, 26 of them a correctly
+spelled `^s[0-9]+$` slot flagged for DEPTH alone. Denying a `Write` for a directory that already
+exists refuses a blameless basename and offers no action, so it does not.
+
+**AND THAT ANCESTOR CLASS IS NOT A STABLE POPULATION.** Declaring ONE depth-3 area moves the
+count **73 → 47**, and the 26 rows that flip are EXACTLY the ancestor-bare-slot class — set
+comparison empty in both directions, area sets asserted to differ (17 vs 18) BEFORE the verdicts
+were compared. Two legal remedies exist, move the slot or declare the area, and `I82b` already
+owns that under-specification.
+
+**A FIRST-ORDER PURITY TEST CANNOT SEE THAT, AND THE FIRST ONE TAKEN HERE DID NOT.** Judging one
+path alone in an empty tree returns an identical verdict, and dropping the consumer file entirely
+ALSO returns 73 — the inference loop at `validate-artifact-paths.sh:227-237` recovers a depth-2
+area from the scan root, so a depth-2 declaration is non-discriminating. Only a DEPTH-3 area
+separates them. The verdict is a function of the path AND the declared areas; what is genuinely
+path-only is the BASENAME half, because a slot is always a directory and a basename is never at
+`slotidx`.
+
+**FALSE-POSITIVE SET EMPTY, AND THE CORPUS HAD TO BE CONSTRUCTED TO SAY SO.** Driving the shipped
+hook: **0 denials over the consumer's 6510 live tracked paths**, 0 over this distribution's 69, and
+**exactly 31 of the 1882 historical** — equal to the validator's own basename-blamed set, with 0
+false positives and 0 misses in both `comm` directions. That consumer tree PASSES today, so the
+live set holds no offender and could not discriminate at all; the population was built from history
+for exactly that reason.
+
+**DENY RATHER THAN WARN, AND THE CONSTRAINT WAS CHECKED INSTEAD OF INHERITED.** The plan-channel
+hook was held to a WARNING because plan mode's harness REQUIRES its path to exist, so a deny breaks
+the mode outright. No analogue exists here: every pipeline step prescribes a conforming destination
+and `I82` fails the build if core ever prescribes otherwise.
+
+**EXCEPT ONE PLACEHOLDER DID SEND AN AGENT TO A DENIED PATH.** `code-reviewer.md` and `qa.md`
+prescribe `docs/reviews/s<N>/<story-index>-…md`, and the pipeline mints ids SPRINT-FIRST
+(`s306-1`), so an agent resolving that placeholder to the id writes `s312/s312-1-code-review.md` —
+measured NONCONFORMING against `s312/1-code-review.md` as the same-invocation conforming control.
+Both role files now state the placeholder is the bare index. A deny whose remedy is a path core
+prescribes against is what teaches an operator to turn a guard off.
+
+### A write-time guard's population is NOT its validator's, and the difference is unappealable
+
+Found by the tip adversary on a branch whose every other gate was green.
+`validate-artifact-paths.sh:136-140` builds its corpus with `git ls-files` — the TRACKED set — while
+this hook's corpus is whatever reaches `Write`. They differ by exactly the GITIGNORED set, and the
+difference runs the dangerous way: for an ignored path the batched arm can NEVER render a verdict,
+so a deny is the only verdict and there is nothing to appeal to. Measured by driving the shipped
+hook over the consumer's ignored paths under the scan roots: **five denials**, all generated
+evidence the pipeline has written for hundreds of sprints — `s241-1-evidence-manifest.txt`,
+`sprint-148-smoke-test-*.log`, `cdk-diff-s310-services-stack.txt` — ignored by `*.txt` and `*.log`,
+and every future `sprint-NNN-*.log` would have hit it. **The 0-of-6510 figure was correct and taken
+over the TRACKED population, which is not the deny surface.** The guard now fails open on
+`git check-ignore`, and the arm discriminates in both directions: seeding those patterns flips the
+ignored paths to ALLOW while the tracked `.md` offender is unmoved.
+
+### The remedy was wrong on the commonest shape, and one remedy was refused by the guard that issued it
+
+A token in the SUFFIX position ends at the `.`, so a strip expression whose trailing class carried
+`.` consumed the extension separator: `review-s288.md` → `review-md`. That position is the COMMON
+one — `artifact-path-config.sh:106-108` records it as 173 files and it is why `TOKEN_RE` is not
+anchored to a whole component. And `sed` replaces once per expression, so `s12-s12-x.md` kept its
+second token and the suggestion was itself **DENIED on the next keystroke** — a mechanism defending
+its own defect. Fixed by splitting the extension off the stem and stripping to a fixed point; a
+basename that is ONLY a token composes `s304/artifact.md` rather than re-inserting the token
+through the fallback. **All ten probed suggestions are now ALLOWed by the guard that issued them,
+and two match the consumer's own hand-migration byte-for-byte.**
+
+### The fail-open set was claimed enumerated and was not
+
+`./`, `//` and `/../` spellings that RESOLVE into a scan root were ALLOWED, because the scan-root
+test compared an unnormalised string. `REL` is normalised before that test now — including a `//`
+collapse BEFORE the project-prefix match, since a doubled slash at the boundary defeats that match
+itself and was the one spelling still allowed after the first repair. A path that walks ABOVE the
+project keeps its `../`, matches no root, and correctly fails open. **An enumeration in a header is
+a claim that can be false**, and the list now says to update it when an exit is added.
+
+### A receipt of lexical-presence conjuncts is closed by a guard that can never run
+
+`BL-271`'s filed receipt was a whole-file `grep` over two named guards narrowed to non-comment
+lines. `grep -v '^[[:blank:]]*#'` strips only WHOLE-LINE comments, so it was closable by a trailing
+comment **0**, by a dead variable `artifact_path_check_enabled=0` **0**, and by a heredoc body
+**0** — a dead variable closing the entry being precisely the failure the narrowing was added to
+prevent, one spelling over. It also scored **1** against a correct fix sited in a NEW hook.
+
+The first replacement killed those and still scored 0 against five DEAD-GUARD states, because every
+conjunct was a presence test: `permissionDecision` is satisfied by an `allow` emission, and naming
+a hook's basename anywhere in the template says nothing about WHICH matcher block holds it. The
+filed form asserts the deny VALUE, the `Write` tool gate, the token predicate, and via `jq` that
+the hook sits in a `PreToolUse` block whose matcher actually matches `Write`. **Scored across nine
+mutants with every mutation asserted APPLIED in the same invocation** — tip 0, all nine 1 — after
+two earlier readings turned out to be `sed` expressions that silently no-op'd and returned a
+meaningless 0.
+
+### A shipped hook is a corpus entry: `FORK_BUDGET` 3833 → 3842
+
+The new hook moved `scripts/validate-enforcement-map.sh` **3827 → 3836 without touching a line of
+it**, because `I13` and `I14` both loop once per `core/hooks/ai-dlc-*.sh`: a new hook pays a
+`basename` and a `grep` in one, and a `basename`, `grep`, `git ls-files` and `awk` in the other.
+Attributed by a base/tip differential with base taken in a CLEAN `git worktree` so the delta is the
+branch's, both sides `--stable`, spreads 3827-3827 and 3836-3836: **I14 90 → 94, I84 271 → 273,
+I13 49 → 51, I83 134 → 135** — +4, +2, +2, +1, summing to the whole +9 with no unattributed
+remainder. Same class as `0.590.0`, where a prose-only commit moved this number by one. A
+comment-only header edit afterwards moved it zero, checked rather than assumed.
+
+### The scan-root test now precedes the resolver calls
+
+The guard sits in front of every `Write` in every consumer and resolved three expressions before
+establishing that the path was its subject at all, so a `Write` to `src/main.ts` paid the full
+resolver cost: **64ms against a 9ms non-`Write` control**, 20 reps. Only `--scan-roots` is needed
+to bail, so it is the only one resolved up front — **38ms**, discrimination unchanged across all
+six probe cases.
+
+### Also
+
+- `.claude/rules/tool-hazards.md` records that `git log --follow` answers about ONE path and reads
+  as a rename census: it scored **1** of 73 paths renamed where a derived rename map scored **62**,
+  and that 1 was quoted into a value argument the correction inverted.
+- `BL-271`'s entry is rewritten with the measurements above and its receipt replaced.
+
 ## [0.592.0] - 2026-09-17
 
 ### The two arms left at the top of the by-arm table, and a fork-free rewrite refused on measurement
