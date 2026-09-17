@@ -192,7 +192,7 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    fixture and 1.30x within its unit of work are the same headline number and opposite subjects.
    Take the census of ONE invocation before scoping a memo.
 
-   **Inside the validator the remaining arms are `I33b` 645, `I75` 453 and `I84` 271**, of a
+   **Inside the validator the remaining arms are `I33b` 645, `I75` 446 and `I84` 271**, of a
    total of 3827 (`FORK_BUDGET` 3833 since `v0.592.0`). `I82` is GONE from this table — 657 → 61
    at `v0.592.0`, which also took `I84` 527 → 271. Re-derive before choosing — it is the only
    ranking that has predicted anything here:
