@@ -513,7 +513,29 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   code change anywhere -- which is the gate working, not a false positive.
 #   Budget from the HIGH reading, 4774, plus the usual 3 rather than 6: the arms that would
 #   grow it are corpus-derived, and a wider band is headroom this file cannot account for.
-FORK_BUDGET=4777
+#
+#   LOWERED TO 3833 AT THIS RELEASE. I82 and I84, the two arms left at the top of the by-arm
+#   table after 0.588.0 took I59 and I60. I82's `i82_is_sprint_token` forked two `grep -qE`
+#   per COMPONENT across 316 components, and its per-path split forked a `printf | tr` per
+#   path across 95 -- I82 657 -> 61. I84's two predicates each piped `grep -v` into `grep -q`
+#   once per file across a 127-file corpus; folded into one `grep -qE` carrying the comment
+#   narrowing as a prefix, I84 527 -> 271. Total 4774 -> 3827, `--stable` in a CLEAN
+#   `git worktree` both sides, spreads 4774-4774 and 3826-3827.
+#
+#   I84 IS DELIBERATELY NOT FORK-FREE, AND THE MEASUREMENT IS WHY. The in-shell `read` loop
+#   removes all 508 of its forks and is 3.7x SLOWER on the real corpus -- 127 files, 78011
+#   lines, interleaved reps: shipped 439-480ms against in-shell 1698-2028ms, every form
+#   agreeing on hits. A fork budget cannot see that, so a lower number here would have bought
+#   a wall-clock regression on a validator the suite runs well over a hundred times per push.
+#   The one-grep form keeps one fork per file per predicate and is slightly faster than both.
+#   **A FORK COUNT IS A PROXY FOR COST AND NOT THE COST.** Whole-validator wall clock, from
+#   inside the repo, 3 reps each: base 46.31/46.30/46.63s, tip 43.48/44.07/43.54s.
+#
+#   Budget from the HIGH reading, 3827, plus the usual 6. The admissible range at this
+#   measurement is 3827..5467 -- A3 needs `b >= t`, A4 needs `b <= t/0.7`, A1 needs
+#   `b < t/0.4` -- so 3833 sits near the bottom of a window that is open, which is what `m8`
+#   asserts at the COMMITTED value.
+FORK_BUDGET=3833
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
@@ -6765,14 +6787,29 @@ else
   # exempt every component and report a clean zero over a corpus it never judged.
   i82_slot_re="$(bash "$REPO_ROOT/core/scripts/artifact-path-config.sh" --slot-re-prescribed 2>/dev/null)"
   [ -n "$i82_slot_re" ] || err "I82 could not resolve the sprint-slot ERE from core/scripts/artifact-path-config.sh --slot-re-prescribed. Falling back to the literal pair, which under-exempts: a prescription naming a concrete slot will be reported as a violation of the rule it satisfies."
+  # `[[ =~ ]]`, NOT `grep -qE <<<`, and the reason is I82b's verbatim: this runs once per
+  # COMPONENT of every extracted path -- 316 components on today's corpus -- so the obvious
+  # spelling forks twice per component. Measured before and after over the live 316: the grep
+  # form 993-1053ms, this one 14-16ms, identical hit counts.
+  #
+  # THE RHS IS UNQUOTED ON PURPOSE AND QUOTING IT INVERTS THE ARM. Inside `[[ =~ ]]` a quoted
+  # right-hand side is a LITERAL, so `"$i82_slot_re"` would match the eleven characters of the
+  # expression rather than a slot, every exemption would miss, and every conforming prescription
+  # would be reported. Scored against the arm's own nine probes: this form 0 failures, the quoted
+  # form 7, the slot expression stripped of its anchors 4, the exemption dropped 1 -- with
+  # never-flags at 7 and always-flags at 2 as the two controls.
+  #
+  # THE `[ -n ]` GUARD IS LOAD-BEARING HERE IN A WAY IT WAS NOT BEFORE. An EMPTY ERE makes
+  # `grep -qE` match everything (rc 0) and `[[ =~ ]]` raise rc 2, so the two forms diverge on
+  # exactly the input the guard already refuses. Keep the guard; it is what makes them equal.
   i82_is_sprint_token() { # <component> -> 0 when it carries one
     if [ -n "$i82_slot_re" ]; then
-      grep -qE "$i82_slot_re" <<<"$1" && return 1       # the reserved directory slot, any spelling
+      [[ "$1" =~ $i82_slot_re ]] && return 1           # the reserved directory slot, any spelling
     else
       [ "$1" = 's<N>' ] && return 1
       [ "$1" = 's*' ] && return 1
     fi
-    grep -qE "$i82_tok_re" <<<"$1"
+    [[ "$1" =~ $i82_tok_re ]]
   }
 
   # THE CORPUS IS DERIVED, never listed: every step file, every skill-root rule file except the
@@ -6831,11 +6868,24 @@ else
       i82_viol=""
       while IFS= read -r p; do
         [ -n "$p" ] || continue
+        # SPLIT WITH PARAMETER EXPANSION, NOT `printf | tr`, which is I82b's rule one arm down
+        # applied to the site that motivated it. This forked twice per path across 95 paths.
+        # `set -- $p` under a `/` IFS is not the fix either: `s*` is a real component spelling
+        # here and would glob.
+        #
+        # THOSE FORKS DID NOT REPORT AT THIS LINE, WHICH IS WHY THEY SURVIVED I82b's PASS. On
+        # bash 3.2 a `<(...)` body reports its commands' LINENO as the enclosing if/elif/fi
+        # chain's CLOSING line, so `fork-profile.sh --section by-line` attributed all 95 to a
+        # bare `fi` two arms down and `--arm-lines` bucketed them into I99 -- an arm holding no
+        # `tr` at all. That is `BL-268`, and this is the site it was hiding.
         i82_bad=""
-        while IFS= read -r c; do
+        i82_rest="$p"
+        while [ -n "$i82_rest" ]; do
+          c="${i82_rest%%/*}"
+          if [ "$c" = "$i82_rest" ]; then i82_rest=""; else i82_rest="${i82_rest#*/}"; fi
           [ -n "$c" ] || continue
           i82_is_sprint_token "$c" && i82_bad="$c"
-        done < <(printf '%s\n' "$p" | tr '/' '\n')
+        done
         [ -n "$i82_bad" ] || continue
         grep -qxF "$p" <<<"$i82_ledger" && continue
         i82_viol="${i82_viol}
@@ -7237,14 +7287,37 @@ I84_SCHEMA="$REPO_ROOT/core/schemas/sprint-status.json"
 # would make THIS file the only positive, and the exemption that fixes that is an exemption for
 # exactly the kind of file the ban exists for.
 i84_a='planning-'; i84_b='artifacts[^ ]*stories'
+# ONE `grep` PER FILE, NOT TWO THROUGH A PIPE, AND THE FORK-FREE FORM WAS REFUTED BY
+# MEASUREMENT. The obvious cut here is an in-shell `read` loop with `[[ =~ ]]`, which removes
+# every fork. It is 3.7x SLOWER: over this arm's real corpus -- 127 files, 78011 lines --
+# interleaved reps read shipped 439-480ms against in-shell 1698-2028ms, all forms agreeing on
+# hits. The shipped shape pays its forks and scans in C; the fork-free shape runs 78011 bash
+# loop iterations. This validator runs well over a hundred times per full push, so that trade is
+# a wall-clock REGRESSION bought with a lower fork count -- and a fork budget cannot see it.
+# Folding the pipe into one `grep` removes 3 of the 4 forks per file AND is slightly faster.
+#
+# THE NARROWING IS THE SAME ONE, SPELLED AS A PREFIX. `^[[:blank:]]*([^#[:blank:]].*)?` is the
+# comment filter the pipe did with `grep -v`: optional leading blanks, then either the pattern
+# at column 0 or a first non-blank that is not `#`. The optional group is load-bearing -- the
+# form without it (`[^#[:blank:]].*` mandatory) is a FALSE NEGATIVE when the path starts at
+# column 0, measured: shipped 1, that form 0. `[[:blank:]]`, not `[ \t]`: a two-member class
+# where the shipped grammar has six is what shipped a false finding at 0.588.0.
+#
+# AGREEMENT MEASURED BEFORE LANDING: 0 disagreements against the shipped pair across all 127
+# corpus files, and correct on five seeded boundary cases -- column-0, indented, `#` comment,
+# space-then-`#` comment, and tab-indented.
+#
+# It also closes the I54 shape latent in the old form: both predicates fed `grep -q` from a
+# pipe, which under `pipefail` answers with the writer's EPIPE on a MATCH. This file sets
+# `set -u` and not `pipefail`, so it did not bite; the pipe is gone now regardless.
 i84_restates() { # <file> -> 0 when a non-comment line carries an area-qualified story path
-  grep -v '^[[:space:]]*#' "$1" 2>/dev/null | grep -qE "${i84_a}${i84_b}"
+  grep -qE "^[[:blank:]]*([^#[:blank:]].*)?${i84_a}${i84_b}" "$1" 2>/dev/null
 }
 # The SAME comment narrowing, and it is here because arm (b) fired on its first run without it:
 # migrate-artifact-paths.sh MENTIONS `stories_dir` in the comment explaining why it deferred the
 # corpus, and was scored as a reader that had forgotten to substitute. A mention is not a read.
 i84_reads() { # <file> -> 0 when a non-comment line reads the declaration
-  grep -v '^[[:space:]]*#' "$1" 2>/dev/null | grep -q 'stories_dir'
+  grep -qE "^[[:blank:]]*([^#[:blank:]].*)?stories_dir" "$1" 2>/dev/null
 }
 
 i84_probe_dir="$(mktemp -d)"
