@@ -89,6 +89,20 @@ what is true now. Measured: a hand's final message listed four defects as outsta
 already been fixed, because it had not re-read the files between finding them and reporting.
 Check the tree, not the report.
 
+## awk's `getline < file` reads an unopenable file as an empty one
+
+It returns **-1** where an empty file returns 0, and raises nothing. `while ((getline l < f) > 0)`
+— the idiom at every site in this tree — cannot tell "read nothing" from "could not open", so a
+corpus a caller LISTED and the scan never opened reports the same clean line as a scanned one.
+Measured: 3 files listed, 2 scanned, awk exit 0, stderr EMPTY; the shell loop it replaced could
+not hide this, because `grep` wrote to stderr. **A batched rewrite can lose a diagnostic channel
+the per-item loop got for free.** Count what was SCANNED and compare it against the list; a floor
+guard over the list is a claim about the `find`, not about the read.
+
+**And an awk program in a single-quoted shell literal cannot contain an APOSTROPHE, including in
+its comments** — one closes the literal and the remainder executes as shell. Done twice in one
+file, the second time in the sentence warning about it, by quoting the offending word.
+
 ## `grep -c` prints its zero AND exits 1
 
 `n=$(grep -c … || echo 0)` is `0` followed by a newline and another `0` on zero matches, and
