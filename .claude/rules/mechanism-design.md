@@ -43,6 +43,18 @@ A property is also unobservable when an EARLIER exit pre-empts its only reader. 
 before that row is read, so a mutant reporting AND overwriting passed everything. Ask what READS
 the property under the shipped control flow, and assert the value, not the count.
 
+**TWO THRESHOLDS BOUNDING ONE QUANTITY FROM OPPOSITE SIDES CAN CLOSE THE WINDOW BETWEEN THEM,
+AND THE ARM THAT DIES IS THE ONE NOBODY EDITED.** Measured: a fork gate's floor was a constant
+and its stale-high arm a fraction of a budget that ratchets DOWN every time work is removed, so
+the window was empty at every budget below a value the budget had already passed — the arm whose
+own message is "a ceiling nothing can reach reads exactly like one that passed" had become that,
+one release earlier, silently. Its mutant could not see it because the mutant was wired to a
+budget DERIVED from the live reading, where the window is never empty; that wiring is right for
+the other arms and is exactly why none of them watched the committed value. **Ask of every
+ratchet what it makes UNREACHABLE, not only what it makes smaller**, express paired bounds in
+the same units so they move together, and give the reachability of the window its own arm keyed
+on the COMMITTED value.
+
 ## Ask what a change makes always-true downstream
 
 Every new constraint has three questions attached: what does this make permanently true or
