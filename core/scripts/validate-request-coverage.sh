@@ -72,6 +72,7 @@ REQUESTS=""
 BRIEF=""
 SPRINT=""
 CITE_SHA=""
+SESSION=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -79,13 +80,66 @@ while [ $# -gt 0 ]; do
         --brief)    BRIEF="${2:-}";    shift 2 ;;
         --sprint)   SPRINT="${2:-}";   shift 2 ;;
         --cite-sha) CITE_SHA="${2:-}"; shift 2 ;;
+        # OPTIONAL, and deliberately not a fourth required argument: every existing caller
+        # passes three or four, and promoting this one would turn each of them into the
+        # exit-2 usage fault this block exists to keep distinguishable from a finding.
+        --session)  SESSION="${2:-}";  shift 2 ;;
         *) echo "ERROR: unknown argument: $1" >&2; exit 2 ;;
     esac
 done
 
 if [ -z "$REQUESTS" ] || [ -z "$BRIEF" ] || [ -z "$SPRINT" ]; then
-    echo "usage: validate-request-coverage.sh --requests <file> --brief <file> --sprint <n> [--cite-sha <sha>]" >&2
+    echo "usage: validate-request-coverage.sh --requests <file> --brief <file> --sprint <n> [--cite-sha <sha>] [--session <id>]" >&2
     exit 2
+fi
+
+# ---- ZERO CAPTURED REQUESTS FOR THIS SESSION -------------------------------------------
+# A session whose prompts were never captured is a DETECTABLE state that was silent until
+# now, and the silence is the defect. Measured once on the reference consumer: one session's
+# opening message -- 921 bytes, the `/ai-dlc` invocation carrying a whole sprint's scope --
+# never reached operator-requests-history.md, while three other sessions active in the same
+# window had every prompt captured including their own opening turns. The first reader that
+# noticed was `--cite-sha` reporting "no captured request carries SHA256 <hash>", several
+# pipeline steps later, in a message about a HASH rather than about a missing session.
+#
+# THE ROOT CAUSE IS NOT CLAIMED AND IS NOT WHAT THIS ARM IS FOR. The capture sits ABOVE the
+# snapshot gate on purpose so a project's first message is kept, and its predicate is the
+# prompt being non-empty once `<system-reminder>` blocks are stripped -- so a first-turn miss
+# is not that gate. The classes that remain (the harness delivering an opening message before
+# the hook is attached on a resume-from-compact or CLI-initial-prompt path; an ordering race
+# in the session-start chain) are outside this hook's control flow and were not reproduced.
+# One instance, no reproduction. This arm turns a silent miss into a NAMED one; it does not
+# explain it.
+#
+# `- Session: <id>` is written on EVERY entry the hook records (`ai-dlc-pause.sh`, three
+# sites), so the join key already exists and nothing new has to be emitted for this.
+#
+# PENDING-SHAPED, NOT FAIL-SHAPED, and that is deliberate: without `--session` there is
+# nothing to compare and the arm stays quiet, so every existing caller is unaffected. A
+# caller that passes the flag gets exit 2 -- "nothing was compared" -- rather than exit 1,
+# because a session with no capture is an absent EVIDENCE base, not a plan that dropped a
+# topic, and those two want different remedies.
+if [ -n "$SESSION" ]; then
+    if [ ! -r "$REQUESTS" ]; then
+        echo "ERROR: operator-requests file not readable: $REQUESTS" >&2
+        exit 2
+    fi
+    # Anchored on the field the hook writes, and counted rather than tested, so the message
+    # can say how many entries the file holds for OTHER sessions -- a zero beside a non-zero
+    # total is the shape that says "capture ran, and not for you".
+    _rc_mine="$(LC_ALL=C grep -cF -- "- Session: ${SESSION}" "$REQUESTS")" || _rc_mine=0
+    _rc_all="$(LC_ALL=C grep -cE '^- Session: ' "$REQUESTS")" || _rc_all=0
+    if [ "$_rc_mine" -eq 0 ]; then
+        echo "ERROR: no captured request for session ${SESSION} in ${REQUESTS}." >&2
+        echo "       That file holds ${_rc_all} entr(ies) carrying a session id, and none of them" >&2
+        echo "       is this one -- so the UserPromptSubmit capture ran and did not record this" >&2
+        echo "       session. Everything downstream that cites a request by hash is citing a" >&2
+        echo "       record that was never written: \`--cite-sha\` would report an unresolvable" >&2
+        echo "       SHA several steps from here, which names the symptom and not this cause." >&2
+        echo "       Nothing was compared. Re-run once the session's ask is captured, or record" >&2
+        echo "       why it is absent before routing proceeds." >&2
+        exit 2
+    fi
 fi
 
 # FAIL CLOSED on an absent capture. A missing requests file means the hook is not installed or
