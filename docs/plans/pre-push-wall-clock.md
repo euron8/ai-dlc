@@ -63,12 +63,17 @@ sort -k2,2nr "$D" | head -3                                                  # t
 awk '{s+=$2; n++} END{printf "%d over %d units, sum/12 = %.1f\n", s, n, s/12}' "$D"   # the floor
 ```
 
-Measured at `v0.587.0`, full 202-fixture dispatch under `AI_DLC_FIXTURE_NO_SKIP=1`, pool 12:
-pole **561s** (the gate's own PASS line), total **6527 pool-seconds**, floor **`sum/12` = 543.9s**.
-The gap between the two is **~17s**, and **that gap is all any pole work can ever return.** Zero
-out the pole entirely and the suite still cannot finish faster than the floor. **The suite is
-WORK-BOUND with essentially no scheduling headroom left, which is the strongest form of the ruling
-below.**
+Measured at `v0.588.0`, full 202-fixture dispatch under `AI_DLC_FIXTURE_NO_SKIP=1`, pool 12:
+pole **486s**, total **5403 pool-seconds**, floor **`sum/12` = 450.2s**. The gap between the two
+is **~36s**, and **that gap is all any pole work can ever return.** Zero out the pole entirely and
+the suite still cannot finish faster than the floor. **The suite is WORK-BOUND with essentially no
+scheduling headroom left, which is the strongest form of the ruling below.**
+
+**THE FLOOR MOVES WHEN WORK IS REMOVED, AND THAT IS THE WHOLE POINT.** It was `sum/12` = 543.9s at
+`v0.587.0` and is 450.2s now, against a total that went 6527 → 5403 pool-seconds. Read that
+direction, not the pole: the two readings are from different runs on different box loads and the
+pole alone cannot resolve one release, but the floor and the total moved together and by more than
+a fifth.
 
 **THE LOADED POLE CANNOT RESOLVE A SINGLE RELEASE'S WORK, AND `v0.587.0` MEASURED THE SPREAD
 DIRECTLY.** Three full no-skip gate runs across that one batch, on trees differing by at most two
@@ -84,11 +89,21 @@ because the whole run inflated — total 5496 → 6350, +15.5% across all 202 un
 Read the pole and the total together or neither; a pole that moved less than its run's total moved
 IMPROVED.
 
-**SO THE NUMBERS THAT SURVIVE A RELEASE ARE THE LOAD-INDEPENDENT COUNTS.** `v0.587.0` shipped two
-work removals and neither is visible in the pole: I87's fork count 1842 → 48 and the validator's
-total 8219 → 6425 (`scripts/fork-profile.sh --stable`, spread 8219-8219 and 6424-6425, both sides
-in CLEAN worktrees), and the reconcile engine's git calls 19219 → 14490 (PATH-shadowed wrappers,
-impossible-tool control 0 in the same log). Quote counts, not seconds.
+**SO THE NUMBERS THAT SURVIVE A RELEASE ARE THE LOAD-INDEPENDENT COUNTS.** Three releases have now
+shipped work removals invisible in the pole: I87's fork count 1842 → 48 and the validator's total
+8219 → 6425 at `v0.587.0`; the reconcile engine's git calls 19219 → 14490 (PATH-shadowed wrappers,
+impossible-tool control 0 in the same log); and **I60 1011 → 46 with I59 713 → 20 at `v0.588.0`,
+the validator's total 6425 → 4767** (`scripts/fork-profile.sh --stable`, spreads 6425-6425 and
+4767-4767, both sides in CLEAN worktrees, every other arm byte-identical across the two readings).
+Quote counts, not seconds.
+
+**AND A FORK BUDGET THAT RATCHETS DOWN CAN KILL THE ARM BESIDE IT.** `validator-fork-budget`'s A1
+floor was a hardcoded 5000 evaluated BEFORE A4 stale-high, so A4's window was `5000 < t < 0.7b` —
+empty for every budget at or below 7143, which `v0.587.0`'s 6431 already was. The arm whose message
+reads *"a ceiling nothing can reach is a check that cannot fire"* had become one, and its mutant
+could not see it because that mutant is wired to a budget derived from the live reading. Fixed at
+`v0.588.0`: the floor is 40% of `FORK_BUDGET`, and `m8` asserts A4's reachability at the COMMITTED
+budget. **Ask of the next reduction what it makes unreachable**, not only what it makes faster.
 
 **OPERATOR RULING AT BATCH 119, GIVEN IN AS MANY WORDS:** *"420 as a pole is not good enough.
 Neither is 346 on the next. Need to look deeper and refactor more aggressively in a future
@@ -110,11 +125,13 @@ ruling stands until the operator replaces it: **the subject is removing work, no
 
    The head of that distribution is opened by EVERY unit: `.gitignore`, `.git/index`, `.git/HEAD`,
    `.git/config`, `.git/packed-refs`, the commit-graph shards — 202 opens each. And the same shape
-   repeats INSIDE one program: `scripts/validate-enforcement-map.sh` is ~10600 lines with **377
-   `grep`, 101 `awk`, 85 `sed`, 68 `find`** invocation sites (control: an impossible tool name
-   returns 0), each a fresh walk of a corpus an earlier arm already walked. Those four counts fell
-   at `v0.587.0` when I87's two per-item loops became one awk pass each; a STATIC site count is not
-   the runtime invocation count and never was — the multipliers are corpus-derived loop trip counts.
+   repeats INSIDE one program: `scripts/validate-enforcement-map.sh` is ~10770 lines, each arm a
+   fresh walk of a corpus an earlier arm already walked. **Do not read a static token count as the
+   subject** — re-derived here it is 438 `grep`, 207 `awk`, 156 `sed`, 85 `find` (control: an
+   impossible tool name returns 0), and those numbers went UP across `v0.588.0` while the RUNTIME
+   fork count fell 26%, because a batched awk program is more tokens and fewer processes. The
+   multipliers are corpus-derived loop trip counts, so the only figure worth acting on is
+   `scripts/fork-profile.sh --section by-arm`.
 
    **THIS LEVER IS PROVEN, NOT THEORETICAL — `v0.586.0` TOOK THE FIRST BITE AND IT IS THE PATTERN
    TO REPEAT.** The repetition is not only across fixtures; it is inside ONE INVOCATION of one
@@ -145,15 +162,24 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    On `ledger-reverify.sh` this read **366 total / 112 distinct**, with two blobs read 79 times
    each; memoizing took it to 133 git calls and the fixture from 306.81s to 215.21s SOLO.
 
-   **THE UNPROFILED HEAVY UNITS ARE THE NEXT ACTION, AND SO IS FINISHING THE RECONCILE MEMO.**
+   **`self-update-gate` IS THE NEXT TARGET, AND SO IS FINISHING THE RECONCILE MEMO.**
    Profiled so far: `ledger-reverify.sh` (done, `0.586.0`), I87 in the enforcement-map validator
-   (done, `0.587.0`), `emit-report.sh` (PARTIAL, `0.587.0` — the surviving shapes are listed in the
-   discharged record below). Profiled and found NOT to have this shape:
-   `gate-adjudication-mutants`, where git is absent by design and the awk/grep repetition is spread
-   across 21 independently-necessary sandbox reruns. **Not yet profiled: `self-update-gate`**, where
-   a first census read 9032 git calls / 1091 distinct with one sha re-verified 79-86 times per run —
-   the same shape as the two fixes already taken. **`I60` at 1011 forks is the largest remaining arm
-   inside the validator.**
+   (done, `0.587.0`), I60 and I59 in the same validator (done, `0.588.0`), `emit-report.sh`
+   (PARTIAL, `0.587.0` — the surviving shapes are listed in the discharged record below). Profiled
+   and found NOT to have this shape: `gate-adjudication-mutants`, where git is absent by design and
+   the awk/grep repetition is spread across 21 independently-necessary sandbox reruns.
+   **Not yet profiled: `self-update-gate`**, where a first census read 9032 git calls / 1091
+   distinct with one sha re-verified 79-86 times per run — the same shape as the three fixes
+   already taken.
+
+   **Inside the validator the remaining arms are `I82` 653, `I33b` 645, `I84` 527 and `I75` 446**,
+   of a total of 4767. Re-derive that table before choosing — it is the only ranking that has
+   predicted anything here:
+
+   ```
+   W=$(mktemp -d); git worktree add -q --detach "$W/wt" HEAD    # CLEAN tree: the main checkout
+   ( cd "$W/wt" && bash scripts/fork-profile.sh --stable --section by-arm )   # carries ~15400 .sh
+   ```
 
    **SHARDING AND INNER POOLS DO NOT REMOVE WORK — THEY MOVE IT.** Measured on the tree today:
    `validator-arm-selection` 370 + its `-b` shard 158 = **528 pool-seconds for one subject**. A
@@ -161,10 +187,10 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    the wall the suite now sits against. Every past pole win was bought this way and that is why
    the floor is where it is.
 
-   **Work concentrates, which is what makes this tractable:** top 10 units are **46.3%** of all
-   pool-seconds, top 20 are **64.8%**. Re-derive both before scoping — the membership moves, these
+   **Work concentrates, which is what makes this tractable:** top 10 units are **41.6%** of all
+   pool-seconds, top 20 are **58.7%**. Re-derive both before scoping — the membership moves, these
    two figures sat one release stale until action 3b re-ran them from a worktree, and they swing
-   with the run: the same tree read 42.0/60.3 and 46.3/64.8 from two different gate runs, so they
+   with the run: one tree read 42.0/60.3 and 46.3/64.8 from two different gate runs, so they
    rank targets and do not size them:
 
    ```
@@ -323,14 +349,63 @@ killed them, and both sections are kept in full below because their hazard notes
 to read them if the numbers ever change back.
 ### Discharged — do not re-execute
 
+**BATCH 122 SHIPPED AS `v0.588.0` (`6b5b9a63`, PR #788). ACTION 1 AGAIN, AND THE SECOND SUBJECT WAS
+FOUND BY THE FIRST ONE FAILING.**
+
+**I60 and I59 became one awk pass each**, the two arms left at the top of the by-arm table after
+`0.587.0`. `i59_undocumented_in` forked one `awk` per MODE (216 modes across 100 files) and
+`i59_modes_of` four externals per FILE; `i60_ghosts_in` forked a `find` and a `head` per CITATION
+(97 each) and `i60_dispatches` eight externals per resolved citation (84) over only 42 distinct
+target files. **I60 1011 → 46, I59 713 → 20, the file 6425 → 4767 (−25.8%)**, `--stable` 2/2 each
+side in CLEAN worktrees, spreads 6425-6425 and 4767-4767, every OTHER arm byte-identical across
+the two readings. `FORK_BUDGET` 6431 → 4773.
+
+**THE EQUIVALENCE ORACLE HAD TO BE BUILT AGAINST A CORPUS THAT CAN DISAGREE.** Both arms report
+zero findings on this tree, so comparing FINDINGS compares two empty sets — the vacuous shape
+`0.587.0` measured at 0 of 205. The shipped implementations were extracted BYTE-IDENTICALLY (with
+a control proving the comparator can report a difference) and scored over the non-empty
+INTERMEDIATE sets — 216 modes, 164 dispatch rows — plus a seeded `mktemp` corpus that fires,
+asserted non-zero on the shipped side first, with a fully-documented file as the silent control.
+A deliberately wrong port was then built and shown to DISAGREE on the same input.
+
+**AN ORACLE THAT SETS `pipefail` IS NOT MEASURING A SUBJECT THAT DOES NOT.** The extraction first
+reported 53 ghosts against the validator's 0: `i60_ghosts_in` ends `… | sort -u | grep -qx`, and
+`grep -q` leaves at its first match while `sort` is still writing, so under `pipefail` every
+dispatched mode read as undispatched. The subject is `set -u`. The probe was wrong, as this repo's
+rule says to assume.
+
+**TWO MUTATION ANCHORS DIED AND WERE RE-ANCHORED; SIX WERE VERIFIED BY RUNNING THEM.** Measured
+before re-anchoring, with the dead function deliberately left in place: the old I59 arm-2 mutation
+applied cleanly, `cmp -s` passed it, and `--arms I59` exited 0 printing the OK line — the
+silent-unmutated-run defect `0.587.0` shipped. `i59_modes_of` was DELETED rather than kept beside
+the awk, and `i60_nc_form()` exists as a function so the battery has one executable site to key on;
+the same regex in the prose above it is text a `sed` cannot tell from the program.
+
+**THE FORK GATE'S OWN FLOOR HAD KILLED THE ARM BESIDE IT, AND THE CORRECT CHANGE IS WHAT EXPOSED
+IT.** `judge`'s A1 floor was a hardcoded 5000 evaluated before A4 stale-high, so A4's window was
+`5000 < t < 0.7b` — EMPTY for every budget at or below 7143, which `0.587.0`'s 6431 already was.
+Landing the true reading at 4767 made the fixture report the improvement as
+`BROKEN ... a broken tracer`, with m2, m3, m5 and m6 all firing on A1 instead of their own arms.
+Floor is now 40% of `FORK_BUDGET` so both bounds move together; the three real broken-tracer inputs
+measure 0, 0 and 1 against a live control of 4767. New mutant `m8` constructs the midpoint of A4's
+window at the COMMITTED budget — the one mutant that must key on `$BUDGET`, because `m3` at
+`T1 * 2` has a window under any floor and could never see the closure. Filed as `BL-265`.
+
+**BOTH NEW RECEIPTS WERE WRITTEN PROSE-SATISFIABLE AND CAUGHT BY SCORING THEM.** `BL-265`'s first
+form returned 0 against a three-line file of pure comments with no executable floor; `BL-266`'s was
+satisfied by two unrelated comments about a hand-copied path. Both re-keyed on emission sites and
+scored 0 / 1 / 1 across the real file, a prose-only file and the parent commit. `BL-266` also
+records that the I59 corpus mutation is over-broad — four arms' corpora, up from three, and `vrun`
+reads only one verdict — which is pre-existing and which this release widened by one site.
+
 **BATCH 121 SHIPPED AS `v0.587.0` (`14f5ecfb`). TWO SUBJECTS ON ACTION 1, AND THE SECOND ONE IS
 DELIBERATELY UNFINISHED.**
 
 **I87's two per-item loops became one awk pass each.** `i87_readable` forked one `grep` per file
 across 430 files; `i87_exposed_in` ran ~9 externals per fixture directory across 205 of them.
 **I87 1842 → 48 forks, the whole file 8219 → 6425**, `FORK_BUDGET` 8225 → 6431 taken from the
-fixture's own reading rather than by arithmetic. I87 no longer appears in the by-arm table and
-**`I60` is now the largest arm at 1011 forks — that is the next target on this lever.**
+fixture's own reading rather than by arithmetic. I87 no longer appears in the by-arm table.
+(I60 was named here as the next target; `v0.588.0` took it, and I59 with it.)
 
 **THE RECONCILE HALF IS A PARTIAL FIX AND SAYS SO.** A filesystem-backed blob/tree memo in
 `lib.sh`, shared across one `emit-report.sh` render through `AI_DLC_RECONCILE_MEMO` because the
