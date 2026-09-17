@@ -172,6 +172,10 @@ session's work, check the stash list before concluding anything.
   `validate-shell-portability.sh` catches this in a tracked file; in a tool call nothing does.
 - **Never test whether work landed by ancestry** in a squash-merge repo — the commits that
   would answer are the ones a squash removed. Test by content.
+- **`--follow` answers about ONE path and reads as a rename census.** Measured: it scored 1 of
+  73 paths as renamed where a rename MAP — `-M --diff-filter=R --name-status` over all refs,
+  1192 pairs, joined by key — scored 62. The 1 inverted the conclusion it was quoted for.
+  Derive the map and join it; never walk `--follow` per path.
 - Commit or stash before any `git checkout` that names a path.
 
 ## A validator that resolves its own root ignores the probe tree you built for it
