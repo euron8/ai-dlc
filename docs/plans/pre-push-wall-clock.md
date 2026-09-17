@@ -63,17 +63,19 @@ sort -k2,2nr "$D" | head -3                                                  # t
 awk '{s+=$2; n++} END{printf "%d over %d units, sum/12 = %.1f\n", s, n, s/12}' "$D"   # the floor
 ```
 
-Measured at `v0.588.0`, full 202-fixture dispatch under `AI_DLC_FIXTURE_NO_SKIP=1`, pool 12:
-pole **486s**, total **5403 pool-seconds**, floor **`sum/12` = 450.2s**. The gap between the two
-is **~36s**, and **that gap is all any pole work can ever return.** Zero out the pole entirely and
+Measured at `v0.589.0`, full 202-fixture dispatch under `AI_DLC_FIXTURE_NO_SKIP=1`, pool 12:
+pole **504s**, total **5637 pool-seconds**, floor **`sum/12` = 469.8s**. The gap between the two
+is **~34s**, and **that gap is all any pole work can ever return.** Zero out the pole entirely and
 the suite still cannot finish faster than the floor. **The suite is WORK-BOUND with essentially no
 scheduling headroom left, which is the strongest form of the ruling below.**
 
 **THE FLOOR MOVES WHEN WORK IS REMOVED, AND THAT IS THE WHOLE POINT.** It was `sum/12` = 543.9s at
-`v0.587.0` and is 450.2s now, against a total that went 6527 → 5403 pool-seconds. Read that
-direction, not the pole: the two readings are from different runs on different box loads and the
-pole alone cannot resolve one release, but the floor and the total moved together and by more than
-a fifth.
+`v0.587.0` and is 469.8s now, against a total that went 6527 → 5637 pool-seconds. Read that
+direction, not the pole: the readings are from different runs on different box loads and the pole
+alone cannot resolve one release, but the floor and the total moved together. **They are still
+loaded numbers and they wobble** — `v0.588.0` read 450.2s and 5403 on the same tree one release
+earlier, a 4% swing from box load alone, which is why the LOAD-INDEPENDENT fork counts above are
+the figures to quote.
 
 **THE LOADED POLE CANNOT RESOLVE A SINGLE RELEASE'S WORK, AND `v0.587.0` MEASURED THE SPREAD
 DIRECTLY.** Three full no-skip gate runs across that one batch, on trees differing by at most two
@@ -173,7 +175,7 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    already taken.
 
    **Inside the validator the remaining arms are `I82` 653, `I33b` 645, `I84` 527 and `I75` 446**,
-   of a total of 4767. Re-derive that table before choosing — it is the only ranking that has
+   of a total of 4769. Re-derive that table before choosing — it is the only ranking that has
    predicted anything here:
 
    ```
@@ -188,7 +190,7 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    the floor is where it is.
 
    **Work concentrates, which is what makes this tractable:** top 10 units are **41.6%** of all
-   pool-seconds, top 20 are **58.7%**. Re-derive both before scoping — the membership moves, these
+   pool-seconds, top 20 are **57.8%**. Re-derive both before scoping — the membership moves, these
    two figures sat one release stale until action 3b re-ran them from a worktree, and they swing
    with the run: one tree read 42.0/60.3 and 46.3/64.8 from two different gate runs, so they
    rank targets and do not size them:
@@ -348,6 +350,37 @@ ruling stands until the operator replaces it: **the subject is removing work, no
 killed them, and both sections are kept in full below because their hazard notes are the reason
 to read them if the numbers ever change back.
 ### Discharged — do not re-execute
+
+**BATCH 122 ALSO SHIPPED `v0.589.0` (`bc1d75b7`, PR #789) — A CORRECTION, AND THE TIP ADVERSARY
+FOUND BOTH HALVES OF IT ON A GATE-GREEN BRANCH.**
+
+**`[ \t]` IS NOT `[[:space:]]`, AND `v0.588.0` CLAIMED THE PREDICATE WAS "PRESERVED VERBATIM".**
+Three regex literals in the two new awk programs used a two-member class where the shell grammars
+they replaced used the six-member POSIX class. Measured end to end on a seeded tree: a file whose
+`# Usage:` line is FORM-FEED indented and correctly documents its mode was reported as
+UNDOCUMENTED by the tip at exit 1 and silently by the parent — **a false finding invented by the
+port**. The TAB direction the adversary also flagged is REFUTED: awk compiles `\t` inside a
+LITERAL regex, so both grammars match a tab-indented arm. `awk -v` is where the escape is
+stripped, which is why `i60_nc_form` already used the class.
+
+**`getline < file` RETURNS -1 ON AN UNREADABLE FILE AND AWK RAISES NOTHING.** I59's floor counts
+the `find` LIST while the scan reads the FILES, so a corpus listed and never opened reported the
+same clean line as a scanned one — the shell form could not hide it because `grep` wrote to
+stderr. Measured: 3 listed, 2 scanned, awk exit 0, stderr EMPTY; and on a seeded tree with one
+corpus file at mode 000 the parent exits **0** while the fix reports `listed 100 ... SCANNED only
+99` and exits 1. **Ask of every `getline` what it does when the file will not open.**
+
+**AN AWK LITERAL CANNOT CONTAIN AN APOSTROPHE, INCLUDING IN ITS COMMENTS.** It is a single-quoted
+shell literal. The first draft of the scan-count block closed it on a possessive form of
+"validator"; the second draft did it again WHILE WARNING ABOUT IT, by quoting the offending word.
+Both caught by `bash -n` and by `--arms I59` exiting 2 — the selector's own refusal path working
+exactly as its header says it must.
+
+**TWO ADVERSARY FINDINGS WERE REFUTED BY MEASUREMENT.** The derived mutant tally counts **9** over
+a real green run, not 5 — `kill_j`'s own messages match the counter's grammar, verified by driving
+the SHIPPED `note()` over the exact lines a green run emits. And `BL-265`'s receipt is not
+prose-satisfiable; both anchors resolve to executing lines. **A delegate's finding is a hypothesis
+until re-derived**, in both directions.
 
 **BATCH 122 SHIPPED AS `v0.588.0` (`6b5b9a63`, PR #788). ACTION 1 AGAIN, AND THE SECOND SUBJECT WAS
 FOUND BY THE FIRST ONE FAILING.**
