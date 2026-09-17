@@ -3738,9 +3738,32 @@ verify: sh h=core/hooks/ai-dlc-dispatch-guard.sh; [ -f "$h" ] || exit 9; LC_ALL=
 
 ## BL-261 — the `UserPromptSubmit` capture hook missed one session's opening prompt entirely, and nothing detects a session with zero captured requests
 
+**LANDED (v0.591.0, verified 66067534) — THE BUILDABLE HALF ONLY, AND THE OTHER HALF IS STILL
+OPEN BY DESIGN.** `validate-request-coverage.sh` takes an optional `--session <id>` and refuses
+with exit 2 when the capture holds no entry for it, naming the session and the count it does
+hold for others. The join key is `- Session: <id>`, which `ai-dlc-pause.sh` already writes on
+every entry at three sites, so nothing new is emitted for this. PENDING-shaped rather than
+FAIL-shaped: exit 2 is "nothing was compared", not "the plan dropped a topic", and those want
+different remedies. Opt-in, so Check 33's published invocation and every other existing caller
+is byte-unaffected.
+
+Driven in `core/fixtures/request-coverage`, four arms: an absent session exits 2 naming itself
+on a brief that otherwise PASSES; the ALLOW TWIN one property away (`sess-1`, which the seed
+does hold) exits 0 on the same command line, because a deny arm alone cannot tell a
+correctly-keyed guard from one refusing everything; a caller passing no `--session` is
+untouched; and mutant `nojoin` — the session count forced to 0, guarded by `cmp -s` — reports
+the PRESENT session as absent, which is what proves the twin can fire. Receipt 0 at tip, 1 at
+the parent.
+
+**What is NOT fixed, restated so the close is not read wider than it is.** The root cause of
+the original miss is not established. The capture sits above the snapshot gate on purpose and
+its predicate is a non-empty stripped prompt, so a first-turn miss is not that gate; the classes
+the consumer names are outside the hook's control flow and were not reproduced. One instance, no
+reproduction. This turns a silent miss into a named one and explains nothing.
+
 **DEFECT.** Filed from the consumer candidate
 `PC-S312-USERPROMPTSUBMIT-HOOK-MISSES-SESSION-OPENING-PROMPT`, read from the consumer's sprint
-branch ledger (not yet on its `main`). Consumer receipt is `verify: manual`. Not fixed here.
+branch ledger (not yet on its `main`). Consumer receipt is `verify: manual`.
 
 On the reference consumer, one session's opening message (921 bytes, the `/ai-dlc` invocation
 carrying a sprint's full scope) was never written to `_bmad-output/operator-requests-history.md`

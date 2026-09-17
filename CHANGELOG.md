@@ -15,6 +15,47 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.591.0] - 2026-09-16
+
+### A session whose prompts were never captured is now a named state instead of a silent one
+
+`BL-261`, from the consumer's sprint-branch candidate
+`PC-S312-USERPROMPTSUBMIT-HOOK-MISSES-SESSION-OPENING-PROMPT`. **The buildable half only; the
+root cause is still not established and the entry says so.**
+
+**Measured once on the reference consumer:** one session's opening message — 921 bytes, the
+`/ai-dlc` invocation carrying a whole sprint's scope — never reached
+`operator-requests-history.md`, while three other sessions active in the same window had every
+prompt captured including their own opening turns. The first reader that noticed was
+`--cite-sha`, reporting `no captured request carries SHA256 <hash>` several pipeline steps
+later — a message about a HASH rather than about a missing session.
+
+`validate-request-coverage.sh` now takes an optional `--session <id>` and refuses with exit 2
+when the capture holds no entry for it, naming the session and the count it holds for others. A
+zero beside a non-zero total is the shape that says *capture ran, and not for you*. The join key
+is `- Session: <id>`, which `ai-dlc-pause.sh` already writes on every entry at three sites, so
+nothing new is emitted for this.
+
+**PENDING-shaped, not FAIL-shaped, and opt-in.** Exit 2 is "nothing was compared", not "the plan
+dropped a topic" — a session with no capture is an absent evidence base and wants a different
+remedy. Without the flag the arm stays quiet, so Check 33's published invocation and every other
+existing caller is byte-unaffected; a fail-closed default here would wedge live work.
+
+**Four arms in `core/fixtures/request-coverage`, and the twin is the one that matters.** An
+absent session exits 2 naming itself on a brief that otherwise PASSES; the ALLOW TWIN one
+property away (`sess-1`, which the seed does hold) exits 0 on the same command line; a caller
+passing no `--session` is untouched; and mutant `nojoin` — the session count forced to 0,
+guarded by `cmp -s` — reports the PRESENT session as absent. A deny arm alone cannot tell a
+correctly-keyed guard from one that refuses everything, which is why the twin exists. Receipt 0
+at tip, 1 at the parent.
+
+**What this does NOT do.** The capture sits above the snapshot gate on purpose and its predicate
+is a non-empty stripped prompt, so a first-turn miss is not that gate. The classes the consumer
+names — the harness delivering an opening message before the hook attaches on a
+resume-from-compact or CLI-initial-prompt path, an ordering race in the session-start chain —
+are outside the hook's control flow and were not reproduced. One instance, no reproduction. This
+turns a silent miss into a named one and explains nothing.
+
 ## [0.590.0] - 2026-09-16
 
 ### Check 22's effort arm could not fire at the gate its own step file publishes

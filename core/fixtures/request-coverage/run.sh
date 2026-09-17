@@ -247,6 +247,55 @@ else
   bad "a capture with no operator entry exited $RC; an empty ask reading as NOT-APPLICABLE is the defect this release closes"
 fi
 
+# --- ZERO CAPTURED REQUESTS FOR A SESSION (BL-261) ---------------------------------------
+# The seeded capture carries `- Session: sess-1` and `- Session: sess-2`, so a THIRD id is a
+# session the capture genuinely does not hold. That is the measured state: one consumer
+# session's opening message never reached the history while other sessions active in the same
+# window were captured in full.
+#
+# THE OFFENDER AND ITS ALLOW TWIN ARE ONE PROPERTY APART AND RUN IN THE SAME INVOCATION. An
+# arm asserting only that a missing session ERRORS passes identically against a build that
+# refuses every `--session` it is handed, which is the deny-without-its-allow shape.
+OUT="$(bash "$VALIDATOR" --requests "$REQ" --brief "$COVERED" --sprint 42 --session sess-absent 2>&1)"; RC=$?
+if [ "$RC" = "2" ] && grep -q 'no captured request for session sess-absent' <<<"$OUT"; then
+  ok "a session with ZERO captured requests exits 2 NAMING that session, on a brief that otherwise passes — the miss is reported here rather than surfacing as an unresolvable SHA several steps later"
+else
+  bad "a session absent from the capture exited $RC without naming it; a silent zero-capture session is BL-261's whole subject"
+fi
+
+OUT="$(bash "$VALIDATOR" --requests "$REQ" --brief "$COVERED" --sprint 42 --session sess-1 2>&1)"; RC=$?
+if [ "$RC" = "0" ]; then
+  ok "ALLOW TWIN: a session the capture DOES hold passes the same command line — the arm reads its key rather than refusing every --session, and one property separates this run from the one above"
+else
+  bad "a session PRESENT in the capture exited $RC on a covered brief; the arm is refusing unconditionally, so the assertion above establishes nothing"
+fi
+
+# ...and the arm must stay silent for every caller that passes no --session at all. Check 33's
+# published invocation is one of them, so a fail-closed default here would wedge live work.
+OUT="$(bash "$VALIDATOR" --requests "$REQ" --brief "$COVERED" --sprint 42 2>&1)"; RC=$?
+if [ "$RC" = "0" ] && ! grep -q 'no captured request for session' <<<"$OUT"; then
+  ok "a caller passing no --session is unaffected — the arm is opt-in, so no existing invocation changes behaviour"
+else
+  bad "omitting --session exited $RC and/or reached the session arm; every caller that passes three arguments must be untouched"
+fi
+
+# MUTANT: neuter the join so the arm cannot see a present session, and it must then fire on
+# sess-1 too. Built as a COPY guarded by cmp -s, because a sed that matched nothing would
+# otherwise score as a kill.
+ZCMUT="$WORK/vrc-nojoin.sh"
+sed 's/^    _rc_mine="\$(LC_ALL=C grep -cF -- "- Session: \${SESSION}" "\$REQUESTS")" || _rc_mine=0$/    _rc_mine=0/' \
+  "$VALIDATOR" > "$ZCMUT"
+if cmp -s "$VALIDATOR" "$ZCMUT"; then
+  bad "FIXTURE BROKEN: the zero-capture mutant changed nothing — the join line was renamed, so this control tests an unmutated file"
+else
+  OUT="$(bash "$ZCMUT" --requests "$REQ" --brief "$COVERED" --sprint 42 --session sess-1 2>&1)"; RC=$?
+  if [ "$RC" = "2" ] && grep -q 'no captured request for session sess-1' <<<"$OUT"; then
+    ok "MUTANT nojoin: a build that never counts the session's own entries reports the PRESENT session as absent, so the allow twin above is what proves the join is read"
+  else
+    bad "MUTANT nojoin SURVIVED: stripping the session count still passed sess-1 (exit $RC) — the allow twin cannot fire and its ok line means nothing"
+  fi
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "request-coverage: PASS"; exit 0; fi
 echo "request-coverage: $fails assertion(s) FAILED" >&2
