@@ -499,7 +499,21 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   arms still cost are the batched awk's own spawns: one `mktemp` and one `find` per call
 #   site, plus the `grep -r` that derives I60's citation corpus, which is unchanged.
 #   Budget from the HIGH reading, 4767, plus the usual 6.
-FORK_BUDGET=4773
+#
+#   RAISED TO 4777 AT 0.590.0, AND THE CAUSE IS PROSE, NOT CODE. Nothing in that release
+#   touched this file. `gate-validation.md` gained one documented path --
+#   `_bmad-output/subagent-context.jsonl`, the probe file Check 22's published invocation now
+#   passes -- and `_bmad-output` is a declared scan root, so I82's extractor picked the path up
+#   into `i82_seen` and `i82_is_sprint_token` charged TWO `grep -qE` per component. Two
+#   components, four forks: I82 653 -> 657, total 4769 -> 4774, one over the old ceiling.
+#   Measured in clean worktrees both sides, `--stable` 2/2 each, spreads 4769-4769 and
+#   4774-4774, every other arm byte-identical; base `validator-fork-budget` PASSes at 4769.
+#   **A DOCUMENTED PATH IS A CORPUS ENTRY HERE. Adding one to any file under a scan root costs
+#   2 forks per component**, so a step file gaining an example path moves this number with no
+#   code change anywhere -- which is the gate working, not a false positive.
+#   Budget from the HIGH reading, 4774, plus the usual 3 rather than 6: the arms that would
+#   grow it are corpus-derived, and a wider band is headroom this file cannot account for.
+FORK_BUDGET=4777
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

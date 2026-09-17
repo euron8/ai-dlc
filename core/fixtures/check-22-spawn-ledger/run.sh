@@ -1063,6 +1063,66 @@ stepverdict() {
   printf 'ALL-FOUR'
 }
 
+# C2b. THE PUBLISHED INVOCATION MUST PASS `--probe`, AND THIS ARM DRIVES IT RATHER THAN
+# READING IT. Every other arm in this file builds its own command line with `--probe`
+# already on it, so the fixture was structurally incapable of noticing that the command
+# gate-validation.md publishes carried no `--probe` at all. Measured before this arm existed:
+# `probe_effort()` returns empty without a readable probe, every row lands in EFFORT_PENDING,
+# and the effort route cannot reach VIOL -- so a consumer running the step file's own command
+# got a clean verdict over an arm that never ran, while all 55 assertions here were green.
+#
+# THE FLAGS ARE EXTRACTED FROM THE STEP FILE AND EXECUTED, never grepped. A grep for the
+# token is satisfied by the prose around the fence -- this file's own CHANGELOG entry carries
+# `--probe` four times -- which is the text-about-a-program trap. The seed below is a real
+# effort mismatch, so an invocation that reaches the arm exits 1 and one that cannot exits 0:
+# the two are one flag apart and the difference IS the assertion.
+gv_flags() { # -> the published flag list, one line, from the fenced block only
+  # THE CLOSING FENCE IS TESTED BEFORE THE APPEND, NOT AFTER. Appending first and exiting
+  # second puts the literal ``` on the end of the command line; both the published run and
+  # its no-probe control then die of a syntax error at rc=1, the two agree, and the arm
+  # reports "not discriminating" — a broken extractor reading exactly like the defect.
+  # AND THE CONTINUATION IS HONOURED, NOT STRIPPED BLINDLY. An extractor that removes every
+  # trailing `\` and joins the lines is MORE FORGIVING THAN A SHELL: a block whose continuation
+  # was dropped mid-command still reassembles here into a valid command line, so the arm passes
+  # while a consumer copy-pasting that block loses every flag after the break. Measured on this
+  # branch, by the tip adversary and reproduced here: deleting the `\` after `--probe` leaves
+  # `--settings .claude/settings.json` orphaned on its own line, and the old extractor still
+  # scored C2b green. A line inside the fence that does NOT end in `\` therefore ENDS the
+  # command, exactly as the shell would read it.
+  LC_ALL=C awk '/^scripts\/ai-dlc\/validate-spawn-ledger\.sh/{p=1}
+                p && /^```/{exit}
+                p{ cont = /\\$/; gsub(/\\$/,""); b = b $0 " "; if (!cont) exit }
+                END{printf "%s", b}' "$1"
+}
+GVF="$(gv_flags "$GV")"
+if ! grep -q 'validate-spawn-ledger' <<<"$GVF"; then
+  bad "FIXTURE BROKEN: could not extract Check 22's published invocation from $GV, so C2b tested nothing"
+else
+  c2b="$WORK/c2b"; mkdir -p "$c2b"
+  erow dev sonnet true true c2b-d1 true high tc2b > "$c2b/ledger.jsonl"
+  prow tc2b low claude-sonnet-5 2.1.300               > "$c2b/probe.jsonl"
+  # The published line names consumer-relative paths; rewrite them onto this world and run it.
+  c2b_cmd="$(printf '%s' "$GVF" \
+    | sed -e "s#scripts/ai-dlc/validate-spawn-ledger\.sh#bash '$VSL'#" \
+          -e "s#_bmad-output/spawn-ledger\.jsonl#$c2b/ledger.jsonl#" \
+          -e "s#_bmad-output/subagent-context\.jsonl#$c2b/probe.jsonl#" \
+          -e "s#\.claude/settings\.json#$WORK/settings.json#" \
+          -e 's#--sprint <N>#--sprint 900#')"
+  eval "$c2b_cmd" >/dev/null 2>&1; c2b_rc=$?
+  # The CONTROL, one flag apart and in the same invocation: strip --probe and its argument
+  # from the very same command. It must go quiet, or the seed never reached the effort arm
+  # and the rc=1 above was produced by some other route.
+  c2b_ctl="$(printf '%s' "$c2b_cmd" | sed -e "s#--probe $c2b/probe.jsonl##")"
+  eval "$c2b_ctl" >/dev/null 2>&1; c2b_ctl_rc=$?
+  if [ "$c2b_rc" -eq 1 ] && [ "$c2b_ctl_rc" -eq 0 ]; then
+    ok "C2b (behavioural: this arm EXECUTES the invocation gate-validation.md publishes) the published command reaches the effort arm — a seeded effort_bound=high against a probe recording low exits 1 as published, and exits 0 with --probe stripped from that same command line, so the flag is what makes the route reachable"
+  elif [ "$c2b_rc" -eq "$c2b_ctl_rc" ]; then
+    bad "C2b the published invocation and the same command WITHOUT --probe both exited $c2b_rc, so this arm is not discriminating: either the published command has lost its --probe (the effort route cannot fire at the gate, which is BL-263) or the seed never reaches the effort comparison"
+  else
+    bad "C2b the published invocation exited $c2b_rc (expected 1 on a seeded effort mismatch) and its no-probe control exited $c2b_ctl_rc (expected 0). Command was: $c2b_cmd"
+  fi
+fi
+
 SV="$(stepverdict "$GV")"
 if [ "$SV" = "ALL-FOUR" ]; then
   ok "C2 (weak prose arm: this one READS the step file rather than driving a program, and C1 is the arm that binds behaviour) gate-validation.md's disposition section is headed for a recorded Rule 19 violation rather than a Rule 19(a) one, and names all four FAIL classes between that header and the sentence closing the section"

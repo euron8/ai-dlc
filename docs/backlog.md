@@ -3643,6 +3643,50 @@ The rate is 1 of 3 pool runs on that evening, against 0 of 5 solo; a single-digi
 the same band `BL-230` measures, and a fix for one may be a fix for both — grep both entries
 before building.
 
+**WIDENED AT BATCH 123, AND THE "RARE FLAKE" FRAMING ABOVE IS REFUTED. THIS IS A CONCURRENCY
+DEFECT WITH A ~90% RATE, NOT A SINGLE-DIGIT ONE.** It went red on a gate run, was nearly
+dispositioned as the `BL-230` contention class on the strength of 9 green solo runs, and the
+solo runs turn out to be the OUTLIER. Driven at a discriminating N — the predicted event count
+at the rate this entry claims is **0.27 for an 8-run sweep**, below one, so the 8 greens that
+first looked like an acquittal could not discriminate and were discarded:
+
+```
+solo         N=9    0 red
+pool width12 N=12   5 red   (42%)
+tip          N=32  29 red   (91%)
+base         N=32  29 red   (91%)
+```
+
+**BASE AND TIP ARE IDENTICAL AT THE SAME N**, which is what establishes this belongs to `main`
+and not to whatever change is in flight — the misattribution both this entry and `BL-230` exist
+to stop, measured rather than argued this time.
+
+**AND THE HARNESS DOES NAME THE SECOND KILLER; the claim above that it is "not derivable from
+the captured output" is wrong.** Over 64 concurrent runs the entanglement verdict names THREE
+distinct shapes, so the population is wider than the one arm this entry was filed on:
+
+```
+27  foreign_definition_untouched three_states_are_distinct
+14  foreign_definition_untouched
+14  three_states_are_distinct
+ 3  SURVIVED (check_joins_declaration_to_projection passes against the mutated subject)
+```
+
+Those 3 SURVIVED rows are the direction that matters: under load the mutant is not merely
+killed by extra arms, it sometimes is not killed at all — a mutation scoring green against a
+subject that no longer does the thing the arm asserts.
+
+**THE LEAD IS `mut()`'s `cp "$SUBJ_DIR"/*` at `run.sh:419`**, which copies the LIVE
+`core/scripts/` directory — 53 files — once per mutant, while 105 fixtures naming that path run
+in the same pool. The copy is not atomic and the source is shared. `MUTROOT` is a private
+`mktemp -d`, so the DESTINATION is correctly isolated and the SOURCE is not; that asymmetry is
+why solo is clean and the pool is not. Verify that before building: the rc triple this entry
+already asks for will say which world moved, and the copy race says why.
+
+**What does NOT change: do not narrow the mutant or drop the entanglement check.** It is firing
+correctly on a real property. What is owed is isolating the source of the copy, not silencing
+the arm that reports it.
+
 **THE RECEIPT KEYS ON THE HARNESS'S REPORT LINE, NOT ON THE FLAKE.** A flake cannot be a
 receipt's subject — a run that happens to go green closes it. What is owed and checkable is
 that the entanglement verdict carries the OBSERVED rc of every arm that fired, so the receipt
@@ -3733,8 +3777,18 @@ verify: sh d=core/scripts; [ -d "$d" ] || exit 9; f=$(grep -lE 'operator-request
 
 ## BL-263 — Check 22's effort-mismatch route is unreachable under the invocation the step file publishes
 
+**LANDED (v0.590.0, verified 803ccc69).** The published invocation now passes
+`--probe _bmad-output/subagent-context.jsonl`, sited BEFORE `--settings` because the receipt's
+own `awk` stops collecting at that flag. Driven end to end on one seeded row whose
+`effort_bound` is `high` and whose probe row records `low`: **rc=1 with the probe and rc=0
+without it, same ledger, same settings** — so the arm was genuinely unreachable at the gate and
+now fires. The file is written by `ai-dlc-subagent-probe.sh` into the same `_bmad-output/` the
+ledger lives in, is registered in the settings template, and its rows carry the `tool_use_id`
+`probe_effort()` joins on. An absent probe stays PENDING rather than failing, so the flag is
+safe on every run including before the sprint's first teammate returns.
+
 **NOTE.** Found by the batch-118 contract adversary while attacking the clearing-path fix for
-`PC-S312-CHECK22-NO-CLEARING-PATH-FOR-19B-CITATION-MISS`. Not fixed here.
+`PC-S312-CHECK22-NO-CLEARING-PATH-FOR-19B-CITATION-MISS`.
 
 `core/scripts/validate-spawn-ledger.sh` has four routes into its `VIOL` counter. The effort route
 (`records effort=`, near `:556`) is gated on `PROBE_READABLE` (`:379-382`), which is true only when

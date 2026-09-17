@@ -1486,8 +1486,22 @@ finding about any teammate. Run:
 ```
 scripts/ai-dlc/validate-spawn-ledger.sh \
   --ledger _bmad-output/spawn-ledger.jsonl --sprint <N> \
+  --probe _bmad-output/subagent-context.jsonl \
   --settings .claude/settings.json
 ```
+
+**`--probe` IS WHAT MAKES THE EFFORT ARM REACHABLE, AND WITHOUT IT THAT ARM
+CANNOT FIRE AT THIS GATE.** `probe_effort()` returns empty unless `--probe`
+names a readable file, so every row lands in `EFFORT_PENDING` and none can
+reach `VIOL` — a clean-looking verdict over an arm that never ran, which is
+this repository's recurring defect. `subagent-context.jsonl` is written by
+`ai-dlc-subagent-probe.sh` into the same `_bmad-output/` the ledger lives in,
+one row per teammate stop, and its rows carry the `tool_use_id` the join keys
+on. The file is absent before the sprint's first teammate returns; the
+validator treats an unreadable probe as PENDING rather than failing, so the
+flag is safe to pass on every run and the `COUNTS:` line names which state it
+was in. A run that omits it reports `no --probe was passed` in that line —
+read that as "the effort comparison did not happen", never as a pass.
 
 It filters to this sprint, drops the out-of-scope rows named above, and
 decides all three Rule 19 comparisons per remaining row:
