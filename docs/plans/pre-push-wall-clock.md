@@ -63,14 +63,15 @@ sort -k2,2nr "$D" | head -3                                                  # t
 awk '{s+=$2; n++} END{printf "%d over %d units, sum/12 = %.1f\n", s, n, s/12}' "$D"   # the floor
 ```
 
-Re-derived at `v0.591.0`, full 202-fixture dispatch under `AI_DLC_FIXTURE_NO_SKIP=1`, pool 12:
-pole **501s**, total **5591 pool-seconds**, floor **`sum/12` = 465.9s**. The gap between the two
-is **~35s**, and **that gap is all any pole work can ever return.** Zero out the pole entirely and
+Re-derived at `v0.593.0`, full 202-fixture dispatch under `AI_DLC_FIXTURE_NO_SKIP=1`, pool 12:
+pole **627s**, total **7120 pool-seconds**, floor **`sum/12` = 593.3s**. The gap between the two
+is **~34s**, and **that gap is all any pole work can ever return.** Zero out the pole entirely and
 the suite still cannot finish faster than the floor. **The suite is WORK-BOUND with essentially no
-scheduling headroom left, which is the strongest form of the ruling below.** (At `v0.589.0` the
-same three read 504s, 5637 and 469.8s — a batch that shipped two releases moved none of them
-outside the wobble the caveats below describe, which is itself the point: neither release
-targeted total work.)
+scheduling headroom left, which is the strongest form of the ruling below.** (At `v0.591.0` the
+same three read 501s, 5591 and 465.9s, and at `v0.589.0` 504s, 5637 and 469.8s. **The `v0.593.0`
+reading is +27% on BOTH the pole and the total against `v0.591.0` — read together, as the caveat
+below requires, that is a busier box and not a regression.** The GAP is the load-independent part
+of this block and it has read ~34s across all three.)
 
 **THE FLOOR MOVES WHEN WORK IS REMOVED, AND THAT IS THE WHOLE POINT.** It was `sum/12` = 543.9s at
 `v0.587.0` and is 469.8s now, against a total that went 6527 → 5637 pool-seconds. Read that
@@ -192,10 +193,18 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    fixture and 1.30x within its unit of work are the same headline number and opposite subjects.
    Take the census of ONE invocation before scoping a memo.
 
-   **Inside the validator the remaining arms are `I33b` 645, `I75` 446 and `I84` 271**, of a
-   total of 3827 (`FORK_BUDGET` 3833 since `v0.592.0`). `I82` is GONE from this table — 657 → 61
+   **Inside the validator the remaining arms are `I33b` 645, `I75` 446 and `I84` 273**, of a
+   total of 3836 (`FORK_BUDGET` 3842 since `v0.593.0`). `I82` is GONE from this table — 657 → 61
    at `v0.592.0`, which also took `I84` 527 → 271. Re-derive before choosing — it is the only
    ranking that has predicted anything here:
+
+   **A SHIPPED HOOK IS A CORPUS ENTRY AND MOVED THIS TOTAL WITHOUT TOUCHING THE VALIDATOR.**
+   `v0.593.0` added one `core/hooks/ai-dlc-*.sh` and the file went **3827 → 3836**, because `I13`
+   and `I14` each loop once per hook: I14 +4, I84 +2, I13 +2, I83 +1, summing to the whole +9 with
+   no remainder (base in a CLEAN worktree, both sides `--stable`, spreads 3827-3827 and
+   3836-3836). `I84` reads 273 here rather than 271 for that reason and NOT because its arm
+   changed. Same class as `0.590.0`'s prose-only commit. **Take a base reading in a clean worktree
+   before attributing any delta to the arm you edited.**
 
    **`I33b` IS NOW THE TOP ARM AND ITS FIXTURE ANCHOR IS THE WHOLE DIFFICULTY.** The separability
    ruling below says `(I33b + its A27 edit)` is one release: `enforcement-map-derivations/run.sh`
@@ -256,8 +265,8 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    the wall the suite now sits against. Every past pole win was bought this way and that is why
    the floor is where it is.
 
-   **Work concentrates, which is what makes this tractable:** top 10 units are **40.7%** of all
-   pool-seconds, top 20 are **57.9%** (re-derived at `v0.591.0`; 41.6/57.8 at `v0.589.0`).
+   **Work concentrates, which is what makes this tractable:** top 10 units are **42.3%** of all
+   pool-seconds, top 20 are **60.6%** (re-derived at `v0.593.0`; 40.7/57.9 at `v0.591.0`).
    Re-derive both before scoping — the membership moves, these
    two figures sat one release stale until action 3b re-ran them from a worktree, and they swing
    with the run: one tree read 42.0/60.3 and 46.3/64.8 from two different gate runs, so they
@@ -418,6 +427,40 @@ ruling stands until the operator replaces it: **the subject is removing work, no
 killed them, and both sections are kept in full below because their hazard notes are the reason
 to read them if the numbers ever change back.
 ### Discharged — do not re-execute
+
+**BATCH 125 SHIPPED `v0.593.0` (`db2468d7`) AND ITS SUBJECT WAS NOT THIS PLAN.** The operator
+ruled `BL-271` the batch's subject ahead of action 1's arm table, relayed through the peer session
+that handed this plan over. A `PreToolUse` `Write` hook now refuses a sprint-token BASENAME at the
+keystroke; `validate-artifact-paths.sh` had one call site, the consumer pre-push, which is opt-in,
+batched, and reached after the file is committed, merged and cited. **Action 1's arm table is
+unchanged by that work and is still the next subject.**
+
+**THE DENY IS NARROWED TO THE BASENAME, AND THE SPLIT IS THE FINDING.** Of 73 blocking paths in
+the post-migration write population, only **31** are blamed on the basename; **42** are blamed on
+an ANCESTOR DIRECTORY the author never named in that call, 26 of them a correctly-spelled slot
+flagged for DEPTH alone. Declaring ONE depth-3 area moves 73 → 47 and flips exactly those 26, so
+that class is not even a stable population.
+
+**A WRITE-TIME GUARD'S POPULATION IS NOT ITS VALIDATOR'S, AND THE TIP ADVERSARY FOUND IT ON A
+GATE-GREEN BRANCH.** The validator's corpus is `git ls-files`; the hook's is whatever reaches
+`Write`. They differ by the GITIGNORED set, and for an ignored path the batched arm can NEVER
+render a verdict — so the deny was the only verdict and unappealable. Five live denials on
+`*.txt`/`*.log` evidence. **An FP set of 0 over 6510 TRACKED paths was correct and measured over
+the wrong population.** Carried to `.claude/rules/` as the `--follow` half only; the population
+rule lives in the entry.
+
+**FOUR OF THIS BATCH'S OWN DEFECTS WERE CAUGHT BY MECHANISMS, NOT BY READING.** I54 caught a
+`printf | grep -q`; the GATE caught `FORK_BUDGET` 3833 against a measured 3836 (see the arm-table
+warning above); a `cmp` guard caught two mutant scores produced by `sed` expressions that SILENTLY
+NEVER APPLIED; and a corpus sweep caught 3 denials on a passing tree from an ambiguity count read
+over the basename instead of the whole path. **A `git log --follow` rename query scored 1 of 73
+where a derived 1192-pair rename map scored 62**, and the 1 had already been quoted into a value
+argument that the correction inverted.
+
+**A FALSE `BL-272` SIBLING WAS FILED AND WITHDRAWN.** `validate-artifact-paths.sh:410` is
+`head -60`, but `:411` prints `… first 30 of 73 shown.` — a DECLARED preview, not a silent
+truncation, and it was in the captured output of the run that was misread. Not filed. The error was
+reading a RENDERED artifact instead of driving the program.
 
 **BATCH 124 SHIPPED `v0.592.0` AND IT IS ACTION 1 AGAIN — THE LAST TWO ARMS AT THE TOP OF THE
 BY-ARM TABLE, PLUS A REWRITE THIS RELEASE REFUSED.** Validator total **4774 → 3827 forks**,
