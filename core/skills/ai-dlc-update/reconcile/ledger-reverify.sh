@@ -608,7 +608,12 @@ named_absorbed() { # <label> -> "<how> <n> <sha>,<sha>,..." if upstream's histor
   _hits="$(git -C "$DIST" log -F --grep="$_id" --format=%h "$THEIRS" 2>/dev/null)"
   if [ -z "$_hits" ]; then
     # FALLBACK: the short id upstream actually writes. Only when it names ONE entry.
-    _pfx="$(printf '%s' "$_id" | sed -n 's/^\(PC-S[0-9][0-9]*\)-.*/\1/p')"
+    _pfx=""
+    case "$_id" in
+      PC-S[0-9]*-*)
+        _pfx="${_id#PC-}"; _pfx="${_pfx%%-*}"
+        case "${_pfx#S}" in ""|*[!0-9]*) _pfx="" ;; *) _pfx="PC-$_pfx" ;; esac ;;
+    esac
     [ -n "$_pfx" ] || return 0
     [ "$(prefix_entry_count "$_pfx")" = "1" ] || return 0
     # ANCHORED, because `-F` is an unanchored FIXED-SUBSTRING search and that is not what the
@@ -661,7 +666,12 @@ named_ambiguous() { # <label> -> "<newest-sha> <n-entries>" when the prefix is s
   # `log -F --grep="$_id"` came back empty -- the same query, differing only in `%h` against
   # `%H`. Measured on the fixture's seeded corpus, one invocation: 34 of 41 distinct slug
   # queries were this function repeating it, and 141 git calls fell to 109.
-  _pfx="$(printf '%s' "$_id" | sed -n 's/^\(PC-S[0-9][0-9]*\)-.*/\1/p')"
+  _pfx=""
+  case "$_id" in
+    PC-S[0-9]*-*)
+      _pfx="${_id#PC-}"; _pfx="${_pfx%%-*}"
+      case "${_pfx#S}" in ""|*[!0-9]*) _pfx="" ;; *) _pfx="PC-$_pfx" ;; esac ;;
+  esac
   [ -n "$_pfx" ] || return 0
   _n="$(prefix_entry_count "$_pfx")"
   [ "$_n" -gt 1 ] 2>/dev/null || return 0
@@ -705,13 +715,27 @@ named_ambiguous() { # <label> -> "<newest-sha> <n-entries>" when the prefix is s
 # six renders produced four distinct outputs. Everything outside this helper was stable.
 #
 # A herestring is not a pipe: grep reads a file, there is no writer to signal, and an early
-# exit cannot become a false negative. Keeping `grep -F` (rather than a `case` glob) preserves
-# the per-LINE fixed-string semantics the convention's substrings are written against.
+# exit cannot become a false negative. That is why the herestring form was safe; it is not why
+# it was needed, and it is no longer the form used.
+#
+# WHY `case` REPLACED `grep -F` HERE, AND THE ONE INPUT THAT WOULD MAKE IT WRONG. `grep -F`
+# treats a needle containing a newline as an OR over its lines; `case "$_c" in *"$_one"*)` is a
+# literal span. They diverge on exactly that input class, and on nothing else -- verified with a
+# single-line control agreeing in the same invocation. A MULTI-LINE `_one` IS UNCONSTRUCTIBLE
+# HERE: `_one` is produced by `while IFS= read -r _one`, and `read -r` cannot yield a value
+# containing a newline. One level up, `$subs` gets its newlines only from the `" "` split
+# below, whose fields are single-line by construction. The two callers are this function's
+# direct site and `base_holds`; neither can pass one.
+#
+# So the per-LINE semantics are not being traded away -- there is no input on which they differ.
+# If a future edit lets a needle carry a newline, this becomes a false NEGATIVE (a substring
+# reported absent when grep would have found one of its lines), which is the false-close
+# direction this file exists to refuse. Restore `grep -qF -- "$_one" <<<"$_c"` if that day comes.
 all_present() {
   _c="$1"; _ok=1
   while IFS= read -r _one; do
     [ -n "$_one" ] || continue
-    grep -qF -- "$_one" <<<"$_c" || _ok=0
+    case "$_c" in *"$_one"*) ;; *) _ok=0 ;; esac
   done <<EOF
 $2
 EOF
@@ -1394,8 +1418,14 @@ consumer_scannable() {
 # cannot be trusted either way, and turning it into a CLOSE-CANDIDATE on a GUESSED spelling is
 # the false-close direction this whole file is built to refuse.
 anchor_variants() { # <anchor> -> candidate spellings, the original excluded by the caller
-  local _a="$1" _swapped
-  _swapped="$(printf '%s' "$_a" | tr '_-' '-_')"
+  local _a="$1" _swapped _ch _rest _out=""
+  _rest="$_a"
+  while [ -n "$_rest" ]; do
+    _ch="${_rest%"${_rest#?}"}"
+    case "$_ch" in _) _out="$_out-" ;; -) _out="${_out}_" ;; *) _out="$_out$_ch" ;; esac
+    _rest="${_rest#?}"
+  done
+  _swapped="$_out"
   printf '%s\n%s\n%s\n' "$_swapped" "${_a%:}" "${_swapped%:}" | sort -u
 }
 
@@ -1404,13 +1434,14 @@ anchor_variants() { # <anchor> -> candidate spellings, the original excluded by 
 # was misspelled is not derivable and a guess names the wrong token in the row.
 near_miss_spelling() { # <path> <anchor> <subs>
   local _p="$1" _a="$2" _subs="$3" _v _tb _bb
-  [ "$(printf '%s\n' "$_subs" | grep -c .)" -eq 1 ] || return 0
+  case "$_subs" in ""|*"
+"*) return 0 ;; esac
   _tb="$(theirs_show "$_p")"; _bb="$(base_show "$_p")"
   while IFS= read -r _v; do
     [ -n "$_v" ] && [ "$_v" != "$_a" ] || continue
-    if grep -qF -- "$_v" <<<"$_tb" && ! grep -qF -- "$_v" <<<"$_bb"; then
-      printf '%s' "$_v"; return 0
-    fi
+    case "$_tb" in *"$_v"*) ;; *) continue ;; esac
+    case "$_bb" in *"$_v"*) continue ;; esac
+    printf '%s' "$_v"; return 0
   done <<EOF
 $(anchor_variants "$_a")
 EOF

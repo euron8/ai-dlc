@@ -15,6 +15,85 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.599.0] - 2026-09-18
+
+### The pole's remaining cost was non-git forks, which every instrument this repo aims at it is blind to
+
+`ledger-reverify.sh` is the suite pole at 479 of 5508 pool-seconds. `0.598.0` cut its git calls
+141 → 109 and the fixture ~8.6%. What remained is not git at all: one invocation makes **909
+forks against 109 git calls**, and `sed` (284), `grep` (191) and `cat` (170) outnumber git 6:1.
+The bucketed git census and the total/distinct ratio — the two instruments action 1 of
+`docs/plans/pre-push-wall-clock.md` names — score every change below as **zero**, because the git
+count is unchanged at 109/86 on both sides.
+
+Three fork removals, stacked, in `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh`:
+
+- `all_present` (`:720`) replaces a per-substring `grep -qF` with a `case` span. 132 of the 909
+  forks are that one line, reached from `base_holds` and the per-entry loop.
+- `near_miss_spelling` / `anchor_variants` (`:1404-1436`) drop `tr`, `sort -u` and a
+  `printf | grep -c` line count for parameter expansion.
+- The `PC-S<n>` prefix extraction at `:611` and `:666` replaces a `sed -n` with a `case` and two
+  expansions — 72 forks.
+
+**Measured in CPU-SECONDS, because wall clock could not resolve it.** A 10-rep interleaved
+wall-clock differential read paired deltas of −492..+1086 ms around a mean of 485 — the spread
+larger than the effect, which is a null by this repo's own rule, and box load rose to 12.1 from
+concurrent sessions mid-measurement. Re-taken as RUSAGE_CHILDREN over the process tree, 6
+interleaved reps with the side order alternating: **base 5.362-5.684s against 4.373-4.761s,
+disjoint, −17.0%**. Forks 909 → 639.
+
+**The fixture agrees on the LABEL SET, not merely the count** — 274 assertions, `cmp`-identical
+between base and tip against a control proving the comparator can report a difference. A
+reordering preserves a count while moving a verdict, which is why the count alone is not the
+evidence. `ledger-reverify-unfalsifiable` and `ledger-rotate` green on the same tree.
+
+### Four candidates were refuted by measurement, and two of the refutations cost more than the fix
+
+**`memo_show`'s `cat` is 162 forks resolving to 9 distinct files — the top row by every
+redundancy instrument — and it costs ZERO.** Ablated: −0.004 CPU-s, −0.1%, ranges overlapping.
+It is also the `$(<file)` idiom `0.587.0` shipped a blocker with. **A fork count ranks
+redundancy, not cost**, measured directly here for the third release running.
+
+**`verb_norm`'s `sed` CHANGES THE OUTPUT.** It looked like a clean 86-fork removal and the timing
+read as a ~10% win; the strip is load-bearing for backtick-wrapped verbs. Caught only by
+byte-comparing stdout.
+
+**A combined candidate read as the session's largest effect at ~30% and was a broken program.**
+Three `CLOSE-CANDIDATE` rows silently became `STILL-LIVE` — a receipt's leading quote never
+stripped. It was fast *because* it took a shorter, wrong path, and that is the false-close
+direction this file exists to refuse.
+
+**A prefix rewrite failed 3 of 274 before it was correct**, gaining an `ambiguous-collapse` label
+the base run does not emit. **This fixture discriminates on these lines: run it, do not reason
+about it.**
+
+**An equivalence probe that read "0 disagreements" was BROKEN** — its multi-line needle had every
+line present, so both implementations agreed for a reason neither owned. Rebuilt with an input
+where one line matches and the span does not, it diverges 1 vs 0 with a single-line control
+agreeing in the same invocation.
+
+### The `case` substitution is safe because the input class that separates it from `grep -F` is unconstructible, and the comment now says so
+
+`grep -F` treats a newline in the needle as an OR over its lines; `case` is a literal span. They
+diverge on exactly that and nothing else. A multi-line needle cannot arrive: `_one` comes from
+`while IFS= read -r _one`, and `read -r` cannot yield a value containing a newline; one level up,
+`$subs` takes its newlines only from the `" "` split, whose fields are single-line. Callers
+enumerated at exactly two, against a control of 0 for an impossible token.
+
+The comment at `:717` previously defended `grep -F` for "per-LINE fixed-string semantics" —
+**prose defending the semantics a change trades away is how the next author reverts it**, so it
+is rewritten rather than deleted, naming the input that would make `case` wrong and the exact
+line to restore if one ever appears.
+
+### Mutation anchors were checked BEFORE the fixture ran, not after
+
+`0.587.0` shipped two mutants that silently ran the unmutated path after a memo moved their call
+sites. Derived here first: **0 of the fixture's 152 `sed` sites anchor any function this release
+touches** (control: an impossible token returns 0), and the two `grep -qF` mentions in the
+fixture are ordinary assertions at `:467` and `:3368`, not anchors. `NAMED_ANCHOR` still resolves
+to exactly 1 line. An orphaned anchor runs the unmutated path and reads as a pass, so a green
+fixture does not cover this.
+
 ## [0.598.0] - 2026-09-18
 
 ### `named_ambiguous` re-ran the history walk its only caller had just made, and the guards that could refuse it for free ran after it
