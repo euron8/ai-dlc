@@ -15,6 +15,38 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.602.0] - 2026-09-18
+
+### `bashOutputMaxChars` caps inline Bash output, and `settings-merge.sh` learns to deliver a template scalar a consumer can override
+
+Lever B of the consumer-context-footprint plan. The harness clamps `bashOutputMaxChars` to
+4000–128000 (default 30000): past it, an over-limit Bash result is replaced by a path plus a
+2,000-character preview, and a failed command keeps a 10,000-character head-and-tail. The
+template now ships `8000`.
+
+**Measured subject**: across 40 `graph` consumer sessions, 155 Bash results exceeded 8 KB and
+summed 2,888,360 bytes, while the median result was 308 bytes and p90 was 2,856 — so an
+8,000-character cap touches only that tail. This is Rule 23(c)'s enforcer: large read-only
+output must not land inline in the resident prefix.
+
+### "Every other key preserved" could not deliver it — a new `2c` merge contract
+
+`core/skills/ai-dlc-update/reconcile/settings-merge.sh` preserved unrecognised keys only on the
+consumer side, so a template-only scalar never reached an installed tree. The merge grows an
+explicit `2c` contract — template supplies, consumer wins, absent on both sides stays absent —
+with jq `($u.bashOutputMaxChars // $t.bashOutputMaxChars)`, writing the key only when the result
+is non-null. A consumer's own value survives every pull; a template that declares nothing writes
+nothing.
+
+### `settings-merge-documented-form` gains assertion 5, proven to fire
+
+Three worlds, each read as a VALUE rather than a presence: a consumer declaring 12000 survives a
+template declaring 8000; a consumer declaring nothing receives the template's 8000; a key neither
+side declares stays absent (not `null`, not `0`). A `cmp`-guarded template-wins mutant — the merge
+expression flipped to `$t // $u` — fails World 1 only, so the consumer-wins arm is keyed on
+precedence and cannot pass by accident. The arm was proved able to fail before shipping: against
+the unmerged `settings-merge.sh` the fixture exits 1 with 3 FAILs.
+
 ## [0.601.0] - 2026-09-18
 
 ### `retired-tokens.sh` re-ran the preclassify both its callers already held, once per CLASSIFY file

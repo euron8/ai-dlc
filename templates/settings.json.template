@@ -73,6 +73,7 @@
       "effort": "medium"
     }
   },
+  "bashOutputMaxChars": 8000,
   "enabledPlugins": {
     "context-mode@context-mode": true
   },

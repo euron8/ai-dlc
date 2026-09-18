@@ -126,6 +126,63 @@ else
   bad "MUTANT NOT DETECTED: bare '--check' now exits 0, so assertion 1 cannot distinguish a runnable doc from an unrunnable one"
 fi
 
+# --- Assertion 5: bashOutputMaxChars is DELIVERED, and the consumer's value wins -----
+# The template's cap on inline Bash output is the one non-hook scalar the merge must carry
+# to an EXISTING consumer; "every other key preserved" would leave every installed tree
+# uncapped forever. Three worlds, each read as a VALUE rather than a presence, plus a
+# mutant that widens the merge to unconditional-template so the consumer-wins arm cannot
+# pass by accident. Both template shapes are synthesised here so the arm does not depend
+# on what the live template happens to declare.
+if [ -n "$TMPL" ]; then
+  T_CAP="$WORK/tmpl-cap.json"; T_NOCAP="$WORK/tmpl-nocap.json"
+  jq '.bashOutputMaxChars = 8000' "$TMPL" > "$T_CAP"
+  jq 'del(.bashOutputMaxChars)' "$TMPL" > "$T_NOCAP"
+  [ "$(jq -r '.bashOutputMaxChars' "$T_CAP")" = "8000" ] \
+    && [ "$(jq -r 'has("bashOutputMaxChars")' "$T_NOCAP")" = "false" ] \
+    || { echo "FIXTURE BROKEN: could not synthesise the two template shapes" >&2; exit 2; }
+
+  # World 1: consumer declares 12000, template declares 8000 -> 12000 survives.
+  printf '{"bashOutputMaxChars":12000,"permissions":{"allow":[]}}\n' > "$WORK/w1.json"
+  bash "$MERGE" --consumer "$WORK/w1.json" --template "$T_CAP" >/dev/null 2>&1
+  v="$(jq -r '.bashOutputMaxChars' "$WORK/w1.json")"
+  if [ "$v" = "12000" ]; then ok "bashOutputMaxChars: consumer's 12000 survives a template declaring 8000"
+  else bad "bashOutputMaxChars: consumer's 12000 was replaced (read $v) — the merge must never overwrite a consumer scalar"; fi
+
+  # World 2: consumer silent, template declares 8000 -> 8000 lands.
+  printf '{"permissions":{"allow":[]}}\n' > "$WORK/w2.json"
+  bash "$MERGE" --consumer "$WORK/w2.json" --template "$T_CAP" >/dev/null 2>&1
+  v="$(jq -r '.bashOutputMaxChars' "$WORK/w2.json")"
+  if [ "$v" = "8000" ]; then ok "bashOutputMaxChars: template's 8000 lands on a consumer that declares none"
+  else bad "bashOutputMaxChars: template value did not reach the consumer (read $v) — an installed tree stays uncapped"; fi
+
+  # World 3: neither side declares it -> key absent, not null and not 0.
+  printf '{"permissions":{"allow":[]}}\n' > "$WORK/w3.json"
+  bash "$MERGE" --consumer "$WORK/w3.json" --template "$T_NOCAP" >/dev/null 2>&1
+  v="$(jq -r 'has("bashOutputMaxChars")' "$WORK/w3.json")"
+  if [ "$v" = "false" ]; then ok "bashOutputMaxChars: absent on both sides stays absent"
+  else bad "bashOutputMaxChars: a key neither side declared appeared (has=$v) — the guard is gone"; fi
+
+  # Mutant: template-wins. Built as a copy, guarded by cmp so a sed that matched nothing
+  # cannot pass as a mutation. It must fail World 1 ONLY.
+  MUT="$WORK/merge-template-wins.sh"
+  sed 's/(\$u\.bashOutputMaxChars \/\/ \$t\.bashOutputMaxChars)/($t.bashOutputMaxChars \/\/ $u.bashOutputMaxChars)/' "$MERGE" > "$MUT"
+  if cmp -s "$MERGE" "$MUT"; then
+    bad "MUTANT DID NOT APPLY: the consumer-wins expression is no longer where assertion 5 keys it"
+  else
+    printf '{"bashOutputMaxChars":12000,"permissions":{"allow":[]}}\n' > "$WORK/m1.json"
+    bash "$MUT" --consumer "$WORK/m1.json" --template "$T_CAP" >/dev/null 2>&1
+    m1="$(jq -r '.bashOutputMaxChars' "$WORK/m1.json")"
+    printf '{"permissions":{"allow":[]}}\n' > "$WORK/m3.json"
+    bash "$MUT" --consumer "$WORK/m3.json" --template "$T_NOCAP" >/dev/null 2>&1
+    m3="$(jq -r 'has("bashOutputMaxChars")' "$WORK/m3.json")"
+    if [ "$m1" = "8000" ] && [ "$m3" = "false" ]; then
+      ok "MUTANT (template wins) fails World 1 only — the consumer-wins arm discriminates"
+    else
+      bad "MUTANT (template wins) scored w1=$m1 w3=$m3 — expected 8000/false; the arm is not keyed on precedence"
+    fi
+  fi
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "settings-merge-documented-form: PASS"; exit 0; fi
 echo "settings-merge-documented-form: $fails assertion(s) FAILED" >&2
