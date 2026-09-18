@@ -648,6 +648,23 @@ named_absorbed() { # <label> -> "<how> <n> <sha>,<sha>,..." if upstream's histor
 named_ambiguous() { # <label> -> "<newest-sha> <n-entries>" when the prefix is shared
   local _id="$1" _pfx _n _c _hits
   case "$_id" in *[!A-Z0-9-]*|'') return 0 ;; esac
+  # THE FORK-FREE GUARDS RUN FIRST, and that ordering is the whole cost of this function. All
+  # four are pure predicates that return empty, so the order they are asked in cannot change the
+  # answer -- only how many history walks are paid for an id that was never going to produce a
+  # row. The slug walk used to sit at the top, so an id carrying no `PC-S<n>-` prefix, or one
+  # whose prefix names a single entry, paid a full `git log` over THEIRS before a `sed` and a
+  # counter refused it.
+  #
+  # AND THAT WALK IS THE ONE `named_absorbed` HAS ALREADY MADE. The only caller
+  # (`[ -n "$na" ] || nam="$(named_ambiguous "$label")"`) reaches here exactly when
+  # `named_absorbed` returned empty, which for an id-shaped label means its own
+  # `log -F --grep="$_id"` came back empty -- the same query, differing only in `%h` against
+  # `%H`. Measured on the fixture's seeded corpus, one invocation: 34 of 41 distinct slug
+  # queries were this function repeating it, and 141 git calls fell to 109.
+  _pfx="$(printf '%s' "$_id" | sed -n 's/^\(PC-S[0-9][0-9]*\)-.*/\1/p')"
+  [ -n "$_pfx" ] || return 0
+  _n="$(prefix_entry_count "$_pfx")"
+  [ "$_n" -gt 1 ] 2>/dev/null || return 0
   # READ INTO A VARIABLE, THEN TEST. `| grep -q .` leaves at its first match while git log is
   # still writing, so under `pipefail` the pipeline answers with the WRITER's EPIPE and this
   # reports "upstream does not name the slug" on a slug it DOES name (I54/I54b). The whole
@@ -656,10 +673,6 @@ named_ambiguous() { # <label> -> "<newest-sha> <n-entries>" when the prefix is s
   local _slug_hit
   _slug_hit="$(git -C "$DIST" log -F --grep="$_id" --format=%H "$THEIRS" 2>/dev/null)"
   [ -z "$_slug_hit" ] || return 0
-  _pfx="$(printf '%s' "$_id" | sed -n 's/^\(PC-S[0-9][0-9]*\)-.*/\1/p')"
-  [ -n "$_pfx" ] || return 0
-  _n="$(prefix_entry_count "$_pfx")"
-  [ "$_n" -gt 1 ] 2>/dev/null || return 0
   # ANCHORED, for the same reason as the sibling call in `named_absorbed`: `-F` is an unanchored
   # fixed-substring search, so it claims a commit that mentions the prefix only inside a DIFFERENT
   # entry's longer slug. Both arms ask the same question -- "does upstream cite this SHORT id" --
