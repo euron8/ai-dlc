@@ -15,6 +15,62 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.597.0] - 2026-09-18
+
+### The reconcile render hands down the preclassify rows it already paid for, and the memo target it was pointed at was refuted by its own census
+
+**THE PLAN'S ACTION 1 NAMED "FINISHING THE RECONCILE MEMO" AS THE NEXT TARGET, AND THE CENSUS
+REFUTED IT BEFORE ANYTHING WAS BUILT.** `reconcile-emit-report` is #2 in the durations record at
+**320 pool-seconds** behind the `ledger-reverify` pole at 513, so it reads as the memo's next
+subject. Censused under a PATH-shadowed `git` wrapper with the wrapper's own positive control at 1
+and an impossible-subcommand control at 0, **ONE invocation is 93 git calls resolving to 76
+distinct — 1.22x.** That is `self-update-gate`'s shape, which the plan already records as NOT this
+lever, and not `ledger-reverify.sh`'s 366/112 that a per-process memo cut to 133. The fixture's
+whole run is 14490 calls against **300** distinct, so the redundancy is real and is **ACROSS** the
+~156 invocations it drives, in separate processes, where a per-process memo cannot reach it.
+
+**THE PER-INVOCATION TABLE HAD A MEMO-SHAPED ROW AND IT WAS THE WRONG TARGET TOO.**
+`hash-object` is 12 calls to **2 distinct files, 6.00x** — the highest ratio in the invocation and
+the one a fork-ranked reading picks. It is 12 forks of a 2s render. Taking it would have been
+`v0.596.0`'s `I75` mistake one release later: **a ratio ranks redundancy, not cost.**
+
+**THE SUBJECT WAS FOUND BY ABLATION, AND IT IS ONE DETECTOR.** Every detector the renderer drives,
+timed against one seeded tree, 3 interleaved reps with each run's rc asserted: whole render
+1456-1556ms, of which **`unregistered-drift.sh` alone is 586-661ms** — 43% — against
+`ledger-reverify` 163-165, `preclassify` 132-147, `layer-drift` 84-94 and nine others below 100.
+
+**THE FIX IS A FLAG THAT ALREADY EXISTED AND ONE CALLER NEVER PASSED.** `unregistered-drift.sh`
+takes `--bucket-rows <file>` so a caller holding preclassify's output hands it down instead of
+making the scan re-derive it in a second process. `apply.sh:504` has passed it since the flag
+existed. `emit-report.sh` computes those exact rows at `:204` and then drove the scan at `:418`
+without the flag, re-deriving them every render. Measured on the fixture's own tree, 5 interleaved
+reps with the outputs byte-compared every rep: **NOFLAG 789-949ms against FLAG 610-723ms**,
+disjoint ranges. Whole render, 4 interleaved reps, stdout AND stderr byte-identical across every
+rep with a control proving `cmp` can report a difference: **2200-2268ms against 2080-2162ms.**
+
+**THE FLAG CHANGES WHO PAID AND NOT WHAT IS ANSWERED, ASSERTED RATHER THAN REASONED.** All four
+`--bucket-rows` states — absent, a real rows file, an EMPTY file, and the one-blank-line file this
+change's `printf '%s\n' "$pc"` writes when `pc` is empty — return the identical row against the
+no-flag reference. The scan counts its rows with `grep -c .`, so the blank line scores 0 and takes
+the same fail-closed path as a genuinely empty file: the carried path falls back to its HARD row
+rather than being acquitted. The flag is passed only when the `mktemp` succeeded; absent it, the
+pre-existing no-flag call stands.
+
+**B1/B2 ARE THE ARMS, AND B1 IS KEYED ON THE EMISSION SITE BECAUSE A WHOLE-FILE GREP IS SATISFIED
+BY PROSE.** Nothing bound the renderer to the flag — the equivalence is owned by
+`apply-drift-after-write/run.sh:430` and the empty-file-no-acquit by `:442`, and both are about the
+SCAN, not about which caller drives it. B1 greps the executing line; probed under `mktemp` in both
+directions, it reports the base renderer (**FAIL**), stays quiet on the flagged one (**ok**), and
+still reports a base renderer carrying `--bucket-rows` in a COMMENT — where a whole-file
+`grep -cF` reads 1 and acquits. B2 re-runs the shipped scan both ways on the fixture's tree and
+compares row-for-row, with the row set asserted non-empty first because two empty outputs compare
+equal.
+
+**SIXTEEN FIXTURES REACH THE CHANGED PROGRAM AND THEY ARE 1607 OF 5745 POOL-SECONDS — 28% of
+everything the suite computes**, including the pole (`ledger-reverify` 513) and #2
+(`reconcile-emit-report` 320), derived against the durations record with an absent-name control at
+0 and a present-name control at 1.
+
 ## [0.596.0] - 2026-09-18
 
 ### I65's vocabulary prefilter becomes fixed-string, and the plan's by-arm ranking is refuted as a cost ranking

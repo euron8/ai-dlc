@@ -411,12 +411,33 @@ render() {
   # The previous shape read `$?` after `cmd | awk | sort`, which under this file's `pipefail` is the
   # pipeline's status and not the detector's; it happened to agree because the readers exit 0, and
   # an agreement that holds by luck is the shape this region exists to end.
-  local ud_rc ld_rc ud_raw ld_raw
+  # `--bucket-rows` HANDS DOWN THE PRECLASSIFY ROWS THIS RENDER ALREADY PAID FOR, and it is the
+  # same shape `apply.sh` has passed since it grew the flag. `pc` above is
+  # `preclassify.sh "$DIST" "$BASE" "$THEIRS" "$CONSUMER"` — byte-for-byte the argument order
+  # `unregistered-drift.sh`'s carried-bucket arm re-derives when the flag is absent, which is why
+  # handing it over changes who paid and never what is answered.
+  #
+  # THE FLAG IS PASSED ONLY WHEN THE TEMP FILE EXISTS, and never with an empty one standing in for
+  # a real derivation. The scan's own guard refuses to read "no buckets" as "nothing diverged"
+  # while the range still moves `core/`, so a failed write falls back to the HARD row rather than
+  # acquitting — `apply-drift-after-write/run.sh:439` asserts exactly that, and its arm at :430
+  # asserts the flagged and standalone runs agree row-for-row. Absent the temp file we pass no
+  # flag at all, which is the pre-existing path and re-derives correctly.
+  local ud_rc ld_rc ud_raw ld_raw ud_pc
   ld_raw="$(mktemp)"; ud_raw="$(mktemp)"
   bash "$SELF/layer-drift.sh"        "$DIST" "$BASE" "$THEIRS" "$CONSUMER" >"$ld_raw" 2>/dev/null
   ld_rc=$?
-  bash "$SELF/unregistered-drift.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >"$ud_raw" 2>/dev/null
-  ud_rc=$?
+  ud_pc="$(mktemp 2>/dev/null)" || ud_pc=""
+  if [ -n "$ud_pc" ]; then
+    printf '%s\n' "$pc" > "$ud_pc"
+    bash "$SELF/unregistered-drift.sh" --bucket-rows "$ud_pc" \
+         "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >"$ud_raw" 2>/dev/null
+    ud_rc=$?
+    rm -f "$ud_pc"
+  else
+    bash "$SELF/unregistered-drift.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >"$ud_raw" 2>/dev/null
+    ud_rc=$?
+  fi
 
   sub "Blocking-layer (HARD-* — blocks apply):"
   # The wrapper gets the same REFUSED treatment as the two detectors it drives (below): print
