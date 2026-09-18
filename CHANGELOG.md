@@ -15,6 +15,62 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.595.0] - 2026-09-17
+
+### The batched I33b scan gets the one assertion its own corpus was already exercising
+
+A tip adversary attacked `0.594.0` after it had merged and found no blocker, but two gaps it
+could not close itself. This release closes the one that is buildable and files the other.
+
+**THE FILE BOUNDARY IS A NEW FAILURE MODE THAT BATCHING CREATED, AND NOTHING WATCHED IT.** The
+per-file shell predicate could not carry state between files — each one got its own process. One
+awk pass carries `vars`, `seen` and `walk` across `FNR==1` unless it clears them, and the failure
+is SILENT AND ACQUITTING: a name already marked `seen` in an earlier file never re-enters
+`vars[]`, so a later file's walk-up is never reported. **The live corpus already exercises this
+boundary** — 14 fixture scripts declare `d` and 5 declare `_d`, derived rather than typed.
+
+New assertion `A27b_i33b_resets_state_per_file`, seeded with the offender SECOND behind a file
+declaring the same name, because a one-file seed cannot tell "scans every file" from "scans the
+first one". Proven both ways: `ok` against the shipped predicate, and against a mutant with the
+`delete seen` removed it reports `the validator did NOT report it` and fails. It fires only
+`I33b`, and both shards PASS with it dealt in — the partition is derived from the function names,
+so no list needed editing.
+
+**`BL-273`: THE TWO GRAMMARS DIVERGE ON AN INPUT THE CORPUS CANNOT HOLD, AND IT IS NOW ASSERTED.**
+The old predicate's `\$(\{)?VAR(\})?/\.\./` makes the braces optional on each side independently,
+so `${A/../foo}` — bash pattern substitution, not a directory walk — matched it. The batched
+program requires the `}` to close before `/../` and does not. Measured: old **1**, new **0**; the
+form occurs in **0** corpus files against a control of **97** for `${VAR}`. A narrowing toward
+correctness — but `0.594.0` shipped under an equivalence claim, and this was the one input
+separating the implementations.
+
+`A27c_i33b_pattern_substitution_is_not_a_walk` seeds both forms in one tree, the acquittal beside
+its ALLOW TWIN one property apart (`${A}/../schemas/x.json`, the same variable and braces, closing
+before the `/../`). A silence arm alone would pass against a predicate that stopped matching
+anything. Proven both ways: `ok` shipped, and with the loose brace grammar restored it reports
+`I33b named zz-i33b-patsub` and fails.
+
+**AND THE FIRST DRAFT OF THAT ENTRY'S RECEIPT WAS PROSE-SATISFIABLE — THE GATE CAUGHT IT, NOT
+REVIEW.** `R2` counts receipts closable by a COMMENT carrying their own grep literal and is a
+RATCHET at 1; this one made it **2** and blocked the push. Rewritten to DRIVE the predicate:
+it extracts `i33b_scan`, runs it over both seeded files, and exits 9 rather than 0 if the walk-up
+case stops being seen, so a predicate matching nothing cannot close it.
+
+**AND THE NEW ARM's FIRST DRAFT SHIPPED THE `printf | grep -q` DEFECT, WHICH `I54`/`I54b` CAUGHT
+AT THE GATE.** Both directions of `A27c` tested a whole validator run — far larger than the 64 KiB
+pipe buffer — through `printf '%s' "$out" | grep -q`, so under `pipefail` the pipeline answers with
+the WRITER's EPIPE and both tests report NOT FOUND on output that contains the token. Permanently,
+and with no symptom: the arm would have passed forever while checking nothing. Converted to
+here-strings, and the mutant re-scored afterwards to prove the arm still kills it. **The validator
+went red on the clean tree for this, which is the mechanism doing precisely its job** — three
+separate defects in this batch were caught by machinery rather than by reading.
+
+**THE ADVERSARY RAN AFTER THE MERGE, WHICH IS THE PROCESS FINDING AND IT IS THE LEAD's.** The
+plan's dispatch rule puts the contract adversary BEFORE the builders spawn, for exactly the
+reason measured at batch 101: findings that land after a build has started get rebuilt rather
+than designed in. Here the build and the adversary ran concurrently and the release merged first,
+so both findings arrived as post-hoc audit. Nothing was wrong in the tree; the sequencing was.
+
 ## [0.594.0] - 2026-09-17
 
 ### I33b's per-file scan becomes one awk pass, and 273 of 302 files stop paying two forks for an empty answer
