@@ -41,8 +41,17 @@ entries now run before the walk, so an id with no prefix — or one whose prefix
 entry — is refused without a `git log` at all. **141 → 109 git calls (−32, −22.7%)**, distinct
 118 → 86, both sides reproducing **exactly** across 2 interleaved reps under their own
 PATH-shadowed wrappers, each wrapper's control at 1. Wall clock, 5 interleaved reps with rc
-asserted: base **3.66-3.79s** against tip **3.33-3.49s**, disjoint. The fixture solo:
-**267.17s → 221.16s (−17.2%)**.
+asserted: base **3.66-3.79s** against tip **3.33-3.49s**, disjoint.
+
+**A FIXTURE-SOLO PAIR WAS DERIVED, PUBLISHED AND THEN WITHDRAWN BY ITS OWN CONTROL — IT WAS
+MEASURED THROUGH THE INSTRUMENT.** The base fixture run was timed under the PATH-shadowed git
+wrapper; the tip run was not. The wrapper is a `sh` that logs and `exec`s, measured at **~8ms per
+git call** (300 calls, 2 reps each: 6.65-6.74s bare against 9.11-9.16s wrapped), and the fixture
+makes **9146** of them — roughly **73s** of pure instrument on the base side alone. The pair read
+267.17s → 221.16s and would have shipped as −17.2%; corrected for the instrument the base is
+nearer 194s, so the figure did not merely overstate the win, **it pointed the wrong way**. The
+per-invocation numbers above are unaffected: both of their sides were measured alike, interleaved,
+in fixed worktrees. **Time both sides through the same instrument, or through none.**
 
 **STDOUT AND STDERR ARE BYTE-IDENTICAL**, 104 rows, with a control proving `cmp` can report a
 difference in the same invocation. All **274** assertions correct and the assertion **LABEL SET**

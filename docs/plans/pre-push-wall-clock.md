@@ -246,7 +246,16 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    `return 0`: base 3.65-3.90s against 2.58-2.70s, 4 interleaved reps in fixed worktrees, rc
    asserted every side), never by the ratio. **Ask what a cheap guard is sitting BEHIND**: the fix
    was ordering four pure predicates so the `sed` and the counter refuse an id before the walk is
-   paid for, 141 → 109 calls and the fixture 267.17s → 221.16s solo.
+   paid for, 141 → 109 calls.
+
+   **AND THAT RELEASE WITHDREW ITS OWN FIXTURE-SOLO FIGURE, WHICH IS THE HAZARD TO CARRY
+   FORWARD.** The base fixture run was timed under the PATH-shadowed git wrapper this block tells
+   you to build, and the tip run was not. The wrapper is a `sh` that logs and `exec`s — **~8ms per
+   git call**, measured at 300 calls over 2 reps, 6.65-6.74s bare against 9.11-9.16s wrapped — and
+   `ledger-reverify` makes **9146** of them, so the base carried ~73s of pure instrument. The pair
+   read 267.17s → 221.16s and **pointed the wrong way**: corrected, the base is nearer 194s.
+   **THE CENSUS WRAPPER AND THE TIMING RUN ARE TWO DIFFERENT MEASUREMENTS AND MUST NEVER SHARE A
+   RUN.** Take the count under the wrapper, take the clock without it, and interleave each pair.
 
    Profiled so far: `ledger-reverify.sh` (done, `0.586.0` memo and `0.598.0` guard order), I87 in the enforcement-map validator
    (done, `0.587.0`), I60 and I59 in the same validator (done, `0.588.0`), I82 and I84 in the same
@@ -562,7 +571,10 @@ of `named_ambiguous`'s guards are pure predicates returning empty, so the order 
 cannot move the answer — only how many history walks are paid for an id that was never going to
 produce a row. **141 → 109 git calls (−22.7%)**, distinct 118 → 86, both sides reproducing EXACTLY
 across 2 interleaved reps under their own PATH-shadowed wrappers; wall clock base 3.66-3.79s
-against tip 3.33-3.49s, disjoint; **fixture solo 267.17s → 221.16s (−17.2%)**. Stdout and stderr
+against tip 3.33-3.49s, disjoint. **A FIXTURE-SOLO PAIR WAS PUBLISHED AND WITHDRAWN BY ITS OWN
+CONTROL**: the base run was timed under the census's git wrapper and the tip run was not, at ~8ms
+× 9146 calls ≈ 73s of instrument on one side only, so 267.17s → 221.16s pointed the WRONG WAY.
+Stdout and stderr
 byte-identical at 104 rows with a control proving `cmp` can report a difference, and the assertion
 **LABEL SET** identical at 274 — not merely the count, which is exactly what a reordering can
 preserve while moving a verdict.
