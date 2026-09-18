@@ -580,6 +580,21 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    the floor; remove the worktree and report `resumable from origin/main at <sha>` or the
    mismatch.
 
+3b-ii. **REMOVE EVERY AGENT WORKTREE THIS BATCH SPAWNED, BEFORE 3c.** Run after 3b, when no
+   hand is still working. `git worktree list | grep .claude/worktrees` derives the set; the
+   count at a clean batch close is **0**, and it is the only moment that is true. The `Agent`
+   tool auto-removes a worktree only when it is UNCHANGED, so every hand that writes leaves one
+   permanently — measured at batch 129: **39 worktrees, 1.0G, three days old, across batches
+   114-129**, three of them spawned by briefs that said *"do not delete the worktrees"*.
+   **A brief must never say that.** Snapshot any uncommitted files first
+   (`git -C <wt> status --porcelain`; 2 of the 39 held some, one a complete unlanded fixture),
+   then `git worktree remove`, which deletes the DIRECTORY and never the branch — every commit
+   survives, verified by a control resolving a branch after removal. A locked tree needs
+   `-f -f`; **read the pid in the lock reason first and confirm it is not a live agent.**
+   This is NOT a pre-push gate and must not become one: measured on this batch, hands were
+   legitimately live across all four pushes, so a push-time check has a non-empty
+   false-positive set on every normal batch.
+
 3c. **HAND THE PLAN TO A LOCAL AI-DLC SESSION, THEN STOP.** The last action, after 3b has
    passed. Operator instruction, given at batch 52 of the ledger drain. Call `ListAgents`; a
    qualifying target is a local peer session whose name begins `ai-dlc-` (never a `graph-*`
