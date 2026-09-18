@@ -15,6 +15,32 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.597.1] - 2026-09-18
+
+### The plan's resume block quoted a record its own gate run then rewrote, and the fresh-resume check is what found it
+
+**THE FIGURES WERE TRUE WHEN TAKEN AND FALSE BY THE TIME THEY MERGED.** `0.597.0`'s resume block
+recorded pole **513s**, total **5745**, floor **478.8s**, gap **34.2s**, concentration
+`top10=42.7% top20=60.0%` — derived from `.git/ai-dlc-fixture-durations` BEFORE that release's own
+verification gate ran. **A full dispatch REWRITES all 202 rows of that record.** Re-run from a
+worktree at `origin/main` as a stranger would, the same block prints pole **636s**, total
+**6960**, floor **580.0s**, gap **56.0s**, `top10=41.5% top20=58.9%`.
+
+**NO CODE MOVED BETWEEN THE TWO READINGS. THE SECOND ONE IS THE SAME TREE MEASURED UNDER LOAD** —
+a fork-count differential was running two full fixture suites beside the gate — so every unit
+inflated and the pole inflated most. This is the swing the block already warns about, landing
+inside a single release rather than across four.
+
+**THE RESUME CHECK IS THE MECHANISM THAT CAUGHT IT, AND NOTHING ELSE COULD HAVE.**
+`validate-plan-shape.sh` reads 0 errors on both versions — it cannot see that a figure is stale —
+and the plan's own commands are what disagree with the prose above them. Action 3b requires
+re-running those commands from `origin/main` after the merge, and that is where the mismatch
+surfaced: block claims 513/5745/478.8, block's own command prints 636/6960/580.0.
+
+**Corrected to the post-gate record, with BOTH readings kept and the reason for the spread named**
+— a resuming session runs the command, so the command's answer is the one that has to be on the
+page. The gap is now stated as a range, ~34-56s, with the DIRECTION as the answer.
+
 ## [0.597.0] - 2026-09-18
 
 ### The reconcile render hands down the preclassify rows it already paid for, and the memo target it was pointed at was refuted by its own census
