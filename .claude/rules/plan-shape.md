@@ -111,6 +111,25 @@ it was handed off:
   for, so it is not to be allow-listed. A scratch copy goes into a fresh `mktemp -d` under the
   scratchpad and is never deleted by the hand; anything that must be cleared names a literal
   absolute path. The plan's dispatch action carries that sentence into every spawn prompt.
+- **A brief NEVER says "leave the worktrees in place", and the lead removes every one it
+  spawned before reporting the batch closed.** Operator instruction at batch 129, on a measured
+  accumulation: **39 agent worktrees, 1.0G**, dating back three days across batches 114-129.
+  The `Agent` tool auto-removes a worktree only if it is UNCHANGED, so every hand that writes
+  anything leaves one behind permanently — the default is accumulation, and nothing prunes it.
+  Three of those 39 were spawned by the batch that found them, by briefs that said in as many
+  words *"do not delete the worktrees"* so their evidence would survive collection. **That
+  instruction is the defect**: a hand's deliverable is its TEXT and the tree it commits, never a
+  directory the lead reads afterwards, so the evidence never needed to outlive the report.
+  A brief tells its hand to work in `mktemp -d` under the scratchpad, and the lead runs
+  `git worktree remove` over `.claude/worktrees/` at collection — `git worktree remove` deletes
+  the DIRECTORY and never the branch, so nothing committed is at risk and the rescue is only
+  ever the uncommitted files. Two of those 39 held uncommitted work, one of them a complete
+  unlanded fixture; snapshot those before removing. **A locked worktree needs `-f -f`, and the
+  lock names a pid — CHECK IT IS NOT A LIVE AGENT before forcing.** Measured: all three locks
+  named the SESSION's own pid, not a running hand.
+  Accumulation is not merely disk: `.claude/worktrees/` is gitignored, so a read-set derivation
+  taken while they exist records them into a TRACKED map (`BL-264` — 8512 of 32107 rows), and
+  any count over the shipped `.sh` set moves with how many agents happen to be live.
 - **Every `Agent` spawn, read-only or writing, passes `isolation: "remote"`.** Operator
   instruction at batch 108's close: a hand was spawned in-process/local, the operator said so
   explicitly ("I want them locally running but remote") and asked that this apply to the plan
