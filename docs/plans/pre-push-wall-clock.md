@@ -215,6 +215,17 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    byte-compared every rep, disjoint ranges. **Ask of a slow orchestrator which of its CHILDREN
    costs the time before scoping anything inside it.**
 
+   **AND THE FIGURE QUOTED FOR IT IS THE COUNT, NOT THE SECONDS, EXACTLY AS THIS BLOCK REQUIRES.**
+   One full fixture run per side in two FIXED `git worktree` checkouts, interleaved, each under its
+   own PATH-shadowed wrapper with that wrapper's control at 1: **14490 → 14047 git calls, −443
+   (−3.1%)**, distinct 300 both sides, `rc=0` both sides, assertions 81 against 83 — the sides
+   differing by exactly the two arms added. Base reproduced at **14490 on a second rep**. The ms
+   column of that same run is void: a concurrent gate put the tip rep at 355892ms against the
+   base's 202105ms. **A DIFFERENTIAL'S BASE MUST BE A TREE THE SESSION CANNOT WRITE** — the first
+   attempt used the main checkout while the release branch was being assembled in it, so rep 2's
+   base was the tip, caught by grepping that rep's own output for the new arm (83 assertions where
+   a real base emits 81) and not by reading the timings.
+
    Profiled so far: `ledger-reverify.sh` (done, `0.586.0`), I87 in the enforcement-map validator
    (done, `0.587.0`), I60 and I59 in the same validator (done, `0.588.0`), I82 and I84 in the same
    validator (done, `0.592.0` — 4774 → 3827 forks, and the arm table in the block above is the

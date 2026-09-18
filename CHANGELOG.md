@@ -71,6 +71,29 @@ everything the suite computes**, including the pole (`ledger-reverify` 513) and 
 (`reconcile-emit-report` 320), derived against the durations record with an absent-name control at
 0 and a present-name control at 1.
 
+**THE FIGURE THAT SURVIVES THE BOX IS THE COUNT, AND IT IS QUOTED INSTEAD OF THE SECONDS.** One
+full fixture run per side in two FIXED `git worktree` checkouts, interleaved, each under its own
+PATH-shadowed `git` wrapper with that wrapper's control at 1: **14490 → 14047 calls, −443
+(−3.1%)**, distinct 300 both sides, `rc=0` both sides, assertions 81 against 83 — the sides differ
+by exactly the two arms this release adds. The base reading reproduced at **14490 on a second
+rep**. The wall-clock column of that same run is NOT quoted: a concurrent gate run put the tip rep
+at 355892ms against the base's 202105ms, which is the box and not the change, and it is why this
+plan's own rule says to quote load-independent counts.
+
+**A DIFFERENTIAL'S BASE MUST BE A TREE THE SESSION CANNOT WRITE.** The first attempt used the main
+checkout as BASE and the release branch was then assembled in it, so rep 2's "base" was the tip.
+Caught by grepping that rep's own output for the new arm — **83 assertions where a real base emits
+81** — and not by reading the timings, which looked merely noisy. Re-run in two fixed worktrees.
+
+**AND A BACKGROUNDED WRAPPER'S EXIT IS NOT THE GATE'S.** The first full gate run reported
+`exited with code 0` at the harness while the gate itself printed `pre-push: BLOCKED` and exited
+1. The failing arm was **R4**, on this release's own `BL-275` receipt: it guarded its preconditions
+with `|| exit 9`, which R4 forbids, taking out-of-population 1/1 → 2/1 against a ratchet that only
+moves down. It had scored clean by hand at the tip because **the validator scores every receipt in
+a detached checkout of the BASE**, where this release's `B1_HIT` line does not yet exist — so the
+guard written as a sanity check was the branch that fired. Re-keyed to exit only 0 or 1: 1 at tip,
+1 at base, 0 with the owed arm seeded into a `mktemp` tree.
+
 ## [0.596.0] - 2026-09-18
 
 ### I65's vocabulary prefilter becomes fixed-string, and the plan's by-arm ranking is refuted as a cost ranking
