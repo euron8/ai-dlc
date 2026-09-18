@@ -55,6 +55,46 @@ have gone green, and would have reported "still open" forever.
 never the word anywhere in prose, because an entry that merely discusses landing something is
 not a closed entry.
 
+## BL-275 — a shared detector's cost-saving flag is bound by NO fixture at any CALLER, so a second caller can silently stop passing it
+
+**DEFECT.** Found while scoping `0.597.0`, by censusing `reconcile-emit-report` and then ablating
+the detectors its renderer drives.
+
+**THE FLAG IS COVERED AND THE CALLERS ARE NOT.** `unregistered-drift.sh` takes
+`--bucket-rows <file>` so a caller already holding `preclassify.sh`'s output hands it down instead
+of making the scan re-derive it in a second process. Two arms own its SEMANTICS:
+`apply-drift-after-write/run.sh:430` asserts the flagged and standalone scans agree row-for-row,
+and `:442` asserts an EMPTY rows file does not acquit. Both are statements about the SCAN. **Not
+one arm anywhere asserted that any CALLER passes it.**
+
+**THE GAP WAS LIVE AND COST THE SUITE MEASURABLY.** `apply.sh:504` has passed the flag since it
+existed. `emit-report.sh` computed those exact rows at `:204` and then drove the scan at `:418`
+with no flag, re-deriving them every render — measured on the fixture's own seeded tree, 5
+interleaved reps with the outputs byte-compared every rep: **789-949ms without against 610-723ms
+with**, disjoint ranges, in a detector that is 586-661ms of a 1456-1556ms render. Fixed at
+`0.597.0`, and `B1`/`B2` in `reconcile-emit-report/run.sh` now bind THAT caller.
+
+**THE REMAINING EXPOSURE IS THE GENERAL SHAPE, NOT THIS INSTANCE.** `apply.sh`'s own passing of
+the flag is still bound by nothing: deleting `--bucket-rows` from `:504` restores the cost, changes
+no verdict, and every arm stays green. Derived at this tip: **2** callers pass the flag at an
+executing line, **1** of them (`emit-report.sh`) is bound by a fixture arm keyed on its emission
+site, against an impossible-flag control of 0 in the same grammar.
+
+**WHY AN EMISSION-SITE KEY AND NOT A FILE GREP.** Measured while building `B1`: a whole-file
+`grep -cF -- '--bucket-rows'` reads **1** on a renderer that mentions the flag only in a COMMENT
+and passes it nowhere — the header of `unregistered-drift.sh` documents the flag, and this entry's
+own prose would satisfy it too. The arm has to grep the line that EXECUTES the scan.
+
+**What is owed.** An arm binding `apply.sh:504`'s emission site the way `B1` binds
+`emit-report.sh`'s, in whichever of `apply-drift-after-write` or its siblings already drives that
+path — cheaper than a new fixture, and it closes the pair. The broader form (derive the caller set
+and require each to be bound) is the stronger fix and needs a join key that does not exist yet.
+
+**Tiered DEFECT, not BLOCKER.** No verdict is wrong in either direction: the flag changes who paid
+and never what is answered, which is exactly why its absence was invisible for as long as it was.
+
+verify: sh a=core/skills/ai-dlc-update/reconcile/apply.sh; ctl=$(grep -rchE -- '--bucket-rows-ZZQQ' core/fixtures 2>/dev/null | awk '{s+=$1} END{print s+0}'); [ "$ctl" -eq 0 ] || exit 1; grep -qE '^[[:blank:]]*UD_FLAG="--bucket-rows"' "$a" 2>/dev/null || exit 1; for g in core/fixtures/*/run.sh; do grep -qE 'grep [^|]*-c[^|]*UD_FLAG="--bucket-rows"|grep [^|]*-c[^|]*bucket-rows[^|]*"\$APPLY"|grep [^|]*-q[^|]*--bucket-rows[^|]*"\$APPLY"' "$g" 2>/dev/null && exit 0; done; exit 1
+
 ## BL-274 — `--arms <indented-id>` runs the whole enclosing unit, so timing one arm that way measures up to twelve, and nothing says so
 
 **DEFECT.** Found while scoping `0.596.0` against the wall-clock plan's by-arm fork table, after

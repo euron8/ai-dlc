@@ -83,7 +83,10 @@ pole **545s** (`ledger-reverify`, with `reconcile-emit-report` 332 and `validato
 283 behind it), total **6132 pool-seconds**, floor **`sum/12` = 511.0s**. The gap between the two
 is **~34s**, and **that gap is all any pole work can ever return.** Zero out the pole entirely and
 the suite still cannot finish faster than the floor. **The suite is WORK-BOUND with essentially no
-scheduling headroom left, which is the strongest form of the ruling below.** (At `v0.593.0` the same three read 627s, 7120 and 593.3s; at `v0.591.0` 501s, 5591 and 465.9s;
+scheduling headroom left, which is the strongest form of the ruling below.** (Re-derived at
+`v0.597.0` from the same block: pole **513s**, `reconcile-emit-report` 320 and
+`gate-adjudication-mutants` 282 behind it, total **5745**, floor **478.8s** — the gap again
+**~34s**, and the concentration `top10=42.7% top20=60.0%`. At `v0.593.0` the same three read 627s, 7120 and 593.3s; at `v0.591.0` 501s, 5591 and 465.9s;
 at `v0.589.0` 504s, 5637 and 469.8s. **Every one of those four readings is a LOADED number taken
 on a different box load, and they swing ±27% for that reason alone** — do not read the
 `v0.593.0` → `v0.594.0` fall as this release's work. The GAP is the load-independent part of this
@@ -185,7 +188,45 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    On `ledger-reverify.sh` this read **366 total / 112 distinct**, with two blobs read 79 times
    each; memoizing took it to 133 git calls and the fixture from 306.81s to 215.21s SOLO.
 
-   **FINISHING THE RECONCILE MEMO IS THE NEXT TARGET.**
+   **THE RECONCILE MEMO IS FINISHED AS A TARGET — `v0.597.0` CENSUSED THE LAST CANDIDATE AND IT IS
+   NOT THIS SHAPE. DO NOT TAKE `reconcile-emit-report` AS ACTION 1's NEXT MEMO.** It is #2 in the
+   record at 320 pool-seconds behind the 513s pole, which is exactly why it read as the memo's next
+   subject. Censused under a PATH-shadowed wrapper (wrapper control 1, impossible-subcommand control
+   0): **ONE invocation is 93 calls / 76 distinct = 1.22x** — `self-update-gate`'s shape, recorded
+   two paragraphs down as NOT this lever, and not `ledger-reverify.sh`'s 366/112. The fixture's
+   14490 calls resolve to **300** distinct, so the redundancy is ACROSS its ~156 invocations, in
+   separate processes. **Every fixture whose whole-run ratio looked memo-shaped has now been
+   censused per-invocation and only one of them ever was.**
+
+   **AND THE PER-INVOCATION TABLE'S HIGHEST RATIO WAS ALSO THE WRONG TARGET, WHICH IS THE DURABLE
+   HALF.** `hash-object` reads 12 calls to **2 distinct files, 6.00x** — the top row of that
+   invocation's table, and 12 forks of a 2s render. Taking it would have repeated `v0.596.0`'s `I75`
+   error one release later. **A RATIO RANKS REDUNDANCY, NOT COST**; it is the same instrument
+   failure as the by-arm fork table, one level down, and it is spotted the same way — by ABLATION.
+
+   **THE SUBJECT WAS ONE DETECTOR, AND THE FIX WAS A FLAG THAT ALREADY EXISTED.** Every detector
+   the renderer drives, timed against one seeded tree, 3 interleaved reps with each run's rc
+   asserted: whole render 1456-1556ms, of which **`unregistered-drift.sh` alone is 586-661ms —
+   43%** — against `ledger-reverify` 163-165, `preclassify` 132-147, `layer-drift` 84-94 and nine
+   others below 100ms. That scan takes `--bucket-rows <file>` so a caller holding preclassify's
+   output hands it down instead of making it re-derive them in a second process; `apply.sh:504` has
+   passed it since the flag existed and `emit-report.sh` never did, computing those exact rows one
+   call above. **NOFLAG 789-949ms against FLAG 610-723ms**, 5 interleaved reps, outputs
+   byte-compared every rep, disjoint ranges. **Ask of a slow orchestrator which of its CHILDREN
+   costs the time before scoping anything inside it.**
+
+   **AND THE FIGURE QUOTED FOR IT IS THE COUNT, NOT THE SECONDS, EXACTLY AS THIS BLOCK REQUIRES.**
+   One full fixture run per side in two FIXED `git worktree` checkouts, interleaved, each under its
+   own PATH-shadowed wrapper with that wrapper's control at 1: **14490 → 14047 git calls, −443
+   (−3.1%)**, distinct 300 both sides, `rc=0` both sides, assertions 81 against 83 — the sides
+   differing by exactly the two arms added. **Both sides reproduced EXACTLY on a second interleaved
+   rep — spreads 14490-14490 and 14047-14047, zero either side.** The ms column of that same run is
+   void: a concurrent gate put the tip reps at 355892/317245ms against the base's 202105/265350ms,
+   overlapping ranges around a −443-call effect. **A DIFFERENTIAL'S BASE MUST BE A TREE THE SESSION CANNOT WRITE** — the first
+   attempt used the main checkout while the release branch was being assembled in it, so rep 2's
+   base was the tip, caught by grepping that rep's own output for the new arm (83 assertions where
+   a real base emits 81) and not by reading the timings.
+
    Profiled so far: `ledger-reverify.sh` (done, `0.586.0`), I87 in the enforcement-map validator
    (done, `0.587.0`), I60 and I59 in the same validator (done, `0.588.0`), I82 and I84 in the same
    validator (done, `0.592.0` — 4774 → 3827 forks, and the arm table in the block above is the
@@ -312,9 +353,9 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    the wall the suite now sits against. Every past pole win was bought this way and that is why
    the floor is where it is.
 
-   **Work concentrates, which is what makes this tractable:** top 10 units are **41.8%** of all
-   pool-seconds, top 20 are **58.9%** (re-derived at `v0.594.0`; 42.3/60.6 at `v0.593.0` and
-   40.7/57.9 at `v0.591.0`).
+   **Work concentrates, which is what makes this tractable:** top 10 units are **42.7%** of all
+   pool-seconds, top 20 are **60.0%** (re-derived at `v0.597.0`; 41.8/58.9 at `v0.594.0`,
+   42.3/60.6 at `v0.593.0` and 40.7/57.9 at `v0.591.0`).
    Re-derive both before scoping — the membership moves, these
    two figures sat one release stale until action 3b re-ran them from a worktree, and they swing
    with the run: one tree read 42.0/60.3 and 46.3/64.8 from two different gate runs, so they
@@ -475,6 +516,39 @@ ruling stands until the operator replaces it: **the subject is removing work, no
 killed them, and both sections are kept in full below because their hazard notes are the reason
 to read them if the numbers ever change back.
 ### Discharged — do not re-execute
+
+**BATCH 127 SHIPPED `v0.597.0` AND IT REFUTED ACTION 1's NAMED TARGET FOR THE SECOND RELEASE
+RUNNING — THIS TIME THE MEMO, NOT THE ARM TABLE.** Action 1 said "FINISHING THE RECONCILE MEMO IS
+THE NEXT TARGET" and `reconcile-emit-report` sat at #2 in the record, 320 pool-seconds behind the
+513s pole. Its census killed the scope: **one invocation is 93 git calls / 76 distinct = 1.22x**,
+`self-update-gate`'s shape, which the plan already recorded as NOT this lever. The whole fixture's
+14490 calls against 300 distinct is redundancy ACROSS ~156 invocations in separate processes.
+
+**THE PER-INVOCATION TABLE THEN OFFERED ITS OWN WRONG TARGET.** `hash-object` at 12 calls to 2
+distinct files is **6.00x**, the top row — and 12 forks of a 2s render. The same instrument failure
+`v0.596.0` recorded for the by-arm fork table, one level down: **a ratio ranks redundancy, not
+cost.**
+
+**THE REAL SUBJECT WAS A CHILD PROCESS, FOUND BY ABLATION.** Timing every detector the renderer
+drives, 3 interleaved reps with rc asserted: `unregistered-drift.sh` is **586-661ms of a
+1456-1556ms render — 43%**, against the next-largest at 163-165ms. The fix was `--bucket-rows`, a
+flag that already existed, that `apply.sh:504` had passed since it existed, and that
+`emit-report.sh` never passed while computing the exact rows one call above it: **NOFLAG
+789-949ms against FLAG 610-723ms**, 5 interleaved reps, byte-compared every rep, disjoint.
+
+**THE EQUIVALENCE WAS OWNED AND THE CALLER WAS NOT, WHICH IS WHY IT WENT UNSEEN.**
+`apply-drift-after-write/run.sh:430` asserts the flagged and standalone scans agree row-for-row and
+`:442` asserts an empty rows file does not acquit — both about the SCAN. **Nothing bound the
+RENDERER to the flag.** `B1` now greps the executing line, because a whole-file grep is satisfied
+by prose: probed under `mktemp` in both directions it reports the base renderer, stays quiet on the
+flagged one, and still reports a base renderer carrying the flag in a COMMENT, where `grep -cF`
+reads 1 and acquits.
+
+**A TIMING DIFFERENTIAL WAS CONTAMINATED BY THE FIX BEING COPIED INTO ITS OWN BASE TREE.** The
+main checkout was the "BASE" side of a background run while the branch was being assembled in it,
+so rep 2's base was the tip. Caught by grepping that rep's own output for the new arm — 83
+assertions where a real base emits 81. **A differential's base must be a tree the session cannot
+write**; re-run in two fixed `git worktree` checkouts.
 
 **BATCH 126 SHIPPED `v0.596.0` AND IT REFUTED THIS PLAN'S OWN TARGETING RULE BEFORE IT SHIPPED
 ANYTHING.** Action 1 named `I75` next on fork count. Timed, `I75` is **0.86s net** of a ~41s

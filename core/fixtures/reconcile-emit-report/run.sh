@@ -1626,6 +1626,49 @@ v_kill E10 "V-HB" "V-HB:1|UNDECIDED|0|0|0|0" \
 if v_kill E11 "V-R V-N V-H V-HA V-S V-U V-HC V-HB" "V-HB:3|BLOCKERS-RESOLVED|1|1|0|0" "V-HC:1|UNDECIDED|0|1|0|0"; then
   ok "E11 (both guards removed together): V-HB reads BLOCKERS-RESOLVED — a wrapper that did not run is named as the operator's own resolution over a drift still on disk, which is the defect the pair exists to prevent and which neither mutant alone can reach"
 fi
+
+# --- B1/B2: emit-report HANDS unregistered-drift.sh the preclassify rows it already paid for ---
+#
+# The render computes `pc` once and then drove `unregistered-drift.sh` with no `--bucket-rows`,
+# so that scan's carried-bucket arm re-derived the identical rows in a second process. Measured
+# on this fixture's own seeded tree, 5 interleaved reps with the outputs byte-compared every rep:
+# 789-949ms without the flag against 610-723ms with it, disjoint ranges.
+#
+# THE EQUIVALENCE IS ALREADY OWNED ELSEWHERE AND IS NOT RESTATED HERE.
+# `apply-drift-after-write/run.sh:430` asserts the flagged and standalone scans agree row-for-row,
+# and `:442` asserts an EMPTY rows file does not acquit. What NOTHING asserted is that THIS
+# renderer passes the flag at all — apply.sh has passed it since the flag existed and emit-report
+# never did, which is precisely the state that made this a live cost rather than a fixed one.
+#
+# B1 IS KEYED ON THE EMISSION SITE, NOT ON THE FILE. A whole-file `grep -qF -- --bucket-rows` is
+# satisfied by the header comment above the call and by this comment block; the binding has to be
+# the line that EXECUTES the scan. The control below is the same grammar against an argument no
+# call site carries, and it must read 0 or the count beside it means nothing.
+B1_HIT="$(grep -cE '^[[:space:]]*bash "\$SELF/unregistered-drift\.sh" --bucket-rows ' "$EMIT")" || B1_HIT=0
+B1_CTL="$(grep -cE '^[[:space:]]*bash "\$SELF/unregistered-drift\.sh" --qqq-absent-rows ' "$EMIT")" || B1_CTL=0
+if [ "$B1_CTL" -ne 0 ]; then
+  bad "B1 CONTROL the impossible-flag grammar matched $B1_CTL executing lines, so B1's count establishes nothing"
+elif [ "$B1_HIT" -ge 1 ]; then
+  ok "B1 the renderer drives unregistered-drift.sh with --bucket-rows at an EXECUTING line ($B1_HIT), not merely in prose — the rows this render already computed are handed down instead of re-derived (control: the same grammar with an impossible flag reads 0)"
+else
+  bad "B1 no executing line passes --bucket-rows to unregistered-drift.sh; the render re-derives preclassify in a second process, which measured 789-949ms against 610-723ms on this tree"
+fi
+
+# B2 IS THE ARM THAT MAKES B1 MEAN SOMETHING: the flag must not change the RENDERED REGION.
+# B1 alone passes on a renderer that hands down the wrong rows. This re-runs the shipped scan
+# both ways against the tree this fixture seeded and byte-compares, with a non-empty control —
+# two empty outputs compare equal and would pass without it.
+B2_PC="$WORK/b2-pc-rows"
+bash "$(dirname "$EMIT")/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" > "$B2_PC" 2>/dev/null
+B2_N="$(bash "$(dirname "$EMIT")/unregistered-drift.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
+B2_F="$(bash "$(dirname "$EMIT")/unregistered-drift.sh" --bucket-rows "$B2_PC" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
+if [ "$(printf '%s\n' "$B2_N" | grep -c .)" -eq 0 ]; then
+  bad "B2 CONTROL the standalone scan produced NO rows on this fixture's tree, so the comparison below is two empty sets and cannot discriminate"
+elif [ "$B2_F" = "$B2_N" ]; then
+  ok "B2 the flag changes who PAID and not what is answered: flagged and standalone scans agree row-for-row on this fixture's own tree, with the row set asserted non-empty first"
+else
+  bad "B2 the flagged and standalone scans DISAGREE, so the rendered region depends on which caller ran the scan: $(diff <(printf '%s\n' "$B2_N") <(printf '%s\n' "$B2_F") | head -4 | tr '\n' '|')"
+fi
 echo
 if [ "$fails" -eq 0 ]; then echo "reconcile-emit-report: PASS"; exit 0; fi
 echo "reconcile-emit-report: $fails assertion(s) FAILED" >&2
