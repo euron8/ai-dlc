@@ -84,24 +84,19 @@ pole **545s** (`ledger-reverify`, with `reconcile-emit-report` 332 and `validato
 is **~34s**, and **that gap is all any pole work can ever return.** Zero out the pole entirely and
 the suite still cannot finish faster than the floor. **The suite is WORK-BOUND with essentially no
 scheduling headroom left, which is the strongest form of the ruling below.** (Re-derived at
-`v0.598.0` from the same block, AFTER that release's own gate run, which is the record a
-stranger resuming here will read: pole **479s** (`reconcile-emit-report` 297 and
-`validator-arm-selection` 269 behind it), total **5508**, floor **459.0s**, concentration
-`top10=41.0% top20=57.1%` — **gap 20s**, the narrowest this block has ever recorded, on an
-idle box with nothing running beside the gate. At `v0.597.0` the same three read pole **636s**,
-total **6960**, floor **580.0s**, `top10=41.5% top20=58.9%`. **THE GAP HAS READ 20s, 56s AND ~34s
-ACROSS THESE READINGS, AND THAT SPREAD IS THE POINT.** `v0.597.0` also read 513/5745/478.8 — gap
-34.2s — from the record as it stood BEFORE its gate ran; its 636/6960/580.0 reading is the same
-tree measured while a fork
-differential ran beside the suite, so every unit inflated and the pole inflated most. **A gate run
-REWRITES this record, so the figures a resuming session reads are whatever the last full dispatch
-happened to cost, under whatever else was running.** Take the gap as ~20-56s and the DIRECTION as
-the answer; do not treat any end as one release's work. At `v0.594.0` the same three read 545s,
-6132 and 511.0s; at `v0.593.0` 627s, 7120 and 593.3s; at `v0.591.0` 501s, 5591 and 465.9s;
-at `v0.589.0` 504s, 5637 and 469.8s. **Every one of those readings is a LOADED number taken
-on a different box load, and they swing ±27% for that reason alone** — do not read the
-`v0.597.0` → `v0.598.0` fall as this release's work either. The GAP is the load-independent part
-of this block.)
+`v0.601.0` from the same block, AFTER that release's own gate run, which is the record a
+stranger resuming here will read: pole **429s** (`validator-arm-selection` 347 and
+`gate-adjudication-mutants` 264 behind it), total **5899**, floor **491.6s**, concentration
+`top10=38.7% top20=57.9%`. **THE POLE IS NOW BELOW THE FLOOR — 429s against 491.6s — SO POLE WORK
+HAS NOTHING LEFT TO BUY AT ALL**, and the makespan is the floor. Earlier readings of the same
+three, every one LOADED and on a different box load: `v0.598.0` 479/5508/459.0 with gap 20s,
+`v0.597.0` 636/6960/580.0 and 513/5745/478.8 on one tree an hour apart, `v0.594.0` 545/6132/511.0,
+`v0.593.0` 627/7120/593.3. **THE GAP HAS READ 20s, 56s, ~34s AND NOW NEGATIVE, AND THAT SPREAD IS
+THE POINT.** **A gate run REWRITES this record, so the figures a resuming session reads are
+whatever the last full dispatch happened to cost, under whatever else was running** — they swing
+±27% on load alone. Take the DIRECTION as the answer and never a single reading as one release's
+work; batch 129 removed real work and the total still rose 5508 → 5899, because three gate runs
+and five measurement agents shared the box.)
 
 **THE FLOOR MOVES WHEN WORK IS REMOVED, AND THAT IS THE WHOLE POINT.** It was `sum/12` = 543.9s at
 `v0.587.0`. Read that DIRECTION, not any single reading: the floor and the total move together
@@ -270,18 +265,63 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    because the calls overlap the work. **Re-take a contaminated figure; never repair it by
    arithmetic.**
 
-   Profiled so far: `ledger-reverify.sh` (done, `0.586.0` memo and `0.598.0` guard order), I87 in the enforcement-map validator
+   **BATCH 129 (`0.599.0`-`0.601.0`) TOOK THE NON-GIT FORKS, AND THAT IS THE LEVER THIS BLOCK'S
+   OWN INSTRUMENTS CANNOT SEE.** `ledger-reverify.sh` makes **909 forks against 109 git calls** —
+   `sed` 284, `grep` 191, `cat` 170, outnumbering git 6:1 — so the bucketed git census and the
+   total/distinct ratio both score a correct 17% CPU cut as ZERO. **Ask what a program forks that
+   is NOT git before reading a git census as its cost.** Measured in CPU-seconds because wall
+   clock could not resolve it: a 10-rep interleaved wall-clock differential read −492..+1086 ms
+   around a mean of 485, spread larger than the effect. Also taken: `machinery_paths()` 26 → 2
+   `ls-files` (`0.600.0`), and `retired-tokens.sh`'s per-CLASSIFY-file re-derivation of a
+   preclassify both callers already held, 594 → 396 invocations (`0.601.0`).
+
+   **TWO SHIPPED FIXES WERE BLOCKED BY AN ADVERSARY BEFORE THEY LANDED, AND BOTH REMEDIES ARE
+   THE DURABLE PART.** A batched `machinery_paths()` that put `--with-tree="$BASE"` on the OPENING
+   line of a multi-line command substitution made `armc-mut-base`'s line-delete produce a mutant
+   that DOES NOT PARSE — scored as SURVIVED, reading as a regression in the change under test.
+   `ac_kill_pre` now runs `bash -n` beside its `cmp -s`. And handing preclassify rows down to
+   `retired-tokens.sh` acquitted a live finding on an EMPTY rows file, because that detector's
+   refusal goes to stderr and both callers discard it — all four reconcile fixtures stayed green
+   over the hole. **Ask of every hand-down what an EMPTY payload makes the reader say.**
+
+   **`gate-adjudication-mutants` (264s) WAS MEASURED AND REFUSED, AND THE REFUSAL IS THE FINDING.**
+   Four of the eight sections of the fixture it reruns 21 times are scored by NO mutant's declared
+   kill set, and ablating them is a clean **−32%** (base 145.92-158.43s against 99.41-107.09s,
+   disjoint, rc=0, 21 scored, 0 FAIL). **It is still a coverage regression.** The battery's guard
+   is an EQUALITY compare (`run.sh:198`), so an UNDECLARED failure is a finding TODAY; the
+   21-mutant corpus cannot separate the sides because every mutant was authored to damage a
+   DECLARED property. One constructed input — deleting the dispatch window's upper bound at
+   `validate-gate-adjudication.sh:1398` — reads base `GOT=[BINDING]` rc=1 against ablated `GOT=[]`
+   rc=0, silent. **Do not re-take this without splitting the fixture at its own boundary.**
+
+   **`validator-arm-selection` + `-b` (473s combined) IS MEASURED AND OPEN.** 118 declared ids run
+   against 103 selectable units, so **15 ids re-run a unit another id already ran** — all 11
+   layer-contract ids generate a byte-identical 115068-byte subprogram (controls: `I8` 65412,
+   `I82` 93337). Ablating to 103 representatives is −18% on the pair. **DO NOT TAKE THAT SHORTCUT**:
+   `run.sh:329` asserts every id runs alone and `:414` that the union of per-id findings equals the
+   full run's, and the ablation was measured to stop checking one id's attribution. The real fix is
+   lifting the `if [ -f "$lc_file" ]` guard at `validate-enforcement-map.sh:629` so the 9 indented
+   arms become column-0 units — a change to a validator the pole invokes, needing its own
+   before/after timing, and a release of its own.
+
+   Profiled so far: `ledger-reverify.sh` (done, `0.586.0` memo, `0.598.0` guard order, `0.599.0`
+   non-git forks 909 → 639), `preclassify.sh`'s `machinery_paths()` (done, `0.600.0`),
+   `retired-tokens.sh` (done, `0.601.0`), I87 in the enforcement-map validator
    (done, `0.587.0`), I60 and I59 in the same validator (done, `0.588.0`), I82 and I84 in the same
    validator (done, `0.592.0` — 4774 → 3827 forks, and the arm table in the block above is the
    post-cut one), `emit-report.sh`
    (PARTIAL, `0.587.0` — the surviving shapes are listed in the discharged record below). Profiled
    and found NOT to have this shape: `gate-adjudication-mutants`, where git is absent by design and
    the awk/grep repetition is spread across 21 independently-necessary sandbox reruns.
-   **`self-update-gate` WAS PROFILED AT `v0.590.0` AND IT IS NOT THIS SHAPE. DO NOT TAKE IT AS
-   ACTION 1's NEXT TARGET.** The 9032 git calls / 1091 distinct reproduce exactly (PATH-shadowed
-   wrapper, control 1, rc 0, 188 assertions green) — but the redundancy is ACROSS invocations, in
-   separate processes, not inside one. **One invocation is 92 calls / 71 distinct = 1.30x**, and
-   the fixture drives ~98 of them (9032/92 = 98.2), 85 being safe-stop sub-walks. Compare
+   **`self-update-gate` WAS PROFILED AT `v0.590.0`, IS NOT THE MEMO SHAPE, AND WAS TAKEN ANYWAY AT
+   `0.600.0` BY A DIFFERENT LEVER — ITS ARM-C FORK FAN-OUT.** The memo reading below stands and is
+   still the reason not to build one here. **THREE OF ITS FIGURES WERE REFUTED WHEN RE-DERIVED**,
+   which is why none of them should be quoted without re-taking: the fixture drives **257**
+   invocations, not ~98 (the 98 came from dividing total git calls by a divisor valid only for FULL
+   invocations); the 85 are safe-stop **DRIVERS at 0.027s each**, not sub-walks, and the sub-walks
+   are a separate 59; and **the plan's named lever for it — "the range or the walk" — is false**.
+   The release range is SEEDED and flat at 4 across 237 releases, so this fixture's cost is not
+   history-bound, and ablating the safe-stop walk reads as no measurable change. Compare
    `ledger-reverify.sh`, the shape the three completed fixes share: 366 calls resolving to 112
    distinct INSIDE one process, which a per-process memo cut to 133. A memo here buys ~21 calls
    of 92 and cannot reach across the other 97 invocations. Timed on this tree: **1.08s per
