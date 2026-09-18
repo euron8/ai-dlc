@@ -524,6 +524,24 @@ PC="$(printf '%s\n' "$PC" | awk -F'\t' '
   END                       { printf "%s", fx }
 ')"
 
+# `--bucket-rows` FOR retired-tokens.sh, THE SAME HAND-DOWN `unregistered-drift.sh` GETS ABOVE.
+# That detector ran `preclassify.sh "$DIST" "$BASE" "$THEIRS" "$CONSUMER"` itself -- byte-for-byte
+# `:486` -- once per CLASSIFY row of the loop below. `$UD_PC` is already unlinked at `:511`, so
+# this is its own file.
+#
+# MATERIALISED AFTER THE FIXTURES-LAST REORDER, which is safe because the detector derives its
+# subject set through `sort -u`: the rows it receives are the same SET in a different order, and
+# order is normalised away before anything reads them.
+#
+# THE FLAG IS PASSED ONLY WHEN THE WRITE SUCCEEDED. An empty handed-down file must never stand in
+# for a real derivation -- "no rows" and "no retired token" are the same stdout, and the
+# detector's refusal goes to stderr, which the call below discards. It falls back to deriving on
+# an empty file for exactly that reason.
+RT_PC="$(mktemp "${TMPDIR:-/tmp}/apply-rt.XXXXXX" 2>/dev/null)" || RT_PC=""
+if [ -n "$RT_PC" ]; then
+  printf '%s\n' "$PC" > "$RT_PC" || RT_PC=""
+fi
+
 # ---------------------------------------------------------------- 1. buckets (preclassify)
 while IFS="$(printf '\t')" read -r kind path cons bucket; do
   [ -n "${bucket:-}" ] || continue
@@ -557,8 +575,13 @@ while IFS="$(printf '\t')" read -r kind path cons bucket; do
       # invisibly: consumer-only code inside this file still referencing a contract
       # upstream retired. Carried on the worklist item itself so the obligation
       # arrives with the work, not in a report section that can be skimmed.
-      rt="$(bash "$SELF/retired-tokens.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" "$path" 2>/dev/null \
-            | awk -F'\t' '{print $3}' | paste -sd' ' -)"
+      if [ -n "$RT_PC" ]; then
+        rt="$(bash "$SELF/retired-tokens.sh" --bucket-rows "$RT_PC" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" "$path" 2>/dev/null \
+              | awk -F'\t' '{print $3}' | paste -sd' ' -)"
+      else
+        rt="$(bash "$SELF/retired-tokens.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" "$path" 2>/dev/null \
+              | awk -F'\t' '{print $3}' | paste -sd' ' -)"
+      fi
       if [ -n "${rt:-}" ]; then
         say WORKLIST semantic-merge "$rel" "MUST ALSO re-point retired contract token(s): ${rt} — re-run retired-tokens.sh after merging; a non-empty result means the merge is NOT complete"
       else
@@ -580,6 +603,7 @@ while IFS="$(printf '\t')" read -r kind path cons bucket; do
 done <<EOF
 $PC
 EOF
+[ -n "$RT_PC" ] && rm -f "$RT_PC"
 
 # THE DRIVER REPLACED ITSELF, AND THE OPERATOR IS TOLD SO RATHER THAN LEFT TO INFER IT.
 # The rename above makes this SAFE -- the run finishes on the version that was invoked -- but

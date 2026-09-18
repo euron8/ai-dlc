@@ -229,6 +229,26 @@ render() {
   # wrong -- which side holds which lines -- capped, with the suppressed count STATED so a
   # truncated sample can never read as a complete one.
   if [ -n "$classify" ]; then
+    # `--bucket-rows` HANDS DOWN THE ROWS THIS RENDER ALREADY PAID FOR, exactly as the
+    # `unregistered-drift.sh` call below has since that flag existed. `retired-tokens.sh`
+    # re-derived them by running `preclassify.sh "$DIST" "$BASE" "$THEIRS" "$CONSUMER"` itself —
+    # byte-for-byte the call at the top of this function — ONCE PER CLASSIFY FILE. Measured on
+    # the fixture's own render matrix: 594 preclassify invocations, of which 198 were this
+    # re-derivation; handing the rows down leaves 396.
+    #
+    # WRITTEN OUTSIDE THE LOOP because the loop below is the right-hand side of a PIPELINE and
+    # therefore a subshell: a temp file created inside it is created once per row and cannot be
+    # cleaned by the caller.
+    #
+    # THE FLAG IS PASSED ONLY WHEN THE WRITE SUCCEEDED, never with an empty file standing in for
+    # a real derivation. `retired-tokens.sh` falls back to deriving when the handed-down file is
+    # empty — an empty set and a failed derivation are the same stdout, and its own refusal goes
+    # to stderr, which this call discards. `retired-contract-token/run.sh` asserts both halves.
+    local rt_pc=""
+    rt_pc="$(mktemp 2>/dev/null)" || rt_pc=""
+    if [ -n "$rt_pc" ]; then
+      printf '%s\n' "$pc" > "$rt_pc" || rt_pc=""
+    fi
     sub "Semantic worklist orientation — OURS = consumer, THEIRS = upstream at theirs. Every ours/theirs claim in the resolution prose MUST be derived from this block, never from recall:"
     printf '%s\n' "$pc" | awk -F'\t' 'NF>=4 && $4 ~ /CLASSIFY/ {print $2"\t"$3}' | sort -u \
     | while IFS="$(printf '\t')" read -r cp cons; do
@@ -286,8 +306,13 @@ render() {
           # this only renders it. UNCAPPED on purpose -- the signal was already inside
           # "ONLY IN OURS" above on the pull that motivated it, buried at "137
           # suppressed", and the cap is what hid it.
-          rt="$(bash "$SELF/retired-tokens.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" "$cp" 2>/dev/null \
-                | awk -F'\t' '{print $3}')"
+          if [ -n "$rt_pc" ]; then
+            rt="$(bash "$SELF/retired-tokens.sh" --bucket-rows "$rt_pc" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" "$cp" 2>/dev/null \
+                  | awk -F'\t' '{print $3}')"
+          else
+            rt="$(bash "$SELF/retired-tokens.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" "$cp" 2>/dev/null \
+                  | awk -F'\t' '{print $3}')"
+          fi
           if [ -n "$rt" ]; then
             echo "    RETIRED-CONTRACT-TOKEN — OURS still references what THEIRS eliminated (uncapped; resolve EVERY one):"
             printf '%s\n' "$rt" | sed 's/^/      /'
@@ -299,6 +324,7 @@ render() {
           fi
         fi
       done
+    [ -n "$rt_pc" ] && rm -f "$rt_pc"
   fi
 
   sub "Deletions (apply would git rm a consumer file — gated per-path):"
