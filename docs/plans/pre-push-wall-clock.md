@@ -75,12 +75,13 @@ on a different box load, and they swing ±27% for that reason alone** — do not
 block and it has read ~34s across all four.)
 
 **THE FLOOR MOVES WHEN WORK IS REMOVED, AND THAT IS THE WHOLE POINT.** It was `sum/12` = 543.9s at
-`v0.587.0` and is 469.8s now, against a total that went 6527 → 5637 pool-seconds. Read that
-direction, not the pole: the readings are from different runs on different box loads and the pole
-alone cannot resolve one release, but the floor and the total moved together. **They are still
-loaded numbers and they wobble** — `v0.588.0` read 450.2s and 5403 on the same tree one release
-earlier, a 4% swing from box load alone, which is why the LOAD-INDEPENDENT fork counts above are
-the figures to quote.
+`v0.587.0`. Read that DIRECTION, not any single reading: the floor and the total move together
+when work is removed, while the pole alone cannot resolve one release. **But these are loaded
+numbers and they wobble far more than one release's work.** Measured on ONE tree at `v0.595.0`,
+two gate runs an hour apart: 511.0s over 6132 pool-seconds, then 483.8s over 5805 — a 5% swing
+with no code change between them, and `v0.588.0` read 450.2s/5403 against `v0.589.0`'s
+469.8s/5637 the same way. **Quote the LOAD-INDEPENDENT fork counts above; take a floor reading as
+a direction and never as a delta.**
 
 **THE LOADED POLE CANNOT RESOLVE A SINGLE RELEASE'S WORK, AND `v0.587.0` MEASURED THE SPREAD
 DIRECTLY.** Three full no-skip gate runs across that one batch, on trees differing by at most two
