@@ -15,6 +15,26 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.595.1] - 2026-09-18
+
+### The wall-clock plan's floor paragraph said "is 469.8s now" three releases after it stopped being now
+
+Found by running action 3b — the fresh-resume check — from a `git worktree` of `origin/main` and
+reading the block as a stranger. The resume figures at the head of the block were re-derived at
+`0.594.0`; the paragraph BELOW them was not, and still read `sum/12` = 469.8s against a total of
+5637 pool-seconds, both from `v0.589.0`.
+
+**The repair is not a fresher number, because a fresher number decays the same way.** Measured on
+ONE tree at this release, two gate runs an hour apart with no code change between them: 511.0s over
+6132 pool-seconds, then 483.8s over 5805 — a **5% swing from box load alone**. The paragraph now
+states the DIRECTION the floor moves when work is removed, carries the two same-tree readings as
+the evidence that a single one cannot resolve a release, and points at the load-independent fork
+counts as the figures to quote.
+
+**Action 3b's own hazard note held up**: the block's derive commands resolve the durations record
+through `git rev-parse --git-common-dir` and ran correctly from the linked worktree, where `.git`
+is a file and a literal `.git/` path prints `sort: Not a directory` while still exiting 0.
+
 ## [0.595.0] - 2026-09-17
 
 ### The batched I33b scan gets the one assertion its own corpus was already exercising
