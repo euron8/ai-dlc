@@ -71,7 +71,16 @@
 
 set -u
 
-DIST="${1:?usage: retired-tokens.sh <dist> <base> <theirs> <consumer> [<path>]}"
+BUCKET_ROWS=""
+while [ "$#" -gt 0 ]; do
+  case "${1:-}" in
+    --bucket-rows) BUCKET_ROWS="${2:-}"; shift 2 ;;
+    --bucket-rows=*) BUCKET_ROWS="${1#--bucket-rows=}"; shift ;;
+    *) break ;;
+  esac
+done
+
+DIST="${1:?usage: retired-tokens.sh [--bucket-rows <file>] <dist> <base> <theirs> <consumer> [<path>]}"
 BASE="${2:?}"
 THEIRS="${3:?}"
 CONSUMER="${4:?}"
@@ -92,7 +101,13 @@ LIMIT='A consumer path upstream never had is outside this detector BY DESIGN (th
 
 # The subject set is captured ONCE, outside the loop, so the run can count what it
 # opened: a counter kept in a pipeline's last stage is lost to its subshell.
-ROWS="$(bash "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null || true)"
+ROWS=""
+if [ -n "$BUCKET_ROWS" ] && [ -s "$BUCKET_ROWS" ]; then
+  ROWS="$(cat "$BUCKET_ROWS" 2>/dev/null || true)"
+fi
+if [ -z "$ROWS" ]; then
+  ROWS="$(bash "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null || true)"
+fi
 
 # preclassify.sh emitting NOTHING has three causes and this script cannot tell them
 # apart: no file under a mapped core path moved between base and theirs (a docs-only

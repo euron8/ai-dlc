@@ -15,6 +15,65 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.601.0] - 2026-09-18
+
+### `retired-tokens.sh` re-ran the preclassify both its callers already held, once per CLASSIFY file
+
+`emit-report.sh:204` and `apply.sh:486` each compute
+`preclassify.sh <dist> <base> <theirs> <consumer>` and hold the rows. `retired-tokens.sh:95` then
+ran **the same program with byte-identical arguments**, once for every CLASSIFY file in the
+worklist. It grows a `--bucket-rows` parser — the same flag, same grammar, that
+`unregistered-drift.sh:134` has carried since `0.597.0` — and both callers hand down what they
+already paid for.
+
+**Measured as a COUNT, which is the load-independent figure**: an instrumented `preclassify.sh`
+counting its own invocations across a full `reconcile-emit-report` run reads **594 on base and
+396 on tip**, rc=0 and 0 FAIL on both sides. The 198 removed are exactly the per-CLASSIFY-file
+re-derivations. `apply-drift-after-write` moves 79 → 64 by the same route.
+
+### The obvious form of that hand-down is a LIVE ACQUITTAL VECTOR, and every existing fixture passed it
+
+`retired-tokens.sh` refuses to report clean when preclassify yields nothing — "no rows" and "no
+retired token" are the same stdout, so the refusal names the three causes and exits. **That
+refusal goes to stderr, and BOTH callers discard stderr** (`2>/dev/null`) and render
+`RETIRED-CONTRACT-TOKEN: none`.
+
+A detector that simply reads the handed-down file therefore treats an EMPTY file — a failed
+`mktemp`, a truncated write — as a clean tree, at the one place an operator reads. Constructed on
+a world where the detector genuinely emits: with correct rows handed down the flagged and
+standalone runs agree row-for-row; with an empty file the finding is **ACQUITTED**. All four
+reconcile fixtures stayed green with that hole open.
+
+The shipped form falls back to deriving when the handed-down rows are empty, mirroring
+`unregistered-drift.sh`'s "believe the emptiness only when the range is genuinely empty". Callers
+pass the flag only when the write succeeded.
+
+### Two fixture arms ship WITH the flag, because nothing could have caught this
+
+`retired-contract-token/run.sh` had 11 arms and **none drove any flag**. A flag that ships one
+release ahead of the arm guarding it is a window in which the acquittal is live and invisible,
+so both land here, ported from `apply-drift-after-write/run.sh:430` and `:442`:
+
+- the flagged and standalone runs agree **row-for-row**, asserted on the EMITTING world — scored
+  against a world where the detector reports nothing, both runs are empty and agree for a reason
+  neither owns, which is why the arm also fails if the handed-down file is empty;
+- an **empty** `--bucket-rows` file does not acquit.
+
+**The second arm was proved able to fail before shipping.** Built the naive "read the file and
+trust it" detector — the form without the fallback — and ran the real fixture against it in
+place: the acquittal arm goes **FAIL** at rc=1 with `Got: <no row>`, while the agreement arm stays
+green. Exactly one assertion moves, so the two arms are not entangled. A first attempt at that
+probe ran a fixture copy from `/tmp` and exited 2 resolving its root elsewhere — a broken probe,
+discarded rather than read as a result.
+
+### Ordering note
+
+`apply.sh` materialises its rows AFTER the fixtures-last reorder at `:521`. That is safe because
+the detector derives its subject through `sort -u`: the rows are the same SET in a different
+order, and order is normalised away before anything reads them. The temp file is its own —
+`$UD_PC` is already unlinked at `:511` — and in `emit-report.sh` it is created OUTSIDE the
+worklist loop, because that loop is the right-hand side of a pipeline and therefore a subshell.
+
 ## [0.600.0] - 2026-09-18
 
 ### `machinery_paths()` forked one `ls-files` per manifest glob per ref — 26 git calls to resolve 130 paths

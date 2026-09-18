@@ -113,6 +113,44 @@ else
   bad "the severed contract was NOT caught -- detector is inert"
 fi
 
+# --- 1b. `--bucket-rows` CHANGES WHO PAID, NEVER WHAT IS ANSWERED --------------
+# `emit-report.sh` and `apply.sh` both hold `preclassify.sh <dist> <base> <theirs> <consumer>`
+# rows already -- byte-for-byte this detector's own call -- and re-deriving them cost one
+# preclassify per CLASSIFY file. The flag hands them down. These two arms are ported from
+# `apply-drift-after-write/run.sh:430` and `:442`, which exist because this exact class of hole
+# is invisible to every other arm: the world above stays green whether the flag is read or not.
+#
+# THE EMITTING WORLD IS THE SUBJECT ON PURPOSE. Scored against a world where the detector
+# reports nothing, both the flagged and standalone runs are empty and agree for a reason
+# neither owns.
+RTF="$WORK/pc-rows"
+bash "$(dirname "$DETECT")/preclassify.sh" "$DIST" "$BASE_SHA" "$THEIRS_SHA" "$CONS" > "$RTF" 2>/dev/null
+RT_STAND="$out"
+RT_FLAG="$(bash "$DETECT" --bucket-rows "$RTF" "$DIST" "$BASE_SHA" "$THEIRS_SHA" "$CONS" 2>/dev/null)"
+if [ "$(grep -c . "$RTF")" -gt 0 ] && [ -n "$RT_FLAG" ] && [ "$RT_FLAG" = "$RT_STAND" ]; then
+  ok "--bucket-rows changes no verdict: the flagged and standalone runs agree row-for-row"
+elif [ "$(grep -c . "$RTF")" -eq 0 ]; then
+  bad "the handed-down rows file is EMPTY, so this arm compares two empties and establishes nothing"
+elif [ -z "$RT_FLAG" ]; then
+  bad "the flagged run produced NO rows where the standalone run did -- a caller handing down rows would render RETIRED-CONTRACT-TOKEN: none over a live finding"
+else
+  bad "the flagged and standalone runs DISAGREE, so a report and a hand-run detector would differ: $(diff <(printf '%s\n' "$RT_STAND") <(printf '%s\n' "$RT_FLAG") | head -4 | tr '\n' '|')"
+fi
+
+# ...and an EMPTY rows file must NOT acquit. THIS IS THE FAIL-CLOSED CELL and the only input on
+# which a read-the-file-and-trust-it implementation differs from the shipped one. The detector's
+# refusal for "no rows" goes to STDERR, and BOTH callers discard stderr with `2>/dev/null` and
+# render `RETIRED-CONTRACT-TOKEN: none` -- so an empty handed-down file, from a failed `mktemp`
+# or a truncated write, is byte-indistinguishable from a clean tree at the only place an
+# operator reads. Measured before this arm existed: all four reconcile fixtures stayed green
+# with that hole open.
+RT_EMPTY="$(bash "$DETECT" --bucket-rows /dev/null "$DIST" "$BASE_SHA" "$THEIRS_SHA" "$CONS" 2>/dev/null)"
+if grep -q 'RETIRED-CONTRACT-TOKEN.*\$ROOT/\.chan' <<<"$RT_EMPTY"; then
+  ok "an EMPTY --bucket-rows file does not acquit: the detector re-derives rather than reporting clean"
+else
+  bad "with the handed-down rows empty the retired token was ACQUITTED -- a detector that cannot read its subject must not clear it. Got: ${RT_EMPTY:-<no row>}"
+fi
+
 # --- 2. RE-POINTED CONSUMER IS CLEAN -------------------------------------------
 # The control. Without it, assertion 1 could be passing because the detector flags
 # everything, which is the same as flagging nothing.
