@@ -35,12 +35,17 @@ path, and never to leave worktrees in place; the lead runs `git worktree remove`
 
 ### Status
 
-Plan authored 2026-09-18 from fresh measurement. Nothing in it has shipped. Levers are ordered
-by measured payoff and each is one release.
+Plan authored 2026-09-18 from fresh measurement. Nothing has shipped to `main`; lever B's code
+half sits on `wip/lever-b-bash-output-cap` awaiting its release cut. Levers are ordered by
+measured payoff and each is one release.
 
 ### Next actions
 
-1. **Lever B — cap inline Bash output at the harness.** Add `"bashOutputMaxChars": 8000` to
+1. **Lever B — cap inline Bash output at the harness.** THE CODE HALF IS BUILT AND GATE-GREEN
+   on branch `wip/lever-b-bash-output-cap` (commit `928ac9fa`, on origin): start there, cut the
+   release from it (VERSION bump, CHANGELOG entry, commit subject as one claim), run
+   `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push` by exit code, merge. What that commit
+   holds, for verification rather than re-doing: add `"bashOutputMaxChars": 8000` to
    `templates/settings.json.template` (top-level key; harness clamps 4000–128000, default 30000,
    over-limit output becomes a path plus a 2,000-char preview; failures keep a 10,000-char
    head-and-tail). Extend the jq program in
