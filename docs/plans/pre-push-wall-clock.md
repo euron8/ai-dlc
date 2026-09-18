@@ -84,20 +84,24 @@ pole **545s** (`ledger-reverify`, with `reconcile-emit-report` 332 and `validato
 is **~34s**, and **that gap is all any pole work can ever return.** Zero out the pole entirely and
 the suite still cannot finish faster than the floor. **The suite is WORK-BOUND with essentially no
 scheduling headroom left, which is the strongest form of the ruling below.** (Re-derived at
-`v0.597.0` from the same block, AFTER that release's own gate run, which is the record a
-stranger resuming here will read: pole **636s** (`reconcile-emit-report` 382 and
-`gate-adjudication-mutants` 343 behind it), total **6960**, floor **580.0s**, concentration
-`top10=41.5% top20=58.9%`. **THE GAP READS 56s HERE AND ~34s EVERYWHERE ELSE IN THIS BLOCK, AND
-THAT SPREAD IS THE POINT.** The same release read 513/5745/478.8 — gap 34.2s — from the record as
-it stood BEFORE its gate ran; the 636/6960/580.0 reading is the same tree measured while a fork
+`v0.598.0` from the same block, AFTER that release's own gate run, which is the record a
+stranger resuming here will read: pole **479s** (`reconcile-emit-report` 297 and
+`validator-arm-selection` 269 behind it), total **5508**, floor **459.0s**, concentration
+`top10=41.0% top20=57.1%` — **gap 20s**, the narrowest this block has ever recorded, on an
+idle box with nothing running beside the gate. At `v0.597.0` the same three read pole **636s**,
+total **6960**, floor **580.0s**, `top10=41.5% top20=58.9%`. **THE GAP HAS READ 20s, 56s AND ~34s
+ACROSS THESE READINGS, AND THAT SPREAD IS THE POINT.** `v0.597.0` also read 513/5745/478.8 — gap
+34.2s — from the record as it stood BEFORE its gate ran; its 636/6960/580.0 reading is the same
+tree measured while a fork
 differential ran beside the suite, so every unit inflated and the pole inflated most. **A gate run
 REWRITES this record, so the figures a resuming session reads are whatever the last full dispatch
-happened to cost, under whatever else was running.** Take the gap as ~34-56s and the DIRECTION as
-the answer; do not treat either end as this release's work. At `v0.593.0` the same three read 627s, 7120 and 593.3s; at `v0.591.0` 501s, 5591 and 465.9s;
-at `v0.589.0` 504s, 5637 and 469.8s. **Every one of those four readings is a LOADED number taken
+happened to cost, under whatever else was running.** Take the gap as ~20-56s and the DIRECTION as
+the answer; do not treat any end as one release's work. At `v0.594.0` the same three read 545s,
+6132 and 511.0s; at `v0.593.0` 627s, 7120 and 593.3s; at `v0.591.0` 501s, 5591 and 465.9s;
+at `v0.589.0` 504s, 5637 and 469.8s. **Every one of those readings is a LOADED number taken
 on a different box load, and they swing ±27% for that reason alone** — do not read the
-`v0.593.0` → `v0.594.0` fall as this release's work. The GAP is the load-independent part of this
-block and it has read ~34s across all four.)
+`v0.597.0` → `v0.598.0` fall as this release's work either. The GAP is the load-independent part
+of this block.)
 
 **THE FLOOR MOVES WHEN WORK IS REMOVED, AND THAT IS THE WHOLE POINT.** It was `sum/12` = 543.9s at
 `v0.587.0`. Read that DIRECTION, not any single reading: the floor and the total move together
@@ -383,10 +387,10 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    the wall the suite now sits against. Every past pole win was bought this way and that is why
    the floor is where it is.
 
-   **Work concentrates, which is what makes this tractable:** top 10 units are **41.5%** of all
-   pool-seconds, top 20 are **58.9%** (re-derived at `v0.597.0` from the post-gate record; the
-   SAME tree read 42.7/60.0 from the pre-gate one, which is the swing this pair of figures has
-   against no code change at all; 41.8/58.9 at `v0.594.0`, 42.3/60.6 at `v0.593.0` and
+   **Work concentrates, which is what makes this tractable:** top 10 units are **41.0%** of all
+   pool-seconds, top 20 are **57.1%** (re-derived at `v0.598.0` from the post-gate record;
+   41.5/58.9 at `v0.597.0`, whose SAME tree read 42.7/60.0 from the pre-gate one — the swing this
+   pair of figures has against no code change at all; 41.8/58.9 at `v0.594.0`, 42.3/60.6 at `v0.593.0` and
    40.7/57.9 at `v0.591.0`).
    Re-derive both before scoping — the membership moves, these
    two figures sat one release stale until action 3b re-ran them from a worktree, and they swing
