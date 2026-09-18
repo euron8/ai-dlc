@@ -3833,6 +3833,46 @@ first.
 verify: sh f=core/skills/ai-dlc/steps/gate-validation.md; [ -f "$f" ] || exit 9; LC_ALL=C awk '/validate-spawn-ledger\.sh/{p=1} p && /--settings/{print; exit}' "$f" | grep -q . || exit 9; LC_ALL=C awk '/validate-spawn-ledger\.sh \\?$/{p=1} p{b=b $0 "\n"} p && /--settings/{exit} END{printf "%s", b}' "$f" | LC_ALL=C grep -qE -- '--probe' && exit 0; exit 1
 
 
+## BL-273 — I33b's batched grammar narrowed on `${VAR/../…}` against an equivalence claim, and the one input separating the two implementations was in no corpus and no assertion
+
+**NOTE.** Found by the contract adversary auditing `0.594.0` and re-derived here. The release
+claims the batched predicate is equivalent to the per-file one, and on the live corpus it is —
+byte-identical stdout and stderr, 29 intermediate rows reproduced, 4 findings against 4 on a
+seeded tree. **The grammars are not the same grammar, and the corpus cannot tell.**
+
+**The divergence.** The old predicate asked `grep -qE "\$(\{)?VAR(\})?/\.\./"`, in which the
+brace group is OPTIONAL ON BOTH SIDES INDEPENDENTLY — so `${A/../foo}`, which is bash pattern
+substitution and not a directory walk at all, satisfies it as `${A` plus `/../`. The batched
+program requires the closing `}` to immediately precede `/../` when a brace was opened, so it
+does not match. Measured on a constructed file: old grammar **1**, new grammar **0**.
+
+**It is a narrowing TOWARD correctness, which is why this is a NOTE and not a defect.** The old
+behaviour was a false positive; the new one is right. But `0.594.0` shipped under an equivalence
+claim, and the one input that separates the two implementations is the one input nobody wrote
+down — so a future port has an oracle that says "match the old one" and a program that
+deliberately does not.
+
+**Why the corpus cannot see it.** `grep -rlE '\$\{[A-Za-z_][A-Za-z0-9_]*/\.\./' core/fixtures`
+returns **0** files, against a control of **97** for `${VAR}` in the same corpus, so the form is
+absent rather than the grep being broken. An absence from today's corpus is not a fact about what
+the predicate must handle.
+
+**FIXED IN THE SAME BATCH, which is why this entry is filed rather than left open.**
+`A27c_i33b_pattern_substitution_is_not_a_walk` seeds BOTH forms in one tree: `${A/../foo}` must
+NOT be named, and `${A}/../schemas/x.json` — the same variable, the same braces, differing only in
+whether the brace closes before `/../` — must be. The silence half alone would pass against a
+predicate that stopped matching anything, so the ALLOW TWIN is the half that makes it mean
+something. Proven both ways: `ok` on the shipped grammar, and with the loose brace grammar
+restored it reports `I33b named zz-i33b-patsub` and fails.
+
+**The receipt DRIVES the predicate rather than grepping the file that implements it**, because the
+first draft of this entry was prose-satisfiable and `R2`'s ratchet caught it at the gate — 2
+against a ceiling of 1. It extracts `i33b_scan` from the validator, runs it over both seeded
+files, and exits 9 rather than 0 if the walk-up case stops being seen, so a predicate that matches
+nothing cannot close it.
+
+verify: sh v=scripts/validate-enforcement-map.sh; [ -f "$v" ] || exit 9; grep -q 'I33B_WALK_AWK' "$v" || exit 9; d=$(mktemp -d) || exit 9; sed -n '/^I33B_WALK_AWK=/,/^}$/p' "$v" > "$d/p.sh"; grep -q 'i33b_scan()' "$d/p.sh" || { rm -rf "$d"; exit 9; }; printf 'A="$(dirname "$X")"\nB="${A/../foo}"\n' > "$d/pat.sh"; printf 'A="$(dirname "$X")"\nB="${A}/../schemas/x.json"\n' > "$d/walk.sh"; . "$d/p.sh"; w=$(i33b_scan "$d/walk.sh" | grep -c .); p=$(i33b_scan "$d/pat.sh" | grep -c .); rm -rf "$d"; [ "$w" -eq 1 ] || exit 9; [ "$p" -eq 0 ] || exit 1; grep -q 'A27c_i33b_pattern_substitution' core/fixtures/enforcement-map-derivations/run.sh && exit 0; exit 1
+
 ## BL-272 — `fork-profile.sh --section by-line` prints 60 of its rows and says nothing, so a by-line sum is silently partial and disagrees with the by-arm column it should equal
 
 **DEFECT.** Found by summing `--section by-line` per arm range, reading the result against the

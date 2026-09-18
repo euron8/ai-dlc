@@ -823,6 +823,78 @@ A26_i33b_two_step_walk() {
   fi
 }
 
+# --- Assertion 27b: I33b — the scan resets its state at every file boundary --
+# THE BOUNDARY ONLY EXISTS BECAUSE THE SCAN IS BATCHED, AND NOTHING ELSE WATCHES IT. The
+# per-file shell predicate this replaced could not have this defect: each file got its own
+# process. One awk pass over the whole corpus carries `vars`, `seen` and `walk` across the
+# FNR==1 boundary unless it clears them, and the failure is SILENT AND IN THE ACQUITTING
+# DIRECTION — a name already marked `seen` in an earlier file never re-enters `vars[]`, so
+# the later file's walk-up is never reported at all.
+#
+# THE CORPUS ALREADY EXERCISES IT: 14 fixture scripts declare `d` and 5 declare `_d`
+# (derived from the live corpus, not typed), so name reuse across files is the normal case
+# and a regression here would hide real findings rather than invent false ones.
+#
+# The seed puts the OFFENDER SECOND, behind a file declaring the same name, because a
+# one-file seed cannot tell "scans every file" from "scans the first one".
+A27b_i33b_resets_state_per_file() {
+  t="$(fresh)"
+  # Two files, same variable name. The FIRST declares `d` and never walks up; the SECOND
+  # declares `d` and does walk up. Only the second is a finding, and it is only reachable if
+  # the scan cleared `seen` at the boundary.
+  mkdir -p "$t/core/fixtures/zz-i33b-reset-a" "$t/core/fixtures/zz-i33b-reset-b" 2>/dev/null
+  printf 'd="$(dirname "$X")"\nS="$d/sibling.sh"\n' > "$t/core/fixtures/zz-i33b-reset-a/run.sh"
+  printf 'd="$(dirname "$Y")"\nS="$d/../schemas/x.json"\n' > "$t/core/fixtures/zz-i33b-reset-b/run.sh"
+  if [ ! -s "$t/core/fixtures/zz-i33b-reset-b/run.sh" ]; then
+    bad "FIXTURE BROKEN — the I33b reset seed could not be written, so the assertion below would test a tree that never carried its subject."
+    return
+  fi
+  assert_fires "I33b a walk-up in a LATER file reusing an earlier file's variable name is REPORTED" \
+               "zz-i33b-reset-b"
+}
+
+# --- Assertion 27c: I33b — pattern substitution is not a directory walk ------
+# THE NARROWING IS ASSERTED RATHER THAN INCIDENTAL, WHICH IS WHAT `BL-273` ASKED FOR. The
+# per-file predicate this replaced spelled the brace group as `\$(\{)?VAR(\})?/\.\./`, which
+# makes the opening and closing braces optional INDEPENDENTLY — so `${A/../foo}`, bash pattern
+# substitution and not a directory walk at all, satisfied it as `${A` plus `/../`. That was a
+# false positive. The batched program requires the brace to CLOSE before `/../`, so it is
+# correct, and the two grammars therefore DISAGREE on an input no corpus file contains.
+#
+# THIS IS THE SILENCE HALF AND IT HAS ITS ALLOW TWIN ONE PROPERTY APART. A silence arm alone
+# passes identically against a predicate that stopped matching everything, so the seed carries
+# BOTH forms in one tree: the pattern-substitution file must NOT be named, and the braced
+# walk-up beside it — same variable, same braces, differing only in whether the brace closes
+# before `/../` — must be. A29's own remedy text is the model.
+A27c_i33b_pattern_substitution_is_not_a_walk() {
+  t="$(fresh)"
+  mkdir -p "$t/core/fixtures/zz-i33b-patsub" 2>/dev/null
+  # The near-miss: a dirname variable used in pattern substitution. Not a walk.
+  printf 'A="$(dirname "$X")"\nB="${A/../foo}"\n' > "$t/core/fixtures/zz-i33b-patsub/run.sh"
+  # The ALLOW TWIN: the same variable, braced, where the brace DOES close before /../
+  mkdir -p "$t/core/fixtures/zz-i33b-braced" 2>/dev/null
+  printf 'A="$(dirname "$X")"\nB="${A}/../schemas/x.json"\n' > "$t/core/fixtures/zz-i33b-braced/run.sh"
+  if [ ! -s "$t/core/fixtures/zz-i33b-patsub/run.sh" ] || [ ! -s "$t/core/fixtures/zz-i33b-braced/run.sh" ]; then
+    bad "FIXTURE BROKEN — the I33b pattern-substitution seed could not be written, so neither direction below was tested."
+    return
+  fi
+  out="$(run_map I33b 2>&1)"
+  # HERE-STRINGS, NOT PIPES. A validator run is far larger than the pipe buffer, and under
+  # pipefail `printf | grep -q` answers with the WRITER's EPIPE once the output after the match
+  # passes it -- so both tests below would report NOT FOUND on output that contains the token,
+  # permanently and with no symptom. I54 and I54b caught exactly that in the first draft of this
+  # arm; the redirect goes at the end of the grep and the pipe disappears.
+  if grep -q 'zz-i33b-patsub' <<< "$out"; then
+    printf '  FAIL  I33b named zz-i33b-patsub: `${A/../foo}` is bash pattern substitution, not a walk up into a sibling subtree, and reporting it is the false positive the batched grammar exists to have removed\n'
+    return 1
+  fi
+  if ! grep -q 'zz-i33b-braced' <<< "$out"; then
+    printf '  FAIL  I33b did NOT name zz-i33b-braced: `${A}/../` IS a walk up from a dirname variable, so the silence above is the predicate matching nothing rather than discriminating\n'
+    return 1
+  fi
+  printf '  ok    I33b `${A/../foo}` is acquitted while `${A}/../` one property apart is REPORTED\n'
+}
+
 # --- Assertion 27: I33b — one predicate, and it fails closed when blinded ----
 # THE ASSERTION THAT MATTERS MOST HERE. An earlier draft inlined the detection twice, so
 # blinding the corpus scan left the probe passing against its own private copy — a probe

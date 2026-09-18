@@ -63,15 +63,16 @@ sort -k2,2nr "$D" | head -3                                                  # t
 awk '{s+=$2; n++} END{printf "%d over %d units, sum/12 = %.1f\n", s, n, s/12}' "$D"   # the floor
 ```
 
-Re-derived at `v0.593.0`, full 202-fixture dispatch under `AI_DLC_FIXTURE_NO_SKIP=1`, pool 12:
-pole **627s**, total **7120 pool-seconds**, floor **`sum/12` = 593.3s**. The gap between the two
+Re-derived at `v0.594.0`, full 202-fixture dispatch under `AI_DLC_FIXTURE_NO_SKIP=1`, pool 12:
+pole **545s** (`ledger-reverify`, with `reconcile-emit-report` 332 and `validator-arm-selection`
+283 behind it), total **6132 pool-seconds**, floor **`sum/12` = 511.0s**. The gap between the two
 is **~34s**, and **that gap is all any pole work can ever return.** Zero out the pole entirely and
 the suite still cannot finish faster than the floor. **The suite is WORK-BOUND with essentially no
-scheduling headroom left, which is the strongest form of the ruling below.** (At `v0.591.0` the
-same three read 501s, 5591 and 465.9s, and at `v0.589.0` 504s, 5637 and 469.8s. **The `v0.593.0`
-reading is +27% on BOTH the pole and the total against `v0.591.0` — read together, as the caveat
-below requires, that is a busier box and not a regression.** The GAP is the load-independent part
-of this block and it has read ~34s across all three.)
+scheduling headroom left, which is the strongest form of the ruling below.** (At `v0.593.0` the same three read 627s, 7120 and 593.3s; at `v0.591.0` 501s, 5591 and 465.9s;
+at `v0.589.0` 504s, 5637 and 469.8s. **Every one of those four readings is a LOADED number taken
+on a different box load, and they swing ±27% for that reason alone** — do not read the
+`v0.593.0` → `v0.594.0` fall as this release's work. The GAP is the load-independent part of this
+block and it has read ~34s across all four.)
 
 **THE FLOOR MOVES WHEN WORK IS REMOVED, AND THAT IS THE WHOLE POINT.** It was `sum/12` = 543.9s at
 `v0.587.0` and is 469.8s now, against a total that went 6527 → 5637 pool-seconds. Read that
@@ -193,10 +194,16 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    fixture and 1.30x within its unit of work are the same headline number and opposite subjects.
    Take the census of ONE invocation before scoping a memo.
 
-   **Inside the validator the remaining arms are `I33b` 645, `I75` 446 and `I84` 273**, of a
-   total of 3836 (`FORK_BUDGET` 3842 since `v0.593.0`). `I82` is GONE from this table — 657 → 61
-   at `v0.592.0`, which also took `I84` 527 → 271. Re-derive before choosing — it is the only
-   ranking that has predicted anything here:
+   **Inside the validator the remaining arms are `I75` 446, `I84` 273, `I61` 204 and `I64` 181**,
+   of a total of 3203 (`FORK_BUDGET` 3209 since `v0.594.0`). `I33b` is GONE from this table —
+   645 → 14 at `v0.594.0` — as `I82` went 657 → 61 at `v0.592.0`. Re-derive before choosing — it
+   is the only ranking that has predicted anything here:
+
+   **`I75` IS NOW THE TOP ARM, AND IT IS THE ONE WITH NO ORACLE.** Every arm this plan has cut so
+   far had a non-empty intermediate set or a seedable corpus to be equivalent to. `I75` has
+   neither, which `BL-269` states in full. **Build the oracle BEFORE the rewrite**, and note that
+   the two arms below it are cheaper AND already oracle-bearing, so "top of the table" is not by
+   itself the argument for taking it next.
 
    **A SHIPPED HOOK IS A CORPUS ENTRY AND MOVED THIS TOTAL WITHOUT TOUCHING THE VALIDATOR.**
    `v0.593.0` added one `core/hooks/ai-dlc-*.sh` and the file went **3827 → 3836**, because `I13`
@@ -206,15 +213,18 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    changed. Same class as `0.590.0`'s prose-only commit. **Take a base reading in a clean worktree
    before attributing any delta to the arm you edited.**
 
-   **`I33b` IS NOW THE TOP ARM AND ITS FIXTURE ANCHOR IS THE WHOLE DIFFICULTY.** The separability
-   ruling below says `(I33b + its A27 edit)` is one release: `enforcement-map-derivations/run.sh`
-   anchors A27 by REGEX onto `i33b_scan`'s per-variable `grep -qE`, so batching without
-   co-editing it fails the push as `FIXTURE BROKEN`, reading like an unrelated regression.
-   Re-derived at `v0.592.0`: that anchor resolves to exactly ONE line, 4211, against a negative
-   control of 0 — and 4211 is also the single hottest LINE in the file at 304 `sed` + 304 `sort`.
+   **`I33b` IS DONE — TAKEN AT `v0.594.0`, TOGETHER WITH ITS `A27` ANCHOR, AND THE SEPARABILITY
+   RULING WAS RIGHT.** The arm's 645 forks were 608 unconditional `sed`+`sort` pairs, one pair per
+   corpus file, building a variable list that is EMPTY in 273 of 302 files. Batched into one awk
+   pass: 645 → 14, total 3835 → 3203. `A27` did anchor by REGEX onto the deleted `grep -qE` and
+   was re-anchored onto the batched program's declaration grammar — the one grammar BOTH callers
+   execute — scored at exactly ONE line against a control of 0, firing only `I33b`.
 
-   **`I75` HAS NO ORACLE AND `BL-269` SAYS SO.** It is second on this table and the one arm where
-   a batching rewrite has nothing to be equivalent to. Build the oracle first.
+   **AND THE WHOLE-VALIDATOR TIMING DIFFERENTIAL WAS A NULL, WHICH IS WHY THE ARM-LEVEL NUMBER IS
+   THE ONE QUOTED.** 4 interleaved reps in worktrees: base 20.40/25.17/20.40/23.26s against tip
+   20.61/19.44/20.50/19.70s — overlapping ranges around a ~1.1s effect. **Ask what a differential
+   can RESOLVE before reading anything off it**; the arm timed alone (1.34s → 0.22s) discriminates
+   and the whole-run one does not.
 
    **A FORK COUNT IS A PROXY FOR COST, NOT THE COST, AND `v0.592.0` MEASURED THE DIVERGENCE.**
    `I84`'s fork-free rewrite removes all 508 of its forks and is **3.7x SLOWER** — 127 files,
@@ -265,8 +275,9 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    the wall the suite now sits against. Every past pole win was bought this way and that is why
    the floor is where it is.
 
-   **Work concentrates, which is what makes this tractable:** top 10 units are **42.3%** of all
-   pool-seconds, top 20 are **60.6%** (re-derived at `v0.593.0`; 40.7/57.9 at `v0.591.0`).
+   **Work concentrates, which is what makes this tractable:** top 10 units are **41.8%** of all
+   pool-seconds, top 20 are **58.9%** (re-derived at `v0.594.0`; 42.3/60.6 at `v0.593.0` and
+   40.7/57.9 at `v0.591.0`).
    Re-derive both before scoping — the membership moves, these
    two figures sat one release stale until action 3b re-ran them from a worktree, and they swing
    with the run: one tree read 42.0/60.3 and 46.3/64.8 from two different gate runs, so they
