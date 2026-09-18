@@ -828,10 +828,19 @@ A26_i33b_two_step_walk() {
 # blinding the corpus scan left the probe passing against its own private copy — a probe
 # certifying an instrument it never exercised. Scan and probe now call ONE function, so
 # breaking it must surface as the probe failing, not as a clean tree.
+#
+# RE-ANCHORED WHEN THE PREDICATE WAS BATCHED. The mutation used to key on the per-variable
+# `grep -qE` inside the old per-file shell function; that line no longer exists, and a
+# mutation matching nothing is a LOST SUBJECT whose repair is a new subject rather than a
+# relaxed assertion. The blinding point is now the declaration regex inside `I33B_WALK_AWK`
+# — the one grammar BOTH callers execute, so blinding it is exactly the "private copy"
+# failure this assertion was written for. Verified before shipping: the anchor resolves to
+# exactly ONE line (control: an impossible anchor returns 0), the mutant fires this arm and
+# no other, and the unmutated subject stays silent.
 A27_i33b_fails_closed_when_blind() {
   t="$(fresh)"
   if edit "$t/scripts/validate-enforcement-map.sh" \
-       '{ if ($0 ~ /grep -qE .*_v.*_f. 2>\/dev\/null && printf/ && !done) { sub(/grep -qE "[^"]*"/, "grep -qE \"ZZNOMATCHZZ\""); done=1 } } { print }'; then
+       '{ if ($0 ~ /\^\[\[:space:\]\]\*\[A-Za-z_\]\[A-Za-z0-9_\]\*="\\\$\\\(dirname/ && !done) { sub(/\/\^.*\/ \{/, "/ZZNOMATCHZZ/ {"); done=1 } } { print }'; then
     assert_fires "I33b a BLINDED predicate reports its own probe rather than a clean tree" \
                  "positive probe was NOT reported"
   fi
