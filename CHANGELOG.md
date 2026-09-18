@@ -15,6 +15,58 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.598.0] - 2026-09-18
+
+### `named_ambiguous` re-ran the history walk its only caller had just made, and the guards that could refuse it for free ran after it
+
+**THE SUBJECT WAS FOUND BY ABLATION, NOT BY A RATIO.** `ledger-reverify` is the suite pole at
+**636** pool-seconds. Its per-invocation census reads **141 git calls / 118 distinct = 1.20x** —
+`self-update-gate`'s shape, which the plan already records as NOT the memo lever, so the ratio
+said there was nothing here. Stubbing `named_absorbed` and `named_ambiguous` to `return 0` and
+interleaving 4 reps in two fixed `git worktree` checkouts, rc asserted on every side: base
+**3.65-3.90s** against ablated **2.58-2.70s**, disjoint — the naming search is ~29% of an
+invocation.
+
+**THE REDUNDANCY IS A QUERY REPEATED ACROSS TWO FUNCTIONS, WHICH A PER-FUNCTION READING CANNOT
+SEE.** `named_ambiguous`'s first act was
+`git log -F --grep="$_id" --format=%H "$THEIRS"`. `named_absorbed` opens with the identical walk
+at `--format=%h`, and the single call site — `[ -n "$na" ] || nam="$(named_ambiguous "$label")"`
+— reaches the second one exactly when the first returned empty. For an id-shaped label the
+answer is therefore already known. Bucketed by normalised call shape: **34 of 41 distinct slug
+queries per invocation were the repeat.**
+
+**THE FIX IS AN ORDERING, AND ALL FOUR GUARDS ARE PURE PREDICATES SO IT CANNOT MOVE THE ANSWER.**
+The `sed` that extracts a `PC-S<n>` prefix and the `prefix_entry_count` that requires two or more
+entries now run before the walk, so an id with no prefix — or one whose prefix names a single
+entry — is refused without a `git log` at all. **141 → 109 git calls (−32, −22.7%)**, distinct
+118 → 86, both sides reproducing **exactly** across 2 interleaved reps under their own
+PATH-shadowed wrappers, each wrapper's control at 1. Wall clock, 5 interleaved reps with rc
+asserted: base **3.66-3.79s** against tip **3.33-3.49s**, disjoint.
+
+**A FIXTURE-SOLO PAIR WAS DERIVED, PUBLISHED AND THEN WITHDRAWN BY ITS OWN CONTROL — IT WAS
+MEASURED THROUGH THE INSTRUMENT.** The base fixture run was timed under the PATH-shadowed git
+wrapper; the tip run was not. The wrapper is a `sh` that logs and `exec`s, measured at **~8ms per
+git call** (300 calls, 2 reps each: 6.65-6.74s bare against 9.11-9.16s wrapped), and the fixture
+makes **9146** of them — roughly **73s** of pure instrument on the base side alone. The pair read
+267.17s → 221.16s and would have shipped as −17.2%; corrected for the instrument the base is
+nearer 194s, so the figure did not merely overstate the win, **it pointed the wrong way**. The
+per-invocation numbers above are unaffected: both of their sides were measured alike, interleaved,
+in fixed worktrees. **Time both sides through the same instrument, or through none.**
+
+**STDOUT AND STDERR ARE BYTE-IDENTICAL**, 104 rows, with a control proving `cmp` can report a
+difference in the same invocation. All **274** assertions correct and the assertion **LABEL SET**
+identical — not merely the count, which a reordering could preserve while moving a verdict.
+
+**THE TWO MUTATION ANCHORS ON THESE LINES SURVIVED BECAUSE NO ANCHORED LINE CHANGED ITS BYTES.**
+`named-anchor-unique` resolves the slug search by what the line IS and still returns exactly 1;
+`mut-bound` keys on `--format=%[hH] "$THEIRS"` and still counts 4 sites, the same as at `HEAD`,
+against a control of 0 for an impossible format letter. Checked before the fixture ran, because a
+moved anchor makes a mutant silently run the unmutated path.
+
+All eight fixtures driving the changed program green by name: `ledger-reverify`, `ledger-rotate`,
+`ledger-reverify-unfalsifiable`, `ledger-status-vocabulary`, `backlog-receipt-binding`,
+`shadowed-local-validators`, `reconcile-emit-report`, `fixture-git-env-seam`.
+
 ## [0.597.1] - 2026-09-18
 
 ### The plan's resume block quoted a record its own gate run then rewrote, and the fresh-resume check is what found it
