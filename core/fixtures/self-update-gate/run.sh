@@ -1056,6 +1056,20 @@ ac_kill_pre() { # ac_kill_pre <label> <sed-expr> <want-carry-set> <why>
     printf '  FAIL  %-16s mutation matched nothing in preclassify.sh, so the arm it scores is unproven\n' "$1"
     return
   fi
+  # AND THE MUTANT MUST PARSE. `cmp -s` above proves the sed CHANGED something; it cannot tell a
+  # mutation that alters the predicate from one that produces a file bash will not run. A
+  # non-parsing mutant emits an EMPTY carry set, which this arm scores as SURVIVED -- so a
+  # refactor that moves an anchored line into a multi-line command substitution reads as a
+  # regression in the change under test, not as a broken mutant. MEASURED at 0.600.0: the first
+  # batched form of `machinery_paths()` put `--with-tree="$BASE"` on the OPENING line of a
+  # multi-line assignment, `armc-mut-base`'s line-delete then removed that opener, and the mutant
+  # died with `syntax error: unexpected end of file` while this arm reported SURVIVED with no
+  # tell. The check is one line and it names the state it found.
+  if ! bash -n "$d/preclassify.sh" 2>/dev/null; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-16s the mutated preclassify.sh does NOT PARSE, so its empty carry set is a syntax error rather than the property this arm claims to score\n' "$1"
+    return
+  fi
   got="$(ac_carry "$d/self-update-gate.sh" "$AC/cons" "$AC/cwd")"
   if [ "$got" = "$3" ]; then
     printf '  ok    %-16s KILLED (%s)\n' "$1" "$4"
