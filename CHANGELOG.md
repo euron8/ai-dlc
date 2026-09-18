@@ -15,6 +15,64 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.594.0] - 2026-09-17
+
+### I33b's per-file scan becomes one awk pass, and 273 of 302 files stop paying two forks for an empty answer
+
+Action 1 of `docs/plans/pre-push-wall-clock.md` again — the top arm of the by-arm fork table,
+re-derived at `744b456a` in a clean `git worktree`: validator total **3835**, `I33b` **645**,
+`I75` 446, `I84` 273. `BL-268` was checked and does not apply; the two hot lines are executable
+fork sites inside `i33b_scan`, not a bare `fi`.
+
+`i33b_scan` forked a `sed` and a `sort -u` for EVERY member of the fixture corpus to build the
+list of `NAME="$(dirname "$OTHER")"` declarations, then a `grep` per declared name. **Only 29 of
+302 files declare one at all**, so 608 of the arm's 645 forks were spent, unconditionally, and
+273 files paid two of them to produce an empty set. Batched into one `awk` pass over the whole
+corpus: **I33b 645 → 14, total 3835 → 3203**, `--stable` in CLEAN worktrees both sides, spreads
+3835-3835 and 3203-3203. `FORK_BUDGET` 3842 → 3209. I33b no longer appears in the by-arm table.
+
+**THIS IS THE I87/I60/I59 SHAPE AND NOT I84's, WHICH IS THE WHOLE REASON IT WON.** `0.592.0`
+measured a fork-free rewrite running **3.7x slower** because it moved scanning into bash; this one
+moves it into `awk`, which scans in C. The arm alone over the real corpus, 3 interleaved reps:
+**1.336/1.363/1.403s → 0.225/0.218/0.226s.**
+
+**THE WHOLE-VALIDATOR DIFFERENTIAL IS A NULL AND IS REPORTED AS ONE.** 4 interleaved reps in
+worktrees, sides asserted to differ first: base 20.40/25.17/20.40/23.26s against tip
+20.61/19.44/20.50/19.70s. The ranges OVERLAP, so a whole-run timing cannot resolve a ~1.1s effect
+and nothing is claimed from it — the arm-level measurement above is the one that discriminates.
+
+**THE ORACLE WAS BUILT BEFORE THE REWRITE, BECAUSE THE FINDING SET IS EMPTY.** `i33b_scan`
+extracted byte-identically (control: the comparator was shown to report a difference) and run over
+the corpus reports **0** hits, so comparing findings compares two empty sets — the vacuous shape
+measured at 0-of-205 in `0.587.0`. Three parts instead: the **29-row** intermediate set reproduced
+exactly; a seeded corpus making the set NON-EMPTY, where both implementations report the same
+**4**; and two deliberately WRONG ports shown to DISAGREE on that same input.
+
+**TWO OF THE DISCRIMINATING INPUTS CANNOT BE EXPRESSED BY THE LIVE CORPUS, AND ONE OF THEM IS A
+REAL NAME COLLISION.** Every corpus file declares at most ONE such variable, so a port handling
+only the first would pass everything the tree can offer; and the corpus carries both `d` and `_d`,
+so a port testing the walk-up by substring rather than to the name's END conflates them. Seeded
+both: the first-only port misses the two-variable file, the substring port invents a hit on `$d`.
+
+**THE ARM NOW COUNTS WHAT IT SCANNED, NOT WHAT IT LISTED.** A floor guard over the `find` is a
+claim about the `find`; I59 shipped exactly that at `0.588.0` through `getline`, which returns -1
+in silence on an unopenable file. The new guard was proven to fire by blinding the scan count IN
+PLACE: `listed 302 fixture script(s) and SCANNED only 0`, exit 1, silent and exit 0 restored.
+
+**`A27` WAS RE-ANCHORED, WHICH IS WHY THIS IS ONE RELEASE AND NOT TWO.**
+`enforcement-map-derivations/run.sh` anchored assertion 27 by REGEX onto the per-variable
+`grep -qE` the rewrite deletes, so batching without co-editing it fails the push as
+`FIXTURE BROKEN`, reading like an unrelated regression. Re-anchored onto the declaration grammar
+inside `I33B_WALK_AWK` — the one grammar BOTH callers execute, so the ONE-PREDICATE-TWO-CALLERS
+property it exists to protect is still what the mutation attacks. Scored three ways: the anchor
+resolves to exactly **1** line (control: an impossible anchor returns 0), the mutant produces
+`positive probe was NOT reported` at exit 1, and it fires **only** `I33b`.
+
+**The program holds no whole file**, avoiding the `BL-267` buffering class: declared names and
+walked-up names are collected in the same single pass and intersected at end-of-file, so memory
+is one file's NAME count rather than its length. The declaration regex keeps `[[:space:]]` and
+not `[ \t]` — `0.589.0` invented a false finding with that two-member narrowing.
+
 ## [0.593.0] - 2026-09-17
 
 ### A sprint-token basename is refused at the `Write`, not four artifacts later

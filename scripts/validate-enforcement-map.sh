@@ -545,7 +545,24 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   I84 271 -> 273, I13 49 -> 51, I83 134 -> 135 -- +4, +2, +2, +1, which sums to the whole +9
 #   with no unattributed remainder. Same class as the `0.590.0` entry where a prose-only commit
 #   moved this number by one.
-FORK_BUDGET=3842
+#
+#   LOWERED TO 3209 AT THIS RELEASE. I33b, the top arm of the by-arm table at 645 of 3835.
+#   Its per-file predicate forked a `sed` and a `sort -u` for EVERY member of the fixture
+#   corpus -- 302 files, 608 forks -- to build a variable list that is EMPTY in 273 of them,
+#   then a `grep` per declared variable. Batched into one `awk` pass over the whole corpus:
+#   I33b 645 -> 14, total 3835 -> 3203, `--stable` in a CLEAN `git worktree` both sides,
+#   spreads 3835-3835 and 3203-3203.
+#
+#   THE SHAPE IS I87/I60/I59's AND NOT I84's, WHICH IS WHY IT WON. The entry above records a
+#   fork-free rewrite running 3.7x slower because it moved the scanning into bash. This one
+#   moves it into `awk`, which scans in C: the arm alone, timed over the real corpus with 3
+#   interleaved reps, goes 1.336/1.363/1.403s -> 0.225/0.218/0.226s.
+#
+#   Budget from the HIGH reading, 3203, plus the usual 6. The admissible range at this
+#   measurement is 3203..4575 -- A3 needs `b >= t`, A4 needs `b <= t/0.7`, A1 needs
+#   `b < t/0.4` -- so 3209 sits near the bottom of a window that is open, which is what `m8`
+#   asserts at the COMMITTED value.
+FORK_BUDGET=3209
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
@@ -4238,12 +4255,73 @@ fi
 # the corpus scan left the probe passing against its own private copy, and the probe would
 # have certified an instrument it never exercised. That is the "a check that cannot fire
 # reads exactly like one that passed" class, arriving inside the guard against it.
-i33b_scan() { # i33b_scan <file> -> one line per (file, variable) that walks up
-  _f="$1"
-  _vars="$(sed -n 's/^[[:space:]]*\([A-Za-z_][A-Za-z0-9_]*\)="\$(dirname "\$[A-Za-z_][A-Za-z0-9_]*")".*/\1/p' "$_f" 2>/dev/null | sort -u)"
-  for _v in $_vars; do
-    grep -qE "\\\$(\{)?${_v}(\})?/\.\./" "$_f" 2>/dev/null && printf '%s(%s)\n' "$_f" "\$$_v"
-  done
+# ONE AWK PASS OVER THE WHOLE CORPUS, NOT ONE sed PLUS ONE sort PER FILE. The per-file form
+# this replaced forked a `sed` and a `sort -u` for EVERY member of the corpus and a `grep` per
+# declared variable -- 645 forks of the validator's 3835, of which 608 were the unconditional
+# per-file pair. Only 29 of 302 corpus files declare a dirname variable at all, so 273 of them
+# paid two forks to produce an empty set. Measured on the live corpus, 3 interleaved reps:
+# 1.336/1.363/1.403s for the shell form against 0.225/0.218/0.226s for this one.
+#
+# THE PROGRAM HOLDS NO WHOLE FILE. An earlier draft buffered every line into `lines[]` so the
+# walk-up scan could revisit them after the declaration set was complete, which is the shape
+# `BL-267` records against I59. This one collects the declared names and the walked-up names
+# in the SAME single pass and intersects them at end-of-file, so its memory is the number of
+# names in one file rather than that file's length. Order does not matter to the result, and
+# must not: the shell form asked `grep` about the WHOLE file, so a walk-up written ABOVE its
+# own declaration was a hit there and is a hit here. Both directions are seeded in
+# core/fixtures/enforcement-map-derivations.
+#
+# `[[:space:]]`, NOT `[ \t]`. The predicate this replaced anchored on the POSIX class, which
+# has six members; a two-member class is a DIFFERENT predicate that silently reclassifies a
+# form-feed-indented declaration as a non-instance. `0.589.0` shipped exactly that narrowing in
+# two ported awk programs and invented a false finding with it.
+#
+# NO APOSTROPHE ANYWHERE IN THIS PROGRAM, comments included. It is a single-quoted shell
+# literal, so one apostrophe closes it and the remainder executes as shell.
+I33B_WALK_AWK='
+  FNR == 1 { if (fn != "") i33b_flush(); fn = FILENAME; nv = 0; delete vars; delete seen; delete walk }
+  # A DECLARATION: `NAME="$(dirname "$OTHER")"`, at the head of the line, as the sed anchored it.
+  /^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*="\$\(dirname "\$[A-Za-z_][A-Za-z0-9_]*"\)"/ {
+    s = $0
+    sub(/^[[:space:]]*/, "", s)
+    n = substr(s, 1, index(s, "=") - 1)
+    # `sort -u` in the shell form: a name declared twice in one file is reported once.
+    if (!(n in seen)) { seen[n] = 1; vars[++nv] = n }
+  }
+  # A WALK-UP: `$NAME/../` or `${NAME}/../`, anywhere on any line. The name is matched to its
+  # END, so a bare-sigil reference cannot be satisfied by a LONGER name that merely starts the
+  # same way -- the corpus carries both `d` and `_d`, and a substring test conflates them.
+  {
+    rest = $0
+    while ((p = index(rest, "$")) > 0) {
+      rest = substr(rest, p + 1)
+      if (substr(rest, 1, 1) == "{") {
+        t = substr(rest, 2); c = index(t, "}")
+        if (c > 0 && substr(t, c + 1, 4) == "/../") walk[substr(t, 1, c - 1)] = 1
+      } else if (match(rest, /^[A-Za-z_][A-Za-z0-9_]*/)) {
+        if (substr(rest, RLENGTH + 1, 4) == "/../") walk[substr(rest, 1, RLENGTH)] = 1
+      }
+    }
+  }
+  END {
+    if (fn != "") i33b_flush()
+    # THE SCANNED COUNT, to its own file. awk reports an unopenable operand on stderr and exits
+    # 1, unlike `getline < file` which returns -1 in silence -- but the caller must not have to
+    # rely on that, so what reached the program is counted and compared against what was LISTED.
+    if (SCANFILE != "") printf "%d\n", nfiles + 0 > SCANFILE
+  }
+  function i33b_flush(   i) {
+    for (i = 1; i <= nv; i++) if (vars[i] in walk) printf "%s($%s)\n", fn, vars[i]
+    nfiles++
+  }
+'
+# ONE PREDICATE, TWO CALLERS, AND THE BATCHING DOES NOT CHANGE THAT. Both the probe and the
+# corpus scan reach the awk program above through this function; neither carries a private
+# copy. Blinding the program therefore still surfaces as the probe failing rather than as a
+# clean tree, which is the property assertion 27 of enforcement-map-derivations exists to hold.
+i33b_scan() { # i33b_scan <file>... -> one line per (file, variable) that walks up
+  [ "$#" -gt 0 ] || return 0
+  awk -v SCANFILE="${I33B_SCANFILE:-}" "$I33B_WALK_AWK" "$@" 2>/dev/null
 }
 
 # The probe proves BOTH directions in the same run, through the function the scan uses.
@@ -4266,10 +4344,32 @@ fi
 
 i33b_hits=""
 if [ -d "$REPO_ROOT/core/fixtures" ]; then
-  for _sf in $(find "$REPO_ROOT/core/fixtures" -name '*.sh' -type f 2>/dev/null | sort); do
-    _r="$(i33b_scan "$_sf")"
+  # THE COUNT IS TAKEN OVER WHAT THE SCANNER READ, NOT OVER WHAT THE `find` LISTED. A floor
+  # guard on the list is a claim about the `find`; it says nothing about whether the scan ever
+  # opened those files, and a corpus listed and never read reports the same clean line as a
+  # scanned one. I59 shipped precisely that at `0.588.0` through `getline`, which fails in
+  # silence. Here the two counts are derived independently and compared.
+  I33B_SCANFILE="$(mktemp 2>/dev/null)"
+  i33b_list="$(find "$REPO_ROOT/core/fixtures" -name '*.sh' -type f 2>/dev/null | sort)"
+  i33b_listed="$(printf '%s\n' "$i33b_list" | grep -c . || true)"
+  if [ "$i33b_listed" -gt 0 ]; then
+    # Word-splitting on newline only: a corpus path carrying a space would otherwise split.
+    IFS='
+'
+    set -f
+    # shellcheck disable=SC2086
+    _r="$(i33b_scan $i33b_list)"
+    set +f
+    unset IFS
     [ -n "$_r" ] && i33b_hits="$i33b_hits $(printf '%s' "$_r" | sed "s|$REPO_ROOT/||g" | tr '\n' ' ')"
-  done
+    i33b_scanned="$(cat "$I33B_SCANFILE" 2>/dev/null)"
+    [ -n "$i33b_scanned" ] || i33b_scanned=0
+    [ "$i33b_scanned" -eq "$i33b_listed" ] || err "I33b listed $i33b_listed fixture script(s) and SCANNED only $i33b_scanned. The corpus its scanner actually opened is smaller than the one it enumerated, so the clean result below is about a set nobody chose. An unreadable or vanished member reads exactly like a conforming one."
+  else
+    err "I33b found no fixture scripts under core/fixtures, so its corpus scan asserted nothing this run. An empty corpus exits clean and reads exactly like a tree in which every file passed."
+  fi
+  rm -f "$I33B_SCANFILE"
+  unset I33B_SCANFILE
 fi
 
 if [ -n "${i33b_hits// /}" ]; then
