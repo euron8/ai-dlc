@@ -232,15 +232,19 @@ machinery_paths() { # -> one core-relative machinery path per line, resolved at 
   _mm="$(dirname "$0")/setup-sites.md"
   [ -f "$_mm" ] || return 0
   _mgs="$(awk '/^machinery:/{f=1;next} f&&/^  - /{sub(/^  - /,"");print;next} f{exit}' "$_mm")"
-  _mout=""
+  _mout=""; _mgnorm=""; _mb=""; _mt=""
   case "$-" in *f*) _mf=1 ;; *) _mf=0 ;; esac
   set -f
   for _mg in $_mgs; do
     case "$_mg" in core/scripts/ai-dlc/*) _mg="core/scripts/${_mg#core/scripts/ai-dlc/}" ;; esac
-    _mout="$_mout
-$(git -C "$DIST" ls-files --with-tree="$BASE" -- "$_mg" 2>/dev/null)
-$(git -C "$DIST" ls-files --with-tree="$THEIRS" -- "$_mg" 2>/dev/null)"
+    _mgnorm="$_mgnorm $_mg"
   done
+  if [ -n "$_mgnorm" ]; then
+    _mb="$(git -C "$DIST" ls-files --with-tree="$BASE" -- $_mgnorm 2>/dev/null)"
+    _mt="$(git -C "$DIST" ls-files --with-tree="$THEIRS" -- $_mgnorm 2>/dev/null)"
+    _mout="$_mb
+$_mt"
+  fi
   [ "$_mf" = 1 ] || set +f
   printf '%s\n' "$_mout" | grep -v '^$' | sort -u
 }

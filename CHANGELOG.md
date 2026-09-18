@@ -15,6 +15,79 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.600.0] - 2026-09-18
+
+### `machinery_paths()` forked one `ls-files` per manifest glob per ref — 26 git calls to resolve 130 paths
+
+`preclassify.sh:231`'s `machinery_paths()` loops the 13 `machinery:` globs from `setup-sites.md`
+and resolves each one separately at BASE and at THEIRS: **26 `git ls-files --with-tree` forks**.
+The pathspec list can be passed once per ref instead, which is **2**. Both forms resolve the
+identical **130** paths, byte-compared against a control proving the comparator can report a
+difference. The count was taken under a PATH-shadowed wrapper in a run sharing no clock with any
+timing, because that wrapper costs ~8ms per git call.
+
+This function is the arm-C cost of `self-update-gate` (234 pool-seconds). Its lever was NOT the
+one the wall-clock plan named: that plan says "the lever is the range or the walk, never a memo",
+and both are refuted — the release range is **seeded, flat at 4 across 237 releases**, so this
+fixture's cost is not history-bound, and ablating the safe-stop walk reads as **no measurable
+change**. Arm C is the entire difference between a full and a safe-stop invocation, and inside it
+this one function is the fan-out.
+
+### The obvious form of that fix FAILS THE GATE, and the arm that should have caught it could not fire
+
+Collapsing the loop into one two-line `_mout="$(…BASE…)\n$(…THEIRS…)"` assignment puts
+`--with-tree="$BASE"` on the **opening line of a multi-line command substitution**.
+`core/fixtures/self-update-gate/run.sh:1072`'s mutant `armc-mut-base` is a line DELETE on exactly
+that text. On the old form it deletes one complete `$( )` line and the file still parses; on the
+collapsed form it deletes the line that OPENS the assignment and the mutant dies with
+`syntax error: unexpected end of file`.
+
+**A non-parsing mutant emits an empty carry set, which the arm scores as `SURVIVED`** — reading as
+a regression in the change under test rather than as a broken mutant. Shipped this way it would
+have failed the push with a message pointing at the wrong thing.
+
+The form that ships assigns the two refs to separate scalars so `--with-tree="$BASE"` stays on a
+self-contained line. Both mutants then apply at exactly 1 matched line each (control: an
+impossible expression matches 0), both parse, and **all six `armc` mutants are KILLED** with
+`PASS: all 188 assertions correct` — `armc-mut-base` among them, read by name against a control of
+0 for an impossible mutant name.
+
+### `ac_kill_pre` now requires the mutant to PARSE, which is the guard whose absence hid the above
+
+`ac_kill_pre:1054` asserted only that the `sed` CHANGED something (`cmp -s`). That cannot separate
+a mutation that alters the predicate from one that produces a file `bash` will not run, and the
+second reads as a surviving mutant. One line added: `bash -n` on the mutated copy, with its own
+`FAIL` naming the state it found.
+
+**Probed both directions under `mktemp` before shipping**: the arm fires on a seeded non-parsing
+mutant and stays quiet on a parsing one, and the seeded offender **differs** from the original — so
+`cmp -s` passes it and only the new check catches it. The assertion count is unchanged at 188
+because this hardens existing arms rather than adding one.
+
+### `set -f` is kept, and it is load-bearing
+
+`_mgnorm` is built by an unquoted `for _mg in $_mgs` and expanded unquoted at the `ls-files` call,
+so globbing fires at both points. `armc-mut-setf` demonstrates it by killing: without `set -f` the
+pathspecs expand against the CWD and the machinery set collapses to the entries carrying no glob
+character. The `[ -n "$_mgnorm" ]` guard is equally load-bearing in the other direction —
+`git ls-files --with-tree=<ref> --` with an EMPTY pathspec returns **the whole tree** where the
+loop it replaces iterates zero times, which would invert arm C's empty-set → UNDECIDED contract.
+An earlier draft without that guard failed 4 assertions on exactly this.
+
+### The reach of this change is 8 fixtures, not the 19 a read-set join suggests
+
+Three populations were being conflated, and separating them needed instrumentation rather than
+grep — a read-set entry is a READ, a driver EXECUTES the program, and only some callers reach this
+function. Counted with a fire-counter inside the function body: **49 fixtures name `preclassify.sh`
+in their read-sets (3441 pool-seconds), 20 drive it (1397), and 8 fire `machinery_paths` (1032,
+18.7% of 5508)**. The suite pole `ledger-reverify` fires **zero** times — control: the same
+instrumented tree read 27 and 168 on other fixtures in the same sweep.
+
+**A first sweep reported 6 firers / 702 pool-seconds and that was a FALSE ZERO.** 81 fixture
+`run.sh` files scrub every ambient `AI_DLC_*` name from the environment, and the counter was named
+`AI_DLC_MP_LOG`. Renamed, `apply-drift-after-write` moved from **0 fires to 168**. Any future
+instrumentation of this suite must not use that prefix.
+
 ## [0.599.0] - 2026-09-18
 
 ### The pole's remaining cost was non-git forks, which every instrument this repo aims at it is blind to
