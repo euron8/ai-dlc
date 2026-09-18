@@ -15,6 +15,49 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.596.0] - 2026-09-18
+
+### I65's vocabulary prefilter becomes fixed-string, and the plan's by-arm ranking is refuted as a cost ranking
+
+**THE PLAN'S ACTION 1 NAMED `I75` AS THE NEXT TARGET ON FORK COUNT, AND FORK COUNT DOES NOT RANK
+THE COST.** The by-arm table reproduces exactly in a clean worktree — total 3203, `--stable`
+spread 3203-3203, `I75` top at 446 — but timed per arm, the ranking inverts. `I75` is **0.86s
+net** of a ~41s validator. The plan's own `0.592.0` warning, *"a fork count is a PROXY for cost,
+not the cost"*, fires on the selection made one paragraph below it.
+
+**AND THE FIRST CORRECTION WAS ALSO WRONG, WHICH IS THE PART TO CARRY FORWARD.** Timing arms
+with `--arms <id>` and subtracting a baseline taken from an arm OUTSIDE the block scored `I61` at
+4.75s and `I64` at 4.67s, and a release was nearly scoped on it. **Indented arm headers merge
+upward into the enclosing column-0 unit**, so `--arms I61`, `--arms I64` and `--arms I41` all run
+the SAME twelve-arm layer-contract unit, lines 1205-1992. The discriminating measurement is one
+line: **`I41`, an arm with FOUR forks, costs 4.29s.** Nine arms of that unit timed 4.12-4.30s —
+identical by construction, and every per-arm figure taken that way is a reading of the unit.
+
+**THE SUBJECT, FOUND BY ABLATION WITH EVERY RUN'S EXIT CODE ASSERTED, IS `I65`.** Four
+interleaved reps in one tree at one path: base 4.41-4.58, `no-I65` **1.68-2.03**, against
+`no-I61` 3.89-4.18, `no-I64` 4.05-4.70, `no-I62` 4.24-4.56 and `no-I63fwd` 4.10-4.54 — only
+`I65`'s range clears the base. Inside it the cost is ONE LINE: `lc_i65_index`'s step (c) grep,
+an ERE alternation of the whole 53-code vocabulary wrapped in two boundary groups, at
+**2.23-2.26s** against **0.79-0.83s** for `grep -F -f`, three reps each.
+
+**THE PREFILTER MAY OVER-MATCH BECAUSE IT IS NOT THE PREDICATE.** The awk below it re-applies the
+exact boundary test per line, so this grep's only job is narrowing the corpus that awk reads — a
+SUPERSET is safe and a subset is not. Verified in that direction rather than assumed: 863 bounded
+lines against 1138 fixed-string lines, `comm -23` scoring **ZERO** present-under-ERE and
+absent-under-`-F`, with 275 in the safe direction the awk discards. **A bare `cmp` says only that
+the two differ, which is the reading that would have rejected this change.**
+
+Whole validator, 4 interleaved reps, non-overlapping: base 40.78-42.86s, tip **39.54-39.93s**.
+Stdout and stderr byte-identical to base with a control proving `cmp` can report a difference;
+`I65`'s four-directory self-probe still scores exactly 1; fork total 3204 against a base of
+3203-3204, because one grep replaced one grep.
+
+**TWO ABLATIONS WERE DISCARDED AS BROKEN RATHER THAN READ.** One removed `I61`'s emitters and
+left its declaration, and the renderer's own "declared arm contains no err/warn/fail call" guard
+refused the run at exit 2 — the guard working exactly as its header says it must. A second read
+1.02s and looked like a 4x win; its exit code was **1**, not 0, so it was a failing run and not a
+faster one. Every ablation figure above carries its asserted `rc=0`.
+
 ## [0.595.1] - 2026-09-18
 
 ### The wall-clock plan's floor paragraph said "is 469.8s now" three releases after it stopped being now

@@ -39,6 +39,21 @@ earlier session or from a subagent is a hypothesis until re-derived.
 stop. Silence and progress are indistinguishable from outside, and the only way to tell them
 apart is for the operator to ask.
 
+**A SESSION STARTED BY A HANDOFF FROM ANOTHER SESSION RUNS AUTONOMOUSLY.** Operator direction,
+standing: if you were invoked by action 3c's one-liner rather than by the operator, assume the
+operator is NOT available and that their instruction is to take your own recommendation. A
+choice you can settle by MEASURING is not a decision to escalate — pick the option you would
+have recommended, name the derivation that chose it, and continue. Do not stop on
+`AskUserQuestion` for a question a measurement in this tree can answer; a session that stalls
+on a question nobody is there to answer converts a measurable decision into dead wall clock,
+which is the currency this plan exists to move.
+
+**It removes the WAIT, never the REPORTING, and it changes no other ruling.** Report on every
+decision you take under it, with the derivation, exactly as the ping instruction above requires.
+A consumer pull stays operator-initiated and is never dispatched under this paragraph. Scope
+stays the operator's: autonomy chooses the MECHANISM, never whether the GOAL survives, so a
+blocked item is reported as blocked and never quietly dropped. Merges were already preapproved.
+
 **Delegate.** The Delegation section below is not advisory: most of these steps are independent
 and should run as parallel named agents.
 
@@ -195,16 +210,37 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    fixture and 1.30x within its unit of work are the same headline number and opposite subjects.
    Take the census of ONE invocation before scoping a memo.
 
+   **`I65` IS DONE — TAKEN AT `v0.596.0`, AND IT WAS NEVER IN THE FORK TABLE'S TOP FOUR.** Its
+   `lc_i65_index` step (c) prefilter was an ERE alternation of the whole 53-code vocabulary
+   wrapped in two boundary groups, at **2.23-2.26s** against **0.79-0.83s** for `grep -F -f` —
+   ~50% of the layer-contract unit and the single most expensive line in it. The awk below it
+   re-applies the exact boundary test, so the prefilter may return a SUPERSET and never a
+   subset: verified `comm -23` = **0** lines present-under-ERE and absent-under-`-F`, 275 in the
+   safe direction. Whole validator, 4 interleaved reps: base 40.78-42.86s, tip 39.54-39.93s.
+   Fork total 3204 against 3203-3204, because one grep replaced one grep — **the fork gate could
+   not see this win at all**, which is the same blindness `v0.592.0` recorded in the other
+   direction.
+
    **Inside the validator the remaining arms are `I75` 446, `I84` 273, `I61` 204 and `I64` 181**,
    of a total of 3203 (`FORK_BUDGET` 3209 since `v0.594.0`). `I33b` is GONE from this table —
    645 → 14 at `v0.594.0` — as `I82` went 657 → 61 at `v0.592.0`. Re-derive before choosing — it
    is the only ranking that has predicted anything here:
 
-   **`I75` IS NOW THE TOP ARM, AND IT IS THE ONE WITH NO ORACLE.** Every arm this plan has cut so
-   far had a non-empty intermediate set or a seedable corpus to be equivalent to. `I75` has
-   neither, which `BL-269` states in full. **Build the oracle BEFORE the rewrite**, and note that
-   the two arms below it are cheaper AND already oracle-bearing, so "top of the table" is not by
-   itself the argument for taking it next.
+   **THAT TABLE RANKS FORKS AND NOT COST, AND `v0.596.0` MEASURED THE INVERSION. DO NOT PICK A
+   TARGET OFF IT ALONE.** `I75` is top at 446 forks and is **0.86s net** of a ~41s validator.
+   The table is still worth re-deriving — it is how a batching opportunity is SPOTTED — but the
+   arm that costs the wall clock is found by ABLATION, not by reading the top row. `BL-269`'s
+   I75 oracle is therefore not worth building for a 0.86s subject; the entry stays open as a
+   coverage fact, not as this plan's next action.
+
+   **AND `--arms <id>` IS NOT A PER-ARM TIMER — `BL-274`.** An INDENTED arm header merges upward
+   into the enclosing column-0 unit, so `--arms I61`, `--arms I64` and `--arms I41` all run the
+   SAME twelve-arm layer-contract unit. Timing one that way reads the UNIT, exits 0 and prints
+   the ordinary OK line, with no tell. The discriminating measurement is one line: **`I41`, an
+   arm with FOUR forks, times at 4.29s.** 15 indented headers against 103 column-0 ones, so this
+   is not one unit's problem. **Ablate the arm's body, assert `rc=0` on EVERY side, and
+   interleave** — two ablations in that release read as huge wins and were a renderer refusal at
+   exit 2 and a failing run at exit 1.
 
    **A SHIPPED HOOK IS A CORPUS ENTRY AND MOVED THIS TOTAL WITHOUT TOUCHING THE VALIDATOR.**
    `v0.593.0` added one `core/hooks/ai-dlc-*.sh` and the file went **3827 → 3836**, because `I13`
@@ -439,6 +475,30 @@ ruling stands until the operator replaces it: **the subject is removing work, no
 killed them, and both sections are kept in full below because their hazard notes are the reason
 to read them if the numbers ever change back.
 ### Discharged — do not re-execute
+
+**BATCH 126 SHIPPED `v0.596.0` AND IT REFUTED THIS PLAN'S OWN TARGETING RULE BEFORE IT SHIPPED
+ANYTHING.** Action 1 named `I75` next on fork count. Timed, `I75` is **0.86s net** of a ~41s
+validator. The by-arm table is a SPOTTING instrument and not a cost ranking, and the warning it
+already carried from `v0.592.0` — a fork count is a proxy, not the cost — was firing on the
+selection made one paragraph below it.
+
+**THE FIRST CORRECTION WAS ALSO WRONG, AND THAT IS THE DURABLE HALF.** Subtracting a baseline
+taken from an arm OUTSIDE the block scored `I61` 4.75s and `I64` 4.67s, which inverted the target
+a second time. `--arms` on an INDENTED id runs the whole enclosing unit (`BL-274`); the
+discriminating line is `I41`, four forks, **4.29s**. A memo was then built against `I64`,
+byte-identical in output and a REGRESSION in forks — 181 → 234, file 3203 → 3257 — and reverted
+unshipped. **Two wrong scopings in one session, both from an instrument nobody had questioned.**
+
+**THE REAL SUBJECT WAS `I65`, FOUND ONLY BY ABLATION**, and it never appeared in the fork table's
+top four. One line: the step (c) vocabulary prefilter, 2.23-2.26s bounded-ERE against 0.79-0.83s
+`grep -F -f`. Whole validator 40.78-42.86s → 39.54-39.93s, 4 interleaved reps, non-overlapping,
+stdout and stderr byte-identical with a control proving `cmp` can report a difference.
+
+**TWO ABLATIONS WERE DISCARDED AS BROKEN RATHER THAN READ**, which is why every figure above
+carries an asserted `rc=0`. One removed `I61`'s emitters and left the declaration; the renderer's
+"declared arm contains no err/warn/fail call" guard refused it at exit 2. A second read 1.02s
+against a 4.29s base — a 4x win — and its exit code was **1**. Both would have shipped a wrong
+attribution.
 
 **BATCH 125 SHIPPED `v0.593.0` (`db2468d7`) AND ITS SUBJECT WAS NOT THIS PLAN.** The operator
 ruled `BL-271` the batch's subject ahead of action 1's arm table, relayed through the peer session

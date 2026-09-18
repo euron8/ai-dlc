@@ -55,6 +55,48 @@ have gone green, and would have reported "still open" forever.
 never the word anywhere in prose, because an entry that merely discusses landing something is
 not a closed entry.
 
+## BL-274 — `--arms <indented-id>` runs the whole enclosing unit, so timing one arm that way measures up to twelve, and nothing says so
+
+**DEFECT.** Found while scoping `0.596.0` against the wall-clock plan's by-arm fork table, after
+a release was very nearly scoped on the wrong arm twice.
+
+**THE MECHANISM IS CORRECT AND THE MEASUREMENT BUILT ON IT IS NOT.** `ARMS_SELECT_AWK` merges an
+INDENTED arm header upward into the enclosing column-0 unit — deliberate, documented at the
+selector, and required, because an indented arm reads values the column-0 prologue computes. The
+consequence nobody wrote down is that `--arms I61`, `--arms I64` and `--arms I41` all execute the
+SAME twelve-arm layer-contract unit, so `/usr/bin/time -p bash …/validate-enforcement-map.sh
+--arms <id>` is a reading of the UNIT and not of the arm named on the command line.
+
+**IT READS AS AN ARM COST AND THERE IS NO TELL.** The run prints the ordinary OK line and exits
+0; nothing in stdout, stderr or the exit code distinguishes "ran one arm" from "ran twelve". The
+discriminating measurement is one line: **`I41`, an arm with FOUR forks, times at 4.29s.** Nine
+arms of that unit timed 4.12–4.30s on one tree — identical by construction, which reads as nine
+arms that happen to cost the same.
+
+**MEASURED COST OF THE WRONG READING.** Subtracting a baseline taken from an arm OUTSIDE the
+block scored `I61` at 4.75s and `I64` at 4.67s against `I75`'s 0.86s, which inverted the plan's
+target, and a memo was built against `I64` on that basis. It was byte-identical in output and a
+REGRESSION in the currency: I64 181 → 234 forks, file total 3203 → 3257. Reverted unshipped. The
+real subject, found only by ABLATION with each run's exit code asserted, was `I65` at ~2.7s of
+the unit's 4.5s.
+
+**THE EXPOSURE IS NOT ONE UNIT.** Derived at this tip: **15** indented arm headers against 103
+column-0 ones (control: an impossible `ZZQQ` header scores 0). Every one of them mis-times the
+same way, and the layer-contract unit is merely the largest.
+
+**What is owed.** Either `--arms` reports the unit it actually selected and its member ids on
+stderr — cheap, and it makes the granularity visible at the moment a reader is about to time it
+— or the plan's action 1 stops quoting per-arm seconds taken this way and says ablation is the
+only per-arm instrument. The first is the stronger form: it fixes the instrument rather than
+warning about it, and `fork-profile.sh --section by-arm` already attributes per arm correctly,
+so only the TIMING path is blind.
+
+**Tiered DEFECT, not BLOCKER.** No shipped verdict is wrong — the selector runs exactly the arms
+it must, and every invariant still fires. What is broken is a measurement practice this repo's
+own plan instructs sessions to use, and it has now produced two wrong scopings in one session.
+
+verify: sh v=scripts/validate-enforcement-map.sh; r=scripts/render-invariant-index.sh; [ -f "$v" ] || exit 9; [ -f "$r" ] || exit 9; grep -q 'ARMS_SELECT_AWK' "$v" || exit 9; ind=$(awk '/^[[:blank:]]+#[[:blank:]]*---[[:blank:]]*I[0-9]/{n++} END{print n+0}' "$v"); ctl=$(awk '/^[[:blank:]]+#[[:blank:]]*---[[:blank:]]*ZZQQ/{n++} END{print n+0}' "$v"); [ "$ctl" -eq 0 ] || exit 9; [ "$ind" -gt 0 ] || exit 9; bash "$r" --arm-lines "$v" >/dev/null 2>&1 || exit 9; out="$(bash "$v" --arms I41 2>&1 >/dev/null)"; printf '%s' "$out" | grep -qiE 'unit|also runs|selected arms' && exit 0; exit 1
+
 ## BL-254 — the `sh` receipt's base control is new, and nothing here asserts a consumer's INSTALLED engine ever runs it
 
 **DEFECT.** Filed against `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh` from the
