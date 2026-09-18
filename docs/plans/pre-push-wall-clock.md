@@ -219,9 +219,10 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    One full fixture run per side in two FIXED `git worktree` checkouts, interleaved, each under its
    own PATH-shadowed wrapper with that wrapper's control at 1: **14490 → 14047 git calls, −443
    (−3.1%)**, distinct 300 both sides, `rc=0` both sides, assertions 81 against 83 — the sides
-   differing by exactly the two arms added. Base reproduced at **14490 on a second rep**. The ms
-   column of that same run is void: a concurrent gate put the tip rep at 355892ms against the
-   base's 202105ms. **A DIFFERENTIAL'S BASE MUST BE A TREE THE SESSION CANNOT WRITE** — the first
+   differing by exactly the two arms added. **Both sides reproduced EXACTLY on a second interleaved
+   rep — spreads 14490-14490 and 14047-14047, zero either side.** The ms column of that same run is
+   void: a concurrent gate put the tip reps at 355892/317245ms against the base's 202105/265350ms,
+   overlapping ranges around a −443-call effect. **A DIFFERENTIAL'S BASE MUST BE A TREE THE SESSION CANNOT WRITE** — the first
    attempt used the main checkout while the release branch was being assembled in it, so rep 2's
    base was the tip, caught by grepping that rep's own output for the new arm (83 assertions where
    a real base emits 81) and not by reading the timings.

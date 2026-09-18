@@ -75,10 +75,12 @@ everything the suite computes**, including the pole (`ledger-reverify` 513) and 
 full fixture run per side in two FIXED `git worktree` checkouts, interleaved, each under its own
 PATH-shadowed `git` wrapper with that wrapper's control at 1: **14490 → 14047 calls, −443
 (−3.1%)**, distinct 300 both sides, `rc=0` both sides, assertions 81 against 83 — the sides differ
-by exactly the two arms this release adds. The base reading reproduced at **14490 on a second
-rep**. The wall-clock column of that same run is NOT quoted: a concurrent gate run put the tip rep
-at 355892ms against the base's 202105ms, which is the box and not the change, and it is why this
-plan's own rule says to quote load-independent counts.
+by exactly the two arms this release adds. **BOTH SIDES REPRODUCED EXACTLY ON A SECOND
+INTERLEAVED REP — spreads 14490-14490 and 14047-14047, zero either side** — which is what makes
+this a count rather than a reading. The wall-clock column of that same run is NOT quoted: a
+concurrent gate put the tip reps at 355892 and 317245ms against the base's 202105 and 265350ms,
+overlapping ranges around a −443-call effect, which is the box and not the change. That is why
+this plan's own rule says to quote load-independent counts.
 
 **A DIFFERENTIAL'S BASE MUST BE A TREE THE SESSION CANNOT WRITE.** The first attempt used the main
 checkout as BASE and the release branch was then assembled in it, so rep 2's "base" was the tip.
