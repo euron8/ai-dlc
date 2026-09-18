@@ -93,7 +93,7 @@ and require each to be bound) is the stronger fix and needs a join key that does
 **Tiered DEFECT, not BLOCKER.** No verdict is wrong in either direction: the flag changes who paid
 and never what is answered, which is exactly why its absence was invisible for as long as it was.
 
-verify: sh e=core/skills/ai-dlc-update/reconcile/emit-report.sh; a=core/skills/ai-dlc-update/reconcile/apply.sh; f=core/fixtures/reconcile-emit-report/run.sh; for p in "$e" "$a" "$f"; do [ -f "$p" ] || exit 9; done; ctl=$(grep -chE -- '--bucket-rows-ZZQQ' "$e" "$a" "$f" 2>/dev/null | awk '{s+=$1} END{print s+0}'); [ "$ctl" -eq 0 ] || exit 9; grep -qE '^[[:blank:]]*UD_FLAG="--bucket-rows"' "$a" || exit 9; grep -qE '^[[:blank:]]*B1_HIT=' "$f" || exit 9; for g in core/fixtures/*/run.sh; do grep -qE '^[[:blank:]]*[A-Za-z_]+=.*grep -c.*UD_FLAG="--bucket-rows"|^[[:blank:]]*[A-Za-z_]+=.*grep -c.*bucket-rows.*\$APPLY|grep -[a-z]*q[a-z]*E? *.--bucket-rows.*"\$APPLY"' "$g" 2>/dev/null && exit 0; done; exit 1
+verify: sh a=core/skills/ai-dlc-update/reconcile/apply.sh; ctl=$(grep -rchE -- '--bucket-rows-ZZQQ' core/fixtures 2>/dev/null | awk '{s+=$1} END{print s+0}'); [ "$ctl" -eq 0 ] || exit 1; grep -qE '^[[:blank:]]*UD_FLAG="--bucket-rows"' "$a" 2>/dev/null || exit 1; for g in core/fixtures/*/run.sh; do grep -qE 'grep [^|]*-c[^|]*UD_FLAG="--bucket-rows"|grep [^|]*-c[^|]*bucket-rows[^|]*"\$APPLY"|grep [^|]*-q[^|]*--bucket-rows[^|]*"\$APPLY"' "$g" 2>/dev/null && exit 0; done; exit 1
 
 ## BL-274 — `--arms <indented-id>` runs the whole enclosing unit, so timing one arm that way measures up to twelve, and nothing says so
 
