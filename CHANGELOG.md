@@ -48,10 +48,18 @@ MEASURED THROUGH THE INSTRUMENT.** The base fixture run was timed under the PATH
 wrapper; the tip run was not. The wrapper is a `sh` that logs and `exec`s, measured at **~8ms per
 git call** (300 calls, 2 reps each: 6.65-6.74s bare against 9.11-9.16s wrapped), and the fixture
 makes **9146** of them — roughly **73s** of pure instrument on the base side alone. The pair read
-267.17s → 221.16s and would have shipped as −17.2%; corrected for the instrument the base is
-nearer 194s, so the figure did not merely overstate the win, **it pointed the wrong way**. The
-per-invocation numbers above are unaffected: both of their sides were measured alike, interleaved,
-in fixed worktrees. **Time both sides through the same instrument, or through none.**
+267.17s → 221.16s and would have shipped as −17.2%. The per-invocation numbers above are
+unaffected: both of their sides were measured alike, interleaved, in fixed worktrees. **Time both
+sides through the same instrument, or through none.**
+
+**RE-TAKEN WITH BOTH SIDES UNWRAPPED AND INTERLEAVED IN FIXED WORKTREES, rc ASSERTED AND 274
+ASSERTIONS ON ALL FOUR RUNS: base 240.85-256.75s against tip 220.17-234.45s**, disjoint, **~21.5s
+(−8.6%)**. **THE CORRECTION'S OWN ARITHMETIC WAS ALSO WRONG AND IT TOOK THE RE-TAKE TO SHOW IT.**
+Subtracting the instrument gave an estimated base of ~194s, which would have made the tip a
+REGRESSION; the measured base is 240.85-256.75s and the win is real but half the size first
+claimed. A per-call overhead multiplied by a call count is not a measurement of the run — the
+calls overlap the work, and the estimate pointed the wrong way in the opposite direction to the
+error it was correcting. **Re-take a contaminated figure; never repair it by subtraction.**
 
 **STDOUT AND STDERR ARE BYTE-IDENTICAL**, 104 rows, with a control proving `cmp` can report a
 difference in the same invocation. All **274** assertions correct and the assertion **LABEL SET**

@@ -257,9 +257,18 @@ ruling stands until the operator replaces it: **the subject is removing work, no
    you to build, and the tip run was not. The wrapper is a `sh` that logs and `exec`s — **~8ms per
    git call**, measured at 300 calls over 2 reps, 6.65-6.74s bare against 9.11-9.16s wrapped — and
    `ledger-reverify` makes **9146** of them, so the base carried ~73s of pure instrument. The pair
-   read 267.17s → 221.16s and **pointed the wrong way**: corrected, the base is nearer 194s.
+   read 267.17s → 221.16s and shipped as −17.2%.
    **THE CENSUS WRAPPER AND THE TIMING RUN ARE TWO DIFFERENT MEASUREMENTS AND MUST NEVER SHARE A
    RUN.** Take the count under the wrapper, take the clock without it, and interleave each pair.
+
+   **AND THE REPAIR-BY-SUBTRACTION WAS WRONG TOO, WHICH IS THE HALF WORTH MORE THAN THE FIRST
+   ERROR.** ~8ms × 9146 calls gave an estimated base of ~194s, which would have made the tip a
+   REGRESSION and nearly reverted a correct change. Re-taken with both sides unwrapped and
+   interleaved in fixed worktrees, rc asserted and 274 assertions on all four runs: **base
+   240.85-256.75s against tip 220.17-234.45s**, disjoint, **~21.5s (−8.6%)** — real, and half the
+   size first claimed. A per-call overhead times a call count is not a measurement of the run,
+   because the calls overlap the work. **Re-take a contaminated figure; never repair it by
+   arithmetic.**
 
    Profiled so far: `ledger-reverify.sh` (done, `0.586.0` memo and `0.598.0` guard order), I87 in the enforcement-map validator
    (done, `0.587.0`), I60 and I59 in the same validator (done, `0.588.0`), I82 and I84 in the same
@@ -577,8 +586,10 @@ produce a row. **141 → 109 git calls (−22.7%)**, distinct 118 → 86, both s
 across 2 interleaved reps under their own PATH-shadowed wrappers; wall clock base 3.66-3.79s
 against tip 3.33-3.49s, disjoint. **A FIXTURE-SOLO PAIR WAS PUBLISHED AND WITHDRAWN BY ITS OWN
 CONTROL**: the base run was timed under the census's git wrapper and the tip run was not, at ~8ms
-× 9146 calls ≈ 73s of instrument on one side only, so 267.17s → 221.16s pointed the WRONG WAY.
-Stdout and stderr
+× 9146 calls ≈ 73s of instrument on one side only, so 267.17s → 221.16s was void — **and the
+subtraction that "corrected" it to ~194s was void too**, making the tip read as a regression.
+Re-taken unwrapped and interleaved, rc asserted, 274 assertions all four runs: **240.85-256.75s
+against 220.17-234.45s**, disjoint, **−8.6%**. Stdout and stderr
 byte-identical at 104 rows with a control proving `cmp` can report a difference, and the assertion
 **LABEL SET** identical at 274 — not merely the count, which is exactly what a reordering can
 preserve while moving a verdict.
