@@ -1793,7 +1793,22 @@ EOF
     # (c) which directories name each code AT AN ATTRIBUTABLE SITE — ONE grep for the whole
     # vocabulary, then the comment and `code:` exclusions applied in awk over only the lines
     # that matched. grep -n keeps the filename so the directory is recoverable.
-    grep -rnE "(^|[^A-Za-z0-9_-])(${LC_I65_ALT})([^A-Za-z0-9_-]|$)" "$root" \
+    #
+    # THE PREFILTER IS FIXED-STRING AND DELIBERATELY OVER-MATCHES. An ERE alternation of the
+    # whole code vocabulary wrapped in two boundary groups is the single most expensive
+    # operation in this invariant's unit -- MEASURED on core/fixtures at 53 codes: 2.23-2.26s
+    # for the bounded ERE against 0.79-0.83s for `grep -F -f`, three reps each, which is ~50%
+    # of the entire layer-contract unit's wall clock.
+    #
+    # IT IS SAFE BECAUSE THIS GREP IS NOT THE PREDICATE. The awk below re-applies the exact
+    # boundary test per line -- the `(^|[^A-Za-z0-9_-])` / `([^A-Za-z0-9_-]|$)` pair is spelled
+    # there and is what decides a hit -- so this line's only job is to narrow the corpus the
+    # awk reads. A prefilter may therefore return a SUPERSET; it must never return a subset.
+    # VERIFIED IN THAT DIRECTION rather than assumed: 863 bounded-ERE lines against 1138
+    # fixed-string lines, with `comm -23` scoring ZERO lines present under the ERE and absent
+    # under `-F`, and 275 in the safe direction the awk then discards. A bare `cmp` says only
+    # that the two differ, which is the reading that would have rejected this change.
+    grep -rnF -f "$TMPDIR_I65/codes" "$root" \
       > "$TMPDIR_I65/craw" 2>/dev/null || true
     awk -v r="$root/" -F: '
       NR==FNR { codes[++nc]=$0; next }

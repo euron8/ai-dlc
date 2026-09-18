@@ -39,6 +39,21 @@ earlier session or from a subagent is a hypothesis until re-derived.
 stop. Silence and progress are indistinguishable from outside, and the only way to tell them
 apart is for the operator to ask.
 
+**A SESSION STARTED BY A HANDOFF FROM ANOTHER SESSION RUNS AUTONOMOUSLY.** Operator direction,
+standing: if you were invoked by action 3c's one-liner rather than by the operator, assume the
+operator is NOT available and that their instruction is to take your own recommendation. A
+choice you can settle by MEASURING is not a decision to escalate — pick the option you would
+have recommended, name the derivation that chose it, and continue. Do not stop on
+`AskUserQuestion` for a question a measurement in this tree can answer; a session that stalls
+on a question nobody is there to answer converts a measurable decision into dead wall clock,
+which is the currency this plan exists to move.
+
+**It removes the WAIT, never the REPORTING, and it changes no other ruling.** Report on every
+decision you take under it, with the derivation, exactly as the ping instruction above requires.
+A consumer pull stays operator-initiated and is never dispatched under this paragraph. Scope
+stays the operator's: autonomy chooses the MECHANISM, never whether the GOAL survives, so a
+blocked item is reported as blocked and never quietly dropped. Merges were already preapproved.
+
 **Delegate.** The Delegation section below is not advisory: most of these steps are independent
 and should run as parallel named agents.
 
