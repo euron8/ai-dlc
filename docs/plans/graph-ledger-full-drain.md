@@ -49,6 +49,35 @@ and expect a rule here to cite a measurement whose story lives in the archive.**
 that file and a `path:line` into it would then fail `validate-plan-shape.sh`'s citation arm on a
 correct rotation.
 
+**BATCH 130 SHIPPED AS `v0.606.0` (`208f3561`), TWO SUBJECTS, BOTH FALSE-CLOSE PRODUCERS, ONE PC
+ID NAMED VERBATIM IN THE SQUASH MESSAGE.** `BL-143` closed, discharging
+`PC-S312-TRUNK-PUSH-DECLINES-TO-POLICE-THE-TRUNK`, and `BL-270` closed. Gate
+`AI_DLC_FIXTURE_NO_SKIP=1`: exit **0**, 22 of 22 phases PASS, 0 FAIL, all **202** fixtures
+dispatched and 202 ok, the changed fixture read by name against an impossible-name control of 0.
+Pole `ledger-reverify` 436s against baseline 628s. Live **86 -> 82**, archive **189 -> 193** (four
+rotated: the two subjects plus `BL-261` and `BL-263`, which carried LANDED lines from earlier
+releases and had never been rotated). Receipt histogram 9/64/1 before, **11/62/1** after — exactly
+the two subjects moved, so no incidental close.
+
+**THE ELECTION LOOP IN THE DERIVE BLOCK BELOW IS NEW, AND IT IS WHY `BL-270` CLOSED.** The
+ancestor gate is GONE and the block now takes a UNION over every qualifying ref, minus the union
+of their archives. Do not "repair" it back to a single elected ref: measured at batch 130, the
+three qualifying refs are PAIRWISE INCOMPARABLE (adds 4/4/4, union 7), so every single-ref rule
+loses real filings, and a union WITHOUT the archive subtraction resurrects the 6 ids that are live
+on one qualifying ref and archived on another.
+
+**THE DELIVERY GAP IS ZERO AND THE PULL IS BANKED BY OPERATOR DECISION.** Consumer installed
+`0.605.0` against `VERSION` `0.605.0` at the sweep — the operator pulled `0.601.0`-`0.605.0` into
+graph on 2026-09-19 as `554e4a32`. PENDING 8, TERMINAL 110. `v0.606.0` has since shipped, so
+re-derive the gap; do not read this sentence for it.
+
+**A NEW CANDIDATE LANDED MID-BATCH AND WAS UNCOMMITTED WHEN READ.**
+`PC-S312-DERIVATION-FENCES-STRANDED-CORE-RELOCATION-WITH-NO-WORKLIST-ROW` had no `-S` date and was
+visible only by diffing the consumer's working tree against `git show HEAD:` — the one class a
+commit-keyed sweep is structurally blind to. Filed as a WIDENING of `BL-276` at the candidate's own
+request rather than as a new entry. **Run that comparison every batch**; the ledger md5 moved twice
+during this one.
+
 **THIS FILE IS NOW BOUND AT 150000 BYTES** by arm `P8` of `scripts/validate-plan-shape.sh`, which
 covers every plan in `docs/plans/` at depth 1 whether live or spent. When it fires, the remedy is
 `bash scripts/plan-rotate.sh docs/plans/graph-ledger-full-drain.md` to see what would move and
@@ -703,7 +732,19 @@ given at batch 90.
 
    Batch 119 shipped as `v0.585.0` (`389b6bdc`) and is recorded in that plan's discharged section;
    it did not build the inner pool the batch-118 ruling anticipated, and the measurement for why is
-   there. **This ruling governs batch 120 and stays live until the operator replaces it.**
+   there.
+
+   **THAT RULING IS SPENT AND ITS WORK IS DONE. DO NOT OPEN A BATCH ON THE WALL CLOCK.** Batches
+   120-129 executed it across `v0.586.0`-`v0.601.0`, and `docs/plans/pre-push-wall-clock.md` is the
+   record. **The premise it turned on has now inverted: the POLE IS BELOW THE FLOOR.** Re-derived
+   at batch 130 from `$(git rev-parse --git-common-dir)/ai-dlc-fixture-durations`, 202 rows:
+   pole `ledger-reverify` **420s** against `sum/12` = **425.0s** over 5100 pool-seconds. Pole work
+   has nothing left to buy, and the suite is work-bound. Re-derive both before believing this
+   paragraph — these are LOADED numbers that swing ±27% on box load, so read the DIRECTION.
+
+   **Batch 130 returned this plan to its own provenance-first ordering**, which is where it stays
+   until the operator rules otherwise: the sweep decides, and a PC-backed entry outranks every
+   distribution-internal one.
 
    **SUPERSEDED — OPERATOR RULING AT BATCH 118: `docs/plans/pre-push-wall-clock.md` IS BATCH 119's
    SUBJECT.** Kept for its lineage only; the block above replaces it.
@@ -810,7 +851,7 @@ given at batch 90.
    **A sentence in this file saying the residue is zero is a snapshot of a file someone else is
    holding open. Run the sweep; never read that sentence for an answer.**
 
-1a. **`docs/backlog.md` IS AT 73 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
+1a. **`docs/backlog.md` IS AT 82 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
    is not blocked. That is not licence to file rather than fix — the standing correction in the
    resume block still governs — but a filing no longer costs a rotation, and rotating still means
    CLOSING, which needs a measurement.
