@@ -15,6 +15,65 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.605.0] - 2026-09-19
+
+### the dispatch protocol moves out of implementation.md into a by-reference step file
+
+Lever E of the consumer-context-footprint plan, and like Lever D a change of
+SITING rather than a trim — no prose is deleted and the protocol binds exactly
+as before. The measured subject is the re-read: across the 40 most recent graph
+transcripts `steps/implementation.md` was read 31 times in 8 sessions, **25 of
+those reads whole-file**, and 7 of the 8 sessions read it more than once. Every
+one of those re-reads paid for the whole file.
+
+**The plan named the wrong span, and the measurement is why this entry exists.**
+Lever E was drafted as "split the per-story loop out of `implementation.md`",
+the loop being sections 5-7. Re-derived against the tree, the per-section byte
+distribution puts 16,283 B of the file's 28,785 in section 2 *Create Agent
+Team* — 57% — against 4,026 B in section 5 and 5,405 B in section 6. The loop
+is not where the bytes are. Within section 2 the coherent one-time span is the
+dispatch protocol: worktree-explicit dispatch, the Rule 29 bounded-join
+mandate, bounded-join ≠ serial execution with the wave-DAG planning output,
+dispatch-prompt cache discipline, the dev-brief bug-class checklist, the
+canonical-story-file pre-flight check and the dev-dispatch exploration budget.
+A lead loads that once per sprint at its first dispatch; it then re-reads it on
+every subsequent whole-file read of the step.
+
+That span — 11,713 B, former lines 100-301 — moved verbatim to
+`core/skills/ai-dlc/steps/_dispatch-protocol.md` (12,649 B with its frontmatter
+and provenance header), and `implementation.md` keeps a forwarding stub at the
+span's former location naming every procedure the file carries and ending READ
+AND FOLLOW. `implementation.md` is **17,913 B, down from 28,785 (−10,872 B,
+−37.8%)**. The siting copies `steps/_gate-procedures.md`, which established the
+underscore-prefixed by-reference step file: same frontmatter shape, a
+`STEP_LOADED_TOKEN`, no `nextStepFile` because it is not a pipeline step, and a
+one-line forwarding pointer left behind at each extracted procedure's former
+home.
+
+Extraction fidelity was proved two ways rather than reviewed: the new file's
+body, stripped of its 17-line header, is `cmp`-identical to the original
+lines 100-301, with an off-by-one span as the control that must differ; and a
+line-union comparison reports 0 of the old file's 526 lines absent from
+new-file ∪ moved-body, with a seeded absent line as the control that must be
+reported.
+
+**Packaging needed no change and that was checked, not assumed.** Both
+`core-manifest.md` lists and `install.sh` take `steps/*.md` by glob, and no
+validator enumerates step files by name except for `gate-validation.md` and
+`stories-test-strategy.md`, neither of which this touches.
+
+Two joins were measured before the move, because 0.604.0 hit both classes.
+`enforcement-map.yaml` declares **zero** call sites on `implementation.md`
+(control: 37 on `gate-validation.md`), and `layer-contract.yaml` names it zero
+times (control: 6 `verify:` lines), so the stranded-call-site arm at
+`scripts/validate-enforcement-map.sh:3373` has no subject here. The live joins
+are content greps: `core/fixtures/story-fields-derive/run.sh` requires the
+`sprint-status.sh derive-stories` write form in `implementation.md` and
+`core/scripts/validate-layer-entries.sh` harvests its bold `**QA — validate
+every AC …**` line — both sit in section 5 and stayed put. The one citation
+that did move is `ai-dlc-continue.sh` Check 2b, into the new file, which
+W7 resolves over `steps/*.md` by glob.
+
 ## [0.604.0] - 2026-09-19
 
 ### six phase-bound rule bodies move out of SKILL.md into rule-bodies/ and load by stub pointer
