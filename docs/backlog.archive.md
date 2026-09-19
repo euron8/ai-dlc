@@ -15553,3 +15553,142 @@ its grammar function is gone.
 verify: sh p=docs/plans/graph-ledger-full-drain.md; [ -f "$p" ] || exit 9; LC_ALL=C grep -q 'lids()' "$p" || exit 9; LC_ALL=C grep -qE '^[[:blank:]]*git -C [^ ]+ merge-base --is-ancestor main "\$b"' "$p" && exit 1; LC_ALL=C grep -qE '^comm -23 /tmp/union_live\.txt /tmp/arch\.txt > /tmp/live\.txt' "$p" || exit 1; exit 0
 
 
+## BL-041
+
+**LANDED (v0.607.0, verified b2f55a42.)**
+
+**The one sprint-ship counter that refuses to grandfather a smoke FAIL is rendered non-binding by
+the disjunction that reads both counters.** `core/skills/ai-dlc/steps/retro.md:845-848` defines
+`consecutive-deploy-clean` as resetting "on ANY smoke FAIL, regardless of whether the FAIL is new
+or pre-existing — strictest counter; reflects ship-quality without grandfathering." `:863-864`
+then reads them: "A sprint is ship-quality when **EITHER** counter reaches 5/5." A FAIL carried
+across a sprint boundary holds `consecutive-deploy-clean` at 0 permanently while
+`consecutive-no-regression` climbs to 5/5, and the sprint is declared ship-quality with the FAIL
+live. The strict counter cannot decide anything it does not already share with the loose one.
+
+The renewal loop the entry filed is stated mechanically rather than left as an omission:
+`:849-854` resets `consecutive-no-regression` "ONLY on a NEW smoke FAIL not present in the prior
+deploy-validate run" — so "new" is defined by comparison against the previous run's record, and
+nothing re-derives it against the artifact that set the original threshold. Measured across
+`core/skills/`: `pre-existing` occurs 11 times, of which exactly **3** are in the pipeline steps
+and all three are in `retro.md`'s two counter definitions; the other 8 are in
+`ai-dlc-update/reconcile/*` and are unrelated. Control in the same invocation: `pre-exxisting` =
+**0**, and `grandfather` = 1 (`retro.md:848`), so the search ran and discriminates.
+
+**The filing named the wrong absence, and the correction moves the fix target.** It filed that
+"nothing requires a red check carried across a sprint boundary to be re-justified," which reads as
+a missing rule to be added. There is no missing rule — the non-grandfathering requirement already
+exists at `:845-848`, fully written. The defect is that `:863-864` makes it optional. That is a
+different and much cheaper fix than the one the entry sketched, and it moves the change from
+"add a filing obligation" to "the disjunction at `:863-864`."
+
+**THE FIX IS A QUALIFIED DISJUNCTION AND A BARE CONJUNCTION IS A REGRESSION, NOT A SPELLING.**
+Derived read-only over the reference consumer's `docs/retro/`: 105 dual-counter readings, **4** in
+the wedge state (`deploy-clean` 0 with `no-regression` at or past 5), against a same-invocation
+control of **32** readings at `deploy-clean` 5 or more — so the strict counter is reachable and
+the defect is live. A conjunction requiring both counters would have withheld ship-quality across
+an essentially unbroken run of `deploy-clean: 0/5` on a pre-existing FAIL that consumer could not
+fix, which is `.claude/rules/mechanism-design.md`'s "never ship a check that wedges live work".
+The satisfying shape is therefore: the strict counter declares alone, and the loose counter
+declares only where every outstanding FAIL is a recorded carry-over naming the failing check, the
+run-id it first failed under, and the sprint it was carried from.
+
+**The receipt is NOT anchored on the raw literal, because the literal dies on a reflow.**
+`EITHER counter reaches 5/5` sat on one line by accident of the current wrap; a reflow-only copy
+with the disjunction fully intact takes the literal apart, the control arm passes cheerfully and
+the entry reads CLOSED with the defect untouched. The span is therefore whitespace-normalised
+before it is searched, and the literal arm is scored on the normalised text. Two further arms
+close the other holes a literal cannot: the span's LENGTH must be in band, because
+`awk '/start/,/end/'` runs to EOF if either boundary moves — measured, an unmatchable end pattern
+grows the span from 26 lines to 496 and the literal arm then reads a file, not a section; and the
+declaration's SEMANTICS are read as two sentence-level facts, so a restatement that drops the
+literal while leaving both counters standalone still reports STILL-LIVE.
+
+The first arm exits **2** if the Sprint-Ship Verification section stops naming
+`consecutive-no-regression` at all, and the band arm exits **2** as well — a restructure is
+separated from a live defect, and both are separated from an unreadable subject, which exits
+**9**. The quote-back hazard has no mechanism against it here: `retro.md` is in
+`core/scripts/audit-rule-files.sh`'s `IN_SCOPE`, but that auditor's origin-tag scan requires the
+trigger word inside PARENTHESES, so a bare "this formerly read" sentence is invisible to it. What
+saves the receipt is its direction — a quote-back keeps the literal alive on the normalised span
+and reports STILL-LIVE, which is the safe way to be wrong. Write no removal record in the step
+prose.
+
+Discharges the consumer entry `PC-S295-RETRO-RED-SMOKE-CROSSING-SPRINT-BOUNDARY` at pinned ledger
+line 577.
+
+
+verify: sh R=core/skills/ai-dlc/steps/retro.md; [ -f "$R" ] || exit 9; S=$(LC_ALL=C awk '/^### Sprint-Ship Verification/,/^### 5\. Human Commentary/' "$R"); [ -n "$S" ] || exit 9; L=$(printf '%s\n' "$S" | wc -l); { [ "$L" -ge 15 ] && [ "$L" -le 60 ]; } || exit 2; N=$(printf '%s\n' "$S" | tr '\n' ' ' | tr -s ' '); grep -qF 'consecutive-no-regression' <<<"$N" || exit 2; ! grep -qF 'EITHER counter reaches 5/5' <<<"$N" || exit 1; V=$(printf '%s' "$N" | tr '.' '\n' | awk '/consecutive-deploy-clean/ && /ship-quality/ && !/consecutive-no-regression/ {a=1} /consecutive-no-regression/ && /only where|only when|only if|unless|provided that/ {b=1} END{print a+0, b+0}'); [ "$V" = "1 1" ]
+## BL-043
+
+**LANDED (v0.607.0, verified b2f55a42.)**
+
+**`_gate-procedures.md` owns the bounded-join beat, restates its whole contract, and never says
+the beat is backgrounded.** As measured on the defect, the token `run_in_background` occurred
+**once** in that file's 47,764 bytes, inside the Gate-adjudication *dispatch* section, about the
+`Agent` spawn. The **Bounded-join beat** section — `core/skills/ai-dlc/steps/_gate-procedures.md:101`
+at this tip — is 40 lines prescribing the call form, both exit codes, why a waiting beat exits 0,
+the mtime rule, `--since`, wave batching, and four named prohibitions, and not the one property
+that makes a beat a beat. Measured in one invocation over the two slices on the defect:
+Gate-adjudication dispatch carried `run_in_background` **1** time; Bounded-join beat carried it
+**0** times. Control that the grep works on that file at all: `wait-for-deliverable` = **6** hits.
+
+That section calls itself "the ONLY sanctioned way to wait for a teammate" (`:104`), and three
+sites delegate to it by name — `:192` (gate-adjudicator), `:312` (adversarial review), `:475`
+(adversarial repair) — each reading `**Join** with the bounded-join beat (above)`. So the omission
+is inherited by every join the gate procedures describe.
+
+A foreground beat is not a slow beat, it is a **dead** one. `core/hooks/ai-dlc-continue.sh:1318`
+enumerates four ways to believe you have a beat and not have one, and names this as (2): "a
+foreground call — its exit trap clears the marker before your turn ends". The same block prescribes
+the literal form the beat section omits: `Bash(run_in_background: true)
+scripts/ai-dlc/wait-for-deliverable.sh <path> [<path>...]`. `core/scripts/wait-for-deliverable.sh:31`
+states the design premise the section drops — "This beat is BACKGROUNDED".
+
+**The filing this discharges named the wrong two sections and prescribed a fix that is now a
+restatement.** It asked for one line in "Adversarial review dispatch" and "Adversarial repair
+dispatch" mandating backgrounded-plus-bounded-join. The bounded-join half has since landed in both
+(`:312`, `:475`), and the backgrounded half of a *dispatch* is now Rule 29's global default —
+`core/skills/ai-dlc/rule-bodies/rule-29.md:72`, "`run_in_background: true` is now the DEFAULT for
+every spawn, not an exception" — so writing it into two step-file sections would restate a default
+rather than fix anything. That sentence is NOT in `SKILL.md`: `run_in_background` occurs there **0**
+times, against a same-invocation control of **1** for `Rule 29`. The correction is **narrower in
+cause and wider in reach**: the missing property is on the *beat*, not the dispatch, and it is
+missing at the one site all three joins share.
+
+The duty is sited in the beat section because that is where the three callers delegate to: a fix at
+any one of them fixes one join out of three. `run_in_background: true` is the form the fix cannot be
+written without — the harness parameter, spelled identically at every core file that names it, so
+this cannot be an anchor on a phrasing the filing invented.
+
+**THE BARE TOKEN IS NOT THE ANCHOR, BECAUSE A PROHIBITION CARRIES IT.** A sentence forbidding
+backgrounding — the exact regression this entry exists to prevent, contradicting
+`wait-for-deliverable.sh:31` and `ai-dlc-continue.sh:1318` — spells `run_in_background: true` as
+readily as the fix does, and a presence test on the beat slice calls it fixed. The receipt therefore
+scores POLARITY separately from presence: a prohibition or a weakening ("optional", "never pass",
+"not required") anywhere in the slice reports STILL-LIVE, and the token must additionally sit within
+four lines of the `wait-for-deliverable.sh` call spec, which is where a mandate lives and a mere
+mention does not.
+
+**The control arm exits 2, not 1, because its margin is ONE.** `run_in_background` appears twice in
+the whole file and only the dispatch-slice occurrence is in the control's reach, so an ordinary prose
+tidy at that one line kills the control; collapsing that into the same exit as a live defect hides a
+dead instrument. The beat slice's LENGTH is asserted in band for the same reason — the slicer
+terminates only on `^## `, so demoting the neighbouring heading grows the slice from 40 lines to 93
+and the subject arm then reads the NEIGHBOUR's token. An unreadable or absent subject exits **9**.
+
+**The receipt takes the additive fix** — the mandate written into the beat section. A subtraction fix
+that deleted the restated call spec in favour of a bare Rule 29 citation would leave this reporting
+STILL-LIVE and needs the receipt re-anchored; that is stated rather than papered over, and the
+additive fix is the one the file's own shape invites, since the neighbouring Gate-adjudication
+dispatch (`:172` at this tip) already spells the token.
+
+Discharges the consumer entry `PC-S297-GATE-PROCEDURES-DISPATCH-NOT-MANDATED-BACKGROUND` at pinned
+ledger line 1361. **That entry's own receipt is a live false-close** and must not be reused:
+`theirs_has core/skills/ai-dlc/steps/_gate-procedures.md "Execute the sub-skills back-to-back, with
+no pause for human input between them:"` — that string is present today at `:225`, in the Validation
+cycle section, and has nothing to do with backgrounding. `theirs_has` closes on presence, so the
+entry evaluates as a CLOSE-CANDIDATE on a string whose presence is unrelated to the defect.
+
+
+verify: sh P=core/skills/ai-dlc/steps/_gate-procedures.md; [ -f "$P" ] || exit 9; SL(){ LC_ALL=C awk -v h="$1" 'index($0,h)==1{f=1;next} f&&/^## /{exit} f' "$P"; }; C=$(SL '## Gate-adjudication dispatch'); B=$(SL '## Bounded-join beat'); { [ -n "$C" ] && [ -n "$B" ]; } || exit 9; LB=$(printf '%s\n' "$B" | wc -l); { [ "$LB" -ge 10 ] && [ "$LB" -le 60 ]; } || exit 2; grep -qF 'run_in_background: true' <<<"$C" || exit 2; NEG=$(printf '%s\n' "$B" | tr '\n' ' ' | tr '.' '\n' | awk '/run_in_background/ && /[Nn]ever pass|[Nn]ever use|[Dd]o not pass|[Dd]o not use|[Mm]ust not pass|MUST NOT pass|[Nn]ever background|is optional|optional here|[Nn]ot required/{n++} END{print n+0}'); [ "$NEG" -eq 0 ] || exit 1; ADJ=$(printf '%s\n' "$B" | awk '/run_in_background: true/{t[NR]=1} /wait-for-deliverable\.sh/{c[NR]=1} END{n=0; for(i in t) for(j in c){d=i-j; if(d<0)d=-d; if(d<=4)n++} print n+0}'); [ "$ADJ" -ge 1 ]

@@ -49,15 +49,38 @@ and expect a rule here to cite a measurement whose story lives in the archive.**
 that file and a `path:line` into it would then fail `validate-plan-shape.sh`'s citation arm on a
 correct rotation.
 
-**BATCH 130 SHIPPED AS `v0.606.0` (`208f3561`), TWO SUBJECTS, BOTH FALSE-CLOSE PRODUCERS, ONE PC
-ID NAMED VERBATIM IN THE SQUASH MESSAGE.** `BL-143` closed, discharging
-`PC-S312-TRUNK-PUSH-DECLINES-TO-POLICE-THE-TRUNK`, and `BL-270` closed. Gate
-`AI_DLC_FIXTURE_NO_SKIP=1`: exit **0**, 22 of 22 phases PASS, 0 FAIL, all **202** fixtures
-dispatched and 202 ok, the changed fixture read by name against an impossible-name control of 0.
-Pole `ledger-reverify` 436s against baseline 628s. Live **86 -> 82**, archive **189 -> 193** (four
-rotated: the two subjects plus `BL-261` and `BL-263`, which carried LANDED lines from earlier
-releases and had never been rotated). Receipt histogram 9/64/1 before, **11/62/1** after — exactly
-the two subjects moved, so no incidental close.
+**BATCH 131 SHIPPED AS `v0.607.0` (`b2f55a42`), TWO SUBJECTS, BOTH STEP-PROSE SAFETY PROPERTIES,
+BOTH PC IDS NAMED VERBATIM IN THE RELEASE COMMIT.** `BL-041` closed, discharging
+`PC-S295-RETRO-RED-SMOKE-CROSSING-SPRINT-BOUNDARY`; `BL-043` closed, discharging
+`PC-S297-GATE-PROCEDURES-DISPATCH-NOT-MANDATED-BACKGROUND`. Gate `AI_DLC_FIXTURE_NO_SKIP=1`:
+exit **0**, 22 of 22 phases PASS, 0 FAIL, all **202** fixtures dispatched and 202 ok, both changed
+fixtures read by name against an impossible-name control of 0. Live **83 -> 81**, archive
+**193 -> 195**. Receipt histogram 7/62/1 before, **9/61/1** after — exactly the two subjects moved,
+so no incidental close. `BL-277` FILED, not fixed.
+
+**THE PC-BACKED WORKLIST IS 10 AND THE TWO CLOSED SUBJECTS LEFT IT.** Re-derived post-merge with
+its three controls (live 48, a known-live id 1, an impossible id 0): `BL-029`, `BL-039`, `BL-040`,
+`BL-042`, `BL-057`, `BL-067`, `BL-132`, `BL-140`, `BL-145`, `BL-215`. **Four of those ten record
+their own remedy as refuted, unshippable or unconstructible** — `BL-067`, `BL-132`, `BL-145`,
+`BL-215` — so read each entry's own text before scoping it, and do not rebuild a refuted remedy.
+
+**A GATE RUN FROM A LINKED WORKTREE IS NOT EVIDENCE, AND THAT IS NOW FILED AS `BL-277`.** In a
+worktree `.git` is a FILE, both runners spell their evidence records as literal `.git/` paths, and
+neither resolves `--git-common-dir` (0 in each, control 7). The writes fail, every failure is
+error-suppressed, and the banner is unaffected. Measured at batch 131: three hands each reported a
+green or in-progress suite from its own worktree and none had written a verdict record. **Run the
+suite from the PRIMARY checkout.** The fix is one line in each of two byte-bound runners, so it
+must land in both — the entry's receipt has an arm for exactly that half-fix.
+
+**DISPATCH HANDS, BUT DO NOT LET THEM RUN THE SUITE.** Operator instruction at batch 131, after
+the machine reached **load 62-72 on 18 cores**: six concurrent `pre-push` runs, 12 worker pools,
+137 fixture processes. Two hands had each started a full 202-fixture suite to check their own
+work while the lead ran two more. Every timing taken under that is a measurement of contention —
+one base rep read **1651s at load 75** — and the measurement hand's whole differential was void.
+**The LEAD owns the gate, runs it alone, and waits for it.** Tell every hand so in its brief.
+**Kill a hand's process GROUP and its parent shell**, not just the fixtures: eleven orphaned `zsh`
+wrappers survived three separate cleanups because the sweep keyed on `pre-push` and `run.sh`
+rather than on PPID.
 
 **THE ELECTION LOOP IN THE DERIVE BLOCK BELOW IS NEW, AND IT IS WHY `BL-270` CLOSED.** The
 ancestor gate is GONE and the block now takes a UNION over every qualifying ref, minus the union
@@ -66,10 +89,14 @@ three qualifying refs are PAIRWISE INCOMPARABLE (adds 4/4/4, union 7), so every 
 loses real filings, and a union WITHOUT the archive subtraction resurrects the 6 ids that are live
 on one qualifying ref and archived on another.
 
-**THE DELIVERY GAP IS ZERO AND THE PULL IS BANKED BY OPERATOR DECISION.** Consumer installed
-`0.605.0` against `VERSION` `0.605.0` at the sweep — the operator pulled `0.601.0`-`0.605.0` into
-graph on 2026-09-19 as `554e4a32`. PENDING 8, TERMINAL 110. `v0.606.0` has since shipped, so
-re-derive the gap; do not read this sentence for it.
+**THE DELIVERY GAP IS TWO RELEASES AND A BOOTSTRAPPING FILE IS IN THE RANGE.** Consumer installed
+`0.605.0` against `VERSION` `0.607.0` at batch 131's close; the operator's last pull was
+`0.601.0`-`0.605.0` into graph on 2026-09-19 as `554e4a32`, and the consumer has pulled nothing
+since. Over `a934b743..b2f55a42`, 14 `core/` files changed and
+`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh` is among them — **the consumer's INSTALLED
+copy runs the pull that carries its own repair**, so say so in any brief rather than claiming the
+next pull is protected by it. Mode-only changes: 0 (every row `100755 -> 100755 M`, blobs
+differing). Re-derive all of it; do not read this sentence for a number.
 
 **A NEW CANDIDATE LANDED MID-BATCH AND WAS UNCOMMITTED WHEN READ.**
 `PC-S312-DERIVATION-FENCES-STRANDED-CORE-RELOCATION-WITH-NO-WORKLIST-ROW` had no `-S` date and was
@@ -686,7 +713,9 @@ given at batch 90.
      the backlog entry, the receipt scored against tip/base/stub/mutants) and a **measurement
      hand** (fixture timing base vs tip in a detached worktree, the consumer rehearsal with its
      `cmp -s` control, the reverify diff), each `opus` in its own worktree, each rebasing onto
-     that sha. Wall clock is the fix plus the longest arm, never the sum. Batch 101 measured the
+     that sha. **NO HAND RUNS THE FIXTURE SUITE — say so in every brief.** Batch 131 measured what
+     happens when two of them do: load 62-72 on 18 cores, six concurrent suites, and a timing
+     differential that was pure contention. The lead runs the gate, alone, and waits for it. Wall clock is the fix plus the longest arm, never the sum. Batch 101 measured the
      serial shape at over an hour for nine steps a fan-out would have run in the fixture's time.
      The lead does not build; the lead writes the contract, collects by content, cuts the
      release commit, and pings.
@@ -744,7 +773,7 @@ given at batch 90.
 
    **Batch 130 returned this plan to its own provenance-first ordering**, which is where it stays
    until the operator rules otherwise: the sweep decides, and a PC-backed entry outranks every
-   distribution-internal one.
+   distribution-internal one. Batch 131 scoped off that worklist and left it at **10**.
 
    **SUPERSEDED — OPERATOR RULING AT BATCH 118: `docs/plans/pre-push-wall-clock.md` IS BATCH 119's
    SUBJECT.** Kept for its lineage only; the block above replaces it.
