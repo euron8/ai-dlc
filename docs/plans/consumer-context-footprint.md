@@ -35,9 +35,9 @@ path, and never to leave worktrees in place; the lead runs `git worktree remove`
 
 ### Status
 
-Plan authored 2026-09-18 from fresh measurement; this block re-derived the same day after the
-0.603.0 merge, per the re-derive action below. Levers are ordered by measured payoff and each
-is one release.
+Plan authored 2026-09-18 from fresh measurement; this block re-derived 2026-09-19 after Lever
+D's release commit landed on a local branch — unmerged, gate red, diagnosis below — per the
+re-derive action. Levers are ordered by measured payoff and each is one release.
 
 **Shipped.** Lever B — `bashOutputMaxChars: 8000` in `templates/settings.json.template`, on
 `origin/main` as merge `21be0dce` (release 0.602.0), with the settings-merge arm extended to
@@ -46,6 +46,56 @@ the new top-level-key shape. Lever C — `omitClaudeMd: true` declared for `adve
 `core/scripts/render-agent-definitions.sh`, on `origin/main` as merge `5f5d7fac` (release
 0.603.0), bound by three mutants in `core/fixtures/agent-definition-render/run.sh`. The
 measured detail of both is the CHANGELOG entry beside each release, not this file.
+
+**Committed, gate red, unmerged — Lever D (the next session's work).** Commit `1ed8e56f` on
+local branch `lever-d-rule-bodies` (branched from `b0017c8f`, never pushed) is the 0.604.0
+release triple: rules 19, 20, 24, 27, 28 and 29 moved verbatim from `SKILL.md` (108,508 →
+65,036 B, −43,472 B) to new `core/skills/ai-dlc/rule-bodies/rule-NN.md`, each stub keeping the
+heading, the verbatim Carrier line and a load paragraph ending READ AND FOLLOW
+`rule-bodies/rule-NN.md`; packaging claims added in `install.sh`, both manifest copies,
+`audit-rule-files.sh` and I23's glob list. The directory ships as `rule-bodies/`, not the
+`rules/` this plan drafted: the `core-manifest.md` prefix table reserves the entry prefix
+`rules/` for `.claude/rules/` outside the skill dir, so a skill-dir `rules/` could not be
+manifest-claimed and shipped-but-unclaimed is the I76 defect. The full gate
+(`AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`) exited 1 on two root causes, both dated
+and discriminated — the whole validator in a clean `git worktree` at `b0017c8f` exits 0; at the
+tip it exits 1, its only finding the first line:
+
+- **Root cause A (arm I63, `scripts/validate-enforcement-map.sh:1511`).**
+  `layer-contract.yaml`'s `absorbed_from:` pins `core/skills/ai-dlc/SKILL.md` `role: pointer`,
+  which requires it to name at least one contract code. The seven it named (`E6`, `E15`, `E16`,
+  `E17`, `W4`, `EXTENSION-CHECK-NUMBER-COLLISION`, `EXTENSION-RETIRE-CANDIDATE`) were all
+  inside Rule 27's span and moved with it into `rule-bodies/rule-27.md` (derived: the same set
+  is present there, 7 = 7; the new `SKILL.md` names 0). The arm's own remedy text states the
+  choice: "pin it role: none, or restore the reference it lost" — the fixer's mechanism choice.
+  `role: none` is mechanically true today, and note what it changes downstream: I62's citation
+  join excludes `role: none` files, and the code-naming prose would then live only in
+  `rule-bodies/rule-27.md`, which no pin or prose_home currently binds.
+- **Root cause B (plan-shape phase).** `docs/plans/v0357-gate-remediation-delegation.md:404`
+  cites `core/skills/ai-dlc/SKILL.md:1406`; that file now has 1,160 lines. Three further
+  stale line-number citations to Rule 28's moved body sit at `:406` (`:1432`), `:518`
+  (`:1429-1431`) and `:615` (`:1406`). Fix is to re-anchor all four sites and re-run
+  `bash scripts/validate-plan-shape.sh` clean.
+- **Cascade, expected to clear.** Twelve fixtures reported `FIXTURE BROKEN — the pristine tree
+  does not pass validate-enforcement-map.sh` against the dirty tree: consumer-machinery-home,
+  enforcement-map-derivations and -b, enforcement-map-sites, -b and -c, layer-contract-conformance
+  and -b, ledger-status-vocabulary, validator-arm-selection, validator-fork-budget. Their
+  self-probes run the validator over the repo, so they are attributable to root cause A, not
+  independent defects; after A lands, re-run the gate and expect them green — a fixture still
+  red then is a real finding about the fix, not about the fixture.
+
+**Operator rulings 2026-09-19.** (i) **Rule 13 is added to Lever D's scope.** Derived from
+`SKILL.md` at `b0017c8f`: its span is lines 378–616, 12,190 B, the largest in the file; its
+heading sits at byte offset 18,984, so it is the only rule spanning the 20,121-byte re-attach
+cut — starts above it, ends below — and it carries no `**Carrier:**` line (the 18 carriers bind
+rules at or past the cut). Why it was originally off-list, and why moving it is still the
+largest single resident-byte win: bytes above the cut are paid on every non-compacted turn.
+The 0.604.0 commit moved six bodies; Rule 13's body is unmoved as of `1ed8e56f`. The fixer
+chooses the mechanism — fold it into the release commit before the push (keeps Lever D one
+release, the branch shape the release validator wants), or land it as the lever's second
+release — and the release claim (subject = VERSION = CHANGELOG heading) must then describe
+what actually moved. (ii) **Hand off to a fresh session**, executed via the handoff action
+below; the fresh session takes action 1 as written here.
 
 **Dropped by operator ruling 2026-09-19.** Lever A — fork `ai-dlc-update` into a subagent —
 was rehearsed on a `file://` clone to a measured result: a `context: fork` dry-run completed
@@ -65,7 +115,19 @@ run deflected before step 2 and the operator dropped the lever there. Episode:
 
 ### Next actions
 
-1. **Lever D — split `SKILL.md` by residency.** Measured subject: 108,508 B / 1,888 lines,
+1. **Lever D — land it.** The release commit exists: `1ed8e56f` on local branch
+   `lever-d-rule-bodies`, never pushed, gate red with the two root causes, the discriminations
+   and the remedy options recorded in the Status block above. The remaining steps, in order:
+   fix root cause A (choose between the two remedies I63's own error text names, and make sure
+   the choice keeps the contract-prose join honest — see the Status note on what `role: none`
+   exempts); fix root cause B (re-anchor the four stale line citations, plan-shape clean);
+   move Rule 13's body per the operator ruling of 2026-09-19 (Status above; fold into the
+   release commit is the one-release shape); re-run `AI_DLC_FIXTURE_NO_SKIP=1 bash
+   .githooks/pre-push` to exit 0 reading only the exit code; push and verify the remote ref
+   moved with `git ls-remote --heads origin lever-d-rule-bodies` against a control ref; open
+   the PR with the **gh CLI** (the GitHub MCP `create_pull_request` 403s for this account),
+   squash-merge, ff local main. The measured subject that motivated the split, unchanged:
+   108,508 B / 1,888 lines,
    resident every turn, 6.1% of all input tokens across the 21 `/ai-dlc` graph sessions
    (151.7 M of 2.47 B; per-session 3.4–29%); the harness re-attaches only 5,000 tokens after a
    compaction and the docs' guidance is a body under 500 lines. The largest rule spans are
