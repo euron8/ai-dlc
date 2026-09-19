@@ -6,11 +6,13 @@
   "aiDlcRoles": {
     "adversary": {
       "model": "opus",
-      "effort": "high"
+      "effort": "high",
+      "omitClaudeMd": true
     },
     "analyst": {
       "model": "sonnet",
-      "effort": "medium"
+      "effort": "medium",
+      "omitClaudeMd": true
     },
     "architect": {
       "model": "opus",
@@ -34,7 +36,8 @@
     },
     "gate-adjudicator": {
       "model": "opus",
-      "effort": "high"
+      "effort": "high",
+      "omitClaudeMd": true
     },
     "ops": {
       "model": "opus",
