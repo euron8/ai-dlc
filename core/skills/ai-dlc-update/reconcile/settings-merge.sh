@@ -26,6 +26,16 @@
 #                      is exactly that contract, and it is why `core/team-roles`
 #                      needs no setup-substitution sites at all: there is no
 #                      consumer-specific string left in a core file to mask.
+#   2c. bashOutputMaxChars
+#                    — template supplies, consumer wins. The harness cap on
+#                      inline Bash output: past it, a result becomes a path plus
+#                      a 2,000-character preview. This is Rule 23(c)'s enforcer
+#                      (large read-only output must not land in the resident
+#                      prefix; measured 155 results over 8 KB summing 2.9 MB
+#                      across 40 consumer sessions), and it must REACH an
+#                      existing consumer, which "every other key preserved"
+#                      cannot do. A consumer value survives every pull; a
+#                      template with no value writes nothing.
 #   3. env.AI_DLC_MODEL_<FAMILY>_WINDOW
 #                    — NEVER WRITTEN. The context sensor's ceiling is declared
 #                      per model family (FABLE, OPUS, SONNET, HAIKU, OTHER) in
@@ -193,6 +203,10 @@ if ! printf '%s' "$BASE_JSON" | jq \
     | ((($t.aiDlcRoles  // {}) + ($u.aiDlcRoles  // {}))) as $roles
     | if ($models | length) > 0 then .aiDlcModels = $models else . end
     | if ($roles  | length) > 0 then .aiDlcRoles  = $roles  else . end
+    # bashOutputMaxChars is a scalar, so "additive, user wins" is `//`. Guarded the
+    # same way: neither side declaring it leaves the key absent.
+    | ($u.bashOutputMaxChars // $t.bashOutputMaxChars) as $bash_cap
+    | if $bash_cap != null then .bashOutputMaxChars = $bash_cap else . end
     | .hooks = (
         $events
         | map(. as $e | (($uh[$e] // []) | strip_ai_dlc) + ($th[$e] // []) | {($e): .})
