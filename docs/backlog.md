@@ -3412,25 +3412,57 @@ receipts, the second of which reads `.git/hooks/pre-push`. Real consumer 314 byt
 `STILL-LIVE`; clone absent → rc=2 → `CLOSE-CANDIDATE`. **Had the guard covered that prefix the
 rehearsal would have said `NEEDS-REVIEW` and the false expectation would never have shipped.**
 
-**WHY IT IS FILED RATHER THAN FIXED, and the reason is not difficulty.** `ledger-reverify.sh` is
-currently NOT in the `0.471.0 → 0.479.0` range, and a pull against that exact range is in flight
-with its dry run already matched against the rehearsal. Editing this file now would move the range
-under the executing session and invalidate a comparison it has already made. Take it after that
-pull lands.
+**THE DEFERRAL PREMISE HAS EXPIRED.** This was filed rather than fixed because a pull against
+`0.471.0 → 0.479.0` was in flight with its dry run already matched against a rehearsal, and
+editing this file would have moved the range under the executing session. Re-derived:
+`docs/plans/graph-pull-0471-to-0479.md` line 1 reads `DISCHARGED — DO NOT EXECUTE` and the
+consumer's installed stamp is `0.605.0`. The constraint is gone and the fix is taken here.
 
-**AND THE OBVIOUS WIDENING NEEDS ITS FALSE-POSITIVE SET MEASURED FIRST.** The allow-list is doing
-real work: receipt bodies are full of path-shaped tokens that are NOT consumer paths — `$WORK/`
-and `$d/` temp-dir fragments, `sed` substitution fragments, and DISTRIBUTION-relative `core/...`
-paths that correctly resolve nowhere under `$CONSUMER`. A naive widening turns every one of those
-into a spurious `NEEDS-REVIEW`, which suppresses real closes and is the opposite failure. Scope the
-widening to consumer-relative prefixes that genuinely exist (`.git/`, and bare dotfiles at the
-root), and measure the FP set over the reference ledger's 36 `verify: sh` receipts before shipping.
+**THE WIDENING IS `.git/` ONLY, AND THE BARE-ROOT-DOTFILE HALF OF THIS ENTRY'S OWN PROPOSAL IS
+REFUTED.** The allow-list is doing real work: receipt bodies are full of path-shaped tokens that
+are NOT consumer paths — `$WORK/` and `$d/` temp-dir fragments, `sed` substitution fragments, and
+DISTRIBUTION-relative `core/...` paths that correctly resolve nowhere under `$CONSUMER`. A naive
+widening turns every one of those into a spurious `NEEDS-REVIEW`, which suppresses real closes and
+is the opposite failure, with more volume behind it. Measured over the elected ref's ledger — 17
+`sh` receipts, control: 15 of them name a path at all, 10 distinct tokens admitted by the four
+prefixes:
+
+    current allow-list                       10 distinct tokens
+    + .git/ + bare root dotfile              14   newly admitted: . .EXPECTED_VALIDATORS
+                                                  .git/hooks/pre-push .pre-commit-config.yaml
+    + .git/ ONLY                             11   newly admitted: .git/hooks/pre-push
+
+The guard flags only an ABSENT path, so an admitted token that resolves is inert. Resolved against
+the consumer (controls in the same invocation: `docs` and `_bmad-output` present,
+`.zzqq-impossible-never` absent), three of the dotfile four exist and one does not:
+**`.EXPECTED_VALIDATORS` is not a path.** It is a fragment of a real receipt's `grep -qE` pattern —
+`grep -qE "for v in $EXPECTED_VALIDATORS;" .claude/hooks/guarded-merge.sh` — whose `$` the
+tokenizer strips, leaving a leading dot. The dotfile arm reads it as a missing consumer file and
+withholds a legitimate close. The `.git/`-only form admits 1 new token of which **0** are absent: a
+false-positive set of ZERO, and it still fixes the motivating case.
+
+**AND A SECOND, LARGER FP CLASS PUTS THE DOTFILE ARM PERMANENTLY OUT.** `receipt_path_tokens` is
+`tr -c 'A-Za-z0-9_./$-'`, which turns `*` into a newline — so `core/hooks/*.sh` yields the bare
+token `.sh`, carrying no glob character for the existing guard to refuse. A dotfile arm admits it,
+`$CONSUMER/.sh` is absent, and every `*.ext` in every receipt becomes a spurious `NEEDS-REVIEW`.
+Seeded as `SH-GLOB-BARE-EXT` with `SH-GIT-BARE-TOKEN` beside it; `mutation-dotfile` in
+`core/fixtures/ledger-reverify/run.sh` reintroduces the arm and must be killed by both.
+
+**THE TWO HALVES CANNOT SHARE A DERIVATION.** `.git/` is untracked BY CONSTRUCTION: 0 tracked
+paths under it at the consumer, against controls of 1989 under `docs/` and 7 tracked root
+dotfiles. A unified `git ls-files` narrowing drops `.git/hooks/pre-push` — the one path this entry
+exists for — so `.git/` is a literal prefix rule requiring a path segment after it.
+
+**EXPECT THE TALLY TO MOVE FOR A REASON UNRELATED TO THIS FIX.** `sh_base_control` runs only on
+the else branch of the absent-subject test, so an entry that starts being flagged leaves the
+base-controlled population and the `RECEIPTS-UNDECIDED` denominators move with it. That is
+arithmetic, not a regression.
 
 Sibling to `BL-089`, which records that a non-zero exit meaning *"a precondition moved and I
 measured nothing"* is displayed identically to a genuine reproduction. Same class, opposite
 direction.
 
-verify: sh set -e; r="$PWD"; h="$(git -C "$r" rev-parse HEAD)"; w=$(mktemp -d); mkdir -p "$w/c/_bmad-output/ai-dlc-update" "$w/c/.claude"; printf '%s\n' '# l' '' '## PC-PROBE-ABSENT-HOOK — probe' '' 'Body.' '' 'verify: sh cd "$CONSUMER" && grep -qF sentinel .git/hooks/pre-push' > "$w/c/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; printf 'version: 0.471.0\ncommit: 31b51d48\nskill_version: 0.471.0\nskill_commit: 31b51d48\n' > "$w/c/.claude/.ai-dlc-version"; o="$(cd "$w/c" && bash "$r/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh" "$r" 31b51d48 "$w/c" "$h" 2>/dev/null)"; grep -q 'PC-PROBE-ABSENT-HOOK' <<<"$o" || exit 9; grep -qE '^NEEDS-REVIEW[[:space:]]+PC-PROBE-ABSENT-HOOK' <<<"$o"
+verify: sh set -e; r="$PWD"; h="$(git -C "$r" rev-parse HEAD)"; w=$(mktemp -d); mkdir -p "$w/c/_bmad-output/ai-dlc-update" "$w/c/.claude"; { printf '%s\n' '# l' ''; printf '%s\n' '## PC-PROBE-ABSENT-HOOK — the subject a fresh checkout lacks' '' 'Body.' '' 'verify: sh cd "$CONSUMER" && grep -qF sentinel .git/hooks/pre-push' ''; printf '%s\n' '## PC-PROBE-GLOB-EXT — over-fire control: a glob tokenizes to the bare token .sh' '' 'Body.' '' 'verify: sh for f in core/hooks/*.sh; do :; done; false' ''; printf '%s\n' '## PC-PROBE-WORK-FRAG — over-fire control: a $WORK temp fragment is not a consumer path' '' 'Body.' '' 'verify: sh W=/nonexistent-work-root; test -e "$W/scratch/thing.sh"'; } > "$w/c/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; printf 'version: 0.471.0\ncommit: 31b51d48\nskill_version: 0.471.0\nskill_commit: 31b51d48\n' > "$w/c/.claude/.ai-dlc-version"; o="$(cd "$w/c" && bash "$r/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh" "$r" 31b51d48 "$w/c" "$h" 2>/dev/null)"; grep -q 'PC-PROBE-ABSENT-HOOK' <<<"$o" || exit 9; grep -q 'PC-PROBE-GLOB-EXT' <<<"$o" || exit 9; grep -q 'PC-PROBE-WORK-FRAG' <<<"$o" || exit 9; grep -qE '^NEEDS-REVIEW[[:space:]]+PC-PROBE-ABSENT-HOOK[[:space:]].*consumer-relative path\(s\) it names DO NOT EXIST:.*\.git/hooks/pre-push' <<<"$o" && grep -qE '^CLOSE-CANDIDATE[[:space:]]+PC-PROBE-GLOB-EXT' <<<"$o" && grep -qE '^CLOSE-CANDIDATE[[:space:]]+PC-PROBE-WORK-FRAG' <<<"$o"
 
 
 ## BL-145 — a docs commit that MENTIONS a candidate id is reported to the consumer as upstream having absorbed it
