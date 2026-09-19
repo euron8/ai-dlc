@@ -352,13 +352,15 @@ mutant_fires "$TMP/i62-home.yaml" "I62: core/skills/ai-dlc/extensions/README.md"
 # separate scope — every code it names — is what puts Rule 27 under the join at all. Without
 # this arm the pointer role would be a pin with no reader.
 #
-# W4 is named by NO pinned file except core SKILL.md, and W2 by none at all, so swapping them
-# moves exactly one unit's owed id and cannot reach extensions/README.md.
+# W4 is named by NO pinned file except the pointer body, and W2 by none at all, so swapping them
+# moves exactly one unit's owed id and cannot reach extensions/README.md. The pointer pin moved
+# from SKILL.md to rule-bodies/rule-27.md at 0.604.0, when Rule 27's body (and the 7 contract
+# codes it names) left SKILL.md; the emitter this asserts on moved with it.
 sed -e 's/^    code: W4$/    code: __SWAP__/' \
     -e 's/^    code: W2$/    code: W4/' \
     -e 's/^    code: __SWAP__$/    code: W2/' \
     "$CONTRACT" > "$TMP/i62-pointer.yaml"
-mutant_fires "$TMP/i62-pointer.yaml" "I62: core/skills/ai-dlc/SKILL.md" "i62-pointer" \
+mutant_fires "$TMP/i62-pointer.yaml" "I62: core/skills/ai-dlc/rule-bodies/rule-27.md" "i62-pointer" \
   "a pointer that names a code without citing its clause is a second, unbound copy of the rule"
 
 # --- I62 arm 3: the vacuity guard ------------------------------------------------------

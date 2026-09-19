@@ -144,6 +144,7 @@ core_manifest:
   - git-hooks/pre-push
   - SKILL.md
   - steps/*.md
+  - rule-bodies/*.md
   - escalations.md
   - rule-authoring.md
   - artifact-path-grammar.md
@@ -342,6 +343,7 @@ machinery:
 rulebook:
   - SKILL.md
   - steps/*.md
+  - rule-bodies/*.md
   - escalations.md
   - rule-authoring.md
   - artifact-path-grammar.md

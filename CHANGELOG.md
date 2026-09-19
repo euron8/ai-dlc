@@ -15,6 +15,98 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.604.0] - 2026-09-19
+
+### six phase-bound rule bodies move out of SKILL.md into rule-bodies/ and load by stub pointer
+
+Lever D of the consumer-context-footprint plan — a change of SITING, not a
+trim. `SKILL.md` is resident every turn once the skill is invoked and
+re-attaches only at ~5,000 tokens after a compaction; the six dispatch- and
+gate-bound rules 19, 20, 24, 27, 28 and 29 spanned 47,606 B of its 108,508 B,
+all past the re-attach cut, so their text was never what survived a compaction
+anyway. Each span moved verbatim to
+`core/skills/ai-dlc/rule-bodies/rule-NN.md` (46,981 B across the six bodies,
+including a one-line provenance header each) and `SKILL.md` keeps a stub: the
+heading, one load paragraph ending in READ AND FOLLOW
+`rule-bodies/rule-NN.md` before acting under the rule, the verbatim Carrier
+line and the span's verbatim I79 comment block. The extraction proved interior
+fidelity byte-for-byte — each body read back, stripped of its provenance line,
+equals the original span interior exactly. `SKILL.md` is 65,036 B
+(−43,472 B, −40%), with 31 rule headings, 18 carriers and the digest's 46
+entries unchanged.
+
+**Why `rule-bodies/` and not `rules/` as the plan drafted**: the
+`core-manifest.md` prefix table reserves the entry prefix `rules/` for
+`.claude/rules/` outside the skill dir, so the manifest cannot claim a skill
+directory of that name — and a shipped-but-unclaimed file is exactly the I76
+defect. Packaging follows the `templates/` precedent: `install.sh` gains a
+guarded glob copy; `core-manifest.md` and its duplicate
+`reconcile/setup-sites.md` each claim `rule-bodies/*.md` in `core_manifest:`
+and `rulebook:` (I5/I28 bind the copies); `audit-rule-files.sh` walks the new
+directory and `IN_SCOPE` resolves the new pointer prefix; I23's shipped
+rule-prose set includes the new glob. The pointers live only in the stubs, so
+the step files that cite these rules by number resolve through them and no
+pointer is restated N times.
+
+Verified: rule-file audit exits 0 with 0 tier-1 findings over the enlarged
+86-file corpus; digest `--write`/`--check` renders 46 entries, 0 dangling,
+unchanged; re-attach budget PASS with the protocol at 1,241 tokens;
+enforcement-map arms I5, I23, I28, I76, I79, I25, I33 exit 0; `install.sh`
+rehearsed into a fresh target — the bodies land, a stub pointer resolves in
+the consumer layout, the consumer-layout audit exits 0 with 0 tier-1 findings,
+and `core-paths.sh --list` derives the new manifest entry (1, with the
+pre-existing `steps` entry as the positive control in the same invocation).
+Rule 13 (12,190 B) moves too, by operator ruling. It STRADDLED the re-attach
+cut — heading at byte 18,984, body ending at 31,174 — and I79 keys on the
+HEADING offset, so a rule that begins above the cut and ends below it was
+outside the invariant's band and declared no Carrier while most of its text
+was unreachable after a compaction. Its body is now
+`rule-bodies/rule-13.md` and its stub declares
+`Carrier: scripts/ai-dlc/validate-locked-anchor.sh`. `SKILL.md` is 53,375 B
+(−55,133 B, −50.8% against 0.603.0), 927 lines, 31 rule headings, 19 carriers,
+7 bodies totalling 59,358 B.
+
+Two joins moved with it, neither of which the six-rule move could reach
+because none of those spans named an enforcer. `layer-contract.yaml`'s
+`absorbed_from` pinned `SKILL.md` `role: pointer` while the 7 contract codes
+it pointed with had moved to `rule-bodies/rule-27.md`; I63's remedy offers
+`role: none` OR restoring the reference, and `role: none` alone would have
+dropped the codes out of I62's citation join, whose corpus IS the pin list —
+so the pin was RELOCATED: `SKILL.md` `role: none`, `rule-bodies/rule-27.md`
+`role: pointer`. And `enforcement-map.yaml`'s `compact-window-ordering` entry
+declared its call site as `SKILL.md Rule 2`, whose two
+`validate-compact-window.sh` mentions left with Rule 13's body; the site now
+names `rule-bodies/rule-13.md`, and `resolve_site_file` in
+`validate-enforcement-map.sh` gains a `rule-bodies/*.md` case, since every
+`*.md` site previously resolved into `steps/`.
+
+Verified, each with a negative control in the same invocation: I63 fires again
+when the pointer pin names a body carrying no code; W2 fires again when the
+call site names a body that never mentions the enforcer; P4 fires again on a
+seeded out-of-range citation. `validate-enforcement-map.sh` timed from inside
+the repo, 3 interleaved reps each side: 16.64-16.68s before, 16.80-16.85s
+after (+1.1%) — it is the validator the suite pole invokes. Four stale
+citations in `docs/plans/v0357-gate-remediation-delegation.md` re-anchored to
+`rule-bodies/rule-28.md:16`, `:44-46` and `:49`; the quoted text was NOT at
+the cited lines on `main` either, so those citations predated this move. A
+third plan stranded by the shrink re-anchored to `SKILL.md:628`.
+`validate-plan-shape.sh` is 40 plans, 0 errors.
+
+Two fixtures pinned the OLD siting and are repaired. `absorbed-specifics-survive`
+grepped `SKILL.md` for six specifics the reference consumer deleted its own copies
+of; all six moved into `rule-bodies/rule-13.md`, so it reported `FIXTURE BROKEN`
+over text that had not been lost. Its subject is the RULEBOOK, not one file of it,
+so it now reads SKILL.md plus every rule body as one corpus — and tolerates the
+directory being ABSENT, which is the pre-0.604.0 layout a consumer one pull behind
+still has. Both directions controlled: deleting a literal from a copied tree fails
+it, and the `main` SKILL.md with no `rule-bodies/` passes it.
+`layer-contract-conformance`'s `i62-pointer` mutant asserted the emitter string
+`I62: core/skills/ai-dlc/SKILL.md`; the pointer pin moved, so the assertion now
+names `rule-bodies/rule-27.md` and shard `b` is 17 of 17.
+
+Gate: `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push` exits 0, `all gates
+green`, with both repaired fixtures reported `ok` by name.
+
 ## [0.603.0] - 2026-09-18
 
 ### `omitClaudeMd` ships for the three rulebook-free roles, and jq's `tostring` turns a missing key into an invalid one

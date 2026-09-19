@@ -212,6 +212,15 @@ if [ -d "$SCRIPT_DIR/../core/skills/ai-dlc/templates" ]; then
   cp "$SCRIPT_DIR/../core/skills/ai-dlc/templates/"*.md \
      "$PROJECT_ROOT/.claude/skills/ai-dlc/templates/" 2>/dev/null || true
 fi
+# Rule bodies: the full text of the six phase-bound rules whose SKILL.md stubs
+# carry a READ AND FOLLOW pointer. Shipped whole like steps/; guarded glob like
+# templates/ above. The name deviates from the plan's `rules/` because the
+# core-manifest.md prefix table reserves `rules/` for `.claude/rules/`.
+if [ -d "$SCRIPT_DIR/../core/skills/ai-dlc/rule-bodies" ]; then
+  mkdir -p "$PROJECT_ROOT/.claude/skills/ai-dlc/rule-bodies"
+  cp "$SCRIPT_DIR/../core/skills/ai-dlc/rule-bodies/"*.md \
+     "$PROJECT_ROOT/.claude/skills/ai-dlc/rule-bodies/" 2>/dev/null || true
+fi
 
 # Layered rulebook (Rule 27 / spec §7): consumer-owned extensions/ + overrides/.
 # ADDITIVE — create if absent and seed the README contract; NEVER overwrite a

@@ -415,6 +415,8 @@ absorbed_from:
   - path: core/skills/ai-dlc-update/SKILL.md
     role: home
   - path: core/skills/ai-dlc/SKILL.md
+    role: none
+  - path: core/skills/ai-dlc/rule-bodies/rule-27.md
     role: pointer
   - path: core/skills/ai-dlc/core-manifest.md
     role: none

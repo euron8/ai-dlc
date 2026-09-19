@@ -115,115 +115,7 @@ Write escalations to `docs/escalations/pending.md`. Escalations have
 three tiers that determine whether work blocks or continues.
 
 ### Rule 13 -- Requirements define WHAT; agents have autonomy over HOW
-When carry-over items, brainstorming sessions, or direct user
-instructions specify concrete details -- UI placement, implementation
-approach, scope boundaries, feature behavior -- those details are
-**locked requirements**. Validation cycles may challenge or question
-locked requirements, but MUST NOT silently change them. Any
-divergence from specified requirements -- dropping a requirement,
-substituting different behavior, or determining a requirement cannot
-be met as specified -- requires human sign-off via `HARD_BLOCK`
-escalation (Rule 12, Tier 1). The escalation must quote the original
-user-specified detail and the proposed change. Agents that rewrite
-user intent into a vaguer form during planning are violating this
-rule.
-
-## HANDOFF PROTOCOL AND PIPELINE SNAPSHOT
-The lead maintains a living pipeline snapshot throughout the sprint.
-When context pressure or human request warrants a handoff, the
-snapshot is the contract transferred to a new conversation.
-
-### Living pipeline snapshot
-**Path:** `_bmad-output/pipeline-snapshot.md`
-
-### No self-scheduling skill re-entry
-A self-scheduled wake-up (ScheduleWakeup, cron, or any deferred
-self-trigger) MUST NOT carry a payload that invokes this skill or
-re-enters the pipeline. Self-scheduled payloads are limited to
-inert reminders or read-only status checks.
-
-## HANDOFF PROTOCOL -- TRIGGERS AND CONTEXT THRESHOLDS
-Continues the Handoff Protocol above; step files cite these subsections
-as `SKILL.md` Handoff Protocol "<subsection>".
-
-### Handoff triggers
-**(a) Human-requested handoff** -- user explicitly asks to continue
-in a new session (directly, or in response to a Rule 2(b)/(c)
-reminder). Rule 11(b) preamble applies. Only path (a) initiates a
-handoff. When it fires, **READ AND FOLLOW** `steps/handoff.md` — the
-ordered 5-step procedure (stop teammates → commit → finalize snapshot →
-emit the bare `/ai-dlc resume` line → pause flag + end session) and the
-resume-line template. Resume is snapshot-driven: the entry line carries
-no state; `route.md` Step 0 reads `_bmad-output/pipeline-snapshot.md`
-for all of it. Never narrate pipeline state into the resume line.
-
-### Pending operator approvals do not transfer across handoff
-A resume prompt is never an operator approval for a pending gate. When a
-handoff crosses a gate that awaits human sign-off, the successor session
-MUST re-present that gate and obtain fresh in-session approval — even if
-the resume text says "execute ... on my approval" or "proceed once
-resumed." Approval is bound to the session that granted it; it does not
-survive into a new conversation. This applies to every human gate: the
-Production Validation Checkpoint, defined in `steps/deploy-validate.md`; a
-destructive one-time operation, defined in `steps/deploy-validate.md`; a
-`DEFERRAL_REQUEST`, defined in `escalations.md`; and any HARD_BLOCK
-disposition, defined in `escalations.md`. Every gate named here MUST cite
-the file defining its procedure. A gate with no procedure is not a gate:
-in core AS SHIPPED the sprint-PR merge has none, because `steps/retro.md`
-merges it without asking.
-
-### Reminder thresholds
-Yellow, red, and imminent are DERIVED from the resolved effective window --
-a percentage of the window CLAMPED to a bounded "lead" below the ceiling
-(`effectiveWindow - 31,000`), not read from a per-row table. The
-`ai-dlc-context-sensor.sh` hook computes them and owns the formula, the
-defaults, and the worked examples; tune via
-`AI_DLC_SENSOR_{YELLOW,RED,IMMINENT}_PCT` and
-`AI_DLC_SENSOR_{YELLOW,RED,IMMINENT}_{MIN,MAX}_LEAD`. The band constants are
-guarded by `scripts/ai-dlc/validate-compact-window.sh` (see "Auto-compact ordering
-invariant" below).
-
-### Reminder semantics
-The `ai-dlc-context-sensor.sh` hook measures resident context and emits
-the yellow / red / imminent reminder automatically. You neither measure
-nor estimate your own context window. If the user shares `/context`
-output, treat it as authoritative.
-
-### Reminder text
-`ai-dlc-context-sensor.sh` is the SOLE emitter and owns the exact wording of
-all three bands; do not restate it here or in a step file. No band instructs
-the lead to hand off, and no band asks the lead to OFFER one either -- what the
-lead says to the operator at a threshold is (b)/(c)/(d) above, and theirs
-alone. Every band carries the non-blocking doctrine in the shared wrapper; red
-adds that the reminder is not an instruction to hand off, and imminent adds
-that only path (a) initiates one and a threshold is not a request. Imminent
-also directs a snapshot refresh BEFORE the next pipeline action, because
-`ai-dlc-recover.sh` re-reads that snapshot after compaction and recovers a
-stale one faithfully.
-
-### Auto-compact ordering invariant
-Claude Code compacts at `effectiveWindow - 13,000`, where `effectiveWindow`
-is `min(autoCompactWindow, model max)` and `autoCompactWindow` resolves in
-Claude Code's precedence order (env > settings.local.json > project
-settings.json > user settings; managed/enterprise settings and CLI flags
-outrank all of these but are not readable from a hook, so they cannot be
-modelled). Because every band is a clamped percentage anchored to the
-resolved ceiling, red clears the compaction point BY CONSTRUCTION and the
-disjoint clamp ranges keep yellow < red < imminent < compaction for any
-window.
-
-### Auto-handoff (configurable via `auto_handoff_mode`)
-The lead MAY automatically execute the path (a) procedure
-(`steps/handoff.md`) at a defined safe seam when all preconditions hold.
-Auto-handoff is NOT a fifth pause point -- it is a session-terminating
-action that runs the path (a) procedure unchanged, and resume itself is
-never automated.
-
-## ADDITIONAL OPERATING RULES
-The rules below apply to pipeline execution but are less time-
-critical than Rules 1-13. They may sit past the 5K token boundary
-that Claude Code re-attaches after compact; if they appear missing
-after a compact event, re-invoke `/ai-dlc` to restore them.
+Concrete details specified by carry-over items, brainstorming sessions or direct user instructions are **locked requirements**: validation cycles may challenge them but MUST NOT silently change them, and any divergence requires human sign-off via `HARD_BLOCK` escalation. READ AND FOLLOW `rule-bodies/rule-13.md` before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 14 -- Multi-sprint phasing is autonomous
 When the agent determines a feature exceeds single-sprint scope due
@@ -261,74 +153,10 @@ not a rule -- it is a suggestion leaning on a story. Rewrite it hard
 or move it to a retro doc as a lesson.
 
 ### Rule 19 -- Agent spawns MUST bind the full role contract
-When the lead invokes the Agent tool to spawn a teammate, the spawn MUST
-bind that teammate to its role file (`.claude/team-roles/<role>.md`) --
-the whole contract, not just the model. Two bindings are mandatory:
-**(a) Model.** `render-agent-definitions` renders
-`.claude/agents/<role>.md` from `aiDlcRoles.<role>` — that generated
-definition is the binding: a role-bound dispatch naming it as
-`subagent_type` runs on its `model:` and its `effort:` both, which is
-also what makes (c) below load-bearing. The `ai-dlc-dispatch-guard`
-PreToolUse hook selects between two branches on every role-bound
-dispatch. When a matching, non-stale definition exists, the guard
-rewrites `subagent_type` to it and DELETES both `name` and `model` from
-the call — the rendered definition is the one source, and an explicit
-`model` param would outrank it. When no matching definition exists, or
-the definition's frontmatter disagrees with `aiDlcRoles.<role>` (a
-stale render), the guard falls back to today's behaviour as the net
-under the definition, not the norm: it resolves `aiDlcRoles.<role>.model`
-and injects the `model` parameter itself. Do NOT restate a
-role-to-model mapping here or in step files; a second mapping drifts
-from the role file and is itself a violation. A spawn that omits
-`model` on the fallback path, names a different key, or lacks a
-matching definition where one is expected, is still a Rule 19 violation
-Check 22 records at retro.
-**Config is authoritative.** `aiDlcRoles.<role>` states the model and the
-effort; the rendered definition (a) is what binds both. The guard also
-appends a sentence stating the configured effort to the prompt -- the
-Agent tool has no effort parameter for the guard to set directly, so on a
-role dispatched without a definition that sentence is the fallback signal,
-not a harness-enforced value. Evaluate neither value. An `-escalated` role MAY
-name the same model and the same effort as its base role; that is valid
-config. Do not flag, question, or negotiate either -- not in a dispatch
-prompt, a gate log, a handoff, or a retro. Config is the operator's to
-change.
-**(b) Role contract.** The dispatch prompt MUST carry, as a standing
-line, the instruction: *"Your operating contract is
-`.claude/team-roles/<role>.md`. Read it and follow it as your FIRST
-action before any other work."* This puts the role's identity,
-ownership, constraints, and escalation protocol into the *subagent's*
-context (not the lead's, per Rule 23), and mirrors Rule 21 -- the read
-IS the binding, not the lead's recall. Keep the line byte-identical
-across dispatches so it rides the shared-block cache
-(`implementation.md` dispatch-prompt cache discipline); vary only the
-`<role>` token. A spawn that names a role but omits this line binds
-model without contract and is a Rule 19 violation.
-**(c) No `name` on a role-bound dispatch.** The spawn MUST NOT pass a
-`name` parameter. Passing one routes the spawn to the teammate runner
-instead of the resume-by-id path a definition-bound dispatch runs on,
-and that runner applies the definition's `model` but not its `effort` --
-so a named role-bound dispatch silently drops the effort half of (a).
-Reach a role-bound hand afterward by `SendMessage` to the agent id
-`ListAgents` reports; that is resume-by-id, not the named-teammate inbox
-the "`SendMessage` reaches a resident teammate" passage below describes,
-and a lead expecting that inbox is looking in the wrong place. Dropping
-`name` costs nothing else: its one mechanical reader in the tree is the
-dispatch guard's ledger row, which already falls back to `subagent_type`
-when `name` is absent, and Rule 20 joins every teammate on its
-deliverable file, never on `name`.
+When the lead invokes the `Agent` tool to spawn a teammate, the spawn MUST bind that teammate to its full role contract -- the role file, its rendered definition, and every mandatory binding -- not the model alone. READ AND FOLLOW `rule-bodies/rule-19.md` before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 20 -- Validation evaluations run in independent subagents with provenance
-Validation evaluations -- the four sub-skills (`/bmad-party-mode`,
-`/bmad-advanced-elicitation`, `/bmad-review-adversarial-general`,
-`/bmad-prd`) **and the native `ai-dlc-adversary-review` convergence
-review** -- MUST be evaluated by **real, independent subagents** -- never
-roleplayed solo in the lead's own context. Independence is the point: a single LLM
-evaluating an artifact it (or its own conversation) authored produces convergent
-opinions and defeats the validation, and it absorbs delegable work into the lead's
-context (Rule 28). The `mode` field of the emitted provenance block MUST be
-`subagent` for ALL FIVE; `mode: solo` is forbidden for every one of them (not only
-party-mode) and FAILS gate-validation Check 17.
+Validation evaluations -- the four `/bmad-*` sub-skills and the native `ai-dlc-adversary-review` convergence review -- MUST be evaluated by real, independent subagents with `mode: subagent` provenance, never roleplayed solo in the lead's own context. READ AND FOLLOW `rule-bodies/rule-20.md` before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 21 -- READ AND FOLLOW is a Read tool call, not recall
 A `READ AND FOLLOW` directive MUST produce a `Read` tool call for the
@@ -394,12 +222,7 @@ offload them freely.
      rule; whatever is named here is what survives instead of its memory. -->
 
 ### Rule 24 -- Planning and retro exploration is dispatched to analyst subagents
-Read-heavy exploration in planning **and retro** steps is the lead's
-largest avoidable cache-read cost: every file the lead reads inline accumulates in its
-context and is re-read every subsequent turn. To keep the lead lean,
-the *exploration* portion of designated steps is dispatched to an
-`analyst` subagent (read-only, bound to the analyst role file per Rule 19 — model + role-contract line) whose raw
-reading never enters the lead's context.
+Read-heavy exploration in the planning and retro steps is the lead's largest avoidable cache-read cost and MUST be dispatched to an `analyst` subagent, whose raw reading never enters the lead's context. READ AND FOLLOW `rule-bodies/rule-24.md` before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 25 -- Artifact-size discipline
 Living planning artifacts that grow without bound are the single
@@ -418,39 +241,13 @@ machinery -- MUST use the smallest mechanism that satisfies the
 locked requirements and acceptance criteria.
 
 ### Rule 27 -- Layered rulebook: core, extensions, overrides
-The consumer rulebook is three layers. This rule is how a consumer
-self-improves *without* re-tangling core against upstream (spec §7).
+The consumer rulebook is three layers -- core, extensions, overrides -- and a consumer self-improves through the layer contract, never by re-tangling core against upstream. READ AND FOLLOW `rule-bodies/rule-27.md` before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 28 -- Delegation is the default; inline execution is the exception
-The lead MUST delegate any action a subagent can service. Doing the
-work inline in the lead's own conversation is permitted ONLY when the
-action falls in the **non-delegable set**:
-- **(a) Orchestration** -- spawning/joining teammates, task creation and
-  dependency wiring, wave/DAG planning, branch and worktree management,
-  merge and land-order integration (including merge-conflict resolution,
-  `implementation.md` -- integration is orchestration), and discharge-
-  predicate execution at deploy gates.
-- **(b) Routing** -- pipeline-variant selection and step sequencing.
-- **(c) Gate-validation decisions** -- resolving the manifest, running the
-  `script` / `project` / `lead` checks, owning the PASS/FAIL, the remediation
-  disposition and the escalation, and adopting the `gate-adjudicator`'s per-check
-  verdicts via Check 26. Applying the remediation EDIT is NOT in this set: the
-  repair is dispatched to a `remediator`
-  (`_gate-procedures.md`, "Adversarial repair dispatch") and the lead verifies it
-  against the repair record. The lead still owns the disposition -- but it clears
-  a FAIL only through a dispatched repair, never by editing the artifact inline.
-  Evaluating an individual `adjudication: llm` check is NOT in this set: like a
-  Rule 20 validation evaluation it is escalated to a fresh `gate-adjudicator` and
-  never rendered solo in the lead's context. The lead still owns the outcome --
-  but it adopts an `llm` verdict only through fail-closed Check 26, never by
-  judging the check inline.
+The lead MUST delegate any action a subagent can service; inline execution is permitted only for the non-delegable set. READ AND FOLLOW `rule-bodies/rule-28.md` before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 29 -- Steering budget: the operator must always be able to reach you
-Claude Code delivers a queued operator message at a **tool-call boundary** --
-it arrives alongside the next tool result. A long turn is therefore harmless.
-What silences the operator is a long **single tool call**: while one is in
-flight there is no boundary, so the message cannot land. The operator's blind
-window equals the duration of the in-flight foreground call.
+Claude Code delivers a queued operator message only at a tool-call boundary, so what silences the operator is a long single foreground tool call, and the lead MUST bound foreground call duration within the steering budget. READ AND FOLLOW `rule-bodies/rule-29.md` before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 30 -- The spec is BMAD's; the enforcement is ours
 Specification artifacts MUST be produced by the BMAD workflows that own them and
