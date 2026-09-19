@@ -24,7 +24,7 @@ carried from this file is a hypothesis.
 stop. Silence and progress are indistinguishable from outside.
 
 **A session started by a handoff from another session runs autonomously.** If you were invoked
-by action 9's one-liner rather than by the operator, take your own measured recommendation, state
+by the handoff action's one-liner rather than by the operator, take your own measured recommendation, state
 the choice in your first ping, and continue. It removes the wait, never the reporting. Scope stays
 the operator's: a blocked item is reported as blocked, never dropped.
 
@@ -47,34 +47,25 @@ the new top-level-key shape. Lever C — `omitClaudeMd: true` declared for `adve
 0.603.0), bound by three mutants in `core/fixtures/agent-definition-render/run.sh`. The
 measured detail of both is the CHANGELOG entry beside each release, not this file.
 
-**Blocked, reported and not dropped.** Lever A — fork `ai-dlc-update` into a subagent. Its
-safety rests on two runtime facts no build session can observe: which `transcript_path` the
-calls made from inside a `context: fork` carry, and whether a fork's own transcript carries
-the skill-injection text — `core/hooks/ai-dlc-acknowledge.sh`'s updater-session detection
-(`:139-170`) keys on transcript-scan signals, and ZERO transcripts in the 40-session corpus
-carry an `ai-dlc-update` fork signature, because no fork has ever run. Never ship a change
-that wedges live work: the operator's live updater path is not blind-forked on a reading of
-the hook. Action 1 is the rehearsal that unblocks it.
+**Dropped by operator ruling 2026-09-19.** Lever A — fork `ai-dlc-update` into a subagent —
+was rehearsed on a `file://` clone to a measured result: a `context: fork` dry-run completed
+fully, and one clean `apply` attempt executed the whole cycle inside the fork (step-1
+auto-push, all four ref checks, step-7 apply byte-verified, correctly no merge). But two of
+the three apply attempts that reached a verdict deflected at launch on byte-identical trees,
+same model, same prompt — the fork read the clone's rehearsal-staged git log and asked the
+operator to choose a branch instead of running the mechanically validatable ref checks.
+Deflection is invisible at launch, so fork mode cannot be made a reliable carrier for an
+`apply` path from skill text alone. The operator ruled this scenario not worth pursuing for
+this skill; no binding arm was added to `core/scripts/validate-reattach-budget.sh` and
+`context: fork` stays absent from `core/skills/ai-dlc-update/SKILL.md`. Untested residue at
+the drop: the post-self-update re-invoke path — its discriminating fixture input (a
+body-only `SKILL.md` differential at theirs, frontmatter byte-identical) was built, but the
+run deflected before step 2 and the operator dropped the lever there. Episode:
+`~/.claude/projects/-Users-n8-git-ai-dlc/memory/ai_dlc_fork_apply_deflection_variance.md`.
 
 ### Next actions
 
-1. **Lever A — run the unblock rehearsal, then ship only if it clears.** On a `file://` clone
-   of graph under `mktemp -d` in the scratchpad, drive one real `ai-dlc-update` cycle with
-   `context: fork`, `agent: general-purpose`, `background: false` added to
-   `core/skills/ai-dlc-update/SKILL.md:1-5` (keep `effort: high`): (a) bare run, (b) `<ref>`
-   run, (c) `apply` with a self-update in range — the re-invoke path at `SKILL.md:80`, `:217`,
-   `:592` is the open question, because a `Skill` call from inside a fork is undocumented; if
-   it wedges, the fork returns `RE-INVOKE REQUIRED` text and the lead re-invokes. Confirm
-   `core/hooks/ai-dlc-acknowledge.sh` (updater-session detection) still classifies the fork's
-   writes as updater writes, and that `core/hooks/ai-dlc-subagent-probe.sh` fails open on a
-   spawn with no ledger row. Bind on ship: add an arm to
-   `core/scripts/validate-reattach-budget.sh` (it already opens SKILL.md heads) asserting
-   `context: fork` implies `background: false`, and that `core/skills/ai-dlc/SKILL.md` never
-   carries `context: fork` — it IS the lead. Do NOT fork `ai-dlc-setup` (an operator wizard).
-   Expected reduction ~ 140 KB per session averaged, 170 KB per update invocation (the
-   175,718-byte body, injected 33 times across the 40-session baseline corpus).
-
-2. **Lever D — split `SKILL.md` by residency.** Measured subject: 108,508 B / 1,888 lines,
+1. **Lever D — split `SKILL.md` by residency.** Measured subject: 108,508 B / 1,888 lines,
    resident every turn, 6.1% of all input tokens across the 21 `/ai-dlc` graph sessions
    (151.7 M of 2.47 B; per-session 3.4–29%); the harness re-attaches only 5,000 tokens after a
    compaction and the docs' guidance is a body under 500 lines. The largest rule spans are
@@ -91,13 +82,13 @@ the hook. Action 1 is the rehearsal that unblocks it.
    the table with `grep -l "Rule N\b" core/hooks/*.sh`) is the safest to move, because its
    enforcer is not the lead's memory. Rehearse on an `install.sh` tree and re-run the transcript
    census on a clone. Expected reduction: the moved bytes × turns, order 60–70 KB resident.
-3. **Lever E — split the per-story loop out of `implementation.md`.** Measured subject:
+2. **Lever E — split the per-story loop out of `implementation.md`.** Measured subject:
    28,785 B in one `## EXECUTION SEQUENCE` section, read whole 23 of 29 times, re-read more than
    once in 7 sessions. Section-split it so the per-story iteration re-reads a small file and the
    one-time setup is read once; `_gate-procedures.md` already has the by-reference shape
    (`:7`). Same treatment for `route.md` only if the census shows re-reads (it did not: 22 of 23
    reads were whole and once per session).
-4. **Do not do these, with the measured reason.** A PreToolUse deny on read-only `git` without
+3. **Do not do these, with the measured reason.** A PreToolUse deny on read-only `git` without
    `ctx_*`: 393 of 911 matching commands are mixed with a mutation in the same line. Trimming the
    post-compaction snapshot re-read: the harness re-reads the 5 most-recent files (snapshot was
    among them at 38 of 48 compactions, ~4.4 KB each) but the second read is Rule 21's deliberate
@@ -105,20 +96,20 @@ the hook. Action 1 is the rehearsal that unblocks it.
    `autoCompactWindow`, `MAX_MCP_OUTPUT_TOKENS`, a `# Compact instructions` section in
    `CLAUDE.md.template`: each is either consumer-owned `env`, negligible, or a restatement of
    what `ai-dlc-precompact.sh:104` already emits.
-5. **Consumer-side measurement, after each lever merges.** On a `file://` clone of graph,
+4. **Consumer-side measurement, after each lever merges.** On a `file://` clone of graph,
    rehearse the pull (`/ai-dlc-update` runbook — READY, never dispatched: a consumer pull is
    operator-initiated), then re-run the transcript census in this file's Derivation section
    against the graph transcripts once the operator has pulled and run a sprint. The number that
    closes a lever is the category's share moving on the consumer, not a green gate here.
-6. **Re-derive this block after each merge.** Run the derive block below, replace the Status
+5. **Re-derive this block after each merge.** Run the derive block below, replace the Status
    paragraph and the figures in the lever actions with the fresh values, and move any lever
    whose release has merged out of the Next-actions list into the Status paragraph, naming
    its release.
-7. **Fresh-resume check.** Merge the docs commit, then, from a fresh checkout of `origin/main`, resume this plan as a stranger: re-run the derive block there, assert the next-action
+6. **Fresh-resume check.** Merge the docs commit, then, from a fresh checkout of `origin/main`, resume this plan as a stranger: re-run the derive block there, assert the next-action
    names no lever a commit on `origin/main` has shipped, and run
    `bash scripts/validate-plan-shape.sh docs/plans/consumer-context-footprint.md` there as the
    floor.
-8. **Hand off, then stop.** `ListAgents`; if a local `ai-dlc-*` session is found (never a
+7. **Hand off, then stop.** `ListAgents`; if a local `ai-dlc-*` session is found (never a
    `graph-*` one), `SendMessage` it exactly `READ and FOLLOW docs/plans/consumer-context-footprint.md`
    and nothing else. A `REFUSED:` reply advances to the next untried qualifying session, idle
    ones first; silence does not. Once one replies `ACCEPTED`, there is no further work and no
@@ -126,8 +117,9 @@ the hook. Action 1 is the rehearsal that unblocks it.
 
 ### Done when
 
-Each of levers B, A, C, D, E has either shipped as one release with its binding arm green, or is
-recorded above as blocked with the measurement that blocked it. Observation point for the
+Each of levers B, C, D, E has either shipped as one release with its binding arm green, or is
+recorded above as blocked with the measurement that blocked it; Lever A is recorded above as
+dropped by operator ruling and is not a criterion. Observation point for the
 consumer figure: the graph transcript census taken AFTER the operator's pull and one sprint,
 compared category-by-category against the 2026-09-18 baseline in the Derivation section below.
 The gate command that must be green on each release: `AI_DLC_FIXTURE_NO_SKIP=1 bash .githooks/pre-push`,
