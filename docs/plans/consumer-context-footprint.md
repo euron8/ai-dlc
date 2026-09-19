@@ -40,6 +40,18 @@ MERGED. Levers are ordered by measured payoff and each is one release. **Every l
 resolved: B, C, D and E have shipped, and A is dropped by operator ruling. No lever work
 remains — what is left is the consumer-side observation, which is operator-gated.**
 
+**The consumer-side observation is UNREACHABLE today, measured rather than assumed.** Read-only
+against `/Users/n8/git/graph` on 2026-09-19: `.claude/skills/ai-dlc/SKILL.md` is **108,508 B**,
+the pre-Lever-D size to the byte; `.claude/skills/ai-dlc/rule-bodies/` holds **0** entries and
+`.claude/skills/ai-dlc/steps/_dispatch-protocol.md` is absent, against a control of
+`steps/implementation.md` present. The consumer has not pulled any of 0.602.0–0.605.0, so
+action 3's census would re-measure the 2026-09-18 baseline and read as a null result for four
+shipped levers. The observation point opens when the operator pulls; nothing in this repo moves
+it. The fresh-resume check (action 5) was re-run at `43ef2c5a` in a detached worktree of
+`origin/main`: derive block control **8**, `validate-plan-shape.sh` 0 errors 0 warnings,
+plan 18,848 B, and the next-action list names no lever — control, the Status block names
+levers 8 times.
+
 **Shipped.** Lever B — `bashOutputMaxChars: 8000` in `templates/settings.json.template`, on
 `origin/main` as merge `21be0dce` (release 0.602.0), with the settings-merge arm extended to
 the new top-level-key shape. Lever C — `omitClaudeMd: true` declared for `adversary`,
