@@ -684,6 +684,209 @@ else
   check_beat_clause "_gate-procedures.md step 1" "$g_step1"
 fi
 
+# --- Beat-is-backgrounded arms ------------------------------------------------------
+#
+# THE DEFECT THESE ARMS EXIST FOR. The `## Bounded-join beat` section of
+# `_gate-procedures.md` prescribes the call form, both exit codes, why a waiting beat
+# exits 0, the mtime rule, `--since`, wave batching and four named prohibitions — and
+# never said the beat is BACKGROUNDED. Measured in one invocation over the two slices
+# before the fix: the Gate-adjudication dispatch slice carried `run_in_background` once,
+# the Bounded-join beat slice zero times.
+#
+# A FOREGROUND BEAT IS NOT A SLOW BEAT, IT IS A DEAD ONE. `ai-dlc-continue.sh` enumerates
+# four ways to believe you have a beat and not have one, and names this as the second: a
+# foreground call's exit trap clears the marker before the turn ends, so the join the lead
+# believes is armed is not, and the turn-end hook reports no live wait over a teammate that
+# has not delivered. `wait-for-deliverable.sh` states the premise the section dropped.
+# The section calls itself the ONLY sanctioned way to wait for a teammate and three sites
+# delegate to it BY NAME, so the duty is sited here rather than at any one caller.
+#
+# WHY THE ANCHOR IS THE CALL FORM AND NOT THE BARE PARAMETER NAME. The bare token
+# `run_in_background` in the slice is reachable by a sentence FORBIDDING backgrounding —
+# measured, a seeded "Never pass `run_in_background: true` to this beat" scores a bare-token
+# anchor CLOSED while asserting the opposite of the fix. Arm `beat-bg-polarity` convicts
+# that shape on its own, so a token-presence pass cannot be earned by a prohibition.
+#
+# A PROSE-ONLY SPELLING SCORES AS NOT-FIXED, AND THAT IS A DELIBERATE CHOICE. A correct
+# statement in the section's own register — "the beat is ALWAYS BACKGROUNDED" — carries the
+# property and not the token, and these arms report it STILL-LIVE. The alternative anchor,
+# keyed on `backgrounded`, false-CLOSES: that word already appears once in the slice at tip
+# ("a nonzero exit from a backgrounded command"), so it would pass against the pre-fix file.
+# The token is therefore mandated, the neighbouring dispatch site already spells it that
+# way, and this comment is here so a future author reading a red arm over competent prose
+# knows it is a choice rather than an oversight.
+#
+# THE SLICE LENGTH IS ASSERTED because the slicer terminates on a heading, and any edit that
+# removes or demotes the NEXT heading grows the slice until it reads the neighbour's call
+# form as the beat's own. Measured on copies: demoting the neighbour to setext grows the
+# beat slice from 46 lines to 93 and the subject arm then reads a token from the neighbour.
+# Derived with THIS slicer on the subject at tip: 46 lines. Band max 60.
+BEAT_BAND_MAX=60
+bg_cF() { local n; n="$(grep -cF -- "$1" <<<"$2")" || n=0; printf '%s' "$n"; }
+bg_cE() { local n; n="$(grep -cE -- "$1" <<<"$2")" || n=0; printf '%s' "$n"; }
+# Both slicers key on the heading TEXT at any level and terminate on the next heading at
+# `###` or shallower. Keying the CONTROL on text rather than on `^## ` is deliberate: an
+# ordinary prose demote of the neighbouring heading is not this work, and reporting it as a
+# dead control would spend the one signal that separates a restructure from a live defect.
+beat_slice() { awk '/^#+ Bounded-join beat/{f=1;print;next} f&&/^#{1,3} /{exit} f{print}' "$1"; }
+disp_slice() { awk '/^#+ Gate-adjudication dispatch/{f=1;print;next} f&&/^#{1,3} /{exit} f{print}' "$1"; }
+
+# score_bg <file> -> "<beat-lines> <ctl> <subj> <proh>"
+score_bg() {
+  local f="$1" b d bl ctl subj proh
+  b="$(beat_slice "$f")"; d="$(disp_slice "$f")"
+  bl="$(printf '%s\n' "$b" | wc -l | tr -d ' ')"
+  ctl="$(bg_cF 'run_in_background: true' "$d")"
+  subj="$(bg_cF 'run_in_background: true' "$b")"
+  proh="$(bg_cE '(Never|never|Do not|do not|must not|Avoid|avoid) [^.]*run_in_background' "$b")"
+  printf '%s %s %s %s' "$bl" "$ctl" "$subj" "$proh"
+}
+
+if [ -z "${GATE_PROC_MD:-}" ]; then
+  bad "FIXTURE BROKEN — _gate-procedures.md unresolved, so the beat-backgrounded arms asserted nothing"
+else
+  BGW="$(mktemp -d)"
+  set -- $(score_bg "$GATE_PROC_MD")
+  BG_L="$1"; BG_CTL="$2"; BG_SUBJ="$3"; BG_PROH="$4"
+
+  # ARM 1 — the slice is in band. Out of band, every content arm below it is being
+  # satisfied by a neighbouring section rather than by the beat.
+  if [ "$BG_L" -gt 0 ] && [ "$BG_L" -le "$BEAT_BAND_MAX" ]; then
+    ok "beat-slice-band: the Bounded-join beat slice is $BG_L lines (band 1..$BEAT_BAND_MAX)"
+  else
+    bad "beat-slice-band: the slice is $BG_L lines, outside 1..$BEAT_BAND_MAX — it has run past its terminating heading and is reading a neighbouring section's prose as its own"
+  fi
+
+  # ARM 2 — the CONTROL, in the same invocation, over the thing the verdict claims is
+  # present elsewhere. Its loss is a RESTRUCTURE and is reported separately: an ordinary
+  # reword of the dispatch call form is not this work and must not read as a live defect.
+  if [ "$BG_CTL" -gt 0 ]; then
+    ok "beat-bg-control: the Gate-adjudication dispatch slice still spells the call form ($BG_CTL) — the slicer and the grep both ran"
+  else
+    bad "beat-bg-control: the dispatch slice spells 'run_in_background: true' $BG_CTL times. At zero this is a restructure of the neighbouring section, not a live defect in the beat — the subject arm below is unanchored and its reading proves nothing either way."
+  fi
+
+  # ARM 3 — the SUBJECT.
+  if [ "$BG_SUBJ" -gt 0 ]; then
+    ok "beat-is-backgrounded: the Bounded-join beat slice spells 'run_in_background: true' ($BG_SUBJ)"
+  else
+    bad "beat-is-backgrounded: the Bounded-join beat prescribes the call and never says it is backgrounded. A foreground beat's exit trap clears the in-flight marker before the turn ends, so the join reads as armed and is not — and this section is the ONLY sanctioned way to wait for a teammate, so every join delegating to it by name inherits the omission."
+  fi
+
+  # ARM 4 — POLARITY. A prohibition carries the token and asserts the opposite.
+  if [ "$BG_PROH" -eq 0 ]; then
+    ok "beat-bg-polarity: no sentence in the slice forbids the backgrounded call"
+  else
+    bad "beat-bg-polarity: the slice FORBIDS passing run_in_background to this beat ($BG_PROH). That contradicts wait-for-deliverable.sh's own premise and ai-dlc-continue.sh's enumeration of dead beats, and it satisfies a bare token-presence anchor while inverting the property."
+  fi
+
+  # --- THE MUTANTS. Arms 3 and 4 are prose-presence-shaped and arm 1 is a band; all three
+  # pass against a reader that never ran. Each mutant is a COPY, built by rewriting whole
+  # lines with awk rather than by a `sed` whose `&` is the entire match, guarded by `cmp -s`,
+  # and scored on the ONE arm it must move.
+
+  # M-BG1 — PROHIBITION on a tree carrying the fix: the token is present, the polarity
+  # inverted. Arm 4 must own it.
+  M_PROH="$BGW/gp-prohibition.md"
+  awk '
+    { print }
+    /^\*\*The call\.\*\* One `Bash` call/ {
+      print ""
+      print "**Never pass `run_in_background: true` to this beat** — the lead must see"
+      print "the result inline."
+    }
+  ' "$GATE_PROC_MD" > "$M_PROH"
+  if cmp -s "$GATE_PROC_MD" "$M_PROH"; then
+    bad "MUTANT bg1 DID NOT APPLY — the prohibition rewrite produced a byte-identical copy, so the verdict below would be scored against the original"
+  else
+    set -- $(score_bg "$M_PROH")
+    if [ "$4" -gt 0 ] && [ "$2" -gt 0 ] && [ "$1" -le "$BEAT_BAND_MAX" ]; then
+      ok "MUTANT bg1 KILLED: a seeded prohibition is convicted by beat-bg-polarity (proh=$4) with the control alive (ctl=$2)"
+    else
+      bad "MUTANT bg1 SURVIVED: prohibition copy scored lines=$1 ctl=$2 subj=$3 proh=$4; wanted proh>0. A sentence forbidding the backgrounded call passes a token anchor while asserting the opposite of the fix."
+    fi
+  fi
+
+  # M-BG2 — the FIX REMOVED: the call spec reverted to its pre-fix wording and the
+  # mandating paragraph deleted. This is the world arm 3 exists for, and without it arm 3
+  # passes against a slicer that returns the whole file.
+  #
+  # IT STANDS DOWN WHEN ARM 3 HAS ALREADY FIRED. This mutant removes the FIX, so on a tree
+  # that never carried it the anchors match nothing and it reports DID NOT APPLY — a second
+  # failure for the one defect arm 3 just named, which is the entangled-assertion shape.
+  # Arm 3 owns the unfixed tree and its firing there IS the discrimination this mutant
+  # exists to demonstrate. M-BG1 and M-BG3 do not stand down: M-BG1 only appends, and
+  # M-BG3's heading anchor exists on every tree, so both stay armed either way.
+  M_NOBG="$BGW/gp-nobg.md"
+  if [ "$BG_SUBJ" -eq 0 ]; then
+    printf '  --    MUTANT bg2 stood down: beat-is-backgrounded fired on the real subject, so the fix this mutant removes is not present to remove\n'
+  else
+  awk '
+    /^\*\*The call\.\*\* One `Bash` call, `run_in_background: true`, every path in the wave:$/ {
+      print "**The call.** One `Bash` call, every path in the wave:"; next
+    }
+    /^\*\*`run_in_background: true` is part of the call, not a preference\.\*\* A foreground$/ { skip=1; next }
+    skip && /^live wait over a teammate that has not delivered\.$/ { skip=0; next }
+    skip { next }
+    { print }
+  ' "$GATE_PROC_MD" > "$M_NOBG"
+  if cmp -s "$GATE_PROC_MD" "$M_NOBG"; then
+    bad "MUTANT bg2 DID NOT APPLY — the fix-removal rewrite produced a byte-identical copy"
+  else
+    set -- $(score_bg "$M_NOBG")
+    if [ "$3" -eq 0 ] && [ "$2" -gt 0 ] && [ "$4" -eq 0 ] && [ "$1" -le "$BEAT_BAND_MAX" ]; then
+      ok "MUTANT bg2 KILLED: with the fix reverted the beat slice carries the call form 0 times while the control still reads $2 — beat-is-backgrounded discriminates"
+    else
+      bad "MUTANT bg2 SURVIVED: fix-removed copy scored lines=$1 ctl=$2 subj=$3 proh=$4; wanted subj=0 with ctl>0. Arm 3 cannot tell the pre-fix section from the fixed one."
+    fi
+  fi
+  fi
+
+  # M-BG3 — SLICER OVER-READ with the defect LIVE. The neighbouring heading is rewritten
+  # setext, which no level-keyed slicer terminates on, so the beat slice swallows it and
+  # reads the neighbour's call form as the beat's own. THIS is the world the band exists
+  # for: today an ATX demote also kills the control, which saves the verdict by adjacency
+  # rather than by mechanism, and any edit inserting a heading between the two sections
+  # closes the subject without touching the control at all.
+  M_OVER="$BGW/gp-overread.md"
+  awk '
+    /^\*\*The call\.\*\* One `Bash` call, `run_in_background: true`, every path in the wave:$/ {
+      print "**The call.** One `Bash` call, every path in the wave:"; next
+    }
+    /^\*\*`run_in_background: true` is part of the call, not a preference\.\*\* A foreground$/ { skip=1; next }
+    skip && /^live wait over a teammate that has not delivered\.$/ { skip=0; next }
+    skip { next }
+    /^## Gate-adjudication dispatch \(referenced by the gate\)$/ {
+      print "Gate-adjudication dispatch (referenced by the gate)"
+      print "---------------------------------------------------"
+      next
+    }
+    { print }
+  ' "$GATE_PROC_MD" > "$M_OVER"
+  if cmp -s "$GATE_PROC_MD" "$M_OVER"; then
+    bad "MUTANT bg3 DID NOT APPLY — the over-read rewrite produced a byte-identical copy"
+  else
+    set -- $(score_bg "$M_OVER")
+    if [ "$1" -gt "$BEAT_BAND_MAX" ]; then
+      ok "MUTANT bg3 KILLED: the beat slice grows to $1 lines and beat-slice-band refuses it, rather than the subject arm reading a call form off the swallowed neighbour"
+    else
+      bad "MUTANT bg3 SURVIVED: over-read copy's beat slice read $1 lines (subj=$3), still in band. The slice has absorbed the next section and the subject arm is scoring the neighbour's prose."
+    fi
+  fi
+
+  # M-BG4 — UNMUTATED CONTROL with a positive conjunct. A copy that cannot be read gives
+  # back "nothing wrong" exactly; this demands the same four numbers AND a non-zero one.
+  M_CTL="$BGW/gp-control.md"
+  cp "$GATE_PROC_MD" "$M_CTL"
+  bg_base="$BG_L $BG_CTL $BG_SUBJ $BG_PROH"
+  bg_copy="$(score_bg "$M_CTL")"
+  if [ "$bg_copy" = "$bg_base" ] && [ "$BG_CTL" -gt 0 ]; then
+    ok "beat-bg unmutated control: byte-identical copy reproduces lines/ctl/subj/proh = $bg_copy"
+  else
+    bad "beat-bg unmutated control: copy scored '$bg_copy', subject scored '$bg_base' — two readings of one file disagree, so the mutant verdicts above describe an unstable reader"
+  fi
+fi
+
 rm -rf "$ROOT"
 echo ""
 [ "$fails" -eq 0 ] && { echo "handoff-resume-guard: PASS"; exit 0; }
