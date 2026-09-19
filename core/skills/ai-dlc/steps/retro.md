@@ -860,8 +860,14 @@ line:
 dual-counter: consecutive-deploy-clean: <N>/5; consecutive-no-regression: <M>/5 (run-id: <CI-run-id>).
 ```
 
-Each counter is tracked against its own 5/5 target. A sprint is
-ship-quality when EITHER counter reaches 5/5.
+Each counter is tracked against its own 5/5 target, and the two do not
+carry equal authority. `consecutive-deploy-clean` at 5/5 declares a sprint
+ship-quality on its own. `consecutive-no-regression` at 5/5 declares it
+only where every smoke FAIL still outstanding is a recorded carry-over —
+the retro names the failing check, the run-id it first failed under, and
+the sprint it was carried from. An outstanding FAIL missing any of those
+three leaves the sprint short of ship-quality whatever the looser counter
+reads.
 
 ### 5. Human Commentary
 
