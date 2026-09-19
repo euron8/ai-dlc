@@ -108,9 +108,14 @@ bounded file-wait beat, and it is the ONLY sanctioned way to wait for a teammate
 and a `Skill` spawn returns no handle at all. Every ai-dlc teammate delivers by file
 (Rule 20): **the deliverable file IS the handle.**
 
-**The call.** One `Bash` call, every path in the wave:
+**The call.** One `Bash` call, `run_in_background: true`, every path in the wave:
 
     scripts/ai-dlc/wait-for-deliverable.sh [--since <epoch|ISO8601>] <path> [<path> ...]
+
+**`run_in_background: true` is part of the call, not a preference.** A foreground
+beat is a dead beat: its exit trap clears the in-flight marker before your turn
+ends, so the join you believe is armed is not, and the turn-end hook reports no
+live wait over a teammate that has not delivered.
 
 - `exit 0` — beat complete. Read the output: consume the `DELIVERED <path>` lines,
   beat again over the `WAITING <path>` ones. Exit 0 alone does not mean all landed.
