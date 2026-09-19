@@ -213,9 +213,9 @@ the underived-claim bar all live in `team-roles/adversary.md` and
 step file is a copy that drifts.
 
 **Join every spawn on its DELIVERABLE** — one `scripts/ai-dlc/wait-for-deliverable.sh
-<path> [<path> ...]` call per wave ("Bounded-join beat" above). A hand-rolled
-`until`/`while`/`sleep` wait is a Rule 29 Check A violation that gate Check 25
-counts.
+<path> [<path> ...]` call per wave, `run_in_background: true` ("Bounded-join beat"
+above). A hand-rolled `until`/`while`/`sleep` wait is a Rule 29 Check A violation that
+gate Check 25 counts.
 
 **Intensity.** Run the minimum cycle SKILL.md Rule 8's intensity table names for
 the declared `validation_intensity` — read that row; a copy here drifts. A

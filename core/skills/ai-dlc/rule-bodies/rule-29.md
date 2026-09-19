@@ -82,9 +82,11 @@ sub-skill, Rule 20(i), so the lead holds no handle whatsoever). Both deliver by
 file write (Rule 20, "File-write deliverable"), so the file IS the handle, waited
 on in beats:
 
-**Do not retype the loop. Call the script -- and pass the WHOLE WAVE to ONE call:**
+**Do not retype the loop. Call the script -- and pass the WHOLE WAVE to ONE call,
+`run_in_background: true`:**
 
-    scripts/ai-dlc/wait-for-deliverable.sh <path> [<path>...]
+    Bash(run_in_background: true):
+      scripts/ai-dlc/wait-for-deliverable.sh <path> [<path>...]
 
     exit 0 -- BEAT COMPLETE. This call WAS the beat. READ THE OUTPUT:
               `DELIVERED <path>` lines are yours to consume; `WAITING

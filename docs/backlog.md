@@ -1802,44 +1802,67 @@ verify: sh S=$(LC_ALL=C awk '/CHECK_LOADED: 5 /,/CHECK_LOADED: 6 /' core/skills/
 ## BL-041
 
 **The one sprint-ship counter that refuses to grandfather a smoke FAIL is rendered non-binding by
-the disjunction that reads both counters.** `core/skills/ai-dlc/steps/retro.md:710-713` defines
+the disjunction that reads both counters.** `core/skills/ai-dlc/steps/retro.md:845-848` defines
 `consecutive-deploy-clean` as resetting "on ANY smoke FAIL, regardless of whether the FAIL is new
-or pre-existing — strictest counter; reflects ship-quality without grandfathering." `:728-729`
+or pre-existing — strictest counter; reflects ship-quality without grandfathering." `:863-864`
 then reads them: "A sprint is ship-quality when **EITHER** counter reaches 5/5." A FAIL carried
 across a sprint boundary holds `consecutive-deploy-clean` at 0 permanently while
 `consecutive-no-regression` climbs to 5/5, and the sprint is declared ship-quality with the FAIL
 live. The strict counter cannot decide anything it does not already share with the loose one.
 
 The renewal loop the entry filed is stated mechanically rather than left as an omission:
-`:716-717` resets `consecutive-no-regression` "ONLY on a NEW smoke FAIL not present in the prior
+`:849-854` resets `consecutive-no-regression` "ONLY on a NEW smoke FAIL not present in the prior
 deploy-validate run" — so "new" is defined by comparison against the previous run's record, and
 nothing re-derives it against the artifact that set the original threshold. Measured across
-`core/skills/`: `pre-existing` occurs 10 times, of which exactly **3** are in the pipeline steps
-and all three are `retro.md:712`, `:715`, `:718`; the other 7 are in `ai-dlc-update/reconcile/*`
-and are unrelated. Control in the same invocation: `pre-exxisting` = **0**, and `grandfather` = 1
-(`retro.md:713`), so the search ran and discriminates.
+`core/skills/`: `pre-existing` occurs 11 times, of which exactly **3** are in the pipeline steps
+and all three are in `retro.md`'s two counter definitions; the other 8 are in
+`ai-dlc-update/reconcile/*` and are unrelated. Control in the same invocation: `pre-exxisting` =
+**0**, and `grandfather` = 1 (`retro.md:848`), so the search ran and discriminates.
 
 **The filing named the wrong absence, and the correction moves the fix target.** It filed that
 "nothing requires a red check carried across a sprint boundary to be re-justified," which reads as
 a missing rule to be added. There is no missing rule — the non-grandfathering requirement already
-exists at `:710-713`, fully written. The defect is that `:729` makes it optional. That is a
+exists at `:845-848`, fully written. The defect is that `:863-864` makes it optional. That is a
 different and much cheaper fix than the one the entry sketched, and it moves the change from
-"add a filing obligation" to "the disjunction at `:729`."
+"add a filing obligation" to "the disjunction at `:863-864`."
 
-The anchor is `EITHER counter reaches 5/5` because a fix cannot leave that clause standing and
-still bind the strict counter — every satisfying change either replaces the disjunction or
-qualifies it, and both edit that line. The usual quote-back hazard (a fix that documents what it
-removed, leaving the anchor alive in a comment) is suppressed here by a second mechanism rather
-than by hope: `retro.md` is in `core/scripts/audit-rule-files.sh`'s `IN_SCOPE` at `:374`, and an
-origin note in step prose is a tier-1 blocking finding there, so the removal record has nowhere in
-this file to live. The receipt's first arm exits **2** if the Sprint-Ship Verification section
-stops naming `consecutive-no-regression` at all, separating a restructure from a live defect.
+**THE FIX IS A QUALIFIED DISJUNCTION AND A BARE CONJUNCTION IS A REGRESSION, NOT A SPELLING.**
+Derived read-only over the reference consumer's `docs/retro/`: 105 dual-counter readings, **4** in
+the wedge state (`deploy-clean` 0 with `no-regression` at or past 5), against a same-invocation
+control of **32** readings at `deploy-clean` 5 or more — so the strict counter is reachable and
+the defect is live. A conjunction requiring both counters would have withheld ship-quality across
+an essentially unbroken run of `deploy-clean: 0/5` on a pre-existing FAIL that consumer could not
+fix, which is `.claude/rules/mechanism-design.md`'s "never ship a check that wedges live work".
+The satisfying shape is therefore: the strict counter declares alone, and the loose counter
+declares only where every outstanding FAIL is a recorded carry-over naming the failing check, the
+run-id it first failed under, and the sprint it was carried from.
+
+**The receipt is NOT anchored on the raw literal, because the literal dies on a reflow.**
+`EITHER counter reaches 5/5` sat on one line by accident of the current wrap; a reflow-only copy
+with the disjunction fully intact takes the literal apart, the control arm passes cheerfully and
+the entry reads CLOSED with the defect untouched. The span is therefore whitespace-normalised
+before it is searched, and the literal arm is scored on the normalised text. Two further arms
+close the other holes a literal cannot: the span's LENGTH must be in band, because
+`awk '/start/,/end/'` runs to EOF if either boundary moves — measured, an unmatchable end pattern
+grows the span from 26 lines to 496 and the literal arm then reads a file, not a section; and the
+declaration's SEMANTICS are read as two sentence-level facts, so a restatement that drops the
+literal while leaving both counters standalone still reports STILL-LIVE.
+
+The first arm exits **2** if the Sprint-Ship Verification section stops naming
+`consecutive-no-regression` at all, and the band arm exits **2** as well — a restructure is
+separated from a live defect, and both are separated from an unreadable subject, which exits
+**9**. The quote-back hazard has no mechanism against it here: `retro.md` is in
+`core/scripts/audit-rule-files.sh`'s `IN_SCOPE`, but that auditor's origin-tag scan requires the
+trigger word inside PARENTHESES, so a bare "this formerly read" sentence is invisible to it. What
+saves the receipt is its direction — a quote-back keeps the literal alive on the normalised span
+and reports STILL-LIVE, which is the safe way to be wrong. Write no removal record in the step
+prose.
 
 Discharges the consumer entry `PC-S295-RETRO-RED-SMOKE-CROSSING-SPRINT-BOUNDARY` at pinned ledger
 line 577.
 
 
-verify: sh S=$(LC_ALL=C awk '/^### Sprint-Ship Verification/,/^### 5\. Human Commentary/' core/skills/ai-dlc/steps/retro.md); grep -q 'consecutive-no-regression' <<<"$S" || exit 2; ! grep -q 'EITHER counter reaches 5/5' <<<"$S"
+verify: sh R=core/skills/ai-dlc/steps/retro.md; [ -f "$R" ] || exit 9; S=$(LC_ALL=C awk '/^### Sprint-Ship Verification/,/^### 5\. Human Commentary/' "$R"); [ -n "$S" ] || exit 9; L=$(printf '%s\n' "$S" | wc -l); { [ "$L" -ge 15 ] && [ "$L" -le 60 ]; } || exit 2; N=$(printf '%s\n' "$S" | tr '\n' ' ' | tr -s ' '); grep -qF 'consecutive-no-regression' <<<"$N" || exit 2; ! grep -qF 'EITHER counter reaches 5/5' <<<"$N" || exit 1; V=$(printf '%s' "$N" | tr '.' '\n' | awk '/consecutive-deploy-clean/ && /ship-quality/ && !/consecutive-no-regression/ {a=1} /consecutive-no-regression/ && /only where|only when|only if|unless|provided that/ {b=1} END{print a+0, b+0}'); [ "$V" = "1 1" ]
 ## BL-042
 
 **Check 17's PRD arm reads the provenance block out of an artifact the invocation it pins is
@@ -1891,21 +1914,21 @@ verify: sh S=$(LC_ALL=C awk '/CHECK_LOADED: 17 /,/CHECK_LOADED: 18 /' core/skill
 ## BL-043
 
 **`_gate-procedures.md` owns the bounded-join beat, restates its whole contract, and never says
-the beat is backgrounded.** The token `run_in_background` occurs **once** in that file's 41,657
-bytes — at `core/skills/ai-dlc/steps/_gate-procedures.md:149`, inside the Gate-adjudication
-*dispatch* section, about the `Agent` spawn. The **Bounded-join beat** section at `:91-132` is 41
-lines that prescribe the call form (`:101`), both exit codes, why a waiting beat exits 0, the
-mtime rule, `--since`, wave batching, and four named prohibitions — and not the one property that
-makes a beat a beat. Measured in one invocation over the two slices: Gate-adjudication dispatch =
-30 lines, `run_in_background` count **1**; Bounded-join beat = 41 lines, count **0**. Control that
-the grep works on that file at all: `wait-for-deliverable` = **5** hits.
+the beat is backgrounded.** As measured on the defect, the token `run_in_background` occurred
+**once** in that file's 47,764 bytes, inside the Gate-adjudication *dispatch* section, about the
+`Agent` spawn. The **Bounded-join beat** section — `core/skills/ai-dlc/steps/_gate-procedures.md:101`
+at this tip — is 40 lines prescribing the call form, both exit codes, why a waiting beat exits 0,
+the mtime rule, `--since`, wave batching, and four named prohibitions, and not the one property
+that makes a beat a beat. Measured in one invocation over the two slices on the defect:
+Gate-adjudication dispatch carried `run_in_background` **1** time; Bounded-join beat carried it
+**0** times. Control that the grep works on that file at all: `wait-for-deliverable` = **6** hits.
 
-That section calls itself "the ONLY sanctioned way to wait for a teammate" (`:94`), and three
-sites delegate to it by name — `:158` (gate-adjudicator), `:269` (adversarial review), `:431`
+That section calls itself "the ONLY sanctioned way to wait for a teammate" (`:104`), and three
+sites delegate to it by name — `:192` (gate-adjudicator), `:312` (adversarial review), `:475`
 (adversarial repair) — each reading `**Join** with the bounded-join beat (above)`. So the omission
 is inherited by every join the gate procedures describe.
 
-A foreground beat is not a slow beat, it is a **dead** one. `core/hooks/ai-dlc-continue.sh:568`
+A foreground beat is not a slow beat, it is a **dead** one. `core/hooks/ai-dlc-continue.sh:1318`
 enumerates four ways to believe you have a beat and not have one, and names this as (2): "a
 foreground call — its exit trap clears the marker before your turn ends". The same block prescribes
 the literal form the beat section omits: `Bash(run_in_background: true)
@@ -1915,34 +1938,50 @@ states the design premise the section drops — "This beat is BACKGROUNDED".
 **The filing this discharges named the wrong two sections and prescribed a fix that is now a
 restatement.** It asked for one line in "Adversarial review dispatch" and "Adversarial repair
 dispatch" mandating backgrounded-plus-bounded-join. The bounded-join half has since landed in both
-(`:269`, `:431`), and the backgrounded half of a *dispatch* is now SKILL.md Rule 29's global default
-— `SKILL.md:1550`, "`run_in_background: true` is now the DEFAULT for every spawn, not an exception"
-— so writing it into two step-file sections would restate a default rather than fix anything. The
-correction is **narrower in cause and wider in reach**: the missing property is on the *beat*, not
-the dispatch, and it is missing at the one site all three joins share.
+(`:312`, `:475`), and the backgrounded half of a *dispatch* is now Rule 29's global default —
+`core/skills/ai-dlc/rule-bodies/rule-29.md:72`, "`run_in_background: true` is now the DEFAULT for
+every spawn, not an exception" — so writing it into two step-file sections would restate a default
+rather than fix anything. That sentence is NOT in `SKILL.md`: `run_in_background` occurs there **0**
+times, against a same-invocation control of **1** for `Rule 29`. The correction is **narrower in
+cause and wider in reach**: the missing property is on the *beat*, not the dispatch, and it is
+missing at the one site all three joins share.
 
-The anchor is the beat section's own text because that is where the duty is sited: the three callers
-delegate, so a fix at any one of them fixes one join out of three. The control arm is the
-Gate-adjudication dispatch slice — a section-slicer or a grep that has stopped working reports
-STILL-LIVE rather than closing, which is the safe direction. `run_in_background` is a token the fix
-cannot be written without: it is the harness parameter, spelled that way at all 12 core files that
-name it, so this cannot be an anchor on a phrasing the filing invented.
+The duty is sited in the beat section because that is where the three callers delegate to: a fix at
+any one of them fixes one join out of three. `run_in_background: true` is the form the fix cannot be
+written without — the harness parameter, spelled identically at every core file that names it, so
+this cannot be an anchor on a phrasing the filing invented.
+
+**THE BARE TOKEN IS NOT THE ANCHOR, BECAUSE A PROHIBITION CARRIES IT.** A sentence forbidding
+backgrounding — the exact regression this entry exists to prevent, contradicting
+`wait-for-deliverable.sh:31` and `ai-dlc-continue.sh:1318` — spells `run_in_background: true` as
+readily as the fix does, and a presence test on the beat slice calls it fixed. The receipt therefore
+scores POLARITY separately from presence: a prohibition or a weakening ("optional", "never pass",
+"not required") anywhere in the slice reports STILL-LIVE, and the token must additionally sit within
+four lines of the `wait-for-deliverable.sh` call spec, which is where a mandate lives and a mere
+mention does not.
+
+**The control arm exits 2, not 1, because its margin is ONE.** `run_in_background` appears twice in
+the whole file and only the dispatch-slice occurrence is in the control's reach, so an ordinary prose
+tidy at that one line kills the control; collapsing that into the same exit as a live defect hides a
+dead instrument. The beat slice's LENGTH is asserted in band for the same reason — the slicer
+terminates only on `^## `, so demoting the neighbouring heading grows the slice from 40 lines to 93
+and the subject arm then reads the NEIGHBOUR's token. An unreadable or absent subject exits **9**.
 
 **The receipt takes the additive fix** — the mandate written into the beat section. A subtraction fix
 that deleted the restated call spec in favour of a bare Rule 29 citation would leave this reporting
 STILL-LIVE and needs the receipt re-anchored; that is stated rather than papered over, and the
-additive fix is the one the file's own shape invites, since `:149` already spells the token for the
-neighbouring dispatch.
+additive fix is the one the file's own shape invites, since the neighbouring Gate-adjudication
+dispatch (`:172` at this tip) already spells the token.
 
 Discharges the consumer entry `PC-S297-GATE-PROCEDURES-DISPATCH-NOT-MANDATED-BACKGROUND` at pinned
 ledger line 1361. **That entry's own receipt is a live false-close** and must not be reused:
 `theirs_has core/skills/ai-dlc/steps/_gate-procedures.md "Execute the sub-skills back-to-back, with
-no pause for human input between them:"` — that string is present today at `:190`, in the Validation
+no pause for human input between them:"` — that string is present today at `:225`, in the Validation
 cycle section, and has nothing to do with backgrounding. `theirs_has` closes on presence, so the
 entry evaluates as a CLOSE-CANDIDATE on a string whose presence is unrelated to the defect.
 
 
-verify: sh P=core/skills/ai-dlc/steps/_gate-procedures.md; S(){ LC_ALL=C awk -v h="$1" 'index($0,h)==1{f=1;next} f&&/^## /{exit} f' "$P"; }; C=$(S "## Gate-adjudication dispatch"); [ "$(grep -cF run_in_background <<<"$C")" -ge 1 ] || exit 1; B=$(S "## Bounded-join beat"); [ "$(grep -cF run_in_background <<<"$B")" -ge 1 ]
+verify: sh P=core/skills/ai-dlc/steps/_gate-procedures.md; [ -f "$P" ] || exit 9; SL(){ LC_ALL=C awk -v h="$1" 'index($0,h)==1{f=1;next} f&&/^## /{exit} f' "$P"; }; C=$(SL '## Gate-adjudication dispatch'); B=$(SL '## Bounded-join beat'); { [ -n "$C" ] && [ -n "$B" ]; } || exit 9; LB=$(printf '%s\n' "$B" | wc -l); { [ "$LB" -ge 10 ] && [ "$LB" -le 60 ]; } || exit 2; grep -qF 'run_in_background: true' <<<"$C" || exit 2; NEG=$(printf '%s\n' "$B" | tr '\n' ' ' | tr '.' '\n' | awk '/run_in_background/ && /[Nn]ever pass|[Nn]ever use|[Dd]o not pass|[Dd]o not use|[Mm]ust not pass|MUST NOT pass|[Nn]ever background|is optional|optional here|[Nn]ot required/{n++} END{print n+0}'); [ "$NEG" -eq 0 ] || exit 1; ADJ=$(printf '%s\n' "$B" | awk '/run_in_background: true/{t[NR]=1} /wait-for-deliverable\.sh/{c[NR]=1} END{n=0; for(i in t) for(j in c){d=i-j; if(d<0)d=-d; if(d<=4)n++} print n+0}'); [ "$ADJ" -ge 1 ]
 ## BL-048
 
 **Two of the three dev-role checks this consumer carries have no upstream equivalent, and the
@@ -4320,3 +4359,77 @@ the rows clear only on a root-privileged re-derivation, so a count-based receipt
 unattainable in this session and would read as a failure of a fix that works.
 
 verify: sh d=core/scripts/derive-fixture-readsets.sh; [ -f "$d" ] || exit 9; grep -q '^norm()' "$d" || exit 9; grep -q '^drop_ignored()' "$d" && grep -q 'check-ignore' "$d" && exit 0; exit 1
+
+## BL-277 — both pre-push runners spell their cross-run evidence records as literal `.git/` paths, so every gate run from a linked worktree loses the evidence silently and still reports green
+
+**DEFECT.** Found at batch 131 while collecting three fan-out hands, each of which had run the
+suite in its own agent worktree. Not fixed here — it is a different subsystem from that batch's
+two subjects, and the fix is one line in each of two byte-bound runners.
+
+**In a linked worktree `.git` is a FILE, not a directory.** Both runners define their records as
+literal `.git/`-prefixed paths and neither resolves `git rev-parse --git-common-dir` — measured 0
+occurrences of that token in each, against a positive control of 7 for `FIXTURE_JOBS` in the same
+file and a verified-absent negative control of 0. Six record variables carry 26 references between
+them.
+
+**The measured symptom is two errors on stderr and a run that keeps going:**
+
+    .githooks/pre-push: line 923: .git/ai-dlc-suite-key.log: Not a directory
+    .githooks/pre-push: line 660: .git/ai-dlc-fixture-durations.last: Not a directory
+
+Every write is `2>/dev/null || true` or an append whose failure is discarded, so the suite proceeds
+and the banner is unaffected. Measured on one worktree against the primary checkout in the same
+invocation: `ai-dlc-fixture-durations`, `ai-dlc-fixture-verified`, `ai-dlc-fixture-failures` and
+`ai-dlc-suite-key` are all present from the primary checkout and all unreachable from the
+worktree, with the `.git` shape itself as the discriminating control (DIR vs gitlink FILE).
+
+**What is lost is the CROSS-RUN half, which is the half that exists for the failures nobody can
+reproduce.** `FAILLOG_RECORD`'s own header says a red unit's output has to outlive the run that
+produced it, and records that this was filed by the reference consumer as
+`PC-S302-FIXTURE-SUITE-POOL-PRODUCES-AN-UNREPRODUCIBLE-FAIL-AND-THE-EVIDENCE-IS-DELETED-WITH-THE-TEMP-DIR`.
+A gate run from a worktree cannot keep the evidence that record exists to keep. `VERIFIED_RECORD`
+additionally feeds the content-key skip, so a worktree run also cannot bank what it verified. The
+IN-RUN verdict-completeness assertion walks the dispatched list and is unaffected — this entry is
+about what crosses runs, and the distinction is why the defect survives a green suite.
+
+**It is ONE defect in ONE program, not divergence.** The four shared definitions are byte-identical
+between `.githooks/pre-push` and `core/git-hooks/pre-push` — diffed in one invocation — which is
+what invariant **I66** binds. So the consumer's installed runner carries it too, and a consumer
+that pushes from a worktree loses the same evidence.
+
+**The write-side failure is not the whole cost.** A hand that runs the suite in its worktree gets a
+run that cannot record what it did, and its green is therefore not evidence about anything a later
+run can check. Measured at batch 131: three separate worktree gate runs were reported green or
+in-progress by their hands, and none had written a verdict record; the one trustworthy run was the
+lead's, from the primary checkout.
+
+**No fixture covers this.** Two fixtures build a worktree (`backlog-receipt-binding`,
+`fixture-git-env-seam`) and neither drives the hook's records; `prepush-worktree-env-scrub` is the
+nearest neighbour and its subject is the adjacent one — scrubbing an inherited `GIT_DIR` out of the
+hook's environment, not resolving the record paths — measuring 0 for any record token against a
+control of 21 for `worktree` in its own text.
+
+**The receipt DRIVES the subject rather than grepping the file that implements it, and the first
+form was rejected at the gate for exactly that.** The first draft asked whether the token
+`git-common-dir` appeared in both runners — a lexical test, which `validate-backlog-receipts.sh`'s
+`R2` arm caught by appending one comment line carrying that literal and watching the receipt go
+`1 -> 0`. R2 is a RATCHET that only moves down, and it was right: a receipt that cannot tell a fix
+from prose about a fix is the instrument the next batch would have used to decide whether its own
+fix worked.
+
+The shipped form builds a real repository under `mktemp`, adds a real linked worktree, EVALUATES
+each runner's own `DURATIONS_RECORD=` expression in both trees, and asks whether the write lands.
+A comment cannot satisfy it, and an implementation that resolves the common directory by any other
+means closes it correctly, because the test is the behaviour and not the spelling.
+
+**Scored on five trees, every mutation asserted applied.** Tip **1**. A comment carrying the old
+grep literal appended to both runners **1** — the arm that the first draft failed. Both runners
+resolving the common directory **0**. Only the DISTRIBUTION runner fixed **1**, because a fix that
+misses the consumer's copy is the half-fix I66 exists to prevent. The `DURATIONS_RECORD=` anchor
+renamed **9**, so a moved precondition cannot read as a close.
+
+**Its own control is the primary checkout**, asserted in the same invocation: the identical
+expression must resolve where `.git` is a directory. If it does not, the receipt exits 9 — a broken
+harness reports as unmeasured rather than as a finding.
+
+verify: sh s=.githooks/pre-push; c=core/git-hooks/pre-push; [ -f "$s" ] && [ -f "$c" ] || exit 9; d=$(mktemp -d) || exit 9; r="$d/r"; mkdir -p "$r" || exit 9; git init -q "$r" 2>/dev/null || { rm -rf "$d"; exit 9; }; printf 'x\n' > "$r/f"; git -C "$r" add -A >/dev/null 2>&1 && git -C "$r" -c user.email=t@t -c user.name=t commit -qm s >/dev/null 2>&1 || { rm -rf "$d"; exit 9; }; git -C "$r" worktree add -q --detach "$d/wt" >/dev/null 2>&1 || { rm -rf "$d"; exit 9; }; [ -f "$d/wt/.git" ] || { rm -rf "$d"; exit 9; }; n=0; bad=0; for f in "$s" "$c"; do e=$(LC_ALL=C grep -m1 -E '^DURATIONS_RECORD=' "$f") || { bad=9; break; }; p=$( cd "$r" && eval "$e" 2>/dev/null; { : > "$DURATIONS_RECORD"; } 2>/dev/null && echo 1 || echo 0 ); [ "$p" = 1 ] || { bad=9; break; }; w=$( cd "$d/wt" && eval "$e" 2>/dev/null; { : > "$DURATIONS_RECORD"; } 2>/dev/null && echo 1 || echo 0 ); [ "$w" = 1 ] || n=$((n+1)); done; rm -rf "$d"; [ "$bad" = 9 ] && exit 9; [ "$n" -eq 0 ] && exit 0; exit 1

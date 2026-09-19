@@ -54,9 +54,9 @@ retire only if read-time freshness becomes structurally guaranteed
 ### 1. Sprint-Level Adversarial Review
 
 **Join every spawn on its DELIVERABLE** — one
-`scripts/ai-dlc/wait-for-deliverable.sh <path> [<path> ...]` call per wave
-(`_gate-procedures.md`, "Bounded-join beat"). A hand-rolled `until`/`while`/`sleep`
-wait is a Rule 29 Check A violation; gate Check 25 counts it.
+`scripts/ai-dlc/wait-for-deliverable.sh <path> [<path> ...]` call per wave,
+`run_in_background: true` (`_gate-procedures.md`, "Bounded-join beat"). A hand-rolled
+`until`/`while`/`sleep` wait is a Rule 29 Check A violation; gate Check 25 counts it.
 
 
 `/bmad-review-adversarial-general` — final adversarial pass on the

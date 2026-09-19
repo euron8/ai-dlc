@@ -15,6 +15,69 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.607.0] - 2026-09-19
+
+### two step-file safety properties that fail silently in a consumer's own pipeline
+
+Both subjects come off the PC-BACKED WORKLIST, both edit a different file, and neither fix
+closes the other's receipt — scored in both directions. Both entries' receipts were REPLACED
+rather than reused: the filed pair were measured unsound, one closable by a harmless line
+reflow and one closable by a sentence asserting the opposite of the fix.
+
+#### `PC-S295-RETRO-RED-SMOKE-CROSSING-SPRINT-BOUNDARY` — the strict sprint-ship counter could
+decide nothing (`BL-041`)
+
+`retro.md`'s Sprint-Ship Verification defined `consecutive-deploy-clean` to reset on ANY smoke
+FAIL "regardless of whether the FAIL is new or pre-existing — strictest counter; reflects
+ship-quality without grandfathering", and then read the two counters as a bare disjunction: a
+sprint was ship-quality when EITHER reached 5/5. A FAIL carried across a sprint boundary pins the
+strict counter at 0 permanently while `consecutive-no-regression` climbs, so the disjunction
+declared the sprint ship-quality with the FAIL live and the strict counter could decide nothing
+the loose one did not already decide. Derived over the reference consumer's retro history: 105
+dual-counter readings, 4 in exactly that wedge state, against a same-invocation control of 32
+readings with the strict counter at or past 5.
+
+The disjunction is now QUALIFIED rather than removed. `consecutive-deploy-clean` at 5/5 declares
+ship-quality on its own; `consecutive-no-regression` at 5/5 declares it only where every
+outstanding smoke FAIL is a recorded carry-over naming the failing check, the run-id it first
+failed under, and the sprint it was carried from. A bare CONJUNCTION was scored as a regression,
+not as a second spelling: it would have withheld that consumer's ship-quality declaration across
+an essentially unbroken run of `deploy-clean: 0/5` on a pre-existing FAIL it could not fix.
+
+The receipt no longer anchors on the raw literal. `EITHER counter reaches 5/5` sat on one line by
+accident of the current wrap, and a reflow-only copy with the defect fully intact scored CLOSED
+while the control arm passed. The span is whitespace-normalised before it is searched, its LENGTH
+is asserted in band — an unmatchable end pattern grows `awk '/start/,/end/'` from 26 lines to 496
+— and the declaration's semantics are read as two sentence-level facts, so a restatement that
+drops the literal while leaving both counters standalone still reports STILL-LIVE.
+
+#### `PC-S297-GATE-PROCEDURES-DISPATCH-NOT-MANDATED-BACKGROUND` — the bounded-join beat never said
+it was backgrounded (`BL-043`)
+
+`_gate-procedures.md`'s Bounded-join beat section prescribed the whole beat contract — the call
+form, both exit codes, why a waiting beat exits 0, the mtime rule, `--since`, wave batching and
+four named prohibitions — and never the one property that makes a beat a beat. A foreground beat
+is not a slow beat: its exit trap clears the in-flight marker before the turn ends, which
+`ai-dlc-continue.sh` already enumerates as one of four ways to believe you have a live beat and
+not have one, and which `wait-for-deliverable.sh`'s own header states as the design premise. The
+section calls itself the only sanctioned way to wait for a teammate and three sites delegate to
+it by name, so the omission was inherited by every join the gate procedures describe.
+
+`run_in_background: true` now sits in the call spec itself, with a paragraph mandating it as part
+of the call. Every other core carrier that RESTATED a beat call spec without it was corrected in
+the same change — `rule-29.md`, `requirements.md`, `discovery.md`, `sprint-review.md`,
+`carry-over-evaluation.md`, `route.md`, `gate-validation.md` and one further site in
+`_gate-procedures.md` itself; the three sites that already CITE the beat section by name were
+left citing it.
+
+The receipt no longer anchors on the bare parameter name, which a sentence FORBIDDING
+backgrounding spells as readily as the fix does — measured, that prohibition scored CLOSED while
+asserting the opposite of the fix. Polarity is scored separately from presence, the token must
+sit within four lines of the call spec, the beat slice's length is asserted in band (demoting the
+neighbouring heading grows it from 40 lines to 93 and the subject arm then reads the neighbour),
+and control failure now exits 2 rather than collapsing a dead instrument into the same verdict as
+a live defect.
+
 ## [0.606.0] - 2026-09-19
 
 ### two false-close producers: a ledger-ref election that cannot fire, and an absent-subject guard that cannot spell `.git/`

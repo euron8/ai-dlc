@@ -1891,7 +1891,8 @@ against the one the previous gate recorded:
 and only one of them has something left to do:
 
 - **Arms A / C (starvation, unbounded wait).** Re-issue any still-pending wait through
-  `scripts/ai-dlc/wait-for-deliverable.sh` — one call, every path in the wave — and record the
+  `scripts/ai-dlc/wait-for-deliverable.sh` — one call, every path in the wave,
+  `run_in_background: true` (`_gate-procedures.md`, "Bounded-join beat") — and record the
   count.
 - **Arm B (steamroll), and arm D.** Nothing to re-issue. These fire on a historical fact in
   an append-only transcript: the call was made, and no later action un-makes it. Do NOT read
