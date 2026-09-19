@@ -181,6 +181,13 @@ run deflected before step 2 and the operator dropped the lever there. Episode:
    and the `skill:ai-dlc` category now measures a 53,375 B body against the baseline's
    108,508 B, so its share moves for a reason the census cannot distinguish from a change in
    session mix. Report the per-session byte count beside the share.
+   **A third hazard, and it is the one that reads as a null result:** Lever C's effect lands in
+   graph's `.claude/agents/*.md`, which is GITIGNORED and rendered from `aiDlcRoles` by
+   `core/scripts/render-agent-definitions.sh`. It is live dispatch input that no git-based
+   corpus can see, so measuring `omitClaudeMd` by diffing the consumer tree returns zero and
+   reads as "the lever did nothing". Measure it in the rendered files on disk, and note that a
+   later `aiDlcRoles` change needs the renderer re-run locally or the consumer's pre-push
+   blocks on drift.
 4. **Re-derive this block after each merge.** Run the derive block below, replace the Status
    paragraph and the figures in the lever actions with the fresh values, and move any lever
    whose release has merged out of the Next-actions list into the Status paragraph, naming
