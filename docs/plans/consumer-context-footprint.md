@@ -40,14 +40,34 @@ MERGED. Levers are ordered by measured payoff and each is one release. **Every l
 resolved: B, C, D and E have shipped, and A is dropped by operator ruling. No lever work
 remains — what is left is the consumer-side observation, which is operator-gated.**
 
-**The consumer-side observation is UNREACHABLE today, measured rather than assumed.** Read-only
-against `/Users/n8/git/graph` on 2026-09-19: `.claude/skills/ai-dlc/SKILL.md` is **108,508 B**,
-the pre-Lever-D size to the byte; `.claude/skills/ai-dlc/rule-bodies/` holds **0** entries and
-`.claude/skills/ai-dlc/steps/_dispatch-protocol.md` is absent, against a control of
-`steps/implementation.md` present. The consumer has not pulled any of 0.602.0–0.605.0, so
-action 3's census would re-measure the 2026-09-18 baseline and read as a null result for four
-shipped levers. The observation point opens when the operator pulls; nothing in this repo moves
-it. The fresh-resume check (action 5) was re-run at `43ef2c5a` in a detached worktree of
+**THE PULL HAS LANDED; the observation point is HALF open.** The operator pulled
+0.601.0 → 0.605.0 into `/Users/n8/git/graph` on 2026-09-19 as squash commit `554e4a32`
+(PR #1090). Verified here by CONTENT, not by the pulling session's report and not by ancestry,
+which a squash makes false: consumer `SKILL.md` **53,375 B**, `steps/implementation.md`
+**17,913 B**, `rule-bodies/` **7** entries, `steps/_dispatch-protocol.md` present,
+`bashOutputMaxChars` **8000**, and `omitClaudeMd` true on exactly `adversary`, `analyst` and
+`gate-adjudicator` against controls of `dev` and `qa` absent. All four levers are now installed
+on the consumer.
+
+**The census still cannot be taken, for the OTHER half of the done-when: no sprint has run.**
+Zero `_bmad-output` files and zero transcripts are newer than the pull, against a control of
+zero newer than a future date. The baseline this closes against is per-session byte shares, so
+a corpus with no post-pull session produces no post-pull share. Action 3's observation point is
+a pull AND one sprint; the second condition is the live one. **Take the census when a graph
+sprint has run on the installed 0.605.0, and re-derive rather than reusing the
+2026-09-18 table.**
+
+**A time-comparison hazard, measured here:** the pulling session reported the merge as
+`2026-09-19T16:04:04Z` and this machine runs EDT (UTC−4), so a first pass comparing that stamp
+against local `mtime`s put the merge four hours in the future and scored every consumer
+transcript as pre-pull — a false zero that reads exactly like "no activity". Convert to epoch
+before comparing, and control with a genuinely future date.
+
+Superseded reading, kept because it is the measurement that dated the pull: before `554e4a32`,
+consumer `SKILL.md` read **108,508 B** — the pre-Lever-D size to the byte — with `rule-bodies/`
+holding 0 entries and `_dispatch-protocol.md` absent.
+
+The fresh-resume check (action 5) was re-run at `43ef2c5a` in a detached worktree of
 `origin/main`: derive block control **8**, `validate-plan-shape.sh` 0 errors 0 warnings,
 plan 18,848 B, and the next-action list names no lever — control, the Status block names
 levers 8 times.
@@ -147,11 +167,20 @@ run deflected before step 2 and the operator dropped the lever there. Episode:
    `autoCompactWindow`, `MAX_MCP_OUTPUT_TOKENS`, a `# Compact instructions` section in
    `CLAUDE.md.template`: each is either consumer-owned `env`, negligible, or a restatement of
    what `ai-dlc-precompact.sh:104` already emits.
-3. **Consumer-side measurement, after each lever merges.** On a `file://` clone of graph,
-   rehearse the pull (`/ai-dlc-update` runbook — READY, never dispatched: a consumer pull is
-   operator-initiated), then re-run the transcript census in this file's Derivation section
-   against the graph transcripts once the operator has pulled and run a sprint. The number that
-   closes a lever is the category's share moving on the consumer, not a green gate here.
+3. **Consumer-side measurement — the pull is DONE, the sprint is not.** The pull landed as
+   `554e4a32` and all four levers are installed on graph, verified by content in the Status
+   block above. The remaining condition is one graph sprint on the installed 0.605.0; until
+   then the transcript corpus holds no post-pull session and the census has nothing to read.
+   When a sprint has run, re-run the derive block against the graph transcripts and compare
+   category-by-category against the 2026-09-18 baseline in the Derivation section. The number
+   that closes a lever is the category's share moving on the consumer, not a green gate here.
+   **Two hazards, both measured:** the corpus is CENSORED — graph's Bash results are truncated
+   at 30,000 characters by something graph does not declare, so every `bytes above cap` figure
+   taken from it is a FLOOR (evidence:
+   `~/.claude/projects/-Users-n8-git-ai-dlc/memory/ai_dlc_graph_bash_output_censored_at_30000.md`);
+   and the `skill:ai-dlc` category now measures a 53,375 B body against the baseline's
+   108,508 B, so its share moves for a reason the census cannot distinguish from a change in
+   session mix. Report the per-session byte count beside the share.
 4. **Re-derive this block after each merge.** Run the derive block below, replace the Status
    paragraph and the figures in the lever actions with the fresh values, and move any lever
    whose release has merged out of the Next-actions list into the Status paragraph, naming
