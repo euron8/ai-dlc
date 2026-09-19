@@ -15,6 +15,95 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.606.0] - 2026-09-19
+
+### two false-close producers: a ledger-ref election that cannot fire, and an absent-subject guard that cannot spell `.git/`
+
+Both subjects were chosen off the PC-BACKED WORKLIST and both produce a FALSE CLOSE, which
+this system calls its worst output. Neither fix closes the other's receipt.
+
+#### `PC-S312-TRUNK-PUSH-DECLINES-TO-POLICE-THE-TRUNK` — the absent-subject guard (`BL-143`)
+
+`receipt_absent_subjects()` routes a receipt whose SUBJECT is missing to `NEEDS-REVIEW`, because
+a non-zero exit for an absence is indistinguishable from one for a fix. Its prefix allow-list
+could not spell `.git/hooks/pre-push`, so for exactly the subject a fresh checkout most often
+lacks — `git clone` does not carry `.git/hooks/` — the guard was a check that could not fire and
+the row read `CLOSE-CANDIDATE`. It had already cost one: the `0.471.0 → 0.479.0` rehearsal
+recorded 2 where the live run correctly reports 1.
+
+One code line: `.git/?*` added to the whitelist, requiring a path segment so the bare token
+`.git` never becomes a subject. A literal prefix rule, NOT derived from `git ls-files` — `.git/`
+is untracked by construction (0 tracked paths under it, against controls of 1989 under `docs/`
+and 7 tracked root dotfiles), so an `ls-files` narrowing would silently delete the subject.
+
+**The widening was narrowed by measurement before it shipped, and the first form was wrong.**
+Over the elected ref's ledger (17 `sh` receipts, 15 naming a path, 10 distinct tokens admitted
+today): `.git/` plus a bare-root-dotfile arm admits 4 new tokens, of which `.EXPECTED_VALIDATORS`
+is ABSENT and would be flagged — and it is not a path at all, but a fragment of a real receipt's
+`grep -qE "for v in $EXPECTED_VALIDATORS;"` whose `$` the tokenizer strips. That withholds a
+legitimate close, which is the suppression failure the entry warns about. `.git/` alone admits 1
+new token with a false-positive set of ZERO.
+
+The stronger reason the dotfile arm must not return: the split strips the glob character BEFORE
+the existing guard sees it, so `core/hooks/*.sh` yields the bare token `.sh`, which carries no
+`*`, `?` or `$` to refuse. Both classes are now seeded and mutant-bound.
+
+The filed receipt was satisfiable by three other `NEEDS-REVIEW` emitters; the replacement asserts
+the detail string built from `$_gone` at runtime, which only the absent-subject line emits.
+Scored five ways, independently re-scored by the lead: tip 0, unfixed 1, second spelling 0,
+`$WORK/`-admitting widening 1, bare-`.sh`-admitting widening 1.
+
+`mutation-prefix` keyed its `sed` on the old whitelist line and would have reported DID NOT APPLY
+on the fixing commit — re-anchored, with a third arm so a partial widening cannot score its kill.
+Fixture 274 → 279 assertions, exit 0. Timing effect is BELOW RESOLUTION: interleaved reps in
+fixed checkouts read a base-side spread of 28.7s around a difference of −0.36s.
+
+Expected and stated: `sh_base_control` runs only on the else branch, so a newly-flagged entry
+leaves the base-controlled population and `RECEIPTS-UNDECIDED` denominators move with it.
+
+#### the drain plan's ledger-ref election (`BL-270`)
+
+The derive block gated each candidate branch on `merge-base --is-ancestor main "$b"`, which the
+consumer's branching shape cannot satisfy — it branches per sprint while `main` advances
+independently. At filing, 0 of 723 non-main branches passed while 178 carried a ledger;
+re-measured here, 1 of 723, whichever branch the consumer happens to have checked out. So the
+loop elected correctly BY LUCK and reverts to 0 at the next retro merge.
+
+It read as a clean sweep because the assertion arm was computed against the ref the loop ELECTED,
+so on the fallback it compared `main` with itself and answered 0 by construction while the
+presence control read non-zero beside it.
+
+**Electing ONE ref is also unsound, and this entry's own premise was refuted.** The three refs
+the property arm elects are pairwise incomparable — adds 4/4/4 with a union of 7, overlapping in
+one id — so every single-ref rule loses real filings. A naive union is the opposite trap: 6 of
+its 54 ids are live on one qualifying ref and ARCHIVED on another. Union-live minus union-archive
+is 48, today's answer reached by rule rather than luck, with `main` folded in so an empty
+qualifying set is correct by construction rather than by a fallback.
+
+Adds a FLOOR control on the union — the existing presence control reads `main` and can say
+nothing about the elected set — and reports the qualifying-ref COUNT so 0 is asserted rather than
+inferred.
+
+The filed receipt closed the incomplete fix: keyed on the gate line alone, deleting the gate
+while leaving the assertion arm keyed on `main` exited 0. Replaced with a conjunction keyed on
+the union derivation. Scored five ways: tip 1, fix 0, prose-only 1, no-`lids()` stub 9, half-fix
+1. A receipt form predicted during review was refuted too — "`live_main.txt` must leave the
+assertion line" scores 1 on the correct fix, reporting a shipped fix as unshipped.
+
+The rewrite breached `P8`'s ceiling, so the plan was rotated in the same change: 33707 bytes
+moved to `docs/plans/archive/`, conservation asserted three ways, all nine declared live sections
+present.
+
+#### `BL-276` widened with occurrence #2
+
+The consumer filed `PC-S312-DERIVATION-FENCES-STRANDED-CORE-RELOCATION-WITH-NO-WORKLIST-ROW`
+mid-batch, UNCOMMITTED — no `-S` date, visible only by diffing the working tree against
+`git show HEAD:`, the one class a commit-keyed sweep is structurally blind to. Same asymmetry one
+population over: a consumer ARTIFACT file whose `derived` fence EXECUTES a core path, where
+`BL-276`'s detector scans layer files reproducing core lines. Re-derived here: 0 worklist rows
+against a same-invocation control of 1. Not re-filed separately, at the candidate's own request;
+its own receipt is declared unsafe by its author and was not adopted.
+
 ## [0.605.0] - 2026-09-19
 
 ### the dispatch protocol moves out of implementation.md into a by-reference step file

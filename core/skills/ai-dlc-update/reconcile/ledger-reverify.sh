@@ -788,13 +788,61 @@ receipt_path_tokens() { printf '%s\n' "$1" | tr -c 'A-Za-z0-9_./$-' '\n' || true
 # outcome today, and a guard whose removal changes nothing is not load-bearing. The property is
 # pinned by the `SH-THEIRS-TREE-*` seed instead, which is the same pairing `SH-DIST-PATH` already
 # provides for the `git -C` rev-spec form.
+#
+# `.git/` IS IN THE WHITELIST AND A BARE ROOT DOTFILE IS NOT, AND THAT ASYMMETRY IS THE WHOLE
+# NARROWING. `.git/hooks/<x>` is the subject a fresh checkout most often lacks -- `git clone` does
+# not carry `.git/hooks/` -- so without this prefix the guard SKIPS the token, the receipt's
+# non-zero exit for the ABSENCE reads as a fix, and the row is a CLOSE-CANDIDATE recording an
+# absorption that never happened. MEASURED on the reference consumer: a rehearsal on a clone
+# reported 2 CLOSE-CANDIDATE where the live run correctly reported 1.
+#
+# THE FALSE-POSITIVE SET IS WHY THE BARE-DOTFILE ARM IS NOT HERE, and it was measured over the
+# same corpus before either form shipped -- the elected ref's ledger, 17 `sh` receipts, 15 of them
+# naming a path at all (the control), 10 distinct tokens admitted by the four prefixes above:
+#
+#   + `.git/` + bare root dotfile   14 tokens   newly admitted: `.` `.EXPECTED_VALIDATORS`
+#                                               `.git/hooks/pre-push` `.pre-commit-config.yaml`
+#   + `.git/` ONLY                  11 tokens   newly admitted: `.git/hooks/pre-push`
+#
+# This guard flags only an ABSENT path, so an admitted token that resolves is inert. Resolved
+# against that consumer (controls in the same invocation: `docs` and `_bmad-output` present,
+# `.zzqq-impossible-never` absent), three of the bare-dotfile four EXIST and one does not:
+# `.EXPECTED_VALIDATORS` IS NOT A PATH AT ALL. It is a fragment of a real receipt's `grep -qE`
+# pattern -- `grep -qE "for v in $EXPECTED_VALIDATORS;" .claude/hooks/guarded-merge.sh` -- whose
+# `$` the split above strips, leaving a leading dot. The bare-dotfile arm reads it as a missing
+# consumer file and WITHHOLDS A LEGITIMATE CLOSE, which is the suppression failure this function's
+# header names, reached on the first real corpus it was pointed at. The `.git/`-only form admits 1
+# new token of which 0 are absent: a false-positive set of ZERO.
+#
+# AND THE LARGER REASON THE BARE-DOTFILE ARM MUST NOT COME BACK: the split STRIPS THE GLOB
+# CHARACTER BEFORE THE GUARD BELOW CAN SEE IT. `tr -c 'A-Za-z0-9_./$-'` turns `*` into a newline,
+# so a receipt writing `core/hooks/*.sh` yields the bare token `.sh`, which carries no `*`, `?` or
+# `$` for that guard to refuse. A bare-dotfile arm admits it, `$CONSUMER/.sh` is absent, and EVERY
+# `*.ext` in any receipt becomes a spurious NEEDS-REVIEW. `SH-GLOB-BARE-EXT` in the fixture is that
+# token's seed and `mutation-dotfile` is the mutant that reintroduces the arm; the near-miss
+# control is `.pre-commit-config.yaml`, which EXISTS on that consumer and is therefore inert.
+#
+# A PATH SEGMENT IS REQUIRED AFTER `.git/`, so the bare token `.git` never becomes a subject -- it
+# is a DIRECTORY that `-e` passes anyway, and admitting it would put a token nobody wrote into the
+# accusing population.
+#
+# THIS HALF CANNOT SHARE A DERIVATION WITH THE OTHERS, which is the obvious simplification and it
+# deletes the subject. `.git/` is untracked BY CONSTRUCTION: measured at the reference consumer, 0
+# tracked paths under `.git/`, against controls of 1989 under `docs/` and 7 tracked root dotfiles.
+# A unified `git ls-files` narrowing therefore drops `.git/hooks/pre-push` -- the one path this
+# prefix exists for -- and the guard silently goes back to not firing. It is a LITERAL prefix rule.
+#
+# WIDENING THIS GUARD SHRINKS `sh_base_control`'s POPULATION, and the tally moves for a reason
+# unrelated to any fix. That control runs only on the ELSE branch below, so an entry that starts
+# being flagged as absent leaves the base-controlled set and the RECEIPTS-UNDECIDED denominators
+# move with it. That is arithmetic, not a regression.
 receipt_absent_subjects() {
   local rest="$1" p out=""
   while IFS= read -r p; do
     [ -n "$p" ] || continue
     p="${p#\$CONSUMER/}"
     case "$p" in
-      docs/*|_bmad-output/*|scripts/*|.claude/*) ;;
+      docs/*|_bmad-output/*|scripts/*|.claude/*|.git/?*) ;;
       *) continue ;;
     esac
     case "$p" in *'*'*|*'?'*|*'$'*) continue ;; esac

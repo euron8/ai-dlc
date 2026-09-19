@@ -12864,3 +12864,435 @@ to grow fourfold carries the identical hazard.
 23. Report to the operator: what shipped, what was closed and how, what graph must do, and
     anything left undone with the reason.
 
+### What is DONE — do not redo any of it
+
+**BATCH 16 IS COMPLETE, MERGED AND PUSHED AS `v0.428.0`. IT DISCHARGED ALL SIX SPRINT-306
+CANDIDATES**, one commit each on one release branch, every id verbatim in its own release commit
+message where `named_absorbed()` can read it — verified 1 hit each against an impossible-id
+control of 0. `BL-104`–`BL-109` filed and all six CLOSED and rotated: live **70 → 76 → 70**,
+archive **33 → 39**, `--check PASS` before `--apply` with every entry reporting
+`CLOSE-CANDIDATE [sha … resolves]`, control `BL-006` still live. The six:
+
+| candidate | what landed |
+|---|---|
+| `PC-S306-CHECK-2-HAS-NO-SPRINT-SCOPE` | Check 2's blocking clause scoped by the entry header's sprint; a past-sprint `HARD_BLOCK` is SURFACED at implementation/story/retro gates and still BLOCKS at planning and sprint-review; an entry naming no sprint blocks everywhere |
+| `PC-S306-SUPPRESSED-STATUS-FIRST-TOKEN-SILENT-NO-OP` | suppression FIELDS under a non-`SUPPRESSED` status are reported, and the verdict line carries `malformed_attempt=` |
+| `PC-S306-SERIES-VALIDATOR-NO-LEAD-RESOLUTION-PATH` | `gate-<type>-resolution-p<M>.md` accepted alongside the repair name, `gate-` anchor kept, structure requirement unchanged |
+| `PC-S306-FANOUT-UNTRACKED-FILES-INVISIBLE` | corpus is tracked plus `--others --exclude-standard`, de-duplicated, untracked share printed in band |
+| `PC-S306-GATE-REMEDIATION-BLOCKS-INDEPENDENT-DEV-DISPATCH` | Section 6 numbered action list conditions routing on the next step's read-set; Section 7's completion condition names the ENTERING gate |
+| `PC-S306-STUB-AUDIT-PHASE-N-MATCHES-WORD-BOUNDED-PROSE` | `Phase [0-9]` is a marker only inside a statement of absence; the alternative is narrowed, not deleted |
+
+**BOTH FIXES THE SUPPRESSION CANDIDATE PROPOSED WERE MEASURED AND BOTH ARE UNSHIPPABLE, AND
+THAT IS THE BATCH'S BEST FINDING.** Requiring the `**Status:**` line to be exactly one token
+rejects most of the corpus. Flagging a second vocabulary token elsewhere on the line scores
+**5 of 108** status lines on the reference consumer and **all five are FALSE** — four say *"not
+a HARD_BLOCK"* and one says *"already RESOLVED BY FACT below"*. The negation and the intent are
+the same shape, so that rule cannot separate the true positive from its own false positives.
+**A filed remedy is a hypothesis; build it and measure its false-positive set before writing
+it.** The shipped arm keys on the FIELDS instead: 0 of 123 entries, control 16.
+
+**THE GATE REFUSED THE FIRST PUSH ON `FORK_BUDGET` AND THAT IS THE ARM WORKING.** 7067 measured
+against 7061. Isolated by differential inside this repo with the two new fixture directories
+moved aside and restored: **13 forks for two directories**, which is the per-directory cost the
+two previous raises already measured. Raised to **7073**, six over the top of a 7066–7067 spread,
+recorded as a one-line reviewable diff beside its own measurement. **Budget the re-push**: a
+batch that adds fixture directories will breach, and the breach costs a full second gate run.
+
+**FOUR HANDS, AND FOR THE FIRST TIME IN THIS PROGRAM ALL FOUR DELIVERED.** Every one was given a
+deliverable IN THE TREE — a validator edit plus a fixture — rather than a report file, and every
+one produced working code with its own measurement recorded beside it. The best work in the
+batch again came from the hands whose output was a committed battery. Two of the four never sent
+a closing message at all and it did not matter, because the tree was the deliverable. **Give a
+hand a tree deliverable or do not spawn it.**
+
+**THE LEAD AUTHORED ALL SIX RECEIPTS AND SCORED EVERY ONE AGAINST FIVE BUILDS** — the shipped
+fix, a second spelling by a competent author, and two or three plausible regressions. Three of
+the six needed a repair after the first scoring: a span-level receipt was satisfied by one HTML
+comment, another by the bold sentence above the numbered item it was meant to read, and a third
+could not tell `--exclude-standard` dropped from the fix. **Scoring is not a formality; it moved
+half the receipts.**
+
+**TWO OF THE LEAD'S OWN PROBES MEASURED THE WRONG TREE AND A CONTROL CAUGHT BOTH.**
+`report-propagation-fanout.sh` and `validate-gate-adjudication.sh` both `cd` to a root resolved
+by walking up from the SCRIPT's own directory, so a probe repo built under `mktemp` and entered
+with `cd` is silently ignored and the run reports on the distribution. The first cut of the
+fanout receipt produced a worklist citing `docs/backlog.archive.md`. **Set
+`AI_DLC_PROJECT_ROOT` explicitly, and read the output for paths that could only have come from
+the wrong tree.**
+
+**`v0.427.0` FOLLOWED BATCH 15 AND IS ALSO MERGED AND PUSHED (`144fd252`).** It is the
+adversarial pass's own findings, landed as a follow-up rather than carried into batch 16. Two
+fixes: `--finish` now REFUSES an unresolvable `<theirs>`/`<dist>` instead of writing the literal
+argument into `commit:` and declaring the tree consistent; and `core/git-hooks/pre-push`'s
+`applying_guard()` no longer tells a wedged operator to re-run the pull, which cannot clear a
+range-derived hand-back row. Two entries FILED and not fixed — `BL-102` (`--finish` verifies
+nothing it stamps; `mech_fail` is the only variable assigned above the phase guard and mutated
+only inside it) and `BL-103` (a hook the template cannot register withholds `--finish` forever;
+population measured EMPTY at 19/19). Gate exit 0, 17 of 17 phases, 169 ok / 0 FAIL.
+
+**THE ADVERSARIAL PASS RAN AFTER THE MERGE FOR THE FOURTH TIME, AND ITS BEST ACT WAS A
+RETRACTION.** It filed two BLOCKERs, then withdrew them: its `rsync` had excluded
+`_bmad-output/`, deleting the consumer's `layer-adjudication-register.jsonl` and its 269 records,
+so every adjudicated row re-fired as an outstanding hand-back. With the register present, four
+realistic ranges stamp cleanly. **A defective setup and a correct one produced identically
+plausible manifests, and only the register's presence separated them.**
+
+**A CONTROL OF MINE PASSED FOR THE WRONG REASON AND I REPORTED IT AS EVIDENCE.** I probed
+`--finish` with a bogus `<theirs>` of `refs/heads/nope` and got a correct refusal, so I called
+the path sound. The slashes break the `sed`; the `|| true` swallows it; the read-back disagrees.
+A slash-FREE bogus ref writes straight through. **Run the control on the input that
+DISCRIMINATES** — the rule was already in `verification-discipline.md`.
+
+**BATCH 15 IS COMPLETE, MERGED AND PUSHED AS `v0.426.0`.** `BL-030` CLOSED and rotated,
+discharging `PC-S304`, with the id in the RELEASE COMMIT MESSAGE where `named_absorbed()` can read
+it (verified: 1 hit, against an impossible-id control of 0). Release `5cc6c4f5`, close-and-rotate
+`601f20f4`, fast-forward merge. Live **69 → 68**, archive **32 → 33**; recorded to show the
+rotation HAPPENED, **not as progress**. `--check PASS` before `--apply` with the receipt reporting
+`CLOSE-CANDIDATE [sha 5cc6c4f5 resolves]`, `BL-030` in the archive and not in the live file,
+control `BL-006` still live. Gate exit **0** read from a sentinel CLEARED before the run, **17 of
+17** phases PASS, **0 FAIL** lines ANSI-stripped, **169 ok / 0 FAIL** with
+`AI_DLC_FIXTURE_NO_SKIP=1` confirmed live in the log, the new fixture read BY NAME against a
+present-name control of 1 and an impossible-name control of 0 in the same invocation.
+
+**THE FIX WEDGED ITS OWN ESCAPE HATCH ON THE FIRST END-TO-END RUN, AND ONLY RUNNING IT FOUND
+THAT.** `--finish` counted every row it re-derived, including `DECISION hook-registration-unchecked`
+— whose stated remedy is to re-run the apply that delivers the missing validator, on the phase
+`--finish` skips. Unclearable by construction, and a withheld stamp nobody can advance is a
+consumer whose own `pre-push` refuses to run. **Ask what a new gate makes permanently true
+downstream; it is not visible in the diff.** The repair is two counters, and only ONE `WORKLIST`
+row is reachable under `--finish` at all — derived over the code that mode actually executes, with
+a control proving the grammar can see rows, then proved terminating end to end.
+
+**A ZERO GAP LASTED EXACTLY ONE RELEASE, AND THE GAP IS NOW 3 AND HELD OPEN ON PURPOSE.**
+`docs/plans/graph-pull-0425-to-0428.md` is written, LIVE and NOT STARTED. **It is not yours to
+run.**
+
+**Phases 0–2, 4 and 5 are COMPLETE.** Phase 3 is the batch loop and it is the only remaining
+work. Batches 1–16 have all MERGED AND PUSHED; the releases are `v0.374.0`, `v0.375.0`,
+`v0.376.0`, `v0.377.0`, `v0.378.0`, `v0.379.0`, `v0.380.0`, `v0.415.0`, `v0.416.0`,
+`v0.418.0`, `v0.419.0`, `v0.421.0`, `v0.422.0`, `v0.423.0`, `v0.426.0` and `v0.428.0`, each recorded in `CHANGELOG.md`; `v0.427.0` followed batch 15 as its adversarial-pass follow-up. `v0.381.0` and `v0.382.0` followed batch 7 as machinery releases;
+many further machinery releases have shipped between `v0.383.0` and `v0.414.0` that are NOT part
+of this program, which is why the batch numbering and the version numbering stopped agreeing.
+
+**THE `0.415.0 → 0.425.0` PULL IS COMPLETE AND THE CONSUMER IS AT `0.425.0` ON ALL FOUR STAMP
+FIELDS.** Five PRs in a graph session the operator drove; the runbook is DISCHARGED at
+`docs/plans/graph-pull-0415-to-0425.md` and its Discharge section is the record. **`PC-S333` and
+`PC-S314` are CLOSED in the consumer's own ledger** — live=0, archive=1 each — which is the
+terminal state this program aims at, reached for the first time.
+
+**THAT PULL'S ZERO GAP IS SPENT.** `v0.426.0` discharged `PC-S304` and `v0.428.0` discharged the
+sprint-306 six, so the pending set is **7** across **3** releases and
+`docs/plans/graph-pull-0425-to-0428.md` is the runbook for it — LIVE, NOT STARTED, and for a graph
+session the operator drives. Action 7's detection still applies; derive it rather than reading this.
+
+**BATCH 14 IS COMPLETE, MERGED AND PUSHED AS `v0.423.0`.** Its own report said "CANDIDATES
+DISCHARGED 6 → 7 OF 49", and **both halves of that figure were wrong** — the denominator through a
+grammar missing two record forms, the numerator through a metric that sheds its own successes. The
+partition AS OF THAT BATCH was **5 DISCHARGED, 14 TERMINAL, 60 live**; the current one is in the
+derive block above and nowhere else. `BL-033` CLOSED and rotated, discharging
+`PC-S314`, with the id in the RELEASE COMMIT MESSAGE where `named_absorbed()` can read it.
+Release `5c3711e2`, close-and-rotate `c174b60a`. The entry counters moved **70 → 69** live and
+**30 → 31** archived; those are recorded to show the rotation HAPPENED, **not as progress** —
+`--check PASS` before `--apply` with the receipt reported
+`CLOSE-CANDIDATE [sha 5c3711e2 resolves]`, `BL-033` in the archive and not in the live file,
+control `BL-006` still live and the two entries filed this batch still live. Gate exit **0** read
+from a sentinel CLEARED before the run and its mtime checked, **17 of 17** phases PASS, **0 FAIL**
+lines ANSI-stripped, **168 ok / 0 FAIL** with `AI_DLC_FIXTURE_NO_SKIP=1` confirmed live in the
+log, the new fixture read BY NAME against a present-name control of 1 and an impossible-name
+control of 0 in the same invocation.
+
+**THE OBVIOUS ONE-LINE FIX WAS A REGRESSION, AND THE ENTRY'S OWN RECEIPT ACCEPTED IT.** `BL-033`
+proposed reordering two arms; measured, that answers `ALREADY-AT-THEIRS` for BOTH a consumer that
+already carries the exec bit and one that still needs it, because on a mode-only change every
+content hash is equal. Its receipt scored `head 1 / reorder 0 / conjunct 0` — it could not tell
+the correct fix from the regression, and the entry SAID so in as many words ("takes either fix")
+without anyone reading that as a defect. **When an entry tells you its receipt accepts two
+different fixes, that is the finding, not a convenience.** Replacement scores
+`head 1 / reorder 1 / conjunct 0`.
+
+**THE ENTRY WAS WIDER THAN FILED IN THREE WAYS, AND ASKING THE QUESTION IS WHAT FOUND THEM** —
+the `100755 -> 100644` direction, a path whose content is at theirs but whose bit is not (a
+DIFFERENT arm, and silent), and the `A` branch's `ALREADY-PRESENT`. That is now four batches
+running where "is this entry wider than filed?" paid.
+
+**A CHANGELOG CLAIM OF MINE WAS TRUE AND UNMEASURED, AND THE CASE THAT PROVED IT WAS NOT IN MY
+MATRIX.** I asserted a mode-aware hash would refuse a safe `UPSTREAM-DELETED`. My first matrix
+showed no such effect — because every `D`-branch case in it had the consumer's mode matching
+base's, so the mode-aware hashes still agreed. The claim needed a consumer whose CONTENT matches
+base and whose MODE does not, and only then did it reproduce. **A differential over a matrix you
+built yourself tests the cases you thought of.**
+
+**A FOLLOW-UP SHIPPED AS `v0.424.0` (`98ad402e`), AND IT IS A HOLE IN BATCH 14'S OWN GUARD.** The
+release changed TWO branches of `preclassify.sh`; the fixture built for it guarded one, so the
+`A`-branch half could be reverted with the suite green. Filed and closed as `BL-101` in one
+cycle. **The finding came from an adversarial pass that ran AFTER the merge — again** — which is
+the third time this plan has recorded that, and the standing instruction to run it BEFORE the
+merge is still the one being skipped.
+
+**THE ATTACK PRODUCED FOUR CANDIDATE WEAKNESSES AND ONLY ONE WAS A REAL COVERAGE GAP, WHICH IS
+ITSELF THE LESSON.** All four satisfy `BL-033`'s replacement receipt; the FIXTURE independently
+kills three, because it carries an ordinary-content-change case and both mode directions. **Run a
+proposed receipt-weakness against the FIXTURE before reading it as a coverage gap.** They are
+different guards, and once an entry is rotated its receipt is archived and inert while the fixture
+is what still runs. Measured: `dropbase` killed by `C5`, `halfmode` by `C4`, `modehash` by `C7`,
+`arevert` survived.
+
+**A RECEIPT KEYED ON `git archive HEAD` CANNOT SEE THE FIX THAT IS SITTING IN THE WORKING TREE.**
+`BL-101`'s read 1 with the repair complete on disk and flipped to 0 on the commit. That is correct
+behaviour and it reads exactly like a repair that did not work — check what the receipt EXTRACTS
+before believing its verdict about uncommitted work.
+
+**FILED `BL-099` AND `BL-100`.** The exec-bit audit is one-directional — it tests `$1=="100755"`
+at both arms, so a file upstream STOPPED shipping executable is never reported, and that
+direction has no level-triggered backstop at all. And `--untangle`'s noop arm is mode-blind: a
+`.githooks/pre-push` copy at 644 with correct content buckets identically to one at 755.
+
+**BATCH 13 IS COMPLETE, MERGED AND PUSHED AS `v0.422.0` (`bccc8d9c`).** `BL-052` CLOSED and
+rotated, discharging `PC-S333`. Live **69 → 68**, archive **29 → 30**, `--check PASS` before
+`--apply` with the receipt reported `CLOSE-CANDIDATE [sha bccc8d9c resolves]`, `BL-052` in the
+archive and not in the live file, control `BL-006` still live. Gate exit **0** read from a
+sentinel CLEARED before the run and its mtime checked, **17 of 17** phases PASS, **0 FAIL**
+lines ANSI-stripped, **167 ok / 0 FAIL** with `AI_DLC_FIXTURE_NO_SKIP=1` confirmed live in the
+log, the changed fixture read BY NAME (2 hits) against a positive control of 1 and an
+impossible-name control of 0 in the same invocation.
+
+**THE ENTRY FILED 5 SITES AND THE POPULATION WAS 13, BECAUSE ITS RECEIPT COULD NOT SPELL ITS
+OWN SUBJECT.** `show +<(theirs|base|ours)>:` cannot see `<ancestor>:`, and the one site spelled
+that way sat INSIDE the receipt's own scoped directory. Its scope had been narrowed to dodge a
+comment quoting the hazardous form; quoting the comment instead makes a wider grammar reach zero
+with no exemption list. **Ask what a receipt's grammar structurally cannot match, not only what
+its corpus excludes.**
+
+**A MEASUREMENT I PUT IN THE CHANGELOG WAS TAKEN OVER THE WRONG SET AND I WITHDREW IT.** I
+claimed a `git`-requiring variant of the new pattern misses 8 wrapped renderings. Over `core/`
+both find the same 13 and the difference set is EMPTY; the 37-vs-29 gap is `docs/` prose about
+the defect. Reporting two TOTALS hid it — deriving the DIFFERENCE SET is what exposed it. The
+pattern choice now rests on the fixture's `x3` mutant instead.
+
+**THREE OF FOUR HANDS DELIVERED NOTHING, AND THE PLAN'S OWN REMEDY IS WHY.** Scope, receipt and
+adversary each went idle repeatedly — eight content-free idle notifications between them — after
+two direct requests each. Only the FIXTURE hand delivered, as in batch 9, and its work was again
+the best in the batch: it found that `grep` handed an EMPTY file list reads STDIN and HANGS,
+measured at two wedged processes for two minutes under the pool. **A hand whose deliverable is
+the TREE delivers; a hand whose deliverable is a report does not**, because the report file is
+the thing a hook denies. Numbered action 3 below has been corrected accordingly.
+
+**BATCH 12 IS COMPLETE, MERGED AND PUSHED AS `v0.421.0`.** `BL-094` CLOSED and rotated;
+`BL-095`, `BL-096`, `BL-097` and `BL-098` FILED. The release branch was four commits,
+fast-forwarded to `main` as `b8714e0d..f121b1dc`; a follow-up branch then carried `BL-098`, the
+sweep bound and the rule carriers, merged as `c37dcb08..5cddec48`. **`BL-098` was filed AFTER the
+resume block had already been re-derived once, which made it stale again inside the same session
+— re-derive after the LAST write, not after the merge you were thinking of.** Live **65 → 69** (one closed, four filed), archive **28 → 29**, `--check`
+PASSing before `--apply`, `BL-094` in the archive and not in the live file, control `BL-006` still
+live. Gate exit **0** read from a sentinel CLEARED before the run and its mtime checked, 17 of 17
+phases, **0 FAIL lines**, 167 units with `AI_DLC_FIXTURE_NO_SKIP=1`, the changed fixture read BY
+NAME (2 hits) against a positive control of 1 and an impossible-name control of 0 in the same
+invocation.
+
+**THE ADVERSARIAL PASS RAN BEFORE THE MERGE THIS TIME, AND IT PAID FOR ITSELF ON THE FIRST
+FINDING.** A guard firing only on an ADJACENT repeat passed the clean tree, the entry's own
+replacement receipt, and all 21 fixture mutants — then rendered a genuine duplicate at exit 0.
+**Three independent-looking verification channels shared ONE input shape**: every duplicate seed
+in all of them placed the repeat beside the first declaration, and the receipt could only ever do
+so, because `awk NR==n{print} {print}` duplicates a line in place. The gap was in the SEED, not
+the mechanism, so the repair was one seed per channel and no new guard. **Ask of a verification
+suite not whether it has enough arms, but whether its inputs are all the same shape.**
+
+**THE RECEIPT CLOSED ON ONE MEMBER OF A FIVE-MEMBER SET THE ENTRY ITSELF ENUMERATES.** A partition
+covering `vocabulary-readers:` alone returned exit 0 while the other four fields stayed silent.
+The standing rule is "ask what ELSE satisfies the receipt"; the new form is that **the SET was
+under-sampled rather than the mechanism** — the receipt exercised a real behaviour, correctly, on
+one member.
+
+**ASKING WHETHER THE ENTRY WAS WIDER THAN FILED PRODUCED THREE OF THE FOUR FILINGS.** It is worth
+making that the default question: `BL-095` (a rule file may declare `paths:` twice and the arm
+named "declares its scope exactly once" is about something else), `BL-096` (the sibling renderer
+refuses a duplicate SOLO declaration and accepts a duplicate GROUP one), `BL-097` (**the renderer
+declares TWO populations and this release hardened one** — its schema walker still last-wins a
+duplicate JSON key, under a header calling that half "total by construction").
+
+**A WIDENING BEYOND THE ENTRY'S FILED TEXT WAS TAKEN DELIBERATELY AND RECORDED AS ONE.** A field
+declared ABOVE its block's `# vocabulary:` line survived the shipped partition — `flush()` clears
+the seen-flags at the name line, so the stray and the real declaration are not a repeat. Eight of
+eight name lines, silent. Fixed here because it is the same function and the last silent-discard
+path in that reader; an orphan is not a repeat, and the CHANGELOG says so.
+
+**TWO MEASUREMENTS OF MINE WERE WRONG AND BOTH WERE CAUGHT BY A CONTROL.** A duplicate-`paths:`
+test run under `git archive` had no `.git`, so an unrelated arm failed on BOTH sides and read as a
+refusal — the real answer needed a `file://` clone. And a claim that 17 "loose-but-not-strict"
+arm-header lines could merge two marker blocks was simply wrong: a line not matching `I[0-9]` was
+never a flush point. **There is no "ought to flush" independent of the reader's own regex.**
+
+**A HOOK FORBIDS SUBAGENTS FROM WRITING REPORT FILES, AND A BRIEF THAT DEMANDS ONE WASTES THE
+HAND.** Every hand was told its report file was the deliverable; the hook refuses the write with
+`Subagents should return findings as text, not write report files`. Two hands worked around it by
+returning text, one delivered a file, one delivered only a diff. **Ask for findings AS TEXT in
+the final message, and treat the tree as the deliverable for anything that is code.**
+
+**A FOLLOW-UP SHIPPED AS `v0.420.0` (`32ad4896`), AND THE ADVERSARIAL PASS THAT FOUND IT RAN
+AFTER THE MERGE.** Arm D's population is a bare `dir/*` glob, and BSD awk ABORTS on a path it
+cannot open rather than skipping it — so one broken symlink in either directory ended the walk,
+and the only message was arm D's exemption control, which can only say "the exempt file does
+not emit". Differential: `5efb3d17^` exits 0 on that tree, `5efb3d17` exits 1, with a bare
+`awk: can't open file` on stderr as the whole diagnosis. **The guard was RIGHT and its message
+was WRONG** — it refused to certify a zero over a corpus it had not finished reading, then
+named the wrong file. The exit code is not reverted; the attribution is fixed, and the
+exemption control now stands down for that case so one cause yields one finding.
+
+**RUN THE ADVERSARIAL PASS BEFORE THE MERGE, NOT AFTER.** Batch 11 gated green, merged, and
+still shipped a defect that one hour of seeding found. The gate cannot catch this class: the
+tree it runs on has no broken symlink, so every arm was correct and silent about a state
+nobody constructed. **Seed the states your own population EXCLUDES** — a directory where a file
+is expected, a dangling link, an unreadable file — and read what the arm says, not just whether
+it exits 0.
+
+**A PARTITION WAS BUILT, MEASURED AND REJECTED, WHICH IS THE PART WORTH REMEMBERING.**
+`find -maxdepth 1 -type f` excludes the dangling link BY CONSTRUCTION and is one process for
+both populations, which is the shape `mechanism-design.md` prefers over a detector. It measured
+**+116**. This file's cost metric charges per DIRECTORY ENTRY EXAMINED, not per `execve`, so a
+single `find` over 71 files costs more than the 48-iteration `[ -f ]` loop batch 11 deleted.
+**Do not rebuild it** — the rejection is recorded beside the arm. Shipped cost of the fix: −2.
+
+**BATCH 11 IS COMPLETE, MERGED AND PUSHED AS `v0.419.0`.** `BL-090` CLOSED and rotated.
+Release `5efb3d17`, close-and-rotate `874d4f41`, fast-forward merge. Live **66 → 65**, archive
+**27 → 28**, `--check` PASSing before `--apply`, `BL-090` in the archive and not in the live
+file, control `BL-006` still live. Gate exit **0** read from a sentinel file CLEARED before the
+run, 17 of 17 phases PASS, 0 FAIL lines, **167 units** with `AI_DLC_FIXTURE_NO_SKIP=1`, all five
+changed fixtures read BY NAME against a positive control of 1 and an impossible-name control of
+0 in the same invocation.
+
+**A CONTROL THAT AGREES WITH THE VERDICT TOLD ME NOTHING, AND I NEARLY BANKED IT.** The first
+by-name read of the gate log returned 0 for all five changed fixtures — and 0 for the
+impossible-name control too, because both patterns anchored on a single space where the log
+writes a column of them. Two zeros that agree are one broken pattern, not a finding. The
+re-read carried a control that MUST come back non-zero, and it did.
+
+**THE POPULATION WAS WRONG IN EXACTLY THE WAY THE ENTRY DESCRIBED, ONE GRAIN OVER.** The first
+cut of the reverse join swept `*.sh`. `core/scripts/gen-architecture-index.js` and
+`scripts/verify-backlog-bl056.py` exist today, so an extension filter would have shipped a
+one-way blind spot inside the arm built to close a one-way blind spot. **Ask of every new
+detector what its population EXCLUDES, and check the exclusion is not the defect itself.**
+
+**A GUARD THAT CANNOT FIRE ON THE STATE IT EXISTS FOR.** `esv_glob_matched` answers for ONE
+glob. The first arm D concatenated both populations into one array and tested the count — but a
+tree where NEITHER glob matched still holds two literal patterns, so the count test reads as a
+match. Each population is now tested on its own.
+
+**BUILDING THE ARM IS WHAT EXPOSED WHAT THE OLD ONE WAS PAYING**, and the change came out
+fork-NEGATIVE by 47. `for f in dir/*.sh; do [ -f "$f" ] && ...; done` costs one fork PER
+CANDIDATE; arm C had been running it over 48 files. Differential on two extracted trees with
+the sides asserted to differ before the comparison was read: HEAD **7049**, branch **7002**.
+`FORK_BUDGET` was ratcheted DOWN 7076 → 7029 rather than left where it was. No wall-clock
+claim: 20.4s before, 20.0s after, three reps each, which cannot resolve 47 forks of 7050.
+
+**FIVE HANDS, ONE DELIVERABLE, AND THE PRESCRIBED REMEDY DID NOT WORK.** Scope, receipt,
+fixture-recon and adversary each had a named report file and a brief telling them the file was
+the deliverable; none wrote one in over two hours. The FIXTURE hand delivered, and its work was
+the best part of the batch — ~230 lines deriving the token and the exempt path from the seed
+rather than typing them, anchoring the two `esv_undeclared` mutations on the argument that
+SEPARATES them, and asserting the probe's EXACT score so neither mutation can score the
+other's kill. **Check the deliverable, not the report: this one existed only as a diff.**
+The cost is real and is recorded here rather than smoothed over — the two arms the lead added
+share an author with the code they test, which is the one thing `fixture-mutants.md` says not
+to do, and the adversarial pass on the close was the lead's own.
+
+**BATCH 10 IS COMPLETE, MERGED AND PUSHED AS `v0.418.0`.** `BL-006` NARROWED and held open,
+`BL-093` filed. It was action 1 and it is DONE. Do not re-run it. Live **65 → 66**, archive
+**27** (nothing rotated — the entry was narrowed, not closed), and the ledger now reports
+**0 CLOSE-CANDIDATE** where it carried one false one. Gate exit **0** read from the hook's own
+status file with its mtime checked, 17 of 17 phases PASS, 0 FAIL lines, 167 units with the skip
+disabled, all five changed fixtures read BY NAME against an impossible-name control of 0.
+
+**THE ENTRY COULD NOT BE CLOSED, AND FINDING THAT OUT COST ONE ADVERSARIAL HAND.** `BL-006` had
+TEN separable claims and the ruled remedy discharged eight. The two survivors are a different
+corpus each — `docs/plans/` has no size arm, and the CONSUMER's own ledger is unbounded and
+unreachable from here — so the narrowed entry carries a CONJUNCTION receipt that cannot go green
+on one of them. **Enumerate an entry's distinct claims BEFORE reading a good measurement as a
+close**; that is `v0.417.0`'s lesson and it fired again immediately.
+
+**A CEILING MAKES A RED PUSH, AND THE CHEAPEST WAY TO CLEAR A RED PUSH WAS ONE LINE OF MARKDOWN.**
+Before the fix, annotating any entry `**LANDED (v...)**` archived it with `--check PASS`, rc=0 —
+reproduced against `BL-006` itself, whose own first line says DO NOT CLOSE. `backlog-rotate.sh`
+now refuses to move an entry whose evidence does not hold, and the guard sits before BOTH
+branches because `--check` filters `^ALREADY-CLOSED` from both sides of its own comparison.
+**The guard as originally specified would have missed its own motivating case**: `BL-006` was the
+only live entry whose receipt exits 0, so a receipt-only arm permits it and the SHA arm is what
+refuses. Ask of every new detector whether it fires on the case that motivated it.
+
+**A MEASUREMENT I GAVE THE OPERATOR WAS DEFECTIVE AND THEY RULED ON IT.** A byte clause was
+ruled, built, and withdrawn: the series behind it started at `158d7528`, which is not on the
+first-parent trunk, and its trend was n=1. Archived entries average 7193 bytes against a live
+mean of 3758, so rotation is the byte lever and it is denominated in ENTRIES. **Check that a
+series' endpoints are on the trunk before drawing a trend from it**, and say so when a figure
+you supplied turns out to be wrong.
+
+**THE TRIAGE SWEEP IS ALSO COMPLETE, MERGED AND PUSHED AS `v0.417.0` (`8eb98209`).** All 64 live entries re-derived by 14 independent hands, one
+question each, then 4 verifiers briefed to BREAK the proposed closes. **62 REPRODUCES, 2
+proposed closes, 1 survived attack.** Coverage joined both ways against the live ledger: nothing
+unexamined, nothing examined twice, no duplicates. Live **64 → 65**, archive **26 → 27**. Gate
+exit **0** read from `git push`'s own `$?`, 16/16 phases PASS, 166 dispatched / 166 ok / 0 FAIL
+against an impossible-name control of 0.
+
+`BL-081` CLOSED (fixed at `5d02dcf4`/`v0.386.0`, thirty releases before anyone joined the row to
+it). `BL-066` REJECTED and held open, narrowed to its sibling claim. `BL-091` and `BL-092`
+filed. `BL-006`, `BL-066` and `BL-089` amended with what the sweep measured.
+
+**THE VERIFIER PASS CAUGHT A FALSE CLOSE ON SCOPE, NOT ON MEASUREMENT, AND THAT IS THE
+TRANSFERABLE LESSON.** Both `BL-066` verifiers agreed on every number and split on what the
+entry CLAIMED. Its sibling paragraph names a harm distinct from the one that was fixed — "its
+output is the sha an operator is told to go and read" — and `named_ambiguous()` still elects one
+commit from its match set. **`v0.387.0`'s CHANGELOG asserts both joins were fixed and that
+sentence is false.** An entry with two subjects expires only when both do; ask that question
+before reading a good measurement as a close.
+
+**BATCH 9 IS COMPLETE, MERGED AND PUSHED AS `v0.416.0`.** `BL-076` and `BL-078` closed,
+`BL-090` filed. Release and merge are one fast-forward commit, `727ddc6c`. Live **66 → 64**,
+archive **24 → 26**, `--check` PASSing before `--apply`, no id in both files (control: `BL-076`
+present in the archive), and `backlog-reverify` reporting **0 CLOSE-CANDIDATE** afterwards
+against an impossible-id control of 0. Gate read directly, not through a pipe: push exit **0**,
+**16 of 16** phases PASS, all six changed fixtures read BY NAME against an impossible-name
+control of 0.
+
+**THE FIRST PUSH WAS BLOCKED AND THE BLOCK WAS RIGHT.** Widening `I93`'s emitter list from 3 to
+14 under its existing per-file loop cost 4 forks per emitter and put the tree **42 over
+`FORK_BUDGET`** — `validator-fork-budget` failed the push. `esv_sites` already took a file
+LIST for exactly this reason and the first cut ignored it; one `awk` per token over the whole
+list took 7092 back to 7054, and the arm's cost is now flat in the declaration's length. **Reach
+for the mechanism the file already has before adding a loop** — the same lesson `I97` was built
+on in batch 8, one release later, in the same file.
+
+**BATCH 8 IS ALSO COMPLETE** (`v0.415.0`, `BL-079`; merge `8d4d7424`, release `2b474ad2`,
+close-and-rotate `20599835`).
+
+**FOUR THINGS THE ENTRY ASSERTED DID NOT HOLD, AND THE RE-DERIVATION IS WHY THEY WERE FOUND.**
+Its own `verify:` receipt was EXPIRED — the seed used a capability grammar the validator now
+DISARMs, so both arms returned 2 and it exited 9 against every implementation, a correct one
+included. Its population was six memlogs, not four. The shared baseline it names as a blocker
+does not exist in that consumer. And the false positive dying does NOT turn that gate green: a
+join (2a) spine finding survives, byte-identical either way, and a figure taken on `--spec --prd`
+alone is a figure about join (1) rather than about Check 30.
+
+**THE INDEPENDENT HANDS PAID AGAIN, 5 OF 5 BATCHES.** Three defects in work already committed on
+the branch, each returning a WRONG answer rather than an error: the borrowed grammar joins its
+blocks with a FORM FEED and this reader was grepping the join, silently dropping the head
+declaration of every block after the first with no DISARM available; a declared population none
+of whose ids the memlog mentions took the note branch on every iteration and printed PASS having
+joined nothing; and `--locked-requirements ""` reverted to the memlog scan and reproduced the
+original false positive. A fourth hand found the CHANGELOG's own s302 claim overstated.
+
+**AND THE FIRST CUT COMMITTED THE DEFECT `I97` NOW BLOCKS.** `validate-locked-anchor.sh` owns
+the `LOCKED_REQUIREMENTS` block grammar and exposes `--emit-blocks` so a second reader need not
+re-derive it. A hand-rolled marker pair went in anyway and read 2 of the grammar's 6 measured
+spellings. **Grep for the mechanism before writing one.**
+
+**The consumer wall-clock investigation is CLOSED and its record is
+`docs/v0.380.0-pipeline-cost-investigation.md`.** It refutes ELEVEN hypotheses, each with its
+killing measurement, and a twelfth (a plateau exit) is refuted in the history below. **Re-running
+any of them is the most expensive mistake available to you.** The operator's standing direction
+at the close of that work was: **stop measuring the pipeline, build the fix.**
+
+**The one live proposal out of it has SHIPPED as `v0.382.0`** — `MAJOR` was overloaded, so
+`findings_major_underived` now partitions `findings_major` and the convergence exit reads
+`findings_critical == 0 && (findings_major - findings_major_underived) == 0`. Absent means ZERO,
+so no block written before it changes verdict.
+

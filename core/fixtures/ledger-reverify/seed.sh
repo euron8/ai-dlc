@@ -435,6 +435,39 @@ cat > "$LED" <<'LEDGER'
 
 ---
 
+- **Entry SH-GITHOOK-GONE names an absent subject under `.git/`, which no consumer top-level
+  home covers.** `git clone` does not carry `.git/hooks/`, so a hook path is the subject a fresh
+  checkout most often lacks — and it matched none of the four prefixes the whitelist carried, so
+  the guard SKIPPED it and the receipt's non-zero exit for the ABSENCE read as a fix. Measured on
+  the reference consumer: the 0.471.0→0.479.0 rehearsal recorded 2 CLOSE-CANDIDATE where the live
+  run correctly reported 1, and the extra one was exactly this shape. SH-SUBJECT-GONE is the
+  paired control on a home the whitelist already had; SH-DIST-PATH and the two entries below are
+  the over-fire controls that must NOT move with it.
+  verify: sh test -e "$CONSUMER/.git/hooks/pre-push" && grep -q sentinel "$CONSUMER/.git/hooks/pre-push"
+
+---
+
+- **Entry SH-GIT-BARE-TOKEN names the BARE token `.git` and nothing under it.** `.git` is a
+  DIRECTORY that `-e` passes on any real consumer, so admitting it would put a token nobody wrote
+  into the accusing population; here the seeded consumer is not a repository, so the bare token is
+  ABSENT and a whitelist spelled `.git*` instead of `.git/?*` would flag it. That is what makes
+  this a discriminating input rather than a restatement of the entry above. Exit 1 with every
+  token it names outside the whitelist -> CLOSE-CANDIDATE.
+  verify: sh [ -n ".git" ] && false
+
+---
+
+- **Entry SH-GLOB-BARE-EXT writes a GLOB, and the tokenizer strips the `*` before any guard sees
+  it.** `receipt_path_tokens` splits on every character a path cannot contain, and `*` is one of
+  them — so `core/hooks/*.sh` yields the bare token `.sh`, which carries no `*`, `?` or `$` for
+  the glob guard to refuse. A whitelist arm admitting any bare root dotfile therefore admits
+  `.sh`, finds it absent, and turns EVERY `*.ext` in every receipt into a spurious NEEDS-REVIEW —
+  which SUPPRESSES A REAL CLOSE, the opposite failure and the one with volume behind it. The
+  receipt exits non-zero naming no consumer subject, so it must read CLOSE-CANDIDATE.
+  verify: sh for f in core/hooks/*.sh; do :; done; false
+
+---
+
 - **Entry SH-THEIRS-TREE reads the distribution AT THEIRS through `$THEIRS_TREE`.** The
   materialized tree carries VERSION 0.103.0 (theirs) while the distribution CHECKOUT this seed
   builds sits one commit past it at 0.104.0. Exit 0 -> STILL-LIVE, and it can only be 0 if the

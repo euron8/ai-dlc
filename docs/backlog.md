@@ -105,6 +105,35 @@ The receipt keys on `apply.sh` gaining a passage worklist row at an EMITTING lin
 row as the same-invocation positive control, because a whole-file grep for the token would be
 satisfied by the comment describing this entry.
 
+**WIDENED AT BATCH 130 — OCCURRENCE #2 LANDED IN THE CONSUMER MID-BATCH, AND IT IS A CITATION
+CLASS THIS ENTRY'S DETECTOR DOES NOT SCAN.** The consumer filed
+`PC-S312-DERIVATION-FENCES-STRANDED-CORE-RELOCATION-WITH-NO-WORKLIST-ROW` on 2026-09-19, against
+installed `0.605.0` at `554e4a32e`. It was UNCOMMITTED when read — no `-S` date, visible only by
+diffing the working tree against `git show HEAD:`, which is the one class a commit-keyed sweep is
+structurally blind to. Re-derived here, with controls: `apply.sh` emits **0** worklist rows for a
+stranded derivation anchor, against a same-invocation control of **1** for the retired-token row,
+and `core/scripts/validate-artifact-derivations.sh` exists.
+
+**IT IS THE SAME ASYMMETRY ONE POPULATION OVER.** This entry's subject is a LAYER file
+reproducing a core line. The new occurrence is a consumer ARTIFACT file whose `derived` fence
+EXECUTES a core path at validation time: Levers D and E relocated Rule 27's body out of `SKILL.md`
+into `rule-bodies/rule-27.md`, and a story file's recorded command
+(`grep -n 'Re-stamp' .claude/skills/ai-dlc/SKILL.md`) went from green to exit 1. The consumer's
+control in the inverse direction establishes MOVE rather than deletion — the text resolves under
+`rule-bodies/` — and the failure was not vacuous: its validator reported `22 stale or unrunnable
+derivation(s) of 47 checked`, and a repair seat re-anchored them by hand.
+
+**NOT RE-FILED AS A SEPARATE ENTRY, at the candidate's own request** — its text says it "should be
+closed alongside BL-276, which is the canonical record." The remedy widens rather than forks: the
+worklist channel this entry asks for must cover `derived`-fence commands in `_bmad-output/**`
+naming paths that exist at base and not at theirs, not only layer passages.
+
+**THE CANDIDATE'S OWN RECEIPT IS DECLARED UNSAFE BY ITS AUTHOR AND MUST NOT BE ADOPTED HERE.** It
+is `theirs_lacks … emit-report.sh "rule-bodies"`, and the filing says so: if this entry's remedy
+lands as `apply.sh` worklist rows, that predicate reads STILL-LIVE after the class is fixed. That
+is the safe direction for a false reading and it is still a receipt that cannot see its own close.
+This entry's own emitting-site receipt governs both occurrences.
+
 verify: sh a=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$a" ] || exit 9; ctl=$(grep -c 'RETIRED-LAYER-ZZQQ' "$a"); [ "$ctl" -eq 0 ] || exit 9; grep -qE '^[[:blank:]]*say WORKLIST .*re-point retired contract token' "$a" || exit 9; d=core/skills/ai-dlc-update/reconcile/retired-layer-passage.sh; [ -f "$d" ] || exit 9; grep -qE "printf 'RETIRED-LAYER-PASSAGE" "$d" || exit 9; grep -qE '^[[:blank:]]*say WORKLIST .*(RETIRED-LAYER-PASSAGE|retired core passage|re-point retired passage)' "$a" && exit 0; exit 1
 
 ## BL-275 — a shared detector's cost-saving flag is bound by NO fixture at any CALLER, so a second caller can silently stop passing it
@@ -3383,25 +3412,57 @@ receipts, the second of which reads `.git/hooks/pre-push`. Real consumer 314 byt
 `STILL-LIVE`; clone absent → rc=2 → `CLOSE-CANDIDATE`. **Had the guard covered that prefix the
 rehearsal would have said `NEEDS-REVIEW` and the false expectation would never have shipped.**
 
-**WHY IT IS FILED RATHER THAN FIXED, and the reason is not difficulty.** `ledger-reverify.sh` is
-currently NOT in the `0.471.0 → 0.479.0` range, and a pull against that exact range is in flight
-with its dry run already matched against the rehearsal. Editing this file now would move the range
-under the executing session and invalidate a comparison it has already made. Take it after that
-pull lands.
+**THE DEFERRAL PREMISE HAS EXPIRED.** This was filed rather than fixed because a pull against
+`0.471.0 → 0.479.0` was in flight with its dry run already matched against a rehearsal, and
+editing this file would have moved the range under the executing session. Re-derived:
+`docs/plans/graph-pull-0471-to-0479.md` line 1 reads `DISCHARGED — DO NOT EXECUTE` and the
+consumer's installed stamp is `0.605.0`. The constraint is gone and the fix is taken here.
 
-**AND THE OBVIOUS WIDENING NEEDS ITS FALSE-POSITIVE SET MEASURED FIRST.** The allow-list is doing
-real work: receipt bodies are full of path-shaped tokens that are NOT consumer paths — `$WORK/`
-and `$d/` temp-dir fragments, `sed` substitution fragments, and DISTRIBUTION-relative `core/...`
-paths that correctly resolve nowhere under `$CONSUMER`. A naive widening turns every one of those
-into a spurious `NEEDS-REVIEW`, which suppresses real closes and is the opposite failure. Scope the
-widening to consumer-relative prefixes that genuinely exist (`.git/`, and bare dotfiles at the
-root), and measure the FP set over the reference ledger's 36 `verify: sh` receipts before shipping.
+**THE WIDENING IS `.git/` ONLY, AND THE BARE-ROOT-DOTFILE HALF OF THIS ENTRY'S OWN PROPOSAL IS
+REFUTED.** The allow-list is doing real work: receipt bodies are full of path-shaped tokens that
+are NOT consumer paths — `$WORK/` and `$d/` temp-dir fragments, `sed` substitution fragments, and
+DISTRIBUTION-relative `core/...` paths that correctly resolve nowhere under `$CONSUMER`. A naive
+widening turns every one of those into a spurious `NEEDS-REVIEW`, which suppresses real closes and
+is the opposite failure, with more volume behind it. Measured over the elected ref's ledger — 17
+`sh` receipts, control: 15 of them name a path at all, 10 distinct tokens admitted by the four
+prefixes:
+
+    current allow-list                       10 distinct tokens
+    + .git/ + bare root dotfile              14   newly admitted: . .EXPECTED_VALIDATORS
+                                                  .git/hooks/pre-push .pre-commit-config.yaml
+    + .git/ ONLY                             11   newly admitted: .git/hooks/pre-push
+
+The guard flags only an ABSENT path, so an admitted token that resolves is inert. Resolved against
+the consumer (controls in the same invocation: `docs` and `_bmad-output` present,
+`.zzqq-impossible-never` absent), three of the dotfile four exist and one does not:
+**`.EXPECTED_VALIDATORS` is not a path.** It is a fragment of a real receipt's `grep -qE` pattern —
+`grep -qE "for v in $EXPECTED_VALIDATORS;" .claude/hooks/guarded-merge.sh` — whose `$` the
+tokenizer strips, leaving a leading dot. The dotfile arm reads it as a missing consumer file and
+withholds a legitimate close. The `.git/`-only form admits 1 new token of which **0** are absent: a
+false-positive set of ZERO, and it still fixes the motivating case.
+
+**AND A SECOND, LARGER FP CLASS PUTS THE DOTFILE ARM PERMANENTLY OUT.** `receipt_path_tokens` is
+`tr -c 'A-Za-z0-9_./$-'`, which turns `*` into a newline — so `core/hooks/*.sh` yields the bare
+token `.sh`, carrying no glob character for the existing guard to refuse. A dotfile arm admits it,
+`$CONSUMER/.sh` is absent, and every `*.ext` in every receipt becomes a spurious `NEEDS-REVIEW`.
+Seeded as `SH-GLOB-BARE-EXT` with `SH-GIT-BARE-TOKEN` beside it; `mutation-dotfile` in
+`core/fixtures/ledger-reverify/run.sh` reintroduces the arm and must be killed by both.
+
+**THE TWO HALVES CANNOT SHARE A DERIVATION.** `.git/` is untracked BY CONSTRUCTION: 0 tracked
+paths under it at the consumer, against controls of 1989 under `docs/` and 7 tracked root
+dotfiles. A unified `git ls-files` narrowing drops `.git/hooks/pre-push` — the one path this entry
+exists for — so `.git/` is a literal prefix rule requiring a path segment after it.
+
+**EXPECT THE TALLY TO MOVE FOR A REASON UNRELATED TO THIS FIX.** `sh_base_control` runs only on
+the else branch of the absent-subject test, so an entry that starts being flagged leaves the
+base-controlled population and the `RECEIPTS-UNDECIDED` denominators move with it. That is
+arithmetic, not a regression.
 
 Sibling to `BL-089`, which records that a non-zero exit meaning *"a precondition moved and I
 measured nothing"* is displayed identically to a genuine reproduction. Same class, opposite
 direction.
 
-verify: sh set -e; r="$PWD"; h="$(git -C "$r" rev-parse HEAD)"; w=$(mktemp -d); mkdir -p "$w/c/_bmad-output/ai-dlc-update" "$w/c/.claude"; printf '%s\n' '# l' '' '## PC-PROBE-ABSENT-HOOK — probe' '' 'Body.' '' 'verify: sh cd "$CONSUMER" && grep -qF sentinel .git/hooks/pre-push' > "$w/c/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; printf 'version: 0.471.0\ncommit: 31b51d48\nskill_version: 0.471.0\nskill_commit: 31b51d48\n' > "$w/c/.claude/.ai-dlc-version"; o="$(cd "$w/c" && bash "$r/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh" "$r" 31b51d48 "$w/c" "$h" 2>/dev/null)"; grep -q 'PC-PROBE-ABSENT-HOOK' <<<"$o" || exit 9; grep -qE '^NEEDS-REVIEW[[:space:]]+PC-PROBE-ABSENT-HOOK' <<<"$o"
+verify: sh set -e; r="$PWD"; h="$(git -C "$r" rev-parse HEAD)"; w=$(mktemp -d); mkdir -p "$w/c/_bmad-output/ai-dlc-update" "$w/c/.claude"; { printf '%s\n' '# l' ''; printf '%s\n' '## PC-PROBE-ABSENT-HOOK — the subject a fresh checkout lacks' '' 'Body.' '' 'verify: sh cd "$CONSUMER" && grep -qF sentinel .git/hooks/pre-push' ''; printf '%s\n' '## PC-PROBE-GLOB-EXT — over-fire control: a glob tokenizes to the bare token .sh' '' 'Body.' '' 'verify: sh for f in core/hooks/*.sh; do :; done; false' ''; printf '%s\n' '## PC-PROBE-WORK-FRAG — over-fire control: a $WORK temp fragment is not a consumer path' '' 'Body.' '' 'verify: sh W=/nonexistent-work-root; test -e "$W/scratch/thing.sh"'; } > "$w/c/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; printf 'version: 0.471.0\ncommit: 31b51d48\nskill_version: 0.471.0\nskill_commit: 31b51d48\n' > "$w/c/.claude/.ai-dlc-version"; o="$(cd "$w/c" && bash "$r/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh" "$r" 31b51d48 "$w/c" "$h" 2>/dev/null)"; grep -q 'PC-PROBE-ABSENT-HOOK' <<<"$o" || exit 9; grep -q 'PC-PROBE-GLOB-EXT' <<<"$o" || exit 9; grep -q 'PC-PROBE-WORK-FRAG' <<<"$o" || exit 9; grep -qE '^NEEDS-REVIEW[[:space:]]+PC-PROBE-ABSENT-HOOK[[:space:]].*consumer-relative path\(s\) it names DO NOT EXIST:.*\.git/hooks/pre-push' <<<"$o" && grep -qE '^CLOSE-CANDIDATE[[:space:]]+PC-PROBE-GLOB-EXT' <<<"$o" && grep -qE '^CLOSE-CANDIDATE[[:space:]]+PC-PROBE-WORK-FRAG' <<<"$o"
 
 
 ## BL-145 — a docs commit that MENTIONS a candidate id is reported to the consumer as upstream having absorbed it
@@ -4062,6 +4123,59 @@ verify: sh f=scripts/fork-profile.sh; [ -f "$f" ] || exit 9; LC_ALL=C grep -q 'f
 
 ## BL-270 — the drain plan's ledger-ref election gates on an ancestor arm no branch can satisfy, so it always falls back to `main` and reports "no filings ahead" with every control green
 
+**LANDED (v0.606.0, verified 1af4d5b4) — AND THE FIX IS A UNION, NOT A REPAIRED ELECTION, BECAUSE
+THE ENTRY'S OWN TIE-BREAK PREMISE WAS REFUTED ON MEASUREMENT.** The ancestor gate is deleted, the
+property arm decides, and every qualifying ref's ledger is folded into one set.
+
+**THE GATE HAD BECOME SATISFIABLE AND THAT IS NOT AN ACQUITTAL.** Re-measured at batch 130 against
+the consumer's current tip: **1 of 723** non-main branches passes, where this entry filed **0 of
+723**, while **178** carry a ledger. The one passing branch is whichever the consumer happens to
+have checked out, so the loop elected correctly BY LUCK and reverts to 0 at the next retro merge.
+Either reading, 177 ledger-carrying branches were never opened.
+
+**THIS ENTRY'S "STRICT SUPERSET" CLAIM IS FALSE, measured by a contract adversary and re-derived
+independently by the lead, same numbers.** The three refs the property arm elects are **pairwise
+incomparable**: carry-over adds 4, `dev/sprint-312/story-1` adds 4, `dev/sprint-312/story-3` adds
+4, and the UNION of adds is **7**, overlapping in exactly one id. The two story branches' add sets
+are byte-identical. So no qualifying ref dominates and **every single-ref rule loses real filings
+whichever tie-break it picks** — a carry-over election drops 3 ids, a story election drops 3 of
+carry-over's 4 adds, three of which are unfiled.
+
+**AND A NAIVE UNION RESURRECTS CLOSED CANDIDATES, which is the trap on the other side.** The bare
+union of the three live sets is **54**, of which **6 ids are live on one qualifying ref and
+ARCHIVED on another**. Union-live MINUS union-archive is **48** — identical to today's single-ref
+answer, but reached by rule rather than by luck — and the 3 ids carry-over "loses" to the other
+two are exactly ids IT has archived. `main` is folded into both unions: it contributes nothing
+today (48 either way, both directions 0) and it makes the empty-qualifying-set case correct by
+construction instead of by a fallback.
+
+**THE ASSERTION ARM WAS THE SECOND HALF AND IT IS FIXED TOO.** It computed
+`comm -23 live_main live | comm -23 - arch` against the ref the loop ELECTED, so on the fallback
+it compared `main` with itself and answered 0 by construction while the presence control read
+non-zero. `main` is now a union MEMBER, so a non-zero means a member ledger lost an id no member
+closed. A **FLOOR** control was added beside it — `main`'s live set minus the union's archive —
+because the existing presence control reads `main` and can say nothing about the elected set: a
+ref whose archive is a superset of `main`'s live set is acquitted by the archive arm while
+carrying a one-id ledger, with every other control still green.
+
+**THE FILED RECEIPT CLOSED THE INCOMPLETE FIX, and that is why it is replaced.** It keyed on the
+gate line alone, so deleting the gate while leaving the assertion arm keyed on `main` exited
+**0**. Built that exact half-fix and scored it: filed receipt **0** (closes it), replacement
+**1**. The replacement's second arm keys on the union derivation line, which only the real fix
+emits. Scored five ways: tip **1**, the fix **0**, prose-only mention **1**, no-`lids()` stub
+**9**, half-fix **1**.
+
+**A PREDICTED RECEIPT FORM WAS ALSO WRONG AND THE MEASUREMENT CAUGHT IT.** The adversary's
+proposed arm 2 was "`live_main.txt` must leave the assertion line". It does not: the recompute
+legitimately keeps `live_main.txt`, because `main` is now a union member being compared against
+the union. That form scored **1 on the correct fix** — it would have reported a shipped fix as
+unshipped. Keyed on the union line instead.
+
+**The plan needed ROTATING in the same change.** The rewrite took it to 151754 bytes against P8's
+150000 ceiling; `scripts/plan-rotate.sh --apply` moved one 33707-byte span to
+`docs/plans/archive/`, conservation asserted three ways, leaving 118020 bytes with all nine
+declared live sections present.
+
 **DEFECT.** Found by running the derive block in
 `docs/plans/graph-ledger-full-drain.md` verbatim and comparing its verdict against the ref the
 previous batch actually worked from. **The election loop is a check that cannot fire.**
@@ -4111,7 +4225,7 @@ before filing across four inputs: tip **1**, a prose-only file naming the arm in
 the fixed form with the line deleted **0**, a stub with no `lids()` **9**. Exit 9 if the plan or
 its grammar function is gone.
 
-verify: sh p=docs/plans/graph-ledger-full-drain.md; [ -f "$p" ] || exit 9; LC_ALL=C grep -q 'lids()' "$p" || exit 9; LC_ALL=C grep -qE '^[[:blank:]]*git -C [^ ]+ merge-base --is-ancestor main "\$b"' "$p" && exit 1; exit 0
+verify: sh p=docs/plans/graph-ledger-full-drain.md; [ -f "$p" ] || exit 9; LC_ALL=C grep -q 'lids()' "$p" || exit 9; LC_ALL=C grep -qE '^[[:blank:]]*git -C [^ ]+ merge-base --is-ancestor main "\$b"' "$p" && exit 1; LC_ALL=C grep -qE '^comm -23 /tmp/union_live\.txt /tmp/arch\.txt > /tmp/live\.txt' "$p" || exit 1; exit 0
 
 
 ## BL-271 — no `PreToolUse` hook checks the artifact-path grammar, so a non-conforming path is created by `Write` and caught only at `pre-push`, after other artifacts have cited it
