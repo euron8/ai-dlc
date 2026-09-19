@@ -27,6 +27,22 @@
 # a level nobody configured. The guard reads what this renders; `--check` at the gate is what
 # stops the two separating.
 #
+# `omitClaudeMd` IS RENDERED INTO THE FRONTMATTER WHEN THE ENTRY DECLARES `true`, and never
+# otherwise. A non-fork subagent receives every CLAUDE.md level plus the unscoped rules unless
+# its definition says not to -- on the reference consumer roughly 25 KB of resident rulebook per
+# spawn, which for the three roles the template flags is content none of their contracts cites
+# (derived: a grep for `CLAUDE.md|core/rules|.claude/rules` and for paths that ONLY the consumer
+# rulebook defines matches neither of the three, while it matches `dev` and
+# `protected-path-editor`, which are exactly the roles the template leaves unflagged). The
+# harness default is already "do not omit", so a declared `false` and an absent key render the
+# same bytes.
+#
+# THE VALUE IS LOADED WITH A NULL-SAFE jq EXPRESSION, NOT `// empty`, AND THAT IS A TRAP. `//`
+# treats jq's `false` as an absent left side: `.omitClaudeMd // empty` prints EMPTY for a
+# declared `false` and cannot tell "the consumer said no" from "the consumer said nothing". The
+# two render identically for THIS field, so the spelling is fixed for the field that follows --
+# a boolean read through `//` silently loses its falsy value, and the loss reads as absence.
+#
 # A ROLE WITH NO `model` KEY GETS NO FILE. The party personas (spawned inside /bmad-party-mode,
 # which controls their model -- see core/hooks/ai-dlc-dispatch-guard.sh's PARTY PERSONAS
 # paragraph for why their model is left alone) configure an effort and no model. Rendering a
@@ -138,7 +154,18 @@ effort_valid() {
   esac
 }
 
-# render_one <role> <model-key> <effort-or-empty> -> the definition text on stdout.
+# The omitClaudeMd vocabulary: a JSON boolean, which the jq load above prints as `true` or
+# `false`. Any other value is the invalid-effort class -- a frontmatter line the harness does
+# not accept is worse than none, because the harness's own fallback is silent and the file reads
+# as though it bound something. Omitted from the file, reported on stderr.
+omit_valid() {
+  case "$1" in
+    true|false) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# render_one <role> <model-key> <effort-or-empty> <omit-true-or-empty> -> the definition text.
 #
 # THE LAST TWO BODY LINES RESTORE WHAT A CUSTOM BODY REPLACES. A subagent spawned with no
 # definition gets the harness's general-purpose prompt, which carries a no-proactive-`.md` rule
@@ -151,6 +178,7 @@ render_one() {
   printf 'description: AI/DLC role %s — rendered from aiDlcRoles.%s; do not edit by hand\n' "$1" "$1"
   printf 'model: %s\n' "$2"
   [ -n "$3" ] && printf 'effort: %s\n' "$3"
+  [ "${4:-}" = "true" ] && printf 'omitClaudeMd: true\n'
   printf -- '---\n'
   printf '%s from .claude/settings.json aiDlcRoles.%s. Edit the settings entry, then re-render. -->\n' \
     "$GEN_PREFIX" "$1"
@@ -167,6 +195,7 @@ rendered=0
 skipped_nomodel=0
 unresolved=""
 bad_effort=""
+bad_omit=""
 bad_name=""
 # RENDERED NAMES ARE RECORDED AS A NEWLINE-DELIMITED STRING, not an array: bash 3.2 under
 # `set -u` errors on expanding an EMPTY array, and the empty case is reachable (every role a
@@ -210,9 +239,17 @@ while IFS= read -r role; do
     eff=""
   fi
 
+  # NOT `// empty`: see the header. A declared `false` must reach `omit_valid` AS `false`, not
+  # as absence, so the loader distinguishes the three states the declaration can be in.
+  om="$(jq -r --arg r "$role" '.aiDlcRoles[$r].omitClaudeMd | if . == null then "" else tostring end' "$SETTINGS" 2>/dev/null)"
+  if [ -n "$om" ] && ! omit_valid "$om"; then
+    bad_omit="$bad_omit ${role}(${om})"
+    om=""
+  fi
+
   RENDERED_NAMES="$RENDERED_NAMES$role
 "
-  want="$(render_one "$role" "$mkey" "$eff")"
+  want="$(render_one "$role" "$mkey" "$eff" "$om")"
   target="$AGENTS_DIR/$role.md"
 
   if [ "$MODE" = "check" ]; then
@@ -266,6 +303,8 @@ fi
   echo "render-agent-definitions.sh: aiDlcRoles key(s) outside the role-name grammar, skipped:${bad_name}" >&2
 [ -n "${bad_effort// /}" ] && \
   echo "render-agent-definitions.sh: invalid effort level(s), OMITTED from the rendered definition (valid: low medium high xhigh max):${bad_effort}" >&2
+[ -n "${bad_omit// /}" ] && \
+  echo "render-agent-definitions.sh: invalid omitClaudeMd value(s), OMITTED from the rendered definition (valid: true false):${bad_omit}" >&2
 [ -n "${unresolved// /}" ] && \
   echo "render-agent-definitions.sh: role(s) whose model key resolves in no aiDlcModels entry, so NO definition was rendered and their spawns keep the parent's effort:${unresolved}" >&2
 

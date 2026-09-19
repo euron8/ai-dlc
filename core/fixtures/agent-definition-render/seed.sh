@@ -4,17 +4,20 @@
 #
 # THE SEEDED SET IS FOUR ROLES AND EVERY ONE OF THEM EXISTS TO SEPARATE TWO OUTCOMES:
 #
-#   alpha   model + a valid effort            -> a full definition, with an `effort:` line
+#   alpha   model + a valid effort            -> a full definition, with an `effort:` line, AND
+#           + omitClaudeMd: true                an `omitClaudeMd: true` line (the declaration the
+#                                               harness reads to stop injecting the CLAUDE.md chain)
 #   bravo   model + NO effort key             -> a definition with NO `effort:` line, which is
 #                                               the near-miss for "a missing effort is rendered
-#                                               as something"
+#                                               as something", and NO omitClaudeMd line either
 #   charlie NO model, effort only             -> NO file at all (the party-persona shape: their
 #                                               model is /bmad-party-mode's to choose, and a
 #                                               model-less definition would bind an effort onto
 #                                               a spawn the dispatch guard is told to leave
 #                                               alone)
 #   delta   model + an INVALID effort         -> a definition whose effort line is OMITTED, and
-#                                               a stderr report
+#           + an INVALID omitClaudeMd           a stderr report -- and the same for its
+#                                               omitClaudeMd, which is not a boolean
 #
 # `alpha` IS DELIBERATELY NOT THE ONLY MEMBER AND NOT THE ONLY INTERESTING ONE. A seeded set of
 # one cannot tell "iterated the declared roles" from "rendered the first one", and `charlie` and
@@ -36,10 +39,10 @@ cat > "$WORK/project/.claude/settings.json" <<'JSON'
     "sonnet": "claude-sonnet-5[1m]"
   },
   "aiDlcRoles": {
-    "alpha":   { "model": "opus",   "effort": "xhigh" },
+    "alpha":   { "model": "opus",   "effort": "xhigh", "omitClaudeMd": true },
     "bravo":   { "model": "sonnet" },
     "charlie": { "effort": "high" },
-    "delta":   { "model": "opus",   "effort": "turbo" }
+    "delta":   { "model": "opus",   "effort": "turbo", "omitClaudeMd": "sometimes" }
   },
   "env": { "SOMETHING_ELSE": "1" }
 }

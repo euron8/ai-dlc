@@ -102,10 +102,22 @@ NO_MODEL="$(jq -r '.aiDlcRoles | to_entries[] | select(.value.model | not) | .ke
 WITH_EFFORT="$(jq -r '.aiDlcRoles | to_entries[] | select(.value.model and (.value.effort // "" | test("^(low|medium|high|xhigh|max)$"))) | .key' "$S0" | sed -n 1p)"
 NO_EFFORT="$(jq -r '.aiDlcRoles | to_entries[] | select(.value.model and (.value.effort == null)) | .key' "$S0" | sed -n 1p)"
 BAD_EFFORT="$(jq -r '.aiDlcRoles | to_entries[] | select(.value.model and .value.effort and (.value.effort | test("^(low|medium|high|xhigh|max)$") | not)) | .key' "$S0" | sed -n 1p)"
+# The omitClaudeMd token sets, derived the same way -- `== true` for the offender because a
+# declared `false` is a VALID value that renders nothing (so it belongs to no arm's world), and
+# `== null` for the near-miss for exactly that reason. The invalid set carries an explicit
+# `!= null` conjunct BECAUSE jq's `tostring` prints null as the STRING "null", which fails the
+# true/false test -- without it the key-ABSENT role is scored as the key-INVALID one, and the
+# measured first cut did exactly that: the arm failed its role-name conjunct on every mutant,
+# every run, because no stderr line could ever name a role nothing had rejected. That is the
+# same `//`-eats-`false` family as the loader's null-safe load, approached from the other side.
+WITH_OMIT="$(jq -r '.aiDlcRoles | to_entries[] | select(.value.omitClaudeMd == true) | .key' "$S0" | sed -n 1p)"
+NO_OMIT="$(jq -r '.aiDlcRoles | to_entries[] | select(.value.model and (.value.omitClaudeMd == null)) | .key' "$S0" | sed -n 1p)"
+BAD_OMIT="$(jq -r '.aiDlcRoles | to_entries[] | select(.value.model and (.value.omitClaudeMd != null) and (.value.omitClaudeMd | tostring | test("^(true|false)$") | not)) | .key' "$S0" | sed -n 1p)"
 N_WITH_MODEL="$(printf '%s\n' "$WITH_MODEL" | grep -c .)"
 if [ -z "$WITH_EFFORT" ] || [ -z "$NO_EFFORT" ] || [ -z "$BAD_EFFORT" ] \
+   || [ -z "$WITH_OMIT" ] || [ -z "$NO_OMIT" ] || [ -z "$BAD_OMIT" ] \
    || [ -z "${NO_MODEL// /}" ] || [ "$N_WITH_MODEL" -lt 2 ]; then
-  echo "FIXTURE BROKEN: the seeded declaration yields with-effort='$WITH_EFFORT' no-effort='$NO_EFFORT' bad-effort='$BAD_EFFORT' no-model='$NO_MODEL' with-model=$N_WITH_MODEL — the arms below cannot discriminate" >&2
+  echo "FIXTURE BROKEN: the seeded declaration yields with-effort='$WITH_EFFORT' no-effort='$NO_EFFORT' bad-effort='$BAD_EFFORT' with-omit='$WITH_OMIT' no-omit='$NO_OMIT' bad-omit='$BAD_OMIT' no-model='$NO_MODEL' with-model=$N_WITH_MODEL — the arms below cannot discriminate" >&2
   drop "$P0"
   exit 2
 fi
@@ -198,6 +210,42 @@ arm_invalid_effort_omitted_and_reported() {
   grep -q '^effort:' "$p/.claude/agents/$BAD_EFFORT.md" && return 1
   grep -q 'invalid effort' <<<"$err" || return 1
   grep -qF -- "$BAD_EFFORT" <<<"$err" || return 1
+  return 0
+}
+
+# Arm 4b: an `omitClaudeMd: true` declaration renders a frontmatter line INSIDE the fences; a
+# role without the key gets NO such line; a non-boolean value is OMITTED from the file and
+# REPORTED on stderr. Three worlds, both directions, one arm -- the mirror of arms 3 and 4.
+# The property itself (a spawn that stops RECEIVING the consumer's CLAUDE.md) is unobservable
+# from this tree, exactly like the effort property this fixture's header names: what is asserted
+# is the projection the renderer wrote, and the harness consumes that. The line-POSITION check
+# is not arm 1b restated -- arm 1b reads the alpha lines' positions, and if alpha grew its
+# `omitClaudeMd:` line BELOW the closing fence no arm but this one would notice, while the
+# harness would read the definition as though the flag were never declared.
+arm_omit_claude_md_tracks_the_declaration() {
+  local p="$1" subj="$2" f out n_open n_close n_omit
+  out="$(render "$subj" "$p")" || return 1
+  # The offender world: the line APPEARS, between the fences. This is the arm's presence
+  # conjunct -- a subject replaced by `exit 0` cannot satisfy it, per the harness rule.
+  f="$p/.claude/agents/$WITH_OMIT.md"
+  [ -f "$f" ] || return 1
+  grep -qxF -- 'omitClaudeMd: true' "$f" || return 1
+  n_open="$(grep -nxF -- '---' "$f" | sed -n 1p | cut -d: -f1)"
+  n_close="$(grep -nxF -- '---' "$f" | sed -n 2p | cut -d: -f1)"
+  n_omit="$(grep -n '^omitClaudeMd:' "$f" | sed -n 1p | cut -d: -f1)"
+  [ -n "$n_open" ] && [ -n "$n_close" ] && [ -n "$n_omit" ] || return 1
+  [ "$n_omit" -gt "$n_open" ] && [ "$n_omit" -lt "$n_close" ] || return 1
+  # The near-miss world: a definition IS written, and carries no omitClaudeMd line.
+  f="$p/.claude/agents/$NO_OMIT.md"
+  [ -f "$f" ] || return 1
+  grep -q '^omitClaudeMd:' "$f" && return 1
+  # The invalid world: no line, but the value is named on the report -- a harness-unaccepted
+  # value written silently would read as a bound property, the invalid-effort class again.
+  f="$p/.claude/agents/$BAD_OMIT.md"
+  [ -f "$f" ] || return 1
+  grep -q '^omitClaudeMd:' "$f" && return 1
+  grep -qi 'omitclaudemd' <<<"$out" || return 1
+  grep -qF -- "$BAD_OMIT" <<<"$out" || return 1
   return 0
 }
 
@@ -363,7 +411,7 @@ arm_idempotent() {
 }
 
 ARMS="renders_model_bearing_roles marker_sits_below_the_frontmatter no_file_for_model_less_role effort_line_tracks_the_declaration
-invalid_effort_omitted_and_reported check_joins_declaration_to_projection
+invalid_effort_omitted_and_reported omit_claude_md_tracks_the_declaration check_joins_declaration_to_projection
 foreign_definition_untouched stale_projection_is_caught_and_cleared check_never_writes
 three_states_are_distinct idempotent"
 
@@ -386,6 +434,7 @@ while IFS=: read -r name rc; do
     no_file_for_model_less_role)         msg="a role with NO model gets NO definition, while one with a model does (the party-persona partition)" ;;
     effort_line_tracks_the_declaration)  msg="a declared effort is rendered and an undeclared one produces no effort line" ;;
     invalid_effort_omitted_and_reported) msg="an invalid effort level is OMITTED from the file and named on stderr" ;;
+    omit_claude_md_tracks_the_declaration) msg="omitClaudeMd: true renders inside the fences, an absent key renders no line, a non-boolean value is omitted and named on stderr" ;;
     check_joins_declaration_to_projection) msg="--check joins the declaration to its projection: green fresh, red when the SETTINGS entry moves, red when the DEFINITION is hand-edited, red when its MARKER is hoisted above the fence with every key intact, green after a re-render" ;;
     foreign_definition_untouched)        msg="an unmarked consumer-written definition is neither reported nor deleted, in either mode" ;;
     stale_projection_is_caught_and_cleared) msg="a generated definition for a role that left aiDlcRoles is reported and removed" ;;
@@ -517,6 +566,28 @@ mut check-creates-the-missing-file \
       printf '"'"'%s\\n'"'"' "$want" > "$target"
 ' \
   check_never_writes
+
+# M8: render_one stops emitting the omitClaudeMd line at all. The arm's PRESENCE conjunct is
+# what this dies on -- an arm that only asserted the near-miss absence would score this a kill
+# it never earned (the harness rule: absence arms require the offender direction too).
+mut drops-omit-line \
+  '/omitClaudeMd: true/d' \
+  omit_claude_md_tracks_the_declaration
+
+# M9: emit the line UNCONDITIONALLY, ignoring the declaration -- the wrong fix that flags every
+# role for a consumer who flagged three. The anchor is the guard, not the printf: the same printf
+# text stays in the line, so the mutant is exactly `[ "${4:-}" = "true" ] &&` deleted. It must
+# fail the near-miss world (and the invalid world), which only arm 4b reads.
+mut emits-omit-line-unconditionally \
+  's/^  \[ "${4:-}" = "true" \] && /  /' \
+  omit_claude_md_tracks_the_declaration
+
+# M10: accept any omitClaudeMd value. Mirrors M2 one vocabulary over, and its observable is the
+# REPORT vanishing, not a line appearing: a harness-unaccepted value passes validation, is still
+# not `true` so renders nothing, and the silently-accepted typo reads as a settled declaration.
+mut accepts-any-omit-value \
+  's/^    true|false) return 0 ;;$/    *) return 0 ;;/' \
+  omit_claude_md_tracks_the_declaration
 
 # UNMUTATED CONTROL, with a POSITIVE conjunct. A control asserting only "nothing went wrong"
 # passes against a subject replaced by `exit 0`, because rc=0 with nothing reported is exactly

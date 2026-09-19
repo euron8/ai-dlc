@@ -15,6 +15,46 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.603.0] - 2026-09-18
+
+### `omitClaudeMd` ships for the three rulebook-free roles, and jq's `tostring` turns a missing key into an invalid one
+
+Lever C of the consumer-context-footprint plan. The template's `adversary`, `analyst` and
+`gate-adjudicator` entries gain `"omitClaudeMd": true`, and
+`scripts/ai-dlc/render-agent-definitions.sh` projects the declaration into the definition
+frontmatter: the line is emitted only when the entry declares `true`, values are validated
+against the boolean vocabulary, and an invalid one is omitted from the file and named on
+stderr exactly like an invalid effort.
+
+**Measured subject**: those three roles were 60 of 168 spawns on the reference consumer, and
+each non-fork spawn received the consumer's `CLAUDE.md` (19,078 B on graph) plus the unscoped
+`.claude/rules` (6,008 B). The reduction is roughly 25 KB per spawn, subagent-side, zero on
+the lead. The ship precondition held and was derived with a control: a grep for rulebook
+citations — `CLAUDE.md`, `core/rules`, `.claude/rules`, and the path forms only the consumer
+rulebook defines — matches neither of the three roles, while it does match `dev` and
+`protected-path-editor`, the two roles the plan names as keeping `CLAUDE.md`, so the grammar
+can match and the targets are genuinely clean.
+
+**Two jq traps, one family**: `// empty` swallows a declared `false` (jq's alternative
+operator treats `false` as an absent left side), so the loader uses
+`if . == null then "" else tostring end`; and `tostring` prints null as the string `"null"`,
+which made the fixture's invalid-value token set resolve to the key-ABSENT role — the new arm
+then failed its role-name conjunct on every run, including the unmutated control, until the
+derivation gained an explicit `!= null` conjunct.
+
+`agent-definition-render` gains arm 4b — the flag renders inside the fences, an absent key
+renders no line, a non-boolean is omitted and reported, position asserted as line numbers
+because a flag below the closing fence is a definition that silently binds nothing — and
+three mutants (`drops-omit-line`, `emits-omit-line-unconditionally`,
+`accepts-any-omit-value`), each killed by arm 4b alone; all ten mutants now kill exactly
+their own arm. `dispatch-model-guard` is unchanged and green. Verified on an
+`install.sh`-built tree: the flag lands in the installed `settings.json`, renders into the
+`adversary` definition inside the fences, and `--check` exits 0 at the consumer path.
+
+Consumers who customised a role entry keep their entry — `aiDlcRoles` merges at the role
+level (contract 2b), so an existing consumer's unflagged `adversary` entry wins over the
+template's flagged one on every pull. That is deliberate: document, do not force.
+
 ## [0.602.0] - 2026-09-18
 
 ### `bashOutputMaxChars` caps inline Bash output, and `settings-merge.sh` learns to deliver a template scalar a consumer can override
