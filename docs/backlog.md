@@ -55,6 +55,58 @@ have gone green, and would have reported "still open" forever.
 never the word anywhere in prose, because an entry that merely discusses landing something is
 not a closed entry.
 
+## BL-276 — a core text MOVE leaves every consumer layer citation stale with no worklist row, where the comparable TOKEN case gets one from `apply.sh`
+
+**DEFECT.** Found on the graph pull to `0.605.0`, where Levers D and E moved core text into
+`rule-bodies/rule-13.md` and `steps/_dispatch-protocol.md`. `retired-layer-passage.sh` reported
+**27** `RETIRED-LAYER-PASSAGE` rows on one pull, correctly, and offered the consumer nothing
+mechanical to act on.
+
+**THE DETECTOR IS SOUND AND ITS REMEDY CHANNEL IS NOT.** The scan itself is careful about the
+thing this repo cares most about: it refuses to report clean when it cannot read the rulebook
+list, and it emits a stderr NOTE when a release deleted no comparable line, because "SILENT about
+stale layer passages" and "found none" are the same output otherwise. Both arms exist to prevent
+a false zero. What has no mechanism is what the consumer does NEXT.
+
+**THE ASYMMETRY IS INSIDE ONE FILE AND IS THE CHEAPEST STATEMENT OF THE GAP.** The retired
+contract TOKEN case is wired through to the apply: `apply.sh:586` emits
+`WORKLIST semantic-merge <rel> "MUST ALSO re-point retired contract token(s): …"`, so the item
+lands in the worklist a consumer already works. The PASSAGE case emits no such row. Derived at
+this tip, same grammar, same file: **1** worklist row for the token case, **0** for the passage
+case, against an impossible-token control of **0** — and a control of **2** emission sites in
+`retired-layer-passage.sh` itself, so the zero is an absence in `apply.sh` and not an unreadable
+file. `SKILL.md:672` carries the whole remedy as prose the narrator must act on: "re-point it at
+the replacement wording, or record why reproducing the retired text is still correct."
+
+**THE COST RECURS ON EVERY FUTURE CORE MOVE, AND MOVES ARE NOW THE DELIVERY SHAPE.** Four of the
+five levers in `docs/plans/consumer-context-footprint.md` were re-sitings rather than semantic
+changes, which is what a context-footprint program produces by construction. Each one strands
+citations the consumer must re-point by hand, found only because a narrator read a report section.
+
+**Ownership was established by the tool, not by eye, and the test inverts on layout.**
+`core-paths.sh --is-core` answers about the PATH in CONSUMER-RELATIVE terms, so the subject must
+be named in the installed layout: `.claude/skills/ai-dlc-update/reconcile/apply.sh` answers
+`core:` with the glob quoted in its stdout, while the distribution's own `core/skills/…` source
+path answers `not-core:` — the same sentence a genuinely consumer-owned `extensions/` file gets.
+The 27 rows themselves route the other way and are graph's carry-over, not this entry's subject.
+
+**NOT `BL-271`, and not the `RETIRED-LAYER-CONTRACT` scan.** `BL-271` is a write-time enforcement
+gap on artifact paths. `retired-layer-contract.sh` catches a layer file shadowing a retired core
+CONSTRUCT; this is a layer file reproducing a core LINE that moved rather than died. Both checked
+before filing.
+
+**Tiered DEFECT.** Nothing is corrupted and no guard is removed. What it costs is a manual
+remedy proportional to how much core text a release moves, delivered through prose, in the one
+place this repo already proved a prose-only step gets skipped — `emit-report.sh:377` says of the
+neighbouring case that "NOTHING CALLS `settings-merge.sh`" and renders the join for exactly that
+reason.
+
+The receipt keys on `apply.sh` gaining a passage worklist row at an EMITTING line, with the token
+row as the same-invocation positive control, because a whole-file grep for the token would be
+satisfied by the comment describing this entry.
+
+verify: sh a=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$a" ] || exit 9; ctl=$(grep -c 'RETIRED-LAYER-ZZQQ' "$a"); [ "$ctl" -eq 0 ] || exit 9; grep -qE '^[[:blank:]]*say WORKLIST .*re-point retired contract token' "$a" || exit 9; d=core/skills/ai-dlc-update/reconcile/retired-layer-passage.sh; [ -f "$d" ] || exit 9; grep -qE "printf 'RETIRED-LAYER-PASSAGE" "$d" || exit 9; grep -qE '^[[:blank:]]*say WORKLIST .*(RETIRED-LAYER-PASSAGE|retired core passage|re-point retired passage)' "$a" && exit 0; exit 1
+
 ## BL-275 — a shared detector's cost-saving flag is bound by NO fixture at any CALLER, so a second caller can silently stop passing it
 
 **DEFECT.** Found while scoping `0.597.0`, by censusing `reconcile-emit-report` and then ablating
