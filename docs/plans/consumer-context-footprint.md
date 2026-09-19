@@ -35,9 +35,10 @@ path, and never to leave worktrees in place; the lead runs `git worktree remove`
 
 ### Status
 
-Plan authored 2026-09-18 from fresh measurement; this block re-derived 2026-09-19 after Lever D
-MERGED. Levers are ordered by measured payoff and each is one release. **Lever E is the only
-lever left; A is dropped and B, C and D have shipped.**
+Plan authored 2026-09-18 from fresh measurement; this block re-derived 2026-09-19 after Lever E
+MERGED. Levers are ordered by measured payoff and each is one release. **Every lever is now
+resolved: B, C, D and E have shipped, and A is dropped by operator ruling. No lever work
+remains — what is left is the consumer-side observation, which is operator-gated.**
 
 **Shipped.** Lever B — `bashOutputMaxChars: 8000` in `templates/settings.json.template`, on
 `origin/main` as merge `21be0dce` (release 0.602.0), with the settings-merge arm extended to
@@ -68,6 +69,36 @@ two fixtures that pinned the OLD siting did not, and were repaired (`absorbed-sp
 now reads SKILL.md plus every rule body as one corpus and tolerates the directory being absent,
 which is the layout a consumer one pull behind still has).
 
+**Shipped — Lever E.** On `origin/main` as squash-merge `a88fc8e4` (release 0.605.0, PR #798).
+The dispatch protocol — former `steps/implementation.md` lines 100-301, 11,713 B — moved
+verbatim to `core/skills/ai-dlc/steps/_dispatch-protocol.md`, with a forwarding stub ending
+READ AND FOLLOW left at its former location (`core/skills/ai-dlc/steps/implementation.md:101`;
+the body's provenance header at `core/skills/ai-dlc/steps/_dispatch-protocol.md:9`). Derived on
+`main` after the merge: `implementation.md` **17,913 B** (from 28,785 — −10,872 B, −37.8%).
+The siting copies `core/skills/ai-dlc/steps/_gate-procedures.md:3` — underscore prefix, a
+`STEP_LOADED_TOKEN`, and no `nextStepFile`, because it is not a pipeline step. Packaging needed
+no change and that was checked rather than assumed: `core/skills/ai-dlc/core-manifest.md:146`
+and `scripts/install.sh:170` both take `steps/*.md` by glob.
+
+**This plan named the wrong span for Lever E, and the correction is the finding worth
+carrying forward.** The next-action below said "split the per-story loop out", the loop being
+sections 5-7. Re-derived per-section: section 2 *Create Agent Team* held 16,283 B of 28,785
+(57%) against 4,026 B in section 5 and 5,405 B in section 6 — the loop is not where the bytes
+were. The re-read census is what made the one-time setup the subject: 31 reads across 8
+sessions, **25 of them whole-file**, 7 of 8 sessions reading it more than once, so a span a
+lead loads once per sprint was paid for on every re-read. `route.md` was checked and correctly
+stayed out of scope — 22 of 23 reads whole, only 2 sessions re-reading.
+
+Both joins this plan warned about were measured absent BEFORE the move rather than after:
+`enforcement-map.yaml` declares zero call sites on `implementation.md` (control: 37 on
+`gate-validation.md`) and `layer-contract.yaml` names it zero times (control: 6 `verify:`
+lines), so the stranded-call-site arm at `scripts/validate-enforcement-map.sh:3374` had no
+subject. The live joins are content greps that sit in section 5 and did not move —
+`core/fixtures/story-fields-derive/run.sh:536` requires the `derive-stories` write form in
+`implementation.md`, and `core/scripts/validate-layer-entries.sh:462` harvests its bold
+`**QA — validate every AC …**` line. The measured detail is the CHANGELOG entry beside the
+release, not this file.
+
 **Operator ruling 2026-09-19 — Rule 13 was added to Lever D's scope, and it is the one I79
 could not see.** Derived at `b0017c8f`: span 12,190 B, the largest in the file, heading at byte
 offset 18,984, no `**Carrier:**` line. It STRADDLED the re-attach cut — starts above, ends
@@ -93,19 +124,9 @@ run deflected before step 2 and the operator dropped the lever there. Episode:
 
 ### Next actions
 
-1. **Lever E — split the per-story loop out of `implementation.md`.** Measured subject:
-   28,785 B in one `## EXECUTION SEQUENCE` section, read whole 23 of 29 times, re-read more than
-   once in 7 sessions. Section-split it so the per-story iteration re-reads a small file and the
-   one-time setup is read once; `core/skills/ai-dlc/steps/_gate-procedures.md:7` already has the
-   by-reference shape to copy. Same treatment for `route.md` only if the census shows re-reads
-   (it did not: 22 of 23 reads were whole and once per session). The siting precedent is
-   0.604.0's: a stub keeps the heading and a load paragraph ending READ AND FOLLOW, as at
-   `core/skills/ai-dlc/SKILL.md:380`, and the body carries a provenance header as at
-   `core/skills/ai-dlc/rule-bodies/rule-13.md:3`. Two joins to check before pushing, because
-   0.604.0 hit both: a moved span that names an enforcer strands its
-   `enforcement-map.yaml` call site (`scripts/validate-enforcement-map.sh:3373` is the arm), and
-   a fixture that greps the OLD file by path reports `FIXTURE BROKEN` over text that moved
-   rather than vanished.
+1. **No lever work remains. Do not start one.** B, C, D and E have shipped and A is dropped
+   by operator ruling; each is recorded in the Status block above with its release. A session
+   resuming here starts at action 2.
 2. **Do not do these, with the measured reason.** A PreToolUse deny on read-only `git` without
    `ctx_*`: 393 of 911 matching commands are mixed with a mutation in the same line. Trimming the
    post-compaction snapshot re-read: the harness re-reads the 5 most-recent files (snapshot was
