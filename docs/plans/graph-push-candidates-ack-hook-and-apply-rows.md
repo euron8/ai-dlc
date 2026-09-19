@@ -141,7 +141,7 @@ they wrote does not fire. Both receipts were then checked at both refs, with con
 **The acknowledge hook's pause-flag allowlist was one file short.**
 `core/hooks/ai-dlc-acknowledge.sh` allows a write to `_bmad-output/pipeline-snapshot.md` while
 the Rule 29 pause flag is up. Its companion `pipeline-snapshot-history.md` fell through to the
-catch-all and was denied. Rule 25(a) in `core/skills/ai-dlc/SKILL.md:1103` and Check 14's `trim`
+catch-all and was denied. Rule 25(a) in `core/skills/ai-dlc/SKILL.md:628` and Check 14's `trim`
 remedy in `core/skills/ai-dlc/steps/gate-validation.md:877` both prescribe MOVING superseded
 snapshot prose into exactly that file, so the rulebook mandated a write the hook denied. Hit
 live on the consumer at a handoff seam, which is precisely where a trim comes due.

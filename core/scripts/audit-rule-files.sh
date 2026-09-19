@@ -230,7 +230,7 @@ for p in ("SKILL.md", "escalations.md", "rule-authoring.md", "artifact-path-gram
     fp = f"{SKILL}/{p}"
     if os.path.isfile(fp):
         corpus.append(fp)
-for root in (f"{SKILL}/steps", f"{SKILL}/templates", ROLES,
+for root in (f"{SKILL}/steps", f"{SKILL}/rule-bodies", f"{SKILL}/templates", ROLES,
              f"{SKILL}/extensions", f"{SKILL}/overrides"):
     corpus.extend(tree(root))
 # The sibling skills and the templates a consumer receives as live files. These
@@ -612,7 +612,7 @@ POINTER = re.compile(
 OUT_OF_SCOPE = re.compile(
     r"^(_bmad-output/|docs/|CLAUDE\.md$|prd\.md$|product-brief\.md$|carry-over-backlog\.md$|"
     r"gate-log|pipeline-snapshot|compaction-log\.md$|audit-anchors\.md$)")
-IN_SCOPE = re.compile(r"^(steps/|schemas/|team-roles/|templates/|"
+IN_SCOPE = re.compile(r"^(steps/|schemas/|team-roles/|templates/|rule-bodies/|"
                       r"rule-authoring\.md$|escalations\.md$|core-manifest\.md$|"
                       r"enforcement-map\.yaml$)")
 

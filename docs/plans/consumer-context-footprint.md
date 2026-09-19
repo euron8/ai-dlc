@@ -72,10 +72,11 @@ tip it exits 1, its only finding the first line:
   join excludes `role: none` files, and the code-naming prose would then live only in
   `rule-bodies/rule-27.md`, which no pin or prose_home currently binds.
 - **Root cause B (plan-shape phase).** `docs/plans/v0357-gate-remediation-delegation.md:404`
-  cites `core/skills/ai-dlc/SKILL.md:1406`; that file now has 1,160 lines. Three further
-  stale line-number citations to Rule 28's moved body sit at `:406` (`:1432`), `:518`
-  (`:1429-1431`) and `:615` (`:1406`). Fix is to re-anchor all four sites and re-run
-  `bash scripts/validate-plan-shape.sh` clean.
+  cited line 1406 of `core/skills/ai-dlc/SKILL.md` against a file that now has 1,160 lines, with three
+  further stale citations to Rule 28's moved body. All four were re-anchored to
+  `rule-bodies/rule-28.md` (`:16`, `:44-46`, `:49`) in 0.604.0; the quoted text never existed at
+  the cited lines on `main` either, so the citations predated the move.
+  `bash scripts/validate-plan-shape.sh` runs clean.
 - **Cascade, expected to clear.** Twelve fixtures reported `FIXTURE BROKEN — the pristine tree
   does not pass validate-enforcement-map.sh` against the dirty tree: consumer-machinery-home,
   enforcement-map-derivations and -b, enforcement-map-sites, -b and -c, layer-contract-conformance

@@ -1051,7 +1051,7 @@ non_catalog_units:
     enforcer:
       - core/scripts/validate-compact-window.sh
     call_sites:
-      - site: SKILL.md Rule 2 (context-budget setup)
+      - site: rule-bodies/rule-13.md (context-budget setup, Rule 13 body)
         posture: advisory — the operator sets autoCompactWindow, the lead verifies
         why: the bands are a clamped percentage of the resolved effective window,
           so red fires before compaction by construction; the script guards the band

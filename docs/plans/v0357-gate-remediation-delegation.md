@@ -401,9 +401,9 @@ Three defects produced it, each measured against the consumer's own artifacts ra
 inferred. All three live in `core/`; none is a consumer-side problem.
 
 **1 — The lead repairs inline, and Rule 28 licenses it in one word.**
-`core/skills/ai-dlc/SKILL.md:1406` places "owning PASS/FAIL/**remediation**" inside Rule 28's
+`core/skills/ai-dlc/rule-bodies/rule-28.md:16` places "owning the PASS/FAIL, the remediation" inside Rule 28's
 *non-delegable* set. Forty lines later the same rule says applying a fix inline "is a
-lead-conduct retro finding" (`SKILL.md:1432`). `enforcement-map.yaml:788` echoes the wider
+lead-conduct retro finding" (`rule-bodies/rule-28.md:49`). `enforcement-map.yaml:788` echoes the wider
 reading: `adjudication: lead   # a remediation protocol the lead executes`.
 
 Measured in the live session transcript
@@ -515,7 +515,7 @@ executed; and D4's reset re-runs the gate from a state that was chosen, not aban
 
 **A prose rule cannot carry this, because the lead has a sanctioned channel for authorizing its
 own deviations.** Rule 28 already contains the strongest sentence available to it —
-`SKILL.md:1429-1431`, *"The lead does NOT get to reason 'this is small, I'll just do it.' When
+`rule-bodies/rule-28.md:44-46`, *"The lead does NOT get to reason 'this is small, I'll just do it.' When
 the lead performs any action inline, it MUST name which exclusion (a/b/c) authorizes it."* It
 produced 115 inline edits.
 
@@ -612,7 +612,7 @@ edits are spent; this refuses the call.
   status YAML, git. Enumerate the permitted set and test it, or the hook wedges the pipeline it
   is protecting.
 
-**A1. `core/skills/ai-dlc/SKILL.md:1406` — Rule 28(c).** Narrow "owning PASS/FAIL/remediation"
+**A1. `core/skills/ai-dlc/rule-bodies/rule-28.md:16` — Rule 28(c).** Narrow "owning the PASS/FAIL, the remediation"
 to the *decision*: the lead owns PASS/FAIL, the disposition, and the escalation; the edit that
 follows is dispatched. Phrase it the way (c) already handles `llm` checks two sentences later
 ("The lead still owns the outcome — but it adopts an `llm` verdict only through fail-closed

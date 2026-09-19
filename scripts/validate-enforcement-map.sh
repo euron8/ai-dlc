@@ -3309,6 +3309,7 @@ resolve_site_file() {
   case "$1" in
     SKILL.md*)            echo "$REPO_ROOT/core/skills/ai-dlc/SKILL.md" ;;
     enforcement-map.yaml*) echo "" ;;
+    rule-bodies/*.md*)    echo "$REPO_ROOT/core/skills/ai-dlc/${1%%[ ]*}" ;;
     *.md*)                echo "$REPO_ROOT/core/skills/ai-dlc/steps/${1%%[ ]*}" ;;
     *)                    echo "" ;;
   esac
@@ -4819,6 +4820,7 @@ else
     err "I23 audit-rule-files.sh --list returned nothing from the distribution root. The corpus builder cannot see the distribution layout, so every class it reports is scanned over zero files."
   else
     rule_prose="$(cd "$REPO_ROOT" && ls core/skills/ai-dlc/*.md core/skills/ai-dlc/steps/*.md \
+                    core/skills/ai-dlc/rule-bodies/*.md \
                     core/skills/ai-dlc/templates/*.md core/skills/ai-dlc/extensions/*.md \
                     core/skills/ai-dlc/overrides/*.md core/team-roles/*.md \
                     core/skills/ai-dlc-setup/SKILL.md core/skills/ai-dlc-update/SKILL.md \

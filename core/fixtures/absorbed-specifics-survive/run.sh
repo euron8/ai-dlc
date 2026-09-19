@@ -42,6 +42,27 @@ SKILL="${1:-}"
 WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
+# THE SUBJECT IS THE RULEBOOK, NOT ONE FILE OF IT. At 0.604.0 seven rule bodies moved out of
+# SKILL.md into `rule-bodies/rule-NN.md` and both of this fixture's host sections went with
+# Rule 13. The claim these arms pin is that core still STATES each specific — the consumer
+# deleted its own copy on the strength of that — and which core file states it is a siting
+# decision this fixture must not pin, or the next such move reads as six absorbed specifics
+# being lost. Read SKILL.md and every rule body as ONE corpus.
+#
+# A CONSUMER MAY NOT HAVE THE DIRECTORY YET: a core fixture ships one pull ahead of its
+# subject, so an absent rule-bodies/ is the pre-0.604.0 layout, not a failure. The corpus is
+# then SKILL.md alone, which is exactly where the text lived then.
+CORPUS="$WORK/corpus.md"
+cat "$SKILL" > "$CORPUS"
+RB="$(dirname "$SKILL")/rule-bodies"
+if [ -d "$RB" ]; then
+  for _b in "$RB"/*.md; do [ -f "$_b" ] && cat "$_b" >> "$CORPUS"; done
+fi
+# The corpus must be at least the file it was built from; a truncated read would make every
+# presence arm below fail for a reason that has nothing to do with the claim.
+[ -s "$CORPUS" ] && [ "$(wc -c < "$CORPUS")" -ge "$(wc -c < "$SKILL")" ] \
+  || { echo "FIXTURE ERROR: corpus is smaller than SKILL.md -- the read failed" >&2; exit 2; }
+
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
@@ -73,9 +94,9 @@ echo "absorbed-specifics-survive:"
 # Every arm below is a presence check, and a presence check over the WRONG FILE, or over a file
 # the reader cannot open, fails for a reason that has nothing to do with the claim. Anchor on a
 # heading that must be in SKILL.md and would not be in a step file.
-if grep -qF 'No self-scheduling skill re-entry' "$SKILL" \
-   && grep -qF 'Pending operator approvals do not transfer across handoff' "$SKILL"; then
-  ok "CONTROL: both host sections are present in $(basename "$SKILL") — the arms below read the right file"
+if grep -qF 'No self-scheduling skill re-entry' "$CORPUS" \
+   && grep -qF 'Pending operator approvals do not transfer across handoff' "$CORPUS"; then
+  ok "CONTROL: both host sections are present in the rulebook corpus — the arms below read the right text"
 else
   bad "FIXTURE BROKEN: one or both host sections are absent, so every arm below fails for the wrong reason"
   echo; echo "absorbed-specifics-survive: FIXTURE BROKEN" >&2; exit 2
@@ -85,7 +106,7 @@ fi
 # 1-2. EVERY ABSORBED SPECIFIC IS STILL HERE.
 # =============================================================================
 for i in 0 1 2 3 4 5; do
-  if grep -qF -- "${LIT[$i]}" "$SKILL"; then
+  if grep -qF -- "${LIT[$i]}" "$CORPUS"; then
     ok "${CLAIM[$i]}"
   else
     bad "LOST: ${CLAIM[$i]} — the reference consumer deleted its own copy of this on the strength of core carrying it, so nothing else states it any more"
@@ -106,13 +127,13 @@ for i in 0 1 2 3 4 5; do
   # rather than as a broken program (measured: two of these six, written that way first). And a
   # literal appearing TWICE would have only its first occurrence removed here, leaving the arm
   # above green over a mutation that did fire -- a survival scored as a kill.
-  n_lit="$(grep -cF -- "${LIT[$i]}" "$SKILL" || true)"
+  n_lit="$(grep -cF -- "${LIT[$i]}" "$CORPUS" || true)"
   if [ "$n_lit" -ne 1 ]; then
     bad "MUTANT $i: its literal is on $n_lit line(s), not exactly 1 — a multi-line or repeated anchor cannot be removed cleanly, so '${CLAIM[$i]}' is unproven"
     continue
   fi
-  awk -v lit="${LIT[$i]}" '{ p=index($0,lit); if(p) $0 = substr($0,1,p-1) substr($0,p+length(lit)); print }' "$SKILL" > "$copy"
-  if cmp -s "$SKILL" "$copy"; then
+  awk -v lit="${LIT[$i]}" '{ p=index($0,lit); if(p) $0 = substr($0,1,p-1) substr($0,p+length(lit)); print }' "$CORPUS" > "$copy"
+  if cmp -s "$CORPUS" "$copy"; then
     bad "MUTANT $i: the literal for '${CLAIM[$i]}' could not be removed, so its arm above proves nothing"
     continue
   fi

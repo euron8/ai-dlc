@@ -60,6 +60,7 @@ core_manifest:
   - core/git-hooks/pre-push
   - core/skills/ai-dlc/SKILL.md
   - core/skills/ai-dlc/steps/*.md
+  - core/skills/ai-dlc/rule-bodies/*.md
   - core/skills/ai-dlc/escalations.md
   - core/skills/ai-dlc/rule-authoring.md
   - core/skills/ai-dlc/artifact-path-grammar.md
@@ -258,6 +259,7 @@ machinery:
 rulebook:
   - core/skills/ai-dlc/SKILL.md
   - core/skills/ai-dlc/steps/*.md
+  - core/skills/ai-dlc/rule-bodies/*.md
   - core/skills/ai-dlc/escalations.md
   - core/skills/ai-dlc/rule-authoring.md
   - core/skills/ai-dlc/artifact-path-grammar.md
