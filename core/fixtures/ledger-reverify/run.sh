@@ -182,6 +182,19 @@ row_is "Entry SH-SUBJECT-GONE" NEEDS-REVIEW "an && chain short-circuiting on a M
 # this one names a distribution path inside a rev-spec and must not be. An extractor that sees
 # neither passes the first arm alone; one that sees both passes the second alone.
 row_is "Entry SH-DIST-PATH" CLOSE-CANDIDATE "a \`core/scripts/<x>\` rev-spec names no consumer subject; reading one out of it withholds the close on a receipt that works"
+# `.git/` IS A CONSUMER HOME THE WHITELIST DID NOT CARRY, AND IT IS THE ONE A FRESH CHECKOUT MOST
+# OFTEN LACKS. `git clone` does not carry `.git/hooks/`, so the receipt exits non-zero for the
+# ABSENCE and the tip read it as a fix. Measured on the reference consumer: the 0.471.0→0.479.0
+# rehearsal recorded 2 CLOSE-CANDIDATE where the live run correctly reported 1.
+row_is "Entry SH-GITHOOK-GONE" NEEDS-REVIEW "an absent \`.git/hooks/<x>\` subject is a missing subject like any other — the tip skipped the token and read the absence as an absorption"
+# THE TWO OVER-FIRE CONTROLS FOR THE WIDENING, and they are what keep it from being the
+# bare-root-dotfile form measured as broken. A bare `.git` is a DIRECTORY on any real consumer, so
+# admitting it puts a token nobody wrote into the accusing population; the tokenizer strips `*`
+# before any guard sees it, so `core/hooks/*.sh` arrives as the bare token `.sh` and a dotfile arm
+# turns every `*.ext` in every receipt into a spurious NEEDS-REVIEW — which SUPPRESSES A REAL
+# CLOSE. Both must still close, or the fix is the wider one this entry exists to refuse.
+row_is "Entry SH-GIT-BARE-TOKEN" CLOSE-CANDIDATE "the bare token \`.git\` is not a subject — a path segment after \`.git/\` is required, or a directory every consumer has becomes an accusation"
+row_is "Entry SH-GLOB-BARE-EXT" CLOSE-CANDIDATE "\`core/hooks/*.sh\` tokenizes to the bare \`.sh\`, which carries no glob character for the glob guard to refuse — admitting it files every \`*.ext\` receipt as unresolved"
 row_is "Entry SH-LIVE"  STILL-LIVE "exit 0 still means it reproduces"
 
 row_is "Entry M" CLOSE-CANDIDATE "two substrings, BOTH at theirs -> absorbed, must not stay open"
@@ -591,7 +604,13 @@ fi
 MUTP="$(dirname "$DIST")/mut-prefix"
 rm -rf "$MUTP"; mkdir -p "$MUTP"
 cp "$(dirname "$CLOSER")"/*.sh "$MUTP/" 2>/dev/null
-sed 's@      docs/\*|_bmad-output/\*|scripts/\*|\.claude/\*) ;;@      *docs/*|*_bmad-output/*|*scripts/*|*.claude/*) ;;@' \
+#
+# THE ANCHOR CARRIES EVERY ALTERNATION THE WHITELIST HAS, `.git/?*` INCLUDED. A mutation keyed on
+# a subset of the line matches nothing the day an alternation is added, `cmp -s` reports DID NOT
+# APPLY, and the arm below fails on the commit that fixes a defect — which reads exactly like the
+# fix being wrong. The widened form keeps `.git/?*` widened too, so SH-GITHOOK-GONE stays
+# NEEDS-REVIEW under this mutant and only SH-DIST-PATH moves.
+sed 's@      docs/\*|_bmad-output/\*|scripts/\*|\.claude/\*|\.git/?\*) ;;@      *docs/*|*_bmad-output/*|*scripts/*|*.claude/*|*.git/?*) ;;@' \
   "$CLOSER" > "$MUTP/ledger-reverify.sh"
 
 ASSERTIONS=$((ASSERTIONS + 1))
@@ -602,6 +621,7 @@ else
   mp_out="$(bash "$MUTP/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>/dev/null)"
   mp_dist="$(printf '%s\n' "$mp_out" | awk -F'\t' '$2 ~ /Entry SH-DIST-PATH/ {print $1; exit}')"
   mp_gone="$(printf '%s\n' "$mp_out" | awk -F'\t' '$2 ~ /Entry SH-SUBJECT-GONE/ {print $1; exit}')"
+  mp_hook="$(printf '%s\n' "$mp_out" | awk -F'\t' '$2 ~ /Entry SH-GITHOOK-GONE/ {print $1; exit}')"
   if [ -z "$mp_out" ]; then
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s the mutant produced NO rows — a dead copy scores every absence as a kill\n' "mutation-prefix"
@@ -611,8 +631,84 @@ else
   elif [ "$mp_gone" != "NEEDS-REVIEW" ]; then
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s the mutant also moved SH-SUBJECT-GONE to %s — it blinded the extractor instead of widening it\n' "mutation-prefix" "${mp_gone:-<none>}"
+  elif [ "$mp_hook" != "NEEDS-REVIEW" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutant moved SH-GITHOOK-GONE to %s — it did not widen the `.git/` alternation with the others, so this mutation is a PARTIAL one and its kill is not the anchoring\n' "mutation-prefix" "${mp_hook:-<none>}"
   else
     printf '  ok    %-22s a substring prefix test reads a consumer subject out of a distribution rev-spec, and only SH-DIST-PATH moves\n' "mutation-prefix"
+  fi
+fi
+
+# MUTATION — NARROW the whitelist back to the four prefixes it carried before `.git/`, which is
+# the TIP form this entry exists to fix. SH-GITHOOK-GONE must fall back to the FALSE CLOSE, and
+# SH-SUBJECT-GONE must stay NEEDS-REVIEW: a mutant that reddens both blinded the extractor rather
+# than removing the one prefix. This is the ABSENCE-shaped arm's mutant — without it the
+# `row_is "Entry SH-GITHOOK-GONE" NEEDS-REVIEW` assertion above passes identically against an
+# extractor that flags everything.
+MUTG="$(dirname "$DIST")/mut-nogit"
+rm -rf "$MUTG"; mkdir -p "$MUTG"
+cp "$(dirname "$CLOSER")"/*.sh "$MUTG/" 2>/dev/null
+sed 's@      docs/\*|_bmad-output/\*|scripts/\*|\.claude/\*|\.git/?\*) ;;@      docs/*|_bmad-output/*|scripts/*|.claude/*) ;;@' \
+  "$CLOSER" > "$MUTG/ledger-reverify.sh"
+
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$CLOSER" "$MUTG/ledger-reverify.sh"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the mutation matched nothing, so the `.git/` prefix assertion is unproven\n' "mutation-nogit"
+else
+  mg2_out="$(bash "$MUTG/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>/dev/null)"
+  mg2_hook="$(printf '%s\n' "$mg2_out" | awk -F'\t' '$2 ~ /Entry SH-GITHOOK-GONE/ {print $1; exit}')"
+  mg2_gone="$(printf '%s\n' "$mg2_out" | awk -F'\t' '$2 ~ /Entry SH-SUBJECT-GONE/ {print $1; exit}')"
+  if [ -z "$mg2_out" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutant produced NO rows — a dead copy scores every absence as a kill\n' "mutation-nogit"
+  elif [ "$mg2_hook" != "CLOSE-CANDIDATE" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s without the `.git/` prefix SH-GITHOOK-GONE read %s, not the FALSE CLOSE the defect produces — the arm above is not watching this prefix\n' "mutation-nogit" "${mg2_hook:-<none>}"
+  elif [ "$mg2_gone" != "NEEDS-REVIEW" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutant also moved SH-SUBJECT-GONE to %s — it blinded the extractor instead of removing one prefix\n' "mutation-nogit" "${mg2_gone:-<none>}"
+  else
+    printf '  ok    %-22s without the `.git/` prefix an absent hook subject reads CLOSE-CANDIDATE — the measured false close, reproduced — while SH-SUBJECT-GONE is unmoved\n' "mutation-nogit"
+  fi
+fi
+
+# MUTATION — THE OVER-WIDE DIRECTION, and it is the one this entry's own filed remedy proposed.
+# Adding a bare-root-dotfile arm beside `.git/` admits the bare token `.sh` that the tokenizer
+# manufactures from `core/hooks/*.sh`, and the bare `.git` directory token besides. Both of this
+# battery's over-fire controls must FLIP to NEEDS-REVIEW under it, which is the suppression
+# failure — a spurious review withholding a legitimate close, with every `*.ext` receipt in it.
+# WITHOUT THIS MUTANT THE BATTERY ACCEPTS THE WIDER FIX: every arm above passes under it.
+MUTD="$(dirname "$DIST")/mut-dotfile"
+rm -rf "$MUTD"; mkdir -p "$MUTD"
+cp "$(dirname "$CLOSER")"/*.sh "$MUTD/" 2>/dev/null
+sed 's@      docs/\*|_bmad-output/\*|scripts/\*|\.claude/\*|\.git/?\*) ;;@      docs/*|_bmad-output/*|scripts/*|.claude/*|.git/?*) ;;\
+      .*) ;;@' \
+  "$CLOSER" > "$MUTD/ledger-reverify.sh"
+
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$CLOSER" "$MUTD/ledger-reverify.sh"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the mutation matched nothing, so the over-fire controls are unproven\n' "mutation-dotfile"
+else
+  md_out="$(bash "$MUTD/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>/dev/null)"
+  md_ext="$(printf '%s\n' "$md_out" | awk -F'\t' '$2 ~ /Entry SH-GLOB-BARE-EXT/ {print $1; exit}')"
+  md_bare="$(printf '%s\n' "$md_out" | awk -F'\t' '$2 ~ /Entry SH-GIT-BARE-TOKEN/ {print $1; exit}')"
+  md_hook="$(printf '%s\n' "$md_out" | awk -F'\t' '$2 ~ /Entry SH-GITHOOK-GONE/ {print $1; exit}')"
+  if [ -z "$md_out" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutant produced NO rows — a dead copy scores every absence as a kill\n' "mutation-dotfile"
+  elif [ "$md_ext" != "NEEDS-REVIEW" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s a bare-dotfile arm left SH-GLOB-BARE-EXT at %s — the `.sh` token the tokenizer makes from a glob is not reaching the whitelist, so that control is asserting nothing\n' "mutation-dotfile" "${md_ext:-<none>}"
+  elif [ "$md_bare" != "NEEDS-REVIEW" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s a bare-dotfile arm left SH-GIT-BARE-TOKEN at %s — the bare `.git` token is not reaching the whitelist, so the required path segment is asserting nothing\n' "mutation-dotfile" "${md_bare:-<none>}"
+  elif [ "$md_hook" != "NEEDS-REVIEW" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the wider mutant ALSO lost SH-GITHOOK-GONE (%s) — it broke the whitelist rather than widening it, so its two kills above are not about the dotfile arm\n' "mutation-dotfile" "${md_hook:-<none>}"
+  else
+    printf '  ok    %-22s a bare-root-dotfile arm flips BOTH over-fire controls to NEEDS-REVIEW — every `*.ext` receipt filed as unresolved, suppressing real closes — while the motivating hook case is unmoved\n' "mutation-dotfile"
   fi
 fi
 
