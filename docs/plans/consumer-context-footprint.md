@@ -168,12 +168,22 @@ for f in files:
                 cat[k]+=len(t); n[k]+=1
 tot=sum(cat.values())
 for k,v in cat.most_common(): print(f"{v/tot*100:5.1f}% {v:10d} n={n[k]:5d} {k}")
-print("bash>8KB", big, bigsum, "| control: total categories", len(cat), "(expect 7)")
+print("bash>8KB", big, bigsum, "| control: total categories", len(cat), "(expect 8)")
 EOF
 ```
 
-Control: the last line's category count must read 7; a different answer means STOP and ping
-the operator — the transcript schema moved and every share above is void.
+Control: the last line's category count must read **8** — eight is the grammar's class count by
+construction, derived: the `k` assignments name exactly eight classes (`bash`, `read:step`,
+`read:snapshot`, `read:other`, `tool:other`, `skill:ai-dlc-update`, `skill:ai-dlc`,
+`user:text`) and the first-seen mtime of every one in the graph corpus is 2026-08-20, a month
+before this plan was authored, with only one corpus file added since. The authored expectation
+was 7, which no run of this grammar over this corpus could have produced — an unattainable
+expectation, the `plan-shape-measured` class: a done-when whose PASS was never reachable,
+sitting in a derive block instead of a done-when section.
+A different answer now means a schema or grammar shift, and then STOP and ping the operator.
+This control voids only the shares THIS block renders — the Derivation table below came from a
+finer scratch-brief classifier whose `Agent results` and `Team-role reads` classes this grammar
+cannot express, so it is not re-voided by this block's readings.
 
 ## Context
 
