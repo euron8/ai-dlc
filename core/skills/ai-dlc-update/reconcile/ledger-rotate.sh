@@ -231,7 +231,10 @@ SPLIT_FINDINGS="$(LC_ALL=C awk "$(ledger_entry_awk)$(ledger_entry_id_awk)${CLOSE
   {
     lab = label_of($0)
     if (lab != "\001") {
-      if (ledger_entry_id(lab) != "") { report(); entry_at = NR; entry_lab = lab; closed = 0; entry_hasv = 0; next }
+      # ARM THE TITLE JOIN ON AN ID-KEYED BOUNDARY, for the reason the `closed` test below
+      # states: this guard only has a subject where rotation can MOVE the entry, so it must
+      # recognise exactly the closes the move recognises. A wrapped title is one of them.
+      if (ledger_entry_id(lab) != "") { report(); entry_at = NR; entry_lab = lab; closed = 0; entry_hasv = 0; ledger_title_arm($0); next }
       report()
       if (entry_at && closed) {
         susp_at = NR; susp_lab = lab; susp_colon = (lab ~ /:$/)
@@ -255,6 +258,12 @@ SPLIT_FINDINGS="$(LC_ALL=C awk "$(ledger_entry_awk)$(ledger_entry_id_awk)${CLOSE
     # split with no refusal -- the one outcome this guard exists to prevent. It is the same
     # grammar the move below uses, from the same single home.
     if (ledger_body_archives($0) && !susp_at) closed = 1
+    # AND THE WRAPPED TITLE, SAME REASON. `ledger_title_join` returns non-empty only on the line
+    # that closes a title span armed above, so this is the join that completes an entry line the
+    # per-line rules could not read whole. Gated on `!susp_at` exactly as the line above is: once
+    # a suspect boundary is pending, the entry whose closedness matters is the one ABOVE it.
+    if (!susp_at) { __tj = ledger_title_join($0)
+                    if (__tj != "" && ledger_entry_line_archives(__tj)) closed = 1 }
     # DELIBERATELY NOT THE LIFTED PREDICATE, AND THE MEASUREMENT IS WHY. This one and the stuck
     # rule below ask a similar question and FAIL IN OPPOSITE DIRECTIONS, so one rule cannot serve
     # both. The stuck rule makes a CLAIM -- these are the entries reverify skips -- so a loose
@@ -370,7 +379,20 @@ awk -v keep="$TMPD/keep" -v move="$TMPD/move" -v names="$TMPD/moved-names" -v st
       # -- inert rather than merely wrong. `ledger_archive_awk` emits both for that reason.
       if (ledger_entry_line_archives($0)) closed = 1
       if (ledger_entry_line_closes($0)) loose = 1
+      # ARM THE TITLE JOIN. A long title wraps with its bold span still open, putting the close
+      # on the NEXT line where no per-line rule can see a complete annotation. `ledger_title_arm`
+      # notices the unbalanced span; the rule below finishes the join and tests it. Armed here
+      # rather than in lib.sh because THIS is where the boundary rule has already decided the
+      # line is an entry line, and a title join may only ever start on one.
+      ledger_title_arm($0)
       next } }
+  # THE JOINED TITLE, TESTED BY THE SAME PREDICATE A SINGLE LINE GETS. `ledger_title_join`
+  # returns the empty string until the span closes, so this fires at most once per title and
+  # never on a body line. Only `closed` is set: `loose` is already 1 from the entry line, whose
+  # unanchored rule sees the token wherever the wrap put it, so the stuck row this entry used to
+  # produce simply stops being produced.
+  { __tj = ledger_title_join($0)
+    if (__tj != "" && ledger_entry_line_archives(__tj)) closed = 1 }
   # THE BOLD SPAN IS WHAT SEPARATES AN ANNOTATION FROM A MENTION, AND IT CARRIES BOTH OF THE
   # FIXES THE RETIRED `(v<digit>` LITERAL USED TO CARRY.
   #

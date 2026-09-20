@@ -628,6 +628,66 @@ ledger_archive_awk() {
     *)             _lar_rest="" ;;
   esac
   printf 'function ledger_entry_line_archives(s) { return (s ~ /%s%s/)%s }\n' "$_lar_req" "$_lar_tail" "$_lar_rest"
+
+  # A TITLE WRAPS, AND A CLOSE THAT STRADDLES THE WRAP IS INVISIBLE TO EVERY PER-LINE RULE.
+  # An entry title is prose an operator types, so it runs long and gets broken across lines with
+  # the bold span still OPEN:
+  #
+  #   - **PC-S311-SNAPSHOT-NEVER-ADVANCES-PAST-DEPLOY-VALIDATE-AT-SPRINT-CLOSE —
+  #     ADOPTED UPSTREAM (v0.554.0, verified 2026-09-15)** —
+  #
+  # Neither line is a complete annotation. The first opens a bold span and carries no token; the
+  # second carries the token and the CLOSING `**` but has no opener, so a rule demanding
+  # `\*\*[^`]*<token>` scores it a non-instance. Every predicate in this directory is per-line,
+  # so the entry was skipped by re-verification -- `entry_line_closes()` is unanchored and fires
+  # on the token wherever it sits -- and refused by every rotation. Skipped-but-unarchivable
+  # again, in the one shape the bold transform cannot reach.
+  #
+  # THE FIX NORMALISES THE INPUT RATHER THAN WIDENING THE REGEX, AND THAT CHOICE IS THE POINT.
+  # A two-line regex would have to re-express the alternation across a join, which is exactly
+  # where the ungrouped-alternation defect recorded above was born. Joining the lines FIRST and
+  # handing the result to `ledger_entry_line_archives()` unchanged means the grammar is still
+  # written once, still grouped correctly, and the straddle costs no new pattern at all.
+  #
+  # THE JOIN IS DELIBERATELY NOT "THE WHOLE BUFFERED ENTRY", AND THAT WAS MEASURED, NOT ASSUMED.
+  # Rotation buffers every line of an entry before deciding, so a rule of the form "a bold span
+  # opens on ANY buffered line and a token appears before it closes" is available and is the
+  # obvious shape. It has a FALSE POSITIVE on the reference consumer live ledger, enumerated:
+  # `## Validator-fork retirement record`, a human record whose own prose explains that it keys
+  # on a bolded annotation and "is meant to stay whole rather than have pieces of it swept into
+  # the archive". Its narrative BOLDS a phrase, and a later line quotes the convention -- so the
+  # whole-buffer rule archives the very entry that documents why it must not be archived. That
+  # is `ledger-rotate.sh`s instruction/narrative discrimination failing in the direction that
+  # loses work. Scored over both consumer files: whole-buffer newly archives 1 live / 0 archived,
+  # and that 1 is the false positive; this title join newly archives 1 live / 0 archived, and
+  # that 1 is the genuine straddle. Same count, opposite entry.
+  #
+  # THREE CLAUSES BOUND IT, and each one is what keeps a narrative line out.
+  #   - It starts ONLY on an entry-shape line whose bold span is still open. A body line can
+  #     never start a join, which is what excludes the narrative case above entirely.
+  #   - It ends at the first line that CLOSES the span, and tests only then. An unbalanced title
+  #     joins nothing.
+  #   - A BLANK line abandons it. A title wrap has no blank line in it; a body that merely opens
+  #     bold is separated from the title by one, so an unterminated span cannot run on and
+  #     swallow the body.
+  # The token still has to sit inside the joined bold span, because the predicate handed the
+  # join is byte-identical to the one handed a single line.
+  printf '%s\n' 'function ledger_title_join(l,   j) {'
+  printf '%s\n' '  if (__ltj_open) {'
+  printf '%s\n' '    if (l ~ /^[ \t]*$/) { __ltj_open = 0; __ltj_buf = ""; return "" }'
+  printf '%s\n' '    j = l; sub(/^[ \t]+/, " ", j); __ltj_buf = __ltj_buf j'
+  printf '%s\n' '    if (gsub(/\*\*/, "", j) % 2 == 1) { __ltj_open = 0; j = __ltj_buf; __ltj_buf = ""; return j }'
+  printf '%s\n' '    return ""'
+  printf '%s\n' '  }'
+  printf '%s\n' '  return ""'
+  printf '%s\n' '}'
+  # ARMED ONLY BY THE CALLER, ON A LINE IT HAS ALREADY CLASSIFIED AS AN ENTRY BOUNDARY. The
+  # caller owns the boundary rule (`ledger_entry_shape`), so asking it to arm the join keeps the
+  # one definition of "entry line" where it already lives instead of restating it here.
+  printf '%s\n' 'function ledger_title_arm(l,   t) {'
+  printf '%s\n' '  t = l; __ltj_open = 0; __ltj_buf = ""'
+  printf '%s\n' '  if (gsub(/\*\*/, "", t) % 2 == 1) { __ltj_open = 1; __ltj_buf = l }'
+  printf '%s\n' '}'
 }
 
 # ---------------------------------------------------------------------------

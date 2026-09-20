@@ -2160,7 +2160,9 @@ declared sites, not everywhere unconditionally.
      version at `theirs` covers your entry (the row's detail names the sha and the version),
      then annotate the ledger entry `**ADOPTED UPSTREAM (v<theirs>, verified <date>)**`, matching
      the existing hand-written closure format. **The bold span is what the rotator reads** — a
-     close written without one is skipped-but-unarchivable. Two other close forms are honoured
+     close written without one is skipped-but-unarchivable. A close inside a long entry TITLE may
+     wrap across a line break with the span still open; that is read as one annotation.
+     Two other close forms are honoured
      and neither takes a version: `**WITHDRAWN (<date>) — <why>**` for an entry whose premise was
      false, and `**CLOSED AS REJECTED — BY DESIGN, adjudicated <date>**` for a candidate upstream
      considered and declined. Never invent a version to make a close archivable.
