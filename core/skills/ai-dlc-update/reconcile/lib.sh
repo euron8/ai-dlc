@@ -465,9 +465,26 @@ ledger_entry_id_awk() { :; }
 # closed -- a rotation guard that permits everything, reading exactly like one that found nothing
 # to stop. More than one match means the grammar is no longer single-homed, and lifting "the" line
 # is then not a question with an answer.
-ledger_close_awk() {
+#
+# THE FINDER MUST NOT HAND-LIST THE TOKEN SET IT IS LOOKING FOR, AND IT DID. This grep used to
+# spell `\(ADOPTED UPSTREAM\|WITHDRAWN\)` — the emitter's alternation, verbatim — so ADDING a
+# close token to the single home silently matched 0 and every caller refused. MEASURED at exactly
+# that point in this change: adding `CLOSED AS REJECTED` to the two predicates in
+# `ledger-reverify.sh` took both finders here from 1 to 0 in the same invocation, against a
+# control of 1 for the relaxed forms below and 0 for an impossible token. That is the LOUD
+# direction — `ledger_close_awk` refuses, the caller exits 2 — but it means the single home is
+# not single: it is one grammar joined to a copy of its own membership, and the copy is here.
+# The finders now key on the STRUCTURE of the rule (a line-pattern setting `closed=1`; a `return`
+# testing `s`) plus ONE anchor token that is load-bearing for every spelling, and the
+# exactly-one guard is what keeps that anchor from matching two rules.
+#
+# THE PATTERN IS EXTRACTED ONCE, BY `ledger_close_awk_pattern()`, because `ledger_archive_awk()`
+# below DERIVES rotation's grammar from the same bytes. Two extractions of one line are two
+# chances to disagree about what that line says, which is the failure this whole block exists to
+# prevent, one level down.
+ledger_close_awk_pattern() { # the BODY close regex, bare, on stdout
   _lca_src="${SELF:-.}/ledger-reverify.sh"
-  _lca_re_find='^[[:space:]]*/.*\(ADOPTED UPSTREAM\|WITHDRAWN\).*closed=1 \}$'
+  _lca_re_find='^[[:space:]]*/.*ADOPTED UPSTREAM.*closed=1 \}$'
   if [ ! -r "$_lca_src" ]; then
     echo "lib.sh: ledger_close_awk cannot read $_lca_src -- the close grammar is single-homed there and must not be restated here" >&2
     return 1
@@ -483,7 +500,130 @@ ledger_close_awk() {
     echo "lib.sh: ledger_close_awk could not extract a pattern out of: $_lca_rule" >&2
     return 1
   fi
-  printf 'function ledger_body_closes(l) { return (l ~ /%s/) }\n' "$_lca_pat"
+  printf '%s\n' "$_lca_pat"
+}
+ledger_close_awk() {
+  _lcw_pat="$(ledger_close_awk_pattern)" || return 1
+  printf 'function ledger_body_closes(l) { return (l ~ /%s/) }\n' "$_lcw_pat"
+}
+
+# ledger_archive_awk() — ROTATION's grammar, DERIVED from the skip grammar rather than
+# hand-listed beside it.
+#
+# THE DEFECT THIS CLOSES, MEASURED. `ledger-reverify.sh` honoured a SET of close tokens;
+# `ledger-rotate.sh` archived on ONE literal, `**ADOPTED UPSTREAM (v[0-9]`, written out at three
+# sites and containing the token `WITHDRAWN` zero times (control, same file: `ADOPTED UPSTREAM`
+# 19 times; impossible token 0). An entry closed by a token rotate could not spell was therefore
+# SKIPPED by every re-verification and REFUSED by every rotation at once — invisible in the report
+# and permanently resident in the live ledger. `ledger-rotate.sh` already named that class
+# "closed-and-unarchivable" in its own stuck-report comment, having never been able to shrink it.
+# Measured on the reference consumer live ledger at this change: SIX entries stranded, five of
+# which this grammar takes.
+#
+# WHAT THE TRANSFORM IS, AND WHY IT IS THE WHOLE OF ROTATION'S EXTRA STRICTNESS. The skip rule is
+# anchored line-leading structure, an OPTIONAL bold span, then the token alternation. Rotation
+# wants exactly the same thing with the bold span MANDATORY: an annotation opens a bold span, a
+# prose mention does not. So this makes `(\*\*[^`]*)?` into `\*\*[^`]*` and changes nothing else,
+# which is why a token added to the skip rule reaches rotation in the SAME edit and a fourth
+# spelling cannot appear in one file alone.
+#
+# THE TRANSFORM IS STRICTLY NARROWING, AND THAT IS ASSERTED RATHER THAN ASSUMED. Measured over the
+# reference consumer's two ledger files in one invocation: skip 5 / archive 4 on the live file and
+# 265 / 265 on the archive, with the not-a-subset count ZERO on both and an impossible-token
+# control 0. An archive verdict this grammar reaches is therefore always one reverify already
+# skips — the acceptance invariant `ledger-rotate.sh`'s header states, now true by construction
+# rather than by two authors agreeing.
+#
+# IT IS ALSO STRICTLY WIDER THAN THE LITERAL IT REPLACES, WHICH IS THE HALF THAT COULD LOSE WORK.
+# Measured over every boundary-shaped line of both consumer files: the old `(v[0-9]` literal takes
+# 0 live / 14 archived, this grammar takes 1 / 14, and the lines the OLD rule takes that this one
+# does NOT number ZERO on both files. So nothing that archived before stops archiving. The one
+# addition on the live file is `PC-S300-…-CITATIONS — **WITHDRAWN 2026-07-25, the premise was
+# false**`, a real close this repo's own vocabulary already honoured.
+#
+# WHAT IT DELIBERATELY DOES NOT DO: INVENT A VERSION. The old literal demanded a digit after
+# `(v`, so a genuine close that HAS no version — a withdrawal, an absorption predating the pull's
+# base, a rejection adjudicated by date — could never satisfy it, and the only ways out were to
+# leave the entry live forever or to annotate a falsehood. This grammar requires the annotation
+# FORM and says nothing about the parenthetical, so a versionless close archives on its own terms.
+# The digit anchor's own defect (`\(v` matching `(verified`) dies with the literal.
+#
+# REFUSES RATHER THAN GUESSING, exactly as the two lifts above do and for the same reason: an
+# empty archive predicate would make rotation move NOTHING while exiting 0, which reads
+# identically to a ledger with nothing closed in it.
+ledger_archive_awk() {
+  _lar_pat="$(ledger_close_awk_pattern)" || return 1
+  # THE OPTIONAL BOLD SPAN, AS A LITERAL. The emitter writes it exactly this way; a REGEX match
+  # here would be a third grammar to keep in step, and a substring test cannot silently half-match.
+  _lar_opt='(\*\*[^`]*)?'
+  _lar_req='\*\*[^`]*'
+  case "$_lar_pat" in
+    *"$_lar_opt"*) ;;
+    *)
+      echo "lib.sh: ledger_archive_awk cannot find the optional bold span '$_lar_opt' in the close grammar '$_lar_pat' -- rotation's extra strictness IS that span becoming mandatory, so with no span to promote there is no archive rule to derive" >&2
+      return 1 ;;
+  esac
+  _lar_head="${_lar_pat%%"$_lar_opt"*}"
+  _lar_tail="${_lar_pat#*"$_lar_opt"}"
+  printf 'function ledger_body_archives(l) { return (l ~ /%s%s%s/) }\n' "$_lar_head" "$_lar_req" "$_lar_tail"
+
+  # TWO PREDICATES, BECAUSE A CLOSE SITS IN TWO PLACES AND ONLY ONE OF THEM HAS A LINE START TO
+  # ANCHOR ON. A BODY annotation is line-leading. An ENTRY-LINE close sits mid-line after the
+  # title (`## PC-FOO — **WITHDRAWN …**`), so the body anchor there is not merely wrong but INERT:
+  # it can never match a line beginning `- **` or `## `, and every entry line ever passed to it
+  # would answer "not closed". `ledger_entry_line_close_awk` records that measurement.
+  #
+  # AND THE ENTRY-LINE RULE IS DERIVED FROM REVERIFY'S ENTRY-LINE RULE, NOT FROM THE BODY ONE,
+  # BECAUSE THE TWO DO NOT HONOUR THE SAME SET. `entry_line_closes()` carries a SECOND disjunct
+  # the body rule has never had: the retained-copy parenthetical `(original text, retained for
+  # the record)`, which closes the copy a withdrawal supersedes. Deriving rotation's entry-line
+  # rule from the body grammar would have left that token skipped-but-unarchivable — the exact
+  # class this whole change exists to empty, surviving in the one member nobody was looking at.
+  # MEASURED on the reference consumer: with the body-derived form, stuck fell 6 -> 2 and this
+  # entry was one of the two.
+  #
+  # THE TRANSFORM IS APPLIED TO THE TOKEN TERM ONLY, AND THE RETAINED-COPY TERM IS CARRIED
+  # THROUGH UNCHANGED. That is not an oversight and it is not a relaxation. A close annotation
+  # opens a bold span, which is why requiring one separates an annotation from a mention; the
+  # retained-copy marker is not an annotation at all but a TITLE SUFFIX, and the convention
+  # writes it bare — `## PC-FOO (original text, retained for the record) — …`. Requiring a bold
+  # span of it would be requiring a form it never has, which is this entry's own defect pointed
+  # the other way.
+  #
+  # ITS FALSE-POSITIVE SET IS MEASURED OVER THE POPULATION IT IS ACTUALLY APPLIED TO, WHICH IS
+  # BOUNDARY LINES AND NOT THE FILE. Across the reference consumer's live ledger and archive the
+  # parenthetical occurs twice: once on a boundary line, the genuine retained copy this takes,
+  # and once inside prose that DESCRIBES the convention — a line beginning with a backtick, which
+  # is not boundary-shaped and which no caller ever hands to this predicate. So the set is EMPTY,
+  # enumerated rather than asserted, with an impossible-token control of 0 in the same invocation.
+  #
+  # THE TOKEN TERM IS REPLACED, NOT EDITED IN PLACE, AND THAT IS A CORRECTNESS FIX RATHER THAN A
+  # STYLE ONE. The entry-line rule writes its alternation UNGROUPED -- `/ADOPTED UPSTREAM|WITHDRAWN
+  # |CLOSED AS REJECTED/` -- where the body rule wraps it in parentheses. Splicing the bold prefix
+  # into the ungrouped form binds it to the FIRST alternative only (`|` is the lowest-precedence
+  # operator in an ERE), so the built rule reads "bolded ADOPTED UPSTREAM, or a bare WITHDRAWN
+  # anywhere on the line" -- looser than the skip rule it is supposed to narrow, which is the one
+  # direction that archives live work. BUILT AND MEASURED before this note existed. So the token
+  # term is taken from the BODY archive pattern, where the grouping is already correct, with only
+  # the line-leading anchor dropped; the retained-copy term is carried across untouched.
+  _lar_elc="$(ledger_entry_line_close_awk)" || return 1
+  _lar_elc="${_lar_elc#function ledger_entry_line_closes(s) \{ }"
+  _lar_elc="${_lar_elc% \}}"
+  _lar_key='return (s ~ /'
+  case "$_lar_elc" in
+    "$_lar_key"*) ;;
+    *)
+      echo "lib.sh: ledger_archive_awk expected the entry-line close rule to OPEN with '$_lar_key' and got '$_lar_elc' -- rotation's entry-line grammar replaces that first term with a bolded one and carries the rest across, so a rule of another shape cannot be derived from" >&2
+      return 1 ;;
+  esac
+  # EVERYTHING AFTER THE FIRST TERM, CARRIED VERBATIM. A rule with no second disjunct leaves this
+  # empty and the built rule is the token test alone, which is the right answer for that emitter.
+  _lar_rest="${_lar_elc#"$_lar_key"}"
+  case "$_lar_rest" in
+    */\)\ \|\|\ *) _lar_rest=" || ${_lar_rest#*/) || }" ;;
+    *)             _lar_rest="" ;;
+  esac
+  printf 'function ledger_entry_line_archives(s) { return (s ~ /%s%s/)%s }\n' "$_lar_req" "$_lar_tail" "$_lar_rest"
 }
 
 # ---------------------------------------------------------------------------
@@ -678,7 +818,11 @@ ledger_entry_line_close_awk() {
   # `\(` `\|` `\)` matches those characters, which is what the target line actually contains.
   # Written unescaped they are a group and an alternation, and the group never closes -- the
   # shim reports `error at position 66` rather than matching nothing, which at least fails loudly.
-  _elc_re_find='^[[:space:]]*return \(s ~ /ADOPTED UPSTREAM\|WITHDRAWN/\)'
+  # TOKEN-SET-AGNOSTIC, for the reason `ledger_close_awk` above states at length: a finder that
+  # spells the alternation it is hunting scores 0 the day a close token is added, and the single
+  # home stops being single. `[^/]*` spans whatever the alternation holds; the exactly-one guard
+  # below is what stops this matching a second `return (s ~ /…/)` rule.
+  _elc_re_find='^[[:space:]]*return \(s ~ /[^/]*ADOPTED UPSTREAM[^/]*/\)'
   if [ ! -r "$_elc_src" ]; then
     echo "lib.sh: ledger_entry_line_close_awk cannot read $_elc_src -- the entry-line close grammar is single-homed there and must not be restated here" >&2
     return 1

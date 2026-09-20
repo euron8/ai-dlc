@@ -15,23 +15,43 @@
 # step in the whole update, and it grows every sprint.
 #
 # ROTATION IS DELIBERATELY STRICTER THAN THE SKIP RULE, and the asymmetry is the point.
-# `ledger-reverify.sh` treats an entry as closed on `/ADOPTED UPSTREAM/` anywhere in it. That
-# is right for SKIPPING — the cost of skipping one extra entry is one unverified row — but
-# wrong for MOVING, where the cost is live work filed into an archive nobody re-reads.
+# `ledger-reverify.sh` treats an entry as closed on a LINE-LEADING marker with an OPTIONAL bold
+# span. That is right for SKIPPING — the cost of skipping one extra entry is one unverified row —
+# but wrong for MOVING, where the cost is live work filed into an archive nobody re-reads.
 #
 # The phrase occurs in open entries as instruction ("annotate `ADOPTED UPSTREAM (vX, verified
 # <date>)` once the grep is non-zero") and as narrative ("the sentinel ADOPTED UPSTREAM in
 # v0.135.0, but ..."). Measured on the reference consumer: 47 occurrences, 32 in the annotation
 # form, so 15 are not annotations. A rotation on the loose rule archives those entries.
 #
-# So rotation requires the ANNOTATION FORM this ledger actually writes: bolded, with a version
-# NUMBER immediately after — `**ADOPTED UPSTREAM (v<digit>`. Anything else stays. An entry
-# wrongly kept costs one more pull to notice; an entry wrongly archived costs the work.
+# SO ROTATION REQUIRES THE ANNOTATION FORM, AND THAT REQUIREMENT IS NOW ONE TRANSFORM OF THE SKIP
+# RULE RATHER THAN A SECOND LIST. An annotation opens a BOLD SPAN; a prose mention does not. So
+# `lib.sh`s `ledger_archive_awk()` takes reverify`s grammar and makes its optional bold span
+# MANDATORY, changing nothing else. An entry wrongly kept costs one more pull to notice; an entry
+# wrongly archived costs the work — and both of those are still true, because the transform is
+# strictly narrowing. MEASURED over the reference consumer`s two ledger files in one invocation:
+# skip 5 / archive 4 on the live file, 265 / 265 on the archive, an archive-not-a-subset-of-skip
+# count of ZERO on both, impossible-token control 0.
 #
-# THE DIGIT IS LOAD-BEARING AND WAS ADDED AFTER THIS SCRIPT ARCHIVED A LIVE ENTRY. Without it
-# the pattern matches its own quotation — a push candidate filed ABOUT this rule writes the form
-# it describes — and it also matches `(verified`, so a close carrying no version at all passed a
-# rule whose banner promises one. Both are measured at the predicate below.
+# THIS FILE USED TO HAND-WRITE ITS OWN LITERAL, `**ADOPTED UPSTREAM (v<digit>`, AT THREE SITES,
+# AND THAT LIST WAS ONE TOKEN SHORT OF THE SKIP RULE IT SAT BESIDE. Measured at our tip before
+# this change: the token `WITHDRAWN` appeared in this file ZERO times (control, same invocation,
+# same file: `ADOPTED UPSTREAM` 19 times; impossible token 0) while the lifted skip rule honoured
+# it. An entry closed that way was skipped by EVERY re-verification and refused by EVERY rotation
+# at once — invisible in the report and permanently resident in the live ledger, which is the
+# class the stuck report below names "closed-and-unarchivable" and could never shrink. Measured on
+# the reference consumer live ledger: SIX entries stranded, five of which the derived grammar
+# takes. Nothing the old literal archived stops archiving — the lines it takes that this grammar
+# does not number ZERO across both consumer files, on boundary lines and bodies alike.
+#
+# AND THE VERSION DIGIT IS GONE ON PURPOSE. It was added after this script archived a live entry,
+# to stop the pattern matching its own quotation and to stop `\(v` matching `(verified`. The
+# no-backtick run inside the bold span does the first job — an annotation never quotes itself —
+# and the second job was never legitimate: a close that HAS no version (a withdrawal, an
+# absorption predating the pull`s base, a rejection adjudicated by date) is a genuine close, and
+# a rule demanding a digit left the operator two exits, leave the entry live forever or annotate
+# a falsehood. Requiring the FORM and saying nothing about the parenthetical is what lets a
+# versionless close archive on its own terms without inventing a version for it.
 #
 # Entry BOUNDARIES are lifted from ledger-reverify's parser unchanged: an entry is a
 # top-level `- **…**` bullet or a `##`-`######` heading, and either one ENDS the entry above.
@@ -97,6 +117,15 @@ SELF="$(cd "$(dirname "$0")" && pwd)"
 CLOSE_AWK="$(ledger_close_awk)" || exit 2
 CLOSE_AWK="${CLOSE_AWK}
 $(ledger_entry_line_close_awk)" || exit 2
+# AND THE ARCHIVE GRAMMAR, DERIVED FROM THE SAME SINGLE HOME. This file used to hand-write the
+# rule that decides a MOVE — the literal `**ADOPTED UPSTREAM (v[0-9]`, at three sites — beside a
+# skip rule it lifted. So the two lists could differ, and they did: this file contained the token
+# `WITHDRAWN` ZERO times while the lifted skip rule honoured it, and an entry closed that way was
+# skipped by every re-verification AND refused by every rotation. `ledger_archive_awk` makes the
+# skip grammar`s optional bold span mandatory and changes nothing else, so this file no longer
+# has a membership opinion of its own and a fourth close token cannot reach one tool alone.
+CLOSE_AWK="${CLOSE_AWK}
+$(ledger_archive_awk)" || exit 2
 
 LEDGER="${1:-}"
 [ -n "$LEDGER" ] || { echo "usage: ledger-rotate.sh <ledger-path> [--archive <path>] [--apply]" >&2; exit 2; }
@@ -165,8 +194,13 @@ trap 'rm -rf "$TMPD"' EXIT
 #
 # `ledger_entry_id()` is the shared, single-homed id rule from lib.sh -- the same one
 # `ledger-reverify.sh`s ENTRY-SWALLOWED arm reads, so the two tools cannot drift about what an
-# id is. The close test is this file`s own strict form, `**ADOPTED UPSTREAM (v<digit>`, not
-# reverify`s looser one, because the loose form matches an entry that merely QUOTES it.
+# id is. The close test is `ledger_body_archives()` -- rotation`s ARCHIVE grammar, the one that
+# decides the move -- and not reverify`s looser skip rule, because the loose form matches an
+# entry that merely QUOTES the phrase. IT MUST BE THE ARCHIVE RULE AND NOT A THIRD FORM: this
+# guard only has a subject where rotation can actually move the entry, so a close test narrower
+# than the move goes blind on exactly the entries the move newly reaches. Hand-written as the
+# old `(v[0-9]` literal it could not see a withdrawal at all, and an entry closed that way would
+# have been split with no refusal.
 #
 # FALSE-POSITIVE SET, MEASURED BEFORE SHIPPING AND ENUMERATED RATHER THAN ASSERTED. Over this
 # guard`s ACTUAL POPULATION -- the files a rotation reads, which are LIVE ledgers -- it reports
@@ -205,11 +239,22 @@ SPLIT_FINDINGS="$(LC_ALL=C awk "$(ledger_entry_awk)$(ledger_entry_id_awk)${CLOSE
         # writes it there -- `- **`validate-ci-gates.sh` -> ADOPTED UPSTREAM (v0.135.0).**` --
         # so a close test that only reads the lines BELOW never sees it and the guard refuses a
         # real entry. Read the line itself as well.
-        if ($0 ~ /ADOPTED UPSTREAM/) susp_closed = 1
+        # THE SUPPRESSORS STAY LOOSE AND BECOME TOKEN-COMPLETE. `ledger_entry_line_closes()` is
+        # reverify`s own UNANCHORED entry-line rule, which is the loose form this site has always
+        # wanted -- what it did not have was the whole token set, so a suspect line closed as
+        # WITHDRAWN suppressed nothing and the guard refused a real entry. Lifting the rule keeps
+        # the looseness the measurement below prescribes and removes the membership opinion.
+        if (ledger_entry_line_closes($0)) susp_closed = 1
       }
       next
     }
-    if ($0 ~ /\*\*ADOPTED UPSTREAM \(v[0-9]/ && !susp_at) closed = 1
+    # THE GUARD MUST SEE EVERY ENTRY ROTATION CAN MOVE, OR IT GOES BLIND ON EXACTLY THE ENTRIES
+    # THIS CHANGE NEWLY MOVES. This test decides whether an entry is CLOSED, which is what makes a
+    # non-id boundary inside it a refusal candidate at all. Hand-written as the strict `(v[0-9]`
+    # literal it could not see a withdrawal, so an entry that is now archivable would have been
+    # split with no refusal -- the one outcome this guard exists to prevent. It is the same
+    # grammar the move below uses, from the same single home.
+    if (ledger_body_archives($0) && !susp_at) closed = 1
     # DELIBERATELY NOT THE LIFTED PREDICATE, AND THE MEASUREMENT IS WHY. This one and the stuck
     # rule below ask a similar question and FAIL IN OPPOSITE DIRECTIONS, so one rule cannot serve
     # both. The stuck rule makes a CLAIM -- these are the entries reverify skips -- so a loose
@@ -228,7 +273,7 @@ SPLIT_FINDINGS="$(LC_ALL=C awk "$(ledger_entry_awk)$(ledger_entry_id_awk)${CLOSE
     # predicate that is neither of these two, and it needs its own false-positive measurement
     # against the consumer archive, where 22 boundary-shaped lines inside closed entries all
     # escape refusal on a single clause today.
-    if ($0 ~ /ADOPTED UPSTREAM/ && susp_at) susp_closed = 1
+    if (ledger_entry_line_closes($0) && susp_at) susp_closed = 1
     if ($0 ~ /^[ \t]*(<br[ \t]*\/?[ \t]*>)?[ \t]*[-*]?[ \t]*`?verify:/) {
       # A receipt ABOVE the suspect line is already on the archive side, so nothing of this
       # entry`s receipt can be stranded by the split and there is nothing to refuse.
@@ -262,12 +307,18 @@ awk -v keep="$TMPD/keep" -v move="$TMPD/move" -v names="$TMPD/moved-names" -v st
     out = (started && closed) ? move : keep
     for (i = 1; i <= n; i++) print buf[i] >> out
     if (started && closed) print label >> names
-    # THE ENTRIES NEITHER RULE TAKES. `ledger-reverify.sh` skips on `/ADOPTED UPSTREAM/`
-    # anywhere; this file archives only on the strict `**ADOPTED UPSTREAM (v`. The asymmetry
-    # is deliberate and its stated cost is that "an entry wrongly kept costs one more pull to
-    # notice" -- but NOTHING NOTICED, because nothing reported the gap. An entry in it is
+    # THE ENTRIES NEITHER RULE TAKES. `ledger-reverify.sh` skips on a line-leading marker with an
+    # OPTIONAL bold span; this file archives on the same grammar with that span MANDATORY. The
+    # asymmetry is deliberate and its stated cost is that "an entry wrongly kept costs one more
+    # pull to notice" -- but NOTHING NOTICED, because nothing reported the gap. An entry in it is
     # skipped by every re-verification AND refused by every rotation: invisible in the report
     # and never filed, for as long as the ledger lives.
+    #
+    # THIS SET IS NOW BOUNDED BY THE TRANSFORM AND CANNOT GROW BY DISAGREEMENT. It used to hold
+    # everything the two files SPELLED differently -- the whole `WITHDRAWN` class, permanently.
+    # What can land here now is only what the two forms of ONE grammar separate: a close written
+    # without a bold span. That is a repairable annotation, which is what the remedy below asks
+    # for, rather than a token this file never heard of.
     if (started && !closed && loose) print label >> stuck
     n = 0; closed = 0; loose = 0; label = ""
   }
@@ -313,16 +364,21 @@ awk -v keep="$TMPD/keep" -v move="$TMPD/move" -v names="$TMPD/moved-names" -v st
   # instance was visible only because a neighbouring sub-bullet`s own annotation sat five lines
   # inside its span.
   { if (ledger_entry_shape($0) != "") { open_entry($0); buf[++n] = $0
-      if ($0 ~ /\*\*ADOPTED UPSTREAM \(v[0-9]/) closed = 1
+      # THE ENTRY-LINE ARCHIVE RULE, NOT THE BODY ONE. A close on a boundary line sits MID-LINE
+      # after the title (`## PC-FOO -- **WITHDRAWN ...**`), so the body rule`s line-leading anchor
+      # can never match here and would answer "not closed" for every entry line ever passed to it
+      # -- inert rather than merely wrong. `ledger_archive_awk` emits both for that reason.
+      if (ledger_entry_line_archives($0)) closed = 1
       if (ledger_entry_line_closes($0)) loose = 1
       next } }
-  # A DIGIT AFTER `(v`, AND THAT ONE CHARACTER CLASS IS THE WHOLE OF TWO FIXES.
+  # THE BOLD SPAN IS WHAT SEPARATES AN ANNOTATION FROM A MENTION, AND IT CARRIES BOTH OF THE
+  # FIXES THE RETIRED `(v<digit>` LITERAL USED TO CARRY.
   #
   # NO APOSTROPHES IN THIS COMMENT, AND THAT IS NOT STYLE. This awk program sits inside a shell
   # single-quoted string, so one apostrophe here closes the quote and the whole block becomes
   # shell words -- which is exactly how the first draft of this comment failed.
   #
-  # DEFECT 1 (PC-S331): THIS PATTERN ARCHIVED A LIVE ENTRY BECAUSE THE ENTRY QUOTED IT.
+  # DEFECT 1 (PC-S331): THE OLD PATTERN ARCHIVED A LIVE ENTRY BECAUSE THE ENTRY QUOTED IT.
   # The test is per-ENTRY, over every buffered line, so any line anywhere in a body decides the
   # verdict -- and a push candidate ABOUT this script naturally writes the form it describes.
   # Reproduced on the reference consumer: --apply archived PC-S330, a live entry, on a line
@@ -330,6 +386,11 @@ awk -v keep="$TMPD/keep" -v move="$TMPD/move" -v names="$TMPD/moved-names" -v st
   # its own quotation of the rule, and the operator caught it only because the acceptance test
   # this script prescribes made the disappearance visible. A swept entry drops a ROW, so the
   # row-set form above catches it for the same reason the byte form did, without the false alarm.
+  # THE DERIVED GRAMMAR REFUSES THAT LINE TOO, AND BY A DIFFERENT PROPERTY: it is anchored
+  # line-leading, and the no-backtick run `[^`]*` between the bold opener and the token means a
+  # code span before the words is a mention even when the bold happens to lead. An annotation
+  # never quotes itself. Both halves of that come from reverify`s own grammar, where they were
+  # derived from every occurrence on this same corpus.
   #
   # SKIPPING FENCES IS THE OBVIOUS FIX AND IT IS THE WRONG ONE -- measured, because the report
   # said the quotation was fenced and it is not. Four quotation forms were tried against a
@@ -340,18 +401,23 @@ awk -v keep="$TMPD/keep" -v move="$TMPD/move" -v names="$TMPD/moved-names" -v st
   # PC-S308-LEDGER-REVERIFY-ENTRY-BOUNDARY-IGNORES-FENCED-HEADINGS: a fenced `## <ts>` line no
   # longer opens an entry, so a closed entry carrying one rotates whole instead of in pieces.)
   #
-  # DEFECT 2, FOUND WHILE MEASURING THE FIRST AND REPORTED BY NOBODY: \(v matches (verified.
-  # So an entry annotated  **ADOPTED UPSTREAM (verified 2026-07-21).**  -- a close carrying NO
-  # version -- satisfied a rule whose own banner promises the version immediately after the
-  # parenthesis, and one such entry sits in the reference consumer archive. Under the digit
-  # anchor it becomes a correctly-reported stuck row instead, which is the state v0.330.0 added
-  # the refusal list to make visible.
+  # DEFECT 2 WAS NEVER A DEFECT, AND CORRECTING IT COST MORE THAN IT SAVED. The old literal`s
+  # `\(v` also matched `(verified`, so an entry annotated  **ADOPTED UPSTREAM (verified
+  # 2026-07-21).**  satisfied a rule whose banner promised a version. The digit anchor turned
+  # that into a stuck row -- and a close carrying no version is a GENUINE close, not a
+  # malformed one. Demanding a digit left the operator two exits on every withdrawal and every
+  # pre-base absorption: leave the entry live forever, or write a version that is not true.
+  # This grammar asks for the FORM and says nothing about the parenthetical, so that entry
+  # archives on its own terms. The stuck report below is correspondingly narrower: what reaches
+  # it now is a close written with no bold span at all, which is a repairable annotation.
   #
-  # FALSE-NEGATIVE SET MEASURED BEFORE SHIPPING, against the reference consumer archive of
-  # genuine closes: 71 lines match the old pattern, 70 match this one, and the single
-  # difference is the versionless close above -- which the rule was never entitled to archive.
-  # Live ledger: 1 false positive before, 0 after.
-  /\*\*ADOPTED UPSTREAM \(v[0-9]/ { closed = 1 }
+  # FALSE-NEGATIVE SET MEASURED BEFORE SHIPPING, against the reference consumer`s archive of
+  # genuine closes AND its live ledger, in one invocation: the lines the OLD literal takes that
+  # this grammar does NOT number ZERO in both files, on boundary lines and bodies alike, so
+  # nothing that archived before stops archiving. Going the other way it takes one more line on
+  # the live file -- a real withdrawal this repo`s vocabulary already honoured -- and the same
+  # 14 boundary closes on the archive. Impossible-token control 0 on both.
+  ledger_body_archives($0) { closed = 1 }
   # THE SKIP SIDE OF THE SAME QUESTION, LIFTED FROM reverify RATHER THAN RESTATED.
   #
   # NO APOSTROPHES IN THIS COMMENT EITHER, for the reason stated above it.
@@ -387,11 +453,18 @@ n_stuck="$(grep -c . "$TMPD/stuck-names")"
 # the nothing-to-rotate case is exactly where this hides. Measured on the reference consumer at
 # 0.329.0: rotate printed "0 closed entries -- nothing to rotate" while ELEVEN entries sat
 # closed-and-unarchivable, one of them annotated `**ADOPTED UPSTREAM (absorbed before base
-# <sha>, verified <date>)` -- a real, deliberate, bolded close that the strict `(v` refuses
+# <sha>, verified <date>)` -- a real, deliberate, bolded close that the then-strict `(v` refused
 # because the parenthetical does not start with a version.
 #
-# THIS DOES NOT RELAX THE STRICT RULE. Archiving live work is the expensive error and the rule
-# stays as it is; what changes is that its cost is now PAID BY SOMETHING rather than assumed.
+# THAT ENTRY NOW ARCHIVES, AND THIS REPORT IS CORRESPONDINGLY NARROWER. The archive grammar is
+# derived from the skip grammar and asks for the annotation FORM rather than for a version, so a
+# genuine close carrying none is no longer stuck. Archiving live work is still the expensive
+# error and the rule is still the stricter of the two -- what left the set is the class that
+# could never leave it by any annotation, not the caution.
+#
+# THIS REPORT DOES NOT RETIRE WITH ITS LARGEST CLASS, and it must not. The two grammars still
+# differ by one property, so a close written with no bold span at all still lands here, and the
+# remedy below is now something the operator can actually satisfy.
 if [ "$n_stuck" -gt 0 ]; then
   echo "ledger-rotate: ${n_stuck} entry(ies) are CLOSED for re-verification but NOT archivable."
   # THIS BANNER USED TO DESCRIBE THE STATE IT FIXES, IN THE PRESENT TENSE, INSIDE ITS OWN
@@ -403,10 +476,12 @@ if [ "$n_stuck" -gt 0 ]; then
   # two lines below. The rows below are the filing; say so where the reader is.
   echo "  ledger-reverify.sh skips them and this script refuses them, so THIS ROW is the only"
   echo "  place they appear. They stay in the live ledger and are re-reported every run."
-  echo "  To archive one, write the annotation form this script accepts — bolded, with the"
-  echo "  version immediately after the parenthesis:  **ADOPTED UPSTREAM (v<version>, verified <date>)**"
-  echo "  If the close is genuine but has no version (absorbed before base, withdrawn, a"
-  echo "  retained copy), that is a legitimate state and the row is the record of it."
+  echo "  To archive one, write the close as a BOLD ANNOTATION on its own line, or in the bold"
+  echo "  span of the entry title:  **ADOPTED UPSTREAM (v<version>, verified <date>)**"
+  echo "  NO VERSION IS REQUIRED. A close that genuinely has none archives on its own terms —"
+  echo "  **WITHDRAWN (<date>) — <why>**,  **ADOPTED UPSTREAM (absorbed before base <sha>)**,"
+  echo "  **CLOSED AS REJECTED — BY DESIGN, adjudicated <date>**  are all accepted forms."
+  echo "  Do not invent a version to satisfy this script; the bold span is what it reads."
   sed 's|^|    |' "$TMPD/stuck-names"
 fi
 l_all="$(wc -l < "$LEDGER" | tr -d ' ')"
