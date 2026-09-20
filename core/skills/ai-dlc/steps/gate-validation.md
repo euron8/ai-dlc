@@ -1187,17 +1187,35 @@ to a caller that has decided this artifact class carries none.
   `scripts/ai-dlc/validate-provenance-block.sh
   _bmad-output/planning-artifacts/prd.md --require-skill
   bmad-prd`.
-  The same arm runs at the requirements gate on `feature` and `carry-over`, whose
-  `requirements.md` §4 invokes the same skill; I32 joins the pin to
+  This arm is for the branches where `/bmad-prd` AUTHORS the PRD — greenfield and
+  brownfield-b, `research-requirements.md` §2. Where the only `bmad-prd` invocation
+  is §3's validate call, the arm below is the one that runs. I32 joins the pin to
   `research-requirements.md` by the parenthetical, and the `requirements-step` fixture
   holds `requirements.md` to the same name.
-  `research-requirements.md` §3 invokes `/bmad-prd` with the **validate** intent, so
-  that is the name a correct run stamps. It pinned `bmad-validate-prd` until this
+  `/bmad-prd` is the name a correct run stamps either way. It pinned `bmad-validate-prd` until this
   release — a fork introduced when §3 was repointed and this arm was not — and the
   gate would have failed on a correctly-executed run. A PRD stamped before the
   repoint still passes: BMAD's `bmad-validate-prd` is a deprecated shim that forwards
   here, and the schema's `superseded_skills` records that, so the pin accepts either
   name. I32 now joins each `bmad-*` pin to the step file that invokes it.
+- **PRD gate, validate-only branch (research-requirements phase, brownfield-a
+  and brownfield-c):** run `scripts/ai-dlc/validate-provenance-block.sh
+  <run-folder>/validation-report.md --require-skill bmad-prd`, where
+  `<run-folder>` is the directory §3's validate call wrote its report pair into.
+  This arm REPLACES the arm above on every branch where §3's validate call is
+  the sprint's only `bmad-prd` invocation. `research-requirements.md` §2
+  authors `prd.md` through `/bmad-prd` on greenfield and brownfield-b only; on
+  brownfield-a and brownfield-c it updates the PRD by hand, so nothing stamps a
+  block into `prd.md` and §3 is forbidden to write one there. Rule 20 sites the
+  block in the artifact the invocation PRODUCES, and the validate intent
+  produces `validation-report.html` and `validation-report.md`, so the report is
+  both where a correct run puts the block and where this check has to look.
+  `requirements.md` §4 has the same shape on `feature` and `carry-over` — a hand
+  PRD update, with the validate call as its only `bmad-prd` invocation — so this
+  arm, not the one above, is the one that runs at that gate.
+  `--allow-missing` is wrong on this arm: an artifact carrying no block is the
+  finding this check exists to raise, and that flag acquits exactly the run that
+  skipped the stamp.
 - **Story readiness gate (stories-test-strategy):** run
   `scripts/ai-dlc/validate-provenance-block.sh <story-file>
   --require-skill ai-dlc-adversary-review` for each story.

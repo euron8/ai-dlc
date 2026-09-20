@@ -1829,24 +1829,57 @@ at all, leaving §3's validate call as the only `bmad-prd` run in the sprint. So
 feature and brownfield-a/c sprint the arm has no legal way to pass. The correction is wider, and
 it identifies the missing thing as a branch rather than a wording conflict.
 
-The anchor is `validation-report` inside the span because that is the path the block legally
-lands on, so no repoint or added branch can be written without naming it — unlike `prd.md`, which
-a correct greenfield branch must keep and which would therefore report the entry live after a real
-fix. It also survives the quote-back hazard: a fix documenting the old single-target arm would have
-to name `prd.md`, not the report. The receipt exits **2** if the span stops naming `require-skill`,
-which is the check-renumbered case. The one satisfying fix this anchor would miss is the mirror
-direction — amending §3 to carry the block into `prd.md` — and that branch is closed by `:110`
-and by the sub-skill's own headless contract, which writes the report regardless of finding count.
+The original anchor was `validation-report` inside the span, on the reasoning that no repoint or
+added branch could be written without naming it. That reasoning held for the path and not for the
+predicate: a whole-span substring search is satisfied by any text carrying the token, which a
+comment and a negating sentence both do, and it is NOT satisfied by a correct fix that reaches the
+same path through a different spelling. The quote-back hazard it was chosen to survive is real and
+the replacement below survives it for a different reason — an invocation is emitted, not quoted.
+The one satisfying fix either anchor would miss is the mirror direction — amending §3 to carry the
+block into `prd.md` — and that branch is closed by `research-requirements.md:110` and by the
+sub-skill's own headless contract, which writes the report regardless of finding count.
 
 Note for whoever implements it: the fix is a second arm in the check, not a note beside the
 existing one. `steps/` is in `core/scripts/audit-rule-files.sh`'s `IN_SCOPE` (`:374`), so the
 branch must be written as check text with no version tag and no account of the fork it replaced.
 
+**What the fix covers, and what it does not.** Check 17 now carries a second `bmad-prd` arm,
+pinned to the run folder's `validation-report.md`, and the original arm is narrowed to the
+branches where `/bmad-prd` AUTHORS the PRD. The split is by which invocation produces the
+artifact, not by project type: `research-requirements.md` §2 authors `prd.md` through
+`/bmad-prd` on greenfield and brownfield-b; brownfield-a and brownfield-c update it by hand,
+leaving §3's validate call as the sprint's only `bmad-prd` run. The new arm covers
+`requirements.md` §4 as well, on the same ground — §4(c) updates the PRD by hand and its only
+`bmad-prd` invocation is the validate call, so the requirements gate needs the report-pinned
+arm and the authoring arm is unsatisfiable there. Both branches carry `--require-skill`; the
+arm refuses `--allow-missing`, which would acquit the missing block this check exists to raise.
+
+**The filing's project-type axis does not re-derive, and the correction WIDENS it.** It reads
+`feature` as a `research-requirements.md` branch. The router
+(`core/skills/ai-dlc/steps/route.md`, variant table) routes `feature` and `carry-over` through
+`requirements.md` and never through `research-requirements.md`; the variants that run
+`research-requirements.md` are greenfield, brownfield-a, brownfield-b and brownfield-c. So the
+unsatisfiable set is brownfield-a and brownfield-c in `research-requirements.md`, PLUS `feature`
+and `carry-over` in `requirements.md` — a second step file the filing never named.
+
+**The old receipt was broken in both directions and is replaced.** Keyed on `validation-report`
+anywhere in the span, it closed at exit 0 on an HTML comment inside the span that fixed nothing,
+and it rejected a competent second spelling that pins a grammar-legal run-folder path without
+using that token in a form the old grep could see. The replacement keys on the EMISSION SITE: it
+joins the span's wrapped arms, counts the `validate-provenance-block.sh … --require-skill
+bmad-prd` INVOCATIONS, requires two or more, and requires at least one of their paths not to end
+in `prd.md`. It counts ARMS, not `--require-skill` tokens: the span's `--require-skill`
+occurrences are spread one per arm across several arms pinning different skills, so a token
+count answers a question about the whole check rather than about this pin. An HTML comment emits no
+invocation; a sentence asserting the opposite emits none either. The emptied-span control is
+separate and first: exactly one `CHECK_LOADED: 17 ` marker, else exit 2, so a renumber to `17a`
+reports a broken receipt rather than a reproducing defect.
+
 Discharges the consumer entry
 `PC-S297-CHECK17-PRD-ARM-CONTRADICTS-RULE-20-BLOCK-PLACEMENT` at pinned ledger line 1165.
 
 
-verify: sh S=$(LC_ALL=C awk '/CHECK_LOADED: 17 /,/CHECK_LOADED: 18 /' core/skills/ai-dlc/steps/gate-validation.md); grep -q 'require-skill' <<<"$S" || exit 2; grep -q 'validation-report' <<<"$S"
+verify: sh GV=core/skills/ai-dlc/steps/gate-validation.md; M="$(grep -c 'CHECK_LOADED: 17 ' "$GV")" || M=0; [ "$M" -eq 1 ] || exit 2; A="$(awk '/CHECK_LOADED: 17 /,/CHECK_LOADED: 18 /' "$GV" | awk '/^- [*][*]/{if(b!=""){print b};b=$0;next} b!=""{b=b" "$0} END{if(b!=""){print b}}')"; [ -n "$A" ] || exit 2; N="$(grep -cE -- 'validate-provenance-block[.]sh +[^ ]+.*--require-skill +bmad-prd' <<<"$A")" || N=0; [ "$N" -ge 2 ] || exit 1; P="$(sed -nE 's#.*validate-provenance-block[.]sh +([^ ]+).*--require-skill +bmad-prd.*#\1#p' <<<"$A")"; Q="$(grep -cv 'prd[.]md$' <<<"$P")" || Q=0; [ "$Q" -ge 1 ]
 ## BL-048
 
 **Two of the three dev-role checks this consumer carries have no upstream equivalent, and the
