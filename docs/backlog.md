@@ -2767,7 +2767,7 @@ PC-backed and ranks above any distribution-internal entry under the provenance-f
 candidate's DEFECT is real and its stated REMEDY is refuted — both halves were measured, and the
 adjudication has been carried back in `docs/reviews/graph-s340-adjudication-brief.md` §1b.**
 
-`self-update-gate.sh:180` acquits a split with "SPLIT BUYS NOTHING HERE", gated on
+`self-update-gate.sh`'s `advise_safe_stop` acquits a split with "SPLIT BUYS NOTHING HERE", gated on
 `machinery_at_or_past()` (`:205-213`), which is `git merge-base --is-ancestor` on the stamp's
 `skill_commit` and nothing else. The sentence it emits is a claim about what the CLASSIFIER will
 do; the test underneath it is about where a sha sits in the graph.
@@ -2788,10 +2788,49 @@ set of arguments: **0 changed classifier rows over 59 paths, against a control o
 versus a 0.432.0 engine, with `diff -rq` confirming the two engine directories differ. The hop's
 engine change was inert and the gate could not say so.
 
-**THE PREDICATE TO BUILD, and it is not a guess at what `manifest_dests()` filters.** Lift this
-file's own "the verdict is a differential, not an exit code" doctrine from gating-script exit codes
-to classifier OUTPUT: run the installed engine and the engine at the candidate against the
-consumer's tree and compare. It OBSERVES the filter's effect rather than modelling it.
+**THE BEHAVIOURAL DIFFERENTIAL IS REFUTED AS THE REMEDY, MEASURED AT BATCH 137 BY A CONTRACT
+ADVERSARY AND RE-DERIVED BY THE LEAD. DO NOT BUILD IT.** It was the predicate this entry named,
+and it fails for the same reason as the byte arm it was meant to replace, only harder:
+
+- **The filed INSTANCE is not an instance.** Reconstructed filing state (consumer at
+  `8e53e4b41^`, stamp `0.452.0` / `11bdeb8e`; control: `HEAD` stamp reads `0.608.0` / `03c04e74`,
+  so the extraction is genuinely historical), driving the consumer's own installed engine with
+  `11bdeb8e cb3ac04d`: `SPLIT BUYS NOTHING HERE` rows = **0**. The run takes the `else` branch.
+  `machinery_at_or_past` is FALSE there (`--is-ancestor b634e42d 11bdeb8e` rc=1; control:
+  `--is-ancestor b634e42d cb3ac04d` rc=0) because the stamp is BEHIND the candidate. The
+  acquittal never fired on the pull this entry was filed from, so a new conjunct ANDed under
+  that guard changes nothing on the motivating case, in either direction.
+- **The central measurement had a subject side byte-identical to its own baseline.**
+  `preclassify.sh` is blob `860ed5494c38` at 0.452.0, 0.454.0 AND 0.456.0 (control:
+  `setup-sites.md` differs across the same pair, `ba22836977` vs `88a0b4a50e`). The "0 changed
+  classifier rows against a control of 4" was two runs of the SAME program; `diff -rq` proved the
+  DIRECTORIES differ and never that the CLASSIFIER did.
+- **The 59-row population is not the one the gate runs on.** On the real range the classifier
+  emits **10** rows, all `UPSTREAM-ONLY` (6) or `UPSTREAM-ONLY-ADD` (4) — no consumer delta, so
+  no judgement for two engines to disagree about. 59 came from a synthetic `0.432.0..0.456.0`.
+- **The false-positive set is 92%.** Over the last 40 release hops `preclassify.sh` is UNCHANGED
+  on **37** (control: the same walk over all of `core/` shows 34 of 40 hops changed, so the walk
+  discriminates). The arm this entry banned the byte predicate for was vacuous on 7 of 39; this
+  one is vacuous on 37 of 40.
+- **No control-engine rule is derivable, and that half is a PROOF and not a bug.** Control = the
+  engine at BASE is byte-identical to the installed engine exactly when it is needed. Control =
+  N releases back is a magic number: the first differing `preclassify.sh` sits **7** releases
+  back from the candidate, and N moves with cadence. A resolution control needs a KNOWN-DIFFERENT
+  engine, establishable only by the byte comparison this entry bans or by an unbounded walk.
+
+**THE DEFECT IS STILL REAL AND THE ENTRY STAYS LIVE.** Nothing above contradicts the finding that
+the emitted sentence is a claim about BEHAVIOUR while the test underneath is graph-topological.
+What is refuted is that a behavioural differential can carry it.
+
+**THE DIRECTION THAT SURVIVES EVERY MEASUREMENT IS NARROWER: REFUSE, DO NOT ACQUIT.** Withhold the
+acquittal when the classifier is byte-identical across `installed -> candidate`, because then the
+ancestry test is the ONLY evidence and the sentence it licenses — "its machinery has already
+landed" — is unsupported. One `git rev-parse` pair, no control engine, and it fires on the 37 of
+40 hops where the differential is silent. It is NOT the banned byte-equality arm: that one gated
+the PULL's content, this gates the ACQUITTAL's own evidence. It weakens an acquittal rather than
+strengthening one, which is the asymmetry `self-update-gate.sh` already states for itself —
+refusing costs less than firing wrongly. **Scope is the operator's; this is recorded as the
+measured direction, not taken.**
 
 **THREE THINGS ARE UNMEASURED AND THEY ARE WHY THIS IS FILED RATHER THAN BUILT.** Shipping a check
 whose false-positive set has not been run is forbidden here, and this one has three open questions:
@@ -2805,7 +2844,7 @@ whose false-positive set has not been run is forbidden here, and this one has th
 - **COST IS NOT THE BLOCKER, AND AN EARLIER REVISION OF THIS ENTRY SAID IT MIGHT BE.** That
   revision put the resolution control at "a third, deliberately-older engine extracted per candidate
   ref" with a cost "not yet a number". **"Per candidate" was the load-bearing half and it is
-  wrong**: `advise_safe_stop()` returns at `self-update-gate.sh:168` on `AI_DLC_GATE_IN_SAFE_STOP`,
+  wrong**: `advise_safe_stop()` returns early on `AI_DLC_GATE_IN_SAFE_STOP`,
   which `:125` exports before the `--safe-stop` walk begins, so every per-candidate recursion
   short-circuits before reaching the acquittal and the differential is evaluated exactly once, on
   the single candidate the walk elected. Measured at **≈7s per invocation, independent of range
@@ -2827,15 +2866,43 @@ identically and still not be a tree to acquit. **This entry is now only about th
 behaviour predicate**, and closing it requires that, not the marker guard.
 
 **Tiered DEFECT.** It wrongly advises a split on a consumer whose engine is already behaviourally
-current. It is bounded: `advise_safe_stop` is called only at `:431` and `:543`, both immediately
-after `emit SELF-UPDATE-DEFER`, so the acquittal is unreachable except behind a DEFER and a wrong
-answer can only mis-advise a consumer already deferring — never one on the happy path.
+current. It is bounded: `advise_safe_stop` is called at exactly two sites, each immediately after
+an `emit SELF-UPDATE-DEFER` inside a deferral block, so the acquittal is unreachable except behind
+a DEFER and a wrong answer can only mis-advise a consumer already deferring — never one on the
+happy path. **The bound re-derives TRUE; the line numbers this entry used to cite did not.** Every
+anchor here had moved by `5540c7c6` — the acquittal, `machinery_at_or_past`, both call sites and
+the early return — so the citations are given by NAME above and the reader greps for them. An
+entry citing `path:line` into a file that moves is `BL-133`'s own subject, occurring here.
 
-The receipt keys on a behavioural comparison EXISTING, deliberately not on the ancestry test being
-absent: any real fix ADDS the behaviour check while KEEPING ancestry, so a receipt anchored on the
-ancestry line survives the fix — the co-occurrence trap the upstream entry names in its own
-`verify: manual` rationale. Scored three ways: 1 against the tree, 0 against a scratch copy with an
-engine extraction seeded, 9 with the subject removed.
+**THERE ARE TWO `SPLIT BUYS NOTHING HERE` EMITTERS AND ONLY ONE IS THE SUBJECT.** The second is
+the push-refusal case with candidate `"-"`, whose window carries **0** non-comment references to
+`machinery_at_or_past` or `advise_safe_stop` (control: 4 `emit` calls in the same window, so the
+grep works) — its only textual hit is a comment explaining why the walk is deliberately skipped
+there. Same banner, different premise, no ancestry test. **Name the subject by its
+`machinery_at_or_past` guard, never by the banner text**, and note that the fixture asserts
+`grep -c 'SPLIT BUYS NOTHING'` against expected counts at six sites: a fix landing on the wrong
+emitter moves those counts and satisfies a banner-counting receipt while changing nothing.
+
+**THE FIXTURE'S OWN MUTATION ANCHOR IS AIMED AT THE LINE A FIX MUST RESHAPE.**
+`core/fixtures/self-update-gate/run.sh`'s `SC_A3` anchors on the literal
+`    if machinery_at_or_past "$_ss"; then`, which matches the shipping gate exactly **1** time
+(control: a bogus anchor matches 0). Any fix that rewrites that line empties the mutant silently —
+it applies to nothing, the file stays byte-identical, and the battery reads SURVIVED. Assert
+`! cmp -s` before scoring, and re-anchor the mutant on the predicate that DECIDES.
+
+**THE RECEIPT IS REFUTED: IT REJECTS THE CORRECT FIX AND CLOSES ON THE DESTRUCTIVE INVERSE.**
+Six candidates built from the shipping file, each asserted applied by `cmp -s` first. A real
+differential — extract the candidate engine, run both `preclassify.sh`, compare — scores **1**,
+REJECTED, because the receipt demands `show|archive|worktree` and `preclassify` on ONE line with
+no `|` between them, and the extraction is necessarily two lines: `preclassify.sh` sources
+`lib.sh` at `:47` and reads `setup-sites.md` via `dirname "$0"`, so it cannot be extracted as a
+single file. Meanwhile the same line inside an UNCALLED function, the same line under `if false`,
+an unconditional `: "$(git show … | head -0)"` consulting nothing, AND a mutant replacing the
+guard with `git archive … || true` — which acquits **every** consumer unconditionally — all score
+**0**, closed. The inverse mutant emits 1 `SPLIT BUYS NOTHING` row on the motivating case against
+the shipping tree's 0, so the FIXTURE separates them and the receipt does not. **Key the
+replacement on the EMISSION SITE** — that the acquittal's own guard consults a behaviour term —
+plus a non-vacuity arm, and score it against all six before filing it.
 
 verify: sh g=core/skills/ai-dlc-update/reconcile/self-update-gate.sh; [ -f "$g" ] || exit 9; grep -q "advise_safe_stop" "$g" || exit 9; grep -vE "^[[:space:]]*#" "$g" | grep -qE "(show|archive|worktree)[^|]*preclassify" && exit 0; exit 1
 
