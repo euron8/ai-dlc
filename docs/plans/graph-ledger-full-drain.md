@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 617..1048. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 1143..1260. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -49,14 +49,75 @@ and expect a rule here to cite a measurement whose story lives in the archive.**
 that file and a `path:line` into it would then fail `validate-plan-shape.sh`'s citation arm on a
 correct rotation.
 
-**ROTATE THIS FILE BEFORE YOU WRITE YOUR OWN BLOCK — IT IS THE FIRST THING BATCH 138 OWES.** At
-batch 137's close it sits ~1200 bytes under `P8`'s 150000 ceiling, which is less than one resume
-block, so your push WILL fail on it. That is the designed order and not a surprise:
-`plan-rotate.sh` refuses to move anything while the file is UNDER the ceiling ("a plan under the
-ceiling rotates to itself"), so a batch cannot rotate pre-emptively however much it wants to. Let
-the arm fire, then `bash scripts/plan-rotate.sh docs/plans/graph-ledger-full-drain.md` to see what
-moves and `--apply` to move it. **Never a discharge banner in the head window** — that silences P9
-through P13 on this file.
+**ROTATE THIS FILE BEFORE YOU WRITE YOUR OWN BLOCK — IT IS THE FIRST THING EVERY BATCH FROM HERE
+OWES.** The file sits within one resume block of `P8`'s 150000 ceiling, so your push WILL fail on
+it. That is the designed order and not a surprise: `plan-rotate.sh` refuses to move anything while
+the file is UNDER the ceiling ("a plan under the ceiling rotates to itself"), so a batch cannot
+rotate pre-emptively however much it wants to. Let the arm fire, then `bash
+scripts/plan-rotate.sh docs/plans/graph-ledger-full-drain.md` to see what moves and `--apply` to
+move it. **Never a discharge banner in the head window** — that silences P9 through P13 on this
+file.
+
+**BATCH 138 SHIPPED `v0.613.0` (`53a17335`, #811), ONE SUBJECT, SHIPPED ALONE BECAUSE IT TOUCHES
+THE LEDGER ENGINES.** `BL-140` closed, discharging three ids named verbatim in the release commit:
+`PC-S297-H2-SEEDS-STILL-VACUOUS-PURE-ECHO`,
+`PC-S300-ORIGIN-TAG-GATE-HAS-NO-WAIVER-FOR-TRACEABILITY-CITATIONS` and
+`PC-S305-CHECK-17-BYPASS-CONSUMER-CASES-V8-V9-AND-A-PASSING-CONTROL`. Rotation's archive grammar is
+now DERIVED from re-verification's close grammar; the three hand-written literals are gone.
+Measured on the reference consumer, both engines over one seed with the copies asserted
+byte-different in the same invocation: **6 stranded / 0 movable before, 0 / 6 after**, nothing that
+archived ceasing to. Gate at `AI_DLC_FIXTURE_JOBS=6 AI_DLC_FIXTURE_NO_SKIP=1`: 22 of 22 phases
+PASS, **203 ok / 0 FAIL**, both changed fixtures read by name against an impossible-name control of
+0. Live **78 -> 76**, archive **202 -> 204**.
+
+**THE SUITE-POLE PHASE SKIPPED AND THAT IS A REAL GAP IN THIS RELEASE'S EVIDENCE.** The operator
+set `AI_DLC_FIXTURE_JOBS=6` for the session; the pole guard refuses to compare a loaded cost at 6
+against a baseline recorded at 12, which is correct — a cost recorded under one pool width is not
+comparable to another. Its self-probe still fired in both directions, so the arm works and had no
+valid comparand. **This release carries no wall-clock regression check.** A batch wanting one runs
+the gate at the default 12.
+
+**A SECOND ENTRY CLOSED THAT NOBODY SCOPED, AND ONLY AN IDENTITY DIFF FOUND IT.** `BL-074` predicted
+a THIRD hand-copy of the entry-line close predicate; the docs hand found and fixed it in
+`warn-shadowed-local-validators.sh`, which carried the new token **0** times while the engines
+carried it 1, 2 and 5. An entry closed on its TITLE scored OPEN there, and an open entry suppresses
+the `RETIRE-CANDIDATE` row — a fork whose debt had closed was advised as still needed. The
+zero-exit receipt histogram read 7 before and 9 after, which reconciles plausibly as "my subject
+plus one"; the SET diff named `BL-074` outright. **Diff the zeros by identity every batch.**
+
+**`BL-140`'s OWN RECEIPT REJECTED ITS CORRECT FIX, WHICH IS `BL-279`'s TRAP ONE LEVEL UP.** The
+receipt grepped `REJECTED BY DESIGN`; the fix landed `CLOSED AS REJECTED`, so a correct fix scored
+STILL-LIVE forever. REPLACED, not extended: the new one derives the token set from the owner and
+DRIVES the rotator over a seeded ledger, base 1 / tip 0, killing four mutants including the
+destructive inverse. **Score a receipt against the fix before believing its verdict.**
+
+**TWO SHAPES WERE REFUSED ON MEASUREMENT, AND ONE OF THEM WAS THE LEAD'S OWN SUGGESTION.** For the
+wrapped-title case the lead proposed deciding over rotate's existing whole-entry buffer. Built and
+measured against the alternative, both shapes newly archive exactly ONE entry — the **opposite**
+one: the whole-buffer rule sweeps `## Validator-fork retirement record`, a human record whose own
+prose says it must stay whole. The title join shipped instead, FP set empty over eight synthesised
+worlds. Separately, a fixture mutant scoring zero was LEFT ALONE as a tautology — the fixture
+derives its seed tokens from the rule the mutant edits, so both sides move together, and "fixing"
+it means hand-listing the vocabulary in the fixture.
+
+**THE CONSUMER PULLED MID-BATCH AND THE GAP IS NOW ONE RELEASE.** Installed **0.612.0**
+(`9bb59dfa`) against `VERSION` **0.613.0**, moved by the consumer's own
+`33c8b7dd2 reconcile distribution 0.608.0 -> 0.612.0 (#1092)`. **All three ledger engine files are
+in that one-release range** (`SKILL.md`, `ledger-reverify.sh`, `ledger-rotate.sh`, of 8 core paths),
+so the consumer's INSTALLED copy runs the pull carrying its own repair. The operator's BANKED ruling
+stands — report the gap, write no runbook. Re-derive it; do not read this sentence for a number.
+
+**TWO ENTRIES WERE FILED, NOT FIXED, AND BOTH SHIP ALONE.** `BL-280` carries
+`PC-S345-DEFER-PATH-NAMES-NO-HOME-FOR-THE-GATE-RECORD-IT-JUST-WROTE`: the DEFER span is 10 lines
+naming the gate record 0 times against an OK-path control of 1, and step 7's 198-line span names it
+0 times. **Its predicted LOSS is refuted as a rate and REAL as a window** — 23 of 23 records tracked,
+12 of 12 on the DEFER path, and then a 13th DEFER record caught UNTRACKED mid-flight while a
+reconcile ran. A steady-state census cannot see that class: every record it counts has already
+survived. `BL-281` carries
+`PC-S312-HANDOFF-GUARD-ARMS-ON-A-STALE-DISK-RECORD-THROUGH-A-RECONCILE`, filed the same day by the
+consumer; key 2 at `core/hooks/ai-dlc-handoff-pending.sh:107` arms on a `HANDOFF POINT` line nothing
+ever clears, where key 1 keys on a FILE a completing handoff deletes. A fix hand is out on it
+against `origin/main`; **check for its branch before scoping `BL-281` yourself.**
 
 **BATCH 137 SHIPPED NO RELEASE, AND THAT IS THE CORRECT SHAPE: BOTH SUBJECTS WERE DOCS-ONLY, SO
 `core/` IS UNTOUCHED AND THE CONSUMER GAP DID NOT WIDEN.** Merged as `b468c01b` (#810), verified by
@@ -1078,124 +1139,6 @@ given at batch 90.
    on `BL-132` returns 1), its single candidate mention being a bare id on its own line carrying
    no verb. So the number of non-PC-backed rows is **three**, not the two an earlier revision of
    this paragraph claimed. **Two hands agreeing is not a control; the matched LINE is.**
-
-   **BATCH 134's PAIRING TEST IS THE ONE TO REUSE WHEN BATCHING TWO SUBJECTS.** Several worklist
-   rows touch a BOOTSTRAPPING file — `ledger-reverify.sh`, `ledger-rotate.sh`, `apply.sh` or the
-   update skill — which action 2 requires to ship ALONE, so the batchable set is smaller than the
-   worklist and that is the first thing to derive, not the last. **Derive the membership; do not
-   read a list of ids here.** Batch 136's subject reached that rule by an indirect route worth
-   knowing: `classify-block.md` is on none of those lists, but the fix's correct SITE turned out to
-   be `ai-dlc-update/SKILL.md`, which IS the update skill — so the ship-alone answer followed the
-   site, not the entry's own file list, and it could not be settled until the site was.
-   Derive it per entry BODY with a non-empty-body control; batch 135 did, and the answer chose the
-   subject. Then SCORE each candidate's
-   receipt against the OTHER's tip and report both: a receipt the other fix closes is a pairing to
-   refuse, and scoring it is what establishes the pairing rather than assuming it.
-
-   **SUPERSEDED — OPERATOR RULING AT BATCH 118: `docs/plans/pre-push-wall-clock.md` IS BATCH 119's
-   SUBJECT.** Kept for its lineage only; the block above replaces it.
-   Given in as many words ("I hereby rule it batch 119's subject") after the operator asked whether
-   any release from `v0.576.0` to `v0.583.0` had cut the suite's wall clock and was told none had —
-   `v0.583.0` added a guard, which is a ceiling and not a cut. This overrode the provenance-first
-   ordering for ONE batch, the same shape as the batch-117 ruling for `BL-257`. Its two named
-   actions were the `ledger-reverify` pole and the inner-pool sweep, pole first "because the
-   makespan is one directory" — **which is the premise batch 119 measured and refuted.**
-
-   **BATCH 118 SHIPPED AS `v0.584.0` (`a1979146`), TWO SUBJECTS, THREE ENTRIES CLOSED, TWO PC IDS
-   NAMED VERBATIM IN THE SQUASH MESSAGE.** `BL-259` closed, discharging
-   `PC-S312-STEP-2-SPELLS-THE-DERIVED-FIXTURE-SET-IN-A-FORM-ITS-OWN-RUNNER-REFUSES`:
-   `self-update-fixtures.sh` normalises `core/fixtures/<name>` and `tests/fixtures/<name>`, with or
-   without a trailing slash, to the bare name by character class, sited after `$LOG` exists and
-   before the coverage join, rotating the positionals; the refusal row names which shape it saw and
-   keeps the original argument as subject; `SKILL.md:477` says what the runner takes. `BL-262`
-   closed, discharging `PC-S312-CHECK22-NO-CLEARING-PATH-FOR-19B-CITATION-MISS`: Check 22's
-   four-arm disposition is scoped to every route into the validator's failure exit, arm 4 carries a
-   remediation per class, arm 1 says an entry clears exactly the spawns it names and may name
-   several, the effort route is documented probe-only, every FAIL message names the disposition.
-   `BL-256` closed incidentally (its own text said nothing was owed; receipt 0). `BL-260`, `BL-261`
-   and `BL-263` FILED, not fixed. Live **71 -> 73** (three rotated, five filed), archive
-   **186 -> 189**. Gate `AI_DLC_FIXTURE_NO_SKIP=1`: 22 of 22 phases, 202 ok / 0 FAIL, pole
-   `ledger-reverify 500s` against baseline 628s, four fixtures read by name against an
-   impossible-name control of 0. First push exit 141 with every gate green and no ref on origin;
-   re-push landed. Receipt histogram before and after: the same three zeros (`BL-254`, `BL-238`,
-   `BL-236`, each deliberately held open) — no further incidental close.
-
-   **THE SECOND SUBJECT WAS PULLED IN BY THE OPERATOR MID-BATCH AND WAS UNCOMMITTED IN THE
-   CONSUMER'S WORKING TREE WHEN READ.** `git show HEAD:` on the sprint branch lacked it; only the
-   working file carried it, so it had no `-S` date and the derived id set found it where the commit
-   message could not. Its own receipt was a FALSE PASS at base and tip: it greps the disposition
-   section for `19(b)|citation`, and arm 3 carries the word "citation" about the
-   operator-authorization citation. Its `derived` counts (6 and 0) reproduce on NO copy reachable
-   from here, the consumer's installed one included (1 and 1). `BL-262`'s receipt drives the
-   validator on a seeded four-row ledger and REFUSES if a class is deleted — the adversary showed a
-   naming-only receipt scores a build that deletes the 19(b) arm as FIXED.
-
-   **BOTH CONTRACT ADVERSARIES FOUND BLOCKERS THAT NAMED FIXES, AND NONE WAS STRUCTURAL.** First
-   subject: a `case core/fixtures/*)` glob matches a space and a newline, so the contract's own
-   sentence acquitted the PC-S310 joined list and ran ONE fixture green over fourteen; `set -- $list`
-   word-splits and deletes the joined-list refusal; sited after the coverage join, a complete
-   path-form set is convicted incomplete; sited before `$LOG` exists the runner dies at rc=1, the
-   red-suite code, with the real fixture green on it. Three of the four contract mutants were
-   already green on the shipped suite. Second subject: the fixture's `VIOL=$((VIOL + 1))` grep is a
-   text-about-the-program trap (a one-space respelling empties it; a helper function keeps the
-   count at 4 with wrong membership), and the effort route is unreachable under the published
-   invocation (`BL-263`). Every one went into the contract before a builder started.
-
-   **FOUR FAN-OUT HANDS STALLED AT ONCE ON A HARNESS WATCHDOG (no progress for 600s) AND ALL FOUR
-   RESUMED BY NAME WITH THEIR CONTEXT INTACT.** A stall that hits every hand in the same minute is
-   the harness, not the hands; `SendMessage` to the name resumes the agent from its transcript.
-
-   **THE LEDGER REF ELECTION FELL BACK TO `main` AGAIN** — the consumer's sprint branch
-   `ai-dlc/carry-over/epic-crs-fvs-carryover-priorities` is diverged (6 behind, 63 ahead, 11
-   unpushed at the sweep). Main-side worklist 17. Four filings only on the branch, all four now
-   filed here (`BL-254`, `BL-259`, `BL-260`, `BL-261`) plus the working-tree one (`BL-262`).
-   Consumer stamp `0.581.0`; delivery gap is `v0.582.0`, `v0.583.0`, `v0.584.0`, with 0 mode-only
-   changes across 25 raw diff rows and four bootstrapping files in the range (`SKILL.md`,
-   `emit-report.sh`, `preclassify.sh`, `self-update-fixtures.sh`). The consumer's installed runner
-   still refuses the path form on the pull that delivers `v0.584.0`; the fix takes effect on the
-   pull after.
-
-   **ONE READ-SET ROW IS OWED AND NEEDS ROOT.** `check-22-spawn-ledger` now reads
-   `core/skills/ai-dlc/steps/gate-validation.md` and its map entry does not carry that path, so a
-   docs-only push can skip the fixture whose arm C2 watches that file. The operator runs
-   `sudo bash core/scripts/derive-fixture-readsets.sh --list "check-22-spawn-ledger"` and the next
-   batch commits the map change, as batch 118 did for `suite-pole-guard`.
-
-   **BATCH 117 SHIPPED AS `v0.583.0` (`3c4c1b14`)**: `BL-257` closed (the pole is watched by
-   `scripts/validate-suite-pole.sh` against `docs/suite-pole-baseline.tsv`, row `ledger-reverify
-   628`, band 20, ceiling 754, calibrated on three serial full runs with a 12% loaded spread),
-   `BL-255` closed, `BL-258` filed. The number to read for the pole is the guard's own PASS line in
-   the gate log, never a durations-record row.
-
-   **`core/fixtures/reconcile-emit-report`'s intermittent pool red IS ALREADY FILED AS `BL-230`**
-   — batch 118 grepped before filing and found it; do not file it again. `BL-258` is the same shape
-   on a second fixture.
-   **"RESIDUE ZERO" MEANS NO CANDIDATE AWAITS A FIRST FILING. IT NEVER MEANS THE PC WORK IS
-   DONE, AND EVERY BLOCK BELOW SAYING "ZERO KNOWN" IS MAKING ONLY THE NARROW CLAIM.** Two joins,
-   two questions, and they are not interchangeable:
-
-   - **`comm -23 /tmp/live.txt /tmp/filed.txt`** — candidates NO backlog entry cites. This is
-     FILING COVERAGE. It goes to zero when every candidate has been examined once, which is the
-     normal healthy state and says nothing about whether the defects are fixed.
-   - **the PC-BACKED WORKLIST join** in `### Derive the state` — live entries whose cited
-     candidate is STILL LIVE in the consumer's ledger. **This is WORK REMAINING and it is the
-     scoping input.** Run it every batch.
-
-   **Measured at batch 112, which got this wrong:** the first join returned 23, all already
-   dispositioned, and the session reported "zero available PC work" and scoped two no-`PC`
-   entries. The second join returned 22 entries, 20 with receipts still exiting 1, against a
-   consumer ledger holding 62 live candidates. **Scoping a no-`PC` entry over those 22 inverts
-   the operator's provenance-first ruling**, which exists precisely because a session finds its
-   own discoveries readiest. Report BOTH numbers, say which question each answers, and scope off
-   the second.
-
-   **NOTHING IS PRE-SCOPED. THE SWEEP DECIDES, AND IT HAS NOW RETURNED NEW WORK TWO BATCHES
-   RUNNING AFTER TWO EARLIER BLOCKS DECLARED THE PC-BACKED SET EXHAUSTED.** That declaration was
-   true when written and false one batch later, twice over: the consumer filed
-   `PC-S308-GATE-METRICS-CHECK2-STALE-VERDICT-READ-ORDER` on 2026-09-06 (live 66 -> 67), and then
-   THREE `PC-S309-*` candidates on 2026-09-07 (live 67 -> 70, unfiled 16 -> 19, md5 moved again).
-   **A sentence in this file saying the residue is zero is a snapshot of a file someone else is
-   holding open. Run the sweep; never read that sentence for an answer.**
 
 1a. **`docs/backlog.md` IS AT 82 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
    is not blocked. That is not licence to file rather than fix — the standing correction in the
