@@ -170,8 +170,37 @@ Run live smoke tests and **capture output**:
 4. If deployment issue: dispatch the `ops` teammate to fix the
    deployment, re-deploy, and re-run smoke tests.
 5. Repeat until all smoke tests pass.
+6. When the loop is exhausted — every diagnosis run, both routes taken,
+   the test still red — the smoke verdict stays FAILED and the loop stops
+   being the answer. File a Tier 1 `HARD_BLOCK` in
+   `docs/escalations/pending.md` carrying the tee'd smoke output path and
+   the failing assertions verbatim, and STOP. The operator records an
+   explicit disposition on that entry — `approved-deferral` / `do-now` /
+   `descope` — per Rule 13 + Rule 12 Tier 1. That
+   recorded operator disposition, never the lead's own reading of the
+   failure, is the only thing that releases the checkpoint, and it
+   releases the checkpoint without changing the verdict: the smoke
+   result is FAILED under every one of the three.
 A deployment with failing smoke tests is a broken deployment. Do not
 present it to the human for validation.
+
+**The checkpoint carries the failing smoke evidence, not a summary of
+it.** Where a recorded `approved-deferral` disposition releases the
+checkpoint over a red smoke run, the `Deployment` block reports
+`Smoke tests: FAILED` and the `Escalation Log` block names the
+HARD_BLOCK id, the recorded disposition, the tee'd output path, and the
+failing assertions as captured. A checkpoint that reports a smoke pass,
+omits the smoke line, or narrates the failure in place of the captured
+output is a forged checkpoint, and the deferral it rests on is void.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: a red smoke run with
+no reachable repair, which the loop above alone answers only with an
+unbounded stall — and the stall's practical exit, a lead who clears the
+gate on its own authority and presents a checkpoint with the failure
+summarized away. False-positive cost: one HARD_BLOCK entry and one
+recorded disposition line per smoke run the fix loop cannot clear.
+Removal condition: retire once a checkpoint cannot be presented over a
+red smoke verdict without a structurally-enforced operator gate.
 
 Verify the deployed build contains expected changes:
 ```bash
@@ -304,6 +333,10 @@ See: docs/escalations/pending.md
 - DECIDED_AUTONOMOUSLY entries: [count] — review recommended
 - DEFERRAL_REQUEST entries: [count] — approval needed
 - HARD_BLOCK entries: [count, should be 0 or resolved]
+- Red-gate dispositions: [for each gate verdict left FAILED under a
+  recorded operator disposition — the HARD_BLOCK id, the disposition
+  token (approved-deferral / do-now / descope), the captured evidence
+  path, and the failing output verbatim]
 
 ### Next Steps
 [If multi-sprint: "Sprint 1 of N complete. Awaiting your validation
