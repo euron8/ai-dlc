@@ -49,14 +49,26 @@ and expect a rule here to cite a measurement whose story lives in the archive.**
 that file and a `path:line` into it would then fail `validate-plan-shape.sh`'s citation arm on a
 correct rotation.
 
-**BATCH 131 SHIPPED AS `v0.607.0` (`b2f55a42`), TWO SUBJECTS, BOTH STEP-PROSE SAFETY PROPERTIES,
-BOTH PC IDS NAMED VERBATIM IN THE RELEASE COMMIT.** `BL-041` closed, discharging
-`PC-S295-RETRO-RED-SMOKE-CROSSING-SPRINT-BOUNDARY`; `BL-043` closed, discharging
-`PC-S297-GATE-PROCEDURES-DISPATCH-NOT-MANDATED-BACKGROUND`. Gate `AI_DLC_FIXTURE_NO_SKIP=1`:
-exit **0**, 22 of 22 phases PASS, 0 FAIL, all **202** fixtures dispatched and 202 ok, both changed
-fixtures read by name against an impossible-name control of 0. Live **83 -> 81**, archive
-**193 -> 195**. Receipt histogram 7/62/1 before, **9/61/1** after — exactly the two subjects moved,
-so no incidental close.
+**BATCH 133 SHIPPED AS `v0.609.0` (`77f5213a`), TWO SUBJECTS, BOTH STEP-PROSE SAFETY PROPERTIES,
+BOTH PC IDS NAMED VERBATIM IN THE RELEASE COMMIT.** `BL-039` closed, discharging
+`PC-S295-RETRO-STEP5C-DEADLOCK-ON-DEFERRED-RED`; `BL-042` closed, discharging
+`PC-S297-CHECK17-PRD-ARM-CONTRADICTS-RULE-20-BLOCK-PLACEMENT`. Gate `AI_DLC_FIXTURE_NO_SKIP=1`:
+exit **0**, 22 of 22 phases PASS, **202 dispatched / 202 ok / 0 FAILED**, changed-span fixtures
+read by name against an impossible-name control of 0. Live **80 -> 78**, archive **196 -> 198**.
+Receipt histogram 9/58/1 before the rotation and **7/58/1** after — the two rotated entries were
+exactly the two zeros that left, so no incidental close. The PC-backed worklist moved **11 -> 9**;
+set difference both ways confirms only those two left and nothing joined.
+
+**THE GATE LOG IS ANSI-COLOURED AND A RAW GREP SCORES ITS PHASE HEADERS AT ZERO.** Measured this
+batch: `grep -c '── phase'` returned **0** against 38 PASS lines in the same file. Strip the
+escapes (`perl -pe 's/\e\[[0-9;]*m//g'`) and the real tally is 22 headers, 22 PASS, 0 FAIL. A
+zero beside a non-zero control in the same file is the tell.
+
+**A FIXTURE ABSENT FROM THE LOG IS NOT NECESSARILY A FIXTURE THAT DID NOT RUN.**
+`core/fixtures/check-manifest-bypass` touches Check 17, was changed-adjacent, and appears **zero**
+times in a log tallying 202 ok. It has no `run.sh`: it is a SEED other fixtures source. Derive the
+arithmetic before reading the absence — 205 directories, 3 without a runner (`lib/` and two
+seed-only), 202 dispatched — and read the seed's DRIVERS by name instead (four, all ok here).
 
 **BATCH 132 SHIPPED AS `v0.608.0` (`c50d6e7d`), ONE SUBJECT, AND IT WAS THE DEFECT BATCH 131
 TRIPPED OVER.** `BL-277` closed: both runners now resolve `GITDIR` from `--git-common-dir` instead
@@ -83,11 +95,23 @@ cited, and the amended-away object still RESOLVED locally while being reachable 
 where the release sha is stable, and test reachability with `git branch --contains`, never with
 `cat-file`.
 
-**THE PC-BACKED WORKLIST IS 10 AND THE TWO CLOSED SUBJECTS LEFT IT.** Re-derived post-merge with
-its three controls (live 48, a known-live id 1, an impossible id 0): `BL-029`, `BL-039`, `BL-040`,
-`BL-042`, `BL-057`, `BL-067`, `BL-132`, `BL-140`, `BL-145`, `BL-215`. **Four of those ten record
-their own remedy as refuted, unshippable or unconstructible** — `BL-067`, `BL-132`, `BL-145`,
-`BL-215` — so read each entry's own text before scoping it, and do not rebuild a refuted remedy.
+**THE PC-BACKED WORKLIST IS 9 AND THE TWO CLOSED SUBJECTS LEFT IT.** Re-derived post-merge with
+its three controls (live 49, a known-live id 1, an impossible id 0): `BL-029`, `BL-040`, `BL-057`,
+`BL-067`, `BL-132`, `BL-140`, `BL-145`, `BL-215`, `BL-276`. **THREE of those nine record their own
+remedy as refuted, unshippable or unconstructible** — `BL-067`, `BL-132`, `BL-215` — so read each
+entry's own text before scoping it, and do not rebuild a refuted remedy.
+
+**AN EARLIER REVISION SAID FOUR AND NAMED `BL-145` AS THE FOURTH. IT IS NOT.** Measured both by a
+sweep hand and by the lead independently: `BL-145`'s text carries none of those three words. Its
+actual self-assessment is *"the obvious fix is not obviously right, which is why this is filed
+rather than taken"* — an unmeasured false-positive set, which is a SCOPING task and not a
+refutation. **Score a paraphrase against the entry's own words before letting it rank the entry
+out**, and note that `BL-145`'s premise re-derives true today.
+
+**AND THE COUNT IS A JOIN, NOT A CONSTANT.** It read 10 at batch 132's close and 11 when batch 133
+measured it, with no batch in between: `BL-276`'s cited candidate reached `live.txt` through the
+union-of-branches election. A session scoping off a number written here rather than running the
+join loses whatever arrived since.
 
 **A GATE RUN FROM A LINKED WORKTREE IS NOT EVIDENCE, AND THAT IS NOW FILED AS `BL-277`.** In a
 worktree `.git` is a FILE, both runners spell their evidence records as literal `.git/` paths, and
@@ -114,15 +138,26 @@ three qualifying refs are PAIRWISE INCOMPARABLE (adds 4/4/4, union 7), so every 
 loses real filings, and a union WITHOUT the archive subtraction resurrects the 6 ids that are live
 on one qualifying ref and archived on another.
 
-**THE DELIVERY GAP IS THREE RELEASES AND A BOOTSTRAPPING FILE IS IN THE RANGE. THE OPERATOR HAS
+**THE DELIVERY GAP IS FOUR RELEASES AND A BOOTSTRAPPING FILE IS IN THE RANGE. THE OPERATOR HAS
 BANKED IT — DO NOT WRITE A RUNBOOK.** Ruling given at batch 132's close, on the question asked
 directly: bank the pull and keep reporting the gap each batch. Consumer installed `0.605.0`
-against `VERSION` `0.608.0`; the last pull was `0.601.0`-`0.605.0` into graph on 2026-09-19 as
-`554e4a32`, and the consumer has pulled nothing since. Over `a934b743..68211a2e`, 16 `core/` files
-changed and
+against `VERSION` `0.609.0`; the last pull was `0.601.0`-`0.605.0` into graph on 2026-09-19 as
+`554e4a32`, and the consumer has pulled nothing since. Over the installed commit to `origin/main`,
+17 `core/` files changed and
 `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh` is among them — **the consumer's INSTALLED
 copy runs the pull that carries its own repair**, so say so in any brief rather than claiming the
 next pull is protected by it. Mode-only changes: **0**. Re-derive all of it; do not read this sentence for a number.
+
+**THE GAP WIDENS BY ONE ON EVERY RELEASE THIS PROGRAM SHIPS, WHICH IS THE PROGRAM SUCCEEDING AND
+NOT A REASON TO REORDER.** Batch 133 took it from three to four. The banked ruling stands until
+the operator lifts it; report the number each batch and stop.
+
+**THE CONSUMER'S OWN COMMITTED REPORT SAYS HOW ITS INSTALLED ENGINE WILL CLASSIFY THE NEXT PULL,
+AND THAT IS REACHABLE EVIDENCE NOBODY HAD READ.** `_bmad-output/ai-dlc-update/reconcile-report.md`
+in the consumer tree records a DRY RUN of `0.601.0`-`0.605.0` verdicting **SELF-UPDATE-DEFER**
+(`rulebook-coupled-fixtures`, zero CARRY rows) and naming a SAFE-STOP split point whose slice
+self-updates cleanly. Read that file before writing any pull brief — it is a measurement of the
+engine the consumer actually runs, not a reading of the code here.
 
 **A NEW CANDIDATE LANDED MID-BATCH AND WAS UNCOMMITTED WHEN READ.**
 `PC-S312-DERIVATION-FENCES-STRANDED-CORE-RELOCATION-WITH-NO-WORKLIST-ROW` had no `-S` date and was
@@ -799,10 +834,11 @@ given at batch 90.
 
    **Batch 130 returned this plan to its own provenance-first ordering**, which is where it stays
    until the operator rules otherwise: the sweep decides, and a PC-backed entry outranks every
-   distribution-internal one. Batch 131 scoped off that worklist and left it at **10**; batch 132
-   took `BL-277`, which carries no `PC-` id and was therefore NOT off that worklist — an operator
-   choice, made on a direct question, because the defect was blocking this program's own gate.
-   The worklist is still **10** and it is still where a batch scopes from by default.
+   distribution-internal one. Batch 132 took `BL-277`, which carries no `PC-` id and was therefore
+   NOT off that worklist — an operator choice, made on a direct question, because the defect was
+   blocking this program's own gate. Batch 133 scoped two PC-backed entries off the worklist and
+   left it at **9**, which is still where a batch scopes from by default. **Run the join; the
+   number here is a record of when it was taken, never an input.**
 
    **SUPERSEDED — OPERATOR RULING AT BATCH 118: `docs/plans/pre-push-wall-clock.md` IS BATCH 119's
    SUBJECT.** Kept for its lineage only; the block above replaces it.
