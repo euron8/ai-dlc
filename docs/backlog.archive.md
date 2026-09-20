@@ -16332,3 +16332,92 @@ This entry's own emitting-site receipt governs both occurrences.
 
 verify: sh unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY; R=core/skills/ai-dlc-update/reconcile; [ -f core/skills/ai-dlc-update/reconcile/apply.sh ] && [ -f core/skills/ai-dlc-update/reconcile/setup-sites.md ] && [ -f core/scripts/validate-artifact-derivations.sh ] || exit 9; grep -q 'RETIRED-LAYER-PASSAGE' core/skills/ai-dlc-update/reconcile/retired-layer-passage.sh || exit 9; W="$(mktemp -d)" || exit 9; q() { rm -rf "${W:?}" 2>/dev/null; exit "$1"; }; Q="$(printf '\140\140\140')"; L='the narrator must record the close-out sweep verdict before the sprint ends'; git init -q "$W/d" && [ -d "$W/d/.git" ] || q 9; mkdir -p "$W/d/core/skills/ai-dlc" || q 9; printf '%s\nkept\n' "$L" > "$W/d/core/skills/ai-dlc/SKILL.md"; printf 'unchanged\n' > "$W/d/core/skills/ai-dlc/steady.md"; git -C "$W/d" add -A >/dev/null 2>&1; git -C "$W/d" -c user.email=f@x -c user.name=f commit -qm b >/dev/null 2>&1; B="$(git -C "$W/d" rev-parse HEAD)" || q 9; printf 'kept\n' > "$W/d/core/skills/ai-dlc/SKILL.md"; git -C "$W/d" add -A >/dev/null 2>&1; git -C "$W/d" -c user.email=f@x -c user.name=f commit -qm t >/dev/null 2>&1; T="$(git -C "$W/d" rev-parse HEAD)" || q 9; [ "$B" != "$T" ] || q 9; for c in h m; do mkdir -p "$W/$c/.claude/skills/ai-dlc/extensions" "$W/$c/_bmad-output" "$W/$c/scripts/ai-dlc" || q 9; printf 'x\n' > "$W/$c/scripts/ai-dlc/validate-artifact-derivations.sh"; git init -q "$W/$c" || q 9; done; printf '%s\n' "$L" > "$W/h/.claude/skills/ai-dlc/extensions/e.md"; printf 'a wholly different sentence core never carried\n' > "$W/m/.claude/skills/ai-dlc/extensions/e.md"; printf '%sderived\n$ grep -n sweep .claude/skills/ai-dlc/SKILL.md\n%s\n' "$Q" "$Q" > "$W/h/_bmad-output/s.md"; printf '%sderived\n$ grep -n x .claude/skills/ai-dlc/steady.md\n%s\n' "$Q" "$Q" > "$W/m/_bmad-output/s.md"; dn() { bash "$R/retired-layer-passage.sh" "$W/d" "$B" "$T" "$1" 2>/dev/null | awk -F'\t' '$1=="RETIRED-LAYER-PASSAGE"' | grep -c . ; }; DH="$(dn "$W/h")" || DH=0; DM="$(dn "$W/m")" || DM=0; [ "$DH" -ge 1 ] && [ "$DM" -eq 0 ] || q 9; HO="$(bash "$R/apply.sh" "$W/d" "$B" "$W/h" "$T" 2>/dev/null)"; MO="$(bash "$R/apply.sh" "$W/d" "$B" "$W/m" "$T" 2>/dev/null)"; nr() { printf '%s\n' "$1" | awk -F'\t' 'NF>=3' | grep -c . ; }; NH="$(nr "$HO")" || NH=0; NM="$(nr "$MO")" || NM=0; [ "$NH" -ge 1 ] && [ "$NM" -ge 1 ] || q 9; k() { printf '%s\n' "$1" | awk -F'\t' -v p="$2" '$1=="WORKLIST" && $2 ~ p' | grep -c . ; }; HP="$(k "$HO" passage)" || HP=0; MP="$(k "$MO" passage)" || MP=0; HD="$(k "$HO" derivation)" || HD=0; MD="$(k "$MO" derivation)" || MD=0; [ "$HP" -ge 1 ] && [ "$MP" -eq 0 ] && [ "$HD" -ge 1 ] && [ "$MD" -eq 0 ] && q 0; q 1
 
+## BL-029
+
+**LANDED (v0.612.0, verified 8efbd08b).**
+
+**This placeholder deliberately matches NEITHER keying regex, and that is a measurement.**
+`backlog-reverify.sh:150` keys on `^(<br>)?\*\*LANDED \(v` with no digit required, while
+`backlog-rotate.sh:295` requires `^(<br>)?\*\*LANDED \(v[0-9]`. A `v<version>` placeholder
+written in the literal form scores **1** against the first and **0** against the second
+(positive control, a real `v0.612.0` annotation: 1 and 1; negative control, prose mentioning
+the word: 0 and 0) — so it would report the entry ALREADY-CLOSED, **permanently stop its receipt
+being re-run**, and still never rotate. The paragraph above scores 0 against both, which keeps
+the receipt live until the real annotation replaces it.
+
+**A block whose machinery core text presupposes takes the `domain-local` route, lands in
+`extensions/` with no push flag written at all, and is never offered upstream — and the decision
+that does this is the untangle-apply bucket list, not the classifier prompt.** Measured on the
+shipping tree (`4e147590`) at `core/skills/ai-dlc-update/SKILL.md`: the `domain-local` bullet read
+`extract the block to extensions/, then restore core to theirs at that block` and wrote no
+`push_candidate` at all, while `un-pushed-innovation` one bullet below wrote `push_candidate:
+true`. That asymmetry is the whole mechanism.
+
+**THE FILING'S CENTRAL CLAIM ABOUT THE MOTIVATING CASE IS FALSE, AND CORRECTING IT MOVES THE
+FIX.** The filing reasoned that the reference consumer "held the rotation as `domain-local`". It
+did not. The live home is
+`/Users/n8/git/graph/.claude/skills/ai-dlc/extensions/steps-domain/retro-gate-log-rotation.md`,
+carrying `hooks: steps/retro.md` and `push_candidate: false` in its frontmatter, and its §4a
+adjudication sits in `.claude/skills/ai-dlc/overrides/steps__retro__domain-sections.md`
+(`7a-post` = 5 hits there; control: that override file exists and is 32636 bytes, while an
+impossible sibling under `extensions/steps-domain/` does not resolve). It is an `extensions/`
+ENTRY with a wrong flag VALUE — never a `domain-local` row emitted by the classifier. **A rule
+sited on the classifier's `domain-local` bullet would have scored ZERO on its own motivating
+case**, which is the batch-135 failure shape exactly. The fix is therefore sited at the decision
+point in `core/skills/ai-dlc-update/SKILL.md`, where both bullets now write the flag explicitly
+and `domain-local` writes `false` as a derived positive claim; `reconcile/classify-block.md:36`
+carries the same wording for a reader, and is read by 0 executables (control: 10 mentions of
+`preclassify` in `scripts/validate-enforcement-map.sh` against 0 for `classify-block`).
+
+**WHAT SURVIVES OF THE ORIGINAL FILING.** The consequence is still measurable in core.
+`core/scripts/validate-artifact-budget.sh:1363` emits `rotate -> a rotation was MISSED`, and
+`core/skills/ai-dlc/steps/retro.md` carries the `7a-post` rotation step that satisfies it at
+`:837,838,895,1104,1173,1176,1179` — 7 hits, against an impossible-token control of 0 in both
+files, same invocation. Core acquired that step only at v0.121.0 having shipped the accusing
+breach message since v0.45.0, and for that whole span core held a gate whose passing condition it
+did not define. **The line numbers the entry originally cited — `validate-artifact-budget.sh:1048`
+and `retro.md:702,896,965` — no longer resolve to the cited text** (`:1048` is now a bare `cat
+>&2 <<'EOF'`); the CLAIMS survive and the citations above replace them.
+
+Also surviving: the classifier's return schema
+(`core/skills/ai-dlc-update/reconcile/classify-block.md:99-103`) carries exactly `id`, `bucket`,
+`action`, `needs_operator_confirmation`, `note` — control: an impossible sixth key scores 0 in the
+same invocation — so there is still no field in which the dependency answer is recorded. And the
+"no detector for 'core references a step it does not define'" claim still holds against the
+upstream-side class: `core/scripts/validate-ci-gates.sh` is a dormant-gate detector (16 `dormant`
+mentions, control 0 for an impossible token) whose subject is CI gates declared in a retro with no
+enforcer match, not core prose depending on machinery core lacks.
+
+**WHAT EXPIRED.** The filing asserted the buckets are the only per-block signal. Since it was
+written `needs_operator_confirmation` shipped as an explicitly orthogonal second axis
+(`classify-block.md:74-92`, "A block can have an obvious, mechanical bucket … and STILL require a
+human decision"), so the general complaint that one bucket carries the whole disposition is false.
+What is left of it is narrow: `needs_operator_confirmation` is a human-attention flag carrying no
+push flag, so it cannot re-home an unrelated push axis.
+
+**THE OLD RECEIPT SCORED 0 ON A DESTRUCTIVE REGRESSION, AND THAT IS THE DEFECT BEING REPAIRED
+HERE.** The old receipt grepped the `domain-local` bullet of `classify-block.md`
+case-insensitively for `push`. Scored on three trees built into a scratch dir, all three asserted
+pairwise-different by `cmp -s` before any score was read: shipping `4e147590` → 1, the fix → 0,
+and a regression built FROM shipping that strips the push route from `un-pushed-innovation` and
+moves it to `domain-local` → **0**. A receipt that cannot tell the fix from the regression that
+inverts it has established nothing. The replacement below extracts BOTH bullets from the decision
+site, strips HTML comments, and asserts three things at once — `domain-local` writes `false`,
+`un-pushed-innovation` writes `true`, and `domain-local` does NOT write `true`. Re-scored on the
+same three trees plus four false-close probes (prose above the bullet list, an HTML comment
+carrying the token inside the span, a bare HTML comment, an unrelated sixth Return-schema key):
+fix 0, shipping 1, regression 1, and 1 on all four probes; an empty tree exits 3 rather than
+passing silently, so a moved subject cannot read as a close.
+
+**THE FIX SHIPS ALONE AND TAKES EFFECT ONE PULL LATE.** `core/skills/ai-dlc-update/SKILL.md` IS
+the update skill, so a consumer's installed copy runs the pull that delivers its own repair. The
+pull carrying this fix is classified by the OLD bullet list; the one after it is the first
+protected one.
+
+Discharges the consumer entry `PC-S296-REJECTION-CARRIES-UNRELATED-GAPS` at pinned ledger line 860
+(live at `/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md:459`, control:
+an impossible `## PC-` id scores 0 in the same file). **That entry's own receipt is defective in
+the retiring direction — see BL-279.**
+
+
+verify: sh s=core/skills/ai-dlc-update/SKILL.md; [ -f "$s" ] || exit 3; g(){ LC_ALL=C awk -v B="- **$1** " "index(\$0,B)==1{f=1;print;next} f&&/^- [*][*]/{exit} f" "$s" | LC_ALL=C sed "s/<!--.*-->//g" | LC_ALL=C tr "\n" " " | LC_ALL=C tr -s " "; }; d="$(g domain-local)"; u="$(g un-pushed-innovation)"; [ -n "$d" ] && [ -n "$u" ] || exit 3; LC_ALL=C grep -qE "push_candidate: *false" <<< "$d" || exit 1; LC_ALL=C grep -qE "push_candidate: *true" <<< "$u" || exit 1; ! LC_ALL=C grep -qE "push_candidate: *true" <<< "$d"
