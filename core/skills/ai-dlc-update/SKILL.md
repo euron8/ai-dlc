@@ -145,8 +145,8 @@ Every consumer block that differs from upstream is one of:
 | Bucket | Meaning | Pull action |
 |--------|---------|-------------|
 | **rewording** | same concept, different prose; already-upstream in substance | take theirs (drop the consumer rewording) |
-| **domain-local** | consumer machinery upstream intentionally lacks | keep ours; layer theirs' non-conflicting additions around it |
-| **un-pushed-innovation** | generalizable improvement not yet absorbed upstream | keep ours; **flag for push** (feeds the absorption arc) |
+| **domain-local** | consumer machinery upstream intentionally lacks AND no core text depends on | keep ours with `push_candidate: false`; layer theirs' non-conflicting additions around it. If core text at the hook target DOES depend on it, the bucket is `un-pushed-innovation` instead |
+| **un-pushed-innovation** | generalizable improvement not yet absorbed upstream — including anything core text presupposes | keep ours with `push_candidate: true`; **flag for push** (feeds the absorption arc) |
 | **conflict** | both changed the same core rule incompatibly | operator adjudicates |
 
 **Every ours/theirs claim is DERIVED, never recalled.** A bucket above is a claim about
@@ -1793,7 +1793,14 @@ prose is itself generated rather than composed.
      which `team-roles/remediator.md` is one.
    - keep/domain-local/innovation blocks → leave ours; for domain-local, layer
      theirs' non-conflicting additions; for innovation, append to the
-     push-candidate ledger.
+     push-candidate ledger. **The push asymmetry between those two is a
+     decision, not a default, and it is the same one the untangle bucket list
+     makes below.** Before leaving a block as domain-local, answer the
+     dependency question against `theirs`: does any core text at the block's
+     hook target — a gate, a breach message, a budget row, a cross-reference —
+     presuppose the machinery being kept local? If it does, core is incomplete
+     without the block; treat it as innovation and append it to the ledger.
+     A block left domain-local is the positive claim that nothing core does.
    - conflicts → apply only operator-adjudicated resolutions.
    - `UPSTREAM-DELETED` files (upstream removed the file, consumer untouched
      vs base) → **`git rm` the consumer file, but ONLY after an explicit
