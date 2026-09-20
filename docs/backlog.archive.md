@@ -15692,3 +15692,95 @@ entry evaluates as a CLOSE-CANDIDATE on a string whose presence is unrelated to 
 
 
 verify: sh P=core/skills/ai-dlc/steps/_gate-procedures.md; [ -f "$P" ] || exit 9; SL(){ LC_ALL=C awk -v h="$1" 'index($0,h)==1{f=1;next} f&&/^## /{exit} f' "$P"; }; C=$(SL '## Gate-adjudication dispatch'); B=$(SL '## Bounded-join beat'); { [ -n "$C" ] && [ -n "$B" ]; } || exit 9; LB=$(printf '%s\n' "$B" | wc -l); { [ "$LB" -ge 10 ] && [ "$LB" -le 60 ]; } || exit 2; grep -qF 'run_in_background: true' <<<"$C" || exit 2; NEG=$(printf '%s\n' "$B" | tr '\n' ' ' | tr '.' '\n' | awk '/run_in_background/ && /[Nn]ever pass|[Nn]ever use|[Dd]o not pass|[Dd]o not use|[Mm]ust not pass|MUST NOT pass|[Nn]ever background|is optional|optional here|[Nn]ot required/{n++} END{print n+0}'); [ "$NEG" -eq 0 ] || exit 1; ADJ=$(printf '%s\n' "$B" | awk '/run_in_background: true/{t[NR]=1} /wait-for-deliverable\.sh/{c[NR]=1} END{n=0; for(i in t) for(j in c){d=i-j; if(d<0)d=-d; if(d<=4)n++} print n+0}'); [ "$ADJ" -ge 1 ]
+## BL-277 — both pre-push runners spell their cross-run evidence records as literal `.git/` paths, so every gate run from a linked worktree loses the evidence silently and still reports green
+
+**LANDED (v0.608.0, verified c50d6e7d.)**
+
+**DEFECT.** Found at batch 131 while collecting three fan-out hands, each of which had run the
+suite in its own agent worktree. Not fixed here — it is a different subsystem from that batch's
+two subjects, and the fix is one line in each of two byte-bound runners.
+
+**In a linked worktree `.git` is a FILE, not a directory.** Both runners define their records as
+literal `.git/`-prefixed paths and neither resolves `git rev-parse --git-common-dir` — measured 0
+occurrences of that token in each, against a positive control of 7 for `FIXTURE_JOBS` in the same
+file and a verified-absent negative control of 0. Six record variables carry 26 references between
+them.
+
+**The measured symptom is two errors on stderr and a run that keeps going:**
+
+    .githooks/pre-push: line 923: .git/ai-dlc-suite-key.log: Not a directory
+    .githooks/pre-push: line 660: .git/ai-dlc-fixture-durations.last: Not a directory
+
+Every write is `2>/dev/null || true` or an append whose failure is discarded, so the suite proceeds
+and the banner is unaffected. Measured on one worktree against the primary checkout in the same
+invocation: `ai-dlc-fixture-durations`, `ai-dlc-fixture-verified`, `ai-dlc-fixture-failures` and
+`ai-dlc-suite-key` are all present from the primary checkout and all unreachable from the
+worktree, with the `.git` shape itself as the discriminating control (DIR vs gitlink FILE).
+
+**What is lost is the CROSS-RUN half, which is the half that exists for the failures nobody can
+reproduce.** `FAILLOG_RECORD`'s own header says a red unit's output has to outlive the run that
+produced it, and records that this was filed by the reference consumer as
+`PC-S302-FIXTURE-SUITE-POOL-PRODUCES-AN-UNREPRODUCIBLE-FAIL-AND-THE-EVIDENCE-IS-DELETED-WITH-THE-TEMP-DIR`.
+A gate run from a worktree cannot keep the evidence that record exists to keep. `VERIFIED_RECORD`
+additionally feeds the content-key skip, so a worktree run also cannot bank what it verified. The
+IN-RUN verdict-completeness assertion walks the dispatched list and is unaffected — this entry is
+about what crosses runs, and the distinction is why the defect survives a green suite.
+
+**It is ONE defect in ONE program, not divergence.** The four shared definitions are byte-identical
+between `.githooks/pre-push` and `core/git-hooks/pre-push` — diffed in one invocation — which is
+what invariant **I66** binds. So the consumer's installed runner carries it too, and a consumer
+that pushes from a worktree loses the same evidence.
+
+**The write-side failure is not the whole cost.** A hand that runs the suite in its worktree gets a
+run that cannot record what it did, and its green is therefore not evidence about anything a later
+run can check. Measured at batch 131: three separate worktree gate runs were reported green or
+in-progress by their hands, and none had written a verdict record; the one trustworthy run was the
+lead's, from the primary checkout.
+
+**No fixture covers this.** Two fixtures build a worktree (`backlog-receipt-binding`,
+`fixture-git-env-seam`) and neither drives the hook's records; `prepush-worktree-env-scrub` is the
+nearest neighbour and its subject is the adjacent one — scrubbing an inherited `GIT_DIR` out of the
+hook's environment, not resolving the record paths — measuring 0 for any record token against a
+control of 21 for `worktree` in its own text.
+
+**The receipt DRIVES the subject rather than grepping the file that implements it, and the first
+form was rejected at the gate for exactly that.** The first draft asked whether the token
+`git-common-dir` appeared in both runners — a lexical test, which `validate-backlog-receipts.sh`'s
+`R2` arm caught by appending one comment line carrying that literal and watching the receipt go
+`1 -> 0`. R2 is a RATCHET that only moves down, and it was right: a receipt that cannot tell a fix
+from prose about a fix is the instrument the next batch would have used to decide whether its own
+fix worked.
+
+The shipped form builds a real repository under `mktemp`, adds a real linked worktree, EVALUATES
+each runner's own record expression in both trees, and asks whether the write lands. A comment
+cannot satisfy it, and an implementation that resolves the common directory by any other means
+closes it correctly, because the test is the behaviour and not the spelling.
+
+**IT EVALUATES THE WHOLE `GITDIR` + `DURATIONS_RECORD` PAIR, AND THE ONE-LINE FORM RETURNED A
+FALSE 9.** The fix assigns `GITDIR` on its own line and keys the records off it, so a receipt
+`eval`-ing only the `DURATIONS_RECORD=` line resolves `$GITDIR` to empty, writes to `/…`, and fails
+its own primary-checkout control — reporting **9, unmeasured**, against a tree that is correctly
+fixed. The receipt therefore slices the `FIXTURE_POOL_BEGIN`/`END` block and evaluates both lines
+together. **A receipt that reads ONE line of a two-line construction is measuring its own grammar.**
+
+**Scored on four trees, every mutation asserted applied.** Both runners resolving the common
+directory **0**. Base `d42026e3` **1**. Only the DISTRIBUTION runner fixed **1**, because a fix
+that misses the consumer's copy is the half-fix I66 exists to prevent. A comment carrying
+`git rev-parse --git-common-dir` appended to both unfixed runners **1** — the arm the first draft
+failed.
+
+**Its own control is the primary checkout**, asserted in the same invocation: the identical
+expression must resolve where `.git` is a directory. If it does not, the receipt exits 9 — a broken
+harness reports as unmeasured rather than as a finding.
+
+**FIXED AT `v0.608.0`. `I55`'s arm 4 had to move with it, and that is the half a reader would
+miss.** That arm required every `<NAME>_RECORD=` to begin with a literal `.git/` — the correct rule
+for the defect it was written for (a record inside the hashed working tree makes the content key
+unmatchable), and the exact spelling that is WRONG in a worktree. It now admits a `$GITDIR/` prefix
+**only where the same file assigns `GITDIR` from `rev-parse --git-common-dir`**, so a hook that
+merely names a variable called `GITDIR`, or points it inside the tree, is convicted as before.
+Probed in both directions against the real validator, each mutation applied to the live hook and
+restored byte-identically: a seeded in-tree record **convicted**, an unresolved `GITDIR` assignment
+**convicted**, the shipped hook **silent**.
+
+verify: sh s=.githooks/pre-push; c=core/git-hooks/pre-push; [ -f "$s" ] && [ -f "$c" ] || exit 9; d=$(mktemp -d) || exit 9; r="$d/r"; mkdir -p "$r" || exit 9; git init -q "$r" 2>/dev/null || { rm -rf "$d"; exit 9; }; printf 'x\n' > "$r/f"; git -C "$r" add -A >/dev/null 2>&1 && git -C "$r" -c user.email=t@t -c user.name=t commit -qm s >/dev/null 2>&1 || { rm -rf "$d"; exit 9; }; git -C "$r" worktree add -q --detach "$d/wt" >/dev/null 2>&1 || { rm -rf "$d"; exit 9; }; [ -f "$d/wt/.git" ] || { rm -rf "$d"; exit 9; }; n=0; bad=0; for f in "$s" "$c"; do e=$(LC_ALL=C sed -n '/^# FIXTURE_POOL_BEGIN/,/^# FIXTURE_POOL_END/p' "$f" | LC_ALL=C grep -E '^(GITDIR=|DURATIONS_RECORD=)'); [ -n "$e" ] || { bad=9; break; }; printf '%s' "$e" | LC_ALL=C grep -q '^DURATIONS_RECORD=' || { bad=9; break; }; p=$( cd "$r" && eval "$e" 2>/dev/null; { : > "$DURATIONS_RECORD"; } 2>/dev/null && echo 1 || echo 0 ); [ "$p" = 1 ] || { bad=9; break; }; w=$( cd "$d/wt" && eval "$e" 2>/dev/null; { : > "$DURATIONS_RECORD"; } 2>/dev/null && echo 1 || echo 0 ); [ "$w" = 1 ] || n=$((n+1)); done; rm -rf "$d"; [ "$bad" = 9 ] && exit 9; [ "$n" -eq 0 ] && exit 0; exit 1
