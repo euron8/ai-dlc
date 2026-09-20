@@ -58,7 +58,48 @@ scripts/plan-rotate.sh docs/plans/graph-ledger-full-drain.md` to see what moves 
 move it. **Never a discharge banner in the head window** — that silences P9 through P13 on this
 file.
 
-**BATCH 138 SHIPPED `v0.613.0` (`53a17335`, #811), ONE SUBJECT, SHIPPED ALONE BECAUSE IT TOUCHES
+**BATCH 138 SHIPPED TWO RELEASES AND CLOSED FOUR ENTRIES. `v0.614.0` (`f73027d8`, #813) CARRIED
+TWO SUBJECTS IN ONE RELEASE, AND THAT IS THE NORMAL SHAPE — action 2's ship-alone clause is a
+PER-FILE test, derived per release, not a disposition toward one subject per batch.** `BL-281`
+closed (the handoff guard's key 2 armed forever on a line nothing rewrites; key 1 keys on a FILE
+step 5 deletes and is self-clearing, and that asymmetry was the defect rather than the grammar),
+discharging `PC-S312-HANDOFF-GUARD-ARMS-ON-A-STALE-DISK-RECORD-THROUGH-A-RECONCILE`. `BL-260`
+closed on the operator's standing instruction: the dispatch guard's effort prose line is removed.
+Gate 22 of 22 phases PASS, **203 ok / 0 FAIL**, five affected fixtures read by name against an
+impossible-name control of 0. Live **76 -> 74**, archive **204 -> 206**.
+
+**THE EFFORT LINE WAS NEVER GATED ON THE THING ITS OWN COMMENT CLAIMED.** The header called it
+"what a dispatch with no usable definition still gets"; `NEEDS_EFFORT` referenced
+`DEFINITION_BOUND` **zero** times, against a control of one in the `NEEDS_TYPE` block beside it.
+So it was appended on definition-bound dispatches too, restating in prose what the harness had
+already bound from the definition's `effort:` key. **Nothing ever measured it**: `probe_effort()`
+reads the teammate's TRANSCRIPT, the six fixture assertions read the outgoing PROMPT for the
+sentence's own text, and `grep -rln EFFORT_LINE core/ scripts/` returned one file — the hook that
+emitted it. The only thing verifying the line was a check that the line was there. Removing it
+took **13 of 27** dispatch shapes from emitting to silent, all one class, so the guard is
+strictly more idempotent. **A comment describing a gate the code does not have is the shape to
+watch for; it framed the entry as a narrow edge case for two batches.**
+
+**THE LEAD SERIALISED TWO SUBJECTS THAT DID NOT NEED IT, AND ONLY AN ERROR EXPOSED IT.** Both
+were planned as separate releases on the assumption that hook fixes ship alone. Derived: `0.613.0`
+touched **2** bootstrapping files and was correctly alone; `0.614.0` touched **0**, so the rule
+always permitted the batch. A botched branch switch forced the rebuild that found it. **Derive
+the bootstrapping-file count per release before assuming separation** — an unnecessary split
+costs a full gate run, which is this program's scarcest resource.
+
+**NEVER SWITCH BRANCHES WHILE THE GATE IS RUNNING.** Measured here: `git checkout` mid-run left
+the suite measuring a tree without the change under test, and the run had to be killed and
+re-taken. It also left **24** orphaned fixture processes that needed clearing by name.
+
+**BOTH RECEIPT FLOORS WERE RE-SEATED TOGETHER AND THE WINDOW WAS PROBED, NOT ASSUMED.** Four
+rotations took live 78 -> 74 and `sh` receipts 65 -> 61, leaving both `.githooks/pre-push` floors
+above their live counts. R5 compares the two DROPS, so it passed — but a probe seeding one real
+`verify: sh` -> `verify: manual` downgrade fires R5 at the OLD floors and at the NEW ones, so the
+window was never closed and the re-seat did not open one. **The first probe attempt edited the
+`## Receipts` LEGEND and did not apply**, caught by the receipt count not moving rather than by
+reading. Floors now 61/74.
+
+**BATCH 138 ALSO SHIPPED `v0.613.0` (`53a17335`, #811), ONE SUBJECT, ALONE BECAUSE IT TOUCHES
 THE LEDGER ENGINES.** `BL-140` closed, discharging three ids named verbatim in the release commit:
 `PC-S297-H2-SEEDS-STILL-VACUOUS-PURE-ECHO`,
 `PC-S300-ORIGIN-TAG-GATE-HAS-NO-WAIVER-FOR-TRACEABILITY-CITATIONS` and
@@ -100,8 +141,8 @@ worlds. Separately, a fixture mutant scoring zero was LEFT ALONE as a tautology 
 derives its seed tokens from the rule the mutant edits, so both sides move together, and "fixing"
 it means hand-listing the vocabulary in the fixture.
 
-**THE CONSUMER PULLED MID-BATCH AND THE GAP IS NOW ONE RELEASE.** Installed **0.612.0**
-(`9bb59dfa`) against `VERSION` **0.613.0**, moved by the consumer's own
+**THE CONSUMER PULLED MID-BATCH AND THE GAP IS TWO RELEASES.** Installed **0.612.0**
+(`9bb59dfa`) against `VERSION` **0.614.0**, moved by the consumer's own
 `33c8b7dd2 reconcile distribution 0.608.0 -> 0.612.0 (#1092)`. **All three ledger engine files are
 in that one-release range** (`SKILL.md`, `ledger-reverify.sh`, `ledger-rotate.sh`, of 8 core paths),
 so the consumer's INSTALLED copy runs the pull carrying its own repair. The operator's BANKED ruling
