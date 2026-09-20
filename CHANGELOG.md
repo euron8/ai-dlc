@@ -15,6 +15,40 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.615.0] - 2026-09-20
+
+### the self-update DEFER path wrote an approval record that no step claimed, and a human supplied the missing instruction ten times
+
+`reconcile/self-update-gate.sh` writes `_bmad-output/ai-dlc-update/self-update-gate-<ts>.md` on
+every verdict it can produce, DEFER included. Only the OK bullet named that record, and it named it
+as half of a two-file "approval artifact" bound for the self-update commit — a commit the DEFER path
+never creates, since its own first clause is "do NOT cut the branch and do NOT push". So on DEFER
+the record was written and orphaned.
+
+Nothing was lost, because the operator had been closing the gap by hand. Re-derived against the
+reference consumer, joining each record to the commit that added it: 25 records on disk, 25 tracked,
+0 untracked; 13 DEFER and 12 OK; **10 of 13 DEFER records already arrive on a reconcile commit and
+0 on a self-update commit**, against 9 of 12 OK records arriving on a self-update commit. The
+destination this change names is the one the records were already reaching.
+
+The DEFER bullet now names the record alone, names the step-7 gated apply as its destination, and
+says in the same breath that this is an instruction to the operating agent and not an enforced
+property. That last clause is not modesty: one instrument over the whole `reconcile/` engine finds
+2 non-comment `git add`/`git commit` lines, both `bad`-message strings in `apply.sh` case arms,
+against 189 non-comment `git -C` lines. Nothing here stages or commits anything, and the shipped
+prose says so rather than letting a reader infer an enforcement that does not exist.
+
+`self-update-fixtures.sh` already printed "Commit the gate record beside this log." on its refusal
+path, so the shipping program had been instructing what the skill omitted.
+
+BL-280's receipt is REPLACED, because the original could not tell the fix from the unfixed tree —
+1 at base and 1 at the fix, sides asserted different in the same invocation. Its verb-then-token arm
+used `[^.]*`, which crosses neither a period nor a newline, so it rejected 6 of 7 competent
+phrasings and accepted every inert form including a fenced block. The replacement terminates on the
+next sibling bullet rather than the OK bullet's spelling, strips fenced blocks and multi-line HTML
+comments before any arm, reads the record-naming sentence and the one after it, and scores 29 of 29
+with every mutant asserted applied. Carries the reference consumer's `PC-S345-DEFER-PATH-NAMES-NO-HOME-FOR-THE-GATE-RECORD-IT-JUST-WROTE`.
+
 ## [0.614.0] - 2026-09-20
 
 ### the handoff guard's snapshot key had no lifecycle, so a finished handoff armed it forever
