@@ -186,6 +186,13 @@
       "reason": "Handoff entry marker, written by the PostToolUse Read hook when the lead opens steps/handoff.md and removed by that file at step 5. Means the lead is INSIDE the handoff procedure, which is what ai-dlc-recover.sh routes a post-compact Read on. A tracked copy makes every checkout look mid-handoff."
     },
     {
+      "name": ".handoff-complete",
+      "transient": true,
+      "producer": "core/hooks/ai-dlc-continue.sh",
+      "ignore": "_bmad-output/.handoff-complete",
+      "reason": "Written by the Stop guard on the branch where every handoff arm was read and found satisfied, and read by ai-dlc-handoff-pending.sh as key 2's discharge. The snapshot's HANDOFF POINT line has no writer that removes it, so without this stamp a completed handoff armed the guard permanently; the predicate re-arms on a snapshot NEWER than the stamp, which is what a later handoff's step 3 produces. A tracked copy discharges the key for a completion that never happened in this checkout."
+    },
+    {
       "name": "ai-dlc-update",
       "transient": false,
       "producer": "core/hooks/ai-dlc-acknowledge.sh",

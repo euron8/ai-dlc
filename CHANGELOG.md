@@ -15,6 +15,57 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.614.0] - 2026-09-20
+
+### the handoff guard's snapshot key had no lifecycle, so a finished handoff armed it forever
+
+`ai-dlc-handoff-pending.sh`'s key 2 fired on the presence of a `HANDOFF POINT` line in
+`pipeline-snapshot.md` and on nothing else. Nothing in this distribution removes that line --
+every other occurrence of the token is a comment or a fixture seed, against an impossible-token
+control of 0 -- so once the predicate was true it was true permanently, and every later Stop of a
+paused session blocked on a handoff that had already completed.
+
+Key 1 needed no such repair because it keys on a FILE that step 5 deletes: it is self-clearing by
+construction. The asymmetry was the defect, not the grammar -- widening or narrowing the regex
+changes which stale line arms the guard, never that a stale line arms it.
+
+Key 2 now carries a completion lifecycle. `ai-dlc-continue.sh` writes `.handoff-complete` on the
+branch where every Check 0 arm was read and found satisfied, and deliberately NOT on the backoff
+branch, which allows a Stop it could not verify. The predicate compares snapshot newer-than-stamp,
+never the inverse, because bash 3.2's `-nt` is whole-second and the inverse form would disarm a
+compliant handoff whose steps landed in the same second.
+
+Measured on the reference consumer: one record, two days old, the guard firing five times across a
+maintenance session that owed no handoff protocol at all.
+
+Seven cases driven base against tip, the two sides asserted byte-different first with an unchanged
+control file: only the stamped-and-older case, the writer, and the completed tree's next Stop move.
+An unstamped record, a record written after a stamp, the transcript arm and key 1 are identical on
+both sides -- the exemption acquits no real handoff.
+
+### the dispatch guard's effort prose line is removed
+
+`ai-dlc-dispatch-guard.sh` appended `"Your configured reasoning effort for this role is <level>.
+Operate at that level."` to every dispatch carrying a configured effort. The binding channel is the
+rendered `.claude/agents/<role>.md` definition's `effort:` key, which the harness applies; the
+prompt sentence bound nothing.
+
+The line was not gated on the definition being absent. `NEEDS_EFFORT` referenced `DEFINITION_BOUND`
+**zero** times, against a control of one in the adjacent `NEEDS_TYPE` block, so the sentence was
+appended on definition-bound dispatches too -- duplicating in prose what the harness had already
+bound. The header paragraph describing it as "what a dispatch with no usable definition still gets"
+described a gate the code never had, and is corrected with the removal.
+
+Nothing measured the line's effect: `probe_effort()` reads the teammate's own transcript, which the
+harness writes from the definition, and the fixture's six `expect_effort` assertions read the
+outgoing prompt for the sentence's own text. `grep -rln EFFORT_LINE core/ scripts/` returned one
+file -- the hook that emitted it.
+
+Thirteen of twenty-seven dispatch shapes now emit nothing where they previously emitted, one class:
+the model is already correct or unresolvable and no definition rewrite is owed, so the sentence was
+the sole trigger. The guard is strictly more idempotent. `PIN_EFFORT` is unchanged and still owns
+`I111`'s level vocabulary and the two re-render diagnostics.
+
 ## [0.613.0] - 2026-09-20
 
 ### the close grammar is one grammar now, and the two files it had not reached

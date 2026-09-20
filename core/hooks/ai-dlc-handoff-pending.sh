@@ -103,8 +103,35 @@ ai_dlc_handoff_pending() {
   # -- a lead writes it, by hand, improvising -- so there was no producer to seed from and the
   # first grammar was written from the same imagination as its own test case. It matched
   # everything I invented and nothing a consumer had actually written.
+  #
+  # AND THE RECORD HAS NO LIFECYCLE OF ITS OWN, WHICH IS WHY THE COMPLETION STAMP IS PART OF THE
+  # KEY. Key 1 is a FILE a completing handoff deletes, so it is self-clearing by construction.
+  # Key 2 is PROSE in a document whose only writer APPENDS -- nothing in this distribution ever
+  # removes the line, against an impossible-token control of 0 over the same corpus -- so once
+  # true it was true permanently, and every later Stop of a paused session armed the guard on a
+  # handoff that had finished days earlier. Measured on the reference consumer: one record, two
+  # days old, the guard firing five times across one maintenance session that owed no handoff
+  # protocol at all. Widening or narrowing the grammar changes WHICH stale line arms it, never
+  # that a stale line arms it; the repair is a lifecycle, at the key.
+  #
+  # THE STAMP IS WRITTEN BY THE GUARD, NEVER BY THE PROCEDURE. ai-dlc-continue.sh writes
+  # `.handoff-complete` on the branch where every Check 0 arm is satisfied -- steps 1, 3, 4 and
+  # 5 all recorded -- and NOT on the branch where the backoff releases, which allows a Stop it
+  # could not verify. A record a program writes from its own input attests intent and not
+  # completion; this one is written by the reader that just checked the five steps.
+  #
+  # THE TEST IS "SNAPSHOT NEWER THAN STAMP", NEVER "STAMP NEWER THAN SNAPSHOT", the same
+  # direction and the same reason as that hook's driver-signal arm: bash 3.2's `-nt` compares
+  # whole seconds, and two files written in one second are `-nt` each other in NEITHER
+  # direction -- so the positive form would disarm a compliant handoff whose step 3 and step 5
+  # landed in the same second, and this form arms it. A NEW record is written at step 3, after
+  # the previous handoff's stamp, so it is strictly newer and still fires the key; an absent
+  # stamp fires it too, which is the state every consumer is in before its first verified
+  # completion.
   if [ -r "${_sd}/pipeline-snapshot.md" ] \
-     && grep -qiE '^[[:space:]]*(#{1,6}[[:space:]]*)?(\*\*)?HANDOFF POINT' "${_sd}/pipeline-snapshot.md" 2>/dev/null; then
+     && grep -qiE '^[[:space:]]*(#{1,6}[[:space:]]*)?(\*\*)?HANDOFF POINT' "${_sd}/pipeline-snapshot.md" 2>/dev/null \
+     && { [ ! -f "${_sd}/.handoff-complete" ] \
+          || [ "${_sd}/pipeline-snapshot.md" -nt "${_sd}/.handoff-complete" ]; }; then
     AI_DLC_HANDOFF_KEY="snapshot-section"
     return 0
   fi
