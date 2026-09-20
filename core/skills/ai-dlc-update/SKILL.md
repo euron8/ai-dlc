@@ -669,13 +669,19 @@ prose is itself generated rather than composed.
    a retired core directive as ordinary prose. This one asks the complementary question:
    does a layer file still contain a LINE core carried at base and deleted by theirs?
    Output is `RETIRED-LAYER-PASSAGE<TAB><layer-path>:<line><TAB><deleted core line>`.
-   Each row is a passage the layer reproduces and core no longer has — re-point it at
-   the replacement wording, or record why reproducing the retired text is still correct.
+   Each row is a passage the layer reproduces and core no longer has — **RE-POINT it at
+   the wording core carries now.** Do not delete it. This detector's input is one path
+   glob's removed-line set, so it cannot tell a MOVE from a retirement, and on a release
+   that re-sites text every row cites wording core still carries somewhere else.
    Its limit, and read its stderr for the same reason: it matches reproductions, not
    paraphrases. Reword any clause and the line stops matching.
    **This does NOT block the apply** — a layer file is consumer-owned and the pull
-   does not rewrite it. It is a worklist item, and it is owed before the pull counts
-   as done.
+   does not rewrite it.
+   **Step 7's apply emits a `WORKLIST retired-layer-passage` row for this same class**,
+   from its own run of this detector, so the work is tracked there whether or not you
+   run the scan here. Running it now is the earlier look, not a second finding; the row
+   is what the re-stamp waits on. The row's own detail is authoritative about the remedy
+   — work the row, not this paragraph.
    Note what it does NOT catch: a shape the consumer invented that core never had,
    and a layer file that paraphrases a retired construct without using its literal
    shape. A clean result is not proof every layer file survived the release.
@@ -1462,8 +1468,14 @@ prose is itself generated rather than composed.
      setup-token defaults (e.g. `gate-adjudicator` ← `adversary`'s model), **known-drift refiles**
      (`provenance-block.json` `known_skills` → `extensions/known-skills.json`, core reverted — the
      "migrate the drift" chore, automated), catalog relabels, and the version re-stamp.
-   - `WORKLIST …` — the only things left for YOU: each `semantic-merge` (a BOTH-CHANGED 3-way PROSE
-     merge, per `classify-block.md`) and each `override-readopt` (work it with the loop below).
+   - `WORKLIST …` — the only things left for YOU. Work EVERY row, whatever its kind: each one
+     names concrete work in its own detail field, and the re-stamp is withheld until all of them
+     are disposed. `semantic-merge` is a BOTH-CHANGED 3-way PROSE merge per `classify-block.md`,
+     and `override-readopt` is worked with the loop below; the rest state their own remedy.
+     **Do not read this bullet as the list of kinds.** It named two while the apply emitted
+     eleven, and a reader checking whether their row "counted" against a two-member list is
+     reading a restatement that stopped tracking its subject. The kinds are declared at their
+     emitting sites in `reconcile/apply.sh`, which is the only place they are complete.
    - **A row whose detail begins `<i>/<n> ATOMIC` is one step of an ORDERED SEQUENCE.** Do every
      step of that subject in the printed order and commit them together. Do not reorder them, do
      not land one without the others, and do not treat the last step as the whole item. The order
