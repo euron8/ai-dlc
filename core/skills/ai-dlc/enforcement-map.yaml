@@ -209,7 +209,10 @@ checks:
       - core/scripts/sprint-status.sh
     call_sites:
       - site: gate-validation.md Check 5
-        posture: FAILS the gate on exit 1; exit 4 is the non-vacuity sub-clause
+        posture: FAILS the gate on exit 1; exit 4 is the non-vacuity sub-clause;
+          FAILS independently of the script on a story whose status moved BACKWARD
+          from the value the previous gate-log entry recorded, or which that entry
+          recorded and the sprint no longer lists
         why: the check's own text said "compare status values programmatically"
           and core shipped no program, so the comparison was performed by hand
           at every gate. The three consumer-authored versions of it each went
@@ -218,7 +221,15 @@ checks:
           the story files no longer used — and each printed its zero beside a
           success line. The script decides the comparison and reports the
           COUNT; the adjudication stays llm because the non-vacuity sub-clause
-          is scoped by gate type, which the script cannot see.
+          is scoped by gate type, which the script cannot see. The script's two
+          comparands are a record and a derivation of that record — the repair for a
+          disagreement regenerates the entry FROM the story file — so it detects
+          staleness of the copy and never a status wrong at the source. The third
+          comparand is the only one written by a different actor at a different time:
+          the `story_status:` field Check 12 writes into each gate-log entry, read
+          back at the NEXT gate. Check 12 is numbered after Check 5, so the comparand
+          is necessarily the previous gate's entry, and a sprint's first gate records
+          the absence as evidence rather than failing.
     ci_workflow: ~
 
   - id: "6"
