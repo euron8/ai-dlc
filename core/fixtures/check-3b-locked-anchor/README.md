@@ -52,3 +52,34 @@ refuses if the world ever loses that shape.
 The `prd.md` control and the PASS-line arm are the two that separate a correct
 widening from the two plausible wrong ones: accepting every basename fails the
 first, and putting the third name first in the tuple fails only the second.
+
+## The `requires_context:` road's report-only bullet observation
+
+`run.sh` builds a fourth world under `mktemp` — a two-section brief and four stories
+differing only in the bullet — and asserts the COUNT FIELDS on the PASS line, never the
+first line as a whole.
+
+| Arm | World | Asserts |
+|-----|-------|---------|
+| verbatim | the bullet byte-present under the cited anchor | `1 byte-present / 0 not`, rc 0 |
+| fabricated | a bullet the brief never says | `0 / 1`, **rc still 0** |
+| abridged honest | a bullet shortened from the source sentence | `0 / 1`, **rc still 0** — this is what proves report-only is report-only |
+| cross-section | a bullet verbatim under the section the pointer does NOT name | `0 / 1` — the observation is scoped to the resolved window |
+| the SPLIT | the verbatim and fabricated stories together | they disagree on the COUNT FIELDS, and their exit codes do not move |
+| `MB1` + pairing | the count fields replaced by a per-story run marker | the count arms go red while the mutant's FIRST LINES still differ — a receipt closing on a line split closes on it, and only a count-keyed arm sees through it |
+| `MB2` + pairing | the observation appended to `failures` | the ABRIDGED HONEST story reds, so an enforcing regression is visible; the verbatim one stays green |
+| `MB3` + pairing | the match widened to the whole artifact | the cross-section bullet counts as byte-present, so the window is what scopes it; a fabricated bullet still counts absent |
+| designated-honest assertion | `requires-context-story.md` | it reports `1 / 0`, so its false-positive set is EMPTY BY CONSTRUCTION and no FP figure may be taken there |
+| ctx cwd-invariance | three stories × two cwds, one of them this directory | the observation resolves its window story-relative, like every other arm |
+
+**`requires-context-story.md` cannot measure the false-positive set.** Its bullet is
+verbatim at the anchor, so it scores `1 / 0` and an FP measured on it is a false zero.
+The abridged world is the shape the corpus lacked, and the arm above asserts the
+designated file's `1 / 0` directly so that fact cannot go stale silently.
+
+**The exit code does not move on this road, and every count arm carries the rc assertion
+beside it.** An abridged cite-by-reference restatement is the honest shape here: over a
+reference consumer's corpus, 7 of the 13 stories that reach the observation carry at
+least one non-verbatim bullet and 49 of 51 bullets overall are not byte-present. As a
+failure condition that is a 54% red rate on honest blocks, which is the regression `MB2`
+makes visible.
