@@ -49,15 +49,34 @@ and expect a rule here to cite a measurement whose story lives in the archive.**
 that file and a `path:line` into it would then fail `validate-plan-shape.sh`'s citation arm on a
 correct rotation.
 
-**BATCH 133 SHIPPED AS `v0.609.0` (`77f5213a`), TWO SUBJECTS, BOTH STEP-PROSE SAFETY PROPERTIES,
-BOTH PC IDS NAMED VERBATIM IN THE RELEASE COMMIT.** `BL-039` closed, discharging
-`PC-S295-RETRO-STEP5C-DEADLOCK-ON-DEFERRED-RED`; `BL-042` closed, discharging
-`PC-S297-CHECK17-PRD-ARM-CONTRADICTS-RULE-20-BLOCK-PLACEMENT`. Gate `AI_DLC_FIXTURE_NO_SKIP=1`:
-exit **0**, 22 of 22 phases PASS, **202 dispatched / 202 ok / 0 FAILED**, changed-span fixtures
-read by name against an impossible-name control of 0. Live **80 -> 78**, archive **196 -> 198**.
-Receipt histogram 9/58/1 before the rotation and **7/58/1** after — the two rotated entries were
-exactly the two zeros that left, so no incidental close. The PC-backed worklist moved **11 -> 9**;
-set difference both ways confirms only those two left and nothing joined.
+**BATCH 134 SHIPPED AS `v0.610.0` (`4e241fb7`), TWO SUBJECTS, BOTH CHECKS THAT COULD NOT TELL A
+RIGHT ANSWER FROM A WRONG ONE, BOTH PC IDS NAMED VERBATIM IN THE RELEASE COMMIT.** `BL-040`
+closed, discharging `PC-S295-RETRO-CHECK5-SELF-REFERENTIAL`; `BL-057` closed, discharging
+`PC-S297-LOCKED-FENCE-LAUNDERS-AGENT-PROSE`. `BL-278` filed. Gate `AI_DLC_FIXTURE_NO_SKIP=1`:
+exit **0**, 22 of 22 phases PASS, **202 dispatched / 202 ok / 0 FAILED**, both changed fixtures
+read by name against an impossible-name control of 0. Live **79 -> 77**, archive **198 -> 200**.
+The PC-backed worklist moved **9 -> 7**, set difference both ways confirming only those two left.
+
+**THE RECEIPT HISTOGRAM IS AN ARITHMETIC TRAP WHEN THE BATCH ALSO FILES AN ENTRY.** It read
+7/58/1 before and **9/57/1** after, and the arithmetic closes plausibly — but the 57 moved because
+`BL-278` entered the live set at 1, not because a receipt changed. **Diff the zeros BY IDENTITY,
+never by count**: the nine were the seven already zero plus this batch's two, so no entry closed
+incidentally. A count-only reading cannot separate a new filing from an incidental close.
+
+**A GATE THAT BLOCKS CAN STILL EXIT 0 THROUGH A BACKGROUNDED WRAPPER, AND IT DID HERE.** The first
+full run reported `exit code 0` in the task notification while the log's last line read
+`pre-push: BLOCKED.` — 22 phases, 21 PASS, one FAIL. **Read the LOG, never the wrapper**, and
+strip the ANSI first (`perl -pe 's/\e\[[0-9;]*m//g'`), which is the trap batch 133 recorded.
+
+**THE BLOCKED PHASE WAS A REAL CONSUMER-BOUNDARY DEFECT IN THIS BATCH'S OWN NEW FIXTURE ARM.** A
+fixture arm read `docs/backlog.md` to DERIVE an entry's receipt and score it over the same seeds
+— sound in this tree, dead in every consumer one, because `install.sh` ships no `docs/backlog.md`
+and `gate-verdict-grep-shape` SHIPS. On a consumer that arm stands down, and **a unit that cannot
+fail scores as a pass in that consumer's own suite verdict**. Derived at the tip, both sides in
+one invocation: 4 fixtures cite `docs/backlog.md` and **4 of 4** are `.dist-only`, against **0**
+shipping — the tree's answer to this class is unanimous. Reverted, and the lost coverage FILED as
+`BL-278` rather than dropped. The obvious repair — hardcoding the receipt into the shipping
+fixture — is the one to refuse; it creates the second definition the join exists to prevent.
 
 **THE GATE LOG IS ANSI-COLOURED AND A RAW GREP SCORES ITS PHASE HEADERS AT ZERO.** Measured this
 batch: `grep -c '── phase'` returned **0** against 38 PASS lines in the same file. Strip the
@@ -69,6 +88,14 @@ zero beside a non-zero control in the same file is the tell.
 times in a log tallying 202 ok. It has no `run.sh`: it is a SEED other fixtures source. Derive the
 arithmetic before reading the absence — 205 directories, 3 without a runner (`lib/` and two
 seed-only), 202 dispatched — and read the seed's DRIVERS by name instead (four, all ok here).
+
+**BATCH 133 SHIPPED AS `v0.609.0` (`77f5213a`), TWO SUBJECTS, BOTH STEP-PROSE SAFETY PROPERTIES.**
+`BL-039` closed, discharging `PC-S295-RETRO-STEP5C-DEADLOCK-ON-DEFERRED-RED`; `BL-042` closed,
+discharging `PC-S297-CHECK17-PRD-ARM-CONTRADICTS-RULE-20-BLOCK-PLACEMENT`. Live **80 -> 78**,
+archive **196 -> 198**, worklist **11 -> 9**. Its two durable lessons: the gate log is
+ANSI-coloured so a raw `grep -c '── phase'` reads **0** against 38 PASS lines in the same file,
+and a fixture ABSENT from a 202-ok log may simply have no `run.sh` — `check-manifest-bypass` is a
+SEED other fixtures source, and the arithmetic closes it (205 directories, 3 without a runner).
 
 **BATCH 132 SHIPPED AS `v0.608.0` (`c50d6e7d`), ONE SUBJECT, AND IT WAS THE DEFECT BATCH 131
 TRIPPED OVER.** `BL-277` closed: both runners now resolve `GITDIR` from `--git-common-dir` instead
@@ -95,11 +122,14 @@ cited, and the amended-away object still RESOLVED locally while being reachable 
 where the release sha is stable, and test reachability with `git branch --contains`, never with
 `cat-file`.
 
-**THE PC-BACKED WORKLIST IS 9 AND THE TWO CLOSED SUBJECTS LEFT IT.** Re-derived post-merge with
-its three controls (live 49, a known-live id 1, an impossible id 0): `BL-029`, `BL-040`, `BL-057`,
-`BL-067`, `BL-132`, `BL-140`, `BL-145`, `BL-215`, `BL-276`. **THREE of those nine record their own
-remedy as refuted, unshippable or unconstructible** — `BL-067`, `BL-132`, `BL-215` — so read each
-entry's own text before scoping it, and do not rebuild a refuted remedy.
+**THE PC-BACKED WORKLIST IS 7 AND THE TWO CLOSED SUBJECTS LEFT IT.** Re-derived post-rotation with
+its three controls (live 49, a known-live id 1, an impossible id 0): `BL-029`, `BL-067`, `BL-132`,
+`BL-140`, `BL-145`, `BL-215`, `BL-276`. **THREE of those seven record their own remedy as refuted,
+unshippable or unconstructible** — `BL-067`, `BL-132`, `BL-215` — so read each entry's own text
+before scoping it, and do not rebuild a refuted remedy. **Verify that against the ENTRY's own
+words, never against this sentence**: batch 133 measured a paraphrase here ranking a live entry
+out of scope, and batch 134 re-checked all three by grepping each entry for the three words
+against a control that the entry body was non-empty.
 
 **AN EARLIER REVISION SAID FOUR AND NAMED `BL-145` AS THE FOURTH. IT IS NOT.** Measured both by a
 sweep hand and by the lead independently: `BL-145`'s text carries none of those three words. Its
@@ -138,19 +168,20 @@ three qualifying refs are PAIRWISE INCOMPARABLE (adds 4/4/4, union 7), so every 
 loses real filings, and a union WITHOUT the archive subtraction resurrects the 6 ids that are live
 on one qualifying ref and archived on another.
 
-**THE DELIVERY GAP IS FOUR RELEASES AND A BOOTSTRAPPING FILE IS IN THE RANGE. THE OPERATOR HAS
+**THE DELIVERY GAP IS FIVE RELEASES AND A BOOTSTRAPPING FILE IS IN THE RANGE. THE OPERATOR HAS
 BANKED IT — DO NOT WRITE A RUNBOOK.** Ruling given at batch 132's close, on the question asked
 directly: bank the pull and keep reporting the gap each batch. Consumer installed `0.605.0`
-against `VERSION` `0.609.0`; the last pull was `0.601.0`-`0.605.0` into graph on 2026-09-19 as
+against `VERSION` `0.610.0`; the last pull was `0.601.0`-`0.605.0` into graph on 2026-09-19 as
 `554e4a32`, and the consumer has pulled nothing since. Over the installed commit to `origin/main`,
-17 `core/` files changed and
+22 `core/` files changed and
 `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh` is among them — **the consumer's INSTALLED
 copy runs the pull that carries its own repair**, so say so in any brief rather than claiming the
 next pull is protected by it. Mode-only changes: **0**. Re-derive all of it; do not read this sentence for a number.
 
 **THE GAP WIDENS BY ONE ON EVERY RELEASE THIS PROGRAM SHIPS, WHICH IS THE PROGRAM SUCCEEDING AND
-NOT A REASON TO REORDER.** Batch 133 took it from three to four. The banked ruling stands until
-the operator lifts it; report the number each batch and stop.
+NOT A REASON TO REORDER.** Batch 134 took it from four to five. **Five is the threshold this
+plan's own action 7 calls WIDE** — say so when reporting it, and keep reporting rather than
+reordering. The banked ruling stands until the operator lifts it.
 
 **THE CONSUMER'S OWN COMMITTED REPORT SAYS HOW ITS INSTALLED ENGINE WILL CLASSIFY THE NEXT PULL,
 AND THAT IS REACHABLE EVIDENCE NOBODY HAD READ.** `_bmad-output/ai-dlc-update/reconcile-report.md`
@@ -836,9 +867,16 @@ given at batch 90.
    until the operator rules otherwise: the sweep decides, and a PC-backed entry outranks every
    distribution-internal one. Batch 132 took `BL-277`, which carries no `PC-` id and was therefore
    NOT off that worklist — an operator choice, made on a direct question, because the defect was
-   blocking this program's own gate. Batch 133 scoped two PC-backed entries off the worklist and
-   left it at **9**, which is still where a batch scopes from by default. **Run the join; the
-   number here is a record of when it was taken, never an input.**
+   blocking this program's own gate. Batches 133 and 134 each scoped two PC-backed entries off the
+   worklist, leaving it at **7**, which is still where a batch scopes from by default. **Run the
+   join; the number here is a record of when it was taken, never an input.**
+
+   **BATCH 134's PAIRING TEST IS THE ONE TO REUSE WHEN BATCHING TWO SUBJECTS.** Of the seven
+   remaining, four touch a BOOTSTRAPPING file (`apply.sh`, `ledger-reverify.sh`, `ledger-rotate.sh`,
+   the update skill), which action 2 requires to ship ALONE — so the batchable set is smaller than
+   the worklist and that is the first thing to derive, not the last. Then SCORE each candidate's
+   receipt against the OTHER's tip and report both: a receipt the other fix closes is a pairing to
+   refuse, and scoring it is what establishes the pairing rather than assuming it.
 
    **SUPERSEDED — OPERATOR RULING AT BATCH 118: `docs/plans/pre-push-wall-clock.md` IS BATCH 119's
    SUBJECT.** Kept for its lineage only; the block above replaces it.
