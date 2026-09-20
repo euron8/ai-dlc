@@ -1005,12 +1005,16 @@ prose is itself generated rather than composed.
      report and the §8.1 fan-in already use. `STILL-LIVE` + `NAMED-UPSTREAM` on one entry is
      the highest-value pair this tool prints: the entry is absorbed AND its receipt is wrong.
      **Not auto-closable** — step 8 closes `CLOSE-CANDIDATE` rows only, so this needs no
-     exception. It is not *unclosable*: the row instructs an annotation, and **any** occurrence
-     of `ADOPTED UPSTREAM` in an entry makes `ledger-reverify.sh` skip it from the next run on.
-     Write the form `ledger-rotate.sh` accepts — bolded, version immediately after the
-     parenthesis — or the entry becomes skipped-but-unarchivable: invisible in every future
-     report and never filed. `ledger-rotate.sh` now reports that set; it counted **8** on the
-     reference consumer while printing "0 closed entries — nothing to rotate" in the same run.
+     exception. It is not *unclosable*: the row instructs an annotation, and a **line-leading**
+     close marker in an entry makes `ledger-reverify.sh` skip it from the next run on.
+     Write the close **in a bold span** — on its own line, or in the entry title's bold — or the
+     entry becomes skipped-but-unarchivable: invisible in every future report and never filed.
+     `ledger-rotate.sh` reports that set. **No version is required**; a close that genuinely has
+     none (a withdrawal, an absorption predating `base`, a rejection adjudicated by date) archives
+     on its own terms, and inventing a version to satisfy the rotator is the defect pointed the
+     other way. Rotation's grammar is `ledger-reverify.sh`'s own close rule with the bold span made
+     mandatory, derived by `reconcile/lib.sh`'s `ledger_archive_awk()`, so the two tools cannot
+     honour different token sets.
      Read it as "upstream named it", not "upstream took it": a commit can name an id to record
      a rejection or a split. Confirm which, then re-anchor or drop the stale receipt.
    - `NAMED-UPSTREAM-AMBIGUOUS` → upstream's history cites this entry's SPRINT prefix
@@ -2154,8 +2158,13 @@ declared sites, not everywhere unconditionally.
      explained that defect class. The whole ledger re-verifies in ~1.5s; this costs nothing.
    - **Close any `CLOSE-CANDIDATE` entries from step 3f.** For each, confirm the upstream
      version at `theirs` covers your entry (the row's detail names the sha and the version),
-     then annotate the ledger entry `ADOPTED UPSTREAM (v<theirs>, verified <date>)`, matching
-     the existing hand-written closure format. **Do NOT delete the entry** — retro and the
+     then annotate the ledger entry `**ADOPTED UPSTREAM (v<theirs>, verified <date>)**`, matching
+     the existing hand-written closure format. **The bold span is what the rotator reads** — a
+     close written without one is skipped-but-unarchivable. Two other close forms are honoured
+     and neither takes a version: `**WITHDRAWN (<date>) — <why>**` for an entry whose premise was
+     false, and `**CLOSED AS REJECTED — BY DESIGN, adjudicated <date>**` for a candidate upstream
+     considered and declined. Never invent a version to make a close archivable.
+     **Do NOT delete the entry** — retro and the
      §8.1 fan-in read it. The annotation is an `Edit` under `_bmad-output/ai-dlc-update/**`
      (the updater's own directory, carved out of the Rule 29 acknowledge hook), never a
      Bash write, and never automatic. Close ONLY `CLOSE-CANDIDATE` rows; a `NEEDS-REVIEW`
@@ -2189,8 +2198,11 @@ declared sites, not everywhere unconditionally.
      lines / 220 KB / 50 entries on the reference consumer, of which only 39 still
      classified. Every pull parses the closed ones, every report renders them, and every
      receipt edit pays for their bytes. Rotation moves, never deletes, and requires the
-     annotation form (`**ADOPTED UPSTREAM (v`) rather than the phrase anywhere — an entry
-     wrongly kept costs one pull to notice, one wrongly archived costs the work.
+     annotation form — a **bold span** carrying the close marker — rather than the phrase
+     anywhere: an entry wrongly kept costs one pull to notice, one wrongly archived costs the
+     work. That grammar is `ledger-reverify.sh`'s own close rule with its optional bold span made
+     mandatory, derived at run time by `reconcile/lib.sh`'s `ledger_archive_awk()`, so every token
+     the re-verification honours as a close is archivable and the two cannot drift apart.
      **Acceptance test:** `ledger-reverify.sh` must emit the same ROW SET before and after
      the `--apply` — by status and subject, `cut -f1,2 | sort` either side. Rotation moves
      exactly the entries it already skips, and every number it prints is counted over BOTH
