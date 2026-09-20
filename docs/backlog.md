@@ -4069,3 +4069,42 @@ known-cited id scores 3 and 8 across the two backlog files; this one scored 0 an
 
 verify: sh set -e; f="core/skills/ai-dlc-update/SKILL.md"; [ -r "$f" ] || exit 9; s="$(LC_ALL=C awk '/On `SELF-UPDATE-DEFER`/{on=1} /On `SELF-UPDATE-OK`/{exit} on' "$f")"; [ -n "$s" ] || exit 9; printf '%s' "$s" | LC_ALL=C grep -q 'self-update-gate-' || exit 1; printf '%s' "$s" | LC_ALL=C grep -qiE '(do NOT|never) commit[^.]*self-update-gate-' && exit 1; printf '%s' "$s" | LC_ALL=C grep -qE '[Cc]ommit[^.]*self-update-gate-' || exit 1; exit 0
 
+
+## BL-282 — "a green gate is not a landed push" has no enforcer, and the obvious check RACES a backgrounded push
+
+**NOTE.** Filed at batch 138 after the lead reported a push failure that had not happened.
+
+**THE RULE IS PROSE WITH NOTHING BEHIND IT.** `.claude/rules/verification-discipline.md:216`
+records the measured hazard: twice, every phase PASS, `pre-push: all gates green`, **exit 141 from
+the transport**, and the ref NOT on origin. It instructs confirming the remote ref moved before
+opening a PR or reporting a release. Derived at this tip: `grep -rn 'ls-remote'` over
+`.githooks/pre-push` and `scripts/*.sh` returns **0** readers, against a control of 15 `pre-push`
+occurrences in `docs/backlog.md` — so the instruction has no mechanism and depends on the session
+remembering it.
+
+**AND GIT OFFERS NO HOOK POINT FOR IT.** Derived from the hook samples git itself ships:
+`post-push` is **0** of the 14, against a control of **1** for `pre-push`. `pre-push` runs BEFORE
+the transport, so the failure it would need to observe happens after it exits. **A hook cannot
+carry this check**, which is why the rule has stayed prose and why this entry is a NOTE rather
+than a fix with a known shape.
+
+**THE OBVIOUS CHECK HAS A MEASURED FALSE POSITIVE, AND THE LEAD SHIPPED IT THIS BATCH.** A
+`git ls-remote --heads origin <branch>` reading 0 is only evidence of an absent ref if the push
+has FINISHED. Measured: `git push -q` was backgrounded under a 600s timeout, `ls-remote` ran while
+it was still in flight and read **0** against an impossible-branch control of 0, and the push then
+completed and the ref appeared. The reflog shows exactly **one** push landing the sha — the
+"re-push" that followed was a no-op against an already-landed ref. **A zero read from a check
+whose subject is still being written is not a finding**, and it is indistinguishable from the real
+exit-141 case the rule exists for.
+
+**SO A CHECK MUST ESTABLISH THAT THE PUSH COMPLETED BEFORE IT READS THE REF.** That is the
+property the design has to carry, and it is the reason this is not a one-line addition. A session
+that backgrounds the push cannot read the ref until the background task reports, and nothing today
+joins those two events.
+
+**WHAT A FIX MUST NOT DO.** Do not put the check in `pre-push` — it cannot see the outcome.
+Do not key it on the push command's exit status alone: that is the value the measured hazard
+reports as 0 while the ref is absent, and reading it through a pipe makes it worse, because this
+shell has no `PIPESTATUS` and a pipeline answers with its last stage.
+
+verify: sh set -e; r=.claude/rules/verification-discipline.md; [ -r "$r" ] || exit 9; LC_ALL=C grep -q 'green gate is not a landed push' "$r" || exit 9; n="$(grep -rlF 'ls-remote' .githooks/ scripts/ 2>/dev/null | grep -cv '^$')" || n=0; [ "$n" -gt 0 ] && exit 0; exit 1
