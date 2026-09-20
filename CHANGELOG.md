@@ -15,6 +15,63 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.612.0] - 2026-09-20
+
+### a push flag that was never written, and a receipt that could not tell the fix from its inverse
+
+#### PC-S296-REJECTION-CARRIES-UNRELATED-GAPS
+
+The untangle-apply bucket list routed `domain-local` to `extensions/` writing no push flag at
+all, while `un-pushed-innovation` one bullet below wrote `push_candidate: true`. A block whose
+machinery core text presupposes takes the first route, lands with the flag unwritten, and is
+never offered upstream. `validate-layer-entries.sh` E9 already makes the key REQUIRED on every
+extensions entry, so absence was never the gap — what remained was a wrong VALUE, and nothing
+derived it.
+
+Both bullets now write the flag explicitly, and `domain-local` writes `false` as a positive
+claim: no gate, breach message, budget row or cross-reference at the entry's `hooks:` target
+depends on the machinery, derived against `theirs` before it is written. A dependency found
+means core is incomplete without the block, which is `un-pushed-innovation` by definition, so
+the block takes the next bullet instead. **`domain-local` gains no push route of its own** —
+adding one would leave `needs_operator_confirmation` as the only thing separating the two
+buckets, which is the tautology the alternative fix creates.
+
+**THE FILING'S CENTRAL CLAIM ABOUT ITS OWN MOTIVATING CASE WAS FALSE, AND CORRECTING IT MOVED
+THE SITE.** The entry reasoned that the reference consumer held the gate-log rotation as
+`domain-local`. It did not: the live home is an `extensions/steps-domain/` ENTRY carrying
+`hooks: steps/retro.md` and `push_candidate: false`, with its §4a adjudication in
+`overrides/`. A rule sited on the classifier's `domain-local` bullet scores ZERO on the case
+that motivated it. The duty is therefore sited where the declaration DECIDES, on the path every
+subject already passes through.
+
+The bucket→action mapping is restated in four places and nothing binds them —
+`validate-enforcement-map.sh` names `classify-block` 0 times against a control of 10 for
+`preclassify`, and `vocabulary-index.md` carries no bucket row. All four now answer the
+dependency question the same way: the decision site, the mid-apply bucket list, the taxonomy
+table, and the classifier prompt. That prompt is read by no executable, so it carries the rule
+for a reader while the decision site is what a receipt can observe.
+
+**The old backlog receipt scored 0 on a destructive regression.** It grepped the classifier's
+`domain-local` bullet for `push`, which a regression stripping the push route from
+`un-pushed-innovation` and moving it to `domain-local` satisfies exactly. Three trees, asserted
+pairwise-different before any score was read: shipping 1, fix 0, regression 0. The replacement
+extracts BOTH bullets from the decision site and asserts the flag VALUES in both directions —
+fix 0, shipping 1, regression 1, and 1 on each of four false-close probes (prose, a token-
+carrying HTML comment, a bare HTML comment, an unrelated sixth schema key); an absent subject
+exits 3 rather than passing.
+
+`SKILL.md` under `core/skills/ai-dlc-update/` is a bootstrapping file: the consumer's INSTALLED
+copy runs the pull that delivers this repair, so the pull carrying it is still classified by the
+old bullet list and the one after it is the first protected one.
+
+Filed as `BL-279`: the consumer-side receipt for this same entry is defective in the RETIRING
+direction, where non-zero means CLOSE-CANDIDATE. A multi-line HTML comment in its Return schema,
+any indented `word: text` line there, and any prose in the bucket span carrying one of its four
+vocabulary words each drive it non-zero without changing behaviour. It is also vocabulary-bound:
+a correct fix worded without `depends`/`dependency`/`presuppos`/`push_candidate` leaves it
+reading STILL-LIVE forever. That receipt lives in the consumer's ledger and this distribution
+must not write there.
+
 ## [0.611.0] - 2026-09-20
 
 ### a detector whose findings reached a report and no worklist
