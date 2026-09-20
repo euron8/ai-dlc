@@ -1397,6 +1397,13 @@ given at batch 90.
    instrument: **any entry other than your subject reporting exit 0 is an incidental close.**
    Run it before and after, and diff the two.
 
+   **DIFF THE ZEROS BY IDENTITY, NEVER BY COUNT — A BATCH THAT ALSO FILES AN ENTRY MAKES THE
+   ARITHMETIC CLOSE ON A WRONG READING.** Measured at batch 134: 7/58/1 before and 9/57/1 after,
+   which reconciles plausibly as "+2 zeros are my two subjects, and 58−2+1=57". The 57 moved
+   because a NEWLY FILED entry entered the live set at 1, and a count cannot tell that from an
+   incidental close in either direction. Print the ID of every entry whose receipt exits 0, both
+   times, and compare the two SETS.
+
    ```
    bash -c 'while IFS= read -r l; do ( eval "$l" ) >/dev/null 2>&1; echo "$?"; done \
      < <(awk "/^## BL-[0-9]+/{e=1} e && sub(/^[ \t]*verify: sh /,\"\")" docs/backlog.md) \
