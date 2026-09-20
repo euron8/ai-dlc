@@ -41,9 +41,9 @@ printf 'version: 0.70.0\ncommit: fixture\n' > "$CONSUMER/.claude/.ai-dlc-version
 #
 # `model` is a KEY into `aiDlcModels`, and the guard injects the KEY as the Agent
 # tool's `model` parameter — that parameter is an enum and rejects a full model
-# string. `effort` has no tool parameter at all, so the guard appends a `/effort`
-# directive to the dispatch prompt; the rendered definition under .claude/agents/ is the
-# channel that binds it (see the RENDERED AGENT DEFINITIONS block below).
+# string. `effort` has no tool parameter at all, and the rendered definition under
+# .claude/agents/ is the ONLY channel that binds it (see the RENDERED AGENT DEFINITIONS
+# block below). A role pinning an effort with no definition rendered for it gets none.
 cat > "$CONSUMER/.claude/settings.json" <<'SETTINGS'
 {
   "aiDlcModels": {
@@ -91,8 +91,8 @@ done
 # --- RENDERED AGENT DEFINITIONS ------------------------------------------------
 # `.claude/agents/<role>.md`, the projection of `aiDlcRoles.<role>` that the HARNESS
 # reads. The guard binds a role's `subagent_type` to one of these and strips `name` and
-# `model`, because a definition's `effort:` is applied by the harness where the guard's
-# prompt sentence is only advisory.
+# `model`, because a definition's `effort:` is applied by the harness and nothing else
+# the guard can touch carries an effort at all.
 #
 # EVERY DEFINITION BELONGS TO A ROLE NO OTHER ARM USES, AND THAT IS THE POINT. The
 # absent-definition branch is "today's behaviour", so every pre-existing arm in run.sh IS

@@ -59,23 +59,48 @@ expect_untouched() {
     || bad "$3 → hook emitted '$out', expected NOTHING (it must not inject or force-approve here)"
 }
 
-# The prompt the guard hands back, for effort assertions.
+# The prompt the guard hands back, for the prompt-integrity assertions.
 newprompt() { raw "$1" "$2" | jq -r '.hookSpecificOutput.updatedInput.prompt // ""' 2>/dev/null; }
-expect_effort() {  # expect_effort <root> <json> <level> <label>
-  # THE EXTRACTOR IS THE GUARD'S OWN GRAMMAR AND MOVES WITH IT. It used to read
-  # `/effort [a-z]+`, matching an imperative to run a slash command no file in this
-  # distribution defines; the guard now STATES the level instead, so this matches the
-  # statement. Anchored on the phrase AND the level so a guard that emitted the wrong
-  # level, or the right level for the wrong role, is still caught.
-  local got; got="$(newprompt "$1" "$2" | grep -oE 'reasoning effort for this role is [a-z]+' | head -1)"
-  [ "$got" = "reasoning effort for this role is $3" ] \
-    && ok "$4 -> prompt states the configured effort ($3)" \
-    || bad "$4 -> expected the prompt to state effort '$3', got '${got:-<none>}'"
+
+# THE GUARD AMENDS PARAMETERS AND NEVER THE PROMPT, and these two arms are what holds it
+# there. The Agent tool has no effort parameter and prompt text is read back by nothing --
+# `validate-spawn-ledger.sh` resolves a teammate's actual level from that teammate's own
+# transcript -- so a sentence appended here reaches no mechanism while making every dispatch
+# with a configured effort a correcting dispatch. The two arms are keyed on DIFFERENT
+# observables on purpose: one on byte identity, one on the text a directive would produce.
+# A single grammar scoring its own subject as a non-instance is how an absence scan reports
+# a floor of unknown depth.
+#
+# expect_prompt_verbatim <root> <json> <label>
+# Only meaningful on a dispatch that EMITS -- a silent one hands back no prompt at all, so
+# the emission is ASSERTED here rather than assumed, and an arm pointed at a silent dispatch
+# reports that it cannot see its subject instead of passing over an empty string.
+expect_prompt_verbatim() {
+  local out got want
+  out="$(raw "$1" "$2")"
+  if [ -z "$out" ]; then
+    bad "$3 -> the guard emitted NOTHING, so no returned prompt exists to compare — this arm needs a correcting dispatch and is asserting nothing here"
+    return
+  fi
+  got="$(printf '%s' "$out" | jq -r '.hookSpecificOutput.updatedInput.prompt // "<unset>"' 2>/dev/null)"
+  want="$(printf '%s' "$2" | jq -r '.tool_input.prompt // "<unset>"')"
+  [ "$got" = "$want" ] \
+    && ok "$3 -> the outgoing prompt is byte-identical to the one dispatched" \
+    || bad "$3 -> the guard REWROTE the prompt. sent: '$want' / returned: '$got'"
+}
+# expect_no_effort_prose <root> <json> <label>
+# Keyed on the OBSERVABLE a re-added directive produces -- any sentence naming a level of
+# the configured vocabulary -- rather than on one spelling, so a reworded line is caught too.
+expect_no_effort_prose() {
+  local got; got="$(newprompt "$1" "$2" | grep -oiE '(reasoning )?effort[^.]{0,40}(low|medium|high|xhigh|max)' | head -1)"
+  [ -z "$got" ] \
+    && ok "$3 -> the outgoing prompt states no effort level" \
+    || bad "$3 -> the outgoing prompt states an effort ('$got') — the guard has no effort channel and must not put one in the prompt"
 }
 expect_model_kept() { # expect_model_kept <root> <json> <label>
-  # The guard emitted (to append effort) but did NOT rewrite `model`. Distinguishes
-  # "left the model alone" from "emitted nothing", which stopped being the same thing
-  # once effort became a second, independent trigger.
+  # The guard emitted (for another trigger) but did NOT rewrite `model`. Distinguishes
+  # "left the model alone" from "emitted nothing" on a dispatch that emits for a reason
+  # other than the model.
   local m; m="$(raw "$1" "$2" | jq -r '.hookSpecificOutput.updatedInput.model // "<unset>"' 2>/dev/null)"
   local want; want="$(printf '%s' "$2" | jq -r '.tool_input.model // "<unset>"')"
   [ "$m" = "$want" ] \
@@ -86,12 +111,6 @@ expect_no_model() { # expect_no_model <root> <json> <label>
   raw "$1" "$2" | jq -e '.hookSpecificOutput.updatedInput | has("model") | not' >/dev/null 2>&1 \
     && ok "$3 -> no model bound" \
     || bad "$3 -> a model was bound where none is configured"
-}
-expect_no_effort() { # expect_no_effort <root> <json> <label>
-  local got; got="$(newprompt "$1" "$2" | grep -oE 'reasoning effort for this role is [a-z]+' | head -1)"
-  [ -z "$got" ] \
-    && ok "$3 -> no effort stated" \
-    || bad "$3 -> an effort was stated ('$got') where none should be"
 }
 
 echo "dispatch-model-guard"
@@ -136,46 +155,51 @@ expect_set "$CONSUMER" "$(mkjson Agent remediator sonnet)" opus \
   "remediator explicitly requested sonnet against an opus pin (the real S291 defect)"
 
 # --- 4. correct tier -> UNTOUCHED (happy path keeps its approval posture) ----
-# The call is still AMENDED — effort has to be appended — but the model is left alone.
-# Model and effort are independent triggers; either can fire without the other.
-expect_model_kept "$CONSUMER" "$(mkjson Agent gate-adjudicator opus)" \
+# THE TRIGGER SET IS TWO, NOT THREE, AND THESE ARMS ARE WHERE THAT IS OBSERVABLE. A
+# configured effort is not a trigger: the only channel that reaches a teammate's effort is
+# the rendered definition, which `NEEDS_TYPE` already selects. So a dispatch whose model is
+# already right and whose role has NO rendered definition needs nothing and must emit
+# NOTHING — it keeps whatever approval posture it would otherwise have. Every role in this
+# block pins an effort and has no definition, so each of these used to emit purely to append
+# a prompt sentence, and each is now silent.
+expect_untouched "$CONSUMER" "$(mkjson Agent gate-adjudicator opus)" \
   "gate-adjudicator requested opus against an opus config"
-expect_model_kept "$CONSUMER" "$(mkjson Agent analyst sonnet)" \
+expect_untouched "$CONSUMER" "$(mkjson Agent analyst sonnet)" \
   "analyst requested sonnet against a sonnet config"
 
 # --- 5. a request CARRYING the key matches ----------------------------------
 # The key is `opus`; a full model string containing it is the same model -> untouched.
 # The tolerance is bounded by the DECLARED key, not by a hardcoded tier table.
-expect_model_kept "$CONSUMER" "$(mkjson Agent gate-adjudicator 'claude-opus-5[1m]')" \
+expect_untouched "$CONSUMER" "$(mkjson Agent gate-adjudicator 'claude-opus-5[1m]')" \
   "full model string carrying the configured key (key compare, not a tier guess)"
 
 # --- 6. unpinned role -> UNTOUCHED (fail-open: tea/sm/ux/cis declare nothing)-
-# No model param, so an absent `model` in updatedInput proves the guard bound none —
-# with a param present it would be the CALLER's value surviving, which proves nothing.
-expect_no_model "$CONSUMER" "$(mkjson Agent tea)" \
-  "tea configures an effort but no model"
-expect_model_kept "$CONSUMER" "$(mkjson Agent tea opus)" \
+# `tea` configures an effort and NO model, and has no rendered definition. With effort gone
+# as a trigger there is nothing left for the guard to do on either shape, so both are total
+# no-ops rather than emissions that bind no model.
+expect_untouched "$CONSUMER" "$(mkjson Agent tea)" \
+  "tea configures an effort but no model — nothing to correct"
+expect_untouched "$CONSUMER" "$(mkjson Agent tea opus)" \
   "tea with an explicit model: the guard has no configured value to correct it to"
 
 # --- 7. model key not defined in aiDlcModels -> NO MODEL BOUND (fail-open) ---
-# architect's entry names `ghostkey`, which aiDlcModels does not define. The model must
-# not be bound. Its EFFORT is still valid and still binds — proof the two resolve
-# independently, so one broken half cannot silently take the other down with it.
-expect_no_model "$CONSUMER" "$(mkjson Agent architect)" \
-  "role whose configured model key is absent from aiDlcModels — no model bound"
-expect_model_kept "$CONSUMER" "$(mkjson Agent architect sonnet)" \
+# architect's entry names `ghostkey`, which aiDlcModels does not define, so nothing resolves
+# to bind. Its effort is valid and still cannot be delivered by this guard: architect has no
+# rendered definition, so the level reaches the teammate through no channel at all and the
+# guard stays silent rather than emitting prose about it.
+expect_untouched "$CONSUMER" "$(mkjson Agent architect)" \
+  "role whose configured model key is absent from aiDlcModels — nothing bound, nothing emitted"
+expect_untouched "$CONSUMER" "$(mkjson Agent architect sonnet)" \
   "and an explicitly wrong model is NOT corrected against an unresolvable key"
-expect_effort "$CONSUMER" "$(mkjson Agent architect sonnet)" high \
-  "the same role's valid effort still binds (the two resolve independently)"
 
 # --- 8. the Ollama prose line is not a pin; the `- Model:` key binds ---------
-expect_model_kept "$CONSUMER" "$(mkjson Agent dev sonnet)" \
+expect_untouched "$CONSUMER" "$(mkjson Agent dev sonnet)" \
   "dev configured sonnet: a sonnet request is left alone"
 expect_set "$CONSUMER" "$(mkjson Agent dev opus)" sonnet \
   "dev.md opus request is corrected to the pinned sonnet (prose /model line is not the pin)"
 
 # --- 8b. dev-escalated: model escalation is a ROLE, and its pin is bound ------
-expect_model_kept "$CONSUMER" "$(mkjson Agent dev-escalated opus)" \
+expect_untouched "$CONSUMER" "$(mkjson Agent dev-escalated opus)" \
   "dev-escalated requested opus against its opus config (escalation happy path)"
 expect_set "$CONSUMER" "$(mkjson Agent dev-escalated sonnet)" opus \
   "dev-escalated requested sonnet against its opus pin → corrected to opus (the escalation slip)"
@@ -211,93 +235,143 @@ expect_untouched "$CONSUMER" "$(mkjson Agent nonexistent-role)" \
 expect_set "$CONSUMER" "$(mkjson Task remediator)" opus \
   "Task-tool dispatch is policed like Agent"
 
-# --- 13b. EFFORT is bound too, from the same config entry -------------------
-# The Agent tool has no `effort` parameter, so the guard appends a `/effort` directive
-# to the dispatch PROMPT. Without this the config would be authoritative for model and
-# merely advisory for effort, and a teammate would have to read settings.json to learn
-# its own effort — the compliance hope this release exists to remove.
-expect_effort "$CONSUMER" "$(mkjson Agent gate-adjudicator)" high \
-  "gate-adjudicator (config says high)"
-expect_effort "$CONSUMER" "$(mkjson Agent dev)" medium \
-  "dev (config says medium)"
+# --- 13b. THE PROMPT IS NOT A CHANNEL: the guard amends PARAMETERS ONLY -------
+# The Agent tool has no `effort` parameter, and a sentence in the prompt is read back by
+# nothing — `validate-spawn-ledger.sh` resolves a teammate's level from that teammate's own
+# transcript, never from what was said to it. So the guard hands the prompt back UNCHANGED on
+# every path, and a configured effort is delivered by the rendered definition or not at all.
+#
+# BOTH ARMS RUN ON A DISPATCH THAT EMITS, or they are reading an empty string. Two are driven:
+# a model correction (no definition involved) and a definition-bound rewrite (whose role pins
+# an effort and whose definition supplies it), because those are the two emitting paths and a
+# reinstated append could sit on either one.
+EFFJ_MODEL="$(mkjson Agent remediator sonnet)"
+EFFJ_DEF="$(mkjson Agent defok sonnet)"
+expect_prompt_verbatim "$CONSUMER" "$EFFJ_MODEL" \
+  "model-correcting dispatch (remediator pins effort high)"
+expect_prompt_verbatim "$CONSUMER" "$EFFJ_DEF" \
+  "definition-bound dispatch (defok pins effort high and its definition binds it)"
+expect_no_effort_prose "$CONSUMER" "$EFFJ_MODEL" \
+  "model-correcting dispatch"
+expect_no_effort_prose "$CONSUMER" "$EFFJ_DEF" \
+  "definition-bound dispatch"
 
-# A role with an effort and NO model — the party-persona shape. Before this release it
-# got no binding at all; now its effort is bound even though its model is not.
-expect_effort "$CONSUMER" "$(mkjson Agent tea)" high \
-  "tea has an effort but no model"
-raw "$CONSUMER" "$(mkjson Agent tea)" | jq -e '.hookSpecificOutput.updatedInput | has("model") | not' >/dev/null 2>&1 \
-  && ok "tea gets no model bound (it configures none) while still getting its effort" \
-  || bad "a model was bound for tea, which configures none — the guard is inventing one"
+# A role with an effort and NO model — the party-persona shape. Nothing about it is
+# correctable, so the whole dispatch is a no-op rather than an emission carrying prose.
+expect_untouched "$CONSUMER" "$(mkjson Agent tea)" \
+  "tea has an effort and no model, and no definition — nothing to bind"
 
-# An unrecognised effort level is DROPPED, never injected. Injecting it would state a
-# configured effort that is not one, in the authoritative voice of the config.
-expect_no_effort "$CONSUMER" "$(mkjson Agent badeffort)" \
+# A role configured with an INVALID effort level. Its model still resolves and is still
+# corrected, and the unrecognised level reaches the outgoing call through nothing.
+expect_set "$CONSUMER" "$(mkjson Agent badeffort opus)" sonnet \
+  "a role with an invalid effort level still has its model corrected"
+expect_no_effort_prose "$CONSUMER" "$(mkjson Agent badeffort opus)" \
   "a role configured with an invalid effort level"
 
 # --- 13c. IDEMPOTENCE: a well-formed dispatch keeps its approval posture -----
-# The guard emits `allow` to carry `updatedInput`. If it emitted on every dispatch it
-# would change the approval posture of calls it has nothing to correct, so a call that
-# already carries the right model AND the effort directive must produce NO decision.
-#
-# THE LITERAL IS PINNED HERE ON PURPOSE, and it is what couples the guard's emitted line to its
-# own dedupe test. The dedupe matches a substring of what the guard appends; change the line
-# without changing the match and this arm goes red, which is the only thing standing between a
-# reworded line and a guard that emits on every dispatch forever.
-IDEM="$(jq -nc --arg p "contract is .claude/team-roles/gate-adjudicator.md
+# The guard emits `allow` to carry `updatedInput`. If it emitted on every dispatch it would
+# change the approval posture of calls it has nothing to correct. With effort no longer a
+# trigger, a dispatch whose model is already right and whose role has no rendered definition
+# is such a call — and its prompt is irrelevant to that verdict, which is what the pair below
+# asserts: the SAME dispatch is silent with and without an effort sentence in its prompt.
+IDEM="$(jq -nc --arg p "contract is .claude/team-roles/gate-adjudicator.md" \
+  '{tool_name:"Agent",tool_input:{model:"opus",prompt:$p,name:"t"}}')"
+expect_untouched "$CONSUMER" "$IDEM" \
+  "a dispatch already carrying the configured model"
+
+# THE LEGACY PROMPT, one property apart. A consumer dispatching from a cached prompt still
+# carries the sentence the guard used to append. It is not a trigger, not a dedupe key and not
+# something the guard strips — the verdict must be identical to the arm above, or prompt text
+# is still steering a decision somewhere.
+IDEM_LEGACY="$(jq -nc --arg p "contract is .claude/team-roles/gate-adjudicator.md
 
 Your configured reasoning effort for this role is high. Operate at that level." \
   '{tool_name:"Agent",tool_input:{model:"opus",prompt:$p,name:"t"}}')"
-expect_untouched "$CONSUMER" "$IDEM" \
-  "a dispatch already carrying the configured model AND effort"
+expect_untouched "$CONSUMER" "$IDEM_LEGACY" \
+  "the same dispatch whose prompt still carries the sentence the guard used to append"
 
-# ...and the dedupe must key on the LEVEL, not merely on the phrase. Without this the guard
-# reads "already has an effort" as "already has the RIGHT effort", so a role reconfigured from
-# medium to high keeps being dispatched at medium forever, silently and with a spawn-ledger row
-# claiming otherwise. Measured as a live gap: dropping the level from the match killed no
-# assertion in this file before this arm existed.
-STALE="$(jq -nc --arg p "contract is .claude/team-roles/gate-adjudicator.md
+# A prompt naming a DIFFERENT level is the same non-event. Under the old dedupe this input
+# was the one that forced an emission; nothing reads it now.
+IDEM_WRONGLEVEL="$(jq -nc --arg p "contract is .claude/team-roles/gate-adjudicator.md
 
 Your configured reasoning effort for this role is medium. Operate at that level." \
   '{tool_name:"Agent",tool_input:{model:"opus",prompt:$p,name:"t"}}')"
+expect_untouched "$CONSUMER" "$IDEM_WRONGLEVEL" \
+  "the same dispatch whose prompt names a level the config does not"
+
+# --- 13c-MUT. EVERY ARM ABOVE IS AN ABSENCE, SO SEED THE RE-ADDITION ----------
+# `expect_untouched`, `expect_prompt_verbatim` and `expect_no_effort_prose` all pass against a
+# guard that does nothing, and deleting six assertions for a channel removes coverage unless
+# something can still fail. The two mutants below reinstate the removed behaviour at the two
+# LOCATIONS it could return to — the trigger set, and the emit path's input rewrite — and each
+# is scored on an OBSERVABLE of the dispatch, never on the spelling of any sentence.
 #
-# READ THE LAST OCCURRENCE, NOT THE FIRST. The guard APPENDS, so a prompt that already carried a
-# stale statement ends up with both; the configured one is the one it added, and it is last.
-# `expect_effort` takes the first match and is right for every other call site, where there is
-# only one. Asserting the emission separately is what stops this arm from passing on a guard
-# that stayed silent and left the stale line as the only match.
-stale_out="$(newprompt "$CONSUMER" "$STALE" | grep -oE 'reasoning effort for this role is [a-z]+' | tail -1)"
-[ "$stale_out" = "reasoning effort for this role is high" ] \
-  && ok "a prompt carrying the WRONG level is re-stated at the configured one" \
-  || bad "a prompt stating the wrong level was left at it (last statement: '${stale_out:-<none>}') — the dedupe matches the phrase without the level, so a reconfigured role is never re-stamped"
-[ -n "$(raw "$CONSUMER" "$STALE")" ] \
-  && ok "CONTROL: that dispatch produced a decision at all — the correction is an emission, not a silent pass" \
-  || bad "CONTROL: the guard emitted nothing for a dispatch carrying the wrong level"
-
-# --- 13c-MUT. the idempotence arm is an ABSENCE, so prove it can fire ---------
-# `expect_untouched` asserts the hook emitted NOTHING, and a hook that emits nothing for every
-# input satisfies it perfectly. That arm is the only thing coupling the guard's emitted effort
-# line to its own dedupe test — reword one without the other and it is what goes red — so an
-# arm that cannot fire would silently uncouple them. The guard sources no siblings, so a lone
-# copy is a faithful subject here; the unmutated control states that rather than assuming it.
+# The guard sources no siblings, so a lone copy is a faithful subject; the control states that
+# rather than assuming it, and it asserts a POSITIVE outcome beside the silence so a copy that
+# died at startup cannot score as a clean run.
 MCTL="$WORK/guard-control.sh"; cp "$HOOK" "$MCTL"
-[ -z "$(printf '%s' "$IDEM" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$MCTL" 2>/dev/null)" ] \
-  && ok "MUTANT CONTROL: an unmutated copy of the guard is still silent on the idempotent dispatch" \
-  || bad "MUTANT CONTROL is dead — a copy of the guard behaves differently from the original, so the kill below is unearned"
-
-# THE MUTATION MUST MAKE THE DEDUPE MATCH NOTHING, NOT MATCH EVERYTHING, and the first
-# attempt here got that backwards. Widening the pattern to `*)` means NEEDS_EFFORT is never
-# set, so the mutant emits nothing on this input — which is exactly what the ORIGINAL does,
-# and the arm scored a kill it had not earned. Narrowing it to a token no prompt contains
-# sends every dispatch down the `NEEDS_EFFORT=true` branch, so the idempotent one starts
-# emitting. Assert the POSITIVE outcome.
-MGUARD="$WORK/guard-nodedupe.sh"
-sed 's|\*"reasoning effort for this role is \${PIN_EFFORT}"\*) : ;;|*"__NO_PROMPT_CONTAINS_THIS__"*) : ;;|' "$HOOK" > "$MGUARD"
-if cmp -s "$HOOK" "$MGUARD"; then
-  bad "MUTANT matched nothing (cmp -s guard) — the idempotence arm proves nothing"
+mctl_idem="$(printf '%s' "$IDEM" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$MCTL" 2>/dev/null)"
+mctl_corr="$(printf '%s' "$EFFJ_MODEL" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$MCTL" 2>/dev/null \
+             | jq -r '.hookSpecificOutput.updatedInput.model // "<unset>"' 2>/dev/null)"
+if [ -z "$mctl_idem" ] && [ "$mctl_corr" = "opus" ]; then
+  ok "MUTANT CONTROL: an unmutated copy is silent on the idempotent dispatch AND still binds opus on the correcting one — it ran, and the kills below are against the mutation"
 else
-  [ -n "$(printf '%s' "$IDEM" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$MGUARD" 2>/dev/null)" ] \
-    && ok "MUTANT: with the dedupe unable to match, the idempotent dispatch starts emitting — so that arm is live" \
-    || bad "MUTANT: the idempotent dispatch stayed silent even with the dedupe disabled — the idempotence arm passes whatever the guard does"
+  bad "MUTANT CONTROL is dead — copy emitted '${mctl_idem:-<nothing>}' on the idempotent dispatch and bound '$mctl_corr' on the correcting one; a copy that behaves differently from the original makes every kill below unearned"
+fi
+
+# MUTANT A — EFFORT IS A TRIGGER AGAIN. The fast-exit is what makes a configured effort stop
+# deciding whether the guard speaks, so widening it back is the mutation the section-4 and
+# section-6 arms exist to catch. Scored on EMISSION: a dispatch those arms require to be
+# silent starts producing a decision, which is the approval-posture change itself.
+#
+# AWK, NOT SED. The replacement text carries `||`, and an `&` or a `\|` in a BSD sed
+# replacement is not the literal the author typed — measured here, the sed form died with
+# `bad flag in substitute command` and the copy came out unmutated, which `cmp -s` correctly
+# refused. awk compares the whole line and prints a literal, so neither side is a pattern.
+MTRIG="$WORK/guard-effort-trigger.sh"
+MTRIG_ANCHOR='[ "$NEEDS_MODEL" = true ] || [ "$NEEDS_TYPE" = true ] || exit 0'
+mtrig_n="$(grep -cxF "$MTRIG_ANCHOR" "$HOOK")" || mtrig_n=0
+[ "$mtrig_n" -eq 1 ] \
+  && ok "MUTANT effort-trigger anchor is UNIQUE in the guard (1 line) — the mutation below edits the trigger set and nothing else" \
+  || bad "MUTANT effort-trigger anchor matched $mtrig_n lines, expected exactly 1 — a mutation on a non-unique anchor moves cells it did not intend"
+awk '
+  $0 == "[ \"$NEEDS_MODEL\" = true ] || [ \"$NEEDS_TYPE\" = true ] || exit 0" {
+    print "[ \"$NEEDS_MODEL\" = true ] || [ \"$NEEDS_TYPE\" = true ] || [ -n \"$PIN_EFFORT\" ] || exit 0"
+    next
+  }
+  { print }
+' "$HOOK" > "$MTRIG"
+if cmp -s "$HOOK" "$MTRIG"; then
+  bad "MUTANT effort-trigger DID NOT APPLY — the awk matched nothing, so the trigger-set arms prove nothing"
+elif ! bash -n "$MTRIG" 2>/dev/null; then
+  bad "MUTANT effort-trigger DID NOT APPLY as valid shell — a mutant that cannot parse is silent for a reason that is not the mutation"
+else
+  mtrig_out="$(printf '%s' "$(mkjson Agent gate-adjudicator opus)" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$MTRIG" 2>/dev/null)"
+  [ -n "$mtrig_out" ] \
+    && ok "MUTANT effort-trigger: with a configured effort back in the trigger set, a dispatch the guard has nothing to correct starts emitting — sections 4/6 are what catch it" \
+    || bad "MUTANT effort-trigger survived: the already-correct dispatch stayed silent with effort restored as a trigger, so the untouched arms assert nothing about the trigger set"
+fi
+
+# MUTANT B — THE PROMPT IS REWRITTEN AGAIN, on the one emitting path that is definitionally
+# about effort. Anchored INSIDE the definition-bound jq so it cannot be confused with the
+# model path, and it appends to `.prompt` rather than replacing it, which is the closest
+# reinstatement of what was removed. Scored on TWO observables, because 13b reads the property
+# through two grammars and a mutant that only one can see leaves the other unproven.
+MAPP="$WORK/guard-prompt-append.sh"
+sed "s@'. + {subagent_type: \$t} | del(.name) | del(.model)'@'. + {subagent_type: \$t} | del(.name) | del(.model) | .prompt = (.prompt + \"\\\\n\\\\nYour configured reasoning effort for this role is high. Operate at that level.\")'@" \
+  "$HOOK" > "$MAPP"
+if cmp -s "$HOOK" "$MAPP"; then
+  bad "MUTANT prompt-append matched nothing (cmp -s guard) — the prompt-integrity arms prove nothing"
+else
+  mapp_prompt="$(printf '%s' "$EFFJ_DEF" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$MAPP" 2>/dev/null \
+                 | jq -r '.hookSpecificOutput.updatedInput.prompt // "<unset>"' 2>/dev/null)"
+  mapp_sent="$(printf '%s' "$EFFJ_DEF" | jq -r '.tool_input.prompt')"
+  [ "$mapp_prompt" != "$mapp_sent" ] \
+    && ok "MUTANT prompt-append: the returned prompt stops being byte-identical to the dispatched one — expect_prompt_verbatim is what catches it" \
+    || bad "MUTANT prompt-append survived the verbatim arm: the prompt came back identical with an append reinstated, so that arm cannot fire"
+  [ -n "$(printf '%s' "$mapp_prompt" | grep -oiE '(reasoning )?effort[^.]{0,40}(low|medium|high|xhigh|max)' | head -1)" ] \
+    && ok "  and the effort-prose grammar sees it too — the second reading of the same property is live, not a restatement of the first" \
+    || bad "  the effort-prose grammar scored its own subject as a non-instance: a reinstated directive was invisible to it, so its zero is a floor of unknown depth"
 fi
 
 # --- 13d. a role with no config entry -> UNTOUCHED (fail-open) --------------
@@ -415,9 +489,9 @@ sprint_of() { # sprint_of <snapshot-line>  -> the .sprint the guard recorded
 printf -- '- **sprint_id:** 291\n' > "$CONSUMER/_bmad-output/pipeline-snapshot.md"
 
 # --- 13e. THE RENDERED DEFINITION: subagent_type rewrite, name and model deleted ----
-# A definition's `effort:` is APPLIED by the harness where the guard's prompt sentence is
-# only advisory, so this is the binding half of the release. Three properties, and all
-# three must hold together or the dispatch silently loses its effort:
+# A definition's `effort:` is APPLIED by the harness, and it is the ONLY channel that
+# reaches a teammate's effort at all. Three properties, and all three must hold together or
+# the dispatch silently loses its effort:
 #
 #   * `subagent_type` names the role, so the harness selects `.claude/agents/<role>.md`;
 #   * `name` is GONE, because a name routes the spawn to the in-process teammate runner,
@@ -479,8 +553,8 @@ DEFOK_EFFORT="$(awk '/^effort:[[:space:]]/{sub(/^effort:[[:space:]]*/,""); print
   || bad "  effort_bound='$(lfield .effort_bound)', expected '$DEFOK_EFFORT' from .claude/agents/defok.md"
 
 # THE DISCRIMINATING SEED. `defnodef` pins an effort in settings and has NO rendered
-# definition, so nothing binds an effort for it: the configured level reaches the teammate as
-# the guard's prompt sentence, which is advisory and applies nothing. A row claiming an effort
+# definition, so nothing binds an effort for it: the configured level reaches the teammate
+# through no channel at all. A row claiming an effort
 # was bound there is the defect — it is what makes an unbound dispatch read as a bound one,
 # and it is what this guard recorded before `effort_bound` moved off the config.
 NODEF_PIN="$(jq -r '.aiDlcRoles.defnodef.effort // ""' "$CONSUMER/.claude/settings.json")"
@@ -489,7 +563,7 @@ NODEF_PIN="$(jq -r '.aiDlcRoles.defnodef.effort // ""' "$CONSUMER/.claude/settin
   || bad "  CONTROL is dead: defnodef pins '$NODEF_PIN' and its definition is $( [ -e "$CONSUMER/.claude/agents/defnodef.md" ] && echo present || echo absent ) — a null here would prove nothing"
 rm -f "$LEDGER"; raw "$CONSUMER" "$(mkjson Agent defnodef)" >/dev/null
 [ "$(lfield .effort_bound)" = "null" ] \
-  && ok "  a dispatch with no definition records effort_bound=null even though its role pins one — the prompt line is advisory and binds nothing" \
+  && ok "  a dispatch with no definition records effort_bound=null even though its role pins one — no channel carries that level" \
   || bad "  effort_bound='$(lfield .effort_bound)' on a dispatch that bound no effort, expected null: the field is recording the CONFIG, so a row nothing applied an effort to reads as one that did"
 # ...and the row exists, so the null above is a recorded null and not an unwritten row.
 [ "$(lfield .role)" = "defnodef" ] \
@@ -559,9 +633,7 @@ grep -q 'no rendered .claude/agents/defnodef.md' <<<"$ABS_CTX" \
 # --- 13i. IDEMPOTENCE ON THE DEFINITION PATH --------------------------------
 # The rewrite emits `allow` to carry `updatedInput`, so it must not fire on a dispatch
 # already in the target shape, or every correct call has its approval posture changed.
-IDEMDEF="$(jq -nc --arg p "Your operating contract is \`.claude/team-roles/defok.md\`.
-
-Your configured reasoning effort for this role is high. Operate at that level." \
+IDEMDEF="$(jq -nc --arg p "Your operating contract is \`.claude/team-roles/defok.md\`." \
   '{tool_name:"Agent",tool_input:{subagent_type:"defok",prompt:$p}}')"
 expect_untouched "$CONSUMER" "$IDEMDEF" \
   "a dispatch already carrying the rewritten type, no name and no model"
