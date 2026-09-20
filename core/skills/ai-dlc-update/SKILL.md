@@ -400,6 +400,11 @@ prose is itself generated rather than composed.
      step 7.** That flag is the whole mechanism; do NOT set the two fields by hand, and do not
      read step 7's "preserve them" as overriding this. The two instructions describe different
      runs and the flag is what tells them apart — see step 7's re-stamp bullet.
+     **The gate wrote `_bmad-output/ai-dlc-update/self-update-gate-<ts>.md` on this verdict too.**
+     Carry that record to the step-7 gated apply and commit it there with the machinery slice.
+     **That is an instruction to the operating agent and not an enforced property**: nothing in
+     `reconcile/` stages or commits anything, so the record reaches that commit only because the
+     agent put it there.
    - On `SELF-UPDATE-OK`: proceed autonomously as below.
    - `SELF-UPDATE-CARRY` rows are ADVISORY and accompany any verdict, OK included. Each names
      one machinery path the consumer has diverged on. They do not stop the cycle; they remove
