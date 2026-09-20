@@ -1379,6 +1379,593 @@ else
   fi
 fi
 
+# ==============================================================================================
+# BL-276 -- THE TWO ROUTING ROWS, AND THE SITING THAT KEEPS THE FINISHER ABLE TO EXIT
+# ==============================================================================================
+#
+# WHAT IS BOUND HERE. `retired-layer-passage.sh` detects a consumer layer file still carrying a
+# rulebook line core had at base and no longer has at theirs; its rows reached the REPORT and
+# nothing else, while the sibling TOKEN class has been a worklist row since the `*CLASSIFY*` arm
+# gained `retired-tokens.sh`. The same asymmetry one population over: a planning artifact whose
+# ```derived fence EXECUTES a core path gets no row when a release re-sites the text that path
+# carried. Both are now `say` sites inside apply.sh's `FINISH=0` span.
+#
+# WHY THESE ARMS LIVE IN THIS FIXTURE AND NOT IN A NEW ONE. The rows' load-bearing property is
+# WHICH COUNTER they raise and WHEN -- `say` increments `handback` and `worklist_n`, `--finish`
+# gates its stamp on `worklist_n` alone, and a row re-derived beside `hook_registration_row`
+# would withhold the stamp on a tree `--finish` cannot change. That is this file's whole subject;
+# C1/C4/C7/C8 and m8 already separate the two counters, `mk_consumer` already builds a consumer
+# whose stamp and marker are read, and `run_apply`/`run_finish_as` already drive the unstubbed
+# script in both modes. An arm asserting a row's SITING needs the stamp and the marker in the
+# same verdict, and this is the only fixture that reads them.
+#
+# ITS OWN DIST, AND THAT IS NOT A CONVENIENCE. The pull above moves `core/session-driver/*` and
+# `core/fixtures/*`; neither row can fire against it -- the passage detector diffs only the
+# `rulebook:` globs from `setup-sites.md`, and nothing under those globs moves there. Seeding a
+# retired rulebook LINE into the dist above would change what every arm from C1 down classifies.
+# So these worlds get a second two-commit repository whose only change is one deleted rulebook
+# line, and the arms above are untouched by it.
+#
+# COST. The passage detector is nearly free when it has nothing to compare -- it exits before
+# opening a layer file -- and the expensive shape is a large removed-line set against a large
+# layer corpus. These worlds carry ONE removed line and at most one layer file, which is why the
+# whole block below runs in a couple of seconds rather than in the tens the reference consumer's
+# 52-file corpus costs.
+BLROOT="$WORK/bl276"
+PD="$BLROOT/dist"
+BL_OK=1
+mkdir -p "$PD/core/skills/ai-dlc" "$PD/core/scripts" || BL_OK=0
+if [ "$BL_OK" = 1 ]; then
+  git -C "$PD" init -q 2>/dev/null || BL_OK=0
+fi
+pgitc() { git -C "$PD" -c user.email=f@f -c user.name=fixture "$@"; }
+
+# THE RETIRED LINE AND ITS NEAR-MISS, AND THE NEAR-MISS CARRIES EVERY PROPERTY THE OFFENDER DOES
+# EXCEPT THE ONE UNDER TEST. Both are ordinary rulebook prose, both are reproduced by a layer
+# file under the same numbering and emphasis, both are inside the `rulebook:` globs. They differ
+# in one thing: the offender reproduces the deleted line and the near-miss PARAPHRASES it, which
+# is exactly the limit `retired-layer-passage.sh`'s own header states it cannot cross. A
+# near-miss that simply omitted the line would discriminate against nothing.
+BL_RETIRED='Every override entry must declare a shadows anchor before it is adopted'
+BL_KEPT='An extension entry declares conforms_to and is never adopted by absorption'
+BL_PARA='An override entry needs a declared shadow anchor prior to adoption'
+
+if [ "$BL_OK" = 1 ]; then
+  printf '1.0.0\n' > "$PD/VERSION"
+  { printf '# AI/DLC\n\n'
+    printf -- '- %s\n' "$BL_RETIRED"
+    printf -- '- %s\n' "$BL_KEPT"
+  } > "$PD/core/skills/ai-dlc/SKILL.md"
+  # A REAL DISTRIBUTION SHIPS CORE VALIDATORS, and apply.sh withholds its re-stamp as
+  # manifest-unreadable when `core/scripts/` expands empty at THEIRS. Without this the finish
+  # arm below would pass for a reason that has nothing to do with the rows.
+  printf '#!/usr/bin/env bash\necho v\n' > "$PD/core/scripts/validate-synthetic.sh"
+  pgitc add -A >/dev/null 2>&1 && pgitc commit -q -m bl276-base >/dev/null 2>&1 || BL_OK=0
+fi
+BL_BASE=""; BL_THEIRS=""; BL_THEIRS_VER=""
+if [ "$BL_OK" = 1 ]; then
+  BL_BASE="$(git -C "$PD" rev-parse HEAD)"
+  printf '2.0.0\n' > "$PD/VERSION"
+  { printf '# AI/DLC\n\n'
+    printf -- '- %s\n' "$BL_KEPT"
+  } > "$PD/core/skills/ai-dlc/SKILL.md"
+  pgitc add -A >/dev/null 2>&1 && pgitc commit -q -m bl276-theirs >/dev/null 2>&1 || BL_OK=0
+  BL_THEIRS="$(git -C "$PD" rev-parse HEAD)"
+  BL_THEIRS_VER="$(git -C "$PD" show "${BL_THEIRS}:VERSION" 2>/dev/null)"
+fi
+
+# The two consumer-relative paths a `derived` fence can name. One is the mapping of a core path
+# this range CHANGED; the other is a core path it did not touch. `map_consumer` is what apply.sh
+# uses, so these are written as that mapper emits them.
+BL_CHANGED_CONS=".claude/skills/ai-dlc/SKILL.md"
+BL_UNCHANGED_CONS="scripts/ai-dlc/validate-synthetic.sh"
+
+# bl_consumer <dir> <layer:hit|miss|none> <deriv:hit|miss|empty|none> <validator:yes|no>
+#
+# EVERY WORLD IS DEFINED WHOLE, INCLUDING WHAT IT DOES NOT WRITE. A builder that leaves the
+# previous world's layer file or artifact behind hands the next arm a shape nobody seeded, and
+# the resulting two-cell flip reads as entanglement between arms that are in fact independent.
+bl_consumer() {
+  local c="$1" layer="$2" deriv="$3" val="$4"
+  rm -rf "$c" || return 1
+  mkdir -p "$c/.claude" "$c/scripts/ai-dlc" || return 1
+  # hook-registration validator present in every world: without it apply.sh emits
+  # `DECISION hook-registration-unchecked` BEFORE the stamp under `--finish`, and the finish arm
+  # below would then be reading that row's effect rather than the two rows under test.
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$c/scripts/ai-dlc/validate-hook-registration.sh"
+  chmod +x "$c/scripts/ai-dlc/validate-hook-registration.sh"
+  printf '#!/usr/bin/env bash\necho v\n' > "$c/scripts/ai-dlc/validate-synthetic.sh"
+  case "$layer" in
+    hit)  mkdir -p "$c/.claude/skills/ai-dlc/overrides" || return 1
+          printf '# override\n\n3. **%s**\n' "$BL_RETIRED" \
+            > "$c/.claude/skills/ai-dlc/overrides/steps__w__x.md" ;;
+    miss) mkdir -p "$c/.claude/skills/ai-dlc/overrides" || return 1
+          printf '# override\n\n3. **%s**\n' "$BL_PARA" \
+            > "$c/.claude/skills/ai-dlc/overrides/steps__w__x.md" ;;
+    none) : ;;
+  esac
+  case "$deriv" in
+    hit)  mkdir -p "$c/_bmad-output/planning" || return 1
+          printf '# plan\n\n```derived\n$ grep -c shadow %s\n3\n```\n' "$BL_CHANGED_CONS" \
+            > "$c/_bmad-output/planning/plan.md" ;;
+    # THE NEAR-MISS CARRIES EVERY PROPERTY THE OFFENDER KEYS ON EXCEPT ONE, TWICE OVER. Its
+    # FENCED command names a core path this range did NOT change; and the changed path DOES
+    # appear, in a line spelled exactly as the offender's is — leading `$ `, same command — but
+    # OUTSIDE any fence. A near-miss whose unfenced line did not carry the `$ ` prefix would
+    # discriminate against nothing that keys on the fence, because the prefix test alone would
+    # already reject it. BL-m5 is the mutant that proves this half is load-bearing.
+    miss) mkdir -p "$c/_bmad-output/planning" || return 1
+          { printf '# plan\n\n```derived\n$ grep -c echo %s\n1\n```\n' "$BL_UNCHANGED_CONS"
+            printf '\nQuoted below as prose, deliberately not inside a fence:\n\n'
+            printf '$ grep -c shadow %s\n' "$BL_CHANGED_CONS"
+          } > "$c/_bmad-output/planning/plan.md" ;;
+    empty) mkdir -p "$c/_bmad-output" || return 1 ;;
+    none)  : ;;
+  esac
+  if [ "$val" = yes ]; then
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$c/scripts/ai-dlc/validate-artifact-derivations.sh"
+    chmod +x "$c/scripts/ai-dlc/validate-artifact-derivations.sh"
+  fi
+  printf 'version: 1.0.0\ncommit: %s\n' "$BL_BASE" > "$c/.claude/.ai-dlc-version"
+  rm -f "$c/.claude/.ai-dlc-applying"
+}
+
+bl_drive() { # bl_drive <apply-path> <consumer> [flag...]
+  local a="$1" c="$2"; shift 2
+  bash "$a" "$@" "$PD" "$BL_BASE" "$c" "$BL_THEIRS" 2>/dev/null
+}
+bl_n() { awk -F'\t' -v a="$2" -v b="$3" '$1==a && $2==b {n++} END {print n+0}' <<< "$1"; }
+# The four observables every world below is read through, as one string. WORKLIST-vs-DECISION is
+# the distinction that decides whether `--finish` can exit, so it is in the vector rather than
+# collapsed into a hit count.
+bl_vec() { # bl_vec <out> -> "row1|wl2|unreadable|unchecked"
+  printf '%s|%s|%s|%s' \
+    "$(bl_n "$1" WORKLIST retired-layer-passage)" \
+    "$(bl_n "$1" WORKLIST artifact-derivations)" \
+    "$(bl_n "$1" DECISION artifact-derivations-unreadable)" \
+    "$(bl_n "$1" DECISION artifact-derivations-unchecked)"
+}
+# bl_run <label> <layer> <deriv> <val> [flag...] -> sets BL_OUT, BL_VEC; returns 1 if unbuildable
+#
+# THIS ONE MAY USE GLOBALS AND `bl_mut_vec` BELOW MAY NOT, AND THE DIFFERENCE IS THE CALL SHAPE
+# RATHER THAN THE FUNCTION. Every call site here is `if bl_run ...; then`, a plain command in
+# this shell, so its assignments survive. `bl_mut_vec` is read through `$( )` at every site, and
+# an assignment inside a command substitution is lost to the subshell — which is why that one
+# records its consumer in a FILE. Do not unify them by making this one return a string.
+BL_OUT=""; BL_VEC=""
+bl_run() {
+  local lbl="$1" layer="$2" deriv="$3" val="$4"; shift 4
+  local c="$BLROOT/c-$lbl"
+  bl_consumer "$c" "$layer" "$deriv" "$val" || return 1
+  [ "${1:-}" = --finish ] && printf 'theirs: %s\n' "$BL_THEIRS" > "$c/.claude/.ai-dlc-applying"
+  BL_OUT="$(bl_drive "$BL_APPLY_UNDER_TEST" "$c" "$@")"
+  BL_VEC="$(bl_vec "$BL_OUT")"
+  BL_LAST_CONS="$c"
+  return 0
+}
+BL_APPLY_UNDER_TEST="$APPLY"
+BL_LAST_CONS=""
+
+if [ "$BL_OK" != 1 ] || [ -z "$BL_BASE" ] || [ -z "$BL_THEIRS" ] || [ "$BL_BASE" = "$BL_THEIRS" ]; then
+  bad "BL276 setup: could not build the two-commit dist whose range deletes one rulebook line (base='${BL_BASE:-<none>}' theirs='${BL_THEIRS:-<none>}') — every arm below would be unreadable"
+else
+
+# --- BL-S0 SUBJECT PROBE: are these two rows installed at all? --------------------------------
+#
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT, AND THESE ROWS ARE A NEWER SUBJECT THAN `--finish`.
+# The probe at the top of this file clears a consumer whose apply.sh predates the handback guard
+# entirely; a consumer can have that guard and still be running an apply.sh from before BL-276,
+# and every arm below would then read as a regression on a tree whose only fault is not having
+# received the fix yet. The probe drives the FIRING world — the one BL-1 asserts draws both rows
+# — and reads whether either reached the manifest. "Subject not installed" is not "subject
+# regressed"; in the DISTRIBUTION the subject is always present, so an absent one is hard.
+BL_PRESENT=1
+if bl_run probe hit hit yes; then
+  case "$BL_VEC" in
+    "0|0|0|0") BL_PRESENT=0 ;;
+  esac
+else
+  bad "BL-S0 setup: could not build the probe consumer, so whether the subject is installed was never established"
+fi
+if [ "$BL_PRESENT" = 0 ]; then
+  if [ "$IS_DIST" = 1 ]; then
+    bad "BL-S0 the resolved apply.sh ($APPLY) emitted NEITHER routing row over a consumer that carries both subjects — a layer file reproducing a line this range deleted, and an artifact fence naming a core path it changed. The BL-276 rows are absent. HARD in the distribution: the subject must be present here."
+  else
+    printf '  SKIP  %s\n' "BL-1..BL-5 and BL-m1..BL-m6 — the installed apply.sh predates the retired-layer-passage and artifact-derivations routing rows; they land with a later pull than the one carrying this fixture"
+  fi
+else
+  ok "BL-S0 the resolved apply.sh routes at least one of the two classes, so the arms below are scoring a subject that is present"
+
+# --- BL-S1 SANITY: the range this block drives actually deletes a rulebook line ---------------
+# Both rows key on `git diff base..theirs -- core/`, one through the detector's rulebook globs
+# and one through `map_consumer`. If that range were empty BOTH would be silent and every
+# absence arm below would pass over a program that was never asked anything. Asserted with its
+# own control in the same derivation: the diff names the rulebook file and does NOT name the
+# validator whose consumer mapping the near-miss fence cites.
+BL_DIFF="$(git -C "$PD" diff --name-only "$BL_BASE" "$BL_THEIRS" -- core/ 2>/dev/null)"
+if grep -qxF 'core/skills/ai-dlc/SKILL.md' <<< "$BL_DIFF" \
+   && ! grep -qxF 'core/scripts/validate-synthetic.sh' <<< "$BL_DIFF"; then
+  ok "BL-S1 setup: the seeded range changes the rulebook file and NOT the validator — the offender and near-miss fences below cite two paths this range genuinely classifies differently"
+else
+  bad "BL-S1 setup: the seeded range is not the two-path shape the arms need (changed: $(printf '%s' "$BL_DIFF" | tr '\n' ' ')) — every derivation arm below would be vacuous"
+fi
+
+# --- BL-S2 SANITY: THE STAGING TRAP, ASSERTED BEFORE ANY ROW IS SCORED ------------------------
+#
+# MEASURED, AND IT FAILS IN THE DIRECTION THAT READS AS A PASS. `retired-layer-passage.sh`
+# resolves its corpus from `$(dirname $0)/setup-sites.md`. A reconcile directory staged with
+# `*.sh` and no `*.md` leaves it unable to read that declaration; it REFUSES rather than
+# reporting clean -- but it refuses on stderr, and every call site in apply.sh discards stderr.
+# So the detector returns no rows, apply.sh emits no row 1, and a fixture whose staging did that
+# would score a passage arm against a detector that never opened a layer file.
+#
+# Measured on this repo's reconcile directory, same consumer, same range: `*.sh` only gives
+# row1=0 while row2 still fires at 1; `*` gives row1=1. The two differ in the copy, not in the
+# subject, which is why this is asserted here and not left to the reader.
+if [ -s "$REC/setup-sites.md" ]; then
+  ok "BL-S2 setup: the reconcile directory this fixture drives carries setup-sites.md, so the passage detector can read its rulebook corpus — a staging without it returns zero rows on stderr and reads exactly like a clean consumer"
+else
+  bad "BL-S2 setup: $REC has no setup-sites.md, so retired-layer-passage.sh refuses on stderr (which apply.sh discards) and returns no rows — BL-1 below would score a detector that never opened a layer file"
+fi
+
+# --- BL-1: BOTH ROWS FIRE ON A CONSUMER THAT CARRIES BOTH SUBJECTS ----------------------------
+# The positive direction, and it is what makes every absence arm below readable. `semantic-merge`
+# is NOT available as the same-invocation control here -- these worlds seed no both-changed file
+# -- so the control is `DECISION restamp-withheld`, which apply.sh emits whenever a hand-back is
+# outstanding and which therefore proves the run reached its re-stamp verdict.
+if bl_run both hit hit yes; then
+  BL_BOTH="$BL_VEC"
+  BL_CTL="$(bl_n "$BL_OUT" DECISION restamp-withheld)"
+  if [ "$BL_BOTH" = "1|1|0|0" ]; then
+    ok "BL-1 a consumer whose layer file reproduces the retired line AND whose artifact fence names the changed core path draws both WORKLIST rows (retired-layer-passage, artifact-derivations)"
+  else
+    bad "BL-1 the firing consumer drew row1|wl2|unreadable|unchecked = $BL_BOTH, not 1|1|0|0 — the classes BL-276 routes to the worklist are not reaching it"
+  fi
+  if [ "$BL_CTL" -ge 1 ]; then
+    ok "BL-1 and the same invocation emits DECISION restamp-withheld, so the run reached its re-stamp verdict rather than dying early"
+  else
+    bad "BL-1 the firing run emitted no DECISION restamp-withheld — it did not reach the re-stamp verdict, so the counts above are about a run that stopped, not about these rows"
+  fi
+else
+  bad "BL-1 setup: could not build the firing consumer"
+  BL_BOTH="BROKEN"
+fi
+
+# --- BL-2: THE NEAR-MISS IS SILENT, AND IT IS ONE PROPERTY AWAY FROM BL-1 ---------------------
+# The layer file paraphrases instead of reproducing (the detector's own stated limit), and the
+# fenced command names a core path this range did not change while the SAME command naming the
+# changed path sits OUTSIDE the fence. Both halves of the offender are present in form; only the
+# discriminating property is absent from each.
+if bl_run near miss miss yes; then
+  if [ "$BL_VEC" = "0|0|0|0" ]; then
+    ok "BL-2 a near-miss consumer — a PARAPHRASED layer line, and a fenced command naming an UNCHANGED core path while the changed one appears outside any fence — draws neither row"
+  else
+    bad "BL-2 the near-miss consumer drew $BL_VEC, not 0|0|0|0 — a row fired on a layer file that reproduces nothing core deleted, or on a fence this range does not touch (the unfenced line is the likely match)"
+  fi
+  if [ "$(bl_n "$BL_OUT" DECISION restamp-withheld)" -ge 1 ]; then
+    ok "BL-2 and the near-miss run still reaches its re-stamp verdict, so its two zeros are an absence of rows and not an absence of a run"
+  else
+    bad "BL-2 the near-miss run emitted no DECISION restamp-withheld: its zeros may be a run that never got there, which is the shape an absence arm cannot tell from a pass"
+  fi
+else
+  bad "BL-2 setup: could not build the near-miss consumer"
+fi
+
+# --- BL-3: THE TWO ROWS ARE INDEPENDENT -------------------------------------------------------
+# A consumer with the artifact but NO layer directory, and one with the layer file but no
+# artifact corpus. Without this pair a single shared gate emitting both rows together would
+# satisfy BL-1 and BL-2 exactly as the shipped code does.
+if bl_run nolayer none hit yes; then
+  case "$BL_VEC" in
+    "0|1|0|0") ok "BL-3 a consumer with no layer directory still draws the derivation row alone — the two rows are separately gated" ;;
+    *)         bad "BL-3 a consumer with no layer directory drew $BL_VEC, not 0|1|0|0 — the passage row fired with no layer file to have found it in, or the derivation row is gated on the passage one" ;;
+  esac
+else
+  bad "BL-3 setup: could not build the no-layer consumer"
+fi
+if bl_run noart hit none yes; then
+  case "$BL_VEC" in
+    "1|0|0|0") ok "BL-3 and a consumer with no _bmad-output draws the passage row alone — neither row depends on the other's subject" ;;
+    *)         bad "BL-3 a consumer with no artifact corpus drew $BL_VEC, not 1|0|0|0" ;;
+  esac
+else
+  bad "BL-3 setup: could not build the no-artifact consumer"
+fi
+
+# --- BL-4: THE ABSENT-VALIDATOR BRANCH IS A DECISION, AND IT IS GATED ON THE JOIN -------------
+#
+# TWO DIRECTIONS, AND THE SECOND ONE IS THE MEASURED FALSE POSITIVE. With real stranded
+# citations and no `validate-artifact-derivations.sh` on the consumer, the run must SAY so --
+# nothing can re-run those commands. But a consumer with no artifact corpus at all, or an empty
+# one, must draw NOTHING from this site: keying the absent-branch on the TOOL rather than on the
+# non-empty join fires on every consumer predating the mechanism, which is what failed C4 above
+# and is the reason that arm's seed exists.
+if bl_run noval hit hit no; then
+  case "$BL_VEC" in
+    "1|0|0|1") ok "BL-4 a consumer with stranded citations and no validate-artifact-derivations.sh draws DECISION artifact-derivations-unchecked instead of the WORKLIST row — nothing on that tree can re-run the commands, and the row says so" ;;
+    *)         bad "BL-4 the validator-absent consumer drew $BL_VEC, not 1|0|0|1 — either the WORKLIST row was emitted naming a script that is not there, or the split reported nothing at all" ;;
+  esac
+else
+  bad "BL-4 setup: could not build the validator-absent consumer"
+fi
+if bl_run emptyart hit empty yes; then
+  case "$BL_VEC" in
+    "1|0|0|0") ok "BL-4 and a consumer whose _bmad-output holds no markdown draws NEITHER derivation branch — the gate is the non-empty join, not the presence of the tool, so a consumer predating the mechanism is not handed a row about work it does not have" ;;
+    *)         bad "BL-4 an empty artifact corpus drew $BL_VEC, not 1|0|0|0 — a branch keyed on the tool rather than on the join fires on every older consumer, which is the C4 shape" ;;
+  esac
+else
+  bad "BL-4 setup: could not build the empty-artifact consumer"
+fi
+
+# --- BL-5: THE SITING. NEITHER ROW IS EMITTED UNDER --finish, AND THE STAMP IS WRITTEN --------
+#
+# THIS IS THE ARM THE WHOLE SITING EXISTS FOR, AND IT IS THE ONE THAT CANNOT BE READ OFF THE
+# ROWS ALONE. `say` raises `worklist_n`, and `--finish` gates its stamp on that counter. Both
+# rows are re-derived from state `--finish` never writes -- a layer file is consumer-owned and
+# this program never rewrites one, and the derivation remedy re-anchors a citation at a path
+# that is itself in the changed set -- so a row sited beside `hook_registration_row` /
+# `transient_ignore_row` / `agent_definitions_row`, which run under `--finish` BEFORE
+# `write_stamp`, would withhold the stamp on every finish over this tree. `.ai-dlc-applying`
+# would stay, `core/git-hooks/pre-push`'s applying guard would refuse every push, and the
+# consumer would have no exit. The tree driven here is the SAME one BL-1 fires both rows on, so
+# the zeros below are a property of the mode and not of the input.
+if bl_run finish hit hit yes --finish; then
+  BL_FV="$(sed -n 's/^version:[[:space:]]*//p' "$BL_LAST_CONS/.claude/.ai-dlc-version" 2>/dev/null | head -1)"
+  BL_FM="$([ -f "$BL_LAST_CONS/.claude/.ai-dlc-applying" ] && echo PRESENT || echo GONE)"
+  BL_FR="$(bl_n "$BL_OUT" RESOLVED restamp)"
+  if [ "$BL_VEC" = "0|0|0|0" ]; then
+    ok "BL-5 --finish over the very tree BL-1 fires both rows on emits NEITHER — the rows sit inside the FINISH=0 span, so the finisher never re-derives them"
+  else
+    bad "BL-5 --finish emitted $BL_VEC over a tree it cannot change: these rows raise worklist_n, which is the counter --finish gates its stamp on, and neither has work that clears in that mode. The consumer is wedged with .ai-dlc-applying on disk and pre-push refusing every push"
+  fi
+  if [ "$BL_FV" = "$BL_THEIRS_VER" ] && [ "$BL_FM" = GONE ] && [ "$BL_FR" -ge 1 ]; then
+    ok "BL-5 and the finisher STAMPS — version $BL_FV, marker cleared, RESOLVED restamp — which is the exit the siting exists to preserve"
+  else
+    bad "BL-5 --finish did not stamp (version='${BL_FV:-<absent>}' expected $BL_THEIRS_VER, marker=$BL_FM, RESOLVED restamp=$BL_FR). A row this mode cannot clear withholds the stamp forever, and the applying marker keeps pre-push refusing"
+  fi
+else
+  bad "BL-5 setup: could not build the finish consumer"
+fi
+
+# ==============================================================================================
+# BL-276 MUTANTS
+# ==============================================================================================
+#
+# FOUR REGRESSIONS THAT ALL PASS THE ENTRY'S FILED RECEIPT, plus the two that revert each row
+# outright. The receipt anchors on `^[[:blank:]]*say WORKLIST` plus the class name, which
+# establishes lexical non-comment position and neither reachability nor conditionality: a row in
+# a function nothing calls, a row under `if false`, a row consulting no detector, and a row
+# emitted only under `--finish` all satisfy it. The arms above are what must kill them, so each
+# one below is scored against a named arm and against a second arm it must NOT move.
+#
+# EVERY MUTANT IS A COPY OF THE WHOLE RECONCILE DIRECTORY. apply.sh evals map_consumer() out of
+# preclassify.sh and shells to its siblings; a lone script copy dies before printing anything,
+# and `*.sh` without the `*.md` silences the passage detector specifically (BL-S2). `bl_mut`
+# therefore asserts setup-sites.md landed in the copy, so a mutant scored 0 on row 1 cannot be
+# a staging that refused.
+bl_mut() { # bl_mut <dir> ; transform reads apply.sh on stdin, writes stdout
+  mkdir -p "$1" || return 1
+  cp "$REC"/* "$1"/ 2>/dev/null
+  [ -f "$1/apply.sh" ] || return 1
+  [ -s "$1/setup-sites.md" ] || { bad "MUTANT STAGING BROKEN — $1 has no setup-sites.md, so its row-1 score is the staging refusing and not the mutation"; return 1; }
+  cat > "$1/apply.sh"
+  ! cmp -s "$REC/apply.sh" "$1/apply.sh"
+}
+# bl_mut_vec <rec-dir> <layer> <deriv> <val> [flags...] -> the four-observable vector
+# THE CONSUMER IT BUILT IS RECORDED IN A FILE, NOT IN A VARIABLE, AND THAT IS A MEASUREMENT.
+# An arm may need the STAMP and the MARKER a mutant's run wrote rather than only the rows it
+# printed — BL-m4's consequence is a withheld stamp, and a row count is true either way. The
+# obvious shape is a global naming the directory this function built. It CANNOT be a global:
+# every call site reads this function through `$( )`, and an assignment made inside a command
+# substitution is lost to the subshell. Measured here while building BL-m4: the arm read
+# `version=<absent> marker=GONE` off a path the caller never learned, which reads exactly like a
+# mutation that failed to wedge the finisher. A file survives the subshell; a variable does not.
+bl_mut_vec() {
+  local rec="$1"; shift
+  local layer="$1" deriv="$2" val="$3"; shift 3
+  local c="$BLROOT/mc-$$-$RANDOM" out
+  bl_consumer "$c" "$layer" "$deriv" "$val" || { echo "BROKEN"; return; }
+  printf '%s' "$c" > "$BLROOT/.last-mut-consumer"
+  [ "${1:-}" = --finish ] && printf 'theirs: %s\n' "$BL_THEIRS" > "$c/.claude/.ai-dlc-applying"
+  out="$(bl_drive "$rec/apply.sh" "$c" "$@")"
+  bl_vec "$out"
+}
+bl_last_mut_consumer() { cat "$BLROOT/.last-mut-consumer" 2>/dev/null; }
+
+# --- BL-CTL: THE UNMUTATED COPY, WITH POSITIVE CONJUNCTS ON BOTH DIRECTIONS -------------------
+# A control asserting only "nothing went wrong" passes against a subject replaced by `exit 0`.
+# This one requires the firing world's two rows to be THERE and the near-miss world's to be
+# absent, in the same copy, so a staging that cannot run reports as broken rather than as clean.
+if printf '%s' "$(cat "$REC/apply.sh")" > /dev/null && mkdir -p "$BLROOT/mut-ctl" \
+   && cp "$REC"/* "$BLROOT/mut-ctl/" 2>/dev/null && [ -s "$BLROOT/mut-ctl/setup-sites.md" ]; then
+  BLC_P="$(bl_mut_vec "$BLROOT/mut-ctl" hit hit yes)"
+  BLC_N="$(bl_mut_vec "$BLROOT/mut-ctl" miss miss yes)"
+  if [ "$BLC_P" = "1|1|0|0" ] && [ "$BLC_N" = "0|0|0|0" ]; then
+    ok "BL-CTL an unmutated copy of the reconcile directory reproduces BOTH directions (firing 1|1|0|0, near-miss 0|0|0|0), so a mutant's silence below is the mutation and not the copy"
+  else
+    bad "BL-CTL the unmutated copy did not reproduce the shipped behaviour (firing=$BLC_P near-miss=$BLC_N) — every BL mutant verdict below is unreadable"
+  fi
+else
+  bad "BL-CTL could not stage a complete copy of $REC — every BL mutant verdict below is unreadable"
+fi
+
+# --- BL-m1: the passage row moved into a function NOTHING CALLS -------------------------------
+# The first of the four the filed receipt accepts. The emitting line keeps its exact spelling and
+# its leading blank, so `^[[:blank:]]*say WORKLIST retired-layer-passage` still matches; the row
+# is simply unreachable. BL-1 must go red and BL-3's derivation half must not.
+if awk '
+    /^RLP_OUT="\$\(bash "\$SELF\/retired-layer-passage\.sh"/ { print "bl276_dead_passage_row() {"; ded=1 }
+    ded==1 && /^fi$/ { print $0; print "}"; ded=0; next }
+    { print }
+  ' "$REC/apply.sh" | bl_mut "$BLROOT/bl-m1"; then
+  BLM1="$(bl_mut_vec "$BLROOT/bl-m1" hit hit yes)"
+  case "$BLM1" in
+    0\|1\|*) ok "BL-m1 (the whole passage block wrapped in a function nothing calls): BL-1 goes red — the row is lexically intact and unreachable, which is the first regression the filed receipt accepts" ;;
+    1\|*)    bad "BL-m1 SURVIVED: the passage row was still emitted from inside an uncalled function ($BLM1), so BL-1 is not testing reachability" ;;
+    *)       bad "BL-m1 produced a vector this fixture does not recognise ($BLM1) — it may have died for an unrelated reason, in which case BL-1's kill is unearned" ;;
+  esac
+  case "$BLM1" in
+    *\|1\|0\|0) ok "BL-m1 and the derivation row is untouched by it — BL-1's two halves are not entangled" ;;
+    *)          bad "BL-m1 also moved the derivation row ($BLM1): the passage and derivation arms are entangled and one of them proves nothing on its own" ;;
+  esac
+else
+  bad "BL-m1 did not apply — apply.sh's passage block no longer opens with \`RLP_OUT=\"\$(bash \"\$SELF/retired-layer-passage.sh\"\` at column 0, so this mutant proves nothing. Re-anchor it on the current spelling."
+fi
+
+# --- BL-m2: the passage row under `if false` --------------------------------------------------
+# The second receipt-passing regression. The detector is still invoked, the variable is still
+# assigned from it, and the row is still lexically a `say WORKLIST` — only the condition is
+# dead. This is the one a reachability conjunct keyed on the invocation cannot see.
+if sed 's/^if \[ "\$RLP_N" -gt 0 \]; then$/if false; then/' "$REC/apply.sh" | bl_mut "$BLROOT/bl-m2"; then
+  BLM2="$(bl_mut_vec "$BLROOT/bl-m2" hit hit yes)"
+  case "$BLM2" in
+    0\|1\|*) ok "BL-m2 (the passage row's condition replaced by \`if false\`): BL-1 goes red although the detector is still called and the row still reads as a say WORKLIST site" ;;
+    1\|*)    bad "BL-m2 SURVIVED: the row was emitted with its guard dead ($BLM2), so BL-1 is not testing the condition" ;;
+    *)       bad "BL-m2 produced a vector this fixture does not recognise ($BLM2)" ;;
+  esac
+  case "$BLM2" in
+    *\|1\|0\|0) ok "BL-m2 and the derivation row is untouched by it" ;;
+    *)          bad "BL-m2 also moved the derivation row ($BLM2): the two arms are entangled" ;;
+  esac
+else
+  bad "BL-m2 did not apply — the passage row's guard is no longer spelled \`if [ \"\$RLP_N\" -gt 0 ]; then\` at column 0, so this mutant proves nothing"
+fi
+
+# --- BL-m3: an UNCONDITIONAL passage row consulting no detector -------------------------------
+# The third, and the one that is most obviously a row while being least obviously wrong: the
+# detector is never run and the row is emitted on every pull, so a consumer with no stale layer
+# passage at all is handed work that does not exist. BL-2 is the arm that owns it; BL-1 must
+# STAY GREEN, because an unconditional row does fire on the firing world too.
+if awk '
+    /^RLP_OUT="\$\(bash "\$SELF\/retired-layer-passage\.sh"/ { skip=1 }
+    skip==1 && /^fi$/ { skip=0
+                        print "RLP_N=1; RLP_NF=1; RLP_LIST=\"unknown\""
+                        print "  say WORKLIST retired-layer-passage \".claude/skills/ai-dlc/\" \"${RLP_N} RETIRED-LAYER-PASSAGE row(s) across ${RLP_NF} layer file(s). RE-POINT each one at the wording core carries now. File(s): ${RLP_LIST}.\""
+                        next }
+    skip==1 { next }
+    { print }
+  ' "$REC/apply.sh" | bl_mut "$BLROOT/bl-m3"; then
+  BLM3_P="$(bl_mut_vec "$BLROOT/bl-m3" hit hit yes)"
+  BLM3_N="$(bl_mut_vec "$BLROOT/bl-m3" miss miss yes)"
+  case "$BLM3_N" in
+    1\|*) ok "BL-m3 (an unconditional row consulting no detector): BL-2 goes red — the near-miss consumer, which has no stale passage at all, is handed the row anyway" ;;
+    0\|*) bad "BL-m3 SURVIVED: the near-miss consumer drew no passage row from an unconditional emitter ($BLM3_N), so BL-2 is not testing that the row is derived from the detector" ;;
+    *)    bad "BL-m3 produced a vector this fixture does not recognise ($BLM3_N)" ;;
+  esac
+  case "$BLM3_P" in
+    1\|1\|0\|0) ok "BL-m3 and BL-1 stays GREEN under it — an unconditional row does reach the firing consumer, which is exactly why BL-1 alone cannot catch this regression and BL-2 is not redundant" ;;
+    *)          bad "BL-m3 also moved the firing world ($BLM3_P): BL-1 and BL-2 are entangled, and the near-miss kill above is not cleanly attributable" ;;
+  esac
+else
+  bad "BL-m3 did not apply — the passage block could not be replaced by an unconditional emitter; re-anchor it on the current spelling"
+fi
+
+# --- BL-m4: the passage row RE-SITED to where the finisher re-derives it ----------------------
+#
+# THE FOURTH RECEIPT-PASSING REGRESSION, AND THE ONE WITH THE WORST CONSEQUENCE. The row is
+# moved out of the FINISH=0 span and emitted under `--finish` instead, beside the trailing
+# hook/transient/agent rows and BEFORE write_stamp. It reads as a correct fix -- the row exists,
+# it is derived from the detector, it is a say WORKLIST line -- and it wedges the consumer: the
+# row raises worklist_n over a tree `--finish` cannot change, the stamp is withheld forever and
+# `.ai-dlc-applying` never clears. BL-5 owns it. BL-1 must also go red, because the row leaves
+# the ordinary path entirely; that is the one place two arms genuinely both fire, and BL-5 is
+# the one that names the consequence.
+if awk '
+    /^RLP_OUT="\$\(bash "\$SELF\/retired-layer-passage\.sh"/ { cap=1 }
+    cap==1 { blk = blk $0 "\n"; if ($0 ~ /^fi$/) cap=2; next }
+    /^if \[ "\$FINISH" = 1 \]; then$/ { print; if (blk != "") { printf "%s", blk; blk="" } ; next }
+    { print }
+  ' "$REC/apply.sh" | bl_mut "$BLROOT/bl-m4"; then
+  BLM4_F="$(bl_mut_vec "$BLROOT/bl-m4" hit hit yes --finish)"
+  # THE WEDGE ITSELF, READ OFF THE TREE RATHER THAN OFF THE ROW COUNT. `bl_mut_vec` leaves its
+  # consumer on disk, so the stamp and the marker this mutant's finisher wrote are still there.
+  # A row count is the symptom; the stamp left at BASE with `.ai-dlc-applying` still present is
+  # the CONSEQUENCE, and it is what `core/git-hooks/pre-push`'s applying guard acts on. This
+  # repo has shipped a guard whose refusal was asserted by a row count that was true either way.
+  BLM4_FC="$(bl_last_mut_consumer)"
+  BLM4_FV="$(sed -n 's/^version:[[:space:]]*//p' "$BLM4_FC/.claude/.ai-dlc-version" 2>/dev/null | head -1)"
+  BLM4_FM="$([ -n "$BLM4_FC" ] && [ -f "$BLM4_FC/.claude/.ai-dlc-applying" ] && echo PRESENT || echo GONE)"
+  BLM4_O="$(bl_mut_vec "$BLROOT/bl-m4" hit hit yes)"
+  if [ -z "$BLM4_FC" ]; then
+    bad "BL-m4 could not recover the consumer directory its finisher ran against, so the wedge conjunct below has no subject to read — this arm is unproven"
+  elif [ "$BLM4_FV" = "1.0.0" ] && [ "$BLM4_FM" = PRESENT ]; then
+    ok "BL-m4 and the wedge is observed on the TREE, not inferred from a row: the mutant's finisher left the stamp at 1.0.0 with .ai-dlc-applying still on disk, which is the state pre-push refuses every push over and which no further --finish can clear"
+  else
+    bad "BL-m4 the re-sited row did not withhold the finisher's stamp (version='${BLM4_FV:-<absent>}' marker=$BLM4_FM) — BL-5's second conjunct is then asserting a consequence this mutation does not produce, and the siting claim rests on the row count alone"
+  fi
+  case "$BLM4_F" in
+    1\|*) ok "BL-m4 (the passage row re-sited beside the trailing rows, under --finish): BL-5 goes red — the finisher re-derives a row over a tree it never writes, raising worklist_n before write_stamp" ;;
+    0\|*) bad "BL-m4 SURVIVED: --finish emitted no passage row with the block moved into its branch ($BLM4_F), so BL-5 is not testing the siting" ;;
+    *)    bad "BL-m4 produced a vector this fixture does not recognise ($BLM4_F)" ;;
+  esac
+  case "$BLM4_O" in
+    0\|1\|*) ok "BL-m4 and BL-1 goes red with it — the row left the ordinary path, which is the half a --finish-only fix gets wrong in the other direction" ;;
+    *)       bad "BL-m4 left the ordinary-run row in place ($BLM4_O): the mutation did not move the block, so BL-5's kill above is not attributable to the siting" ;;
+  esac
+else
+  bad "BL-m4 did not apply — either the passage block or apply.sh's \`if [ \"\$FINISH\" = 1 ]; then\` branch has been respelled, so BL-5 is unproven against a re-sited row"
+fi
+
+# --- BL-m5: the relevance scan stops reading the FENCE ----------------------------------------
+#
+# ANCHORED ON THE PREDICATE THAT DECIDES, NOT ON THE GUARD ABOVE IT — AND THAT IS A MEASUREMENT.
+# The obvious mutation is `if [ -n "${VD_MOVED:-}" ] && [ "$VD_LISTED" -gt 0 ]` widened to
+# `true`, and it SURVIVES: both conjuncts are already true on the near-miss consumer, which has
+# a markdown artifact and a non-empty changed set. Widening a guard that already passes changes
+# no decision, and a mutant that changes no decision reads exactly like an arm that cannot fire.
+# What decides relevance is `VD_HITS`, and what computes it is the awk's `infence` test. Drop
+# the fence requirement from the line that accumulates hits and the scan matches the SAME
+# command wherever it appears — which is precisely the property BL-2's near-miss seeds, in a
+# line spelled exactly as the offender's but outside any fence.
+if sed 's/^          infence \&\& \/\^\[\[:blank:\]\]\*\\\$ \/ {$/          \/^[[:blank:]]*\\$ \/ {/' \
+     "$REC/apply.sh" | bl_mut "$BLROOT/bl-m5"; then
+  BLM5_N="$(bl_mut_vec "$BLROOT/bl-m5" miss miss yes)"
+  BLM5_P="$(bl_mut_vec "$BLROOT/bl-m5" hit hit yes)"
+  case "$BLM5_N" in
+    "0|0|0|0")
+      bad "BL-m5 SURVIVED: the near-miss consumer drew nothing with the fence requirement removed ($BLM5_N), so BL-2's derivation half is not testing that the scan reads the FENCE — an unfenced command naming a changed core path would route work that no derivation records" ;;
+    *)
+      ok "BL-m5 (the relevance scan no longer requires the \`\`\`derived fence): BL-2 goes red — the near-miss consumer's unfenced quotation of the same command is matched, and a citation nothing recorded is routed to the validator" ;;
+  esac
+  case "$BLM5_P" in
+    1\|*) ok "BL-m5 and the passage row is untouched by it — the derivation scan and the passage detector are separately gated" ;;
+    *)    bad "BL-m5 also moved the passage row ($BLM5_P): the two sites are entangled" ;;
+  esac
+else
+  bad "BL-m5 did not apply — the derivation scan's fenced-command rule is no longer spelled \`infence && /^[[:blank:]]*\\\$ / {\`, so BL-2's derivation half is unproven against a scan that ignores the fence. Re-anchor it on the current spelling."
+fi
+
+# --- BL-m6: the WORKLIST row emitted whether or not the validator is there --------------------
+#
+# ANCHORED ON THE `elif` THAT SPLITS THE TWO BRANCHES, for the same reason BL-m5 is anchored
+# where it is: the corpus guard and the join guard are both already satisfied on every world
+# that reaches this site, so editing either changes nothing. The decision under test is which
+# of the two branches a stranded-citation consumer lands in, and `[ -f "$VD_VALIDATOR" ]` on
+# the first `elif` is the whole of it. Drop that conjunct and a consumer with no
+# `validate-artifact-derivations.sh` is handed a WORKLIST row naming a script it does not have
+# — work it cannot do, in the channel that withholds its stamp. BL-4's validator-absent half
+# owns it; BL-4's empty-corpus half must stay green, because that world never reaches the
+# branch at all.
+if sed 's/^    elif \[ "\$VD_HITS" -gt 0 \] \&\& \[ -f "\$VD_VALIDATOR" \]; then$/    elif [ "$VD_HITS" -gt 0 ]; then/' \
+     "$REC/apply.sh" | bl_mut "$BLROOT/bl-m6"; then
+  BLM6_V="$(bl_mut_vec "$BLROOT/bl-m6" hit hit no)"
+  BLM6_E="$(bl_mut_vec "$BLROOT/bl-m6" hit empty no)"
+  case "$BLM6_V" in
+    *\|1\|*) ok "BL-m6 (the WORKLIST branch stops asking whether the validator is present): BL-4's validator-absent half goes red — the consumer is handed a WORKLIST row naming a script that is not on its tree, and that row withholds its stamp" ;;
+    *\|0\|0\|1) bad "BL-m6 SURVIVED: the validator-absent consumer still drew its unchecked DECISION ($BLM6_V), so BL-4 is not testing the branch — the split is being made somewhere this mutation does not reach" ;;
+    *)       bad "BL-m6 produced a vector this fixture does not recognise ($BLM6_V)" ;;
+  esac
+  case "$BLM6_E" in
+    "1|0|0|0") ok "BL-m6 and the empty-corpus world is untouched by it — that consumer never reaches the branch, so BL-4's two halves are not entangled" ;;
+    *)         bad "BL-m6 also moved the empty-corpus world ($BLM6_E): BL-4's halves are entangled and one of them proves nothing on its own" ;;
+  esac
+else
+  bad "BL-m6 did not apply — the derivation site's WORKLIST branch is no longer spelled \`elif [ \"\$VD_HITS\" -gt 0 ] && [ -f \"\$VD_VALIDATOR\" ]; then\`, so BL-4 is unproven against a row that names an absent validator"
+fi
+
+fi  # ---- end of the BL-S0 subject probe -------------------------------------------------------
+fi  # ---- end of the BL-276 block ------------------------------------------------------------
+
 echo
 if [ "$fails" -eq 0 ]; then
   echo "PASS  apply-restamp-worklist: a run that hands back a WORKLIST or a DECISION row leaves"

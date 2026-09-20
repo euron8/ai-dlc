@@ -18,11 +18,9 @@
 #                         should have been placed was not, it says so instead (see phase 5).
 #
 # WHAT IT HANDS BACK (it does NOT guess these):
-#   WORKLIST semantic-merge   <path>      a BOTH-CHANGED file needing a 3-way PROSE merge (LLM)
-#   WORKLIST override-readopt <override>  a HARD-OVERRIDE-DRIFT-SECTION: merge the section, then
-#                                         readopt-override.sh --stamp readopt (LLM + gated script)
-#   WORKLIST extension-reread <entry>     an EXTENSION-HOOK-DRIFT: the hooked core file changed,
-#                                         so re-read the entry and record a verdict (LLM)
+#   WORKLIST <kind> <subject> <detail>    concrete work that CLEARS when the work is done, so the
+#                                         re-stamp is withheld until it is. Every kind is named at
+#                                         its own emitting site below.
 #   DECISION <kind> <path> <why>          a genuine operator call (unknown drift refile-vs-revert,
 #                                         a deletion, a value with no default)
 #   DECISION restamp-withheld <stamp>     work is still outstanding — a file that SHOULD have
@@ -30,6 +28,17 @@
 #                                         above is undisposed — so the stamp was NOT advanced and
 #                                         the in-flight marker was NOT cleared. Finish the rows,
 #                                         then re-run with --finish.
+#
+# THE KIND SET IS DERIVED FROM THIS FILE, NEVER HAND-LISTED HERE, AND THAT IS A REPAIR RATHER
+# THAN A STYLE CHOICE. This block used to name three WORKLIST kinds. It was eleven by the time
+# anybody counted, and the eight it had silently stopped covering were invisible precisely
+# because the list LOOKED complete -- a reader checking whether a class was routed consulted a
+# header that had been wrong for eight additions. A restatement drifts tighter than what it
+# restates, and nothing compares the two. The live set is one command:
+#
+#   grep -oE '^[[:blank:]]*say (WORKLIST|DECISION) [a-z-]+' apply.sh | awk '{print $2, $3}' | sort -u
+#
+# Read that, not a paragraph. The SHAPE above is the contract; the membership is the code's.
 #
 # THE STAMP IS THE NEXT PULL'S BASE, AND A HAND-BACK IS NOT DONE WHEN THIS PROGRAM EXITS.
 # This driver used to gate the stamp on `mech_fail` alone -- its own inability to place a file --
@@ -604,6 +613,154 @@ done <<EOF
 $PC
 EOF
 [ -n "$RT_PC" ] && rm -f "$RT_PC"
+
+# --- 1b. RETIRED CORE PASSAGES STILL CARRIED BY A LAYER FILE ---------------------------------
+#
+# THE DETECTOR IS SOUND AND ITS REMEDY CHANNEL WAS PROSE. `retired-layer-passage.sh` asks whether
+# a consumer layer file still carries a LINE core had at base and deleted by theirs, and its rows
+# reached `emit-report.sh`s report section and nothing else. The sibling TOKEN case has been wired
+# into the worklist since the `*CLASSIFY*` arm above gained its `retired-tokens.sh` call, so the
+# asymmetry sat inside this one file: one row for the token class, none for the passage class,
+# while `ai-dlc-update/SKILL.md` step 3a-iv says in as many words that a passage row "is a worklist
+# item". A consumer reads the worklist; a report section is read by whoever happens to read it.
+#
+# ONCE PER RUN, NOT ONCE PER PATH. The detector answers about the whole layer corpus in one call
+# and its subject is a layer file, which the `*CLASSIFY*` loop above never iterates. Siting it
+# inside that arm would fork the detector per classified path and ask it the same question every
+# time.
+#
+# THE DETAIL SAYS RE-POINT, AND THAT IS A MEASUREMENT RATHER THAN A WORDING PREFERENCE. On the
+# release pair that motivated this row, every reported row cited a line core STILL CARRIES at
+# theirs -- the text was re-sited into another rulebook file, not retired. The detector cannot
+# tell a move from a death, because its input is the removed-line set of one path glob; the
+# remedy on a re-siting release is therefore a new citation, and a row that said "delete" would
+# instruct the consumer to destroy text that is still current.
+#
+# INSIDE THE `FINISH=0` SPAN, DELIBERATELY, AND THE SITING IS THE LOAD-BEARING PART. `say`
+# increments `handback` and `worklist_n`, and `--finish` gates its stamp on `worklist_n` alone.
+# A row emitted where the trailing `hook_registration_row` / `transient_ignore_row` /
+# `agent_definitions_row` run would be re-derived by the finisher, on a tree whose layer files the
+# apply never rewrites, before `write_stamp` -- so the stamp would be withheld, `.ai-dlc-applying`
+# would stay, and `core/git-hooks/pre-push` would refuse every push with no exit. The second
+# disposition SKILL.md offers ("record why reproducing the retired text is still correct") changes
+# nothing this detector reads and `layer-contract.yaml` carries no acknowledgement channel for it,
+# so there is no work that clears such a row. Here the row is a hand-back on the ordinary run and
+# `--finish` is the exit, which is the terminating shape the two counters above exist to preserve.
+#
+# STDERR IS DISCARDED AT THIS CALL SITE, AS AT EVERY OTHER IN THIS FILE, AND THAT MAKES ONE
+# SILENCE INDISTINGUISHABLE FROM ANOTHER. The detector refuses to report clean when it cannot read
+# `setup-sites.md`, but it refuses ON STDERR and returns no rows -- so a staging that ships this
+# directory's `*.sh` without its `*.md` produces zero rows and no row here, which reads exactly
+# like a clean corpus. The failure is in the safe direction (a missed row, never a false one) and
+# it is the fixture that must assert the corpus was readable, not this driver.
+RLP_OUT="$(bash "$SELF/retired-layer-passage.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)"
+RLP_N="$(printf '%s\n' "$RLP_OUT" | awk -F'\t' '$1=="RETIRED-LAYER-PASSAGE"{n++} END{print n+0}')"
+case "${RLP_N:-0}" in ''|*[!0-9]*) RLP_N=0 ;; esac
+if [ "$RLP_N" -gt 0 ]; then
+  RLP_FILES="$(printf '%s\n' "$RLP_OUT" \
+    | awk -F'\t' '$1=="RETIRED-LAYER-PASSAGE"{p=$2; sub(/:[0-9]+$/,"",p); print p}' | sort -u)"
+  RLP_NF="$(printf '%s\n' "$RLP_FILES" | sed '/^$/d' | wc -l | tr -d ' ')"
+  RLP_LIST="$(printf '%s\n' "$RLP_FILES" | sed '/^$/d' | tr '\n' ' ')"
+  # ON ONE LINE, LIKE THE TOKEN ROW ABOVE, AND THAT IS NOT A STYLE CHOICE. Every binding on this
+  # class keys on the line that EMITS -- `^[[:blank:]]*say WORKLIST …` plus the class name -- and
+  # a backslash continuation puts the class name on a line the anchor cannot reach, so the row
+  # would exist and every grammar watching for it would read the same clean zero as its absence.
+  say WORKLIST retired-layer-passage ".claude/skills/ai-dlc/" "${RLP_N} RETIRED-LAYER-PASSAGE row(s) across ${RLP_NF} layer file(s): each reproduces a rulebook line core carried at ${BASE} and no longer carries at ${THEIRS}. RE-POINT each one at the wording core carries now — measured on a re-siting release, every such row cited text that had MOVED to another rulebook file rather than been retired, so the remedy is a new citation and never a deletion. File(s): ${RLP_LIST}. Re-run \`reconcile/retired-layer-passage.sh <dist> ${BASE} ${THEIRS} <consumer>\` afterwards; an empty result is the clear, and read its stderr — a run that opened no layer file says so there and is not the same as finding none. This does NOT block the apply: a layer file is consumer-owned and this program never rewrites one."
+fi
+
+# --- 1c. RECORDED DERIVATIONS STRANDED BY THE SAME RELOCATION --------------------------------
+#
+# THE SAME ASYMMETRY ONE POPULATION OVER. The rows above are about a layer file reproducing core
+# TEXT. This one is about a planning artifact whose ```derived fence EXECUTES a core path: the
+# fence records a command and the output it produced, and when core text is re-sited the command
+# runs against a file that no longer holds the text it was written to measure. It does not fail
+# loudly. It re-runs green or red by accident of what still resolves at the old path.
+#
+# A ROUTING ROW, NOT A SECOND DETECTOR, BECAUSE THE DETECTOR ALREADY SHIPS.
+# `core/scripts/validate-artifact-derivations.sh` re-runs every fenced command and names the ones
+# that no longer reproduce; building a staleness check here would split that corpus in two and
+# neither half would see everything. What is missing is not the check, it is the routing: nothing
+# on the pull path tells a consumer that this release is the one that stranded its citations.
+#
+# THE GATE IS A PATH JOIN AND IT DECIDES RELEVANCE, NEVER STALENESS. It asks only whether some
+# fenced command names a core path this range CHANGED. It does not parse a derivation, does not
+# run one, and reaches no verdict about any of them -- the validator named in the row owns that
+# question, on the operator's invocation.
+#
+# CHANGED, NOT DELETED, AND THE DIFFERENCE IS THE WHOLE ARM. The obvious predicate -- a fence
+# naming a core path present at base and ABSENT at theirs -- scores ZERO on the case that
+# motivated this row: the relocation moved text INSIDE files that exist at both ends, so no core
+# path was deleted at all. A deletion-keyed gate here is a check that cannot fire, which reads
+# exactly like one that passed.
+#
+# NOT RUN FROM HERE. The validator executes the commands it finds; parse-only over a real
+# consumer's artifact corpus is tens of seconds and execution is more. An apply may spend one
+# cheap scan to decide whether to NAME the work. It may not spend the work itself.
+#
+# GATED ON THE JOIN BEING NON-EMPTY, WHICH IS THE DECLARATION AND NOT THE VALIDATOR, and that is
+# `transient_ignore_row`s measured false positive taken forward rather than re-learned. Keying an
+# absent-branch on the TOOL fires on every consumer predating the mechanism -- a tree with neither
+# half is not a defect, it is a tree this release has nothing to say about -- and that is what
+# failed `apply-restamp-worklist`s C4, whose consumer asserts ZERO hand-back rows. A consumer with
+# no artifact corpus, or one whose fences cite nothing this range touched, gets no row from either
+# branch here. Only once real stranded citations exist does a missing validator become a
+# reportable split.
+#
+# INSIDE THE `FINISH=0` SPAN FOR A REASON OF ITS OWN, NOT BY ANALOGY WITH THE ROW ABOVE. The
+# remedy re-anchors a citation at the path core carries NOW -- and on the motivating range that
+# replacement path is itself in the changed set, so the join still matches after the work is
+# correctly done. A row whose own remedy cannot clear it must never reach the finisher, which
+# gates on `worklist_n`: it would withhold the stamp forever. Here it is a hand-back on the
+# ordinary run, and `--finish` is the exit.
+VD_ART="$CONSUMER/_bmad-output"
+VD_VALIDATOR="$CONSUMER/scripts/ai-dlc/validate-artifact-derivations.sh"
+if [ -d "$VD_ART" ]; then
+  # Consumer-relative, because that is how an artifact writes a path. `map_consumer` is the one
+  # mapper this program has (loaded from preclassify.sh above); a private table here is the
+  # defect I17 exists to prevent.
+  VD_MOVED="$(git -C "$DIST" diff --name-only "$BASE" "$THEIRS" -- core/ 2>/dev/null \
+    | while IFS= read -r _vp; do [ -n "$_vp" ] && map_consumer "$_vp"; done | sort -u | paste -sd'|' -)"
+  VD_LISTED="$(find "$VD_ART" -type f -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
+  case "${VD_LISTED:-0}" in ''|*[!0-9]*) VD_LISTED=0 ;; esac
+  if [ -n "${VD_MOVED:-}" ] && [ "$VD_LISTED" -gt 0 ]; then
+    # THE NEEDLES RIDE IN `-v`, NOT IN A FILE awk OPENS. `getline < file` returns -1 for an
+    # unopenable file and 0 for an empty one and raises nothing, so a needle set that failed to
+    # load scores every artifact as a non-instance and the run reads clean. A `-v` that did not
+    # bind is visible as an empty split. `|` is the separator because it cannot occur in a path
+    # this mapper emits, and `awk -v` carries no newline at all.
+    #
+    # EACH INVOCATION REPORTS WHAT IT OPENED. `xargs` splits the corpus into batches, so the
+    # counts are summed below and compared against the `find` listing: a batch that never ran
+    # produces the same empty stdout as a batch that matched nothing.
+    VD_SCAN="$(find "$VD_ART" -type f -name '*.md' -print0 2>/dev/null \
+      | xargs -0 awk -v paths="$VD_MOVED" '
+          BEGIN { n = split(paths, A, "|"); for (i = 1; i <= n; i++) if (A[i] != "") P[A[i]] = 1 }
+          FNR == 1 { files++; infence = 0 }
+          /^[[:blank:]]*```derived[[:blank:]]*$/ { infence = 1; next }
+          infence && /^[[:blank:]]*```[[:blank:]]*$/ { infence = 0; next }
+          infence && /^[[:blank:]]*\$ / {
+            for (p in P) if (index($0, p) > 0) { hits++; H[FILENAME] = 1; break }
+          }
+          END { m = 0; for (f in H) m++; printf "%d\t%d\t%d\n", files + 0, hits + 0, m }
+        ' 2>/dev/null)"
+    VD_SCANNED="$(printf '%s\n' "$VD_SCAN" | awk -F'\t' '{a+=$1} END{print a+0}')"
+    VD_HITS="$(printf '%s\n' "$VD_SCAN" | awk -F'\t' '{a+=$2} END{print a+0}')"
+    VD_NF="$(printf '%s\n' "$VD_SCAN" | awk -F'\t' '{a+=$3} END{print a+0}')"
+    case "${VD_SCANNED:-0}" in ''|*[!0-9]*) VD_SCANNED=0 ;; esac
+    case "${VD_HITS:-0}" in ''|*[!0-9]*) VD_HITS=0 ;; esac
+    case "${VD_NF:-0}" in ''|*[!0-9]*) VD_NF=0 ;; esac
+    if [ "$VD_SCANNED" -lt "$VD_LISTED" ]; then
+      say DECISION artifact-derivations-unreadable "_bmad-output/" \
+        "the artifact corpus could not be fully read — ${VD_SCANNED} of ${VD_LISTED} markdown file(s) were opened — so whether this range stranded a recorded derivation is UNKNOWN, and unknown reads exactly like clean. Run \`bash scripts/ai-dlc/validate-artifact-derivations.sh _bmad-output/\` by hand before treating this pull as done."
+    elif [ "$VD_HITS" -gt 0 ] && [ -f "$VD_VALIDATOR" ]; then
+      say WORKLIST artifact-derivations "_bmad-output/" \
+        "${VD_HITS} recorded \`derived\` command(s) across ${VD_NF} artifact file(s) name a core path this range CHANGED between ${BASE} and ${THEIRS}. Core text that moved leaves each of those commands measuring whatever still happens to sit at the old path, which re-runs without failing. RE-POINT each stale one at the path core carries at ${THEIRS}. The check is \`bash scripts/ai-dlc/validate-artifact-derivations.sh _bmad-output/\` — it re-runs every fenced command, names the ones that no longer reproduce, and exit 0 is the clear. NOT run from here: it executes the commands it finds, and that is a cost this driver must not charge on a pull."
+    elif [ "$VD_HITS" -gt 0 ]; then
+      say DECISION artifact-derivations-unchecked "_bmad-output/" \
+        "${VD_HITS} recorded \`derived\` command(s) across ${VD_NF} artifact file(s) name a core path this range changed, and scripts/ai-dlc/validate-artifact-derivations.sh is not on this consumer, so nothing can re-run them. It is delivered by install.sh's copy loop over core/scripts/; run a fresh install of that script, then \`bash scripts/ai-dlc/validate-artifact-derivations.sh _bmad-output/\`."
+    fi
+  fi
+fi
 
 # THE DRIVER REPLACED ITSELF, AND THE OPERATOR IS TOLD SO RATHER THAN LEFT TO INFER IT.
 # The rename above makes this SAFE -- the run finishes on the version that was invoked -- but
