@@ -64,6 +64,19 @@
 # `PASS — EXAMINED NOTHING`. It is not failed: a block that claims nothing has
 # nothing to substantiate. It is no longer spelled like a verified story.
 #
+# AND THE POINTER ROAD REPORTS ITS BULLETS WITHOUT FAILING THEM. Where a
+# `requires_context:` pointer resolves to an anchor window, the PASS line also
+# carries how many of the block's bullets are byte-present in that window and how
+# many are not. This is an OBSERVATION and never an exit code: the contract above
+# stands, an abridged cite-by-reference restatement is the honest shape on this
+# road, and on a reference consumer's corpus the great majority of bullets on it
+# are not byte-present -- as a failure condition it would red most of the honest
+# blocks it can see. The figures and the tree they were taken in are recorded
+# beside the counters below. What the exemption never justified is that a
+# fabricated block and a verbatim one printed the same line as well as the same
+# code, leaving nothing downstream able to tell them apart. The counts separate
+# them; the verdict does not move.
+#
 # NOTE — category error this guards against: context/tool thresholds (e.g. the
 # ctx INTENT_SEARCH_THRESHOLD) gate what re-enters the conversation on an
 # intent-bearing tool call; they never gate what is written to a file. Never
@@ -479,6 +492,50 @@ pointers_checked = 0
 # DEFAULT_SOR_BASENAMES comment is something a run ANSWERS rather than something an
 # operator estimates. Never a failure: an unmigrated citation is behind, not wrong.
 legacy_claims = 0
+# REPORT-ONLY BULLET OBSERVATION ON THE `requires_context:` ROAD. The byte-match stays
+# off this road as an EXIT CODE -- see the header contract -- because an abridged
+# cite-by-reference restatement is the honest shape here, and as a failure condition it
+# would red most of the honest blocks it can observe at all. That is the regression this
+# road's exemption exists to avoid.
+#
+# What the exemption never justified is the two roads being INDISTINGUISHABLE. A block
+# whose bullets are pure fabrication and one whose bullets are verbatim at the cited
+# anchor produced the same exit code AND the same report line, so nothing downstream of
+# this script could tell them apart. These two counters put the difference on the PASS
+# line while leaving the verdict alone.
+#
+# THE FP SET AND THE REACHABILITY, WITH THE TREE NAMED. Derived by driving THIS script
+# over a reference consumer checkout, `.claude/worktrees/` EXCLUDED -- a count over a
+# tree walk is a function of what is on disk, and the same walk including the agent
+# worktrees reads 189 for a population that is really 96, because each worktree carries
+# a duplicate of files already counted:
+#
+#   population (LOCKED_REQUIREMENTS + requires_context:, worktrees excluded)   96
+#     observation PRINTED on the PASS line                                      5
+#       clean (0 not byte-present)                                              1
+#       >=1 not byte-present  <- the FP set                                     4
+#     no resolvable pointer, FAILED                                            38
+#     no resolvable pointer, PASSED                                            53
+#                                                          partition sum       96
+#   bullets byte-present 1 / not byte-present 30
+#   CONTROL impossible token over the same walk                                  0
+#   CONTROL total .md walked                                                 18263
+#
+# THE SUPPRESSED SET IS STRUCTURALLY EMPTY, AND ASKING WHETHER IT WAS COST THREE WRONG
+# NUMBERS. "Computed but not printed" looks like a real bucket -- a FAIL exits before the
+# PASS line -- so a story could seem to resolve a window and never report it. It cannot: a
+# story fails this road BECAUSE its pointer did not resolve (unmatched sentinel, dangling
+# anchor, artifact absent), and an unresolved pointer appends no window. Printed and
+# computed are the same set by construction, so there is one reading and no percentage
+# needs a qualifier.
+#
+# Every wrong figure for that bucket came from grepping each file for a `requires_context:`
+# LINE and inferring a resolved window. Text about a program is not the program. The table
+# above is from the SHIPPING script instrumented at its `ctx_windows.append` site, seed
+# asserted applied, partition exact. Re-derive it the same way; the numbers move with the
+# consumer's corpus.
+ctx_bullets_verbatim = 0
+ctx_bullets_absent = 0
 
 # THE UNMATCHED-SENTINEL GUARD. An opener with no closer is not "nothing to check" — it
 # is this script failing to parse a block that is right there, and it used to be
@@ -527,6 +584,11 @@ for bidx, block in enumerate(blocks, start=1):
     # Resolving the pointer keeps this script's stated contract intact -- "honest
     # citation cannot fail this check" -- because an honest pointer resolves. What it
     # removes is the road by which a block substantiates nothing and scores as clean.
+    # The anchor windows this block's RESOLVED pointers name. The report-only
+    # observation below matches against their UNION, on the same terms as the
+    # full_text_source road at (c): a block's bullets are looked for in what the
+    # block CITES, and requiring each at each is the cross-product defect.
+    ctx_windows = []
     for cite in [REQUIRES_CTX_CITE_RE.match(ln).group(1)
                  for ln in lines if REQUIRES_CTX_CITE_RE.match(ln)]:
         artifact, anchor = split_citation(cite)
@@ -542,13 +604,30 @@ for bidx, block in enumerate(blocks, start=1):
         if not anchor:
             continue
         with open(resolved, "r", encoding="utf-8") as pfh:
-            if anchor_window(pfh.read(), anchor) is None:
+            ctx_window = anchor_window(pfh.read(), anchor)
+            if ctx_window is None:
                 failures.append(
                     f"block #{bidx}: requires_context anchor '{anchor}' is absent from "
                     f"'{artifact}' (dangling load pointer). The file resolves and the "
                     f"anchor does not, so the pointer names a section the artifact no "
                     f"longer has."
                 )
+            else:
+                ctx_windows.append(ctx_window)
+
+    # REPORT ONLY. Nothing here appends to `failures`, touches `claims_checked` or
+    # `pointers_checked`, or reaches the exit code. It counts, for this block's bullets,
+    # how many are byte-present in the union of the windows its pointers resolved to.
+    if ctx_windows:
+        ctx_norm = collapse_ws("\n".join(ctx_windows))
+        for btext in bullets:
+            bnorm = collapse_ws(btext)
+            if not bnorm:
+                continue
+            if bnorm in ctx_norm:
+                ctx_bullets_verbatim += 1
+            else:
+                ctx_bullets_absent += 1
 
     if not sources:
         # A block with requirement bullets and NEITHER citation form is
@@ -680,11 +759,21 @@ else:
         f", {legacy_claims} of them still at the legacy '{LEGACY_SOR_BASENAME}'"
         if legacy_claims else ""
     )
+    # The observation is OBSERVED, not enforced: it is printed only when a pointer
+    # resolved to a window, and it never moves the verdict above.
+    ctx_note = ""
+    if ctx_bullets_verbatim or ctx_bullets_absent:
+        ctx_note = (
+            f", requires_context bullets {ctx_bullets_verbatim} byte-present / "
+            f"{ctx_bullets_absent} not byte-present at the cited anchor(s) "
+            f"(observation only — an abridged restatement is the honest shape on "
+            f"this road and is never failed here)"
+        )
     print(
         f"VALIDATE-LOCKED-ANCHOR: PASS ({story_path}, {len(blocks)} block(s), "
         f"{claims_checked} full_text_source claim(s) verified against "
         f"'{sor_basename}'{legacy_note}, {pointers_checked} requires_context "
-        f"pointer(s) resolved)"
+        f"pointer(s) resolved{ctx_note})"
     )
 sys.exit(0)
 PYEOF

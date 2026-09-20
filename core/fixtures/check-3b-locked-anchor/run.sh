@@ -798,6 +798,277 @@ else
   rc=1
 fi
 
+# --- THE POINTER ROAD'S COUNT FIELDS SEPARATE A FABRICATION FROM A QUOTATION --------
+#
+# THE DEFECT THESE EXIST TO CATCH. A block whose bullets were pure fabrication scored
+# BYTE-IDENTICALLY to one whose bullets were verbatim, whenever the block cited
+# `requires_context:` -- same exit code AND same report line -- so nothing downstream of
+# this script could tell them apart. The other two roads reject the identical
+# fabrication, which is the control that the validator discriminates and that this road
+# is where it did not.
+#
+# AND THE EXIT CODE MUST NOT MOVE, WHICH IS WHY THESE ARMS ASSERT IT SEPARATELY. An
+# abridged cite-by-reference restatement is the honest shape on this road: measured by
+# driving the shipping script over a reference consumer checkout with `.claude/worktrees/`
+# EXCLUDED, 4 of the 5 stories that reach the observation carry at least one non-verbatim
+# bullet. As a failure condition that reds most of the honest blocks the observation can
+# see, and a builder who makes the fabricated story exit 1 has shipped that regression.
+# Every arm below therefore pairs the count assertion with an exit-code assertion.
+# `validate-locked-anchor.sh` carries the full partition and the tree it was taken in;
+# re-derive there rather than quoting this comment.
+#
+# THE ARMS KEY ON THE COUNT FIELDS, NEVER ON THE FIRST LINE, AND THAT IS MEASURED RATHER
+# THAN STYLISTIC. The entry's receipt closes on EITHER an exit-code split OR a
+# first-report-line split, and a change making the line differ for a reason unrelated to
+# the bullets satisfies it while shipping nothing. Built and confirmed live: a mutant
+# replacing the observation with a per-story run marker on the PASS line splits the two
+# stories' first lines perfectly, closes the receipt, and reports nothing about any
+# bullet. `MB1` below is that mutant and it must come out RED.
+#
+# `requires-context-story.md` IS NOT A SUBSTITUTE FOR THE ABRIDGED SEED. The file this
+# fixture designates as the honest cite-by-reference case scores 1 byte-present / 0 not --
+# its bullet is verbatim at the anchor -- so the false-positive set is EMPTY there and a
+# builder measuring FP on it reads a false zero. The abridged world below is the shape the
+# corpus lacked: an honest bullet shortened from a longer source sentence, which reports
+# `not byte-present` WHILE STILL EXITING 0. That arm is what proves report-only is
+# report-only, and a fixture without it cannot see an enforcing regression at all.
+CTX="$WORK/ctxobs"; mkdir -p "$CTX" || exit 2
+cat > "$CTX/product-brief.md" <<'CTXEOF'
+# Brief
+
+## LR-A1
+
+- LR-A1: The indexer MUST publish a per-epoch delta, including the cursor
+  position and the epoch boundary, before the next compaction begins.
+
+## LR-A2
+
+- LR-A2: The rebalancer MUST refuse a trade whose slippage exceeds two percent.
+CTXEOF
+
+ctx_story() { # ctx_story <file> <bullet>
+  printf '%s\n' "# story" "" "<!-- LOCKED_REQUIREMENTS -->" \
+    "requires_context: product-brief.md#LR-A1" "$2" \
+    "<!-- END LOCKED_REQUIREMENTS -->" > "$1"
+}
+CTX_VERBATIM="- LR-A1: The indexer MUST publish a per-epoch delta, including the cursor position and the epoch boundary, before the next compaction begins."
+CTX_FABRICATED="- LR-A1: The indexer MAY discard the epoch delta whenever it likes."
+# THE ABRIDGED HONEST BULLET. Every word of it is drawn from the source sentence and it
+# asserts nothing the source does not; it is shorter, which is what a cite-by-reference
+# restatement is FOR. It must report not-byte-present and must exit 0.
+CTX_ABRIDGED="- LR-A1: The indexer publishes a per-epoch delta before the next compaction."
+# The CROSS-SECTION bullet: byte-present in the artifact, under a heading the pointer does
+# not name. It separates "the observation matched the window" from "the observation
+# matched the file".
+CTX_FOREIGN="- LR-A2: The rebalancer MUST refuse a trade whose slippage exceeds two percent."
+
+ctx_story "$CTX/h.md" "$CTX_VERBATIM"
+ctx_story "$CTX/f.md" "$CTX_FABRICATED"
+ctx_story "$CTX/a.md" "$CTX_ABRIDGED"
+ctx_story "$CTX/x.md" "$CTX_FOREIGN"
+
+# The sides must DIFFER, asserted before any comparison is read. Two stories built from
+# one template with the same bullet produce the same counts for that reason and not
+# because the observation works.
+ctx_pairs_ok=1
+for ctx_pair in "h f" "h a" "h x"; do
+  set -- $ctx_pair
+  if cmp -s "$CTX/$1.md" "$CTX/$2.md"; then
+    echo "FIXTURE ERROR: the $1 and $2 probe stories are byte-identical — the count comparison below discriminates nothing" >&2
+    rc=2; ctx_pairs_ok=0
+  fi
+done
+[ "$ctx_pairs_ok" -eq 1 ] && echo "ok: ctx observation — the probe stories differ (the comparison has two sides)"
+
+# Read the COUNT FIELDS out of the PASS line. Never the first line as a whole: a run
+# marker, a timestamp or a path splits that and says nothing about a bullet.
+ctx_counts() { # ctx_counts <validator> <story>  -> "<rc> <found>/<notfound>"
+  local out got n
+  out="$(bash "$1" "$2" 2>&1)"; got=$?
+  n="$(sed -n 's/.*requires_context bullets \([0-9][0-9]*\) byte-present \/ \([0-9][0-9]*\) not byte-present.*/\1\/\2/p' <<<"$out")"
+  printf '%s %s' "$got" "${n:-NONE}"
+}
+
+ctx_case() { # ctx_case <validator> <story> <want-rc> <want-counts> <what>
+  local r want
+  r="$(ctx_counts "$1" "$2")"
+  want="$3 $4"
+  if [ "$r" = "$want" ]; then
+    echo "ok: ctx observation — $5 (rc=$3, $4 byte-present/not)"
+    return 0
+  fi
+  echo "FAIL: ctx observation — $5: expected rc/counts '$want', got '$r'" >&2
+  rc=1
+  return 1
+}
+
+ctx_case "$VALIDATOR" "$CTX/h.md" 0 "1/0" "a VERBATIM bullet is counted byte-present"
+ctx_case "$VALIDATOR" "$CTX/f.md" 0 "0/1" "a FABRICATED bullet is counted not byte-present AND STILL EXITS 0"
+ctx_case "$VALIDATOR" "$CTX/a.md" 0 "0/1" "an ABRIDGED HONEST bullet is counted not byte-present AND STILL EXITS 0 — the observation is a report, not a verdict"
+ctx_case "$VALIDATOR" "$CTX/x.md" 0 "0/1" "a bullet from a section the pointer does not name is not byte-present at the CITED anchor"
+
+# THE FABRICATED/HONEST SPLIT, ASSERTED ON THE COUNTS THEMSELVES. Two stories one bullet
+# apart must disagree on the count fields. This is the assertion the entry's receipt
+# cannot make, because it closes on any difference in the line.
+ctx_h="$(ctx_counts "$VALIDATOR" "$CTX/h.md")"
+ctx_f="$(ctx_counts "$VALIDATOR" "$CTX/f.md")"
+if [ "${ctx_h#* }" = "NONE" ] || [ "${ctx_f#* }" = "NONE" ]; then
+  echo "FAIL: ctx observation — one of the two stories printed NO count fields at all, so the split below is unmeasurable (h='$ctx_h' f='$ctx_f')" >&2
+  rc=1
+elif [ "${ctx_h#* }" = "${ctx_f#* }" ]; then
+  echo "FAIL: ctx observation — a verbatim and a fabricated block report the SAME count fields ('${ctx_h#* }'); nothing downstream of this validator can tell them apart" >&2
+  rc=1
+else
+  echo "ok: ctx observation — the fabricated and honest blocks SPLIT on the count fields ('${ctx_f#* }' vs '${ctx_h#* }')"
+fi
+# ... and the exit codes must NOT split. The whole constraint on this road.
+if [ "${ctx_h%% *}" = "0" ] && [ "${ctx_f%% *}" = "0" ]; then
+  echo "ok: ctx observation — CONSTRAINT: both blocks still exit 0, so the byte-match did not become a failure condition on this road"
+else
+  echo "FAIL: ctx observation — CONSTRAINT BROKEN: the exit codes moved (h='$ctx_h' f='$ctx_f'). Byte-matching this road as a verdict reds 7 of every 13 honest stories that reach it" >&2
+  rc=1
+fi
+
+# --- MB1: the RUN-MARKER mutant, which closes the receipt and ships nothing ---------
+# Built as a copy and guarded by `cmp -s`. It replaces the count fields with a per-story
+# marker: the two stories' first report lines then differ perfectly, the entry's receipt
+# closes, and no bullet was examined. The arms above must come out RED on it.
+MB1="$WORK/mut-run-marker.sh"
+MUT_OLD='        ctx_note = (
+            f", requires_context bullets {ctx_bullets_verbatim} byte-present / "
+            f"{ctx_bullets_absent} not byte-present at the cited anchor(s) "
+            f"(observation only — an abridged restatement is the honest shape on "
+            f"this road and is never failed here)"
+        )' \
+MUT_NEW='        ctx_note = f", run-marker {os.path.basename(story_path)}"' \
+python3 -c 'import os,sys; s=open(sys.argv[1],encoding="utf-8").read(); open(sys.argv[2],"w",encoding="utf-8").write(s.replace(os.environ["MUT_OLD"],os.environ["MUT_NEW"],1))' \
+  "$VALIDATOR" "$MB1"
+if cmp -s "$VALIDATOR" "$MB1"; then
+  echo "FIXTURE ERROR: MB1 changed no bytes — the run-marker mutant did not apply, so the arms above prove nothing" >&2
+  rc=2
+else
+  mb1_h="$(ctx_counts "$MB1" "$CTX/h.md")"
+  mb1_f="$(ctx_counts "$MB1" "$CTX/f.md")"
+  if [ "${mb1_h#* }" = "NONE" ] && [ "${mb1_f#* }" = "NONE" ]; then
+    echo "ok: MUTATION MB1 — a per-story run marker prints NO count fields, so the arms above score it RED (they read the counts, not the line)"
+  else
+    echo "FAIL: MUTATION MB1 — the run-marker mutant still satisfies the count arms (h='$mb1_h' f='$mb1_f'); they are reading something a marker can forge" >&2
+    rc=1
+  fi
+  # PAIRING, and it is what makes MB1 a statement about the RECEIPT rather than about the
+  # mutant being broken: the mutant's FIRST LINES still differ, so the entry's
+  # line-based receipt closes on it while it examines nothing.
+  mb1_hl="$(bash "$MB1" "$CTX/h.md" 2>&1 | head -1)"
+  mb1_fl="$(bash "$MB1" "$CTX/f.md" 2>&1 | head -1)"
+  if [ "$mb1_hl" != "$mb1_fl" ]; then
+    echo "ok: MUTATION MB1 PAIRING — the mutant's first report lines DO differ, so a receipt closing on a line split would close on it; only a count-keyed arm reds it"
+  else
+    echo "FAIL: MUTATION MB1 PAIRING — the mutant's first lines are identical, so it is not the receipt-weakness shape and MB1 above proves less than it claims" >&2
+    rc=1
+  fi
+fi
+
+# --- MB2: the ENFORCING mutant — the regression the exemption exists to avoid -------
+# The observation becomes a failure condition. The fabricated story reds, which looks like
+# an improvement, and the ABRIDGED HONEST story reds with it -- which is most of what the
+# observation can see on the real corpus. Only the abridged seed can see this, which is why
+# it had to be built.
+MB2="$WORK/mut-enforce-observation.sh"
+MUT_OLD='            else:
+                ctx_bullets_absent += 1' \
+MUT_NEW='            else:
+                ctx_bullets_absent += 1
+                failures.append(f"block #{bidx}: MUTANT — observation enforced")' \
+python3 -c 'import os,sys; s=open(sys.argv[1],encoding="utf-8").read(); open(sys.argv[2],"w",encoding="utf-8").write(s.replace(os.environ["MUT_OLD"],os.environ["MUT_NEW"],1))' \
+  "$VALIDATOR" "$MB2"
+if cmp -s "$VALIDATOR" "$MB2"; then
+  echo "FIXTURE ERROR: MB2 changed no bytes — the enforcing mutant did not apply, so the report-only assertion above proves nothing" >&2
+  rc=2
+else
+  mb2_a="$(ctx_counts "$MB2" "$CTX/a.md")"
+  if [ "${mb2_a%% *}" = "0" ]; then
+    echo "FAIL: MUTATION MB2 — with the observation appended to failures, the ABRIDGED HONEST story still exits 0; the report-only assertion is not what keeps it green" >&2
+    rc=1
+  else
+    echo "ok: MUTATION MB2 — enforcing the observation REDS the abridged honest story (report-only is what keeps it green, and an enforcing regression is visible)"
+  fi
+  # PAIRING: the same mutant must still accept the VERBATIM story, or it reds everything
+  # and its verdict is unattributable.
+  mb2_h="$(ctx_counts "$MB2" "$CTX/h.md")"
+  if [ "${mb2_h%% *}" = "0" ]; then
+    echo "ok: MUTATION MB2 PAIRING — the same mutant still accepts the verbatim story (it fails only its own assertion)"
+  else
+    echo "FAIL: MUTATION MB2 PAIRING — the enforcing mutant reds the verbatim story too; it reds everything and MB2 above is unattributable" >&2
+    rc=1
+  fi
+fi
+
+# --- MB3: the WINDOW mutant — the observation must match the CITED anchor -----------
+# Matching against the whole artifact instead of the resolved window degenerates the
+# observation to co-presence: a bullet lifted from a section the pointer does not name
+# would then count as byte-present. The cross-section story is the only seed that sees it.
+MB3="$WORK/mut-ctx-whole-file.sh"
+MUT_OLD='        ctx_norm = collapse_ws("\n".join(ctx_windows))' \
+MUT_NEW='        ctx_norm = collapse_ws(open(resolved, "r", encoding="utf-8").read())' \
+python3 -c 'import os,sys; s=open(sys.argv[1],encoding="utf-8").read(); open(sys.argv[2],"w",encoding="utf-8").write(s.replace(os.environ["MUT_OLD"],os.environ["MUT_NEW"],1))' \
+  "$VALIDATOR" "$MB3"
+if cmp -s "$VALIDATOR" "$MB3"; then
+  echo "FIXTURE ERROR: MB3 changed no bytes — the window mutant did not apply, so the cross-section arm above proves nothing" >&2
+  rc=2
+else
+  mb3_x="$(ctx_counts "$MB3" "$CTX/x.md")"
+  if [ "${mb3_x#* }" = "1/0" ]; then
+    echo "ok: MUTATION MB3 — matching the whole artifact counts a bullet from an uncited section as byte-present (the window is what scopes the observation)"
+  else
+    echo "FAIL: MUTATION MB3 — the cross-section bullet is still not byte-present with the window widened to the whole file (got '$mb3_x'); the window is not what the cross-section arm tests" >&2
+    rc=1
+  fi
+  # PAIRING: the same mutant must still count the fabricated bullet as absent. A mutant
+  # that counted everything present would satisfy the arm above while testing nothing.
+  mb3_f="$(ctx_counts "$MB3" "$CTX/f.md")"
+  if [ "${mb3_f#* }" = "0/1" ]; then
+    echo "ok: MUTATION MB3 PAIRING — the same mutant still counts a fabricated bullet as absent (it widened the window, it did not disarm the match)"
+  else
+    echo "FAIL: MUTATION MB3 PAIRING — the whole-file mutant counts the fabricated bullet present too (got '$mb3_f'); it disarms the match rather than widening the window" >&2
+    rc=1
+  fi
+fi
+
+# --- THE DESIGNATED HONEST FILE CANNOT MEASURE THE FALSE-POSITIVE SET ---------------
+# ASSERTED, NOT ASSUMED. `requires-context-story.md` is what this fixture's README names
+# as the honest cite-by-reference case, and its bullet is VERBATIM at the anchor -- so it
+# reports 1/0 and the FP set measured on it is empty by construction. A builder who reads
+# that zero as "the observation never fires on honest prose" has measured the wrong file.
+# If it ever stops being verbatim this arm says so, rather than the abridged seed above
+# quietly becoming redundant.
+rcs_counts="$(ctx_counts "$VALIDATOR" "$DIR/requires-context-story.md")"
+if [ "$rcs_counts" = "0 1/0" ]; then
+  echo "ok: ctx observation — the designated honest story is VERBATIM (1/0), so it cannot measure the false-positive set and the abridged seed above is what does"
+else
+  echo "FAIL: ctx observation — requires-context-story.md reports '$rcs_counts', not '0 1/0'. Either its bullet stopped being verbatim at the anchor or the observation stopped reaching it; re-derive before trusting any FP figure taken here" >&2
+  rc=1
+fi
+
+# --- CWD INVARIANCE for the observation --------------------------------------------
+# THIS DIRECTORY SHIPS A `product-brief.md` DECOY carrying LR-1/LR-2, and the observation
+# resolves its window through the same `resolve_artifact` every other arm uses. An
+# observation that answered differently from here would report byte-present counts about
+# a file the story never cited. Both polarities, from the decoy cwd and from an empty one.
+for ctx_cwd in "decoy (this fixture dir)|$DIR" "empty|$EMPTY"; do
+  ctx_cl="${ctx_cwd%%|*}"; ctx_cp="${ctx_cwd#*|}"
+  for ctx_spec in "verbatim|$CTX/h.md|0 1/0" "fabricated|$CTX/f.md|0 0/1" "abridged|$CTX/a.md|0 0/1"; do
+    ctx_n="${ctx_spec%%|*}"; ctx_rest="${ctx_spec#*|}"
+    ctx_file="${ctx_rest%%|*}"; ctx_want="${ctx_rest##*|}"
+    ctx_got="$( cd "$ctx_cp" && ctx_counts "$VALIDATOR" "$ctx_file" )"
+    if [ "$ctx_got" = "$ctx_want" ]; then
+      echo "ok: ctx observation CWD INVARIANCE — $ctx_n answers '$ctx_want' from cwd '$ctx_cl'"
+    else
+      echo "FAIL: ctx observation CWD INVARIANCE — $ctx_n from cwd '$ctx_cl': expected '$ctx_want', got '$ctx_got'" >&2
+      rc=1
+    fi
+  done
+done
+
 # Unmutated control from the same directory.
 MC="$WORK/control-unmutated.sh"; cp "$VALIDATOR" "$MC"
 if bash "$MC" "$DIR/good-story.md" >/dev/null 2>&1; then

@@ -569,10 +569,40 @@ a story inlines — to satisfy a tooling constraint.
   consolidates under a single parent before gate-pass. Duplicate story keys
   *inside* one `stories:` mapping are reported by `check-stories`; the
   parent-key form above is yours to read.
+- **Third comparand — the status the PREVIOUS gate recorded.** The two records
+  compared above are not independent of each other. The repair for a stale entry
+  regenerates that entry FROM the story file, so a `status:` that is wrong at the
+  source is copied into every canonical copy and both comparands agree. Read the
+  `story_status:` field from the **previous gate-log entry of this sprint** in
+  `_bmad-output/implementation-artifacts/gate-log.md` (Check 12 owns that field)
+  and compare each story's recorded value against the `status:` its story file
+  carries now:
+  - **A story whose current status sits EARLIER in the lifecycle than the value
+    that entry recorded — Gate FAILS.** A status advances; a backward move means
+    one of the two values was written wrong at its source, and no
+    `derive-stories` run surfaces that — the run takes the story file as the
+    source and rewrites the canonical copies to agree with it.
+  - **A story the previous entry recorded and the current sprint no longer lists,
+    or lists under a different id — Gate FAILS.** Take it through the Gate Failure
+    protocol at the end of this file, dispatched.
+  - Same value, or a forward move: that story passes this comparand.
+  - **A story recorded `absent`, or absent in both spellings now** — the value is
+    not a lifecycle position and cannot move backward, so it passes this comparand.
+    Resolve each current value by the precedence in Check 12's own `story_status:`
+    clause; a reader resolving it differently from the writer compares two
+    spellings rather than two times.
+  - **No previous gate-log entry for this sprint** — the first gate of a sprint,
+    or a log rotated at an epoch boundary. Write
+    `story_status comparand: no prior gate-log entry for sprint <N>` into this
+    check's evidence row and proceed. The absence is recorded AS EVIDENCE and is
+    never a FAIL: a gate with nothing to compare against states that it compared
+    nothing.
 - **Evidence:** Log the comparison results in the gate log entry — the
   command, its exit code, and its **counts** line (entries parsed and
   comparisons made). A verdict without the counts cannot be told apart from
-  one recorded over a corpus the tool never read.
+  one recorded over a corpus the tool never read. Log the `story_status:`
+  comparand separately: the previous entry's values, the current values, and
+  the per-story verdict.
 
 ### 6. Production integrity tests exist? (Implementation gates only)
 <!-- CHECK_LOADED: 6 -->
@@ -739,6 +769,29 @@ The gate log entry MUST include:
   resolved). This is the **baseline the next gate compares against**, so it is
   written on every gate, PASS or FAIL. Omitting it silently resets the baseline to
   0 and forgives every violation committed since the last gate.
+- `story_status:` — one `<story-id>: <status>` line per story in the current
+  sprint, read from the story file itself and NOT from `sprint-status.yaml`. This
+  is the **third comparand Check 5 reads at the next gate**, and it is the only
+  record of a story's status written by a different actor at a different time than
+  the two Check 5 already compares. It is written on every gate, PASS or FAIL.
+  Omitting it leaves the next gate's Check 5 with two comparands that are
+  derivations of one another, which agree whenever the story file is wrong at the
+  source.
+  - **Resolve each value by ONE precedence, the same one Check 5's opening bullet
+    uses: frontmatter `status:`, and the `**Status:**` header ONLY for a file with
+    no frontmatter `status:`.** The two spellings co-occur and disagree on real
+    stories, so "either one" leaves the writer free to pick a value the reader then
+    compares against — a story whose status never moved reads as a backward move
+    and FAILS a gate that has nothing wrong with it. The reader and the writer
+    resolve identically or the comparand is noise.
+  - **Record the lifecycle value only.** Where the header carries a trailing
+    annotation, the value is the leading token; the annotation is not part of it
+    and does not belong in this field.
+  - **A story with NO status in either spelling** is recorded as
+    `<story-id>: absent`. It is not omitted from the field and it is not given a
+    default: `absent` is a value Check 5 can compare and is never itself a backward
+    move, where an omitted line is indistinguishable from a story the writer
+    forgot.
 
 A gate log entry without per-check results is incomplete and must be
 rewritten before proceeding.

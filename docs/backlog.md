@@ -1707,48 +1707,130 @@ verify: sh F=core/skills/ai-dlc/steps/sprint-review.md; [ "$(grep -cF HARD_BLOCK
 
 **Check 5's whole span consults no record produced by a process other than the one it is
 auditing, and the check's own text says the resulting pass is reachable.** Measured over the
-66-line `CHECK_LOADED: 5` → `CHECK_LOADED: 6` span of
-`core/skills/ai-dlc/steps/gate-validation.md:456-521`: occurrences of `gate-log` **inside the
-span = 0**; controls in the same invocation — `sprint-status.yaml` inside the span = **4**, and
-`gate-log` elsewhere in the same file = **11** (Checks 12, 16, 18, 22 and 25, the last of which
-machine-reads `steering_violations:` out of the previous gate-log entry at `:1668`). The token is
+`CHECK_LOADED: 5` → `CHECK_LOADED: 6` span of `core/skills/ai-dlc/steps/gate-validation.md` **as
+it stood before this entry's fix — `:503-578`, 76 lines.** The same span is `:503-608` and 106
+lines now the fix has landed; both bounds are stated because the defect measurement is only
+meaningful over the pre-fix span, and a post-fix citation alone would name a span the defect has
+been removed from. Occurrences of `gate-log` **inside the pre-fix span = 0**; controls in the
+same invocation — `sprint-status.yaml` inside the span = **4**, and `gate-log` in any spelling
+elsewhere in the same file = **11**, against an impossible-token control of **0**. The token is
 live in the file and absent from this check. The mechanical half agrees:
 `core/scripts/sprint-status.sh` names `gate-log` **0** times against a control of **66**
-occurrences of `sprint-status` in the same file.
+occurrences of `sprint-status` in the same file, unchanged at tip.
 
-`gate-validation.md:481-483` states the failure in the check's own words — running
+**THE PRECEDENT IS ONE CHECK, NOT FOUR, AND THE ORIGINAL FILING'S "four other checks already
+machine-read it" IS FALSE IN THE DIRECTION THAT MAKES THE FIX LOOK EASIER THAN IT IS.** The two
+counts must both be stated, because the control has to be on the RECEIPT'S OWN TOKEN and the
+receipt greps `gate-log.md`, not `gate-log`. Re-derived over the pre-fix file in one invocation:
+`gate-log` in any spelling = **11**, `gate-log.md` = **2**, impossible token = **0**. Both
+`gate-log.md` sites — `:704` and `:767` before the fix, `:734` and `:820` now — are Check 12
+WRITE sites. Checks 16, 18 and 22 are writes too. Exactly **ONE** site in this file READS
+gate-log content: Check 25 (heading `:1944`), which machine-reads `steering_violations:` out of
+the previous gate-log entry at `:1956`. That single case is the pattern to copy — a field Check
+12 writes BECAUSE Check 25 reads it — and it is the whole reason the fix is reachable rather
+than architectural. A reader who takes "four checks" at face value expects four working
+precedents and finds one. The fix adds a third `gate-log.md` site at `:577`, which is Check 5's
+new read.
+
+`gate-validation.md:538-539` states the failure in the check's own words — running
 `derive-stories` when the story file's own `status:` is wrong "would copy the wrong status into
 every canonical copy and this check would then pass." Core documents the vacuous pass and answers
 it with a warning to the human, not with a comparand.
 
 **The filing's cause is wrong in the narrowing direction and the headline is too wide.** It filed
-"two hand-maintained records compared to each other," and Check 5 is no longer hand-run: `:463`
-dispatches `scripts/ai-dlc/sprint-status.sh check-stories` and `:485` adds
-`derive-stories --check`, both with exit-code contracts, and `:498-505` adds a non-vacuity
+"two hand-maintained records compared to each other," and Check 5 is no longer hand-run: `:510`
+dispatches `scripts/ai-dlc/sprint-status.sh check-stories` and `:541` adds
+`derive-stories --check`, both with exit-code contracts, and `:555-560` adds a non-vacuity
 sub-clause that makes exit 4 a FAIL. So "the check cannot fail" is false — it fails on exit 1
 whenever the two copies disagree, and it now fails on an empty corpus. What survives, and what is
 sharper than filed, is that the two comparands are not independent: the declared repair at
-`:473-476` regenerates the `sprint-status.yaml` entry *from* the story file, so the check joins a
+`:520-521` regenerates the `sprint-status.yaml` entry *from* the story file, so the check joins a
 record to a derivation of that record. It detects staleness of the copy and cannot detect a status
-that is wrong at the source — which is the S295 state the entry reproduces, three stories reading
-`review` in the story file and in both canonicals while merged and gate-3 passed.
+that is wrong at the source — which is the consumer state the entry reproduces, three stories
+reading `review` in the story file and in both canonicals while merged and gate-3 passed.
 
 The anchor is the gate log because that is the only record in this pipeline written by a different
-actor at a different time, and four other checks in the same file already machine-read it, so the
-fix is reachable rather than architectural. A looser anchor — `gate-log` anywhere in
-`gate-validation.md` — false-closes today, on Check 12's rotation prose, which is why the receipt
-extracts the span first. The receipt's first arm exits **2** rather than 1 when the span comes
-back without `sprint-status.yaml`, which is the renumber-or-removal case: a vanished span would
-otherwise make an empty `grep` look like a live defect forever.
+actor at a different time, and Check 25's `steering_violations:` read is the one working
+precedent for that shape in this file, so the fix is reachable rather than architectural. A
+looser anchor — `gate-log` anywhere in `gate-validation.md` — false-closes today, on Check 12's
+rotation prose, which is why the receipt extracts the span first.
+
+**THE READ HALF ALONE IS UNREACHABLE, WHICH IS WHY THE FIX IS TWO SPANS IN ONE COMMIT.** The
+gate-log ENTRY SCHEMA at `:732-741` (now `:762`) enumerated exactly six fields — gate name and
+phase, timestamp, per-check results, evidence artifacts, remediations, and
+`steering_violations: <N>`.
+**There was no per-story status field.** A Check 5 clause saying "compare against the status the
+prior gate-log entry recorded" would therefore read a field no gate ever writes: an unreachable
+criterion shipped into a gate, which is worse than the defect it replaces. The edit is a Check 5
+READ clause PLUS a Check 12 WRITE clause adding the `story_status:` field the read consumes.
+Without the writer half the comparand is vacuous forever and reads green.
+
+Check 12 is numbered AFTER Check 5 (headings `:731` vs `:502`), so within one gate the reader precedes the
+writer and the comparand is necessarily the PREVIOUS gate's entry — which at a sprint's first
+gate does not exist. That branch belongs in the numbered action list, where the executor decides
+it deliberately: no prior entry means RECORD THE ABSENCE AS EVIDENCE, never a FAIL.
+
+**AND THE READER AND WRITER MUST RESOLVE THE STATUS BY ONE PRECEDENCE, WHICH THE FIRST DRAFT DID
+NOT.** That draft told the writer to read "frontmatter `status:` (or the `**Status:**` header)".
+The two spellings co-occur on real stories AND they disagree, so the "or" left the writer free to
+pick either value while Check 5 compared against whichever the previous gate happened to choose —
+a story whose status never moved then reads as a backward move and FAILS. Derived over a
+reference consumer's story corpus, worktrees excluded, partition exact: of **1069** stories,
+**122** carry both spellings, of which **56** are byte-identical, **17** differ only by a trailing
+annotation on the header, and **49 DISAGREE on the lifecycle token**; **278** are frontmatter
+only, **587** header only, and **82** carry NO STATUS AT ALL, against an impossible-token control
+of **0** over the same corpus. One precedence now governs both sides — frontmatter `status:`,
+header only where there is no frontmatter `status:` — the value is the leading lifecycle token,
+and a story with neither is recorded `absent` rather than omitted, since an omitted line is
+indistinguishable from a story the writer forgot. `absent` is not a lifecycle position, cannot
+move backward, and passes the comparand.
+
+**THE ENTRY'S OWN CLAIM ABOUT ARM 1 WAS FALSE AND INVERTED THE PROTECTION IT DESCRIBED.** It said
+the receipt's first arm exits **2** rather than 1 on the renumber-or-removal case. Measured, with
+each seed asserted applied by `cmp -s` in the same run: deleting the `CHECK_LOADED: 6` anchor
+makes the `awk` range run to end-of-file — a **2403**-line span at base — and arm 1 still finds
+`sprint-status.yaml` there, so it never reaches exit 2; arm 2 then matches Check 12's own write
+site and the receipt returns **0**, a SILENT FALSE CLOSE. Arm 1's exit-2 protection covers only
+the deletion of Check 5's OWN anchor (measured: rc **2**, which is the control proving arm 1
+fires at all). The receipt below therefore carries a third arm, a span-length bound, so a blown
+span reports "I measured nothing" (exit 2) instead of a close.
+
+**WHAT THE RECEIPT STILL CANNOT SEE, AND WHICH MECHANISM OWNS THAT HALF.** Three false closes
+were measured against the strengthened receipt, seeds asserted applied:
+
+```
+receipt arms                         old   new
+base (7640ec96)                       1     1     correct — defect reproduces
+tip                                   0     0     correct — fix present
+`<!-- see also gate-log.md -->`       0     0     FALSE CLOSE, both forms
+bare sentence naming the gate log     0     0     FALSE CLOSE, both forms
+CHECK_LOADED: 6 anchor deleted        0     2     FIXED by the span bound
+`nowriter`: Check 12 field deleted    0     0     BLIND, both forms
+Check 5's read clause deleted         1     1     correct — mutant reopens
+Check 5's OWN anchor deleted          2     2     control — arm 1 does fire
+```
+
+The comment and bare-mention closes cannot be excluded by any `grep` this receipt can express,
+and the `nowriter` mutant — which deletes ONLY the Check 12 `story_status:` field and leaves the
+Check 5 read intact — is invisible to it because the receipt greps the Check 5 span alone and
+that span is unchanged. **Neither blindness is the receipt's to fix; both belong to the FIXTURE
+arms**, which assert the span carries a non-comment line stating a FAIL condition and that the
+writer half is present. Recording which mechanism owns which half is the point: a later reader
+who finds the receipt closable by a comment should not conclude the guard is broken, and one who
+finds it blind to `nowriter` should look for the fixture rather than widen the grep.
 
 Any implementation must scope its own predicate to the `CHECK_LOADED: 5` span for the same reason,
 and must add the comparand as check text, carrying no origin note or version tag —
-`core/scripts/audit-rule-files.sh` scopes `steps/` (`:374`) and tiers both as blocking.
+`core/scripts/audit-rule-files.sh` scopes `steps/` and tiers both as blocking, and its tier-1
+`ORIGIN_TAG` regex at `:364` fires on a bare `S`-plus-digits token, so no `PC-` id may appear in
+the step file. Plain markdown, never an HTML comment: a comment closes the receipt while
+instructing nobody, and `I112` in `scripts/validate-enforcement-map.sh` carries a deliberate
+HTML-comment exclusion the edit would land inside.
 
 Discharges the consumer entry `PC-S295-RETRO-CHECK5-SELF-REFERENTIAL` at pinned ledger line 510.
 
 
-verify: sh S=$(LC_ALL=C awk '/CHECK_LOADED: 5 /,/CHECK_LOADED: 6 /' core/skills/ai-dlc/steps/gate-validation.md); grep -q 'sprint-status\.yaml' <<<"$S" || exit 2; grep -q 'gate-log\.md' <<<"$S"
+verify: sh S=$(LC_ALL=C awk '/CHECK_LOADED: 5 /,/CHECK_LOADED: 6 /' core/skills/ai-dlc/steps/gate-validation.md); grep -q 'sprint-status\.yaml' <<<"$S" || exit 2; [ "$(printf '%s\n' "$S" | wc -l)" -lt 200 ] || exit 2; grep -q 'gate-log\.md' <<<"$S"
 ## BL-048
 
 **Two of the three dev-role checks this consumer carries have no upstream equivalent, and the
@@ -1807,7 +1889,7 @@ differing only in their citation line, each carrying the same two invented requi
 **rc=0**, `PASS (… 1 block(s), 0 full_text_source claim(s) verified …, 1 requires_context pointer(s)
 resolved)`; with `full_text_source: locked-requirements.md:Requirements` **rc=1**, `requirement not
 byte-present at the cited anchor(s)`; with no citation at all **rc=1**, the uncheckable guard at
-`:490-510`. Two of the three roads reject the identical fabrication, which is the control — the
+`:623-644`. Two of the three roads reject the identical fabrication, which is the control — the
 validator discriminates, and the pointer road is where it does not.
 
 Then the sharper measurement, a differential whose two sides are asserted to differ before the
@@ -1816,27 +1898,83 @@ anchor), identical in every other byte, produce the **same exit code and the sam
 line** after the story path is normalised out. Nothing downstream of this validator can tell them
 apart.
 
-**`:461-463` claims this road is closed and it is not.** The comment introducing pointer
+**`:575-577` claims this road is closed and it is not.** The comment introducing pointer
 resolution states that what it removes is "the road by which a block substantiates nothing and
 scores as clean". Resolving the pointer establishes that the artifact and anchor exist; it places
 no constraint whatever on the bullets, so a block still substantiates nothing — and because
-`pointers_checked` is now nonzero, it no longer even lands on the `PASS — NOTHING VERIFIED` line
-at `:607` that was built to mark exactly this case. The change moved the laundering case out of
+`pointers_checked` is now nonzero, it no longer even lands on the `PASS — EXAMINED NOTHING` line
+at `:743` that was built to mark exactly this case. The change moved the laundering case out of
 the one report line that flagged it.
 
 **The filing is right and too broad.** It says the validator "can be satisfied by agent-authored
 text inside the fence", unqualified. Measured, the correction is **narrower**: only the
-`requires_context:` road launders, and that road's exemption from byte-matching is deliberate,
-documented and measured — matching an abridged cite-by-reference restatement would red every
-honest block, and the script's own contract promises it never will. So the fix is not "byte-match
-the bullets"; that has already been tried and rejected on evidence.
+`requires_context:` road launders, and that road's exemption from byte-matching is deliberate and
+documented in the header. So the fix is not "byte-match the bullets as an exit code".
+
+**THE ENTRY PREVIOUSLY SUPPORTED THAT CONSTRAINT WITH A HISTORY CLAIM THAT IS FALSE.** It said the
+byte-match on this road "has already been tried and rejected on evidence." It has not. All **11**
+revisions of `core/scripts/validate-locked-anchor.sh` were walked (control: the revision before
+the first returns rc **128** — the file does not exist there, so the walk reached the beginning),
+and the exemption appears in the header as a **DESIGN ASSERTION from the very first revision
+onward**. No revision ever implemented the byte-match on this road and rolled it back. A builder
+who checks the history behind that sentence finds nothing there and may read the constraint as
+soft, which is the one direction that ships the regression.
+
+**The constraint is nonetheless correct, and the basis is a MEASUREMENT rather than a history.**
+Derived by driving the shipping validator over a reference consumer checkout, `.claude/worktrees/`
+EXCLUDED, partition exact and controls in the same walk:
+
+```
+population (LOCKED_REQUIREMENTS + requires_context:, worktrees excluded)   96
+  observation PRINTED on the PASS line                                      5
+    clean (0 not byte-present)                                              1
+    >=1 not byte-present  <- the FP set                                     4
+  FAILED before the PASS line                                              38
+  PASSED, no pointer resolved, nothing to observe                          53
+                                                       partition sum       96
+bullets byte-present 1 / not byte-present 30   (over the printed set)
+CONTROL impossible token over the same walk                                 0
+CONTROL total .md walked, worktrees excluded                            11412
+CONTROL same walk INCLUDING worktrees reads a population of               189
+```
+
+**The 189 is the contaminated reading and it is why no figure here may be quoted from an older
+one.** Each agent worktree carries a duplicate of files already counted, so a count over a tree
+walk moves with what is on disk rather than with the corpus. 93 of that 189 were duplicates.
+
+As an exit code the byte-match would red **4 of the 5** blocks it can observe, and 30 of the 31
+bullets on that road are not byte-present. An abridged cite-by-reference restatement is the honest
+shape here, so failing it reds most of the honest blocks the observation can see — which is the
+regression this road's exemption exists to avoid.
+
+**THE REACHABILITY BELONGS BESIDE THAT FP SET, BECAUSE WITHOUT IT THE CHANGE SOUNDS LARGER THAN
+IT IS.** The observation is printed on **5 of 96** stories — **5.2%** — so the new report field is
+blank on nineteen of every twenty stories the consumer owns, and the claim that it separates a
+fabricated block from an honest one holds only on that 5%.
+
+**A "computed but suppressed" reading was checked and it is ZERO, which is not what it looks
+like.** A story that FAILs exits before the PASS line, so one might expect the 38 failures to
+compute the observation and never print it. Measured by instrumenting the shipping script —
+control in the same run: the instrumented copy and the shipped one returned identical verdict and
+stdout on all 96, and `cmp -s` asserted the two differ first — the marker fires on **5** files,
+all of which pass, and on **0** of the 38 failures. The mechanism is visible in the failure
+reasons: a story fails on this road precisely BECAUSE its pointer did not resolve — an unmatched
+sentinel, a dangling anchor, an artifact absent from disk — and an unresolved pointer contributes
+no window, so there is nothing to match against. Computed and printed are the same 5 here, and a
+wider "computed" figure is an artifact of assuming the two sets differ.
 
 The receipt therefore asserts only that the two roads stop being **indistinguishable**, closing on
 either an exit-code split or a report-line split. That matches this file's own established repair
-pattern — `:600-620` separated the two roads to PASS by report line while deliberately leaving the
+pattern — `:741-764` separated the two roads to PASS by report line while deliberately leaving the
 exit code alone — so the anchor does not prejudge which fix is taken. It carries an inline sanity
 arm that the two probe stories differ, because a differential whose sides are accidentally the
 same file agrees perfectly and reads as "no defect".
+
+**Ask what ELSE satisfies this receipt, and the answer is measured, not hypothetical.** A change
+making the report line differ for a reason unrelated to the bullets — an unnormalised story path,
+a timestamp, a hash of the block — satisfies it and ships nothing. The FIXTURE arms own that
+exclusion: they must assert `[f]` and `[h]` differ ON THE BULLET-COUNT FIELDS, never merely on
+the first line.
 
 Discharges the consumer entry `PC-S297-LOCKED-FENCE-LAUNDERS-AGENT-PROSE` at pinned ledger line 1215.
 
@@ -4127,3 +4265,44 @@ unattainable in this session and would read as a failure of a fix that works.
 
 verify: sh d=core/scripts/derive-fixture-readsets.sh; [ -f "$d" ] || exit 9; grep -q '^norm()' "$d" || exit 9; grep -q '^drop_ignored()' "$d" && grep -q 'check-ignore' "$d" && exit 0; exit 1
 
+
+## BL-278 — the join between an entry's receipt and the fixture that covers the same subject has no home a consumer can run
+
+**DEFECT.** Found at batch 134, when the arm that would have carried this join was reverted out
+of a shipping fixture by the pre-push dead-doc-ref phase.
+
+**THE JOIN IS REAL AND NOTHING ASSERTS IT.** A backlog entry's `verify: sh` receipt and the
+fixture arms covering the same subject divide the work between them: the receipt establishes
+that the fix is present, and the arms establish what the receipt cannot express. At batch 134
+that division was measured rather than assumed — BL-040's receipt is blind to a mutant deleting
+only the Check 12 writer half, and blind to a comment or a bare mention replacing the comparand,
+so three of the six seeded shapes are fixture-owned. **The division is currently stated in a
+comment**, and a comment goes stale in silence: the next hand to widen the receipt reads the arms
+as redundant and deletes one.
+
+**WHY IT HAS NO HOME TODAY.** The join's two sides live on opposite sides of the consumer
+boundary. The receipt is a line in `docs/backlog.md`, which `install.sh` does not ship; the arms
+live in `core/fixtures/gate-verdict-grep-shape/`, which does. Derived at this tip, both sides in
+the same invocation: `grep -rlF 'docs/backlog.md' core/fixtures/` returns **4** fixtures —
+`backlog-ledger`, `backlog-receipt-binding`, `backlog-rotate-fence-guard`, `backlog-size-ceiling`
+— and **4 of 4** carry a `.dist-only` marker, against **0** shipping ones. So the tree's existing
+answer to this class is unanimous and the arm that broke it was the anomaly.
+`scripts/validate-no-dead-doc-refs.sh` enforces exactly that, and the class it names is not
+cosmetic: a shipping fixture whose corpus is absent on a consumer STANDS DOWN there, and a unit
+that cannot fail scores as a pass in that consumer's own suite verdict.
+
+**THE OBVIOUS REPAIR IS THE ONE TO REFUSE.** Hardcoding the receipt into the fixture makes the
+arm runnable on a consumer and creates a second definition of the receipt — which is the drift
+this entry exists to prevent, one level down. The receipt must be DERIVED from the entry or not
+scored at all.
+
+**What is owed is a `.dist-only` home beside the other backlog units.**
+`core/fixtures/backlog-receipt-binding/` already reads `docs/backlog.md` (14 sites) and already
+drives receipts over seeded ledgers, and its `.dist-only` marker states this exact reasoning.
+Whether the join belongs as arms there, or in a new `.dist-only` fixture, is the scoping question
+— `.claude/rules/fixture-ship-decl.md` governs either way, and a NEW fixture directory also owes
+a read-set row the operator must derive with root.
+
+Discharges nothing upstream; this is distribution-internal and ranks below any PC-backed entry.
+
+verify: sh h=core/fixtures/gate-verdict-grep-shape/run.sh; [ -f "$h" ] || exit 9; b=core/fixtures/backlog-receipt-binding/run.sh; [ -f "$b" ] || exit 9; [ -f core/fixtures/backlog-receipt-binding/.dist-only ] || exit 9; grep -q 'docs/backlog.md' "$h" && exit 9; grep -qE 'BL-040|CHECK_LOADED: 5' "$b" && exit 0; exit 1
