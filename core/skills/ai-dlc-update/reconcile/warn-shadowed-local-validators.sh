@@ -104,6 +104,16 @@ SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # byte-indistinguishable from a corpus with nothing in it. MEASURED before this guard existed:
 # rc=0 with 0 rows on the refusal path, against rc=0 with 1 row when the lift resolves.
 CLOSE_AWK="$(ledger_close_awk)" || exit 2
+# THE ENTRY-LINE RULE IS LIFTED TOO, AND IT USED TO BE THE LAST HAND-WRITTEN TOKEN LIST IN THIS
+# DIRECTORY. The rule below read `/ADOPTED UPSTREAM|WITHDRAWN/` inline, so it held a MEMBERSHIP
+# OPINION of its own: a close token added to the single home reached the body rule through
+# `ledger_close_awk` and never reached this line. MEASURED at the commit that added one: this
+# file contained the new token ZERO times while the two engines carried it 1, 2 and 5 times
+# (same invocation, same directory; impossible-token control 0 in all four files). An entry
+# closed on the title by that token then scored OPEN here, and an open entry is exactly what
+# suppresses the RETIRE-CANDIDATE row -- a silent non-finding, in the direction that reads clean.
+CLOSE_AWK="${CLOSE_AWK}
+$(ledger_entry_line_close_awk)" || exit 2
 # Piped to a while-read loop (bash 3.2, no mapfile).
 closed_basenames="$(awk "$(ledger_entry_awk)${CLOSE_AWK}"'
   function flush(){ if (closed && names != "") printf "%s", names; closed=0; names="" }
@@ -112,7 +122,7 @@ closed_basenames="$(awk "$(ledger_entry_awk)${CLOSE_AWK}"'
   # LINE closes on the marker anywhere in it, because the legacy id-less form writes the close
   # inside the title, and on the retained-copy parenthetical, which carries no marker of its own.
   ledger_body_closes($0) { closed=1 }
-  ledger_entry_shape($0) != "" && ($0 ~ /ADOPTED UPSTREAM|WITHDRAWN/ || $0 ~ /\(original text, retained for the record\)/) { closed=1 }
+  ledger_entry_shape($0) != "" && ledger_entry_line_closes($0) { closed=1 }
   {
     s=$0
     while (match(s, /[A-Za-z0-9._-]+\.sh/)) {

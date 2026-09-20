@@ -1589,7 +1589,7 @@ ENTRIES="$(awk -v DASH=' — ' "$(ledger_entry_awk)"'
   # a defect that was retracted as false. The withdrawal marker closes the superseder; this
   # closes the copy it supersedes.
   function entry_line_closes(s) {
-    return (s ~ /ADOPTED UPSTREAM|WITHDRAWN/) || (s ~ /\(original text, retained for the record\)/)
+    return (s ~ /ADOPTED UPSTREAM|WITHDRAWN|CLOSED AS REJECTED/) || (s ~ /\(original text, retained for the record\)/)
   }
   # EVERY RECEIPT, NOT THE LAST ONE. `directive` was a scalar assigned inside a per-line rule, so
   # an entry carrying two line-leading `verify:` lines had its first silently overwritten — no row,
@@ -1632,19 +1632,34 @@ ENTRIES="$(awk -v DASH=' — ' "$(ledger_entry_awk)"'
       next
     }
   }
-  # TWO WAYS AN ENTRY IS DONE, AND ONLY ONE WAS RECOGNISED. `ADOPTED UPSTREAM` closes an entry
-  # upstream took. `WITHDRAWN` closes one whose PREMISE WAS FALSE — the author found the defect
-  # they filed does not exist. Both are finished; neither wants a verdict on the next pull. Only
-  # the first was in the vocabulary, so a withdrawn entry re-reported forever, and its receipt
-  # cannot resolve the contradiction because there is no defect for the receipt to test.
+  # THREE WAYS AN ENTRY IS DONE, AND THIS LINE IS THE SINGLE HOME OF THAT SET. `ADOPTED UPSTREAM`
+  # closes an entry upstream took. `WITHDRAWN` closes one whose PREMISE WAS FALSE — the author
+  # found the defect they filed does not exist. `CLOSED AS REJECTED` closes a candidate upstream
+  # ADJUDICATED as by-design: the premise held, upstream considered it, and the answer was no.
+  # All three are finished; none wants a verdict on the next pull, and none can be settled by a
+  # receipt — there is no defect left for a receipt to test in any of the three.
   #
   # Measured on the reference consumer: of nine HAND-REVIEW rows, TWO were one withdrawn entry
   # counted twice — the entry and the copy of its original text retained for the record.
   #
-  # NOT MIRRORED INTO ledger-rotate.sh. Its close predicate is the stricter annotation form
-  # `**ADOPTED UPSTREAM (v`, and lib.sh records that the two differ deliberately. A withdrawn
-  # entry therefore stops emitting a row but is not auto-archived: the silent-skip direction,
-  # which that same note names as the safe one of the two. Rotating a withdrawal is a hand call.
+  # `CLOSED AS REJECTED` IS TWO WORDS LONGER THAN THE OBVIOUS SPELLING BECAUSE THE SHORT ONE HAS
+  # A MEASURED FALSE POSITIVE. On the reference consumer corpus, boundary-shaped lines carrying a
+  # bare `REJECTED` number 1 — `PC-S340-DERIVATION-CAPTURE-HOOK-ROLLS-BACK-THE-WHOLE-FILE-ON-A-
+  # REJECTED-BLOCK`, an entry whose SUBJECT is a rejected fence — and the bare token would close
+  # it on its own title. Under `CLOSED AS REJECTED` that line scores 0, against a control of 1
+  # for the line the consumer already annotated in the long form and 0 for an impossible token.
+  #
+  # MIRRORED INTO ledger-rotate.sh, AND THE MIRROR IS DERIVED RATHER THAN RESTATED. This set used
+  # to be honoured here and hand-listed there, one token shorter, so an entry closed by the token
+  # rotate could not spell was skipped by every re-verification AND refused by every rotation:
+  # invisible in the report and permanently resident in the live ledger. (No apostrophes in this
+  # block: the awk program is a single-quoted shell string, and one ends it -- which is how the
+  # first draft of THIS comment failed, two paragraphs below the note saying so.) `lib.sh` and its
+  # `ledger_archive_awk()` now DERIVE the rotate archive grammar from this very line by making its
+  # optional bold span mandatory, so a token added here reaches rotate in the same edit and a
+  # fourth spelling cannot appear in one file alone. The STRICTNESS asymmetry the old note
+  # described survives — rotate still demands the bolded annotation form and still refuses a bare
+  # prose mention — but it is now a transform of this grammar rather than a second copy of it.
   #
   # ANCHORED, for the same reason `^verify:` below is — and this predicate needed it MORE, because
   # its failure is silent in the worse direction. Unanchored, a PROSE MENTION of the vocabulary
@@ -1667,7 +1682,7 @@ ENTRIES="$(awk -v DASH=' — ' "$(ledger_entry_awk)"'
   #
   # `[^`]*` between the bold opener and the marker is defence in depth: an annotation never quotes
   # itself, so a code span before the words is a mention even when the bold happens to lead.
-  /^[ \t]*(<br[ \t]*\/?[ \t]*>)?[ \t]*(\*\*[^`]*)?(ADOPTED UPSTREAM|WITHDRAWN)/ { closed=1 }
+  /^[ \t]*(<br[ \t]*\/?[ \t]*>)?[ \t]*(\*\*[^`]*)?(ADOPTED UPSTREAM|WITHDRAWN|CLOSED AS REJECTED)/ { closed=1 }
   # ANCHORED to the start of the line. The ledger is prose that DISCUSSES receipts as well as
   # carrying them, and an unanchored match treated both alike: "explicitly NO verify: field"
   # in a sentence registered as a directive. The scalar is last-match-wins, so a prose mention
