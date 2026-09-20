@@ -56,7 +56,32 @@ BOTH PC IDS NAMED VERBATIM IN THE RELEASE COMMIT.** `BL-041` closed, discharging
 exit **0**, 22 of 22 phases PASS, 0 FAIL, all **202** fixtures dispatched and 202 ok, both changed
 fixtures read by name against an impossible-name control of 0. Live **83 -> 81**, archive
 **193 -> 195**. Receipt histogram 7/62/1 before, **9/61/1** after — exactly the two subjects moved,
-so no incidental close. `BL-277` FILED, not fixed.
+so no incidental close.
+
+**BATCH 132 SHIPPED AS `v0.608.0` (`c50d6e7d`), ONE SUBJECT, AND IT WAS THE DEFECT BATCH 131
+TRIPPED OVER.** `BL-277` closed: both runners now resolve `GITDIR` from `--git-common-dir` instead
+of spelling `.git/`, so a gate run from a linked worktree keeps its cross-run evidence. Gate exit
+**0**, 22 of 22 phases PASS, **202 ok / 0 FAIL**, both changed fixtures read by name against an
+impossible-name control of 0, and **zero** `Not a directory` lines — the symptom itself as the
+control. Live **81 -> 80**, archive **195 -> 196**. Histogram 7/60/1, the same seven zeros as
+before the close, so no incidental close.
+
+**THREE THINGS BIT, AND EACH IS A GENERAL SHAPE.** `I55`'s arm 4 REQUIRED the literal `.git/`
+prefix the fix had to remove — a guard correct for its own defect and wrong for this one, so the
+fix had to move the invariant WITH it, probed both directions against the live validator. The
+receipt returned a **false 9** against a correctly fixed tree because it evaluated only the
+`DURATIONS_RECORD=` line while the fix assigns `GITDIR` on the line above: **a receipt that reads
+ONE line of a two-line construction is measuring its own grammar.** And
+`core/fixtures/enforcement-map-sites`'s mutation anchored on `"\.git/`, matched nothing once that
+spelling was gone, and the fixture went `FIXTURE BROKEN` **on the commit that fixed the defect** —
+repaired with a NEW SUBJECT (both legal prefixes anchored), never a relaxed assertion.
+
+**NEVER NAME THE RELEASE SHA INSIDE THE RELEASE COMMIT.** The `LANDED (v…, verified <sha>)`
+annotation went into the release commit itself, so every `--amend` moved the sha the annotation
+cited, and the amended-away object still RESOLVED locally while being reachable from **0** refs —
+`git cat-file -t` said `commit` for a sha no branch contained. Annotate in a FOLLOW-UP commit,
+where the release sha is stable, and test reachability with `git branch --contains`, never with
+`cat-file`.
 
 **THE PC-BACKED WORKLIST IS 10 AND THE TWO CLOSED SUBJECTS LEFT IT.** Re-derived post-merge with
 its three controls (live 48, a known-live id 1, an impossible id 0): `BL-029`, `BL-039`, `BL-040`,
@@ -89,14 +114,15 @@ three qualifying refs are PAIRWISE INCOMPARABLE (adds 4/4/4, union 7), so every 
 loses real filings, and a union WITHOUT the archive subtraction resurrects the 6 ids that are live
 on one qualifying ref and archived on another.
 
-**THE DELIVERY GAP IS TWO RELEASES AND A BOOTSTRAPPING FILE IS IN THE RANGE.** Consumer installed
-`0.605.0` against `VERSION` `0.607.0` at batch 131's close; the operator's last pull was
-`0.601.0`-`0.605.0` into graph on 2026-09-19 as `554e4a32`, and the consumer has pulled nothing
-since. Over `a934b743..b2f55a42`, 14 `core/` files changed and
+**THE DELIVERY GAP IS THREE RELEASES AND A BOOTSTRAPPING FILE IS IN THE RANGE. THE OPERATOR HAS
+BANKED IT — DO NOT WRITE A RUNBOOK.** Ruling given at batch 132's close, on the question asked
+directly: bank the pull and keep reporting the gap each batch. Consumer installed `0.605.0`
+against `VERSION` `0.608.0`; the last pull was `0.601.0`-`0.605.0` into graph on 2026-09-19 as
+`554e4a32`, and the consumer has pulled nothing since. Over `a934b743..68211a2e`, 16 `core/` files
+changed and
 `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh` is among them — **the consumer's INSTALLED
 copy runs the pull that carries its own repair**, so say so in any brief rather than claiming the
-next pull is protected by it. Mode-only changes: 0 (every row `100755 -> 100755 M`, blobs
-differing). Re-derive all of it; do not read this sentence for a number.
+next pull is protected by it. Mode-only changes: **0**. Re-derive all of it; do not read this sentence for a number.
 
 **A NEW CANDIDATE LANDED MID-BATCH AND WAS UNCOMMITTED WHEN READ.**
 `PC-S312-DERIVATION-FENCES-STRANDED-CORE-RELOCATION-WITH-NO-WORKLIST-ROW` had no `-S` date and was
@@ -773,7 +799,10 @@ given at batch 90.
 
    **Batch 130 returned this plan to its own provenance-first ordering**, which is where it stays
    until the operator rules otherwise: the sweep decides, and a PC-backed entry outranks every
-   distribution-internal one. Batch 131 scoped off that worklist and left it at **10**.
+   distribution-internal one. Batch 131 scoped off that worklist and left it at **10**; batch 132
+   took `BL-277`, which carries no `PC-` id and was therefore NOT off that worklist — an operator
+   choice, made on a direct question, because the defect was blocking this program's own gate.
+   The worklist is still **10** and it is still where a batch scopes from by default.
 
    **SUPERSEDED — OPERATOR RULING AT BATCH 118: `docs/plans/pre-push-wall-clock.md` IS BATCH 119's
    SUBJECT.** Kept for its lineage only; the block above replaces it.
