@@ -49,16 +49,69 @@ and expect a rule here to cite a measurement whose story lives in the archive.**
 that file and a `path:line` into it would then fail `validate-plan-shape.sh`'s citation arm on a
 correct rotation.
 
+**ROTATE THIS FILE BEFORE YOU WRITE YOUR OWN BLOCK — IT IS THE FIRST THING BATCH 138 OWES.** At
+batch 137's close it sits ~1200 bytes under `P8`'s 150000 ceiling, which is less than one resume
+block, so your push WILL fail on it. That is the designed order and not a surprise:
+`plan-rotate.sh` refuses to move anything while the file is UNDER the ceiling ("a plan under the
+ceiling rotates to itself"), so a batch cannot rotate pre-emptively however much it wants to. Let
+the arm fire, then `bash scripts/plan-rotate.sh docs/plans/graph-ledger-full-drain.md` to see what
+moves and `--apply` to move it. **Never a discharge banner in the head window** — that silences P9
+through P13 on this file.
+
+**BATCH 137 SHIPPED NO RELEASE, AND THAT IS THE CORRECT SHAPE: BOTH SUBJECTS WERE DOCS-ONLY, SO
+`core/` IS UNTOUCHED AND THE CONSUMER GAP DID NOT WIDEN.** Merged as `b468c01b` (#810), verified by
+CONTENT because a squash deletes the commits ancestry would answer with. The read-set map is
+current again — the operator ran the root-only trace, 202 -> 203 fixtures and 32107 -> 32125
+entries, additive and asserted so (no other fixture's rows removed).
+
+**`BL-029` WAS CLOSED THIS BATCH, NOT THE LAST ONE, AND THE BLOCK BELOW OVERSTATED IT.** Batch 136
+shipped the fix and left the entry LIVE carrying its own `ANNOTATION OWED` placeholder, because the
+release commit did not exist while that batch was writing. Nothing carried the obligation forward:
+reverify reported `CLOSE-CANDIDATE`, the entry sat live, and the resume block said closed. **The
+second half of action 5 is the half that goes missing, and it goes missing silently.** Now
+annotated `**LANDED (v0.612.0, verified 8efbd08b).**` and rotated. Live **77 -> 76**, archive
+**201 -> 202**. Receipt zeros diffed BY IDENTITY: 8 before, 7 after, the departing id is `BL-029`
+itself, so nothing closed incidentally.
+
+**`BL-132`'s REMEDY IS REFUTED AND THE ENTRY STAYS LIVE. A CONTRACT ADVERSARY RUN ALONE KILLED IT
+BEFORE A BUILDER SPAWNED.** The behavioural differential this plan's worklist would have had a
+builder construct fails four ways, each measured with a firing control: the FILED INSTANCE is not
+an instance (0 `SPLIT BUYS NOTHING` rows on the reconstructed filing state — the stamp is BEHIND
+the candidate, so the guard is already false); the entry's central differential COMPARED A PROGRAM
+WITH ITSELF (`preclassify.sh` is one blob at 0.452.0, 0.454.0 and 0.456.0, control: `setup-sites.md`
+differs across the same pair); the false-positive set is **37 of 40** release hops, where the byte
+arm this entry BANS for vacuity was 7 of 39; and no control-engine rule is derivable, which is a
+PROOF rather than a bug. **Three instrument traps are recorded in the entry**: its receipt REJECTS
+a correct fix and ACCEPTS five wrong ones including a mutant that acquits every consumer
+unconditionally, there are TWO `SPLIT BUYS NOTHING` emitters and only one is the subject, and the
+fixture's `SC_A3` anchor sits on the exact line a fix must reshape. **Do not rebuild the
+differential.** The surviving direction — REFUSE the acquittal when the classifier is byte-identical
+rather than strengthening it — is recorded in the entry as measured, NOT taken; it is a scope
+change and the operator's call.
+
+**THE WORKLIST READS 6 AND ONLY ONE ROW IS BOTH OWNED AND UNBUILT.** Re-taken after the rotation
+against the same union: `BL-067`, `BL-132`, `BL-140`, `BL-145`, `BL-215`, `BL-279`, with `BL-029`
+gone (0 rows, control: `BL-132` at 1). Scored by ownership verb, **`BL-067`, `BL-140` AND `BL-145`
+carry ZERO** — three rows, not the two an earlier reading claimed. `BL-132` now carries its
+refutation and `BL-215`'s own text says no enforcer is constructible and ownership must be settled
+first, so **nothing on this list is a straightforward build today**. Derive it again rather than
+reading this sentence.
+
+**AN OWNERSHIP VERB IS NOT A CLAIM OF OWNERSHIP EITHER, AND THAT IS NEW.** Batch 136 established
+that a `PC-` TOKEN cannot distinguish "I close this" from "I am not this". One level down, the
+VERB scoring built to fix that matched `BL-279`'s sentence *"Discharges **nothing** upstream"* — a
+negation scored as ownership. Read the matched LINE, never the count.
+
 **BATCH 136 SHIPPED AS `v0.612.0` (`8efbd08b`), ONE SUBJECT, SHIPPED ALONE BECAUSE THE SUBJECT IS
-THE UPDATE SKILL ITSELF.** `BL-029` closed, discharging `PC-S296-REJECTION-CARRIES-UNRELATED-GAPS`,
+THE UPDATE SKILL ITSELF.** Its fix discharged `PC-S296-REJECTION-CARRIES-UNRELATED-GAPS`,
 named verbatim in the release commit. `SKILL.md`'s step-7u bucket list routed `domain-local` to
 `extensions/` writing no push flag while `un-pushed-innovation` wrote `push_candidate: true` one
 bullet below; both now write it, and a found dependency re-buckets. `BL-279` filed; `BL-230`
 widened. Gate `AI_DLC_FIXTURE_NO_SKIP=1`: 22 of 22 phases, 37 PASS / **0 FAIL**, **203 ok / 203
 dispatched**, both changed fixtures read by name against an impossible-name control of 0. Live
-**76 -> 77**, archive **201** unmoved (a filing, no rotation). The PC-backed worklist reads **7**
-and `BL-029` is still on it — its candidate stays live upstream until the consumer PULLS, which is
-the DISCHARGED-falls-on-success shape, not a regression.
+**76 -> 77**, archive **201** unmoved (a filing, no rotation) — **and the archive not moving was
+the TELL that the close never took**, read at the time as an ordinary filing. Batch 137 annotated
+and rotated the entry; see its block at the top.
 
 **THE SITE WAS WRONG IN THE FIRST CONTRACT AND AN ADVERSARY RUN ALONE CAUGHT IT BEFORE A BUILDER
 STARTED.** Revision 1 sited the rule on `classify-block.md`'s `domain-local` bullet. That file is
@@ -112,11 +165,13 @@ the five-release WIDE threshold. **0** mode-only changes across 17 raw diff rows
 `ai-dlc-update/SKILL.md` are both in the range, so the consumer's INSTALLED copy runs the pull
 carrying its own repair. The operator's BANKED ruling stands — report the gap, write no runbook.
 
-**ONE ACTION IS OWED AND NO SESSION CAN TAKE IT.** The new fixture has no read-set entry and the
-runner says so on every push: `1 of 203 fixture dir(s) UNMAPPED (always run):
-extract-push-flag-decision`. It runs regardless, so nothing is silently skipped. The operator runs
-`sudo bash core/scripts/derive-fixture-readsets.sh --list "extract-push-flag-decision"` and the
-next batch commits the map change.
+**THAT BATCH'S OWED ROOT-ONLY ACTION IS DISCHARGED — the operator ran the trace during batch 137
+and the map change is committed.** The shape is worth keeping: a new fixture directory carries no
+read-set entry, `derive-fixture-readsets.sh` needs root, and no session can take it, so the runner
+prints `N of M fixture dir(s) UNMAPPED (always run)` on every push until an operator does. It runs
+regardless, so nothing is silently skipped. **Check that banner each batch and ASK when it names a
+fixture**; verify the result is additive (fixture and entry totals both rise, no other fixture's
+rows removed) rather than assuming it.
 
 **BATCH 135 SHIPPED AS `v0.611.0` (`82f875b3`), ONE SUBJECT, AND IT SHIPPED ALONE BECAUSE
 `apply.sh` IS A BOOTSTRAPPING FILE.** `BL-276` closed, discharging
@@ -995,21 +1050,34 @@ given at batch 90.
    distribution-internal one. Batch 132 took `BL-277`, which carries no `PC-` id and was therefore
    NOT off that worklist — an operator choice, made on a direct question, because the defect was
    blocking this program's own gate. Batches 133 and 134 each scoped two PC-backed entries off the
-   worklist, batch 135 scoped one, and batch 136 scoped `BL-029` — after which the join reads
-   **7**, which is HIGHER than before the close and is not a regression: `BL-029` stays on the
-   list because its candidate is live upstream until the consumer PULLS, and `BL-279` entered
-   carrying the same id. **A worklist that rises across a successful batch is the normal shape
-   here.** That is still where a batch scopes from by default. **Run the join; the number here is
-   a record of when it was taken, never an input.**
+   worklist, batch 135 scoped one, and batch 136 scoped `BL-029` — whose ROTATION batch 137 had to
+   finish, so the join only lost that row a batch later. **A worklist that rises across a
+   successful batch is the normal shape here**, because a discharged candidate stays live upstream
+   until the consumer PULLS. That is still where a batch scopes from by default.
+
+   **BUT THE LIST IS NOW THIN, AND A SESSION SHOULD KNOW THAT BEFORE IT SCOPES.** After batch 137
+   every remaining row is qualified: three carry NO ownership verb, `BL-132` carries a measured
+   refutation of its own remedy, `BL-215`'s own text says no enforcer is constructible and that
+   ownership must be settled first, and `BL-279` disclaims its candidate in as many words. **Run
+   the join and read each entry's BODY; if nothing on it is a straightforward build, say so to the
+   operator rather than forcing one.** The number here is a record of when it was taken, never an
+   input.
 
    **SCORE CITATION OWNERSHIP BEFORE RANKING, BECAUSE THE JOIN CANNOT.** `pc()` matches any `PC-`
-   token in an entry and cannot tell "I close this" from "here is an example". Measured at batch
-   136 over the six-row worklist: `BL-140` cites its id as one of four stuck EXAMPLES and `BL-145`
-   cites its own as a false-positive TABLE ROW and receipt ANCHOR — neither is a candidate the
-   entry discharges. Scored by ownership verb (`Discharges`, `Carries the reference consumer's`,
-   `Filed by the consumer as`), hits were BL-029=3, BL-067=1, BL-132=5, BL-215=2, **BL-140=0,
-   BL-145=0**, against an impossible-verb control of 0. **Two of six rows were not PC-backed at
-   all**, and that decided the batch's subject.
+   token in an entry and cannot tell "I close this" from "here is an example". `BL-140` cites its
+   id as one of four stuck EXAMPLES and `BL-145` cites its own as a false-positive TABLE ROW and
+   receipt ANCHOR — neither is a candidate the entry discharges. Score by ownership verb
+   (`Discharges`, `Carries the reference consumer's`, `Filed by the consumer as`) against an
+   impossible-verb control, per entry BODY with a non-empty-body control.
+
+   **AND THEN READ THE MATCHED LINE, BECAUSE THE VERB SCORING HAS ITS OWN TWO FAILURES — BOTH
+   MEASURED AT BATCH 137, BOTH AGAINST A HAND THAT REPORTED CONFIDENTLY.** A NEGATION scores as
+   ownership: `BL-279`'s only hit is *"Discharges **nothing** upstream"*, which is the entry
+   disclaiming the candidate in the very sentence the grep counts. And the COUNT ITSELF WAS WRONG
+   ONE BATCH EARLIER — `BL-067` was recorded at 1 and re-derives at **0** (control: the same grep
+   on `BL-132` returns 1), its single candidate mention being a bare id on its own line carrying
+   no verb. So the number of non-PC-backed rows is **three**, not the two an earlier revision of
+   this paragraph claimed. **Two hands agreeing is not a control; the matched LINE is.**
 
    **BATCH 134's PAIRING TEST IS THE ONE TO REUSE WHEN BATCHING TWO SUBJECTS.** Several worklist
    rows touch a BOOTSTRAPPING file — `ledger-reverify.sh`, `ledger-rotate.sh`, `apply.sh` or the
