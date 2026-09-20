@@ -9,7 +9,7 @@
 # every other fixture's entries alone, so refreshing one fixture costs its own runtime
 # rather than a full re-derivation.
 #
-# fixtures mapped: 202    entries: 32107
+# fixtures mapped: 203    entries: 32125
 absorbed-specifics-survive	.git/HEAD
 absorbed-specifics-survive	.git/config
 absorbed-specifics-survive	.git/index
@@ -8831,6 +8831,24 @@ extension-check-adoption	core/scripts/validate-gate-manifest.sh
 extension-check-adoption	core/skills/ai-dlc-update/reconcile/adopt-extension-checks.sh
 extension-check-adoption	core/skills/ai-dlc/enforcement-map.yaml
 extension-check-adoption	core/skills/ai-dlc/steps/gate-validation.md
+extract-push-flag-decision	.git/HEAD
+extract-push-flag-decision	.git/config
+extract-push-flag-decision	.git/index
+extract-push-flag-decision	.git/info/exclude
+extract-push-flag-decision	.git/objects/ae/45ed459b71c666d0e8cbc0164e53f037051a4e
+extract-push-flag-decision	.git/objects/d8/d9b56b341cccabe91e210918d2578b1b3d512e
+extract-push-flag-decision	.git/objects/info/commit-graphs/commit-graph-chain
+extract-push-flag-decision	.git/objects/info/commit-graphs/graph-2e085ff44ca2ae7c5739806502100c553300cbbf.graph
+extract-push-flag-decision	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
+extract-push-flag-decision	.git/objects/info/commit-graphs/graph-df2de5f516c1ef7339926410c099a0fdb5bcf123.graph
+extract-push-flag-decision	.git/objects/pack/multi-pack-index
+extract-push-flag-decision	.git/packed-refs
+extract-push-flag-decision	.git/refs/heads/batch-137-bl132-safe-stop-predicate
+extract-push-flag-decision	.gitignore
+extract-push-flag-decision	core/fixtures/extract-push-flag-decision/run.sh
+extract-push-flag-decision	core/fixtures/extract-push-flag-decision/seed.sh
+extract-push-flag-decision	core/fixtures/lib/preamble.sh
+extract-push-flag-decision	core/skills/ai-dlc-update/SKILL.md
 fanout-payload-channel	.git/HEAD
 fanout-payload-channel	.git/config
 fanout-payload-channel	.git/index
