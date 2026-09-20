@@ -4121,16 +4121,26 @@ twice independently, by the lead and by a contract adversary, all four figures a
 
 The DEFER bullet is at `core/skills/ai-dlc-update/SKILL.md:394`.
 
-**ITS PREDICTED CONSEQUENCE IS REFUTED, AND THE REFUTATION IS WHY THIS IS A NOTE.** The consumer's
-entry says the record "survives only if the operator happens to `git add` it while committing
-something else", and infers that the tracked records all arrived via the OK path. Measured on the
-reference consumer, by two hands independently: **23 of 23** gate records on disk are TRACKED
-(control: an impossible record name returns 0), and **12 of 12 DEFER records are tracked — 0
-lost**. Joining each record against the commit that ADDED it refutes the entry's own inference
-directly: 11 of 19 arrived on commits that are not self-updates, 9 of them on the step-7/8
-reconcile commit, which is exactly the destination the entry's remedy proposes. **The operator has
-been doing by hand what the entry asks the skill to instruct.** The stranding rate is zero, so this
-is a CLARITY defect in the DEFER prose, not an observed loss of evidence.
+**ITS PREDICTED CONSEQUENCE IS REFUTED AS A LOSS RATE, AND THE REFUTATION IS WHY THIS IS A NOTE.**
+The consumer's entry says the record "survives only if the operator happens to `git add` it while
+committing something else", and infers that the tracked records all arrived via the OK path.
+Measured on the reference consumer, by two hands independently: **23 of 23** gate records on disk
+were TRACKED (control: an impossible record name returns 0), including **12 of 12 DEFER records**.
+Joining each record against the commit that ADDED it refutes the entry's own inference directly:
+11 of 19 arrived on commits that are not self-updates, 9 of them on the step-7/8 reconcile commit,
+which is exactly the destination the entry's remedy proposes. **The operator has been doing by hand
+what the entry asks the skill to instruct.**
+
+**BUT THE UNTRACKED WINDOW IS REAL, AND IT WAS CAUGHT OPEN.** Re-read later in the same batch while
+a reconcile session was live in that tree: a **13th DEFER record**
+(`self-update-gate-20260920T185033Z.md`, `# verdict: DEFER`) sitting **UNTRACKED**, on a branch
+carrying zero commits ahead of its base (control: the 2026-09-17 record reads TRACKED in the same
+invocation; impossible verdict token 0). So the tracked rate is a measurement of CLOSED cycles and
+the window between writing the record and committing it is exactly where the entry says it is.
+**A steady-state census cannot see this class** — every record it counts has already survived, which
+is selection on the outcome. The honest statement is that no record has been LOST to date and the
+exposure is real but brief; do not read the 23-of-23 as evidence the window does not exist, and do
+not read this one untracked file as a loss. It is the same program mid-flight.
 
 **WHAT A FIX MUST NOT DO, each measured before this entry was filed.**
 
