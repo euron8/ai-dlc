@@ -1374,7 +1374,16 @@ fi
 cp "$PREPUSH" "$PREPUSH.orig"
 i55_declared="$(grep -cE '^[A-Z][A-Z0-9_]*_RECORD="' "$PREPUSH.orig" 2>/dev/null)"
 case "$i55_declared" in ''|*[!0-9]*) i55_declared=0 ;; esac
-sed -E 's@^([A-Z][A-Z0-9_]*_RECORD)="\.git/@\1="core/@' "$PREPUSH.orig" > "$PREPUSH"
+# THE ANCHOR IS THE RECORD'S PREFIX, WHICHEVER OF THE TWO LEGAL SPELLINGS IT USES.
+# It was `"\.git/` alone until v0.608.0, when the hook stopped spelling the git dir
+# literally: in a LINKED WORKTREE `.git` is a FILE, so every record failed to open and
+# the suite lost its cross-run evidence silently (`BL-277`). The hook now resolves
+# `GITDIR` from `--git-common-dir` and the records read `"$GITDIR/…`, which that `sed`
+# matched NOTHING of — so this arm correctly refused, on the commit that fixed the
+# defect, rather than passing over a mutation that never applied. Both spellings are
+# anchored here because both are legal: the literal one in a program that has no
+# worktree to serve, the resolved one in these two hooks.
+sed -E 's@^([A-Z][A-Z0-9_]*_RECORD)="(\.git|\$GITDIR)/@\1="core/@' "$PREPUSH.orig" > "$PREPUSH"
 if [ "$i55_declared" -lt 2 ]; then
   bad "FIXTURE BROKEN: the hook declares $i55_declared cross-run record(s) under .git/; this arm proves a DERIVED subject set and cannot do that over fewer than two"
 elif cmp -s "$PREPUSH.orig" "$PREPUSH"; then
