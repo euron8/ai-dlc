@@ -4227,6 +4227,8 @@ verify: sh d=core/scripts/derive-fixture-readsets.sh; [ -f "$d" ] || exit 9; gre
 
 ## BL-277 — both pre-push runners spell their cross-run evidence records as literal `.git/` paths, so every gate run from a linked worktree loses the evidence silently and still reports green
 
+**LANDED (v0.608.0, verified c50d6e7d.)**
+
 **DEFECT.** Found at batch 131 while collecting three fan-out hands, each of which had run the
 suite in its own agent worktree. Not fixed here — it is a different subsystem from that batch's
 two subjects, and the fix is one line in each of two byte-bound runners.
