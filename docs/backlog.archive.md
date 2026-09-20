@@ -16421,3 +16421,121 @@ the retiring direction — see BL-279.**
 
 
 verify: sh s=core/skills/ai-dlc-update/SKILL.md; [ -f "$s" ] || exit 3; g(){ LC_ALL=C awk -v B="- **$1** " "index(\$0,B)==1{f=1;print;next} f&&/^- [*][*]/{exit} f" "$s" | LC_ALL=C sed "s/<!--.*-->//g" | LC_ALL=C tr "\n" " " | LC_ALL=C tr -s " "; }; d="$(g domain-local)"; u="$(g un-pushed-innovation)"; [ -n "$d" ] && [ -n "$u" ] || exit 3; LC_ALL=C grep -qE "push_candidate: *false" <<< "$d" || exit 1; LC_ALL=C grep -qE "push_candidate: *true" <<< "$u" || exit 1; ! LC_ALL=C grep -qE "push_candidate: *true" <<< "$d"
+## BL-074
+
+**LANDED (v0.613.0, verified 53a17335).**
+
+**The ENTRY-LINE half of the ledger close predicate is still a hand-copy, in the one program that
+now lifts the BODY half from its owner.** `core/skills/ai-dlc-update/reconcile/`
+`warn-shadowed-local-validators.sh` composes its awk from `ledger_entry_awk()` and
+`ledger_close_awk()`, so its boundary rule and its BODY close test are both single-homed — and
+then writes the entry-line test inline:
+
+```
+ledger_entry_shape($0) != "" && ($0 ~ /ADOPTED UPSTREAM|WITHDRAWN/ || $0 ~ /\(original text, retained for the record\)/) { closed=1 }
+```
+
+which is the predicate `ledger-reverify.sh`'s `entry_line_closes()` already owns. `lib.sh`
+single-homes only the body rule, and its own header's sentence about two close-predicates
+differing deliberately is about reverify-vs-rotate — it says nothing about a third copy in a
+third program.
+
+**This is the same class the release that filed it just fixed, and it is filed rather than fixed
+for a stated reason.** That release replaced four drifted copies of the BODY rule with one lift,
+after measuring that the drifted ones produced a false report on the reference consumer and false
+retire advice here. A second lift is the correct remedy and it is a second runtime read; landing
+one into a release whose fixtures three independent hands had just stabilised is how a green gate
+becomes a red one at the last step.
+
+**The two copies AGREE today, so no fixture arm can distinguish them and one would be vacuous.**
+That is what makes this a latent defect rather than a live one, and it is also why the remedy is
+a lift rather than a guard — `mechanism-design.md` asks for the PARTITION that makes the bad state
+unconstructible over the check that looks for it. The receipt below therefore keys on the
+restatement itself, with a control so deleting the arm cannot close it.
+
+**A fix must lift, not delete.** The entry-line scope is load-bearing: the legacy id-less form
+writes its close inside the title, and the retained-copy parenthetical carries no marker of its
+own, so a program without an entry-line test misses both.
+
+Found by the fixture author who repaired `core/fixtures/shadowed-local-validators/` after the body
+lift landed, while establishing that its new mutant could distinguish a lifted predicate from an
+inline one.
+
+verify: sh W=core/skills/ai-dlc-update/reconcile/warn-shadowed-local-validators.sh; [ -f "$W" ] || exit 9; grep -q 'ledger_close_awk' "$W" || exit 9; n="$(grep -c 'original text, retained for the record' "$W")"; [ "$n" -eq 0 ]
+
+## BL-140 — the ledger's close vocabulary has one token and it asserts the opposite of a rejection
+
+**LANDED (v0.613.0, verified 53a17335).**
+
+**Surfaced by the operator carrying an adjudication into the reference consumer**, 2026-09-02, and
+NOT fixed here — this is a different subsystem from `BL-139`'s release.
+
+`ledger-rotate.sh` moves an entry out of the live push-candidate ledger on exactly one sentinel:
+an annotation opening `**ADOPTED UPSTREAM (v<digit>`. `ledger-reverify.sh` reads the same phrase.
+There is no close form for a candidate upstream **REJECTED as by-design**, so a consumer that has
+been told its candidate is rejected has two options: leave it live, where it surfaces in every
+upstream sweep forever, or archive it under an annotation claiming upstream ADOPTED it.
+
+Measured on the real instance, in the consumer's archive today:
+
+    ## PC-S340-IS-CORE-ANSWERS-BY-DECLARED-GLOB-NOT-BY-MEMBERSHIP
+      **ADOPTED UPSTREAM (v0.458.0, verified 2026-09-02)** -- adjudicated `REJECTED - BY DESIGN`
+      in upstream's S340 adjudication brief
+
+**The version it names is the release that REVERTED the fix it claims was adopted.** `v0.458.0`
+reverted the membership answer; the entry now records that upstream adopted a change that release
+removed. Anyone reading that ledger later reconstructs the wrong history, and the belief it
+creates — that `--is-core` answers by membership — is the one that already cost a release.
+
+**This is not the consumer's error.** The rotation happened correctly, the reason text is accurate,
+and the operator's session had no other token available. The vocabulary is the defect and it is
+upstream's: both `ledger-rotate.sh` and `ledger-reverify.sh` are core.
+
+**MEASURED AGAIN ON THE 0.471.0 -> 0.479.0 PULL, AND THE GAP IS NOT A ONE-OFF.** Driving
+`ledger-rotate.sh` in report mode against the consumer's live ledger after that pull: it names
+**FOUR entries CLOSED for re-verification but NOT archivable**, because each is a genuine close
+with no version — a withdrawal, or an absorption predating `base`. They stay in the live ledger
+and are re-reported on every run, and the script's own row is the only place they appear.
+Post-rotation the ledger carries **10 `ADOPTED UPSTREAM` occurrences and 1** in the
+`**ADOPTED UPSTREAM (v` form the rotator accepts, against an impossible-token control of 0. The
+executing session measured 11 and 2 immediately before the rotation; both readings are correct at
+their own moment, and the SPREAD is the point. **The gap between "closed" and "archivable" is nine
+occurrences wide on one ledger.**
+
+The four: `PC-S297-H2-SEEDS-STILL-VACUOUS-PURE-ECHO`,
+`PC-S300-ORIGIN-TAG-GATE-HAS-NO-WAIVER-FOR-TRACEABILITY-CITATIONS` (the withdrawn entry and its
+retained original), and `PC-S305-CHECK-17-BYPASS-CONSUMER-CASES-V8-V9-AND-A-PASSING-CONTROL`.
+**They were deliberately left stuck rather than papered over** — inventing a version to make them
+archivable would record an adoption that never happened, which is this entry's own defect pointed
+the other way.
+
+**THE MISSING REJECTION FORM IS HALF THE GAP, AND THE OTHER HALF IS A SET DIFFERENCE BETWEEN
+THE TWO ENGINES.** `ledger-reverify.sh:1670` closed an entry on TWO tokens, `ADOPTED UPSTREAM`
+and `WITHDRAWN`, while `ledger-rotate.sh` archived on ONE hand-written literal at three sites —
+and that file contained `WITHDRAWN` **zero** times, against a same-invocation same-file control
+of `ADOPTED UPSTREAM` at 19 and an impossible-token control of 0. So a withdrawal was SKIPPED by
+every re-verification and REFUSED by every rotation at once: invisible in the report and
+permanently resident in the live ledger. Adding a rejection token to one file alone reproduces
+that state rather than fixing it, which is why this entry closes on the two lists becoming ONE
+grammar and not on any spelling.
+
+**`BL-068` is ALREADY ARCHIVED** — LANDED at `v0.377.0`, in `docs/backlog.archive.md` (control:
+this entry is live in `docs/backlog.md`). Nothing is owed to it and this entry closes alone.
+
+Two findings from the hand that derived the grammar, both of which a spelling-level fix would
+have shipped past:
+
+- **`reconcile/lib.sh`'s own finders hand-listed the token set they were hunting**, so adding a
+  close token to the single home took them from 1 match to 0 and every caller refused — the same
+  defect one level down, in the file whose job is to prevent it. A finder keys on the rule's
+  STRUCTURE plus one anchor token now, with an exactly-one guard.
+- **The entry-line rule cannot be derived from the body rule.** Doing so stranded the
+  retained-copy parenthetical, which is not part of the body grammar at all, and the stuck count
+  fell only 6 → 2 that way against 6 → 1 for the shipped derivation.
+
+The enforcer is `reconcile/lib.sh`'s `ledger_archive_awk()`, which makes the skip grammar's
+optional bold span mandatory; it is not restated here.
+
+verify: sh R=core/skills/ai-dlc-update/reconcile; V="$R/ledger-reverify.sh"; O="$R/ledger-rotate.sh"; [ -r "$V" ] && [ -r "$O" ] || exit 9; n=$(grep -cE '^[[:space:]]*/.*ADOPTED UPSTREAM.*closed=1 \}$' "$V") || exit 9; [ "$n" = 1 ] || exit 9; d=$(mktemp -d) || exit 9; grep -E '^[[:space:]]*/.*ADOPTED UPSTREAM.*closed=1 \}$' "$V" | sed -E 's|.*\(([^()]*)\)/.*|\1|' | tr '|' '\n' | grep . > "$d/toks"; grep -qx 'ADOPTED UPSTREAM' "$d/toks" || exit 9; grep -qx 'ZZQQ NO SUCH TOKEN' "$d/toks" && exit 9; i=$(grep -c . "$d/toks") || exit 9; [ "$i" -ge 2 ] || exit 9; run() { L="$d/$3.md"; { echo '# L'; echo; echo '## PC-RX-A annotated'; echo; echo "**$1 $2** closed."; echo; echo 'verify: manual'; echo; echo '## PC-RX-B unbolded'; echo; echo "$1 $2 closed."; echo; echo 'verify: manual'; echo; echo '## PC-RX-M mention only'; echo; echo "Once ruled, annotate it \`$1 $2\` then."; echo; echo 'verify: manual'; echo; } > "$L"; bash "$O" "$L" 2>/dev/null | awk '/closed entries would move/{m=1;next} /^  archive: /{m=0} m' > "$d/$3.mv"; a=$(grep -c 'PC-RX-A annotated' "$d/$3.mv"); b=$(grep -c 'PC-RX-B unbolded' "$d/$3.mv"); m=$(grep -c 'PC-RX-M mention only' "$d/$3.mv"); echo "$a$b$m"; }; VP='(v0.1.0, verified 2026-01-01).'; ok=1; [ "$(run 'ADOPTED UPSTREAM' "$VP" ctl)" = 100 ] || ok=0; [ "$(run 'ZZQQ FABRICATED CLOSE' "$VP" neg)" = 000 ] || exit 9; j=0; while IFS= read -r t; do j=$((j+1)); [ "$(run "$t" "$VP" "t$j")" = 100 ] || ok=0; done < "$d/toks"; [ "$j" = "$i" ] || exit 9; [ "$(run 'ADOPTED UPSTREAM' '(absorbed before base abc1234).' nov)" = 100 ] || ok=0; rm -rf "$d"; [ "$ok" = 1 ]
+
+
