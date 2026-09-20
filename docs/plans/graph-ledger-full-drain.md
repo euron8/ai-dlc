@@ -49,6 +49,75 @@ and expect a rule here to cite a measurement whose story lives in the archive.**
 that file and a `path:line` into it would then fail `validate-plan-shape.sh`'s citation arm on a
 correct rotation.
 
+**BATCH 136 SHIPPED AS `v0.612.0` (`8efbd08b`), ONE SUBJECT, SHIPPED ALONE BECAUSE THE SUBJECT IS
+THE UPDATE SKILL ITSELF.** `BL-029` closed, discharging `PC-S296-REJECTION-CARRIES-UNRELATED-GAPS`,
+named verbatim in the release commit. `SKILL.md`'s step-7u bucket list routed `domain-local` to
+`extensions/` writing no push flag while `un-pushed-innovation` wrote `push_candidate: true` one
+bullet below; both now write it, and a found dependency re-buckets. `BL-279` filed; `BL-230`
+widened. Gate `AI_DLC_FIXTURE_NO_SKIP=1`: 22 of 22 phases, 37 PASS / **0 FAIL**, **203 ok / 203
+dispatched**, both changed fixtures read by name against an impossible-name control of 0. Live
+**76 -> 77**, archive **201** unmoved (a filing, no rotation). The PC-backed worklist reads **7**
+and `BL-029` is still on it — its candidate stays live upstream until the consumer PULLS, which is
+the DISCHARGED-falls-on-success shape, not a regression.
+
+**THE SITE WAS WRONG IN THE FIRST CONTRACT AND AN ADVERSARY RUN ALONE CAUGHT IT BEFORE A BUILDER
+STARTED.** Revision 1 sited the rule on `classify-block.md`'s `domain-local` bullet. That file is
+read by **0** executables (control: 35 `.sh` name `preclassify`), so no arm can observe whether a
+classifier applied anything written there — and the motivating case does not live in a
+`domain-local` row at all. It is an `extensions/` entry carrying `hooks: steps/retro.md` and
+`push_candidate: false`, with its adjudication in `overrides/`. **The proposed rule scored ZERO on
+its own motivating case**, the same failure batch 135 recorded, caught the same way: by RUNNING it.
+
+**THE RECEIPT BEING REPLACED ACQUITTED THE DESTRUCTIVE INVERSE OF ITS OWN FIX.** Measured, mutant
+application asserted by `cmp` first: strip `FLAG for push` from `un-pushed-innovation` and move it
+to `domain-local` — deleting the only working push route — and the shipped receipt exits **0**, the
+same verdict it gives the correct fix, against **1** on the shipping tree. **A receipt that cannot
+separate the fix from its inverse is not a receipt**, and a prose insertion closed it too.
+
+**A VALIDATOR ARM WAS BUILT, MEASURED, AND REJECTED IN FAVOUR OF A FIXTURE.** The join an arm would
+carry — an entry's `hooks:` target against whether core text there presupposes the machinery —
+fires on **8 of the 25** `push_candidate: false` entries in the reference consumer, including
+entries with no dependency. An unmeasured lint is one the operator turns off. The distribution's
+own `extensions/` holds only `README.md`, so the arm would also have had zero corpus here.
+
+**A POPULATION COUNT WAS WRONG BECAUSE A CONTRACT DOC COUNTED AS AN ENTRY.** The `push_candidate:
+false` population is **25**, not 26: `extensions/README.md` carries a TEMPLATE flag line. Text
+about a program is not the program, in the count itself.
+
+**TWO GATE RUNS BLOCKED BEFORE THE THIRD WENT GREEN, AND BOTH BLOCKS WERE REAL.** The first
+reported `exit code 0` in the task notification while the log's last line read `pre-push: BLOCKED.`
+— **read the LOG, never the wrapper.** Its cause was `R5`'s population floors, stale since
+`v0.562.0` (set at 88 entries / 76 receipts; the tree had rotated to 76/65) with `origin/main`
+passing only by sitting EXACTLY on the boundary, `12 > 12` being false. **The window between the
+paired bounds was CLOSED**: filing any `verify: manual` entry RAISES the entry count, shrinks the
+entry drop, and fires an arm whose real subject is a DELETED receipt — measured, this batch removed
+**zero** `sh` receipts. Re-seated both floors together, as R5's own remedy prescribes, and probed
+both ways: a floor of 65 against 64 still FAILS by name, and an entries floor above the live count
+no longer fires on a manual filing. **Ask of every ratchet what it makes UNREACHABLE.**
+
+**THE SECOND BLOCK WAS `BL-230`, AND `E3` IS A FOURTH ARM THE ENTRY DID NOT NAME.**
+`reconcile-emit-report` failed `E3` under the 12-way pool having PASSED minutes earlier on a tree
+differing only by one integer pair on a `.githooks/pre-push` argument line. Solo from the repo root
+it exits **0** twice, 83 assertions each. Attribution severed in one invocation: the fixture names
+`ai-dlc-update/SKILL.md` **0** times against a control of **22** for `emit-report.sh`. `E3` scored
+**0** hits in the entry against a control of **9** for `E1`, so the entry was WIDENED rather than
+the green re-run erasing the evidence.
+
+**THE DELIVERY GAP IS THREE RELEASES, AND A FIGURE IN A BRIEF EXPIRED UNDER THE BATCH THAT WROTE
+IT.** The consumer PULLED `0.605.0 -> 0.608.0` mid-batch, at `cff9a603`. A brief stating `0.605.0`
+/ `a934b743` was accurate when written and three releases stale two hours later; a measurement hand
+caught it by RE-READING the stamp instead of trusting the brief. Installed **0.608.0**
+(`03c04e74`) against `VERSION` **0.612.0** — `0.609.0`, `0.610.0`, `0.612.0` and this one, **below**
+the five-release WIDE threshold. **0** mode-only changes across 17 raw diff rows; `apply.sh` and
+`ai-dlc-update/SKILL.md` are both in the range, so the consumer's INSTALLED copy runs the pull
+carrying its own repair. The operator's BANKED ruling stands — report the gap, write no runbook.
+
+**ONE ACTION IS OWED AND NO SESSION CAN TAKE IT.** The new fixture has no read-set entry and the
+runner says so on every push: `1 of 203 fixture dir(s) UNMAPPED (always run):
+extract-push-flag-decision`. It runs regardless, so nothing is silently skipped. The operator runs
+`sudo bash core/scripts/derive-fixture-readsets.sh --list "extract-push-flag-decision"` and the
+next batch commits the map change.
+
 **BATCH 135 SHIPPED AS `v0.611.0` (`82f875b3`), ONE SUBJECT, AND IT SHIPPED ALONE BECAUSE
 `apply.sh` IS A BOOTSTRAPPING FILE.** `BL-276` closed, discharging
 `PC-S312-DERIVATION-FENCES-STRANDED-CORE-RELOCATION-WITH-NO-WORKLIST-ROW`, named verbatim in the
@@ -926,14 +995,30 @@ given at batch 90.
    distribution-internal one. Batch 132 took `BL-277`, which carries no `PC-` id and was therefore
    NOT off that worklist — an operator choice, made on a direct question, because the defect was
    blocking this program's own gate. Batches 133 and 134 each scoped two PC-backed entries off the
-   worklist, and batch 135 scoped one, leaving it at **6**, which is still where a batch scopes
-   from by default. **Run the join; the number here is a record of when it was taken, never an
-   input.**
+   worklist, batch 135 scoped one, and batch 136 scoped `BL-029` — after which the join reads
+   **7**, which is HIGHER than before the close and is not a regression: `BL-029` stays on the
+   list because its candidate is live upstream until the consumer PULLS, and `BL-279` entered
+   carrying the same id. **A worklist that rises across a successful batch is the normal shape
+   here.** That is still where a batch scopes from by default. **Run the join; the number here is
+   a record of when it was taken, never an input.**
 
-   **BATCH 134's PAIRING TEST IS THE ONE TO REUSE WHEN BATCHING TWO SUBJECTS.** Of the six
-   remaining, three touch a BOOTSTRAPPING file (`ledger-reverify.sh`, `ledger-rotate.sh`, the
-   update skill) — `BL-140`, `BL-145` and `BL-067` — which action 2 requires to ship ALONE, so the
-   batchable set is smaller than the worklist and that is the first thing to derive, not the last.
+   **SCORE CITATION OWNERSHIP BEFORE RANKING, BECAUSE THE JOIN CANNOT.** `pc()` matches any `PC-`
+   token in an entry and cannot tell "I close this" from "here is an example". Measured at batch
+   136 over the six-row worklist: `BL-140` cites its id as one of four stuck EXAMPLES and `BL-145`
+   cites its own as a false-positive TABLE ROW and receipt ANCHOR — neither is a candidate the
+   entry discharges. Scored by ownership verb (`Discharges`, `Carries the reference consumer's`,
+   `Filed by the consumer as`), hits were BL-029=3, BL-067=1, BL-132=5, BL-215=2, **BL-140=0,
+   BL-145=0**, against an impossible-verb control of 0. **Two of six rows were not PC-backed at
+   all**, and that decided the batch's subject.
+
+   **BATCH 134's PAIRING TEST IS THE ONE TO REUSE WHEN BATCHING TWO SUBJECTS.** Several worklist
+   rows touch a BOOTSTRAPPING file — `ledger-reverify.sh`, `ledger-rotate.sh`, `apply.sh` or the
+   update skill — which action 2 requires to ship ALONE, so the batchable set is smaller than the
+   worklist and that is the first thing to derive, not the last. **Derive the membership; do not
+   read a list of ids here.** Batch 136's subject reached that rule by an indirect route worth
+   knowing: `classify-block.md` is on none of those lists, but the fix's correct SITE turned out to
+   be `ai-dlc-update/SKILL.md`, which IS the update skill — so the ship-alone answer followed the
+   site, not the entry's own file list, and it could not be settled until the site was.
    Derive it per entry BODY with a non-empty-body control; batch 135 did, and the answer chose the
    subject. Then SCORE each candidate's
    receipt against the OTHER's tip and report both: a receipt the other fix closes is a pairing to
