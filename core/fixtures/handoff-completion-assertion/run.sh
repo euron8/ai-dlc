@@ -132,7 +132,7 @@ reset_state() { # reset_state <projdir>
   mkdir -p "$sd/.driver"
   rm -f "$sd/handoff-guard-state.txt" "$sd/pipeline-continuation-log.md" \
         "$sd/pipeline-paused.flag" "$sd/.handoff-in-progress" "$sd/.recover-fired" \
-        "$sd/pipeline-snapshot.md" "$sd/.handoff-guard-armed"
+        "$sd/pipeline-snapshot.md" "$sd/.handoff-guard-armed" "$sd/.handoff-complete"
   # STEP 4's TOUCH IS PART OF THE BASELINE STATE. Check 0 asserts `.driver/handoff` once the
   # resume, sweep and push arms are satisfied, so every ALLOW case in this file needs it on
   # disk or it blocks for the driver arm's reason. It is the LEAD's own Bash action, not a
@@ -808,6 +808,111 @@ r="$(disk "$SESS_A")"
                  || bad "  the operator's answer field did not block either ($r) — (j) proves nothing, and the AskUserQuestion channel is unguarded"
 
 # =============================================================================
+# KEY 2's LIFECYCLE — the completion stamp, at both ends
+# =============================================================================
+# THE SUBJECT. Key 2 reads a LINE in the snapshot, and the snapshot's writers only APPEND.
+# Key 1 reads a FILE that step 5 deletes, so it is self-clearing by construction; key 2 had
+# no discharge at all, and a record once written armed this guard for every later paused Stop
+# of every later session. Measured on the reference consumer: one record, two days old, the
+# guard firing five times across one maintenance session that owed no handoff protocol.
+#
+# THE ARM THAT MATTERS IS THE ARMING ONE, NOT THE DISCHARGE. A discharge that is too eager
+# produces a handoff whose Stop is never examined -- the whole failure ai-dlc-continue.sh's
+# Check 0 exists to catch -- so every ALLOW below is paired, in the same tree, with the case
+# that must still BLOCK: no stamp (c1), a stamp OLDER than the record (c3), and a transcript
+# request through the stamped tree (c2's control). The discharge changes which SNAPSHOT
+# RECORDS are live, and nothing else.
+#
+# BOTH ENDS ARE DRIVEN, because a reader with no writer discharges nothing and a writer with
+# no reader is inert, and each one alone reads exactly like a working pair. (c5) drives the
+# WRITER through the Stop hook's own satisfied branch -- never by touching the file here --
+# so the stamp these arms read is the one a real completion produces.
+#
+# THE SEED IS THE PRODUCER-DERIVED ONE, the reference consumer's own bold lead-in -- the only
+# instance of this record that exists anywhere. A lifecycle asserted over the reader-derived
+# heading alone would be asserted over a shape nothing has been observed writing.
+HC() { printf '%s' "$1/_bmad-output/.handoff-complete"; }
+SNAP_BOLD_SRC="$ROOT/snap-bold.md"
+[ -r "$SNAP_BOLD_SRC" ] || broken "the producer-derived snapshot seed is missing from the sandbox; every key-2 lifecycle case below would run against a tree with no handoff record and pass for the wrong reason"
+snap_at() { cp "$SNAP_BOLD_SRC" "$1/_bmad-output/pipeline-snapshot.md"; }
+
+# (c1) THE ARMING CASE. The reference consumer's own record shape, no stamp. This is the state
+#      every consumer is in before its first verified completion, and it MUST still block.
+dsetup
+snap_at "$P_DISK"
+rm -f "$(HC "$P_DISK")"
+r="$(disk "$SESS_A")"
+[ "$r" = block ] && ok "(c1) key 2: a handoff record with NO completion stamp -> BLOCK (a real pending handoff still arms the guard)" \
+                 || bad "(c1) a pending handoff record was ALLOWED ($r) — the discharge has disarmed key 2 outright, and a genuine in-flight handoff now ends its session unexamined"
+
+# (c2) THE DISCHARGE. The same bytes on disk, one file apart: a stamp NEWER than the record.
+dsetup
+snap_at "$P_DISK"
+sleep 1
+: > "$(HC "$P_DISK")"
+r="$(disk "$SESS_A")"
+[ "$r" = allow ] && ok "(c2) the SAME record with a completion stamp newer than it -> ALLOW (the record's own completion clears the key)" \
+                 || bad "(c2) a COMPLETED handoff still armed the guard ($r) — key 2 has no lifecycle, so the record arms every later paused Stop forever; this is the reference consumer's five blocks in one session"
+# AND THE STAMP DISCHARGES THE KEY, NOT THE GUARD. Same stamped tree, a transcript-visible
+# request: Check 0 must still block. Without this the ALLOW above is equally consistent with
+# a stamp that switches Check 0 off.
+dsetup
+snap_at "$P_DISK"
+sleep 1
+: > "$(HC "$P_DISK")"
+r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_REQ_NOBLK")")"
+[ "$r" = block ] && ok "  control: the stamped tree still BLOCKS a transcript-visible request — the stamp discharges KEY 2, not Check 0" \
+                 || bad "  the stamped tree allowed a transcript-visible request too ($r) — the stamp is switching the whole guard off, which is a guard that fails open"
+
+# (c3) THE NEAR-MISS THE DISCHARGE MUST NOT COVER, and it is the exemption's own subject. A
+#      LATER handoff writes a NEW record at step 3, after the previous handoff's stamp. The
+#      comparison is "snapshot newer than stamp" and never the inverse: bash 3.2's `-nt` is
+#      whole-second, so a compliant handoff whose step 3 and step 5 land in one second is
+#      `-nt` in NEITHER direction, and the inverse form would disarm it.
+dsetup
+: > "$(HC "$P_DISK")"
+sleep 1
+snap_at "$P_DISK"
+r="$(disk "$SESS_A")"
+[ "$r" = block ] && ok "(c3) a NEW record written AFTER an old stamp -> BLOCK (the exemption does not acquit the next handoff)" \
+                 || bad "(c3) the next handoff's record was acquitted by the PREVIOUS handoff's stamp ($r) — one completed handoff disarms key 2 for the rest of the consumer's life"
+
+# (c4) KEY 1 IS UNAFFECTED BY THE STAMP. The two keys must stay separable: a lead INSIDE the
+#      procedure arms the guard whatever the last handoff recorded.
+dsetup "" yes
+: > "$(HC "$P_DISK")"
+r="$(disk "$SESS_A")"
+[ "$r" = block ] && ok "(c4) the entry marker with a stamp present -> BLOCK (the discharge is scoped to key 2)" \
+                 || bad "(c4) the entry marker stopped arming once a stamp existed ($r) — the discharge has leaked into key 1, and a lead mid-procedure is no longer caught"
+
+# (c5) THE WRITER, DRIVEN THROUGH ITS OWN HOOK. The stamp is written on the branch where every
+#      Check 0 arm was READ and found satisfied -- never by this fixture, and never on the
+#      backoff branch, which allows a Stop it could not verify. Three cells: the unsatisfied
+#      Stop leaves no stamp, the satisfied Stop writes one, and the NEXT Stop of that same
+#      tree then allows. The third cell is the defect's own shape and it is what the writer
+#      and the reader have to agree on.
+dsetup
+snap_at "$P_DISK"
+rm -f "$(HC "$P_DISK")" "$P_DISK/_bmad-output/.driver/handoff"
+r="$(disk "$SESS_A")"
+_c5a=absent; [ -f "$(HC "$P_DISK")" ] && _c5a=present
+[ "$r" = block ] && [ "$_c5a" = absent ] \
+  && ok "(c5) an UNSATISFIED Stop blocks and writes NO stamp — an unverified handoff does not discharge its own key" \
+  || bad "(c5) an unsatisfied Stop verdict=$r stamp=$_c5a — a handoff that failed its own arms is recording itself complete, and the next Stop is not examined"
+sleep 1
+: > "$P_DISK/_bmad-output/.driver/handoff"
+rm -f "$P_DISK/_bmad-output/handoff-guard-state.txt"
+r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_REQ_OK")")"
+_c5b=absent; [ -f "$(HC "$P_DISK")" ] && _c5b=present
+[ "$r" = allow ] && [ "$_c5b" = present ] \
+  && ok "  and the SATISFIED Stop allows and writes the stamp — the completion record has a producer in the shipped machinery" \
+  || bad "  the satisfied Stop verdict=$r stamp=$_c5b — key 2's discharge has no writer, so the reader above can never fire on a real tree"
+rm -f "$P_DISK/_bmad-output/handoff-guard-state.txt" "$P_DISK/_bmad-output/.handoff-guard-armed"
+r="$(disk "$SESS_A")"
+[ "$r" = allow ] && ok "  and the NEXT paused Stop of that same tree ALLOWS — the two halves agree, which is the whole defect" \
+                 || bad "  the next Stop of the completed tree still BLOCKED ($r) — the writer's stamp is not the file the reader reads, or the comparison is the wrong way round"
+
+# =============================================================================
 # ai-dlc-recover.sh — THE STEP-FILE OVERRIDE (the predicate, through the compact caller)
 # =============================================================================
 # TWO INDEPENDENTLY DERIVED VALUES, COMPARED. The mandate is read out of the emitted
@@ -909,6 +1014,25 @@ rsetup "$P_REC" "$SNAP_MENTION" yes no
 rassert "(o2) the same words as a MENTION mid-line -> the snapshot's own step file (a mention is not a record)" \
   "$P_REC" "$SESS_A" "$STEP_IMPL" \
   "(o2) a snapshot merely DISCUSSING the handoff record was treated as carrying one — the key is a bare substring and any snapshot whose prose names the section reroutes every compaction"
+
+# (o3) KEY 2's DISCHARGE THROUGH THE OTHER CALLER. The two callers pass different state dirs
+#      and different session sources, and a discharge that works at the Stop seam and not here
+#      leaves a compaction after a COMPLETED handoff recovering into the handoff procedure --
+#      the exact drift the shared predicate exists to prevent. Paired in the same tree with
+#      (o), which must still route: the discharge is one file apart from it.
+rsetup "$P_REC" "$SNAP_BOLD" yes no
+sleep 1
+: > "$(HC "$P_REC")"
+rassert "(o3) key 2 with a completion stamp newer than the record -> the snapshot's own step file" \
+  "$P_REC" "$SESS_A" "$STEP_IMPL" \
+  "(o3) a COMPLETED handoff still routed a post-compact recovery into handoff.md — key 2's discharge does not reach ai-dlc-recover.sh, so the two callers answer one question differently"
+rsetup "$P_REC" "$SNAP_BOLD" yes no
+: > "$(HC "$P_REC")"
+sleep 1
+cp "$SNAP_BOLD" "$P_REC/_bmad-output/pipeline-snapshot.md"
+rassert "  control: a record NEWER than the stamp still routes to handoff.md — the discharge is the ordering, not the file's presence" \
+  "$P_REC" "$SESS_A" "$STEP_HANDOFF" \
+  "  a handoff record written after the previous handoff's stamp was acquitted — one completed handoff disarms the recovery override for good"
 
 # (p) KEY 3, this session's request rows, alone: no entry marker and no HANDOFF POINT heading.
 #     TWO ROWS, request first and a question about it second. See log_two_row's header.
@@ -1242,6 +1366,125 @@ if mkmut m9b-key2-requires-heading "$LIBF" \
   [ "$_m9b" = "$STEP_HANDOFF" ] && ok "  control [m9b]: the reader-derived HEADING seed still passes under the same mutant — a battery seeded only from the reader would have called the broken grammar correct" \
                                || bad "MUTANT TOO BROAD [m9b]: the heading seed stopped routing too ('${_m9b:-<nothing>}') — key 2 is off entirely and (o)'s kill is unattributable"
   mut_ctl m9b "$MUT_DIR"
+fi
+
+# M9c — KEY 2 LOSES ITS DISCHARGE, which is the shipped predicate before this release: the
+#       record arms the key on presence alone and nothing ever clears it. Killed by (c2) and
+#       by nothing else -- every other key-2 seed in this file carries no stamp, so only the
+#       stamped tree can see the conjunct. ALLOW-shaped kill, so the control asserts the
+#       UNSTAMPED record still blocks under the same mutant: the mutation removed the
+#       discharge, it did not disable key 2.
+#
+# THE SED DELIMITER IS `@`, for the reason M9's header states: a `|` here reads to I54b as a
+# pipeline feeding a reader.
+if mkmut m9c-key2-no-discharge "$LIBF" \
+     -e 's@^     && { \[ ! -f "${_sd}/.handoff-complete" \] \\$@     \&\& { true \\@'; then
+  dsetup
+  snap_at "$P_DISK"
+  sleep 1
+  : > "$(HC "$P_DISK")"
+  r="$(disk "$SESS_A" "$MUT_DIR")"
+  [ "$r" = block ] && ok "  mutant [m9c] KILLED by assertion (c2): with the discharge gone a COMPLETED handoff arms the guard again, permanently" \
+                   || bad "MUTANT SURVIVED [m9c]: expected block, got $r — (c2) does not depend on the discharge conjunct, so that assertion proves nothing"
+  dsetup
+  snap_at "$P_DISK"
+  rm -f "$(HC "$P_DISK")"
+  r="$(disk "$SESS_A" "$MUT_DIR")"
+  [ "$r" = block ] && ok "  control [m9c]: the UNSTAMPED record still BLOCKS under the same mutant — it removed the discharge, not key 2" \
+                   || bad "MUTANT TOO BROAD [m9c]: the unstamped record stopped blocking too ($r) — the mutation disabled key 2 outright and (c2)'s kill is unattributable"
+  mut_ctl m9c "$MUT_DIR"
+fi
+
+# M9d — THE COMPARISON INVERTED, stamp-newer-than-snapshot rather than snapshot-newer-than-
+#       stamp. This is the plausible spelling and it is wrong in the direction that matters:
+#       it acquits the NEXT handoff's record on the PREVIOUS handoff's stamp. Killed by (c3)
+#       alone -- (c2)'s tree has the stamp newer, where both spellings agree, so only the
+#       ordering (c3) seeds can separate them. ALLOW-shaped kill; the control is (c2)'s tree,
+#       which must still ALLOW, proving the mutation inverted the test rather than deleting it.
+if mkmut m9d-discharge-inverted "$LIBF" \
+     -e 's@|| \[ "${_sd}/pipeline-snapshot.md" -nt "${_sd}/.handoff-complete" \]; }; then@|| [ "${_sd}/.handoff-complete" -nt "${_sd}/pipeline-snapshot.md" ]; }; then@'; then
+  dsetup
+  : > "$(HC "$P_DISK")"
+  sleep 1
+  snap_at "$P_DISK"
+  r="$(disk "$SESS_A" "$MUT_DIR")"
+  [ "$r" = allow ] && ok "  mutant [m9d] KILLED by assertion (c3): inverted, one completed handoff's stamp acquits every record written after it" \
+                   || bad "MUTANT SURVIVED [m9d]: expected allow, got $r — (c3) does not depend on the comparison's direction, so that assertion proves nothing"
+  dsetup
+  snap_at "$P_DISK"
+  rm -f "$(HC "$P_DISK")"
+  r="$(disk "$SESS_A" "$MUT_DIR")"
+  [ "$r" = block ] && ok "  control [m9d]: the UNSTAMPED record still BLOCKS under the same mutant — it inverted the comparison, it did not delete the key" \
+                   || bad "MUTANT TOO BROAD [m9d]: the unstamped record stopped blocking too ($r) — (c3)'s kill is unattributable"
+  mut_ctl m9d "$MUT_DIR"
+fi
+
+# M9e — THE WRITER NEVER WRITES. The reader is intact and the stamp is never produced, which
+#       is a reader with no writer: inert on every real tree and green against every seed this
+#       fixture writes by hand. Killed by (c5)'s second and third cells, which drive the Stop
+#       hook's own satisfied branch. The control is (c1), which must still block: the mutation
+#       removed the producer, not the guard.
+if mkmut m9e-no-stamp-writer "$CONF" \
+     -e 's@^      : > "${LOG_DIR}/.handoff-complete" 2>/dev/null || true$@      : # stamp writer removed@'; then
+  dsetup
+  snap_at "$P_DISK"
+  rm -f "$(HC "$P_DISK")" "$P_DISK/_bmad-output/.driver/handoff"
+  drive "$P_DISK" "$SESS_A" "$T_REQ_OK" "$MUT_DIR" >/dev/null
+  sleep 1
+  : > "$P_DISK/_bmad-output/.driver/handoff"
+  rm -f "$P_DISK/_bmad-output/handoff-guard-state.txt"
+  r="$(verdict "$(drive "$P_DISK" "$SESS_A" "$T_REQ_OK" "$MUT_DIR")")"
+  _st=absent; [ -f "$(HC "$P_DISK")" ] && _st=present
+  { [ "$r" = allow ] && [ "$_st" = absent ]; } \
+    && ok "  mutant [m9e] KILLED by assertion (c5): the satisfied Stop allows and leaves NO stamp — key 2's reader has no producer and can never fire" \
+    || bad "MUTANT SURVIVED [m9e]: satisfied Stop verdict=$r stamp=$_st — (c5) does not read the writer, so that assertion proves nothing"
+  dsetup
+  snap_at "$P_DISK"
+  rm -f "$(HC "$P_DISK")"
+  r="$(disk "$SESS_A" "$MUT_DIR")"
+  [ "$r" = block ] && ok "  control [m9e]: the pending record still BLOCKS under the same mutant — it removed the writer, not the guard" \
+                   || bad "MUTANT TOO BROAD [m9e]: the pending record stopped blocking too ($r) — the mutation reached Check 0 itself"
+  mut_ctl m9e "$MUT_DIR"
+fi
+
+# M9f — THE STAMP MOVES TO THE BACKOFF BRANCH, where the guard ALLOWS a Stop it could not
+#       verify. That discharges key 2 on exactly the handoffs that failed their own arms, and
+#       it reads as a working writer on every tree where the handoff succeeded. Killed by
+#       (c5)'s first cell, which is the only seed whose Stop is unsatisfied. Control: the
+#       satisfied branch must still stamp, so the mutation MOVED the writer rather than
+#       deleting it -- which is what separates this mutant from m9e.
+if mkmut m9f-stamp-on-backoff "$CONF" \
+     -e 's@^      rm -f "$HANDOFF_STATE" "$HANDOFF_ARMED_FILE"   # backoff exhausted@      : > "${LOG_DIR}/.handoff-complete" 2>/dev/null || true; rm -f "$HANDOFF_STATE" "$HANDOFF_ARMED_FILE"   # backoff exhausted@'; then
+  dsetup
+  snap_at "$P_DISK"
+  rm -f "$(HC "$P_DISK")" "$P_DISK/_bmad-output/.driver/handoff"
+  # MAX_RAPID_BLOCKS consecutive blocks inside the rapid window, so the backoff releases.
+  #
+  # `drive` CANNOT REACH THIS BRANCH AND THAT IS DELIBERATE ON ITS PART: it clears
+  # handoff-guard-state.txt before every call, because a tree driven four times by the ordinary
+  # cases would start ALLOWING and read exactly like an arm standing down. Here the counter IS
+  # the subject, so this one mutant drives the hook raw. Without the raw form the mutant
+  # survives against a correct fixture -- measured -- which reads as an arm that cannot fire.
+  _i=0
+  while [ "$_i" -lt 5 ]; do
+    jq -nc --arg t "$T_REQ_OK" --arg s "$SESS_A" '{transcript_path:$t,session_id:$s}' \
+    | CLAUDE_PROJECT_DIR="$P_DISK" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" \
+      bash "$MUT_DIR/ai-dlc-continue.sh" >/dev/null 2>&1
+    _i=$((_i + 1))
+  done
+  _st=absent; [ -f "$(HC "$P_DISK")" ] && _st=present
+  [ "$_st" = present ] && ok "  mutant [m9f] KILLED by assertion (c5): the BACKOFF branch now stamps, so a handoff that failed every arm records itself complete" \
+                       || bad "MUTANT SURVIVED [m9f]: the backoff branch left no stamp — (c5)'s unsatisfied cell does not read the writer's siting, so that assertion proves nothing"
+  dsetup
+  snap_at "$P_DISK"
+  rm -f "$(HC "$P_DISK")"
+  sleep 1
+  : > "$P_DISK/_bmad-output/.driver/handoff"
+  drive "$P_DISK" "$SESS_A" "$T_REQ_OK" "$MUT_DIR" >/dev/null
+  _st=absent; [ -f "$(HC "$P_DISK")" ] && _st=present
+  [ "$_st" = present ] && ok "  control [m9f]: the SATISFIED branch still stamps under the same mutant — the writer was moved, not duplicated away" \
+                       || bad "MUTANT TOO BROAD [m9f]: the satisfied branch stopped stamping too — the mutation removed the writer and the kill above is m9e's, not this one's"
+  mut_ctl m9f "$MUT_DIR"
 fi
 
 # M10 — drop the session-id conjunct in the awk. Killed by (q).

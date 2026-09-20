@@ -741,6 +741,24 @@ The \`/ai-dlc resume\` line MUST sit BETWEEN two delimiter lines (four or more h
       rm -f "$HANDOFF_STATE" "$HANDOFF_ARMED_FILE"   # backoff exhausted: allow stop (possible false positive)
     else
       rm -f "$HANDOFF_STATE" "$HANDOFF_ARMED_FILE"   # every arm satisfied: the handoff is complete
+      # AND THE SNAPSHOT'S HANDOFF RECORD IS DISCHARGED HERE, which is key 2's whole lifecycle.
+      # That key reads a LINE in a document whose writers only append, so nothing in this
+      # distribution can remove it and it armed this guard permanently -- measured on the
+      # reference consumer as five blocks across one session against a record two days old.
+      # Key 1 needed no such stamp because it is a file step 5 deletes.
+      #
+      # THE STAMP BELONGS ON THIS BRANCH AND NOT ON THE ONE ABOVE. This is the branch where
+      # every arm -- the sweep, the push, the driver signal and the entry marker -- was just
+      # READ and found satisfied, so the stamp records a verified completion rather than a
+      # step the lead claimed. The backoff branch allows a Stop it could NOT verify; stamping
+      # there would discharge the key on exactly the handoffs that failed their own arms,
+      # three rapid blocks after the operator asked for one.
+      #
+      # A LATER handoff re-arms the key by WRITING a new record at step 3, which is newer than
+      # this stamp. The predicate compares the two that way round -- snapshot newer than stamp
+      # -- because bash 3.2's `-nt` is whole-second and the inverse form would disarm a
+      # compliant handoff whose step 3 and step 5 landed in one second.
+      : > "${LOG_DIR}/.handoff-complete" 2>/dev/null || true
     fi
   fi
 fi
