@@ -15784,3 +15784,185 @@ restored byte-identically: a seeded in-tree record **convicted**, an unresolved 
 **convicted**, the shipped hook **silent**.
 
 verify: sh s=.githooks/pre-push; c=core/git-hooks/pre-push; [ -f "$s" ] && [ -f "$c" ] || exit 9; d=$(mktemp -d) || exit 9; r="$d/r"; mkdir -p "$r" || exit 9; git init -q "$r" 2>/dev/null || { rm -rf "$d"; exit 9; }; printf 'x\n' > "$r/f"; git -C "$r" add -A >/dev/null 2>&1 && git -C "$r" -c user.email=t@t -c user.name=t commit -qm s >/dev/null 2>&1 || { rm -rf "$d"; exit 9; }; git -C "$r" worktree add -q --detach "$d/wt" >/dev/null 2>&1 || { rm -rf "$d"; exit 9; }; [ -f "$d/wt/.git" ] || { rm -rf "$d"; exit 9; }; n=0; bad=0; for f in "$s" "$c"; do e=$(LC_ALL=C sed -n '/^# FIXTURE_POOL_BEGIN/,/^# FIXTURE_POOL_END/p' "$f" | LC_ALL=C grep -E '^(GITDIR=|DURATIONS_RECORD=)'); [ -n "$e" ] || { bad=9; break; }; printf '%s' "$e" | LC_ALL=C grep -q '^DURATIONS_RECORD=' || { bad=9; break; }; p=$( cd "$r" && eval "$e" 2>/dev/null; { : > "$DURATIONS_RECORD"; } 2>/dev/null && echo 1 || echo 0 ); [ "$p" = 1 ] || { bad=9; break; }; w=$( cd "$d/wt" && eval "$e" 2>/dev/null; { : > "$DURATIONS_RECORD"; } 2>/dev/null && echo 1 || echo 0 ); [ "$w" = 1 ] || n=$((n+1)); done; rm -rf "$d"; [ "$bad" = 9 ] && exit 9; [ "$n" -eq 0 ] && exit 0; exit 1
+## BL-039
+
+**LANDED (v0.609.0, verified 77f5213a).** Both spans carry the escalation branch: the
+verdict stays FAIL, a Tier 1 `HARD_BLOCK` records the check and its output verbatim, and only a
+recorded operator disposition releases the checkpoint without converting the verdict. The retro
+passage covers all three of Step 5c's absolute mandates. The replacement receipt requires the
+vocabulary positively across both spans and accepts `approved-deferral`; it scores 0 on the fixed
+tree and 1 on the unfixed base, the pure word swap, and the deploy-only half fix.
+
+**Two core steps make a red check unsatisfiable by any action available to the lead, and neither
+offers the escalation branch core uses for exactly this state twelve hundred lines earlier.**
+`core/skills/ai-dlc/steps/retro.md:839` (Step 5c check 3) reads "MUST exit 0. If it fails, fix the
+issues before proceeding to Step 6." `core/skills/ai-dlc/steps/deploy-validate.md:165-173` reads
+"**Smoke tests MUST pass.** ... 5. Repeat until all smoke tests pass. A deployment with failing
+smoke tests is a broken deployment. Do not present it to the human for validation." Measured over
+each span: `escalat*` = 0, `Rule 12` = 0, `HARD_BLOCK` = 0, `disposition` = 0, `operator` = 0 —
+**ten zeros, all five in both spans.** Controls in the same invocation: `smoke` = 5 in the
+deploy-validate span, `check` = 3 in the retro span, so both extractions read real text.
+
+**Core already ships the pattern the filing calls novel, for a different subject.**
+`core/skills/ai-dlc/steps/retro.md:448-459` — "**Locked-requirement deferral needs recorded
+operator disposition.**" — requires a HARD_BLOCK with an explicit operator disposition on record
+(approved-deferral / do-now / descope) per Rule 13 + Rule 12 Tier 1, and surfaces it at the PVC
+"so the governance fact that a locked requirement slipped its lock is visible and signed off". It
+carries its own Rule 26(c) minimum-mechanism block. Same file, same failure shape, applied to
+requirements and never extended to checks.
+
+**The filing's prescribed fix is foreclosed upstream, in writing, and must not be transcribed.**
+It proposes "a gate outcome distinct from PASS and FAIL — a BLOCKED-BY-RECORDED-DISPOSITION state".
+`core/schemas/gate-adjudication-verdict.json:112-113` closes that vocabulary at two values and
+states why in the field's own doc: `"enum": ["PASS", "FAIL"]`, "PASS or FAIL. There is no third
+value and no empty value. A check you cannot evaluate is FAIL-with-reason, never omitted and never
+PASS-by-default." That schema is the single source the readers load and `sync-taught-schema.sh --check`
+byte-matches its rendered example, so a third value is not an omission to fill. The literal token
+`BLOCKED-BY-RECORDED-DISPOSITION` occurs **0** times in `core/` (control: `HARD_BLOCK` in 58 files)
+— a receipt anchored on it, as the filing's shape invites, would have reported STILL-LIVE forever.
+**Narrower** than filed on the remedy: the check stays FAIL and the escalation carries the
+disposition, which needs no new outcome. **Wider** than filed on the defect: `retro.md` Step 5c
+carries three absolute `MUST exit 0` mandates (`:828`, `:839`, `:845`), not the one the filing
+names, and the entry it absorbs (`PC-S295-RETRO-DEPLOY-VALIDATE-S3-DEADLOCK`) is the second site of
+the same shape rather than a separate item.
+
+**The escalation branch is now written into BOTH spans, and the receipt below is a
+REPLACEMENT, not the original.** `deploy-validate.md` gains a step 6 in the smoke fix loop: loop exhausted with the test still
+red, the smoke verdict stays FAILED, a Tier 1 `HARD_BLOCK` carries the tee'd output path and the
+failing assertions verbatim, and only a recorded operator disposition
+(approved-deferral / do-now / descope) per Rule 13 + Rule 12 Tier 1 releases the checkpoint —
+which it does without changing the verdict. The checkpoint template gains a `Red-gate
+dispositions` row under the existing `### Escalation Log` block, carrying the HARD_BLOCK id, the
+disposition token, the evidence path and the failing output as captured; a checkpoint reporting
+a smoke pass, omitting the smoke line, or narrating the failure in place of the captured output
+is declared forged and the deferral void. `retro.md` gains the matching branch at the end of
+Step 5c with the same shape, citing the closed PASS/FAIL enum so no third verdict is invented.
+Both carry a Rule 26(c) triple.
+
+**SCOPE: the retro half covers all THREE `MUST exit 0` mandates, not one.** The new passage is
+sited at the END of Step 5c and names checks 2, 3 and 4 together, so it binds the whole gate
+rather than the single mandate the old receipt's span happened to contain. The old span
+(`3. **Mandatory rules validation.**` → `4. **Audit-anchor`) is therefore the wrong extraction
+for the fixed tree and is replaced below by the whole-`5c` span.
+
+The anchor is a disjunction over the vocabulary core OWNS for this state — `operator disposition`
+OR `approved-deferral` — required POSITIVELY in each of the two spans, never file-wide, because
+file-wide is satisfied by the locked-requirement passage already at `retro.md` and would
+false-close on day one. The run control is `recorded operator disposition` in `retro.md`: if that
+vocabulary is ever removed the receipt reports STILL-LIVE rather than closing on a broken search.
+The span-non-empty guard keeps a renamed or deleted heading at exit 1 rather than 0.
+
+**The `|| [ "$XL" -eq 0 ]` disjunct is GONE, and that hole is why.** Measured on seeded copies
+asserted to differ from the source: a pure word swap replacing both absolute sentences with
+neutral prose and adding no governance vocabulary drove the old receipt to `DR=0 DL=0 RR=0 RL=0`
+and exit 0 — a full close over an intact deadlock. Scored against the replacement, five trees
+each built into its own scratch directory and asserted to differ before its verdict was read:
+correct fix **0**, a second spelling of the correct fix **0**, that pure word swap **1**, the
+deploy-only half fix **1**, the unfixed tree **1**. Four degenerate trees also hold: retro
+heading renamed **1**, deploy anchor renamed **1**, run-control vocabulary removed **1**, and the
+receipt's own literals appended as a comment to the END of both unfixed files **1** — the seed
+`validate-backlog-receipts.sh` builds.
+
+**STATED LIMIT, measured rather than assumed.** That same comment placed INSIDE both spans of the
+unfixed tree closes the receipt at **0**. The subject here is step-file PROSE, so the emission
+site and the prose are the same text and no anchor over it can separate a governing sentence from
+a comment asserting one. Tightening the anchor further was scored and rejected: requiring
+`HARD_BLOCK` in each span rejects a compliant escalation that records `do-now` or `descope`
+without the literal token, which is the exact failure — a correct fix refused by an over-exact
+anchor — that broke the previous receipt in its other direction.
+
+Discharges the consumer entry `PC-S295-RETRO-STEP5C-DEADLOCK-ON-DEFERRED-RED` (absorbing
+`PC-S295-RETRO-DEPLOY-VALIDATE-S3-DEADLOCK`) at pinned ledger line 436. Both source `theirs_has`
+predicates are subsumed: each is the `-cF` arm of its half.
+
+
+verify: sh R=core/skills/ai-dlc/steps/retro.md; D=core/skills/ai-dlc/steps/deploy-validate.md; [ "$(grep -ci "recorded operator disposition" "$R")" -ge 1 ] || exit 1; DS=$(sed -n '/^\*\*Smoke tests MUST pass\.\*\*/,/^### 3b\./p' "$D"); RS=$(sed -n '/^### 5c\. Pre-Commit Validation Gate/,/^### 6\. Commit, Push, and PR/p' "$R"); [ -n "$DS" ] && [ -n "$RS" ] || exit 1; DR=$(grep -Eci "operator disposition|approved-deferral" <<<"$DS"); RR=$(grep -Eci "operator disposition|approved-deferral" <<<"$RS"); [ "$DR" -ge 1 ] && [ "$RR" -ge 1 ]
+## BL-042
+
+**LANDED (v0.609.0, verified 77f5213a).** Check 17 carries a second arm pinning the run
+folder's report for the validate-only branches, with `--require-skill`, no `--allow-missing`, and
+its step file named in the parenthetical so `I32` joins the pin. The filed project-type axis was
+wrong: `route.md` never routes `feature` through `research-requirements.md`, so the unsatisfiable
+set is brownfield-a and brownfield-c there plus `feature` and `carry-over` in `requirements.md`
+§4. The replacement receipt counts invocations and requires a non-`prd.md` path; it scores 0 on
+the fixed tree and 1 on the unfixed base and on the HTML-comment non-fix.
+
+**Check 17's PRD arm reads the provenance block out of an artifact the invocation it pins is
+forbidden to write.** `core/skills/ai-dlc/steps/gate-validation.md:1076-1079` runs
+`validate-provenance-block.sh _bmad-output/planning-artifacts/prd.md --require-skill bmad-prd`,
+and `:1080` states the derivation for that pin: "`research-requirements.md` §3 invokes `/bmad-prd`
+with the **validate** intent, so that is the name a correct run stamps." Rule 20 sites the block
+at `core/skills/ai-dlc/SKILL.md:767-768` — "Every invocation MUST emit a
+`SKILL_INVOCATION_PROVENANCE v1` block into **the artifact it produces**." The artifact §3
+produces is not the PRD: `core/skills/ai-dlc/steps/research-requirements.md:110-114` says the
+validate intent "always writes both `validation-report.html` and `validation-report.md` into the
+run folder," and the same passage forbids the other exit outright — "this call must not re-author
+the PRD." A run that obeys Rule 20 puts the block where Check 17 does not look, and a run that
+satisfies Check 17 natively has violated `:110`. Hand-carrying the block into `prd.md` is the only
+remaining exit, which is the workaround the consumer entry reproduces.
+
+Measured: `validation-report` occurs **0** times in the whole of `gate-validation.md`, and **1**
+time in `research-requirements.md` — control `require-skill` = **3** inside the 90-line
+`CHECK_LOADED: 17` → `18` span, so the span extraction and the search both ran. The artifact Rule
+20 designates as the block's home is named by the step that produces it and by no gate check.
+
+**The filing understated the scope by one project-type axis.** It filed a text-level disagreement
+between Check 17's PRD arm and Rule 20's placement clause. The arm is in fact correct for exactly
+one branch and unsatisfiable for the rest: `research-requirements.md:80-81` invokes `/bmad-prd` to
+author `prd.md` only for greenfield/brownfield-b, where the produced artifact genuinely is the
+PRD; `:82-92` routes feature/brownfield-a/c through a hand UPDATE with no `/bmad-prd` invocation
+at all, leaving §3's validate call as the only `bmad-prd` run in the sprint. So on every
+feature and brownfield-a/c sprint the arm has no legal way to pass. The correction is wider, and
+it identifies the missing thing as a branch rather than a wording conflict.
+
+The original anchor was `validation-report` inside the span, on the reasoning that no repoint or
+added branch could be written without naming it. That reasoning held for the path and not for the
+predicate: a whole-span substring search is satisfied by any text carrying the token, which a
+comment and a negating sentence both do, and it is NOT satisfied by a correct fix that reaches the
+same path through a different spelling. The quote-back hazard it was chosen to survive is real and
+the replacement below survives it for a different reason — an invocation is emitted, not quoted.
+The one satisfying fix either anchor would miss is the mirror direction — amending §3 to carry the
+block into `prd.md` — and that branch is closed by `research-requirements.md:110` and by the
+sub-skill's own headless contract, which writes the report regardless of finding count.
+
+Note for whoever implements it: the fix is a second arm in the check, not a note beside the
+existing one. `steps/` is in `core/scripts/audit-rule-files.sh`'s `IN_SCOPE` (`:374`), so the
+branch must be written as check text with no version tag and no account of the fork it replaced.
+
+**What the fix covers, and what it does not.** Check 17 now carries a second `bmad-prd` arm,
+pinned to the run folder's `validation-report.md`, and the original arm is narrowed to the
+branches where `/bmad-prd` AUTHORS the PRD. The split is by which invocation produces the
+artifact, not by project type: `research-requirements.md` §2 authors `prd.md` through
+`/bmad-prd` on greenfield and brownfield-b; brownfield-a and brownfield-c update it by hand,
+leaving §3's validate call as the sprint's only `bmad-prd` run. The new arm covers
+`requirements.md` §4 as well, on the same ground — §4(c) updates the PRD by hand and its only
+`bmad-prd` invocation is the validate call, so the requirements gate needs the report-pinned
+arm and the authoring arm is unsatisfiable there. Both branches carry `--require-skill`; the
+arm refuses `--allow-missing`, which would acquit the missing block this check exists to raise.
+
+**The filing's project-type axis does not re-derive, and the correction WIDENS it.** It reads
+`feature` as a `research-requirements.md` branch. The router
+(`core/skills/ai-dlc/steps/route.md`, variant table) routes `feature` and `carry-over` through
+`requirements.md` and never through `research-requirements.md`; the variants that run
+`research-requirements.md` are greenfield, brownfield-a, brownfield-b and brownfield-c. So the
+unsatisfiable set is brownfield-a and brownfield-c in `research-requirements.md`, PLUS `feature`
+and `carry-over` in `requirements.md` — a second step file the filing never named.
+
+**The old receipt was broken in both directions and is replaced.** Keyed on `validation-report`
+anywhere in the span, it closed at exit 0 on an HTML comment inside the span that fixed nothing,
+and it rejected a competent second spelling that pins a grammar-legal run-folder path without
+using that token in a form the old grep could see. The replacement keys on the EMISSION SITE: it
+joins the span's wrapped arms, counts the `validate-provenance-block.sh … --require-skill
+bmad-prd` INVOCATIONS, requires two or more, and requires at least one of their paths not to end
+in `prd.md`. It counts ARMS, not `--require-skill` tokens: the span's `--require-skill`
+occurrences are spread one per arm across several arms pinning different skills, so a token
+count answers a question about the whole check rather than about this pin. An HTML comment emits no
+invocation; a sentence asserting the opposite emits none either. The emptied-span control is
+separate and first: exactly one `CHECK_LOADED: 17 ` marker, else exit 2, so a renumber to `17a`
+reports a broken receipt rather than a reproducing defect.
+
+Discharges the consumer entry
+`PC-S297-CHECK17-PRD-ARM-CONTRADICTS-RULE-20-BLOCK-PLACEMENT` at pinned ledger line 1165.
+
+
+verify: sh GV=core/skills/ai-dlc/steps/gate-validation.md; M="$(grep -c 'CHECK_LOADED: 17 ' "$GV")" || M=0; [ "$M" -eq 1 ] || exit 2; A="$(awk '/CHECK_LOADED: 17 /,/CHECK_LOADED: 18 /' "$GV" | awk '/^- [*][*]/{if(b!=""){print b};b=$0;next} b!=""{b=b" "$0} END{if(b!=""){print b}}')"; [ -n "$A" ] || exit 2; N="$(grep -cE -- 'validate-provenance-block[.]sh +[^ ]+.*--require-skill +bmad-prd' <<<"$A")" || N=0; [ "$N" -ge 2 ] || exit 1; P="$(sed -nE 's#.*validate-provenance-block[.]sh +([^ ]+).*--require-skill +bmad-prd.*#\1#p' <<<"$A")"; Q="$(grep -cv 'prd[.]md$' <<<"$P")" || Q=0; [ "$Q" -ge 1 ]
