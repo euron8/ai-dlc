@@ -53,6 +53,38 @@ ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 entries() { grep -cE '^(## |- \*\*)' "$1" 2>/dev/null || echo 0; }
 
+# THE CLOSE VOCABULARY, DERIVED FROM ITS SINGLE HOME AND NEVER SPELLED HERE.
+#
+# A FIXTURE THAT HAND-LISTS THE TOKEN SET IS THE SUBJECT'S OWN DEFECT, ONE LEVEL UP. The thing
+# under test is that `ledger-rotate.sh` stopped keeping a membership opinion of its own and now
+# DERIVES rotation's grammar from `ledger-reverify.sh`'s close rule. A seed that writes
+# `WITHDRAWN` into a heredoc is a third copy of that list: the day a fourth token is added to
+# the single home, this fixture's seed still carries three and the arm proving the two lists
+# agree goes quiet about exactly the token that was added. So the tokens come out of the rule
+# `ledger_close_awk_pattern()` lifts, at run time, by the same structural grammar `lib.sh` uses
+# -- a line-leading pattern rule setting `closed=1` and naming the anchor token -- and NOT by
+# spelling the alternation.
+#
+# IT REFUSES RATHER THAN GUESSING. An empty answer here would make the arms that consume it
+# seed entries closed by nothing and read as green, which is the shape of every defect this
+# file guards. The caller asserts the two tokens are non-empty and DISTINCT before using them.
+q_close_token() { # <n> -> the nth token of reverify's close alternation, on stdout
+  LC_ALL=C awk -v want="$1" '
+    /^[[:space:]]*\/.*ADOPTED UPSTREAM.*closed=1 \}$/ {
+      line = $0
+      # The alternation is the LAST parenthesised group before the closing slash.
+      if (match(line, /\([^()]*ADOPTED UPSTREAM[^()]*\)\/ \{ closed=1 \}[[:space:]]*$/)) {
+        grp = substr(line, RSTART + 1, RLENGTH - 1)
+        sub(/\)\/ \{ closed=1 \}[[:space:]]*$/, "", grp)
+        n = split(grp, tok, /\|/)
+        if (want >= 1 && want <= n) { print tok[want]; found = 1 }
+      }
+      exit
+    }
+    END { if (!found) exit 1 }
+  ' "$RV"
+}
+
 echo "ledger-rotate:"
 
 before_lines="$(wc -l < "$LEDGER" | tr -d ' ')"
@@ -223,17 +255,36 @@ fi
 # reason is structural: a swept entry stops being extracted as open, so it stops emitting a row
 # at all — status and subject are exactly what disappears.
 #
-# THE MUTATION IS THE ONE THAT PRODUCED THE REAL DEFECT (PC-S331): drop the version DIGIT from
-# the close predicate and the rotator matches an entry against its own INLINE quotation of the
-# annotation form. `PC-SW-OPEN` below is that entry, and it carries a receipt so ledger-reverify
-# emits a row for it — the quoting entry in the PC-S331 ledger further down does not, which is
-# why this needs its own seed rather than reusing that one.
+# THE MUTATION IS THE ONE THAT PRODUCES THE REAL DEFECT (PC-S331): make the archive grammar
+# stop requiring a LINE START, and the rotator matches an entry against its own INLINE quotation
+# of the annotation form. `PC-SW-OPEN` below is that entry, and it carries a receipt so
+# ledger-reverify emits a row for it — the quoting entry in the PC-S331 ledger further down does
+# not, which is why this needs its own seed rather than reusing that one.
+#
+# THE SUBJECT MOVED WITH THE GRAMMAR, AND THE ANCHOR HAD TO MOVE WITH IT. This mutation used to
+# delete the version DIGIT from a literal `**ADOPTED UPSTREAM (v[0-9]` written out in
+# `ledger-rotate.sh`. That literal is GONE: rotation's grammar is now DERIVED in `lib.sh`'s
+# `ledger_archive_awk()` by promoting reverify's optional bold span to a mandatory one, and the
+# digit was retired deliberately because a close that genuinely has no version is a real close.
+# Measured at this tip: the old sed matched 0 lines (control, same invocation: a sed on
+# `ledger_body_archives` matched), so it scored a kill for a mutation that never applied.
+#
+# THE NEW ANCHOR IS THE PREDICATE THAT DECIDES, NOT A SPELLING. `_lar_head` is the line-leading
+# `^[ \t]*(<br…>)?[ \t]*` prefix that `ledger_archive_awk()` carries across from the skip rule.
+# Emptying it leaves the bold span and the token set exactly as they are and removes only the
+# requirement that the annotation OPEN its line — which is precisely what lets a mid-sentence
+# quotation match. Measured on the seed below: 1 entry moves unmutated, 2 mutated, and the extra
+# one is PC-SW-OPEN.
+#
+# THE MUTATION IS IN `lib.sh`, WHICH BOTH COPIES SOURCE, so the control and the mutant need
+# SEPARATE program directories — mutating the shared `lib.sh` in one directory would move the
+# control too, and two identically-swept runs compare equal.
 #
 # THE QUOTATION IS MID-LINE, DELIBERATELY. reverify's body-close rule is ANCHORED, so a phrase
-# in the middle of a sentence does not close the entry there; the rotator's is UNANCHORED, so
-# the same line matches once the digit is gone. That asymmetry is what lets one seed be both
-# live to the classifier and archivable by a broken rotator.
-SW="$WORK/sweep"; rm -rf "$SW"; mkdir -p "$SW/ctl" "$SW/mut" "$SW/bin"
+# in the middle of a sentence does not close the entry there; an unanchored archive rule matches
+# the same line. That asymmetry is what lets one seed be both live to the classifier and
+# archivable by a broken rotator.
+SW="$WORK/sweep"; rm -rf "$SW"; mkdir -p "$SW/ctl" "$SW/mut" "$SW/bin" "$SW/mbin"
 cat > "$SW/led.md" <<'SWLED'
 # Push-candidate ledger
 
@@ -255,7 +306,12 @@ SWLED
 # a sandbox that mirrors the whole directory would keep working when the program grows a read of
 # something else, and this fixture's job is to notice that.
 cp "$(dirname "$ROT")"/*.sh "$SW/bin"/ 2>/dev/null
-sed 's@/\\\*\\\*ADOPTED UPSTREAM \\(v\[0-9\]/@/\\*\\*ADOPTED UPSTREAM \\(v/@' "$ROT" > "$SW/bin/sweeper.sh"
+cp "$(dirname "$ROT")"/*.sh "$SW/mbin"/ 2>/dev/null
+LIB="$(dirname "$ROT")/lib.sh"
+# DROP THE LINE-LEADING ANCHOR from the DERIVED archive grammar. `_lar_head` holds it; the bold
+# span and the token alternation are untouched, so this is one property and not a widening of
+# the whole rule.
+sed 's@^  _lar_head="${_lar_pat%%"$_lar_opt"\*}"$@  _lar_head=""@' "$LIB" > "$SW/mbin/lib.sh"
 
 sw_rows() { # <rotator> <dir> -> writes "<before-rows>|<after-rows>|<before-has-open>|<after-has-open>"
   local rot="$1" d="$2" b a
@@ -267,11 +323,11 @@ sw_rows() { # <rotator> <dir> -> writes "<before-rows>|<after-rows>|<before-has-
   printf '%s\n--\n%s\n' "$b" "$a" > "$d/rows.txt"
 }
 
-if cmp -s "$ROT" "$SW/bin/sweeper.sh"; then
-  bad "FIXTURE BROKEN — the digit-anchor mutation matched nothing, so the sweep assertions below are unproven"
+if cmp -s "$LIB" "$SW/mbin/lib.sh"; then
+  bad "FIXTURE BROKEN — the line-anchor mutation matched nothing in lib.sh, so the sweep assertions below are unproven"
 else
-  sw_rows "$SW/bin/ledger-rotate.sh" "$SW/ctl"
-  sw_rows "$SW/bin/sweeper.sh"        "$SW/mut"
+  sw_rows "$SW/bin/ledger-rotate.sh"  "$SW/ctl"
+  sw_rows "$SW/mbin/ledger-rotate.sh" "$SW/mut"
   ctl_b="$(sed -n '1,/^--$/p' "$SW/ctl/rows.txt" | grep -v '^--$')"
   ctl_a="$(sed -n '/^--$/,$p'  "$SW/ctl/rows.txt" | grep -v '^--$')"
   mut_b="$(sed -n '1,/^--$/p' "$SW/mut/rows.txt" | grep -v '^--$')"
@@ -297,7 +353,7 @@ else
   elif grep -q 'PC-SW-OPEN' <<<"$mut_a"; then
     bad "  MUTATION: the row set changed but the swept entry is still present, so the difference is not the sweep and this arm is measuring something else"
   else
-    ok "  MUTATION: without the version digit the rotator archives the quoting LIVE entry, its row disappears, and the ROW-SET comparison FAILS — the reshaped test is not laxer about a sweep"
+    ok "  MUTATION: without the line-leading anchor the rotator archives the quoting LIVE entry, its row disappears, and the ROW-SET comparison FAILS — the reshaped test is not laxer about a sweep"
   fi
 fi
 
@@ -631,9 +687,19 @@ fi
 # fixture and leaves the live defect untouched — so the fenced case is seeded as a CONTROL that
 # must stay silent for its own reason, and the inline case is the subject.
 #
-# DEFECT 2 IS SEEDED TOO, and nobody reported it: `\(v` also matches `(verified`, so a close
-# carrying NO VERSION satisfied a rule whose banner promises one. It must now be REFUSED and
-# reported as stuck, which is the state v0.330.0 added the refusal list to make visible.
+# THE VERSIONLESS CASE IS SEEDED AND ITS VERDICT IS THE OPPOSITE OF WHAT IT WAS. `\(v` also
+# matched `(verified`, and the digit anchor added to close that turned a GENUINE close into a
+# stuck row. A close that has no version -- a withdrawal, an absorption predating the pull`s
+# base, a rejection adjudicated by date -- is a real close, and demanding a digit left the
+# operator two exits: leave the entry live forever, or write a version that is not true. The
+# derived grammar asks for the annotation FORM and says nothing about the parenthetical, so
+# PC-Q4 now ARCHIVES. PC-Q5 below is what still lands in the stuck list, and it is a repairable
+# annotation rather than a token this file never heard of.
+#
+# THE TOKEN SET IS NOT SPELLED HERE, IT IS DERIVED. PC-Q6 and PC-Q7 are built from the tokens
+# `ledger-reverify.sh` actually honours, read out of the single home at run time, so a token
+# added there arrives in this seed in the same edit. A hand-written list of tokens in a fixture
+# is the same defect the subject under test just removed, one level up.
 Q="$WORK/quoting-ledger.md"
 cat > "$Q" <<'QLED'
 # Push-candidate ledger
@@ -651,9 +717,25 @@ STATUS: STILL-LIVE.
 ```
 STATUS: STILL-LIVE.
 
-## PC-Q4 — closed with NO VERSION, which the rule is not entitled to archive
+## PC-Q4 — closed with NO VERSION, a genuine close the rule must now archive
 **ADOPTED UPSTREAM (verified 2026-07-21).** absorbed before base.
+
+## PC-Q5 — closed with no BOLD SPAN at all: skipped by reverify, and not archivable
+<br>ADOPTED UPSTREAM (v0.201.0, verified 2026-07-21). no bold anywhere on this line.
+
+## PC-Q6 — LIVE, and its body NARRATES a close token at the start of a line
 QLED
+# THE NARRATIVE LINE CARRIES A REAL TOKEN AND NO BOLD SPAN, which is the whole discrimination:
+# line-leading is not enough, the annotation form is. Built from the derived token set so a new
+# token is narrated here too. `ledger-rotate.sh`'s header at :22 names this class by example.
+q_tok1="$(q_close_token 1)"
+q_tok2="$(q_close_token 2)"
+{
+  printf '%s in v0.135.0 is what the sentinel got, but this entry is still open.\n' "$q_tok1"
+  printf 'STATUS: STILL-LIVE.\n\n'
+  printf '## PC-Q7 — closed by the SECOND token reverify honours, which rotate must archive too\n'
+  printf '**%s (v0.202.0, verified 2026-07-21).** closed by a token no literal in this file spells.\n' "$q_tok2"
+} >> "$Q"
 q_out="$(bash "$ROT" "$Q" --archive "$WORK/quoting-archive.md" 2>&1)"
 q_moved="$(awk '/closed entries would move/{on=1;next} /^  archive:/{on=0} on' <<<"$q_out")"
 
@@ -665,41 +747,144 @@ fi
 if grep -q 'PC-Q2' <<<"$q_moved"; then
   bad "a LIVE entry that quotes the strict annotation form INLINE was archived by it. That is PC-S331 verbatim: rotate matched the entry against its own quotation, and --apply deletes live work from the file the pull reads"
 else
-  ok "an entry quoting the strict form INLINE is NOT archived — the match requires a version DIGIT, which a quotation does not carry"
+  ok "an entry quoting the strict form INLINE is NOT archived — the derived grammar is line-leading, and a quotation sits inside a sentence"
 fi
 if grep -q 'PC-Q3' <<<"$q_moved"; then
   bad "the fenced ESCAPED form was archived — that is a different match from the live one and means the predicate got looser, not tighter"
 else
   ok "  and the fenced escaped form stays too (it never matched: the escaped form is not the literal)"
 fi
+
+# --- A VERSIONLESS CLOSE ARCHIVES ----------------------------------------------------------
+# The inverse of what this arm asserted for its whole previous life, and the inversion is the
+# point of the change it now covers. Read the block header before "fixing" this back.
 if grep -q 'PC-Q4' <<<"$q_moved"; then
-  bad "a close carrying NO VERSION was archived. The banner promises the version immediately after the parenthesis, and \`\\(v\` matching \`(verified\` is how that promise was unenforced"
+  ok "a close carrying NO VERSION is ARCHIVED — the grammar asks for the annotation FORM, so a withdrawal or a pre-base absorption closes on its own terms instead of living forever"
 else
-  ok "a versionless close is REFUSED rather than archived — the rule now enforces the form its own banner states"
-fi
-q_stuck="$(awk '/NOT archivable/{on=1;next} /^ledger-rotate:/{on=0} on' <<<"$q_out")"
-if grep -q 'PC-Q4' <<<"$q_stuck"; then
-  ok "  and it is REPORTED as stuck, so refusing it does not make it invisible"
-else
-  bad "  the versionless close was refused and NOT reported — refused-and-silent is the exact state v0.330.0 exists to end"
+  bad "a versionless close was NOT archived. Demanding a digit leaves the operator two exits — leave the entry live forever, or write a version that is not true — and the entry is then skipped by every re-verification AND refused by every rotation"
 fi
 
-# MUTATION — restore the un-anchored pattern. PC-Q2 must come back, and PC-Q1 must not move,
-# or the mutant is testing whether the arm RUNS rather than what it matches.
-MUTQ="$WORK/rot-mutant"; rm -rf "$MUTQ"; mkdir -p "$MUTQ"
-cp "$(dirname "$ROT")"/* "$MUTQ"/ 2>/dev/null
-sed 's/ADOPTED UPSTREAM \\(v\[0-9\]/ADOPTED UPSTREAM \\(v/' "$ROT" > "$MUTQ/ledger-rotate.sh"
-if cmp -s "$ROT" "$MUTQ/ledger-rotate.sh"; then
-  bad "  FIXTURE ERROR: the digit-anchor mutation matched nothing, so the assertions above are unproven"
+# --- WHAT IS STILL STUCK, AND IT IS REPAIRABLE ----------------------------------------------
+# The two grammars differ by exactly one property, so exactly one class can still land here: a
+# close written with NO BOLD SPAN. Asserting this is what says the stuck report did not retire
+# with its largest class — a report that lost its subject reads identically to one whose corpus
+# is clean.
+q_stuck="$(awk '/NOT archivable/{on=1;next} /^ledger-rotate:/{on=0} on' <<<"$q_out")"
+if grep -q 'PC-Q5' <<<"$q_stuck"; then
+  ok "a close written with NO BOLD SPAN is reported as stuck — the one class the two grammars still separate, and the remedy the banner offers can actually be satisfied"
 else
+  bad "the no-bold close was neither archived nor reported — that is the invisible state the stuck list exists to end, surviving in the only shape that can still reach it"
+fi
+if grep -q 'PC-Q5' <<<"$q_moved"; then
+  bad "  the no-bold close was ARCHIVED — the mandatory bold span is what separates an annotation from a mention, and without it a narrated token sweeps live work"
+else
+  ok "  and it is NOT archived: rotation is still the stricter of the two grammars"
+fi
+if grep -q 'PC-Q4' <<<"$q_stuck"; then
+  bad "  the versionless close is ALSO in the stuck list while being archived — one entry cannot be both, so the two predicates disagree about it"
+else
+  ok "  and PC-Q4 is not in that list: archived and stuck stay disjoint"
+fi
+
+# --- AN INSTRUCTION OR NARRATIVE OCCURRENCE DOES NOT ARCHIVE AN OPEN ENTRY -------------------
+# `ledger-rotate.sh`'s header at :22 states why this discrimination exists: the phrase occurs in
+# open entries as instruction and as narrative, measured at 15 of 47 occurrences on the
+# reference consumer. PC-Q2 covers the mid-line quotation; this covers the LINE-LEADING
+# narrative, which is the harder half — line position alone does not separate it, only the bold
+# span does.
+if grep -q 'PC-Q6' <<<"$q_moved"; then
+  bad "an OPEN entry whose body NARRATES a close token at the start of a line was archived — that is live work deleted from the file the pull reads, and the bold span is the only thing that separates the two"
+else
+  ok "an OPEN entry that NARRATES a close token line-leading is NOT archived — line position is not the discriminator, the annotation's bold span is"
+fi
+
+# --- A TOKEN REVERIFY HONOURS THAT ROTATE CANNOT ARCHIVE MUST BE IMPOSSIBLE ------------------
+# THE DEFECT'S OWN SHAPE. `ledger-reverify.sh` honoured a SET; `ledger-rotate.sh` archived on one
+# hand-written literal. An entry closed by a token rotate could not spell was SKIPPED by every
+# re-verification AND REFUSED by every rotation at once — invisible in the report and permanently
+# resident in the live ledger. This arm is keyed on the token set DERIVED from reverify's own
+# rule, so it cannot go stale the way the literal did: the day a fourth token is added to the
+# single home, this seed carries it and this arm decides whether rotation followed.
+if [ -z "$q_tok2" ] || [ "$q_tok2" = "$q_tok1" ]; then
+  bad "PRECONDITION FAILED: the derived close vocabulary yielded no distinct second token ('${q_tok1:-<none>}' / '${q_tok2:-<none>}'), so the arm below is about one token twice and cannot see the two lists diverging"
+elif grep -q 'PC-Q7' <<<"$q_moved"; then
+  ok "an entry closed by the SECOND token reverify honours is ARCHIVED — the close vocabulary is one grammar, and a token cannot reach one tool alone"
+else
+  bad "an entry closed by '${q_tok2}' — a token ledger-reverify.sh honours — was NOT archived. It is skipped by every re-verification and refused by every rotation at once: invisible in the report and permanently resident in the live ledger"
+fi
+if grep -q 'PC-Q7' <<<"$q_stuck"; then
+  bad "  and it is in the STUCK list, which is the report of exactly that class — so the two lists have diverged again"
+else
+  ok "  and it is not in the stuck list either, which is the report that class used to be the whole of"
+fi
+
+# MUTATION — DROP THE LINE-LEADING ANCHOR from the derived archive grammar. PC-Q2 must come
+# back, and PC-Q1 must not stop moving, or the mutant is testing whether the arm RUNS rather
+# than what it matches.
+#
+# RE-ANCHORED: this used to delete the version DIGIT from a literal in `ledger-rotate.sh`. That
+# literal is gone — the grammar is derived in `lib.sh` — and the sed matched nothing while
+# scoring a kill. The subject is `_lar_head`, the line-leading prefix the derivation carries
+# across from the skip rule; emptying it leaves the bold span and the token set untouched, so
+# the mutant changes exactly one property. The mutation is in `lib.sh`, which every copy in the
+# directory sources, so the unmutated control lives in its OWN directory.
+MUTQ="$WORK/rot-mutant"; rm -rf "$MUTQ"; mkdir -p "$MUTQ"
+cp "$(dirname "$ROT")"/*.sh "$MUTQ"/ 2>/dev/null
+sed 's@^  _lar_head="${_lar_pat%%"$_lar_opt"\*}"$@  _lar_head=""@' "$LIB" > "$MUTQ/lib.sh"
+CTLQ="$WORK/rot-control"; rm -rf "$CTLQ"; mkdir -p "$CTLQ"
+cp "$(dirname "$ROT")"/*.sh "$CTLQ"/ 2>/dev/null
+if cmp -s "$LIB" "$MUTQ/lib.sh"; then
+  bad "  FIXTURE ERROR: the line-anchor mutation matched nothing in lib.sh, so the assertions above are unproven"
+else
+  # THE UNMUTATED CONTROL RUNS FROM THE SAME KIND OF SANDBOX AND ASSERTS A POSITIVE OUTCOME. A
+  # copy that dies sourcing lib.sh archives nothing, and "PC-Q2 did not move" is exactly what a
+  # program that never ran produces.
+  c_out="$(bash "$CTLQ/ledger-rotate.sh" "$Q" --archive "$WORK/ctl-archive.md" 2>&1)"
+  c_moved="$(awk '/closed entries would move/{on=1;next} /^  archive:/{on=0} on' <<<"$c_out")"
   m_out="$(bash "$MUTQ/ledger-rotate.sh" "$Q" --archive "$WORK/mut-archive.md" 2>&1)"
   m_moved="$(awk '/closed entries would move/{on=1;next} /^  archive:/{on=0} on' <<<"$m_out")"
+  if ! grep -q 'PC-Q1' <<<"$c_moved" || grep -q 'PC-Q2' <<<"$c_moved"; then
+    bad "  FIXTURE BROKEN: the UNMUTATED copy in a sandbox does not reproduce the shipped verdict (Q1 moves, Q2 does not), so the mutant's verdict is not attributable to the mutation"
+  else
+    ok "  mutation control: an unmutated copy in its own sandbox archives PC-Q1 and leaves PC-Q2 alone"
+  fi
   if ! grep -q 'PC-Q1' <<<"$m_moved"; then
     bad "  MUTATION: the unmutated-control entry stopped moving under the mutant, so the copy is broken and its verdict is not attributable"
   elif grep -q 'PC-Q2' <<<"$m_moved"; then
-    ok "  MUTATION: without the version digit the quoting entry is archived again — the anchor is what stands between a live entry and the archive"
+    ok "  MUTATION: without the line-leading anchor the quoting entry is archived again — the anchor is what stands between a live entry and the archive"
   else
-    bad "  MUTATION: removing the digit anchor did NOT re-archive the quoting entry, so these assertions are not measuring the anchor"
+    bad "  MUTATION: removing the line anchor did NOT re-archive the quoting entry, so these assertions are not measuring the anchor"
+  fi
+fi
+
+# --- MUTATION: MAKE THE PROMOTED BOLD SPAN OPTIONAL AGAIN ----------------------------------
+# THE OTHER HALF OF THE DERIVATION, AND IT HAS A SUBJECT THE ANCHOR MUTANT CANNOT REACH.
+# `ledger_archive_awk()` is one transform — take reverify's grammar and make its OPTIONAL bold
+# span MANDATORY — so there are exactly two properties to break and each needs its own mutant.
+# The anchor mutant above reaches PC-Q2 (mid-line) and not PC-Q6 (line-leading, no bold); this
+# one reaches PC-Q6 and not PC-Q2. Measured both ways before shipping: neither mutant moves the
+# other's subject, so neither is covered by the other and a third is not needed.
+MUTB="$WORK/rot-mutant-bold"; rm -rf "$MUTB"; mkdir -p "$MUTB"
+cp "$(dirname "$ROT")"/*.sh "$MUTB"/ 2>/dev/null
+sed "s@^  _lar_req='\\\\\\*\\\\\\*\\[^\`\\]\\*'\$@  _lar_req='(\\\\*\\\\*[^\`]*)?'@" "$LIB" > "$MUTB/lib.sh"
+if cmp -s "$LIB" "$MUTB/lib.sh"; then
+  bad "  FIXTURE ERROR: the mandatory-bold-span mutation matched nothing in lib.sh, so the narrative arm above is unproven"
+else
+  b_out="$(bash "$MUTB/ledger-rotate.sh" "$Q" --archive "$WORK/mutb-archive.md" 2>&1)"
+  b_moved="$(awk '/closed entries would move/{on=1;next} /^  archive:/{on=0} on' <<<"$b_out")"
+  if ! grep -q 'PC-Q1' <<<"$b_moved"; then
+    bad "  MUTATION bold-span: the unmutated-control entry stopped moving, so the copy is broken and its verdict is not attributable"
+  elif ! grep -q 'PC-Q6' <<<"$b_moved"; then
+    bad "  MUTATION bold-span: with the span optional again the NARRATED token was still not archived, so the narrative arm above is not measuring the span"
+  elif grep -q 'PC-Q2' <<<"$b_moved"; then
+    bad "  MUTATION bold-span: it also archived the MID-LINE quotation, so it is not a clean mutation of the span alone and it overlaps the anchor mutant"
+  else
+    ok "  MUTATION bold-span: with the span optional the line-leading NARRATIVE is archived as live work, and the mid-line quotation is not — one property, its own subject"
+  fi
+  if grep -q 'PC-Q5' <<<"$b_moved"; then
+    ok "  MUTATION bold-span: and the no-bold CLOSE leaves the stuck list by being archived — the span is what puts it there"
+  else
+    bad "  MUTATION bold-span: the no-bold close still did not archive, so the stuck arm above is not keyed on the span either"
   fi
 fi
 
@@ -869,6 +1054,140 @@ rg_write fp-quotes '- **A real entry that QUOTES the annotation form** in its ow
   verify: theirs_has core/scripts/thing.sh "MARKER_A"
 '
 fp_check fp-quotes "SUBJECT DEFECT" "an entry that merely QUOTES the annotation form still rotates"
+
+# --- THE CLOSE VOCABULARY REACHES BOTH SIDES OF THIS GUARD, AND THEY FAIL OPPOSITE WAYS ------
+#
+# THE GUARD HAS TWO CLOSE TESTS AND THEY ARE DELIBERATELY DIFFERENT PREDICATES.
+# `ledger_body_archives()` decides whether the entry ABOVE is closed, which is what makes a
+# non-id boundary inside it a refusal candidate at all -- it ARMS the refusal.
+# `ledger_entry_line_closes()` decides whether the SUSPECT LINE carries a close of its own,
+# which SUPPRESSES the refusal. `ledger-rotate.sh:242-247` and `:257-276` state why one is the
+# archive grammar and the other the loose skip rule: they fail in opposite directions, so one
+# rule cannot serve both.
+#
+# BOTH USED TO CARRY A MEMBERSHIP OPINION AND BOTH WERE WRONG, IN OPPOSITE DIRECTIONS. The
+# arming side was the hand-written `(v[0-9]` literal, which could not spell a withdrawal at all,
+# so an entry closed that way was never seen as CLOSED and a split of it drew no refusal -- the
+# one outcome this guard exists to prevent. The suppressing side hand-listed the alternation, so
+# a suspect line closed as WITHDRAWN suppressed nothing and the guard refused a REAL entry,
+# which wedges a rotation that would have been correct. Both now come from the single home, and
+# both directions are asserted here because a fix to either alone reads identically on the other.
+#
+# THE TOKENS ARE DERIVED, NEVER SPELLED, for the reason `q_close_token()` gives at its
+# definition: a fixture that writes the alternation into a heredoc is the third copy of the list
+# the subject under test just deleted.
+rg_tok2="$(q_close_token 2)" || rg_tok2=""
+if [ -z "$rg_tok2" ] || [ "$rg_tok2" = "$(q_close_token 1)" ]; then
+  bad "PRECONDITION FAILED: no distinct second close token could be derived from ledger-reverify.sh ('${rg_tok2:-<none>}'), so the two arms below are about ADOPTED UPSTREAM twice and cannot see the vocabularies diverging"
+else
+  # ARMING SIDE. The entry above is closed by the SECOND token, which the retired literal could
+  # not spell. A suspect boundary sits inside it with the entry's receipt below. The guard must
+  # REFUSE -- under the old literal this entry read as OPEN, the refusal never armed, and the
+  # split shipped silently.
+  printf '%s' "# Push-candidate ledger
+
+- **PC-TOK-CLOSED-ABOVE** — closed by a token no literal in ledger-rotate.sh ever spelled
+
+  <br>**${rg_tok2} 2026-07-25 — done.**
+
+- **Note:** an annotation lead-in, written the way an operator writes one
+
+  verify: theirs_has core/scripts/thing.sh \"MARKER_A\"
+" > "$RG/susp-armed.md"
+  if rg_refused susp-armed; then
+    ok "the refusal ARMS on an entry closed by '${rg_tok2}' — the close test that decides CLOSED is the archive grammar, so a token the old literal could not spell no longer means a split ships with no refusal"
+  else
+    bad "the guard did NOT refuse a split of an entry closed by '${rg_tok2}'. That entry reads as OPEN to the arming test, so rotation archives its head and strands its receipt in the live ledger under no heading — silently, and irreversibly"
+  fi
+
+  # THE ARMING CONTROL, one property apart: the entry above is OPEN. Without it the arm above
+  # passes against a guard that refuses unconditionally, which is the DENY-without-its-ALLOW-twin
+  # shape — and an unconditional refusal wedges every rotation there is.
+  printf '%s' "# Push-candidate ledger
+
+- **PC-TOK-OPEN-ABOVE** — not closed at all, so nothing below it can be stranded
+
+  Body text carrying no annotation.
+
+- **Note:** an annotation lead-in, written the way an operator writes one
+
+  verify: theirs_has core/scripts/thing.sh \"MARKER_A\"
+" > "$RG/susp-unarmed.md"
+  if rg_refused susp-unarmed; then
+    bad "  the guard refuses the same shape below an OPEN entry — it is not keyed on the entry above being closed at all, so it refuses unconditionally and wedges every rotation"
+  else
+    ok "  and stays silent when the entry above is OPEN: the arming test reads the entry, not the shape of the line below it"
+  fi
+
+  # SUPPRESSING SIDE. The SUSPECT line carries a close of its own, written in the legacy id-less
+  # form that puts it in the boundary line's own bold span, using that same second token. This is
+  # a REAL entry closed in its own right: nothing of the entry above can be stranded by it, and
+  # refusing here wedges a correct rotation.
+  rg_write susp-suppressed "- **\`thing.sh\` → ${rg_tok2} 2026-07-25, closed in its own right.** legacy id-less
+
+  verify: theirs_has core/scripts/thing.sh \"MARKER_A\"
+"
+  if rg_refused susp-suppressed; then
+    bad "SUBJECT DEFECT — the guard refuses a REAL entry whose own close is written as '${rg_tok2}'. The suppressor does not honour the whole close vocabulary, so every legacy id-less entry closed that way wedges the rotation of the ledger it sits in"
+  else
+    ok "a suspect line closed IN ITS OWN RIGHT by '${rg_tok2}' suppresses the refusal — the suppressor is the loose skip rule from the single home, so it honours every token reverify does"
+  fi
+
+  # THE SUPPRESSION CONTROL, one property apart: the same line with no close marker at all. This
+  # is the guard's actual subject and it MUST still refuse, or the suppressor has widened into
+  # "never refuse" and the arm above is measuring nothing.
+  rg_write susp-unsuppressed '- **`thing.sh` carries no close marker of its own.** legacy id-less
+
+  verify: theirs_has core/scripts/thing.sh "MARKER_A"
+'
+  if rg_refused susp-unsuppressed; then
+    ok "  and the same line with NO close marker still refuses — the suppressor reads the marker, it has not widened into silence"
+  else
+    bad "  the same line with no close marker of its own was NOT refused, so the suppressor acquits everything and the arm above proves nothing"
+  fi
+fi
+
+# --- THE ARMING TEST IS THE ARCHIVE GRAMMAR AND NOT THE LOOSE ONE ---------------------------
+#
+# THE TWO TESTS ASK A SIMILAR QUESTION AND FAIL IN OPPOSITE DIRECTIONS, so routing the arming
+# side through the loose rule is a mutation every arm above survives -- measured, scored ZERO
+# findings across this whole file until this arm existed. `ledger-rotate.sh:264-276` says it was
+# BUILT and MEASURED that way and that it WEDGES rotation; nothing in the fixture could see that.
+#
+# THE DISCRIMINATING INPUT WAS MISSING, NOT THE PROPERTY. Every seed above whose entry is closed
+# is closed by a real ANNOTATION, which BOTH rules take -- so both rules arm and the two sides
+# compare equal. The input that separates them is an entry that the LOOSE rule reads as closed
+# and the ARCHIVE grammar does not: a line-leading NARRATIVE mention carrying no bold span, in
+# an entry that is still open. Measured, this ledger, shipped vs the loose-armed mutant:
+# rc=0 no refusal against rc=1 REFUSING, with an annotation-closed control at rc=1 both ways.
+#
+# THE COST IS A WEDGE, NOT A MISSED FINDING, which is why the assertion is a SILENCE. Refusal is
+# the whole of this guard's behaviour; a guard that refuses a ledger whose entry is merely
+# DISCUSSING the vocabulary stops every rotation of that ledger, and the operator turns it off.
+# The OPEN entry that narrates has to be the one the suspect sits inside, so this seed replaces
+# the shared closed preamble rather than appending to it.
+printf '%s' '# Push-candidate ledger
+
+- **PC-LIVE-NARRATES** — an OPEN entry whose body narrates the close vocabulary line-leading
+
+  ADOPTED UPSTREAM in v0.135.0 is what the sentinel got, but this entry is still open.
+
+- **Note:** an annotation lead-in, written the way an operator writes one
+
+  verify: theirs_has core/scripts/thing.sh "MARKER_A"
+' > "$RG/fp-narrated.md"
+if rg_refused fp-narrated; then
+  bad "SUBJECT DEFECT — the guard refuses a ledger whose entry merely NARRATES the vocabulary. The arming test is the loose skip rule rather than the archive grammar, so it reads OPEN work as closed and WEDGES every rotation of that ledger; refusal writes nothing at all, so there is no partial result either"
+else
+  ok "a suspect line below an entry that only NARRATES the vocabulary draws NO refusal — the arming test is the ARCHIVE grammar, which is the one that decides the move this guard protects"
+fi
+# AND THE DISCRIMINATION IS ASSERTED, not assumed: the same shape below a genuinely ANNOTATED
+# entry must still refuse. Without this the arm above passes against a guard that never refuses.
+if rg_refused splitter; then
+  ok "  and the same shape below a genuinely ANNOTATED close still refuses — the two ledgers differ in how the entry above is closed, and only that"
+else
+  bad "  the annotated control stopped refusing, so the silence above is a guard that refuses nothing rather than a guard reading the right predicate"
+fi
 
 # THE EXIT CONDITION. A refusal is only legitimate if it can be SATISFIED, and the guard's own
 # remedy line offers exactly one way out — re-indent the annotation or drop its bold — which is
@@ -1164,6 +1483,94 @@ else
   fi
 fi
 
+echo "== DERIV. the archive grammar is DERIVED, and the derivation refuses audibly =="
+
+# WHAT IS BEING GUARDED HERE IS THE JOIN ITSELF, NOT A VERDICT.
+#
+# `lib.sh`'s `ledger_archive_awk()` builds rotation's grammar by taking the close rule out of
+# `ledger-reverify.sh` and promoting its OPTIONAL bold span to a MANDATORY one. That transform
+# has a precondition: the close rule must CONTAIN an optional bold span to promote. If the rule
+# is reworded so it does not, there is no archive rule to derive.
+#
+# THE QUIET FAILURE IS THE ONLY ONE THAT MATTERS. Interpolated into an awk program, an empty
+# predicate makes awk die on an undefined function -- or, worse, makes it decide that NOTHING is
+# closed. Rotation would then move nothing and exit 0, which reads EXACTLY like a ledger with
+# nothing closed in it. The refusal is what stands between those two states, and a refusal that
+# is not asserted is a refusal nobody notices leaving.
+#
+# BOTH DIRECTIONS, SEEDED UNDER $WORK AND NEVER AGAINST THE REAL CORPUS. The OFFENDER is a
+# reverify copy whose close rule has lost its optional bold span; the NEAR-MISS is a copy whose
+# rule keeps the span and merely gains a token, which must derive cleanly -- that is the case a
+# refusal keyed on the wrong property would also reject, and it is the one that happens.
+DV="$WORK/deriv"; rm -rf "$DV"; mkdir -p "$DV/off" "$DV/near" "$DV/ctl"
+for d in off near ctl; do cp "$(dirname "$ROT")"/*.sh "$DV/$d/" 2>/dev/null; done
+cat > "$DV/led.md" <<'DVLED'
+# Push-candidate ledger
+
+## PC-DV-CLOSED — a genuine close, so a working rotator has something to report
+**ADOPTED UPSTREAM (v0.210.0, verified 2026-07-21).** really closed.
+
+## PC-DV-OPEN — an open entry, so a rotator that moved everything would read differently
+Body text carrying no annotation.
+DVLED
+
+# THE OFFENDER: the optional bold span removed from the close rule. Keyed on the span's own
+# literal bytes -- the same `(\*\*[^`]*)?` `ledger_archive_awk()` searches for -- so this seeds
+# exactly the precondition the refusal names and not some adjacent breakage.
+sed 's@(\\\*\\\*\[\^`\]\*)?@@' "$RV" > "$DV/off/ledger-reverify.sh"
+# THE NEAR-MISS: the span kept, one token added to the alternation. Built from a token that is
+# NOT already in the rule, so this is a real change to the vocabulary and not a no-op.
+#
+# BOTH PREDICATES GAIN IT, WHICH IS WHAT A REAL TOKEN ADDITION LOOKS LIKE. `ledger-reverify.sh`
+# carries the vocabulary on two lines -- the body rule and the entry-line rule -- and the commit
+# that added `CLOSED AS REJECTED` edited both. Seeding only one would make this near-miss a
+# HALF-edit nobody writes, and the derivation would then be acquitted on an input it never sees.
+# The insertion is anchored on the FIRST derived token so nothing here spells the alternation.
+sed "s@$(q_close_token 1)|@$(q_close_token 1)|SUPERSEDED BY THE FIXTURE|@" "$RV" > "$DV/near/ledger-reverify.sh"
+
+dv_run() { bash "$DV/$1/ledger-rotate.sh" "$DV/led.md" --archive "$DV/$1/arch.md" 2>&1; }
+
+# THE UNMUTATED CONTROL FIRST, AND IT IS PRESENCE-SHAPED. A sandbox copy that cannot run emits
+# nothing, and "no archive rule" is satisfied by silence — so the control must show the shipped
+# verdict, not merely a zero exit.
+dv_ctl="$(dv_run ctl)"; dv_ctl_rc=$?
+if [ "$dv_ctl_rc" -eq 0 ] && grep -q 'PC-DV-CLOSED' <<<"$dv_ctl" && ! grep -q 'PC-DV-OPEN' <<<"$dv_ctl"; then
+  ok "CONTROL: an unmutated copy in the sandbox derives its grammar and archives the closed entry only (rc=$dv_ctl_rc)"
+else
+  bad "FIXTURE BROKEN — the unmutated sandbox copy did not reproduce the shipped verdict (rc=$dv_ctl_rc), so the two verdicts below are not attributable"
+fi
+
+if cmp -s "$RV" "$DV/off/ledger-reverify.sh"; then
+  bad "FIXTURE BROKEN — removing the optional bold span from the close rule matched nothing, so the refusal arm below is unproven"
+else
+  dv_off="$(dv_run off)"; dv_off_rc=$?
+  if [ "$dv_off_rc" -eq 0 ]; then
+    bad "the derivation SURVIVED a close grammar with no optional bold span (rc=0). With nothing to promote the archive predicate is empty, rotation decides that nothing is closed, and the run is byte-indistinguishable from a ledger with nothing closed in it"
+  elif grep -q 'cannot find the optional bold span' <<<"$dv_off"; then
+    ok "the derivation REFUSES AUDIBLY when the close grammar loses its optional bold span (rc=$dv_off_rc), naming the span it could not find — rotation's extra strictness IS that promotion, so with nothing to promote there is no rule to derive"
+  else
+    bad "the derivation exited $dv_off_rc but said nothing about the missing bold span, so the operator is told a rotation failed and not which join came apart: $(printf '%s' "$dv_off" | head -1)"
+  fi
+  if grep -q 'PC-DV-CLOSED' <<<"$dv_off"; then
+    bad "  and it reported an entry as moving anyway — a refusal that still rotates is not a refusal"
+  else
+    ok "  and it rotates nothing while refusing, so the refusal is not survivable"
+  fi
+fi
+
+if cmp -s "$RV" "$DV/near/ledger-reverify.sh"; then
+  bad "FIXTURE BROKEN — the token-addition near-miss matched nothing, so the acquittal below is vacuous"
+else
+  dv_near="$(dv_run near)"; dv_near_rc=$?
+  if [ "$dv_near_rc" -ne 0 ]; then
+    bad "NEAR-MISS: the derivation refused a close rule that merely gained a TOKEN (rc=$dv_near_rc). The refusal is keyed on the wrong property — adding a token to the single home is the ordinary case, and refusing it wedges every rotation on the day the vocabulary grows: $(printf '%s' "$dv_near" | head -1)"
+  elif grep -q 'PC-DV-CLOSED' <<<"$dv_near" && ! grep -q 'PC-DV-OPEN' <<<"$dv_near"; then
+    ok "  NEAR-MISS: a close rule that gains a TOKEN derives cleanly and reaches the same verdict — the refusal is keyed on the bold span, not on the alternation's membership"
+  else
+    bad "  NEAR-MISS: the derivation succeeded but the verdict moved, so adding a token to the single home changed what rotation archives about entries that do not use it"
+  fi
+fi
+
 echo "== BL. a close on the entry's OWN boundary line is seen by the archive predicate =="
 
 # The boundary-line rule ends in `next`, which used to skip every flag-setting rule below it:
@@ -1216,17 +1623,88 @@ else
   bad "CONTROL: the BODY case stopped archiving — this change broke the path that already worked"
 fi
 
-# THE LOOSE HALF. Setting only the archive flag from the boundary line would fix the loud case
-# and leave a versionless boundary close exactly as invisible as before -- no archive, and no
-# stuck row either. That entry must become a REPORTED stuck row, which is a presence assertion.
-bl_ledger "$BLW/looseboundary.md" \
+# THE LOOSE HALF. Setting only the archive flag from the boundary line would leave a close the
+# ARCHIVE grammar does not take exactly as invisible as before -- no archive, and no stuck row
+# either. Such an entry must become a REPORTED stuck row, which is a presence assertion.
+#
+# THE SUBJECT MOVED, AND THE SEED MOVED WITH IT. This seeded a VERSIONLESS close, because the
+# archive rule was a literal demanding a digit after `(v`. That literal is gone: rotation's
+# grammar is derived from the skip grammar by promoting the bold span, and it says nothing about
+# the parenthetical -- so a versionless close is now a real close and ARCHIVES. Asserting it as
+# stuck would be asserting the defect the change removed. The class that still reaches the stuck
+# list is the one the two grammars genuinely separate: a close with NO BOLD SPAN, which reverify
+# skips on and rotation will not move. Measured at this tip on the old seed: 0 stuck rows, 1
+# would-move -- which is the CORRECT answer and read as the loose half being missing.
+#
+# THE CLOSE SITS ON THE BOUNDARY LINE, AND THAT IS WHAT MAKES THIS ARM ABOUT THE BOUNDARY PATH.
+# Written one line down in the BODY, the body-side loose rule reports it and the arm passes with
+# the entry-line flags deleted -- measured exactly that way here, as the mutant below surviving.
+# A HEADING shape is used because the bullet shape opens on `- **`, so a bullet entry always
+# carries a bold span and cannot express "line-leading close, no bold span" at all.
+printf '%s\n' \
+  '# Push Candidate Ledger' '' 'Preamble that always stays.' '' \
+  '- **PC-BL-OPEN** — an open entry with no close anywhere.' \
+  '  Body text carrying no annotation.' '' \
+  '## PC-BL-NOBOLD — ADOPTED UPSTREAM (absorbed before base acdae7a, verified 2026-07-24), no bold span' \
+  '  Body line carrying no annotation of its own.' > "$BLW/nobold.md"
+bl_nb_out="$(bash "$ROT" "$BLW/nobold.md" --archive "$BLW/arch.md" 2>&1)"
+bl_stuck="$(grep -c 'NOT archivable' <<<"$bl_nb_out")" || bl_stuck=0
+bl_nb_moved="$(grep -c 'would move' <<<"$bl_nb_out")" || bl_nb_moved=0
+if [ "$bl_stuck" -eq 1 ] && [ "$bl_nb_moved" -eq 0 ]; then
+  ok "a close with NO BOLD SPAN is reported as stuck rather than vanishing (stuck=$bl_stuck moved=$bl_nb_moved) — the loose test still fires where the archive test does not"
+else
+  bad "a no-bold close was neither archived nor reported (stuck=$bl_stuck moved=$bl_nb_moved) — the loose half of the boundary fix is missing, so the quiet case is still invisible"
+fi
+
+# AND THE VERSIONLESS BOUNDARY CLOSE ARCHIVES, which is the half that USED to be stuck. Seeded
+# here rather than only in the PC-Q block because the boundary line is its own code path --
+# `ledger_entry_line_archives()`, derived from reverify's ENTRY-LINE rule rather than its body
+# one -- and an entry-line grammar that kept a version opinion would be invisible to a body-line
+# assertion.
+bl_ledger "$BLW/versionless.md" \
   '- **ADOPTED UPSTREAM (absorbed before base acdae7a, verified 2026-07-24).** thing' \
   '  Body line carrying no annotation of its own.'
-bl_stuck="$(bash "$ROT" "$BLW/looseboundary.md" --archive "$BLW/arch.md" 2>&1 | grep -c 'NOT archivable')"
-if [ "$bl_stuck" -eq 1 ]; then
-  ok "a VERSIONLESS close on the boundary line is reported as stuck rather than vanishing"
+bl_vl_out="$(bash "$ROT" "$BLW/versionless.md" --archive "$BLW/arch.md" 2>&1)"
+bl_vl_moved="$(grep -c 'would move' <<<"$bl_vl_out")" || bl_vl_moved=0
+bl_vl_stuck="$(grep -c 'NOT archivable' <<<"$bl_vl_out")" || bl_vl_stuck=0
+if [ "$bl_vl_moved" -eq 1 ] && [ "$bl_vl_stuck" -eq 0 ]; then
+  ok "  and a VERSIONLESS close on the boundary line ARCHIVES (moved=$bl_vl_moved stuck=$bl_vl_stuck) — the entry-line grammar asks for the annotation form, not for a version"
 else
-  bad "a versionless boundary-line close was neither archived nor reported — the loose half of the fix is missing, so the quiet case is still invisible"
+  bad "  a versionless boundary-line close did not archive (moved=$bl_vl_moved stuck=$bl_vl_stuck) — demanding a digit on the entry-line path leaves a withdrawal or a pre-base absorption resident forever"
+fi
+
+# --- AND THE ENTRY-LINE PATH HONOURS THE WHOLE VOCABULARY, WHICH IS ITS OWN ASSERTION -------
+#
+# TWO ARCHIVE PREDICATES, TWO POPULATIONS, AND THE PC-Q BLOCK REACHES ONLY ONE OF THEM.
+# `ledger_body_archives()` decides a close sitting in the BODY; `ledger_entry_line_archives()`
+# decides one sitting on the entry's OWN boundary line, and `lib.sh` derives the second from
+# reverify's ENTRY-LINE rule rather than its body rule because the two do not honour the same
+# set. Every token-set arm in the PC-Q block seeds its close in a BODY, so a body predicate
+# alone satisfies all of them. Measured: rotation's entry-line rule hand-written back to a
+# one-token literal moves this ledger from 1 archived / 0 stuck to 0 / 1 and changes NOTHING
+# else in this file -- the class this whole change exists to empty, surviving in the one
+# predicate nobody was asserting about.
+#
+# THE TOKEN IS DERIVED, for the reason `q_close_token()` states at its definition: spelling it
+# here would be another copy of a list the subject under test just reduced to one.
+bl_tok2="$(q_close_token 2)" || bl_tok2=""
+if [ -z "$bl_tok2" ] || [ "$bl_tok2" = "$(q_close_token 1)" ]; then
+  bad "PRECONDITION FAILED: no distinct second close token derived ('${bl_tok2:-<none>}'), so the entry-line arm below cannot see the two grammars diverging"
+else
+  printf '%s\n' \
+    '# Push Candidate Ledger' '' 'Preamble that always stays.' '' \
+    '- **PC-BL-OPEN** — an open entry with no close anywhere.' \
+    '  Body text carrying no annotation.' '' \
+    "- **${bl_tok2} 2026-07-25 — done.** legacy id-less, closed on its OWN boundary line" \
+    '  Body line carrying no annotation of its own.' > "$BLW/tokboundary.md"
+  bl_tk_out="$(bash "$ROT" "$BLW/tokboundary.md" --archive "$BLW/arch.md" 2>&1)"
+  bl_tk_moved="$(grep -c 'would move' <<<"$bl_tk_out")" || bl_tk_moved=0
+  bl_tk_stuck="$(grep -c 'NOT archivable' <<<"$bl_tk_out")" || bl_tk_stuck=0
+  if [ "$bl_tk_moved" -eq 1 ] && [ "$bl_tk_stuck" -eq 0 ]; then
+    ok "  and a close by '${bl_tok2}' on the entry's OWN boundary line ARCHIVES (moved=$bl_tk_moved stuck=$bl_tk_stuck) — the entry-line grammar is derived from reverify's entry-line rule, so it honours every token that rule does"
+  else
+    bad "  a close by '${bl_tok2}' on the boundary line was not archived (moved=$bl_tk_moved stuck=$bl_tk_stuck). The entry-line predicate keeps a membership opinion of its own, so an entry closed that way is skipped by every re-verification AND refused by every rotation — and no body-line assertion can see it"
+  fi
 fi
 
 # --- MUTANT: restore the defect by reverting ONLY the boundary-line flag setting -----------
@@ -1249,7 +1727,15 @@ fi
 # the other half sits unproven. Caught exactly that way here: the loose line was rewritten from
 # `ledger_body_closes` to `ledger_entry_line_closes` and the mutation's second pattern silently
 # stopped matching. So the deletions are COUNTED, and a count other than 2 is a broken mutation.
-bl_deleted="$(awk '/if \(\$0 ~ \/\\\*\\\*ADOPTED UPSTREAM \\\(v\[0-9\]\/\) closed = 1/ { n++; next }
+#
+# AND IT HAPPENED AGAIN, IN THE OTHER PATTERN, WHICH IS WHY NEITHER SPELLS A GRAMMAR NOW. The
+# archive line was rewritten from the literal `$0 ~ /\*\*ADOPTED UPSTREAM \(v[0-9]/` to the
+# derived call `ledger_entry_line_archives($0)`, and this pattern went from matching one line to
+# matching zero while the OTHER still matched -- exactly the partial revert this count exists to
+# catch, reported as `reverted 1 of 2`. Both patterns are now keyed on the CALL each line makes
+# and on nothing about the grammar behind it, which is the property that actually distinguishes
+# these two lines from everything else in the file.
+bl_deleted="$(awk '/if \(ledger_entry_line_archives\(\$0\)\) closed = 1/ { n++; next }
      /if \(ledger_entry_line_closes\(\$0\)\) loose = 1/ { n++; next }
      { print > "/dev/stderr" }
      END { print n+0 }' "$ROT" 2>"$BLM/ledger-rotate.sh")"
@@ -1260,16 +1746,16 @@ elif cmp -s "$ROT" "$BLM/ledger-rotate.sh"; then
 else
   m_on="$(bash "$BLM/ledger-rotate.sh" "$BLW/onboundary.md" --archive "$BLM/arch.md" 2>&1 | grep -c 'would move')"
   m_in="$(bash "$BLM/ledger-rotate.sh" "$BLW/inbody.md"     --archive "$BLM/arch.md" 2>&1 | grep -c 'would move')"
-  m_ls="$(bash "$BLM/ledger-rotate.sh" "$BLW/looseboundary.md" --archive "$BLM/arch.md" 2>&1 | grep -c 'NOT archivable')"
+  m_ls="$(bash "$BLM/ledger-rotate.sh" "$BLW/nobold.md"     --archive "$BLM/arch.md" 2>&1 | grep -c 'NOT archivable')"
   if [ "$m_on" -eq 0 ]; then
     ok "  mutation boundary-flags: without them the boundary-line close goes unseen again (the arm can fire)"
   else
     bad "  mutation boundary-flags: the mutant still archived the boundary-line close, so the arm above proves nothing"
   fi
   if [ "$m_ls" -eq 0 ]; then
-    ok "  mutation boundary-flags: and the VERSIONLESS boundary close stops being reported — the loose half is load-bearing too"
+    ok "  mutation boundary-flags: and the NO-BOLD boundary close stops being reported — the loose half is load-bearing too"
   else
-    bad "  mutation boundary-flags: the versionless case was still reported under the mutant, so the loose half proves nothing"
+    bad "  mutation boundary-flags: the no-bold case was still reported under the mutant, so the loose half proves nothing"
   fi
   if [ "$m_in" -eq 1 ]; then
     ok "  mutation boundary-flags: and the BODY case survives the mutant — the two paths are not entangled"

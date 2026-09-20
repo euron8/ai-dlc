@@ -107,10 +107,13 @@ verify: theirs_has core/scripts/thing.sh "MARKER_A"
 
   <br>**ADOPTED UPSTREAM (v0.98.0, verified 2026-01-01).** Upstream took it.
 
-- **Entry STUCK is closed for re-verification and unarchivable.** A genuine, deliberate,
-  BOLDED close whose parenthetical carries no version, which is the form an operator writes
-  when the absorption predates the pull's base.
-  <br>**ADOPTED UPSTREAM (absorbed before base abc1234, verified 2026-01-01).**
+- **Entry STUCK is closed for re-verification and unarchivable.** A genuine, deliberate close
+  written with NO BOLD SPAN, which is the one class the skip grammar and the archive grammar
+  still separate: reverify's rule makes the span optional, rotation's makes it mandatory, so
+  this line is a close to one tool and a mention to the other. It used to carry the bold and
+  no VERSION, and a version digit is what made it stuck; that digit is retired, because a
+  close whose absorption predates the pull's base genuinely has no version to write.
+  <br>ADOPTED UPSTREAM (absorbed before base abc1234, verified 2026-01-01).
   verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_STUCK"
 
   verify: theirs_lacks core/scripts/thing.sh "MARKER_E"

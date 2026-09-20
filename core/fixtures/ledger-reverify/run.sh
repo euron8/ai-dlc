@@ -1236,14 +1236,38 @@ row_is "retained for the record" ABSENT \
 
 # MUTATION — restore the unanchored predicate. The prose entry must vanish, and it must be the
 # ONLY thing that changes: an anchor that also drops a real close is a different bug.
+#
+# RE-ANCHORED ON STRUCTURE, AND IT IS TOKEN-SET-AGNOSTIC BY CONSTRUCTION. This sed used to spell
+# the alternation it was editing -- `(ADOPTED UPSTREAM|WITHDRAWN)` -- so the release that added
+# `CLOSED AS REJECTED` to this rule took the sed from matching one line to matching zero, and
+# `cmp -s` correctly refused to let the no-op pass. A mutation keyed on a SPELLING is worth
+# nothing here: the subject is the line-leading ANCHOR and the `<br>`/bold-span structure around
+# the token term, not which tokens that term holds. So the token term is captured with `(.*)`
+# and written back untouched, and only the anchor and the structure are stripped. The
+# post-mutation shape is asserted below rather than assumed, because a capture that matched the
+# wrong span would still change the file and still satisfy `cmp -s`.
 MUTD="$(dirname "$DIST")/mut-closer"
 rm -rf "$MUTD"; mkdir -p "$MUTD"
 cp "$(dirname "$CLOSER")"/*.sh "$MUTD/" 2>/dev/null
-sed 's@^  /\^\[ \\t\]\*(<br\[ \\t\]\*\\/?\[ \\t\]\*>)?\[ \\t\]\*(\\\*\\\*\[^`\]\*)?(ADOPTED UPSTREAM|WITHDRAWN)/ { closed=1 }@  /ADOPTED UPSTREAM|WITHDRAWN/ { closed=1 }@' \
+sed -E 's@^  /\^\[ \\t\]\*\(<br\[ \\t\]\*\\/\?\[ \\t\]\*>\)\?\[ \\t\]\*\(\\\*\\\*\[\^`\]\*\)\?(\(.*\))/ \{ closed=1 \}$@  /\1/ { closed=1 }@' \
   "$CLOSER" > "$MUTD/ledger-reverify.sh"
 
+# THE UNANCHORED FORM IS READ BACK, NOT ASSUMED. `cmp -s` says the file changed; it does not say
+# the change is the one this arm needs. A sed whose capture swallowed the wrong span produces a
+# different, still-different file, and every verdict below would then be attributed to a mutation
+# nobody built. The post-mutation rule must carry the token alternation and must NOT carry the
+# `^[ \t]*` anchor that is the subject.
 ASSERTIONS=$((ASSERTIONS + 1))
-if cmp -s "$CLOSER" "$MUTD/ledger-reverify.sh"; then
+mut_rule="$(grep -E '^  /.*ADOPTED UPSTREAM.*\{ closed=1 \}$' "$MUTD/ledger-reverify.sh")" || mut_rule=""
+case "$mut_rule" in
+  '  /^'*)  mut_shape="still-anchored" ;;
+  '  /('*) mut_shape="ok" ;;
+  *)        mut_shape="unrecognised" ;;
+esac
+if [ "$mut_shape" != ok ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the mutation produced a rule this arm does not recognise (%s): %s\n' "mutation" "$mut_shape" "${mut_rule:-<no close rule at all>}"
+elif cmp -s "$CLOSER" "$MUTD/ledger-reverify.sh"; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s the mutation matched nothing, so the anchor assertions above are unproven\n' "mutation"
 else
