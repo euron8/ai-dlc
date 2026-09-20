@@ -405,6 +405,19 @@ fixed it by prefixing its own temp dirs, while `emit-report.sh:331` and `:373` s
 `mktemp`. Not folded into `v0.582.0`, whose subject was the step 3b section; the pre-existing
 intermittent charged to whichever change is in flight is the shape this entry exists to stop.
 
+**A FOURTH ARM AT BATCH 136, AND IT IS `E3` — AN ARM THIS ENTRY DOES NOT NAME.** Two full gate runs
+on the same branch, minutes apart, differing only by one integer pair on a `.githooks/pre-push`
+argument line: run 1 scored `reconcile-emit-report` **ok**, run 2 scored it **FAIL** on
+`E3 moved the worlds [V-N V-HC] and had to move exactly [V-N]`. The same tree run SOLO from the
+repo root exits **0** with **0** failing assertions. Attribution severed the same way as the three
+before it, derived in one invocation: the fixture names `ai-dlc-update/SKILL.md` — the only engine
+file this batch changed — **0** times, against a control of **22** for `emit-report.sh`, and
+`classify-block.md` **0** times. The extra world is **V-HC** again, as E1 predicted and E9 did not,
+which is a third distinct expected-set for one shared cause. The entry's own generalisation from
+batch 114 — the population is "arms scored under pool contention", not any named arm — now has four
+members across three arms, and **E1/E9 in the title remain an enumeration where the finding is a
+class.**
+
 verify: sh f=core/fixtures/reconcile-emit-report/run.sh; [ -f "$f" ] || exit 9; l=$(grep -n 'v_kill E1 ' "$f" | head -1 | cut -d: -f1); [ -n "$l" ] || exit 9; set=$(sed -n "${l}p" "$f" | sed -E 's/.*v_kill E1 "([^"]*)".*/\1/'); [ -n "$set" ] || exit 9; n=$(printf '%s' "$set" | wc -w | tr -d ' '); msg=$(sed -n "$((l+1))p" "$f"); grep -q 'three worlds' <<<"$msg" || exit 0; [ "$n" -eq 3 ] && exit 0; exit 1
 
 ## BL-099 — the exec-bit audit is one-directional, so a consumer file that upstream STOPPED shipping executable is never reported
