@@ -991,6 +991,41 @@ core-layer-immutability).
    MUST exit 0 — a drifted housekeeping schema is the defect this check exists
    to catch, not a clean file.
 
+**An unclearable check in this gate escalates; it never self-clears.** The
+three absolute `MUST exit 0` mandates above (checks 2, 3 and 4) are
+satisfied by fixing the issue, and that is the whole of the lead's
+authority over them. When a check stays red after the repair the check's
+own output names — a validator whose precondition no action in this sprint
+can reach, a refusal the lead has no standing to resolve — the check's
+verdict stays FAIL and the Step 6 commit stays blocked. File a Tier 1
+`HARD_BLOCK` in `docs/escalations/pending.md` naming the check, its
+command, and its output verbatim, and STOP. The operator records an
+explicit disposition on that entry — `approved-deferral` / `do-now` /
+`descope` — per Rule 13 + Rule 12 Tier 1. A recorded operator disposition
+is the only thing that unblocks the commit, it never converts the FAIL
+into a PASS, and the gate log entry records the check as FAILED with the
+disposition beside it. The verdict vocabulary is closed at PASS and FAIL
+in `.claude/schemas/gate-adjudication-verdict.json`; a check the lead
+cannot evaluate is FAIL-with-reason, never a third state.
+
+**The disposition is recorded before the checkpoint and surfaces at it.**
+Every retro check left FAILED under a recorded operator disposition is
+carried into the production validation checkpoint with the HARD_BLOCK id,
+the disposition token, and the check's failing output as captured. A
+disposition recorded after the checkpoint, or one the checkpoint reports
+as a summary rather than the captured output, launders the failure and is
+void.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: a check whose mandate
+no action available to the lead can satisfy, which the absolute wording
+alone answers only with an unbounded stall — and the stall's practical
+exit, a lead who declares the gate clear on its own authority and commits
+over a red check nobody signed off. False-positive cost: one HARD_BLOCK
+entry and one recorded disposition line per check the named repair cannot
+clear. Removal condition: retire once every check in this gate carries a
+repair the lead can execute, or once the operator gate is structurally
+enforced rather than written.
+
 ### 6. Commit, Push, and PR
 
 **6a. Commit all remaining artifacts.**
