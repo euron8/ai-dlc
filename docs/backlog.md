@@ -1738,21 +1738,57 @@ carries three absolute `MUST exit 0` mandates (`:828`, `:839`, `:845`), not the 
 names, and the entry it absorbs (`PC-S295-RETRO-DEPLOY-VALIDATE-S3-DEADLOCK`) is the second site of
 the same shape rather than a separate item.
 
-The anchor is `operator disposition` — the phrase core itself uses for this state at `retro.md:448`
-— scoped to each of the two spans, never file-wide, because file-wide is satisfied by the
-locked-requirement passage that is already there and would false-close on day one. The run control
-is `recorded operator disposition` in `retro.md` (2 occurrences today): if that vocabulary is ever
-removed the receipt reports STILL-LIVE rather than closing on a broken search. Each span also
-closes if its absolute sentence simply disappears, so a fix that replaces the wording with any
-vocabulary at all still closes. All four arms — vocabulary added, sentence removed, in both files —
-were driven on seeded copies asserted to differ from the source, and all returned 0.
+**The escalation branch is now written into BOTH spans, and the receipt below is a
+REPLACEMENT, not the original.** `deploy-validate.md` gains a step 6 in the smoke fix loop: loop exhausted with the test still
+red, the smoke verdict stays FAILED, a Tier 1 `HARD_BLOCK` carries the tee'd output path and the
+failing assertions verbatim, and only a recorded operator disposition
+(approved-deferral / do-now / descope) per Rule 13 + Rule 12 Tier 1 releases the checkpoint —
+which it does without changing the verdict. The checkpoint template gains a `Red-gate
+dispositions` row under the existing `### Escalation Log` block, carrying the HARD_BLOCK id, the
+disposition token, the evidence path and the failing output as captured; a checkpoint reporting
+a smoke pass, omitting the smoke line, or narrating the failure in place of the captured output
+is declared forged and the deferral void. `retro.md` gains the matching branch at the end of
+Step 5c with the same shape, citing the closed PASS/FAIL enum so no third verdict is invented.
+Both carry a Rule 26(c) triple.
+
+**SCOPE: the retro half covers all THREE `MUST exit 0` mandates, not one.** The new passage is
+sited at the END of Step 5c and names checks 2, 3 and 4 together, so it binds the whole gate
+rather than the single mandate the old receipt's span happened to contain. The old span
+(`3. **Mandatory rules validation.**` → `4. **Audit-anchor`) is therefore the wrong extraction
+for the fixed tree and is replaced below by the whole-`5c` span.
+
+The anchor is a disjunction over the vocabulary core OWNS for this state — `operator disposition`
+OR `approved-deferral` — required POSITIVELY in each of the two spans, never file-wide, because
+file-wide is satisfied by the locked-requirement passage already at `retro.md` and would
+false-close on day one. The run control is `recorded operator disposition` in `retro.md`: if that
+vocabulary is ever removed the receipt reports STILL-LIVE rather than closing on a broken search.
+The span-non-empty guard keeps a renamed or deleted heading at exit 1 rather than 0.
+
+**The `|| [ "$XL" -eq 0 ]` disjunct is GONE, and that hole is why.** Measured on seeded copies
+asserted to differ from the source: a pure word swap replacing both absolute sentences with
+neutral prose and adding no governance vocabulary drove the old receipt to `DR=0 DL=0 RR=0 RL=0`
+and exit 0 — a full close over an intact deadlock. Scored against the replacement, five trees
+each built into its own scratch directory and asserted to differ before its verdict was read:
+correct fix **0**, a second spelling of the correct fix **0**, that pure word swap **1**, the
+deploy-only half fix **1**, the unfixed tree **1**. Four degenerate trees also hold: retro
+heading renamed **1**, deploy anchor renamed **1**, run-control vocabulary removed **1**, and the
+receipt's own literals appended as a comment to the END of both unfixed files **1** — the seed
+`validate-backlog-receipts.sh` builds.
+
+**STATED LIMIT, measured rather than assumed.** That same comment placed INSIDE both spans of the
+unfixed tree closes the receipt at **0**. The subject here is step-file PROSE, so the emission
+site and the prose are the same text and no anchor over it can separate a governing sentence from
+a comment asserting one. Tightening the anchor further was scored and rejected: requiring
+`HARD_BLOCK` in each span rejects a compliant escalation that records `do-now` or `descope`
+without the literal token, which is the exact failure — a correct fix refused by an over-exact
+anchor — that broke the previous receipt in its other direction.
 
 Discharges the consumer entry `PC-S295-RETRO-STEP5C-DEADLOCK-ON-DEFERRED-RED` (absorbing
 `PC-S295-RETRO-DEPLOY-VALIDATE-S3-DEADLOCK`) at pinned ledger line 436. Both source `theirs_has`
 predicates are subsumed: each is the `-cF` arm of its half.
 
 
-verify: sh R=core/skills/ai-dlc/steps/retro.md; D=core/skills/ai-dlc/steps/deploy-validate.md; [ "$(grep -ci "recorded operator disposition" "$R")" -ge 1 ] || exit 1; DS=$(sed -n '/^\*\*Smoke tests MUST pass\.\*\*/,/^### 3b\./p' "$D"); RS=$(sed -n '/^3\. \*\*Mandatory rules validation\.\*\*/,/^4\. \*\*Audit-anchor/p' "$R"); [ -n "$DS" ] && [ -n "$RS" ] || exit 1; DR=$(grep -ci "operator disposition" <<<"$DS"); DL=$(grep -cF "Repeat until all smoke tests pass." <<<"$DS"); RR=$(grep -ci "operator disposition" <<<"$RS"); RL=$(grep -cF "MUST exit 0. If it fails, fix the issues" <<<"$RS"); { [ "$DR" -ge 1 ] || [ "$DL" -eq 0 ]; } && { [ "$RR" -ge 1 ] || [ "$RL" -eq 0 ]; }
+verify: sh R=core/skills/ai-dlc/steps/retro.md; D=core/skills/ai-dlc/steps/deploy-validate.md; [ "$(grep -ci "recorded operator disposition" "$R")" -ge 1 ] || exit 1; DS=$(sed -n '/^\*\*Smoke tests MUST pass\.\*\*/,/^### 3b\./p' "$D"); RS=$(sed -n '/^### 5c\. Pre-Commit Validation Gate/,/^### 6\. Commit, Push, and PR/p' "$R"); [ -n "$DS" ] && [ -n "$RS" ] || exit 1; DR=$(grep -Eci "operator disposition|approved-deferral" <<<"$DS"); RR=$(grep -Eci "operator disposition|approved-deferral" <<<"$RS"); [ "$DR" -ge 1 ] && [ "$RR" -ge 1 ]
 ## BL-040
 
 **Check 5's whole span consults no record produced by a process other than the one it is
