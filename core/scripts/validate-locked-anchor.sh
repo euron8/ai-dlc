@@ -514,17 +514,26 @@ legacy_claims = 0
 #     observation PRINTED on the PASS line                                      5
 #       clean (0 not byte-present)                                              1
 #       >=1 not byte-present  <- the FP set                                     4
-#     observation COMPUTED, suppressed by an earlier FAIL exit                  11
-#     no resolvable pointer, nothing to observe                                 80
+#     no resolvable pointer, FAILED                                            38
+#     no resolvable pointer, PASSED                                            53
+#                                                          partition sum       96
 #   bullets byte-present 1 / not byte-present 30
 #   CONTROL impossible token over the same walk                                  0
 #   CONTROL total .md walked                                                 18263
 #
-# TWO READINGS OF "REACHES THE OBSERVATION" AND THEY DIFFER. A story that FAILs exits
-# before the PASS line, so the observation is computed and never printed: 5 print it
-# (5.2%), 16 compute it (16.7%). The PRINTED figure is the one a consumer sees. Re-derive
-# both before quoting either; the numbers move with the consumer's corpus and the reading
-# that flatters a claim is not automatically the one the mechanism runs on.
+# THE SUPPRESSED SET IS STRUCTURALLY EMPTY, AND ASKING WHETHER IT WAS COST THREE WRONG
+# NUMBERS. "Computed but not printed" looks like a real bucket -- a FAIL exits before the
+# PASS line -- so a story could seem to resolve a window and never report it. It cannot: a
+# story fails this road BECAUSE its pointer did not resolve (unmatched sentinel, dangling
+# anchor, artifact absent), and an unresolved pointer appends no window. Printed and
+# computed are the same set by construction, so there is one reading and no percentage
+# needs a qualifier.
+#
+# Every wrong figure for that bucket came from grepping each file for a `requires_context:`
+# LINE and inferring a resolved window. Text about a program is not the program. The table
+# above is from the SHIPPING script instrumented at its `ctx_windows.append` site, seed
+# asserted applied, partition exact. Re-derive it the same way; the numbers move with the
+# consumer's corpus.
 ctx_bullets_verbatim = 0
 ctx_bullets_absent = 0
 
