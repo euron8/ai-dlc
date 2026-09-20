@@ -1551,98 +1551,6 @@ line 267, whose live carrier is now
 
 
 verify: sh s=core/skills/ai-dlc/steps/sprint-review.md; b=$(LC_ALL=C awk '/^### 3\. Fix and Re-Validate/{f=1;next} f&&/^### 4\./{exit} f' "$s"); [ -n "$b" ] || exit 1; grep -qi live <<<"$b" || exit 1; grep -qi branch <<<"$b" && grep -qi carry-over <<<"$b"
-## BL-029
-
-&gt;&gt; ANNOTATION OWED — DO NOT ROTATE THIS ENTRY YET. The fix is committed; the RELEASE commit
-does not exist, so neither the version nor the verifying sha has been derived and this entry
-carries no close annotation. When the release lands, replace this whole paragraph with exactly
-one line, at the start of a line: `**LANDED (v<version>, verified <sha>).**`
-
-**This placeholder deliberately matches NEITHER keying regex, and that is a measurement.**
-`backlog-reverify.sh:150` keys on `^(<br>)?\*\*LANDED \(v` with no digit required, while
-`backlog-rotate.sh:295` requires `^(<br>)?\*\*LANDED \(v[0-9]`. A `v<version>` placeholder
-written in the literal form scores **1** against the first and **0** against the second
-(positive control, a real `v0.612.0` annotation: 1 and 1; negative control, prose mentioning
-the word: 0 and 0) — so it would report the entry ALREADY-CLOSED, **permanently stop its receipt
-being re-run**, and still never rotate. The paragraph above scores 0 against both, which keeps
-the receipt live until the real annotation replaces it.
-
-**A block whose machinery core text presupposes takes the `domain-local` route, lands in
-`extensions/` with no push flag written at all, and is never offered upstream — and the decision
-that does this is the untangle-apply bucket list, not the classifier prompt.** Measured on the
-shipping tree (`4e147590`) at `core/skills/ai-dlc-update/SKILL.md`: the `domain-local` bullet read
-`extract the block to extensions/, then restore core to theirs at that block` and wrote no
-`push_candidate` at all, while `un-pushed-innovation` one bullet below wrote `push_candidate:
-true`. That asymmetry is the whole mechanism.
-
-**THE FILING'S CENTRAL CLAIM ABOUT THE MOTIVATING CASE IS FALSE, AND CORRECTING IT MOVES THE
-FIX.** The filing reasoned that the reference consumer "held the rotation as `domain-local`". It
-did not. The live home is
-`/Users/n8/git/graph/.claude/skills/ai-dlc/extensions/steps-domain/retro-gate-log-rotation.md`,
-carrying `hooks: steps/retro.md` and `push_candidate: false` in its frontmatter, and its §4a
-adjudication sits in `.claude/skills/ai-dlc/overrides/steps__retro__domain-sections.md`
-(`7a-post` = 5 hits there; control: that override file exists and is 32636 bytes, while an
-impossible sibling under `extensions/steps-domain/` does not resolve). It is an `extensions/`
-ENTRY with a wrong flag VALUE — never a `domain-local` row emitted by the classifier. **A rule
-sited on the classifier's `domain-local` bullet would have scored ZERO on its own motivating
-case**, which is the batch-135 failure shape exactly. The fix is therefore sited at the decision
-point in `core/skills/ai-dlc-update/SKILL.md`, where both bullets now write the flag explicitly
-and `domain-local` writes `false` as a derived positive claim; `reconcile/classify-block.md:36`
-carries the same wording for a reader, and is read by 0 executables (control: 10 mentions of
-`preclassify` in `scripts/validate-enforcement-map.sh` against 0 for `classify-block`).
-
-**WHAT SURVIVES OF THE ORIGINAL FILING.** The consequence is still measurable in core.
-`core/scripts/validate-artifact-budget.sh:1363` emits `rotate -> a rotation was MISSED`, and
-`core/skills/ai-dlc/steps/retro.md` carries the `7a-post` rotation step that satisfies it at
-`:837,838,895,1104,1173,1176,1179` — 7 hits, against an impossible-token control of 0 in both
-files, same invocation. Core acquired that step only at v0.121.0 having shipped the accusing
-breach message since v0.45.0, and for that whole span core held a gate whose passing condition it
-did not define. **The line numbers the entry originally cited — `validate-artifact-budget.sh:1048`
-and `retro.md:702,896,965` — no longer resolve to the cited text** (`:1048` is now a bare `cat
->&2 <<'EOF'`); the CLAIMS survive and the citations above replace them.
-
-Also surviving: the classifier's return schema
-(`core/skills/ai-dlc-update/reconcile/classify-block.md:99-103`) carries exactly `id`, `bucket`,
-`action`, `needs_operator_confirmation`, `note` — control: an impossible sixth key scores 0 in the
-same invocation — so there is still no field in which the dependency answer is recorded. And the
-"no detector for 'core references a step it does not define'" claim still holds against the
-upstream-side class: `core/scripts/validate-ci-gates.sh` is a dormant-gate detector (16 `dormant`
-mentions, control 0 for an impossible token) whose subject is CI gates declared in a retro with no
-enforcer match, not core prose depending on machinery core lacks.
-
-**WHAT EXPIRED.** The filing asserted the buckets are the only per-block signal. Since it was
-written `needs_operator_confirmation` shipped as an explicitly orthogonal second axis
-(`classify-block.md:74-92`, "A block can have an obvious, mechanical bucket … and STILL require a
-human decision"), so the general complaint that one bucket carries the whole disposition is false.
-What is left of it is narrow: `needs_operator_confirmation` is a human-attention flag carrying no
-push flag, so it cannot re-home an unrelated push axis.
-
-**THE OLD RECEIPT SCORED 0 ON A DESTRUCTIVE REGRESSION, AND THAT IS THE DEFECT BEING REPAIRED
-HERE.** The old receipt grepped the `domain-local` bullet of `classify-block.md`
-case-insensitively for `push`. Scored on three trees built into a scratch dir, all three asserted
-pairwise-different by `cmp -s` before any score was read: shipping `4e147590` → 1, the fix → 0,
-and a regression built FROM shipping that strips the push route from `un-pushed-innovation` and
-moves it to `domain-local` → **0**. A receipt that cannot tell the fix from the regression that
-inverts it has established nothing. The replacement below extracts BOTH bullets from the decision
-site, strips HTML comments, and asserts three things at once — `domain-local` writes `false`,
-`un-pushed-innovation` writes `true`, and `domain-local` does NOT write `true`. Re-scored on the
-same three trees plus four false-close probes (prose above the bullet list, an HTML comment
-carrying the token inside the span, a bare HTML comment, an unrelated sixth Return-schema key):
-fix 0, shipping 1, regression 1, and 1 on all four probes; an empty tree exits 3 rather than
-passing silently, so a moved subject cannot read as a close.
-
-**THE FIX SHIPS ALONE AND TAKES EFFECT ONE PULL LATE.** `core/skills/ai-dlc-update/SKILL.md` IS
-the update skill, so a consumer's installed copy runs the pull that delivers its own repair. The
-pull carrying this fix is classified by the OLD bullet list; the one after it is the first
-protected one.
-
-Discharges the consumer entry `PC-S296-REJECTION-CARRIES-UNRELATED-GAPS` at pinned ledger line 860
-(live at `/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md:459`, control:
-an impossible `## PC-` id scores 0 in the same file). **That entry's own receipt is defective in
-the retiring direction — see BL-279.**
-
-
-verify: sh s=core/skills/ai-dlc-update/SKILL.md; [ -f "$s" ] || exit 3; g(){ LC_ALL=C awk -v B="- **$1** " "index(\$0,B)==1{f=1;print;next} f&&/^- [*][*]/{exit} f" "$s" | LC_ALL=C sed "s/<!--.*-->//g" | LC_ALL=C tr "\n" " " | LC_ALL=C tr -s " "; }; d="$(g domain-local)"; u="$(g un-pushed-innovation)"; [ -n "$d" ] && [ -n "$u" ] || exit 3; LC_ALL=C grep -qE "push_candidate: *false" <<< "$d" || exit 1; LC_ALL=C grep -qE "push_candidate: *true" <<< "$u" || exit 1; ! LC_ALL=C grep -qE "push_candidate: *true" <<< "$d"
 ## BL-038
 
 **Core's sprint-review §3 lets a "genuinely environmental" integration seam defer with no
@@ -2859,7 +2767,7 @@ PC-backed and ranks above any distribution-internal entry under the provenance-f
 candidate's DEFECT is real and its stated REMEDY is refuted — both halves were measured, and the
 adjudication has been carried back in `docs/reviews/graph-s340-adjudication-brief.md` §1b.**
 
-`self-update-gate.sh:180` acquits a split with "SPLIT BUYS NOTHING HERE", gated on
+`self-update-gate.sh`'s `advise_safe_stop` acquits a split with "SPLIT BUYS NOTHING HERE", gated on
 `machinery_at_or_past()` (`:205-213`), which is `git merge-base --is-ancestor` on the stamp's
 `skill_commit` and nothing else. The sentence it emits is a claim about what the CLASSIFIER will
 do; the test underneath it is about where a sha sits in the graph.
@@ -2880,10 +2788,49 @@ set of arguments: **0 changed classifier rows over 59 paths, against a control o
 versus a 0.432.0 engine, with `diff -rq` confirming the two engine directories differ. The hop's
 engine change was inert and the gate could not say so.
 
-**THE PREDICATE TO BUILD, and it is not a guess at what `manifest_dests()` filters.** Lift this
-file's own "the verdict is a differential, not an exit code" doctrine from gating-script exit codes
-to classifier OUTPUT: run the installed engine and the engine at the candidate against the
-consumer's tree and compare. It OBSERVES the filter's effect rather than modelling it.
+**THE BEHAVIOURAL DIFFERENTIAL IS REFUTED AS THE REMEDY, MEASURED AT BATCH 137 BY A CONTRACT
+ADVERSARY AND RE-DERIVED BY THE LEAD. DO NOT BUILD IT.** It was the predicate this entry named,
+and it fails for the same reason as the byte arm it was meant to replace, only harder:
+
+- **The filed INSTANCE is not an instance.** Reconstructed filing state (consumer at
+  `8e53e4b41^`, stamp `0.452.0` / `11bdeb8e`; control: `HEAD` stamp reads `0.608.0` / `03c04e74`,
+  so the extraction is genuinely historical), driving the consumer's own installed engine with
+  `11bdeb8e cb3ac04d`: `SPLIT BUYS NOTHING HERE` rows = **0**. The run takes the `else` branch.
+  `machinery_at_or_past` is FALSE there (`--is-ancestor b634e42d 11bdeb8e` rc=1; control:
+  `--is-ancestor b634e42d cb3ac04d` rc=0) because the stamp is BEHIND the candidate. The
+  acquittal never fired on the pull this entry was filed from, so a new conjunct ANDed under
+  that guard changes nothing on the motivating case, in either direction.
+- **The central measurement had a subject side byte-identical to its own baseline.**
+  `preclassify.sh` is blob `860ed5494c38` at 0.452.0, 0.454.0 AND 0.456.0 (control:
+  `setup-sites.md` differs across the same pair, `ba22836977` vs `88a0b4a50e`). The "0 changed
+  classifier rows against a control of 4" was two runs of the SAME program; `diff -rq` proved the
+  DIRECTORIES differ and never that the CLASSIFIER did.
+- **The 59-row population is not the one the gate runs on.** On the real range the classifier
+  emits **10** rows, all `UPSTREAM-ONLY` (6) or `UPSTREAM-ONLY-ADD` (4) — no consumer delta, so
+  no judgement for two engines to disagree about. 59 came from a synthetic `0.432.0..0.456.0`.
+- **The false-positive set is 92%.** Over the last 40 release hops `preclassify.sh` is UNCHANGED
+  on **37** (control: the same walk over all of `core/` shows 34 of 40 hops changed, so the walk
+  discriminates). The arm this entry banned the byte predicate for was vacuous on 7 of 39; this
+  one is vacuous on 37 of 40.
+- **No control-engine rule is derivable, and that half is a PROOF and not a bug.** Control = the
+  engine at BASE is byte-identical to the installed engine exactly when it is needed. Control =
+  N releases back is a magic number: the first differing `preclassify.sh` sits **7** releases
+  back from the candidate, and N moves with cadence. A resolution control needs a KNOWN-DIFFERENT
+  engine, establishable only by the byte comparison this entry bans or by an unbounded walk.
+
+**THE DEFECT IS STILL REAL AND THE ENTRY STAYS LIVE.** Nothing above contradicts the finding that
+the emitted sentence is a claim about BEHAVIOUR while the test underneath is graph-topological.
+What is refuted is that a behavioural differential can carry it.
+
+**THE DIRECTION THAT SURVIVES EVERY MEASUREMENT IS NARROWER: REFUSE, DO NOT ACQUIT.** Withhold the
+acquittal when the classifier is byte-identical across `installed -> candidate`, because then the
+ancestry test is the ONLY evidence and the sentence it licenses — "its machinery has already
+landed" — is unsupported. One `git rev-parse` pair, no control engine, and it fires on the 37 of
+40 hops where the differential is silent. It is NOT the banned byte-equality arm: that one gated
+the PULL's content, this gates the ACQUITTAL's own evidence. It weakens an acquittal rather than
+strengthening one, which is the asymmetry `self-update-gate.sh` already states for itself —
+refusing costs less than firing wrongly. **Scope is the operator's; this is recorded as the
+measured direction, not taken.**
 
 **THREE THINGS ARE UNMEASURED AND THEY ARE WHY THIS IS FILED RATHER THAN BUILT.** Shipping a check
 whose false-positive set has not been run is forbidden here, and this one has three open questions:
@@ -2897,7 +2844,7 @@ whose false-positive set has not been run is forbidden here, and this one has th
 - **COST IS NOT THE BLOCKER, AND AN EARLIER REVISION OF THIS ENTRY SAID IT MIGHT BE.** That
   revision put the resolution control at "a third, deliberately-older engine extracted per candidate
   ref" with a cost "not yet a number". **"Per candidate" was the load-bearing half and it is
-  wrong**: `advise_safe_stop()` returns at `self-update-gate.sh:168` on `AI_DLC_GATE_IN_SAFE_STOP`,
+  wrong**: `advise_safe_stop()` returns early on `AI_DLC_GATE_IN_SAFE_STOP`,
   which `:125` exports before the `--safe-stop` walk begins, so every per-candidate recursion
   short-circuits before reaching the acquittal and the differential is evaluated exactly once, on
   the single candidate the walk elected. Measured at **≈7s per invocation, independent of range
@@ -2919,15 +2866,43 @@ identically and still not be a tree to acquit. **This entry is now only about th
 behaviour predicate**, and closing it requires that, not the marker guard.
 
 **Tiered DEFECT.** It wrongly advises a split on a consumer whose engine is already behaviourally
-current. It is bounded: `advise_safe_stop` is called only at `:431` and `:543`, both immediately
-after `emit SELF-UPDATE-DEFER`, so the acquittal is unreachable except behind a DEFER and a wrong
-answer can only mis-advise a consumer already deferring — never one on the happy path.
+current. It is bounded: `advise_safe_stop` is called at exactly two sites, each immediately after
+an `emit SELF-UPDATE-DEFER` inside a deferral block, so the acquittal is unreachable except behind
+a DEFER and a wrong answer can only mis-advise a consumer already deferring — never one on the
+happy path. **The bound re-derives TRUE; the line numbers this entry used to cite did not.** Every
+anchor here had moved by `5540c7c6` — the acquittal, `machinery_at_or_past`, both call sites and
+the early return — so the citations are given by NAME above and the reader greps for them. An
+entry citing `path:line` into a file that moves is `BL-133`'s own subject, occurring here.
 
-The receipt keys on a behavioural comparison EXISTING, deliberately not on the ancestry test being
-absent: any real fix ADDS the behaviour check while KEEPING ancestry, so a receipt anchored on the
-ancestry line survives the fix — the co-occurrence trap the upstream entry names in its own
-`verify: manual` rationale. Scored three ways: 1 against the tree, 0 against a scratch copy with an
-engine extraction seeded, 9 with the subject removed.
+**THERE ARE TWO `SPLIT BUYS NOTHING HERE` EMITTERS AND ONLY ONE IS THE SUBJECT.** The second is
+the push-refusal case with candidate `"-"`, whose window carries **0** non-comment references to
+`machinery_at_or_past` or `advise_safe_stop` (control: 4 `emit` calls in the same window, so the
+grep works) — its only textual hit is a comment explaining why the walk is deliberately skipped
+there. Same banner, different premise, no ancestry test. **Name the subject by its
+`machinery_at_or_past` guard, never by the banner text**, and note that the fixture asserts
+`grep -c 'SPLIT BUYS NOTHING'` against expected counts at six sites: a fix landing on the wrong
+emitter moves those counts and satisfies a banner-counting receipt while changing nothing.
+
+**THE FIXTURE'S OWN MUTATION ANCHOR IS AIMED AT THE LINE A FIX MUST RESHAPE.**
+`core/fixtures/self-update-gate/run.sh`'s `SC_A3` anchors on the literal
+`    if machinery_at_or_past "$_ss"; then`, which matches the shipping gate exactly **1** time
+(control: a bogus anchor matches 0). Any fix that rewrites that line empties the mutant silently —
+it applies to nothing, the file stays byte-identical, and the battery reads SURVIVED. Assert
+`! cmp -s` before scoring, and re-anchor the mutant on the predicate that DECIDES.
+
+**THE RECEIPT IS REFUTED: IT REJECTS THE CORRECT FIX AND CLOSES ON THE DESTRUCTIVE INVERSE.**
+Six candidates built from the shipping file, each asserted applied by `cmp -s` first. A real
+differential — extract the candidate engine, run both `preclassify.sh`, compare — scores **1**,
+REJECTED, because the receipt demands `show|archive|worktree` and `preclassify` on ONE line with
+no `|` between them, and the extraction is necessarily two lines: `preclassify.sh` sources
+`lib.sh` at `:47` and reads `setup-sites.md` via `dirname "$0"`, so it cannot be extracted as a
+single file. Meanwhile the same line inside an UNCALLED function, the same line under `if false`,
+an unconditional `: "$(git show … | head -0)"` consulting nothing, AND a mutant replacing the
+guard with `git archive … || true` — which acquits **every** consumer unconditionally — all score
+**0**, closed. The inverse mutant emits 1 `SPLIT BUYS NOTHING` row on the motivating case against
+the shipping tree's 0, so the FIXTURE separates them and the receipt does not. **Key the
+replacement on the EMISSION SITE** — that the acquittal's own guard consults a behaviour term —
+plus a non-vacuity arm, and score it against all six before filing it.
 
 verify: sh g=core/skills/ai-dlc-update/reconcile/self-update-gate.sh; [ -f "$g" ] || exit 9; grep -q "advise_safe_stop" "$g" || exit 9; grep -vE "^[[:space:]]*#" "$g" | grep -qE "(show|archive|worktree)[^|]*preclassify" && exit 0; exit 1
 
