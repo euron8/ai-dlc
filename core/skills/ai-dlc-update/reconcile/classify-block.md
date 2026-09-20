@@ -35,8 +35,15 @@ context loss. Prefer the numbered-item level.
   that was mined FROM this consumer.
 - **domain-local** — consumer-specific machinery upstream intentionally lacks
   (domain checks, execution-health floors, deploy gates for this consumer's
-  stack). Action: keep ours; note any non-conflicting upstream additions to
-  layer around it.
+  stack) AND on which no core text depends. Action: keep ours with
+  `push_candidate: false`; note any non-conflicting upstream additions to
+  layer around it. Before assigning this bucket, ask the dependency question
+  and answer it against `theirs`, not from memory: does any core text at the
+  block's hook target — a gate, a breach message, a budget row, a
+  cross-reference — presuppose the machinery being kept local? If it does,
+  core is incomplete without the block, which makes it generalizable by
+  definition: assign `un-pushed-innovation` instead. This bucket has no push
+  route, and that is its whole distinction from the next one.
 - **un-pushed-innovation** — a GENERALIZABLE improvement the consumer made that
   upstream still lacks. Action: keep ours; FLAG for push (record it — it feeds
   the absorption arc).

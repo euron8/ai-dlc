@@ -2311,8 +2311,20 @@ exactly this shape. Per classify bucket, act:
 - **rewording** → discard the consumer's version; core is restored to
   `theirs` at that block (rewording is by definition already-upstream in
   substance).
-- **domain-local** → extract the block to `extensions/`, then restore core to
-  `theirs` at that block.
+- **domain-local** → extract the block to `extensions/` with an explicit
+  `push_candidate: false`, then restore core to `theirs` at that block. The
+  flag is never omitted and never defaulted here: writing `false` is the
+  positive claim that no core text at the entry's `hooks:` target — no gate, no
+  breach message, no budget row, no cross-reference — depends on the machinery
+  being kept local. Derive that claim against `theirs` before writing it; a
+  flag written without asking is an unmade decision recorded as a made one. If
+  core text DOES depend on it, core is incomplete without the block and the
+  block is NOT domain-local: assign **un-pushed-innovation** and take the next
+  bullet instead. `domain-local` carries no push route of its own, and that
+  flag is the entire distinction between these two bullets. This decision is
+  per-BLOCK, so it never reaches a consumer-only FILE (queued to the ledger
+  below) or anything already sitting in `overrides/` — ask the same dependency
+  question at those two sites, where no bucket is assigned to carry it.
 - **un-pushed-innovation** → extract to `extensions/` with `push_candidate:
   true`, then restore core to `theirs`.
 - **conflict** → extract to `overrides/` with `shadows: <file>#<id>` and
