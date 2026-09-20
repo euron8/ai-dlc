@@ -261,9 +261,13 @@ unquote() { # unquote <value>
 # enough: the LABEL rules in that supposedly-unchanged block already differ (rotate omits
 # reverify's ` — ` truncation, so `## PC-FOO — title` labels differently in each).
 #
-# Only the BOUNDARY moves here. The two close-predicates stay in their own files because they
-# differ DELIBERATELY — reverify skips on `ADOPTED UPSTREAM` anywhere, rotate requires the
-# annotation form `**ADOPTED UPSTREAM (v` — and collapsing those would archive live entries.
+# THIS PASSAGE ONCE READ "the two close-predicates stay in their own files because they differ
+# DELIBERATELY", and that was the defect. The two predicates do differ, but by ONE PROPERTY —
+# rotation requires the bold span reverify treats as optional — and the reason given for keeping
+# them apart licensed two independent TOKEN SETS, which is how one file came to honour a close
+# the other could not spell. `ledger_close_awk()` and `ledger_archive_awk()` below now emit both
+# from one home: the difference is a derivation, not a second list.
+#
 # The label rules also stay put: unifying them changes rotate's `moved-names` output, which is
 # a behaviour change and not this one's business. That is the same admission rule this file
 # opened with — a helper earns a place here only when two tools disagreeing about it is itself

@@ -20,11 +20,15 @@
 # because "ADOPTED UPSTREAM appearing in an OPEN entry's prose is the realistic way a rotation
 # eats live work."
 #
-# THE PREDICATE IS DELIBERATELY NOT SHARED WITH THE OTHER TWO, AND lib.sh SAYS WHY. Only the
-# entry BOUNDARY is single-sourced there; the close-predicates "stay in their own files because
-# they differ DELIBERATELY -- reverify skips on `ADOPTED UPSTREAM` anywhere, rotate requires the
-# annotation form -- and collapsing those would archive live entries." This is a third such
-# predicate, for a third ledger, for that same reason.
+# THE PREDICATE IS NOT SHARED WITH THE OTHER TWO BECAUSE THE LEDGER IS DIFFERENT, NOT BECAUSE
+# THE PREDICATES MAY DIVERGE. This file rotates `docs/backlog.md`, whose close marker is
+# `**LANDED (v` and whose entry ids are `BL-`; the other two rotate a consumer's push-candidate
+# ledger, closed by an upstream-adoption vocabulary this file has no entry for. Those two used
+# to hold INDEPENDENT token sets under a "they differ deliberately" rationale quoted here, and
+# one of them came to honour a close the other could not spell -- `reconcile/lib.sh`s
+# `ledger_archive_awk()` now DERIVES the stricter predicate from the looser one for that reason.
+# Adding a close token to THIS ledger is a change to this file alone; adding one to the
+# push-candidate ledger is a change to its single home, and never to a copy.
 #
 # ACCEPTANCE TEST, INHERITED WHOLE: `backlog-reverify.sh` output must be byte-identical before
 # and after a rotation. Rotation moves exactly the entries reverify already reports as
