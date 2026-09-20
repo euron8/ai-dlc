@@ -1708,7 +1708,7 @@ verify: sh F=core/skills/ai-dlc/steps/sprint-review.md; [ "$(grep -cF HARD_BLOCK
 **Check 5's whole span consults no record produced by a process other than the one it is
 auditing, and the check's own text says the resulting pass is reachable.** Measured over the
 `CHECK_LOADED: 5` → `CHECK_LOADED: 6` span of `core/skills/ai-dlc/steps/gate-validation.md` **as
-it stood before this entry's fix — `:503-578`, 76 lines.** The same span is `:503-603` and 101
+it stood before this entry's fix — `:503-578`, 76 lines.** The same span is `:503-608` and 106
 lines now the fix has landed; both bounds are stated because the defect measurement is only
 meaningful over the pre-fix span, and a post-fix citation alone would name a span the defect has
 been removed from. Occurrences of `gate-log` **inside the pre-fix span = 0**; controls in the
@@ -1723,10 +1723,10 @@ machine-read it" IS FALSE IN THE DIRECTION THAT MAKES THE FIX LOOK EASIER THAN I
 counts must both be stated, because the control has to be on the RECEIPT'S OWN TOKEN and the
 receipt greps `gate-log.md`, not `gate-log`. Re-derived over the pre-fix file in one invocation:
 `gate-log` in any spelling = **11**, `gate-log.md` = **2**, impossible token = **0**. Both
-`gate-log.md` sites — `:704` and `:767` before the fix, `:729` and `:801` now — are Check 12
+`gate-log.md` sites — `:704` and `:767` before the fix, `:734` and `:820` now — are Check 12
 WRITE sites. Checks 16, 18 and 22 are writes too. Exactly **ONE** site in this file READS
-gate-log content: Check 25 (heading `:1925`), which machine-reads `steering_violations:` out of
-the previous gate-log entry at `:1937`. That single case is the pattern to copy — a field Check
+gate-log content: Check 25 (heading `:1944`), which machine-reads `steering_violations:` out of
+the previous gate-log entry at `:1956`. That single case is the pattern to copy — a field Check
 12 writes BECAUSE Check 25 reads it — and it is the whole reason the fix is reachable rather
 than architectural. A reader who takes "four checks" at face value expects four working
 precedents and finds one. The fix adds a third `gate-log.md` site at `:577`, which is Check 5's
@@ -1756,7 +1756,7 @@ looser anchor — `gate-log` anywhere in `gate-validation.md` — false-closes t
 rotation prose, which is why the receipt extracts the span first.
 
 **THE READ HALF ALONE IS UNREACHABLE, WHICH IS WHY THE FIX IS TWO SPANS IN ONE COMMIT.** The
-gate-log ENTRY SCHEMA at `:732-741` (now `:757`) enumerated exactly six fields — gate name and
+gate-log ENTRY SCHEMA at `:732-741` (now `:762`) enumerated exactly six fields — gate name and
 phase, timestamp, per-check results, evidence artifacts, remediations, and
 `steering_violations: <N>`.
 **There was no per-story status field.** A Check 5 clause saying "compare against the status the
@@ -1765,10 +1765,25 @@ criterion shipped into a gate, which is worse than the defect it replaces. The e
 READ clause PLUS a Check 12 WRITE clause adding the `story_status:` field the read consumes.
 Without the writer half the comparand is vacuous forever and reads green.
 
-Check 12 is numbered AFTER Check 5 (headings `:726` vs `:502`), so within one gate the reader precedes the
+Check 12 is numbered AFTER Check 5 (headings `:731` vs `:502`), so within one gate the reader precedes the
 writer and the comparand is necessarily the PREVIOUS gate's entry — which at a sprint's first
 gate does not exist. That branch belongs in the numbered action list, where the executor decides
 it deliberately: no prior entry means RECORD THE ABSENCE AS EVIDENCE, never a FAIL.
+
+**AND THE READER AND WRITER MUST RESOLVE THE STATUS BY ONE PRECEDENCE, WHICH THE FIRST DRAFT DID
+NOT.** That draft told the writer to read "frontmatter `status:` (or the `**Status:**` header)".
+The two spellings co-occur on real stories AND they disagree, so the "or" left the writer free to
+pick either value while Check 5 compared against whichever the previous gate happened to choose —
+a story whose status never moved then reads as a backward move and FAILS. Derived over a
+reference consumer's story corpus, worktrees excluded, partition exact: of **1069** stories,
+**122** carry both spellings, of which **56** are byte-identical, **17** differ only by a trailing
+annotation on the header, and **49 DISAGREE on the lifecycle token**; **278** are frontmatter
+only, **587** header only, and **82** carry NO STATUS AT ALL, against an impossible-token control
+of **0** over the same corpus. One precedence now governs both sides — frontmatter `status:`,
+header only where there is no frontmatter `status:` — the value is the leading lifecycle token,
+and a story with neither is recorded `absent` rather than omitted, since an omitted line is
+indistinguishable from a story the writer forgot. `absent` is not a lifecycle position, cannot
+move backward, and passes the comparand.
 
 **THE ENTRY'S OWN CLAIM ABOUT ARM 1 WAS FALSE AND INVERTED THE PROTECTION IT DESCRIBED.** It said
 the receipt's first arm exits **2** rather than 1 on the renumber-or-removal case. Measured, with
@@ -1874,7 +1889,7 @@ differing only in their citation line, each carrying the same two invented requi
 **rc=0**, `PASS (… 1 block(s), 0 full_text_source claim(s) verified …, 1 requires_context pointer(s)
 resolved)`; with `full_text_source: locked-requirements.md:Requirements` **rc=1**, `requirement not
 byte-present at the cited anchor(s)`; with no citation at all **rc=1**, the uncheckable guard at
-`:605-626`. Two of the three roads reject the identical fabrication, which is the control — the
+`:623-644`. Two of the three roads reject the identical fabrication, which is the control — the
 validator discriminates, and the pointer road is where it does not.
 
 Then the sharper measurement, a differential whose two sides are asserted to differ before the
@@ -1883,12 +1898,12 @@ anchor), identical in every other byte, produce the **same exit code and the sam
 line** after the story path is normalised out. Nothing downstream of this validator can tell them
 apart.
 
-**`:557-559` claims this road is closed and it is not.** The comment introducing pointer
+**`:575-577` claims this road is closed and it is not.** The comment introducing pointer
 resolution states that what it removes is "the road by which a block substantiates nothing and
 scores as clean". Resolving the pointer establishes that the artifact and anchor exist; it places
 no constraint whatever on the bullets, so a block still substantiates nothing — and because
 `pointers_checked` is now nonzero, it no longer even lands on the `PASS — EXAMINED NOTHING` line
-at `:725` that was built to mark exactly this case. The change moved the laundering case out of
+at `:743` that was built to mark exactly this case. The change moved the laundering case out of
 the one report line that flagged it.
 
 **The filing is right and too broad.** It says the validator "can be satisfied by agent-authored
@@ -1906,23 +1921,51 @@ who checks the history behind that sentence finds nothing there and may read the
 soft, which is the one direction that ships the regression.
 
 **The constraint is nonetheless correct, and the basis is a MEASUREMENT rather than a history.**
-Over a reference consumer's real corpus, under the report-only observation this entry's fix
-introduces: **7 of the 13** observable blocks carry at least one non-verbatim bullet, and **49 of
-51** bullets overall are not byte-present at the cited anchor. As an exit code that is a **54%
-red rate on observable honest blocks** — an abridged cite-by-reference restatement is the honest
-shape here, and failing it would red the majority of them.
+Derived by driving the shipping validator over a reference consumer checkout, `.claude/worktrees/`
+EXCLUDED, partition exact and controls in the same walk:
 
-**AND THE REACHABILITY BELONGS BESIDE THAT FP SET, BECAUSE WITHOUT IT THE CHANGE SOUNDS LARGER
-THAN IT IS.** Over the same corpus, **189** files carry both a `LOCKED_REQUIREMENTS` block and a
-`requires_context:` line, and only **13** of them reach the observation at all — **6.9%**. Of the
-other 176, **100** print `PASS — EXAMINED NOTHING` (rc 0) and **76** FAIL (rc 1) before reaching
-it. So the separation of a fabricated block from an honest one holds on 7% of the population and
-the new report field is blank on nine of every ten stories the consumer owns. An FP set reported
-without its reachability figure overstates what the change does.
+```
+population (LOCKED_REQUIREMENTS + requires_context:, worktrees excluded)   96
+  observation PRINTED on the PASS line                                      5
+    clean (0 not byte-present)                                              1
+    >=1 not byte-present  <- the FP set                                     4
+  FAILED before the PASS line                                              38
+  PASSED, no pointer resolved, nothing to observe                          53
+                                                       partition sum       96
+bullets byte-present 1 / not byte-present 30   (over the printed set)
+CONTROL impossible token over the same walk                                 0
+CONTROL total .md walked, worktrees excluded                            11412
+CONTROL same walk INCLUDING worktrees reads a population of               189
+```
+
+**The 189 is the contaminated reading and it is why no figure here may be quoted from an older
+one.** Each agent worktree carries a duplicate of files already counted, so a count over a tree
+walk moves with what is on disk rather than with the corpus. 93 of that 189 were duplicates.
+
+As an exit code the byte-match would red **4 of the 5** blocks it can observe, and 30 of the 31
+bullets on that road are not byte-present. An abridged cite-by-reference restatement is the honest
+shape here, so failing it reds most of the honest blocks the observation can see — which is the
+regression this road's exemption exists to avoid.
+
+**THE REACHABILITY BELONGS BESIDE THAT FP SET, BECAUSE WITHOUT IT THE CHANGE SOUNDS LARGER THAN
+IT IS.** The observation is printed on **5 of 96** stories — **5.2%** — so the new report field is
+blank on nineteen of every twenty stories the consumer owns, and the claim that it separates a
+fabricated block from an honest one holds only on that 5%.
+
+**A "computed but suppressed" reading was checked and it is ZERO, which is not what it looks
+like.** A story that FAILs exits before the PASS line, so one might expect the 38 failures to
+compute the observation and never print it. Measured by instrumenting the shipping script —
+control in the same run: the instrumented copy and the shipped one returned identical verdict and
+stdout on all 96, and `cmp -s` asserted the two differ first — the marker fires on **5** files,
+all of which pass, and on **0** of the 38 failures. The mechanism is visible in the failure
+reasons: a story fails on this road precisely BECAUSE its pointer did not resolve — an unmatched
+sentinel, a dangling anchor, an artifact absent from disk — and an unresolved pointer contributes
+no window, so there is nothing to match against. Computed and printed are the same 5 here, and a
+wider "computed" figure is an artifact of assuming the two sets differ.
 
 The receipt therefore asserts only that the two roads stop being **indistinguishable**, closing on
 either an exit-code split or a report-line split. That matches this file's own established repair
-pattern — `:723-746` separated the two roads to PASS by report line while deliberately leaving the
+pattern — `:741-764` separated the two roads to PASS by report line while deliberately leaving the
 exit code alone — so the anchor does not prejudge which fix is taken. It carries an inline sanity
 arm that the two probe stories differ, because a differential whose sides are accidentally the
 same file agrees perfectly and reads as "no defect".

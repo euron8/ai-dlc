@@ -808,12 +808,14 @@ fi
 # is where it did not.
 #
 # AND THE EXIT CODE MUST NOT MOVE, WHICH IS WHY THESE ARMS ASSERT IT SEPARATELY. An
-# abridged cite-by-reference restatement is the honest shape on this road: measured over a
-# reference consumer's corpus, 7 of the 13 stories that reach the observation carry at
-# least one non-verbatim bullet and 49 of 51 bullets overall are not byte-present. As a
-# failure condition that is a 54% red rate on honest blocks, and a builder who makes the
-# fabricated story exit 1 has shipped that regression. Every arm below therefore pairs the
-# count assertion with an exit-code assertion.
+# abridged cite-by-reference restatement is the honest shape on this road: measured by
+# driving the shipping script over a reference consumer checkout with `.claude/worktrees/`
+# EXCLUDED, 4 of the 5 stories that reach the observation carry at least one non-verbatim
+# bullet. As a failure condition that reds most of the honest blocks the observation can
+# see, and a builder who makes the fabricated story exit 1 has shipped that regression.
+# Every arm below therefore pairs the count assertion with an exit-code assertion.
+# `validate-locked-anchor.sh` carries the full partition and the tree it was taken in;
+# re-derive there rather than quoting this comment.
 #
 # THE ARMS KEY ON THE COUNT FIELDS, NEVER ON THE FIRST LINE, AND THAT IS MEASURED RATHER
 # THAN STYLISTIC. The entry's receipt closes on EITHER an exit-code split OR a
@@ -968,8 +970,9 @@ fi
 
 # --- MB2: the ENFORCING mutant — the regression the exemption exists to avoid -------
 # The observation becomes a failure condition. The fabricated story reds, which looks like
-# an improvement, and the ABRIDGED HONEST story reds with it -- which is the 54% red rate
-# on the real corpus. Only the abridged seed can see this, which is why it had to be built.
+# an improvement, and the ABRIDGED HONEST story reds with it -- which is most of what the
+# observation can see on the real corpus. Only the abridged seed can see this, which is why
+# it had to be built.
 MB2="$WORK/mut-enforce-observation.sh"
 MUT_OLD='            else:
                 ctx_bullets_absent += 1' \

@@ -79,7 +79,8 @@ designated file's `1 / 0` directly so that fact cannot go stale silently.
 
 **The exit code does not move on this road, and every count arm carries the rc assertion
 beside it.** An abridged cite-by-reference restatement is the honest shape here: over a
-reference consumer's corpus, 7 of the 13 stories that reach the observation carry at
-least one non-verbatim bullet and 49 of 51 bullets overall are not byte-present. As a
-failure condition that is a 54% red rate on honest blocks, which is the regression `MB2`
-makes visible.
+reference consumer checkout with `.claude/worktrees/` excluded, 4 of the 5 stories that
+reach the observation carry at least one non-verbatim bullet. As a failure condition that
+reds most of the honest blocks the observation can see, which is the regression `MB2`
+makes visible. `validate-locked-anchor.sh` carries the full partition and the tree it was
+taken in; re-derive there rather than quoting this file.
