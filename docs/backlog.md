@@ -4265,3 +4265,44 @@ unattainable in this session and would read as a failure of a fix that works.
 
 verify: sh d=core/scripts/derive-fixture-readsets.sh; [ -f "$d" ] || exit 9; grep -q '^norm()' "$d" || exit 9; grep -q '^drop_ignored()' "$d" && grep -q 'check-ignore' "$d" && exit 0; exit 1
 
+
+## BL-278 — the join between an entry's receipt and the fixture that covers the same subject has no home a consumer can run
+
+**DEFECT.** Found at batch 134, when the arm that would have carried this join was reverted out
+of a shipping fixture by the pre-push dead-doc-ref phase.
+
+**THE JOIN IS REAL AND NOTHING ASSERTS IT.** A backlog entry's `verify: sh` receipt and the
+fixture arms covering the same subject divide the work between them: the receipt establishes
+that the fix is present, and the arms establish what the receipt cannot express. At batch 134
+that division was measured rather than assumed — BL-040's receipt is blind to a mutant deleting
+only the Check 12 writer half, and blind to a comment or a bare mention replacing the comparand,
+so three of the six seeded shapes are fixture-owned. **The division is currently stated in a
+comment**, and a comment goes stale in silence: the next hand to widen the receipt reads the arms
+as redundant and deletes one.
+
+**WHY IT HAS NO HOME TODAY.** The join's two sides live on opposite sides of the consumer
+boundary. The receipt is a line in `docs/backlog.md`, which `install.sh` does not ship; the arms
+live in `core/fixtures/gate-verdict-grep-shape/`, which does. Derived at this tip, both sides in
+the same invocation: `grep -rlF 'docs/backlog.md' core/fixtures/` returns **4** fixtures —
+`backlog-ledger`, `backlog-receipt-binding`, `backlog-rotate-fence-guard`, `backlog-size-ceiling`
+— and **4 of 4** carry a `.dist-only` marker, against **0** shipping ones. So the tree's existing
+answer to this class is unanimous and the arm that broke it was the anomaly.
+`scripts/validate-no-dead-doc-refs.sh` enforces exactly that, and the class it names is not
+cosmetic: a shipping fixture whose corpus is absent on a consumer STANDS DOWN there, and a unit
+that cannot fail scores as a pass in that consumer's own suite verdict.
+
+**THE OBVIOUS REPAIR IS THE ONE TO REFUSE.** Hardcoding the receipt into the fixture makes the
+arm runnable on a consumer and creates a second definition of the receipt — which is the drift
+this entry exists to prevent, one level down. The receipt must be DERIVED from the entry or not
+scored at all.
+
+**What is owed is a `.dist-only` home beside the other backlog units.**
+`core/fixtures/backlog-receipt-binding/` already reads `docs/backlog.md` (14 sites) and already
+drives receipts over seeded ledgers, and its `.dist-only` marker states this exact reasoning.
+Whether the join belongs as arms there, or in a new `.dist-only` fixture, is the scoping question
+— `.claude/rules/fixture-ship-decl.md` governs either way, and a NEW fixture directory also owes
+a read-set row the operator must derive with root.
+
+Discharges nothing upstream; this is distribution-internal and ranks below any PC-backed entry.
+
+verify: sh h=core/fixtures/gate-verdict-grep-shape/run.sh; [ -f "$h" ] || exit 9; b=core/fixtures/backlog-receipt-binding/run.sh; [ -f "$b" ] || exit 9; [ -f core/fixtures/backlog-receipt-binding/.dist-only ] || exit 9; grep -q 'docs/backlog.md' "$h" && exit 9; grep -qE 'BL-040|CHECK_LOADED: 5' "$b" && exit 0; exit 1
