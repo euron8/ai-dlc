@@ -311,7 +311,15 @@ drivability() { bash scripts/ai-dlc/validate-fixture-drivability.sh; }
 #    real only where two widths' readings do not overlap.
 # FIXTURE_POOL_BEGIN
 FIXTURE_JOBS="${AI_DLC_FIXTURE_JOBS:-12}"
-DURATIONS_RECORD=".git/ai-dlc-fixture-durations"
+# RESOLVE THE GIT DIRECTORY; NEVER SPELL IT `.git/`. In a LINKED WORKTREE `.git` is a
+# FILE, not a directory, so every record below fails to open -- and each write is
+# error-suppressed, so the suite proceeds and the banner is unaffected while the
+# cross-run evidence is silently lost. `--git-common-dir` answers `.git` in a primary
+# checkout and the shared admin directory from a worktree, so one spelling is correct
+# in both. The fallback keeps the old behaviour if rev-parse is unavailable.
+GITDIR="$(git rev-parse --git-common-dir 2>/dev/null)" || GITDIR=".git"
+[ -n "$GITDIR" ] || GITDIR=".git"
+DURATIONS_RECORD="$GITDIR/ai-dlc-fixture-durations"
 # THIS RUN'S COSTS, UNMERGED. The record above merges each run over the last so a fixture that
 # was SKIPPED keeps the cost it had -- which is what the longest-first dispatch wants, and which
 # makes every row in it a floor of unknown age. If you want to know what your suite cost THIS
@@ -321,12 +329,12 @@ DURATIONS_RECORD=".git/ai-dlc-fixture-durations"
 # means "no complete measurement" -- a red unit, a killed push, or a suite that never ran -- and
 # a non-empty one means a full green pool. A red run's timings describe a suite that stopped
 # early, and treating those as a measurement reads a short run as a fast one.
-LASTRUN_RECORD=".git/ai-dlc-fixture-durations.last"
+LASTRUN_RECORD="$GITDIR/ai-dlc-fixture-durations.last"
 READSET_MAP=".ai-dlc-fixture-readsets.tsv"
 # THE VERIFIED-STATE RECORD LIVES UNDER .git FOR I55 ARM 4'S REASON EXACTLY: the content key
 # hashes the working tree, so a cross-run record inside it would change the key that decides
 # whether this suite runs at all.
-VERIFIED_RECORD=".git/ai-dlc-fixture-verified"
+VERIFIED_RECORD="$GITDIR/ai-dlc-fixture-verified"
 # WHEN A FIXTURE GOES RED, THIS IS THE FILE TO READ. The pool runs each unit in its own worker
 # and keeps only a verdict, so without this record a failing fixture left you one line --
 # `FAIL <name>` -- and no way to see what it actually printed. Re-running the fixture by hand
@@ -339,7 +347,7 @@ VERIFIED_RECORD=".git/ai-dlc-fixture-verified"
 #
 # NEVER DELETED ON A GREEN RUN. If a push goes red and the next one goes green, this file still
 # holds the red run's output -- which is the case you most want it for.
-FAILLOG_RECORD=".git/ai-dlc-fixture-failures"
+FAILLOG_RECORD="$GITDIR/ai-dlc-fixture-failures"
 
 # Reduce "$1" (the dispatch list) to the fixtures a change can actually affect, using the
 # trace-derived read-sets in $READSET_MAP. Announces what it skipped and why; leaves the list

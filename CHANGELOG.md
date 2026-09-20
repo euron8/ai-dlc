@@ -15,6 +15,37 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.608.0] - 2026-09-19
+
+### the pre-push runners lose their cross-run evidence in a linked worktree
+
+#### the defect
+
+In a linked worktree `.git` is a FILE, not a directory. Both pre-push runners spelled their
+cross-run records as literal `.git/` paths and neither resolved `git rev-parse --git-common-dir`.
+Every write failed, every failure was error-suppressed, and the suite proceeded with its banner
+unaffected while the durations, verified, failures and suite-key records were all unreachable.
+
+Measured at batch 131: three fan-out hands each ran the suite in its own agent worktree and
+reported green or in-progress; none had written a verdict record. The in-run verdict-completeness
+assertion walks the dispatched list and is unaffected — what is lost is the half that crosses
+runs, which is the half the failure record exists for.
+
+One defect in one program, not divergence: the four shared definitions were byte-identical between
+the two hooks, which is what I66 binds, so a consumer pushing from a worktree lost the same
+evidence.
+
+#### the fix, and the invariant that had to move with it
+
+Each runner resolves `GITDIR` once from `--git-common-dir` — which answers `.git` in a primary
+checkout and the shared admin directory from a worktree — and keys every record off it.
+
+`I55`'s arm 4 required a literal `.git/` prefix, which is the correct rule for the defect it
+guards and the wrong spelling here. It now admits `$GITDIR/` only where the same file assigns
+GITDIR from that command, so a hook naming an unresolved variable is convicted as before. Probed
+both directions against the live validator: seeded in-tree record convicted, unresolved GITDIR
+convicted, shipped hook silent.
+
 ## [0.607.0] - 2026-09-19
 
 ### two step-file safety properties that fail silently in a consumer's own pipeline

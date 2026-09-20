@@ -317,7 +317,15 @@ step "agent definitions (the shipped renderer runs, and says which of its three 
 # is present and the mechanism is absent.
 # FIXTURE_POOL_BEGIN
 FIXTURE_JOBS="${AI_DLC_FIXTURE_JOBS:-12}"
-DURATIONS_RECORD=".git/ai-dlc-fixture-durations"
+# RESOLVE THE GIT DIRECTORY; NEVER SPELL IT `.git/`. In a LINKED WORKTREE `.git` is a
+# FILE, not a directory, so every record below fails to open -- and each write is
+# error-suppressed, so the suite proceeds and the banner is unaffected while the
+# cross-run evidence is silently lost. `--git-common-dir` answers `.git` in a primary
+# checkout and the shared admin directory from a worktree, so one spelling is correct
+# in both. The fallback keeps the old behaviour if rev-parse is unavailable.
+GITDIR="$(git rev-parse --git-common-dir 2>/dev/null)" || GITDIR=".git"
+[ -n "$GITDIR" ] || GITDIR=".git"
+DURATIONS_RECORD="$GITDIR/ai-dlc-fixture-durations"
 # THIS RUN'S COSTS, UNMERGED, AND THAT IS THE WHOLE DIFFERENCE FROM THE RECORD ABOVE.
 # DURATIONS_RECORD merges each run over the last one so a SKIPPED unit keeps the cost it had --
 # correct for scheduling, useless for measurement. Its rows are of mixed vintage and nothing in
@@ -337,12 +345,12 @@ DURATIONS_RECORD=".git/ai-dlc-fixture-durations"
 # THE CONTENT-KEY SKIP NEVER ENTERS THE POOL, so it neither truncates nor writes -- the PRIOR
 # run's file survives it. That is why the reader is the hook step, which stands down on
 # SUITE_SKIPPED rather than trusting the file's age.
-LASTRUN_RECORD=".git/ai-dlc-fixture-durations.last"
+LASTRUN_RECORD="$GITDIR/ai-dlc-fixture-durations.last"
 READSET_MAP=".ai-dlc-fixture-readsets.tsv"
 # THE VERIFIED-STATE RECORD LIVES UNDER .git FOR I55 ARM 4'S REASON EXACTLY: the content key
 # hashes the working tree, so a cross-run record inside it would change the key that decides
 # whether this suite runs at all.
-VERIFIED_RECORD=".git/ai-dlc-fixture-verified"
+VERIFIED_RECORD="$GITDIR/ai-dlc-fixture-verified"
 # A RED UNIT'S OUTPUT HAS TO OUTLIVE THE RUN THAT PRODUCED IT. Until this record existed the
 # worker below sent every fixture's stdout and stderr to /dev/null, so an intermittent red left
 # ONE line of evidence -- `FAIL <name>` in a terminal -- and the honest local remedy was "push
@@ -359,7 +367,7 @@ VERIFIED_RECORD=".git/ai-dlc-fixture-verified"
 # "it went red, I pushed again, it went green" -- a green run that cleaned up would destroy the
 # evidence at exactly the moment the operator went looking for it. The record names the run that
 # wrote it, and nothing points a reader at it unless THIS run is red.
-FAILLOG_RECORD=".git/ai-dlc-fixture-failures"
+FAILLOG_RECORD="$GITDIR/ai-dlc-fixture-failures"
 
 # Reduce "$1" (the dispatch list) to the fixtures a change can actually affect, using the
 # trace-derived read-sets in $READSET_MAP. Announces what it skipped and why; leaves the list
@@ -911,7 +919,7 @@ run_fixtures() {
 # The record lives in .git/, NOT in the working tree, and that is load-bearing: a
 # record inside the tree would be hashed by the key it stores, so writing it would
 # invalidate it and no push could ever hit.
-KEY_RECORD=".git/ai-dlc-suite-key"
+KEY_RECORD="$GITDIR/ai-dlc-suite-key"
 
 # THE HIT RATE IS THE ONE NUMBER THIS CHANGE COULD NOT MEASURE BEFORE SHIPPING.
 # main is squash-merged, so its history records releases and not the pushes inside
@@ -919,7 +927,7 @@ KEY_RECORD=".git/ai-dlc-suite-key"
 # proxy is 2 of the last 60 commits; the inner-loop rate is higher and unknown.
 # So the instrument ships with the change: one line per decision, countable with
 #   awk '{print $2}' .git/ai-dlc-suite-key.log | sort | uniq -c
-KEY_LOG=".git/ai-dlc-suite-key.log"
+KEY_LOG="$GITDIR/ai-dlc-suite-key.log"
 key_log() { printf '%s %s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "${2:-none}" >> "$KEY_LOG" 2>/dev/null || true; }
 
 fixture_suite_step() {

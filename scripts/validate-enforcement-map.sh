@@ -6010,11 +6010,28 @@ The pre-push hook skips the entire fixture suite when the key is unchanged, and 
     if [ -z "$i55_recs" ]; then
       err "I55 found no <NAME>_RECORD= assignment in .githooks/pre-push. This arm exists to prove every cross-run record the hook keeps lives outside the tree its own content key hashes; over an empty subject set it proves nothing and prints exactly what a pass prints. Fails closed: either a record was renamed out of this grammar, or the machinery it guards is gone and this arm should be retired with it."
     else
+      # A LITERAL `.git/` IS WRONG IN A LINKED WORKTREE, so a RESOLVED git dir is
+      # admitted too -- and only when the hook itself resolves it. In a worktree `.git`
+      # is a FILE, so every record spelled literally fails to open; each write is
+      # error-suppressed, so the suite proceeds and the banner is unaffected while the
+      # cross-run evidence is silently lost (`BL-277`). `--git-common-dir` answers
+      # `.git` in a primary checkout and the shared admin directory from a worktree,
+      # which is outside the hashed tree in BOTH shapes -- so it satisfies this arm's
+      # actual subject rather than widening it.
+      #
+      # THE EXEMPTION IS BOUND TO THE ASSIGNMENT, NOT TO THE NAME. `$GITDIR/` is
+      # accepted only where the same file assigns GITDIR from `rev-parse
+      # --git-common-dir`; a hook that merely names a variable called GITDIR, or points
+      # it at a path inside the tree, is convicted exactly as before. Without that
+      # conjunct the arm would acquit any record whose prefix happened to be a variable.
+      i55_gitdir_ok=0
+      grep -qE '^GITDIR="\$\(git rev-parse --git-common-dir' "$i55_hook" && i55_gitdir_ok=1
       i55_badrec=""
       while IFS=' ' read -r i55_rn i55_rv; do
         [ -n "$i55_rn" ] || continue
         case "$i55_rv" in
           .git/*) : ;;
+          '$GITDIR'/*) [ "$i55_gitdir_ok" -eq 1 ] || i55_badrec="${i55_badrec} ${i55_rn}='${i55_rv}' (no resolved GITDIR assignment in this file)" ;;
           *) i55_badrec="${i55_badrec} ${i55_rn}='${i55_rv}'" ;;
         esac
       done <<<"$i55_recs"

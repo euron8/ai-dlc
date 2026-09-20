@@ -4283,18 +4283,35 @@ from prose about a fix is the instrument the next batch would have used to decid
 fix worked.
 
 The shipped form builds a real repository under `mktemp`, adds a real linked worktree, EVALUATES
-each runner's own `DURATIONS_RECORD=` expression in both trees, and asks whether the write lands.
-A comment cannot satisfy it, and an implementation that resolves the common directory by any other
-means closes it correctly, because the test is the behaviour and not the spelling.
+each runner's own record expression in both trees, and asks whether the write lands. A comment
+cannot satisfy it, and an implementation that resolves the common directory by any other means
+closes it correctly, because the test is the behaviour and not the spelling.
 
-**Scored on five trees, every mutation asserted applied.** Tip **1**. A comment carrying the old
-grep literal appended to both runners **1** — the arm that the first draft failed. Both runners
-resolving the common directory **0**. Only the DISTRIBUTION runner fixed **1**, because a fix that
-misses the consumer's copy is the half-fix I66 exists to prevent. The `DURATIONS_RECORD=` anchor
-renamed **9**, so a moved precondition cannot read as a close.
+**IT EVALUATES THE WHOLE `GITDIR` + `DURATIONS_RECORD` PAIR, AND THE ONE-LINE FORM RETURNED A
+FALSE 9.** The fix assigns `GITDIR` on its own line and keys the records off it, so a receipt
+`eval`-ing only the `DURATIONS_RECORD=` line resolves `$GITDIR` to empty, writes to `/…`, and fails
+its own primary-checkout control — reporting **9, unmeasured**, against a tree that is correctly
+fixed. The receipt therefore slices the `FIXTURE_POOL_BEGIN`/`END` block and evaluates both lines
+together. **A receipt that reads ONE line of a two-line construction is measuring its own grammar.**
+
+**Scored on four trees, every mutation asserted applied.** Both runners resolving the common
+directory **0**. Base `d42026e3` **1**. Only the DISTRIBUTION runner fixed **1**, because a fix
+that misses the consumer's copy is the half-fix I66 exists to prevent. A comment carrying
+`git rev-parse --git-common-dir` appended to both unfixed runners **1** — the arm the first draft
+failed.
 
 **Its own control is the primary checkout**, asserted in the same invocation: the identical
 expression must resolve where `.git` is a directory. If it does not, the receipt exits 9 — a broken
 harness reports as unmeasured rather than as a finding.
 
-verify: sh s=.githooks/pre-push; c=core/git-hooks/pre-push; [ -f "$s" ] && [ -f "$c" ] || exit 9; d=$(mktemp -d) || exit 9; r="$d/r"; mkdir -p "$r" || exit 9; git init -q "$r" 2>/dev/null || { rm -rf "$d"; exit 9; }; printf 'x\n' > "$r/f"; git -C "$r" add -A >/dev/null 2>&1 && git -C "$r" -c user.email=t@t -c user.name=t commit -qm s >/dev/null 2>&1 || { rm -rf "$d"; exit 9; }; git -C "$r" worktree add -q --detach "$d/wt" >/dev/null 2>&1 || { rm -rf "$d"; exit 9; }; [ -f "$d/wt/.git" ] || { rm -rf "$d"; exit 9; }; n=0; bad=0; for f in "$s" "$c"; do e=$(LC_ALL=C grep -m1 -E '^DURATIONS_RECORD=' "$f") || { bad=9; break; }; p=$( cd "$r" && eval "$e" 2>/dev/null; { : > "$DURATIONS_RECORD"; } 2>/dev/null && echo 1 || echo 0 ); [ "$p" = 1 ] || { bad=9; break; }; w=$( cd "$d/wt" && eval "$e" 2>/dev/null; { : > "$DURATIONS_RECORD"; } 2>/dev/null && echo 1 || echo 0 ); [ "$w" = 1 ] || n=$((n+1)); done; rm -rf "$d"; [ "$bad" = 9 ] && exit 9; [ "$n" -eq 0 ] && exit 0; exit 1
+**FIXED AT `v0.608.0`. `I55`'s arm 4 had to move with it, and that is the half a reader would
+miss.** That arm required every `<NAME>_RECORD=` to begin with a literal `.git/` — the correct rule
+for the defect it was written for (a record inside the hashed working tree makes the content key
+unmatchable), and the exact spelling that is WRONG in a worktree. It now admits a `$GITDIR/` prefix
+**only where the same file assigns `GITDIR` from `rev-parse --git-common-dir`**, so a hook that
+merely names a variable called `GITDIR`, or points it inside the tree, is convicted as before.
+Probed in both directions against the real validator, each mutation applied to the live hook and
+restored byte-identically: a seeded in-tree record **convicted**, an unresolved `GITDIR` assignment
+**convicted**, the shipped hook **silent**.
+
+verify: sh s=.githooks/pre-push; c=core/git-hooks/pre-push; [ -f "$s" ] && [ -f "$c" ] || exit 9; d=$(mktemp -d) || exit 9; r="$d/r"; mkdir -p "$r" || exit 9; git init -q "$r" 2>/dev/null || { rm -rf "$d"; exit 9; }; printf 'x\n' > "$r/f"; git -C "$r" add -A >/dev/null 2>&1 && git -C "$r" -c user.email=t@t -c user.name=t commit -qm s >/dev/null 2>&1 || { rm -rf "$d"; exit 9; }; git -C "$r" worktree add -q --detach "$d/wt" >/dev/null 2>&1 || { rm -rf "$d"; exit 9; }; [ -f "$d/wt/.git" ] || { rm -rf "$d"; exit 9; }; n=0; bad=0; for f in "$s" "$c"; do e=$(LC_ALL=C sed -n '/^# FIXTURE_POOL_BEGIN/,/^# FIXTURE_POOL_END/p' "$f" | LC_ALL=C grep -E '^(GITDIR=|DURATIONS_RECORD=)'); [ -n "$e" ] || { bad=9; break; }; printf '%s' "$e" | LC_ALL=C grep -q '^DURATIONS_RECORD=' || { bad=9; break; }; p=$( cd "$r" && eval "$e" 2>/dev/null; { : > "$DURATIONS_RECORD"; } 2>/dev/null && echo 1 || echo 0 ); [ "$p" = 1 ] || { bad=9; break; }; w=$( cd "$d/wt" && eval "$e" 2>/dev/null; { : > "$DURATIONS_RECORD"; } 2>/dev/null && echo 1 || echo 0 ); [ "$w" = 1 ] || n=$((n+1)); done; rm -rf "$d"; [ "$bad" = 9 ] && exit 9; [ "$n" -eq 0 ] && exit 0; exit 1
