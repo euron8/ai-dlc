@@ -562,6 +562,14 @@ render() {
   rlc="$(bash "$SELF/retired-layer-contract.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null | awk -F'\t' 'NF{print $1"  "$2"  "$3}' | sort -u)"
   none_or "$rlc"
 
+  # THIS SECTION IS NO LONGER THE ONLY CHANNEL FOR THIS CLASS, AND THE HEADING CANNOT SAY SO.
+  # `apply.sh` runs this same detector at step 7 and emits a `WORKLIST retired-layer-passage`
+  # row, so the class now reaches the operator through the worklist a consumer already works and
+  # the re-stamp is withheld until the row is disposed. This section remains the EARLIER look --
+  # step 5, before any write -- and the two are the same finding rather than two. Stated here and
+  # not in the rendered text because the region above is byte-compared by `--verify` against an
+  # approved report: a heading edit invalidates every report approved before this release, which
+  # is a cost paid by consumers for a sentence that belongs to the reader of this file.
   sub "Retired core passages still carried by a consumer layer file:"
   local rlp
   rlp="$(bash "$SELF/retired-layer-passage.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null | awk -F'\t' 'NF{print $1"  "$2"  "$3}' | sort -u)"

@@ -18,11 +18,9 @@
 #                         should have been placed was not, it says so instead (see phase 5).
 #
 # WHAT IT HANDS BACK (it does NOT guess these):
-#   WORKLIST semantic-merge   <path>      a BOTH-CHANGED file needing a 3-way PROSE merge (LLM)
-#   WORKLIST override-readopt <override>  a HARD-OVERRIDE-DRIFT-SECTION: merge the section, then
-#                                         readopt-override.sh --stamp readopt (LLM + gated script)
-#   WORKLIST extension-reread <entry>     an EXTENSION-HOOK-DRIFT: the hooked core file changed,
-#                                         so re-read the entry and record a verdict (LLM)
+#   WORKLIST <kind> <subject> <detail>    concrete work that CLEARS when the work is done, so the
+#                                         re-stamp is withheld until it is. Every kind is named at
+#                                         its own emitting site below.
 #   DECISION <kind> <path> <why>          a genuine operator call (unknown drift refile-vs-revert,
 #                                         a deletion, a value with no default)
 #   DECISION restamp-withheld <stamp>     work is still outstanding — a file that SHOULD have
@@ -30,6 +28,17 @@
 #                                         above is undisposed — so the stamp was NOT advanced and
 #                                         the in-flight marker was NOT cleared. Finish the rows,
 #                                         then re-run with --finish.
+#
+# THE KIND SET IS DERIVED FROM THIS FILE, NEVER HAND-LISTED HERE, AND THAT IS A REPAIR RATHER
+# THAN A STYLE CHOICE. This block used to name three WORKLIST kinds. It was eleven by the time
+# anybody counted, and the eight it had silently stopped covering were invisible precisely
+# because the list LOOKED complete -- a reader checking whether a class was routed consulted a
+# header that had been wrong for eight additions. A restatement drifts tighter than what it
+# restates, and nothing compares the two. The live set is one command:
+#
+#   grep -oE '^[[:blank:]]*say (WORKLIST|DECISION) [a-z-]+' apply.sh | awk '{print $2, $3}' | sort -u
+#
+# Read that, not a paragraph. The SHAPE above is the contract; the membership is the code's.
 #
 # THE STAMP IS THE NEXT PULL'S BASE, AND A HAND-BACK IS NOT DONE WHEN THIS PROGRAM EXITS.
 # This driver used to gate the stamp on `mech_fail` alone -- its own inability to place a file --

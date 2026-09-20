@@ -57,6 +57,58 @@ not a closed entry.
 
 ## BL-276 — a core text MOVE leaves every consumer layer citation stale with no worklist row, where the comparable TOKEN case gets one from `apply.sh`
 
+**LANDED (v<version>, verified <sha>).** Both occurrences route to the worklist from `apply.sh`,
+inside the `FINISH=0` span: a `WORKLIST retired-layer-passage` row emitted once per run when
+`retired-layer-passage.sh` returns rows, and a `WORKLIST artifact-derivations` row that NAMES
+`validate-artifact-derivations.sh` rather than re-deriving staleness. Driven on a hit tree and a
+miss tree, the shipped driver emits 1 passage row and 1 derivation row against 0 and 0, with the
+detector's own 1-against-0 as the same-invocation control on the seeds themselves.
+
+**THE SITING IS THE FIX, NOT A DETAIL.** `say` increments `worklist_n` and `--finish` gates its
+stamp on that alone, so a row beside `hook_registration_row` would be re-derived by the finisher
+over a tree whose layer files the apply never rewrites — the stamp withheld, `.ai-dlc-applying`
+left, `core/git-hooks/pre-push` refusing every push with no exit. Neither row has work that
+clears it in that mode: the second disposition offered for a passage ("record why reproducing the
+retired text is still correct") changes nothing the detector reads and `layer-contract.yaml`
+carries no acknowledgement channel for it, and the derivation row's own remedy re-anchors a
+citation at the path core carries now, which on a re-siting range is itself in the changed set.
+Measured on the shipped driver: passage 1 / derivation 1 on the ordinary run against 0 / 0 under
+`--finish`.
+
+**THE DELETION-KEYED PREDICATE FOR OCCURRENCE #2 SCORES ZERO ON ITS OWN MOTIVATING CASE, so it
+is not what shipped.** "A `derived` fence naming a core path present at base and absent at
+theirs" cannot fire on the filing's range: `git diff --diff-filter=D --name-only` over `core/`
+for `3d843500..a88fc8e4` returns **0** deleted paths, against a control range returning real
+deletions. The relocation was a move INSIDE files that exist at both ends, so the fence broke on
+a moved ANCHOR and never on a deleted PATH. What shipped is a path join deciding RELEVANCE only —
+does some fenced command name a core path this range CHANGED — and the remedy is a ROUTING row
+naming the existing `core/scripts/validate-artifact-derivations.sh`, never a second detector:
+that validator already re-runs every fenced command, and a staleness check here would split its
+corpus. The validator is NAMED and never RUN from the apply, because it executes what it finds.
+
+**THE PASSAGE ROW SAYS RE-POINT, NOT DELETE**, and that is measured rather than preferred. The
+detector's input is one path glob's removed-line set, so it cannot tell a move from a death; on
+the filing's own range every reported row cited text core still carries at theirs. A row worded
+as a deletion would instruct a consumer to destroy current text.
+
+**`apply.sh` IS A BOOTSTRAPPING FILE.** The consumer's INSTALLED copy runs the pull that carries
+this repair, so these rows first appear on the pull AFTER the one that delivers them. The pull
+delivering the fix is not protected by it.
+
+**THE FILED RECEIPT WAS INSUFFICIENT AND IS REPLACED.** Scored against seven candidates built and
+run rather than reasoned about, it read **0 at the fixed tip AND 0 at all four regressions** — a
+row in a never-called function, a row under `if false`, an unconditional row consulting no
+detector, and a row emitted only under `--finish`. It rejected only a comment-only spelling. A
+receipt that accepts four candidate fixes has established none of them, and lexical conjuncts
+cannot repair it: reachability and ordinary-mode conjuncts kill regressions 3 and 4 and still
+pass 1 and 2. The receipt below is BEHAVIOURAL — it drives `apply.sh` against a seeded hit tree
+and a seeded miss tree under `mktemp` and reads the rows. **TWO SEEDS ARE LOAD-BEARING**: on the
+hit tree alone the unconditional-row regression scores 1/1, identical to the tip, and only the
+miss tree separates them; the other three die on the hit seed. Scored: tip 0, base 1, a stub with
+the detector removed 9, and each of the four regressions 1, with a comment-only mutant at 1. It
+asserts its seeds DISCRIMINATE under the detector before reading the driver, and that the driver
+emitted rows at all on both trees, so a run that never happened cannot read as a clean one.
+
 **DEFECT.** Found on the graph pull to `0.605.0`, where Levers D and E moved core text into
 `rule-bodies/rule-13.md` and `steps/_dispatch-protocol.md`. `retired-layer-passage.sh` reported
 **27** `RETIRED-LAYER-PASSAGE` rows on one pull, correctly, and offered the consumer nothing
@@ -134,7 +186,7 @@ lands as `apply.sh` worklist rows, that predicate reads STILL-LIVE after the cla
 is the safe direction for a false reading and it is still a receipt that cannot see its own close.
 This entry's own emitting-site receipt governs both occurrences.
 
-verify: sh a=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$a" ] || exit 9; ctl=$(grep -c 'RETIRED-LAYER-ZZQQ' "$a"); [ "$ctl" -eq 0 ] || exit 9; grep -qE '^[[:blank:]]*say WORKLIST .*re-point retired contract token' "$a" || exit 9; d=core/skills/ai-dlc-update/reconcile/retired-layer-passage.sh; [ -f "$d" ] || exit 9; grep -qE "printf 'RETIRED-LAYER-PASSAGE" "$d" || exit 9; grep -qE '^[[:blank:]]*say WORKLIST .*(RETIRED-LAYER-PASSAGE|retired core passage|re-point retired passage)' "$a" && exit 0; exit 1
+verify: sh unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY; R=core/skills/ai-dlc-update/reconcile; [ -f core/skills/ai-dlc-update/reconcile/apply.sh ] && [ -f core/skills/ai-dlc-update/reconcile/setup-sites.md ] && [ -f core/scripts/validate-artifact-derivations.sh ] || exit 9; grep -q 'RETIRED-LAYER-PASSAGE' core/skills/ai-dlc-update/reconcile/retired-layer-passage.sh || exit 9; W="$(mktemp -d)" || exit 9; q() { rm -rf "${W:?}" 2>/dev/null; exit "$1"; }; Q="$(printf '\140\140\140')"; L='the narrator must record the close-out sweep verdict before the sprint ends'; git init -q "$W/d" && [ -d "$W/d/.git" ] || q 9; mkdir -p "$W/d/core/skills/ai-dlc" || q 9; printf '%s\nkept\n' "$L" > "$W/d/core/skills/ai-dlc/SKILL.md"; printf 'unchanged\n' > "$W/d/core/skills/ai-dlc/steady.md"; git -C "$W/d" add -A >/dev/null 2>&1; git -C "$W/d" -c user.email=f@x -c user.name=f commit -qm b >/dev/null 2>&1; B="$(git -C "$W/d" rev-parse HEAD)" || q 9; printf 'kept\n' > "$W/d/core/skills/ai-dlc/SKILL.md"; git -C "$W/d" add -A >/dev/null 2>&1; git -C "$W/d" -c user.email=f@x -c user.name=f commit -qm t >/dev/null 2>&1; T="$(git -C "$W/d" rev-parse HEAD)" || q 9; [ "$B" != "$T" ] || q 9; for c in h m; do mkdir -p "$W/$c/.claude/skills/ai-dlc/extensions" "$W/$c/_bmad-output" "$W/$c/scripts/ai-dlc" || q 9; printf 'x\n' > "$W/$c/scripts/ai-dlc/validate-artifact-derivations.sh"; git init -q "$W/$c" || q 9; done; printf '%s\n' "$L" > "$W/h/.claude/skills/ai-dlc/extensions/e.md"; printf 'a wholly different sentence core never carried\n' > "$W/m/.claude/skills/ai-dlc/extensions/e.md"; printf '%sderived\n$ grep -n sweep .claude/skills/ai-dlc/SKILL.md\n%s\n' "$Q" "$Q" > "$W/h/_bmad-output/s.md"; printf '%sderived\n$ grep -n x .claude/skills/ai-dlc/steady.md\n%s\n' "$Q" "$Q" > "$W/m/_bmad-output/s.md"; dn() { bash "$R/retired-layer-passage.sh" "$W/d" "$B" "$T" "$1" 2>/dev/null | awk -F'\t' '$1=="RETIRED-LAYER-PASSAGE"' | grep -c . ; }; DH="$(dn "$W/h")" || DH=0; DM="$(dn "$W/m")" || DM=0; [ "$DH" -ge 1 ] && [ "$DM" -eq 0 ] || q 9; HO="$(bash "$R/apply.sh" "$W/d" "$B" "$W/h" "$T" 2>/dev/null)"; MO="$(bash "$R/apply.sh" "$W/d" "$B" "$W/m" "$T" 2>/dev/null)"; nr() { printf '%s\n' "$1" | awk -F'\t' 'NF>=3' | grep -c . ; }; NH="$(nr "$HO")" || NH=0; NM="$(nr "$MO")" || NM=0; [ "$NH" -ge 1 ] && [ "$NM" -ge 1 ] || q 9; k() { printf '%s\n' "$1" | awk -F'\t' -v p="$2" '$1=="WORKLIST" && $2 ~ p' | grep -c . ; }; HP="$(k "$HO" passage)" || HP=0; MP="$(k "$MO" passage)" || MP=0; HD="$(k "$HO" derivation)" || HD=0; MD="$(k "$MO" derivation)" || MD=0; [ "$HP" -ge 1 ] && [ "$MP" -eq 0 ] && [ "$HD" -ge 1 ] && [ "$MD" -eq 0 ] && q 0; q 1
 
 ## BL-275 — a shared detector's cost-saving flag is bound by NO fixture at any CALLER, so a second caller can silently stop passing it
 
