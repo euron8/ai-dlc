@@ -15,6 +15,75 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.609.0] - 2026-09-19
+
+### a red gate check with no reachable repair, and a PRD arm no validate-only branch can satisfy
+
+#### PC-S295-RETRO-STEP5C-DEADLOCK-ON-DEFERRED-RED
+
+Two core steps mandated an outcome no action available to the lead could reach, and neither
+offered an escalation branch. `retro.md` Step 5c carries three absolute `MUST exit 0` mandates;
+`deploy-validate.md` requires the smoke fix loop to repeat until the tests pass and forbids
+presenting a failing deployment at the checkpoint. When the repair a check names is outside the
+sprint's reach, the lead's only written options were an unbounded stall or clearing the gate on
+its own authority.
+
+Measured over each span, controls in the same invocation: `operator disposition` = 0 in both,
+with each span's absolute sentence present at 1, against a file-wide run control of 2 in
+`retro.md`.
+
+Both spans now escalate. The verdict stays FAIL — the filing proposed a third gate outcome and
+`core/schemas/gate-adjudication-verdict.json` closes that enum at PASS/FAIL with the reason in
+the field doc, so the check is FAIL-with-reason and the escalation carries the disposition. A
+Tier 1 `HARD_BLOCK` records the check, its command and its output verbatim; only a recorded
+operator disposition (approved-deferral / do-now / descope, per Rule 13 + Rule 12 Tier 1)
+releases the checkpoint, and it releases it without converting the verdict. The retro passage
+covers all three mandates, not the one the filing named.
+
+The acquittal this could have created is closed explicitly: the disposition is recorded before
+the checkpoint and surfaces at it, and a checkpoint reporting a smoke pass, omitting the smoke
+line, or narrating the failure in place of the captured output is declared forged and the
+deferral void. The existing Escalation Log carries the row rather than a new channel.
+
+#### PC-S297-CHECK17-PRD-ARM-CONTRADICTS-RULE-20-BLOCK-PLACEMENT
+
+Check 17 pinned the provenance block to `prd.md --require-skill bmad-prd`. Rule 20 requires the
+block in the artifact the invocation produces, and `research-requirements.md` §3 invokes
+`/bmad-prd` with the validate intent, which writes its report into the run folder and is
+forbidden to re-author the PRD. On branches where that validate call is the only `bmad-prd` run,
+the arm had no legal way to pass.
+
+Measured with controls in the same invocation: `validation-report` inside the CHECK_LOADED 17→18
+span = 0 and file-wide in `gate-validation.md` = 0, against `require-skill` = 3 in the span and
+`validation-report` = 1 in `research-requirements.md`.
+
+Check 17 gains a second arm pinning the run folder's report for the validate-only branches, and
+the existing arm is narrowed to the authoring branches. The arm carries `--require-skill` and
+refuses `--allow-missing` in its own text, and its parenthetical names the step file so `I32`
+can join the pin — an arm named by project type alone fails that invariant.
+
+The filed project-type axis was wrong and the correction widens the defect. `route.md`'s variant
+table routes greenfield and brownfield-a/b/c through `research-requirements.md` and never routes
+`feature` there at all. The unsatisfiable set is brownfield-a and brownfield-c in
+`research-requirements.md`, plus `feature` and `carry-over` in `requirements.md` §4 — a second
+step file neither the filing nor the batch contract had reached.
+
+#### both receipts were broken in both directions and are replaced
+
+Each entry's receipt accepted a cheap non-fix and rejected a competent correct fix, measured on
+probe trees asserted to differ from their source before any exit was read.
+
+`BL-039`'s per-span arm was a disjunction — vocabulary added OR the absolute sentence gone — so a
+pure word swap closed it at exit 0 with the deadlock fully intact, while a fix written as "the
+operator's recorded decision" was rejected on the exact bigram. It now requires the vocabulary
+positively across both spans and accepts `approved-deferral`, the enum token a compliant
+escalation cannot avoid naming.
+
+`BL-042`'s arm keyed on a filename token, so an HTML comment inside the span closed it. It now
+counts `validate-provenance-block.sh` invocations pinning `bmad-prd` and requires one to name a
+path that is not `prd.md` — an emission site rather than a word. The cross-span half-fix arm in
+`BL-039` was measured sound and is kept.
+
 ## [0.608.0] - 2026-09-19
 
 ### the pre-push runners lose their cross-run evidence in a linked worktree
