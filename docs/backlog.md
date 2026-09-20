@@ -325,10 +325,19 @@ sentence, and this receipt only establishes that there is one to read.
 
 verify: sh f=core/skills/ai-dlc-update/SKILL.md; [ -r "$f" ] || exit 9; c=$(grep -nE 'show "\$\{[a-z]+\}:' "$f" | head -1 | cut -d: -f1); [ -n "$c" ] || exit 9; n=$(awk -v c="$c" 'BEGIN{bt=sprintf("%c%c%c",96,96,96)} { if (substr($0,1,3)==bt || substr($0,5,3)==bt) { fence=!fence; F[NR]=1 } else F[NR]=fence; L[NR]=tolower($0) } END { for (i=1;i<c;i++) { if (F[i] || L[i] !~ /zsh/ || L[i] ~ /<!--/) continue; lo=i-3; if (lo<1) lo=1; hi=i+5; if (hi>NR) hi=NR; for (j=lo;j<=hi;j++) if (!F[j] && L[j] ~ /brace/) { print i; exit } } }' "$f"); [ -n "$n" ] || exit 1; exit 0
 
-## BL-230 — `reconcile-emit-report`'s kill-set arms fail intermittently under the pool — E1 and E9 both measured, on two different worlds — and E1's success message describes a different assertion than the one it makes
+## BL-230 — `reconcile-emit-report`'s kill-set arms fail intermittently under the pool — E1, E8 and E9 all measured, on three different worlds — and E1's success message describes a different assertion than the one it makes
 
 **Found 2026-09-11** during batch 85, when E1 failed a gate run on a branch whose change cannot
 reach it. Two separate defects in one arm; the second is what makes the first expensive.
+
+**E8 IS THE THIRD ARM, MEASURED AT BATCH 138 UNDER A SIX-WIDE POOL.** `v_kill E8 "V-R V-U"`
+(`run.sh:1596`) failed a gate run whose tree changes only `ai-dlc-handoff-pending.sh`,
+`ai-dlc-continue.sh` and `pipeline-state-paths.json`. Attribution severed in one invocation: the
+fixture names those three files **0**, **0** and **0** times against a control of **22** for
+`emit-report.sh`. Solo from the repo root the same tree exits **0** at 83 assertions with 0
+failures, and the very next pool run at the same width scored it `ok`. So the population is
+arms scored under pool contention at ANY width, not a property of 12-way, and E8 sits between
+the two arms already named — the entry's own reading of its subject reproduces at a third site.
 
 **THE FLAKE.** `v_kill E1 "V-R V-U"` (`run.sh:1129`) asserts a mutant moves EXACTLY two worlds. On
 one 12-way pool run it reported `[V-R V-U V-HC]` and failed; the same tree run solo from the repo
@@ -3382,42 +3391,6 @@ close.
 
 verify: sh f=core/fixtures/agent-definition-render/run.sh; [ -f "$f" ] || exit 9; l="$(grep -E '^[[:blank:]]*bad "MUTANT \$label killed by \$want AND by:' "$f")"; [ -n "$l" ] || exit 9; case "$l" in *'$out'*|*'rc='*|*'observed'*) exit 0 ;; esac; exit 1
 
-## BL-260 — the dispatch guard's effort prompt line is advisory prose with no verified effect, and the only fixture covering it checks that the sentence was appended
-
-**NOTE.** Filed from the consumer candidate
-`PC-S312-EFFORT-PROMPT-LINE-HAS-NO-VERIFIED-BEHAVIORAL-EFFECT`, read from the consumer's sprint
-branch ledger (not yet on its `main`). Not fixed here.
-
-`core/hooks/ai-dlc-dispatch-guard.sh:387-414` builds `EFFORT_LINE` — "Your configured reasoning
-effort for this role is `${PIN_EFFORT}`. Operate at that level." — and `:642-646` appends it to the
-dispatch prompt whenever `NEEDS_EFFORT` is true. The hook's own comment at `:376-381` says this is
-the WEAK channel: the `Agent` tool has no effort parameter, and the BINDING channel is the rendered
-`.claude/agents/<role>.md` definition's `effort:` key. The line exists for the dispatch that has no
-usable definition. Nothing in this tree measures whether a teammate that received the sentence
-behaves differently from one that did not: `core/fixtures/dispatch-model-guard/run.sh` carries
-`expect_effort` assertions (6 sites) and every one asserts the sentence's PRESENCE in the outgoing
-prompt.
-
-**The consumer's proposed disposition is to decommission the line** — drop `EFFORT_LINE`,
-`NEEDS_EFFORT` and the append branch, and the `expect_effort` assertions with them — so a role
-dispatched with no current definition carries no effort signal rather than an unverified one.
-
-**Why this is a NOTE and not yet a fix.** The claim "no verified behavioural effect" is true and
-unmeasurable from this repo, which is the same status as every other prompt sentence this
-distribution emits; deleting the fallback removes the only channel on the no-definition path and
-that path is what `BL-240`'s gap (a configured effort recorded but never reaching the API call)
-already covers from the other side. Whether an advisory sentence is worth its bytes on that path is
-a design ruling, not a measurement, and the entry records it for the operator rather than deciding
-it. The candidate also names `PC-S303-EFFORT-BINDING-COMMANDS-A-SLASH-COMMAND-THAT-RESOLVES-TO-NOTHING`'s
-fix as the origin of the current wording, which is correct (`:390-401`).
-
-**Receipt.** Closes when the line is gone from the hook, or when the tree carries a fixture arm
-that measures the teammate's behaviour rather than the prompt string. The second half is not
-mechanically distinguishable from the first by a one-liner, so the receipt keys on the first and a
-hand review is owed if a behavioural arm ever lands instead.
-
-verify: sh h=core/hooks/ai-dlc-dispatch-guard.sh; [ -f "$h" ] || exit 9; LC_ALL=C grep -qF 'EFFORT_LINE="Your configured reasoning effort for this role' "$h" && exit 1; exit 0
-
 ## BL-273 — I33b's batched grammar narrowed on `${VAR/../…}` against an equivalence claim, and the one input separating the two implementations was in no corpus and no assertion
 
 **NOTE.** Found by the contract adversary auditing `0.594.0` and re-derived here. The release
@@ -4096,57 +4069,3 @@ known-cited id scores 3 and 8 across the two backlog files; this one scored 0 an
 
 verify: sh set -e; f="core/skills/ai-dlc-update/SKILL.md"; [ -r "$f" ] || exit 9; s="$(LC_ALL=C awk '/On `SELF-UPDATE-DEFER`/{on=1} /On `SELF-UPDATE-OK`/{exit} on' "$f")"; [ -n "$s" ] || exit 9; printf '%s' "$s" | LC_ALL=C grep -q 'self-update-gate-' || exit 1; printf '%s' "$s" | LC_ALL=C grep -qiE '(do NOT|never) commit[^.]*self-update-gate-' && exit 1; printf '%s' "$s" | LC_ALL=C grep -qE '[Cc]ommit[^.]*self-update-gate-' || exit 1; exit 0
 
-## BL-281 — the handoff guard's key 2 is a line in a document nothing rewrites, so a COMPLETED handoff arms it forever
-
-**DEFECT.** Filed at batch 138 from the reference consumer's push-candidate ledger, where it is
-`PC-S312-HANDOFF-GUARD-ARMS-ON-A-STALE-DISK-RECORD-THROUGH-A-RECONCILE` (consumer-filed
-2026-09-20, during its own `0.605.0 -> 0.608.0` reconcile apply, at the operator's explicit
-instruction to report the firing rather than work around it).
-
-**THE CONSUMER IS RUNNING THIS EXACT CODE.** `cmp -s` against the consumer's installed
-`.claude/hooks/ai-dlc-handoff-pending.sh`: **IDENTICAL**. Control in the same invocation, a file
-this batch changed: DIFFER. So this is not a stale-copy report and the fix is ours.
-
-**THE PREDICATE, at `core/hooks/ai-dlc-handoff-pending.sh:107`.** Key 2 returns 0 on the presence
-of a line matching `^[[:space:]]*(#{1,6}[[:space:]]*)?(\*\*)?HANDOFF POINT` in
-`pipeline-snapshot.md`, and on nothing else — no recency test, no completion test, no session
-binding. `ai-dlc-continue.sh` Check 0 then blocks every Stop, demanding a `----` / `/ai-dlc
-resume` / `----` block and, once that clears, a foreground `git push`.
-
-**NOTHING CLEARS THE LINE.** Derived across `core/`: every other occurrence of the token is a
-COMMENT in the same hook or a fixture seed (`handoff-completion-assertion/seed.sh`,
-`run.sh`) — there is no writer that removes it, and the snapshot is an accreting record.
-Control: an impossible token scores 0 in the same file. So the predicate, once true, is true
-permanently.
-
-**THE ASYMMETRY WITH KEY 1 IS THE WHOLE DEFECT, AND IT IS WHY THIS IS NOT A GRAMMAR BUG.** Key 1
-(`:88`) keys on `.handoff-in-progress`, a FILE, which a completing handoff deletes — it is
-self-clearing by construction. Key 2 keys on PROSE in a document whose writer only ever appends.
-Two keys for one condition, one with a lifecycle and one without. The fix belongs at the key, not
-at the grammar: widening or narrowing the regex changes which stale lines arm it, never that a
-stale line arms it.
-
-**AND CHECK 0 SCOPES ITSELF TO NO FLOW.** Measured: `core/hooks/ai-dlc-continue.sh` is 1386 lines
-and mentions the `ai-dlc-update` maintenance flow **zero** times. During a reconcile the operator
-is doing distribution-to-consumer tooling maintenance, not the operate pipeline: there is no
-in-flight teammate to sweep, the operate snapshot must not be finalized as a handoff record, and
-the terminal action is a tooling PR merge. The consumer measured the guard firing **five times
-across one reconcile**, alternating the resume-block arm and the push arm.
-
-**THE FIRING IS LIVE, NOT HISTORICAL.** A reconcile session was running in the reference consumer
-while this entry was being written, on branch `ai-dlc-update/0.612.0-reconcile-20260920T192434Z`.
-
-**WHAT A FIX MUST NOT DO.** The obvious repair — teach Check 0 to recognise the maintenance flow —
-puts flow detection in the guard, where a wrong answer silently disarms a real handoff. Prefer
-giving key 2 the lifecycle key 1 already has, so the record's own completion clears it; that
-leaves the guard's scope alone and removes the stale state rather than policing it. Whatever
-ships, the fixture that covers this is `core/fixtures/handoff-completion-assertion`, which carries
-NO ship declaration today — read `.claude/rules/fixture-ship-decl.md` before adding arms, because
-the hooks themselves ship and a consumer must be able to fail this.
-
-Carries the reference consumer's
-`PC-S312-HANDOFF-GUARD-ARMS-ON-A-STALE-DISK-RECORD-THROUGH-A-RECONCILE`, live upstream, which
-nothing in this repo had cited before this entry (control: a known-cited id scores 1 in the
-archive; this one scored 0 and 0 across both backlog files).
-
-verify: sh set -e; h="core/hooks/ai-dlc-handoff-pending.sh"; [ -r "$h" ] || exit 9; LC_ALL=C grep -q 'AI_DLC_HANDOFF_KEY="snapshot-section"' "$h" || exit 9; n="$(LC_ALL=C awk '/AI_DLC_HANDOFF_KEY="snapshot-section"/{found=1} found && /return 0/{print NR; exit}' "$h")"; [ -n "$n" ] || exit 9; s="$(LC_ALL=C sed -n "$((n>12?n-12:1)),${n}p" "$h")"; printf '%s' "$s" | LC_ALL=C grep -qE '(handoff-complete|handoff_complete|\.handoff-done|completed_at|HANDOFF COMPLETE)' && exit 0; exit 1
