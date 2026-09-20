@@ -15,6 +15,91 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.610.0] - 2026-09-20
+
+### two checks that could not tell a right answer from a wrong one, and neither knew it
+
+#### PC-S295-RETRO-CHECK5-SELF-REFERENTIAL
+
+Gate-validation Check 5 compared a story file's `status:` against its `sprint-status.yaml`
+entry, and the declared repair for a disagreement regenerates that entry FROM the story file.
+The two comparands were therefore a record and a derivation of that record: the check detects
+staleness of the copy and cannot detect a status that is wrong at the source. The span's own
+text already stated the vacuous pass — running `derive-stories` on a wrong source "would copy
+the wrong status into every canonical copy and this check would then pass" — and answered it
+with a warning to a human rather than a third comparand.
+
+Measured over the `CHECK_LOADED: 5` → `CHECK_LOADED: 6` span, controls in the same invocation:
+`gate-log` inside the span **0**, `sprint-status.yaml` inside the span **4**, `gate-log` in any
+spelling elsewhere in the file **11**, impossible token **0**. The mechanical half agreed —
+`core/scripts/sprint-status.sh` names `gate-log` **0** times against a control of **66**
+occurrences of `sprint-status`.
+
+**Two spans, one commit, because the read half alone is unreachable.** The gate-log entry schema
+enumerated six fields and carried no per-story status, so a Check 5 clause reading one would
+consult a field no gate ever writes. Check 5 gains a third comparand — the `story_status:` the
+PREVIOUS gate-log entry of this sprint recorded, compared against each story file's current
+`status:`, where a backward move in the lifecycle or a story the previous entry recorded that the
+sprint no longer lists FAILS the gate. Check 12's entry schema gains `story_status:`, one
+`<story-id>: <status>` line per story, read from the story file itself and written on every gate,
+PASS or FAIL. That is the `steering_violations:` shape, and it is the ONE working precedent in
+this file: re-derived, `gate-log.md` occurs **2** times file-wide and both are Check 12 write
+sites, while exactly one site reads gate-log content — Check 25's `steering_violations:` read.
+The filing's "four other checks machine-read it" was false; Checks 16, 18 and 22 are writes.
+
+Check 12 is numbered after Check 5, so within one gate the reader precedes the writer and the
+comparand is necessarily the previous gate's entry. At a sprint's first gate that entry does not
+exist; the no-prior-entry branch is a numbered condition in the action list and records the
+absence as evidence, never a FAIL.
+
+`audit-rule-files.sh` is delta-zero across the edit — tier-1 0, all findings 74, locally-owned
+39, unresolved 0, corpus 88 files, before and after.
+
+#### PC-S297-LOCKED-FENCE-LAUNDERS-AGENT-PROSE
+
+A `LOCKED_REQUIREMENTS` block whose bullets are pure fabrication scored byte-identically to one
+whose bullets are verbatim, whenever the block cited `requires_context:`. Two probe stories
+differing only in the bullet, asserted to differ by `cmp -s` before the comparison was read,
+produced the same exit code AND the same first report line, so nothing downstream of
+`core/scripts/validate-locked-anchor.sh` could tell them apart. The other two roads —
+`full_text_source:` and no citation at all — reject the identical fabrication, which is the
+control: the validator discriminates, and this road is where it does not.
+
+**The exit code does not move, and that is the whole constraint.** Byte-matching the bullets as a
+failure condition on this road reds honest blocks. Derived by driving the shipping validator over
+a reference consumer checkout with `.claude/worktrees/` EXCLUDED, partition exact: of a 96-file
+population, the observation prints on 5, and 4 of those 5 carry at least one non-verbatim bullet,
+with 30 of the 31 bullets on that road not byte-present. As a failure condition that reds most of
+the honest blocks it can see. An abridged cite-by-reference restatement is the honest shape here
+and the header contract has promised since the first revision that it is never failed. An earlier
+reading that this byte-match "had already been tried and rejected on evidence" was checked against
+all 11 revisions of the file (control: the revision before the first returns rc 128) and is false
+— the exemption has only ever been a design assertion, never an implementation rolled back.
+
+What the exemption never justified is the two roads printing the same LINE as well as the same
+code. The match now runs as an OBSERVATION over the union of the windows the block's pointers
+resolved to, reusing `anchor_window()` and `collapse_ws()` on the same union terms as the
+`full_text_source` road, and the PASS line carries how many bullets were found byte-present and
+how many were not. Nothing appends to `failures`; `claims_checked` and `pointers_checked` keep
+their meanings; `PASS — EXAMINED NOTHING` is untouched and still reachable.
+
+**Reachability, stated beside the FP set:** the observation prints on 5 of the 96 — 5.2% — so the
+field is blank on nineteen of every twenty stories the consumer owns. Of the other 91, 53 resolve
+no pointer and 38 FAIL before the PASS line. A "computed but suppressed" set was checked and is
+ZERO: a story fails on this road precisely because its pointer did not resolve — an unmatched
+sentinel, a dangling anchor, an artifact absent from disk — and an unresolved pointer contributes
+no window to match against, so computed and printed are the same 5. That was measured by
+instrumenting the shipping script, with the instrumented copy asserted to differ by `cmp -s` and
+then to return identical verdict and stdout to the shipped one on all 96.
+
+The same walk INCLUDING `.claude/worktrees/` reads a population of 189, and that figure is
+contamination — 93 of it duplicates of files already counted, the class where a count over a tree
+walk moves with what is on disk rather than with the corpus.
+
+Self-probed in both directions: the fabricated block reports 0 byte-present / 1 not, the fully
+verbatim block 1 / 0, and an honest bullet ABRIDGED from a longer source sentence reports 0 / 1
+while still exiting 0 — which is what proves report-only is report-only.
+
 ## [0.609.0] - 2026-09-19
 
 ### a red gate check with no reachable repair, and a PRD arm no validate-only branch can satisfy
