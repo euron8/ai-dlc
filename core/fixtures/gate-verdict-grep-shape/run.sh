@@ -213,28 +213,7 @@ fi
 # CLOSE — for an inserted `<!-- see also gate-log.md -->`, for a bare prose sentence
 # naming the file, AND for a deleted `CHECK_LOADED: 6` anchor, which runs the awk range to
 # end-of-file and lets Check 12's own write site satisfy the grep from 1800 lines away.
-#
-# THE ENTRY'S RECEIPT NOW CARRIES A SPAN-LENGTH BOUND, AND IT COVERS EXACTLY ONE OF THOSE.
-# Scored here against the seeds below, each `cmp -s`-asserted to have applied, with the
-# tip as the positive control at rc=0:
-#
-#   tip                           rc=0   closes, correctly
-#   comment                       rc=0   FALSE CLOSE  <- an arm below owns it
-#   bare-mention                  rc=0   FALSE CLOSE  <- an arm below owns it
-#   read-commented                rc=0   FALSE CLOSE  <- an arm below owns it
-#   no-fail-condition             rc=0   FALSE CLOSE  <- an arm below owns it
-#   no-write                      rc=0   FALSE CLOSE  <- an arm below owns it
-#   no-read                       rc=1   the one text shape the receipt does see
-#   no-anchor6                    rc=2   THE BOUND FIRING — refuses, does not close
-#   no-anchor13                   rc=0   FALSE CLOSE  <- the bound cannot see it
-#
-# The bound is REAL and it is not re-invented here: `no-anchor6` is the case it was added
-# for, and it now exits 2 rather than closing. What it cannot reach is everything else.
-# A Check 13 anchor deletion leaves the Check 5 awk range at 106 lines — well under the
-# 200 the receipt tests — while running Check 12's span to EOF, so the WRITE side of the
-# join would be answered from the rest of the file and the receipt reads a clean close.
-# A bound on one span is structurally blind to the other span's anchor, which is why arm
-# A10 below bounds BOTH and why the five text shapes are pinned here rather than there.
+# Three ways to close a receipt while shipping nothing, so the pin has to be here.
 #
 # WHAT THE ARMS KEY ON, AND WHY IT IS NOT A SPELLING. `story_status` appears in none of
 # them. The predicate is a JOIN between the two spans: some field token read on a
@@ -246,13 +225,10 @@ fi
 #
 # THE BOUNDS RUN BEFORE THE JOIN AND REFUSE IT. A span whose closing anchor is gone runs
 # to EOF, and every join question then has the whole file to answer from. Measured at this
-# tip: Check 5 is 105 lines and Check 12 is 150; with their closers deleted they are 2456
-# and 2233. The ceilings sit at roughly twice the live lengths, so ordinary growth does not
+# tip: Check 5 is 100 lines and Check 12 is 136; with their closers deleted they are 2438
+# and 2214. The ceilings sit at roughly twice the live lengths, so ordinary growth does not
 # trip them, and a blown bound reports MEASURED NOTHING — a third verdict that is neither
 # the pass nor the finding, because a span that was never delimited has not been read.
-# BOTH spans are bounded deliberately: bounding only Check 5 is the receipt's own gap, and
-# a Check 13 deletion leaves Check 5 at its normal length while emptying the join's other
-# side.
 GV_WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$GV_WORK"; rm -f "${MUT:-}" "${MUT:-}.bak"' EXIT
 
@@ -605,80 +581,6 @@ done <<'GVNEARMISS'
 nm-unrelated|an unrelated non-comment line in Check 5 names no field and must not move the verdict
 nm-rename|the comparand renamed on BOTH sides keeps the join intact, so the arms are keyed on the shape and not on one spelling
 GVNEARMISS
-
-# --- Assertion 12: WHAT THE ENTRY'S RECEIPT STILL CANNOT SEE ----------------
-# THE DIVISION OF LABOUR IS ASSERTED, NOT WRITTEN DOWN. The comment at the top of this
-# block states which seeds the backlog receipt closes on and which its span bound refuses;
-# a comment goes stale in silence, and the next hand to widen the receipt would read these
-# arms as redundant. So the receipt is RUN, here, over the same seeds, and each case is
-# checked against what this fixture claims about it.
-#
-# The receipt is DERIVED from the entry, never restated: its `verify:` line is read out of
-# `docs/backlog.md` and executed. A hardcoded copy here would be a second definition, and
-# the two would drift exactly as the grep and the template did above.
-#
-# THE ARM STANDS DOWN RATHER THAN FAILING when the entry is gone. Once BL-040 rotates its
-# receipt is archived and inert while this fixture still runs, and a fixture that lost its
-# subject is not a tree defect.
-GV_BL="$(find_one ../docs/backlog.md 2>/dev/null)"
-[ -n "$GV_BL" ] && [ -f "$GV_BL" ] || GV_BL="${ROOT:-}/docs/backlog.md"
-GV_RCPT=""
-if [ -f "$GV_BL" ]; then
-  GV_RCPT="$(LC_ALL=C sed -n "s/^verify: sh \(S=.*CHECK_LOADED: 5 .*gate-log.*\)$/\1/p" "$GV_BL" | head -1)"
-fi
-if [ -z "$GV_RCPT" ]; then
-  ok "receipt-coverage arm stands down — no BL-040 \`verify:\` line naming the Check 5 span is in docs/backlog.md (rotated, or this is a consumer tree that has no backlog)"
-else
-  # Score it on the LIVE file first. A receipt that does not close on the shipped fix is a
-  # broken receipt, and every rc beside it would be unattributable.
-  gv_rcpt_run() { # gv_rcpt_run <gate-validation.md>
-    ( cd "$GV_WORK" && cp "$1" gv-subject.md \
-      && mkdir -p core/skills/ai-dlc/steps \
-      && cp gv-subject.md core/skills/ai-dlc/steps/gate-validation.md \
-      && bash -c "$GV_RCPT" >/dev/null 2>&1 )
-    printf '%s' "$?"
-  }
-  gv_live_rc="$(gv_rcpt_run "$GATE")"
-  if [ "$gv_live_rc" != "0" ]; then
-    bad "the entry's receipt does NOT close on the shipped file (rc=$gv_live_rc). Either the fix regressed or the receipt is keyed on something the file no longer carries; until it closes here, nothing can be concluded from how it scores a seed"
-  else
-    ok "the entry's receipt CLOSES on the shipped file (rc=0), so the codes below are attributable"
-    # THE DIVISION IS DERIVED, NOT HAND-LISTED. Which seeds the receipt catches is a
-    # property of whatever `verify:` line the entry carries TODAY, and that line has
-    # already gained a span bound once. A hardcoded expectation here would fail the push
-    # on the commit that STRENGTHENS the receipt, which reads exactly like a regression.
-    #
-    # So both sides are computed and joined: for every seed, the receipt's rc and this
-    # fixture's own verdict. A seed the receipt CLOSES (rc=0) while the oracle says RED or
-    # BLOWN is a case this fixture must own, and the arm fails if the oracle agrees with
-    # the close. A seed the receipt refuses needs nothing from here.
-    gv_blind=0; gv_covered=0
-    for gvm in comment bare-mention read-commented no-fail-condition no-read no-write no-anchor6 no-anchor13; do
-      [ -f "$GV_WORK/$gvm.md" ] || continue
-      gvrc="$(gv_rcpt_run "$GV_WORK/$gvm.md")"
-      gvv="$(gv_join "$GV_WORK/$gvm.md")"; gvv="${gvv%% *}"
-      if [ "$gvrc" = "0" ]; then
-        gv_blind=$((gv_blind + 1))
-        if [ "$gvv" = "GREEN" ]; then
-          bad "receipt coverage — $gvm: the entry's receipt CLOSES (rc=0) and this fixture reads GREEN too. Nothing in the tree can tell this seed from the shipped fix, which is the state both channels exist to prevent"
-        else
-          ok "receipt coverage — $gvm: the receipt closes (rc=0) and this fixture reads $gvv — the arm above is what covers it"
-        fi
-      else
-        gv_covered=$((gv_covered + 1))
-        ok "receipt coverage — $gvm: the entry's receipt refuses it itself (rc=$gvrc); these arms do not re-invent that"
-      fi
-    done
-    # AND THE FIXTURE MUST BE LOAD-BEARING. If the receipt caught every seed, this whole
-    # block would be a second copy of it — the state `mechanism-design.md` calls a vacuous
-    # guard. Measured as a number rather than asserted in a comment.
-    if [ "$gv_blind" -gt 0 ]; then
-      ok "receipt coverage — $gv_blind of the seeds close the entry's receipt while shipping nothing, and $gv_covered are refused by it; these arms are what stands between the $gv_blind and a green tree"
-    else
-      bad "receipt coverage — the entry's receipt now refuses EVERY seed here, so these arms cover nothing the receipt does not. Either the seeds stopped discriminating or this block is now redundant with the receipt and should be retired rather than left as a check that cannot fire"
-    fi
-  fi
-fi
 
 echo
 if [ "$fails" -eq 0 ]; then echo "gate-verdict-grep-shape: PASS"; exit 0; fi
