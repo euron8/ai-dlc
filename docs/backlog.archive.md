@@ -16539,3 +16539,97 @@ optional bold span mandatory; it is not restated here.
 verify: sh R=core/skills/ai-dlc-update/reconcile; V="$R/ledger-reverify.sh"; O="$R/ledger-rotate.sh"; [ -r "$V" ] && [ -r "$O" ] || exit 9; n=$(grep -cE '^[[:space:]]*/.*ADOPTED UPSTREAM.*closed=1 \}$' "$V") || exit 9; [ "$n" = 1 ] || exit 9; d=$(mktemp -d) || exit 9; grep -E '^[[:space:]]*/.*ADOPTED UPSTREAM.*closed=1 \}$' "$V" | sed -E 's|.*\(([^()]*)\)/.*|\1|' | tr '|' '\n' | grep . > "$d/toks"; grep -qx 'ADOPTED UPSTREAM' "$d/toks" || exit 9; grep -qx 'ZZQQ NO SUCH TOKEN' "$d/toks" && exit 9; i=$(grep -c . "$d/toks") || exit 9; [ "$i" -ge 2 ] || exit 9; run() { L="$d/$3.md"; { echo '# L'; echo; echo '## PC-RX-A annotated'; echo; echo "**$1 $2** closed."; echo; echo 'verify: manual'; echo; echo '## PC-RX-B unbolded'; echo; echo "$1 $2 closed."; echo; echo 'verify: manual'; echo; echo '## PC-RX-M mention only'; echo; echo "Once ruled, annotate it \`$1 $2\` then."; echo; echo 'verify: manual'; echo; } > "$L"; bash "$O" "$L" 2>/dev/null | awk '/closed entries would move/{m=1;next} /^  archive: /{m=0} m' > "$d/$3.mv"; a=$(grep -c 'PC-RX-A annotated' "$d/$3.mv"); b=$(grep -c 'PC-RX-B unbolded' "$d/$3.mv"); m=$(grep -c 'PC-RX-M mention only' "$d/$3.mv"); echo "$a$b$m"; }; VP='(v0.1.0, verified 2026-01-01).'; ok=1; [ "$(run 'ADOPTED UPSTREAM' "$VP" ctl)" = 100 ] || ok=0; [ "$(run 'ZZQQ FABRICATED CLOSE' "$VP" neg)" = 000 ] || exit 9; j=0; while IFS= read -r t; do j=$((j+1)); [ "$(run "$t" "$VP" "t$j")" = 100 ] || ok=0; done < "$d/toks"; [ "$j" = "$i" ] || exit 9; [ "$(run 'ADOPTED UPSTREAM' '(absorbed before base abc1234).' nov)" = 100 ] || ok=0; rm -rf "$d"; [ "$ok" = 1 ]
 
 
+## BL-260 — the dispatch guard's effort prompt line is advisory prose with no verified effect, and the only fixture covering it checks that the sentence was appended
+
+**LANDED (v0.614.0, verified f73027d8).**
+
+**NOTE.** Filed from the consumer candidate
+`PC-S312-EFFORT-PROMPT-LINE-HAS-NO-VERIFIED-BEHAVIORAL-EFFECT`, read from the consumer's sprint
+branch ledger (not yet on its `main`). Not fixed here.
+
+`core/hooks/ai-dlc-dispatch-guard.sh:387-414` builds `EFFORT_LINE` — "Your configured reasoning
+effort for this role is `${PIN_EFFORT}`. Operate at that level." — and `:642-646` appends it to the
+dispatch prompt whenever `NEEDS_EFFORT` is true. The hook's own comment at `:376-381` says this is
+the WEAK channel: the `Agent` tool has no effort parameter, and the BINDING channel is the rendered
+`.claude/agents/<role>.md` definition's `effort:` key. The line exists for the dispatch that has no
+usable definition. Nothing in this tree measures whether a teammate that received the sentence
+behaves differently from one that did not: `core/fixtures/dispatch-model-guard/run.sh` carries
+`expect_effort` assertions (6 sites) and every one asserts the sentence's PRESENCE in the outgoing
+prompt.
+
+**The consumer's proposed disposition is to decommission the line** — drop `EFFORT_LINE`,
+`NEEDS_EFFORT` and the append branch, and the `expect_effort` assertions with them — so a role
+dispatched with no current definition carries no effort signal rather than an unverified one.
+
+**Why this is a NOTE and not yet a fix.** The claim "no verified behavioural effect" is true and
+unmeasurable from this repo, which is the same status as every other prompt sentence this
+distribution emits; deleting the fallback removes the only channel on the no-definition path and
+that path is what `BL-240`'s gap (a configured effort recorded but never reaching the API call)
+already covers from the other side. Whether an advisory sentence is worth its bytes on that path is
+a design ruling, not a measurement, and the entry records it for the operator rather than deciding
+it. The candidate also names `PC-S303-EFFORT-BINDING-COMMANDS-A-SLASH-COMMAND-THAT-RESOLVES-TO-NOTHING`'s
+fix as the origin of the current wording, which is correct (`:390-401`).
+
+**Receipt.** Closes when the line is gone from the hook, or when the tree carries a fixture arm
+that measures the teammate's behaviour rather than the prompt string. The second half is not
+mechanically distinguishable from the first by a one-liner, so the receipt keys on the first and a
+hand review is owed if a behavioural arm ever lands instead.
+
+verify: sh h=core/hooks/ai-dlc-dispatch-guard.sh; [ -f "$h" ] || exit 9; LC_ALL=C grep -qF 'EFFORT_LINE="Your configured reasoning effort for this role' "$h" && exit 1; exit 0
+
+## BL-281 — the handoff guard's key 2 is a line in a document nothing rewrites, so a COMPLETED handoff arms it forever
+
+**LANDED (v0.614.0, verified f73027d8).**
+
+**DEFECT.** Filed at batch 138 from the reference consumer's push-candidate ledger, where it is
+`PC-S312-HANDOFF-GUARD-ARMS-ON-A-STALE-DISK-RECORD-THROUGH-A-RECONCILE` (consumer-filed
+2026-09-20, during its own `0.605.0 -> 0.608.0` reconcile apply, at the operator's explicit
+instruction to report the firing rather than work around it).
+
+**THE CONSUMER IS RUNNING THIS EXACT CODE.** `cmp -s` against the consumer's installed
+`.claude/hooks/ai-dlc-handoff-pending.sh`: **IDENTICAL**. Control in the same invocation, a file
+this batch changed: DIFFER. So this is not a stale-copy report and the fix is ours.
+
+**THE PREDICATE, at `core/hooks/ai-dlc-handoff-pending.sh:107`.** Key 2 returns 0 on the presence
+of a line matching `^[[:space:]]*(#{1,6}[[:space:]]*)?(\*\*)?HANDOFF POINT` in
+`pipeline-snapshot.md`, and on nothing else — no recency test, no completion test, no session
+binding. `ai-dlc-continue.sh` Check 0 then blocks every Stop, demanding a `----` / `/ai-dlc
+resume` / `----` block and, once that clears, a foreground `git push`.
+
+**NOTHING CLEARS THE LINE.** Derived across `core/`: every other occurrence of the token is a
+COMMENT in the same hook or a fixture seed (`handoff-completion-assertion/seed.sh`,
+`run.sh`) — there is no writer that removes it, and the snapshot is an accreting record.
+Control: an impossible token scores 0 in the same file. So the predicate, once true, is true
+permanently.
+
+**THE ASYMMETRY WITH KEY 1 IS THE WHOLE DEFECT, AND IT IS WHY THIS IS NOT A GRAMMAR BUG.** Key 1
+(`:88`) keys on `.handoff-in-progress`, a FILE, which a completing handoff deletes — it is
+self-clearing by construction. Key 2 keys on PROSE in a document whose writer only ever appends.
+Two keys for one condition, one with a lifecycle and one without. The fix belongs at the key, not
+at the grammar: widening or narrowing the regex changes which stale lines arm it, never that a
+stale line arms it.
+
+**AND CHECK 0 SCOPES ITSELF TO NO FLOW.** Measured: `core/hooks/ai-dlc-continue.sh` is 1386 lines
+and mentions the `ai-dlc-update` maintenance flow **zero** times. During a reconcile the operator
+is doing distribution-to-consumer tooling maintenance, not the operate pipeline: there is no
+in-flight teammate to sweep, the operate snapshot must not be finalized as a handoff record, and
+the terminal action is a tooling PR merge. The consumer measured the guard firing **five times
+across one reconcile**, alternating the resume-block arm and the push arm.
+
+**THE FIRING IS LIVE, NOT HISTORICAL.** A reconcile session was running in the reference consumer
+while this entry was being written, on branch `ai-dlc-update/0.612.0-reconcile-20260920T192434Z`.
+
+**WHAT A FIX MUST NOT DO.** The obvious repair — teach Check 0 to recognise the maintenance flow —
+puts flow detection in the guard, where a wrong answer silently disarms a real handoff. Prefer
+giving key 2 the lifecycle key 1 already has, so the record's own completion clears it; that
+leaves the guard's scope alone and removes the stale state rather than policing it. Whatever
+ships, the fixture that covers this is `core/fixtures/handoff-completion-assertion`, which carries
+NO ship declaration today — read `.claude/rules/fixture-ship-decl.md` before adding arms, because
+the hooks themselves ship and a consumer must be able to fail this.
+
+Carries the reference consumer's
+`PC-S312-HANDOFF-GUARD-ARMS-ON-A-STALE-DISK-RECORD-THROUGH-A-RECONCILE`, live upstream, which
+nothing in this repo had cited before this entry (control: a known-cited id scores 1 in the
+archive; this one scored 0 and 0 across both backlog files).
+
+verify: sh set -e; h="core/hooks/ai-dlc-handoff-pending.sh"; [ -r "$h" ] || exit 9; LC_ALL=C grep -q 'AI_DLC_HANDOFF_KEY="snapshot-section"' "$h" || exit 9; n="$(LC_ALL=C awk '/AI_DLC_HANDOFF_KEY="snapshot-section"/{found=1} found && /return 0/{print NR; exit}' "$h")"; [ -n "$n" ] || exit 9; s="$(LC_ALL=C sed -n "$((n>12?n-12:1)),${n}p" "$h")"; printf '%s' "$s" | LC_ALL=C grep -qE '(handoff-complete|handoff_complete|\.handoff-done|completed_at|HANDOFF COMPLETE)' && exit 0; exit 1
