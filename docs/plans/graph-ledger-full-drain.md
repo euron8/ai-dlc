@@ -154,11 +154,19 @@ naming the gate record 0 times against an OK-path control of 1, and step 7's 198
 0 times. **Its predicted LOSS is refuted as a rate and REAL as a window** — 23 of 23 records tracked,
 12 of 12 on the DEFER path, and then a 13th DEFER record caught UNTRACKED mid-flight while a
 reconcile ran. A steady-state census cannot see that class: every record it counts has already
-survived. `BL-281` carries
-`PC-S312-HANDOFF-GUARD-ARMS-ON-A-STALE-DISK-RECORD-THROUGH-A-RECONCILE`, filed the same day by the
-consumer; key 2 at `core/hooks/ai-dlc-handoff-pending.sh:107` arms on a `HANDOFF POINT` line nothing
-ever clears, where key 1 keys on a FILE a completing handoff deletes. A fix hand is out on it
-against `origin/main`; **check for its branch before scoping `BL-281` yourself.**
+survived. **`BL-281` was filed AND FIXED in the same batch and is no longer available** — it
+shipped in `v0.614.0`; the paragraph above records it.
+
+**`BL-282` IS FILED AND IS THE ONE ENTRY THIS BATCH LEAVES BEHIND WITH A REAL DESIGN QUESTION.**
+The rule "a green gate is not a landed push" (`.claude/rules/verification-discipline.md`) has
+**0** readers of `ls-remote` across the hooks and scripts, against a control of 15 `pre-push`
+occurrences in the backlog — it is prose with no mechanism. **Git ships no `post-push` hook** (0
+of its 14 samples, control 1 for `pre-push`) and `pre-push` runs BEFORE the transport, so no hook
+can observe the outcome. **The obvious check also has a measured false positive this batch
+shipped**: an `ls-remote` reading 0 while a BACKGROUNDED push is still in flight is
+indistinguishable from the real exit-141 case, and the reflog showed one push landing the sha with
+the "re-push" a no-op. A fix must establish the push COMPLETED before reading the ref, and nothing
+today joins those two events. Scope it as a design question, not a one-line addition.
 
 **BATCH 137 SHIPPED NO RELEASE, AND THAT IS THE CORRECT SHAPE: BOTH SUBJECTS WERE DOCS-ONLY, SO
 `core/` IS UNTOUCHED AND THE CONSUMER GAP DID NOT WIDEN.** Merged as `b468c01b` (#810), verified by
