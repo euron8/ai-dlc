@@ -49,6 +49,54 @@ and expect a rule here to cite a measurement whose story lives in the archive.**
 that file and a `path:line` into it would then fail `validate-plan-shape.sh`'s citation arm on a
 correct rotation.
 
+**BATCH 135 SHIPPED AS `v0.611.0` (`82f875b3`), ONE SUBJECT, AND IT SHIPPED ALONE BECAUSE
+`apply.sh` IS A BOOTSTRAPPING FILE.** `BL-276` closed, discharging
+`PC-S312-DERIVATION-FENCES-STRANDED-CORE-RELOCATION-WITH-NO-WORKLIST-ROW`, named verbatim in the
+release commit. `retired-layer-passage.sh`'s rows reached the report and nothing else; both it
+and the stranded-derivation class now route to the worklist from `apply.sh`. Gate
+`AI_DLC_FIXTURE_NO_SKIP=1`: exit **0**, 22 of 22 phases PASS, **202 ok / 0 FAIL**, the changed
+fixture read by name against an impossible-name control of 0. Live **77 -> 76**, archive
+**200 -> 201**. The PC-backed worklist moved **7 -> 6**.
+
+**THE OBVIOUS PREDICATE SCORED ZERO ON ITS OWN MOTIVATING CASE, AND THE CONTRACT CARRIED IT
+UNTIL AN ADVERSARY RAN IT.** The second occurrence looked like "a `derived` fence naming a core
+path present at base and absent at theirs". The filing's own range deletes **0** `core/` paths,
+against a control range returning real deletions: the relocation was a move INSIDE files that
+exist at both ends, so the fence broke on a moved ANCHOR, not a deleted PATH. A path-absence
+check there is a check that cannot fire. **Run the proposed rule against the case that MOTIVATED
+it before building it** — and `validate-artifact-derivations.sh` already answered the question by
+RUNNING the command, so the remedy was a routing row naming it, never a second detector.
+
+**A WEDGE ARGUMENT CAN BE EXACTLY BACKWARDS AND STILL READ AS CAUTION.** The contract said an
+unconditional row inside the phases would make `--finish` refuse. The opposite is true:
+`apply.sh`'s `FINISH=0` span is skipped under `--finish`, so a row inside it cannot raise the
+`worklist_n` the finisher gates on, and `--finish` is the exit that clears it. The real wedge is
+a row sited beside the trailing per-run rows, which the finisher re-derives BEFORE `write_stamp`
+on a tree whose layer files the apply never rewrites — and neither class has an acknowledgement
+channel, so the stamp would never be written and the applying guard would refuse every push.
+**Derive which side of a mode guard your row lands on; do not reason about it from the row.**
+
+**A RECEIPT THAT ANCHORS ON A LEXICAL SITE CANNOT SEE REACHABILITY, AND FOUR REGRESSIONS PROVED
+IT.** `BL-276`'s filed receipt read 0 at the fixed tip AND 0 at a row in an uncalled function, a
+row under `if false`, an unconditional row consulting no detector, and a row emitted only under
+`--finish`; it rejected only a comment-only spelling. Adding lexical conjuncts kills two of the
+four at most. The replacement is a BEHAVIOURAL two-seed battery driving `apply.sh` against a hit
+tree and a miss tree — **one seed cannot do it**, because the unconditional row is byte-identical
+to a correct fix on the hit seed and separates only on the miss seed.
+
+**A MUTATION THAT DID NOT APPLY READS EXACTLY LIKE ONE THAT SURVIVED.** Measured twice this
+batch: a `perl` transform matched nothing and left the file byte-identical, which scores as
+"the mutant survived" unless a `cmp -s` control asserts the sides differ. The shipped `bl_mut`
+ends in `! cmp -s` for that reason. Two further mutants genuinely survived and were RE-ANCHORED
+rather than accepted: widening a guard already true in the world under test changes no decision,
+so the anchor has to move to the predicate that DECIDES.
+
+**MY OWN PHASE-HEADER GREP RETURNED A FALSE ZERO ON A GREEN LOG.** `grep -c '── phase'` read 0
+against a log carrying 22 headers, ANSI stripped, because the headers are `^── ` and carry no
+such word. The tell was the control: 0 PASS lines beside a run that plainly passed. **Point a
+log grammar at its own subject before believing its zero** — and the wrapper reported exit 0
+while I still had to read the log's last line to know the gate was green.
+
 **BATCH 134 SHIPPED AS `v0.610.0` (`4e241fb7`), TWO SUBJECTS, BOTH CHECKS THAT COULD NOT TELL A
 RIGHT ANSWER FROM A WRONG ONE, BOTH PC IDS NAMED VERBATIM IN THE RELEASE COMMIT.** `BL-040`
 closed, discharging `PC-S295-RETRO-CHECK5-SELF-REFERENTIAL`; `BL-057` closed, discharging
@@ -122,14 +170,16 @@ cited, and the amended-away object still RESOLVED locally while being reachable 
 where the release sha is stable, and test reachability with `git branch --contains`, never with
 `cat-file`.
 
-**THE PC-BACKED WORKLIST IS 7 AND THE TWO CLOSED SUBJECTS LEFT IT.** Re-derived post-rotation with
+**THE PC-BACKED WORKLIST IS 6 AND THE CLOSED SUBJECT LEFT IT.** Re-derived post-rotation with
 its three controls (live 49, a known-live id 1, an impossible id 0): `BL-029`, `BL-067`, `BL-132`,
-`BL-140`, `BL-145`, `BL-215`, `BL-276`. **THREE of those seven record their own remedy as refuted,
+`BL-140`, `BL-145`, `BL-215`. **THREE of those six record their own remedy as refuted,
 unshippable or unconstructible** — `BL-067`, `BL-132`, `BL-215` — so read each entry's own text
 before scoping it, and do not rebuild a refuted remedy. **Verify that against the ENTRY's own
 words, never against this sentence**: batch 133 measured a paraphrase here ranking a live entry
-out of scope, and batch 134 re-checked all three by grepping each entry for the three words
-against a control that the entry body was non-empty.
+out of scope, and batches 134 and 135 each re-checked all three by grepping each entry BODY for
+the three words against a control that the body was non-empty. **`BL-215` also has no `sh`
+receipt at all** — it is `verify: manual`, and its own text says no enforcer is constructible on
+what exists today, so it is not scopeable as a build without settling that first.
 
 **AN EARLIER REVISION SAID FOUR AND NAMED `BL-145` AS THE FOURTH. IT IS NOT.** Measured both by a
 sweep hand and by the lead independently: `BL-145`'s text carries none of those three words. Its
@@ -168,15 +218,23 @@ three qualifying refs are PAIRWISE INCOMPARABLE (adds 4/4/4, union 7), so every 
 loses real filings, and a union WITHOUT the archive subtraction resurrects the 6 ids that are live
 on one qualifying ref and archived on another.
 
-**THE DELIVERY GAP IS FIVE RELEASES AND A BOOTSTRAPPING FILE IS IN THE RANGE. THE OPERATOR HAS
-BANKED IT — DO NOT WRITE A RUNBOOK.** Ruling given at batch 132's close, on the question asked
+**THE DELIVERY GAP IS SIX RELEASES AND TWO BOOTSTRAPPING FILES ARE NOW IN THE RANGE. THE OPERATOR
+HAS BANKED IT — DO NOT WRITE A RUNBOOK.** Ruling given at batch 132's close, on the question asked
 directly: bank the pull and keep reporting the gap each batch. Consumer installed `0.605.0`
-against `VERSION` `0.610.0`; the last pull was `0.601.0`-`0.605.0` into graph on 2026-09-19 as
-`554e4a32`, and the consumer has pulled nothing since. Over the installed commit to `origin/main`,
-22 `core/` files changed and
-`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh` is among them — **the consumer's INSTALLED
-copy runs the pull that carries its own repair**, so say so in any brief rather than claiming the
-next pull is protected by it. Mode-only changes: **0**. Re-derive all of it; do not read this sentence for a number.
+against `VERSION` `0.611.0`; the last pull was `0.601.0`-`0.605.0` into graph on 2026-09-19 as
+`554e4a32`, and the consumer has pulled nothing since. Both
+`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh` and — as of batch 135 —
+`core/skills/ai-dlc-update/reconcile/apply.sh` are in the range, so **the consumer's INSTALLED
+copy runs the pull that carries its own repair** twice over: say so in any brief rather than
+claiming the next pull is protected by either. Re-derive all of it; do not read this sentence
+for a number.
+
+**AND THE CONSUMER'S OWN COMMITTED DRY RUN IS SILENT ABOUT THE TOP OF THE RANGE.**
+`_bmad-output/ai-dlc-update/reconcile-report.md` rehearses `0.605.0`-`0.608.0` and verdicts
+`SELF-UPDATE-DEFER` with a SAFE-STOP at `0.606.0` and **11** `HARD-LAYER-ADJUDICATION-MISSING`
+blocking rows. It says nothing about `0.608.0` onward. Read it before writing a brief — it is a
+measurement of the engine the consumer actually runs — and do not read its verdict as covering
+releases it never saw.
 
 **THE GAP WIDENS BY ONE ON EVERY RELEASE THIS PROGRAM SHIPS, WHICH IS THE PROGRAM SUCCEEDING AND
 NOT A REASON TO REORDER.** Batch 134 took it from four to five. **Five is the threshold this
@@ -868,13 +926,16 @@ given at batch 90.
    distribution-internal one. Batch 132 took `BL-277`, which carries no `PC-` id and was therefore
    NOT off that worklist — an operator choice, made on a direct question, because the defect was
    blocking this program's own gate. Batches 133 and 134 each scoped two PC-backed entries off the
-   worklist, leaving it at **7**, which is still where a batch scopes from by default. **Run the
-   join; the number here is a record of when it was taken, never an input.**
+   worklist, and batch 135 scoped one, leaving it at **6**, which is still where a batch scopes
+   from by default. **Run the join; the number here is a record of when it was taken, never an
+   input.**
 
-   **BATCH 134's PAIRING TEST IS THE ONE TO REUSE WHEN BATCHING TWO SUBJECTS.** Of the seven
-   remaining, four touch a BOOTSTRAPPING file (`apply.sh`, `ledger-reverify.sh`, `ledger-rotate.sh`,
-   the update skill), which action 2 requires to ship ALONE — so the batchable set is smaller than
-   the worklist and that is the first thing to derive, not the last. Then SCORE each candidate's
+   **BATCH 134's PAIRING TEST IS THE ONE TO REUSE WHEN BATCHING TWO SUBJECTS.** Of the six
+   remaining, three touch a BOOTSTRAPPING file (`ledger-reverify.sh`, `ledger-rotate.sh`, the
+   update skill) — `BL-140`, `BL-145` and `BL-067` — which action 2 requires to ship ALONE, so the
+   batchable set is smaller than the worklist and that is the first thing to derive, not the last.
+   Derive it per entry BODY with a non-empty-body control; batch 135 did, and the answer chose the
+   subject. Then SCORE each candidate's
    receipt against the OTHER's tip and report both: a receipt the other fix closes is a pairing to
    refuse, and scoring it is what establishes the pairing rather than assuming it.
 
