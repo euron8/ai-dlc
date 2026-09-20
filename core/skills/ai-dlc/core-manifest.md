@@ -235,6 +235,7 @@ core_manifest:
   - fixtures/hook-registration-join/**
   - fixtures/implementation-join-yield/**
   - fixtures/escalation-delivery/**
+  - fixtures/extract-push-flag-decision/**
   - fixtures/inflight-row-shape/**
   - fixtures/known-skills-extension/**
   - fixtures/layer-anchor-declaration/**
