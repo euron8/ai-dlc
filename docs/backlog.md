@@ -4185,3 +4185,58 @@ which is live upstream and which nothing in this repo had cited before this entr
 known-cited id scores 3 and 8 across the two backlog files; this one scored 0 and 0).
 
 verify: sh set -e; f="core/skills/ai-dlc-update/SKILL.md"; [ -r "$f" ] || exit 9; s="$(LC_ALL=C awk '/On `SELF-UPDATE-DEFER`/{on=1} /On `SELF-UPDATE-OK`/{exit} on' "$f")"; [ -n "$s" ] || exit 9; printf '%s' "$s" | LC_ALL=C grep -q 'self-update-gate-' || exit 1; printf '%s' "$s" | LC_ALL=C grep -qiE '(do NOT|never) commit[^.]*self-update-gate-' && exit 1; printf '%s' "$s" | LC_ALL=C grep -qE '[Cc]ommit[^.]*self-update-gate-' || exit 1; exit 0
+
+## BL-281 — the handoff guard's key 2 is a line in a document nothing rewrites, so a COMPLETED handoff arms it forever
+
+**DEFECT.** Filed at batch 138 from the reference consumer's push-candidate ledger, where it is
+`PC-S312-HANDOFF-GUARD-ARMS-ON-A-STALE-DISK-RECORD-THROUGH-A-RECONCILE` (consumer-filed
+2026-09-20, during its own `0.605.0 -> 0.608.0` reconcile apply, at the operator's explicit
+instruction to report the firing rather than work around it).
+
+**THE CONSUMER IS RUNNING THIS EXACT CODE.** `cmp -s` against the consumer's installed
+`.claude/hooks/ai-dlc-handoff-pending.sh`: **IDENTICAL**. Control in the same invocation, a file
+this batch changed: DIFFER. So this is not a stale-copy report and the fix is ours.
+
+**THE PREDICATE, at `core/hooks/ai-dlc-handoff-pending.sh:107`.** Key 2 returns 0 on the presence
+of a line matching `^[[:space:]]*(#{1,6}[[:space:]]*)?(\*\*)?HANDOFF POINT` in
+`pipeline-snapshot.md`, and on nothing else — no recency test, no completion test, no session
+binding. `ai-dlc-continue.sh` Check 0 then blocks every Stop, demanding a `----` / `/ai-dlc
+resume` / `----` block and, once that clears, a foreground `git push`.
+
+**NOTHING CLEARS THE LINE.** Derived across `core/`: every other occurrence of the token is a
+COMMENT in the same hook or a fixture seed (`handoff-completion-assertion/seed.sh`,
+`run.sh`) — there is no writer that removes it, and the snapshot is an accreting record.
+Control: an impossible token scores 0 in the same file. So the predicate, once true, is true
+permanently.
+
+**THE ASYMMETRY WITH KEY 1 IS THE WHOLE DEFECT, AND IT IS WHY THIS IS NOT A GRAMMAR BUG.** Key 1
+(`:88`) keys on `.handoff-in-progress`, a FILE, which a completing handoff deletes — it is
+self-clearing by construction. Key 2 keys on PROSE in a document whose writer only ever appends.
+Two keys for one condition, one with a lifecycle and one without. The fix belongs at the key, not
+at the grammar: widening or narrowing the regex changes which stale lines arm it, never that a
+stale line arms it.
+
+**AND CHECK 0 SCOPES ITSELF TO NO FLOW.** Measured: `core/hooks/ai-dlc-continue.sh` is 1386 lines
+and mentions the `ai-dlc-update` maintenance flow **zero** times. During a reconcile the operator
+is doing distribution-to-consumer tooling maintenance, not the operate pipeline: there is no
+in-flight teammate to sweep, the operate snapshot must not be finalized as a handoff record, and
+the terminal action is a tooling PR merge. The consumer measured the guard firing **five times
+across one reconcile**, alternating the resume-block arm and the push arm.
+
+**THE FIRING IS LIVE, NOT HISTORICAL.** A reconcile session was running in the reference consumer
+while this entry was being written, on branch `ai-dlc-update/0.612.0-reconcile-20260920T192434Z`.
+
+**WHAT A FIX MUST NOT DO.** The obvious repair — teach Check 0 to recognise the maintenance flow —
+puts flow detection in the guard, where a wrong answer silently disarms a real handoff. Prefer
+giving key 2 the lifecycle key 1 already has, so the record's own completion clears it; that
+leaves the guard's scope alone and removes the stale state rather than policing it. Whatever
+ships, the fixture that covers this is `core/fixtures/handoff-completion-assertion`, which carries
+NO ship declaration today — read `.claude/rules/fixture-ship-decl.md` before adding arms, because
+the hooks themselves ship and a consumer must be able to fail this.
+
+Carries the reference consumer's
+`PC-S312-HANDOFF-GUARD-ARMS-ON-A-STALE-DISK-RECORD-THROUGH-A-RECONCILE`, live upstream, which
+nothing in this repo had cited before this entry (control: a known-cited id scores 1 in the
+archive; this one scored 0 and 0 across both backlog files).
+
+verify: sh set -e; h="core/hooks/ai-dlc-handoff-pending.sh"; [ -r "$h" ] || exit 9; LC_ALL=C grep -q 'AI_DLC_HANDOFF_KEY="snapshot-section"' "$h" || exit 9; n="$(LC_ALL=C awk '/AI_DLC_HANDOFF_KEY="snapshot-section"/{found=1} found && /return 0/{print NR; exit}' "$h")"; [ -n "$n" ] || exit 9; s="$(LC_ALL=C sed -n "$((n>12?n-12:1)),${n}p" "$h")"; printf '%s' "$s" | LC_ALL=C grep -qE '(handoff-complete|handoff_complete|\.handoff-done|completed_at|HANDOFF COMPLETE)' && exit 0; exit 1
