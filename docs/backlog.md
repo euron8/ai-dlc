@@ -2980,10 +2980,34 @@ retained original), and `PC-S305-CHECK-17-BYPASS-CONSUMER-CASES-V8-V9-AND-A-PASS
 archivable would record an adoption that never happened, which is this entry's own defect pointed
 the other way.
 
-Sibling to `BL-068`, which records that the rotate acceptance test false-fails on the workflow it
-documents. Take them together or say which one you are closing.
+**THE MISSING REJECTION FORM IS HALF THE GAP, AND THE OTHER HALF IS A SET DIFFERENCE BETWEEN
+THE TWO ENGINES.** `ledger-reverify.sh:1670` closed an entry on TWO tokens, `ADOPTED UPSTREAM`
+and `WITHDRAWN`, while `ledger-rotate.sh` archived on ONE hand-written literal at three sites —
+and that file contained `WITHDRAWN` **zero** times, against a same-invocation same-file control
+of `ADOPTED UPSTREAM` at 19 and an impossible-token control of 0. So a withdrawal was SKIPPED by
+every re-verification and REFUSED by every rotation at once: invisible in the report and
+permanently resident in the live ledger. Adding a rejection token to one file alone reproduces
+that state rather than fixing it, which is why this entry closes on the two lists becoming ONE
+grammar and not on any spelling.
 
-verify: sh set -e; R="$PWD/core/skills/ai-dlc-update/reconcile"; grep -q 'ADOPTED UPSTREAM' "$R/ledger-rotate.sh"; ! grep -qE 'REJECTED[ -]+(BY DESIGN|by design)' "$R/ledger-rotate.sh" && exit 1; exit 0
+**`BL-068` is ALREADY ARCHIVED** — LANDED at `v0.377.0`, in `docs/backlog.archive.md` (control:
+this entry is live in `docs/backlog.md`). Nothing is owed to it and this entry closes alone.
+
+Two findings from the hand that derived the grammar, both of which a spelling-level fix would
+have shipped past:
+
+- **`reconcile/lib.sh`'s own finders hand-listed the token set they were hunting**, so adding a
+  close token to the single home took them from 1 match to 0 and every caller refused — the same
+  defect one level down, in the file whose job is to prevent it. A finder keys on the rule's
+  STRUCTURE plus one anchor token now, with an exactly-one guard.
+- **The entry-line rule cannot be derived from the body rule.** Doing so stranded the
+  retained-copy parenthetical, which is not part of the body grammar at all, and the stuck count
+  fell only 6 → 2 that way against 6 → 1 for the shipped derivation.
+
+The enforcer is `reconcile/lib.sh`'s `ledger_archive_awk()`, which makes the skip grammar's
+optional bold span mandatory; it is not restated here.
+
+verify: sh R=core/skills/ai-dlc-update/reconcile; V="$R/ledger-reverify.sh"; O="$R/ledger-rotate.sh"; [ -r "$V" ] && [ -r "$O" ] || exit 9; n=$(grep -cE '^[[:space:]]*/.*ADOPTED UPSTREAM.*closed=1 \}$' "$V") || exit 9; [ "$n" = 1 ] || exit 9; d=$(mktemp -d) || exit 9; grep -E '^[[:space:]]*/.*ADOPTED UPSTREAM.*closed=1 \}$' "$V" | sed -E 's|.*\(([^()]*)\)/.*|\1|' | tr '|' '\n' | grep . > "$d/toks"; grep -qx 'ADOPTED UPSTREAM' "$d/toks" || exit 9; grep -qx 'ZZQQ NO SUCH TOKEN' "$d/toks" && exit 9; i=$(grep -c . "$d/toks") || exit 9; [ "$i" -ge 2 ] || exit 9; run() { L="$d/$3.md"; { echo '# L'; echo; echo '## PC-RX-A annotated'; echo; echo "**$1 $2** closed."; echo; echo 'verify: manual'; echo; echo '## PC-RX-B unbolded'; echo; echo "$1 $2 closed."; echo; echo 'verify: manual'; echo; echo '## PC-RX-M mention only'; echo; echo "Once ruled, annotate it \`$1 $2\` then."; echo; echo 'verify: manual'; echo; } > "$L"; bash "$O" "$L" 2>/dev/null | awk '/closed entries would move/{m=1;next} /^  archive: /{m=0} m' > "$d/$3.mv"; a=$(grep -c 'PC-RX-A annotated' "$d/$3.mv"); b=$(grep -c 'PC-RX-B unbolded' "$d/$3.mv"); m=$(grep -c 'PC-RX-M mention only' "$d/$3.mv"); echo "$a$b$m"; }; VP='(v0.1.0, verified 2026-01-01).'; ok=1; [ "$(run 'ADOPTED UPSTREAM' "$VP" ctl)" = 100 ] || ok=0; [ "$(run 'ZZQQ FABRICATED CLOSE' "$VP" neg)" = 000 ] || exit 9; j=0; while IFS= read -r t; do j=$((j+1)); [ "$(run "$t" "$VP" "t$j")" = 100 ] || ok=0; done < "$d/toks"; [ "$j" = "$i" ] || exit 9; [ "$(run 'ADOPTED UPSTREAM' '(absorbed before base abc1234).' nov)" = 100 ] || ok=0; rm -rf "$d"; [ "$ok" = 1 ]
 
 
 ## BL-142 — a withdrawn claim is reported forever, and its withdrawal is invisible by construction

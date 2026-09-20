@@ -15,6 +15,61 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.613.0] - 2026-09-20
+
+### the close grammar is one grammar now, and the two files it had not reached
+
+#### the ledger's archive rule is derived from its skip rule
+
+`ledger-rotate.sh` archived on one hand-written literal at three sites while
+`ledger-reverify.sh` closed on a SET; the rotator contained the token `WITHDRAWN` zero times
+against a same-file control of `ADOPTED UPSTREAM` at 19 and an impossible-token control of 0.
+An entry closed by a token the rotator could not spell was skipped by every re-verification and
+refused by every rotation at once. `reconcile/lib.sh`'s `ledger_archive_awk()` now derives
+rotation's predicates from the single close rule by making its optional bold span mandatory, so
+a token added to that one home reaches both tools in the same edit. `CLOSED AS REJECTED` joins
+the vocabulary, and a close carrying no version archives on its own terms.
+
+#### the last hand-written token list in the reconcile directory
+
+`warn-shadowed-local-validators.sh` kept its own entry-line close rule, spelled
+`/ADOPTED UPSTREAM|WITHDRAWN/` inline, so it held a membership opinion the lifted body rule did
+not reach. It carried the new token zero times while the two engines carried it 1, 2 and 5 times
+(same invocation, same directory; impossible-token control 0 across all four files). An entry
+closed on its title by that token scored OPEN there, and an open entry is what suppresses the
+`RETIRE-CANDIDATE` row — a fork advised as still-needed after its debt closed. It now lifts
+`ledger_entry_line_close_awk()`. Driven over a seeded world either side of the change, one
+variable: the new token 0 → 1 rows, with `ADOPTED UPSTREAM` at 1 → 1 and a genuinely open entry
+at 0 → 0 as same-invocation controls, and the two sides asserted byte-different first.
+
+#### two comments that licensed the split, one of them quoted by a third file
+
+`reconcile/lib.sh` said the close predicates "stay in their own files because they differ
+DELIBERATELY", and `scripts/backlog-rotate.sh` quoted that sentence as its own rationale. The
+predicates do differ, by one property, but the reason as written licensed two independent TOKEN
+sets — which is the defect above, stated as a design intent. Both passages are corrected;
+`backlog-rotate.sh`'s separateness is now grounded in its ledger being a different ledger.
+
+#### the backlog receipt that rejected the correct fix
+
+`BL-140`'s receipt grepped for `REJECTED[ -]+(BY DESIGN|by design)` and scored 0 against a fix
+that landed the token `CLOSED AS REJECTED`, so it exited 1 on the change that closes it. It is
+REPLACED, not extended, by one that DRIVES `ledger-rotate.sh` over a seeded ledger and reads
+which entries MOVE, deriving the token set from the owner rather than spelling it: base 1, tip
+0, and four mutants built from base each scored 1 — a token added to the close list alone (the
+defect itself), a comment-only insertion naming the token, a widening of the rotator that
+re-verification does not honour, and a rotator archiving on the loose rule so an instruction
+counts. Every mutant was asserted byte-different from base and its applied text read back.
+
+#### BL-140's entry records the whole gap
+
+The entry as filed described only the missing rejection form. It now also records the
+set difference between the two engines, that `BL-068` — the sibling it told a reader to take
+with it — is already archived as LANDED, and the two findings the derivation turned up: that
+`lib.sh`'s own finders hand-listed the token set they hunted, so adding a token took them 1 → 0
+and every caller refused; and that deriving the entry-line rule from the body rule strands the
+retained-copy parenthetical, moving the stuck count only 6 → 2 against 6 → 1.
+
 ## [0.612.0] - 2026-09-20
 
 ### a push flag that was never written, and a receipt that could not tell the fix from its inverse
