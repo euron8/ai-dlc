@@ -69,11 +69,13 @@
 # carries how many of the block's bullets are byte-present in that window and how
 # many are not. This is an OBSERVATION and never an exit code: the contract above
 # stands, an abridged cite-by-reference restatement is the honest shape on this
-# road, and measured over a reference consumer's corpus 49 of 51 bullets are not
-# byte-present across the 13 stories that reach the observation at all. What the
-# exemption never justified is that a fabricated block and a verbatim one printed
-# the same line as well as the same code, leaving nothing downstream able to tell
-# them apart. The counts separate them; the verdict does not move.
+# road, and on a reference consumer's corpus the great majority of bullets on it
+# are not byte-present -- as a failure condition it would red most of the honest
+# blocks it can see. The figures and the tree they were taken in are recorded
+# beside the counters below. What the exemption never justified is that a
+# fabricated block and a verbatim one printed the same line as well as the same
+# code, leaving nothing downstream able to tell them apart. The counts separate
+# them; the verdict does not move.
 #
 # NOTE — category error this guards against: context/tool thresholds (e.g. the
 # ctx INTENT_SEARCH_THRESHOLD) gate what re-enters the conversation on an
@@ -492,10 +494,8 @@ pointers_checked = 0
 legacy_claims = 0
 # REPORT-ONLY BULLET OBSERVATION ON THE `requires_context:` ROAD. The byte-match stays
 # off this road as an EXIT CODE -- see the header contract -- because an abridged
-# cite-by-reference restatement is the honest shape here. Measured over a reference
-# consumer's corpus: of the 13 stories that reach this observation at all, 7 carry at
-# least one non-verbatim bullet, and 49 of 51 bullets overall are not byte-present. As a
-# failure condition that is a 54% red rate on honest blocks, which is the regression this
+# cite-by-reference restatement is the honest shape here, and as a failure condition it
+# would red most of the honest blocks it can observe at all. That is the regression this
 # road's exemption exists to avoid.
 #
 # What the exemption never justified is the two roads being INDISTINGUISHABLE. A block
@@ -504,9 +504,27 @@ legacy_claims = 0
 # this script could tell them apart. These two counters put the difference on the PASS
 # line while leaving the verdict alone.
 #
-# REACHABILITY, STATED BESIDE THE FP SET: over that same corpus, 189 files carry both a
-# LOCKED_REQUIREMENTS block and a `requires_context:` line and 13 of them reach this
-# observation -- 6.9%. The other 176 resolve no pointer and print no observation.
+# THE FP SET AND THE REACHABILITY, WITH THE TREE NAMED. Derived by driving THIS script
+# over a reference consumer checkout, `.claude/worktrees/` EXCLUDED -- a count over a
+# tree walk is a function of what is on disk, and the same walk including the agent
+# worktrees reads 189 for a population that is really 96, because each worktree carries
+# a duplicate of files already counted:
+#
+#   population (LOCKED_REQUIREMENTS + requires_context:, worktrees excluded)   96
+#     observation PRINTED on the PASS line                                      5
+#       clean (0 not byte-present)                                              1
+#       >=1 not byte-present  <- the FP set                                     4
+#     observation COMPUTED, suppressed by an earlier FAIL exit                  11
+#     no resolvable pointer, nothing to observe                                 80
+#   bullets byte-present 1 / not byte-present 30
+#   CONTROL impossible token over the same walk                                  0
+#   CONTROL total .md walked                                                 18263
+#
+# TWO READINGS OF "REACHES THE OBSERVATION" AND THEY DIFFER. A story that FAILs exits
+# before the PASS line, so the observation is computed and never printed: 5 print it
+# (5.2%), 16 compute it (16.7%). The PRINTED figure is the one a consumer sees. Re-derive
+# both before quoting either; the numbers move with the consumer's corpus and the reading
+# that flatters a claim is not automatically the one the mechanism runs on.
 ctx_bullets_verbatim = 0
 ctx_bullets_absent = 0
 
