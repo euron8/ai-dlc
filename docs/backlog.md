@@ -57,7 +57,7 @@ not a closed entry.
 
 ## BL-276 — a core text MOVE leaves every consumer layer citation stale with no worklist row, where the comparable TOKEN case gets one from `apply.sh`
 
-**LANDED (v<version>, verified <sha>).** Both occurrences route to the worklist from `apply.sh`,
+**LANDED (v0.611.0, verified in the follow-up commit).** Both occurrences route to the worklist from `apply.sh`,
 inside the `FINISH=0` span: a `WORKLIST retired-layer-passage` row emitted once per run when
 `retired-layer-passage.sh` returns rows, and a `WORKLIST artifact-derivations` row that NAMES
 `validate-artifact-derivations.sh` rather than re-deriving staleness. Driven on a hit tree and a

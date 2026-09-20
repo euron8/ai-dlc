@@ -15,6 +15,45 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.611.0] - 2026-09-20
+
+### a detector whose findings reached a report and no worklist
+
+#### PC-S312-DERIVATION-FENCES-STRANDED-CORE-RELOCATION-WITH-NO-WORKLIST-ROW
+
+`retired-layer-passage.sh` detects a consumer layer file still carrying a rulebook line core
+had at `base` and no longer has at `theirs`. Its rows reached `emit-report.sh`'s report section
+and nothing else, while the sibling retired-TOKEN case has been a worklist row from `apply.sh`
+since the `*CLASSIFY*` arm gained its `retired-tokens.sh` call. Derived at the tip: 1 worklist
+row for the token class, 0 for the passage class, against an impossible-token control of 0 in
+the same file. The whole remedy shipped as prose in `SKILL.md`, in the one place this repo has
+already proved a prose-only step gets skipped. Measured cost on the reference consumer: 27
+rows on one pull, correctly reported, with nothing mechanical offered.
+
+Both classes now route to the worklist from `apply.sh`. The row for the PASSAGE class says
+RE-POINT rather than delete: measured on a re-siting release, 27 of 27 rows cited a line still
+present in core at `theirs` — it had MOVED, not died — against the detector's own
+measured-true pair where 35 of 35 were genuinely gone.
+
+The second occurrence is a consumer ARTIFACT `derived` fence executing a core path at
+validation time. **The obvious predicate for it is refuted and is not what shipped.** A check
+keyed on a path present at `base` and absent at `theirs` scores ZERO on its own motivating
+case: the filing's range deletes 0 `core/` paths, against a control range returning real
+deletions, because the relocation was a move INSIDE files that exist at both ends. That is a
+check that cannot fire, and it reads exactly like one that passed. `validate-artifact-
+derivations.sh` already answers the question by RUNNING the command, so the remedy is a
+routing row naming it rather than a second detector — gated on the declaration, not the
+renderer, for the false positive `transient_ignore_row` already records.
+
+Both rows sit inside the `FINISH=0` span, so `--finish` is the exit that clears them. A row
+sited beside the trailing per-run rows would be re-derived by the finisher before
+`write_stamp`, on a tree whose layer files the apply never rewrites, and neither class has an
+acknowledgement channel — the stamp would never be written and the pre-push applying guard
+would refuse every push with no exit.
+
+`apply.sh` is a bootstrapping file: the consumer's INSTALLED copy runs the pull that carries
+this repair, so these rows first appear on the pull AFTER the one delivering them.
+
 ## [0.610.0] - 2026-09-20
 
 ### two checks that could not tell a right answer from a wrong one, and neither knew it
