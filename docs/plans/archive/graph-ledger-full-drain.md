@@ -13414,3 +13414,117 @@ so no block written before it changes verdict.
    **A sentence in this file saying the residue is zero is a snapshot of a file someone else is
    holding open. Run the sweep; never read that sentence for an answer.**
 
+   **BATCH 23 REPLACED ITS RECEIPT THREE TIMES AND EACH ROUND WAS WRONG IN A DIFFERENT
+   DIRECTION.** Take these three before you write a line:
+
+   - **SEED THE EXEMPTIONS, OR THE EXEMPTION HALF IS UNTESTED.** Round two drove the real program
+     and still accepted five wrong implementations, because its seed held no exempt case and no
+     untouched case. Four of the five WEDGED the subject on correct input, which is worse than the
+     defect being fixed. For every exemption your fix has, the seed needs an instance of it.
+   - **MAKE THE FAILING RUN THE SAME SIZE AS THE CONTROL RUN.** An implementation that reads
+     nothing and keys on a COUNT passes any receipt whose bad input is smaller than its good one.
+   - **A LITERAL PHRASE ARM IS TOO STRICT AND TOO WEAK AT ONCE.** Round three's `grep -qF` on an
+     uppercase sentence rejected the same fix merely lowercased — reporting a shipped fix as
+     unshipped — and was satisfied by an HTML comment carrying the phrase over unfixed prose. If
+     you must key on prose, make it case-insensitive and reject a match inside a comment, and write
+     down in the entry that a rewrite still scores STILL-LIVE.
+
+   **Batch 22 shipped a receipt that did BOTH and needed three more rounds after the merge.** Its
+   three holes, in the order they surfaced, each invisible until the previous one closed:
+
+   - **A near-miss in a SEPARATE run is an ADJACENT input.** A second clean tree can only ask
+     *does the arm fire at all*, never *does it fire on the RIGHT paths*, because in the run where
+     the arm fires there is nothing present it should stay quiet about. Put the negative BESIDE
+     the offender, in the same run.
+   - **Never key on a token nothing BINDS.** It keyed on a status word carried by no
+     `docs/vocabulary-index.md` entry and no `# vocabulary:` arm, so an author who spelled it
+     differently — one did, independently — scored as still-live. Key on BEHAVIOUR: the shape of
+     the row and a basename, not a word. Check whether your token is bound before keying on it.
+   - **The seed must reach the point where a fix could be SITED.** It stopped at the first of four
+     early exits, so arm PLACEMENT decided the verdict. Add a control asserting the run got that
+     deep.
+
+   Three rounds of scoring is not evidence of a good receipt. It is evidence the inputs were all
+   the same SHAPE.
+
+   **THE RESUME BLOCK ABOVE IS THE CURRENT RECORD OF THE GAP.** Do not run the pull, do not
+   re-litigate it, and do not treat the gap as a reason to reorder this batch.
+
+   **REHEARSE BEFORE WRITING ANY RUNBOOK FIGURE, AND TREAT THE REHEARSAL AS A DETECTOR.**
+   `v0.429.0`'s rehearsal caught a `WORKLIST` row that would have told every consumer to register
+   a sourced library as a hook. That is the only consumer-facing defect this program has caught
+   before delivery, and nothing inside this repo could have found it.
+
+   **THE RECURRENCE NOTE IS STILL OPEN AND STILL NOT YOURS UNLESS THE OPERATOR SAYS SO.** Sprint
+   306 appended a `RECURRED` block to `PC-S305-DISPATCH-GUARD-SED-PATTERN-BOLD-MISMATCH`,
+   recording that the defect blocked a live incident fix, that the consumer applied a SCHEMA-side
+   workaround the entry's own text says does not close it, and that the entry's `verify:` clause
+   is HOOK-side only and therefore **structurally cannot detect a schema-side close**. Read it;
+   take it only on a ruling.
+
+   **THE PC-BACKED COUNT IS NOT THE CORPUS.** Live entries citing a `PC-` id outnumber the corpus,
+   because some cite candidates already ARCHIVED upstream — closing those discharges something the
+   consumer closed itself. Derive the corpus with the join below rather than trusting the list:
+
+   ```
+   # /tmp/live.txt comes from `### Derive the state; do not trust the numbers below` -- BOTH record forms
+   awk '/^## BL-[0-9]+/{if(id!="")out(); id=$2; pcs=""}
+        match($0,/PC-[A-Z0-9][A-Z0-9-]+/){p=substr($0,RSTART,RLENGTH); if(index(pcs,p)==0) pcs=pcs (pcs?",":"") p}
+        END{if(id!="")out()} function out(){ if(pcs!="") printf "%s\t%s\n", id, pcs }' docs/backlog.md |
+   while IFS="$(printf '\t')" read -r id pcs; do
+     for p in $(printf '%s' "$pcs" | tr ',' ' '); do
+       grep -qx "$p" /tmp/live.txt && { printf '%s\t%s\n' "$id" "$p"; break; }
+     done
+   done
+   ```
+
+   **AN ENTRY SHOULD LEAVE THE PC-BACKED SET ONLY BY BEING CLOSED.** Derive the set from the join
+   at the top of this action rather than reading any name here; it is a snapshot of two files that
+   both move.
+
+   **THE SELECTION RULE IS PROVENANCE FIRST, THEN CONSEQUENCE — NOT READINESS.** Operator
+   ruling. "Readiest to close" is what pointed batch 13 at three entries with no consumer
+   provenance and no consumer surface, and it will do it again, because a session always finds
+   its own discoveries easiest to fix. Derive the corpus rather than trusting this list:
+
+   The join that derives it is the one at the top of this action — **run that one, not the
+   bare `awk` half of it.** The `awk` alone answers "which entries cite a `PC-` id", which is a
+   question about `docs/backlog.md` and not about the consumer. Piping it through `/tmp/live.txt`
+   is what makes it a measurement of the goal.
+
+   **`BL-095` through `BL-098` are DEFERRED, not rejected.** They are real, each carries a
+   candidate fix already measured against an empty false-positive set, and they are the
+   secondary goal the operator ranked BELOW this one. They are also all distribution-only —
+   `scripts/render-invariant-index.sh` and `scripts/render-vocabulary-index.sh` reach no
+   consumer. Take them when the PC-backed set is discharged, or when one of them blocks a
+   PC-backed fix.
+
+   **The recommendation does not excuse the re-derivation.** Run each candidate's receipt
+   directly and read the RAW exit code, then re-derive the entry's population rather than
+   believing it. Batch 12's own subject was filed with a receipt that closed on one field of
+   the five its entry enumerates, and only running it found that.
+
+   `BL-006` is NARROWED and still live, and it is the coherent alternative — but read its
+   receipt first: it is a CONJUNCTION over two corpora in two trees, and the consumer half is
+   not reachable from a distribution-side change. Taking it means taking the `docs/plans/`
+   half and saying so. `BL-093` is a per-file judgment rather than one fix and is NOT a batch
+   subject as it stands. `BL-082` and `BL-083` are still not one subsystem, so taking them
+   means saying which single thing you are closing. `BL-066` was REJECTED at v0.417.0 and
+   narrowed to its sibling claim, which `named_ambiguous()` still exhibits.
+
+   **Run every candidate's receipt directly and read the RAW exit code before you scope it.**
+   A `STILL-LIVE` row is not evidence the entry is live: receipts exiting **1** having measured
+   nothing outnumber the exit-9 ones and carry no hint at all. One did that for 16 releases while
+   reading as a genuine reproduction.
+
+   **Then re-derive the entry's population rather than believing it.** Measured across 64 entries:
+   entries WIDER than filed are the base case, not the exception, and citation drift is routine
+   and mostly not load-bearing.
+
+   **Ask what ELSE satisfies the receipt.** The standing rule is in
+   `.claude/rules/verification-discipline.md`, "a receipt that reads a RENDERED artifact is
+   closable by prose"; it is not restated here.
+
+   **And ask what the fix's own population EXCLUDES.** Batch 11's first cut answered a
+   one-way-blindness entry with an arm that was blind by file extension. The exclusion has to
+   be stated in the arm and it has to not be the defect itself.
