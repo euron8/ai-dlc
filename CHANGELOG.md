@@ -15,6 +15,54 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.618.0] - 2026-09-21
+
+### BL-286 — a `verify: manual` under a label that is not an entry id reported HAND-REVIEW, whose own disposition is an instruction to go and read something the row cannot name
+
+`ledger-reverify.sh` treats any `- **…**` bullet as an entry header, so a narrative closure record
+written in that shape is emitted as an entry. Where such a record declares `verify: manual` the row
+lands as `HAND-REVIEW`, and step 8 routes that status to *"adjudicate the entry body against
+theirs, then annotate"* — against a subject the row cannot name.
+
+The harm is the JOIN, and it is the only one of three candidate harms that survived being driven.
+The ENTRY column is the key an operator greps back into the ledger with, and this engine's own
+label rule truncates at the first em-dash and strips backticks: an id survives that transform, a
+prose sentence does not. Measured over the 102 rows emitted at the state the defect was filed
+against, asking of each label whether it greps back into the file it came from — **3** do not, all
+three prose-titled, against **99** that do. `emit-report.sh:515` is
+`$1=="HAND-REVIEW" ? "" : "  "$3`, so `HAND-REVIEW` is the one status whose DETAIL the report
+drops: the unusable key is the whole of what reaches the operator.
+
+**Two louder harm theories were measured and are FALSE**, and both are recorded because either
+would have justified a wider fix. The filing's own account — that the receipt is INHERITED from a
+neighbouring entry, which is what its id is named after — is refuted: every `manual` receipt under
+a prose bullet across five corpora sits INSIDE that bullet's own body span (entry 235 / receipt
+237 / span end 238; 601 / 614 / 617). Nothing is inherited. And *"the entry can never be
+archived"* is refuted by driving `ledger-rotate.sh --apply` on a prose-titled bullet and an
+id-keyed one annotated identically: **both** moved, **both** left the live file.
+
+So the fix is the STATUS, not the parser. A `manual` receipt under a label `ledger_entry_id()`
+cannot spell now emits `NEEDS-REVIEW unresolved:` naming the label as the defect, and the bullet
+grammar is byte-untouched — narrowing it drops real entries, and a trailing-space requirement
+already hid 43 of 63 bullet-form entries here once. The id test is asked through the shared `awk`
+rule rather than restated as a local `case`, because a narrower local spelling goes blind on the
+`_` and `.` forms that rule was widened for.
+
+False-positive set, enumerated over the tool's own population across five corpora: **2 / 1 / 1 /
+2**, every one a narrative record, a section container or an inventory line, and **ZERO** entries.
+Control in the same census: **341** id-keyed `manual` entries untouched. The wider predicate —
+*any* receipt under a non-id label — reports **43** including nine live `extensions/*-push.md`
+entries whose `sh` receipts run and produce real verdicts; it was measured, then rejected.
+
+Both directions probed with the sides asserted byte-different first: at filing state the non-id
+`HAND-REVIEW` rows go **2 → 0** while **90** id-keyed (status, label) pairs stay identical, diff
+control non-vacuous at 4; at consumer HEAD **1 → 0** across 47 identical pairs, control 2.
+`PC-S305-BARE-BOLD` keeps both its rows on both sides. Five mutants, each `cmp -s`-guarded, all
+killed — including one that mutates `lib.sh`, the file the closer actually resolves.
+
+**Ships alone.** `ledger-reverify.sh` is a bootstrapping file: the consumer's INSTALLED copy runs
+the pull that carries its own repair, so this fix cannot protect the pull delivering it.
+
 ## [0.617.0] - 2026-09-21
 
 ### BL-015 — an extension entry with no markdown heading is reachable by neither absorption join, and its only row is the one the report filters
