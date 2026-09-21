@@ -15,6 +15,153 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.617.0] - 2026-09-21
+
+### BL-015 — an extension entry with no markdown heading is reachable by neither absorption join, and its only row is the one the report filters
+
+Both absorption arms in `layer-drift.sh` key on a HEADING — the numbered one on `anchors_of_file`,
+the unnumbered one on `unnumbered_titles_of_file`. An entry whose body carries no heading at all
+harvests empty from both, the unnumbered arm's guard is false, there is no `else`, and the only row
+such an entry can produce is `EXTENSION-OK` — which `emit-report.sh` filters out of the
+operator-facing section. So an entry no duplication join has ever been able to read arrived as
+silence indistinguishable from a clean check. New status `EXTENSION-NO-HEADINGS`, clause `LC-E20`, at
+level WARN.
+
+**The guard is "no heading at all", never "no UNNUMBERED heading", and the difference is the whole
+false-positive set.** `ext_titles` is the file's headings minus the ones the numbered arm owns, so an
+entry built entirely out of numbered headings harvests empty there and IS fully checked. Measured
+with the shipping functions over the reference consumer's **40** registered entries: the naive guard
+reports **14** and the shipped one **4**, so the narrowing is a 10-entry false-positive set against
+zero. Control in the same measurement: `anchors_of_file` against core's `gate-validation.md` yields
+**42**, so the harvesters work and the 4 is an absence rather than a broken probe.
+
+**WARN and never ADJUDICATED, deliberately.** An ADJUDICATED code creates a register duty — a verdict
+keyed on a subject digest, recorded before `apply` proceeds — and this row's entire content is that
+no mechanism looked at the entry. There is no reading for a verdict to be a record of.
+
+The entry's figures and citations were stale in every position and are re-derived here: the harvester
+and its guard had moved, the emit census counted one of the file's two emitters and read **21 / 14**
+where both emitters give **24 / 16**, the consumer population was taken through a flat `*.md` glob
+that matches one README and no entry at all, and `checks/gate-validation-push.md` carries **6**
+headings rather than the 10 filed. Its receipt is replaced: an adversary measured the previous
+predicate — any row naming the subject whose status is neither of two named ones — ACCEPTING three of
+four regressions, including reusing an existing status and an unconditional row on every entry. The
+replacement derives the adjudicated set, the report's filtered set, and the corpus's
+already-owned statuses from the shipping files, and points its deny grammar at a status the run
+really emits before trusting that grammar's zero.
+
+Carries the reference consumer's `PC-S316-ABSORPTION-DETECTOR-JOINS-ONLY-ON-NUMBERED-ANCHORS`, which
+that consumer has ARCHIVED — so no absorption row can be produced for it and this release is
+provenance for the filing rather than a close signal on the consumer side.
+
+### BL-016 — `retired-layer-contract.sh` could not hold a PATH in either vocabulary, so a layer file citing a retired rulebook file was claimed by nothing
+
+`shapes_of()` extracts labelled directives and `tokens_of()` extracts `{token}` placeholders, so a
+rulebook file retired between base and theirs changes NEITHER set, the retired set comes back empty,
+and the run took its early exit having opened no layer file. A layer file citing a file core no
+longer ships is the same failure as one quoting a retired directive — the entry sends a teammate to a
+file that is gone.
+
+The new arm is the SAME subtraction the detector already does, taken over the rulebook FILE SET
+instead of over the shapes inside it; nothing new is read and nothing is hand-listed. The early exit
+is now conditional on BOTH subtractions, because leaving it keyed on the shape set alone would have
+built the path arm behind a branch that returns before reaching it. All three spellings are matched —
+an entry writes `hooks: steps/retro.md` while its prose writes the consumer path, and matching one
+form scores 1 of 22 citable paths as reachable and reads as coverage. Matching is literal and
+whole-token rather than a regex built from the path, which would accuse `retro-old.md` for
+`retro.md`.
+
+**The site is this detector and not W11.** W11/LC-R4 holds a consumer's prescribed ARTIFACT paths to
+core's grammar over four hand-declared scan roots; its question is whether a path CONFORMS, where
+this one's is whether a path was RETIRED between two refs — which needs both refs, and W11 sees one
+tree.
+
+**The second subject ships as prose with no enforcer, and its close is a human read.** The header's
+limits section and the run-time `LIMIT` string named an invented shape and a prose paraphrase and did
+not tell the operator that a retired path was outside the vocabulary, so that zero read as covered.
+Both are widened. Neither is checked by anything: the limits phrase appears in **5** detectors in
+that directory and no arm validates the content of any of them, against a control in the same sweep
+where the identical grammar over `scripts/`, `core/scripts/` and `core/fixtures/` returns **1**
+unrelated comment — so the grammar can spell the phrase outside the detector directory and the
+absence of a validator is real. The backlog entry says so rather than implying the arm covers it.
+
+Three stale line citations in the entry are re-derived; every symbol they named was present, which is
+the shape that survives review. Its receipt is replaced: the previous predicate was a row COUNT,
+satisfied by any widening of the directive vocabulary with no path arm in existence. The replacement
+requires the row to NAME the retired path and carries two seeded controls — a layer file citing
+nothing retired, and one citing only a near-miss neighbour.
+
+Carries the reference consumer's
+`PC-S314-NO-DETECTOR-CLAIMS-A-LAYER-FILE-CITING-A-PATH-THE-PULL-JUST-RETIRED`, which that consumer
+has ARCHIVED, so this release is provenance rather than a close signal there.
+
+### BL-284 — the handoff entry marker armed on a Read the recovery machinery itself compelled
+
+`ai-dlc-handoff-entry.sh` armed on ANY `Read` matching `*/steps/handoff.md`, unconditionally.
+`ai-dlc-recover.sh` MANDATES `Read <step file>` as the second tool call after every compaction and
+points that mandate at `handoff.md` whenever a handoff is already pending, and
+`ai-dlc-recover-gate.sh` then DENIES any other call until the Read happens. So a session that merely
+compacted while paused was compelled to read the file, and the hook wrote the entry marker on the
+strength of a Read the machinery itself forced.
+
+The marker means "this session is INSIDE the handoff procedure", and it is key 1 of
+`ai_dlc_handoff_pending` — the key that arms the Stop guard and reroutes the next compaction's
+mandate. It is self-clearing only in the sense that a COMPLETING handoff deletes it at step 5; a
+session that never began one has nothing to run step 5, so the marker persists and the guard blocks a
+Stop over a procedure never owed. This is the same defect one key over from the key-2 lifecycle work,
+which touched neither of these two files.
+
+**The fix is a suppression on ONE distinguishable state, not a narrowing of the match**, because
+recovery NEEDS that Read. The discriminator is `.recover-fired`, the gate's own in-flight record,
+read as key=value and never sourced: suppress only when a recovery is in flight AND the file being
+read is the one that recovery named. Everything else still arms, including a Read of `handoff.md`
+during a recovery whose mandate pointed at a different step file, which is a lead opening the
+procedure of its own accord. Every unreadable or ambiguous input falls through and writes the marker:
+a marker written wrongly is a Stop guard the lead clears with `rm`, where a marker NOT written while
+the lead really is mid-handoff loses the routing this file exists to provide.
+
+Filed as BL-284 with a receipt that drives the shipping hook over four seeds. Two seeds are required
+and one cannot do it — a fix that simply stops arming is byte-identical to the correct one on the
+recovery seed and separates only on the genuine-initiation seed, which is therefore a predicate
+conjunct rather than a precondition.
+
+Carries the reference consumer's
+`PC-S312-RECOVERY-MANDATED-HANDOFF-READ-REARMS-ENTRY-MARKER-AFTER-EVERY-COMPACTION`, which is LIVE
+there — so this release is a real close signal for that candidate, on the pull that carries this
+hook.
+
+### BL-285 — the `reconcile-emit-report` fixture convicted the machinery of a failure in the world the fixture built for it
+
+Step 2 of the self-update treats a RED fixture as evidence the machinery slice is broken and blocks a
+real pull on that reading, so a red cell here is a conviction. Reproduced with three concurrent
+copies of the unit on one tree: 1 of 3 red, 2 green, same commit. Two assertions failed, and the
+second named the renderer in the fixture's own voice when the renderer was never involved.
+
+Every world this unit builds — move a branch, write a probe file, commit — ran through a helper that
+swallowed both streams AND the exit status: **8** world-mutation sites, **0** checking that the change
+they intended landed. A world that did not get built does not make the arm downstream SKIP; it makes
+that arm read a tree one commit short of the one it assumes, and report on `emit-report.sh`.
+
+`broken()` is a verdict the fixture could not previously spell. It prints, fails the unit, and says
+in the line itself that this is not evidence about the machinery — the one fact a step 2 reading the
+log needs in order not to convict a correct slice. NOT a retry, which hides an unreliable
+construction, and NOT a skip, which stands the arm down for a reason indistinguishable from the
+machinery being fine. Two helpers, because exit status is not the whole answer: `git commit` with
+nothing staged exits 1 while `git checkout` of a ref already at HEAD exits 0 having done nothing, so
+`world_moved` DERIVES the post-condition from the repository against a sha captured BEFORE the
+mutation rather than a value the same block wrote.
+
+Filed as BL-285, re-derived as distinct from BL-283 rather than assumed: that entry's mechanism is a
+leak counter globbing a fixed prefix in a shared `TMPDIR`, and the grammar for it scores **0** over
+this fixture against a control of **4** on `ledger-reverify/run.sh`. Its receipt is a differential
+whose two sides are `cmp`-asserted to differ before either is read, and whose unforced side must emit
+zero world-construction-broken lines while still asserting — so neither an unconditional verdict nor
+a verdict that downgraded the red to a skip can close it.
+
+Carries the reference consumer's
+`PC-S312-E6-KILL-SET-SCORES-NONDETERMINISTICALLY-AND-CONVICTS-A-CLEAN-SLICE`, which is LIVE there —
+so this release is a real close signal for that candidate, on the pull that carries this fixture.
+
 ## [0.616.0] - 2026-09-20
 
 ### BL-014 — the re-adoption dossier read a multi-line plain `reason:` as its first line, and clipped a long one with nothing saying so
