@@ -13528,3 +13528,55 @@ so no block written before it changes verdict.
    **And ask what the fix's own population EXCLUDES.** Batch 11's first cut answered a
    one-way-blindness entry with an arm that was blind by file extension. The exclusion has to
    be stated in the arm and it has to not be the defect itself.
+## What the pull produced — the four filings, and the one lesson behind all of them
+
+`BL-066`–`BL-069` are in `docs/backlog.md` with full derivations. Summarised only so a fresh session
+knows what exists before re-deriving it:
+
+| id | defect | consumer id |
+|---|---|---|
+| `BL-066` | `named_absorbed()` joins on the OLDEST commit whose MESSAGE mentions an id, and feeds its `VERSION` into a paste-ready PERMANENT annotation. Naming is not absorbing. **This plan CAUSED the worst of it** — the rule requiring every closed id in the release commit message is what makes the join resolve there. | `PC-S334-NAMED-ABSORBED-JOINS-ON-THE-OLDEST-MESSAGE-MENTION` |
+| `BL-067` | `closes_when` has a schema, a producer, a printer and **no consumer**. Six layer debts came due the instant graph ran the command they named, and nothing announced it. | `PC-S334-CLOSES-WHEN-NAMES-A-COMMAND-AND-NOTHING-JOINS-THE-TWO` |
+| `BL-068` | `ledger-rotate.sh:38-41` states a byte-identical invariant that its own prescribed workflow breaks, and the fixture asserting it **cannot construct** the row that would break it. | `PC-S334-ROTATE-ACCEPTANCE-TEST-FALSE-FAILS-ON-THE-WORKFLOW-IT-DOCUMENTS` |
+| `BL-069` | `audit-layer-debt.sh` files its own discharge rows as undeclared debt, so the metric moves the wrong way in response to the action it exists to encourage. | `PC-S334-AUDIT-LAYER-DEBT-FLAGS-ITS-OWN-DISCHARGE-ROWS-AS-UNDECLARED-DEBT` |
+
+### THE FINDING THAT OUTRANKS ALL FOUR, AND THE REASON THIS SECTION EXISTS
+
+**Six independent instances of ONE class in a single pull, split evenly between two parties who were
+both actively watching for it.** A path a receipt READS versus one it MENTIONS. A grep hit counted
+as a call site. A regex truncating placeholder paths. A report's own summary sentence *"24
+HAND-REVIEW"* counted as a data row. A `v`-anchored bucket labelled "nothing to compare" that
+contained the largest disagreement in the set. And a receipt guard testing that extracted text
+*contained* the string `prefix_entry_count` — which mangled, unparseable text still does — so `eval`
+failed, the function was never defined, both counts came back empty, and `[ "" = "" ]` returned 0.
+
+**That last one was in the receipt for the entry documenting the pattern, written in the same hour.**
+
+**Six is not a discipline problem, and treating it as one produces exactly the wrong remedy.** The
+instinct after six is to read more carefully — and reading is the faculty that failed all six times.
+Every instance was a TEXT-SHAPED QUESTION ASKED ABOUT A PROGRAM: does this file mention X, does this
+line contain Y, does this extraction look like a function. Text-shaped questions cannot separate a
+subject from a reference to it.
+
+**Nothing about review caught any of them.** Not the brief, which I reviewed before shipping. Not
+the figures, which I published three times. Not the version walk, which I reviewed *while writing
+its own control*. Reviewing a rendering establishes only that it is internally consistent with
+itself, which every one of these was. **All six fell to recomputing from source and comparing two
+independently derived values.**
+
+### THE RULE THIS EARNED, and it is the one to carry forward
+
+**A control must be run against the input that DISCRIMINATES, and asserted to discriminate on it,
+before its result is read.**
+
+Every bad control in this pull passed on an input ADJACENT to the one that mattered — a summary line
+beside the data rows, a release commit one step ahead of the start point, two temp paths differing
+only in a header, a fixture corpus that could not construct the row type under test.
+
+`ARM 5` of `render-brief.sh` is the shape that follows from it, and it is portable: draw the probe
+FROM THE CORPUS rather than hand-picking one, so it survives the corpus moving; compute both
+candidate semantics; and **REFUSE UNLESS THEY DIFFER** before reading either. It does not ask anyone
+to read more carefully. It makes the instrument refuse when its two inputs cannot disagree.
+
+**A number was wrong three times and an artifact twice, and every single correction came from a
+party re-deriving rather than accepting.** That is the operating lesson of this entire program.
