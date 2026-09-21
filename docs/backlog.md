@@ -4276,3 +4276,128 @@ so the row appears only on a pull carrying this run.sh.
 **Receipt engine:** `scripts/backlog-reverify.sh` — **exit 0 = the fix is present -> CLOSE-CANDIDATE**. Exits are 0 or 1 only; a third code would be mapped to STILL-LIVE and read as a live defect. Do NOT carry this predicate into a consumer's push-candidate ledger, whose `ledger-reverify.sh` reads exit 0 as STILL REPRODUCES.
 
 verify: sh export LC_ALL=C; F=core/fixtures/reconcile-emit-report/run.sh; S=core/fixtures/reconcile-emit-report/seed.sh; [ -r "$F" ] && [ -r "$S" ] || { echo "PRECONDITION: the fixture moved and nothing was measured"; exit 1; }; W=$(mktemp -d) || { echo "PRECONDITION: no scratch"; exit 1; }; for side in a b; do mkdir -p "$W/$side/core" || { echo "PRECONDITION: no scratch"; exit 1; }; tar -cf - core/fixtures core/skills core/schemas 2>/dev/null | tar -xf - -C "$W/$side" || { echo "PRECONDITION: tree copy"; exit 1; }; done; FA="$W/a/$F"; FB="$W/b/$F"; [ -r "$FA" ] && [ -r "$FB" ] || { echo "PRECONDITION: tree copy incomplete"; exit 1; }; perl -0777 -i -pe 's/(commit -m "docs-only commit)/commit --no-such-flag -m "docs-only commit/' "$FB" || { echo "PRECONDITION: forcing failed"; exit 1; }; if cmp -s "$FA" "$FB"; then echo "PRECONDITION: the forcing matched nothing, so both runs read the same program"; exit 1; fi; OA="$W/oa"; OB="$W/ob"; ( cd "$W/a" && bash "$F" ) > "$OA" 2>&1; RA=$?; ( cd "$W/b" && bash "$F" ) > "$OB" 2>&1; RB=$?; PAT='world construction, NOT a machinery finding'; NA=$(awk -v p="$PAT" 'index($0,p)>0 && /^[[:space:]]*FAIL/' "$OA" | grep -c .) || NA=0; NB=$(awk -v p="$PAT" 'index($0,p)>0 && /^[[:space:]]*FAIL/' "$OB" | grep -c .) || NB=0; NS=$(grep -cF -- "$PAT" "$OB") || NS=0; CA=$(grep -c '  ok    ' "$OA") || CA=0; echo "unforced: rc=$RA fail_verdict_lines=$NA ok_arms=$CA | forced: rc=$RB fail_verdict_lines=$NB any_verdict_lines=$NS"; [ "$CA" -ge 1 ] || { echo "PRECONDITION: the unforced unit asserted nothing"; exit 1; }; [ "$NA" -eq 0 ] && [ "$NB" -ge 1 ] && [ "$NS" -eq "$NB" ] && [ "$RB" -ne 0 ]
+
+---
+
+## BL-286 — a `verify: manual` under a label that is not an entry id reported HAND-REVIEW, whose own disposition is an instruction to go and read something the row cannot name
+
+**DEFECT.** Filed by the reference consumer 2026-09-20 and fixed in this release. Its own
+reproduction re-run before anything was changed, with a control in the same invocation: against
+the ledger at the state it was filed against, the engine emitted **2** `HAND-REVIEW` rows whose
+ENTRY field is not id-shaped, against a control of **19** id-shaped `HAND-REVIEW` rows and
+**103** rows total. Against the same ledger at consumer HEAD the figure is **1** and the control
+**13**, because one offender was edited out between filing and now — so the filed figure is
+correct for the tree it names and is not the figure today.
+
+**THE HARM IS THE JOIN, AND IT IS THE ONLY ONE OF THREE CANDIDATE HARMS THAT SURVIVED BEING
+DRIVEN.** `SKILL.md` step 8 routes `HAND-REVIEW` to *"adjudicate the entry body against theirs,
+then annotate"*. The ENTRY column is the key an operator greps back into the ledger with, and
+`ledger-reverify.sh`'s label rule truncates at the first em-dash and strips backticks: an id
+survives that transform, a prose sentence does not. Measured over the 102 emitted rows at filing
+state, asking of each label whether it greps back into the file it came from — **3** do not, all
+three prose-titled, against **99** that do. And `emit-report.sh:515` is
+`$1=="HAND-REVIEW" ? "" : "  "$3`, so `HAND-REVIEW` is the one status whose DETAIL the report
+drops: the unusable key is the whole of what reaches the operator.
+
+**TWO LOUDER HARM THEORIES WERE MEASURED AND ARE FALSE.** Both are recorded because both read as
+obviously right, and either would have justified a wider fix.
+
+- **"the receipt is INHERITED from a neighbouring entry"** — the filing's own account, and the
+  reason its id ends `AND-INHERITS-A-NEIGHBOUR-S-VERIFY-MANUAL`. REFUTED. Every `manual` receipt
+  under a prose bullet across five corpora sits INSIDE that bullet's own body span, between it
+  and the next entry-shaped line: entry line 235 / receipt 237 / span end 238, and 601 / 614 /
+  617, with the same shape in the consumer archive and in this repo's own backlog. Nothing is
+  inherited. The receipts were authored for the bullets that carry them, and each reads as a
+  deliberate declaration — *"container heading for already-CLOSED sub-entries; names no upstream
+  artifact"*.
+- **"the entry can never be archived, so it is resident forever"** — REFUTED by driving
+  `ledger-rotate.sh --apply` on a two-entry probe, a prose-titled bullet and an id-keyed one
+  annotated identically: **both** moved to the archive, **both** left the live file. Rotation
+  reads `ledger_archive_awk()`, which keys on the annotation and not on the label.
+
+**THE FIX IS THE STATUS, NOT THE PARSER**, which is the third time `ledger-reverify.sh` has
+reached that answer — `ENTRY-SWALLOWED`'s header and the mid-line-receipt pass both record making
+the same trade for the same reason. A `manual` receipt under a label `ledger_entry_id()` cannot
+spell now emits `NEEDS-REVIEW unresolved:` naming the LABEL as the defect. The bullet grammar is
+byte-untouched.
+
+**THE ID TEST IS ASKED THROUGH `ledger_entry_id()` IN awk, NOT RESTATED AS A SHELL `case`.** A
+local restatement is the drift `lib.sh`'s own header records happening inside one release, and a
+narrower one goes blind on the two forms that rule was widened for: `_` and `.` in an id
+(`PC-S330-…-GIT_DIR-…`, `PC-S300-…-AT-0.242.0`), both real consumer entries, both scored as
+annotations by the old `^[A-Z0-9-]+$` spelling.
+
+**FALSE-POSITIVE SET, MEASURED OVER THE TOOL'S OWN POPULATION AND ENUMERATED RATHER THAN
+ASSERTED.** The population is OPEN entries carrying a receipt, with the closure rule applied
+exactly as the extraction applies it, across the consumer's live ledger at filing state and at
+HEAD, its archive, and both of this repo's backlog files. Non-id labels declaring `manual`: **2**
+at filing state, **1** today, **1** in the consumer archive, **2** in this backlog. Every one is a
+narrative record, a section container or an inventory line; **ZERO** are entries. Control in the
+same census: **341** id-keyed `manual` entries across the same corpora, none of which this
+reaches.
+
+**SCOPED TO `manual` DELIBERATELY, AND THE WIDER PREDICATE WAS RUN BEFORE IT WAS REJECTED.** *Any
+receipt under a non-id label* reports **43** across those corpora, including nine
+`extensions/*-push.md` bullets whose `sh` receipts run and produce real verdicts — prose-titled by
+convention and not defective. A mechanical verb RUNS and its verdict stands on the receipt's own
+evidence whatever the label says; `manual` is the one verb whose entire output IS the instruction
+to go and read the entry, so it is the one that needs a findable entry.
+
+**WHAT THIS DOES NOT REACH, STATED BECAUSE IT READS AS THE SAME SUBJECT.** A bold span at COLUMN
+ZERO with no list marker — `**<id>**` — is not entry-shaped under `ledger_entry_shape()` at all
+(`^- \*\*` or `^#{2,6}[ \t]`), so it emits no row of any kind and never reaches this dispatch.
+That is `PC-S305-BARE-BOLD-ENTRY-IS-INVISIBLE-TO-EVERY-REVERIFY`, a separate live defect this fix
+neither causes nor repairs. Measured across the four real corpora: **3** column-zero occurrences,
+all invisible, against a control of **5** dash-bullet ids in the live ledger alone that are seen.
+The fixture seeds the dash-bullet bare-bold form as a near-miss and says in its own body why the
+column-zero form is not seeded.
+
+**THIS IS A BOOTSTRAPPING FILE AND THE FIX CANNOT PROTECT THE PULL THAT DELIVERS IT.** A consumer
+runs its OWN installed `ledger-reverify.sh`; the run that carries this repair is classified by
+the engine being replaced. The first pull after this one is the first that reports the new row.
+
+**Not measured, and stated rather than hidden:** whether any operator has actually acted on one
+of these rows and gone looking for an entry that does not exist. The consumer's committed gate
+logs and reconcile reports would answer it — the data is reachable, it was not taken.
+
+verify: sh set -e; E=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; L=core/skills/ai-dlc-update/reconcile/lib.sh; F=core/fixtures/ledger-reverify/run.sh; S=core/fixtures/ledger-reverify/seed.sh; for f in "$E" "$L" "$F" "$S"; do [ -r "$f" ] || exit 9; done; G="$(LC_ALL=C grep -c 'function ledger_entry_id(label)' "$L")" || G=0; [ "$G" -eq 1 ] || exit 9; B="$(LC_ALL=C grep -c 'if (l ~ /\^- \\\*\\\*/)           sh = "bullet"' "$L")" || B=0; [ "$B" -eq 1 ] || exit 9; W=$(mktemp -d) || exit 9; trap 'rm -rf "$W"' EXIT; printf '%s\n' '# L' '' '- **PC-BL286-CONTROL-ID-KEYED-MANUAL**' '  body' '  verify: manual' '' '- **A narrative record written as a bullet.** body' '  verify: manual record' '' '- **`a-tool.sh` -> RETIRED (no stock equivalent)** body' '  verify: manual record' '' '- **A prose entry with a mechanical receipt.** body' '  verify: sh exit 0' > "$W/led.md"; O="$(bash "$E" . HEAD~1 . HEAD "$W/led.md" 2>/dev/null)" || true; [ -n "$O" ] || exit 9; C="$(printf '%s\n' "$O" | LC_ALL=C awk -F'\t' '$1=="HAND-REVIEW" && $2 ~ /^PC-BL286-CONTROL/{c++} END{print c+0}')"; [ "$C" -eq 1 ] || exit 9; M="$(printf '%s\n' "$O" | LC_ALL=C awk -F'\t' '$1=="STILL-LIVE" && $2 ~ /mechanical receipt/{c++} END{print c+0}')"; [ "$M" -eq 1 ] || exit 9; N="$(printf '%s\n' "$O" | LC_ALL=C awk -F'\t' '$1=="NEEDS-REVIEW" && $3 ~ /not an entry id/{c++} END{print c+0}')"; H="$(printf '%s\n' "$O" | LC_ALL=C awk -F'\t' '$1=="HAND-REVIEW" && $2 !~ /^(PC|BL)-/{c++} END{print c+0}')"; echo "ctl_id_manual=$C ctl_mech=$M nonid_needsreview=$N nonid_handreview=$H"; [ "$N" -eq 2 ] && [ "$H" -eq 0 ] || exit 1; exit 0
+
+<!-- Receipt notes, and the question is what ELSE satisfies this.
+     IT DRIVES THE ENGINE, it does not grep it. A lexical receipt keyed on the new emit line is
+     closed by a comment quoting it, and this file's own prose about the fix would close it.
+     The two `grep -c` arms above are PRECONDITIONS exiting 9, not the verdict: they establish
+     that the shared id rule is still single-homed in lib.sh and that the bullet grammar has NOT
+     been narrowed, so a `1` verdict cannot be bought by deleting either.
+
+     TWO OFFENDERS OF DIFFERENT SPELLINGS, and the count is asserted as 2 rather than >=1. One
+     opens with a capitalised sentence and ends in a period; the other opens with an inline code
+     span and an arrow and ends in NO period. A fix keyed on the surface form rather than on
+     `ledger_entry_id()` closes on one and leaves the other, and `-eq 2` is what refuses it.
+
+     TWO CONTROLS IN THE SAME INVOCATION, both PRESENCE-shaped, so an engine emitting nothing
+     fails rather than passing: an id-keyed `manual` entry must still read HAND-REVIEW, and a
+     PROSE-titled entry carrying a MECHANICAL receipt must still read STILL-LIVE. The second is
+     what refuses the widened predicate — it reports 43 rows across the real corpora, nine of
+     them live extension entries whose receipts run.
+
+     SCORED AGAINST THE CORRECT FIX AND THREE WRONG ONES, all four built as full copies and run,
+     each edit guarded by `cmp -s` so a mutation that did not apply is reported rather than read
+     as a survival. Exit codes are the MEASURED ones, not the intended ones:
+       correct fix (shipped)                                   -> 0  CLOSES
+       no fix at all (the pre-change engine)                   -> 1  nonid_needsreview=0, handreview=2
+       narrow `- **` to id-only in lib.sh                      -> 9  precondition B: grammar narrowed
+       widen past `manual` to every verb                       -> 9  ctl_mech lost (STILL-LIVE gone)
+     The last two exit 9 rather than 1 and that is the honest reading: 9 is this receipt's
+     PRECONDITION-UNMET code, and in both cases the precondition is exactly the property the wrong
+     fix broke. It is a refusal either way — neither closes — but a reader scoring a fifth
+     implementation should not expect 1.
+     A fourth, a locally-restated `^[A-Z0-9-]+$` id test, is NOT separated by this receipt — its
+     offenders are still caught, and the input that discriminates it is an id carrying `.` or `_`,
+     which this receipt's tiny ledger does not hold. `core/fixtures/ledger-reverify/run.sh` carries
+     that case as `PC-FIXTURE-DOTTED-0.242.0-AND-UNDER_SCORE-MANUAL` and the mutant
+     `mutation-nonid-local-idshape` kills it there. Stated rather than left as a silent gap: the
+     FIXTURE is the stronger instrument for this entry and the receipt is the portable one.
+
+     RUN FROM THE REPO ROOT, against a seeded ledger under `mktemp` and never the real corpus.
+     `HEAD~1`/`HEAD` are passed only because the engine requires two refs; no arm here reads
+     either, so the verdict does not move with history. -->
