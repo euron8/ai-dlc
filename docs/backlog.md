@@ -3978,96 +3978,133 @@ closed by a consumer session and has no distribution-side predicate.
 verify: manual — the subject is a consumer-owned file this repo must not write, and no
 distribution-side predicate can observe it.
 
-## BL-280 — the self-update DEFER path writes an approval record that no step claims, and the loss it predicts has not occurred
+## BL-280 — the self-update DEFER path writes an approval record that no step claims, and the operator has been committing it by hand
+
+<br>**LANDED (v0.615.0, verified <SHA>).**
 
 **NOTE.** Filed at batch 138 from the reference consumer's push-candidate ledger, where it is
 `PC-S345-DEFER-PATH-NAMES-NO-HOME-FOR-THE-GATE-RECORD-IT-JUST-WROTE` (consumer-filed 2026-09-17,
 during its own `0.581.0 -> 0.593.0` apply, on the path that actually ran). Filed rather than fixed:
-the subject is `core/skills/ai-dlc-update/SKILL.md`, a bootstrapping file, so it ships ALONE and is
-a later batch's subject. **Both halves below are measured, and they point in opposite directions.**
+the subject is `core/skills/ai-dlc-update/SKILL.md`, a bootstrapping file, so it ships ALONE.
 
-**THE SUBJECT REPRODUCES AT THIS TIP.** `reconcile/self-update-gate.sh` writes
+**THE SUBJECT REPRODUCED AT FILING AND AT THE FIX'S BASE.** `reconcile/self-update-gate.sh` writes
 `_bmad-output/ai-dlc-update/self-update-gate-<ts>.md` on EVERY run, DEFER included, and announces
-it on stderr as `record: <path>` (`self-update-gate.sh:435`, with the `# verdict:`/`# rows:`
-trailer appended at `:317`). On the OK path `SKILL.md:435` calls the gate record and the fixture
-log "THE APPROVAL ARTIFACT FOR THIS AUTONOMOUS CYCLE ... AND IT IS THE ONLY ONE" and instructs
-**"Commit BOTH files in the self-update commit."** On the DEFER path nothing names it. Derived
-twice independently, by the lead and by a contract adversary, all four figures agreeing:
+it on stderr as `record: <path>`. On the OK path `SKILL.md:440` calls the gate record and the
+fixture log "THE APPROVAL ARTIFACT FOR THIS AUTONOMOUS CYCLE ... AND IT IS THE ONLY ONE" and
+instructs **"Commit BOTH files in the self-update commit."** On the DEFER path nothing named it.
 
-- the DEFER span (`/On `SELF-UPDATE-DEFER`/,/On `SELF-UPDATE-OK`/`) is **10** lines and carries
-  **0** occurrences of `self-update-gate-`;
-- CONTROL, same file, the OK path: `grep -c 'gate record and the fixture log'` -> **1**, at
-  `core/skills/ai-dlc-update/SKILL.md:475`;
-- the span's only `commit` occurrence is the `skill_commit` STAMP FIELD, not an instruction;
-- step 7's span (`sed -n '1403,1600p'`, **198** lines as its own control) names the record **0**
-  times.
+**THE SPAN IS NINE LINES OR TEN DEPENDING ON THE GRAMMAR, AND BOTH FIGURES ARE RIGHT.** They are
+two grammars, not drift, and collapsing them to one number makes this entry's prose disagree with
+the grammar its own prose names. Measured at the fix's base (`944e172e`):
 
-The DEFER bullet is at `core/skills/ai-dlc-update/SKILL.md:394`.
+- under the `{exit}` grammar the `verify:` field uses — `awk '/DEFER/{on=1} /OK/{exit} on'` — the
+  span is **9** lines, because the terminator is consumed and not printed;
+- under the RANGE grammar this entry's prose cites, `/On \`SELF-UPDATE-DEFER\`/,/On
+  \`SELF-UPDATE-OK\`/`, it is **10**, because `awk /a/,/b/` INCLUDES the terminator. That 10th line
+  is the OK bullet itself — the line carrying `Commit BOTH files`.
 
-**ITS PREDICTED CONSEQUENCE IS REFUTED AS A LOSS RATE, AND THE REFUTATION IS WHY THIS IS A NOTE.**
-The consumer's entry says the record "survives only if the operator happens to `git add` it while
-committing something else", and infers that the tracked records all arrived via the OK path.
-Measured on the reference consumer, by two hands independently: **23 of 23** gate records on disk
-were TRACKED (control: an impossible record name returns 0), including **12 of 12 DEFER records**.
-Joining each record against the commit that ADDED it refutes the entry's own inference directly:
-11 of 19 arrived on commits that are not self-updates, 9 of them on the step-7/8 reconcile commit,
-which is exactly the destination the entry's remedy proposes. **The operator has been doing by hand
-what the entry asks the skill to instruct.**
+Both spans carried **0** occurrences of `self-update-gate-`. Control, same invocation: the whole
+file scored **1**; negative control, an impossible token, scored 0 in the same span.
 
-**BUT THE UNTRACKED WINDOW IS REAL, AND IT WAS CAUGHT OPEN.** Re-read later in the same batch while
-a reconcile session was live in that tree: a **13th DEFER record**
-(`self-update-gate-20260920T185033Z.md`, `# verdict: DEFER`) sitting **UNTRACKED**, on a branch
-carrying zero commits ahead of its base (control: the 2026-09-17 record reads TRACKED in the same
-invocation; impossible verdict token 0). So the tracked rate is a measurement of CLOSED cycles and
-the window between writing the record and committing it is exactly where the entry says it is.
-**A steady-state census cannot see this class** — every record it counts has already survived, which
-is selection on the outcome. The honest statement is that no record has been LOST to date and the
-exposure is real but brief; do not read the 23-of-23 as evidence the window does not exist, and do
-not read this one untracked file as a loss. It is the same program mid-flight.
+**STEP 7'S SPAN IS 704 LINES, NOT 198, AND IT DOES CONTAIN A COMMIT INSTRUCTION.** The earlier
+figure came from the literal window `sed -n '1403,1600p'`, which has since gone stale and now opens
+mid-step-6. Derived from the real step boundaries (`grep -nE '^[0-9]+\. '`), step 7 runs `:1407`
+through `:2110` at base — **704** lines — and carries "commit them together" at `:1484`. **The
+siting decision survives on the corrected evidence**: `self-update-gate-` appears **0** times in
+that real 704-line span (control: 1 whole-file; impossible token 0 in the same span), so the DEFER
+bullet remained the only correct site.
 
-**WHAT A FIX MUST NOT DO, each measured before this entry was filed.**
+**THE LIVE ARGUMENT IS THE DESTINATION SPLIT, AND THE EARLIER "CAUGHT OPEN" DATUM IS SPENT.** The
+13th DEFER record this entry once cited as sitting untracked has since landed, on `33c8b7dd2`, a
+reconcile commit — precisely the destination this fix names. Re-derived against the reference
+consumer, read-only, joining each record to the commit that ADDED it (`git log --diff-filter=A`)
+and classifying that commit by its own subject:
 
-- **Do not phrase it as "commit the approval artifact".** `:435` defines that term as a PAIR, and
-  on DEFER half the pair cannot exist: `self-update-fixtures.sh` refuses on a non-OK verdict and
-  exits before running, so no fixture log is written. Measured: for the DEFER record of
-  2026-09-17 there are **0** fixture logs in the same hour, against **1** for an OK record as the
-  control, with the glob grammar itself controlled at 69 logs found overall and 0 for an
-  impossible hour. An instruction naming the pair on DEFER is unsatisfiable; one naming the record
-  alone creates a SECOND one-file definition of a two-file term.
-- **Do not site the fix at step 7.** The commit happens at step 8 (`Deliver — branch → commit →
-  push`); step 7's 198-line span contains no commit instruction of any kind. A correct fix sited
-  at step 7 or step 8 is REJECTED by the consumer entry's own receipt, and a correct fix at the
-  DEFER bullet is ACCEPTED by it along with its own destructive inverse — see below.
-- **Do not assume a wedge that runs the other way.** The worry that committing on DEFER makes the
-  cycle look OK to a downstream guard is refuted at the code: `self-update-fixtures.sh:323` globs
-  the WORKING TREE, so tracked-vs-untracked is invisible to it; `:359` refuses on the verdict
-  FIELD, which committing does not alter; and `PRE-WRITTEN` (`:759`) keys on input digests, where
-  the record's own path appears in zero `# input:` rows. Committing on DEFER lands on the safe
-  side of both.
+- **25** gate records on disk, **25 tracked, 0 untracked** (control: a path known absent reads
+  untracked in the same invocation; impossible record glob 0);
+- **13 DEFER** and **12 OK** by their own `# verdict:` field (negative control: impossible verdict
+  token 0);
+- **10 of 13 DEFER records arrived on a reconcile commit, and 0 on a self-update commit**; the
+  other 3 arrived on an unrelated feature commit;
+- against **9 of 12 OK records arriving on a self-update commit**.
 
-**THE CONSUMER'S OWN RECEIPT FOR THIS CANDIDATE CANNOT SCORE A FIX, AND THAT IS RECORDED HERE SO
-THE NEXT BATCH DOES NOT REBUILD IT.** Scored against seven mutants, each asserted to differ from
-base by `cmp -s` first: it exits the same on a correct fix at the DEFER bullet, on that fix's
-DESTRUCTIVE INVERSE ("do NOT commit it; delete it"), and on an inert HTML comment naming the file;
-it REJECTS a correct fix sited at step 7 or step 8; and because `awk /a/,/b/` includes the
-terminator line, a token placed on the OK bullet satisfies the DEFER receipt. A receipt that
-cannot separate a fix from its inverse is not a receipt.
+**The skill's only commit instruction named the self-update commit, which the DEFER path never
+creates** — its own first clause is "do NOT cut the branch and do NOT push". So the operator has
+been doing by hand, ten times, what the skill left unsaid. That is the defect, and it is stronger
+evidence than a loss rate: nothing was lost because a human kept supplying the missing step.
 
-**AND NO ARM CAN OBSERVE THE OUTCOME, SO ANY FIX HERE IS PROSE-ONLY.** Derived: the whole
-`reconcile/` engine contains **2** non-comment `git add`/`git commit` occurrences and both are
-`bad`-message strings inside `apply.sh` case arms, never calls, against a control of 189 executable
-`git -C` calls in the same tree. Nothing in this system stages or commits anything; step 8's prose
-is followed by the agent. The three fixtures naming `SELF-UPDATE-DEFER` reference `SKILL.md` 0, 0
-and 1 times, and that single hit is a prose comment at
-`core/fixtures/self-update-join-gate/run.sh:11`, not a read (control: `apply-machinery-stamp/run.sh`
-scores 3, two of them live `bad` messages). **State that cost in whatever ships; do not let a
-prose change read as an enforced one.**
+**THE FIX IS PROSE-ONLY AND THAT COST IS STATED RATHER THAN HIDDEN.** One instrument both sides
+(`grep -vE '^[^:]+:[0-9]+:[[:space:]]*#'`, which allows INDENTED comments): the `reconcile/` engine
+holds **2** non-comment `git add`/`git commit` lines, both `bad`-message strings at `apply.sh:1943`
+and `:1946`, against **189** non-comment `git -C` lines. Negative control, same instrument,
+impossible token: 0. Nothing in `reconcile/` stages or commits anything, so the record reaches the
+commit only because the operating agent puts it there — which the shipped prose says in as many
+words. A count of 214 for the same subject is an OCCURRENCE count, a different quantity; a count of
+191/3 comes from a grammar that misses indented comments.
 
-Carries the reference consumer's `PC-S345-DEFER-PATH-NAMES-NO-HOME-FOR-THE-GATE-RECORD-IT-JUST-WROTE`,
-which is live upstream and which nothing in this repo had cited before this entry (control: a
-known-cited id scores 3 and 8 across the two backlog files; this one scored 0 and 0).
+**AND THE RUNNER ALREADY SAID IT.** `self-update-fixtures.sh:778` prints "Commit the gate record
+beside this log." The program instructed the thing the skill's DEFER bullet omitted.
 
-verify: sh set -e; f="core/skills/ai-dlc-update/SKILL.md"; [ -r "$f" ] || exit 9; s="$(LC_ALL=C awk '/On `SELF-UPDATE-DEFER`/{on=1} /On `SELF-UPDATE-OK`/{exit} on' "$f")"; [ -n "$s" ] || exit 9; printf '%s' "$s" | LC_ALL=C grep -q 'self-update-gate-' || exit 1; printf '%s' "$s" | LC_ALL=C grep -qiE '(do NOT|never) commit[^.]*self-update-gate-' && exit 1; printf '%s' "$s" | LC_ALL=C grep -qE '[Cc]ommit[^.]*self-update-gate-' || exit 1; exit 0
+**WHAT A FIX MUST NOT DO, each measured.**
+
+- **Never name the PAIR** — not "approval artifact", not "BOTH files", not the fixture log.
+  `SKILL.md:440` defines that term as two files, and on DEFER the log records a REFUSAL rather than
+  an approval, so the term does not apply. (`self-update-fixtures.sh` creates its log at `:108`
+  unconditionally, ~250 lines before the verdict refusal at `:359`, so a log DOES exist on DEFER —
+  the reason is what it records, not whether it exists.)
+- **Never name "the self-update commit" as the destination.** On DEFER no such commit exists, so
+  that instruction is unsatisfiable. Name the step-7 gated apply.
+- **Do not reason about a downstream wedge.** Committing on DEFER is safe on all three arms:
+  `self-update-fixtures.sh:323` globs the WORKING TREE, so tracked-vs-untracked is invisible to it;
+  `:359` refuses on the verdict FIELD, which committing does not alter; `PRE-WRITTEN` at `:759`
+  keys on input digests, and over 25 real gate records every one names itself in 0 `# input:` rows
+  (controls: 3258 total input rows, 1352 naming real paths).
+
+**THE ORIGINAL RECEIPT COULD NOT DISCRIMINATE THE FIX FROM THE UNFIXED TREE, AND THAT IS THIS
+ENTRY'S HEADLINE.** Scored at base and at the fix, sides `cmp -s`-asserted different in the same
+invocation: **raw 1 at base, raw 1 at the fix.** Its third arm was
+`grep -qE '[Cc]ommit[^.]*self-update-gate-'` — verb-then-token, and `[^.]*` crosses neither a
+period NOR a newline. Over a 29-input corpus, every mutant `cmp -s`-asserted applied, it scored
+17 of 29: it REJECTED 6 of 7 competent correct phrasings, ACCEPTED all three inert forms (HTML
+comment, one-line and multi-line, and a fenced block), and could not read the real fix at all.
+
+**Its `{exit}` terminator exclusion was also an accident of the OK bullet's spelling** — rename
+that bullet and the span runs 2053 lines to EOF instead of 9. The earlier claim that a renamed OK
+bullet makes the unfixed tree score **0** is REFUTED: measured, it scores **1**, because the OK
+passage puts the token at `:433` and `Commit BOTH files` at `:435` — different lines, which arm 3
+cannot span either (positive control in the same invocation: one seeded line carrying both verb and
+token DOES fire arm 3). The terminator is replaced anyway, on the span-length grounds.
+
+**THE REPLACEMENT BELOW IS A DISTRIBUTION RECEIPT AND ITS EXIT CONVENTION IS INVERTED FROM THE
+CONSUMER'S.** `scripts/backlog-reverify.sh:232` reads exit **0** as CLOSE-CANDIDATE and any
+non-zero as STILL-LIVE; the consumer's `reconcile/ledger-reverify.sh` reads exit 0 as STILL-LIVE.
+Do not port one to the other. It exits **9**, never 1, when a precondition moved and it measured
+nothing, because reverify maps every non-zero to STILL-LIVE and a 1 meaning "I could not measure"
+reads as a reproduction.
+
+**AND THE `ALREADY-CLOSED` ROW BESIDE THIS ENTRY IS EVIDENCE OF NOTHING.** Once the annotation
+above is present, `backlog-reverify.sh:150` sets `closed=1` on `/^(<br>)?\*\*LANDED \(v/` and
+`:175-177` emits `ALREADY-CLOSED` and then `continue`s — **the receipt is never run.** That row is
+produced by the annotation TEXT and says nothing about whether the fix is present, which is a check
+that cannot fire reading exactly like one that passed. Only
+`backlog-reverify.sh --closed-receipts` runs the receipt on an annotated entry; that row reads
+`CLOSE-CANDIDATE`. Read the second, never the first.
+
+It terminates on the next sibling bullet (`^   - `), which cannot be renamed away; strips fenced
+blocks and HTML comments — including multi-line ones — before any arm; joins the span to one
+logical sentence per line; and reads the record-naming sentence AND the one after it, because a
+competent author may put the token in one and the verb in the next. That widening is probed for
+what it ACQUITS: a discard clause placed in the FOLLOWING sentence still scores 1. Its negation
+scan is whitelist-free and reads the window with the required disclaimer's fixed phrases excised —
+without that excision it rejects every correct fix, since `not an enforced property` contains
+`not `. Measured: 29 of 29, every mutant `cmp -s`-asserted applied, including 7 correct phrasings,
+10 destructive spellings, 3 inert forms, two mis-sitings, the renamed-OK-bullet input in both
+directions, the byte-identical consumer copy, and two degenerate-precondition inputs at 9. Each of
+its arms was also shown to fire ALONE, by single-property removal from the landed fix.
+
+Carries the reference consumer's `PC-S345-DEFER-PATH-NAMES-NO-HOME-FOR-THE-GATE-RECORD-IT-JUST-WROTE`.
+
+verify: sh f="core/skills/ai-dlc-update/SKILL.md"; [ -r "$f" ] || exit 9; s="$(LC_ALL=C awk '/^   - On `SELF-UPDATE-DEFER`/{on=1;print;next} on&&/^   - /{exit} on' "$f")"; [ -n "$s" ] || exit 9; sib="$(LC_ALL=C awk '/^   - On `SELF-UPDATE-DEFER`/{on=1;next} on&&/^   - /{n++} END{print n+0}' "$f")"; [ "${sib:-0}" -ge 1 ] || exit 9; s="$(LC_ALL=C awk '/^[[:space:]]*```/{fn=!fn;next} fn{next} {gsub(/<!--[^>]*-->/,"")} cm{if(/-->/){cm=0;sub(/^.*-->/,"")}else{next}} /<!--/{cm=1;sub(/<!--.*$/,"")} {print}' <<< "$s")"; [ -n "$s" ] || exit 9; j="$(LC_ALL=C tr '\n' ' ' <<< "$s" | LC_ALL=C awk '{gsub(/[.!?][*_`)]* +/,"&\n"); print}')"; [ -n "$j" ] || exit 9; jl="$(LC_ALL=C tr '[:upper:]' '[:lower:]' <<< "$j")"; LC_ALL=C grep -q 'self-update-gate-' <<< "$jl" || exit 1; w="$(LC_ALL=C awk '/self-update-gate-/{print;nx=1;next} nx{print;nx=0}' <<< "$jl")"; [ -n "$w" ] || exit 9; LC_ALL=C grep -qE 'approval artifact|both files|fixture log' <<< "$w" && exit 1; LC_ALL=C grep -qE 'self[- ]?update commit' <<< "$w" && exit 1; LC_ALL=C grep -qE 'commit|stage|track|include|carry|carri' <<< "$w" || exit 1; wn="$(LC_ALL=C sed -E 's/instruction to the (operating )?agent//g; s/not an enforced property//g; s/not enforced//g; s/nothing enforces//g' <<< "$w")"; LC_ALL=C grep -qE 'do not|do n.t|does n.t|will n.t|should n.t|need n.t|never|not |need not|without|avoid|refrain|omit|skip|delete|discard|remove|untracked|gitignore|scratch|noise|wrong|leave it|leave the|no need|unnecessary|optional' <<< "$wn" && exit 1; LC_ALL=C grep -qE 'not an enforced property|not enforced|nothing enforces|instruction to the (operating )?agent' <<< "$jl" || exit 1; exit 0
 
 
 ## BL-282 — "a green gate is not a landed push" has no enforcer, and the obvious check RACES a backgrounded push

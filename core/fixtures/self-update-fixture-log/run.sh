@@ -33,6 +33,11 @@
 # Exit:  0 = every assertion holds, 1 = something regressed, 2 = the harness could not run.
 set -uo pipefail
 
+# HERMETIC -- scrub the operator's tuning before reading anything (I10). Part 14 names
+# AI_DLC_GATE_IN_SAFE_STOP, the key gate_record_open() reads, so without this the arm
+# asserts against whatever the developer's settings.json happens to say.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 pick() { for c in "$@"; do [ -n "$c" ] && [ -f "$c" ] && { printf '%s' "$c"; return; }; done; }
@@ -3399,6 +3404,310 @@ if mkmutant2 "$MG12" "gr_tok_base=\"\$(git -C \"\$DIST\" show \"\${BASE}:\${gr_g
   fi
 else
   bad "FIXTURE ERROR: one of the two probe-token sites no longer occurs exactly once in the runner — Part G22 proves nothing"
+fi
+
+# --- PARTS J1 to J14: EVERY VERDICT THE GATE CAN WRITE MUST HAVE A SKILL BULLET CLAIMING ----
+# ---                  THE RECORD IT WROTE                                                 ----
+#
+# THE DEFECT. `self-update-gate.sh` writes `_bmad-output/ai-dlc-update/self-update-gate-<ts>.md`
+# on EVERY verdict -- `gate_record_open()` is guarded by `AI_DLC_GATE_IN_SAFE_STOP` and by
+# nothing else, never by the verdict -- and step 2's only instruction naming that record used to
+# sit on the OK path, where it names the record and the fixture log as a PAIR and sends both to a
+# self-update commit the DEFER path never creates. So the DEFER and UNDECIDED paths wrote an
+# approval record no step claimed. Filed by the reference consumer as
+# PC-S345, and the operator had been committing that record by hand on the step-7 reconcile.
+#
+# BOTH SIDES ARE DERIVED, WHICH IS WHAT MAKES THIS AN OBSERVATION RATHER THAN A RESTATEMENT OF
+# THE RECEIPT THAT SHIPPED WITH IT. Side A is the gate's own `_rec_v=` assignments; side B is the
+# region of `SKILL.md` belonging to each verdict's disposition bullet. Neither is hand-listed, so
+# a fourth verdict added to the gate with no bullet fires this arm on its own.
+#
+# THE SPAN GRAMMAR WAS CHOSEN BY MEASUREMENT AND THE OBVIOUS ONE IS WRONG. A region running to
+# the next SIBLING bullet (`^   - `) scores the OK path at ZERO on the fixed tree as well as the
+# broken one: the OK bullet is a ONE-LINE bullet and the passage naming the record sits thirty
+# lines below it, inside the CARRY bullet's span under that grammar. An arm keyed on it would
+# fail the push on a correct tree. Measured at both revisions, per bullet. The grammar that
+# discriminates runs each region to the next DISPOSITION bullet (`^   - On \`SELF-UPDATE-`), else
+# to the end of the numbered step: base scores 1 of 3 verdicts claimed, the fix scores 3 of 3.
+#
+# ONE BULLET COVERS TWO VERDICTS, so the join is over VERDICTS and never over bullet COUNT. The
+# DEFER bullet opens `On \`SELF-UPDATE-DEFER\` or \`SELF-UPDATE-UNDECIDED\``; a count comparison
+# reads three bullets against three verdicts and passes vacuously on a tree where the UNDECIDED
+# path is claimed by nothing.
+#
+# THE REGION IS READ WITH FENCED BLOCKS AND HTML COMMENTS BLANKED, AND THE COMMIT-VERB SCAN IS
+# READ WITH INLINE CODE SPANS REMOVED ON TOP OF THAT. A comment is not an instruction and a
+# fenced example is not one either (mutants J11 and J13). The code-span strip is the narrowing
+# that took this arm's false-positive set to zero: `skill_commit` and `version`/`commit` are
+# FIELD NAMES, the DEFER bullet at base carries `skill_commit` and nothing else, and without the
+# strip the unfixed tree scores its DEFER region as claimed. The record TOKEN is counted BEFORE
+# the strip, because the record's path is itself written inside a code span.
+#
+# THE NEGATION SCAN IS READ WITH THE DISCLAIMER CLAUSE EXCISED, and that subtlety is the one a
+# naive scan gets backwards: the correct fix's own disclaimer says `nothing in \`reconcile/\`
+# stages or commits anything`, so a scan that discards any line carrying a negation discards the
+# fix. The exclusion is anchored on the negation reaching a commit verb within one sentence.
+#
+# THE FALSE-REJECT SET WAS MEASURED, NOT ASSUMED. Four competent alternate phrasings of the same
+# correct fix, written without reference to this predicate, all score CLAIMED (J7 to J10). A
+# receipt that rejects a competent author's other wording is as broken as one that accepts a
+# regression, and the receipt this arm was built beside rejected 3 of 6.
+#
+# THE SUBJECT CAN BE ABSENT ON A CONSUMER AND THAT MUST NOT READ AS A PASS. This fixture SHIPS,
+# a core fixture arrives one pull ahead of the code it guards, and a shipping arm whose subject
+# is missing stands down -- which scores as a green unit in the consumer's own suite verdict.
+# So the resolve is the same dual-layout `pick()` this file already uses for the runner, both
+# candidates named side by side and never a walk up from a resolved path (I33) nor a walk for
+# VERSION (I106), and a missing subject prints a SKIP line that is not an `ok`.
+J_SKILL="$(pick "$HERE/../../skills/ai-dlc-update/SKILL.md" \
+                "$HERE/../../../core/skills/ai-dlc-update/SKILL.md" \
+                "$HERE/../../../.claude/skills/ai-dlc-update/SKILL.md")"
+J_GATE="$(pick "$HERE/../../skills/ai-dlc-update/reconcile/self-update-gate.sh" \
+               "$HERE/../../../core/skills/ai-dlc-update/reconcile/self-update-gate.sh" \
+               "$HERE/../../../.claude/skills/ai-dlc-update/reconcile/self-update-gate.sh")"
+
+JW="$(mktemp -d)"
+trap 'rm -rf "$CONS" "$CONS2" "$DIST" "$WREPO" "$JW"' EXIT
+
+# The reader, in one place so the probe, the corpus and every mutant below score under the
+# identical grammar. It prints one line per verdict the gate can write whose SKILL.md region
+# does NOT claim the record, and nothing at all when every verdict is claimed.
+j_unclaimed() { # $1=a SKILL.md  $2=a gate script -> one unclaimed verdict per line
+  j_s="$JW/stripped.$$"
+  # Fenced blocks and HTML comments blanked, LINE NUMBERING PRESERVED -- deleting the lines
+  # instead would shift every region boundary below a fence and the offsets would be about a
+  # file nobody reads.
+  awk '
+    /^```/ { fence = !fence; print ""; next }
+    fence  { print ""; next }
+    /<!--/ { incom = 1 }
+    incom  { if (index($0, "-->")) incom = 0; print ""; next }
+    { print }
+  ' "$1" > "$j_s"
+  j_verdicts="$(grep -oE '_rec_v=[A-Za-z][A-Za-z0-9_-]*' "$2" | sed 's/.*=//' | sort -u)"
+  j_disp="$(grep -nE '^   - On `SELF-UPDATE-' "$j_s" | cut -d: -f1)"
+  j_first="$(printf '%s\n' "$j_disp" | head -1)"
+  j_end="$(grep -nE '^[0-9]+\. ' "$j_s" | awk -F: -v f="$j_first" '$1 > f { print $1 - 1; exit }')"
+  [ -n "$j_end" ] || j_end="$(wc -l < "$j_s")"
+  for j_v in $j_verdicts; do
+    j_bl="$(grep -nE "^   - On \`SELF-UPDATE-${j_v}\`|^   - On \`SELF-UPDATE-[A-Z-]+\`( or \`SELF-UPDATE-[A-Z-]+\`)* or \`SELF-UPDATE-${j_v}\`" \
+            "$j_s" | head -1 | cut -d: -f1)"
+    [ -n "$j_bl" ] || { printf '%s\n' "$j_v"; continue; }
+    j_re="$(printf '%s\n' "$j_disp" | awk -v b="$j_bl" '$1 > b { print $1 - 1; exit }')"
+    [ -n "$j_re" ] || j_re="$j_end"
+    j_reg="$(sed -n "${j_bl},${j_re}p" "$j_s")"
+    j_rec="$(printf '%s\n' "$j_reg" | grep -cF 'self-update-gate-')" || j_rec=0
+    j_pos="$(printf '%s\n' "$j_reg" | sed 's/`[^`]*`/@/g' | grep -E 'commit(s|ted|ting)?' \
+             | grep -cviE '(do not|never|nothing[^.]*)[^.]*commit')" || j_pos=0
+    { [ "$j_rec" -gt 0 ] && [ "$j_pos" -gt 0 ]; } || printf '%s\n' "$j_v"
+  done
+  rm -f "$j_s"
+}
+j_flat() { j_unclaimed "$1" "$2" | sort | tr '\n' ',' ; }
+
+if [ -z "$J_SKILL" ] || [ -z "$J_GATE" ]; then
+  # DISTINGUISHABLE, AND DELIBERATELY NOT AN `ok`. This is the mid-pull state: the fixture has
+  # landed and its subject has not. `bad` would wedge the consumer's push on a state the pull
+  # itself creates; silence would let a unit that checked nothing count toward a green suite.
+  printf '  SKIP  the verdict/record join: no ai-dlc-update %s resolves from %s in either layout, so this fixture landed ahead of its subject and asserted nothing here\n' \
+    "$([ -z "$J_SKILL" ] && printf 'SKILL.md' || printf 'reconcile/self-update-gate.sh')" "$HERE"
+else
+  # --- J1 and J2: THE SELF-PROBE, BOTH DIRECTIONS, UNDER mktemp AND BEFORE THE CORPUS --------
+  # An arm reporting zero findings without first proving it can produce one has established that
+  # it ran. The offender is a tree whose DEFER region names no record; the near-miss is the same
+  # tree with a correct fix written in a phrasing this predicate was not built around.
+  J_OFF="$JW/probe-offender.md"
+  awk '!/^     \*\*The gate wrote `_bmad-output/ &&
+       !/^     Carry that record to the step-7 gated apply/ &&
+       !/^     \*\*That is an instruction to the operating agent/ &&
+       !/^     `reconcile\/` stages or commits anything/ &&
+       !/^     agent put it there\.$/' "$J_SKILL" > "$J_OFF"
+  J_NEAR="$JW/probe-near-miss.md"
+  awk '{ print }
+       /^     runs and the flag is what tells them apart/ {
+         print "     The gate already wrote `_bmad-output/ai-dlc-update/self-update-gate-<ts>.md` for this"
+         print "     verdict; include it in the step-7 gated apply commit alongside the machinery slice." }' \
+    "$J_OFF" > "$J_NEAR"
+  j_off_flat="$(j_flat "$J_OFF" "$J_GATE")"
+  j_near_flat="$(j_flat "$J_NEAR" "$J_GATE")"
+  # The offender must have been CONSTRUCTIBLE. A probe built by a pattern that matched nothing is
+  # byte-identical to the subject, and an arm that then reports nothing reads exactly like one
+  # that discriminates.
+  if cmp -s "$J_SKILL" "$J_OFF" || cmp -s "$J_OFF" "$J_NEAR"; then
+    bad "FIXTURE ERROR: the J probe trees did not build (offender identical to the subject, or the near-miss identical to the offender). Neither direction of this reader was proven this run, so its verdict on the real corpus says only that it ran"
+  elif [ -n "$j_off_flat" ] && [ -z "$j_near_flat" ]; then
+    ok "the verdict/record reader REPORTS a seeded offender (a DEFER region naming no record: ${j_off_flat}) and stays QUIET on a seeded near-miss written in a phrasing it was not built around — both directions, on trees under mktemp and never the real corpus"
+  else
+    bad "the verdict/record reader did not discriminate on its own probe trees (offender read '${j_off_flat:-empty}' and must be non-empty; near-miss read '${j_near_flat:-empty}' and must be empty). An empty offender reading is a reader that cannot spell its own subject; a non-empty near-miss reading is one that rejects a correct fix, which is the defect one row above this one in the same worklist"
+  fi
+
+  # --- J3: THE INSTRUMENT ITSELF, before any verdict is read off it --------------------------
+  # A derived population of zero on either side reports a clean join having joined nothing.
+  j_na="$(grep -oE '_rec_v=[A-Za-z][A-Za-z0-9_-]*' "$J_GATE" | sed 's/.*=//' | sort -u | grep -c .)" || j_na=0
+  j_nb="$(grep -cE '^   - On `SELF-UPDATE-' "$J_SKILL")" || j_nb=0
+  j_ctl="$(grep -cF 'self-update-gate-ZZQX139' "$J_SKILL")" || j_ctl=0
+  j_tok="$(grep -cF 'self-update-gate-' "$J_SKILL")" || j_tok=0
+  if [ "$j_na" -ge 2 ] && [ "$j_nb" -ge 1 ] && [ "$j_ctl" -eq 0 ] && [ "$j_tok" -gt 0 ]; then
+    ok "both sides of the join derive a non-empty population ($j_na gate verdicts, $j_nb disposition bullets) and the record token scores $j_tok against an impossible-token control of 0 in the same file"
+  else
+    bad "the join's own instrument is broken (gate verdicts $j_na expected >=2, disposition bullets $j_nb expected >=1, impossible-token control $j_ctl expected 0, record token $j_tok expected >0). A side that derives nothing reports every verdict claimed, or every verdict unclaimed, for a reason that is not about the tree"
+  fi
+
+  # --- J4: THE CORPUS ------------------------------------------------------------------------
+  j_live="$(j_flat "$J_SKILL" "$J_GATE")"
+  if [ -z "$j_live" ]; then
+    ok "every verdict \`self-update-gate.sh\` can write has a step-2 disposition region instructing that the record it wrote be committed — the gate records on every verdict, so a verdict whose bullet names no record leaves an approval artifact no step claims"
+  else
+    bad "these verdicts the gate CAN write have no disposition region instructing that the record be committed: ${j_live}. \`gate_record_open()\` is guarded by AI_DLC_GATE_IN_SAFE_STOP and by nothing else, so the record exists on every one of them; the operator then either loses it or commits it by hand. Name the record ALONE in that verdict's bullet — not as the 'approval artifact', which SKILL.md defines as a PAIR — and name the step-7 gated apply as its destination, never the self-update commit, which the DEFER path never creates"
+  fi
+
+  # --- J5 to J13: THE MUTATION BATTERY ------------------------------------------------------
+  # Every mutant is a COPY under mktemp, `cmp -s` asserts it applied before its score is read,
+  # and each is keyed on a LOCATION and an observable rather than on a spelling. A mutation that
+  # did not apply reads exactly like one that survived.
+  j_mut() { # $1=label $2=mutant path $3=original it was built from $4=want-flat $5=why
+    if [ ! -s "$2" ] || cmp -s "$3" "$2"; then
+      bad "MUTATION $1 DID NOT APPLY (the anchor no longer occurs in ${3##*/}), so it scores nothing. Re-anchor it on the subject's own predicate; a lost anchor must never be repaired by relaxing an assertion"
+      return
+    fi
+    j_got="$(j_flat "$2" "$J_GATE")"
+    if [ "$j_got" = "$4" ]; then
+      ok "MUTATION $1 — $5"
+    else
+      bad "MUTATION $1 SURVIVED or fired wrongly: the reader returned '${j_got:-empty}' and must return '${4:-empty}'. $5"
+    fi
+  }
+
+  # J5: the fix REVERTED. Every layer of it, and the post-mutation token count is asserted to
+  # have dropped -- a mutation that applies can still be partial, and `cmp -s` cannot see that.
+  J_M1="$J_OFF"
+  j_m1_tok="$(grep -cF 'self-update-gate-' "$J_M1")" || j_m1_tok=0
+  if [ "$j_m1_tok" -lt "$j_tok" ]; then
+    j_mut "J5 fix reverted" "$J_M1" "$J_SKILL" "DEFER,UNDECIDED," \
+      "reverting the whole insertion leaves the two verdicts that bullet covers claiming no record, which is the state this arm exists to refuse (token count fell $j_tok -> $j_m1_tok, so the revert was not partial)"
+  else
+    bad "MUTATION J5's revert was PARTIAL: the record token still scores $j_m1_tok against an unmutated $j_tok. A partial revert proves the layer left in place and comes out green"
+  fi
+
+  # J6: a FOURTH verdict in the GATE with no bullet. This mutates SIDE A, so it is the only
+  # mutant here that establishes the verdict set is READ rather than assumed.
+  J_M2="$JW/gate-4th.sh"
+  awk '{ print }
+       /^      _rec_v=UNDECIDED$/ { print "    elif false; then"; print "      _rec_v=STRANDED" }' \
+    "$J_GATE" > "$J_M2"
+  if [ -s "$J_M2" ] && ! cmp -s "$J_GATE" "$J_M2" && bash -n "$J_M2" 2>/dev/null; then
+    j_got4="$(j_flat "$J_SKILL" "$J_M2")"
+    if [ "$j_got4" = "STRANDED," ]; then
+      ok "MUTATION J6 — a FOURTH verdict added to the gate with no bullet for it is reported, and the three that DO have one are not: the verdict set is read out of the script rather than hand-listed here, so this arm fires the day somebody adds a verdict"
+    else
+      bad "MUTATION J6 SURVIVED or over-fired: the reader returned '${j_got4:-empty}' and must return 'STRANDED,'. Empty means side A is not derived from the gate at all; anything extra means the addition perturbed a verdict it should not have touched"
+    fi
+  else
+    bad "FIXTURE ERROR: MUTATION J6 did not build a parseable gate with a fourth verdict, so nothing established that side A is derived"
+  fi
+
+  # J7: the instruction MOVED out of the DEFER region to a place it does not belong -- below the
+  # CARRY bullet, still inside step 2 and still in the file. The token count is UNCHANGED, so
+  # only a region-keyed reader can see it; a whole-file grep cannot.
+  J_M3="$JW/m-relocated.md"
+  awk 'BEGIN { buf = "" }
+       /^     \*\*The gate wrote `_bmad-output/ , /^     agent put it there\.$/ { buf = buf $0 "\n"; next }
+       { print }
+       /^   - `SELF-UPDATE-CARRY` rows are ADVISORY/ { printf "%s", buf; buf = "" }' \
+    "$J_SKILL" > "$J_M3"
+  j_m3_tok="$(grep -cF 'self-update-gate-' "$J_M3")" || j_m3_tok=0
+  if [ "$j_m3_tok" -eq "$j_tok" ]; then
+    j_mut "J7 instruction relocated" "$J_M3" "$J_SKILL" "DEFER,UNDECIDED," \
+      "moving the instruction out of the DEFER region and into the CARRY bullet's leaves the whole-file token count UNCHANGED at $j_tok, so a file-wide grep reads the tree as fixed and only a region-keyed reader refuses it"
+  else
+    bad "FIXTURE ERROR: MUTATION J7 changed the whole-file token count ($j_tok -> $j_m3_tok), so it is not the relocation it claims to be and a kill would be scored on a deletion instead"
+  fi
+
+  # J8: the OK path's instruction deleted, DEFER's left intact. The join is over ALL verdicts,
+  # and without this mutant nothing establishes that -- an arm that only ever looked at DEFER
+  # would pass every run.
+  J_M4="$JW/m-ok-deleted.md"
+  awk '!/^   \*\*Commit BOTH files in the self-update commit\*\*/ &&
+       !/^   `_bmad-output\/ai-dlc-update\/self-update-gate-<ts>\.md` — its verdict/' "$J_SKILL" > "$J_M4"
+  j_mut "J8 OK instruction deleted" "$J_M4" "$J_SKILL" "OK," \
+    "deleting the OK path's own record instruction while DEFER's stands is reported as OK alone — the join is over every verdict the gate can write, not over the one this batch fixed"
+
+  # J9: an inert HTML COMMENT carrying the whole instruction. A comment is not an instruction,
+  # and the raw token count is asserted UNCHANGED so the kill is the comment strip and not a
+  # deletion.
+  J_M5="$JW/m-comment.md"
+  awk '/^     \*\*The gate wrote `_bmad-output/ { print "     <!-- " $0; incom = 1; next }
+       incom && /^     agent put it there\.$/  { print $0 " -->"; incom = 0; next }
+       { print }' "$J_SKILL" > "$J_M5"
+  j_m5_tok="$(grep -cF 'self-update-gate-' "$J_M5")" || j_m5_tok=0
+  if [ "$j_m5_tok" -eq "$j_tok" ]; then
+    j_mut "J9 HTML-comment only" "$J_M5" "$J_SKILL" "DEFER,UNDECIDED," \
+      "an instruction that survives only inside an HTML comment is refused, with the raw token count unchanged at $j_tok — the comment strip is what the kill is scored on"
+  else
+    bad "FIXTURE ERROR: MUTATION J9 changed the raw token count ($j_tok -> $j_m5_tok), so it deleted the passage rather than commenting it out and J5 already owns that case"
+  fi
+
+  # J10: the same instruction inside a FENCED code block. Its own mutant rather than a second
+  # assertion on J9's seed: one strip can be present with the other absent, and a seed that
+  # exercises both cannot say which strip fired.
+  J_M6="$JW/m-fenced.md"
+  awk '{ print }
+       /^     runs and the flag is what tells them apart/ {
+         print "```"
+         print "commit _bmad-output/ai-dlc-update/self-update-gate-<ts>.md"
+         print "```" }' "$J_OFF" > "$J_M6"
+  j_mut "J10 fenced block only" "$J_M6" "$J_OFF" "DEFER,UNDECIDED," \
+    "an instruction present only inside a fenced code block is refused too — the fence strip and the comment strip are separate properties and neither covers the other"
+
+  # J11: a NEGATED instruction naming the record. The near-miss that carries every property the
+  # arm keys on EXCEPT the one that matters, and the direction that looks finished: without it,
+  # a reader satisfied by the record token alone passes.
+  J_M7="$JW/m-negated.md"
+  awk '{ print }
+       /^     runs and the flag is what tells them apart/ {
+         print "     The gate wrote `_bmad-output/ai-dlc-update/self-update-gate-<ts>.md` on this verdict."
+         print "     Do not commit it; the operator disposes of it by hand." }' "$J_OFF" > "$J_M7"
+  j_mut "J11 negated instruction" "$J_M7" "$J_OFF" "DEFER,UNDECIDED," \
+    "a region that NAMES the record while forbidding the commit is still unclaimed — the record token alone does not satisfy this arm, and the disclaimer clause the correct fix carries (nothing in reconcile/ stages or commits anything) is excised rather than read as that negation"
+
+  # J12 and J13: TWO COMPETENT ALTERNATE PHRASINGS of the same correct fix, each in its own
+  # mutant and neither written from this predicate's accept-set. They must NOT fire. This is the
+  # measured half of the false-positive set, and it is the half the receipt beside this arm got
+  # wrong: it rejected 3 of 6 correct phrasings, which is BL-279's defect one row up.
+  j_phrasing() { # $1=label $2=first line $3=second line
+    j_p="$JW/m-phrase-$1.md"
+    awk -v l1="$2" -v l2="$3" '{ print }
+         /^     runs and the flag is what tells them apart/ { print l1; print l2 }' "$J_OFF" > "$j_p"
+    if [ ! -s "$j_p" ] || cmp -s "$J_OFF" "$j_p"; then
+      bad "MUTATION $1 DID NOT APPLY, so nothing was established about this arm's false-REJECT set"
+      return
+    fi
+    j_pg="$(j_flat "$j_p" "$J_GATE")"
+    if [ -z "$j_pg" ]; then
+      ok "MUTATION $1 — a competent author's alternate phrasing of the SAME correct fix is ACCEPTED. An arm that rejects a correct fix wedges the work it exists to protect, and its false-REJECT set is the half that goes unmeasured"
+    else
+      bad "MUTATION $1 was REJECTED: the reader returned '${j_pg}' against a correctly-fixed region written in another wording. That is a false REJECT, and it is the defect filed one row above this one in the same worklist"
+    fi
+  }
+  j_phrasing "J12 rephrasing (include-in)" \
+    "     Include \`_bmad-output/ai-dlc-update/self-update-gate-<ts>.md\`, which the gate wrote here," \
+    "     in the commit the step-7 gated apply makes."
+  j_phrasing "J13 rephrasing (record-exists)" \
+    "     A record exists at \`_bmad-output/ai-dlc-update/self-update-gate-<ts>.md\` even on this path," \
+    "     and the operating agent commits it with the step-7 gated apply."
+
+  # J14: THE UNMUTATED CONTROL, PRESENCE-SHAPED AND RUN LAST. Every arm above is
+  # presence-shaped, so a reader replaced by `exit 0` fails them by construction -- but the
+  # control still has to assert a positive: that the reader names the verdicts it was given and
+  # not a fixed string. It is scored on the OFFENDER, where the answer is non-empty, because on
+  # the real tree an empty answer is indistinguishable from a reader that returns nothing ever.
+  j_ctl_off="$(j_unclaimed "$J_OFF" "$J_GATE" | sort | tr '\n' ' ')"
+  case "$j_ctl_off" in
+    *DEFER*UNDECIDED*)
+      ok "CONTROL — the reader names the specific verdicts it found unclaimed ($j_ctl_off) rather than emitting a fixed string, so every kill above is the mutation and not a reader that answers the same way on any input" ;;
+    *)
+      bad "CONTROL — the reader did not name DEFER and UNDECIDED on the offender tree (got '${j_ctl_off:-empty}'). A reader whose output does not depend on its input scores every mutant above for a reason that is not the mutation" ;;
+  esac
 fi
 
 echo
