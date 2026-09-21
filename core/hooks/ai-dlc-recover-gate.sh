@@ -195,6 +195,28 @@ you on the next call; there is nothing here to weigh."
       if is_full_read; then
         # SATISFIED. Clear both, so the gate is inert for the rest of the session until the
         # next compaction writes a fresh marker.
+        #
+        # THE BREADCRUMB IS WRITTEN BEFORE THE CLEAR, AND IT EXISTS FOR A HOOK THAT RUNS AFTER
+        # THIS ONE. `ai-dlc-handoff-entry.sh` is PostToolUse on `Read`; this gate is PreToolUse
+        # on every tool. So on the call that satisfies the second mandate the order is: this
+        # hook runs, the Read executes, the entry hook runs. If the entry hook tried to decide
+        # from `$MARKER` it would be testing a file this line removed one hook earlier, and it
+        # would arm the handoff marker on a Read the recovery COMPELLED -- the exact case it
+        # exists to prevent, invisible to any seed that does not drive both hooks in shipped
+        # order.
+        #
+        # SO THE STATE IS HANDED FORWARD EXPLICITLY. This records WHICH Read was the satisfying
+        # one, which is strictly more than `$MARKER` ever knew: the marker says "a recovery is
+        # in flight", never "THIS call is the one it demanded". A lead that satisfied only the
+        # FIRST mandate and then opened the step file of its own accord is a genuine
+        # initiation, and it must still arm -- the marker alone cannot tell that apart from
+        # this case, and this breadcrumb can, because only the satisfying call writes it.
+        #
+        # ONE-SHOT BY CONSTRUCTION. The consumer deletes it, so it cannot accumulate and it
+        # cannot answer for a later Read. A stale copy that somehow survives is bounded the
+        # same way the marker is: `ai-dlc-recover.sh` removes it when a NEW recovery starts,
+        # so it can never outlive the recovery that wrote it.
+        printf 'step_file=%s\n' "$STEP_REL" > "${STATE_DIR}/.recover-satisfied" 2>/dev/null || true
         rm -f "$MARKER" "$PROGRESS" 2>/dev/null || true
         exit 0
       fi

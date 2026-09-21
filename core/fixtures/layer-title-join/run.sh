@@ -189,6 +189,41 @@ mkext FRESH steps/widget.md <<'MD'
 Consumer text core adopted between base and theirs.
 MD
 
+# --- LC-E20's three seeds. See Part 8 for what separates them. -------------------------
+#
+# THE NAIVE GUARD AND THE SHIPPED ONE AGREE ON `NOHEAD` AND DISAGREE ON `NUMONLY`, and that
+# is the only pair that can tell them apart. `ext_titles` is this file's headings MINUS the
+# ones the numbered arm owns, so an entry built entirely out of NUMBERED headings harvests
+# empty there while being fully checked by the numbered arm forty lines up. A row keyed on
+# the empty `ext_titles` accuses it of being unreachable while the join is reading it. Seed
+# them together or Part 8's positive arm passes against the false-positive guard too.
+mkext NOHEAD steps/widget.md <<'MD'
+This entry is frontmatter plus prose and carries no markdown heading of any kind, so
+neither absorption join can harvest anything from it and neither can ever report it as
+absorbed — whatever core has since adopted.
+MD
+
+mkext NUMONLY steps/widget.md <<'MD'
+### 3. [ext:NUMONLY] Numbered Widget Section.
+
+Every heading in this entry is NUMBERED, so `unnumbered_titles_of_file` harvests EMPTY —
+exactly like NOHEAD — while the numbered arm reads it fully. This is the naive guard's
+false-positive set, and it must stay silent.
+MD
+
+# THE PREDICATE IS `#{2,6}`, WIDER THAN EITHER JOIN'S `#{2,4}`, AND THIS IS THE SEED THAT
+# HOLDS IT THERE. An h5 heading is invisible to both joins (their grammar stops at `####`)
+# AND invisible to `heading_titles_of_stream`, so `ext_titles` is empty here too. The row's
+# claim is "no heading of any kind is present", which is FALSE of this entry — an h5 body is
+# a different gap and is not this row's to state. Narrow the predicate to `#{2,4}` and this
+# entry starts being accused; the mutant below does exactly that.
+mkext H5ONLY steps/widget.md <<'MD'
+##### Deep Consumer Heading
+
+This entry's only heading is an h5, which is below both joins' `#{2,4}` grammar. It has a
+heading, so LC-E20's claim does not hold of it.
+MD
+
 OUT="$(bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>"$ROOT/err")"
 st() { printf '%s\n' "$OUT" | awk -F'\t' -v e="$1" '$2 ~ e {print $1}'; }
 detail() { printf '%s\n' "$OUT" | awk -F'\t' -v e="$1" -v s="$2" '$1==s && $2 ~ e {print $4}'; }
@@ -322,6 +357,98 @@ else
 fi
 
 # =======================================================================================
+# Part 8: LC-E20 — AN ENTRY NO ABSORPTION JOIN CAN SEE SAYS SO, AND THE GUARD IS
+#         "NO HEADING AT ALL" RATHER THAN "ext_titles IS EMPTY".
+#
+# THE DEFECT. Both absorption arms key on a markdown HEADING — the numbered one on
+# `anchors_of_file`, the unnumbered one on `unnumbered_titles_of_file`. An entry whose body
+# carries no heading anywhere harvests EMPTY from both, `cand` is never populated, the
+# absorption block never runs and there is no `else`. The only row such an entry can produce
+# is the drift arm's `EXTENSION-OK`, which `emit-report.sh` filters out of the
+# operator-facing section — so an entry that no duplication join has ever been able to read
+# arrives as silence indistinguishable from a clean check.
+#
+# THE ARM THAT MATTERS IS THE NEGATIVE ONE, and it is why `NUMONLY` is seeded. A guard keyed
+# on the empty `ext_titles` reports BOTH entries and looks correct against a fixture that
+# only asserts the positive: `ext_titles` is the file's headings MINUS the ones the numbered
+# arm owns, so an entry built entirely out of numbered headings harvests empty there while
+# being read in full by the numbered arm. On the reference consumer that naive guard scores
+# 14 of 40 registered entries where the shipped one scores 4 — a ten-entry false-positive
+# set, and every one of them a true accusation of unreachability against a join that was
+# reading it.
+#
+# THIS SECTION NAMES `EXTENSION-NO-HEADINGS` IN ITS ASSERTIONS, NOT ONLY IN THIS COMMENT.
+# I65 joins a clause to the fixture that proves its code fires, and it refuses a fixture
+# whose only mention of the code is prose: a header sentence listing what a fixture covers
+# is a statement ABOUT the proof, never the proof. LC-E20's `fixture:` is updated from
+# `none` to this directory in the same change, and I65's reverse arm would fail the push if
+# it were not.
+# =======================================================================================
+echo ""
+
+# 8a. THE POSITIVE. An entry with no heading at all is reported.
+if grep -qx EXTENSION-NO-HEADINGS <<<"$(st 'NOHEAD\.md$')"; then
+  ok "an entry carrying NO markdown heading is reported as EXTENSION-NO-HEADINGS"
+else
+  bad "an entry with no heading of any kind produced no EXTENSION-NO-HEADINGS row — both absorption joins harvest empty from it, so its only other row is the filtered EXTENSION-OK and its unreachability reads to the operator as a clean check"
+fi
+
+# 8b. THE DISCRIMINATING NEGATIVE, and the whole reason 8a is not satisfied by the naive
+#     guard. NUMONLY has an EMPTY `ext_titles` — identical to NOHEAD at that grain — and IS
+#     fully checked, by the numbered arm.
+if grep -qx EXTENSION-NO-HEADINGS <<<"$(st 'NUMONLY\.md$')"; then
+  bad "an entry built entirely out of NUMBERED headings was reported as having no heading — the guard is keyed on the empty ext_titles rather than on the absence of a heading, which accuses 10 of the reference consumer's 40 entries of being unreachable while the numbered join is reading them"
+else
+  ok "  an entry whose every heading is NUMBERED is NOT reported (its ext_titles is empty too, and the numbered arm reads it)"
+fi
+# THE NON-VACUITY CONJUNCT for 8b. Its silence on this status is evidence only if the entry
+# reached the classifier at all; an entry that produced no row whatsoever would satisfy 8b
+# against a pass that had simply stopped looking at it.
+if [ "$(printf '%s\n' "$OUT" | grep -c 'NUMONLY\.md')" -ge 1 ]; then
+  ok "  and NUMONLY does appear under some other status, so its silence above is a real zero"
+else
+  bad "the NUMONLY entry produced NO row at all — 8b's silence proves nothing, because an entry the classifier never reached is silent on every status"
+fi
+
+# 8c. THE PREDICATE'S WIDTH, asserted as its own case. `#{2,6}` is wider than either join's
+#     `#{2,4}` on purpose: an h5-only entry is invisible to both joins AND has an empty
+#     `ext_titles`, but it HAS a heading, so this row's claim is false of it.
+if grep -qx EXTENSION-NO-HEADINGS <<<"$(st 'H5ONLY\.md$')"; then
+  bad "an entry whose only heading is an h5 was reported as having NO heading — the predicate has narrowed to the joins' own #{2,4} and the row now makes a claim that is false of its subject"
+else
+  ok "  an entry whose only heading is an h5 is NOT reported (it has a heading; its invisibility to the joins is a different gap)"
+fi
+
+# 8d. THE ROW IS ADDITIVE, NOT A REPLACEMENT. A heading-less entry still gets its drift row;
+#     if this status displaced EXTENSION-OK the operator would lose the drift signal for
+#     exactly the entries nothing else can see. Asserted as an exact set so a code that does
+#     not exist yet cannot creep in unnoticed.
+e20_want="EXTENSION-HOOK-DRIFT
+EXTENSION-NO-HEADINGS"
+e20_got="$(st 'NOHEAD\.md$' | sort -u)"
+if [ "$e20_got" = "$e20_want" ]; then
+  ok "  a heading-less entry yields EXACTLY the new status plus its file-grain drift row"
+else
+  bad "a heading-less entry yielded an unexpected status set — want=[$(tr '\n' ' ' <<<"$e20_want")] got=[$(tr '\n' ' ' <<<"$e20_got")]. A stronger status here would prescribe a remedy for an entry about which nothing has been read"
+fi
+
+# 8e. THE LEVEL. LC-E20 is WARN and deliberately NOT ADJUDICATED: the ADJUDICATED level
+#     demands a recorded verdict keyed on a subject digest before apply proceeds, and this
+#     row's entire content is that no mechanism looked at the entry — there is no reading for
+#     a verdict to be a record of. Read from the reader's OWN `--adjudicated-codes` mode
+#     rather than from a restatement here. The seeded contract is a stub with no clauses, so
+#     the control asserted in Part 7 (nothing at ADJUDICATED in this tree) is what makes this
+#     a real zero; re-derived here against the DISTRIBUTION's contract, which does have some.
+e20_adj="$(bash "$DRIFT" --adjudicated-codes "$HERE/../../.." HEAD 2>/dev/null)"
+if [ -z "$e20_adj" ]; then
+  ok "  (LC-E20 level: the distribution contract is unreadable from here, so this arm stands down rather than asserting against an empty set)"
+elif grep -qxF 'EXTENSION-NO-HEADINGS' <<<"$e20_adj"; then
+  bad "EXTENSION-NO-HEADINGS is at level ADJUDICATED. That level creates a register duty — a verdict keyed on a subject digest, recorded before apply proceeds — and this row states only that nothing looked at the entry. There is no reading for a verdict to be a record of, and promoting it also moves the ADJUDICATED set that I58 binds against layer-contract.yaml"
+else
+  ok "  EXTENSION-NO-HEADINGS is NOT in the reader's own ADJUDICATED set (control: that set is non-empty, $(printf '%s\n' "$e20_adj" | grep -c .) code(s))"
+fi
+
+# =======================================================================================
 # Part 6: THE ROW IS KEYABLE, AND A RECORDED READING SILENCES IT UNTIL EITHER SIDE MOVES.
 #
 # v0.290.0 corrected this row's remedy to say a register verdict clears it and left the
@@ -449,6 +576,141 @@ else
   else
     bad "recording a verdict removed this subject from the listing. The key is again reachable only while the row prints, which for this clause means only while it is unadjudicated"
   fi
+fi
+
+# =======================================================================================
+# MUTANTS FOR PART 8
+#
+# Part 8's arms 8b and 8c are ABSENCE-shaped, and an absence-shaped arm is the one that
+# REQUIRES a mutant: both-directions seeding establishes that the arm discriminates between
+# two inputs, and only a mutant establishes that it discriminates AT ALL.
+#
+# EACH MUTANT IS A COPY OF THE WHOLE reconcile DIRECTORY. `layer-drift.sh` sources
+# `lib.sh` as a SIBLING and refuses with exit 1 when it cannot; a lone mutated copy finds no
+# library, emits nothing, and "no rows" would then score every absence arm as a kill.
+#
+# KEYED ON THE GUARD'S LOCATION AND OBSERVABLE, NEVER ON A SPELLING THE FIX INTRODUCED.
+# Each `sed` rewrites the CONDITION at the emission site; a mutation anchored on the status
+# token or on the remedy prose would match nothing the day either is reworded, and the
+# fixture would go FIXTURE STALE on a commit that changed no behaviour.
+# =======================================================================================
+echo ""
+echo "  --- Part 8 mutants ---"
+
+E20_SRC_DIR="$(cd "$(dirname "$DRIFT")" && pwd)"
+E20N=0
+# `e20mut` SETS A GLOBAL AND PRINTS NOTHING, and that is not a style choice. `bad` writes to
+# STDOUT, so a builder called inside `$( )` folds its own refusal text into the captured
+# value: every failure path then returns a NON-EMPTY string, the caller reads it as a
+# successfully built mutant, and `bash "<the refusal sentence>"` produces no rows — which
+# the arms below score as MUTANT SURVIVED. Measured while probing this section: a subject
+# already carrying the naive guard reported `MUTANT SURVIVED [me1]` where the true state is
+# FIXTURE STALE, and the two readings prescribe opposite repairs.
+E20_MUT=""
+e20mut() { # e20mut <name> <sed-arg>... -> sets E20_MUT to the mutant's path, or to ""
+  local name="$1"; shift
+  local d="$ROOT/e20-$name"
+  E20_MUT=""
+  rm -rf "$d"; mkdir -p "$d"
+  cp -R "$E20_SRC_DIR"/. "$d"/ 2>/dev/null || { bad "MUTANT HARNESS BROKEN [$name]: could not copy the reconcile directory"; return 1; }
+  sed "$@" "$DRIFT" > "$d/mutant-drift.sh" || { bad "MUTANT DID NOT APPLY [$name]: sed exited non-zero, so no mutant exists and its arms would report nothing"; return 1; }
+  # `cmp -s` — a mutation that matched NOTHING is byte-identical to the original and reads
+  # exactly like a mutant that survived. This repo has shipped that reading twice.
+  if cmp -s "$DRIFT" "$d/mutant-drift.sh"; then
+    bad "FIXTURE STALE [$name]: the mutation matched nothing in layer-drift.sh, so the arm it is meant to probe is unproven. The subject was reworded — re-anchor the mutation on the same observable, never relax the assertion"
+    return 1
+  fi
+  if ! bash -n "$d/mutant-drift.sh" 2>/dev/null; then
+    bad "FIXTURE STALE [$name]: the mutant does not parse, so a kill would be a syntax error rather than a disarmed guard"
+    return 1
+  fi
+  E20_MUT="$d/mutant-drift.sh"
+  return 0
+}
+# Every mutant's own control: the copy must still classify NOHEAD's SIBLING — the unrelated
+# CONTROL entry, which no mutation below touches — or the copy is what failed. PRESENCE-
+# shaped, because a copy that died sourcing lib.sh emits nothing and that is what an
+# absence-shaped control would score as healthy.
+e20run() { printf '%s\n' "$(bash "$1" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null)"; }
+e20st() { printf '%s\n' "$1" | awk -F'\t' -v e="$2" '$2 ~ e {print $1}'; }
+e20ctl() { # e20ctl <name> <output>
+  if [ "$(printf '%s\n' "$2" | grep -c 'CONTROL\.md')" -ge 1 ]; then
+    ok "  control [$1]: the copy still classifies the untouched CONTROL entry — it loaded lib.sh and ran"
+  else
+    bad "MUTANT HARNESS BROKEN [$1]: the copy produced no row for the untouched CONTROL entry; it is not running, and every verdict beside it is a property of the copy rather than of the mutation"
+  fi
+}
+
+# NOTE — CONJUNCT 1 OF THE GUARD IS VACUOUS TODAY, AND NO MUTANT BELOW DROPS IT.
+#
+# The guard is `[ -z "$ext_titles" ] && ! grep -qE '^#{2,6}[[:space:]]+' "$f"`. A mutant
+# removing the FIRST conjunct would SURVIVE, and its survival must not be read as a coverage
+# gap: `heading_titles_of_stream` matches `^#{2,4}`, a strict SUBSET of the guard's `^#{2,6}`,
+# so any file with a heading conjunct 2 can see also populates `ext_titles` — no input can
+# separate them. Measured independently here over 9 seeds (no heading, h1-only, h2, h3, h4,
+# h5, h6, mixed h5+h6, numbered-only): conjunct-2-ALONE and the shipped guard emit the
+# identical set, while conjunct-1-ALONE differs on four of them, which is the harness control
+# proving the instrument can see a difference at all.
+#
+# THE DECISIVE COMPARISON IS conjunct2-ALONE vs SHIPPED. Comparing conjunct1-alone against
+# shipped establishes that conjunct 2 is load-bearing and says nothing about the vacuity.
+#
+# THE GUARD STAYS BY OPERATOR DECISION. It is recorded here rather than deleted because the
+# two predicates are only equivalent while the two grammars stay in their current relation,
+# and a `#{2,4}` widening would separate them silently. ME2 below is what fails if the
+# relation moves.
+#
+# ME1 — THE GUARD IS KEYED ON THE EMPTY `ext_titles` ALONE, which is the naive form the fix
+#       header measures a 10-entry false-positive set for. Killed by 8b: NUMONLY's
+#       `ext_titles` is empty too, so it starts being accused of unreachability while the
+#       numbered arm is reading it. This is the CONVERSE of the vacuity above — dropping
+#       conjunct 2 is observable, dropping conjunct 1 is not.
+#       ANCHORED ON THE `&&` CONJUNCTION rather than on the status token: the conjunction IS
+#       the property under test, and it survives any rewording of the row's text.
+if e20mut me1-naive-ext-titles-guard -e 's@^  if \[ -z "\$ext_titles" \] && ! grep -qE .\^#{2,6}\[\[:space:\]\]+. "\$f"; then$@  if [ -z "$ext_titles" ]; then@'; then
+  ME1_OUT="$(e20run "$E20_MUT")"
+  if grep -qx EXTENSION-NO-HEADINGS <<<"$(e20st "$ME1_OUT" 'NUMONLY\.md$')"; then
+    ok "  mutant [me1] KILLED by 8b: keyed on the empty ext_titles alone, the guard accuses a fully-checked numbered-only entry"
+  else
+    bad "MUTANT SURVIVED [me1]: the naive ext_titles-only guard did NOT report NUMONLY, so 8b does not depend on the heading half of the conjunction and the false-positive set it exists to bound is untested"
+  fi
+  # THE SAME MUTANT MUST STILL REPORT NOHEAD. Without this conjunct a mutant that disabled
+  # the whole block would fail 8b's check for the wrong reason and read as a kill.
+  if grep -qx EXTENSION-NO-HEADINGS <<<"$(e20st "$ME1_OUT" 'NOHEAD\.md$')"; then
+    ok "    and it still reports NOHEAD, so the kill above is the widening and not a dead block"
+  else
+    bad "MUTANT HARNESS BROKEN [me1]: the mutant reports NEITHER entry — the block is disabled rather than widened, and the kill above would be an outage"
+  fi
+  e20ctl me1 "$ME1_OUT"
+  E20N=$((E20N+1))
+fi
+
+# ME2 — THE HEADING PREDICATE NARROWS TO THE JOINS' OWN `#{2,4}`. Killed by 8c: an h5-only
+#       entry then reads as having no heading at all, and the row makes a claim that is
+#       false of its subject. This is the arm that holds the predicate WIDER than the joins.
+if e20mut me2-narrow-to-joins-grammar -e 's@! grep -qE .\^#{2,6}\[\[:space:\]\]+. "\$f"@! grep -qE '"'"'^#{2,4}[[:space:]]+'"'"' "$f"@'; then
+  ME2_OUT="$(e20run "$E20_MUT")"
+  if grep -qx EXTENSION-NO-HEADINGS <<<"$(e20st "$ME2_OUT" 'H5ONLY\.md$')"; then
+    ok "  mutant [me2] KILLED by 8c: narrowed to #{2,4}, the guard reports an entry that HAS a heading"
+  else
+    bad "MUTANT SURVIVED [me2]: narrowing the predicate to the joins' own #{2,4} changed nothing about H5ONLY, so 8c is not load-bearing and the row's width is unasserted"
+  fi
+  if grep -qx EXTENSION-NO-HEADINGS <<<"$(e20st "$ME2_OUT" 'NOHEAD\.md$')"; then
+    ok "    and it still reports NOHEAD, so the kill is the narrowing and not a dead block"
+  else
+    bad "MUTANT HARNESS BROKEN [me2]: the mutant reports neither entry — the block is disabled rather than narrowed"
+  fi
+  e20ctl me2 "$ME2_OUT"
+  E20N=$((E20N+1))
+fi
+
+# A MUTANT THAT KILLED NOTHING READS EXACTLY LIKE AN ARM THAT CANNOT FIRE, and `cmp -s`
+# cannot see it — it proves the edit applied, never that the run loaded the edited file.
+# Assert the count.
+if [ "$E20N" -eq 2 ]; then
+  ok "  both Part 8 mutants were built, applied (cmp -s) and scored"
+else
+  bad "only $E20N of 2 Part 8 mutants were scored — a mutation that never became a mutant leaves its arm unproven, and this fixture would report PASS over it"
 fi
 
 echo ""

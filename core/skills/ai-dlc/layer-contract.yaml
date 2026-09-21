@@ -921,6 +921,40 @@ clauses:
     code: EXTENSION-TITLE-MATCHES-CORE
     fixture: layer-title-join
 
+  - id: LC-E20
+    subject: extension
+    level: WARN
+    since: 20
+    normative: >-
+      Both absorption joins key on a HEADING — LC-E5/LC-E6 on a numbered anchor, LC-E19 on a
+      prose title. An entry whose body carries NO heading this clause can see harvests empty
+      from both, so neither has ever been able to report it as absorbed however exactly core has
+      since adopted its content. The only other row such an entry can produce is
+      EXTENSION-OK, which emit-report.sh filters out of the operator-facing section, so its
+      unreachability has been arriving as silence indistinguishable from a clean check. This
+      clause makes the absence of a join visible; it states nothing about the entry's content
+      and prescribes no deletion.
+      THE PREDICATE IS "NO HEADING AT `#{2,6}`", never "no UNNUMBERED heading", and the
+      difference is the whole false-positive set. An entry built entirely out of numbered
+      headings also harvests empty from the LC-E19 arm and is fully checked by LC-E5/LC-E6;
+      keyed there, this clause would accuse 10 of the reference consumer's 40 registered
+      entries of being unreachable while the numbered join was reading them. Keyed on the
+      absence it reports 4, every one of which carries frontmatter and prose and no heading.
+      ITS GRAIN IS WIDER THAN THE JOINS' AND THE GAP IS DECLARED RATHER THAN IMPLIED. The two
+      harvesters read `^#{2,4}`; this guard reads `^#{2,6}`. So an entry whose ONLY headings
+      are h5/h6 is unjoinable and is NOT reported — measured against an h1-only entry, which
+      IS reported, in the same invocation. Reporting the wider shape keeps this row's own
+      claim honest: it says "no heading at this grain is present", never "no join can read
+      this entry". A body of h5/h6 headings is a DIFFERENT gap and is not this clause's to
+      state.
+      WARN, never ADJUDICATED: the ADJUDICATED level demands a recorded verdict keyed on a
+      subject digest before apply proceeds, and this row's entire content is that no mechanism
+      looked at the entry — there is no reading for a verdict to be a record of.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
+    code: EXTENSION-NO-HEADINGS
+    fixture: layer-title-join
+
   - id: LC-E7
     subject: extension
     level: WARN

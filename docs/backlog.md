@@ -1145,55 +1145,97 @@ verify: sh bad=0; for f in $(git ls-files templates/pipeline/); do grep -qE "^[^
 **A registered extension entry with zero markdown headings is invisible to the absorption arm, and
 the only row it gets says `EXTENSION-OK`.** `layer-drift.sh`'s unnumbered absorption arm harvests its
 subject with `ext_titles="$(unnumbered_titles_of_file "$f")"` at
-`core/skills/ai-dlc-update/reconcile/layer-drift.sh:1502` and runs only under
-`if [ -n "$ext_titles" ]` at `:1503`. `unnumbered_titles_of_file` at `:747` resolves titles from
+`core/skills/ai-dlc-update/reconcile/layer-drift.sh:1753` and runs only under
+`if [ -n "$ext_titles" ]` at `:1754`. `unnumbered_titles_of_file` at `:982` resolves titles from
 headings, so an entry whose body carries no markdown heading yields an empty set and the arm never
-executes on it. There is no `else`, so nothing is emitted — and the status vocabulary has no member
-that could say so: `NOT-CHECKED` appears **0** times in the file, against **21** emit sites carrying
-**14** distinct statuses.
+executes on it. There is no `else`, so nothing is emitted — and the status vocabulary had no member
+that could say so: `NOT-CHECKED` appears **0** times in the file, against **24** emit sites carrying
+**16** distinct statuses.
 
-Measured on the reference consumer's 38 registered extension entries: **3** carry zero markdown
+**Every `path:line` in the figures above was re-derived at base `e52260f4`, and every one of them had
+moved** — the entry had been carrying `:1502`, `:1503` and `:747`, which name unrelated lines in the
+current file. **The emit-site figure was wrong for a different reason, and it is the instructive
+one:** the grammar that produced `21 / 14` counted `emit` alone. The file has TWO emitters — `emit()`
+at `:284` and `emit_raw()` at `:859` — so the census is **23 `emit` + 1 `emit_raw` = 24**, over 17
+first-argument tokens of which one is the variable `$worst`, leaving **16** literal statuses. A
+grammar that cannot spell one of its subject's two emitters returns a floor, not a count.
+
+Measured on the reference consumer's **40** registered extension entries: **4** carry zero markdown
 headings — `roles/pm-domain.md`, `steps-domain/bug-investigation-domain.md`,
-`steps-domain/research-requirements-domain.md`. Control: the other **35** carry at least one, and
-`checks/gate-validation-push.md` carries **10**.
+`steps-domain/research-requirements-domain.md`, and `steps-domain/manual-operator-ac-domain.md`,
+which the earlier figure did not name. Control in the same derivation: the other **36** carry at
+least one heading, and `checks/gate-validation-push.md` carries **6** — not the 10 filed.
+
+**THE POPULATION WAS WRONG BECAUSE THE GLOB WAS FLAT.** Entries NEST under `checks/`, `roles/` and
+`steps-domain/`; a `*.md` glob at the extensions root matches **1** file, `README.md`, and no
+registered entry at all. That reads as a working search over a tiny corpus. The count above is a
+recursive walk, and the `1` is recorded here because it is the shape of the error, not its size.
 
 **The silence is worse than absence**, and this is where the filing understated itself. Running the
-shipping `layer-drift.sh` against that consumer, each of the three gets exactly one row and its status
-is `EXTENSION-OK` — the sole member of the denylist at
-`core/skills/ai-dlc-update/reconcile/emit-report.sh:230`, so it never reaches the report. The operator
-sees nothing, and the row behind the nothing reads as checked-and-fine.
+shipping `layer-drift.sh` against that consumer, each of the four gets exactly one row and its status
+is `EXTENSION-OK` — filtered at `core/skills/ai-dlc-update/reconcile/emit-report.sh:491` (the entry
+said `:230`), so it never reaches the report. The operator sees nothing, and the row behind the
+nothing reads as checked-and-fine.
 
 **A live instance, found by hand on a file the detector cannot see.** `pm-domain.md`'s own frontmatter
 comment records core v0.288.0 adding both of that entry's former bullets to `team-roles/pm.md`
 near-verbatim. That is exactly the retirement case the absorption arm exists to find.
 
 Discharges `PC-S316-ABSORPTION-DETECTOR-JOINS-ONLY-ON-NUMBERED-ANCHORS`, whose headline claim — the
-arm being gated behind the `ext_anchors` guard — is already fixed: the arm at `:1502` is a separate
-`if` and the weaker status does reach the report. These 3 are the residue. A close of that entry is
-GATED on this filing.
+arm being gated behind the `ext_anchors` guard — was already fixed: the arm is a separate `if` and
+the weaker status does reach the report. These 4 are the residue.
 
-**The satisfiability evidence is a DIFFERENTIAL, not a killed mutant, and that is a real gap.** An
-attempt to patch `unnumbered_titles_of_file`'s empty case collapsed the classifier from 3 rows to 1
-and tripped the receipt's own `HARNESS BROKEN` guard — the guard works, but no green mutant was
-obtained. What stands instead: `WITHHEADING` — identical body text, identical `hooks:` target,
-identical absorbed section, same invocation — earns `EXTENSION-RETIRE-CANDIDATE`, so the target state
-is demonstrably emittable by the shipping code for this exact body and only the harvester's blindness
-separates the two entries. **Close this gap with a killed mutant before treating the receipt as
-mutation-tested.** The receipt's predicate also had to exclude `EXTENSION-HOOK-DRIFT`: a first version
-returned 0 because the synthetic entry picked up that unrelated arm's row, which the three real
-entries do not get — found only by running it.
+**WHAT THAT CITATION DOES AND DOES NOT DO.** The parent is **ARCHIVED** upstream — `live=0 arch=1`,
+against a control in the same derivation where a worklist id reads `live=1` — so `named_absorbed()`
+cannot produce a row for it and any criterion keyed on one **cannot fire**. The release commit
+therefore closes nothing on the consumer side and is not evidence of one; it is provenance for where
+this filing came from. The close signal for THIS entry is its own receipt and nothing else.
 
-verify: sh D=core/skills/ai-dlc-update/reconcile/layer-drift.sh; R=$(mktemp -d); DI="$R/d"; CO="$R/c"; mkdir -p "$DI/core/skills/ai-dlc/steps" "$DI/core/schemas" "$CO/.claude/skills/ai-dlc/extensions"; cp core/schemas/layer-adjudication-register.json "$DI/core/schemas/" || { echo "HARNESS BROKEN: schema"; exit 2; }; printf '%s\n' '<!-- CORE_MANIFEST v1 -->' 'machinery:' '  - core-manifest.md' 'rulebook:' '  - steps/*.md' > "$DI/core/skills/ai-dlc/core-manifest.md"; printf 'contract_version: 16\n' > "$DI/core/skills/ai-dlc/layer-contract.yaml"; printf '%s\n' '# Widget' '' '### 3. Pre-existing Widget Check.' '' 'Core has carried this for releases.' > "$DI/core/skills/ai-dlc/steps/widget.md"; git -C "$DI" init -q >/dev/null 2>&1; git -C "$DI" add -A >/dev/null 2>&1; git -C "$DI" -c user.email=f@x -c user.name=f commit -qm base >/dev/null 2>&1; B=$(git -C "$DI" rev-parse --short HEAD); printf '%s\n' '' '### 9. Absorbed Widget Check.' '' 'Core adopted this on this pull.' >> "$DI/core/skills/ai-dlc/steps/widget.md"; git -C "$DI" add -A >/dev/null 2>&1; git -C "$DI" -c user.email=f@x -c user.name=f commit -qm theirs >/dev/null 2>&1; T=$(git -C "$DI" rev-parse --short HEAD); E="$CO/.claude/skills/ai-dlc/extensions"; for n in HEADINGLESS WITHHEADING; do printf '%s\n' '---' 'kind: step-domain' 'hooks: steps/widget.md' "id: $n" 'push_candidate: false' 'conforms_to: 16' '---' '' > "$E/$n.md"; done; printf '%s\n' '- **Absorbed Widget Check (consumer copy).** The body core has since taken, carried as a bare bullet with no heading.' >> "$E/HEADINGLESS.md"; printf '%s\n' '### 9. Absorbed Widget Check.' '' 'The same body, under a heading.' >> "$E/WITHHEADING.md"; O=$(bash "$D" "$DI" "$B" "$T" "$CO" 2>/dev/null); N=$(LC_ALL=C grep -c '' <<<"$O" || true); SU=$(LC_ALL=C awk -F'\t' '$2 ~ /HEADINGLESS/ && $1 != "EXTENSION-OK" && $1 != "EXTENSION-HOOK-DRIFT"' <<<"$O" | LC_ALL=C grep -c '' || true); CT=$(LC_ALL=C awk -F'\t' '$2 ~ /WITHHEADING/ && $1 == "EXTENSION-RETIRE-CANDIDATE"' <<<"$O" | LC_ALL=C grep -c '' || true); NA=$(LC_ALL=C grep -c HEADINGLESS <<<"$O" || true); rm -rf "$R"; echo "rows=$N headingless_named=$NA headingless_absorption_rows=$SU control_withheading_retire_rows=$CT"; [ "$N" -gt 0 ] && [ "$CT" -ge 1 ] || { echo "HARNESS BROKEN: the absorption arm did not fire on the with-heading control"; exit 2; }; [ "$SU" -ge 1 ]
+**THE FIX IS SHIPPED, AND THE RECEIPT BELOW REPLACES ONE AN ADVERSARY MEASURED ACCEPTING THREE OF
+FOUR REGRESSIONS.** The old predicate was "any row naming HEADINGLESS whose status is neither
+`EXTENSION-OK` nor `EXTENSION-HOOK-DRIFT`", which any status at all satisfies. Measured: it accepted
+reusing `EXTENSION-RESTATES-CORE` (mislabels the finding), an unconditional row on every entry (a
+lint firing corpus-wide), and `EXTENSION-ANCHOR-MISSING` (mis-tiers onto a clause carrying a register
+duty). It correctly rejected only emitting `EXTENSION-OK`.
+
+**The replacement derives every set it tests against from the shipping files**, so it cannot be
+satisfied by a status that is merely new. The candidate status must be carried by the subject and by
+NO other entry in a corpus that gives each neighbouring status a legitimate owner; must not be in the
+contract's `ADJUDICATED` level set read from `layer-contract.yaml`; must not be in `emit-report.sh`'s
+filtered set read from the emitter; and must not appear on either false-positive control. **The deny
+grammar is pointed at its own subject before its zero is trusted** — the corpus carries an entry that
+earns the filtered status, and the receipt refuses unless that grammar matched it.
+
+**The false-positive control is the load-bearing one, and it is the naive fix's whole failure set.**
+`NUMBEREDONLY` has an EMPTY `ext_titles` and is FULLY CHECKED by the numbered arm. A guard keyed on
+`[ -z "$ext_titles" ]` accuses it; the shipped guard, keyed on the absence of any heading, does not.
+On the reference consumer that is 14 entries against 4.
+
+**THE CLAUSE PROSE SAID "NO MARKDOWN HEADING AT ALL" AND THE CODE DOES NOT MEAN THAT.** The guard
+reads `^#{2,6}` while both harvesters read `^#{2,4}`, so the row's grain is WIDER than the joins'.
+Measured behaviourally rather than reasoned, because the natural reading gets it backwards in both
+directions: an **h1-only** entry IS reported, and an **h5-only** entry is NOT — the latter being
+genuinely unjoinable and silently unreported, which is a different gap this clause does not claim.
+`layer-contract.yaml` and `extensions/README.md` now state the grain and that gap explicitly rather
+than implying total coverage.
+
+**Receipt engine:** `scripts/backlog-reverify.sh` — **exit 0 = the fix is present -> CLOSE-CANDIDATE**. Exits are 0 or 1 only; a third code would be mapped to STILL-LIVE and read as a live defect. Do NOT carry this predicate into a consumer's push-candidate ledger, whose `ledger-reverify.sh` reads exit 0 as STILL REPRODUCES.
+
+verify: sh export LC_ALL=C; D=core/skills/ai-dlc-update/reconcile/layer-drift.sh; Y=core/skills/ai-dlc/layer-contract.yaml; ER=core/skills/ai-dlc-update/reconcile/emit-report.sh; [ -r "$D" ] && [ -r "$Y" ] && [ -r "$ER" ] || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; R=$(mktemp -d) || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; DI="$R/d"; CO="$R/c"; mkdir -p "$DI/core/skills/ai-dlc/steps" "$DI/core/schemas" "$CO/.claude/skills/ai-dlc/extensions" || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; cp core/schemas/layer-adjudication-register.json "$DI/core/schemas/" || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; printf '%s\n' '<!-- CORE_MANIFEST v1 -->' 'machinery:' '  - core-manifest.md' 'rulebook:' '  - steps/*.md' > "$DI/core/skills/ai-dlc/core-manifest.md"; printf 'contract_version: 16\n' > "$DI/core/skills/ai-dlc/layer-contract.yaml"; printf '%s\n' '# Widget' '' '### 3. Pre-existing Widget Check.' '' 'Core has carried this for releases.' '' '## Stable Span' '' 'Unchanged across the pull.' > "$DI/core/skills/ai-dlc/steps/widget.md"; printf '%s\n' '# Sprocket' '' '### Sprocket Guidance.' '' 'A core file this pull does not touch.' > "$DI/core/skills/ai-dlc/steps/sprocket.md"; git -C "$DI" init -q || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; git -C "$DI" add -A || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; git -C "$DI" -c user.email=f@x -c user.name=f commit -qm base || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; B=$(git -C "$DI" rev-parse --short HEAD) || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; printf '%s\n' '' '### 9. Absorbed Widget Check.' '' 'Core adopted this on this pull.' >> "$DI/core/skills/ai-dlc/steps/widget.md"; git -C "$DI" add -A || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; git -C "$DI" -c user.email=f@x -c user.name=f commit -qm theirs || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; T=$(git -C "$DI" rev-parse --short HEAD) || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; [ -n "$B" ] && [ -n "$T" ] && [ "$B" != "$T" ] || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; E="$CO/.claude/skills/ai-dlc/extensions"; fm() { printf '%s\n' '---' 'kind: step-domain' "hooks: steps/${3:-widget}.md" "id: $1" 'push_candidate: false' 'conforms_to: 16' ${2:+"$2"} '---' '' ; }; fm HEADINGLESS > "$E/HEADINGLESS.md"; printf '%s\n' '- **Absorbed Widget Check (consumer copy).** The body core has since taken, as a bare bullet.' >> "$E/HEADINGLESS.md"; fm WITHHEADING > "$E/WITHHEADING.md"; printf '%s\n' '### 9. Absorbed Widget Check.' '' 'The same body, under a heading.' >> "$E/WITHHEADING.md"; fm RESTATER > "$E/RESTATER.md"; printf '%s\n' '### 3. Pre-existing Widget Check.' '' 'A restatement of a section core already had.' >> "$E/RESTATER.md"; fm ANCHORGONE "extends: '#Section Upstream Deleted'" > "$E/ANCHORGONE.md"; printf '%s\n' '### Consumer Anchor Entry.' '' 'Augments a span that is gone.' >> "$E/ANCHORGONE.md"; fm TITLEMATCH > "$E/TITLEMATCH.md"; printf '%s\n' '## Stable Span' '' 'A prose heading naming a core section.' >> "$E/TITLEMATCH.md"; fm OKENTRY '' sprocket > "$E/OKENTRY.md"; printf '%s\n' '### Consumer Sprocket Note.' '' 'Nothing changed upstream for this one.' >> "$E/OKENTRY.md"; fm NUMBEREDONLY > "$E/NUMBEREDONLY.md"; printf '%s\n' '### 12. [ext:NUMBEREDONLY] Consumer Numbered Check.' '' 'A numbered consumer section.' >> "$E/NUMBEREDONLY.md"; fm CLEANHEADED > "$E/CLEANHEADED.md"; printf '%s\n' '### Consumer Only Sprocket Review.' '' 'Nothing in core resembles this.' >> "$E/CLEANHEADED.md"; O="$R/o"; bash "$D" "$DI" "$B" "$T" "$CO" > "$O" 2>/dev/null || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; ROWS=$(grep -c '^EXTENSION' "$O") || ROWS=0; CT=$(awk -F'\t' '$1=="EXTENSION-RETIRE-CANDIDATE" && $2 ~ /WITHHEADING/' "$O" | grep -c .) || CT=0; [ "$ROWS" -gt 0 ] && [ "$CT" -ge 1 ] || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; awk -F'\t' '$2 !~ /HEADINGLESS/ {print $1}' "$O" | sort -u > "$R/others"; awk '/^  - id:/{lv="";cd=""} /^    level:/{lv=$2} /^    code:/{cd=$2; if(lv=="ADJUDICATED") print cd}' "$Y" | sort -u > "$R/adj"; grep -o '\$1!="[A-Z][A-Z0-9_-]*"' "$ER" | sed -e 's/^[^"]*"//' -e 's/"$//' | sort -u > "$R/deny"; [ -s "$R/adj" ] && [ -s "$R/deny" ] || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; awk -F'\t' '{print $1}' "$O" | sort -u > "$R/seen"; DH=$(grep -xF -f "$R/deny" "$R/seen" | grep -c .) || DH=0; [ "$DH" -ge 1 ] || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; awk -F'\t' '$2 ~ /HEADINGLESS/ {print $1}' "$O" | sort -u > "$R/subj"; grep -vxF -f "$R/others" "$R/subj" > "$R/c1" || : > "$R/c1"; grep -vxF -f "$R/adj" "$R/c1" > "$R/c2" || : > "$R/c2"; grep -vxF -f "$R/deny" "$R/c2" > "$R/cand" || : > "$R/cand"; N=$(grep -c . "$R/cand") || N=0; FP=0; if [ "$N" -ge 1 ]; then FP=$(awk -F'\t' '$2 ~ /NUMBEREDONLY|CLEANHEADED/ {print $1}' "$O" | grep -xF -f "$R/cand" | grep -c .) || FP=0; fi; echo "rows=$ROWS control_absorption=$CT deny_grammar_hits=$DH subject_only_statuses=$N [$(tr '\n' ' ' < "$R/cand")] fp_control_hits=$FP"; [ "$N" -ge 1 ] && [ "$FP" -eq 0 ]
 
 ## BL-016
 
 **Nothing derives a retired PATH from the base→theirs diff, so a layer file citing one is claimed by
 no detector.** `retired-layer-contract.sh` does derive its retired set from the base→theirs core
 rulebook, but its vocabulary is two shapes and neither is a path: `shapes_of()` at
-`core/skills/ai-dlc-update/reconcile/retired-layer-contract.sh:81-87` extracts labelled directives and
-`tokens_of()` at `:88-90` extracts `{<token>}` placeholders. A path retired between the two refs
-changes neither set, so `RETIRED` at `:131` is empty and the run takes the early exit at `:141`,
-reporting that the release "retired NO contract shape ... so NO layer file was opened".
+`core/skills/ai-dlc-update/reconcile/retired-layer-contract.sh:83` extracts labelled directives and
+`tokens_of()` at `:89` extracts `{<token>}` placeholders. A path retired between the two refs
+changes neither set, so `RETIRED` at `:137` is empty and the run takes the early exit, reporting that
+the release "retired NO contract shape ... so NO layer file was opened".
+
+**Those three line numbers are re-derived at base `e52260f4`; the entry had been carrying `:81`,
+`:88` and `:131`, all stale, while every named function and variable was present.** A citation whose
+symbol resolves and whose line does not is the shape that survives review.
 
 The only other candidate is W11 / LC-R4 at `core/scripts/validate-layer-entries.sh:1560`, which closes
 the headline instance and cannot generalise: its arm 2 at `:1731` is hard-coded to the story corpus,
@@ -1208,20 +1250,71 @@ shape (2 at base, 2 at theirs)"; retiring a labelled DIRECTIVE the same layer fi
 **1** row on that same file. Same harness, same layer file — the detector fires, and the vocabulary is
 what excludes paths.
 
-The header's "WHAT IT DOES NOT CATCH, STATED PLAINLY" at `:47-51` names an invented shape and a prose
-paraphrase, and the run-time limit at `:129` names prose restatements. **Neither tells the operator
-that a retired path is outside the vocabulary, so this zero reads as covered** — an additional defect
-at the same site, folded in here.
+**SUBJECT 2, AND IT IS WHY THIS ENTRY DOES NOT EXPIRE ON THE ARM ALONE.** The header's "WHAT IT DOES
+NOT CATCH, STATED PLAINLY" at base `:47` names an invented shape and a prose paraphrase, and the
+run-time `LIMIT` at `:135` names prose restatements only. **Neither told the operator that a retired
+path was outside the vocabulary, so the zero read as covered.**
 
-Discharges `PC-S314-NO-DETECTOR-CLAIMS-A-LAYER-FILE-CITING-A-PATH-THE-PULL-JUST-RETIRED`. A close of
-that entry is GATED on this filing — W11 arm 2 closes its headline instance and not this sub-claim.
+**THIS HALF SHIPS AS PROSE WITH NO ENFORCER, AND ITS CLOSE IS A HUMAN READ.** The `LIMIT` string is
+now widened — it names the path arm and the residue the arm still does not cover — and the header
+says so above the code. Neither is checked by anything. Derived at this tip: the phrase
+`WHAT IT DOES NOT CATCH, STATED PLAINLY` appears in **5** detectors under
+`core/skills/ai-dlc-update/reconcile/`, and **no arm anywhere validates the content of any of them**.
+Control in the same sweep, and it is the reason that zero is reportable: the identical grammar over
+`scripts/`, `core/scripts/` and `core/fixtures/` returns **1** file — `validate-plan-shape.sh:29`,
+an unrelated comment in a different validator — so the grammar can spell the phrase outside the
+detector directory and the absence of a VALIDATOR is a real absence rather than a broken search.
+**Do not read a green gate as evidence about this half.** The `LIMIT` string is the part an operator
+actually sees, because the RUN prints it; the header is prose whose accuracy nothing re-derives.
 
-Behavioural rather than a grep: the receipt drives the real detector twice over one seeded tree and the
-directive arm is the control in the same invocation, so a harness that stopped exercising the detector
-returns 0 rows for BOTH arms and reports STILL-LIVE rather than closing. **A fix landing in W11 instead
-of in this detector would also read STILL-LIVE; re-point the receipt if that is the shape chosen.**
+**The receipt below covers subject 1 only.** It asserts the arm's behaviour and is silent about
+whether the limits text is accurate, because no mechanical predicate can observe that. **An entry
+with two subjects expires only when both do** — closing this one needs the arm's receipt green AND a
+hand-read of the header and `LIMIT` against what the detector now covers.
 
-verify: sh D=$(mktemp -d); mkdir -p "$D/dist/core/skills/ai-dlc" "$D/cons/.claude/skills/ai-dlc/extensions"; S="$D/dist/core/skills/ai-dlc/SKILL.md"; R="$D/dist"; git -C "$R" init -q; git -C "$R" config user.email a@b; git -C "$R" config user.name a; printf -- "- Model: \140/opus\n- Effort: \140/high\nStories: _bmad-output/planning-artifacts/stories/\n" > "$S"; git -C "$R" add -A; git -C "$R" commit -qm b; C1=$(git -C "$R" rev-parse HEAD); printf -- "- Model: \140/opus\n- Effort: \140/high\nStories: _bmad-output/planning-artifacts/s<N>/stories/\n" > "$S"; git -C "$R" commit -qam p; C2=$(git -C "$R" rev-parse HEAD); git -C "$R" checkout -q -b d "$C1"; printf -- "- Model: \140/opus\nStories: _bmad-output/planning-artifacts/stories/\n" > "$S"; git -C "$R" commit -qam d; C3=$(git -C "$R" rev-parse HEAD); printf -- "- Effort: \140/high\n_bmad-output/planning-artifacts/stories/\n" > "$D/cons/.claude/skills/ai-dlc/extensions/x.md"; V=core/skills/ai-dlc-update/reconcile/retired-layer-contract.sh; P=$(bash "$V" "$R" "$C1" "$C2" "$D/cons" 2>/dev/null | grep -c "^RETIRED-LAYER-CONTRACT"); K=$(bash "$V" "$R" "$C1" "$C3" "$D/cons" 2>/dev/null | grep -c "^RETIRED-LAYER-CONTRACT"); rm -rf "$D"; [ "$K" -ge 1 ] && [ "$P" -ge 1 ]
+Discharges `PC-S314-NO-DETECTOR-CLAIMS-A-LAYER-FILE-CITING-A-PATH-THE-PULL-JUST-RETIRED`.
+
+**WHAT THAT CITATION DOES AND DOES NOT DO.** That parent is **ARCHIVED** upstream — `live=0 arch=1`,
+derived over both ledger files in the declaration form the archive actually uses, with a control in
+the same derivation where a worklist id reads `live=1`. So `named_absorbed()` cannot produce a row
+for it and a criterion keyed on one **cannot fire**; the release commit is provenance, not a close
+signal. Nothing on the consumer side moves because of this release, and the entry's own receipt is
+the only thing that decides its status here.
+
+Behavioural rather than a grep: the receipt drives the real detector twice over one seeded tree and
+the directive arm is the control in the same invocation, so a harness that stopped exercising the
+detector returns 0 rows for BOTH arms and reports STILL-LIVE rather than closing. **A fix landing in
+W11 instead of in this detector would also read STILL-LIVE; re-point the receipt if that is the shape
+chosen.**
+
+**THE ARM SHIPPED WITH A FALSE-POSITIVE CLASS, AND THE ZERO THAT HID IT WAS A CEILING RATHER THAN AN
+FP SET.** `spellings_of()`'s third spelling strips `skills/ai-dlc/`, which degenerates any rulebook
+file sitting DIRECTLY under that directory to a BARE FILENAME — matched by an unanchored `grep -qF`,
+where the comment claimed "word-ish boundaries" the code did not have. Four files degenerate that
+way. Measured over the reference consumer's 54 layer files, bare match against the correct
+`.claude/skills/ai-dlc/<file>` grain, impossible-filename control **0** in the same sweep: `SKILL.md`
+**17 / 1**, `escalations.md` **4 / 0**, `rule-authoring.md` **4 / 0**, `artifact-path-grammar.md`
+**3 / 0**. End to end with `SKILL.md` genuinely retired: **17 path rows → 1**. The arm's first
+false-positive measurement read zero because the range it was taken over retired no rulebook file at
+all — **a ceiling, not an FP set, and reading one as the other is how an unmeasured lint ships.** The
+repair is a property of the SPELLING, not a list of the four: emit the third spelling only when it
+retains a directory component, so a rulebook file added at that level later cannot reopen the class
+silently.
+
+**THE RECEIPT BELOW REPLACES ONE WHOSE PREDICATE WAS A ROW COUNT.** The old form asked only that each
+run produce at least one `RETIRED-LAYER-CONTRACT` row, which any widening of the DIRECTIVE vocabulary
+satisfies without a path arm existing. Measured against four regressions on the shipped arm: an
+unattributed row (the operator cannot tell which path is stale) and a re-introduced early exit keyed
+on `RETIRED` alone are rejected by requiring the row to NAME the retired path; an unconditional arm
+firing on every (layer file, retired path) pair and a substring match built from the path — which
+accuses `route-old.md` for `route.md`, the dynamic-string hazard this repo has shipped three times —
+are rejected by two seeded control files that cite, respectively, nothing retired and only the
+near-miss neighbour. **The attribution test asks that the row name the path, never that it carry a
+particular prefix**, so a second author's spelling of the same row still closes it.
+
+**Receipt engine:** `scripts/backlog-reverify.sh` — **exit 0 = the fix is present -> CLOSE-CANDIDATE**. Exits are 0 or 1 only; a third code would be mapped to STILL-LIVE and read as a live defect. Do NOT carry this predicate into a consumer's push-candidate ledger, whose `ledger-reverify.sh` reads exit 0 as STILL REPRODUCES.
+
+verify: sh export LC_ALL=C; V=core/skills/ai-dlc-update/reconcile/retired-layer-contract.sh; [ -r "$V" ] || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; D=$(mktemp -d) || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; R="$D/dist"; C="$D/cons"; mkdir -p "$R/core/skills/ai-dlc/steps" "$C/.claude/skills/ai-dlc/extensions" || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; printf '%s\n' '<!-- CORE_MANIFEST v1 -->' 'machinery:' '  - core-manifest.md' 'rulebook:' '  - steps/*.md' '  - SKILL.md' > "$R/core/skills/ai-dlc/core-manifest.md"; printf -- '- Model: `/opus`\n- Effort: `/high`\n' > "$R/core/skills/ai-dlc/SKILL.md"; printf '%s\n' '# Route' '' 'The routing step.' > "$R/core/skills/ai-dlc/steps/route.md"; printf '%s\n' '# Route Old' '' 'A near-miss neighbour that is NEVER retired.' > "$R/core/skills/ai-dlc/steps/route-old.md"; printf '%s\n' '# Retro' '' 'The retro step.' > "$R/core/skills/ai-dlc/steps/retro.md"; git -C "$R" init -q || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; git -C "$R" config user.email a@b || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; git -C "$R" config user.name a || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; git -C "$R" add -A || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; git -C "$R" commit -qm base || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; B=$(git -C "$R" rev-parse HEAD) || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; git -C "$R" checkout -q -b pathside "$B" || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; git -C "$R" rm -q core/skills/ai-dlc/steps/route.md || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; git -C "$R" commit -qm retire-path || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; TP=$(git -C "$R" rev-parse HEAD) || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; git -C "$R" checkout -q -b dirside "$B" || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; printf -- '- Model: `/opus`\n' > "$R/core/skills/ai-dlc/SKILL.md"; git -C "$R" commit -qam retire-directive || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; TD=$(git -C "$R" rev-parse HEAD) || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; [ "$B" != "$TP" ] && [ "$B" != "$TD" ] && [ "$TP" != "$TD" ] || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; X="$C/.claude/skills/ai-dlc/extensions"; printf '%s\n' '---' 'kind: step-domain' 'hooks: steps/retro.md' 'id: citer' '---' '' 'See `steps/route.md` for routing.' '' '- Effort: `/high`' '' 'Also see `steps/retro.md`, which nothing retired.' > "$X/citer.md"; printf '%s\n' '---' 'kind: step-domain' 'hooks: steps/retro.md' 'id: decoy' '---' '' 'See `steps/route-old.md`, a different file that was not retired.' > "$X/decoy.md"; printf '%s\n' '---' 'kind: step-domain' 'hooks: steps/retro.md' 'id: innocent' '---' '' 'Local guidance citing no core file.' > "$X/innocent.md"; OP="$D/op"; OD="$D/od"; bash "$V" "$R" "$B" "$TP" "$C" > "$OP" 2>/dev/null || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; bash "$V" "$R" "$B" "$TD" "$C" > "$OD" 2>/dev/null || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; DC=$(awk -F'\t' '$1=="RETIRED-LAYER-CONTRACT" && $3 !~ /route/' "$OD" | grep -c .) || DC=0; [ "$DC" -ge 1 ] || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; PP=$(awk -F'\t' '$1=="RETIRED-LAYER-CONTRACT" && $2 ~ /citer/ && $3 ~ /route\.md/' "$OP" | grep -c .) || PP=0; DK=$(awk -F'\t' '$1=="RETIRED-LAYER-CONTRACT" && $2 ~ /decoy/' "$OP" "$OD" | grep -c .) || DK=0; IN=$(awk -F'\t' '$1=="RETIRED-LAYER-CONTRACT" && $2 ~ /innocent/' "$OP" "$OD" | grep -c .) || IN=0; DP=$(awk -F'\t' '$1=="RETIRED-LAYER-CONTRACT" && $3 ~ /route\.md/' "$OD" | grep -c .) || DP=0; SV=$(awk -F'\t' '$1=="RETIRED-LAYER-CONTRACT" && $3 ~ /retro\.md/' "$OP" "$OD" | grep -c .) || SV=0; echo "path_rows=$PP directive_control=$DC decoy=$DK innocent=$IN path_on_dir_run=$DP surviving=$SV"; [ "$PP" -ge 1 ] && [ "$DK" -eq 0 ] && [ "$IN" -eq 0 ] && [ "$DP" -eq 0 ] && [ "$SV" -eq 0 ]
 
 ## BL-020
 
@@ -4001,4 +4094,185 @@ nothing is not the situation here — its removal would make a real leak invisib
 **Not measured, and stated rather than hidden:** whether any leak the arm has ever reported was
 genuine. The distribution's history would answer it and it was not taken.
 
-verify: sh set -e; F=core/fixtures/ledger-reverify/run.sh; E=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -r "$F" ] && [ -r "$E" ] || exit 9; M="$(LC_ALL=C grep -n 'ledger-reverify-theirs' "$E" | LC_ALL=C grep -c 'mktemp')" || M=0; [ "$M" -ge 1 ] || exit 9; C="$(LC_ALL=C grep -c 'tt_count()' "$F")" || C=0; [ "$C" -ge 1 ] || exit 9; W=$(mktemp -d) || exit 9; B="$(ls -d "${TMPDIR:-/tmp}"/ledger-reverify-theirs.* 2>/dev/null | LC_ALL=C grep -c . )" || B=0; S="$(mktemp -d "${TMPDIR:-/tmp}/ledger-reverify-theirs.XXXXXX")" || { rmdir "$W"; exit 9; }; A="$(ls -d "${TMPDIR:-/tmp}"/ledger-reverify-theirs.* 2>/dev/null | LC_ALL=C grep -c . )" || A=0; rmdir "$S"; Z="$(ls -d "${TMPDIR:-/tmp}"/ledger-reverify-theirs.* 2>/dev/null | LC_ALL=C grep -c . )" || Z=0; rmdir "$W"; echo "before=$B foreign=$A restored=$Z"; [ "$A" -eq "$((B+1))" ] && [ "$Z" -eq "$B" ] || { echo "PRECONDITION: the shared glob no longer tracks a foreign tree, so nothing here was measured"; exit 9; }; P="$(LC_ALL=C grep -o 'ledger-reverify-theirs\.[A-Za-z$_{}()]*' "$E" | head -1)"; case "$P" in *'$'*) exit 0 ;; esac; exit 1
+verify: sh set -e; F=core/fixtures/ledger-reverify/run.sh; E=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -r "$F" ] && [ -r "$E" ] || exit 9; M="$(LC_ALL=C grep -n 'ledger-reverify-theirs' "$E" | LC_ALL=C grep -c 'mktemp')" || M=0; [ "$M" -ge 1 ] || exit 9; C="$(LC_ALL=C grep -c 'tt_count()' "$F")" || C=0; [ "$C" -ge 1 ] || exit 9; W=$(mktemp -d) || exit 9; B="$(ls -d "$W"/ledger-reverify-theirs.* 2>/dev/null | LC_ALL=C grep -c . )" || B=0; S="$(mktemp -d "$W/ledger-reverify-theirs.XXXXXX")" || { rmdir "$W"; exit 9; }; A="$(ls -d "$W"/ledger-reverify-theirs.* 2>/dev/null | LC_ALL=C grep -c . )" || A=0; rmdir "$S"; Z="$(ls -d "$W"/ledger-reverify-theirs.* 2>/dev/null | LC_ALL=C grep -c . )" || Z=0; rmdir "$W"; echo "before=$B foreign=$A restored=$Z"; [ "$A" -eq "$((B+1))" ] && [ "$Z" -eq "$B" ] || { echo "PRECONDITION: the shared glob no longer tracks a foreign tree, so nothing here was measured"; exit 9; }; P="$(LC_ALL=C grep -o 'ledger-reverify-theirs\.[A-Za-z$_{}()]*' "$E" | head -1)"; case "$P" in *'$'*) exit 0 ;; esac; exit 1
+
+## BL-284 — the handoff entry marker armed on a Read the recovery machinery itself compelled, and a session that never began a handoff could not clear it
+
+**DEFECT.** The marker means "this session is INSIDE the handoff procedure", and it was written
+from a tool call the session had no choice about. Consequence is a blocked Stop over a procedure
+that was never owed, which is why this is a DEFECT and not a NOTE: the lead's own exit is the
+thing that stops working.
+
+**THE TWO MECHANISMS DISAGREED ABOUT WHAT A READ MEANS.** `core/hooks/ai-dlc-handoff-entry.sh`
+armed on ANY `Read` whose path matched `*/steps/handoff.md`, unconditionally.
+`ai-dlc-recover.sh` MANDATES `Read <step file>` as the second tool call after every compaction and
+points that mandate at `handoff.md` whenever a handoff is already pending, and
+`ai-dlc-recover-gate.sh` then DENIES every other call until that Read happens. So a session that
+merely compacted while paused was COMPELLED to read the file, and the hook read the compelled Read
+as an initiation.
+
+**THE MARKER IS NOT SELF-CLEARING FOR THE SESSION THAT NEVER STARTED.** It is key 1 of
+`ai_dlc_handoff_pending` — the key that arms the Stop guard and reroutes the NEXT compaction's
+mandate — and it is deleted at step 5 of the handoff procedure. A session that never began one has
+nothing to run step 5, so the marker persists and the guard blocks a Stop over a procedure that was
+never owed. Every compaction re-fires the mandate, so the state is self-sustaining rather than
+transient.
+
+**NOT A REGRESSION OF THE KEY-2 WORK.** That release gave key 2 a lifecycle and touched NEITHER of
+these two files. This is the same defect one key over, and it was reachable the whole time.
+
+**THE FIX IS A SUPPRESSION ON ONE DISTINGUISHABLE STATE, NEVER A NARROWING OF THE MATCH**, because
+recovery NEEDS that Read and a narrower path match would break the mandate. Unreadable or ambiguous
+input FAILS OPEN TO ARMING — a marker written wrongly is one `rm`, a marker not written loses the
+routing the file exists to provide.
+
+**THE FIRST CUT KEYED THAT SUPPRESSION ON `.recover-fired` AND WAS UNREACHABLE ON EVERY CONSUMER.**
+Derived by PARSING `templates/settings.json.template`: `ai-dlc-recover-gate.sh` is `PreToolUse`
+matcher `*` and `ai-dlc-handoff-entry.sh` is `PostToolUse` matcher `Read`, and that gate **deletes**
+the in-flight marker on the call that satisfies the second mandate. So the shipped order is gate,
+Read, entry hook — and by the time the entry hook runs, the file that would have answered is gone
+one hook earlier. The test fell through and the marker was written anyway, which is the exact case
+the fix exists to prevent.
+
+**AND THE MARKER WAS THE WRONG KEY EVEN WHERE IT SURVIVED — A SECOND BLOCKER, IN THE OPPOSITE
+DIRECTION.** It records "a recovery is in flight", never "THIS Read is the one it demanded", so it
+cannot tell a mandated Read from a voluntary open during the same recovery, and suppressing the
+latter loses the routing. **The constructible form is not the obvious one**: a mandate naming a
+different step file cannot produce it, because the gate DENIES a Read of a file its mandate does not
+name and that call never reaches `PostToolUse` at all. The reachable state is an UNARMABLE recovery
+— `step_file_resolved=0`, which the injector refused — where the gate stands down and the marker
+persists for the whole session. A voluntary open there is a genuine initiation with the marker
+present, and the marker-keyed shape silenced it.
+
+**THE SHIPPED KEY IS A SATISFACTION BREADCRUMB.** The gate writes `.recover-satisfied` naming the
+step file, on the satisfying call and only there, immediately before clearing the marker; the entry
+hook reads it, CONSUMES it, and compares on the basename under its `steps/` parent. That answers the
+narrow question this hook actually has — was THIS Read the one the recovery demanded — and because
+only the satisfying call writes it, a recovery that has not reached its second mandate leaves a
+voluntary open still arming. `ai-dlc-recover.sh` clears any stale copy when a new recovery starts.
+**This is a FOUR-FILE change**: the entry hook, the gate, the injector, and
+`core/schemas/pipeline-state-paths.json`, whose `paths` population goes **37 → 38** (re-derived at
+`e52260f4` and at tip; a control in the same derivation reads 2 entries for `.recover-fired` and 0
+for an impossible name). I95 requires that classification, and a new state path without it fails the
+push.
+
+**THE RECEIPT DRIVES THE SHIPPED HOOK SEQUENCE, AND THAT IS THE WHOLE REASON IT WORKS.** A seed that
+invokes the entry hook alone with a hand-placed marker reports not-armed — correctly, about a
+sequence no consumer executes — and so passes on the broken fix AND the fixed one. Seven such seeds
+missed both blockers exactly that way. Every seed here runs gate → Read → entry hook, with the
+registration PARSED from the template and ASSERTED before any seed runs, and a gate `deny` is
+modelled as a call that never executed rather than as a Read that did.
+
+**FOUR SEEDS, NO TWO REDUNDANT.** S1 is the shipped-order mandated Read (must not arm — blocker 1);
+S2 is the unarmable-recovery voluntary open (must arm — blocker 2); S3 is a genuine initiation with
+no recovery at all; **S4 separates "a breadcrumb exists" from "the breadcrumb names THIS file"** —
+the mandate names `retro.md` and is satisfied on its own file, then the lead voluntarily opens
+`handoff.md`, which must arm. Without S4 a suppression keyed on mere existence scores identically to
+the shipped fix, which is measured: that mutant passed until S4 was added.
+
+Scored on three whole trees and three regressions, with a Read of an unrelated path as the
+same-invocation control: TIP closes it; **the FIRST CUT and BASE are both rejected, and they fail on
+DIFFERENT seeds** — the first cut arms on S1 and wrongly suppresses S2, base arms on both. Reverting
+to the marker key, stopping arming entirely, and suppressing on breadcrumb existence are all
+rejected; an implementation reading the breadcrumb with `awk` instead of `sed` closes it.
+
+Discharges `PC-S312-RECOVERY-MANDATED-HANDOFF-READ-REARMS-ENTRY-MARKER-AFTER-EVERY-COMPACTION`.
+
+**WHAT THAT CITATION DOES AND DOES NOT DO.** Unlike this batch's other two parents, this candidate
+IS live upstream — `live=1 arch=0`, derived in the declaration form the ledger uses, with a control
+in the same derivation where an archived id reads `live=0 arch=1`. So the release commit IS a real
+close signal on the consumer side and `named_absorbed()` can produce a row for it. What it does not
+do is close anything by itself: the consumer runs its own installed engine, so the row appears only
+on a pull that carries this hook, and until then the candidate stays live there whatever this
+repo's gate says.
+
+**Receipt engine:** `scripts/backlog-reverify.sh` — **exit 0 = the fix is present -> CLOSE-CANDIDATE**. Exits are 0 or 1 only; a third code would be mapped to STILL-LIVE and read as a live defect. Do NOT carry this predicate into a consumer's push-candidate ledger, whose `ledger-reverify.sh` reads exit 0 as STILL REPRODUCES.
+
+verify: sh export LC_ALL=C; H=core/hooks/ai-dlc-handoff-entry.sh; G=core/hooks/ai-dlc-recover-gate.sh; TPL=templates/settings.json.template; [ -r "$H" ] && [ -r "$G" ] && [ -r "$TPL" ] || { echo "PRECONDITION: a subject moved and nothing was measured"; exit 1; }; command -v jq >/dev/null 2>&1 || { echo "PRECONDITION: no jq"; exit 1; }; GE=$(jq -r '.hooks.PreToolUse[]?|select(.hooks[]?.command|test("ai-dlc-recover-gate"))|.matcher' "$TPL" 2>/dev/null | head -1); HE=$(jq -r '.hooks.PostToolUse[]?|select(.hooks[]?.command|test("ai-dlc-handoff-entry"))|.matcher' "$TPL" 2>/dev/null | head -1); [ "$GE" = "*" ] && [ "$HE" = "Read" ] || { echo "PRECONDITION: registration is not PreToolUse:* + PostToolUse:Read (got '$GE' / '$HE'), so this receipt no longer reproduces the shipped order"; exit 1; }; W=$(mktemp -d) || { echo "PRECONDITION: no scratch"; exit 1; }; M=.handoff-in-progress; GH="$PWD/$G"; HH="$PWD/$H"; seed() { local n="$1"; local res="$2"; local mand="$3"; local rd="$4"; local p="$W/$n"; rm -rf "$p"; mkdir -p "$p/_bmad-output" "$p/.claude/skills/ai-dlc/steps" || return 1; printf 'snapshot\n' > "$p/_bmad-output/snap.md"; printf 'handoff\n'  > "$p/.claude/skills/ai-dlc/steps/handoff.md"; printf 'retro\n'    > "$p/.claude/skills/ai-dlc/steps/retro.md"; if [ "$res" != NONE ]; then { printf 'snapshot_path=_bmad-output/snap.md\n'; printf 'step_file=%s\n' "$mand"; printf 'step_file_resolved=%s\n' "$res"; } > "$p/_bmad-output/.recover-fired"; printf '{"tool_name":"Read","tool_input":{"file_path":"%s"}}' "$p/_bmad-output/snap.md" | CLAUDE_PROJECT_DIR="$p" bash "$GH" >/dev/null 2>&1; fi; local pay; pay=$(printf '{"tool_name":"Read","tool_input":{"file_path":"%s"}}' "$p/$rd"); local gout; gout=$(printf '%s' "$pay" | CLAUDE_PROJECT_DIR="$p" bash "$GH" 2>/dev/null); case "$gout" in *'"deny"'*) echo denied; return 0 ;; esac; printf '%s' "$pay" | CLAUDE_PROJECT_DIR="$p" bash "$HH" >/dev/null 2>&1; if [ -e "$p/_bmad-output/$M" ]; then echo armed; else echo not-armed; fi; }; seed2() { local n="$1"; local mand="$2"; local rd="$3"; local p="$W/$n"; rm -rf "$p"; mkdir -p "$p/_bmad-output" "$p/.claude/skills/ai-dlc/steps" || return 1; printf 'snapshot\n' > "$p/_bmad-output/snap.md"; printf 'handoff\n'  > "$p/.claude/skills/ai-dlc/steps/handoff.md"; printf 'retro\n'    > "$p/.claude/skills/ai-dlc/steps/retro.md"; { printf 'snapshot_path=_bmad-output/snap.md\n'; printf 'step_file=%s\n' "$mand"; printf 'step_file_resolved=1\n'; } > "$p/_bmad-output/.recover-fired"; printf '{"tool_name":"Read","tool_input":{"file_path":"%s"}}' "$p/_bmad-output/snap.md" | CLAUDE_PROJECT_DIR="$p" bash "$GH" >/dev/null 2>&1; local p2; p2=$(printf '{"tool_name":"Read","tool_input":{"file_path":"%s"}}' "$p/$mand"); printf '%s' "$p2" | CLAUDE_PROJECT_DIR="$p" bash "$GH" >/dev/null 2>&1; printf '%s' "$p2" | CLAUDE_PROJECT_DIR="$p" bash "$HH" >/dev/null 2>&1; local pay gout; pay=$(printf '{"tool_name":"Read","tool_input":{"file_path":"%s"}}' "$p/$rd"); gout=$(printf '%s' "$pay" | CLAUDE_PROJECT_DIR="$p" bash "$GH" 2>/dev/null); case "$gout" in *'"deny"'*) echo denied; return 0 ;; esac; printf '%s' "$pay" | CLAUDE_PROJECT_DIR="$p" bash "$HH" >/dev/null 2>&1; if [ -e "$p/_bmad-output/$M" ]; then echo armed; else echo not-armed; fi; }; S1=$(seed s1 1 .claude/skills/ai-dlc/steps/handoff.md .claude/skills/ai-dlc/steps/handoff.md) || { echo "PRECONDITION: seed 1"; exit 1; }; S2=$(seed s2 0 .claude/skills/ai-dlc/steps/handoff.md .claude/skills/ai-dlc/steps/handoff.md) || { echo "PRECONDITION: seed 2"; exit 1; }; S3=$(seed s3 NONE '' .claude/skills/ai-dlc/steps/handoff.md) || { echo "PRECONDITION: seed 3"; exit 1; }; S4=$(seed2 s4 .claude/skills/ai-dlc/steps/retro.md .claude/skills/ai-dlc/steps/handoff.md) || { echo "PRECONDITION: seed 4"; exit 1; }; CTL=$(seed ctl NONE '' docs/unrelated.md) || { echo "PRECONDITION: control seed"; exit 1; }; echo "S1=$S1 S2=$S2 S3=$S3 S4=$S4 control_unrelated_read=$CTL"; [ "$CTL" = not-armed ] || { echo "PRECONDITION: the control armed, so the harness is not measuring arming"; exit 1; }; [ "$S1" = not-armed ] && [ "$S2" = armed ] && [ "$S3" = armed ] && [ "$S4" = armed ]
+
+## BL-285 — the reconcile-emit-report fixture convicted the machinery of a failure in the world the fixture built for it
+
+**DEFECT.** Step 2 of the self-update treats a RED fixture as evidence that the machinery slice is
+broken and blocks a real pull on that reading, so a red cell here is a conviction. This unit could
+emit one it had no basis for, and the conviction names a file that was never involved.
+
+**REPRODUCED, three concurrent copies of the unit on one tree: 1 of 3 red, 2 green, same commit.**
+Two assertions failed — the strip guard's `FIXTURE BROKEN`, and the docs-only near-miss's *"a
+docs-only upstream commit made --verify reject a sound approved report (rc=1)"*. The second is the
+false conviction in full: it names the renderer, in the fixture's own voice, and the renderer was
+never involved. Not reproduced in 13 further concurrent runs, which is what an intermittent looks
+like and is why the repair is structural rather than a chase.
+
+**THE MECHANISM IS A HELPER THAT SWALLOWED THE EXIT STATUS OF EVERY WORLD IT BUILT.** Each arm
+below the helper builds a WORLD — move a branch, write a probe file, commit. Measured on the file:
+**8** world-mutation sites, **0** of which checked that the change they intended landed. **A world
+that did not get built does not make the arm downstream SKIP** — it makes that arm read a tree one
+commit short of the one it assumes, and report on `emit-report.sh`. Both observed failures sit
+immediately downstream of such a site.
+
+**THE FIX IS A VERDICT THE FIXTURE COULD NOT PREVIOUSLY SPELL.** `broken()` prints, FAILS the unit,
+and says in the line itself that this is not evidence about the machinery — the one fact a step 2
+reading the log needs in order not to convict a correct slice. **NOT a retry**, which hides an
+unreliable construction, and **NOT a skip**, which stands the arm down for a reason
+indistinguishable from the machinery being fine. The unit still goes red; what changes is what it
+says.
+
+**THREE HELPERS, BECAUSE EXIT STATUS IS NOT THE WHOLE ANSWER AND A RESET NEEDS A DIFFERENT QUESTION
+FROM A COMMIT.** `git commit` with nothing staged exits 1 while `git checkout` of a ref already at
+HEAD exits 0 having done nothing, so the status answers "did the command error" where the arms need
+"is the tree now the one I require". `world_moved` DERIVES that from the repository, against a sha
+captured BEFORE the mutation rather than a value the same block wrote — a record a block writes from
+its own input is a record of intent, and comparing it against that input is a tautology.
+
+**`world_moved` IS THE WRONG QUESTION FOR A `reset --hard`, WHICH IS WHY THERE IS A THIRD.** It asks
+"did this ref stop being what it was", and a reset to a ref already at HEAD exits 0 having done
+nothing while the ref it is asked about did not move because it was already there — exactly the case
+this change says exit status cannot answer. `world_at` asserts the POSTCONDITION the reset exists to
+establish: HEAD is now at the named ref. Derived site counts, two independent methods agreeing before
+being reported: `DGW` 14 occurrences / 12 sites, `world_moved` 9 / 4, `world_at` 4 / 2.
+
+**ONE CAPTURE MOVED, AND THAT IS A REAL DEFECT THE FIRST CUT SHIPPED.** `MOVEREF` is a BRANCH, so
+the docs-only world's `reset --hard` moves it; a pre-reset reading of that ref is a sha the commit
+below is not being compared against, and the delta measured would be the RESET's rather than the
+COMMIT's — a commit that silently did nothing would still look like it moved. The capture now sits
+after the reset.
+
+**NOT BL-283, RE-DERIVED RATHER THAN ASSUMED.** That entry's mechanism is a leak counter globbing a
+FIXED PREFIX in a shared `TMPDIR`. Grammar for it over this fixture: **0** hits; control in the same
+invocation against `core/fixtures/ledger-reverify/run.sh`: **4**. This fixture's seed takes its own
+`mktemp -d`, so the race is inside one run rather than across runs. Disjoint mechanisms.
+
+**THE RECEIPT RUNS THE SUBJECT AND IS A DIFFERENTIAL WHOSE SIDES ARE ASSERTED TO DIFFER.** Two whole
+trees are built, one with the docs-only world's commit forced to fail, and the two copies are
+`cmp`-compared before either is read — a forcing that matched nothing cannot pass as a measurement.
+The unforced side must emit ZERO world-construction-broken lines, so the verdict cannot be an
+unconditional row. **The unforced side's `ok` count is a live harness control in the same run**,
+because two empty logs compare equal and read as "no difference".
+
+**THE EXIT STATUS CANNOT SEE THE SKIP REGRESSION, AND A FIRST PREDICATE KEYED ON IT ACCEPTED ONE.**
+Measured: a `broken()` that PRINTS the disclaimer while downgrading the verdict to `SKIP` leaves the
+unit red anyway — the downstream false conviction is still there — so its exit status AND its
+disclaimer count are both identical to the correct fix's. The conjunct that separates them is WHICH
+VERDICT the line carries: the receipt counts the disclaimer on `FAIL` lines and requires that count
+to equal the disclaimer's count under any verdict, so a line that carries the claim under a weaker
+verdict fails the equality. Scored against four regressions and a second spelling: the skip
+downgrade, a verdict stripped of its disclaimer, and an unconditional row are rejected, and a
+differently-worded `broken()` carrying the same claim on a `FAIL` line closes the entry.
+
+**THE FIXTURE MUST BE COPIED AS A TREE, NOT AS ITS SCRIPTS.** It resolves its root by walking up
+from its own directory, so a flat copy of `*.sh` cannot find `lib/preamble.sh` or the engine and
+exits 2 having asserted nothing — which reads exactly like a clean run of a unit that found no
+world-construction failure. The receipt copies at depth and its harness control catches the case
+anyway.
+
+Discharges `PC-S312-E6-KILL-SET-SCORES-NONDETERMINISTICALLY-AND-CONVICTS-A-CLEAN-SLICE`.
+
+**WHAT THAT CITATION DOES AND DOES NOT DO.** This candidate is live upstream — `live=1 arch=0`,
+derived with an archived id reading `live=0 arch=1` as the control in the same derivation — so the
+release commit IS a close signal there and `named_absorbed()` can produce a row for it. It does not
+close the candidate on its own: this fixture SHIPS, and a consumer runs the copy it last installed,
+so the row appears only on a pull carrying this run.sh.
+
+**Receipt engine:** `scripts/backlog-reverify.sh` — **exit 0 = the fix is present -> CLOSE-CANDIDATE**. Exits are 0 or 1 only; a third code would be mapped to STILL-LIVE and read as a live defect. Do NOT carry this predicate into a consumer's push-candidate ledger, whose `ledger-reverify.sh` reads exit 0 as STILL REPRODUCES.
+
+verify: sh export LC_ALL=C; F=core/fixtures/reconcile-emit-report/run.sh; S=core/fixtures/reconcile-emit-report/seed.sh; [ -r "$F" ] && [ -r "$S" ] || { echo "PRECONDITION: the fixture moved and nothing was measured"; exit 1; }; W=$(mktemp -d) || { echo "PRECONDITION: no scratch"; exit 1; }; for side in a b; do mkdir -p "$W/$side/core" || { echo "PRECONDITION: no scratch"; exit 1; }; tar -cf - core/fixtures core/skills core/schemas 2>/dev/null | tar -xf - -C "$W/$side" || { echo "PRECONDITION: tree copy"; exit 1; }; done; FA="$W/a/$F"; FB="$W/b/$F"; [ -r "$FA" ] && [ -r "$FB" ] || { echo "PRECONDITION: tree copy incomplete"; exit 1; }; perl -0777 -i -pe 's/(commit -m "docs-only commit)/commit --no-such-flag -m "docs-only commit/' "$FB" || { echo "PRECONDITION: forcing failed"; exit 1; }; if cmp -s "$FA" "$FB"; then echo "PRECONDITION: the forcing matched nothing, so both runs read the same program"; exit 1; fi; OA="$W/oa"; OB="$W/ob"; ( cd "$W/a" && bash "$F" ) > "$OA" 2>&1; RA=$?; ( cd "$W/b" && bash "$F" ) > "$OB" 2>&1; RB=$?; PAT='world construction, NOT a machinery finding'; NA=$(awk -v p="$PAT" 'index($0,p)>0 && /^[[:space:]]*FAIL/' "$OA" | grep -c .) || NA=0; NB=$(awk -v p="$PAT" 'index($0,p)>0 && /^[[:space:]]*FAIL/' "$OB" | grep -c .) || NB=0; NS=$(grep -cF -- "$PAT" "$OB") || NS=0; CA=$(grep -c '  ok    ' "$OA") || CA=0; echo "unforced: rc=$RA fail_verdict_lines=$NA ok_arms=$CA | forced: rc=$RB fail_verdict_lines=$NB any_verdict_lines=$NS"; [ "$CA" -ge 1 ] || { echo "PRECONDITION: the unforced unit asserted nothing"; exit 1; }; [ "$NA" -eq 0 ] && [ "$NB" -ge 1 ] && [ "$NS" -eq "$NB" ] && [ "$RB" -ne 0 ]
