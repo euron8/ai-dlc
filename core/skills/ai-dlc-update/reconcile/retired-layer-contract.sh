@@ -188,9 +188,38 @@ spellings_of() {   # spellings_of <dist-relative-rulebook-path>
     team-roles/*) printf '.claude/%s\n' "$e" ;;
     *)            printf '.claude/skills/ai-dlc/%s\n' "${e#skills/ai-dlc/}" ;;
   esac
+  # THE THIRD SPELLING IS EMITTED ONLY WHEN IT RETAINS A DIRECTORY COMPONENT, and that guard
+  # is the difference between an arm and a lint the operator turns off.
+  #
+  # Stripping `skills/ai-dlc/` degenerates any rulebook file sitting DIRECTLY under that
+  # directory to a BARE FILENAME, and the match below is `grep -qF` -- an unanchored substring
+  # test. Measured over the reference consumer's 54 layer files, bare match against the correct
+  # `.claude/skills/ai-dlc/<file>` grain, impossible-filename control 0 in the same sweep:
+  #
+  #   SKILL.md                  bare 17  correct 1
+  #   escalations.md            bare  4  correct 0
+  #   rule-authoring.md         bare  4  correct 0
+  #   artifact-path-grammar.md  bare  3  correct 0
+  #
+  # So the day a release retires `core/skills/ai-dlc/SKILL.md` this arm would emit 17 rows
+  # where 1 is true. It is LATENT rather than visible: the range this detector was measured
+  # over retired no rulebook file, so that zero was the CEILING and never the false-positive
+  # set. A ceiling read as an FP set is how an unmeasured lint ships.
+  #
+  # THE GUARD IS A PROPERTY OF THE SPELLING, NOT OF THE CORPUS, which is why it is written as
+  # "does this retain a directory" rather than as a list of the four filenames that degenerate
+  # today. A filename list goes stale the release a rulebook file is added at that level, and
+  # nothing announces it. Nothing is lost by the skip: `steps/retro.md` and `team-roles/tea.md`
+  # keep their directory and are still matched, and the entry spelling of a file directly under
+  # the skill root is unusable as evidence either way -- `hooks: SKILL.md` is the frontmatter
+  # form, and it is already covered by the second spelling at full grain.
   case "$e" in
     team-roles/*) printf '%s\n' "$e" ;;
-    *)            printf '%s\n' "${e#skills/ai-dlc/}" ;;
+    *)
+      _e3="${e#skills/ai-dlc/}"
+      case "$_e3" in
+        */*) printf '%s\n' "$_e3" ;;
+      esac ;;
   esac
 }
 
