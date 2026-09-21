@@ -759,6 +759,40 @@ fi
 # was wrong. That is a control on a different property than the claim, and it is why the clause
 # says a count control does not validate an order claim.
 #
+# RAISED A SIXTEENTH TIME, 62259 -> 67584, ON AN EXPLICIT OPERATOR RULING ("raise the ceiling"),
+# FOR TWO RULES COSTING 1369 BYTES TOGETHER. Sized to headroom, in the style of the fourteenth
+# and fifteenth raises.
+#
+# A6 WAS OBSERVED FAILING AT 63614/62259 BEFORE THE CEILING MOVED. The two rules were drafted
+# into `tool-hazards.md` FIRST and the ceiling derived from the channel afterwards, which is the
+# standard the fifteenth raise set after its own estimate missed by 23%. No estimate was made
+# here; the only figure used is the post-write measurement.
+#
+# THE NUMBER IS DERIVED. 63614 bytes across 74 `## ` sections -- 859 bytes per section,
+# re-measured rather than carried from the fifteenth raise's 827, because the mean moves as the
+# channel grows. 67584 is 66 KiB, leaving 3970 bytes: FOUR AND A HALF sections at the current
+# mean, against 6.5 at the fourteenth raise and 5.25 at the fifteenth. Deliberately not ten --
+# the guard has to keep firing.
+#
+# THE MECHANIZE-FIRST STANDARD WAS MET BY MEASUREMENT, NOT BY ASSERTION, AND IT PRODUCED NO ARM.
+# Both rules are about behaviour in an ad-hoc tool call, so the tracked corpus an arm would scan
+# was counted before the durable channel was reached for: `ps ... | grep` 0 tracked `.sh` sites,
+# `pgrep` 0, against a control of 295 files carrying `mktemp` in the same sweep. A scan with no
+# population cannot fire, so there is nothing to mechanize and the channel is the only carrier.
+#
+# THE FIRST RULE is the process-table liveness probe. Measured both spellings against an
+# impossible-token control in one invocation: `ps ax -o command= | grep -c` answered 4 for a
+# real token AND 4 for one existing nowhere. `pgrep -f` is clean at one watcher and deadlocks at
+# two. The instructive half is that my own first probe was SINGLE-WATCHER and acquitted `pgrep`
+# on four arms, which a peer refuted by running the two-watcher case -- a probe missing the
+# triggering variable returns a zero indistinguishable from an absence, and the wrong fix it
+# invites (`grep -v $$`) does not touch a sibling.
+#
+# THE SECOND RULE is the fifth delegation bullet: an answer composed in session output reaches
+# nobody. Measured on a peer blocked for an hour while a finished adjudication sat in this
+# session's prose. There is no failure arm on a send never made, and the transcript of a
+# composed answer is byte-indistinguishable from a delivered one.
+#
 # WHY IT CANNOT BE MECHANIZED OR SCOPED. 46 tracked files call `find`, and every one of them is
 # CORRECT: under `bash` the name resolves to `/usr/bin/find` (verified under
 # `env -i PATH=/usr/bin:/bin bash` against the interactive shell's own function definition as the
@@ -776,7 +810,7 @@ fi
 #
 # WHAT IS STILL NOT COVERED. The judgement-per-passage vestigial form is STILL not exhaustively
 # enumerated. That debt is now five raises old and is stated rather than quietly carried forward.
-DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-62259}"
+DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-67584}"
 durable_files() {
   printf '%s\n' CLAUDE.md
   for f in $(rule_files); do has_paths_key "$f" || printf '%s\n' "$f"; done

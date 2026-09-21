@@ -55,7 +55,7 @@ output whose SHAPE is the answer — exit codes, counts, `git status` — and fo
 Where a Bash result has to be exact, DERIVE it instead of reading it: `md5`, `wc -c`,
 `cmp -s`, `grep -c`.
 
-## Delegation hazards: four ways a tool call lies about another agent
+## Delegation hazards: seven ways a tool call lies about another agent
 
 **A backgrounded `sleep` returns immediately**, so chained "waits" are rapid polling granting no
 wall clock. Measured: apparent ten-minute waits spanned one minute, four agents were called silent
@@ -88,6 +88,13 @@ more, then wait one more timer before merging without it.
 what is true now. Measured: a hand's final message listed four defects as outstanding that had
 already been fixed, because it had not re-read the files between finding them and reporting.
 Check the tree, not the report.
+
+**AN ANSWER COMPOSED IN SESSION OUTPUT REACHES NOBODY, AND MY TRANSCRIPT READS THE SAME EITHER
+WAY.** A peer's question is answered only by `SendMessage`, with the incoming message's `from`
+copied as `to`; plain output is not visible to other agents. Measured: a full adjudication was
+derived against the tree and written as prose, the peer blocked for an hour at ~97% of its
+window and had to chase it, and no error was raised because there is no failure arm on a send
+never made. A turn that opens with a `<cross-session-message>` does not end without one.
 
 ## awk's `getline < file` reads an unopenable file as an empty one
 
@@ -203,3 +210,13 @@ the two returned DIFFERENT first paths while their counts agreed 3/3 and a negat
 answered 0/0 both ways — so the natural control passed and the only property being read was
 wrong. **A count control does not validate an ORDER claim.** Any `find`-ordering figure taken
 in a tool call is void; re-take it with `/usr/bin/find` and name the binary beside the number.
+
+**A PROCESS-TABLE LIVENESS PROBE SCORES A SUBJECT THAT WAS NEVER STARTED AS RUNNING.** Measured
+both spellings against an impossible-token control in the same invocation: `ps ax -o command= |
+grep -c` answered 4 for a real token and 4 for one existing nowhere, because the `bash -c`
+wrapper's argv holds the ENTIRE script text, so every token the script merely mentions is in a
+live process. `pgrep -f` excludes `self` and nothing else — clean at one watcher, but a SECOND
+concurrently-armed watcher carries the pattern in its own argv, each matches the other, and
+neither loop can terminate. A single-watcher probe cannot see that and returns a zero
+indistinguishable from an absence. Block on the CONDITION — `wait`, a pid file, a sentinel the
+subject writes on exit — never on a process-table grep.
