@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 1430..1543. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 2007..2058. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -58,7 +58,76 @@ scripts/plan-rotate.sh docs/plans/graph-ledger-full-drain.md` to see what moves 
 move it. **Never a discharge banner in the head window** — that silences P9 through P13 on this
 file.
 
-**BATCH 139 SHIPPED `v0.615.0` (`b9caf678`, #816), ONE SUBJECT, ALONE BECAUSE THE SUBJECT IS THE
+**BATCH 140 SHIPPED `v0.616.0` (`4071e41b`, #816), TWO SUBJECTS IN ONE RELEASE.** `BL-014` and
+`BL-018` closed, discharging `PC-S299-READOPT-DOSSIER-RENDERS-REASON-EMPTY` and
+`PC-S302-HARD-BLOCKERS-HAS-NO-POST-APPLY-GUARD`, both named verbatim in the release commit. Gate at
+`AI_DLC_FIXTURE_NO_SKIP=1`: 22 of 22 phases PASS, **203 ok / 0 FAIL**, both changed fixtures read by
+name against an impossible-name control of 0. Live **75 -> 73**, archive **207 -> 209**. Receipt
+zeros diffed BY IDENTITY, 7 -> 9, the two arrivals being exactly the subjects — and that diff was
+load-bearing because this batch ALSO filed, which makes a count-only reading close plausibly.
+
+**THE SCOPING INPUT RETURNED FOUR ROWS AND EVERY ONE DISQUALIFIED ITSELF IN ITS OWN WORDS.**
+`BL-067` records its remedy unshippable at 3/3 false positives, `BL-132` carries a measured
+refutation, `BL-145` says the obvious fix is not obviously right with an unmeasured FP set, and
+`BL-215` says no enforcer is constructible. Action 1 anticipates this state and says to report
+rather than force one. **So this batch scoped off a class the join CANNOT SEE.**
+
+**A `GATED-ON-THIS-FILING` ENTRY IS INVISIBLE TO THE PC-BACKED WORKLIST BY CONSTRUCTION, AND THE
+CLASS IS FOUR ENTRIES.** These are entries this repo filed as the measured RESIDUE of a candidate
+whose headline the consumer has already ARCHIVED. The join keys on `live.txt`; the parent candidate
+left it; the residue scores zero. Derived with controls: all four ids read `live=0 arch=1` while a
+worklist id reads `live=1` in the same invocation. **`BL-015` AND `BL-016` ARE THE REMAINING TWO AND
+ARE THE STRAIGHTFORWARD BUILD NEXT** — same shape, same invisibility, both receipts exit 1 today.
+
+**THE CLASS COUNT IS A FLATTENED-BODY QUESTION AND A LINE-GREP ANSWERS IT WRONG.** The phrase
+wraps, so a line-oriented grep scores 2 where the per-entry flattened derivation scores **4**
+(negative control 0 flattened). The contract carried both numbers in adjacent bullets without
+noticing they disagreed.
+
+**BOTH RECEIPTS WERE REPLACED BEFORE EITHER FIX WAS BUILT, AND THAT ORDERING IS THE FINDING.** Both
+accepted implementations that ship nothing. `BL-018`'s captured `2>&1`, so a qualifier written to
+stderr — which `emit-report.sh` discards with `2>/dev/null` — scored 0, as did widening the filter
+and quoting the line it sits beside. `BL-014`'s accepted raising the clip limit past its own seed,
+the one regression its entry names by name. **A receipt scored only after the fix exists cannot
+tell the fix from the regressions beside it.**
+
+**NO FIXED SEED LADDER CAN VERIFY A CLIP ARM.** Measured: escalating the seed to 20000 moved the
+escape to `head -50000`; 2000000 moved it to `head -5000000`. Every ladder has a top. The shipped
+receipt derives its seed from the render's OWN declared bound and seeds past it, and keeps a
+behavioural ladder beside that because a computed bound the grammar cannot spell reads as no bound.
+
+**A MUTANT SCORING "REJECTED" ON A CONJUNCTION HAS ESTABLISHED NOTHING UNTIL THE OTHER CONJUNCTS
+ARE SATISFIED.** The lead's first attempt to score the clip regression read 1 and was a
+non-discriminating null: it raised the limit while leaving the plain-scalar half unfixed, so the
+receipt failed on the other arm. The discriminating input fixes one half and breaks the other.
+
+**`named_absorbed()` NO LONGER ELECTS THE OLDEST NAMING COMMIT, AND A CONTRACT WRITTEN ON THE OLD
+BEHAVIOUR SHIPPED IN THIS BATCH BEFORE AN ADVERSARY CAUGHT IT.** Both `tail -1` occurrences in that
+span are PROSE describing what was removed. The row carries no version either way — the emit says
+so in as many words — so re-citing cannot cause a false version attribution; but the caller branches
+on `na_n > 1` and rewrites the row to the unelected-list form. Both ids read 1 naming commit before
+the release and **2** after, as predicted. **`BL-145` is the live entry that governs this act and it
+is on the disqualified worklist**, so each entry states what its citation does and does not do.
+
+**THE GATE BLOCKED, THE WRAPPER SAID `exit 0`, AND THE FAILING FIXTURE WAS NOT THIS BRANCH'S.**
+`ledger-reverify`, 1 of 279 assertions, under the pool; green solo on the identical commit. The
+branch touched neither that engine nor that fixture, and the fixture drives neither changed file.
+**Filed as `BL-283` rather than re-run away**: its leak counter globs a FIXED prefix in a shared
+`TMPDIR`, so it answers a question about the box and reports it as a property of the run. Proven
+behaviourally — a hand-made directory under that prefix, created by no `ledger-reverify` run, moves
+the delta +1 and back on removal. **7** other fixture directories drive that materializer, so the
+collision population is this suite's own pool.
+
+**AND THE FIRST ATTRIBUTION FOR IT WAS WRONG, WITH THE MECHANISM RIGHT.** The consumer's INSTALLED
+copy carries the byte-identical `mktemp` line under the same user and `TMPDIR`, and its gate was
+running — but it started AFTER the failing run finished. **A shared mechanism is not an
+attribution; check the timestamps before naming a cause.**
+
+**THE `(#816)` IN THE BATCH 139 LINE BELOW IS WRONG.** GitHub reports PR **#816** as THIS batch's
+release. Batch 139's release sha `b9caf678` resolves and is on `origin/main`, so the sha is good and
+only the PR number is bad. Do not propagate a PR number from a commit SUBJECT; ask the forge.
+
+**BATCH 139 SHIPPED `v0.615.0` (`b9caf678`), ONE SUBJECT, ALONE BECAUSE THE SUBJECT IS THE
 UPDATE SKILL ITSELF.** `BL-280` closed, discharging
 `PC-S345-DEFER-PATH-NAMES-NO-HOME-FOR-THE-GATE-RECORD-IT-JUST-WROTE`, named verbatim in the release
 commit. The self-update DEFER path wrote `self-update-gate-<ts>.md` on every verdict and no step
@@ -1237,13 +1306,25 @@ given at batch 90.
    successful batch is the normal shape here**, because a discharged candidate stays live upstream
    until the consumer PULLS. That is still where a batch scopes from by default.
 
-   **BUT THE LIST IS NOW THIN, AND A SESSION SHOULD KNOW THAT BEFORE IT SCOPES.** After batch 137
-   every remaining row is qualified: three carry NO ownership verb, `BL-132` carries a measured
-   refutation of its own remedy, `BL-215`'s own text says no enforcer is constructible and that
-   ownership must be settled first, and `BL-279` disclaims its candidate in as many words. **Run
-   the join and read each entry's BODY; if nothing on it is a straightforward build, say so to the
-   operator rather than forcing one.** The number here is a record of when it was taken, never an
-   input.
+   **THE LIST IS THIN AND EVERY ROW ON IT DISQUALIFIES ITSELF, SO THE JOIN IS NO LONGER WHERE A
+   BATCH SCOPES FROM. THE ANSWER IS NOT TO FORCE ONE — IT IS TO WORK THE CLASS THE JOIN CANNOT
+   SEE.** Measured at batch 140 against each entry's own body, not a paraphrase: `BL-067` records
+   its remedy UNSHIPPABLE at 3/3 false positives, `BL-132` carries a measured refutation,
+   `BL-145` says the obvious fix is not obviously right with an unmeasured FP set, `BL-215` says
+   no enforcer is constructible until ownership is settled. **Run the join and read each entry's
+   BODY anyway** — it is still the provenance-first input and a new candidate can arrive on it —
+   but when nothing there is a straightforward build, go to the `GATED-ON-THIS-FILING` class
+   below rather than forcing a refuted remedy or reporting an empty batch.
+
+   **THAT CLASS IS WHERE BATCH 140's WORK CAME FROM AND `BL-015` AND `BL-016` ARE WHAT REMAIN.**
+   An entry filed as the measured RESIDUE of a candidate whose headline the consumer has ARCHIVED
+   scores ZERO on this join by construction — the join keys on `live.txt` and the parent candidate
+   left it. Derive the class with the entry bodies FLATTENED (`## BL-` to the next `## BL-`,
+   whatever its number): a line-oriented grep scores 2 where the flattened derivation scores 4,
+   because the phrase wraps. Controls in the same invocation: each id reads `live=0 arch=1` while
+   a worklist id reads `live=1`, and an impossible phrase scores 0 flattened.
+
+   The number here is a record of when it was taken, never an input.
 
    **SCORE CITATION OWNERSHIP BEFORE RANKING, BECAUSE THE JOIN CANNOT.** `pc()` matches any `PC-`
    token in an entry and cannot tell "I close this" from "here is an example". `BL-140` cites its
@@ -1935,55 +2016,3 @@ Each of these is a command, and each was checked to be answerable at the point i
   graph until graph pulls. Run the fixed copy locally against graph's ledger for this program's
   own use, but the brief must be actionable under the engine graph has installed today.
 
-## What the pull produced — the four filings, and the one lesson behind all of them
-
-`BL-066`–`BL-069` are in `docs/backlog.md` with full derivations. Summarised only so a fresh session
-knows what exists before re-deriving it:
-
-| id | defect | consumer id |
-|---|---|---|
-| `BL-066` | `named_absorbed()` joins on the OLDEST commit whose MESSAGE mentions an id, and feeds its `VERSION` into a paste-ready PERMANENT annotation. Naming is not absorbing. **This plan CAUSED the worst of it** — the rule requiring every closed id in the release commit message is what makes the join resolve there. | `PC-S334-NAMED-ABSORBED-JOINS-ON-THE-OLDEST-MESSAGE-MENTION` |
-| `BL-067` | `closes_when` has a schema, a producer, a printer and **no consumer**. Six layer debts came due the instant graph ran the command they named, and nothing announced it. | `PC-S334-CLOSES-WHEN-NAMES-A-COMMAND-AND-NOTHING-JOINS-THE-TWO` |
-| `BL-068` | `ledger-rotate.sh:38-41` states a byte-identical invariant that its own prescribed workflow breaks, and the fixture asserting it **cannot construct** the row that would break it. | `PC-S334-ROTATE-ACCEPTANCE-TEST-FALSE-FAILS-ON-THE-WORKFLOW-IT-DOCUMENTS` |
-| `BL-069` | `audit-layer-debt.sh` files its own discharge rows as undeclared debt, so the metric moves the wrong way in response to the action it exists to encourage. | `PC-S334-AUDIT-LAYER-DEBT-FLAGS-ITS-OWN-DISCHARGE-ROWS-AS-UNDECLARED-DEBT` |
-
-### THE FINDING THAT OUTRANKS ALL FOUR, AND THE REASON THIS SECTION EXISTS
-
-**Six independent instances of ONE class in a single pull, split evenly between two parties who were
-both actively watching for it.** A path a receipt READS versus one it MENTIONS. A grep hit counted
-as a call site. A regex truncating placeholder paths. A report's own summary sentence *"24
-HAND-REVIEW"* counted as a data row. A `v`-anchored bucket labelled "nothing to compare" that
-contained the largest disagreement in the set. And a receipt guard testing that extracted text
-*contained* the string `prefix_entry_count` — which mangled, unparseable text still does — so `eval`
-failed, the function was never defined, both counts came back empty, and `[ "" = "" ]` returned 0.
-
-**That last one was in the receipt for the entry documenting the pattern, written in the same hour.**
-
-**Six is not a discipline problem, and treating it as one produces exactly the wrong remedy.** The
-instinct after six is to read more carefully — and reading is the faculty that failed all six times.
-Every instance was a TEXT-SHAPED QUESTION ASKED ABOUT A PROGRAM: does this file mention X, does this
-line contain Y, does this extraction look like a function. Text-shaped questions cannot separate a
-subject from a reference to it.
-
-**Nothing about review caught any of them.** Not the brief, which I reviewed before shipping. Not
-the figures, which I published three times. Not the version walk, which I reviewed *while writing
-its own control*. Reviewing a rendering establishes only that it is internally consistent with
-itself, which every one of these was. **All six fell to recomputing from source and comparing two
-independently derived values.**
-
-### THE RULE THIS EARNED, and it is the one to carry forward
-
-**A control must be run against the input that DISCRIMINATES, and asserted to discriminate on it,
-before its result is read.**
-
-Every bad control in this pull passed on an input ADJACENT to the one that mattered — a summary line
-beside the data rows, a release commit one step ahead of the start point, two temp paths differing
-only in a header, a fixture corpus that could not construct the row type under test.
-
-`ARM 5` of `render-brief.sh` is the shape that follows from it, and it is portable: draw the probe
-FROM THE CORPUS rather than hand-picking one, so it survives the corpus moving; compute both
-candidate semantics; and **REFUSE UNLESS THEY DIFFER** before reading either. It does not ask anyone
-to read more carefully. It makes the instrument refuse when its two inputs cannot disagree.
-
-**A number was wrong three times and an artifact twice, and every single correction came from a
-party re-deriving rather than accepting.** That is the operating lesson of this entire program.
