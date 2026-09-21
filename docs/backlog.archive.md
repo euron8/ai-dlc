@@ -17421,6 +17421,8 @@ verify: sh export LC_ALL=C; F=core/fixtures/reconcile-emit-report/run.sh; S=core
 
 **LANDED (v0.618.0, verified 54fb7d8b).** A `manual` receipt under a label `ledger_entry_id()` cannot spell now emits `NEEDS-REVIEW unresolved:` naming the label as the defect; the bullet grammar is byte-untouched. False-positive set enumerated over five corpora — 2/1/1/2, every one a narrative record, container or inventory line, ZERO entries, against a control of 341 id-keyed `manual` entries untouched. Two of the filing’s own harm theories were measured FALSE and are recorded in the entry. Shipped ALONE: `ledger-reverify.sh` is a bootstrapping file.
 
+Discharges `PC-S312-LEDGER-REVERIFY-PARSES-NARRATIVE-CLOSURE-BULLETS-AS-ENTRY-HEADERS-AND-INHERITS-A-NEIGHBOUR-S-VERIFY-MANUAL`. **The id is written here UNWRAPPED and on one line on purpose.** Every join over this corpus greps a contiguous token, so an id broken across a line is invisible to all of them: this entry cited its candidate nowhere until the batch close checked, and the unfiled join therefore reported an already-closed candidate as awaiting a first filing. The release commit carried it correctly (1, against controls of 2 for the version and 3 for the entry id), so the upstream close signal was never at risk — what was missing is the distribution-side join.
+
 **DEFECT.** Filed by the reference consumer 2026-09-20 and fixed in this release. Its own
 reproduction re-run before anything was changed, with a control in the same invocation: against
 the ledger at the state it was filed against, the engine emitted **2** `HAND-REVIEW` rows whose
