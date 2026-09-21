@@ -26,6 +26,8 @@ core fix lands on disk while the pipeline goes on running the rule it replaced.
 | B2 | `--stamp reaffirm` demands `--note` | an unrecorded decision is not a decision |
 | C | the gate goes green after a **real** re-adoption, re-stamps `base_sha`, and the consumer's own delta survives | a "fix" that discards the consumer's reason for overriding |
 | D | `unregistered-drift.sh` separates an in-place core rewrite (`tea.md`) from install.sh's template substitution (`dev.md`), and leaves untouched files `CORE-OK` | both directions are fatal — see below |
+| B4b | a **multi-line PLAIN** `reason:` renders whole, and its continuation STOPS at the next unindented key | `fm_block()` entered continuation mode only on a block indicator, so `reason: <text>` running over the lines beneath it rendered its FIRST LINE ONLY. Worse than the block-scalar defect B4 fixed: a bare `\|` rendered empty, which the operator reads as a missing field and goes to the file for, while one surviving line ending in a complete sentence reads as the WHOLE reason and step 7's decision is taken against a fragment that looks whole |
+| B4c | the reason panel's clip **announces itself**, with a count, and a reason that FITS carries no notice | it was `head -20`: a long reason lost its tail with nothing in the output saying so. Raising the limit is not a fix — the notice is a function of the INPUT, not of the bound, so no value of the bound can produce a silent clip |
 | J | a core paragraph upstream RE-FLOWED (same words, new line breaks) is not superseded text: a faithful adoption passes `--check` and lands `--stamp readopt`; a near-miss that also keeps a sentence core genuinely dropped is refused, naming only the dropped one; a line core NEGATED in place is refused when the body carries only the old line and passes when it carries the new one | the live `steps__gate-validation__check-20` case: a base line survives at theirs as the SUFFIX of a longer line, a whole-line set difference calls it deleted, and the refusal fires on the state it exists to certify |
 
 ## Why D is two-sided
@@ -55,6 +57,8 @@ Every gate here was mutation-tested; each mutant is caught:
 | trailing-newline bug reintroduced in `unregistered-drift.sh` | D (template substitution misread as drift) |
 | base-side test put back on WHOLE LINES (set difference instead of containment) | J (faithful re-flow adoption refused; the near-miss still refuses, so exactly one cell moves) |
 | containment acquits without asking whether the body carries the CARRIER (bare containment) | J (the body teaching the negated rule passes; the faithful re-flow still passes, so exactly one cell moves) |
+| the plain arm back to `print v; exit` | B4b (the continuation vanishes while line 1 and the single-line form both still render, so it is the continuation being tested and not the run) |
+| the clip notice deleted, the bound left in place (`head -20` exactly) | B4c (the same twenty lines are shown and the tail is silently dropped — the notice is the ONLY observable, which is why no arm reading the panel's content could have caught it) |
 
 `seed.sh` writes a real git repository with two commits and a real consumer tree
 to disk. It contains no `echo` describing a file it does not create — v0.48.0

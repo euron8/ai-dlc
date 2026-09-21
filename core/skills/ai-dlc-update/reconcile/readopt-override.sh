@@ -118,6 +118,22 @@ fm() { sed -n '/^---$/,/^---$/p' "$1" | sed -n "s/^$2:[[:space:]]*//p" | head -1
 #
 # fm() keeps its single-line semantics for `shadows` and `base_sha`: widening the shared reader
 # would change how two fields parse to fix a third.
+#
+# A MULTI-LINE PLAIN SCALAR IS THE SAME DEFECT ONE YAML SHAPE OVER, AND IT FAILS IN THE WORSE
+# DIRECTION. The block-scalar fix above cured `reason: |`; `reason: <text>` continued over the
+# lines beneath it took the `print v; exit` arm and rendered its FIRST LINE ONLY. A bare `|`
+# rendered EMPTY, which the operator reads as a missing field and goes to the file for; one
+# surviving line that ends in a complete sentence reads as the WHOLE reason, and step 7's
+# retire / readopt / reaffirm decision is then taken against a fragment that looks whole.
+# Measured on the reference consumer's overrides, with the shipping reader lifted verbatim: a
+# 3-line plain scalar rendered 1 line where a 3-line block scalar rendered 3.
+#
+# SO THE PLAIN ARM ENTERS THE SAME CONTINUATION STATE rather than growing its own: `inb` already
+# carries the block-END rule — an unindented `key:` closes it, which is the `--note` WRITER's own
+# rule — and a plain scalar ends at exactly the same place. Reusing it is what keeps reader and
+# writer unable to disagree about where a reason stops, and it is why this is one line and not a
+# second state machine. The first line is printed BEFORE entering it, because for a plain scalar
+# that line is content; for a block scalar the indicator is not.
 fm_block() { # fm_block <file> <key>
   awk -v k="$2" '
     NR==1 && /^---$/                       { fm=1; next }
@@ -125,7 +141,7 @@ fm_block() { # fm_block <file> <key>
     fm && !inb && index($0, k ":") == 1 {
       v = substr($0, length(k) + 2); sub(/^[ \t]+/, "", v)
       if (v ~ /^[|>][0-9]*[-+]?$/) { inb = 1; next }
-      print v; exit
+      print v; inb = 1; next
     }
     fm && inb && /^[A-Za-z_][A-Za-z0-9_]*:/ { exit }
     fm && inb                              { sub(/^[ \t]+/, "", $0); print }
@@ -648,6 +664,22 @@ esac
 # ---------------------------------------------------------------------------
 # Default: the dossier. Everything the operator needs to answer ONE question.
 # ---------------------------------------------------------------------------
+#
+# THE REASON PANEL'S CLIP ANNOUNCES ITSELF, AND THE ANNOUNCEMENT IS THE WHOLE POINT. It was
+# `head -20`: a reason longer than twenty folded lines lost its tail with nothing in the output
+# saying so, and the operator adjudicated step 7's retire / readopt / reaffirm against a
+# fragment indistinguishable from a complete field. That is the same dangerous direction the
+# plain-scalar defect above had — a plausible value is worse than an obviously missing one.
+#
+# RAISING THE LIMIT IS NOT THE FIX AND A LADDER OF LIMITS IS NOT EITHER. Every constant has a
+# reason longer than it, and the silent clip simply moves. The `awk` END rule fires whenever the
+# authored line count exceeds what was printed, so the notice is a function of the INPUT rather
+# than of the bound, and no value of the bound can produce a silent clip.
+#
+# `awk`, NOT `head` PLUS A SECOND COUNT OF THE SAME PIPELINE. `fm_block` would have to run twice
+# to compare a count against the bound, which is two reads of one file that can disagree; the END
+# rule already holds `NR`, so one pass answers both. ASCII ONLY in that string: the suite runs awk
+# under `LC_ALL=C`, where a multibyte character in the program text has aborted a scan mid-file.
 cat <<EOF
 ================================================================================
 RE-ADOPTION DOSSIER — $(basename "$OVR")
@@ -657,7 +689,7 @@ base_sha  : ${BASE_SHA}  ->  theirs: ${THEIRS_SHA}
 core file : ${CORE}
 
 --- WHY THIS OVERRIDE EXISTS (its own stated reason) --------------------------
-$(fm_block "$OVR" reason | fold -s -w 78 | sed 's/^/  /' | head -20)
+$(fm_block "$OVR" reason | fold -s -w 78 | sed 's/^/  /' | awk 'NR<=20{print} END{if (NR>20) printf "  [... %d further line(s) NOT SHOWN. Read the override file named above for the whole reason.]\n", NR-20}')
 
 --- WHAT UPSTREAM CHANGED IN THE SHADOWED SECTION (${BASE_SHA}..${THEIRS_SHA}) ---
 EOF

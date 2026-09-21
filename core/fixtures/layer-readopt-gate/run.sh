@@ -237,6 +237,197 @@ else
 fi
 rm -f "$BL"
 
+echo "== B4b. a MULTI-LINE PLAIN reason renders whole, and it fails WORSE than the block form =="
+
+# THE SAME DEFECT ONE YAML SHAPE OVER, AND IN THE MORE DANGEROUS DIRECTION. B4 above cured
+# `reason: |`; `reason: <text>` continued over the lines beneath it took `fm_block()`'s
+# `print v; exit` arm and rendered its FIRST LINE ONLY. A bare `|` rendered EMPTY, which the
+# operator reads as a missing field and goes to the file for. One surviving line that ends in a
+# complete sentence reads as the WHOLE reason, so step 7's retire / readopt / reaffirm decision
+# is taken against a fragment that looks whole and nothing in the output says otherwise.
+#
+# THREE SENTINELS, NOT TWO. A two-line seed cannot tell "reads the continuation" from "reads one
+# more line"; the third is what makes the arm about the continuation STATE rather than about a
+# lookahead. Each is unique in the file, so a hit is that line and not a substring of another.
+PM="$CONS/.claude/skills/ai-dlc/overrides/SKILL__PlainMulti.md"
+cat > "$PM" <<EOF
+---
+shadows: SKILL.md#Rule 7
+base_sha: ${BASE}
+reason: PLAIN-FIRST-SENTINEL the first line of a plain scalar,
+  PLAIN-CONT-SENTINEL and the continuation that finishes it,
+  PLAIN-TAIL-SENTINEL and a third line beneath that one.
+---
+Body.
+EOF
+pm_out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$PM" 2>&1)"
+if grep -q 'PLAIN-FIRST-SENTINEL' <<<"$pm_out"; then
+  ok "a PLAIN multi-line reason renders its first line"
+else
+  bad "the dossier rendered nothing for a plain scalar reason at all — the common path is broken, and every verdict below is about an empty panel"
+fi
+if grep -q 'PLAIN-CONT-SENTINEL' <<<"$pm_out" && grep -q 'PLAIN-TAIL-SENTINEL' <<<"$pm_out"; then
+  ok "  ...and BOTH continuation lines beneath it — a reason that runs past line 1 is not silently truncated to a fragment that reads whole"
+else
+  bad "the dossier rendered only line 1 of a PLAIN multi-line reason (cont=$(grep -c 'PLAIN-CONT-SENTINEL' <<<"$pm_out") tail=$(grep -c 'PLAIN-TAIL-SENTINEL' <<<"$pm_out"), want 1 and 1) — step 7's decision is taken against a fragment ending in a complete sentence, which is worse than the blank field B4 fixed"
+fi
+
+# THE CONTINUATION MUST STOP AT THE NEXT KEY, and that is the half a widened reader breaks.
+# `inb` carries the block-END rule — an unindented `key:` closes it, which is the `--note`
+# WRITER's own rule — and the plain arm reuses it precisely so reader and writer cannot disagree
+# about where a reason stops. A reader that simply consumed to the fence would pass every
+# assertion above and swallow `base_sha` into the rationale panel.
+PK="$CONS/.claude/skills/ai-dlc/overrides/SKILL__PlainKeyStop.md"
+cat > "$PK" <<EOF
+---
+shadows: SKILL.md#Rule 7
+reason: PLAIN-STOP-SENTINEL line one of the reason,
+  PLAIN-STOP-CONT-SENTINEL line two of the reason.
+base_sha: ${BASE}
+---
+Body.
+EOF
+pk_panel="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$PK" 2>&1 \
+            | awk '/WHY THIS OVERRIDE EXISTS/{p=1;next} /^--- WHAT UPSTREAM/{p=0} p')"
+if grep -q 'PLAIN-STOP-CONT-SENTINEL' <<<"$pk_panel"; then
+  ok "CONTROL: with a key BELOW it the reason's continuation line still renders (so the absence below is a real zero)"
+else
+  bad "CONTROL: the continuation did not render when a key follows the reason, so the stop assertion below is a statement about an empty panel"
+fi
+if grep -q 'base_sha' <<<"$pk_panel"; then
+  bad "the rationale panel swallowed the `base_sha:` key that follows the reason — the plain arm is consuming to the fence instead of reusing the block-END rule, and the operator reads frontmatter as the override's stated purpose"
+else
+  ok "  ...and the reason STOPS at the next unindented key: base_sha does not leak into the panel"
+fi
+rm -f "$PK"
+
+echo "== B4c. the reason panel's CLIP ANNOUNCES ITSELF =="
+
+# IT WAS `head -20`: a reason longer than twenty folded lines lost its tail with nothing in the
+# output saying so, and the operator adjudicated against a fragment indistinguishable from a
+# complete field. The same dangerous direction as B4b — a plausible value is worse than an
+# obviously missing one.
+#
+# RAISING THE LIMIT IS NOT THE FIX AND THE ARM IS BUILT SO THAT IT COULD NOT BE. The notice is a
+# function of the INPUT (the awk END rule fires whenever the authored line count exceeds what was
+# printed), so what is asserted is the RELATION — head shown, tail withheld, count stated — and
+# no value of the bound satisfies it while clipping silently.
+CLIP="$CONS/.claude/skills/ai-dlc/overrides/SKILL__Clip.md"
+{
+  echo '---'
+  echo 'shadows: SKILL.md#Rule 7'
+  echo "base_sha: ${BASE}"
+  echo 'reason: CLIP-HEAD-SENTINEL line 1 of a long plain scalar.'
+  i=2
+  while [ "$i" -le 30 ]; do echo "  continuation line ${i} of the long plain scalar."; i=$((i+1)); done
+  echo '  CLIP-TAIL-SENTINEL the very last line, which must not be shown.'
+  echo '---'
+  echo 'Body.'
+} > "$CLIP"
+clip_out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$CLIP" 2>&1)"
+if grep -q 'CLIP-HEAD-SENTINEL' <<<"$clip_out" && ! grep -q 'CLIP-TAIL-SENTINEL' <<<"$clip_out"; then
+  ok "a long reason is still clipped (head shown, tail withheld) — the panel is bounded, which is what makes the notice necessary"
+else
+  bad "the clip itself has moved (head=$(grep -c 'CLIP-HEAD-SENTINEL' <<<"$clip_out") tail=$(grep -c 'CLIP-TAIL-SENTINEL' <<<"$clip_out"), want 1 and 0) — if nothing is withheld the notice arm below asserts nothing, and if nothing is shown the panel is empty"
+fi
+clip_n="$(grep -oE '\[\.\.\. [0-9]+ further line' <<<"$clip_out" | grep -oE '[0-9]+' | head -1)"
+if [ -n "$clip_n" ] && [ "$clip_n" -gt 0 ]; then
+  ok "  ...and the clip ANNOUNCES itself with a COUNT ($clip_n further line(s)) — the operator is told the field is partial instead of reading a fragment as whole"
+else
+  bad "the reason panel clipped with NO notice and no count — this is the shipped defect: a truncated rationale is indistinguishable from a complete one, and the retire/readopt/reaffirm decision is taken on it"
+fi
+# THE NEAR-MISS, AND IT CARRIES THE PROPERTY THE FEARED REGRESSION KEYS ON. A notice printed
+# unconditionally would satisfy both assertions above. This reason is long enough to be a real
+# multi-line scalar and short enough to fit, so a notice here is a false one.
+SHORT="$CONS/.claude/skills/ai-dlc/overrides/SKILL__ClipCtl.md"
+cat > "$SHORT" <<EOF
+---
+shadows: SKILL.md#Rule 7
+base_sha: ${BASE}
+reason: SHORT-HEAD-SENTINEL line one of a short plain scalar,
+  and line two, which fits inside the bound with room to spare.
+---
+Body.
+EOF
+short_out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$SHORT" 2>&1)"
+if grep -q 'SHORT-HEAD-SENTINEL' <<<"$short_out"; then
+  ok "CONTROL: the short reason renders (so the notice's absence below is a real zero, not a dead run)"
+else
+  bad "CONTROL: the short reason did not render at all, so the absence below says nothing"
+fi
+if grep -q 'NOT SHOWN' <<<"$short_out"; then
+  bad "a reason that FITS carried the clip notice anyway — the notice fires unconditionally, so it tells the operator nothing about whether this field is partial"
+else
+  ok "  ...and carries NO clip notice: the announcement is a function of the input, not a line printed on every dossier"
+fi
+rm -f "$SHORT"
+
+# --- MUTANTS: the plain-continuation arm and the clip notice ------------------------------
+# B4b's stop-assertion and B4c's near-miss are both ABSENCE-shaped, and an absence passes
+# against a copy that emits nothing. Both mutants are copies of the WHOLE reconcile directory
+# (a lone script dies sourcing its siblings and prints nothing, which would score as a kill for
+# every arm here), `cmp -s`-guarded, keyed on the LINE THAT DECIDES rather than on any wording.
+# A FRESH `mktemp -d` RATHER THAN A REUSED-AND-CLEARED NAME. The sibling batteries in this file
+# open with `rm -rf "$VAR"` on a path they just assigned; a fresh directory reaches the same state
+# without a recursive delete on a computed path, and it cannot inherit a previous battery's
+# leftovers — which is the failure that makes a mutant read a file nobody in this block wrote.
+PMUT="$(mktemp -d "${TMPDIR:-/tmp}/lrg-plainmut.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
+cp "$(dirname "$READOPT")"/*.sh "$PMUT/" 2>/dev/null || true
+cp "$(dirname "$READOPT")"/*.md "$PMUT/" 2>/dev/null || true
+
+cp "$READOPT" "$PMUT/readopt-override.sh"
+pctl="$(bash "$PMUT/readopt-override.sh" "$DIST" "$THEIRS" "$CONS" "$PM" 2>&1)"
+if grep -q 'PLAIN-CONT-SENTINEL' <<<"$pctl" && grep -q 'PLAIN-FIRST-SENTINEL' <<<"$pctl"; then
+  ok "  mutation control: an unmutated copy in a fresh directory still renders both lines of the plain reason"
+else
+  bad "  mutation control: the unmutated copy rendered first=$(grep -c 'PLAIN-FIRST-SENTINEL' <<<"$pctl") cont=$(grep -c 'PLAIN-CONT-SENTINEL' <<<"$pctl") — a copy that cannot run scores every kill below unearned"
+fi
+
+# MUTANT 1 — the plain arm back to `print v; exit`, which is the shipped-before behaviour
+# exactly. The multi-line entry must lose its continuation and the SINGLE-line form must not
+# move: one reads the same either way, so a mutant that took both would be testing whether the
+# reader runs at all rather than whether it continues.
+sed 's@^      print v; inb = 1; next$@      print v; exit@' "$READOPT" > "$PMUT/readopt-override.sh"
+if cmp -s "$READOPT" "$PMUT/readopt-override.sh"; then
+  bad "  mutation plain-continue: the mutation matched nothing (cmp -s guard) — the continuation arm has been respelled and B4b proves nothing"
+else
+  m_multi="$(bash "$PMUT/readopt-override.sh" "$DIST" "$THEIRS" "$CONS" "$PM" 2>&1)"
+  cat > "$CONS/.claude/skills/ai-dlc/overrides/SKILL__PlainOne.md" <<EOF
+---
+shadows: SKILL.md#Rule 7
+base_sha: ${BASE}
+reason: ONELINE-SENTINEL a single-line plain reason.
+---
+Body.
+EOF
+  m_one="$(bash "$PMUT/readopt-override.sh" "$DIST" "$THEIRS" "$CONS" "$CONS/.claude/skills/ai-dlc/overrides/SKILL__PlainOne.md" 2>&1)"
+  if grep -q 'PLAIN-FIRST-SENTINEL' <<<"$m_multi" && ! grep -q 'PLAIN-CONT-SENTINEL' <<<"$m_multi" \
+     && grep -q 'ONELINE-SENTINEL' <<<"$m_one"; then
+    ok "  mutation plain-continue: with the arm back to \`print v; exit\` the continuation VANISHES while line 1 and the single-line form both still render — B4b is reading the continuation and not the run"
+  else
+    bad "  mutation plain-continue: multi first=$(grep -c 'PLAIN-FIRST-SENTINEL' <<<"$m_multi") (want 1) cont=$(grep -c 'PLAIN-CONT-SENTINEL' <<<"$m_multi") (want 0) single=$(grep -c 'ONELINE-SENTINEL' <<<"$m_one") (want 1) — the arm is vacuous, or the mutant broke the reader and silence scored as a kill"
+  fi
+  rm -f "$CONS/.claude/skills/ai-dlc/overrides/SKILL__PlainOne.md"
+fi
+
+# MUTANT 2 — the announcement deleted, the BOUND left in place: `head -20`'s exact behaviour.
+# This is the one that could not be caught by any arm reading the panel's CONTENT, because the
+# shown lines are byte-identical either way — the notice is the whole observable. The short
+# control is the positive conjunct, so a mutant that killed the panel cannot score this.
+sed 's@ | awk .NR<=20{print} END{if (NR>20) printf "  \[\.\.\. %d further line(s) NOT SHOWN\. Read the override file named above for the whole reason\.\]\\n", NR-20}.@ | head -20@' "$READOPT" > "$PMUT/readopt-override.sh"
+if cmp -s "$READOPT" "$PMUT/readopt-override.sh"; then
+  bad "  mutation clip-notice: the mutation matched nothing (cmp -s guard) — the announcing awk has been respelled and B4c proves nothing"
+else
+  mc_long="$(bash "$PMUT/readopt-override.sh" "$DIST" "$THEIRS" "$CONS" "$CLIP" 2>&1)"
+  if ! grep -q 'NOT SHOWN' <<<"$mc_long" && grep -q 'CLIP-HEAD-SENTINEL' <<<"$mc_long" \
+     && ! grep -q 'CLIP-TAIL-SENTINEL' <<<"$mc_long"; then
+    ok "  mutation clip-notice: with the announcement removed the SAME twenty lines are shown and the tail is SILENTLY dropped — the notice is the only observable, which is why no content arm could have caught this"
+  else
+    bad "  mutation clip-notice: notice=$(grep -c 'NOT SHOWN' <<<"$mc_long") (want 0) head=$(grep -c 'CLIP-HEAD-SENTINEL' <<<"$mc_long") (want 1) tail=$(grep -c 'CLIP-TAIL-SENTINEL' <<<"$mc_long") (want 0) — either the notice is not load-bearing, or the mutant changed the bound too and the two properties are entangled"
+  fi
+fi
+rm -f "$PM" "$CLIP"
+
 echo "== B5. the dossier's upstream-change panel must SAY when nothing drifted =="
 
 # The panel titled "WHAT UPSTREAM CHANGED IN THE SHADOWED SECTION" echoed its heading for
