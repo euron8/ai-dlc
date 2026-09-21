@@ -236,6 +236,61 @@ fi
 # renderer that keys on the COMMIT passes the first and fails the third, and a renderer keying
 # on nothing passes the third alone.
 DG() { git -C "$DIST" -c user.email=f@f -c user.name=fixture "$@" >/dev/null 2>&1; }
+
+# --- WORLD CONSTRUCTION IS CHECKED, AND A FAILED CONSTRUCTION IS `FIXTURE BROKEN` ----------
+#
+# WHY THIS IS NOT A STYLE POINT. Step 2 of the self-update treats a RED fixture as evidence
+# that the machinery slice is broken, and on that reading it blocks a real pull. So a red cell
+# here is a conviction, and the fixture owes it a true cause. Every `DG`/`git checkout` below
+# builds a WORLD -- it moves a branch, writes a probe file, commits -- and every one of them
+# swallowed both streams and its exit status: measured on this file, 8 world-mutation sites
+# and 0 of them checking that the change they intended actually landed.
+#
+# A world that did not get built does not make the arm downstream of it SKIP. It makes that arm
+# read a tree one commit short of the one it assumes, and the arm then reports on
+# `emit-report.sh` -- in the fixture's own voice, naming a machinery defect. Two such arms were
+# observed red on a tree byte-identical to `theirs`, once in three concurrent runs and not
+# again in thirteen: the strip guard's FIXTURE BROKEN, and the docs-only near-miss's "a
+# docs-only upstream commit made --verify reject a sound approved report". The second is the
+# false conviction in full -- it names the renderer, and the renderer was never involved.
+#
+# THE DISTINCTION THE FIXTURE COULD NOT DRAW is between "the subject is wrong" and "the world
+# I built for the subject is not the world I think it is". Those need different verdicts.
+# `bad` is the first. `broken` is the second: it prints, it fails the unit, and it says in the
+# line itself that this is not evidence about the machinery -- which is the one fact a step 2
+# reading the log needs in order not to convict a correct slice.
+#
+# NOT A RETRY, AND NOT A SKIP. A retry hides a construction that is unreliable; a skip turns a
+# real regression into silence, standing the arm down for a reason indistinguishable from the
+# machinery being fine, which is this repo's named defect class. The unit still goes red. What
+# changes is WHAT IT SAYS.
+#
+# EXIT STATUS IS NOT THE WHOLE ANSWER, so there are two helpers. `git commit` with nothing
+# staged exits 1, and `git checkout` of a ref that is already HEAD exits 0 having changed
+# nothing -- so the status answers "did the command error" while the arms need "is the tree
+# now the one I require". `DGW` covers the first and `world_moved` DERIVES the second from the
+# repository.
+broken() { printf '  FAIL  FIXTURE BROKEN (world construction, NOT a machinery finding) — %s\n' "$1"; fails=$((fails+1)); }
+
+DGW() { # DGW <what> <git-args...> -- run a world mutation and REFUSE if it did not take
+  local _what="$1"; shift
+  if ! git -C "$DIST" -c user.email=f@f -c user.name=fixture "$@" >/dev/null 2>&1; then
+    broken "$_what failed in the scratch dist; every assertion downstream of it reads a tree that was never built"
+    return 1
+  fi
+  return 0
+}
+
+world_moved() { # world_moved <what> <ref> <sha-it-must-no-longer-be>
+  local _got; _got="$(git -C "$DIST" rev-parse "$2" 2>/dev/null)"
+  if [ -z "$_got" ]; then
+    broken "$1: '$2' does not resolve in the scratch dist"; return 1
+  fi
+  if [ "$_got" = "$3" ]; then
+    broken "$1: '$2' did not move (still $3), so the world under test is the world before it"; return 1
+  fi
+  return 0
+}
 verify_ref() { bash "$EMIT" --verify "$1" "$DIST" "$BASE" "$CONSUMER" "$2" >/dev/null 2>&1; RC=$?; }
 core_tree_at() { git -C "$DIST" rev-parse "${1}:core" 2>/dev/null; }
 
@@ -279,9 +334,14 @@ else
 fi
 
 # --- Assertion: a CORE move under a fixed spelling FAILS --verify -------------
-git -C "$DIST" checkout -q "$MOVEREF" 2>/dev/null
+# The pre-move sha is captured BEFORE the mutation, so `world_moved` compares against what the
+# ref actually was rather than against a value this block also wrote.
+_pre_harm="$(git -C "$DIST" rev-parse "$MOVEREF" 2>/dev/null)"
+DGW "checking out $MOVEREF for the core-move world" checkout -q "$MOVEREF" || true
 printf '#!/usr/bin/env bash\necho MOVED-REF-PROBE moved-after-approval\n' > "$DIST/$MOVED_PROBE_PATH"
-DG add -A; DG commit -m "upstream core content moves after the operator approved"
+DGW "staging the core-move world" add -A || true
+DGW "committing the core-move world" commit -m "upstream core content moves after the operator approved" || true
+world_moved "the core-move world" "$MOVEREF" "$_pre_harm" || true
 REGION_HARM="$WORK/region-core-moved.md"
 bash "$EMIT" "$DIST" "$BASE" "$CONSUMER" "$MOVEREF" > "$REGION_HARM" 2>/dev/null
 
@@ -322,9 +382,12 @@ fi
 # the tree, it fires when and only when the bytes the pull would WRITE have changed.
 #
 # If you are here because you changed the key and this arm went red: the arm is the finding.
-DG reset --hard "$THEIRS"
+_pre_docs="$(git -C "$DIST" rev-parse "$MOVEREF" 2>/dev/null)"
+DGW "resetting to $THEIRS for the docs-only world" reset --hard "$THEIRS" || true
 mkdir -p "$DIST/docs"; printf 'a docs-only commit between releases\n' > "$DIST/docs/note.md"
-DG add -A; DG commit -m "docs-only commit — core untouched"
+DGW "staging the docs-only world" add -A || true
+DGW "committing the docs-only world" commit -m "docs-only commit — core untouched" || true
+world_moved "the docs-only world" "$MOVEREF" "$_pre_docs" || true
 REGION_DOCS="$WORK/region-docs-moved.md"
 bash "$EMIT" "$DIST" "$BASE" "$CONSUMER" "$MOVEREF" > "$REGION_DOCS" 2>/dev/null
 
@@ -368,7 +431,7 @@ fi
 # Rendered from a COPY of the whole reconcile dir so the mutant's sibling lookups (preclassify,
 # retired-tokens, ledger-reverify) resolve exactly as the real script's do; a copy that died
 # sourcing a helper emits nothing, and nothing would otherwise score as a kill.
-DG reset --hard "$THEIRS"
+DGW "resetting to $THEIRS before the mutant battery" reset --hard "$THEIRS" || true
 MUTT="$WORK/mut-reconcile-tree"
 rm -rf "$MUTT"; cp -R "$(dirname "$EMIT")" "$MUTT"
 # Anchored on the rendered text, which is unique in the file — the prose above it says
@@ -385,9 +448,12 @@ CTL_REPORT="$WORK/mut-ctl-report.md"; MUT_REPORT="$WORK/mut-report.md"
 { echo "# Reconcile report (fixture)"; echo; cat "$MUT_REGION"; } > "$MUT_REPORT"
 
 # Now move theirs across the same core change both renderers were pointed at.
-git -C "$DIST" checkout -q "$MOVEREF" 2>/dev/null
+_pre_mut="$(git -C "$DIST" rev-parse "$MOVEREF" 2>/dev/null)"
+DGW "checking out $MOVEREF for the mutant-battery world" checkout -q "$MOVEREF" || true
 printf '#!/usr/bin/env bash\necho MOVED-REF-PROBE moved-under-the-mutant\n' > "$DIST/$MOVED_PROBE_PATH"
-DG add -A; DG commit -m "upstream core content moves under the mutant battery"
+DGW "staging the mutant-battery world" add -A || true
+DGW "committing the mutant-battery world" commit -m "upstream core content moves under the mutant battery" || true
+world_moved "the mutant-battery world" "$MOVEREF" "$_pre_mut" || true
 bash "$MUTT/emit-report.sh" --verify "$CTL_REPORT" "$DIST" "$BASE" "$CONSUMER" "$MOVEREF" >/dev/null 2>&1
 ctl_rc=$?
 bash "$MUTT/mutant-emit.sh" --verify "$MUT_REPORT" "$DIST" "$BASE" "$CONSUMER" "$MOVEREF" >/dev/null 2>&1
