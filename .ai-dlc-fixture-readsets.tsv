@@ -9,7 +9,7 @@
 # every other fixture's entries alone, so refreshing one fixture costs its own runtime
 # rather than a full re-derivation.
 #
-# fixtures mapped: 203    entries: 32125
+# fixtures mapped: 203    entries: 32127
 absorbed-specifics-survive	.git/HEAD
 absorbed-specifics-survive	.git/config
 absorbed-specifics-survive	.git/index
@@ -10160,16 +10160,15 @@ handoff-completion-assertion	.git/HEAD
 handoff-completion-assertion	.git/config
 handoff-completion-assertion	.git/index
 handoff-completion-assertion	.git/info/exclude
-handoff-completion-assertion	.git/objects/33/a4425c0ed05dea70f881660ffdf01c7c86da33
-handoff-completion-assertion	.git/objects/7f/1479d0f091b8393b8613744a84c3c8229a65a3
+handoff-completion-assertion	.git/objects/5e/17226f4e9abbfacb595ef4690588ceaf098001
+handoff-completion-assertion	.git/objects/ef/d38fc5dd1d41e6ef01ed7c6f114a6cf510f684
 handoff-completion-assertion	.git/objects/info/commit-graphs/commit-graph-chain
-handoff-completion-assertion	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
-handoff-completion-assertion	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
+handoff-completion-assertion	.git/objects/info/commit-graphs/graph-0379598c48f1e636cbf005c95d629c8ed2197c7d.graph
+handoff-completion-assertion	.git/objects/info/commit-graphs/graph-2e085ff44ca2ae7c5739806502100c553300cbbf.graph
 handoff-completion-assertion	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
-handoff-completion-assertion	.git/objects/info/commit-graphs/graph-fa7bbe6bcd67e84c678384cfb84f17a16d6fa8fa.graph
 handoff-completion-assertion	.git/objects/pack/multi-pack-index
 handoff-completion-assertion	.git/packed-refs
-handoff-completion-assertion	.git/refs/heads/main
+handoff-completion-assertion	.git/refs/heads/batch141-b-ledger-reverify-nonid-manual
 handoff-completion-assertion	.gitignore
 handoff-completion-assertion	core
 handoff-completion-assertion	core/fixtures
@@ -10181,6 +10180,7 @@ handoff-completion-assertion	core/fixtures/lib/preamble.sh
 handoff-completion-assertion	core/hooks
 handoff-completion-assertion	core/hooks/ai-dlc-acknowledge.sh
 handoff-completion-assertion	core/hooks/ai-dlc-answer-capture.sh
+handoff-completion-assertion	core/hooks/ai-dlc-artifact-path-guard.sh
 handoff-completion-assertion	core/hooks/ai-dlc-context-provenance.sh
 handoff-completion-assertion	core/hooks/ai-dlc-context-sensor.sh
 handoff-completion-assertion	core/hooks/ai-dlc-continue.sh
@@ -10203,6 +10203,7 @@ handoff-completion-assertion	core/hooks/ai-dlc-rules-floor.sh
 handoff-completion-assertion	core/hooks/ai-dlc-subagent-probe.sh
 handoff-completion-assertion	core/hooks/ai-dlc-window.sh
 handoff-completion-assertion	core/schemas/pause-routing.json
+handoff-completion-assertion	templates/settings.json.template
 handoff-resume-guard	.git/HEAD
 handoff-resume-guard	.git/config
 handoff-resume-guard	.git/index
@@ -20258,22 +20259,23 @@ reconcile-emit-report	.git/HEAD
 reconcile-emit-report	.git/config
 reconcile-emit-report	.git/index
 reconcile-emit-report	.git/info/exclude
-reconcile-emit-report	.git/objects/33/a4425c0ed05dea70f881660ffdf01c7c86da33
-reconcile-emit-report	.git/objects/7f/1479d0f091b8393b8613744a84c3c8229a65a3
+reconcile-emit-report	.git/objects/5e/17226f4e9abbfacb595ef4690588ceaf098001
+reconcile-emit-report	.git/objects/ef/d38fc5dd1d41e6ef01ed7c6f114a6cf510f684
 reconcile-emit-report	.git/objects/info/commit-graphs/commit-graph-chain
-reconcile-emit-report	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
-reconcile-emit-report	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
+reconcile-emit-report	.git/objects/info/commit-graphs/graph-0379598c48f1e636cbf005c95d629c8ed2197c7d.graph
+reconcile-emit-report	.git/objects/info/commit-graphs/graph-2e085ff44ca2ae7c5739806502100c553300cbbf.graph
 reconcile-emit-report	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
-reconcile-emit-report	.git/objects/info/commit-graphs/graph-fa7bbe6bcd67e84c678384cfb84f17a16d6fa8fa.graph
 reconcile-emit-report	.git/objects/pack/multi-pack-index
 reconcile-emit-report	.git/packed-refs
-reconcile-emit-report	.git/refs/heads/main
+reconcile-emit-report	.git/refs/heads/batch141-b-ledger-reverify-nonid-manual
 reconcile-emit-report	.gitignore
+reconcile-emit-report	91ad8b3f111114e369ba4aff6bc96b9a031f8444
 reconcile-emit-report	core
 reconcile-emit-report	core/fixtures
 reconcile-emit-report	core/fixtures/lib
 reconcile-emit-report	core/fixtures/lib/preamble.sh
 reconcile-emit-report	core/fixtures/reconcile-emit-report
+reconcile-emit-report	core/fixtures/reconcile-emit-report/README.md
 reconcile-emit-report	core/fixtures/reconcile-emit-report/run.sh
 reconcile-emit-report	core/fixtures/reconcile-emit-report/seed.sh
 reconcile-emit-report	core/skills

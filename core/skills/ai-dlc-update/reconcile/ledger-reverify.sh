@@ -2116,7 +2116,78 @@ EOF
       esac
       ;;
     manual)
-      emit HAND-REVIEW "$label" "verify: manual — no mechanical predicate by design; adjudicate the entry body against theirs ($TV)"
+      # A `manual` RECEIPT UNDER A LABEL THAT IS NOT AN ID IS AN ENTRY-SHAPE DEFECT, AND
+      # HAND-REVIEW IS THE ONE STATUS THAT CANNOT SAY SO.
+      #
+      # THE HARM IS THE JOIN, AND IT IS THE ONLY ONE OF THREE CANDIDATE HARMS THAT SURVIVED
+      # BEING DRIVEN. Step 8 routes HAND-REVIEW to "adjudicate the entry body against theirs,
+      # then annotate": the ENTRY column is the key the operator greps back into the ledger
+      # with, and this file's own label rule truncates at the first ` — ` and strips backticks.
+      # An id survives that transform; a prose sentence does not. Measured over the reference
+      # consumer ledger at the state the defect was filed against, 102 emitted rows: 3 labels
+      # do not grep back into the file they came from, ALL THREE prose-titled, against 99 that
+      # do. The row names a subject the operator cannot find, and HAND-REVIEW's detail is the
+      # one `emit-report.sh` DROPS (`$1=="HAND-REVIEW" ? "" : "  "$3`), so the report carries
+      # the unusable key and nothing else.
+      #
+      # TWO LOUDER HARM THEORIES WERE MEASURED AND ARE FALSE. They are recorded because both
+      # read as obviously right and both are the reason a wider fix would have shipped:
+      #
+      #   (1) "the receipt is INHERITED from a neighbouring entry" -- the filing's own account.
+      #       REFUTED. Every `manual` receipt under a prose bullet on all five corpora sits
+      #       INSIDE that bullet's own body span, between it and the next entry-shaped line:
+      #       entry line 235 / receipt 237 / span end 238, and 601 / 614 / 617, with the same
+      #       shape in the archive and in this distribution's backlog. Nothing is inherited;
+      #       the receipts were authored for the bullets that carry them.
+      #   (2) "the entry can never be archived, so it is resident forever". REFUTED by driving
+      #       `ledger-rotate.sh --apply` on a two-entry probe, a prose-titled bullet and an
+      #       id-keyed one annotated identically: BOTH moved, both left the live file. Rotation
+      #       reads `ledger_archive_awk()`, which keys on the annotation and not on the label.
+      #
+      # SO THE FIX IS THE STATUS, NOT THE PARSER, and that is the third time this file has
+      # reached that answer -- see ENTRY-SWALLOWED's header and the mid-line receipt pass. The
+      # bullet grammar stays byte-untouched: narrowing it drops real entries, and a
+      # trailing-space requirement already hid 43 of 63 bullet-form entries here once.
+      #
+      # WHAT THIS DOES NOT REACH, STATED BECAUSE IT READS AS THE SAME SUBJECT AND IS NOT. A bold
+      # span at COLUMN ZERO with no list marker -- `**<id>**` -- is not entry-shaped under
+      # `ledger_entry_shape()` at all (`^- \*\*` or `^#{2,6}[ \t]`), so it emits no row of any
+      # kind and never reaches this dispatch. That is `PC-S305-BARE-BOLD-ENTRY-IS-INVISIBLE-TO-
+      # EVERY-REVERIFY`, a separate live defect this fix neither causes nor repairs. Measured
+      # across the reference consumer live ledger, its archive and both distribution backlog
+      # files: 3 column-zero occurrences, all invisible, against a control of 5 dash-bullet ids
+      # in the live ledger alone that are seen.
+      #
+      # `ledger_entry_id()` IS THE SHARED RULE FROM lib.sh, asked through awk rather than
+      # restated as a shell `case`. A local restatement is exactly the drift that file's header
+      # records happening inside one release, and a narrower one goes blind on the two forms it
+      # was widened for: `_` and `.` in an id (`PC-S330-...-GIT_DIR-...`,
+      # `PC-S300-...-AT-0.242.0`), both real entries, both scored as annotations by the old
+      # `^[A-Z0-9-]+$` spelling.
+      #
+      # FALSE-POSITIVE SET, MEASURED OVER THE TOOL'S OWN POPULATION -- OPEN entries carrying a
+      # receipt, closure rule applied as the extraction above applies it -- across the reference
+      # consumer's live ledger at filing state and today, its archive, and both distribution
+      # backlog files. Non-id labels declaring `manual`: 2 at filing state, 1 today, 1 in the
+      # archive, 2 in the backlog. Every one is a narrative record or an inventory line, none is
+      # an entry: the S295 closure container, the `validate-retro-prereq.sh → RETIRED` fork
+      # record, the Rule-18 carve-out bullet, the backlog `## Receipts` documentation heading
+      # and a three-feature inventory line. ZERO real entries. Control in the same census: 341
+      # id-keyed `manual` entries across the same corpora, none of which this reaches.
+      #
+      # SCOPED TO `manual`, DELIBERATELY, AND THE WIDER PREDICATE WAS RUN BEFORE IT WAS
+      # REJECTED. "any non-id label carrying any receipt" reports 43 across those corpora,
+      # including nine `extensions/*-push.md` bullets with real `sh` receipts that run and
+      # produce real verdicts -- prose-titled by convention and not defective. A mechanical verb
+      # RUNS and its verdict stands on the receipt's own evidence whatever the label says;
+      # `manual` is the one verb whose entire output IS the instruction to go and read the
+      # entry, so it is the one that needs a findable entry.
+      if printf '%s\n' "$label" | LC_ALL=C awk "$(ledger_entry_awk)$(ledger_entry_id_awk)"'
+           { if (ledger_entry_id($0) != "") ok=1 } END { exit !ok }'; then
+        emit HAND-REVIEW "$label" "verify: manual — no mechanical predicate by design; adjudicate the entry body against theirs ($TV)"
+      else
+        emit NEEDS-REVIEW "$label" "unresolved: 'verify: manual' declared under a label that is not an entry id, so this row names no entry an operator can find. The ENTRY column is the join key back into the ledger and it is truncated at the first em-dash and stripped of backticks — an id survives that, a prose sentence does not. HAND-REVIEW would route this to 'adjudicate the entry body', which is an instruction to go and read something the row cannot name, and the report drops HAND-REVIEW's detail so nothing else would reach you. This is an ENTRY-SHAPE defect, not a hand-review declaration: the line-leading '- **…**' or '##' this receipt sits under is a narrative record, a section container or an inventory line rather than a titled entry. Either give it a 'PC-'/'BL-' id, or move the receipt to the entry that owns it, then re-run and confirm the row reports under that id. THE BULLET GRAMMAR IS NOT THE THING TO CHANGE: narrowing '- **' to exclude prose drops real entries, which is the remedy PC-S305 is filed against and the one a trailing-space requirement already used to hide 43 of 63 bullet-form entries."
+      fi
       ;;
     *)
       emit NEEDS-REVIEW "$label" "unresolved: unknown verify verb '$verb' (expected theirs_lacks | theirs_has | sh | manual)"
