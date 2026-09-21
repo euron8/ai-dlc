@@ -291,6 +291,29 @@ world_moved() { # world_moved <what> <ref> <sha-it-must-no-longer-be>
   fi
   return 0
 }
+
+# world_at <what> <ref-that-HEAD-must-now-equal> -- for a `reset --hard`, whose whole job is
+# to put HEAD somewhere specific.
+#
+# A RESET NEEDS A DIFFERENT ASSERTION FROM A COMMIT, and `world_moved` cannot supply it.
+# `world_moved` asks "did this ref stop being what it was", which is the right question for a
+# commit and the WRONG one for a reset: a `reset --hard` to a ref already at HEAD exits 0
+# having done nothing, and the ref it is asked about did not move because it was already
+# there. That is precisely the case this whole change says exit status cannot answer, and the
+# two reset sites were left with nothing but exit status. So assert the POSTCONDITION the
+# reset exists to establish -- HEAD is now at the named ref -- rather than a delta.
+world_at() { # world_at <what> <ref>
+  local _head _want
+  _head="$(git -C "$DIST" rev-parse HEAD 2>/dev/null)"
+  _want="$(git -C "$DIST" rev-parse "$2" 2>/dev/null)"
+  if [ -z "$_head" ] || [ -z "$_want" ]; then
+    broken "$1: HEAD or '$2' does not resolve in the scratch dist"; return 1
+  fi
+  if [ "$_head" != "$_want" ]; then
+    broken "$1: HEAD is $_head but the world requires $_want ('$2'); every assertion downstream reads a tree that was never built"; return 1
+  fi
+  return 0
+}
 verify_ref() { bash "$EMIT" --verify "$1" "$DIST" "$BASE" "$CONSUMER" "$2" >/dev/null 2>&1; RC=$?; }
 core_tree_at() { git -C "$DIST" rev-parse "${1}:core" 2>/dev/null; }
 
@@ -382,8 +405,13 @@ fi
 # the tree, it fires when and only when the bytes the pull would WRITE have changed.
 #
 # If you are here because you changed the key and this arm went red: the arm is the finding.
-_pre_docs="$(git -C "$DIST" rev-parse "$MOVEREF" 2>/dev/null)"
 DGW "resetting to $THEIRS for the docs-only world" reset --hard "$THEIRS" || true
+world_at "the docs-only world's reset" "$THEIRS" || true
+# CAPTURED AFTER THE RESET, DELIBERATELY. `MOVEREF` is a BRANCH (seed.sh's `git branch -f`)
+# and the reset above moves the checked-out branch, so a pre-reset reading of it is a sha the
+# commit below is not being compared against -- the delta would be the reset's, not the
+# commit's, and a commit that silently did nothing would still look like it moved.
+_pre_docs="$(git -C "$DIST" rev-parse "$MOVEREF" 2>/dev/null)"
 mkdir -p "$DIST/docs"; printf 'a docs-only commit between releases\n' > "$DIST/docs/note.md"
 DGW "staging the docs-only world" add -A || true
 DGW "committing the docs-only world" commit -m "docs-only commit — core untouched" || true
@@ -432,6 +460,7 @@ fi
 # retired-tokens, ledger-reverify) resolve exactly as the real script's do; a copy that died
 # sourcing a helper emits nothing, and nothing would otherwise score as a kill.
 DGW "resetting to $THEIRS before the mutant battery" reset --hard "$THEIRS" || true
+world_at "the mutant battery's reset" "$THEIRS" || true
 MUTT="$WORK/mut-reconcile-tree"
 rm -rf "$MUTT"; cp -R "$(dirname "$EMIT")" "$MUTT"
 # Anchored on the rendered text, which is unique in the file — the prose above it says
@@ -1193,7 +1222,15 @@ git -C "$DIST" checkout -q -B "$VMREF" "$THEIRS" 2>/dev/null
 v_copy V-M && v_approve V-M "$VMREF" || bad "FIXTURE BROKEN — could not build world V-M"
 v_resolve V-M
 printf '#!/usr/bin/env bash\necho MOVED-REF-PROBE moved-under-the-decided-cause\n' > "$DIST/$MOVED_PROBE_PATH"
-VDG add -A; VDG commit -m "upstream core content moves after the blocker was resolved"
+# WRAPPED FOR THE SAME REASON THE `DG` SITES ARE, and it was missed because the scan that
+# established "0 unchecked" keyed on `DG` with a word boundary and this site is spelled `VDG`
+# -- so the grammar scored its own subject as a non-instance and returned a clean zero. The
+# V-M world has an independent `SP4` check downstream, which bounds the risk; it does not
+# establish the claim, and the claim was what was wrong.
+_pre_vm="$(git -C "$DIST" rev-parse "$VMREF" 2>/dev/null)"
+DGW "staging the V-M post-resolution world" add -A || true
+DGW "committing the V-M post-resolution world" commit -m "upstream core content moves after the blocker was resolved" || true
+world_moved "the V-M post-resolution world" "$VMREF" "$_pre_vm" || true
 
 v_copy V-R && v_approve V-R "$THEIRS" || bad "FIXTURE BROKEN — could not build world V-R"
 v_resolve V-R
