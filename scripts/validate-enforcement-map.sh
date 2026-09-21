@@ -562,7 +562,16 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   measurement is 3203..4575 -- A3 needs `b >= t`, A4 needs `b <= t/0.7`, A1 needs
 #   `b < t/0.4` -- so 3209 sits near the bottom of a window that is open, which is what `m8`
 #   asserts at the COMMITTED value.
-FORK_BUDGET=3209
+#
+#   RAISED TO 3223 FOR THE FIXTURES THIS RELEASE ADDS, and the cause is the CORPUS rather than
+#   the validator: the arms that walk the fixture set fork per directory, so three new fixture
+#   bodies move the total without a line of this file changing. Measured at the release tip,
+#   A2 reproducing 2x over 4 reps with spread 3216-3217: HIGH reading 3217, plus the usual 6.
+#   The admissible range at that measurement is 3217..4595, so 3223 again sits near the bottom
+#   of an OPEN window -- which is the property `m8` asserts at the committed value and the one
+#   a raise can quietly destroy. A budget raised to the top of its window makes A4 unreachable
+#   and the arm then reads exactly like one that passed.
+FORK_BUDGET=3223
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
