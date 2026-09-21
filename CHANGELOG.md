@@ -49,6 +49,10 @@ will reach for one: escalating the receipt's seed to 20000 moved the escape to `
 the render's own declared bound and seeds past it, keeping a behavioural ladder beside that derived
 seed because a computed bound the grammar cannot spell reads as no bound at all.
 
+Carries the reference consumer's `PC-S299-READOPT-DOSSIER-RENDERS-REASON-EMPTY`, whose headline the
+consumer archived as `ADOPTED UPSTREAM (v0.150.1)`; this release closes the residue that filing left
+behind, not the ledger row.
+
 ### BL-018 — `hard-blockers.sh` discarded `CORE-AT-THEIRS`, and the blindness was narrower and one site wider than filed
 
 `collect()` filters both detectors' rows through `^HARD-`, and `CORE-AT-THEIRS` carries no such prefix
@@ -76,6 +80,10 @@ invokes with `2>/dev/null` and whose stderr spelling the receipt rejects.
 the row cannot reach the count that decides `BLOCKERS-RESOLVED`; and suppressing the affirmative line
 would break live positive controls at `core/fixtures/reconcile-blocking-list/run.sh:136` and `:192`,
 the second of which is explicitly the control guarding the refusal arm's absence half.
+
+Carries the reference consumer's `PC-S302-HARD-BLOCKERS-HAS-NO-POST-APPLY-GUARD`, whose headline the
+consumer archived as `ADOPTED UPSTREAM (v0.367.0)`; this release closes the residue that filing left
+behind, not the ledger row.
 
 ### Both entries now state what citing their `PC-` id does, and one NOTE about citation anchors
 
