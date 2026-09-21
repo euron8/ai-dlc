@@ -946,7 +946,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: EXTENSION-NO-HEADINGS
-    fixture: none
+    fixture: layer-title-join
 
   - id: LC-E7
     subject: extension
