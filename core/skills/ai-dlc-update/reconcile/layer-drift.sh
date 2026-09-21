@@ -163,6 +163,13 @@
 #                                    span that resolves to nothing compares empty
 #                                    against empty, so the natural failure of the
 #                                    narrowing is silence on a real change.
+#   EXTENSION-NO-HEADINGS            the entry's body carries NO markdown heading, so
+#                                    BOTH absorption joins harvest empty from it and
+#                                    neither can ever report it as absorbed. Its only
+#                                    other row is EXTENSION-OK, which the report
+#                                    filters — so the entry's unreachability has been
+#                                    reading as a clean check. Not a finding about
+#                                    content; a statement that nothing looked.
 #   EXTENSION-OK                     hooked core file unchanged, OR it changed and the
 #                                    declared `extends:` span did not
 
@@ -1837,6 +1844,48 @@ while IFS= read -r f; do
       emit EXTENSION-TITLE-MATCHES-CORE "$entry" "$hooks" \
         "${when}: this entry's heading '$ut' names the same section as core's '$hit' in '$hooks', matched on TEXT because neither side carries a number. ${extra}. THREE dispositions, and the entry decides which: if the body DUPLICATES core's section, retire it per Rule 27(b) — an absorbed-but-kept entry starts as an exact copy and diverges from there. If it AUGMENTS that section, record it in ${ADJ_REGISTER#"$CONSUMER"/} with clause $(adj_clause_cell EXTENSION-TITLE-MATCHES-CORE) and subject_digest ${tm_digest:-<unkeyable: entry or target unreadable>} and a verdict of $(printf '%s' "$ADJ_VERDICTS" | tr '\n' '|' | sed 's/|$//'), plus a reason -- that is what clears this row, and it is the only thing that does. The digest covers this entry AND the core file it hooks at ${THEIRS}, so the verdict is spent the next time either one moves; it is a record of a reading, not an exemption for the path. If it REPRODUCES core's section in order to append to it, neither of those is the answer and the grain is: \`kind: qualifier\` with \`extends: '#${hit}'\` and \`position: append\`, which renders your addition INSIDE core's section and carries no obligation on the prose you did not write. Recording an augmenting verdict on a reproduction clears this row and leaves the copy frozen, and a frozen copy cannot receive an upstream improvement -- measured on the reference consumer at this exact clause: 165 lines reproducing a 133-line core section to carry 49 additive ones, and core's step 1 had already gained guidance the copy never received. That is Rule 27(c)'s silent fork, and the verdict channel is not where it gets fixed. Declaring \`extends: '#${hit}'\` (spelled as the core heading actually reads) is worth doing anyway because it narrows the DRIFT subject to that span, but it does NOT silence this row and never has: \`extends:\` answers 'which span do I augment', never 'does core now carry my body'. Weaker than EXTENSION-RESTATES-CORE on purpose: a numbered anchor is an identity claim, a prose heading is not, so this reports the match and does not prescribe the delete.$([ -n "$tm_digest" ] && adj_spent_note "$entry" "$tm_digest" "$(adj_clause_of EXTENSION-TITLE-MATCHES-CORE)")"
     done <<< "$(printf '%s' "$cand" | awk -F"$TAB" 'NF>=3 { if ($1 > d[$3]) { d[$3]=$1; r[$3]=$0 } } END { for (k in r) print r[k] }')"
+  fi
+
+  # --- AN ENTRY WITH NO HEADING AT ALL IS CHECKED BY NOTHING, AND SAYS SO -----------------
+  #
+  # Both absorption arms join on a HEADING. The numbered one keys on `anchors_of_file`, the
+  # unnumbered one on `unnumbered_titles_of_file`. An entry whose body carries no markdown
+  # heading anywhere harvests EMPTY from both, so `cand` is never populated, the block above
+  # never runs, and there is no `else`. The only row such an entry can produce is the drift
+  # arm's `EXTENSION-OK`, which `emit-report.sh` filters out of the operator-facing section by
+  # design — so an entry that no duplication join can see reads to the operator exactly like
+  # an entry that was checked and found clean. That is this repo's named defect class wearing
+  # a clean status, and it is silent in the direction that matters.
+  #
+  # THE GUARD IS "NO HEADINGS AT ALL", NOT "ext_titles IS EMPTY", AND THE DIFFERENCE IS
+  # MEASURED. `ext_titles` is this file's headings MINUS the ones the numbered arm owns, so an
+  # entry built entirely out of NUMBERED headings harvests empty here and IS fully checked --
+  # by the numbered arm, forty lines up. A row keyed on the empty `ext_titles` would accuse it
+  # of being unreachable while the joins were reading it. Measured on the reference consumer's
+  # 40 registered entries with these very functions: 14 have an empty `ext_titles`, and only 4
+  # of those have no heading at all -- a 10-entry false-positive set for the naive guard, and
+  # ZERO for the one shipped. The 4 are real: they carry frontmatter and prose, no headings,
+  # and neither join has ever been able to see them. The control in the same measurement is
+  # `anchors_of_file` against core's gate-validation.md, which yields 42, so the harvesters
+  # work and the 4 is an absence rather than a broken probe.
+  #
+  # THE PREDICATE IS `#{2,6}`, WIDER THAN EITHER JOIN'S `#{2,4}`, on purpose: this row's claim
+  # is "no heading of any kind is present", and a `#####` heading would make that claim false
+  # while still being invisible to both joins. Reporting the wider shape keeps the row honest
+  # about what it establishes -- a body of h5 headings is a DIFFERENT gap and is not this row's
+  # to state.
+  #
+  # HERE-STRING IS NOT NEEDED HERE because `grep -qE` reads the FILE directly, not a pipe.
+  # Stated because the sibling call forty lines up is a here-string for exactly that reason and
+  # the asymmetry otherwise reads as an oversight.
+  #
+  # WARN, NEVER ADJUDICATED. An ADJUDICATED code creates a register duty -- the operator must
+  # record a verdict keyed on a digest before `apply` proceeds -- and the whole content of this
+  # row is "no mechanism looked at this entry". There is nothing for a verdict to be a reading
+  # OF. Promoting it would demand a recorded judgement about an absence of evidence.
+  if [ -z "$ext_titles" ] && ! grep -qE '^#{2,6}[[:space:]]+' "$f"; then
+    emit EXTENSION-NO-HEADINGS "$entry" "$hooks" \
+      "this entry's body carries NO markdown heading, so BOTH absorption joins harvest empty from it: the numbered arm has no anchor to key on and the title arm has no title. Neither has ever been able to report this entry as absorbed, no matter how exactly core has since adopted its content, and the only other row it can produce is EXTENSION-OK — which the report filters out, so its silence has been reading as a clean check. This row is that silence made visible; it is NOT a finding about the entry's content. To make the entry joinable, give its sections markdown headings (\`### <Title>\`, or \`### <N>. [ext:$(printf '%s' "$entry" | sed -E 's#.*/##; s#\.md$##')] <Title>\` where it augments a numbered core section). If the entry is deliberately heading-less prose, nothing here is wrong with it and this row will keep reporting — that is the honest state, not a defect to suppress."
   fi
 
   # --- drift, at whichever grain the entry declared --------------------------
