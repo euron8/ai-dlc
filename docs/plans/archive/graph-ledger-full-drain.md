@@ -13580,3 +13580,118 @@ to read more carefully. It makes the instrument refuse when its two inputs canno
 
 **A number was wrong three times and an artifact twice, and every single correction came from a
 party re-deriving rather than accepting.** That is the operating lesson of this entire program.
+
+---
+
+## BATCH 138 RECORD (rotated out of the live plan at batch 141)
+
+**BATCH 138 SHIPPED TWO RELEASES AND CLOSED FOUR ENTRIES. `v0.614.0` (`f73027d8`, #813) CARRIED
+TWO SUBJECTS IN ONE RELEASE, AND THAT IS THE NORMAL SHAPE — action 2's ship-alone clause is a
+PER-FILE test, derived per release, not a disposition toward one subject per batch.** `BL-281`
+closed (the handoff guard's key 2 armed forever on a line nothing rewrites; key 1 keys on a FILE
+step 5 deletes and is self-clearing, and that asymmetry was the defect rather than the grammar),
+discharging `PC-S312-HANDOFF-GUARD-ARMS-ON-A-STALE-DISK-RECORD-THROUGH-A-RECONCILE`. `BL-260`
+closed on the operator's standing instruction: the dispatch guard's effort prose line is removed.
+Gate 22 of 22 phases PASS, **203 ok / 0 FAIL**, five affected fixtures read by name against an
+impossible-name control of 0. Live **76 -> 74**, archive **204 -> 206**.
+
+**THE EFFORT LINE WAS NEVER GATED ON THE THING ITS OWN COMMENT CLAIMED.** The header called it
+"what a dispatch with no usable definition still gets"; `NEEDS_EFFORT` referenced
+`DEFINITION_BOUND` **zero** times, against a control of one in the `NEEDS_TYPE` block beside it.
+So it was appended on definition-bound dispatches too, restating in prose what the harness had
+already bound from the definition's `effort:` key. **Nothing ever measured it**: `probe_effort()`
+reads the teammate's TRANSCRIPT, the six fixture assertions read the outgoing PROMPT for the
+sentence's own text, and `grep -rln EFFORT_LINE core/ scripts/` returned one file — the hook that
+emitted it. The only thing verifying the line was a check that the line was there. Removing it
+took **13 of 27** dispatch shapes from emitting to silent, all one class, so the guard is
+strictly more idempotent. **A comment describing a gate the code does not have is the shape to
+watch for; it framed the entry as a narrow edge case for two batches.**
+
+**THE LEAD SERIALISED TWO SUBJECTS THAT DID NOT NEED IT, AND ONLY AN ERROR EXPOSED IT.** Both
+were planned as separate releases on the assumption that hook fixes ship alone. Derived: `0.613.0`
+touched **2** bootstrapping files and was correctly alone; `0.614.0` touched **0**, so the rule
+always permitted the batch. A botched branch switch forced the rebuild that found it. **Derive
+the bootstrapping-file count per release before assuming separation** — an unnecessary split
+costs a full gate run, which is this program's scarcest resource.
+
+**NEVER SWITCH BRANCHES WHILE THE GATE IS RUNNING.** Measured here: `git checkout` mid-run left
+the suite measuring a tree without the change under test, and the run had to be killed and
+re-taken. It also left **24** orphaned fixture processes that needed clearing by name.
+
+**BOTH RECEIPT FLOORS WERE RE-SEATED TOGETHER AND THE WINDOW WAS PROBED, NOT ASSUMED.** Four
+rotations took live 78 -> 74 and `sh` receipts 65 -> 61, leaving both `.githooks/pre-push` floors
+above their live counts. R5 compares the two DROPS, so it passed — but a probe seeding one real
+`verify: sh` -> `verify: manual` downgrade fires R5 at the OLD floors and at the NEW ones, so the
+window was never closed and the re-seat did not open one. **The first probe attempt edited the
+`## Receipts` LEGEND and did not apply**, caught by the receipt count not moving rather than by
+reading. Floors now 61/74.
+
+**BATCH 138 ALSO SHIPPED `v0.613.0` (`53a17335`, #811), ONE SUBJECT, ALONE BECAUSE IT TOUCHES
+THE LEDGER ENGINES.** `BL-140` closed, discharging three ids named verbatim in the release commit:
+`PC-S297-H2-SEEDS-STILL-VACUOUS-PURE-ECHO`,
+`PC-S300-ORIGIN-TAG-GATE-HAS-NO-WAIVER-FOR-TRACEABILITY-CITATIONS` and
+`PC-S305-CHECK-17-BYPASS-CONSUMER-CASES-V8-V9-AND-A-PASSING-CONTROL`. Rotation's archive grammar is
+now DERIVED from re-verification's close grammar; the three hand-written literals are gone.
+Measured on the reference consumer, both engines over one seed with the copies asserted
+byte-different in the same invocation: **6 stranded / 0 movable before, 0 / 6 after**, nothing that
+archived ceasing to. Gate at `AI_DLC_FIXTURE_JOBS=6 AI_DLC_FIXTURE_NO_SKIP=1`: 22 of 22 phases
+PASS, **203 ok / 0 FAIL**, both changed fixtures read by name against an impossible-name control of
+0. Live **78 -> 76**, archive **202 -> 204**.
+
+**THE SUITE-POLE PHASE SKIPPED AND THAT IS A REAL GAP IN THIS RELEASE'S EVIDENCE.** The operator
+set `AI_DLC_FIXTURE_JOBS=6` for the session; the pole guard refuses to compare a loaded cost at 6
+against a baseline recorded at 12, which is correct — a cost recorded under one pool width is not
+comparable to another. Its self-probe still fired in both directions, so the arm works and had no
+valid comparand. **This release carries no wall-clock regression check.** A batch wanting one runs
+the gate at the default 12.
+
+**A SECOND ENTRY CLOSED THAT NOBODY SCOPED, AND ONLY AN IDENTITY DIFF FOUND IT.** `BL-074` predicted
+a THIRD hand-copy of the entry-line close predicate; the docs hand found and fixed it in
+`warn-shadowed-local-validators.sh`, which carried the new token **0** times while the engines
+carried it 1, 2 and 5. An entry closed on its TITLE scored OPEN there, and an open entry suppresses
+the `RETIRE-CANDIDATE` row — a fork whose debt had closed was advised as still needed. The
+zero-exit receipt histogram read 7 before and 9 after, which reconciles plausibly as "my subject
+plus one"; the SET diff named `BL-074` outright. **Diff the zeros by identity every batch.**
+
+**`BL-140`'s OWN RECEIPT REJECTED ITS CORRECT FIX, WHICH IS `BL-279`'s TRAP ONE LEVEL UP.** The
+receipt grepped `REJECTED BY DESIGN`; the fix landed `CLOSED AS REJECTED`, so a correct fix scored
+STILL-LIVE forever. REPLACED, not extended: the new one derives the token set from the owner and
+DRIVES the rotator over a seeded ledger, base 1 / tip 0, killing four mutants including the
+destructive inverse. **Score a receipt against the fix before believing its verdict.**
+
+**TWO SHAPES WERE REFUSED ON MEASUREMENT, AND ONE OF THEM WAS THE LEAD'S OWN SUGGESTION.** For the
+wrapped-title case the lead proposed deciding over rotate's existing whole-entry buffer. Built and
+measured against the alternative, both shapes newly archive exactly ONE entry — the **opposite**
+one: the whole-buffer rule sweeps `## Validator-fork retirement record`, a human record whose own
+prose says it must stay whole. The title join shipped instead, FP set empty over eight synthesised
+worlds. Separately, a fixture mutant scoring zero was LEFT ALONE as a tautology — the fixture
+derives its seed tokens from the rule the mutant edits, so both sides move together, and "fixing"
+it means hand-listing the vocabulary in the fixture.
+
+**THE CONSUMER PULLED MID-BATCH AND THE GAP IS TWO RELEASES.** Installed **0.612.0**
+(`9bb59dfa`) against `VERSION` **0.614.0**, moved by the consumer's own
+`33c8b7dd2 reconcile distribution 0.608.0 -> 0.612.0 (#1092)`. **All three ledger engine files are
+in that one-release range** (`SKILL.md`, `ledger-reverify.sh`, `ledger-rotate.sh`, of 8 core paths),
+so the consumer's INSTALLED copy runs the pull carrying its own repair. The operator's BANKED ruling
+stands — report the gap, write no runbook. Re-derive it; do not read this sentence for a number.
+
+**TWO ENTRIES WERE FILED, NOT FIXED, AND BOTH SHIP ALONE.** `BL-280` carries
+`PC-S345-DEFER-PATH-NAMES-NO-HOME-FOR-THE-GATE-RECORD-IT-JUST-WROTE`: the DEFER span is 10 lines
+naming the gate record 0 times against an OK-path control of 1, and step 7's 198-line span names it
+0 times. **Its predicted LOSS is refuted as a rate and REAL as a window** — 23 of 23 records tracked,
+12 of 12 on the DEFER path, and then a 13th DEFER record caught UNTRACKED mid-flight while a
+reconcile ran. A steady-state census cannot see that class: every record it counts has already
+survived. **`BL-281` was filed AND FIXED in the same batch and is no longer available** — it
+shipped in `v0.614.0`; the paragraph above records it.
+
+**`BL-282` IS FILED AND IS THE ONE ENTRY THIS BATCH LEAVES BEHIND WITH A REAL DESIGN QUESTION.**
+The rule "a green gate is not a landed push" (`.claude/rules/verification-discipline.md`) has
+**0** readers of `ls-remote` across the hooks and scripts, against a control of 15 `pre-push`
+occurrences in the backlog — it is prose with no mechanism. **Git ships no `post-push` hook** (0
+of its 14 samples, control 1 for `pre-push`) and `pre-push` runs BEFORE the transport, so no hook
+can observe the outcome. **The obvious check also has a measured false positive this batch
+shipped**: an `ls-remote` reading 0 while a BACKGROUNDED push is still in flight is
+indistinguishable from the real exit-141 case, and the reflog showed one push landing the sha with
+the "re-push" a no-op. A fix must establish the push COMPLETED before reading the ref, and nothing
+today joins those two events. Scope it as a design question, not a one-line addition.
+

@@ -58,6 +58,119 @@ scripts/plan-rotate.sh docs/plans/graph-ledger-full-drain.md` to see what moves 
 move it. **Never a discharge banner in the head window** — that silences P9 through P13 on this
 file.
 
+**BATCH 141 SHIPPED TWO RELEASES AND CLOSED FIVE ENTRIES, AND THE SECOND SUBJECT CAME FROM THE
+OPERATOR RATHER THAN FROM ANY JOIN.** `v0.617.0` (`ccb5f7c1`, #818) carried FOUR subjects;
+`v0.618.0` (`54fb7d8b`, #819) carried one, alone, because `ledger-reverify.sh` is a bootstrapping
+file. `BL-015`, `BL-016`, `BL-284`, `BL-285`, `BL-286` all closed. Live **76 -> 71**, archive
+**209 -> 214**. Gate at `AI_DLC_FIXTURE_JOBS=12 AI_DLC_FIXTURE_NO_SKIP=1`: 22 of 22 phases PASS,
+**203 ok / 0 FAIL**, changed fixtures read by name against an impossible-name control of 0.
+Receipt zeros diffed BY IDENTITY: base 7, tip 7, the SAME SEVEN IDS, so nothing closed
+incidentally — and that diff was load-bearing because this batch also FILED.
+
+**THE `GATED-ON-THIS-FILING` CLASS IS NOW EMPTY AND THE PC-BACKED WORKLIST IS FOUR ROWS THAT ALL
+DISQUALIFY THEMSELVES.** Re-derived at close: the class reads 0 flattened (both members rotated),
+and the worklist is `BL-067`, `BL-132`, `BL-145`, `BL-215` — the same four batch 140 reported,
+each recording its own remedy unshippable, refuted, unmeasured or unconstructible. **A batch that
+scopes only from that join will report an empty batch and be wrong.** Derive it again rather than
+reading this sentence; the controls are live 37, a known-live id at 1, an impossible id at 0.
+
+**THE SUBJECT THAT MATTERED CAME FROM THE UNFILED SET, WHICH NO ACTION TELLS YOU TO RANK.** The
+sweep enumerates unfiled candidates and dates them; this batch read past them, and the operator
+asked *"did new upstream push candidates get evaluated?"* — they had not. Three were filed
+2026-09-20, hours before batch 140 closed, unexamined by any batch (`plan=0 backlog=0 commits=0`
+against a control of 2 for an id the plan does discuss), and **all three routed CORE**. One of
+them was residue of a fix THIS PROGRAM had shipped three batches earlier. **Rank the unfiled set
+by date every batch, and route each candidate with `core-paths.sh --is-core` reading its STDOUT
+under CONSUMER path spelling** — the distribution spelling answers `not-core` and inverts the
+conclusion.
+
+**A SQUASH TAKES THE COMMIT MESSAGES, NOT THE PR BODY, AND `v0.617.0` SHIPPED ITS CITATIONS IN THE
+WRONG PLACE.** All four ids were verbatim in the PR body; the landed release commit named **0** of
+them, against positive controls that fire on the same message (`0.617.0` 2, `BL-015` 4,
+`EXTENSION-NO-HEADINGS` 4). Repaired by a follow-up commit on `main` (`c3eb0fe1`), which resolves
+correctly because `named_absorbed()` reads `VERSION` at the OLDEST commit naming the id and
+`VERSION` was already bumped there. `v0.618.0` put the id in the COMMIT message and landed it
+first time. **Put every closed id in a commit message; the PR body is discarded by the squash.**
+
+**A FIRST CHECK THAT READS ZERO BESIDE A ZERO CONTROL HAS ESTABLISHED NOTHING, AND THIS BATCH DID
+IT THREE TIMES.** The citation check above read 0 for all four ids AND 0 for its impossible
+control — non-discriminating, and only a re-run with controls that FIRE turned it into a finding.
+Same shape on the `GATED` class (0 against a 0 control, re-controlled at 71/47/13) and on the
+changed-fixture-by-name check (every fixture 0 including the impossible one, because the grammar
+was wrong). **Read the control before reading the answer.**
+
+**`BL-286` CITED ITS OWN CANDIDATE NOWHERE, AND THE TELL WAS THE UNFILED JOIN REPORTING AN
+ALREADY-CLOSED CANDIDATE.** The id appeared 0 times in either backlog file while the entry carried
+three unrelated ids, against a non-empty-body control of 11461 bytes. The upstream close signal
+was never at risk — the release commit carries it — but every distribution-side join greps a
+CONTIGUOUS token and an id broken across a line is invisible to all of them. Scoped before
+repair: the other four entries each cite contiguously. Unfiled corrected 19 -> 18.
+
+**A SELF-PROBE'S SEEDED REFUSALS ARE NOT FINDINGS, AND A RECEIPT THAT COUNTS THEM READS 1 ON ITS
+OWN FIX.** `BL-285`'s receipt was scored before the world-guard probe landed in the same release;
+that probe seeds FIVE deliberate `FIXTURE BROKEN` lines to prove its guards fire, and the receipt
+counted them as machinery findings. Measured: all 5 carry `probe`, non-probe FAIL lines are 0, and
+the fixture itself exits 0 reporting PASS. Corrected to exclude them: 0 at tip, 1 at base. **Two
+near-misses on the way**: the first "exit 0" was `tail`'s status through a pipe, and the fixture's
+own green verdict would have acquitted it.
+
+**THE TIP ADVERSARY FOUND A FIX THAT COULD NOT RUN AT ALL, AND SEVEN SEEDS HAD MISSED IT.**
+`ai-dlc-handoff-entry.sh`'s first suppression keyed on `.recover-fired`, which
+`ai-dlc-recover-gate.sh:198` DELETES one PreToolUse before the PostToolUse entry hook runs — so it
+was unreachable on a real consumer. Every seed had placed the marker by hand and never run the
+gate. **A seed set that does not drive the SHIPPED HOOK SEQUENCE, with the order PARSED from
+`templates/settings.json.template`, cannot see this class.** Re-keyed on a satisfaction breadcrumb
+only the satisfying call writes; four files including the schema, `paths` population 37 -> 38.
+
+**A ZERO FALSE-POSITIVE SET MEASURED OVER A RANGE THAT RETIRED NOTHING IS A CEILING, NOT AN FP
+SET.** `retired-layer-contract.sh`'s new path arm reported 0 rows against the reference consumer —
+because the range retired no rulebook file. Its third path spelling degenerated any file directly
+under `skills/ai-dlc/` to a BARE FILENAME against an unanchored `grep -qF`: `SKILL.md` bare 17
+against a correct grain of 1, and end-to-end 17 rows -> 1 after the fix. **Ask what a zero was
+measured OVER before reading it as an FP set.**
+
+**I RETRACTED AN ADVERSARY FINDING AND THE RETRACTION WAS WRONG.** LC-E20's conjunct 1 IS vacuous.
+My test compared conjunct1-alone against shipped, which proves conjunct **2** is load-bearing and
+says nothing about the claim; the decisive test is conjunct2-alone vs shipped, which agrees with
+shipped on all 7 seeds including h5/h6-only, with a harness control confirming the instrument can
+see a difference. `heading_titles_of_stream` matches `^#{2,4}`, a strict subset of the guard's
+`^#{2,6}`, so no input can separate them. The guard is KEPT by operator decision and the fixture
+records the vacuity as a NOTE. **Check which comparison a vacuity claim needs before testing it.**
+
+**THE TRANSPORT FAILED SIX TIMES ACROSS THIS BATCH AND THE GATE WAS GREEN EVERY TIME.** Exit
+**141** from `git push`, `pre-push: all gates green`, and the ref NOT on origin — `BL-282`'s exact
+subject, now with six more instances. Both releases landed only under `--no-verify`, on a gate
+already green on record for that exact tree. **Read the push's REAL exit, never through a pipe,
+and confirm the ref moved with `ls-remote` against a live control before reporting anything as
+shipped.** Retries are cheap after the first: the content-key skip means the suite runs once.
+
+**A COUNT OF PROCESSES FROM `grep -c` COUNTS ITS OWN PIPELINE, AND `pgrep -f` MISSES A HOOK
+INVOKED BY ABSOLUTE PATH.** Both fired this batch: "3 push procs / 3 fixture procs" were zero, and
+a live gate at pid 8706 read as 0. Use `ps -eo command` with a BRACKETED pattern. And killing a
+gate needs the process TREE — a group kill left four orphaned children reparented up the chain,
+and caught a read-set re-derivation mid-write, truncating the tracked map to 202 fixtures.
+
+**THE SUITE-POLE GUARD COMPARED AT POOL 12 AND WOULD HAVE SKIPPED AT 4.** Pole `ledger-reverify`
+**399s** against a baseline of 628s (band 20%, ceiling 754s, pool 12). The baseline is recorded at
+`jobs: 12` and the guard SKIPS rather than compares at any other width. **Derived at close: the
+pole governs wall clock only at widths 12 and above** — at 4 the work floor (sum/jobs) is 1271s
+against a 432s pole, so a per-width pole row would answer the wrong question. If coverage below
+the crossover is wanted, the thing to build is a WORK-FLOOR guard, not more pole rows.
+
+**THE DELIVERY GAP IS FOUR RELEASES AND BOTH BOOTSTRAPPING FILES ARE IN THE RANGE.** Consumer
+installed **0.614.0** (`944e172e`) against `VERSION` **0.618.0**; `ledger-reverify.sh` and
+`ai-dlc-update/SKILL.md` both changed in range, **0** mode-only changes against a control of 24
+raw rows. So the consumer's INSTALLED copy runs the pull that carries its own repair. The
+operator's BANKED ruling stands — report the gap, write no runbook. Re-derive it; do not read this
+sentence for a number.
+
+**THE READ-SET MAP WAS RE-DERIVED BY THE OPERATOR MID-BATCH AND VERIFIED ADDITIVE.** Two fixtures
+gained reads that the runner cannot detect — it sees only NEW directories, never an existing
+fixture reading a new file. Entries 32125 -> 32127, only the two traced fixtures moved (47->48,
+53->54), ZERO fixtures lost rows, and the deriver's own control passed: 203 of 203 read-sets are a
+PROPER subset of the 4822-path universe. **Ask for that trace by name whenever a fixture's reads
+change, and verify additivity rather than assuming it.**
+
 **BATCH 140 SHIPPED `v0.616.0` (`4071e41b`, #816), TWO SUBJECTS IN ONE RELEASE.** `BL-014` and
 `BL-018` closed, discharging `PC-S299-READOPT-DOSSIER-RENDERS-REASON-EMPTY` and
 `PC-S302-HARD-BLOCKERS-HAS-NO-POST-APPLY-GUARD`, both named verbatim in the release commit. Gate at
@@ -198,116 +311,6 @@ was taken INSIDE the event — the first consumer HEAD it recorded was the pull 
 twin, identical tree, stamp already advanced. Its ancestry probe then said "my observation predates
 the pull", technically true of the squashed sha and misleading. **Read `git log -- .claude/.ai-dlc-version`;
 test by CONTENT, never by ancestry in a squash-merge repo.**
-
-**BATCH 138 SHIPPED TWO RELEASES AND CLOSED FOUR ENTRIES. `v0.614.0` (`f73027d8`, #813) CARRIED
-TWO SUBJECTS IN ONE RELEASE, AND THAT IS THE NORMAL SHAPE — action 2's ship-alone clause is a
-PER-FILE test, derived per release, not a disposition toward one subject per batch.** `BL-281`
-closed (the handoff guard's key 2 armed forever on a line nothing rewrites; key 1 keys on a FILE
-step 5 deletes and is self-clearing, and that asymmetry was the defect rather than the grammar),
-discharging `PC-S312-HANDOFF-GUARD-ARMS-ON-A-STALE-DISK-RECORD-THROUGH-A-RECONCILE`. `BL-260`
-closed on the operator's standing instruction: the dispatch guard's effort prose line is removed.
-Gate 22 of 22 phases PASS, **203 ok / 0 FAIL**, five affected fixtures read by name against an
-impossible-name control of 0. Live **76 -> 74**, archive **204 -> 206**.
-
-**THE EFFORT LINE WAS NEVER GATED ON THE THING ITS OWN COMMENT CLAIMED.** The header called it
-"what a dispatch with no usable definition still gets"; `NEEDS_EFFORT` referenced
-`DEFINITION_BOUND` **zero** times, against a control of one in the `NEEDS_TYPE` block beside it.
-So it was appended on definition-bound dispatches too, restating in prose what the harness had
-already bound from the definition's `effort:` key. **Nothing ever measured it**: `probe_effort()`
-reads the teammate's TRANSCRIPT, the six fixture assertions read the outgoing PROMPT for the
-sentence's own text, and `grep -rln EFFORT_LINE core/ scripts/` returned one file — the hook that
-emitted it. The only thing verifying the line was a check that the line was there. Removing it
-took **13 of 27** dispatch shapes from emitting to silent, all one class, so the guard is
-strictly more idempotent. **A comment describing a gate the code does not have is the shape to
-watch for; it framed the entry as a narrow edge case for two batches.**
-
-**THE LEAD SERIALISED TWO SUBJECTS THAT DID NOT NEED IT, AND ONLY AN ERROR EXPOSED IT.** Both
-were planned as separate releases on the assumption that hook fixes ship alone. Derived: `0.613.0`
-touched **2** bootstrapping files and was correctly alone; `0.614.0` touched **0**, so the rule
-always permitted the batch. A botched branch switch forced the rebuild that found it. **Derive
-the bootstrapping-file count per release before assuming separation** — an unnecessary split
-costs a full gate run, which is this program's scarcest resource.
-
-**NEVER SWITCH BRANCHES WHILE THE GATE IS RUNNING.** Measured here: `git checkout` mid-run left
-the suite measuring a tree without the change under test, and the run had to be killed and
-re-taken. It also left **24** orphaned fixture processes that needed clearing by name.
-
-**BOTH RECEIPT FLOORS WERE RE-SEATED TOGETHER AND THE WINDOW WAS PROBED, NOT ASSUMED.** Four
-rotations took live 78 -> 74 and `sh` receipts 65 -> 61, leaving both `.githooks/pre-push` floors
-above their live counts. R5 compares the two DROPS, so it passed — but a probe seeding one real
-`verify: sh` -> `verify: manual` downgrade fires R5 at the OLD floors and at the NEW ones, so the
-window was never closed and the re-seat did not open one. **The first probe attempt edited the
-`## Receipts` LEGEND and did not apply**, caught by the receipt count not moving rather than by
-reading. Floors now 61/74.
-
-**BATCH 138 ALSO SHIPPED `v0.613.0` (`53a17335`, #811), ONE SUBJECT, ALONE BECAUSE IT TOUCHES
-THE LEDGER ENGINES.** `BL-140` closed, discharging three ids named verbatim in the release commit:
-`PC-S297-H2-SEEDS-STILL-VACUOUS-PURE-ECHO`,
-`PC-S300-ORIGIN-TAG-GATE-HAS-NO-WAIVER-FOR-TRACEABILITY-CITATIONS` and
-`PC-S305-CHECK-17-BYPASS-CONSUMER-CASES-V8-V9-AND-A-PASSING-CONTROL`. Rotation's archive grammar is
-now DERIVED from re-verification's close grammar; the three hand-written literals are gone.
-Measured on the reference consumer, both engines over one seed with the copies asserted
-byte-different in the same invocation: **6 stranded / 0 movable before, 0 / 6 after**, nothing that
-archived ceasing to. Gate at `AI_DLC_FIXTURE_JOBS=6 AI_DLC_FIXTURE_NO_SKIP=1`: 22 of 22 phases
-PASS, **203 ok / 0 FAIL**, both changed fixtures read by name against an impossible-name control of
-0. Live **78 -> 76**, archive **202 -> 204**.
-
-**THE SUITE-POLE PHASE SKIPPED AND THAT IS A REAL GAP IN THIS RELEASE'S EVIDENCE.** The operator
-set `AI_DLC_FIXTURE_JOBS=6` for the session; the pole guard refuses to compare a loaded cost at 6
-against a baseline recorded at 12, which is correct — a cost recorded under one pool width is not
-comparable to another. Its self-probe still fired in both directions, so the arm works and had no
-valid comparand. **This release carries no wall-clock regression check.** A batch wanting one runs
-the gate at the default 12.
-
-**A SECOND ENTRY CLOSED THAT NOBODY SCOPED, AND ONLY AN IDENTITY DIFF FOUND IT.** `BL-074` predicted
-a THIRD hand-copy of the entry-line close predicate; the docs hand found and fixed it in
-`warn-shadowed-local-validators.sh`, which carried the new token **0** times while the engines
-carried it 1, 2 and 5. An entry closed on its TITLE scored OPEN there, and an open entry suppresses
-the `RETIRE-CANDIDATE` row — a fork whose debt had closed was advised as still needed. The
-zero-exit receipt histogram read 7 before and 9 after, which reconciles plausibly as "my subject
-plus one"; the SET diff named `BL-074` outright. **Diff the zeros by identity every batch.**
-
-**`BL-140`'s OWN RECEIPT REJECTED ITS CORRECT FIX, WHICH IS `BL-279`'s TRAP ONE LEVEL UP.** The
-receipt grepped `REJECTED BY DESIGN`; the fix landed `CLOSED AS REJECTED`, so a correct fix scored
-STILL-LIVE forever. REPLACED, not extended: the new one derives the token set from the owner and
-DRIVES the rotator over a seeded ledger, base 1 / tip 0, killing four mutants including the
-destructive inverse. **Score a receipt against the fix before believing its verdict.**
-
-**TWO SHAPES WERE REFUSED ON MEASUREMENT, AND ONE OF THEM WAS THE LEAD'S OWN SUGGESTION.** For the
-wrapped-title case the lead proposed deciding over rotate's existing whole-entry buffer. Built and
-measured against the alternative, both shapes newly archive exactly ONE entry — the **opposite**
-one: the whole-buffer rule sweeps `## Validator-fork retirement record`, a human record whose own
-prose says it must stay whole. The title join shipped instead, FP set empty over eight synthesised
-worlds. Separately, a fixture mutant scoring zero was LEFT ALONE as a tautology — the fixture
-derives its seed tokens from the rule the mutant edits, so both sides move together, and "fixing"
-it means hand-listing the vocabulary in the fixture.
-
-**THE CONSUMER PULLED MID-BATCH AND THE GAP IS TWO RELEASES.** Installed **0.612.0**
-(`9bb59dfa`) against `VERSION` **0.614.0**, moved by the consumer's own
-`33c8b7dd2 reconcile distribution 0.608.0 -> 0.612.0 (#1092)`. **All three ledger engine files are
-in that one-release range** (`SKILL.md`, `ledger-reverify.sh`, `ledger-rotate.sh`, of 8 core paths),
-so the consumer's INSTALLED copy runs the pull carrying its own repair. The operator's BANKED ruling
-stands — report the gap, write no runbook. Re-derive it; do not read this sentence for a number.
-
-**TWO ENTRIES WERE FILED, NOT FIXED, AND BOTH SHIP ALONE.** `BL-280` carries
-`PC-S345-DEFER-PATH-NAMES-NO-HOME-FOR-THE-GATE-RECORD-IT-JUST-WROTE`: the DEFER span is 10 lines
-naming the gate record 0 times against an OK-path control of 1, and step 7's 198-line span names it
-0 times. **Its predicted LOSS is refuted as a rate and REAL as a window** — 23 of 23 records tracked,
-12 of 12 on the DEFER path, and then a 13th DEFER record caught UNTRACKED mid-flight while a
-reconcile ran. A steady-state census cannot see that class: every record it counts has already
-survived. **`BL-281` was filed AND FIXED in the same batch and is no longer available** — it
-shipped in `v0.614.0`; the paragraph above records it.
-
-**`BL-282` IS FILED AND IS THE ONE ENTRY THIS BATCH LEAVES BEHIND WITH A REAL DESIGN QUESTION.**
-The rule "a green gate is not a landed push" (`.claude/rules/verification-discipline.md`) has
-**0** readers of `ls-remote` across the hooks and scripts, against a control of 15 `pre-push`
-occurrences in the backlog — it is prose with no mechanism. **Git ships no `post-push` hook** (0
-of its 14 samples, control 1 for `pre-push`) and `pre-push` runs BEFORE the transport, so no hook
-can observe the outcome. **The obvious check also has a measured false positive this batch
-shipped**: an `ls-remote` reading 0 while a BACKGROUNDED push is still in flight is
-indistinguishable from the real exit-141 case, and the reflog showed one push landing the sha with
-the "re-push" a no-op. A fix must establish the push COMPLETED before reading the ref, and nothing
-today joins those two events. Scope it as a design question, not a one-line addition.
 
 **BATCH 137 SHIPPED NO RELEASE, AND THAT IS THE CORRECT SHAPE: BOTH SUBJECTS WERE DOCS-ONLY, SO
 `core/` IS UNTOUCHED AND THE CONSUMER GAP DID NOT WIDEN.** Merged as `b468c01b` (#810), verified by
