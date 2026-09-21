@@ -21,10 +21,27 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
-trap 'rm -rf "$WORK"' EXIT
-# shellcheck source=/dev/null
-. "$WORK/env.sh"
+
+# PROBE-ONLY MODE SKIPS THE SEED, AND THAT IS A COST DECISION WITH A NUMBER BEHIND IT.
+# The world-guard battery at the foot of this file re-runs this whole script once per mutant,
+# because the helpers it probes (`DGW`, `world_moved`, `world_at`, `broken`) are defined HERE.
+# Measured: one probe-only run WITH the seed costs 34s, so seven of them add ~238s to a unit
+# the durations file records at 184s LOADED -- more than doubling a pole-adjacent fixture, on
+# a suite whose wall clock tracks its single longest directory. The guards under test build
+# their own throwaway repository and never read the seeded world, so the seed is pure cost in
+# this mode. Skipped, the battery is a rounding error instead of a pole change.
+#
+# THE FLAG IS NEVER SET BY THE PRE-PUSH RUNNER -- the battery sets it on the COPIES it drives
+# -- so an ordinary invocation seeds and runs everything exactly as before.
+if [ -n "${AI_DLC_RER_PROBE_ONLY:-}" ]; then
+  WORK="$(mktemp -d "${TMPDIR:-/tmp}/rer-probe.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
+  trap 'rm -rf "$WORK"' EXIT
+else
+  WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
+  trap 'rm -rf "$WORK"' EXIT
+  # shellcheck source=/dev/null
+  . "$WORK/env.sh"
+fi
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
@@ -33,12 +50,26 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 verify() { bash "$EMIT" --verify "$1" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>&1; RC=$?; }
 
 # The orientation block for the BOTH-ADDED template, as rendered.
-ORIENT="$(awk '/Semantic worklist orientation/,/^\*\*Deletions/' "$REGION")"
+#
+# `${REGION:-/dev/null}` BECAUSE PROBE-ONLY MODE NEVER SEEDS. That mode exists for the
+# world-guard battery, whose subjects (`DGW`, `world_moved`, `world_at`, `broken`) build
+# their own throwaway repository and read nothing the seed produces. Under `set -u` the bare
+# `$REGION` aborted the run before the probe was reached, and an aborted copy prints no
+# verdict at all -- which every "expected at least N failures" arm reads as MUTANT SURVIVED.
+# The default keeps this line inert there and unchanged everywhere else; the probe's own
+# `FIXTURE ERROR` guard is what catches a copy that really did fail to start.
+ORIENT="$(awk '/Semantic worklist orientation/,/^\*\*Deletions/' "${REGION:-/dev/null}")"
 # Which side is the line attributed to? Prints THEIRS or OURS, or nothing.
 side_of() { printf '%s\n' "$ORIENT" | awk -v pat="$1" '
   /ONLY IN THEIRS/{s="THEIRS"} /ONLY IN OURS/{s="OURS"} $0 ~ pat {print s; exit}'; }
 
 echo "reconcile-emit-report:"
+
+# EVERY ASSERTION FROM HERE TO THE WORLD-GUARD SECTION READS THE SEEDED WORLD, and probe-only
+# mode never builds one. The guards under test construct their own throwaway repository, so
+# the whole corpus half is skipped rather than made conditional line by line -- one branch
+# whose scope is visible, instead of a `${...:-}` default on each of forty readers.
+if [ -z "${AI_DLC_RER_PROBE_ONLY:-}" ]; then
 
 # --- Assertion 0: SANITY — the rendered region carries the HARD blocker -------
 if grep -q "reconcile-mechanical" "$REGION" && grep -q "HARD-UNREGISTERED-CORE-DRIFT" "$REGION" && grep -q "thing.json" "$REGION"; then
@@ -270,6 +301,7 @@ DG() { git -C "$DIST" -c user.email=f@f -c user.name=fixture "$@" >/dev/null 2>&
 # nothing -- so the status answers "did the command error" while the arms need "is the tree
 # now the one I require". `DGW` covers the first and `world_moved` DERIVES the second from the
 # repository.
+fi   # end of the seed-dependent corpus half; see the probe-only branch above
 broken() { printf '  FAIL  FIXTURE BROKEN (world construction, NOT a machinery finding) — %s\n' "$1"; fails=$((fails+1)); }
 
 DGW() { # DGW <what> <git-args...> -- run a world mutation and REFUSE if it did not take
@@ -316,6 +348,214 @@ world_at() { # world_at <what> <ref>
 }
 verify_ref() { bash "$EMIT" --verify "$1" "$DIST" "$BASE" "$CONSUMER" "$2" >/dev/null 2>&1; RC=$?; }
 core_tree_at() { git -C "$DIST" rev-parse "${1}:core" 2>/dev/null; }
+
+# --- THE WORLD GUARDS ARE THEMSELVES CHECKED, BEFORE ANY WORLD IS BUILT -------------------
+#
+# WHY THIS SECTION EXISTS AT ALL. Every arm below this point depends on `DGW` and
+# `world_moved` to tell it that the world it is about to read was actually built. A guard
+# that cannot fire reads exactly like one that passed, and here the failure is silent in the
+# worst direction: a guard that never refuses leaves the unit reporting on emit-report.sh,
+# in the fixture's own voice, about a tree that is one commit short of the one it assumes.
+# Step 2 of the self-update treats a RED cell here as evidence the machinery slice is broken
+# and blocks a real pull on that reading, so an unproven guard is an unproven conviction.
+#
+# IT RUNS BEFORE THE CORPUS. Probing after the worlds are built would ask the guards to
+# report on trees they have already passed; this asks them about trees constructed for the
+# question, in a throwaway repository, and leaves `$DIST` untouched.
+#
+# THE PAIR IN W3 IS THE WHOLE REASON THERE ARE TWO HELPERS, and neither half establishes it
+# alone: `git commit` with nothing staged EXITS 1 while `git checkout` of a ref already at
+# HEAD EXITS 0 having changed nothing. A fixture keyed on exit status alone catches the first
+# and is blind to the second, and "the command did not error" is not "the tree is now the one
+# I require".
+echo ""
+echo "  --- world-construction guards (probed before any world is built) ---"
+
+# The probe counts `broken` calls by watching `fails`, and restores it afterwards. A probe
+# that left its own seeded failures in the tally would fail the unit for succeeding.
+_wp_before=0; _wp_fired=0
+wp_start() { _wp_before="$fails"; }
+wp_end()   { _wp_fired=$(( fails - _wp_before )); fails="$_wp_before"; }
+wp_want()  { # wp_want <label> <want-fired> <want-rc> <got-rc> <failmsg>
+  if [ "$_wp_fired" -eq "$2" ] && [ "$4" -eq "$3" ]; then ok "  $1"
+  else bad "$5 (refusals=$_wp_fired want=$2, rc=$4 want=$3)"; fi
+}
+
+# A THROWAWAY REPOSITORY, NEVER `$DIST`. The guards take `$DIST` from the enclosing scope, so
+# the probe rebinds it for the duration and restores it — a probe that mutated the real
+# scratch dist would change the world every later arm reads.
+#
+# THE DEFAULT IS FOR PROBE-ONLY MODE, WHERE THERE IS NO SEEDED `$DIST` TO SAVE. Under `set -u`
+# a bare `$DIST` aborts the run here, and an aborted copy prints no verdict — which every
+# "expected at least N failures" arm reads as MUTANT SURVIVED rather than as a copy that died.
+_WP_REAL_DIST="${DIST:-}"
+WPD="$WORK/world-guard-probe"
+rm -rf "$WPD"; mkdir -p "$WPD"
+if ! git -C "$WPD" init -q 2>/dev/null; then
+  bad "FIXTURE BROKEN — could not init the world-guard probe repo, so the guards every arm below relies on are unproven"
+else
+  DIST="$WPD"
+  printf 'seed\n' > "$WPD/a.txt"
+  git -C "$WPD" -c user.email=f@f -c user.name=fixture add -A >/dev/null 2>&1
+  git -C "$WPD" -c user.email=f@f -c user.name=fixture commit -qm p0 >/dev/null 2>&1
+  _WP0="$(git -C "$WPD" rev-parse HEAD 2>/dev/null)"
+
+  # W1 — DGW REFUSES A MUTATION THAT ERRORED. Without this every `|| true` beside a DGW call
+  #      is decoration and the helper is a rename of DG.
+  wp_start; DGW "a probe checkout of a ref that does not exist" checkout -q no-such-ref-141; _wprc=$?; wp_end
+  wp_want "DGW REFUSES a git mutation that failed (and returns non-zero)" 1 1 "$_wprc" \
+    "DGW did not refuse a failing git mutation. Every world below is then built by a helper that swallows its own errors, and an arm downstream reads a tree that was never constructed — reporting on emit-report.sh in the fixture's own voice"
+
+  # W2 — AND IT IS QUIET ON ONE THAT WORKED. The other direction: a guard that refuses
+  #      everything is indistinguishable from one that discriminates, and it would turn every
+  #      green run red for a reason that has nothing to do with the machinery.
+  printf 'more\n' >> "$WPD/a.txt"
+  wp_start; DGW "a probe stage that must succeed" add -A; _wprc=$?; wp_end
+  wp_want "  and stays SILENT on a mutation that succeeded" 0 0 "$_wprc" \
+    "DGW refused a git mutation that succeeded — it fires unconditionally, so its refusals carry no information and it would fail every push"
+
+  # W3 — THE DISCRIMINATING PAIR, and requirement (5) in full. Exit status alone is not the
+  #      answer, in BOTH directions.
+  #  (a) `commit` with nothing staged EXITS 1 — an error that changed nothing. DGW catches it.
+  git -C "$WPD" -c user.email=f@f -c user.name=fixture commit -qm p1 >/dev/null 2>&1
+  _WP1="$(git -C "$WPD" rev-parse HEAD 2>/dev/null)"
+  wp_start; DGW "a probe commit with nothing staged" commit -m "nothing is staged"; _wprc=$?; wp_end
+  wp_want "DGW catches a commit with nothing staged (it exits 1 having changed nothing)" 1 1 "$_wprc" \
+    "a commit with nothing staged was not refused. That is the world-construction failure that reads as a machinery finding: the next arm reads a tree one commit short of the one it assumes"
+
+  #  (b) `checkout` of a ref ALREADY AT HEAD EXITS 0 having done nothing. DGW cannot see it —
+  #      and asserting that it cannot is what makes `world_moved` non-redundant. A fixture
+  #      carrying only (a) would read as though exit status were sufficient.
+  wp_start; DGW "a probe checkout of the ref already at HEAD" checkout -q "$_WP1"; _wprc=$?; wp_end
+  wp_want "  and a checkout of the ref ALREADY at HEAD exits 0, so DGW alone cannot see it" 0 0 "$_wprc" \
+    "a no-op checkout was refused by DGW, which would mean exit status does see this case — then world_moved has no subject and one of the two helpers is vacuous"
+
+  # W4 — world_moved REFUSES A REF THAT DID NOT MOVE. This is the half DGW is blind to, and
+  #      it is DERIVED from the repository rather than from a value the same block wrote.
+  wp_start; world_moved "the probe world" HEAD "$_WP1"; _wprc=$?; wp_end
+  wp_want "world_moved REFUSES a ref that did not move (the case DGW cannot see)" 1 1 "$_wprc" \
+    "world_moved accepted a ref that is still at the sha captured before the mutation. The no-op checkout above then passes both guards, and the world under test is the world before it"
+
+  # W5 — AND ACCEPTS ONE THAT DID. The other direction.
+  printf 'again\n' >> "$WPD/a.txt"
+  git -C "$WPD" -c user.email=f@f -c user.name=fixture add -A >/dev/null 2>&1
+  git -C "$WPD" -c user.email=f@f -c user.name=fixture commit -qm p2 >/dev/null 2>&1
+  wp_start; world_moved "the probe world" HEAD "$_WP1"; _wprc=$?; wp_end
+  wp_want "  and ACCEPTS a ref that moved" 0 0 "$_wprc" \
+    "world_moved refused a ref that genuinely moved — it fires unconditionally and every world below would report FIXTURE BROKEN on a correct construction"
+
+  # W6 — THE UNRESOLVABLE-REF BRANCH, AND ITS SUBJECT IS NOT WHAT IT LOOKS LIKE.
+  #
+  # MEASURED, because the obvious probe input reports the opposite of the truth. `git
+  # rev-parse <name>` on a ref that does not exist does NOT print empty — it prints the NAME
+  # BACK and exits non-zero, so with `2>/dev/null` the capture is `no-such-ref-141`, 18 bytes.
+  # That is non-empty, so `[ -z "$_got" ]` is FALSE, the comparison runs, and a name compares
+  # unequal to any sha — the helper reports the world as MOVED. Verified in a throwaway repo
+  # on this machine, with HEAD at 40 bytes as the same-invocation control: a deleted branch
+  # read back as its own name and scored MOVED, where `rev-parse --verify <ref>^{commit}`
+  # returned 0 bytes and scored "does not resolve".
+  #
+  # SO THIS ARM ASSERTS THE MEASURED BEHAVIOUR AND NAMES THE GAP RATHER THAN PRETENDING THE
+  # GUARD COVERS IT. The `-z` branch is not vacuous — `rev-parse` of an EMPTY string prints
+  # nothing — but the case an operator would expect it to catch, a ref that was deleted or
+  # never created, does not reach it. Both are asserted below so a future change to either
+  # `world_moved` or to git's output shape moves a cell.
+  _wp_rp="$(git -C "$WPD" rev-parse no-such-ref-141 2>/dev/null)"
+  if [ -n "$_wp_rp" ] && [ "$_wp_rp" != "$_WP1" ]; then
+    ok "  measured: rev-parse of a missing ref prints the NAME back ($_wp_rp), not empty — so world_moved's -z branch is not what catches it (control: HEAD reads $(git -C "$WPD" rev-parse HEAD 2>/dev/null | wc -c | tr -d ' ') bytes)"
+    wp_start; world_moved "the probe world" no-such-ref-141 "$_WP1"; _wprc=$?; wp_end
+    wp_want "  and world_moved reports such a ref as MOVED, which is the KNOWN GAP: the postcondition is carried by world_at at the reset sites, and by DGW at the checkout sites, not here" 0 0 "$_wprc" \
+      "world_moved's behaviour on an unresolvable ref changed. Re-measure what rev-parse prints before adjusting this arm: if it now returns empty, the -z branch catches the case and this expectation should flip to a refusal"
+  else
+    bad "  rev-parse of a missing ref returned '${_wp_rp:-<empty>}' on this machine, which is neither the name nor a resolvable sha. Both W6 arms are written against a measured output shape and neither is readable until that is re-measured"
+  fi
+  # W6b — THE `-z` BRANCH DOES HAVE A SUBJECT, and asserting it keeps the branch from reading
+  #       as dead code the next reader deletes. An EMPTY ref argument makes rev-parse print
+  #       nothing at all.
+  wp_start; world_moved "the probe world" "" "$_WP1"; _wprc=$?; wp_end
+  wp_want "  and world_moved REFUSES an unresolvable (empty) ref, so the -z branch is load-bearing" 1 1 "$_wprc" \
+    "world_moved accepted a ref that resolves to nothing. The -z branch has no subject, and a guard whose removal changes nothing is a loaded gun rather than a check"
+
+  # W7 — world_at ASSERTS A POSTCONDITION, which is the question a `reset --hard` poses and
+  #      neither other helper can answer. `world_moved` asks "did this ref stop being what it
+  #      was", which is right for a commit and WRONG for a reset: a reset to a ref already at
+  #      HEAD exits 0 having done nothing, and the ref did not move because it was already
+  #      there. Both directions, against the same tree.
+  git -C "$WPD" branch -f probe-target "$_WP1" >/dev/null 2>&1
+  wp_start; world_at "the probe reset" probe-target; _wprc=$?; wp_end
+  wp_want "world_at REFUSES when HEAD is not at the required ref" 1 1 "$_wprc" \
+    "world_at accepted a tree whose HEAD is not where the reset was supposed to put it — the two reset sites then have nothing but exit status, which cannot answer this"
+  git -C "$WPD" reset --hard "$_WP1" >/dev/null 2>&1
+  wp_start; world_at "the probe reset" probe-target; _wprc=$?; wp_end
+  wp_want "  and ACCEPTS once HEAD is there" 0 0 "$_wprc" \
+    "world_at refused a reset that landed correctly — it fires unconditionally and both reset sites would report FIXTURE BROKEN on a correct construction"
+  # W7b — AND THE NO-OP RESET, which is the case the helper exists for. `reset --hard` to a
+  #       ref already at HEAD exits 0 having changed nothing, so DGW is silent; world_at must
+  #       still confirm the postcondition rather than inferring it from that silence.
+  wp_start; DGW "a probe reset to the ref already at HEAD" reset --hard "$_WP1"; _wprc=$?; wp_end
+  wp_want "  a reset to the ref ALREADY at HEAD exits 0, so DGW alone cannot see it" 0 0 "$_wprc" \
+    "a no-op reset was refused by DGW, which would mean exit status does answer this — then world_at has no subject and one of the two helpers is vacuous"
+
+  DIST="$_WP_REAL_DIST"
+fi
+
+# W7 — THE CENSUS: NO WORLD MUTATION IS LEFT UNCHECKED. Derived from this file rather than
+#      hand-listed, because a hand-written site list goes vacuous the release somebody adds a
+#      site and nothing announces it. The subject is the bare `DG` verbs that BUILD a world;
+#      `DG` itself stays for mutations whose failure is not a world (it is still called by
+#      name below), so the census is over the world-building verbs only.
+# THE GRAMMAR MATCHES ANY `*DG` WRAPPER, NOT JUST `DG`, AND THAT WIDENING IS A MEASURED
+# REPAIR. The previous census keyed on `DG` with a left word boundary, so the `VDG` site --
+# the V-M world's own wrapper -- was scored as a NON-INSTANCE and the scan returned a clean
+# zero over it. That is this repo's named scan failure: a grammar that cannot spell the thing
+# it hunts reports its own subject as absent, and the zero is a floor of unknown depth. Any
+# future `XDG`-shaped wrapper is now in the population by construction rather than by someone
+# remembering to add it.
+_wp_raw="$(grep -nE '(^|[^A-Za-z_])[A-Z]*DG (add|commit|reset|checkout|branch)' "$0")" || _wp_raw=""
+_wp_unchecked="$(printf '%s\n' "$_wp_raw" | grep -v '^[0-9]*:#' | grep -c .)" || _wp_unchecked=0
+# THE CONTROL, in the same invocation: the checked form must be present in quantity, or a
+# zero above means the grammar cannot spell its own subject rather than that the sites are
+# gone. A scan that scores its own subject as a non-instance returns a clean zero.
+_wp_checked="$(grep -cE '(^|[^A-Za-z_])DGW "' "$0")" || _wp_checked=0
+# AND THE GRAMMAR IS POINTED AT ITS OWN SUBJECT BEFORE ITS ZERO IS TRUSTED. A seeded line in
+# the wrapper form must match; if it does not, the scan cannot express what it hunts and the
+# count beside it means nothing. Built in a temp file, never in this script.
+#
+# THE SEEDED LINES ARE ASSEMBLED FROM PIECES, so the literal wrapper forms never appear in
+# this file. Written out plainly they are matched by the very census above — the scan scores
+# its own self-test as an unchecked world mutation and reports 1. Measured exactly that way
+# on the first cut: a grammar that can see its own probe cannot be pointed at the corpus.
+_wp_gram="$WORK/census-selftest.txt"
+_wp_v="DG"
+{ printf 'V%s add -A\n' "$_wp_v"
+  printf '%s commit -m x\n' "$_wp_v"
+  printf 'ZZ%s reset --hard y\n' "$_wp_v"
+  printf '%sW "checked" add -A\n' "$_wp_v"; } > "$_wp_gram"
+_wp_self="$(grep -cE '(^|[^A-Za-z_])[A-Z]*DG (add|commit|reset|checkout|branch)' "$_wp_gram")" || _wp_self=0
+_wp_selfctl="$(grep -cE '(^|[^A-Za-z_])[A-Z]*DG (qqq-no-such-verb)' "$_wp_gram")" || _wp_selfctl=0
+if [ "$_wp_self" -lt 3 ] || [ "$_wp_selfctl" -ne 0 ]; then
+  bad "FIXTURE BROKEN — the census grammar scored $_wp_self of 3 seeded wrapper forms (impossible-verb control: $_wp_selfctl, want 0). It cannot spell its own subject, so any zero it reports is a floor of unknown depth rather than a finding"
+fi
+if [ "$_wp_checked" -lt 5 ]; then
+  bad "FIXTURE BROKEN — the census grammar found only $_wp_checked checked world mutations. It cannot spell its own subject, so the zero it reports beside them is a floor of unknown depth rather than a finding"
+elif [ "$_wp_unchecked" -eq 0 ]; then
+  ok "census: 0 unchecked world mutations remain (control, same grammar: $_wp_checked checked ones)"
+else
+  bad "census: $_wp_unchecked world mutation(s) still run through the unchecked helper, which swallows both streams AND the exit status. A world that did not get built does not make the arm downstream SKIP — it makes that arm read a tree one commit short of the one it assumes, and report on emit-report.sh"
+fi
+
+# PROBE-ONLY MODE, and it exists for the mutant battery at the foot of this file. Those
+# mutants edit THIS SCRIPT's own helpers, so each one has to be re-run as a whole program;
+# without an early exit each would pay the unit's full cost and the battery would multiply a
+# pole-bound fixture by five. The flag is read from the environment rather than from `$1`
+# because `$1` is already this fixture's optional subject path.
+#
+# THE EXIT IS NOT AN ESCAPE HATCH FOR THE UNIT. It is never set by the pre-push runner — the
+# battery sets it on the COPIES it drives — so a normal invocation runs everything below.
+if [ -n "${AI_DLC_RER_PROBE_ONLY:-}" ]; then
+  if [ "$fails" -eq 0 ]; then exit 0; fi
+  exit 1
+fi
 
 # The APPROVED render — theirs spelled symbolically, ref sitting where the operator approved it.
 REGION_SYM="$WORK/region-symbolic.md"
@@ -1772,6 +2012,191 @@ elif [ "$B2_F" = "$B2_N" ]; then
 else
   bad "B2 the flagged and standalone scans DISAGREE, so the rendered region depends on which caller ran the scan: $(diff <(printf '%s\n' "$B2_N") <(printf '%s\n' "$B2_F") | head -4 | tr '\n' '|')"
 fi
+# =========================================================================================
+# MUTANTS FOR THE WORLD GUARDS
+#
+# W1-W7 are guard-shaped, and three of the six probe arms are ABSENCE-shaped — they assert
+# that a guard did NOT fire. Those pass against a `broken` that can never be reached, so the
+# probe alone establishes that the guards discriminate between two inputs and only a mutant
+# establishes that they discriminate at all.
+#
+# THE SUBJECT IS THIS FILE, which is what makes these different from every other battery
+# here: `DGW`, `world_moved` and `broken` are defined in `run.sh` itself. So each mutant is a
+# copy of THIS SCRIPT with one helper edited, re-run end to end, and scored on whether its
+# own W-arms went red. A copy is re-run with `--world-guard-probe-only` so the mutants cost
+# the probe rather than the whole unit; the flag is handled at the top of the file.
+#
+# KEYED ON THE HELPERS' BODIES, never on a message string. The verdict text is what an
+# operator reads and it will be reworded; the `if` that decides is the property under test.
+# =========================================================================================
+echo ""
+echo "  --- world-guard mutants ---"
+
+WG_SELF="$HERE/run.sh"
+WGN=0
+WG_MUT=""
+# SETS A GLOBAL AND PRINTS NOTHING, for the reason `bad` writes to stdout: a builder called
+# inside `$( )` folds its own refusal into the captured value, the caller reads a non-empty
+# string as a built mutant, and running it produces nothing — which an absence-shaped arm
+# scores as MUTANT SURVIVED. FIXTURE STALE and MUTANT SURVIVED prescribe opposite repairs.
+#
+# THE COPY IS A TREE, NOT A FILE, AND A PARTIAL ONE MAKES EVERY MUTANT SURVIVE. This script's
+# line 2 sources `../lib/preamble.sh` and its `seed.sh` resolves the distribution by walking
+# `$HERE/../../..`; a copy missing either dies before its first assertion, reports nothing,
+# and every "expected at least 1 failure" arm reads that silence as MUTANT SURVIVED.
+# MEASURED exactly that way on the first cut: all six scored SURVIVED against an untouched
+# subject, which reads precisely like a change that does not work. The usual control could
+# not see it, because the control runs the REAL file in the REAL tree and passed.
+#
+# So the copy is rooted at `<d>/core/fixtures/<name>/`, with `lib/` beside it and `skills/`
+# symlinked to the real one, which is what makes `../lib` and `../../..` both resolve.
+wgmut() { # wgmut <name> <sed-arg>... -> sets WG_MUT
+  local name="$1"; shift
+  local r="$WORK/wg-$name" d
+  d="$r/core/fixtures/reconcile-emit-report"
+  WG_MUT=""
+  rm -rf "$r"; mkdir -p "$d" "$r/core/fixtures/lib"
+  cp "$HERE/../lib/preamble.sh" "$r/core/fixtures/lib/" 2>/dev/null \
+    || { bad "MUTANT HARNESS BROKEN [$name]: could not copy the fixture preamble; the copy would die on line 2 and its silence would score as a kill"; return 1; }
+  ln -s "$(cd "$HERE/../../skills" && pwd)" "$r/core/skills" 2>/dev/null \
+    || { bad "MUTANT HARNESS BROKEN [$name]: could not link core/skills into the copy tree; seed.sh would not resolve emit-report.sh"; return 1; }
+  cp "$HERE/seed.sh" "$d/seed.sh" 2>/dev/null || true
+  cp "$HERE/README.md" "$d/README.md" 2>/dev/null || true
+  sed "$@" "$WG_SELF" > "$d/run.sh" || { bad "MUTANT DID NOT APPLY [$name]: sed exited non-zero"; return 1; }
+  if cmp -s "$WG_SELF" "$d/run.sh"; then
+    bad "FIXTURE STALE [$name]: the mutation matched nothing in this file's own world guards. The helper was reworded — re-anchor on the same observable, never relax the assertion"
+    return 1
+  fi
+  if ! bash -n "$d/run.sh" 2>/dev/null; then
+    bad "FIXTURE STALE [$name]: the mutant does not parse, so a kill would be a syntax error rather than a disarmed guard"
+    return 1
+  fi
+  WG_MUT="$d/run.sh"
+  return 0
+}
+# Each mutant is scored on the PROBE's own output. `wg_probe` runs the copy in probe-only
+# mode and prints the count of failed W-arms.
+#
+# A COPY THAT REFUSED AT STARTUP IS NOT A MUTANT VERDICT, AND THE ARM SAYS SO SEPARATELY.
+# `FIXTURE ERROR` / `FIXTURE BROKEN` before the first assertion produces zero `FAIL` lines,
+# which every "expected at least N" arm below would read as MUTANT SURVIVED. The output is
+# captured once and inspected for that state before any count is taken.
+wg_out() { AI_DLC_RER_PROBE_ONLY=1 bash "$1" 2>&1; }
+# THE METRIC IS THE PROBE'S OWN VERDICT ARMS, NOT EVERY `FAIL` LINE, and the difference is
+# not cosmetic. W1-W7 work by PROVOKING refusals: each seeds a broken world, lets `broken`
+# fire, and then asserts the refusal happened. So a correct run prints five `FAIL  FIXTURE
+# BROKEN` lines by design, and counting them scored the UNMUTATED control at 5 -- reported as
+# "measured against a broken baseline" when the baseline was right and the ruler was wrong.
+# `wp_want` is the only thing that speaks for a probe arm, and it prints `  FAIL  ` followed
+# by a message ending in the `(refusals=N want=M, rc=X want=Y)` suffix it alone emits.
+wg_verdict_fails() { grep -c '^  FAIL  .*(refusals=' <<<"$1"; }
+wg_score() { # wg_score <name> <min-expected-fails> <killmsg>
+  local o n; o="$(wg_out "$WG_MUT")"
+  if grep -q 'FIXTURE ERROR' <<<"$o"; then
+    bad "MUTANT HARNESS BROKEN [$1]: the copy refused at startup (FIXTURE ERROR) and never reached an assertion. Its zero failures are a copy that did not run, not a mutation that survived — check the copy tree carries lib/preamble.sh and resolves core/skills"
+    return
+  fi
+  n="$(wg_verdict_fails "$o")" || n=0
+  if [ "${n:-0}" -ge "$2" ]; then
+    ok "  mutant [$1] KILLED ($n W-arm failure(s)) by $3"
+  else
+    bad "MUTANT SURVIVED [$1]: the world-guard probe reported ${n:-0} failure(s), expected at least $2 — $3 does not depend on the mutated code, so those arms prove nothing"
+  fi
+}
+# THE UNMUTATED CONTROL, run through the SAME probe-only path. Without it every count above
+# is read against an assumption; a copy that dies at startup reports 0 failures and every
+# "expected at least N" arm would correctly fail, but a copy that dies AFTER the probe would
+# not — and the control is what separates the two.
+# COUNTED THE SAME WAY THE MUTANTS ARE, which is the whole point of a baseline. Counting
+# every `FAIL` line scored this control at 5 on a correct tree: the probe arms WORK by
+# provoking `broken`, so five `FAIL  FIXTURE BROKEN` lines are what a passing run looks like.
+# The control then reported "measured against a broken baseline" while the baseline was fine
+# and the ruler was wrong -- a control that disagrees with the thing it controls for.
+_wg_ctl="$(wg_verdict_fails "$(wg_out "$WG_SELF")")" || _wg_ctl=0
+if [ "${_wg_ctl:-1}" -eq 0 ]; then
+  ok "  control [unmutated]: this file's own world-guard probe reports 0 failures in probe-only mode"
+else
+  bad "MUTANT HARNESS BROKEN: the UNMUTATED copy reports ${_wg_ctl} world-guard failure(s) in probe-only mode. Every mutant count below is measured against a broken baseline, and two inert runs compare equal"
+fi
+
+# WM1 — DGW STOPS REFUSING: the failure branch returns 0 without reporting, so the helper is
+#       a rename of DG. Killed by W1 and W3a.
+# THE DELIMITER IS `|`, NEVER `@`, AND THAT IS A MEASURED REPAIR RATHER THAN A PREFERENCE.
+# Every anchor in this battery runs through `DGW`'s own condition line, which carries the
+# fixture's git identity `user.email=f@f` — so an `s@...@...@` expression terminates inside
+# its own pattern. The `sed` then matched nothing, `cmp -s` correctly refused the no-op, and
+# three of six mutants reported FIXTURE STALE on a subject that had not moved at all.
+if wgmut wm1-dgw-never-refuses \
+     -e 's|^    broken "\$_what failed in the scratch dist|    return 0 # refusal removed: "$_what failed in the scratch dist|'; then
+  wg_score wm1 1 "W1/W3a: a git mutation that ERRORED is no longer refused, so every world below is built by a helper that swallows its own failures"
+  WGN=$((WGN+1))
+fi
+
+# WM2 — DGW REFUSES UNCONDITIONALLY. The mirror, and the direction that looks finished: a
+#       guard that fires on everything is indistinguishable from one that discriminates
+#       unless something asserts the quiet case. Killed by W2 and W3b.
+# The negation is dropped, so DGW refuses exactly the mutations that SUCCEEDED — the
+# inversion, which is the sharpest form of "fires unconditionally" that still parses.
+if wgmut wm2-dgw-always-refuses \
+     -e 's|^  if ! git -C "\$DIST" -c user\.email|  if git -C "$DIST" -c user.email|'; then
+  wg_score wm2 1 "W2/W3b: DGW now refuses a mutation that SUCCEEDED, so its refusals carry no information"
+  WGN=$((WGN+1))
+fi
+
+# WM3 — world_moved STOPS COMPARING: the did-not-move branch is dead, so the helper answers
+#       only "does this ref resolve". Killed by W4 — which is the case DGW is blind to, so
+#       with this mutant alive a no-op checkout passes BOTH guards.
+if wgmut wm3-world-moved-never-compares \
+     -e 's@^  if \[ "\$_got" = "\$3" \]; then@  if false; then@'; then
+  wg_score wm3 1 "W4: a ref still at the sha captured before the mutation is accepted, so the world under test is the world before it"
+  WGN=$((WGN+1))
+fi
+
+# WM4 — THE `-z` BRANCH IS DISABLED, so a ref resolving to NOTHING compares unequal to any
+#       sha and reads as a world that MOVED — the guard passing precisely where the
+#       construction failed hardest. Killed by W6b.
+#
+#       W6b RATHER THAN W6, AND THE DIFFERENCE IS MEASURED. `rev-parse` of a ref that does
+#       not EXIST prints the name back rather than empty, so that input never reaches this
+#       branch; W6 asserts that measured behaviour and names it as the known gap. The branch
+#       does have a subject — an empty ref argument — and W6b is it. Keyed here the mutant
+#       dies; keyed on the missing-ref input it would survive, and the survival would read as
+#       "the -z branch is not load-bearing, delete it", which is the direction that removes a
+#       correct guard.
+if wgmut wm4-empty-reads-as-moved \
+     -e 's@^  if \[ -z "\$_got" \]; then@  if false; then@'; then
+  wg_score wm4 1 "W6b: a ref resolving to nothing compares unequal to any sha and is read as a world that moved"
+  WGN=$((WGN+1))
+fi
+
+# WM6 — world_at STOPS COMPARING: it answers only "do both refs resolve", never "is HEAD
+#       there". Killed by W7. This is the helper the tip added for the two `reset --hard`
+#       sites, and no other mutant reaches it — WM1/WM2 are DGW's, WM3/WM4 are world_moved's.
+if wgmut wm6-world-at-never-compares \
+     -e 's@^  if \[ "\$_head" != "\$_want" \]; then@  if false; then@'; then
+  wg_score wm6 1 "W7: a reset that left HEAD somewhere else is accepted, so the two reset sites have nothing but exit status — which cannot answer a no-op reset"
+  WGN=$((WGN+1))
+fi
+
+# WM5 — `broken` STOPS FAILING THE UNIT: it prints and leaves `fails` alone. This is the
+#       quietest regression of the four and the one a reader would not see: every world
+#       refusal still appears in the log and the unit goes green over it. Killed by every
+#       positive W-arm at once, because the probe counts refusals by watching `fails`.
+#       ANCHORED ON THE TALLY INCREMENT ALONE, not on the whole definition: the message text
+#       is what an operator reads and it will be reworded, while `fails=$((fails+1))` is the
+#       property under test.
+if wgmut wm5-broken-does-not-fail \
+     -e 's|^broken() \(.*\)fails=\$((fails+1)); }$|broken() \1: ; }|'; then
+  wg_score wm5 1 "the positive W-arms: a world refusal prints and no longer fails the unit, so the log says FIXTURE BROKEN and the cell reads green"
+  WGN=$((WGN+1))
+fi
+
+if [ "$WGN" -eq 6 ]; then
+  ok "  all 6 world-guard mutants were built, applied (cmp -s) and scored"
+else
+  bad "only $WGN of 6 world-guard mutants were scored — a mutation that never became a mutant leaves its arm unproven and this fixture would report PASS over it"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "reconcile-emit-report: PASS"; exit 0; fi
 echo "reconcile-emit-report: $fails assertion(s) FAILED" >&2
