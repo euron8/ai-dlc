@@ -641,10 +641,30 @@ e20ctl() { # e20ctl <name> <output>
   fi
 }
 
+# NOTE — CONJUNCT 1 OF THE GUARD IS VACUOUS TODAY, AND NO MUTANT BELOW DROPS IT.
+#
+# The guard is `[ -z "$ext_titles" ] && ! grep -qE '^#{2,6}[[:space:]]+' "$f"`. A mutant
+# removing the FIRST conjunct would SURVIVE, and its survival must not be read as a coverage
+# gap: `heading_titles_of_stream` matches `^#{2,4}`, a strict SUBSET of the guard's `^#{2,6}`,
+# so any file with a heading conjunct 2 can see also populates `ext_titles` — no input can
+# separate them. Measured independently here over 9 seeds (no heading, h1-only, h2, h3, h4,
+# h5, h6, mixed h5+h6, numbered-only): conjunct-2-ALONE and the shipped guard emit the
+# identical set, while conjunct-1-ALONE differs on four of them, which is the harness control
+# proving the instrument can see a difference at all.
+#
+# THE DECISIVE COMPARISON IS conjunct2-ALONE vs SHIPPED. Comparing conjunct1-alone against
+# shipped establishes that conjunct 2 is load-bearing and says nothing about the vacuity.
+#
+# THE GUARD STAYS BY OPERATOR DECISION. It is recorded here rather than deleted because the
+# two predicates are only equivalent while the two grammars stay in their current relation,
+# and a `#{2,4}` widening would separate them silently. ME2 below is what fails if the
+# relation moves.
+#
 # ME1 — THE GUARD IS KEYED ON THE EMPTY `ext_titles` ALONE, which is the naive form the fix
 #       header measures a 10-entry false-positive set for. Killed by 8b: NUMONLY's
 #       `ext_titles` is empty too, so it starts being accused of unreachability while the
-#       numbered arm is reading it.
+#       numbered arm is reading it. This is the CONVERSE of the vacuity above — dropping
+#       conjunct 2 is observable, dropping conjunct 1 is not.
 #       ANCHORED ON THE `&&` CONJUNCTION rather than on the status token: the conjunction IS
 #       the property under test, and it survives any rewording of the row's text.
 if e20mut me1-naive-ext-titles-guard -e 's@^  if \[ -z "\$ext_titles" \] && ! grep -qE .\^#{2,6}\[\[:space:\]\]+. "\$f"; then$@  if [ -z "$ext_titles" ]; then@'; then
