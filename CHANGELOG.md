@@ -15,6 +15,88 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.616.0] - 2026-09-20
+
+### BL-014 — the re-adoption dossier read a multi-line plain `reason:` as its first line, and clipped a long one with nothing saying so
+
+`fm_block()` entered continuation mode only on a block indicator, so a `reason:` whose text ran over
+the lines beneath it rendered as its FIRST LINE ONLY, and the render's `head -20` dropped the tail of
+a long reason with no ellipsis and no count. Step 7's retire / readopt / reaffirm decision turns on
+that field, and both halves fail in the dangerous direction: a fragment ending in a complete sentence
+reads as the whole reason, where the sibling defect already fixed — a bare `|` rendering empty — sent
+the operator to the file.
+
+The plain arm now enters the same `inb` continuation state the block arm uses rather than growing its
+own, so reader and writer still cannot disagree about where a reason stops. The clip announces itself
+from an `awk` END rule keyed on the INPUT line count, so no value of the bound can produce a silent
+clip.
+
+Measured read-only against the reference consumer's ten override entries, both readers lifted
+verbatim from their own blobs and asserted to DIFFER before any comparison was read: **4 of 10 moved,
+every one a PLAIN scalar, 1 line → 36, 27, 18, 9**; the 6 unchanged are block scalars or genuine
+one-liners. The clip notice now appears on **8 of 10**, and the 2 whose folded reason runs under
+twenty lines correctly carry none.
+
+One regression-surface case is recorded as NOT NEW: a plain reason followed by a `# comment` line now
+swallows that comment. The BASE reader does exactly the same to a comment beneath a block scalar —
+1 under base and 1 under tip there, against 0 → 1 for the plain shape, with an ordinary body line as
+the control — so this is the existing `inb` block-END rule reaching a second YAML shape rather than
+new behaviour.
+
+The entry also records why a fixed seed ladder cannot verify the clip arm, because the next author
+will reach for one: escalating the receipt's seed to 20000 moved the escape to `head -50000`, and
+2000000 moved it to `head -5000000`. Every ladder has a top. The shipped receipt derives its seed from
+the render's own declared bound and seeds past it, keeping a behavioural ladder beside that derived
+seed because a computed bound the grammar cannot spell reads as no bound at all.
+
+### BL-018 — `hard-blockers.sh` discarded `CORE-AT-THEIRS`, and the blindness was narrower and one site wider than filed
+
+`collect()` filters both detectors' rows through `^HARD-`, and `CORE-AT-THEIRS` carries no such prefix
+on purpose — the detector DID classify and nothing is blocked. That filter is the standalone wrapper's
+only reader, so a run whose one finding was "the list you are about to read was computed against a
+stale base" rendered as `0 HARD blockers.` and nothing else. The row is now read out separately BESIDE
+the affirmative line, exactly as `DRIFT-RANGE-DEGENERATE` already was.
+
+**Narrower than filed.** `emit-report.sh:485` renders the unregistered-drift section through a filter
+excluding only `CORE-OK`, which already passes `CORE-AT-THEIRS` through — verified behaviourally, the
+row surviving at 1 against a `CORE-OK` control suppressed at 0. The blindness was the STANDALONE
+invocation's alone, which is exactly the one `SKILL.md:1625` tells the operator to run post-apply. The
+fix holds that line: the rows-supplied wrapper's stdout is byte-identical base against tip across five
+row worlds — **5 identical, 0 differ** — with the standalone subject world asserted to DIFFER in the
+same invocation, so total `CORE-AT-THEIRS` renderings in the emit-report path stay at **1** and
+nothing double-renders.
+
+**One site wider than filed: check mode.** The degenerate note had a check-mode counterpart and
+`CORE-AT-THEIRS` had none, so `--check` certified a report COMPLETE against a stale-base comparison,
+silently. It now WARNS rather than FAILS, on stderr — correct in check mode, which renders no region
+and whose every line the operator reads directly, and wrong in print mode, which `emit-report.sh:477`
+invokes with `2>/dev/null` and whose stderr spelling the receipt rejects.
+
+**The siting was closed by derivation, not chosen.** `refused_new` greps `^DETECTOR-REFUSED` only, so
+the row cannot reach the count that decides `BLOCKERS-RESOLVED`; and suppressing the affirmative line
+would break live positive controls at `core/fixtures/reconcile-blocking-list/run.sh:136` and `:192`,
+the second of which is explicitly the control guarding the refusal arm's absence half.
+
+### Both entries now state what citing their `PC-` id does, and one NOTE about citation anchors
+
+`BL-145` records that a commit naming a candidate id is read by `named_absorbed()` as upstream having
+absorbed it, and that this program is the largest producer of that class. Each entry now says what its
+own citation does and does not do. It cannot cause a false version attribution — the row carries no
+version either way. The earlier reading that the join elects the OLDEST naming commit, so re-citing
+could not move the reported version, is PRE-FIX behaviour and gone; both `tail -1` occurrences in that
+span are now prose describing what was removed. What the citation does do is flip the caller's
+`na_n > 1` branch, rewriting the row from "in one commit" to "in N commits, ALL of them ... NONE of
+them is elected". Each id resolves to **1** naming commit at this base, `e939a925`, against an
+impossible-id control of 0, so the release commit citing them takes each to 2. Both are already
+archived consumer-side as `ADOPTED UPSTREAM`, at v0.150.1 and v0.367.0 — the rows are informational,
+not inert, and neither entry claims otherwise.
+
+Recorded as a NOTE: every `.sh:<line>` citation in the live backlog that resolves to a file is in
+range and none is out of range, controls in the same derivation both ways — while both entries revised
+here carried wrong anchors when checked by CONTENT, six between them, every one still inside its
+file's line count and all six moved by this release's two fixes. A range check on a backlog citation is
+a check that cannot fire, and nothing enforces these the way `P4` enforces plan citations.
+
 ## [0.615.0] - 2026-09-20
 
 ### the self-update DEFER path wrote an approval record that no step claimed, and a human supplied the missing instruction ten times

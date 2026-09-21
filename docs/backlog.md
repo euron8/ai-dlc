@@ -1143,12 +1143,18 @@ verify: sh bad=0; for f in $(git ls-files templates/pipeline/); do grep -qE "^[^
 ## BL-014
 
 **The re-adoption dossier renders a multi-line PLAIN scalar `reason:` as its first line only, and
-clips a block scalar with no ellipsis.** `fm_block()` at
-`core/skills/ai-dlc-update/reconcile/readopt-override.sh:121` enters block mode only on
-`/^[|>][0-9]*[-+]?$/`; every other `reason:` value takes `print v; exit` at `:128`. A multi-line PLAIN
-scalar therefore reaches the dossier's "WHY THIS OVERRIDE EXISTS" panel as its first line. Separately
-the render at `:660` pipes through `head -20` with no ellipsis and no count, so a long reason is
+clips a block scalar with no ellipsis.** `fm_block()` in
+`core/skills/ai-dlc-update/reconcile/readopt-override.sh` entered block mode only on
+`/^[|>][0-9]*[-+]?$/`; every other `reason:` value took `print v; exit`. A multi-line PLAIN
+scalar therefore reached the dossier's "WHY THIS OVERRIDE EXISTS" panel as its first line. Separately
+the render piped through `head -20` with no ellipsis and no count, so a long reason was
 silently truncated.
+
+**FIXED.** The plain arm enters the same `inb` continuation state the block arm uses, and the render's
+`awk` END rule announces the clip as a function of the INPUT rather than of the bound. Anchors are
+given by NAME above rather than by line, because the fix moved all three: `fm_block()` is now at
+`:137`, its plain arm at `:144`, the render at `:692`. The header forbidding a widening of the shared
+`fm()` reader instead is still at `:119-120`, and is the constraint the fix was built against.
 
 Measured with the shipping `fm_block()` lifted verbatim, against the reference consumer's override
 entries: `steps__retro__ci-gates-enforcement-surface.md` renders **1 line of 35**, and its one
@@ -1169,6 +1175,48 @@ marginally worse than filed. The mechanism claims are exact at the line level.
 
 Discharges `PC-S299-READOPT-DOSSIER-RENDERS-REASON-EMPTY`. A close of that entry is GATED on this
 filing.
+
+**MEASURED ON THE REAL CORPUS, NOT ON CONSTRUCTED SHAPES.** Both readers lifted verbatim from their
+own blobs and asserted to DIFFER before any comparison was read, run read-only over the reference
+consumer's ten override entries: **4 of 10 moved, each one a PLAIN scalar, 1 line -> 36, 27, 18 and
+9**. The 6 unchanged are block scalars or genuine one-liners, so the fix reaches exactly the shape it
+was built for and nothing else. The clip notice now appears on **8 of 10**; the 2 whose folded reason
+runs under twenty lines correctly carry none. The directory holds an eleventh `.md`, a `README.md`
+with no `reason:` at all, excluded from the ten because it is not an override entry — it renders
+empty under both readers.
+
+**A REGRESSION SURFACE THAT IS NOT NEW, AND SAYING SO IS THE POINT.** A plain reason followed by a
+`# comment` line now swallows that comment into the rendered reason. That is the existing `inb`
+block-END rule reaching a second YAML shape rather than new behaviour, and it was established by
+running the BASE reader against the SAME shape one YAML form over: a comment line beneath a BLOCK
+scalar renders at 1 under base and 1 under tip, while beneath a PLAIN scalar it goes 0 -> 1. Control
+in the same invocation: an ordinary body line renders in every cell that rendered anything. Reader
+and writer still agree about where a reason stops, which is the property reusing `inb` was chosen to
+preserve.
+
+**WHY A FIXED SEED LADDER CANNOT VERIFY THE CLIP ARM, stated because the next author will reach for
+one.** Escalating the receipt's seed to 20000 moved the escape to `head -50000`; 2000000 moved it to
+`head -5000000`. Every ladder has a top and a constant above it passes quietly. The shipped receipt
+therefore derives its seed from the render's OWN declared bound and seeds past it, and keeps a
+behavioural ladder BESIDE that derived seed because a computed bound the grammar cannot spell reads
+as no bound at all.
+
+**WHAT THIS ENTRY'S CITATION OF ITS `PC-` ID DOES AND DOES NOT DO — `BL-145` GOVERNS THIS ACT.**
+`BL-145` records that a commit naming an id is read by `named_absorbed()` as upstream having absorbed
+it, and that this program is the largest producer of that class. Citing the id above is exactly that
+act. What it CANNOT do is cause a false version attribution: the row carries no version either way
+(`ledger-reverify.sh:1771` emits `THIS ROW CARRIES NO VERSION, DELIBERATELY`; control 0 for an
+impossible phrase in the same span). The earlier reading that `named_absorbed()` elects the OLDEST
+naming commit, so that re-citing could not move the reported version, describes PRE-FIX behaviour and
+is gone — the header at `:552-604` reads "THE WHOLE MATCH SET, NOT ONE COMMIT OF IT ... stops
+electing any of them", and both `tail -1` occurrences in that span are PROSE describing what was
+removed. What the citation DOES do is move the caller's branch at `:1760`: above `na_n > 1` the row is
+rewritten from "in one commit, `<sha>`" to "in N commits, ALL of them ... (NONE of them is elected --
+read them)". Re-derived at this tip: the id resolves to **1** naming commit, `e939a925` (v0.373.0),
+control 0 for an impossible id in the same invocation — so the release commit citing it takes n to 2
+and flips that branch. Consumer-side the entry is ALREADY archived as
+`**ADOPTED UPSTREAM (v0.150.1, verified 2026-08-17)**`, so the row it would produce is informational
+rather than a live misattribution. It is not inert, and this entry does not claim it is.
 
 Both arms exercise the SHIPPED code — every function in the file is lifted verbatim and the render
 pipeline is lifted from the line that renders it, so a fix at either site moves the receipt where a
@@ -1317,11 +1365,19 @@ verify: sh D=$(mktemp -d); mkdir -p "$D/dist/core/skills/ai-dlc" "$D/cons/.claud
 
 ## BL-018
 
-**`hard-blockers.sh` discards `CORE-AT-THEIRS` and prints `0 HARD blockers.`** `collect()` at
-`core/skills/ai-dlc-update/reconcile/hard-blockers.sh:186-191` filters both detectors' rows to
+**`hard-blockers.sh` discards `CORE-AT-THEIRS` and prints `0 HARD blockers.`** `collect()` in
+`core/skills/ai-dlc-update/reconcile/hard-blockers.sh` filters both detectors' rows to
 `$1 ~ /^HARD-/`. `CORE-AT-THEIRS`, emitted by `unregistered-drift.sh:499`, does not survive that
-filter, so a run whose only finding is that row prints the literal `0 HARD blockers.` at `:253` and
+filter, so a run whose only finding was that row printed the literal `0 HARD blockers.` and
 nothing else.
+
+**FIXED.** The row is read out separately BESIDE the affirmative line, exactly as
+`DRIFT-RANGE-DEGENERATE` already was, and only when this wrapper ran the detector itself. `collect()`
+and its filter are cited by NAME above rather than by line because the fix moved them: `collect()` is
+now at `:220`, its two filter arms at `:222` and `:224`, the affirmative line's emitter at `:287`, the
+new read-out at `:210-218` and `:302`. The degenerate header the fix was modelled on is still at
+`:176-184`, the detector resolution from `$0` still at `:111-113`, and the quoting-defeat record the
+note's wording obeys is now at `:258-265`.
 
 That row is the documented tell for a stale base. `SKILL.md:1625` says so in as many words:
 "`CORE-AT-THEIRS` rows are the tell that the base was stale." This wrapper is the caller that most
@@ -1341,21 +1397,70 @@ the identical harness produced the listed row.
 Discharges `PC-S302-HARD-BLOCKERS-HAS-NO-POST-APPLY-GUARD`. A close of that entry is GATED on this
 filing — `--post-apply` exists and closes the headline; the asymmetry argument does not close with it.
 
+**WHAT THIS ENTRY'S CITATION OF ITS `PC-` ID DOES AND DOES NOT DO — `BL-145` GOVERNS THIS ACT.**
+`BL-145` records that a commit naming an id is read by `named_absorbed()` as upstream having absorbed
+it, and that this program is the largest producer of that class. Citing the id above is exactly that
+act. It CANNOT cause a false version attribution: the row carries no version either way
+(`ledger-reverify.sh:1771` emits `THIS ROW CARRIES NO VERSION, DELIBERATELY`; control 0 for an
+impossible phrase in the same span). The earlier reading that `named_absorbed()` elects the OLDEST
+naming commit, so that re-citing could not move the reported version, describes PRE-FIX behaviour and
+is gone — the header at `:552-604` reads "THE WHOLE MATCH SET, NOT ONE COMMIT OF IT ... stops
+electing any of them", and both `tail -1` occurrences in that span are PROSE describing what was
+removed. What the citation DOES do is move the caller's branch at `:1760`: above `na_n > 1` the row is
+rewritten from "in one commit, `<sha>`" to "in N commits, ALL of them ... (NONE of them is elected --
+read them)". Re-derived at this tip: the id resolves to **1** naming commit, `e939a925` (v0.373.0),
+control 0 for an impossible id in the same invocation — so the release commit citing it takes n to 2
+and flips that branch. Consumer-side the entry is ALREADY archived as
+`**ADOPTED UPSTREAM (v0.367.0, verified 2026-08-17)**`, so the row it would produce is informational
+rather than a live misattribution. It is not inert, and this entry does not claim it is.
+
+**NOTE — in-range is not resolving, and nothing enforces backlog citations the way `P4` enforces plan
+ones.** Every distinct `.sh:<line>` citation in the live backlog that resolves to a file on disk is
+IN RANGE and **0** are out of range, taken with `/usr/bin/grep` rather than the interactive shim,
+which honours `.gitignore` and scans a different set. Controls in the same derivation: an impossible
+line number against a resolving file scores OUT-OF-RANGE and a known-good line scores IN-RANGE, so
+the zero is a measurement rather than a dead arm. The counts themselves are not quoted, because this
+file IS the corpus and every revision to it moves them — the durable part is the ratio, which was
+whole-set in range on every reading taken. Yet both entries revised here had wrong anchors when
+checked by CONTENT — six between them, every one still inside its file's line count, all six moved by
+the two fixes this batch shipped. A range check on a backlog citation is a check that cannot fire.
+
 **THE BLINDNESS IS CONFINED TO THE STANDALONE WRAPPER, WHICH IS NARROWER THAN THIS ENTRY WAS FILED
 AND IS NOT AN ACQUITTAL.** `emit-report.sh:485` renders the unregistered-drift section through
 `awk -F'\t' '$1!="CORE-OK"'`, which PASSES `CORE-AT-THEIRS` through — verified behaviourally over a
 seeded row set, the row surviving at 1 against a `CORE-OK` control suppressed at 0. So in the
 emit-report path the row is already visible, and the defect is confined to the STANDALONE invocation
-— which is exactly the one `SKILL.md` tells the operator to run post-apply. A fix must therefore
+— which is exactly the one `SKILL.md:1625` tells the operator to run post-apply. A fix must therefore
 also not DOUBLE-RENDER in the emit-report path.
 
-**THE SITING QUESTION IS ANSWERED — BESIDE, NOT SUPPRESSING — AND IT IS DERIVED.** `refused_new`
-greps `^DETECTOR-REFUSED` only, so a `CORE-AT-THEIRS` row cannot reach it and cannot move the count
-that decides `BLOCKERS-RESOLVED`. `unseen_rows()` does not exclude the row, so it increments the
-advisory `other_new`, exactly as `DRIFT-RANGE-DEGENERATE` already does. And SUPPRESSING would break
-live positive controls: `core/fixtures/reconcile-blocking-list/run.sh:136` and `:192` both require
-`0 HARD blockers` PRESENT on a clean tree, and `:192` is explicitly the control guarding the refusal
-arm's absence half — a suppressing fix firing on those worlds turns a control into a failure.
+**AND THE SHIPPED FIX HOLDS THAT LINE, MEASURED RATHER THAN ARGUED.** Base and tip wrappers driven
+beside a stub detector in both invocation shapes: the rows-supplied wrapper's stdout is
+BYTE-IDENTICAL base against tip across five row worlds — `CORE-AT-THEIRS` only, `CORE-OK` only,
+`HARD-` only, `HARD-` plus `CORE-AT-THEIRS`, and empty — **5 identical, 0 differ**, with the
+STANDALONE subject world asserted to DIFFER in the same invocation so "identical" is a claim about a
+wrapper that demonstrably changed something. Total `CORE-AT-THEIRS` renderings in the emit-report
+path therefore stay at **1**: 0 from the wrapper, which `emit-report.sh:476` always invokes with
+`--ud-rows`, and 1 from emit-report's own filter, against a `CORE-OK` control suppressed at 0.
+
+**A THIRD SITE NOBODY NAMED IN THE FILING: CHECK MODE.** The degenerate note has a check-mode
+counterpart and `CORE-AT-THEIRS` had none, so `--check` certified a report COMPLETE against a
+comparison computed on a stale base, silently — the check-cannot-fire shape one detector over from
+where it was already recorded. It now WARNS on stderr rather than FAILING, at `:322`. Both halves of
+that are deliberate: warning rather than failing, because the HARD set is smaller than it should be
+but honestly computed and reddening an accurate report wedges live work; and stderr, which is correct
+in check mode — it renders no region and every line it emits is read directly — where it would be
+wrong in print mode, which `emit-report.sh:477` invokes with `2>/dev/null`. The receipt rejects the
+stderr spelling in print mode for exactly that reason.
+
+**THE SITING QUESTION WAS CLOSED BY DERIVATION, NOT CHOSEN.** The row sits BESIDE `0 HARD blockers.`
+rather than suppressing it, and neither half of that was a preference. `refused_new`
+(`emit-report.sh:707`) greps `^DETECTOR-REFUSED` only, so a `CORE-AT-THEIRS` row cannot reach it and
+cannot move the count that decides `BLOCKERS-RESOLVED`. `unseen_rows()` does not exclude the row, so
+it increments the advisory `other_new`, exactly as `DRIFT-RANGE-DEGENERATE` already does. And
+SUPPRESSING would break live positive controls: `core/fixtures/reconcile-blocking-list/run.sh:136`
+and `:192` both require `0 HARD blockers` PRESENT on a clean tree, and `:192` is explicitly the
+control guarding the refusal arm's absence half — a suppressing fix firing on those worlds turns a
+control into a failure. Both anchors re-resolve by content at this tip.
 
 Behavioural, and it stubs the detector deliberately: the subject is the wrapper's filter, not which
 base a detector was handed, so the receipt depends on no consumer tree and no ref pair that will move.
