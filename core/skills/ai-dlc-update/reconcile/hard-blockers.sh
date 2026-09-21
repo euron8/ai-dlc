@@ -183,6 +183,40 @@ fi
 # status into a list every downstream reader treats as clause-owned.
 DEGENERATE="$(printf '%s\n' "$LD_ROWS" | awk -F'\t' '$1=="DRIFT-RANGE-DEGENERATE"{print $1; exit}')"
 
+# THE SECOND ROW THIS WRAPPER WAS BLIND TO, AND IT IS THE SAME CLASS ONE DETECTOR OVER.
+# `CORE-AT-THEIRS` is emitted by `unregistered-drift.sh` when a consumer file is already
+# byte-identical to `theirs`. SKILL.md step 7 calls it the tell that the base was stale, and it
+# is: every status that detector emits means "consumer edits vs base", so a base that already IS
+# theirs makes the whole set describe the wrong comparison. The row carries no `HARD-` prefix on
+# purpose — the detector DID classify and nothing is blocked — so the `^HARD-` filter below, this
+# wrapper's only reader, discarded it, and a run whose one finding was "the list you are reading
+# was computed against the wrong base" rendered as the affirmative empty line instead. Read it
+# out separately for the reason the degenerate note above states: widening the filter would put a
+# non-clause status into a list every downstream reader treats as clause-owned.
+#
+# BESIDE THE AFFIRMATIVE LINE, NOT SUPPRESSING IT, AND THAT IS DERIVED. A refusal suppresses
+# because the detector never classified; this one classified. `--verify`'s `refused_new` greps
+# `^DETECTOR-REFUSED` only, so this row cannot reach the count that decides BLOCKERS-RESOLVED.
+# And `core/fixtures/reconcile-blocking-list/run.sh:136` and `:192` both require the affirmative
+# line PRESENT on a clean tree — `:192` is explicitly the control guarding the refusal arm's
+# absence half — so a suppressing read-out would turn a live positive control into a failure.
+#
+# ONLY WHEN THIS WRAPPER RAN THE DETECTOR ITSELF, gated exactly as the refusal rows below are.
+# `emit-report.sh` supplies `--ud-rows` and renders its own unregistered-drift section through a
+# filter that excludes only `CORE-OK`, so that path ALREADY shows this row; emitting it here too
+# would put two rows in one report for one finding, and `--verify`'s `unseen_rows()` counts what
+# is in the region. The blindness is the STANDALONE invocation's alone — which is exactly the
+# invocation SKILL.md tells the operator to run post-apply.
+AT_THEIRS=""
+if [ -z "$UD_ROWS_FILE" ]; then
+  AT_THEIRS="$(printf '%s\n' "$UD_ROWS" | awk -F'\t' '$1=="CORE-AT-THEIRS"{print $1; exit}')"
+fi
+
+# THE NOTE MUST NOT QUOTE THE LINE IT SITS BESIDE, for the reason recorded at the refusal rows
+# below: a qualifier that names the affirmative line puts that exact string into the region, and
+# every reader testing for the line's presence or absence then finds it inside the text about it.
+AT_NOTE="unregistered-drift.sh reported at least one core file already byte-identical to theirs, which is the documented tell that the base it was handed is STALE. Its statuses all mean consumer-edits-vs-base, so against a base that is already theirs this list is SILENT about in-place core edits rather than clean on them. Post-apply, re-run this wrapper with --post-apply; pre-apply, the base passed is not the pull's base."
+
 collect() {
   printf '%s\n' "$UD_ROWS" \
     | awk -F'\t' '$1 ~ /^HARD-/ { print $1"\t"$2 }'
@@ -265,6 +299,7 @@ EOF
   # which is the artifact the operator actually approves `apply` from. Nothing byte-compares this
   # region; the only transform applied to it strips the two marker lines.
   [ -n "$DEGENERATE" ] && printf '%-32s %s\n' "DRIFT-RANGE-DEGENERATE" "$DEG_NOTE"
+  [ -n "$AT_THEIRS" ] && printf '%-32s %s\n' "CORE-AT-THEIRS" "$AT_NOTE"
   echo "<!-- END GENERATED: hard-blockers -->"
   exit 0
 fi
@@ -278,6 +313,13 @@ fi
 # accurate about everything it could see, which is the wedge-live-work shape; the operator is told
 # instead, and the exit code keeps meaning exactly what it meant.
 [ -n "$DEGENERATE" ] && echo "hard-blockers: DRIFT-RANGE-DEGENERATE — $DEG_NOTE" >&2
+
+# THE SAME RULING FOR A STALE BASE, AND STDERR IS RIGHT HERE WHERE IT WOULD BE WRONG ABOVE. Check
+# mode renders no region; every line it emits is a diagnostic the operator reads directly, so the
+# reason print mode must not use stderr — `emit-report.sh` invokes it with `2>/dev/null` — does not
+# reach this half. WARNED, NOT FAILED, for the reason the degenerate note gives: the HARD set is
+# smaller than it should be but honestly computed, and reddening an accurate report wedges live work.
+[ -n "$AT_THEIRS" ] && echo "hard-blockers: CORE-AT-THEIRS — $AT_NOTE" >&2
 
 # A REFUSAL IS DIFFERENT FROM A DEGENERATE RANGE AND IT FAILS. The paragraph above turns on the set
 # being SMALLER THAN IT SHOULD BE but honestly computed; a refusing detector computed NOTHING, so
