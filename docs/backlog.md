@@ -4226,3 +4226,63 @@ reports as 0 while the ref is absent, and reading it through a pipe makes it wor
 shell has no `PIPESTATUS` and a pipeline answers with its last stage.
 
 verify: sh set -e; r=.claude/rules/verification-discipline.md; [ -r "$r" ] || exit 9; LC_ALL=C grep -q 'green gate is not a landed push' "$r" || exit 9; n="$(grep -rlF 'ls-remote' .githooks/ scripts/ 2>/dev/null | grep -cv '^$')" || n=0; [ "$n" -gt 0 ] && exit 0; exit 1
+
+## BL-283 — the theirs-tree leak counter globs a SHARED prefix, so any concurrent process on the box fails the arm
+
+**DEFECT.** Found at batch 140 when the arm went red under a 6-way pool on a tree that touches
+neither the engine nor the fixture, and green solo on the identical commit.
+
+**THE COUNTER ASKS A QUESTION ABOUT THE BOX AND REPORTS THE ANSWER AS A PROPERTY OF THE RUN.**
+`core/fixtures/ledger-reverify/run.sh:3411` is
+`tt_count() { ls -d "${TMPDIR:-/tmp}"/ledger-reverify-theirs.* …; }`, and the arm reports
+`nt_after - nt_before` as *"this engine left %+d of its own theirs-trees behind"*. The
+materializer at `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:1227` names its tree
+`mktemp -d "${TMPDIR:-/tmp}/ledger-reverify-theirs.XXXXXX"` — a FIXED prefix carrying **0**
+per-run discriminator (control: the same grep for `$$` or a run id over that file returns 0).
+So the glob cannot separate this run's trees from anyone else's.
+
+**MEASURED BEHAVIOURALLY, and the seed is a directory no `ledger-reverify` run created.**
+`mkdir` one tree under that prefix by hand: the count goes **2 → 3**, delta **+1**, which is
+exactly the value the arm convicts on. Remove it and the count returns to **2** in the same
+invocation, so the counter is live rather than stuck. A +1 delta is therefore attributable to
+any process on the machine, and the arm's message names the engine.
+
+**THE POPULATION IS THIS SUITE'S OWN POOL, WHICH IS WHY IT IS NOT RARE.** **7** fixture
+directories other than `ledger-reverify` drive `ledger-reverify.sh` (control: 8 including it),
+and the runner dispatches through a worker pool. Any of the seven scheduled alongside it
+materializes into the same shared prefix.
+
+**AND THE COLLISION SURFACE IS WIDER THAN THIS REPO.** The reference consumer's INSTALLED copy
+carries the byte-identical `mktemp` line under the same user and the same `TMPDIR`, and 6 of its
+own fixtures drive it, so a consumer gate running concurrently is a second population. That is
+a statement about the prefix, not an attribution: the consumer gate observed at batch 140
+started AFTER the failing run finished, so it was not the cause of that instance.
+
+**THE HEADER ABOVE THE ARM RECORDS AN EARLIER, WIDER FORM OF THIS SAME DEFECT AS FIXED.** It
+states that the counter once matched every `${TMPDIR}/tmp.*` on the machine, was *"red once in
+three reps on a busy host"*, and that under the pool *"that is a guaranteed intermittent, which
+is a fixture that cries wolf rather than a check"*. The repair NARROWED the glob to a named
+prefix. Narrowing the population reduced the rate and did not change the kind: the question
+"did THIS run materialize a tree" is still answered by a glob no run owns.
+
+**A FIXTURE THAT FAILS ON AMBIENT LOAD COSTS MORE THAN THE CHECK IS WORTH, BECAUSE ITS RED IS
+INDISTINGUISHABLE FROM A REGRESSION IN THE CHANGE UNDER TEST.** At batch 140 it blocked a
+release whose branch touched neither file, and the session spent a full gate cycle establishing
+that. The arm's subject — the engine cleaning up after itself — is real and worth keeping; what
+is broken is the instrument.
+
+**Two leftover trees dated two days before that run were on disk throughout**, which is
+independent evidence that cleanup is imperfect and that a baseline taken mid-session carries
+whatever a previous session abandoned.
+
+**THE FIX SHAPE IS A PER-RUN DISCRIMINATOR, NOT A LOCK OR A RETRY.** Give the materializer a
+run-scoped segment the caller can set and the fixture can glob — the fixture already controls
+the environment it invokes the closer in. A retry converts an intermittent into a slower
+intermittent, and a lock serialises fixtures the pool exists to parallelise. **Do not "fix" it
+by deleting the arm**: the property it checks is load-bearing, and a guard whose removal changes
+nothing is not the situation here — its removal would make a real leak invisible.
+
+**Not measured, and stated rather than hidden:** whether any leak the arm has ever reported was
+genuine. The distribution's history would answer it and it was not taken.
+
+verify: sh set -e; F=core/fixtures/ledger-reverify/run.sh; E=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -r "$F" ] && [ -r "$E" ] || exit 9; M="$(LC_ALL=C grep -n 'ledger-reverify-theirs' "$E" | LC_ALL=C grep -c 'mktemp')" || M=0; [ "$M" -ge 1 ] || exit 9; C="$(LC_ALL=C grep -c 'tt_count()' "$F")" || C=0; [ "$C" -ge 1 ] || exit 9; W=$(mktemp -d) || exit 9; B="$(ls -d "${TMPDIR:-/tmp}"/ledger-reverify-theirs.* 2>/dev/null | LC_ALL=C grep -c . )" || B=0; S="$(mktemp -d "${TMPDIR:-/tmp}/ledger-reverify-theirs.XXXXXX")" || { rmdir "$W"; exit 9; }; A="$(ls -d "${TMPDIR:-/tmp}"/ledger-reverify-theirs.* 2>/dev/null | LC_ALL=C grep -c . )" || A=0; rmdir "$S"; Z="$(ls -d "${TMPDIR:-/tmp}"/ledger-reverify-theirs.* 2>/dev/null | LC_ALL=C grep -c . )" || Z=0; rmdir "$W"; echo "before=$B foreign=$A restored=$Z"; [ "$A" -eq "$((B+1))" ] && [ "$Z" -eq "$B" ] || { echo "PRECONDITION: the shared glob no longer tracks a foreign tree, so nothing here was measured"; exit 9; }; P="$(LC_ALL=C grep -o 'ledger-reverify-theirs\.[A-Za-z$_{}()]*' "$E" | head -1)"; case "$P" in *'$'*) exit 0 ;; esac; exit 1
