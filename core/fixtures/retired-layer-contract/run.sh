@@ -174,7 +174,12 @@ fi
 
 # 7c. THE ROW NAMES THE CANONICAL DISTRIBUTION PATH, which is the one an operator can look
 #     up in the release. The spelling that matched is not the finding.
-if grep -qF 'path:core/skills/ai-dlc/steps/route.md' <<< "$PONLY"; then
+# HERE-STRING, NEVER A PIPE INTO `grep -q`. The reader leaves at its first match while the
+# writer is still pushing; under `pipefail` the pipeline then answers with the writer's EPIPE
+# and reports NOT-FOUND on input that DOES contain the pattern — permanently, once the output
+# after the match fills the pipe buffer. I54/I54b hold the whole tree to this shape, and both
+# arms caught this file.
+if grep -qF 'path:core/skills/ai-dlc/steps/route.md' <<<"$PONLY"; then
   ok "  the row names the canonical distribution path, not the spelling that matched"
 else
   bad "  no row names the canonical distribution path. The operator cannot look a consumer-relative spelling up in the release, and two entries citing one retired file in different forms would render as two different findings"
@@ -365,7 +370,7 @@ fi
 #      arm that separates "reports a retirement" from "reports a citation".
 if rlcmut m2-no-subtraction -e 's@^  RETIRED_PATHS="\$(comm -23 <(printf .%s\\n. "\$RB_BASE") <(printf .%s\\n. "\$RB_THEIRS"))"$@  RETIRED_PATHS="$RB_BASE"@'; then
   M2_OUT="$(rlcrun "$RLC_MUT")"
-  if grep -q . <<< "$(awk -F'\t' '$2 ~ /path-survivor\.md/ && $3 ~ /^path:/' <<< "$M2_OUT")"; then
+  if [ -n "$(awk -F'\t' '$2 ~ /path-survivor\.md/ && $3 ~ /^path:/' <<<"$M2_OUT")" ]; then
     ok "  mutant [m2] KILLED by 7e: without the subtraction, a SURVIVING rulebook path is reported"
   else
     bad "MUTANT SURVIVED [m2]: replacing the retired-path subtraction with the whole base set changed nothing about path-survivor.md, so 7e is not load-bearing and the arm's retirement half is unasserted"
@@ -383,14 +388,14 @@ fi
 #      the repair was a new seed, not a relaxed assertion.
 if rlcmut m3-regex-not-literal -e 's@        grep -qF -- "\$_sp" <<< "\$body" || continue@        grep -qE -- "$_sp" <<< "$body" || continue@'; then
   M3_OUT="$(rlcrun "$RLC_MUT")"
-  if grep -q . <<< "$(awk -F'\t' '$2 ~ /path-dot-near-miss\.md/ && $3 ~ /^path:/' <<< "$M3_OUT")"; then
+  if [ -n "$(awk -F'\t' '$2 ~ /path-dot-near-miss\.md/ && $3 ~ /^path:/' <<<"$M3_OUT")" ]; then
     ok "  mutant [m3] KILLED by 7d': matched as a regex, the retired path's '.' matches any character and route-md.bak is reported"
   else
     bad "MUTANT SURVIVED [m3]: switching the literal match to a regex changed nothing about the single-character near miss, so 7d' is not load-bearing. Check the seed still puts exactly ONE character where the retired path's '.' sits — a longer stem there acquits the regex and the arm cannot see which match is running"
   fi
   # THE SAME MUTANT MUST STILL FIND THE REAL CITATIONS. A regex that failed to compile
   # matches nothing, which would fail 7d''s check for the wrong reason and read as a kill.
-  if grep -q . <<< "$(awk -F'\t' '$2 ~ /path-entry-spelling\.md/ && $3 ~ /^path:/' <<< "$M3_OUT")"; then
+  if [ -n "$(awk -F'\t' '$2 ~ /path-entry-spelling\.md/ && $3 ~ /^path:/' <<<"$M3_OUT")" ]; then
     ok "    and it still flags the real entry-spelling citation, so the kill is the widening and not a broken pattern"
   else
     bad "MUTANT HARNESS BROKEN [m3]: the regex mutant flags NEITHER file — the pattern does not compile, so the kill above would be an outage rather than a widening"
@@ -432,13 +437,13 @@ if rlcmut m5-bare-filename-spelling \
      -e 's@^      case "\$_e3" in$@      case x in@' \
      -e 's@^        \*/\*) printf .%s\\n. "\$_e3" ;;$@        x) printf "%s\\n" "$_e3" ;;@'; then
   M5_OUT="$(rlcrun "$RLC_MUT")"
-  if grep -q . <<< "$(awk -F'\t' '$2 ~ /path-bare-filename\.md/ && $3 ~ /^path:/' <<< "$M5_OUT")"; then
+  if [ -n "$(awk -F'\t' '$2 ~ /path-bare-filename\.md/ && $3 ~ /^path:/' <<<"$M5_OUT")" ]; then
     ok "  mutant [m5] KILLED by 7f: without the directory-component guard a bare filename is matched as an unanchored substring, and prose that merely names the file is reported"
   else
     bad "MUTANT SURVIVED [m5]: emitting the bare-filename spelling changed nothing, so 7f is not load-bearing. Check the seed still declares a rulebook glob at the SKILL ROOT and retires a file there — without one the guard has no subject in this tree and its arm passes by having nothing to be wrong about"
   fi
   # The same mutant must still flag the true root-level citation, or the kill is an outage.
-  if grep -q . <<< "$(awk -F'\t' '$2 ~ /path-root-level-true\.md/ && $3 ~ /^path:/' <<< "$M5_OUT")"; then
+  if [ -n "$(awk -F'\t' '$2 ~ /path-root-level-true\.md/ && $3 ~ /^path:/' <<<"$M5_OUT")" ]; then
     ok "    and it still flags the true consumer-grain citation, so the kill is the widening and not a dead arm"
   else
     bad "MUTANT HARNESS BROKEN [m5]: the mutant flags NEITHER file — the spelling emitter is broken rather than widened"
