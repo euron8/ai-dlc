@@ -33,6 +33,11 @@
 # Exit:  0 = every assertion holds, 1 = something regressed, 2 = the harness could not run.
 set -uo pipefail
 
+# HERMETIC -- scrub the operator's tuning before reading anything (I10). Part 14 names
+# AI_DLC_GATE_IN_SAFE_STOP, the key gate_record_open() reads, so without this the arm
+# asserts against whatever the developer's settings.json happens to say.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 pick() { for c in "$@"; do [ -n "$c" ] && [ -f "$c" ] && { printf '%s' "$c"; return; }; done; }
