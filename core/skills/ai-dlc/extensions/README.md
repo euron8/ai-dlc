@@ -394,8 +394,11 @@ times on first contact gets disabled and then catches nothing.
   does not exist, the key reads as a registration and performs none.
 - **[LC-E20]** WARN — an entry whose body carries **no markdown heading at all** is reported as
   `EXTENSION-NO-HEADINGS`. Both absorption joins key on a heading — **[LC-E5]**/**[LC-E6]** on a
-  numbered anchor, **[LC-E19]** on a prose title — so such an entry harvests empty from both and
-  neither can ever report it as absorbed, however exactly core has since adopted its content. The
+  numbered anchor, **[LC-E19]** on a prose title — so an entry carrying no heading this row can
+  see harvests empty from both and neither can ever report it as absorbed, however exactly core
+  has since adopted its content. The row's own grain is `#{2,6}`, wider than the joins' `#{2,4}`,
+  so an entry whose only headings are h5/h6 is unjoinable and still not reported — a different
+  gap, and deliberately not this row's claim. The
   only other row it can produce is `EXTENSION-OK`, which the report filters, so its unreachability
   has been arriving as silence you could not tell from a clean check. **This says nothing about
   your entry's content.** Give its sections headings to make it joinable; if it is deliberately

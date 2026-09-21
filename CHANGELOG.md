@@ -39,6 +39,13 @@ zero. Control in the same measurement: `anchors_of_file` against core's `gate-va
 keyed on a subject digest, recorded before `apply` proceeds — and this row's entire content is that
 no mechanism looked at the entry. There is no reading for a verdict to be a record of.
 
+**The clause prose said "no markdown heading at all" and the code does not mean that.** The guard
+reads `^#{2,6}` where both harvesters read `^#{2,4}`, so the row's grain is wider than the joins'.
+Measured rather than reasoned, because the natural reading is wrong in both directions: an h1-only
+entry IS reported, an h5-only entry is NOT — the latter genuinely unjoinable and silently
+unreported, a different gap this clause does not claim. `layer-contract.yaml` and
+`extensions/README.md` now state the grain and the gap rather than implying total coverage.
+
 The entry's figures and citations were stale in every position and are re-derived here: the harvester
 and its guard had moved, the emit census counted one of the file's two emitters and read **21 / 14**
 where both emitters give **24 / 16**, the consumer population was taken through a flat `*.md` glob
@@ -67,9 +74,20 @@ instead of over the shapes inside it; nothing new is read and nothing is hand-li
 is now conditional on BOTH subtractions, because leaving it keyed on the shape set alone would have
 built the path arm behind a branch that returns before reaching it. All three spellings are matched —
 an entry writes `hooks: steps/retro.md` while its prose writes the consumer path, and matching one
-form scores 1 of 22 citable paths as reachable and reads as coverage. Matching is literal and
-whole-token rather than a regex built from the path, which would accuse `retro-old.md` for
-`retro.md`.
+form scores 1 of 22 citable paths as reachable and reads as coverage. Matching is literal rather
+than a regex built from the path, which would accuse `retro-old.md` for `retro.md`.
+
+**A false-positive class shipped with the first cut of that arm, and the zero that hid it was a
+CEILING rather than an FP set.** The third spelling strips `skills/ai-dlc/`, degenerating any
+rulebook file directly under that directory to a BARE FILENAME against an unanchored `grep -qF`.
+Measured over the reference consumer's 54 layer files, against the correct
+`.claude/skills/ai-dlc/<file>` grain with an impossible-filename control of **0**: `SKILL.md`
+**17 / 1**, `escalations.md` **4 / 0**, `rule-authoring.md` **4 / 0**, `artifact-path-grammar.md`
+**3 / 0**; end to end with `SKILL.md` genuinely retired, **17 path rows → 1**. The original FP
+measurement read zero because its range retired no rulebook file at all, so nothing could have fired
+whatever the grammar was. The repair is a property of the spelling — emit it only when it retains a
+directory component — rather than a list of the four, which would go stale the release a file is
+added at that level.
 
 **The site is this detector and not W11.** W11/LC-R4 holds a consumer's prescribed ARTIFACT paths to
 core's grammar over four hand-declared scan roots; its question is whether a path CONFORMS, where
@@ -112,18 +130,34 @@ Stop over a procedure never owed. This is the same defect one key over from the 
 which touched neither of these two files.
 
 **The fix is a suppression on ONE distinguishable state, not a narrowing of the match**, because
-recovery NEEDS that Read. The discriminator is `.recover-fired`, the gate's own in-flight record,
-read as key=value and never sourced: suppress only when a recovery is in flight AND the file being
-read is the one that recovery named. Everything else still arms, including a Read of `handoff.md`
-during a recovery whose mandate pointed at a different step file, which is a lead opening the
-procedure of its own accord. Every unreadable or ambiguous input falls through and writes the marker:
-a marker written wrongly is a Stop guard the lead clears with `rm`, where a marker NOT written while
+recovery NEEDS that Read. Every unreadable or ambiguous input falls through and writes the marker: a
+marker written wrongly is a Stop guard the lead clears with `rm`, where a marker NOT written while
 the lead really is mid-handoff loses the routing this file exists to provide.
 
-Filed as BL-284 with a receipt that drives the shipping hook over four seeds. Two seeds are required
-and one cannot do it — a fix that simply stops arming is byte-identical to the correct one on the
-recovery seed and separates only on the genuine-initiation seed, which is therefore a predicate
-conjunct rather than a precondition.
+**Keying that suppression on `.recover-fired` was unreachable on every consumer, and an adversary at
+the tip found it.** Derived by parsing `templates/settings.json.template`: the gate is `PreToolUse`
+matcher `*`, this hook is `PostToolUse` matcher `Read`, and the gate DELETES the in-flight marker on
+the call that satisfies the second mandate. The shipped order is gate, Read, entry hook, so the file
+that would have answered is gone one hook earlier and the marker was written anyway. **A second
+blocker ran the other way**: the marker says "a recovery is in flight", never "THIS Read is the one
+it demanded", so in the one state where it survives — an UNARMABLE recovery, `step_file_resolved=0`,
+where the gate stands down and the marker persists all session — it silenced a genuine initiation.
+The obvious construction for that case is impossible: the gate DENIES a Read of a file its mandate
+does not name, so that call never reaches `PostToolUse`.
+
+**The shipped key is a satisfaction breadcrumb.** The gate writes `.recover-satisfied` naming the
+step file, on the satisfying call and only there, immediately before clearing the marker; the entry
+hook reads and CONSUMES it. Only the satisfying call writes it, which is also what lets a voluntary
+open during a half-satisfied recovery still arm, and `ai-dlc-recover.sh` clears any stale copy when
+a new recovery starts. Four files: the entry hook, the gate, the injector, and
+`core/schemas/pipeline-state-paths.json`, whose `paths` population goes **37 → 38** as I95 requires.
+
+Filed as BL-284 with a receipt that drives the SHIPPED HOOK SEQUENCE — gate, Read, entry hook — with
+the registration parsed from the template and asserted before any seed runs. A seed that invokes the
+entry hook alone with a hand-placed marker passes on the broken fix and the fixed one, which is how
+seven earlier seeds missed both blockers. Four seeds, none redundant: the fourth separates "a
+breadcrumb exists" from "the breadcrumb names this file", and without it a suppression keyed on mere
+existence scores identically to the shipped fix.
 
 Carries the reference consumer's
 `PC-S312-RECOVERY-MANDATED-HANDOFF-READ-REARMS-ENTRY-MARKER-AFTER-EVERY-COMPACTION`, which is LIVE
@@ -146,10 +180,17 @@ that arm read a tree one commit short of the one it assumes, and report on `emit
 in the line itself that this is not evidence about the machinery — the one fact a step 2 reading the
 log needs in order not to convict a correct slice. NOT a retry, which hides an unreliable
 construction, and NOT a skip, which stands the arm down for a reason indistinguishable from the
-machinery being fine. Two helpers, because exit status is not the whole answer: `git commit` with
+machinery being fine. Three helpers, because exit status is not the whole answer: `git commit` with
 nothing staged exits 1 while `git checkout` of a ref already at HEAD exits 0 having done nothing, so
 `world_moved` DERIVES the post-condition from the repository against a sha captured BEFORE the
-mutation rather than a value the same block wrote.
+mutation rather than a value the same block wrote. `world_at` is the third, because `world_moved`
+asks the wrong question of a `reset --hard`: a reset to a ref already at HEAD exits 0 having done
+nothing and the ref did not move because it was already there, so the assertion has to be the
+POSTCONDITION — HEAD is now at the named ref. Derived site counts, two methods agreeing: `DGW` 14
+occurrences / 12 sites, `world_moved` 9 / 4, `world_at` 4 / 2. One capture also moved: `MOVEREF` is
+a BRANCH that the docs-only reset relocates, so a pre-reset reading measured the reset's delta
+rather than the commit's, and a commit that silently did nothing would still have looked like it
+moved.
 
 Filed as BL-285, re-derived as distinct from BL-283 rather than assumed: that entry's mechanism is a
 leak counter globbing a fixed prefix in a shared `TMPDIR`, and the grammar for it scores **0** over
