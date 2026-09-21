@@ -25,7 +25,9 @@
 # AND IT IS NOT EVERY READ OF THAT FILE. A compaction's recovery MANDATES a Read of the step
 # file and points that mandate here whenever a handoff is already pending, so arming on the
 # path alone wrote the marker from a Read the machinery compelled. The suppression is sited at
-# the arming decision below, keyed on the gate's own in-flight record.
+# the arming decision below, keyed on the SATISFACTION BREADCRUMB `ai-dlc-recover-gate.sh`
+# writes on the call that discharges the second mandate -- not on the in-flight marker, which
+# that gate has already deleted by the time this PostToolUse hook runs.
 #
 # THE MATCH IS ON THE BASENAME UNDER A steps/ PARENT, not on a whole path. The same file lives
 # at .claude/skills/ai-dlc/steps/handoff.md on a consumer and core/skills/ai-dlc/steps/handoff.md
@@ -97,26 +99,52 @@ esac
 # handoff.md — including one taken during a recovery whose mandate pointed at a different
 # step file — still arms, because that is a lead opening the procedure of its own accord.
 #
+# IT IS NOT `.recover-fired`, AND THAT WAS THE FIRST CUT'S DEFECT. Keying on the marker looks
+# right and is UNREACHABLE: `ai-dlc-recover-gate.sh` is PreToolUse on every tool, this hook is
+# PostToolUse on `Read`, and the gate DELETES the marker on the call that satisfies the second
+# mandate. So by the time this hook runs, the file that would have answered is gone one hook
+# earlier, the test falls through, and the marker is written from a Read the machinery forced.
+# A seed that drives this hook alone with a hand-placed marker cannot see that: it reports
+# not-armed, correctly, about a sequence no consumer ever executes.
+#
+# AND THE MARKER WOULD HAVE BEEN THE WRONG KEY EVEN IF IT SURVIVED. It says "a recovery is in
+# flight", never "THIS Read is the one it demanded". A lead that satisfied only the FIRST
+# mandated Read and then opened this file of its own accord is a GENUINE INITIATION with the
+# marker still present, and keying on the marker suppresses it -- losing the routing, which is
+# the worse direction by this hook's own reasoning.
+#
+# SO THE KEY IS THE GATE'S SATISFACTION BREADCRUMB, written by that gate on the satisfying
+# call and ONLY there. It answers the narrow question this hook actually has: was this Read
+# the one the recovery demanded. A recovery in flight that has NOT reached its second mandate
+# writes no breadcrumb, so a voluntary open during that window still arms.
+#
 # READ AS KEY=VALUE, NEVER SOURCED. `.` on a file under the project directory would execute
-# whatever a consumer's tree happened to put there; `ai-dlc-recover-gate.sh` reads the same
-# file the same way and says so for the same reason.
+# whatever a consumer's tree happened to put there; `ai-dlc-recover-gate.sh` reads its own
+# state the same way and says so for the same reason.
+#
+# CONSUMED HERE. The breadcrumb describes ONE call, so leaving it on disk would let it answer
+# for a later Read of the same file -- a voluntary re-open moments afterwards would be read as
+# the mandated one and silently fail to arm. Removing it as it is read makes it one-shot on
+# both sides; `ai-dlc-recover.sh` also clears it when a new recovery starts, so it cannot
+# outlive the recovery that wrote it.
 #
 # FAIL OPEN TO ARMING. Every unreadable or ambiguous input falls through and writes the
 # marker, which is this hook's existing behaviour. A marker written when it should not have
 # been is a Stop guard the lead can clear with `rm`; a marker NOT written when the lead really
 # is mid-handoff loses the routing this whole file exists to provide, and a compaction then
 # sends the successor to the interrupted step instead of to the procedure.
-_RF="${STATE_DIR}/.recover-fired"
-if [ -f "$_RF" ]; then
-  _RF_STEP="$(sed -n 's/^step_file=//p' "$_RF" 2>/dev/null | head -1)"
-  if [ -n "$_RF_STEP" ]; then
+_RS="${STATE_DIR}/.recover-satisfied"
+if [ -f "$_RS" ]; then
+  _RS_STEP="$(sed -n 's/^step_file=//p' "$_RS" 2>/dev/null | head -1)"
+  rm -f "$_RS" 2>/dev/null || true
+  if [ -n "$_RS_STEP" ]; then
     # Compare on the BASENAME UNDER ITS steps/ PARENT, the same grain the `case` above uses
     # and for the same reason: the mandate records a project-relative path while the Read may
     # arrive absolute or relative, and a whole-path compare would fail to suppress in exactly
     # the layouts this hook was written to span.
-    case "$_RF_STEP" in
+    case "$_RS_STEP" in
       */steps/handoff.md|steps/handoff.md)
-        # A recovery is in flight and IT is what demanded this Read. Not an initiation.
+        # The gate just recorded that THIS Read satisfied the second mandate. Not an initiation.
         exit 0 ;;
     esac
   fi

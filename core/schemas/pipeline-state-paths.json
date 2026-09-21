@@ -137,6 +137,13 @@
       "reason": "One-shot marker that recovery has already run for this compaction. A committed copy suppresses recovery in a fresh clone."
     },
     {
+      "name": ".recover-satisfied",
+      "transient": true,
+      "producer": "core/hooks/ai-dlc-recover-gate.sh",
+      "ignore": "_bmad-output/.recover-satisfied",
+      "reason": "Written by the recovery gate on the call that satisfies the SECOND mandated Read, naming that read's step file, and consumed by ai-dlc-handoff-entry.sh. It exists because that gate is PreToolUse and the entry hook is PostToolUse: the gate deletes .recover-fired on the same call, so the entry hook cannot decide from the in-flight marker and would arm the handoff entry marker on a Read the recovery compelled. Only the satisfying call writes it, which is also what lets a voluntary open during a half-satisfied recovery still arm. ai-dlc-recover.sh clears it when a new recovery starts. A tracked copy tells a fresh checkout that a mandate it never received was already discharged."
+    },
+    {
       "name": ".recover-gate-progress",
       "transient": true,
       "producer": "core/hooks/ai-dlc-recover-gate.sh",

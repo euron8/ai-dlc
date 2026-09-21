@@ -567,6 +567,16 @@ mkdir -p "$STATE_DIR" 2>/dev/null || true
   printf 'step_file_resolved=%s\n' "$STEP_FILE_RESOLVED"
 } >"$MARKER" 2>/dev/null || true
 
+# A NEW RECOVERY INVALIDATES THE PREVIOUS ONE'S SATISFACTION BREADCRUMB.
+# `ai-dlc-recover-gate.sh` writes `.recover-satisfied` on the call that satisfies the second
+# mandate, and `ai-dlc-handoff-entry.sh` consumes it to tell a recovery-mandated Read of
+# handoff.md from a voluntary one. Its consumer deletes it, so the normal path leaves nothing
+# behind -- but a session that ends mid-recovery, or a consumer whose entry hook is not
+# registered, would leave one on disk where the NEXT recovery's first voluntary open would
+# read it and fail to arm. Clearing it here bounds its lifetime to the recovery that wrote it,
+# which is the same guarantee `$MARKER` gets from being rewritten above.
+rm -f "${STATE_DIR}/.recover-satisfied" 2>/dev/null || true
+
 # PROVENANCE MARKER -- PC-S306-UNSOLICITED-CONTEXT-HAS-NO-PROVENANCE-SIGNAL. The
 # library is a SIBLING in both layouts (core/hooks/, .claude/hooks/), so this is a
 # same-directory read and never a walk up from a resolved path. Fail-open: a hook
