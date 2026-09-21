@@ -1162,6 +1162,273 @@ else
 fi
 
 # =============================================================================
+# (e6)-(e13) A RECOVERY-MANDATED READ IS NOT A HANDOFF INITIATION
+# =============================================================================
+# THE DEFECT. `ai-dlc-recover.sh` MANDATES `Read <step file>` as the second tool call after
+# EVERY compaction and points that mandate at handoff.md whenever a handoff is already
+# pending; `ai-dlc-recover-gate.sh` then DENIES any other call until that Read happens. So a
+# session that merely compacts while paused is COMPELLED to read handoff.md -- and this hook,
+# which armed on any Read of that path, wrote the entry marker on the strength of a Read the
+# machinery itself forced. The marker means "this session is INSIDE the handoff procedure",
+# and it is key 1: the key that arms the Stop guard and reroutes the next compaction. A
+# session that never began the procedure has nothing to run step 5, so it persists.
+#
+# EVERY ARM HERE DRIVES THE SHIPPED HOOK SEQUENCE, AND THAT IS THE WHOLE POINT OF THE
+# SECTION. The two hooks run on different events: `ai-dlc-recover-gate.sh` is PreToolUse on
+# every tool, `ai-dlc-handoff-entry.sh` is PostToolUse on `Read`. On the call that satisfies
+# the second mandate the real order is GATE, then the Read, then ENTRY -- and the gate DELETES
+# `.recover-fired` on that call, one hook before the entry hook runs. A seed that invokes the
+# entry hook alone with a hand-placed marker reports not-armed, correctly, about a sequence no
+# consumer ever executes; it cannot see either of the two defects a tip adversary found here.
+#
+# THE ORDER IS PARSED OUT OF THE SETTINGS TEMPLATE, NEVER ASSUMED. A fixture that hard-codes
+# "gate first" encodes one hand's belief about the registration, and the registration is the
+# thing that decides. If the template ever registered the entry hook on PreToolUse, or the
+# gate on PostToolUse, this section would be driving a sequence the consumer does not run and
+# would keep printing `ok`.
+echo ""
+
+_HES_TMPL=""
+for _c in "$HERE/../../../templates/settings.json.template" \
+          "$HERE/../../templates/settings.json.template"; do
+  [ -f "$_c" ] && { _HES_TMPL="$_c"; break; }
+done
+if [ -z "${_HES_TMPL:-}" ]; then
+  # THE DISTRIBUTION-ONLY HALF STANDS DOWN LOUDLY. `templates/` is not installed on a
+  # consumer, so this arm cannot run there -- and a stand-down that printed nothing would be
+  # indistinguishable from a passing order check.
+  ok "(e6-order) the settings template is absent (consumer layout); the registration order is asserted only in the distribution, and the arms below still drive gate-then-entry"
+
+else
+  # jq over the template, because the shape is nested and a grep for two filenames cannot say
+  # which EVENT each sits under -- which is the only thing this arm is about.
+  _HES_GATE_EV="$(jq -r '.hooks | to_entries[] | select(.value[]?.hooks[]?.command // "" | test("ai-dlc-recover-gate\\.sh")) | .key' "$_HES_TMPL" 2>/dev/null | head -1)"
+  _HES_ENT_EV="$(jq -r  '.hooks | to_entries[] | select(.value[]?.hooks[]?.command // "" | test("ai-dlc-handoff-entry\\.sh")) | .key' "$_HES_TMPL" 2>/dev/null | head -1)"
+  if [ "$_HES_GATE_EV" = "PreToolUse" ] && [ "$_HES_ENT_EV" = "PostToolUse" ]; then
+    ok "(e6-order) the template registers the gate on PreToolUse and the entry hook on PostToolUse, so the shipped order on one Read is gate -> Read -> entry (this is what the arms below drive)"
+    _HES_ORDER_OK=1
+  else
+    bad "(e6-order) the template registers the gate on '${_HES_GATE_EV:-<nothing>}' and the entry hook on '${_HES_ENT_EV:-<nothing>}', not PreToolUse/PostToolUse. Every arm below drives gate-then-entry on the strength of that registration; if it moved, this section is driving a sequence no consumer runs and would keep printing ok"
+  fi
+  # CONTROL, same invocation: a hook name the template does NOT carry must resolve to nothing,
+  # or the two answers above came from a query that matches anything.
+  _HES_CTL="$(jq -r '.hooks | to_entries[] | select(.value[]?.hooks[]?.command // "" | test("ai-dlc-no-such-hook-141\\.sh")) | .key' "$_HES_TMPL" 2>/dev/null | head -1)"
+  [ -z "$_HES_CTL" ] \
+    && ok "  control: an impossible hook name resolves to no event, so the two readings above are real" \
+    || bad "  control: an impossible hook name resolved to '$_HES_CTL' — the query matches anything and the order reading establishes nothing"
+fi
+
+# `gdrive` runs the PreToolUse gate exactly as the harness does: JSON on stdin, decision on
+# stdout. `seq_read` then runs the SHIPPED SEQUENCE for one Read -- gate, then entry -- and
+# reports marker|no-marker. Nothing here hand-places `.recover-satisfied`: the gate writes it
+# on the satisfying call and the entry hook consumes it, which is the only form of this
+# assertion that can catch the two halves disagreeing about the breadcrumb.
+gdrive() { # gdrive <projdir> <tool> <file-path> [hooksdir] -> raw decision JSON
+  local proj="$1" tool="$2" fp="$3" hd="${4:-$HOOKS_DIR}"
+  jq -nc --arg t "$tool" --arg p "$fp" '{tool_name:$t,tool_input:{file_path:$p}}' \
+  | CLAUDE_PROJECT_DIR="$proj" bash "$hd/ai-dlc-recover-gate.sh" 2>/dev/null
+}
+gdenied() { printf '%s' "$1" | jq -e '.hookSpecificOutput.permissionDecision=="deny"' >/dev/null 2>&1; }
+# `reset_state` PREDATES BOTH OF THESE FILES AND DOES NOT CLEAR THEM, and that leak is not
+# cosmetic: measured while building this section, a stale `.recover-gate-progress` from the
+# previous case put a freshly-reset tree at the gate's SECOND mandate before any snapshot Read
+# had happened, so (e8) was building a window it then asserted it could not build — and (e6)
+# read a breadcrumb an earlier case had caused. Every case here differs from its neighbour in
+# one file, which is only a true statement if the residue is removed.
+#
+# IT IS A SEPARATE HELPER RATHER THAN A CHANGE TO `reset_state`, because that function is
+# called by roughly a hundred arms in this file whose subject is the Stop seam; widening it
+# would change what every one of them is seeded with, and the two files are this section's.
+rclean() { rm -f "$1/_bmad-output/.recover-gate-progress" "$1/_bmad-output/.recover-satisfied" \
+                 "$1/_bmad-output/.recover-fired" 2>/dev/null || true; }
+seq_read() { # seq_read <projdir> <read-path> [hooksdir] -> marker|no-marker
+  local proj="$1" fp="$2" hd="${3:-$HOOKS_DIR}"
+  rm -f "$proj/_bmad-output/.handoff-in-progress"
+  gdrive "$proj" Read "$fp" "$hd" >/dev/null   # PreToolUse
+  edrive "$proj" Read "$fp" "$hd" >/dev/null   # the Read happens, then PostToolUse
+  if [ -f "$proj/_bmad-output/.handoff-in-progress" ]; then printf marker; else printf no-marker; fi
+}
+# Puts a tree into the state where the gate's SECOND mandate is outstanding: a recovery has
+# fired and the snapshot Read has already been made. Built by driving the real hooks.
+arm_to_step() { # arm_to_step <projdir> <session>
+  rdrive "$1" "$2" >/dev/null                                   # ai-dlc-recover.sh writes .recover-fired
+  local _sn; _sn="$(sed -n 's/^snapshot_path=//p' "$1/_bmad-output/.recover-fired" 2>/dev/null | head -1)"
+  [ -n "$_sn" ] && gdrive "$1" Read "$1/$_sn" >/dev/null        # satisfy mandate 1 through the gate
+}
+
+# --- (e6) THE SUPPRESSED STATE, DRIVEN AS THE CONSUMER RUNS IT ---------------------------
+reset_state "$P_REC"; rclean "$P_REC"
+cp "$SNAP_PLAIN" "$P_REC/_bmad-output/pipeline-snapshot.md"
+touch "$P_REC/_bmad-output/pipeline-paused.flag"
+mkmarker "$P_REC"                    # a handoff IS pending, so the mandate points at handoff.md
+arm_to_step "$P_REC" "$SESS_A"
+_E6_STEP="$(sed -n 's/^step_file=//p' "$P_REC/_bmad-output/.recover-fired" 2>/dev/null | head -1)"
+_E6_STAGE="$(cat "$P_REC/_bmad-output/.recover-gate-progress" 2>/dev/null || true)"
+# THE PRECONDITIONS ARE ASSERTED BEFORE THE ARM. A tree whose mandate names another file, or
+# whose gate is still on stage 1, is in a DIFFERENT world -- one where arming is correct -- and
+# (e6) would then pass for the opposite reason to the one it claims.
+case "$_E6_STEP" in
+  */steps/handoff.md|steps/handoff.md) _e6_ok=1 ;;
+  *) _e6_ok=0 ;;
+esac
+if [ "$_e6_ok" -ne 1 ]; then
+  bad "(e6-pre) the recovery recorded step_file='${_E6_STEP:-<nothing>}', which does not name handoff.md — this tree is in (e8)'s world and (e6) would pass by arming correctly rather than by suppressing"
+elif [ "$_E6_STAGE" != "step" ]; then
+  bad "(e6-pre) after the snapshot Read the gate is at stage '${_E6_STAGE:-<none>}', not 'step'. The second mandate is not outstanding, so the Read below is not the one the recovery demands and (e6) measures nothing"
+else
+  ok "(e6-pre) the recovery mandates handoff.md and the gate is at its SECOND mandate — the Read below is the compelled one"
+  # The gate must ALLOW this Read; if it denied, no consumer would ever reach the entry hook
+  # with this input and the arm would be about an unreachable sequence.
+  _E6_DEC="$(gdrive "$P_REC" Read "$P_REC/$STEP_HANDOFF")"
+  if gdenied "$_E6_DEC"; then
+    bad "(e6-pre) the gate DENIED the very Read it mandated, so the sequence under test is unreachable and (e6)'s verdict is about a call no consumer makes"
+  else
+    ok "  and the gate ALLOWS that Read, so the shipped sequence reaches the entry hook"
+  fi
+  # RE-ARM, AND `rclean` IS WHAT MAKES THE RE-ARM REAL. The gate probe above satisfied the
+  # second mandate, so it WROTE a breadcrumb; `reset_state` predates that file and does not
+  # remove it. Left in place, `mkmarker`'s own Read consumes it and is suppressed, key 1 is
+  # never created, the recovery then mandates the INTERRUPTED step instead of handoff.md, and
+  # the sequence below arms — reported as (e6) failing, which is a true statement about a
+  # world the fixture built wrong rather than about the hook. Measured exactly that way.
+  reset_state "$P_REC"; rclean "$P_REC"
+  cp "$SNAP_PLAIN" "$P_REC/_bmad-output/pipeline-snapshot.md"
+  touch "$P_REC/_bmad-output/pipeline-paused.flag"
+  mkmarker "$P_REC"; arm_to_step "$P_REC" "$SESS_A"
+  if [ "$(seq_read "$P_REC" "$P_REC/$STEP_HANDOFF")" = no-marker ]; then
+    ok "(e6) driven in SHIPPED ORDER (gate -> Read -> entry), a recovery-mandated Read does NOT write the entry marker"
+  else
+    bad "(e6) a recovery-mandated Read wrote the entry marker when the two hooks are driven in shipped order. The gate deletes .recover-fired on this very call, one hook before the entry hook runs, so a suppression keyed on that marker is UNREACHABLE on a consumer — it tests a file that is already gone"
+  fi
+fi
+
+# --- (e7) THE SEED THAT SEPARATES A CORRECT FIX FROM A BROKEN ONE -------------------------
+# No recovery at all: a lead opening the procedure of their own accord, where the marker is
+# REQUIRED. A fix keyed on anything other than the satisfying call agrees with the correct one
+# on (e6) and diverges only here.
+reset_state "$P_REC"; rclean "$P_REC"
+cp "$SNAP_PLAIN" "$P_REC/_bmad-output/pipeline-snapshot.md"
+touch "$P_REC/_bmad-output/pipeline-paused.flag"
+if [ "$(seq_read "$P_REC" "$P_REC/$STEP_HANDOFF")" = marker ]; then
+  ok "(e7) with NO recovery in flight the same sequence DOES write the marker — a genuine initiation still arms"
+else
+  bad "(e7) a genuine handoff initiation no longer writes the marker. The suppression has swallowed the mandate rather than one distinguishable state, and the routing this hook exists to provide is gone: a compaction now sends the successor to the interrupted step instead of to the procedure"
+fi
+
+# --- (e8) A RECOVERY IN FLIGHT THAT HAS NOT REACHED ITS SECOND MANDATE --------------------
+# THE SECOND DEFECT THE BREADCRUMB EXISTS FOR, and no arm above can see it. A lead that has
+# satisfied only the FIRST mandated Read and then opens handoff.md of its own accord is a
+# GENUINE INITIATION with `.recover-fired` still on disk. A suppression keyed on the marker's
+# existence silences it and loses the routing; one keyed on the SATISFYING CALL does not,
+# because no breadcrumb has been written yet.
+reset_state "$P_REC"; rclean "$P_REC"
+cp "$SNAP_PLAIN" "$P_REC/_bmad-output/pipeline-snapshot.md"
+touch "$P_REC/_bmad-output/pipeline-paused.flag"
+mkmarker "$P_REC"
+rdrive "$P_REC" "$SESS_A" >/dev/null     # a recovery fires; mandate 1 is NOT satisfied
+_E8_STAGE="$(cat "$P_REC/_bmad-output/.recover-gate-progress" 2>/dev/null || printf 'snapshot')"
+if [ -f "$P_REC/_bmad-output/.recover-fired" ] && [ "$_E8_STAGE" != step ]; then
+  ok "(e8-pre) a recovery is in flight and the gate is still at its FIRST mandate — the marker exists, no satisfying call has happened"
+  if [ "$(seq_read "$P_REC" "$P_REC/$STEP_HANDOFF")" = marker ]; then
+    ok "(e8) a voluntary open during that window still ARMS — the key is the satisfying call, not the marker's existence"
+  else
+    bad "(e8) a lead opening handoff.md while a recovery was in flight but UNSATISFIED was suppressed. That Read was compelled by nothing, so the suppression is keyed on 'a recovery exists' rather than on 'this Read is the one it demanded' — and losing the routing is the worse direction by this hook's own reasoning"
+  fi
+else
+  bad "(e8-pre) could not build the in-flight-but-unsatisfied window (marker present? stage='$_E8_STAGE'), so (e8) would assert against a state that is not the one it names"
+fi
+
+# --- (e9) FAIL OPEN: a breadcrumb with no step_file key ----------------------------------
+# Every unreadable or ambiguous input falls through and arms. The two errors are not
+# symmetric: a marker written wrongly is a Stop guard the lead clears with `rm`, a marker
+# MISSED while the lead really is mid-handoff loses the routing. WRITTEN DIRECTLY, because
+# the gate cannot be driven into emitting a keyless breadcrumb -- it writes the key or nothing.
+reset_state "$P_REC"
+printf 'satisfied_at=2026-09-21T00:00:00Z\n' > "$P_REC/_bmad-output/.recover-satisfied"
+if [ "$(seq_read "$P_REC" "$P_REC/$STEP_HANDOFF")" = marker ]; then
+  ok "(e9) a breadcrumb carrying no step_file key FAILS OPEN to arming"
+else
+  bad "(e9) an ambiguous breadcrumb suppressed the arming. A marker written wrongly is cleared with rm; a marker missed loses the routing this hook exists to provide, so every unreadable input must arm"
+fi
+
+# --- (e10) THE BREADCRUMB IS ONE-SHOT ----------------------------------------------------
+# It describes ONE call. Left on disk it would answer for a LATER Read of the same file, so a
+# voluntary re-open moments after the mandated one would be read as the mandated one and
+# silently fail to arm. The consumer deletes it as it reads it; this asserts that directly by
+# running the sequence TWICE against a single breadcrumb.
+reset_state "$P_REC"; rclean "$P_REC"
+cp "$SNAP_PLAIN" "$P_REC/_bmad-output/pipeline-snapshot.md"
+touch "$P_REC/_bmad-output/pipeline-paused.flag"
+mkmarker "$P_REC"; arm_to_step "$P_REC" "$SESS_A"
+_E10_FIRST="$(seq_read "$P_REC" "$P_REC/$STEP_HANDOFF")"
+_E10_SECOND="$(seq_read "$P_REC" "$P_REC/$STEP_HANDOFF")"
+if [ "$_E10_FIRST" = no-marker ] && [ "$_E10_SECOND" = marker ]; then
+  ok "(e10) the breadcrumb is CONSUMED: the mandated Read is suppressed and an immediate re-open of the same file arms"
+else
+  bad "(e10) the two Reads scored '$_E10_FIRST' then '$_E10_SECOND', expected no-marker then marker. A breadcrumb left on disk answers for a later call, so a voluntary re-open right after the mandated one is read as the mandated one and silently fails to arm"
+fi
+
+# --- (e11) CONTROL FOR (e6): the SAME state, a DIFFERENT file read ------------------------
+reset_state "$P_REC"; rclean "$P_REC"
+cp "$SNAP_PLAIN" "$P_REC/_bmad-output/pipeline-snapshot.md"
+touch "$P_REC/_bmad-output/pipeline-paused.flag"
+mkmarker "$P_REC"; arm_to_step "$P_REC" "$SESS_A"
+if [ "$(seq_read "$P_REC" "$P_REC/$STEP_IMPL")" = no-marker ]; then
+  ok "(e11) control: in (e6)'s exact state, a Read of a DIFFERENT step file is also unmarked"
+else
+  bad "(e11) reading an ordinary step file in the suppressed state wrote the marker — the path match and the suppression are interacting, and (e6)'s silence cannot be attributed to either"
+fi
+
+# --- (e12) BOTH LAYOUTS ------------------------------------------------------------------
+# The comparison is on the BASENAME UNDER ITS steps/ PARENT because the gate records a
+# project-relative path while the Read may arrive absolute; a whole-path compare fails to
+# suppress in exactly the layouts this hook spans. Driven on the CONSUMER tree, whose step
+# files live under `.claude/`, with the breadcrumb written by the gate itself.
+reset_state "$P_REC_CLAUDE"; rclean "$P_REC_CLAUDE"
+cp "$SNAP_PLAIN" "$P_REC_CLAUDE/_bmad-output/pipeline-snapshot.md"
+touch "$P_REC_CLAUDE/_bmad-output/pipeline-paused.flag"
+mkmarker "$P_REC_CLAUDE"; arm_to_step "$P_REC_CLAUDE" "$SESS_A"
+_E12_STEP="$(sed -n 's/^step_file=//p' "$P_REC_CLAUDE/_bmad-output/.recover-fired" 2>/dev/null | head -1)"
+case "$_E12_STEP" in
+  .claude/*)
+    ok "(e12-pre) on the consumer tree the gate records a .claude/-spelled mandate ($_E12_STEP)"
+    if [ "$(seq_read "$P_REC_CLAUDE" "$P_REC_CLAUDE/$STEP_HANDOFF_C")" = no-marker ]; then
+      ok "(e12) the suppression holds in the INSTALLED layout, which is the only layout this hook runs in"
+    else
+      bad "(e12) the consumer layout did not suppress. The hook is comparing whole paths or is anchored on the distribution spelling, so on every installed tree a compaction still arms the Stop guard over a procedure that was never begun"
+    fi
+    ;;
+  *)
+    bad "(e12-pre) the consumer tree recorded step_file='${_E12_STEP:-<nothing>}', which is not consumer-spelled — the layout arm would assert about the distribution spelling twice"
+    ;;
+esac
+# POSITIVE CONTROL for (e12): the same tree with no breadcrumb must still arm, or (e12) is a
+# dead hook rather than a suppression.
+reset_state "$P_REC_CLAUDE"; rclean "$P_REC_CLAUDE"
+cp "$SNAP_PLAIN" "$P_REC_CLAUDE/_bmad-output/pipeline-snapshot.md"
+touch "$P_REC_CLAUDE/_bmad-output/pipeline-paused.flag"
+if [ "$(seq_read "$P_REC_CLAUDE" "$P_REC_CLAUDE/$STEP_HANDOFF_C")" = marker ]; then
+  ok "  control: the same consumer tree with no breadcrumb DOES arm"
+else
+  bad "  the entry hook does not arm in the consumer tree even with no breadcrumb — (e12) is a dead hook, not a suppression"
+fi
+
+# --- (e13) THE BREADCRUMB IS PARSED AS KEY=VALUE, NEVER SOURCED --------------------------
+# `.` on a file under the project directory executes whatever a consumer's tree put there,
+# and this hook runs on EVERY Read. Seeded with a value that is a command substitution:
+# sourcing it creates the canary, parsing it does not.
+CANARY="$P_ENTRY/_bmad-output/.sourced-canary"
+rm -f "$CANARY" "$P_ENTRY/_bmad-output/.handoff-in-progress"
+printf 'step_file=$(touch %s)\n' "$CANARY" > "$P_ENTRY/_bmad-output/.recover-satisfied"
+edrive "$P_ENTRY" Read "$P_ENTRY/$STEP_HANDOFF" >/dev/null
+if [ -f "$CANARY" ]; then
+  bad "(e13) the hook SOURCED .recover-satisfied — a file under the project directory, whose content a consumer's tree supplies, was executed as shell by a PostToolUse hook that runs on every Read"
+else
+  ok "(e13) the breadcrumb is parsed as key=value, never sourced (a command-substitution payload did not execute)"
+fi
+rm -f "$P_ENTRY/_bmad-output/.recover-satisfied" "$CANARY" "$P_ENTRY/_bmad-output/.handoff-in-progress"
+
+# =============================================================================
 # MUTANTS
 # =============================================================================
 # Both-directions seeding establishes that an arm discriminates between two inputs; only a
@@ -1773,6 +2040,101 @@ fi
 if mkmut m17-any-tool "$ENTF" -e 's@^\[ "$TOOL" = "Read" \] || exit 0$@: # tool check removed@'; then
   ment m17 "$MUT_DIR" Edit "$P_ENTRY/core/skills/ai-dlc/steps/handoff.md" marker \
     "assertion (e3): editing the step file now writes the marker"
+fi
+
+# --- THE RECOVERY SUPPRESSION (e6)-(e13) --------------------------------------------------
+#
+# EVERY ARM IN THAT SECTION EXCEPT (e7)-(e9) IS ABSENCE-SHAPED, and an absence-shaped arm is
+# the one that REQUIRES a mutant: the seeded pairs establish that the arms discriminate
+# between two inputs, and only a mutant establishes that they discriminate AT ALL.
+#
+# EACH MUTANT IS DRIVEN THROUGH THE SHIPPED SEQUENCE, not through the entry hook alone. Two
+# of these four (m28, m29) key on state the GATE writes, so a battery that drove only the
+# PostToolUse half would score them against a breadcrumb the fixture had placed itself -- the
+# seed shape that made the pre-fix defect invisible to seven seeds.
+#
+# `mseq` runs gate-then-entry against the mutant's hooks directory and follows every verdict
+# with a PRESENCE-shaped control in the same tree: a copy that died on load, or one that
+# simply stopped writing markers, produces the identical absence and would score every
+# no-marker expectation for free.
+mseq() { # mseq <name> <mutdir> <projdir> <read-path> <want> <killmsg>
+  local got
+  got="$(seq_read "$3" "$4" "$2")"
+  if [ "$got" = "$5" ]; then
+    ok "  mutant [$1] KILLED by $6"
+  else
+    bad "MUTANT SURVIVED [$1]: expected $5, got $got — $6 does not depend on the mutated code"
+  fi
+  # The control: same copy, same tree, NO recovery state at all, which must arm.
+  #
+  # `rclean` IS LOAD-BEARING HERE AND m30 IS WHY. That mutant's whole defect is that it does
+  # NOT consume the breadcrumb, so the file its own verdict was scored against is still on
+  # disk when the control runs — and the control then reads a suppressed state and reports
+  # MUTANT HARNESS BROKEN over a mutant that had just been killed correctly. A control that
+  # inherits the residue of the case it is controlling for is not a control.
+  reset_state "$3"; rclean "$3"
+  cp "$SNAP_PLAIN" "$3/_bmad-output/pipeline-snapshot.md"
+  touch "$3/_bmad-output/pipeline-paused.flag"
+  [ "$(seq_read "$3" "$3/$STEP_HANDOFF" "$2")" = marker ] \
+    && ok "  control [$1]: the same copy still marks an unsuppressed Read — it loads and runs" \
+    || bad "MUTANT HARNESS BROKEN [$1]: the copy marks nothing at all; the verdict above is a property of the copy rather than of the mutation"
+}
+# Rebuilds the suppressed world (recovery in flight, gate at its SECOND mandate) using the
+# MUTANT's hooks, so a mutation to the gate's breadcrumb write is exercised where it lives.
+mseq_arm() { # mseq_arm <projdir> <mutdir>
+  reset_state "$1"
+  cp "$SNAP_PLAIN" "$1/_bmad-output/pipeline-snapshot.md"
+  touch "$1/_bmad-output/pipeline-paused.flag"
+  mkmarker "$1" "$2"
+  rdrive "$1" "$SESS_A" "$2" >/dev/null
+  local _sn; _sn="$(sed -n 's/^snapshot_path=//p' "$1/_bmad-output/.recover-fired" 2>/dev/null | head -1)"
+  [ -n "$_sn" ] && gdrive "$1" Read "$1/$_sn" "$2" >/dev/null
+  return 0
+}
+GATEF="ai-dlc-recover-gate.sh"
+
+# M27 — THE SUPPRESSION IS REMOVED, which is the pre-fix hook. Killed by (e6): a
+#       recovery-mandated Read arms again. ANCHORED ON THE `case` ARM'S EXIT, because that
+#       exit IS the suppression and it survives any rewording of the breadcrumb's name.
+if mkmut m27-no-recovery-suppression "$ENTF" -e 's@^        exit 0 ;;$@        : ;;@'; then
+  _M27="$MUT_DIR"; mseq_arm "$P_REC" "$_M27"
+  mseq m27 "$_M27" "$P_REC" "$P_REC/$STEP_HANDOFF" marker \
+    "assertion (e6): with the suppression gone a Read the recovery COMPELLED writes the entry marker again, so a session that merely compacted while paused arms the Stop guard over a procedure it never began"
+fi
+
+# M28 — THE KEY GOES BACK TO `.recover-fired`, WHICH IS THE FIRST CUT'S DEFECT IN FULL and
+#       the one no single-hook seed can see. The gate DELETES that marker on the satisfying
+#       call, one hook BEFORE this hook runs, so the test falls through and the marker is
+#       written from a compelled Read. Killed by (e6) — and only when the sequence is driven
+#       in shipped order, which is what makes this mutant the receipt for `seq_read`.
+if mkmut m28-key-on-the-deleted-marker "$ENTF" \
+     -e 's@^_RS="${STATE_DIR}/\.recover-satisfied"$@_RS="${STATE_DIR}/.recover-fired"@'; then
+  _M28="$MUT_DIR"; mseq_arm "$P_REC" "$_M28"
+  mseq m28 "$_M28" "$P_REC" "$P_REC/$STEP_HANDOFF" marker \
+    "assertion (e6): keyed on .recover-fired the suppression is UNREACHABLE — the gate removed that file one PreToolUse earlier, so on a real consumer the test reads a file that is already gone"
+fi
+
+# M29 — THE GATE STOPS WRITING THE BREADCRUMB. The entry hook is untouched; the state it
+#       needs is simply never handed forward. Killed by (e6), and it is the arm proving the
+#       two hooks are joined rather than each correct in isolation. MUTATES THE GATE, which
+#       is why `mseq_arm` rebuilds the world with the mutant's own hooks.
+if mkmut m29-gate-writes-no-breadcrumb "$GATEF" \
+     -e 's@^        printf .step_file=%s\\n. "\$STEP_REL" > "\${STATE_DIR}/\.recover-satisfied" 2>/dev/null || true$@        : # breadcrumb not written@'; then
+  _M29="$MUT_DIR"; mseq_arm "$P_REC" "$_M29"
+  mseq m29 "$_M29" "$P_REC" "$P_REC/$STEP_HANDOFF" marker \
+    "assertion (e6): with the gate no longer handing the satisfying call forward, the entry hook has nothing to decide from and arms on a compelled Read"
+fi
+
+# M30 — THE BREADCRUMB IS NOT CONSUMED. It stays on disk and answers for a LATER Read of the
+#       same file, so a voluntary re-open moments after the mandated one is read as the
+#       mandated one and silently fails to arm. Killed by (e10)'s second half, which is the
+#       only arm that reads the file twice.
+if mkmut m30-breadcrumb-not-consumed "$ENTF" \
+     -e 's@^  rm -f "\$_RS" 2>/dev/null || true$@  : # breadcrumb left on disk@'; then
+  _M30="$MUT_DIR"; mseq_arm "$P_REC" "$_M30"
+  seq_read "$P_REC" "$P_REC/$STEP_HANDOFF" "$_M30" >/dev/null   # the mandated Read
+  mseq m30 "$_M30" "$P_REC" "$P_REC/$STEP_HANDOFF" no-marker \
+    "assertion (e10): the breadcrumb survives its own read, so an immediate voluntary re-open is taken for the mandated call and the lead's real initiation is silently unmarked"
 fi
 
 # THE UNMUTATED CONTROL, built by the same copy-the-directory machinery as every mutant. A copy
