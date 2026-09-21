@@ -443,7 +443,7 @@ e20_adj="$(bash "$DRIFT" --adjudicated-codes "$HERE/../../.." HEAD 2>/dev/null)"
 if [ -z "$e20_adj" ]; then
   ok "  (LC-E20 level: the distribution contract is unreadable from here, so this arm stands down rather than asserting against an empty set)"
 elif grep -qxF 'EXTENSION-NO-HEADINGS' <<<"$e20_adj"; then
-  bad "EXTENSION-NO-HEADINGS is at level ADJUDICATED. That level creates a register duty — a verdict keyed on a subject digest, recorded before apply proceeds — and this row states only that nothing looked at the entry. There is no reading for a verdict to be a record of, and promoting it also moves the ADJUDICATED set that docs/vocabulary-index.md binds through I58"
+  bad "EXTENSION-NO-HEADINGS is at level ADJUDICATED. That level creates a register duty — a verdict keyed on a subject digest, recorded before apply proceeds — and this row states only that nothing looked at the entry. There is no reading for a verdict to be a record of, and promoting it also moves the ADJUDICATED set that I58 binds against layer-contract.yaml"
 else
   ok "  EXTENSION-NO-HEADINGS is NOT in the reader's own ADJUDICATED set (control: that set is non-empty, $(printf '%s\n' "$e20_adj" | grep -c .) code(s))"
 fi
