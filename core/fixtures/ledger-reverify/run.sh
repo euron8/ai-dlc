@@ -133,8 +133,71 @@ row_is "Entry D" ABSENT          "no verify: line -> hand-review, no row"
 # NEEDS-REVIEW, so a deliberate "no mechanical predicate exists" declaration was reported in
 # the same breath as a typo, and draining the bucket meant re-reading entries that had already
 # said they need no machine check.
-row_is "Entry E" HAND-REVIEW     "verify: manual is a declaration, not a malformed line"
-row_is "Entry F" HAND-REVIEW     "trailing backtick on the verb is a formatting slip, not a different verb"
+row_is "PC-FIXTURE-ENTRY-E-DECLARES-MANUAL" HAND-REVIEW     "verify: manual is a declaration, not a malformed line"
+row_is "PC-FIXTURE-ENTRY-F-MANUAL-BACKTICK" HAND-REVIEW     "trailing backtick on the verb is a formatting slip, not a different verb"
+
+# --- A NON-ID `verify: manual` IS AN ENTRY-SHAPE DEFECT, NOT A HAND-REVIEW DECLARATION -----
+# THE DEFECT. `manual` declared under a label the shared id rule cannot spell produced
+# HAND-REVIEW, whose step-8 disposition is "adjudicate the entry body against theirs". The
+# ENTRY column is the key an operator greps back into the ledger with, and this file's own
+# label rule truncates at the first em-dash and strips backticks — an id survives that, a
+# prose sentence does not. Measured on the reference consumer at the state the defect was
+# filed against, 102 emitted rows: 3 labels do not grep back into the file they came from,
+# all three prose-titled, against 99 that do. And `emit-report.sh` DROPS HAND-REVIEW's detail
+# (`$1=="HAND-REVIEW" ? "" : "  "$3`), so the unusable key is the whole of what reaches the
+# report.
+#
+# THE TWO OFFENDERS ARE TWO SPELLINGS, DELIBERATELY. One opens with a capitalised sentence,
+# the other with an inline code span and an arrow. A fix keyed on either surface form rather
+# than on `ledger_entry_id()` reports one and misses the other, and both spellings are real:
+# both are lifted from the reference consumer's live ledger.
+row_is "A narrative closure record written as a bullet" NEEDS-REVIEW \
+  "a manual receipt under a prose label names no entry an operator can find — entry-shape defect, not hand-review"
+row_is "validate-fixture-prereq.sh" NEEDS-REVIEW \
+  "the SECOND spelling: code span and arrow rather than a capitalised sentence, so a surface-form fix misses it"
+
+# The row must say WHICH defect, or it joins three other NEEDS-REVIEW causes in one bucket.
+ASSERTIONS=$((ASSERTIONS + 1))
+nm_det="$(printf '%s\n' "$OUT" | awk -F'\t' '$2 ~ /A narrative closure record/ && $1=="NEEDS-REVIEW"{print $3; exit}')"
+if [ -z "$nm_det" ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s no NEEDS-REVIEW row for the prose-titled manual record at all\n' "nonid-manual-detail"
+elif ! grep -q '^unresolved: ' <<<"$nm_det"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the detail does not OPEN with a cause token, so this cause cannot be told from the other three: %s\n' "nonid-manual-detail" "$(printf '%s' "$nm_det" | cut -c1-90)"
+elif ! grep -q 'not an entry id' <<<"$nm_det"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the detail never says the LABEL is the defect, so the operator is told to fix the receipt: %s\n' "nonid-manual-detail" "$(printf '%s' "$nm_det" | cut -c1-110)"
+elif ! grep -q 'BULLET GRAMMAR IS NOT THE THING TO CHANGE' <<<"$nm_det"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the detail does not warn off narrowing the bullet grammar, which is the remedy PC-S305 is filed against\n' "nonid-manual-detail"
+else
+  printf '  ok    %-22s opens with the cause token, names the LABEL as the defect, and warns off narrowing the grammar\n' "nonid-manual-detail"
+fi
+
+# THE TRAP, AND IT IS THE REASON THIS ARM SET EXISTS RATHER THAN A ONE-LINE GRAMMAR NARROWING.
+# A bare bold span at column zero closing immediately is a LEGITIMATE entry shape — the one
+# `PC-S305-BARE-BOLD-ENTRY-IS-INVISIBLE-TO-EVERY-REVERIFY` is filed about — and a trailing-space
+# requirement once hid 43 of 63 bullet-form entries here. Both near-misses must keep their rows.
+row_is "PC-FIXTURE-BARE-BOLD-MANUAL-STILL-SEEN" HAND-REVIEW \
+  "a bullet whose bold span closes at end of line is a real entry and still reports HAND-REVIEW — a grammar narrowing kills this row"
+row_lacks "PC-FIXTURE-BARE-BOLD-MANUAL-STILL-SEEN" NEEDS-REVIEW \
+  "...and it is NOT reported as an entry-shape defect, which is what an id test that cannot spell a bare-bold label would do"
+
+# THE SECOND NEAR-MISS IS THE CHARACTER CLASS, where this has already been wrong: `^[A-Z0-9-]+$`
+# excludes `_` and `.` and scored two real consumer entries as annotations. A fix that restates
+# the id test locally instead of asking `ledger_entry_id()` re-introduces exactly that.
+row_is "PC-FIXTURE-DOTTED-0.242.0-AND-UNDER_SCORE-MANUAL" HAND-REVIEW \
+  "an id carrying . and _ is still an id — a locally-restated id test loses both characters"
+row_lacks "PC-FIXTURE-DOTTED-0.242.0-AND-UNDER_SCORE-MANUAL" NEEDS-REVIEW \
+  "...and is not reported as a shape defect, the exact false negative the shared rule was widened to close"
+
+# AND THE ARM MUST DISCRIMINATE ON THE VERB, NOT ON THE LABEL ALONE. Nine prose-titled bullets
+# in this ledger carry real `sh` and `theirs_lacks` receipts that RUN and produce real verdicts;
+# reporting those would be the wider predicate this fix deliberately did not ship. A mechanical
+# verb stands on its receipt's own evidence whatever the label says.
+row_lacks "a-real-entry.sh" NEEDS-REVIEW \
+  "a PROSE-titled entry carrying a MECHANICAL receipt is untouched — the wider predicate reports 43 of these across the real corpora"
 
 # THE FOURTH DIFFERENTIAL — path namespace. G carries Entry B's claim verbatim but filed in
 # the consumer install layout. Before the basename fallback it reported NEEDS-REVIEW: the
@@ -3753,6 +3816,122 @@ dp_kill mutation-refuse-after-run "$dp_m6" \
   '$2 ~ /SH-DIST-REVSPEC / && $1=="STILL-LIVE" {f=1} END{exit !f}' \
   'a refusal that also requires a non-zero exit leaves the zero-exit $DIST reader as a healthy-looking STILL-LIVE — the residue an exit-1-only seed cannot see' \
   'SH-DIST-REVSPEC STILL-LIVE'
+
+# --- FIVE WRONG FIXES FOR THE NON-ID `manual` DEFECT ------------------------------------------
+# Each is a fix a reader would plausibly write, and each is scored on BEHAVIOUR through the same
+# `dp_mutant`/`dp_kill` harness the $DIST battery uses: the mutation is a copy, `cmp -s` refuses
+# one that matched nothing, `bash -n` refuses one that does not parse, and every kill carries a
+# CONTROL row re-read from the mutant's own output so a copy that died is reported as wreckage
+# rather than scored.
+#
+# THE ANCHORS ARE ASSERTED UNIQUE FIRST, with an impossible anchor as the control in the same
+# block. A mutation keyed on a line that has moved matches nothing, `dp_mutant` returns empty,
+# and `dp_kill` reports DID NOT APPLY — but only the anchor probe says WHY, and a re-anchored
+# mutation is the shape this repo has shipped green twice.
+nid_anchor='           { if (ledger_entry_id($0) != "") ok=1 } END { exit !ok }'"'"'; then'
+ASSERTIONS=$((ASSERTIONS + 1))
+nid_n="$(grep -cF -- "$nid_anchor" "$CLOSER")" || nid_n=0
+nid_imp="$(grep -cF -- '{ if (ledger_entry_id($0) == "") ok=1 } END { exit ok }' "$CLOSER")" || nid_imp=0
+if [ "$nid_n" -eq 1 ] && [ "$nid_imp" -eq 0 ]; then
+  printf '  ok    %-22s the id-test anchor is UNIQUE in the closer (control: an impossible anchor matches 0)\n' "nonid-anchor"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the id-test anchor matched %s lines (want 1) and the impossible control matched %s (want 0) — the mutations below would cut the wrong line or none\n' "nonid-anchor" "$nid_n" "$nid_imp"
+fi
+
+# THE CONTROL ROW FOR ALL FIVE is the bare-bold near-miss reporting HAND-REVIEW. It is a
+# legitimate entry that every correct engine emits, so a mutant that lost it broke the tool.
+nid_ctl='$2 ~ /PC-FIXTURE-BARE-BOLD-MANUAL-STILL-SEEN/ && $1=="HAND-REVIEW" {f=1} END{exit !f}'
+nid_ctlmsg='PC-FIXTURE-BARE-BOLD-MANUAL-STILL-SEEN HAND-REVIEW'
+
+# m1 — NO FIX AT ALL. The pre-change engine: `manual` always emits HAND-REVIEW. This is the
+# baseline mutant and it is what proves the whole arm set can fail — without it, every arm below
+# passes against an engine that never changed.
+nid_m1="$(dp_mutant nonid-no-fix "$nid_anchor" '           { ok=1 } END { exit !ok }'"'"'; then')"
+dp_kill mutation-nonid-no-fix "$nid_m1" \
+  '$2 ~ /A narrative closure record/ && $1=="HAND-REVIEW" {f=1} END{exit !f}' \
+  "$nid_ctl" \
+  'the unfixed engine reports the prose-titled narrative record as HAND-REVIEW again — the defect, reproduced' \
+  "$nid_ctlmsg"
+
+# m2 — NARROW THE BULLET GRAMMAR INSTEAD. The remedy this fix exists to refuse, and the one a
+# reader reaches for first: make `- **` stop opening an entry unless what follows is an id. It
+# silences the offender, and it ALSO deletes every prose-titled entry from the report — nine of
+# which carry `sh` receipts that run. The kill is that `a-real-entry.sh` stops reporting at all.
+#
+# ITS SUBJECT IS IN `lib.sh`, NOT IN THE CLOSER, so it cannot go through `dp_mutant` — which
+# copies the siblings unmutated and edits only `ledger-reverify.sh`. Mutating the wrong file is
+# how three mutants in a row once read green against a change that was correct, so this one
+# builds the copy itself, edits the sibling the closer RESOLVES, and carries the same three
+# guards: `cmp -s` on the file it actually changed, `bash -n`, and dp_kill's control row.
+nid_m2=""
+nid_m2d="$(dirname "$DIST")/mut-nonid-narrow-grammar"
+rm -rf "$nid_m2d"; mkdir -p "$nid_m2d"
+cp "$(dirname "$CLOSER")"/*.sh "$nid_m2d/" 2>/dev/null
+if [ -f "$nid_m2d/lib.sh" ]; then
+  NG_OLD='  if (l ~ /^- \*\*/)           sh = "bullet"'
+  NG_NEW='  if (l ~ /^- \*\*(PC|BL)-/)   sh = "bullet"'
+  NG_OLD="$NG_OLD" NG_NEW="$NG_NEW" awk '
+    $0 == ENVIRON["NG_OLD"] { print ENVIRON["NG_NEW"]; next }
+    { print }
+  ' "$(dirname "$CLOSER")/lib.sh" > "$nid_m2d/lib.sh.new" \
+    && mv "$nid_m2d/lib.sh.new" "$nid_m2d/lib.sh"
+  if ! cmp -s "$(dirname "$CLOSER")/lib.sh" "$nid_m2d/lib.sh" \
+     && bash -n "$nid_m2d/lib.sh" 2>/dev/null; then
+    nid_m2="$nid_m2d"
+  fi
+fi
+dp_kill mutation-nonid-narrow-grammar "$nid_m2" \
+  '$2 ~ /a-real-entry\.sh/ {f=1} END{exit f}' \
+  "$nid_ctl" \
+  'narrowing the bullet grammar to id-only deletes a-real-entry.sh from the report entirely — it takes real prose-titled entries with it, which is the remedy PC-S305 is filed against' \
+  "$nid_ctlmsg"
+
+# m3 — RESTATE THE ID TEST LOCALLY WITH THE OLD CHARACTER CLASS. The drift `lib.sh`'s header
+# records happening inside one release, in its measured form: `^[A-Z0-9-]+$` excludes `_` and
+# `.`, and it scored two real consumer entries as annotations. The offender is still caught, so
+# every arm about the offender stays green and only the dotted near-miss says anything.
+nid_m3="$(dp_mutant nonid-local-idshape "$nid_anchor" '           { if ($0 ~ /^(PC|BL)-[A-Z0-9-]+$/) ok=1 } END { exit !ok }'"'"'; then')"
+dp_kill mutation-nonid-local-idshape "$nid_m3" \
+  '$2 ~ /PC-FIXTURE-DOTTED/ && $1=="NEEDS-REVIEW" {f=1} END{exit !f}' \
+  "$nid_ctl" \
+  'a locally-restated ^[A-Z0-9-]+$ id test reports the dotted/underscored id as a shape defect — the exact false negative the shared rule was widened to close' \
+  "$nid_ctlmsg"
+
+# m4 — KEY ON THE SURFACE FORM RATHER THAN THE ID RULE. The shape a reader writes after reading
+# only the first offender: narrative records end in a sentence period, so refuse those. It
+# catches both offenders here and is wrong for a reason the SECOND spelling exposes — measured
+# across the five real corpora, 19 of 27 prose bullets in this distribution's own backlog end in
+# a period and most are annotations, while the arrow-form retirement record does not.
+# The kill is the dotted near-miss: its label ends in no period, so this mutant ACQUITS nothing
+# it should and CONVICTS nothing it should not -- except that it also convicts the bare-bold
+# near-miss, whose bold span carries a period-free id but whose LABEL is the whole line.
+nid_m4="$(dp_mutant nonid-period-form "$nid_anchor" '           { if ($0 !~ /\.$/) ok=1 } END { exit !ok }'"'"'; then')"
+dp_kill mutation-nonid-period-form "$nid_m4" \
+  '$2 ~ /validate-fixture-prereq\.sh/ && $1=="HAND-REVIEW" {f=1} END{exit !f}' \
+  "$nid_ctl" \
+  'a period-keyed surface-form test ACQUITS the arrow-spelled retirement record (its label ends in a code-span period the label transform strips) — a fix keyed on surface form, not on the id rule, misses the second spelling' \
+  "$nid_ctlmsg"
+
+# m5 — WIDEN TO EVERY VERB. The predicate this fix deliberately did not ship: report ANY receipt
+# under a non-id label, not only `manual`. Measured over the tool's own population across five
+# corpora it reports 43, including nine `extensions/*-push.md` bullets whose `sh` receipts run
+# and produce real verdicts. The kill is `a-real-entry.sh` flipping to NEEDS-REVIEW: a mechanical
+# verb stands on its receipt's own evidence whatever the label says.
+#
+# ANCHORED ON THE `case` HEAD, NOT ON THE `manual)` ARM, AND THE FIRST SPELLING WAS UNREACHABLE.
+# Widening that arm to `manual|sh|theirs_lacks|theirs_has)` applies cleanly, parses, and changes
+# NOTHING: `theirs_lacks|theirs_has)` and `sh)` are earlier arms of the same `case`, so a shell
+# takes the first match and the widened arm is dead code. The mutant scored identical to the
+# shipped engine for a reason that has nothing to do with the predicate under test, which reads
+# exactly like a guard that is not load-bearing. A gate INSIDE the case head reaches every verb.
+nid_m5="$(dp_mutant nonid-all-verbs '  case "$verb_norm" in' '  if [ -n "$verb_norm" ] && ! printf '"'"'%s\n'"'"' "$label" | LC_ALL=C awk "$(ledger_entry_awk)$(ledger_entry_id_awk)"'"'"'{ if (ledger_entry_id($0) != "") ok=1 } END { exit !ok }'"'"'; then emit NEEDS-REVIEW "$label" "unresolved: receipt under a label that is not an entry id"; continue; fi
+  case "$verb_norm" in')"
+dp_kill mutation-nonid-all-verbs "$nid_m5" \
+  '$2 ~ /a-real-entry\.sh/ && $1=="NEEDS-REVIEW" {f=1} END{exit !f}' \
+  "$nid_ctl" \
+  'widening past `manual` reports a prose-titled entry whose mechanical receipt RUNS — 43 rows across the real corpora, nine of them live extension entries' \
+  "$nid_ctlmsg"
 
 echo
 if [ "$FAILURES" -gt 0 ]; then

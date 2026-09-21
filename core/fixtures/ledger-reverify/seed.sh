@@ -253,12 +253,20 @@ cat > "$LED" <<'LEDGER'
 - **Entry D has no verify line.** A legacy prose entry, hand-review as today.
   <br>No machine-runnable receipt; the closer must not emit a row for it.
 
-- **Entry E declares manual.** No mechanical predicate exists for this claim.
+- **PC-FIXTURE-ENTRY-E-DECLARES-MANUAL — Entry E declares manual.** No mechanical predicate
+  exists for this claim.
   <br>Hand-review is the DECLARATION, not a malformed line — it must not share a verdict
   with a typo.
+  <br>ID-KEYED, AND THAT IS THIS SEED'S SECOND SUBJECT. Its FIRST is the verb: a declaration
+  must not share a verdict with a typo. It was prose-titled, which made it indistinguishable
+  from the narrative-record seeds below, and a fix that routes a non-id `manual` elsewhere
+  would have moved this arm as collateral rather than being caught by it. The two properties
+  are now separable: this one varies the VERB under a stable id, those vary the LABEL under a
+  stable verb.
   verify: manual
 
-- **Entry F declares manual with a stray backtick.** Prose formatting leaked into the verb.
+- **PC-FIXTURE-ENTRY-F-MANUAL-BACKTICK — Entry F declares manual with a stray backtick.**
+  Prose formatting leaked into the verb.
   <br>A formatting slip must not change the verdict.
   verify: manual`
 
@@ -790,6 +798,60 @@ therefore the ONLY mechanical signal available for this shape, which is the case
 entries reporting HAND-REVIEW two pulls after upstream absorbed them.
 
 verify: manual
+
+---
+
+## A NON-ID `verify: manual` IS AN ENTRY-SHAPE DEFECT — four seeds, and the last two are the traps
+
+The SUBJECT is a `manual` receipt declared under a label the shared id rule cannot spell. Its
+harm is the JOIN: step 8 routes HAND-REVIEW to "adjudicate the entry body", the ENTRY column is
+the key the operator greps back with, and a prose sentence does not survive this file's label
+transform (truncate at the first em-dash, strip backticks). `emit-report.sh` drops HAND-REVIEW's
+detail, so the unusable key is all that reaches the report.
+
+FOUR SEEDS, TWO OFFENDERS AND TWO NEAR-MISSES, and the near-misses are what stop a fix from
+narrowing the bullet grammar — the remedy `PC-S305-BARE-BOLD-ENTRY-IS-INVISIBLE-TO-EVERY-REVERIFY`
+is filed against, and the one a trailing-space requirement already used to hide 43 of 63
+bullet-form entries with.
+
+- **A narrative closure record written as a bullet.** OFFENDER. The five items above were
+  re-verified and closed; this line is a record of that pass, not a titled entry, and the
+  receipt below it is authored FOR this record rather than inherited from a neighbour.
+  verify: manual container record; names no upstream artifact and has no subject at theirs
+
+- **`validate-fixture-prereq.sh` → RETIRED (no stock equivalent)** OFFENDER, SECOND SPELLING,
+  and it is a different shape on purpose. Two properties separate it from the record above:
+  it opens with an inline code span and an arrow rather than a capitalised sentence, and its
+  bold span ends in NO SENTENCE PERIOD. Both matter, and the second one is the discriminating
+  input rather than a stylistic variation — without it the corpus cannot tell this fix from one
+  keyed on the surface form "a narrative record ends in a period", which convicts both offenders
+  and every real entry whose title happens to end in one. Neither spelling is invented: both are
+  lifted from the reference consumer's live ledger, where the arrow form is how every
+  validator-fork retirement is written.
+  verify: manual retirement record; upstream has never shipped this script
+
+- **PC-FIXTURE-BARE-BOLD-MANUAL-STILL-SEEN**
+  NEAR-MISS, AND THE MOST IMPORTANT SEED HERE: a bullet whose bold span closes IMMEDIATELY at
+  end of line, carrying nothing else, with a `manual` receipt. It is a legitimate entry shape
+  and must keep reporting HAND-REVIEW. A fix that narrows the bullet grammar to exclude prose
+  kills this row, and a trailing-space requirement already hid 43 of 63 bullet-form entries
+  here once.
+  <br>THE COLUMN-ZERO FORM `**<id>**` WITH NO LIST MARKER IS DELIBERATELY NOT SEEDED HERE, and
+  that is a measurement rather than an omission: the shape rule is `^- \*\*` or `^#{2,6}[ \t]`,
+  so a column-zero bold span is not entry-shaped AT ALL and emits no row of any kind. That is
+  the live defect `PC-S305-BARE-BOLD-ENTRY-IS-INVISIBLE-TO-EVERY-REVERIFY` names, it is a
+  separate subject from this one, and seeding it here would assert an absence this fix neither
+  causes nor repairs. Measured across four real corpora: 3 column-zero occurrences, all three
+  invisible to every reverify today, against a control of 5 dash-bullet ids in the live ledger
+  alone that are seen.
+  verify: manual
+
+- **PC-FIXTURE-DOTTED-0.242.0-AND-UNDER_SCORE-MANUAL — an id carrying `.` and `_`** — the
+  SECOND near-miss, and it exists because the character class is where this has already been
+  wrong. A `^[A-Z0-9-]+$` id rule excludes both characters and scored two real consumer entries
+  as annotations; a fix that restates the id test locally instead of asking `ledger_entry_id()`
+  will re-introduce exactly that, and this row is the only thing that would say so.
+  verify: manual
 
 ---
 
