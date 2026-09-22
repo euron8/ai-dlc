@@ -232,5 +232,7 @@ The stories-test-strategy step will:
 Every new item filed MUST include `**Status:** OPEN` at minimum.
 Item IDs MUST use `CO-S<sprint>-<descriptor>` format.
 
-Run gate validation [planning] (`gate-validation.md`), then:
+Run auto-handoff evaluation at `Seam B` with the label `carry-over-evaluation end-of-step pre-gate`
+(see `_gate-procedures.md` "Auto-handoff evaluation"). If evaluation returns CONTINUE, run
+gate validation [planning] (`gate-validation.md`), then:
 **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/requirements.md`

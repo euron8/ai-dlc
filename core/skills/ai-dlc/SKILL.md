@@ -476,7 +476,13 @@ action (Bash, Edit, Write, Agent, Skill) before the Read. The lead
 MUST NOT substitute memory, prior-session knowledge, or accumulated
 context for the Read. The Read tool call is the mechanical
 verification that the step was loaded into the current conversation
-context.
+context. **For `gate-validation.md` alone the Read is SLICED, never
+whole**: run `scripts/ai-dlc/gate-slice.sh --type <gate type>`, which
+emits the `offset`/`limit` spans covering the `GATE_MANIFEST` universal
+row plus the declared type's row, and issue one native `Read` per span.
+On a resume after a compaction, pass `--done "$(scripts/ai-dlc/gate-checkpoint.sh
+--nonce <gate_nonce> done)"` so checks already verdicted at this nonce
+are omitted from the plan. The bounded Read is the compliant Read.
 
 **Each step file carries a `STEP_LOADED_TOKEN` HTML comment** (format:
 `<!-- STEP_LOADED_TOKEN: <step-name> -->`). It is a marker, and no gate
@@ -512,6 +518,25 @@ the gate if any required check's anchor is absent — completeness is a
 checked invariant, not a trust-the-loader assumption. See
 `steps/gate-validation.md` "Gate-type manifest". All OTHER step
 files remain whole-file `READ AND FOLLOW` as above.
+
+**The slice is EMITTED, never derived by hand.** `scripts/ai-dlc/gate-slice.sh
+--type <type>` resolves the rendered manifest — core's table, or the
+`overrides/` entry shadowing it, plus every `extensions/checks/` entry
+declaring `gate_types:` — and prints one `offset<TAB>limit<TAB>checks`
+row per contiguous span. Issue exactly those Reads, natively; never route
+the file through a `ctx_*` tool (Rule 23(c)). It exits 2 rather than
+shortening the plan when a required check has no anchor. A consumer
+extension's checks are reported as a separate load.
+
+**A gate resumes; it does not restart.** Every check that reaches a
+verdict is recorded at once —
+`scripts/ai-dlc/gate-checkpoint.sh --nonce <gate_nonce> record <id> <PASS|FAIL|SKIP|PENDING>`
+— and a resume after a compaction passes the settled set back as
+`--done`. Only `PASS` and `SKIP` narrow a resume. The ledger is keyed on
+the nonce; a re-dispatch mints a fresh nonce and reads an empty ledger.
+The gate is `open`ed at nonce mint and `close`d after Check 15, and
+`scripts/ai-dlc/gate-checkpoint.sh current` names the open nonce — a
+resume that finds none resumes no gate.
 
 **Failure mode this prevents.** In hot sessions with many completed
 gates, the lead pattern-matches on "I know what this step does" and
@@ -569,7 +594,10 @@ complete, the lead MAY issue the mandatory `Read` with an `offset` to
 the remaining sections rather than the whole file. The Read tool call
 — the attention interrupt that defeats run-from-memory — remains
 mandatory; only its span narrows. Never slice past a section the lead
-has not completed.
+has not completed. This applies equally to a POST-COMPACTION resume
+that lands inside a gate: the mandated re-read of `gate-validation.md`
+is the `gate-slice.sh` plan narrowed by `gate-checkpoint.sh done`
+(Rule 21), not the whole file.
 
 **(c) Offload high-volume observational Bash (context-mode).** Large
 *read-only* command output (test-suite runs, gate-validation script output,
