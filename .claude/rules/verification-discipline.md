@@ -216,6 +216,10 @@ the suite. Read the gate's exit, never a backgrounded wrapper's.
 **And a green gate is not a landed push.** Twice, every phase PASS, `pre-push: all gates green`,
 exit 141 from the transport, and the ref NOT on origin — `git ls-remote --heads origin <branch>`
 empty against a control. Confirm the remote ref moved before opening a PR or reporting a release.
+The cause is outside the tree: `git push` opens the SSH connection BEFORE the hook runs, the
+suite idles it for minutes, GitHub drops it, and the pack write gets SIGPIPE. Three pushes in a
+row dropped mid-suite; `ServerAliveInterval 60` / `ServerAliveCountMax 30` on the alias in
+`~/.ssh/config` was the one change, and the next three ran 8m04s, 8m41s, 8m08s with zero drops.
 
 ## An entry with two subjects expires only when both do
 

@@ -15,6 +15,27 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.622.0] - 2026-09-22
+
+### The "green gate, exit 141, ref not on origin" push failure has a cause, and it is an operator dotfile
+
+`git push` opens the SSH connection before `pre-push` runs, the suite idles it for the length
+of a full run, GitHub's sshd drops it, and git takes SIGPIPE writing the pack. Three consecutive
+pushes on the 0.619.0 branch dropped mid-suite at the same point, each log carrying
+`Connection to github.com closed by remote host` before `pre-push: all gates green`. The alias
+in `~/.ssh/config` carried no keepalive. With `ServerAliveInterval 60` /
+`ServerAliveCountMax 30` — the one variable changed — the next three pushes ran 8m04s, 8m41s
+and 8m08s with zero drops and every ref landed.
+
+#### Shipped
+
+- `.claude/rules/verification-discipline.md` names the cause beside the symptom rule, so the
+  next session confirms the ref moved and knows why it might not have.
+- `BL-282` annotated: its receipt asks for an `ls-remote` reader in the hook, a detector for a
+  symptom whose cause is outside the tree. The entry stays open on the reshaped mechanism — the
+  hook warning at push time when the ssh alias lacks a keepalive — and records that the
+  symptom-detector is no longer the right shape.
+
 ## [0.621.0] - 2026-09-22
 
 ### The context sensor sampled once per compaction window inside a gate, so its warnings landed with no turns left

@@ -3825,6 +3825,20 @@ distribution-side predicate can observe it.
 
 **NOTE.** Filed at batch 138 after the lead reported a push failure that had not happened.
 
+**CAUSE FOUND AT 0.619.0–0.621.0, AND IT IS AN OPERATOR DOTFILE, NOT THE TREE.** `git push`
+opens the SSH connection before `pre-push` runs (the hook reads the remote's refs on stdin), the
+suite then idles that connection for the length of a full run, GitHub's sshd drops it, and git
+takes SIGPIPE writing the pack — exit 141, gate green, ref absent. Three consecutive pushes on the
+0.619.0 branch dropped at the same point mid-suite, each log carrying `Connection to github.com
+closed by remote host` before `pre-push: all gates green`. `~/.ssh/config` for the alias carried
+no keepalive. With `ServerAliveInterval 60` / `ServerAliveCountMax 30` added — the one variable
+changed — the next three pushes ran **8m04s, 8m41s, 8m08s** with zero drops and every ref
+landed. The receipt below asks for an `ls-remote` reader in the hook, which is a detector for a
+symptom whose cause is now known; the mechanism that would fire is the hook WARNING at push time
+when the ssh alias lacks a keepalive, which is a check with a measured false-positive set (this
+box, before the change). The entry stays open on that reshaped receipt, and this note is the
+record that the symptom-detector is no longer the right shape.
+
 **THE RULE IS PROSE WITH NOTHING BEHIND IT.** `.claude/rules/verification-discipline.md:216`
 records the measured hazard: twice, every phase PASS, `pre-push: all gates green`, **exit 141 from
 the transport**, and the ref NOT on origin. It instructs confirming the remote ref moved before
