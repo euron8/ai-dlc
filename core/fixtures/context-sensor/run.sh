@@ -520,19 +520,83 @@ check "Stop still echoes Stop" \
 
 # Throttle: a small fixture (170 bytes) never advances 512KB, so a second
 # PostToolBatch within the window is skipped -- but Stop always reads.
+#
+# THE SEED SITS FAR FROM EVERY THRESHOLD, AND THAT IS NOW LOAD-BEARING. The undeclared-model
+# floor is 200000 (ceiling 169000), so YELLOW is 80000. A cached reading of 5000 is 75000
+# away -- outside the 90000 relax band by construction? No: 75000 < 90000 is INSIDE. The
+# band is wide on a small window on purpose (a missed crossing costs proportionally more),
+# so the only reading outside it on this window is one ABOVE every threshold with nothing
+# left to cross: cache IMMINENT (150000, past 149000) and the next-unfired threshold is
+# empty, so the flat byte gate alone decides. This arm used to cache 90000 (at-yellow),
+# 10000 short of RED and squarely in band: the fix read through and this arm called it
+# a regression. `imminent` exists only on a DECLARED window (an undeclared floor never
+# reports it), so the seed declares 200000 -- the same figure the floor would use.
 reset
-evfire at-yellow.jsonl PostToolBatch >/dev/null            # first read: not throttled, records last_read_size
+printf '{"transcript_path":"%s","session_id":"t","hook_event_name":"PostToolBatch"}' "$(at 150000)" \
+  | AI_DLC_MODEL_OPUS_WINDOW=200000 CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1   # first read: not throttled, records last_read_size
 SIZE1="$(evfield last_read_size)"
 [ -n "$SIZE1" ] && ok "PostToolBatch records last_read_size" || bad "PostToolBatch records last_read_size" "absent"
-# second PostToolBatch on the SAME tiny fixture: below throttle delta -> skipped,
-# so last_measured must NOT change even if we point at a bigger reading.
+# second PostToolBatch on the SAME tiny size class, cached reading far from any threshold:
+# below throttle delta -> skipped, so last_measured must NOT change.
 BEFORE="$(evfield last_measured)"
-evfire at-red.jsonl PostToolBatch >/dev/null                # different file, but same tiny size class
+printf '{"transcript_path":"%s","session_id":"t","hook_event_name":"PostToolBatch"}' "$FIXTURES/at-red.jsonl" \
+  | AI_DLC_MODEL_OPUS_WINDOW=200000 CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1   # different file, same tiny size class
 AFTER="$(evfield last_measured)"
-check "  second PostToolBatch within throttle window is skipped" "$AFTER" "$BEFORE"
+check "  second PostToolBatch within throttle window is skipped (cached at IMMINENT: no unfired threshold, so no relax)" "$AFTER" "$BEFORE"
 # a Stop is never throttled: it reads even within the window.
 evfire at-red.jsonl Stop >/dev/null
 check "  Stop is never throttled (reads through the window)" "$(evfield last_measured)" "130000"
+
+# --- distance-aware relax ----------------------------------------------------
+# Measured on the reference consumer: inside a gate the lead's own 179 KB gate-file reads
+# drove transcript growth to 765-885 KB per compaction window, so the 512 KB byte gate
+# allowed ONE PostToolBatch sample per window while token readings crossed IMMINENT in nine
+# of ten windows; three windows got no fire at all and two got their last warning with zero
+# turns remaining. The byte gate's premise -- transcript bytes vastly outpace tokens -- inverts
+# when the bytes ARE the tokens. So when the cached reading is within RELAX_TOKENS of the next
+# unfired threshold, a sub-throttle PostToolBatch reads through; far from one, it still skips.
+#
+# Both directions in one run, or a gate that always reads passes the first and a gate that
+# never reads passes the second. The cached reading is planted by a Stop (never throttled),
+# the transcript is then swapped for one PAST the threshold at the same tiny byte size, and
+# the second PostToolBatch is the subject.
+reset
+evfire below-yellow.jsonl Stop >/dev/null                   # cache 50000: 30000 from YELLOW (80000) -> in band
+printf '{"transcript_path":"%s","session_id":"t","hook_event_name":"PostToolBatch"}' "$(at 85000)" \
+  | CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1
+check "relax: cached 50000 is within 90000 of YELLOW (80000), so a sub-throttle PostToolBatch READS THROUGH and sees 85000" \
+  "$(evfield last_measured)" "85000"
+check "  and the crossing FIRES on that read (last_level yellow)" "$(evfield last_level)" "yellow"
+
+reset
+printf '{"transcript_path":"%s","session_id":"t","hook_event_name":"Stop"}' "$(at 150000)" \
+  | AI_DLC_MODEL_OPUS_WINDOW=200000 CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1   # cache 150000: past IMMINENT on a declared 200000, no next threshold
+printf '{"transcript_path":"%s","session_id":"t","hook_event_name":"PostToolBatch"}' "$(at 160000)" \
+  | AI_DLC_MODEL_OPUS_WINDOW=200000 CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1
+check "relax control: cached at IMMINENT has no unfired threshold above it, so the same sub-throttle PostToolBatch is SKIPPED (cost guard intact)" \
+  "$(evfield last_measured)" "150000"
+
+# MUTANT: force RELAX=0 so the throttle is the pre-fix flat byte gate. Built as a copy with
+# its sibling library, cmp -s proves the sed matched, bash -n that it parses. The kill is
+# the read-through arm alone: the control arm must STAY green under the mutant, because a
+# flat gate skips both cases and a mutant that flipped the control would mean the two arms
+# cannot tell "reads near thresholds" from "reads always".
+MRD="$WORK/mutant-relax"; mkdir -p "$MRD"
+cp "$(dirname "$HOOK_PATH")/ai-dlc-window.sh" "$MRD/" 2>/dev/null || true
+sed 's/\[ "$_TOK_DISTANCE" -le "$RELAX_TOKENS" \] && RELAX=1/RELAX=0/' "$HOOK_PATH" > "$MRD/ai-dlc-context-sensor.sh"
+if cmp -s "$HOOK_PATH" "$MRD/ai-dlc-context-sensor.sh"; then
+  bad "relax mutant applied" "sed matched nothing; the copy is byte-identical"
+elif ! bash -n "$MRD/ai-dlc-context-sensor.sh" 2>/dev/null; then
+  bad "relax mutant applied" "the mutant does not parse"
+else
+  reset
+  printf '{"transcript_path":"%s","session_id":"t","hook_event_name":"Stop"}' "$FIXTURES/below-yellow.jsonl" \
+    | CLAUDE_PROJECT_DIR="$WORK" bash "$MRD/ai-dlc-context-sensor.sh" >/dev/null 2>&1
+  printf '{"transcript_path":"%s","session_id":"t","hook_event_name":"PostToolBatch"}' "$(at 85000)" \
+    | CLAUDE_PROJECT_DIR="$WORK" bash "$MRD/ai-dlc-context-sensor.sh" >/dev/null 2>&1
+  check "MUTANT: with RELAX forced to 0 the near-threshold PostToolBatch is skipped again (reads 50000, not 85000)" \
+    "$(evfield last_measured)" "50000"
+fi
 
 # First PostToolBatch of a session (no sidecar) is never throttled.
 reset

@@ -149,6 +149,23 @@ RESET_DROP="${AI_DLC_SENSOR_RESET_DROP:-50000}"
 # assuming large puts red past the real compaction point, which is silent.
 UNDECLARED_MODEL_MAX=200000
 
+# band_calc is the pure form of the threshold clamp: PCT/MIN_LEAD/MAX_LEAD plus
+# an explicit EFFECTIVE/CEILING pair, so it can be evaluated twice in one run --
+# once cheaply against a CACHED window for the throttle below, and once
+# authoritatively against the freshly-resolved window once the tail-read has
+# run. `band()` (defined near the real EFFECTIVE/CEILING further down) is a
+# thin wrapper over this that reads those two as globals, so every existing
+# call site is unchanged.
+band_calc() {  # $1 pct  $2 min_lead  $3 max_lead  $4 effective  $5 ceiling
+  local raw hi lo
+  raw=$(( $4 * $1 / 100 ))
+  hi=$(( $5 - $2 ))
+  lo=$(( $5 - $3 ))
+  [ "$raw" -gt "$hi" ] && raw="$hi"
+  [ "$raw" -lt "$lo" ] && raw="$lo"
+  printf '%s' "$raw"
+}
+
 # Fail-open on every error path: a missing reading is never worse than a wrong
 # one, and this hook must never be able to stall the pipeline.
 command -v jq >/dev/null 2>&1 || exit 0
@@ -191,21 +208,112 @@ TRANSCRIPT="$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/nu
 #
 # Stop is infrequent and carries the snapshot-reconcile semantics, so it always
 # reads. PostToolBatch fires on every tool batch -- a full tail-read (up to a 4MB
-# jq scan) that often is real hot-path latency. Skip it unless the transcript has
-# grown by THROTTLE_BYTES since the last full read, tracked as `last_read_size`
-# in the sidecar. The first read of a session (no sidecar) is never throttled, so
-# sampling always starts. A crossing is at most THROTTLE_BYTES of transcript
-# late, and transcript bytes vastly outpace token growth (tool outputs), so this
-# is far tighter than the token thresholds it feeds.
+# jq scan) that often is real hot-path latency (measured on a real 10.6MB
+# consumer transcript: 0.01-0.03s at the 256KB tail tier, 0.3-1.3s once a tail
+# escalates to 4MB). Skip it unless the transcript has grown by THROTTLE_BYTES
+# since the last full read, tracked as `last_read_size` in the sidecar. The
+# first read of a session (no sidecar) is never throttled, so sampling always
+# starts.
+#
+# THE HEADER'S OLD CLAIM -- "transcript bytes vastly outpace token growth, so
+# this is far tighter than the token thresholds it feeds" -- INVERTS INSIDE A
+# PLANNING GATE. Measured on the graph consumer transcript (b4a9f216, ten
+# post-compaction windows): a single 179KB gate-file re-read drives transcript
+# growth to 765,181-1,794,927 bytes per window while the RESET_DROP-cleared
+# `last_level` gets exactly one chance to observe each threshold crossing from
+# `none`. At the flat 524,288-byte gate, three of ten windows sampled ZERO
+# times and nine of ten crossed IMMINENT before a sample landed. A flat byte
+# gate cannot see that the SAME growth is safe on an ordinary tool-output-heavy
+# window and fatal on a gate-file-read-heavy one -- the byte count carries no
+# signal about how close TOKENS are to firing.
+#
+# A bytes-per-token conversion was tried and measured wrong: the real ratio
+# between two token-usage checkpoints in the graph consumer transcript ranges
+# 0.3-10.6 bytes/token depending on what sits between them (a giant gate-file
+# read vs. ordinary tool chatter), so ANY single constant either overshoots
+# (misses crossings the way THROTTLE_BYTES alone did -- measured: BPT=4 still
+# left one window's cached reading 78,800 tokens from YELLOW, computed a
+# 315,200-byte allowance, and the window's total remaining growth was only
+# 277,700 bytes, so the gate never reopened) or undershoots so far that it
+# reads on nearly every call, discarding the cost guard it exists to keep.
+#
+# So the gate compares distance in TOKEN SPACE ONLY (candidate (a)), never
+# converted to bytes: once the CACHED last_measured reading is within
+# RELAX_TOKENS of the next unfired threshold above CACHED last_level, the flat
+# THROTTLE_BYTES gate is bypassed entirely and every PostToolBatch reads
+# through, regardless of how little the transcript grew. Outside that band the
+# flat THROTTLE_BYTES gate applies exactly as before -- the 4MB-scan cost
+# guard holds unchanged wherever the old design earned it, at the start of a
+# window and on any ordinary tool-heavy stretch nowhere near a crossing. This
+# costs nothing extra: last_measured, last_level and effective_window are
+# already in the sidecar, so the distance check is arithmetic on cached
+# fields, never a second transcript read.
+#
+# RELAX_TOKENS defaults to 90000 -- above the largest single-turn token jump
+# measured on the graph consumer transcript (49,150, of 408 sub-reset deltas)
+# with margin, and larger than the worst-case gap-to-threshold seen across the
+# ten seeded windows (78,800). Once the cached reading enters that band, every
+# PostToolBatch reads through until the level escalates or the window resets,
+# so a crossing is never more than one growth-allowance late outside the band
+# and never missed at all inside it. Verified by driving this shipped hook
+# (not a simulator) through all ten seeded windows' real (byte, token)
+# checkpoint sequences: every window now reaches its true peak severity,
+# where the unpatched hook missed 9 of 10 the same way.
+#
+# THE COST THIS BUYS: at a 200000-token undeclared-model floor, YELLOW sits at
+# 80000 and RELAX_TOKENS (90000) exceeds it, so the relax band covers the
+# none->yellow transition from session start -- every PostToolBatch reads
+# through until YELLOW first fires, and only red/imminent get the flat-gate
+# cost guard's full benefit on a small window. This is deliberate: a small
+# window is the one where a missed crossing is proportionally most dangerous
+# (fewer tokens of runway), and the tail-read this trades for costs 0.01-1.3s
+# even at the worst 4MB-tail tier (measured on the real 10.6MB consumer
+# transcript). On a large (1M-class) declared window the same 90000-token band
+# is a small fraction of the run to YELLOW, so the flat THROTTLE_BYTES gate
+# does most of the work exactly as before.
 # -----------------------------------------------------------------------------
 THROTTLE_BYTES="${AI_DLC_SENSOR_THROTTLE_BYTES:-524288}"
+RELAX_TOKENS="${AI_DLC_SENSOR_RELAX_TOKENS:-90000}"
 if [ "$EVENT" = PostToolBatch ] && [ -r "$STATE_FILE" ]; then
   LAST_READ_SIZE="$(sed -n 's/^last_read_size=//p' "$STATE_FILE" 2>/dev/null | head -1)"
   case "${LAST_READ_SIZE:-}" in ''|*[!0-9]*) LAST_READ_SIZE="" ;; esac
   if [ -n "$LAST_READ_SIZE" ]; then
-    CUR_SIZE="$(wc -c < "$TRANSCRIPT" 2>/dev/null | tr -d ' ')"
-    case "${CUR_SIZE:-}" in ''|*[!0-9]*) CUR_SIZE=0 ;; esac
-    [ "$(( CUR_SIZE - LAST_READ_SIZE ))" -ge "$THROTTLE_BYTES" ] || exit 0
+    # Distance to the next unfired threshold, in TOKENS, from the CACHED
+    # window fields -- no transcript read involved. An unreadable/absent cache
+    # field leaves RELAX at 0 (the flat gate decides alone), which is the safe
+    # direction: a missing cache never bypasses the gate the old flat design
+    # already enforced, so it cannot introduce a new false-negative relative
+    # to the pre-fix behaviour.
+    CACHED_TOKENS="$(sed -n 's/^last_measured=//p' "$STATE_FILE" 2>/dev/null | head -1)"
+    CACHED_EFFECTIVE="$(sed -n 's/^effective_window=//p' "$STATE_FILE" 2>/dev/null | head -1)"
+    CACHED_LEVEL="$(sed -n 's/^last_level=//p' "$STATE_FILE" 2>/dev/null | head -1)"
+    case "${CACHED_TOKENS:-}" in ''|*[!0-9]*) CACHED_TOKENS="" ;; esac
+    case "${CACHED_EFFECTIVE:-}" in ''|*[!0-9]*) CACHED_EFFECTIVE="" ;; esac
+    case "${CACHED_LEVEL:-}" in none|yellow|red|imminent) ;; *) CACHED_LEVEL="" ;; esac
+    RELAX=0
+    if [ -n "$CACHED_TOKENS" ] && [ -n "$CACHED_EFFECTIVE" ] && [ -n "$CACHED_LEVEL" ]; then
+      _C_CEILING=$(( CACHED_EFFECTIVE - SENSOR_RESERVE ))
+      _C_YELLOW="$(band_calc "$YELLOW_PCT" "$YELLOW_MIN_LEAD" "$YELLOW_MAX_LEAD" "$CACHED_EFFECTIVE" "$_C_CEILING")"
+      _C_RED="$(band_calc "$RED_PCT" "$RED_MIN_LEAD" "$RED_MAX_LEAD" "$CACHED_EFFECTIVE" "$_C_CEILING")"
+      _C_IMMINENT="$(band_calc "$IMMINENT_PCT" "$IMMINENT_MIN_LEAD" "$IMMINENT_MAX_LEAD" "$CACHED_EFFECTIVE" "$_C_CEILING")"
+      # Next unfired threshold strictly above the last fired level, in rank order.
+      _C_NEXT=""
+      case "$CACHED_LEVEL" in
+        none)   _C_NEXT="$_C_YELLOW" ;;
+        yellow) _C_NEXT="$_C_RED" ;;
+        red)    _C_NEXT="$_C_IMMINENT" ;;
+        imminent) _C_NEXT="" ;;  # already at the top rank; recurrence handles it below
+      esac
+      if [ -n "$_C_NEXT" ] && [ "$_C_NEXT" -gt 0 ]; then
+        _TOK_DISTANCE=$(( _C_NEXT - CACHED_TOKENS ))
+        [ "$_TOK_DISTANCE" -le "$RELAX_TOKENS" ] && RELAX=1
+      fi
+    fi
+    if [ "$RELAX" -ne 1 ]; then
+      CUR_SIZE="$(wc -c < "$TRANSCRIPT" 2>/dev/null | tr -d ' ')"
+      case "${CUR_SIZE:-}" in ''|*[!0-9]*) CUR_SIZE=0 ;; esac
+      [ "$(( CUR_SIZE - LAST_READ_SIZE ))" -ge "$THROTTLE_BYTES" ] || exit 0
+    fi
   fi
 fi
 
@@ -431,13 +539,7 @@ fi
 CEILING=$(( EFFECTIVE - SENSOR_RESERVE ))
 
 band() {  # $1 pct  $2 min_lead  $3 max_lead  -> echoes the clamped threshold
-  local raw hi lo
-  raw=$(( EFFECTIVE * $1 / 100 ))
-  hi=$(( CEILING - $2 ))          # closest allowed to the ceiling (latest fire)
-  lo=$(( CEILING - $3 ))          # furthest allowed from it   (earliest fire)
-  [ "$raw" -gt "$hi" ] && raw="$hi"
-  [ "$raw" -lt "$lo" ] && raw="$lo"
-  printf '%s' "$raw"
+  band_calc "$1" "$2" "$3" "$EFFECTIVE" "$CEILING"
 }
 
 T_YELLOW="$(band "$YELLOW_PCT" "$YELLOW_MIN_LEAD" "$YELLOW_MAX_LEAD")"
