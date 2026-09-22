@@ -38,6 +38,15 @@ elif [ -f "$ROOT/.claude/hooks/ai-dlc-recover-gate.sh" ]; then GATE="$ROOT/.clau
 fi
 IS_DIST=0; [ -d "$ROOT/core/skills/ai-dlc" ] && IS_DIST=1
 
+# The THIRD hook in the sequence the harness actually runs: SessionStart:compact writes the
+# marker, PostCompact reads it for the compaction log, the first PreToolUse arms the gate on
+# it. The gate arms above drive the first and third with a hand-seeded marker between them,
+# which is exactly the shape that could not see the second one deleting the file.
+POSTCOMPACT=""
+if   [ -f "$ROOT/core/hooks/ai-dlc-postcompact.sh" ]; then POSTCOMPACT="$ROOT/core/hooks/ai-dlc-postcompact.sh"
+elif [ -f "$ROOT/.claude/hooks/ai-dlc-postcompact.sh" ]; then POSTCOMPACT="$ROOT/.claude/hooks/ai-dlc-postcompact.sh"
+fi
+
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/postcompact-rulebook.XXXXXX")" || exit 2
 mkdir -p "$WORK/project/_bmad-output"
 
@@ -70,6 +79,7 @@ HOOK="$HOOK"
 VAL="$VAL"
 SKILL="$SKILL"
 GATE="$GATE"
+POSTCOMPACT="$POSTCOMPACT"
 IS_DIST="$IS_DIST"
 PROJECT="$WORK/project"
 STEPS_REL=".claude/skills/ai-dlc/steps"
