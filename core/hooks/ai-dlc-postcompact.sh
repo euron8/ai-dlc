@@ -73,7 +73,21 @@ if [ -f "$MARKER" ]; then
   else
     RECOVERED="yes"
   fi
-  rm -f "$MARKER" 2>/dev/null || true
+  # READ, NEVER DELETE. This hook used to `rm -f "$MARKER"` here, and it fires on PostCompact,
+  # which the harness runs AFTER SessionStart:compact wrote the marker and BEFORE the lead's
+  # first tool call. So the file `ai-dlc-recover-gate.sh` arms on was gone one event before
+  # that gate could read it, and its `[ -f "$MARKER" ] || exit 0` fast path stood it down
+  # silently on every compaction. Measured on the reference consumer: 636 of 637 logged
+  # compactions read `recovery_injected: yes` -- this hook READ the marker each time, and
+  # reading it was the same call that deleted it -- while the gate's deny text appears in
+  # zero of 256 transcripts and all ten post-compaction first calls in one session were
+  # non-mandated. Driven by hand with the shipped hooks in sequence: marker PRESENT after
+  # recover.sh, ABSENT after this hook, gate silent. The gate is the marker's sole deleter:
+  # it removes the file on the call that satisfies the second mandate, and clears it itself
+  # when a mandated path has vanished. An unarmable marker (`step_file_resolved=0`) persists
+  # for the session by the gate's own design, which is the state this hook's deletion was
+  # written for -- and `ai-dlc-recover.sh` rewrites the marker on the next compaction, so it
+  # can never carry a stale record across two.
 fi
 
 mkdir -p "$STATE_DIR" 2>/dev/null || true

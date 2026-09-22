@@ -15,6 +15,51 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.620.0] - 2026-09-22
+
+### The post-compaction recovery gate never fired on a consumer, because the hook that logs the compaction deleted the marker the gate arms on
+
+`ai-dlc-recover-gate.sh` is a PreToolUse hook that denies any non-mandated first call after a
+compaction, arming on `_bmad-output/.recover-fired`. Its deny text appears in **0 of 256**
+reference-consumer transcripts (control: a different hook's `hook error:` text appears 8 times
+in the same corpus), and in one session all **ten** post-compaction first calls were
+non-mandated — `tail`, `rm -f`, `grep`, bounded Reads — and none was denied.
+
+The hook is correct. Driven by hand with the consumer's real marker state it denies, and driven
+through a real `claude --print` session on a scratch install it denied the first Bash call,
+allowed the two mandated Reads, cleared the marker and let the retry through. What it never had
+was the marker: `ai-dlc-postcompact.sh` fires on PostCompact, which the harness runs AFTER
+`SessionStart:compact` wrote the marker and BEFORE the lead's first tool call, and at `:76` it
+deleted the file after reading two fields from it for the compaction log. Its own log is the
+fingerprint — **636 of 637** logged compactions read `recovery_injected: yes`, so it read the
+marker every time, and reading it was the same call that removed it. Driven in harness order
+with the shipped hooks: marker PRESENT after `recover.sh`, ABSENT after `postcompact.sh`, gate
+silent on the next Bash call.
+
+The fixture could not see it by construction: every gate arm seeds the marker with the real
+producer and drives the gate — two of the three hooks, skipping the one that deleted the file.
+
+#### Shipped
+
+- **`core/hooks/ai-dlc-postcompact.sh`** reads the marker and never deletes it. The gate is the
+  marker's sole deleter: it removes the file on the call that satisfies the second mandate and
+  clears it itself when a mandated path has vanished. An unarmable marker
+  (`step_file_resolved=0`) persists for the session by the gate's own design, and
+  `ai-dlc-recover.sh` rewrites it on the next compaction, so a persisted record cannot go stale.
+- **`core/fixtures/postcompact-rulebook-recovery/`** gains the three-hook arm: `recover.sh` →
+  `postcompact.sh` → gate, in harness order, asserting the marker survives and the first
+  non-mandated call is denied. Its mutant restores the deletion on a copy (`cmp -s` proves it
+  applied) and the arm goes red on exactly that line. `seed.sh` binds the third hook in both
+  layouts; absent on a consumer one pull behind, the arm SKIPs.
+
+#### Recorded, not a fix
+
+A first hand on this defect refuted the mechanism from the same 636/637 figure, reading it as
+"the marker was intact when postcompact ran" — true, and the reason it was gone one event
+later. Two re-scopes and eighty minutes of transcript forensics followed before a four-line
+direct run of the three hooks in sequence answered it. The direct experiment should have been
+first.
+
 ## [0.619.0] - 2026-09-22
 
 ### A gate cut by a compaction now RESUMES from its recorded verdicts, and the sliced load of `gate-validation.md` is emitted by a program instead of derived by hand

@@ -1722,6 +1722,70 @@ else
   bad "the injected block is missing:$miss — a lead that skips a mandated Read has nothing telling it the skip must be declared"
 fi
 
+# =============================================================================
+# THE THREE-HOOK SEQUENCE -- the arm that could only be written after the field
+#
+# Every gate arm above seeds the marker with the real producer and then drives the gate. That
+# is two of the three hooks the harness runs, and the one it skips is the one that mattered:
+# `ai-dlc-postcompact.sh` fires on PostCompact, AFTER SessionStart:compact wrote the marker and
+# BEFORE the first PreToolUse, and it used to delete the marker after reading it for the
+# compaction log. So the gate found nothing, exited 0 on its fast path, and every arm above
+# stayed green -- correctly, about a sequence no consumer executes. Measured: 636 of 637
+# logged compactions on the reference consumer read `recovery_injected: yes` (postcompact READ
+# the file), the gate's deny text in 0 of 256 transcripts, and all ten post-compaction first
+# calls in one session non-mandated and undenied.
+#
+# The arm runs all three, in harness order, and asserts the deny. The mutant restores the
+# deletion and the arm goes red.
+# =============================================================================
+if [ -z "${POSTCOMPACT:-}" ]; then
+  if [ "$IS_DIST" = 1 ]; then bad "ai-dlc-postcompact.sh is absent from the distribution tree"
+  else skip "three-hook sequence" "ai-dlc-postcompact.sh is in neither layout"; fi
+elif [ -z "${GATE:-}" ] || ! command -v jq >/dev/null 2>&1; then
+  skip "three-hook sequence" "the gate or jq is absent; the deny cannot be observed"
+else
+
+p_sequence() { # p_sequence <postcompact-hook> -> PASS | FAIL:<what it saw>
+  _p="$(newproj route.md consumer)"
+  arm_marker "$HOOK" "$_p"
+  [ -f "$_p/$mk" ] || { printf 'FAIL:SEED — the producer wrote no marker, so the sequence has nothing to lose\n'; return; }
+  printf '{"trigger":"auto","session_id":"fixture","compact_summary":"seeded"}' \
+    | CLAUDE_PROJECT_DIR="$_p" bash "$1" >/dev/null 2>&1
+  grep -q 'recovery_injected: yes' "$_p/_bmad-output/compaction-log.md" 2>/dev/null \
+    || { printf 'FAIL:postcompact did not log the injection, so it never read the marker and this arm measured nothing\n'; return; }
+  [ -f "$_p/$mk" ] || { printf 'FAIL:postcompact DELETED the marker the gate arms on, one event before the gate can read it\n'; return; }
+  d="$(gate_call "$GATE" "$_p" "$(jcall Bash -)")"
+  allowed "$d" && { printf 'FAIL:the first tool call after a real three-hook compaction was ALLOWED (%s)\n' "${d%%|*}"; return; }
+  printf 'PASS\n'
+}
+
+r="$(p_sequence "$POSTCOMPACT")"
+if [ "$r" = PASS ]; then
+  ok "three-hook sequence: recover.sh -> postcompact.sh -> gate, the marker survives postcompact and the first non-mandated call is DENIED"
+else
+  bad "three-hook sequence: ${r#FAIL:}"
+fi
+
+# MUTANT -- restore the deletion that shipped. `cmp -s` proves it applied; `bash -n` that it
+# parses. The kill is the sequence arm alone: the compaction log must STILL read yes, because
+# the deletion came after the read, which is exactly why the log never showed the hole.
+MP_DEL="$WORK/postcompact-deletes.sh"
+awk '{print} /^    RECOVERED="yes"$/ && !done {getline; print; print "  rm -f \"$MARKER\" 2>/dev/null || true"; done=1}' "$POSTCOMPACT" > "$MP_DEL"
+if cmp -s "$POSTCOMPACT" "$MP_DEL"; then
+  bad "FIXTURE STALE: the deletion mutant is byte-identical to postcompact.sh, so the mutation matched nothing"
+elif ! bash -n "$MP_DEL" 2>/dev/null; then
+  bad "FIXTURE STALE: the deletion mutant is not valid shell"
+else
+  rm_="$(p_sequence "$MP_DEL")"
+  case "$rm_" in
+    FAIL:postcompact\ DELETED*) ok "mutant: postcompact.sh restored to deleting the marker — the sequence arm goes red on exactly that line" ;;
+    PASS) bad "MUTANT KILLED NOTHING: a postcompact.sh that deletes the marker still passes the sequence arm, so the arm cannot see the shipped defect" ;;
+    *) bad "MUTANT FLIP WRONG: expected the deletion finding, measured '${rm_#FAIL:}'" ;;
+  esac
+fi
+
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "postcompact-rulebook-recovery: PASS"; exit 0; fi
 echo "postcompact-rulebook-recovery: $fails assertion(s) FAILED" >&2
