@@ -15,6 +15,42 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.621.0] - 2026-09-22
+
+### The context sensor sampled once per compaction window inside a gate, so its warnings landed with no turns left
+
+`ai-dlc-context-sensor.sh` fires Rule 2's YELLOW/RED/IMMINENT reminders from `Stop` and
+`PostToolBatch`. Its `PostToolBatch` throttle skips the transcript read unless the file has grown
+`THROTTLE_BYTES` (512 KB) since the last sample, on the premise that transcript bytes vastly
+outpace token growth. Inside a gate that premise inverts: the lead's own 179 KB gate-file reads
+ARE the bytes. Measured on the reference consumer's looping session, ten compaction windows:
+transcript growth 765–885 KB per window, so the throttle allowed **one** sample per window;
+token readings crossed IMMINENT in nine of ten; three windows got **no fire at all** and two got
+their last warning with **zero** assistant turns remaining. `RESET_DROP` correctly cleared the
+level after each cut, so every window had to re-cross from `none` with one chance to observe it.
+The sensor was sound — it fired six times in that session — and unactionable.
+
+#### Shipped
+
+- **`core/hooks/ai-dlc-context-sensor.sh`** — a distance-aware relax on the `PostToolBatch`
+  throttle. From the cached sidecar fields alone (`last_measured`, `effective_window`,
+  `last_level`) it recomputes the next unfired threshold and reads through the byte gate when
+  the cached reading is within `RELAX_TOKENS` (default 90000, `AI_DLC_SENSOR_RELAX_TOKENS`) of
+  it. Far from a threshold, or with none left above the cached level, the flat byte gate
+  decides exactly as before. `band_calc()` is the existing clamp math parametrised so the
+  cached recomputation and the live one are one function. Missing or unparseable cache fields
+  fail closed (no relax). Cost preserved where it matters: the tail read is 0.01–0.03 s at the
+  256 KB tier and 1.3 s at the 4 MB tier on the real 10.6 MB consumer transcript, and the
+  relax spends it only within the band.
+- **`core/fixtures/context-sensor/`** 99 → 103 assertions: a sub-throttle `PostToolBatch` with
+  the cached reading in band READS THROUGH and fires the crossing; the same call with the cache
+  at IMMINENT (no threshold above it) is SKIPPED; a mutant forcing `RELAX=0` reverts to the
+  flat gate and the read-through arm goes red while the control stays green. The existing
+  skip arm's seed moved from 90000 to a reading past IMMINENT — 90000 sits inside the band on
+  the fixture's 200000 window, so the fix correctly read through it and the old arm called
+  that a regression. `imminent` is reachable only on a DECLARED window, so those seeds declare
+  one.
+
 ## [0.620.0] - 2026-09-22
 
 ### The post-compaction recovery gate never fired on a consumer, because the hook that logs the compaction deleted the marker the gate arms on
