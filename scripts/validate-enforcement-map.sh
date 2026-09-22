@@ -571,7 +571,7 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   of an OPEN window -- which is the property `m8` asserts at the committed value and the one
 #   a raise can quietly destroy. A budget raised to the top of its window makes A4 unreachable
 #   and the arm then reads exactly like one that passed.
-FORK_BUDGET=3223
+FORK_BUDGET=3261
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #

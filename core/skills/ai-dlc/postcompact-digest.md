@@ -165,7 +165,13 @@ action (Bash, Edit, Write, Agent, Skill) before the Read. The lead
 MUST NOT substitute memory, prior-session knowledge, or accumulated
 context for the Read. The Read tool call is the mechanical
 verification that the step was loaded into the current conversation
-context.
+context. **For `gate-validation.md` alone the Read is SLICED, never
+whole**: run `scripts/ai-dlc/gate-slice.sh --type <gate type>`, which
+emits the `offset`/`limit` spans covering the `GATE_MANIFEST` universal
+row plus the declared type's row, and issue one native `Read` per span.
+On a resume after a compaction, pass `--done "$(scripts/ai-dlc/gate-checkpoint.sh
+--nonce <gate_nonce> done)"` so checks already verdicted at this nonce
+are omitted from the plan. The bounded Read is the compliant Read.
 
 ### Rule 22 -- Pause-point resume MUST re-read the step file
 When a pipeline pause point (Rule 3(a)-(d)) receives human input and
@@ -197,7 +203,10 @@ complete, the lead MAY issue the mandatory `Read` with an `offset` to
 the remaining sections rather than the whole file. The Read tool call
 — the attention interrupt that defeats run-from-memory — remains
 mandatory; only its span narrows. Never slice past a section the lead
-has not completed.
+has not completed. This applies equally to a POST-COMPACTION resume
+that lands inside a gate: the mandated re-read of `gate-validation.md`
+is the `gate-slice.sh` plan narrowed by `gate-checkpoint.sh done`
+(Rule 21), not the whole file.
 **(c) Offload high-volume observational Bash (context-mode).** Large
 *read-only* command output (test-suite runs, gate-validation script output,
 `git log`/`diff`/`status` inspection, log scans) MUST be run via

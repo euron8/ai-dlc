@@ -72,7 +72,12 @@ planning gate that edits `scripts/*.sh`.
 this manifest, resolves the declared gate type, and loads (READ AND
 FOLLOW) the `universal` row **plus** every check ID in that type's row.
 "Loaded" for `gate-validation.md` means exactly this set present in
-context — not the whole file (§5.2). Each check carries a
+context — not the whole file (§5.2). **The spans are emitted, not
+derived by hand:** `scripts/ai-dlc/gate-slice.sh --type <type>` prints
+one `offset<TAB>limit<TAB>checks` row per contiguous required span;
+issue one native `Read` per row. On a post-compaction resume pass
+`--done "$(scripts/ai-dlc/gate-checkpoint.sh --nonce <gate_nonce> done)"`
+so checks already verdicted at this nonce are not re-read. Each check carries a
 `<!-- CHECK_LOADED: <id> -->` anchor directly under its heading; H1
 reads the manifest and FAILS the gate if any required check's anchor is
 absent from loaded context. A check present in this file but absent from
@@ -169,11 +174,19 @@ whose script checks already pass. Measured on the reference consumer: Check 2's 
 validator failed on a single token after the adjudicator had already been dispatched, and the
 gate paid a second full adjudication for a FAIL a script reports in under a second.
 
-At gate entry, once those pass: generate `gate_nonce` (`<gate_type>-<UTC>`),
+At gate entry, once those pass: generate `gate_nonce` (`<gate_type>-<UTC>`), run
+`scripts/ai-dlc/gate-checkpoint.sh --nonce <gate_nonce> open`,
 then READ AND FOLLOW `_gate-procedures.md` "Gate-adjudication dispatch" — dispatch the
 adjudicator `run_in_background`, join its verdict. While it runs, evaluate ONLY the remaining
 `project` / `lead` checks below — the script checks are already done;
 inline-evaluating an `llm` check is a Rule 20 solo violation.
+
+**Record every verdict the moment it is reached.** After each check — script arm, lead
+check, or an adjudicator verdict adopted through Check 26 — run
+`scripts/ai-dlc/gate-checkpoint.sh --nonce <gate_nonce> record <check-id> <PASS|FAIL|SKIP|PENDING>`.
+A post-compaction resume reads this ledger to skip settled checks (Rule 21). Record a
+`FAIL` too. On a re-dispatch, mint the fresh nonce and `open` it; the old ledger needs no
+clearing. After Check 15, run `gate-checkpoint.sh --nonce <gate_nonce> close`.
 Adopt the adjudicator's per-check verdicts through the terminal **Check 26** (fail-closed).
 A verdict is valid ONLY for the dispatch that produced it. If you re-dispatch — because
 state moved, or the prior verdict cited state that has since changed — generate a fresh

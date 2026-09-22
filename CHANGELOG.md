@@ -15,6 +15,98 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.619.0] - 2026-09-22
+
+### A gate cut by a compaction now RESUMES from its recorded verdicts, and the sliced load of `gate-validation.md` is emitted by a program instead of derived by hand
+
+The reference consumer ran one planning gate four times across four compactions and wrote no gate
+log. Measured against its transcript: the four windows re-read **3.2x** the 179,506-byte gate file
+(9,353 line-reads, one window covering 100% of it), no single Read exceeded 100 KB, and the
+redundancy was entirely CROSS-window — each recovery restarted near line 1 over ground the prior
+window had already covered. Two defects in core produced that shape, and neither was the file's size.
+
+**The gate had no durable record before its own terminal write.** The first thing a gate writes to
+disk is Check 12's gate-log append, and the manifest orders Check 12 after 1, 2, 2a, 3, 4 and 7.
+Every verdict before it — the script arms and every lead evaluation — existed only in the
+conversation, so a compaction discarded all of it and the recovery protocol re-armed the identical
+work. Confirmed from the consumer's disk: `gate-log.md` with no row for that sprint,
+`gate-metrics.jsonl` stopping at the previous sprint, no adjudication verdict written.
+
+**Slicing had no mechanism.** Rule 21 carves `gate-validation.md` out as sliced-loading — the
+`GATE_MANIFEST` universal row plus the declared type's row — and
+`docs/v0.24.0-gate-validation-slicing-spec.md:399` records the design as *"no behavior flag; the
+manifest + H1 are the mechanism."* Nothing emitted the slice; the lead resolved 28 check ids by
+hand against a table it had to read the file to see. Across 256 consumer transcripts that file was
+Read 558 times, 541 of them hand-bounded — leads working around the contract rather than following
+it. And the permission to slice was unreachable after a compaction: Rule 21's carve-out and Rule
+23(b) both sit past the 20,121-byte re-attach cut, the rendered digest carried zero mentions of
+`GATE_MANIFEST`, 23(b) reached only a Rule 22 pause-point resume (a compaction is not one), and the
+injected recovery block said "in full" five times and "offset" never. A compacted lead holding
+only the block and the digest was told, compliantly, to read the whole file.
+
+#### Shipped
+
+- **`core/scripts/gate-slice.sh`** — resolves the RENDERED manifest (core's table, or the
+  `overrides/` entry shadowing it, plus every `extensions/checks/` entry declaring `gate_types:`,
+  the same layer resolution `validate-gate-manifest.sh` performs) and emits one
+  `offset<TAB>limit<TAB>checks` row per contiguous required span. Planning: 8 rows, 117,247 of
+  178,616 bytes. `--done ID,..` omits checks already verdicted. It emits a PLAN and never the
+  text: Rule 23(c) and `ai-dlc-protect.sh` forbid routing a verbatim-load file through Bash, and
+  the lead still issues native `Read` calls, so Rule 21's attention interrupt is intact. Exit 2 —
+  never a shorter plan — on an unknown type, on `universal`, on no manifest, and on a required id
+  with no anchor, because that last is H1's FAIL condition and a silently narrower plan would move
+  the failure one step later and blame the loader. A consumer extension's checks are reported as a
+  separate load; a span into this file cannot address another. Self-probe in four directions,
+  run before the corpus — the fourth asserts the preamble is planned, added after the
+  adversary's mutant that dropped it survived the first three.
+- **`core/scripts/gate-checkpoint.sh`** — a per-check verdict ledger at
+  `_bmad-output/.gate-checkpoint/<gate_nonce>.tsv`. `record <id> <PASS|FAIL|SKIP|PENDING>`
+  (closed vocabulary; a verdictless row is refused as a record of intent), `done` (PASS and SKIP
+  only — a FAIL routes to Gate Failure, which must re-read the check it failed, and a PENDING is
+  unfinished), `list`, `clear`, and `current`, which names the newest ledger for a resume that lost
+  the nonce to the compaction. Keyed on the nonce, so a re-dispatch mints a fresh one and reads an
+  empty ledger by construction: no verdict can cross a dispatch. Nine probe directions.
+- **Rule 21 and Rule 23(b)** name both scripts; the sliced Read is the compliant Read, and 23(b)
+  now reaches a post-compaction resume explicitly. Rule 21's FIRST paragraph carries it, which is
+  the paragraph the digest selector keeps. `steps/gate-validation.md`'s loader contract and gate
+  entry sequence say to emit the plan and to record every verdict the moment it is reached.
+- **`core/hooks/ai-dlc-recover.sh`** — the injected block gains a section that runs
+  `gate-checkpoint.sh current` and, when a ledger exists, names the nonce and the exact `--done`
+  invocation. Measured with a ledger: 9,805 chars, under the 10,000 harness ceiling, `degraded=no`.
+- **`steps/carry-over-evaluation.md` §7** runs auto-handoff evaluation at `Seam B` before its
+  gate, in `requirements.md`'s form. Of the step files that invoke a gate, this one declared no
+  seam — and `_gate-procedures.md` forbids auto-handoff inside the gate sequence, so once inside
+  there was by rule no exit. The context sensor fired RED four times in that session with nowhere
+  to land.
+- `.gate-checkpoint` is classified transient in `pipeline-state-paths.json`; I95 fires on its
+  removal (rc 1 without, 0 with).
+- **`core/fixtures/gate-resume/`** ships: 41 assertions — the required set for all five types
+  parsed independently from the manifest and compared, span coverage of every required check,
+  `--done` narrowing and its WARN, open/close/current and the PASS/SKIP asymmetry, six refusals
+  at rc 2, the recovery hook driven end to end under the 10,000-char cliff with a no-ledger
+  control, byte-identical plans across both layouts, and cwd invariance. Six mutants, all
+  killed. With the subject absent — a consumer one pull behind — it reports 17 SKIPs and zero
+  `ok`.
+
+#### Measured and NOT in this release
+
+**`ai-dlc-recover-gate.sh` denied nothing across ~190 consumer transcripts** while 5 of 10
+post-compaction first calls in the looping session were non-mandated. The hook is correct when
+driven with the consumer's real marker state (deny reproduced). `ai-dlc-postcompact.sh:76` deletes
+the marker the gate arms on, and the two sit on different events (`PostCompact` against
+`SessionStart:compact`). Separate release; the fixture that would have caught it seeds the marker
+itself and so cannot see contention between two hooks.
+
+**The context sensor's warnings were unactionable, not absent.** It fired six times in the looping
+session. `THROTTLE_BYTES=524288` allowed ONE `PostToolBatch` sample per window once the gate's own
+reads drove transcript growth (765–885 KB per window) past the throttle at the rate the window
+exhausted; three of the four gate windows got no fire at all and two got their last warning with
+zero turns remaining. Separate release.
+
+Slicing alone was measured and is insufficient: a fresh planning plan is still 66% of the file.
+What terminates the loop is the checkpoint narrowing each resume — 66% → 59% → 37% as checks
+settle — so the work of one window survives into the next.
+
 ## [0.618.0] - 2026-09-21
 
 ### BL-286 — a `verify: manual` under a label that is not an entry id reported HAND-REVIEW, whose own disposition is an instruction to go and read something the row cannot name

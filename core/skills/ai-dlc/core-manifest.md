@@ -261,6 +261,7 @@ core_manifest:
   - fixtures/pause-hook-origin/**
   - fixtures/pause-question-in-prose/**
   - fixtures/postcompact-rulebook-recovery/**
+  - fixtures/gate-resume/**
   - fixtures/fanout-payload-channel/**
   - fixtures/fanout-untracked-corpus/**
   - fixtures/preclassify-mode-bucket/**

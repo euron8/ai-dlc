@@ -169,6 +169,12 @@ argv_for() {
     validate-escalation-status-vocabulary.sh) printf '%s' "$WORK/docs/pending.md" ;;
     validate-suppression-lifetime.sh) printf '%s' "--escalations $WORK/docs/pending.md" ;;
     validate-h2-attestation.sh)     printf '%s' "--digest" ;;
+    # `current` prints nothing from every root when no ledger exists, which is byte-identical
+    # and scores the resolver INERT. `list` on a nonce that the seed does not carry is the
+    # same. `record` WRITES under the resolved root, and its stderr names the nonce it wrote
+    # at -- the file lands in one tree or the other, so the run is not the same either way.
+    gate-checkpoint.sh)             printf '%s' "--nonce probe-19700101T000000Z record 1 PASS" ;;
+    gate-slice.sh)                  printf '%s' "--type planning" ;;
     # A bare run stops at "no mode given", which is byte-identical from every root and
     # scores the resolver INERT — the agreement assertion above then holds for a script
     # nobody asked a root-dependent question of. `--scan-roots` is the cheapest mode that

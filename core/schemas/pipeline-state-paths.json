@@ -236,6 +236,13 @@
       "reason": "Per-gate adjudication verdicts. Committed evidence a later gate reads."
     },
     {
+      "name": ".gate-checkpoint",
+      "transient": true,
+      "producer": "core/scripts/gate-checkpoint.sh",
+      "ignore": "_bmad-output/.gate-checkpoint/",
+      "reason": "Per-check verdict ledger for ONE gate dispatch, keyed on gate_nonce, so a gate interrupted by a compaction resumes instead of re-running every check from zero. TRANSIENT and not the gate log: gate-log.md above is the durable audit trail Check 12 writes, and a ledger row records only that a check reached a verdict at this nonce. It cannot outlive its dispatch by construction -- a re-dispatch mints a fresh nonce and reads an empty ledger -- so a tracked copy would tell a fresh checkout that checks were settled for a dispatch that no longer exists."
+    },
+    {
       "name": "gate-metrics.jsonl",
       "transient": false,
       "producer": "core/scripts/validate-snapshot-conservation.sh",

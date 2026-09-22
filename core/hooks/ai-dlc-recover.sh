@@ -355,6 +355,39 @@ SIDECAR_NOTE=""
 commit, working tree, sprint status, gate-log tail) is at
 \`${SIDECAR#"$PROJECT_DIR"/}\`. Read it only if the snapshot leaves a gap."
 
+# A gate in flight leaves a per-check ledger under .gate-checkpoint/; its newest file names
+# the live nonce. Resolved HERE so the injected block can say which nonce to resume rather
+# than telling the lead to go and look -- a lead that has to look reconstructs instead.
+# The checkpoint script is a sibling in scripts/ai-dlc/ on a consumer and core/scripts/
+# here; both are named, neither is derived from the other (I33).
+GATE_NONCE=""
+for _ckp in "${PROJECT_DIR}/scripts/ai-dlc/gate-checkpoint.sh" "${PROJECT_DIR}/core/scripts/gate-checkpoint.sh"; do
+  if [ -x "$_ckp" ]; then
+    GATE_NONCE="$(CLAUDE_PROJECT_DIR="$PROJECT_DIR" bash "$_ckp" current 2>/dev/null || true)"
+    break
+  fi
+done
+if [ -n "$GATE_NONCE" ]; then
+  GATE_RESUME="## The cut landed inside a gate -- RESUME it, do not restart it
+
+\`_bmad-output/.gate-checkpoint/OPEN\` names \`${GATE_NONCE}\`: that gate was in flight
+when this compaction cut and its \`gate_nonce\` is \`${GATE_NONCE}\`.
+When you reach that gate's \`gate-validation.md\` Read, take the SLICED plan and
+skip the checks already settled at this nonce:
+
+\`scripts/ai-dlc/gate-slice.sh --type <gate type> --done \"\$(scripts/ai-dlc/gate-checkpoint.sh --nonce ${GATE_NONCE} done)\"\`
+
+Issue one native \`Read\` per emitted row. Every verdict you reach from here is
+recorded at the same nonce (\`gate-checkpoint.sh --nonce ${GATE_NONCE} record <id> <verdict>\`).
+Mint a fresh nonce ONLY if you re-dispatch the adjudicator."
+else
+  # No ledger, no gate in flight: the section is omitted whole. Rule 21 already carries the
+  # slicing instruction for the next gate the lead reaches, and the block is at its byte
+  # ceiling on the no-step-file branch -- a sentence here about a gate that does not exist
+  # costs the directive above it.
+  GATE_RESUME=""
+fi
+
 build() { # build <include_position:yes|no>
 cat <<EOF
 # AI/DLC POST-COMPACT RECOVERY (injected by .claude/hooks/ai-dlc-recover.sh)
@@ -389,6 +422,8 @@ A mandate that substitutes for your own possibly-wrong belief about your state
 cannot leave the skip decision to that same belief. The disclosure is what makes a
 real exception and a rationalized one different to an operator reading the
 transcript rather than identical.
+
+${GATE_RESUME}
 
 ## Most of your rulebook is not in your context
 
