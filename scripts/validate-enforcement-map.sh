@@ -11020,6 +11020,85 @@ EOF
   [ -z "$i113_extra" ] || err "I113: a FOURTH reader of the snapshot position field exists at:$i113_extra. Three copies are already the most this field can carry safely; a fourth written the pre-fix way takes whichever bullet came first and reproduces the coin-toss in a file no arm names. Add it to i113_declared here in the same change, carrying all four canonical strings, or route it through one of the three."
 fi
 
+# --- I114: a shipped skill's frontmatter sets nothing on the session that invokes it ---
+#
+# WHAT IT BINDS. A skill runs INSIDE the lead session, so any frontmatter key the harness
+# applies at invocation -- `effort`, `model`, `allowed-tools` -- overrides a setting the
+# operator chose with `/effort`, `/model` or `effortLevel`/`modelSettings`, silently and for
+# the whole turn. Operator ruling: ai-dlc binds SUBAGENTS (`aiDlcRoles`, rendered into
+# `.claude/agents/<role>.md` by render-agent-definitions.sh) and never the lead.
+#
+# THE MEASURED FAILURE. All three skills shipped an `effort:` pin. In a consumer session the
+# operator ran `/effort medium` and then `/ai-dlc resume`, and every one of the turn's 74
+# replies recorded `effort: high`, with no warning. Nothing read the pin -- no validator, no
+# fixture -- so removing it broke nothing, and nothing stopped it coming back either.
+#
+# AN ALLOWLIST, NOT A DENYLIST. A denylist of today's three lead-binding keys scores a key the
+# harness adds next release as clean. Every key outside the allowlist fails, and the remedy
+# says which way to resolve it: a lead-session setting is removed, and a purely descriptive
+# key is added to `i114_allowed` below.
+#
+# THE POPULATION IS DERIVED: every `core/skills/*/SKILL.md`, globbed from the repo root. A
+# glob matching nothing must not report success, so an empty population fails, and the
+# orchestrator's own SKILL.md is asserted present so a moved skills directory cannot turn
+# this arm into a pass over zero files.
+#
+# ONLY THE FRONTMATTER IS READ. The parser reads top-level keys between the opening `---` and
+# the next one, and nothing after. A body line reading `effort: high`, like the one this
+# release's CHANGELOG entry quotes, is prose and not a setting.
+#
+# FALSE-POSITIVE SET, MEASURED BEFORE THIS SHIPPED, on the release tree: 3 files, 6 keys, all
+# `name` or `description`, FP set EMPTY. At the parent commit the same run reports exactly the
+# 3 `effort:` lines this release deletes and nothing else. Cost: one awk over three files.
+i114_allowed=' name description argument-hint disable-model-invocation user-invocable '
+i114_keys_in() {  # <file>... -> "file<TAB>key" for every top-level frontmatter key
+  awk 'FNR==1 { inf=0; done=0 }
+       done { next }
+       FNR==1 && /^---[[:space:]]*$/ { inf=1; next }
+       inf && /^---[[:space:]]*$/ { done=1; next }
+       inf && /^[A-Za-z][A-Za-z0-9_-]*:/ { k=$0; sub(/:.*/,"",k); print FILENAME "\t" k }' "$@" 2>/dev/null
+}
+i114_offenders() {  # <file>... -> " file[key]" for every key outside the allowlist
+  i114_out=''
+  while IFS="$(printf '\t')" read -r i114_f i114_k; do
+    [ -n "$i114_k" ] || continue
+    case "$i114_allowed" in *" $i114_k "*) ;; *) i114_out="${i114_out} ${i114_f}[${i114_k}]" ;; esac
+  done <<EOF_I114
+$(i114_keys_in "$@")
+EOF_I114
+  printf '%s' "$i114_out"
+}
+# SELF-PROBE FIRST, BOTH DIRECTIONS, under mktemp. The offender seed must be reported; the
+# near-miss (allowed keys only, a `model:` token inside the description, and an `effort:` line
+# in the BODY) must not be -- that seed is exactly the shape of the corrected tree.
+i114_probe="$(mktemp -d 2>/dev/null)"
+if [ -z "$i114_probe" ] || [ ! -d "$i114_probe" ]; then
+  err "I114 could not create its probe directory, so its self-probe did not run. A scan whose probe did not fire reports a clean corpus it never read; this fails instead."
+else
+  printf -- '---\nname: x\ndescription: y\neffort: high\n---\nbody\n' > "$i114_probe/offender.md"
+  printf -- '---\nname: x\ndescription: "pick a model: any"\n---\n\neffort: high\nmodel: opus\n' > "$i114_probe/nearmiss.md"
+  i114_po="$(i114_offenders "$i114_probe/offender.md")"
+  i114_pn="$(i114_offenders "$i114_probe/nearmiss.md")"
+  if [ "$i114_po" != " $i114_probe/offender.md[effort]" ]; then
+    err "I114 SELF-PROBE FAILED: a seeded SKILL.md carrying \`effort: high\` in its frontmatter yielded '${i114_po}' rather than one [effort] finding. The parser cannot see the key it exists to refuse, so a clean corpus below would be a floor of unknown depth."
+  elif [ -n "$i114_pn" ]; then
+    err "I114 SELF-PROBE FAILED: the near-miss seed (allowed keys only, a \`model:\` token inside the description, \`effort:\`/\`model:\` lines in the BODY) was reported as '${i114_pn}'. The parser reads past the closing fence or inside a value, so its findings would be noise."
+  else
+    # Relative paths, from a subshell at the root, so a finding names `core/skills/<x>/SKILL.md`
+    # and never an absolute path that varies by checkout.
+    i114_n="$(cd "$REPO_ROOT" 2>/dev/null && set -- core/skills/*/SKILL.md && { [ -f "$1" ] && echo "$#" || echo 0; })"
+    if [ "${i114_n:-0}" -eq 0 ] || [ ! -f "$REPO_ROOT/core/skills/ai-dlc/SKILL.md" ]; then
+      err "I114 found ${i114_n:-0} core/skills/*/SKILL.md file(s), and core/skills/ai-dlc/SKILL.md is not among them. The orchestrator skill is a permanent member of this population, so the glob no longer reaches the skills -- the zero is a broken scan, not a clean one."
+    else
+      i114_bad="$(cd "$REPO_ROOT" 2>/dev/null && i114_offenders core/skills/*/SKILL.md)"
+      if [ -n "$i114_bad" ]; then
+        err "I114: a shipped skill's frontmatter sets a key outside the allowlist (${i114_allowed# }):${i114_bad}. A skill runs inside the lead session, and a key the harness applies at invocation (effort, model, allowed-tools, ...) silently overrides what the operator set with /effort, /model or settings, for the whole turn. ai-dlc binds subagents through aiDlcRoles and never the lead. If the key sets anything on the session, remove it. If it is purely descriptive, add it to i114_allowed in this arm, with the reason."
+      fi
+    fi
+  fi
+  rm -rf "$i114_probe" 2>/dev/null || true
+fi
+
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"

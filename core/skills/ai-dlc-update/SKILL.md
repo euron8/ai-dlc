@@ -1,7 +1,6 @@
 ---
 name: ai-dlc-update
 description: "Reconcile upstream AI/DLC distribution changes into a diverged consumer project via a base-aware semantic three-way merge (the distribution→consumer pull path). Run bare for a dry-run report, or with `apply` to reconcile after review. Prefix either with a distribution ref (`<ref>`, `<ref> apply`) to stop short of upstream HEAD — needed when the self-update gate reports SELF-UPDATE-DEFER and names a SELF-UPDATE-SAFE-STOP ref, because a deferred machinery slice lands after the classify that would have used it. Run with `untangle` (or `untangle apply`) for the one-time Phase-2 core/extensions/overrides migration on a still-tangled consumer. Use when the user says \"ai-dlc-update\", \"pull upstream\", \"update ai-dlc\", \"reconcile with distribution\", or \"untangle\"."
-effort: high
 ---
 
 # AI/DLC Update — the distribution→consumer pull path

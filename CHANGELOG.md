@@ -15,6 +15,43 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.623.0] - 2026-09-22
+
+### The skills no longer set the lead session's effort, and I114 keeps it that way
+
+All three skills pinned an effort level in their frontmatter: `ai-dlc` and `ai-dlc-update` at
+`high`, `ai-dlc-setup` at `medium`. A skill runs inside the lead session, so the pin overrode
+whatever the operator had set with `/effort` or `effortLevel`/`modelSettings`, silently, for
+the whole invoking turn. Measured on a consumer session: `/effort medium` followed by
+`/ai-dlc resume` gave 74 replies, every one recorded at `high`. `ai-dlc-update` also re-invokes
+itself through the Skill tool after a self-update, which is a path that could raise the
+session back up mid-run.
+
+Operator ruling: ai-dlc binds subagents and never the lead. Subagent effort is unchanged. It
+still comes from `aiDlcRoles` and is rendered into `.claude/agents/<role>.md`.
+
+#### Shipped
+
+- Removed the `effort:` line from all three `SKILL.md` frontmatters. The lead now runs at
+  whatever the operator configured. **A consumer that relied on the pin for a `high` lead now
+  gets its own setting instead, so set `/effort high` or `effortLevel` if that is wanted.**
+- `core/skills/ai-dlc/SKILL.md` prerequisite 2 and `templates/QUICKSTART.md.template` now say
+  that the lead's settings belong to the operator, where they used to describe the pin.
+- **I114** in `scripts/validate-enforcement-map.sh`: every `core/skills/*/SKILL.md` frontmatter
+  key must be on a descriptive allowlist (`name`, `description`, `argument-hint`,
+  `disable-model-invocation`, `user-invocable`). It is an allowlist rather than a denylist, so a
+  lead-binding key the harness adds later fails by default. The self-probe runs in both
+  directions: a seeded `effort:` key is reported, and body-level `effort:`/`model:` lines are
+  not. Run against the parent commit, the arm reports exactly the three pins this release
+  removes. On this tree it is clean. Validator cost, measured over 3 interleaved reps in
+  matched worktrees: 17.63–17.71s before and 17.78–18.04s after.
+
+#### Delivery note
+
+A consumer receives this through `ai-dlc-update`, and the copy running that update is still
+the old one, so the update that delivers the change runs at `high`. Every later invocation
+respects the operator's setting.
+
 ## [0.622.0] - 2026-09-22
 
 ### The "green gate, exit 141, ref not on origin" push failure has a cause, and it is an operator dotfile
