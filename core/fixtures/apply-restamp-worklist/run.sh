@@ -1966,6 +1966,316 @@ fi
 fi  # ---- end of the BL-S0 subject probe -------------------------------------------------------
 fi  # ---- end of the BL-276 block ------------------------------------------------------------
 
+# ==============================================================================================
+# BL-292 -- hook_registration_row() READS BOTH OF THE VALIDATOR'S FAILURE LISTS
+# ==============================================================================================
+#
+# THE DEFECT. `validate-hook-registration.sh` prints two failure lists in two shapes: UNREGISTERED
+# names carry a `.claude/hooks/` prefix, DANGLING names (registered, no file on disk) are printed
+# BARE. The row parsed the prefix alone, so a tree whose only failure was a dangling registration
+# exited 1 with nothing parsed and the function emitted NO row -- on `--finish` too, where it is
+# the check that is meant to verify the finished tree. A `.claude/settings.json` holding `[]` was
+# silent the same way: python raised, the validator exited 1 with no list, and the rc-1 arm keyed
+# on names emitted nothing.
+#
+# WHY THE REAL VALIDATOR, AND NOT THE `exit 0` STUB C4/C8 USE. Every arm here is about the SHAPE
+# of that program's output, so a stub would be a second implementation of the grammar the fix
+# parses -- a seed derived from the reader's accept-set. Each world copies the shipped validator
+# and `settings-merge.sh` (whose jq source the validator reads its ownership pattern out of) into
+# a consumer built by `mk_consumer`, then seeds hook files and registrations.
+#
+# DRIVEN THROUGH `--finish`, ALWAYS. `hook_registration_row` is the same function in both modes;
+# `--finish` skips the resolution phases, so a world costs one fork of apply.sh that reaches the
+# row cheaply, and it is the mode where the row's COUNTER decides the stamp -- which is what (e)
+# reads off the tree. The ordinary run calls the identical function after `write_stamp`.
+#
+# THE ARMS, EACH PRESENCE-SHAPED (a row naming the hook must APPEAR):
+#   (a) dangling-only                -> ONE `WORKLIST settings-merge` whose DANGLING list is
+#                                       exactly the dangling hook. The validator follows that
+#                                       list with its paste-able FIX block, whose first line is
+#                                       indented like a list member (`    d="$(mktemp -d)" \`);
+#                                       an exact list is what shows that line was not read as a
+#                                       name.
+#   (b) unregistered + dangling      -> the one settings-merge row names BOTH.
+#   (c) dangling, registered ONLY in settings.local.json
+#                                    -> `WORKLIST settings-local-dangling`, subject
+#                                       `.claude/settings.local.json`, and NO settings-merge row:
+#                                       settings-merge.sh never touches that file.
+#   (d) settings.json is `[]`        -> `DECISION hook-registration-unparsed`, and --finish still
+#                                       stamps over it (a DECISION does not raise worklist_n).
+#   (e) --finish over (a)'s tree     -> the stamp is WITHHELD on the tree: version stays 1.0.0,
+#                                       `.ai-dlc-applying` stays, `DECISION restamp-withheld`.
+#   (f) near-misses. A clean tree draws no hook-registration row and stamps. A tree whose
+#       settings.local.json registers a LIVE hook (file present, so the validator lists it under
+#       its NOTE, in the same bare shape as a DANGLING name) must not have that hook named in
+#       either WORKLIST row -- the NOTE list is not a failure list.
+#
+# MUTANTS: M-a (DANGLING parse removed), M-c (local-only split removed), M-d (unparsed DECISION
+# removed). R4 -- the "first non-4-space line ends the block" stop removed alone -- is NOT scored:
+# against today's validator the NOTE header IS that first line, so the NOTE-mode switch covers
+# the stop and the stop covers the switch; removing either alone changes no row. That is recorded
+# in apply.sh beside the parse; a seed that separates them needs a validator section that does
+# not exist yet.
+HR_VAL_SRC=""
+for cand in "$ROOT/core/scripts/validate-hook-registration.sh" "$ROOT/scripts/ai-dlc/validate-hook-registration.sh"; do
+  [ -f "$cand" ] && HR_VAL_SRC="$cand" && break
+done
+HR_SKIP=""
+if [ -z "$HR_VAL_SRC" ] || [ ! -f "$REC/settings-merge.sh" ]; then
+  HR_SKIP="the hook-registration validator or reconcile/settings-merge.sh is not on this tree (validator='${HR_VAL_SRC:-<none>}')"
+elif ! command -v python3 >/dev/null 2>&1; then
+  HR_SKIP="python3 is not on PATH, so the real validator cannot run and every world would read as unparsed"
+fi
+
+# hr_json <names> -> a settings document registering ai-dlc-hra-<name>.sh for each name
+hr_json() {
+  local n first=1
+  printf '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":['
+  for n in $1; do
+    [ "$first" = 1 ] || printf ','
+    first=0
+    printf '{"type":"command","command":"bash \\"$CLAUDE_PROJECT_DIR\\"/.claude/hooks/ai-dlc-hra-%s.sh"}' "$n"
+  done
+  printf ']}]}}\n'
+}
+# hr_world <kind> -> prints a FRESH consumer dir. Every world is defined whole: its own mktemp
+# directory, so nothing a previous world wrote can leak into the next one's shape.
+hr_world() {
+  local c on="alpha beta" main="alpha beta" loc="" h
+  c="$(mktemp -d "$WORK/hr.XXXXXX")" || return 1
+  mk_consumer "$c" green || return 1
+  cp "$HR_VAL_SRC" "$c/scripts/ai-dlc/validate-hook-registration.sh" || return 1
+  chmod +x "$c/scripts/ai-dlc/validate-hook-registration.sh"
+  mkdir -p "$c/.claude/hooks" "$c/.claude/skills/ai-dlc-update/reconcile" || return 1
+  cp "$REC/settings-merge.sh" "$c/.claude/skills/ai-dlc-update/reconcile/" || return 1
+  printf 'base: %s\ntheirs: %s\n' "$BASE" "$THEIRS" > "$c/.claude/.ai-dlc-applying"
+  case "$1" in
+    clean)     : ;;
+    unreg)     main="beta" ;;
+    dangling)  on="alpha" ;;
+    both)      on="alpha"; main="beta" ;;
+    localdg)   loc="ghost" ;;
+    livelocal) on="alpha"; main="beta"; loc="alpha" ;;
+    emptyarr)  : ;;
+    *)         return 1 ;;
+  esac
+  for h in $on; do
+    printf '#!/usr/bin/env bash\n# hra %s: a synthetic hook seeded by apply-restamp-worklist\nexit 0\n' "$h" \
+      > "$c/.claude/hooks/ai-dlc-hra-$h.sh"
+  done
+  if [ "$1" = emptyarr ]; then printf '[]\n' > "$c/.claude/settings.json"
+  else hr_json "$main" > "$c/.claude/settings.json"; fi
+  [ -n "$loc" ] && hr_json "$loc" > "$c/.claude/settings.local.json"
+  printf '%s' "$c"
+}
+# hr_drive <apply.sh> <kind> -> prints the consumer dir; the rows land in <dir>/.hr-rows. A FILE,
+# because every caller reads this through `$( )` and an assignment there is lost to the subshell.
+hr_drive() {
+  local c
+  c="$(hr_world "$2")" || { printf 'BROKEN'; return; }
+  bash "$1" --finish "$DIST" "$BASE" "$c" "$THEIRS" > "$c/.hr-rows" 2>/dev/null
+  printf '%s' "$c"
+}
+hr_n()   { awk -F'\t' -v a="$2" -v b="$3" '$1==a && $2==b {n++} END {print n+0}' "$1/.hr-rows" 2>/dev/null || echo 0; }
+hr_det() { awk -F'\t' -v a="$2" -v b="$3" '$1==a && $2==b {print $4; exit}' "$1/.hr-rows" 2>/dev/null; }
+hr_sub() { awk -F'\t' -v a="$2" -v b="$3" '$1==a && $2==b {print $3; exit}' "$1/.hr-rows" 2>/dev/null; }
+# The DANGLING list the settings-merge row prints, verbatim, between its label and the dash.
+hr_dlist() {
+  awk -v s="$(hr_det "$1" WORKLIST settings-merge)" 'BEGIN {
+    i = index(s, "(DANGLING): "); if (i == 0) { print "<none>"; exit }
+    r = substr(s, i + 12); j = index(r, "\342\200\224 "); if (j == 0) { print "<unterminated>"; exit }
+    print substr(r, 1, j - 1) }'
+}
+# The rows whose presence each arm keys on. Anything else in the manifest is someone else's arm.
+hr_any() {
+  echo $(( $(hr_n "$1" WORKLIST settings-merge) + $(hr_n "$1" WORKLIST settings-local-dangling) \
+         + $(hr_n "$1" DECISION hook-registration-unparsed) + $(hr_n "$1" DECISION hook-registration-unreadable) \
+         + $(hr_n "$1" DECISION hook-registration-unchecked) ))
+}
+
+hr_arm_a() { # dangling-only
+  [ "$(hr_n "$1" WORKLIST settings-merge)" = 1 ] && [ "$(hr_dlist "$1")" = "ai-dlc-hra-beta.sh " ]
+}
+hr_arm_b() { # unregistered + dangling
+  local d; d="$(hr_det "$1" WORKLIST settings-merge)"
+  [ "$(hr_n "$1" WORKLIST settings-merge)" = 1 ] && [ "$(hr_dlist "$1")" = "ai-dlc-hra-beta.sh " ] \
+    && case "$d" in *"UNREGISTERED after this apply: ai-dlc-hra-alpha.sh "*) true ;; *) false ;; esac
+}
+hr_arm_c() { # local-only dangling
+  [ "$(hr_n "$1" WORKLIST settings-local-dangling)" = 1 ] \
+    && [ "$(hr_sub "$1" WORKLIST settings-local-dangling)" = ".claude/settings.local.json" ] \
+    && case "$(hr_det "$1" WORKLIST settings-local-dangling)" in *"(DANGLING): ai-dlc-hra-ghost.sh "*) true ;; *) false ;; esac \
+    && [ "$(hr_n "$1" WORKLIST settings-merge)" = 0 ]
+}
+hr_arm_d() { # settings.json is []
+  [ "$(hr_n "$1" DECISION hook-registration-unparsed)" = 1 ] && [ "$(hr_n "$1" WORKLIST settings-merge)" = 0 ]
+}
+hr_arm_e() { # --finish over the dangling-only tree withholds, read off the TREE
+  [ "$(stamp_ver "$1")" = "1.0.0" ] && [ "$(marker "$1")" = PRESENT ] && [ "$(hr_n "$1" DECISION restamp-withheld)" -ge 1 ]
+}
+hr_arm_f() { # <clean-dir> <livelocal-dir>
+  local d m l
+  [ "$(hr_any "$1")" = 0 ] && [ "$(stamp_ver "$1")" = "$THEIRS_VER" ] || return 1
+  # POSITIVE CONJUNCT: some hook-registration row exists, so the absence below is about a run
+  # that reached the row and not about one that emitted nothing.
+  [ "$(hr_any "$2")" -ge 1 ] || return 1
+  m="$(hr_det "$2" WORKLIST settings-merge)"; l="$(hr_det "$2" WORKLIST settings-local-dangling)"
+  case "$m$l" in *ai-dlc-hra-alpha.sh*) return 1 ;; esac
+  return 0
+}
+# hr_vec <apply.sh> -> "a b c d e f" as 1 (holds) / 0 (fails). All six worlds are driven for every
+# subject, so a mutant is scored on every arm and a two-arm kill cannot hide.
+hr_vec() {
+  local A="$1" cd cb cl ce cc cv v=""
+  cd="$(hr_drive "$A" dangling)"; cb="$(hr_drive "$A" both)"; cl="$(hr_drive "$A" localdg)"
+  ce="$(hr_drive "$A" emptyarr)"; cc="$(hr_drive "$A" clean)"; cv="$(hr_drive "$A" livelocal)"
+  for x in "$cd" "$cb" "$cl" "$ce" "$cc" "$cv"; do [ -d "$x" ] || { printf 'BROKEN'; return; }; done
+  hr_arm_a "$cd" && v="${v}1" || v="${v}0"
+  hr_arm_b "$cb" && v="$v 1" || v="$v 0"
+  hr_arm_c "$cl" && v="$v 1" || v="$v 0"
+  hr_arm_d "$ce" && v="$v 1" || v="$v 0"
+  hr_arm_e "$cd" && v="$v 1" || v="$v 0"
+  hr_arm_f "$cc" "$cv" && v="$v 1" || v="$v 0"
+  printf '%s' "$v"
+}
+
+if [ -n "$HR_SKIP" ]; then
+  if [ "$IS_DIST" = 1 ]; then
+    bad "HR setup: $HR_SKIP — HARD in the distribution, every BL-292 arm would be unreadable"
+  else
+    printf '  SKIP  %s\n' "HR-a..HR-f and HR-M-a/c/d — $HR_SKIP"
+  fi
+else
+# --- HR-S0 SUBJECT PROBE: the pre-fix program is SILENT on a dangling-only tree ----------------
+# That silence is the defect, so it is also the probe: an apply.sh with no hook-registration row
+# of any kind over this tree predates BL-292. A consumer can receive this fixture a pull ahead of
+# the apply.sh it tests; in the DISTRIBUTION the subject is always present, so absence is hard.
+HR_PROBE="$(hr_drive "$APPLY" dangling)"
+HR_PRESENT=1
+if [ ! -d "$HR_PROBE" ]; then
+  bad "HR-S0 setup: could not build the dangling-only consumer"; HR_PRESENT=0
+elif [ "$(bash "$HR_PROBE/scripts/ai-dlc/validate-hook-registration.sh" --root "$HR_PROBE" >/dev/null 2>&1; echo $?)" != 1 ]; then
+  bad "HR-S0 setup: the real validator does not exit 1 on the dangling-only world, so no arm below is scoring the shape BL-292 is about"; HR_PRESENT=0
+elif [ "$(hr_any "$HR_PROBE")" = 0 ]; then
+  HR_PRESENT=0
+  if [ "$IS_DIST" = 1 ]; then
+    bad "HR-S0 the resolved apply.sh ($APPLY) emitted NO hook-registration row over a tree whose validator exits 1 on a dangling registration — the BL-292 parse is absent. HARD in the distribution."
+  else
+    printf '  SKIP  %s\n' "HR-a..HR-f — the installed apply.sh predates the BL-292 DANGLING parse; it lands with a later pull than this fixture"
+  fi
+else
+  ok "HR-S0 the real validator exits 1 on the dangling-only world and the resolved apply.sh answers it with a hook-registration row, so the arms below score a subject that is present"
+fi
+
+if [ "$HR_PRESENT" = 1 ]; then
+HR_D="$HR_PROBE"
+HR_B="$(hr_drive "$APPLY" both)"; HR_L="$(hr_drive "$APPLY" localdg)"; HR_E="$(hr_drive "$APPLY" emptyarr)"
+HR_C="$(hr_drive "$APPLY" clean)"; HR_V="$(hr_drive "$APPLY" livelocal)"
+
+if hr_arm_a "$HR_D"; then
+  ok "HR-a a dangling-only tree draws ONE WORKLIST settings-merge row whose DANGLING list is exactly ai-dlc-hra-beta.sh — and not the validator's FIX line that follows the list at the same indent"
+else
+  bad "HR-a the dangling-only tree drew settings-merge=$(hr_n "$HR_D" WORKLIST settings-merge) with DANGLING list '$(hr_dlist "$HR_D")', not one row listing exactly 'ai-dlc-hra-beta.sh ' — a registration Claude Code cannot run is not reaching the worklist (other rows: unparsed=$(hr_n "$HR_D" DECISION hook-registration-unparsed))"
+fi
+if hr_arm_b "$HR_B"; then
+  ok "HR-b an unregistered hook AND a dangling one share the ONE settings-merge row, and it names both (alpha UNREGISTERED, beta DANGLING) — one merge clears both"
+else
+  bad "HR-b the unregistered+dangling tree drew settings-merge=$(hr_n "$HR_B" WORKLIST settings-merge), DANGLING list '$(hr_dlist "$HR_B")' — the row does not name both hooks"
+fi
+if hr_arm_c "$HR_L"; then
+  ok "HR-c a dangling hook registered ONLY in settings.local.json draws WORKLIST settings-local-dangling on .claude/settings.local.json naming ai-dlc-hra-ghost.sh, and NO settings-merge row — that merge never touches the file"
+else
+  bad "HR-c the local-only dangling tree drew settings-local-dangling=$(hr_n "$HR_L" WORKLIST settings-local-dangling) (subject '$(hr_sub "$HR_L" WORKLIST settings-local-dangling)') and settings-merge=$(hr_n "$HR_L" WORKLIST settings-merge) — the operator is handed a remedy that cannot clear it, or none"
+fi
+if hr_arm_d "$HR_E"; then
+  ok "HR-d a settings.json holding [] draws DECISION hook-registration-unparsed — a non-zero exit that named nothing is not read as clean"
+else
+  bad "HR-d the [] tree drew unparsed=$(hr_n "$HR_E" DECISION hook-registration-unparsed), settings-merge=$(hr_n "$HR_E" WORKLIST settings-merge) — the validator failed without a list and the row said nothing"
+fi
+if [ "$(stamp_ver "$HR_E")" = "$THEIRS_VER" ] && [ "$(marker "$HR_E")" = GONE ]; then
+  ok "HR-d and --finish still stamps over that DECISION — it raises handback, not worklist_n, so a missing interpreter cannot wedge the finisher"
+else
+  bad "HR-d --finish withheld over DECISION hook-registration-unparsed (stamp '$(stamp_ver "$HR_E")', marker $(marker "$HR_E")) — the C8 wedge, reached through the new row"
+fi
+if hr_arm_e "$HR_D"; then
+  ok "HR-e --finish over the dangling-only tree WITHHOLDS on the tree: version 1.0.0, .ai-dlc-applying present, DECISION restamp-withheld"
+else
+  bad "HR-e --finish over a dangling registration stamped (version '$(stamp_ver "$HR_D")', marker $(marker "$HR_D")) — the invocation meant to verify the finished tree passed a hook Claude Code cannot run"
+fi
+if hr_arm_f "$HR_C" "$HR_V"; then
+  ok "HR-f near-misses: a clean tree draws no hook-registration row and stamps $THEIRS_VER; a LIVE hook listed under the validator's settings.local.json NOTE is named in neither WORKLIST row, while that tree's real dangling hook still draws one"
+else
+  bad "HR-f a near-miss fired: clean rows=$(hr_any "$HR_C") stamp='$(stamp_ver "$HR_C")'; live-local tree rows=$(hr_any "$HR_V"), settings-merge detail names alpha: $(case "$(hr_det "$HR_V" WORKLIST settings-merge)$(hr_det "$HR_V" WORKLIST settings-local-dangling)" in *ai-dlc-hra-alpha.sh*) echo yes ;; *) echo no ;; esac)"
+fi
+
+# --- HR MUTANTS -------------------------------------------------------------------------------
+# Copies of the whole reconcile directory (`mut_apply`), `cmp -s`-guarded, each anchor asserted
+# UNIQUE before the edit so a respelled anchor reports DID NOT APPLY rather than a silent no-op.
+HR_WANT_CTL="1 1 1 1 1 1"
+hr_mut() { # hr_mut <dir> <anchor-literal> ; transform on stdin
+  local n; n="$(grep -cF -- "$2" "$REC/apply.sh")" || n=0
+  [ "$n" = 1 ] || { cat >/dev/null; return 1; }
+  mut_apply "$1"
+}
+if build_rec "$WORK/hr-ctl"; then
+  HRC_U="$(hr_drive "$WORK/hr-ctl/apply.sh" unreg)"
+  HRC_V="$(hr_vec "$WORK/hr-ctl/apply.sh")"
+  case "$(hr_det "$HRC_U" WORKLIST settings-merge)" in
+    *"UNREGISTERED after this apply: ai-dlc-hra-alpha.sh "*) HRC_UOK=1 ;;
+    *) HRC_UOK=0 ;;
+  esac
+  if [ "$HRC_UOK" = 1 ] && [ "$HRC_V" = "$HR_WANT_CTL" ]; then
+    ok "HR-CTL an unmutated copy emits the UNREGISTERED settings-merge row naming ai-dlc-hra-alpha.sh and scores every arm ($HRC_V), so a mutant's vector below is the mutation and not the copy"
+  else
+    bad "HR-CTL the unmutated copy did not reproduce the shipped behaviour (unregistered row=$HRC_UOK, vector='$HRC_V', want '$HR_WANT_CTL') — every HR mutant verdict below is unreadable"
+  fi
+else
+  bad "HR-CTL could not stage a copy of $REC — every HR mutant verdict below is unreadable"
+fi
+
+# hr_score <label> <dir> <want-vector> <what it removed>
+hr_score() {
+  local v; v="$(hr_vec "$2/apply.sh")"
+  if [ "$v" = "$3" ]; then
+    ok "$1 ($4): arm vector a..f = $v — killed exactly the arms it owns"
+  elif [ "$v" = "$HR_WANT_CTL" ]; then
+    bad "$1 SURVIVED ($4): every arm still holds ($v), so the arms it should kill are not testing that line"
+  else
+    bad "$1 ($4) scored $v, want $3 — it killed an arm it should not, or missed one it should, so the arms are entangled or one is vacuous"
+  fi
+}
+
+# M-a: the DANGLING parse removed. The D list is also the ONLY source of a local-only dangling
+# name (the split intersects it with the NOTE list), so (c) dies with (a)/(b)/(e) by construction:
+# there is no DANGLING-less input on which (c) could hold. A dangling-only tree then exits 1 with
+# nothing parsed, which the new rc!=0 branch reports as unparsed -- so (d) and (f) stay green.
+HR_MA='    index($0, "  DANGLING ") == 1 { m = "D"; next }'
+if awk -v a="$HR_MA" '$0 == a { next } { print }' "$REC/apply.sh" | hr_mut "$WORK/hr-ma" "$HR_MA"; then
+  hr_score "HR-M-a" "$WORK/hr-ma" "0 0 0 1 0 1" "the DANGLING block parse deleted"
+else
+  bad "HR-M-a DID NOT APPLY — the DANGLING parse line is no longer spelled \`$HR_MA\` exactly once in apply.sh; HR-a/b/e are unproven. Re-anchor it."
+fi
+
+# M-c: the local-only split removed -- the case subject is emptied, so no name ever matches the
+# NOTE list and every dangling name lands on the settings-merge row that cannot clear it.
+HR_MC='    case "$hr_local" in'
+if awk -v a="$HR_MC" '$0 == a { print "    case \"\" in"; next } { print }' "$REC/apply.sh" | hr_mut "$WORK/hr-mc" "$HR_MC"; then
+  hr_score "HR-M-c" "$WORK/hr-mc" "1 1 0 1 1 1" "the settings.local.json split deleted; local names go to settings-merge"
+else
+  bad "HR-M-c DID NOT APPLY — \`$HR_MC\` is not in apply.sh exactly once; HR-c is unproven. Re-anchor it."
+fi
+
+# M-d: the unparsed DECISION removed -- its branch made unreachable, leaving rc!=0-with-no-names
+# silent exactly as before the fix.
+HR_MD='  elif [ "$hr_rc" != "0" ]; then'
+if awk -v a="$HR_MD" '$0 == a { print "  elif false; then"; next } { print }' "$REC/apply.sh" | hr_mut "$WORK/hr-md" "$HR_MD"; then
+  hr_score "HR-M-d" "$WORK/hr-md" "1 1 1 0 1 1" "the hook-registration-unparsed branch made unreachable"
+else
+  bad "HR-M-d DID NOT APPLY — \`$HR_MD\` is not in apply.sh exactly once; HR-d is unproven. Re-anchor it."
+fi
+fi  # ---- end of HR_PRESENT
+fi  # ---- end of the BL-292 block
+
 echo
 if [ "$fails" -eq 0 ]; then
   echo "PASS  apply-restamp-worklist: a run that hands back a WORKLIST or a DECISION row leaves"
