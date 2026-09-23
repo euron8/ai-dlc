@@ -55,7 +55,7 @@ output whose SHAPE is the answer — exit codes, counts, `git status` — and fo
 Where a Bash result has to be exact, DERIVE it instead of reading it: `md5`, `wc -c`,
 `cmp -s`, `grep -c`.
 
-## Delegation hazards: seven ways a tool call lies about another agent
+## Delegation hazards: eight ways a tool call lies about another agent
 
 **A backgrounded `sleep` returns immediately**, so chained "waits" are rapid polling granting no
 wall clock. Measured: apparent ten-minute waits spanned one minute, four agents were called silent
@@ -95,6 +95,11 @@ copied as `to`; plain output is not visible to other agents. Measured: a full ad
 derived against the tree and written as prose, the peer blocked for an hour at ~97% of its
 window and had to chase it, and no error was raised because there is no failure arm on a send
 never made. A turn that opens with a `<cross-session-message>` does not end without one.
+
+**A LOAD GENERATOR IN A BRIEF OUTLIVES THE HAND.** Measured: a hand told to run `yes > /dev/null`
+"killed by pid" orphaned 36 of them to init for 38 minutes at load ~118 until the operator asked,
+voiding every timing on the box, and found no flake anyway. Never brief one. Force the suspected
+interleaving in a scratch copy instead — that is also the discriminating experiment.
 
 ## awk's `getline < file` reads an unopenable file as an empty one
 

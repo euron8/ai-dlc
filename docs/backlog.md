@@ -427,7 +427,52 @@ batch 114 — the population is "arms scored under pool contention", not any nam
 members across three arms, and **E1/E9 in the title remain an enumeration where the finding is a
 class.**
 
-verify: sh f=core/fixtures/reconcile-emit-report/run.sh; [ -f "$f" ] || exit 9; l=$(grep -n 'v_kill E1 ' "$f" | head -1 | cut -d: -f1); [ -n "$l" ] || exit 9; set=$(sed -n "${l}p" "$f" | sed -E 's/.*v_kill E1 "([^"]*)".*/\1/'); [ -n "$set" ] || exit 9; n=$(printf '%s' "$set" | wc -w | tr -d ' '); msg=$(sed -n "$((l+1))p" "$f"); grep -q 'three worlds' <<<"$msg" || exit 0; [ "$n" -eq 3 ] && exit 0; exit 1
+**A FIFTH MEASURED ARM AT BATCH 144, AND IT IS `E2`.** Filed by the consumer as
+`PC-S313-EMIT-REPORT-E2-IS-A-FOURTH-POOL-FLAKE-ARM` during its 0.623.0 → 0.624.0 self-update. Its id
+says fourth; counted against this entry it is the fifth, after E1, E8, E9 and E3. The consumer's
+pre-push under a **6-wide** pool failed `E2 moved the worlds [V-M V-HC] and had to move exactly
+[V-M]`. On the same tree, 3 standalone runs, 6 concurrent standalone copies and a full 185-fixture
+12-way pool all passed. The extra world is **V-HC** again, and it is the extra world in three of the
+five arms.
+
+**CPU LOAD DID NOT REPRODUCE IT, AND THAT ZERO CANNOT DISCRIMINATE.** Batch 144 ran 144 direct
+`--verify` runs, 12 fixture runs and 3432 replayed score cells, and every one agreed. At the
+observed rate of about 1 in 30, 12 fixture runs predict about 0.4 failures, so a clean sweep there
+is what the hypothesis predicts and refutes nothing.
+
+**A FORCED PROCESS CAP DID FLIP THE SHIPPED PROGRAM'S VERDICT.** Under `ulimit -u`, V-HC's verdict
+changed in **4 of 12** rounds. The cause was a sibling fork failure (exit 128) that was rendered as
+DETECTOR-REFUSED. In one of those rounds a RETIRE-CANDIDATE row was silently dropped. So the scorer
+has a real failure mode in which resource exhaustion reads as a verdict. **This is not attributed
+to the consumer's failure.** One fixture run peaks about 63 processes above a baseline of about 600,
+against a limit of 10666, so the consumer's run was nowhere near the cap.
+
+**RELEASE 0.625.0 SHIPS THE INSTRUMENT.** When a kill-set arm fails, it now prints the
+score cells of each world that differs and a diff of that world's stderr, so the next pool failure
+carries its own cause.
+
+**ITS FIRST CATCH NAMED A MECHANISM, AND 0.625.0 FIXES IT.** An unforced E2 failure, in a scratch
+copy with no `.git`, showed V-HC's `HARD-UNREGISTERED-CORE-DRIFT schemas/thing.json` rendered as
+`CORE-TEMPLATE-SUBSTITUTED` with NO DETECTOR-REFUSED line. So that extra world was not the `ulimit`
+refusal above. `unregistered-drift.sh`'s `is_unregistered()` fed `diff ... 2>/dev/null` into an
+awk whose END printed "clean" on no hunk, and it is reached only after `cmp` shows the files differ.
+Forced with a `diff` shim that exits 2: unshimmed HARD, shimmed CORE-TEMPLATE-SUBSTITUTED. A second
+site, `closest_ancestor_blob()`, scored a failed diff as a perfect match: unshimmed HARD drift,
+shimmed `HARD-CORE-BEHIND`. Both now fail closed, each with an arm and a mutant in
+`setup-config-drift`. **This entry stays live**: the E2/V-HC shape matches this mechanism, but E9's
+extra world was V-B, and E1/E8 are not yet shown to share it. Close only when the instrument has
+recorded a pool failure's cause, or a pool run of the size that predicts at least 3 failures at
+base comes back clean at tip.
+
+**E1'S SECOND DEFECT IS SETTLED.** The assertion `"V-R V-U"` is right and the message "three" was
+wrong. The message is corrected in 0.625.0.
+
+**THE RECEIPT IS RETIRED TO `manual`.** The receipt above scored only the message/assertion
+mismatch. Once the message was corrected it would have proposed CLOSE on a flake that is still
+live, which is the one direction that loses the entry. The flake has no mechanical predicate until
+the instrument catches a failure and names its cause.
+
+verify: manual
 
 ## BL-099 — the exec-bit audit is one-directional, so a consumer file that upstream STOPPED shipping executable is never reported
 
@@ -922,9 +967,42 @@ deleted, so this is not one removal loop. The hooks are not shared — `.claude/
 is the same prefix boundary `install.sh` already writes by, and v0.106.0 narrowed `hooks/*.sh`
 to `hooks/ai-dlc-*.sh` for exactly this reason.
 
-Anchored on the glob any fix must name, not on a description of the fix.
+**RE-MEASURED AT BATCH 144, AND THE RECEIPT ABOVE COULD CLOSE THIS ON A COMMENT.** A contract
+adversary on `BL-291` reported that `uninstall --force` on an installed 0.624.0 tree left all 24
+`ai-dlc-*.sh` hooks and `settings.json` in place, still registered. Re-taken here with the
+0.624.0 tree (`origin/main` `5376b309`), installed by its own `scripts/install.sh` into an empty
+`mktemp` git repo holding an empty `_bmad/`, then `scripts/uninstall.sh . --force` (the project
+root is the FIRST positional argument; `uninstall.sh --force` alone reads `--force` as the root and
+exits 1 having removed nothing). Hooks **24** before and **24** after, uninstall rc **0**, and
+**21** distinct `ai-dlc-*.sh` names still registered in the surviving `settings.json`. Control in
+the same run: the `.claude/rules/ai-dlc-*.md` files, which `uninstall.sh` does remove by prefix,
+went from present to **0**. At `b144-release`, after `BL-291`, it is 23 hooks before and 23 after,
+with 20 registered. Also surviving: `.claude/.ai-dlc-version`, the session driver, the `schemas/`
+files and `.claude/agents/*.md`.
 
-verify: has scripts/uninstall.sh "hooks/ai-dlc-"
+`scripts/uninstall.sh:64` introduces the rule-file loop with *"the `ai-dlc-` prefix is the boundary,
+as it is for hooks"*. No hook loop exists: `grep -c 'hooks/ai-dlc-' scripts/uninstall.sh` returns
+**0**. The comment describes code nobody wrote.
+
+**THE `has` RECEIPT WAS SATISFIABLE BY PROSE, SO IT IS REPLACED.** Appending the comment `# remove
+.claude/hooks/ai-dlc-*.sh and un-merge settings.json` to `uninstall.sh` would have proposed CLOSE
+while nothing changed. The receipt below drives the real programs. It installs a fresh consumer
+under `mktemp`, requires at least one hook present and registered and one `ai-dlc-*.md` rule file
+present, runs `uninstall.sh . --force`, and requires the rule file gone (the control, so an
+uninstall that did not run cannot score). It then exits 1 if any `ai-dlc-*.sh` hook survives, or if
+a surviving `settings.json` still registers one. Distribution engine: exit 0 is CLOSE-CANDIDATE.
+About 5s, most of it the install; each run leaves one installed tree under `$TMPDIR`.
+
+| tree | exit |
+|---|---|
+| `b144-release` | **1** |
+| `origin/main` `5376b309` | **1** |
+| `b144-release` with that comment appended to `uninstall.sh` | **1** |
+
+A fix that passes it has not been built, so no passing score exists yet. `settings.json` still has
+to be UN-MERGED rather than deleted, as the paragraph above says.
+
+verify: sh [ -r scripts/install.sh ] && [ -r scripts/uninstall.sh ] || exit 9; command -v git >/dev/null || exit 9; R="$(pwd)"; T="$(mktemp -d)" || exit 9; ( cd "$T" && git init -q && mkdir _bmad && git -c user.name=r -c user.email=r@r commit -q --allow-empty -m init && bash "$R/scripts/install.sh" ) >/dev/null 2>&1 || exit 9; set -- "$T"/.claude/hooks/ai-dlc-*.sh; [ -f "$1" ] || exit 9; grep -q 'hooks/ai-dlc-[a-z0-9-]*\.sh' "$T/.claude/settings.json" 2>/dev/null || exit 9; set -- "$T"/.claude/rules/ai-dlc-*.md; [ -f "$1" ] || exit 9; ( cd "$T" && bash "$R/scripts/uninstall.sh" . --force ) >/dev/null 2>&1 || exit 9; set -- "$T"/.claude/rules/ai-dlc-*.md; [ -f "$1" ] && exit 9; set -- "$T"/.claude/hooks/ai-dlc-*.sh; [ -f "$1" ] && exit 1; [ -f "$T/.claude/settings.json" ] && grep -q 'hooks/ai-dlc-[a-z0-9-]*\.sh' "$T/.claude/settings.json" && exit 1; exit 0
 
 ---
 
@@ -3974,3 +4052,64 @@ fix is to refuse with exit 2, as the UNREACHABLE branch at `:419` already does, 
 widen, is a design choice that has not been made.
 
 verify: manual
+
+
+## BL-292 — `apply.sh` emits no WORKLIST row for a DANGLING hook registration, on `--finish` too
+
+**DEFECT.** Filed at batch 144, found by the contract adversary on `BL-291`'s consumer pull.
+
+**THE PARSE CAN ONLY SEE ONE OF THE VALIDATOR'S TWO FAILURE LISTS.**
+`core/skills/ai-dlc-update/reconcile/apply.sh:1845` builds `hr_names` with
+`sed -n 's@^ *\.claude/hooks/@@p'`, and `:1846` emits the WORKLIST row only when the validator's
+rc is 1 AND `hr_names` is non-empty. `core/scripts/validate-hook-registration.sh` prints its
+UNREGISTERED list at `:398` as `    .claude/hooks/<name>`, which the parse reads. It prints its
+DANGLING list at `:411` as a bare `    <name>`, with no `.claude/hooks/` prefix, which the parse cannot
+read. So a tree whose only failure is a dangling registration returns rc 1 with an empty
+`hr_names`, and `hook_registration_row` emits nothing. It is not the rc 2 branch either, so no
+DECISION row appears. `--finish` calls the same function at `:2066`, after the settings merge, so
+the invocation meant to verify the finished tree is silent too. The only thing that catches it is
+the prose hard gate in `ai-dlc-update/SKILL.md` ("Hook-registration gate — hard"), which a session
+has to read and run.
+
+**WHERE IT BITES.** A hook retired upstream, like `BL-291`'s, when the file deletion is committed
+before the settings merge, or when the strip half of the merge does not run.
+
+**BOOTSTRAPPING, SO THE FIX SHIPS ALONE.** `apply.sh` is the program that delivers a pull. A
+consumer runs its installed copy, so a fix to it is delivered by the broken version it replaces.
+The fix must ship in a release of its own, with nothing else a pull would ask this function about.
+
+**RECEIPT, SCORED.** It extracts the shipped `hook_registration_row` from `apply.sh`, installs a
+fresh consumer with `scripts/install.sh` under `mktemp`, and requires the installed validator to exit
+0 on it. Positive control: with one hook's registration removed from `settings.json` (so the hook is
+UNREGISTERED), the function must emit a WORKLIST row, otherwise exit 9. Subject: with the
+registration restored and the hook file moved out (so it is DANGLING), the validator must exit 1,
+otherwise exit 9, and the function must emit a WORKLIST or DECISION row. Distribution engine: exit 0
+is CLOSE-CANDIDATE. It needs `jq` and takes about 5s, most of it the install. Each run leaves one
+installed tree under `$TMPDIR`.
+
+| tree | exit |
+|---|---|
+| `b144-release` | **1** |
+| `origin/main` `5376b309` | **1** |
+| candidate fix: a second `sed` also reads `    ai-dlc-*.sh` bare names into `hr_names` | **0** |
+
+verify: sh A=core/skills/ai-dlc-update/reconcile/apply.sh; [ -r "$A" ] && [ -r scripts/install.sh ] || exit 9; command -v jq >/dev/null || exit 9; F="$(awk '/^hook_registration_row\(\) \{/{p=1} p{print} p&&/^\}$/{exit}' "$A")"; [ -n "$F" ] || exit 9; R="$(pwd)"; T="$(mktemp -d)" || exit 9; ( cd "$T" && git init -q && mkdir _bmad && git -c user.name=r -c user.email=r@r commit -q --allow-empty -m init && bash "$R/scripts/install.sh" ) >/dev/null 2>&1 || exit 9; V="$T/scripts/ai-dlc/validate-hook-registration.sh"; [ -x "$V" ] || exit 9; bash "$V" --root "$T" >/dev/null 2>&1 || exit 9; say() { echo "ROW $1 $2"; }; eval "$F"; h="$(cd "$T/.claude/hooks" && ls ai-dlc-*.sh | head -1)"; [ -n "$h" ] || exit 9; cp "$T/.claude/settings.json" "$T/s.bak"; jq --arg h "$h" 'walk(if type == "object" and has("hooks") and (.hooks|type) == "array" then .hooks |= map(select((.command // "") | contains($h) | not)) else . end)' "$T/s.bak" > "$T/.claude/settings.json" || exit 9; cmp -s "$T/s.bak" "$T/.claude/settings.json" && exit 9; CONSUMER="$T"; o="$(hook_registration_row)"; case "$o" in *"ROW WORKLIST "*) : ;; *) exit 9 ;; esac; cp "$T/s.bak" "$T/.claude/settings.json"; mv "$T/.claude/hooks/$h" "$T/$h"; bash "$V" --root "$T" >/dev/null 2>&1; [ $? = 1 ] || exit 9; o="$(hook_registration_row)"; case "$o" in *"ROW WORKLIST "*|*"ROW DECISION "*) exit 0 ;; esac; exit 1
+
+## BL-293 — `register-drift.sh`'s `substitution_only()` reads a `diff` that did not run as "substitution only", so a changed section is left out of the generated override
+
+**DEFECT.** Filed at batch 144, by the hand that fixed the same shape in `unregistered-drift.sh`.
+
+**THE SAME FAIL-OPEN, INVERTED.** `core/skills/ai-dlc-update/reconcile/register-drift.sh:104`
+pipes `diff` into an awk whose END prints `yes` ("differs only at `{token}` lines") when it saw no
+hunk. The caller at `:136` reaches it only after `[ "$a" = "$b" ]` has shown the sections differ, so
+an empty stream means `diff` did not run. On `yes` the section is added to `skipped` and never
+written into the override. Forced with a `diff` on PATH that exits 2, on a section with a real edit
+and no token: unshimmed `no`, shimmed `yes`. Control in the same run: a token-only difference reads
+`yes` unshimmed.
+
+**WHY IT IS NOT IN 0.625.0.** It is an operator-run tool that writes an override file. It is not a
+gate a pull reads, so it does not share the HARD-blocker consequence that put its sibling in the
+release. The fix is the one `is_unregistered()` took: check `diff`'s exit and answer `no` (not
+substitution-only) on anything but 1 with a hunk.
+
+verify: sh F=core/skills/ai-dlc-update/reconcile/register-drift.sh; [ -r "$F" ] || exit 9; eval "$(awk '/^substitution_only\(\) \{/,/^\}/' "$F")"; command -v substitution_only >/dev/null || exit 9; [ "$(substitution_only 'consumer edit' 'dist line')" = no ] || exit 9; [ "$(substitution_only 'value x' 'value {tok}')" = yes ] || exit 9; S="$(mktemp -d)" || exit 9; printf '#!/bin/sh\nexit 2\n' > "$S/diff"; chmod +x "$S/diff"; [ "$(PATH="$S:$PATH" substitution_only 'consumer edit' 'dist line')" = yes ] && exit 1; exit 0

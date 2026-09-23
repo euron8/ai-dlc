@@ -242,7 +242,15 @@ closest_ancestor_blob() {
   for sha in $(git -C "$DIST" log --format=%H "${BASE}" -- "$cp" 2>/dev/null); do
     [ "$sha" = "$(git -C "$DIST" rev-parse "$BASE" 2>/dev/null)" ] && continue
     git -C "$DIST" cat-file -e "${sha}:${cp}" 2>/dev/null || continue
-    n="$(git_show "${sha}" "${cp}" | diff - "$cons" 2>/dev/null | grep -c '^[<>]' || true)"
+    # A diff that FAILED prints nothing, and nothing counts as ZERO differing lines -- a perfect
+    # match, which then beats base and turns plain drift into HARD-CORE-BEHIND, whose remedy is
+    # "take theirs" over the consumer's own edit. Measured by forcing it: a `diff` shim failing only
+    # on the older blob moved an in-place edit from HARD-UNREGISTERED-CORE-DRIFT to HARD-CORE-BEHIND.
+    # A candidate whose diff did not run is skipped, never scored; exit 0 (identical) and 1 are the
+    # only readings.
+    n="$(git_show "${sha}" "${cp}" | diff - "$cons" 2>/dev/null)"
+    [ "$?" -le 1 ] || continue
+    n="$(printf '%s\n' "$n" | grep -c '^[<>]')" || n=0
     if [ -z "$best_n" ] || [ "${n:-0}" -lt "$best_n" ]; then best_n="$n"; best_sha="$sha"; fi
   done
   [ -n "$best_sha" ] || return 0
@@ -422,10 +430,26 @@ carried_bucket() {
 # base-side line range falls inside a declared heading-block setup-site (exempt_ranges). The
 # diff hunk header (`12,15c12,18`) carries the base range on its LEFT of the a/c/d operator;
 # `match(h,/[acd]/)` + substr is POSIX awk — no gawk `match(...,arr)` extension (bash-3.2 floor).
+#
+# THREE ANSWERS, NOT TWO: `yes`, `no`, and `unknown` when the diff did not run. The caller reaches
+# this only AFTER `cmp` has shown base and the consumer DIFFER, so the only legitimate `diff` exit
+# is 1 with at least one hunk. Anything else -- exit 2, exit 0, or no hunk at all -- is a diff that
+# FAILED (a fork refused under load, EAGAIN on the process substitution, an unreadable file), and
+# the awk below used to print `no` for an empty stream. `no` is CORE-TEMPLATE-SUBSTITUTED, so a
+# real in-place edit was reclassified as install.sh's own substitution, silently, and a HARD
+# blocker vanished from the report with no DETECTOR-REFUSED line anywhere. Measured by forcing it:
+# a `diff` shim on PATH that exits 2 and prints nothing turned a schema edit that reads
+# HARD-UNREGISTERED-CORE-DRIFT unshimmed into CORE-TEMPLATE-SUBSTITUTED, and the same row was
+# caught moving in the pooled `reconcile-emit-report` run. The exit status is checked AND the awk
+# refuses an empty stream, because either failure alone reaches `no`.
 is_unregistered() {
-  local cp="$1" cons="$2" ranges
+  local cp="$1" cons="$2" ranges d drc
   ranges="$(exempt_ranges "$cp")"
-  diff <(git_show "${BASE}" "${cp}") "$cons" 2>/dev/null | awk -v ranges="$ranges" '
+  # The captured variable loses only diff's trailing newline, which the here-string restores; the
+  # BLOB is still streamed through `<( )`, so the phantom-final-hunk hazard above does not apply.
+  d="$(diff <(git_show "${BASE}" "${cp}") "$cons" 2>/dev/null)"; drc=$?
+  if [ "$drc" -ne 1 ] || [ -z "$d" ]; then printf 'unknown'; return 0; fi
+  awk -v ranges="$ranges" '
     function left_exempt(h,   p,left,n,LR,ls,le,m,RG,i,rr) {
       p = match(h, /[acd]/); if (p == 0) return 0
       left = substr(h, 1, p - 1)
@@ -440,8 +464,8 @@ is_unregistered() {
     }
     /^[0-9]/ { if (hunk && !tok) bad=1; hunk=1; tok=0; if (left_exempt($0)) tok=1; next }
     /^</     { if ($0 ~ /\{[a-z_][a-z0-9_]*\}/) tok=1 }
-    END      { if (hunk && !tok) bad=1; print (bad ? "yes" : "no") }
-  '
+    END      { if (!hunk) { print "unknown"; exit } if (hunk && !tok) bad=1; print (bad ? "yes" : "no") }
+  ' <<<"$d"
 }
 
 # Scan set. Prose/schema core a consumer could edit and silently drift — overwrite-on-pull, so
@@ -512,7 +536,19 @@ is_unregistered() {
         continue
       fi
 
-      if [ "$(is_unregistered "$cp" "$cons")" = "no" ]; then
+      unreg="$(is_unregistered "$cp" "$cons")"
+      # A classifier that could not run blocks under the SAME status as real drift, and stops here
+      # rather than falling through: every arm below diffs this file again, and `apply.sh`'s drift
+      # loop and `hard-blockers.sh` both key on this exact spelling, so a new status would be a row
+      # apply does not guard before it overwrites. Wrong in the recoverable direction -- a re-run
+      # clears a transient failure, and a lost consumer edit cannot be recovered at all.
+      if [ "$unreg" != "yes" ] && [ "$unreg" != "no" ]; then
+        printf 'unregistered-drift: diff of %s against core@%s did not run; classified HARD, not template substitution\n' "$rel" "$BASE" >&2
+        emit HARD-UNREGISTERED-CORE-DRIFT "$rel" \
+          "CLASSIFIER DID NOT RUN — this file differs from core@${BASE} (cmp), but the diff that decides template-substitution vs drift failed, so it is reported as drift rather than acquitted. Re-run unregistered-drift.sh; if this row persists, the consumer's copy is an in-place edit: refile it as an overrides/ entry with base_sha ${BASE}, or revert it."
+        continue
+      fi
+      if [ "$unreg" = "no" ]; then
         emit CORE-TEMPLATE-SUBSTITUTED "$rel" "differs only at declared setup-substitution sites ({token} lines or heading-block config regions)"
         continue
       fi

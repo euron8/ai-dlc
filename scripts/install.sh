@@ -375,30 +375,6 @@ cp "$SCRIPT_DIR/../core/hooks/"*.sh "$PROJECT_ROOT/.claude/hooks/"
 chmod +x "$PROJECT_ROOT/.claude/hooks/"*.sh
 echo "  hooks installed"
 
-# REPORT the notifier's resolved channel, because the no-channel case is otherwise INVISIBLE.
-# ai-dlc-notify.sh is macOS (osascript) and Linux (notify-send); on anything else, or with the
-# tool absent, it exits 0 having raised nothing. A hook that silently does nothing is the
-# inert-mechanism class this repo keeps shipping, and its stderr at notification time is not
-# somewhere an operator looks. This is the one moment they are watching, so it is said here.
-# PROBED, never assumed: the answer comes from running the hook that will run later, so a
-# platform branch that stops resolving cannot keep reporting that it does.
-NOTIFY_HOOK="$PROJECT_ROOT/.claude/hooks/ai-dlc-notify.sh"
-if [ -x "$NOTIFY_HOOK" ]; then
-  NOTIFY_PROBE="$(bash "$NOTIFY_HOOK" --probe 2>/dev/null)"
-  NOTIFY_CHANNEL="$(printf '%s\n' "$NOTIFY_PROBE" | sed -n 's/^channel=//p' | head -1)"
-  NOTIFY_PLATFORM="$(printf '%s\n' "$NOTIFY_PROBE" | sed -n 's/^platform=//p' | head -1)"
-  case "${NOTIFY_CHANNEL:-none}" in
-    none)
-      echo "  input-needed notifier: NO desktop channel on ${NOTIFY_PLATFORM:-this platform}."
-      echo "    ai-dlc-notify.sh will exit 0 without raising anything. Supported: macOS"
-      echo "    (osascript) and Linux with notify-send installed."
-      ;;
-    *)
-      echo "  input-needed notifier: desktop channel = ${NOTIFY_CHANNEL} (${NOTIFY_PLATFORM:-unknown})"
-      ;;
-  esac
-fi
-
 # Install the auto session-chaining driver (operator-run tmux launcher)
 mkdir -p "$PROJECT_ROOT/.claude/session-driver"
 cp "$SCRIPT_DIR/../core/session-driver/"*.sh "$PROJECT_ROOT/.claude/session-driver/"

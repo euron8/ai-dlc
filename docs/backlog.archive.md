@@ -17636,3 +17636,108 @@ inside `**(b)` **1**. The arm itself is held by `enforcement-map-derivations` A4
 moved), A44 (carrier moved) and A45 (a Rule 24 edit stays silent while still stamp-bound).
 
 verify: sh k=core/rules/ai-dlc-resident-discipline.md; s=core/skills/ai-dlc/SKILL.md; v=scripts/validate-enforcement-map.sh; [ -r "$k" ] && [ -r "$s" ] && [ -r "$v" ] || exit 9; [ "$(grep -c '^\*\*(b) Sliced re-read of large step files\.\*\* ' "$s")" = 1 ] || exit 9; d="$(mktemp -d)" || exit 9; trap 'rm -rf "$d"' EXIT; cp -R core scripts "$d/" || exit 9; o="$(bash "$d/$v" --arms I79 2>&1)" || exit 1; case "$o" in *"I79 carrier stamps: "[1-9]*" rule(s) stamp-bound to a .claude/rules/ carrier."*) : ;; *) exit 1 ;; esac; awk '/^\*\*\(b\) Sliced re-read of large step files\.\*\* / { $0 = $0 " RECEIPT-EDIT" } { print }' "$s" > "$d/$s" || exit 9; cmp -s "$s" "$d/$s" && exit 9; o="$(bash "$d/$v" --arms I79 2>&1)"; case "$o" in *"the rule body moved"*) : ;; *) exit 1 ;; esac; awk '/^\*\*\(b\)/ { p = 1 } p && /^$/ { p = 0 } p && index($0, "gate-checkpoint.sh done") && $0 !~ /^[[:space:]]*<!--/ { f = 1 } END { exit !f }' "$k" || exit 1; exit 0
+## BL-290 — `audit-layer-debt.sh` charged a core mechanism's NAME, and a quote of its own cue, as an undeclared obligation
+
+**LANDED (v0.625.0, verified 2e471b9a).** `PROSE` denies the mechanism-name and self-mention forms; receipt exits 0 on `b144-release`.
+
+**DEFECT.** Filed and fixed at batch 144. Discharges `PC-S313-DEBT-AUDIT-CUE-FIRES-ON-A-CORE-CONSTRUCT-NAME`.
+
+**ALL SIX UNDECLARED ROWS ON THE REFERENCE REGISTER WERE FALSE.** The UNDECLARED arm of
+`core/scripts/audit-layer-debt.sh` reports a row whose reason reads like an obligation and whose
+entry declares no `owed`. `remediation` is in its cue set. On the consumer's 568-row register it
+flagged 6 rows. Five were flagged on `remediation` alone, and every one of those names core
+machinery (`remediation protocol`, `remediation EDIT`, `remediation guard`, `remediation routing`)
+to say that the entry does not touch it. The sixth quoted the tool's own output, `on cue
+'deferred'`. The printed remedy is to re-record each row with an `owed` object, which would declare
+six debts that do not exist. The register is append-only, so no act clears them, and the report
+stays non-zero forever.
+
+**FIX, IN THE REGEX.** `PROSE` gains two lookarounds. `remediation` is not a cue when one of a
+closed noun set follows it (`protocol`, `edit`/`edits`, `guard`, `routing`) and ends at the cue's
+own `(?![\w-])` boundary. A cue is also not a cue when the tool's own reporting prefix, `cue '` or
+`cues: '`, sits before it. The SIXTH-class header comment at the regex carries the measurement and
+the narrowing story. UNDECLARED on the reference register went from 6 to 0. Of the 15 occurrences
+of `remediation`, 12 are mechanism names, and the two genuine debts (`OWED REMEDIATION, deferred
+…`, `OWED REMEDIATION, still outstanding`) stay cues. One false acquittal is constructible and
+accepted: "The remediation edit to this entry has not been applied yet". The rules sit in `PROSE`
+and not in the `hits` comprehension, because three `layer-debt-due-and-discharge` mutants anchor on
+that comprehension's text. The fixture's new arms landed in `e4922499`.
+
+**THE CONSUMER'S RECEIPT ACCEPTED REGRESSIONS.** A contract adversary measured the filed receipt
+and found it passed three wrong fixes: dropping `remediation` from the cue set entirely, acquitting
+any row that contains `remediation`, and adding only `/` to a lookbehind. It also never tested the
+self-mention. The receipt below replaces it.
+
+**RECEIPT, SCORED.** It drives the shipping script against a synthetic register under `mktemp`
+with four rows. Two must be acquitted: a mechanism name in the space form ("the remediation EDIT is
+dispatched") and a self-mention ("on cue 'deferred'"). Two are controls that must stay flagged:
+`remediation` as the only cue ("Remediation of the anchor is still pending") and a scare-quoted real
+obligation ("The split is 'deferred' to a later pull"). Exit 9 if either control stops firing,
+which is how an over-reaching fix scores. Distribution engine: exit 0 is CLOSE-CANDIDATE. Each run
+leaves one small `mktemp -d` directory under `$TMPDIR`.
+
+| tree | exit |
+|---|---|
+| `b144-release` (the fix) | **0** |
+| `origin/main` `5376b309` | **1** |
+| R1: `remediation` dropped from `PROSE` | **9** |
+| R2: quote lookbehind widened to `(?<!')` | **9** |
+| R3: noun lookahead widened to `(?!\s+\w)` | **9** |
+| R4: acquit any row containing `remediation` | **9** |
+| base regex plus `/` in the lookbehind | **1** |
+| fix with the `cue '` / `cues: '` lookbehinds removed | **1** |
+| fix with the noun lookahead removed | **1** |
+
+verify: sh s=core/scripts/audit-layer-debt.sh; [ -r "$s" ] || exit 9; command -v python3 >/dev/null || exit 9; d="$(mktemp -d)" || exit 9; python3 -c 'import json,sys; R=[("e/mech.md","Core changed the handoff, and the remediation EDIT is dispatched by the lead, which this entry does not restate."),("e/self.md","This row reads the report, which printed this entry on cue '"'"'deferred'"'"' earlier."),("e/near.md","Remediation of the anchor is still pending."),("e/quote.md","The split is '"'"'deferred'"'"' to a later pull.")]; [print(json.dumps({"clause":"LC-E4","entry":e,"subject_digest":str(i)*40,"verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":r})) for i,(e,r) in enumerate(R)]' > "$d/r.jsonl" || exit 9; o="$(bash "$s" --register "$d/r.jsonl" --json 2>/dev/null)" || exit 9; u="$(python3 -c 'import json,sys; print(" ".join(r["entry"] for r in json.loads(sys.stdin.read())["undeclared"]))' <<<"$o")" || exit 9; case " $u " in *" e/near.md "*) : ;; *) exit 9 ;; esac; case " $u " in *" e/quote.md "*) : ;; *) exit 9 ;; esac; case " $u " in *" e/mech.md "*|*" e/self.md "*) exit 1 ;; esac; exit 0
+
+## BL-291 — retire the `Notification` desktop-alert hook from AI/DLC
+
+**LANDED (v0.625.0, verified 8cbbdeaf).** The hook, its registration, its install probe and its fixture are gone; receipt exits 0 on `b144-release`.
+
+**NOTE.** An operator-directed removal, not a defect. Filed and discharged at batch 144. Discharges `PC-S313-REMOVE-NOTIFY-HOOK`.
+
+**WHAT `8cbbdeaf` CHANGED.** One commit, because I5, I8 and the hook-registration join bind the
+pieces to each other:
+
+- `core/hooks/ai-dlc-notify.sh` is deleted.
+- `templates/settings.json.template` loses its `Notification` event block.
+- `scripts/install.sh` loses the post-install channel probe.
+- `core/fixtures/notify-hook-channel/` is deleted, along with its glob in `core-manifest.md` and in
+  `setup-sites.md`.
+- `scripts/uninstall.sh`: the name leaves the shipped-fixture loop, and a separate retired-fixture
+  loop removes the copy an earlier install left behind. The loop is separate because I8 binds the
+  shipped loop to `core/fixtures/` in both directions.
+
+`.ai-dlc-fixture-readsets.tsv` is left as generated. Its stale rows are inert.
+
+**THE CONSUMER PULL, MEASURED BY A CONTRACT ADVERSARY.** Three facts, in the order a pull meets
+them:
+
+1. **Treat the deletions as ONE decision.** The pull reports `ai-dlc-notify.sh` and both
+   `notify-hook-channel` fixture files as UPSTREAM-DELETED, and gates each path separately. If the
+   hook deletion is declined, settings-merge still drops the registration block, so the hook is
+   left on disk and UNREGISTERED. `validate-hook-registration.sh` then exits 1, and its printed
+   remedy (re-run settings-merge) cannot fix it, because the template no longer carries the block.
+   If the fixture deletion is declined, the fixture's seed fails with exit 2.
+2. **A commit or push between the file deletion and the settings merge is red**, because the
+   registration is then DANGLING. `BL-292` records that `apply.sh` emits no worklist row for that
+   state.
+3. **The merge leaves an empty `"Notification": []` key.** It is inert.
+
+**RECEIPT, SCORED.** It reads the working tree and needs `jq`. It returns 1 while any site still
+carries the hook: the hook file, a `Notification` key or an `ai-dlc-notify` token in the settings
+template, the fixture directory, `NOTIFY_HOOK` or `ai-dlc-notify` in `install.sh`, the fixture glob
+in `core-manifest.md` or `setup-sites.md`, or the name in `uninstall.sh`'s SHIPPING loop (the line
+I8 parses). It deliberately does not read the rest of `uninstall.sh`, because the retired-fixture
+loop has to name the fixture. Exit 9 if the template stops registering any `ai-dlc-*.sh` hook, so
+an emptied template cannot read as a removal. Distribution engine: exit 0 is CLOSE-CANDIDATE.
+
+| tree | exit |
+|---|---|
+| `b144-release` | **0** |
+| `origin/main` `5376b309` | **1** |
+| `b144-release` with a `Notification` key re-added to the template | **1** |
+| `b144-release` with the template's `hooks` emptied | **9** |
+
+verify: sh command -v jq >/dev/null || exit 9; t=templates/settings.json.template; [ -r "$t" ] && jq -e . "$t" >/dev/null 2>&1 || exit 9; jq -e '[.hooks[]?[]?.hooks[]?.command // ""] | any(test("/\\.claude/hooks/ai-dlc-[^/]+\\.sh"))' "$t" >/dev/null || exit 9; [ -e core/hooks/ai-dlc-notify.sh ] && exit 1; jq -e '.hooks | has("Notification")' "$t" >/dev/null && exit 1; grep -qF ai-dlc-notify "$t" && exit 1; [ -e core/fixtures/notify-hook-channel ] && exit 1; [ -r scripts/install.sh ] || exit 9; grep -qE 'NOTIFY_HOOK|ai-dlc-notify' scripts/install.sh && exit 1; for f in core/skills/ai-dlc/core-manifest.md core/skills/ai-dlc-update/reconcile/setup-sites.md; do [ -r "$f" ] || exit 9; grep -qF notify-hook-channel "$f" && exit 1; done; [ -r scripts/uninstall.sh ] || exit 9; grep -E '^for fixture_dir in ' scripts/uninstall.sh | grep -qw notify-hook-channel && exit 1; exit 0
+

@@ -318,7 +318,6 @@ core_manifest:
   - fixtures/consolidation-residue/**
   - fixtures/apply-machinery-stamp/**
   - fixtures/layer-absorption-retire/**
-  - fixtures/notify-hook-channel/**
   - fixtures/updater-session-signals/**
   - fixtures/route-read-required/**
   - fixtures/artifact-derivations/**
