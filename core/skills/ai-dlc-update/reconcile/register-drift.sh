@@ -22,7 +22,8 @@
 # Usage: register-drift.sh <dist-repo> <base-sha> <consumer-root> <core-rel-path> [--apply]
 #          core-rel-path e.g. team-roles/tea.md  |  skills/ai-dlc/steps/retro.md
 #        (default: dry-run -- print the override it WOULD write)
-# Exit:  0 ok / 1 nothing to register / 2 usage
+# Exit:  0 ok / 1 nothing to register / 2 usage OR refusal -- a section that cannot be
+#        classified or accounted for; nothing is written and core is NOT reverted
 set -uo pipefail
 
 DIST="${1:?usage: register-drift.sh <dist-repo> <base-sha> <consumer-root> <core-rel-path> [--apply]}"
@@ -101,13 +102,34 @@ SELF="$(cd "$(dirname "$0")" && pwd)"
 # the consumer never touched, and every future upstream edit to it would be discarded
 # unseen. Same asymmetric test unregistered-drift.sh uses — the DIST side must carry the
 # token, so a consumer cannot manufacture an exemption by typing "{foo}" into its copy.
+#
+# THREE ANSWERS, NOT TWO: `yes`, `no`, and `unknown` when the diff did not run -- the discipline
+# unregistered-drift.sh's is_unregistered() took for the same shape. The caller reaches this only
+# AFTER `[ "$a" = "$b" ]` has shown the sections differ, so the only legitimate `diff` exit is 1
+# with at least one hunk. Anything else is a diff that FAILED (a fork refused under load, EAGAIN
+# on the process substitution), and the awk below used to print `yes` for an empty stream. `yes`
+# means "leave this section out of the override", and the section is then destroyed by the
+# revert at the end. Measured with a `diff` shim that exits 2 only for one section: two edited
+# sections, Alpha and Beta, the diff failing only for Beta -- rc 0, `skipped: Beta`, the override
+# carried Alpha alone, core was reverted, and Beta's edit was gone with no line on stderr.
+# The exit status is checked AND the awk refuses an empty stream, because either failure alone
+# reaches `yes`. The captured variable loses only diff's trailing newline, which the here-string
+# restores.
 substitution_only() { # <consumer-section-text> <dist-section-text>
-  diff <(printf '%s\n' "$2") <(printf '%s\n' "$1") | awk '
+  local d drc
+  d="$(diff <(printf '%s\n' "$2") <(printf '%s\n' "$1") 2>/dev/null)"; drc=$?
+  if [ "$drc" -ne 1 ] || [ -z "$d" ]; then printf 'unknown'; return 0; fi
+  awk '
     /^[0-9]/ { if (hunk && !tok) bad=1; hunk=1; tok=0; next }
     /^</     { if ($0 ~ /\{[a-z_][a-z0-9_]*\}/) tok=1 }
-    END      { if (hunk && !tok) bad=1; print (bad ? "no" : "yes") }
-  '
+    END      { if (!hunk) { print "unknown"; exit } if (hunk && !tok) bad=1; print (bad ? "no" : "yes") }
+  ' <<<"$d"
 }
+
+# A refusal names the section and exits 2 BEFORE anything is written or reverted. It is the
+# only safe answer here: every path below that proceeds on a guess ends in `git show > core`,
+# which deletes whatever the guess left out.
+refuse() { echo "register-drift: $1" >&2; echo "  Nothing written; $REL NOT reverted. Re-run; if it repeats, register by hand." >&2; exit 2; }
 
 changed=""
 skipped=""
@@ -133,10 +155,14 @@ while IFS= read -r line; do
   fi
 
   [ "$a" = "$b" ] && continue
-  if [ "$(substitution_only "$a" "$b")" = yes ]; then
-    skipped="${skipped}${skipped:+, }${h}"
-    continue
-  fi
+  # Refused HERE, inside the loop, so a dry run refuses too: a dry run that prints an override
+  # missing a section is the preview the operator approves before --apply.
+  so="$(substitution_only "$a" "$b")"
+  case "$so" in
+    yes) skipped="${skipped}${skipped:+, }${h}"; continue ;;
+    no)  ;;
+    *)   refuse "cannot classify section '${h}': diff did not run" ;;
+  esac
   changed="${changed}${changed:+$'\n'}${h}"
 done < <(headings_of "$CONS_FILE")
 
