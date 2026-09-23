@@ -4112,4 +4112,51 @@ gate a pull reads, so it does not share the HARD-blocker consequence that put it
 release. The fix is the one `is_unregistered()` took: check `diff`'s exit and answer `no` (not
 substitution-only) on anything but 1 with a hunk.
 
-verify: sh F=core/skills/ai-dlc-update/reconcile/register-drift.sh; [ -r "$F" ] || exit 9; eval "$(awk '/^substitution_only\(\) \{/,/^\}/' "$F")"; command -v substitution_only >/dev/null || exit 9; [ "$(substitution_only 'consumer edit' 'dist line')" = no ] || exit 9; [ "$(substitution_only 'value x' 'value {tok}')" = yes ] || exit 9; S="$(mktemp -d)" || exit 9; printf '#!/bin/sh\nexit 2\n' > "$S/diff"; chmod +x "$S/diff"; [ "$(PATH="$S:$PATH" substitution_only 'consumer edit' 'dist line')" = yes ] && exit 1; exit 0
+**MEASURED DAMAGE, AND THE REMEDY ABOVE IS SUPERSEDED.** Batch 145's contract adversary drove the
+shipped script end to end. Only the MIXED case loses the edit: two edited sections, `diff` failing
+for the second alone, reads rc 0 with `skipped: Beta`, the override carries Alpha only, core is
+reverted, and Beta's edit exists nowhere. When `diff` fails for every section the script exits 1 at
+"no ## / ### section differs" before the revert, so nothing is lost. The same revert is reachable by
+three further paths with the edit not carried: an EMPTY override body when `section_of` cannot make
+its temp file during body extraction; an unchecked `render > "$OUT"`, which failed, printed
+REGISTERED and reverted core anyway; and a dist-side `section_of` failure, which files a core section
+as consumer-only, so an `extensions/` duplicate renders beside core's own heading. Answering `no` is
+not the fix. It would put a section the classifier never read into the override on a guess, and it
+would still let a run that classified nothing go on to revert core. The fix refuses instead, in two
+layers. `substitution_only` answers `unknown` when `diff` did not run, and the loop refuses on it with
+exit 2 before anything is written, so a dry run refuses too. A pre-revert conservation check then
+requires every consumer section to be core's own text, present verbatim in the override or extension
+just written (read back from disk), or re-confirmed substitution-only by a `diff` that ran; anything
+else exits 2 with core NOT reverted, every write is checked, and the revert goes through a temp file.
+Neither layer is enough alone. The conservation check without the three-valued classifier re-asks
+the same classifier, gets the same wrong `yes`, and loses the edit: regression r3 below scores
+identical to base.
+
+**RECEIPT, SCORED.** It drives the shipped `register-drift.sh` against a dist git repo and consumer
+built under `mktemp`: one role file, sections Alpha, Beta and Gamma, with the consumer's Alpha and
+Beta edited and Beta carrying the marker `BETAKEEP`. A `diff` shim on PATH exits 2 only when one of
+its inputs carries the marker and otherwise execs the real `diff`, and it drops a `.fired` file.
+Preconditions, each exit 9: the shim passes a marker-free pair through to the real `diff` (exit 1)
+without firing, and the unshimmed control on an identical consumer exits 0 with an override carrying
+BOTH edits. Subject, shimmed: the shim must have fired, otherwise exit 9, and then rc must be
+non-zero, the overrides directory empty, the consumer file `cmp`-identical to its pre-run copy, and
+stderr must carry the classifier's own refusal, `cannot classify section 'Beta'`. That last clause
+is what makes the receipt require layer 1: without it, r1 and r2 on the full fix read 0, because the
+conservation check refuses them in its own words and the edit survives. Distribution engine: exit 0
+is CLOSE-CANDIDATE. Each run leaves one tree under `$TMPDIR`. Regressions r1 and r2 are scored on
+the layer-1-only tree, where nothing else stands behind the classifier, and again on the full fix.
+The receipt therefore reads layer 1 directly and does not see layer 2; layer 2's three other paths
+are the fixture's to hold.
+
+| tree | exit |
+|---|---|
+| `origin/main` `a86d9a5f` | **1** |
+| fix, both layers, `63004ff4` | **0** |
+| layer 1 only, `408cb864` | **0** |
+| r1: `unknown` treated as `yes`, on `408cb864` | **1** |
+| r1 on `63004ff4` | **1** (0 before the stderr clause) |
+| r2: refuse only when EVERY differing section is `unknown`, on `408cb864` | **1** |
+| r2 on `63004ff4` | **1** (0 before the stderr clause) |
+| r3: conservation check with the base two-valued `substitution_only`, on `63004ff4` | **1** |
+
+verify: sh F=core/skills/ai-dlc-update/reconcile/register-drift.sh; [ -r "$F" ] && [ -r "${F%/*}/lib.sh" ] || exit 9; F="$(pwd)/$F"; D="$(command -v diff)"; [ -x "$D" ] || exit 9; T="$(mktemp -d)" || exit 9; S="$T/shim"; mkdir -p "$S" "$T/d/core/team-roles" "$T/c/.claude/team-roles" "$T/k/.claude/team-roles" || exit 9; printf '#!/bin/sh\nt1="%s/a.$$"; t2="%s/b.$$"; cat "$1" > "$t1"; cat "$2" > "$t2"\nif grep -q BETAKEEP "$t1" "$t2"; then : > "%s/.fired"; exit 2; fi\nexec "%s" "$t1" "$t2"\n' "$S" "$S" "$S" "$D" > "$S/diff" && chmod +x "$S/diff" || exit 9; printf 'x\n' > "$T/p1"; printf 'y\n' > "$T/p2"; PATH="$S:$PATH" diff "$T/p1" "$T/p2" >/dev/null 2>&1; [ $? = 1 ] || exit 9; [ -e "$S/.fired" ] && exit 9; printf '# Role: X\n\n## Alpha\n\nalpha core text.\n\n## Beta\n\nbeta core text.\n\n## Gamma\n\ngamma core text.\n' > "$T/d/core/team-roles/x.md"; ( cd "$T/d" && git init -q && git add -A && git -c user.name=r -c user.email=r@r commit -qm base ) >/dev/null 2>&1 || exit 9; B="$(git -C "$T/d" rev-parse HEAD)" || exit 9; sed 's/^alpha core text\.$/alpha CONSUMER EDIT./; s/^beta core text\.$/beta CONSUMER EDIT BETAKEEP./' "$T/d/core/team-roles/x.md" > "$T/e.md"; grep -q 'alpha CONSUMER EDIT' "$T/e.md" && grep -q BETAKEEP "$T/e.md" || exit 9; cp "$T/e.md" "$T/c/.claude/team-roles/x.md" && cp "$T/e.md" "$T/k/.claude/team-roles/x.md" || exit 9; O=.claude/skills/ai-dlc/overrides/team-roles__x__consumer-drift.md; bash "$F" "$T/d" "$B" "$T/k" team-roles/x.md --apply >/dev/null 2>&1 || exit 9; grep -q 'alpha CONSUMER EDIT' "$T/k/$O" && grep -q BETAKEEP "$T/k/$O" || exit 9; PATH="$S:$PATH" bash "$F" "$T/d" "$B" "$T/c" team-roles/x.md --apply >/dev/null 2>"$T/err"; rc=$?; [ -e "$S/.fired" ] || exit 9; [ "$rc" != 0 ] && [ -z "$(ls -A "$T/c/.claude/skills/ai-dlc/overrides" 2>/dev/null)" ] && cmp -s "$T/e.md" "$T/c/.claude/team-roles/x.md" && grep -q "cannot classify section 'Beta'" "$T/err" && exit 0; exit 1

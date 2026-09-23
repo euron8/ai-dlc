@@ -1565,6 +1565,10 @@ prose is itself generated rather than composed.
      subtree cannot reach an unnamed refusal. In both cases the dispositions are: keep the
      consumer's version (accept per-entry, and it re-reports every pull), or upstream it.
      Reverting destroys the divergence; say so before anyone chooses it.
+     Its third refusal is NOT structural: exit 2 naming a section (`cannot classify section`,
+     `conservation:`, or a write it could not make) means a step failed mid-run, and core was
+     NOT reverted: the edit is still in place. Re-run it; if it repeats, register by hand. Never
+     revert core to get past it — that deletes the edit the refusal kept.
      Check the row's status before you conclude anything:
      if it is `HARD-CORE-DRIFT-ABSORBED`, the disposition below applies. Otherwise say
      so, and let the operator keep it (it will report every pull) or upstream it. Do not
