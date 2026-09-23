@@ -3935,3 +3935,42 @@ genuine. The distribution's history would answer it and it was not taken.
 verify: sh set -e; F=core/fixtures/ledger-reverify/run.sh; E=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -r "$F" ] && [ -r "$E" ] || exit 9; M="$(LC_ALL=C grep -n 'ledger-reverify-theirs' "$E" | LC_ALL=C grep -c 'mktemp')" || M=0; [ "$M" -ge 1 ] || exit 9; C="$(LC_ALL=C grep -c 'tt_count()' "$F")" || C=0; [ "$C" -ge 1 ] || exit 9; W=$(mktemp -d) || exit 9; B="$(ls -d "$W"/ledger-reverify-theirs.* 2>/dev/null | LC_ALL=C grep -c . )" || B=0; S="$(mktemp -d "$W/ledger-reverify-theirs.XXXXXX")" || { rmdir "$W"; exit 9; }; A="$(ls -d "$W"/ledger-reverify-theirs.* 2>/dev/null | LC_ALL=C grep -c . )" || A=0; rmdir "$S"; Z="$(ls -d "$W"/ledger-reverify-theirs.* 2>/dev/null | LC_ALL=C grep -c . )" || Z=0; rmdir "$W"; echo "before=$B foreign=$A restored=$Z"; [ "$A" -eq "$((B+1))" ] && [ "$Z" -eq "$B" ] || { echo "PRECONDITION: the shared glob no longer tracks a foreign tree, so nothing here was measured"; exit 9; }; P="$(LC_ALL=C grep -o 'ledger-reverify-theirs\.[A-Za-z$_{}()]*' "$E" | head -1)"; case "$P" in *'$'*) exit 0 ;; esac; exit 1
 
 
+
+## BL-289 — `plan-rotate.sh` answers "at or under the ceiling" on a plan it cannot rotate, and its batch class cannot see column-0 paragraphs
+
+**DEFECT.** Found at batch 143 when `validate-plan-shape.sh`'s P8 failed
+`docs/plans/graph-ledger-full-drain.md` at 152698 bytes against 150000. The remedy P8 prints is
+`plan-rotate.sh`, which exited **0** printing *"is 152698 bytes, at or under the 150000-byte
+ceiling — nothing to move"*. The same answer came back at `--ceiling` 148000, 140000 and 130000.
+
+**TWO CLAIMS, AND THEY ARE SEPARABLE.**
+
+1. **The banner is false.** `scripts/plan-rotate.sh:414` is the `NMOVED=0` branch, and it reuses
+   the under-ceiling sentence from `:171`. The only way to reach `:414` is from above the ceiling,
+   because `:170` has already returned for every plan at or under it. So the message is wrong on
+   every input that reaches it.
+2. **The candidate set is empty for the resume-block shape.** Class 2 at `:331` matches
+   `^[[:space:]]+\*\*BATCH`, which requires an INDENTED paragraph. The plan's resume block writes
+   its batch paragraphs at column 0, and every section above `### NEXT ACTIONS` is declared live.
+   So neither class has a member, and nothing is moved.
+
+**WORKAROUND IN USE.** Batches 139-143 rotated by hand. The live plan's resume block says to trust
+P8 over the rotator's banner, and it gives the manual cut with a byte-conservation check.
+
+**WHY THE RECEIPT IS MANUAL, MEASURED.** A behavioural receipt was built first. It seeds a plan
+of 400 column-0 `**BATCH` paragraphs, `--apply`s at a 20000-byte ceiling, and asserts the result
+is at or under the ceiling with its live section kept. Scored four ways:
+
+- the shipped tree exits **1**;
+- a message-only fix exits **1**;
+- widening `:331` to `[[:space:]]*` also exits **1**. It archives 156 spans, but the pointer line
+  it leaves per span lands the plan at **21834** bytes;
+- a refuse-when-still-over fix could not be scored, because its mutation did not apply (`cmp -s`
+  equal).
+
+So no receipt built so far separates a correct fix from a partial one, and column-0 widening needs
+coalesced spans (one pointer per run, not per paragraph) before it can reach a ceiling. Whether the
+fix is to refuse with exit 2, as the UNREACHABLE branch at `:419` already does, or to coalesce and
+widen, is a design choice that has not been made.
+
+verify: manual
