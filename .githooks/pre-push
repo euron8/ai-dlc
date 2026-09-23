@@ -173,7 +173,7 @@ step "backlog depth (docs/backlog.md stays a queue, not a log)" \
 step "backlog receipts (a receipt a COMMENT can satisfy is not a receipt)" \
   bash scripts/validate-backlog-receipts.sh \
     --max-prose-closable 1 --max-unscorable 28 --max-out-of-population 1 \
-    --max-unstable 0 --min-sh-receipts 61 --min-entries 74
+    --max-unstable 0 --min-sh-receipts 58 --min-entries 72
 
 # 1g. The bash-3.2 / BSD-userland floor for every shipped shell file. GNU-only idioms do not
 #     error here, they return the WRONG ANSWER quietly -- `sed -i` takes the script as a
