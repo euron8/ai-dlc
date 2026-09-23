@@ -200,7 +200,53 @@ unowned = sorted({(r.get("clause") or "", r.get("entry") or "") for r in rows
 # A cue EMBEDDED IN A LONGER IDENTIFIER is not prose about an obligation: `debt` inside
 # `test-check18-debt-audit` is a filename, and it was 1 of the 2 false positives measured
 # on the reference register. Require the cue to stand alone, not to sit between hyphens.
-PROSE = re.compile(r"(?<![\w-])(owed|still owed|deferred|remediation|follow-?up|debt|TODO)(?![\w-])", re.I)
+PROSE = re.compile(r"(?<![\w-])(?<!cue ')(?<!cues: ')(owed|still owed|deferred|remediation(?!\s+(?:protocol|edits?|guard|routing)(?![\w-]))|follow-?up|debt|TODO)(?![\w-])", re.I)
+#
+# A SIXTH FALSE-POSITIVE CLASS, AND IT IS LEXICAL LIKE THE FIRST: THE CUE IS PART OF A NAME. The
+# construct is a MECHANISM NAME — `remediation protocol`, `remediation EDIT`, `remediation guard`,
+# `remediation routing` — which is core's own vocabulary for a piece of machinery, not a statement
+# that remediation is owed. An adjudicator comparing a consumer entry against core has to name
+# that machinery to say the entry does not touch it, and the arm charged them for naming it. The
+# same class carries a SELF-MENTION: a row quoting this tool's own output, `on cue 'deferred'`, is
+# describing the report, not incurring a debt — the case the third class below records the tool
+# scoring as an instance of its own subject.
+#
+# BOTH RULES LIVE INSIDE `PROSE`, AS LOOKAROUNDS, AND NOT IN THE `hits` COMPREHENSION BELOW. The
+# `layer-debt-due-and-discharge` battery anchors three mutants (M5, M6, M11) on the text of that
+# comprehension, so a rule sited there would move their anchor and break them.
+#
+# MEASURED ON THE REFERENCE REGISTER, 568 rows: UNDECLARED 6 before, 0 after. Five of the six
+# were flagged on `remediation` alone and all five are mechanism names; the sixth is the
+# self-mention, flagged on `deferred`. `remediation` occurs 15 times on 13 rows. Twelve of those
+# are mechanism names, and 11 of them are followed by a member of the closed noun set; the twelfth
+# is `Remediation Rule 12`, whose noun is `Rule`. Two are the genuine debts, `OWED REMEDIATION,
+# deferred by operator decision` and `OWED REMEDIATION, still outstanding`, and they STAY cues
+# because a comma follows, not a mechanism noun. The fifteenth is `remediation writes`, a verb,
+# and stays a cue. The self-mention form occurs exactly once on the register.
+#
+# THE NARROWING STORY, because the next author will want to widen it back.
+#
+# A CLOSED NOUN SET, NOT DROPPING `remediation`. Dropping the word loses real obligations spelled
+# with it and no other cue — "Remediation of the anchor is still pending" is one, and this regex
+# still reports it. The set is exactly the four nouns seen following the word on the register
+# (`protocol`, `edit`/`edits`, `guard`, `routing`), and each must end at the same `(?![\w-])`
+# boundary as the cue itself, so `remediation guardrail` or `remediation edit-queue` stays a cue.
+# `rule`/`rules` is NOT in the set: its one occurrence sits on a row no arm flags, so admitting it
+# would move nothing today, which is the vacuous widening `mechanism-design.md` refuses.
+#
+# THE EXACT `cue '` / `cues: '` PREFIX, NOT ANY QUOTED CUE. A quote alone does not make a mention:
+# "The split is 'deferred' to a later pull" is an adjudicator stating a real obligation with
+# emphasis, and it stays flagged. Only the tool's own reporting vocabulary marks the word as a
+# quotation of this report. On the register a bare quoted cue occurs once, and that once is the
+# self-mention, so the wider form would acquit nothing more today and would lose the constructible
+# obligation above.
+#
+# FALSE-ACQUITTAL SET, ENUMERATED. On the register it is EMPTY: all 12 occurrences the new
+# lookarounds deny, read in full, are 11 mechanism names and 1 self-mention. One false acquittal is
+# constructible — "The remediation edit to this entry has not been applied yet" is an obligation
+# spelled with a mechanism noun, and it is acquitted. That is the accepted cost: that sentence
+# names an edit that is pending, and the register's adjudicators spell that case with `owed` or
+# `deferred`, which this change does not touch.
 #
 # A THIRD FALSE-POSITIVE CLASS, AND IT IS THE ONE THAT PUNISHES THE CORRECT ANSWER. The two
 # above are lexical (a cue inside an identifier) and structural (a discharge row). This one is
