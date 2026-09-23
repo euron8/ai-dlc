@@ -1,7 +1,6 @@
 ---
 name: ai-dlc-setup
 description: "Guided configuration wizard for AI/DLC. Run bare for full setup, or with a section name to jump directly: /ai-dlc-setup [models|deploy|ownership|operations|launch|conventions|patterns|validate]"
-effort: medium
 ---
 
 # AI/DLC Setup Wizard
