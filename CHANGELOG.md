@@ -15,6 +15,58 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.625.0] - 2026-09-23
+
+### PC-S313-DEBT-AUDIT-CUE-FIRES-ON-A-CORE-CONSTRUCT-NAME — `audit-layer-debt.sh` stops charging a core mechanism's name, or a quote of its own cue, as an undeclared obligation
+
+The UNDECLARED arm of `core/scripts/audit-layer-debt.sh` flagged every row whose reason contained
+`remediation`. On the reference consumer's 568-row register, all 6 UNDECLARED rows were false.
+Five named core machinery (`remediation protocol`, `remediation EDIT`, `remediation guard`,
+`remediation routing`), and one quoted the tool's own output, `on cue 'deferred'`. The register is
+append-only, so those rows could never be cleared. `PROSE` now denies `remediation` when a noun
+from a closed set follows it, and denies a cue that follows the tool's own `cue '` or `cues: '`
+prefix. UNDECLARED on that register goes from 6 to 0, and both genuine `OWED REMEDIATION` debts
+stay flagged. The consumer's receipt accepted three regressions, so it is replaced. The new receipt
+drives the shipping script with two controls that must stay flagged, and all three regressions
+score 9 against it. `layer-debt-due-and-discharge` gains arms for both forms. `BL-290`.
+
+### PC-S313-REMOVE-NOTIFY-HOOK — the `Notification` desktop-alert hook is retired
+
+The operator ruled the input-needed desktop notifier out of the distribution. `ai-dlc-notify.sh`,
+its `Notification` block in `templates/settings.json.template`, the post-install channel probe in
+`scripts/install.sh` and the `notify-hook-channel` fixture are deleted, along with the fixture's
+globs in `core-manifest.md` and `setup-sites.md`. `scripts/uninstall.sh` removes an old install's
+copy of the fixture. `BL-291`.
+
+**On the pull, the three UPSTREAM-DELETED paths are ONE decision.** Accept all three:
+`.claude/hooks/ai-dlc-notify.sh`, `tests/fixtures/notify-hook-channel/run.sh` and
+`tests/fixtures/notify-hook-channel/seed.sh`. The pull gates each path separately, but declining
+any one of them breaks something. If the hook deletion is declined, the settings merge still drops
+its registration, so the hook is left unregistered. `validate-hook-registration.sh` then exits 1,
+and its remedy (re-run the settings merge) cannot fix it. If a fixture deletion is declined, that
+fixture's seed exits 2. Do not commit or push between deleting the files and running the settings
+merge, because the registration is dangling in that window and the gate is red. The merge leaves
+an empty `"Notification": []` key, which is inert.
+
+### PC-S313-EMIT-REPORT-E2-IS-A-FOURTH-POOL-FLAKE-ARM — `reconcile-emit-report`'s kill-set arms now say why they failed (BL-230 is NOT closed)
+
+The E2 failure the consumer filed is the fifth arm of `BL-230`'s intermittent pool failure, and it
+again scored V-HC as an extra world. CPU load did not reproduce it: 144 `--verify` runs, 12 fixture
+runs and 3432 replayed score cells all agreed. At the observed rate, 12 runs predict about 0.4
+failures, so that zero is not a refutation. A forced `ulimit -u` cap flipped V-HC's verdict in 4
+of 12 rounds, because a sibling fork failure was rendered as DETECTOR-REFUSED. That failure mode is
+real, but the cap is not attributed to the consumer's failure, which ran far below it. When a
+kill-set arm fails, it now prints the differing world's score cells and a diff of its stderr, so
+the next failure carries its cause. E1's message is corrected to match its two-world assertion.
+**`BL-230` stays open.**
+
+### Filed
+
+`BL-292`: `apply.sh` emits no worklist row for a DANGLING hook registration, because it parses only
+the UNREGISTERED list's line shape. `apply.sh` is a bootstrapping file, so its fix ships in a release
+of its own. `BL-002` is re-measured: `uninstall.sh` removes none of the installed hooks, and its
+`has` receipt, which a comment could satisfy, is replaced by one that drives install and uninstall.
+
 ## [0.624.0] - 2026-09-23
 
 ### PC-S313-FIXTURE-SKILLS-PATH-DIST-LAYOUT-ASSUMPTION — the world-guard mutant copy no longer links a `core/skills` nothing reads
