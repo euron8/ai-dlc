@@ -2009,9 +2009,16 @@ fi  # ---- end of the BL-276 block ---------------------------------------------
 #       settings.local.json registers a LIVE hook (file present, so the validator lists it under
 #       its NOTE, in the same bare shape as a DANGLING name) must not have that hook named in
 #       either WORKLIST row -- the NOTE list is not a failure list.
+#   (g) dangling, registered in BOTH settings.json and settings.local.json
+#                                    -> named in the settings-merge row AND in a
+#                                       `settings-local-dangling` row. The validator's NOTE list is
+#                                       `local - main`, so the name is under DANGLING alone; the
+#                                       merge clears settings.json and leaves the local block, so a
+#                                       merge-only remedy leaves the validator at exit 1.
 #
-# MUTANTS: M-a (DANGLING parse removed), M-c (local-only split removed), M-d (unparsed DECISION
-# removed). R4 -- the "first non-4-space line ends the block" stop removed alone -- is NOT scored:
+# MUTANTS: M-a (DANGLING parse removed), M-b (the dangling clause OVERWRITES the unregistered text
+# instead of appending), M-c (local-only split removed), M-d (unparsed DECISION removed), M-g (the
+# direct settings.local.json read ignored). R4 -- the "first non-4-space line ends the block" stop removed alone -- is NOT scored:
 # against today's validator the NOTE header IS that first line, so the NOTE-mode switch covers
 # the stop and the stop covers the switch; removing either alone changes no row. That is recorded
 # in apply.sh beside the parse; a seed that separates them needs a validator section that does
@@ -2056,6 +2063,7 @@ hr_world() {
     both)      on="alpha"; main="beta" ;;
     localdg)   loc="ghost" ;;
     livelocal) on="alpha"; main="beta"; loc="alpha" ;;
+    bothfiles) on="alpha"; loc="beta" ;;
     emptyarr)  : ;;
     *)         return 1 ;;
   esac
@@ -2123,19 +2131,27 @@ hr_arm_f() { # <clean-dir> <livelocal-dir>
   case "$m$l" in *ai-dlc-hra-alpha.sh*) return 1 ;; esac
   return 0
 }
-# hr_vec <apply.sh> -> "a b c d e f" as 1 (holds) / 0 (fails). All six worlds are driven for every
-# subject, so a mutant is scored on every arm and a two-arm kill cannot hide.
+hr_arm_g() { # dangling in BOTH files -> both rows name it
+  [ "$(hr_n "$1" WORKLIST settings-merge)" = 1 ] && [ "$(hr_dlist "$1")" = "ai-dlc-hra-beta.sh " ] \
+    && [ "$(hr_n "$1" WORKLIST settings-local-dangling)" = 1 ] \
+    && [ "$(hr_sub "$1" WORKLIST settings-local-dangling)" = ".claude/settings.local.json" ] \
+    && case "$(hr_det "$1" WORKLIST settings-local-dangling)" in *"(DANGLING): ai-dlc-hra-beta.sh "*) true ;; *) false ;; esac
+}
+# hr_vec <apply.sh> -> "a b c d e f g" as 1 (holds) / 0 (fails). All seven worlds are driven for
+# every subject, so a mutant is scored on every arm and a two-arm kill cannot hide.
 hr_vec() {
-  local A="$1" cd cb cl ce cc cv v=""
+  local A="$1" cd cb cl ce cc cv cg v=""
   cd="$(hr_drive "$A" dangling)"; cb="$(hr_drive "$A" both)"; cl="$(hr_drive "$A" localdg)"
   ce="$(hr_drive "$A" emptyarr)"; cc="$(hr_drive "$A" clean)"; cv="$(hr_drive "$A" livelocal)"
-  for x in "$cd" "$cb" "$cl" "$ce" "$cc" "$cv"; do [ -d "$x" ] || { printf 'BROKEN'; return; }; done
+  cg="$(hr_drive "$A" bothfiles)"
+  for x in "$cd" "$cb" "$cl" "$ce" "$cc" "$cv" "$cg"; do [ -d "$x" ] || { printf 'BROKEN'; return; }; done
   hr_arm_a "$cd" && v="${v}1" || v="${v}0"
   hr_arm_b "$cb" && v="$v 1" || v="$v 0"
   hr_arm_c "$cl" && v="$v 1" || v="$v 0"
   hr_arm_d "$ce" && v="$v 1" || v="$v 0"
   hr_arm_e "$cd" && v="$v 1" || v="$v 0"
   hr_arm_f "$cc" "$cv" && v="$v 1" || v="$v 0"
+  hr_arm_g "$cg" && v="$v 1" || v="$v 0"
   printf '%s' "$v"
 }
 
@@ -2170,7 +2186,7 @@ fi
 if [ "$HR_PRESENT" = 1 ]; then
 HR_D="$HR_PROBE"
 HR_B="$(hr_drive "$APPLY" both)"; HR_L="$(hr_drive "$APPLY" localdg)"; HR_E="$(hr_drive "$APPLY" emptyarr)"
-HR_C="$(hr_drive "$APPLY" clean)"; HR_V="$(hr_drive "$APPLY" livelocal)"
+HR_C="$(hr_drive "$APPLY" clean)"; HR_V="$(hr_drive "$APPLY" livelocal)"; HR_G="$(hr_drive "$APPLY" bothfiles)"
 
 if hr_arm_a "$HR_D"; then
   ok "HR-a a dangling-only tree draws ONE WORKLIST settings-merge row whose DANGLING list is exactly ai-dlc-hra-beta.sh — and not the validator's FIX line that follows the list at the same indent"
@@ -2207,11 +2223,16 @@ if hr_arm_f "$HR_C" "$HR_V"; then
 else
   bad "HR-f a near-miss fired: clean rows=$(hr_any "$HR_C") stamp='$(stamp_ver "$HR_C")'; live-local tree rows=$(hr_any "$HR_V"), settings-merge detail names alpha: $(case "$(hr_det "$HR_V" WORKLIST settings-merge)$(hr_det "$HR_V" WORKLIST settings-local-dangling)" in *ai-dlc-hra-alpha.sh*) echo yes ;; *) echo no ;; esac)"
 fi
+if hr_arm_g "$HR_G"; then
+  ok "HR-g a dangling hook registered in BOTH settings.json and settings.local.json is named in the settings-merge row AND in a settings-local-dangling row on .claude/settings.local.json — the merge alone leaves the local block and the validator at exit 1"
+else
+  bad "HR-g the both-files tree drew settings-merge=$(hr_n "$HR_G" WORKLIST settings-merge) (DANGLING list '$(hr_dlist "$HR_G")') and settings-local-dangling=$(hr_n "$HR_G" WORKLIST settings-local-dangling) — the validator's NOTE list excludes a name also in settings.json, so the operator is sent round twice"
+fi
 
 # --- HR MUTANTS -------------------------------------------------------------------------------
 # Copies of the whole reconcile directory (`mut_apply`), `cmp -s`-guarded, each anchor asserted
 # UNIQUE before the edit so a respelled anchor reports DID NOT APPLY rather than a silent no-op.
-HR_WANT_CTL="1 1 1 1 1 1"
+HR_WANT_CTL="1 1 1 1 1 1 1"
 hr_mut() { # hr_mut <dir> <anchor-literal> ; transform on stdin
   local n; n="$(grep -cF -- "$2" "$REC/apply.sh")" || n=0
   [ "$n" = 1 ] || { cat >/dev/null; return 1; }
@@ -2237,7 +2258,7 @@ fi
 hr_score() {
   local v; v="$(hr_vec "$2/apply.sh")"
   if [ "$v" = "$3" ]; then
-    ok "$1 ($4): arm vector a..f = $v — killed exactly the arms it owns"
+    ok "$1 ($4): arm vector a..g = $v — killed exactly the arms it owns"
   elif [ "$v" = "$HR_WANT_CTL" ]; then
     bad "$1 SURVIVED ($4): every arm still holds ($v), so the arms it should kill are not testing that line"
   else
@@ -2248,19 +2269,21 @@ hr_score() {
 # M-a: the DANGLING parse removed. The D list is also the ONLY source of a local-only dangling
 # name (the split intersects it with the NOTE list), so (c) dies with (a)/(b)/(e) by construction:
 # there is no DANGLING-less input on which (c) could hold. A dangling-only tree then exits 1 with
-# nothing parsed, which the new rc!=0 branch reports as unparsed -- so (d) and (f) stay green.
+# nothing parsed, which the new rc!=0 branch reports as unparsed -- so (d) and (f) stay green,
+# and (g) dies with the rest: its name reaches the function only through the D list.
 HR_MA='    index($0, "  DANGLING ") == 1 { m = "D"; next }'
 if awk -v a="$HR_MA" '$0 == a { next } { print }' "$REC/apply.sh" | hr_mut "$WORK/hr-ma" "$HR_MA"; then
-  hr_score "HR-M-a" "$WORK/hr-ma" "0 0 0 1 0 1" "the DANGLING block parse deleted"
+  hr_score "HR-M-a" "$WORK/hr-ma" "0 0 0 1 0 1 0" "the DANGLING block parse deleted"
 else
   bad "HR-M-a DID NOT APPLY — the DANGLING parse line is no longer spelled \`$HR_MA\` exactly once in apply.sh; HR-a/b/e are unproven. Re-anchor it."
 fi
 
 # M-c: the local-only split removed -- the case subject is emptied, so no name ever matches the
-# NOTE list and every dangling name lands on the settings-merge row that cannot clear it.
+# NOTE list and every dangling name lands on the settings-merge row that cannot clear it. (The
+# direct settings.local.json read still adds a local row, so (c) dies on the extra merge row.)
 HR_MC='    case "$hr_local" in'
 if awk -v a="$HR_MC" '$0 == a { print "    case \"\" in"; next } { print }' "$REC/apply.sh" | hr_mut "$WORK/hr-mc" "$HR_MC"; then
-  hr_score "HR-M-c" "$WORK/hr-mc" "1 1 0 1 1 1" "the settings.local.json split deleted; local names go to settings-merge"
+  hr_score "HR-M-c" "$WORK/hr-mc" "1 1 0 1 1 1 1" "the settings.local.json split deleted; local names go to settings-merge"
 else
   bad "HR-M-c DID NOT APPLY — \`$HR_MC\` is not in apply.sh exactly once; HR-c is unproven. Re-anchor it."
 fi
@@ -2269,9 +2292,26 @@ fi
 # silent exactly as before the fix.
 HR_MD='  elif [ "$hr_rc" != "0" ]; then'
 if awk -v a="$HR_MD" '$0 == a { print "  elif false; then"; next } { print }' "$REC/apply.sh" | hr_mut "$WORK/hr-md" "$HR_MD"; then
-  hr_score "HR-M-d" "$WORK/hr-md" "1 1 1 0 1 1" "the hook-registration-unparsed branch made unreachable"
+  hr_score "HR-M-d" "$WORK/hr-md" "1 1 1 0 1 1 1" "the hook-registration-unparsed branch made unreachable"
 else
   bad "HR-M-d DID NOT APPLY — \`$HR_MD\` is not in apply.sh exactly once; HR-d is unproven. Re-anchor it."
+fi
+
+# M-b: the dangling clause OVERWRITES hr_what instead of appending, so a tree with an unregistered
+# AND a dangling hook loses the unregistered name. Only (b) seeds both at once.
+HR_MB='    [ -n "$hr_dangle" ] && hr_what="${hr_what}hook(s) REGISTERED'
+if awk -v a="$HR_MB" 'index($0, a) == 1 { sub(/hr_what="\$\{hr_what\}hook/, "hr_what=\"hook") } { print }' "$REC/apply.sh" | hr_mut "$WORK/hr-mb" "$HR_MB"; then
+  hr_score "HR-M-b" "$WORK/hr-mb" "1 0 1 1 1 1 1" "the dangling clause overwrites the unregistered text"
+else
+  bad "HR-M-b DID NOT APPLY — \`$HR_MB\` is not in apply.sh exactly once; HR-b's mixed row is unproven. Re-anchor it."
+fi
+
+# M-g: the direct settings.local.json read ignored -- a name in both files goes to the merge only.
+HR_MG='                    case "$hr_inlocal" in'
+if awk -v a="$HR_MG" 'index($0, a) == 1 { sub(/case "\$hr_inlocal" in/, "case \"\" in") } { print }' "$REC/apply.sh" | hr_mut "$WORK/hr-mg" "$HR_MG"; then
+  hr_score "HR-M-g" "$WORK/hr-mg" "1 1 1 1 1 1 0" "the direct settings.local.json read ignored"
+else
+  bad "HR-M-g DID NOT APPLY — \`$HR_MG\` is not in apply.sh exactly once; HR-g is unproven. Re-anchor it."
 fi
 fi  # ---- end of HR_PRESENT
 fi  # ---- end of the BL-292 block
