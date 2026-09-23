@@ -130,19 +130,18 @@ substitution_only() { # <consumer-section-text> <dist-section-text>
 # here: every path below that proceeds on a guess ends in `git show > core`, which deletes
 # whatever the guess left out. Writes go to temp files that are published only after every
 # check has passed, and the EXIT trap removes them, so a refusal leaves the consumer as it was.
-refuse() { echo "register-drift: $1" >&2; echo "  .claude/${REL#skills/ai-dlc/} NOT reverted; the consumer's edit is still in place. Re-run; if it repeats, register by hand." >&2; exit 2; }
+refuse() { echo "register-drift: $1" >&2; echo "  ${CONS_FILE#$CONSUMER/} NOT reverted; the consumer's edit is still in place. Re-run; if it repeats, register by hand." >&2; exit 2; }
 
-# The heading list is captured ONCE and reused by the conservation check below, so the two
-# passes account for the same set. grep exits 1 on a file with no headings (a real answer: the
-# `no ## / ### section differs` exit handles it); anything above 1 is a grep that did not run,
-# and an empty list would make the conservation check pass vacuously.
+# grep exits 1 on a file with no headings (a real answer: the `no ## / ### section differs`
+# exit handles it); anything above 1 is a grep that did not run, and an empty list would read as
+# a file with nothing to classify.
 hl="$(headings_of "$CONS_FILE")"; hrc=$?
 [ "$hrc" -le 1 ] || refuse "cannot list the headings of $CONS_FILE (grep exit $hrc)"
 
 changed=""
 skipped=""
-skipped_nl=""   # the same set one per line, for the conservation check's exact-line match
 added=""
+unaddressable=""
 while IFS= read -r line; do
   h="${line#*:}"
   [ -n "$h" ] || continue
@@ -153,6 +152,18 @@ while IFS= read -r line; do
   # `mktemp` shim failing on the dist side of Beta alone: Beta went to extensions/ as an
   # addition while core's Beta rendered beside it.
   a="$(section_of "$h" < "$CONS_FILE")" || refuse "cannot read the consumer's section '${h}'"
+
+  # A heading the resolver cannot ADDRESS: its name normalizes to nothing (`## 概要`, `## ***`),
+  # so section_of matches no line even in the file the heading was read from. An override
+  # anchors by that same resolver, so no override or extension can carry such a section. It is
+  # left to the positional conservation check below: unchanged, it is byte-equal to core and
+  # needs no carrying; changed, the check refuses it by position. Measured before this: the
+  # empty `b` filed an unchanged `## 概要` as a consumer-only ADDITION -- the dry run previewed
+  # an empty extension -- and --apply then refused it as "reads EMPTY" on every re-run.
+  if [ -z "$a" ]; then
+    unaddressable="${unaddressable}${unaddressable:+; }${h}"
+    continue
+  fi
   b="$(git -C "$DIST" show "${BASE}:${CORE}" | section_of "$h")" || refuse "cannot read core's section '${h}' at ${BASE}"
 
   # A section the CONSUMER has but CORE does not is an ADDITION, not an override.
@@ -174,7 +185,7 @@ while IFS= read -r line; do
   # missing a section is the preview the operator approves before --apply.
   so="$(substitution_only "$a" "$b")"
   case "$so" in
-    yes) skipped="${skipped}${skipped:+, }${h}"; skipped_nl="${skipped_nl}${skipped_nl:+$'\n'}${h}"; continue ;;
+    yes) skipped="${skipped}${skipped:+, }${h}"; continue ;;
     no)  ;;
     *)   refuse "cannot classify section '${h}': diff did not run" ;;
   esac
@@ -182,6 +193,7 @@ while IFS= read -r line; do
 done <<<"$hl"
 
 [ -n "$skipped" ] && echo "── skipped (template substitution only, not a consumer change): ${skipped}"
+[ -n "$unaddressable" ] && echo "── headings no override can anchor to (the name normalizes to nothing; conserved only if unchanged): ${unaddressable}"
 [ -n "$added" ] && echo "── consumer-ONLY sections (core has no such heading) -> extensions/, not overrides/: $(printf '%s' "$added" | tr '\n' ';')"
 
 if [ -z "$changed" ]; then
@@ -216,35 +228,30 @@ ${body}
 EOF
 }
 
-if [ "$APPLY" != "--apply" ]; then
-  echo "── would write: ${OUT#$CONSUMER/}"
-  echo "── would revert: .claude/${REL#skills/ai-dlc/} to ${BASE}"
-  echo "── ${n_changed} changed section(s): $(printf '%s' "$changed" | tr '\n' ';')"
-  echo ""
-  render
-  echo ""
-  echo "register-drift: DRY RUN. Re-run with --apply to write it."
-  exit 0
-fi
-
-# Every write below is CHECKED, because the revert at the end runs on whatever they left.
-# Measured: with the override path unwritable (a directory in its place), `render > "$OUT"`
-# failed, the script carried on, printed REGISTERED, reverted core, and the edit existed
-# nowhere under the consumer.
+# Everything is STAGED in temp files first and checked before anything is published -- in a dry
+# run too, so the preview and the apply cannot disagree about whether this file is registrable.
+# Measured: with the override path unwritable (a directory in its place), an unchecked
+# `render > "$OUT"` failed, the script carried on, printed REGISTERED, reverted core, and the
+# edit existed nowhere under the consumer. Writing in place and refusing afterwards is not
+# enough either: an override with an EMPTY body (a failed body extraction) is a live file that
+# shadows core's section with nothing on the next render.
 #
-# The override and extension are written to TEMP files beside their targets and moved into
-# place only after the conservation check below has read them back. A refusal therefore
-# leaves the consumer exactly as it was. Writing in place and refusing afterwards is not
-# enough: an override with an EMPTY body (the failed body extraction the check exists to
-# catch) is a live file that shadows core's section with nothing on the next render.
-#
-# The target must be a regular file or absent: `mv` onto a DIRECTORY succeeds by moving the file
-# inside it, which is the unwritable-path case above reporting success a second way.
+# Under --apply the temp files sit beside their targets, so the final `mv` is a rename; a dry run
+# stages them outside the consumer. The EXIT trap removes whatever was not published. A target
+# must be a regular file or absent: `mv` onto a DIRECTORY succeeds by moving the file inside it,
+# which is the unwritable-path case above reporting success a second way.
 OUT_TMP=""; EXT_TMP=""; rtmp=""
 cleanup_tmps() { local t; for t in "$OUT_TMP" "$EXT_TMP" "$rtmp"; do [ -n "$t" ] && rm -f "$t"; done; return 0; }
 trap cleanup_tmps EXIT
-[ ! -e "$OUT" ] || [ -f "$OUT" ] || refuse "the override path ${OUT#$CONSUMER/} exists and is not a regular file"
-OUT_TMP="$(mktemp "${OUT}.tmp.XXXXXX")" || refuse "cannot create a temp file beside ${OUT#$CONSUMER/}"
+stage() { # <target> -> path of a fresh temp file to stage it in
+  if [ "$APPLY" = "--apply" ]; then
+    [ ! -e "$1" ] || [ -f "$1" ] || refuse "${1#$CONSUMER/} exists and is not a regular file"
+    mktemp "${1}.tmp.XXXXXX"
+  else
+    mktemp
+  fi
+}
+OUT_TMP="$(stage "$OUT")" || refuse "cannot stage the override ${OUT#$CONSUMER/}"
 render > "$OUT_TMP" || refuse "cannot write the override ${OUT#$CONSUMER/}"
 
 # Consumer-only sections go to extensions/ — additive, file-hooked, no anchor to break.
@@ -256,11 +263,10 @@ if [ -n "$added" ]; then
     *)            EXT_SUB="steps-domain"; EXT_KIND="step" ;;
   esac
   EXT_DIR="$CONSUMER/.claude/skills/ai-dlc/extensions/$EXT_SUB"
-  mkdir -p "$EXT_DIR" || refuse "cannot create ${EXT_DIR#$CONSUMER/}"
+  if [ "$APPLY" = "--apply" ]; then mkdir -p "$EXT_DIR" || refuse "cannot create ${EXT_DIR#$CONSUMER/}"; fi
   ext_id="$(printf '%s' "$REL" | sed 's|.*/||; s|\.md$||')-consumer"
   EXT_OUT="$EXT_DIR/${ext_id}.md"
-  [ ! -e "$EXT_OUT" ] || [ -f "$EXT_OUT" ] || refuse "the extension path ${EXT_OUT#$CONSUMER/} exists and is not a regular file"
-  EXT_TMP="$(mktemp "${EXT_OUT}.tmp.XXXXXX")" || refuse "cannot create a temp file beside ${EXT_OUT#$CONSUMER/}"
+  EXT_TMP="$(stage "$EXT_OUT")" || refuse "cannot stage the extension ${EXT_OUT#$CONSUMER/}"
   {
     printf -- '---\nkind: %s\nhooks: %s\nid: %s\n' "$EXT_KIND" "$SHADOW_TGT" "$ext_id"
     printf 'reason: TODO — one line: why this consumer ADDS these sections. Written by register-drift.sh; core defines no heading for them, so they are additive and cannot be an override (an override anchors to a core heading; one that resolves to nothing is drift detection that is silently dead).\n---\n\n'
@@ -271,52 +277,147 @@ if [ -n "$added" ]; then
   } > "$EXT_TMP" || refuse "cannot write the extension ${EXT_OUT#$CONSUMER/}"
 fi
 
-# PRE-REVERT CONSERVATION CHECK. The revert below overwrites the consumer's file with core, so
-# every consumer section must already be somewhere else, or be core's own text. Each heading in
-# the SAME list the classifier walked must be one of:
-#   - byte-equal to core's section at BASE (nothing to carry);
-#   - present VERBATIM in the override or extension temp file just written, read back from disk;
-#   - in `skipped`, with substitution_only answering `yes` again from a diff that ran.
-# Anything else is refused with core NOT reverted. The classifier above is not trusted to have
-# got this right, because every way it has lost an edit was a wrong-but-plausible answer from a
-# step that failed quietly: a diff that did not run (two edited sections, diff failing for Beta
-# alone: rc 0, Beta's edit lost), a body extraction whose temp file could not be made (an EMPTY
-# override body, rc 0), an unchecked write. This check reads the RESULT, so it catches a failure
-# in any of them, including one nobody has found yet.
-written="$(cat "$OUT_TMP")" || refuse "cannot read back the override just written"
-if [ -n "$added" ]; then
-  ext_written="$(cat "$EXT_TMP")" || refuse "cannot read back the extension just written"
-  written="${written}"$'\n'"${ext_written}"
+# Core at BASE, exactly as the revert will write it. Staged in a FILE, not a process
+# substitution, because a `git show` that fails inside `<( )` hands `diff` an empty file and the
+# failure is invisible. Under --apply this same file is what gets moved over the consumer's.
+if [ "$APPLY" = "--apply" ]; then
+  rtmp="$(mktemp "${CONS_FILE}.revert.XXXXXX")" || refuse "cannot create a temp file beside ${CONS_FILE#$CONSUMER/}"
+  # `cp -p` first so the reverted file keeps the consumer file's mode.
+  cp -p "$CONS_FILE" "$rtmp" || refuse "cannot stage the revert of ${CONS_FILE#$CONSUMER/}"
+else
+  rtmp="$(mktemp)" || refuse "cannot stage core's ${CORE} for the dry run's check"
 fi
-n_checked=0
-while IFS= read -r line; do
-  h="${line#*:}"
-  [ -n "$h" ] || continue
-  a="$(section_of "$h" < "$CONS_FILE")" || refuse "conservation: cannot re-read the consumer's section '${h}'"
-  b="$(git -C "$DIST" show "${BASE}:${CORE}" | section_of "$h")" || refuse "conservation: cannot re-read core's section '${h}'"
-  # A heading taken from this very file always resolves to at least its own line, so an empty
-  # `a` is a resolver that did not run -- and an empty string is a substring of everything,
-  # so the verbatim test below would pass it vacuously.
-  [ -n "$a" ] || refuse "conservation: the consumer's section '${h}' reads EMPTY"
-  n_checked=$((n_checked + 1))
-  [ "$a" = "$b" ] && continue
-  case "$written" in *"$a"*) continue ;; esac
-  if grep -qxF -- "$h" <<<"$skipped_nl" && [ "$(substitution_only "$a" "$b")" = yes ]; then
-    continue
-  fi
-  refuse "conservation: section '${h}' differs from core at ${BASE} and is carried by nothing that was written"
-done <<<"$hl"
-# An empty walk would pass everything; the classifier found at least one changed section to
-# get here, so zero checked headings is a loop that did not run.
-[ "$n_checked" -gt 0 ] || refuse "conservation: checked no sections"
+git -C "$DIST" show "${BASE}:${CORE}" > "$rtmp" || refuse "cannot read core's ${CORE} at ${BASE}"
 
-# The revert writes a temp file beside the target and moves it into place only when `git show`
-# succeeded, so a failed show cannot truncate the consumer's file to nothing. `cp -p` first so
-# the file keeps its mode; the redirect then replaces the content only. It is PREPARED before
-# anything is published, so a failed show refuses while the consumer is still untouched.
-rtmp="$(mktemp "${CONS_FILE}.revert.XXXXXX")" || refuse "cannot create a temp file beside $CONS_FILE"
-cp -p "$CONS_FILE" "$rtmp" && git -C "$DIST" show "${BASE}:${CORE}" > "$rtmp" \
-  || refuse "cannot write core's ${CORE} at ${BASE} for the revert"
+# PRE-REVERT CONSERVATION CHECK, and it is POSITIONAL. The revert overwrites the consumer's file
+# with core, so every line the consumer changed must already be carried by something written.
+#
+# It does NOT ask the classifier's question again by heading NAME. `section_of` resolves a
+# heading by bidirectional substring match and returns the FIRST hit, so a check built on it is
+# blind exactly where the classifier is. Measured, each with rc 0, REGISTERED, core reverted and
+# the edit gone: an edited `## Review` below an unedited `## Review Process` (both resolve to the
+# latter); a duplicate heading edited at its second occurrence; a preamble edit beside an edited
+# section. It is real on a consumer: 9 of 564 headings across 8 installed files resolve to a
+# different line, among them `## The evidence contract — ...` resolving to `## Contract`.
+#
+# So the hunks come from ONE `diff` of core at BASE against the whole consumer file, and each
+# must be either:
+#   - a template-substitution hunk: its core side carries a `{token}` (install.sh's own edit,
+#     the same asymmetric test substitution_only uses); or
+#   - carried on both of its sides, as set out beside the check below.
+# Anything else -- a section the resolver misfiled, a preamble edit, a deleted section -- is
+# refused with core NOT reverted. The override system anchors by heading NAME through that same
+# resolver, so these shapes cannot be expressed as an override at all; refusing is the answer,
+# not a limitation of this check. The `diff` is checked like substitution_only's: exit 1 with a
+# hunk, or refuse, because a diff that did not run is the defect this whole check backs up.
+core_d="$(diff "$rtmp" "$CONS_FILE" 2>/dev/null)"; core_drc=$?
+[ "$core_drc" -eq 1 ] && [ -n "$core_d" ] \
+  || refuse "conservation: diff of core at ${BASE} against ${CONS_FILE#$CONSUMER/} did not run (exit ${core_drc})"
+[ -s "$OUT_TMP" ] || refuse "conservation: the staged override is empty"
+if [ -n "$added" ]; then
+  [ -s "$EXT_TMP" ] || refuse "conservation: the staged extension is empty"
+  nw=2
+else
+  nw=1
+fi
+# BOTH SIDES of every hunk are checked, because either can lose the edit:
+#   - each consumer line the hunk adds must sit in a POSITIONAL section whose whole text (trailing
+#     blank lines trimmed, since the override body is captured by `$( )`) appears verbatim in
+#     what was written;
+#   - each core line the hunk removes must sit in a core span the override SHADOWS -- resolved
+#     from `shadows:` by the same resolver the renderer uses. A removed core line outside every
+#     shadowed span renders back, so the consumer's change to it is undone. Measured on graph's
+#     analyst.md shape: the consumer edits `## Contract` and `## The evidence contract — ...`;
+#     both names resolve to `## Contract`, the consumer side of each is carried, and the
+#     evidence-contract edit was still lost, because nothing shadows core's evidence section.
+# Files are told apart by FNR resets, which an EMPTY file never produces -- hence the -s guards.
+shadow_spans=""
+while IFS= read -r h; do
+  [ -n "$h" ] || continue
+  s="$(span_of "$h" < "$rtmp")" || refuse "conservation: cannot resolve core's span for '${h}'"
+  [ -n "$s" ] || refuse "conservation: the override shadows '${h}', which resolves to no heading in core at ${BASE}"
+  shadow_spans="${shadow_spans}${shadow_spans:+,}${s% *}-${s#* }"
+done <<<"$changed"
+cons_check="$(awk -v nw="$nw" -v shadow="$shadow_spans" '
+  function spans(   i, j, m, k, SR, rr) {
+    sp = 1
+    for (i = 1; i <= nc; i++) {
+      LV[i] = 0
+      if (match(C[i], /^#+/) && RLENGTH >= 2 && RLENGTH <= 6 && substr(C[i], RLENGTH + 1, 1) ~ /[ \t]/) LV[i] = RLENGTH
+    }
+    for (i = 1; i <= nc; i++) {
+      if (LV[i] < 2 || LV[i] > 3 || substr(C[i], LV[i] + 1, 1) != " ") continue
+      ST[i] = 1; E[i] = nc
+      for (j = i + 1; j <= nc; j++) if (LV[j] && LV[j] <= LV[i]) { E[i] = j - 1; break }
+    }
+    m = split(shadow, SR, ",")
+    for (k = 1; k <= m; k++) { if (SR[k] == "") continue; split(SR[k], rr, "-"); ns++; SS[ns] = rr[1] + 0; SE[ns] = rr[2] + 0 }
+  }
+  function carried(i,   k, t, te) {
+    if (i in CA) return CA[i]
+    te = E[i]; while (te > i && (C[te] == "" || C[te] == "\r")) te--
+    t = C[i]; for (k = i + 1; k <= te; k++) t = t "\n" C[k]
+    CA[i] = (index("\n" W, "\n" t "\n") > 0)
+    return CA[i]
+  }
+  function covered(L,   i) {
+    for (i = 1; i <= L; i++) if ((i in ST) && E[i] >= L && carried(i)) return 1
+    return 0
+  }
+  function shadowed(k,   s) {
+    for (s = 1; s <= ns; s++) if (k >= SS[s] && k <= SE[s]) return 1
+    return 0
+  }
+  function close_hunk(   L, k) {
+    if (!inh) return
+    inh = 0
+    if (tok || bad != "") return
+    if (!sp) spans()
+    for (k = 1; k <= nlost; k++) if (!shadowed(LOST[k])) {
+      bad = "core line " LOST[k] " (" LOSTT[k] ") was changed or removed by the consumer, and no section the override shadows contains it"
+      return
+    }
+    if (op == "d") return
+    for (L = rs; L <= re; L++) if (!covered(L)) {
+      bad = "consumer line " L " (" C[L] ") is carried by nothing that was written: it sits before any ## / ### heading, or under one that resolves by name to a different section"
+      return
+    }
+  }
+  FNR == 1 { f++ }
+  f == 1 { C[FNR] = $0; nc = FNR; next }
+  f <= 1 + nw { W = W $0 "\n"; next }
+  /^[0-9]/ {
+    close_hunk()
+    p = match($0, /[acd]/); op = substr($0, p, 1)
+    n = split(substr($0, 1, p - 1), R, ","); ls = R[1] + 0
+    n = split(substr($0, p + 1), R, ","); rs = R[1] + 0; re = (n > 1 ? R[2] : R[1]) + 0
+    inh = 1; tok = 0; nlost = 0; kl = ls; nh++
+    next
+  }
+  /^</ {
+    if ($0 ~ /\{[a-z_][a-z0-9_]*\}/) tok = 1
+    nlost++; LOST[nlost] = kl; LOSTT[nlost] = substr($0, 3, 60); kl++
+  }
+  END {
+    close_hunk()
+    if (f != nw + 2 || !nh) { print "the whole-file diff was not read (files " f ", hunks " nh ")"; exit 3 }
+    if (bad != "") { print bad; exit 1 }
+    print "ok " nh
+  }
+' "$CONS_FILE" "$OUT_TMP" ${EXT_TMP:+"$EXT_TMP"} - <<<"$core_d")"; crc=$?
+[ "$crc" -eq 0 ] && [ "${cons_check%% *}" = ok ] \
+  || refuse "conservation: ${cons_check:-the check did not run (awk exit ${crc})}"
+
+if [ "$APPLY" != "--apply" ]; then
+  echo "── would write: ${OUT#$CONSUMER/}"
+  echo "── would revert: ${CONS_FILE#$CONSUMER/} to ${BASE}"
+  echo "── ${n_changed} changed section(s): $(printf '%s' "$changed" | tr '\n' ';')"
+  echo ""
+  cat "$OUT_TMP"
+  echo ""
+  echo "register-drift: DRY RUN. Re-run with --apply to write it."
+  exit 0
+fi
 
 # Publish, in the order that keeps the edit somewhere at every step: the override and the
 # extension land first, core is reverted last. `mktemp` creates 0600; the published files get
@@ -338,7 +439,7 @@ rtmp=""
 echo "REGISTERED  ${OUT#$CONSUMER/}"
 echo "  shadows      : ${shadow_line}"
 echo "  base_sha     : ${BASE}  (where the delta forked from, NOT the sha being pulled)"
-echo "  core reverted: .claude/${REL#skills/ai-dlc/} restored to ${BASE}"
+echo "  core reverted: ${CONS_FILE#$CONSUMER/} restored to ${BASE}"
 echo ""
 echo "  WRITE THE reason: LINE. It says TODO. An override whose reason nobody stated is"
 echo "  one nobody can ever retire — the next pull cannot ask 'does upstream supersede this?'"
