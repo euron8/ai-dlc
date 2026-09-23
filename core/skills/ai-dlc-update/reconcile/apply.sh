@@ -1867,17 +1867,56 @@ if [ -n "$HR_VALIDATOR" ]; then
     m != "" && $0 !~ /^    / { m = "" }
     m != "" && $0 ~ /^    ai-dlc-[^ ]*\.sh$/ { sub(/^    /, ""); print m, $0 }')"
   hr_local=" $(printf '%s\n' "$hr_blocks" | awk '$1 == "L" { print $2 }' | tr '\n' ' ')"
+  # THE NOTE LIST IS `local - main`, SO IT CANNOT SEE A NAME REGISTERED IN BOTH FILES. Such a name
+  # appears under DANGLING alone and would be routed to the merge only; the merge rewrites
+  # settings.json and leaves the settings.local.json block in place, so the validator still exits
+  # 1 and the operator is sent round a second time. So settings.local.json is read here directly,
+  # with the validator's OWN grammar: the pattern it prints on its `pattern (from ...)` line (the
+  # one it extracts from settings-merge.sh), applied to every `command` string under `hooks`, the
+  # name being the last path segment of the match -- the walk `registered_in()` performs. Reading
+  # the pattern off the output rather than restating it is what keeps the two from drifting.
+  hr_pat="$(printf '%s\n' "$hr_out" | sed -n 's/^  pattern (from [^)]*): //p' | head -n 1)"
+  hr_inlocal=" "
+  if [ -n "$hr_pat" ] && [ -f "$CONSUMER/.claude/settings.local.json" ]; then
+    hr_inlocal=" $(python3 -c '
+import json, re, sys
+rx = re.compile(sys.argv[2])
+def walk(n, out):
+    if isinstance(n, dict):
+        for k, v in n.items():
+            if k == "command" and isinstance(v, str):
+                out.append(v)
+            else:
+                walk(v, out)
+    elif isinstance(n, list):
+        for v in n:
+            walk(v, out)
+doc = json.load(open(sys.argv[1], encoding="utf-8"))
+cmds = []
+walk(doc.get("hooks", {}) if isinstance(doc, dict) else {}, cmds)
+for c in cmds:
+    for hit in rx.finditer(c):
+        print(hit.group(0).rsplit("/", 1)[-1])
+' "$CONSUMER/.claude/settings.local.json" "$hr_pat" 2>/dev/null | tr '\n' ' ')"
+  fi
   hr_dangle=""; hr_dangle_local=""
-  for _hn in $(printf '%s\n' "$hr_blocks" | awk '$1 == "D" { print $2 }'); do
+  # A `while read` OVER A HERE-STRING, NEVER `for _hn in $(...)`. This file has no `set -f`, and a
+  # registered name is whatever the settings say: `.claude/hooks/ai-dlc-*.sh` matches the
+  # validator's pattern, is printed under DANGLING as `ai-dlc-*.sh`, and an unquoted expansion
+  # globs it against the cwd. Measured from `.claude/hooks`: it named all 21 hooks.
+  while IFS= read -r _hn; do
+    [ -n "$_hn" ] || continue
     case "$hr_local" in
       *" ${_hn} "*) hr_dangle_local="${hr_dangle_local}${_hn} " ;;
-      *)            hr_dangle="${hr_dangle}${_hn} " ;;
+      *)            hr_dangle="${hr_dangle}${_hn} "
+                    case "$hr_inlocal" in *" ${_hn} "*) hr_dangle_local="${hr_dangle_local}${_hn} " ;; esac ;;
     esac
-  done
+  done <<< "$(printf '%s\n' "$hr_blocks" | awk '$1 == "D" { print $2 }')"
   # ONE ROW PER REMEDY. Unregistered and dangling-in-settings.json are both cleared by the same
   # merge, so they share the one `settings-merge` row -- whose unregistered wording is unchanged.
   # A dangling registration held in settings.local.json is a different act on a different file,
-  # so it gets its own row. Nothing downstream collapses rows by id: `say` prints and counts each
+  # so it gets its own row, and a name registered in BOTH files is named in both rows. Nothing
+  # downstream collapses rows by id: `say` prints and counts each
   # one, so two rows here are two undisposed items to `handback` and to `worklist_n` alike.
   if [ "$hr_rc" = "1" ] && { [ -n "$hr_names" ] || [ -n "$hr_dangle" ] || [ -n "$hr_dangle_local" ]; }; then
     hr_what=""
@@ -1889,7 +1928,7 @@ if [ -n "$HR_VALIDATOR" ]; then
     fi
     if [ -n "$hr_dangle_local" ]; then
       say WORKLIST settings-local-dangling ".claude/settings.local.json" \
-        "hook(s) registered ONLY in .claude/settings.local.json with no file under .claude/hooks/ (DANGLING): ${hr_dangle_local}— Claude Code cannot run them. \`reconcile/settings-merge.sh\` never touches settings.local.json, so the settings reconcile cannot clear this: remove each named hook's block from .claude/settings.local.json by hand, on every machine that holds one. Re-run scripts/ai-dlc/validate-hook-registration.sh afterwards; it must exit 0 before delivery."
+        "hook(s) registered in .claude/settings.local.json with no file under .claude/hooks/ (DANGLING): ${hr_dangle_local}— Claude Code cannot run them. \`reconcile/settings-merge.sh\` never touches settings.local.json, so the settings reconcile cannot clear this, including for a name the settings-merge row also lists: remove each named hook's block from .claude/settings.local.json by hand, on every machine that holds one. Re-run scripts/ai-dlc/validate-hook-registration.sh afterwards; it must exit 0 before delivery."
     fi
   elif [ "$hr_rc" = "2" ]; then
     say DECISION hook-registration-unreadable ".claude/settings.json" \
