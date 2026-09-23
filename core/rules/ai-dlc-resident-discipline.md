@@ -18,7 +18,9 @@ into the working context. Query `pipeline-snapshot.md` for prior-step state inst
 
 **(b) Sliced re-read.** On a Rule 22 resume into a large step file whose earlier numbered
 sections are complete, the mandatory `Read` MAY carry an `offset`. The Read call stays
-mandatory — only its span narrows. Never slice past an incomplete section.
+mandatory — only its span narrows. Never slice past an incomplete section. A
+POST-COMPACTION resume inside a gate re-reads the `gate-slice.sh` plan narrowed by
+`gate-checkpoint.sh done` (Rule 21), not the whole `gate-validation.md`.
 
 **(c) Offload high-volume observational Bash.** Large read-only output (test runs, gate
 output, `git log`/`diff`/`status`, log scans) MUST go through `ctx_batch_execute` /
