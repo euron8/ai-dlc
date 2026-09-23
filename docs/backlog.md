@@ -4010,8 +4010,17 @@ timed base 17.42-17.62s against tip 17.50-17.85s, three interleaved reps, ranges
 without editing the carrier passes the arm by design; the receipt's clause grep is what catches
 that regression here, and nothing catches it for a future clause.
 
-**RECEIPT, SCORED.** Distribution engine: exit 0 is CLOSE-CANDIDATE. Base **1**, tip **0**; stamp
-re-pointed at the unedited carrier **1** (clause grep); clause carried with the carrier sha left
-stale **1** (the arm fires); clause carried with the binding absent **1** (no stamp-bound count).
+**RECEIPT, SCORED.** Distribution engine: exit 0 is CLOSE-CANDIDATE, 9 is a missing subject or
+an edit that did not apply. It DRIVES the arm: `core/` and `scripts/` are copied under `mktemp`,
+and the copy's validator resolves its root from its own path, so it reads the copy. On the
+unedited copy I79 must exit 0 with a stamp-bound count of at least one. Rule 23(b)'s heading
+line is then edited in the COPY only, and I79 must print `the rule body moved`, which only a
+validator reading the copy can do. Finally `gate-checkpoint.sh done` must sit inside the
+carrier's `**(b)` paragraph on a line that is not an HTML comment. Base `13dd61de` **1**, tip
+**0**; the corpus drift `err` replaced by `:` **1** (the tip adversary's mutant, which every
+fixture passed before batch 142's A43/A44); carrier reverted to base with
+`<!-- gate-checkpoint.sh done -->` appended and re-stamped **1**, and the same comment placed
+inside `**(b)` **1**. The arm itself is held by `enforcement-map-derivations` A43 (rule body
+moved), A44 (carrier moved) and A45 (a Rule 24 edit stays silent while still stamp-bound).
 
-verify: sh set -e; k=core/rules/ai-dlc-resident-discipline.md; [ -r "$k" ] || exit 9; o="$(bash scripts/validate-enforcement-map.sh --arms I79 2>&1)" || exit 1; case "$o" in *" "[1-9]*" rule(s) stamp-bound to a .claude/rules/ carrier"*) : ;; *) exit 1 ;; esac; LC_ALL=C grep -q 'gate-checkpoint.sh done' "$k" || exit 1; exit 0
+verify: sh k=core/rules/ai-dlc-resident-discipline.md; s=core/skills/ai-dlc/SKILL.md; v=scripts/validate-enforcement-map.sh; [ -r "$k" ] && [ -r "$s" ] && [ -r "$v" ] || exit 9; [ "$(grep -c '^\*\*(b) Sliced re-read of large step files\.\*\* ' "$s")" = 1 ] || exit 9; d="$(mktemp -d)" || exit 9; trap 'rm -rf "$d"' EXIT; cp -R core scripts "$d/" || exit 9; o="$(bash "$d/$v" --arms I79 2>&1)" || exit 1; case "$o" in *"I79 carrier stamps: "[1-9]*" rule(s) stamp-bound to a .claude/rules/ carrier."*) : ;; *) exit 1 ;; esac; awk '/^\*\*\(b\) Sliced re-read of large step files\.\*\* / { $0 = $0 " RECEIPT-EDIT" } { print }' "$s" > "$d/$s" || exit 9; cmp -s "$s" "$d/$s" && exit 9; o="$(bash "$d/$v" --arms I79 2>&1)"; case "$o" in *"the rule body moved"*) : ;; *) exit 1 ;; esac; awk '/^\*\*\(b\)/ { p = 1 } p && /^$/ { p = 0 } p && index($0, "gate-checkpoint.sh done") && $0 !~ /^[[:space:]]*<!--/ { f = 1 } END { exit !f }' "$k" || exit 1; exit 0
