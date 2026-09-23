@@ -1451,6 +1451,24 @@ v_diffset() { # v_diffset <tag-a> <tag-b> — names of the worlds whose score di
   printf '%s' "${out% }"
 }
 v_of() { cat "$VW/$1/score.$2" 2>/dev/null; }
+# v_diag <world> <tag> — WHY a world's cell moved, printed only on a failing kill arm. A red run
+# under the pre-push pool leaves nothing behind but this unit's captured output, which both
+# runners copy WHOLE into .git/ai-dlc-fixture-failures; the scratch worlds are gone. A FAIL line
+# naming one extra world cannot say whether that world took a real verdict or a sibling detector
+# died under load (exit 128 renders DETECTOR-REFUSED and moves the cell), so the two cells and
+# the difference between the two stderr captures are written here, bounded to 40 diff lines.
+v_diag() {
+  local w="$1" t="$2" a="$VW/$1/stderr.ship" b="$VW/$1/stderr.$2"
+  printf '  DIAG  %s %s: ship=[%s] %s=[%s]\n' "$t" "$w" "$(v_of "$w" ship)" "$t" "$(v_of "$w" "$t")"
+  if [ ! -f "$a" ] || [ ! -f "$b" ]; then
+    printf '  DIAG  %s %s: stderr capture missing (ship:%s %s:%s)\n' "$t" "$w" \
+      "$([ -f "$a" ] && echo present || echo ABSENT)" "$t" "$([ -f "$b" ] && echo present || echo ABSENT)"
+  elif cmp -s "$a" "$b"; then
+    printf '  DIAG  %s %s: stderr.ship and stderr.%s are byte-identical\n' "$t" "$w" "$t"
+  else
+    diff -u "$a" "$b" | awk -v p="  DIAG  $t $w | " 'NR <= 40 { print p $0 } END { if (NR > 40) print p "... (" NR - 40 " more diff lines cut)" }'
+  fi
+}
 
 VDG() { git -C "$DIST" -c user.email=f@f -c user.name=fixture "$@" >/dev/null 2>&1; }
 
@@ -1726,7 +1744,7 @@ fi
 #
 # KILL SETS ARE ASSERTED EXACTLY AND SOME OF THEM HAVE THREE MEMBERS. That is the arms
 # OVERLAPPING rather than the mutants being wrong, and it is measured rather than assumed: V-R
-# and V-U read exit 3, so every mutation of the resolved-cause BRANCH moves all three.
+# and V-U read exit 3, so every mutation of the resolved-cause BRANCH moves both.
 # What separates those mutants is what they move BEYOND that set — E5 reaches V-HA, E1 does not —
 # and the specific wrong verdict each world takes, asserted per world below.
 V_APPLIED=""
@@ -1875,12 +1893,15 @@ v_kill() {
   got="$(v_diffset ship "$n")"
   if [ "$got" != "$want" ]; then
     bad "$n moved the worlds [${got:-none}] and had to move exactly [$want] — a mutant that fails more than its own arms means two of them are entangled, and one that fails fewer means the arm it guards is carried by something else"
+    for w in $got; do case " $want " in *" $w "*) : ;; *) v_diag "$w" "$n" ;; esac; done
+    for w in $want; do case " $got " in *" $w "*) : ;; *) v_diag "$w" "$n" ;; esac; done
     allok=0
   fi
   for spec in "$@"; do
     w="${spec%%:*}"; exp="${spec#*:}"; act="$(v_of "$w" "$n")"
     if [ "$act" != "$exp" ]; then
       bad "$n on $w scored $act, not the specific wrong verdict $exp — the cell moved for some reason other than the one this mutation names, so the kill is unattributed"
+      v_diag "$w" "$n"
       allok=0
     fi
   done
@@ -1896,7 +1917,7 @@ fi
 # E1: the classification deleted — the program as it stood before this change, which reported the
 # mismatch and exited 1 for every cause. Moves every world that reads 3 and nothing else.
 v_kill E1 "V-R V-U" "V-R:1|BLOCKERS-RESOLVED|1|1|0|0" \
-  && ok "E1 (exit 3 deleted): the three worlds that read 3 go red and no other — the resolved-blocker case falls back to the undifferentiated refusal and apply.sh cannot tell it from a hand-edit"
+  && ok "E1 (exit 3 deleted): the two worlds that read 3 go red and no other — the resolved-blocker case falls back to the undifferentiated refusal and apply.sh cannot tell it from a hand-edit"
 
 # E2: the refs comparison disarmed. A moved upstream must be decided FIRST, because it makes every
 # other line incomparable. Now that `_stamp_` has left the comparison, V-M is the only world whose
