@@ -2041,15 +2041,24 @@ WG_MUT=""
 # scores as MUTANT SURVIVED. FIXTURE STALE and MUTANT SURVIVED prescribe opposite repairs.
 #
 # THE COPY IS A TREE, NOT A FILE, AND A PARTIAL ONE MAKES EVERY MUTANT SURVIVE. This script's
-# line 2 sources `../lib/preamble.sh` and its `seed.sh` resolves the distribution by walking
-# `$HERE/../../..`; a copy missing either dies before its first assertion, reports nothing,
-# and every "expected at least 1 failure" arm reads that silence as MUTANT SURVIVED.
-# MEASURED exactly that way on the first cut: all six scored SURVIVED against an untouched
-# subject, which reads precisely like a change that does not work. The usual control could
-# not see it, because the control runs the REAL file in the REAL tree and passed.
+# line 2 sources `../lib/preamble.sh`; a copy without it dies before its first assertion,
+# reports nothing, and every "expected at least 1 failure" arm reads that silence as MUTANT
+# SURVIVED. MEASURED exactly that way on the first cut: all six scored SURVIVED against an
+# untouched subject, which reads precisely like a change that does not work. The usual
+# control could not see it, because the control runs the REAL file in the REAL tree and passed.
 #
-# So the copy is rooted at `<d>/core/fixtures/<name>/`, with `lib/` beside it and `skills/`
-# symlinked to the real one, which is what makes `../lib` and `../../..` both resolve.
+# So the copy is rooted at `<d>/core/fixtures/<name>/` with `lib/preamble.sh` beside it, and
+# that copy is guarded. NOTHING ELSE IS NEEDED, BECAUSE PROBE-ONLY MODE NEVER RUNS `seed.sh` --
+# the only reader of the distribution's `core/skills` -- and exits at the probe's own verdict.
+# MEASURED: an unmutated copy with `core/skills` linked and one with no `core/skills` at all
+# print byte-identical probe output (rc 0, 13 ok lines, 0 verdict failures). `skills/` was
+# linked here once, and on an installed consumer (this file at `tests/fixtures/<name>/`) its
+# `cd "$HERE/../../skills"` failed once per mutant, `ln -s ""` exited 0, and the refusal
+# beside it could never fire -- a guard with no subject, over a link nothing read. Do not
+# re-add it. If probe mode ever starts seeding, a skills-less copy prints `FIXTURE ERROR:
+# emit-report.sh not found in either layout` (measured, rc 2), and `wg_score` below refuses
+# that as MUTANT HARNESS BROKEN before any mutant verdict is read.
+# `seed.sh` and `README.md` are copied only so the copy tree matches the fixture's shape.
 wgmut() { # wgmut <name> <sed-arg>... -> sets WG_MUT
   local name="$1"; shift
   local r="$WORK/wg-$name" d
@@ -2058,8 +2067,6 @@ wgmut() { # wgmut <name> <sed-arg>... -> sets WG_MUT
   rm -rf "$r"; mkdir -p "$d" "$r/core/fixtures/lib"
   cp "$HERE/../lib/preamble.sh" "$r/core/fixtures/lib/" 2>/dev/null \
     || { bad "MUTANT HARNESS BROKEN [$name]: could not copy the fixture preamble; the copy would die on line 2 and its silence would score as a kill"; return 1; }
-  ln -s "$(cd "$HERE/../../skills" && pwd)" "$r/core/skills" 2>/dev/null \
-    || { bad "MUTANT HARNESS BROKEN [$name]: could not link core/skills into the copy tree; seed.sh would not resolve emit-report.sh"; return 1; }
   cp "$HERE/seed.sh" "$d/seed.sh" 2>/dev/null || true
   cp "$HERE/README.md" "$d/README.md" 2>/dev/null || true
   sed "$@" "$WG_SELF" > "$d/run.sh" || { bad "MUTANT DID NOT APPLY [$name]: sed exited non-zero"; return 1; }
@@ -2093,7 +2100,7 @@ wg_verdict_fails() { grep -c '^  FAIL  .*(refusals=' <<<"$1"; }
 wg_score() { # wg_score <name> <min-expected-fails> <killmsg>
   local o n; o="$(wg_out "$WG_MUT")"
   if grep -q 'FIXTURE ERROR' <<<"$o"; then
-    bad "MUTANT HARNESS BROKEN [$1]: the copy refused at startup (FIXTURE ERROR) and never reached an assertion. Its zero failures are a copy that did not run, not a mutation that survived — check the copy tree carries lib/preamble.sh and resolves core/skills"
+    bad "MUTANT HARNESS BROKEN [$1]: the copy refused at startup (FIXTURE ERROR) and never reached an assertion. Its zero failures are a copy that did not run, not a mutation that survived — check the copy tree carries lib/preamble.sh"
     return
   fi
   n="$(wg_verdict_fails "$o")" || n=0

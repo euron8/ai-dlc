@@ -15,6 +15,31 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.624.0] - 2026-09-23
+
+### PC-S313-FIXTURE-SKILLS-PATH-DIST-LAYOUT-ASSUMPTION — the world-guard mutant copy no longer links a `core/skills` nothing reads
+
+`core/fixtures/reconcile-emit-report/run.sh`'s `wgmut()` linked `$HERE/../../skills` into
+each mutant copy. On an installed consumer that `cd` fails, printing one `No such file or
+directory` line per mutant, and the guard beside it could never refuse, because
+`ln -s ""` exits 0. The link was also unused: probe-only mode never reaches `seed.sh`, and
+copies with and without it produce byte-identical probe output. The link and its guard are
+deleted, and the comment now says what the copy actually needs. The candidate said the fixture
+fails every consumer push. That is refuted: the consumer's installed copy is byte-identical to
+this one, and it passes with 6 of 6 world-guard mutants killed. `BL-287`.
+
+### PC-S313-RESIDENT-RULE-23-CARRIER-NOT-UPDATED-WITH-SKILL-MD — Rule 23's resident carrier carries the post-compaction gate re-read, and I79 binds the carrier to the rule
+
+`core/rules/ai-dlc-resident-discipline.md` duplicates `SKILL.md` Rule 23 so that the rule
+survives a compaction. 0.619.0 extended Rule 23(b) to cover a post-compaction resume inside a
+gate, and the carrier was not updated. The clause is now carried. I79 in
+`scripts/validate-enforcement-map.sh` checked only that a declared carrier resolves. It now
+also holds a stamp pair for every band rule carried by a `core/rules/` file: a hash of the rule
+body without its Carrier line, and a hash of the carrier. A change on either side fails the
+push and names the side that moved. Replayed over the history, the rule body changed once
+since the carrier existed, at 0.619.0, and that is the only point where the check would have
+fired. `BL-288`.
+
 ## [0.623.0] - 2026-09-22
 
 ### The skills no longer set the lead session's effort, and I114 keeps it that way

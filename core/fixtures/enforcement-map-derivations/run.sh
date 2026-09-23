@@ -639,6 +639,75 @@ A14_i79_gap_count_is_reported() {
   esac
 }
 
+# --- I79's carrier-stamp binding, driven through the REAL corpus ---------------
+# The arm's own self-probe proves `i79_moved` names the right side on a three-rule toy
+# SKILL.md. It does not prove the CORPUS loop reaches that comparison: measured, replacing
+# the corpus drift `err` with `:` and editing Rule 23's body left I79 exit 0 and every fixture
+# green, because nothing edited the real SKILL.md or the real carrier and required the message.
+# These three do; against that mutant, built by hand in a copy, (a) and (b) FAIL and (c) and
+# A14 stay ok. Each is presence-shaped -- (a) and (b) require a message to APPEAR, (c)
+# requires the stamp-bound count to APPEAR beside the silence -- so a corpus loop that stopped
+# emitting fails them rather than satisfying them.
+#
+# ONE LINE IN EACH SUBJECT, AND THE ANCHOR IS A LINE ONLY THAT SUBJECT CARRIES. Rule 23(b)'s
+# heading line and Rule 24's first paragraph line each occur once in SKILL.md; `edit` refuses
+# a program that matched nothing, so an anchor that drifts is FIXTURE BROKEN, not a pass.
+
+# (a) Rule 23's body moves under an unchanged carrier -> exactly one finding, naming the body.
+A43_i79_rule_body_drift_is_reported() {
+  t="$(fresh)"
+  if edit "$t/$SKILL_REL" \
+        '/^\*\*\(b\) Sliced re-read of large step files\.\*\* / && !d { print $0 " A clause the carrier does not carry."; d=1; next } { print }'; then
+    assert_fires_n "I79: an edit to Rule 23's body under an unchanged carrier is REPORTED as the rule body moving" \
+                   "the rule body moved" 1
+  fi
+}
+
+# (b) The carrier moves under an unchanged rule -> exactly one finding, naming the carrier.
+# The carrier's path is the one the rule DECLARES, mapped the way I79 maps it; it is not a
+# second list of carriers.
+A44_i79_carrier_drift_is_reported() {
+  t="$(fresh)"
+  if edit "$t/core/rules/ai-dlc-resident-discipline.md" \
+        '/^\*\*\(b\) Sliced re-read\.\*\* / && !d { print $0 " A clause the rule does not have."; d=1; next } { print }'; then
+    assert_fires_n "I79: an edit to Rule 23's carrier under an unchanged rule is REPORTED as the carrier moving" \
+                   "the carrier moved" 1
+  fi
+}
+
+# (c) THE NEAR-MISS: Rule 24, the rule immediately after Rule 23, is edited. A stamp that
+# hashed more than Rule 23's span would fire here -- measured by hand against a copy whose
+# corpus hashed the whole SKILL.md (re-stamped to its own unedited pair, so only this arm
+# separates it): (c) FAILED, (a) and (b) stayed ok. The silence is scored
+# only beside a POSITIVE conjunct I79 itself prints -- the stamp-bound count, at least one --
+# so a corpus loop that never reached the stamp comparison cannot pass this as a clean run.
+A45_i79_neighbour_rule_edit_is_silent() {
+  t="$(fresh)"
+  local out rc n
+  if edit "$t/$SKILL_REL" \
+        '/^Read-heavy exploration in the planning and retro steps / && !d { print $0 " An edit to the neighbouring rule."; d=1; next } { print }'; then
+    out="$(run_map I79)"; rc=$?
+    sel_guard "$rc" I79 "$out"
+    n="$(grep -c '^FAIL:' <<<"$out")" || n=0
+    case "$out" in
+      *"I79 carrier stamps: "[1-9]*" rule(s) stamp-bound to a .claude/rules/ carrier."*) ;;
+      *) bad "I79: an edit to Rule 24 printed no stamp-bound count of at least one — the corpus loop never reached the stamp comparison, so its silence says nothing"
+         return ;;
+    esac
+    case "$out" in
+      *"the rule body moved"*|*"the carrier moved"*|*"AND carrier moved"*)
+        bad "I79: an edit to Rule 24 was REPORTED as Rule 23 drifting — the stamp hashes more than Rule 23's own span, so every neighbouring edit will demand a re-stamp" ;;
+      *)
+        if [ "$rc" -ne 0 ] || [ "$n" -ne 0 ]; then
+          bad "I79: an edit to Rule 24 produced rc=$rc and $n finding(s); the neighbouring rule is not the stamp's subject"
+          grep '^FAIL:' <<<"$out" | cut -c1-160 | sed 's/^/          | /'
+        else
+          ok "I79: an edit to Rule 24, the neighbour, leaves the Rule 23 stamp silent and still stamp-bound"
+        fi ;;
+    esac
+  fi
+}
+
 # --- I84: the story corpus location is ONE declaration ------------------------
 # Four arms, because the invariant has four ways to stop meaning anything and three of them
 # are SILENT. The literal it bans had four copies in the tree before it existed.

@@ -571,7 +571,13 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   of an OPEN window -- which is the property `m8` asserts at the committed value and the one
 #   a raise can quietly destroy. A budget raised to the top of its window makes A4 unreachable
 #   and the arm then reads exactly like one that passed.
-FORK_BUDGET=3261
+#
+#   RAISED TO 3275 FOR I79's CARRIER-STAMP BINDING. `--stable` in this release's worktree:
+#   base 3258-3260, tip 3269-3269, so +9 -- one `mktemp`, four extractor calls over the probe
+#   variants, one batched probe hash and one corpus hash. The probe was first written with a
+#   `shasum` per case and measured 3273-3274; batching the six probe files into one hashing
+#   process took it to 3269. HIGH reading 3269 plus the usual 6; the window 3269..4670 is open.
+FORK_BUDGET=3275
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
@@ -5253,6 +5259,124 @@ done
 # BOTH SIDES DERIVED. The band comes from validate-reattach-budget.sh's own window and
 # bytes-per-token, never from a hardcoded "14-30" -- a hardcoded band silently stops
 # matching the moment a rule is inserted, and would keep printing this same clean line.
+#
+# THE RESOLVE ABOVE PROVES A CARRIER EXISTS, NOT THAT IT STILL CARRIES THE RULE. A carrier
+# that is a `.claude/rules/*.md` file is a hand-condensed DUPLICATE of the rule's text, so it
+# goes stale silently whenever the rule is edited: the 0.619.0 clause added to Rule 23(b)
+# never reached `core/rules/ai-dlc-resident-discipline.md`, and this arm stayed green because
+# the file still existed. So for every band rule whose carrier maps to `core/rules/*.md`
+# (DERIVED in the loop below, never listed), a RECORDED pair -- sha256 of the rule's body
+# with its `**Carrier:**` line removed, and sha256 of the carrier's `core/rules/` source --
+# is compared with the live pair, and the arm fails naming whichever side moved. A carried
+# rule with no recorded pair fails, and so does a recorded pair for a rule no longer carried
+# that way, so the set cannot drift in either direction.
+#
+# WHY A HASH PAIR AND NOT A TOKEN JOIN. The carrier is a deliberate paraphrase: a join of
+# the rule's backticked tokens against the carrier measured 7 misses AFTER the clause was
+# carried, every one a condensation in (c). A token join would fire forever on correct text.
+# The pair makes no claim about CONTENT; it records that someone looked at both sides at
+# this exact state, and forces a second look when either moves.
+#
+# HOW THE FALSE-POSITIVE SET REACHED ZERO. Replayed over every SKILL.md commit since the
+# carrier was created -- 25 transitions: a whole-file hash moved on all 25; a hash of the
+# Rule 23 span INCLUDING its `**Carrier:**` line moved on 2, one of them (v0.350.0) an edit to
+# the Carrier line alone, which changes nothing the carrier duplicates; the span EXCLUDING
+# that line moved on exactly 1, at 0.619.0, which is the true positive. The carrier file has
+# one commit in that history, so its side contributes none. Removing the Carrier line is
+# the narrowing, and the self-probe below holds it (case D).
+#
+# WHY THE STAMP LIVES HERE. It must not ship: a stamp inside the carrier would be re-injected
+# into every consumer session on every compaction and would make the carrier's own hash a
+# fixed point problem. A separate data file under scripts/ would be a second file to package,
+# classify and keep in step with this arm; inline, a re-stamp is one reviewed line in the
+# file that reads it. Format, one line per carried rule: `<rule> <body-sha256> <carrier-sha256>`.
+I79_CARRIER_STAMPS='23 055c550adaf45f3ded98f1e3413363b57e286335d3e3a4610b56b3297bf14d09 f852b40c4286a946021eb21ab46faa24a8781ed71c08a448be306df6b3208e8b'
+
+# The rule-body extractor, as DATA, so the self-probe and the corpus run the same program.
+# A FENCED `## ` LINE IS A CODE SAMPLE, NOT A SECTION TERMINATOR, and reading it as one
+# truncated Rule 25's body at the heading FORMAT the rule exists to prescribe -- so the
+# carrier declared below it became unreachable and this arm reported a gap that was not
+# there. The rule and its own example cannot both be right under a fence-blind reader.
+# False-positive set of the fence tracking, measured over SKILL.md: ONE rule body carries
+# a fenced `^## ` line (Rule 25's own), against a control of 2 fence delimiters present.
+i79_body_awk='
+  $0 ~ ("^### Rule " n " ") { inb=1; fence=0; next }
+  inb && /^```/ { fence = !fence; next }
+  inb && !fence && /^### Rule [0-9]/ { exit }
+  inb && !fence && /^## / { exit }
+  inb { print }
+'
+# I79_NC <- $1 with its single `**Carrier:**` line removed. Pure parameter expansion, so it
+# costs no fork; the caller has already asserted there is exactly one such line.
+i79_strip_carrier() {
+  local b pre rest
+  b=$'\n'"$1"
+  pre="${b%%$'\n'\*\*Carrier:\*\**}"
+  rest="${b#*$'\n'\*\*Carrier:\*\*}"
+  case "$rest" in *$'\n'*) rest="${rest#*$'\n'}" ;; *) rest="" ;; esac
+  I79_NC="${pre#$'\n'}"$'\n'"$rest"
+}
+# I79_PB / I79_PC <- sha256 of the text $1 and of the file $2, in ONE hashing process.
+i79_pair() {
+  local o
+  I79_PB=""; I79_PC=""
+  o="$(shasum -a 256 - "$2" <<<"$1" 2>/dev/null)" || o="$(sha256sum - "$2" <<<"$1" 2>/dev/null)" || return 1
+  I79_PB="${o%%$'\n'*}"; I79_PB="${I79_PB%% *}"
+  I79_PC="${o#*$'\n'}";  I79_PC="${I79_PC%% *}"
+  [ "${#I79_PB}" -eq 64 ] && [ "${#I79_PC}" -eq 64 ]
+}
+# I79_MOVED <- which side of the recorded pair ($1 $2) differs from the live pair ($3 $4).
+i79_moved() {
+  I79_MOVED=""
+  [ "$1" = "$3" ] || I79_MOVED="rule body"
+  if [ "$2" != "$4" ]; then
+    if [ -n "$I79_MOVED" ]; then I79_MOVED="$I79_MOVED AND carrier"; else I79_MOVED="carrier"; fi
+  fi
+}
+
+# SELF-PROBE, BEFORE THE CORPUS, BOTH DIRECTIONS. A three-rule SKILL.md and a carrier under
+# mktemp; the pair is recorded at s0/c0 and each case is scored against it:
+#   A  Rule 23's body edited, carrier unchanged      -> must name "rule body"
+#   B  Rules 22 and 24 edited, Rule 23 untouched     -> must be silent (the span holds)
+#   C  carrier edited alone                          -> must name "carrier"
+#   D  only Rule 23's `**Carrier:**` line edited     -> must be silent (the narrowing)
+i79_pd="$(mktemp -d "${TMPDIR:-/tmp}/i79-XXXXXX")"
+printf '%s\n' '### Rule 22 -- a' '' 'alpha' '### Rule 23 -- b' '' 'beta body' '' '**Carrier:** `.claude/rules/x.md`' '<!-- note -->' '### Rule 24 -- c' '' 'gamma' > "$i79_pd/s0"
+printf '%s\n' '### Rule 22 -- a' '' 'alpha' '### Rule 23 -- b' '' 'beta body, plus a new clause' '' '**Carrier:** `.claude/rules/x.md`' '<!-- note -->' '### Rule 24 -- c' '' 'gamma' > "$i79_pd/s1"
+printf '%s\n' '### Rule 22 -- a' '' 'alpha EDITED' '### Rule 23 -- b' '' 'beta body' '' '**Carrier:** `.claude/rules/x.md`' '<!-- note -->' '### Rule 24 -- c' '' 'gamma EDITED' > "$i79_pd/s2"
+printf '%s\n' '### Rule 22 -- a' '' 'alpha' '### Rule 23 -- b' '' 'beta body' '' '**Carrier:** `.claude/rules/x.md` (a longer declaration)' '<!-- note -->' '### Rule 24 -- c' '' 'gamma' > "$i79_pd/s3"
+printf '%s\n' 'carried beta' > "$i79_pd/c0"
+printf '%s\n' 'carried beta, plus the new clause' > "$i79_pd/c1"
+i79_probe_bad=""
+# Each variant's Rule 23 span goes through the SAME extractor and stripper the corpus uses;
+# the four stripped bodies and two carriers are then hashed in ONE process, because a
+# per-case `shasum` (a perl script) cost 5 forks this validator's budget does not have.
+for i79_s in s0 s1 s2 s3; do
+  i79_strip_carrier "$(awk -v n=23 "$i79_body_awk" "$i79_pd/$i79_s")"
+  printf '%s\n' "$I79_NC" > "$i79_pd/b$i79_s"
+done
+i79_ph="$(cd "$i79_pd" && { shasum -a 256 bs0 bs1 bs2 bs3 c0 c1 2>/dev/null || sha256sum bs0 bs1 bs2 bs3 c0 c1 2>/dev/null; })"
+i79_hs=""
+while read -r i79_h i79_f; do
+  [ "${#i79_h}" -eq 64 ] && i79_hs="$i79_hs $i79_f=$i79_h"
+done <<<"$i79_ph"
+i79_ph() { local x="${i79_hs#* $1=}"; [ "$x" != "$i79_hs" ] && I79_H="${x%% *}" || I79_H=""; }
+i79_ph bs0; i79_rb="$I79_H"; i79_ph c0; i79_rc="$I79_H"
+if [ -z "$i79_rb" ] || [ -z "$i79_rc" ]; then
+  i79_probe_bad=" no sha256 tool answered (tried shasum -a 256, sha256sum);"
+else
+  for i79_case in A:bs1:c0:rule\ body B:bs2:c0: C:bs0:c1:carrier D:bs3:c0:; do
+    i79_cs="${i79_case#*:}"; i79_cc="${i79_cs#*:}"; i79_want="${i79_cc#*:}"
+    i79_cs="${i79_cs%%:*}"; i79_cc="${i79_cc%%:*}"
+    i79_ph "$i79_cs"; i79_lb="$I79_H"; i79_ph "$i79_cc"; i79_lc="$I79_H"
+    i79_moved "$i79_rb" "$i79_rc" "$i79_lb" "$i79_lc"
+    [ "$I79_MOVED" = "$i79_want" ] || i79_probe_bad="$i79_probe_bad case ${i79_case%%:*} gave '$I79_MOVED' where '$i79_want' was required;"
+  done
+fi
+rm -f "$i79_pd/s0" "$i79_pd/s1" "$i79_pd/s2" "$i79_pd/s3" "$i79_pd/bs0" "$i79_pd/bs1" "$i79_pd/bs2" "$i79_pd/bs3" "$i79_pd/c0" "$i79_pd/c1" && rmdir "$i79_pd"
+[ -n "$i79_probe_bad" ] && err "I79 carrier-stamp self-probe failed:$i79_probe_bad The binding between a rule and its .claude/rules/ carrier cannot be trusted to fire, so its silence over the real SKILL.md means nothing."
+i79_carried=""; i79_carried_n=0
+
 i79_budget="$(sed -n 's/^BUDGET="${AI_DLC_REATTACH_BUDGET:-\([0-9]*\)}"/\1/p' "$REPO_ROOT/core/scripts/validate-reattach-budget.sh" | head -1)"
 i79_bpt="$(sed -n 's/^BPT="${AI_DLC_BYTES_PER_TOKEN:-\([0-9]*\)}"/\1/p' "$REPO_ROOT/core/scripts/validate-reattach-budget.sh" | head -1)"
 i79_skill="$REPO_ROOT/core/skills/ai-dlc/SKILL.md"
@@ -5277,20 +5401,9 @@ else
     fi
     i79_gaps=0
     for i79_n in $i79_band; do
-      # the rule's own body span, so a Carrier line cannot be borrowed from a neighbour
-      # A FENCED `## ` LINE IS A CODE SAMPLE, NOT A SECTION TERMINATOR, and reading it as one
-      # truncated Rule 25's body at the heading FORMAT the rule exists to prescribe -- so the
-      # carrier declared below it became unreachable and this arm reported a gap that was not
-      # there. The rule and its own example cannot both be right under a fence-blind reader.
-      # False-positive set of the fence tracking, measured over SKILL.md: ONE rule body carries
-      # a fenced `^## ` line (Rule 25's own), against a control of 2 fence delimiters present.
-      i79_body="$(awk -v n="$i79_n" '
-        $0 ~ ("^### Rule " n " ") { inb=1; fence=0; next }
-        inb && /^```/ { fence = !fence; next }
-        inb && !fence && /^### Rule [0-9]/ { exit }
-        inb && !fence && /^## / { exit }
-        inb { print }
-      ' "$i79_skill")"
+      # the rule's own body span, so a Carrier line cannot be borrowed from a neighbour;
+      # the extractor and its fence story are at `i79_body_awk` above
+      i79_body="$(awk -v n="$i79_n" "$i79_body_awk" "$i79_skill")"
       i79_line="$(grep -c '^\*\*Carrier:\*\*' <<<"$i79_body")"
       if [ "$i79_line" -eq 0 ]; then
         err "I79 Rule $i79_n is below the re-attach cut and declares no '**Carrier:**'. A compacted lead does not hold this rule; without a declared carrier nothing does, and the omission is indistinguishable from a rule that genuinely needs none."
@@ -5339,6 +5452,28 @@ else
               esac
               if [ -n "$i79_dist" ] && [ ! -e "$REPO_ROOT/$i79_dist" ]; then
                 err "I79 Rule $i79_n declares carrier '$i79_target' (distribution path '$i79_dist'), which does not exist in the tree. A carrier that cannot be resolved carries nothing, and this declaration would keep reading like coverage."
+              elif [ -n "$i79_dist" ]; then
+                case "$i79_dist" in
+                  core/rules/*.md)
+                    i79_carried="$i79_carried $i79_n"; i79_carried_n=$(( i79_carried_n + 1 ))
+                    i79_strip_carrier "$i79_body"
+                    if ! i79_pair "$I79_NC" "$REPO_ROOT/$i79_dist"; then
+                      err "I79 Rule $i79_n: could not hash the rule body and '$i79_dist' (no shasum -a 256 or sha256sum), so the carrier binding was not checked."
+                    else
+                      i79_rec=""
+                      while read -r i79_sn i79_sb i79_sc; do
+                        [ "$i79_sn" = "$i79_n" ] && i79_rec="$i79_sb $i79_sc"
+                      done <<<"$I79_CARRIER_STAMPS"
+                      i79_restamp="set the Rule $i79_n line of I79_CARRIER_STAMPS in scripts/validate-enforcement-map.sh to '$i79_n $I79_PB $I79_PC'"
+                      if [ -z "$i79_rec" ]; then
+                        err "I79 Rule $i79_n is carried by '$i79_dist', a hand-condensed duplicate of the rule, and no recorded pair binds the two. Nothing would notice the rule changing under its carrier. Confirm the carrier carries every clause of the rule's current body, then $i79_restamp."
+                      else
+                        i79_moved "${i79_rec%% *}" "${i79_rec#* }" "$I79_PB" "$I79_PC"
+                        [ -n "$I79_MOVED" ] && err "I79 Rule $i79_n and its carrier '$i79_dist' have drifted from their recorded pair: the $I79_MOVED moved. The carrier is a duplicate re-injected on every compaction, so a rule change it does not carry is lost to every compacted session while this arm reads green. Carry the rule change into the carrier (or confirm it is already carried), then re-stamp both: $i79_restamp."
+                      fi
+                    fi
+                    ;;
+                esac
               fi
               ;;
           esac
@@ -5347,7 +5482,17 @@ else
     done
     # The gap count is REPORTED, never silently tolerated. Per CLAUDE.md, a bound the
     # invariant accepts must be visible or it reads as full coverage.
+    # A recorded pair for a rule that is no longer carried by a rule file is stale, and a
+    # stale stamp is how a re-numbered rule would inherit a pair nobody checked.
+    while read -r i79_sn i79_sb i79_sc; do
+      [ -n "$i79_sn" ] || continue
+      case " $i79_carried " in
+        *" $i79_sn "*) : ;;
+        *) err "I79 I79_CARRIER_STAMPS records a pair for Rule $i79_sn, which is not a band rule carried by a core/rules/ file (carried set:${i79_carried:- none}). Remove the line, or restore the carrier it attested." ;;
+      esac
+    done <<<"$I79_CARRIER_STAMPS"
     echo "  I79: ${i79_band_n} rule(s) below the ${i79_cut}-byte re-attach cut; ${i79_gaps} declared carrier gap(s)."
+    echo "  I79 carrier stamps: ${i79_carried_n} rule(s) stamp-bound to a .claude/rules/ carrier."
   fi
 fi
 
