@@ -447,9 +447,22 @@ has a real failure mode in which resource exhaustion reads as a verdict. **This 
 to the consumer's failure.** One fixture run peaks about 63 processes above a baseline of about 600,
 against a limit of 10666, so the consumer's run was nowhere near the cap.
 
-**RELEASE 0.625.0 SHIPS THE INSTRUMENT, NOT A FIX.** When a kill-set arm fails, it now prints the
+**RELEASE 0.625.0 SHIPS THE INSTRUMENT.** When a kill-set arm fails, it now prints the
 score cells of each world that differs and a diff of that world's stderr, so the next pool failure
-carries its own cause. **This entry stays live.**
+carries its own cause.
+
+**ITS FIRST CATCH NAMED A MECHANISM, AND 0.625.0 FIXES IT.** An unforced E2 failure, in a scratch
+copy with no `.git`, showed V-HC's `HARD-UNREGISTERED-CORE-DRIFT schemas/thing.json` rendered as
+`CORE-TEMPLATE-SUBSTITUTED` with NO DETECTOR-REFUSED line. So that extra world was not the `ulimit`
+refusal above. `unregistered-drift.sh`'s `is_unregistered()` fed `diff ... 2>/dev/null` into an
+awk whose END printed "clean" on no hunk, and it is reached only after `cmp` shows the files differ.
+Forced with a `diff` shim that exits 2: unshimmed HARD, shimmed CORE-TEMPLATE-SUBSTITUTED. A second
+site, `closest_ancestor_blob()`, scored a failed diff as a perfect match: unshimmed HARD drift,
+shimmed `HARD-CORE-BEHIND`. Both now fail closed, each with an arm and a mutant in
+`setup-config-drift`. **This entry stays live**: the E2/V-HC shape matches this mechanism, but E9's
+extra world was V-B, and E1/E8 are not yet shown to share it. Close only when the instrument has
+recorded a pool failure's cause, or a pool run of the size that predicts at least 3 failures at
+base comes back clean at tip.
 
 **E1'S SECOND DEFECT IS SETTLED.** The assertion `"V-R V-U"` is right and the message "three" was
 wrong. The message is corrected in 0.625.0.
@@ -4081,3 +4094,22 @@ installed tree under `$TMPDIR`.
 | candidate fix: a second `sed` also reads `    ai-dlc-*.sh` bare names into `hr_names` | **0** |
 
 verify: sh A=core/skills/ai-dlc-update/reconcile/apply.sh; [ -r "$A" ] && [ -r scripts/install.sh ] || exit 9; command -v jq >/dev/null || exit 9; F="$(awk '/^hook_registration_row\(\) \{/{p=1} p{print} p&&/^\}$/{exit}' "$A")"; [ -n "$F" ] || exit 9; R="$(pwd)"; T="$(mktemp -d)" || exit 9; ( cd "$T" && git init -q && mkdir _bmad && git -c user.name=r -c user.email=r@r commit -q --allow-empty -m init && bash "$R/scripts/install.sh" ) >/dev/null 2>&1 || exit 9; V="$T/scripts/ai-dlc/validate-hook-registration.sh"; [ -x "$V" ] || exit 9; bash "$V" --root "$T" >/dev/null 2>&1 || exit 9; say() { echo "ROW $1 $2"; }; eval "$F"; h="$(cd "$T/.claude/hooks" && ls ai-dlc-*.sh | head -1)"; [ -n "$h" ] || exit 9; cp "$T/.claude/settings.json" "$T/s.bak"; jq --arg h "$h" 'walk(if type == "object" and has("hooks") and (.hooks|type) == "array" then .hooks |= map(select((.command // "") | contains($h) | not)) else . end)' "$T/s.bak" > "$T/.claude/settings.json" || exit 9; cmp -s "$T/s.bak" "$T/.claude/settings.json" && exit 9; CONSUMER="$T"; o="$(hook_registration_row)"; case "$o" in *"ROW WORKLIST "*) : ;; *) exit 9 ;; esac; cp "$T/s.bak" "$T/.claude/settings.json"; mv "$T/.claude/hooks/$h" "$T/$h"; bash "$V" --root "$T" >/dev/null 2>&1; [ $? = 1 ] || exit 9; o="$(hook_registration_row)"; case "$o" in *"ROW WORKLIST "*|*"ROW DECISION "*) exit 0 ;; esac; exit 1
+
+## BL-293 — `register-drift.sh`'s `substitution_only()` reads a `diff` that did not run as "substitution only", so a changed section is left out of the generated override
+
+**DEFECT.** Filed at batch 144, by the hand that fixed the same shape in `unregistered-drift.sh`.
+
+**THE SAME FAIL-OPEN, INVERTED.** `core/skills/ai-dlc-update/reconcile/register-drift.sh:104`
+pipes `diff` into an awk whose END prints `yes` ("differs only at `{token}` lines") when it saw no
+hunk. The caller at `:136` reaches it only after `[ "$a" = "$b" ]` has shown the sections differ, so
+an empty stream means `diff` did not run. On `yes` the section is added to `skipped` and never
+written into the override. Forced with a `diff` on PATH that exits 2, on a section with a real edit
+and no token: unshimmed `no`, shimmed `yes`. Control in the same run: a token-only difference reads
+`yes` unshimmed.
+
+**WHY IT IS NOT IN 0.625.0.** It is an operator-run tool that writes an override file. It is not a
+gate a pull reads, so it does not share the HARD-blocker consequence that put its sibling in the
+release. The fix is the one `is_unregistered()` took: check `diff`'s exit and answer `no` (not
+substitution-only) on anything but 1 with a hunk.
+
+verify: sh F=core/skills/ai-dlc-update/reconcile/register-drift.sh; [ -r "$F" ] || exit 9; eval "$(awk '/^substitution_only\(\) \{/,/^\}/' "$F")"; command -v substitution_only >/dev/null || exit 9; [ "$(substitution_only 'consumer edit' 'dist line')" = no ] || exit 9; [ "$(substitution_only 'value x' 'value {tok}')" = yes ] || exit 9; S="$(mktemp -d)" || exit 9; printf '#!/bin/sh\nexit 2\n' > "$S/diff"; chmod +x "$S/diff"; [ "$(PATH="$S:$PATH" substitution_only 'consumer edit' 'dist line')" = yes ] && exit 1; exit 0

@@ -58,7 +58,19 @@ of 12 rounds, because a sibling fork failure was rendered as DETECTOR-REFUSED. T
 real, but the cap is not attributed to the consumer's failure, which ran far below it. When a
 kill-set arm fails, it now prints the differing world's score cells and a diff of its stderr, so
 the next failure carries its cause. E1's message is corrected to match its two-world assertion.
-**`BL-230` stays open.**
+
+**The instrument's first catch named a product defect, and it is fixed here.** An unforced E2
+failure showed V-HC's `HARD-UNREGISTERED-CORE-DRIFT` row rendered as `CORE-TEMPLATE-SUBSTITUTED`,
+with no DETECTOR-REFUSED line. `unregistered-drift.sh`'s `is_unregistered()` reads `diff` through
+`2>/dev/null` into an awk that printed "clean" when it saw no hunk. It is reached only after `cmp`
+has shown the files differ, so an empty diff means `diff` did not run. Forced with a failing `diff`
+on PATH, a real in-place core edit, which is a HARD blocker, was reported as template
+substitution. A consumer could lose a HARD blocker the same way. It now fails closed: a diff that
+did not run yields `HARD-UNREGISTERED-CORE-DRIFT` with `CLASSIFIER DID NOT RUN`. A second site,
+`closest_ancestor_blob()`, scored a failed diff as a perfect ancestor match and turned plain drift
+into `HARD-CORE-BEHIND`, whose remedy overwrites the consumer's edit. It now skips a candidate whose
+diff did not run. `setup-config-drift` gains one arm and one mutant per site. **`BL-230` stays
+open**, because E9's extra world was V-B and this mechanism is not yet shown to cover it.
 
 ### Filed
 
@@ -66,6 +78,8 @@ the next failure carries its cause. E1's message is corrected to match its two-w
 the UNREGISTERED list's line shape. `apply.sh` is a bootstrapping file, so its fix ships in a release
 of its own. `BL-002` is re-measured: `uninstall.sh` removes none of the installed hooks, and its
 `has` receipt, which a comment could satisfy, is replaced by one that drives install and uninstall.
+`BL-293`: `register-drift.sh`'s `substitution_only()` has the same fail-open shape inverted, so a
+failed `diff` drops a changed section from the generated override.
 
 ## [0.624.0] - 2026-09-23
 
