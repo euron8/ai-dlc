@@ -50,7 +50,7 @@ command -v python3 >/dev/null 2>&1 || { echo "FIXTURE ERROR: python3 absent" >&2
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
-EXPECTED_ASSERTIONS=37
+EXPECTED_ASSERTIONS=48
 fails=0; made=0
 ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
@@ -441,6 +441,101 @@ else
 fi
 
 # =============================================================================================
+# THE NAMED-CUE CLASS — the cue is part of a NAME, not a statement that anything is owed.
+#
+# Two rules, both lookarounds inside `PROSE`. (B) `remediation` followed by a member of a CLOSED
+# mechanism-noun set (protocol, edit, edits, guard, routing), ending at the cue's own boundary,
+# names core machinery. (C) a cue in the tool's own quoted reporting form — `cue '` or `cues: '` —
+# is a mention of this report's output, not an obligation.
+#
+# EVERY ROW BELOW DECLARES NO `owed` AND NO `closes_owed`, and no row in this register declares
+# one, so neither the discharge skip, the entry subtraction nor the citation acquittal can reach
+# any of them: the lookarounds are the ONLY thing deciding each verdict. Each acquittal sits
+# beside a near-miss in the same run, and every near-miss carries the property its feared
+# regression keys on.
+# =============================================================================================
+CREG="$WORK/named.jsonl"
+python3 "$WORK/mkreg.py" "$CREG" <<'SPEC'
+{"entry":"extensions/mechname.md","reason":"Core's change is to the failure/remediation protocol, and the remediation EDIT is dispatched by the remediation guard over remediation routing."}
+{"entry":"extensions/remnear.md","reason":"Remediation of the anchor is still pending; the remediation guardrail and the remediation edit-queue wait on it."}
+{"entry":"extensions/selfmention.md","reason":"audit-layer-debt.sh lists this entry under UNDECLARED on cue 'deferred'."}
+{"entry":"extensions/mentionplus.md","reason":"audit-layer-debt.sh lists this entry under UNDECLARED on cue 'deferred'. The split is still deferred to a later pull."}
+{"entry":"extensions/scarequote.md","reason":"The split is 'deferred' to a later pull."}
+{"entry":"extensions/remcomma.md","reason":"Anchor REMEDIATION, pending operator decision."}
+SPEC
+cout="$(run "$CREG")"
+cund="$(und_block "$cout")"
+
+# --- 18. THE OFFENDER: a mechanism name is not an obligation -----------------------------------
+if grep -q 'mechname\.md' <<<"$cund"; then
+  bad "a row naming core's remediation MACHINERY (protocol, EDIT, guard, routing) was filed as an undeclared obligation — the arm charges the adjudicator for naming what the entry does not touch"
+  show "$cund"
+else
+  ok "MECHANISM NAME: \`remediation\` followed by a closed mechanism noun (protocol, EDIT, guard, routing) is not a cue"
+fi
+
+# --- 19. THE NEAR-MISS: remediation followed by a word OUTSIDE the set is still a cue -----------
+# Every cue in this row is `remediation`, and every occurrence is followed by whitespace and a
+# WORD — `of`, and two words that merely START with a set member (`guardrail`, `edit-queue`). A
+# lookahead widened from the closed set to "any following word" acquits all three, and that is
+# the regression this row exists to catch: `Remediation of the anchor is still pending` is a real
+# obligation whose only cue is the word being narrowed.
+if grep -q 'remnear\.md' <<<"$cund"; then
+  ok "NEAR-MISS: \`remediation\` followed by a word outside the closed noun set (\`of\`, \`guardrail\`, \`edit-queue\`) is still reported"
+else
+  bad "a real obligation whose only cue is \`remediation\` was acquitted — the mechanism-noun lookahead has widened past its closed set"
+  show "$cund"
+fi
+
+# --- 20. THE OFFENDER: a quotation of this tool's own output is not an obligation --------------
+if grep -q 'selfmention\.md' <<<"$cund"; then
+  bad "a row QUOTING this report (\`on cue 'deferred'\`) was filed as an undeclared obligation — the tool scores its own output as an instance of its own subject"
+  show "$cund"
+else
+  ok "SELF-MENTION: a cue in the tool's own quoted form (\`cue '…'\`) is not reported"
+fi
+
+# --- 21. PER OCCURRENCE: the mention does not acquit a real obligation beside it ---------------
+# Byte-identical first sentence to `selfmention.md`, plus a genuine obligation in the second. A
+# row-grain rule — drop the row if any cue is a self-mention — silences it.
+if grep -q 'mentionplus\.md' <<<"$cund"; then
+  ok "PER-OCCURRENCE: a self-mention beside a real \`still deferred\` in the same row is still reported"
+else
+  bad "a self-mention acquitted the real obligation stated in the next sentence — the quote rule is applied per row, not per occurrence"
+  show "$cund"
+fi
+
+# --- 22. THE NEAR-MISS: a scare-quoted cue is emphasis, not a mention --------------------------
+# Carries the quote character immediately before the cue, which is the property a widened
+# lookbehind keys on, and lacks only the tool's own `cue ` / `cues: ` prefix.
+if grep -q 'scarequote\.md' <<<"$cund"; then
+  ok "NEAR-MISS: a scare-quoted real obligation (\`is 'deferred' to a later pull\`) is still reported"
+else
+  bad "a quoted cue with no \`cue '\` prefix was acquitted — the mention rule is keyed on the quote, not on the tool's reporting vocabulary"
+  show "$cund"
+fi
+
+# --- 23. the genuine-debt spelling: remediation followed by a COMMA --------------------------
+# The reference register's two genuine debts open `OWED REMEDIATION, …`. `OWED` is itself a cue,
+# so that verbatim spelling would survive whatever happens to `remediation`; this seed drops it
+# so that `remediation` is the row's ONLY cue and a comma — not a mechanism noun — follows it.
+if grep -q 'remcomma\.md' <<<"$cund"; then
+  ok "\`REMEDIATION, pending operator decision\` is still reported — a comma after the cue is not a mechanism noun"
+else
+  bad "\`remediation\` followed by a comma was acquitted — the genuine-debt spelling on the reference register is lost"
+  show "$cund"
+fi
+
+# --- 24. and the count is exactly the four rows that earn it -----------------------------------
+# A conjunct, exactly as at arms 3 and 17: it cannot say WHICH row moved.
+if grep -qE '^UNDECLARED \(4\)' <<<"$cout"; then
+  ok "exactly 4 of the 6 cue-carrying rows are reported — the other 2 name a mechanism or quote the tool"
+else
+  bad "the undeclared count is not 4; the named-cue rules are not partitioning names and mentions from obligations"
+  show "$cout"
+fi
+
+# =============================================================================================
 # MUTANTS. Every arm above that asserts an ABSENCE passes against a subject that emitted
 # nothing, and a both-directions control cannot see that: it establishes that the arm
 # discriminates between two inputs, never that it discriminates at all. These do.
@@ -605,6 +700,35 @@ score M11 "$(mkmut m11 "$ANCHOR_HITS" '    hits = sorted({m.group(0).lower() for
                    if not cue_denied(reason, m) and m.group(0).lower() != "owed"})')" "$NREG" \
   "dropping the \`owed\` cue entirely loses the near-miss row one token from the denial" \
   absent 'keep\.md'
+
+# The named-cue anchors, keyed on the two lookaround groups inside `PROSE` rather than on the
+# whole line, so each mutant moves exactly one rule. Double-quoted because they carry `'`.
+ANCHOR_NOUN="(?!\s+(?:protocol|edits?|guard|routing)(?![\w-]))"
+ANCHOR_QUOTE="(?<!cue ')(?<!cues: ')"
+
+# MB_off — the mechanism-noun lookahead removed, i.e. the behaviour rule (B) replaced. Scored on
+# the mechanism row REAPPEARING.
+score MB_off "$(mkmut mb_off "remediation$ANCHOR_NOUN" 'remediation')" "$CREG" \
+  "without the mechanism-noun lookahead, a row naming core's remediation machinery is filed as an obligation again" \
+  present 'mechname\.md'
+
+# MB_wide — the closed set widened to any following word. The plausible generalisation, and it
+# acquits a real obligation whose only cue is `remediation`. Scored on the near-miss VANISHING.
+score MB_wide "$(mkmut mb_wide "$ANCHOR_NOUN" '(?!\s+\w)')" "$CREG" \
+  "a lookahead acquitting \`remediation\` before ANY word loses \`Remediation of the anchor is still pending\`" \
+  absent 'remnear\.md'
+
+# MC_off — the quote lookbehinds removed, i.e. the behaviour rule (C) replaced. Scored on the
+# self-mention REAPPEARING.
+score MC_off "$(mkmut mc_off "$ANCHOR_QUOTE" '')" "$CREG" \
+  "without the quote lookbehinds, a row quoting this tool's own \`cue 'deferred'\` is filed as an obligation again" \
+  present 'selfmention\.md'
+
+# MC_anyq — any preceding quote treated as a mention. Scored on the scare-quoted obligation
+# VANISHING, which only the near-miss can see: the self-mention is acquitted either way.
+score MC_anyq "$(mkmut mc_anyq "$ANCHOR_QUOTE" "(?<!')")" "$CREG" \
+  "a lookbehind on any quote acquits the scare-quoted real obligation \`is 'deferred' to a later pull\`" \
+  absent 'scarequote\.md'
 
 # UNMUTATED CONTROL — necessary and NOT sufficient. rc=0-with-no-findings is exactly what a
 # subject replaced by `exit 0` looks like, so this carries a POSITIVE conjunct: a copy taken and
