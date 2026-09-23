@@ -17543,3 +17543,96 @@ verify: sh set -e; E=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; L=c
      RUN FROM THE REPO ROOT, against a seeded ledger under `mktemp` and never the real corpus.
      `HEAD~1`/`HEAD` are passed only because the engine requires two refs; no arm here reads
      either, so the verdict does not move with history. -->
+## BL-287 — the world-guard mutant copy linked `core/skills` through a `cd` that fails on every installed consumer, behind a refusal that could never fire
+
+**LANDED (v0.624.0, verified 29291758).** The link and its guard are deleted; receipt exits 0 on `origin/main`.
+
+**NOTE.** Filed and discharged at batch 142. Discharges `PC-S313-FIXTURE-SKILLS-PATH-DIST-LAYOUT-ASSUMPTION`.
+
+**THE CANDIDATE'S "RED ON EVERY PUSH" CLAIM IS REFUTED.** Read-only on the reference consumer:
+its installed `tests/fixtures/reconcile-emit-report/run.sh` and `seed.sh` are byte-identical to
+0.623.0's, its `.git/ai-dlc-fixture-failures` records `1 of 185 units red` naming
+`agent-definition-render` and carries **0** `No such file` lines, and its durations file records
+`reconcile-emit-report` as a completed unit. A fresh `scripts/install.sh` consumer runs the
+fixture to **PASS** with 6 of 6 world-guard mutants KILLED.
+
+**WHAT WAS REAL IS A GUARD WITH NO SUBJECT OVER A LINK NOTHING READ.** `wgmut()` ran
+`ln -s "$(cd "$HERE/../../skills" && pwd)" "$r/core/skills" 2>/dev/null || { bad "MUTANT HARNESS
+BROKEN …"; return 1; }`. Installed, the fixture sits at `tests/fixtures/<name>/`, so the `cd`
+fails, printing `cd: …/../../skills: No such file or directory` once per mutant (**6** stderr
+lines per run, measured). The substitution is empty and `ln -s ""` exits **0** (control: `ln -s`
+into a missing directory exits 1), so the refusal could not fire in the one layout where the
+`cd` failed. The link was also unused: probe-only mode never runs `seed.sh`, and an unmutated
+copy with `core/skills` linked and one without it printed byte-identical probe output (rc 0,
+13 ok, 0 verdict failures; `diff` 0 lines after path normalisation). The comment above `wgmut`
+claimed a partial copy "dies before its first assertion", which was stale for probe mode.
+
+**FIXED BY SUBTRACTION.** The link and its guard are deleted, and the comment says what the copy
+needs (`lib/preamble.sh`, still copied and guarded) and why `skills/` is not linked. If probe
+mode ever starts seeding, a skills-less copy prints `FIXTURE ERROR: emit-report.sh not found in
+either layout` (measured, rc 2), and `wg_score` refuses that as MUTANT HARNESS BROKEN.
+
+**THE SAME ASSUMPTION IS NOT A CLASS.** Across shipping fixtures, 162 non-comment `../../<x>`
+sites were scanned; 2 carry no consumer spelling nearby. One was this. The other,
+`prepush-worktree-env-scrub/run.sh`, detects the layout itself a few lines below.
+
+**RECEIPT, SCORED.** Extracts the shipped `wgmut` body and drives it in both layouts (a `core/`
+copy with `core/skills` present, a `tests/` copy without it), requiring 0 stderr lines and no
+`core/skills` entry in the built copy; exit 9 on a precondition. Distribution engine: exit 0 is
+CLOSE-CANDIDATE. Base `13dd61de` **1**, tip **0**; the original two lines re-added **1**; a
+`[ -d "$HERE/../../skills" ] && ln -s …` guard **1** — deliberately, because the link is dead in
+both layouts and the guard only hides the symptom. Each run leaves two small `mktemp -d`
+directories under `$TMPDIR`.
+
+verify: sh set -u; F=core/fixtures/reconcile-emit-report; [ -r "$F/run.sh" ] && [ -r core/fixtures/lib/preamble.sh ] || exit 9; D="$(awk '/^wgmut\(\) \{/{p=1} p{print} p&&/^\}$/{exit}' "$F/run.sh")"; [ -n "$D" ] || exit 9; bad() { echo "BAD $1"; }; eval "$D"; R=0; for L in core tests; do T="$(mktemp -d)" || exit 9; mkdir -p "$T/$L/fixtures/reconcile-emit-report" "$T/$L/fixtures/lib" "$T/work"; cp "$F/run.sh" "$F/seed.sh" "$F/README.md" "$T/$L/fixtures/reconcile-emit-report/" && cp core/fixtures/lib/preamble.sh "$T/$L/fixtures/lib/" || exit 9; [ "$L" = core ] && mkdir -p "$T/core/skills"; HERE="$T/$L/fixtures/reconcile-emit-report"; WORK="$T/work"; WG_SELF="$HERE/run.sh"; wgmut rcp -e 's/^fails=0$/fails=0 /' >"$T/out" 2>"$T/err"; rc=$?; [ "$rc" -eq 0 ] && [ -n "$WG_MUT" ] && [ -r "$WORK/wg-rcp/core/fixtures/lib/preamble.sh" ] || { echo "PRECONDITION: wgmut did not build a copy in the $L layout (rc=$rc)"; exit 9; }; E="$(grep -c . "$T/err")" || E=0; K=0; { [ -L "$WORK/wg-rcp/core/skills" ] || [ -e "$WORK/wg-rcp/core/skills" ]; } && K=1; echo "$L: stderr_lines=$E skills_link=$K"; [ "$E" -eq 0 ] && [ "$K" -eq 0 ] || R=1; done; exit $R
+
+## BL-288 — Rule 23's resident carrier was never updated when Rule 23(b) grew the post-compaction gate re-read, and I79 could not see it
+
+**LANDED (v0.624.0, verified 29291758).** The clause is carried and I79 binds the carrier to the rule body; receipt exits 0 on `origin/main`.
+
+**DEFECT.** Filed and fixed at batch 142. Discharges `PC-S313-RESIDENT-RULE-23-CARRIER-NOT-UPDATED-WITH-SKILL-MD`.
+
+**THE CARRIER IS A HAND-CONDENSED DUPLICATE, AND NOTHING BOUND IT TO THE RULE IT DUPLICATES.**
+`core/skills/ai-dlc/SKILL.md` Rule 23 declares `**Carrier:** .claude/rules/ai-dlc-resident-discipline.md`,
+the unconditional rule file re-injected on every compaction. 0.619.0 added to Rule 23(b): a
+post-compaction resume that lands inside a gate re-reads the `gate-slice.sh` plan narrowed by
+`gate-checkpoint.sh done` (Rule 21), not the whole `gate-validation.md`. The carrier was not
+touched. Since the carrier was created (`153f8ba1`) it has **1** commit, and Rule 23's body with
+its Carrier line removed changed **once** across **25** `SKILL.md` transitions — at 0.619.0. The
+one reader the carrier exists for, a compacted session, lacked the one clause written for it.
+
+**I79 STAYED GREEN BECAUSE IT ONLY CHECKS THAT THE CARRIER RESOLVES.** A path that exists is not a
+duplicate that is current.
+
+**WHY NOT A TOKEN JOIN.** The carrier paraphrases on purpose. Joining the rule's backticked
+tokens against the carrier measured **7** misses after the clause was carried, every one a
+deliberate condensation in (c), so it would fire forever on correct text.
+
+**FIX.** The clause is carried, condensed. Inside the existing I79 arm, every band rule whose
+carrier maps to `core/rules/*.md` (derived; 1 today) has a stored pair — sha256 of the rule body
+minus its Carrier line, sha256 of the carrier source — compared against the live pair, failing
+and naming the side that moved. The pair is inline in the validator (`I79_CARRIER_STAMPS`), so
+nothing ships. FP set replayed over history: whole-file hash 25, span with its Carrier line 2
+(one a Carrier-line-only edit at v0.350.0), span without it 1, which is the true positive. A
+self-probe under `mktemp` runs before the corpus in both directions; 5 of 5 mutants killed.
+`FORK_BUDGET` 3261 -> 3275 for the probe's one batched hash process; `validate-enforcement-map.sh`
+timed base 17.42-17.62s against tip 17.50-17.85s, three interleaved reps, ranges overlapping.
+
+**A RE-STAMP IS AN ATTESTATION, AND THE ARM CANNOT CHECK IT.** Changing the stored carrier sha
+without editing the carrier passes the arm by design; the receipt's clause grep is what catches
+that regression here, and nothing catches it for a future clause.
+
+**RECEIPT, SCORED.** Distribution engine: exit 0 is CLOSE-CANDIDATE, 9 is a missing subject or
+an edit that did not apply. It DRIVES the arm: `core/` and `scripts/` are copied under `mktemp`,
+and the copy's validator resolves its root from its own path, so it reads the copy. On the
+unedited copy I79 must exit 0 with a stamp-bound count of at least one. Rule 23(b)'s heading
+line is then edited in the COPY only, and I79 must print `the rule body moved`, which only a
+validator reading the copy can do. Finally `gate-checkpoint.sh done` must sit inside the
+carrier's `**(b)` paragraph on a line that is not an HTML comment. Base `13dd61de` **1**, tip
+**0**; the corpus drift `err` replaced by `:` **1** (the tip adversary's mutant, which every
+fixture passed before batch 142's A43/A44); carrier reverted to base with
+`<!-- gate-checkpoint.sh done -->` appended and re-stamped **1**, and the same comment placed
+inside `**(b)` **1**. The arm itself is held by `enforcement-map-derivations` A43 (rule body
+moved), A44 (carrier moved) and A45 (a Rule 24 edit stays silent while still stamp-bound).
+
+verify: sh k=core/rules/ai-dlc-resident-discipline.md; s=core/skills/ai-dlc/SKILL.md; v=scripts/validate-enforcement-map.sh; [ -r "$k" ] && [ -r "$s" ] && [ -r "$v" ] || exit 9; [ "$(grep -c '^\*\*(b) Sliced re-read of large step files\.\*\* ' "$s")" = 1 ] || exit 9; d="$(mktemp -d)" || exit 9; trap 'rm -rf "$d"' EXIT; cp -R core scripts "$d/" || exit 9; o="$(bash "$d/$v" --arms I79 2>&1)" || exit 1; case "$o" in *"I79 carrier stamps: "[1-9]*" rule(s) stamp-bound to a .claude/rules/ carrier."*) : ;; *) exit 1 ;; esac; awk '/^\*\*\(b\) Sliced re-read of large step files\.\*\* / { $0 = $0 " RECEIPT-EDIT" } { print }' "$s" > "$d/$s" || exit 9; cmp -s "$s" "$d/$s" && exit 9; o="$(bash "$d/$v" --arms I79 2>&1)"; case "$o" in *"the rule body moved"*) : ;; *) exit 1 ;; esac; awk '/^\*\*\(b\)/ { p = 1 } p && /^$/ { p = 0 } p && index($0, "gate-checkpoint.sh done") && $0 !~ /^[[:space:]]*<!--/ { f = 1 } END { exit !f }' "$k" || exit 1; exit 0

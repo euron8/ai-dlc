@@ -13695,3 +13695,77 @@ indistinguishable from the real exit-141 case, and the reflog showed one push la
 the "re-push" a no-op. A fix must establish the push COMPLETED before reading the ref, and nothing
 today joins those two events. Scope it as a design question, not a one-line addition.
 
+
+## BATCH 139 RECORD (rotated out of the live plan at batch 142)
+
+**BATCH 139 SHIPPED `v0.615.0` (`b9caf678`), ONE SUBJECT, ALONE BECAUSE THE SUBJECT IS THE
+UPDATE SKILL ITSELF.** `BL-280` closed, discharging
+`PC-S345-DEFER-PATH-NAMES-NO-HOME-FOR-THE-GATE-RECORD-IT-JUST-WROTE`, named verbatim in the release
+commit. The self-update DEFER path wrote `self-update-gate-<ts>.md` on every verdict and no step
+claimed it; the DEFER bullet now names the record ALONE, names the step-7 gated apply as its
+destination, and says in the same breath that nothing in `reconcile/` stages or commits anything.
+Gate at `AI_DLC_FIXTURE_JOBS=6 AI_DLC_FIXTURE_NO_SKIP=1`: 22 of 22 phases PASS, **203 ok / 0 FAIL**,
+three changed fixtures read by name against an impossible-name control of 0. Live **75 -> 74**,
+archive **206 -> 207**. Receipt zeros diffed BY IDENTITY, unchanged both sides, so nothing closed
+incidentally.
+
+**THE GATE BLOCKED ON THIS BATCH'S OWN NEW ARM AND THE WRAPPER SAID `exit 0`.** 22 phases, 20 PASS,
+2 FAIL, log last line `pre-push: BLOCKED.` — **read the LOG, ANSI stripped, never the wrapper.**
+ONE root cause produced EIGHT failing fixtures: the new arm named `AI_DLC_GATE_IN_SAFE_STOP` without
+assigning it or clearing the ambient environment, `I87` fails the build on exactly that, and all
+eight failures DRIVE `validate-enforcement-map.sh`. Established as this batch's rather than
+pre-existing before touching anything: three sampled fixtures exit 0 at `origin/main` and non-zero
+at the tip. The shared `lib/preamble.sh` scrubs `GIT_*` only, so the canonical clearing loop is
+added beside `set -uo pipefail`. **A hand's PASS report cannot see this class; only the gate can.**
+
+**A RECEIPT THAT READS 1 AT BASE AND 1 AT THE FIX IS NOT A RECEIPT, AND THIS ONE HAD SHIPPED.**
+`BL-280`'s filed receipt could not separate the fixed tree from the broken one — sides `cmp -s`
+asserted different in the same invocation. Its verb-then-token arm used `[^.]*`, which crosses
+neither a period NOR a newline, and the shipped fix puts the token on one line and the verb on the
+next. It rejected 4 of 6 competent phrasings and accepted the inert forms including a fenced block
+and a multi-line HTML comment. REPLACED, not extended; 29/29 with an acquittal probe (a discard
+clause in the sentence AFTER the record-naming one) still scoring 1.
+
+**THE TWO ENGINES' `sh` CONVENTIONS ARE INVERTED AND THE SAME TREE YIELDS OPPOSITE VERDICTS.**
+Distribution `scripts/backlog-reverify.sh:232` reads exit 0 as CLOSE-CANDIDATE; consumer
+`reconcile/ledger-reverify.sh:30` reads exit 0 as STILL-LIVE. Both behave as documented. Say which
+engine a receipt is written for, beside the receipt.
+
+**`ALREADY-CLOSED` IS KEYED ON THE ANNOTATION, NOT THE RECEIPT.** `backlog-reverify.sh:150` sets
+`closed=1` on `**LANDED (v` and `:175` emits then `continue`s, so **the receipt NEVER RUNS on an
+annotated entry**. Only `--closed-receipts` runs it. A green ALREADY-CLOSED row beside an annotated
+entry is a check that cannot fire.
+
+**A CONTROL THAT PASSES IS NOT EVIDENCE THE INSTRUMENT WORKS — ONLY EVIDENCE ABOUT THE PROPERTY IT
+VARIED. When the suspected fault IS the instrument, one control is never enough.** Measured five
+times in one thread, by three hands all watching for it: every control that passed varied a SECOND
+TOKEN, and every repair varied a SECOND SPELLING OF THE SAME TOKEN. Varying the subject acquitted
+us; varying one property of the pattern caught it. **"Add another control" is the wrong lesson.**
+
+**THE INTERACTIVE `grep` IS A SHIM AND IT RETURNS A WRONG NUMBER ON THE SAME SET.** Measured: the
+same pattern and file read 33 interactively and 87 under `/usr/bin/grep`, while a second-token
+control and a line count agreed under both. Inside `bash <script>` `type grep` IS `/usr/bin/grep`,
+so scripted counts are unexposed. **Take any count you will QUOTE with `/usr/bin/grep` or in a
+script, and name which.** Four mechanisms for WHY were proposed and four refuted; none is stated
+here, deliberately.
+
+**A PROCESS-NAME MATCH IS NOT AN OWNERSHIP CLAIM, AND A RELATIVE PATH DEFEATS THE OBVIOUS GREP.**
+Two measured this batch: 19 processes matching a fixture pattern were about to be killed and pgid
+29679 was the CONSUMER's own `pre-push` belonging to a live `graph-*` session; and a later check for
+`ai-dlc/\.githooks/pre-push` read 0 against a control of 2, because the hook is invoked by its
+RELATIVE path — a live gate was nearly declared dead. Check the repo root and the pgid, never the
+name.
+
+**THE CONSUMER PULLED MID-BATCH AND THE GAP IS NOW ZERO.** Installed **0.615.0**'s predecessor
+`0.614.0` (`944e172e`) by its own `cca6bbe8d reconcile distribution 0.612.0 -> 0.614.0 (#1094)` and
+`af2014865` self-update; the gap read 2 releases when this batch opened and 0 before it closed.
+`v0.615.0` reopens it at one, with `SKILL.md` in range, so the consumer's INSTALLED copy runs the
+pull carrying its own repair. The operator's BANKED ruling stands — report the gap, write no
+runbook. Re-derive it; do not read this sentence for a number.
+
+**A STAMP COMPARED AGAINST YOUR OWN BASELINE CANNOT DETECT A PULL THAT PREDATES YOUR RUN.** Measured:
+a hand reported "no pull happened" with every stamp field matching its baseline, because its baseline
+was taken INSIDE the event — the first consumer HEAD it recorded was the pull commit's pre-squash
+twin, identical tree, stamp already advanced. Its ancestry probe then said "my observation predates
+the pull", technically true of the squashed sha and misleading. **Read `git log -- .claude/.ai-dlc-version`;
+test by CONTENT, never by ancestry in a squash-merge repo.**
