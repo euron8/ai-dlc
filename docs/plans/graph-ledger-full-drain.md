@@ -58,6 +58,59 @@ scripts/plan-rotate.sh docs/plans/graph-ledger-full-drain.md` to see what moves 
 move it. **Never a discharge banner in the head window** — that silences P9 through P13 on this
 file.
 
+**BATCH 142 SHIPPED `v0.624.0` (`29291758`, #826): TWO SUBJECTS, BOTH FROM THE UNFILED SET, BOTH
+FILED AND CLOSED IN THIS ONE BATCH.** `BL-287` discharges
+`PC-S313-FIXTURE-SKILLS-PATH-DIST-LAYOUT-ASSUMPTION` and `BL-288` discharges
+`PC-S313-RESIDENT-RULE-23-CARRIER-NOT-UPDATED-WITH-SKILL-MD`. The release commit names both
+verbatim (2 hits, impossible-id control 0). The gate at `AI_DLC_FIXTURE_NO_SKIP=1` ran 22 of 22
+phases with 0 FAIL lines and **204 ok**, and the changed fixtures were read by name against an
+impossible-name control of 0. Live stays **71** (two filed, two closed), and the archive went
+**214 -> 216**. The exit-0 receipts, compared by identity, went from the prior 8 to those 8 plus
+the two subjects, so nothing closed incidentally.
+
+**THE SCOPING INPUTS WERE EXACTLY AS BATCH 141 LEFT THEM.** The worklist is 4 rows that each
+disqualify themselves (`BL-067`, `BL-132`, `BL-145`, `BL-215`), and the gated class reads 0
+flattened. Unfiled is **16**. Six of those route CORE: two are this batch's subjects, the plan
+archive records `PC-S340-RETRO-AUDIT-SCANS-FIXTURE-FAILS-ONCE-AND-PASSES-ON-RETRY` as REFUTED,
+`PC-S309-VALIDATE-MANDATORY-RULES-CHECK5-TEST-ONLY-WEB-DIFF-FALSE-FAIL` shipped in `v0.542.0`
+and is awaiting the consumer's close, `PC-S309-PRE-PUSH-FLAG-MISMATCH-ORIGINAL-TEXT` calls itself
+superseded, and `PC-S297-FFCLUSTER-SHA-STALE` has a receipt the archive records as green on
+ABSENCE. **Neither of the last two has been hand-adjudicated. They are the CORE candidates the
+next batch should read first.**
+
+**THE FIRST CANDIDATE'S HEADLINE WAS FALSE AND ITS DEFECT WAS REAL.** It claimed the fixture
+turned every consumer push red. A contract adversary, run alone, measured the installed copy
+PASSING with 6/6 mutants killed, and the consumer's own failures file names a different unit. What
+was real is a `cd` that failed on every install and printed to stderr, plus a refusal that could
+never fire, because `ln -s ""` exits 0, over a link no mode reads. The fix was subtraction.
+**Score a candidate's symptom separately from its mechanism. A refuted headline is not a
+refuted entry.**
+
+**THE CONTRACT'S TOKEN JOIN WOULD HAVE FIRED FOREVER, AND ONE MEASUREMENT CHANGED THE SHAPE.**
+Joining Rule 23's backticked tokens against its carrier read **7** false positives after the fix,
+all of them deliberate condensation. The shipped binding is a stamp pair inside the EXISTING I79
+arm. Replayed over the history it fires exactly once, at 0.619.0. **A carrier that paraphrases
+cannot be bound by content, only by change.**
+
+**THE GATE BLOCKED ON THIS BATCH'S OWN CHANGE, AND THE TIP ADVERSARY FOUND THE SAME DEFECT
+INDEPENDENTLY.** Fix B appended a clause to I79's summary line, and two fixture arms parse that
+line: one needs the period after `gap(s)`, and one extracts the first `I79: N rule(s)`. Moving
+the new count onto its own `I79 carrier stamps:` line fixed both. **Before you extend a
+validator's output line, grep the fixtures for everything that parses it.** The adversary's two
+DEFECTs, that no fixture drove the new drift error and that the receipt could be closed by an
+HTML comment, were fixed before the merge (arms A43-A45, and a behavioural receipt scoring 1 on
+four regressions). Its NOTE that the `BL-287` receipt rejects a `[ -d ]`-guarded link is
+declined: that rejection is deliberate and recorded in the entry.
+
+**THE DELIVERY GAP IS TWO RELEASES AND THE CONSUMER IS PULLING RIGHT NOW.** It has installed
+**0.622.0** (`06733c6c`) against `VERSION` **0.624.0**. It sits on
+`ai-dlc-update/0.623.0-reconcile-*` with its three `SKILL.md` files modified in the working tree,
+so a pull is in flight. `ai-dlc-update/SKILL.md` is in range (1 commit), the other three
+bootstrapping files are at 0, and 0 of 6 raw rows are mode-only. The operator's banked ruling
+stands: report the gap and write no runbook. Its porcelain count moved **4 -> 11** during this
+batch, entirely from that pull. The ledger md5 did not move, which is the criterion-4 check by
+content.
+
 **BATCH 141 SHIPPED TWO RELEASES AND CLOSED FIVE ENTRIES, AND THE SECOND SUBJECT CAME FROM THE
 OPERATOR RATHER THAN FROM ANY JOIN.** `v0.617.0` (`ccb5f7c1`, #818) carried FOUR subjects;
 `v0.618.0` (`54fb7d8b`, #819) carried one, alone, because `ledger-reverify.sh` is a bootstrapping
@@ -239,78 +292,6 @@ attribution; check the timestamps before naming a cause.**
 **THE `(#816)` IN THE BATCH 139 LINE BELOW IS WRONG.** GitHub reports PR **#816** as THIS batch's
 release. Batch 139's release sha `b9caf678` resolves and is on `origin/main`, so the sha is good and
 only the PR number is bad. Do not propagate a PR number from a commit SUBJECT; ask the forge.
-
-**BATCH 139 SHIPPED `v0.615.0` (`b9caf678`), ONE SUBJECT, ALONE BECAUSE THE SUBJECT IS THE
-UPDATE SKILL ITSELF.** `BL-280` closed, discharging
-`PC-S345-DEFER-PATH-NAMES-NO-HOME-FOR-THE-GATE-RECORD-IT-JUST-WROTE`, named verbatim in the release
-commit. The self-update DEFER path wrote `self-update-gate-<ts>.md` on every verdict and no step
-claimed it; the DEFER bullet now names the record ALONE, names the step-7 gated apply as its
-destination, and says in the same breath that nothing in `reconcile/` stages or commits anything.
-Gate at `AI_DLC_FIXTURE_JOBS=6 AI_DLC_FIXTURE_NO_SKIP=1`: 22 of 22 phases PASS, **203 ok / 0 FAIL**,
-three changed fixtures read by name against an impossible-name control of 0. Live **75 -> 74**,
-archive **206 -> 207**. Receipt zeros diffed BY IDENTITY, unchanged both sides, so nothing closed
-incidentally.
-
-**THE GATE BLOCKED ON THIS BATCH'S OWN NEW ARM AND THE WRAPPER SAID `exit 0`.** 22 phases, 20 PASS,
-2 FAIL, log last line `pre-push: BLOCKED.` — **read the LOG, ANSI stripped, never the wrapper.**
-ONE root cause produced EIGHT failing fixtures: the new arm named `AI_DLC_GATE_IN_SAFE_STOP` without
-assigning it or clearing the ambient environment, `I87` fails the build on exactly that, and all
-eight failures DRIVE `validate-enforcement-map.sh`. Established as this batch's rather than
-pre-existing before touching anything: three sampled fixtures exit 0 at `origin/main` and non-zero
-at the tip. The shared `lib/preamble.sh` scrubs `GIT_*` only, so the canonical clearing loop is
-added beside `set -uo pipefail`. **A hand's PASS report cannot see this class; only the gate can.**
-
-**A RECEIPT THAT READS 1 AT BASE AND 1 AT THE FIX IS NOT A RECEIPT, AND THIS ONE HAD SHIPPED.**
-`BL-280`'s filed receipt could not separate the fixed tree from the broken one — sides `cmp -s`
-asserted different in the same invocation. Its verb-then-token arm used `[^.]*`, which crosses
-neither a period NOR a newline, and the shipped fix puts the token on one line and the verb on the
-next. It rejected 4 of 6 competent phrasings and accepted the inert forms including a fenced block
-and a multi-line HTML comment. REPLACED, not extended; 29/29 with an acquittal probe (a discard
-clause in the sentence AFTER the record-naming one) still scoring 1.
-
-**THE TWO ENGINES' `sh` CONVENTIONS ARE INVERTED AND THE SAME TREE YIELDS OPPOSITE VERDICTS.**
-Distribution `scripts/backlog-reverify.sh:232` reads exit 0 as CLOSE-CANDIDATE; consumer
-`reconcile/ledger-reverify.sh:30` reads exit 0 as STILL-LIVE. Both behave as documented. Say which
-engine a receipt is written for, beside the receipt.
-
-**`ALREADY-CLOSED` IS KEYED ON THE ANNOTATION, NOT THE RECEIPT.** `backlog-reverify.sh:150` sets
-`closed=1` on `**LANDED (v` and `:175` emits then `continue`s, so **the receipt NEVER RUNS on an
-annotated entry**. Only `--closed-receipts` runs it. A green ALREADY-CLOSED row beside an annotated
-entry is a check that cannot fire.
-
-**A CONTROL THAT PASSES IS NOT EVIDENCE THE INSTRUMENT WORKS — ONLY EVIDENCE ABOUT THE PROPERTY IT
-VARIED. When the suspected fault IS the instrument, one control is never enough.** Measured five
-times in one thread, by three hands all watching for it: every control that passed varied a SECOND
-TOKEN, and every repair varied a SECOND SPELLING OF THE SAME TOKEN. Varying the subject acquitted
-us; varying one property of the pattern caught it. **"Add another control" is the wrong lesson.**
-
-**THE INTERACTIVE `grep` IS A SHIM AND IT RETURNS A WRONG NUMBER ON THE SAME SET.** Measured: the
-same pattern and file read 33 interactively and 87 under `/usr/bin/grep`, while a second-token
-control and a line count agreed under both. Inside `bash <script>` `type grep` IS `/usr/bin/grep`,
-so scripted counts are unexposed. **Take any count you will QUOTE with `/usr/bin/grep` or in a
-script, and name which.** Four mechanisms for WHY were proposed and four refuted; none is stated
-here, deliberately.
-
-**A PROCESS-NAME MATCH IS NOT AN OWNERSHIP CLAIM, AND A RELATIVE PATH DEFEATS THE OBVIOUS GREP.**
-Two measured this batch: 19 processes matching a fixture pattern were about to be killed and pgid
-29679 was the CONSUMER's own `pre-push` belonging to a live `graph-*` session; and a later check for
-`ai-dlc/\.githooks/pre-push` read 0 against a control of 2, because the hook is invoked by its
-RELATIVE path — a live gate was nearly declared dead. Check the repo root and the pgid, never the
-name.
-
-**THE CONSUMER PULLED MID-BATCH AND THE GAP IS NOW ZERO.** Installed **0.615.0**'s predecessor
-`0.614.0` (`944e172e`) by its own `cca6bbe8d reconcile distribution 0.612.0 -> 0.614.0 (#1094)` and
-`af2014865` self-update; the gap read 2 releases when this batch opened and 0 before it closed.
-`v0.615.0` reopens it at one, with `SKILL.md` in range, so the consumer's INSTALLED copy runs the
-pull carrying its own repair. The operator's BANKED ruling stands — report the gap, write no
-runbook. Re-derive it; do not read this sentence for a number.
-
-**A STAMP COMPARED AGAINST YOUR OWN BASELINE CANNOT DETECT A PULL THAT PREDATES YOUR RUN.** Measured:
-a hand reported "no pull happened" with every stamp field matching its baseline, because its baseline
-was taken INSIDE the event — the first consumer HEAD it recorded was the pull commit's pre-squash
-twin, identical tree, stamp already advanced. Its ancestry probe then said "my observation predates
-the pull", technically true of the squashed sha and misleading. **Read `git log -- .claude/.ai-dlc-version`;
-test by CONTENT, never by ancestry in a squash-merge repo.**
 
 **BATCH 137 SHIPPED NO RELEASE, AND THAT IS THE CORRECT SHAPE: BOTH SUBJECTS WERE DOCS-ONLY, SO
 `core/` IS UNTOUCHED AND THE CONSUMER GAP DID NOT WIDEN.** Merged as `b468c01b` (#810), verified by
@@ -1319,8 +1300,11 @@ given at batch 90.
    but when nothing there is a straightforward build, go to the `GATED-ON-THIS-FILING` class
    below rather than forcing a refuted remedy or reporting an empty batch.
 
-   **THAT CLASS IS WHERE BATCH 140's WORK CAME FROM AND `BL-015` AND `BL-016` ARE WHAT REMAIN.**
-   An entry filed as the measured RESIDUE of a candidate whose headline the consumer has ARCHIVED
+   **THAT CLASS IS EMPTY SINCE BATCH 141, SO THE UNFILED SET IS WHERE BATCH 142's WORK CAME FROM.**
+   Rank the unfiled candidates by `-S` date, newest first; route each with `core-paths.sh --is-core`
+   under CONSUMER path spelling, reading STDOUT; and read each CORE candidate's own body against the
+   tree before scoping it. Re-derive the class anyway, because it refills whenever a filing lands
+   as residue. An entry filed as the measured RESIDUE of a candidate whose headline the consumer has ARCHIVED
    scores ZERO on this join by construction — the join keys on `live.txt` and the parent candidate
    left it. Derive the class with the entry bodies FLATTENED (`## BL-` to the next `## BL-`,
    whatever its number): a line-oriented grep scores 2 where the flattened derivation scores 4,
