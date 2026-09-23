@@ -1843,12 +1843,72 @@ fi
 if [ -n "$HR_VALIDATOR" ]; then
   hr_out="$(bash "$HR_VALIDATOR" --root "$CONSUMER" 2>&1)"; hr_rc=$?
   hr_names="$(printf '%s\n' "$hr_out" | sed -n 's@^ *\.claude/hooks/@@p' | tr '\n' ' ')"
-  if [ "$hr_rc" = "1" ] && [ -n "$hr_names" ]; then
-    say WORKLIST settings-merge ".claude/settings.json" \
-      "hook(s) present and UNREGISTERED after this apply: ${hr_names}— each is on disk, wired to nothing, and indistinguishable from one that is working. Run the settings reconcile, which is the one program that owns this contract: \`t=\$(mktemp); git -C <dist> show \"\${theirs}:templates/settings.json.template\" > \"\$t\"; reconcile/settings-merge.sh --consumer .claude/settings.json --template \"\$t\"\`. Re-run scripts/ai-dlc/validate-hook-registration.sh afterwards; it must exit 0 before delivery."
+  # THE VALIDATOR HAS TWO FAILURE LISTS AND PRINTS THEM IN TWO SHAPES, AND THE `sed` ABOVE CAN READ
+  # ONLY ONE. UNREGISTERED names carry a `.claude/hooks/` prefix; DANGLING names -- registered, no
+  # file on disk -- are printed BARE, as `    ai-dlc-<x>.sh`. With the prefix parse alone, a tree
+  # whose only failure was a dangling registration returned rc 1 with nothing parsed and this
+  # function emitted NO row at all, on `--finish` too: the invocation meant to verify the finished
+  # tree was silent over a registration Claude Code cannot run.
+  #
+  # SCOPED TO ITS BLOCK. The settings.local.json NOTE prints its names in the SAME bare shape a few
+  # lines later, and a NOTE is not a failure -- the hook is live for whoever holds that file. An
+  # unscoped parse (a second `sed` over every bare `    ai-dlc-*.sh` line) reports a working
+  # local-only hook as dangling and hands the operator a remedy for a hook that is fine. Two things
+  # end the DANGLING block: the first line not indented four spaces, and the NOTE header switching
+  # the mode. Against today's validator output they COVER EACH OTHER -- the NOTE header is itself
+  # the first non-4-space line after the list, so removing either one alone changes no row. The
+  # stop is kept for the section the validator adds next, which the NOTE switch cannot know about.
+  # The NOTE list is read on its own because it decides WHICH remedy a dangling name gets:
+  # `settings-merge.sh` rewrites `.claude/settings.json` only, so a registration that lives in
+  # settings.local.json survives the merge and has to be removed by hand.
+  hr_blocks="$(printf '%s\n' "$hr_out" | awk '
+    index($0, "  DANGLING ") == 1 { m = "D"; next }
+    index($0, "  NOTE ") == 1 && index($0, "settings.local.json") > 0 { m = "L"; next }
+    m != "" && $0 !~ /^    / { m = "" }
+    m != "" && $0 ~ /^    ai-dlc-[^ ]*\.sh$/ { sub(/^    /, ""); print m, $0 }')"
+  hr_local=" $(printf '%s\n' "$hr_blocks" | awk '$1 == "L" { print $2 }' | tr '\n' ' ')"
+  hr_dangle=""; hr_dangle_local=""
+  for _hn in $(printf '%s\n' "$hr_blocks" | awk '$1 == "D" { print $2 }'); do
+    case "$hr_local" in
+      *" ${_hn} "*) hr_dangle_local="${hr_dangle_local}${_hn} " ;;
+      *)            hr_dangle="${hr_dangle}${_hn} " ;;
+    esac
+  done
+  # ONE ROW PER REMEDY. Unregistered and dangling-in-settings.json are both cleared by the same
+  # merge, so they share the one `settings-merge` row -- whose unregistered wording is unchanged.
+  # A dangling registration held in settings.local.json is a different act on a different file,
+  # so it gets its own row. Nothing downstream collapses rows by id: `say` prints and counts each
+  # one, so two rows here are two undisposed items to `handback` and to `worklist_n` alike.
+  if [ "$hr_rc" = "1" ] && { [ -n "$hr_names" ] || [ -n "$hr_dangle" ] || [ -n "$hr_dangle_local" ]; }; then
+    hr_what=""
+    [ -n "$hr_names" ] && hr_what="hook(s) present and UNREGISTERED after this apply: ${hr_names}— each is on disk, wired to nothing, and indistinguishable from one that is working. "
+    [ -n "$hr_dangle" ] && hr_what="${hr_what}hook(s) REGISTERED in .claude/settings.json with no file under .claude/hooks/ (DANGLING): ${hr_dangle}— Claude Code cannot run them; the hook was retired upstream and the strip half of the reconcile did not run. If a name is still in theirs' template, its FILE is what is missing: restore it with \`git -C <dist> show \"\${theirs}:core/hooks/<name>\" > .claude/hooks/<name>\` instead. "
+    if [ -n "$hr_what" ]; then
+      say WORKLIST settings-merge ".claude/settings.json" \
+        "${hr_what}Run the settings reconcile, which is the one program that owns this contract: \`t=\$(mktemp); git -C <dist> show \"\${theirs}:templates/settings.json.template\" > \"\$t\"; reconcile/settings-merge.sh --consumer .claude/settings.json --template \"\$t\"\`. Re-run scripts/ai-dlc/validate-hook-registration.sh afterwards; it must exit 0 before delivery."
+    fi
+    if [ -n "$hr_dangle_local" ]; then
+      say WORKLIST settings-local-dangling ".claude/settings.local.json" \
+        "hook(s) registered ONLY in .claude/settings.local.json with no file under .claude/hooks/ (DANGLING): ${hr_dangle_local}— Claude Code cannot run them. \`reconcile/settings-merge.sh\` never touches settings.local.json, so the settings reconcile cannot clear this: remove each named hook's block from .claude/settings.local.json by hand, on every machine that holds one. Re-run scripts/ai-dlc/validate-hook-registration.sh afterwards; it must exit 0 before delivery."
+    fi
   elif [ "$hr_rc" = "2" ]; then
     say DECISION hook-registration-unreadable ".claude/settings.json" \
       "the hook-registration check could not run, so whether this pull's hooks are wired is UNKNOWN — and unknown reads exactly like clean. Detail: $(printf '%s' "$hr_out" | tr '\n' ' ')"
+  elif [ "$hr_rc" != "0" ]; then
+    # A NON-ZERO EXIT THAT NAMED NOTHING IS NOT A CLEAN RUN, AND IT WAS SILENT HERE. Measured: a
+    # `.claude/settings.json` holding `[]` is valid JSON, so the validator's fail-closed path never
+    # fires; `doc.get` then raises, python exits 1 with a traceback and no list, and the rc-1 arm
+    # above -- keyed on names -- emitted nothing. A consumer with no `python3` exits 127 the same
+    # way. Its own id rather than `-unreadable` (the validator's DECLARED refusal, rc 2) or
+    # `-unchecked` (no validator at all, which the C8 arm of the apply-restamp-worklist fixture
+    # keys on).
+    #
+    # A DECISION, SO `--finish` DOES NOT WITHHOLD ON IT -- deliberately. `--finish` gates on
+    # `worklist_n` alone, and a missing `python3` is not work that clears: a finisher that
+    # withheld here would leave the in-flight marker with no invocation able to remove it, the
+    # wedge C8 exists to rule out. The ordinary run still counts it into `handback`.
+    say DECISION hook-registration-unparsed ".claude/settings.json" \
+      "the hook-registration check exited ${hr_rc} without naming a single hook, so whether this pull's hooks are wired is UNKNOWN — and unknown reads exactly like clean. It is not the validator's declared refusal (that is exit 2): an interpreter error or a missing \`python3\` both look like this. Fix what the detail shows, then re-run scripts/ai-dlc/validate-hook-registration.sh until it exits 0. Detail: $(printf '%s\n' "$hr_out" | tail -n 3 | tr '\n' ' ')"
   fi
 else
   # NOT a silent skip. A pull old enough to predate the validator cannot check this, and saying

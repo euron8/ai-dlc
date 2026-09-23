@@ -4080,20 +4080,29 @@ The fix must ship in a release of its own, with nothing else a pull would ask th
 
 **RECEIPT, SCORED.** It extracts the shipped `hook_registration_row` from `apply.sh`, installs a
 fresh consumer with `scripts/install.sh` under `mktemp`, and requires the installed validator to exit
-0 on it. Positive control: with one hook's registration removed from `settings.json` (so the hook is
-UNREGISTERED), the function must emit a WORKLIST row, otherwise exit 9. Subject: with the
-registration restored and the hook file moved out (so it is DANGLING), the validator must exit 1,
-otherwise exit 9, and the function must emit a WORKLIST or DECISION row. Distribution engine: exit 0
-is CLOSE-CANDIDATE. It needs `jq` and takes about 5s, most of it the install. Each run leaves one
-installed tree under `$TMPDIR`.
+0 on it. Positive control: with hook `h` unregistered in `settings.json`, the function must emit a
+WORKLIST row naming `h`, otherwise exit 9. Three subjects follow, each a validator exit 1 (else 9).
+**Dangling beside a live local-only hook:** `h`'s file moved out while `h` is still registered, and a
+second hook `h2` registered ONLY in `settings.local.json`. The validator must print both as bare
+names (else 9). The function must emit a WORKLIST row naming `h`, and no row may name `h2`, which is
+live for whoever holds that file. **Local-only dangling:** a hook with no file, registered only in
+`settings.local.json`. It needs a WORKLIST row whose subject is `.claude/settings.local.json` and that
+names the hook. **`settings.json` holding `[]`:** the validator exits 1 with a traceback and no list,
+and the function must emit a DECISION row. A DECISION is no longer accepted for a dangling
+registration. Exit 0 is CLOSE-CANDIDATE. It needs `jq` and takes about 5s, most of it the install.
+Each run leaves one installed tree under `$TMPDIR`.
 
 | tree | exit |
 |---|---|
-| `b144-release` | **1** |
-| `origin/main` `5376b309` | **1** |
-| candidate fix: a second `sed` also reads `    ai-dlc-*.sh` bare names into `hr_names` | **0** |
+| `origin/main` `a86d9a5f` | **1** |
+| fix, branch `b145-bl292-fix` | **0** |
+| regression: the dangling-only row emitted as DECISION | **1** |
+| regression: the filed candidate, every bare `    ai-dlc-*.sh` line read as dangling | **1** |
+| regression: DANGLING parse with neither the stop nor the NOTE-header switch | **1** |
+| regression: NOTE-header switch alone removed | **1** |
+| stop alone removed (the NOTE header is the first non-4-space line today, so the two cover each other) | 0 |
 
-verify: sh A=core/skills/ai-dlc-update/reconcile/apply.sh; [ -r "$A" ] && [ -r scripts/install.sh ] || exit 9; command -v jq >/dev/null || exit 9; F="$(awk '/^hook_registration_row\(\) \{/{p=1} p{print} p&&/^\}$/{exit}' "$A")"; [ -n "$F" ] || exit 9; R="$(pwd)"; T="$(mktemp -d)" || exit 9; ( cd "$T" && git init -q && mkdir _bmad && git -c user.name=r -c user.email=r@r commit -q --allow-empty -m init && bash "$R/scripts/install.sh" ) >/dev/null 2>&1 || exit 9; V="$T/scripts/ai-dlc/validate-hook-registration.sh"; [ -x "$V" ] || exit 9; bash "$V" --root "$T" >/dev/null 2>&1 || exit 9; say() { echo "ROW $1 $2"; }; eval "$F"; h="$(cd "$T/.claude/hooks" && ls ai-dlc-*.sh | head -1)"; [ -n "$h" ] || exit 9; cp "$T/.claude/settings.json" "$T/s.bak"; jq --arg h "$h" 'walk(if type == "object" and has("hooks") and (.hooks|type) == "array" then .hooks |= map(select((.command // "") | contains($h) | not)) else . end)' "$T/s.bak" > "$T/.claude/settings.json" || exit 9; cmp -s "$T/s.bak" "$T/.claude/settings.json" && exit 9; CONSUMER="$T"; o="$(hook_registration_row)"; case "$o" in *"ROW WORKLIST "*) : ;; *) exit 9 ;; esac; cp "$T/s.bak" "$T/.claude/settings.json"; mv "$T/.claude/hooks/$h" "$T/$h"; bash "$V" --root "$T" >/dev/null 2>&1; [ $? = 1 ] || exit 9; o="$(hook_registration_row)"; case "$o" in *"ROW WORKLIST "*|*"ROW DECISION "*) exit 0 ;; esac; exit 1
+verify: sh A=core/skills/ai-dlc-update/reconcile/apply.sh; [ -r "$A" ] && [ -r scripts/install.sh ] || exit 9; command -v jq >/dev/null || exit 9; F="$(awk '/^hook_registration_row\(\) \{/{p=1} p{print} p&&/^\}$/{exit}' "$A")"; [ -n "$F" ] || exit 9; R="$(pwd)"; T="$(mktemp -d)" || exit 9; ( cd "$T" && git init -q && mkdir _bmad && git -c user.name=r -c user.email=r@r commit -q --allow-empty -m init && bash "$R/scripts/install.sh" ) >/dev/null 2>&1 || exit 9; V="$T/scripts/ai-dlc/validate-hook-registration.sh"; [ -x "$V" ] || exit 9; bash "$V" --root "$T" >/dev/null 2>&1 || exit 9; say() { echo "ROW $1 $2 ${3:-} ${4:-}"; }; eval "$F"; h="$(cd "$T/.claude/hooks" && ls ai-dlc-*.sh | sed -n 1p)"; h2="$(cd "$T/.claude/hooks" && ls ai-dlc-*.sh | sed -n 2p)"; [ -n "$h" ] && [ -n "$h2" ] || exit 9; S="$T/.claude/settings.json"; L="$T/.claude/settings.local.json"; cp "$S" "$T/s.bak"; unreg() { jq --arg h "$1" 'walk(if type == "object" and has("hooks") and (.hooks|type) == "array" then .hooks |= map(select((.command // "") | contains($h) | not)) else . end)' "$T/s.bak" > "$S"; }; loc() { jq -n --arg c "bash /p/.claude/hooks/$1" '{hooks:{PreToolUse:[{matcher:"Bash",hooks:[{type:"command",command:$c}]}]}}' > "$L"; }; unreg "$h" || exit 9; cmp -s "$T/s.bak" "$S" && exit 9; CONSUMER="$T"; o="$(hook_registration_row)"; grep -q "^ROW WORKLIST .*$h" <<< "$o" || exit 9; unreg "$h2" || exit 9; loc "$h2" || exit 9; mv "$T/.claude/hooks/$h" "$T/$h"; vo="$(bash "$V" --root "$T" 2>&1)"; [ $? = 1 ] || exit 9; grep -qx "    $h" <<< "$vo" && grep -qx "    $h2" <<< "$vo" || exit 9; o="$(hook_registration_row)"; grep -q "^ROW WORKLIST .*$h" <<< "$o" || exit 1; grep -q "^ROW [A-Z]* .*$h2" <<< "$o" && exit 1; mv "$T/$h" "$T/.claude/hooks/$h"; cp "$T/s.bak" "$S"; loc ai-dlc-zz-retired.sh || exit 9; bash "$V" --root "$T" >/dev/null 2>&1; [ $? = 1 ] || exit 9; o="$(hook_registration_row)"; grep -q "^ROW WORKLIST [a-z-]* \.claude/settings\.local\.json .*ai-dlc-zz-retired\.sh" <<< "$o" || exit 1; rm -f "$L"; printf '[]\n' > "$S"; bash "$V" --root "$T" >/dev/null 2>&1; [ $? = 1 ] || exit 9; o="$(hook_registration_row)"; grep -q "^ROW DECISION " <<< "$o" || exit 1; exit 0
 
 ## BL-294 — `bug-investigation.md` has no step that puts an operator-applicable relief in front of the operator, so a lead holding one writes a story instead
 
