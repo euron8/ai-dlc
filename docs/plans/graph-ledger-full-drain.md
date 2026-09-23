@@ -69,6 +69,48 @@ before the next retained paragraph, append the cut to the archive under `## BATC
 (rotated out of the live plan at batch <m>)`, and assert byte conservation: the plan's drop equals
 the moved bytes, and the archive's growth equals the moved bytes plus the header.
 
+**BATCH 144 SHIPPED `v0.625.0` (`240d813a`, #830), AND ALL THREE OF THE CONSUMER'S 2026-09-23
+FILINGS ARE ADDRESSED — THE OPERATOR MADE THEM THE BATCH'S PRIORITY MID-SWEEP.**
+`PC-S313-DEBT-AUDIT-CUE-FIRES-ON-A-CORE-CONSTRUCT-NAME` closed as `BL-290`, and
+`PC-S313-REMOVE-NOTIFY-HOOK` closed as `BL-291`, the hook retired by operator direction. Both are named in the
+release commit (1 commit each, impossible-id control 0). `PC-S313-EMIT-REPORT-E2-IS-A-FOURTH-POOL-FLAKE-ARM`
+widened `BL-230`, which STAYS LIVE on a `verify: manual` receipt and is now the fifth row of the
+PC-backed worklist. Gate at `AI_DLC_FIXTURE_NO_SKIP=1`: 22 of 22 phases, **203 ok / 0 FAIL**, exit 0,
+changed fixtures read by name against an impossible-name control of 0. Live **74**, archive **218**.
+
+**THE FLAKE'S INSTRUMENT FOUND A PRODUCT DEFECT ON ITS FIRST CATCH, AND IT IS NOT THE ONE THE LOAD
+HYPOTHESIS PREDICTED.** CPU load reproduced nothing, and a zero taken at a predicted count of 0.4
+refutes nothing. The kill-set arms were taught to print the differing world's stderr diff instead, and
+one unforced E2 failure showed `HARD-UNREGISTERED-CORE-DRIFT` rendered as `CORE-TEMPLATE-SUBSTITUTED`
+with no refusal line. That was `unregistered-drift.sh` reading a `diff` that did not run as "clean", in
+two functions. Both now fail closed, forced with a failing `diff` shim, with an arm and a mutant each.
+**A diagnostic that names its own cause beat 3432 replayed cells that named nothing.** `BL-293` files
+the same shape in `register-drift.sh`.
+
+**A HAND BRIEFED TO RUN A LOAD GENERATOR ORPHANED 36 `yes` PROCESSES FOR 38 MINUTES AT LOAD ~118**,
+until the operator asked what was flooding the machine. `tool-hazards.md` now carries the rule. Never
+brief one; force the interleaving in a scratch copy.
+
+**THE SPACED-BULLET CONTROL DIED AGAIN AND IS REPLACED.** The consumer WITHDREW
+`PC-S295-RETRO-PARALLEL-OPEN-COUNT-METHOD` in `6bc1b0461` mid-batch. Both fences now use
+`PC-S309-PRE-PUSH-FLAG-MISMATCH-ORIGINAL-TEXT`, the only live spaced bullet left, read 1. When it
+dies too there is no spaced form to control on; say so, rather than dropping the arm.
+
+**THE NEXT BATCH'S INPUTS, RE-DERIVED AT `240d813a`.** Consumer live **28** across **9** qualifying
+refs; unfiled **14**, the same fourteen batch 143 adjudicated, so **no new filing awaits a first
+look**. The worklist is five rows: the four self-disqualifying ones and `BL-230`, which has no
+build until the instrument records a pool failure's cause on the consumer. The core-routing
+candidates still owed are `BL-292` (`apply.sh`, a bootstrapping file, so it ships ALONE) and `BL-293`.
+**Take `BL-293` next if nothing new is filed, and `BL-292` in a release of its own.**
+
+**THE DELIVERY GAP IS ONE RELEASE.** The consumer installed **0.624.0**. `VERSION` is **0.625.0**, 0 of the
+four bootstrapping files changed in range, and 0 of 10 raw `core/` rows are mode-only. **The pull
+carries a one-decision instruction**: the hook and both `notify-hook-channel` fixture files are
+UPSTREAM-DELETED, and all three must be accepted together. Declining any one of them turns the
+consumer's gate red, and the CHANGELOG says so. The banked ruling stands: report the gap and write no
+runbook. The consumer committed `6bc1b0461` during the batch and its porcelain is 17, all under
+`_bmad-output/`; nothing this program writes is among them.
+
 **BATCH 143 SHIPPED NO RELEASE, BECAUSE NO CANDIDATE ROUTES CORE. THAT IS A MEASURED STATE AND
 NOT AN EMPTY BATCH.** Every input re-derived at `origin/main` `bf518a1b`: live backlog **71**
 (**72** after this batch filed `BL-289`), archive **216**, consumer live ledger **28** across **10** qualifying refs, unfiled **14**, the
@@ -170,7 +212,7 @@ batch, entirely from that pull. The ledger md5 did not move, which is the criter
 content.
 
 **EVERYTHING BELOW THIS LINE, DOWN TO `### Derive the state`, IS AN EARLIER BATCH'S BLOCK.** Each
-one was current when it was written, and the batch 143 and 142 blocks above replace it. Read those blocks
+one was current when it was written, and the batch 144, 143 and 142 blocks above replace it. Read those blocks
 for the measurement behind a rule. Take no figure and no next-work pointer from them: their
 counts, gaps and "remaining" ids have all moved since.
 
@@ -706,9 +748,10 @@ comm -12 /tmp/live.txt /tmp/arch.txt | wc -l          # control: must be 0, the 
 comm -12 /tmp/live.txt /tmp/filed.txt | wc -l         # live candidates a backlog entry cites
 comm -23 /tmp/live.txt /tmp/filed.txt                 # live candidates NOTHING has filed
 grep -cx 'PC-S333-SKILL-RENDERS-THE-THEIRS-REF-UNQUOTED-AND-ZSH-EATS-IT' /tmp/filed.txt  # control: 1
-grep -cx 'PC-S295-RETRO-PARALLEL-OPEN-COUNT-METHOD' /tmp/live.txt   # control: 1, a SPACED bullet.
-                                                      # It was `PC-S295-RETRO-CHECK5-SELF-REFERENTIAL`
-                                                      # until the consumer ARCHIVED that id, after
+grep -cx 'PC-S309-PRE-PUSH-FLAG-MISMATCH-ORIGINAL-TEXT' /tmp/live.txt   # control: 1, a SPACED bullet.
+                                                      # It was `PC-S295-RETRO-PARALLEL-OPEN-COUNT-METHOD`,
+                                                      # and `-CHECK5-SELF-REFERENTIAL` before that,
+                                                      # until the consumer ARCHIVED each id, after
                                                       # which it read 0 on a correct derivation. A
                                                       # control a close can break must be re-checked
                                                       # every batch, not trusted.
@@ -823,7 +866,7 @@ wc -l < /tmp/pc_backed.tsv     # THE WORKLIST: entries whose candidate is STILL 
 cat /tmp/pc_backed.tsv         # read it -- the ids are the batch's candidate set
 # controls, same invocation:
 wc -l < /tmp/live.txt                                            # must be NON-ZERO
-grep -cxF 'PC-S295-RETRO-PARALLEL-OPEN-COUNT-METHOD' /tmp/live.txt  # a known-live id: 1
+grep -cxF 'PC-S309-PRE-PUSH-FLAG-MISMATCH-ORIGINAL-TEXT' /tmp/live.txt  # a known-live id: 1
 grep -cxF 'PC-S999-NEVER-A-REAL-ID' /tmp/live.txt                # impossible id: 0
 ```
 
