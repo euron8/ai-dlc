@@ -5491,7 +5491,8 @@ else
         *) err "I79 I79_CARRIER_STAMPS records a pair for Rule $i79_sn, which is not a band rule carried by a core/rules/ file (carried set:${i79_carried:- none}). Remove the line, or restore the carrier it attested." ;;
       esac
     done <<<"$I79_CARRIER_STAMPS"
-    echo "  I79: ${i79_band_n} rule(s) below the ${i79_cut}-byte re-attach cut; ${i79_gaps} declared carrier gap(s); ${i79_carried_n} rule(s) stamp-bound to a .claude/rules/ carrier."
+    echo "  I79: ${i79_band_n} rule(s) below the ${i79_cut}-byte re-attach cut; ${i79_gaps} declared carrier gap(s)."
+    echo "  I79 carrier stamps: ${i79_carried_n} rule(s) stamp-bound to a .claude/rules/ carrier."
   fi
 fi
 
