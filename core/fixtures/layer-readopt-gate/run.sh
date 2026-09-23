@@ -822,6 +822,242 @@ else
   else bad "register-drift invented an override for a hook -- overrides shadow headings, hooks have none"; fi
 fi
 
+echo "== E2. register-drift REFUSES rather than revert an edit it did not carry =="
+
+# register-drift ends in a revert: core overwrites the consumer's file. Every step before it
+# that fails QUIETLY therefore destroys an edit, and each world below is one such step, forced:
+#   (a) a MIXED diff failure -- two edited sections, `diff` failing for Beta alone. Before the
+#       fix the classifier read the empty stream as `yes` (template substitution only), Beta was
+#       skipped, the override carried Alpha alone, and core was reverted: rc 0, Beta gone.
+#   (b) the same world as a DRY RUN, which is the preview an operator approves.
+#   (c) the override path already a DIRECTORY, so the override cannot be written as a file.
+#   (d) the BODY extraction failing for Alpha (a `mktemp` shim, keyed on the call index derived
+#       from a counting run, not hardcoded) -- only the pre-revert conservation check reads the
+#       RESULT, so only it can see an override whose body lost a section.
+#   (e) the positive control: the same two-edit seed, nothing shimmed, registers BOTH sections.
+# Every arm is PRESENCE-shaped: a named refusal on stderr, a shim `.fired` marker, and the
+# consumer file cmp-identical. A subject that emits nothing fails all of them.
+# Worlds are fresh `mktemp -d` directories under $ROOT, one per drive: every --apply mutates its
+# world, and a mutant must never read a file a previous drive left.
+E2_REALDIFF="$(command -v diff)"; E2_REALMK="$(command -v mktemp)"
+if [ -z "$REG" ] || [ -z "$E2_REALDIFF" ] || [ -z "$E2_REALMK" ]; then
+  bad "E2: cannot locate register-drift.sh ($REG), diff ($E2_REALDIFF) or mktemp ($E2_REALMK)"
+else
+  e2_world() { # <beta-edit-marker> -> prints a fresh world dir
+    local w
+    w="$(mktemp -d "$ROOT/e2w.XXXXXX")" || return 1
+    mkdir -p "$w/dist/core/team-roles" "$w/cons/.claude/team-roles" || return 1
+    git -C "$w/dist" init -q && git -C "$w/dist" config user.email f@x \
+      && git -C "$w/dist" config user.name f || return 1
+    printf '# Role: X\n\n## Alpha\n\nalpha core text.\n\n## Beta\n\nbeta core text.\n\n## Gamma\n\ngamma core text.\n' \
+      > "$w/dist/core/team-roles/x.md" || return 1
+    git -C "$w/dist" add -A && git -C "$w/dist" commit -qm base || return 1
+    sed "s/alpha core text\./alpha E2-ALPHA-EDIT./; s/beta core text\./beta $1./" \
+      "$w/dist/core/team-roles/x.md" > "$w/cons/.claude/team-roles/x.md" || return 1
+    cp "$w/cons/.claude/team-roles/x.md" "$w/orig.md" || return 1
+    git -C "$w/dist" rev-parse HEAD > "$w/base" || return 1
+    printf '%s' "$w"
+  }
+  # A `diff` that exits 2 only when an input carries KEEPME (Beta's marker in the keyed seed),
+  # and otherwise runs the real one -- so Alpha is classified and Beta alone is not.
+  e2_diffshim() {
+    local d
+    d="$(mktemp -d "$ROOT/e2dshim.XXXXXX")" || return 1
+    cat > "$d/diff" <<EOF
+#!/bin/sh
+t1=\$(mktemp) || exit 3; t2=\$(mktemp) || exit 3
+cat "\$1" > "\$t1"; cat "\$2" > "\$t2"
+if grep -q KEEPME "\$t1" "\$t2"; then rm -f "\$t1" "\$t2"; : > "$d/.fired"; exit 2; fi
+"$E2_REALDIFF" "\$t1" "\$t2"; rc=\$?; rm -f "\$t1" "\$t2"; exit \$rc
+EOF
+    chmod +x "$d/diff" && printf '%s' "$d"
+  }
+  # A `mktemp` that logs every call (`noarg` = section_of's own temp file, `arg` = a templated
+  # temp beside a target) and fails the Nth no-argument call; N=0 never fails.
+  e2_mkshim() { # <N>
+    local d
+    d="$(mktemp -d "$ROOT/e2mshim.XXXXXX")" || return 1
+    echo 0 > "$d/n"; : > "$d/log"
+    cat > "$d/mktemp" <<EOF
+#!/bin/sh
+if [ \$# -eq 0 ]; then
+  n=\$(( \$(cat "$d/n") + 1 )); echo \$n > "$d/n"; echo noarg >> "$d/log"
+  if [ "\$n" = "$1" ]; then : > "$d/.fired"; exit 1; fi
+else
+  echo arg >> "$d/log"
+fi
+exec "$E2_REALMK" "\$@"
+EOF
+    chmod +x "$d/mktemp" && printf '%s' "$d"
+  }
+  e2_run() { # <script> <world> <shim-dir or -> [--apply]
+    local s="$1" w="$2" p="$3" P="$PATH"; shift 3
+    [ "$p" = - ] || P="$p:$PATH"
+    PATH="$P" bash "$s" "$w/dist" "$(cat "$w/base")" "$w/cons" team-roles/x.md "$@" > "$w/out" 2> "$w/err"
+    echo $? > "$w/rc"
+  }
+  e2_novr() { ls -A "$1/cons/.claude/skills/ai-dlc/overrides" 2>/dev/null | wc -l | tr -d ' '; }
+
+  # The call index of Alpha's BODY extraction, derived: the body is extracted after the classify
+  # loop and immediately before the first templated temp file (the override's), one no-argument
+  # call per changed section, Alpha first. A counting run that registers cleanly supplies it.
+  E2_N=""
+  e2w="$(e2_world E2-BETA-EDIT-KEEPME)"; e2m="$(e2_mkshim 0)"
+  if [ -n "$e2w" ] && [ -n "$e2m" ]; then
+    e2_run "$REG" "$e2w" "$e2m" --apply
+    e2c="$(awk '/^arg$/ { print c + 0; f = 1; exit } /^noarg$/ { c++ }' "$e2m/log")"
+    if [ "$(cat "$e2w/rc")" = 0 ] && grep -q '^REGISTERED' "$e2w/out" && [ -n "$e2c" ] && [ "$e2c" -ge 3 ]; then
+      E2_N=$((e2c - 1))
+    fi
+  fi
+  if [ -n "$E2_N" ]; then
+    ok "E2 harness: a counting run registers cleanly and puts Alpha's body extraction at no-argument mktemp call $E2_N"
+  else
+    bad "E2 harness: the counting run did not register or logged no templated mktemp before the body (rc=$(cat "$e2w/rc" 2>/dev/null)) -- arm (d) cannot be keyed"
+  fi
+
+  E2_WHY=""; E2_W=""
+  e2_arm() { # <a|b|c|d|e|n> <script> -> 0 holds / 1 fails / 2 harness; E2_WHY and E2_W describe the run
+    local arm="$1" s="$2" w sh="" o rc f=n same=n novr beta=E2-BETA-EDIT-KEEPME
+    E2_WHY=""; E2_W=""
+    [ "$arm" = n ] && beta=E2-BETA-EDIT-PLAIN
+    w="$(e2_world "$beta")"; [ -n "$w" ] || { E2_WHY="world build failed"; return 2; }
+    E2_W="$w"; o="$w/cons/.claude/skills/ai-dlc/overrides/team-roles__x__consumer-drift.md"
+    case "$arm" in
+      a|b|n) sh="$(e2_diffshim)" ;;
+      d)     [ -n "$E2_N" ] || { E2_WHY="no derived call index"; return 2; }; sh="$(e2_mkshim "$E2_N")" ;;
+      c)     mkdir -p "$o" ;;
+    esac
+    case "$arm" in a|b|n|d) [ -n "$sh" ] || { E2_WHY="shim build failed"; return 2; } ;; esac
+    if [ "$arm" = b ]; then e2_run "$s" "$w" "${sh:--}"; else e2_run "$s" "$w" "${sh:--}" --apply; fi
+    rc="$(cat "$w/rc")"
+    [ -n "$sh" ] && [ -e "$sh/.fired" ] && f=y
+    cmp -s "$w/orig.md" "$w/cons/.claude/team-roles/x.md" && same=y
+    novr="$(e2_novr "$w")"
+    case "$arm" in
+      a|b)
+        E2_WHY="rc=$rc fired=$f names-Beta=$(grep -cF "cannot classify section 'Beta'" "$w/err") overrides-dir-entries=$novr consumer-identical=$same dry-run-line=$(grep -c 'DRY RUN' "$w/out")"
+        [ "$rc" = 2 ] && [ "$f" = y ] && grep -qF "cannot classify section 'Beta'" "$w/err" \
+          && [ "$novr" = 0 ] && [ "$same" = y ] && ! grep -q 'DRY RUN' "$w/out" && ! grep -q '^REGISTERED' "$w/out" ;;
+      c)
+        E2_WHY="rc=$rc names-path=$(grep -cF 'exists and is not a regular file' "$w/err") inside-the-dir=$(ls -A "$o" 2>/dev/null | wc -l | tr -d ' ') consumer-identical=$same"
+        [ "$rc" = 2 ] && grep -qF 'exists and is not a regular file' "$w/err" && [ -d "$o" ] \
+          && [ "$(ls -A "$o" | wc -l | tr -d ' ')" = 0 ] && [ "$novr" = 1 ] && [ "$same" = y ] ;;
+      d)
+        E2_WHY="rc=$rc fired=$f names-Alpha=$(grep -cF "conservation: section 'Alpha'" "$w/err") overrides-dir-entries=$novr consumer-identical=$same"
+        [ "$rc" = 2 ] && [ "$f" = y ] && grep -qF "conservation: section 'Alpha'" "$w/err" \
+          && [ "$novr" = 0 ] && [ "$same" = y ] ;;
+      e|n)
+        E2_WHY="rc=$rc fired=$f registered=$(grep -c '^REGISTERED' "$w/out") alpha=$(grep -c E2-ALPHA-EDIT "$o" 2>/dev/null) beta=$(grep -c "$beta" "$o" 2>/dev/null) reverted=$(cmp -s "$w/dist/core/team-roles/x.md" "$w/cons/.claude/team-roles/x.md" && echo y || echo n)"
+        [ "$rc" = 0 ] && [ "$f" = n ] && grep -q '^REGISTERED' "$w/out" && grep -q E2-ALPHA-EDIT "$o" \
+          && grep -q "$beta" "$o" && cmp -s "$w/dist/core/team-roles/x.md" "$w/cons/.claude/team-roles/x.md" ;;
+    esac
+  }
+  # The DAMAGE a killed arm must show, read off the world e2_arm just drove. A mutant scores a
+  # kill only by reproducing the loss the arm exists to prevent -- never by merely not refusing,
+  # which a copy that died would also do.
+  e2_damage() { # <arm>
+    local w="$E2_W" o="$E2_W/cons/.claude/skills/ai-dlc/overrides/team-roles__x__consumer-drift.md"
+    case "$1" in
+      a) [ "$(cat "$w/rc")" = 0 ] && grep -q '^REGISTERED' "$w/out" && ! grep -rq KEEPME "$w/cons" ;;
+      b) [ "$(cat "$w/rc")" = 0 ] && grep -q 'DRY RUN' "$w/out" && grep -q '^── skipped.*Beta' "$w/out" ;;
+      c) [ "$(cat "$w/rc")" = 0 ] && grep -q '^REGISTERED' "$w/out" && [ -d "$o" ] && [ "$(ls -A "$o" | wc -l | tr -d ' ')" = 1 ] ;;
+      d) [ "$(cat "$w/rc")" = 0 ] && grep -q '^REGISTERED' "$w/out" && ! grep -rq E2-ALPHA-EDIT "$w/cons" ;;
+      *) return 1 ;;
+    esac
+  }
+
+  e2_label() { case "$1" in
+    a) echo "(a) MIXED diff failure, --apply" ;;   b) echo "(b) MIXED diff failure, dry run" ;;
+    c) echo "(c) override path is a directory" ;;  d) echo "(d) Alpha's body extraction fails" ;;
+    e) echo "(e) positive control, unshimmed" ;;   n) echo "(a') keyed shim over an UNKEYED seed" ;;
+  esac; }
+  e2_ok() { case "$1" in
+    a) echo "refused naming Beta (rc 2), the diff shim fired, no override written, the consumer file cmp-identical" ;;
+    b) echo "the dry run refuses too, naming Beta, and prints no DRY RUN preview missing a section" ;;
+    c) echo "refused (rc 2) naming the path, nothing moved inside the directory, the consumer file cmp-identical" ;;
+    d) echo "the conservation check refuses naming Alpha (rc 2), the mktemp shim fired, no override, the consumer file cmp-identical" ;;
+    e) echo "rc 0, REGISTERED, the override carries BOTH edits, and core is reverted" ;;
+    n) echo "the allow twin of (a): the same shim on a seed without its key does not fire, and both edits register" ;;
+  esac; }
+
+  for e2a in a b c d e n; do
+    e2_arm "$e2a" "$REG"; e2r=$?
+    if [ "$e2r" = 0 ]; then ok "$(e2_label "$e2a"): $(e2_ok "$e2a")"
+    else bad "$(e2_label "$e2a"): $E2_WHY (verdict $e2r)"; fi
+  done
+
+  # --- MUTANTS. A copy of the WHOLE reconcile directory (the script sources lib.sh; a lone copy
+  # dies, prints nothing, and would score every arm as a kill). Each mutation is a fixed-string
+  # line replacement whose key must occur EXACTLY once before and zero times after, plus a
+  # `cmp -s` that the copy differs -- a respelled line reports DID NOT APPLY, never a kill.
+  #   M1  layer 1 reverted: substitution_only two-valued again (no `unknown`, an empty stream
+  #       reads `yes`) and the caller refusal gone. The conservation check is LEFT IN, on purpose:
+  #       it re-asks the same classifier for a skipped section, gets the same wrong `yes`, and
+  #       passes the loss. So layer 1 is necessary even with layer 2 present. Owns (a) AND (b) --
+  #       the one refusal site, reached with and without --apply.
+  #   M2  the conservation check's verdict replaced by a no-op. Owns (d): nothing else reads the
+  #       override's body back, so the lost Alpha is registered and reverted.
+  #   M3  the not-a-regular-file guard removed. Owns (c): `mv` onto a directory SUCCEEDS by
+  #       moving the file inside it, so the run registers and reverts.
+  EMUT="$(mktemp -d "$ROOT/e2mut.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
+  cp "$(dirname "$REG")"/*.sh "$EMUT/" 2>/dev/null || true
+  cp "$(dirname "$REG")"/*.md "$EMUT/" 2>/dev/null || true
+  cp "$REG" "$EMUT/register-drift.sh"
+  e2_ctl=0
+  if [ -f "$EMUT/lib.sh" ] && cmp -s "$REG" "$EMUT/register-drift.sh"; then
+    for e2a in a b c d e n; do
+      e2_arm "$e2a" "$EMUT/register-drift.sh" || { e2_ctl=1; bad "  mutation control: the unmutated copy fails $(e2_label "$e2a"): $E2_WHY"; }
+    done
+  else
+    e2_ctl=1; bad "  mutation control: lib.sh is not beside the copied register-drift.sh -- every verdict below would be a dead copy"
+  fi
+  [ "$e2_ctl" = 0 ] && ok "  mutation control: an unmutated copy in a fresh directory holds all six E2 arms, including REGISTERED through the keyed shim on the unkeyed seed"
+
+  e2_mutate() { # <key> <replacement> [<key> <replacement>]... -> builds $EMUT/register-drift.sh
+    local dst="$EMUT/register-drift.sh"
+    cp "$REG" "$dst" || return 1
+    while [ $# -ge 2 ]; do
+      [ "$(grep -cF -- "$1" "$dst")" = 1 ] || return 1
+      K="$1" R="$2" awk 'index($0, ENVIRON["K"]) { print ENVIRON["R"]; next } { print }' "$dst" > "$dst.next" || return 1
+      mv "$dst.next" "$dst" || return 1
+      [ "$(grep -cF -- "$1" "$dst")" = 0 ] || return 1
+      shift 2
+    done
+    ! cmp -s "$REG" "$dst"
+  }
+  e2_score() { # <name> <owned-arms>
+    local a r others=""
+    for a in a b c d e; do
+      e2_arm "$a" "$EMUT/register-drift.sh"; r=$?
+      case "$2" in
+        *"$a"*)
+          if [ "$r" = 1 ] && e2_damage "$a"; then
+            ok "  mutation $1 KILLS $(e2_label "$a"): the edit is lost exactly as before the fix -- $E2_WHY"
+          else
+            bad "  mutation $1 did NOT kill $(e2_label "$a") with the loss reproduced (verdict $r): $E2_WHY"
+          fi ;;
+        *) [ "$r" = 0 ] || others="$others $a($E2_WHY)" ;;
+      esac
+    done
+    if [ -z "$others" ]; then ok "  mutation $1: every arm it does not own still holds -- it fails only its own"
+    else bad "  mutation $1 ALSO moved:$others -- the arms are entangled"; fi
+  }
+  if [ "$e2_ctl" = 0 ]; then
+    if e2_mutate "then printf 'unknown'; return 0; fi" "  :" \
+         'if (!hunk) { print "unknown"; exit } ' '    END      { if (hunk && !tok) bad=1; print (bad ? "no" : "yes") }' \
+         'refuse "cannot classify section' "    # M1: the unknown arm removed; a non-yes answer falls through to changed"; then
+      e2_score M1 ab
+    else bad "  mutation M1 DID NOT APPLY: a layer-1 anchor in substitution_only or its caller was respelled -- (a) and (b) are unproven"; fi
+    if e2_mutate 'is carried by nothing that was written"' "  :"; then
+      e2_score M2 d
+    else bad "  mutation M2 DID NOT APPLY: the conservation verdict line was respelled -- (d) is unproven"; fi
+    if e2_mutate 'refuse "the override path' ":"; then
+      e2_score M3 c
+    else bad "  mutation M3 DID NOT APPLY: the not-a-regular-file guard was respelled -- (c) is unproven"; fi
+  fi
+fi
+
 echo "== F. upstream ABSORBED the consumer's in-place delta =="
 
 # Extensions have had this signal since v0.34.0 (EXTENSION-RETIRE-CANDIDATE). Core drift
