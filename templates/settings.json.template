@@ -210,16 +210,6 @@
         ]
       }
     ],
-    "Notification": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ai-dlc-notify.sh"
-          }
-        ]
-      }
-    ],
     "SubagentStop": [
       {
         "hooks": [
