@@ -63,15 +63,15 @@ file.
 Its batch-paragraph class matches only INDENTED `**BATCH` lines, while the paragraphs in this
 block start at column 0, and every section above `### NEXT ACTIONS` is declared live. So its
 candidate set is empty, and the `NMOVED=0` branch reuses the under-ceiling message. **Read
-`validate-plan-shape.sh`'s P8, not the rotator's banner.** Until the rotator is fixed, rotate the
+`validate-plan-shape.sh`'s P8, not the rotator's banner.** Filed as `BL-289`. Until it is fixed, rotate the
 oldest batch paragraphs by hand, as batches 139-143 did. Cut from a `**BATCH <n>` line to the line
 before the next retained paragraph, append the cut to the archive under `## BATCH <n> RECORD
 (rotated out of the live plan at batch <m>)`, and assert byte conservation: the plan's drop equals
 the moved bytes, and the archive's growth equals the moved bytes plus the header.
 
 **BATCH 143 SHIPPED NO RELEASE, BECAUSE NO CANDIDATE ROUTES CORE. THAT IS A MEASURED STATE AND
-NOT AN EMPTY BATCH.** Every input re-derived at `origin/main` `bf518a1b`: live backlog **71**,
-archive **216**, consumer live ledger **28** across **10** qualifying refs, unfiled **14**, the
+NOT AN EMPTY BATCH.** Every input re-derived at `origin/main` `bf518a1b`: live backlog **71**
+(**72** after this batch filed `BL-289`), archive **216**, consumer live ledger **28** across **10** qualifying refs, unfiled **14**, the
 PC-backed worklist the same four self-disqualifying rows (`BL-067`, `BL-132`, `BL-145`, `BL-215`),
 and the gated class **0** flattened against a firing control of 3 `GATED on this filing` hits in
 `docs/backlog.archive.md`. **The next batch has no build subject either unless the consumer files
