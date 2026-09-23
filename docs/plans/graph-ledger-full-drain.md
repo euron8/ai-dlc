@@ -65,7 +65,8 @@ FILED AND CLOSED IN THIS ONE BATCH.** `BL-287` discharges
 verbatim (2 hits, impossible-id control 0). The gate at `AI_DLC_FIXTURE_NO_SKIP=1` ran 22 of 22
 phases with 0 FAIL lines and **204 ok**, and the changed fixtures were read by name against an
 impossible-name control of 0. Live stays **71** (two filed, two closed), and the archive went
-**214 -> 216**. The exit-0 receipts, compared by identity, went from the prior 8 to those 8 plus
+**214 -> 216**. The exit-0 receipts, compared by identity, went from the 8 measured when this batch opened (batch 141 recorded 7;
+the step was not attributed) to those 8 plus
 the two subjects, so nothing closed incidentally.
 
 **THE SCOPING INPUTS WERE EXACTLY AS BATCH 141 LEFT THEM.** The worklist is 4 rows that each
@@ -93,12 +94,12 @@ arm. Replayed over the history it fires exactly once, at 0.619.0. **A carrier th
 cannot be bound by content, only by change.**
 
 **THE GATE BLOCKED ON THIS BATCH'S OWN CHANGE, AND THE TIP ADVERSARY FOUND THE SAME DEFECT
-INDEPENDENTLY.** Fix B appended a clause to I79's summary line, and two fixture arms parse that
+INDEPENDENTLY.** The `BL-288` change appended a clause to I79's summary line, and two fixture arms parse that
 line: one needs the period after `gap(s)`, and one extracts the first `I79: N rule(s)`. Moving
 the new count onto its own `I79 carrier stamps:` line fixed both. **Before you extend a
 validator's output line, grep the fixtures for everything that parses it.** The adversary's two
 DEFECTs, that no fixture drove the new drift error and that the receipt could be closed by an
-HTML comment, were fixed before the merge (arms A43-A45, and a behavioural receipt scoring 1 on
+HTML comment, were fixed before the merge (arms A43-A45 in `core/fixtures/enforcement-map-derivations/run.sh`, and a behavioural receipt scoring 1 on
 four regressions). Its NOTE that the `BL-287` receipt rejects a `[ -d ]`-guarded link is
 declined: that rejection is deliberate and recorded in the entry.
 
@@ -110,6 +111,11 @@ bootstrapping files are at 0, and 0 of 6 raw rows are mode-only. The operator's 
 stands: report the gap and write no runbook. Its porcelain count moved **4 -> 11** during this
 batch, entirely from that pull. The ledger md5 did not move, which is the criterion-4 check by
 content.
+
+**EVERYTHING BELOW THIS LINE, DOWN TO `### Derive the state`, IS AN EARLIER BATCH'S BLOCK.** Each
+one was current when it was written, and the batch 142 block above replaces it. Read those blocks
+for the measurement behind a rule. Take no figure and no next-work pointer from them: their
+counts, gaps and "remaining" ids have all moved since.
 
 **BATCH 141 SHIPPED TWO RELEASES AND CLOSED FIVE ENTRIES, AND THE SECOND SUBJECT CAME FROM THE
 OPERATOR RATHER THAN FROM ANY JOIN.** `v0.617.0` (`ccb5f7c1`, #818) carried FOUR subjects;
@@ -289,9 +295,9 @@ copy carries the byte-identical `mktemp` line under the same user and `TMPDIR`, 
 running — but it started AFTER the failing run finished. **A shared mechanism is not an
 attribution; check the timestamps before naming a cause.**
 
-**THE `(#816)` IN THE BATCH 139 LINE BELOW IS WRONG.** GitHub reports PR **#816** as THIS batch's
-release. Batch 139's release sha `b9caf678` resolves and is on `origin/main`, so the sha is good and
-only the PR number is bad. Do not propagate a PR number from a commit SUBJECT; ask the forge.
+**THE `(#816)` ONCE ATTACHED TO BATCH 139's RELEASE WAS WRONG** (that record is now in the plan
+archive). GitHub reports PR **#816** as batch 140's release. Batch 139's release sha `b9caf678`
+resolves and is on `origin/main`, so the sha was good and only the PR number was bad. Do not propagate a PR number from a commit SUBJECT; ask the forge.
 
 **BATCH 137 SHIPPED NO RELEASE, AND THAT IS THE CORRECT SHAPE: BOTH SUBJECTS WERE DOCS-ONLY, SO
 `core/` IS UNTOUCHED AND THE CONSUMER GAP DID NOT WIDEN.** Merged as `b468c01b` (#810), verified by
@@ -1297,8 +1303,8 @@ given at batch 90.
    `BL-145` says the obvious fix is not obviously right with an unmeasured FP set, `BL-215` says
    no enforcer is constructible until ownership is settled. **Run the join and read each entry's
    BODY anyway** — it is still the provenance-first input and a new candidate can arrive on it —
-   but when nothing there is a straightforward build, go to the `GATED-ON-THIS-FILING` class
-   below rather than forcing a refuted remedy or reporting an empty batch.
+   but when nothing there is a straightforward build, go to the RANKED UNFILED SET next, then the
+   `GATED-ON-THIS-FILING` class, rather than forcing a refuted remedy or reporting an empty batch.
 
    **THAT CLASS IS EMPTY SINCE BATCH 141, SO THE UNFILED SET IS WHERE BATCH 142's WORK CAME FROM.**
    Rank the unfiled candidates by `-S` date, newest first; route each with `core-paths.sh --is-core`
@@ -1329,9 +1335,10 @@ given at batch 90.
    no verb. So the number of non-PC-backed rows is **three**, not the two an earlier revision of
    this paragraph claimed. **Two hands agreeing is not a control; the matched LINE is.**
 
-1a. **`docs/backlog.md` IS AT 82 OF 100** — re-derive it, do not read it. The operator raised the ceiling at `v0.446.0`, so filing
-   is not blocked. That is not licence to file rather than fix — the standing correction in the
-   resume block still governs — but a filing no longer costs a rotation, and rotating still means
+1a. **`docs/backlog.md` HAS A CEILING OF 100 LIVE ENTRIES** — derive the count with
+   `grep -cE '^## BL-[0-9]+' docs/backlog.md`, never read one here. The operator raised the ceiling
+   at `v0.446.0`, so filing is not blocked. That is not licence to file rather than fix, but a
+   filing no longer costs a rotation, and rotating still means
    CLOSING, which needs a measurement.
 
 1b. **THE SWEEP, kept here because every later batch runs it as its opening action.** Operator
@@ -1446,11 +1453,13 @@ given at batch 90.
 
    **THERE IS NO PARKED SUBJECT. THE SWEEP DECIDES.** Do not go looking for a parked branch.
 
-   **IF THE SWEEP FINDS NO NEW FILING, THAT IS NOT AN EMPTY BATCH — TAKE A PC-BACKED ENTRY.**
-   "The sweep found nothing" means no candidate awaits a FIRST filing; the PC-BACKED WORKLIST
-   join in `### Derive the state` is what says whether work remains, and it has been non-empty
-   every time it has been run. Re-derive the set with that join rather than reading a count
-   here, and none is pre-chosen. The selection rule is PROVENANCE first, then consequence —
+   **IF THE SWEEP FINDS NO NEW FILING, THAT IS NOT AN EMPTY BATCH.** "The sweep found nothing"
+   means no candidate awaits a FIRST filing. Two sources say whether work remains: the PC-BACKED
+   WORKLIST join in `### Derive the state`, and the UNFILED set ranked by date, of which "new
+   filing" is only the newest slice. Read each worklist row's BODY first; where every row
+   disqualifies itself in its own words, which is the state action 1 records, take the oldest
+   unexamined CORE candidate from the unfiled set rather than forcing a row. Re-derive both rather
+   than reading a count here, and none is pre-chosen. The selection rule is PROVENANCE first, then consequence —
    **never readiness, and a no-`PC` entry ranks below every member of that worklist.** Rank the
    set yourself; re-derive that your pick's id is live upstream, with the archive and
    impossible-id controls both 0, and run its receipt RAW before scoping it.
