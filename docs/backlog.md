@@ -2068,8 +2068,37 @@ Split from `BL-058`, which registered the vocabulary these emitters share; found
 that entry's own owner file. Tier: **DEFECT** — it misstates what a `hard_block` check enforces, on
 a corpus where the vacuous road was measured at roughly one story in five.
 
+**One row as filed, six as measured.** The "one row, not a class" paragraph above
+was a claim about three emitters, and the empty-subject vocabulary has many more. A
+fresh derivation joined every `hard_block: true` row to its enforcers, and each
+enforcer to its `EXAMINED NOTHING` emission and the exit that follows it. Six rows
+state `exit 0 required` against an enforcer whose vacuous road exits 0: **Check 2**
+(`validate-escalation-status-vocabulary.sh` and `validate-suppression-lifetime.sh`,
+both driven on an absent escalations file, rc 0), **Check 2a**
+(`validate-escalation-resolution.sh`, driven on the same input, rc 0), **Check 3b**
+(`validate-locked-anchor.sh`, driven on `nothing-verified-story.md`, rc 0, with
+`bad-story.md` rc 1 as the control), **Check 26** (`validate-gate-adjudication.sh
+--series`, driven on an empty series directory, rc 0), **Check 33**
+(`validate-request-coverage.sh`, driven on an ask naming no identifier, rc 0), and
+**Check 35** (`validate-snapshot-conservation.sh`, driven on a repository with no
+snapshot and on one with no gate-metrics file, rc 0 both). All six were driven
+through the shipping script. Checks 30, 31 and 32 exit 2 on the same shape and Check
+34 exits 3, so those four were the controls and are not in the set. The filed receipt
+could not see this. It read one row, so a qualifier written into `why:` satisfied it,
+a qualifier on the advisory `stories-test-strategy.md` site satisfied it, and a fix
+covering 3b alone satisfied it. The receipt below derives the emitter set from the
+map's own `empty_subject_verdict: emitters:` list, keeps every `hard_block` row whose
+enforcer takes that exit-0 road and whose posture says `exit 0 required`, and requires
+at least six rows, with 3b among them, each carrying `EXAMINED NOTHING` in the
+posture value itself.
 
-verify: sh M=core/skills/ai-dlc/enforcement-map.yaml; V=core/scripts/validate-locked-anchor.sh; F=core/fixtures/check-3b-locked-anchor; [ -f "$M" ] && [ -r "$V" ] && [ -d "$F" ] || exit 9; ( cd "$F" && bash "../../../$V" bad-story.md >/dev/null 2>&1 ); b=$?; ( cd "$F" && bash "../../../$V" nothing-verified-story.md >/dev/null 2>&1 ); n=$?; [ "$b" -eq 1 ] || exit 9; [ "$n" -eq 0 ] || exit 9; ROW=$(awk '/- site: gate-validation.md Check 3b$/{on=1} on{print; c++} on && c>=6{exit}' "$M"); [ -n "$ROW" ] || exit 9; printf '%s' "$ROW" | grep -qiE 'EXAMINED NOTHING|empty.subject|empty_subject'
+**LANDED (v0.634.0, verified dc682da5).** Each of the six postures keeps the literal
+`exit 0 required` and adds, inline, that exit 0 with `EXAMINED NOTHING` is not a
+pass because nothing was verified. The step files for Checks 26, 33 and 35 carry no
+read-the-PASS-line instruction like the one Check 3b has at
+`steps/gate-validation.md:489-494`.
+
+verify: sh M=core/skills/ai-dlc/enforcement-map.yaml; V=core/scripts/validate-locked-anchor.sh; F=core/fixtures/check-3b-locked-anchor; [ -f "$M" ] && [ -r "$V" ] && [ -d "$F" ] || exit 9; b=$(cd "$F" && bash "../../../$V" bad-story.md >/dev/null 2>&1; echo $?); o=$(cd "$F" && bash "../../../$V" nothing-verified-story.md 2>&1); n=$?; [ "$b" = 1 ] && [ "$n" = 0 ] || exit 9; case "$o" in *"EXAMINED NOTHING"*) ;; *) exit 9 ;; esac; E=$(awk '/^empty_subject_verdict:/{on=1;next} on&&/^[^ ]/{exit} on&&/^  emitters:/{em=1;next} on&&em&&/^    - /{print $2;next} on&&/^  [a-z]/{em=0}' "$M"); [ -n "$E" ] || exit 9; Z=""; for e in $E; do [ -f "$e" ] || continue; x=$(awk 'f==0 && /EXAMINED NOTHING/ && $0 !~ /^[ \t]*#/ {f=1} f==1 && match($0, /(^|[^a-zA-Z_.])exit[ ]+[0-9]+|sys\.exit\([0-9]+\)/) {s=substr($0,RSTART,RLENGTH); gsub(/[^0-9]/,"",s); print s; exit}' "$e"); [ "$x" = 0 ] && Z="$Z $e"; done; case " $Z " in *" $V "*) ;; *) exit 9 ;; esac; R=$(awk -v z="$Z " 'function fl(){ if (hb && hit && pv ~ /exit 0 required/) { t++; if (id=="3b") s3=1; if (pv !~ /EXAMINED NOTHING/) bad++ } pv="" } /^  - id: /{fl(); id=$3; gsub(/"/,"",id); hb=0; hit=0; ie=0; next} /^[^ ]/{fl(); id=""; next} /^    hard_block: true/{hb=1} /^    enforcer:/{ie=1; next} ie && /^      - /{ if (index(z, " " $2 " ")) hit=1; next} /^    [a-z_]+:/{ie=0} /^        posture: /{fl(); pv=$0; inp=1; next} inp && /^          [^ ]/{pv=pv " " $0; next} {inp=0} /^        [a-z_]+:/{fl()} END{fl(); print t+0, bad+0, s3+0}' "$M"); set -- $R; [ "${1:-0}" -ge 6 ] && [ "$3" = 1 ] || exit 9; [ "$2" -eq 0 ]
 ## BL-082
 
 **On a case-folding filesystem `--strays` reports a declared home as a stray when the caller
