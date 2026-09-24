@@ -2973,7 +2973,17 @@ the pin in place (the pin must defeat it) and with the pin removed (the arm must
 A fix that shortens the sequence or widens the assertion scores STILL-LIVE. Exit 9 if the arm
 or the hook constant is gone.
 
-verify: sh f=core/fixtures/implementation-join-yield/run.sh; h=core/hooks/ai-dlc-continue.sh; [ -f "$f" ] && [ -f "$h" ] || exit 9; grep -q 'beat-churn stall' "$f" || exit 9; grep -q '^RAPID_WINDOW_SECONDS=' "$h" || exit 9; grep -qE '^RAPID_WINDOW_SECONDS="?\$\{' "$h" && exit 0; awk '/pipeline-block-state/ && /date \+%s/ {c++} END{exit !(c>0)}' "$f" && exit 0; exit 1
+**Receipt replaced.** The filed receipt was a lexical grep: a comment naming
+`pipeline-block-state` beside `date +%s`, or an inert `${...}` env override on the hook
+constant, closed it without changing behaviour, and it rejected the entry's own preferred
+fix. The receipt below drives the whole fixture under a `date` shim that advances the clock
+31s only after the hook reads `NOW`, so an unpinned rapid side resets the counter and the
+arm goes red; exit 9 if the shim was consulted fewer than nine times.
+
+**LANDED (v0.634.0, verified 931e64d4).** `pin_state` and an `R` event in `drive_seq`, used only
+by the beat-churn arm.
+
+verify: sh f=core/fixtures/implementation-join-yield/run.sh; h=core/hooks/ai-dlc-continue.sh; [ -f "$f" ] && [ -f "$h" ] || exit 9; grep -q 'beat-churn stall' "$f" && grep -q '^TIMESTAMP=$(date -u ' "$h" && grep -q '^NOW=$(date +%s)' "$h" || exit 9; D=$(mktemp -d) || exit 9; X(){ rm -f "$D/date" "$D/clock" "$D/flag" "$D/n"; rmdir "$D"; exit "$1"; }; printf '%s\n' '#!/bin/bash' 'C="$SHIM_D/clock"; [ -s "$C" ] || /bin/date +%s > "$C"' 'if [ "$1" = -u ]; then : > "$SHIM_D/flag"; exec /bin/date "$@"; fi' 'if [ "$*" = +%s ]; then T=$(cat "$C"); echo "$T"; if [ -e "$SHIM_D/flag" ]; then rm -f "$SHIM_D/flag"; echo $((T+31)) > "$C"; echo x >> "$SHIM_D/n"; fi; exit 0; fi' 'exec /bin/date "$@"' > "$D/date" && chmod +x "$D/date" || X 9; O=$(SHIM_D="$D" PATH="$D:$PATH" bash "$f" 2>&1); r=$?; n=$(wc -l < "$D/n" 2>/dev/null | tr -d ' '); [ "${n:-0}" -ge 9 ] || X 9; [ "$r" -eq 0 ] && grep -q '^  ok    beat-churn stall: BACKOFF' <<<"$O" && X 0; X 1
 
 ## BL-159 — four handoff-completion defects adjacent to `BL-158`, found by the batch-49 hands and deliberately not fixed there
 
