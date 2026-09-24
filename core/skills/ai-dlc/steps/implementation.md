@@ -151,7 +151,9 @@ Verify:
   that. READ the ledger here and confirm it matches what you believe you
   dispatched — a row with `role_contract_cited: false` or
   `role_file_readable: false` is a Rule 19 violation you can still fix
-  before the gate. Do not restate the ledger's contents in the gate log
+  before the gate. `role_contract_cited` is true when the prompt OR the
+  definition the dispatch selected delivered the (b) line, and
+  `contract_via` says which; it records delivery, not the teammate's read. Do not restate the ledger's contents in the gate log
   as a substitute for it; a table you write about your own dispatches is
   what Check 22 stopped relying on.
 - Every story tagged `protected_path_editor: true` was dispatched to a

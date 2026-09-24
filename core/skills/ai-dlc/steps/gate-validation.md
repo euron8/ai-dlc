@@ -1606,7 +1606,20 @@ It filters to this sprint, drops the out-of-scope rows named above, and
 decides all three Rule 19 comparisons per remaining row:
 **(a)** `model_bound` — the value the guard actually bound, not a self-report —
 matches `aiDlcRoles.<role>.model`; **(b)** `role_contract_cited` is `true`; and
-`role_file_readable` is not `false`, which is Rule 19's fail-closed case. **The
+`role_file_readable` is not `false`, which is Rule 19's fail-closed case.
+
+**`role_contract_cited` records DELIVERY of the Rule 19(b) line, by one of two
+carriers, and `contract_via` names which:** `prompt` when the dispatch prompt
+names `team-roles/<role>.md`, `definition` when the dispatch is definition-bound
+and the body of the `.claude/agents/<role>.md` it selects carries that role's
+rendered line. `null` means neither carried it, and that row FAILS. Both are
+recorded at PreToolUse, so neither proves the spawn launched (another hook can
+still deny it) and neither proves the teammate read its role file. Do not read
+`contract_via: definition` as weaker than `prompt`: both put the same line in
+the teammate's context. Rows written before the guard recorded `contract_via`
+carry `false` for definition-bound dispatches whose definition did deliver the
+line. The validator does not re-read them, and they clear only through the
+four-arm disposition below. **The
 pin rule is the script's, not this paragraph's** — it shares `pin_key()` and
 `matches_pin()` with the dispatch guard byte-identically, and `validate-enforcement-map.sh`
 I56 binds them, so the gate cannot classify a binding differently from the hook
@@ -1647,7 +1660,8 @@ escalation where an authorization would live.)
 These four arms clear EVERY class of recorded Rule 19 violation the script fails
 on, and the classes are its four FAIL routes into that one exit code, not four
 dispositions: a Rule 19(a) **tier mismatch**; a **missing Rule 19(b)
-role-contract citation** (`role_contract_cited=false`); an **unreadable role
+role-contract citation** (`role_contract_cited=false`: the line reached the
+teammate neither in the prompt nor in the definition the dispatch selected); an **unreadable role
 file** (`role_file_readable=false`, Rule 19's fail-closed case); and an **effort
 mismatch**, where the row's `effort_bound` disagrees with the effort the
 teammate's own transcript records. A class the arms did not cover would be a
@@ -1701,8 +1715,13 @@ right conduct and is not a clearing path. Missing any of the four arms → the
 violation still FAILS, whichever class it belongs to.
 
 This clears the RECORDED violation. It does not license the next one — the
-dispatch guard binds the model before the work runs, so a spawn made under the
-current guard should never reach this clause.
+dispatch guard binds the model before the work runs, and on a definition-bound
+dispatch the selected definition delivers the Rule 19(b) line, so a spawn made
+under the current guard reaches this clause only by a route the guard cannot
+correct: a dispatch whose prompt cites no role file and that selects no
+definition carrying the line, an unreadable role file, or an effort the
+harness did not apply. The guard records a missing citation and never denies
+on it.
 
 **A row exists even for a teammate that was stopped mid-flight**, because the
 ledger is written at dispatch rather than at completion. That is deliberate:
