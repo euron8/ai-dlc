@@ -4096,3 +4096,205 @@ verify: sh set -e; F=core/fixtures/ledger-reverify/run.sh; E=core/skills/ai-dlc-
 
 
 
+## BL-299 — story-provenance's arm R is red in every consumer install from 0.628.0, because the writer cannot find the install's schema under a foreign project root
+
+**DEFECT.** A shipped fixture fails on every consumer at 0.628.0 or later, and the consumer's
+pre-push runs its shipped fixtures, so every push from such a consumer is blocked.
+
+Filed by the consumer as `PC-S313-STORY-PROVENANCE-ARM-R-IS-RED-IN-THE-CONSUMER-LAYOUT`, during
+its 0.627.0 → 0.631.0 reconcile. This entry discharges it. The consumer's filing reported the
+failure on its own tree (`38 assertions, 1 failing`), and routed it with
+`core-paths.sh --is-core scripts/ai-dlc/stamp-story-provenance.sh`, which exits 0.
+
+**THE PREMISE, REPRODUCED IN A FRESH INSTALL.** `scripts/install.sh` was run from an `origin/main`
+extraction (`4d4c2772`) into an empty `mktemp -d` holding `_bmad/`, git-inited with one empty
+commit, stdin `</dev/null`. In that consumer, `tests/fixtures/story-provenance/run.sh` exits
+**1**, with **37 ok and 1 FAIL**. The failing arm is `mixed: bind resolves artifact via project
+root`, and its captured output is `FAIL: schemas/provenance-block.json not found`. With
+`AI_DLC_PROJECT_ROOT` pointing at a directory holding only `.claude/`,
+`stamp-story-provenance.sh --print-schema` prints the same FAIL. The same install built from
+the fix exits **0** with **38 ok**, and `--print-schema` names `<consumer>/.claude/schemas/`.
+`validator-path-resolution` exits 0 in both installs. Arm R arrived in 0.628.0 (`e3f1a65d`,
+located with `git log -S` on the arm's label), so 0.628.0 is the first release that carries it.
+
+**THE MECHANISM.** `install.sh` splits what shares a parent here: `core/scripts/<x>` lands at
+`scripts/ai-dlc/<x>`, and `core/schemas/` lands at `.claude/schemas/`. The writer's schema
+chain had three candidates. The first was `$SP_SCRIPT_DIR/../schemas/`, which is correct in the
+distribution but is `scripts/schemas/` on a consumer. The other two were
+`core/schemas/` and `.claude/schemas/` under the resolved project root. Arm R sets
+`AI_DLC_PROJECT_ROOT` to a seeded world that has no schemas. On a consumer all three candidates
+miss, and the writer fails closed, although the install's own schema is one directory walk
+away. In the distribution the first candidate hits, so the fixture stays green here.
+`validate-provenance-block.sh` has the same three-candidate shape in a different order, and it
+misses the same way.
+
+**THE FIX APPENDS THE INSTALL ROOT LAST, IN BOTH THE WRITER AND THE READER.** Each script walks
+up from its own directory with its own inline `ai_dlc_resolve_root`. It appends
+`<install-root>/.claude/schemas/provenance-block.json` as the final candidate, and it skips an
+empty walk answer rather than letting it become `/.claude/schemas/` at the filesystem root.
+**It is LAST because install-first splits the pair, and that was measured, not reasoned.**
+Placed first in the writer only, with a foreign override root carrying its own schema, the
+writer loads the install's schema while the reader loads the override root's. The reader then
+refuses a stamp the writer has just written. Appended last in both, an override root carrying
+its own schema wins in both programs, and a root carrying none falls through to the install's in
+both. The existing candidates are not reordered, because five fixtures plant a schema into a
+world and drive the reader against it.
+
+**`validator-path-resolution` CHANGES IN THE SAME RELEASE, BECAUSE THE FIX TURNS IT RED
+OTHERWISE.** That fixture ships. Its non-vacuity arm requires every script that mentions
+`AI_DLC_PROJECT_ROOT` to change its output under a wrong root. Its old argv for the writer
+reached exactly one root-keyed read, which was the schema lookup, and for the reader it was the
+same. With the fallback in place, a wrong root no longer loses the schema, so both scripts score
+inert and the arm fails with `MUTANT: stamp-story-provenance.sh ignored a wrong project root`.
+The writer is now driven through the one-shot bind, whose `artifact:` binds only from the wrong
+root, and the reader through the `known_skills` extension found under the root. Each still
+proves that its script consults the root. Shipping the engine without that change would replace
+one red shipped fixture with another.
+
+**WHY NO GATE CAUGHT IT.** Nothing in the distribution runs a shipped fixture in the consumer
+layout. The suite runs `core/fixtures/*/run.sh` in the distribution tree, where the writer's
+first candidate resolves, and a fixture that is green here reaches the consumer and goes red
+there. That gap is its own entry below.
+
+**Consumer mitigation until 0.633.0 lands.** A consumer at 0.628.0 through 0.632.0 has a red
+story-provenance fixture that blocks pre-push. Re-pull to 0.633.0, whose single apply carries
+the fixed writer, reader and fixtures, so its own pre-push runs fixed code. Otherwise push with
+`git push --no-verify`, on a record naming this PC id.
+
+**THE RECEIPT, AND WHAT IT WAS SCORED AGAINST.** It installs HEAD into a fresh consumer (an
+install failure exits 9) and holds five things. First, the writer's `--print-schema` under a
+foreign root that has no schema is `-ef` the consumer's `.claude/schemas/` copy. Second, under a
+foreign root carrying its own copy, it is `-ef` that copy; this is the near-miss that
+install-first fails. Third, the reader accepts a story that the writer stamped under the
+schema-less override. Fourth, the installed story-provenance fixture exits 0 and prints `ok`
+beside the arm-R label exactly once. Fifth, the installed `validator-path-resolution` exits 0.
+Scored through `eval` from the tree root, as `scripts/validate-backlog-receipts.sh` runs it:
+
+```
+14129c75 (the fix)                                0
+origin/main 4d4c2772                              1   (clause 1: --print-schema)
+arm R deleted from the fixture                    1   (clause 4: label count)
+install candidate FIRST in the writer             1   (clause 2: override-with-schema)
+writer fixed, reader reverted to origin/main      1   (clause 3: reader refuses)
+validator-path-resolution reverted                1   (clause 5)
+```
+
+Each mutant was built in its own `git archive` extraction of `14129c75` and verified applied
+with `cmp -s` against the unmutated file. The clause attribution comes from a diagnostic copy of
+the receipt in which each `exit 1` carries a distinct code; every mutant died on a different
+clause.
+
+verify: sh R="$(pwd)"; command -v git >/dev/null || exit 9; T="$(mktemp -d)" || exit 9; F="$(mktemp -d)" || exit 9; G="$(mktemp -d)" || exit 9; M="$(mktemp -d)" || exit 9; mkdir -p "$F/.claude" "$G/.claude/schemas" || exit 9; ( cd "$T" && git init -q && mkdir _bmad && git -c user.name=r -c user.email=r@r commit -q --allow-empty -m init && bash "$R/scripts/install.sh" "$T" </dev/null ) >/dev/null 2>&1 || exit 9; W="$T/scripts/ai-dlc/stamp-story-provenance.sh"; V="$T/scripts/ai-dlc/validate-provenance-block.sh"; K="$T/.claude/schemas/provenance-block.json"; [ -f "$W" ] && [ -f "$V" ] && [ -f "$K" ] || exit 9; cp "$K" "$G/.claude/schemas/provenance-block.json" || exit 9; P="$(AI_DLC_PROJECT_ROOT="$F" bash "$W" --print-schema 2>/dev/null)"; [ -n "$P" ] && [ "$P" -ef "$K" ] || exit 1; Q="$(AI_DLC_PROJECT_ROOT="$G" bash "$W" --print-schema 2>/dev/null)"; [ -n "$Q" ] && [ "$Q" -ef "$G/.claude/schemas/provenance-block.json" ] || exit 1; bash "$T/tests/fixtures/story-provenance/seed.sh" --mixed-into "$M" >/dev/null 2>&1 || exit 9; ( cd "$M" && AI_DLC_PROJECT_ROOT="$F" bash "$W" --terminal s1/bug-fix-oneshot-story-2-fix-thing.md --profile bug-story-provenance s1/stories/story-2-fix-thing.md ) >/dev/null 2>&1 || exit 1; ( cd "$M" && AI_DLC_PROJECT_ROOT="$F" bash "$V" s1/stories/story-2-fix-thing.md --require-skill bmad-review-adversarial-general ) >/dev/null 2>&1 || exit 1; o="$(cd "$T" && bash tests/fixtures/story-provenance/run.sh 2>&1)" || exit 1; [ "$(grep -cE '^  ok +mixed: bind resolves artifact via project root ' <<<"$o")" = 1 ] || exit 1; ( cd "$T" && bash tests/fixtures/validator-path-resolution/run.sh ) >/dev/null 2>&1 || exit 1; exit 0
+
+## BL-300 — five sibling scripts fail closed in the consumer layout under an override root carrying no schema
+
+**DEFECT.** The failure is latent. Found by the batch 150 contract adversary, while it was
+attacking the fix for `BL-299`. It discharges no consumer candidate.
+
+**THE SAME SHAPE AS `BL-299`, IN FIVE MORE PROGRAMS.** `sprint-status.sh`,
+`sync-taught-schema.sh`, `validate-audit-anchors.sh`, `validate-write-format-steering.sh` and
+`validate-gate-adjudication.sh` each look for their schema beside the script
+(`../schemas/`) and under the resolved project root. None of them falls back to the install
+root. In the consumer layout the script-relative candidate is `scripts/schemas/`, which does not
+exist. So an `AI_DLC_PROJECT_ROOT` naming a root without `.claude/schemas/` makes every one of
+them fail closed. `validate-gate-adjudication.sh` resolves `enforcement-map.yaml` the same
+root-keyed way (at `core/scripts/validate-gate-adjudication.sh:327-329`), so it needs both
+lookups fixed.
+
+**MEASURED IN A FRESH INSTALL OF `14129c75`**, against a foreign root holding only `.claude/`.
+Each script was run from the consumer root with and without the override, and the `not found`
+or `cannot find` diagnostic was counted in both runs. Without the override, all five print
+neither (the control). With it, all five print one, and `sprint-status`, `sync-taught-schema`,
+`validate-audit-anchors` and `validate-write-format-steering` exit 1.
+`validate-gate-adjudication` needs `--expected implementation` to get past its usage exit
+before it reads the schema, and then it exits 2 with
+`schemas/gate-adjudication-verdict.json not found`. The fixed pair from `BL-299`, run the same
+way, prints neither diagnostic.
+
+**WHY IT IS LATENT.** No production caller points the override at a root with no schema. A
+consumer's override names the consumer, which carries `.claude/schemas/`. The failure needs a
+fixture or an operator to aim the override somewhere foreign, which is exactly what arm R did
+for the writer.
+
+**ANY FIX ALSO NEEDS THE `validator-path-resolution` TREATMENT.** Every one of these scripts
+mentions `AI_DLC_PROJECT_ROOT`, so that fixture's non-vacuity arm requires each to change its
+output under a wrong root. For any script whose only root-keyed read reachable from its current
+`argv_for` is the schema lookup, an install-root fallback makes that script score inert, and the
+arm goes red, as it did for the provenance pair. Each fixed script needs an `argv_for` that
+reaches a root-keyed read that is not the schema. Apply the same order rule as `BL-299`: append
+the fallback LAST.
+
+The receipt exits 0 once none of the five prints a `not found` or `cannot find` diagnostic under
+the foreign override. It exits 9 if the no-override control already prints one, or if the install
+fails. It scores **1** at `14129c75`, printing five `LIVE:` lines.
+
+verify: sh R="$(pwd)"; command -v git >/dev/null || exit 9; T="$(mktemp -d)" || exit 9; F="$(mktemp -d)" || exit 9; mkdir -p "$F/.claude" || exit 9; ( cd "$T" && git init -q && mkdir _bmad && git -c user.name=r -c user.email=r@r commit -q --allow-empty -m init && bash "$R/scripts/install.sh" "$T" </dev/null ) >/dev/null 2>&1 || exit 9; bad=0; for s in sprint-status sync-taught-schema validate-audit-anchors validate-write-format-steering validate-gate-adjudication; do p="$T/scripts/ai-dlc/$s.sh"; [ -f "$p" ] || exit 9; a=""; [ "$s" = validate-gate-adjudication ] && a="--expected implementation"; c="$(cd "$T" && bash "$p" $a 2>&1)"; case "$c" in *"not found"*|*"cannot find"*) exit 9 ;; esac; e="$(cd "$T" && AI_DLC_PROJECT_ROOT="$F" bash "$p" $a 2>&1)"; case "$e" in *"not found"*|*"cannot find"*) echo "LIVE: $s"; bad=1 ;; esac; done; [ "$bad" -eq 0 ]
+
+## BL-301 — the gate runs no shipped fixture in the consumer layout, so a fixture red on every consumer ships green
+
+**DEFECT.** Found by the batch 150 contract adversary. It discharges no consumer candidate.
+
+**THE GAP `BL-299` FELL THROUGH.** The distribution's pre-push runs `core/fixtures/*/run.sh` in
+the distribution tree. `install.sh` splits what shares a parent here, so `core/scripts/<x>`
+lands at `scripts/ai-dlc/<x>` and `core/schemas/` at `.claude/schemas/`. A fixture that resolves
+a sibling through the distribution's relative layout therefore passes here and fails on every
+consumer. That is what happened to story-provenance's arm R, which went red in every consumer
+install from 0.628.0 while every distribution push stayed green. The consumer found it on its
+own tree, three releases later. The installer-driving fixtures here (`consumer-machinery-home`,
+`layer-crosswalk-home`, `shipped-rule-version-floor` and five more, located by grepping
+`core/fixtures/*/run.sh` for `scripts/install.sh`) each assert one property of the installed
+tree. None of them runs the shipped fixture set there.
+
+**THE SHAPE OF A FIX, AND WHY IT IS NOT A SMALL ONE.** A gate phase would install HEAD into a
+`mktemp -d` consumer with `_bmad/`, then run every shipped fixture there through the consumer's
+own installed runner, `core/git-hooks/pre-push`, which is the program a consumer runs. It has to
+use that runner so that the pool and the verdict accounting match. The shipped set is the
+fixtures carrying no `.dist-only` marker. The cost is a second full pass over most of the suite,
+and the suite is pole-bound, so the phase has to be scheduled against the existing pole rather
+than appended serially. **Measure that cost before choosing** between a full consumer-layout
+pass and a pass limited to the fixtures whose read-set crosses a path that `install.sh` remaps.
+
+**`verify: manual`, because no behavioural receipt is constructible at receipt scale.** The
+property is that the GATE runs the shipped set in a consumer layout. The only behavioural test
+is to seed a fixture that fails only in the consumer layout and run the gate, which means running
+the suite from inside a receipt, and the receipt runner itself runs from inside that gate. A
+grep of `.githooks/pre-push` for `install.sh` would be satisfied by a comment, and
+`scripts/validate-backlog-receipts.sh` would correctly report it as PROSE-CLOSABLE. Close this
+entry by hand on the release whose gate shows the new phase failing on a seeded consumer-only
+fixture and passing on its removal.
+
+verify: manual
+
+## BL-302 — in the distribution layout the provenance writer and reader load different schemas when the override root carries its own
+
+**DEFECT.** The disagreement predates `BL-299` and is not changed by it. Found by the batch 150
+contract adversary. It discharges no consumer candidate.
+
+**THE TWO CHAINS ARE ORDERED DIFFERENTLY.** In `core/scripts/stamp-story-provenance.sh` the
+writer tries `$SP_SCRIPT_DIR/../schemas/` FIRST, and the root candidates after it. In
+`core/scripts/validate-provenance-block.sh` the reader tries `<root>/core/schemas/` and
+`<root>/.claude/schemas/` first, and its script-relative candidate after them. In the
+distribution the script-relative candidate always exists. So when `AI_DLC_PROJECT_ROOT` names a
+root that carries its own schema, the writer loads `core/schemas/` while the reader loads the
+foreign root's copy. On a consumer the writer's first candidate is `scripts/schemas/`, which
+does not exist, so the pair already agree there. `BL-299`'s fix appended the install root last
+in both chains and left their first candidates as they were, so this split survives the fix.
+
+**MEASURED AT `14129c75`, in the distribution layout.** The override root carries a copy of the
+schema whose `tool_use_id` `forbidden` list additionally names `toolu_FIXTURE`. That field
+matches by `prefix_ci`, and the fixture seed's ids begin with that stem. Under that override the
+writer's `--print-schema` names `core/scripts/../schemas/provenance-block.json`. The writer stamps
+the bug story (`wrote s1/stories/story-2-fix-thing.md`), and the reader then refuses it with
+`tool_use_id: toolu_FIXTUREaaaaaaaa is forbidden`, exit 1. Each program is consistent with its
+own schema, and the two schemas differ.
+
+**THE RECEIPT, AND A FIX-SHAPED CONTROL.** The receipt asserts that the writer's `--print-schema`
+is `-ef` the override root's copy. Then, if the writer stamps at all, the reader accepts what it
+stamped. It scores **1** at `14129c75`. A scratch copy with the writer's script-relative
+candidate moved after its two root candidates, which is the reader's order, scores **0**. That
+control establishes that the receipt can close, and that a fix of that shape closes it.
+**Check the fixtures before shipping that reorder.** Several fixtures plant a schema into a world
+and drive the writer or the reader against it. The order is load-bearing for them, and the
+contract for `BL-299` forbade reordering for exactly that reason.
+
+verify: sh R="$(pwd)"; W="$R/core/scripts/stamp-story-provenance.sh"; V="$R/core/scripts/validate-provenance-block.sh"; K="$R/core/schemas/provenance-block.json"; [ -f "$W" ] && [ -f "$V" ] && [ -f "$K" ] && [ -f "$R/core/fixtures/story-provenance/seed.sh" ] || exit 9; command -v python3 >/dev/null || exit 9; G="$(mktemp -d)" || exit 9; M="$(mktemp -d)" || exit 9; mkdir -p "$G/.claude/schemas" || exit 9; python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); f=[x for x in s["fields"] if x.get("name")=="tool_use_id" and x.get("forbidden_match")=="prefix_ci"]; assert len(f)==1; f[0]["forbidden"].append("toolu_FIXTURE"); json.dump(s,open(sys.argv[2],"w"))' "$K" "$G/.claude/schemas/provenance-block.json" 2>/dev/null || exit 9; bash "$R/core/fixtures/story-provenance/seed.sh" --mixed-into "$M" >/dev/null 2>&1 || exit 9; P="$(AI_DLC_PROJECT_ROOT="$G" bash "$W" --print-schema 2>/dev/null)"; [ -n "$P" ] && [ "$P" -ef "$G/.claude/schemas/provenance-block.json" ] || exit 1; B=s1/stories/story-2-fix-thing.md; if ( cd "$M" && AI_DLC_PROJECT_ROOT="$G" bash "$W" --terminal s1/bug-fix-oneshot-story-2-fix-thing.md --profile bug-story-provenance "$B" ) >/dev/null 2>&1; then ( cd "$M" && AI_DLC_PROJECT_ROOT="$G" bash "$V" "$B" --require-skill bmad-review-adversarial-general ) >/dev/null 2>&1 || exit 1; fi; exit 0

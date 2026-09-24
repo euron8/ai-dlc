@@ -27,7 +27,8 @@ if [ -z "$WRITER" ]; then
 fi
 
 ROOT="$(bash "$DIR/seed.sh" | tail -1)"
-trap 'rm -rf "$ROOT"' EXIT
+NM_EXTRA=""
+trap 'rm -rf "$ROOT" ${NM_EXTRA:+"$NM_EXTRA"}' EXIT
 
 REAL_TID="toolu_FIXTUREaaaaaaaa"
 FAILURES=0
@@ -461,6 +462,253 @@ case "$MR" in
       printf '  ok    %-46s\n' "mutant MR (root base dropped) killed by arm R"
     fi ;;
 esac
+
+# --- THE INSTALL'S SCHEMA. In a consumer the writer and reader sit at <root>/scripts/ai-dlc/ and
+# the schema at <root>/.claude/schemas/, so an AI_DLC_PROJECT_ROOT naming a root with no schema of
+# its own used to leave both with nothing to load: arm R was red on every consumer. Both now fall
+# back to the install root, walked up from the script's own directory, as their LAST candidate —
+# last in BOTH, so an override root that carries its own schema still wins in both and the pair
+# never loads two different schemas. Four arms, each on a fresh sandbox <t>:
+#   CI  consumer: the writer's --print-schema IS <t>'s schema (identity, not an exit code)
+#   CR  consumer: the reader passes a story the writer just stamped under the same override
+#   NI  near-miss: the foreign root carries its OWN schema, and the writer resolves THAT one
+#   NR  near-miss: the reader resolves it too — the story carries a second block citing a skill
+#       ONLY the foreign schema knows, so a reader that loaded <t>'s schema refuses it
+# <t> carries .claude/ so the resolver's walk stops there and cannot find a host schema above the
+# sandbox; the foreign root carries .claude/ too. The two schemas and the source differ in BYTES,
+# so identity cannot be satisfied by a coincidence of content.
+READER="$(dirname "$WRITER")/validate-provenance-block.sh"
+CONS="$(mktemp -d "$ROOT/cons.XXXXXX")"
+NEAR_SKILL="fixture-nearmiss-foreign-skill"
+SCH="provenance-block.json"
+cons_world() { # $1 "plain"|"near"  $2 extra script to place beside the pair (or "")  -> world dir
+  local w; w="$(mktemp -d "$CONS/w.XXXXXX")" || return 1
+  mkdir -p "$w/t/.claude/schemas" "$w/t/scripts/ai-dlc" "$w/f/.claude" "$w/f/stories" || return 1
+  cp "$WRITER" "$w/t/scripts/ai-dlc/stamp-story-provenance.sh" || return 1
+  cp "$READER" "$w/t/scripts/ai-dlc/validate-provenance-block.sh" || return 1
+  [ -z "$2" ] || cp "$2" "$w/t/scripts/ai-dlc/$(basename "$2")" || return 1
+  python3 -c 'import json,sys; json.dump(json.load(open(sys.argv[1])), open(sys.argv[2], "w"), indent=3)' \
+    "$SCHEMA_SRC" "$w/t/.claude/schemas/$SCH" || return 1
+  if [ "$1" = near ]; then
+    mkdir -p "$w/f/.claude/schemas" || return 1
+    python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); s["known_skills"]=list(s["known_skills"])+[sys.argv[3]]; json.dump(s, open(sys.argv[2], "w"), indent=5)' \
+      "$SCHEMA_SRC" "$w/f/.claude/schemas/$SCH" "$NEAR_SKILL" || return 1
+  fi
+  cp "$ROOT/converged/s1-stories-adversarial-p2.md" "$w/f/pass-p2.md" || return 1
+  printf '# Story cons\n\n## Acceptance Criteria\n- AC(a): thing.\n' > "$w/f/stories/story-cons.md"
+  printf '%s\n' "$w"
+}
+# Each arm: $1 the script under test, by basename, placed beside the real pair (so it shares the
+# pair's install root). Answers 0 held, 1 failed, 2 FIXTURE BROKEN; prints its evidence to stderr.
+arm_ci() { local w out; w="$(cons_world plain "$2")" || return 2
+  out="$(cd "$w/f" && AI_DLC_PROJECT_ROOT="$w/f" bash "$w/t/scripts/ai-dlc/$1" --print-schema 2>&1)"
+  [ -n "$out" ] && [ "$out" -ef "$w/t/.claude/schemas/$SCH" ] && return 0
+  echo "        CI resolved: $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-200)" >&2; return 1; }
+arm_ni() { local w out; w="$(cons_world near "$2")" || return 2
+  out="$(cd "$w/f" && AI_DLC_PROJECT_ROOT="$w/f" bash "$w/t/scripts/ai-dlc/$1" --print-schema 2>&1)"
+  [ -n "$out" ] && [ "$out" -ef "$w/f/.claude/schemas/$SCH" ] && return 0
+  echo "        NI resolved: $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-200)" >&2; return 1; }
+# The stamp is always the REAL writer beside the pair, so a reader mutant cannot fail an arm by
+# way of the writer and a writer mutant cannot fail a reader arm.
+stamp_cons() { # $1 world
+  ( cd "$1/f" && AI_DLC_PROJECT_ROOT="$1/f" bash "$1/t/scripts/ai-dlc/stamp-story-provenance.sh" \
+      --terminal pass-p2.md stories/story-cons.md 2>&1 )
+}
+arm_cr() { local w st out rc; w="$(cons_world plain "$2")" || return 2
+  st="$(stamp_cons "$w")"
+  grep -qF "stamped 1 of 1" <<<"$st" || { echo "        CR stamp: $(printf '%s' "$st" | tr '\n' ' ' | cut -c1-200)" >&2; return 2; }
+  out="$(cd "$w/f" && AI_DLC_PROJECT_ROOT="$w/f" bash "$w/t/scripts/ai-dlc/$1" stories/story-cons.md \
+      --require-skill ai-dlc-adversary-review 2>&1)"; rc=$?
+  [ "$rc" -eq 0 ] && grep -qF "PASS (stories/story-cons.md, 1 block(s)" <<<"$out" && return 0
+  echo "        CR reader rc=$rc: $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-200)" >&2; return 1; }
+arm_nr() { local w st out rc; w="$(cons_world near "$2")" || return 2
+  st="$(stamp_cons "$w")"
+  grep -qF "stamped 1 of 1" <<<"$st" || { echo "        NR stamp: $(printf '%s' "$st" | tr '\n' ' ' | cut -c1-200)" >&2; return 2; }
+  printf '\n<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: %s\ninvoked_at: 2026-01-02T03:04:05Z\ntool_use_id: %s\nmode: subagent\nlead_role: x.md\nartifact: stories/story-cons.md\nfindings_critical: 0\nfindings_major: 0\nfindings_minor: 0\nSKILL_INVOCATION_PROVENANCE_END -->\n' \
+    "$NEAR_SKILL" "$REAL_TID" >> "$w/f/stories/story-cons.md"
+  out="$(cd "$w/f" && AI_DLC_PROJECT_ROOT="$w/f" bash "$w/t/scripts/ai-dlc/$1" stories/story-cons.md \
+      --require-skill ai-dlc-adversary-review 2>&1)"; rc=$?
+  [ "$rc" -eq 0 ] && grep -qF "PASS (stories/story-cons.md, 2 block(s)" <<<"$out" && return 0
+  echo "        NR reader rc=$rc: $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-200)" >&2; return 1; }
+# -> "<CI><CR><NI><NR>" for a writer $1 and a reader $2 (basenames beside the pair), $3 the extra file
+cons_vector() { local v="" r
+  arm_ci "$1" "$3"; r=$?; v="$v$r"
+  arm_cr "$2" "$3"; r=$?; v="$v$r"
+  arm_ni "$1" "$3"; r=$?; v="$v$r"
+  arm_nr "$2" "$3"; r=$?; v="$v$r"
+  printf '%s\n' "$v"
+}
+
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ ! -f "$READER" ] || [ ! -f "$SCHEMA_SRC" ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-46s\n' "FIXTURE BROKEN: no reader beside the writer, or no source schema"
+  BASEV="broken"
+else
+  BASEV="$(cons_vector stamp-story-provenance.sh validate-provenance-block.sh "")"
+  pw="$(cons_world near "")"
+  if [ -z "$pw" ] || cmp -s "$SCHEMA_SRC" "$pw/t/.claude/schemas/$SCH" \
+     || cmp -s "$SCHEMA_SRC" "$pw/f/.claude/schemas/$SCH" \
+     || cmp -s "$pw/t/.claude/schemas/$SCH" "$pw/f/.claude/schemas/$SCH"; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-46s\n' "FIXTURE BROKEN: sandbox schemas do not differ in bytes"
+  else
+    printf '  ok    %-46s\n' "install schema: sandbox schemas differ in bytes"
+  fi
+fi
+i=0
+for lbl in "consumer: writer resolves the install schema (CI)" \
+           "consumer: reader passes the writer's stamp (CR)" \
+           "near-miss: writer resolves foreign schema (NI)" \
+           "near-miss: reader resolves foreign schema (NR)"; do
+  i=$((i + 1)); ASSERTIONS=$((ASSERTIONS + 1))
+  c="$(printf '%s' "$BASEV" | cut -c"$i")"
+  if [ "$c" = 0 ]; then printf '  ok    %-46s\n' "$lbl"
+  else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s result=%s\n' "$lbl" "${c:-none}"; fi
+done
+
+# --- MUTANTS OF THE INSTALL CANDIDATE. Each is built from the script the fixture RESOLVED, anchored
+# on the install-root walk the candidate is built from (exactly once), and refused unless it
+# APPLIED (cmp differs). A mutant is killed only when its WHOLE vector matches: its own arm fails
+# and every other arm still holds, so no kill is borrowed from an entangled arm.
+MUTI="$(mktemp -d "$CONS/mut.XXXXXX")"
+INSTALL_LOC='
+import re, sys
+src = open(sys.argv[1]).read()
+def one(pat, what):
+    m = re.findall(pat, src, re.M)
+    if len(m) != 1:
+        sys.exit("anchor: %s found %d times" % (what, len(m)))
+    return m[0]
+root = one(r"^(\w+)=\x22\$\(ai_dlc_resolve_root \x22\$\w+_SCRIPT_DIR\x22 \|\| true\)\x22$", "install-root walk")
+sch = one(r"^\[ -n \x22\$" + root + r"\x22 \] && (\w+)=\x22\$" + root + r"/\.claude/schemas/provenance-block\.json\x22$", "guarded install schema")
+Q = chr(34)
+last = "    " + Q + "$" + sch + Q + "; do\n"
+tail = " \\\n" + last
+if src.count(tail) != 1:
+    sys.exit("anchor: install candidate is not the last candidate exactly once")
+def dropped():
+    return src.replace(tail, "; do\n")
+'
+# IA/IC — the install candidate removed (writer / reader). With it goes all the fix does.
+DROP_PROG="$INSTALL_LOC"'
+open(sys.argv[2], "w").write(dropped())
+'
+# IB/IB2 — the install candidate moved FIRST in its own loop (writer / reader).
+FIRST_PROG="$INSTALL_LOC"'
+out = dropped()
+i = src.index(tail)
+j = out.rfind("for cand in \\\n", 0, i)
+if j < 0:
+    sys.exit("anchor: no loop head before the install candidate")
+j += len("for cand in \\\n")
+open(sys.argv[2], "w").write(out[:j] + "    " + Q + "$" + sch + Q + " \\\n" + out[j:])
+'
+# ID/ID2 — the empty-walk guard removed: the install schema is built even from an empty root.
+UNGUARD_PROG="$INSTALL_LOC"'
+g = "[ -n " + Q + "$" + root + Q + " ] && " + sch + "="
+if src.count(g) != 1:
+    sys.exit("anchor: empty-walk guard not found exactly once")
+open(sys.argv[2], "w").write(src.replace(g, sch + "="))
+'
+mk_imut() { # $1 source  $2 mutant basename  $3 program -> mutant path, or DID NOT APPLY
+  local out="$MUTI/$2"
+  if ! python3 -c "$3" "$1" "$out" 2>"$MUTI/$2.err"; then
+    echo "DID NOT APPLY: $(head -1 "$MUTI/$2.err")"; return 1
+  fi
+  if cmp -s "$1" "$out"; then echo "DID NOT APPLY: identical to $(basename "$1")"; return 1; fi
+  printf '%s\n' "$out"
+}
+# Anchor control: the locator refuses a file carrying no install candidate at all.
+ASSERTIONS=$((ASSERTIONS + 1))
+printf '#!/usr/bin/env bash\necho no candidate here\n' > "$MUTI/decoy.sh"
+if python3 -c "$DROP_PROG" "$MUTI/decoy.sh" "$MUTI/decoy.out" 2>/dev/null; then
+  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s\n' "FIXTURE BROKEN: install anchor matched a decoy"
+else
+  printf '  ok    %-46s\n' "install mutants: anchor refuses a decoy"
+fi
+# $1 label  $2 mutant path-or-DID-NOT-APPLY  $3 "writer"|"reader"  $4 expected vector
+score_imut() {
+  local label="$1" mp="$2" role="$3" want="$4" got
+  ASSERTIONS=$((ASSERTIONS + 1))
+  case "$mp" in "DID NOT APPLY"*)
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "$label" "$mp"; return ;;
+  esac
+  if [ "$BASEV" != 0000 ]; then
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "$label" "FIXTURE BROKEN: unmutated vector is $BASEV"; return
+  fi
+  if [ "$role" = writer ]; then
+    got="$(cons_vector "$(basename "$mp")" validate-provenance-block.sh "$mp" 2>/dev/null)"
+  else
+    got="$(cons_vector stamp-story-provenance.sh "$(basename "$mp")" "$mp" 2>/dev/null)"
+  fi
+  if [ "$got" = "$want" ]; then printf '  ok    %-46s\n' "$label"
+  else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "$label" "vector $got, want $want (CI CR NI NR)"; fi
+}
+score_imut "mutant IA (writer: install cand removed) by CI" \
+  "$(mk_imut "$WRITER" ma-writer.sh "$DROP_PROG")" writer 1000
+score_imut "mutant IB (writer: install cand first) by NI" \
+  "$(mk_imut "$WRITER" mb-writer.sh "$FIRST_PROG")" writer 0010
+score_imut "mutant IC (reader: install cand removed) by CR" \
+  "$(mk_imut "$READER" mc-reader.sh "$DROP_PROG")" reader 0100
+score_imut "mutant IB2 (reader: install cand first) by NR" \
+  "$(mk_imut "$READER" mb2-reader.sh "$FIRST_PROG")" reader 0001
+
+# ID — THE EMPTY-WALK GUARD. Without it an install walk that finds no marker makes the candidate
+# /.claude/schemas/provenance-block.json, at the filesystem root. No sandbox can plant a file
+# there, so no exit code or resolved path can separate the mutant from the guard: both fail to
+# find a schema, identically. The one observable is the path the program TESTS, so arm G reads
+# the script's own execution trace: the unguarded copy stats the filesystem-root path and the
+# guarded one never does. It runs from a directory with no root marker above it — asserted first,
+# by the writer's own refusal to resolve a root there — because anywhere else the walk succeeds
+# and the guard has no subject.
+ASSERTIONS=$((ASSERTIONS + 1))
+NM=""
+for base in "$ROOT" /tmp; do
+  cand_nm="$(mktemp -d "$base/nomark.XXXXXX" 2>/dev/null)" || continue
+  [ "$base" = "$ROOT" ] || NM_EXTRA="$cand_nm"
+  mkdir -p "$cand_nm/scripts/ai-dlc" "$cand_nm/f/.claude"
+  cp "$WRITER" "$cand_nm/scripts/ai-dlc/stamp-story-provenance.sh"
+  cp "$READER" "$cand_nm/scripts/ai-dlc/validate-provenance-block.sh"
+  pre="$(cd "$cand_nm" && env -u AI_DLC_PROJECT_ROOT -u CLAUDE_PROJECT_DIR \
+      bash "$cand_nm/scripts/ai-dlc/stamp-story-provenance.sh" --print-schema 2>&1)"; prc=$?
+  if [ "$prc" -eq 2 ] && grep -qF "cannot resolve the project root" <<<"$pre"; then NM="$cand_nm"; break; fi
+done
+if [ -z "$NM" ]; then
+  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s\n' "FIXTURE BROKEN: no marker-free directory for arm G"
+else
+  printf '  ok    %-46s\n' "arm G: sandbox has no root marker above it"
+fi
+ROOTSTAT=" -f /.claude/schemas/$SCH"
+trace_of() { # $1 script basename in $NM/scripts/ai-dlc  then its args -> the xtrace
+  local s="$1"; shift
+  ( cd "$NM" && AI_DLC_PROJECT_ROOT="$NM/f" PS4='+ ' bash -x "$NM/scripts/ai-dlc/$s" "$@" 2>&1 )
+}
+# $1 label  $2 guarded script  $3 mutant path-or-DID-NOT-APPLY  then script args
+score_guard() {
+  local label="$1" real="$2" mp="$3" ctl mut; shift 3
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ -z "$NM" ]; then FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "$label" "FIXTURE BROKEN: no sandbox"; return; fi
+  case "$mp" in "DID NOT APPLY"*)
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "$label" "$mp"; return ;;
+  esac
+  cp "$mp" "$NM/scripts/ai-dlc/$(basename "$mp")"
+  ctl="$(trace_of "$real" "$@")"; mut="$(trace_of "$(basename "$mp")" "$@")"
+  if ! grep -qF " -f $NM/f/.claude/schemas/$SCH" <<<"$ctl" || ! grep -qF "$SCH not found" <<<"$ctl"; then
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "$label" "FIXTURE BROKEN: control trace lacks the override candidate"
+  elif grep -qF -- "$ROOTSTAT" <<<"$ctl"; then
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "$label" "guarded script stats /.claude/schemas/ at the filesystem root"
+  elif ! grep -qF -- "$ROOTSTAT" <<<"$mut"; then
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "$label" "SURVIVED: unguarded copy never stats the filesystem root"
+  else
+    printf '  ok    %-46s\n' "$label"
+  fi
+}
+[ -z "$NM" ] || printf '# probe\n' > "$NM/probe.md"
+score_guard "mutant ID (writer: walk guard removed) by G" stamp-story-provenance.sh \
+  "$(mk_imut "$WRITER" md-writer.sh "$UNGUARD_PROG")" --print-schema
+score_guard "mutant ID2 (reader: walk guard removed) by G" validate-provenance-block.sh \
+  "$(mk_imut "$READER" md2-reader.sh "$UNGUARD_PROG")" "$NM/probe.md" --allow-missing
 
 echo "  ---- $ASSERTIONS assertions, $FAILURES failing ----"
 [ "$FAILURES" -eq 0 ]
