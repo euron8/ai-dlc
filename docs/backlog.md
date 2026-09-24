@@ -4214,3 +4214,126 @@ neither `ff1ed69e` nor `98036a53` changed.
 | r3: the base two-valued `substitution_only`, on `63004ff4` / `ff1ed69e` / `98036a53` | **1** / **1** / **1** |
 
 verify: sh F=core/skills/ai-dlc-update/reconcile/register-drift.sh; [ -r "$F" ] && [ -r "${F%/*}/lib.sh" ] || exit 9; F="$(pwd)/$F"; D="$(command -v diff)"; [ -x "$D" ] || exit 9; T="$(mktemp -d)" || exit 9; S="$T/shim"; mkdir -p "$S" "$T/d/core/team-roles" "$T/c/.claude/team-roles" "$T/k/.claude/team-roles" || exit 9; printf '#!/bin/sh\nt1="%s/a.$$"; t2="%s/b.$$"; cat "$1" > "$t1"; cat "$2" > "$t2"\nif grep -q BETAKEEP "$t1" "$t2"; then : > "%s/.fired"; exit 2; fi\nexec "%s" "$t1" "$t2"\n' "$S" "$S" "$S" "$D" > "$S/diff" && chmod +x "$S/diff" || exit 9; printf 'x\n' > "$T/p1"; printf 'y\n' > "$T/p2"; PATH="$S:$PATH" diff "$T/p1" "$T/p2" >/dev/null 2>&1; [ $? = 1 ] || exit 9; [ -e "$S/.fired" ] && exit 9; printf '# Role: X\n\n## Alpha\n\nalpha core text.\n\n## Beta\n\nbeta core text.\n\n## Gamma\n\ngamma core text.\n' > "$T/d/core/team-roles/x.md"; ( cd "$T/d" && git init -q && git add -A && git -c user.name=r -c user.email=r@r commit -qm base ) >/dev/null 2>&1 || exit 9; B="$(git -C "$T/d" rev-parse HEAD)" || exit 9; sed 's/^alpha core text\.$/alpha CONSUMER EDIT./; s/^beta core text\.$/beta CONSUMER EDIT BETAKEEP./' "$T/d/core/team-roles/x.md" > "$T/e.md"; grep -q 'alpha CONSUMER EDIT' "$T/e.md" && grep -q BETAKEEP "$T/e.md" || exit 9; cp "$T/e.md" "$T/c/.claude/team-roles/x.md" && cp "$T/e.md" "$T/k/.claude/team-roles/x.md" || exit 9; O=.claude/skills/ai-dlc/overrides/team-roles__x__consumer-drift.md; bash "$F" "$T/d" "$B" "$T/k" team-roles/x.md --apply >/dev/null 2>&1 || exit 9; grep -q 'alpha CONSUMER EDIT' "$T/k/$O" && grep -q BETAKEEP "$T/k/$O" || exit 9; PATH="$S:$PATH" bash "$F" "$T/d" "$B" "$T/c" team-roles/x.md --apply >/dev/null 2>"$T/err"; rc=$?; [ -e "$S/.fired" ] || exit 9; [ "$rc" != 0 ] && [ -z "$(ls -A "$T/c/.claude/skills/ai-dlc/overrides" 2>/dev/null)" ] && cmp -s "$T/e.md" "$T/c/.claude/team-roles/x.md" && grep -q "cannot classify section 'Beta'" "$T/err" && exit 0; exit 1
+
+## BL-294 — `bug-investigation.md` has no step that puts an operator-applicable relief in front of the operator, so a lead holding one writes a story instead
+
+**BLOCKER.** Filed at batch 145 on the operator's instruction, relayed by the peer session
+`llm-gateway-41`, from a read-only diagnosis of the reference consumer's session `d5ba4ec4`
+(lead model `qwen38flash-mlx`). Filing only; no implementation was authorized with it.
+
+**THE INCIDENT.** At 21:41Z, mid-sprint (S313, at `stories-test-strategy` §4), the operator
+reported *"Rebalances are failing with partial burn block often."* The lead said a live-capital
+bug outranks the sprint, and the operator chose "Fold into S313". By about 22:46Z the diagnosis
+had two causes and a pool that was blocked (6 blocked, 0 successes in 24h), plus a relief needing
+no deploy: raise `max_hook_underflow_residuals` and restart. At 22:51:24 it verified that relief
+against a live counter. It never asked the operator. At 22:48:46 its thinking drafted the question
+(*"do you want the config-raise stopgap as an interim step too? … So: one question now —
+re-baseline grant?"*) and sent only the re-baseline question. At 22:51:53 it dropped the relief
+(*"the stopgap is the operator's interim option, not the agent's. KISS: the story = the drain fix
++ the flip fix."*). The relief ended up inside story-3-1 as *"a lawful interim operator stopgap …
+but ships nothing"*. The next 75 tool calls, up to 23:25:43, changed no code and told the operator
+nothing. The lead had drafted the relief in its thinking five times (22:08, 22:26, 22:48, 22:51,
+23:12).
+
+**THE AGENT OWNS THE LARGER SHARE, AND THIS ENTRY IS THE PIPELINE'S SHARE.** Nothing external
+displaced the question: between 22:51:24 and 22:52:05 the only injection was the harness's
+tool-batching reminder. What the pipeline supplied was every frame the lead used to set the relief
+aside, and no rule pointing the other way:
+
+- `core/skills/ai-dlc/steps/bug-investigation.md` runs `### 2. Investigation` (`:40`) straight
+  into `### 3. Create Fix Story` (`:80`). Its only product is a story. "Stopgap" and "interim
+  mitigation" appear in **0** step files.
+- `core/skills/ai-dlc/SKILL.md:180`, Rule 3: *"Keep working. Do not ask if you should continue."*
+  Rule 12 Tier 2 (`SKILL.md:351-360`) lets the lead own option selection, and the lead cited both at
+  22:48:46 (*"a decision the lead could own … don't over-ask"*).
+- `core/skills/ai-dlc/SKILL.md:305-308`, Rule 11(a), is scoped to *"genuine ambiguity"* and says
+  *"Do not ask about matters resolvable by … applying professional defaults."* It neither requires
+  nor forbids surfacing a relief.
+
+The consumer's installed copy (0.624.0, `5376b309`) is byte-identical to `core/` for every file
+cited here, so these lines are the ones that ran.
+
+**THE CHANGE.** Add a numbered section to `bug-investigation.md` between §2 and §3. When the
+investigation has found relief the operator can apply without a deploy (a config value, a restart,
+an existing endpoint), put it to the operator with `AskUserQuestion` BEFORE §3, with options
+**apply now (recommended)** and **wait for the fix**. Rule 4 forbids skipping a numbered section,
+so this alone would have surfaced the relief at 22:51. Add the matching clause to Rule 11(a): a
+live-defect relief that only the operator can apply is not an ambiguity question, and it is always
+asked. Word it so Rule 3's closed pause-point list stops reading as a reason to withhold it.
+
+**BEFORE BUILDING, PROVE IT CAN FIRE.** The measured case is a single session with a single model.
+A comparable session (`35669f67`, 2026-09-14, `claude-sonnet-5`) triaged a partial-burn report to
+root cause in 22 minutes, but its pipeline state differed too, so it cannot separate the two
+causes. Replay `d5ba4ec4`'s 22:51 state against the changed step file and show the question is
+reached.
+
+verify: manual — whether a step makes a lead ASK is a behavioural claim about a model reading prose; the section's presence is not the fix, and a `has` receipt would be closed by its own heading.
+
+## BL-295 — `route.md`'s mixed-defect MUST-ASK offers no "mitigate now" option, so the only routes for a live bug are sprint-shaped
+
+**DEFECT.** Filed at batch 145 with `BL-294`, from the same incident (`d5ba4ec4`), on the
+operator's instruction. Filing only.
+
+`core/skills/ai-dlc/steps/route.md:398-409` makes a bug arriving during a carry-over or sprint a
+MUST-ASK, and it fired correctly at 21:43:23. It offered three options: **Fold into S313**,
+**Separate sprint after S313**, **Drop S313, bug first**. All three put the bug through a sprint.
+None of them says "mitigate or hotfix now, then fold". The lead then quoted two constraints in the
+same question: there is no concurrent-sprint mechanism, and `roll` refuses to move over an
+in-progress sprint (`core/scripts/sprint-status.sh:406-407`: *"refusing to roll forward … over a
+sprint that is not closed. Close it first (retro)"*). So the question's own framing ruled out
+anything faster than the sprint.
+
+**THE CHANGE.** Give the MUST-ASK a required option: **mitigate/hotfix now, then fold**. The `roll`
+refusal can stay. This option needs no second sprint, only an action taken before the fold.
+
+**Prior evidence that the class recurs:** the consumer's
+`_bmad-output/party-mode-transcripts/s158/hotfix-retro.md:43` (*"forcing a sprint boundary
+mid-emergency would've been worse"*), and two archived ledger entries recording S306 as a live
+production bug-fix sprint in which a stale HARD_BLOCK and a spawn-ledger exit 3 held up the fix
+(`push-candidate-ledger.archive.md:7943`, `:11615`). Those are the evidence behind
+`gate-validation.md:297-303`.
+
+verify: manual — the option's presence in the step is prose, and whether the lead offers it is behaviour.
+
+## BL-296 — a bug folded into a carry-over sprint loses `bug-investigation`'s one-shot validation and takes the full story cycle
+
+**DEFECT.** Filed at batch 145 with `BL-294`, from the same incident (`d5ba4ec4`), on the
+operator's instruction. Filing only.
+
+`core/skills/ai-dlc/steps/bug-investigation.md` §4 (`### 4. Validation`, `:92`) validates a fix
+story with a one-shot adversary. Folded into S313, the same bug went through
+`core/skills/ai-dlc/steps/stories-test-strategy.md`'s cycle instead:
+- `### 2a. Propagate Locked Requirements to Stories` (`:311`)
+- CAP-5 registration across memlog, bmad-spec, a PRD FR and an NFR amendment, and the spine AD
+- elicitation
+- `### 4. Story Validation Cycle (Rule 8)` (`:466`) run to EXIT_CONDITION_MET
+
+That was about 80 minutes after the report, with no code changed. The route a bug takes decided
+how much ceremony it got, and the heavier route was the one the MUST-ASK in `BL-295` made the
+default.
+
+**THE CHANGE.** State in `stories-test-strategy.md` that a folded bug story keeps
+`bug-investigation`'s one-shot §4 validation and does not re-enter the convergence cycle.
+
+verify: manual — which validation a folded story receives is a routing judgment the step states; no predicate on the text establishes the lead follows it.
+
+## BL-297 — the IMMINENT context sensor's "BEFORE your next pipeline action" outranks an operator-facing finding, and the Stop hook's fidelity line leans the same way
+
+**NOTE.** Filed at batch 145 with `BL-294`, on the operator's instruction. Filing only.
+
+At 23:11:52 in `d5ba4ec4` the adversary's F3 had just shown that the drain already exists as
+`POST /api/rebalancer/integrity/dismiss-burn`. That made the fix an operator action rather than new
+code. The IMMINENT advice at `core/hooks/ai-dlc-context-sensor.sh:643` then fired: *"BEFORE your
+next pipeline action, refresh _bmad-output/pipeline-snapshot.md"*. The lead's 23:12:48 reply was
+*"refreshing the snapshot now"*, and F3 never reached the operator. The 23:04 compaction summary
+had already kept only the dismissal (*"config raise is stopgap only (re-saturates)"*).
+
+The Stop hook's `core/hooks/ai-dlc-continue.sh:1330-1342` (*"The pipeline is designed for fidelity,
+not throughput"*) fired as a block once, at 22:00:13, and was not the proximate cause. It is ambient
+pressure pointing the same way.
+
+**THE QUESTION TO SETTLE**, not a pre-chosen change: should an operator-facing finding on a live
+defect take precedence over the IMMINENT snapshot refresh? The sensor's advice says what to do
+BEFORE the next pipeline action, and reporting to the operator is not one.
+
+verify: manual — a precedence between two prompts is a behavioural question, recorded as a NOTE until `BL-294` is built and re-measured.
