@@ -915,18 +915,21 @@ else
   # sides of the check see the shape (s u p g), either side's line for that position is accepted,
   # so disabling one side leaves the arm holding on the other -- the side-specific proof is owned
   # by (x), which only the core side sees, and by (y) and (d), which only the consumer side sees.
+  # The consumer-side refusal is keyed on its line-and-text PREFIX only: the prose after it, and
+  # which line of a pure addition it names first (blank added lines are about to be skipped), are
+  # not what the arm is about. (y) therefore accepts any consumer line.
   e2_want() { case "$1" in
     s) printf '%s\n' "conservation: core line 13 (review.) was changed or removed by the consumer" \
-                     "conservation: consumer line 13 (review E2S-REVIEW.) is carried by nothing that was written" ;;
+                     "conservation: consumer line 13 (review E2S-REVIEW.)" ;;
     u) printf '%s\n' "conservation: core line 17 (n2.) was changed or removed by the consumer" \
-                     "conservation: consumer line 17 (n2 E2S-NOTES.) is carried by nothing that was written" ;;
+                     "conservation: consumer line 17 (n2 E2S-NOTES.)" ;;
     p) printf '%s\n' "conservation: core line 3 (intro.) was changed or removed by the consumer" \
-                     "conservation: consumer line 3 (intro E2S-INTRO.) is carried by nothing that was written" ;;
+                     "conservation: consumer line 3 (intro E2S-INTRO.)" ;;
     g) printf '%s\n' "conservation: core line 9 (gaiyou.) was changed or removed by the consumer" \
-                     "conservation: consumer line 9 (gaiyou E2S-GAIYOU.) is carried by nothing that was written" ;;
+                     "conservation: consumer line 9 (gaiyou E2S-GAIYOU.)" ;;
     x) echo "conservation: core line 7 (## Beta) was changed or removed by the consumer" ;;
-    y) echo "conservation: consumer line 10 () is carried by nothing that was written" ;;
-    d) echo "conservation: consumer line 5 (alpha E2-ALPHA-EDIT.) is carried by nothing that was written" ;;
+    y) echo "conservation: consumer line " ;;
+    d) echo "conservation: consumer line 5 (alpha E2-ALPHA-EDIT.)" ;;
   esac; }
   # A `diff` that exits 2 only when an input carries KEEPME (Beta's marker in the keyed seed) AND
   # it was handed process substitutions -- substitution_only's per-section diff, never the
@@ -1095,7 +1098,7 @@ EOF
     d) echo "the conservation check's CONSUMER side refuses naming Alpha's edited line 5 (rc 2), the mktemp shim fired, no override, the consumer file cmp-identical" ;;
     s|u|p|g) echo "refused (rc 2) by the positional conservation check naming the edited line by number and text, no override, the consumer file cmp-identical" ;;
     x) echo "refused (rc 2) by the CORE side naming the deleted '## Beta' at core line 7, no override, the consumer file cmp-identical" ;;
-    y) echo "refused (rc 2) by the CONSUMER side naming line 10 of the misfiled section, no override, the consumer file cmp-identical" ;;
+    y) echo "refused (rc 2) by the CONSUMER side naming a line of the misfiled section, no override, the consumer file cmp-identical" ;;
     k) echo "the allow twin of (g): rc 0, REGISTERED, the heading reported as unaddressable, Alpha carried, core reverted" ;;
     j) echo "the dry run previews (rc 0, DRY RUN, Alpha in the preview) rather than refusing, and writes nothing" ;;
     e) echo "rc 0, REGISTERED, the override carries BOTH edits, and core is reverted" ;;
