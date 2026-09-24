@@ -1141,7 +1141,10 @@ given at batch 90.
      `cmp -s` control, the reverify diff), each `opus` in its own worktree, each rebasing onto
      that sha. **NO HAND RUNS THE FIXTURE SUITE — say so in every brief.** Batch 131 measured what
      happens when two of them do: load 62-72 on 18 cores, six concurrent suites, and a timing
-     differential that was pure contention. The lead runs the gate, alone, and waits for it. Wall clock is the fix plus the longest arm, never the sum. Batch 101 measured the
+     differential that was pure contention. The lead runs the gate, alone, and waits for it.
+     **If a hand's suite has to be stopped, kill its process GROUP and its parent shell**, not
+     just the fixtures: eleven orphaned `zsh` wrappers survived three cleanups keyed on `pre-push`
+     and `run.sh` rather than on PPID. Wall clock is the fix plus the longest arm, never the sum. Batch 101 measured the
      serial shape at over an hour for nine steps a fan-out would have run in the fixture's time.
      The lead does not build; the lead writes the contract, collects by content, cuts the
      release commit, and pings.
