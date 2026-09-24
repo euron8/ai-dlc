@@ -69,6 +69,45 @@ before the next retained paragraph, append the cut to the archive under `## BATC
 (rotated out of the live plan at batch <m>)`, and assert byte conservation: the plan's drop equals
 the moved bytes, and the archive's growth equals the moved bytes plus the header.
 
+**BATCH 147 SHIPPED `v0.629.0` (`c53b74cf`, #838) AND CLOSED `BL-294` AND `BL-297`.** The release
+commit names `BL-297`, 1 hit against an impossible-id control of 0. `BL-294` shipped in
+`v0.628.0` and closes on that release's structural trace. The gate ran at
+`AI_DLC_FIXTURE_NO_SKIP=1`: 22 phases, **203 ok / 0 FAIL**, all gates green, `context-sensor`
+read `ok` by name, and the remote ref was confirmed with `ls-remote`. Live **74 -> 72**, archive
+**222 -> 224**. The exit-0 receipt set is the same **8** ids before and after, compared by
+identity: `BL-025`, `BL-236`, `BL-238`, `BL-254`, `BL-264`, `BL-265`, `BL-271`, `BL-273`.
+**Batch 146's "9" was a miscount.** Re-run at `e3f1a65d` itself, the set reads 8.
+
+**OPERATOR RULING AT BATCH 147: NO MODEL REPLAY CLOSES A STEP-FILE OR PROMPT FIX.** *"No replay
+is needed and would not guarantee anything."* It was given on the `BL-294` 21:43 replay, after a
+contract adversary had turned that replay into a 17-20 hour run on the one `mlx-serve` process
+the consumer's live session was using. A small-n replay on one model neither confirms nor
+refutes whether prose makes a lead ASK. Close such an entry on the structural trace (the binding
+text present at every point on the incident path, byte-compared against what the lead read)
+plus a fixture that pins it. Do not propose a replay as a close condition, and do not file an
+entry whose close needs one.
+
+**`BL-297` SHIPPED AS TEXT, AND ITS SHAPE CAME FROM THE ADVERSARY.** The IMMINENT advice at
+`core/hooks/ai-dlc-context-sensor.sh:643` now keeps an operator-facing finding in the SAME
+response as the snapshot refresh, recording it under Open Items. The advice does not say
+"report first". With one turn of headroom left, that lets the compaction fire while the question
+is pending and loses the refresh on every IMMINENT fire that has a finding pending. Presence arms
+plus a committed mutant sit in `core/fixtures/context-sensor/run.sh`. Against the pre-fix sensor,
+both new arms fail.
+
+**NEXT WORK.** The PC-backed worklist is five rows, all self-disqualifying: `BL-067`, `BL-132`,
+`BL-145` and `BL-215` in their own words, and `BL-230`, which awaits a cause the instrument has
+not recorded. Unfiled is the same **14**, with the same dates as batch 145. The consumer's ledger
+md5 `3e62c07e…` did not move. **No subject awaits a first look.** Re-derive first. Per action 1,
+take the oldest unexamined CORE candidate from the unfiled set only if one has appeared; all 14
+current ones are adjudicated consumer-owned in the batch-143 block below. A new consumer filing
+is otherwise the only thing that creates work.
+
+**THE DELIVERY GAP IS TWO RELEASES.** The consumer installed **0.627.0** (`23aea0ef`) against
+`VERSION` **0.629.0**. Neither release touched a bootstrapping file. The banked ruling stands:
+report the gap and write no runbook. The consumer's porcelain read 14-15 during the batch, all
+under `_bmad-output/`, and nothing this program writes was among them.
+
 **BATCH 146 SHIPPED `v0.628.0` (`e3f1a65d`, #835) AND CLOSED `BL-295` AND `BL-296`. `BL-294`
 SHIPPED AND STAYS LIVE, BECAUSE ITS CLOSE CONDITION IS A REPLAY AND THE REPLAY DID NOT SHOW IT.**
 The release commit names all three: 1 hit each, against an impossible-id control of 0. The gate
@@ -92,7 +131,8 @@ bug-fix arm, where both commands exited 1 and the old gate passed it. The declar
 on the per-bug `bug-fix-oneshot-<slug>.md`. **Replay a gate change on the consumer's live sprint
 slot before trusting the fixture.** The fixture's own worlds cannot hold a legacy residue.
 
-**THE `BL-294` REPLAY IS INCONCLUSIVE, AND THE ENTRY SAYS WHAT WOULD DECIDE IT.** It ran on the
+**THE `BL-294` REPLAY WAS INCONCLUSIVE, AND BATCH 147's OPERATOR RULING RETIRED REPLAYS AS A
+CLOSE CONDITION** (block above). What follows is the record, not an instruction. It ran on the
 incident's own model `qwen38flash-mlx`, through the local gateway, because `claude -p` exposes no
 `AskUserQuestion`. The relief question was asked in 0 of 4 scored runs at tip and 0 of 4 at base.
 The structural trace discriminates, but the replay was cut at 22:51, after the lead's base-era
@@ -105,12 +145,8 @@ options and controlled both ways), and a new batch rebuilds it.
 **NEXT WORK.** The PC-backed worklist is unchanged at five rows, every one self-disqualifying or,
 for `BL-230`, awaiting a cause the instrument has not recorded. Unfiled is still the same
 **14**, byte-identical to the batch-145 set with identical dates, so no filing awaits a first
-look. **Take `BL-294`'s 21:43 replay next, and `BL-297` in the same batch**: `BL-297` asks whether
-an operator-facing finding outranks the IMMINENT snapshot refresh, and it was held until
-`BL-294` was built. Neither changes a bootstrapping file. **Action 6b's shipped-id check reads
-non-empty for both, and that is expected:** `v0.626.0`'s release commit FILED them, and `v0.628.0`'s
-names `BL-294` because it shipped the section. Neither commit closes either entry, which is why both
-are still `## BL-` headings in `docs/backlog.md`.
+look. Batch 147 took `BL-294` and `BL-297` and closed both without a replay; its block above
+names the next work.
 
 **THE CONSUMER PULLED `0.627.0` DURING THE BATCH, AND THE GAP IS NOW ONE RELEASE.** Its stamp reads
 `0.627.0` (`23aea0ef`) after its own #1109 and #1110. The pull rotated out the two ids batch 144
@@ -320,7 +356,7 @@ batch, entirely from that pull. The ledger md5 did not move, which is the criter
 content.
 
 **EVERYTHING BELOW THIS LINE, DOWN TO `### Derive the state`, IS AN EARLIER BATCH'S BLOCK.** Each
-one was current when it was written, and the batch 145, 144, 143 and 142 blocks above replace it. Read those blocks
+one was current when it was written, and the batch 147 through 142 blocks above replace it. Read those blocks
 for the measurement behind a rule. Take no figure and no next-work pointer from them: their
 counts, gaps and "remaining" ids have all moved since.
 
