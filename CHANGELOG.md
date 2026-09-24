@@ -15,6 +15,42 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.630.0] - 2026-09-24
+
+This release answers the consumer's S313 filing against the dispatch guard. It fixes the record the
+filing traced, and it does not build the deny the filing proposed, for measured reasons.
+
+### BL-298 — the dispatch guard credits the Rule 19(b) line the selected definition delivers
+
+`core/hooks/ai-dlc-dispatch-guard.sh` recorded `role_contract_cited: false` on every
+definition-bound dispatch whose prompt did not repeat the role path. The rendered
+`.claude/agents/<role>.md` body is the subagent's system prompt, and it carries that line. On the
+reference consumer at S313, those rows were all 7 of Check 22's in-scope failures.
+
+The field is now true when the prompt cites `team-roles/<role>.md`. It is also true when the
+dispatch is definition-bound and the selected body carries that role's first rendered line as a
+whole line below the frontmatter. The match is on the role-specific first line only, because the
+second line of the rendered sentence is the same in every role's body. A new ledger field,
+`contract_via` (`prompt`, `definition` or null), records which carrier delivered the line.
+
+The record is of delivery at PreToolUse. It does not show that the teammate launched or read the
+file: 6 of 21 joined definition-bound teammates never read their role file, and Rule 19(b) still
+binds on the read.
+
+The filed deny remedy is refuted and not built. It would have refused 22 consumer dispatches whose
+system prompt carried the line, and the uncited, in-scope population outside the definition path is
+0. The release adds no new emission either, since one would change a dispatch's approval posture.
+
+`validate-spawn-ledger.sh` keeps its semantics. Its Rule 19(b) FAIL text now says the dispatch
+carried the line in neither its prompt nor the definition it selected. Rows written before this
+release are not cleared, and they are disposed of through Check 22's four-arm path.
+
+Updated carriers: `rule-19.md` (b), `gate-validation.md` Check 22 and `implementation.md`.
+`core/fixtures/dispatch-model-guard/run.sh` adds six arms and three committed mutants, and fails 7
+arms against the pre-fix guard. A replay of the consumer's 83 S313 dispatches through both guards
+moves exactly the 7 definition-bound rows, and it takes the validator from exit 1 (7 missing
+citations) to exit 0.
+
 ## [0.629.0] - 2026-09-24
 
 This release carries one follow-up to 0.628.0's live-defect work. It also records the close of
