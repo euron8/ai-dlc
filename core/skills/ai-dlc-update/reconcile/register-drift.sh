@@ -115,14 +115,30 @@ SELF="$(cd "$(dirname "$0")" && pwd)"
 # The exit status is checked AND the awk refuses an empty stream, because either failure alone
 # reaches `yes`. The captured variable loses only diff's trailing newline, which the here-string
 # restores.
+#
+# ONE TOKEN DOES NOT EXEMPT A WHOLE HUNK. `diff` coalesces adjacent changed lines into one hunk,
+# so a real edit on the line beside a token site shares the token's hunk. Exempting any hunk with
+# a token on its core side lost that edit silently, rc 0, at every sha: `run {test_cmd} first.` /
+# `then merge.` edited to `run pytest first.` / `then merge after REVIEW.` read as substitution
+# only, and REVIEW was reverted away. A hunk is exempt only if some core-side line carries a
+# token AND every token-FREE core-side line reappears verbatim on the consumer side -- so the
+# hunk changed nothing but token lines. The same rule is in the conservation check's awk below;
+# the two must agree, or the classifier skips a section the check then refuses.
 substitution_only() { # <consumer-section-text> <dist-section-text>
   local d drc
   d="$(diff <(printf '%s\n' "$2") <(printf '%s\n' "$1") 2>/dev/null)"; drc=$?
   if [ "$drc" -ne 1 ] || [ -z "$d" ]; then printf 'unknown'; return 0; fi
   awk '
-    /^[0-9]/ { if (hunk && !tok) bad=1; hunk=1; tok=0; next }
-    /^</     { if ($0 ~ /\{[a-z_][a-z0-9_]*\}/) tok=1 }
-    END      { if (!hunk) { print "unknown"; exit } if (hunk && !tok) bad=1; print (bad ? "no" : "yes") }
+    function endh(   k) {
+      if (!inh) return
+      inh = 0
+      if (!tok) { bad = 1; return }
+      for (k = 1; k <= ntf; k++) if (!(TF[k] in GT)) { bad = 1; return }
+    }
+    /^[0-9]/ { endh(); inh = 1; nh++; tok = 0; ntf = 0; split("", GT); next }
+    /^</     { if ($0 ~ /\{[a-z_][a-z0-9_]*\}/) tok = 1; else { ntf++; TF[ntf] = substr($0, 3) } }
+    /^>/     { GT[substr($0, 3)] = 1 }
+    END      { endh(); if (!nh) { print "unknown"; exit } print (bad ? "no" : "yes") }
   ' <<<"$d"
 }
 
@@ -130,7 +146,13 @@ substitution_only() { # <consumer-section-text> <dist-section-text>
 # here: every path below that proceeds on a guess ends in `git show > core`, which deletes
 # whatever the guess left out. Writes go to temp files that are published only after every
 # check has passed, and the EXIT trap removes them, so a refusal leaves the consumer as it was.
+#
+# TWO KINDS OF REFUSAL, and they need different advice. `refuse` is for a step that FAILED -- a
+# diff, a temp file, a `git show`, a write -- where running again can succeed. `refuse_fixed` is
+# for a verdict about the file itself: the same input refuses the same way every time, so telling
+# the operator to re-run sends them round a loop. It says what to change instead.
 refuse() { echo "register-drift: $1" >&2; echo "  ${CONS_FILE#$CONSUMER/} NOT reverted; the consumer's edit is still in place. Re-run; if it repeats, register by hand." >&2; exit 2; }
+refuse_fixed() { printf 'register-drift: %s\n' "$1" >&2; echo "  ${CONS_FILE#$CONSUMER/} NOT reverted; the consumer's edit is still in place. This refusal is about the file's content: re-running without changing the file refuses the same way." >&2; exit 2; }
 
 # grep exits 1 on a file with no headings (a real answer: the `no ## / ### section differs`
 # exit handles it); anything above 1 is a grep that did not run, and an empty list would read as
@@ -245,7 +267,7 @@ cleanup_tmps() { local t; for t in "$OUT_TMP" "$EXT_TMP" "$rtmp"; do [ -n "$t" ]
 trap cleanup_tmps EXIT
 stage() { # <target> -> path of a fresh temp file to stage it in
   if [ "$APPLY" = "--apply" ]; then
-    [ ! -e "$1" ] || [ -f "$1" ] || refuse "${1#$CONSUMER/} exists and is not a regular file"
+    [ ! -e "$1" ] || [ -f "$1" ] || refuse_fixed "${1#$CONSUMER/} exists and is not a regular file"
     mktemp "${1}.tmp.XXXXXX"
   else
     mktemp
@@ -302,8 +324,9 @@ git -C "$DIST" show "${BASE}:${CORE}" > "$rtmp" || refuse "cannot read core's ${
 #
 # So the hunks come from ONE `diff` of core at BASE against the whole consumer file, and each
 # must be either:
-#   - a template-substitution hunk: its core side carries a `{token}` (install.sh's own edit,
-#     the same asymmetric test substitution_only uses); or
+#   - a template-substitution hunk: a core-side line carries a `{token}` and every token-free
+#     core-side line reappears on the consumer side (install.sh's own edit, the same rule
+#     substitution_only uses); or
 #   - carried on both of its sides, as set out beside the check below.
 # Anything else -- a section the resolver misfiled, a preamble edit, a deleted section -- is
 # refused with core NOT reverted. The override system anchors by heading NAME through that same
@@ -335,7 +358,7 @@ shadow_spans=""
 while IFS= read -r h; do
   [ -n "$h" ] || continue
   s="$(span_of "$h" < "$rtmp")" || refuse "conservation: cannot resolve core's span for '${h}'"
-  [ -n "$s" ] || refuse "conservation: the override shadows '${h}', which resolves to no heading in core at ${BASE}"
+  [ -n "$s" ] || refuse_fixed "conservation: the override shadows '${h}', which resolves to no heading in core at ${BASE}"
   shadow_spans="${shadow_spans}${shadow_spans:+,}${s% *}-${s#* }"
 done <<<"$changed"
 cons_check="$(awk -v nw="$nw" -v shadow="$shadow_spans" '
@@ -368,19 +391,37 @@ cons_check="$(awk -v nw="$nw" -v shadow="$shadow_spans" '
     for (s = 1; s <= ns; s++) if (k >= SS[s] && k <= SE[s]) return 1
     return 0
   }
-  function close_hunk(   L, k) {
+  # A token hunk is exempt only when it changed nothing but token lines -- the rule
+  # substitution_only states, and the reason is written there.
+  function token_only(   k) {
+    if (!tok) return 0
+    for (k = 1; k <= ntf; k++) if (!(TF[k] in GT)) return 0
+    return 1
+  }
+  function close_hunk(   L, k, t) {
     if (!inh) return
     inh = 0
-    if (tok || bad != "") return
+    if (bad != "" || token_only()) return
     if (!sp) spans()
     for (k = 1; k <= nlost; k++) if (!shadowed(LOST[k])) {
-      bad = "core line " LOST[k] " (" LOSTT[k] ") was changed or removed by the consumer, and no section the override shadows contains it"
+      t = LOSTT[k]
+      if (t ~ /^##+[ \t]/)
+        bad = "the consumer DELETED core heading \"" t "\" (core line " LOST[k] "). An override can only replace a heading it names, and the revert would bring this one back, so the deletion cannot be registered as it stands.\n  Way through: keep the heading in the consumer file with a body that states the retirement (e.g. \"Retired locally: <why>.\"), then run register-drift again; the section is then a changed section and is carried by the override."
+      else
+        bad = "core line " LOST[k] " (" t ") was changed or removed by the consumer, and no section the override shadows contains it. It sits before any ## / ### heading, or under a heading whose name resolves to a different section, so no override can carry the change. Move the edit into a uniquely named ## / ### section, or take it upstream."
       return
     }
     if (op == "d") return
-    for (L = rs; L <= re; L++) if (!covered(L)) {
-      bad = "consumer line " L " (" C[L] ") is carried by nothing that was written: it sits before any ## / ### heading, or under one that resolves by name to a different section"
-      return
+    # A BLANK added line is never charged. It carries no content, and the most common shape puts
+    # one inside a span nothing carries: an edited section plus a new section appended at EOF,
+    # where the separator blank lands in the last core section. Charging it refused that shape
+    # on 61 of 63 core files, which end on a non-blank line.
+    for (L = rs; L <= re; L++) {
+      if (C[L] == "" || C[L] == "\r") continue
+      if (!covered(L)) {
+        bad = "consumer line " L " (" C[L] ") is carried by nothing that was written. It sits before any ## / ### heading, or under a heading whose name resolves to a different section, so no override can carry it. Move the edit into a uniquely named ## / ### section, or take it upstream."
+        return
+      }
     }
   }
   FNR == 1 { f++ }
@@ -391,13 +432,14 @@ cons_check="$(awk -v nw="$nw" -v shadow="$shadow_spans" '
     p = match($0, /[acd]/); op = substr($0, p, 1)
     n = split(substr($0, 1, p - 1), R, ","); ls = R[1] + 0
     n = split(substr($0, p + 1), R, ","); rs = R[1] + 0; re = (n > 1 ? R[2] : R[1]) + 0
-    inh = 1; tok = 0; nlost = 0; kl = ls; nh++
+    inh = 1; tok = 0; ntf = 0; split("", GT); nlost = 0; kl = ls; nh++
     next
   }
   /^</ {
-    if ($0 ~ /\{[a-z_][a-z0-9_]*\}/) tok = 1
+    if ($0 ~ /\{[a-z_][a-z0-9_]*\}/) tok = 1; else { ntf++; TF[ntf] = substr($0, 3) }
     nlost++; LOST[nlost] = kl; LOSTT[nlost] = substr($0, 3, 60); kl++
   }
+  /^>/ { GT[substr($0, 3)] = 1 }
   END {
     close_hunk()
     if (f != nw + 2 || !nh) { print "the whole-file diff was not read (files " f ", hunks " nh ")"; exit 3 }
@@ -405,8 +447,13 @@ cons_check="$(awk -v nw="$nw" -v shadow="$shadow_spans" '
     print "ok " nh
   }
 ' "$CONS_FILE" "$OUT_TMP" ${EXT_TMP:+"$EXT_TMP"} - <<<"$core_d")"; crc=$?
-[ "$crc" -eq 0 ] && [ "${cons_check%% *}" = ok ] \
-  || refuse "conservation: ${cons_check:-the check did not run (awk exit ${crc})}"
+# Exit 1 is a VERDICT on the file and refuses without "re-run"; anything else is a check that did
+# not complete, which running again can fix.
+case "$crc" in
+  0) [ "${cons_check%% *}" = ok ] || refuse "conservation: the check did not report (awk exit 0, output '${cons_check}')" ;;
+  1) refuse_fixed "conservation: ${cons_check}" ;;
+  *) refuse "conservation: ${cons_check:-the check did not run (awk exit ${crc})}" ;;
+esac
 
 if [ "$APPLY" != "--apply" ]; then
   echo "── would write: ${OUT#$CONSUMER/}"
