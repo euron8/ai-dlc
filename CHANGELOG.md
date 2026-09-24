@@ -15,6 +15,52 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.626.0] - 2026-09-23
+
+### `register-drift.sh` refuses rather than revert core over a consumer edit it did not carry
+
+`core/skills/ai-dlc-update/reconcile/register-drift.sh` writes a consumer's in-place edit of a core
+file into an override, then reverts core. Consumer edits could be lost without warning in several
+ways, and the script still exited 0:
+
+- **A `diff` that failed was read as template substitution.** With two sections edited and `diff`
+  failing for only one of them, that section was skipped and core was reverted.
+- **The override body came out empty.**
+- **The write of the override was never checked.**
+- **A core section was misfiled as consumer-only.**
+- **The edit sat in a spot no heading reaches:** under a heading whose name resolves to a different
+  section (9 of the reference consumer's 564 installed headings do), under a duplicate heading, or
+  in the preamble.
+- **`diff` merged a `{token}` line and a real edit into one hunk.** The whole hunk then passed as
+  substitution.
+
+What changed:
+
+- **The classifier now answers `unknown` when `diff` did not run,** and the script refuses before
+  writing anything, in a dry run as well.
+- **A positional, two-sided check runs before the revert.** Every added consumer line must be
+  carried by what was written, and every changed core line must fall inside a section the override
+  shadows. Otherwise the script exits 2, core is not reverted, and nothing is published.
+- **Blank lines are never counted.** Counting them made appending a new section at the end of the
+  file a false refusal.
+- **A hunk is exempt as substitution only when every token-free core line reappears** on the
+  consumer side.
+- **Refusals caused by the file's content now say that re-running refuses the same way.** A deleted
+  core heading is named, with the way through.
+- **Two refusal classes are listed in `ai-dlc-update/SKILL.md`,** with the remedy for each.
+- **`layer-readopt-gate` gains section E2:** 16 arms and 8 mutants.
+- **Measured on 32 worlds built from the reference consumer's real installed files:** 27 behave as
+  before, and 5 now refuse where the old script lost between 34 and 176 lines. `BL-293`.
+
+### Backlog: four filings on a live-defect relief the operator could apply that is never surfaced
+
+Filed on the operator's instruction, from a read-only diagnosis of a consumer session in which the
+lead drafted a no-deploy relief for a live production bug five times and never offered it.
+`BL-294` (BLOCKER) covers `bug-investigation.md`, which has no step that asks. `BL-295` covers
+`route.md`'s MUST-ASK, which has no "mitigate now" option. `BL-296` covers a folded bug losing its
+one-shot validation. `BL-297` covers the IMMINENT sensor's precedence. These are filings only;
+nothing is implemented.
+
 ## [0.625.0] - 2026-09-23
 
 ### PC-S313-DEBT-AUDIT-CUE-FIRES-ON-A-CORE-CONSTRUCT-NAME — `audit-layer-debt.sh` stops charging a core mechanism's name, or a quote of its own cue, as an undeclared obligation
