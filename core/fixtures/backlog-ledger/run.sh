@@ -231,6 +231,114 @@ else
   fi
 fi
 
+# ---------------------------------------------------------------------------------------
+# Seed C — how an `sh` receipt's EXIT CODE routes (BL-089).
+# ---------------------------------------------------------------------------------------
+# Exit 9 is this corpus's could-not-measure code, and it read STILL-LIVE — the same words as a
+# genuine reproduction. It must read NEEDS-REVIEW with an `unresolved:` detail, and NOTHING
+# ELSE: CLOSE-CANDIDATE proposes the close outright, and HAND-REVIEW is what backlog-rotate.sh
+# accepts as permission to move an annotated entry, so either turns "I could not tell" into a
+# false close. The controls sit in the SAME seed, one exit code apart: 0 must still close, and
+# 1, 126 and 127 must still read STILL-LIVE — the last two so a fix widened from "9" to "any
+# code that is not 1" is caught, since a vanished command is not the receipt's own signal.
+LC="$WORK/c.md"
+cat > "$LC" <<'EOM'
+# Probe ledger — exit routing
+
+## BL-121 — sh exits 0
+
+verify: sh exit 0
+
+## BL-122 — sh exits 1
+
+verify: sh exit 1
+
+## BL-123 — sh exits 9, the could-not-measure code
+
+verify: sh exit 9
+
+## BL-124 — sh exits 127, a command that is not there
+
+verify: sh no-such-command-bl089-zz
+
+## BL-125 — sh exits 126
+
+verify: sh exit 126
+EOM
+
+# route_ok <output> — 0 when every row of seed C routes correctly, else 1 with the reason on
+# stdout. Every conjunct is PRESENCE-shaped, so an engine that emitted nothing fails it.
+route_ok() {
+  local o="$1" id n
+  for id in 121 122 123 124 125; do
+    n="$(grep -cE "	BL-$id	" <<<"$o")" || n=0
+    [ "$n" -eq 1 ] || { echo "BL-$id has $n rows, want 1"; return 1; }
+  done
+  grep -qE '^CLOSE-CANDIDATE	BL-121	' <<<"$o" || { echo "exit 0 is not CLOSE-CANDIDATE"; return 1; }
+  grep -qE '^STILL-LIVE	BL-122	'      <<<"$o" || { echo "exit 1 is not STILL-LIVE"; return 1; }
+  grep -qE '^STILL-LIVE	BL-124	'      <<<"$o" || { echo "exit 127 is not STILL-LIVE"; return 1; }
+  grep -qE '^STILL-LIVE	BL-125	'      <<<"$o" || { echo "exit 126 is not STILL-LIVE"; return 1; }
+  grep -qE '^NEEDS-REVIEW	BL-123	unresolved:' <<<"$o" \
+    || { echo "exit 9 reads '$(grep -E '	BL-123	' <<<"$o" | cut -f1)', want NEEDS-REVIEW with an unresolved: detail"; return 1; }
+  return 0
+}
+
+COUT="$(bash "$RV" "$LC" 2>&1)"
+if why="$(route_ok "$COUT")"; then
+  ok "exit-9-routing" "exit 9 reads NEEDS-REVIEW unresolved:, beside 0 CLOSE-CANDIDATE and 1/126/127 STILL-LIVE"
+else
+  bad "exit-9-routing" "$why"
+fi
+
+# THREE COPIES OF THE ENGINE, SAME ROOT AS THE MUTANTS ABOVE. The unmutated control runs FIRST:
+# a copy that cannot find VERSION or lib.sh emits INPUT-UNRESOLVED and no rows, and every mutant
+# driven through that root would then fail route_ok for THAT reason and score a kill it did not
+# earn. So the control must PASS route_ok, which requires the baseline rows to be there.
+[ -f "$MROOT/VERSION" ] && [ -f "$MROOT/core/skills/ai-dlc-update/reconcile/lib.sh" ] \
+  || bad "exit-9-mut-root" "the mutant root lacks VERSION or reconcile/lib.sh, so no mutant verdict below means anything"
+cp "$RV" "$MUT"
+MOUT="$(bash "$MUT" "$LC" 2>&1)"
+if why="$(route_ok "$MOUT")" && grep -qE '^STILL-LIVE	BL-122	' <<<"$MOUT"; then
+  ok "exit-9-control" "the unmutated copy in the mutant root routes seed C correctly (baseline BL-122 STILL-LIVE present)"
+else
+  bad "exit-9-control" "the unmutated copy fails seed C, so the mutant root is broken and the verdicts below are void: $why"
+fi
+# Each mutant must fail route_ok while its baseline row (BL-122 STILL-LIVE) is still there —
+# that row proves the copy RAN, so the failure is the mutation and not a dead engine.
+score_route_mut() { # <arm> <description-of-regression>
+  local mo why
+  mo="$(bash "$MUT" "$LC" 2>&1)"
+  if ! grep -qE '^STILL-LIVE	BL-122	' <<<"$mo"; then
+    bad "$1" "the baseline row (BL-122 STILL-LIVE) is gone — the mutant broke the engine, not the routing"
+  elif why="$(route_ok "$mo")"; then
+    bad "$1" "SURVIVED: with $2 the arm still passes"
+  else
+    ok "$1" "killed: $2 — $why"
+  fi
+}
+# Anchors, each asserted unique so a sed cannot edit a second copy.
+A0N="$(grep -c '^ *if \[ "\$SH_RC" -eq 0 \]; then$' "$RV")" || A0N=0
+A9N="$(grep -c '^ *emit "NEEDS-REVIEW" "\$LABEL" "unresolved: the sh receipt exited 9,' "$RV")" || A9N=0
+if [ "$A0N" -eq 1 ] && [ "$A9N" -eq 1 ]; then ok "exit-9-anchors" "both routing anchors are unique in the engine"
+else bad "exit-9-anchors" "routing anchors appear $A0N and $A9N times; the mutations below need exactly one each"; fi
+# 1. 9 ROUTED TO CLOSE-CANDIDATE — the false close proposed outright.
+if ! sed 's/^\( *\)if \[ "\$SH_RC" -eq 0 \]; then$/\1if [ "$SH_RC" -eq 0 ] || [ "$SH_RC" -eq 9 ]; then/' "$RV" > "$MUT"; then
+  bad "mutation-9-close" "DID NOT APPLY: sed failed"
+elif cmp -s "$RV" "$MUT"; then
+  bad "mutation-9-close" "DID NOT APPLY: the mutation matched nothing, so the exit-0 guard is unproven"
+else
+  score_route_mut "mutation-9-close" "exit 9 routed to CLOSE-CANDIDATE"
+fi
+# 2. 9 ROUTED TO HAND-REVIEW — the false close backlog-rotate.sh accepts. The detail is kept, so
+#    only the STATUS moves and the kill cannot come from the `unresolved:` conjunct.
+if ! sed 's/^\( *\)emit "NEEDS-REVIEW" "\$LABEL" "unresolved: the sh receipt exited 9,/\1emit "HAND-REVIEW" "$LABEL" "unresolved: the sh receipt exited 9,/' "$RV" > "$MUT"; then
+  bad "mutation-9-hand" "DID NOT APPLY: sed failed"
+elif cmp -s "$RV" "$MUT"; then
+  bad "mutation-9-hand" "DID NOT APPLY: the mutation matched nothing, so the NEEDS-REVIEW route is unproven"
+else
+  score_route_mut "mutation-9-hand" "exit 9 routed to HAND-REVIEW"
+fi
+
 # The preamble and the `## Receipts` prose section must contribute NO row. A parser that
 # treated any heading as an entry produced a phantom `Receipts` entry that came back
 # ALREADY-CLOSED, because that section quotes the closing form while explaining it.

@@ -135,13 +135,27 @@ age_state() {
   _t="$(sed -n '1p' "$_sf")"; _c="$(sed -n '2p' "$_sf")"
   printf '%s\n%s\n' "$(( _t - 100 ))" "$_c" > "$_sf"
 }
+# The mirror of `age_state`: rewrite the recorded block timestamp to NOW, so
+# the next block reads a gap of zero. The rapid side of the clock has to be
+# pinned too — arm 6a needs nine stop-hook calls inside RAPID_WINDOW_SECONDS
+# (core/hooks/ai-dlc-continue.sh:93), and the pre-push pool spreads real calls
+# past it, which resets the counter and reads as "no BACKOFF". Used ONLY by 6a:
+# pinning before every block would undo `age_state` in 6b and turn the
+# slow-beat near-miss red.
+pin_state() {
+  _sf="$1/_bmad-output/pipeline-block-state.txt"; [ -f "$_sf" ] || return 0
+  _c="$(sed -n '2p' "$_sf")"
+  printf '%s\n%s\n' "$(date +%s)" "$_c" > "$_sf"
+}
 # Drive one event sequence: B = block turn (no beat), L = live-beat turn,
-# G = the previous beat consumed real time. Echoes the decision sequence.
+# G = the previous beat consumed real time, R = the previous beat consumed
+# none (pin the rapid side). Echoes the decision sequence.
 drive_seq() {
   _w="$1"; shift
   for _e in "$@"; do
     case "$_e" in
       G) age_state "$_w"; continue ;;
+      R) pin_state "$_w"; continue ;;
       L) beat_on "$_w" ;;
       B) beat_off "$_w" ;;
     esac
@@ -160,7 +174,7 @@ backed_off() { case "$1" in *BACKOFF*) return 0 ;; esac; return 1; }
 # 6a. THE OFFENDER — the reference consumer's measured sprint-305 shape: a block,
 #     an instantly-returning beat, a block, a beat, ... Every beat consumes no
 #     time, so nothing is progressing and the stall MUST be reported.
-W="$(bash "$HERE/seed.sh" sequence)"; SEQ="$(drive_seq "$W" B L B L B L B L B)"
+W="$(bash "$HERE/seed.sh" sequence)"; SEQ="$(drive_seq "$W" B L R B L R B L R B L R B)"
 if backed_off "$SEQ"; then ok "beat-churn stall: BACKOFF is reached through interleaved live beats (the detector can fire)"
 else bad "beat-churn stall: no BACKOFF in [$SEQ] — a beat between every pair of blocks still pins the counter, so no stall can ever be confirmed"; fi
 case "$SEQ" in *'ALLOWED_BY_LIVE_BEAT'*) ok "...and the yields themselves were still ALLOWED (the backoff did not come from losing Check 2b)" ;;

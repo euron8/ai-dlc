@@ -20,6 +20,8 @@ distribution-only, as `core/fixtures/plan-shape/.dist-only` already is.
 
 ```
 verify: sh <one-liner>              exit 0 = the fix is present -> CLOSE-CANDIDATE
+                                    exit 9 = the receipt cannot measure its subject -> NEEDS-REVIEW
+                                    any other non-zero = still reproduces -> STILL-LIVE
 verify: has   <repo-rel-path> "<substr>"    close when the file CONTAINS the substring
 verify: lacks <repo-rel-path> "<substr>"    close when the file LACKS it
 verify: manual                      no mechanical predicate by design -> HAND-REVIEW
@@ -30,7 +32,7 @@ assume of the ref it greps. A behavioural predicate asserts the defect itself an
 anchored on prose the author invented to describe a wanted fix.
 
 **THIS FILE'S `sh` POLARITY IS THE OPPOSITE OF THE CONSUMER LEDGER'S, AND THE TWO ARE WRITTEN
-IN THE SAME SESSIONS.** Here, `scripts/backlog-reverify.sh:184-186` reads **exit 0 as "the fix
+IN THE SAME SESSIONS.** Here, `scripts/backlog-reverify.sh:241-250` reads **exit 0 as "the fix
 is present"** and non-zero as "still reproduces". In a consumer's push-candidate ledger,
 `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:942` reads it the other way — **exit 0
 means the entry STILL REPRODUCES**, and non-zero proposes CLOSE-CANDIDATE. Carrying this file's
@@ -188,7 +190,7 @@ base BEFORE any comparison is read, because a differential whose two sides do no
 every receipt undecided and reads as a working control.
 
 **SCORED AGAINST FOUR BUILDS, each `cmp`-asserted to differ from the real fix and `bash -n`
-asserted to parse.** Polarity checked at the emitter: `scripts/backlog-reverify.sh:233` reads
+asserted to parse.** Polarity checked at the emitter: `scripts/backlog-reverify.sh:244` reads
 **exit 0 as CLOSE-CANDIDATE, the fix is present** — the OPPOSITE of the consumer engine this
 entry is about, whose `:1913`/`:1949` sites read exit 0 as STILL-LIVE.
 
@@ -779,7 +781,7 @@ measure*, and the exit code alone will never carry it.
 
 **`backlog-reverify.sh` maps `sh` receipts on exit code alone — 0 is CLOSE-CANDIDATE and
 EVERY non-zero is `STILL-LIVE  … "sh receipt exited non-zero -- still reproduces here"`
-(`scripts/backlog-reverify.sh:198-203`).** But this corpus's receipts use **exit 9** as their
+(`scripts/backlog-reverify.sh:198-203` as filed; the routing now sits at `:241-250`).** But this corpus's receipts use **exit 9** as their
 own HAND-REVIEW convention: it is what a receipt returns when a PRECONDITION has moved and it
 therefore measured nothing. The engine folds that into STILL-LIVE, so a receipt asserting *"I
 could not tell"* is reported in the same words as one asserting *"the defect is still here"*.
@@ -824,7 +826,24 @@ Proven both directions: **1** against this tree, **0** against a mutant routing 
 NEEDS-REVIEW, with the two sides asserted to differ and the mutant asserted to be valid shell
 first. Tier: **DEFECT** — it silently disables the only instrument this backlog has.
 
-verify: sh R=scripts/backlog-reverify.sh; [ -r "$R" ] || exit 9; D=$(mktemp -d) || exit 9; X(){ rm -rf "$D"; exit "$1"; }; printf '%s\n' '# probe ledger' '' '## BL-901' '' 'A genuinely live entry whose receipt reproduces the defect.' '' 'verify: sh exit 1' '' '## BL-902' '' 'An entry whose receipt cannot measure anything and says so.' '' 'verify: sh exit 9' > "$D/probe.md" || X 9; O=$(bash "$R" "$D/probe.md" 2>/dev/null); [ "$(grep -c 'BL-901' <<<"$O")" -eq 1 ] || X 9; [ "$(grep -c 'BL-902' <<<"$O")" -eq 1 ] || X 9; V1=$(grep 'BL-901' <<<"$O" | cut -f1); V2=$(grep 'BL-902' <<<"$O" | cut -f1); [ "$V1" = "STILL-LIVE" ] || X 9; [ -n "$V2" ] || X 9; [ "$V2" != "STILL-LIVE" ]; X $?
+**THE FILED RECEIPT ACCEPTED TWO FALSE-CLOSE ROUTES, AND IT IS REPLACED.** It required only
+that the exit-9 row differ from STILL-LIVE, so an engine routing 9 to CLOSE-CANDIDATE satisfied
+it, and so did one routing 9 to HAND-REVIEW — which `backlog-rotate.sh:431` accepts as
+permission to move an annotated entry. Both turn "I could not measure" into a close. The
+receipt below pins the route: 9 must read NEEDS-REVIEW with an `unresolved:` detail, beside 0
+CLOSE-CANDIDATE and 1 and 127 STILL-LIVE in the same probe ledger. **The census premise was
+re-measured, not carried:** 1 live receipt exits 9 today, `BL-130`'s (two runs, exit 9 both
+times), and the same-root differential of the old and new engine over the real ledger moves
+exactly that one row, STILL-LIVE to NEEDS-REVIEW. `scripts/backlog-reverify.sh:241-250` now
+captures the exit; `core/fixtures/backlog-ledger` arm `exit-9-routing` holds it, with committed
+mutants for both false-close routes.
+
+**THIS DISCHARGES THE EXIT-9 SUBJECT ONLY.** The entry's second subject survives untouched:
+receipts that exit **1** having measured nothing — `BL-081`'s shape above — are still
+byte-indistinguishable from a genuine reproduction, and no exit-code routing can separate them.
+The entry stays live for that subject, and its receipt below closes only the first.
+
+verify: sh R=scripts/backlog-reverify.sh; [ -r "$R" ] || exit 9; D=$(mktemp -d) || exit 9; X(){ rm -rf "$D"; exit "$1"; }; printf '%s\n' '# probe ledger' '' '## BL-901' '' 'live' '' 'verify: sh exit 1' '' '## BL-902' '' 'cannot measure' '' 'verify: sh exit 9' '' '## BL-903' '' 'fixed' '' 'verify: sh exit 0' '' '## BL-904' '' 'command gone' '' 'verify: sh exit 127' > "$D/probe.md" || X 9; O=$(bash "$R" "$D/probe.md" 2>/dev/null); v(){ awk -F'\t' -v l="BL-$1" -v f="$2" '$2==l{print $f}' <<<"$O"; }; for i in 901 902 903 904; do [ "$(v $i 2 | grep -c .)" -eq 1 ] || X 9; done; [ "$(v 901 1)" = STILL-LIVE ] || X 9; [ "$(v 903 1)" = CLOSE-CANDIDATE ] || X 9; [ "$(v 904 1)" = STILL-LIVE ] || X 1; [ "$(v 902 1)" = NEEDS-REVIEW ] || X 1; case "$(v 902 3)" in unresolved:*) X 0 ;; esac; X 1
 
 ---
 
@@ -2068,8 +2087,37 @@ Split from `BL-058`, which registered the vocabulary these emitters share; found
 that entry's own owner file. Tier: **DEFECT** — it misstates what a `hard_block` check enforces, on
 a corpus where the vacuous road was measured at roughly one story in five.
 
+**One row as filed, six as measured.** The "one row, not a class" paragraph above
+was a claim about three emitters, and the empty-subject vocabulary has many more. A
+fresh derivation joined every `hard_block: true` row to its enforcers, and each
+enforcer to its `EXAMINED NOTHING` emission and the exit that follows it. Six rows
+state `exit 0 required` against an enforcer whose vacuous road exits 0: **Check 2**
+(`validate-escalation-status-vocabulary.sh` and `validate-suppression-lifetime.sh`,
+both driven on an absent escalations file, rc 0), **Check 2a**
+(`validate-escalation-resolution.sh`, driven on the same input, rc 0), **Check 3b**
+(`validate-locked-anchor.sh`, driven on `nothing-verified-story.md`, rc 0, with
+`bad-story.md` rc 1 as the control), **Check 26** (`validate-gate-adjudication.sh
+--series`, driven on an empty series directory, rc 0), **Check 33**
+(`validate-request-coverage.sh`, driven on an ask naming no identifier, rc 0), and
+**Check 35** (`validate-snapshot-conservation.sh`, driven on a repository with no
+snapshot and on one with no gate-metrics file, rc 0 both). All six were driven
+through the shipping script. Checks 30, 31 and 32 exit 2 on the same shape and Check
+34 exits 3, so those four were the controls and are not in the set. The filed receipt
+could not see this. It read one row, so a qualifier written into `why:` satisfied it,
+a qualifier on the advisory `stories-test-strategy.md` site satisfied it, and a fix
+covering 3b alone satisfied it. The receipt below derives the emitter set from the
+map's own `empty_subject_verdict: emitters:` list, keeps every `hard_block` row whose
+enforcer takes that exit-0 road and whose posture says `exit 0 required`, and requires
+at least six rows, with 3b among them, each carrying `EXAMINED NOTHING` in the
+posture value itself.
 
-verify: sh M=core/skills/ai-dlc/enforcement-map.yaml; V=core/scripts/validate-locked-anchor.sh; F=core/fixtures/check-3b-locked-anchor; [ -f "$M" ] && [ -r "$V" ] && [ -d "$F" ] || exit 9; ( cd "$F" && bash "../../../$V" bad-story.md >/dev/null 2>&1 ); b=$?; ( cd "$F" && bash "../../../$V" nothing-verified-story.md >/dev/null 2>&1 ); n=$?; [ "$b" -eq 1 ] || exit 9; [ "$n" -eq 0 ] || exit 9; ROW=$(awk '/- site: gate-validation.md Check 3b$/{on=1} on{print; c++} on && c>=6{exit}' "$M"); [ -n "$ROW" ] || exit 9; printf '%s' "$ROW" | grep -qiE 'EXAMINED NOTHING|empty.subject|empty_subject'
+**LANDED (v0.634.0, verified dc682da5).** Each of the six postures keeps the literal
+`exit 0 required` and adds, inline, that exit 0 with `EXAMINED NOTHING` is not a
+pass because nothing was verified. The step files for Checks 26, 33 and 35 carry no
+read-the-PASS-line instruction like the one Check 3b has at
+`steps/gate-validation.md:489-494`.
+
+verify: sh M=core/skills/ai-dlc/enforcement-map.yaml; V=core/scripts/validate-locked-anchor.sh; F=core/fixtures/check-3b-locked-anchor; [ -f "$M" ] && [ -r "$V" ] && [ -d "$F" ] || exit 9; b=$(cd "$F" && bash "../../../$V" bad-story.md >/dev/null 2>&1; echo $?); o=$(cd "$F" && bash "../../../$V" nothing-verified-story.md 2>&1); n=$?; [ "$b" = 1 ] && [ "$n" = 0 ] || exit 9; case "$o" in *"EXAMINED NOTHING"*) ;; *) exit 9 ;; esac; E=$(awk '/^empty_subject_verdict:/{on=1;next} on&&/^[^ ]/{exit} on&&/^  emitters:/{em=1;next} on&&em&&/^    - /{print $2;next} on&&/^  [a-z]/{em=0}' "$M"); [ -n "$E" ] || exit 9; Z=""; for e in $E; do [ -f "$e" ] || continue; x=$(awk 'f==0 && /EXAMINED NOTHING/ && $0 !~ /^[ \t]*#/ {f=1} f==1 && match($0, /(^|[^a-zA-Z_.])exit[ ]+[0-9]+|sys\.exit\([0-9]+\)/) {s=substr($0,RSTART,RLENGTH); gsub(/[^0-9]/,"",s); print s; exit}' "$e"); [ "$x" = 0 ] && Z="$Z $e"; done; case " $Z " in *" $V "*) ;; *) exit 9 ;; esac; R=$(awk -v z="$Z " 'function fl(){ if (hb && hit && pv ~ /exit 0 required/) { t++; if (id=="3b") s3=1; if (pv !~ /EXAMINED NOTHING/) bad++ } pv="" } /^  - id: /{fl(); id=$3; gsub(/"/,"",id); hb=0; hit=0; ie=0; next} /^[^ ]/{fl(); id=""; next} /^    hard_block: true/{hb=1} /^    enforcer:/{ie=1; next} ie && /^      - /{ if (index(z, " " $2 " ")) hit=1; next} /^    [a-z_]+:/{ie=0} /^        posture: /{fl(); pv=$0; inp=1; next} inp && /^          [^ ]/{pv=pv " " $0; next} {inp=0} /^        [a-z_]+:/{fl()} END{fl(); print t+0, bad+0, s3+0}' "$M"); set -- $R; [ "${1:-0}" -ge 6 ] && [ "$3" = 1 ] || exit 9; [ "$2" -eq 0 ]
 ## BL-082
 
 **On a case-folding filesystem `--strays` reports a declared home as a stray when the caller
@@ -2973,7 +3021,17 @@ the pin in place (the pin must defeat it) and with the pin removed (the arm must
 A fix that shortens the sequence or widens the assertion scores STILL-LIVE. Exit 9 if the arm
 or the hook constant is gone.
 
-verify: sh f=core/fixtures/implementation-join-yield/run.sh; h=core/hooks/ai-dlc-continue.sh; [ -f "$f" ] && [ -f "$h" ] || exit 9; grep -q 'beat-churn stall' "$f" || exit 9; grep -q '^RAPID_WINDOW_SECONDS=' "$h" || exit 9; grep -qE '^RAPID_WINDOW_SECONDS="?\$\{' "$h" && exit 0; awk '/pipeline-block-state/ && /date \+%s/ {c++} END{exit !(c>0)}' "$f" && exit 0; exit 1
+**Receipt replaced.** The filed receipt was a lexical grep: a comment naming
+`pipeline-block-state` beside `date +%s`, or an inert `${...}` env override on the hook
+constant, closed it without changing behaviour, and it rejected the entry's own preferred
+fix. The receipt below drives the whole fixture under a `date` shim that advances the clock
+31s only after the hook reads `NOW`, so an unpinned rapid side resets the counter and the
+arm goes red; exit 9 if the shim was consulted fewer than nine times.
+
+**LANDED (v0.634.0, verified 931e64d4).** `pin_state` and an `R` event in `drive_seq`, used only
+by the beat-churn arm.
+
+verify: sh f=core/fixtures/implementation-join-yield/run.sh; h=core/hooks/ai-dlc-continue.sh; [ -f "$f" ] && [ -f "$h" ] || exit 9; grep -q 'beat-churn stall' "$f" && grep -q '^TIMESTAMP=$(date -u ' "$h" && grep -q '^NOW=$(date +%s)' "$h" || exit 9; D=$(mktemp -d) || exit 9; X(){ rm -f "$D/date" "$D/clock" "$D/flag" "$D/n"; rmdir "$D"; exit "$1"; }; printf '%s\n' '#!/bin/bash' 'C="$SHIM_D/clock"; [ -s "$C" ] || /bin/date +%s > "$C"' 'if [ "$1" = -u ]; then : > "$SHIM_D/flag"; exec /bin/date "$@"; fi' 'if [ "$*" = +%s ]; then T=$(cat "$C"); echo "$T"; if [ -e "$SHIM_D/flag" ]; then rm -f "$SHIM_D/flag"; echo $((T+31)) > "$C"; echo x >> "$SHIM_D/n"; fi; exit 0; fi' 'exec /bin/date "$@"' > "$D/date" && chmod +x "$D/date" || X 9; O=$(SHIM_D="$D" PATH="$D:$PATH" bash "$f" 2>&1); r=$?; n=$(wc -l < "$D/n" 2>/dev/null | tr -d ' '); [ "${n:-0}" -ge 9 ] || X 9; [ "$r" -eq 0 ] && grep -q '^  ok    beat-churn stall: BACKOFF' <<<"$O" && X 0; X 1
 
 ## BL-159 — four handoff-completion defects adjacent to `BL-158`, found by the batch-49 hands and deliberately not fixed there
 
@@ -3970,7 +4028,30 @@ nothing is not the situation here — its removal would make a real leak invisib
 **Not measured, and stated rather than hidden:** whether any leak the arm has ever reported was
 genuine. The distribution's history would answer it and it was not taken.
 
-verify: sh set -e; F=core/fixtures/ledger-reverify/run.sh; E=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -r "$F" ] && [ -r "$E" ] || exit 9; M="$(LC_ALL=C grep -n 'ledger-reverify-theirs' "$E" | LC_ALL=C grep -c 'mktemp')" || M=0; [ "$M" -ge 1 ] || exit 9; C="$(LC_ALL=C grep -c 'tt_count()' "$F")" || C=0; [ "$C" -ge 1 ] || exit 9; W=$(mktemp -d) || exit 9; B="$(ls -d "$W"/ledger-reverify-theirs.* 2>/dev/null | LC_ALL=C grep -c . )" || B=0; S="$(mktemp -d "$W/ledger-reverify-theirs.XXXXXX")" || { rmdir "$W"; exit 9; }; A="$(ls -d "$W"/ledger-reverify-theirs.* 2>/dev/null | LC_ALL=C grep -c . )" || A=0; rmdir "$S"; Z="$(ls -d "$W"/ledger-reverify-theirs.* 2>/dev/null | LC_ALL=C grep -c . )" || Z=0; rmdir "$W"; echo "before=$B foreign=$A restored=$Z"; [ "$A" -eq "$((B+1))" ] && [ "$Z" -eq "$B" ] || { echo "PRECONDITION: the shared glob no longer tracks a foreign tree, so nothing here was measured"; exit 9; }; P="$(LC_ALL=C grep -o 'ledger-reverify-theirs\.[A-Za-z$_{}()]*' "$E" | head -1)"; case "$P" in *'$'*) exit 0 ;; esac; exit 1
+**THE FILED RECEIPT WAS REPLACED AT BATCH 151, BECAUSE IT ACCEPTED ONLY ONE OF THE TWO FIXES.**
+It passed only when the engine's `mktemp` line carried a `$` in its prefix, which is the
+engine-side discriminator. The fixture-only fix gives the laziness run a private `TMPDIR`, so no
+foreign tree can land in the directory it counts. That fix closes the defect and leaves the
+engine line untouched, so under the filed receipt the entry would have read live forever. The
+receipt below runs the fixture's laziness block alone, twice. The first run goes through a shim
+that plants one foreign `ledger-reverify-theirs.*` tree in the ambient `TMPDIR` before invoking
+the real engine, and the arm must stay `ok`. The second run uses an engine copy that
+materializes on every call and never removes its tree, and the arm must still FAIL on the leak.
+It was scored against seven constructed trees: **S0** unfixed scores **1**, **S1** (the fixture
+fix) scores **0**, **S2** (the engine fix) scores **0**, the regressions **S3**, **S4**, **S5**
+and **S7** each score **1**, and **S6** (the arm deleted) scores **9**. At `937919e4` it prints
+`foreign:ok=0,fail=1 leak-mutant:fail=1,ok=0` and exits **1**.
+
+**LANDED (v0.634.0, verified d5971dd0).** The fix is in the fixture only; `ledger-reverify.sh` is
+untouched. The laziness arm now counts `ledger-reverify-theirs.*` inside a private `LZ_TMP` under
+the fixture sandbox, and it runs the closer with `TMPDIR="$LZ_TMP"`. It stays prefix-scoped
+because every engine run leaks one `reconcile-memo.*` (`BL-303`). `theirs-tree-prefix` gains a
+second assertion, under the same private `TMPDIR`, that a `$THEIRS_TREE` run materializes INSIDE
+it, so an engine that ignored `TMPDIR` could no longer leave the counter reading 0 forever. The
+committed mutant `mutation-tt-eager-leak` must read `left +1`. The fixture exits 0 with 295 ok and
+0 FAIL. The receipt below exits 0 at tip.
+
+verify: sh set -u; F=core/fixtures/ledger-reverify/run.sh; S=core/fixtures/ledger-reverify/seed.sh; E=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -r "$F" ] && [ -r "$S" ] && [ -r "$E" ] || exit 9; T="$(mktemp -d)" || exit 9; trap 'rm -rf "$T"' EXIT; awk '/^# D\. LAZINESS/{p=1} /^# THE OTHER DIRECTION/{p=0} p' "$F" > "$T/arm.sh"; grep -q 'theirs-tree-lazy' "$T/arm.sh" || exit 9; mkdir "$T/amb" "$T/mut"; export TMPDIR="$T/amb"; read -r DIST BASE CONS THEIRS < <(bash "$S") || exit 9; [ -d "$DIST" ] || exit 9; cp "$(dirname "$E")"/*.sh "$T/mut/" || exit 9; OLD1='        *THEIRS_TREE*)' NEW1='        *)' OLD2='  [ -n "${THEIRS_TREE_OWNED:-}" ] && rm -rf "$THEIRS_TREE_OWNED"' awk '$0==ENVIRON["OLD1"]{print ENVIRON["NEW1"]; a++; next} $0==ENVIRON["OLD2"]{b++; next} {print} END{exit !(a==1 && b==1)}' "$E" > "$T/mut/ledger-reverify.sh" || exit 9; printf 'mkdir "$BL_AMB/ledger-reverify-theirs.FOREIGN$$"\nexec bash "$BL_REAL" "$@"\n' > "$T/shim.sh"; drive() { ( FAILURES=0; ASSERTIONS=0; CLOSER="$1"; BL_AMB="$T/amb" BL_REAL="$PWD/$E"; export BL_AMB BL_REAL; . "$T/arm.sh" ) 2>&1; }; fo="$(drive "$T/shim.sh")"; nf="$(ls -d "$T/amb"/ledger-reverify-theirs.FOREIGN* 2>/dev/null | grep -c .)" || nf=0; lo="$(drive "$T/mut/ledger-reverify.sh")"; fok="$(grep -c '^  ok    theirs-tree-lazy' <<<"$fo")" || fok=0; ffail="$(grep -c '^  FAIL  theirs-tree-lazy .*theirs-trees behind' <<<"$fo")" || ffail=0; lfail="$(grep -c '^  FAIL  theirs-tree-lazy .*left +[1-9]' <<<"$lo")" || lfail=0; lok="$(grep -c '^  ok    theirs-tree-lazy' <<<"$lo")" || lok=0; echo "foreign-injected=$nf foreign:ok=$fok,fail=$ffail leak-mutant:fail=$lfail,ok=$lok"; [ "$nf" -eq 1 ] || exit 9; [ $((fok + ffail)) -eq 1 ] && [ $((lfail + lok)) -eq 1 ] || exit 9; [ "$fok" -eq 1 ] && [ "$lfail" -eq 1 ] && exit 0; exit 1
 
 
 
@@ -4086,3 +4167,163 @@ and drive the writer or the reader against it. The order is load-bearing for the
 contract for `BL-299` forbade reordering for exactly that reason.
 
 verify: sh R="$(pwd)"; W="$R/core/scripts/stamp-story-provenance.sh"; V="$R/core/scripts/validate-provenance-block.sh"; K="$R/core/schemas/provenance-block.json"; [ -f "$W" ] && [ -f "$V" ] && [ -f "$K" ] && [ -f "$R/core/fixtures/story-provenance/seed.sh" ] || exit 9; command -v python3 >/dev/null || exit 9; G="$(mktemp -d)" || exit 9; M="$(mktemp -d)" || exit 9; mkdir -p "$G/.claude/schemas" || exit 9; python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); f=[x for x in s["fields"] if x.get("name")=="tool_use_id" and x.get("forbidden_match")=="prefix_ci"]; assert len(f)==1; f[0]["forbidden"].append("toolu_FIXTURE"); json.dump(s,open(sys.argv[2],"w"))' "$K" "$G/.claude/schemas/provenance-block.json" 2>/dev/null || exit 9; bash "$R/core/fixtures/story-provenance/seed.sh" --mixed-into "$M" >/dev/null 2>&1 || exit 9; P="$(AI_DLC_PROJECT_ROOT="$G" bash "$W" --print-schema 2>/dev/null)"; [ -n "$P" ] && [ "$P" -ef "$G/.claude/schemas/provenance-block.json" ] || exit 1; B=s1/stories/story-2-fix-thing.md; if ( cd "$M" && AI_DLC_PROJECT_ROOT="$G" bash "$W" --terminal s1/bug-fix-oneshot-story-2-fix-thing.md --profile bug-story-provenance "$B" ) >/dev/null 2>&1; then ( cd "$M" && AI_DLC_PROJECT_ROOT="$G" bash "$V" "$B" --require-skill bmad-review-adversarial-general ) >/dev/null 2>&1 || exit 1; fi; exit 0
+
+## BL-303 — every standalone `ledger-reverify.sh` run leaks one `reconcile-memo.*` directory
+
+**DEFECT.** Found by the batch 151 adversary on the `BL-283` contract, while it was tracing the
+engine's temp-directory lifecycle. It discharges no consumer candidate.
+
+**THE MEMO IS BUILT TWICE AND ONLY ONE COPY IS REMOVED.** `ai_dlc_memo_dir()` in
+`core/skills/ai-dlc-update/reconcile/lib.sh` makes the cache lazily. It calls `mktemp -d` on
+`reconcile-memo.XXXXXX` at `:738`, records ownership in `AI_DLC_MEMO_OWNED` at `:740`, and
+`ai_dlc_memo_cleanup` at `:748` removes only that recorded directory. `ledger-reverify.sh`
+calls the cleanup from its EXIT trap (`:1163`, armed at `:1166`). That arrangement works only
+if the FIRST memo lookup happens in the main shell. It does not. The first one is at `:1523`,
+`TV="$(theirs_show VERSION | tr -d '[:space:]')"`. `theirs_show` runs as a pipeline stage
+inside a command substitution, so it builds the memo in a subshell, sets `AI_DLC_MEMO_OWNED`
+there, and the assignment dies with that subshell. The main shell sees state `""`, builds a
+SECOND memo at its next lookup (`theirs_has_path` at `:1845`), and its EXIT trap removes only
+that second one.
+
+**ISOLATED, NOT INFERRED.** Measured at `937919e4` with `PS4` carrying `$BASH_SUBSHELL` and
+`$LINENO`, one standalone run against the `ledger-reverify` fixture's seed under a private
+`TMPDIR`. The trace shows two `mktemp` calls at `:738`, one at subshell level 2 and one at
+level 0, and `AI_DLC_MEMO_OWNED` set at `:740` in each. It shows one `rm -rf` at `:748`, at
+level 0, naming the level-0 directory. The directory left on disk is the level-2 one, by
+name. The run emitted 111 output rows and exited 0, so nothing about the run looks wrong.
+
+**THE POPULATION IS EVERY STANDALONE RUN ON THE MACHINE.** A run under `emit-report.sh` borrows
+`AI_DLC_RECONCILE_MEMO` from the orchestrator, takes the `:732` branch and creates nothing, so
+it does not leak. Every other caller does, including an operator running the closer directly,
+`apply.sh`, and each fixture that drives the engine. This machine's `TMPDIR` held **433455**
+`reconcile-memo.*` directories out of 457238 directories in total, counted with
+`/usr/bin/find -maxdepth 1`. An impossible-prefix control in the same invocation counted 0, and
+none of the 433455 was older than two days. So the machine created at least two hundred
+thousand a day. Which callers produced them was not measured.
+
+**THE FIX SHIPS ALONE.** `lib.sh` is sourced by fourteen reconcile scripts, including
+`ledger-reverify.sh`, `preclassify.sh` and `emit-report.sh`, which run during a pull. A fix to a
+bootstrapping step cannot be delivered by that step, because the consumer's installed copy is
+the one that runs the pull. So the release carrying this fix carries nothing else that depends
+on it.
+
+**TWO SCRATCH FIXES WERE SCORED, AND THE OBVIOUS ONE DOES NOT WORK.** Calling
+`ai_dlc_memo_dir || true` once in the main shell, directly after the trap is armed, leaves
+**0** directories and the receipt exits **0**. Arming `trap ai_dlc_memo_cleanup EXIT` inside
+`ai_dlc_memo_dir()` whenever `$BASH_SUBSHELL` is non-zero still leaves **1**, and the receipt
+exits **1**. The trace shows why: the trap is set at subshell level 2 and never runs. Under this
+machine's bash 3.2, an EXIT trap set in a function that runs as a pipeline stage inside `$( )`
+does not fire. The same function called as `$(f)`, with no pipeline, does fire it. A fix has to
+make the owning process the one whose trap runs. It must not rely on a subshell cleaning up
+after itself.
+
+The receipt runs the engine once, standalone, against the `ledger-reverify` fixture's seed
+under a private `TMPDIR`. It unsets `AI_DLC_RECONCILE_MEMO` so the borrowed-memo path cannot
+hide the leak, and counts the `reconcile-memo.*` directories left behind. It exits **9** if the
+seed or engine is missing, or if the run produced no output rows. Scored at `937919e4`: **1**
+(`rows=111 reconcile-memo-left=1`). A scratch copy of the unfixed tree also scores **1**,
+which shows the copy itself does not change the answer. The main-shell fix scores **0**. A
+copy with the engine removed scores **9**.
+
+verify: sh set -u; S=core/fixtures/ledger-reverify/seed.sh; E=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -r "$S" ] && [ -r "$E" ] && [ -r "$(dirname "$E")/lib.sh" ] || exit 9; T="$(mktemp -d)" || exit 9; trap 'rm -rf "$T"' EXIT; mkdir "$T/amb" || exit 9; export TMPDIR="$T/amb"; unset AI_DLC_RECONCILE_MEMO; read -r DIST BASE CONS THEIRS < <(bash "$S" 2>/dev/null) || exit 9; [ -d "$DIST" ] && [ -d "$CONS" ] || exit 9; out="$(bash "$E" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>/dev/null)"; rows="$(LC_ALL=C grep -cE '^[A-Z][A-Z-]+	' <<<"$out")" || rows=0; left="$(ls -d "$T/amb"/reconcile-memo.* 2>/dev/null | LC_ALL=C grep -c .)" || left=0; echo "rows=$rows reconcile-memo-left=$left"; [ "$rows" -gt 0 ] || exit 9; [ "$left" -eq 0 ] && exit 0; exit 1
+
+## BL-304 — `fanout-payload-channel` counts and deletes `fanout.*` in the SHARED temp root, so a concurrent run can fail arm 5, fake m6's kill, and lose its payload
+
+**DEFECT.** Found by the batch 151 adversary as the sibling of `BL-283`. The failure is
+REACHABLE and has not been OBSERVED in a gate run. It discharges no consumer candidate.
+
+**THE SAME SHAPE AS `BL-283`, IN A DIFFERENT FIXTURE.** Arm 5 of
+`core/fixtures/fanout-payload-channel/run.sh` (`:346-353`) counts
+`find "$TMP_ROOT" -maxdepth 1 -name 'fanout.*' -type d` before and after one subject run, and
+fails if the count grew. Mutant m6 (`:478-491`) takes the same count around a copy with its
+cleanup trap removed, at `:480` and `:482`. `$TMP_ROOT` is the ambient `TMPDIR`, resolved at
+`:113`. The subject names its payload directory `mktemp -d "${TMPDIR:-/tmp}/fanout.XXXXXX"` at
+`core/scripts/report-propagation-fanout.sh:311`, which is a fixed prefix with no per-run
+segment. So the count cannot separate this run's directory from any other process's.
+
+**THE POPULATION IS THE SUITE'S OWN POOL.** `fanout-untracked-corpus` and
+`validator-path-resolution` also drive `report-propagation-fanout.sh`, and the runner dispatches
+fixtures through `xargs -P`. `.githooks/pre-push` sets no per-fixture `TMPDIR`: `TMPDIR` has 0
+occurrences in it, against 5 for `xargs` as the control. Neither fanout fixture carries
+`.dist-only`, so both ship, and a consumer's pool has the same exposure.
+
+**THREE CONSEQUENCES, ONE OF THEM DESTRUCTIVE.**
+- Arm 5 reads a false RED when another run's `fanout.*` directory exists at the `after` count
+  but not at the `before` count. The message then blames the cleanup trap in the change under
+  test.
+- m6 scores a false KILL for the same reason. With the trap removed but nothing actually
+  leaking, a foreign directory still lifts the count. So the battery can credit arm 5 with a
+  kill the arm did not earn.
+- m6's own cleanup at `:488`, `find "$TMP_ROOT" -maxdepth 1 -name 'fanout.*' -type d -exec rm -rf {} +`,
+  deletes EVERY `fanout.*` directory in the shared root. That includes the live payload
+  directory of any concurrent subject run, which then fails reading its own payload. The
+  subject's contract reports that as a scoping failure, exit 3, and that run's fixture goes red
+  for a reason it cannot see.
+
+**MEASURED BY FORCING THE INTERLEAVING, NOT BY WAITING FOR IT.** The receipt puts a `python3`
+shim on `PATH` that creates one `fanout.FOREIGN<pid>` directory in the run's `TMPDIR` each time
+it is invoked, then executes the real interpreter. The subject calls `python3` between the arm's
+two counts, so every subject run plants one foreign directory mid-run. At `937919e4` the fixture
+exits 1, arm 5 fails, and all 10 planted directories are gone by the end of the run: m6's sweep
+removed them. A plain run of the same unfixed copy with no foreign writer PASSES, so the copy
+itself is sound.
+
+**THE FIX SHAPE IS A PRIVATE TEMP ROOT FOR THE COUNTING RUNS.** The scratch fix scored below
+gives arm 5 and m6 their own directory under `$WORK`, runs the subject with `TMPDIR` pointed at
+it, and counts and sweeps only there. The subject line is unchanged. A per-run discriminator in
+the subject's `mktemp` prefix, as `BL-283` proposes for its engine, would also work, but the
+fixture fix is smaller. **Do not "fix" it by deleting arm 5 or m6.** m6's own comment records
+that arm 5 is the only arm that can see a missing cleanup trap.
+
+**WHY THE RECEIPT IS BEHAVIOURAL.** A structural receipt that greps the arm's `find` for
+`$TMP_ROOT` is closed by renaming the variable. It is also closed by an arm whose predicate no
+longer reads the count. So the receipt runs the fixture. It passes only when four things hold
+under the forced foreign writer: the fixture exits 0, arm 5 is `ok`, m6 is killed, and every
+planted foreign directory survives. As a same-invocation control it also runs a copy of the
+fixture against a subject whose cleanup trap is removed, and arm 5 must FAIL there. That keeps
+an arm reduced to `if true` from passing. It exits **9** if the fixture or subject is missing,
+if the fixture never resolved its subject, if the shim planted nothing, or if the control copy
+ran some other subject.
+
+It was scored on seven trees. At `937919e4` it scores **1**
+(`fixture-rc=1 arm5-ok=0 m6-killed=1 foreign-planted=10 foreign-surviving=0`). The unfixed
+scratch copy scores **1**, and the private-temp-root fix scores **0**. Three regressions each
+score **1**: arm 5 deleted, m6's sweep left on the shared root, and arm 5's predicate replaced by
+`true`. The last of these scored **0** under the receipt's first draft, which had no
+leaky-subject control, and that is why the control exists. With the fixture absent it scores
+**9**.
+
+verify: sh set -u; F=core/fixtures/fanout-payload-channel/run.sh; S=core/scripts/report-propagation-fanout.sh; [ -r "$F" ] && [ -r "$S" ] || exit 9; P="$(command -v python3)" || exit 9; T="$(mktemp -d)" || exit 9; trap 'rm -rf "$T"' EXIT; mkdir -p "$T/amb" "$T/amb2" "$T/shim" "$T/w/core/fixtures/fanout-payload-channel" "$T/w/core/scripts" || exit 9; printf '#!/bin/sh\nd="$FANOUT_FOREIGN_AMB/fanout.FOREIGN$$"; mkdir "$d" 2>/dev/null && echo "$d" >> "$FANOUT_FOREIGN_LOG"\nexec "%s" "$@"\n' "$P" > "$T/shim/python3" && chmod +x "$T/shim/python3" || exit 9; cp "$F" "$T/w/$F" || exit 9; sed 's|^trap .rm -rf "\$FANOUT_TMP". EXIT|: # trap removed|' "$S" > "$T/w/$S" || exit 9; cmp -s "$S" "$T/w/$S" && exit 9; drive() { FANOUT_FOREIGN_AMB="$2" FANOUT_FOREIGN_LOG="$3" TMPDIR="$2" PATH="$T/shim:$PATH" bash "$1" 2>&1; }; out="$(drive "$F" "$T/amb" "$T/log")"; rc=$?; [ "$rc" -eq 0 ] || [ "$rc" -eq 1 ] || exit 9; LC_ALL=C grep -q 'subject resolved:' <<<"$out" || exit 9; [ -s "$T/log" ] || exit 9; lo="$(drive "$T/w/$F" "$T/amb2" "$T/log2")"; LC_ALL=C grep -qF "subject resolved: $T/w/" <<<"$lo" || exit 9; np=0; nl=0; while read -r d; do np=$((np+1)); [ -d "$d" ] && nl=$((nl+1)); done < "$T/log"; a5="$(LC_ALL=C grep -c '^  ok    5\. ' <<<"$out")" || a5=0; m6="$(LC_ALL=C grep -c 'mutant \[m6-trap\] KILLED' <<<"$out")" || m6=0; l5="$(LC_ALL=C grep -c '^  FAIL  5\. the run left' <<<"$lo")" || l5=0; echo "fixture-rc=$rc arm5-ok=$a5 m6-killed=$m6 foreign-planted=$np foreign-surviving=$nl leaky-subject:arm5-fail=$l5"; [ "$rc" -eq 0 ] && [ "$a5" -eq 1 ] && [ "$m6" -eq 1 ] && [ "$nl" -eq "$np" ] && [ "$l5" -eq 1 ] && exit 0; exit 1
+
+## BL-305 — the step text for Checks 26, 33 and 35 never tells the reader that exit 0 with `EXAMINED NOTHING` verified nothing
+
+**DEFECT.** Found at batch 151 by the `BL-080` fix hand, while it re-derived which hard_block
+rows exit 0 on the vacuous road. It discharges no consumer candidate.
+
+**`BL-080` FIXED THE MAP AND LEFT THE STEP FILE, WHICH IS WHERE A GATE READER ACTUALLY LOOKS.**
+Six hard_block rows in `core/skills/ai-dlc/enforcement-map.yaml` now say that exit 0 with
+`EXAMINED NOTHING` is not a pass. In `core/skills/ai-dlc/steps/gate-validation.md` only Check 3b
+carries the matching instruction, at `core/skills/ai-dlc/steps/gate-validation.md:489-494` ("Read
+the PASS line, not just the exit code"). Measured per section, from its `### N.` heading to the
+next heading: the Check 26, 33 and 35 sections name `EXAMINED NOTHING` **0**, **0** and **0**
+times, against **1** in the 3b passage as the control. Check 2 and 2a need the same audit and it
+was not taken.
+
+**Each section frames the vacuous road its own way, and two of them frame it as acceptable.**
+
+- Check 26 (`core/skills/ai-dlc/steps/gate-validation.md:2971`) runs the `--series` stall rung
+  with `exit 0 required` and nothing else. That rung is the one that takes the vacuous exit-0
+  road on an empty series directory, driven at batch 151.
+- Check 33 (`core/skills/ai-dlc/steps/gate-validation.md:2813-2816`) says a zero identifier count
+  "is reported, not passed silently" and that the check "has no subject", but it never tells the
+  reader to read the line instead of the exit.
+- Check 35 (`core/skills/ai-dlc/steps/gate-validation.md:2917-2918`) says "NOT-APPLICABLE is exit
+  0 and prints why", which presents exit 0 as the acceptable outcome.
+
+**The fix is prose in a step file, so no behavioural receipt exists.** A grep for the phrase in
+each section would be closed by the phrase alone, which `scripts/validate-backlog-receipts.sh`
+correctly reports as PROSE-CLOSABLE. Close by hand on the release whose diff gives each of the
+three sections a read-the-PASS-line instruction naming `EXAMINED NOTHING`, and records whether
+Check 2 and 2a need one too.
+
+verify: manual

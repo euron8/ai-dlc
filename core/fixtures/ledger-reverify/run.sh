@@ -3464,14 +3464,24 @@ fi
 
 # D. LAZINESS. A ledger with no $THEIRS_TREE receipt must materialize nothing.
 #
-# COUNTED BY THIS ENGINE'S OWN PREFIX, NEVER BY THE HOST'S WHOLE TMP POPULATION. The first cut
-# counted every `${TMPDIR}/tmp.*` on the machine, so any other process creating a temp directory
-# during the run failed the arm — MEASURED: red once in three reps on a busy host, and under the
-# twelve-way pool that is a guaranteed intermittent, which is a fixture that cries wolf rather
-# than a check. The materializer now names its tree `ledger-reverify-theirs.XXXXXX`, so the
-# question "did THIS run materialize a tree" is answerable by name and no other process can
-# answer it. The DELTA is reported, never the host's raw totals, which are meaningless off-box.
-tt_count() { ls -d "${TMPDIR:-/tmp}"/ledger-reverify-theirs.* 2>/dev/null | grep -c . || true; }
+# COUNTED IN A TMPDIR THIS FIXTURE OWNS, NEVER UNDER A PREFIX THE BOX SHARES. The first cut counted
+# every `${TMPDIR}/tmp.*` on the machine and went red once in three reps on a busy host. Narrowing
+# the glob to the engine's own `ledger-reverify-theirs.*` prefix reduced the rate and did not change
+# the kind: a shared prefix is a population ANY concurrent process on the box moves, and the
+# prefix carries no per-run discriminator. Seven other fixtures in this suite drive the same engine
+# through the worker pool, and the consumer's INSTALLED engine carries the byte-identical `mktemp`
+# line under the same user and the same TMPDIR — each of them materializes under that prefix, and
+# one `mkdir` there reads as +1, exactly the delta this arm convicts on while naming THIS engine.
+#
+# So the closer runs with TMPDIR pointed at a directory created here, under the fixture's own
+# sandbox (the EXIT trap removes it), which no other process knows exists. The count stays
+# PREFIX-scoped inside it rather than counting everything: every engine run also leaves one
+# `reconcile-memo.*` there, and an unscoped count would convict a correct engine at +1.
+# The theirs-tree-prefix arm below proves the engine honours TMPDIR at all — a TMPDIR it ignored
+# would leave this count at 0 forever. The DELTA is reported, never the raw totals.
+LZ_TMP="$(mktemp -d "$(dirname "$DIST")/lazy-tmp.XXXXXX")" || LZ_TMP=""
+[ -n "$LZ_TMP" ] && [ -d "$LZ_TMP" ] || { echo "FIXTURE ERROR: could not create the laziness arm's private TMPDIR under $(dirname "$DIST")" >&2; exit 2; }
+tt_count() { ls -d "$LZ_TMP"/ledger-reverify-theirs.* 2>/dev/null | grep -c . || true; }
 LED_NOTREE="$(dirname "$DIST")/no-theirs-tree-ledger.md"
 {
   printf '# probe\n\n'
@@ -3480,25 +3490,30 @@ LED_NOTREE="$(dirname "$DIST")/no-theirs-tree-ledger.md"
   printf '## PC-FIXTURE-NOTREE-B — the git -C control in the same ledger\n\n'
   printf 'verify: sh git -C "$DIST" cat-file -e "${THEIRS}:VERSION"\n'
 } > "$LED_NOTREE"
-nt_before="$(tt_count)"
-nt_out="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$LED_NOTREE" 2>&1)"
-nt_after="$(tt_count)"
-nt_delta=$((nt_after - nt_before))
+# THE ARM IS A FUNCTION OF THE CLOSER so the committed leak mutant below drives this exact logic,
+# not a restatement of it. Prints the verdict line; returns 1 on FAIL.
+lz_verdict() { # <closer>
+  local c="$1" before after delta out
+  before="$(tt_count)"
+  out="$(TMPDIR="$LZ_TMP" bash "$c" "$DIST" "$BASE" "$CONS" "$THEIRS" "$LED_NOTREE" 2>&1)"
+  after="$(tt_count)"
+  delta=$((after - before))
+  if ! printf '%s\n' "$out" | awk -F'\t' '$2 ~ /NOTREE-B/ && $1=="STILL-LIVE" {f=1} END{exit !f}'; then
+    printf '  FAIL  %-22s the tree-free ledger produced no control row, so this run establishes nothing about laziness\n' "theirs-tree-lazy"
+    printf '%s\n' "$out" | sed 's/^/          | /'
+    return 1
+  elif grep -q THEIRS_TREE <<<"$out"; then
+    printf '  FAIL  %-22s a ledger naming no $THEIRS_TREE receipt still produced a row mentioning the materializer\n' "theirs-tree-lazy"
+    printf '%s\n' "$out" | sed 's/^/          | /'
+    return 1
+  elif [ "$delta" -ne 0 ]; then
+    printf '  FAIL  %-22s this engine left %+d of its own theirs-trees behind across a ledger with no $THEIRS_TREE receipt — something was materialized and not cleaned\n' "theirs-tree-lazy" "$delta"
+    return 1
+  fi
+  printf '  ok    %-22s a ledger with no $THEIRS_TREE receipt materializes nothing (no materializer row, this engine'"'"'s own theirs-tree count delta %+d) while its control row still reports\n' "theirs-tree-lazy" "$delta"
+}
 ASSERTIONS=$((ASSERTIONS + 1))
-if ! printf '%s\n' "$nt_out" | awk -F'\t' '$2 ~ /NOTREE-B/ && $1=="STILL-LIVE" {f=1} END{exit !f}'; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s the tree-free ledger produced no control row, so this run establishes nothing about laziness\n' "theirs-tree-lazy"
-  printf '%s\n' "$nt_out" | sed 's/^/          | /'
-elif grep -q THEIRS_TREE <<<"$nt_out"; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s a ledger naming no $THEIRS_TREE receipt still produced a row mentioning the materializer\n' "theirs-tree-lazy"
-  printf '%s\n' "$nt_out" | sed 's/^/          | /'
-elif [ "$nt_delta" -ne 0 ]; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s this engine left %+d of its own theirs-trees behind across a ledger with no $THEIRS_TREE receipt — something was materialized and not cleaned\n' "theirs-tree-lazy" "$nt_delta"
-else
-  printf '  ok    %-22s a ledger with no $THEIRS_TREE receipt materializes nothing (no materializer row, this engine'"'"'s own theirs-tree count delta %+d) while its control row still reports\n' "theirs-tree-lazy" "$nt_delta"
-fi
+lz_verdict "$CLOSER" || FAILURES=$((FAILURES + 1))
 # THE OTHER DIRECTION, AND WITHOUT IT THE ARM ABOVE IS SATISFIED BY A PREFIX NOTHING EVER USES.
 # A count that is always zero reads exactly like a count that is correctly zero, so the same
 # counter must be shown to RISE while a $THEIRS_TREE receipt is being evaluated. The receipt
@@ -3514,6 +3529,31 @@ case "$tt_live" in
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s the materialized tree does not carry this engine'"'"'s prefix (%s), so the laziness counter above can never rise and its zero establishes nothing\n' \
       "theirs-tree-prefix" "${tt_live:-<none recorded>}" ;;
+esac
+# ...AND IN THE PRIVATE TMPDIR THE LAZINESS ARM COUNTS. The prefix alone is not enough: the arm
+# above counts `$LZ_TMP`, so an engine that ignored TMPDIR would materialize under the box's shared
+# temp root, the private count would never move, and a real leak would read as delta 0. Driven under
+# the SAME `TMPDIR="$LZ_TMP"` the laziness arm uses, on a one-entry ledger whose receipt records the
+# live tree's path.
+LED_INTREE="$(dirname "$DIST")/in-lz-tmp-ledger.md"
+{
+  printf '# probe\n\n'
+  printf '## PC-FIXTURE-INTREE-A — a receipt that records where its THEIRS_TREE lives\n\n'
+  printf 'verify: sh [ -n "${THEIRS_TREE:-}" ] || exit 127; echo "$THEIRS_TREE" > "$CONSUMER/lz-tree-path.txt"; test -d "$THEIRS_TREE"\n'
+} > "$LED_INTREE"
+rm -f "$CONS/lz-tree-path.txt"
+TMPDIR="$LZ_TMP" bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$LED_INTREE" >/dev/null 2>&1
+lz_live="$(cat "$CONS/lz-tree-path.txt" 2>/dev/null)"
+rm -f "$CONS/lz-tree-path.txt"
+ASSERTIONS=$((ASSERTIONS + 1))
+case "$lz_live" in
+  "$LZ_TMP"/ledger-reverify-theirs.*)
+    printf '  ok    %-22s under TMPDIR=<private dir> the tree is materialized INSIDE it (%s), so the laziness count reads the directory the engine actually writes\n' \
+      "theirs-tree-prefix" "$(basename "$lz_live")" ;;
+  *)
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s under TMPDIR=%s the tree was recorded at %s — a TMPDIR the engine ignores would leave the laziness counter reading 0 forever, so its zero establishes nothing\n' \
+      "theirs-tree-prefix" "$LZ_TMP" "${lz_live:-<none recorded>}" ;;
 esac
 
 # --- THE BOOTSTRAPPING WINDOW: AN OLD ENGINE DOES NOT EXPORT $THEIRS_TREE ----------------------
@@ -3804,6 +3844,47 @@ else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s the gate was widened to every receipt and no materialization was attempted anyway — the laziness arm cannot fire\n' "mutation-tt-eager"
     printf '%s\n' "$eg_out" | sed 's/^/          | /'
+  fi
+fi
+# m9 — EAGER AND LEAKING, driven through the laziness arm's OWN logic on a VALID ref. The eager
+# mutant above is killed by a verdict on an unresolvable ref, which the laziness COUNT never sees;
+# this one is what proves the count can fire. Both layers go: the `*THEIRS_TREE*)` gate widens to
+# `*)` so every `sh` receipt materializes, AND the EXIT cleanup line is deleted so the trees
+# survive — either layer alone leaves the count at 0 (lazy, or cleaned). The count runs in the
+# private TMPDIR, so a positive `left +N` here is this mutant's trees and nobody else's.
+lzm_dir="$(dirname "$DIST")/mut-tt-eager-leak"
+rm -rf "$lzm_dir"; mkdir -p "$lzm_dir"
+cp "$(dirname "$CLOSER")"/*.sh "$lzm_dir/" 2>/dev/null
+lzm_ok=1
+[ -f "$lzm_dir/lib.sh" ] || lzm_ok=0
+LZM_OLD1='        *THEIRS_TREE*)' LZM_NEW1='        *)' \
+LZM_OLD2='  [ -n "${THEIRS_TREE_OWNED:-}" ] && rm -rf "$THEIRS_TREE_OWNED"' \
+  awk '$0 == ENVIRON["LZM_OLD1"] { print ENVIRON["LZM_NEW1"]; a++; next }
+       $0 == ENVIRON["LZM_OLD2"] { b++; next }
+       { print }
+       END { exit !(a == 1 && b == 1) }' "$CLOSER" > "$lzm_dir/ledger-reverify.sh" || lzm_ok=0
+cmp -s "$CLOSER" "$lzm_dir/ledger-reverify.sh" && lzm_ok=0
+bash -n "$lzm_dir/ledger-reverify.sh" 2>/dev/null || lzm_ok=0
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ "$lzm_ok" -ne 1 ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the eager+leak mutation DID NOT APPLY (an anchor matched nothing or twice, the copy lacks lib.sh, or the result does not parse), so the laziness count is unproven\n' "mutation-tt-eager-leak"
+else
+  # THE UNMUTATED CONTROL, SAME RUN, SAME TMPDIR: the shipped closer must still read ok, or the
+  # mutant's FAIL below could be the harness failing rather than the count firing.
+  lzm_ctl="$(lz_verdict "$CLOSER")"
+  lzm_out="$(lz_verdict "$lzm_dir/ledger-reverify.sh")"
+  if ! grep -q '^  ok    theirs-tree-lazy ' <<<"$lzm_ctl"; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the UNMUTATED control did not read ok, so the mutant verdict below is not attributable to the mutation\n' "mutation-tt-eager-leak"
+    printf '%s\n' "$lzm_ctl" | sed 's/^/          | /'
+  elif grep -qE '^  FAIL  theirs-tree-lazy .*left \+[1-9]' <<<"$lzm_out"; then
+    printf '  ok    %-22s an engine that materializes eagerly and never cleans makes the laziness count RISE in the private TMPDIR (%s) while the unmutated control reads ok\n' \
+      "mutation-tt-eager-leak" "$(grep -oE 'left \+[0-9]+' <<<"$lzm_out" | head -1)"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the engine was made eager AND leaking and the laziness arm did not report a positive left +N — its count cannot fire\n' "mutation-tt-eager-leak"
+    printf '%s\n' "$lzm_out" | sed 's/^/          | /'
   fi
 fi
 # m6 — THE REFUSAL SITED AFTER THE RUN, on the rc=0 path. The residue is a STILL-LIVE that reads

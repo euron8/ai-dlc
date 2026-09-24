@@ -15,6 +15,66 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.634.0] - 2026-09-24
+
+This release fixes two fixtures that failed on ambient concurrency rather than on the change
+under test (`BL-283`, `BL-153`). It routes a receipt's exit 9 away from STILL-LIVE (`BL-089`,
+first subject only). It corrects six hard_block postures in the enforcement map (`BL-080`). It
+also files `BL-303`, `BL-304` and `BL-305`. None of these discharges a consumer candidate.
+`ledger-reverify.sh` and every other bootstrapping file are untouched.
+
+### BL-283 — the ledger-reverify laziness arm counts theirs-trees in a private TMPDIR
+
+The arm counted `${TMPDIR}/ledger-reverify-theirs.*`, a prefix every process on the box shares.
+Any concurrent materialization therefore failed it: seven other fixtures drive the engine under
+the same pool, and the consumer's installed engine uses the same prefix. The fixture now runs
+that invocation with `TMPDIR` set to a private directory under its sandbox and counts only
+there. The fixture gives the engine a clean directory instead of the engine labelling its own
+tree, so every engine version that honours `TMPDIR` is covered, including the one a consumer
+has installed. `theirs-tree-prefix` now also asserts that a `$THEIRS_TREE` run materializes
+inside the private directory. A committed eager-leak mutant must make the count rise. The
+receipt was replaced because the filed one accepted only an engine-side fix.
+
+### BL-153 — `implementation-join-yield`'s beat-churn arm no longer depends on wall time
+
+The arm needs nine stop-hook calls inside the hook's 30-second rapid-fire window, and the pool
+spreads real calls past it. A new `R` event pins the state file's timestamp to now, mirroring
+the existing `G` aging event. The event is used only in the beat-churn sequence, because pinning
+before every beat undoes the slow-beat near-miss and turns it red. The receipt drives the whole
+fixture under a `date` shim that advances the clock after each hook read. The filed receipt was
+closed by a comment and rejected this fix.
+
+### BL-089 — `backlog-reverify.sh` reads a receipt's exit 9 as NEEDS-REVIEW
+
+An `sh` receipt that exits 9 reports that it cannot measure its subject, and the engine had
+filed it as STILL-LIVE beside real defects. Exit 9 now reads NEEDS-REVIEW with an `unresolved:`
+detail, and 126 and 127 stay STILL-LIVE. Neither CLOSE-CANDIDATE nor HAND-REVIEW is used: the
+rotator treats both as permission to move an entry. On the live backlog this moves exactly one
+row, `BL-130`. The entry stays open for its second subject, receipts that exit 1 having measured
+nothing.
+
+### BL-080 — six hard_block postures say that exit 0 with `EXAMINED NOTHING` is not a pass
+
+Filed against Check 3b. Driving every hard_block enforcer on a vacuous input found six rows that
+exit 0 while printing `EXAMINED NOTHING`: 2, 2a, 3b, 26, 33 and 35. Checks 30, 31, 32 and 34 exit
+2 or 3 on that road and are unchanged. Each of the six keeps the literal `exit 0 required` and now
+states the qualifier inline. The step text for 26, 33 and 35 still lacks the matching instruction
+and is filed as `BL-305`.
+
+### Filed
+
+- `BL-303` — every standalone `ledger-reverify.sh` run leaks one `reconcile-memo.*` directory:
+  the memo lookup at `ledger-reverify.sh:1523` runs in a pipeline inside `$( )`, so the directory
+  it creates is never owned by the process whose EXIT handler cleans up. This machine's temp
+  directory held more than 429,000 of them, none older than two days. `lib.sh` is sourced by
+  bootstrapping scripts, so the fix ships alone.
+- `BL-304` — `fanout-payload-channel` counts and sweeps `fanout.*` in the shared temp root, the
+  same class as `BL-283`. This can happen but has not been observed.
+- `BL-305` — see `BL-080`.
+
+The read-set map now carries `story-provenance`'s read of `validate-provenance-block.sh`, traced
+by the operator.
+
 ## [0.633.0] - 2026-09-24
 
 This release makes the story-provenance writer and its reader find the install's schema when

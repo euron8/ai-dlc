@@ -9,7 +9,7 @@
 # every other fixture's entries alone, so refreshing one fixture costs its own runtime
 # rather than a full re-derivation.
 #
-# fixtures mapped: 203    entries: 32150
+# fixtures mapped: 203    entries: 32153
 absorbed-specifics-survive	.git/HEAD
 absorbed-specifics-survive	.git/config
 absorbed-specifics-survive	.git/index
@@ -23673,13 +23673,13 @@ story-provenance	.git/HEAD
 story-provenance	.git/config
 story-provenance	.git/index
 story-provenance	.git/info/exclude
-story-provenance	.git/objects/33/a4425c0ed05dea70f881660ffdf01c7c86da33
-story-provenance	.git/objects/7f/1479d0f091b8393b8613744a84c3c8229a65a3
+story-provenance	.git/objects/7b/0a634417d02793904afc2296cf6bd14aaa915d
+story-provenance	.git/objects/93/7919e47aca1a9a070fad058940ce445e93ecad
 story-provenance	.git/objects/info/commit-graphs/commit-graph-chain
-story-provenance	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
-story-provenance	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
+story-provenance	.git/objects/info/commit-graphs/graph-0379598c48f1e636cbf005c95d629c8ed2197c7d.graph
+story-provenance	.git/objects/info/commit-graphs/graph-2e085ff44ca2ae7c5739806502100c553300cbbf.graph
+story-provenance	.git/objects/info/commit-graphs/graph-7303014332e1b9ef4e7143da4aa669938a897e3f.graph
 story-provenance	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
-story-provenance	.git/objects/info/commit-graphs/graph-fa7bbe6bcd67e84c678384cfb84f17a16d6fa8fa.graph
 story-provenance	.git/objects/pack/multi-pack-index
 story-provenance	.git/packed-refs
 story-provenance	.git/refs/heads/main
@@ -23698,6 +23698,9 @@ story-provenance	core/scripts/.claude
 story-provenance	core/scripts/.git
 story-provenance	core/scripts/core/skills/ai-dlc
 story-provenance	core/scripts/stamp-story-provenance.sh
+story-provenance	core/scripts/validate-provenance-block.sh
+story-provenance	s1/stories/story-2-fix-thing.md
+story-provenance	s1/stories/story-9-old-name.md
 stray-party-mode-provenance	.git/HEAD
 stray-party-mode-provenance	.git/config
 stray-party-mode-provenance	.git/index
