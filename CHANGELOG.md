@@ -15,6 +15,33 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.627.0] - 2026-09-23
+
+### `apply.sh` names a DANGLING hook registration, and says when the check could not read its own answer
+
+`hook_registration_row()` in `core/skills/ai-dlc-update/reconcile/apply.sh` parsed only the
+validator's UNREGISTERED list. `validate-hook-registration.sh` prints DANGLING names bare,
+without the `.claude/hooks/` prefix, so a tree whose only failure was a stale registration
+returned rc 1 and emitted no row, on `--finish` too.
+
+What changed:
+
+- **Dangling names join the `settings-merge` WORKLIST row,** since the same merge clears both
+  kinds.
+- **A name registered only in `settings.local.json` gets its own
+  `settings-local-dangling` row.** `settings-merge.sh` never touches that file. A name registered
+  in both files gets both rows.
+- **A validator that fails without printing names gets `DECISION
+  hook-registration-unparsed`.** That covers a `settings.json` of `[]` and a missing `python3`.
+  `--finish` does not withhold on it, and it does withhold on a dangling registration, because
+  that is a WORKLIST row.
+- **The name loop no longer glob-expands against the working directory.**
+- **The receipt now rejects six regressions.** `apply-restamp-worklist` gains seven arms and five
+  mutants driven through the real `--finish` against the real validator, and its read-set gains
+  that validator.
+
+**This release ships alone**, because `apply.sh` is the program that delivers a pull. `BL-292`.
+
 ## [0.626.0] - 2026-09-23
 
 ### `register-drift.sh` refuses rather than revert core over a consumer edit it did not carry

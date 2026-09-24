@@ -4054,47 +4054,6 @@ widen, is a design choice that has not been made.
 verify: manual
 
 
-## BL-292 — `apply.sh` emits no WORKLIST row for a DANGLING hook registration, on `--finish` too
-
-**DEFECT.** Filed at batch 144, found by the contract adversary on `BL-291`'s consumer pull.
-
-**THE PARSE CAN ONLY SEE ONE OF THE VALIDATOR'S TWO FAILURE LISTS.**
-`core/skills/ai-dlc-update/reconcile/apply.sh:1845` builds `hr_names` with
-`sed -n 's@^ *\.claude/hooks/@@p'`, and `:1846` emits the WORKLIST row only when the validator's
-rc is 1 AND `hr_names` is non-empty. `core/scripts/validate-hook-registration.sh` prints its
-UNREGISTERED list at `:398` as `    .claude/hooks/<name>`, which the parse reads. It prints its
-DANGLING list at `:411` as a bare `    <name>`, with no `.claude/hooks/` prefix, which the parse cannot
-read. So a tree whose only failure is a dangling registration returns rc 1 with an empty
-`hr_names`, and `hook_registration_row` emits nothing. It is not the rc 2 branch either, so no
-DECISION row appears. `--finish` calls the same function at `:2066`, after the settings merge, so
-the invocation meant to verify the finished tree is silent too. The only thing that catches it is
-the prose hard gate in `ai-dlc-update/SKILL.md` ("Hook-registration gate — hard"), which a session
-has to read and run.
-
-**WHERE IT BITES.** A hook retired upstream, like `BL-291`'s, when the file deletion is committed
-before the settings merge, or when the strip half of the merge does not run.
-
-**BOOTSTRAPPING, SO THE FIX SHIPS ALONE.** `apply.sh` is the program that delivers a pull. A
-consumer runs its installed copy, so a fix to it is delivered by the broken version it replaces.
-The fix must ship in a release of its own, with nothing else a pull would ask this function about.
-
-**RECEIPT, SCORED.** It extracts the shipped `hook_registration_row` from `apply.sh`, installs a
-fresh consumer with `scripts/install.sh` under `mktemp`, and requires the installed validator to exit
-0 on it. Positive control: with one hook's registration removed from `settings.json` (so the hook is
-UNREGISTERED), the function must emit a WORKLIST row, otherwise exit 9. Subject: with the
-registration restored and the hook file moved out (so it is DANGLING), the validator must exit 1,
-otherwise exit 9, and the function must emit a WORKLIST or DECISION row. Distribution engine: exit 0
-is CLOSE-CANDIDATE. It needs `jq` and takes about 5s, most of it the install. Each run leaves one
-installed tree under `$TMPDIR`.
-
-| tree | exit |
-|---|---|
-| `b144-release` | **1** |
-| `origin/main` `5376b309` | **1** |
-| candidate fix: a second `sed` also reads `    ai-dlc-*.sh` bare names into `hr_names` | **0** |
-
-verify: sh A=core/skills/ai-dlc-update/reconcile/apply.sh; [ -r "$A" ] && [ -r scripts/install.sh ] || exit 9; command -v jq >/dev/null || exit 9; F="$(awk '/^hook_registration_row\(\) \{/{p=1} p{print} p&&/^\}$/{exit}' "$A")"; [ -n "$F" ] || exit 9; R="$(pwd)"; T="$(mktemp -d)" || exit 9; ( cd "$T" && git init -q && mkdir _bmad && git -c user.name=r -c user.email=r@r commit -q --allow-empty -m init && bash "$R/scripts/install.sh" ) >/dev/null 2>&1 || exit 9; V="$T/scripts/ai-dlc/validate-hook-registration.sh"; [ -x "$V" ] || exit 9; bash "$V" --root "$T" >/dev/null 2>&1 || exit 9; say() { echo "ROW $1 $2"; }; eval "$F"; h="$(cd "$T/.claude/hooks" && ls ai-dlc-*.sh | head -1)"; [ -n "$h" ] || exit 9; cp "$T/.claude/settings.json" "$T/s.bak"; jq --arg h "$h" 'walk(if type == "object" and has("hooks") and (.hooks|type) == "array" then .hooks |= map(select((.command // "") | contains($h) | not)) else . end)' "$T/s.bak" > "$T/.claude/settings.json" || exit 9; cmp -s "$T/s.bak" "$T/.claude/settings.json" && exit 9; CONSUMER="$T"; o="$(hook_registration_row)"; case "$o" in *"ROW WORKLIST "*) : ;; *) exit 9 ;; esac; cp "$T/s.bak" "$T/.claude/settings.json"; mv "$T/.claude/hooks/$h" "$T/$h"; bash "$V" --root "$T" >/dev/null 2>&1; [ $? = 1 ] || exit 9; o="$(hook_registration_row)"; case "$o" in *"ROW WORKLIST "*|*"ROW DECISION "*) exit 0 ;; esac; exit 1
-
 ## BL-294 — `bug-investigation.md` has no step that puts an operator-applicable relief in front of the operator, so a lead holding one writes a story instead
 
 **BLOCKER.** Filed at batch 145 on the operator's instruction, relayed by the peer session

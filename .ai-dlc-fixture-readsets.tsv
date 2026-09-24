@@ -9,7 +9,7 @@
 # every other fixture's entries alone, so refreshing one fixture costs its own runtime
 # rather than a full re-derivation.
 #
-# fixtures mapped: 203    entries: 32127
+# fixtures mapped: 203    entries: 32128
 absorbed-specifics-survive	.git/HEAD
 absorbed-specifics-survive	.git/config
 absorbed-specifics-survive	.git/index
@@ -472,16 +472,16 @@ apply-restamp-worklist	.git/HEAD
 apply-restamp-worklist	.git/config
 apply-restamp-worklist	.git/index
 apply-restamp-worklist	.git/info/exclude
-apply-restamp-worklist	.git/objects/33/a4425c0ed05dea70f881660ffdf01c7c86da33
-apply-restamp-worklist	.git/objects/7f/1479d0f091b8393b8613744a84c3c8229a65a3
+apply-restamp-worklist	.git/objects/19/cd97d7aa304fdbe419f8f217bea010d9ec802a
+apply-restamp-worklist	.git/objects/47/6d0ce524f110593cbf82a5d5d0b48c2c4642ea
 apply-restamp-worklist	.git/objects/info/commit-graphs/commit-graph-chain
-apply-restamp-worklist	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
-apply-restamp-worklist	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
+apply-restamp-worklist	.git/objects/info/commit-graphs/graph-0379598c48f1e636cbf005c95d629c8ed2197c7d.graph
+apply-restamp-worklist	.git/objects/info/commit-graphs/graph-2e085ff44ca2ae7c5739806502100c553300cbbf.graph
+apply-restamp-worklist	.git/objects/info/commit-graphs/graph-7303014332e1b9ef4e7143da4aa669938a897e3f.graph
 apply-restamp-worklist	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
-apply-restamp-worklist	.git/objects/info/commit-graphs/graph-fa7bbe6bcd67e84c678384cfb84f17a16d6fa8fa.graph
 apply-restamp-worklist	.git/objects/pack/multi-pack-index
 apply-restamp-worklist	.git/packed-refs
-apply-restamp-worklist	.git/refs/heads/main
+apply-restamp-worklist	.git/refs/heads/b145-v0627
 apply-restamp-worklist	.gitignore
 apply-restamp-worklist	core
 apply-restamp-worklist	core/fixtures
@@ -492,6 +492,7 @@ apply-restamp-worklist	core/fixtures/lib/preamble.sh
 apply-restamp-worklist	core/git-hooks/pre-push
 apply-restamp-worklist	core/schemas/pipeline-state-paths.json
 apply-restamp-worklist	core/scripts/sync-transient-ignore.sh
+apply-restamp-worklist	core/scripts/validate-hook-registration.sh
 apply-restamp-worklist	core/skills
 apply-restamp-worklist	core/skills/ai-dlc
 apply-restamp-worklist	core/skills/ai-dlc-update
