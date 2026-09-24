@@ -1565,10 +1565,25 @@ prose is itself generated rather than composed.
      subtree cannot reach an unnamed refusal. In both cases the dispositions are: keep the
      consumer's version (accept per-entry, and it re-reports every pull), or upstream it.
      Reverting destroys the divergence; say so before anyone chooses it.
-     Its third refusal is NOT structural: exit 2 naming a section (`cannot classify section`,
-     `conservation:`, or a write it could not make) means a step failed mid-run, and core was
-     NOT reverted: the edit is still in place. Re-run it; if it repeats, register by hand. Never
-     revert core to get past it — that deletes the edit the refusal kept.
+     Its other exit-2 refusals are NOT structural. In every one, core was NOT reverted and the
+     edit is still in place, in a dry run and under `--apply` alike. Never revert core to get
+     past one; that deletes the edit the refusal kept. Two kinds:
+     - **A step failed mid-run.** Re-run it, and if it repeats, register by hand. These are
+       `cannot classify section '<h>': diff did not run`; `cannot list the headings`;
+       `cannot read the consumer's section` or `core's section`; `conservation: diff of core
+       at <base> … did not run`; `conservation: the staged override is empty` (or `extension`);
+       `conservation: cannot resolve core's span`; `conservation: the override shadows '<h>',
+       which resolves to no heading`; `<path> exists and is not a regular file`; and any
+       `cannot stage`, `cannot write`, `cannot create`, `cannot set the mode` or `cannot move`.
+     - **The edit cannot be expressed as an override.** A re-run gives the same answer. These are
+       `conservation: core line N (…) was changed or removed by the consumer, and no section the
+       override shadows contains it`, and `conservation: consumer line N (…) is carried by nothing
+       that was written`. The first covers a deleted core section, a preamble edit, and an edited
+       heading that an earlier heading's name swallows (`## Review` below `## Review Process`) or
+       that repeats. The second covers a consumer-only heading whose name resolves to a core
+       one. Overrides anchor by heading name, so the remedy is the one for a structural refusal:
+       keep the consumer's version, or upstream it.
+     Exit 1, `no ## / ### section differs`, writes nothing: the delta is outside every heading.
      Check the row's status before you conclude anything:
      if it is `HARD-CORE-DRIFT-ABSORBED`, the disposition below applies. Otherwise say
      so, and let the operator keep it (it will report every pull) or upstream it. Do not

@@ -4125,12 +4125,33 @@ not the fix. It would put a section the classifier never read into the override 
 would still let a run that classified nothing go on to revert core. The fix refuses instead, in two
 layers. `substitution_only` answers `unknown` when `diff` did not run, and the loop refuses on it with
 exit 2 before anything is written, so a dry run refuses too. A pre-revert conservation check then
-requires every consumer section to be core's own text, present verbatim in the override or extension
-just written (read back from disk), or re-confirmed substitution-only by a `diff` that ran; anything
-else exits 2 with core NOT reverted, every write is checked, and the revert goes through a temp file.
-Neither layer is enough alone. The conservation check without the three-valued classifier re-asks
-the same classifier, gets the same wrong `yes`, and loses the edit: regression r3 below scores
-identical to base.
+backs it, with core NOT reverted on any refusal, every write checked, and the revert staged in a temp
+file.
+
+**THE CONSERVATION CHECK IS POSITIONAL AND TWO-SIDED (`ff1ed69e`).** Its first cut (`63004ff4`)
+re-asked the classifier by heading NAME. That made it blind wherever the classifier is blind:
+`section_of` matches headings bidirectionally on substrings and returns the first hit. The
+adversary measured each of these shapes at rc 0, REGISTERED, core reverted and the edit gone: an
+edited `## Review` below an unedited `## Review Process`, where both names resolve to the latter;
+a duplicate same-level heading edited at its second occurrence; and a preamble edit beside an
+edited section. The shape is real on a consumer. In graph's installed files, 9 of 564 headings
+across 8 files resolve to a different line. `analyst.md`'s `## The evidence contract — ...`
+resolves to `## Contract`. The check now takes ONE `diff` of core at BASE against the whole
+consumer file, staged in a file and exit-checked, and tests each hunk from both sides. Every
+consumer line the hunk adds must sit in a positional section whose whole text appears verbatim in
+what was written. Every core line it removes must sit in a core span the override's `shadows:`
+resolves to. A hunk whose core side carries a `{token}` is install.sh's own substitution and
+passes. The core side is what catches a **deleted core section**: nothing shadows it, so it would
+render back. That case is newly refused, as `conservation: core line N (…) was changed or removed
+by the consumer, and no section the override shadows contains it`. The consumer side is what
+catches a consumer-only `## Review` that the resolver files against core's `## Review Process`, and
+an override whose body lost a section: `conservation: consumer line N (…) is carried by nothing that
+was written…`. The dry run now stages and checks exactly what `--apply` would write, so the two
+cannot disagree. A heading whose name normalizes to nothing (`## 概要`) is no longer refused while
+it is unchanged. No override can anchor it, but byte-equal to core it needs no carrying, and an
+edited one is refused by position. Neither layer is enough alone. With the base two-valued
+classifier the check reads the same wrong `yes` wherever the whole-file `diff` fails too, and
+regression r3 below scores identical to base.
 
 **RECEIPT, SCORED.** It drives the shipped `register-drift.sh` against a dist git repo and consumer
 built under `mktemp`: one role file, sections Alpha, Beta and Gamma, with the consumer's Alpha and
@@ -4145,18 +4166,21 @@ is what makes the receipt require layer 1: without it, r1 and r2 on the full fix
 conservation check refuses them in its own words and the edit survives. Distribution engine: exit 0
 is CLOSE-CANDIDATE. Each run leaves one tree under `$TMPDIR`. Regressions r1 and r2 are scored on
 the layer-1-only tree, where nothing else stands behind the classifier, and again on the full fix.
-The receipt therefore reads layer 1 directly and does not see layer 2; layer 2's three other paths
-are the fixture's to hold.
+The receipt therefore reads layer 1 directly and does not see layer 2. Layer 2's paths and the
+resolver shapes belong to `core/fixtures/layer-readopt-gate` section E2: arms (d), (s), (u), (p),
+(x), (y) and (g), and the allow twins (k) and (j). Mutants there switch off each side of the check
+separately. The receipt's shim also fails the whole-file `diff`, which carries the marker, so on
+`ff1ed69e` r1 and r3 are refused as `diff … did not run` and the edit survives. They score 1 on the
+stderr clause alone. None of the refusal texts `ff1ed69e` changed is one the receipt keys on.
 
 | tree | exit |
 |---|---|
 | `origin/main` `a86d9a5f` | **1** |
-| fix, both layers, `63004ff4` | **0** |
 | layer 1 only, `408cb864` | **0** |
-| r1: `unknown` treated as `yes`, on `408cb864` | **1** |
-| r1 on `63004ff4` | **1** (0 before the stderr clause) |
-| r2: refuse only when EVERY differing section is `unknown`, on `408cb864` | **1** |
-| r2 on `63004ff4` | **1** (0 before the stderr clause) |
-| r3: conservation check with the base two-valued `substitution_only`, on `63004ff4` | **1** |
+| first conservation check, `63004ff4` | **0** |
+| positional two-sided check, `ff1ed69e` | **0** |
+| r1: `unknown` treated as `yes`, on `408cb864` / `63004ff4` / `ff1ed69e` | **1** / **1** / **1** |
+| r2: refuse only when EVERY differing section is `unknown`, on the same three | **1** / **1** / **1** |
+| r3: the base two-valued `substitution_only`, on `63004ff4` / `ff1ed69e` | **1** / **1** |
 
 verify: sh F=core/skills/ai-dlc-update/reconcile/register-drift.sh; [ -r "$F" ] && [ -r "${F%/*}/lib.sh" ] || exit 9; F="$(pwd)/$F"; D="$(command -v diff)"; [ -x "$D" ] || exit 9; T="$(mktemp -d)" || exit 9; S="$T/shim"; mkdir -p "$S" "$T/d/core/team-roles" "$T/c/.claude/team-roles" "$T/k/.claude/team-roles" || exit 9; printf '#!/bin/sh\nt1="%s/a.$$"; t2="%s/b.$$"; cat "$1" > "$t1"; cat "$2" > "$t2"\nif grep -q BETAKEEP "$t1" "$t2"; then : > "%s/.fired"; exit 2; fi\nexec "%s" "$t1" "$t2"\n' "$S" "$S" "$S" "$D" > "$S/diff" && chmod +x "$S/diff" || exit 9; printf 'x\n' > "$T/p1"; printf 'y\n' > "$T/p2"; PATH="$S:$PATH" diff "$T/p1" "$T/p2" >/dev/null 2>&1; [ $? = 1 ] || exit 9; [ -e "$S/.fired" ] && exit 9; printf '# Role: X\n\n## Alpha\n\nalpha core text.\n\n## Beta\n\nbeta core text.\n\n## Gamma\n\ngamma core text.\n' > "$T/d/core/team-roles/x.md"; ( cd "$T/d" && git init -q && git add -A && git -c user.name=r -c user.email=r@r commit -qm base ) >/dev/null 2>&1 || exit 9; B="$(git -C "$T/d" rev-parse HEAD)" || exit 9; sed 's/^alpha core text\.$/alpha CONSUMER EDIT./; s/^beta core text\.$/beta CONSUMER EDIT BETAKEEP./' "$T/d/core/team-roles/x.md" > "$T/e.md"; grep -q 'alpha CONSUMER EDIT' "$T/e.md" && grep -q BETAKEEP "$T/e.md" || exit 9; cp "$T/e.md" "$T/c/.claude/team-roles/x.md" && cp "$T/e.md" "$T/k/.claude/team-roles/x.md" || exit 9; O=.claude/skills/ai-dlc/overrides/team-roles__x__consumer-drift.md; bash "$F" "$T/d" "$B" "$T/k" team-roles/x.md --apply >/dev/null 2>&1 || exit 9; grep -q 'alpha CONSUMER EDIT' "$T/k/$O" && grep -q BETAKEEP "$T/k/$O" || exit 9; PATH="$S:$PATH" bash "$F" "$T/d" "$B" "$T/c" team-roles/x.md --apply >/dev/null 2>"$T/err"; rc=$?; [ -e "$S/.fired" ] || exit 9; [ "$rc" != 0 ] && [ -z "$(ls -A "$T/c/.claude/skills/ai-dlc/overrides" 2>/dev/null)" ] && cmp -s "$T/e.md" "$T/c/.claude/team-roles/x.md" && grep -q "cannot classify section 'Beta'" "$T/err" && exit 0; exit 1
