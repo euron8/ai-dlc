@@ -4140,14 +4140,41 @@ resolves to `## Contract`. The check now takes ONE `diff` of core at BASE agains
 consumer file, staged in a file and exit-checked, and tests each hunk from both sides. Every
 consumer line the hunk adds must sit in a positional section whose whole text appears verbatim in
 what was written. Every core line it removes must sit in a core span the override's `shadows:`
-resolves to. A hunk whose core side carries a `{token}` is install.sh's own substitution and
-passes. The core side is what catches a **deleted core section**: nothing shadows it, so it would
-render back. That case is newly refused, as `conservation: core line N (…) was changed or removed
-by the consumer, and no section the override shadows contains it`. The consumer side is what
-catches a consumer-only `## Review` that the resolver files against core's `## Review Process`, and
-an override whose body lost a section: `conservation: consumer line N (…) is carried by nothing that
-was written…`. The dry run now stages and checks exactly what `--apply` would write, so the two
-cannot disagree. A heading whose name normalizes to nothing (`## 概要`) is no longer refused while
+resolves to. A hunk that changed nothing but `{token}` lines is install.sh's own substitution and
+passes; the narrowing of that exemption is below. The core side is what catches a **deleted core
+section**: nothing shadows it, so it would render back. The consumer side is what catches a
+consumer-only `## Review` that the resolver files against core's `## Review Process`, and an
+override whose body lost a section. The dry run now stages and checks exactly what `--apply` would
+write, so the two cannot disagree.
+
+**`98036a53` SETTLES THREE MORE SHAPES AND SPLITS THE REFUSALS BY CAUSE.**
+- **The token exemption no longer exempts a whole hunk.** `diff` coalesces adjacent changed lines,
+  so a real edit on the line beside a token site shares the token's hunk. Measured at every sha
+  before this one: `run {test_cmd} first.` / `then merge.` edited to `run pytest first.` / `then
+  merge after REVIEW.` read as substitution only, rc 0, and REVIEW was reverted away. A hunk is now
+  exempt only if every token-free core-side line reappears verbatim on the consumer side. The rule
+  is in `substitution_only()` and in the check's `token_only()`, and the two must agree.
+- **A blank added line is never charged.** The separator blank before a section appended at EOF
+  lands in the last core section's span, which nothing carries. Charging it refused an edit plus an
+  EOF append on 61 of 63 core files.
+- **Refusals now say whether re-running can help.** A failed step (a `diff`, `mktemp`, `git show` or
+  write) still says `Re-run; if it repeats, register by hand`. A verdict on the file's content goes
+  through `refuse_fixed`, which ends `re-running without changing the file refuses the same way`.
+  The core-line and consumer-line conservation refusals end `Move the edit into a uniquely named ## /
+  ### section, or take it upstream.` A removed core HEADING line gets its own message: `the consumer
+  DELETED core heading "<h>" (core line N)`. It is followed by `Way through: keep the heading in the
+  consumer file with a body that states the retirement …, then run register-drift again`.
+
+NOTE: the second adversary's graph-derived census covered 32 worlds. 27 agree with base. The other
+5 now refuse, where base lost between 34 and 176 lines in each.
+
+NOTE: in `dupt`, identical text in a second same-name section is taken as carried. Whether the
+renderer resolves both to the same override was not measured.
+
+NOTE: an EOF append with no other edit exits 1, `no ## / ### section differs`. It writes nothing
+and reverts nothing.
+
+NOTE: runtime is roughly linear in file size, at 1.1–1.25x base. A heading whose name normalizes to nothing (`## 概要`) is no longer refused while
 it is unchanged. No override can anchor it, but byte-equal to core it needs no carrying, and an
 edited one is refused by position. Neither layer is enough alone. With the base two-valued
 classifier the check reads the same wrong `yes` wherever the whole-file `diff` fails too, and
@@ -4167,11 +4194,13 @@ conservation check refuses them in its own words and the edit survives. Distribu
 is CLOSE-CANDIDATE. Each run leaves one tree under `$TMPDIR`. Regressions r1 and r2 are scored on
 the layer-1-only tree, where nothing else stands behind the classifier, and again on the full fix.
 The receipt therefore reads layer 1 directly and does not see layer 2. Layer 2's paths and the
-resolver shapes belong to `core/fixtures/layer-readopt-gate` section E2: arms (d), (s), (u), (p),
-(x), (y) and (g), and the allow twins (k) and (j). Mutants there switch off each side of the check
-separately. The receipt's shim also fails the whole-file `diff`, which carries the marker, so on
-`ff1ed69e` r1 and r3 are refused as `diff … did not run` and the edit survives. They score 1 on the
-stderr clause alone. None of the refusal texts `ff1ed69e` changed is one the receipt keys on.
+resolver shapes belong to section E2 of `core/fixtures/layer-readopt-gate`. Its arms are (d), (s),
+(u), (p), (x), (y), (g), (eof) and (tok), and its allow twins are (k) and (j). The mutants there
+switch off the core side, the consumer side, the blank skip, and both token loops, each one
+separately. The receipt's shim also fails the whole-file `diff`, which carries the marker. From
+`ff1ed69e` on, r1 and r3 are therefore refused as `diff … did not run`, and the edit survives. They
+score 1 on the stderr clause alone. The receipt keys on `cannot classify section 'Beta'`, which
+neither `ff1ed69e` nor `98036a53` changed.
 
 | tree | exit |
 |---|---|
@@ -4179,8 +4208,9 @@ stderr clause alone. None of the refusal texts `ff1ed69e` changed is one the rec
 | layer 1 only, `408cb864` | **0** |
 | first conservation check, `63004ff4` | **0** |
 | positional two-sided check, `ff1ed69e` | **0** |
-| r1: `unknown` treated as `yes`, on `408cb864` / `63004ff4` / `ff1ed69e` | **1** / **1** / **1** |
-| r2: refuse only when EVERY differing section is `unknown`, on the same three | **1** / **1** / **1** |
-| r3: the base two-valued `substitution_only`, on `63004ff4` / `ff1ed69e` | **1** / **1** |
+| narrowed token exemption, blank skip, split refusals, `98036a53` | **0** |
+| r1: `unknown` treated as `yes`, on `408cb864` / `63004ff4` / `ff1ed69e` / `98036a53` | **1** / **1** / **1** / **1** |
+| r2: refuse only when EVERY differing section is `unknown`, on the same four | **1** / **1** / **1** / **1** |
+| r3: the base two-valued `substitution_only`, on `63004ff4` / `ff1ed69e` / `98036a53` | **1** / **1** / **1** |
 
 verify: sh F=core/skills/ai-dlc-update/reconcile/register-drift.sh; [ -r "$F" ] && [ -r "${F%/*}/lib.sh" ] || exit 9; F="$(pwd)/$F"; D="$(command -v diff)"; [ -x "$D" ] || exit 9; T="$(mktemp -d)" || exit 9; S="$T/shim"; mkdir -p "$S" "$T/d/core/team-roles" "$T/c/.claude/team-roles" "$T/k/.claude/team-roles" || exit 9; printf '#!/bin/sh\nt1="%s/a.$$"; t2="%s/b.$$"; cat "$1" > "$t1"; cat "$2" > "$t2"\nif grep -q BETAKEEP "$t1" "$t2"; then : > "%s/.fired"; exit 2; fi\nexec "%s" "$t1" "$t2"\n' "$S" "$S" "$S" "$D" > "$S/diff" && chmod +x "$S/diff" || exit 9; printf 'x\n' > "$T/p1"; printf 'y\n' > "$T/p2"; PATH="$S:$PATH" diff "$T/p1" "$T/p2" >/dev/null 2>&1; [ $? = 1 ] || exit 9; [ -e "$S/.fired" ] && exit 9; printf '# Role: X\n\n## Alpha\n\nalpha core text.\n\n## Beta\n\nbeta core text.\n\n## Gamma\n\ngamma core text.\n' > "$T/d/core/team-roles/x.md"; ( cd "$T/d" && git init -q && git add -A && git -c user.name=r -c user.email=r@r commit -qm base ) >/dev/null 2>&1 || exit 9; B="$(git -C "$T/d" rev-parse HEAD)" || exit 9; sed 's/^alpha core text\.$/alpha CONSUMER EDIT./; s/^beta core text\.$/beta CONSUMER EDIT BETAKEEP./' "$T/d/core/team-roles/x.md" > "$T/e.md"; grep -q 'alpha CONSUMER EDIT' "$T/e.md" && grep -q BETAKEEP "$T/e.md" || exit 9; cp "$T/e.md" "$T/c/.claude/team-roles/x.md" && cp "$T/e.md" "$T/k/.claude/team-roles/x.md" || exit 9; O=.claude/skills/ai-dlc/overrides/team-roles__x__consumer-drift.md; bash "$F" "$T/d" "$B" "$T/k" team-roles/x.md --apply >/dev/null 2>&1 || exit 9; grep -q 'alpha CONSUMER EDIT' "$T/k/$O" && grep -q BETAKEEP "$T/k/$O" || exit 9; PATH="$S:$PATH" bash "$F" "$T/d" "$B" "$T/c" team-roles/x.md --apply >/dev/null 2>"$T/err"; rc=$?; [ -e "$S/.fired" ] || exit 9; [ "$rc" != 0 ] && [ -z "$(ls -A "$T/c/.claude/skills/ai-dlc/overrides" 2>/dev/null)" ] && cmp -s "$T/e.md" "$T/c/.claude/team-roles/x.md" && grep -q "cannot classify section 'Beta'" "$T/err" && exit 0; exit 1

@@ -1567,23 +1567,32 @@ prose is itself generated rather than composed.
      Reverting destroys the divergence; say so before anyone chooses it.
      Its other exit-2 refusals are NOT structural. In every one, core was NOT reverted and the
      edit is still in place, in a dry run and under `--apply` alike. Never revert core to get
-     past one; that deletes the edit the refusal kept. Two kinds:
-     - **A step failed mid-run.** Re-run it, and if it repeats, register by hand. These are
-       `cannot classify section '<h>': diff did not run`; `cannot list the headings`;
+     past one; that deletes the edit the refusal kept. The refusal's last line says which kind
+     it is:
+     - **`Re-run; if it repeats, register by hand`: a step failed mid-run.** Re-run it. These
+       are `cannot classify section '<h>': diff did not run`; `cannot list the headings`;
        `cannot read the consumer's section` or `core's section`; `conservation: diff of core
        at <base> … did not run`; `conservation: the staged override is empty` (or `extension`);
-       `conservation: cannot resolve core's span`; `conservation: the override shadows '<h>',
-       which resolves to no heading`; `<path> exists and is not a regular file`; and any
-       `cannot stage`, `cannot write`, `cannot create`, `cannot set the mode` or `cannot move`.
-     - **The edit cannot be expressed as an override.** A re-run gives the same answer. These are
-       `conservation: core line N (…) was changed or removed by the consumer, and no section the
-       override shadows contains it`, and `conservation: consumer line N (…) is carried by nothing
-       that was written`. The first covers a deleted core section, a preamble edit, and an edited
-       heading that an earlier heading's name swallows (`## Review` below `## Review Process`) or
-       that repeats. The second covers a consumer-only heading whose name resolves to a core
-       one. Overrides anchor by heading name, so the remedy is the one for a structural refusal:
-       keep the consumer's version, or upstream it.
-     Exit 1, `no ## / ### section differs`, writes nothing: the delta is outside every heading.
+       `conservation: cannot resolve core's span`; `conservation: the check did not run` or `did
+       not report`; and any `cannot stage`, `cannot write`, `cannot create`, `cannot set the
+       mode` or `cannot move`. One of them differs: `the revert did not land` means the override
+       IS written and the edit is in both places, so remove nothing — re-run to finish the revert.
+     - **`re-running without changing the file refuses the same way`: a verdict on the file.** Do
+       not re-run; change the file or choose a disposition.
+       - `conservation: the consumer DELETED core heading "<h>" (core line N)`. Follow its `Way
+         through`: put the heading back with a body stating the retirement, then run it again.
+         The section is then a changed section, and the override carries it.
+       - `conservation: core line N (…) was changed or removed by the consumer…` and `conservation:
+         consumer line N (…) is carried by nothing that was written…`. These cover a preamble edit,
+         a heading an earlier heading's name swallows (`## Review` below `## Review Process`), a
+         repeated heading, and a consumer-only heading whose name resolves to a core one.
+         Overrides anchor by heading name, so do what the message says: move the edit into a
+         uniquely named `##` / `###` section, or upstream it.
+       - `conservation: the override shadows '<h>', which resolves to no heading`, and `<path>
+         exists and is not a regular file`. Clear the path, or fix the heading, before running it
+         again.
+     Exit 1, `no ## / ### section differs`, writes nothing. The delta is outside every heading, and
+     that includes an EOF append with no other edit.
      Check the row's status before you conclude anything:
      if it is `HARD-CORE-DRIFT-ABSORBED`, the disposition below applies. Otherwise say
      so, and let the operator keep it (it will report every pull) or upstream it. Do not

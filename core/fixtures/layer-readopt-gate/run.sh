@@ -851,6 +851,12 @@ echo "== E2. register-drift REFUSES rather than revert an edit it did not carry 
 #   (k) the ALLOW twin of (g), one property apart: `## 概要` UNCHANGED beside an edited Alpha
 #       registers (rc 0) -- the unaddressable heading needs no carrying when byte-equal to core.
 #   (j) the same world as (k) as a DRY RUN, which must preview rather than refuse.
+#   (eof) an edited Alpha plus a new section appended at EOF must REGISTER: the edit in the
+#       override, the new section in the extension. Its separator blank sits in core's last span.
+#   (tok) a token site and a real edit coalesced into one hunk (`run {test_cmd} first.` / `then
+#       merge.` -> `run pytest first.` / `then merge after E2S-REVIEW.`) must carry the edit, rc 0.
+# Content refusals must say they are DETERMINISTIC (re-running unchanged refuses the same way),
+# and (x) must name the deleted heading and the way through.
 # Every arm is PRESENCE-shaped: a named refusal on stderr (the exact conservation line, by line
 # number and text), a shim `.fired` marker where there is a shim, and the consumer file
 # cmp-identical. A subject that emits nothing fails all of them.
@@ -892,6 +898,10 @@ else
          E2_CONS='# X\n\n## Alpha\n\nalpha E2S-ALPHA.\n\n## 概要\n\ngaiyou E2S-GAIYOU.\n' ;;
       k|j) E2_CORE='# X\n\n## Alpha\n\nalpha.\n\n## 概要\n\ngaiyou.\n'
          E2_CONS='# X\n\n## Alpha\n\nalpha E2S-ALPHA.\n\n## 概要\n\ngaiyou.\n' ;;
+      o) E2_CORE='# X\n\n## Alpha\n\nalpha.\n\n## Beta\n\nbeta.\n'
+         E2_CONS='# X\n\n## Alpha\n\nalpha E2S-ALPHA.\n\n## Beta\n\nbeta.\n\n## Local\n\nlocal E2S-EOF.\n' ;;
+      t) E2_CORE='# X\n\n## Alpha\n\nalpha.\n\n## Beta\n\nrun {test_cmd} first.\nthen merge.\n'
+         E2_CONS='# X\n\n## Alpha\n\nalpha E2S-ALPHA.\n\n## Beta\n\nrun pytest first.\nthen merge after E2S-REVIEW.\n' ;;
       *) return 1 ;;
     esac
   }
@@ -927,7 +937,7 @@ else
                      "conservation: consumer line 3 (intro E2S-INTRO.)" ;;
     g) printf '%s\n' "conservation: core line 9 (gaiyou.) was changed or removed by the consumer" \
                      "conservation: consumer line 9 (gaiyou E2S-GAIYOU.)" ;;
-    x) echo "conservation: core line 7 (## Beta) was changed or removed by the consumer" ;;
+    x) echo "conservation: the consumer DELETED core heading \"## Beta\" (core line 7)" ;;
     y) echo "conservation: consumer line " ;;
     d) echo "conservation: consumer line 5 (alpha E2-ALPHA-EDIT.)" ;;
   esac; }
@@ -994,11 +1004,11 @@ EOF
   fi
 
   E2_WHY=""; E2_W=""
-  e2_arm() { # <a|b|c|d|e|n|s|u|p|x|y|g|k|j> <script> -> 0 holds / 1 fails / 2 harness; E2_WHY and E2_W describe the run
-    local arm="$1" s="$2" w sh="" o rc f=n same=n novr beta=E2-BETA-EDIT-KEEPME want
+  e2_arm() { # <a|b|c|d|e|n|s|u|p|x|y|g|k|j|o|t> <script> -> 0 holds / 1 fails / 2 harness; E2_WHY and E2_W describe the run
+    local arm="$1" s="$2" w sh="" o rc f=n same=n novr beta=E2-BETA-EDIT-KEEPME want ext fixd
     E2_WHY=""; E2_W=""
     case "$arm" in
-      s|u|p|x|y|g|k|j)
+      s|u|p|x|y|g|k|j|o|t)
         w="$(e2_world2 "$arm")"; [ -n "$w" ] || { E2_WHY="world build failed"; return 2; }
         E2_W="$w"; o="$w/cons/.claude/skills/ai-dlc/overrides/team-roles__x__consumer-drift.md"
         if [ "$arm" = j ]; then e2_run "$s" "$w" -; else e2_run "$s" "$w" - --apply; fi
@@ -1014,11 +1024,24 @@ EOF
             E2_WHY="rc=$rc dry-run-line=$(grep -c 'DRY RUN' "$w/out") unaddressable-line=$(grep -c 'headings no override can anchor.*概要' "$w/out") preview-alpha=$(grep -c E2S-ALPHA "$w/out") overrides-dir-entries=$novr consumer-identical=$same err=$(head -1 "$w/err" | cut -c1-120)"
             [ "$rc" = 0 ] && grep -q 'DRY RUN' "$w/out" && grep -q 'headings no override can anchor.*概要' "$w/out" \
               && grep -q E2S-ALPHA "$w/out" && [ "$novr" = 0 ] && [ "$same" = y ] ;;
+          o)
+            ext="$w/cons/.claude/skills/ai-dlc/extensions/roles/x-consumer.md"
+            E2_WHY="rc=$rc registered=$(grep -c '^REGISTERED' "$w/out") ovr-alpha=$(grep -c E2S-ALPHA "$o" 2>/dev/null) ext-eof=$(grep -c E2S-EOF "$ext" 2>/dev/null) reverted=$(cmp -s "$w/dist/core/team-roles/x.md" "$w/cons/.claude/team-roles/x.md" && echo y || echo n) err=$(head -1 "$w/err" | cut -c1-140)"
+            [ "$rc" = 0 ] && grep -q '^REGISTERED' "$w/out" && grep -q E2S-ALPHA "$o" && grep -q E2S-EOF "$ext" \
+              && cmp -s "$w/dist/core/team-roles/x.md" "$w/cons/.claude/team-roles/x.md" ;;
+          t)
+            E2_WHY="rc=$rc registered=$(grep -c '^REGISTERED' "$w/out") ovr-review=$(grep -c E2S-REVIEW "$o" 2>/dev/null) ovr-alpha=$(grep -c E2S-ALPHA "$o" 2>/dev/null) reverted=$(cmp -s "$w/dist/core/team-roles/x.md" "$w/cons/.claude/team-roles/x.md" && echo y || echo n) err=$(head -1 "$w/err" | cut -c1-140)"
+            [ "$rc" = 0 ] && grep -q '^REGISTERED' "$w/out" && grep -q E2S-REVIEW "$o" && grep -q E2S-ALPHA "$o" \
+              && cmp -s "$w/dist/core/team-roles/x.md" "$w/cons/.claude/team-roles/x.md" ;;
           *)
+            # Every content refusal is DETERMINISTIC and must say so, not tell the operator to re-run.
+            # A deleted heading must also name the way through.
             want="$(e2_want "$arm")"
-            E2_WHY="rc=$rc names-the-line=$(grep -cF "$want" "$w/err") registered=$(grep -c '^REGISTERED' "$w/out") overrides-dir-entries=$novr consumer-identical=$same err=$(head -1 "$w/err" | cut -c1-140)"
-            [ "$rc" = 2 ] && grep -qF "$want" "$w/err" && [ "$novr" = 0 ] && [ "$same" = y ] \
-              && ! grep -q '^REGISTERED' "$w/out" ;;
+            fixd="re-running without changing the file refuses the same way"
+            E2_WHY="rc=$rc names-the-line=$(grep -cF "$want" "$w/err") deterministic=$(grep -cF "$fixd" "$w/err") way-through=$(grep -cF 'Way through: keep the heading' "$w/err") registered=$(grep -c '^REGISTERED' "$w/out") overrides-dir-entries=$novr consumer-identical=$same err=$(head -1 "$w/err" | cut -c1-140)"
+            [ "$rc" = 2 ] && grep -qF "$want" "$w/err" && grep -qF "$fixd" "$w/err" && [ "$novr" = 0 ] && [ "$same" = y ] \
+              && ! grep -q '^REGISTERED' "$w/out" \
+              && { [ "$arm" != x ] || grep -qF 'Way through: keep the heading' "$w/err"; } ;;
         esac
         return $? ;;
     esac
@@ -1071,6 +1094,11 @@ EOF
       # override shadows it, so the consumer's deletion is undone.
       x) [ "$(cat "$w/rc")" = 0 ] && grep -q '^REGISTERED' "$w/out" && grep -q E2S-COREBETA "$w/cons/.claude/team-roles/x.md" \
            && ! grep -q 'x.md#Beta' "$o" ;;
+      # eof's damage is a FALSE REFUSAL, not a loss: the separator blank before the appended section
+      # is charged, and a registrable, common shape is refused at the blank consumer line 10.
+      o) [ "$(cat "$w/rc")" = 2 ] && grep -qF 'conservation: consumer line 10 ()' "$w/err" \
+           && cmp -s "$w/orig.md" "$w/cons/.claude/team-roles/x.md" ;;
+      t) [ "$(cat "$w/rc")" = 0 ] && grep -q '^REGISTERED' "$w/out" && ! grep -rq E2S-REVIEW "$w/cons" ;;
       *) return 1 ;;
     esac
   }
@@ -1087,6 +1115,8 @@ EOF
     g) echo "(g) an EDITED unaddressable ## 概要" ;;
     k) echo "(k) an UNCHANGED unaddressable ## 概要, --apply" ;;
     j) echo "(j) an UNCHANGED unaddressable ## 概要, dry run" ;;
+    o) echo "(eof) an edit plus a section appended at EOF" ;;
+    t) echo "(tok) a token site coalesced with a real edit in one hunk" ;;
   esac; }
   e2_marker() { case "$1" in
     s) echo E2S-REVIEW ;; u) echo E2S-NOTES ;; p) echo E2S-INTRO ;; y) echo E2S-ADDREVIEW ;; g) echo E2S-GAIYOU ;;
@@ -1096,16 +1126,18 @@ EOF
     b) echo "the dry run refuses too, naming Beta, and prints no DRY RUN preview missing a section" ;;
     c) echo "refused (rc 2) naming the path, nothing moved inside the directory, the consumer file cmp-identical" ;;
     d) echo "the conservation check's CONSUMER side refuses naming Alpha's edited line 5 (rc 2), the mktemp shim fired, no override, the consumer file cmp-identical" ;;
-    s|u|p|g) echo "refused (rc 2) by the positional conservation check naming the edited line by number and text, no override, the consumer file cmp-identical" ;;
-    x) echo "refused (rc 2) by the CORE side naming the deleted '## Beta' at core line 7, no override, the consumer file cmp-identical" ;;
-    y) echo "refused (rc 2) by the CONSUMER side naming a line of the misfiled section, no override, the consumer file cmp-identical" ;;
+    s|u|p|g) echo "refused (rc 2) by the positional conservation check naming the edited line by number and text, as deterministic, no override, the consumer file cmp-identical" ;;
+    x) echo "refused (rc 2) naming the DELETED core heading \"## Beta\" at core line 7 and the way through, as deterministic, no override, the consumer file cmp-identical" ;;
+    y) echo "refused (rc 2) by the CONSUMER side naming a line of the misfiled section, as deterministic, no override, the consumer file cmp-identical" ;;
+    o) echo "rc 0, REGISTERED, Alpha's edit in the override, the appended section in the extension, core reverted" ;;
+    t) echo "rc 0, REGISTERED, the edit beside the token (E2S-REVIEW) carried in the override, core reverted" ;;
     k) echo "the allow twin of (g): rc 0, REGISTERED, the heading reported as unaddressable, Alpha carried, core reverted" ;;
     j) echo "the dry run previews (rc 0, DRY RUN, Alpha in the preview) rather than refusing, and writes nothing" ;;
     e) echo "rc 0, REGISTERED, the override carries BOTH edits, and core is reverted" ;;
     n) echo "the allow twin of (a): the same shim on a seed without its key does not fire, and both edits register" ;;
   esac; }
 
-  E2_ARMS="a b c d e n s u p x y g k j"
+  E2_ARMS="a b c d e n s u p x y g k j o t"
   for e2a in $E2_ARMS; do
     e2_arm "$e2a" "$REG"; e2r=$?
     if [ "$e2r" = 0 ]; then ok "$(e2_label "$e2a"): $(e2_ok "$e2a")"
@@ -1132,6 +1164,17 @@ EOF
   #       Owns (x) alone: every other shape the core side sees, the consumer side sees too.
   #   M5  the CONSUMER side of the check off (added consumer lines never tested for a carrier).
   #       Owns (y) and (d): a pure addition and a lost body have no unshadowed removed line.
+  #   M6  the blank-line skip removed. Owns (eof): the blank separator before an EOF-appended
+  #       section lands in the last core section's span, which nothing carries, so a common
+  #       registrable shape is FALSELY refused (rc 2 at consumer line 10). Its damage is a refusal,
+  #       not a loss.
+  #   M7  BOTH token-free loops removed (substitution_only's endh() and the check's token_only()).
+  #       Owns (tok): a hunk with any token line is exempt again, Beta is skipped, and the edit
+  #       beside the token is reverted away at rc 0. Measured, and NOT committed as mutants:
+  #       removing the endh() loop ALONE gives rc 2 on (tok) -- the check's loop refuses it, no
+  #       loss -- and removing the token_only() loop ALONE changes nothing, because the classifier
+  #       already calls Beta changed and the override carries it. The token_only() loop is a
+  #       backstop no world isolates today: it can only fire on a hunk the classifier skipped.
   # NOT a mutant here, measured and recorded: leaving the whole-file diff's exit status unchecked
   # SURVIVES every world, because the awk refuses a hunkless stream on its own (`hunks 0`) --
   # the two guards cover each other, and no world separates them without faking a diff that
@@ -1170,7 +1213,8 @@ EOF
       e2_arm "$a" "$EMUT/register-drift.sh"; r=$?
       if e2_in "$a" "$2"; then
         if [ "$r" = 1 ] && e2_damage "$a"; then
-          ok "  mutation $1 KILLS $(e2_label "$a"): the edit is lost exactly as before the fix -- $E2_WHY"
+          if [ "$a" = o ]; then ok "  mutation $1 KILLS $(e2_label "$a"): a registrable shape is FALSELY refused at its blank separator line -- $E2_WHY"
+          else ok "  mutation $1 KILLS $(e2_label "$a"): the edit is lost exactly as before the fix -- $E2_WHY"; fi
         else
           bad "  mutation $1 did NOT kill $(e2_label "$a") with the loss reproduced (verdict $r): $E2_WHY"
         fi
@@ -1208,12 +1252,15 @@ EOF
   }
   E2_M1="then printf 'unknown'; return 0; fi"
   E2_M1R="  :"
-  E2_M1B='if (!hunk) { print "unknown"; exit } '
-  E2_M1BR='    END      { if (hunk && !tok) bad=1; print (bad ? "no" : "yes") }'
+  E2_M1B='if (!nh) { print "unknown"; exit } '
+  E2_M1BR='    END      { endh(); print (bad ? "no" : "yes") }'
   E2_M1C='refuse "cannot classify section'
   E2_M1CR="    # M1: the unknown arm removed; a non-yes answer falls through to changed"
-  E2_M2='|| refuse "conservation: ${cons_check:-'
-  E2_M2R='  || true'
+  E2_M2='1) refuse_fixed "conservation: ${cons_check}" ;;'
+  E2_M2R='  1) : ;;'
+  # The two token-free loops: substitution_only's endh() and the check's token_only().
+  E2_M7A='for (k = 1; k <= ntf; k++) if (!(TF[k] in GT)) { bad = 1; return }'
+  E2_M7B='for (k = 1; k <= ntf; k++) if (!(TF[k] in GT)) return 0'
   if [ "$e2_ctl" = 0 ]; then
     if e2_mutate "$E2_M1" "$E2_M1R" "$E2_M1B" "$E2_M1BR" "$E2_M1C" "$E2_M1CR"; then
       e2_score_covered M1 "a b"
@@ -1230,9 +1277,15 @@ EOF
     if e2_mutate 'for (k = 1; k <= nlost; k++) if (!shadowed(LOST[k])) {' '    for (k = 1; k <= nlost; k++) if (0) {'; then
       e2_score M4 x
     else bad "  mutation M4 DID NOT APPLY: the core-side loop of the conservation check was respelled -- (x) is unproven"; fi
-    if e2_mutate 'for (L = rs; L <= re; L++) if (!covered(L)) {' '    for (L = rs; L <= re; L++) if (0) {'; then
+    if e2_mutate 'if (!covered(L)) {' '      if (0) {'; then
       e2_score M5 "y d"
-    else bad "  mutation M5 DID NOT APPLY: the consumer-side loop of the conservation check was respelled -- (y) and (d) are unproven"; fi
+    else bad "  mutation M5 DID NOT APPLY: the consumer-side test of the conservation check was respelled -- (y) and (d) are unproven"; fi
+    if e2_mutate 'if (C[L] == "" || C[L] == "\r") continue' '      ;'; then
+      e2_score M6 o
+    else bad "  mutation M6 DID NOT APPLY: the blank-line skip was respelled -- (eof) is unproven"; fi
+    if e2_mutate "$E2_M7A" '      ;' "$E2_M7B" '    ;'; then
+      e2_score M7 t
+    else bad "  mutation M7 DID NOT APPLY: a token-free loop was respelled -- (tok) is unproven"; fi
   fi
 fi
 
