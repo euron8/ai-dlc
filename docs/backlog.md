@@ -4158,3 +4158,62 @@ and drive the writer or the reader against it. The order is load-bearing for the
 contract for `BL-299` forbade reordering for exactly that reason.
 
 verify: sh R="$(pwd)"; W="$R/core/scripts/stamp-story-provenance.sh"; V="$R/core/scripts/validate-provenance-block.sh"; K="$R/core/schemas/provenance-block.json"; [ -f "$W" ] && [ -f "$V" ] && [ -f "$K" ] && [ -f "$R/core/fixtures/story-provenance/seed.sh" ] || exit 9; command -v python3 >/dev/null || exit 9; G="$(mktemp -d)" || exit 9; M="$(mktemp -d)" || exit 9; mkdir -p "$G/.claude/schemas" || exit 9; python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); f=[x for x in s["fields"] if x.get("name")=="tool_use_id" and x.get("forbidden_match")=="prefix_ci"]; assert len(f)==1; f[0]["forbidden"].append("toolu_FIXTURE"); json.dump(s,open(sys.argv[2],"w"))' "$K" "$G/.claude/schemas/provenance-block.json" 2>/dev/null || exit 9; bash "$R/core/fixtures/story-provenance/seed.sh" --mixed-into "$M" >/dev/null 2>&1 || exit 9; P="$(AI_DLC_PROJECT_ROOT="$G" bash "$W" --print-schema 2>/dev/null)"; [ -n "$P" ] && [ "$P" -ef "$G/.claude/schemas/provenance-block.json" ] || exit 1; B=s1/stories/story-2-fix-thing.md; if ( cd "$M" && AI_DLC_PROJECT_ROOT="$G" bash "$W" --terminal s1/bug-fix-oneshot-story-2-fix-thing.md --profile bug-story-provenance "$B" ) >/dev/null 2>&1; then ( cd "$M" && AI_DLC_PROJECT_ROOT="$G" bash "$V" "$B" --require-skill bmad-review-adversarial-general ) >/dev/null 2>&1 || exit 1; fi; exit 0
+
+## BL-303 — every standalone `ledger-reverify.sh` run leaks one `reconcile-memo.*` directory
+
+**DEFECT.** Found by the batch 151 adversary on the `BL-283` contract, while it was tracing the
+engine's temp-directory lifecycle. It discharges no consumer candidate.
+
+**THE MEMO IS BUILT TWICE AND ONLY ONE COPY IS REMOVED.** `ai_dlc_memo_dir()` in
+`core/skills/ai-dlc-update/reconcile/lib.sh` makes the cache lazily. It calls `mktemp -d` on
+`reconcile-memo.XXXXXX` at `:738`, records ownership in `AI_DLC_MEMO_OWNED` at `:740`, and
+`ai_dlc_memo_cleanup` at `:748` removes only that recorded directory. `ledger-reverify.sh`
+calls the cleanup from its EXIT trap (`:1163`, armed at `:1166`). That arrangement works only
+if the FIRST memo lookup happens in the main shell. It does not. The first one is at `:1523`,
+`TV="$(theirs_show VERSION | tr -d '[:space:]')"`. `theirs_show` runs as a pipeline stage
+inside a command substitution, so it builds the memo in a subshell, sets `AI_DLC_MEMO_OWNED`
+there, and the assignment dies with that subshell. The main shell sees state `""`, builds a
+SECOND memo at its next lookup (`theirs_has_path` at `:1845`), and its EXIT trap removes only
+that second one.
+
+**ISOLATED, NOT INFERRED.** Measured at `937919e4` with `PS4` carrying `$BASH_SUBSHELL` and
+`$LINENO`, one standalone run against the `ledger-reverify` fixture's seed under a private
+`TMPDIR`. The trace shows two `mktemp` calls at `:738`, one at subshell level 2 and one at
+level 0, and `AI_DLC_MEMO_OWNED` set at `:740` in each. It shows one `rm -rf` at `:748`, at
+level 0, naming the level-0 directory. The directory left on disk is the level-2 one, by
+name. The run emitted 111 output rows and exited 0, so nothing about the run looks wrong.
+
+**THE POPULATION IS EVERY STANDALONE RUN ON THE MACHINE.** A run under `emit-report.sh` borrows
+`AI_DLC_RECONCILE_MEMO` from the orchestrator, takes the `:732` branch and creates nothing, so
+it does not leak. Every other caller does, including an operator running the closer directly,
+`apply.sh`, and each fixture that drives the engine. This machine's `TMPDIR` held **433455**
+`reconcile-memo.*` directories out of 457238 directories in total, counted with
+`/usr/bin/find -maxdepth 1`. An impossible-prefix control in the same invocation counted 0, and
+none of the 433455 was older than two days. So the machine created at least two hundred
+thousand a day. Which callers produced them was not measured.
+
+**THE FIX SHIPS ALONE.** `lib.sh` is sourced by fourteen reconcile scripts, including
+`ledger-reverify.sh`, `preclassify.sh` and `emit-report.sh`, which run during a pull. A fix to a
+bootstrapping step cannot be delivered by that step, because the consumer's installed copy is
+the one that runs the pull. So the release carrying this fix carries nothing else that depends
+on it.
+
+**TWO SCRATCH FIXES WERE SCORED, AND THE OBVIOUS ONE DOES NOT WORK.** Calling
+`ai_dlc_memo_dir || true` once in the main shell, directly after the trap is armed, leaves
+**0** directories and the receipt exits **0**. Arming `trap ai_dlc_memo_cleanup EXIT` inside
+`ai_dlc_memo_dir()` whenever `$BASH_SUBSHELL` is non-zero still leaves **1**, and the receipt
+exits **1**. The trace shows why: the trap is set at subshell level 2 and never runs. Under this
+machine's bash 3.2, an EXIT trap set in a function that runs as a pipeline stage inside `$( )`
+does not fire. The same function called as `$(f)`, with no pipeline, does fire it. A fix has to
+make the owning process the one whose trap runs. It must not rely on a subshell cleaning up
+after itself.
+
+The receipt runs the engine once, standalone, against the `ledger-reverify` fixture's seed
+under a private `TMPDIR`. It unsets `AI_DLC_RECONCILE_MEMO` so the borrowed-memo path cannot
+hide the leak, and counts the `reconcile-memo.*` directories left behind. It exits **9** if the
+seed or engine is missing, or if the run produced no output rows. Scored at `937919e4`: **1**
+(`rows=111 reconcile-memo-left=1`). A scratch copy of the unfixed tree also scores **1**,
+which shows the copy itself does not change the answer. The main-shell fix scores **0**. A
+copy with the engine removed scores **9**.
+
+verify: sh set -u; S=core/fixtures/ledger-reverify/seed.sh; E=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -r "$S" ] && [ -r "$E" ] && [ -r "$(dirname "$E")/lib.sh" ] || exit 9; T="$(mktemp -d)" || exit 9; trap 'rm -rf "$T"' EXIT; mkdir "$T/amb" || exit 9; export TMPDIR="$T/amb"; unset AI_DLC_RECONCILE_MEMO; read -r DIST BASE CONS THEIRS < <(bash "$S" 2>/dev/null) || exit 9; [ -d "$DIST" ] && [ -d "$CONS" ] || exit 9; out="$(bash "$E" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>/dev/null)"; rows="$(LC_ALL=C grep -cE '^[A-Z][A-Z-]+	' <<<"$out")" || rows=0; left="$(ls -d "$T/amb"/reconcile-memo.* 2>/dev/null | LC_ALL=C grep -c .)" || left=0; echo "rows=$rows reconcile-memo-left=$left"; [ "$rows" -gt 0 ] || exit 9; [ "$left" -eq 0 ] && exit 0; exit 1
