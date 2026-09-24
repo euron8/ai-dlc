@@ -14155,3 +14155,133 @@ fixture reading a new file. Entries 32125 -> 32127, only the two traced fixtures
 PROPER subset of the 4822-path universe. **Ask for that trace by name whenever a fixture's reads
 change, and verify additivity rather than assuming it.**
 
+**BATCH 140 SHIPPED `v0.616.0` (`4071e41b`, #816), TWO SUBJECTS IN ONE RELEASE.** `BL-014` and
+`BL-018` closed, discharging `PC-S299-READOPT-DOSSIER-RENDERS-REASON-EMPTY` and
+`PC-S302-HARD-BLOCKERS-HAS-NO-POST-APPLY-GUARD`, both named verbatim in the release commit. Gate at
+`AI_DLC_FIXTURE_NO_SKIP=1`: 22 of 22 phases PASS, **203 ok / 0 FAIL**, both changed fixtures read by
+name against an impossible-name control of 0. Live **75 -> 73**, archive **207 -> 209**. Receipt
+zeros diffed BY IDENTITY, 7 -> 9, the two arrivals being exactly the subjects — and that diff was
+load-bearing because this batch ALSO filed, which makes a count-only reading close plausibly.
+
+**THE SCOPING INPUT RETURNED FOUR ROWS AND EVERY ONE DISQUALIFIED ITSELF IN ITS OWN WORDS.**
+`BL-067` records its remedy unshippable at 3/3 false positives, `BL-132` carries a measured
+refutation, `BL-145` says the obvious fix is not obviously right with an unmeasured FP set, and
+`BL-215` says no enforcer is constructible. Action 1 anticipates this state and says to report
+rather than force one. **So this batch scoped off a class the join CANNOT SEE.**
+
+**A `GATED-ON-THIS-FILING` ENTRY IS INVISIBLE TO THE PC-BACKED WORKLIST BY CONSTRUCTION, AND THE
+CLASS IS FOUR ENTRIES.** These are entries this repo filed as the measured RESIDUE of a candidate
+whose headline the consumer has already ARCHIVED. The join keys on `live.txt`; the parent candidate
+left it; the residue scores zero. Derived with controls: all four ids read `live=0 arch=1` while a
+worklist id reads `live=1` in the same invocation. **`BL-015` AND `BL-016` ARE THE REMAINING TWO AND
+ARE THE STRAIGHTFORWARD BUILD NEXT** — same shape, same invisibility, both receipts exit 1 today.
+
+**THE CLASS COUNT IS A FLATTENED-BODY QUESTION AND A LINE-GREP ANSWERS IT WRONG.** The phrase
+wraps, so a line-oriented grep scores 2 where the per-entry flattened derivation scores **4**
+(negative control 0 flattened). The contract carried both numbers in adjacent bullets without
+noticing they disagreed.
+
+**BOTH RECEIPTS WERE REPLACED BEFORE EITHER FIX WAS BUILT, AND THAT ORDERING IS THE FINDING.** Both
+accepted implementations that ship nothing. `BL-018`'s captured `2>&1`, so a qualifier written to
+stderr — which `emit-report.sh` discards with `2>/dev/null` — scored 0, as did widening the filter
+and quoting the line it sits beside. `BL-014`'s accepted raising the clip limit past its own seed,
+the one regression its entry names by name. **A receipt scored only after the fix exists cannot
+tell the fix from the regressions beside it.**
+
+**NO FIXED SEED LADDER CAN VERIFY A CLIP ARM.** Measured: escalating the seed to 20000 moved the
+escape to `head -50000`; 2000000 moved it to `head -5000000`. Every ladder has a top. The shipped
+receipt derives its seed from the render's OWN declared bound and seeds past it, and keeps a
+behavioural ladder beside that because a computed bound the grammar cannot spell reads as no bound.
+
+**A MUTANT SCORING "REJECTED" ON A CONJUNCTION HAS ESTABLISHED NOTHING UNTIL THE OTHER CONJUNCTS
+ARE SATISFIED.** The lead's first attempt to score the clip regression read 1 and was a
+non-discriminating null: it raised the limit while leaving the plain-scalar half unfixed, so the
+receipt failed on the other arm. The discriminating input fixes one half and breaks the other.
+
+**`named_absorbed()` NO LONGER ELECTS THE OLDEST NAMING COMMIT, AND A CONTRACT WRITTEN ON THE OLD
+BEHAVIOUR SHIPPED IN THIS BATCH BEFORE AN ADVERSARY CAUGHT IT.** Both `tail -1` occurrences in that
+span are PROSE describing what was removed. The row carries no version either way — the emit says
+so in as many words — so re-citing cannot cause a false version attribution; but the caller branches
+on `na_n > 1` and rewrites the row to the unelected-list form. Both ids read 1 naming commit before
+the release and **2** after, as predicted. **`BL-145` is the live entry that governs this act and it
+is on the disqualified worklist**, so each entry states what its citation does and does not do.
+
+**THE GATE BLOCKED, THE WRAPPER SAID `exit 0`, AND THE FAILING FIXTURE WAS NOT THIS BRANCH'S.**
+`ledger-reverify`, 1 of 279 assertions, under the pool; green solo on the identical commit. The
+branch touched neither that engine nor that fixture, and the fixture drives neither changed file.
+**Filed as `BL-283` rather than re-run away**: its leak counter globs a FIXED prefix in a shared
+`TMPDIR`, so it answers a question about the box and reports it as a property of the run. Proven
+behaviourally — a hand-made directory under that prefix, created by no `ledger-reverify` run, moves
+the delta +1 and back on removal. **7** other fixture directories drive that materializer, so the
+collision population is this suite's own pool.
+
+**AND THE FIRST ATTRIBUTION FOR IT WAS WRONG, WITH THE MECHANISM RIGHT.** The consumer's INSTALLED
+copy carries the byte-identical `mktemp` line under the same user and `TMPDIR`, and its gate was
+running — but it started AFTER the failing run finished. **A shared mechanism is not an
+attribution; check the timestamps before naming a cause.**
+
+**THE `(#816)` ONCE ATTACHED TO BATCH 139's RELEASE WAS WRONG** (that record is now in the plan
+archive). GitHub reports PR **#816** as batch 140's release. Batch 139's release sha `b9caf678`
+resolves and is on `origin/main`, so the sha was good and only the PR number was bad. Do not propagate a PR number from a commit SUBJECT; ask the forge.
+
+**DISPATCH HANDS, BUT DO NOT LET THEM RUN THE SUITE.** Operator instruction at batch 131, after
+the machine reached **load 62-72 on 18 cores**: six concurrent `pre-push` runs, 12 worker pools,
+137 fixture processes. Two hands had each started a full 202-fixture suite to check their own
+work while the lead ran two more. Every timing taken under that is a measurement of contention —
+one base rep read **1651s at load 75** — and the measurement hand's whole differential was void.
+**The LEAD owns the gate, runs it alone, and waits for it.** Tell every hand so in its brief.
+**Kill a hand's process GROUP and its parent shell**, not just the fixtures: eleven orphaned `zsh`
+wrappers survived three separate cleanups because the sweep keyed on `pre-push` and `run.sh`
+rather than on PPID.
+
+**THE ELECTION LOOP IN THE DERIVE BLOCK BELOW IS NEW, AND IT IS WHY `BL-270` CLOSED.** The
+ancestor gate is GONE and the block now takes a UNION over every qualifying ref, minus the union
+of their archives. Do not "repair" it back to a single elected ref: measured at batch 130, the
+three qualifying refs are PAIRWISE INCOMPARABLE (adds 4/4/4, union 7), so every single-ref rule
+loses real filings, and a union WITHOUT the archive subtraction resurrects the 6 ids that are live
+on one qualifying ref and archived on another.
+
+**THE DELIVERY GAP IS SIX RELEASES AND TWO BOOTSTRAPPING FILES ARE NOW IN THE RANGE. THE OPERATOR
+HAS BANKED IT — DO NOT WRITE A RUNBOOK.** Ruling given at batch 132's close, on the question asked
+directly: bank the pull and keep reporting the gap each batch. Consumer installed `0.605.0`
+against `VERSION` `0.611.0`; the last pull was `0.601.0`-`0.605.0` into graph on 2026-09-19 as
+`554e4a32`, and the consumer has pulled nothing since. Both
+`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh` and — as of batch 135 —
+`core/skills/ai-dlc-update/reconcile/apply.sh` are in the range, so **the consumer's INSTALLED
+copy runs the pull that carries its own repair** twice over: say so in any brief rather than
+claiming the next pull is protected by either. Re-derive all of it; do not read this sentence
+for a number.
+
+**AND THE CONSUMER'S OWN COMMITTED DRY RUN IS SILENT ABOUT THE TOP OF THE RANGE.**
+`_bmad-output/ai-dlc-update/reconcile-report.md` rehearses `0.605.0`-`0.608.0` and verdicts
+`SELF-UPDATE-DEFER` with a SAFE-STOP at `0.606.0` and **11** `HARD-LAYER-ADJUDICATION-MISSING`
+blocking rows. It says nothing about `0.608.0` onward. Read it before writing a brief — it is a
+measurement of the engine the consumer actually runs — and do not read its verdict as covering
+releases it never saw.
+
+**THE GAP WIDENS BY ONE ON EVERY RELEASE THIS PROGRAM SHIPS, WHICH IS THE PROGRAM SUCCEEDING AND
+NOT A REASON TO REORDER.** Batch 134 took it from four to five. **Five is the threshold this
+plan's own action 7 calls WIDE** — say so when reporting it, and keep reporting rather than
+reordering. The banked ruling stands until the operator lifts it.
+
+**THE CONSUMER'S OWN COMMITTED REPORT SAYS HOW ITS INSTALLED ENGINE WILL CLASSIFY THE NEXT PULL,
+AND THAT IS REACHABLE EVIDENCE NOBODY HAD READ.** `_bmad-output/ai-dlc-update/reconcile-report.md`
+in the consumer tree records a DRY RUN of `0.601.0`-`0.605.0` verdicting **SELF-UPDATE-DEFER**
+(`rulebook-coupled-fixtures`, zero CARRY rows) and naming a SAFE-STOP split point whose slice
+self-updates cleanly. Read that file before writing any pull brief — it is a measurement of the
+engine the consumer actually runs, not a reading of the code here.
+
+**A NEW CANDIDATE LANDED MID-BATCH AND WAS UNCOMMITTED WHEN READ.**
+`PC-S312-DERIVATION-FENCES-STRANDED-CORE-RELOCATION-WITH-NO-WORKLIST-ROW` had no `-S` date and was
+visible only by diffing the consumer's working tree against `git show HEAD:` — the one class a
+commit-keyed sweep is structurally blind to. Filed as a WIDENING of `BL-276` at the candidate's own
+request rather than as a new entry. **Run that comparison every batch**; the ledger md5 moved twice
+during this one.
+
+**THIS FILE IS NOW BOUND AT 150000 BYTES** by arm `P8` of `scripts/validate-plan-shape.sh`, which
+covers every plan in `docs/plans/` at depth 1 whether live or spent. When it fires, the remedy is
+`bash scripts/plan-rotate.sh docs/plans/graph-ledger-full-drain.md` to see what would move and
+`--apply` to move it — **never a discharge banner in the head window**, which would silence P9
+through P13 on this file. Rotating is the remedy; there is no exemption list and one must not be
+added.
+

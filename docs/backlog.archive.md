@@ -18591,3 +18591,213 @@ reads 0.633.0). The receipt exits 0 at `origin/main` after the merge. The gate r
 
 verify: sh R="$(pwd)"; command -v git >/dev/null || exit 9; T="$(mktemp -d)" || exit 9; F="$(mktemp -d)" || exit 9; G="$(mktemp -d)" || exit 9; M="$(mktemp -d)" || exit 9; mkdir -p "$F/.claude" "$G/.claude/schemas" || exit 9; ( cd "$T" && git init -q && mkdir _bmad && git -c user.name=r -c user.email=r@r commit -q --allow-empty -m init && bash "$R/scripts/install.sh" "$T" </dev/null ) >/dev/null 2>&1 || exit 9; W="$T/scripts/ai-dlc/stamp-story-provenance.sh"; V="$T/scripts/ai-dlc/validate-provenance-block.sh"; K="$T/.claude/schemas/provenance-block.json"; [ -f "$W" ] && [ -f "$V" ] && [ -f "$K" ] || exit 9; cp "$K" "$G/.claude/schemas/provenance-block.json" || exit 9; P="$(AI_DLC_PROJECT_ROOT="$F" bash "$W" --print-schema 2>/dev/null)"; [ -n "$P" ] && [ "$P" -ef "$K" ] || exit 1; Q="$(AI_DLC_PROJECT_ROOT="$G" bash "$W" --print-schema 2>/dev/null)"; [ -n "$Q" ] && [ "$Q" -ef "$G/.claude/schemas/provenance-block.json" ] || exit 1; bash "$T/tests/fixtures/story-provenance/seed.sh" --mixed-into "$M" >/dev/null 2>&1 || exit 9; ( cd "$M" && AI_DLC_PROJECT_ROOT="$F" bash "$W" --terminal s1/bug-fix-oneshot-story-2-fix-thing.md --profile bug-story-provenance s1/stories/story-2-fix-thing.md ) >/dev/null 2>&1 || exit 1; ( cd "$M" && AI_DLC_PROJECT_ROOT="$F" bash "$V" s1/stories/story-2-fix-thing.md --require-skill bmad-review-adversarial-general ) >/dev/null 2>&1 || exit 1; o="$(cd "$T" && bash tests/fixtures/story-provenance/run.sh 2>&1)" || exit 1; [ "$(grep -cE '^  ok +mixed: bind resolves artifact via project root ' <<<"$o")" = 1 ] || exit 1; ( cd "$T" && bash tests/fixtures/validator-path-resolution/run.sh ) >/dev/null 2>&1 || exit 1; exit 0
 
+## BL-080
+
+**`enforcement-map.yaml` states Check 3b's posture as `FAILS the gate (exit 0 required)`, and
+exit 0 is exactly what a story that verified NOTHING returns — so the map records a vacuous run as
+gate-satisfying.** The row's enforcer is `core/scripts/validate-locked-anchor.sh`, whose vacuous
+branch prints `PASS — EXAMINED NOTHING` and exits **0** by deliberate design: a block claiming
+nothing has nothing to substantiate, and failing it would red every legacy block in a consumer's
+history. Driven through the shipping script on the fixture's own stories, three arms in one
+invocation: `nothing-verified-story.md` **rc 0**, `good-story.md` **rc 0**, and the control that
+proves the check can still fire, `bad-story.md` **rc 1**. The two roads to 0 are distinguishable in
+the REPORT LINE and indistinguishable in the EXIT CODE, and the map's posture is written in terms
+of the exit code.
+
+**The scale is already measured and it is recorded in this repo, in the fixture's own prose:** on a
+reference consumer **196 of 998 stories took the vacuous road and 0 took the verified one** — the
+whole corpus reported PASS and nothing had ever been verified. A posture that reads "exit 0
+required" is satisfied by every one of those 196.
+
+**This is `BL-039`'s PASS-by-default hazard written into the map rather than into a schema, and it
+is what `BL-058` did NOT fix.** `BL-058` unified the emitted TOKEN across three validators and
+registered it as a controlled vocabulary; it deliberately left every exit code untouched, because
+the codes are per-validator contracts and one of them is consumer-visible. So the token now
+distinguishes the two roads and the posture line still does not. The distinction exists, is
+rendered in `docs/vocabulary-index.md`, and the one place a reader goes to ask "what does this
+check enforce" cannot see it.
+
+**Narrower than it looks in one direction, and that belongs in the record.** The other two emitters
+do not have this shape: `validate-stub-audit.sh` exits **4** on its vacuous branch and its map row
+says so explicitly (`exit 4 is the non-vacuity sub-clause`), and `validate-ci-gates.sh` exits
+**78** with a row whose posture is `reports; the retro adjudicates`. Only the locked-anchor row
+states a bare exit-0 requirement against an emitter whose vacuous road is exit 0. The defect is one
+row, not a class — but it is the row on a `hard_block: true` check.
+
+**Why the receipt is the receipt.** It cannot key on the posture's WORDING, because any fix is free
+to phrase it differently and this program has already shipped one receipt that rejected a correct
+fix for renaming its subject. It keys instead on the JOIN the fix has to create: the Check 3b row
+must reach the empty-subject vocabulary — by naming the token, or the vocabulary, or by the gate
+step reading the token rather than the code. Its control is behavioural and runs first: the
+fixture's failing story must still exit **1** and its vacuous story must still exit **0**, so a fix
+that "resolves" this by making the vacuous road fail — reddening 196 of 998 stories on a real
+consumer — exits 9 and reports STILL-LIVE rather than closing. That control is the whole reason
+this entry is not simply "make it exit non-zero". Proven in both directions with the sides asserted
+to differ: **1** against the tree as shipped, **0** against a copy whose Check 3b row names the
+token, with the behavioural control passing in both.
+
+Split from `BL-058`, which registered the vocabulary these emitters share; found while auditing
+that entry's own owner file. Tier: **DEFECT** — it misstates what a `hard_block` check enforces, on
+a corpus where the vacuous road was measured at roughly one story in five.
+
+**One row as filed, six as measured.** The "one row, not a class" paragraph above
+was a claim about three emitters, and the empty-subject vocabulary has many more. A
+fresh derivation joined every `hard_block: true` row to its enforcers, and each
+enforcer to its `EXAMINED NOTHING` emission and the exit that follows it. Six rows
+state `exit 0 required` against an enforcer whose vacuous road exits 0: **Check 2**
+(`validate-escalation-status-vocabulary.sh` and `validate-suppression-lifetime.sh`,
+both driven on an absent escalations file, rc 0), **Check 2a**
+(`validate-escalation-resolution.sh`, driven on the same input, rc 0), **Check 3b**
+(`validate-locked-anchor.sh`, driven on `nothing-verified-story.md`, rc 0, with
+`bad-story.md` rc 1 as the control), **Check 26** (`validate-gate-adjudication.sh
+--series`, driven on an empty series directory, rc 0), **Check 33**
+(`validate-request-coverage.sh`, driven on an ask naming no identifier, rc 0), and
+**Check 35** (`validate-snapshot-conservation.sh`, driven on a repository with no
+snapshot and on one with no gate-metrics file, rc 0 both). All six were driven
+through the shipping script. Checks 30, 31 and 32 exit 2 on the same shape and Check
+34 exits 3, so those four were the controls and are not in the set. The filed receipt
+could not see this. It read one row, so a qualifier written into `why:` satisfied it,
+a qualifier on the advisory `stories-test-strategy.md` site satisfied it, and a fix
+covering 3b alone satisfied it. The receipt below derives the emitter set from the
+map's own `empty_subject_verdict: emitters:` list, keeps every `hard_block` row whose
+enforcer takes that exit-0 road and whose posture says `exit 0 required`, and requires
+at least six rows, with 3b among them, each carrying `EXAMINED NOTHING` in the
+posture value itself.
+
+**LANDED (v0.634.0, verified 76ba3029).** Each of the six postures keeps the literal
+`exit 0 required` and adds, inline, that exit 0 with `EXAMINED NOTHING` is not a
+pass because nothing was verified. The step files for Checks 26, 33 and 35 carry no
+read-the-PASS-line instruction like the one Check 3b has at
+`steps/gate-validation.md:489-494`.
+
+verify: sh M=core/skills/ai-dlc/enforcement-map.yaml; V=core/scripts/validate-locked-anchor.sh; F=core/fixtures/check-3b-locked-anchor; [ -f "$M" ] && [ -r "$V" ] && [ -d "$F" ] || exit 9; b=$(cd "$F" && bash "../../../$V" bad-story.md >/dev/null 2>&1; echo $?); o=$(cd "$F" && bash "../../../$V" nothing-verified-story.md 2>&1); n=$?; [ "$b" = 1 ] && [ "$n" = 0 ] || exit 9; case "$o" in *"EXAMINED NOTHING"*) ;; *) exit 9 ;; esac; E=$(awk '/^empty_subject_verdict:/{on=1;next} on&&/^[^ ]/{exit} on&&/^  emitters:/{em=1;next} on&&em&&/^    - /{print $2;next} on&&/^  [a-z]/{em=0}' "$M"); [ -n "$E" ] || exit 9; Z=""; for e in $E; do [ -f "$e" ] || continue; x=$(awk 'f==0 && /EXAMINED NOTHING/ && $0 !~ /^[ \t]*#/ {f=1} f==1 && match($0, /(^|[^a-zA-Z_.])exit[ ]+[0-9]+|sys\.exit\([0-9]+\)/) {s=substr($0,RSTART,RLENGTH); gsub(/[^0-9]/,"",s); print s; exit}' "$e"); [ "$x" = 0 ] && Z="$Z $e"; done; case " $Z " in *" $V "*) ;; *) exit 9 ;; esac; R=$(awk -v z="$Z " 'function fl(){ if (hb && hit && pv ~ /exit 0 required/) { t++; if (id=="3b") s3=1; if (pv !~ /EXAMINED NOTHING/) bad++ } pv="" } /^  - id: /{fl(); id=$3; gsub(/"/,"",id); hb=0; hit=0; ie=0; next} /^[^ ]/{fl(); id=""; next} /^    hard_block: true/{hb=1} /^    enforcer:/{ie=1; next} ie && /^      - /{ if (index(z, " " $2 " ")) hit=1; next} /^    [a-z_]+:/{ie=0} /^        posture: /{fl(); pv=$0; inp=1; next} inp && /^          [^ ]/{pv=pv " " $0; next} {inp=0} /^        [a-z_]+:/{fl()} END{fl(); print t+0, bad+0, s3+0}' "$M"); set -- $R; [ "${1:-0}" -ge 6 ] && [ "$3" = 1 ] || exit 9; [ "$2" -eq 0 ]
+## BL-153 — `implementation-join-yield`'s beat-churn arm needs nine stop-hook invocations inside the hook's 30-second rapid-fire window, and the pool spreads them past it
+
+**Found 2026-09-03 on the re-push of the same docs commit**, one run after `BL-152`: the gate
+refused on `implementation-join-yield`, green solo, red under the pool (`1 of 185 units red`).
+Consumer-facing: the fixture ships. DEFECT.
+
+The arm is `beat-churn stall` (`core/fixtures/implementation-join-yield/run.sh:163-165`): it drives
+the sequence `B L B L B L B L B` — nine invocations of `ai-dlc-continue.sh` — and asserts a
+`BACKOFF` appears, which the hook emits once three blocks fall within `RAPID_WINDOW_SECONDS=30`
+of each other (`core/hooks/ai-dlc-continue.sh:88-89,391,770`). Every other gap in the fixture is
+expressed WITHOUT sleeping (`age_state` moves the state file's timestamp back 100s), but the
+"rapid" side of the same clock is left to real wall time: nine hook runs must complete inside 30
+seconds. Under the pool they did not — the red run's sequence reads
+`... BLOCKED (rapid-fire 3/3) ALLOWED_BY_LIVE_BEAT BLOCKED (rapid-fire 1/3) ...`: the counter
+reached three, a gap of 30s or more elapsed before the fourth block, and the hook correctly reset
+it. The arm then reports `no BACKOFF`.
+
+**Not a hook defect.** The reset is the hook's documented behaviour and the fixture's own
+`slow-beat near-miss` arm depends on it. The fixture pins one side of the clock and trusts the
+other. Measured red run: `.git/ai-dlc-fixture-failures`, header `2026-09-03T20:35:37Z`.
+
+**Remedy shape:** pin the rapid side the way the slow side is pinned — a helper that rewrites
+the state file's last-block timestamp to `now` before each `B` (the mirror of `age_state`), so
+the sequence is rapid by construction; or make the window an env override in the hook
+(`${AI_DLC_RAPID_WINDOW_SECONDS:-30}`) and have the fixture raise it. The first form touches
+only the fixture and is preferred. Prove it can fail: inject a `sleep 31` between two blocks with
+the pin in place (the pin must defeat it) and with the pin removed (the arm must go red).
+
+**Receipt limits, stated.** The receipt accepts either form: a fixture helper that writes
+`date +%s` into `pipeline-block-state.txt`, or the hook reading the window from an env override.
+A fix that shortens the sequence or widens the assertion scores STILL-LIVE. Exit 9 if the arm
+or the hook constant is gone.
+
+**Receipt replaced.** The filed receipt was a lexical grep: a comment naming
+`pipeline-block-state` beside `date +%s`, or an inert `${...}` env override on the hook
+constant, closed it without changing behaviour, and it rejected the entry's own preferred
+fix. The receipt below drives the whole fixture under a `date` shim that advances the clock
+31s only after the hook reads `NOW`, so an unpinned rapid side resets the counter and the
+arm goes red; exit 9 if the shim was consulted fewer than nine times.
+
+**LANDED (v0.634.0, verified 76ba3029).** `pin_state` and an `R` event in `drive_seq`, used only
+by the beat-churn arm.
+
+verify: sh f=core/fixtures/implementation-join-yield/run.sh; h=core/hooks/ai-dlc-continue.sh; [ -f "$f" ] && [ -f "$h" ] || exit 9; grep -q 'beat-churn stall' "$f" && grep -q '^TIMESTAMP=$(date -u ' "$h" && grep -q '^NOW=$(date +%s)' "$h" || exit 9; D=$(mktemp -d) || exit 9; X(){ rm -f "$D/date" "$D/clock" "$D/flag" "$D/n"; rmdir "$D"; exit "$1"; }; printf '%s\n' '#!/bin/bash' 'C="$SHIM_D/clock"; [ -s "$C" ] || /bin/date +%s > "$C"' 'if [ "$1" = -u ]; then : > "$SHIM_D/flag"; exec /bin/date "$@"; fi' 'if [ "$*" = +%s ]; then T=$(cat "$C"); echo "$T"; if [ -e "$SHIM_D/flag" ]; then rm -f "$SHIM_D/flag"; echo $((T+31)) > "$C"; echo x >> "$SHIM_D/n"; fi; exit 0; fi' 'exec /bin/date "$@"' > "$D/date" && chmod +x "$D/date" || X 9; O=$(SHIM_D="$D" PATH="$D:$PATH" bash "$f" 2>&1); r=$?; n=$(wc -l < "$D/n" 2>/dev/null | tr -d ' '); [ "${n:-0}" -ge 9 ] || X 9; [ "$r" -eq 0 ] && grep -q '^  ok    beat-churn stall: BACKOFF' <<<"$O" && X 0; X 1
+
+## BL-283 — the theirs-tree leak counter globs a SHARED prefix, so any concurrent process on the box fails the arm
+
+**DEFECT.** Found at batch 140 when the arm went red under a 6-way pool on a tree that touches
+neither the engine nor the fixture, and green solo on the identical commit.
+
+**THE COUNTER ASKS A QUESTION ABOUT THE BOX AND REPORTS THE ANSWER AS A PROPERTY OF THE RUN.**
+`core/fixtures/ledger-reverify/run.sh:3411` is
+`tt_count() { ls -d "${TMPDIR:-/tmp}"/ledger-reverify-theirs.* …; }`, and the arm reports
+`nt_after - nt_before` as *"this engine left %+d of its own theirs-trees behind"*. The
+materializer at `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:1227` names its tree
+`mktemp -d "${TMPDIR:-/tmp}/ledger-reverify-theirs.XXXXXX"` — a FIXED prefix carrying **0**
+per-run discriminator (control: the same grep for `$$` or a run id over that file returns 0).
+So the glob cannot separate this run's trees from anyone else's.
+
+**MEASURED BEHAVIOURALLY, and the seed is a directory no `ledger-reverify` run created.**
+`mkdir` one tree under that prefix by hand: the count goes **2 → 3**, delta **+1**, which is
+exactly the value the arm convicts on. Remove it and the count returns to **2** in the same
+invocation, so the counter is live rather than stuck. A +1 delta is therefore attributable to
+any process on the machine, and the arm's message names the engine.
+
+**THE POPULATION IS THIS SUITE'S OWN POOL, WHICH IS WHY IT IS NOT RARE.** **7** fixture
+directories other than `ledger-reverify` drive `ledger-reverify.sh` (control: 8 including it),
+and the runner dispatches through a worker pool. Any of the seven scheduled alongside it
+materializes into the same shared prefix.
+
+**AND THE COLLISION SURFACE IS WIDER THAN THIS REPO.** The reference consumer's INSTALLED copy
+carries the byte-identical `mktemp` line under the same user and the same `TMPDIR`, and 6 of its
+own fixtures drive it, so a consumer gate running concurrently is a second population. That is
+a statement about the prefix, not an attribution: the consumer gate observed at batch 140
+started AFTER the failing run finished, so it was not the cause of that instance.
+
+**THE HEADER ABOVE THE ARM RECORDS AN EARLIER, WIDER FORM OF THIS SAME DEFECT AS FIXED.** It
+states that the counter once matched every `${TMPDIR}/tmp.*` on the machine, was *"red once in
+three reps on a busy host"*, and that under the pool *"that is a guaranteed intermittent, which
+is a fixture that cries wolf rather than a check"*. The repair NARROWED the glob to a named
+prefix. Narrowing the population reduced the rate and did not change the kind: the question
+"did THIS run materialize a tree" is still answered by a glob no run owns.
+
+**A FIXTURE THAT FAILS ON AMBIENT LOAD COSTS MORE THAN THE CHECK IS WORTH, BECAUSE ITS RED IS
+INDISTINGUISHABLE FROM A REGRESSION IN THE CHANGE UNDER TEST.** At batch 140 it blocked a
+release whose branch touched neither file, and the session spent a full gate cycle establishing
+that. The arm's subject — the engine cleaning up after itself — is real and worth keeping; what
+is broken is the instrument.
+
+**Two leftover trees dated two days before that run were on disk throughout**, which is
+independent evidence that cleanup is imperfect and that a baseline taken mid-session carries
+whatever a previous session abandoned.
+
+**THE FIX SHAPE IS A PER-RUN DISCRIMINATOR, NOT A LOCK OR A RETRY.** Give the materializer a
+run-scoped segment the caller can set and the fixture can glob — the fixture already controls
+the environment it invokes the closer in. A retry converts an intermittent into a slower
+intermittent, and a lock serialises fixtures the pool exists to parallelise. **Do not "fix" it
+by deleting the arm**: the property it checks is load-bearing, and a guard whose removal changes
+nothing is not the situation here — its removal would make a real leak invisible.
+
+**Not measured, and stated rather than hidden:** whether any leak the arm has ever reported was
+genuine. The distribution's history would answer it and it was not taken.
+
+**THE FILED RECEIPT WAS REPLACED AT BATCH 151, BECAUSE IT ACCEPTED ONLY ONE OF THE TWO FIXES.**
+It passed only when the engine's `mktemp` line carried a `$` in its prefix, which is the
+engine-side discriminator. The fixture-only fix gives the laziness run a private `TMPDIR`, so no
+foreign tree can land in the directory it counts. That fix closes the defect and leaves the
+engine line untouched, so under the filed receipt the entry would have read live forever. The
+receipt below runs the fixture's laziness block alone, twice. The first run goes through a shim
+that plants one foreign `ledger-reverify-theirs.*` tree in the ambient `TMPDIR` before invoking
+the real engine, and the arm must stay `ok`. The second run uses an engine copy that
+materializes on every call and never removes its tree, and the arm must still FAIL on the leak.
+It was scored against seven constructed trees: **S0** unfixed scores **1**, **S1** (the fixture
+fix) scores **0**, **S2** (the engine fix) scores **0**, the regressions **S3**, **S4**, **S5**
+and **S7** each score **1**, and **S6** (the arm deleted) scores **9**. At `937919e4` it prints
+`foreign:ok=0,fail=1 leak-mutant:fail=1,ok=0` and exits **1**.
+
+**LANDED (v0.634.0, verified 76ba3029).** The fix is in the fixture only; `ledger-reverify.sh` is
+untouched. The laziness arm now counts `ledger-reverify-theirs.*` inside a private `LZ_TMP` under
+the fixture sandbox, and it runs the closer with `TMPDIR="$LZ_TMP"`. It stays prefix-scoped
+because every engine run leaks one `reconcile-memo.*` (`BL-303`). `theirs-tree-prefix` gains a
+second assertion, under the same private `TMPDIR`, that a `$THEIRS_TREE` run materializes INSIDE
+it, so an engine that ignored `TMPDIR` could no longer leave the counter reading 0 forever. The
+committed mutant `mutation-tt-eager-leak` must read `left +1`. The fixture exits 0 with 295 ok and
+0 FAIL. The receipt below exits 0 at tip.
+
+verify: sh set -u; F=core/fixtures/ledger-reverify/run.sh; S=core/fixtures/ledger-reverify/seed.sh; E=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -r "$F" ] && [ -r "$S" ] && [ -r "$E" ] || exit 9; T="$(mktemp -d)" || exit 9; trap 'rm -rf "$T"' EXIT; awk '/^# D\. LAZINESS/{p=1} /^# THE OTHER DIRECTION/{p=0} p' "$F" > "$T/arm.sh"; grep -q 'theirs-tree-lazy' "$T/arm.sh" || exit 9; mkdir "$T/amb" "$T/mut"; export TMPDIR="$T/amb"; read -r DIST BASE CONS THEIRS < <(bash "$S") || exit 9; [ -d "$DIST" ] || exit 9; cp "$(dirname "$E")"/*.sh "$T/mut/" || exit 9; OLD1='        *THEIRS_TREE*)' NEW1='        *)' OLD2='  [ -n "${THEIRS_TREE_OWNED:-}" ] && rm -rf "$THEIRS_TREE_OWNED"' awk '$0==ENVIRON["OLD1"]{print ENVIRON["NEW1"]; a++; next} $0==ENVIRON["OLD2"]{b++; next} {print} END{exit !(a==1 && b==1)}' "$E" > "$T/mut/ledger-reverify.sh" || exit 9; printf 'mkdir "$BL_AMB/ledger-reverify-theirs.FOREIGN$$"\nexec bash "$BL_REAL" "$@"\n' > "$T/shim.sh"; drive() { ( FAILURES=0; ASSERTIONS=0; CLOSER="$1"; BL_AMB="$T/amb" BL_REAL="$PWD/$E"; export BL_AMB BL_REAL; . "$T/arm.sh" ) 2>&1; }; fo="$(drive "$T/shim.sh")"; nf="$(ls -d "$T/amb"/ledger-reverify-theirs.FOREIGN* 2>/dev/null | grep -c .)" || nf=0; lo="$(drive "$T/mut/ledger-reverify.sh")"; fok="$(grep -c '^  ok    theirs-tree-lazy' <<<"$fo")" || fok=0; ffail="$(grep -c '^  FAIL  theirs-tree-lazy .*theirs-trees behind' <<<"$fo")" || ffail=0; lfail="$(grep -c '^  FAIL  theirs-tree-lazy .*left +[1-9]' <<<"$lo")" || lfail=0; lok="$(grep -c '^  ok    theirs-tree-lazy' <<<"$lo")" || lok=0; echo "foreign-injected=$nf foreign:ok=$fok,fail=$ffail leak-mutant:fail=$lfail,ok=$lok"; [ "$nf" -eq 1 ] || exit 9; [ $((fok + ffail)) -eq 1 ] && [ $((lfail + lok)) -eq 1 ] || exit 9; [ "$fok" -eq 1 ] && [ "$lfail" -eq 1 ] && exit 0; exit 1
+
+
+
