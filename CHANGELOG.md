@@ -15,6 +15,36 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.629.0] - 2026-09-24
+
+This release carries one follow-up to 0.628.0's live-defect work. It also records the close of
+that release's remaining entry.
+
+### BL-297 — the IMMINENT snapshot refresh no longer displaces an operator-facing finding
+
+In the consumer session behind 0.628.0, an adversary had just shown that the fix already existed
+as an operator endpoint. Then the context sensor's IMMINENT advice fired: *"BEFORE your next
+pipeline action, refresh _bmad-output/pipeline-snapshot.md"*. The lead replied "refreshing the
+snapshot now", and the finding never reached the operator.
+
+`core/hooks/ai-dlc-context-sensor.sh` now says that a finding the operator has not been told is
+not held back by the refresh. The lead records the finding under Open Items and puts it to the
+operator in the same response, as parallel tool calls. The advice does not say "report first".
+With about one turn of headroom left, reporting first lets the compaction fire while the
+question is pending, and the snapshot refresh is then lost.
+
+`core/fixtures/context-sensor/run.sh` binds both halves with presence arms. A committed mutant
+deletes the sentence and must fail them, and a control asserts that the mutant copy still fires
+IMMINENT. Against the pre-fix sensor, both new arms fail.
+
+### BL-294 — closed on the structural trace
+
+0.628.0 shipped the operator-relief section, the fold directive and the Rule 11(a) clause. The
+entry's close condition was a model replay of the incident. By operator ruling, no replay is
+needed, and a small-n replay on one model would not establish anything either way. The entry
+closes on what the shipped files bind on the incident path. The lead read base bytes that
+are byte-identical to `5376b309`, and each of those files differs at `e3f1a65d`.
+
 ## [0.628.0] - 2026-09-23
 
 Three filings from one consumer session. A live production bug was reported mid-sprint and
