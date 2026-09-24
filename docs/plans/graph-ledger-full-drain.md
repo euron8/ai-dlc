@@ -97,11 +97,20 @@ both new arms fail.
 
 **NEXT WORK.** The PC-backed worklist is five rows, all self-disqualifying: `BL-067`, `BL-132`,
 `BL-145` and `BL-215` in their own words, and `BL-230`, which awaits a cause the instrument has
-not recorded. Unfiled is the same **14**, with the same dates as batch 145. The consumer's ledger
-md5 `3e62c07e…` did not move. **No subject awaits a first look.** Re-derive first. Per action 1,
-take the oldest unexamined CORE candidate from the unfiled set only if one has appeared; all 14
-current ones are adjudicated consumer-owned in the batch-143 block below. A new consumer filing
-is otherwise the only thing that creates work.
+not recorded. **A NEW CONSUMER FILING LANDED WHILE BATCH 147 WAS CLOSING, AND IT IS THE NEXT
+SUBJECT.** `PC-S313-DISPATCH-GUARD-RECORDS-CITED-FALSE-AND-NEVER-DENIES` was committed in the
+consumer's `e7584fff0` (2026-09-24 07:03 -0400), on `ai-dlc/carry-over/epic-crs-closure-fvs-advance`,
+after this batch's sweep had run. The ledger md5 moved from `3e62c07e…` to `b6fd6280…`, and the
+working-tree live set went from 26 to 27, with only this id added. It is cited 0 times in
+`docs/backlog.md`, the archive and this plan, against a control of 1 for
+`PC-S313-EMIT-REPORT-E2` in the same ledger. It routes CORE: `core-paths.sh --is-core
+.claude/hooks/ai-dlc-dispatch-guard.sh` reads `core`, against a `not-core` control on
+`_bmad-output/spawn-ledger.jsonl`. Its premise holds at `core/hooks/ai-dlc-dispatch-guard.sh:182`:
+the guard records `role_contract_cited: false` and never denies. The filed remedy is a DENY path,
+which is a hook behaviour change that can wedge live dispatches. **Write the contract and run the
+adversary alone before any build.** Ask the adversary what a deny makes always-true for a
+dispatch whose role arrives only via `subagent_type` (the fallback at `:185`). The other 14
+unfiled candidates are unchanged and adjudicated consumer-owned in the batch-143 block below.
 
 **THE DELIVERY GAP IS TWO RELEASES.** The consumer installed **0.627.0** (`23aea0ef`) against
 `VERSION` **0.629.0**. Neither release touched a bootstrapping file. The banked ruling stands:
