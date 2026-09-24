@@ -20,6 +20,8 @@ distribution-only, as `core/fixtures/plan-shape/.dist-only` already is.
 
 ```
 verify: sh <one-liner>              exit 0 = the fix is present -> CLOSE-CANDIDATE
+                                    exit 9 = the receipt cannot measure its subject -> NEEDS-REVIEW
+                                    any other non-zero = still reproduces -> STILL-LIVE
 verify: has   <repo-rel-path> "<substr>"    close when the file CONTAINS the substring
 verify: lacks <repo-rel-path> "<substr>"    close when the file LACKS it
 verify: manual                      no mechanical predicate by design -> HAND-REVIEW
@@ -30,7 +32,7 @@ assume of the ref it greps. A behavioural predicate asserts the defect itself an
 anchored on prose the author invented to describe a wanted fix.
 
 **THIS FILE'S `sh` POLARITY IS THE OPPOSITE OF THE CONSUMER LEDGER'S, AND THE TWO ARE WRITTEN
-IN THE SAME SESSIONS.** Here, `scripts/backlog-reverify.sh:184-186` reads **exit 0 as "the fix
+IN THE SAME SESSIONS.** Here, `scripts/backlog-reverify.sh:241-250` reads **exit 0 as "the fix
 is present"** and non-zero as "still reproduces". In a consumer's push-candidate ledger,
 `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:942` reads it the other way — **exit 0
 means the entry STILL REPRODUCES**, and non-zero proposes CLOSE-CANDIDATE. Carrying this file's
@@ -188,7 +190,7 @@ base BEFORE any comparison is read, because a differential whose two sides do no
 every receipt undecided and reads as a working control.
 
 **SCORED AGAINST FOUR BUILDS, each `cmp`-asserted to differ from the real fix and `bash -n`
-asserted to parse.** Polarity checked at the emitter: `scripts/backlog-reverify.sh:233` reads
+asserted to parse.** Polarity checked at the emitter: `scripts/backlog-reverify.sh:244` reads
 **exit 0 as CLOSE-CANDIDATE, the fix is present** — the OPPOSITE of the consumer engine this
 entry is about, whose `:1913`/`:1949` sites read exit 0 as STILL-LIVE.
 
@@ -779,7 +781,7 @@ measure*, and the exit code alone will never carry it.
 
 **`backlog-reverify.sh` maps `sh` receipts on exit code alone — 0 is CLOSE-CANDIDATE and
 EVERY non-zero is `STILL-LIVE  … "sh receipt exited non-zero -- still reproduces here"`
-(`scripts/backlog-reverify.sh:198-203`).** But this corpus's receipts use **exit 9** as their
+(`scripts/backlog-reverify.sh:198-203` as filed; the routing now sits at `:241-250`).** But this corpus's receipts use **exit 9** as their
 own HAND-REVIEW convention: it is what a receipt returns when a PRECONDITION has moved and it
 therefore measured nothing. The engine folds that into STILL-LIVE, so a receipt asserting *"I
 could not tell"* is reported in the same words as one asserting *"the defect is still here"*.
@@ -824,7 +826,24 @@ Proven both directions: **1** against this tree, **0** against a mutant routing 
 NEEDS-REVIEW, with the two sides asserted to differ and the mutant asserted to be valid shell
 first. Tier: **DEFECT** — it silently disables the only instrument this backlog has.
 
-verify: sh R=scripts/backlog-reverify.sh; [ -r "$R" ] || exit 9; D=$(mktemp -d) || exit 9; X(){ rm -rf "$D"; exit "$1"; }; printf '%s\n' '# probe ledger' '' '## BL-901' '' 'A genuinely live entry whose receipt reproduces the defect.' '' 'verify: sh exit 1' '' '## BL-902' '' 'An entry whose receipt cannot measure anything and says so.' '' 'verify: sh exit 9' > "$D/probe.md" || X 9; O=$(bash "$R" "$D/probe.md" 2>/dev/null); [ "$(grep -c 'BL-901' <<<"$O")" -eq 1 ] || X 9; [ "$(grep -c 'BL-902' <<<"$O")" -eq 1 ] || X 9; V1=$(grep 'BL-901' <<<"$O" | cut -f1); V2=$(grep 'BL-902' <<<"$O" | cut -f1); [ "$V1" = "STILL-LIVE" ] || X 9; [ -n "$V2" ] || X 9; [ "$V2" != "STILL-LIVE" ]; X $?
+**THE FILED RECEIPT ACCEPTED TWO FALSE-CLOSE ROUTES, AND IT IS REPLACED.** It required only
+that the exit-9 row differ from STILL-LIVE, so an engine routing 9 to CLOSE-CANDIDATE satisfied
+it, and so did one routing 9 to HAND-REVIEW — which `backlog-rotate.sh:431` accepts as
+permission to move an annotated entry. Both turn "I could not measure" into a close. The
+receipt below pins the route: 9 must read NEEDS-REVIEW with an `unresolved:` detail, beside 0
+CLOSE-CANDIDATE and 1 and 127 STILL-LIVE in the same probe ledger. **The census premise was
+re-measured, not carried:** 1 live receipt exits 9 today, `BL-130`'s (two runs, exit 9 both
+times), and the same-root differential of the old and new engine over the real ledger moves
+exactly that one row, STILL-LIVE to NEEDS-REVIEW. `scripts/backlog-reverify.sh:241-250` now
+captures the exit; `core/fixtures/backlog-ledger` arm `exit-9-routing` holds it, with committed
+mutants for both false-close routes.
+
+**THIS DISCHARGES THE EXIT-9 SUBJECT ONLY.** The entry's second subject survives untouched:
+receipts that exit **1** having measured nothing — `BL-081`'s shape above — are still
+byte-indistinguishable from a genuine reproduction, and no exit-code routing can separate them.
+The entry stays live for that subject, and its receipt below closes only the first.
+
+verify: sh R=scripts/backlog-reverify.sh; [ -r "$R" ] || exit 9; D=$(mktemp -d) || exit 9; X(){ rm -rf "$D"; exit "$1"; }; printf '%s\n' '# probe ledger' '' '## BL-901' '' 'live' '' 'verify: sh exit 1' '' '## BL-902' '' 'cannot measure' '' 'verify: sh exit 9' '' '## BL-903' '' 'fixed' '' 'verify: sh exit 0' '' '## BL-904' '' 'command gone' '' 'verify: sh exit 127' > "$D/probe.md" || X 9; O=$(bash "$R" "$D/probe.md" 2>/dev/null); v(){ awk -F'\t' -v l="BL-$1" -v f="$2" '$2==l{print $f}' <<<"$O"; }; for i in 901 902 903 904; do [ "$(v $i 2 | grep -c .)" -eq 1 ] || X 9; done; [ "$(v 901 1)" = STILL-LIVE ] || X 9; [ "$(v 903 1)" = CLOSE-CANDIDATE ] || X 9; [ "$(v 904 1)" = STILL-LIVE ] || X 1; [ "$(v 902 1)" = NEEDS-REVIEW ] || X 1; case "$(v 902 3)" in unresolved:*) X 0 ;; esac; X 1
 
 ---
 
