@@ -188,7 +188,64 @@ printf '9.9.9\n' > "$DIST/VERSION"
 
 DRIVER_REL=".claude/session-driver/ai-dlc-session-driver.sh"
 
-# mk_consumer <dir> <green|worklist|decision> [hrv]
+# seed_map <core-path> -> the consumer-relative path a finished apply writes it to. Written out
+# here rather than evaluated from preclassify.sh, so the seed is not derived from the reader's own
+# grammar; S4 and RS1 check the seeded bytes against the tree the ORDINARY apply actually writes.
+seed_map() {
+  case "$1" in
+    core/scripts/*)  echo "scripts/ai-dlc/${1#core/scripts/}" ;;
+    core/fixtures/*) echo "tests/fixtures/${1#core/fixtures/}" ;;
+    core/*)          echo ".claude/${1#core/}" ;;
+  esac
+}
+# seed_ref <dist> <base> <ref> <consumer>
+#
+# A FINISHED TREE, which is the state `--finish` exists for: the operator has applied <ref>'s
+# content by hand, so every core path base..ref changes holds <ref>'s bytes, a deleted one is gone,
+# and a fixture `.dist-only` AT <ref> is not written at all. `--finish` verifies exactly this before
+# it stamps, so a world handed to it without this seed is an UNAPPLIED tree and is correctly
+# withheld -- which is what every `--finish` world here was until the verified finish landed.
+seed_ref() {
+  local d="$1" b="$2" r="$3" c="$4" rows st p f cp
+  rows="$(git -C "$d" diff --name-status --no-renames "$b" "$r" -- core/ 2>/dev/null)" || return 1
+  [ -n "$rows" ] || return 1
+  while IFS="$(printf '\t')" read -r st p; do
+    [ -n "${p:-}" ] || continue
+    case "$p" in
+      core/fixtures/*)
+        f="${p#core/fixtures/}"; f="${f%%/*}"
+        git -C "$d" cat-file -e "${r}:core/fixtures/${f}/.dist-only" 2>/dev/null && continue ;;
+    esac
+    cp="$(seed_map "$p")"
+    case "$st" in
+      D) rm -f "$c/$cp" ;;
+      *) mkdir -p "$(dirname "$c/$cp")" && git -C "$d" show "${r}:${p}" > "$c/$cp" || return 1 ;;
+    esac
+  done <<< "$rows"
+  return 0
+}
+# same_on_range <dist> <base> <ref> <seeded> <applied> -> 0 when every consumer path the range
+# maps to holds the same bytes in both trees (or is absent from both), and at least one is present.
+same_on_range() {
+  local rows p cp present=0
+  rows="$(git -C "$1" diff --name-only --no-renames "$2" "$3" -- core/ 2>/dev/null)"
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    cp="$(seed_map "$p")"
+    if [ -f "$4/$cp" ] || [ -f "$5/$cp" ]; then
+      cmp -s "$4/$cp" "$5/$cp" || return 1
+      present=$((present+1))
+    fi
+  done <<< "$rows"
+  [ "$present" -gt 0 ]
+}
+
+# mk_consumer <dir> <green|worklist|decision|finished|merged> [hrv]
+#
+# `finished` is `green` with THEIRS applied by seed_ref. `merged` is `finished` with the session
+# driver replaced by a hand merge that differs from BOTH base and theirs -- the file an operator
+# resolved a semantic merge into, which preclassify buckets CLASSIFY and `--finish` must not count.
+# Its text deliberately carries no `UPSTREAM`, so an overwrite from theirs is visible in it.
 #
 # `hrv` installs a stub `scripts/ai-dlc/validate-hook-registration.sh` that exits 0. That is the
 # ONE thing separating C4's tree from C8's: without it apply.sh's hook-registration site emits
@@ -215,6 +272,10 @@ mk_consumer() {
     mkdir -p "$c/tests/fixtures/doomed-fx" || return 1
     printf '#!/usr/bin/env bash\n# doomed v1\n' > "$c/tests/fixtures/doomed-fx/run.sh"
   fi
+  case "$mode" in
+    finished|merged) seed_ref "$DIST" "$BASE" "$THEIRS" "$c" || return 1 ;;
+  esac
+  [ "$mode" = merged ] && printf '#!/usr/bin/env bash\n# driver v1 and v2 hand-merged by the operator\n' > "$c/$DRIVER_REL"
   printf 'version: 1.0.0\ncommit: %s\n' "$BASE" > "$c/.claude/.ai-dlc-version"
   rm -f "$c/.claude/.ai-dlc-applying"
 }
@@ -391,9 +452,10 @@ fi
 
 # --- C4/C5: --finish stamps, and does nothing else --------------------------------------------
 C_FIN="$WORK/cons-finish"
-mk_consumer "$C_FIN" green hrv || { echo "FIXTURE BROKEN — could not build the finish consumer" >&2; exit 2; }
-# The state --finish is FOR: a previous run withheld, so the marker is on disk and the operator
-# has since disposed of the worklist by hand.
+# FINISHED, not green. `--finish` verifies the tree before it stamps, so a consumer still at base is
+# an unapplied tree and is correctly withheld; the state --finish is FOR is the one the operator
+# produced by doing the worklist -- theirs' content on disk, the marker still present.
+mk_consumer "$C_FIN" finished hrv || { echo "FIXTURE BROKEN — could not build the finish consumer" >&2; exit 2; }
 printf 'base: %s\ntheirs: %s\n' "$BASE" "$THEIRS" > "$C_FIN/.claude/.ai-dlc-applying"
 OUT_FIN="$(run_apply "$APPLY" "$C_FIN" --finish)"
 F_VER="$(stamp_ver "$C_FIN")"; F_SHA="$(stamp_sha "$C_FIN")"; F_MK="$(marker "$C_FIN")"
@@ -402,10 +464,22 @@ if [ "$F_VER" = "$THEIRS_VER" ] && [ "$F_SHA" = "$THEIRS_SHORT" ] && [ "$F_MK" =
 else
   bad "C4 --finish left the stamp at 'version: ${F_VER:-<absent>} / commit: ${F_SHA:-<absent>}' with the marker $F_MK. This is the ONLY exit from a withheld stamp: with the marker present pre-push refuses every push, so a --finish that does not stamp leaves the consumer with no way forward"
 fi
-if ! grep -q 'UPSTREAM' "$C_FIN/$DRIVER_REL"; then
-  ok "C5 --finish performed no resolution work — $DRIVER_REL is untouched"
+
+# C5 ON A MERGED TREE. The operator resolved the semantic merge into a copy that differs from BOTH
+# base and theirs. --finish must leave those bytes exactly as they are AND stamp: a finisher that
+# ran the resolution phases would re-bucket the merged file to CLASSIFY and withhold forever, and a
+# finisher that compared each copy against theirs would withhold on it the same way.
+C_MRG="$WORK/cons-merged"
+mk_consumer "$C_MRG" merged hrv || { echo "FIXTURE BROKEN — could not build the merged consumer" >&2; exit 2; }
+printf 'base: %s\ntheirs: %s\n' "$BASE" "$THEIRS" > "$C_MRG/.claude/.ai-dlc-applying"
+cp "$C_MRG/$DRIVER_REL" "$WORK/merged-driver.before"
+OUT_MRG="$(run_apply "$APPLY" "$C_MRG" --finish)"
+if cmp -s "$WORK/merged-driver.before" "$C_MRG/$DRIVER_REL" \
+   && [ "$(stamp_ver "$C_MRG")" = "$THEIRS_VER" ] && [ "$(marker "$C_MRG")" = GONE ] \
+   && ! has_row "$OUT_MRG" WORKLIST finish-unapplied; then
+  ok "C5 --finish over a hand-merged $DRIVER_REL leaves its bytes unchanged AND stamps $THEIRS_VER — no resolution work, and a merged file is not counted as unapplied"
 else
-  bad "C5 --finish overwrote $DRIVER_REL from theirs, so it ran the resolution phases. In the real workflow that deadlocks: a BOTH-CHANGED file the operator has just merged re-buckets to CLASSIFY on every subsequent run, so the hand-back never empties and the stamp is never reached"
+  bad "C5 --finish over a hand-merged tree: driver bytes $(cmp -s "$WORK/merged-driver.before" "$C_MRG/$DRIVER_REL" && echo unchanged || echo CHANGED), stamp '$(stamp_ver "$C_MRG")', marker $(marker "$C_MRG"), finish-unapplied $(has_row "$OUT_MRG" WORKLIST finish-unapplied && echo present || echo absent). In the real workflow a BOTH-CHANGED file the operator has just merged re-buckets to CLASSIFY on every run, so a finisher that resolves or that compares to theirs never reaches the stamp"
 fi
 
 # --- C8: --finish TERMINATES over a DECISION row it cannot clear -------------------------------
@@ -416,7 +490,7 @@ fi
 # then wedged with the marker on disk and no invocation that can clear it, which is the failure
 # this whole change exists to prevent, reintroduced one layer down by the change itself.
 C_TERM="$WORK/cons-terminate"
-mk_consumer "$C_TERM" green || { echo "FIXTURE BROKEN — could not build the terminate consumer" >&2; exit 2; }
+mk_consumer "$C_TERM" finished || { echo "FIXTURE BROKEN — could not build the terminate consumer" >&2; exit 2; }
 printf 'base: %s\ntheirs: %s\n' "$BASE" "$THEIRS" > "$C_TERM/.claude/.ai-dlc-applying"
 OUT_TERM="$(run_apply "$APPLY" "$C_TERM" --finish)"
 if ! has_row "$OUT_TERM" DECISION hook-registration-unchecked; then
@@ -450,7 +524,10 @@ fi
 # the one that separates absent from present without being the thing F1 asserts: it stamps under
 # BOTH programs, and only the fixed one says on its own row that it could not check.
 C_IDN="$WORK/cons-id-norecord"
-mk_consumer "$C_IDN" green hrv || { echo "FIXTURE BROKEN — could not build the no-record consumer" >&2; exit 2; }
+# Written from OTHER, the ref this finish names: with no record to dispute it, the legitimate case
+# is a tree carrying the argument's content.
+mk_consumer "$C_IDN" green hrv && seed_ref "$DIST" "$BASE" "$OTHER" "$C_IDN" \
+  || { echo "FIXTURE BROKEN — could not build the no-record consumer" >&2; exit 2; }
 rm -f "$C_IDN/.claude/.ai-dlc-applying"
 OUT_IDN="$(run_finish_as "$APPLY" "$C_IDN" "$OTHER")"
 if ! has_row "$OUT_IDN" DECISION restamp-identity-unchecked; then
@@ -469,7 +546,7 @@ else
   # load-bearing conjuncts here are the stamp still holding BASE's version and the marker still
   # being on disk; the row is asserted too, but it is the weakest of the three.
   C_IDM="$WORK/cons-id-mismatch"
-  mk_consumer "$C_IDM" green hrv || { echo "FIXTURE BROKEN — could not build the mismatch consumer" >&2; exit 2; }
+  mk_consumer "$C_IDM" finished hrv || { echo "FIXTURE BROKEN — could not build the mismatch consumer" >&2; exit 2; }
   printf 'base: %s\ntheirs: %s\n' "$BASE" "$THEIRS" > "$C_IDM/.claude/.ai-dlc-applying"
   # READ THE STAMP BEFORE THE RUN AND COMPARE AGAINST ITSELF. Comparing against a derived
   # constant would put a silent join between this arm and mk_consumer's literal; comparing
@@ -493,7 +570,7 @@ else
   # finisher whose only sin is naming the newer of two equivalent refs, and it would look exactly
   # like F1 working. Mutant m10 below is that simplification, and this is the arm that kills it.
   C_IDD="$WORK/cons-id-docs"
-  mk_consumer "$C_IDD" green hrv || { echo "FIXTURE BROKEN — could not build the docs-only consumer" >&2; exit 2; }
+  mk_consumer "$C_IDD" finished hrv || { echo "FIXTURE BROKEN — could not build the docs-only consumer" >&2; exit 2; }
   printf 'base: %s\ntheirs: %s\n' "$BASE" "$THEIRS" > "$C_IDD/.claude/.ai-dlc-applying"
   OUT_IDD="$(run_finish_as "$APPLY" "$C_IDD" "$DOCS")"
   F2_VER="$(stamp_ver "$C_IDD")"; F2_SHA="$(stamp_sha "$C_IDD")"; F2_MK="$(marker "$C_IDD")"
@@ -587,9 +664,12 @@ mk_report() { # mk_report <consumer> <theirs-to-render-at>
 }
 
 C_U1="$WORK/cons-u1"; C_U2="$WORK/cons-u2"; C_U3="$WORK/cons-u3"; C_U4="$WORK/cons-u4"
-for c in "$C_U1" "$C_U2" "$C_U3" "$C_U4"; do
+for c in "$C_U1" "$C_U2" "$C_U3"; do
   mk_consumer "$c" green || { echo "FIXTURE BROKEN — could not build a union-gate consumer" >&2; exit 2; }
 done
+# U4 drives --finish, so its tree is FINISHED: an unapplied one is withheld by the tree check, and
+# the arm would then be reading that refusal instead of whether the union gate was consulted.
+mk_consumer "$C_U4" finished || { echo "FIXTURE BROKEN — could not build a union-gate consumer" >&2; exit 2; }
 mk_report "$C_U1" "$THEIRS"   # current: rendered at the ref apply will use
 mk_report "$C_U2" "$BASE"     # stale:   rendered at an OLDER upstream
 mk_report "$C_U4" "$BASE"     # stale, for the --finish arm
@@ -886,13 +966,13 @@ fi
 # the validator, so no such row exists — which is why C8 has a tree of its own.
 if sed 's/^if \[ "$FINISH" = 1 \]; then outstanding="$worklist_n";/if [ "$FINISH" = 1 ]; then outstanding="$handback";/' \
    "$REC/apply.sh" | mut_apply "$WORK/m8"; then
-  M8="$(mut_stamp "$WORK/m8" green - --finish)"
+  M8="$(mut_stamp "$WORK/m8" finished - --finish)"
   case "$M8" in
     "1.0.0|PRESENT|WITHHELD|"*) ok "m8 (--finish gates on handback): C8 goes red — the finisher withholds over the DECISION row it emitted itself, and no invocation can clear it" ;;
     "$THEIRS_VER|GONE|"*)       bad "m8 SURVIVED: --finish still stamped while gating on handback, so C8's tree emits no DECISION row and the arm is vacuous ($M8)" ;;
     *)                          bad "m8 produced an unrecognised verdict ($M8)" ;;
   esac
-  M8H="$(mut_stamp "$WORK/m8" green hrv --finish)"
+  M8H="$(mut_stamp "$WORK/m8" finished hrv --finish)"
   if [ "${M8H%%|*}" = "$THEIRS_VER" ]; then
     ok "m8 and C4 stays green under it — the two counters are separately observable, which is the whole reason C8 exists beside C4"
   else
@@ -909,7 +989,7 @@ fi
 if grep -q '^FINISH=0' "$REC/apply.sh"; then
   if sed 's/^\(if \[ "$mech_fail" -gt 0 \].*\); then$/\1 || [ "$FINISH" = 1 ]; then/' "$REC/apply.sh" \
      | mut_apply "$WORK/m6"; then
-    M6="$(mut_stamp "$WORK/m6" green hrv --finish)"
+    M6="$(mut_stamp "$WORK/m6" finished hrv --finish)"
     case "$M6" in
       "1.0.0|"*)            ok "m6 (--finish withholds too): C4 goes red — the only exit from a withheld stamp is itself withheld and the tree can never push again" ;;
       "$THEIRS_VER|GONE|"*) bad "m6 SURVIVED: --finish still stamped with the guard extended to cover it, so C4 is not reading the stamp this mode writes ($M6)" ;;
@@ -931,16 +1011,23 @@ fi
 # --- m7: `--finish` runs the full phases. Must die on C5. --------------------------------------
 # Anchored on the option-parser branch rather than on any variable, so it holds whatever the flag
 # is called: the option is still accepted and sets nothing, which is exactly a full run.
+#
+# DRIVEN ON C5's MERGED TREE. A full run re-buckets the hand-merged driver to CLASSIFY and hands it
+# back as a semantic merge, so the stamp is withheld -- the real-workflow deadlock C5 names. The
+# merged bytes survive either way (a CLASSIFY file is never overwritten), so the kill is the stamp
+# half of C5, and `mut_stamp`'s driver field reads UNTOUCHED under both programs: the merged text
+# carries no `UPSTREAM`.
 if sed 's/^\([[:space:]]*\)--finish).*$/\1--finish) : ;;/' "$REC/apply.sh" | mut_apply "$WORK/m7"; then
-  M7="$(mut_stamp "$WORK/m7" green hrv --finish)"
+  M7="$(mut_stamp "$WORK/m7" merged hrv --finish)"
   case "$M7" in
-    *"|OVERWRITTEN") ok "m7 (--finish runs the phases): C5 goes red — the driver file was overwritten from theirs, and in the real workflow a just-merged file re-buckets to CLASSIFY on every run so the hand-back never empties" ;;
-    *"|UNTOUCHED")   bad "m7 SURVIVED: no resolution work ran with the --finish branch neutered, so C5 is not testing the phase skip ($M7)" ;;
-    *)               bad "m7 produced an unrecognised verdict ($M7)" ;;
+    "1.0.0|PRESENT|WITHHELD|UNTOUCHED") ok "m7 (--finish runs the phases): C5 goes red — the hand-merged driver re-buckets to CLASSIFY, is handed back as a semantic merge, and the stamp is withheld over a tree the operator has finished" ;;
+    "$THEIRS_VER|GONE|"*)               bad "m7 SURVIVED: the merged tree still stamped with the --finish branch neutered ($M7), so C5 is not testing the phase skip" ;;
+    *)                                  bad "m7 produced an unrecognised verdict ($M7)" ;;
   esac
-  case "$M7" in
-    "$THEIRS_VER|GONE|"*) ok "m7 and C4 stays green under it — a full run on a clean consumer stamps too, so only C5 separates the two modes" ;;
-    *)                    bad "m7 also killed C4 ($M7): the two arms are entangled" ;;
+  M7F="$(mut_stamp "$WORK/m7" finished hrv --finish)"
+  case "$M7F" in
+    "$THEIRS_VER|GONE|"*) ok "m7 and C4 stays green under it — a full run on a finished consumer stamps too, so only C5's merged tree separates the two modes" ;;
+    *)                    bad "m7 also killed C4 ($M7F): the two arms are entangled" ;;
   esac
 else
   bad "m7 did not apply — the option parser carries no \`--finish)\` branch, so this mutant proves nothing"
@@ -956,7 +1043,12 @@ fi
 # the stamp to have MOVED, so a copy that dies emitting nothing fails rather than scoring a kill.
 mut_finish_id() {
   local rec="$1" argv="$2" c="$WORK/mid-$$-$RANDOM"
-  mk_consumer "$c" green hrv || { echo "BROKEN||"; return; }
+  # Written from THEIRS, the ref the marker records. With no marker there is no record to
+  # dispute, so the tree is written from the argument itself, as F3's is.
+  mk_consumer "$c" finished hrv || { echo "BROKEN||"; return; }
+  if [ "${3:-}" = nomarker ]; then
+    seed_ref "$DIST" "$BASE" "$argv" "$c" || { echo "BROKEN||"; return; }
+  fi
   [ "${3:-}" = nomarker ] || printf 'base: %s\ntheirs: %s\n' "$BASE" "$THEIRS" > "$c/.claude/.ai-dlc-applying"
   local out; out="$(run_finish_as "$rec/apply.sh" "$c" "$argv")"
   printf '%s|%s|%s\n' "$(stamp_ver "$c")" "$(marker "$c")" \
@@ -2054,7 +2146,9 @@ hr_json() {
 hr_world() {
   local c on="alpha beta" main="alpha beta" loc="" h
   c="$(mktemp -d "$WORK/hr.XXXXXX")" || return 1
-  mk_consumer "$c" green || return 1
+  # FINISHED: every world here is driven through --finish, which verifies the tree before it
+  # stamps, so a tree at base would be withheld for that and not for the row under test.
+  mk_consumer "$c" finished || return 1
   cp "$HR_VAL_SRC" "$c/scripts/ai-dlc/validate-hook-registration.sh" || return 1
   chmod +x "$c/scripts/ai-dlc/validate-hook-registration.sh"
   mkdir -p "$c/.claude/hooks" "$c/.claude/skills/ai-dlc-update/reconcile" || return 1
@@ -2319,6 +2413,366 @@ else
 fi
 fi  # ---- end of HR_PRESENT
 fi  # ---- end of the BL-292 block
+
+# ==============================================================================================
+# VF -- `--finish` VERIFIES THE TREE IT STAMPS
+# ==============================================================================================
+#
+# THE DEFECT. `--finish` skips the resolution phases, so `mech_fail` is always 0 there, and the
+# finisher printed `RESOLVED consistent "the tree matches <theirs>"` over any tree handed to it --
+# including one where no file had ever been applied. The stamp is the next pull's merge base, so a
+# tree left at base and stamped at theirs mis-bases the following merge silently.
+#
+# WHAT THE FIX DOES, AND THEREFORE WHAT THESE ARMS READ. Under `--finish`, after the identity check
+# and only when it did not refuse: BASE must be a commit whose `core/` tree is the tree of the
+# stamp's `commit:`; then preclassify's OWN buckets are read, and every row in a pure-apply bucket
+# (the ones phase 1 answers by overwriting from theirs) is a `WORKLIST finish-unapplied` row, which
+# withholds the stamp. A CLASSIFY row never counts, so a hand-merged file cannot wedge the finisher,
+# and preclassify reads `.dist-only` AT THEIRS, so a dist-only fixture that was correctly never
+# written is not unapplied work.
+#
+# ITS OWN DIST. The pull at the top of this file changes one file per shape; these arms need TWO
+# changed files with the unapplied one NOT first in ls-tree order (`a-first` < `m-added` <
+# `z-second`), an ADDED file, a `.dist-only` fixture added in range, and a shipping fixture that is
+# modified in range -- so a scan that stops at its first changed path, or that exempts only added
+# files, reads differently from one that scans the set. VF-S1 asserts that shape before any arm.
+#
+# EVERY ARM IS KEYED ON BEHAVIOUR: the stamp's `commit:`/`version:`, the marker on disk, and the
+# emitted row's KIND and SUBJECT, compared as an exact set where the arm is about which file.
+VFROOT="$WORK/vf"; VD="$VFROOT/dist"; VDW="$VFROOT/dist-wt"
+VF_OK=1
+mkdir -p "$VD/core/session-driver" "$VD/core/scripts" "$VD/core/fixtures/ship-fx" || VF_OK=0
+[ "$VF_OK" = 1 ] && { git -C "$VD" init -q 2>/dev/null || VF_OK=0; }
+vfgit() { git -C "$VD" -c user.email=f@f -c user.name=fixture "$@"; }
+VB=""; VT=""; VO=""
+if [ "$VF_OK" = 1 ]; then
+  printf '1.0.0\n' > "$VD/VERSION"
+  printf '#!/usr/bin/env bash\necho v\n' > "$VD/core/scripts/validate-synthetic.sh"
+  printf '# a v1\n'    > "$VD/core/session-driver/a-first.sh"
+  printf '# z v1\n'    > "$VD/core/session-driver/z-second.sh"
+  printf '# ship v1\n' > "$VD/core/fixtures/ship-fx/run.sh"
+  vfgit add -A >/dev/null 2>&1 && vfgit commit -q -m vf-base >/dev/null 2>&1 || VF_OK=0
+  VB="$(git -C "$VD" rev-parse HEAD 2>/dev/null)"
+  printf '2.0.0\n' > "$VD/VERSION"
+  printf '# a v2 UPSTREAM\n'    > "$VD/core/session-driver/a-first.sh"
+  printf '# z v2 UPSTREAM\n'    > "$VD/core/session-driver/z-second.sh"
+  printf '# m added UPSTREAM\n' > "$VD/core/session-driver/m-added.sh"
+  printf '# ship v2 UPSTREAM\n' > "$VD/core/fixtures/ship-fx/run.sh"
+  mkdir -p "$VD/core/fixtures/dist-fx" || VF_OK=0
+  printf '# dist-only fixture\n' > "$VD/core/fixtures/dist-fx/run.sh"
+  printf 'its subject is a distribution-only program\n' > "$VD/core/fixtures/dist-fx/.dist-only"
+  vfgit add -A >/dev/null 2>&1 && vfgit commit -q -m vf-theirs >/dev/null 2>&1 || VF_OK=0
+  VT="$(git -C "$VD" rev-parse HEAD 2>/dev/null)"
+  # VO: `core/` genuinely moved again -- the ref a fumbled finisher names in VF-R6.
+  printf '3.0.0\n' > "$VD/VERSION"
+  printf '# a v3 OTHER\n' > "$VD/core/session-driver/a-first.sh"
+  vfgit add -A >/dev/null 2>&1 && vfgit commit -q -m vf-other >/dev/null 2>&1 || VF_OK=0
+  VO="$(git -C "$VD" rev-parse HEAD 2>/dev/null)"
+  # The operator's checkout sits AT theirs, so the working tree and THEIRS agree on every marker.
+  vfgit checkout -q --detach "$VT" >/dev/null 2>&1 || VF_OK=0
+  # VDW: the same history, checkout at theirs, working tree DISAGREEING with THEIRS in both
+  # directions about `.dist-only` -- dist-fx's marker removed, ship-fx given one.
+  git clone -q "$VD" "$VDW" >/dev/null 2>&1 && git -C "$VDW" checkout -q --detach "$VT" >/dev/null 2>&1 || VF_OK=0
+  rm -f "$VDW/core/fixtures/dist-fx/.dist-only"
+  printf 'a working-tree-only marker THEIRS does not carry\n' > "$VDW/core/fixtures/ship-fx/.dist-only"
+fi
+VT_SHORT="$(git -C "$VD" rev-parse --short "$VT" 2>/dev/null)"
+
+# vf_consumer <dir> <none|noadd|zonly|full|merged|noship>
+#   none    installed at VB, nothing applied
+#   noadd   theirs applied except the ADDED core file
+#   zonly   theirs applied except z-second, which is NOT first in ls-tree order
+#   full    theirs applied; dist-fx (dist-only at THEIRS) correctly never written
+#   merged  full, with a-first hand-merged to differ from BOTH base and theirs
+#   noship  full, with ship-fx (a SHIPPING fixture, modified in range) left at base
+vf_consumer() {
+  local c="$1" st="$2" p cp
+  mkdir -p "$c/.claude" "$c/scripts/ai-dlc" || return 1
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$c/scripts/ai-dlc/validate-hook-registration.sh"
+  chmod +x "$c/scripts/ai-dlc/validate-hook-registration.sh"
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    cp="$(seed_map "$p")"
+    mkdir -p "$(dirname "$c/$cp")" && git -C "$VD" show "${VB}:${p}" > "$c/$cp" || return 1
+  done <<< "$(git -C "$VD" ls-tree -r --name-only "$VB" -- core/ 2>/dev/null)"
+  [ "$st" = none ] || seed_ref "$VD" "$VB" "$VT" "$c" || return 1
+  case "$st" in
+    none|full) : ;;
+    noadd)  rm -f "$c/.claude/session-driver/m-added.sh" ;;
+    zonly)  git -C "$VD" show "${VB}:core/session-driver/z-second.sh" > "$c/.claude/session-driver/z-second.sh" ;;
+    merged) printf '# a v1 and v2 hand-merged by the operator\n' > "$c/.claude/session-driver/a-first.sh" ;;
+    noship) git -C "$VD" show "${VB}:core/fixtures/ship-fx/run.sh" > "$c/tests/fixtures/ship-fx/run.sh" ;;
+    *) return 1 ;;
+  esac
+  printf 'version: 1.0.0\ncommit: %s\n' "$VB" > "$c/.claude/.ai-dlc-version"
+  printf 'base: %s\ntheirs: %s\n' "$VB" "$VT" > "$c/.claude/.ai-dlc-applying"
+}
+# vf_run <rec> <state> <dist> <base-argv> <theirs-argv> -> sets VF_C; rows in $VF_C/.vf-rows
+VF_C=""
+vf_run() {
+  VF_C="$(mktemp -d "$VFROOT/c.XXXXXX")" || return 1
+  vf_consumer "$VF_C" "$2" || return 1
+  ( cd "${VF_CWD:-$PWD}" && bash "$1/apply.sh" --finish "$3" "$4" "$VF_C" "$5" ) > "$VF_C/.vf-rows" 2>/dev/null
+  return 0
+}
+vf_n()    { awk -F'\t' -v a="$2" -v b="$3" '$1==a && $2==b {n++} END {print n+0}' "$1/.vf-rows" 2>/dev/null; }
+vf_subj() { awk -F'\t' -v a="$2" -v b="$3" '$1==a && $2==b {print $3}' "$1/.vf-rows" 2>/dev/null | sort | tr '\n' ' '; }
+# Withheld AT BASE, read off the tree: the stamp's commit is still VB, the marker is still there.
+vf_held()  { [ "$(stamp_sha "$1")" = "$VB" ] && [ "$(stamp_ver "$1")" = 1.0.0 ] && [ "$(marker "$1")" = PRESENT ] \
+               && [ "$(vf_n "$1" DECISION restamp-withheld)" -ge 1 ]; }
+vf_stamp() { [ "$(stamp_sha "$1")" = "$VT_SHORT" ] && [ "$(stamp_ver "$1")" = 2.0.0 ] && [ "$(marker "$1")" = GONE ] \
+               && [ "$(vf_n "$1" RESOLVED restamp)" -ge 1 ] && [ "$(vf_n "$1" WORKLIST finish-unapplied)" = 0 ]; }
+
+vf_r1() { vf_run "$1" none "$VD" "$VB" "$VT" || return 1
+  vf_held "$VF_C" && case " $(vf_subj "$VF_C" WORKLIST finish-unapplied)" in *" .claude/session-driver/z-second.sh "*) true ;; *) false ;; esac; }
+# vf_names <consumer> <must-name> <must-not-name...> -- keyed on the file that decides and on the
+# APPLIED files beside it, not on the whole set: an exact set would also move under a mutant that
+# adds an unrelated row (the dist-only one), and one mutant must fail only its own arm.
+vf_names() {
+  local s x; s=" $(vf_subj "$1" WORKLIST finish-unapplied)"; shift
+  case "$s" in *" $1 "*) : ;; *) return 1 ;; esac; shift
+  for x in "$@"; do case "$s" in *" $x "*) return 1 ;; esac; done
+  return 0
+}
+vf_r2() { vf_run "$1" noadd "$VD" "$VB" "$VT" || return 1
+  vf_held "$VF_C" && vf_names "$VF_C" .claude/session-driver/m-added.sh \
+    .claude/session-driver/a-first.sh .claude/session-driver/z-second.sh tests/fixtures/ship-fx/run.sh; }
+vf_ro() { vf_run "$1" zonly "$VD" "$VB" "$VT" || return 1
+  vf_held "$VF_C" && vf_names "$VF_C" .claude/session-driver/z-second.sh \
+    .claude/session-driver/a-first.sh .claude/session-driver/m-added.sh tests/fixtures/ship-fx/run.sh; }
+vf_r3() { vf_run "$1" full "$VD" "$VB" "$VT" || return 1
+  vf_stamp "$VF_C" && [ ! -e "$VF_C/tests/fixtures/dist-fx" ]; }
+vf_r4() { vf_run "$1" merged "$VD" "$VB" "$VT" || return 1
+  vf_stamp "$VF_C" && grep -q 'hand-merged' "$VF_C/.claude/session-driver/a-first.sh"; }
+vf_r5() { vf_run "$1" none "$VD" "$VT" "$VT" || return 1
+  vf_held "$VF_C" && [ "$(vf_n "$VF_C" WORKLIST finish-base-unverified)" = 1 ]; }
+vf_r5b() { vf_run "$1" none "$VD" vf-no-such-base-ref "$VT" || return 1
+  vf_held "$VF_C" && [ "$(vf_n "$VF_C" WORKLIST finish-base-unverified)" = 1 ]; }
+# R6 IS NOT `vf_held`: an identity refusal is the `restamp-identity-mismatch` branch of the
+# re-stamp, reached because nothing raised `worklist_n`, so no `restamp-withheld` row prints. The
+# stamp and marker are read directly, as F1 reads them.
+vf_r6() { vf_run "$1" none "$VD" "$VB" "$VO" || return 1
+  [ "$(stamp_sha "$VF_C")" = "$VB" ] && [ "$(stamp_ver "$VF_C")" = 1.0.0 ] && [ "$(marker "$VF_C")" = PRESENT ] \
+    && [ "$(vf_n "$VF_C" DECISION restamp-identity-mismatch)" = 1 ] \
+    && [ "$(vf_n "$VF_C" WORKLIST finish-unapplied)" = 0 ] && [ "$(vf_n "$VF_C" WORKLIST finish-base-unverified)" = 0 ] \
+    && [ "$(vf_n "$VF_C" WORKLIST finish-unverified-tree)" = 0 ]; }
+# DO1 reads preclassify's own row for each fixture, against the SKEWED working tree.
+vf_do1() {
+  local c rows
+  c="$(mktemp -d "$VFROOT/c.XXXXXX")" && vf_consumer "$c" none || return 1
+  rows="$(bash "$1/preclassify.sh" "$VDW" "$VB" "$VT" "$c" 2>/dev/null)"
+  [ "$(awk -F'\t' '$2=="core/fixtures/dist-fx/run.sh" {print $4}' <<< "$rows")" = DIST-ONLY-SKIP ] \
+    && [ "$(awk -F'\t' '$2=="core/fixtures/ship-fx/run.sh" {print $4}' <<< "$rows")" = UPSTREAM-ONLY ]
+}
+vf_do2() { vf_run "$1" full "$VDW" "$VB" "$VT" || return 1; vf_stamp "$VF_C"; }
+vf_do3() { vf_run "$1" noship "$VDW" "$VB" "$VT" || return 1
+  vf_held "$VF_C" && vf_names "$VF_C" tests/fixtures/ship-fx/run.sh \
+    .claude/session-driver/a-first.sh .claude/session-driver/m-added.sh .claude/session-driver/z-second.sh; }
+VF_ARMS="r1 r2 ro r3 r4 r5 r5b r6 do1 do2 do3"
+vf_vec() { # vf_vec <rec> -> one 1/0 per arm, in VF_ARMS order
+  local a v=""
+  for a in $VF_ARMS; do
+    if "vf_$a" "$1"; then v="$v 1"; else v="$v 0"; fi
+  done
+  printf '%s' "${v# }"
+}
+
+if [ "$VF_OK" != 1 ] || [ -z "$VB" ] || [ -z "$VT" ] || [ -z "$VO" ] || [ -z "$VT_SHORT" ]; then
+  bad "VF setup: could not build the verified-finish dist (base='${VB:-<none>}' theirs='${VT:-<none>}' other='${VO:-<none>}') — every VF arm would be unreadable"
+else
+
+# --- VF-S1: THE RANGE HAS THE SHAPE THE ARMS NEED ---------------------------------------------
+VF_NS="$(git -C "$VD" diff --name-status --no-renames "$VB" "$VT" -- core/ 2>/dev/null | tr '\t' ' ' | tr '\n' '|')"
+VF_ORDER="$(git -C "$VD" ls-tree -r --name-only "$VT" -- core/session-driver/ 2>/dev/null | tr '\n' ' ')"
+if [ "$VF_NS" = "A core/fixtures/dist-fx/.dist-only|A core/fixtures/dist-fx/run.sh|M core/fixtures/ship-fx/run.sh|M core/session-driver/a-first.sh|A core/session-driver/m-added.sh|M core/session-driver/z-second.sh|" ] \
+   && [ "$VF_ORDER" = "core/session-driver/a-first.sh core/session-driver/m-added.sh core/session-driver/z-second.sh " ] \
+   && [ "$(git -C "$VD" rev-parse "${VO}:core" 2>/dev/null)" != "$(git -C "$VD" rev-parse "${VT}:core" 2>/dev/null)" ]; then
+  ok "VF-S1 setup: base..theirs modifies two core files (a-first, z-second), ADDS one (m-added, between them in ls-tree order), adds a .dist-only fixture and modifies a shipping one; the other ref differs from theirs in core/"
+else
+  bad "VF-S1 setup: the range is not the shape the VF arms need (name-status '$VF_NS', ls-tree order '$VF_ORDER') — a first-path-only or an added-file-blind scan could not be told apart from the fix"
+fi
+
+# --- VF-S2: THE FINISHED SEED IS WHAT THE ORDINARY APPLY WRITES -------------------------------
+# seed_ref is hand-written; the producer of a finished tree is apply.sh's ordinary run. Both are
+# built from the same installed-at-base consumer and compared byte for byte over the range, and the
+# ordinary run must not have written the dist-only fixture either.
+VF_S2A="$(mktemp -d "$VFROOT/s2a.XXXXXX")"; VF_S2S="$(mktemp -d "$VFROOT/s2s.XXXXXX")"
+if vf_consumer "$VF_S2A" none && vf_consumer "$VF_S2S" full; then
+  rm -f "$VF_S2A/.claude/.ai-dlc-applying"
+  bash "$APPLY" "$VD" "$VB" "$VF_S2A" "$VT" >/dev/null 2>&1
+  if same_on_range "$VD" "$VB" "$VT" "$VF_S2S" "$VF_S2A" && [ ! -e "$VF_S2A/tests/fixtures/dist-fx" ] \
+     && grep -q UPSTREAM "$VF_S2A/.claude/session-driver/z-second.sh"; then
+    ok "VF-S2 setup: the 'full' seed is byte-identical over the range to the tree apply.sh's ordinary run writes, and neither writes the dist-only fixture"
+  else
+    bad "VF-S2 setup: the 'full' seed and the ordinary apply's tree differ over base..theirs, so the VF arms are finishing a tree the real producer never makes"
+  fi
+else
+  bad "VF-S2 setup: could not build the seed-provenance consumers"
+fi
+# The main pull's `finished` seed, against the ordinary run C3 already drove over C_GREEN.
+C_S4="$WORK/cons-s4"
+if mk_consumer "$C_S4" finished && same_on_range "$DIST" "$BASE" "$THEIRS" "$C_S4" "$C_GREEN"; then
+  ok "S4 setup: the 'finished' seed every --finish world above uses is byte-identical over base..theirs to what the ordinary apply wrote into C_GREEN"
+else
+  bad "S4 setup: the 'finished' seed differs from the ordinary apply's tree over base..theirs — C4, C8, F*, U4 and HR-* are finishing a tree the real producer never makes"
+fi
+
+# --- VF-S3: THE SKEWED CHECKOUT DISAGREES WITH THEIRS IN BOTH DIRECTIONS ----------------------
+if [ ! -e "$VDW/core/fixtures/dist-fx/.dist-only" ] && [ -f "$VDW/core/fixtures/ship-fx/.dist-only" ] \
+   && git -C "$VDW" cat-file -e "${VT}:core/fixtures/dist-fx/.dist-only" 2>/dev/null \
+   && ! git -C "$VDW" cat-file -e "${VT}:core/fixtures/ship-fx/.dist-only" 2>/dev/null; then
+  ok "VF-S3 setup: the skewed dist checkout LACKS dist-fx's .dist-only that THEIRS carries and HAS a ship-fx .dist-only THEIRS lacks — a working-tree read and a THEIRS read answer oppositely on both"
+else
+  bad "VF-S3 setup: the skewed checkout does not disagree with THEIRS in both directions, so VF-DO1..3 cannot tell a THEIRS-keyed dist_only() from a working-tree one"
+fi
+
+# --- VF0 SUBJECT PROBE ------------------------------------------------------------------------
+# A consumer can hold this fixture a pull ahead of the apply.sh it tests. The probe is the
+# unresolvable-BASE world: the pre-fix finisher stamps it with no row at all. In the DISTRIBUTION
+# the subject must be present, so absence is a failure AND the arms still run, so the run says
+# which of them the absent subject fails.
+VF_PRESENT=1
+vf_run "$REC" none "$VD" vf-no-such-base-ref "$VT"
+if [ "$(vf_n "$VF_C" WORKLIST finish-base-unverified)" = 0 ]; then
+  VF_PRESENT=0
+  if [ "$IS_DIST" = 1 ]; then
+    bad "VF0 the resolved apply.sh ($APPLY) emitted no WORKLIST finish-base-unverified over a --finish naming an unresolvable base, so the verified finish is absent. HARD in the distribution; the arms below run anyway"
+  else
+    printf '  SKIP  %s\n' "VF-R1..VF-DO3 and VF-m* — the installed apply.sh predates the verified --finish; it lands with this same pull"
+  fi
+else
+  ok "VF0 the resolved apply.sh withholds over an unresolvable base with its own WORKLIST row, so the verified finish is present"
+fi
+
+if [ "$VF_PRESENT" = 1 ] || [ "$IS_DIST" = 1 ]; then
+vf_report() { # vf_report <arm-fn> <label> <ok-text> <bad-text>
+  if "$1" "$REC"; then ok "$2 $3"; else
+    bad "$2 $4 (stamp '$(stamp_ver "$VF_C") @ $(stamp_sha "$VF_C")', marker $(marker "$VF_C"), finish-unapplied: '$(vf_subj "$VF_C" WORKLIST finish-unapplied)', base-unverified=$(vf_n "$VF_C" WORKLIST finish-base-unverified), identity-mismatch=$(vf_n "$VF_C" DECISION restamp-identity-mismatch))"
+  fi
+}
+vf_report vf_r1 VF-R1 "nothing applied: --finish withholds, the stamp stays at base, the marker stays, and z-second is named unapplied" \
+  "--finish over a tree where NOTHING was applied did not withhold naming z-second"
+vf_report vf_r2 VF-R2 "only the ADDED file missing: --finish withholds naming exactly .claude/session-driver/m-added.sh" \
+  "--finish over a tree missing only the file this range ADDED did not withhold naming exactly that file"
+vf_report vf_ro VF-RO "two changed files, the unapplied one NOT first in ls-tree order: --finish withholds naming exactly z-second" \
+  "--finish with a-first applied and z-second still at base did not withhold naming exactly z-second — a scan that stops at its first changed path reads this tree as finished"
+vf_report vf_r3 VF-R3 "fully applied, the .dist-only fixture added in range and correctly absent: --finish stamps 2.0.0 @ $VT_SHORT and clears the marker" \
+  "--finish over a FULLY APPLIED tree did not stamp — a correctly finished consumer is wedged"
+vf_report vf_r4 VF-R4 "a hand-merged file (differs from base AND theirs): --finish stamps and leaves the merge in place" \
+  "--finish over a tree with a hand-merged file did not stamp — a merged file must never count as unapplied"
+vf_report vf_r5 VF-R5 "BASE typed as THEIRS: --finish withholds with WORKLIST finish-base-unverified over a tree where nothing was applied" \
+  "--finish with BASE typed as THEIRS did not withhold on the base — an empty range acquits every file"
+vf_report vf_r5b VF-R5b "BASE unresolvable: --finish withholds with WORKLIST finish-base-unverified" \
+  "--finish naming an unresolvable BASE did not withhold with finish-base-unverified"
+vf_report vf_r6 VF-R6 "identity mismatch over an unapplied tree: the identity row prints, and NO finish-unapplied / finish-base-unverified / finish-unverified-tree row is computed against the fumbled ref" \
+  "--finish naming a ref the marker disputes, over an unapplied tree, did not print the identity row alone"
+vf_report vf_do1 VF-DO1 "preclassify classifies by THEIRS against a skewed checkout: dist-fx (marker at THEIRS, not on disk) is DIST-ONLY-SKIP, ship-fx (marker on disk, not at THEIRS) is UPSTREAM-ONLY" \
+  "preclassify's dist_only() did not answer from THEIRS against a checkout that disagrees with it"
+vf_report vf_do2 VF-DO2 "and --finish over the fully applied tree, driven from that skewed checkout, still stamps" \
+  "--finish from a checkout lacking a .dist-only that THEIRS carries withheld over a correctly finished tree"
+vf_report vf_do3 VF-DO3 "and with the SHIPPING fixture left at base, driven from that skewed checkout, --finish withholds naming exactly tests/fixtures/ship-fx/run.sh" \
+  "--finish from a checkout carrying a .dist-only THEIRS lacks acquitted a shipping fixture that was never applied"
+# CWD: the decisive withhold, re-driven from `/`.
+if VF_CWD=/ vf_r1 "$REC"; then
+  ok "VF-CWD VF-R1 driven from / reaches the same withheld verdict"
+else
+  bad "VF-CWD VF-R1 driven from / did not withhold (stamp '$(stamp_ver "$VF_C")', marker $(marker "$VF_C")) — some VF path resolves from the process cwd"
+fi
+
+# --- VF MUTANTS -------------------------------------------------------------------------------
+# Copies of the whole reconcile directory; every anchor asserted to occur EXACTLY ONCE in the file
+# it edits, and the copy asserted to DIFFER from the original, before any verdict is read. Each is
+# scored on the whole arm vector so an entangled kill cannot hide.
+VF_WANT_CTL="1 1 1 1 1 1 1 1 1 1 1"
+vf_mut() { # vf_mut <dir> <apply.sh|preclassify.sh> <anchor-line> <replacement>
+  local n; n="$(grep -cxF -- "$3" "$REC/$2")" || n=0
+  [ "$n" = 1 ] || return 1
+  build_rec "$1" || return 1
+  VF_A="$3" VF_R="$4" awk '$0 == ENVIRON["VF_A"] { print ENVIRON["VF_R"]; next } { print }' "$REC/$2" > "$1/$2" || return 1
+  [ -f "$1/preclassify.sh" ] && [ -f "$1/lib.sh" ] || return 1
+  ! cmp -s "$REC/$2" "$1/$2"
+}
+vf_score() { # vf_score <label> <dir> <want> <what it did>
+  local v; v="$(vf_vec "$2")"
+  if [ "$v" = "$3" ]; then
+    ok "$1 ($4): VF vector [$VF_ARMS] = $v — killed exactly the arms it owns"
+  elif [ "$v" = "$VF_WANT_CTL" ]; then
+    bad "$1 SURVIVED ($4): every VF arm still holds ($v)"
+  else
+    bad "$1 ($4) scored $v, want $3 — it killed an arm it should not, or missed one it should"
+  fi
+}
+if build_rec "$WORK/vf-ctl"; then
+  VFC="$(vf_vec "$WORK/vf-ctl")"
+  if [ "$VFC" = "$VF_WANT_CTL" ]; then
+    ok "VF-CTL an unmutated copy of the reconcile directory holds every VF arm ($VFC) — withholds AND stamps are both reproduced, so a mutant's vector below is the mutation and not the copy"
+  else
+    bad "VF-CTL the unmutated copy scored '$VFC', want '$VF_WANT_CTL' — every VF mutant verdict below is unreadable"
+  fi
+else
+  bad "VF-CTL could not stage a copy of $REC — every VF mutant verdict below is unreadable"
+fi
+
+VF_CASE='      UPSTREAM-ONLY|UPSTREAM-ONLY-ADD|*SETUP-TOKENS*)'
+# m-cmp: count a row whenever the consumer copy differs from theirs' blob, instead of reading
+# preclassify's bucket. The design the fix's own header records as built and refuted.
+if vf_mut "$WORK/vf-mcmp" apply.sh "$VF_CASE" \
+  '      *) if [ "$_fv_bucket" = DIST-ONLY-SKIP ] || [ "$(git -C "$DIST" show "${THEIRS}:${_fv_path}" 2>/dev/null | git hash-object --stdin)" = "$(git hash-object "$CONSUMER/$_fv_cons" 2>/dev/null)" ]; then continue; fi'; then
+  vf_score VF-m-cmp "$WORK/vf-mcmp" "1 1 1 1 0 1 1 1 1 1 1" "compare each copy to theirs' blob instead of preclassify's pure-apply buckets"
+else
+  bad "VF-m-cmp DID NOT APPLY — \`$VF_CASE\` is not in apply.sh exactly once; VF-R4 is unproven"
+fi
+# m-distonly: the dist-only exemption dropped -- DIST-ONLY-SKIP counted as unapplied. R3 OWNS it.
+# It also kills R4 and DO2, and that overlap is the property rather than an entanglement: every
+# world that STAMPS is finished over a range that adds the dist-only fixture, so without the
+# exemption no finished tree over that range can ever stamp. R4's own subject is the merge (m-cmp),
+# DO2's is the skewed checkout (m-wt); each of them has its own mutant that R3 does not see.
+if vf_mut "$WORK/vf-mdo" apply.sh "$VF_CASE" '      UPSTREAM-ONLY|UPSTREAM-ONLY-ADD|*SETUP-TOKENS*|DIST-ONLY-SKIP)'; then
+  vf_score VF-m-distonly "$WORK/vf-mdo" "1 1 1 0 0 1 1 1 1 0 1" "a DIST-ONLY-SKIP row counted as unapplied"
+else
+  bad "VF-m-distonly DID NOT APPLY — \`$VF_CASE\` is not in apply.sh exactly once; VF-R3 is unproven"
+fi
+# m-noadd: the added-file half dropped -- UPSTREAM-ONLY-ADD not counted.
+if vf_mut "$WORK/vf-mna" apply.sh "$VF_CASE" '      UPSTREAM-ONLY|*SETUP-TOKENS*)'; then
+  vf_score VF-m-noadd "$WORK/vf-mna" "1 0 1 1 1 1 1 1 1 1 1" "an UPSTREAM-ONLY-ADD row not counted"
+else
+  bad "VF-m-noadd DID NOT APPLY — \`$VF_CASE\` is not in apply.sh exactly once; VF-R2 is unproven"
+fi
+# m-first: only the first classified changed path is looked at (dist-only rows skipped, then stop).
+VF_LOOP='    [ -n "${_fv_bucket:-}" ] || continue'
+if vf_mut "$WORK/vf-mfp" apply.sh "$VF_LOOP" "$VF_LOOP
+    [ -n \"\${_fv_one:-}\" ] && break
+    case \"\$_fv_bucket\" in DIST-ONLY-SKIP) continue ;; esac
+    _fv_one=1"; then
+  vf_score VF-m-first "$WORK/vf-mfp" "0 0 0 1 1 1 1 1 1 1 1" "only the first changed path is checked"
+else
+  bad "VF-m-first DID NOT APPLY — \`$VF_LOOP\` is not in apply.sh exactly once; VF-RO is unproven"
+fi
+# m-order: the tree check no longer gated on the identity verdict, so it runs against a fumbled ref.
+VF_GATE='  [ -z "$finish_id_mismatch" ] && finish_verify_tree'
+if vf_mut "$WORK/vf-mor" apply.sh "$VF_GATE" '  finish_verify_tree'; then
+  vf_score VF-m-order "$WORK/vf-mor" "1 1 1 1 1 1 1 0 1 1 1" "the tree check runs whatever the identity check decided"
+else
+  bad "VF-m-order DID NOT APPLY — \`$VF_GATE\` is not in apply.sh exactly once; VF-R6 is unproven"
+fi
+# m-base: BASE trusted from argv -- every base finding discarded just before it is read. One edit
+# reverts every layer of the base check (commit, stamp present, commit: line, tree equality).
+VF_WHY='  if [ -n "$_fv_why" ]; then'
+if vf_mut "$WORK/vf-mbs" apply.sh "$VF_WHY" "  _fv_why=\"\"
+$VF_WHY"; then
+  vf_score VF-m-base "$WORK/vf-mbs" "1 1 1 1 1 0 0 1 1 1 1" "BASE trusted from argv, never checked against the stamp"
+else
+  bad "VF-m-base DID NOT APPLY — \`$VF_WHY\` is not in apply.sh exactly once; VF-R5/R5b are unproven"
+fi
+# m-wt: preclassify's dist_only() reading the dist WORKING TREE again -- the pre-fix spelling.
+VF_DO='      git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${_f}/.dist-only" 2>/dev/null'
+if vf_mut "$WORK/vf-mwt" preclassify.sh "$VF_DO" '      [ -f "$DIST/core/fixtures/$_f/.dist-only" ]'; then
+  vf_score VF-m-wt "$WORK/vf-mwt" "1 1 1 1 1 1 1 1 0 0 0" "dist_only() reads the dist working tree instead of THEIRS"
+else
+  bad "VF-m-wt DID NOT APPLY — \`$VF_DO\` is not in preclassify.sh exactly once; VF-DO1..3 are unproven"
+fi
+fi  # ---- end of VF_PRESENT
+fi  # ---- end of the VF block
 
 echo
 if [ "$fails" -eq 0 ]; then
