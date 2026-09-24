@@ -4042,6 +4042,15 @@ fix) scores **0**, **S2** (the engine fix) scores **0**, the regressions **S3**,
 and **S7** each score **1**, and **S6** (the arm deleted) scores **9**. At `937919e4` it prints
 `foreign:ok=0,fail=1 leak-mutant:fail=1,ok=0` and exits **1**.
 
+**LANDED (v0.634.0, verified d5971dd0).** The fix is in the fixture only; `ledger-reverify.sh` is
+untouched. The laziness arm now counts `ledger-reverify-theirs.*` inside a private `LZ_TMP` under
+the fixture sandbox, and it runs the closer with `TMPDIR="$LZ_TMP"`. It stays prefix-scoped
+because every engine run leaks one `reconcile-memo.*` (`BL-303`). `theirs-tree-prefix` gains a
+second assertion, under the same private `TMPDIR`, that a `$THEIRS_TREE` run materializes INSIDE
+it, so an engine that ignored `TMPDIR` could no longer leave the counter reading 0 forever. The
+committed mutant `mutation-tt-eager-leak` must read `left +1`. The fixture exits 0 with 295 ok and
+0 FAIL. The receipt below exits 0 at tip.
+
 verify: sh set -u; F=core/fixtures/ledger-reverify/run.sh; S=core/fixtures/ledger-reverify/seed.sh; E=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -r "$F" ] && [ -r "$S" ] && [ -r "$E" ] || exit 9; T="$(mktemp -d)" || exit 9; trap 'rm -rf "$T"' EXIT; awk '/^# D\. LAZINESS/{p=1} /^# THE OTHER DIRECTION/{p=0} p' "$F" > "$T/arm.sh"; grep -q 'theirs-tree-lazy' "$T/arm.sh" || exit 9; mkdir "$T/amb" "$T/mut"; export TMPDIR="$T/amb"; read -r DIST BASE CONS THEIRS < <(bash "$S") || exit 9; [ -d "$DIST" ] || exit 9; cp "$(dirname "$E")"/*.sh "$T/mut/" || exit 9; OLD1='        *THEIRS_TREE*)' NEW1='        *)' OLD2='  [ -n "${THEIRS_TREE_OWNED:-}" ] && rm -rf "$THEIRS_TREE_OWNED"' awk '$0==ENVIRON["OLD1"]{print ENVIRON["NEW1"]; a++; next} $0==ENVIRON["OLD2"]{b++; next} {print} END{exit !(a==1 && b==1)}' "$E" > "$T/mut/ledger-reverify.sh" || exit 9; printf 'mkdir "$BL_AMB/ledger-reverify-theirs.FOREIGN$$"\nexec bash "$BL_REAL" "$@"\n' > "$T/shim.sh"; drive() { ( FAILURES=0; ASSERTIONS=0; CLOSER="$1"; BL_AMB="$T/amb" BL_REAL="$PWD/$E"; export BL_AMB BL_REAL; . "$T/arm.sh" ) 2>&1; }; fo="$(drive "$T/shim.sh")"; nf="$(ls -d "$T/amb"/ledger-reverify-theirs.FOREIGN* 2>/dev/null | grep -c .)" || nf=0; lo="$(drive "$T/mut/ledger-reverify.sh")"; fok="$(grep -c '^  ok    theirs-tree-lazy' <<<"$fo")" || fok=0; ffail="$(grep -c '^  FAIL  theirs-tree-lazy .*theirs-trees behind' <<<"$fo")" || ffail=0; lfail="$(grep -c '^  FAIL  theirs-tree-lazy .*left +[1-9]' <<<"$lo")" || lfail=0; lok="$(grep -c '^  ok    theirs-tree-lazy' <<<"$lo")" || lok=0; echo "foreign-injected=$nf foreign:ok=$fok,fail=$ffail leak-mutant:fail=$lfail,ok=$lok"; [ "$nf" -eq 1 ] || exit 9; [ $((fok + ffail)) -eq 1 ] && [ $((lfail + lok)) -eq 1 ] || exit 9; [ "$fok" -eq 1 ] && [ "$lfail" -eq 1 ] && exit 0; exit 1
 
 
@@ -4285,3 +4294,36 @@ leaky-subject control, and that is why the control exists. With the fixture abse
 **9**.
 
 verify: sh set -u; F=core/fixtures/fanout-payload-channel/run.sh; S=core/scripts/report-propagation-fanout.sh; [ -r "$F" ] && [ -r "$S" ] || exit 9; P="$(command -v python3)" || exit 9; T="$(mktemp -d)" || exit 9; trap 'rm -rf "$T"' EXIT; mkdir -p "$T/amb" "$T/amb2" "$T/shim" "$T/w/core/fixtures/fanout-payload-channel" "$T/w/core/scripts" || exit 9; printf '#!/bin/sh\nd="$FANOUT_FOREIGN_AMB/fanout.FOREIGN$$"; mkdir "$d" 2>/dev/null && echo "$d" >> "$FANOUT_FOREIGN_LOG"\nexec "%s" "$@"\n' "$P" > "$T/shim/python3" && chmod +x "$T/shim/python3" || exit 9; cp "$F" "$T/w/$F" || exit 9; sed 's|^trap .rm -rf "\$FANOUT_TMP". EXIT|: # trap removed|' "$S" > "$T/w/$S" || exit 9; cmp -s "$S" "$T/w/$S" && exit 9; drive() { FANOUT_FOREIGN_AMB="$2" FANOUT_FOREIGN_LOG="$3" TMPDIR="$2" PATH="$T/shim:$PATH" bash "$1" 2>&1; }; out="$(drive "$F" "$T/amb" "$T/log")"; rc=$?; [ "$rc" -eq 0 ] || [ "$rc" -eq 1 ] || exit 9; LC_ALL=C grep -q 'subject resolved:' <<<"$out" || exit 9; [ -s "$T/log" ] || exit 9; lo="$(drive "$T/w/$F" "$T/amb2" "$T/log2")"; LC_ALL=C grep -qF "subject resolved: $T/w/" <<<"$lo" || exit 9; np=0; nl=0; while read -r d; do np=$((np+1)); [ -d "$d" ] && nl=$((nl+1)); done < "$T/log"; a5="$(LC_ALL=C grep -c '^  ok    5\. ' <<<"$out")" || a5=0; m6="$(LC_ALL=C grep -c 'mutant \[m6-trap\] KILLED' <<<"$out")" || m6=0; l5="$(LC_ALL=C grep -c '^  FAIL  5\. the run left' <<<"$lo")" || l5=0; echo "fixture-rc=$rc arm5-ok=$a5 m6-killed=$m6 foreign-planted=$np foreign-surviving=$nl leaky-subject:arm5-fail=$l5"; [ "$rc" -eq 0 ] && [ "$a5" -eq 1 ] && [ "$m6" -eq 1 ] && [ "$nl" -eq "$np" ] && [ "$l5" -eq 1 ] && exit 0; exit 1
+
+## BL-305 — the step text for Checks 26, 33 and 35 never tells the reader that exit 0 with `EXAMINED NOTHING` verified nothing
+
+**DEFECT.** Found at batch 151 by the `BL-080` fix hand, while it re-derived which hard_block
+rows exit 0 on the vacuous road. It discharges no consumer candidate.
+
+**`BL-080` FIXED THE MAP AND LEFT THE STEP FILE, WHICH IS WHERE A GATE READER ACTUALLY LOOKS.**
+Six hard_block rows in `core/skills/ai-dlc/enforcement-map.yaml` now say that exit 0 with
+`EXAMINED NOTHING` is not a pass. In `core/skills/ai-dlc/steps/gate-validation.md` only Check 3b
+carries the matching instruction, at `core/skills/ai-dlc/steps/gate-validation.md:489-494` ("Read
+the PASS line, not just the exit code"). Measured per section, from its `### N.` heading to the
+next heading: the Check 26, 33 and 35 sections name `EXAMINED NOTHING` **0**, **0** and **0**
+times, against **1** in the 3b passage as the control. Check 2 and 2a need the same audit and it
+was not taken.
+
+**Each section frames the vacuous road its own way, and two of them frame it as acceptable.**
+
+- Check 26 (`core/skills/ai-dlc/steps/gate-validation.md:2971`) runs the `--series` stall rung
+  with `exit 0 required` and nothing else. That rung is the one that takes the vacuous exit-0
+  road on an empty series directory, driven at batch 151.
+- Check 33 (`core/skills/ai-dlc/steps/gate-validation.md:2813-2816`) says a zero identifier count
+  "is reported, not passed silently" and that the check "has no subject", but it never tells the
+  reader to read the line instead of the exit.
+- Check 35 (`core/skills/ai-dlc/steps/gate-validation.md:2917-2918`) says "NOT-APPLICABLE is exit
+  0 and prints why", which presents exit 0 as the acceptable outcome.
+
+**The fix is prose in a step file, so no behavioural receipt exists.** A grep for the phrase in
+each section would be closed by the phrase alone, which `scripts/validate-backlog-receipts.sh`
+correctly reports as PROSE-CLOSABLE. Close by hand on the release whose diff gives each of the
+three sections a read-the-PASS-line instruction naming `EXAMINED NOTHING`, and records whether
+Check 2 and 2a need one too.
+
+verify: manual
