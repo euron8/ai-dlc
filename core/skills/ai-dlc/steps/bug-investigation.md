@@ -18,9 +18,11 @@ If `planning_offload: on` (default), do NOT run sections 1–2 inline.
 Spawn an `analyst` subagent (Agent tool, bound to the analyst role file `.claude/team-roles/analyst.md` per SKILL.md Rule 19 — both bindings: `model` and the standing role-contract Read line) scoped to
 sections 1–2 — it loads context, investigates, reproduces, and traces
 root cause, then writes its findings (root cause, repro, affected
-files/call-sites) to `_bmad-output/planning-artifacts/bug-analysis.md`,
+files/call-sites, and any relief the operator can apply without a
+deploy — or `operator relief: none found`) to
+`_bmad-output/planning-artifacts/bug-analysis.md`,
 returning only `{artifact_path, summary, gaps}`. Then resume at section
-3 (Create Fix Story) using the analysis. The lead authors the fix
+2b (Operator Relief) using the analysis — NOT at section 3. The lead authors the fix
 story, validates, and owns it. If `planning_offload: off`, run all
 sections inline. Per SKILL.md Rule 24.
 
@@ -77,6 +79,26 @@ an incomplete falsification ladder does. Ties to the falsification ladder
 above: that proves the cause is correctly LOCATED, this proves the fix is
 COMPLETE.
 
+### 2b. Operator Relief
+
+**When the investigation found relief the operator can apply WITHOUT a
+deploy — a config value, a restart, an existing endpoint or admin action, a
+feature flag — put it to the operator with `AskUserQuestion` BEFORE section 3**,
+recommended option first: **apply now (recommended)** / **wait for the fix**.
+State the relief's limit in the question; a stopgap that only buys time is
+still asked. Ask it now: if another question is due in the same turn, send
+both as separate questions in one `AskUserQuestion` call, and never hold this
+one back for another. Ask once per relief, and set NO pause flag (SKILL.md
+Rule 3(a)).
+
+If none exists, record `operator relief: none found` in the analysis and
+continue.
+
+**The lead cannot apply the relief, so nothing substitutes for asking.** It is
+never written into a story as a substitute for the question, and never recorded
+in the analysis as an autonomous Rule 12 Tier 2 decision. The question is not
+held back behind any review a project adds between section 2 and section 3.
+
 ### 3. Create Fix Story
 
 Create a bug-fix story in `_bmad-output/planning-artifacts/s<N>/stories/`:
@@ -102,24 +124,30 @@ nothing). The native `adversary` review is for CONVERGENCE cycles only.
 - **Source fidelity pass:** Does the story address the specific issue
   described? Does the fix approach match what was requested?
 
-It writes findings to `_bmad-output/planning-artifacts/s<N>/bug-fix-oneshot.md`
-carrying a `SKILL_INVOCATION_PROVENANCE v1` block with
-`skill: bmad-review-adversarial-general`, `mode: subagent`, and the three
-`findings_*` counts — and **no `verdict`**, which a one-shot never stamps. The
-path must not carry an `-adversarial-p<M>` suffix: Check 24 globs that prefix and
-a verdict-less pass swept into a series fails rung A.
+It writes findings to `_bmad-output/planning-artifacts/s<N>/bug-fix-oneshot-<slug>.md`,
+where `<slug>` is the fix story's own slug, so each bug in a sprint has its own
+one-shot. The file carries a `SKILL_INVOCATION_PROVENANCE v1` block with
+`skill: bmad-review-adversarial-general`, `mode: subagent`, `artifact:` naming
+the fix story, and the three `findings_*` counts — and **no `verdict`**, which a
+one-shot never stamps. That `artifact:` line is what routes the story to Check
+17's bug-fix arm. The path must not carry an `-adversarial-p<M>` suffix: Check 24
+globs that prefix and a verdict-less pass swept into a series fails rung A.
 
 Apply all improvements through the **Adversarial repair dispatch** sub-routine
 (`_gate-procedures.md`): ONE `remediator` takes the whole finding set, applies the
 edits and appends the changelog to the story. The lead owns the disposition, not
 the edit.
 
+**A one-shot finding that yields relief the operator can apply** — an existing
+endpoint or admin action that turns the fix into an operator action — goes to the
+operator through section 2b's question WHEN IT IS FOUND, not after the disposition.
+
 **Then stamp the story — MECHANICALLY, never by hand.** Check 17's bug-fix
 story-readiness gate requires a `SKILL_INVOCATION_PROVENANCE` block on the story
 itself, and nothing else writes one. Run:
 
 `scripts/ai-dlc/stamp-story-provenance.sh --terminal
-_bmad-output/planning-artifacts/s<N>/bug-fix-oneshot.md --profile
+_bmad-output/planning-artifacts/s<N>/bug-fix-oneshot-<slug>.md --profile
 bug-story-provenance <story-file>`
 
 `--profile bug-story-provenance` is load-bearing: the default profile pins the

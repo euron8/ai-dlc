@@ -15,6 +15,112 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.628.0] - 2026-09-23
+
+Three filings from one consumer session. A live production bug was reported mid-sprint and
+folded into the sprint. The lead found a no-deploy relief and drafted it five times, but never
+offered it to the operator. The bug then went through the full story cycle with no code changed.
+
+### Bug triage puts operator-applicable relief to the operator before the fix story
+
+`core/skills/ai-dlc/steps/bug-investigation.md` ran `### 2. Investigation` straight into
+`### 3. Create Fix Story`. A story was its only product, so no step ever asked the operator about a
+relief.
+
+What changed:
+
+- **New `### 2b. Operator Relief`.** When the investigation found relief the operator can apply
+  without a deploy (a config value, a restart, an existing endpoint or admin action, a feature
+  flag), the lead puts it to the operator with `AskUserQuestion` before §3. The options are
+  **apply now (recommended)** and **wait for the fix**, and the question states the relief's
+  limit. A stopgap that only buys time is still asked. There is no pause flag. If no relief
+  exists, the analysis records `operator relief: none found`. The relief is never written into a
+  story, or recorded as an autonomous Rule 12 Tier 2 decision, in place of asking.
+- **The analyst's return from §0 includes the relief, and the lead resumes at §2b, not §3.** A §4
+  one-shot finding that turns the fix into an operator action goes to the operator when it is
+  found.
+- **`SKILL.md` Rule 11(a):** relief for a live defect that only the operator can apply is an
+  operator-only decision and is always asked. Professional defaults and Tier 2 do not reach it,
+  because Tier 2 covers only choices the lead can carry out. Rule 3's pause point (a) is now
+  **Ambiguity resolution and operator-only decisions**, and "Do not ask if you should continue"
+  now says it is about continuing, not about an operator action. The count of four pause points is
+  unchanged. The post-compact digest is re-rendered to match.
+- **The fold directive, `stories-test-strategy.md` `### 3a. Fold a Defect into This Sprint`.** A
+  defect folded into the sprint, by `route.md`'s MUST-ASK or by operator direction, is triaged
+  first: READ AND FOLLOW `bug-investigation.md` §0–§4 for it, skipping §5 and §6. Without this, a
+  new section would not have been reached in the session that motivated it. There the lead read
+  `bug-investigation.md` as a reference while running `stories-test-strategy` §4, and Rule 4
+  binds only a file loaded through READ AND FOLLOW.
+- **`templates/QUICKSTART.md.template`** listed three pause points. It now lists Rule 3's four,
+  with (a) under its new name.
+
+The entry closes on a replay of that session's state against these files, and that replay is
+still owed. `BL-294`.
+
+### The mixed-defect MUST-ASK must offer "triage now, then fold the fix"
+
+`core/skills/ai-dlc/steps/route.md`'s MUST-ASK for a bug arriving during a sprint named no
+options, and in the incident all three routes offered went through a sprint. The question must
+now include **triage now, then fold the fix**. That option runs `bug-investigation.md` §0–§2b, so
+any relief reaches the operator first, and then folds the fix story into the current sprint
+through `stories-test-strategy.md` §3a. The filing asked for "mitigate/hotfix now". It became
+"triage now" because at routing time the relief is not yet known. The `roll` refusal is
+unchanged. `BL-295`.
+
+### A folded bug-fix story keeps its one-shot, and Check 17 routes it to the bug-fix arm
+
+In the incident, the bug story went through the full convergence cycle, and the gate required
+it. Check 17's story arm demanded `ai-dlc-adversary-review` on every story, so the lead overwrote
+the story's one-shot provenance block with a convergence block.
+
+What changed:
+
+- **Check 17 partitions the sprint's stories** (`gate-validation.md`). A folded bug-fix story
+  runs the bug-fix arm. Every other story runs the story arm and the series cross-check. The
+  folded story is **declared, not self-selected**: it is the story named by the `artifact:` field
+  of a per-bug `s<N>/bug-fix-oneshot-<slug>.md` in the sprint's planning slot. **Only the per-bug
+  name declares.** A legacy `s<N>/bug-fix-oneshot.md` never re-routes a story. It is read only at
+  the bug-investigation gate, as the bug-fix arm's fallback there.
+- **The one-shot has a per-bug name,** `s<N>/bug-fix-oneshot-<slug>.md`, where `<slug>` is the
+  fix story's slug. A sprint can therefore fold more than one bug. The one-shot's block now
+  carries `artifact:` naming the fix story.
+- **`stories-test-strategy.md` §4 leaves a folded bug-fix story out of the convergence cycle and
+  out of the `--series` stamp.** The series' `artifact_sha` covers the stories it reviewed, so a
+  folded story inside it would move that sha on every edit and re-open the series at its next
+  pass (Check 24 arm J).
+- **`stamp-story-provenance.sh` gains one refusal.** Under a verdict-less profile
+  (`bug-story-provenance`) it refuses to stamp or `--check` a story that the one-shot's
+  `artifact:` does not name, resolved as an absolute path, from the cwd, or from the project
+  root. Replayed on the reference consumer's four one-shots, no exit code changed; a sprint whose
+  story moved after its review now fails on the bind instead of on drift.
+  `core/fixtures/story-provenance` gains a mixed-sprint case, the bind's arms, and mutants on
+  both. `BL-296`.
+- **`route.md`'s fold option has a route once the sprint is past `stories-test-strategy`:** run
+  `bug-investigation.md` §3–§4 directly into the sprint's `stories/`, skipping §5–§6, and the
+  story takes Check 17's bug-fix arm at the next gate. `BL-295`.
+
+### On the pull
+
+**This release changes what the stories-test-strategy gate accepts,** so a sprint in flight is
+the case to know about. A pull cannot re-route a story that is already written. Only a
+`bug-fix-oneshot-<slug>.md` declares a folded story, and no sprint started before this release
+has one, so every story in such a sprint stays on the arm it was on. This was replayed with the
+shipping scripts on a scratch copy of the reference consumer's in-flight sprint. That sprint sits
+at `stories-test-strategy`, has a legacy `bug-fix-oneshot.md` naming a story, and has that story
+stamped by convergence:
+
+- the gate before this release: all four stories on the story arm, gate PASS;
+- a first cut that also matched the legacy name: that story moved to the bug-fix arm and failed
+  both commands (rc=1, retired pin and drift), gate FAIL;
+- this release: no declaring file, all four stories on the story arm, gate PASS.
+
+The partition takes effect for a defect folded after the pull. That defect is triaged through
+`bug-investigation.md` §0–§4 and gets a per-bug one-shot. A lead that has not re-read the step
+files since the pull still runs the old prose until its next READ AND FOLLOW of them.
+
+`BL-297` stays open. It is a NOTE on the context sensor's precedence and waits on a
+re-measurement now that `BL-294` is built.
+
 ## [0.627.0] - 2026-09-23
 
 ### `apply.sh` names a DANGLING hook registration, and says when the check could not read its own answer

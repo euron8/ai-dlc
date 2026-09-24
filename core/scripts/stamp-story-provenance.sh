@@ -152,9 +152,10 @@ if [[ "$PRINT_SCHEMA" == "yes" ]]; then
     exit 0
 fi
 
-python3 - "$SCHEMA" "$TERMINAL" "$CHECK_ONLY" "$TOOL_USE_ID" "$PROFILE_NAME" "${STORIES[@]}" <<'PYEOF'
+SP_ROOT_FOR_PY="$SP_ROOT" python3 - "$SCHEMA" "$TERMINAL" "$CHECK_ONLY" "$TOOL_USE_ID" "$PROFILE_NAME" "${STORIES[@]}" <<'PYEOF'
 import hashlib
 import json
+import os
 import re
 import sys
 
@@ -333,6 +334,43 @@ if not check_only and tfields.get("tool_use_id") != tid:
         with open(terminal_path, "w", encoding="utf-8") as fh:
             fh.write(new_tcontent)
         print(f"  backfilled tool_use_id in the terminal pass (SoR): {terminal_path}")
+
+
+# A ONE-SHOT reviewed ONE story, and its `artifact:` names it. Check 17 routes a folded bug-fix
+# story to this profile's lighter arm BY that field, so the field is the declaration and the
+# story may not choose it: without this bind any story at all could be stamped, and then checked,
+# through a one-shot that reviewed a different one. A convergence pass names the stories
+# DIRECTORY and is bound by its own series instead, so the bind is keyed on the same profile
+# property as the verdict rule above and never applies to it.
+#
+# The field is written by the one-shot's subagent as a project-root-relative path; the gate
+# passes the story however it was invoked. So a candidate is taken as given (absolute), against
+# the working directory, and against the project root, and the bind holds when any of them is
+# the same file as the story. A field naming no file, or naming another story, refuses.
+def artifact_binds(story_path):
+    ref = tfields.get("artifact", "")
+    if not ref:
+        return False
+    target = os.path.realpath(story_path)
+    bases = [os.getcwd()]
+    if os.environ.get("SP_ROOT_FOR_PY"):
+        bases.append(os.environ["SP_ROOT_FOR_PY"])
+    cands = [ref] if os.path.isabs(ref) else [os.path.join(b, ref) for b in bases]
+    return any(os.path.exists(c) and os.path.realpath(c) == target for c in cands)
+
+
+if "verdict" not in PROFILE.get("batch_invariant", []):
+    unbound = [sp for sp in story_paths if not artifact_binds(sp)]
+    if unbound:
+        print(
+            f"FAIL: terminal one-shot {terminal_path} reviewed "
+            f"'{tfields.get('artifact', '')}', which is not the story being "
+            f"{'checked' if check_only else 'stamped'}: {', '.join(unbound)}. A one-shot binds "
+            f"only the story its artifact field names; that field is what routes a story to this "
+            f"profile, so a story it does not name cannot take this profile's arm.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
 
 def render(story_path, sha):

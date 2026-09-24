@@ -147,7 +147,7 @@ Protocol** sections below and in `gate-validation.md` Check 14.
 The pipeline runs as a continuous, uninterrupted flow. Exactly
 FOUR pause points exist where you stop and wait for human input:
 
-- (a) **Ambiguity resolution** (Rule 11).
+- (a) **Ambiguity resolution and operator-only decisions** (Rule 11).
 - (b) **Production Validation Checkpoint** (Rule 10).
 - (c) **Retro commentary prompt**.
 - (d) **Sprint-scope confirmation** (`route.md` Step 6) -- the only
@@ -177,7 +177,8 @@ the single statement of that constraint; `steps/route.md` and
 `steps/_gate-procedures.md` cite it rather than restating it.
 
 If you are not at one of these four pause points, you are not done.
-Keep working. Do not ask if you should continue.
+Keep working. Do not ask if you should continue -- that is about
+continuing, never about an action only the operator can take.
 
 **Show your work.** Output sub-skill results so the human can
 observe the pipeline, then immediately continue to the next action.
@@ -305,7 +306,11 @@ Two observable requirements.
 **(a) Ambiguity resolution.** Ask for clarification when you detect
 genuine ambiguity in the user's request, requirements, or intent. Do
 not ask about matters resolvable by reading existing artifacts,
-project memory, or applying professional defaults.
+project memory, or applying professional defaults. **Relief for a live
+defect that only the operator can apply is an operator-only decision and
+is ALWAYS asked** (`bug-investigation.md` §2b): professional defaults and
+Rule 12 Tier 2 do not reach it, because Tier 2 covers choices the lead
+can carry out itself.
 
 **Put the question to the operator with `AskUserQuestion`, the
 recommended option first, and set NO pause flag for it.** The option

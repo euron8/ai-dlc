@@ -49,18 +49,24 @@ conversation, from the user's initial request through production deployment.
   Context is maintained through artifacts on disk, not conversation history.
 - **Autonomous gates.** Phase transitions run the gate validation protocol
   automatically. No human approval is needed between phases.
-- **Three pause points.** These are the only three points where the
+- **Four pause points.** These are the only four points where the
   pipeline pauses for human input (SKILL.md Rule 3):
-  1. **Ambiguity resolution.** Whenever the router or a pipeline
-     step detects genuine ambiguity in the user's request,
-     requirements, or intent, the pipeline pauses to ask one
-     targeted clarifying question before proceeding.
+  1. **Ambiguity resolution and operator-only decisions.** Whenever
+     the router or a pipeline step detects genuine ambiguity in the
+     user's request, requirements, or intent, the pipeline asks one
+     targeted clarifying question before proceeding. It also always
+     puts to the human any relief for a live defect that only the
+     human can apply, such as a config value, a restart or an admin
+     action (`bug-investigation.md` §2b).
   2. **Production Validation Checkpoint.** After deployment and
      smoke tests, the pipeline stops and waits for the human to
      validate the deployed production instance.
   3. **Retro commentary prompt.** After the retrospective writes
      lessons and process improvements, the human gets a chance to
      comment before the sprint closes.
+  4. **Sprint-scope confirmation.** Before planning, the router asks
+     the human to confirm or correct the sprint scope it resolved
+     (`route.md` Step 6).
 
   Post-compact recovery still outputs a verification turn for
   transparency (current step, last gate, in-flight sub-step, git

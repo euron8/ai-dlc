@@ -1284,7 +1284,16 @@ to a caller that has decided this artifact class carries none.
   skipped the stamp.
 - **Story readiness gate (stories-test-strategy):** run
   `scripts/ai-dlc/validate-provenance-block.sh <story-file>
-  --require-skill ai-dlc-adversary-review` for each story.
+  --require-skill ai-dlc-adversary-review` for each story EXCEPT a folded
+  bug-fix story.
+  **A folded bug-fix story is DECLARED, never self-selected:** it is the story
+  named by the `artifact:` field of a per-bug `s<N>/bug-fix-oneshot-<slug>.md`
+  provenance block in this sprint's planning slot. That story runs the bug-fix
+  arm below instead of this one, and every other story runs this arm and the
+  cross-check below. A story cannot opt itself out, because the declaration
+  lives in the one-shot's residue, not in the story. **Only the per-bug name
+  declares.** A legacy `s<N>/bug-fix-oneshot.md` NEVER declares a folded story
+  at this gate: the story it names stays on this arm.
   The stories cycle is a CONVERGENCE cycle, so it stamps the native
   identifier. A consumer whose override pins the superseded
   `bmad-review-adversarial-general` name — dev/qa/code-reviewer pre-submission
@@ -1294,7 +1303,8 @@ to a caller that has decided this artifact class carries none.
   Then run the story-provenance CROSS-CHECK, once for the whole batch:
   `scripts/ai-dlc/stamp-story-provenance.sh --series
   <path-prefix-of-this-sprint's-stories-adversarial-pass-series> --check
-  <story-file>...`; exit 0 required. `validate-provenance-block.sh` proves the
+  <story-file>...` over the same story list, folded bug-fix stories left out;
+  exit 0 required. `validate-provenance-block.sh` proves the
   block is schema-SHAPED; this proves it is the RIGHT block — every
   batch-invariant field equals the terminal convergence pass (the single source
   of truth) and `artifact_sha` is the current bytes of the story it sits on. It
@@ -1308,8 +1318,13 @@ to a caller that has decided this artifact class carries none.
   `scripts/ai-dlc/validate-provenance-block.sh <story-file> --require-skill
   bmad-review-adversarial-general`, then the CROSS-CHECK
   `scripts/ai-dlc/stamp-story-provenance.sh --terminal
-  _bmad-output/planning-artifacts/s<N>/bug-fix-oneshot.md --profile
-  bug-story-provenance --check <story-file>`; exit 0 required for both.
+  _bmad-output/planning-artifacts/s<N>/bug-fix-oneshot-<slug>.md --profile
+  bug-story-provenance --check <story-file>`, where `<story-file>` is the story
+  that one-shot's `artifact:` names; exit 0 required for both. This arm runs
+  at the bug-investigation gate AND, for each folded bug-fix story, at the
+  stories-test-strategy gate. At the bug-investigation gate ONLY, a sprint
+  whose one-shot predates the per-bug name reads `s<N>/bug-fix-oneshot.md`
+  here.
   The bug variant's §4 review is a ONE-SHOT, so the block carries NO `verdict`
   and cites the bmad skill rather than the native one — which is why it needs its
   own arm and its own profile. `--profile bug-story-provenance` is not optional:

@@ -463,6 +463,24 @@ risk assessment suggests phasing:
 - The implementation step will execute sprint 1, deploy, signal human,
   then wait for validation before proceeding to sprint 2
 
+### 3a. Fold a Defect into This Sprint
+
+**A defect folded into this sprint — by `route.md` Step 4's mixed-defect
+MUST-ASK or by operator direction — is triaged, not written straight into a
+story.** For each one:
+
+**READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/bug-investigation.md`
+sections 0–4 for that defect, then resume here at section 4. A defect that
+`route.md` already took through sections 0–2b runs sections 3–4 here.
+
+Sections 5 (Sprint Setup) and 6 (Gate Validation and Proceed) of
+`bug-investigation.md` are NOT run: this sprint already exists and this step
+owns its gate. The fix story that section 3 writes lands in this sprint's
+`stories/` directory, and its one-shot is the per-bug
+`s<N>/bug-fix-oneshot-<slug>.md`. That story is a **folded bug-fix story** for
+the rest of this step and for gate-validation Check 17. A story named only by a
+legacy `s<N>/bug-fix-oneshot.md` is NOT folded and stays in the cycle below.
+
 ### 4. Story Validation Cycle (Rule 8)
 
 Run the validation cycle (`_gate-procedures.md`, "Validation cycle") on the
@@ -479,7 +497,17 @@ sprint's stories — its passes use the **Adversarial review dispatch** and
 - **on convergence:** append a changelog to each story file, then stamp story
   provenance (below).
 
-   **Stamp the terminal-pass provenance block onto every story — MECHANICALLY,
+**A folded bug-fix story (§3a) is NOT a subject of this cycle.** It keeps the
+one-shot `bug-investigation.md` §4 ran on it and its `bug-story-provenance`
+block, and it never enters convergence. Leave it out of the reviewed set and out
+of the `--series` stamp below: the series' `artifact_sha` is taken over the
+stories it reviewed, so a folded story inside that set moves it on every edit and
+re-opens the series at its next pass (Check 24 arm J). Check 17 routes it to its bug-fix arm by the
+`artifact:` field of its per-bug `s<N>/bug-fix-oneshot-<slug>.md`, and by no
+other file.
+
+   **Stamp the terminal-pass provenance block onto every story except a folded
+   bug-fix story — MECHANICALLY,
    never by hand.** Check 17's story-readiness gate requires a
    `SKILL_INVOCATION_PROVENANCE` block on each story file. Do NOT transcribe it
    "per precedent" — that is how it drifted (one sprint carried `artifact_sha`,
