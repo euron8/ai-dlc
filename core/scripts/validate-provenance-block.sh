@@ -152,12 +152,22 @@ PB_ROOT="${AI_DLC_PROJECT_ROOT:-}"
 PB_ROOT="${PB_ROOT:-/nonexistent}"
 # --- end AI_DLC_ROOT --------------------------------------------------------
 
+# The schema belongs to the INSTALL, not to whatever project AI_DLC_PROJECT_ROOT points at, so the
+# install root — walked up from this script's own directory — is the last candidate. LAST, and in
+# stamp-story-provenance.sh too: the writer and this reader must resolve the SAME schema under any
+# override, or a stamp one wrote the other refuses. An override root carrying its own schema still
+# wins in both; one carrying none falls through to the install's in both. An empty walk answer is
+# skipped, never turned into /.claude/schemas/ at the filesystem root.
+PB_INSTALL_ROOT="$(ai_dlc_resolve_root "$PB_SCRIPT_DIR" || true)"
+PB_INSTALL_SCHEMA=""
+[ -n "$PB_INSTALL_ROOT" ] && PB_INSTALL_SCHEMA="$PB_INSTALL_ROOT/.claude/schemas/provenance-block.json"
 SCHEMA=""
 for cand in \
     "$PB_ROOT/core/schemas/provenance-block.json" \
     "$PB_ROOT/.claude/schemas/provenance-block.json" \
-    "$PB_SCRIPT_DIR/../schemas/provenance-block.json"; do
-    [ -f "$cand" ] && { SCHEMA="$cand"; break; }
+    "$PB_SCRIPT_DIR/../schemas/provenance-block.json" \
+    "$PB_INSTALL_SCHEMA"; do
+    [ -n "$cand" ] && [ -f "$cand" ] && { SCHEMA="$cand"; break; }
 done
 
 if [ -z "$SCHEMA" ]; then
