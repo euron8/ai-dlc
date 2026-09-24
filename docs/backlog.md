@@ -4028,7 +4028,21 @@ nothing is not the situation here — its removal would make a real leak invisib
 **Not measured, and stated rather than hidden:** whether any leak the arm has ever reported was
 genuine. The distribution's history would answer it and it was not taken.
 
-verify: sh set -e; F=core/fixtures/ledger-reverify/run.sh; E=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -r "$F" ] && [ -r "$E" ] || exit 9; M="$(LC_ALL=C grep -n 'ledger-reverify-theirs' "$E" | LC_ALL=C grep -c 'mktemp')" || M=0; [ "$M" -ge 1 ] || exit 9; C="$(LC_ALL=C grep -c 'tt_count()' "$F")" || C=0; [ "$C" -ge 1 ] || exit 9; W=$(mktemp -d) || exit 9; B="$(ls -d "$W"/ledger-reverify-theirs.* 2>/dev/null | LC_ALL=C grep -c . )" || B=0; S="$(mktemp -d "$W/ledger-reverify-theirs.XXXXXX")" || { rmdir "$W"; exit 9; }; A="$(ls -d "$W"/ledger-reverify-theirs.* 2>/dev/null | LC_ALL=C grep -c . )" || A=0; rmdir "$S"; Z="$(ls -d "$W"/ledger-reverify-theirs.* 2>/dev/null | LC_ALL=C grep -c . )" || Z=0; rmdir "$W"; echo "before=$B foreign=$A restored=$Z"; [ "$A" -eq "$((B+1))" ] && [ "$Z" -eq "$B" ] || { echo "PRECONDITION: the shared glob no longer tracks a foreign tree, so nothing here was measured"; exit 9; }; P="$(LC_ALL=C grep -o 'ledger-reverify-theirs\.[A-Za-z$_{}()]*' "$E" | head -1)"; case "$P" in *'$'*) exit 0 ;; esac; exit 1
+**THE FILED RECEIPT WAS REPLACED AT BATCH 151, BECAUSE IT ACCEPTED ONLY ONE OF THE TWO FIXES.**
+It passed only when the engine's `mktemp` line carried a `$` in its prefix, which is the
+engine-side discriminator. The fixture-only fix gives the laziness run a private `TMPDIR`, so no
+foreign tree can land in the directory it counts. That fix closes the defect and leaves the
+engine line untouched, so under the filed receipt the entry would have read live forever. The
+receipt below runs the fixture's laziness block alone, twice. The first run goes through a shim
+that plants one foreign `ledger-reverify-theirs.*` tree in the ambient `TMPDIR` before invoking
+the real engine, and the arm must stay `ok`. The second run uses an engine copy that
+materializes on every call and never removes its tree, and the arm must still FAIL on the leak.
+It was scored against seven constructed trees: **S0** unfixed scores **1**, **S1** (the fixture
+fix) scores **0**, **S2** (the engine fix) scores **0**, the regressions **S3**, **S4**, **S5**
+and **S7** each score **1**, and **S6** (the arm deleted) scores **9**. At `937919e4` it prints
+`foreign:ok=0,fail=1 leak-mutant:fail=1,ok=0` and exits **1**.
+
+verify: sh set -u; F=core/fixtures/ledger-reverify/run.sh; S=core/fixtures/ledger-reverify/seed.sh; E=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -r "$F" ] && [ -r "$S" ] && [ -r "$E" ] || exit 9; T="$(mktemp -d)" || exit 9; trap 'rm -rf "$T"' EXIT; awk '/^# D\. LAZINESS/{p=1} /^# THE OTHER DIRECTION/{p=0} p' "$F" > "$T/arm.sh"; grep -q 'theirs-tree-lazy' "$T/arm.sh" || exit 9; mkdir "$T/amb" "$T/mut"; export TMPDIR="$T/amb"; read -r DIST BASE CONS THEIRS < <(bash "$S") || exit 9; [ -d "$DIST" ] || exit 9; cp "$(dirname "$E")"/*.sh "$T/mut/" || exit 9; OLD1='        *THEIRS_TREE*)' NEW1='        *)' OLD2='  [ -n "${THEIRS_TREE_OWNED:-}" ] && rm -rf "$THEIRS_TREE_OWNED"' awk '$0==ENVIRON["OLD1"]{print ENVIRON["NEW1"]; a++; next} $0==ENVIRON["OLD2"]{b++; next} {print} END{exit !(a==1 && b==1)}' "$E" > "$T/mut/ledger-reverify.sh" || exit 9; printf 'mkdir "$BL_AMB/ledger-reverify-theirs.FOREIGN$$"\nexec bash "$BL_REAL" "$@"\n' > "$T/shim.sh"; drive() { ( FAILURES=0; ASSERTIONS=0; CLOSER="$1"; BL_AMB="$T/amb" BL_REAL="$PWD/$E"; export BL_AMB BL_REAL; . "$T/arm.sh" ) 2>&1; }; fo="$(drive "$T/shim.sh")"; nf="$(ls -d "$T/amb"/ledger-reverify-theirs.FOREIGN* 2>/dev/null | grep -c .)" || nf=0; lo="$(drive "$T/mut/ledger-reverify.sh")"; fok="$(grep -c '^  ok    theirs-tree-lazy' <<<"$fo")" || fok=0; ffail="$(grep -c '^  FAIL  theirs-tree-lazy .*theirs-trees behind' <<<"$fo")" || ffail=0; lfail="$(grep -c '^  FAIL  theirs-tree-lazy .*left +[1-9]' <<<"$lo")" || lfail=0; lok="$(grep -c '^  ok    theirs-tree-lazy' <<<"$lo")" || lok=0; echo "foreign-injected=$nf foreign:ok=$fok,fail=$ffail leak-mutant:fail=$lfail,ok=$lok"; [ "$nf" -eq 1 ] || exit 9; [ $((fok + ffail)) -eq 1 ] && [ $((lfail + lok)) -eq 1 ] || exit 9; [ "$fok" -eq 1 ] && [ "$lfail" -eq 1 ] && exit 0; exit 1
 
 
 
