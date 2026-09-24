@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
+# Hermetic against ambient AI_DLC_* tunables (enforcement-map I10). The BL-292 arms write hook
+# registrations and drive `--finish` through the real validator, so an operator's exported
+# tunable would otherwise be tested instead of the code.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 # apply-restamp-worklist — a run that HANDS WORK BACK must not stamp the tree as being at THEIRS,
 # and must not clear the in-flight marker.
 #

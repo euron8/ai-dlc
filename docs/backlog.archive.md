@@ -17863,3 +17863,84 @@ neither `ff1ed69e` nor `98036a53` changed.
 
 verify: sh F=core/skills/ai-dlc-update/reconcile/register-drift.sh; [ -r "$F" ] && [ -r "${F%/*}/lib.sh" ] || exit 9; F="$(pwd)/$F"; D="$(command -v diff)"; [ -x "$D" ] || exit 9; T="$(mktemp -d)" || exit 9; S="$T/shim"; mkdir -p "$S" "$T/d/core/team-roles" "$T/c/.claude/team-roles" "$T/k/.claude/team-roles" || exit 9; printf '#!/bin/sh\nt1="%s/a.$$"; t2="%s/b.$$"; cat "$1" > "$t1"; cat "$2" > "$t2"\nif grep -q BETAKEEP "$t1" "$t2"; then : > "%s/.fired"; exit 2; fi\nexec "%s" "$t1" "$t2"\n' "$S" "$S" "$S" "$D" > "$S/diff" && chmod +x "$S/diff" || exit 9; printf 'x\n' > "$T/p1"; printf 'y\n' > "$T/p2"; PATH="$S:$PATH" diff "$T/p1" "$T/p2" >/dev/null 2>&1; [ $? = 1 ] || exit 9; [ -e "$S/.fired" ] && exit 9; printf '# Role: X\n\n## Alpha\n\nalpha core text.\n\n## Beta\n\nbeta core text.\n\n## Gamma\n\ngamma core text.\n' > "$T/d/core/team-roles/x.md"; ( cd "$T/d" && git init -q && git add -A && git -c user.name=r -c user.email=r@r commit -qm base ) >/dev/null 2>&1 || exit 9; B="$(git -C "$T/d" rev-parse HEAD)" || exit 9; sed 's/^alpha core text\.$/alpha CONSUMER EDIT./; s/^beta core text\.$/beta CONSUMER EDIT BETAKEEP./' "$T/d/core/team-roles/x.md" > "$T/e.md"; grep -q 'alpha CONSUMER EDIT' "$T/e.md" && grep -q BETAKEEP "$T/e.md" || exit 9; cp "$T/e.md" "$T/c/.claude/team-roles/x.md" && cp "$T/e.md" "$T/k/.claude/team-roles/x.md" || exit 9; O=.claude/skills/ai-dlc/overrides/team-roles__x__consumer-drift.md; bash "$F" "$T/d" "$B" "$T/k" team-roles/x.md --apply >/dev/null 2>&1 || exit 9; grep -q 'alpha CONSUMER EDIT' "$T/k/$O" && grep -q BETAKEEP "$T/k/$O" || exit 9; PATH="$S:$PATH" bash "$F" "$T/d" "$B" "$T/c" team-roles/x.md --apply >/dev/null 2>"$T/err"; rc=$?; [ -e "$S/.fired" ] || exit 9; [ "$rc" != 0 ] && [ -z "$(ls -A "$T/c/.claude/skills/ai-dlc/overrides" 2>/dev/null)" ] && cmp -s "$T/e.md" "$T/c/.claude/team-roles/x.md" && grep -q "cannot classify section 'Beta'" "$T/err" && exit 0; exit 1
 
+## BL-292 — `apply.sh` emits no WORKLIST row for a DANGLING hook registration, on `--finish` too
+
+**DEFECT.** Filed at batch 144, found by the contract adversary on `BL-291`'s consumer pull.
+
+**THE PARSE CAN ONLY SEE ONE OF THE VALIDATOR'S TWO FAILURE LISTS.**
+`core/skills/ai-dlc-update/reconcile/apply.sh:1845` builds `hr_names` with
+`sed -n 's@^ *\.claude/hooks/@@p'`, and `:1846` emits the WORKLIST row only when the validator's
+rc is 1 AND `hr_names` is non-empty. `core/scripts/validate-hook-registration.sh` prints its
+UNREGISTERED list at `:398` as `    .claude/hooks/<name>`, which the parse reads. It prints its
+DANGLING list at `:411` as a bare `    <name>`, with no `.claude/hooks/` prefix, which the parse cannot
+read. So a tree whose only failure is a dangling registration returns rc 1 with an empty
+`hr_names`, and `hook_registration_row` emits nothing. It is not the rc 2 branch either, so no
+DECISION row appears. `--finish` calls the same function at `:2066`, after the settings merge, so
+the invocation meant to verify the finished tree is silent too. The only thing that catches it is
+the prose hard gate in `ai-dlc-update/SKILL.md` ("Hook-registration gate — hard"), which a session
+has to read and run.
+
+**WHERE IT BITES.** A hook retired upstream, like `BL-291`'s, when the file deletion is committed
+before the settings merge, or when the strip half of the merge does not run.
+
+**BOOTSTRAPPING, SO THE FIX SHIPS ALONE.** `apply.sh` is the program that delivers a pull. A
+consumer runs its installed copy, so a fix to it is delivered by the broken version it replaces.
+The fix must ship in a release of its own, with nothing else a pull would ask this function about.
+
+**RECEIPT, SCORED.** It extracts the shipped `hook_registration_row` from `apply.sh`, installs a
+fresh consumer with `scripts/install.sh` under `mktemp`, and requires the installed validator to exit
+0 on it. Positive control: with hook `h` unregistered in `settings.json`, the function must emit a
+WORKLIST row naming `h`, otherwise exit 9. Five subjects follow, each a validator exit 1 (else 9).
+**Dangling beside a live local-only hook:** `h`'s file moved out while `h` is still registered, and a
+second hook `h2` registered ONLY in `settings.local.json`. The validator must print both as bare
+names (else 9). The function must emit a WORKLIST row naming `h`, and no row may name `h2`, which is
+live for whoever holds that file. **Local-only dangling:** a hook with no file, registered only in
+`settings.local.json`. It needs a WORKLIST row whose subject is `.claude/settings.local.json` and that
+names the hook, and the `settings-merge` row must not name it. **Mixed:** `h` unregistered and `h2`
+dangling in `settings.json`. The one `settings-merge` row must name both. **Both files:** `h2` dangling
+and registered in `settings.json` AND `settings.local.json`. The validator's `local_only` list is
+`local - main`, so `h2` appears under DANGLING alone. It must still be named in the `settings-merge`
+row and in a `.claude/settings.local.json` row, because the merge leaves the local block in place.
+**`settings.json` holding `[]`:** the validator exits 1 with a traceback and no list, and the function
+must emit a DECISION row. A DECISION is not accepted for a dangling registration. Exit 0 is
+CLOSE-CANDIDATE. It needs `jq` and takes about 5s, most of it the install. Each run leaves one
+installed tree under `$TMPDIR`.
+
+| tree | exit |
+|---|---|
+| `origin/main` `a86d9a5f` | **1** |
+| first fix `7d57b37e` (no both-files row) | **1** |
+| fix, branch `b145-bl292-fix` | **0** |
+| regression: the dangling-only row emitted as DECISION | **1** |
+| regression: the filed candidate, every bare `    ai-dlc-*.sh` line read as dangling | **1** |
+| regression: DANGLING parse with neither the stop nor the NOTE-header switch | **1** |
+| regression: NOTE-header switch alone removed | **1** |
+| regression: the dangling clause OVERWRITES the unregistered text instead of appending | **1** |
+| regression: the direct `settings.local.json` read ignored | **1** |
+| stop alone removed (the NOTE header is the first non-4-space line today, so the two cover each other) | 0 |
+
+**NOTES FROM THE TIP ADVERSARY, NOT FIXED HERE.**
+
+- **The reference consumer gets no new row today.** Its installed validator is byte-identical to
+  this one and exits 0, so the old and new functions both emit nothing. Walked through the
+  0.625.0 hook retirement, the dangling row appears only between the hook-file deletion and the
+  settings merge, and it is true there. At `--finish` the validator exits 0 and the stamp is
+  written.
+- **A per-user hook registered in `settings.local.json` by absolute path matches the validator's
+  pattern and is reported DANGLING.** Such a hook now draws a `settings-local-dangling` row
+  telling the operator to remove a hook that works. The false positive belongs to the validator's
+  unanchored pattern and was already failing the consumer's pre-push.
+- **Under `PYTHONIOENCODING=ascii` the validator crashes printing the em-dash in the DANGLING
+  header.** A real dangling registration then becomes `DECISION hook-registration-unparsed`,
+  which `--finish` stamps over. That is fail-open, but the cause is in the validator, and the
+  registration was silent before this fix anyway.
+- **Step 2's self-update refreshes `reconcile/*` before the apply, so a pull that is not deferred
+  probably runs the fixed copy on its own delivery.** Unmeasured; `self-update-gate.sh` was not
+  run. Shipping alone remains the conservative choice.
+
+**LANDED (v0.627.0, verified 969e76ee).** `hook_registration_row` reads the DANGLING and
+`settings.local.json` lists, and emits a DECISION when the validator fails without names.
+Receipt exits 0 on `b145-v0627`, 1 at `a86d9a5f`.
+
+verify: sh A=core/skills/ai-dlc-update/reconcile/apply.sh; [ -r "$A" ] && [ -r scripts/install.sh ] || exit 9; command -v jq >/dev/null || exit 9; F="$(awk '/^hook_registration_row\(\) \{/{p=1} p{print} p&&/^\}$/{exit}' "$A")"; [ -n "$F" ] || exit 9; R="$(pwd)"; T="$(mktemp -d)" || exit 9; ( cd "$T" && git init -q && mkdir _bmad && git -c user.name=r -c user.email=r@r commit -q --allow-empty -m init && bash "$R/scripts/install.sh" ) >/dev/null 2>&1 || exit 9; V="$T/scripts/ai-dlc/validate-hook-registration.sh"; [ -x "$V" ] || exit 9; bash "$V" --root "$T" >/dev/null 2>&1 || exit 9; say() { echo "ROW $1 $2 ${3:-} ${4:-}"; }; eval "$F"; h="$(cd "$T/.claude/hooks" && ls ai-dlc-*.sh | sed -n 1p)"; h2="$(cd "$T/.claude/hooks" && ls ai-dlc-*.sh | sed -n 2p)"; [ -n "$h" ] && [ -n "$h2" ] || exit 9; S="$T/.claude/settings.json"; L="$T/.claude/settings.local.json"; cp "$S" "$T/s.bak"; unreg() { jq --arg h "$1" 'walk(if type == "object" and has("hooks") and (.hooks|type) == "array" then .hooks |= map(select((.command // "") | contains($h) | not)) else . end)' "$T/s.bak" > "$S"; }; loc() { jq -n --arg c "bash /p/.claude/hooks/$1" '{hooks:{PreToolUse:[{matcher:"Bash",hooks:[{type:"command",command:$c}]}]}}' > "$L"; }; names() { m="$(grep "^ROW WORKLIST $1 " <<< "$o")"; shift; for n in "$@"; do case "$m" in *"$n"*) : ;; *) return 1 ;; esac; done; }; unreg "$h" || exit 9; cmp -s "$T/s.bak" "$S" && exit 9; CONSUMER="$T"; o="$(hook_registration_row)"; grep -q "^ROW WORKLIST .*$h" <<< "$o" || exit 9; unreg "$h2" || exit 9; loc "$h2" || exit 9; mv "$T/.claude/hooks/$h" "$T/$h"; vo="$(bash "$V" --root "$T" 2>&1)"; [ $? = 1 ] || exit 9; grep -qx "    $h" <<< "$vo" && grep -qx "    $h2" <<< "$vo" || exit 9; o="$(hook_registration_row)"; grep -q "^ROW WORKLIST .*$h" <<< "$o" || exit 1; grep -q "^ROW [A-Z]* .*$h2" <<< "$o" && exit 1; mv "$T/$h" "$T/.claude/hooks/$h"; cp "$T/s.bak" "$S"; loc ai-dlc-zz-retired.sh || exit 9; bash "$V" --root "$T" >/dev/null 2>&1; [ $? = 1 ] || exit 9; o="$(hook_registration_row)"; grep -q "^ROW WORKLIST [a-z-]* \.claude/settings\.local\.json .*ai-dlc-zz-retired\.sh" <<< "$o" || exit 1; grep -q "^ROW WORKLIST settings-merge .*ai-dlc-zz-retired" <<< "$o" && exit 1; rm -f "$L"; unreg "$h" || exit 9; mv "$T/.claude/hooks/$h2" "$T/$h2"; bash "$V" --root "$T" >/dev/null 2>&1; [ $? = 1 ] || exit 9; o="$(hook_registration_row)"; names settings-merge "$h" "$h2" || exit 1; cp "$T/s.bak" "$S"; loc "$h2" || exit 9; bash "$V" --root "$T" >/dev/null 2>&1; [ $? = 1 ] || exit 9; o="$(hook_registration_row)"; names settings-merge "$h2" || exit 1; grep -q "^ROW WORKLIST [a-z-]* \.claude/settings\.local\.json .*$h2" <<< "$o" || exit 1; rm -f "$L"; printf '[]\n' > "$S"; bash "$V" --root "$T" >/dev/null 2>&1; [ $? = 1 ] || exit 9; o="$(hook_registration_row)"; grep -q "^ROW DECISION " <<< "$o" || exit 1; exit 0
+
