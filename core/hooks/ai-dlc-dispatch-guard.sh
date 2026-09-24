@@ -174,21 +174,45 @@ PROMPT="$(printf '%s' "$INPUT" | jq -r '.tool_input.prompt // empty' 2>/dev/null
 ROLE="$(printf '%s' "$PROMPT" | grep -oE 'team-roles/[a-z][a-z-]*\.md' \
   | head -1 | sed -E 's#team-roles/##; s#\.md$##')"
 
-# Whether the Rule 19(b) contract line was actually carried — the prompt naming
-# the role file IS that citation, so this is the same read, recorded rather than
-# discarded. Check 22 needs it: a spawn with no contract citation is a Rule 19(b)
-# violation, and until now nothing observed it except the lead's own gate-log
-# prose about itself.
+# WHAT `role_contract_cited` RECORDS: that the Rule 19(b) line naming the role file
+# was DELIVERED to the teammate at dispatch. Two carriers deliver it, and the ledger
+# names which one in `contract_via`:
+#
+#   prompt      the dispatch prompt names `team-roles/<role>.md`. This is the same
+#               read that derives ROLE here, recorded rather than discarded.
+#   definition  the dispatch is definition-bound (decided further down) and the
+#               `.claude/agents/<role>.md` body THIS DISPATCH SELECTS carries the
+#               rendered line. That body is the subagent system prompt, so the line
+#               reaches the teammate without the lead restating it.
+#
+# The prompt wins when both apply. Neither carrier present leaves the field false and
+# `contract_via` null, and Check 22 fails that row as it always has.
+#
+# IT IS A RECORD OF DELIVERY-AS-SELECTED, TAKEN AT PreToolUse. It is not proof the
+# spawn launched (another hook may still deny it, and a row then exists for a dispatch
+# that never ran, which `model_bound` shares), and it is NOT PROOF THE TEAMMATE READ THE
+# FILE: either carrier only puts the line in front of it. Rule 19(b) binds on the read.
+#
+# THE DEFINITION CARRIER MATCHES ONLY THE ROLE-SPECIFIC FIRST LINE, as a whole line,
+# below the closing frontmatter fence. `render-agent-definitions.sh` splits the sentence
+# across two lines, and the second one is identical in every role body, so matching it
+# (or the sentence loosely) would credit a role R definition that names role S. The
+# frontmatter agreement test does not read the body, so it cannot stand in for this.
 ROLE_CONTRACT_CITED=false
-[ -n "$ROLE" ] && ROLE_CONTRACT_CITED=true
+CONTRACT_VIA=""
+if [ -n "$ROLE" ]; then
+  ROLE_CONTRACT_CITED=true
+  CONTRACT_VIA=prompt
+fi
 
 # FALLBACK: the dispatch named a role only via `subagent_type`. Before v0.158.0
 # this path was a silent no-op — no binding, no correction, no record — and it is
 # the likeliest way a `protected-path-editor` reached sonnet against an opus pin
 # on the reference consumer while the guard sat installed and green. A dispatch
-# that identifies its role unambiguously must still be bound; it is only the
-# CONTRACT CITATION that is missing, and that is recorded as false rather than
-# used as grounds to skip the dispatch.
+# that identifies its role unambiguously must still be bound; the PROMPT carries
+# no citation, and whether the selected definition carries one is decided once
+# DEFINITION_BOUND is known. Neither is grounds to skip the dispatch, and this
+# guard never denies on a missing citation.
 if [ -z "$ROLE" ]; then
   ROLE="$(printf '%s' "$INPUT" | jq -r '.tool_input.subagent_type // empty' 2>/dev/null \
     | grep -oE '^[a-z][a-z-]*$' || true)"
@@ -344,6 +368,21 @@ fi
 # model-less marked file as bindable would rewrite `subagent_type` for exactly the party
 # seats `/bmad-party-mode` controls, so it falls to the absent branch here too.
 [ -n "$DEF_MODEL" ] || DEFINITION_BOUND=false
+
+# THE DEFINITION CARRIER for the Rule 19(b) citation (see the block at ROLE_CONTRACT_CITED
+# above). Only a BOUND definition is selected, so only a bound one can deliver the line;
+# a stale or unmarked file is never read here. The body is everything below the closing
+# frontmatter fence, and the match is `-x -F` on the role-specific first line, built from
+# ROLE with the same format `render-agent-definitions.sh` emits it with.
+if [ "$ROLE_CONTRACT_CITED" = false ] && [ "$DEFINITION_BOUND" = true ]; then
+  _dg_body="$(awk 'NR==1 && $0!="---"{exit} NR==1{next} f{print; next} /^---$/{f=1}' \
+                "$DEF_FILE" 2>/dev/null || true)"
+  _dg_line="$(printf 'Your operating contract is `.claude/team-roles/%s.md`. Read it and follow it as your' "$ROLE")"
+  if [ -n "$_dg_body" ] && grep -qxF -- "$_dg_line" <<<"$_dg_body" 2>/dev/null; then
+    ROLE_CONTRACT_CITED=true
+    CONTRACT_VIA=definition
+  fi
+fi
 
 # TWO THINGS CAN NEED SETTING, and a role may need either, both, or neither.
 #
@@ -542,6 +581,7 @@ jq -nc \
    --arg effort "${SPAWN_EFFORT:-}" \
    --arg tui "${SPAWN_TUI:-}" \
    --arg stripped "${SPAWN_NAME_STRIPPED:-}" \
+   --arg via "${CONTRACT_VIA:-}" \
    --argjson cited "$ROLE_CONTRACT_CITED" \
    --argjson readable "$ROLE_FILE_READABLE" \
    --argjson defbound "$DEFINITION_BOUND" \
@@ -561,6 +601,9 @@ jq -nc \
      # shell argument, so a possessive here CLOSES it and bash reports a syntax error.
      effort_bound: (if $effort == "" then null else $effort end),
      role_contract_cited: $cited,
+     # WHICH carrier delivered the Rule 19(b) line: prompt or definition, null when
+     # neither did. Delivery at dispatch only, never a read. NO APOSTROPHE HERE either.
+     contract_via: (if $via == "" then null else $via end),
      role_file_readable: $readable,
      definition_bound: $defbound,
      definition_stale: $defstale,

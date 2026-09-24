@@ -424,15 +424,20 @@ raw "$CONSUMER" "$(mkjson Agent gate-adjudicator opus)" >/dev/null
 # subagent_type-only: before v0.158.0 this was a total no-op — no binding, no row.
 # It is the likeliest route by which a protected-path-editor reached sonnet on the
 # reference consumer while the guard sat installed and green.
+#
+# THIS IS THE NO-DEFINITION WORLD. `remediator` has no rendered `.claude/agents/` file in
+# the seed, so neither carrier delivers the Rule 19(b) line and false stays the right
+# record. A subagent_type-only dispatch whose role HAS a bound definition is a different
+# world with a different answer; the CONTRACT CARRIER block below owns it.
 rm -f "$LEDGER"
 J="$(jq -nc '{tool_name:"Agent",tool_input:{name:"t-1",model:"sonnet",subagent_type:"remediator",prompt:"Do the work."}}')"
 [ "$(setmodel "$CONSUMER" "$J")" = "opus" ] \
   && ok "subagent_type-only dispatch is bound (was a silent no-op before v0.158.0)" \
   || bad "subagent_type-only dispatch injected '$(setmodel "$CONSUMER" "$J")', expected opus"
 raw "$CONSUMER" "$J" >/dev/null
-[ "$(lfield .role_contract_cited)" = "false" ] \
-  && ok "  and records role_contract_cited=false — the Rule 19(b) omission stays visible" \
-  || bad "  role_contract_cited='$(lfield .role_contract_cited)', expected false"
+[ "$(lfield .role_contract_cited)" = "false" ] && [ "$(lfield .contract_via)" = "null" ] \
+  && ok "  and records role_contract_cited=false, contract_via=null — with no definition the Rule 19(b) omission stays visible" \
+  || bad "  role_contract_cited='$(lfield .role_contract_cited)' contract_via='$(lfield .contract_via)', expected false/null"
 
 # Fail-closed: a role file that does not resolve is a Rule 19 violation, and it
 # must be RECORDED. Exiting before the write would make it look like no dispatch.
@@ -449,6 +454,174 @@ raw "$CONSUMER" "$(mkjson Agent - opus)" >/dev/null
 [ ! -s "$LEDGER" ] \
   && ok "a dispatch binding no role writes no row (not our spawn)" \
   || bad "a role-less dispatch wrote a ledger row: $(lrow)"
+
+# --- CONTRACT CARRIER: role_contract_cited and contract_via ------------------------
+# The Rule 19(b) line reaches a teammate by one of two carriers: the dispatch PROMPT naming
+# `team-roles/<role>.md`, or the BODY of the `.claude/agents/<role>.md` definition the dispatch
+# selects, which is the subagent system prompt. The row records which in `contract_via`, and
+# `role_contract_cited` is true when either delivered it. A record of delivery-as-selected at
+# PreToolUse, never of the read.
+#
+# THE WORLDS, each keyed to one property:
+#   a  defok, subagent_type only, no prompt citation      -> true/definition
+#   b  defok, prompt cites the role AND definition bound  -> true/prompt   (prompt wins)
+#   c  defnoline, bound, body carries neither line         -> false/null
+#   d  defwrongrole, bound, body carries defok line 1 + 2  -> false/null
+#   e  remediator, no definition at all                    -> false/null
+#   f  defok, a two-document input the emit cannot amend  -> see its own comment
+# c and d are MARKED and AGREE with settings, so the guard binds them exactly as it binds
+# defok; only the body differs, which is the property under test. The definition_bound
+# controls below say so in this run, or a false there would be a false for the wrong reason.
+#
+# EVERY DRIVE SEEDS AN EPOCH ROW FIRST, and it is not the subject. A one-row ledger makes the
+# subject its own epoch and `tail -1` then reads whatever row exists; here the subject must be
+# row 2 and must carry its own role, or the cell reports the row it did read. The epoch row is
+# prompt-cited (true/prompt), so a subject that wrote nothing cannot pass a false/null arm on it.
+EPOCHJ="$(mkjson Agent gate-adjudicator opus)"
+# ccell <guard> <json> <subject-role> -> "cited/via" of the subject row, or a diagnostic.
+ccell() {
+  local n
+  rm -f "$LEDGER"
+  printf '%s' "$EPOCHJ" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" >/dev/null 2>&1
+  printf '%s' "$2" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" >/dev/null 2>&1
+  n="$(wc -l < "$LEDGER" 2>/dev/null | tr -d ' ')"
+  [ "$n" = 2 ] || { printf 'ROWS=%s' "${n:-0}"; return; }
+  tail -1 "$LEDGER" | jq -r --arg r "$3" \
+    'if .role == $r then "\(.role_contract_cited | tostring)/\(.contract_via | tostring)" else "WRONGROW:\(.role)" end' 2>/dev/null
+}
+CW_A="$(jq -nc '{tool_name:"Agent",tool_input:{name:"t-a",subagent_type:"defok",prompt:"Do the work."}}')"
+CW_B="$(mkjson Agent defok)"
+CW_C="$(jq -nc '{tool_name:"Agent",tool_input:{name:"t-c",subagent_type:"defnoline",prompt:"Do the work."}}')"
+CW_D="$(jq -nc '{tool_name:"Agent",tool_input:{name:"t-d",subagent_type:"defwrongrole",prompt:"Do the work."}}')"
+CW_E="$(jq -nc '{tool_name:"Agent",tool_input:{name:"t-e",subagent_type:"remediator",prompt:"Do the work."}}')"
+# cvec <guard> -> the a..e cell vector, one string, for the mutant battery.
+cvec() {
+  printf 'a=%s b=%s c=%s d=%s e=%s' \
+    "$(ccell "$1" "$CW_A" defok)" "$(ccell "$1" "$CW_B" defok)" \
+    "$(ccell "$1" "$CW_C" defnoline)" "$(ccell "$1" "$CW_D" defwrongrole)" \
+    "$(ccell "$1" "$CW_E" remediator)"
+}
+
+# CONTROLS: c and d are bound (so the body is what decides), e is not.
+for _cw in "a:$CW_A" "c:$CW_C" "d:$CW_D"; do
+  rm -f "$LEDGER"; raw "$CONSUMER" "${_cw#*:}" >/dev/null
+  [ "$(lfield .definition_bound)" = "true" ] \
+    && ok "CONTROL world ${_cw%%:*}: the definition is BOUND, so the contract cell below is decided by the body" \
+    || bad "CONTROL world ${_cw%%:*}: definition_bound='$(lfield .definition_bound)', expected true — the world is not the one its arm claims"
+done
+rm -f "$LEDGER"; raw "$CONSUMER" "$CW_E" >/dev/null
+[ "$(lfield .definition_bound)" = "false" ] \
+  && ok "CONTROL world e: remediator has no definition (definition_bound=false)" \
+  || bad "CONTROL world e: definition_bound='$(lfield .definition_bound)', expected false"
+
+TIP_A="$(ccell "$HOOK" "$CW_A" defok)"
+[ "$TIP_A" = "true/definition" ] \
+  && ok "(a) definition-bound, subagent_type-only, no prompt citation -> cited=true contract_via=definition" \
+  || bad "(a) recorded '$TIP_A', expected 'true/definition' — the selected definition body carries the role line and the row says it was not delivered"
+TIP_B="$(ccell "$HOOK" "$CW_B" defok)"
+[ "$TIP_B" = "true/prompt" ] \
+  && ok "(b) prompt citation with a definition ALSO bound -> contract_via=prompt (the prompt wins)" \
+  || bad "(b) recorded '$TIP_B', expected 'true/prompt'"
+TIP_C="$(ccell "$HOOK" "$CW_C" defnoline)"
+[ "$TIP_C" = "false/null" ] \
+  && ok "(c) marked, agreeing definition whose body lacks the line -> false/null (the frontmatter is not the carrier)" \
+  || bad "(c) recorded '$TIP_C', expected 'false/null' — a bound definition was credited without its body being read"
+TIP_D="$(ccell "$HOOK" "$CW_D" defwrongrole)"
+[ "$TIP_D" = "false/null" ] \
+  && ok "(d) role R definition carrying role S line 1 and the shared line 2 -> false/null (the match is role-specific)" \
+  || bad "(d) recorded '$TIP_D', expected 'false/null' — another role's contract line was credited to this role"
+TIP_E="$(ccell "$HOOK" "$CW_E" remediator)"
+[ "$TIP_E" = "false/null" ] \
+  && ok "(e) no definition file, no prompt citation -> false/null" \
+  || bad "(e) recorded '$TIP_E', expected 'false/null'"
+
+# (f) THE INPUT THE EMIT CANNOT AMEND. Two JSON documents on stdin: every read takes the first,
+# so the role resolves and the definition binds, but the final decision build receives two
+# values and fails, and the guard FAILS OPEN — it emits nothing and the rewrite that selects
+# the definition never reaches the harness. The ledger row is written BEFORE the emit, from
+# the selection, so it records true/definition anyway. THIS ARM RECORDS THAT BEHAVIOUR, it
+# does not endorse it: contract_via is delivery-as-SELECTED at PreToolUse, and here the
+# selection was not delivered. Asserted so a change to it is seen, in either direction.
+CW_F="$(printf '%s {"x":1}' "$CW_A")"
+rm -f "$LEDGER"
+F_OUT="$(printf '%s' "$CW_F" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$HOOK" 2>/dev/null)"
+[ -z "$F_OUT" ] \
+  && ok "(f) CONTROL: the two-document input takes the fail-open path (no decision emitted)" \
+  || bad "(f) CONTROL: the guard emitted on the two-document input, so this world is not the fail-open path: '$F_OUT'"
+TIP_F="$(ccell "$HOOK" "$CW_F" defok)"
+[ "$TIP_F" = "true/definition" ] \
+  && ok "(f) fail-open emit: the row still records true/definition — a record of the selection, not of a rewrite that reached the harness" \
+  || bad "(f) fail-open emit recorded '$TIP_F', expected 'true/definition' (the recorded behaviour changed; decide whether that is intended)"
+
+# --- CONTRACT CARRIER MUTANTS -------------------------------------------------
+# Each mutant is a COPY of the whole hooks directory, because the guard sources
+# ai-dlc-context-provenance.sh as a sibling on its emit path. Each is guarded by `cmp -s`
+# and a parse check, and each is scored on the EXACT a..e vector, so a mutant that moves a
+# cell it does not own is visible rather than scored as a kill.
+#
+# OVERLAP, STATED: mutant (i) necessarily moves BOTH c and d, because both are bound
+# definitions whose body lacks this role line 1 and (i) never reads the body. c OWNS that
+# case; d is proven load-bearing by (ii), which moves d alone. Mutant (iii) also moves world
+# f, which is not in the scored vector: f records behaviour and owns no mutant.
+HOOKS_SRC="$(dirname "$HOOK")"
+mk_hooks_copy() { # mk_hooks_copy <tag> -> path of the guard inside a fresh copy of the hooks dir
+  local d; d="$(mktemp -d "$WORK/hooks-$1.XXXXXX")" || return 1
+  cp -R "$HOOKS_SRC/." "$d/" || return 1
+  printf '%s/%s' "$d" "$(basename "$HOOK")"
+}
+CC_WANT="a=true/definition b=true/prompt c=false/null d=false/null e=false/null"
+
+CC_CTL="$(mk_hooks_copy control)"
+if [ -z "$CC_CTL" ] || [ ! -r "$(dirname "$CC_CTL")/ai-dlc-context-provenance.sh" ]; then
+  bad "CARRIER MUTANT CONTROL: the hooks copy is missing the guard or its provenance sibling — every verdict below would be about a copy that cannot run"
+else
+  CC_CTL_VEC="$(cvec "$CC_CTL")"
+  [ "$CC_CTL_VEC" = "$CC_WANT" ] \
+    && ok "CARRIER MUTANT CONTROL: an unmutated hooks copy records a=true/definition (positive) and the full expected vector" \
+    || bad "CARRIER MUTANT CONTROL is dead: vector '$CC_CTL_VEC', expected '$CC_WANT'"
+fi
+
+# cc_mut <tag> <exact-anchor-line> <replacement-line> <expected-vector> <label>
+cc_mut() {
+  local g n vec
+  n="$(grep -cxF -- "$2" "$HOOK")" || n=0
+  if [ "$n" != 1 ]; then
+    bad "CARRIER MUTANT $1 anchor matched $n lines in the guard, expected exactly 1 — the mutation is lost or ambiguous"
+    return
+  fi
+  g="$(mk_hooks_copy "$1")"
+  if [ -z "$g" ]; then bad "CARRIER MUTANT $1: could not build the hooks copy"; return; fi
+  A="$2" R="$3" awk '$0 == ENVIRON["A"] { print ENVIRON["R"]; next } { print }' "$HOOK" > "$g"
+  if cmp -s "$HOOK" "$g"; then
+    bad "CARRIER MUTANT $1 DID NOT APPLY (cmp -s) — its arm proves nothing"; return
+  fi
+  if ! bash -n "$g" 2>/dev/null; then
+    bad "CARRIER MUTANT $1 DID NOT APPLY as valid shell"; return
+  fi
+  vec="$(cvec "$g")"
+  [ "$vec" = "$4" ] \
+    && ok "CARRIER MUTANT $1 killed: $5" \
+    || bad "CARRIER MUTANT $1: vector '$vec', expected '$4' — $5 is not what the arms see"
+}
+
+# (i) the citation is DEFINITION_BOUND, the body is never read.
+cc_mut body-ignored \
+  '  if [ -n "$_dg_body" ] && grep -qxF -- "$_dg_line" <<<"$_dg_body" 2>/dev/null; then' \
+  '  if true; then' \
+  "a=true/definition b=true/prompt c=true/definition d=true/definition e=false/null" \
+  "citing on definition_bound alone credits the line-less body — arm (c) owns it (d moves too, stated above)"
+# (ii) the match keyed on line 2, which every role body carries.
+cc_mut line2-key \
+  '  _dg_line="$(printf '"'"'Your operating contract is `.claude/team-roles/%s.md`. Read it and follow it as your'"'"' "$ROLE")"' \
+  '  _dg_line="FIRST action before any other work."' \
+  "a=true/definition b=true/prompt c=false/null d=true/definition e=false/null" \
+  "keying on the shared line 2 credits another role line — arm (d) alone catches it"
+# (iii) revert to prompt-only: the definition carrier is never consulted.
+cc_mut prompt-only \
+  'if [ "$ROLE_CONTRACT_CITED" = false ] && [ "$DEFINITION_BOUND" = true ]; then' \
+  'if false; then' \
+  "a=false/null b=true/prompt c=false/null d=false/null e=false/null" \
+  "a prompt-only guard records the definition-bound dispatch as uncited — arm (a) alone catches it"
 
 # --- SPRINT STAMP: THE READER MUST NOT SPELL THE DECORATION -------------------
 # EVERY SEED HERE USED TO BE THE EMPHASISED BULLET, WHICH IS THE FORM THE READER

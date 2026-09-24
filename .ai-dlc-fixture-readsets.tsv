@@ -9,7 +9,7 @@
 # every other fixture's entries alone, so refreshing one fixture costs its own runtime
 # rather than a full re-derivation.
 #
-# fixtures mapped: 203    entries: 32128
+# fixtures mapped: 203    entries: 32150
 absorbed-specifics-survive	.git/HEAD
 absorbed-specifics-survive	.git/config
 absorbed-specifics-survive	.git/index
@@ -4373,24 +4373,46 @@ dispatch-model-guard	.git/HEAD
 dispatch-model-guard	.git/config
 dispatch-model-guard	.git/index
 dispatch-model-guard	.git/info/exclude
-dispatch-model-guard	.git/objects/33/a4425c0ed05dea70f881660ffdf01c7c86da33
-dispatch-model-guard	.git/objects/7f/1479d0f091b8393b8613744a84c3c8229a65a3
+dispatch-model-guard	.git/objects/b8/037f04e6e337e4d979d5a05ded388666118974
+dispatch-model-guard	.git/objects/c7/4096a52e0c82d539d09f583b3abe6f85f5c42f
 dispatch-model-guard	.git/objects/info/commit-graphs/commit-graph-chain
-dispatch-model-guard	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
-dispatch-model-guard	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
+dispatch-model-guard	.git/objects/info/commit-graphs/graph-0379598c48f1e636cbf005c95d629c8ed2197c7d.graph
+dispatch-model-guard	.git/objects/info/commit-graphs/graph-2e085ff44ca2ae7c5739806502100c553300cbbf.graph
+dispatch-model-guard	.git/objects/info/commit-graphs/graph-7303014332e1b9ef4e7143da4aa669938a897e3f.graph
 dispatch-model-guard	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
-dispatch-model-guard	.git/objects/info/commit-graphs/graph-fa7bbe6bcd67e84c678384cfb84f17a16d6fa8fa.graph
 dispatch-model-guard	.git/objects/pack/multi-pack-index
 dispatch-model-guard	.git/packed-refs
-dispatch-model-guard	.git/refs/heads/main
+dispatch-model-guard	.git/refs/heads/release/0.630.0
 dispatch-model-guard	.gitignore
 dispatch-model-guard	core
 dispatch-model-guard	core/fixtures
 dispatch-model-guard	core/fixtures/dispatch-model-guard
 dispatch-model-guard	core/fixtures/dispatch-model-guard/run.sh
 dispatch-model-guard	core/fixtures/dispatch-model-guard/seed.sh
+dispatch-model-guard	core/hooks
+dispatch-model-guard	core/hooks/ai-dlc-acknowledge.sh
+dispatch-model-guard	core/hooks/ai-dlc-answer-capture.sh
+dispatch-model-guard	core/hooks/ai-dlc-artifact-path-guard.sh
 dispatch-model-guard	core/hooks/ai-dlc-context-provenance.sh
+dispatch-model-guard	core/hooks/ai-dlc-context-sensor.sh
+dispatch-model-guard	core/hooks/ai-dlc-continue.sh
+dispatch-model-guard	core/hooks/ai-dlc-core-guard.sh
+dispatch-model-guard	core/hooks/ai-dlc-derivation-capture.sh
 dispatch-model-guard	core/hooks/ai-dlc-dispatch-guard.sh
+dispatch-model-guard	core/hooks/ai-dlc-driver-signal.sh
+dispatch-model-guard	core/hooks/ai-dlc-escalation-delivery.sh
+dispatch-model-guard	core/hooks/ai-dlc-gate-remediation-guard.sh
+dispatch-model-guard	core/hooks/ai-dlc-handoff-entry.sh
+dispatch-model-guard	core/hooks/ai-dlc-handoff-pending.sh
+dispatch-model-guard	core/hooks/ai-dlc-pause.sh
+dispatch-model-guard	core/hooks/ai-dlc-postcompact.sh
+dispatch-model-guard	core/hooks/ai-dlc-precompact.sh
+dispatch-model-guard	core/hooks/ai-dlc-protect.sh
+dispatch-model-guard	core/hooks/ai-dlc-recover-gate.sh
+dispatch-model-guard	core/hooks/ai-dlc-recover.sh
+dispatch-model-guard	core/hooks/ai-dlc-rules-floor.sh
+dispatch-model-guard	core/hooks/ai-dlc-subagent-probe.sh
+dispatch-model-guard	core/hooks/ai-dlc-window.sh
 dispatch-model-guard	core/team-roles/gate-adjudicator.md
 divergence-hard-block	.git/HEAD
 divergence-hard-block	.git/config
