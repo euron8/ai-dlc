@@ -67,6 +67,60 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
 
+**BATCH 150 SHIPPED TWO RELEASES AND CLOSED `BL-102` AND `BL-299`.** `v0.632.0` (`43645568`,
+#845) closed `BL-102`, alone, because `apply.sh` and `preclassify.sh` are bootstrapping files.
+`v0.633.0` (`6e72d451`, #846) closed `BL-299`, which discharges the consumer's
+`PC-S313-STORY-PROVENANCE-ARM-R-IS-RED-IN-THE-CONSUMER-LAYOUT`. That release commit is the only
+commit naming the id (impossible-id control 0), and `VERSION` at it reads 0.633.0. Both gates ran
+at `AI_DLC_FIXTURE_NO_SKIP=1`: 22 phases PASS, **203 ok / 0 FAIL**, and `apply-restamp-worklist`,
+`story-provenance` and `validator-path-resolution` read `ok` by name against an impossible-name
+control of 0. `ls-remote` confirmed both refs. Live **71 -> 73** (four filed, two closed), archive
+**226 -> 228**. The exit-0 receipt set after the merge was the opening 8 plus `BL-102` and
+`BL-299`, compared by identity, so nothing closed incidentally.
+
+**`BL-102`'s FILED REMEDY WOULD HAVE WEDGED EVERY CONSUMER, AND THE SHIPPED ONE READS
+PRECLASSIFY'S OWN BUCKETS.** The entry said to withhold `--finish` when a consumer copy differs
+from theirs; a semantically merged file always differs, so the marker would never clear. The
+contract changed the predicate to "still in a pure-apply bucket", and the adversary, run alone,
+found three blockers in that: the added-file half wedged on every `.dist-only` fixture a range
+adds, the new check pre-empted the theirs identity guard, and BASE failed open. Measured on a
+scratch clone of the consumer applied 0.627.0 to the fix: zero `finish-unapplied` rows on the
+applied tree, 20 on the unapplied one (exactly the ordinary run's pure-apply set), and the old
+finisher stamped the unapplied clone.
+
+**`BL-299` ARRIVED MID-BATCH ON AN UNPUSHED CONSUMER BRANCH, AND THE OPERATOR ASKED ABOUT IT BY
+ID.** The consumer filed it at 11:04 in `54ca5a9df`, its 0.627.0 -> 0.631.0 reconcile commit on
+the LOCAL branch `ai-dlc-update/0.631.0-reconcile-20260924T1500Z`. The checked-out branch's ledger
+carried 0 of it, so the sweep could not have seen it. **A consumer mid-pull files onto its pull
+branch; `git -C /Users/n8/git/graph log --all -S<id>` finds it where the working-tree ledger does
+not.** Its fix had to move the reader with the writer and change `validator-path-resolution` in
+the same release, or the pull that delivers it goes red on a second shipped fixture.
+
+**THE CONSUMER'S PULL IS BLOCKED BY THAT RED FIXTURE, AND THIS PROGRAM MUST NOT UNBLOCK IT.** Its
+pre-push fails on `story-provenance` arm R, so the 0.631.0 reconcile branch cannot be pushed. The
+0.633.0 CHANGELOG states the mitigation (re-pull to 0.633.0, or `--no-verify` on a record naming
+the id). That is the operator's to carry; a consumer pull is not preapproved.
+
+**ONE ACT IS OWED TO THE OPERATOR AND IS NOT DONE.** `story-provenance` now reads
+`core/scripts/validate-provenance-block.sh`, and the read-set map has 0 rows for that read against
+1 for the writer, so a change touching only the reader skips the fixture. The deriver needs root:
+`sudo bash core/scripts/derive-fixture-readsets.sh --list "story-provenance"`, then commit the map.
+
+**NEXT WORK.** Re-derive the sweep; a new consumer filing outranks everything below. Batch 150
+FILED `BL-300` (five sibling scripts share the schema-lookup defect in the consumer layout, latent),
+`BL-301` (the gate runs no shipped fixture in the consumer layout) and `BL-302` (writer and reader
+load different schemas in the distribution layout when the override root carries its own). The
+scope hand's ranking of the older DEFECT set, re-derive it before use: bootstrapping `BL-283`
+first; non-bootstrapping `BL-089`, `BL-080` and `BL-153` as one release.
+
+**THE DELIVERY GAP IS SIX RELEASES, WHICH IS WIDE, AND THREE BOOTSTRAPPING FILES ARE IN RANGE.**
+The consumer installed **0.627.0** (`23aea0ef`) against `VERSION` **0.633.0**. In range, `apply.sh`,
+`preclassify.sh` and `ai-dlc-update/SKILL.md` have 1 commit each and `ledger-reverify.sh` 0
+(control: `core/hooks` 2). 0 of 26 raw `core/` rows are mode-only. **The consumer's INSTALLED
+`apply.sh` runs the pull that delivers `BL-102`, so that pull's own `--finish` is unverified.**
+The banked ruling stands: report the gap and write no runbook. The ledger md5 `b6fd6280…` did not
+move across the batch, and the consumer's porcelain read 1-3, all under `_bmad-output/`.
+
 **BATCH 149 SHIPPED `v0.631.0` (`d150a85b`, #843) AND CLOSED `BL-289`, THE ROTATOR DEFECT.** No
 consumer filing awaited work, so the batch took the distribution-internal entry this plan had been
 working around since batch 139. The release commit names `BL-289`. The only other commit naming
@@ -426,7 +480,7 @@ batch, entirely from that pull. The ledger md5 did not move, which is the criter
 content.
 
 **EVERYTHING BELOW THIS LINE, DOWN TO `### Derive the state`, IS AN EARLIER BATCH'S BLOCK.** Each
-one was current when it was written, and the batch 149 through 142 blocks above replace it. Read those blocks
+one was current when it was written, and the batch 150 through 142 blocks above replace it. Read those blocks
 for the measurement behind a rule. Take no figure and no next-work pointer from them: their
 counts, gaps and "remaining" ids have all moved since.
 
