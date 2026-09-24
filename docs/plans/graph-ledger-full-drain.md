@@ -69,6 +69,51 @@ before the next retained paragraph, append the cut to the archive under `## BATC
 (rotated out of the live plan at batch <m>)`, and assert byte conservation: the plan's drop equals
 the moved bytes, and the archive's growth equals the moved bytes plus the header.
 
+**BATCH 146 SHIPPED `v0.628.0` (`e3f1a65d`, #835) AND CLOSED `BL-295` AND `BL-296`. `BL-294`
+SHIPPED AND STAYS LIVE, BECAUSE ITS CLOSE CONDITION IS A REPLAY AND THE REPLAY DID NOT SHOW IT.**
+The release commit names all three: 1 hit each, against an impossible-id control of 0. The gate
+ran at `AI_DLC_FIXTURE_NO_SKIP=1`: 22 phases, **203 ok / 0 FAIL**, all gates green, and
+`story-provenance` read `ok` by name against an impossible-name control of 0. Live **76 -> 74**,
+archive **220 -> 222**. The exit-0 receipt set is the same 9 ids before and after, compared by
+identity, so nothing closed incidentally.
+
+**THE CONTRACT ADVERSARY CHANGED THE DESIGN BEFORE ANY BUILD.** `BL-294`'s filed remedy was a
+numbered section, on the premise that Rule 4 forbids skipping one. Rule 4 binds a file loaded by
+READ AND FOLLOW, and on the fold path the lead read `bug-investigation.md` only as a REFERENCE
+while it ran `stories-test-strategy` §4. So the section needed a carrier:
+`stories-test-strategy.md` §3a now READ-AND-FOLLOWs `bug-investigation` for a folded defect. The
+adversary also found that Check 17 had FORCED the incident's 01:53 overwrite of the bug story's
+one-shot block, which made `BL-296` a gate change, not only a step sentence.
+
+**A FIRST CUT TURNED THE CONSUMER'S IN-FLIGHT SPRINT RED, AND A SCRATCH-COPY REPLAY CAUGHT IT.**
+The folded-story declaration first matched `bug-fix-oneshot*.md`, which also matched the legacy
+name. On a scratch copy of the consumer's S313 that moved a convergence-stamped story to the
+bug-fix arm, where both commands exited 1 and the old gate passed it. The declaration now keys only
+on the per-bug `bug-fix-oneshot-<slug>.md`. **Replay a gate change on the consumer's live sprint
+slot before trusting the fixture.** The fixture's own worlds cannot hold a legacy residue.
+
+**THE `BL-294` REPLAY IS INCONCLUSIVE, AND THE ENTRY SAYS WHAT WOULD DECIDE IT.** It ran on the
+incident's own model `qwen38flash-mlx`, through the local gateway, because `claude -p` exposes no
+`AskUserQuestion`. The relief question was asked in 0 of 4 scored runs at tip and 0 of 4 at base.
+The structural trace discriminates, but the replay was cut at 22:51, after the lead's base-era
+reasoning was already in its history, and the harness leaked into the model's context. The
+decisive run is a replay cut at 21:43, before the fold. Its scripts are named in the entry.
+
+**NEXT WORK.** The PC-backed worklist is unchanged at five rows, every one self-disqualifying or,
+for `BL-230`, awaiting a cause the instrument has not recorded. Unfiled is still the same
+**14**, byte-identical to the batch-145 set with identical dates, so no filing awaits a first
+look. **Take `BL-294`'s 21:43 replay next, and `BL-297` in the same batch**: `BL-297` asks whether
+an operator-facing finding outranks the IMMINENT snapshot refresh, and it was held until
+`BL-294` was built. Neither changes a bootstrapping file.
+
+**THE CONSUMER PULLED `0.627.0` DURING THE BATCH, AND THE GAP IS NOW ONE RELEASE.** Its stamp reads
+`0.627.0` (`23aea0ef`) after its own #1109 and #1110. The pull rotated out the two ids batch 144
+shipped, so consumer live went **28 -> 26** and nothing entered. From installed to `VERSION`
+**0.628.0**, 0 of the four bootstrapping files changed and 0 of 9 raw `core/` rows are mode-only.
+The banked ruling stands: report the gap and write no runbook. Nothing this program writes appears
+in the pull's diff: 0 matching paths against a control of 70 changed files. The ledger md5 moved to
+`3e62c07e…` because of that pull, and the consumer's porcelain is 12, all under `_bmad-output/`.
+
 **BATCH 145 SHIPPED TWO RELEASES AND CLOSED BOTH CORE-ROUTING CANDIDATES BATCH 144 LEFT.**
 `v0.626.0` (`0e09fcd2`, #832) closed `BL-293`, and `v0.627.0` (`722d910d`, #833) closed `BL-292`,
 alone, because `apply.sh` is a bootstrapping file. Each release commit names its id: 1 hit each,
@@ -113,9 +158,8 @@ the four carries a `PC-` id, and all four are `verify: manual`.
 **NEXT WORK.** The PC-backed worklist is unchanged at five rows: the four self-disqualifying ones,
 and `BL-230`, which has no build until the instrument records a pool failure's cause. Unfiled is
 still **14**, the same fourteen batch 143 adjudicated, and no new filing awaits a first look.
-**Take `BL-294` next, with `BL-295` and `BL-296` in the same release where action 2 allows.**
-All three change core step files the consumer runs. `BL-294`'s own entry says to prove the new
-section is REACHED by replaying `d5ba4ec4`'s 22:51 state before building on it.
+Batch 146 took `BL-294`, `BL-295` and `BL-296` as one release; its block above names the next
+work.
 
 **THE DELIVERY GAP IS THREE RELEASES, AND A BOOTSTRAPPING FILE IS IN RANGE.** The consumer
 installed **0.624.0** (`5376b309`) against `VERSION` **0.627.0**. In range, `apply.sh` has 1 commit,

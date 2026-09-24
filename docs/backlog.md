@@ -4142,99 +4142,20 @@ in 0 step files" is superseded by §2b. The **replay requirement survives unchan
 close condition. A replay on any model other than `qwen38flash-mlx` cannot separate the agent's
 share from the pipeline's.
 
+**SHIPPED IN `v0.628.0` AND STILL LIVE: THE REPLAY DID NOT SHOW THE QUESTION ASKED.** A structural
+trace discriminates: at every incident point from the fold onward the shipped files bind a
+relief question the base files do not carry, and the base column is byte-identical to what the
+lead actually read. The behavioural replay ran on `qwen38flash-mlx` through the local gateway,
+cut at 22:51:24 with the changed step files swapped into the history: the relief question was
+asked in **0 of 4** scored runs at tip and **0 of 4** at base, one tip run wrote the fix story
+without asking, and one tip run was lost. `claude -p` cannot run it, because headless mode
+exposes no `AskUserQuestion`. The replay has three confounds: harness refusals and the sandbox
+path leaked into the model's context, the history before the cut keeps the lead's own base-era
+reasoning ("a different path, not a step"; the relief recorded as Tier 2), and n is small. So it
+neither confirms nor refutes the trace. The next measurement is a replay cut at 21:43, before
+the fold, so the lead follows the changed files from the MUST-ASK onward.
+
 verify: manual — whether a step makes a lead ASK is a behavioural claim about a model reading prose; the section's presence is not the fix, and a `has` receipt would be closed by its own heading.
-
-## BL-295 — `route.md`'s mixed-defect MUST-ASK offers no "mitigate now" option, so the only routes for a live bug are sprint-shaped
-
-**DEFECT.** Filed at batch 145 with `BL-294`, from the same incident (`d5ba4ec4`), on the
-operator's instruction. Filing only.
-
-`core/skills/ai-dlc/steps/route.md:398-409` makes a bug arriving during a carry-over or sprint a
-MUST-ASK, and it fired correctly at 21:43:23. It offered three options: **Fold into S313**,
-**Separate sprint after S313**, **Drop S313, bug first**. All three put the bug through a sprint.
-None of them says "mitigate or hotfix now, then fold". The lead then quoted two constraints in the
-same question: there is no concurrent-sprint mechanism, and `roll` refuses to move over an
-in-progress sprint (`core/scripts/sprint-status.sh:406-407`: *"refusing to roll forward … over a
-sprint that is not closed. Close it first (retro)"*). So the question's own framing ruled out
-anything faster than the sprint.
-
-**THE CHANGE.** Give the MUST-ASK a required option: **mitigate/hotfix now, then fold**. The `roll`
-refusal can stay. This option needs no second sprint, only an action taken before the fold.
-
-**Prior evidence that the class recurs:** the consumer's
-`_bmad-output/party-mode-transcripts/s158/hotfix-retro.md:43` (*"forcing a sprint boundary
-mid-emergency would've been worse"*), and two archived ledger entries recording S306 as a live
-production bug-fix sprint in which a stale HARD_BLOCK and a spawn-ledger exit 3 held up the fix
-(`push-candidate-ledger.archive.md:7943`, `:11615`). Those are the evidence behind
-`gate-validation.md:297-303`.
-
-**WHAT THE BUILD ESTABLISHED (batch 146, not yet released).** The required option is reworded.
-**"mitigate/hotfix now, then fold" became "triage now, then fold the fix".** At routing time the
-relief is not yet known: in `d5ba4ec4` it was found about an hour after the MUST-ASK fired at
-21:43:23. An option to mitigate would therefore have named an action nobody could yet describe.
-The option `route.md` now requires says to READ AND FOLLOW `bug-investigation.md` §0–§2b for the
-defect, so that any operator-applicable relief reaches the operator through §2b first. The fix
-story (§3–§4) is then folded into the current sprint through `stories-test-strategy.md` §3a. The
-other options remain the lead's to frame within Rule 3's cap of 2-4 per question.
-
-What survived: the diagnosis that all three offered routes were sprint-shaped, and that the
-`roll` refusal can stay (`core/scripts/sprint-status.sh` is unchanged). "This option needs no second
-sprint" also survives, because triage runs before the fold and not in a sprint of its own.
-
-verify: manual — the option's presence in the step is prose, and whether the lead offers it is behaviour.
-
-## BL-296 — a bug folded into a carry-over sprint loses `bug-investigation`'s one-shot validation and takes the full story cycle
-
-**DEFECT.** Filed at batch 145 with `BL-294`, from the same incident (`d5ba4ec4`), on the
-operator's instruction. Filing only.
-
-`core/skills/ai-dlc/steps/bug-investigation.md` §4 (`### 4. Validation`, `:92`) validates a fix
-story with a one-shot adversary. Folded into S313, the same bug went through
-`core/skills/ai-dlc/steps/stories-test-strategy.md`'s cycle instead:
-- `### 2a. Propagate Locked Requirements to Stories` (`:311`)
-- CAP-5 registration across memlog, bmad-spec, a PRD FR and an NFR amendment, and the spine AD
-- elicitation
-- `### 4. Story Validation Cycle (Rule 8)` (`:466`) run to EXIT_CONDITION_MET
-
-That was about 80 minutes after the report, with no code changed. The route a bug takes decided
-how much ceremony it got, and the heavier route was the one the MUST-ASK in `BL-295` made the
-default.
-
-**THE CHANGE.** State in `stories-test-strategy.md` that a folded bug story keeps
-`bug-investigation`'s one-shot §4 validation and does not re-enter the convergence cycle.
-
-**WHAT THE BUILD ESTABLISHED (batch 146, not yet released).** **The gate forced this outcome, not
-only the step prose.** At 01:53:56 the lead overwrote story-3-1's one-shot provenance block with
-the convergence block, because Check 17's story arm required `ai-dlc-adversary-review` on every
-story in the sprint. The consumer's tree still shows it: `s313/bug-fix-oneshot.md` names story-3-1
-in its `artifact:` field, and story-3-1 carries `skill: ai-dlc-adversary-review`. The filed change
-was a sentence in `stories-test-strategy.md`. That sentence alone would have been defeated at the
-gate, so the claim that the step could fix this by itself did not survive. What was built:
-
-- **Check 17 partitions the sprint's stories** (`gate-validation.md`). A folded bug-fix story runs
-  the bug-fix arm, which uses `--require-skill bmad-review-adversarial-general` and the
-  `bug-story-provenance` cross-check. Every other story runs the story arm and the series
-  cross-check. The folded story is DECLARED, not self-selected: it is the story named by the
-  `artifact:` field of a per-bug `s<N>/bug-fix-oneshot-<slug>.md` in the sprint's planning slot.
-  The partition itself needs no script change, because `stamp-story-provenance.sh --check`
-  already takes an explicit list. The declaration did: the writer now refuses, under a
-  verdict-less profile, a story that the one-shot's `artifact:` does not name, so a story cannot
-  borrow another bug's one-shot to take the lighter arm.
-- **The one-shot has a per-bug name,** `s<N>/bug-fix-oneshot-<slug>.md`, so that a sprint can
-  fold more than one bug. **Only that name declares.** A first cut matched
-  `bug-fix-oneshot*.md`, which also matched the legacy name. Replayed on a scratch copy of the
-  consumer's in-flight S313, that cut moved story-3-1 to the bug arm and failed the gate (rc=1 on
-  both commands), where the old gate passes it. The narrowed declaration passes the same copy. A
-  legacy `s<N>/bug-fix-oneshot.md` is read only at the bug-investigation gate.
-- **`stories-test-strategy.md` §3a and §4:** a folded bug-fix story keeps its §4 one-shot, is
-  left out of the convergence cycle's reviewed set, and is left out of the `--series` stamp. A
-  folded story inside that set would move the series' `artifact_sha` on every edit and re-open
-  the series at its next pass (Check 24 arm J).
-
-The filed THE CHANGE survives and is widened from a step sentence to a gate partition. The ~80
-minutes of ceremony are the incident's own figure and were not re-measured.
-
-verify: manual — which validation a folded story receives is a routing judgment the step states; no predicate on the text establishes the lead follows it.
 
 ## BL-297 — the IMMINENT context sensor's "BEFORE your next pipeline action" outranks an operator-facing finding, and the Stop hook's fidelity line leans the same way
 
