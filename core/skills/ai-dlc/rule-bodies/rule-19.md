@@ -49,6 +49,15 @@ across dispatches so it rides the shared-block cache
 `<role>` token. A spawn that names a role but omits this line binds
 model without contract and is a Rule 19 violation.
 
+The line is DELIVERED by either of two carriers: the dispatch prompt, or
+the rendered `.claude/agents/<role>.md` definition the dispatch selects,
+whose body is the subagent's system prompt and carries the line for that
+role. The dispatch guard records which carrier delivered it
+(`role_contract_cited`, `contract_via`), at PreToolUse. That record is
+of delivery as selected: it does not prove the spawn launched, and it
+does not prove the teammate read the file. Delivery puts the line in
+front of the teammate; the read is still the binding.
+
 **(c) No `name` on a role-bound dispatch.** The spawn MUST NOT pass a
 `name` parameter. Passing one routes the spawn to the teammate runner
 instead of the resume-by-id path a definition-bound dispatch runs on,

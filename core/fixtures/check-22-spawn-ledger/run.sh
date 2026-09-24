@@ -1176,7 +1176,7 @@ else
   bad "CONTROL: the validator emits the clearing sentence $CPSRC time(s); with fewer than four the mutants below remove nothing"
 fi
 
-if cpmut m1 'subagent_type alone and cited no Rule 19(b) role contract.'; then
+if cpmut m1 'Rule 19(b) line in neither its prompt nor the definition it selected.'; then
   cpscore m1 cite "dropping the clearing sentence from the 19(b) message alone leaves a consumer told its dispatch failed Rule 19(b) with no path out"
 else
   bad "FIXTURE BROKEN: mutation m1 did not apply or does not parse -- the 19(b) message's last unique line was renamed, so this mutant proves nothing"

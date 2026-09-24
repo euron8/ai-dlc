@@ -468,11 +468,15 @@ while IFS="$(printf '\t')" read -r name role bound requested cited readable sche
     VIOL=$((VIOL + 1)); UNREADABLE=$((UNREADABLE + 1))
   fi
 
-  # Rule 19(b): the dispatch named its role only via `subagent_type` and carried no
-  # contract line. The guard bound the model anyway; the citation is still owed.
+  # Rule 19(b): the dispatch guard recorded that the contract line reached the teammate by
+  # neither carrier -- not in the prompt, and not in the body of the definition the dispatch
+  # selected (`contract_via` null). The guard bound the model anyway; the citation is still
+  # owed. A row written before the guard read the definition body reads false here even
+  # where that body carried the line, and it is NOT re-read: the row is a past record, and
+  # it clears through the four-arm disposition like any other.
   if [ "$cited" != "true" ]; then
-    echo "FAIL: [$name] role_contract_cited=false -- the dispatch named role '${role:-<none>}' via" >&2
-    echo "      subagent_type alone and cited no Rule 19(b) role contract." >&2
+    echo "FAIL: [$name] role_contract_cited=false -- the dispatch of role '${role:-<none>}' carried the" >&2
+    echo "      Rule 19(b) line in neither its prompt nor the definition it selected." >&2
     echo "      It is a fact about the past: clear it only through Check 22's" >&2
     echo "      four-arm disposition, never by re-running the gate." >&2
     VIOL=$((VIOL + 1)); UNCITED=$((UNCITED + 1))
