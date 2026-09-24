@@ -4155,6 +4155,19 @@ reasoning ("a different path, not a step"; the relief recorded as Tier 2), and n
 neither confirms nor refutes the trace. The next measurement is a replay cut at 21:43, before
 the fold, so the lead follows the changed files from the MUST-ASK onward.
 
+**CLOSED ON THE STRUCTURAL TRACE, BY OPERATOR RULING AT BATCH 147: NO REPLAY IS NEEDED, AND
+NONE WOULD GUARANTEE ANYTHING.** The replay close condition above was an assumption nobody
+measured, including the claim that only `qwen38flash-mlx` could separate the two shares. A
+small-n replay on one model neither confirms nor refutes whether a step file makes a lead ask.
+What closes the entry is what `v0.628.0` put on the incident path. The fold directive
+(`stories-test-strategy.md` §3a) makes Rule 4 bind `bug-investigation.md` §2b. §2b requires the
+question, or `operator relief: none found`, before §3. Rule 11(a) makes operator-only relief
+always asked. Batch 147's contract adversary verified the base bytes the lead read (transcript
+rows 19, 55, 138, 284, 824 and 1044) as byte-identical to `5376b309` and all different at
+`e3f1a65d`. So the shipped files differ from what the lead read at every point from the fold
+onward. The agent's share, about 60% by the batch-145 diagnosis, is not the pipeline's to close.
+**LANDED (v0.628.0, verified e3f1a65d).**
+
 verify: manual — whether a step makes a lead ASK is a behavioural claim about a model reading prose; the section's presence is not the fix, and a `has` receipt would be closed by its own heading.
 
 ## BL-297 — the IMMINENT context sensor's "BEFORE your next pipeline action" outranks an operator-facing finding, and the Stop hook's fidelity line leans the same way
@@ -4177,5 +4190,18 @@ defect take precedence over the IMMINENT snapshot refresh? The sensor's advice s
 BEFORE the next pipeline action, and reporting to the operator is not one.
 
 **Now unblocked:** `BL-294` is built in batch 146, so this NOTE waits only on the re-measurement.
+
+**SETTLED AT BATCH 147: YES, AND THE ADVICE NOW SAYS SO.** The re-measurement is withdrawn by the
+operator's ruling on `BL-294`: no replay. The question is answered in the text. The IMMINENT
+advice at `core/hooks/ai-dlc-context-sensor.sh:643` now says that a finding the operator has not
+been told is not held back by the refresh. It is recorded under Open Items AND put to the
+operator in the same response, as parallel tool calls. The advice deliberately does NOT say
+"report first". The contract adversary showed that "report first", with one turn of headroom
+left, lets the compaction fire while the question is pending. That loses the refresh, which is
+the sensor's whole job, and it would be true on every IMMINENT fire that had a finding pending.
+Both halves are bound by presence arms in `core/fixtures/context-sensor/run.sh`. A mutant deletes
+the sentence and must fail the arm, and a control asserts that the mutant copy still fires
+IMMINENT. The Stop hook's fidelity line is ambient and not the proximate cause, so it is left as
+it is.
 
 verify: manual — a precedence between two prompts is a behavioural question, recorded as a NOTE until `BL-294` is built and re-measured.

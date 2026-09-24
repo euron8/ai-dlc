@@ -332,6 +332,35 @@ case "$OUT" in *"SURFACE that trade-off"*|*"let THEM call it"*)
     bad "imminent does not ask the lead to offer a handoff" "advice re-offers the handoff" ;;
   *) ok "imminent does not ask the lead to offer a handoff" ;; esac
 
+# BL-297: the refresh must not displace an operator-facing finding. At d5ba4ec4 23:12 the
+# lead answered "refreshing the snapshot now" and the finding never reached the operator.
+# The advice binds BOTH halves in ONE response -- record it under Open Items AND put it to
+# the operator -- because "report first" would lose the refresh to the compaction.
+case "$OUT" in *"not held back by this refresh"*) ok "imminent does not let the refresh hold back an operator finding" ;;
+  *) bad "imminent does not let the refresh hold back an operator finding" "got: ${OUT:-<silent>}" ;; esac
+case "$OUT" in *"under Open Items AND put it to the operator in the SAME response"*)
+    ok "  and binds the snapshot record and the operator report into one response" ;;
+  *) bad "  and binds the snapshot record and the operator report into one response" "got: ${OUT:-<silent>}" ;; esac
+
+# MUTANT (BL-297): the pre-fix advice, with the carve-out sentence deleted. Both arms above
+# are PRESENCE-shaped, so this copy must fail them; a sed that matched nothing is refused.
+MUTF="$WORK/mutant-finding"; mkdir -p "$MUTF"
+cp "$(dirname "$HOOK_PATH")"/ai-dlc-*.sh "$MUTF/" 2>/dev/null || true
+sed 's/ A finding the operator has not yet been told -- .* this reminder is warning about\.//' \
+  "$HOOK_PATH" > "$MUTF/ai-dlc-context-sensor.sh"
+if cmp -s "$HOOK_PATH" "$MUTF/ai-dlc-context-sensor.sh"; then
+  bad "finding mutant applied" "sed matched nothing; the copy is byte-identical"
+else
+  reset1m
+  MOUT="$(printf '{"transcript_path":"%s","session_id":"t"}' "$(at 249001)" \
+          | CLAUDE_PROJECT_DIR="$WORK" bash "$MUTF/ai-dlc-context-sensor.sh" 2>/dev/null | ctx)"
+  case "$MOUT" in *"Auto-compact will fire"*) ok "  finding mutant still fires imminent (the copy ran)" ;;
+    *) bad "  finding mutant still fires imminent (the copy ran)" "got: ${MOUT:-<silent>}" ;; esac
+  case "$MOUT" in *"not held back by this refresh"*)
+      bad "MUTANT: without the carve-out the finding arm fails" "carve-out still present" ;;
+    *) ok "MUTANT: without the carve-out the finding arm fails" ;; esac
+fi
+
 # The band must still be reachable at the values real compactions were observed at.
 reset1m
 OUT="$(raw "$(at 267445)" | ctx)"                   # lowest real graph preTokens
