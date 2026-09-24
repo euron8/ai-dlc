@@ -894,6 +894,11 @@ applying_guard() {
       withholds again. --finish is the only exit for this case. The withheld row prints the
       exact command with the machinery flag already resolved.
 
+      --finish checks the tree before it stamps. It withholds again, with a WORKLIST row per
+      file, while any file still reads as a pure apply from theirs (missing, or still at
+      base). It also withholds when <base> is not the stamp's own commit, or when <theirs> is
+      not the ref recorded in this marker. A file you merged by hand does not hold it up.
+
    If that pull was abandoned and the tree is known good, remove the marker:
 
      rm .claude/.ai-dlc-applying
