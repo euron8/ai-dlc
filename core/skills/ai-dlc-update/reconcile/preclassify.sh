@@ -382,11 +382,18 @@ fi
 # about MEMBERSHIP, where I8 only ever compared them on DESTINATION. Observed live: the
 # reference consumer has tests/fixtures/enforcement-map-sites/ with no subject script beside
 # it — a fixture that can never run, in a suite whose green means "these checks are tested."
-dist_only() { # core/fixtures/<name>/... -> is it marked dist-only?
+#
+# READ AT THEIRS, NEVER FROM THE DIST WORKING TREE. Every other answer this script gives is keyed
+# on a ref; this one read whatever the operator's checkout happened to hold, so a checkout on a
+# ref where a fixture was not yet (or no longer) `.dist-only` bucketed it as a pure apply.
+# `apply.sh --finish` counts pure-apply rows as unapplied work, so that misreading withheld the
+# stamp over a correctly applied tree whose dist-only fixture was, correctly, never written.
+# `self-update-fixtures.sh` already reads the marker at theirs for the same reason.
+dist_only() { # core/fixtures/<name>/... -> is it marked dist-only at THEIRS?
   case "$1" in
     core/fixtures/*)
       _f="${1#core/fixtures/}"; _f="${_f%%/*}"
-      [ -f "$DIST/core/fixtures/$_f/.dist-only" ]
+      git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${_f}/.dist-only" 2>/dev/null
       ;;
     *) return 1 ;;
   esac

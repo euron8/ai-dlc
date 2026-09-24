@@ -15,6 +15,51 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.632.0] - 2026-09-24
+
+This release makes `apply.sh --finish` check the tree before it advances the stamp. It ships
+alone because it changes a bootstrapping file: `apply.sh` and `preclassify.sh` are the
+machinery that delivers a pull. A consumer therefore gets the checking finisher on the pull
+AFTER the one that installs it.
+
+### BL-102 — `apply.sh --finish` verifies the tree it stamps
+
+`--finish` skips the resolution phases, so `mech_fail` was always 0 there. It stamped theirs
+and cleared the in-flight marker over any tree it was handed. Measured on a synthetic tree
+where nothing had been applied: `RESOLVED restamp` and `RESOLVED consistent`, and the marker
+was gone. It now checks three things before it stamps, in order:
+
+1. **The identity of `<theirs>`.** The existing marker-vs-argv `core/`-tree comparison is now
+   decided once, before the withholding guard. On a mismatch the tree check does not run, and
+   `DECISION restamp-identity-mismatch` is the row the operator sees.
+2. **BASE fails closed.** `<base>` must resolve to a commit whose `core/` tree equals the tree
+   of the stamp's `commit:`. Otherwise the result is `WORKLIST finish-base-unverified`. A BASE
+   typed as THEIRS used to empty every range and acquit everything.
+3. **The unapplied set, taken from preclassify's own buckets.** It makes the same
+   `preclassify.sh` call phase 1 makes. Each row still bucketed `UPSTREAM-ONLY`,
+   `UPSTREAM-ONLY-ADD` or `…SETUP-TOKENS…` becomes `WORKLIST finish-unapplied`, naming the file
+   and the command that writes theirs' copy. A preclassify failure, or no rows over a range that
+   moves `core/`, is `WORKLIST finish-unverified-tree`. A changed setup-sited path in any other
+   bucket gets `NOTE finish-unverified`, which does not count.
+
+The filed remedy was "compare each consumer copy against theirs' blob". It was **not**
+shipped: a hand-merged file keeps a consumer delta by definition, so that comparison withholds
+every semantic merge forever. That is the deadlock `--finish` exists to escape. A
+`BOTH-CHANGED->CLASSIFY` row never counts here.
+
+`preclassify.sh`'s `dist_only()` now reads `.dist-only` at THEIRS (`git cat-file -e`) instead
+of from the dist working tree. A checkout on another ref bucketed a dist-only fixture as a pure
+apply, which `--finish` now counts as unapplied work. The ordinary run is unchanged wherever the
+dist checkout agrees with theirs about `.dist-only`.
+
+The contract adversary raised three blockers, and all three are closed: the working-tree
+`dist_only()`, identity before tree, and BASE failing closed. The entry's structural receipt
+already exited 0 on `origin/main` before the fix. It is replaced by a behavioural one that
+drives `apply.sh --finish` against a synthetic dist and consumer. It scores 0 at the fix and
+1 at `origin/main`. Each of seven mutants scores non-zero on the arm it breaks. Two correct
+alternative spellings of the fix score 0. `ai-dlc-update/SKILL.md` and the consumer `pre-push`
+marker message now describe what `--finish` checks.
+
 ## [0.631.0] - 2026-09-24
 
 This release fixes the plan rotator, which the live drain plan has been working around by hand

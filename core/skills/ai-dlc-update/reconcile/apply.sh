@@ -97,6 +97,11 @@ set -uo pipefail
 # the re-stamp and the marker clear, for a tree whose worklist the caller has since disposed. It
 # is a mode rather than a separate script because the stamp is written in exactly one place and a
 # second copy of that logic is a second thing to drift.
+#
+# IT VERIFIES THE TREE BEFORE IT STAMPS, and does not take the caller's word for it: the identity
+# of <theirs>, then BASE against the stamp, then preclassify's own pure-apply buckets -- any file
+# still reading as a pure apply is a WORKLIST row and the stamp is withheld. Without that, it
+# stamped theirs over a tree where nothing had been applied. See finish_verify_tree().
 CARRIED_MACHINERY=0
 FINISH=0
 _pos_n=0
@@ -323,7 +328,8 @@ fi
 #
 # NOT REWRITTEN UNDER `--finish`. That mode writes nothing to core, so there is no window to
 # mark; re-creating the marker there would only re-assert a mixture this invocation is about to
-# declare resolved.
+# declare resolved. It clears the marker only once finish_verify_tree() finds no file still
+# reading as a pure apply; a withheld finish leaves it in place.
 APPLYING="$CONSUMER/.claude/.ai-dlc-applying"
 mkdir -p "$CONSUMER/.claude" 2>/dev/null || true
 if [ "$FINISH" = 0 ]; then
@@ -1572,6 +1578,149 @@ fi
 
 fi  # ---- end of the resolution phases; see the `--finish` guard that opens them --------------
 
+# --- `--finish`: IS <theirs> THE REF THIS TREE WAS WRITTEN FROM? -------------------------------
+#
+# RESOLVABLE IS NOT THE SAME QUESTION AS CORRECT, AND THE GUARD IN write_stamp() ONLY EVER ASKED THE
+# FIRST. It refuses a ref that names nothing. A ref that names the WRONG thing resolves perfectly,
+# and every arm there then does its job over it: the stamp takes its sha, the read-back agrees with
+# what was just written, `RESOLVED consistent "the tree matches <ref>"` is printed over a tree that
+# was never brought there, and the marker is removed. Measured on `--finish`, with the marker
+# recording one ref and argv carrying another: the run reported success on both rows and cleared
+# the marker. The bogus-ref control refused in the same run, which is what makes this a gap in the
+# guard rather than an absent guard.
+#
+# THE SECOND SIDE OF THE JOIN ALREADY EXISTED AND NOTHING HAD EVER READ IT. `.ai-dlc-applying`
+# records `theirs:` at the top of this file, and a census of the whole tracked tree found no
+# parser of it at all -- every reader is an existence test (`core/git-hooks/pre-push` asks only
+# whether the file is there). It is written by the ORDINARY run and deliberately NOT rewritten
+# under `--finish`, so on the one path that is retyped by hand it still holds the ref whose
+# content was actually applied. That makes it the record of what the operator approved, sitting
+# unread beside the argument most likely to be fumbled, and deleted by the same run that ignores
+# it.
+#
+# KEYED ON THE `core/` TREE, for the reason `emit-report.sh` is: a distribution ships docs
+# between releases, so two refs can differ as commits while the bytes this pull WRITES are
+# identical. Refusing on the commit would wedge a finisher whose only sin is naming the newer of
+# two equivalent refs; refusing on the tree fires exactly when the finish would stamp content
+# the tree does not carry.
+#
+# IT NEVER FAILS FOR WANT OF THE RECORD. A missing marker, a marker with no `theirs:` line, or a
+# recorded ref that no longer resolves are all UNCHECKED rather than refused -- a consumer whose
+# marker was cleared by hand (the remedy `core/git-hooks/pre-push` itself prints) must still be
+# able to finish. Those states say so on their own row instead of passing silently, because an
+# unchecked identity reported as a clean one is the failure this guard exists to end.
+#
+# A FUNCTION, CALLED ONCE, BEFORE THE WITHHOLDING GUARD. It sets the two variables and emits
+# nothing; write_stamp() prints the rows. finish_verify_tree() reads the same answer, so the
+# comparison exists in one place and the tree check never runs against a ref the record disputes.
+finish_identity() {
+  if [ ! -f "$APPLYING" ]; then
+    finish_id_note="no \`${APPLYING##*/}\` on the consumer, so the ref this tree was actually written from is not recorded anywhere and \`${THEIRS}\` could not be checked against it"
+  else
+    _m_theirs="$(sed -n 's/^theirs:[[:space:]]*//p' "$APPLYING" 2>/dev/null | head -1)"
+    if [ -z "$_m_theirs" ]; then
+      finish_id_note="\`${APPLYING##*/}\` carries no \`theirs:\` line, so there is nothing to check \`${THEIRS}\` against"
+    else
+      _m_tree="$(git -C "$DIST" rev-parse "${_m_theirs}:core" 2>/dev/null || true)"
+      _a_tree="$(git -C "$DIST" rev-parse "${THEIRS}:core" 2>/dev/null || true)"
+      if [ -z "$_m_tree" ] || [ -z "$_a_tree" ]; then
+        finish_id_note="\`${_m_theirs}:core\` or \`${THEIRS}:core\` does not resolve in ${DIST}, so the recorded ref and the argument could not be compared"
+      elif [ "$_m_tree" != "$_a_tree" ]; then
+        finish_id_mismatch="this tree was written from \`${_m_theirs}\` (\`core/\` tree ${_m_tree}), but this command names \`${THEIRS}\` (\`core/\` tree ${_a_tree})"
+      fi
+    fi
+  fi
+}
+
+# --- `--finish`: DOES THE TREE CARRY WHAT THE STAMP IS ABOUT TO CLAIM? -------------------------
+#
+# `--finish` skips the resolution phases, so `mech_fail` is always the `0` assigned above the
+# phase guard, and before this check the finisher printed `RESOLVED consistent "the tree matches
+# <theirs>"` over any tree handed to it. Measured on a synthetic tree where no file was ever
+# applied: `--finish` stamped theirs and cleared the marker with the consumer's driver still
+# byte-identical to base.
+#
+# THE UNAPPLIED SET IS PRECLASSIFY'S OWN, NOT A SECOND CLASSIFIER. The same call phase 1 makes, and
+# a row counts only when its bucket is one phase 1 answers by overwriting from theirs -- the two
+# families its `case` spells. A pure-apply bucket after the apply means the consumer copy still
+# matches base, or is missing, or lacks theirs' exec bit: work the ordinary run would have done
+# mechanically. A CLASSIFY row never counts, so a file the operator merged by hand -- which keeps a
+# consumer delta by definition -- cannot wedge the finisher. Comparing each copy against theirs'
+# blob instead was built and refuted: it withholds every merged file forever.
+#
+# EACH ROW IS A WORKLIST, WHICH IS WHAT `--finish` GATES ON, and it clears when the file is
+# written. No new counter: `say` counts it.
+#
+# FAILS CLOSED ON EVERY PRECONDITION. BASE must be a commit whose `core/` tree is the tree of the
+# stamp's `commit:` -- a BASE typed as theirs makes every range empty and acquits everything, and
+# the stamp is the record an EARLIER re-stamp wrote, which `--finish` has not touched yet. A
+# preclassify that fails, or that returns no rows while BASE..THEIRS moves `core/`, is a withhold
+# too: "no rows" and "nothing unapplied" print the same.
+#
+# A SETUP-SITED PATH is never byte-equal to base on a consumer, since setup filled its tokens, so
+# it usually buckets CLASSIFY and is not counted. It gets a NOTE naming it, so what was not
+# verified is visible rather than silent. NOTE does not count.
+#
+# An unresolvable <theirs> is left to write_stamp()'s `restamp-unresolvable` refusal, which
+# already stamps nothing; this check has no ref to classify against.
+finish_verify_tree() {
+  local _fv_rows _fv_rc _fv_st _fv_path _fv_cons _fv_bucket _fv_sc _fv_bt _fv_st_t _fv_sited
+  local _fv_stamp="$CONSUMER/.claude/.ai-dlc-version" _fv_why=""
+  git -C "$DIST" rev-parse -q --verify "${THEIRS}^{commit}" >/dev/null 2>&1 || return 0
+  if ! git -C "$DIST" rev-parse -q --verify "${BASE}^{commit}" >/dev/null 2>&1; then
+    _fv_why="\`${BASE}\` is not a commit in ${DIST}"
+  elif [ ! -f "$_fv_stamp" ]; then
+    _fv_why="there is no version stamp, so nothing records the base this tree was installed at"
+  else
+    _fv_sc="$(sed -n 's/^commit:[[:space:]]*//p' "$_fv_stamp" 2>/dev/null | head -1)"
+    _fv_bt="$(git -C "$DIST" rev-parse -q --verify "${BASE}:core" 2>/dev/null || true)"
+    _fv_st_t=""
+    [ -n "$_fv_sc" ] && _fv_st_t="$(git -C "$DIST" rev-parse -q --verify "${_fv_sc}:core" 2>/dev/null || true)"
+    if [ -z "$_fv_sc" ]; then
+      _fv_why="the stamp carries no \`commit:\` line to check \`${BASE}\` against"
+    elif [ -z "$_fv_st_t" ] || [ -z "$_fv_bt" ]; then
+      _fv_why="\`${_fv_sc}:core\` (the stamp's commit) or \`${BASE}:core\` does not resolve in ${DIST}"
+    elif [ "$_fv_st_t" != "$_fv_bt" ]; then
+      _fv_why="the stamp records \`${_fv_sc}\` (\`core/\` tree ${_fv_st_t}), but this command names \`${BASE}\` (\`core/\` tree ${_fv_bt}) as the base"
+    fi
+  fi
+  if [ -n "$_fv_why" ]; then
+    say WORKLIST finish-base-unverified "${_fv_stamp#"$CONSUMER"/}" "${_fv_why}. Whether this tree was brought to \`${THEIRS}\` is decided against the base it started from, and that base is not established, so nothing was verified and the stamp is not advanced. Re-run with the stamp's own \`commit:\`${_fv_sc:+ (\`${_fv_sc}\`)} as \`<base>\` -- the restamp-withheld row below echoes the \`<base>\` this command was given, so do not copy its command on this row."
+    return 0
+  fi
+  _fv_rows="$(bash "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)"; _fv_rc=$?
+  if [ "$_fv_rc" -ne 0 ]; then
+    say WORKLIST finish-unverified-tree "" "preclassify.sh exited ${_fv_rc}, so which files are still at base is UNKNOWN and the stamp is not advanced. Re-run it by hand with the same four arguments and fix what it reports, then re-run --finish."
+    return 0
+  fi
+  if [ -z "$_fv_rows" ] && [ "$_fv_bt" != "$(git -C "$DIST" rev-parse -q --verify "${THEIRS}:core" 2>/dev/null || true)" ]; then
+    say WORKLIST finish-unverified-tree "" "preclassify.sh returned no rows while \`${BASE}..${THEIRS}\` changes \`core/\`, which is not the same as nothing being unapplied, so the stamp is not advanced. Re-run it by hand with the same four arguments and fix what it reports, then re-run --finish."
+    return 0
+  fi
+  # The setup-sited set, read by preclassify's OWN assignment rather than a second grammar -- the
+  # same load map_consumer() gets above. `$0` in it resolves to this file, which sits beside
+  # setup-sites.md exactly as preclassify.sh does.
+  SETUP_SITED_PATHS=""
+  eval "$(awk '/^SETUP_SITED_PATHS=/,/sort -u\)"$/' "$SELF/preclassify.sh" 2>/dev/null)"
+  _fv_sited="$SETUP_SITED_PATHS"
+  [ -n "$_fv_sited" ] || say NOTE finish-unverified "reconcile/setup-sites.md" "the setup-sited path set came back empty, so no changed setup-sited path can be named here as unverified."
+  while IFS="$(printf '\t')" read -r _fv_st _fv_path _fv_cons _fv_bucket; do
+    [ -n "${_fv_bucket:-}" ] || continue
+    case "$_fv_bucket" in
+      UPSTREAM-ONLY|UPSTREAM-ONLY-ADD|*SETUP-TOKENS*)
+        say WORKLIST finish-unapplied "$_fv_cons" "${_fv_bucket}: this file still reads as ${_fv_bucket} against \`${THEIRS}\` -- missing, still at base, or without theirs' exec bit -- so the tree does not carry what the stamp would claim. Write theirs' copy: \`git -C <dist> show \"${THEIRS}:${_fv_path}\" > ${_fv_cons}\` (and \`chmod +x\` it if upstream ships it executable), or re-run the ordinary apply, then re-run --finish." ;;
+      *)
+        case "$_fv_st" in R|O) continue ;; esac
+        if grep -qxF "$_fv_path" <<< "$_fv_sited"; then
+          say NOTE finish-unverified "$_fv_cons" "setup-sited, bucketed ${_fv_bucket}: a setup-filled file never byte-matches base or theirs, so --finish cannot tell a merged copy from an untouched one. Confirm by hand that theirs' changes are in it."
+        fi ;;
+    esac
+  done <<EOF
+$_fv_rows
+EOF
+  return 0
+}
+
 # version landed when it did not costs a silent divergence nobody looks for.
 #
 # A FUNCTION BECAUSE IT HAS TWO CALL SITES AND ONE BODY. `--finish` runs it over a tree this
@@ -1596,6 +1745,16 @@ finish_flag=""
 if [ "$CARRIED_MACHINERY" = 1 ]; then
   withheld_extra=" This run carried step 2's deferred machinery slice, so \`skill_version\`/\`skill_commit\` are withheld with it — both pairs or neither."
   finish_flag=" --carried-machinery-slice"
+fi
+# UNDER `--finish` THE TREE IS CHECKED HERE, BEFORE THE GUARD READS `worklist_n`: identity first,
+# because an unapplied set computed against a fumbled <theirs> names content the tree was never
+# approved for, and on a mismatch the tree check does not run at all -- the identity row below is
+# the one the operator needs.
+finish_id_mismatch=""
+finish_id_note=""
+if [ "$FINISH" = 1 ]; then
+  finish_identity
+  [ -z "$finish_id_mismatch" ] && finish_verify_tree
 fi
 if [ "$FINISH" = 1 ]; then outstanding="$worklist_n"; else outstanding="$handback"; fi
 if [ "$mech_fail" -gt 0 ] || [ "$outstanding" -gt 0 ]; then
@@ -1622,56 +1781,9 @@ elif [ -f "$STAMP" ]; then
   # `refs/heads/nope` breaks the `sed` replacement, the `|| true` swallows it, the read-back
   # disagrees and the run correctly reports `restamp-failed`. Only a slash-FREE bogus ref
   # reaches the defect. The control has to be the input that discriminates.
-  # RESOLVABLE IS NOT THE SAME QUESTION AS CORRECT, AND THE GUARD BELOW ONLY EVER ASKED THE FIRST.
   #
-  # The refusal above fires on a ref that names nothing. A ref that names the WRONG thing resolves
-  # perfectly, and every arm below then does its job over it: the stamp takes its sha, the
-  # read-back agrees with what was just written, `RESOLVED consistent "the tree matches <ref>"` is
-  # printed over a tree that was never brought there, and the marker is removed. Measured on
-  # `--finish`, with the marker recording one ref and argv carrying another: the run reported
-  # success on both rows and cleared the marker. The bogus-ref control refused in the same run,
-  # which is what makes this a gap in the guard rather than an absent guard.
-  #
-  # THE SECOND SIDE OF THE JOIN ALREADY EXISTED AND NOTHING HAD EVER READ IT. `.ai-dlc-applying`
-  # records `theirs:` at the top of this file, and a census of the whole tracked tree found no
-  # parser of it at all -- every reader is an existence test (`core/git-hooks/pre-push` asks only
-  # whether the file is there). It is written by the ORDINARY run and deliberately NOT rewritten
-  # under `--finish`, so on the one path that is retyped by hand it still holds the ref whose
-  # content was actually applied. That makes it the record of what the operator approved, sitting
-  # unread beside the argument most likely to be fumbled, and deleted by the same run that ignores
-  # it.
-  #
-  # KEYED ON THE `core/` TREE, for the reason `emit-report.sh` is: a distribution ships docs
-  # between releases, so two refs can differ as commits while the bytes this pull WRITES are
-  # identical. Refusing on the commit would wedge a finisher whose only sin is naming the newer of
-  # two equivalent refs; refusing on the tree fires exactly when the finish would stamp content
-  # the tree does not carry.
-  #
-  # IT NEVER FAILS FOR WANT OF THE RECORD. A missing marker, a marker with no `theirs:` line, or a
-  # recorded ref that no longer resolves are all UNCHECKED rather than refused -- a consumer whose
-  # marker was cleared by hand (the remedy `core/git-hooks/pre-push` itself prints) must still be
-  # able to finish. Those states say so on their own row instead of passing silently, because an
-  # unchecked identity reported as a clean one is the failure this guard exists to end.
-  finish_id_mismatch=""
-  finish_id_note=""
-  if [ "$FINISH" = 1 ]; then
-    if [ ! -f "$APPLYING" ]; then
-      finish_id_note="no \`${APPLYING##*/}\` on the consumer, so the ref this tree was actually written from is not recorded anywhere and \`${THEIRS}\` could not be checked against it"
-    else
-      _m_theirs="$(sed -n 's/^theirs:[[:space:]]*//p' "$APPLYING" 2>/dev/null | head -1)"
-      if [ -z "$_m_theirs" ]; then
-        finish_id_note="\`${APPLYING##*/}\` carries no \`theirs:\` line, so there is nothing to check \`${THEIRS}\` against"
-      else
-        _m_tree="$(git -C "$DIST" rev-parse "${_m_theirs}:core" 2>/dev/null || true)"
-        _a_tree="$(git -C "$DIST" rev-parse "${THEIRS}:core" 2>/dev/null || true)"
-        if [ -z "$_m_tree" ] || [ -z "$_a_tree" ]; then
-          finish_id_note="\`${_m_theirs}:core\` or \`${THEIRS}:core\` does not resolve in ${DIST}, so the recorded ref and the argument could not be compared"
-        elif [ "$_m_tree" != "$_a_tree" ]; then
-          finish_id_mismatch="this tree was written from \`${_m_theirs}\` (\`core/\` tree ${_m_tree}), but this command names \`${THEIRS}\` (\`core/\` tree ${_a_tree})"
-        fi
-      fi
-    fi
-  fi
+  # THE IDENTITY OF <theirs> -- `finish_id_mismatch` / `finish_id_note` -- IS DECIDED ONCE, BY
+  # finish_identity() ABOVE, before the withholding guard. Both this arm and the tree check read it.
   if ! theirs_sha="$(git -C "$DIST" rev-parse --short "$THEIRS" 2>/dev/null)" || [ -z "$theirs_sha" ]; then
     say DECISION restamp-unresolvable "$STAMP" "\`${THEIRS}\` does not resolve in ${DIST}, so there is no sha to stamp and nothing was written. The stamp is left at ${BASE} and the in-flight marker is left in place. Check the <dist> path and the <theirs> ref -- if you retyped this from a withheld row, note that it prints <dist> and <consumer> as placeholders and passes <theirs> through verbatim."
   elif [ -n "$finish_id_mismatch" ]; then

@@ -2199,12 +2199,94 @@ operator to assert completion over a tree that is not complete.
 Found by an adversarial pass on `v0.426.0`, run after the merge. Not a `PC-` candidate, so it
 ranks below the PC-backed set.
 
-The receipt is the STRUCTURAL fact, not the behaviour: it exits 1 while `write_stamp()` contains
+The receipt AS FILED was the STRUCTURAL fact, not the behaviour: it exits 1 while `write_stamp()` contains
 no comparison against theirs' blob, and 0 once one is added. It exits 9 if the phase guard or the
 counter initialisation cannot be located, so a reshaped file reports a moved precondition rather
 than a false close.
 
-verify: sh a=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$a" ] || exit 9; g=$(grep -n 'FINISH" = 0 \]; then' "$a" | tail -1 | cut -d: -f1); i=$(grep -n '^mech_fail=0$' "$a" | head -1 | cut -d: -f1); w=$(grep -n '^write_stamp() {' "$a" | head -1 | cut -d: -f1); [ -n "$g" ] && [ -n "$i" ] && [ -n "$w" ] || exit 9; [ "$i" -lt "$g" ] || exit 9; body=$(sed -n "${w},\$p" "$a" | awk 'NR>1 && /^}$/{exit} {print}' | sed 's/#.*//'); grep -q 'THEIRS}:VERSION' <<<"$body" || exit 9; grep -q 'THEIRS}:core/' <<<"$body" && exit 0; exit 1
+**Re-derived at batch 150 against `origin/main` (`4d4c2772`), claim by claim.** The central
+claim SURVIVES and reproduces: on a synthetic dist and consumer where nothing was applied,
+`--finish` at `origin/main` stamped theirs and cleared the marker. That is arm R1 of the receipt
+below, and it fails there. "Not a regression against the pre-change behaviour" also stands. So
+does "the mapper is already loaded above the guard", since `map_consumer()` is eval'd from
+`preclassify.sh` at the top of `apply.sh`. "The finisher verifies exactly one property today,
+hook registration" was true when filed and is what this fix changes. The read-set census
+("`mech_fail` is the only variable…") was not re-derived; nothing below depends on it.
+
+**THE FILED REMEDY WAS SUPERSEDED, BECAUSE IT WEDGES EVERY SEMANTIC MERGE.** "Compare each
+consumer copy against `git show "${THEIRS}:core/<rel>"` and withhold on a mismatch" withholds on
+every file the operator merged by hand, since a merge keeps a consumer delta by definition. That
+is the exact deadlock `--finish` exists to escape, reintroduced at the finisher. Built as a
+mutant, it fails the receipt's R4 merged control. The fix asks preclassify instead, making the
+same call phase 1 makes. A row counts as unapplied only when its bucket is one phase 1 answers
+by overwriting from theirs: `UPSTREAM-ONLY`, `UPSTREAM-ONLY-ADD`, or a `SETUP-TOKENS` bucket.
+Such a row is missing, still at base, or lacks theirs' exec bit. A `BOTH-CHANGED->CLASSIFY` row
+never counts. Each unapplied row is `WORKLIST finish-unapplied`, which is what `--finish` already
+gates on. The receipt's structural `verify:` line keyed on the filed remedy's shape (a
+`THEIRS}:core/` read inside `write_stamp()`). Scored at batch 150, it already exits 0 at
+`origin/main` and at the compare-to-theirs mutant alike, so it could not tell the fix from its
+absence. It is replaced below.
+
+**Three adversary BLOCKERs against the first contract, each closed in `3c41a764`:**
+
+- **B1: `dist_only()` read the dist WORKING TREE.** A checkout on a ref where a fixture was
+  not yet `.dist-only` bucketed it as a pure apply, and `--finish` would then withhold forever
+  over a fixture that must never be written. `preclassify.sh` now reads the marker at theirs
+  with `git cat-file -e "${THEIRS}:core/fixtures/<f>/.dist-only"`. Receipt R3 seeds exactly this:
+  the marker is present at theirs and deleted from the dist working tree.
+- **B2: identity before tree.** An unapplied set computed against a fumbled `<theirs>` names
+  content the tree was never approved for. `finish_identity()` now decides the
+  marker-vs-argv `core/`-tree comparison once, before the guard, and `finish_verify_tree()`
+  does not run on a mismatch, so `DECISION restamp-identity-mismatch` is the row the operator
+  sees. That is receipt R6.
+- **B3: BASE fails closed.** A `<base>` typed as `<theirs>` makes every range empty and acquits
+  everything. BASE must resolve to a commit, and its `core/` tree must equal that of the
+  stamp's `commit:`. A missing stamp, a stamp without `commit:`, or an unresolvable one is a
+  `WORKLIST finish-base-unverified` withhold, with no skip path. That is receipt R5.
+
+A preclassify that exits non-zero, or that returns no rows while `BASE..THEIRS` moves `core/`,
+is `WORKLIST finish-unverified-tree`. A changed setup-sited path that buckets anything else
+gets `NOTE finish-unverified`, which does not count. **Stated limits:** content and mode as
+preclassify sees them, and no check that a merge is CORRECT. A CRLF/autocrlf dist checkout is
+not addressed.
+
+**False-positive set on the reference consumer:** the adversary measured `finish-unapplied`
+at U1=0 (still-at-base) and U2=0 (missing) over graph's real pull range, with a swapped-ref
+control that fired 18. That figure is the ADVERSARY's; the measurement hand re-takes it on a
+scratch clone before this entry closes.
+
+**The receipt is behavioural.** It drives the shipping `apply.sh --finish` against a
+synthetic dist and consumer built in `mktemp -d`. BASE->THEIRS changes two core files, the
+unapplied one NOT first in `ls-tree` order. It adds one core file and one `.dist-only` fixture
+whose marker exists only at theirs. The arms:
+
+- R3 applied control: stamps, and the marker is cleared.
+- R4 merged control: one changed file differs from both base and theirs, and the run stamps.
+- R1 nothing applied: withholds, the stamp stays at base, and the marker stays present.
+- R1b: only the second changed file is unapplied. It withholds and names that file.
+- R2: only the added file is missing. It withholds and names it.
+- R5: BASE typed as THEIRS withholds.
+- R6: an identity mismatch over an unapplied tree prints `restamp-identity-mismatch`.
+
+It exits 9 on a broken precondition or a failing CONTROL (R3, R4), because a receipt that
+withholds on a done tree is measuring a wedge. It exits 1 otherwise, and 0 only when every arm
+holds. Scored in scratch trees: 0 at `3c41a764` and 1 at `origin/main`. Each mutant was
+`cmp`-asserted as applied:
+
+| mutant | exit | arm that failed |
+| --- | --- | --- |
+| compare-to-theirs | 9 | R4 |
+| dist-only read from the working tree | 9 | R3, R4 |
+| dist-only rows counted | 9 | R3, R4 |
+| first unapplied row only | 1 | R1b, R2 |
+| no U2 (`UPSTREAM-ONLY-ADD` not counted) | 1 | R2 |
+| tree check run despite an identity mismatch | 1 | R6 |
+| BASE trusted from argv | 1 | R5 |
+
+Two correct second spellings score 0: the identity guard read inside `finish_verify_tree()`,
+and unapplied computed as "missing or byte-equal to base's blob".
+
+verify: sh A=core/skills/ai-dlc-update/reconcile/apply.sh; [ -f "$A" ] || exit 9; [ -f core/skills/ai-dlc-update/reconcile/preclassify.sh ] || exit 9; A="$(pwd)/$A"; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY; d=$(mktemp -d) || exit 9; case "$d" in */tmp.*) trap 'rm -rf "$d"' EXIT ;; *) exit 9 ;; esac; D="$d/dist"; mkdir -p "$D/core/scripts" "$D/core/fixtures/dfx" || exit 9; git -C "$D" init -q >/dev/null 2>&1 || exit 9; g() { git -C "$D" -c user.email=r@r -c user.name=r "$@" >/dev/null 2>&1; }; printf '1.0.0\n' > "$D/VERSION"; for f in aa zz; do printf '%s v1\n' "$f" > "$D/core/scripts/$f.sh"; done; g add -A && g commit -q -m b || exit 9; B=$(git -C "$D" rev-parse HEAD) || exit 9; printf '2.0.0\n' > "$D/VERSION"; for f in aa zz mm; do printf '%s v2\n' "$f" > "$D/core/scripts/$f.sh"; done; printf 'dist only\n' > "$D/core/fixtures/dfx/.dist-only"; printf 'fx\n' > "$D/core/fixtures/dfx/run.sh"; g add -A && g commit -q -m t || exit 9; T=$(git -C "$D" rev-parse HEAD) || exit 9; printf 'aa v3\n' > "$D/core/scripts/aa.sh"; g add -A && g commit -q -m o || exit 9; O=$(git -C "$D" rev-parse HEAD) || exit 9; rm -f "$D/core/fixtures/dfx/.dist-only"; git -C "$D" cat-file -e "${T}:core/fixtures/dfx/.dist-only" || exit 9; [ ! -e "$D/core/fixtures/dfx/.dist-only" ] || exit 9; [ "$(git -C "$D" ls-tree --name-only "$T" core/scripts/ | sed -n 1p)" = core/scripts/aa.sh ] || exit 9; mk() { c="$d/$1"; r="$3"; mkdir -p "$c/.claude" "$c/scripts/ai-dlc" || return 1; printf '#!/usr/bin/env bash\nexit 0\n' > "$c/scripts/ai-dlc/validate-hook-registration.sh" && chmod +x "$c/scripts/ai-dlc/validate-hook-registration.sh" || return 1; printf 'version: 1.0.0\ncommit: %s\n' "$B" > "$c/.claude/.ai-dlc-version"; printf 'base: %s\ntheirs: %s\n' "$B" "$r" > "$c/.claude/.ai-dlc-applying"; set -- $2; for f in aa zz mm; do case "$1" in b) printf '%s v1\n' "$f" > "$c/scripts/ai-dlc/$f.sh" ;; t) printf '%s v2\n' "$f" > "$c/scripts/ai-dlc/$f.sh" ;; m) printf '%s v2 merged by hand\n' "$f" > "$c/scripts/ai-dlc/$f.sh" ;; esac; shift; done; return 0; }; st() { v=$(sed -n 's/^version:[[:space:]]*//p' "$c/.claude/.ai-dlc-version" | head -1); k=$(sed -n 's/^commit:[[:space:]]*//p' "$c/.claude/.ai-dlc-version" | head -1); if [ "$v" = 2.0.0 ] && [ ! -e "$c/.claude/.ai-dlc-applying" ]; then echo S; elif [ "$v" = 1.0.0 ] && [ "$k" = "$B" ] && [ -e "$c/.claude/.ai-dlc-applying" ]; then echo W; else echo X; fi; }; run() { mk "$1" "$2" "$3" || exit 9; o=$(bash "$A" --finish "$D" "$4" "$c" "$T" 2>/dev/null); s=$(st); }; names() { awk -F'\t' -v p="$1" '$1=="WORKLIST" && index($0, p) {n++} END {exit !n}' <<< "$o"; }; run r3 "t t t" "$T" "$B"; [ "$s" = S ] || exit 9; run r4 "m t t" "$T" "$B"; [ "$s" = S ] || exit 9; F=0; run r1 "b b -" "$T" "$B"; [ "$s" = W ] || F=1; run r1b "t b t" "$T" "$B"; [ "$s" = W ] && names scripts/ai-dlc/zz.sh || F=1; run r2 "t t -" "$T" "$B"; [ "$s" = W ] && names scripts/ai-dlc/mm.sh || F=1; run r5 "b b -" "$T" "$T"; [ "$s" = W ] || F=1; run r6 "b b -" "$O" "$B"; [ "$s" = W ] && grep -q 'restamp-identity-mismatch' <<< "$o" || F=1; exit $F
 
 ## BL-103 — an `ai-dlc-*.sh` hook the settings template cannot register withholds `--finish` forever
 
