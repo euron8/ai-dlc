@@ -4217,3 +4217,71 @@ which shows the copy itself does not change the answer. The main-shell fix score
 copy with the engine removed scores **9**.
 
 verify: sh set -u; S=core/fixtures/ledger-reverify/seed.sh; E=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -r "$S" ] && [ -r "$E" ] && [ -r "$(dirname "$E")/lib.sh" ] || exit 9; T="$(mktemp -d)" || exit 9; trap 'rm -rf "$T"' EXIT; mkdir "$T/amb" || exit 9; export TMPDIR="$T/amb"; unset AI_DLC_RECONCILE_MEMO; read -r DIST BASE CONS THEIRS < <(bash "$S" 2>/dev/null) || exit 9; [ -d "$DIST" ] && [ -d "$CONS" ] || exit 9; out="$(bash "$E" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>/dev/null)"; rows="$(LC_ALL=C grep -cE '^[A-Z][A-Z-]+	' <<<"$out")" || rows=0; left="$(ls -d "$T/amb"/reconcile-memo.* 2>/dev/null | LC_ALL=C grep -c .)" || left=0; echo "rows=$rows reconcile-memo-left=$left"; [ "$rows" -gt 0 ] || exit 9; [ "$left" -eq 0 ] && exit 0; exit 1
+
+## BL-304 — `fanout-payload-channel` counts and deletes `fanout.*` in the SHARED temp root, so a concurrent run can fail arm 5, fake m6's kill, and lose its payload
+
+**DEFECT.** Found by the batch 151 adversary as the sibling of `BL-283`. The failure is
+REACHABLE and has not been OBSERVED in a gate run. It discharges no consumer candidate.
+
+**THE SAME SHAPE AS `BL-283`, IN A DIFFERENT FIXTURE.** Arm 5 of
+`core/fixtures/fanout-payload-channel/run.sh` (`:346-353`) counts
+`find "$TMP_ROOT" -maxdepth 1 -name 'fanout.*' -type d` before and after one subject run, and
+fails if the count grew. Mutant m6 (`:478-491`) takes the same count around a copy with its
+cleanup trap removed, at `:480` and `:482`. `$TMP_ROOT` is the ambient `TMPDIR`, resolved at
+`:113`. The subject names its payload directory `mktemp -d "${TMPDIR:-/tmp}/fanout.XXXXXX"` at
+`core/scripts/report-propagation-fanout.sh:311`, which is a fixed prefix with no per-run
+segment. So the count cannot separate this run's directory from any other process's.
+
+**THE POPULATION IS THE SUITE'S OWN POOL.** `fanout-untracked-corpus` and
+`validator-path-resolution` also drive `report-propagation-fanout.sh`, and the runner dispatches
+fixtures through `xargs -P`. `.githooks/pre-push` sets no per-fixture `TMPDIR`: `TMPDIR` has 0
+occurrences in it, against 5 for `xargs` as the control. Neither fanout fixture carries
+`.dist-only`, so both ship, and a consumer's pool has the same exposure.
+
+**THREE CONSEQUENCES, ONE OF THEM DESTRUCTIVE.**
+- Arm 5 reads a false RED when another run's `fanout.*` directory exists at the `after` count
+  but not at the `before` count. The message then blames the cleanup trap in the change under
+  test.
+- m6 scores a false KILL for the same reason. With the trap removed but nothing actually
+  leaking, a foreign directory still lifts the count. So the battery can credit arm 5 with a
+  kill the arm did not earn.
+- m6's own cleanup at `:488`, `find "$TMP_ROOT" -maxdepth 1 -name 'fanout.*' -type d -exec rm -rf {} +`,
+  deletes EVERY `fanout.*` directory in the shared root. That includes the live payload
+  directory of any concurrent subject run, which then fails reading its own payload. The
+  subject's contract reports that as a scoping failure, exit 3, and that run's fixture goes red
+  for a reason it cannot see.
+
+**MEASURED BY FORCING THE INTERLEAVING, NOT BY WAITING FOR IT.** The receipt puts a `python3`
+shim on `PATH` that creates one `fanout.FOREIGN<pid>` directory in the run's `TMPDIR` each time
+it is invoked, then executes the real interpreter. The subject calls `python3` between the arm's
+two counts, so every subject run plants one foreign directory mid-run. At `937919e4` the fixture
+exits 1, arm 5 fails, and all 10 planted directories are gone by the end of the run: m6's sweep
+removed them. A plain run of the same unfixed copy with no foreign writer PASSES, so the copy
+itself is sound.
+
+**THE FIX SHAPE IS A PRIVATE TEMP ROOT FOR THE COUNTING RUNS.** The scratch fix scored below
+gives arm 5 and m6 their own directory under `$WORK`, runs the subject with `TMPDIR` pointed at
+it, and counts and sweeps only there. The subject line is unchanged. A per-run discriminator in
+the subject's `mktemp` prefix, as `BL-283` proposes for its engine, would also work, but the
+fixture fix is smaller. **Do not "fix" it by deleting arm 5 or m6.** m6's own comment records
+that arm 5 is the only arm that can see a missing cleanup trap.
+
+**WHY THE RECEIPT IS BEHAVIOURAL.** A structural receipt that greps the arm's `find` for
+`$TMP_ROOT` is closed by renaming the variable. It is also closed by an arm whose predicate no
+longer reads the count. So the receipt runs the fixture. It passes only when four things hold
+under the forced foreign writer: the fixture exits 0, arm 5 is `ok`, m6 is killed, and every
+planted foreign directory survives. As a same-invocation control it also runs a copy of the
+fixture against a subject whose cleanup trap is removed, and arm 5 must FAIL there. That keeps
+an arm reduced to `if true` from passing. It exits **9** if the fixture or subject is missing,
+if the fixture never resolved its subject, if the shim planted nothing, or if the control copy
+ran some other subject.
+
+It was scored on seven trees. At `937919e4` it scores **1**
+(`fixture-rc=1 arm5-ok=0 m6-killed=1 foreign-planted=10 foreign-surviving=0`). The unfixed
+scratch copy scores **1**, and the private-temp-root fix scores **0**. Three regressions each
+score **1**: arm 5 deleted, m6's sweep left on the shared root, and arm 5's predicate replaced by
+`true`. The last of these scored **0** under the receipt's first draft, which had no
+leaky-subject control, and that is why the control exists. With the fixture absent it scores
+**9**.
+
+verify: sh set -u; F=core/fixtures/fanout-payload-channel/run.sh; S=core/scripts/report-propagation-fanout.sh; [ -r "$F" ] && [ -r "$S" ] || exit 9; P="$(command -v python3)" || exit 9; T="$(mktemp -d)" || exit 9; trap 'rm -rf "$T"' EXIT; mkdir -p "$T/amb" "$T/amb2" "$T/shim" "$T/w/core/fixtures/fanout-payload-channel" "$T/w/core/scripts" || exit 9; printf '#!/bin/sh\nd="$FANOUT_FOREIGN_AMB/fanout.FOREIGN$$"; mkdir "$d" 2>/dev/null && echo "$d" >> "$FANOUT_FOREIGN_LOG"\nexec "%s" "$@"\n' "$P" > "$T/shim/python3" && chmod +x "$T/shim/python3" || exit 9; cp "$F" "$T/w/$F" || exit 9; sed 's|^trap .rm -rf "\$FANOUT_TMP". EXIT|: # trap removed|' "$S" > "$T/w/$S" || exit 9; cmp -s "$S" "$T/w/$S" && exit 9; drive() { FANOUT_FOREIGN_AMB="$2" FANOUT_FOREIGN_LOG="$3" TMPDIR="$2" PATH="$T/shim:$PATH" bash "$1" 2>&1; }; out="$(drive "$F" "$T/amb" "$T/log")"; rc=$?; [ "$rc" -eq 0 ] || [ "$rc" -eq 1 ] || exit 9; LC_ALL=C grep -q 'subject resolved:' <<<"$out" || exit 9; [ -s "$T/log" ] || exit 9; lo="$(drive "$T/w/$F" "$T/amb2" "$T/log2")"; LC_ALL=C grep -qF "subject resolved: $T/w/" <<<"$lo" || exit 9; np=0; nl=0; while read -r d; do np=$((np+1)); [ -d "$d" ] && nl=$((nl+1)); done < "$T/log"; a5="$(LC_ALL=C grep -c '^  ok    5\. ' <<<"$out")" || a5=0; m6="$(LC_ALL=C grep -c 'mutant \[m6-trap\] KILLED' <<<"$out")" || m6=0; l5="$(LC_ALL=C grep -c '^  FAIL  5\. the run left' <<<"$lo")" || l5=0; echo "fixture-rc=$rc arm5-ok=$a5 m6-killed=$m6 foreign-planted=$np foreign-surviving=$nl leaky-subject:arm5-fail=$l5"; [ "$rc" -eq 0 ] && [ "$a5" -eq 1 ] && [ "$m6" -eq 1 ] && [ "$nl" -eq "$np" ] && [ "$l5" -eq 1 ] && exit 0; exit 1
