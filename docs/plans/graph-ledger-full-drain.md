@@ -58,16 +58,14 @@ scripts/plan-rotate.sh docs/plans/graph-ledger-full-drain.md` to see what moves 
 move it. **Never a discharge banner in the head window** — that silences P9 through P13 on this
 file.
 
-**THE ROTATOR CANNOT SEE THIS BLOCK'S GROWTH, AND IT SAYS SO WRONGLY.** Measured at batch 143 on
-152698 bytes: it exits **0** printing "at or under the 150000-byte ceiling — nothing to move".
-Its batch-paragraph class matches only INDENTED `**BATCH` lines, while the paragraphs in this
-block start at column 0, and every section above `### NEXT ACTIONS` is declared live. So its
-candidate set is empty, and the `NMOVED=0` branch reuses the under-ceiling message. **Read
-`validate-plan-shape.sh`'s P8, not the rotator's banner.** Filed as `BL-289`. Until it is fixed, rotate the
-oldest batch paragraphs by hand, as batches 139-143 did. Cut from a `**BATCH <n>` line to the line
-before the next retained paragraph, append the cut to the archive under `## BATCH <n> RECORD
-(rotated out of the live plan at batch <m>)`, and assert byte conservation: the plan's drop equals
-the moved bytes, and the archive's growth equals the moved bytes plus the header.
+**THE ROTATOR NOW SEES THIS BLOCK'S BATCH RECORDS, SO DO NOT ROTATE BY HAND.** Each column-0
+`**BATCH <n>` paragraph opens a record that runs to the next one. Once the spent sections are
+exhausted, the rotator takes records OLDEST-FIRST, and it never takes the newest record or the first
+one in the section. It budgets its own pointer line, and it refuses with exit 2 rather than
+claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scratch copy at
+`--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
+exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
+it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
 
 **BATCH 148 SHIPPED `v0.630.0` (`2407ce9a`, #841) AND CLOSED `BL-298`, WHICH DISCHARGES THE
 CONSUMER FILING BATCH 147 NAMED.** The release commit names
@@ -1141,7 +1139,10 @@ given at batch 90.
      `cmp -s` control, the reverify diff), each `opus` in its own worktree, each rebasing onto
      that sha. **NO HAND RUNS THE FIXTURE SUITE — say so in every brief.** Batch 131 measured what
      happens when two of them do: load 62-72 on 18 cores, six concurrent suites, and a timing
-     differential that was pure contention. The lead runs the gate, alone, and waits for it. Wall clock is the fix plus the longest arm, never the sum. Batch 101 measured the
+     differential that was pure contention. The lead runs the gate, alone, and waits for it.
+     **If a hand's suite has to be stopped, kill its process GROUP and its parent shell**, not
+     just the fixtures: eleven orphaned `zsh` wrappers survived three cleanups keyed on `pre-push`
+     and `run.sh` rather than on PPID. Wall clock is the fix plus the longest arm, never the sum. Batch 101 measured the
      serial shape at over an hour for nine steps a fan-out would have run in the fixture's time.
      The lead does not build; the lead writes the contract, collects by content, cuts the
      release commit, and pings.
