@@ -15,6 +15,47 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.631.0] - 2026-09-24
+
+This release fixes the plan rotator, which the live drain plan has been working around by hand
+since batch 139. The rotator is distribution-internal and does not ship to a consumer.
+
+### BL-289 — `plan-rotate.sh` sees column-0 batch records, budgets its own pointer, and refuses a plan it cannot rotate
+
+`scripts/plan-rotate.sh` could not see the batch paragraphs in the drain plan's resume block,
+because its batch class matched only indented `**BATCH` lines. On that plan it exited 0 with
+"at or under the ceiling — nothing to move" at every ceiling from 150000 down to 20000. The
+`NMOVED=0` branch reused the under-ceiling sentence, and it is reachable only from above the
+ceiling. The contract adversary found two further defects. The pointer line was never budgeted,
+so the fixture's own seed at a 2000-byte ceiling was written at 2012 bytes with exit 0. And the
+conservation arm could not see a span counted twice.
+
+The rotator now:
+
+- treats each column-0 `**BATCH <n>` paragraph inside a live section as the start of a record that
+  runs to the next one. It takes records only after the spent sections and the indented
+  retrospective runs, oldest number first, and never takes a section's highest-numbered record or
+  its first record;
+- keeps the candidate classes a partition, and refuses if the running remainder disagrees with
+  the one derived from the moved lines;
+- coalesces adjacent ranges in the pointer and budgets the pointer's bytes inside the selection
+  loop;
+- builds and measures both files before writing either, and refuses with exit 2 if the result
+  would be over the ceiling;
+- exits 2 with its own sentence when a plan is over the ceiling and no span of any class exists;
+- carries a fourth acceptance arm, derived independently of the splitter, which refuses when a
+  protected record was archived or when a moved record is newer than a kept one.
+
+Measured on a scratch copy of `docs/plans/graph-ledger-full-drain.md` at `--ceiling 130000`,
+records 142 and 140 moved as one range and 148-143 stayed live. The plan dropped by the archive's
+growth plus 2 bytes, P8-P13 stayed green, and a second apply changed nothing. At the default
+ceiling, all 40 plans give the same exit code and first line as before.
+
+`core/fixtures/plan-rotate/run.sh` now derives its ceilings from the seed rather than typing them.
+It adds arms for the no-candidate refusal, batch records and the protected floor, and kills 15 of
+15 mutants. It fails against the pre-fix rotator. The entry's receipt is behavioural, and it
+exits 0 at tip, 1 at base, and 1 on each of five partial fixes.
+
 ## [0.630.0] - 2026-09-24
 
 This release answers the consumer's S313 filing against the dispatch guard. It fixes the record the
