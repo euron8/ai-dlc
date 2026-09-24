@@ -1685,7 +1685,7 @@ finish_verify_tree() {
     fi
   fi
   if [ -n "$_fv_why" ]; then
-    say WORKLIST finish-base-unverified "${_fv_stamp#"$CONSUMER"/}" "${_fv_why}. Whether this tree was brought to \`${THEIRS}\` is decided against the base it started from, and that base is not established, so nothing was verified and the stamp is not advanced. Re-run with the \`<base>\` the withheld row printed, which is the stamp's own \`commit:\`."
+    say WORKLIST finish-base-unverified "${_fv_stamp#"$CONSUMER"/}" "${_fv_why}. Whether this tree was brought to \`${THEIRS}\` is decided against the base it started from, and that base is not established, so nothing was verified and the stamp is not advanced. Re-run with the stamp's own \`commit:\`${_fv_sc:+ (\`${_fv_sc}\`)} as \`<base>\` -- the restamp-withheld row below echoes the \`<base>\` this command was given, so do not copy its command on this row."
     return 0
   fi
   _fv_rows="$(bash "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)"; _fv_rc=$?

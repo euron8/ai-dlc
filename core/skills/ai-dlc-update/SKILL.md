@@ -2042,8 +2042,8 @@ prose is itself generated rather than composed.
      a mixture until you have done the rows. **When every `WORKLIST` and `DECISION`
      row above is disposed, run
      `reconcile/apply.sh --finish [--carried-machinery-slice] <dist> <base> <consumer> <theirs>`.**
-     It does the stamp and the marker clear and NOTHING else — it runs no resolution
-     phase, so it cannot undo or redo your merges. Carry `--carried-machinery-slice`
+     It checks the tree, then does the stamp and the marker clear — it runs no resolution
+     phase and writes no core file, so it cannot undo or redo your merges. Carry `--carried-machinery-slice`
      through to it if the first run had it; the withheld row prints the exact command,
      flag included.
 
@@ -2059,12 +2059,40 @@ prose is itself generated rather than composed.
      be at theirs, and the un-merged files then read as `ALREADY-AT-THEIRS` to every
      detector that compares against it.
 
-     *What `--finish` still checks.* It runs the hook-registration validator FIRST and
-     withholds again on a `WORKLIST settings-merge` row, because by then the settings
-     merge has happened and the answer is verifiable rather than attested. It does not
-     gate on a `DECISION` row: those you have already adjudicated, or they are the tool
-     saying it could not look, and gating on one that cannot clear would wedge the
-     consumer with no exit.
+     *What `--finish` checks before it stamps.* It does not take your word that the rows
+     are done. In this order, and every failure is a `WORKLIST` row that withholds the
+     stamp and leaves the marker in place:
+
+     1. **`<theirs>` is the ref this tree was written from.** It compares the `core/` tree
+        of the `theirs:` recorded in `.claude/.ai-dlc-applying` against the `<theirs>` you
+        typed. On a mismatch it prints `DECISION restamp-identity-mismatch`, writes nothing,
+        and skips the two checks below — an unapplied set computed against the wrong ref
+        names content this tree was never approved for.
+     2. **`<base>` is the base the tree started from.** It must resolve to a commit, and its
+        `core/` tree must equal that of the stamp's own `commit:`. Otherwise
+        `WORKLIST finish-base-unverified`: re-run with the stamp's own `commit:` as `<base>`.
+        The `DECISION restamp-withheld` row beside it echoes the `<base>` you typed, so do
+        not copy its command on this row.
+        A `<base>` typed as `<theirs>` makes every range empty, so this is not optional.
+     3. **No file still reads as a pure apply.** It runs `preclassify.sh` with the same four
+        arguments, and every row still bucketed `UPSTREAM-ONLY`, `UPSTREAM-ONLY-ADD` or
+        `…SETUP-TOKENS…` is a `WORKLIST finish-unapplied` row naming the file — missing,
+        still at base, or lacking theirs' exec bit. Write theirs' copy and re-run `--finish`.
+        A file you merged by hand buckets `BOTH-CHANGED->CLASSIFY` and never counts, so a
+        semantic merge cannot wedge the finisher; a `.dist-only` fixture at `<theirs>` is
+        skipped. If `preclassify.sh` fails, or returns nothing while the range moves
+        `core/`, that is `WORKLIST finish-unverified-tree`, never a pass.
+
+     A changed setup-sited file never byte-matches base or theirs, so it usually buckets
+     CLASSIFY; `--finish` names it on a `NOTE finish-unverified` row and does not withhold.
+     Confirm those by hand. Nothing here checks that a merge is CORRECT — only that no file
+     the ordinary run would have overwritten from theirs is still waiting for it.
+
+     It also runs the hook-registration validator and withholds again on a
+     `WORKLIST settings-merge` row, because by then the settings merge has happened and
+     the answer is verifiable rather than attested. It does not gate on a `DECISION` row:
+     those you have already adjudicated, or they are the tool saying it could not look,
+     and gating on one that cannot clear would wedge the consumer with no exit.
 
    - **YOU write `_bmad-output/ai-dlc-update/reconcile-log-<ts>.md`, and `apply.sh` does NOT.**
      Write it LAST, after the post-apply re-runs, because it records them. It carries the gates
