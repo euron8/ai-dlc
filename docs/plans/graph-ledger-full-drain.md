@@ -97,14 +97,20 @@ incident's own model `qwen38flash-mlx`, through the local gateway, because `clau
 `AskUserQuestion`. The relief question was asked in 0 of 4 scored runs at tip and 0 of 4 at base.
 The structural trace discriminates, but the replay was cut at 22:51, after the lead's base-era
 reasoning was already in its history, and the harness leaked into the model's context. The
-decisive run is a replay cut at 21:43, before the fold. Its scripts are named in the entry.
+decisive run is a replay cut at 21:43, before the fold. The batch's replay scripts were session
+scratch and are not kept; the entry records the method (the main-thread request rebuilt from the
+last compaction boundary, the step-file Reads swapped, a classifier keyed on the question's
+options and controlled both ways), and a new batch rebuilds it.
 
 **NEXT WORK.** The PC-backed worklist is unchanged at five rows, every one self-disqualifying or,
 for `BL-230`, awaiting a cause the instrument has not recorded. Unfiled is still the same
 **14**, byte-identical to the batch-145 set with identical dates, so no filing awaits a first
 look. **Take `BL-294`'s 21:43 replay next, and `BL-297` in the same batch**: `BL-297` asks whether
 an operator-facing finding outranks the IMMINENT snapshot refresh, and it was held until
-`BL-294` was built. Neither changes a bootstrapping file.
+`BL-294` was built. Neither changes a bootstrapping file. **Action 6b's shipped-id check reads
+non-empty for both, and that is expected:** `v0.626.0`'s release commit FILED them, and `v0.628.0`'s
+names `BL-294` because it shipped the section. Neither commit closes either entry, which is why both
+are still `## BL-` headings in `docs/backlog.md`.
 
 **THE CONSUMER PULLED `0.627.0` DURING THE BATCH, AND THE GAP IS NOW ONE RELEASE.** Its stamp reads
 `0.627.0` (`23aea0ef`) after its own #1109 and #1110. The pull rotated out the two ids batch 144
