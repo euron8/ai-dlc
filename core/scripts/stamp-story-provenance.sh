@@ -134,12 +134,23 @@ SP_ROOT="${AI_DLC_PROJECT_ROOT:-}"
 }
 # --- end AI_DLC_ROOT --------------------------------------------------------
 
+# The schema belongs to the INSTALL, not to whatever project AI_DLC_PROJECT_ROOT points at. An
+# override naming a root with no .claude/schemas/ found nothing above and failed closed, although
+# the schema sat beside this script the whole time. So the install root, walked up from this
+# script's own directory, is the last candidate. LAST, and in the reader too: first would make this
+# writer load the install's schema while validate-provenance-block.sh loads an override root's own,
+# and the reader would refuse the stamp. An empty walk answer is skipped, never turned into
+# /.claude/schemas/ at the filesystem root.
+SP_INSTALL_ROOT="$(ai_dlc_resolve_root "$SP_SCRIPT_DIR" || true)"
+SP_INSTALL_SCHEMA=""
+[ -n "$SP_INSTALL_ROOT" ] && SP_INSTALL_SCHEMA="$SP_INSTALL_ROOT/.claude/schemas/provenance-block.json"
 SCHEMA=""
 for cand in \
     "$SP_SCRIPT_DIR/../schemas/provenance-block.json" \
     "${SP_ROOT:-/nonexistent}/core/schemas/provenance-block.json" \
-    "${SP_ROOT:-/nonexistent}/.claude/schemas/provenance-block.json"; do
-    [ -f "$cand" ] && { SCHEMA="$cand"; break; }
+    "${SP_ROOT:-/nonexistent}/.claude/schemas/provenance-block.json" \
+    "$SP_INSTALL_SCHEMA"; do
+    [ -n "$cand" ] && [ -f "$cand" ] && { SCHEMA="$cand"; break; }
 done
 if [ -z "$SCHEMA" ]; then
     echo "FAIL: schemas/provenance-block.json not found. The schema is the source of truth;" >&2

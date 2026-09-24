@@ -136,8 +136,35 @@ printf '# artifact\n' > "$WORK/docs/artifact.md"
   printf '$ ls docs | wc -l\n'
   printf '%s\n' "$(ls "$WORK/docs" | wc -l)"
   printf '```\n'; } > "$WORK/docs/derived.md"
-printf '# terminal pass\n' > "$WORK/docs/pass-p1.md"
 printf '# story\n' > "$WORK/docs/stories/story-1.md"
+
+# THE PROVENANCE PAIR NO LONGER FAILS ON A WRONG ROOT BY LOSING ITS SCHEMA. Both scripts fall
+# back to the schema of the install they sit in, so a bare terminal pass and a blockless
+# artifact read identically from every root and scored both INERT. Each is handed the one input
+# its remaining root-keyed read decides.
+#
+# The WRITER's is the one-shot bind, which resolves `artifact:` against the cwd AND the project
+# root. The cwd here IS the correct root, so under the wrong root the bind's bases are a SUPERSET
+# of the right ones: no field can bind under the right root and refuse under the wrong one. The
+# only separable input binds from <root>/scripts alone, so the correct run REFUSES the bind and
+# the poisoned one reaches --check. That is the honest floor for this arm: it proves the root is
+# CONSULTED, not that the bind is correct — story-provenance's arm R owns that question.
+#
+# The READER's is the known_skills extension, found under the root. Its artifact cites a skill
+# only that extension names, so the right root passes and the wrong one refuses the skill.
+{ printf '# terminal one-shot\n<!-- SKILL_INVOCATION_PROVENANCE v1\n'
+  printf 'skill: bmad-review-adversarial-general\ninvoked_at: 2026-01-02T05:06:07Z\n'
+  printf 'tool_use_id: toolu_VPRPROBEaaaaaaaa\nmode: subagent\nlead_role: bug-investigation.md\n'
+  printf 'artifact: ../docs/stories/story-1.md\n'
+  printf 'findings_critical: 0\nfindings_major: 0\nfindings_minor: 0\n'
+  printf 'SKILL_INVOCATION_PROVENANCE_END -->\n'; } > "$WORK/docs/pass-p1.md"
+mkdir -p "$WORK/.claude/skills/ai-dlc/extensions" || exit 2
+printf '["vpr-root-probe-skill"]\n' > "$WORK/.claude/skills/ai-dlc/extensions/known-skills.json"
+{ printf '# artifact\n<!-- SKILL_INVOCATION_PROVENANCE v1\n'
+  printf 'skill: vpr-root-probe-skill\ninvoked_at: 2026-01-02T05:06:07Z\n'
+  printf 'tool_use_id: toolu_VPRPROBEaaaaaaaa\nmode: subagent\nlead_role: vpr-probe\n'
+  printf 'findings_critical: 0\nfindings_major: 0\nfindings_minor: 0\n'
+  printf 'SKILL_INVOCATION_PROVENANCE_END -->\n'; } > "$WORK/docs/artifact.md"
 
 # Root-dependent inputs for the four validators whose bare run stops at a usage
 # line. Each is placed ONLY under the correct root, never under $WORK/scripts, so a
@@ -164,7 +191,7 @@ argv_for() {
     validate-gate-adjudication.sh)  printf '%s' "--expected implementation" ;;
     validate-provenance-block.sh)   printf '%s' "$WORK/docs/artifact.md" ;;
     validate-artifact-derivations.sh) printf '%s' "$WORK/docs/derived.md" ;;
-    stamp-story-provenance.sh)      printf '%s' "--terminal $WORK/docs/pass-p1.md --check $WORK/docs/stories/story-1.md" ;;
+    stamp-story-provenance.sh)      printf '%s' "--terminal $WORK/docs/pass-p1.md --profile bug-story-provenance --check $WORK/docs/stories/story-1.md" ;;
     validate-ac-falsifiability.sh)  printf '%s' "$WORK/docs/stories/story-1.md" ;;
     validate-escalation-status-vocabulary.sh) printf '%s' "$WORK/docs/pending.md" ;;
     validate-suppression-lifetime.sh) printf '%s' "--escalations $WORK/docs/pending.md" ;;
