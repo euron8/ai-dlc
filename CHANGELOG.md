@@ -15,6 +15,35 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.633.0] - 2026-09-24
+
+This release makes the story-provenance writer and its reader find the install's schema when
+`AI_DLC_PROJECT_ROOT` names a root that carries none, which is what the fixture's arm R does. It
+also files the four entries the contract adversary measured beside it (`BL-299` is this release's
+subject; `BL-300`, `BL-301` and `BL-302` are filed, not fixed).
+
+### PC-S313-STORY-PROVENANCE-ARM-R-IS-RED-IN-THE-CONSUMER-LAYOUT
+
+The story-provenance fixture's arm R (new in 0.628.0) failed in every consumer install:
+`stamp-story-provenance.sh` looked for `provenance-block.json` beside the script and under the
+resolved project root, and in the consumer layout (`scripts/ai-dlc/` beside `.claude/schemas/`)
+an `AI_DLC_PROJECT_ROOT` naming a root with no schemas found none of them and failed closed.
+The writer and `validate-provenance-block.sh` now both append the install root, walked up from
+the script's own directory, as their LAST schema candidate, so an override root carrying its own
+schema still wins in both and one carrying none falls through to the install's in both.
+Install-first was measured to split the pair: the writer loaded the install's schema, the reader
+the override root's, and the reader refused the stamp. `validator-path-resolution` changes in the
+same release, because the fallback left its old argv for the pair with no root-keyed read; the
+writer is now driven through the one-shot bind and the reader through the `known_skills`
+extension. Verified in trees built by `scripts/install.sh` into an empty directory:
+story-provenance and validator-path-resolution both exit 0; from 0.632.0, story-provenance
+exits 1 on arm R.
+
+**Consumer mitigation.** Consumers at 0.628.0 through 0.632.0 carry a red story-provenance
+fixture that blocks pre-push. Re-pull to 0.633.0 — its single apply carries the fixed writer,
+reader and both fixtures, so its own pre-push runs fixed code — or push with
+`git push --no-verify` on a record naming PC-S313-STORY-PROVENANCE-ARM-R-IS-RED-IN-THE-CONSUMER-LAYOUT.
+
 ## [0.632.0] - 2026-09-24
 
 This release makes `apply.sh --finish` check the tree before it advances the stamp. It ships
