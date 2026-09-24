@@ -56,7 +56,7 @@ handoff exception applies. Handoff triggers:
 ### Rule 3 -- Never stall the pipeline
 The pipeline runs as a continuous, uninterrupted flow. Exactly
 FOUR pause points exist where you stop and wait for human input:
-- (a) **Ambiguity resolution** (Rule 11).
+- (a) **Ambiguity resolution and operator-only decisions** (Rule 11).
 - (b) **Production Validation Checkpoint** (Rule 10).
 - (c) **Retro commentary prompt**.
 - (d) **Sprint-scope confirmation** (`route.md` Step 6) -- the only

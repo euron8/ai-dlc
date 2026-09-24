@@ -4106,6 +4106,42 @@ root cause in 22 minutes, but its pipeline state differed too, so it cannot sepa
 causes. Replay `d5ba4ec4`'s 22:51 state against the changed step file and show the question is
 reached.
 
+**WHAT THE BUILD ESTABLISHED (batch 146, not yet released).** The adversary re-derived the
+premises from the main transcript. **Rule 4 did not bind on the incident's path.** The lead loaded
+`bug-investigation.md` three times as main-thread Reads (21:56:54, 22:26:42, 22:40:51) while it was
+executing `stories-test-strategy` §4. It read the file as a reference (*"bug-investigation is a
+*different* path, not a step in the current flow"*), and Rule 4 binds only sections of a file loaded
+through READ AND FOLLOW. The lead, not an analyst, wrote `bug-analysis.md` at 22:45:08. That
+analysis already held the relief and classified it *"agent-owned … Rule 12 Tier 2
+DECIDED_AUTONOMOUSLY"*.
+
+So the filed claim **"Rule 4 forbids skipping a numbered section, so this alone would have surfaced
+the relief at 22:51" did not survive.** A new section in `bug-investigation.md` alone would not have
+been reached on that path. What was built:
+
+- **`### 2b. Operator Relief`** in `bug-investigation.md`, labelled 2b so that no cited section
+  number moves. When relief the operator can apply without a deploy exists, it goes to the operator
+  with `AskUserQuestion` before §3: **apply now (recommended)** / **wait for the fix**, with the
+  relief's limit stated. Otherwise the analysis records `operator relief: none found`. The relief is
+  never written into a story, and never recorded as a Rule 12 Tier 2 decision, in place of asking.
+  §0's analyst returns the relief and the lead resumes at §2b. A one-shot §4 finding that yields
+  relief goes to the operator when it is found.
+- **The fold directive,** `stories-test-strategy.md` `### 3a. Fold a Defect into This Sprint`.
+  It says to READ AND FOLLOW `bug-investigation.md` §0–§4 for each folded defect, and skip §5 and
+  §6. This is what makes Rule 4 bind §2b on the path the incident took.
+- **Rule 11(a) and Rule 3 in `SKILL.md`.** Relief that only the operator can apply is an
+  operator-only decision and is always asked, because Tier 2 covers only choices the lead can carry
+  out itself. Pause point (a) is relabelled *Ambiguity resolution and operator-only decisions*, and
+  *"Do not ask if you should continue"* now says it is about continuing, not about an operator
+  action. The FOUR-pause-point count is unchanged, because it is rendered into the post-compact
+  digest and quoted in `ai-dlc-acknowledge.sh`.
+
+The filed claims about the pipeline's frames (`SKILL.md` Rule 3, Rule 11(a), Rule 12 Tier 2, and
+§2 running straight into §3) survive as filed. The claim "Stopgap and interim mitigation appear
+in 0 step files" is superseded by §2b. The **replay requirement survives unchanged** and is the
+close condition. A replay on any model other than `qwen38flash-mlx` cannot separate the agent's
+share from the pipeline's.
+
 verify: manual — whether a step makes a lead ASK is a behavioural claim about a model reading prose; the section's presence is not the fix, and a `has` receipt would be closed by its own heading.
 
 ## BL-295 — `route.md`'s mixed-defect MUST-ASK offers no "mitigate now" option, so the only routes for a live bug are sprint-shaped
@@ -4132,6 +4168,19 @@ production bug-fix sprint in which a stale HARD_BLOCK and a spawn-ledger exit 3 
 (`push-candidate-ledger.archive.md:7943`, `:11615`). Those are the evidence behind
 `gate-validation.md:297-303`.
 
+**WHAT THE BUILD ESTABLISHED (batch 146, not yet released).** The required option is reworded.
+**"mitigate/hotfix now, then fold" became "triage now, then fold the fix".** At routing time the
+relief is not yet known: in `d5ba4ec4` it was found about an hour after the MUST-ASK fired at
+21:43:23. An option to mitigate would therefore have named an action nobody could yet describe.
+The option `route.md` now requires says to READ AND FOLLOW `bug-investigation.md` §0–§2b for the
+defect, so that any operator-applicable relief reaches the operator through §2b first. The fix
+story (§3–§4) is then folded into the current sprint through `stories-test-strategy.md` §3a. The
+other options remain the lead's to frame within Rule 3's cap of 2-4 per question.
+
+What survived: the diagnosis that all three offered routes were sprint-shaped, and that the
+`roll` refusal can stay (`core/scripts/sprint-status.sh` is unchanged). "This option needs no second
+sprint" also survives, because triage runs before the fold and not in a sprint of its own.
+
 verify: manual — the option's presence in the step is prose, and whether the lead offers it is behaviour.
 
 ## BL-296 — a bug folded into a carry-over sprint loses `bug-investigation`'s one-shot validation and takes the full story cycle
@@ -4154,6 +4203,37 @@ default.
 **THE CHANGE.** State in `stories-test-strategy.md` that a folded bug story keeps
 `bug-investigation`'s one-shot §4 validation and does not re-enter the convergence cycle.
 
+**WHAT THE BUILD ESTABLISHED (batch 146, not yet released).** **The gate forced this outcome, not
+only the step prose.** At 01:53:56 the lead overwrote story-3-1's one-shot provenance block with
+the convergence block, because Check 17's story arm required `ai-dlc-adversary-review` on every
+story in the sprint. The consumer's tree still shows it: `s313/bug-fix-oneshot.md` names story-3-1
+in its `artifact:` field, and story-3-1 carries `skill: ai-dlc-adversary-review`. The filed change
+was a sentence in `stories-test-strategy.md`. That sentence alone would have been defeated at the
+gate, so the claim that the step could fix this by itself did not survive. What was built:
+
+- **Check 17 partitions the sprint's stories** (`gate-validation.md`). A folded bug-fix story runs
+  the bug-fix arm, which uses `--require-skill bmad-review-adversarial-general` and the
+  `bug-story-provenance` cross-check. Every other story runs the story arm and the series
+  cross-check. The folded story is DECLARED, not self-selected: it is the story named by the
+  `artifact:` field of a per-bug `s<N>/bug-fix-oneshot-<slug>.md` in the sprint's planning slot.
+  The partition itself needs no script change, because `stamp-story-provenance.sh --check`
+  already takes an explicit list. The declaration did: the writer now refuses, under a
+  verdict-less profile, a story that the one-shot's `artifact:` does not name, so a story cannot
+  borrow another bug's one-shot to take the lighter arm.
+- **The one-shot has a per-bug name,** `s<N>/bug-fix-oneshot-<slug>.md`, so that a sprint can
+  fold more than one bug. **Only that name declares.** A first cut matched
+  `bug-fix-oneshot*.md`, which also matched the legacy name. Replayed on a scratch copy of the
+  consumer's in-flight S313, that cut moved story-3-1 to the bug arm and failed the gate (rc=1 on
+  both commands), where the old gate passes it. The narrowed declaration passes the same copy. A
+  legacy `s<N>/bug-fix-oneshot.md` is read only at the bug-investigation gate.
+- **`stories-test-strategy.md` §3a and §4:** a folded bug-fix story keeps its §4 one-shot, is
+  left out of the convergence cycle's reviewed set, and is left out of the `--series` stamp. A
+  folded story inside that set would move the series' `artifact_sha` on every edit and re-open
+  the series at its next pass (Check 24 arm J).
+
+The filed THE CHANGE survives and is widened from a step sentence to a gate partition. The ~80
+minutes of ceremony are the incident's own figure and were not re-measured.
+
 verify: manual — which validation a folded story receives is a routing judgment the step states; no predicate on the text establishes the lead follows it.
 
 ## BL-297 — the IMMINENT context sensor's "BEFORE your next pipeline action" outranks an operator-facing finding, and the Stop hook's fidelity line leans the same way
@@ -4174,5 +4254,7 @@ pressure pointing the same way.
 **THE QUESTION TO SETTLE**, not a pre-chosen change: should an operator-facing finding on a live
 defect take precedence over the IMMINENT snapshot refresh? The sensor's advice says what to do
 BEFORE the next pipeline action, and reporting to the operator is not one.
+
+**Now unblocked:** `BL-294` is built in batch 146, so this NOTE waits only on the re-measurement.
 
 verify: manual — a precedence between two prompts is a behavioural question, recorded as a NOTE until `BL-294` is built and re-measured.

@@ -187,7 +187,12 @@ else
   # Under the real schema `verdict` is batch-invariant, so its absence is not EXIT_CONDITION_MET
   # and the writer refuses. Under the mutant the profile has become a one-shot profile, no verdict
   # is present to object to, and the stamp goes through — which is the derived behaviour under test.
-  grep -v '^verdict:' "$C/s1-stories-adversarial-p2.md" > "$MUTROOT/noverdict-p1.md"
+  # Under the mutant the profile IS a one-shot profile, and a one-shot binds only the story its
+  # `artifact:` names — so the pass names the story it is stamped onto, or the mutant is refused
+  # by the artifact bind and never reaches the verdict rule this arm is about. The control is
+  # unaffected: the unmutated profile refuses on the verdict before the bind is read.
+  grep -v '^verdict:' "$C/s1-stories-adversarial-p2.md" \
+    | sed "s#^artifact:.*#artifact: $MUTROOT/story-mut.md#" > "$MUTROOT/noverdict-p1.md"
   mk_mut_story() { printf '# Story mut\n\n## Acceptance Criteria\n- AC(a): thing.\n' > "$MUTROOT/story-mut.md"; }
   mut_run() { # -> the writer's output, resolving the schema from $MUTROOT/schemas/
     mk_mut_story
@@ -225,6 +230,237 @@ PY
     printf '  ok    %-46s\n' "mutation: dropping verdict from the profile disarms the guard"
   fi
 fi
+
+# --- MIXED SPRINT. One planning slot holding a convergence-validated story and a FOLDED bug-fix
+# story, as stories-test-strategy §3a produces. Check 17 sends the story a per-bug one-shot's
+# `artifact:` names to the bug arm and every other story to the convergence arm; these arms prove
+# each story passes ONLY its own arm, in both directions, and that the one-shot's `artifact:` is
+# a binding and not a label. Paths inside the blocks are root-relative as the producer writes
+# them, so every drive runs with the world as its working directory. seed.sh --mixed-into lists
+# the world's members.
+SEED="$DIR/seed.sh"
+mixed_world() { # -> a fresh world directory; each caller gets its own, never a stamped one
+  local w
+  w="$(mktemp -d "$ROOT/mixed.XXXXXX")" || return 1
+  bash "$SEED" --mixed-into "$w" || return 1
+  printf '%s\n' "$w"
+}
+# $1 world  $2 writer  then writer args. The writer is run from INSIDE the world.
+in_world() { local w="$1" wr="$2"; shift 2; ( cd "$w" && bash "$wr" "$@" ); }
+# Stamp the world the way the two procedures do: the convergence stories through the series, the
+# folded story through ITS OWN per-bug one-shot. This stamp is itself arm M1/M2 on the real writer.
+S1C="s1/stories/story-1-feature.md"; S1U="s1/stories/story-3-unfolded.md"
+S1B="s1/stories/story-2-fix-thing.md"; ONESHOT="s1/bug-fix-oneshot-story-2-fix-thing.md"
+BUGP="bug-story-provenance"
+# story-3 carries a WELL-FORMED bug block, stamped through a one-shot that really named it and is
+# otherwise byte-identical to story-2's. That is the discriminating input for the bind: its block
+# equals what story-2's one-shot derives (artifact is per-story, not batch-invariant), so only the
+# bind separates "reviewed this story" from "reviewed another story".
+forge_unfolded_bug_block() { # $1 world  $2 writer
+  sed "s#^artifact:.*#artifact: $S1U#" "$1/$ONESHOT" > "$1/s1/scratch-oneshot-for-3.md"
+  in_world "$1" "$2" --terminal s1/scratch-oneshot-for-3.md --profile "$BUGP" "$S1U" >/dev/null 2>&1
+}
+
+MW="$(mixed_world)"
+if [ -z "$MW" ] || [ ! -f "$MW/$ONESHOT" ]; then
+  ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-46s\n' "FIXTURE BROKEN: seed.sh --mixed-into built no world"
+else
+  # M1/M2 — the two stamps. M2 is the per-bug one-shot name ACCEPTED by --terminal.
+  expect "mixed: convergence stories stamp via --series" 0 "stamped 2 of 2" \
+    in_world "$MW" "$WRITER" --series s1/stories-adversarial "$S1C" "$S1U"
+  expect "mixed: per-bug one-shot accepted by --terminal" 0 "stamped 1 of 1 story file(s) from $ONESHOT" \
+    in_world "$MW" "$WRITER" --terminal "$ONESHOT" --profile "$BUGP" "$S1B"
+  # A — each story passes its OWN arm.
+  expect "mixed: convergence story passes --series arm" 0 "OK (2 story file(s) current)" \
+    in_world "$MW" "$WRITER" --series s1/stories-adversarial --check "$S1C" "$S1U"
+  expect "mixed: folded bug story passes bug arm" 0 "OK (1 story file(s) current)" \
+    in_world "$MW" "$WRITER" --terminal "$ONESHOT" --profile "$BUGP" --check "$S1B"
+  # C — the bug story FAILS the convergence arm. The needle names the story, so a DRIFT
+  #     reported against some OTHER file cannot satisfy it. Its ALLOW twin is the arm above.
+  expect "mixed: bug story FAILS --series arm" 1 "$S1B: block does not match" \
+    in_world "$MW" "$WRITER" --series s1/stories-adversarial --check "$S1B"
+  # D — the convergence story FAILS the bug arm, on its BLOCK and not on the bind: the legacy
+  #     one-shot names story-1, so the bind is satisfied and only the profile can refuse it.
+  #     This is also the legacy near-miss: Check 17 reads no declaration from the legacy name at
+  #     the stories gate, story-1 stays on its arm and passes there (arm A), and this arm is
+  #     what would happen to it if the legacy name DID route it.
+  expect "mixed: convergence story FAILS bug arm (legacy)" 1 "$S1C: block does not match" \
+    in_world "$MW" "$WRITER" --terminal s1/bug-fix-oneshot.md --profile "$BUGP" --check "$S1C"
+  expect "mixed: legacy one-shot leaves story-1 on its arm" 0 "OK (1 story file(s) current)" \
+    in_world "$MW" "$WRITER" --series s1/stories-adversarial --check "$S1C"
+  # E — THE BIND. An unfolded story carrying a well-formed bug block, checked through a one-shot
+  #     that reviewed a DIFFERENT story, is refused; so is stamping it that way; so is a one-shot
+  #     whose artifact names a story path that no longer exists.
+  forge_unfolded_bug_block "$MW" "$WRITER"
+  expect "mixed: bind control — story-3 block is well-formed" 0 "OK (1 story file(s) current)" \
+    in_world "$MW" "$WRITER" --terminal s1/scratch-oneshot-for-3.md --profile "$BUGP" --check "$S1U"
+  expect "mixed: bind refuses --check of an unnamed story" 1 "which is not the story being checked: $S1U" \
+    in_world "$MW" "$WRITER" --terminal "$ONESHOT" --profile "$BUGP" --check "$S1U"
+  expect "mixed: bind refuses stamping an unnamed story" 1 "which is not the story being stamped: $S1U" \
+    in_world "$MW" "$WRITER" --terminal "$ONESHOT" --profile "$BUGP" "$S1U"
+  expect "mixed: bind refuses an artifact naming no file" 1 "which is not the story being checked: $S1B" \
+    in_world "$MW" "$WRITER" --terminal s1/bug-fix-oneshot-story-9-moved.md --profile "$BUGP" --check "$S1B"
+  # The bind does not reach the CONVERGENCE door: its pass names the stories DIRECTORY, which is
+  # no story, and arm A passed through it. Asserted by arm A itself.
+fi
+
+# R — THE PROJECT-ROOT BASE. `artifact:` is root-relative, and the gate need not run from the
+# root. Run from the sprint slot, the working-directory base cannot resolve the field (it would
+# read s1/s1/...), so only the project-root base binds it. A fresh world, because MW's bug story
+# is already stamped and would print "stamped 0 of 1".
+RW="$(mixed_world)"
+if [ -z "$RW" ] || [ ! -f "$RW/$ONESHOT" ]; then
+  ASSERTIONS=$((ASSERTIONS + 1)); FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-46s\n' "FIXTURE BROKEN: seed.sh --mixed-into built no world (R)"
+else
+  expect "mixed: bind resolves artifact via project root" 0 "stamped 1 of 1" \
+    env AI_DLC_PROJECT_ROOT="$RW" bash -c 'cd "$1/s1" && bash "$2" --terminal "$3" --profile "$4" "$5"' _ \
+      "$RW" "$WRITER" "${ONESHOT#s1/}" "$BUGP" "${S1B#s1/}"
+fi
+
+# --- MUTANTS OF THE MIXED ARMS. Each is a copy of the writer in a scripts/ + schemas/ layout
+# (its schema sibling is asserted present), driven over a FRESH mixed world, beside an
+# UNMUTATED copy in the identical layout that must produce the arm's PRESENCE row. A mutant
+# scores only if it applied (cmp differs), the control printed the refusal, and the mutant
+# printed the OPPOSITE positive row — never merely the absence of the refusal.
+MUTX="$(mktemp -d "$ROOT/mutx.XXXXXX")"
+mkdir -p "$MUTX/scripts" "$MUTX/schemas"
+cp "$WRITER" "$MUTX/scripts/ctl.sh"
+if [ -f "$SCHEMA_SRC" ]; then cp "$SCHEMA_SRC" "$MUTX/schemas/provenance-block.json"; fi
+# $1 name  $2 python mutation program (reads $1 path of source, writes $2 path of mutant)
+mk_mutx() {
+  local out="$MUTX/scripts/$1.sh"
+  if ! python3 -c "$2" "$WRITER" "$out" 2>"$MUTX/$1.err"; then
+    echo "DID NOT APPLY: $(head -1 "$MUTX/$1.err")"; return 1
+  fi
+  if cmp -s "$WRITER" "$out"; then echo "DID NOT APPLY: identical to the writer"; return 1; fi
+  printf '%s\n' "$out"
+}
+# The anchor for each mutation is a STATEMENT THE SUBJECT EXECUTES, located structurally and
+# required to occur exactly once; the program refuses (non-zero) on zero or several.
+#
+# MB — the bind: the predicate the one-shot guard calls answers "bound" for every story.
+MB_PROG='
+import re, sys
+src = open(sys.argv[1]).read()
+defs = re.findall(r"(?m)^def (\w+)\(story_path\):\n", src)
+guard = re.findall(r"(?m)^    unbound = \[sp for sp in story_paths if not (\w+)\(sp\)\]$", src)
+if len(guard) != 1 or guard[0] not in defs:
+    sys.exit("anchor: one-shot guard predicate not found exactly once")
+name = guard[0]
+hdr = "def %s(story_path):\n" % name
+if src.count(hdr) != 1:
+    sys.exit("anchor: predicate definition not unique")
+open(sys.argv[2], "w").write(src.replace(hdr, hdr + "    return True\n"))
+'
+# MC — the check compares nothing: any story that carries SOME block reads as current. This is
+# the property arms C and D stand on (a block from the other door is refused by content).
+MC_PROG='
+import re, sys
+src = open(sys.argv[1]).read()
+pat = r"(?m)^(    if check_only:\n        # [^\n]*\n        if )new_content != content(:)"
+if len(re.findall(pat, src)) != 1:
+    sys.exit("anchor: check-mode comparison not found exactly once")
+open(sys.argv[2], "w").write(re.sub(pat, r"\1not BLOCK_RE.findall(content)\2", src))
+'
+# Control for the anchors themselves: an impossible anchor must be refused, or a program that
+# "applies" to anything is what is being scored.
+ASSERTIONS=$((ASSERTIONS + 1))
+if python3 -c 'import sys; src=open(sys.argv[1]).read(); sys.exit(0 if src.count("def zz_never_a_def_here(") == 0 else 1)' "$WRITER" \
+   && [ -f "$MUTX/schemas/provenance-block.json" ] \
+   && [ "$(AI_DLC_PROJECT_ROOT="$MUTX" bash "$MUTX/scripts/ctl.sh" --print-schema 2>/dev/null)" -ef "$MUTX/schemas/provenance-block.json" ]; then
+  printf '  ok    %-46s\n' "mutants: layout control (schema sibling resolved)"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-46s\n' "FIXTURE BROKEN: mutant copy does not resolve its schema sibling"
+fi
+
+# $1 label  $2 mutant path-or-DID-NOT-APPLY  $3 ctl-needle  $4 mut-needle  then writer args
+score_mutant() {
+  local label="$1" mp="$2" cn="$3" mn="$4"; shift 4
+  local w1 w2 ctl mut
+  ASSERTIONS=$((ASSERTIONS + 1))
+  case "$mp" in "DID NOT APPLY"*)
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "$label" "$mp"; return ;;
+  esac
+  w1="$(mixed_world)"; w2="$(mixed_world)"
+  for wx in "$w1" "$w2"; do
+    in_world "$wx" "$WRITER" --series s1/stories-adversarial "$S1C" "$S1U" >/dev/null 2>&1
+    in_world "$wx" "$WRITER" --terminal "$ONESHOT" --profile "$BUGP" "$S1B" >/dev/null 2>&1
+    forge_unfolded_bug_block "$wx" "$WRITER"
+  done
+  ctl="$(cd "$w1" && AI_DLC_PROJECT_ROOT="$w1" bash "$MUTX/scripts/ctl.sh" "$@" 2>&1)"
+  mut="$(cd "$w2" && AI_DLC_PROJECT_ROOT="$w2" bash "$mp" "$@" 2>&1)"
+  if ! grep -qF -- "$cn" <<<"$ctl"; then
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "$label" "FIXTURE BROKEN: control lacks its row"
+    printf '        ctl: %s\n' "$(printf '%s' "$ctl" | tr '\n' ' ' | cut -c1-200)"
+  elif [ "$ctl" = "$mut" ]; then
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "$label" "SURVIVED: mutant output identical to control"
+  elif ! grep -qF -- "$mn" <<<"$mut"; then
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "$label" "SURVIVED: mutant lacks the opposite row"
+    printf '        mut: %s\n' "$(printf '%s' "$mut" | tr '\n' ' ' | cut -c1-200)"
+  else
+    printf '  ok    %-46s\n' "$label"
+  fi
+}
+
+MB="$(mk_mutx mb "$MB_PROG")"
+score_mutant "mutant MB (bind deleted) killed by bind arm" "$MB" \
+  "which is not the story being checked: $S1U" "OK (1 story file(s) current)" \
+  --terminal "$ONESHOT" --profile "$BUGP" --check "$S1U"
+MC="$(mk_mutx mc "$MC_PROG")"
+score_mutant "mutant MC (content blind) killed by arm C" "$MC" \
+  "$S1B: block does not match" "OK (1 story file(s) current)" \
+  --series s1/stories-adversarial --check "$S1B"
+score_mutant "mutant MC (content blind) killed by arm D" "$MC" \
+  "$S1C: block does not match" "OK (1 story file(s) current)" \
+  --terminal s1/bug-fix-oneshot.md --profile "$BUGP" --check "$S1C"
+
+# MR — the bind loses its project-root base: inside the predicate the one-shot guard calls, the
+# one statement appending the root to the candidate bases becomes a no-op. Arm R owns it: run
+# from the sprint slot, the control stamps and the mutant refuses on the bind. Scored on two
+# fresh UNSTAMPED worlds, so the control's row is a real stamp and not "stamped 0 of 1".
+MR_PROG='
+import re, sys
+src = open(sys.argv[1]).read()
+guard = re.findall(r"(?m)^    unbound = \[sp for sp in story_paths if not (\w+)\(sp\)\]$", src)
+if len(guard) != 1:
+    sys.exit("anchor: one-shot guard predicate not found exactly once")
+m = re.search(r"(?ms)^def %s\(story_path\):\n(.*?)(?=^\S)" % guard[0], src)
+if not m:
+    sys.exit("anchor: predicate body not found")
+body = m.group(1)
+hits = re.findall(r"(?m)^( +)bases\.append\([^\n]*\)\n", body)
+if len(hits) != 1:
+    sys.exit("anchor: root-base append not found exactly once in the predicate")
+new_body = re.sub(r"(?m)^( +)bases\.append\([^\n]*\)\n", r"\1pass\n", body, count=1)
+open(sys.argv[2], "w").write(src[:m.start(1)] + new_body + src[m.end(1):])
+'
+MR="$(mk_mutx mr "$MR_PROG")"
+ASSERTIONS=$((ASSERTIONS + 1))
+case "$MR" in
+  "DID NOT APPLY"*)
+    FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "mutant MR (root base dropped) killed by arm R" "$MR" ;;
+  *)
+    r1="$(mixed_world)"; r2="$(mixed_world)"
+    run_r() { # $1 world  $2 writer
+      ( cd "$1/s1" && AI_DLC_PROJECT_ROOT="$1" bash "$2" --terminal "${ONESHOT#s1/}" \
+          --profile "$BUGP" "${S1B#s1/}" 2>&1 )
+    }
+    ctl="$(run_r "$r1" "$MUTX/scripts/ctl.sh")"; mut="$(run_r "$r2" "$MR")"
+    if ! grep -qF "stamped 1 of 1" <<<"$ctl"; then
+      FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "mutant MR (root base dropped) killed by arm R" "FIXTURE BROKEN: control did not stamp"
+      printf '        ctl: %s\n' "$(printf '%s' "$ctl" | tr '\n' ' ' | cut -c1-200)"
+    elif [ "$ctl" = "$mut" ]; then
+      FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "mutant MR (root base dropped) killed by arm R" "SURVIVED: mutant output identical to control"
+    elif ! grep -qF "which is not the story being stamped: ${S1B#s1/}" <<<"$mut"; then
+      FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "mutant MR (root base dropped) killed by arm R" "SURVIVED: mutant did not refuse on the bind"
+      printf '        mut: %s\n' "$(printf '%s' "$mut" | tr '\n' ' ' | cut -c1-200)"
+    else
+      printf '  ok    %-46s\n' "mutant MR (root base dropped) killed by arm R"
+    fi ;;
+esac
 
 echo "  ---- $ASSERTIONS assertions, $FAILURES failing ----"
 [ "$FAILURES" -eq 0 ]
