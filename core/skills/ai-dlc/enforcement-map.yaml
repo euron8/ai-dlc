@@ -124,14 +124,18 @@ checks:
       - core/scripts/validate-suppression-lifetime.sh
     call_sites:
       - site: gate-validation.md Check 2
-        posture: FAILS the gate (exit 0 required)
+        posture: FAILS the gate (exit 0 required; exit 0 with `EXAMINED NOTHING` — printed
+          as `OK — EXAMINED NOTHING` when no escalations file exists — is not a pass,
+          nothing was verified)
         why: Check 2's own predicate is three branches with no else, so an entry
           on a token outside the published set is neither blocked, surfaced nor
           recorded — no verdict is computed for it and the gate reports PASS.
           The script guards the vocabulary the LLM adjudication branches on; the
           adjudication itself stays llm.
       - site: gate-validation.md Check 2 (suppression lifetime)
-        posture: FAILS the gate (exit 0 required)
+        posture: FAILS the gate (exit 0 required; exit 0 with `EXAMINED NOTHING` — printed
+          with entries_scanned=0 when no escalations file exists — is not a pass, nothing
+          was verified)
         why: RESOLVED and OVERRIDDEN close a QUESTION and name no check, so an
           operator's one-time permission to proceed past a failing check has no
           target and no expiry. Measured on the reference consumer, a hard_block
@@ -154,7 +158,8 @@ checks:
       - core/scripts/validate-escalation-resolution.sh
     call_sites:
       - site: gate-validation.md Check 2a
-        posture: FAILS the gate (exit 0 required)
+        posture: FAILS the gate (exit 0 required; exit 0 with `EXAMINED NOTHING` — printed
+          when no escalations file exists — is not a pass, nothing was verified)
         why: a HARD_BLOCK is operator-gated, so marking it RESOLVED asserts an
           operator adjudication; without a cited, transcript-verified operator
           message that is a lead-authored fabrication (the S290 failure)
@@ -185,7 +190,8 @@ checks:
       - core/scripts/validate-locked-anchor.sh
     call_sites:
       - site: gate-validation.md Check 3b
-        posture: FAILS the gate (exit 0 required)
+        posture: FAILS the gate (exit 0 required; exit 0 with `PASS — EXAMINED NOTHING` is
+          not a pass, nothing was verified — the story carried no resolvable citation)
         why: a LOCKED requirement that does not byte-anchor to the source of record
           is a requirement the sprint invented
       - site: stories-test-strategy.md (story authoring)
@@ -582,7 +588,9 @@ checks:
       - core/scripts/validate-gate-adjudication.sh
     call_sites:
       - site: gate-validation.md Check 26
-        posture: FAILS the gate (verdict.sh validate-gate-adjudication <gate_type> <verdict_path> --transcript <path> --transcript-dir <dir>; exit 0 required)
+        posture: FAILS the gate (verdict.sh validate-gate-adjudication <gate_type> <verdict_path> --transcript <path> --transcript-dir <dir>; exit 0 required;
+          exit 0 with a `PASS` line carrying `EXAMINED NOTHING` from the --series stall rung
+          is not a pass, nothing was verified — no verdict carried a gate_series_id)
         why: the lead runs on a cheaper model and escalates every adjudication:llm check for the
           gate type to ONE fresh Opus gate-adjudicator subagent. This is the SINGLE fail-closed
           check through which the lead adopts those per-check verdicts — a missing / malformed /
@@ -726,7 +734,9 @@ checks:
       - core/scripts/validate-request-coverage.sh
     call_sites:
       - site: gate-validation.md Check 33
-        posture: FAILS the gate (exit 0 required; exit 2 on absent evidence is also a FAIL)
+        posture: FAILS the gate (exit 0 required; exit 2 on absent evidence is also a FAIL;
+          exit 0 with `NOT-APPLICABLE — EXAMINED NOTHING` is not a pass, nothing was
+          verified — the ask named no identifier)
         why: >-
           every byte-level guarantee in the pipeline terminates at product-brief.md
           — Check 3b anchors stories to it, Check 30 joins capabilities through it —
@@ -786,7 +796,9 @@ checks:
     call_sites:
       - site: gate-validation.md Check 35
         posture: FAILS the gate (exit 0 required; exit 2 is a FAIL because a check that
-          could not evaluate has not passed)
+          could not evaluate has not passed; exit 0 with `NOT-APPLICABLE`
+          and `EXAMINED NOTHING` is not a pass, nothing was verified — no snapshot, no
+          gate-metrics file, or no resolvable gate sha)
         why: >-
           Rule 25(a) says superseded snapshot content MOVES to a history file and is
           never deleted, and nothing verified the move. Every mechanism around that rule
