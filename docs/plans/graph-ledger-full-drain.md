@@ -69,6 +69,64 @@ before the next retained paragraph, append the cut to the archive under `## BATC
 (rotated out of the live plan at batch <m>)`, and assert byte conservation: the plan's drop equals
 the moved bytes, and the archive's growth equals the moved bytes plus the header.
 
+**BATCH 145 SHIPPED TWO RELEASES AND CLOSED BOTH CORE-ROUTING CANDIDATES BATCH 144 LEFT.**
+`v0.626.0` (`0e09fcd2`, #832) closed `BL-293`, and `v0.627.0` (`722d910d`, #833) closed `BL-292`,
+alone, because `apply.sh` is a bootstrapping file. Each release commit names its id: 1 hit each,
+against an impossible-id control of 0. Both gates ran at `AI_DLC_FIXTURE_NO_SKIP=1`: 22 of 22
+phases, **203 ok / 0 FAIL**, and the changed fixtures read `ok` by name. Live **78 -> 76**, archive
+**218 -> 220**. The batch also FILED `BL-294`..`BL-297` on the operator's instruction (below).
+The exit-0 receipt set is the same 8 ids it opened with, so nothing closed incidentally.
+
+**`BL-293` TOOK THREE FIX ROUNDS, AND EACH TIP ADVERSARY FOUND WHAT THE ROUND BEFORE MISSED.** The
+filed remedy, answer `no` on a failed `diff`, was superseded before any build. The damage turned out
+to be real only in the MIXED case: two edited sections, with `diff` failing for one, exit 0, and
+that edit gone. So the filed single-section receipt could never fire.
+
+The first conservation check keyed sections by NAME, which made it blind to the resolver's own
+shapes. 9 of the reference consumer's 564 installed headings resolve to a different line. The
+second check was positional, and it falsely refused the most common shape, an edit plus an EOF
+append.
+
+**The discriminating input was a corpus built from the consumer's REAL files**: 32 worlds, with
+27 agreeing with the base, and 5 refusing where the base lost 34-176 lines. A hand-seeded world
+set found none of that. **Build the corpus from the consumer's installed files before trusting a
+seeded one.**
+
+**THE `v0.627.0` GATE FAILED ONCE, AND IT WAS THE BRIEF, NOT THE FIX.** The new `BL-292` arms made
+`apply-restamp-worklist` write hook paths, so I10 in `validate-enforcement-map.sh` then required
+it to scrub ambient `AI_DLC_*`. It did not. Every fixture that drives that validator failed with
+it, which is 11 in all. The fixture hand ran its own fixture and never the validator. **A fixture
+hand whose arms touch hooks runs `bash scripts/validate-enforcement-map.sh` before it reports.**
+
+**THE READ-SET DERIVER TRACES WHATEVER IS CHECKED OUT.** `derive-fixture-readsets.sh:283` is
+`cp -a "$REPO_ROOT/."`. The first operator run traced the 0.626.0 checkout and moved only 6 git
+plumbing rows. **Check out the branch that carries the fixture before asking for the trace**, then
+confirm the new row exists (32127 -> 32128 here) and that no other fixture's rows moved.
+
+**THE OPERATOR FILED FOUR ENTRIES FROM A PEER'S DIAGNOSIS.** Peer session `llm-gateway-41` asked
+whether the pipeline makes a lead under-prioritize a live production bug. It came from consumer
+session `d5ba4ec4`, where the lead drafted a no-deploy relief five times and never offered it.
+The verdict was both, with the agent at about 60%, and `BL-294`..`BL-297` record the pipeline's
+share. `BL-294` is a BLOCKER: `bug-investigation.md` has no step that asks the operator. None of
+the four carries a `PC-` id, and all four are `verify: manual`.
+
+**NEXT WORK.** The PC-backed worklist is unchanged at five rows: the four self-disqualifying ones,
+and `BL-230`, which has no build until the instrument records a pool failure's cause. Unfiled is
+still **14**, the same fourteen batch 143 adjudicated, and no new filing awaits a first look.
+**Take `BL-294` next, with `BL-295` and `BL-296` in the same release where action 2 allows.**
+All three change core step files the consumer runs. `BL-294`'s own entry says to prove the new
+section is REACHED by replaying `d5ba4ec4`'s 22:51 state before building on it.
+
+**THE DELIVERY GAP IS THREE RELEASES, AND A BOOTSTRAPPING FILE IS IN RANGE.** The consumer
+installed **0.624.0** (`5376b309`) against `VERSION` **0.627.0**. In range, `apply.sh` has 1 commit,
+`ai-dlc-update/SKILL.md` has 1, and `preclassify.sh` and `ledger-reverify.sh` have 0. 0 of 16 raw
+`core/` rows are mode-only. The pull still carries 0.625.0's one-decision notify-hook deletion. The
+banked ruling stands: report the gap and write no runbook.
+
+The consumer's porcelain is 41: 40 under `_bmad-output/`, plus `docs/escalations/pending.md`, which
+its own live session writes. The ledger md5 `218c7851…` did not move across the batch, which is the
+criterion-4 check by content.
+
 **BATCH 144 SHIPPED `v0.625.0` (`240d813a`, #830), AND ALL THREE OF THE CONSUMER'S 2026-09-23
 FILINGS ARE ADDRESSED — THE OPERATOR MADE THEM THE BATCH'S PRIORITY MID-SWEEP.**
 `PC-S313-DEBT-AUDIT-CUE-FIRES-ON-A-CORE-CONSTRUCT-NAME` closed as `BL-290`, and
@@ -101,7 +159,7 @@ refs; unfiled **14**, the same fourteen batch 143 adjudicated, so **no new filin
 look**. The worklist is five rows: the four self-disqualifying ones and `BL-230`, which has no
 build until the instrument records a pool failure's cause on the consumer. The core-routing
 candidates still owed are `BL-292` (`apply.sh`, a bootstrapping file, so it ships ALONE) and `BL-293`.
-**Take `BL-293` next if nothing new is filed, and `BL-292` in a release of its own.**
+Batch 145 shipped both, and its block above names the next work.
 
 **THE DELIVERY GAP IS ONE RELEASE.** The consumer installed **0.624.0**. `VERSION` is **0.625.0**, 0 of the
 four bootstrapping files changed in range, and 0 of 10 raw `core/` rows are mode-only. **The pull
@@ -212,7 +270,7 @@ batch, entirely from that pull. The ledger md5 did not move, which is the criter
 content.
 
 **EVERYTHING BELOW THIS LINE, DOWN TO `### Derive the state`, IS AN EARLIER BATCH'S BLOCK.** Each
-one was current when it was written, and the batch 144, 143 and 142 blocks above replace it. Read those blocks
+one was current when it was written, and the batch 145, 144, 143 and 142 blocks above replace it. Read those blocks
 for the measurement behind a rule. Take no figure and no next-work pointer from them: their
 counts, gaps and "remaining" ids have all moved since.
 
