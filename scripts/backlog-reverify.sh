@@ -37,7 +37,8 @@
 #   STILL-LIVE       the receipt still reproduces here. Stays open.
 #   HAND-REVIEW      the entry declares `verify: manual` -- no mechanical predicate by design.
 #   NEEDS-REVIEW     the RECEIPT is at fault, never the entry. The DETAIL names which:
-#                    `unresolved:` (no receipt, unknown verb, malformed line, missing path)
+#                    `unresolved:` (no receipt, unknown verb, malformed line, missing path,
+#                    or an `sh` receipt that exited 9 -- its own could-not-measure code)
 #                    or `vacuous predicate:` (a substring that cannot discriminate).
 #   INPUT-UNRESOLVED an ARGUMENT does not resolve. Run-scoped, not entry-scoped. This row
 #                    exists because that state used to be spelled as zero rows and rc=0,
@@ -228,9 +229,21 @@ while IFS="$(printf '\t')" read -r LABEL CLOSED RECEIPT; do
         emit "NEEDS-REVIEW" "$LABEL" "unresolved: MALFORMED sh receipt -- the one-liner does not parse ($(bash -n -c "$SH_PROG" 2>&1 | head -1 | sed 's/^bash: -c: //')). This engine reads a receipt as ONE line, so a receipt written across two arrives here truncated at its first newline, usually inside a quote, a \$( ), after a trailing backslash or inside a heredoc. It was NOT evaluated; a syntax error is not a verdict on the entry. Rewrite it on one line (printf '\\n' in place of a literal newline), then re-run."
         continue
       fi
+      # EXIT 9 IS THE RECEIPT SAYING IT COULD NOT MEASURE, AND IT IS NOT A VERDICT (BL-089). This
+      # corpus's receipts return 9 when a precondition has moved and they therefore measured
+      # nothing. Folded into STILL-LIVE it read as "the defect still reproduces", in the same
+      # words as a genuine reproduction. It routes to NEEDS-REVIEW -- the receipt is at fault,
+      # never the entry -- and to NOTHING ELSE: HAND-REVIEW is what backlog-rotate.sh treats as
+      # permission to move an annotated entry, and CLOSE-CANDIDATE proposes the close outright,
+      # so either would turn "I could not tell" into a false close. Only 9 is special. 126, 127
+      # and every other non-zero stay STILL-LIVE: a command that vanished is not the receipt's
+      # own could-not-measure signal, and widening this to them is a separate decision.
       ( cd "$REPO_ROOT" && eval "$REST" ) >/dev/null 2>&1
-      if [ $? -eq 0 ]; then
+      SH_RC=$?
+      if [ "$SH_RC" -eq 0 ]; then
         emit "CLOSE-CANDIDATE" "$LABEL" "sh receipt exited 0 -- the fix is present. Operator confirms and annotates."
+      elif [ "$SH_RC" -eq 9 ]; then
+        emit "NEEDS-REVIEW" "$LABEL" "unresolved: the sh receipt exited 9, which is the receipt reporting that it cannot measure its subject -- a precondition it relies on has moved. That is not a verdict on the entry; repair the receipt, then re-run."
       else
         emit "STILL-LIVE" "$LABEL" "sh receipt exited non-zero -- still reproduces here"
       fi
