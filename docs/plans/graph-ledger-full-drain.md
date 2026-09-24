@@ -67,6 +67,36 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
 
+**BATCH 149 SHIPPED `v0.631.0` (`d150a85b`, #843) AND CLOSED `BL-289`, THE ROTATOR DEFECT.** No
+consumer filing awaited work, so the batch took the distribution-internal entry this plan had been
+working around since batch 139. The release commit names `BL-289`. The only other commit naming
+it is batch 143's docs commit that filed it; the impossible-id control is 0. The gate ran at
+`AI_DLC_FIXTURE_NO_SKIP=1`: 22 phases PASS, **203 ok / 0 FAIL**, all gates green, `plan-rotate`
+read `ok` by name against an impossible-name control of 0, and `ls-remote` confirmed the ref. Live
+**72 -> 71**, archive **225 -> 226**. The exit-0 receipt set is the previous 8 plus `BL-289`,
+compared by identity, so nothing closed incidentally.
+
+**THE CONTRACT ADVERSARY TURNED A MESSAGE FIX INTO A BUDGETING FIX.** The filed entry had two
+claims: a false banner, and a batch class blind to column 0. The adversary measured a third on
+the shipping script. It never budgeted its own pointer line, so the fixture's seed at a 2000-byte
+ceiling was written at 2012 bytes with exit 0. It also found that arm 1 cannot see a
+double-counted span, and that oldest-first rotation would have archived three standing rulings
+that lived only in batch 140's record. Two of those were already restated live, and the third was
+lifted into action 0 before the release. **Before a rotation, grep the records it will take for
+any rule that exists nowhere else.**
+
+**NEXT WORK.** The inputs are unchanged from batch 148. The PC-backed worklist is the same five
+self-disqualifying rows (`BL-067`, `BL-132`, `BL-145`, `BL-215`, and `BL-230` awaiting a recorded
+cause). Unfiled is the same **14**, with identical dates. The ledger md5 `b6fd6280…` did not move,
+and nothing awaits a first look. Re-derive both; a new consumer filing is the only thing that
+changes this.
+
+**THE DELIVERY GAP IS FOUR RELEASES.** The consumer installed **0.627.0** (`23aea0ef`) against
+`VERSION` **0.631.0**. 0 of the four bootstrapping files changed in range (control: `core/hooks`
+has 2 commits), and 0 of 19 raw `core/` rows are mode-only. `0.631.0` touches no `core/` path. The
+banked ruling stands: report the gap and write no runbook. The consumer's porcelain read 1 during
+the batch, `_bmad-output/pipeline-continuation-log.md`, written by its own session.
+
 **BATCH 148 SHIPPED `v0.630.0` (`2407ce9a`, #841) AND CLOSED `BL-298`, WHICH DISCHARGES THE
 CONSUMER FILING BATCH 147 NAMED.** The release commit names
 `PC-S313-DISPATCH-GUARD-RECORDS-CITED-FALSE-AND-NEVER-DENIES` (1 hit, impossible-id control 0).
@@ -396,7 +426,7 @@ batch, entirely from that pull. The ledger md5 did not move, which is the criter
 content.
 
 **EVERYTHING BELOW THIS LINE, DOWN TO `### Derive the state`, IS AN EARLIER BATCH'S BLOCK.** Each
-one was current when it was written, and the batch 148 through 142 blocks above replace it. Read those blocks
+one was current when it was written, and the batch 149 through 142 blocks above replace it. Read those blocks
 for the measurement behind a rule. Take no figure and no next-work pointer from them: their
 counts, gaps and "remaining" ids have all moved since.
 

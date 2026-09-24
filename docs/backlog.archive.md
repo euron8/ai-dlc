@@ -18269,3 +18269,103 @@ cannot be built, the renderer does not emit the line, or the row is missing or n
 
 verify: sh g=core/hooks/ai-dlc-dispatch-guard.sh; r=core/scripts/render-agent-definitions.sh; [ -r "$g" ] && [ -r "$r" ] || exit 9; command -v jq >/dev/null || exit 9; T="$(mktemp -d)" || exit 9; L1='Your operating contract is `.claude/team-roles/remediator.md`. Read it and follow it as your'; L2='Your operating contract is `.claude/team-roles/adversary.md`. Read it and follow it as your'; for w in own other; do d="$T/$w"; mkdir -p "$d/.claude/team-roles" "$d/_bmad-output" || exit 9; : > "$d/.claude/.ai-dlc-version"; printf '# remediator\n' > "$d/.claude/team-roles/remediator.md"; printf '# adversary\n' > "$d/.claude/team-roles/adversary.md"; printf '%s\n' '{"aiDlcModels":{"opus":"claude-opus-5[1m]"},"aiDlcRoles":{"remediator":{"model":"opus","effort":"high"},"adversary":{"model":"opus","effort":"high"}}}' > "$d/.claude/settings.json"; bash "$r" --root "$d" >/dev/null 2>&1 || exit 9; f="$d/.claude/agents/remediator.md"; grep -qxF -- "$L1" "$f" || exit 9; if [ "$w" = other ]; then sed 's#team-roles/remediator\.md#team-roles/adversary.md#' "$f" > "$f.n" && mv "$f.n" "$f" || exit 9; grep -qxF -- "$L2" "$f" && ! grep -qF 'team-roles/remediator.md' "$f" || exit 9; e='{"v":1,"name":"epoch","role":"adversary","role_contract_cited":true,"contract_via":"definition","definition_bound":true,"tool_use_id":"toolu_epoch"}'; x='true false null toolu_rcpt'; else e='{"v":1,"name":"epoch","role":"adversary","role_contract_cited":false,"contract_via":null,"definition_bound":false,"tool_use_id":"toolu_epoch"}'; x='true true definition toolu_rcpt'; fi; printf '%s\n' "$e" > "$d/_bmad-output/spawn-ledger.jsonl"; printf '%s' '{"tool_name":"Agent","tool_use_id":"toolu_rcpt","tool_input":{"subagent_type":"remediator","prompt":"Do the work."}}' | CLAUDE_PROJECT_DIR="$d" bash "$g" >/dev/null 2>&1; [ "$(wc -l < "$d/_bmad-output/spawn-ledger.jsonl" | tr -d ' ')" = 2 ] || exit 9; o="$(tail -1 "$d/_bmad-output/spawn-ledger.jsonl" | jq -r '[.definition_bound, .role_contract_cited, .contract_via, .tool_use_id] | map(tostring) | join(" ")' 2>/dev/null)" || exit 9; case "$o" in "true "*" toolu_rcpt") : ;; *) exit 9 ;; esac; [ "$o" = "$x" ] || exit 1; done; exit 0
 
+## BL-289 — `plan-rotate.sh` answers "at or under the ceiling" on a plan it cannot rotate, and its batch class cannot see column-0 paragraphs
+
+**DEFECT.** Found at batch 143 when `validate-plan-shape.sh`'s P8 failed
+`docs/plans/graph-ledger-full-drain.md` at 152698 bytes against 150000. The remedy P8 prints is
+`plan-rotate.sh`, which exited **0** printing *"is 152698 bytes, at or under the 150000-byte
+ceiling — nothing to move"*. The same answer came back at `--ceiling` 148000, 140000 and 130000.
+
+**TWO CLAIMS, AND THEY ARE SEPARABLE.**
+
+1. **The banner is false.** `scripts/plan-rotate.sh:414` is the `NMOVED=0` branch, and it reuses
+   the under-ceiling sentence from `:171`. The only way to reach `:414` is from above the ceiling,
+   because `:170` has already returned for every plan at or under it. So the message is wrong on
+   every input that reaches it.
+2. **The candidate set is empty for the resume-block shape.** Class 2 at `:331` matches
+   `^[[:space:]]+\*\*BATCH`, which requires an INDENTED paragraph. The plan's resume block writes
+   its batch paragraphs at column 0, and every section above `### NEXT ACTIONS` is declared live.
+   So neither class has a member, and nothing is moved.
+
+**WORKAROUND IN USE.** Batches 139-143 rotated by hand. The live plan's resume block says to trust
+P8 over the rotator's banner, and it gives the manual cut with a byte-conservation check.
+
+**THE CONTRACT ADVERSARY FOUND TWO MORE, BOTH IN THE SHIPPING SCRIPT BEFORE ANY FIX.** The line
+numbers here are as of `dc833d39`.
+
+3. **The shipping script already landed OVER the ceiling at exit 0.** The selection loop at
+   `:359` stops when the remainder is at or under the ceiling. The writer at `:665-678` then adds
+   a pointer line, and a blank line before it when no pointer exists yet, and the selection never
+   counted either one. Measured on the plan-rotate fixture's own conforming seed (3494 bytes,
+   slug `probe`) at `--ceiling 2000 --apply`: exit **0**, and the file written is **2012** bytes.
+   Every arm was green, because every arm measures the SPLIT, and the pointer is added after the
+   split. The file was also written before anything measured it, so nothing could refuse it.
+4. **Arm 1 cannot see a double-counted span.** Conservation is keyed per LINE, so a line inside
+   two candidate spans is written once and conserves perfectly. The remainder accumulator
+   subtracts it twice, though, so selection stops early, which lands the file over the ceiling.
+   Once column-0 records became a class, the overlap had a concrete source: an indented
+   `**BATCH` quoted inside a column-0 record would be a class-2 opener over lines the record
+   already owns.
+
+**WHAT SHIPPED.** The fix changes only `scripts/plan-rotate.sh`.
+
+- A plan that is over the ceiling and has no candidate of any class exits **2**. The sentence
+  names the three classes and shares no phrase with the under-ceiling one. It is checked before
+  the UNREACHABLE branch.
+- A third class takes column-0 `**BATCH <n>` records inside a live section. Each record runs from
+  its opener to the line before the next unfenced opener, or to the end of the section. In each
+  section, every record carrying the section's max number (ties included) and the positionally
+  first record are protected.
+- Class 3 is taken only after classes 1 and 2 are exhausted. It goes oldest first by number,
+  across all sections, not largest first.
+- The candidate spans are asserted to be a partition. Class 2 skips lines inside a class-3
+  record. The remainder is derived a second way, over the move set, and any overlap or
+  disagreement is refused.
+- Adjacent selected spans are coalesced into one pointer range.
+- The pointer line's exact cost is part of the stop test, re-derived per step. That cost is its
+  full length plus the blank line when none exists, or its length minus the old pointer lines
+  it replaces.
+- Both output files are built in the work directory first. The pointed file must equal the
+  budget to the byte and be at or under the ceiling before anything is written.
+- Arm 4 (protected-record) re-derives the protected openers independently of the splitter. It
+  asserts that each one is in the live remainder, and that no moved record is newer than a kept
+  one.
+
+**THE RECEIPT, AND WHAT IT SEPARATES.** The receipt seeds, under `mktemp -d`, a plan whose one
+live section carries column-0 records 9 down to 1, newest first, with sizes rising by number. The
+ceiling is the plan minus records 1 and 2 plus 50 bytes. That forces class-3 moves and leaves too
+little room for a largest-first pass or an unbudgeted pointer. It exits 0 only if all of these
+hold:
+
+- the rotate exits 0;
+- the final file is at or under the ceiling;
+- record 9 is kept, and record 1 is archived;
+- there is exactly one pointer line, carrying exactly one range;
+- a second seed, over the ceiling with no candidate, exits **2**, stays `cmp -s` identical and
+  creates no archive.
+
+It keys on exit codes, bytes and line shapes, never on message text. A precondition that moved
+exits 9. Each variant below is a scratch copy of the script, asserted `cmp -s` different from the
+tip and then substituted for the receipt's `S=`:
+
+| subject | exit | why |
+|---|---|---|
+| tip `71be66eb` | 0 | 808..936 in one range, 48355 bytes against 51746 |
+| base `dc833d39` | 1 | both seeds exit 0 with the under-ceiling banner, about files that are over it |
+| A only (base plus the exit-2 branch) | 1 | the column-0 seed has no candidate either, so it also exits 2 |
+| `:331` widened to `[[:space:]]*` | 1 | each span is one opener line and the bodies stay live, so UNREACHABLE refuses; the no-candidate seed still exits 0 |
+| class 3 largest first | 1 | arm 4 refuses; with arm 4 also disabled it exits 0, archives 193..355 and leaves record 1 live |
+| no pointer budget | 1 | UNREACHABLE refuses, because it still adds the pointer cost; with that test, the budget-equality gate and the final-size gate all removed, it exits 0 writing 52031 bytes against 51746 |
+| no coalesce | 1 | three ranges for three adjacent spans |
+| correct fix, refusal sentence reworded | 0 | the second spelling |
+
+The design question the old receipt left open is settled by the fix taking both paths: it refuses
+with exit 2 when there is nothing to take, and it coalesces and widens when there is.
+
+verify: sh S=scripts/plan-rotate.sh; [ -f "$S" ] || exit 9; d=$(mktemp -d) || exit 9; P="$d/p.md"; Q="$d/q.md"; awk 'BEGIN{print "# Seed"; print ""; print "## Start here"; print ""; print "1. `## RESUME HERE` -- the batch records."; print "2. `## Done when` -- the exit test."; print ""; print "## RESUME HERE"; print ""; for(n=9;n>=1;n--){printf "**BATCH %d -- record.**\n\n", n; for(i=1;i<=20*n;i++) printf "body %d.%d xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n", n, i; print ""} print "## Done when"; print ""; print "Never."}' > "$P" || exit 9; awk 'BEGIN{print "# Q"; print ""; print "## Start here"; print ""; print "1. `## Work` -- live."; print ""; print "## Work"; print ""; for(i=1;i<=60;i++) print "work line xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}' > "$Q" || exit 9; cp "$Q" "$d/q0" || exit 9; T=$(($(wc -c < "$P"))); O=$(awk '/^\*\*BATCH [0-9]/{c=$2+0} /^## /{c=0} c==1||c==2{s+=length($0)+1} END{print s+0}' "$P"); C=$((T-O+50)); N=$(grep -c '^\*\*BATCH [0-9]' "$P"); [ "$N" -eq 9 ] && [ "$O" -gt 0 ] && [ "$T" -gt "$C" ] && [ "$(($(wc -c < "$Q")))" -gt 1000 ] || exit 9; bash "$S" "$P" --apply --ceiling "$C" >/dev/null 2>&1; r1=$?; bash "$S" "$Q" --apply --ceiling 1000 >/dev/null 2>&1; r2=$?; r=1; [ "$r1" -eq 0 ] && [ "$(($(wc -c < "$P")))" -le "$C" ] && grep -q '^\*\*BATCH 9 ' "$P" && ! grep -q '^\*\*BATCH 1 ' "$P" && grep -q '^\*\*BATCH 1 ' "$d/archive/p.md" && [ "$(grep -c '^\*\*Archived sections live at' "$P")" -eq 1 ] && [ "$(grep '^\*\*Archived sections live at' "$P" | grep -oE '[0-9]+\.\.[0-9]+' | grep -c .)" -eq 1 ] && [ "$r2" -eq 2 ] && cmp -s "$Q" "$d/q0" && [ ! -e "$d/archive/q.md" ] && r=0; rm -f "$P" "$Q" "$d/q0" "$d/archive/p.md" "$d/archive/q.md"; rmdir "$d/archive" "$d" 2>/dev/null; exit $r
+
+**LANDED (v0.631.0, verified d150a85b).** Receipt exits 0 at the release and 1 at `dc833d39`;
+gate at `AI_DLC_FIXTURE_NO_SKIP=1` ran 22 phases PASS, 203 ok, 0 FAIL, `plan-rotate` ok by name.
+
+
+
