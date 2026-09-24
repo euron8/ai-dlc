@@ -64,7 +64,9 @@ cat > "$CONSUMER/.claude/settings.json" <<'SETTINGS'
     "defstaleeffort":   { "model": "opus",   "effort": "high" },
     "defunmarked":      { "model": "opus",   "effort": "high" },
     "defnodef":         { "model": "opus",   "effort": "high" },
-    "defnoeffort":      { "model": "opus" }
+    "defnoeffort":      { "model": "opus" },
+    "defnoline":        { "model": "opus",   "effort": "high" },
+    "defwrongrole":     { "model": "opus",   "effort": "high" }
   },
   "env": { "ENABLE_PROMPT_CACHING_1H": "1" }
 }
@@ -124,7 +126,7 @@ render_def() {            # render_def <name> <model-key> [effort]
   } > "$CONSUMER/.claude/agents/$1.md"
 }
 
-for r in defok defstalemodel defstaleeffort defunmarked defnodef defnoeffort; do
+for r in defok defstalemodel defstaleeffort defunmarked defnodef defnoeffort defnoline defwrongrole; do
   render_role "$r"
 done
 
@@ -153,6 +155,29 @@ render_def defnoeffort opus
   printf -- '---\nname: defunmarked\ndescription: a consumer wrote this by hand\nmodel: opus\neffort: high\n---\n'
   printf 'Hand-written. No generated marker.\n'
 } > "$CONSUMER/.claude/agents/defunmarked.md"
+
+# THE CONTRACT-CARRIER WORLDS. Both files are MARKED and AGREE with settings on model and
+# effort, so the guard BINDS each one, and they differ from `defok` ONLY in the body. That is
+# what lets the ledger arms separate "the selected definition carries the Rule 19(b) line"
+# from "a definition was selected", which the frontmatter test alone cannot tell apart.
+#
+# defnoline: the body carries NEITHER line of the rendered sentence. Line 2 is removed as well
+# as line 1 on purpose: line 2 is identical in every role body, so a body keeping it would make
+# this world and `defwrongrole` the same world to a guard keyed on line 2, and the two mutants
+# in run.sh could not be told apart.
+{
+  printf -- '---\nname: defnoline\ndescription: AI/DLC role defnoline — rendered from aiDlcRoles.defnoline; do not edit by hand\nmodel: opus\neffort: high\n---\n'
+  printf '%s\n' "$DEF_MARKER"
+  printf 'Never create documentation or report files unless your brief names the path; return findings\n'
+  printf 'as text. Do not re-delegate your assignment to another agent.\n'
+} > "$CONSUMER/.claude/agents/defnoline.md"
+# defwrongrole: the body carries ANOTHER role's line 1 and the shared line 2, verbatim.
+{
+  printf -- '---\nname: defwrongrole\ndescription: AI/DLC role defwrongrole — rendered from aiDlcRoles.defwrongrole; do not edit by hand\nmodel: opus\neffort: high\n---\n'
+  printf '%s\n' "$DEF_MARKER"
+  printf 'Your operating contract is `.claude/team-roles/%s.md`. Read it and follow it as your\n' defok
+  printf 'FIRST action before any other work.\n'
+} > "$CONSUMER/.claude/agents/defwrongrole.md"
 
 # NO definition at all for `defnodef`, nor for tea/architect/badeffort/nocfg.
 
