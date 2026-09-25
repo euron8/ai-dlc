@@ -39,15 +39,30 @@ wrong, and the new one gave 0 wrong.
   sections built from preclassify's rows. It does this on a non-zero exit, and on no rows while
   `base..theirs` changes `core/`.
 - `--verify` exits 1 with cause `PRECLASSIFY-REFUSED` when the fresh render carries that line.
-- `apply.sh` stops before writing on the same two conditions.
+- `apply.sh` stops before writing on the same two conditions, and it writes its in-flight
+  marker only after preclassify has classified, so a refusal leaves no `.ai-dlc-applying` behind.
+- `preclassify.sh` emits `PRE-RELOCATION-NOOP` for a changed `core/scripts/*` path that a
+  pre-relocation consumer still holds at `scripts/<name>`, where it used to skip that path
+  silently. Without that row, a range whose only `core/` change deletes such a script classified
+  to zero rows, and the empty-result refusal above would have stopped a legitimate pull that no
+  re-run could clear. The row is inert in apply and in every report section that means work.
 - The fixture's render arms print `DIAG` on a red, so the next pool red carries its cause.
+
+**One narrow window remains open in this release and closes in the next.** The memo writes a fill
+to a temp name about 10 bytes longer than the cache name. A cache key of roughly 244 to 253 bytes
+therefore fails to open its temp file, and `memo_rev_parse` reads that failure as git's "absent".
+The longest key measured on real dist layouts is 218 bytes. `BL-306` closes this in 0.638.0 by
+checking the temp file itself opened and going direct otherwise.
 
 The forced failures do not confirm the pool cause. One fixture run peaks at about 63 processes
 against a cap of 10666. `BL-230` stays live with its close condition unchanged.
 
 Two NOTEs are filed. `BL-308`: the `--templates` and `--untangle` modes reach the new failure
 path but were not force-tested on their own. `BL-309`: ENOSPC partway through a memo fill can
-cache truncated content with status 0. That case was reasoned, not constructed.
+cache truncated content with status 0. That case was reasoned, not constructed. A third NOTE,
+`BL-310`: after a transient `cat-file` or `show` failure on a present path, the memo returns that
+failure uncached, and callers that read any non-zero as absent still get one wrong answer per
+failure.
 
 ## [0.636.0] - 2026-09-24
 

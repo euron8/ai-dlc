@@ -516,8 +516,20 @@ line naming the call. The memo caches only a git answer, never a failure. `emit-
 preclassify's exit status. On a non-zero exit, or on no rows while `base..theirs` changes
 `core/`, it renders `DETECTOR-REFUSED  preclassify.sh …` in all five sections built from those
 rows instead of `none`. `--verify` refuses a fresh render carrying that line with cause
-`PRECLASSIFY-REFUSED`. `apply.sh` stops before writing on the same two conditions. The fixture's
-render arms now print `DIAG` lines on a red, so the next pool red carries its own cause.
+`PRECLASSIFY-REFUSED`. `apply.sh` stops before writing on the same two conditions, and now writes
+its in-flight marker only after preclassify has classified. The fixture's render arms now print
+`DIAG` lines on a red, so the next pool red carries its own cause.
+
+**THE TIP ADVERSARY FOUND THAT THE EMPTY-RESULT REFUSAL HAD A LEGITIMATE SUBJECT.** A range whose
+only `core/` change deletes a `core/scripts/*` file, pulled by a consumer still holding it at the
+pre-relocation `scripts/<name>`, classified to zero rows because preclassify skipped that path
+silently. The new refusal then stopped the pull in all five sections and in apply, and no re-run
+could clear it. Fixed at the source: preclassify now emits a `PRE-RELOCATION-NOOP` row for the
+skipped path, so an empty result means nothing was classified. `relocation-preclassify` arm G and
+`apply-drift-refile` arm h each fail on the revert. It also found that the memo's temp name is
+about 10 bytes longer than the cache name, so a key of roughly 244 to 253 bytes reads as git's
+"absent" at rc 0. The longest real key measured is 218; `BL-306` closes that window in the next
+release.
 
 **THIS DOES NOT CONFIRM THE POOL CAUSE, AND THE ENTRY STAYS LIVE.** The forced failures show
 that the mechanism exists. They do not show that the pool reaches it. One fixture run peaks at
@@ -4081,5 +4093,21 @@ Every later lookup of that key in the render is then served the truncated blob a
 This was reasoned from the shape of the write. It was not constructed with a real ENOSPC. A
 receipt must fill a small volume during a fill and read the cached bytes back against
 `git show`.
+
+verify: manual
+
+## BL-310 — after a transient `cat-file` or `show` failure on a present path, the memo still hands one caller a wrong "absent"
+
+**NOTE.** Found at batch 153 by the `BL-230` tip adversary, reading the 0.637.0 memo change. It
+discharges no consumer candidate.
+
+0.637.0 stopped `lib.sh`'s memo from caching a failed git status. `memo_has_path` and `memo_show`
+treat 128 as git's answer for an absent path and cache it only after `rev-parse -q --verify`
+confirms the path is absent. When that check says the path is present and `cat-file` or `show`
+failed anyway, both return the 128 uncached. Their callers in `ledger-reverify.sh` and
+`layer-drift.sh` read any non-zero as absent, so each transient failure still produces one wrong
+answer; it is no longer served to every later lookup. `memo_has_path` could return 0 there, since
+its own check established presence. The cost of the extra `rev-parse` on each distinct absent key
+was not measured, and `ledger-reverify`'s `theirs_has_path` is its heaviest caller.
 
 verify: manual
