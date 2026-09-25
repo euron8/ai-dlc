@@ -200,15 +200,47 @@ render() {
   _theirs_version="$(git -C "$DIST" show "${THEIRS}:VERSION" 2>/dev/null | tr -d '[:space:]')"
   printf '_theirs_ `VERSION` `%s`.\n' "${_theirs_version:-unresolvable:${THEIRS}}"
 
-  local pc ud ld hb rl del classify
-  pc="$(bash "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null || true)"
+  local pc ud ld hb rl del classify pc_rc pc_refused="" pc_rng pc_rng_rc
+  # A PRECLASSIFY THAT DID NOT CLASSIFY RENDERED AS `none` IN FIVE SECTIONS. This was
+  # `2>/dev/null || true`: the rc was discarded, so a run that exited 2 (preclassify refuses on a
+  # failed git call) or one that printed nothing over a range that moves `core/` rendered the same
+  # empty buckets, empty worklist and empty deletions as a pull with nothing to do -- every pool
+  # red of reconcile-emit-report in batch 151 was a render arm, which is this shape under load.
+  #
+  # TWO REFUSALS, THE SAME RULE `apply.sh --finish` AND `unregistered-drift.sh`'s carried-bucket
+  # arm already apply: a non-zero exit, and an EMPTY row set while `base..theirs` changes `core/`.
+  # A range that cannot be read is not evidence of an empty one, so it refuses too. On either,
+  # `pc` is emptied -- a failed run may have printed a partial row set before it stopped, and no
+  # reader below may consume it -- and every `pc`-derived section renders the refusal line.
+  pc="$(bash "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)"
+  pc_rc=$?
+  if [ "$pc_rc" -ne 0 ]; then
+    pc_refused="exited ${pc_rc} without classifying"
+  elif [ -z "$pc" ]; then
+    pc_rng="$(git -C "$DIST" diff --name-only "$BASE" "$THEIRS" -- core/ 2>/dev/null)"
+    pc_rng_rc=$?
+    if [ "$pc_rng_rc" -ne 0 ]; then
+      pc_refused="returned no rows and whether \`${BASE}..${THEIRS}\` changes \`core/\` could not be read (git diff exited ${pc_rng_rc})"
+    elif [ -n "$pc_rng" ]; then
+      pc_refused="returned no rows while \`${BASE}..${THEIRS}\` changes \`core/\`"
+    fi
+  fi
+  [ -n "$pc_refused" ] && pc=""
+  # The ONE line every pc-derived section prints on a refusal. `--verify` keys on its
+  # `DETECTOR-REFUSED  preclassify.sh (exited|returned)` prefix, which the `--templates` refusal
+  # below does not share.
+  pc_refusal() {
+    echo "DETECTOR-REFUSED  preclassify.sh ${pc_refused}, so this section is NOT a finding of 'none'. Run it directly against this consumer to see why: reconcile/preclassify.sh <dist> <base> <theirs> <consumer>"
+  }
 
   sub "Per-file buckets (STATUS  path):"
-  none_or "$(printf '%s\n' "$pc" | awk -F'\t' 'NF>=4 && $2!="" {print $4"  "$2}' | sort -u)"
+  if [ -n "$pc_refused" ]; then pc_refusal; else
+    none_or "$(printf '%s\n' "$pc" | awk -F'\t' 'NF>=4 && $2!="" {print $4"  "$2}' | sort -u)"
+  fi
 
   sub "Semantic worklist — files needing a 3-way merge (the LLM fills their result in the slot below, one per file):"
   classify="$(printf '%s\n' "$pc" | awk -F'\t' 'NF>=4 && $4 ~ /CLASSIFY/ {print $2}' | sort -u)"
-  none_or "$classify"
+  if [ -n "$pc_refused" ]; then pc_refusal; else none_or "$classify"; fi
 
   # ---- Orientation: which side actually holds what -------------------------
   # A CLASSIFY file's resolution is prose the LLM writes, and prose is where OURS and THEIRS
@@ -325,11 +357,16 @@ render() {
         fi
       done
     [ -n "$rt_pc" ] && rm -f "$rt_pc"
+  elif [ -n "$pc_refused" ]; then
+    # The orientation block renders only when there is a worklist, so on a refusal it would simply
+    # be ABSENT -- which is also what a pull with no CLASSIFY file looks like. It says why instead.
+    sub "Semantic worklist orientation — OURS = consumer, THEIRS = upstream at theirs. Every ours/theirs claim in the resolution prose MUST be derived from this block, never from recall:"
+    pc_refusal
   fi
 
   sub "Deletions (apply would git rm a consumer file — gated per-path):"
   del="$(printf '%s\n' "$pc" | awk -F'\t' '$4=="UPSTREAM-DELETED" || $4 ~ /^ORPHANED-RELOCATED/ {print $4"  "$2}' | sort -u)"
-  none_or "$del"
+  if [ -n "$pc_refused" ]; then pc_refusal; else none_or "$del"; fi
 
   # STEP 3b WAS THE FOURTH MANDATED DETECTOR OUTSIDE THIS REGION, AND THE ONLY ONE THE SKILL TOLD
   # THE LLM TO RUN ITSELF. `preclassify.sh --templates` classifies the generated files that live
@@ -370,7 +407,7 @@ render() {
   # candidate first. Author prose cannot drop what the byte-compare requires to be here.
   sub "Scripts relocation (scripts/ → scripts/ai-dlc/; +consumer-edited = a local adaptation apply will discard — confirm the push-candidate ledger before apply):"
   reloc="$(printf '%s\n' "$pc" | awk -F'\t' '$4 ~ /^RELOCATE-MOVE/ {print $4"  "$2}' | sort -u)"
-  none_or "$reloc"
+  if [ -n "$pc_refused" ]; then pc_refusal; else none_or "$reloc"; fi
 
   # HOOK REGISTRATION — the half of a hook delivery that no driver performs.
   #
@@ -622,6 +659,22 @@ if [ -z "$got" ]; then
   echo "FAIL: the report has no 'reconcile-mechanical' GENERATED region. The mechanical sections" >&2
   echo "  (buckets, deletions, blocking-layer, drift, relabel) must be RENDERED by emit-report.sh," >&2
   echo "  not composed — or a finding can be silently dropped. Emit it and re-write the report." >&2
+  exit 1
+fi
+# A FRESH RENDER WHOSE CLASSIFIER REFUSED CANNOT VERIFY ANYTHING, WHATEVER THE REPORT SAYS. The
+# comparison below would pass a report whose approved region carries the same refusal -- a report
+# rendered while preclassify was failing, approved, and then verified while it still fails -- and
+# `apply.sh` writes on a 0 from here. The buckets, worklist and deletions are exactly what the
+# approval was for, so a render that has none of them is refused before the byte-compare.
+#
+# SCOPED TO preclassify's OWN REFUSAL PREFIX, never to `^DETECTOR-REFUSED` at large: a report may
+# legitimately carry another detector's refusal line that the operator read and approved (the
+# seeded fixture world carries a retired-layer-token.sh one), and that report must still verify.
+# The `--templates` refusal is a different line (`preclassify.sh --templates exited`) and is not
+# matched either; it is decided by the byte-compare like every other detector's.
+if printf '%s\n' "$want" | grep -Eq '^DETECTOR-REFUSED  preclassify\.sh (exited|returned) '; then
+  echo "FAIL: preclassify.sh did not classify on this run, so the mechanical region cannot be verified — its buckets, worklist and deletions are unknown, not empty." >&2
+  echo "  cause: PRECLASSIFY-REFUSED — $(printf '%s\n' "$want" | grep -E '^DETECTOR-REFUSED  preclassify\.sh (exited|returned) ' | head -1 | sed -E 's/^DETECTOR-REFUSED  //; s/, so this section.*//'). Run reconcile/preclassify.sh <dist> <base> <theirs> <consumer> directly, fix what it reports, then re-render and re-approve." >&2
   exit 1
 fi
 if [ "$want" = "$got" ]; then
