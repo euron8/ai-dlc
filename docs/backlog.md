@@ -539,6 +539,15 @@ that forced these failures. The close condition is unchanged: the instrument rec
 failure's cause, or a pool run of the size that predicts at least 3 failures at base comes back
 clean at tip.
 
+**MEASURED AT BATCH 155: A PARTIAL POOL, TOO SMALL TO DISCRIMINATE.** Batch 151's shape was rerun
+at tip 0.639.1 (`49330f4a`) against base 0.624.0 (`29291758`), under `xargs -P 6`. The driving hand
+stalled, and the pool died after 66 of 156 runs: 44 tip and 22 base. All 66 exited 0 and end in
+`PASS`. No log carries a `DIAG` line, which is correct, because a `DIAG` prints only on a red. At
+batch 151's rates, 22 base runs predict 0.46 failures and 44 tip runs predict 0.8. Both are below
+one, so this clean result does not separate a fixed tip from an unfixed one, and it is not
+evidence either way. The close condition needs the full 156, which takes about 2.5 hours at the
+observed mean of 359s per run.
+
 verify: manual
 
 ## BL-099 — the exec-bit audit is one-directional, so a consumer file that upstream STOPPED shipping executable is never reported
