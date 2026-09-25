@@ -1284,6 +1284,91 @@ sbc_kill sbc-mut-one-total "$(sbc_mutant one-total \
   "" \
   "folding both directions into one total reads 1 of 6 against a still-live population of 3 -- a denominator taken over a different set than its numerator"
 
+# --- A RECEIPT THAT READS STDIN MUST NOT EAT THE ENTRIES AFTER IT ------------------------------
+#
+# THE DEFECT. The entry loop is `while … read …; done <<< "$ENTRIES"`, and both `bash -c` sites
+# inside it -- the evaluation and `sh_base_rc` -- ran the receipt with fd 0 INHERITED, positioned at
+# the next entry. A receipt that reads stdin consumed every entry after its own: those entries
+# emitted NO ROW, rc stayed 0 and stderr stayed empty, so a shorter report read as a clean one.
+#
+# TWO LEDGERS, ONE PER SITE, AND EACH FIRST RECEIPT READS STDIN AT ONE SITE ONLY, so a mutant of
+# one redirect cannot be killed by the other site's arm:
+#   - EVAL: `cat` then a passing check, naming neither ref -- bucket 3, so it never reaches the
+#     base control and only the evaluation site can hand it the loop's stdin.
+#   - BASE: the `cat` runs only when `$THEIRS` equals the LITERAL base sha, which is true inside
+#     the base control's rebinding and false at the evaluation. The literal is load-bearing:
+#     spelled `$BASE`, `sh_base_eligible` excludes the receipt and the base control never runs it.
+# The eaten entries are a STILL-LIVE and a CLOSE-CANDIDATE, the same receipts the arms above
+# already measure, so each verdict is asserted for its value and not merely for being there.
+SI_EVAL_LED="$SBC/stdin-eval.md"
+SI_BASE_LED="$SBC/stdin-base.md"
+si_ledger() { # <file> <first-receipt>
+  {
+    printf '# probe\n\n'
+    printf '## PC-STDIN-READER - its receipt reads stdin\n\n'
+    printf 'verify: sh %s\n\n---\n\n' "$2"
+    printf '## PC-STDIN-NEXT-LIVE - the entry right after it\n\n'
+    printf 'verify: sh %s\n\n---\n\n' "$SBC_SAME"
+    printf '## PC-STDIN-LAST-CLOSE - the entry after that\n\n'
+    printf 'verify: sh %s\n' "$SBC_CMOVED"
+  } > "$1"
+}
+si_ledger "$SI_EVAL_LED" 'cat >/dev/null; true'
+si_ledger "$SI_BASE_LED" "[ \"\$THEIRS\" = \"$BASE\" ] && cat >/dev/null; git -C \"\$DIST\" cat-file -e \"\${THEIRS}:VERSION\""
+si_verdicts() { # <engine> <ledger> -> "<reader> <next> <last>" statuses, "-" where no row
+  local o
+  o="$(bash "$1" "$DIST" "$BASE" "$CONS" "$THEIRS" "$2" 2>/dev/null)"
+  printf '%s\n' "$o" | awk -F'\t' '
+    index($2,"PC-STDIN-READER ")==1{r=$1} index($2,"PC-STDIN-NEXT-LIVE ")==1{n=$1} index($2,"PC-STDIN-LAST-CLOSE ")==1{l=$1}
+    END{printf "%s %s %s", (r?r:"-"), (n?n:"-"), (l?l:"-")}'
+}
+SI_WANT="STILL-LIVE STILL-LIVE CLOSE-CANDIDATE"
+for si in eval base; do
+  case "$si" in eval) led="$SI_EVAL_LED" ;; *) led="$SI_BASE_LED" ;; esac
+  got="$(si_verdicts "$CLOSER" "$led")"
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ "$got" = "$SI_WANT" ]; then
+    printf '  ok    %-22s all three entries report, with their own verdicts, after a receipt that reads stdin at the %s site\n' "stdin-$si" "$si"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s got "%s", want "%s" -- a receipt that reads stdin ate the entries after it, and the report is shorter with rc 0\n' "stdin-$si" "$got" "$SI_WANT"
+  fi
+done
+
+# THE MUTANTS REMOVE ONE REDIRECT EACH and are scored on BOTH ledgers: the owning ledger must lose
+# its later entries while the reader's own row survives (the engine ran), and the OTHER ledger must
+# stay whole (the mutant is a mutation of that one site).
+si_mut_line_eval='        bash -c "$sh_prog" </dev/null >/dev/null 2>&1'
+si_mut_line_base='    bash -c "$1" </dev/null >/dev/null 2>&1'
+for si in eval base; do
+  case "$si" in
+    eval) old="$si_mut_line_eval"; new='        bash -c "$sh_prog" >/dev/null 2>&1'; own="$SI_EVAL_LED"; other="$SI_BASE_LED" ;;
+    *)    old="$si_mut_line_base"; new='    bash -c "$1" >/dev/null 2>&1';       own="$SI_BASE_LED"; other="$SI_EVAL_LED" ;;
+  esac
+  ASSERTIONS=$((ASSERTIONS + 1))
+  n="$(SBC_A="$old" awk '$0 == ENVIRON["SBC_A"] {c++} END{print c+0}' "$CLOSER")" || n=0
+  d=""; [ "$n" -eq 1 ] && d="$(sbc_mutant "stdin-$si" "$old" "$new")"
+  if [ -z "$d" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutation DID NOT APPLY (anchor matched %s lines, want 1) -- the stdin-%s arm is unproven\n' "stdin-mut-$si" "$n" "$si"
+    continue
+  fi
+  m_own="$(si_verdicts "$d/ledger-reverify.sh" "$own")"
+  m_other="$(si_verdicts "$d/ledger-reverify.sh" "$other")"
+  if [ "${m_own%% *}" != "STILL-LIVE" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutant lost the READER row too (%s) -- it broke the engine, so its reading is wreckage\n' "stdin-mut-$si" "$m_own"
+  elif [ "$m_own" = "$SI_WANT" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the %s redirect was removed and all three entries still reported -- the stdin-%s arm cannot fire\n' "stdin-mut-$si" "$si" "$si"
+  elif [ "$m_other" != "$SI_WANT" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutant also moved the OTHER site ledger (%s) -- the two arms are entangled\n' "stdin-mut-$si" "$m_other"
+  else
+    printf '  ok    %-22s without the %s-site redirect the entries after the reader vanish (%s) while the other ledger is whole\n' "stdin-mut-$si" "$si" "$m_own"
+  fi
+done
+
 # --- THE CLOSE PREDICATE IS ANCHORED, like the verify: predicate beside it -------------
 # Unanchored, a PROSE MENTION of the vocabulary closed a live entry, and the failure was silent
 # in the worse direction: no row at all rather than a wrong one. Measured on the reference
@@ -3163,7 +3248,7 @@ tl_kill() { # <name> <dir-or-empty> <kill-awk> <control-awk> <kill-msg> <ctl-msg
 ASSERTIONS=$((ASSERTIONS + 1))
 tl_g="$(grep -c '^ *if ! bash -n -c "\$sh_prog" >/dev/null 2>&1; then$' "$CLOSER")" || tl_g=0
 tl_p="$(grep -c '^ *sh_prog="cd \\"\$CONSUMER\\" && { \$rest$' "$CLOSER")" || tl_p=0
-tl_r="$(grep -c '^ *bash -c "\$sh_prog" >/dev/null 2>&1$' "$CLOSER")" || tl_r=0
+tl_r="$(grep -c '^ *bash -c "\$sh_prog" </dev/null >/dev/null 2>&1$' "$CLOSER")" || tl_r=0
 if [ "$tl_g" -eq 1 ] && [ "$tl_p" -eq 1 ] && [ "$tl_r" -eq 1 ]; then
   printf '  ok    %-22s the parse guard, the wrapper assignment and the run line are each unique in the closer\n' "sh-parse-anchors"
 else
