@@ -144,6 +144,16 @@ fi
   echo "OK: EXAMINED NOTHING — no escalations file ($ESCALATIONS); nothing to check."
   exit 0
 }
+# A file holding no non-whitespace byte is the same state as no file, and says so. Keyed on
+# the BYTES, not on zero parsed records: a populated file whose entries this parser cannot
+# read (no `**Status:**` field at all) is a grammar failure, not an empty corpus, and must
+# keep its `n=[]` line. `grep` exits 1 only when it read the file and matched nothing.
+grep -q '[^[:space:]]' "$ESCALATIONS" 2>/dev/null
+ESC_BLANK_RC=$?
+if [ "$ESC_BLANK_RC" -eq 1 ]; then
+  echo "OK: EXAMINED NOTHING — escalations file present but empty ($ESCALATIONS); nothing to check."
+  exit 0
+fi
 
 # ---- 3. Extract one <header>\t<STATUS> record per entry ---------------------
 # Same flush-on-header / first-ALL-CAPS-word-after-label idiom as the awk Status block in
