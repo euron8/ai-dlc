@@ -125,7 +125,7 @@ checks:
     call_sites:
       - site: gate-validation.md Check 2
         posture: FAILS the gate (exit 0 required; exit 0 with `EXAMINED NOTHING` — printed
-          as `OK — EXAMINED NOTHING` when no escalations file exists — is not a pass,
+          as `OK — EXAMINED NOTHING` when no escalations file exists or it holds nothing — is not a pass,
           nothing was verified)
         why: Check 2's own predicate is three branches with no else, so an entry
           on a token outside the published set is neither blocked, surfaced nor
@@ -134,7 +134,7 @@ checks:
           adjudication itself stays llm.
       - site: gate-validation.md Check 2 (suppression lifetime)
         posture: FAILS the gate (exit 0 required; exit 0 with `EXAMINED NOTHING` — printed
-          with entries_scanned=0 when no escalations file exists — is not a pass, nothing
+          with entries_scanned=0 when no escalations file exists or it holds nothing — is not a pass, nothing
           was verified)
         why: RESOLVED and OVERRIDDEN close a QUESTION and name no check, so an
           operator's one-time permission to proceed past a failing check has no
@@ -159,7 +159,7 @@ checks:
     call_sites:
       - site: gate-validation.md Check 2a
         posture: FAILS the gate (exit 0 required; exit 0 with `EXAMINED NOTHING` — printed
-          when no escalations file exists — is not a pass, nothing was verified)
+          when no escalations file exists or it holds nothing — is not a pass, nothing was verified)
         why: a HARD_BLOCK is operator-gated, so marking it RESOLVED asserts an
           operator adjudication; without a cited, transcript-verified operator
           message that is a lead-authored fabrication (the S290 failure)

@@ -15,6 +15,39 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.639.0] - 2026-09-25
+
+An empty escalations file now reads `EXAMINED NOTHING` in three gate validators (`BL-307`). It
+discharges no consumer candidate.
+
+### BL-307 — an escalations file holding nothing prints EXAMINED NOTHING
+
+With `docs/escalations/pending.md` absent, `validate-escalation-resolution.sh`,
+`validate-escalation-status-vocabulary.sh` and `validate-suppression-lifetime.sh` print
+`OK: EXAMINED NOTHING`. With the file present and empty, each exited 0 with an ordinary `OK:` line,
+so an empty file read as a real pass. Each now treats a file holding no non-whitespace byte exactly
+as an absent one, with the reason `escalations file present but empty (<path>)`.
+
+The predicate is the file's bytes, not the parser's count, on measurement. Across all 891 versions
+of the reference consumer's `pending.md`, none was empty. 41 carried no `**Status:**` field, and one
+of those held live decisions in a shape the parser cannot read. A zero-parsed-entries predicate
+would have relabelled that as "nothing to examine".
+
+The check sits only in gate mode, below each validator's mode split. Placed above it, an empty file
+made `--any-authorized` exit 0, which `core-paths.sh` reads as an operator citation.
+`--any-authorized` and `--in-force` behave exactly as before.
+
+Each validator's fixture gains arms for an empty, a whitespace-only, an absent, a heading-only, a
+populated-but-zero-record and a populated file. The resolution fixture adds `--any-authorized` on an
+empty file, and suppression-lifetime adds `--in-force`. Committed mutants revert the fix, widen
+the predicate to zero parsed records, and hoist the check above the mode split, and each fails
+only its own arms.
+
+**No step text at Checks 2 and 2a reads this token yet.** `BL-305` added the instruction to
+Checks 26, 33 and 35 only. The enforcement map's posture for these checks says `EXAMINED NOTHING`
+"is not a pass", while the validators' own headers call an absent file a legitimate clean state.
+What an adjudicator should do with the token at Check 2 is filed as `BL-311`.
+
 ## [0.638.0] - 2026-09-25
 
 This release stops a memo file that cannot be created from changing a reconcile detector's answer

@@ -46,7 +46,7 @@
 #   validate-escalation-status-vocabulary.sh <pending.md> [escalations.md]
 #
 # EXIT
-#   0  every Status token is in the derived vocabulary (or no escalations file exists)
+#   0  every Status token is in the derived vocabulary (or the escalations file is absent or holds nothing)
 #   1  at least one entry carries an out-of-vocabulary Status token
 #   2  bad arguments, or the vocabulary source could not be read — see above, this is a
 #      refusal, not a pass
