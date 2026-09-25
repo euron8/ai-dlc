@@ -67,6 +67,51 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
 
+**BATCH 154 SHIPPED `v0.639.1` (`c79a1d55`, #857), WHICH ADJUDICATES ONE CONSUMER CANDIDATE
+`ALREADY-FIXED` AND CHANGES NO CODE.** It was invoked by peer handoff. The consumer had filed
+nothing new since 2026-09-23. The PC-backed worklist had 5 rows: `BL-230` needs a pooled run the
+disk cannot hold, and `BL-067`, `BL-132`, `BL-145` and `BL-215` each disqualify themselves in their
+own text. So the batch took the unfiled set. Of its 14 ids, the five newest were scored: one is
+named in a release commit, two carry `NOT-UPSTREAM` in the brief, one is withdrawn by its own
+entry, and `PC-S340-RETRO-AUDIT-SCANS-FIXTURE-FAILS-ONCE-AND-PASSES-ON-RETRY` had no adjudication
+anywhere (impossible-id control 0).
+
+**`PC-S340` WAS FIXED BEFORE IT WAS FILED.** Its one failure was on 2026-07-22, not on the
+2026-08-31 filing date, and it came from the consumer's serial pre-push loop, not `ci-local.sh`.
+That day's fixture fed 16 assertions through a pipe into `grep -q` under `pipefail`. Rebuilt and run
+6-wide, it failed 21 of 78 runs; with `pipefail` removed it failed 0 of 30, and as here-strings
+0 of 24. `362f6840` (v0.144.0) took the sites from 16 to 3, and `8eaf896a` (v0.207.0) removed the
+last 3. The adversary corrected my first draft, which credited `362f6840` alone. It also found
+no logged failure after the fix (26 consumer logs name the unit, all PASS, with a detection
+control of 24), and at matched N the current fixture failed 0 of 36 against the old one's 6 of 36.
+The release commit is the only commit naming the id, `VERSION` there reads 0.639.1, and an
+impossible-id control reads 0.
+
+The gate ran at `AI_DLC_FIXTURE_NO_SKIP=1`: exit 0, all gates green, 203 ok and 0 FAIL, with
+`retro-audit-scans` read `ok` by name against an impossible-name control of 0. `ls-remote`
+confirmed the ref. Live **74 -> 75** (one filed, none closed), and the archive stays at **236**. The
+exit-0 receipt set is unchanged at 9, because the only entry added is `verify: manual`.
+
+**ONE ENTRY FILED.** `BL-312` (NOTE): a `core-paths.sh --list` stall past 30s fails
+`retro-audit-scans` assertions 25-28 as ordinary findings, not as a refusal. No stall has been
+observed.
+
+**THE DISK HELD 1.1 GiB FREE ALL BATCH.** About 6 GB sits in other sessions' scratch trees from
+2026-09-23 and 2026-09-24 under `/private/tmp/claude-501/-Users-n8-git-ai-dlc/`. I asked the
+operator before deleting them and had no answer at the close.
+
+**NEXT WORK.** Re-derive the sweep; a new consumer filing outranks everything below. `BL-230` is
+still the only buildable PC-backed row, and it needs disk first. The unfiled set's remaining nine
+ids, dated 2026-07-24 and 2026-07-30, have not been scored one by one against the brief and commit
+messages. Score them next. `BL-311` waits on the operator. The eight read-set re-traces from batch
+153 are still owed, and only the operator can run them.
+
+**THE DELIVERY GAP IS SEVEN RELEASES.** The consumer is at 0.633.0 against `VERSION` 0.639.1.
+This release adds only docs, so the bootstrapping files in range are unchanged from batch 153.
+Two PC ids are now PENDING: `PC-S313-EMIT-REPORT-E2-IS-A-FOURTH-POOL-FLAKE-ARM` and `PC-S340-…`.
+The banked ruling stands: report the gap and write no runbook. The consumer's porcelain stayed 0,
+and the ledger md5 `3e62c07e…` did not move.
+
 **BATCH 153 SHIPPED THREE RELEASES AND CLOSED `BL-306` AND `BL-307`.** It was invoked by peer
 handoff. No consumer filing post-dated 2026-09-23: the one id ahead of the consumer's `main`,
 `PC-S313-EMIT-REPORT-E2-IS-A-FOURTH-POOL-FLAKE-ARM`, sits on five unpushed sprint branches and is
