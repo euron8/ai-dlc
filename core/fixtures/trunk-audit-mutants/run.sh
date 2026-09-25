@@ -84,8 +84,11 @@ expect_set unresolved-skipped 2 'unresolvable commit was skipped|unresolved clas
 # FIVE since v0.236.0, not four, and the fifth is re-derived rather than inherited: the
 # capture pair's second half (11b) turns a captured value into a validator REJECTION, so an
 # exit code that decides nothing takes that cell too. Same arm, one more fact about it.
-expect_set exit-code-ignored 5 'bypassed merge was NOT reported|does not name the validator|finding exited|watermark advanced past a finding|capture did not vary with the commit' \
-  's@^        if ! _out="\$( cd "\$_wt" \&\& eval "\$_cmd" 2>\&1 )"; then@        if _out="$( cd "$_wt" \&\& eval "$_cmd" 2>\&1 )" \&\& false; then@'
+# SEVEN since arm 24, re-derived the same way: both FAIL spellings of the stdin arm assert
+# that the `false` declared after the reader produces a finding, and a discarded exit code
+# produces none. The stdin mutants M19-M21 are what OWN that arm; here it is fan-out.
+expect_set exit-code-ignored 7 'bypassed merge was NOT reported|does not name the validator|finding exited|watermark advanced past a finding|capture did not vary with the commit|swallowed the validator after it' \
+  's@^        if ! _out="\$( cd "\$_wt" \&\& eval "\$_cmd" </dev/null 2>\&1 )"; then@        if _out="$( cd "$_wt" \&\& eval "$_cmd" </dev/null 2>\&1 )" \&\& false; then@'
 
 # M3 — a declared validator missing from the audited tree is no longer NAMED as absent.
 # ONE red, not two, and the reason is worth stating: `eval` on a path that is not there
@@ -122,7 +125,10 @@ expect_set no-validator-accepted 2 'owing nothing by omission was accepted|did n
 # arm entirely, and a cell proven only by a total knock-out is a cell that can rot in place.
 #
 # M8 — the finding still fires and stops naming which validator rejected the tree.
-expect_set finding-unattributed 1 'does not name the validator' \
+# THREE since arm 24: its two FAIL spellings key on the finding NAMING `'false'`, which is
+# how they tell "the later validator ran" from "some validator failed". Attribution is M8's
+# fact on a second seed, not an entanglement.
+expect_set finding-unattributed 3 'does not name the validator|swallowed the validator after it' \
   "s@_why=\"\\\${_why} '\\\$_cmd' exits non-zero@_why=\"\${_why} 'a validator' exits non-zero@"
 
 # M9 — the watermark advances past a finding, so the next run starts after the commit that
@@ -196,6 +202,29 @@ expect_set capture-duplicate-name-accepted 1 'declared twice in one class is ref
 # A mutation that lands and does not mutate the behaviour is the shape `cmp -s` cannot catch.
 expect_set decl-line-trailing-t-eaten 1 'name-only capture was misreported' \
   "s@| sed 's/\^\[\[:space:\]\]\*//; s/\[\[:space:\]\]\*\\\$//'@| sed 's/^[ \\\\t]*//; s/[ \\\\t]*\$//'@"
+
+# ============================================================================
+# M19-M21 — the validator's STDIN. Arm 24 of the sibling.
+# ============================================================================
+# A class's validators are run inside `while read … done < valres`, so an eval that inherits
+# the loop's stdin hands a stdin-reading validator the rest of the class's validator list. Each
+# mutant below is a WRONG fix or a reverted one, and each must redden exactly the two FAIL
+# spellings of arm 24 (`cat >/dev/null` and `read -r _x; true`, each followed by `false`) --
+# never the two near-misses, which pass whether or not the later validator runs.
+#
+# M19 — the redirect removed: the defect exactly as it shipped.
+expect_set stdin-inherited 2 'swallowed the validator after it' \
+  's@^        if ! _out="\$( cd "\$_wt" \&\& eval "\$_cmd" </dev/null 2>\&1 )"; then@        if ! _out="$( cd "$_wt" \&\& eval "$_cmd" 2>\&1 )"; then@'
+
+# M20 — the redirect moved OUTSIDE the substitution, onto the assignment. It reads as the same
+# fix and is not one: the `$( … )` is a subshell that still inherits the loop's stdin.
+expect_set stdin-redirect-outside-subst 2 'swallowed the validator after it' \
+  's@^        if ! _out="\$( cd "\$_wt" \&\& eval "\$_cmd" </dev/null 2>\&1 )"; then@        if ! _out="$( cd "$_wt" \&\& eval "$_cmd" 2>\&1 )" </dev/null; then@'
+
+# M21 — `<&0`, a redirect that duplicates the stdin it was meant to replace. A receipt keyed on
+# "a redirect is present on the eval" accepts this; the behaviour is the unfixed one.
+expect_set stdin-dup-of-own-stdin 2 'swallowed the validator after it' \
+  's@^        if ! _out="\$( cd "\$_wt" \&\& eval "\$_cmd" </dev/null 2>\&1 )"; then@        if ! _out="$( cd "$_wt" \&\& eval "$_cmd" <\&0 2>\&1 )"; then@'
 
 # ==================== PHASE 2: build and drive every mutant, in a pool ====================
 # The zero guard is this fixture's own subject one level out: a registration grammar that

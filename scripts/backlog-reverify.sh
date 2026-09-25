@@ -238,7 +238,9 @@ while IFS="$(printf '\t')" read -r LABEL CLOSED RECEIPT; do
       # so either would turn "I could not tell" into a false close. Only 9 is special. 126, 127
       # and every other non-zero stay STILL-LIVE: a command that vanished is not the receipt's
       # own could-not-measure signal, and widening this to them is a separate decision.
-      ( cd "$REPO_ROOT" && eval "$REST" ) >/dev/null 2>&1
+      # Stdin is closed: this loop's own stdin is the rest of the ledger, which a receipt
+      # reading stdin (`cat >/dev/null`) would consume, dropping every later entry's row.
+      ( cd "$REPO_ROOT" && eval "$REST" </dev/null ) >/dev/null 2>&1
       SH_RC=$?
       if [ "$SH_RC" -eq 0 ]; then
         emit "CLOSE-CANDIDATE" "$LABEL" "sh receipt exited 0 -- the fix is present. Operator confirms and annotates."

@@ -83,7 +83,7 @@
 #   1. derive its changed paths and added lines from git
 #   2. resolve it to a class declared in the consumer's PR-class taxonomy
 #   3. check that commit's OWN tree out into a detached worktree and RE-RUN the
-#      class's declared validators against it
+#      class's declared validators against it, each with stdin closed
 #   4. advance the watermark to the last clean commit, stopping at the first
 #      finding
 #
@@ -496,7 +496,13 @@ A_EOF
         # gets only an exit code and cannot tell that from a real rejection, so the choice is
         # between a confident wrong diagnosis and handing the operator the line that settles
         # it. Parameter expansion, not a pipeline: this is the early-exiting-reader shape.
-        if ! _out="$( cd "$_wt" && eval "$_cmd" 2>&1 )"; then
+        # STDIN IS CLOSED INSIDE THE SUBSTITUTION, because this loop's own stdin is the rest of
+        # the class's validator list. A validator that reads stdin -- measured with
+        # `cat >/dev/null` and with `read -r x; true` -- otherwise consumes every later
+        # validator line, none of them runs, and the class reports CLEAN with the watermark
+        # advancing past a commit a later validator rejects. The redirect sits on the eval,
+        # inside `$( … )`: placed outside it, the subshell still inherits the list.
+        if ! _out="$( cd "$_wt" && eval "$_cmd" </dev/null 2>&1 )"; then
           _verdict="FAIL"
           _first="${_out%%$'\n'*}"
           [ -n "$_first" ] || _first="(it printed nothing)"

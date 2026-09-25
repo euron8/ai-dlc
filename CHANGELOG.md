@@ -15,6 +15,75 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.640.0] - 2026-09-25
+
+Three read loops handed their own stdin to each command they evaluate. A command that read
+stdin consumed the rest of the loop's input, so everything after it was never checked. Each site
+now gives the command an input of its own. All three were found by an adversary in this repo,
+filed as `BL-313`, `BL-314` and `BL-315`, and closed here.
+
+### `BL-313` — `--audit-trunk` no longer lets a validator swallow the rest of its class
+
+`validate-cycle-commits.sh --audit-trunk` runs a class's validators in a `while read` loop over
+the class's validator list, and each `eval` inherited that list as its stdin. Measured on
+`49330f4a` with class `docs` and validators `<first>` then `false`:
+
+| first validator | base | this release |
+|---|---|---|
+| `true` (control) | FAIL, findings=1 | FAIL, findings=1 |
+| `cat >/dev/null` | CLEAN, findings=0, watermark advanced | FAIL naming `'false'` |
+| `head -c0 </dev/null; read -r x; true` | CLEAN, findings=0 | FAIL naming `'false'` |
+
+The eval now runs with `</dev/null` inside the `$( … )`. Placed outside it, the subshell still
+inherits the list. Mutant M2 in `trunk-audit-mutants` is re-anchored on the new line and keeps
+the redirect, so it still mutates only the exit code. The reference consumer declares nine
+`validator:` lines and none reads the audit's stdin, so no consumer verdict changes.
+
+### `BL-314` — a derivation that reads stdin is refused as `READS-STDIN`
+
+`validate-artifact-derivations.sh` runs each derivation from inside a `while read` over the
+artifact, so a command that reads stdin read the rest of the artifact. Its output was computed
+over the artifact's own text, and no later block was checked. Closing stdin alone would let
+`grep -c X` over an empty stream print 0 and pass any author who recorded 0. So each derivation
+now gets a one-line sentinel file as its stdin, and the pair fails as `READS-STDIN` unless the
+sentinel line reads back whole afterwards. The check runs the command rather than parsing it.
+Every file below carries a stale block after its first derivation, except `pipe`, `file` and
+`cat`:
+
+| first derivation | base | this release |
+|---|---|---|
+| `echo 1` (control) | exit 1, 1 of 2 checked | exit 1, 1 of 2 checked |
+| `grep -c WRONG`, recorded `1` | exit 0, `OK: 1 derivation(s)` | exit 1, `READS-STDIN` + `STALE`, 2 of 2 |
+| `grep -c WRONG`, recorded `0` | exit 1, 1 of 1 checked | exit 1, `READS-STDIN` + `STALE`, 2 of 2 |
+| `cat` | exit 1, 1 of 1 checked | exit 1, `READS-STDIN`, 2 checked |
+| `grep WRONG data.txt \| wc -l` | exit 0 | exit 0 |
+| `grep -c WRONG data.txt` | exit 0 | exit 0 |
+| `diff data.txt -` | exit 1, `STALE` | exit 1, `STALE` (known miss) |
+
+`diff f.txt -` reads its `-` operand without moving the shared offset, so it is not caught. The
+script's header lists it, and later blocks are still checked after it. Across the reference
+consumer, the shipping reader lists 6020 derivations in 4840 blocks, and one reads stdin, in
+`reconcile-log-20260922T070020Z.md`. On a scratch copy it fails at base (`GRAMMAR`, `STALE`) and
+here (`READS-STDIN`, `STALE`), so it never produced a false clean. The role files that teach the
+`derived` fence now say to name the measured file as an operand.
+
+### `BL-315` — `backlog-reverify.sh` reports every entry after a stdin-reading receipt
+
+The receipt loop reads a heredoc of ledger records, and each `sh` receipt's `eval` inherited it.
+Over three entries at `49330f4a`, a first receipt `sh true` gives 3 rows and `sh cat >/dev/null`
+gives 1. The eval now runs with `</dev/null`, and both give 3. The script is distribution-only.
+
+### Consumer candidates re-scored, none filed
+
+Thirteen live consumer candidates are cited by no backlog entry. Two were already settled, one in
+0.542.0 and one by the brief. The other 11 had not been scored since 0.373.0. The batch re-scored
+them against this tree and upheld each as consumer-local, with a second verifier attacking the
+verdicts and refuting none. For
+`PC-S297-FFCLUSTER-SHA-STALE`, the upstream half was already fixed by 0.571.0 (`BL-022`), which
+added fix-forward cluster accounting to `deploy-validate.md`. That accounting is a prose mandate.
+No script, hook or reconcile file under `core/` counts the cluster, so the consumer's
+`.github/sprint-main-pr-sha` pin is the consumer's to close.
+
 ## [0.639.1] - 2026-09-25
 
 One consumer candidate is adjudicated `ALREADY-FIXED`. No code changes.

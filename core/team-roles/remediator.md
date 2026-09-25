@@ -80,7 +80,9 @@ rather than by an Opus agent one pass later. The `ai-dlc-derivation-capture.sh` 
 same checker on the block as you WRITE it, so an output you recorded without running the command
 is refused inside the tool call that wrote it. Record the output **verbatim** — a `-> 7` annotation
 or a trailing `<- the count is clean` makes the block unreadable to the checker; put the
-commentary in the `claim now asserted:` line, which is what it is for.
+commentary in the `claim now asserted:` line, which is what it is for. Name the file the
+command measures as an operand: a command that reads stdin derives from nothing, and the
+checker refuses it as `READS-STDIN`.
 
 The command must be one read-only line (`grep`, `rg`, `awk`, `sed`, `wc`, `git grep`, and their
 kin; no `;`, `&&`, redirects or command substitution). A claim you cannot state that way is one

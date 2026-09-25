@@ -697,6 +697,91 @@ else
   bad "k-m2 DID NOT APPLY -- the predicate-deleted mutation matched nothing, so no verdict was scored"
 fi
 
+# --- L. A DERIVATION THAT READS STDIN DERIVES FROM NOTHING, AND MUST NOT SWALLOW THE REST ---
+# run_pair is called inside check_file's `while read … done < "$f"`, so an eval that inherits
+# stdin hands a stdin reader THE REST OF THE ARTIFACT. Measured before the fix: a first
+# derivation `grep -c WRONG` (no file operand) read the later blocks, matched its recorded
+# value, and the stale block after it was never checked -- exit 0, `OK: 1 derivation(s)`.
+#
+# THE RECORDED VALUE IS 0 ON PURPOSE. It is the correct answer over an EMPTY stdin, so a fix
+# that merely closed stdin (`</dev/null`) passes the reader -- a derivation from nothing,
+# reported OK. The validator hands the eval a one-line sentinel and refuses a consumed one as
+# READS-STDIN; l-reader's READS-STDIN conjunct is what separates that from a bare close.
+#
+# EVERY ARM ASSERTS "2 checked" OR "2 derivation(s)", which is the swallow's observable: a
+# validator whose later block went unread counts 1. A redirect placed outside the eval's
+# subshell rather than on the eval is an equally valid fix and nothing here keys on where it
+# sits -- every assertion is behavioural.
+mkdir -p "$WORK/l"
+lemit() { # $1 file  $2 first command  $3 its recorded output ("" = none)  $4 second block's recorded count
+  { printf '# Story\n\n```derived\n$ %s\n' "$2"
+    [ -n "$3" ] && printf '%s\n' "$3"
+    printf '```\n\nAC2 -- a later claim, in its own block.\n\n'
+    printf '```derived\n$ grep -c needle src/two-needles.txt\n%s\n```\n' "$4"; } > "$1"
+}
+lemit "$WORK/l/reader.md" "grep -c WRONG" 0 1
+lemit "$WORK/l/pipe.md"   "grep needle src/two-needles.txt | wc -l" "       2" 2
+lemit "$WORK/l/cat.md"    "cat" "" 2
+
+# l-reader: the stdin reader is refused BY NAME, and the stale block after it is still reported.
+out="$(run "$WORK/l/reader.md")"; rc=$?
+[ "$rc" -eq 1 ] && grep -q 'FAIL (READS-STDIN)' <<< "$out" \
+  && ok "l-reader               exit=1  a first derivation reading stdin is refused as READS-STDIN" \
+  || bad "l-reader a stdin-reading derivation was not refused as READS-STDIN (rc=$rc) -- it derived from nothing and passed: $out"
+grep -q 'FAIL (STALE)' <<< "$out" && grep -q 'of 2 checked' <<< "$out" \
+  && ok "l-reader-rest          the stale block AFTER the reader is still checked (2 checked, STALE reported)" \
+  || bad "l-reader-rest the reader swallowed the rest of the artifact -- the stale second block went unchecked: $out"
+
+# l-pipe: the NEAR-MISS. A pipeline whose first stage names a file reads no stdin of its own;
+# its later stages read the pipe. It must not be flagged, and both blocks must reproduce.
+out="$(run "$WORK/l/pipe.md")"; rc=$?
+[ "$rc" -eq 0 ] && grep -q '^OK: 2 derivation(s)' <<< "$out" && ! grep -q 'READS-STDIN' <<< "$out" \
+  && ok "l-pipe                 exit=0  a pipeline whose first stage names a file is not flagged (2 reproduce)" \
+  || bad "l-pipe a pipeline reading a named file was flagged or failed (rc=$rc): $out"
+
+# l-cat: `cat` first, then a TRUE block. READS-STDIN is the ONLY finding -- not STALE, which is
+# what `cat` over an inherited artifact or over the sentinel produces instead.
+out="$(run "$WORK/l/cat.md")"; rc=$?
+nfail="$(grep -c '^FAIL (' <<< "$out")" || nfail=0
+[ "$rc" -eq 1 ] && [ "$nfail" -eq 1 ] && grep -q 'FAIL (READS-STDIN)' <<< "$out" && grep -q 'of 2 checked' <<< "$out" \
+  && ok "l-cat                  exit=1  \`cat\` first is READS-STDIN and nothing else; the true block after it passes" \
+  || bad "l-cat expected exactly one finding, READS-STDIN, over 2 checked (rc=$rc, $nfail finding(s)): $out"
+
+# L's two mutants. Each is a copy, guarded by `cmp -s`, and each carries a presence-shaped
+# kill condition that only a copy which RAN can print.
+#
+#   M3  the sentinel check removed -- stdin is still the sentinel, so nothing is swallowed,
+#       but the reader PASSES: the bare-close non-fix.
+#   M4  stdin inherited from the loop again -- the defect as it shipped.
+M3="$WORK/l/m3-$VBASE"
+if mut_copy "$M3" 's|^  if \[ "\$sent_back" != "\$STDIN_SENTINEL" \]; then$|  if false; then|'; then
+  ok "l-m3 applied          (cmp -s: the sentinel-check-removed mutation changed the file)"
+  out="$(AI_DLC_PROJECT_ROOT="$WORK" bash "$M3" "$WORK/l/reader.md" 2>&1)"; rc=$?
+  # The kill: the reader is no longer refused, while the STALE block proves the copy ran and
+  # still checked both blocks -- so it is the refusal that moved, not the harness.
+  if ! grep -q 'READS-STDIN' <<< "$out" && grep -q 'FAIL (STALE)' <<< "$out" && grep -q 'of 2 checked' <<< "$out"; then
+    ok "l-m3 KILLED           with the sentinel check gone the stdin reader passes; only l-reader's READS-STDIN conjunct sees it"
+  else
+    bad "l-m3 SURVIVED or did not run: removing the sentinel check did not let the reader pass (rc=$rc): $out"
+  fi
+else
+  bad "l-m3 DID NOT APPLY -- the sentinel-check mutation matched nothing, so no verdict was scored"
+fi
+M4="$WORK/l/m4-$VBASE"
+if mut_copy "$M4" 's|eval "\$c" <&3 3<&- )|eval "$c" 3<\&- )|'; then
+  ok "l-m4 applied          (cmp -s: the stdin-inherited mutation changed the file)"
+  out="$(AI_DLC_PROJECT_ROOT="$WORK" bash "$M4" "$WORK/l/reader.md" 2>&1)"; rc=$?
+  # The kill is the SWALLOW itself, asserted as a presence: exit 0 and ONE derivation counted
+  # over a file holding two, with no READS-STDIN -- the reader consumed the artifact.
+  if [ "$rc" -eq 0 ] && grep -q '^OK: 1 derivation(s)' <<< "$out" && ! grep -q 'READS-STDIN' <<< "$out"; then
+    ok "l-m4 KILLED           with stdin inherited the reader swallows the second block (OK: 1 derivation, exit 0)"
+  else
+    bad "l-m4 SURVIVED or did not run: inheriting the loop's stdin did not swallow the second block (rc=$rc): $out"
+  fi
+else
+  bad "l-m4 DID NOT APPLY -- the stdin-inherited mutation matched nothing, so no verdict was scored"
+fi
+
 echo
 if [ "$fails" -gt 0 ]; then
   echo "FAIL: $fails assertion(s) wrong."
