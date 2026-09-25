@@ -83,7 +83,7 @@
 #   1. derive its changed paths and added lines from git
 #   2. resolve it to a class declared in the consumer's PR-class taxonomy
 #   3. check that commit's OWN tree out into a detached worktree and RE-RUN the
-#      class's declared validators against it
+#      class's declared validators against it, each with stdin closed
 #   4. advance the watermark to the last clean commit, stopping at the first
 #      finding
 #

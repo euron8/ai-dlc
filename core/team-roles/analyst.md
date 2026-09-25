@@ -56,6 +56,12 @@ Under a `- derivation:` list item, column 0 and the item's own indent are both r
 indent the opener carries, every recorded line carries it too — the reader sheds exactly that
 prefix and no more, so output the command itself printed with leading spaces keeps them.
 
+**Name the file the command measures as an operand; never let it read standard input.** A
+derivation has no input of its own, so `grep -c X` with no file counts an empty stream and
+matches a recorded `0` whatever the tree holds. The checker refuses any command that reads
+stdin as `READS-STDIN`. Write `grep -c X path/to/file`; a pipeline whose first stage names
+the file, `grep X path/to/file | wc -l`, is fine.
+
 One read-only command, then its output **verbatim** — no `-> 19` annotation, no trailing
 comment. `scripts/ai-dlc/validate-artifact-derivations.sh` re-runs every command in one of
 those blocks and compares, so a claim written this way is settled by an exit code before the

@@ -28,7 +28,8 @@ verify: manual                      no mechanical predicate by design -> HAND-RE
 ```
 
 **Prefer `sh`.** The tree is right here and executable, which the consumer's ledger cannot
-assume of the ref it greps. A behavioural predicate asserts the defect itself and cannot be
+assume of the ref it greps. A receipt runs from the repo root with stdin closed, so it names
+any input it reads as a file. A behavioural predicate asserts the defect itself and cannot be
 anchored on prose the author invented to describe a wanted fix.
 
 **THIS FILE'S `sh` POLARITY IS THE OPPOSITE OF THE CONSUMER LEDGER'S, AND THE TWO ARE WRITTEN

@@ -33,7 +33,9 @@
 #
 # One `$ ` command line, then the output it produced, verbatim, up to the next `$ ` line
 # or the closing fence. Several command/output pairs may share one block. Commands run
-# from the PROJECT ROOT, so paths are written as the artifact writes them.
+# from the PROJECT ROOT, so paths are written as the artifact writes them. A command names
+# the file it measures as an operand: it runs on a one-line sentinel stdin, never on the
+# artifact, and one that reads that stdin fails as READS-STDIN (run_pair says why).
 #
 # THIS IS OPT-IN BY GRAMMAR, AND THAT IS NOT AN OPT-OUT — the incentive points the other
 # way, which is the only reason it is allowed to be opt-in. An unfenced factual claim is

@@ -40,9 +40,10 @@ the specific classes above the general ones.
 - `added: <regex>` — extended regex, matched against the commit's added lines.
 - `capture: <name> <regex>` — extracts a per-commit value a validator needs as an argument.
   Optional; see below.
-- `validator: <command>` — run from the root of the audited commit's checked-out tree; a
-  non-zero exit is a FAIL for that commit. Repeat the key for more than one. The literal
-  `validator: none` declares that this class owes nothing.
+- `validator: <command>` — run from the root of the audited commit's checked-out tree, with
+  stdin closed; a non-zero exit is a FAIL for that commit. A validator that needs input names
+  it as a file operand. Repeat the key for more than one. The literal `validator: none`
+  declares that this class owes nothing.
 
 A stanza needs at least one `paths:` or `added:` — a class that can never match is a check
 that cannot fire — and at least one `validator:`, `none` included. `#` comments and blank
