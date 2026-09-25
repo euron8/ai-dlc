@@ -9,7 +9,7 @@
 # every other fixture's entries alone, so refreshing one fixture costs its own runtime
 # rather than a full re-derivation.
 #
-# fixtures mapped: 203    entries: 32301
+# fixtures mapped: 203    entries: 32293
 absorbed-specifics-survive	.git/HEAD
 absorbed-specifics-survive	.git/config
 absorbed-specifics-survive	.git/index
@@ -663,18 +663,19 @@ artifact-derivations	.git/HEAD
 artifact-derivations	.git/config
 artifact-derivations	.git/index
 artifact-derivations	.git/info/exclude
-artifact-derivations	.git/objects/33/a4425c0ed05dea70f881660ffdf01c7c86da33
-artifact-derivations	.git/objects/7f/1479d0f091b8393b8613744a84c3c8229a65a3
 artifact-derivations	.git/objects/info/commit-graphs/commit-graph-chain
-artifact-derivations	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
-artifact-derivations	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
-artifact-derivations	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
-artifact-derivations	.git/objects/info/commit-graphs/graph-fa7bbe6bcd67e84c678384cfb84f17a16d6fa8fa.graph
+artifact-derivations	.git/objects/info/commit-graphs/graph-93e6403e1d08d4a02b08f717afce6dcbebb27492.graph
 artifact-derivations	.git/objects/pack/multi-pack-index
+artifact-derivations	.git/objects/pack/pack-311bbc7a1e36ecef56f58653104310cb62bdedcf.idx
+artifact-derivations	.git/objects/pack/pack-311bbc7a1e36ecef56f58653104310cb62bdedcf.pack
 artifact-derivations	.git/packed-refs
-artifact-derivations	.git/refs/heads/main
+artifact-derivations	.git/refs/heads/docs/close-batch-155
 artifact-derivations	.gitignore
+artifact-derivations	core
+artifact-derivations	core/fixtures
+artifact-derivations	core/fixtures/artifact-derivations
 artifact-derivations	core/fixtures/artifact-derivations/run.sh
+artifact-derivations	core/scripts
 artifact-derivations	core/scripts/validate-artifact-derivations.sh
 artifact-path-conformance	.git
 artifact-path-conformance	.git/HEAD
@@ -847,16 +848,13 @@ backlog-ledger	.git/HEAD
 backlog-ledger	.git/config
 backlog-ledger	.git/index
 backlog-ledger	.git/info/exclude
-backlog-ledger	.git/objects/33/a4425c0ed05dea70f881660ffdf01c7c86da33
-backlog-ledger	.git/objects/7f/1479d0f091b8393b8613744a84c3c8229a65a3
 backlog-ledger	.git/objects/info/commit-graphs/commit-graph-chain
-backlog-ledger	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
-backlog-ledger	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
-backlog-ledger	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
-backlog-ledger	.git/objects/info/commit-graphs/graph-fa7bbe6bcd67e84c678384cfb84f17a16d6fa8fa.graph
+backlog-ledger	.git/objects/info/commit-graphs/graph-93e6403e1d08d4a02b08f717afce6dcbebb27492.graph
 backlog-ledger	.git/objects/pack/multi-pack-index
+backlog-ledger	.git/objects/pack/pack-311bbc7a1e36ecef56f58653104310cb62bdedcf.idx
+backlog-ledger	.git/objects/pack/pack-311bbc7a1e36ecef56f58653104310cb62bdedcf.pack
 backlog-ledger	.git/packed-refs
-backlog-ledger	.git/refs/heads/main
+backlog-ledger	.git/refs/heads/docs/close-batch-155
 backlog-ledger	.gitignore
 backlog-ledger	VERSION
 backlog-ledger	core
@@ -18738,15 +18736,14 @@ ledger-reverify	.git/HEAD
 ledger-reverify	.git/config
 ledger-reverify	.git/index
 ledger-reverify	.git/info/exclude
-ledger-reverify	.git/objects/49/330f4a1b67ec0aedaecf2b276983c1287ee47b
-ledger-reverify	.git/objects/7d/7c68d9a8da8fe97f6ca4a8bda439f717b1a34c
 ledger-reverify	.git/objects/info/commit-graphs/commit-graph-chain
 ledger-reverify	.git/objects/info/commit-graphs/graph-93e6403e1d08d4a02b08f717afce6dcbebb27492.graph
 ledger-reverify	.git/objects/pack/multi-pack-index
+ledger-reverify	.git/objects/pack/pack-311bbc7a1e36ecef56f58653104310cb62bdedcf.idx
+ledger-reverify	.git/objects/pack/pack-311bbc7a1e36ecef56f58653104310cb62bdedcf.pack
 ledger-reverify	.git/packed-refs
-ledger-reverify	.git/refs/heads/main
+ledger-reverify	.git/refs/heads/docs/close-batch-155
 ledger-reverify	.gitignore
-ledger-reverify	3f0be5e271681d2f3d509b990b496d4139b35029
 ledger-reverify	core
 ledger-reverify	core/fixtures
 ledger-reverify	core/fixtures/ledger-reverify
@@ -18785,6 +18782,7 @@ ledger-reverify	core/skills/ai-dlc-update/reconcile/setup-sites.md
 ledger-reverify	core/skills/ai-dlc-update/reconcile/template-sites.md
 ledger-reverify	core/skills/ai-dlc-update/reconcile/unregistered-drift.sh
 ledger-reverify	core/skills/ai-dlc-update/reconcile/warn-shadowed-local-validators.sh
+ledger-reverify	e3a0c03bde6321ab072e73ed848a092b0a40aa02
 ledger-reverify-unfalsifiable	.git/HEAD
 ledger-reverify-unfalsifiable	.git/config
 ledger-reverify-unfalsifiable	.git/index
@@ -24266,16 +24264,13 @@ trunk-audit-classes	.git/HEAD
 trunk-audit-classes	.git/config
 trunk-audit-classes	.git/index
 trunk-audit-classes	.git/info/exclude
-trunk-audit-classes	.git/objects/33/a4425c0ed05dea70f881660ffdf01c7c86da33
-trunk-audit-classes	.git/objects/7f/1479d0f091b8393b8613744a84c3c8229a65a3
 trunk-audit-classes	.git/objects/info/commit-graphs/commit-graph-chain
-trunk-audit-classes	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
-trunk-audit-classes	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
-trunk-audit-classes	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
-trunk-audit-classes	.git/objects/info/commit-graphs/graph-fa7bbe6bcd67e84c678384cfb84f17a16d6fa8fa.graph
+trunk-audit-classes	.git/objects/info/commit-graphs/graph-93e6403e1d08d4a02b08f717afce6dcbebb27492.graph
 trunk-audit-classes	.git/objects/pack/multi-pack-index
+trunk-audit-classes	.git/objects/pack/pack-311bbc7a1e36ecef56f58653104310cb62bdedcf.idx
+trunk-audit-classes	.git/objects/pack/pack-311bbc7a1e36ecef56f58653104310cb62bdedcf.pack
 trunk-audit-classes	.git/packed-refs
-trunk-audit-classes	.git/refs/heads/main
+trunk-audit-classes	.git/refs/heads/docs/close-batch-155
 trunk-audit-classes	.gitignore
 trunk-audit-classes	core
 trunk-audit-classes	core/fixtures
@@ -24289,16 +24284,13 @@ trunk-audit-mutants	.git/HEAD
 trunk-audit-mutants	.git/config
 trunk-audit-mutants	.git/index
 trunk-audit-mutants	.git/info/exclude
-trunk-audit-mutants	.git/objects/33/a4425c0ed05dea70f881660ffdf01c7c86da33
-trunk-audit-mutants	.git/objects/7f/1479d0f091b8393b8613744a84c3c8229a65a3
 trunk-audit-mutants	.git/objects/info/commit-graphs/commit-graph-chain
-trunk-audit-mutants	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
-trunk-audit-mutants	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
-trunk-audit-mutants	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
-trunk-audit-mutants	.git/objects/info/commit-graphs/graph-fa7bbe6bcd67e84c678384cfb84f17a16d6fa8fa.graph
+trunk-audit-mutants	.git/objects/info/commit-graphs/graph-93e6403e1d08d4a02b08f717afce6dcbebb27492.graph
 trunk-audit-mutants	.git/objects/pack/multi-pack-index
+trunk-audit-mutants	.git/objects/pack/pack-311bbc7a1e36ecef56f58653104310cb62bdedcf.idx
+trunk-audit-mutants	.git/objects/pack/pack-311bbc7a1e36ecef56f58653104310cb62bdedcf.pack
 trunk-audit-mutants	.git/packed-refs
-trunk-audit-mutants	.git/refs/heads/main
+trunk-audit-mutants	.git/refs/heads/docs/close-batch-155
 trunk-audit-mutants	.gitignore
 trunk-audit-mutants	core
 trunk-audit-mutants	core/fixtures
