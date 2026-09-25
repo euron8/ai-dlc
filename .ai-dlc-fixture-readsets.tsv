@@ -9,7 +9,7 @@
 # every other fixture's entries alone, so refreshing one fixture costs its own runtime
 # rather than a full re-derivation.
 #
-# fixtures mapped: 203    entries: 32293
+# fixtures mapped: 203    entries: 32312
 absorbed-specifics-survive	.git/HEAD
 absorbed-specifics-survive	.git/config
 absorbed-specifics-survive	.git/index
@@ -10410,16 +10410,14 @@ implementation-join-yield	.git/HEAD
 implementation-join-yield	.git/config
 implementation-join-yield	.git/index
 implementation-join-yield	.git/info/exclude
-implementation-join-yield	.git/objects/33/a4425c0ed05dea70f881660ffdf01c7c86da33
-implementation-join-yield	.git/objects/7f/1479d0f091b8393b8613744a84c3c8229a65a3
+implementation-join-yield	.git/objects/10/5ea35079ece987380e16b1f6410e64113068d1
+implementation-join-yield	.git/objects/78/cd7a65078970610b58d03e390a3973e689cf9b
 implementation-join-yield	.git/objects/info/commit-graphs/commit-graph-chain
-implementation-join-yield	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
-implementation-join-yield	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
-implementation-join-yield	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
-implementation-join-yield	.git/objects/info/commit-graphs/graph-fa7bbe6bcd67e84c678384cfb84f17a16d6fa8fa.graph
+implementation-join-yield	.git/objects/info/commit-graphs/graph-7f995749f1f9f9610455fff3b31d8e4d11b046c8.graph
+implementation-join-yield	.git/objects/info/commit-graphs/graph-93e6403e1d08d4a02b08f717afce6dcbebb27492.graph
 implementation-join-yield	.git/objects/pack/multi-pack-index
 implementation-join-yield	.git/packed-refs
-implementation-join-yield	.git/refs/heads/main
+implementation-join-yield	.git/refs/heads/docs/batch-156-close
 implementation-join-yield	.gitignore
 implementation-join-yield	core
 implementation-join-yield	core/fixtures
@@ -10427,8 +10425,29 @@ implementation-join-yield	core/fixtures/implementation-join-yield
 implementation-join-yield	core/fixtures/implementation-join-yield/run.sh
 implementation-join-yield	core/fixtures/implementation-join-yield/seed.sh
 implementation-join-yield	core/hooks
+implementation-join-yield	core/hooks/ai-dlc-acknowledge.sh
+implementation-join-yield	core/hooks/ai-dlc-answer-capture.sh
+implementation-join-yield	core/hooks/ai-dlc-artifact-path-guard.sh
+implementation-join-yield	core/hooks/ai-dlc-context-provenance.sh
+implementation-join-yield	core/hooks/ai-dlc-context-sensor.sh
 implementation-join-yield	core/hooks/ai-dlc-continue.sh
+implementation-join-yield	core/hooks/ai-dlc-core-guard.sh
+implementation-join-yield	core/hooks/ai-dlc-derivation-capture.sh
+implementation-join-yield	core/hooks/ai-dlc-dispatch-guard.sh
+implementation-join-yield	core/hooks/ai-dlc-driver-signal.sh
+implementation-join-yield	core/hooks/ai-dlc-escalation-delivery.sh
+implementation-join-yield	core/hooks/ai-dlc-gate-remediation-guard.sh
+implementation-join-yield	core/hooks/ai-dlc-handoff-entry.sh
 implementation-join-yield	core/hooks/ai-dlc-handoff-pending.sh
+implementation-join-yield	core/hooks/ai-dlc-pause.sh
+implementation-join-yield	core/hooks/ai-dlc-postcompact.sh
+implementation-join-yield	core/hooks/ai-dlc-precompact.sh
+implementation-join-yield	core/hooks/ai-dlc-protect.sh
+implementation-join-yield	core/hooks/ai-dlc-recover-gate.sh
+implementation-join-yield	core/hooks/ai-dlc-recover.sh
+implementation-join-yield	core/hooks/ai-dlc-rules-floor.sh
+implementation-join-yield	core/hooks/ai-dlc-subagent-probe.sh
+implementation-join-yield	core/hooks/ai-dlc-window.sh
 implementation-join-yield	core/schemas/pause-routing.json
 inflight-row-shape	.git
 inflight-row-shape	.git/HEAD

@@ -14432,3 +14432,108 @@ range, and there are **0** mode-only changes out of 6 raw rows (a seeded control
 ruling stands: report the gap and write no runbook. The ledger md5 `64594394…` did not move across
 the batch, which is the criterion-4 check by content.
 
+**BATCH 146 SHIPPED `v0.628.0` (`e3f1a65d`, #835) AND CLOSED `BL-295` AND `BL-296`. `BL-294`
+SHIPPED AND STAYS LIVE, BECAUSE ITS CLOSE CONDITION IS A REPLAY AND THE REPLAY DID NOT SHOW IT.**
+The release commit names all three: 1 hit each, against an impossible-id control of 0. The gate
+ran at `AI_DLC_FIXTURE_NO_SKIP=1`: 22 phases, **203 ok / 0 FAIL**, all gates green, and
+`story-provenance` read `ok` by name against an impossible-name control of 0. Live **76 -> 74**,
+archive **220 -> 222**. The exit-0 receipt set is the same 9 ids before and after, compared by
+identity, so nothing closed incidentally.
+
+**THE CONTRACT ADVERSARY CHANGED THE DESIGN BEFORE ANY BUILD.** `BL-294`'s filed remedy was a
+numbered section, on the premise that Rule 4 forbids skipping one. Rule 4 binds a file loaded by
+READ AND FOLLOW, and on the fold path the lead read `bug-investigation.md` only as a REFERENCE
+while it ran `stories-test-strategy` §4. So the section needed a carrier:
+`stories-test-strategy.md` §3a now READ-AND-FOLLOWs `bug-investigation` for a folded defect. The
+adversary also found that Check 17 had FORCED the incident's 01:53 overwrite of the bug story's
+one-shot block, which made `BL-296` a gate change, not only a step sentence.
+
+**A FIRST CUT TURNED THE CONSUMER'S IN-FLIGHT SPRINT RED, AND A SCRATCH-COPY REPLAY CAUGHT IT.**
+The folded-story declaration first matched `bug-fix-oneshot*.md`, which also matched the legacy
+name. On a scratch copy of the consumer's S313 that moved a convergence-stamped story to the
+bug-fix arm, where both commands exited 1 and the old gate passed it. The declaration now keys only
+on the per-bug `bug-fix-oneshot-<slug>.md`. **Replay a gate change on the consumer's live sprint
+slot before trusting the fixture.** The fixture's own worlds cannot hold a legacy residue.
+
+**THE `BL-294` REPLAY WAS INCONCLUSIVE, AND BATCH 147's OPERATOR RULING RETIRED REPLAYS AS A
+CLOSE CONDITION** (block above). What follows is the record, not an instruction. It ran on the
+incident's own model `qwen38flash-mlx`, through the local gateway, because `claude -p` exposes no
+`AskUserQuestion`. The relief question was asked in 0 of 4 scored runs at tip and 0 of 4 at base.
+The structural trace discriminates, but the replay was cut at 22:51, after the lead's base-era
+reasoning was already in its history, and the harness leaked into the model's context. The
+decisive run is a replay cut at 21:43, before the fold. The batch's replay scripts were session
+scratch and are not kept; the entry records the method (the main-thread request rebuilt from the
+last compaction boundary, the step-file Reads swapped, a classifier keyed on the question's
+options and controlled both ways), and a new batch rebuilds it.
+
+**NEXT WORK.** The PC-backed worklist is unchanged at five rows, every one self-disqualifying or,
+for `BL-230`, awaiting a cause the instrument has not recorded. Unfiled is still the same
+**14**, byte-identical to the batch-145 set with identical dates, so no filing awaits a first
+look. Batch 147 took `BL-294` and `BL-297` and closed both without a replay; its block above
+names the next work.
+
+**THE CONSUMER PULLED `0.627.0` DURING THE BATCH, AND THE GAP IS NOW ONE RELEASE.** Its stamp reads
+`0.627.0` (`23aea0ef`) after its own #1109 and #1110. The pull rotated out the two ids batch 144
+shipped, so consumer live went **28 -> 26** and nothing entered. From installed to `VERSION`
+**0.628.0**, 0 of the four bootstrapping files changed and 0 of 9 raw `core/` rows are mode-only.
+The banked ruling stands: report the gap and write no runbook. Nothing this program writes appears
+in the pull's diff: 0 matching paths against a control of 70 changed files. The ledger md5 moved to
+`3e62c07e…` because of that pull, and the consumer's porcelain is 12, all under `_bmad-output/`.
+
+**BATCH 145 SHIPPED TWO RELEASES AND CLOSED BOTH CORE-ROUTING CANDIDATES BATCH 144 LEFT.**
+`v0.626.0` (`0e09fcd2`, #832) closed `BL-293`, and `v0.627.0` (`722d910d`, #833) closed `BL-292`,
+alone, because `apply.sh` is a bootstrapping file. Each release commit names its id: 1 hit each,
+against an impossible-id control of 0. Both gates ran at `AI_DLC_FIXTURE_NO_SKIP=1`: 22 of 22
+phases, **203 ok / 0 FAIL**, and the changed fixtures read `ok` by name. Live **78 -> 76**, archive
+**218 -> 220**. The batch also FILED `BL-294`..`BL-297` on the operator's instruction (below).
+The exit-0 receipt set is the same 8 ids it opened with, so nothing closed incidentally.
+
+**`BL-293` TOOK THREE FIX ROUNDS, AND EACH TIP ADVERSARY FOUND WHAT THE ROUND BEFORE MISSED.** The
+filed remedy, answer `no` on a failed `diff`, was superseded before any build. The damage turned out
+to be real only in the MIXED case: two edited sections, with `diff` failing for one, exit 0, and
+that edit gone. So the filed single-section receipt could never fire.
+
+The first conservation check keyed sections by NAME, which made it blind to the resolver's own
+shapes. 9 of the reference consumer's 564 installed headings resolve to a different line. The
+second check was positional, and it falsely refused the most common shape, an edit plus an EOF
+append.
+
+**The discriminating input was a corpus built from the consumer's REAL files**: 32 worlds, with
+27 agreeing with the base, and 5 refusing where the base lost 34-176 lines. A hand-seeded world
+set found none of that. **Build the corpus from the consumer's installed files before trusting a
+seeded one.**
+
+**THE `v0.627.0` GATE FAILED ONCE, AND IT WAS THE BRIEF, NOT THE FIX.** The new `BL-292` arms made
+`apply-restamp-worklist` write hook paths, so I10 in `validate-enforcement-map.sh` then required
+it to scrub ambient `AI_DLC_*`. It did not. Every fixture that drives that validator failed with
+it, which is 11 in all. The fixture hand ran its own fixture and never the validator. **A fixture
+hand whose arms touch hooks runs `bash scripts/validate-enforcement-map.sh` before it reports.**
+
+**THE READ-SET DERIVER TRACES WHATEVER IS CHECKED OUT.** `derive-fixture-readsets.sh:283` is
+`cp -a "$REPO_ROOT/."`. The first operator run traced the 0.626.0 checkout and moved only 6 git
+plumbing rows. **Check out the branch that carries the fixture before asking for the trace**, then
+confirm the new row exists (32127 -> 32128 here) and that no other fixture's rows moved.
+
+**THE OPERATOR FILED FOUR ENTRIES FROM A PEER'S DIAGNOSIS.** Peer session `llm-gateway-41` asked
+whether the pipeline makes a lead under-prioritize a live production bug. It came from consumer
+session `d5ba4ec4`, where the lead drafted a no-deploy relief five times and never offered it.
+The verdict was both, with the agent at about 60%, and `BL-294`..`BL-297` record the pipeline's
+share. `BL-294` is a BLOCKER: `bug-investigation.md` has no step that asks the operator. None of
+the four carries a `PC-` id, and all four are `verify: manual`.
+
+**NEXT WORK.** The PC-backed worklist is unchanged at five rows: the four self-disqualifying ones,
+and `BL-230`, which has no build until the instrument records a pool failure's cause. Unfiled is
+still **14**, the same fourteen batch 143 adjudicated, and no new filing awaits a first look.
+Batch 146 took `BL-294`, `BL-295` and `BL-296` as one release; its block above names the next
+work.
+
+**THE DELIVERY GAP IS THREE RELEASES, AND A BOOTSTRAPPING FILE IS IN RANGE.** The consumer
+installed **0.624.0** (`5376b309`) against `VERSION` **0.627.0**. In range, `apply.sh` has 1 commit,
+`ai-dlc-update/SKILL.md` has 1, and `preclassify.sh` and `ledger-reverify.sh` have 0. 0 of 16 raw
+`core/` rows are mode-only. The pull still carries 0.625.0's one-decision notify-hook deletion. The
+banked ruling stands: report the gap and write no runbook.
+
+The consumer's porcelain is 41: 40 under `_bmad-output/`, plus `docs/escalations/pending.md`, which
+its own live session writes. The ledger md5 `218c7851…` did not move across the batch, which is the
+criterion-4 check by content.
+

@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 643..730. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 609..713. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,77 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 156 SHIPPED `v0.642.0` (`78cd7a65`, #863) AND CLOSED `BL-316`.** It was invoked by peer
+handoff. The opening sweep matched batch 155 on every figure and control, with the ledger md5
+still `3e62c07e…`, so the batch took `BL-316`, the ranked DEFECT. `BL-316` names no `PC-` id; it
+was diagnosed from the consumer's log. The gate ran at `AI_DLC_FIXTURE_NO_SKIP=1`: 22 phases PASS
+and 1 SKIP (the pole, at pool width 8 against a baseline of 12), 203 ok and 0 FAIL, and all gates
+green. The six changed fixtures each read `ok` by name against an impossible-name control of 0,
+`ls-remote` matched, and the squash tree was byte-identical to the gated commit. Live
+**76 -> 75**, archive **240 -> 241**. The exit-0 receipt set is batch 155's nine plus `BL-316`,
+compared by id. 56 live `sh` receipts remain against the pre-push floor of 56.
+
+**THE HARNESS COUNTS STOP-HOOK BLOCKS BY TOOL CALL, NOT BY TIME, AND THAT WAS MEASURED IN ITS
+BINARY.** In Claude Code 2.1.282 the query loop's `stopHookBlockingCount` resets to 0 on any
+tool-use recursion, and nowhere else relevant. `stop_hook_active` stays true across tool calls.
+The turn ends when the count passes `CLAUDE_CODE_STOP_HOOK_BLOCK_CAP ?? 8`. The consumer's 21
+blocks at 22-89s were a lead answering in text only, and the harness ended the turn at the ninth.
+
+**THE CONTRACT ADVERSARY REFUTED MY FIRST DESIGN AND MY RECEIPT BEFORE ANY BUILD.** My draft
+counted tool calls alone. Arming a wait-beat is itself a Bash tool call, so beat churn read as
+progress and the sprint-305 stall came back. The shipped fixture would still have passed, because
+its drive sends `"transcript_path":""` and so tests only the time fallback. My receipt accepted
+that design and rejected the right one. The shipped rule continues a run on no new tool call OR
+under 30s, and resets only on both. That count is never below the old one, so the hook only
+releases earlier. `EFF_MAX` is `min(3, CAP)`, because `CAP-1` makes CAP=1 a hook that never blocks.
+Check 0 shares the helper. **Test a hook change on the transcript path, not only on the empty-path
+drive the old arms use.**
+
+**THE TIP ADVERSARY FOUND A DEFECT ON A GREEN BRANCH.** Check 0's backoff fell through to Check 3,
+which keeps its own state, so with the pause flag down a text-only handoff stall read
+`HHHbHHHbHHHb…` past the harness's ninth block. The release makes that backoff terminal, and arm
+8h pins it. The fix also staled `handoff-completion-assertion`'s mutant m9f, which anchored on a
+comment the fix rewrote. **Before editing a hook comment, grep the fixtures for mutation anchors
+on it.**
+
+Replayed on the consumer's transcripts, of 491 blocks across 264 sessions exactly 3 flip to allow,
+all in the stall session at harness counts 4, 4 and 8. A healthy 70-stop session is decided
+identically. The operator re-traced `implementation-join-yield` (24 -> 43 rows, no
+`.claude/worktrees` row, `ledger-reverify` unmoved at 51), and it shipped in the close. **No
+read-set trace is owed.**
+
+**THE CONSUMER PULLED 0.633.0 -> 0.641.0 DURING THE BATCH.** Its reconcile commit `e8f61f53b`
+(#1113) sits on `ai-dlc/carry-over/epic-crs-closure-fvs-advance`, ahead of its `main`, and its
+stamp reads 0.641.0 (`291c286a`). The ledger md5 moved to `5f401bf7…`. Consumer live is
+**26 -> 25**: `PC-S340-RETRO-AUDIT-SCANS-FIXTURE-FAILS-ONCE-AND-PASSES-ON-RETRY` and
+`PC-S297-FFCLUSTER-SHA-STALE` were archived, and one id entered. `PC-S313-EMIT-REPORT-E2-IS-A-FOURTH-POOL-FLAKE-ARM`
+stays open by its own text. The PC-backed worklist is **5 rows**: `BL-312` left it, because its id
+was archived.
+
+**ONE NEW CONSUMER FILING, AND IT ROUTES CORE.**
+`PC-S346-ARTIFACT-DERIVATIONS-ROW-NAMES-A-CLEAR-NO-CONSUMER-CORPUS-CAN-REACH`, filed 2026-09-25
+with that pull. `apply.sh` emits `WORKLIST artifact-derivations` with the remedy *"exit 0 is the
+clear"*. On a real corpus that clear is unreachable: the whole corpus reads 3304 FAIL of 5891, and
+the row's own 30 files read 426 of 783 FAIL both before and after the apply. The consumer's
+proposal is to make the clear "no derivation newly FAILs", base against theirs. `core-paths.sh
+--is-core .claude/skills/ai-dlc-update/reconcile/apply.sh` reads `core`, against a not-core control
+on `_bmad-output/spawn-ledger.jsonl`. It is cited by no backlog entry. `apply.sh` is bootstrapping,
+so the fix ships alone.
+
+**NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
+- `PC-S346-…` is the subject: a new, core-routed consumer filing. File its entry, re-derive the
+  premise against `apply.sh` and `validate-artifact-derivations.sh`, write the contract, run the
+  adversary alone, then build. It ships alone.
+- `BL-230` needs the full 156-run pool. Run it as a lead-owned background job with a sentinel,
+  never inside a hand, and never while a gate runs. The disk held 910 GiB free this batch.
+- `BL-311` waits on the operator.
+
+**THE DELIVERY GAP IS ONE RELEASE.** The consumer is at 0.641.0 against `VERSION` 0.642.0. In
+`291c286a..78cd7a65` the four bootstrapping files have 0 commits, and 0 of 15 raw `core/` rows are
+mode-only. One PC id is PENDING, `PC-S313-EMIT-REPORT-E2-IS-A-FOURTH-POOL-FLAKE-ARM`, and it stays
+open upstream by its own text. The banked ruling stands: report the gap and write no runbook. The
+consumer's porcelain read 12 at the close, from its own pull and session.
 
 **BATCH 155 SHIPPED `v0.640.0` (`7089ccb8`, #859) AND `v0.641.0` (`36c3a35b`, #860), CLOSING
 `BL-313`, `BL-314`, `BL-315` AND `BL-317`, AND FILING `BL-316`.** It was invoked by peer
@@ -534,111 +605,6 @@ unfiled candidates are unchanged and adjudicated consumer-owned in the batch-143
 `VERSION` **0.629.0**. Neither release touched a bootstrapping file. The banked ruling stands:
 report the gap and write no runbook. The consumer's porcelain read 14-15 during the batch, all
 under `_bmad-output/`, and nothing this program writes was among them.
-
-**BATCH 146 SHIPPED `v0.628.0` (`e3f1a65d`, #835) AND CLOSED `BL-295` AND `BL-296`. `BL-294`
-SHIPPED AND STAYS LIVE, BECAUSE ITS CLOSE CONDITION IS A REPLAY AND THE REPLAY DID NOT SHOW IT.**
-The release commit names all three: 1 hit each, against an impossible-id control of 0. The gate
-ran at `AI_DLC_FIXTURE_NO_SKIP=1`: 22 phases, **203 ok / 0 FAIL**, all gates green, and
-`story-provenance` read `ok` by name against an impossible-name control of 0. Live **76 -> 74**,
-archive **220 -> 222**. The exit-0 receipt set is the same 9 ids before and after, compared by
-identity, so nothing closed incidentally.
-
-**THE CONTRACT ADVERSARY CHANGED THE DESIGN BEFORE ANY BUILD.** `BL-294`'s filed remedy was a
-numbered section, on the premise that Rule 4 forbids skipping one. Rule 4 binds a file loaded by
-READ AND FOLLOW, and on the fold path the lead read `bug-investigation.md` only as a REFERENCE
-while it ran `stories-test-strategy` §4. So the section needed a carrier:
-`stories-test-strategy.md` §3a now READ-AND-FOLLOWs `bug-investigation` for a folded defect. The
-adversary also found that Check 17 had FORCED the incident's 01:53 overwrite of the bug story's
-one-shot block, which made `BL-296` a gate change, not only a step sentence.
-
-**A FIRST CUT TURNED THE CONSUMER'S IN-FLIGHT SPRINT RED, AND A SCRATCH-COPY REPLAY CAUGHT IT.**
-The folded-story declaration first matched `bug-fix-oneshot*.md`, which also matched the legacy
-name. On a scratch copy of the consumer's S313 that moved a convergence-stamped story to the
-bug-fix arm, where both commands exited 1 and the old gate passed it. The declaration now keys only
-on the per-bug `bug-fix-oneshot-<slug>.md`. **Replay a gate change on the consumer's live sprint
-slot before trusting the fixture.** The fixture's own worlds cannot hold a legacy residue.
-
-**THE `BL-294` REPLAY WAS INCONCLUSIVE, AND BATCH 147's OPERATOR RULING RETIRED REPLAYS AS A
-CLOSE CONDITION** (block above). What follows is the record, not an instruction. It ran on the
-incident's own model `qwen38flash-mlx`, through the local gateway, because `claude -p` exposes no
-`AskUserQuestion`. The relief question was asked in 0 of 4 scored runs at tip and 0 of 4 at base.
-The structural trace discriminates, but the replay was cut at 22:51, after the lead's base-era
-reasoning was already in its history, and the harness leaked into the model's context. The
-decisive run is a replay cut at 21:43, before the fold. The batch's replay scripts were session
-scratch and are not kept; the entry records the method (the main-thread request rebuilt from the
-last compaction boundary, the step-file Reads swapped, a classifier keyed on the question's
-options and controlled both ways), and a new batch rebuilds it.
-
-**NEXT WORK.** The PC-backed worklist is unchanged at five rows, every one self-disqualifying or,
-for `BL-230`, awaiting a cause the instrument has not recorded. Unfiled is still the same
-**14**, byte-identical to the batch-145 set with identical dates, so no filing awaits a first
-look. Batch 147 took `BL-294` and `BL-297` and closed both without a replay; its block above
-names the next work.
-
-**THE CONSUMER PULLED `0.627.0` DURING THE BATCH, AND THE GAP IS NOW ONE RELEASE.** Its stamp reads
-`0.627.0` (`23aea0ef`) after its own #1109 and #1110. The pull rotated out the two ids batch 144
-shipped, so consumer live went **28 -> 26** and nothing entered. From installed to `VERSION`
-**0.628.0**, 0 of the four bootstrapping files changed and 0 of 9 raw `core/` rows are mode-only.
-The banked ruling stands: report the gap and write no runbook. Nothing this program writes appears
-in the pull's diff: 0 matching paths against a control of 70 changed files. The ledger md5 moved to
-`3e62c07e…` because of that pull, and the consumer's porcelain is 12, all under `_bmad-output/`.
-
-**BATCH 145 SHIPPED TWO RELEASES AND CLOSED BOTH CORE-ROUTING CANDIDATES BATCH 144 LEFT.**
-`v0.626.0` (`0e09fcd2`, #832) closed `BL-293`, and `v0.627.0` (`722d910d`, #833) closed `BL-292`,
-alone, because `apply.sh` is a bootstrapping file. Each release commit names its id: 1 hit each,
-against an impossible-id control of 0. Both gates ran at `AI_DLC_FIXTURE_NO_SKIP=1`: 22 of 22
-phases, **203 ok / 0 FAIL**, and the changed fixtures read `ok` by name. Live **78 -> 76**, archive
-**218 -> 220**. The batch also FILED `BL-294`..`BL-297` on the operator's instruction (below).
-The exit-0 receipt set is the same 8 ids it opened with, so nothing closed incidentally.
-
-**`BL-293` TOOK THREE FIX ROUNDS, AND EACH TIP ADVERSARY FOUND WHAT THE ROUND BEFORE MISSED.** The
-filed remedy, answer `no` on a failed `diff`, was superseded before any build. The damage turned out
-to be real only in the MIXED case: two edited sections, with `diff` failing for one, exit 0, and
-that edit gone. So the filed single-section receipt could never fire.
-
-The first conservation check keyed sections by NAME, which made it blind to the resolver's own
-shapes. 9 of the reference consumer's 564 installed headings resolve to a different line. The
-second check was positional, and it falsely refused the most common shape, an edit plus an EOF
-append.
-
-**The discriminating input was a corpus built from the consumer's REAL files**: 32 worlds, with
-27 agreeing with the base, and 5 refusing where the base lost 34-176 lines. A hand-seeded world
-set found none of that. **Build the corpus from the consumer's installed files before trusting a
-seeded one.**
-
-**THE `v0.627.0` GATE FAILED ONCE, AND IT WAS THE BRIEF, NOT THE FIX.** The new `BL-292` arms made
-`apply-restamp-worklist` write hook paths, so I10 in `validate-enforcement-map.sh` then required
-it to scrub ambient `AI_DLC_*`. It did not. Every fixture that drives that validator failed with
-it, which is 11 in all. The fixture hand ran its own fixture and never the validator. **A fixture
-hand whose arms touch hooks runs `bash scripts/validate-enforcement-map.sh` before it reports.**
-
-**THE READ-SET DERIVER TRACES WHATEVER IS CHECKED OUT.** `derive-fixture-readsets.sh:283` is
-`cp -a "$REPO_ROOT/."`. The first operator run traced the 0.626.0 checkout and moved only 6 git
-plumbing rows. **Check out the branch that carries the fixture before asking for the trace**, then
-confirm the new row exists (32127 -> 32128 here) and that no other fixture's rows moved.
-
-**THE OPERATOR FILED FOUR ENTRIES FROM A PEER'S DIAGNOSIS.** Peer session `llm-gateway-41` asked
-whether the pipeline makes a lead under-prioritize a live production bug. It came from consumer
-session `d5ba4ec4`, where the lead drafted a no-deploy relief five times and never offered it.
-The verdict was both, with the agent at about 60%, and `BL-294`..`BL-297` record the pipeline's
-share. `BL-294` is a BLOCKER: `bug-investigation.md` has no step that asks the operator. None of
-the four carries a `PC-` id, and all four are `verify: manual`.
-
-**NEXT WORK.** The PC-backed worklist is unchanged at five rows: the four self-disqualifying ones,
-and `BL-230`, which has no build until the instrument records a pool failure's cause. Unfiled is
-still **14**, the same fourteen batch 143 adjudicated, and no new filing awaits a first look.
-Batch 146 took `BL-294`, `BL-295` and `BL-296` as one release; its block above names the next
-work.
-
-**THE DELIVERY GAP IS THREE RELEASES, AND A BOOTSTRAPPING FILE IS IN RANGE.** The consumer
-installed **0.624.0** (`5376b309`) against `VERSION` **0.627.0**. In range, `apply.sh` has 1 commit,
-`ai-dlc-update/SKILL.md` has 1, and `preclassify.sh` and `ledger-reverify.sh` have 0. 0 of 16 raw
-`core/` rows are mode-only. The pull still carries 0.625.0's one-decision notify-hook deletion. The
-banked ruling stands: report the gap and write no runbook.
-
-The consumer's porcelain is 41: 40 under `_bmad-output/`, plus `docs/escalations/pending.md`, which
-its own live session writes. The ledger md5 `218c7851…` did not move across the batch, which is the
-criterion-4 check by content.
 
 ### Derive the state; do not trust the numbers below
 
@@ -1264,6 +1230,17 @@ given at batch 90.
      batch 106, after a hand's `rm -rf "$S/$d"` loop stopped the session on a harness prompt
      that must not be allow-listed.
    - **Never merge while a hand is out**, and never read a hand's idle state as its report.
+   - **A fixture hand whose arms touch hooks runs `bash scripts/validate-enforcement-map.sh`
+     before it reports.** Batch 145's gate failed on I10 across 11 fixtures because a hand ran
+     only its own fixture.
+   - **Build a consumer-facing corpus from the consumer's INSTALLED files before trusting a
+     seeded one.** Batch 145's hand-seeded worlds found none of the five that discriminated.
+   - **The read-set deriver traces whatever is CHECKED OUT.** Ask the operator for a trace only on
+     a checkout of the branch that carries the fixture, then confirm that only that fixture's rows
+     moved.
+   - **Replay a GATE change on a scratch copy of the consumer's live sprint slot before trusting
+     the fixture.** Batch 146's first cut moved a convergence-stamped story to the wrong arm and
+     turned the in-flight sprint red; the fixture's own worlds could not hold that legacy residue.
 
 1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below) AGAINST THE REF THAT CARRIES THE
    LIVE LEDGER, RANK THE UNFILED CANDIDATES, THEN SCOPE THE BATCH — AND HOW YOU SCOPE IT DEPENDS ON
