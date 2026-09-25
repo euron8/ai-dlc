@@ -243,6 +243,26 @@ else
   fi
   # No escalations file is a legitimate clean state -- nothing to adjudicate.
   [ -f "$ESCALATIONS" ] || { echo "OK: EXAMINED NOTHING — no escalations file ($ESCALATIONS); nothing to check."; exit 0; }
+  # A FILE THAT EXISTS AND HOLDS NO NON-WHITESPACE BYTE IS THE ABSENT STATE, AND SAYS SO. It
+  # used to fall through to the parser, parse zero records, and print the ordinary
+  # "no S<N> ... requires an operator citation" line -- a verdict over entries when there were
+  # no entries, byte-identical to a file full of legacy resolutions.
+  #
+  # THE PREDICATE IS THE BYTES, NOT THE RECORD COUNT, AND THAT WAS MEASURED. On the reference
+  # consumer 41 of 891 versions of pending.md parse to zero records, and some of those hold
+  # live entries in a shape this parser cannot read; "zero parsed records" would relabel a
+  # grammar failure as nothing having been there. None of the 891 is empty or
+  # whitespace-only. `grep` exits 1 only when it READ the file and found nothing; an
+  # unreadable file exits 2 and keeps its old path.
+  #
+  # BELOW THE --any-authorized SPLIT, deliberately. There an empty file is no citation and
+  # must stay `NONE:` / exit 1; a check hoisted above the split would answer "authorized".
+  grep -q '[^[:space:]]' "$ESCALATIONS" 2>/dev/null
+  ESC_BLANK_RC=$?
+  if [ "$ESC_BLANK_RC" -eq 1 ]; then
+    echo "OK: EXAMINED NOTHING — escalations file present but empty ($ESCALATIONS); nothing to check."
+    exit 0
+  fi
 
   # Normalize the sprint token: accept "290" or "S290".
   SPRINT_NUM="$(printf '%s' "$SPRINT" | tr -cd '0-9')"
