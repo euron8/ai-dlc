@@ -922,8 +922,43 @@ _ai_dlc_memo_absent() { # <dist> <spec> -> 0 only when git itself says the spec 
 }
 _ai_dlc_memo_commit() { # <file-stem> <tmp> <status> -> cache the fill; always serves it
   mv -f "$2" "$1.c" 2>/dev/null || { cat "$2"; rm -f "$2"; return 0; }
-  printf '%s' "$3" > "$1.s"
+  { printf '%s' "$3" > "$1.s"; } 2>/dev/null
   cat "$1.c"
+}
+
+# --- A MEMO FILE THAT CANNOT BE CREATED MUST NOT CHANGE THE ANSWER ---------------------------
+#
+# Every memo file is named after its key, and the key embeds the percent-encoded dist path. Past
+# the 255-character filename limit, or in a memo directory that cannot be written (read-only, or
+# ENOSPC at file creation -- the realistic trigger on a full disk), the fill's `> "$_t"` redirect
+# failed before git ever ran. The fill then reported the REDIRECT's status as git's, served the
+# temp it never wrote, and returned 1 with no output. Measured at the previous release, one
+# process per case: a 372-character dist and a `chmod 555` memo each read WRONG on 7 of 11
+# per-function cells (a present blob, an empty blob, a rev-parse, the ls-tree listing and the
+# diff all came back empty with status 1), and `preclassify.sh` from a long dist emitted 0 bytes
+# with exit 0. No refusal, no stderr the caller keeps -- a present path read as absent.
+#
+# So on a MISS the fill file is created FIRST, as an empty file under its real name, and a miss
+# whose fill file cannot be created goes to the function's own direct line -- the same one an
+# unavailable memo takes -- which asks git uncached. The probe is on `$_t` itself, not on `.c`:
+# the temp carries `.$$.$RANDOM` past `.c`, so a probe of the shorter name passes at key lengths
+# where the fill still fails. A HIT pays nothing new; only a miss pays the probe.
+#
+# No length bound and no hash. A bound cannot see an unwritable directory at any length (a short
+# key in a `chmod 555` memo reads exactly as wrong), and the percent-encoded key is injective
+# where a short hash is not. The `.s` write after a fill discards its own error, and the fill
+# returns the status it holds in memory, never a read-back of `.s`: only a HIT reads `.s`.
+#
+# _ai_dlc_memo_open <key> -- sets the CALLER's `_f` (the file stem) and `_t` (the fill temp, or ""
+# on a hit), which bash's dynamic scope reaches because every caller declares both `local`.
+# 0 = serve from the memo (a hit, or a miss whose fill file now exists); 1 = go direct.
+_ai_dlc_memo_open() {
+  ai_dlc_memo_dir || return 1
+  _f="$AI_DLC_MEMO_DIR/$1"
+  _t=""
+  [ -f "$_f.s" ] && return 0
+  _t="$_f.c.$$.$RANDOM"
+  { : > "$_t"; } 2>/dev/null
 }
 _ai_dlc_memo_serve() { # <tmp> -> serve an uncacheable fill and discard it
   cat "$1"; rm -f "$1"
@@ -935,11 +970,9 @@ _ai_dlc_memo_serve() { # <tmp> -> serve an uncacheable fill and discard it
 # `git show` of an EMPTY blob writes nothing and exits 0.
 memo_show() {
   local _dist="$1" _ref="$2" _path="$3" _k _f _st _t
-  ai_dlc_memo_dir || { git -C "$_dist" show "${_ref}:${_path}" 2>/dev/null; return $?; }
   _k="s $_dist $_ref:$_path"; _k="${_k//%/%25}"; _k="${_k//\//%2F}"
-  _f="$AI_DLC_MEMO_DIR/$_k"
-  if [ ! -f "$_f.s" ]; then
-    _t="$_f.c.$$.$RANDOM"
+  _ai_dlc_memo_open "$_k" || { git -C "$_dist" show "${_ref}:${_path}" 2>/dev/null; return $?; }
+  if [ -n "$_t" ]; then
     git -C "$_dist" show "${_ref}:${_path}" > "$_t" 2>/dev/null
     _st=$?
     if [ "$_st" -eq 0 ] || { [ "$_st" -eq 128 ] && _ai_dlc_memo_absent "$_dist" "${_ref}:${_path}"; }; then
@@ -966,16 +999,20 @@ memo_show() {
 # memo_has_path <dist> <ref> <path> -- 0 when the path exists at the ref. THE STATUS IS
 # THE ANSWER here, unlike memo_show, so it is the only thing cached.
 memo_has_path() {
-  local _dist="$1" _ref="$2" _path="$3" _k _f _st
-  ai_dlc_memo_dir || { git -C "$_dist" cat-file -e "${_ref}:${_path}" 2>/dev/null; return $?; }
+  local _dist="$1" _ref="$2" _path="$3" _k _f _st _t
   _k="e $_dist $_ref:$_path"; _k="${_k//%/%25}"; _k="${_k//\//%2F}"
-  _f="$AI_DLC_MEMO_DIR/$_k"
-  if [ ! -f "$_f.s" ]; then
+  # The probe is a TEMP renamed onto `.s`, never an empty `.s` created in place: an empty `.s`
+  # left behind by an uncacheable status would be read by the next HIT as `return ""`, which is
+  # 255, the very wrong answer this guard exists to prevent.
+  _ai_dlc_memo_open "$_k" || { git -C "$_dist" cat-file -e "${_ref}:${_path}" 2>/dev/null; return $?; }
+  if [ -n "$_t" ]; then
     git -C "$_dist" cat-file -e "${_ref}:${_path}" 2>/dev/null
     _st=$?
     # 128 is BOTH "absent" and "git could not answer" for `cat-file -e`; only the former is cached.
     if [ "$_st" -eq 0 ] || { [ "$_st" -eq 128 ] && _ai_dlc_memo_absent "$_dist" "${_ref}:${_path}"; }; then
-      printf '%s' "$_st" > "$_f.s"
+      { printf '%s' "$_st" > "$_t" && mv -f "$_t" "$_f.s"; } 2>/dev/null || rm -f "$_t"
+    else
+      rm -f "$_t"
     fi
     return "$_st"
   fi
@@ -989,11 +1026,9 @@ memo_has_path() {
 # specs never collide.
 memo_rev_parse() {
   local _dist="$1" _spec="$2" _k _f _st _t
-  ai_dlc_memo_dir || { git -C "$_dist" rev-parse -q --verify "$_spec" 2>/dev/null; return $?; }
   _k="r $_dist $_spec"; _k="${_k//%/%25}"; _k="${_k//\//%2F}"
-  _f="$AI_DLC_MEMO_DIR/$_k"
-  if [ ! -f "$_f.s" ]; then
-    _t="$_f.c.$$.$RANDOM"
+  _ai_dlc_memo_open "$_k" || { git -C "$_dist" rev-parse -q --verify "$_spec" 2>/dev/null; return $?; }
+  if [ -n "$_t" ]; then
     git -C "$_dist" rev-parse -q --verify "$_spec" > "$_t" 2>/dev/null
     _st=$?
     # 0 resolved, 1 does not resolve -- `-q --verify`'s two answers. Anything else is a failure.
@@ -1024,11 +1059,9 @@ memo_rev_parse() {
 # cached read of the same `<dist,ref>` pair instead of one cached read per pathspec.
 memo_ls_tree() {
   local _dist="$1" _ref="$2" _k _f _st _t
-  ai_dlc_memo_dir || { git -C "$_dist" ls-tree -r --name-only "$_ref" 2>/dev/null; return $?; }
   _k="t $_dist $_ref"; _k="${_k//%/%25}"; _k="${_k//\//%2F}"
-  _f="$AI_DLC_MEMO_DIR/$_k"
-  if [ ! -f "$_f.s" ]; then
-    _t="$_f.c.$$.$RANDOM"
+  _ai_dlc_memo_open "$_k" || { git -C "$_dist" ls-tree -r --name-only "$_ref" 2>/dev/null; return $?; }
+  if [ -n "$_t" ]; then
     git -C "$_dist" ls-tree -r --name-only "$_ref" > "$_t" 2>/dev/null
     _st=$?
     if [ "$_st" -eq 0 ]; then _ai_dlc_memo_commit "$_f" "$_t" "$_st"; else _ai_dlc_memo_serve "$_t"; fi
@@ -1046,11 +1079,9 @@ memo_ls_tree() {
 # filter-the-full-answer-locally discipline memo_ls_tree uses.
 memo_diff_name_status() {
   local _dist="$1" _base="$2" _theirs="$3" _k _f _st _t; shift 3
-  ai_dlc_memo_dir || { git -C "$_dist" diff --no-renames --name-status "$_base" "$_theirs" -- "$@" 2>/dev/null; return $?; }
   _k="d $_dist $_base $_theirs $*"; _k="${_k//%/%25}"; _k="${_k//\//%2F}"; _k="${_k// /%20}"
-  _f="$AI_DLC_MEMO_DIR/$_k"
-  if [ ! -f "$_f.s" ]; then
-    _t="$_f.c.$$.$RANDOM"
+  _ai_dlc_memo_open "$_k" || { git -C "$_dist" diff --no-renames --name-status "$_base" "$_theirs" -- "$@" 2>/dev/null; return $?; }
+  if [ -n "$_t" ]; then
     git -C "$_dist" diff --no-renames --name-status "$_base" "$_theirs" -- "$@" > "$_t" 2>/dev/null
     _st=$?
     if [ "$_st" -eq 0 ]; then _ai_dlc_memo_commit "$_f" "$_t" "$_st"; else _ai_dlc_memo_serve "$_t"; fi

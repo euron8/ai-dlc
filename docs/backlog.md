@@ -4004,6 +4004,31 @@ The candidate fix is to hash the key, or to go direct when `${#_k}` exceeds abou
 receipt must drive a detector from a dist path long enough to fire, and compare its output with
 the same run from a short path. `lib.sh` is bootstrapping, so the fix ships alone.
 
+The trigger is wider than the filename limit. The fill's `> "$_t"` redirect fails before git runs,
+so the fill returns the redirect's status and no output. The same wrong answer comes from any memo
+directory that cannot be written. Measured one process per case: a 372-character dist and a
+`chmod 555` memo each read wrong on 7 of 11 per-function cells, while a short writable run matched
+on all 11.
+
+`0.638.0` shipped the fix. On a miss, each of the five memo functions now creates its fill file
+first, and when that fails it takes its existing direct line, so the git calls are byte-identical.
+A fill returns the status it holds in memory and never reads `.s` back. `memo_has_path` writes its
+`.s` through a temp and a rename, so a failed write leaves no empty `.s`. There is no length bound
+and no hash. `preclassify-rename-row` gains arms E–H, and each has a mutant. The receipt below
+drives arms E and F. At `0.638.0` it exits 0. It exits 1 at base `0ff0a9ed` and 1 on the unfixed
+mutant (killed by arm E), and 2 on the length-bound fix (killed by arm F).
+
+verify: sh R="$(pwd)"; P="$R/core/skills/ai-dlc-update/reconcile/preclassify.sh"; [ -f "$P" ] && [ -f "${P%/*}/lib.sh" ] || exit 9; W="$(mktemp -d)" || exit 9; W="$(cd "$W" && pwd)"; D="$W/d"; L="$W/$(printf 'L%.0s' $(seq 1 150))/$(printf 'M%.0s' $(seq 1 150))/d"; C="$W/c"; O="$W/ro"; g() { git -C "$D" -c user.email=r@r -c user.name=r "$@"; }; mkdir -p "$D/core/fixtures/p" "$C/.claude" "$C/tests/fixtures/p" "$O" || exit 9; git -C "$D" init -q || exit 9; printf 'a\n' > "$D/core/fixtures/p/a.sh"; printf 'r\n' > "$D/core/fixtures/p/r.md"; printf '1.0.0\n' > "$D/VERSION"; g add -A && g commit -qm b || exit 9; B="$(git -C "$D" rev-parse HEAD)"; printf 'a2\n' > "$D/core/fixtures/p/a.sh"; printf 'n\n' > "$D/core/fixtures/p/n.sh"; g rm -q core/fixtures/p/r.md; printf '2.0.0\n' > "$D/VERSION"; g add -A && g commit -qm t || exit 9; T="$(git -C "$D" rev-parse HEAD)"; printf 'a\n' > "$C/tests/fixtures/p/a.sh"; printf 'r\n' > "$C/tests/fixtures/p/r.md"; printf 'version: 1.0.0\ncommit: %s\n' "$B" > "$C/.claude/.ai-dlc-version"; mkdir -p "${L%/d}" && cp -R "$D" "$L" || exit 9; [ "${#L}" -gt 255 ] || exit 9; chmod 555 "$O"; ( : > "$O/x" ) 2>/dev/null && exit 9; s="$(env -u AI_DLC_RECONCILE_MEMO bash "$P" "$D" "$B" "$T" "$C" 2>/dev/null)"; [ "$(printf '%s\n' "$s" | grep -c 'core/fixtures/p/')" -ge 3 ] || exit 9; l="$(env -u AI_DLC_RECONCILE_MEMO bash "$P" "$L" "$B" "$T" "$C" 2>/dev/null)"; o="$(AI_DLC_RECONCILE_MEMO="$O" bash "$P" "$D" "$B" "$T" "$C" 2>/dev/null)"; chmod 755 "$O"; [ "$s" = "$l" ] || exit 1; [ "$s" = "$o" ] || exit 2; exit 0
+
+## BL-310 — ENOSPC partway through a memo fill can cache truncated content with status 0
+
+**NOTE.** Filed at batch 153 from the `BL-306` contract. It discharges no consumer candidate.
+
+`BL-306` routes a miss direct when its fill file cannot be CREATED. It does not cover a disk that
+fills up after the file exists. `git show` whose stdout write fails can still exit 0, and the memo
+would then cache the truncated `.c` with status 0. This was reasoned from the write path and not
+constructed with a real ENOSPC.
+
 verify: manual
 
 ## BL-307 — a zero-byte `pending.md` takes an exit-0 road through Checks 2 and 2a that prints no `EXAMINED NOTHING`
