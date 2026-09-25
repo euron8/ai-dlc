@@ -339,6 +339,81 @@ else
   score_route_mut "mutation-9-hand" "exit 9 routed to HAND-REVIEW"
 fi
 
+# ---------------------------------------------------------------------------------------
+# Seed D — an `sh` receipt that READS STDIN must not swallow the entries after it.
+# ---------------------------------------------------------------------------------------
+# The receipt loop is fed by a heredoc of ledger records, so an eval that inherits stdin hands
+# a stdin-reading receipt EVERY LATER RECORD. Measured before the fix: first receipt
+# `sh cat >/dev/null` over three entries produced ONE row -- the later entries were neither
+# STILL-LIVE nor CLOSE-CANDIDATE, they were simply absent. The reader is FIRST on purpose, and
+# the entries after it carry three different verdicts, so a swallow of any length and a
+# mis-scored row are both visible: every conjunct is PRESENCE-shaped.
+LD="$WORK/d.md"
+cat > "$LD" <<'EOM'
+# Probe ledger — a receipt that reads stdin
+
+## BL-131 — sh receipt reading stdin, first
+
+verify: sh cat >/dev/null
+
+## BL-132 — sh exits non-zero, after the reader
+
+verify: sh false
+
+## BL-133 — sh exits zero, after the reader
+
+verify: sh true
+
+## BL-134 — a non-sh receipt, after the reader
+
+verify: lacks VERSION "."
+EOM
+stdin_ok() { # <output> — 0 when all four rows are present, once each, with the right verdict
+  local o="$1" id n
+  for id in 131 132 133 134; do
+    n="$(grep -cE "	BL-$id	" <<<"$o")" || n=0
+    [ "$n" -eq 1 ] || { echo "BL-$id has $n rows, want 1"; return 1; }
+  done
+  grep -qE '^CLOSE-CANDIDATE	BL-131	' <<<"$o" || { echo "the reader itself is not CLOSE-CANDIDATE (cat over a closed stdin exits 0)"; return 1; }
+  grep -qE '^STILL-LIVE	BL-132	'      <<<"$o" || { echo "BL-132 (sh false) is not STILL-LIVE"; return 1; }
+  grep -qE '^CLOSE-CANDIDATE	BL-133	' <<<"$o" || { echo "BL-133 (sh true) is not CLOSE-CANDIDATE"; return 1; }
+  grep -qE '^STILL-LIVE	BL-134	'      <<<"$o" || { echo "BL-134 (lacks, anchor present) is not STILL-LIVE"; return 1; }
+  return 0
+}
+DOUT="$(bash "$RV" "$LD" 2>&1)"
+if why="$(stdin_ok "$DOUT")"; then
+  ok "stdin-receipt" "a receipt reading stdin leaves all four rows with their verdicts"
+else
+  bad "stdin-receipt" "a stdin-reading receipt swallowed later entries: $why"
+fi
+# THE MUTANT: the redirect removed. Same mutant root as above, and its unmutated control runs
+# first on the same seed so a dead root cannot score the kill. The kill needs BL-131's row
+# PRESENT (the copy ran) and the rows after it missing.
+DAN="$(grep -c '^ *( cd "\$REPO_ROOT" && eval "\$REST" </dev/null ) >/dev/null 2>&1$' "$RV")" || DAN=0
+if [ "$DAN" -eq 1 ]; then ok "stdin-anchor" "the receipt eval line is unique in the engine"
+else bad "stdin-anchor" "the receipt eval line appears $DAN times; the mutation below needs exactly one"; fi
+cp "$RV" "$MUT"
+MOUT="$(bash "$MUT" "$LD" 2>&1)"
+if why="$(stdin_ok "$MOUT")"; then
+  ok "stdin-control" "the unmutated copy in the mutant root keeps all four rows"
+else
+  bad "stdin-control" "the unmutated copy fails seed D, so the mutant verdict below is void: $why"
+fi
+if ! sed 's@^\( *\)( cd "\$REPO_ROOT" \&\& eval "\$REST" </dev/null ) >/dev/null 2>&1$@\1( cd "$REPO_ROOT" \&\& eval "$REST" ) >/dev/null 2>\&1@' "$RV" > "$MUT"; then
+  bad "mutation-stdin" "DID NOT APPLY: sed failed"
+elif cmp -s "$RV" "$MUT"; then
+  bad "mutation-stdin" "DID NOT APPLY: the mutation matched nothing, so the closed stdin is unproven"
+else
+  MOUT="$(bash "$MUT" "$LD" 2>&1)"
+  if ! grep -qE '	BL-131	' <<<"$MOUT"; then
+    bad "mutation-stdin" "the reader's own row (BL-131) is gone -- the mutant broke the engine, not the redirect"
+  elif why="$(stdin_ok "$MOUT")"; then
+    bad "mutation-stdin" "SURVIVED: with the receipt's stdin inherited, seed D still keeps every row"
+  else
+    ok "mutation-stdin" "killed: with the receipt's stdin inherited the reader swallows the later entries -- $why"
+  fi
+fi
+
 # The preamble and the `## Receipts` prose section must contribute NO row. A parser that
 # treated any heading as an entry produced a phantom `Receipts` entry that came back
 # ALREADY-CLOSED, because that section quotes the closing form while explaining it.
