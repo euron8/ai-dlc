@@ -10,14 +10,42 @@
 # DECISION ORDER (first match wins)
 # 1. pause flag exists               -> allow stop (user is driving)
 # 2. no snapshot exists              -> allow stop (no active pipeline)
-# 3. rapid-fire limit exceeded       -> allow stop (stall confirmed)
+# 3. stall run exceeds EFF_MAX       -> allow stop (stall confirmed)
 # 4. default                         -> block stop (force Rule 3 continue)
 #
-# RAPID-FIRE DETECTION (time-based, replaces stop_hook_active check)
-# Tracks the timestamp of each block and a counter of consecutive
-# rapid-fire blocks. If two blocks occur within 30 seconds of each
-# other, they are counted as the same stall attempt. After 3 such
-# rapid-fire blocks, the hook backs off and allows the stop.
+# RAPID-FIRE DETECTION (tool call AND time, replaces stop_hook_active check)
+# Tracks the timestamp of each block, a counter of consecutive blocks in
+# the same stall run, and a TOOL MARK -- the session id plus the id of the
+# last assistant `tool_use` in the transcript. A block CONTINUES the run
+# when there has been no new tool call since the previous block, OR when
+# it lands within 30 seconds of it. Only a new tool call AND 30 seconds
+# together start a new run. Once the run passes EFF_MAX (3, or the
+# harness cap when that is lower), the hook backs off and allows the stop.
+#
+# THE TOOL CALL IS THE SIGNAL BECAUSE IT IS THE HARNESS'S OWN SIGNAL.
+# Measured on the Claude Code 2.1.282 binary: the harness keeps its own
+# count of consecutive Stop-hook blocks and ends the turn when it passes
+# CLAUDE_CODE_STOP_HOOK_BLOCK_CAP (default 8, so the 9th block), and it
+# resets that count ONLY on a tool-use recursion -- never on elapsed time.
+# The time-only counter this replaced reset on any 30s gap, so a lead
+# retrying a stop every 45s was blocked forever by the hook and released
+# by the harness instead, and the log recorded the override as `BLOCKED`.
+# Measured on the reference consumer: 21 blocks 22-89s apart in one
+# session, `rapid-fire 3/3` reached twice and reset twice, BACKOFF 0.
+# With the tool test, the run only resets where the harness's does, so
+# the hook always releases first.
+#
+# THE OR-DELTA ARM EXISTS BECAUSE ARMING A WAIT-BEAT IS ITSELF A TOOL CALL.
+# A tool-only rule reset the run on every beat re-arm and reintroduced the
+# join-wait stall Check 2b's comment documents (sprint 305: BLOCKED 15,
+# BACKOFF 0). A beat that returned instantly consumes no time, so the
+# 30s arm still counts it; a beat that genuinely slept is a tool call
+# AND elapsed time, which is progress under both tests.
+#
+# A STATE FILE WITH NO THIRD LINE, OR NO READABLE TRANSCRIPT, FALLS BACK
+# TO THE TIME TEST UNCHANGED -- an older hook's two-line file is read, not
+# refused. Check 0's handoff guard counts through the same helper and the
+# same EFF_MAX, because the harness counts blocks from both sites as one.
 #
 # Why time-based instead of stop_hook_active? When the pipeline
 # invokes multiple bmad skills in sequence (common in Discovery
@@ -52,8 +80,10 @@
 # regardless of who created it.
 #
 # OUTPUT
-# - State: _bmad-output/pipeline-block-state.txt (2 lines:
-#   last-block epoch timestamp, consecutive rapid-fire count)
+# - State: _bmad-output/pipeline-block-state.txt and
+#   _bmad-output/handoff-guard-state.txt (3 lines each: last-block epoch
+#   timestamp, consecutive stall-run count, tool mark
+#   `<session_id>:<last tool_use id|none>`, empty when unreadable)
 # - Appends to: _bmad-output/pipeline-continuation-log.md
 # - JSON to stdout on block: decision + reason
 # - Exit 0 in all cases (block is in the JSON body)
@@ -92,6 +122,16 @@ BEAT_MARKER="${LOG_DIR}/.beat-inflight"
 # Rapid-fire thresholds
 RAPID_WINDOW_SECONDS=30
 MAX_RAPID_BLOCKS=3
+
+# EFF_MAX IS MAX_RAPID_BLOCKS CLAMPED TO THE HARNESS CAP, NEVER TO CAP-1. The hook allows on
+# invocation EFF_MAX+1 and the harness overrides on invocation CAP+1, so EFF_MAX <= CAP is
+# exactly enough; CAP-1 is off by one and turns CAP=1 into a hook that never blocks. CAP <= 0
+# disables the harness cap, so it leaves the default alone; a non-numeric value is read as the
+# harness's own default of 8. Computed without a fork: every Stop pays for this line.
+EFF_MAX="$MAX_RAPID_BLOCKS"
+_stop_cap="${CLAUDE_CODE_STOP_HOOK_BLOCK_CAP:-8}"
+[[ "$_stop_cap" =~ ^-?[0-9]+$ ]] || _stop_cap=8
+if [ "$_stop_cap" -gt 0 ] && [ "$_stop_cap" -lt "$EFF_MAX" ]; then EFF_MAX="$_stop_cap"; fi
 
 # -----------------------------------------------------------------------------
 # Read hook input
@@ -141,7 +181,12 @@ Event types:
   message was outstanding and unacknowledged (Rule 29). A nonzero count means
   the lead tried to execute straight through a waiting human and the hook --
   not the lead's judgment -- is what stopped it. Investigate each one.
-- `BACKOFF`: rapid-fire stop attempts detected; stall confirmed
+- `BACKOFF`: rapid-fire stop attempts detected; stall confirmed. A block
+  continues the stall run when NO tool call came between it and the previous
+  block, at any spacing, or when it came within 30s of it; only a tool call
+  AND 30s start a new run. The hook releases once the run passes 3 blocks, or
+  CLAUDE_CODE_STOP_HOOK_BLOCK_CAP when that is lower, so it lets go before
+  the harness's own block cap ends the turn
 - `ESCALATION_UNDELIVERED`: a SendMessage returned `success:false`, so an
   operator-bound message was never delivered. The harness does NOT mark these
   as tool errors, which is why they fell through silently; a nonzero count
@@ -186,7 +231,7 @@ fi
 #     lines.
 #   False-positive cost: one extra turn when the operator's message merely mentions
 #     handoff without requesting one. It self-clears through the rapid-fire backoff
-#     below (MAX_RAPID_BLOCKS), so it can never wedge the pipeline.
+#     below (EFF_MAX), so it can never wedge the pipeline.
 #   Removal condition: retire when two consecutive sprints record zero
 #     handoff-emission misses, or when the resume block is generated rather than
 #     hand-authored.
@@ -226,6 +271,85 @@ fi
 # Fail-open: any transcript parse failure skips this check entirely.
 TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // empty')
 HANDOFF_STATE="${LOG_DIR}/handoff-guard-state.txt"
+
+# -----------------------------------------------------------------------------
+# The stall-run counter: ONE helper for Check 0's HANDOFF_STATE and Check 3's STATE_FILE
+# -----------------------------------------------------------------------------
+# THE HARNESS COUNTS BLOCKS FROM BOTH SITES AS ONE RUN, so the two sites cannot hold two
+# rules. Before this helper Check 0 carried its own inline copy of the time test, and a fix
+# landing in Check 3 alone would have left a slow handoff-guard stall blocked until the
+# harness overrode it -- the defect this helper exists to close, one site over.
+#
+# THE MARK KEYS ON `.message.role`, NEVER ON THE TOP-LEVEL `.type`. The handoff fixtures seed
+# transcript lines that carry no `type` at all, so a `.type=="assistant"` selector reads every
+# one of them as "no tool call ever" and pins the mark at `none`. And it reads the tool_use ID,
+# never a count: a raw `grep -c tool_use` moves when prose merely mentions the word, which is
+# exactly what a stalled lead explaining itself writes.
+#
+# LAZY AND ONCE. The tail form costs ~26ms; the whole-file fallback runs only when the last 400
+# lines hold no assistant tool_use at all. Nothing outside the two counter sites calls this, so
+# an allow on Check 1, 2 or 2b pays nothing for it.
+#
+# UNKNOWN IS NOT "NO". No transcript, no jq, or a state file with no third line (an older
+# hook's two-line file) leaves the tool test unanswered, and the time test decides alone --
+# the counter this replaced, unchanged. A changed session id changes the mark, so a new
+# session is a tool call by construction.
+TOOL_MARK=""
+TOOL_MARK_READ=0
+TM_PROG='fromjson? | select(.message.role? == "assistant") | .message.content | arrays | .[] | select(.type? == "tool_use") | .id // empty'
+tool_mark() { # -> sets TOOL_MARK once per invocation; empty when the transcript cannot answer
+  [ "$TOOL_MARK_READ" = "1" ] && return 0
+  TOOL_MARK_READ=1
+  TOOL_MARK=""
+  [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ] && [ -r "$TRANSCRIPT" ] || return 0
+  command -v jq >/dev/null 2>&1 || return 0
+  _tm_id="$(tail -n 400 "$TRANSCRIPT" 2>/dev/null | jq -rR "$TM_PROG" 2>/dev/null | tail -n 1)"
+  [ -n "$_tm_id" ] || _tm_id="$(jq -rR "$TM_PROG" "$TRANSCRIPT" 2>/dev/null | tail -n 1)"
+  TOOL_MARK="${SESSION_ID}:${_tm_id:-none}"
+}
+
+# stall_run <state-file>: reads the previous block from a 3-line state file and decides whether
+# THIS block continues that stall run. Sets RUN_LAST (previous epoch, 0 = none), RUN_DELTA,
+# RUN_CNT (the new count), RUN_TOOL (yes|no|unknown -- a tool call since the previous block)
+# and RUN_SIGNAL (tool|time|reset -- which test continued the run). The caller writes the state
+# back with stall_run_write, so the mark it persists is the one this decision was made on.
+#
+# CONTINUE ON EITHER, RESET ONLY ON BOTH: no new tool call, OR under RAPID_WINDOW_SECONDS. The
+# result is never lower than the time-only counter on any sequence, so this can only release
+# EARLIER than the hook it replaced, and on the transcript path it is never lower than the
+# harness's own count, so the hook releases before the harness overrides.
+stall_run() {
+  RUN_LAST=0; RUN_CNT=0; _run_prev=""
+  if [ -f "$1" ]; then
+    RUN_LAST=$(sed -n '1p' "$1" 2>/dev/null); RUN_CNT=$(sed -n '2p' "$1" 2>/dev/null)
+    _run_prev=$(sed -n '3p' "$1" 2>/dev/null)
+    [[ "$RUN_LAST" =~ ^[0-9]+$ ]] || RUN_LAST=0; [[ "$RUN_CNT" =~ ^[0-9]+$ ]] || RUN_CNT=0
+  fi
+  RUN_DELTA=$((NOW - RUN_LAST))
+  tool_mark
+  RUN_TOOL=unknown
+  if [ -n "$TOOL_MARK" ] && [ -n "$_run_prev" ]; then
+    if [ "$TOOL_MARK" = "$_run_prev" ]; then RUN_TOOL=no; else RUN_TOOL=yes; fi
+  fi
+  if [ "$RUN_TOOL" = "no" ]; then
+    RUN_CNT=$((RUN_CNT + 1)); RUN_SIGNAL=tool
+  elif [ "$RUN_DELTA" -lt "$RAPID_WINDOW_SECONDS" ]; then
+    RUN_CNT=$((RUN_CNT + 1)); RUN_SIGNAL=time
+  else
+    RUN_CNT=1; RUN_SIGNAL=reset
+  fi
+}
+stall_run_write() { # <state-file>: NOW, RUN_CNT, TOOL_MARK -- the third line may be empty
+  printf '%s\n%s\n%s\n' "$NOW" "$RUN_CNT" "$TOOL_MARK" > "$1"
+}
+# The BACKOFF detail line, naming the test that closed the run.
+stall_run_why() {
+  if [ "$RUN_SIGNAL" = "tool" ]; then
+    printf '%s' "no tool call across ${RUN_CNT} consecutive blocks (the last with none since the previous block, at any spacing); stall confirmed"
+  else
+    printf '%s' "${EFF_MAX} consecutive rapid-fire blocks (within ${RAPID_WINDOW_SECONDS}s of each other); stall confirmed"
+  fi
+}
 
 # The handoff-intent vocabulary is NOT written here. It is declared once in
 # schemas/pause-routing.json, because ai-dlc-answer-capture.sh needs the same set to route
@@ -588,7 +712,7 @@ EOF
     # is prescribed to resolve it. Offline and protected-branch both leave the commits ahead and
     # DO block -- deliberately, because the operator needs to know the work is stranded, and the
     # remediation text below says to report it rather than to retry forever. The backoff releases
-    # after MAX_RAPID_BLOCKS either way, so this can delay a handoff but cannot wedge one.
+    # after EFF_MAX either way, so this can delay a handoff but cannot wedge one.
     PUSH_OK=1
     if command -v git >/dev/null 2>&1 && git -C "$PROJECT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
       if [ -n "$(git -C "$PROJECT_DIR" remote 2>/dev/null)" ]; then
@@ -653,12 +777,9 @@ EOF
 
     if [ "$RESUME_OK" != "1" ] || [ "$TEAMMATES_OK" != "1" ] || [ "$INFLIGHT_OK" != "1" ] \
        || [ "$PUSH_OK" != "1" ] || [ "$DRIVER_OK" != "1" ] || [ "$MARKER_OK" != "1" ]; then
-      H_LAST=0; H_CNT=0
-      if [ -f "$HANDOFF_STATE" ]; then
-        H_LAST=$(sed -n '1p' "$HANDOFF_STATE" 2>/dev/null); H_CNT=$(sed -n '2p' "$HANDOFF_STATE" 2>/dev/null)
-        [[ "$H_LAST" =~ ^[0-9]+$ ]] || H_LAST=0; [[ "$H_CNT" =~ ^[0-9]+$ ]] || H_CNT=0
-      fi
-      if [ $((NOW - H_LAST)) -lt "$RAPID_WINDOW_SECONDS" ]; then H_CNT=$((H_CNT + 1)); else H_CNT=1; fi
+      # THE SAME STALL-RUN RULE AS CHECK 3, through the same helper and the same EFF_MAX: the
+      # harness counts this site's blocks and Check 3's as one run.
+      stall_run "$HANDOFF_STATE"; H_CNT="$RUN_CNT"
       # WHICH ARM FIRED IS PART OF THE RECORD. Two different failures reach this block and
       # they have different remedies; a log line naming only the resume block would send a
       # retro reading HANDOFF_GUARD_BLOCK counts to the wrong cause.
@@ -679,12 +800,13 @@ EOF
       # not told to redo it.
       H_FIX_RESUME="Per steps/handoff.md step 4, emit exactly this, and nothing else -- no narrated body:"
       H_FIX_TEAM="Per steps/handoff.md step 1, stop every in-flight teammate, wait for each to return, and rewrite its In-Flight Teammates row's status to \`stopped\` -- do NOT delete the row. A deleted row is a lost record: the successor session cannot tell it from a teammate that never existed."
-      if [ "$H_CNT" -le "$MAX_RAPID_BLOCKS" ]; then
-        echo "$NOW" > "$HANDOFF_STATE"; echo "$H_CNT" >> "$HANDOFF_STATE"
+      if [ "$H_CNT" -le "$EFF_MAX" ]; then
+        stall_run_write "$HANDOFF_STATE"
         {
-          echo "## ${TIMESTAMP} -- HANDOFF_GUARD_BLOCK (${H_CNT}/${MAX_RAPID_BLOCKS})"
+          echo "## ${TIMESTAMP} -- HANDOFF_GUARD_BLOCK (${H_CNT}/${EFF_MAX})"
           echo "- Session: ${SESSION_ID}"
           echo "- Handoff requested but the turn ends with ${H_WHY}"
+          echo "- Tool call since previous block: ${RUN_TOOL}"
           echo ""
         } >> "$LOG_FILE"
         # DISPATCHED IN THE PROCEDURE'S OWN ORDER -- step 1, then 3, then 4 -- so the lead is
@@ -1200,9 +1322,10 @@ if [ -f "$BEAT_MARKER" ]; then
     # Driven both ways over four event sequences, the decision sequence came back
     # byte-identical; only the printed delta moved.
     #
-    # THE CLOCK IS THE PROGRESS SIGNAL, so the counter needs no separate reset. A
-    # beat that genuinely consumed time pushes `DELTA` past `RAPID_WINDOW_SECONDS`
-    # and the `else` branch below resets the counter on its own. A beat that
+    # THE CLOCK AND THE TOOL CALL ARE THE PROGRESS SIGNAL, so the counter needs no
+    # separate reset. Arming a beat is a tool call, and a beat that genuinely consumed
+    # time pushes `DELTA` past `RAPID_WINDOW_SECONDS` too, so `stall_run` below resets
+    # the counter on its own -- it resets only when BOTH hold. A beat that
     # returned instantly -- every target already on disk, one of the four ways the
     # block reason below says you can believe you have a beat and not have one --
     # consumes no time, so the counter keeps climbing and the stall is reported.
@@ -1217,35 +1340,21 @@ fi
 # -----------------------------------------------------------------------------
 # Read block state and compute rapid-fire status
 # -----------------------------------------------------------------------------
-LAST_TS=0
-COUNTER=0
-
-if [ -f "$STATE_FILE" ]; then
-  LAST_TS=$(sed -n '1p' "$STATE_FILE" 2>/dev/null || echo "0")
-  COUNTER=$(sed -n '2p' "$STATE_FILE" 2>/dev/null || echo "0")
-  # Defensive: ensure numeric values
-  [[ "$LAST_TS" =~ ^[0-9]+$ ]] || LAST_TS=0
-  [[ "$COUNTER" =~ ^[0-9]+$ ]] || COUNTER=0
-fi
-
-DELTA=$((NOW - LAST_TS))
-
-if [ "$DELTA" -lt "$RAPID_WINDOW_SECONDS" ]; then
-  # Within rapid-fire window; same stall attempt
-  COUNTER=$((COUNTER + 1))
-else
-  # Gap > window; progress happened (or first block)
-  COUNTER=1
-fi
+# Through the shared stall_run helper (defined beside Check 0, which uses it too): the run
+# continues on no new tool call OR under RAPID_WINDOW_SECONDS, and resets only on both.
+stall_run "$STATE_FILE"
+LAST_TS="$RUN_LAST"
+DELTA="$RUN_DELTA"
+COUNTER="$RUN_CNT"
 
 # -----------------------------------------------------------------------------
-# Check 3: Rapid-fire limit exceeded (genuine stall)
+# Check 3: Stall run exceeds EFF_MAX (genuine stall)
 # -----------------------------------------------------------------------------
-if [ "$COUNTER" -gt "$MAX_RAPID_BLOCKS" ]; then
+if [ "$COUNTER" -gt "$EFF_MAX" ]; then
   {
     echo "## ${TIMESTAMP} -- BACKOFF"
     echo "- Session: ${SESSION_ID}"
-    echo "- ${MAX_RAPID_BLOCKS} consecutive rapid-fire blocks (within ${RAPID_WINDOW_SECONDS}s of each other); stall confirmed"
+    echo "- $(stall_run_why)"
     echo "- Allowing stop. Investigate transcript for upstream cause."
     echo ""
   } >> "$LOG_FILE"
@@ -1365,11 +1474,10 @@ fi
 # -----------------------------------------------------------------------------
 # Write updated state and log the block
 # -----------------------------------------------------------------------------
-echo "$NOW" > "$STATE_FILE"
-echo "$COUNTER" >> "$STATE_FILE"
+stall_run_write "$STATE_FILE"
 
 {
-  echo "## ${TIMESTAMP} -- BLOCKED (rapid-fire ${COUNTER}/${MAX_RAPID_BLOCKS})"
+  echo "## ${TIMESTAMP} -- BLOCKED (rapid-fire ${COUNTER}/${EFF_MAX})"
   echo "- Session: ${SESSION_ID}"
   if pq_fire; then
     echo "- Question in prose: yes"
@@ -1390,6 +1498,7 @@ echo "$COUNTER" >> "$STATE_FILE"
   else
     echo "- Seconds since previous block: ${DELTA}"
   fi
+  echo "- Tool call since previous block: ${RUN_TOOL}"
   echo "- Reason returned to Claude: forced continuation (Rule 3)"
   echo ""
 } >> "$LOG_FILE"

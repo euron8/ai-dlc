@@ -768,7 +768,9 @@ nothing about the result signals that it measured the wrong thing:
   hook, not the lead's judgment, is what protected the human. Investigate why.
 - `USER_PAUSE` vs `BLOCKED` — pause frequency against Rule 3 enforcement volume.
 - `BACKOFF` — the Stop hook exhausted its retry budget; the pipeline genuinely
-  stuck. Find the upstream cause in the transcript.
+  stuck. The budget counts consecutive blocks with no tool call between them, at
+  any spacing, or within 30s of each other. The entry's detail line names which
+  test closed the run. Find the upstream cause in the transcript.
 
 A retro that reports zero steerability findings on a sprint in which the operator
 visibly repeated themselves has run the audit wrong.
