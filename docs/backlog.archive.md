@@ -19108,3 +19108,131 @@ gate.
 
 verify: manual
 
+## BL-313 — `--audit-trunk` runs each declared validator on the loop's own stdin, so a validator that reads stdin swallows the rest of its class and the commit reports CLEAN
+
+**DEFECT.** Found at batch 155 by an adversary in this repo, during the contract pass for the
+eval-stdin class. It was not filed by the consumer and discharges no consumer candidate.
+
+`validate-cycle-commits.sh --audit-trunk` runs a class's validators in a
+`while IFS= read -r _cmd; do … done < "$A_TMP/valres"` loop, and each `eval "$_cmd"` inherited
+that loop's stdin. A validator that reads stdin therefore consumed the class's remaining
+validator lines, none of them ran, and the commit reported CLEAN. The watermark advanced past a
+commit that a later validator rejects. Measured at `49330f4a` with class `docs` and validators
+`<first>` then `false`: `true` first gives FAIL, findings=1 (the control); `cat >/dev/null`
+first gives CLEAN, findings=0; `read -r x; true` first gives CLEAN.
+
+The fix redirects `</dev/null` on the eval, inside the `$( … )`. Placed outside the
+substitution, the subshell still inherits the list, and the receipt scores that placement 1.
+Mutant M2 in `trunk-audit-mutants` is re-anchored on the new line and keeps the redirect.
+
+**Consumer reachability: none today.** The reference consumer declares nine `validator:` lines
+over four distinct commands. The only one that loops on `read` redirects from its own manifest
+(`done < "$MANIFEST"`), so none reads the audit's stdin.
+
+The receipt builds four scratch repos and drives the shipping audit. The `true`-first control
+must FAIL (exit 9 otherwise). The `cat` and `read` spellings must each FAIL and name
+`'false'`. A `cat`-first class whose second validator is `true` must stay CLEAN. Scored: tip 0,
+base 1, redirect removed 1, `<&0` 1, redirect outside the `$( … )` 1. It scores 0 on each of
+the other two fixes alone.
+
+**LANDED (v0.640.0, verified 7089ccb8).** The receipt exits 0 at that commit.
+
+verify: sh R="$(pwd)"; V="$R/core/scripts/validate-cycle-commits.sh"; [ -f "$V" ] || exit 9; command -v python3 >/dev/null || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; W="$(mktemp -d)" || exit 9; F="$(printf '\140\140\140')"; g() { git -C "$D" -c user.email=r@r -c user.name=r -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }; au() { D="$W/$1"; mkdir -p "$D/.claude/skills/ai-dlc" "$D/docs" && git -C "$D" init -q && git -C "$D" symbolic-ref HEAD refs/heads/main || return 9; printf 'consumer_pr_class_file: .claude/skills/ai-dlc/pr-classes.md\n' > "$D/.claude/skills/ai-dlc/layer-contract.yaml"; printf '# t\n\n%s\nclass: docs\npaths: ^docs/\nvalidator: %s\nvalidator: %s\n%s\n' "$F" "$2" "$3" "$F" > "$D/.claude/skills/ai-dlc/pr-classes.md"; printf 'a\n' > "$D/docs/a.md"; g add -A && g commit -qm genesis || return 9; G="$(git -C "$D" rev-parse HEAD)" || return 9; printf 'b\n' >> "$D/docs/a.md"; g add -A && g commit -qm change || return 9; o="$(cd "$D" && bash "$V" --audit-trunk "$G" 2>&1)"; rc=$?; return 0; }; au ctl true false || exit 9; [ "$rc" = 1 ] || exit 9; case "$o" in *"'false' exits non-zero"*) ;; *) exit 9 ;; esac; au cat 'cat >/dev/null' false || exit 9; [ "$rc" = 1 ] || exit 1; case "$o" in *"'false' exits non-zero"*) ;; *) exit 1 ;; esac; au rd 'read -r x; true' false || exit 9; [ "$rc" = 1 ] || exit 1; case "$o" in *"'false' exits non-zero"*) ;; *) exit 1 ;; esac; au near 'cat >/dev/null' true || exit 9; [ "$rc" = 0 ] || exit 1; case "$o" in *"CLEAN "*) ;; *) exit 1 ;; esac; exit 0
+
+## BL-314 — `validate-artifact-derivations.sh` ran each derivation on the rest of the artifact, so a derivation reading stdin swallowed every later block
+
+**DEFECT.** Found at batch 155 by an adversary in this repo, during the contract pass for the
+eval-stdin class. It was not filed by the consumer and discharges no consumer candidate.
+
+`run_pair` is called from inside `check_file`'s `while … done < "$f"`, and its eval inherited
+that stdin, which is the rest of the artifact being checked. An allowlisted command that reads
+stdin, such as `grep -c WRONG` with no file operand, consumed the remaining text. Its output
+was computed over the artifact's own prose, and no later block was checked. Measured at
+`49330f4a` with a stale second block: `echo 1` first gives exit 1, `1 stale … of 2 checked`
+(the control). `grep -c WRONG` first, recorded `1`, gives exit 0 and `OK: 1 derivation(s)`.
+
+Closing stdin alone is not the fix. `grep -c X` over an empty stream prints 0, so a derivation
+that measures nothing would pass whenever its author recorded 0. The fix therefore hands the
+eval a one-line sentinel file as its stdin, on fd 3. After the eval the parent reads fd 3,
+whose offset the child shares, and the pair fails as `READS-STDIN` unless the sentinel line
+comes back whole. The check executes the command rather than parsing it, so a command that
+does not read stdin is unaffected. The one known miss is `diff f.txt -`, which reads its `-`
+operand without moving the shared offset. It is listed in the script's header rather than
+claimed as caught, and later blocks are still checked after it.
+
+**Consumer reachability: one reader, and it failed loudly.** The shipping reader's `--list`
+over the reference consumer's `_bmad-output/` and `docs/` finds 6020 derivations in 4840
+blocks. One stdin reader sits in `reconcile-log-20260922T070020Z.md`: a `grep` whose operands
+continue on a backslash line the reader does not join. On a scratch copy, base exits 1 with
+`GRAMMAR` and `STALE`, `2 … of 1 checked`, and the tip exits 1 with `READS-STDIN` and `STALE`,
+`2 … of 2 checked`. So it never produced a false clean.
+
+The receipt drives the shipping validator on scratch artifacts. The control, `echo 1` then a
+stale block, must fail once (exit 9 otherwise). A file-operand `grep -c WRONG data.txt` must
+pass. `grep -c WRONG` with its output recorded as `1` and again as `0`, each followed by a
+stale block, must fail twice: the reader and the stale block. Scored: tip 0, base 1, redirect
+removed 1, `<&0` 1, `</dev/null` in place of the sentinel 1 (the recorded-`0` case passes).
+The sentinel redirect moved outside the subshell scores 0, which is correct because that is an
+equivalent fix. It scores 0 on each of the other two fixes alone.
+
+**LANDED (v0.640.0, verified 7089ccb8).** The receipt exits 0 at that commit.
+
+verify: sh R="$(pwd)"; V="$R/core/scripts/validate-artifact-derivations.sh"; [ -f "$V" ] || exit 9; D="$(mktemp -d)" || exit 9; F="$(printf '\140\140\140')"; printf 'alpha\nWRONG here\n' > "$D/data.txt"; mk() { printf '# a\n\n%sderived\n$ %s\n%s\n%s\n\nLater.\n\n%sderived\n$ %s\n%s\n%s\n' "$F" "$2" "$3" "$F" "$F" "$4" "$5" "$F" > "$D/$1.md"; }; run() { o="$(AI_DLC_PROJECT_ROOT="$D" bash "$V" "$D/$1.md" 2>&1)"; rc=$?; n="$(grep -c '^FAIL (' <<<"$o")" || n=0; }; mk ctl 'echo 1' 1 'echo WRONG-RECORDED' not-this; run ctl; [ "$rc" = 1 ] && [ "$n" = 1 ] || exit 9; mk ok 'grep -c WRONG data.txt' 1 'echo fine' fine; run ok; [ "$rc" = 0 ] || exit 1; mk rd1 'grep -c WRONG' 1 'echo WRONG-RECORDED' not-this; run rd1; [ "$rc" = 1 ] && [ "$n" = 2 ] || exit 1; mk rd0 'grep -c WRONG' 0 'echo WRONG-RECORDED' not-this; run rd0; [ "$rc" = 1 ] && [ "$n" = 2 ] || exit 1; exit 0
+
+## BL-315 — `backlog-reverify.sh` ran each `sh` receipt on the rest of the ledger, so a receipt reading stdin dropped every later entry from the report
+
+**DEFECT.** Found at batch 155 by an adversary in this repo, during the contract pass for the
+eval-stdin class. It was not filed by the consumer and discharges no consumer candidate. The
+script is distribution-only, so no consumer runs it.
+
+The receipt loop reads its records from a heredoc of ledger entries, and
+`eval "$REST"` inherited it. A receipt that reads stdin consumed every later record, so those
+entries produced no row, neither `STILL-LIVE` nor `CLOSE-CANDIDATE`. Measured at `49330f4a`
+over three entries: with a first receipt `sh true` the report has 3 rows (the control), and
+with `sh cat >/dev/null` it has 1. The fix redirects `</dev/null` on the eval.
+
+The receipt drives the shipping script over scratch three-entry ledgers. The `true`-first
+control must give 3 rows (exit 9 otherwise). A `cat`-first ledger and a `read`-first ledger
+must each give 3. Scored: tip 0, base 1, redirect removed 1, `<&0` 1. It scores 0 on each of
+the other two fixes alone.
+
+**LANDED (v0.640.0, verified 7089ccb8).** The receipt exits 0 at that commit.
+
+verify: sh R="$(pwd)"; V="$R/scripts/backlog-reverify.sh"; [ -f "$V" ] || exit 9; D="$(mktemp -d)" || exit 9; T="$(printf '\t')"; mk() { printf '# b\n\n## BL-901 -- a\n\nverify: sh %s\n\n## BL-902 -- b\n\nverify: sh false\n\n## BL-903 -- c\n\nverify: sh true\n' "$2" > "$D/$1.md"; }; rows() { o="$(bash "$V" "$D/$1.md" 2>/dev/null)"; c="$(grep -c "^[A-Z-]*${T}BL-90[123]${T}" <<<"$o")" || c=0; }; mk ctl true; rows ctl; [ "$c" = 3 ] || exit 9; mk cat 'cat >/dev/null'; rows cat; [ "$c" = 3 ] || exit 1; mk rd 'read -r x; true'; rows rd; [ "$c" = 3 ] || exit 1; exit 0
+
+## BL-317 — `ledger-reverify.sh` runs each receipt on the entry loop's own stdin, so a receipt that reads stdin makes every later entry vanish from the report
+
+**DEFECT.** Found at batch 155 by the contract adversary for the eval-stdin class. It named the
+site, and a second hand reproduced it. The consumer did not file it, and it discharges no
+consumer candidate.
+
+The entry loop is `while … read …; done <<< "$ENTRIES"`. Two sites inside it ran a receipt
+with stdin inherited: the evaluation (`bash -c "$sh_prog"`) and the base control in
+`sh_base_rc` (`bash -c "$1"`). A receipt that reads stdin therefore consumed every entry after
+its own, and those entries emitted no row. The run still exited 0 with stderr empty. Measured at
+`49330f4a` on a three-entry ledger whose first receipt was `cat >/dev/null; <passing check>`:
+4 rows became 2. The second entry's `STILL-LIVE` and the third's `CLOSE-CANDIDATE` both vanished,
+and `RECEIPTS-UNDECIDED` fell from "2 of 2" to "1 of 1". The base-control site reproduces on its
+own: a receipt that reads stdin only when `$THEIRS` is the literal base sha gives the same 2 rows.
+
+No verdict flips to `CLOSE-CANDIDATE`. The loss is an entry with no row, which reads exactly like
+an entry with no receipt.
+
+The fix is `</dev/null` on both `bash -c` calls. A copy of the engine with the whole loop moved
+onto fd 3 produced byte-identical output on the fixture's seeded ledger (111 rows each), so no
+third reader of fd 0 exists in the loop body.
+
+**Consumer reachability: none today.** The reference consumer's live ledger carries 20 anchored
+`sh` receipts, and none reads the loop's stdin. **This file is bootstrapping.** The consumer's
+installed engine runs the pull that delivers this fix, so the fix cannot protect that pull.
+
+The receipt drives the shipping engine on three scratch consumers, with base `937919e4` and
+theirs `HEAD`. A control whose first receipt reads nothing must emit all three rows (exit 9
+otherwise). A first receipt that reads stdin at the evaluation site, and one that reads it only
+inside the base control, must each leave all three rows. Scored: tip 0, base `7089ccb8` 1,
+evaluation site alone reverted 1, base-control site alone reverted 1.
+
+**LANDED (v0.641.0, verified 36c3a35b).** The receipt exits 0 at that commit.
+
+verify: sh R="$(pwd)"; E="$R/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh"; [ -f "$E" ] || exit 9; git -C "$R" cat-file -e 937919e4 2>/dev/null || exit 9; W="$(mktemp -d)" || exit 9; T="$(printf '\t')"; ok='git -C "$DIST" cat-file -e "${THEIRS}:VERSION"'; mk() { c="$W/$1"; mkdir -p "$c/_bmad-output/ai-dlc-update"; printf '# L\n\n## PC-S901-RCPT317-ONE — a\n\nverify: sh %s\n\n## PC-S902-RCPT317-TWO — b\n\nverify: sh %s\n\n## PC-S903-RCPT317-THREE — c\n\nverify: sh ! %s\n' "$2" "$ok" "$ok" > "$c/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; o="$(cd "$c" && bash "$E" "$R" 937919e4 "$c" HEAD </dev/null 2>/dev/null)"; n="$(grep -c "^[A-Z-]*${T}PC-S90[123]-RCPT317-" <<<"$o")" || n=0; }; mk ctl "$ok"; [ "$n" = 3 ] || exit 9; mk ev "cat >/dev/null; $ok"; [ "$n" = 3 ] || exit 1; mk bc "case \"\$THEIRS\" in 937919e4) cat >/dev/null ;; esac; $ok"; [ "$n" = 3 ] || exit 1; exit 0
+
