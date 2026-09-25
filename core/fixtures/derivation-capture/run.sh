@@ -25,7 +25,9 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
-trap 'rm -rf "$WORK"' EXIT
+NOROOT_DIRS=""
+# shellcheck disable=SC2086 # NOROOT_DIRS is a space-joined list of mktemp paths, split on purpose
+trap 'rm -rf "$WORK" $NOROOT_DIRS' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
 
@@ -221,6 +223,95 @@ if [ "$RC" = 0 ] && [ ! -s "$ERR" ]; then
   ok "validator exiting 2 → exit 0, silent (only rc 1 is a verdict)"
 else
   bad "a validator that refused to start exited the hook $RC — usage and root-resolution failures would block writes"
+fi
+
+# --- A23-A26: EXIT 2 HAS TWO MEANINGS, AND THE VALIDATOR'S OWN LINES SEPARATE THEM ----------
+# The validator exits 2 both when it cannot START and when a derivation this edit wrote did not
+# run to completion (an `UNRUN:` line, then a `REFUSED:` summary). The second withholds every
+# verdict in the file, STALE included, so a hook that reads every 2 as infrastructure lets one
+# unrunnable block hide a real mismatch in the same write. Measured at the prior tip: a Write of
+# one stale block beside one `"$FILE_ZZ_UNSET"` block gave hook rc=0 with nothing shown.
+unset FILE_ZZ_UNSET
+[ -z "${FILE_ZZ_UNSET+x}" ] && ok "control: FILE_ZZ_UNSET is unset, so A23's second block names an unbound variable" \
+  || bad "control: FILE_ZZ_UNSET is set, so A23 is not about an unbound variable"
+CAP_DIR="$CONSUMER/_bmad-output/planning-artifacts/s1"
+
+# A23: the adversary's two-block Write -- one stale block, one bare unbound `$VAR` block. The
+# unbound variable expands empty (the validator's eval runs with `set -u` off), `grep` on an
+# empty operand prints nothing, and both blocks are STALE: exit 2 with the stale finding shown.
+printf '# s\n\n```derived\n$ grep -c 0 VERSION\n9\n```\n\n```derived\n$ grep -c 0 "$FILE_ZZ_UNSET"\n1\n```\n' > "$CAP_DIR/unbound-write.md"
+fire "$(write_json "$CAP_DIR/unbound-write.md")"
+if [ "$RC" = 2 ] && grep -q 'unbound-write.md:4 records an output' "$ERR" && ! grep -q '^UNRUN' "$ERR"; then
+  ok "a Write of a stale block beside a bare unbound \$VAR block → exit 2, the stale finding shown"
+else
+  bad "the stale-plus-unbound Write exited $RC without naming unbound-write.md:4 as stale — one block that aborts the eval is hiding a real STALE"
+fi
+
+# A24: a Write whose ONLY derivation is unrunnable -- an arithmetic error aborts the subshell
+# whatever `set -u` says. The validator says UNRUN and REFUSED at exit 2; that is a statement
+# about the text this edit wrote, so it reaches the author.
+printf '# s\n\n```derived\n$ grep -c "0$[1/0]" VERSION\n1\n```\n' > "$CAP_DIR/unrun-only.md"
+fire "$(write_json "$CAP_DIR/unrun-only.md")"
+if [ "$RC" = 2 ] && grep -q '^UNRUN: _bmad-output/planning-artifacts/s1/unrun-only.md:4 ' "$ERR" && grep -q '^REFUSED: 1 derivation' "$ERR"; then
+  ok "an UNRUN-only Write → exit 2, the UNRUN line shown at the real path"
+else
+  bad "an UNRUN-only Write exited $RC without surfacing its UNRUN line — a derivation that never ran was written unwitnessed"
+fi
+
+# A25: an UNRUN block BESIDE a stale block. The validator withholds its verdict, but it still
+# prints the STALE it reached; the hook shows both, because a stale block this edit wrote is
+# the author's to fix whether or not a sibling ran.
+printf '# s\n\n```derived\n$ grep -c 0 VERSION\n9\n```\n\n```derived\n$ grep -c "0$[1/0]" VERSION\n1\n```\n' > "$CAP_DIR/unrun-beside-stale.md"
+fire "$(write_json "$CAP_DIR/unrun-beside-stale.md")"
+if [ "$RC" = 2 ] && grep -q 'unrun-beside-stale.md:4 records an output' "$ERR" && grep -q '^UNRUN: .*unrun-beside-stale.md:9 ' "$ERR"; then
+  ok "an UNRUN block beside a stale block → exit 2, both the STALE and the UNRUN shown"
+else
+  bad "an UNRUN block beside a stale one exited $RC without showing both — the unrunnable block hid the stale one"
+fi
+
+# A26: THE NEAR-MISS. An exit 2 that carries no UNRUN or REFUSED line is the validator refusing
+# to start, and it stays exit 0. The refusal text is the REAL validator's, captured by running it
+# where no root resolves (a bare temp dir, no marker, no project variables), then replayed by a
+# stub -- the hook always hands the validator a root, so the real refusal cannot be reached
+# through it. The capture carries its own control: rc 2 and the root-resolution ERROR line.
+# THE CAPTURE DIR IS TRIED UNDER /tmp FIRST, because `$WORK` sits under `$TMPDIR` and an
+# ancestor of that may carry a marker the resolver accepts -- measured on the operator's
+# machine, a `.claude/` directory two levels above `$TMPDIR`, so the copy resolved a root and
+# exited 1. The first candidate whose run is a real root refusal is used.
+NR_RC=""; NR_TXT="$WORK/refusal-root.txt"
+for NR_BASE in /tmp "$WORK"; do
+  NOROOT="$(mktemp -d "$NR_BASE/derivcap-noroot.XXXXXX" 2>/dev/null)" || continue
+  NOROOT_DIRS="${NOROOT_DIRS:-} $NOROOT"
+  cp "$VALIDATOR" "$NOROOT/v.sh"
+  ( cd "$NOROOT" && env -u CLAUDE_PROJECT_DIR -u AI_DLC_PROJECT_ROOT bash "$NOROOT/v.sh" "$ART" ) > "$NR_TXT" 2>&1
+  NR_RC=$?
+  [ "$NR_RC" = 2 ] && grep -q '^ERROR: cannot resolve the project root' "$NR_TXT" && break
+done
+replay() { # $1 captured text  $2 status -> installs a stub validator that replays them
+  { printf '#!/bin/sh\ncat <<'"'"'REFUSAL'"'"' >&2\n'; cat "$1"; printf 'REFUSAL\nexit %s\n' "$2"; } > "$VALIDATOR"
+}
+cp "$VALIDATOR" "$WORK/validator.bak"
+replay "$NR_TXT" "$NR_RC"
+fire "$(edit_json "$ART" "$PAIR_STALE_A")"
+cp "$WORK/validator.bak" "$VALIDATOR"
+if [ "$NR_RC" = 2 ] && grep -q '^ERROR: cannot resolve the project root' "$NR_TXT" \
+   && [ "$RC" = 0 ] && [ ! -s "$ERR" ]; then
+  ok "an unresolvable-root refusal (the real validator's text, exit 2) → exit 0, silent"
+else
+  bad "an unresolvable-root refusal: capture rc $NR_RC, hook rc $RC with $(wc -c <"$ERR") bytes — an infrastructure refusal must not fail the write, or no candidate dir gave a real root refusal"
+fi
+
+# A27: the second infrastructure refusal, bad usage -- the real validator run with no operand,
+# which exits 2 on every machine. Same replay, same verdict: exit 0, silent.
+( cd "$CONSUMER" && AI_DLC_PROJECT_ROOT="$CONSUMER" bash "$VALIDATOR" ) > "$WORK/refusal-usage.txt" 2>&1
+NU_RC=$?
+replay "$WORK/refusal-usage.txt" "$NU_RC"
+fire "$(edit_json "$ART" "$PAIR_STALE_A")"
+cp "$WORK/validator.bak" "$VALIDATOR"
+if [ "$NU_RC" = 2 ] && grep -q '^usage: ' "$WORK/refusal-usage.txt" && [ "$RC" = 0 ] && [ ! -s "$ERR" ]; then
+  ok "a usage refusal (the real validator's text, exit 2) → exit 0, silent"
+else
+  bad "a usage refusal: capture rc $NU_RC, hook rc $RC with $(wc -c <"$ERR") bytes — an infrastructure refusal must not fail the write"
 fi
 
 # --- A16: a REFUSED command blocks at write time too --------------------------

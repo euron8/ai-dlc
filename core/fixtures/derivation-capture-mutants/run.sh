@@ -162,7 +162,10 @@ mutate "MultiEdit edits[] unread" "MultiEdit exited" \
   's/((\.tool_input\.edits \/\/ \[\]) | map(\.new_string \/\/ empty) | join("\\n"))/(.tool_input.no_such_field \/\/ empty)/'
 
 # --- 4. Write payload dropped -------------------------------------------------
-mutate "Write content unread" "a whole-file Write exited" \
+# A23-A25 drive the hook with Write payloads too -- the adversary's reproduction was a Write --
+# so with .content unread each of them sees no pair and reddens alongside A8. Declared, not
+# entangled: every arm whose payload is a Write depends on this one read.
+mutate "Write content unread" "a whole-file Write exited|the stale-plus-unbound Write|an UNRUN-only Write|an UNRUN block beside a stale one" \
   's/(\.tool_input\.content \/\/ empty),/(.tool_input.no_such_field \/\/ empty),/'
 
 # --- 5. missing validator fails CLOSED ----------------------------------------
@@ -170,12 +173,24 @@ mutate "fail-closed on a missing validator" "with the validator absent" \
   's/\[ -r "\$VALIDATOR" \] || exit 0/[ -r "$VALIDATOR" ] || exit 2/'
 
 # --- 6. the mask path is never rewritten to the artifact ----------------------
-mutate "mask path left in the report" "does not cite stories-repair-p1.md" \
+# A24 asserts its UNRUN line at the REAL path, so the rewrite reaching UNRUN lines is owned
+# there too: with the mask path left in, that line names a temp file and the author is sent nowhere.
+mutate "mask path left in the report" "does not cite stories-repair-p1.md|an UNRUN-only Write" \
   's/^REL="\${FILE#"\$PROJECT_DIR"\/}"/REL="$MASK"/'
 
-# --- 7. any non-zero exit read as a verdict -----------------------------------
-mutate "rc 2 read as a verdict" "refused to start" \
-  's/^\[ "\$RC" = 1 \] || exit 0/[ "$RC" != 0 ] || exit 0/'
+# --- 7. every exit 2 read as a verdict ----------------------------------------
+# The UNRUN/REFUSED test dropped from the rc-2 arm, so a validator refusing to START blocks the
+# write. Three arms present the three refusals: a bare `exit 2` stub, and the real validator's
+# own unresolvable-root and usage text replayed.
+mutate "rc 2 read as a verdict" "refused to start|an unresolvable-root refusal|a usage refusal" \
+  "s/^  2) grep -qE '\\^(UNRUN|REFUSED):' <<<\"\\\$OUT\" || exit 0\$/  2) true/"
+
+# --- 7b. the pre-fix gate restored: only rc 1 is a verdict ---------------------
+# The defect as it shipped. A derivation this edit wrote that did not run makes the validator
+# withhold every verdict at exit 2, and this line then exits 0 over it, hiding the UNRUN and any
+# STALE beside it.
+mutate "only rc 1 read as a verdict" "an UNRUN-only Write|an UNRUN block beside a stale one" \
+  's/^case "\$RC" in$/[ "$RC" = 1 ] || exit 0; case "$RC" in/'
 
 # --- 8b. the payload index ignored: every pair submitted, i.e. file grain ------
 # This is the design the measurement rejected — 12 of the 40 fence-carrying files in the

@@ -1596,6 +1596,13 @@ bl_consumer() {
             printf '$ grep -c shadow %s\n' "$BL_CHANGED_CONS"
           } > "$c/_bmad-output/planning/plan.md" ;;
     empty) mkdir -p "$c/_bmad-output" || return 1 ;;
+    # The firing artifact plus a ZERO-BYTE markdown file beside it. An empty file has no first
+    # record, so a scan counting `FNR == 1` as "opened" scores it unread and the corpus reads as
+    # partly unreadable; it is readable, and the WORKLIST row must still be drawn.
+    hitzero) mkdir -p "$c/_bmad-output/planning" || return 1
+          printf '# plan\n\n```derived\n$ grep -c shadow %s\n3\n```\n' "$BL_CHANGED_CONS" \
+            > "$c/_bmad-output/planning/plan.md"
+          : > "$c/_bmad-output/empty-log.md" ;;
     none)  : ;;
   esac
   if [ "$val" = yes ]; then
@@ -1766,6 +1773,16 @@ if bl_run noart hit none yes; then
   esac
 else
   bad "BL-3 setup: could not build the no-artifact consumer"
+fi
+# The near-miss of BL-3's first world, one property apart: a zero-byte markdown file sits in the
+# corpus beside the firing artifact. It is readable, so the vector must be the same 0|1|0|0.
+if bl_run zerobyte none hitzero yes; then
+  case "$BL_VEC" in
+    "0|1|0|0") ok "BL-3z a zero-byte markdown file in the corpus is counted as opened — the derivation row is still drawn, not the unreadable DECISION" ;;
+    *)         bad "BL-3z a corpus carrying one zero-byte markdown file drew $BL_VEC, not 0|1|0|0 — the scan scores an EMPTY file as unopened, so one empty log turns every pull into artifact-derivations-unreadable" ;;
+  esac
+else
+  bad "BL-3z setup: could not build the zero-byte-file consumer"
 fi
 
 # --- BL-4: THE ABSENT-VALIDATOR BRANCH IS A DECISION, AND IT IS GATED ON THE JOIN -------------

@@ -15,6 +15,78 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.643.0] - 2026-09-25
+
+The `artifact-derivations` WORKLIST row now names a clear a pull can reach. This release ships
+alone, because `apply.sh` is bootstrapping.
+
+### `PC-S346-ARTIFACT-DERIVATIONS-ROW-NAMES-A-CLEAR-NO-CONSUMER-CORPUS-CAN-REACH` — the row's clear is zero NEWLY-FAILING, checked by a differential (`BL-318`)
+
+`apply.sh` emits `WORKLIST artifact-derivations` when a fenced `derived` command in
+`_bmad-output/**/*.md` names a core path the range changed. Its remedy named the whole-corpus
+`validate-artifact-derivations.sh _bmad-output/` and said exit 0 was the clear. On the reference
+consumer that validator read 3325 FAIL of 5890 before the 0.633.0 -> 0.641.0 apply and 3328 of
+5892 after it. The failures were pre-existing line citations, so no edit made for the pull could
+reach the clear, and every pull disposed of the row with a hand-built differential.
+
+- `apply.sh`: the join that decides the row is now `vd_join()`, which also returns the row's file
+  set. The BL-m5 fence line and the BL-m6 `elif` are byte-identical, and the row counts are summed
+  as before. The remedy names the new helper. Its clear is zero NEWLY-FAILING, and a derivation
+  already stale before the apply is out of the row's scope. UNASSESSABLE derivations are listed,
+  never cleared.
+- New `reconcile/derivation-differential.sh <dist> <base> <consumer> <theirs> [--base-root <dir>]`,
+  operator-run and never invoked from the driver. It lifts `vd_join()` and `map_consumer()` rather
+  than restating them. It holds the artifact text fixed and varies only the project root, running
+  the consumer's one installed validator against the pre-apply tree and against the consumer. The
+  base root is the newest first-parent commit whose stamp resolves to `<base>`, checked out as a
+  detached worktree that is removed on exit. Each derivation is keyed on file:line and its STATUS.
+  Exit 0 means zero NEWLY-FAILING, 1 names each one, and 2 is a refusal. It refuses a foreign or
+  empty base root, a changed set with no content difference between the roots, a validator exit
+  outside {0,1}, and a base side where nothing passes while the consumer side passes something.
+
+The adversary rejected the first contract's stamp-equality refusal. At hand-back both stamps read
+`<base>` by design, so that refusal would have blocked the one moment the check runs. The
+discriminating control became a byte difference on the changed set.
+
+The tip adversary's BLOCKER is fixed here too: the default base-root walk skips a step-2
+self-update commit (`skill_commit:` not at `<base>`), which carries theirs' machinery and had
+scored a machinery derivation this range broke as STALE-BOTH with exit 0. A leftover
+`derivation-differential-root-*` worktree from a killed run is now named in a NOTE row and left
+in place.
+
+The second tip adversary's findings are fixed too. The walk now accepts a `skill_commit:` that is
+absent, `<base>`, or an ancestor of `<base>`, skips an empty one, and holds `--base-root` to the
+same test. It takes the newest matching commit, and it names a leaked worktree only when the PID
+recorded beside it is dead. The join also counts a zero-byte artifact as opened. One empty log had
+refused the reference consumer's 0.614.0 -> 0.618.0 reconcile at 4556 of 4557. On the 0.633.0 ->
+0.641.0 pull the helper still exits 0.
+
+The third tip adversary's BLOCKER is fixed too: the validator's eval now runs with `set -u` off, so
+a bare unbound `$VAR` gets a verdict instead of UNRUN, and the capture hook surfaces an exit 2 that
+carries `UNRUN:` or `REFUSED:` lines instead of hiding every STALE in the same write behind it; the
+leak NOTE now asks `ps -p`, since `kill -0` read another user's live run as dead.
+
+Measured on a scratch clone of the reference consumer, same pull: the apply rows are
+byte-identical before and after the extraction apart from the remedy text. The helper reads 783
+derivations in 30 files: 0 NEWLY-FAILING, 386 STALE-BOTH, 45 UNASSESSABLE, exit 0.
+
+| helper | receipt |
+|---|---|
+| this release | 0 |
+| absent (0.642.0) | 1 |
+| stub, always exit 0 | 1 |
+| base side ignored | 1 |
+| stamp-equality refusal | 1 |
+| sides swapped | 1 |
+| broken-root refusal dropped | 1 |
+| self-update skip dropped | 1 |
+| before the self-update fix (0d2ecd16) | 1 |
+| before the skill_commit ancestry fix (95719535) | 1 |
+| skill_commit equality restored | 1 |
+| `--base-root` skill_commit check dropped | 1 |
+| oldest matching commit taken | 1 |
+| correct, differently worded rows | 0 |
+
 ## [0.642.0] - 2026-09-25
 
 `ai-dlc-continue.sh` now backs off a stall whose stop attempts are more than 30s apart, so the

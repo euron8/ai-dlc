@@ -56,7 +56,9 @@
 # skip would let an author move a claim out of reach of the checker by writing it in a
 # language the checker does not run.
 #
-# Exit: 0 all derivations reproduce | 1 a derivation is stale or malformed | 2 usage.
+# Exit: 0 all derivations reproduce | 1 a derivation is stale or malformed | 2 usage, or a
+# derivation that did not run to completion (an `UNRUN:` line names each; run_pair says why),
+# which is a refusal and never a verdict.
 set -uo pipefail
 
 # --- AI_DLC_ROOT ------------------------------------------------------------
@@ -107,7 +109,7 @@ case "${1:-}" in
 esac
 [ "$#" -ge 1 ] || { echo "usage: $0 [--list] <file-or-dir>..." >&2; exit 2; }
 
-fails=0; checked=0; blocks=0; files_seen=0
+fails=0; checked=0; blocks=0; files_seen=0; unrun=0
 
 fail() { printf 'FAIL (%s): %s\n' "$1" "$2" >&2; fails=$((fails + 1)); }
 
@@ -513,8 +515,8 @@ cmd_is_safe() { # $1 command -> 0 safe, 1 refused (reason in REFUSED)
   return 0
 }
 
-TMP_SAFE="$(mktemp)"; TMP_OUT="$(mktemp)"; TMP_EXP="$(mktemp)"; TMP_SENT="$(mktemp)"
-trap 'rm -f "$TMP_SAFE" "$TMP_OUT" "$TMP_EXP" "$TMP_SENT"' EXIT
+TMP_SAFE="$(mktemp)"; TMP_OUT="$(mktemp)"; TMP_EXP="$(mktemp)"; TMP_SENT="$(mktemp)"; TMP_RAN="$(mktemp)"
+trap 'rm -f "$TMP_SAFE" "$TMP_OUT" "$TMP_EXP" "$TMP_SENT" "$TMP_RAN"' EXIT
 # The one-line stdin every derivation runs on -- run_pair's READS-STDIN arm says why.
 STDIN_SENTINEL="AI-DLC-DERIVATION-STDIN-SENTINEL"
 printf '%s\n' "$STDIN_SENTINEL" > "$TMP_SENT"
@@ -658,9 +660,53 @@ run_pair() { # $1 file  $2 line  $3 command   (expected output is in $TMP_EXP)
   # `-` operand without moving the shared offset, so it is NOT caught; it is listed here
   # rather than claimed. A miss here is the pre-fix behaviour minus the swallowing -- later
   # blocks are still checked, because the sentinel file, never the artifact, is its stdin.
+  #
+  # A DERIVATION THE SUBSHELL NEVER RAN IS UNRUN, NEVER STALE. The output file is empty both
+  # when the command printed nothing and when the command never executed -- a fork failure
+  # (bash 3.2 abandons the subshell with 128) or a SIGKILL of the subshell (137) -- and an
+  # empty actual against a recorded value reads as STALE. Measured on the base side of
+  # `derivation-differential.sh`: a real break scored STALE-BOTH and the helper exited 0, a
+  # silent false clear. The EXIT STATUS cannot separate the two: real derivations exit 128 on
+  # a genuine git fatal (2 of the reference consumer's 303 on 5 files), and a SIGKILL leaves no
+  # stderr to read. So the subshell writes eval's status to a MARKER after eval returns, with a
+  # builtin that forks nothing, and the parent empties it first:
+  #   - marker EMPTY: the subshell died before eval returned -- fork failure, the subshell
+  #     killed, the `cd` failing, or a shell error in the derivation text that aborts the
+  #     subshell outright (an arithmetic error, `$[1/0]`). Nothing was measured, so each
+  #     stays UNRUN.
+  # THE SUBSHELL RUNS WITH `set -u` OFF, bracketed in the parent around the eval line. The
+  # script's own `set -u` is inherited by the subshell, and under it a bare unbound `$foo` or
+  # `$!` in derivation text -- the allowlist refuses only `${` and `$(` -- aborts the subshell
+  # before the marker is written. That scored an ordinary stale derivation UNRUN, and the
+  # capture hook, which read exit 2 as infrastructure, then hid every real STALE in the same
+  # write. With `set -u` off the variable expands empty, as it does in an interactive shell
+  # where the author ran the command, and the derivation gets a verdict.
+  #   - marker 137 or 143 (SIGKILL, SIGTERM): the COMMAND was killed and the subshell survived.
+  #     Both are delivered from outside the process; no allowlisted read-only tool raises either
+  #     on itself. Other signal statuses stay verdicts: SIGPIPE (141) is what a pipeline whose
+  #     reader stops early produces naturally under the inherited `pipefail`, and a tool that
+  #     crashes (SIGSEGV, SIGABRT) did run, and its output is a fact about it.
+  #     FALSE-POSITIVE SET of that arm: 0. Every derivation in the reference consumer's
+  #     `_bmad-output/` (4645 markdown files, 5784 executed) exited 0, 1, 2, 128 (16 of them)
+  #     or 141 (2); none exited 137 or 143.
+  # Either shape makes the whole run exit 2 with the derivation named: no verdict, never a
+  # STALE. The status used below is the MARKER's, because the subshell now ends on the marker
+  # write and its own status is that write's.
   exec 3< "$TMP_SENT"
-  ( cd "$AI_DLC_ROOT" && eval "$c" <&3 3<&- ) > "$TMP_OUT" 2>/dev/null
-  rc=$?
+  : > "$TMP_RAN"
+  set +u
+  ( cd "$AI_DLC_ROOT" && { eval "$c" <&3 3<&-; printf '%s\n' "$?" > "$TMP_RAN"; } ) > "$TMP_OUT" 2>/dev/null
+  set -u
+  rc=""
+  IFS= read -r rc < "$TMP_RAN" || rc=""
+  case "$rc" in
+    ''|*[!0-9]*|137|143)
+      exec 3<&-
+      printf 'UNRUN: %s:%s did not run to completion (%s), so it has no verdict:\n      $ %s\n' \
+        "$f" "$ln" "$( [ -n "$rc" ] && printf 'the command exited %s, a signal it cannot raise on itself' "$rc" || printf 'no exit status was recorded -- the subshell died before the command returned')" "$c" >&2
+      unrun=$((unrun + 1))
+      return ;;
+  esac
   local sent_back=""
   IFS= read -r sent_back <&3 || sent_back=""
   exec 3<&-
@@ -706,6 +752,14 @@ if [ "$LIST_ONLY" -eq 1 ]; then
   exit 0
 fi
 
+# UNRUN OUTRANKS EVERY VERDICT. A run in which any derivation did not execute has not measured
+# the corpus, so neither its OK nor its FAIL count is a statement about the tree; exit 1 would
+# be read as "the tree moved", and `derivation-differential.sh` accepts only 0 and 1 as verdicts.
+if [ "$unrun" -gt 0 ]; then
+  printf 'REFUSED: %s derivation(s) did not run to completion (each named in an UNRUN line above); no verdict. %s stale or unrunnable finding(s) among the %s checked are not a verdict either. Re-run once the fault is gone.\n' \
+    "$unrun" "$fails" "$checked" >&2
+  exit 2
+fi
 if [ "$fails" -gt 0 ]; then
   printf 'FAIL: %s stale or unrunnable derivation(s) of %s checked in %s file(s).\n' \
     "$fails" "$checked" "$files_seen" >&2

@@ -1,0 +1,12 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+It is the MUTATION BATTERY behind `derivation-differential`. It edits COPIES of
+`core/skills/ai-dlc-update/reconcile/derivation-differential.sh`, which is core's own source,
+and drives the shipping fixture against each copy to prove that its arms can fail: the
+base side ignored, the stamp-equality refusal restored, the two sides swapped, and the
+broken-root refusal dropped. It locates that source and the reconcile directory under
+`core/`, and neither exists at that path in a consumer tree.
+
+A consumer needs the behaviour, and `derivation-differential` ships and asserts it through the
+real helper. This battery shows that those assertions are load-bearing, which is a claim about
+this repository's suite and gives a consumer nothing to act on.

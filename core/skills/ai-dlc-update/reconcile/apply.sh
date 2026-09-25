@@ -744,15 +744,27 @@ fi
 # correctly done. A row whose own remedy cannot clear it must never reach the finisher, which
 # gates on `worklist_n`: it would withhold the stamp forever. Here it is a hand-back on the
 # ordinary run, and `--finish` is the exit.
-VD_ART="$CONSUMER/_bmad-output"
-VD_VALIDATOR="$CONSUMER/scripts/ai-dlc/validate-artifact-derivations.sh"
-if [ -d "$VD_ART" ]; then
+#
+# THE JOIN IS `vd_join()`, AND IT HAS TWO CALLERS. This driver decides from it whether to NAME the
+# work; `reconcile/derivation-differential.sh` re-derives the row's file set from it to CHECK the
+# work, lifting the function out of this file with the same `awk '/^name\(\) \{/,/^\}/'` + `eval`
+# shape map_consumer() is lifted with. A second copy of the join in the helper is two statements
+# of which files the row names, and the operator would be clearing a set the row never named.
+# It must stay at column 0 and close on a column-0 `}` -- that is the lift's grammar.
+#
+# vd_join <dist> <base> <theirs> <artifact-dir>  ->  sets VD_MOVED VD_LISTED VD_SCANNED VD_HITS
+# VD_NF VD_FILES. VD_FILES is the newline-joined, sorted set of artifact files carrying at least
+# one hit -- the row's file set, and the helper's corpus. The scan runs only when the changed set
+# is non-empty and the corpus lists at least one file; otherwise the counts are 0 and the caller's
+# own guard decides.
+vd_join() {
+  VD_MOVED=""; VD_LISTED=0; VD_SCAN=""; VD_SCANNED=0; VD_HITS=0; VD_NF=0; VD_FILES=""
   # Consumer-relative, because that is how an artifact writes a path. `map_consumer` is the one
   # mapper this program has (loaded from preclassify.sh above); a private table here is the
   # defect I17 exists to prevent.
-  VD_MOVED="$(git -C "$DIST" diff --name-only "$BASE" "$THEIRS" -- core/ 2>/dev/null \
+  VD_MOVED="$(git -C "$1" diff --name-only "$2" "$3" -- core/ 2>/dev/null \
     | while IFS= read -r _vp; do [ -n "$_vp" ] && map_consumer "$_vp"; done | sort -u | paste -sd'|' -)"
-  VD_LISTED="$(find "$VD_ART" -type f -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
+  VD_LISTED="$(find "$4" -type f -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
   case "${VD_LISTED:-0}" in ''|*[!0-9]*) VD_LISTED=0 ;; esac
   if [ -n "${VD_MOVED:-}" ] && [ "$VD_LISTED" -gt 0 ]; then
     # THE NEEDLES RIDE IN `-v`, NOT IN A FILE awk OPENS. `getline < file` returns -1 for an
@@ -764,29 +776,49 @@ if [ -d "$VD_ART" ]; then
     # EACH INVOCATION REPORTS WHAT IT OPENED. `xargs` splits the corpus into batches, so the
     # counts are summed below and compared against the `find` listing: a batch that never ran
     # produces the same empty stdout as a batch that matched nothing.
-    VD_SCAN="$(find "$VD_ART" -type f -name '*.md' -print0 2>/dev/null \
+    #
+    # EACH BATCH ALSO NAMES ITS HIT FILES, one `F<TAB>path` line per file, and the count line
+    # stays the only line whose first field is numeric. The sums skip the `F` lines, so the
+    # three counts the rows print are computed exactly as they were before the file names rode
+    # along -- the names are an addition to the scan's output, never a change to its arithmetic.
+    #
+    # OPENED IS COUNTED BY A PROBE READ IN BEGIN, NOT BY `FNR == 1`. An EMPTY file has no first
+    # record, so a counter on `FNR == 1` scores it unopened, and one zero-byte log in the corpus
+    # turns every pull into `artifact-derivations-unreadable` -- measured on the reference
+    # consumer, 4556 of 4557 on the 0.614.0 -> 0.618.0 reconcile. `getline` answers -1 only for a
+    # file it cannot open and 0 for an empty one, which is exactly the distinction wanted here.
+    VD_SCAN="$(find "$4" -type f -name '*.md' -print0 2>/dev/null \
       | xargs -0 awk -v paths="$VD_MOVED" '
-          BEGIN { n = split(paths, A, "|"); for (i = 1; i <= n; i++) if (A[i] != "") P[A[i]] = 1 }
-          FNR == 1 { files++; infence = 0 }
+          BEGIN { n = split(paths, A, "|"); for (i = 1; i <= n; i++) if (A[i] != "") P[A[i]] = 1
+                  for (i = 1; i < ARGC; i++) if ((getline _vl < ARGV[i]) >= 0) { files++; close(ARGV[i]) } }
+          FNR == 1 { infence = 0 }
           /^[[:blank:]]*```derived[[:blank:]]*$/ { infence = 1; next }
           infence && /^[[:blank:]]*```[[:blank:]]*$/ { infence = 0; next }
           infence && /^[[:blank:]]*\$ / {
             for (p in P) if (index($0, p) > 0) { hits++; H[FILENAME] = 1; break }
           }
-          END { m = 0; for (f in H) m++; printf "%d\t%d\t%d\n", files + 0, hits + 0, m }
+          END { m = 0; for (f in H) { m++; printf "F\t%s\n", f }; printf "%d\t%d\t%d\n", files + 0, hits + 0, m }
         ' 2>/dev/null)"
-    VD_SCANNED="$(printf '%s\n' "$VD_SCAN" | awk -F'\t' '{a+=$1} END{print a+0}')"
-    VD_HITS="$(printf '%s\n' "$VD_SCAN" | awk -F'\t' '{a+=$2} END{print a+0}')"
-    VD_NF="$(printf '%s\n' "$VD_SCAN" | awk -F'\t' '{a+=$3} END{print a+0}')"
+    VD_FILES="$(printf '%s\n' "$VD_SCAN" | awk -F'\t' '$1 == "F" { print substr($0, 3) }' | sort -u)"
+    VD_SCANNED="$(printf '%s\n' "$VD_SCAN" | awk -F'\t' '$1 != "F" {a+=$1} END{print a+0}')"
+    VD_HITS="$(printf '%s\n' "$VD_SCAN" | awk -F'\t' '$1 != "F" {a+=$2} END{print a+0}')"
+    VD_NF="$(printf '%s\n' "$VD_SCAN" | awk -F'\t' '$1 != "F" {a+=$3} END{print a+0}')"
     case "${VD_SCANNED:-0}" in ''|*[!0-9]*) VD_SCANNED=0 ;; esac
     case "${VD_HITS:-0}" in ''|*[!0-9]*) VD_HITS=0 ;; esac
     case "${VD_NF:-0}" in ''|*[!0-9]*) VD_NF=0 ;; esac
+  fi
+}
+VD_ART="$CONSUMER/_bmad-output"
+VD_VALIDATOR="$CONSUMER/scripts/ai-dlc/validate-artifact-derivations.sh"
+if [ -d "$VD_ART" ]; then
+  vd_join "$DIST" "$BASE" "$THEIRS" "$VD_ART"
+  if [ -n "${VD_MOVED:-}" ] && [ "$VD_LISTED" -gt 0 ]; then
     if [ "$VD_SCANNED" -lt "$VD_LISTED" ]; then
       say DECISION artifact-derivations-unreadable "_bmad-output/" \
         "the artifact corpus could not be fully read — ${VD_SCANNED} of ${VD_LISTED} markdown file(s) were opened — so whether this range stranded a recorded derivation is UNKNOWN, and unknown reads exactly like clean. Run \`bash scripts/ai-dlc/validate-artifact-derivations.sh _bmad-output/\` by hand before treating this pull as done."
     elif [ "$VD_HITS" -gt 0 ] && [ -f "$VD_VALIDATOR" ]; then
       say WORKLIST artifact-derivations "_bmad-output/" \
-        "${VD_HITS} recorded \`derived\` command(s) across ${VD_NF} artifact file(s) name a core path this range CHANGED between ${BASE} and ${THEIRS}. Core text that moved leaves each of those commands measuring whatever still happens to sit at the old path, which re-runs without failing. RE-POINT each stale one at the path core carries at ${THEIRS}. The check is \`bash scripts/ai-dlc/validate-artifact-derivations.sh _bmad-output/\` — it re-runs every fenced command, names the ones that no longer reproduce, and exit 0 is the clear. NOT run from here: it executes the commands it finds, and that is a cost this driver must not charge on a pull."
+        "${VD_HITS} recorded \`derived\` command(s) across ${VD_NF} artifact file(s) name a core path this range CHANGED between ${BASE} and ${THEIRS}. Core text that moved leaves each of those commands measuring whatever still happens to sit at the old path, which re-runs without failing. RE-POINT each one this range broke at the path core carries at ${THEIRS}. The check is \`bash .claude/skills/ai-dlc-update/reconcile/derivation-differential.sh <dist> ${BASE} . ${THEIRS}\`, run before the apply is committed: it re-derives this row's file set with the same join, runs the installed validator over those files once against the pre-apply tree and once against this one, and keys each derivation on its pass/fail STATUS. The clear is ZERO NEWLY-FAILING — a derivation that passed before this apply and fails after it; exit 0 is that clear, exit 1 names each newly-failing one, exit 2 is a refusal and is never a clear. A derivation that was already stale before the apply is OUT OF THIS ROW'S SCOPE: this range did not break it, and the whole-corpus validator's exit 0 is a clear no edit made for this pull can reach. UNASSESSABLE derivations (refused by the validator on either side: ALLOWLIST, GRAMMAR, READS-STDIN) are LISTED, never counted as cleared — adjudicate each by hand. NOT run from here: it executes the commands it finds, twice, and that is a cost this driver must not charge on a pull."
     elif [ "$VD_HITS" -gt 0 ]; then
       say DECISION artifact-derivations-unchecked "_bmad-output/" \
         "${VD_HITS} recorded \`derived\` command(s) across ${VD_NF} artifact file(s) name a core path this range changed, and scripts/ai-dlc/validate-artifact-derivations.sh is not on this consumer, so nothing can re-run them. It is delivered by install.sh's copy loop over core/scripts/; run a fresh install of that script, then \`bash scripts/ai-dlc/validate-artifact-derivations.sh _bmad-output/\`."

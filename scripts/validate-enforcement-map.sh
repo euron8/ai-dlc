@@ -577,7 +577,15 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   variants, one batched probe hash and one corpus hash. The probe was first written with a
 #   `shasum` per case and measured 3273-3274; batching the six probe files into one hashing
 #   process took it to 3269. HIGH reading 3269 plus the usual 6; the window 3269..4670 is open.
-FORK_BUDGET=3275
+#
+#   RAISED TO 3289 FOR ONE NEW SHIPPED RECONCILE SCRIPT AND ONE NEW `.dist-only` FIXTURE, NOT
+#   FOR A NEW ARM. `--stable` in clean worktrees at the same path shape, validator byte-identical
+#   on both sides: base 3275-3275, tip 3281-3283, so +8, each +1 at a per-file site. Seven are
+#   `reconcile/derivation-differential.sh` joining the populations I21 (awk per reconcile
+#   script), I105 (three sites over reconcile scripts) and I83/I84 (three sites over shipped core
+#   `.sh`); one is `derivation-differential-mutants` joining the `.dist-only` census. HIGH
+#   reading 3283 plus the usual 6.
+FORK_BUDGET=3289
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
