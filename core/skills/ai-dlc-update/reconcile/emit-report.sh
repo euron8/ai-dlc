@@ -53,7 +53,9 @@
 #   emit-report.sh --verify <report.md> <dist> <base> <consumer> <theirs>
 # Exit:
 #   print  : 0 always.
-#   verify : 0 = region present and current; 1 = missing / stale / hand-edited; 2 = usage;
+#   verify : 0 = region present and current; 1 = missing / stale / hand-edited, or the fresh
+#            render carries `DETECTOR-REFUSED  preclassify.sh` (cause PRECLASSIFY-REFUSED, decided
+#            before the byte-compare, so a report carrying the same line fails too); 2 = usage;
 #            3 = stale in the SAFE direction only: the refs are unchanged and the approved region
 #                lists HARD-* row(s) the detectors no longer render, and none they newly do — the
 #                blockers were RESOLVED after the render (the adjudication loop's own work). Still a
