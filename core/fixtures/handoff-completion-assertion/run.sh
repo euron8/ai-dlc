@@ -1723,7 +1723,7 @@ fi
 #       satisfied branch must still stamp, so the mutation MOVED the writer rather than
 #       deleting it -- which is what separates this mutant from m9e.
 if mkmut m9f-stamp-on-backoff "$CONF" \
-     -e 's@^      rm -f "$HANDOFF_STATE" "$HANDOFF_ARMED_FILE"   # backoff exhausted@      : > "${LOG_DIR}/.handoff-complete" 2>/dev/null || true; rm -f "$HANDOFF_STATE" "$HANDOFF_ARMED_FILE"   # backoff exhausted@'; then
+     -e 's@^      rm -f "$HANDOFF_STATE" "$HANDOFF_ARMED_FILE"   # possible false positive, as before@      : > "${LOG_DIR}/.handoff-complete" 2>/dev/null || true; rm -f "$HANDOFF_STATE" "$HANDOFF_ARMED_FILE"   # possible false positive, as before@'; then
   dsetup
   snap_at "$P_DISK"
   rm -f "$(HC "$P_DISK")" "$P_DISK/_bmad-output/.driver/handoff"

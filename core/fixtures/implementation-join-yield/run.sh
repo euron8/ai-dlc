@@ -31,6 +31,30 @@ unset CLAUDE_CODE_STOP_HOOK_BLOCK_CAP
 # Resolved BEFORE any arm puts a `date` shim first on PATH (section 8).
 REAL_DATE="$(command -v date)"
 
+# EVERY TEMP DIR THIS RUN MAKES LIVES UNDER ONE RUN DIR, AND A KILL REAPS BOTH IT AND THE POOL.
+# Sections 8-9 run ~two dozen background jobs, each forking hooks, jq and seeds; killed
+# mid-run without this, they were measured orphaned and still writing `join-yield-*` dirs.
+# TMPDIR is exported so seed.sh and every mktemp below land inside JY_RUN, which the trap
+# removes -- and only a path this run named `join-yield-run-*` is ever removed.
+JY_RUN="$(mktemp -d "${TMPDIR:-/tmp}/join-yield-run-XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
+export TMPDIR="$JY_RUN"
+# FREEZE TOP-DOWN, THEN TERMINATE. A tree snapshot taken while the pool is live is stale by the
+# time it is killed: a job forks a fresh seed.sh between the `pgrep` and the `kill`, and that
+# seed then writes a world AFTER the rm below -- measured, one `join-yield-*` dir left on INT.
+# STOPping each parent before listing its children means nothing in the tree can fork again.
+jy_freeze_tree() { kill -STOP "$1" 2>/dev/null; for _c in $(pgrep -P "$1" 2>/dev/null); do jy_freeze_tree "$_c"; done; }
+jy_term_tree()   { for _c in $(pgrep -P "$1" 2>/dev/null); do jy_term_tree "$_c"; done; kill -TERM "$1" 2>/dev/null; kill -CONT "$1" 2>/dev/null; }
+jy_cleanup() {
+  _jp="$(jobs -p)"
+  for _p in $_jp; do jy_freeze_tree "$_p"; done
+  for _p in $_jp; do jy_term_tree "$_p"; done
+  wait 2>/dev/null
+  case "$JY_RUN" in */join-yield-run-*) rm -rf "$JY_RUN" ;; esac
+}
+trap 'jy_cleanup' EXIT
+trap 'jy_cleanup; trap - EXIT; exit 130' INT
+trap 'jy_cleanup; trap - EXIT; exit 143' TERM
+
 HERE="$(cd "$(dirname "$0")" && pwd)"
 pick() { for c in "$@"; do [ -n "$c" ] && [ -f "$c" ] && { printf '%s' "$c"; return; }; done; }
 STOP_HOOK="$(pick "$HERE/../../hooks/ai-dlc-continue.sh" \
@@ -271,6 +295,7 @@ tx_world() { # tx_world <seed-case> -> world dir with a date shim at $T0
 #                     is owned by 8a and does not also turn every other text-only arm red
 #                  U  a turn with a NEW tool call: an assistant tool_use record with NO
 #                     top-level `type`, its result, and typed assistant text
+#                  Q  an assistant text record alone, with no user record before it (arm 8h)
 #                  L  arm a wait-beat (a typed tool_use record) and Stop while it is live
 #                  S  Stop with no beat live
 #                  +N advance the shimmed clock N seconds
@@ -283,6 +308,8 @@ tx_seq() {
       @*) echo "${_e#@}" > "$_w/.sid"; continue ;;
       T)  printf '%s\n' '{"type":"user","message":{"role":"user","content":"Stop hook feedback: Pipeline is active."}}' \
             '{"message":{"role":"assistant","content":[{"type":"text","text":"Still here, waiting on the gate."}]}}' \
+            >> "$_w/transcript.jsonl"; continue ;;
+      Q)  printf '%s\n' '{"message":{"role":"assistant","content":[{"type":"text","text":"Still here."}]}}' \
             >> "$_w/transcript.jsonl"; continue ;;
       P)  printf '%s\n' '{"type":"user","message":{"role":"user","content":"Stop hook feedback: Pipeline is active."}}' \
             '{"message":{"role":"assistant","content":[{"type":"text","text":"Still here. My next turn will emit a tool_use for the gate."}]}}' \
@@ -398,10 +425,34 @@ arm_8g() { # a slow text-only run of Check 0's handoff guard releases after EFF_
   _ev="$(tx_events "$_w")"; _rows="$(tx_rows "$_w")"
   ARM_MSG="[$_d | $_ev| $_rows]"; rm -rf "$_w"
   [ "$_d" = HHHa ] || return 1
-  [ "$_ev" = 'HANDOFF_GUARD_BLOCK (1/3) HANDOFF_GUARD_BLOCK (2/3) HANDOFF_GUARD_BLOCK (3/3) ' ] || return 1
+  # The release is logged as Check 0's own BACKOFF; with the pause flag UP the pre-fix fall-through
+  # was released by Check 1 instead and logged none. Either is a release here -- which site
+  # releases is arm 8h's, in the world where the difference changes the decision.
+  case "$_ev" in
+    'HANDOFF_GUARD_BLOCK (1/3) HANDOFF_GUARD_BLOCK (2/3) HANDOFF_GUARD_BLOCK (3/3) '|\
+    'HANDOFF_GUARD_BLOCK (1/3) HANDOFF_GUARD_BLOCK (2/3) HANDOFF_GUARD_BLOCK (3/3) BACKOFF ') ;;
+    *) return 1 ;;
+  esac
   [ "$_rows" = 'unknown no no ' ]
 }
-ARMS_8="8a 8b 8c 8d 8e 8f 8g"
+arm_8h() { # the 8g world with the pause flag DOWN: Check 0's backoff must release, not fall through
+  _w="$(tx_world handoff)"; rm -f "$_w/_bmad-output/pipeline-paused.flag"
+  # Q, not T: a Stop-hook feedback record is a newer USER turn, which ends the handoff request
+  # the guard reads, so a T-driven run leaves Check 0 after one Stop and never reaches its backoff.
+  _d="$(tx_seq "$_w" "$1" - S +45 Q S +45 Q S +45 Q S +45 Q S +45 Q S +45 Q S +45 Q S +45 Q S)"
+  _why="$(sed -n 's/^- Handoff guard: //p' "$_w/$LOG" 2>/dev/null | head -n 1)"
+  _bo="$(grep -c -- '-- BACKOFF$' "$_w/$LOG" 2>/dev/null)" || _bo=0
+  ARM_MSG="[$_d | BACKOFF rows $_bo | $_why]"; rm -rf "$_w"
+  # PRESENCE of the release, by the 4th Stop: an `a` in the first four letters.
+  case "${_d%?????}" in *a*) ;; *) return 1 ;; esac
+  # NO RUN OF MORE THAN EFF_MAX (3) CONSECUTIVE BLOCKS ANYWHERE in the nine: the fall-through
+  # read `HHHbHHHbH`, a guard block handing straight on to Check 3's, past the harness's ninth.
+  case "$_d" in *[Hb][Hb][Hb][Hb]*) return 1 ;; esac
+  [ "${#_d}" = 9 ] || return 1
+  [ "$_bo" -ge 1 ] || return 1
+  case "$_why" in 'no tool call across '*) return 0 ;; esac; return 1
+}
+ARMS_8="8a 8b 8c 8d 8e 8f 8g 8h"
 arm_desc() {
   case "$1" in
     8a) echo "text-only stall at 45s and 300s: blocks then BACKOFF on the 4th Stop, detail names the no-tool-call signal" ;;
@@ -411,6 +462,7 @@ arm_desc() {
     8e) echo "a changed session_id over the same transcript reads as a tool call ('yes'); the same session reads 'no'" ;;
     8f) echo "CLAUDE_CODE_STOP_HOOK_BLOCK_CAP clamps EFF_MAX: 1 -> ba, 0 -> bbba, 2 -> bba" ;;
     8g) echo "a slow text-only handoff-guard run releases after EFF_MAX, each row carrying the tool-call line" ;;
+    8h) echo "the same run with the pause flag DOWN releases by the 4th Stop via a 'Handoff guard:' BACKOFF, never more than 3 blocks in a row over 9 Stops" ;;
   esac
 }
 # EVERY ARM OF SECTIONS 8 AND 9 IS A CONCURRENT JOB. Each builds its own worlds and each mutant
@@ -500,11 +552,18 @@ mut_bg() { job mut "$@"; }
   # Pinned to this fixture's default id rather than dropped, so the marks the other arms
   # SEED stay byte-equal and the mutant moves only the one property arm 8e owns.
   mut_bg mark-sans-session 8e 's/^  TOOL_MARK="\${SESSION_ID}:\${_tm_id:-none}"$/  TOOL_MARK="jy:${_tm_id:-none}"/' "the session id ignored by the mark"
+  # (ix) Check 0's exhausted backoff falls through to Check 3 again: the BACKOFF block and its
+  # `exit 0` deleted, the old `rm -f` of the guard's state kept.
+  mut_bg check0-fallthrough 8h '/^      # BACKOFF EXHAUSTED: ALLOW THE STOP HERE/,/^      exit 0$/{
+/# possible false positive, as before$/!d
+}' "Check 0's exhausted backoff falls through to Check 3"
 }
 wait
-# 7 section-8 arms, 7 control arms on the unmutated copy, 8 mutants. With no control copy the
-# FIXTURE BROKEN line above has already failed the run and only the 7 section-8 jobs exist.
-JOBS_WANT=22; [ -n "$CTRL" ] || JOBS_WANT=7
+# Every section-8 arm on the shipping hook, every one again on the unmutated copy, and the
+# nine mutant lines above. With no control copy the FIXTURE BROKEN line above has already
+# failed the run and only the section-8 jobs exist.
+set -- $ARMS_8; N_ARMS=$#
+JOBS_WANT=$((2 * N_ARMS + 9)); [ -n "$CTRL" ] || JOBS_WANT=$N_ARMS
 _i=0
 while [ "$_i" -lt "$JOB_N" ]; do
   _i=$((_i + 1)); _vf="$JOBS/verdict.$_i"
