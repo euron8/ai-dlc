@@ -15,6 +15,50 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.639.1] - 2026-09-25
+
+One consumer candidate is adjudicated `ALREADY-FIXED`. No code changes.
+
+### `PC-S340-RETRO-AUDIT-SCANS-FIXTURE-FAILS-ONCE-AND-PASSES-ON-RETRY` — ALREADY-FIXED (v0.144.0)
+
+The candidate records one `FAIL  retro-audit-scans` that passed on every re-run. `0.569.0` left it
+unadjudicated because a single run reports either verdict. It is now adjudicated with a
+differential, not a clean-run streak.
+
+The failure was on 2026-07-22 (consumer `cd620b80a`), not on the 2026-08-31 filing date. It came
+from the consumer's serial `run_fixtures` loop in `.githooks/pre-push`, not from `ci-local.sh`.
+That day's fixture fed 16 assertions through `printf '%s' "$out" | grep -q LABEL` under `set -uo
+pipefail`. When `grep -q` exits at its first match, the writer can take SIGPIPE, and `pipefail`
+then reports the match as a miss. The fixture never calls `validate-mandatory-rules.sh`.
+
+That day's fixture was rebuilt in a scratch copy and run 6-wide, with one property changed per
+variant:
+
+| variant | failing runs |
+|---|---|
+| unmodified | 8/24, 6/24, 7/30 |
+| `pipefail` removed | 0/30 |
+| the 16 sites as here-strings | 0/24 |
+
+In every failing run, the output `bad()` discarded still contained the label it tested for. The
+failing assertion varied from run to run. The fix is `362f6840` (v0.144.0, 2026-07-24), which
+added `has() { grep -q "$1" <<<"$2"; }` at `core/fixtures/retro-audit-scans/run.sh:28` and took
+the pipe-fed sites from 16 to 3. The consumer received it in its 0.143.5 → 0.153.1 reconcile
+(`ce1cb18a7`, 2026-07-25). That fixture, rebuilt from its own blobs, failed 0 of 36 runs under the
+same load, against 4 of 36 for the failing-day fixture in the same batches. `8eaf896a` (v0.207.0)
+removed the last 3 sites, and the consumer received it on 2026-07-30 (`e3522f153`). The current
+fixture failed 0 of 36 against the failing-day fixture's 6 of 36, interleaved.
+
+Across every consumer ref, 26 gate and fixture logs dated 2026-08-05 through 2026-09-24 name the
+unit, and all 26 read PASS. The same scan finds unit failures for other fixtures in 24 logs. No
+log names the unit between 2026-07-25 and 2026-08-05, because the consumer's pool keeps its
+per-fixture results in an uncommitted temp directory.
+
+Directory order, shared temp names, the clock and git state were each forced and had no effect.
+A stall of more than 30s in `core-paths.sh --list` (`core/scripts/audit-rule-files.sh:144`)
+does fail assertions 25-28. That path arrived at 0.520.0, after the failure, so it cannot be this
+candidate's cause.
+
 ## [0.639.0] - 2026-09-25
 
 An empty escalations file now reads `EXAMINED NOTHING` in three gate validators (`BL-307`). It
