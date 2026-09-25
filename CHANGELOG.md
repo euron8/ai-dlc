@@ -15,6 +15,57 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.642.0] - 2026-09-25
+
+`ai-dlc-continue.sh` now backs off a stall whose stop attempts are more than 30s apart, so the
+hook releases before the harness's own block cap ends the turn.
+
+### `BL-316` — the continue hook keys its stall run on the tool call, not only the clock
+
+The rapid-fire backoff counted a block toward the stall run only when it landed within 30s of the
+previous one. A lead retrying a stop every 45s was blocked on every attempt, and the harness's own
+cap released it instead, which the flow log recorded as `BLOCKED`. Measured on the reference
+consumer: 21 blocks 22-89s apart in one session, `rapid-fire 3/3` reached twice and reset twice,
+and `BACKOFF` 0 across the whole log against `BLOCKED` 34. Measured on the Claude Code 2.1.282
+binary, the harness resets its own block count only on a tool call, never on elapsed time, and
+ends the turn on the ninth consecutive block by default.
+
+A block now continues the run when there was no new assistant `tool_use` since the previous block,
+OR it came within 30s; only both together reset it. A tool-count-only rule was refuted before it
+was built: arming a wait-beat is itself a tool call, so that rule reset the run on every re-arm and
+brought back the sprint-305 join-wait stall. The new count is never lower than the old time-only
+count, so the hook can only release earlier than before.
+
+- The tool mark is the session id plus the id of the last assistant `tool_use`, keyed on
+  `.message.role`, read from the last 400 transcript lines with a whole-file fallback, and stored
+  as a third line in the state file. A two-line state file or an unreadable transcript falls back
+  to the time test unchanged.
+- `EFF_MAX` is 3, clamped to `CLAUDE_CODE_STOP_HOOK_BLOCK_CAP` when that is positive and lower.
+  It is never clamped to CAP-1, which would make CAP=1 a hook that never blocks.
+- Check 0's handoff guard uses the same rule through the same helper, because the harness counts
+  blocks from both sites as one run. Its backoff now allows the stop itself. It used to fall
+  through to Check 3, which keeps its own state, so with the pause flag down a text-only handoff
+  stall read `HHHbHHHbHHHb…` past the harness's ninth block. It now reads `HHHaHHHa…`. The tip
+  adversary found this on a branch whose validators were green, and arm 8h pins it.
+- `BACKOFF` names the test that closed the run. `BLOCKED` and `HANDOFF_GUARD_BLOCK` rows add
+  `Tool call since previous block: yes|no|unknown`. The flow-log legend in all five seeding hooks,
+  `retro.md` and `pipeline-state-paths.json` state the new rule.
+
+Replayed against the consumer's own transcripts: the stall session's 20 real stops were all
+blocked by the old hook, and the new one releases three times, at harness counts 4, 4 and 8,
+each before the harness would have overridden. Across all 264 consumer transcripts, 491 blocks,
+exactly those 3 flip to allow, and a healthy 70-stop multi-skill session is decided identically.
+`implementation-join-yield` gains eight transcript-path arms and a nine-mutant battery, each
+mutant killing its owning arm, plus a trap that reaps its job pool on INT and TERM. With the old
+hook, seven of the eight new arms fail.
+
+| hook | receipt |
+|---|---|
+| 291c286a | 1 |
+| this release | 0 |
+| never blocks | 9 |
+| ten adversary variants | 1 each |
+
 ## [0.641.0] - 2026-09-25
 
 `ledger-reverify.sh` no longer lets a receipt eat the entries after it. This release ships
