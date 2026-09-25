@@ -19032,3 +19032,79 @@ unchanged.
 
 verify: manual
 
+## BL-306 — a memo key embeds the percent-encoded dist path, and past about 190 characters of path the cache write fails and detectors silently change output
+
+**DEFECT.** Found at batch 152 by the `BL-303` fix hand, and confirmed by the tip adversary. It
+discharges no consumer candidate.
+
+Every memo function in `core/skills/ai-dlc-update/reconcile/lib.sh` names its cache file after
+the dist path, the ref and the blob path, percent-encoded (`:902`, `:928`, `:945`, `:974`,
+`:994`). The filename limit is 255 bytes. Past it, the write fails with `File name too long`, the
+lookup falls through, and the detector answers differently without refusing. Measured with
+`preclassify.sh` on a graph clone: a 190-character dist path emitted 418 bytes, and a
+210-character one emitted 0 bytes with four `too long` errors on stderr. Base and the
+`BL-303` tip were identical at every length, so `BL-303` did not widen this.
+
+The encoded dist path has about 122 characters of budget, given a 40-character ref and the
+longest theirs path (87 encoded). A `/Users/<name>/git/<repo>` checkout produces keys of 129 to
+173 characters, and a `/private/var/folders/…` dist produces 189 to 221, all under the limit.
+Only deep scratch paths reach it today, which is where the fix hand's receipt world first hit it.
+
+The candidate fix is to hash the key, or to go direct when `${#_k}` exceeds about 240. Its
+receipt must drive a detector from a dist path long enough to fire, and compare its output with
+the same run from a short path. `lib.sh` is bootstrapping, so the fix ships alone.
+
+The trigger is wider than the filename limit. The fill's `> "$_t"` redirect fails before git runs,
+so the fill returns the redirect's status and no output. The same wrong answer comes from any memo
+directory that cannot be written. Measured one process per case: a 372-character dist and a
+`chmod 555` memo each read wrong on 7 of 11 per-function cells, while a short writable run matched
+on all 11.
+
+`0.638.0` shipped the fix. On a miss, each of the five memo functions now creates its fill file
+first, and when that fails it takes its existing direct line, so the git calls are byte-identical.
+A fill returns the status it holds in memory and never reads `.s` back. `memo_has_path` writes its
+`.s` through a temp and a rename, so a failed write leaves no empty `.s`. There is no length bound
+and no hash. `preclassify-rename-row` gains arms E–H, and each has a mutant. The receipt below
+drives arms E and F. At `0.638.0` it exits 0. It exits 1 at base (`0.637.0`) and 1 on the unfixed
+mutant (killed by arm E), and 2 on the length-bound fix (killed by arm F).
+
+**LANDED (v0.638.0, verified cf0dac88).** The receipt exits 0 on `origin/main` at that commit.
+
+verify: sh R="$(pwd)"; P="$R/core/skills/ai-dlc-update/reconcile/preclassify.sh"; [ -f "$P" ] && [ -f "${P%/*}/lib.sh" ] || exit 9; W="$(mktemp -d)" || exit 9; W="$(cd "$W" && pwd)"; D="$W/d"; L="$W/$(printf 'L%.0s' $(seq 1 150))/$(printf 'M%.0s' $(seq 1 150))/d"; C="$W/c"; O="$W/ro"; g() { git -C "$D" -c user.email=r@r -c user.name=r "$@"; }; mkdir -p "$D/core/fixtures/p" "$C/.claude" "$C/tests/fixtures/p" "$O" || exit 9; git -C "$D" init -q || exit 9; printf 'a\n' > "$D/core/fixtures/p/a.sh"; printf 'r\n' > "$D/core/fixtures/p/r.md"; printf '1.0.0\n' > "$D/VERSION"; g add -A && g commit -qm b || exit 9; B="$(git -C "$D" rev-parse HEAD)"; printf 'a2\n' > "$D/core/fixtures/p/a.sh"; printf 'n\n' > "$D/core/fixtures/p/n.sh"; g rm -q core/fixtures/p/r.md; printf '2.0.0\n' > "$D/VERSION"; g add -A && g commit -qm t || exit 9; T="$(git -C "$D" rev-parse HEAD)"; printf 'a\n' > "$C/tests/fixtures/p/a.sh"; printf 'r\n' > "$C/tests/fixtures/p/r.md"; printf 'version: 1.0.0\ncommit: %s\n' "$B" > "$C/.claude/.ai-dlc-version"; mkdir -p "${L%/d}" && cp -R "$D" "$L" || exit 9; [ "${#L}" -gt 255 ] || exit 9; chmod 555 "$O"; ( : > "$O/x" ) 2>/dev/null && exit 9; s="$(env -u AI_DLC_RECONCILE_MEMO bash "$P" "$D" "$B" "$T" "$C" 2>/dev/null)"; [ "$(printf '%s\n' "$s" | grep -c 'core/fixtures/p/')" -ge 3 ] || exit 9; l="$(env -u AI_DLC_RECONCILE_MEMO bash "$P" "$L" "$B" "$T" "$C" 2>/dev/null)"; o="$(AI_DLC_RECONCILE_MEMO="$O" bash "$P" "$D" "$B" "$T" "$C" 2>/dev/null)"; chmod 755 "$O"; [ "$s" = "$l" ] || exit 1; [ "$s" = "$o" ] || exit 2; exit 0
+
+## BL-307 — a zero-byte `pending.md` takes an exit-0 road through Checks 2 and 2a that prints no `EXAMINED NOTHING`
+
+**NOTE.** Found at batch 152 by the `BL-305` fix hand during its Check 2 and 2a audit. It
+discharges no consumer candidate.
+
+With `docs/escalations/pending.md` absent, `validate-escalation-resolution.sh`,
+`validate-escalation-status-vocabulary.sh` and `validate-suppression-lifetime.sh` each exit 0 and
+print `OK: EXAMINED NOTHING`. With the file present and zero bytes long, each exits 0 without
+that token:
+
+- `OK: no S1 RESOLVED/OVERRIDDEN escalation requires an operator citation.`
+- `OK: n=[] no **Status:** entries found`
+- `OK: entries_scanned=0 … no suppression is past its lifetime`
+
+A reader following the `BL-305` instruction therefore reads an empty file as a real pass. Whether
+an empty `pending.md` is a legitimate consumer state has not been measured. Measure it on the
+reference consumer's history first; if the state is legitimate, the three programs should say
+`EXAMINED NOTHING` on it too.
+
+**MEASURED AT BATCH 153, AND FIXED IN 0.639.0.** Across all 891 versions of the reference
+consumer's `pending.md` on every ref, none was empty or whitespace-only; the smallest is 117 bytes.
+An absent-path control returned 0 commits. Nothing in `core/` outside the fixtures writes the file
+empty. So an empty file is not a state the consumer produces, and "nothing examined" is the true
+report for it. 41 of those versions carry no `**Status:**` field, and one of them holds live
+decisions as bullets the parser cannot read, so the predicate is the file's BYTES (no
+non-whitespace byte), never the parser's count: a zero-parsed-entries predicate would relabel that
+grammar failure as "nothing to examine". The check sits in gate mode only, below each mode split;
+hoisted above it, an empty file made `--any-authorized` exit 0, which `core-paths.sh` reads as an
+operator citation. Each fixture's committed mutants (revert, widened predicate, hoisted check) each
+fail only their own arms. What an adjudicator does with the token at Check 2 is `BL-311`.
+
+**LANDED (v0.639.0, verified 1f838777).** The three fixtures read `ok` by name in that release's
+gate.
+
+verify: manual
+
