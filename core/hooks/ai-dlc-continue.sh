@@ -130,7 +130,7 @@ MAX_RAPID_BLOCKS=3
 # harness's own default of 8. Computed without a fork: every Stop pays for this line.
 EFF_MAX="$MAX_RAPID_BLOCKS"
 _stop_cap="${CLAUDE_CODE_STOP_HOOK_BLOCK_CAP:-8}"
-[[ "$_stop_cap" =~ ^-?[0-9]+$ ]] || _stop_cap=8
+[[ "$_stop_cap" =~ ^-?[0-9]{1,9}$ ]] || _stop_cap=8   # bounded: a 20-digit value overflows `[`
 if [ "$_stop_cap" -gt 0 ] && [ "$_stop_cap" -lt "$EFF_MAX" ]; then EFF_MAX="$_stop_cap"; fi
 
 # -----------------------------------------------------------------------------
@@ -860,7 +860,20 @@ The \`/ai-dlc resume\` line MUST sit BETWEEN two delimiter lines (four or more h
         jq -n --arg r "HANDOFF GUARD: steps 1 through 4 are recorded, but step 5's entry marker is still present -- \`_bmad-output/.handoff-in-progress\` exists, which tells the next compaction that this session is still INSIDE the handoff procedure. Per steps/handoff.md step 5, run \`rm -f _bmad-output/.handoff-in-progress\` (the pause flag is already set) and end the turn again. Do not resume pipeline work." '{decision:"block",reason:$r,suppressOutput:true}'
         exit 0
       fi
-      rm -f "$HANDOFF_STATE" "$HANDOFF_ARMED_FILE"   # backoff exhausted: allow stop (possible false positive)
+      # BACKOFF EXHAUSTED: ALLOW THE STOP HERE, AND NEVER FALL THROUGH TO CHECK 3. Check 3 keeps its
+      # own state file and never saw this site's blocks, so a fall-through with the pause flag DOWN
+      # blocked again, and the next Stop re-armed this guard at a fresh run of 1. Measured on 30
+      # text-only stops at 5s and at 45s: `HHHbHHHbHHHb...`, fifteen consecutive blocks before the
+      # first allow, past the harness's ninth. Terminal here, the longest run is EFF_MAX.
+      {
+        echo "## ${TIMESTAMP} -- BACKOFF"
+        echo "- Session: ${SESSION_ID}"
+        echo "- Handoff guard: $(stall_run_why)"
+        echo "- Allowing stop. Investigate transcript for upstream cause."
+        echo ""
+      } >> "$LOG_FILE"
+      rm -f "$HANDOFF_STATE" "$HANDOFF_ARMED_FILE"   # possible false positive, as before
+      exit 0
     else
       rm -f "$HANDOFF_STATE" "$HANDOFF_ARMED_FILE"   # every arm satisfied: the handoff is complete
       # AND THE SNAPSHOT'S HANDOFF RECORD IS DISCHARGED HERE, which is key 2's whole lifecycle.
