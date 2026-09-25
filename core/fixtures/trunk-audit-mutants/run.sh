@@ -85,7 +85,7 @@ expect_set unresolved-skipped 2 'unresolvable commit was skipped|unresolved clas
 # capture pair's second half (11b) turns a captured value into a validator REJECTION, so an
 # exit code that decides nothing takes that cell too. Same arm, one more fact about it.
 expect_set exit-code-ignored 5 'bypassed merge was NOT reported|does not name the validator|finding exited|watermark advanced past a finding|capture did not vary with the commit' \
-  's@^        if ! _out="\$( cd "\$_wt" \&\& eval "\$_cmd" 2>\&1 )"; then@        if _out="$( cd "$_wt" \&\& eval "$_cmd" 2>\&1 )" \&\& false; then@'
+  's@^        if ! _out="\$( cd "\$_wt" \&\& eval "\$_cmd" </dev/null 2>\&1 )"; then@        if _out="$( cd "$_wt" \&\& eval "$_cmd" </dev/null 2>\&1 )" \&\& false; then@'
 
 # M3 — a declared validator missing from the audited tree is no longer NAMED as absent.
 # ONE red, not two, and the reason is worth stating: `eval` on a path that is not there
