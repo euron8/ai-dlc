@@ -64,9 +64,11 @@ SELF="$(cd "$(dirname "$0")" && pwd)"
 #
 # THE TRAP IS VERIFIED, NOT ASSUMED. A signal ignored when this shell started cannot be trapped,
 # and `trap` then says nothing; a failure would reach no one and the old silent exit 0 would be
-# back. So an unarmed trap refuses the run up front.
+# back. So an unarmed trap refuses the run up front. Read back with the plain `trap -p`: lib.sh's
+# `trap()` shadow passes every `-p` query straight to the builtin, and I115 refuses the `builtin`
+# spelling in any file that sources lib.sh.
 trap 'exit 2' USR1
-case "$(builtin trap -p USR1 2>/dev/null)" in
+case "$(trap -p USR1 2>/dev/null)" in
   *"exit 2"*) ;;
   *) echo "preclassify: cannot arm the USR1 failure trap (the signal is ignored in this environment), so a git failure could not stop the run — refusing to classify" >&2; exit 2 ;;
 esac
@@ -229,14 +231,16 @@ if [ -f "$_pc_stamp" ]; then
   [ "$SELF_UPDATE_REF" = "$BASE" ] && SELF_UPDATE_REF=""
   # 0 resolves and 1 does not; anything else is a git that did not answer, and reading it as
   # "does not resolve" would silently drop the skill_commit arms. Checked in its own block so the
-  # four-line guard below stays one unit.
+  # four-line guard below stays one unit. ONE rev-parse, read by both: a second fork here could
+  # fail transiently where the first answered, and the guard would then clear the ref silently.
+  _pc_su_rc=0
   if [ -z "$SELF_UPDATE_REF" ]; then :; else
     git -C "$DIST" rev-parse --verify --quiet "${SELF_UPDATE_REF}^{commit}" >/dev/null 2>&1
     _pc_su_rc=$?
     [ "$_pc_su_rc" -le 1 ] || pc_fail "rev-parse --verify --quiet ${SELF_UPDATE_REF}^{commit} exited $_pc_su_rc"
   fi
   if [ -n "$SELF_UPDATE_REF" ] \
-     && ! git -C "$DIST" rev-parse --verify --quiet "${SELF_UPDATE_REF}^{commit}" >/dev/null 2>&1; then
+     && [ "$_pc_su_rc" -ne 0 ]; then
     SELF_UPDATE_REF=""
   fi
 fi
@@ -558,24 +562,40 @@ done < <(git -C "$DIST" ls-tree --name-only "$THEIRS" core/scripts/ 2>/dev/null 
 # CAPTURED, NOT PIPED. As `memo_diff_name_status … | while` the diff's status was lost in the
 # pipeline (this script has no `pipefail`), so a failed diff fed the loop nothing and the run
 # exited 0 with EMPTY output -- the same stdout as a range that changes nothing under `core/`.
-# The rows are taken first, the status is read off the bare call, and the loop reads a heredoc
-# in THIS shell.
+# The rows are taken first, the status is read off the bare call, and the loop reads them in
+# THIS shell through a process substitution -- NOT a heredoc, which bash 3.2 materialises as a
+# TMPDIR file: where that write fails (`ulimit -f 0`, a full disk) the heredoc is empty and the
+# loop is skipped with rc 0. A pipe needs no file.
 PC_DIFF="$(memo_diff_name_status "$DIST" "$BASE" "$THEIRS" core/)"
 PC_DIFF_RC=$?
 [ "$PC_DIFF_RC" -eq 0 ] || pc_fail "diff --no-renames --name-status $BASE $THEIRS -- core/ exited $PC_DIFF_RC"
 while IFS=$'\t' read -r status path; do
-  [ -n "$path" ] || continue   # the heredoc of an EMPTY diff is one empty line, not zero lines
+  [ -n "$path" ] || continue   # printf of an EMPTY diff is one empty line, not zero lines
   cons="$(map_consumer "$path")"
 
   # core/scripts/* is owned by the scripts-relocation pass above. On a pre-relocation
   # consumer the copy lives at the OLD path, which this base..theirs diff cannot see,
-  # so the MISSING-at-new-path result would be a false "consumer-deleted". Suppress it
-  # for a not-yet-migrated copy; the relocation pass has already emitted the real
-  # RELOCATE-MOVE row. A migrated consumer (new path present) falls through and
-  # classifies normally.
+  # so the MISSING-at-new-path result would be a false "consumer-deleted". It is not
+  # classified here: the relocation pass has already emitted the real RELOCATE-MOVE row
+  # for any validator theirs still ships. A migrated consumer (new path present) falls
+  # through and classifies normally.
+  #
+  # BUT THE PATH IS STILL EMITTED, AS AN INERT ROW, BECAUSE A SILENT `continue` WAS A ZERO.
+  # A range whose only core/ change is a core/scripts/* DELETION, pulled by a pre-relocation
+  # consumer, used to print NO rows at all (the relocation pass enumerates theirs, where the
+  # deleted file is absent) -- and every reader refuses an empty row set over a range that
+  # moves core/, so emit-report refused five sections and apply stopped, on a pull with
+  # nothing to do, and no re-run could clear it. The row keeps the output non-empty exactly
+  # when the range is. `PRE-RELOCATION-NOOP` is inert at every reader of column 4: apply.sh's
+  # phase 1 takes `*NOOP` as no action and `--finish` counts only pure-apply buckets; it
+  # carries no `CLASSIFY` (worklist, orientation, retired-tokens), is not `UPSTREAM-DELETED`
+  # (deletions), and matches neither `^RELOCATE-MOVE` (scripts relocation) nor `consumer-edited`
+  # (unregistered-drift and self-update-gate's carried classes). It appears only in the
+  # per-file bucket list, which is a listing, not work.
   case "$path" in
     core/scripts/*)
       if [ "$(file_hash "$cons")" = MISSING ] && [ -f "$CONS/scripts/${path#core/scripts/}" ]; then
+        printf '%s\t%s\t%s\t%s\n' "$status" "$path" "$cons" "PRE-RELOCATION-NOOP"
         continue
       fi ;;
   esac
@@ -664,9 +684,7 @@ while IFS=$'\t' read -r status path; do
       ;;
   esac
   printf '%s\t%s\t%s\t%s\n' "$status" "$path" "$cons" "$bucket"
-done <<PC_DIFF_ROWS
-$PC_DIFF
-PC_DIFF_ROWS
+done < <(printf '%s\n' "$PC_DIFF")
 
 # ---------------------------------------------------------------------------
 # Orphan pass — files this distribution used to write to a consumer path it no

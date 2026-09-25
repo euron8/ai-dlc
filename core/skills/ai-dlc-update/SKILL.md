@@ -611,6 +611,8 @@ prose is itself generated rather than composed.
    - `UPSTREAM-DELETED` (upstream removed it, consumer untouched vs base) →
      **delete the consumer file (gated — destructive, see step 7)**
    - `UPSTREAM-DELETED-NOOP` (upstream removed it, consumer already lacks it) → **noop**
+   - `PRE-RELOCATION-NOOP` (a changed `core/scripts/*` path on a consumer still holding
+     it at the pre-relocation `scripts/<name>`; the relocation pass owns that copy) → **noop**
    - `CONSUMER-MISSING-NOOP` (the consumer opted out of this destination — today only
      `.github/workflows/`, which `install.sh` has always written *only* if the directory
      already exists) → **noop**. Updating a workflow a consumer HAS is a fix; creating
