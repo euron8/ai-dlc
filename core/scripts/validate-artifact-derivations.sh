@@ -511,8 +511,11 @@ cmd_is_safe() { # $1 command -> 0 safe, 1 refused (reason in REFUSED)
   return 0
 }
 
-TMP_SAFE="$(mktemp)"; TMP_OUT="$(mktemp)"; TMP_EXP="$(mktemp)"
-trap 'rm -f "$TMP_SAFE" "$TMP_OUT" "$TMP_EXP"' EXIT
+TMP_SAFE="$(mktemp)"; TMP_OUT="$(mktemp)"; TMP_EXP="$(mktemp)"; TMP_SENT="$(mktemp)"
+trap 'rm -f "$TMP_SAFE" "$TMP_OUT" "$TMP_EXP" "$TMP_SENT"' EXIT
+# The one-line stdin every derivation runs on -- run_pair's READS-STDIN arm says why.
+STDIN_SENTINEL="AI-DLC-DERIVATION-STDIN-SENTINEL"
+printf '%s\n' "$STDIN_SENTINEL" > "$TMP_SENT"
 
 # Compare on TRIMMED lines: trailing whitespace in a fenced block is invisible to the
 # author and is never the defect being hunted. Everything else compares byte-for-byte.
@@ -627,8 +630,47 @@ run_pair() { # $1 file  $2 line  $3 command   (expected output is in $TMP_EXP)
       must run it by hand -- which is the cost this block exists to avoid."
     return
   fi
-  ( cd "$AI_DLC_ROOT" && eval "$c" ) > "$TMP_OUT" 2>/dev/null
+  # A DERIVATION NEVER RUNS ON THIS SCRIPT'S STDIN, AND ONE THAT READS STDIN IS REFUSED.
+  #
+  # run_pair is called from inside check_file's `while read … done < "$f"`, so an inherited
+  # stdin is THE REST OF THE ARTIFACT. Measured: a first derivation `grep -c WRONG` (no file
+  # operand, recorded `1`) read the remaining text, matched its own recorded output, and
+  # every later block went unchecked -- a file with a stale second derivation exited 0 with
+  # `OK: 1 derivation(s)`, where `echo 1` in the same position gave exit 1, 1 stale of 2.
+  #
+  # Closing stdin alone is not enough: `grep -c X` over EOF prints 0, so a derivation that
+  # derives from NOTHING would pass whenever its author recorded 0 -- a new false clean. So
+  # the eval gets a SENTINEL on its stdin instead: fd 3 is opened on a one-line file, handed
+  # to the command as fd 0 and closed as fd 3 inside it, and after the eval the PARENT reads
+  # fd 3. The open file description -- and so its offset -- is shared with the child, so the
+  # sentinel line reads back whole only when nothing consumed it. Anything else, EOF or a
+  # partial line from a reader that took a few bytes, is READS-STDIN. This DETECTS BY
+  # EXECUTION: no operand parser decides which command reads stdin (a static one was
+  # measured at 2343 false flags in 6020 on the reference consumer's corpus), so a command
+  # that does not read stdin is unaffected by construction, and a pipeline whose first stage
+  # names a file -- `grep x f | wc -l` -- is not flagged, because the later stages read the
+  # pipe and never the sentinel.
+  #
+  # FALSE-POSITIVE / FALSE-NEGATIVE SET, measured by the contract adversary over 22 stdin
+  # and non-stdin shapes: 21 correct. The one known MISS is `diff f.txt -`, which reads its
+  # `-` operand without moving the shared offset, so it is NOT caught; it is listed here
+  # rather than claimed. A miss here is the pre-fix behaviour minus the swallowing -- later
+  # blocks are still checked, because the sentinel file, never the artifact, is its stdin.
+  exec 3< "$TMP_SENT"
+  ( cd "$AI_DLC_ROOT" && eval "$c" <&3 3<&- ) > "$TMP_OUT" 2>/dev/null
   rc=$?
+  local sent_back=""
+  IFS= read -r sent_back <&3 || sent_back=""
+  exec 3<&-
+  if [ "$sent_back" != "$STDIN_SENTINEL" ]; then
+    fail "READS-STDIN" "$f:$ln runs a command that reads its STANDARD INPUT:
+      \$ $c
+      A derivation runs with no input of its own, so a command that reads stdin derives
+      from nothing -- \`grep -c X\` with no file prints a count of an empty stream, which
+      matches a recorded 0 whatever the tree holds. Name the file it measures as an
+      operand (\`grep -c X path/to/file\`) so the recorded output is a fact about the tree."
+    return
+  fi
   # A non-zero rc is only a failure when the block recorded output. `grep` exiting 1 on
   # NO HITS is a legitimate derivation of a negative, and the artifact records it as such.
   if [ "$rc" -ne 0 ] && [ ! -s "$TMP_OUT" ] && [ ! -s "$TMP_EXP" ]; then
