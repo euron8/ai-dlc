@@ -1036,8 +1036,12 @@ sh_base_rc() { # <sh_prog> -> the receipt's status with $THEIRS REBOUND to $BASE
   # THE EXPORT LIST IS THE ONE AT THE EVALUATION SITE, ONE BINDING APART. A control that also
   # differed in its environment would be a second program, and its disagreement would say nothing
   # about the refs.
+  #
+  # `</dev/null` IS PART OF THAT EXPORT LIST'S TWIN, NOT AN ADDITION TO IT: the evaluation site
+  # carries the same redirect, for the reason recorded there -- this is called from inside the
+  # entry loop, and without it a receipt that reads stdin eats every entry after its own.
   DIST="$DIST" BASE="$BASE" THEIRS="$BASE" CONSUMER="$CONSUMER" THEIRS_TREE="$THEIRS_TREE" \
-    bash -c "$1" >/dev/null 2>&1
+    bash -c "$1" </dev/null >/dev/null 2>&1
 }
 sh_base_control() { # <receipt-text> <sh_prog> <theirs-side rc> -- accumulates, emits nothing
   refs_differ || return 0
@@ -2048,8 +2052,17 @@ while IFS="$(printf '\t')" read -r label ord directive; do
             continue
           fi ;;
       esac
+      # STDIN IS `/dev/null`, BECAUSE OTHERWISE IT IS THE ENTRY LOOP'S HERESTRING. This runs inside
+      # `while … read …; done <<< "$ENTRIES"`, so a receipt inherits fd 0 positioned at the NEXT
+      # entry, and any receipt that reads stdin -- a bare `cat`, a `grep` with no file operand, a
+      # `read` -- consumes every entry after its own. Those entries then emit NO ROW, and rc is 0
+      # with stderr empty. Measured on a three-entry ledger whose first receipt was
+      # `cat >/dev/null; <passing check>`: 4 rows became 2, the second STILL-LIVE and the
+      # CLOSE-CANDIDATE vanished, and RECEIPTS-UNDECIDED fell from "2 of 2" to "1 of 1" -- a
+      # smaller ledger reading as a clean one. The base control in `sh_base_rc` is the same
+      # shape and carries the same redirect.
       DIST="$DIST" BASE="$BASE" THEIRS="$THEIRS" CONSUMER="$CONSUMER" THEIRS_TREE="$THEIRS_TREE" \
-        bash -c "$sh_prog" >/dev/null 2>&1
+        bash -c "$sh_prog" </dev/null >/dev/null 2>&1
       sh_rc=$?
       case "$sh_rc" in
         0)

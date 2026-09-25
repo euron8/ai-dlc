@@ -15,6 +15,34 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.641.0] - 2026-09-25
+
+`ledger-reverify.sh` no longer lets a receipt eat the entries after it. This release ships
+alone, because the file is bootstrapping.
+
+### `BL-317` — every entry after a stdin-reading receipt now emits its row
+
+The entry loop reads a herestring of ledger entries, and both places that run a receipt inherited
+it: the evaluation, and the base control in `sh_base_rc`. A receipt that reads stdin consumed
+every later entry, and those entries emitted no row, with rc 0 and stderr empty. Measured at
+`49330f4a` on three entries whose first receipt was `cat >/dev/null; <passing check>`:
+
+| first receipt | base | this release |
+|---|---|---|
+| reads nothing (control) | 4 rows | 4 rows |
+| reads stdin at the evaluation | 2 rows | 4 rows |
+| reads stdin only in the base control | 2 rows | 4 rows |
+
+In the two failing cases, the second entry's `STILL-LIVE` and the third's `CLOSE-CANDIDATE`
+vanished. No verdict flipped to `CLOSE-CANDIDATE`. Both `bash -c` calls now run with
+`</dev/null`. A copy with the loop moved onto fd 3 matched the fixed engine byte for byte on the
+fixture's 111-row seeded ledger, so the loop has no other reader of fd 0. The `ledger-reverify`
+fixture gains an arm per site, each with a mutant that reverts only its own site, and
+`sh-parse-anchors` is re-pointed at the new evaluation line.
+
+The reference consumer's 20 anchored `sh` receipts include none that reads stdin, so no consumer
+row changes today. The consumer's installed engine runs the pull that delivers this fix.
+
 ## [0.640.0] - 2026-09-25
 
 Three read loops handed their own stdin to each command they evaluate. A command that read

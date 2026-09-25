@@ -4198,3 +4198,39 @@ the other two fixes alone.
 **LANDED (v0.640.0, verified 053b8674).** The receipt exits 0 at that commit.
 
 verify: sh R="$(pwd)"; V="$R/scripts/backlog-reverify.sh"; [ -f "$V" ] || exit 9; D="$(mktemp -d)" || exit 9; T="$(printf '\t')"; mk() { printf '# b\n\n## BL-901 -- a\n\nverify: sh %s\n\n## BL-902 -- b\n\nverify: sh false\n\n## BL-903 -- c\n\nverify: sh true\n' "$2" > "$D/$1.md"; }; rows() { o="$(bash "$V" "$D/$1.md" 2>/dev/null)"; c="$(grep -c "^[A-Z-]*${T}BL-90[123]${T}" <<<"$o")" || c=0; }; mk ctl true; rows ctl; [ "$c" = 3 ] || exit 9; mk cat 'cat >/dev/null'; rows cat; [ "$c" = 3 ] || exit 1; mk rd 'read -r x; true'; rows rd; [ "$c" = 3 ] || exit 1; exit 0
+
+## BL-317 — `ledger-reverify.sh` runs each receipt on the entry loop's own stdin, so a receipt that reads stdin makes every later entry vanish from the report
+
+**DEFECT.** Found at batch 155 by the contract adversary for the eval-stdin class. It named the
+site, and a second hand reproduced it. The consumer did not file it, and it discharges no
+consumer candidate.
+
+The entry loop is `while … read …; done <<< "$ENTRIES"`. Two sites inside it ran a receipt
+with stdin inherited: the evaluation (`bash -c "$sh_prog"`) and the base control in
+`sh_base_rc` (`bash -c "$1"`). A receipt that reads stdin therefore consumed every entry after
+its own, and those entries emitted no row. The run still exited 0 with stderr empty. Measured at
+`49330f4a` on a three-entry ledger whose first receipt was `cat >/dev/null; <passing check>`:
+4 rows became 2. The second entry's `STILL-LIVE` and the third's `CLOSE-CANDIDATE` both vanished,
+and `RECEIPTS-UNDECIDED` fell from "2 of 2" to "1 of 1". The base-control site reproduces on its
+own: a receipt that reads stdin only when `$THEIRS` is the literal base sha gives the same 2 rows.
+
+No verdict flips to `CLOSE-CANDIDATE`. The loss is an entry with no row, which reads exactly like
+an entry with no receipt.
+
+The fix is `</dev/null` on both `bash -c` calls. A copy of the engine with the whole loop moved
+onto fd 3 produced byte-identical output on the fixture's seeded ledger (111 rows each), so no
+third reader of fd 0 exists in the loop body.
+
+**Consumer reachability: none today.** The reference consumer's live ledger carries 20 anchored
+`sh` receipts, and none reads the loop's stdin. **This file is bootstrapping.** The consumer's
+installed engine runs the pull that delivers this fix, so the fix cannot protect that pull.
+
+The receipt drives the shipping engine on three scratch consumers, with base `937919e4` and
+theirs `HEAD`. A control whose first receipt reads nothing must emit all three rows (exit 9
+otherwise). A first receipt that reads stdin at the evaluation site, and one that reads it only
+inside the base control, must each leave all three rows. Scored: tip 0, base `7089ccb8` 1,
+evaluation site alone reverted 1, base-control site alone reverted 1.
+
+**LANDED (v0.641.0, verified c56c8462).** The receipt exits 0 at that commit's tip.
+
+verify: sh R="$(pwd)"; E="$R/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh"; [ -f "$E" ] || exit 9; git -C "$R" cat-file -e 937919e4 2>/dev/null || exit 9; W="$(mktemp -d)" || exit 9; T="$(printf '\t')"; ok='git -C "$DIST" cat-file -e "${THEIRS}:VERSION"'; mk() { c="$W/$1"; mkdir -p "$c/_bmad-output/ai-dlc-update"; printf '# L\n\n## PC-S901-RCPT317-ONE — a\n\nverify: sh %s\n\n## PC-S902-RCPT317-TWO — b\n\nverify: sh %s\n\n## PC-S903-RCPT317-THREE — c\n\nverify: sh ! %s\n' "$2" "$ok" "$ok" > "$c/_bmad-output/ai-dlc-update/push-candidate-ledger.md"; o="$(cd "$c" && bash "$E" "$R" 937919e4 "$c" HEAD </dev/null 2>/dev/null)"; n="$(grep -c "^[A-Z-]*${T}PC-S90[123]-RCPT317-" <<<"$o")" || n=0; }; mk ctl "$ok"; [ "$n" = 3 ] || exit 9; mk ev "cat >/dev/null; $ok"; [ "$n" = 3 ] || exit 1; mk bc "case \"\$THEIRS\" in 937919e4) cat >/dev/null ;; esac; $ok"; [ "$n" = 3 ] || exit 1; exit 0
