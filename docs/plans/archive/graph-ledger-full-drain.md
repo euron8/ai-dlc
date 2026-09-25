@@ -14285,3 +14285,62 @@ covers every plan in `docs/plans/` at depth 1 whether live or spent. When it fir
 through P13 on this file. Rotating is the remedy; there is no exemption list and one must not be
 added.
 
+**BATCH 142 SHIPPED `v0.624.0` (`29291758`, #826): TWO SUBJECTS, BOTH FROM THE UNFILED SET, BOTH
+FILED AND CLOSED IN THIS ONE BATCH.** `BL-287` discharges
+`PC-S313-FIXTURE-SKILLS-PATH-DIST-LAYOUT-ASSUMPTION` and `BL-288` discharges
+`PC-S313-RESIDENT-RULE-23-CARRIER-NOT-UPDATED-WITH-SKILL-MD`. The release commit names both
+verbatim (2 hits, impossible-id control 0). The gate at `AI_DLC_FIXTURE_NO_SKIP=1` ran 22 of 22
+phases with 0 FAIL lines and **204 ok**, and the changed fixtures were read by name against an
+impossible-name control of 0. Live stays **71** (two filed, two closed), and the archive went
+**214 -> 216**. The exit-0 receipts, compared by identity, went from the 8 measured when this batch opened (batch 141 recorded 7;
+the step was not attributed) to those 8 plus
+the two subjects, so nothing closed incidentally.
+
+**THE SCOPING INPUTS WERE EXACTLY AS BATCH 141 LEFT THEM.** The worklist is 4 rows that each
+disqualify themselves (`BL-067`, `BL-132`, `BL-145`, `BL-215`), and the gated class reads 0
+flattened. Unfiled is **16**. Six of those route CORE: two are this batch's subjects, the plan
+archive records `PC-S340-RETRO-AUDIT-SCANS-FIXTURE-FAILS-ONCE-AND-PASSES-ON-RETRY` as REFUTED,
+`PC-S309-VALIDATE-MANDATORY-RULES-CHECK5-TEST-ONLY-WEB-DIFF-FALSE-FAIL` shipped in `v0.542.0`
+and is awaiting the consumer's close, `PC-S309-PRE-PUSH-FLAG-MISMATCH-ORIGINAL-TEXT` calls itself
+superseded, and `PC-S297-FFCLUSTER-SHA-STALE` has a receipt the archive records as green on
+ABSENCE. **Neither of the last two has been hand-adjudicated. They are the CORE candidates the
+next batch should read first.**
+
+**THE FIRST CANDIDATE'S HEADLINE WAS FALSE AND ITS DEFECT WAS REAL.** It claimed the fixture
+turned every consumer push red. A contract adversary, run alone, measured the installed copy
+PASSING with 6/6 mutants killed, and the consumer's own failures file names a different unit. What
+was real is a `cd` that failed on every install and printed to stderr, plus a refusal that could
+never fire, because `ln -s ""` exits 0, over a link no mode reads. The fix was subtraction.
+**Score a candidate's symptom separately from its mechanism. A refuted headline is not a
+refuted entry.**
+
+**THE CONTRACT'S TOKEN JOIN WOULD HAVE FIRED FOREVER, AND ONE MEASUREMENT CHANGED THE SHAPE.**
+Joining Rule 23's backticked tokens against its carrier read **7** false positives after the fix,
+all of them deliberate condensation. The shipped binding is a stamp pair inside the EXISTING I79
+arm. Replayed over the history it fires exactly once, at 0.619.0. **A carrier that paraphrases
+cannot be bound by content, only by change.**
+
+**THE GATE BLOCKED ON THIS BATCH'S OWN CHANGE, AND THE TIP ADVERSARY FOUND THE SAME DEFECT
+INDEPENDENTLY.** The `BL-288` change appended a clause to I79's summary line, and two fixture arms parse that
+line: one needs the period after `gap(s)`, and one extracts the first `I79: N rule(s)`. Moving
+the new count onto its own `I79 carrier stamps:` line fixed both. **Before you extend a
+validator's output line, grep the fixtures for everything that parses it.** The adversary's two
+DEFECTs, that no fixture drove the new drift error and that the receipt could be closed by an
+HTML comment, were fixed before the merge (arms A43-A45 in `core/fixtures/enforcement-map-derivations/run.sh`, and a behavioural receipt scoring 1 on
+four regressions). Its NOTE that the `BL-287` receipt rejects a `[ -d ]`-guarded link is
+declined: that rejection is deliberate and recorded in the entry.
+
+**THE DELIVERY GAP IS TWO RELEASES AND THE CONSUMER IS PULLING RIGHT NOW.** It has installed
+**0.622.0** (`06733c6c`) against `VERSION` **0.624.0**. It sits on
+`ai-dlc-update/0.623.0-reconcile-*` with its three `SKILL.md` files modified in the working tree,
+so a pull is in flight. `ai-dlc-update/SKILL.md` is in range (1 commit), the other three
+bootstrapping files are at 0, and 0 of 6 raw rows are mode-only. The operator's banked ruling
+stands: report the gap and write no runbook. Its porcelain count moved **4 -> 11** during this
+batch, entirely from that pull. The ledger md5 did not move, which is the criterion-4 check by
+content.
+
+**EVERYTHING BELOW THIS LINE, DOWN TO `### Derive the state`, IS AN EARLIER BATCH'S BLOCK.** Each
+one was current when it was written, and the batch 152 through 142 blocks above replace it. Read those blocks
+for the measurement behind a rule. Take no figure and no next-work pointer from them: their
+counts, gaps and "remaining" ids have all moved since.
+
