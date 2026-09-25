@@ -466,29 +466,46 @@ mut() {
   if "arm_$_ctl" "$_m"; then ok "...and the same copy still passes arm $_ctl (it runs; the kill is the mutation's)"
   else bad "MUTANT HARNESS BROKEN ($1): the copy also fails arm $_ctl -- $ARM_MSG"; fi
 }
+# THE MUTANTS RUN CONCURRENTLY, each in its own subshell writing to its own file, and are
+# printed and counted in declaration order after `wait`. Serially they took this fixture from
+# ~3s to ~43s; every mutant has its own copy dir and its own worlds, so nothing is shared.
+# A `bad` inside a subshell cannot move `fails`, so the verdicts are counted from the files.
+MUT_N=0
+mut_bg() { MUT_N=$((MUT_N + 1)); ( mut "$@" ) > "$MUT_ROOT/verdict.$MUT_N" 2>&1 & }
 [ -n "$CTRL" ] && {
   # (i) Draft 1: the tool rule alone where the transcript answers, time only as the fallback.
-  mut tool-only 8b 's/^  elif \[ "\$RUN_DELTA" -lt "\$RAPID_WINDOW_SECONDS" \]; then$/  elif [ "$RUN_TOOL" = unknown ] \&\& [ "$RUN_DELTA" -lt "$RAPID_WINDOW_SECONDS" ]; then/' \
+  mut_bg tool-only 8b 's/^  elif \[ "\$RUN_DELTA" -lt "\$RAPID_WINDOW_SECONDS" \]; then$/  elif [ "$RUN_TOOL" = unknown ] \&\& [ "$RUN_DELTA" -lt "$RAPID_WINDOW_SECONDS" ]; then/' \
       "the OR-delta dropped, a tool call alone resets"
   # (ii) The window widened until every retry counts as rapid.
-  mut window-3600 8c 's/^RAPID_WINDOW_SECONDS=30$/RAPID_WINDOW_SECONDS=3600/' "the rapid window widened to 3600s"
+  mut_bg window-3600 8c 's/^RAPID_WINDOW_SECONDS=30$/RAPID_WINDOW_SECONDS=3600/' "the rapid window widened to 3600s"
   # (iii) A tool call never resets the run: release after N no matter what.
-  mut no-reset-on-tool 8c 's/^    RUN_CNT=1; RUN_SIGNAL=reset$/    if [ "$RUN_TOOL" = yes ]; then RUN_CNT=$((RUN_CNT + 1)); else RUN_CNT=1; fi; RUN_SIGNAL=reset/' \
+  mut_bg no-reset-on-tool 8c 's/^    RUN_CNT=1; RUN_SIGNAL=reset$/    if [ "$RUN_TOOL" = yes ]; then RUN_CNT=$((RUN_CNT + 1)); else RUN_CNT=1; fi; RUN_SIGNAL=reset/' \
       "release after EFF_MAX regardless of tool calls"
   # (iv) The off-by-one clamp.
-  mut clamp-cap-minus-1 8f 's/then EFF_MAX="\$_stop_cap"; fi$/then EFF_MAX=$((_stop_cap - 1)); fi/' "EFF_MAX clamped to CAP-1"
+  mut_bg clamp-cap-minus-1 8f 's/then EFF_MAX="\$_stop_cap"; fi$/then EFF_MAX=$((_stop_cap - 1)); fi/' "EFF_MAX clamped to CAP-1"
   # (v) Check 3 writes its state as the old two lines, so the mark never reaches line 3.
-  mut mark-not-persisted 8a 's/^stall_run_write "\$STATE_FILE"$/printf '"'"'%s\\n%s\\n'"'"' "$NOW" "$RUN_CNT" > "$STATE_FILE"/' \
+  mut_bg mark-not-persisted 8a 's/^stall_run_write "\$STATE_FILE"$/printf '"'"'%s\\n%s\\n'"'"' "$NOW" "$RUN_CNT" > "$STATE_FILE"/' \
       "Check 3's tool mark not persisted to line 3"
   # (vi) Check 0 keeps the inline time-only test it had before the shared helper.
-  mut check0-time-only 8g 's/^      stall_run "\$HANDOFF_STATE"; H_CNT="\$RUN_CNT"$/      stall_run "$HANDOFF_STATE"; H_CNT="$RUN_CNT"; if [ "$RUN_DELTA" -lt "$RAPID_WINDOW_SECONDS" ]; then H_CNT=$RUN_CNT; else H_CNT=1; RUN_CNT=1; fi/' \
+  mut_bg check0-time-only 8g 's/^      stall_run "\$HANDOFF_STATE"; H_CNT="\$RUN_CNT"$/      stall_run "$HANDOFF_STATE"; H_CNT="$RUN_CNT"; if [ "$RUN_DELTA" -lt "$RAPID_WINDOW_SECONDS" ]; then H_CNT=$RUN_CNT; else H_CNT=1; RUN_CNT=1; fi/' \
       "Check 0 left on the time-only test"
   # (vii) A raw count as the mark: prose that merely says tool_use moves it.
-  mut raw-grep-mark 8a 's/^  _tm_id="\$(tail -n 400 .*$/  _tm_id="$(grep -c tool_use "$TRANSCRIPT")"/' "a raw grep -c tool_use as the mark"
+  mut_bg raw-grep-mark 8a 's/^  _tm_id="\$(tail -n 400 .*$/  _tm_id="$(grep -c tool_use "$TRANSCRIPT")"/' "a raw grep -c tool_use as the mark"
   # (viii) A mark that ignores the session: a new session over the same transcript reads `no`.
   # Pinned to this fixture's default id rather than dropped, so the marks the other arms
   # SEED stay byte-equal and the mutant moves only the one property arm 8e owns.
-  mut mark-sans-session 8e 's/^  TOOL_MARK="\${SESSION_ID}:\${_tm_id:-none}"$/  TOOL_MARK="jy:${_tm_id:-none}"/' "the session id ignored by the mark"
+  mut_bg mark-sans-session 8e 's/^  TOOL_MARK="\${SESSION_ID}:\${_tm_id:-none}"$/  TOOL_MARK="jy:${_tm_id:-none}"/' "the session id ignored by the mark"
+  wait
+  _i=0
+  while [ "$_i" -lt "$MUT_N" ]; do
+    _i=$((_i + 1)); _vf="$MUT_ROOT/verdict.$_i"
+    # A subshell that died before printing leaves an empty file -- a mutant with NO verdict.
+    if [ ! -s "$_vf" ]; then bad "MUTANT $_i produced no verdict -- its subshell died, so nothing was scored"; continue; fi
+    cat "$_vf"
+    _nf="$(grep -c "^  FAIL" "$_vf")" || _nf=0
+    fails=$((fails + _nf))
+  done
+  [ "$MUT_N" -eq 8 ] || bad "section 9 dispatched $MUT_N mutants, expected 8 -- a mutant line was lost"
 }
 rm -rf "$MUT_ROOT"
 
