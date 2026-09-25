@@ -46,6 +46,8 @@ set -uo pipefail
 # consumer that pinned AI_DLC_MODEL_ROW and failed seven assertions against a sensor behaving
 # exactly as specified.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+# The harness block cap clamps the continue hook's EFF_MAX; an exported one moves its counts.
+unset CLAUDE_CODE_STOP_HOOK_BLOCK_CAP
 
 # AND SCRUB GIT'S OWN AMBIENT REPO POINTERS, which no other fixture here has had to. `GIT_DIR`
 # and friends take precedence over `-C <dir>`, so a runner that exported one would make the
