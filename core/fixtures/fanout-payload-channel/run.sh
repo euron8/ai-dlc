@@ -116,6 +116,21 @@ TMP_ROOT="$(cd "${TMPDIR:-/tmp}" 2>/dev/null && pwd -P)" \
 # ever yields a path `find` cannot descend, arms 5 and m6 go quiet and report success.
 [ -d "$TMP_ROOT" ] || { echo "FIXTURE ERROR: TMP_ROOT is not a directory: $TMP_ROOT" >&2; exit 2; }
 
+# --- ARM 5 AND m6 COUNT IN A PRIVATE TEMP ROOT, NEVER IN THE SHARED ONE ---------------------
+# The subject names its payload directory `fanout.XXXXXX` with no per-run segment, so a count
+# of `fanout.*` in the ambient TMPDIR cannot tell this run's directory from a concurrent one's.
+# The suite pool runs two other fanout fixtures beside this one: a foreign directory appearing
+# between the two counts failed arm 5 and faked m6's kill, and m6's sweep deleted the live
+# payload of whatever run shared the root. Each counting run gets its own directory under
+# $WORK, the subject is run with TMPDIR pointed at it, and only that directory is counted and
+# swept. Resolved with `pwd -P` for the same symlink reason as TMP_ROOT above.
+WORK_P="$(cd "$WORK" 2>/dev/null && pwd -P)" \
+  || { echo "FIXTURE ERROR: cannot resolve WORK" >&2; exit 2; }
+A5_ROOT="$WORK_P/tmproot-arm5"
+M6_ROOT="$WORK_P/tmproot-m6"
+mkdir -p "$A5_ROOT" "$M6_ROOT" && [ -d "$A5_ROOT" ] && [ -d "$M6_ROOT" ] \
+  || { echo "FIXTURE ERROR: cannot create the private temp roots under $WORK_P" >&2; exit 2; }
+
 fails=0
 ok()     { printf '  ok    %s\n' "$1"; }
 bad()    { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
@@ -343,9 +358,11 @@ fi
 # 5. THE PAYLOAD DIRECTORY IS REMOVED. Moving data to files creates litter, and a
 #    caller run per repair in a gate loop creates it repeatedly.
 # ----------------------------------------------------------------------------
-before=$(find "$TMP_ROOT" -maxdepth 1 -name 'fanout.*' -type d 2>/dev/null | wc -l | tr -d ' ')
-run "$SUBJ" "$SMALL" "$SBASE" >/dev/null 2>&1
-after=$(find "$TMP_ROOT" -maxdepth 1 -name 'fanout.*' -type d 2>/dev/null | wc -l | tr -d ' ')
+# Counted in the private root only; see A5_ROOT above. The subshell keeps the TMPDIR override
+# from reaching anything else this fixture runs.
+before=$(find "$A5_ROOT" -maxdepth 1 -name 'fanout.*' -type d 2>/dev/null | wc -l | tr -d ' ')
+( export TMPDIR="$A5_ROOT"; run "$SUBJ" "$SMALL" "$SBASE" ) >/dev/null 2>&1
+after=$(find "$A5_ROOT" -maxdepth 1 -name 'fanout.*' -type d 2>/dev/null | wc -l | tr -d ' ')
 if [ "$after" -le "$before" ]; then
   ok "5. the payload directory does not survive the run (fanout.* dirs before $before, after $after)"
 else
@@ -477,15 +494,17 @@ fi
 # m6 — the cleanup trap removed. Arm 5 owns this and nothing else can see it.
 if mutate m6-trap -e 's|^trap .rm -rf "\$FANOUT_TMP". EXIT|: # trap removed|'; then
   m="$MUT"
-  b=$(find "$TMP_ROOT" -maxdepth 1 -name 'fanout.*' -type d 2>/dev/null | wc -l | tr -d ' ')
-  gout="$(run "$m" "$SMALL" "$SBASE")"
-  a=$(find "$TMP_ROOT" -maxdepth 1 -name 'fanout.*' -type d 2>/dev/null | wc -l | tr -d ' ')
+  # Its own private root, so a foreign `fanout.*` cannot fake this kill and the sweep below
+  # cannot reach another run's live payload.
+  b=$(find "$M6_ROOT" -maxdepth 1 -name 'fanout.*' -type d 2>/dev/null | wc -l | tr -d ' ')
+  gout="$( export TMPDIR="$M6_ROOT"; run "$m" "$SMALL" "$SBASE" )"
+  a=$(find "$M6_ROOT" -maxdepth 1 -name 'fanout.*' -type d 2>/dev/null | wc -l | tr -d ' ')
   if [ "$(sed -n 's/^rc=//p' <<<"$gout")" != 0 ] || [ "$(rows "$gout")" -lt 1 ]; then
     bad "MUTANT HARNESS BROKEN [m6-trap]: the copy no longer produces a worklist"
   elif [ "$a" -gt "$b" ]; then
     ok "  mutant [m6-trap] KILLED by assertion 5: the copy left $(( a - b )) payload directories behind"
     kills=$((kills+1))
-    find "$TMP_ROOT" -maxdepth 1 -name 'fanout.*' -type d -exec rm -rf {} + 2>/dev/null
+    find "$M6_ROOT" -maxdepth 1 -name 'fanout.*' -type d -exec rm -rf {} + 2>/dev/null
   else
     bad "MUTANT SURVIVED [m6-trap]: removing the cleanup trap left nothing behind, so assertion 5 is watching a directory the subject does not create"
   fi
