@@ -29,6 +29,10 @@
 #
 # Output: TSV to stdout — STATUS<TAB>CORE_PATH<TAB>CONSUMER_PATH<TAB>BUCKET
 #
+# Exit: 0 = classified. 2 = REFUSED: a git call failed (one stderr line names it), or the
+#       failure trap could not be armed. Rows printed before a refusal are partial and no
+#       caller may read them as buckets.
+#
 # Deletion buckets (status D — upstream removed the file):
 #   UPSTREAM-DELETED                      consumer copy untouched vs base -> delete (gated in step 7)
 #   UPSTREAM-DELETED-NOOP                 consumer already lacks it -> noop

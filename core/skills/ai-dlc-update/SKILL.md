@@ -604,6 +604,9 @@ prose is itself generated rather than composed.
      logic. This applies even when the following reconcile would be empty.
 3. **Mechanical pre-classification** (cheap, deterministic — no agents):
    run `reconcile/preclassify.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root>`.
+   **Exit 2 is a refusal, not a result.** When a git call it depends on fails, it exits 2 and
+   prints one stderr line naming that call. Any rows it printed before stopping are partial and
+   must not be read as buckets. Fix what the line names and re-run.
    It hashes base/theirs/ours per changed file and buckets each into:
    - `UPSTREAM-ONLY-ADD` (net-new upstream, consumer lacks it) → **apply (pure)**
    - `UPSTREAM-ONLY` (upstream changed, consumer untouched vs base) → **apply**
@@ -1251,7 +1254,12 @@ prose is itself generated rather than composed.
    (a HARD core-schema drift, twice). After writing the report, run
    `reconcile/emit-report.sh --verify <report> <dist> <base> <consumer> <theirs>`; **it MUST exit 0
    before the HARD STOP.** A nonzero exit here means the region is missing, stale, or was hand-edited —
-   the report is unsound; regenerate and re-emit. (Exit 3, `BLOCKERS-RESOLVED`, is a step-7 state
+   the report is unsound; regenerate and re-emit. When the fresh render carries a
+   `DETECTOR-REFUSED  preclassify.sh` line, `--verify` exits 1 with `cause: PRECLASSIFY-REFUSED`,
+   even if the report carries the same line. The five sections built from preclassify's rows
+   (per-file buckets, semantic worklist, orientation, deletions, scripts relocation) are then
+   unknown, not empty. Run `reconcile/preclassify.sh` directly, fix what it reports, and re-render;
+   a re-emit alone cannot pass. (Exit 3, `BLOCKERS-RESOLVED`, is a step-7 state
    and cannot arise at this step, where nothing has been resolved yet.) This check is not optional, and the operator can
    run the same `--verify` to trust any report without re-running the detectors by hand.
 
@@ -1455,8 +1463,13 @@ prose is itself generated rather than composed.
    `--verify` says which direction it failed in: it exits **3** with `cause: BLOCKERS-RESOLVED`
    when the refs are unchanged and the approved region lists `HARD-*` rows the detectors no longer
    render and none they newly do, and `apply.sh` refuses naming that cause; exit **1** is the other
-   direction — upstream moved, the consumer's stamp moved, a detector did not run, or a finding
-   the approval never saw — and is the stop the gate exists for. So: resolve every blocker, then re-render the region
+   direction — upstream moved, the consumer's stamp moved, a detector did not run (for
+   preclassify, `cause: PRECLASSIFY-REFUSED`), or a finding the approval never saw — and is the
+   stop the gate exists for. `apply.sh` also runs preclassify itself before phase 1, and stops
+   before writing anything when that run exits non-zero, or returns no rows while `base..theirs`
+   changes `core/`, or when that range cannot be read. Its refusal says nothing was written. Run
+   `reconcile/preclassify.sh` with the same four arguments, fix what it reports, and re-run apply
+   with the same arguments. So: resolve every blocker, then re-render the region
    (`reconcile/emit-report.sh <dist> <base> <consumer> <theirs>`) into the report, run `--verify`
    to exit 0, have the operator re-approve it, and only then run `apply.sh`. An `apply.sh` that
    refuses with `BLOCKERS-RESOLVED` is telling you the report predates your own work, not that
