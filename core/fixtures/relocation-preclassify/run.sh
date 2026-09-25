@@ -143,7 +143,9 @@ fi
 MUT="$WORK/mutant"
 cp -R "$RECON" "$MUT" || exit 2
 # Neutralize the subject-set generator: an empty `done < <(true)` feeds the loop nothing.
-perl -0pi -e 's{done < <\(git -C "\$DIST" ls-tree --name-only "\$THEIRS" core/scripts/ 2>/dev/null\)}{done < <(true)}' "$MUT/preclassify.sh" || exit 2
+# The enumerator line carries its own status check after `2>/dev/null`, so the match runs to the
+# end of that line rather than stopping at the redirect.
+perl -0pi -e 's{done < <\(git -C "\$DIST" ls-tree --name-only "\$THEIRS" core/scripts/ 2>/dev/null[^\n]*\)\n}{done < <(true)\n}' "$MUT/preclassify.sh" || exit 2
 if grep -q 'ls-tree --name-only "$THEIRS" core/scripts/' "$MUT/preclassify.sh"; then
   echo "FIXTURE ERROR: mutation did not take — the ls-tree enumerator line was not rewritten" >&2
   exit 2

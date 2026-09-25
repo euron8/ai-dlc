@@ -891,20 +891,63 @@ if [ "${BASH_SUBSHELL:-0}" -eq 0 ]; then
   unset _ai_dlc_prev
 fi
 
+# --- ONLY A GIT ANSWER IS CACHED, NEVER A GIT FAILURE ------------------------------------------
+#
+# Every memo below used to write `$?` into its `.s` file whatever it was. A git that FAILED --
+# a fork refused under load, an index lock, a PATH shim returning 128 -- was therefore cached as
+# if it were git's answer, and every later lookup of that key in the same render was served the
+# failure without git being asked again. Measured with a git shim returning 128 once: the key's
+# `.s` held `128` and every later preclassify in the render read the path as absent.
+#
+# So each memo caches only the statuses that are its subcommand's ANSWERS, measured per
+# subcommand on this machine rather than recalled:
+#
+#   rev-parse -q --verify <rev>:<path>  0 present; 1 absent path OR unresolvable rev; 128 a git
+#                                        that could not run (not a repository). Cache 0 and 1.
+#   ls-tree -r --name-only <ref>         0 only. A bad ref is 128, the same as a failure.
+#   diff --no-renames --name-status      0 only (no --exit-code). A bad ref is 128.
+#   show <rev>:<path>, cat-file -e       0 present; 128 for an absent path AND for a failure --
+#                                        the two are the same status. A 128 is cached only when
+#                                        `rev-parse -q --verify` on the SAME spec answers 1, the
+#                                        one command whose status separates them. It costs one
+#                                        fork per MISSED key, once per render.
+#
+# Anything else is returned to the caller UNCACHED, so the next lookup asks git again. The fill
+# goes to a per-process temp and is renamed into place only when it is cacheable, so an uncached
+# failure never leaves bytes a later reader could mistake for an answer; the `.s` file is still
+# written LAST, so an interrupted fill reads as a miss rather than as a cached lie.
+_ai_dlc_memo_absent() { # <dist> <spec> -> 0 only when git itself says the spec does not resolve
+  git -C "$1" rev-parse -q --verify "$2" >/dev/null 2>&1
+  [ "$?" -eq 1 ]
+}
+_ai_dlc_memo_commit() { # <file-stem> <tmp> <status> -> cache the fill; always serves it
+  mv -f "$2" "$1.c" 2>/dev/null || { cat "$2"; rm -f "$2"; return 0; }
+  printf '%s' "$3" > "$1.s"
+  cat "$1.c"
+}
+_ai_dlc_memo_serve() { # <tmp> -> serve an uncacheable fill and discard it
+  cat "$1"; rm -f "$1"
+}
+
 # memo_show <dist> <ref> <path> -- the blob on stdout, git's own exit status preserved.
 # A MISS AND AN EMPTY BLOB ARE DIFFERENT STATES, and the status file (`.s`) is what
 # separates them: `git show` of an ABSENT path writes nothing and exits non-zero,
-# `git show` of an EMPTY blob writes nothing and exits 0. The status file is written
-# LAST, so an interrupted fill reads as a miss rather than as a cached lie.
+# `git show` of an EMPTY blob writes nothing and exits 0.
 memo_show() {
-  local _dist="$1" _ref="$2" _path="$3" _k _f _st
+  local _dist="$1" _ref="$2" _path="$3" _k _f _st _t
   ai_dlc_memo_dir || { git -C "$_dist" show "${_ref}:${_path}" 2>/dev/null; return $?; }
   _k="s $_dist $_ref:$_path"; _k="${_k//%/%25}"; _k="${_k//\//%2F}"
   _f="$AI_DLC_MEMO_DIR/$_k"
   if [ ! -f "$_f.s" ]; then
-    git -C "$_dist" show "${_ref}:${_path}" > "$_f.c" 2>/dev/null
+    _t="$_f.c.$$.$RANDOM"
+    git -C "$_dist" show "${_ref}:${_path}" > "$_t" 2>/dev/null
     _st=$?
-    printf '%s' "$_st" > "$_f.s"
+    if [ "$_st" -eq 0 ] || { [ "$_st" -eq 128 ] && _ai_dlc_memo_absent "$_dist" "${_ref}:${_path}"; }; then
+      _ai_dlc_memo_commit "$_f" "$_t" "$_st"
+    else
+      _ai_dlc_memo_serve "$_t"
+    fi
+    return "$_st"
   fi
   # `cat`, NOT `printf '%s\n' "$(<f)"`. A command substitution strips EVERY trailing
   # newline and the printf adds exactly one back, so a blob with none comes back one byte
@@ -929,7 +972,12 @@ memo_has_path() {
   _f="$AI_DLC_MEMO_DIR/$_k"
   if [ ! -f "$_f.s" ]; then
     git -C "$_dist" cat-file -e "${_ref}:${_path}" 2>/dev/null
-    printf '%s' "$?" > "$_f.s"
+    _st=$?
+    # 128 is BOTH "absent" and "git could not answer" for `cat-file -e`; only the former is cached.
+    if [ "$_st" -eq 0 ] || { [ "$_st" -eq 128 ] && _ai_dlc_memo_absent "$_dist" "${_ref}:${_path}"; }; then
+      printf '%s' "$_st" > "$_f.s"
+    fi
+    return "$_st"
   fi
   _st="$(<"$_f.s")"
   return "$_st"
@@ -940,14 +988,20 @@ memo_has_path() {
 # the whole key, percent/slash-escaped exactly as memo_show's key is, so two different
 # specs never collide.
 memo_rev_parse() {
-  local _dist="$1" _spec="$2" _k _f _st
+  local _dist="$1" _spec="$2" _k _f _st _t
   ai_dlc_memo_dir || { git -C "$_dist" rev-parse -q --verify "$_spec" 2>/dev/null; return $?; }
   _k="r $_dist $_spec"; _k="${_k//%/%25}"; _k="${_k//\//%2F}"
   _f="$AI_DLC_MEMO_DIR/$_k"
   if [ ! -f "$_f.s" ]; then
-    git -C "$_dist" rev-parse -q --verify "$_spec" > "$_f.c" 2>/dev/null
+    _t="$_f.c.$$.$RANDOM"
+    git -C "$_dist" rev-parse -q --verify "$_spec" > "$_t" 2>/dev/null
     _st=$?
-    printf '%s' "$_st" > "$_f.s"
+    # 0 resolved, 1 does not resolve -- `-q --verify`'s two answers. Anything else is a failure.
+    case "$_st" in
+      0|1) _ai_dlc_memo_commit "$_f" "$_t" "$_st" ;;
+      *)   _ai_dlc_memo_serve "$_t" ;;
+    esac
+    return "$_st"
   fi
   # `cat` for the same reason memo_show uses it: a `$(<f)` round trip rewrites the trailing
   # newline count. A failed rev-parse writes an EMPTY file, which the printf form served as
@@ -969,14 +1023,16 @@ memo_rev_parse() {
 # call sites across several files, each with a DIFFERENT pathspec (or none), share one
 # cached read of the same `<dist,ref>` pair instead of one cached read per pathspec.
 memo_ls_tree() {
-  local _dist="$1" _ref="$2" _k _f _st
+  local _dist="$1" _ref="$2" _k _f _st _t
   ai_dlc_memo_dir || { git -C "$_dist" ls-tree -r --name-only "$_ref" 2>/dev/null; return $?; }
   _k="t $_dist $_ref"; _k="${_k//%/%25}"; _k="${_k//\//%2F}"
   _f="$AI_DLC_MEMO_DIR/$_k"
   if [ ! -f "$_f.s" ]; then
-    git -C "$_dist" ls-tree -r --name-only "$_ref" > "$_f.c" 2>/dev/null
+    _t="$_f.c.$$.$RANDOM"
+    git -C "$_dist" ls-tree -r --name-only "$_ref" > "$_t" 2>/dev/null
     _st=$?
-    printf '%s' "$_st" > "$_f.s"
+    if [ "$_st" -eq 0 ]; then _ai_dlc_memo_commit "$_f" "$_t" "$_st"; else _ai_dlc_memo_serve "$_t"; fi
+    return "$_st"
   fi
   cat "$_f.c"
   _st="$(<"$_f.s")"
@@ -989,14 +1045,16 @@ memo_ls_tree() {
 # and there is exactly one call site of this shape today), so this does not need the
 # filter-the-full-answer-locally discipline memo_ls_tree uses.
 memo_diff_name_status() {
-  local _dist="$1" _base="$2" _theirs="$3" _k _f _st; shift 3
+  local _dist="$1" _base="$2" _theirs="$3" _k _f _st _t; shift 3
   ai_dlc_memo_dir || { git -C "$_dist" diff --no-renames --name-status "$_base" "$_theirs" -- "$@" 2>/dev/null; return $?; }
   _k="d $_dist $_base $_theirs $*"; _k="${_k//%/%25}"; _k="${_k//\//%2F}"; _k="${_k// /%20}"
   _f="$AI_DLC_MEMO_DIR/$_k"
   if [ ! -f "$_f.s" ]; then
-    git -C "$_dist" diff --no-renames --name-status "$_base" "$_theirs" -- "$@" > "$_f.c" 2>/dev/null
+    _t="$_f.c.$$.$RANDOM"
+    git -C "$_dist" diff --no-renames --name-status "$_base" "$_theirs" -- "$@" > "$_t" 2>/dev/null
     _st=$?
-    printf '%s' "$_st" > "$_f.s"
+    if [ "$_st" -eq 0 ]; then _ai_dlc_memo_commit "$_f" "$_t" "$_st"; else _ai_dlc_memo_serve "$_t"; fi
+    return "$_st"
   fi
   cat "$_f.c"
   _st="$(<"$_f.s")"
