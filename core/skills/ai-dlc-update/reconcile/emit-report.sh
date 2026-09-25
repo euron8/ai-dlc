@@ -672,9 +672,16 @@ fi
 # seeded fixture world carries a retired-layer-token.sh one), and that report must still verify.
 # The `--templates` refusal is a different line (`preclassify.sh --templates exited`) and is not
 # matched either; it is decided by the byte-compare like every other detector's.
-if printf '%s\n' "$want" | grep -Eq '^DETECTOR-REFUSED  preclassify\.sh (exited|returned) '; then
+#
+# HERE-STRINGS, NOT `printf | grep -q`: `grep -q` leaves at its first match while printf is still
+# writing a render that can exceed the pipe buffer, and the reader must not depend on the writer's
+# status (I54/I54b). The cause-line extraction reads the same here-string and takes the first
+# line itself, so no stage of it can close early on a writer either.
+if grep -Eq '^DETECTOR-REFUSED  preclassify\.sh (exited|returned) ' <<<"$want"; then
   echo "FAIL: preclassify.sh did not classify on this run, so the mechanical region cannot be verified — its buckets, worklist and deletions are unknown, not empty." >&2
-  echo "  cause: PRECLASSIFY-REFUSED — $(printf '%s\n' "$want" | grep -E '^DETECTOR-REFUSED  preclassify\.sh (exited|returned) ' | head -1 | sed -E 's/^DETECTOR-REFUSED  //; s/, so this section.*//'). Run reconcile/preclassify.sh <dist> <base> <theirs> <consumer> directly, fix what it reports, then re-render and re-approve." >&2
+  _pc_cause="$(grep -m1 -E '^DETECTOR-REFUSED  preclassify\.sh (exited|returned) ' <<<"$want")"
+  _pc_cause="$(sed -E 's/^DETECTOR-REFUSED  //; s/, so this section.*//' <<<"$_pc_cause")"
+  echo "  cause: PRECLASSIFY-REFUSED — ${_pc_cause}. Run reconcile/preclassify.sh <dist> <base> <theirs> <consumer> directly, fix what it reports, then re-render and re-approve." >&2
   exit 1
 fi
 if [ "$want" = "$got" ]; then
