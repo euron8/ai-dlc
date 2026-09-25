@@ -124,10 +124,9 @@ about 2.5 hours at the observed 359s per run.
 
 **THE OPERATOR RAN THE OWED READ-SET TRACE** (nine fixtures, control PASS, no `.claude/worktrees`
 row added), and it shipped in `v0.640.0`.
-**FIVE FIXTURES CHANGED AFTER THAT TRACE, SO A SECOND ONE IS OWED, AND ONLY THE OPERATOR CAN
-RUN IT.** On a checkout of `origin/main`, run `sudo bash core/scripts/derive-fixture-readsets.sh
---list "artifact-derivations backlog-ledger ledger-reverify trunk-audit-classes
-trunk-audit-mutants"`, then commit the map.
+Five fixtures changed after that trace. The operator re-traced all five on the close branch
+(control PASS, only those five fixtures' rows moved, no `.claude/worktrees` row added), and the
+map shipped in the batch 155 close. **No read-set trace is owed.**
 
 **NEXT WORK.** Re-derive the sweep; a new consumer filing outranks everything below.
 - `BL-316` is the strongest subject: a DEFECT with a reproduction and a receipt. Write the
