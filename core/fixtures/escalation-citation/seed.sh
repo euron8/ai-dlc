@@ -44,6 +44,13 @@ CITE_FAKE='2026-07-12T03:00:00Z | "the operator authorized this disposition"'
 entry "$ROOT/pending-clean.md" S49-OLD-2 RESOLVED
 entry "$ROOT/pending-clean.md" S50-ITEM-5 DECIDED_AUTONOMOUSLY
 
+# EMPTY, BLANK and HEADING-ONLY. The first two hold no non-whitespace byte and are the ABSENT
+# state; the third holds prose and no entry, and is not. Whitespace-only is its own seed because
+# a `[ -s ]` test calls it populated.
+: > "$ROOT/pending-empty.md"
+printf '\n \n' > "$ROOT/pending-blank.md"
+printf '# Escalations\nNo escalation has been filed this sprint.\n' > "$ROOT/pending-heading.md"
+
 # --- transcripts ---------------------------------------------------------------------------
 # THE THIRD RECORD IS THREE WEEKS OLD, and it is what a lead reaching backwards would cite:
 # write today's entry, quote a phrase that already exists. Every out-of-window seed this suite
