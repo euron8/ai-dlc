@@ -970,6 +970,113 @@ else
   fi
 fi
 
+# ------------------------------------------------------------------------------
+# EMPTY-FILE ARMS. A file that exists and holds no non-whitespace byte is the ABSENT state and
+# the gate mode prints the absent-file `EXAMINED NOTHING` line for it. It used to fall through
+# and print `OK: entries_scanned=0 ...` -- the line a POPULATED file whose entries this parser
+# cannot read also prints. Only the empty one may say EXAMINED NOTHING.
+#
+# SIX CELLS, SCORED AS ONE STRING, so a mutant can be held to moving ONLY its own cell:
+#   A empty            rc 0, the token, and the "present but empty" reason
+#   B whitespace       the same -- a `[ -s ]` fix calls this file populated and fails here
+#   C absent           rc 0, the token, the absent-file reason, NOT the empty one (unchanged)
+#   D zero-record      heading-only AND a level-4 entry carrying **Suppresses:**: rc 0,
+#                      entries_scanned=0 on the final OK line, NO token. One cell, because no
+#                      zero-record predicate can move one of the two without the other.
+#   E finding          expired-still-failing: rc 1 (unchanged)
+#   F --in-force       an empty file: rc 0, EMPTY stdout, the IN-FORCE: counts on stderr and
+#                      no token anywhere. Its callers parse stdout as rows.
+# Every cell is presence-shaped on at least one conjunct, so a subject that prints nothing
+# fails every one of them.
+# ------------------------------------------------------------------------------
+SEN_CELLS=""
+sen_gate() { # <validator> <case> -> SEN_O / SEN_RC
+  SEN_O="$(AI_DLC_PROJECT_ROOT="$WORK" bash "$1" --escalations "$CASES/$2/pending.md" \
+             --gate-metrics "$GM_FAILING" --enforcement-map "$MAP" 2>/dev/null)"
+  SEN_RC=$?
+}
+sen_cells() { # <validator> -> sets SEN_CELLS
+  local v="$1" c="" o1 r1 err out
+  sen_gate "$v" empty-file
+  if [ "$SEN_RC" -eq 0 ] && grep -qF "EXAMINED NOTHING" <<<"$SEN_O" && grep -qF "present but empty" <<<"$SEN_O"; then c="${c}1"; else c="${c}0"; fi
+  sen_gate "$v" blank-file
+  if [ "$SEN_RC" -eq 0 ] && grep -qF "EXAMINED NOTHING" <<<"$SEN_O" && grep -qF "present but empty" <<<"$SEN_O"; then c="${c}1"; else c="${c}0"; fi
+  sen_gate "$v" never-written
+  if [ "$SEN_RC" -eq 0 ] && grep -qF "EXAMINED NOTHING" <<<"$SEN_O" && grep -qF "no escalations file" <<<"$SEN_O" \
+     && ! grep -qF "present but empty" <<<"$SEN_O"; then c="${c}1"; else c="${c}0"; fi
+  sen_gate "$v" heading-only; o1="$SEN_O"; r1="$SEN_RC"
+  sen_gate "$v" level4-entry
+  if [ "$r1" -eq 0 ] && [ "$SEN_RC" -eq 0 ] && ! grep -qF "EXAMINED NOTHING" <<<"$o1$SEN_O" \
+     && grep -qF "OK: entries_scanned=0 " <<<"$o1" && grep -qF "OK: entries_scanned=0 " <<<"$SEN_O"; then c="${c}1"; else c="${c}0"; fi
+  sen_gate "$v" expired-still-failing
+  if [ "$SEN_RC" -eq 1 ]; then c="${c}1"; else c="${c}0"; fi
+  err="$( AI_DLC_PROJECT_ROOT="$WORK" bash "$v" --in-force --escalations "$CASES/empty-file/pending.md" \
+            --gate-metrics "$GM_FAILING" --enforcement-map "$MAP" 2>&1 >"$WORK/sen-inforce.out" )"; r1=$?
+  out="$(cat "$WORK/sen-inforce.out")"
+  if [ "$r1" -eq 0 ] && [ -z "$out" ] && grep -q '^IN-FORCE: entries_scanned=0 ' <<<"$err" \
+     && ! grep -qF "EXAMINED NOTHING" <<<"$out$err"; then c="${c}1"; else c="${c}0"; fi
+  SEN_CELLS="$c"
+}
+SEN_IS_DIST=0
+case "$(cd "$(dirname "$VALIDATOR")" && pwd)" in */core/scripts) SEN_IS_DIST=1 ;; esac
+sen_cells "$VALIDATOR"
+# A SUBJECT THAT PREDATES THE FIX. This fixture ships and can reach a consumer one pull ahead of
+# the validator: cells A and B read 0 and nothing else moves. SKIP there; FAIL here.
+if [ "$(printf '%s' "$SEN_CELLS" | cut -c1-2)" = "00" ] && [ "$(printf '%s' "$SEN_CELLS" | cut -c3-6)" = "1111" ] \
+   && [ "$SEN_IS_DIST" -ne 1 ]; then
+  printf '  SKIP  the empty-file arms -- the installed validator predates the empty-file verdict; this fixture ships one pull ahead of it\n'
+else
+  i=0
+  for nm in "A empty file" "B whitespace-only file" "C absent file (unchanged)" \
+            "D populated file parsing to zero records carries NO token" "E a real finding still exits 1" \
+            "F --in-force on an empty file: exit 0, empty stdout, IN-FORCE: on stderr"; do
+    i=$((i + 1))
+    if [ "$(printf '%s' "$SEN_CELLS" | cut -c"$i")" = "1" ]; then ok "empty-file cell $nm"
+    else bad "empty-file cell $nm does not hold (cells=$SEN_CELLS)"; fi
+  done
+
+  # --- the mutants, each in a copy of the WHOLE scripts dir, with an unmutated control ------
+  SEN_SRC_DIR="$(cd "$(dirname "$VALIDATOR")" && pwd)"
+  SEN_BASE="$(basename "$VALIDATOR")"
+  SEN_MW="$WORK/empty-mut"; mkdir -p "$SEN_MW"
+  # sen_mk RUNS INSIDE `$( )`, so it cannot call `bad`: the failure count it bumped would die
+  # with the subshell and a mutant that never built would score nothing at all. It writes its
+  # reason to SEN_MW/<name>.why and prints no path; sen_score reads the empty path and fails.
+  sen_mk() {  # <name> <literal anchor, exactly one line, or empty for the control> <replacement file>
+    local d="$SEN_MW/$1" n
+    cp -R "$SEN_SRC_DIR" "$d" || { echo "could not copy $SEN_SRC_DIR" > "$SEN_MW/$1.why"; return 1; }
+    [ -n "$2" ] || { printf '%s\n' "$d/$SEN_BASE"; return 0; }
+    n="$(grep -cF -- "$2" "$VALIDATOR")" || n=0
+    [ "$n" -eq 1 ] || { echo "anchor matches $n line(s), not 1 -- re-anchor it, never relax the arm" > "$SEN_MW/$1.why"; return 1; }
+    awk -v A="$2" -v R="$3" '
+      index($0, A) { while ((getline l < R) > 0) print l; close(R); next }
+      { print }' "$VALIDATOR" > "$d/$SEN_BASE"
+    if cmp -s "$VALIDATOR" "$d/$SEN_BASE"; then echo "changed no bytes -- it would score as a kill" > "$SEN_MW/$1.why"; return 1; fi
+    bash -n "$d/$SEN_BASE" 2>/dev/null || { echo "does not parse" > "$SEN_MW/$1.why"; return 1; }
+    printf '%s\n' "$d/$SEN_BASE"
+  }
+  sen_score() {  # <name> <path-or-empty> <want> <why> <mk-name>
+    if [ -z "$2" ]; then bad "$1 was never built: $(cat "$SEN_MW/$5.why" 2>/dev/null || echo 'no reason recorded')"; return 0; fi
+    sen_cells "$2"
+    if [ "$SEN_CELLS" = "$3" ]; then ok "$1 scored $SEN_CELLS -- $4"
+    else bad "$1 scored $SEN_CELLS, wanted $3 -- $4"; fi
+  }
+  SEN_ANCHOR='if [ "$IN_FORCE" -ne 1 ] && [ "$SL_BLANK_RC" -eq 1 ]; then'
+  printf '%s\n' 'if false; then' > "$SEN_MW/r-revert"
+  printf '%s\n' '[ -n "$RECORDS" ] || ENTRIES_N=0' \
+    'if [ "$IN_FORCE" -ne 1 ] && [ "$ENTRIES_N" -eq 0 ]; then echo "OK: EXAMINED NOTHING — entries_scanned=0 -- zero parsed records ($ESCALATIONS)."; exit 0; fi' \
+    > "$SEN_MW/r-zero"
+  printf '%s\n' 'if [ "$SL_BLANK_RC" -eq 1 ]; then' > "$SEN_MW/r-hoist"
+  SEN_CTL="$(sen_mk control "" "")" || SEN_CTL=""
+  sen_score "MUTANT control (unmutated whole-dir copy)" "$SEN_CTL" 111111 "every cell holds, so a mutant's red cell is the mutation's" control
+  SEN_M1="$(sen_mk revert "$SEN_ANCHOR" "$SEN_MW/r-revert")" || SEN_M1=""
+  sen_score "MUTANT M-revert" "$SEN_M1" 001111 "the fix removed: ONLY the empty and whitespace cells go red" revert
+  SEN_M2="$(sen_mk zero-records '[ -n "$RECORDS" ] || ENTRIES_N=0' "$SEN_MW/r-zero")" || SEN_M2=""
+  sen_score "MUTANT M-zero-records" "$SEN_M2" 111011 "entries_scanned=0 read as empty: ONLY the populated-zero-record cell goes red" zero-records
+  SEN_M3="$(sen_mk hoist "$SEN_ANCHOR" "$SEN_MW/r-hoist")" || SEN_M3=""
+  sen_score "MUTANT M-hoist" "$SEN_M3" 111110 "the check applied to --in-force too: ONLY the --in-force cell goes red" hoist
+fi
+
 echo
 if [ "$fails" -ne 0 ]; then
   echo "suppression-lifetime: $fails assertion(s) FAILED" >&2

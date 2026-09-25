@@ -166,6 +166,18 @@ if [ ! -f "$ESCALATIONS" ]; then
   echo "OK: EXAMINED NOTHING — entries_scanned=0 suppressed=0 terminal_naming_check=0 malformed_attempt=0 -- no escalations file ($ESCALATIONS)."
   exit 0
 fi
+# A file holding no non-whitespace byte is the absent state and says so -- in the gate mode
+# only. `--in-force` keeps answering exactly as it does for an empty list: rows on stdout
+# (none), the `IN-FORCE:` counts on stderr, exit 0. Printing an OK line there would put a
+# non-row on the stream its callers parse as rows. Keyed on the BYTES, not on
+# `entries_scanned=0`: a populated file whose entries this parser cannot read is a grammar
+# failure, not an empty corpus. `grep` exits 1 only when it read the file and matched nothing.
+grep -q '[^[:space:]]' "$ESCALATIONS" 2>/dev/null
+SL_BLANK_RC=$?
+if [ "$IN_FORCE" -ne 1 ] && [ "$SL_BLANK_RC" -eq 1 ]; then
+  echo "OK: EXAMINED NOTHING — entries_scanned=0 suppressed=0 terminal_naming_check=0 malformed_attempt=0 -- escalations file present but empty ($ESCALATIONS)."
+  exit 0
+fi
 
 # ---- 1. Locate the catalog -------------------------------------------------
 if [ -z "$ENFORCEMENT_MAP" ]; then

@@ -4079,6 +4079,18 @@ an empty `pending.md` is a legitimate consumer state has not been measured. Meas
 reference consumer's history first; if the state is legitimate, the three programs should say
 `EXAMINED NOTHING` on it too.
 
+**MEASURED AT BATCH 153, AND FIXED IN 0.639.0.** Across all 891 versions of the reference
+consumer's `pending.md` on every ref, none was empty or whitespace-only; the smallest is 117 bytes.
+An absent-path control returned 0 commits. Nothing in `core/` outside the fixtures writes the file
+empty. So an empty file is not a state the consumer produces, and "nothing examined" is the true
+report for it. 41 of those versions carry no `**Status:**` field, and one of them holds live
+decisions as bullets the parser cannot read, so the predicate is the file's BYTES (no
+non-whitespace byte), never the parser's count: a zero-parsed-entries predicate would relabel that
+grammar failure as "nothing to examine". The check sits in gate mode only, below each mode split;
+hoisted above it, an empty file made `--any-authorized` exit 0, which `core-paths.sh` reads as an
+operator citation. Each fixture's committed mutants (revert, widened predicate, hoisted check) each
+fail only their own arms. What an adjudicator does with the token at Check 2 is `BL-311`.
+
 verify: manual
 
 ## BL-308 — `preclassify.sh --templates` and `--untangle` route through the new failure path, but neither mode was force-tested on its own
@@ -4107,6 +4119,21 @@ Every later lookup of that key in the render is then served the truncated blob a
 This was reasoned from the shape of the write. It was not constructed with a real ENOSPC. A
 receipt must fill a small volume during a fill and read the cached bytes back against
 `git show`.
+
+verify: manual
+
+## BL-311 — Checks 2 and 2a have no step text for `EXAMINED NOTHING`, and the map calls it a failure where the validators call it clean
+
+**NOTE.** Found at batch 153 by the `BL-307` contract adversary. It discharges no consumer
+candidate, and it needs an operator decision before anything is built.
+
+`core/skills/ai-dlc/enforcement-map.yaml` gives Checks 2 and 2a the posture that `EXAMINED
+NOTHING` "is not a pass, nothing was verified". The three validators' own headers call an absent
+escalations file a legitimate clean state. `gate-validation.md`'s Check 2 and 2a sections carry 0
+mentions of the token, against 7 in the whole file, because `BL-305` added the instruction to
+Checks 26, 33 and 35 only. Adding that instruction here as written would make every consumer with
+no escalations file fail Check 2. Which reading is right is the operator's call. How an
+adjudicator actually rules on the token at Check 2 today was available to measure and was not.
 
 verify: manual
 

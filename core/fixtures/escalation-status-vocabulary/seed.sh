@@ -216,6 +216,27 @@ cat > "$WORK/pending-prose-below.md" <<MD
 **Context:** the entry carried NO \`**Status:**\` line from filing until 2026-07-20. It therefore matched no branch.
 MD
 
+# ---- EMPTY, BLANK, HEADING-ONLY and UNPARSED --------------------------------
+# The first two hold no non-whitespace byte and are the ABSENT state. The other two are
+# POPULATED files that parse to zero records, and must never be reported as empty. The last
+# is the reference consumer's own shape (live DA- entries written as bullets, no
+# `**Status:**` field anywhere): a grammar failure, not an absence.
+: > "$WORK/pending-empty.md"
+printf '\n \n' > "$WORK/pending-blank.md"
+printf '# Pending Escalations\nNo escalation has been filed this sprint.\n' > "$WORK/pending-heading.md"
+cat > "$WORK/pending-unparsed.md" <<'MD'
+# Pending Escalations
+
+## DA-283 — deferral of the ingest retry story
+- Status: awaiting operator
+- Raised by: lead, 2026-07-21
+- Decision needed: defer to the next sprint or split the story
+
+## DA-284 — scope of the audit backfill
+- Status: awaiting operator
+- Decision needed: backfill all sprints or only the current one
+MD
+
 cat > "$WORK/env.sh" <<ENV
 VALIDATOR="$VALIDATOR"
 SPEC_SRC="$SPEC_SRC"
@@ -231,6 +252,10 @@ PROSE_ABOVE="$WORK/pending-prose-above.md"
 PROSE_ABOVE_OK="$WORK/pending-prose-above-ok.md"
 PROSE_BELOW="$WORK/pending-prose-below.md"
 PROSE_BELOW_OK="$WORK/pending-prose-below-ok.md"
+EMPTY="$WORK/pending-empty.md"
+BLANK="$WORK/pending-blank.md"
+HEADING="$WORK/pending-heading.md"
+UNPARSED="$WORK/pending-unparsed.md"
 ENV
 
 printf '%s\n' "$WORK"
