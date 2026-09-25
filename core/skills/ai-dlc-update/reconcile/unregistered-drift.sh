@@ -283,9 +283,9 @@ exempt_ranges() {
     # setup-sites values are YAML single-quoted; strip the surrounding quotes here (not in awk).
     heading="${heading#\'}"; heading="${heading%\'}"
     nexth="${nexth#\'}";     nexth="${nexth%\'}"
-    hs="$(printf '%s\n' "$base" | grep -nxF -- "$heading" | head -1 | cut -d: -f1)"
+    hs="$(grep -nxF -- "$heading" <<<"$base" | head -1 | cut -d: -f1)"
     [ -n "$hs" ] || continue
-    ns="$(printf '%s\n' "$base" | awk -v s="$hs" -v nh="$nexth" 'NR>s && $0==nh {print NR; exit}')"
+    ns="$(awk -v s="$hs" -v nh="$nexth" 'NR>s && $0==nh {print NR; exit}' <<<"$base")"
     # An unresolvable terminator grants NO exemption — it used to widen the span to EOF.
     # Both failure directions are silent, but they are not equal: exempting to EOF turns one
     # stale anchor into a blanket exemption over the whole rest of the file, and the drift it

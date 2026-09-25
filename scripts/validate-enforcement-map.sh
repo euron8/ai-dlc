@@ -4634,7 +4634,12 @@ RLIB="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
 if [ ! -f "$RLIB" ]; then
   err "I21 cannot find core/skills/ai-dlc-update/reconcile/lib.sh. The check that keeps the shared drift helpers single-homed just went vacuous — it must locate the library or fail loudly, never pass by finding nothing to bind."
 else
-  lib_fns="$(sed -n 's/^\([a-z_][a-z0-9_]*\)() {.*/\1/p' "$RLIB")"
+  # `trap` IS NOT A HELPER. lib.sh defines a function by that name to SHADOW the builtin in every
+  # sourcing shell (I115 owns why), and every reconcile script that never sources lib.sh calls
+  # the builtin legitimately. Left in the derived set, it scored five of them as calling a lib.sh
+  # helper without sourcing it: emit-report, predicate-differential, self-update-gate,
+  # settings-merge and setup-site-drift, all false.
+  lib_fns="$(sed -n 's/^\([a-z_][a-z0-9_]*\)() {.*/\1/p' "$RLIB" | grep -vx trap)"
   if [ -z "$lib_fns" ]; then
     err "I21 found no function definitions in reconcile/lib.sh. Either the library was emptied or its definition form changed; either way the no-second-copy assertion is now testing nothing and would pass against a tree with four resolvers in it."
   else
@@ -11242,6 +11247,107 @@ else
     fi
   fi
   rm -rf "$i114_probe" 2>/dev/null || true
+fi
+
+# --- I115: no file that sources reconcile/lib.sh can take the memo's EXIT cleanup away ---
+#
+# WHAT IT BINDS. reconcile/lib.sh builds its cross-process memo at SOURCE time and arms the
+# cleanup on the sourcing shell's EXIT. bash EXIT traps REPLACE each other, and six sourcers set
+# their own after sourcing, so lib.sh defines `trap` as a shell function that composes every
+# later `trap X EXIT` with the cleanup first. Measured before that existed: one standalone run
+# each left 105 `reconcile-memo.*` directories from unregistered-drift, 7 from preclassify, 4 from
+# layer-drift, and this machine's TMPDIR held 433455 of them.
+#
+# THE SHADOW HAS FOUR EXITS, and every one is a spelling this arm refuses in a sourcer:
+# `builtin trap` and `command trap` reach the builtin past the function (measured: `command trap`
+# DOES bypass a function named trap on bash 3.2, a leading backslash does NOT), `unset` of `trap`
+# deletes the function, and `trap - EXIT` / `trap '' EXIT` read as "drop all EXIT handling" while
+# under the shadow they keep the cleanup, so an author relying on the builtin meaning is misled.
+#
+# THE UNSET SPELLING TAKES ANY FLAGS AND ANY OTHER NAMES BEFORE `trap`. Measured on bash 3.2: a
+# plain `unset trap`, with no variable named trap, removes the FUNCTION, as do `unset -f trap`
+# and `unset x trap`; only `unset -v trap` keeps it. The grammar was `-f` only and missed the plain
+# form. `-v` is refused too, and deliberately: it is harmless today and one flag away from the
+# form that is not. FP set of the widened grammar over the 427-file corpus: 1 non-comment line,
+# this arm's own remedy message in scripts/validate-enforcement-map.sh, which is no sourcer, so 0
+# findings; the old grammar hit that line plus the self-probe message, also 0 findings.
+#
+# OUT OF SCOPE: an indirect spelling such as `b=builtin; $b trap - EXIT` or an `eval` of one. No
+# line grammar can resolve a variable's value, and no sourcer carries the shape.
+#
+# THE POPULATION IS DERIVED, NOT LISTED. A sourcer is a shell file with a non-comment `.`/`source`
+# line naming `/lib.sh` or `$LIB`, which also names `reconcile/lib.sh` or sits in reconcile/.
+# lib.sh itself is excluded: it is where `builtin trap` legitimately lives. Scanned: reconcile/,
+# scripts/, core/scripts/, core/hooks/ and every fixture's shell files, in ONE awk pass.
+#
+# FALSE-POSITIVE SET, MEASURED ON THE TREE THAT SHIPPED THIS: 426 files scanned, 18 sourcers,
+# 0 findings. The narrowing that got it there is the sourcer filter: without it the line grammar
+# reports two real lines, `trap - EXIT` at reconcile/settings-merge.sh and `trap - EXIT INT TERM`
+# at core/scripts/validate-mutation-red.sh, neither of which sources lib.sh, plus this arm's own
+# probe and message text. The settings-merge line is kept as the IN-CORPUS CONTROL below, so a
+# grammar that stopped matching is caught on the real tree and not only in the probe. Injecting
+# `builtin trap _carry_cleanup EXIT` into a copy of unregistered-drift.sh yields 1 finding
+# against 0 for the unmodified file.
+i115_scan() { # <file>... -> "S<TAB>file" per sourcer, "O<TAB>file:line<TAB>text" per offending line
+  awk '
+    FNR == 1 { if (prev != "") done(prev); prev = FILENAME; src = 0; named = (FILENAME ~ /reconcile\//); n = 0 }
+    function done(f,   i) { if (src && named) { print "S\t" f; for (i = 1; i <= n; i++) print O[i] } else for (i = 1; i <= n; i++) print "X" substr(O[i], 2) }
+    /^[[:space:]]*#/ { next }
+    /reconcile\/lib\.sh/ { named = 1 }
+    /^[[:space:]]*(\.|source)[[:space:]]+"?(\$\{?LIB\}?|[^ ]*\/lib\.sh)"?([[:space:]]|$)/ { src = 1 }
+    {
+      l = $0
+      bad = (l ~ /(^|[^A-Za-z0-9_])(builtin|command)[[:space:]]+trap([^A-Za-z0-9_]|$)/) \
+         || (l ~ /(^|[^A-Za-z0-9_])unset([[:space:]]+-[a-z]+)*([[:space:]]+[A-Za-z_][A-Za-z0-9_]*)*[[:space:]]+trap([[:space:];&|]|$)/) \
+         || (l ~ /(^|[^A-Za-z0-9_])trap[[:space:]]+(--[[:space:]]+)?(-|\047\047|"")[[:space:]]+([^;&|]*[[:space:]])?(EXIT|exit|0)([[:space:];&|]|$)/)
+      if (bad) O[++n] = "O\t" FILENAME ":" FNR "\t" l
+    }
+    END { if (prev != "") done(prev) }
+  ' "$@" 2>/dev/null
+}
+# SELF-PROBE FIRST, BOTH DIRECTIONS, under mktemp. The offender is a sourcer carrying each of the
+# seven forbidden spellings once, and all seven must be reported. The near-misses must not be: a
+# sourcer whose only such text is in COMMENTS, which also arms an ordinary `trap … EXIT` and a
+# `trap - INT`, unsets `trap_dir` and `mytrap`, and runs `unset foo; trap x EXIT`, and a
+# NON-sourcer (the settings-merge shape) carrying `trap - EXIT` for real.
+i115_probe="$(mktemp -d 2>/dev/null)"
+if [ -z "$i115_probe" ] || [ ! -d "$i115_probe" ]; then
+  err "I115 could not create its probe directory, so its self-probe did not run. A scan whose probe did not fire reports a clean corpus it never read; this fails instead."
+else
+  mkdir -p "$i115_probe/reconcile"
+  printf '%s\n' '. "$SELF/lib.sh"' 'builtin trap x EXIT' 'command trap x EXIT' 'unset -f trap' 'trap - EXIT' "trap '' EXIT" 'unset trap' 'unset -f -v foo trap' > "$i115_probe/reconcile/offender.sh"
+  printf '%s\n' '. "$SELF/lib.sh"' '# builtin trap x EXIT' '  # trap - EXIT' "trap 'rm -f x' EXIT" 'trap - INT' 'unset trap_dir' 'unset -v mytrap' 'unset foo; trap x EXIT' > "$i115_probe/reconcile/nearmiss.sh"
+  printf '%s\n' 'OUT=x' 'trap - EXIT' > "$i115_probe/reconcile/nonsourcer.sh"
+  i115_p="$(i115_scan "$i115_probe/reconcile/offender.sh" "$i115_probe/reconcile/nearmiss.sh" "$i115_probe/reconcile/nonsourcer.sh")"
+  i115_count() { printf '%s\n' "$1" | awk -F'\t' -v k="$2" -v f="$3" '$1 == k && index($2, f) == 1 { n++ } END { print n + 0 }'; }
+  i115_po="$(i115_count "$i115_p" O "$i115_probe/reconcile/offender.sh:")"
+  i115_pn="$(i115_count "$i115_p" O "$i115_probe/reconcile/n")"
+  i115_px="$(i115_count "$i115_p" X "$i115_probe/reconcile/nonsourcer.sh:")"
+  if [ "$i115_po" -ne 7 ]; then
+    err "I115 SELF-PROBE FAILED: a seeded lib.sh sourcer carrying builtin trap, command trap, unset -f trap, trap - EXIT, trap '' EXIT, unset trap and unset -f -v foo trap yielded ${i115_po} finding(s), not 7. The scan cannot see a spelling it exists to refuse, so a clean corpus below would be a floor of unknown depth."
+  elif [ "$i115_pn" -ne 0 ]; then
+    err "I115 SELF-PROBE FAILED: the near-misses (the forbidden spellings in comments, an ordinary trap … EXIT, trap - INT, and a NON-sourcer's real trap - EXIT) yielded ${i115_pn} finding(s). The scan reads comments or ignores the sourcer filter, so its findings would be noise."
+  elif [ "$i115_px" -ne 1 ]; then
+    err "I115 SELF-PROBE FAILED: the non-sourcer's trap - EXIT was not seen by the line grammar at all (${i115_px} rows), so the near-miss above passed by blindness rather than by the sourcer filter."
+  else
+    # Relative paths from a subshell at the root, so a finding names `core/...` and never an
+    # absolute path that varies by checkout. lib.sh is dropped from the argument list here.
+    i115_out="$(cd "$REPO_ROOT" 2>/dev/null && set -- core/skills/ai-dlc-update/reconcile/*.sh scripts/*.sh core/scripts/*.sh core/hooks/*.sh core/fixtures/*/*.sh \
+      && for i115_f in "$@"; do shift; [ -f "$i115_f" ] && [ "$i115_f" != core/skills/ai-dlc-update/reconcile/lib.sh ] && set -- "$@" "$i115_f"; done \
+      && i115_scan "$@")"
+    i115_ns="$(i115_count "$i115_out" S "")"
+    i115_ctl="$(i115_count "$i115_out" X core/skills/ai-dlc-update/reconcile/settings-merge.sh:)"
+    i115_lr="$(i115_count "$i115_out" S core/skills/ai-dlc-update/reconcile/ledger-reverify.sh)"
+    if [ "$i115_ns" -lt 12 ] || [ "$i115_lr" -ne 1 ]; then
+      err "I115 found ${i115_ns} lib.sh sourcer(s), and reconcile/ledger-reverify.sh is not among them. Twelve reconcile detectors source lib.sh, so the sourcer grammar no longer reaches them -- a zero here is a broken scan, not a clean one."
+    elif [ "$i115_ctl" -lt 1 ]; then
+      err "I115 IN-CORPUS CONTROL FAILED: reconcile/settings-merge.sh carries a real trap - EXIT and sources nothing, so the line grammar must see it as a non-sourcer row. It did not, so the zero findings below prove nothing about the real tree."
+    else
+      i115_bad="$(printf '%s\n' "$i115_out" | awk -F'\t' '$1 == "O" { printf " %s", $2 }')"
+      [ -z "$i115_bad" ] || err "I115: a file that sources reconcile/lib.sh reaches the builtin trap past lib.sh's composing shadow, or resets EXIT with a spelling whose builtin meaning no longer holds:${i115_bad}. lib.sh arms the memo cleanup on EXIT and composes every later trap X EXIT with it; builtin trap, command trap and unset -f trap drop it, and the memo directory then leaks on every run. Write an ordinary trap <handler> EXIT, which lib.sh composes, and drop the reset line."
+    fi
+  fi
+  rm -rf "$i115_probe" 2>/dev/null || true
 fi
 
 # --- Verdict ------------------------------------------------------------------

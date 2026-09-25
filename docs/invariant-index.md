@@ -132,3 +132,4 @@ To change this file, change the arm header it came from and re-run the renderer.
 | I112 | the code-review verdict set is ONE set across its owner and the gate that reads it |
 | I113 | the single-valued position-bullet COUNT is one grammar in three copies |
 | I114 | a shipped skill's frontmatter sets nothing on the session that invokes it |
+| I115 | no file that sources reconcile/lib.sh can take the memo's EXIT cleanup away |

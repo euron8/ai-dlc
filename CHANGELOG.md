@@ -15,6 +15,49 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.635.0] - 2026-09-24
+
+This release stops the reconcile engine leaking `reconcile-memo.*` directories (`BL-303`). It
+discharges no consumer candidate. `lib.sh` is a bootstrapping file, so the release carries
+nothing else.
+
+### BL-303 — the memo is built at source time and cleaned behind every EXIT handler
+
+The filed entry named one leaked directory per standalone `ledger-reverify.sh` run. Measured over
+every entry point that sources `lib.sh`, on a graph clone at `937919e4` → `76ba3029`, one round
+left **346**: `hard-blockers` 109 through its children, `retired-layer-contract` 108,
+`unregistered-drift` 105. This machine's `TMPDIR` held about 479,000. There were two causes. The
+first lookup in most detectors ran inside `$( )`, so the ownership record died with the subshell.
+And only `ledger-reverify.sh` ever called the cleanup. The filed fix, one early lookup in
+`ledger-reverify.sh`, was measured to leave 61 of 62 directories on the receipt's seed, and was
+not taken.
+
+`lib.sh` now builds the memo in the sourcing shell when it is sourced, and exports it, so
+subshells and child detectors borrow it instead of building their own. `trap` becomes a shell
+function in every sourcing script. It composes any later EXIT handler with the cleanup running
+first, and only in the sourcing shell. It preserves `$?`, still runs the caller's handler under
+`set -e`, and leaves a trap set inside `$( )` uncomposed, so that subshell cannot remove the
+parent's live memo.
+
+Arming an EXIT trap makes a builtin writer into an early-closing reader report EPIPE, and
+`layer-drift.sh` wrote 550 `Broken pipe` lines on the graph clone. Those pipe sites in
+`layer-drift.sh`, `register-drift.sh`, `retired-layer-token.sh`, `unregistered-drift.sh` and
+`scripts/backlog-rotate.sh` now read from here-strings. Across all 12 entry points, stdout, stderr
+and exit codes are byte-identical to base. The pull path (`emit-report.sh`, `--verify`,
+`apply.sh`, `--finish`) produced an identical report and consumer diff, with 0 directories left
+against 116.
+
+**I115** refuses `builtin trap`, `command trap`, `unset` of `trap`, `trap - EXIT` and
+`trap '' EXIT` in any `lib.sh` sourcer. Each of those would drop the composed cleanup. **I21**
+no longer counts `trap` as a `lib.sh` helper. The `ledger-reverify` fixture gains four memo arms,
+each with a committed mutant that only its own arm kills.
+
+`layer-readopt-gate` keyed two things on the shape this release changes. Its `mktemp` shim logged
+the new source-time `mktemp -d` as the first templated call, so arm (d) lost its call index. Its
+flatten mutation anchored on a pipe line that is now a here-string. The shim logs `-d` calls
+separately, and the mutation carries an anchor for each shape. The fixture ships, so it passes
+against both the 0.634.0 engine and this one.
+
 ## [0.634.0] - 2026-09-24
 
 This release fixes two fixtures that failed on ambient concurrency rather than on the change

@@ -228,7 +228,7 @@ fi
 
 n_changed="$(printf '%s\n' "$changed" | grep -c .)"
 slug="$(printf '%s' "$REL" | sed 's|/|__|g; s|\.md$||')"
-first="$(printf '%s\n' "$changed" | head -1)"
+first="$(head -1 <<<"$changed")"
 OUT="$OVR_DIR/$(printf '%s' "$slug" | sed 's|skills__ai-dlc__||')__consumer-drift.md"
 
 shadow_line="$SHADOW_TGT#$(printf '%s\n' "$changed" | paste -sd '@' - | sed "s|@|, ${SHADOW_TGT}#|g")"

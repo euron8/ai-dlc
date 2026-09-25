@@ -4031,15 +4031,47 @@ does not fire. The same function called as `$(f)`, with no pipeline, does fire i
 make the owning process the one whose trap runs. It must not rely on a subshell cleaning up
 after itself.
 
-The receipt runs the engine once, standalone, against the `ledger-reverify` fixture's seed
-under a private `TMPDIR`. It unsets `AI_DLC_RECONCILE_MEMO` so the borrowed-memo path cannot
-hide the leak, and counts the `reconcile-memo.*` directories left behind. It exits **9** if the
-seed or engine is missing, or if the run produced no output rows. Scored at `937919e4`: **1**
-(`rows=111 reconcile-memo-left=1`). A scratch copy of the unfixed tree also scores **1**,
-which shows the copy itself does not change the answer. The main-shell fix scores **0**. A
-copy with the engine removed scores **9**.
+**THE POPULATION WAS WIDER THAN THE ENTRY, AND THE DEFECT WAS TWO.** Measured by the batch 152
+adversary, one standalone run of each `lib.sh` sourcer under a private `TMPDIR`: unregistered-drift
+left 105 directories, preclassify 7, layer-drift 4, retired-fixtures 1 and ledger-reverify 1. The
+filed subshell orphan is one defect. The second is that five of the six memo-using entry points
+never called `ai_dlc_memo_cleanup` at all, so their main-shell directory leaked too. The fix
+builds the memo at SOURCE time in the main shell and exports it, so subshells and child
+processes borrow it. It arms the cleanup on EXIT and makes `trap` a shell function that runs the
+cleanup FIRST in front of any later `trap X EXIT`, because six sourcers arm their own handler
+after sourcing and a handler that calls `exit` would skip a cleanup placed after it. I115 refuses
+the spellings that reach past that function.
 
-verify: sh set -u; S=core/fixtures/ledger-reverify/seed.sh; E=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -r "$S" ] && [ -r "$E" ] && [ -r "$(dirname "$E")/lib.sh" ] || exit 9; T="$(mktemp -d)" || exit 9; trap 'rm -rf "$T"' EXIT; mkdir "$T/amb" || exit 9; export TMPDIR="$T/amb"; unset AI_DLC_RECONCILE_MEMO; read -r DIST BASE CONS THEIRS < <(bash "$S" 2>/dev/null) || exit 9; [ -d "$DIST" ] && [ -d "$CONS" ] || exit 9; out="$(bash "$E" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>/dev/null)"; rows="$(LC_ALL=C grep -cE '^[A-Z][A-Z-]+	' <<<"$out")" || rows=0; left="$(ls -d "$T/amb"/reconcile-memo.* 2>/dev/null | LC_ALL=C grep -c .)" || left=0; echo "rows=$rows reconcile-memo-left=$left"; [ "$rows" -gt 0 ] || exit 9; [ "$left" -eq 0 ] && exit 0; exit 1
+The receipt drives TEN entry points, each with its own argument vector and seed, all taken from
+this tree's fixture seeds (`ledger-reverify`, `retired-layer-contract`, `reconcile-emit-report`
+and `retired-layer-token`). Each runs under its own private `TMPDIR` with `AI_DLC_RECONCILE_MEMO`
+unset, behind a `git` shim that counts calls. "It ran" is keyed on git calls, never on output
+bytes, because several entries correctly print nothing on a world with no retirement. It builds
+an R2 copy of the reconcile directory in the same invocation, with `ai_dlc_memo_dir` returning 1,
+and runs every entry both ways under the same shim. It requires zero `reconcile-memo.*` left
+across all ten. It requires the fix to make strictly fewer git calls than R2 on ledger-reverify,
+layer-drift, unregistered-drift and retired-layer-contract, and no more than R2 everywhere,
+with the same exit code. It then checks that a borrowed directory survives a child's exit, and
+that a sourcer's own `trap "exit 3" EXIT` still removes the memo. Three more arms run a sourcer
+directly: after `x=$(trap : EXIT; :)` the main shell's memo directory must still be present; under
+`set -e`, `trap 'echo OWN rc=$?' EXIT; false` must print `OWN rc=1`; and a sourcer that launches a
+child sourcer must see the child use the SAME directory, fill it, and leave no second one. That
+last arm is what makes the export load-bearing. It exits **9** on a missing
+engine or seed, a failed R2 build, or zero git calls anywhere. Its world lives under `/tmp`
+because a memo key embeds the dist path, and the scratchpad's long path pushed keys past the
+filename limit on base and fix alike.
+
+Scored RAW, each tree a full `core/` copy, base taken at `5bacf2e3`: base **1** (62 left), the fix
+**0**, the filed main-shell pre-call alone **1** (61 left), R2 always-uncacheable **1** (git calls
+equal R2's, 311 on ledger-reverify), a cleanup that removes the borrowed directory **1**, a
+source-time trap with no composing function **1** (4 left, 1 behind the exiting handler), the
+handler composed FIRST **1** (1 left behind the exiting handler), a second correct spelling that
+holds the handler in a variable **0**, the export dropped **1** (the child builds a second
+directory), the set-time level guard reverted **1** (the subshell trap deletes the memo), the
+`&& :` composition reverted **1** (the caller's handler prints nothing under `set -e`), and the
+engine removed **9**.
+
+verify: sh set -u; R="$PWD/core/skills/ai-dlc-update/reconcile"; F="$PWD/core/fixtures"; for x in "$R/lib.sh" "$R/ledger-reverify.sh" "$F/ledger-reverify/seed.sh" "$F/retired-layer-contract/seed.sh" "$F/retired-layer-token/seed.sh" "$F/reconcile-emit-report/seed.sh"; do [ -r "$x" ] || exit 9; done; T="$(mktemp -d /tmp/r303.XXXXXX)" || exit 9; trap 'rm -rf "$T"' EXIT; unset AI_DLC_RECONCILE_MEMO; mkdir "$T/s" "$T/r2" || exit 9; printf '#!/bin/sh\necho >> "$GL"\nexec /usr/bin/git "$@"\n' > "$T/s/git"; chmod +x "$T/s/git"; cp -R "$R/." "$T/r2/" || exit 9; awk '{print} /^ai_dlc_memo_dir\(\) \{/{print "  return 1"}' "$R/lib.sh" > "$T/r2/lib.sh"; cmp -s "$R/lib.sh" "$T/r2/lib.sh" && exit 9; bash -n "$T/r2/lib.sh" || exit 9; export TMPDIR="$T"; read -r LD LB LC LT < <(bash "$F/ledger-reverify/seed.sh" 2>/dev/null) || exit 9; mkdir -p "$LC/tests/fixtures/zz-orphan"; W="$(bash "$F/retired-layer-contract/seed.sh" 2>/dev/null)" && . "$W/env.sh" || exit 9; RD="$DIST" RB="$BASE" RT="$THEIRS" RC="$CONSUMER"; W="$(bash "$F/reconcile-emit-report/seed.sh" 2>/dev/null)" && . "$W/env.sh" || exit 9; ED="$DIST" EB="$BASE" ET="$THEIRS" EC="$CONSUMER"; W="$(bash "$F/retired-layer-token/seed.sh" 2>/dev/null)" && . "$W/env.sh" || exit 9; run() { local e="$1" n="$2" d; shift 2; d="$(mktemp -d "$T/$n.XXXXXX")" || return 9; : > "$d.g"; ( cd "$d" && TMPDIR="$d" GL="$d.g" PATH="$T/s:$PATH" bash "$e/$n.sh" "$@" >/dev/null 2>&1 ); echo "$? $(grep -c '' "$d.g") $(ls -d "$d"/reconcile-memo.* 2>/dev/null | grep -c .)"; }; bad=0 left=0; for v in "ledger-reverify $LD $LB $LC $LT" "preclassify $LD $LB $LT $LC" "retired-tokens $LD $LB $LT $LC" "hard-blockers $LD $LB $LC $LT" "retired-fixtures $LD $LT $LC" "layer-drift $RD $RB $RT $RC" "retired-layer-contract $RD $RB $RT $RC" "retired-layer-passage $RD $RB $RT $RC" "unregistered-drift $ED $EB $EC $ET" "retired-layer-token $DIST $BASE $THEIRS $CONSUMER"; do set -- $v; read -r rc g l <<<"$(run "$R" "$@")"; read -r xrc xg xl <<<"$(run "$T/r2" "$@")"; echo "$1 rc=$rc git=$g left=$l r2-rc=$xrc r2-git=$xg"; [ "$g" -gt 0 ] && [ "$xg" -gt 0 ] || exit 9; left=$((left + l)); [ "$rc" = "$xrc" ] && [ "$g" -le "$xg" ] || bad=1; case "$1" in ledger-reverify|layer-drift|unregistered-drift|retired-layer-contract) [ "$g" -lt "$xg" ] || bad=1 ;; esac; done; B="$(mktemp -d "$T/borrow.XXXXXX")" && d="$(mktemp -d "$T/bw.XXXXXX")" || exit 9; ( cd "$d" && AI_DLC_RECONCILE_MEMO="$B" TMPDIR="$d" bash "$R/ledger-reverify.sh" "$LD" "$LB" "$LC" "$LT" >/dev/null 2>&1 ); bl="$(ls -d "$d"/reconcile-memo.* 2>/dev/null | grep -c .)"; [ -d "$B" ] && [ "$bl" -eq 0 ] || bad=1; d="$(mktemp -d "$T/hx.XXXXXX")" || exit 9; ( TMPDIR="$d" bash -c '. "$1/lib.sh"; trap "exit 3" EXIT' _ "$R" ); hrc=$?; hl="$(ls -d "$d"/reconcile-memo.* 2>/dev/null | grep -c .)"; echo "reconcile-memo-left=$left borrowed-present=$([ -d "$B" ] && echo 1 || echo 0) exit-handler rc=$hrc left=$hl"; [ "$hrc" -eq 3 ] && [ "$hl" -eq 0 ] || bad=1; d="$(mktemp -d "$T/arms.XXXXXX")" || exit 9; a1="$(TMPDIR="$d" bash -c '. "$1/lib.sh"; m="$AI_DLC_MEMO_DIR"; [ -n "$m" ] && [ -d "$m" ] || exit 9; x=$(trap : EXIT; :); [ -d "$m" ] && echo present || echo gone' _ "$R" 2>/dev/null)"; a2="$(TMPDIR="$d" bash -c '. "$1/lib.sh"; set -e; trap "echo OWN rc=\$?" EXIT; false' _ "$R" 2>/dev/null)"; a3="$(TMPDIR="$d" bash -c '. "$1/lib.sh"; p="$AI_DLC_MEMO_DIR"; c="$(bash -c ". \"\$1/lib.sh\"; memo_has_path \"\$2\" HEAD VERSION; echo \"\$AI_DLC_MEMO_DIR\"" _ "$1" "$2" 2>/dev/null)"; n="$(ls "$p" 2>/dev/null | grep -c .)"; [ -n "$p" ] && [ "$c" = "$p" ] && [ "$n" -ge 1 ] && echo one || echo two' _ "$R" "$PWD")"; al="$(ls -d "$d"/reconcile-memo.* 2>/dev/null | grep -c .)"; echo "subshell-trap=$a1 errexit-handler=[$a2] child-borrow=$a3 arms-left=$al"; [ "$a1" = present ] && [ "$a2" = "OWN rc=1" ] && [ "$a3" = one ] && [ "$al" -eq 0 ] || bad=1; [ "$left" -eq 0 ] && [ "$bad" -eq 0 ] && exit 0; exit 1
 
 ## BL-304 — `fanout-payload-channel` counts and deletes `fanout.*` in the SHARED temp root, so a concurrent run can fail arm 5, fake m6's kill, and lose its payload
 

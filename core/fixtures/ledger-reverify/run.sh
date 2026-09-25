@@ -3475,8 +3475,9 @@ fi
 #
 # So the closer runs with TMPDIR pointed at a directory created here, under the fixture's own
 # sandbox (the EXIT trap removes it), which no other process knows exists. The count stays
-# PREFIX-scoped inside it rather than counting everything: every engine run also leaves one
-# `reconcile-memo.*` there, and an unscoped count would convict a correct engine at +1.
+# PREFIX-scoped inside it rather than counting everything: the engine's `reconcile-memo.*` is a
+# different subject with its own arm (memo-standalone-clean, below), and an unscoped count would
+# let a memo leak convict this arm for a defect it does not own.
 # The theirs-tree-prefix arm below proves the engine honours TMPDIR at all — a TMPDIR it ignored
 # would leave this count at 0 forever. The DELTA is reported, never the raw totals.
 LZ_TMP="$(mktemp -d "$(dirname "$DIST")/lazy-tmp.XXXXXX")" || LZ_TMP=""
@@ -4013,6 +4014,202 @@ dp_kill mutation-nonid-all-verbs "$nid_m5" \
   "$nid_ctl" \
   'widening past `manual` reports a prose-titled entry whose mechanical receipt RUNS — 43 rows across the real corpora, nine of them live extension entries' \
   "$nid_ctlmsg"
+
+# --- THE CROSS-PROCESS MEMO LEAVES NOTHING BEHIND --------------------------------------------
+# lib.sh builds `reconcile-memo.*` at SOURCE time in the main shell and arms its removal on the
+# sourcing shell's EXIT, composed into any later `trap X EXIT`. Before that, the first lookup ran
+# inside `$( … | … )`, built the directory in a subshell whose ownership record died with it, and
+# every standalone run of this closer left one directory in TMPDIR — invisible in the row set,
+# which is byte-identical either way. So both arms read the DIRECTORY, in a TMPDIR this fixture
+# owns, with AI_DLC_RECONCILE_MEMO unset so the borrowed-directory path cannot hide the leak.
+#
+# Each arm is a function of the RECONCILE DIRECTORY, so its committed mutant drives the same
+# logic. Each mutant edits lib.sh in a copy of the whole directory (the closer resolves lib.sh
+# beside itself), is refused if the edit matched nothing or does not parse, and each is killed by
+# its OWN arm only: the ownership mutant leaves the composition intact, and the handler-first
+# mutant leaves ownership intact and only loses the cleanup behind a handler that calls `exit`.
+ms_mutant() { # <name> <OLD1> <NEW1> [<OLD2> <NEW2>] -> dir on stdout, empty if it did not apply
+  local d
+  d="$(dirname "$DIST")/mut-$1"; rm -rf "$d"; mkdir -p "$d"
+  cp "$(dirname "$CLOSER")"/*.sh "$(dirname "$CLOSER")"/*.md "$d/" 2>/dev/null
+  [ -f "$d/lib.sh" ] && [ -f "$d/ledger-reverify.sh" ] || return 1
+  MS_O1="$2" MS_N1="$3" MS_O2="${4:-}" MS_N2="${5:-}" awk '
+    $0 == ENVIRON["MS_O1"] { if (ENVIRON["MS_N1"] != "") print ENVIRON["MS_N1"]; a++; next }
+    ENVIRON["MS_O2"] != "" && $0 == ENVIRON["MS_O2"] { print ENVIRON["MS_N2"]; b++; next }
+    { print }
+    END { exit !(a == 1 && (ENVIRON["MS_O2"] == "" || b == 1)) }
+  ' "$(dirname "$CLOSER")/lib.sh" > "$d/lib.sh" || return 1
+  cmp -s "$(dirname "$CLOSER")/lib.sh" "$d/lib.sh" && return 1
+  bash -n "$d/lib.sh" 2>/dev/null || return 1
+  printf '%s' "$d"
+}
+# memo_standalone <reconcile-dir> -> "ok ..." or "FAIL ..." on one line
+memo_standalone() {
+  local r="$1" t out left
+  t="$(mktemp -d "$(dirname "$DIST")/memo-tmp.XXXXXX")" || { echo "FAIL could not create a private TMPDIR"; return; }
+  out="$(unset AI_DLC_RECONCILE_MEMO; TMPDIR="$t" bash "$r/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
+  left="$(ls -d "$t"/reconcile-memo.* 2>/dev/null | grep -c .)" || left=0
+  if ! printf '%s\n' "$out" | awk -F'\t' '$2 ~ /SH-DIST-REVSPEC / && $1=="STILL-LIVE" {f=1} END{exit !f}'; then
+    echo "BROKEN the run produced no SH-DIST-REVSPEC STILL-LIVE control row, so it establishes nothing about the memo"
+  elif [ "$left" -ne 0 ]; then
+    echo "FAIL left=$left"
+  else
+    echo "ok left=0"
+  fi
+}
+# memo_composed <reconcile-dir> -> "ok ..." or "FAIL ..." on one line. A sourcer that owns a memo
+# directory arms its OWN `trap … EXIT` after sourcing, and that handler calls `exit 3` — the
+# shape retired-layer-token and five other sourcers have, with the exit that makes order matter.
+# SEPARATED FROM THE SOURCE-TIME BUILD ON PURPOSE: lib.sh is handed a borrowed directory OUTSIDE
+# the counted TMPDIR, so it builds nothing there, and the probe records ownership of its own
+# directory itself. Only the EXIT composition then decides whether that directory survives.
+memo_composed() {
+  local r="$1" t b out rc left
+  t="$(mktemp -d "$(dirname "$DIST")/memo-trap.XXXXXX")" || { echo "FAIL could not create a private TMPDIR"; return; }
+  b="$(mktemp -d "$(dirname "$DIST")/memo-borrowed.XXXXXX")" || { echo "FAIL could not create the borrowed directory"; return; }
+  out="$(AI_DLC_RECONCILE_MEMO="$b" TMPDIR="$t" bash -c '. "$1/lib.sh" || exit 90; d="$(mktemp -d "$TMPDIR/reconcile-memo.XXXXXX")" || exit 91; AI_DLC_MEMO_OWNED="$d"; [ -d "$d" ] && echo PRE-EXISTS; trap "echo HANDLER-RAN; exit 3" EXIT; exit 0' _ "$r" 2>&1)"; rc=$?
+  left="$(ls -d "$t"/reconcile-memo.* 2>/dev/null | grep -c .)" || left=0
+  if ! grep -q PRE-EXISTS <<<"$out" || ! grep -q HANDLER-RAN <<<"$out" || [ "$rc" -ne 3 ]; then
+    echo "BROKEN the probe did not build its directory, run its own handler, or exit 3 (rc=$rc), so the count below is not about composition"
+  elif [ "$left" -ne 0 ]; then
+    echo "FAIL left=$left"
+  else
+    echo "ok left=0 rc=$rc"
+  fi
+}
+MS_R="$(dirname "$CLOSER")"
+ASSERTIONS=$((ASSERTIONS + 1))
+ms_v="$(memo_standalone "$MS_R")"
+case "$ms_v" in
+  ok*) printf '  ok    %-22s a standalone run with AI_DLC_RECONCILE_MEMO unset leaves 0 reconcile-memo.* in its private TMPDIR, while its control row still reports\n' "memo-standalone-clean" ;;
+  *)   FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s %s — the memo directory outlives the run, and nothing in the row set can show it\n' "memo-standalone-clean" "$ms_v" ;;
+esac
+ASSERTIONS=$((ASSERTIONS + 1))
+mc_v="$(memo_composed "$MS_R")"
+case "$mc_v" in
+  ok*) printf '  ok    %-22s a sourcer that arms its own trap … EXIT after lib.sh, with a handler that calls exit 3, still removes the memo (%s)\n' "memo-trap-composed" "$mc_v" ;;
+  *)   FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s %s — a later trap X EXIT in a sourcer dropped lib.sh'"'"'s cleanup\n' "memo-trap-composed" "$mc_v" ;;
+esac
+# m-own — ownership NOT recorded at source time. The directory is built and exported, the
+# composition is untouched, and nobody owns what was made: the standalone arm must see the leak.
+ms_m1="$(ms_mutant memo-unowned '      AI_DLC_MEMO_OWNED="$_ai_dlc_m"' '')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ -z "$ms_m1" ]; then
+  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the ownership mutation DID NOT APPLY (matched nothing, or the copy does not parse), so memo-standalone-clean is unproven\n' "mutation-memo-unowned"
+else
+  ms_k="$(memo_standalone "$ms_m1")"; ms_o="$(memo_composed "$ms_m1")"
+  case "$ms_k" in
+    FAIL\ left=*)
+      case "$ms_o" in
+        ok*) printf '  ok    %-22s dropping the source-time ownership record leaks (%s) and ONLY memo-standalone-clean moves\n' "mutation-memo-unowned" "$ms_k" ;;
+        *)   FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the mutant also moved memo-trap-composed (%s), so the two arms are entangled\n' "mutation-memo-unowned" "$ms_o" ;;
+      esac ;;
+    *) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s ownership was not recorded and memo-standalone-clean still read "%s" — the arm cannot fire\n' "mutation-memo-unowned" "$ms_k" ;;
+  esac
+fi
+# m-order — the composition runs the caller's handler FIRST and the cleanup after it. A handler
+# that calls `exit` ends the handler there, so the cleanup never runs; the closer's own handler
+# does not exit, so memo-standalone-clean must NOT move.
+ms_m2="$(ms_mutant memo-handler-first '    *)    builtin trap "_ai_dlc_lib_exit && :' '    *)    builtin trap "$_h' '$_h" EXIT ;;' '_ai_dlc_lib_exit" EXIT ;;')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ -z "$ms_m2" ]; then
+  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the handler-first mutation DID NOT APPLY (an anchor matched nothing or twice, or the copy does not parse), so memo-trap-composed is unproven\n' "mutation-memo-handler-first"
+else
+  ms_k="$(memo_composed "$ms_m2")"; ms_o="$(memo_standalone "$ms_m2")"
+  case "$ms_k" in
+    FAIL\ left=*)
+      case "$ms_o" in
+        ok*) printf '  ok    %-22s composing the caller'"'"'s exiting handler BEFORE the cleanup leaks (%s) and ONLY memo-trap-composed moves\n' "mutation-memo-handler-first" "$ms_k" ;;
+        *)   FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the mutant also moved memo-standalone-clean (%s), so the two arms are entangled\n' "mutation-memo-handler-first" "$ms_o" ;;
+      esac ;;
+    *) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the handler ran before the cleanup and memo-trap-composed still read "%s" — the arm cannot fire\n' "mutation-memo-handler-first" "$ms_k" ;;
+  esac
+fi
+
+# --- A SUBSHELL'S OWN EXIT TRAP MUST NOT TAKE THE PARENT'S MEMO WITH IT ------------------------
+# Inside the EXIT handler of a `$( )` subshell bash 3.2 reports $BASH_SUBSHELL as 0, so a
+# cleanup that compared levels only when the handler FIRED ran in the subshell and deleted the
+# directory the main shell was still using. lib.sh's shadow `trap` compares levels when the trap
+# is SET instead. The arm reads the directory the sourcing shell owns, after one
+# `x=$(trap : EXIT; :)`, and requires it present and still owned by the main shell.
+memo_subshell_trap() { # <reconcile-dir> -> "ok ..." / "FAIL ..." / "BROKEN ..."
+  local r="$1" t out
+  t="$(mktemp -d "$(dirname "$DIST")/memo-sub.XXXXXX")" || { echo "FAIL could not create a private TMPDIR"; return; }
+  out="$(unset AI_DLC_RECONCILE_MEMO; TMPDIR="$t" bash -c '. "$1/lib.sh" || exit 90; d="$AI_DLC_MEMO_DIR"; [ -n "$d" ] && [ -d "$d" ] && echo BUILT; x=$(trap : EXIT; :); [ -d "$d" ] && echo AFTER-PRESENT || echo AFTER-GONE' _ "$r" 2>&1)"
+  if ! grep -q BUILT <<<"$out"; then
+    echo "BROKEN lib.sh built no memo at source time, so the subshell trap had nothing to delete"
+  elif grep -q AFTER-GONE <<<"$out"; then
+    echo "FAIL the memo was deleted by a subshell's own trap"
+  elif grep -q AFTER-PRESENT <<<"$out"; then
+    echo "ok present"
+  else
+    echo "BROKEN the probe printed neither verdict: $out"
+  fi
+}
+# --- A SOURCER'S OWN EXIT HANDLER MUST STILL RUN UNDER set -e ----------------------------------
+# The composed handler opens with lib.sh's cleanup, which returns the status it was entered with.
+# A script that FAILS enters the handler non-zero, so under errexit a bare cleanup call ended the
+# handler before the caller's command ran. The arm requires the caller's handler to print, with
+# the ORIGINAL status in `$?`, on a failing `false`, and the script's own exit status preserved.
+memo_errexit() { # <reconcile-dir> -> "ok ..." / "FAIL ..."
+  local r="$1" t out rc left
+  t="$(mktemp -d "$(dirname "$DIST")/memo-e.XXXXXX")" || { echo "FAIL could not create a private TMPDIR"; return; }
+  out="$(unset AI_DLC_RECONCILE_MEMO; TMPDIR="$t" bash -c '. "$1/lib.sh" || exit 90; set -e; trap "echo OWN rc=\$?" EXIT; false' _ "$r" 2>&1)"; rc=$?
+  left="$(ls -d "$t"/reconcile-memo.* 2>/dev/null | grep -c .)" || left=0
+  if [ "$rc" -ne 1 ]; then
+    echo "FAIL the script exited $rc, not the failing command's 1"
+  elif ! grep -qx 'OWN rc=1' <<<"$out"; then
+    echo "FAIL the caller's handler did not run with the original status (output: ${out:-none})"
+  elif [ "$left" -ne 0 ]; then
+    echo "FAIL left=$left"
+  else
+    echo "ok OWN rc=1 left=0"
+  fi
+}
+ASSERTIONS=$((ASSERTIONS + 1))
+st_v="$(memo_subshell_trap "$MS_R")"
+case "$st_v" in
+  ok*) printf '  ok    %-22s x=$(trap : EXIT; :) in a sourcer leaves the main shell'"'"'s memo directory in place\n' "memo-subshell-trap" ;;
+  *)   FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s %s\n' "memo-subshell-trap" "$st_v" ;;
+esac
+ASSERTIONS=$((ASSERTIONS + 1))
+ee_v="$(memo_errexit "$MS_R")"
+case "$ee_v" in
+  ok*) printf '  ok    %-22s under set -e a failing sourcer still runs its own EXIT handler with the original status (%s)\n' "memo-errexit-handler" "$ee_v" ;;
+  *)   FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s %s\n' "memo-errexit-handler" "$ee_v" ;;
+esac
+# m-setguard — the set-time level guard removed. Only memo-subshell-trap may move.
+ms_m3="$(ms_mutant memo-no-setguard '  [ "${BASH_SUBSHELL:-0}" -eq "${_AI_DLC_LIB_LEVEL:-0}" ] || { builtin trap "$@"; return; }' '')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ -z "$ms_m3" ]; then
+  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the set-time guard mutation DID NOT APPLY, so memo-subshell-trap is unproven\n' "mutation-memo-no-setguard"
+else
+  ms_k="$(memo_subshell_trap "$ms_m3")"; ms_o="$(memo_errexit "$ms_m3")"
+  case "$ms_k" in
+    FAIL*)
+      case "$ms_o" in
+        ok*) printf '  ok    %-22s without the set-time guard a subshell trap deletes the parent memo (%s) and ONLY memo-subshell-trap moves\n' "mutation-memo-no-setguard" "$ms_k" ;;
+        *)   FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the mutant also moved memo-errexit-handler (%s), so the two arms are entangled\n' "mutation-memo-no-setguard" "$ms_o" ;;
+      esac ;;
+    *) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the guard was removed and memo-subshell-trap still read "%s" — the arm cannot fire\n' "mutation-memo-no-setguard" "$ms_k" ;;
+  esac
+fi
+# m-errexit — the composition's `&& :` removed. Only memo-errexit-handler may move.
+ms_m4="$(ms_mutant memo-errexit-bare '    *)    builtin trap "_ai_dlc_lib_exit && :' '    *)    builtin trap "_ai_dlc_lib_exit')"
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ -z "$ms_m4" ]; then
+  FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the errexit mutation DID NOT APPLY, so memo-errexit-handler is unproven\n' "mutation-memo-errexit-bare"
+else
+  ms_k="$(memo_errexit "$ms_m4")"; ms_o="$(memo_subshell_trap "$ms_m4")"
+  case "$ms_k" in
+    FAIL*)
+      case "$ms_o" in
+        ok*) printf '  ok    %-22s a bare cleanup call ends the handler under set -e (%s) and ONLY memo-errexit-handler moves\n' "mutation-memo-errexit-bare" "$ms_k" ;;
+        *)   FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the mutant also moved memo-subshell-trap (%s), so the two arms are entangled\n' "mutation-memo-errexit-bare" "$ms_o" ;;
+      esac ;;
+    *) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-22s the && : was removed and memo-errexit-handler still read "%s" — the arm cannot fire\n' "mutation-memo-errexit-bare" "$ms_k" ;;
+  esac
+fi
 
 echo
 if [ "$FAILURES" -gt 0 ]; then

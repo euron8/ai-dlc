@@ -419,7 +419,7 @@ fi
 EVID_TABLE=""; EVID_REFUSE=""; OLDIFS="$IFS"
 while IFS="$(printf '\t')" read -r ST LB DT; do
   [ -n "$LB" ] || continue
-  ANN="$(printf '%s\n' "$MOVED_ANN" | awk -F'\t' -v l="$LB" '$1==l{print $2; exit}')"
+  ANN="$(awk -F'\t' -v l="$LB" '$1==l{print $2; exit}' <<<"$MOVED_ANN")"
   SHA="$(printf '%s\n' "$ANN" | sed -n 's/.*verified \([0-9a-f][0-9a-f]*\).*/\1/p')"
   if   [ "$R1_SKIP" = true ]; then SHAV="sha SKIPPED (ledger is not in a git repository)"
   elif [ -z "$SHA" ];          then SHAV="sha ABSENT"

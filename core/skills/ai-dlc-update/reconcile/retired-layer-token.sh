@@ -228,7 +228,7 @@ if [ -n "$PLAIN" ]; then
     [ -n "$hit" ] || continue
     t="$(show_at "$THEIRS" "$f")"
     if [ -z "$t" ]; then
-      to="$(printf '%s\n' "$RENAMES" | awk -F'\t' -v f="$f" '$1==f {print $2; exit}')"
+      to="$(awk -F'\t' -v f="$f" '$1==f {print $2; exit}' <<<"$RENAMES")"
       [ -z "$to" ] || t="$(show_at "$THEIRS" "$to")"
     fi
     gone="$(comm -23 <(printf '%s\n' "$hit") <(printf '%s\n' "$t" | code_toks))"

@@ -960,7 +960,10 @@ EOF
     chmod +x "$d/diff" && printf '%s' "$d"
   }
   # A `mktemp` that logs every call (`noarg` = section_of's own temp file, `arg` = a templated
-  # temp beside a target) and fails the Nth no-argument call; N=0 never fails.
+  # temp beside a target, `argdir` = a `-d` directory) and fails the Nth no-argument call; N=0
+  # never fails. `argdir` is its own token because lib.sh makes its memo directory with
+  # `mktemp -d` when it is sourced, which is BEFORE any section is read: logged as `arg`, it was
+  # the first templated call and put Alpha's body at call 0, so arm (d) could not be keyed.
   e2_mkshim() { # <N>
     local d
     d="$(mktemp -d "$ROOT/e2mshim.XXXXXX")" || return 1
@@ -970,6 +973,8 @@ EOF
 if [ \$# -eq 0 ]; then
   n=\$(( \$(cat "$d/n") + 1 )); echo \$n > "$d/n"; echo noarg >> "$d/log"
   if [ "\$n" = "$1" ]; then : > "$d/.fired"; exit 1; fi
+elif [ "\$1" = -d ]; then
+  echo argdir >> "$d/log"
 else
   echo arg >> "$d/log"
 fi
@@ -1567,8 +1572,12 @@ else
   fi
 
   # MUTANT 1 — drop the flattening. The wrapped entry must go silent and the single-line
-  # entry must NOT, or the two are entangled and the wrap assertion proves nothing.
-  sed "s@| tr '\\\\n' ' ' | tr -s ' ' \\\\@| tr -s ' ' \\\\@" "$DRIFT" > "$MUTD/layer-drift.sh"
+  # entry must NOT, or the two are entangled and the wrap assertion proves nothing. Two anchors,
+  # one per shape of the flattening line: the `_flat=` assignment, and the pipe continuation it
+  # replaced. This fixture ships, and a consumer can hold it beside an installed layer-drift.sh
+  # of either shape, so the mutation must apply to both.
+  sed -e "s@| tr '\\\\n' ' ' | tr -s ' ')\"@| tr -s ' ')\"@" \
+      -e "s@| tr '\\\\n' ' ' | tr -s ' ' \\\\@| tr -s ' ' \\\\@" "$DRIFT" > "$MUTD/layer-drift.sh"
   if cmp -s "$DRIFT" "$MUTD/layer-drift.sh"; then
     bad "  mutation flatten: the mutation matched nothing, so the flattening assertion is unproven"
   else
