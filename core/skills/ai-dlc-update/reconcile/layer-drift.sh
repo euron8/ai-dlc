@@ -1187,9 +1187,13 @@ heading_labelled_for() { # heading_labelled_for <anchor>  < stream
 SURVIVAL_SCOPE_RE='(surrounding|rest of the|remainder of the|every other part of|other parts of|rest of this)[ ]?[a-z0-9 ]{0,20}(section|check|rule|clause)'
 SURVIVAL_CLAIM_RE="unchanged|untouched|still governs?|still applies|still holds?|remains in force|survives?|is core's"
 asserts_shadow_survives() { # asserts_shadow_survives <body-text>  -> 0 if it makes the claim
-  printf '%s' "$1" | tr '\n' ' ' | tr -s ' ' \
-    | grep -oiE "$SURVIVAL_SCOPE_RE.{0,250}" \
-    | grep -qiE "$SURVIVAL_CLAIM_RE"
+  # HERE-STRINGS, NOT A PIPE INTO `grep -q`. lib.sh arms an EXIT trap in every sourcing shell, and
+  # with one armed bash reports a builtin writer's EPIPE (`printf: write error: Broken pipe`) when
+  # its reader leaves early, which `grep -q` does at its first match.
+  local _flat _scoped
+  _flat="$(printf '%s' "$1" | tr '\n' ' ' | tr -s ' ')"
+  _scoped="$(grep -oiE "$SURVIVAL_SCOPE_RE.{0,250}" <<<"$_flat")" || return 1
+  grep -qiE "$SURVIVAL_CLAIM_RE" <<<"$_scoped"
 }
 
 same_section() { # same_section <textA> <textB>
@@ -1672,7 +1676,7 @@ while IFS= read -r f; do
 
       if grep -Fxq -- "$a" <<<"$theirs_anchors"; then
         # -- same NUMBER upstream. Title decides which defect this is.
-        t_up="$(printf '%s' "$theirs_blob" | heading_text_for "$a")"
+        t_up="$(heading_text_for "$a" <<<"$theirs_blob")"
         if grep -Fxq -- "$a" <<<"$base_anchors"; then tag=PRE-EXISTING; else tag=NEW-THIS-PULL; fi
 
         if same_section "$t_ext" "$t_up"; then
@@ -1708,7 +1712,7 @@ while IFS= read -r f; do
       while IFS= read -r b; do
         [ "$b" = "$a" ] && continue
         [ -n "$b" ] || continue
-        t_up="$(printf '%s' "$theirs_blob" | heading_text_for "$b")"
+        t_up="$(heading_text_for "$b" <<<"$theirs_blob")"
         same_section "$t_ext" "$t_up" || continue
         if grep -Fxq -- "$b" <<<"$base_anchors"; then
           emit EXTENSION-RESTATES-CORE "$entry" "$hooks" \

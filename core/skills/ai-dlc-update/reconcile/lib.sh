@@ -9,8 +9,10 @@
 #
 # Sourced, not eval-scraped. `apply.sh` pulls `map_consumer()` out of
 # `preclassify.sh` with awk because it needs exactly one function out of a
-# script that would otherwise RUN on source; this file has no top-level
-# statements, so `.` is safe and the function bodies stay greppable.
+# script that would otherwise RUN on source. This file's only top-level statements
+# are the memo block below `ai_dlc_memo_cleanup`, which builds the cross-process memo
+# and arms its cleanup on the sourcing shell's EXIT, so `.` is safe and the function
+# bodies stay greppable.
 
 # ---------------------------------------------------------------------------
 # section_of — THE section resolver. One copy, by hard-won default.
@@ -718,12 +720,16 @@ ledger_archive_awk() {
 # exported the variable get two private directories and cannot collide, and a caller
 # with no orchestrator above it (an operator invoking ledger-reverify.sh directly, or
 # apply.sh) behaves exactly as it did before this cache existed.
-AI_DLC_MEMO_DIR=""     # the cache directory THIS PROCESS is using, or "" when not built
-AI_DLC_MEMO_STATE=""   # "" not attempted | ok | unavailable
-AI_DLC_MEMO_OWNED=""   # set only when THIS process's own mktemp made the directory —
-                        # a caller's cleanup trap must remove only what it created,
-                        # never a directory an orchestrator handed down and will clean
-                        # up itself.
+# The three are NEVER EXPORTED, so a child process starts with none of them. They are
+# preserved rather than reset when a shell sources this file a SECOND time: a reset would drop
+# the owner of the directory the first source made, and that directory would then be borrowed
+# through `AI_DLC_RECONCILE_MEMO` and never removed.
+AI_DLC_MEMO_DIR="${AI_DLC_MEMO_DIR:-}"     # the cache directory THIS PROCESS is using, or "" when not built
+AI_DLC_MEMO_STATE="${AI_DLC_MEMO_STATE:-}" # "" not attempted | ok | unavailable
+AI_DLC_MEMO_OWNED="${AI_DLC_MEMO_OWNED:-}" # set only when THIS process's own mktemp made the
+                        # directory — the cleanup must remove only what this process
+                        # created, never a directory an orchestrator handed down and will
+                        # clean up itself.
 ai_dlc_memo_dir() { # 0 = $AI_DLC_MEMO_DIR holds a directory; 1 = uncacheable, go direct
   case "$AI_DLC_MEMO_STATE" in
     ok)          return 0 ;;
@@ -734,6 +740,12 @@ ai_dlc_memo_dir() { # 0 = $AI_DLC_MEMO_DIR holds a directory; 1 = uncacheable, g
     AI_DLC_MEMO_STATE=ok
     return 0
   fi
+  # THE FALLBACK, reached only when the source-time block below could not build a directory
+  # (or lib.sh was itself sourced inside a subshell). A directory made HERE, in a subshell, is
+  # an orphan by construction: the ownership assignment dies with the subshell and no EXIT
+  # trap that survives it can name the path. So a subshell goes direct and uncached, and only
+  # the main shell may still build one.
+  [ "${BASH_SUBSHELL:-0}" -gt 0 ] && return 1
   AI_DLC_MEMO_STATE=unavailable
   AI_DLC_MEMO_DIR="$(mktemp -d "${TMPDIR:-/tmp}/reconcile-memo.XXXXXX" 2>/dev/null)" || return 1
   [ -n "$AI_DLC_MEMO_DIR" ] && [ -d "$AI_DLC_MEMO_DIR" ] || return 1
@@ -741,11 +753,143 @@ ai_dlc_memo_dir() { # 0 = $AI_DLC_MEMO_DIR holds a directory; 1 = uncacheable, g
   AI_DLC_MEMO_STATE=ok
   return 0
 }
-# ai_dlc_memo_cleanup — a caller's job to invoke from ITS OWN exit trap, and only when
-# it did not inherit `AI_DLC_RECONCILE_MEMO` from an orchestrator that already owns
-# it. Removes `$AI_DLC_MEMO_OWNED`, never `$AI_DLC_MEMO_DIR` — the latter can hold a
-# directory this process merely BORROWED.
-ai_dlc_memo_cleanup() { [ -n "${AI_DLC_MEMO_OWNED:-}" ] && rm -rf "$AI_DLC_MEMO_OWNED"; return 0; }
+# ai_dlc_memo_cleanup — removes `$AI_DLC_MEMO_OWNED`, never `$AI_DLC_MEMO_DIR`: the latter
+# can hold a directory this process merely BORROWED from an orchestrator that cleans it up
+# itself. The EXIT composition below runs it on every exit of a sourcing script; a caller that
+# still invokes it from its own handler is harmless, because the owner is cleared on the first
+# call and a second call finds nothing to remove.
+ai_dlc_memo_cleanup() {
+  [ -n "${AI_DLC_MEMO_OWNED:-}" ] && rm -rf "$AI_DLC_MEMO_OWNED"
+  AI_DLC_MEMO_OWNED=""
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# THE MEMO IS BUILT AT SOURCE TIME, IN THE MAIN SHELL, AND CLEANED BY AN EXIT HANDLER NO
+# SOURCING SCRIPT CAN REPLACE.
+# ---------------------------------------------------------------------------
+# The lazy shape above leaked, in two independent ways. First, the first lookup in most
+# detectors runs inside `$( … | … )` (ledger-reverify's `TV="$(theirs_show VERSION | …)"`),
+# so the directory was built in a subshell, `AI_DLC_MEMO_OWNED` died with it, and the main
+# shell built a SECOND one at its next lookup. Every such subshell before the main shell's
+# first call made one orphan. Second, only ledger-reverify.sh ever called the cleanup, so
+# every other memo user leaked its main-shell directory as well. Measured, one standalone run
+# each under a private TMPDIR: unregistered-drift left 105 directories, preclassify 7,
+# layer-drift 4, retired-fixtures 1, ledger-reverify 1. This machine's TMPDIR held 433455
+# `reconcile-memo.*` directories, none older than two days.
+#
+# A SUBSHELL CANNOT CLEAN UP AFTER ITSELF, so moving the cleanup into one does not work: under
+# bash 3.2 an EXIT trap set in a function that runs as a pipeline stage inside `$( )` never
+# fires. Measured with the trap armed inside `ai_dlc_memo_dir` whenever `$BASH_SUBSHELL` is
+# non-zero: still 1 directory left.
+#
+# So the directory is made HERE, once, while the script is sourcing this file in its main
+# shell, and EXPORTED, so every subshell and every child `bash x.sh` borrows it through the
+# inherited-directory branch above instead of building its own. An orchestrator's exported
+# directory is borrowed the same way and is never owned, so it is never removed.
+#
+# THE CLEANUP CANNOT BE LEFT TO EACH CALLER'S OWN `trap … EXIT`, because bash EXIT traps
+# REPLACE each other and six sourcing scripts install their own after sourcing this file
+# (ledger-reverify, unregistered-drift, register-drift, ledger-rotate, retired-layer-token,
+# retired-layer-passage). A trap installed here alone would be overwritten by every one of
+# them. `trap` is therefore a shell function for the rest of the sourcing script: every query
+# form (`trap`, `trap -p`, `trap -l`) and every non-EXIT signal goes straight to
+# `builtin trap`, and any EXIT disposition is composed with this file's cleanup running FIRST.
+# First, not last, because a handler that calls `exit` ends the handler there, and a cleanup
+# placed after it never runs. A reset (`trap - EXIT`, `trap EXIT`) or an ignore
+# (`trap '' EXIT`) keeps the cleanup and drops only the caller's own handler.
+#
+# The one way round this is `builtin trap … EXIT` in a sourcing script, which replaces the
+# composed handler outright. I115 in scripts/validate-enforcement-map.sh refuses that spelling,
+# and the reset spellings beside it, in every file that sources this one.
+#
+# THE CLEANUP RUNS ONLY IN THE SHELL THAT SOURCED THIS FILE. `AI_DLC_MEMO_OWNED` is an ordinary
+# variable, so a `( … )` or `$( … )` subshell inherits a copy of it, and a subshell that arms its
+# own `trap X EXIT` gets the composed handler too. Without a level guard that subshell's exit
+# would delete the parent's live memo halfway through the run.
+#
+# THE GUARD IS TAKEN WHEN THE TRAP IS SET, NOT WHEN IT FIRES. Inside the EXIT handler of a `$( )`
+# subshell, bash 3.2 reports `$BASH_SUBSHELL` as 0, the main shell's level, so a handler-time
+# comparison passes there and `x=$(trap : EXIT; :)` deleted the parent's live memo (measured:
+# the directory was gone on return). A `( … )` subshell reports its real level and was never
+# affected. So the shadow `trap` below compares levels on ENTRY, where `$BASH_SUBSHELL` is right in
+# both forms, and a subshell's `trap` goes straight to `builtin trap` without the cleanup. The
+# handler-time comparison stays as a second line of defence for a subshell that inherited an
+# already-composed handler.
+#
+# THE CALLER'S HANDLER MUST STILL RUN UNDER `set -e`. `_ai_dlc_lib_exit` returns the exit status it
+# was entered with, so a failing script enters the handler with a non-zero `$?`, and a bare
+# `_ai_dlc_lib_exit` as the handler's first command then trips errexit and ends the handler
+# before the caller's own command runs (measured: `set -e; trap 'echo OWN' EXIT; false` printed
+# nothing). The composition is therefore `_ai_dlc_lib_exit && :`, a list errexit does not act on,
+# which leaves `$?` at the original status for the caller's handler to read.
+_ai_dlc_lib_exit() { # preserves $?, so a caller's handler that reads it still sees the exit status
+  local _rc=$?
+  [ "${BASH_SUBSHELL:-0}" -eq "${_AI_DLC_LIB_LEVEL:-0}" ] && ai_dlc_memo_cleanup
+  return "$_rc"
+}
+_AI_DLC_LIB_LEVEL="${BASH_SUBSHELL:-0}"
+trap() {
+  local _a _h _exit=0 _rest=""
+  [ "${BASH_SUBSHELL:-0}" -eq "${_AI_DLC_LIB_LEVEL:-0}" ] || { builtin trap "$@"; return; }
+  case "${1:-}" in
+    --) shift ;;
+    -?*) builtin trap "$@"; return ;;
+  esac
+  [ "$#" -eq 0 ] && { builtin trap; return; }
+  if [ "$#" -eq 1 ]; then _h=-; else _h="$1"; shift; fi
+  for _a in "$@"; do
+    case "$_a" in
+      EXIT|exit|0) _exit=1 ;;
+      *) _rest="$_rest $_a" ;;
+    esac
+  done
+  if [ -n "$_rest" ]; then
+    # shellcheck disable=SC2086 # signal names carry no whitespace; the split is the point
+    builtin trap -- "$_h" $_rest || return
+  fi
+  [ "$_exit" -eq 1 ] || return 0
+  # A handler read back with `trap -p` and re-armed already carries the cleanup; it is stripped
+  # here so the composition never stacks it twice.
+  _h="${_h#_ai_dlc_lib_exit && :
+}"
+  case "$_h" in
+    -|''|_ai_dlc_lib_exit) builtin trap _ai_dlc_lib_exit EXIT ;;
+    *)    builtin trap "_ai_dlc_lib_exit && :
+$_h" EXIT ;;
+  esac
+}
+if [ "${BASH_SUBSHELL:-0}" -eq 0 ]; then
+  if [ -n "${AI_DLC_RECONCILE_MEMO:-}" ] && [ -d "${AI_DLC_RECONCILE_MEMO:-}" ]; then
+    AI_DLC_MEMO_DIR="$AI_DLC_RECONCILE_MEMO"
+    AI_DLC_MEMO_STATE=ok
+  else
+    _ai_dlc_m="$(mktemp -d "${TMPDIR:-/tmp}/reconcile-memo.XXXXXX" 2>/dev/null)" || _ai_dlc_m=""
+    if [ -n "$_ai_dlc_m" ] && [ -d "$_ai_dlc_m" ]; then
+      AI_DLC_MEMO_DIR="$_ai_dlc_m"
+      AI_DLC_MEMO_OWNED="$_ai_dlc_m"
+      AI_DLC_MEMO_STATE=ok
+      AI_DLC_RECONCILE_MEMO="$_ai_dlc_m"
+      export AI_DLC_RECONCILE_MEMO
+    fi
+    unset _ai_dlc_m
+  fi
+  # AN EXIT HANDLER ARMED BEFORE THIS FILE WAS SOURCED IS KEPT, not overwritten: it is read back
+  # and re-armed through the composing `trap` above. `trap -p` inside `$( )` reports the parent's
+  # disposition on bash 3.2, and its output is `trap -- '<handler>' EXIT`, re-read here as words.
+  # A handler that already carries the cleanup came from an earlier source of this file in the
+  # same shell, and the composing `trap` strips it before re-arming, so it is never doubled.
+  _ai_dlc_prev="$(builtin trap -p EXIT)"
+  if [ -n "$_ai_dlc_prev" ]; then
+    _ai_dlc_h() { _ai_dlc_prev="$2"; }
+    eval "_ai_dlc_h ${_ai_dlc_prev#trap }"
+    unset -f _ai_dlc_h
+    trap "$_ai_dlc_prev" EXIT
+  else
+    builtin trap _ai_dlc_lib_exit EXIT
+  fi
+  unset _ai_dlc_prev
+fi
 
 # memo_show <dist> <ref> <path> -- the blob on stdout, git's own exit status preserved.
 # A MISS AND AN EMPTY BLOB ARE DIFFERENT STATES, and the status file (`.s`) is what
