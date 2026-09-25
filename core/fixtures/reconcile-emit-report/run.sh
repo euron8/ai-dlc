@@ -47,7 +47,31 @@ fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 
-verify() { bash "$EMIT" --verify "$1" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>&1; RC=$?; }
+# STDERR IS KEPT, in `$VERIFY_ERR`, overwritten by each call. It is read only by render_diag()
+# below, on a failing render arm -- discarded, a pool red printed the verdict and nothing else.
+VERIFY_ERR="$WORK/verify.stderr"
+verify() { bash "$EMIT" --verify "$1" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>"$VERIFY_ERR"; RC=$?; }
+
+# render_diag <tag> <rc> [<extra-stderr-file> <label>] -- WHY a render arm went red. Every pool
+# red this fixture had in batch 151 was a RENDER arm (assertion 1, the orientation pair, the
+# docs-only near-miss), and each printed its verdict and nothing else, so nobody could say whether
+# a detector had refused under load or the renderer was wrong. Printed ONLY on failure, bounded
+# to 40 lines per stream as v_diag's diff is, and every line carries `DIAG` so a log grep finds it.
+# Arguments after the rc are <stderr-file> <label> pairs; the seed render's stderr is always shown.
+render_diag() {
+  local _t="$1" _f _l
+  printf '  DIAG  %s: rc=%s\n' "$_t" "$2"
+  shift 2
+  set -- "${SEED_ERR:-}" seed-render "$@"
+  while [ "$#" -ge 2 ]; do
+    _f="$1"; _l="$2"; shift 2
+    [ -n "$_f" ] && [ -n "$_l" ] || continue
+    if [ ! -f "$_f" ]; then printf '  DIAG  %s %s: stderr capture missing (%s)\n' "$_t" "$_l" "$_f"; continue; fi
+    if [ ! -s "$_f" ]; then printf '  DIAG  %s %s: stderr empty\n' "$_t" "$_l"; continue; fi
+    awk -v p="  DIAG  $_t $_l | " 'NR <= 40 { print p $0 } END { if (NR > 40) print p "... (" NR - 40 " more lines cut)" }' "$_f"
+  done
+  grep -F 'DETECTOR-REFUSED' "${REGION:-/dev/null}" 2>/dev/null | head -5 | sed "s/^/  DIAG  $_t seed-region refusal | /"
+}
 
 # The orientation block for the BOTH-ADDED template, as rendered.
 #
@@ -81,8 +105,8 @@ fi
 
 # --- Assertion 1: --verify PASSES a report carrying the region verbatim -------
 verify "$REPORT_GOOD"
-[ "$RC" -eq 0 ] && ok "--verify PASSES a report whose region matches the driver (exit 0)" \
-  || bad "--verify failed a correct report (rc=$RC) — false positive"
+if [ "$RC" -eq 0 ]; then ok "--verify PASSES a report whose region matches the driver (exit 0)"
+else bad "--verify failed a correct report (rc=$RC) — false positive"; render_diag "assertion-1" "$RC" "$VERIFY_ERR" verify; fi
 
 # --- Assertion 2: --verify FAILS a report with NO region (the narrated bug) ---
 verify "$REPORT_MISSING"
@@ -102,6 +126,7 @@ if grep -q 'templates/classes.md' <<<"$ORIENT"; then
   ok "the BOTH-ADDED file gets an orientation block in the rendered region"
 else
   bad "no orientation block for the CLASSIFY file — which side holds what is unstated again"
+  render_diag "assertion-4" "seed-print-mode"
 fi
 
 # --- Assertion 5: THE DEFECT — each side's line is attributed to THAT side -----
@@ -111,6 +136,7 @@ if [ "$t_side" = "THEIRS" ] && [ "$o_side" = "OURS" ]; then
   ok "orientation attributes each side's exclusive line to the correct side (theirs->THEIRS, ours->OURS)"
 else
   bad "ORIENTATION INVERTED: upstream's line reported under '$t_side', consumer's under '$o_side'. This is the defect the block exists to prevent, in the block itself."
+  render_diag "assertion-5" "seed-print-mode"
 fi
 
 # --- Assertion 6: a truncated side never reads as complete --------------------
@@ -346,7 +372,7 @@ world_at() { # world_at <what> <ref>
   fi
   return 0
 }
-verify_ref() { bash "$EMIT" --verify "$1" "$DIST" "$BASE" "$CONSUMER" "$2" >/dev/null 2>&1; RC=$?; }
+verify_ref() { bash "$EMIT" --verify "$1" "$DIST" "$BASE" "$CONSUMER" "$2" >/dev/null 2>"$VERIFY_ERR"; RC=$?; }
 core_tree_at() { git -C "$DIST" rev-parse "${1}:core" 2>/dev/null; }
 
 # --- THE WORLD GUARDS ARE THEMSELVES CHECKED, BEFORE ANY WORLD IS BUILT -------------------
@@ -557,6 +583,276 @@ if [ -n "${AI_DLC_RER_PROBE_ONLY:-}" ]; then
   exit 1
 fi
 
+# =============================================================================
+# BL-230 — A PRECLASSIFY THAT DID NOT CLASSIFY RENDERS A REFUSAL, NEVER `none`
+# =============================================================================
+#
+# THE DEFECT. emit-report.sh called preclassify as `2>/dev/null || true`, so a run that exited 2,
+# and a run that exited 0 printing nothing over a range that moves `core/`, rendered the same
+# empty buckets, worklist, orientation, deletions and relocation as a pull with nothing to do.
+# Measured under a forced git failure, preclassify exited 0 with EMPTY output in almost every
+# case, so a fix that reads only the rc misses the dominant shape -- arm b exists for that one.
+#
+# FOUR ARMS, scored against the shipping copy and then against one mutant per layer of the fix:
+#   a  preclassify exits 2 having printed a PARTIAL row -> the refusal line in all five
+#      pc-derived sections, no `none` in any of them, and the partial row rendered nowhere
+#   b  preclassify exits 0 with NO rows while base..theirs moves core/ -> the same, with the
+#      `returned no rows while` cause
+#   e  --verify against a fresh render carrying the refusal exits non-zero NAMING
+#      PRECLASSIFY-REFUSED, for a sound approved report AND for an approved report that itself
+#      carries the refusal -- the second is the case the byte-compare alone passes
+#   n  THE NEAR-MISS, in its OWN world whose range leaves core/ untouched: preclassify exits 0
+#      with no rows, and every section renders `none` with no refusal. The seeded world cannot
+#      host it, because its range moves core/; without it a bare `[ -z "$pc" ]` fix passes a and b.
+#
+# e STANDS DOWN when the forced render carries no refusal line at all. Its guard keys on that
+# line, so it cannot be evaluated without it -- and "no refusal line" is arm a's finding, which
+# would otherwise be reported twice, by two arms, one of them vacuous.
+#
+# PRECLASSIFY IS FORCED BY A HOOK INJECTED INTO A COPY, not by a git shim. A shim reaches every
+# detector the render drives and moves sections these arms do not own. The preclassify end of
+# the failure -- a real git exiting 128 -- is proven against the real program in
+# preclassify-rename-row, which also owns the memo arm.
+#
+# A CONSUMER'S INSTALLED ENGINE MAY PREDATE THE FIX, because this fixture ships ahead of its
+# subject. There the arms SKIP. In the distribution the subject is always present, so they run
+# whatever the file says -- which is how the pre-fix engine is shown to fail them.
+case "$EMIT" in
+  */core/skills/ai-dlc-update/reconcile/emit-report.sh) B230_DIST=1 ;;
+  *) B230_DIST=0 ;;
+esac
+B230_RUN=1
+if ! grep -qF 'DETECTOR-REFUSED  preclassify.sh ${pc_refused}' "$EMIT"; then
+  if [ "$B230_DIST" = 0 ]; then
+    printf '  SKIP  BL-230 arms a b e n -- the installed emit-report.sh predates the preclassify refusal render; it lands with the pull that carries this fixture\n'
+    B230_RUN=0
+  else
+    printf '  --    (BL-230: this emit-report.sh carries no preclassify refusal render; in the distribution the arms run anyway and must go red)\n'
+  fi
+fi
+
+# b230_line <file> <exact-line> <replacement> -- rewrite the ONE line equal to <exact-line>.
+# ENVIRON rather than -v, because awk -v strips a level of backslashes and one anchor carries
+# two. Exit 3 unless exactly one line matched, so a stale anchor cannot pass as an edit.
+b230_line() {
+  B230_A="$2" B230_B="$3" awk '$0 == ENVIRON["B230_A"] { print ENVIRON["B230_B"]; n++; next } { print } END { exit (n == 1) ? 0 : 3 }' "$1" > "$1.b230" \
+    && mv "$1.b230" "$1"
+}
+B230_HEADS='**Per-file buckets
+**Semantic worklist — files needing
+**Semantic worklist orientation
+**Deletions (apply would
+**Scripts relocation'
+B230_WANT_A='exited 2 without classifying'
+B230_WANT_B="returned no rows while \`${BASE}..${THEIRS}\` changes \`core/\`"
+B230_CAUSE='cause: PRECLASSIFY-REFUSED — preclassify.sh exited 2 without classifying'
+# The body of the section whose heading line starts with <prefix>, up to the next heading.
+b230_sec() { awk -v h="$2" 'f && /^\*\*/ { exit } f { print } index($0, h) == 1 { f = 1 }' "$1"; }
+# b230_five <render> <cause> -> empty when the refusal is rendered in all five sections and
+# nothing classified leaked through; otherwise what was wrong.
+b230_five() {
+  local _f="$1" _w="$2" _h _b _m=""
+  grep -qF "DETECTOR-REFUSED  preclassify.sh $_w, so this section is NOT a finding of 'none'." "$_f" || _m="no-refusal-line "
+  while IFS= read -r _h; do
+    _b="$(b230_sec "$_f" "$_h")"
+    grep -qF "DETECTOR-REFUSED  preclassify.sh $_w" <<<"$_b" || _m="${_m}[${_h#\*\*}: no refusal] "
+    if grep -qx 'none' <<<"$_b"; then _m="${_m}[${_h#\*\*}: none] "; fi
+  done <<<"$B230_HEADS"
+  if grep -qF "UPSTREAM-ONLY  $MOVED_PROBE_PATH" "$_f"; then _m="${_m}partial-row-rendered "; fi
+  printf '%s' "$_m"
+}
+# b230_none <render> -> empty when a real region renders `none` in the four always-present
+# pc sections and carries no preclassify refusal. The orientation block is absent by design there.
+b230_none() {
+  local _f="$1" _h _m=""
+  grep -qF 'BEGIN GENERATED: reconcile-mechanical' "$_f" || _m="no-region "
+  if grep -qF 'DETECTOR-REFUSED  preclassify.sh' "$_f"; then _m="${_m}refused "; fi
+  while IFS= read -r _h; do
+    case "$_h" in *orientation) continue ;; esac
+    grep -qx 'none' <<<"$(b230_sec "$_f" "$_h")" || _m="${_m}[${_h#\*\*}: no none] "
+  done <<<"$B230_HEADS"
+  printf '%s' "$_m"
+}
+# b230_score <recon-dir> <tag> -> the failing arm letters among a b e n. Every file it renders
+# stays under $WORK/bl230-<tag>/ so a red arm can print its own evidence.
+b230_score() {
+  local _d="$1" _o="$WORK/bl230-$2" _r="" _m _e1 _e2
+  mkdir -p "$_o"
+  FX_B230_PC=rc2 bash "$_d/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$_o/a.md" 2>"$_o/a.err"
+  if [ "$2" = tip ]; then { echo "# Reconcile report (fixture)"; echo; cat "$_o/a.md"; } > "$B230_REFUSED"; fi
+  _m="$(b230_five "$_o/a.md" "$B230_WANT_A")"
+  [ -z "$_m" ] || { _r="${_r}a"; printf '%s\n' "$_m" > "$_o/a.why"; }
+  FX_B230_PC=empty bash "$_d/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$_o/b.md" 2>"$_o/b.err"
+  _m="$(b230_five "$_o/b.md" "$B230_WANT_B")"
+  [ -z "$_m" ] || { _r="${_r}b"; printf '%s\n' "$_m" > "$_o/b.why"; }
+  if grep -qF "DETECTOR-REFUSED  preclassify.sh $B230_WANT_A" "$_o/a.md"; then
+    FX_B230_PC=rc2 bash "$_d/emit-report.sh" --verify "$REPORT_GOOD" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>"$_o/e1.err"; _e1=$?
+    FX_B230_PC=rc2 bash "$_d/emit-report.sh" --verify "$B230_REFUSED" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>"$_o/e2.err"; _e2=$?
+    if ! { [ "$_e1" -ne 0 ] && grep -qF "$B230_CAUSE" "$_o/e1.err" && [ "$_e2" -ne 0 ] && grep -qF "$B230_CAUSE" "$_o/e2.err"; }; then
+      _r="${_r}e"; printf 'sound approved report rc=%s, refusal-carrying approved report rc=%s, cause named: %s/%s\n' \
+        "$_e1" "$_e2" "$(grep -cF "$B230_CAUSE" "$_o/e1.err")" "$(grep -cF "$B230_CAUSE" "$_o/e2.err")" > "$_o/e.why"
+    fi
+  else
+    : > "$_o/e.stood-down"
+  fi
+  bash "$_d/emit-report.sh" "$NM_DIST" "$NM_BASE" "$NM_CONS" "$NM_THEIRS" > "$_o/n.md" 2>"$_o/n.err"
+  _m="$(b230_none "$_o/n.md")"
+  [ -z "$_m" ] || { _r="${_r}n"; printf '%s\n' "$_m" > "$_o/n.why"; }
+  printf '%s' "$_r"
+}
+
+if [ "$B230_RUN" = 1 ]; then
+  B230="$WORK/bl230-recon"
+  B230_REFUSED="$WORK/bl230-refused-report.md"
+  B230_HOOK="$WORK/bl230-hook.txt"
+  cat > "$B230_HOOK" <<'B230HOOK'
+case "${FX_B230_PC:-}:$MODE" in
+  rc2:) printf 'M\tcore/scripts/moved-ref-probe.sh\tscripts/ai-dlc/moved-ref-probe.sh\tUPSTREAM-ONLY\n'
+        echo "preclassify: git failed, refusing to classify: forced by the reconcile-emit-report fixture" >&2
+        exit 2 ;;
+  empty:) exit 0 ;;
+esac
+B230HOOK
+  B230_BUILT=0
+  if cp -R "$(dirname "$EMIT")" "$B230" 2>/dev/null \
+     && b230_line "$B230/preclassify.sh" 'MODE="${5:-}"' "$(printf '%s\n' 'MODE="${5:-}"'; cat "$B230_HOOK")" \
+     && [ "$(grep -c 'FX_B230_PC' "$B230/preclassify.sh")" = 1 ] \
+     && bash -n "$B230/preclassify.sh" 2>/dev/null; then
+    B230_BUILT=1
+  else
+    broken "BL-230: could not inject the preclassify forcing hook into a copy of the reconcile dir -- the MODE line it anchors on moved, so every BL-230 arm would score a copy that forces nothing"
+  fi
+
+  # THE UNMUTATED CONTROL, positive: the hooked copy, unforced, must classify this world exactly
+  # as the seed render did. A copy that died, or a hook that fires unasked, fails here and not as
+  # a verdict on emit-report.sh.
+  if [ "$B230_BUILT" = 1 ]; then
+    bash "$B230/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$WORK/bl230-ctl.md" 2>"$WORK/bl230-ctl.err"
+    if grep -qF "UPSTREAM-ONLY  $MOVED_PROBE_PATH" "$WORK/bl230-ctl.md" \
+       && grep -qF 'BOTH-ADDED->CLASSIFY  core/skills/ai-dlc/templates/classes.md' "$WORK/bl230-ctl.md" \
+       && ! grep -qF 'DETECTOR-REFUSED  preclassify.sh' "$WORK/bl230-ctl.md"; then
+      ok "BL-230 control: the hooked copy, unforced, renders both seeded bucket rows and no preclassify refusal"
+    else
+      broken "BL-230: the hooked copy of the reconcile dir, UNFORCED, does not classify the seeded world, so the arms below would measure the copy"
+      render_diag "bl230-control" 0 "$WORK/bl230-ctl.err" control-render
+      B230_BUILT=0
+    fi
+  fi
+
+  # THE NEAR-MISS WORLD. Its range moves docs/ and leaves core/ byte-identical, so preclassify
+  # has nothing to classify and exits 0 with no rows -- the one state where an empty `pc` is TRUE.
+  NM="$WORK/bl230-nearmiss"; NM_DIST="$NM/dist"; NM_CONS="$NM/consumer"
+  mkdir -p "$NM_DIST/core/schemas" "$NM_CONS/.claude/schemas"
+  printf '{\n  "rule": "near-miss"\n}\n' > "$NM_DIST/core/schemas/thing.json"
+  cp "$NM_DIST/core/schemas/thing.json" "$NM_CONS/.claude/schemas/thing.json"
+  nm_git() { git -C "$NM_DIST" -c user.email=f@f -c user.name=fixture "$@" >/dev/null 2>&1; }
+  NM_OK=1
+  { nm_git init -q && nm_git add -A && nm_git commit -q -m base; } || NM_OK=0
+  NM_BASE="$(git -C "$NM_DIST" rev-parse HEAD 2>/dev/null)"
+  mkdir -p "$NM_DIST/docs"; printf 'a docs-only commit\n' > "$NM_DIST/docs/note.md"
+  { nm_git add -A && nm_git commit -q -m docs-only; } || NM_OK=0
+  NM_THEIRS="$(git -C "$NM_DIST" rev-parse HEAD 2>/dev/null)"
+  nm_core="$(git -C "$NM_DIST" diff --name-only "$NM_BASE" "$NM_THEIRS" -- core/ 2>/dev/null)"; nm_core_rc=$?
+  nm_all="$(git -C "$NM_DIST" diff --name-only "$NM_BASE" "$NM_THEIRS" 2>/dev/null)"
+  if [ "$B230_BUILT" = 1 ]; then
+    nm_pc="$(bash "$B230/preclassify.sh" "$NM_DIST" "$NM_BASE" "$NM_THEIRS" "$NM_CONS" 2>/dev/null)"; nm_pc_rc=$?
+  else
+    nm_pc=""; nm_pc_rc=0
+  fi
+  if [ "$NM_OK" = 0 ] || [ -z "$NM_BASE" ] || [ "$NM_BASE" = "$NM_THEIRS" ]; then
+    broken "BL-230: the near-miss world's two commits were not built, so arm n reads a range that does not exist"
+  elif [ "$nm_core_rc" -ne 0 ] || [ -n "$nm_core" ] || [ -z "$nm_all" ]; then
+    broken "BL-230: the near-miss range must move something and leave core/ untouched (core rows: $(printf '%s' "$nm_core" | grep -c .), all rows: $(printf '%s' "$nm_all" | grep -c .))"
+  elif [ "$nm_pc_rc" -ne 0 ] || [ -n "$nm_pc" ]; then
+    broken "BL-230: preclassify must exit 0 with no rows over the near-miss range (rc=$nm_pc_rc, rows=$(printf '%s' "$nm_pc" | grep -c .)), or arm n is not the empty-and-true state"
+  else
+    printf '  --    (BL-230 near-miss preconditions derived: the range moves docs/ only, and preclassify exits 0 with no rows over it)\n'
+  fi
+
+  if [ "$B230_BUILT" = 1 ]; then
+    b230_got="$(b230_score "$B230" tip)"
+    B230_O="$WORK/bl230-tip"
+    b230_arm() { # <letter> <ok-text> <bad-text>
+      case "$b230_got" in
+        *"$1"*) bad "BL-230 arm $1: $3 -- $(tr '\n' ' ' < "$B230_O/$1.why" 2>/dev/null)"
+                [ "$1" = e ] && render_diag "bl230-e" "see-why" "$B230_O/e1.err" verify-sound "$B230_O/e2.err" verify-refused
+                [ "$1" = e ] || render_diag "bl230-$1" "print-mode" "$B230_O/$1.err" "$1-render" ;;
+        *) ok "BL-230 arm $1: $2" ;;
+      esac
+    }
+    b230_arm a "preclassify exiting 2 renders the refusal in all five pc sections, no 'none', and its partial row nowhere" \
+      "a preclassify that exited 2 did not render as a refusal in every pc-derived section"
+    b230_arm b "preclassify returning NO rows over a range that moves core/ renders the same refusal, naming that cause" \
+      "an empty classification over a range that moves core/ rendered as a clean pull"
+    if [ -f "$B230_O/e.stood-down" ]; then
+      printf '  --    (BL-230 arm e STANDS DOWN: the forced render carries no refusal line, which is arm a'"'"'s finding)\n'
+    else
+      b230_arm e "--verify refuses a fresh render carrying the refusal, naming PRECLASSIFY-REFUSED, for a sound report and for one that carries the refusal itself" \
+        "--verify did not refuse, by name, a render whose classifier did not classify"
+    fi
+    b230_arm n "near-miss: an EMPTY classification over a range that leaves core/ untouched renders 'none' and no refusal" \
+      "near-miss: a range that leaves core/ untouched was refused, or rendered no 'none'"
+
+    # THE MUTANTS, one per layer, each a copy of the whole hooked dir, each expected to fail
+    # EXACTLY its own arm. Scored in parallel -- each is five invocations of the renderer, and
+    # this unit sits beside the suite pole.
+    b230_mut() { # <name> <file> <anchor> <replacement> -> prints the mutant dir, or nothing
+      local _md="$WORK/bl230-m-$1"
+      cp -R "$B230" "$_md" 2>/dev/null || return 1
+      b230_line "$_md/$2" "$3" "$4" || return 1
+      if cmp -s "$B230/$2" "$_md/$2"; then return 1; fi
+      bash -n "$_md/$2" 2>/dev/null || return 1
+      printf '%s' "$_md"
+    }
+    B230_PIDS=""; B230_LIST=""
+    b230_launch() { # <name> <expect> <file> <anchor> <replacement>
+      local _md
+      _md="$(b230_mut "$1" "$3" "$4" "$5")"
+      if [ -z "$_md" ]; then
+        bad "FIXTURE STALE [BL-230 $1]: the mutation did not apply -- its anchor is not exactly one line of $3. Re-anchor on the same observable, never relax the arm"
+        return 0
+      fi
+      ( b230_score "$_md" "$1" > "$WORK/bl230-$1.score" ) &
+      B230_PIDS="$B230_PIDS $!"
+      B230_LIST="$B230_LIST $1:$2"
+    }
+    # M1, owned by a: the rc is discarded again. b survives it through the empty guard, which is
+    # the layer M2 removes; the partial row arm a forces is what separates this from an empty run.
+    b230_launch m1-rc-discarded a emit-report.sh \
+      '  pc="$(bash "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)"' \
+      '  pc="$(bash "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null || true)"'
+    # M2, owned by b: no guard on an empty row set over a range that moves core/.
+    b230_launch m2-empty-guard-dropped b emit-report.sh '  elif [ -z "$pc" ]; then' '  elif false; then'
+    # M4, owned by e: --verify no longer refuses a render carrying the preclassify refusal. The
+    # opposite direction -- the guard widened to every DETECTOR-REFUSED -- is owned by assertion 1,
+    # whose approved region carries a retired-layer-token refusal on every run.
+    b230_launch m4-verify-refusal-dropped e emit-report.sh \
+      "if printf '%s\\n' \"\$want\" | grep -Eq '^DETECTOR-REFUSED  preclassify\\.sh (exited|returned) '; then" \
+      'if false; then'
+    # M5, owned by n: an empty classification is refused whatever the range -- the `[ -z "$pc" ]` fix.
+    b230_launch m5-range-ignored n emit-report.sh '    elif [ -n "$pc_rng" ]; then' '    elif true; then'
+    for _p in $B230_PIDS; do wait "$_p" 2>/dev/null; done
+    B230_SCORED=0
+    for _s in $B230_LIST; do
+      _n="${_s%%:*}"; _x="${_s#*:}"
+      _g="$(cat "$WORK/bl230-$_n.score" 2>/dev/null)"
+      if ! grep -qF 'BEGIN GENERATED: reconcile-mechanical' "$WORK/bl230-$_n/n.md" 2>/dev/null; then
+        bad "MUTANT HARNESS BROKEN [BL-230 $_n]: the copy rendered no region at all, so its score is a copy that did not run"
+      elif [ "$_g" = "$_x" ]; then
+        ok "mutant BL-230 $_n fails exactly arm [$_x]"
+        B230_SCORED=$((B230_SCORED+1))
+      elif [ -z "$_g" ]; then
+        bad "MUTANT SURVIVED [BL-230 $_n]: every arm passed with the layer removed, so arm $_x cannot see it"
+      else
+        bad "MUTANT [BL-230 $_n] failed arms [$_g], expected exactly [$_x] -- the arms are entangled or one is vacuous"
+      fi
+    done
+    if [ "$B230_SCORED" -ne 4 ]; then
+      bad "only $B230_SCORED of 4 BL-230 mutants were built, applied and killed by their own arm alone"
+    fi
+  fi
+fi
+
 # The APPROVED render — theirs spelled symbolically, ref sitting where the operator approved it.
 REGION_SYM="$WORK/region-symbolic.md"
 bash "$EMIT" "$DIST" "$BASE" "$CONSUMER" "$MOVEREF" > "$REGION_SYM" 2>/dev/null
@@ -657,7 +953,7 @@ DGW "staging the docs-only world" add -A || true
 DGW "committing the docs-only world" commit -m "docs-only commit — core untouched" || true
 world_moved "the docs-only world" "$MOVEREF" "$_pre_docs" || true
 REGION_DOCS="$WORK/region-docs-moved.md"
-bash "$EMIT" "$DIST" "$BASE" "$CONSUMER" "$MOVEREF" > "$REGION_DOCS" 2>/dev/null
+bash "$EMIT" "$DIST" "$BASE" "$CONSUMER" "$MOVEREF" > "$REGION_DOCS" 2>"$WORK/region-docs-moved.stderr"
 
 moved_to="$(git -C "$DIST" rev-parse "$MOVEREF" 2>/dev/null)"
 if [ "$moved_to" = "$THEIRS" ]; then
@@ -693,6 +989,7 @@ elif [ "$RC" -eq 0 ] && cmp -s "$REGION_SYM" "$REGION_DOCS"; then
   ok "--verify PASSES the same report after a DOCS-ONLY move — the key is the \`core/\` tree, so a docs commit between releases cannot wedge a consumer's pull"
 else
   bad "a docs-only upstream commit made --verify reject a sound approved report (rc=$RC) — keyed on the commit rather than the core tree, this sends the consumer back to re-approve a report that was never wrong"
+  render_diag "docs-only" "$RC" "$VERIFY_ERR" verify "$WORK/region-docs-moved.stderr" docs-render
 fi
 
 # --- Assertion: MUTANT — delete the tree line and the core move goes invisible --

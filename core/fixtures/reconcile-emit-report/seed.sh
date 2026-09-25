@@ -160,8 +160,28 @@ LEDGER
 fi
 
 # The driver's rendered region — ground truth.
+#
+# ITS STDERR IS KEPT, NOT DISCARDED. Print mode always exits 0, so the exit says nothing, and the
+# stderr is the only record of WHY a render came out wrong. run.sh prints it as DIAG lines when a
+# render arm fails -- every pool red this fixture had in batch 151 was a render arm, and each of
+# them was red with nothing on the page but the verdict.
 REGION="$WORK/region.md"
-bash "$EMIT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$REGION" 2>/dev/null
+SEED_ERR="$WORK/seed-render.stderr"
+bash "$EMIT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$REGION" 2>"$SEED_ERR"
+
+# A SEED WHOSE CLASSIFIER REFUSED IS NOT A SEED. Every assertion in run.sh reads this region as
+# ground truth, and with preclassify refused its buckets, worklist, orientation, deletions and
+# relocation sections are all the refusal line -- so the arms that read them would report on
+# emit-report.sh for a world that was never classified. Refused as FIXTURE ERROR, never a verdict.
+#
+# KEYED ON `DETECTOR-REFUSED  preclassify.sh`, NEVER ON THE BARE `DETECTOR-REFUSED`: this world
+# carries a `retired-layer-token.sh` refusal on every clean run, so the bare token fires always.
+if grep -qF 'DETECTOR-REFUSED  preclassify.sh' "$REGION"; then
+  echo "FIXTURE ERROR: the seed render's preclassify.sh refused, so the region every arm reads is not a classified world:" >&2
+  grep -F 'DETECTOR-REFUSED  preclassify.sh' "$REGION" | head -2 | sed 's/^/  region: /' >&2
+  head -20 "$SEED_ERR" | sed 's/^/  seed render stderr: /' >&2
+  exit 2
+fi
 
 # GOOD: header + the region verbatim.
 { echo "# Reconcile report (fixture)"; echo; cat "$REGION"; } > "$WORK/report-good.md"
@@ -179,6 +199,7 @@ CONSUMER="$CONSUMER"
 MOVEREF="$MOVEREF"
 MOVED_PROBE_PATH="core/scripts/moved-ref-probe.sh"
 REGION="$REGION"
+SEED_ERR="$SEED_ERR"
 REPORT_GOOD="$WORK/report-good.md"
 REPORT_MISSING="$WORK/report-missing.md"
 REPORT_STALE="$WORK/report-stale.md"

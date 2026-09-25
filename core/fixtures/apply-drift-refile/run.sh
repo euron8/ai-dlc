@@ -163,6 +163,77 @@ else
   bad "the scan produced no usable rows with preclassify.sh present, so assertion 9 proves nothing: $(printf '%s' "$UD_OK" | tr '\n' '|' | cut -c1-200)"
 fi
 
+# --- BL-230 arm f: apply STOPS, before writing, on a preclassify that did not classify ---------
+# apply.sh called preclassify as `2>/dev/null || true`, so a run that exited 2, or returned no
+# rows while base..theirs moves core/, handed phase 1 an empty or partial row set -- and the run
+# went on to write and re-stamp as though that were the whole pull. The fix stops through `err`:
+# exit 1, a message naming the cause and that nothing was written, and no write at all.
+#
+# PRECLASSIFY IS FORCED BY A HOOK IN A COPY of the reconcile dir, one fresh seed per case. The
+# hooked copy UNFORCED is the positive control: it must apply this pull and re-stamp, or the
+# stops below would be a copy that cannot apply anything.
+#
+# A consumer's installed apply.sh may predate the fix, because this fixture ships ahead of it.
+# There the arm SKIPS; in the distribution it runs, so a pre-fix engine goes red.
+case "$APPLY" in */core/skills/ai-dlc-update/reconcile/apply.sh) F_ISDIST=1 ;; *) F_ISDIST=0 ;; esac
+F_RUN=1
+if ! grep -qF 'without classifying, so which files this pull writes' "$APPLY"; then
+  if [ "$F_ISDIST" = 0 ]; then
+    printf '  SKIP  BL-230 arm f -- the installed apply.sh predates the preclassify stop; it lands with the pull that carries this fixture\n'
+    F_RUN=0
+  else
+    printf '  --    (BL-230: this apply.sh carries no preclassify stop; in the distribution arm f runs anyway and must go red)\n'
+  fi
+fi
+if [ "$F_RUN" = 1 ]; then
+  FH="$WORK/bl230-recon"
+  cp -R "$(dirname "$APPLY")" "$FH" || { echo "FIXTURE ERROR: could not copy the reconcile dir" >&2; exit 2; }
+  F_HOOK="$(printf '%s\n' 'MODE="${5:-}"' \
+    'case "${FX_B230_PC:-}:$MODE" in' \
+    '  rc2:) printf '"'"'M\tcore/session-driver/ai-dlc-session-driver.sh\t.claude/session-driver/ai-dlc-session-driver.sh\tUPSTREAM-ONLY\n'"'"'' \
+    '        echo "preclassify: git failed, refusing to classify: forced by the apply-drift-refile fixture" >&2; exit 2 ;;' \
+    '  empty:) exit 0 ;;' \
+    'esac')"
+  F_A='MODE="${5:-}"' F_B="$F_HOOK" awk '$0 == ENVIRON["F_A"] { print ENVIRON["F_B"]; n++; next } { print } END { exit (n == 1) ? 0 : 3 }' \
+    "$(dirname "$APPLY")/preclassify.sh" > "$FH/preclassify.sh"
+  if [ "$?" -ne 0 ] || [ "$(grep -c 'FX_B230_PC' "$FH/preclassify.sh")" != 1 ] || ! bash -n "$FH/preclassify.sh"; then
+    echo "FIXTURE ERROR: BL-230 could not inject the preclassify hook -- its MODE anchor is not exactly one line" >&2; exit 2
+  fi
+  # f_case <force|""> -> sets F_RC F_OUT F_STAMP_BEFORE F_STAMP_AFTER F_DRV for a fresh seed.
+  # Each seed is made UNDER $WORK, so the EXIT trap above removes it with everything else.
+  f_case() {
+    local _w; _w="$(TMPDIR="$WORK" bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: BL-230 seed failed" >&2; exit 2; }
+    eval "$(sed 's/^/F_/' "$_w/env.sh")"
+    F_STAMP_BEFORE="$(cat "$F_STAMP")"
+    F_OUT="$(FX_B230_PC="$1" bash "$FH/apply.sh" "$F_DIST" "$F_BASE" "$F_CONSUMER" "$F_THEIRS" 2>&1)"; F_RC=$?
+    F_STAMP_AFTER="$(cat "$F_STAMP")"
+    F_DRV="$(cat "$F_DRIVER")"
+    F_SCHEMA_EDITED=0; grep -q 'my-persona-skill' "$F_SCHEMA" && F_SCHEMA_EDITED=1
+  }
+  f_case ""
+  if [ "$F_RC" -eq 0 ] && grep -qE '^version: 9\.9\.9$' <<<"$F_STAMP_AFTER" && grep -q 'driver v2' <<<"$F_DRV"; then
+    ok "BL-230 control: the hooked copy, unforced, applies the pull and re-stamps"
+  else
+    echo "FIXTURE ERROR: BL-230 control -- the hooked copy UNFORCED did not apply (rc=$F_RC); the stops below would measure a copy that cannot write" >&2
+    printf '%s\n' "$F_OUT" | head -20 | sed 's/^/  DIAG  f-control | /' >&2
+    exit 2
+  fi
+  for F_CASE in rc2 empty; do
+    case "$F_CASE" in
+      rc2)   F_WANT='preclassify.sh exited 2 without classifying' ;;
+      empty) F_WANT='preclassify.sh returned no rows while' ;;
+    esac
+    f_case "$F_CASE"
+    if [ "$F_RC" -eq 1 ] && grep -qF "$F_WANT" <<<"$F_OUT" && grep -qF 'NOTHING HAS BEEN WRITTEN' <<<"$F_OUT" \
+       && [ "$F_STAMP_AFTER" = "$F_STAMP_BEFORE" ] && grep -q 'driver v1' <<<"$F_DRV" && [ "$F_SCHEMA_EDITED" = 1 ]; then
+      ok "BL-230 arm f ($F_CASE): apply exits 1 naming the cause, writes nothing (driver still v1, drift unrefiled) and leaves the stamp"
+    else
+      bad "BL-230 arm f ($F_CASE): apply did not stop before writing on a preclassify that did not classify (rc=$F_RC, stamp moved: $([ "$F_STAMP_AFTER" = "$F_STAMP_BEFORE" ] && echo no || echo yes), driver: $(grep -o 'driver v[12]' <<<"$F_DRV"), drift still in place: $F_SCHEMA_EDITED)"
+      printf '%s\n' "$F_OUT" | head -20 | sed "s/^/  DIAG  f-$F_CASE | /"
+    fi
+  done
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "apply-drift-refile: PASS"; exit 0; fi
 echo "apply-drift-refile: $fails assertion(s) FAILED" >&2
