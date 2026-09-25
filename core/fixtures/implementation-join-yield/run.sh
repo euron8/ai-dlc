@@ -413,10 +413,21 @@ arm_desc() {
     8g) echo "a slow text-only handoff-guard run releases after EFF_MAX, each row carrying the tool-call line" ;;
   esac
 }
-for _a in $ARMS_8; do
-  if "arm_$_a" "$STOP_HOOK"; then ok "$_a $(arm_desc "$_a")"
-  else bad "$_a $(arm_desc "$_a") -- got $ARM_MSG"; fi
-done
+# EVERY ARM OF SECTIONS 8 AND 9 IS A CONCURRENT JOB. Each builds its own worlds and each mutant
+# its own hooks copy, so no two share a file; each job writes its verdict lines to its own file,
+# and the collector at the end of section 9 prints and counts them in dispatch order after
+# `wait`. Serially the two sections took this fixture from ~3s to ~43s. A `bad` inside a
+# subshell cannot move `fails`, so the collector counts FAIL lines from the files, fails an
+# EMPTY file (a job that died before printing scored nothing), and fails a dispatch count other
+# than JOBS_WANT (a job line that was lost).
+JOBS="$(mktemp -d "${TMPDIR:-/tmp}/join-yield-jobs-XXXXXX")"
+JOB_N=0
+job() { JOB_N=$((JOB_N + 1)); ( "$@" ) > "$JOBS/verdict.$JOB_N" 2>&1 & }
+arm_job() { # arm_job <arm> <hook> <label-prefix>
+  if "arm_$1" "$2"; then ok "$3$1 $(arm_desc "$1")"
+  else bad "$3$1 $(arm_desc "$1") -- got $ARM_MSG"; fi
+}
+for _a in $ARMS_8; do job arm_job "$_a" "$STOP_HOOK" ""; done
 
 # =============================================================================
 # 9. MUTANTS: each wrong implementation of the rule fails ITS OWN arm.
@@ -430,7 +441,7 @@ done
 # ai-dlc-handoff-pending.sh from beside itself, and a lone copy silently skips it.
 # Each edit is guarded by `cmp -s` (a sed that matched nothing is FIXTURE STALE, never
 # a kill) and `bash -n`. The unmutated copy is driven through every arm of section 8
-# first and must pass them all -- that is the control that the copy runs at all.
+# and must pass them all -- that is the control that the copy runs at all.
 HOOK_DIR="$(cd "$(dirname "$STOP_HOOK")" && pwd)"
 MUT_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/join-yield-mut-XXXXXX")"
 mk_copy() { # mk_copy <name> -> path of ai-dlc-continue.sh inside a fresh copy of the hooks dir
@@ -441,10 +452,9 @@ CTRL="$(mk_copy control)"
 if [ -z "$CTRL" ]; then
   bad "FIXTURE BROKEN: the hooks directory copy is missing its sibling ai-dlc-handoff-pending.sh -- no mutant verdict below would be about a hook that ran"
 else
-  _cf=""
-  for _a in $ARMS_8; do "arm_$_a" "$CTRL" || _cf="$_cf $_a"; done
-  if [ -z "$_cf" ]; then ok "mutant control: the UNMUTATED copy of the hooks dir passes every arm of section 8"
-  else bad "MUTANT HARNESS BROKEN: the unmutated copy fails$_cf -- a copy that cannot pass cannot score a kill"; fi
+  # A control arm that fails reads `FAIL  mutant control (unmutated hooks-dir copy): 8x ...`:
+  # a copy that cannot pass cannot score a kill, so every mutant verdict is then unreadable.
+  for _a in $ARMS_8; do job arm_job "$_a" "$CTRL" "mutant control (unmutated hooks-dir copy): "; done
 fi
 
 # mut <name> <owning-arm> <sed-program> <what it implements>
@@ -466,12 +476,7 @@ mut() {
   if "arm_$_ctl" "$_m"; then ok "...and the same copy still passes arm $_ctl (it runs; the kill is the mutation's)"
   else bad "MUTANT HARNESS BROKEN ($1): the copy also fails arm $_ctl -- $ARM_MSG"; fi
 }
-# THE MUTANTS RUN CONCURRENTLY, each in its own subshell writing to its own file, and are
-# printed and counted in declaration order after `wait`. Serially they took this fixture from
-# ~3s to ~43s; every mutant has its own copy dir and its own worlds, so nothing is shared.
-# A `bad` inside a subshell cannot move `fails`, so the verdicts are counted from the files.
-MUT_N=0
-mut_bg() { MUT_N=$((MUT_N + 1)); ( mut "$@" ) > "$MUT_ROOT/verdict.$MUT_N" 2>&1 & }
+mut_bg() { job mut "$@"; }
 [ -n "$CTRL" ] && {
   # (i) Draft 1: the tool rule alone where the transcript answers, time only as the fallback.
   mut_bg tool-only 8b 's/^  elif \[ "\$RUN_DELTA" -lt "\$RAPID_WINDOW_SECONDS" \]; then$/  elif [ "$RUN_TOOL" = unknown ] \&\& [ "$RUN_DELTA" -lt "$RAPID_WINDOW_SECONDS" ]; then/' \
@@ -495,19 +500,21 @@ mut_bg() { MUT_N=$((MUT_N + 1)); ( mut "$@" ) > "$MUT_ROOT/verdict.$MUT_N" 2>&1 
   # Pinned to this fixture's default id rather than dropped, so the marks the other arms
   # SEED stay byte-equal and the mutant moves only the one property arm 8e owns.
   mut_bg mark-sans-session 8e 's/^  TOOL_MARK="\${SESSION_ID}:\${_tm_id:-none}"$/  TOOL_MARK="jy:${_tm_id:-none}"/' "the session id ignored by the mark"
-  wait
-  _i=0
-  while [ "$_i" -lt "$MUT_N" ]; do
-    _i=$((_i + 1)); _vf="$MUT_ROOT/verdict.$_i"
-    # A subshell that died before printing leaves an empty file -- a mutant with NO verdict.
-    if [ ! -s "$_vf" ]; then bad "MUTANT $_i produced no verdict -- its subshell died, so nothing was scored"; continue; fi
-    cat "$_vf"
-    _nf="$(grep -c "^  FAIL" "$_vf")" || _nf=0
-    fails=$((fails + _nf))
-  done
-  [ "$MUT_N" -eq 8 ] || bad "section 9 dispatched $MUT_N mutants, expected 8 -- a mutant line was lost"
 }
-rm -rf "$MUT_ROOT"
+wait
+# 7 section-8 arms, 7 control arms on the unmutated copy, 8 mutants. With no control copy the
+# FIXTURE BROKEN line above has already failed the run and only the 7 section-8 jobs exist.
+JOBS_WANT=22; [ -n "$CTRL" ] || JOBS_WANT=7
+_i=0
+while [ "$_i" -lt "$JOB_N" ]; do
+  _i=$((_i + 1)); _vf="$JOBS/verdict.$_i"
+  if [ ! -s "$_vf" ]; then bad "job $_i produced no verdict -- its subshell died, so nothing was scored"; continue; fi
+  cat "$_vf"
+  _nf="$(grep -c '^  FAIL' "$_vf")" || _nf=0
+  fails=$((fails + _nf))
+done
+[ "$JOB_N" -eq "$JOBS_WANT" ] || bad "sections 8-9 dispatched $JOB_N jobs, expected $JOBS_WANT -- a job line was lost"
+rm -rf "$MUT_ROOT" "$JOBS"
 
 echo
 if [ "$fails" -eq 0 ]; then echo "implementation-join-yield: PASS"; exit 0; fi
