@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 609..713. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 639..686. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,84 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 157 SHIPPED `v0.643.0` (`f4b1e2c2`, #865) AND CLOSED `BL-318`, WHICH DISCHARGES
+`PC-S346-ARTIFACT-DERIVATIONS-ROW-NAMES-A-CLEAR-NO-CONSUMER-CORPUS-CAN-REACH`.** It was invoked by
+peer handoff. The opening sweep matched batch 156 on every figure and control: live 25, unfiled
+13, a PC-backed worklist of 5, and ledger md5 `5f401bf7…`. `f4b1e2c2` is the only commit on
+`origin/main` naming the id, `VERSION` there reads 0.643.0, and an impossible-id control reads 0.
+Live **76 -> 75** (`BL-318` filed and closed), archive **241 -> 242**. The exit-0 receipt set is
+batch 156's nine, compared by id.
+
+**THE `artifact-derivations` ROW NOW NAMES A CLEAR A PULL CAN REACH.** It points at
+`reconcile/derivation-differential.sh`. That helper holds the artifact text fixed, runs one
+validator binary against the pre-pull tree and the applied tree, and clears on zero NEWLY-FAILING.
+On a scratch clone of the consumer it reads 0 of 783 on the 0.633.0 -> 0.641.0 pull. On the next
+pull's range it names one real break: a `grep -n` citation of `ai-dlc-pause.sh` whose four hits
+moved by five lines.
+
+**FOUR ADVERSARY ROUNDS EACH FOUND A SILENT FALSE CLEAR ON A GREEN BRANCH, AND THE LAST THREE WERE
+IN THE PREVIOUS ROUND'S FIX.**
+- The contract's stamp-equality control fired on every correct use, because the WORKLIST row
+  itself withholds the re-stamp. The validator also exits 1, not 2, on a missing root.
+- The walk for the base root landed on step 2's self-update commit, which carries `commit: <base>`
+  and theirs' machinery. Requiring `skill_commit` to equal `<base>` then refused 32 of graph's 123
+  stamp points, because `skill_commit` lags after any pull with no self-update. The shipped rule
+  accepts a `skill_commit` that is absent, equal to `<base>`, or an ancestor of it: 118 of 123.
+- The validator scored a derivation that never ran (a fork failure or a kill) as STALE, which on
+  the base side is a silent clear. A marker written after `eval` fixed that. Its first form made
+  a bare unbound `$VAR` read as UNRUN, and the capture hook treated the resulting exit 2 as clean.
+  The validator now brackets the eval with `set +u`, and the hook shows UNRUN.
+
+**THE FIRST GATE WENT RED ON THREE FIXTURES NO HAND COULD SEE FAIL.** `git push` runs its hooks with
+SIGPIPE ignored, so a near-miss that pinned a pipe's 141 exited 1 under the gate and 0 everywhere
+else. A fixture that started building a scratch repo missed the git-env seam. The fork budget rose
+3275 -> 3289, attributed site by site to one new reconcile script and one new `.dist-only`
+fixture. The release triple then failed per commit, so the branch was squashed to one commit whose
+tree is byte-identical to the gated tip, and it re-gated green on all 22 phases.
+
+**ONE FIRST-RUN FAILURE WAS NEVER EXPLAINED.** The first run of the new fixture read a derivation
+as `base=PASS consumer=STALE`, and 98 later runs did not repeat it. Forcing a derivation not to run
+on the consumer side reproduces it byte for byte. That class now refuses with exit 2 instead of
+reporting NEWLY-FAILING, but what triggered it on that run is not established.
+
+**THE OPERATOR RAN THE READ-SET TRACE TWICE**, the second time for `artifact-derivations` alone,
+because a fix landed mid-trace. Only the traced fixtures' rows moved, no `.claude/worktrees` row
+was added, and the map ships in this close. **No read-set trace is owed.**
+
+**THE CONSUMER PULLED 0.641.0 -> 0.642.0 DURING THE BATCH AND FILED ONE CANDIDATE AT ITS S313
+RETRO, UNCOMMITTED.** Its stamp reads 0.642.0 (`f4dd5172`), with `ai-dlc/retro/sprint-313`
+checked out. The ledger md5 moved to `99072171…`. The working-tree ledger holds 26 live ids against
+HEAD's 25, and the one addition is `PC-S313-FOLDIN-NEVER-RETAKES-ARCHITECTURE-ASSESSMENT`. It
+has 0 commits under `git log --all -S`, and it is cited by no backlog entry, the archive or this
+plan, against a control of 1 for `PC-S346-…` in the archive.
+- **The claim:** `core/skills/ai-dlc/steps/bug-investigation.md` makes a mid-sprint fold-in load
+  the architecture docs but never re-take the sprint's already-issued `architecture-assessment.md`.
+  In S313 a `capital_path: true` story merged under a NO-CHANGES assessment.
+- **Routing:** the consumer records `core-paths.sh --is-core` as exit 0 on that path, with a
+  not-core control.
+
+**NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
+- `PC-S313-FOLDIN-NEVER-RETAKES-ARCHITECTURE-ASSESSMENT` is the subject. Re-derive it from the
+  consumer's committed ledger once it lands; while it is uncommitted it is visible only in the
+  working tree. It is a step-file fix, so it closes on the structural trace plus a fixture, never
+  on a model replay (the batch-147 ruling under action 1). File its entry, re-derive the premise against
+  `bug-investigation.md` and `stories-test-strategy.md` §3a, write the contract, run the adversary
+  alone, then build.
+- `BL-230` needs the full 156-run pool. Run it as a lead-owned background job with a sentinel,
+  never inside a hand, and never while a gate runs.
+- `BL-311` waits on the operator.
+
+**THE DELIVERY GAP IS ONE RELEASE.** The consumer is at 0.642.0 against `VERSION` 0.643.0. In
+`f4dd5172..origin/main`:
+- `apply.sh` has 1 commit, and `preclassify.sh`, `ledger-reverify.sh` and the update skill have 0.
+- There are 13 raw `core/` rows, and 0 of them are mode-only.
+- One PC id is PENDING, `PC-S346-…`.
+
+`apply.sh` is bootstrapping, but the new remedy and its helper sit under `reconcile/`, which step
+2's self-update refreshes before the apply. So the pull that delivers them also emits the new row,
+unless that pull returns `SELF-UPDATE-DEFER`. The banked ruling stands: report the gap and write no
+runbook. The consumer's porcelain read 16, all from its own retro and pull.
 
 **BATCH 156 SHIPPED `v0.642.0` (`78cd7a65`, #863) AND CLOSED `BL-316`.** It was invoked by peer
 handoff. The opening sweep matched batch 155 on every figure and control, with the ledger md5
@@ -557,54 +635,6 @@ this, and the batch-147 block below shows how one arrives mid-batch.
 `VERSION` **0.630.0**. None of 0.628.0-0.630.0 touched a bootstrapping file. The banked ruling
 stands: report the gap and write no runbook. The consumer's porcelain read 6-7 during the batch,
 all under `_bmad-output/`, and its ledger md5 `b6fd6280…` did not move.
-
-**BATCH 147 SHIPPED `v0.629.0` (`c53b74cf`, #838) AND CLOSED `BL-294` AND `BL-297`.** The release
-commit names `BL-297`, 1 hit against an impossible-id control of 0. `BL-294` shipped in
-`v0.628.0` and closes on that release's structural trace. The gate ran at
-`AI_DLC_FIXTURE_NO_SKIP=1`: 22 phases, **203 ok / 0 FAIL**, all gates green, `context-sensor`
-read `ok` by name, and the remote ref was confirmed with `ls-remote`. Live **74 -> 72**, archive
-**222 -> 224**. The exit-0 receipt set is the same **8** ids before and after, compared by
-identity: `BL-025`, `BL-236`, `BL-238`, `BL-254`, `BL-264`, `BL-265`, `BL-271`, `BL-273`.
-**Batch 146's "9" was a miscount.** Re-run at `e3f1a65d` itself, the set reads 8.
-
-**OPERATOR RULING AT BATCH 147: NO MODEL REPLAY CLOSES A STEP-FILE OR PROMPT FIX.** *"No replay
-is needed and would not guarantee anything."* It was given on the `BL-294` 21:43 replay, after a
-contract adversary had turned that replay into a 17-20 hour run on the one `mlx-serve` process
-the consumer's live session was using. A small-n replay on one model neither confirms nor
-refutes whether prose makes a lead ASK. Close such an entry on the structural trace (the binding
-text present at every point on the incident path, byte-compared against what the lead read)
-plus a fixture that pins it. Do not propose a replay as a close condition, and do not file an
-entry whose close needs one.
-
-**`BL-297` SHIPPED AS TEXT, AND ITS SHAPE CAME FROM THE ADVERSARY.** The IMMINENT advice at
-`core/hooks/ai-dlc-context-sensor.sh:643` now keeps an operator-facing finding in the SAME
-response as the snapshot refresh, recording it under Open Items. The advice does not say
-"report first". With one turn of headroom left, that lets the compaction fire while the question
-is pending and loses the refresh on every IMMINENT fire that has a finding pending. Presence arms
-plus a committed mutant sit in `core/fixtures/context-sensor/run.sh`. Against the pre-fix sensor,
-both new arms fail.
-
-**NEXT WORK.** The PC-backed worklist is five rows, all self-disqualifying: `BL-067`, `BL-132`,
-`BL-145` and `BL-215` in their own words, and `BL-230`, which awaits a cause the instrument has
-not recorded. **A NEW CONSUMER FILING LANDED WHILE BATCH 147 WAS CLOSING, AND IT IS THE NEXT
-SUBJECT.** `PC-S313-DISPATCH-GUARD-RECORDS-CITED-FALSE-AND-NEVER-DENIES` was committed in the
-consumer's `e7584fff0` (2026-09-24 07:03 -0400), on `ai-dlc/carry-over/epic-crs-closure-fvs-advance`,
-after this batch's sweep had run. The ledger md5 moved from `3e62c07e…` to `b6fd6280…`, and the
-working-tree live set went from 26 to 27, with only this id added. It is cited 0 times in
-`docs/backlog.md`, the archive and this plan, against a control of 1 for
-`PC-S313-EMIT-REPORT-E2` in the same ledger. It routes CORE: `core-paths.sh --is-core
-.claude/hooks/ai-dlc-dispatch-guard.sh` reads `core`, against a `not-core` control on
-`_bmad-output/spawn-ledger.jsonl`. Its premise holds at `core/hooks/ai-dlc-dispatch-guard.sh:182`:
-the guard records `role_contract_cited: false` and never denies. The filed remedy is a DENY path,
-which is a hook behaviour change that can wedge live dispatches. **Write the contract and run the
-adversary alone before any build.** Ask the adversary what a deny makes always-true for a
-dispatch whose role arrives only via `subagent_type` (the fallback at `:185`). The other 14
-unfiled candidates are unchanged and adjudicated consumer-owned in the batch-143 block below.
-
-**THE DELIVERY GAP IS TWO RELEASES.** The consumer installed **0.627.0** (`23aea0ef`) against
-`VERSION` **0.629.0**. Neither release touched a bootstrapping file. The banked ruling stands:
-report the gap and write no runbook. The consumer's porcelain read 14-15 during the batch, all
-under `_bmad-output/`, and nothing this program writes was among them.
 
 ### Derive the state; do not trust the numbers below
 
@@ -1333,6 +1363,14 @@ given at batch 90.
    on `BL-132` returns 1), its single candidate mention being a bare id on its own line carrying
    no verb. So the number of non-PC-backed rows is **three**, not the two an earlier revision of
    this paragraph claimed. **Two hands agreeing is not a control; the matched LINE is.**
+
+   **OPERATOR RULING AT BATCH 147: NO MODEL REPLAY CLOSES A STEP-FILE OR PROMPT FIX.** *"No replay
+   is needed and would not guarantee anything."* A small replay on one model can neither confirm
+   nor refute whether a sentence of prose changes what a lead does. Close such an entry on the
+   structural trace (the binding text present at every point on the incident path, byte-compared
+   against what the lead read) plus a fixture that pins it. Do not propose a replay as a close
+   condition, and do not file an entry whose close needs one. The ruling's record is in the
+   archive, in batch 147's block.
 
 1a. **`docs/backlog.md` HAS A CEILING OF 100 LIVE ENTRIES** — derive the count with
    `grep -cE '^## BL-[0-9]+' docs/backlog.md`, never read one here. The operator raised the ceiling

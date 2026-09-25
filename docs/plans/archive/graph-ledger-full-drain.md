@@ -14537,3 +14537,51 @@ The consumer's porcelain is 41: 40 under `_bmad-output/`, plus `docs/escalations
 its own live session writes. The ledger md5 `218c7851…` did not move across the batch, which is the
 criterion-4 check by content.
 
+**BATCH 147 SHIPPED `v0.629.0` (`c53b74cf`, #838) AND CLOSED `BL-294` AND `BL-297`.** The release
+commit names `BL-297`, 1 hit against an impossible-id control of 0. `BL-294` shipped in
+`v0.628.0` and closes on that release's structural trace. The gate ran at
+`AI_DLC_FIXTURE_NO_SKIP=1`: 22 phases, **203 ok / 0 FAIL**, all gates green, `context-sensor`
+read `ok` by name, and the remote ref was confirmed with `ls-remote`. Live **74 -> 72**, archive
+**222 -> 224**. The exit-0 receipt set is the same **8** ids before and after, compared by
+identity: `BL-025`, `BL-236`, `BL-238`, `BL-254`, `BL-264`, `BL-265`, `BL-271`, `BL-273`.
+**Batch 146's "9" was a miscount.** Re-run at `e3f1a65d` itself, the set reads 8.
+
+**OPERATOR RULING AT BATCH 147: NO MODEL REPLAY CLOSES A STEP-FILE OR PROMPT FIX.** *"No replay
+is needed and would not guarantee anything."* It was given on the `BL-294` 21:43 replay, after a
+contract adversary had turned that replay into a 17-20 hour run on the one `mlx-serve` process
+the consumer's live session was using. A small-n replay on one model neither confirms nor
+refutes whether prose makes a lead ASK. Close such an entry on the structural trace (the binding
+text present at every point on the incident path, byte-compared against what the lead read)
+plus a fixture that pins it. Do not propose a replay as a close condition, and do not file an
+entry whose close needs one.
+
+**`BL-297` SHIPPED AS TEXT, AND ITS SHAPE CAME FROM THE ADVERSARY.** The IMMINENT advice at
+`core/hooks/ai-dlc-context-sensor.sh:643` now keeps an operator-facing finding in the SAME
+response as the snapshot refresh, recording it under Open Items. The advice does not say
+"report first". With one turn of headroom left, that lets the compaction fire while the question
+is pending and loses the refresh on every IMMINENT fire that has a finding pending. Presence arms
+plus a committed mutant sit in `core/fixtures/context-sensor/run.sh`. Against the pre-fix sensor,
+both new arms fail.
+
+**NEXT WORK.** The PC-backed worklist is five rows, all self-disqualifying: `BL-067`, `BL-132`,
+`BL-145` and `BL-215` in their own words, and `BL-230`, which awaits a cause the instrument has
+not recorded. **A NEW CONSUMER FILING LANDED WHILE BATCH 147 WAS CLOSING, AND IT IS THE NEXT
+SUBJECT.** `PC-S313-DISPATCH-GUARD-RECORDS-CITED-FALSE-AND-NEVER-DENIES` was committed in the
+consumer's `e7584fff0` (2026-09-24 07:03 -0400), on `ai-dlc/carry-over/epic-crs-closure-fvs-advance`,
+after this batch's sweep had run. The ledger md5 moved from `3e62c07e…` to `b6fd6280…`, and the
+working-tree live set went from 26 to 27, with only this id added. It is cited 0 times in
+`docs/backlog.md`, the archive and this plan, against a control of 1 for
+`PC-S313-EMIT-REPORT-E2` in the same ledger. It routes CORE: `core-paths.sh --is-core
+.claude/hooks/ai-dlc-dispatch-guard.sh` reads `core`, against a `not-core` control on
+`_bmad-output/spawn-ledger.jsonl`. Its premise holds at `core/hooks/ai-dlc-dispatch-guard.sh:182`:
+the guard records `role_contract_cited: false` and never denies. The filed remedy is a DENY path,
+which is a hook behaviour change that can wedge live dispatches. **Write the contract and run the
+adversary alone before any build.** Ask the adversary what a deny makes always-true for a
+dispatch whose role arrives only via `subagent_type` (the fallback at `:185`). The other 14
+unfiled candidates are unchanged and adjudicated consumer-owned in the batch-143 block below.
+
+**THE DELIVERY GAP IS TWO RELEASES.** The consumer installed **0.627.0** (`23aea0ef`) against
+`VERSION` **0.629.0**. Neither release touched a bootstrapping file. The banked ruling stands:
+report the gap and write no runbook. The consumer's porcelain read 14-15 during the batch, all
+under `_bmad-output/`, and nothing this program writes was among them.
+
