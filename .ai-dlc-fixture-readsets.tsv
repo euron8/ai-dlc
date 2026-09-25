@@ -9,7 +9,7 @@
 # every other fixture's entries alone, so refreshing one fixture costs its own runtime
 # rather than a full re-derivation.
 #
-# fixtures mapped: 205    entries: 32394
+# fixtures mapped: 205    entries: 32396
 absorbed-specifics-survive	.git/HEAD
 absorbed-specifics-survive	.git/config
 absorbed-specifics-survive	.git/index
@@ -666,8 +666,8 @@ artifact-derivations	.git/HEAD
 artifact-derivations	.git/config
 artifact-derivations	.git/index
 artifact-derivations	.git/info/exclude
-artifact-derivations	.git/objects/6a/3664e5b79b8cdab423d243bd0b23fda46ebb71
-artifact-derivations	.git/objects/b0/dee628405eaef9c8bf58f03d15ebb8df9fe757
+artifact-derivations	.git/objects/c0/75d22cae3d11f729536fe6055afdda188fb24e
+artifact-derivations	.git/objects/d0/8e2f13ee2538ceb864ccbcb5c8b2986a36ae56
 artifact-derivations	.git/objects/info/commit-graphs/commit-graph-chain
 artifact-derivations	.git/objects/info/commit-graphs/graph-7f995749f1f9f9610455fff3b31d8e4d11b046c8.graph
 artifact-derivations	.git/objects/info/commit-graphs/graph-93e6403e1d08d4a02b08f717afce6dcbebb27492.graph
@@ -679,6 +679,8 @@ artifact-derivations	core
 artifact-derivations	core/fixtures
 artifact-derivations	core/fixtures/artifact-derivations
 artifact-derivations	core/fixtures/artifact-derivations/run.sh
+artifact-derivations	core/fixtures/lib
+artifact-derivations	core/fixtures/lib/preamble.sh
 artifact-derivations	core/scripts
 artifact-derivations	core/scripts/validate-artifact-derivations.sh
 artifact-path-conformance	.git
