@@ -222,6 +222,25 @@ cat > "$f" <<EOF
 No check named here.
 EOF
 
+# --- 9b. EMPTY, BLANK, HEADING-ONLY and a LEVEL-4 entry ---------------------
+# The first two hold no non-whitespace byte and are the ABSENT state. The other two are
+# POPULATED and parse to zero records (entries_scanned=0): the parser flushes only on a
+# level-2/3 heading, so a `#### ` entry carrying `**Suppresses:**` is invisible to it. That is
+# a grammar gap, not an empty file, and must never be reported as one.
+f="$(mkcase empty-file)"; : > "$f"
+f="$(mkcase blank-file)"; printf '\n \n' > "$f"
+f="$(mkcase heading-only)"; printf '# Pending Escalations\nNo escalation has been filed this sprint.\n' > "$f"
+f="$(mkcase level4-entry)"
+cat > "$f" <<EOF
+# Pending Escalations
+
+#### [S400 gate — bmad invocation] [lead] - ${A0}
+**Status:** SUPPRESSED
+**Suppresses:** [core] 32 — bmad-invocation-resolves
+**Expires after:** 1 gates
+**Operator authorization:** ${A0} | "Override, proceed, file backlog item"
+EOF
+
 # --- 10. a suppression declared by its FIELDS but classified as something else ---
 # The reproduced defect. `**Status:**` is read as the first [A-Z_] run after the label,
 # so this line classifies as DECIDED_AUTONOMOUSLY, the `case` has no branch for it, and

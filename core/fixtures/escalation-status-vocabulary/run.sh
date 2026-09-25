@@ -293,6 +293,94 @@ for mname in $MUT_NAMES; do
   fi
 done
 
+# --- Assertions 11-15: an EMPTY file is the ABSENT state, and only an empty one -----
+# A file that exists and holds no non-whitespace byte used to fall through to the parser and
+# print `OK: n=[] no **Status:** entries found` -- the same line a POPULATED file whose entries
+# carry no `**Status:**` field prints. The first is nothing to examine; the second is a
+# grammar failure over live entries. Only the first may say EXAMINED NOTHING.
+#
+# FIVE CELLS, SCORED AS ONE STRING, so a mutant can be held to moving ONLY its own cell:
+#   A empty                rc 0, the token, and the "present but empty" reason
+#   B whitespace           the same -- a `[ -s ]` fix calls this file populated and fails here
+#   C absent               rc 0, the token, the absent-file reason, NOT the empty one (unchanged)
+#   D populated-zero-record  heading-only AND the bullet-entry shape: rc 0, the `n=[]` line,
+#                          NO token. One cell, because no zero-record predicate can move one of
+#                          the two without the other.
+#   E finding              the drifted file: rc 1 (unchanged)
+# Every cell is presence-shaped on at least one conjunct, so a subject that prints nothing
+# fails every one of them.
+VEN_CELLS=""
+ven_cells() {  # <validator> -> sets VEN_CELLS
+  local v="$1" o o2 rc rc2 c=""
+  o="$(bash "$v" "$EMPTY" "$SPEC_SRC" 2>/dev/null)"; rc=$?
+  if [ "$rc" -eq 0 ] && grep -qF "EXAMINED NOTHING" <<<"$o" && grep -qF "present but empty" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
+  o="$(bash "$v" "$BLANK" "$SPEC_SRC" 2>/dev/null)"; rc=$?
+  if [ "$rc" -eq 0 ] && grep -qF "EXAMINED NOTHING" <<<"$o" && grep -qF "present but empty" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
+  o="$(bash "$v" "$WORK/pending-never-written.md" "$SPEC_SRC" 2>/dev/null)"; rc=$?
+  if [ "$rc" -eq 0 ] && grep -qF "EXAMINED NOTHING" <<<"$o" && grep -qF "no escalations file" <<<"$o" \
+     && ! grep -qF "present but empty" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
+  o="$(bash "$v" "$HEADING" "$SPEC_SRC" 2>/dev/null)"; rc=$?
+  o2="$(bash "$v" "$UNPARSED" "$SPEC_SRC" 2>/dev/null)"; rc2=$?
+  if [ "$rc" -eq 0 ] && [ "$rc2" -eq 0 ] && ! grep -qF "EXAMINED NOTHING" <<<"$o$o2" \
+     && grep -qF "n=[]" <<<"$o" && grep -qF "n=[]" <<<"$o2"; then c="${c}1"; else c="${c}0"; fi
+  o="$(bash "$v" "$DRIFT" "$SPEC_SRC" 2>&1)"; rc=$?
+  if [ "$rc" -eq 1 ] && grep -qF "out-of-vocabulary status" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
+  VEN_CELLS="$c"
+}
+VEN_IS_DIST=0
+case "$(cd "$(dirname "$VALIDATOR")" && pwd)" in */core/scripts) VEN_IS_DIST=1 ;; esac
+ven_cells "$VALIDATOR"
+# A SUBJECT THAT PREDATES THE FIX. This fixture ships and can reach a consumer one pull ahead of
+# the validator: cells A and B read 0 and nothing else moves. SKIP there; FAIL here.
+if [ "$(printf '%s' "$VEN_CELLS" | cut -c1-2)" = "00" ] && [ "$(printf '%s' "$VEN_CELLS" | cut -c3-5)" = "111" ] \
+   && [ "$VEN_IS_DIST" -ne 1 ]; then
+  printf '  SKIP  the empty-file arms -- the installed validator predates the empty-file verdict; this fixture ships one pull ahead of it\n'
+else
+  i=0
+  for nm in "A empty file" "B whitespace-only file" "C absent file (unchanged)" \
+            "D populated file parsing to zero records carries NO token" "E a real finding still exits 1"; do
+    i=$((i + 1))
+    if [ "$(printf '%s' "$VEN_CELLS" | cut -c"$i")" = "1" ]; then ok "empty-file cell $nm"
+    else bad "empty-file cell $nm does not hold (cells=$VEN_CELLS)"; fi
+  done
+
+  # --- the mutants, each in a copy of the WHOLE scripts dir, with an unmutated control ------
+  VEN_SRC_DIR="$(cd "$(dirname "$VALIDATOR")" && pwd)"
+  VEN_BASE="$(basename "$VALIDATOR")"
+  VEN_MW="$WORK/empty-mut"; mkdir -p "$VEN_MW"
+  # ven_mk RUNS INSIDE `$( )`, so it cannot call `bad`: the failure count it bumped would die
+  # with the subshell and a mutant that never built would score nothing at all. It writes its
+  # reason to VEN_MW/<name>.why and prints no path; ven_score reads the empty path and fails.
+  ven_mk() {  # <name> <literal anchor, exactly one line, or empty for the control> <replacement file>
+    local d="$VEN_MW/$1" n
+    cp -R "$VEN_SRC_DIR" "$d" || { echo "could not copy $VEN_SRC_DIR" > "$VEN_MW/$1.why"; return 1; }
+    [ -n "$2" ] || { printf '%s\n' "$d/$VEN_BASE"; return 0; }
+    n="$(grep -cF -- "$2" "$VALIDATOR")" || n=0
+    [ "$n" -eq 1 ] || { echo "anchor matches $n line(s), not 1 -- re-anchor it, never relax the arm" > "$VEN_MW/$1.why"; return 1; }
+    awk -v A="$2" -v R="$3" '
+      index($0, A) { while ((getline l < R) > 0) print l; close(R); next }
+      { print }' "$VALIDATOR" > "$d/$VEN_BASE"
+    if cmp -s "$VALIDATOR" "$d/$VEN_BASE"; then echo "changed no bytes -- it would score as a kill" > "$VEN_MW/$1.why"; return 1; fi
+    bash -n "$d/$VEN_BASE" 2>/dev/null || { echo "does not parse" > "$VEN_MW/$1.why"; return 1; }
+    printf '%s\n' "$d/$VEN_BASE"
+  }
+  ven_score() {  # <name> <path-or-empty> <want> <why> <mk-name>
+    if [ -z "$2" ]; then bad "$1 was never built: $(cat "$VEN_MW/$5.why" 2>/dev/null || echo 'no reason recorded')"; return 0; fi
+    ven_cells "$2"
+    if [ "$VEN_CELLS" = "$3" ]; then ok "$1 scored $VEN_CELLS -- $4"
+    else bad "$1 scored $VEN_CELLS, wanted $3 -- $4"; fi
+  }
+  printf '%s\n' 'if false; then' > "$VEN_MW/r-revert"
+  printf '%s\n' 'if [ -z "$RECORDS" ]; then echo "OK: EXAMINED NOTHING — zero parsed records ($ESCALATIONS)."; exit 0; fi' \
+                'if [ -z "$RECORDS" ]; then' > "$VEN_MW/r-zero"
+  VEN_CTL="$(ven_mk control "" "")" || VEN_CTL=""
+  ven_score "MUTANT control (unmutated whole-dir copy)" "$VEN_CTL" 11111 "every cell holds, so a mutant's red cell is the mutation's" control
+  VEN_M1="$(ven_mk revert 'if [ "$ESC_BLANK_RC" -eq 1 ]; then' "$VEN_MW/r-revert")" || VEN_M1=""
+  ven_score "MUTANT M-revert" "$VEN_M1" 00111 "the fix removed: ONLY the empty and whitespace cells go red" revert
+  VEN_M2="$(ven_mk zero-records 'if [ -z "$RECORDS" ]; then' "$VEN_MW/r-zero")" || VEN_M2=""
+  ven_score "MUTANT M-zero-records" "$VEN_M2" 11101 "zero parsed records read as empty: ONLY the populated-zero-record cell goes red" zero-records
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "escalation-status-vocabulary: PASS"; exit 0; fi
 echo "escalation-status-vocabulary: $fails assertion(s) FAILED" >&2

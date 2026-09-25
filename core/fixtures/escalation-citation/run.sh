@@ -484,6 +484,118 @@ if [ -n "${MP4:-}" ]; then
   else FAIL=$((FAIL + 1)); printf '  FAIL %-30s P4 moved (x) too -- the arms are entangled\n' "corpus-live"; fi
 fi
 
+# --- an EMPTY escalations file is the ABSENT state, and only an empty one ---------------------
+# A file that exists and holds no non-whitespace byte used to fall through to the parser, parse
+# zero records and print the ordinary nothing-in-scope line -- a verdict over entries when there
+# were none. The gate mode now prints the absent-file `EXAMINED NOTHING` line for it.
+#
+# SIX CELLS, SCORED AS ONE STRING, so a mutant can be held to moving ONLY its own cell:
+#   A empty          rc 0, the token, and the "present but empty" reason
+#   B whitespace     the same -- a `[ -s ]` fix calls this file populated and fails here
+#   C absent         rc 0, the token, the absent-file reason and NOT the empty one (unchanged)
+#   D zero-record    POPULATED, parsing to zero records, and NO token. Two seeds: heading-only
+#                    (a title and a prose line) and pending-clean.md (entries, none in scope,
+#                    which must still print the ordinary nothing-in-scope line). ONE cell,
+#                    because both are zero-record files and no zero-record predicate can move
+#                    one without the other -- as two cells, M-zero-records could never fail
+#                    only its own.
+#   E finding        pending-missing.md -> rc 1, the missing-citation message
+#   F any-authorized an empty file is NO citation: rc 1 and `NONE:`, never the token
+# Every cell is PRESENCE-shaped on at least one conjunct, so a subject that prints nothing
+# fails every one of them.
+echo
+echo "  -- an empty escalations file EXAMINED NOTHING; a populated one never says so --"
+EN_SRC_DIR="$(cd "$(dirname "$VALIDATOR")" && pwd)"
+EN_BASE="$(basename "$VALIDATOR")"
+EN_IS_DIST=0
+case "$EN_SRC_DIR" in */core/scripts) EN_IS_DIST=1 ;; esac
+EN_CELLS=""
+en_cells() {  # $1 validator -> sets EN_CELLS to six 0/1 characters, A..F
+  local v="$1" o o2 e rc rc2 c=""
+  o="$(bash "$v" --escalations "$ROOT/pending-empty.md" --sprint 50 2>/dev/null)"; rc=$?
+  if [ "$rc" -eq 0 ] && grep -qF "EXAMINED NOTHING" <<<"$o" && grep -qF "present but empty" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
+  o="$(bash "$v" --escalations "$ROOT/pending-blank.md" --sprint 50 2>/dev/null)"; rc=$?
+  if [ "$rc" -eq 0 ] && grep -qF "EXAMINED NOTHING" <<<"$o" && grep -qF "present but empty" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
+  o="$(bash "$v" --escalations "$ROOT/pending-never-written.md" --sprint 50 2>/dev/null)"; rc=$?
+  if [ "$rc" -eq 0 ] && grep -qF "EXAMINED NOTHING" <<<"$o" && grep -qF "no escalations file" <<<"$o" \
+     && ! grep -qF "present but empty" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
+  o="$(bash "$v" --escalations "$ROOT/pending-heading.md" --sprint 50 2>/dev/null)"; rc=$?
+  o2="$(bash "$v" --escalations "$ROOT/pending-clean.md" --sprint 50 2>/dev/null)"; rc2=$?
+  if [ "$rc" -eq 0 ] && [ "$rc2" -eq 0 ] && ! grep -qF "EXAMINED NOTHING" <<<"$o$o2" \
+     && grep -qF "no S50 RESOLVED/OVERRIDDEN escalation requires" <<<"$o" \
+     && grep -qF "no S50 RESOLVED/OVERRIDDEN escalation requires" <<<"$o2"; then c="${c}1"; else c="${c}0"; fi
+  e="$(bash "$v" --escalations "$ROOT/pending-missing.md" --sprint 50 --transcript "$ROOT/real.jsonl" 2>&1 >/dev/null)"; rc=$?
+  if [ "$rc" -eq 1 ] && grep -qF "carries no 'Operator authorization:'" <<<"$e"; then c="${c}1"; else c="${c}0"; fi
+  o="$(bash "$v" --any-authorized "$ROOT/pending-empty.md" 2>/dev/null)"; rc=$?
+  if [ "$rc" -eq 1 ] && grep -q '^NONE:' <<<"$o" && ! grep -qF "EXAMINED NOTHING" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
+  EN_CELLS="$c"
+}
+en_names="A:empty B:whitespace C:absent D:populated-zero-record E:finding F:any-authorized"
+en_report() {  # $1 cells -> one ok/FAIL line per cell
+  local i=0 nm
+  for nm in $en_names; do
+    i=$((i + 1)); N=$((N + 1))
+    if [ "$(printf '%s' "$1" | cut -c"$i")" = "1" ]; then printf '  ok   %-30s empty-file cell %s holds\n' "${nm#*:}" "${nm%%:*}"
+    else FAIL=$((FAIL + 1)); printf '  FAIL %-30s empty-file cell %s does not hold\n' "${nm#*:}" "${nm%%:*}"; fi
+  done
+}
+en_cells "$VALIDATOR"
+# A SUBJECT THAT PREDATES THE FIX. This fixture ships, and a consumer may run it one pull ahead
+# of the validator: then cells A and B read 0 and nothing else moves. That is SKIP on a consumer
+# and FAIL in the distribution, where the subject must be present.
+if [ "$(printf '%s' "$EN_CELLS" | cut -c1-2)" = "00" ] && [ "$(printf '%s' "$EN_CELLS" | cut -c3-6)" = "1111" ] \
+   && [ "$EN_IS_DIST" -ne 1 ]; then
+  printf '  SKIP %-30s the installed validator predates the empty-file verdict; this fixture ships one pull ahead of it\n' "pending-empty.md"
+else
+  en_report "$EN_CELLS"
+
+  # --- the three mutants, each in a copy of the WHOLE scripts dir -----------------------------
+  # The validator resolves validate-steering-budget.sh beside itself, so a lone copy fails cell F
+  # for a reason the mutant does not own. The control is the same copy, unmutated, and must score
+  # all seven cells -- which include six presence rows, so a copy that never ran cannot pass it.
+  EN_MW="$(mktemp -d)"; trap 'rm -rf "$ROOT" "$MWORK" "$EN_MW"' EXIT
+  # en_mk RUNS INSIDE `$( )`: anything it echoes becomes the captured PATH and any counter it
+  # bumps dies with the subshell. So it writes its refusal to EN_MW/<name>.why, prints no path,
+  # and en_score fails the empty path with that reason.
+  en_mk() {  # $1 name  $2 anchor (literal, must match exactly one line)  $3 replacement file
+    local d="$EN_MW/$1" n
+    cp -R "$EN_SRC_DIR" "$d" || { echo "could not copy $EN_SRC_DIR" > "$EN_MW/$1.why"; return 1; }
+    [ -f "$d/validate-steering-budget.sh" ] || { echo "the steering sibling is missing from the copy" > "$EN_MW/$1.why"; return 1; }
+    [ -n "$2" ] || { printf '%s\n' "$d/$EN_BASE"; return 0; }
+    n="$(grep -cF -- "$2" "$VALIDATOR")" || n=0
+    [ "$n" -eq 1 ] || { echo "anchor matches $n line(s), not 1 -- re-anchor it, never relax the arm" > "$EN_MW/$1.why"; return 1; }
+    awk -v A="$2" -v R="$3" '
+      index($0, A) { while ((getline l < R) > 0) print l; close(R); next }
+      { print }' "$VALIDATOR" > "$d/$EN_BASE"
+    cmp -s "$VALIDATOR" "$d/$EN_BASE" && { echo "changed no bytes -- it would score as a kill" > "$EN_MW/$1.why"; return 1; }
+    bash -n "$d/$EN_BASE" 2>/dev/null || { echo "does not parse" > "$EN_MW/$1.why"; return 1; }
+    printf '%s\n' "$d/$EN_BASE"
+  }
+  en_score() {  # $1 name  $2 path-or-empty  $3 expected cells  $4 why  $5 mk-name
+    N=$((N + 1))
+    if [ -z "$2" ]; then
+      FAIL=$((FAIL + 1)); printf '  FAIL %-30s was never built: %s\n' "$1" "$(cat "$EN_MW/$5.why" 2>/dev/null || echo 'no reason recorded')"; return
+    fi
+    en_cells "$2"
+    if [ "$EN_CELLS" = "$3" ]; then printf '  ok   %-30s %s -> %s (%s)\n' "$1" "$3" "$EN_CELLS" "$4"
+    else FAIL=$((FAIL + 1)); printf '  FAIL %-30s scored %s, wanted %s -- %s\n' "$1" "$EN_CELLS" "$3" "$4"; fi
+  }
+  EN_R="$EN_MW/replace"; mkdir -p "$EN_R"
+  printf '%s\n' '  if false; then' > "$EN_R/revert"
+  printf '%s\n' 'if [ -z "$RECORDS" ]; then echo "OK: EXAMINED NOTHING — zero parsed records ($ESCALATIONS)."; exit 0; fi' \
+                'if [ -z "$RECORDS" ]; then' > "$EN_R/zero"
+  printf '%s\n' 'STEER_SCRIPT="$(cd "$(dirname "$0")" && pwd)/validate-steering-budget.sh"' \
+                'if [ -f "$ESCALATIONS" ] && ! grep -q '"'"'[^[:space:]]'"'"' "$ESCALATIONS"; then echo "OK: EXAMINED NOTHING — escalations file present but empty ($ESCALATIONS); nothing to check."; exit 0; fi' > "$EN_R/hoist"
+  EN_CTL="$(en_mk control "" "")" || EN_CTL=""
+  en_score "M-control" "$EN_CTL" 111111 "an unmutated copy of the whole dir scores every cell" control
+  EN_M1="$(en_mk revert 'if [ "$ESC_BLANK_RC" -eq 1 ]; then' "$EN_R/revert")" || EN_M1=""
+  en_score "M-revert" "$EN_M1" 001111 "the fix removed: ONLY the empty and whitespace cells go red" revert
+  EN_M2="$(en_mk zero-records 'if [ -z "$RECORDS" ]; then' "$EN_R/zero")" || EN_M2=""
+  en_score "M-zero-records" "$EN_M2" 111011 "zero parsed records read as empty: ONLY the populated-zero-record cell goes red" zero-records
+  EN_M3="$(en_mk hoist 'STEER_SCRIPT="$(cd "$(dirname "$0")" && pwd)/validate-steering-budget.sh"' "$EN_R/hoist")" || EN_M3=""
+  en_score "M-hoist" "$EN_M3" 111110 "the check above the mode split: ONLY the --any-authorized cell goes red" hoist
+fi
+
 # KILL COUNT. A mutation that applied cleanly to a file the run never loaded reads exactly
 # like an arm that cannot fire, and `cmp -s` cannot tell them apart. Zero kills is that state.
 N=$((N + 1))
