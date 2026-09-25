@@ -15,6 +15,36 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.638.0] - 2026-09-25
+
+This release stops a memo file that cannot be created from changing a reconcile detector's answer
+(`BL-306`). It touches `reconcile/lib.sh`, which is bootstrapping, so it ships alone. It
+discharges no consumer candidate.
+
+### BL-306 — a memo file that cannot be created no longer changes the answer
+
+Each memo file in `reconcile/lib.sh` is named after a key that embeds the percent-encoded dist
+path. The fill could fail to create that file, either because the dist path was past the
+255-character filename limit or because the memo directory could not be written (read-only, or
+out of space). When that happened the fill returned status 1 with no output and never asked git.
+A present path therefore read as absent. `preclassify.sh` from a long dist emitted 0 bytes with
+exit 0. On a miss, all five memo functions now create their fill file first. When that fails they
+take their existing direct line, and every git call stays byte-identical. A fill returns the
+status it holds in memory and never reads `.s` back. `memo_has_path` writes `.s` through a temp
+and a rename, so an empty `.s` is never left for a later hit to read as 255. The change adds no
+length bound and no hash, and it keeps `0.637.0`'s rule that only a git answer is cached.
+
+`preclassify-rename-row` gains four arms. E and F require `preclassify.sh` output from a dist
+path over 255 characters and from a `chmod 555` memo to equal the short, writable run's output.
+G requires `memo_has_path` with an unwritable memo to return 0 on a present path and non-zero on
+an absent one. H occupies the `.s` name with a directory and requires the in-memory status.
+There are three mutants: the probe reverted (fails E and F), the read-back restored (fails H),
+and both reverted (fails E through H). A length-bounded fix passes E and fails F. `BL-306`'s
+`verify: manual` is replaced by an `sh` receipt that drives E and F.
+
+The case this does not cover, running out of space partway through a fill whose file was already
+created, is `BL-309`, filed in `0.637.0`.
+
 ## [0.637.0] - 2026-09-25
 
 This release makes the reconcile engine refuse when `preclassify.sh` did not classify
