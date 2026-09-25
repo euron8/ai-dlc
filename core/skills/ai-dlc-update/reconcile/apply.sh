@@ -498,7 +498,27 @@ if [ "$FINISH" = 0 ]; then
 # overrides/ and extensions/ -- files phase 1 never overwrites, README.md explicitly excluded
 # -- and every core-side comparison resolves through `git -C "$DIST" show`, never the
 # installed file. Leaving its call where it is keeps that visible.
-PC="$(bash "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null || true)"
+#
+# A CLASSIFIER THAT DID NOT CLASSIFY STOPS THE RUN BEFORE PHASE 1 WRITES ANYTHING. This was
+# `2>/dev/null || true`, so a preclassify that exited 2 on a failed git call handed phase 1 an
+# empty or partial row set, and the run went on to write and re-stamp as though that were the
+# whole pull. Same two refusals as `--finish`'s tree check below and emit-report's render: a
+# non-zero exit, and no rows while `base..theirs` changes `core/`. It stops through `err`, the
+# shape the union gate above uses to refuse a stale report, and it names that nothing was written.
+# The in-flight marker is already on disk at this point and is left there, as every other stop
+# after it leaves it: the next push blocks and names it rather than running a suite over an
+# unreconciled tree.
+PC="$(bash "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)"
+PC_RC=$?
+if [ "$PC_RC" -ne 0 ]; then
+  err "preclassify.sh exited ${PC_RC} without classifying, so which files this pull writes, merges or deletes is UNKNOWN. NOTHING HAS BEEN WRITTEN to core. Run reconcile/preclassify.sh $DIST $BASE $THEIRS $CONSUMER directly, fix what it reports, then re-run apply with the same four arguments."
+fi
+if [ -z "$PC" ]; then
+  PC_RNG="$(git -C "$DIST" diff --name-only "$BASE" "$THEIRS" -- core/ 2>/dev/null)" \
+    || err "preclassify.sh returned no rows and whether \`${BASE}..${THEIRS}\` changes \`core/\` could not be read. NOTHING HAS BEEN WRITTEN to core. Re-run apply with the same four arguments."
+  [ -z "$PC_RNG" ] \
+    || err "preclassify.sh returned no rows while \`${BASE}..${THEIRS}\` changes \`core/\`, which is not the same as nothing to apply. NOTHING HAS BEEN WRITTEN to core. Run reconcile/preclassify.sh $DIST $BASE $THEIRS $CONSUMER directly, fix what it reports, then re-run apply with the same four arguments."
+fi
 
 # THE BUCKETS ARE HANDED DOWN, NOT RE-DERIVED. `unregistered-drift.sh`'s CORE-MACHINERY-CARRIED
 # arm needs exactly the rows already in `$PC` -- same four arguments, same program -- and running
