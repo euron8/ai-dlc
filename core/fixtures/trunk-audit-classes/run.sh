@@ -432,6 +432,50 @@ grep -q "has 'capture: sprint', which is a name with no regex" <<<"$outct" && [ 
   && ok "a capture with a name and no regex is refused, and the name is reported UNTRUNCATED" \
   || bad "the name-only capture was misreported (rc=$rcct) — a trailing 't' eaten by a sed bracket class reads as a different declaration"
 
+# ---- 24: a validator that READS STDIN must not swallow the validators declared after it.
+# The class's validators run in a `while read … done < valres` loop, so a validator's inherited
+# stdin is THE REST OF THE CLASS'S VALIDATOR LIST. Measured before the fix: `cat >/dev/null`
+# then `false` reported CLEAN, findings=0, the watermark advancing -- `false` never ran. The
+# fix closes stdin on the eval INSIDE the `$( … )`; trunk-audit-mutants proves that the
+# redirect removed, moved outside the substitution, or spelled `<&0` all turn these arms red.
+#
+# TWO SPELLINGS, because a fix keyed on one reader is not a fix for the class: `cat` drains
+# the stream, `read -r _x` takes exactly one line -- which is here the whole remaining list.
+# The assertion names `'false'`, so a fix that failed the READER instead of running the
+# validator after it would still be red: a stdin reader is a legal validator here.
+stdin_case() { # $1 = label, $2 = first validator, $3 = second validator, $4 = want FAIL|CLEAN
+  local d="$WORK/rs-$1" g c o r
+  g="$(mkrepo "$d" "class: docs
+paths: ^docs/
+validator: $2
+validator: $3")"
+  mkdir -p "$d/docs"; printf 'x\n' > "$d/docs/a.md"
+  G "$d" add -A >/dev/null 2>&1; G "$d" commit -q -m "docs change" >/dev/null 2>&1
+  c="$(git -C "$d" rev-parse HEAD)"
+  o="$(run_audit "$d" "$g")"; r="$(arc)"
+  if [ "$4" = FAIL ]; then
+    if grep -qE "^  FAIL    ${c} \(docs\):.* 'false' exits non-zero" <<<"$o" && [ "$r" -eq 1 ]; then
+      ok "a stdin-reading validator ($2) does not swallow the 'false' declared after it"
+    else
+      bad "a stdin-reading validator ($2) swallowed the validator after it (rc=$r) -- 'false' never ran and the class read clean"
+    fi
+  else
+    if grep -qE "^  CLEAN   ${c} \(docs\)" <<<"$o" && [ "$r" -eq 0 ] \
+       && [ "$(cat "$d/_bmad-output/.audit-watermark" 2>/dev/null)" = "$c" ]; then
+      ok "near-miss: '$2' then '$3' is CLEAN and the watermark advances"
+    else
+      bad "near-miss: '$2' then '$3' was not CLEAN (rc=$r) -- the stdin fix fails a compliant class"
+    fi
+  fi
+}
+stdin_case cat      'cat >/dev/null'   'false' FAIL
+stdin_case read     'read -r _x; true' 'false' FAIL
+# NEAR-MISSES. `true` then `true` is the two-validator class with nothing reading stdin; the
+# reader followed by a passing validator is the one an over-broad fix -- refusing any validator
+# that reads stdin -- would turn red, which is why the reader itself is seeded green here.
+stdin_case nm-true  'true'             'true'  CLEAN
+stdin_case nm-cat   'cat >/dev/null'   'true'  CLEAN
+
 # ---- the run itself is a control
 [ -n "$out1" ] && ok "the audit produced output (the run is not a silent death)" \
                || bad "the audit printed NOTHING — every assertion above is vacuous"
