@@ -4081,3 +4081,18 @@ its own check established presence. The cost of the extra `rev-parse` on each di
 was not measured, and `ledger-reverify`'s `theirs_has_path` is its heaviest caller.
 
 verify: manual
+
+## BL-312 — a `core-paths.sh --list` stall past 30s fails `retro-audit-scans` assertions 25-28 as ordinary findings
+
+**NOTE.** Found at batch 154 by the scope hand adjudicating
+`PC-S340-RETRO-AUDIT-SCANS-FIXTURE-FAILS-ONCE-AND-PASSES-ON-RETRY`. It is not that candidate's
+cause: the path arrived at 0.520.0 (`69618a55`), after the candidate's only recorded failure.
+
+`audit-rule-files.sh` runs `core-paths.sh --list` with a 30-second timeout
+(`core/scripts/audit-rule-files.sh:144`). Forced to 0.001s, the fixture's ownership assertions
+25, 26, 27 and 28's control fail. So a stall reads as an ownership finding, not as a refusal. The
+unit's recorded loaded cost is 5s, so a real stall needs about six times that. None has been
+observed. A receipt must force the timeout and read whether the audit names the timeout as its
+cause.
+
+verify: manual
