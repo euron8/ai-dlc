@@ -902,11 +902,11 @@ fi
 # So each memo caches only the statuses that are its subcommand's ANSWERS, measured per
 # subcommand on this machine rather than recalled:
 #
-#   rev-parse -q --verify <rev>:<path>  0 present; 1 absent path OR unresolvable rev; 128 a git
+#   rev-parse -q --verify "${rev}:<path>"  0 present; 1 absent path OR unresolvable rev; 128 a git
 #                                        that could not run (not a repository). Cache 0 and 1.
 #   ls-tree -r --name-only <ref>         0 only. A bad ref is 128, the same as a failure.
 #   diff --no-renames --name-status      0 only (no --exit-code). A bad ref is 128.
-#   show <rev>:<path>, cat-file -e       0 present; 128 for an absent path AND for a failure --
+#   show "${rev}:<path>", cat-file -e    0 present; 128 for an absent path AND for a failure --
 #                                        the two are the same status. A 128 is cached only when
 #                                        `rev-parse -q --verify` on the SAME spec answers 1, the
 #                                        one command whose status separates them. It costs one
