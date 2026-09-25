@@ -9,6 +9,8 @@
 #   pipeline-paused.flag      Check 1 operator pause (allow)
 #   .beat-inflight            Check 2b live-beat marker (allow iff epoch > now)
 #   pipeline-block-state.txt  Check 3 rapid-fire backoff counter
+# plus, for the `transcript` and `handoff` cases only, a transcript JSONL beside
+# _bmad-output/ that the stall-run tool test reads.
 #
 # The deliverable files are DELIBERATELY absent from every case: Check 2b keys off
 # the marker, NOT off deliverable existence, and the whole point of the redesign
@@ -74,6 +76,30 @@ case "$CASE" in
   # single-invocation seed can express it. Identical on disk to no-marker; the
   # name is what tells a reader which arm owns it.
   sequence)       write_snapshot ;;
+
+  # TRANSCRIPT-PATH worlds, for section 8. Every world above drives the hook with an
+  # empty `transcript_path`, so it only ever exercises the time-test fallback. These
+  # carry a JSONL transcript in the shape Claude Code writes -- top-level `type` plus
+  # `.message.role` -- whose last assistant `tool_use` is the seed. run.sh appends one
+  # turn per Stop, including records that have NO top-level `type` (the shape the
+  # handoff fixtures seed), because the hook must key on `.message.role`.
+  transcript)     write_snapshot
+                  printf '%s\n' \
+                    '{"type":"user","message":{"role":"user","content":"go"}}' \
+                    '{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_seed","name":"Agent","input":{}}]}}' \
+                    '{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_seed"}]}}' \
+                    > "$WORK/transcript.jsonl" ;;
+
+  # A handoff the operator asked for and the lead never performed: Check 0's guard
+  # world. Snapshot, pause flag and step 4's driver touch are on disk, so the only
+  # unmet arm is the missing resume block -- the shape handoff-resume-guard seeds as
+  # `.p_miss`, with the same typeless `{message:{role,content}}` records.
+  handoff)        write_snapshot
+                  mkdir -p "$OUT/.driver"; touch "$OUT/pipeline-paused.flag"; : > "$OUT/.driver/handoff"
+                  printf '%s\n' \
+                    '{"message":{"role":"user","content":"hand off the sprint"}}' \
+                    '{"message":{"role":"assistant","content":"Done. I have committed everything and updated the snapshot. Ready when you are."}}' \
+                    > "$WORK/transcript.jsonl" ;;
 
   *) echo "FIXTURE ERROR: unknown case '$CASE'" >&2; exit 2 ;;
 esac

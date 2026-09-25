@@ -32,6 +32,8 @@ set -uo pipefail
 # Unset ALL of them, by pattern, so a NEW tunable cannot reintroduce this. Per-command
 # assignments (`AI_DLC_MODEL_ROW=1M "$HOOK"`) still work: those are the deliberate tests.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+# The harness block cap clamps the continue hook's EFF_MAX; an exported one moves its counts.
+unset CLAUDE_CODE_STOP_HOOK_BLOCK_CAP
 
 
 HERE="$(cd "$(dirname "$0")" && pwd)"

@@ -308,7 +308,12 @@ Event types:
   message was outstanding and unacknowledged (Rule 29). A nonzero count means
   the lead tried to execute straight through a waiting human and the hook --
   not the lead's judgment -- is what stopped it. Investigate each one.
-- `BACKOFF`: rapid-fire stop attempts detected; stall confirmed
+- `BACKOFF`: rapid-fire stop attempts detected; stall confirmed. A block
+  continues the stall run when NO tool call came between it and the previous
+  block, at any spacing, or when it came within 30s of it; only a tool call
+  AND 30s start a new run. The hook releases once the run passes 3 blocks, or
+  CLAUDE_CODE_STOP_HOOK_BLOCK_CAP when that is lower, so it lets go before
+  the harness's own block cap ends the turn
 - `ESCALATION_UNDELIVERED`: a SendMessage returned `success:false`, so an
   operator-bound message was never delivered. The harness does NOT mark these
   as tool errors, which is why they fell through silently; a nonzero count

@@ -25,6 +25,8 @@ set -uo pipefail
 # then blocks the consumer's every push against a hook behaving exactly as specified.
 # Scrub first (validate-enforcement-map.sh I10 asserts this rather than trusting it).
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+# The harness block cap clamps the continue hook's EFF_MAX; an exported one moves its counts.
+unset CLAUDE_CODE_STOP_HOOK_BLOCK_CAP
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }

@@ -4140,21 +4140,62 @@ stops per spacing:
 | 45s | `b` × 12 | `BLOCKED` 12, `BACKOFF` 0 |
 | 89s | `b` × 12 | `BLOCKED` 12, `BACKOFF` 0 |
 
-**The fix is not designed yet, and it needs its own contract adversary.** A wider window alone
-satisfies the receipt below at 45s and 89s and fails again at the next spacing. Any fix has to
-keep the header's distinction between a genuine loop and legitimate multi-skill progression, and
-it has to release before the harness cap does. The cap is `CLAUDE_CODE_STOP_HOOK_BLOCK_CAP`,
-default nine. The log should also be able to tell a turn the harness ended from one the hook
-held.
+**The fix keys the stall run on the harness's own reset signal.** Measured on the Claude Code
+2.1.282 binary, and confirmed by the contract adversary: the harness adds one to its own count
+on every Stop-hook block and ends the turn when the count exceeds
+`CLAUDE_CODE_STOP_HOOK_BLOCK_CAP` (default 8, so the ninth block; a value of 0 or less disables
+it). It resets that count on a tool-use recursion and on the refusal-retry edge, and on nothing
+else. Wall-clock spacing plays no part. `stop_hook_active` stays true across tool calls for the
+rest of the query, so the header was right to reject it. The Stop input carries no progress
+counter, which leaves `transcript_path` as the only source.
 
-The receipt drives the shipping hook on a scratch project with a shimmed clock. At 5s spacing it
-must block three times and then allow (exit 9 otherwise, because then the receipt cannot tell a
-fix from a hook that never blocks). At 45s, 89s and 300s it must block on the first stop and
-allow within nine. The 300s arm is there because a mutant that only widens the window to 120s
-scored 0 without it. A window wider than 300s would still pass, so a green receipt is a floor,
-and the fix contract has to say why its release does not depend on spacing. Scored at
-`0a85fa33`: exit 1. A window of 120s: exit 1. A hook that never blocks: exit 9. A candidate that
-also counts a block when `stop_hook_active` is true: exit 0. That candidate is the design the
-header rejected, and scoring 0 does not make it correct.
+The first design counted tool calls alone, and it was refuted before it was built. Arming a
+wait-beat is itself a Bash `tool_use`, so a tool-only rule resets the run on every beat re-arm.
+That reintroduces the sprint-305 join-wait stall that Check 2b's comment documents. The receipt
+written for that design also rejected the correct fix.
 
-verify: sh R="$(pwd)"; H="$R/core/hooks/ai-dlc-continue.sh"; [ -f "$H" ] || exit 9; command -v jq >/dev/null || exit 9; W="$(mktemp -d)" || exit 9; mkdir -p "$W/p/_bmad-output" "$W/b"; printf -- '- **current_step_file:** deploy-validate.md\n' > "$W/p/_bmad-output/pipeline-snapshot.md"; printf '#!/bin/bash\nif [ "${1:-}" = "+%%s" ]; then cat "$SN"; else exec /bin/date "$@"; fi\n' > "$W/b/date"; chmod +x "$W/b/date"; run() { rm -f "$W/p/_bmad-output/pipeline-block-state.txt"; t=1790000000; s=""; i=0; while [ "$i" -lt 9 ]; do i=$((i+1)); echo "$t" > "$W/n"; r="$(printf '{"session_id":"r","stop_hook_active":true}' | SN="$W/n" PATH="$W/b:$PATH" CLAUDE_PROJECT_DIR="$W/p" bash "$H" 2>/dev/null)"; case "$r" in *'"block"'*) s="${s}b" ;; *) s="${s}a" ;; esac; t=$((t+$1)); done; }; run 5; case "$s" in bbba*) ;; *) exit 9 ;; esac; run 45; case "$s" in b*a*) ;; *) exit 1 ;; esac; run 89; case "$s" in b*a*) ;; *) exit 1 ;; esac; run 300; case "$s" in b*a*) exit 0 ;; *) exit 1 ;; esac
+The rule that shipped is an OR over the two tests. A block continues the current run when there
+has been no new assistant `tool_use` since the previous block, OR when it lands within
+`RAPID_WINDOW_SECONDS` (30) of it. Only a new tool call and 30 seconds together start a new run.
+On every sequence this count is at least the time-only count, so the hook can only release
+earlier than before. On the transcript path it is also at least the harness's count, so the hook
+releases before the harness overrides. The time arm is the one that keeps beat churn counted: a
+beat that returned at once consumed no time. The tool mark is the session id plus the id of the
+last assistant `tool_use`, read with `jq` keyed on `.message.role` from the last 400 transcript
+lines, with a whole-file fallback. A raw `grep` for `tool_use` would move on prose mentions. The
+mark is the third line of the state file. A two-line state file written by an older hook, or a
+transcript that cannot be read, leaves the tool test unanswered and the time test decides
+alone, as before.
+
+The release threshold is `EFF_MAX`, which is 3 clamped to the harness cap when the cap is
+positive and lower. The hook allows on invocation `EFF_MAX`+1 and the harness overrides on
+invocation CAP+1, so `EFF_MAX` <= CAP is exactly enough. Clamping to CAP-1 is off by one and
+turns CAP=1 into a hook that never blocks. Check 0's handoff guard uses the same rule through
+the same helper and the same `EFF_MAX`, because the harness counts blocks from both sites as
+one. `BACKOFF` names the test that closed the run, and `BLOCKED` and `HANDOFF_GUARD_BLOCK` rows
+add `Tool call since previous block: yes|no|unknown`, so the log can separate a turn the hook
+held from one the harness ended.
+
+The first receipt, filed with this entry, drove the hook at 5s, 45s, 89s and 300s and required
+a release within nine at every spacing above the window. A window wider than 300s would still
+have passed it, so it was a floor. Scored at `0a85fa33`: exit 1. A window of 120s: exit 1. A
+hook that never blocks: exit 9. A candidate that also counts a block when `stop_hook_active` is
+true: exit 0. That candidate is the design the header rejected, and scoring 0 did not make it
+correct.
+
+The receipt below replaces it. It drives the shipping hook with a shimmed clock and a seeded
+transcript, nine stops per arm. With no transcript at 5s it must block three times and then
+allow, or it exits 9, because it could not then tell a fix from a hook that never blocks. With
+text-only turns between stops at 45s, 300s and 3600s it must do the same. With a new tool call
+before every stop at 5s (beat churn) it must do the same. With a new tool call before every stop
+at 45s (multi-skill progress) it must block all nine. With `CLAUDE_CODE_STOP_HOOK_BLOCK_CAP=1`
+it must block once and then allow, and with the cap at 0 it must keep the default of three.
+Scored at the fix: exit 0. At `291c286a`: exit 1. A hook that never blocks: exit 9. Two further
+correct spellings, the OR reordered and the mark computed by a different `jq` program: exit 0.
+Every adversary variant exits non-zero: the tool-only AND rule, a 3600s window,
+release-regardless, a SHA mark, an unpersisted mark, no clamp, a CAP-1 clamp, a literal
+contract transcription, a raw-grep mark and a beat-excluding rule all exit 1. A never-blocking
+variant exits 9. The receipt does not cover a two-line state file, a changed session id or a
+slow text-only handoff-guard run. The fixture covers those.
+
+verify: sh R="$(pwd)"; H="$R/core/hooks/ai-dlc-continue.sh"; [ -f "$H" ] || exit 9; command -v jq >/dev/null || exit 9; run() { W="$(mktemp -d)" || exit 9; mkdir -p "$W/p/_bmad-output" "$W/b" || exit 9; printf -- '- **current_step_file:** deploy-validate.md\n' > "$W/p/_bmad-output/pipeline-snapshot.md"; printf '#!/bin/bash\nif [ "${1:-}" = "+%%s" ]; then cat "$SN"; else exec /bin/date "$@"; fi\n' > "$W/b/date"; chmod +x "$W/b/date"; T="$W/t.jsonl"; printf '%s\n' '{"type":"user","message":{"role":"user","content":"go"}}' '{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_seed","name":"Bash","input":{}}]}}' '{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_seed"}]}}' '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"done."}]}}' > "$T"; P="$T"; [ "$2" = none ] && P=""; t=1790000000; s=""; i=0; while [ "$i" -lt 9 ]; do i=$((i+1)); echo "$t" > "$W/n"; if [ "$i" -gt 1 ] && [ "$2" = tool ]; then printf '{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_%s","name":"Bash","input":{}}]}}\n{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_%s"}]}}\n{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"ok."}]}}\n' "$i" "$i" >> "$T"; elif [ "$i" -gt 1 ] && [ "$2" = text ]; then printf '%s\n' '{"type":"user","message":{"role":"user","content":"Stop hook feedback: Pipeline is active."}}' '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"still here; next I emit a tool_use."}]}}' >> "$T"; fi; r="$(printf '{"session_id":"r","transcript_path":"%s","stop_hook_active":true}' "$P" | env -u CLAUDE_CODE_STOP_HOOK_BLOCK_CAP ${3:+"CLAUDE_CODE_STOP_HOOK_BLOCK_CAP=$3"} SN="$W/n" PATH="$W/b:$PATH" CLAUDE_PROJECT_DIR="$W/p" bash "$H" 2>/dev/null)"; case "$r" in *'"block"'*) s="${s}b" ;; *) s="${s}a" ;; esac; t=$((t+$1)); done; }; run 5 none; case "$s" in bbba*) ;; *) exit 9 ;; esac; for g in 45 300 3600; do run "$g" text; case "$s" in bbba*) ;; *) exit 1 ;; esac; done; run 5 tool; case "$s" in bbba*) ;; *) exit 1 ;; esac; run 45 tool; [ "$s" = bbbbbbbbb ] || exit 1; run 45 text 1; case "$s" in ba*) ;; *) exit 1 ;; esac; run 45 text 0; case "$s" in bbba*) exit 0 ;; *) exit 1 ;; esac

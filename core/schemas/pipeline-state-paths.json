@@ -162,7 +162,7 @@
       "transient": true,
       "producer": "core/hooks/ai-dlc-continue.sh",
       "ignore": "_bmad-output/handoff-guard-state.txt",
-      "reason": "Handoff guard state for the current session. One of the three transient names that is NOT dot-prefixed, which is why the partition is enumerated rather than derived from a dot-glob."
+      "reason": "Handoff guard state for the current session, the same three-line stall-run shape as pipeline-block-state.txt. One of the three transient names that is NOT dot-prefixed, which is why the partition is enumerated rather than derived from a dot-glob."
     },
     {
       "name": ".handoff-guard-armed",
@@ -176,7 +176,7 @@
       "transient": true,
       "producer": "core/hooks/ai-dlc-continue.sh",
       "ignore": "_bmad-output/pipeline-block-state.txt",
-      "reason": "Check 3 rapid-fire backoff counter, two lines, reset per run. Ignored in the reference consumer only by accident -- its .gitignore carries a blanket *.txt -- so the rule is stated here rather than left to a coincidence another consumer will not share."
+      "reason": "Check 3 stall-run backoff counter, three lines (last-block epoch, run count, tool mark <session_id>:<last tool_use id|none>), reset per run; a two-line file from an older hook is read and falls back to the time test. Ignored in the reference consumer only by accident -- its .gitignore carries a blanket *.txt -- so the rule is stated here rather than left to a coincidence another consumer will not share."
     },
     {
       "name": "pipeline-paused.flag",

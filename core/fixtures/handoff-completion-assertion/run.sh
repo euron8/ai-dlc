@@ -46,6 +46,8 @@ set -uo pipefail
 # consumer that pinned AI_DLC_MODEL_ROW and failed seven assertions against a sensor behaving
 # exactly as specified.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+# The harness block cap clamps the continue hook's EFF_MAX; an exported one moves its counts.
+unset CLAUDE_CODE_STOP_HOOK_BLOCK_CAP
 
 # AND SCRUB GIT'S OWN AMBIENT REPO POINTERS, which no other fixture here has had to. `GIT_DIR`
 # and friends take precedence over `-C <dir>`, so a runner that exported one would make the
@@ -1721,7 +1723,7 @@ fi
 #       satisfied branch must still stamp, so the mutation MOVED the writer rather than
 #       deleting it -- which is what separates this mutant from m9e.
 if mkmut m9f-stamp-on-backoff "$CONF" \
-     -e 's@^      rm -f "$HANDOFF_STATE" "$HANDOFF_ARMED_FILE"   # backoff exhausted@      : > "${LOG_DIR}/.handoff-complete" 2>/dev/null || true; rm -f "$HANDOFF_STATE" "$HANDOFF_ARMED_FILE"   # backoff exhausted@'; then
+     -e 's@^      rm -f "$HANDOFF_STATE" "$HANDOFF_ARMED_FILE"   # possible false positive, as before@      : > "${LOG_DIR}/.handoff-complete" 2>/dev/null || true; rm -f "$HANDOFF_STATE" "$HANDOFF_ARMED_FILE"   # possible false positive, as before@'; then
   dsetup
   snap_at "$P_DISK"
   rm -f "$(HC "$P_DISK")" "$P_DISK/_bmad-output/.driver/handoff"

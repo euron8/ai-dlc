@@ -23,6 +23,8 @@ set -uo pipefail
 # settings.json exports it into every session, `git push` inherits it, and the gate then runs
 # this fixture against a hook configured differently from what these assertions assume.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+# The harness block cap clamps the continue hook's EFF_MAX; an exported one moves its counts.
+unset CLAUDE_CODE_STOP_HOOK_BLOCK_CAP
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 pick() { for c in "$@"; do [ -n "$c" ] && [ -f "$c" ] && { printf '%s' "$c"; return; }; done; }
