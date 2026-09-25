@@ -29,6 +29,10 @@
 #
 # Output: TSV to stdout — STATUS<TAB>CORE_PATH<TAB>CONSUMER_PATH<TAB>BUCKET
 #
+# Exit: 0 = classified. 2 = REFUSED: a git call failed (one stderr line names it), or the
+#       failure trap could not be armed. Rows printed before a refusal are partial and no
+#       caller may read them as buckets.
+#
 # Deletion buckets (status D — upstream removed the file):
 #   UPSTREAM-DELETED                      consumer copy untouched vs base -> delete (gated in step 7)
 #   UPSTREAM-DELETED-NOOP                 consumer already lacks it -> noop
@@ -38,13 +42,46 @@ DIST="${1:?dist-repo}"; BASE="${2:?base-sha}"; THEIRS="${3:?theirs-ref}"; CONS="
 MODE="${5:-}"
 
 # shellcheck source=lib.sh
-# NOT `|| exit 1` the way most siblings guard this: preclassify.sh is `set -u` only, no
-# `pipefail`, and every OTHER call site here already tolerates lib.sh's memo_* functions
-# being absent by falling back to a direct git call inside each function body — so an
-# unsourceable lib.sh degrades this script to exactly its pre-cache behavior rather than
-# refusing to run.
+# NOT `|| exit 1` the way most siblings guard this, but an unsourceable lib.sh no longer degrades
+# silently either: the memo_* calls below then fail with 127, and 127 is not an answer any of
+# them accepts, so the run refuses through pc_fail() naming the call rather than classifying
+# every path MISSING.
 SELF="$(cd "$(dirname "$0")" && pwd)"
 . "$SELF/lib.sh" 2>/dev/null || true
+
+# --- A GIT THAT FAILED IS NOT A GIT THAT ANSWERED ---------------------------------------------
+#
+# This script used to exit 0 over almost every forced git failure. Measured on a scratch copy
+# with a PATH shim making one git subcommand exit 128: `diff --name-status` failing gave rc 0 and
+# EMPTY output; `hash-object` failing gave rc 0 and a BOTH-ADDED file bucketed UPSTREAM-ONLY-ADD
+# (the consumer copy read as MISSING); `rev-parse` failing gave rc 0 and wrong buckets; under
+# `ulimit -Su` rc 0 and empty in six runs of six. Three causes: the main loop was the right-hand
+# side of `memo_diff_name_status … | while`, so git's status was lost in a pipeline; and
+# `file_hash`/`blob_hash` mapped ANY failure to MISSING, which is a legitimate bucket input.
+#
+# So every git answer below is status-checked, and a failure ends the WHOLE run with exit 2 and
+# one stderr line naming the call. THE HELPERS RUN INSIDE `$( )`, where `exit` ends only the
+# subshell and the caller would read an empty hash as an answer. pc_fail() therefore signals the
+# top-level shell first, whose trap exits 2 as soon as the substitution returns -- one mechanism
+# for every call site, rather than a status check at each of them, some of which sit inside an
+# `elif` condition where a check cannot be spelled.
+#
+# THE TRAP IS VERIFIED, NOT ASSUMED. A signal ignored when this shell started cannot be trapped,
+# and `trap` then says nothing; a failure would reach no one and the old silent exit 0 would be
+# back. So an unarmed trap refuses the run up front. Read back with the plain `trap -p`: lib.sh's
+# `trap()` shadow passes every `-p` query straight to the builtin, and I115 refuses the `builtin`
+# spelling in any file that sources lib.sh.
+trap 'exit 2' USR1
+case "$(trap -p USR1 2>/dev/null)" in
+  *"exit 2"*) ;;
+  *) echo "preclassify: cannot arm the USR1 failure trap (the signal is ignored in this environment), so a git failure could not stop the run — refusing to classify" >&2; exit 2 ;;
+esac
+PC_TOP=$$
+pc_fail() { # <the git call that failed> -> one stderr line, then the WHOLE run exits 2
+  echo "preclassify: git failed, refusing to classify: $*" >&2
+  kill -USR1 "$PC_TOP" 2>/dev/null
+  exit 2
+}
 
 # Resolve DIST and CONS to absolute paths up front. file_hash() feeds
 # "$CONS/<path>" to `git -C "$DIST" hash-object` — a RELATIVE consumer root
@@ -131,8 +168,29 @@ setup_sited() { grep -qxF "$1" <<<"$SETUP_SITED_PATHS"; }
 # one still returns its sha. The only change is that the SHARED cross-process cache
 # (populated once per <dist,spec> for the whole render, when emit-report.sh set one up)
 # answers repeats instead of forking `git` again.
-blob_hash() { local _h; _h="$(memo_rev_parse "$DIST" "$1:$2" 2>/dev/null)"; [ -n "$_h" ] && printf '%s' "$_h" || echo MISSING; }
-file_hash() { local f="$CONS/$1"; [ -f "$f" ] && git -C "$DIST" hash-object "$f" 2>/dev/null || echo MISSING; }
+#
+# MISSING IS AN ANSWER, SO ONLY GIT'S OWN "ABSENT" MAY PRODUCE IT. `rev-parse -q --verify` exits 1
+# for a path absent at a resolvable rev AND for an unresolvable rev (measured: both 1, a present
+# path 0, a git that cannot run 128). Any other status is a failure and refuses the run. And a
+# consumer file that EXISTS but will not hash is a failure too -- reading it as MISSING turned a
+# BOTH-ADDED file into an UPSTREAM-ONLY-ADD that apply overwrites.
+blob_hash() {
+  local _h _rc
+  _h="$(memo_rev_parse "$DIST" "$1:$2" 2>/dev/null)"; _rc=$?
+  case "$_rc" in
+    0) [ -n "$_h" ] || pc_fail "rev-parse -q --verify $1:$2 exited 0 with no sha"
+       printf '%s' "$_h" ;;
+    1) echo MISSING ;;
+    *) pc_fail "rev-parse -q --verify $1:$2 exited $_rc" ;;
+  esac
+}
+file_hash() {
+  local f="$CONS/$1" _h
+  [ -f "$f" ] || { echo MISSING; return 0; }
+  _h="$(git -C "$DIST" hash-object "$f" 2>/dev/null)" || pc_fail "hash-object $f exited $?"
+  [ -n "$_h" ] || pc_fail "hash-object $f exited 0 with no hash"
+  printf '%s\n' "$_h"
+}
 
 # --- THE OTHER SHA IN THE STAMP, AND WHY THE `ours_h` COMPARISONS NEED IT ---------------
 #
@@ -175,8 +233,18 @@ _pc_stamp="$CONS/.claude/.ai-dlc-version"
 if [ -f "$_pc_stamp" ]; then
   SELF_UPDATE_REF="$(sed -n 's/^skill_commit:[[:space:]]*\([^[:space:]]*\).*/\1/p' "$_pc_stamp" | head -1)"
   [ "$SELF_UPDATE_REF" = "$BASE" ] && SELF_UPDATE_REF=""
+  # 0 resolves and 1 does not; anything else is a git that did not answer, and reading it as
+  # "does not resolve" would silently drop the skill_commit arms. Checked in its own block so the
+  # four-line guard below stays one unit. ONE rev-parse, read by both: a second fork here could
+  # fail transiently where the first answered, and the guard would then clear the ref silently.
+  _pc_su_rc=0
+  if [ -z "$SELF_UPDATE_REF" ]; then :; else
+    git -C "$DIST" rev-parse --verify --quiet "${SELF_UPDATE_REF}^{commit}" >/dev/null 2>&1
+    _pc_su_rc=$?
+    [ "$_pc_su_rc" -le 1 ] || pc_fail "rev-parse --verify --quiet ${SELF_UPDATE_REF}^{commit} exited $_pc_su_rc"
+  fi
   if [ -n "$SELF_UPDATE_REF" ] \
-     && ! git -C "$DIST" rev-parse --verify --quiet "${SELF_UPDATE_REF}^{commit}" >/dev/null 2>&1; then
+     && [ "$_pc_su_rc" -ne 0 ]; then
     SELF_UPDATE_REF=""
   fi
 fi
@@ -301,7 +369,7 @@ at_self_update() { # <core-rel-path> <ours-hash>
 # driver chmods -- same posture as `sync_mode_from_theirs()`, which leaves them alone.
 mode_at_theirs() { # <core-rel-path> <consumer-rel-path> -> 0 if the consumer copy's exec bit already matches theirs
   local entry
-  entry="$(git -C "$DIST" ls-tree "$THEIRS" -- "$1" 2>/dev/null)"
+  entry="$(git -C "$DIST" ls-tree "$THEIRS" -- "$1" 2>/dev/null)" || pc_fail "ls-tree $THEIRS -- $1 exited $?"
   case "${entry%% *}" in
     100755) [ -x "$CONS/$2" ] ;;
     100644) [ ! -x "$CONS/$2" ] ;;
@@ -361,7 +429,7 @@ if [ "$MODE" = "--untangle" ]; then
   MANIFEST="$(dirname "$0")/setup-sites.md"
   awk '/^core_manifest:/{f=1; next} f && /^  - /{sub(/^  - /,""); print; next} f{exit}' "$MANIFEST" |
   while IFS= read -r glob; do
-    git -C "$DIST" ls-files "$glob"
+    git -C "$DIST" ls-files "$glob" || pc_fail "ls-files $glob exited $?"
   done | while IFS= read -r path; do
     cons="$(map_consumer "$path")"
     base_h="$(blob_hash "$BASE" "$path")"
@@ -394,6 +462,16 @@ dist_only() { # core/fixtures/<name>/... -> is it marked dist-only at THEIRS?
     core/fixtures/*)
       _f="${1#core/fixtures/}"; _f="${_f%%/*}"
       git -C "$DIST" cat-file -e "${THEIRS}:core/fixtures/${_f}/.dist-only" 2>/dev/null
+      _do_rc=$?
+      # `cat-file -e` exits 128 for an ABSENT marker and for a git that could not answer alike;
+      # only `rev-parse -q --verify`'s 1 separates them. A failure read as "not dist-only" ships a
+      # dist-only fixture into the consumer, so it refuses instead.
+      if [ "$_do_rc" -eq 128 ]; then
+        git -C "$DIST" rev-parse -q --verify "${THEIRS}:core/fixtures/${_f}/.dist-only" >/dev/null 2>&1
+        _do_rv=$?
+        [ "$_do_rv" -eq 1 ] || pc_fail "cat-file -e ${THEIRS}:core/fixtures/${_f}/.dist-only exited 128 and rev-parse -q --verify of it exited $_do_rv"
+      fi
+      return "$_do_rc"
       ;;
     *) return 1 ;;
   esac
@@ -463,7 +541,10 @@ while IFS= read -r core_path; do
 # deliberately non-recursive (`ls-tree --name-only`, no `-r`) — it wants only the immediate
 # entries of core/scripts/, and filtering the recursive listing to depth 1 after the fact
 # is a different, larger rewrite than caching alone. Left as a direct call.
-done < <(git -C "$DIST" ls-tree --name-only "$THEIRS" core/scripts/ 2>/dev/null)
+# THE ENUMERATION'S STATUS IS CHECKED INSIDE THE SUBSTITUTION, because a `< <( )` status is not
+# observable from the loop: a failed ls-tree fed the loop nothing and the pass reported no
+# relocation for a consumer that holds every validator at the old path.
+done < <(git -C "$DIST" ls-tree --name-only "$THEIRS" core/scripts/ 2>/dev/null || pc_fail "ls-tree --name-only $THEIRS core/scripts/ exited $?")
 
 # `--no-renames` IS LOAD-BEARING. Without it git pairs a delete and an add into one
 # `R100<TAB>old<TAB>new` row, `read -r status path` hands `path` the tab-joined pair,
@@ -481,18 +562,44 @@ done < <(git -C "$DIST" ls-tree --name-only "$THEIRS" core/scripts/ 2>/dev/null)
 # memo_diff_name_status (lib.sh): the SHARED cross-process cache for this exact shape --
 # `<dist,base,theirs,pathspec>` is the whole key, git's own --no-renames name-status output
 # is cached verbatim, so this is byte-identical to the direct call it replaces.
-memo_diff_name_status "$DIST" "$BASE" "$THEIRS" core/ | while IFS=$'\t' read -r status path; do
+#
+# CAPTURED, NOT PIPED. As `memo_diff_name_status … | while` the diff's status was lost in the
+# pipeline (this script has no `pipefail`), so a failed diff fed the loop nothing and the run
+# exited 0 with EMPTY output -- the same stdout as a range that changes nothing under `core/`.
+# The rows are taken first, the status is read off the bare call, and the loop reads them in
+# THIS shell through a process substitution -- NOT a heredoc, which bash 3.2 materialises as a
+# TMPDIR file: where that write fails (`ulimit -f 0`, a full disk) the heredoc is empty and the
+# loop is skipped with rc 0. A pipe needs no file.
+PC_DIFF="$(memo_diff_name_status "$DIST" "$BASE" "$THEIRS" core/)"
+PC_DIFF_RC=$?
+[ "$PC_DIFF_RC" -eq 0 ] || pc_fail "diff --no-renames --name-status $BASE $THEIRS -- core/ exited $PC_DIFF_RC"
+while IFS=$'\t' read -r status path; do
+  [ -n "$path" ] || continue   # printf of an EMPTY diff is one empty line, not zero lines
   cons="$(map_consumer "$path")"
 
   # core/scripts/* is owned by the scripts-relocation pass above. On a pre-relocation
   # consumer the copy lives at the OLD path, which this base..theirs diff cannot see,
-  # so the MISSING-at-new-path result would be a false "consumer-deleted". Suppress it
-  # for a not-yet-migrated copy; the relocation pass has already emitted the real
-  # RELOCATE-MOVE row. A migrated consumer (new path present) falls through and
-  # classifies normally.
+  # so the MISSING-at-new-path result would be a false "consumer-deleted". It is not
+  # classified here: the relocation pass has already emitted the real RELOCATE-MOVE row
+  # for any validator theirs still ships. A migrated consumer (new path present) falls
+  # through and classifies normally.
+  #
+  # BUT THE PATH IS STILL EMITTED, AS AN INERT ROW, BECAUSE A SILENT `continue` WAS A ZERO.
+  # A range whose only core/ change is a core/scripts/* DELETION, pulled by a pre-relocation
+  # consumer, used to print NO rows at all (the relocation pass enumerates theirs, where the
+  # deleted file is absent) -- and every reader refuses an empty row set over a range that
+  # moves core/, so emit-report refused five sections and apply stopped, on a pull with
+  # nothing to do, and no re-run could clear it. The row keeps the output non-empty exactly
+  # when the range is. `PRE-RELOCATION-NOOP` is inert at every reader of column 4: apply.sh's
+  # phase 1 takes `*NOOP` as no action and `--finish` counts only pure-apply buckets; it
+  # carries no `CLASSIFY` (worklist, orientation, retired-tokens), is not `UPSTREAM-DELETED`
+  # (deletions), and matches neither `^RELOCATE-MOVE` (scripts relocation) nor `consumer-edited`
+  # (unregistered-drift and self-update-gate's carried classes). It appears only in the
+  # per-file bucket list, which is a listing, not work.
   case "$path" in
     core/scripts/*)
       if [ "$(file_hash "$cons")" = MISSING ] && [ -f "$CONS/scripts/${path#core/scripts/}" ]; then
+        printf '%s\t%s\t%s\t%s\n' "$status" "$path" "$cons" "PRE-RELOCATION-NOOP"
         continue
       fi ;;
   esac
@@ -581,7 +688,7 @@ memo_diff_name_status "$DIST" "$BASE" "$THEIRS" core/ | while IFS=$'\t' read -r 
       ;;
   esac
   printf '%s\t%s\t%s\t%s\n' "$status" "$path" "$cons" "$bucket"
-done
+done < <(printf '%s\n' "$PC_DIFF")
 
 # ---------------------------------------------------------------------------
 # Orphan pass — files this distribution used to write to a consumer path it no

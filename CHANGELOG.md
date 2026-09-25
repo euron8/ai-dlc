@@ -15,6 +15,55 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.637.0] - 2026-09-25
+
+This release makes the reconcile engine refuse when `preclassify.sh` did not classify
+(`BL-230`). It touches `preclassify.sh`, `lib.sh`, `emit-report.sh` and `apply.sh`, which are all
+bootstrapping files, so the release carries nothing else.
+
+**This fix cannot protect the pull that delivers it.** The consumer's INSTALLED `preclassify.sh`,
+`emit-report.sh` and `apply.sh` run that pull, so the pull is classified by the engine this
+release replaces. Only the pull after it runs the fixed engine.
+
+### BL-230 / PC-S313-EMIT-REPORT-E2-IS-A-FOURTH-POOL-FLAKE-ARM — preclassify fails closed, and every reader refuses its refusal
+
+Under forced git failures and `ulimit -Su`, `preclassify.sh` exited 0 with EMPTY or WRONG
+buckets, and `lib.sh`'s memo cached the failure for the rest of the render. Under `ulimit -Su`
+over 90 runs the old engine gave 22 wrong outputs at rc 0, and the new one gave 0 wrong and 13
+refused. Under a shim failing the Nth git call, the old engine exited 0 in 15 of 15 runs with 6
+wrong, and the new one gave 0 wrong.
+
+- `preclassify.sh` exits 2 on any failed git call, with one stderr line naming the call.
+- The memo caches only its subcommand's answers, and a failed call is retried on the next lookup.
+- `emit-report.sh` renders `DETECTOR-REFUSED  preclassify.sh …` instead of `none` in the five
+  sections built from preclassify's rows. It does this on a non-zero exit, and on no rows while
+  `base..theirs` changes `core/`.
+- `--verify` exits 1 with cause `PRECLASSIFY-REFUSED` when the fresh render carries that line.
+- `apply.sh` stops before writing on the same two conditions, and it writes its in-flight
+  marker only after preclassify has classified, so a refusal leaves no `.ai-dlc-applying` behind.
+- `preclassify.sh` emits `PRE-RELOCATION-NOOP` for a changed `core/scripts/*` path that a
+  pre-relocation consumer still holds at `scripts/<name>`, where it used to skip that path
+  silently. Without that row, a range whose only `core/` change deletes such a script classified
+  to zero rows, and the empty-result refusal above would have stopped a legitimate pull that no
+  re-run could clear. The row is inert in apply and in every report section that means work.
+- The fixture's render arms print `DIAG` on a red, so the next pool red carries its cause.
+
+**One narrow window remains open in this release and closes in the next.** The memo writes a fill
+to a temp name about 10 bytes longer than the cache name. A cache key of roughly 244 to 253 bytes
+therefore fails to open its temp file, and `memo_rev_parse` reads that failure as git's "absent".
+The longest key measured on real dist layouts is 218 bytes. `BL-306` closes this in 0.638.0 by
+checking the temp file itself opened and going direct otherwise.
+
+The forced failures do not confirm the pool cause. One fixture run peaks at about 63 processes
+against a cap of 10666. `BL-230` stays live with its close condition unchanged.
+
+Two NOTEs are filed. `BL-308`: the `--templates` and `--untangle` modes reach the new failure
+path but were not force-tested on their own. `BL-309`: ENOSPC partway through a memo fill can
+cache truncated content with status 0. That case was reasoned, not constructed. A third NOTE,
+`BL-310`: after a transient `cat-file` or `show` failure on a present path, the memo returns that
+failure uncached, and callers that read any non-zero as absent still get one wrong answer per
+failure.
+
 ## [0.636.0] - 2026-09-24
 
 This release stops `fanout-payload-channel` counting and deleting in the shared temp root

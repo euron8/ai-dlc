@@ -330,11 +330,14 @@ fi
 # mark; re-creating the marker there would only re-assert a mixture this invocation is about to
 # declare resolved. It clears the marker only once finish_verify_tree() finds no file still
 # reading as a pure apply; a withheld finish leaves it in place.
+#
+# WRITTEN AFTER PRECLASSIFY HAS CLASSIFIED, not here. A preclassify refusal stops the run before
+# any write, and a marker written ahead of it was left on a tree nothing had touched -- blocking
+# the next push with advice about a mid-pull tree that never was one. The write sits directly
+# below that stop, still ahead of the first core write; everything between here and there only
+# defines functions.
 APPLYING="$CONSUMER/.claude/.ai-dlc-applying"
 mkdir -p "$CONSUMER/.claude" 2>/dev/null || true
-if [ "$FINISH" = 0 ]; then
-  printf 'base: %s\ntheirs: %s\n' "$BASE" "$THEIRS" > "$APPLYING" 2>/dev/null || true
-fi
 
 # core/<rel> -> consumer path. ONE mapper.
 #
@@ -498,7 +501,30 @@ if [ "$FINISH" = 0 ]; then
 # overrides/ and extensions/ -- files phase 1 never overwrites, README.md explicitly excluded
 # -- and every core-side comparison resolves through `git -C "$DIST" show`, never the
 # installed file. Leaving its call where it is keeps that visible.
-PC="$(bash "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null || true)"
+#
+# A CLASSIFIER THAT DID NOT CLASSIFY STOPS THE RUN BEFORE PHASE 1 WRITES ANYTHING. This was
+# `2>/dev/null || true`, so a preclassify that exited 2 on a failed git call handed phase 1 an
+# empty or partial row set, and the run went on to write and re-stamp as though that were the
+# whole pull. Same two refusals as `--finish`'s tree check below and emit-report's render: a
+# non-zero exit, and no rows while `base..theirs` changes `core/`. It stops through `err`, the
+# shape the union gate above uses to refuse a stale report, and it names that nothing was written.
+# The in-flight marker is written only AFTER these two refusals, so a stop here leaves the tree
+# exactly as it was -- no marker for the next push to block on over a tree nothing touched. A
+# marker a PREVIOUS aborted run left is not this run's to remove, and is left alone.
+PC="$(bash "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)"
+PC_RC=$?
+if [ "$PC_RC" -ne 0 ]; then
+  err "preclassify.sh exited ${PC_RC} without classifying, so which files this pull writes, merges or deletes is UNKNOWN. NOTHING HAS BEEN WRITTEN to core. Run reconcile/preclassify.sh $DIST $BASE $THEIRS $CONSUMER directly, fix what it reports, then re-run apply with the same four arguments."
+fi
+if [ -z "$PC" ]; then
+  PC_RNG="$(git -C "$DIST" diff --name-only "$BASE" "$THEIRS" -- core/ 2>/dev/null)" \
+    || err "preclassify.sh returned no rows and whether \`${BASE}..${THEIRS}\` changes \`core/\` could not be read. NOTHING HAS BEEN WRITTEN to core. Re-run apply with the same four arguments."
+  [ -z "$PC_RNG" ] \
+    || err "preclassify.sh returned no rows while \`${BASE}..${THEIRS}\` changes \`core/\`, which is not the same as nothing to apply. NOTHING HAS BEEN WRITTEN to core. Run reconcile/preclassify.sh $DIST $BASE $THEIRS $CONSUMER directly, fix what it reports, then re-run apply with the same four arguments."
+fi
+
+# The in-flight marker (see IN-FLIGHT MARKER above): ahead of every core write below.
+printf 'base: %s\ntheirs: %s\n' "$BASE" "$THEIRS" > "$APPLYING" 2>/dev/null || true
 
 # THE BUCKETS ARE HANDED DOWN, NOT RE-DERIVED. `unregistered-drift.sh`'s CORE-MACHINERY-CARRIED
 # arm needs exactly the rows already in `$PC` -- same four arguments, same program -- and running

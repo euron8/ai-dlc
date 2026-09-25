@@ -498,6 +498,46 @@ is the same fail-open shape 0.625.0 fixed for `diff`. It was not confirmed, beca
 EXIT trap deletes the seed's `WORK` directory. A DIAG path for the render arms, keeping the seed's
 stderr on a red, is the next instrument.
 
+**MEASURED AT BATCH 153: THE LEAD'S MECHANISM IS REAL, AND IT WAS WIDER THAN AN EMPTY `pc`.** The
+adversary forced git failures in a scratch copy with a PATH shim and under `ulimit -Su`.
+`preclassify.sh` exited **0** in almost every case. A failed `diff --name-status` gave EMPTY
+output. A failed `hash-object` or `rev-parse` gave WRONG buckets: a BOTH-ADDED file came out
+`UPSTREAM-ONLY-ADD`, which apply overwrites. There were three causes. The main loop was the
+right-hand side of a pipeline without `pipefail`, so the diff's status was lost. `file_hash` and
+`blob_hash` mapped any failure to `MISSING`, which is a real bucket input. And `lib.sh`'s memo
+cached the failed status, so one transient 128 was served to every later lookup in the same
+render. The fix hand then compared the engines. Under `ulimit -Su` over 90 runs, the old engine
+gave **22** wrong outputs at rc 0 and the new one gave **0** wrong and **13** refused. Under the
+Nth-git-call shim, the old engine exited 0 in **15 of 15** runs with **6** wrong, and the new one
+gave **0** wrong.
+
+**WHAT 0.637.0 SHIPS.** `preclassify.sh` now exits 2 on any failed git call, with one stderr
+line naming the call. The memo caches only a git answer, never a failure. `emit-report.sh` reads
+preclassify's exit status. On a non-zero exit, or on no rows while `base..theirs` changes
+`core/`, it renders `DETECTOR-REFUSED  preclassify.sh …` in all five sections built from those
+rows instead of `none`. `--verify` refuses a fresh render carrying that line with cause
+`PRECLASSIFY-REFUSED`. `apply.sh` stops before writing on the same two conditions, and now writes
+its in-flight marker only after preclassify has classified. The fixture's render arms now print
+`DIAG` lines on a red, so the next pool red carries its own cause.
+
+**THE TIP ADVERSARY FOUND THAT THE EMPTY-RESULT REFUSAL HAD A LEGITIMATE SUBJECT.** A range whose
+only `core/` change deletes a `core/scripts/*` file, pulled by a consumer still holding it at the
+pre-relocation `scripts/<name>`, classified to zero rows because preclassify skipped that path
+silently. The new refusal then stopped the pull in all five sections and in apply, and no re-run
+could clear it. Fixed at the source: preclassify now emits a `PRE-RELOCATION-NOOP` row for the
+skipped path, so an empty result means nothing was classified. `relocation-preclassify` arm G and
+`apply-drift-refile` arm h each fail on the revert. It also found that the memo's temp name is
+about 10 bytes longer than the cache name, so a key of roughly 244 to 253 bytes reads as git's
+"absent" at rc 0. The longest real key measured is 218; `BL-306` closes that window in the next
+release.
+
+**THIS DOES NOT CONFIRM THE POOL CAUSE, AND THE ENTRY STAYS LIVE.** The forced failures show
+that the mechanism exists. They do not show that the pool reaches it. One fixture run peaks at
+about 63 processes against a cap of 10666, so ordinary pool load is nowhere near the `ulimit`
+that forced these failures. The close condition is unchanged: the instrument records a pool
+failure's cause, or a pool run of the size that predicts at least 3 failures at base comes back
+clean at tip.
+
 verify: manual
 
 ## BL-099 — the exec-bit audit is one-directional, so a consumer file that upstream STOPPED shipping executable is never reported
@@ -4024,5 +4064,50 @@ A reader following the `BL-305` instruction therefore reads an empty file as a r
 an empty `pending.md` is a legitimate consumer state has not been measured. Measure it on the
 reference consumer's history first; if the state is legitimate, the three programs should say
 `EXAMINED NOTHING` on it too.
+
+verify: manual
+
+## BL-308 — `preclassify.sh --templates` and `--untangle` route through the new failure path, but neither mode was force-tested on its own
+
+**NOTE.** Found at batch 153 by the `BL-230` docs hand, reading the 0.637.0 diff. It discharges no
+consumer candidate.
+
+0.637.0 made `preclassify.sh` exit 2 on a failed git call through `pc_fail()` and its USR1 trap.
+Both optional modes reach that path: `--untangle` calls `blob_hash` and now checks each `ls-files`,
+and `--templates` shares the same helpers. Every forced-failure measurement in batch 153 drove
+the default mode only. No run showed that either mode exits 2, rather than 0 with partial rows,
+when one of its git calls fails. A receipt must force a git failure inside each mode and read the
+exit status and the stdout row count.
+
+verify: manual
+
+## BL-309 — ENOSPC in the middle of a memo `.c` fill can cache truncated content with status 0
+
+**NOTE.** Found at batch 153 by the `BL-306` adversary, reading the 0.637.0 memo change. It
+discharges no consumer candidate.
+
+`lib.sh`'s memo now caches only a git answer. It writes the fill to a temp file, and it caches
+that file when git's exit status is 0. `git show` with its stdout closed or failing still exits
+0, so a disk that fills partway through the write leaves a truncated `.c` and a cached status 0.
+Every later lookup of that key in the render is then served the truncated blob as the answer.
+This was reasoned from the shape of the write. It was not constructed with a real ENOSPC. A
+receipt must fill a small volume during a fill and read the cached bytes back against
+`git show`.
+
+verify: manual
+
+## BL-310 — after a transient `cat-file` or `show` failure on a present path, the memo still hands one caller a wrong "absent"
+
+**NOTE.** Found at batch 153 by the `BL-230` tip adversary, reading the 0.637.0 memo change. It
+discharges no consumer candidate.
+
+0.637.0 stopped `lib.sh`'s memo from caching a failed git status. `memo_has_path` and `memo_show`
+treat 128 as git's answer for an absent path and cache it only after `rev-parse -q --verify`
+confirms the path is absent. When that check says the path is present and `cat-file` or `show`
+failed anyway, both return the 128 uncached. Their callers in `ledger-reverify.sh` and
+`layer-drift.sh` read any non-zero as absent, so each transient failure still produces one wrong
+answer; it is no longer served to every later lookup. `memo_has_path` could return 0 there, since
+its own check established presence. The cost of the extra `rev-parse` on each distinct absent key
+was not measured, and `ledger-reverify`'s `theirs_has_path` is its heaviest caller.
 
 verify: manual
