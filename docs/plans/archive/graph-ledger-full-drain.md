@@ -14344,3 +14344,91 @@ one was current when it was written, and the batch 152 through 142 blocks above 
 for the measurement behind a rule. Take no figure and no next-work pointer from them: their
 counts, gaps and "remaining" ids have all moved since.
 
+**BATCH 144 SHIPPED `v0.625.0` (`240d813a`, #830), AND ALL THREE OF THE CONSUMER'S 2026-09-23
+FILINGS ARE ADDRESSED — THE OPERATOR MADE THEM THE BATCH'S PRIORITY MID-SWEEP.**
+`PC-S313-DEBT-AUDIT-CUE-FIRES-ON-A-CORE-CONSTRUCT-NAME` closed as `BL-290`, and
+`PC-S313-REMOVE-NOTIFY-HOOK` closed as `BL-291`, the hook retired by operator direction. Both are named in the
+release commit (1 commit each, impossible-id control 0). `PC-S313-EMIT-REPORT-E2-IS-A-FOURTH-POOL-FLAKE-ARM`
+widened `BL-230`, which STAYS LIVE on a `verify: manual` receipt and is now the fifth row of the
+PC-backed worklist. Gate at `AI_DLC_FIXTURE_NO_SKIP=1`: 22 of 22 phases, **203 ok / 0 FAIL**, exit 0,
+changed fixtures read by name against an impossible-name control of 0. Live **74**, archive **218**.
+
+**THE FLAKE'S INSTRUMENT FOUND A PRODUCT DEFECT ON ITS FIRST CATCH, AND IT IS NOT THE ONE THE LOAD
+HYPOTHESIS PREDICTED.** CPU load reproduced nothing, and a zero taken at a predicted count of 0.4
+refutes nothing. The kill-set arms were taught to print the differing world's stderr diff instead, and
+one unforced E2 failure showed `HARD-UNREGISTERED-CORE-DRIFT` rendered as `CORE-TEMPLATE-SUBSTITUTED`
+with no refusal line. That was `unregistered-drift.sh` reading a `diff` that did not run as "clean", in
+two functions. Both now fail closed, forced with a failing `diff` shim, with an arm and a mutant each.
+**A diagnostic that names its own cause beat 3432 replayed cells that named nothing.** `BL-293` files
+the same shape in `register-drift.sh`.
+
+**A HAND BRIEFED TO RUN A LOAD GENERATOR ORPHANED 36 `yes` PROCESSES FOR 38 MINUTES AT LOAD ~118**,
+until the operator asked what was flooding the machine. `tool-hazards.md` now carries the rule. Never
+brief one; force the interleaving in a scratch copy.
+
+**THE SPACED-BULLET CONTROL DIED AGAIN AND IS REPLACED.** The consumer WITHDREW
+`PC-S295-RETRO-PARALLEL-OPEN-COUNT-METHOD` in `6bc1b0461` mid-batch. Both fences now use
+`PC-S309-PRE-PUSH-FLAG-MISMATCH-ORIGINAL-TEXT`, the only live spaced bullet left, read 1. When it
+dies too there is no spaced form to control on; say so, rather than dropping the arm.
+
+**THE NEXT BATCH'S INPUTS, RE-DERIVED AT `240d813a`.** Consumer live **28** across **9** qualifying
+refs; unfiled **14**, the same fourteen batch 143 adjudicated, so **no new filing awaits a first
+look**. The worklist is five rows: the four self-disqualifying ones and `BL-230`, which has no
+build until the instrument records a pool failure's cause on the consumer. The core-routing
+candidates still owed are `BL-292` (`apply.sh`, a bootstrapping file, so it ships ALONE) and `BL-293`.
+Batch 145 shipped both, and its block above names the next work.
+
+**THE DELIVERY GAP IS ONE RELEASE.** The consumer installed **0.624.0**. `VERSION` is **0.625.0**, 0 of the
+four bootstrapping files changed in range, and 0 of 10 raw `core/` rows are mode-only. **The pull
+carries a one-decision instruction**: the hook and both `notify-hook-channel` fixture files are
+UPSTREAM-DELETED, and all three must be accepted together. Declining any one of them turns the
+consumer's gate red, and the CHANGELOG says so. The banked ruling stands: report the gap and write no
+runbook. The consumer committed `6bc1b0461` during the batch and its porcelain is 17, all under
+`_bmad-output/`; nothing this program writes is among them.
+
+**BATCH 143 SHIPPED NO RELEASE, BECAUSE NO CANDIDATE ROUTES CORE. THAT IS A MEASURED STATE AND
+NOT AN EMPTY BATCH.** Every input re-derived at `origin/main` `bf518a1b`: live backlog **71**
+(**72** after this batch filed `BL-289`), archive **216**, consumer live ledger **28** across **10** qualifying refs, unfiled **14**, the
+PC-backed worklist the same four self-disqualifying rows (`BL-067`, `BL-132`, `BL-145`, `BL-215`),
+and the gated class **0** flattened against a firing control of 3 `GATED on this filing` hits in
+`docs/backlog.archive.md`. **The next batch has no build subject either unless the consumer files
+one.** Re-derive first; a new filing is the only thing that changes this.
+
+**BOTH CANDIDATES BATCH 142 LEFT UN-ADJUDICATED ARE NOT WORK, AND EACH ONE'S SUBJECT IS
+CONSUMER-OWNED.** `PC-S309-PRE-PUSH-FLAG-MISMATCH-ORIGINAL-TEXT` titles itself `(superseded,
+retained for the record)`, and its successor
+`PC-S309-PRE-PUSH-STILL-CALLS-FAIL-ON-DETERMINISTIC-AFTER-RETRO-MOVED-TO-LOCAL` is in the
+consumer's ARCHIVE (live 0, arch 1). `core/git-hooks/pre-push:121` still reads
+`--fail-on=deterministic`, and that is the withdrawn premise rather than a defect.
+`PC-S297-FFCLUSTER-SHA-STALE`'s subject is `.github/sprint-main-pr-sha`, which
+`core-paths.sh --is-core` answers `not-core`. It appears in **0** files under `core/` against a
+control of 1 for `main merge commit`, and core's own cluster rule in
+`core/skills/ai-dlc/steps/deploy-validate.md:347` derives the window from the sprint's merge
+commit, not from a pin. Its receipt tests the absence of a core script nobody proposes, so its
+exit 0 is green on ABSENCE, as the archive says. **Both stay unfiled, and they are the consumer's
+to close.**
+
+**THE OTHER TWELVE UNFILED IDS ARE NOT CORE EITHER, AND A PATH-COUNT ROUTING OVERSTATED THAT.**
+Routing each body's backticked paths through `core-paths.sh --is-core` scored four ids with a core
+path. Read in full, `PC-S312-FIX-FORWARD-CLASS-GATES-ON-NO-VALIDATOR` and
+`PC-S312-S239-1-HARDENING-CALLS-PRE-RELOCATION-PATHS` have receipts naming only
+`scripts/ai-dlc-local/` files, and their core hits are prose mentions of `scripts/ai-dlc/`.
+`PC-S309-VALIDATE-MANDATORY-RULES-CHECK5-TEST-ONLY-WEB-DIFF-FALSE-FAIL` shipped in `v0.542.0`, and
+`PC-S312-RETRO-REPLAY-HARNESS-NOT-ABSORBED-BY-DRIVABILITY` records its own falsifiability probe as
+REFUTED. **Route on the path the RECEIPT reads, never on every path the body mentions.**
+
+**THE SPACED-BULLET CONTROL HAD GONE DEAD, AND THE DERIVE BLOCK NOW CARRIES A LIVE ONE.**
+`PC-S295-RETRO-CHECK5-SELF-REFERENTIAL` was the "known-live id, must read 1" control in two fences.
+The consumer archived it after batch 134 closed `BL-040`, so it read **0** on a correct derivation.
+The block now uses `PC-S295-RETRO-PARALLEL-OPEN-COUNT-METHOD`, which is a spaced bullet, live on
+`main`, and read 1. The only other live spaced bullet is the superseded pair above. **Both
+controls can die on the consumer's next close, so check each one's own value before reading the
+answer beside it.**
+
+**THE DELIVERY GAP IS TWO RELEASES AND A PULL IS IN FLIGHT.** The consumer has installed
+**0.622.0** (`06733c6c`) against `VERSION` **0.624.0**. It is checked out on
+`ai-dlc-update/0.623.0-reconcile-*` with porcelain **11**. `ai-dlc-update/SKILL.md` has 1 commit in
+range, and there are **0** mode-only changes out of 6 raw rows (a seeded control reads 1). The banked
+ruling stands: report the gap and write no runbook. The ledger md5 `64594394…` did not move across
+the batch, which is the criterion-4 check by content.
+
