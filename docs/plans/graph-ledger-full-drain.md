@@ -67,6 +67,68 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
 
+**BATCH 152 SHIPPED TWO RELEASES AND CLOSED `BL-303`, `BL-304` AND `BL-305`.** `v0.635.0`
+(`42876c2c`, #850) closed `BL-303` alone, because `lib.sh` is bootstrapping. `v0.636.0`
+(`29053a83`, #851) closed `BL-304` and `BL-305`. It was invoked by peer handoff, and no
+consumer filing post-dated 2026-09-23, so it took batch 151's ranking. Each release commit names its
+ids. The only other commit naming them is batch 151's filing (`76ba3029`), and the impossible-id
+control reads 0. Both gates ran at `AI_DLC_FIXTURE_NO_SKIP=1`: 22 of 22 phases PASS, **203 ok**,
+changed fixtures `ok` by name against an impossible-name control of 0, and `ls-remote` confirmed
+both refs. Live **73 -> 72** (two filed, three closed), archive **231 -> 234**. The exit-0 receipt
+set after the merge is batch 151's 9 plus `BL-303` and `BL-304`, compared by identity.
+
+**`BL-303`'s FILED FIX WOULD HAVE CLOSED ITS RECEIPT AND LEFT 61 OF 62 DIRECTORIES.** The entry
+named one leak per `ledger-reverify.sh` run. Measured over every `lib.sh` entry point on a graph
+clone, one round left **346** (`hard-blockers` 109 through its children, `retired-layer-contract`
+108, `unregistered-drift` 105), and this machine's `TMPDIR` held about 479,000. The shipped shape
+came from the contract adversary: build the memo at source time, export it, and shadow `trap` so
+any later EXIT handler runs the cleanup first. That removes the affordance rather than asking six
+hand-written handlers to remember it. **A tip adversary then found one BLOCKER and three DEFECTs
+on a branch whose own validators were green**: a placeholder `LANDED` line dropped the sh-receipt
+population below the pre-push floor; a trap set inside `$( )` deleted the parent's live memo;
+`set -e` skipped the caller's handler; and an armed EXIT trap made `layer-drift.sh` print 550
+`Broken pipe` lines. **Never commit a placeholder `LANDED` line on a fix branch** — it reads as
+closed to every counter.
+
+**THE FIRST 0.635.0 PUSH WAS BLOCKED BY A FIXTURE NO HAND HAD RUN.** `layer-readopt-gate` keyed a
+`mktemp` call index and a mutation anchor on exactly the shapes the fix changed, and it failed at
+tip every time, alone, against 0 at base. It ships, so the repair holds against both engines,
+measured 0 FAIL each way. **Before a lib.sh change, grep the fixtures for `mktemp` shims and for
+mutation anchors on the lines you convert.**
+
+**THE CLOSE RE-SEATS THE SH-RECEIPT FLOOR, 58 -> 56.** Rotating `BL-303` and `BL-304` took two
+`sh` receipts out while the two filed entries are `verify: manual`, so live stayed 72 and R5 of
+`validate-backlog-receipts.sh` refused the close push. Re-seated in `.githooks/pre-push:176`;
+a floor of 57 still fails against the same tree, so the arm can fire.
+
+**TWO ENTRIES FILED.** `BL-306` (DEFECT): a memo key embeds the encoded dist path, and past about
+190 characters of path the cache write fails and detectors silently change output; unchanged by
+`BL-303`, unreached by a `/Users/<name>/git/<repo>` path, and `lib.sh` again, so it ships alone.
+`BL-307` (NOTE): a zero-byte `pending.md` takes an exit-0 road through Checks 2 and 2a that prints
+no `EXAMINED NOTHING`.
+
+**TWO READ-SET RE-TRACES ARE OWED, AND ONLY THE OPERATOR CAN RUN THEM.** The `ledger-reverify`
+fixture's new mutant helper copies `reconcile/*.md`, and `layer-readopt-gate`'s shim changed. Run
+`sudo bash core/scripts/derive-fixture-readsets.sh --list "ledger-reverify layer-readopt-gate"`
+on a checkout of `origin/main`, then commit the map.
+
+**THE DISK FILLED MID-BATCH.** `/System/Volumes/Data` reached 119 MiB free. Deleting this batch's
+own spent scratch trees by literal path freed about 2 GB; Docker's disk image holds about 150 GB.
+**Check `df` before briefing a hand that builds scratch trees, and tell it to remove each tree
+once scored.**
+
+**NEXT WORK.** Re-derive the sweep; a new consumer filing outranks everything below. `BL-306`
+ships alone. `BL-230` still needs its render-arm DIAG. `BL-307` needs its measurement first.
+
+**THE DELIVERY GAP IS THREE RELEASES, AND A BOOTSTRAPPING FILE IS IN RANGE.** The consumer is at
+0.633.0 (`937919e4`) against `VERSION` 0.636.0. In range, `lib.sh` has 1 commit, and
+`preclassify.sh`, `apply.sh`, `ledger-reverify.sh` and the update skill have 0. There are 12
+`core/` paths, 0 mode-only rows, and 0 `PC-` ids. The pull that delivers `lib.sh` runs the
+consumer's installed copy, which leaks but is otherwise correct, so the delivery carries no
+bootstrapping hazard. The banked ruling stands: report the gap and write no runbook. The
+consumer's porcelain moved 3 -> 0 during the batch as it committed its own sprint-review gate
+(`66fb348fa`), and the ledger md5 `3e62c07e…` did not move.
+
 **BATCH 151 SHIPPED `v0.634.0` (`76ba3029`, #848) AND CLOSED `BL-283`, `BL-153` AND `BL-080`,
 PLUS `BL-089`'S EXIT-9 SUBJECT.** No consumer filing post-dated 2026-09-23, and the one new
 PC-backed row, `BL-230`, had no buildable fix, so the batch took the four-entry DEFECT ranking
@@ -523,7 +585,7 @@ batch, entirely from that pull. The ledger md5 did not move, which is the criter
 content.
 
 **EVERYTHING BELOW THIS LINE, DOWN TO `### Derive the state`, IS AN EARLIER BATCH'S BLOCK.** Each
-one was current when it was written, and the batch 150 through 142 blocks above replace it. Read those blocks
+one was current when it was written, and the batch 152 through 142 blocks above replace it. Read those blocks
 for the measurement behind a rule. Take no figure and no next-work pointer from them: their
 counts, gaps and "remaining" ids have all moved since.
 

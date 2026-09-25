@@ -3982,220 +3982,47 @@ contract for `BL-299` forbade reordering for exactly that reason.
 
 verify: sh R="$(pwd)"; W="$R/core/scripts/stamp-story-provenance.sh"; V="$R/core/scripts/validate-provenance-block.sh"; K="$R/core/schemas/provenance-block.json"; [ -f "$W" ] && [ -f "$V" ] && [ -f "$K" ] && [ -f "$R/core/fixtures/story-provenance/seed.sh" ] || exit 9; command -v python3 >/dev/null || exit 9; G="$(mktemp -d)" || exit 9; M="$(mktemp -d)" || exit 9; mkdir -p "$G/.claude/schemas" || exit 9; python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); f=[x for x in s["fields"] if x.get("name")=="tool_use_id" and x.get("forbidden_match")=="prefix_ci"]; assert len(f)==1; f[0]["forbidden"].append("toolu_FIXTURE"); json.dump(s,open(sys.argv[2],"w"))' "$K" "$G/.claude/schemas/provenance-block.json" 2>/dev/null || exit 9; bash "$R/core/fixtures/story-provenance/seed.sh" --mixed-into "$M" >/dev/null 2>&1 || exit 9; P="$(AI_DLC_PROJECT_ROOT="$G" bash "$W" --print-schema 2>/dev/null)"; [ -n "$P" ] && [ "$P" -ef "$G/.claude/schemas/provenance-block.json" ] || exit 1; B=s1/stories/story-2-fix-thing.md; if ( cd "$M" && AI_DLC_PROJECT_ROOT="$G" bash "$W" --terminal s1/bug-fix-oneshot-story-2-fix-thing.md --profile bug-story-provenance "$B" ) >/dev/null 2>&1; then ( cd "$M" && AI_DLC_PROJECT_ROOT="$G" bash "$V" "$B" --require-skill bmad-review-adversarial-general ) >/dev/null 2>&1 || exit 1; fi; exit 0
 
-## BL-303 — every standalone `ledger-reverify.sh` run leaks one `reconcile-memo.*` directory
+## BL-306 — a memo key embeds the percent-encoded dist path, and past about 190 characters of path the cache write fails and detectors silently change output
 
-**DEFECT.** Found by the batch 151 adversary on the `BL-283` contract, while it was tracing the
-engine's temp-directory lifecycle. It discharges no consumer candidate.
+**DEFECT.** Found at batch 152 by the `BL-303` fix hand, and confirmed by the tip adversary. It
+discharges no consumer candidate.
 
-**THE MEMO IS BUILT TWICE AND ONLY ONE COPY IS REMOVED.** `ai_dlc_memo_dir()` in
-`core/skills/ai-dlc-update/reconcile/lib.sh` makes the cache lazily. It calls `mktemp -d` on
-`reconcile-memo.XXXXXX` at `:738`, records ownership in `AI_DLC_MEMO_OWNED` at `:740`, and
-`ai_dlc_memo_cleanup` at `:748` removes only that recorded directory. `ledger-reverify.sh`
-calls the cleanup from its EXIT trap (`:1163`, armed at `:1166`). That arrangement works only
-if the FIRST memo lookup happens in the main shell. It does not. The first one is at `:1523`,
-`TV="$(theirs_show VERSION | tr -d '[:space:]')"`. `theirs_show` runs as a pipeline stage
-inside a command substitution, so it builds the memo in a subshell, sets `AI_DLC_MEMO_OWNED`
-there, and the assignment dies with that subshell. The main shell sees state `""`, builds a
-SECOND memo at its next lookup (`theirs_has_path` at `:1845`), and its EXIT trap removes only
-that second one.
+Every memo function in `core/skills/ai-dlc-update/reconcile/lib.sh` names its cache file after
+the dist path, the ref and the blob path, percent-encoded (`:902`, `:928`, `:945`, `:974`,
+`:994`). The filename limit is 255 bytes. Past it, the write fails with `File name too long`, the
+lookup falls through, and the detector answers differently without refusing. Measured with
+`preclassify.sh` on a graph clone: a 190-character dist path emitted 418 bytes, and a
+210-character one emitted 0 bytes with four `too long` errors on stderr. Base and the
+`BL-303` tip were identical at every length, so `BL-303` did not widen this.
 
-**ISOLATED, NOT INFERRED.** Measured at `937919e4` with `PS4` carrying `$BASH_SUBSHELL` and
-`$LINENO`, one standalone run against the `ledger-reverify` fixture's seed under a private
-`TMPDIR`. The trace shows two `mktemp` calls at `:738`, one at subshell level 2 and one at
-level 0, and `AI_DLC_MEMO_OWNED` set at `:740` in each. It shows one `rm -rf` at `:748`, at
-level 0, naming the level-0 directory. The directory left on disk is the level-2 one, by
-name. The run emitted 111 output rows and exited 0, so nothing about the run looks wrong.
+The encoded dist path has about 122 characters of budget, given a 40-character ref and the
+longest theirs path (87 encoded). A `/Users/<name>/git/<repo>` checkout produces keys of 129 to
+173 characters, and a `/private/var/folders/…` dist produces 189 to 221, all under the limit.
+Only deep scratch paths reach it today, which is where the fix hand's receipt world first hit it.
 
-**THE POPULATION IS EVERY STANDALONE RUN ON THE MACHINE.** A run under `emit-report.sh` borrows
-`AI_DLC_RECONCILE_MEMO` from the orchestrator, takes the `:732` branch and creates nothing, so
-it does not leak. Every other caller does, including an operator running the closer directly,
-`apply.sh`, and each fixture that drives the engine. This machine's `TMPDIR` held **433455**
-`reconcile-memo.*` directories out of 457238 directories in total, counted with
-`/usr/bin/find -maxdepth 1`. An impossible-prefix control in the same invocation counted 0, and
-none of the 433455 was older than two days. So the machine created at least two hundred
-thousand a day. Which callers produced them was not measured.
+The candidate fix is to hash the key, or to go direct when `${#_k}` exceeds about 240. Its
+receipt must drive a detector from a dist path long enough to fire, and compare its output with
+the same run from a short path. `lib.sh` is bootstrapping, so the fix ships alone.
 
-**THE FIX SHIPS ALONE.** `lib.sh` is sourced by fourteen reconcile scripts, including
-`ledger-reverify.sh`, `preclassify.sh` and `emit-report.sh`, which run during a pull. A fix to a
-bootstrapping step cannot be delivered by that step, because the consumer's installed copy is
-the one that runs the pull. So the release carrying this fix carries nothing else that depends
-on it.
+verify: manual
 
-**TWO SCRATCH FIXES WERE SCORED, AND THE OBVIOUS ONE DOES NOT WORK.** Calling
-`ai_dlc_memo_dir || true` once in the main shell, directly after the trap is armed, leaves
-**0** directories and the receipt exits **0**. Arming `trap ai_dlc_memo_cleanup EXIT` inside
-`ai_dlc_memo_dir()` whenever `$BASH_SUBSHELL` is non-zero still leaves **1**, and the receipt
-exits **1**. The trace shows why: the trap is set at subshell level 2 and never runs. Under this
-machine's bash 3.2, an EXIT trap set in a function that runs as a pipeline stage inside `$( )`
-does not fire. The same function called as `$(f)`, with no pipeline, does fire it. A fix has to
-make the owning process the one whose trap runs. It must not rely on a subshell cleaning up
-after itself.
+## BL-307 — a zero-byte `pending.md` takes an exit-0 road through Checks 2 and 2a that prints no `EXAMINED NOTHING`
 
-**THE POPULATION WAS WIDER THAN THE ENTRY, AND THE DEFECT WAS TWO.** Measured by the batch 152
-adversary, one standalone run of each `lib.sh` sourcer under a private `TMPDIR`: unregistered-drift
-left 105 directories, preclassify 7, layer-drift 4, retired-fixtures 1 and ledger-reverify 1. The
-filed subshell orphan is one defect. The second is that five of the six memo-using entry points
-never called `ai_dlc_memo_cleanup` at all, so their main-shell directory leaked too. The fix
-builds the memo at SOURCE time in the main shell and exports it, so subshells and child
-processes borrow it. It arms the cleanup on EXIT and makes `trap` a shell function that runs the
-cleanup FIRST in front of any later `trap X EXIT`, because six sourcers arm their own handler
-after sourcing and a handler that calls `exit` would skip a cleanup placed after it. I115 refuses
-the spellings that reach past that function.
+**NOTE.** Found at batch 152 by the `BL-305` fix hand during its Check 2 and 2a audit. It
+discharges no consumer candidate.
 
-The receipt drives TEN entry points, each with its own argument vector and seed, all taken from
-this tree's fixture seeds (`ledger-reverify`, `retired-layer-contract`, `reconcile-emit-report`
-and `retired-layer-token`). Each runs under its own private `TMPDIR` with `AI_DLC_RECONCILE_MEMO`
-unset, behind a `git` shim that counts calls. "It ran" is keyed on git calls, never on output
-bytes, because several entries correctly print nothing on a world with no retirement. It builds
-an R2 copy of the reconcile directory in the same invocation, with `ai_dlc_memo_dir` returning 1,
-and runs every entry both ways under the same shim. It requires zero `reconcile-memo.*` left
-across all ten. It requires the fix to make strictly fewer git calls than R2 on ledger-reverify,
-layer-drift, unregistered-drift and retired-layer-contract, and no more than R2 everywhere,
-with the same exit code. It then checks that a borrowed directory survives a child's exit, and
-that a sourcer's own `trap "exit 3" EXIT` still removes the memo. Three more arms run a sourcer
-directly: after `x=$(trap : EXIT; :)` the main shell's memo directory must still be present; under
-`set -e`, `trap 'echo OWN rc=$?' EXIT; false` must print `OWN rc=1`; and a sourcer that launches a
-child sourcer must see the child use the SAME directory, fill it, and leave no second one. That
-last arm is what makes the export load-bearing. It exits **9** on a missing
-engine or seed, a failed R2 build, or zero git calls anywhere. Its world lives under `/tmp`
-because a memo key embeds the dist path, and the scratchpad's long path pushed keys past the
-filename limit on base and fix alike.
+With `docs/escalations/pending.md` absent, `validate-escalation-resolution.sh`,
+`validate-escalation-status-vocabulary.sh` and `validate-suppression-lifetime.sh` each exit 0 and
+print `OK: EXAMINED NOTHING`. With the file present and zero bytes long, each exits 0 without
+that token:
 
-Scored RAW, each tree a full `core/` copy, base taken at `5bacf2e3`: base **1** (62 left), the fix
-**0**, the filed main-shell pre-call alone **1** (61 left), R2 always-uncacheable **1** (git calls
-equal R2's, 311 on ledger-reverify), a cleanup that removes the borrowed directory **1**, a
-source-time trap with no composing function **1** (4 left, 1 behind the exiting handler), the
-handler composed FIRST **1** (1 left behind the exiting handler), a second correct spelling that
-holds the handler in a variable **0**, the export dropped **1** (the child builds a second
-directory), the set-time level guard reverted **1** (the subshell trap deletes the memo), the
-`&& :` composition reverted **1** (the caller's handler prints nothing under `set -e`), and the
-engine removed **9**.
+- `OK: no S1 RESOLVED/OVERRIDDEN escalation requires an operator citation.`
+- `OK: n=[] no **Status:** entries found`
+- `OK: entries_scanned=0 … no suppression is past its lifetime`
 
-verify: sh set -u; R="$PWD/core/skills/ai-dlc-update/reconcile"; F="$PWD/core/fixtures"; for x in "$R/lib.sh" "$R/ledger-reverify.sh" "$F/ledger-reverify/seed.sh" "$F/retired-layer-contract/seed.sh" "$F/retired-layer-token/seed.sh" "$F/reconcile-emit-report/seed.sh"; do [ -r "$x" ] || exit 9; done; T="$(mktemp -d /tmp/r303.XXXXXX)" || exit 9; trap 'rm -rf "$T"' EXIT; unset AI_DLC_RECONCILE_MEMO; mkdir "$T/s" "$T/r2" || exit 9; printf '#!/bin/sh\necho >> "$GL"\nexec /usr/bin/git "$@"\n' > "$T/s/git"; chmod +x "$T/s/git"; cp -R "$R/." "$T/r2/" || exit 9; awk '{print} /^ai_dlc_memo_dir\(\) \{/{print "  return 1"}' "$R/lib.sh" > "$T/r2/lib.sh"; cmp -s "$R/lib.sh" "$T/r2/lib.sh" && exit 9; bash -n "$T/r2/lib.sh" || exit 9; export TMPDIR="$T"; read -r LD LB LC LT < <(bash "$F/ledger-reverify/seed.sh" 2>/dev/null) || exit 9; mkdir -p "$LC/tests/fixtures/zz-orphan"; W="$(bash "$F/retired-layer-contract/seed.sh" 2>/dev/null)" && . "$W/env.sh" || exit 9; RD="$DIST" RB="$BASE" RT="$THEIRS" RC="$CONSUMER"; W="$(bash "$F/reconcile-emit-report/seed.sh" 2>/dev/null)" && . "$W/env.sh" || exit 9; ED="$DIST" EB="$BASE" ET="$THEIRS" EC="$CONSUMER"; W="$(bash "$F/retired-layer-token/seed.sh" 2>/dev/null)" && . "$W/env.sh" || exit 9; run() { local e="$1" n="$2" d; shift 2; d="$(mktemp -d "$T/$n.XXXXXX")" || return 9; : > "$d.g"; ( cd "$d" && TMPDIR="$d" GL="$d.g" PATH="$T/s:$PATH" bash "$e/$n.sh" "$@" >/dev/null 2>&1 ); echo "$? $(grep -c '' "$d.g") $(ls -d "$d"/reconcile-memo.* 2>/dev/null | grep -c .)"; }; bad=0 left=0; for v in "ledger-reverify $LD $LB $LC $LT" "preclassify $LD $LB $LT $LC" "retired-tokens $LD $LB $LT $LC" "hard-blockers $LD $LB $LC $LT" "retired-fixtures $LD $LT $LC" "layer-drift $RD $RB $RT $RC" "retired-layer-contract $RD $RB $RT $RC" "retired-layer-passage $RD $RB $RT $RC" "unregistered-drift $ED $EB $EC $ET" "retired-layer-token $DIST $BASE $THEIRS $CONSUMER"; do set -- $v; read -r rc g l <<<"$(run "$R" "$@")"; read -r xrc xg xl <<<"$(run "$T/r2" "$@")"; echo "$1 rc=$rc git=$g left=$l r2-rc=$xrc r2-git=$xg"; [ "$g" -gt 0 ] && [ "$xg" -gt 0 ] || exit 9; left=$((left + l)); [ "$rc" = "$xrc" ] && [ "$g" -le "$xg" ] || bad=1; case "$1" in ledger-reverify|layer-drift|unregistered-drift|retired-layer-contract) [ "$g" -lt "$xg" ] || bad=1 ;; esac; done; B="$(mktemp -d "$T/borrow.XXXXXX")" && d="$(mktemp -d "$T/bw.XXXXXX")" || exit 9; ( cd "$d" && AI_DLC_RECONCILE_MEMO="$B" TMPDIR="$d" bash "$R/ledger-reverify.sh" "$LD" "$LB" "$LC" "$LT" >/dev/null 2>&1 ); bl="$(ls -d "$d"/reconcile-memo.* 2>/dev/null | grep -c .)"; [ -d "$B" ] && [ "$bl" -eq 0 ] || bad=1; d="$(mktemp -d "$T/hx.XXXXXX")" || exit 9; ( TMPDIR="$d" bash -c '. "$1/lib.sh"; trap "exit 3" EXIT' _ "$R" ); hrc=$?; hl="$(ls -d "$d"/reconcile-memo.* 2>/dev/null | grep -c .)"; echo "reconcile-memo-left=$left borrowed-present=$([ -d "$B" ] && echo 1 || echo 0) exit-handler rc=$hrc left=$hl"; [ "$hrc" -eq 3 ] && [ "$hl" -eq 0 ] || bad=1; d="$(mktemp -d "$T/arms.XXXXXX")" || exit 9; a1="$(TMPDIR="$d" bash -c '. "$1/lib.sh"; m="$AI_DLC_MEMO_DIR"; [ -n "$m" ] && [ -d "$m" ] || exit 9; x=$(trap : EXIT; :); [ -d "$m" ] && echo present || echo gone' _ "$R" 2>/dev/null)"; a2="$(TMPDIR="$d" bash -c '. "$1/lib.sh"; set -e; trap "echo OWN rc=\$?" EXIT; false' _ "$R" 2>/dev/null)"; a3="$(TMPDIR="$d" bash -c '. "$1/lib.sh"; p="$AI_DLC_MEMO_DIR"; c="$(bash -c ". \"\$1/lib.sh\"; memo_has_path \"\$2\" HEAD VERSION; echo \"\$AI_DLC_MEMO_DIR\"" _ "$1" "$2" 2>/dev/null)"; n="$(ls "$p" 2>/dev/null | grep -c .)"; [ -n "$p" ] && [ "$c" = "$p" ] && [ "$n" -ge 1 ] && echo one || echo two' _ "$R" "$PWD")"; al="$(ls -d "$d"/reconcile-memo.* 2>/dev/null | grep -c .)"; echo "subshell-trap=$a1 errexit-handler=[$a2] child-borrow=$a3 arms-left=$al"; [ "$a1" = present ] && [ "$a2" = "OWN rc=1" ] && [ "$a3" = one ] && [ "$al" -eq 0 ] || bad=1; [ "$left" -eq 0 ] && [ "$bad" -eq 0 ] && exit 0; exit 1
-
-## BL-304 — `fanout-payload-channel` counts and deletes `fanout.*` in the SHARED temp root, so a concurrent run can fail arm 5, fake m6's kill, and lose its payload
-
-**DEFECT.** Found by the batch 151 adversary as the sibling of `BL-283`. The failure is
-REACHABLE and has not been OBSERVED in a gate run. It discharges no consumer candidate.
-
-**THE SAME SHAPE AS `BL-283`, IN A DIFFERENT FIXTURE.** Arm 5 of
-`core/fixtures/fanout-payload-channel/run.sh` (`:346-353`) counts
-`find "$TMP_ROOT" -maxdepth 1 -name 'fanout.*' -type d` before and after one subject run, and
-fails if the count grew. Mutant m6 (`:478-491`) takes the same count around a copy with its
-cleanup trap removed, at `:480` and `:482`. `$TMP_ROOT` is the ambient `TMPDIR`, resolved at
-`:113`. The subject names its payload directory `mktemp -d "${TMPDIR:-/tmp}/fanout.XXXXXX"` at
-`core/scripts/report-propagation-fanout.sh:311`, which is a fixed prefix with no per-run
-segment. So the count cannot separate this run's directory from any other process's.
-
-**THE POPULATION IS THE SUITE'S OWN POOL.** `fanout-untracked-corpus` and
-`validator-path-resolution` also drive `report-propagation-fanout.sh`, and the runner dispatches
-fixtures through `xargs -P`. `.githooks/pre-push` sets no per-fixture `TMPDIR`: `TMPDIR` has 0
-occurrences in it, against 5 for `xargs` as the control. Neither fanout fixture carries
-`.dist-only`, so both ship, and a consumer's pool has the same exposure.
-
-**THREE CONSEQUENCES, ONE OF THEM DESTRUCTIVE.**
-- Arm 5 reads a false RED when another run's `fanout.*` directory exists at the `after` count
-  but not at the `before` count. The message then blames the cleanup trap in the change under
-  test.
-- m6 scores a false KILL for the same reason. With the trap removed but nothing actually
-  leaking, a foreign directory still lifts the count. So the battery can credit arm 5 with a
-  kill the arm did not earn.
-- m6's own cleanup at `:488`, `find "$TMP_ROOT" -maxdepth 1 -name 'fanout.*' -type d -exec rm -rf {} +`,
-  deletes EVERY `fanout.*` directory in the shared root. That includes the live payload
-  directory of any concurrent subject run, which then fails reading its own payload. The
-  subject's contract reports that as a scoping failure, exit 3, and that run's fixture goes red
-  for a reason it cannot see.
-
-**MEASURED BY FORCING THE INTERLEAVING, NOT BY WAITING FOR IT.** The receipt puts a `python3`
-shim on `PATH` that creates one `fanout.FOREIGN<pid>` directory in the run's `TMPDIR` each time
-it is invoked, then executes the real interpreter. The subject calls `python3` between the arm's
-two counts, so every subject run plants one foreign directory mid-run. At `937919e4` the fixture
-exits 1, arm 5 fails, and all 10 planted directories are gone by the end of the run: m6's sweep
-removed them. A plain run of the same unfixed copy with no foreign writer PASSES, so the copy
-itself is sound.
-
-**THE FIX SHAPE IS A PRIVATE TEMP ROOT FOR THE COUNTING RUNS.** The scratch fix scored below
-gives arm 5 and m6 their own directory under `$WORK`, runs the subject with `TMPDIR` pointed at
-it, and counts and sweeps only there. The subject line is unchanged. A per-run discriminator in
-the subject's `mktemp` prefix, as `BL-283` proposes for its engine, would also work, but the
-fixture fix is smaller. **Do not "fix" it by deleting arm 5 or m6.** m6's own comment records
-that arm 5 is the only arm that can see a missing cleanup trap.
-
-**WHY THE RECEIPT IS BEHAVIOURAL.** A structural receipt that greps the arm's `find` for
-`$TMP_ROOT` is closed by renaming the variable. It is also closed by an arm whose predicate no
-longer reads the count. So the receipt runs the fixture. It passes only when four things hold
-under the forced foreign writer: the fixture exits 0, arm 5 is `ok`, m6 is killed, and every
-planted foreign directory survives. As a same-invocation control it also runs a copy of the
-fixture against a subject whose cleanup trap is removed, and arm 5 must FAIL there. That keeps
-an arm reduced to `if true` from passing. It exits **9** if the fixture or subject is missing,
-if the fixture never resolved its subject, if the shim planted nothing, or if the control copy
-ran some other subject.
-
-It was scored on seven trees. At `937919e4` it scores **1**
-(`fixture-rc=1 arm5-ok=0 m6-killed=1 foreign-planted=10 foreign-surviving=0`). The unfixed
-scratch copy scores **1**, and the private-temp-root fix scores **0**. Three regressions each
-score **1**: arm 5 deleted, m6's sweep left on the shared root, and arm 5's predicate replaced by
-`true`. The last of these scored **0** under the receipt's first draft, which had no
-leaky-subject control, and that is why the control exists. With the fixture absent it scores
-**9**.
-
-**THE FILED SHIM ACCEPTED A WRONG FIX, AND THE RECEIPT BELOW REPLACES IT.** The batch 152
-adversary found that the first shim planted `fanout.FOREIGN<pid>`, a name no real run makes.
-A fix that left the count on the shared root and only tightened the glob to `fanout.??????`
-ignored those directories and scored **0**, the same as the private-root fix. The shim now
-makes its foreign directory with `mktemp -d "$FANOUT_FOREIGN_AMB/fanout.XXXXXX"`, the subject's
-own naming, so a glob cannot tell the two apart. Scored by the adversary at `5bacf2e3`: base
-**1**, private-root fix **0**, glob-tightening fix **1**, private root counted but `TMPDIR` not
-passed to the subject **1**.
-
-verify: sh set -u; F=core/fixtures/fanout-payload-channel/run.sh; S=core/scripts/report-propagation-fanout.sh; [ -r "$F" ] && [ -r "$S" ] || exit 9; P="$(command -v python3)" || exit 9; T="$(mktemp -d)" || exit 9; trap 'rm -rf "$T"' EXIT; mkdir -p "$T/amb" "$T/amb2" "$T/shim" "$T/w/core/fixtures/fanout-payload-channel" "$T/w/core/scripts" || exit 9; printf '#!/bin/sh\nd="$(mktemp -d "$FANOUT_FOREIGN_AMB/fanout.XXXXXX")" && echo "$d" >> "$FANOUT_FOREIGN_LOG"\nexec "%s" "$@"\n' "$P" > "$T/shim/python3" && chmod +x "$T/shim/python3" || exit 9; cp "$F" "$T/w/$F" || exit 9; sed 's|^trap .rm -rf "\$FANOUT_TMP". EXIT|: # trap removed|' "$S" > "$T/w/$S" || exit 9; cmp -s "$S" "$T/w/$S" && exit 9; drive() { FANOUT_FOREIGN_AMB="$2" FANOUT_FOREIGN_LOG="$3" TMPDIR="$2" PATH="$T/shim:$PATH" bash "$1" 2>&1; }; out="$(drive "$F" "$T/amb" "$T/log")"; rc=$?; [ "$rc" -eq 0 ] || [ "$rc" -eq 1 ] || exit 9; LC_ALL=C grep -q 'subject resolved:' <<<"$out" || exit 9; [ -s "$T/log" ] || exit 9; lo="$(drive "$T/w/$F" "$T/amb2" "$T/log2")"; LC_ALL=C grep -qF "subject resolved: $T/w/" <<<"$lo" || exit 9; np=0; nl=0; while read -r d; do np=$((np+1)); [ -d "$d" ] && nl=$((nl+1)); done < "$T/log"; a5="$(LC_ALL=C grep -c '^  ok    5\. ' <<<"$out")" || a5=0; m6="$(LC_ALL=C grep -c 'mutant \[m6-trap\] KILLED' <<<"$out")" || m6=0; l5="$(LC_ALL=C grep -c '^  FAIL  5\. the run left' <<<"$lo")" || l5=0; echo "fixture-rc=$rc arm5-ok=$a5 m6-killed=$m6 foreign-planted=$np foreign-surviving=$nl leaky-subject:arm5-fail=$l5"; [ "$rc" -eq 0 ] && [ "$a5" -eq 1 ] && [ "$m6" -eq 1 ] && [ "$nl" -eq "$np" ] && [ "$l5" -eq 1 ] && exit 0; exit 1
-
-## BL-305 — the step text for Checks 26, 33 and 35 never tells the reader that exit 0 with `EXAMINED NOTHING` verified nothing
-
-**DEFECT.** Found at batch 151 by the `BL-080` fix hand, while it re-derived which hard_block
-rows exit 0 on the vacuous road. It discharges no consumer candidate.
-
-**`BL-080` FIXED THE MAP AND LEFT THE STEP FILE, WHICH IS WHERE A GATE READER ACTUALLY LOOKS.**
-Six hard_block rows in `core/skills/ai-dlc/enforcement-map.yaml` now say that exit 0 with
-`EXAMINED NOTHING` is not a pass. In `core/skills/ai-dlc/steps/gate-validation.md` only Check 3b
-carries the matching instruction, at `core/skills/ai-dlc/steps/gate-validation.md:489-494` ("Read
-the PASS line, not just the exit code"). Measured per section, from its `### N.` heading to the
-next heading: the Check 26, 33 and 35 sections name `EXAMINED NOTHING` **0**, **0** and **0**
-times, against **1** in the 3b passage as the control. Check 2 and 2a need the same audit and it
-was not taken.
-
-**Each section frames the vacuous road its own way, and two of them frame it as acceptable.**
-
-- Check 26 (`core/skills/ai-dlc/steps/gate-validation.md:2971`) runs the `--series` stall rung
-  with `exit 0 required` and nothing else. That rung is the one that takes the vacuous exit-0
-  road on an empty series directory, driven at batch 151.
-- Check 33 (`core/skills/ai-dlc/steps/gate-validation.md:2813-2816`) says a zero identifier count
-  "is reported, not passed silently" and that the check "has no subject", but it never tells the
-  reader to read the line instead of the exit.
-- Check 35 (`core/skills/ai-dlc/steps/gate-validation.md:2917-2918`) says "NOT-APPLICABLE is exit
-  0 and prints why", which presents exit 0 as the acceptable outcome.
-
-**The fix is prose in a step file, so no behavioural receipt exists.** A grep for the phrase in
-each section would be closed by the phrase alone, which `scripts/validate-backlog-receipts.sh`
-correctly reports as PROSE-CLOSABLE. Close by hand on the release whose diff gives each of the
-three sections a read-the-PASS-line instruction naming `EXAMINED NOTHING`, and records whether
-Check 2 and 2a need one too.
-
-**The fix, and one site this entry got wrong.** The Check 26 cite above (`:2971`) sits inside
-`## Gate Failure` step 4, not `### 26.`: the `--series` rung that takes the vacuous road runs
-only there, so the instruction went there, and `### 26.` got a one-line pointer to it. Each
-program spells its vacuous line differently, and each site quotes its own program's line,
-re-derived by driving that program on a vacuous input: 26 (`--series` on an empty directory)
-prints `VALIDATE-GATE-ADJUDICATION: PASS — … EXAMINED NOTHING`; 33 (an ask naming no
-identifier) prints `NOT-APPLICABLE: EXAMINED NOTHING`; 35 (no snapshot) prints
-`verdict : NOT-APPLICABLE -- EXAMINED NOTHING` with ASCII `--`. All three exit 0. The Check 33
-row in `core/skills/ai-dlc/enforcement-map.yaml` spelled the line `NOT-APPLICABLE — EXAMINED
-NOTHING`, which the program never prints; it now carries the emitted spelling, and no fixture or
-validator parsed the old one. Check 2 and 2a audit: `validate-escalation-resolution.sh`,
-`validate-escalation-status-vocabulary.sh` and `validate-suppression-lifetime.sh` already print
-`OK: EXAMINED NOTHING` when `pending.md` is absent. A ZERO-BYTE `pending.md` takes a second
-exit-0 road in all three, with no such token. That is recorded and not changed, because whether
-an empty file is a legitimate state has not been measured; the step text of Checks 2 and 2a is
-unchanged.
+A reader following the `BL-305` instruction therefore reads an empty file as a real pass. Whether
+an empty `pending.md` is a legitimate consumer state has not been measured. Measure it on the
+reference consumer's history first; if the state is legitimate, the three programs should say
+`EXAMINED NOTHING` on it too.
 
 verify: manual
