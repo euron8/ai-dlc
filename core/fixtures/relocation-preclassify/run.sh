@@ -162,6 +162,109 @@ case "$bm" in
     ok "MUTATION: with the enumerator removed the edit disclosure disappears (got '${bm:-<no row>}') — the pass is what produces it" ;;
 esac
 
+# --- G. A PRE-RELOCATION CONSUMER PULLING A core/scripts/* DELETION IS ZERO WORK, NOT A REFUSAL ---
+# THE NEAR-MISS FOR THE EMPTY-RESULT GUARD. emit-report and apply refuse an EMPTY row set while
+# base..theirs moves core/, because preclassify used to go silent under a git failure. This is the
+# one legitimate pull that USED to print zero rows over such a range: its only core/ change deletes
+# core/scripts/x.sh, and the consumer still holds scripts/x.sh at the old path. The relocation pass
+# enumerates theirs, where x.sh is gone, and the changed-files pass skipped the pre-relocation path
+# with a bare `continue` -- so emit-report refused five sections and apply stopped on a pull with
+# nothing to do, and no re-run could clear it. preclassify now emits an inert PRE-RELOCATION-NOOP
+# row there. apply's half of this world is apply-drift-refile arm h.
+#
+# Its OWN world: the range above changes a validator's content, so it cannot host a zero-row pull.
+#
+# G is one arm with two conjuncts: the row is printed, and the render carries no preclassify
+# refusal. The mutant below restores the silent skip and must fail G and move nothing A-F read:
+# A-F read only the main world's preclassify output, and over that world the mutant's output is
+# asserted byte-identical to the subject's once the PRE-RELOCATION-NOOP rows are removed.
+case "$RECON" in */core/skills/ai-dlc-update/reconcile) G_DIST=1 ;; *) G_DIST=0 ;; esac
+G_RUN=1
+if ! grep -qF 'PRE-RELOCATION-NOOP' "$RECON/preclassify.sh"; then
+  if [ "$G_DIST" = 0 ]; then
+    printf '  SKIP  G -- the installed preclassify.sh predates PRE-RELOCATION-NOOP; it lands with the pull that carries this fixture\n'
+    G_RUN=0
+  else
+    printf '  --    (G: this preclassify.sh carries no PRE-RELOCATION-NOOP row; in the distribution the arm runs anyway and must go red)\n'
+  fi
+fi
+if [ "$G_RUN" = 1 ]; then
+  ZD="$WORK/zr-dist"; ZC="$WORK/zr-consumer"
+  mkdir -p "$ZD/core/scripts" "$ZD/core/rules" "$ZC/scripts" "$ZC/.claude/rules" || exit 2
+  zg() { git -C "$ZD" -c user.email=f@f -c user.name=fixture "$@" >/dev/null 2>&1; }
+  printf '#!/usr/bin/env bash\necho x\n' > "$ZD/core/scripts/x.sh"
+  printf 'rule\n' > "$ZD/core/rules/r.md"; printf '0.1.0\n' > "$ZD/VERSION"
+  { zg init -q && zg add -A && zg commit -q -m base; } || { echo "FIXTURE ERROR: G base commit failed" >&2; exit 2; }
+  ZB="$(git -C "$ZD" rev-parse HEAD)"
+  printf '0.2.0\n' > "$ZD/VERSION"
+  { zg rm -q core/scripts/x.sh && zg commit -qam theirs; } || { echo "FIXTURE ERROR: G theirs commit failed" >&2; exit 2; }
+  ZT="$(git -C "$ZD" rev-parse HEAD)"
+  cp "$ZD/core/rules/r.md" "$ZC/.claude/rules/r.md" 2>/dev/null || git -C "$ZD" show "${ZB}:core/rules/r.md" > "$ZC/.claude/rules/r.md"
+  git -C "$ZD" show "${ZB}:core/scripts/x.sh" > "$ZC/scripts/x.sh"
+  printf 'version: 0.1.0\ncommit: %s\n' "$ZB" > "$ZC/.claude/.ai-dlc-version"
+  # The world must be the one described: exactly one core/ change, a deletion under core/scripts/,
+  # and theirs shipping NO core/scripts/ file the relocation pass could emit a row for.
+  _zr="$(git -C "$ZD" diff --no-renames --name-status "$ZB" "$ZT" -- core/)"
+  _zt="$(git -C "$ZD" ls-tree --name-only "$ZT" core/scripts/)"
+  if [ "$_zr" != "$(printf 'D\tcore/scripts/x.sh')" ] || [ -n "$_zt" ] || [ ! -f "$ZC/scripts/x.sh" ] || [ -e "$ZC/scripts/ai-dlc/x.sh" ]; then
+    echo "FIXTURE ERROR: G world is not a lone core/scripts/ deletion pulled by a pre-relocation consumer (range: $(printf '%s' "$_zr" | tr '\t\n' ' '))" >&2
+    exit 2
+  fi
+  # g_score <recon-dir> <tag> -> empty, or what failed
+  g_score() {
+    local _m="" _rows _rc _n
+    _rows="$(bash "$1/preclassify.sh" "$ZD" "$ZB" "$ZT" "$ZC" 2>/dev/null)"; _rc=$?
+    [ "$_rc" -eq 0 ] || _m="${_m}preclassify-rc=$_rc "
+    printf '%s\n' "$_rows" | LC_ALL=C awk -F'\t' '$1=="D" && $2=="core/scripts/x.sh" && $4=="PRE-RELOCATION-NOOP" {f=1} END {exit !f}' \
+      || _m="${_m}no-PRE-RELOCATION-NOOP-row "
+    bash "$1/emit-report.sh" "$ZD" "$ZB" "$ZC" "$ZT" > "$WORK/g-$2.md" 2>/dev/null
+    grep -qF 'BEGIN GENERATED: reconcile-mechanical' "$WORK/g-$2.md" || _m="${_m}no-region "
+    _n="$(grep -cF 'DETECTOR-REFUSED  preclassify.sh' "$WORK/g-$2.md")" || _n=0
+    [ "$_n" = 0 ] || _m="${_m}render-refusals=$_n "
+    printf '%s' "$_m"
+  }
+  g="$(g_score "$RECON" tip)"
+  if [ -z "$g" ]; then
+    ok "G a pre-relocation consumer pulling a lone core/scripts/ deletion gets a PRE-RELOCATION-NOOP row, and the render carries 0 preclassify refusals"
+  else
+    bad "G the zero-work pre-relocation pull was not classified as zero work: $g"
+  fi
+
+  # THE MUTANT: the emitted row removed, restoring the silent `continue`.
+  GM="$WORK/g-mutant"
+  cp -R "$RECON" "$GM" || exit 2
+  _ga="$(printf '        printf %s %s %s %s %s\n' "'%s\\t%s\\t%s\\t%s\\n'" '"$status"' '"$path"' '"$cons"' '"PRE-RELOCATION-NOOP"')"
+  _gh="$(grep -cxF "$_ga" "$RECON/preclassify.sh")" || _gh=0
+  _gc="$(grep -cxF 'ZZ-NO-SUCH-PRECLASSIFY-LINE-ZZ' "$RECON/preclassify.sh")" || _gc=0
+  G_A="$_ga" awk '$0 == ENVIRON["G_A"] { next } { print }' "$RECON/preclassify.sh" > "$GM/preclassify.sh"
+  if [ "$_gh" -ne 1 ] || [ "$_gc" -ne 0 ]; then
+    bad "FIXTURE STALE [G mutant]: the row-emitter anchor matches $_gh lines of preclassify.sh (want 1; impossible-anchor control $_gc, want 0). Re-anchor on the same observable"
+  elif cmp -s "$RECON/preclassify.sh" "$GM/preclassify.sh" || ! bash -n "$GM/preclassify.sh"; then
+    bad "FIXTURE STALE [G mutant]: the mutation did not apply or does not parse"
+  else
+    gm="$(g_score "$GM" mutant)"
+    # Subject and mutant over the SAME current main world. Not against `$PC`: E and F have moved
+    # the consumer since `$PC` was taken, so that comparison would read the world's movement.
+    # The main world ALSO carries a PRE-RELOCATION-NOOP row (alpha is modified in range and sits
+    # at the old path), which the mutant rightly drops. A-F never read that row -- they key on the
+    # old-path consumer column and on CLASSIFY -- so the mutant may differ by exactly those rows
+    # and nothing else.
+    _gs="$(run_pc "$RECON")"
+    _gs_rest="$(printf '%s\n' "$_gs" | LC_ALL=C awk -F'\t' '$4 != "PRE-RELOCATION-NOOP"')"
+    if [ -z "$_gs_rest" ]; then
+      bad "FIXTURE BROKEN [G mutant]: the subject classified nothing else over the main world, so the comparison below compares empty to empty"
+    elif [ "$(printf '%s\n' "$(run_pc "$GM")")" != "$_gs_rest" ]; then
+      bad "MUTANT [G] moved main-world rows OTHER than PRE-RELOCATION-NOOP, so it reaches arms A-F -- entangled"
+    elif ! grep -qF 'BEGIN GENERATED: reconcile-mechanical' "$WORK/g-mutant.md"; then
+      bad "MUTANT HARNESS BROKEN [G]: the copy rendered no region, so its verdict is a copy that did not run"
+    elif [ -z "$gm" ]; then
+      bad "MUTANT SURVIVED [G]: with the row removed, G still passed -- it cannot see the silent skip"
+    else
+      ok "MUTANT (PRE-RELOCATION-NOOP row removed) fails G ($gm) and leaves every other main-world row, which A-F read, byte-identical"
+    fi
+  fi
+fi
+
 echo ""
 if [ "$fails" -eq 0 ]; then
   echo "relocation-preclassify: PASS"

@@ -209,6 +209,16 @@ if [ "$F_RUN" = 1 ]; then
     F_STAMP_AFTER="$(cat "$F_STAMP")"
     F_DRV="$(cat "$F_DRIVER")"
     F_SCHEMA_EDITED=0; grep -q 'my-persona-skill' "$F_SCHEMA" && F_SCHEMA_EDITED=1
+    F_MARK="$F_CONSUMER/.claude/.ai-dlc-applying"
+  }
+  # f_pre <force> <marker-bytes> -> like f_case, but a fresh seed first gets an in-flight marker
+  # planted as a PREVIOUS aborted run would have left it, and only then does apply run.
+  f_pre() {
+    local _w; _w="$(TMPDIR="$WORK" bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: BL-230 seed failed" >&2; exit 2; }
+    eval "$(sed 's/^/F_/' "$_w/env.sh")"
+    F_MARK="$F_CONSUMER/.claude/.ai-dlc-applying"
+    printf '%s' "$2" > "$F_MARK"
+    F_OUT="$(FX_B230_PC="$1" bash "$FH/apply.sh" "$F_DIST" "$F_BASE" "$F_CONSUMER" "$F_THEIRS" 2>&1)"; F_RC=$?
   }
   f_case ""
   if [ "$F_RC" -eq 0 ] && grep -qE '^version: 9\.9\.9$' <<<"$F_STAMP_AFTER" && grep -q 'driver v2' <<<"$F_DRV"; then
@@ -231,7 +241,118 @@ if [ "$F_RUN" = 1 ]; then
       bad "BL-230 arm f ($F_CASE): apply did not stop before writing on a preclassify that did not classify (rc=$F_RC, stamp moved: $([ "$F_STAMP_AFTER" = "$F_STAMP_BEFORE" ] && echo no || echo yes), driver: $(grep -o 'driver v[12]' <<<"$F_DRV"), drift still in place: $F_SCHEMA_EDITED)"
       printf '%s\n' "$F_OUT" | head -20 | sed "s/^/  DIAG  f-$F_CASE | /"
     fi
+    # THE MARKER HALF. The in-flight marker used to be written BEFORE the preclassify stop, so a
+    # refusal left `.ai-dlc-applying` on a tree nothing had written, and the next push blocked
+    # with mid-pull advice about a pull that never started. The fresh seed carries no marker, so
+    # an absent one here is this run's doing. Keyed on rc 1 as well, so a run that never reached
+    # the stop cannot pass this by writing nothing at all.
+    if [ "$F_RC" -eq 1 ] && [ ! -e "$F_MARK" ]; then
+      ok "BL-230 arm f ($F_CASE) marker: the refusing run leaves NO .ai-dlc-applying behind"
+    else
+      bad "BL-230 arm f ($F_CASE) marker: after a preclassify refusal (rc=$F_RC) .ai-dlc-applying is $([ -e "$F_MARK" ] && echo PRESENT || echo absent) -- the next push blocks on a tree nothing touched"
+    fi
   done
+  # THE ALLOW TWIN, one property apart: the same refusal over a consumer that ALREADY carries a
+  # marker from an earlier aborted run. That marker is not this run's to remove, so it must be
+  # there afterwards, byte-identical. Without this twin, a stop that deletes every marker passes
+  # the arm above.
+  F_PLANT="$(printf 'base: 0000000000000000000000000000000000000000\ntheirs: earlier-aborted-run\n')"
+  f_pre rc2 "$F_PLANT"
+  if [ "$F_RC" -eq 1 ] && [ -f "$F_MARK" ] && [ "$(cat "$F_MARK")" = "$F_PLANT" ]; then
+    ok "BL-230 arm f marker ALLOW twin: a marker an earlier run left is kept, byte-identical, by a refusing run"
+  else
+    bad "BL-230 arm f marker ALLOW twin: a refusing run (rc=$F_RC) removed or rewrote a marker an earlier aborted run left ($([ -f "$F_MARK" ] && echo rewritten || echo removed))"
+  fi
+fi
+
+# --- BL-230 arm h: a PRE-RELOCATION consumer pulling a lone core/scripts/ deletion is zero work ---
+# The near-miss for arm f's empty-result stop. The range's only core/ change deletes
+# core/scripts/x.sh, and the consumer still holds scripts/x.sh at the old path. preclassify used to
+# print NO rows for that pull, and apply's empty-over-a-moving-range stop then refused a pull with
+# nothing to do, forever. preclassify now emits an inert PRE-RELOCATION-NOOP row; apply must run
+# through, leave scripts/x.sh alone, and file nothing as an unhandled bucket. The row itself and
+# the render are relocation-preclassify arm G.
+#
+# PRESENCE-SHAPED: rc 0 and an untouched file are also what a subject replaced by `exit 0` gives,
+# so apply must also have printed its manifest (at least one RESOLVED/DECISION/NOTE row). The
+# MUTANT restores the silent skip in a copy and must fail h while f's forced cases, which the row
+# cannot reach, stay green on the same copy.
+case "$APPLY" in */core/skills/ai-dlc-update/reconcile/apply.sh) H_ISDIST=1 ;; *) H_ISDIST=0 ;; esac
+H_RUN=1
+if ! grep -qF 'PRE-RELOCATION-NOOP' "$(dirname "$APPLY")/preclassify.sh"; then
+  if [ "$H_ISDIST" = 0 ]; then
+    printf '  SKIP  BL-230 arm h -- the installed preclassify.sh predates PRE-RELOCATION-NOOP; it lands with the pull that carries this fixture\n'
+    H_RUN=0
+  else
+    printf '  --    (BL-230: this preclassify.sh carries no PRE-RELOCATION-NOOP row; in the distribution arm h runs anyway and must go red)\n'
+  fi
+fi
+if [ "$H_RUN" = 1 ]; then
+  # h_world -> a fresh zero-work world under $WORK, refs recorded IN it as .B/.T
+  h_world() {
+    local _h; _h="$(mktemp -d "$WORK/zr.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
+    mkdir -p "$_h/dist/core/scripts" "$_h/dist/core/rules" "$_h/cons/scripts" "$_h/cons/.claude/rules"
+    printf '#!/usr/bin/env bash\necho x\n' > "$_h/dist/core/scripts/x.sh"
+    printf 'rule\n' > "$_h/dist/core/rules/r.md"; printf '0.1.0\n' > "$_h/dist/VERSION"
+    git -C "$_h/dist" init -q 2>/dev/null || { echo "FIXTURE ERROR: h git init failed" >&2; exit 2; }
+    git -C "$_h/dist" -c user.email=f@f -c user.name=fixture add -A >/dev/null 2>&1
+    git -C "$_h/dist" -c user.email=f@f -c user.name=fixture commit -q -m base >/dev/null 2>&1 \
+      || { echo "FIXTURE ERROR: h base commit failed" >&2; exit 2; }
+    git -C "$_h/dist" rev-parse HEAD > "$_h/.B"
+    printf '0.2.0\n' > "$_h/dist/VERSION"
+    git -C "$_h/dist" rm -q core/scripts/x.sh >/dev/null 2>&1
+    git -C "$_h/dist" -c user.email=f@f -c user.name=fixture commit -qam theirs >/dev/null 2>&1 \
+      || { echo "FIXTURE ERROR: h theirs commit failed" >&2; exit 2; }
+    git -C "$_h/dist" rev-parse HEAD > "$_h/.T"
+    printf '#!/usr/bin/env bash\necho x\n' > "$_h/cons/scripts/x.sh"
+    printf 'rule\n' > "$_h/cons/.claude/rules/r.md"
+    printf 'version: 0.1.0\ncommit: %s\n' "$(cat "$_h/.B")" > "$_h/cons/.claude/.ai-dlc-version"
+    if [ "$(git -C "$_h/dist" diff --no-renames --name-status "$(cat "$_h/.B")" "$(cat "$_h/.T")" -- core/)" != "$(printf 'D\tcore/scripts/x.sh')" ]; then
+      echo "FIXTURE ERROR: h world's range is not a lone core/scripts/x.sh deletion" >&2; exit 2
+    fi
+    printf '%s' "$_h"
+  }
+  # h_score <recon-dir> -> empty, or what failed
+  h_score() {
+    local _h _o _rc _m=""
+    _h="$(h_world)"; [ -n "$_h" ] && [ -d "$_h/cons" ] || { printf 'world-not-built'; return; }
+    _o="$(bash "$1/apply.sh" "$_h/dist" "$(cat "$_h/.B")" "$_h/cons" "$(cat "$_h/.T")" 2>&1)"; _rc=$?
+    printf '%s\n' "$_o" > "$_h/apply.out"
+    [ "$_rc" -eq 0 ] || _m="${_m}apply-rc=$_rc "
+    [ -f "$_h/cons/scripts/x.sh" ] || _m="${_m}scripts/x.sh-removed "
+    if grep -q 'unhandled-bucket' <<<"$_o"; then _m="${_m}unhandled-bucket-row "; fi
+    grep -qE '^(RESOLVED|DECISION|NOTE)	' <<<"$_o" || _m="${_m}no-manifest "
+    printf '%s' "$_m"
+  }
+  h="$(h_score "$(dirname "$APPLY")")"
+  if [ -z "$h" ]; then
+    ok "BL-230 arm h: apply runs a zero-work pre-relocation pull through (rc 0), leaves scripts/x.sh, and files no unhandled-bucket row"
+  else
+    bad "BL-230 arm h: the zero-work pre-relocation pull was not applied as zero work: $h"
+  fi
+  if [ "$F_RUN" = 1 ]; then
+    HM="$WORK/bl230-h-mutant"
+    cp -R "$FH" "$HM" || { echo "FIXTURE ERROR: could not copy the hooked reconcile dir" >&2; exit 2; }
+    _ha="$(printf '        printf %s %s %s %s %s\n' "'%s\\t%s\\t%s\\t%s\\n'" '"$status"' '"$path"' '"$cons"' '"PRE-RELOCATION-NOOP"')"
+    _hh="$(grep -cxF "$_ha" "$FH/preclassify.sh")" || _hh=0
+    H_A="$_ha" awk '$0 == ENVIRON["H_A"] { next } { print }' "$FH/preclassify.sh" > "$HM/preclassify.sh"
+    if [ "$_hh" -ne 1 ] || cmp -s "$FH/preclassify.sh" "$HM/preclassify.sh" || ! bash -n "$HM/preclassify.sh"; then
+      bad "FIXTURE STALE [BL-230 h mutant]: the row-emitter anchor matches $_hh lines of preclassify.sh (want 1), or the mutant does not parse"
+    else
+      hm="$(h_score "$HM")"
+      # f's forced rc2 case on the SAME mutant copy: the row cannot reach it, so it must still stop.
+      _hf_w="$(TMPDIR="$WORK" bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: BL-230 seed failed" >&2; exit 2; }
+      eval "$(sed 's/^/HF_/' "$_hf_w/env.sh")"
+      FX_B230_PC=rc2 bash "$HM/apply.sh" "$HF_DIST" "$HF_BASE" "$HF_CONSUMER" "$HF_THEIRS" >/dev/null 2>&1; _hf_rc=$?
+      if [ -z "$hm" ]; then
+        bad "MUTANT SURVIVED [BL-230 h]: with the PRE-RELOCATION-NOOP row removed, arm h still passed"
+      elif [ "$_hf_rc" -ne 1 ]; then
+        bad "MUTANT [BL-230 h] also moved arm f's forced stop (rc=$_hf_rc) -- entangled, or the copy did not run"
+      else
+        ok "MUTANT (PRE-RELOCATION-NOOP row removed) fails h ($hm) while arm f's forced stop on the same copy is unchanged"
+      fi
+    fi
+  fi
 fi
 
 echo
