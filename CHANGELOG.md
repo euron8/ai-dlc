@@ -15,6 +15,38 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.636.0] - 2026-09-24
+
+This release stops `fanout-payload-channel` counting and deleting in the shared temp root
+(`BL-304`). It also tells a gate reader how to read `EXAMINED NOTHING` at Checks 26, 33 and 35
+(`BL-305`). Neither discharges a consumer candidate, and no bootstrapping file is touched.
+
+### BL-304 — the fanout fixture counts and sweeps in a private temp root
+
+Arm 5 and mutant m6 counted `fanout.*` in the ambient `TMPDIR`. The subject names its payload
+directory with no per-run segment, so a concurrent run could fail arm 5 or fake m6's kill. m6's
+sweep could also delete that run's live payload. Each now counts and sweeps only in its own
+directory under the fixture's `$WORK`, and runs the subject with `TMPDIR` pointed there. Arm 5
+and m6 are kept, and so are their message prefixes. The subject is untouched.
+
+The filed receipt planted `fanout.FOREIGN<pid>`, a name no real run makes. A wrong fix that only
+tightened the glob therefore scored 0. The receipt now plants real `mktemp` names. Scored: base
+1, fix 0, glob-only fix 1, private root without `TMPDIR` 1, arm 5 deleted 1, arm 5 always true 1,
+fixture absent 9.
+
+### BL-305 — Checks 26, 33 and 35 say that exit 0 with `EXAMINED NOTHING` verified nothing
+
+Each site now quotes its own program's line and says that exit 0 there is not a pass. Check 33
+and Check 35 carry the instruction in their sections. Check 26's vacuous road is the `--series`
+rung, which runs from `## Gate Failure` step 4. The instruction sits there, with a pointer under
+Check 26. The filed entry had placed it in Check 26's own section, where that line is never
+printed. The enforcement map's Check 33 row now spells the emitted line,
+`NOT-APPLICABLE: EXAMINED NOTHING`.
+
+Checks 2 and 2a already print `OK: EXAMINED NOTHING` when the file is missing. A zero-byte
+`pending.md` takes a second exit-0 road in all three of their programs, and that road prints no
+token. The entry records this; the step text for Checks 2 and 2a is unchanged.
+
 ## [0.635.0] - 2026-09-24
 
 This release stops the reconcile engine leaking `reconcile-memo.*` directories (`BL-303`). It

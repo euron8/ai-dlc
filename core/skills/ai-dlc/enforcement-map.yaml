@@ -735,7 +735,7 @@ checks:
     call_sites:
       - site: gate-validation.md Check 33
         posture: FAILS the gate (exit 0 required; exit 2 on absent evidence is also a FAIL;
-          exit 0 with `NOT-APPLICABLE — EXAMINED NOTHING` is not a pass, nothing was
+          exit 0 with `NOT-APPLICABLE: EXAMINED NOTHING` is not a pass, nothing was
           verified — the ask named no identifier)
         why: >-
           every byte-level guarantee in the pipeline terminates at product-brief.md

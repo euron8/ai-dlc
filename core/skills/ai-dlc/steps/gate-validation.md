@@ -2358,7 +2358,8 @@ property `AI_DLC_ESCALATIONS` has, and of every validator the lead runs.
 
 **PASS:** exit 0 — every escalated check covered, well-formed, each PASS or `FAIL` under an
 in-force `SUPPRESSED` entry naming it. **FAIL:** any nonzero exit. Fixture:
-`tests/fixtures/gate-adjudication/`.
+`tests/fixtures/gate-adjudication/`. The `--series` rung over these verdicts runs
+at `## Gate Failure` step 4, which says how to read its vacuous line.
 
 **Minimum mechanism (Rule 26(c)).** Failure caught: the lead on a cheaper model silently
 mis-judging or skipping a judgment check — a check that cannot fire reads exactly like one that
@@ -2814,6 +2815,9 @@ scope to compare against — an unanswerable question, not a clean one.
 prints on every path including NOT-APPLICABLE. Across 23 measured requests, 18
 named at least one identifier (mean 4.0, max 13) and **5 named none** — on those
 this check has no subject and says so. It is not a general scope-fidelity check.
+**Read the line, not just the exit code.** That road exits 0 and prints
+`NOT-APPLICABLE: EXAMINED NOTHING`. Any output line containing `EXAMINED NOTHING`
+means the check verified nothing, and that exit 0 is not a pass.
 
 **Do NOT resolve a failure by editing the captured request.** Rule 13 reserves
 WHAT-changes to the operator; back-filling the ask to agree with the plan is the
@@ -2918,7 +2922,10 @@ cannot be parsed, means the verdict would be about nothing. **NOT-APPLICABLE is
 exit 0 and prints why**: no snapshot, no metrics file at all, or no recorded gate
 sha this repository can resolve. `base_sha`, `lines_removed` and `lines_destroyed`
 print on every path, so a run that examined nothing cannot read like a run that
-found nothing.
+found nothing. **Read the verdict line, not just the exit code.** Each
+NOT-APPLICABLE road prints a `verdict` line reading
+`NOT-APPLICABLE -- EXAMINED NOTHING`. Any output line containing
+`EXAMINED NOTHING` means the check verified nothing, and that exit 0 is not a pass.
 
 **On FAIL, recover from git — do not re-author.** `git show "${base_sha}:<snapshot path>"`
 holds the text verbatim; append the named lines to
@@ -2972,7 +2979,11 @@ If any check fails:
 
    exit 0 required. It errors when one `check_id` holds FAIL across three
    consecutive passes of one `gate_series_id`, and that non-zero exit is what
-   makes the escalation fire.
+   makes the escalation fire. **Read the line, not just the exit code.** A
+   directory holding no series exits 0 and prints
+   `VALIDATE-GATE-ADJUDICATION: PASS — … EXAMINED NOTHING`. Any output line
+   containing `EXAMINED NOTHING` means the rung verified nothing, and that exit 0
+   is not a pass.
 5. Do NOT skip a failing check. Do NOT proceed with a known failure.
    "We'll fix it later" is not an acceptable remediation for gate checks.
 

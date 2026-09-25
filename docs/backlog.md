@@ -4139,7 +4139,16 @@ score **1**: arm 5 deleted, m6's sweep left on the shared root, and arm 5's pred
 leaky-subject control, and that is why the control exists. With the fixture absent it scores
 **9**.
 
-verify: sh set -u; F=core/fixtures/fanout-payload-channel/run.sh; S=core/scripts/report-propagation-fanout.sh; [ -r "$F" ] && [ -r "$S" ] || exit 9; P="$(command -v python3)" || exit 9; T="$(mktemp -d)" || exit 9; trap 'rm -rf "$T"' EXIT; mkdir -p "$T/amb" "$T/amb2" "$T/shim" "$T/w/core/fixtures/fanout-payload-channel" "$T/w/core/scripts" || exit 9; printf '#!/bin/sh\nd="$FANOUT_FOREIGN_AMB/fanout.FOREIGN$$"; mkdir "$d" 2>/dev/null && echo "$d" >> "$FANOUT_FOREIGN_LOG"\nexec "%s" "$@"\n' "$P" > "$T/shim/python3" && chmod +x "$T/shim/python3" || exit 9; cp "$F" "$T/w/$F" || exit 9; sed 's|^trap .rm -rf "\$FANOUT_TMP". EXIT|: # trap removed|' "$S" > "$T/w/$S" || exit 9; cmp -s "$S" "$T/w/$S" && exit 9; drive() { FANOUT_FOREIGN_AMB="$2" FANOUT_FOREIGN_LOG="$3" TMPDIR="$2" PATH="$T/shim:$PATH" bash "$1" 2>&1; }; out="$(drive "$F" "$T/amb" "$T/log")"; rc=$?; [ "$rc" -eq 0 ] || [ "$rc" -eq 1 ] || exit 9; LC_ALL=C grep -q 'subject resolved:' <<<"$out" || exit 9; [ -s "$T/log" ] || exit 9; lo="$(drive "$T/w/$F" "$T/amb2" "$T/log2")"; LC_ALL=C grep -qF "subject resolved: $T/w/" <<<"$lo" || exit 9; np=0; nl=0; while read -r d; do np=$((np+1)); [ -d "$d" ] && nl=$((nl+1)); done < "$T/log"; a5="$(LC_ALL=C grep -c '^  ok    5\. ' <<<"$out")" || a5=0; m6="$(LC_ALL=C grep -c 'mutant \[m6-trap\] KILLED' <<<"$out")" || m6=0; l5="$(LC_ALL=C grep -c '^  FAIL  5\. the run left' <<<"$lo")" || l5=0; echo "fixture-rc=$rc arm5-ok=$a5 m6-killed=$m6 foreign-planted=$np foreign-surviving=$nl leaky-subject:arm5-fail=$l5"; [ "$rc" -eq 0 ] && [ "$a5" -eq 1 ] && [ "$m6" -eq 1 ] && [ "$nl" -eq "$np" ] && [ "$l5" -eq 1 ] && exit 0; exit 1
+**THE FILED SHIM ACCEPTED A WRONG FIX, AND THE RECEIPT BELOW REPLACES IT.** The batch 152
+adversary found that the first shim planted `fanout.FOREIGN<pid>`, a name no real run makes.
+A fix that left the count on the shared root and only tightened the glob to `fanout.??????`
+ignored those directories and scored **0**, the same as the private-root fix. The shim now
+makes its foreign directory with `mktemp -d "$FANOUT_FOREIGN_AMB/fanout.XXXXXX"`, the subject's
+own naming, so a glob cannot tell the two apart. Scored by the adversary at `5bacf2e3`: base
+**1**, private-root fix **0**, glob-tightening fix **1**, private root counted but `TMPDIR` not
+passed to the subject **1**.
+
+verify: sh set -u; F=core/fixtures/fanout-payload-channel/run.sh; S=core/scripts/report-propagation-fanout.sh; [ -r "$F" ] && [ -r "$S" ] || exit 9; P="$(command -v python3)" || exit 9; T="$(mktemp -d)" || exit 9; trap 'rm -rf "$T"' EXIT; mkdir -p "$T/amb" "$T/amb2" "$T/shim" "$T/w/core/fixtures/fanout-payload-channel" "$T/w/core/scripts" || exit 9; printf '#!/bin/sh\nd="$(mktemp -d "$FANOUT_FOREIGN_AMB/fanout.XXXXXX")" && echo "$d" >> "$FANOUT_FOREIGN_LOG"\nexec "%s" "$@"\n' "$P" > "$T/shim/python3" && chmod +x "$T/shim/python3" || exit 9; cp "$F" "$T/w/$F" || exit 9; sed 's|^trap .rm -rf "\$FANOUT_TMP". EXIT|: # trap removed|' "$S" > "$T/w/$S" || exit 9; cmp -s "$S" "$T/w/$S" && exit 9; drive() { FANOUT_FOREIGN_AMB="$2" FANOUT_FOREIGN_LOG="$3" TMPDIR="$2" PATH="$T/shim:$PATH" bash "$1" 2>&1; }; out="$(drive "$F" "$T/amb" "$T/log")"; rc=$?; [ "$rc" -eq 0 ] || [ "$rc" -eq 1 ] || exit 9; LC_ALL=C grep -q 'subject resolved:' <<<"$out" || exit 9; [ -s "$T/log" ] || exit 9; lo="$(drive "$T/w/$F" "$T/amb2" "$T/log2")"; LC_ALL=C grep -qF "subject resolved: $T/w/" <<<"$lo" || exit 9; np=0; nl=0; while read -r d; do np=$((np+1)); [ -d "$d" ] && nl=$((nl+1)); done < "$T/log"; a5="$(LC_ALL=C grep -c '^  ok    5\. ' <<<"$out")" || a5=0; m6="$(LC_ALL=C grep -c 'mutant \[m6-trap\] KILLED' <<<"$out")" || m6=0; l5="$(LC_ALL=C grep -c '^  FAIL  5\. the run left' <<<"$lo")" || l5=0; echo "fixture-rc=$rc arm5-ok=$a5 m6-killed=$m6 foreign-planted=$np foreign-surviving=$nl leaky-subject:arm5-fail=$l5"; [ "$rc" -eq 0 ] && [ "$a5" -eq 1 ] && [ "$m6" -eq 1 ] && [ "$nl" -eq "$np" ] && [ "$l5" -eq 1 ] && exit 0; exit 1
 
 ## BL-305 — the step text for Checks 26, 33 and 35 never tells the reader that exit 0 with `EXAMINED NOTHING` verified nothing
 
@@ -4171,5 +4180,22 @@ each section would be closed by the phrase alone, which `scripts/validate-backlo
 correctly reports as PROSE-CLOSABLE. Close by hand on the release whose diff gives each of the
 three sections a read-the-PASS-line instruction naming `EXAMINED NOTHING`, and records whether
 Check 2 and 2a need one too.
+
+**The fix, and one site this entry got wrong.** The Check 26 cite above (`:2971`) sits inside
+`## Gate Failure` step 4, not `### 26.`: the `--series` rung that takes the vacuous road runs
+only there, so the instruction went there, and `### 26.` got a one-line pointer to it. Each
+program spells its vacuous line differently, and each site quotes its own program's line,
+re-derived by driving that program on a vacuous input: 26 (`--series` on an empty directory)
+prints `VALIDATE-GATE-ADJUDICATION: PASS — … EXAMINED NOTHING`; 33 (an ask naming no
+identifier) prints `NOT-APPLICABLE: EXAMINED NOTHING`; 35 (no snapshot) prints
+`verdict : NOT-APPLICABLE -- EXAMINED NOTHING` with ASCII `--`. All three exit 0. The Check 33
+row in `core/skills/ai-dlc/enforcement-map.yaml` spelled the line `NOT-APPLICABLE — EXAMINED
+NOTHING`, which the program never prints; it now carries the emitted spelling, and no fixture or
+validator parsed the old one. Check 2 and 2a audit: `validate-escalation-resolution.sh`,
+`validate-escalation-status-vocabulary.sh` and `validate-suppression-lifetime.sh` already print
+`OK: EXAMINED NOTHING` when `pending.md` is absent. A ZERO-BYTE `pending.md` takes a second
+exit-0 road in all three, with no such token. That is recorded and not changed, because whether
+an empty file is a legitimate state has not been measured; the step text of Checks 2 and 2a is
+unchanged.
 
 verify: manual
