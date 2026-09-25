@@ -4107,3 +4107,110 @@ cause.
 
 verify: manual
 
+
+## BL-318 — the `artifact-derivations` WORKLIST row named the whole-corpus validator's exit 0 as its clear, which no consumer corpus can reach
+
+**DEFECT.** Filed by the reference consumer as
+`PC-S346-ARTIFACT-DERIVATIONS-ROW-NAMES-A-CLEAR-NO-CONSUMER-CORPUS-CAN-REACH` with the
+0.633.0 -> 0.641.0 pull, routed core (`core-paths.sh --is-core` reads `core` on
+`.claude/skills/ai-dlc-update/reconcile/apply.sh`, against a not-core control on
+`_bmad-output/spawn-ledger.jsonl`).
+
+**THE PREMISE, MEASURED at batch 157 on a scratch clone of the consumer. All five of its claims
+held.** `apply.sh` emits `WORKLIST artifact-derivations` when a fenced `derived` command in
+`_bmad-output/**/*.md` names a core path changed in BASE..THEIRS. Its remedy said to run
+`validate-artifact-derivations.sh _bmad-output/` and that "exit 0 is the clear". On the consumer
+that validator read 3325 FAIL of 5890 before the apply and 3328 of 5892 after it. The failures
+were pre-existing: 3216 were STALE, mostly `grep -n` and `sed -n N,Mp` line citations into
+living docs and old sprint packages. The clear was therefore unreachable, and every pull disposed
+of the row with a hand-built differential. The row also did not name its files, so the operator
+re-derived the join by hand each time. The artifact TEXT was held fixed and only
+`AI_DLC_PROJECT_ROOT` was varied (pre-apply worktree against applied tree). Over the row's 30
+files and 783 derivations that gave 0 newly failing and 0 newly passing. A probe derivation keyed
+on the stamp exits 0 at the base root and STALE at the theirs root, so the two sides
+discriminate. The naive shape (base artifacts against theirs artifacts) gives 22 / 18 of noise,
+all from the apply editing artifacts. It is the wrong differential.
+
+**THE FIX.** `apply.sh`'s join becomes `vd_join()`, which also returns `VD_FILES`, the row's file
+set. The BL-m5 fence line and the BL-m6 `elif` stay byte-identical. The new operator-run helper
+`core/skills/ai-dlc-update/reconcile/derivation-differential.sh <dist> <base> <consumer> <theirs>
+[--base-root <dir>]` lifts `vd_join()` and `map_consumer()` with the directory's awk-range +
+`eval` and refuses if either lift fails. It runs the consumer's one installed validator over the
+row's files, once against the pre-apply root and once against the consumer. It keys each
+derivation on file:line and its STATUS, and exits 0 on zero NEWLY-FAILING, 1 naming each one,
+and 2 on a refusal. The remedy text names the helper, puts already-stale derivations out of the
+row's scope, and says UNASSESSABLE rows are listed, never cleared. The fix hand reports the
+helper over the same pull at 783 derivations in 30 files: 0 NEWLY-FAILING, 386 STALE-BOTH,
+45 UNASSESSABLE, exit 0.
+
+**THE ADVERSARY'S CORRECTIONS, all adopted over the first contract.**
+- **No stamp-equality refusal.** At hand-back both roots' stamps read `<base>` by design, so that
+  gate refuses the one moment the check runs. The base root is the newest first-parent commit
+  whose stamp `commit:` resolves in `<dist>` to `<base>`: HEAD at hand-back, HEAD^ after the
+  step-8 commit.
+- **The discriminating control is CONTENT.** At least one mapped changed path must differ
+  byte-wise between the roots (present on one side only counts), or the run exits 2.
+- **A broken root is refused.** A `--base-root` must be a directory whose stamp resolves to
+  `<base>` and that has a git HEAD. A base side that passes ZERO derivations while the consumer
+  passes some is also refused, because the validator exits 1 all-STALE over a missing or empty
+  root rather than refusing.
+- **The universe comes from `--list`**, which is root-independent, and only
+  `FAIL (<verdict>): <abspath>:<line>` head lines are parsed. The first contract's "of N
+  checked" equality was dropped.
+- **The join lives in `apply.sh` as `vd_join()`**, not in `lib.sh` (which `apply.sh` does not
+  source) and not in a new sourced file.
+
+**OUT OF SCOPE, stated.** Already-stale derivations whose output this range moved again (9 on
+this pull) are forgiven, because keying on output is a clear no edit for the pull can close.
+Checkout-dependent derivations (branch name, mtimes, `.git/*`) can show as noise with a worktree
+base. Derivations whose operand is untracked or ignored in the consumer fail at base and read as
+NEWLY-PASSING. They are counted in a NOTE. Ref-dependent `git` derivations read shared refs from
+both roots, so they do not separate after the commit. Relative `_bmad-output/...` operands read
+each root's own copy of that artifact (327 of 1190 `$ ` lines on this row). Runtime is about
+42s per side on the consumer, so the check stays operator-run and is never invoked from the
+driver. A `SELF-UPDATE-DEFER` pull runs the old driver and emits the old row once. **`apply.sh`
+is bootstrapping**, so this ships alone, and the pull that delivers it still runs the old row. A
+command that exits 128 by itself, or is killed by SIGINT or SIGHUP, is still scored as a verdict
+(the natural corpus holds 16 real 128s and 2 real 141s). A shell error in derivation text, such as
+an arithmetic error, is UNRUN. PID reuse can leave a leaked worktree unnamed.
+
+**The receipt drives the shipping helper** over a seeded two-root tree at hand-back shape: the
+stamp reads `<base>` on both roots, the apply is uncommitted, and the helper resolves the base
+root itself. It uses the real validator. Three preconditions exit 9 if they do not hold: the
+seeded stale derivation must fail at base, and the seeded newly-failing one must pass at base
+and fail after the apply. The newly-failing tree must exit 1 and name `newly318.md:<line>`.
+A `--base-root` stamped `<base>` but holding no tree must exit 2. A pair carrying only a
+STALE-BOTH derivation must exit 0. Scored: tip `6a28e4a1` 0; base `f4dd5172` (no helper) 1; a
+stub helper that always exits 0 gives 1; R1 (base side ignored) gives 1; R2 (stamp-equality
+refusal) gives 1; side swap gives 1; dropping the broken-root refusal gives 1. A correct helper
+with differently worded rows and verdict lines gives 0.
+
+**BLOCKER from the tip adversary, fixed in the same release:** step 2's self-update commit keeps
+`commit:` at `<base>` while carrying theirs' machinery, so the default walk took it as the base
+root and a machinery derivation this range broke read STALE-BOTH with exit 0; the walk now also
+requires `skill_commit:` to be absent or to resolve to `<base>`. The receipt's seed gained that
+world (`su318.md`) and was rescored: fix `643ecfc5` 0; pre-round `0d2ecd16` 1; base `f4dd5172` 1;
+stub 1; R1 1; R2 1; side swap 1; broken-root refusal dropped 1; R5 (skip dropped) 1; second
+spelling 0.
+
+**Second tip adversary, fixed in the same release:** the walk and `--base-root` now accept a
+`skill_commit:` that is absent, `<base>`, or an ancestor of `<base>`, and skip an empty one. This
+takes graph's walk from 89 to 118 of 123 correct base roots, with refusals down from 32 to 3. The
+walk takes the newest matching commit, a leaked worktree is named only when its recorded PID is
+dead, and the join counts a zero-byte artifact as opened. The receipt gained a stale
+`skill_commit:` world (`sk318.md`), an empty-`skill_commit:` world, a `--base-root` at the
+self-update commit, and a newest-vs-oldest world (`loc318.md`), and was rescored: fix 0; 95719535
+1; base `f4dd5172` 1; stub 1; R1 1; R2 1; side swap 1; broken-root refusal dropped 1; R5 1; R6
+(equality restored) 1; R7 (`--base-root` check dropped) 1; R8 (oldest pick) 1; oldest pick on
+95719535 1; second spelling 0.
+
+**Third tip adversary, fixed in the same release:** the validator's `set -u` reached the eval
+subshell, so a bare unbound `$VAR` scored a stale derivation UNRUN with exit 2, which the capture
+hook read as infrastructure and used to hide every real STALE in the same write; the eval now runs
+with `set -u` off, the hook surfaces an exit 2 that carries `UNRUN:` or `REFUSED:` lines, and the
+leak NOTE asks `ps -p` rather than `kill -0`, which fails with EPERM on another uid's live process.
+The receipt was rescored at the fix: 0.
+
+**LANDED (v0.643.0, verified 75f409bf).**
+
+verify: sh R="$(pwd)"; H="$R/core/skills/ai-dlc-update/reconcile/derivation-differential.sh"; V="$R/core/scripts/validate-artifact-derivations.sh"; [ -f "$V" ] || exit 9; [ -f "$H" ] || exit 1; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY; W="$(mktemp -d)" || exit 9; g() { git -c user.name=r -c user.email=r@r -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }; D="$W/dist"; mkdir -p "$D/core/skills/x" && g init -q "$D" || exit 9; echo alpha > "$D/core/skills/x/a.md"; g -C "$D" add -A && g -C "$D" commit -qm a || exit 9; A="$(g -C "$D" rev-parse HEAD)"; echo beta > "$D/core/skills/x/a.md"; g -C "$D" commit -qam b || exit 9; B="$(g -C "$D" rev-parse HEAD)"; F='```'; P='.claude/skills/x/a.md'; mk() { C="$W/$1"; mkdir -p "$C/.claude/skills/x" "$C/scripts/ai-dlc" "$C/_bmad-output" || exit 9; g init -q "$C" || exit 9; printf 'version: 0\ncommit: %s\n' "$A" > "$C/.claude/.ai-dlc-version"; echo alpha > "$C/$P"; cp "$V" "$C/scripts/ai-dlc/"; printf '# s\n\n%sderived\n$ grep -c zeta %s\n5\n$ grep -c . %s\n1\n%s\n' "$F" "$P" "$P" "$F" > "$C/_bmad-output/stale318.md"; [ "$2" = 1 ] && printf '# n\n\n%sderived\n$ grep -c alpha %s\n1\n%s\n' "$F" "$P" "$F" > "$C/_bmad-output/newly318.md"; g -C "$C" add -A && g -C "$C" commit -qm c || exit 9; ( cd "$C" && AI_DLC_PROJECT_ROOT="$C" bash "$V" _bmad-output/stale318.md ) >/dev/null 2>&1 && exit 9; if [ "$2" = 1 ]; then ( cd "$C" && AI_DLC_PROJECT_ROOT="$C" bash "$V" _bmad-output/newly318.md ) >/dev/null 2>&1 || exit 9; fi; echo beta > "$C/$P"; if [ "$2" = 1 ]; then ( cd "$C" && AI_DLC_PROJECT_ROOT="$C" bash "$V" _bmad-output/newly318.md ) >/dev/null 2>&1 && exit 9; fi; o="$(bash "$H" "$D" "$A" "$C" "$B" </dev/null 2>/dev/null)"; rc=$?; }; mk one 1; [ "$rc" = 1 ] || exit 1; grep -q 'newly318\.md:[0-9]' <<<"$o" || exit 1; E="$W/empty"; mkdir -p "$E/.claude" && g init -q "$E" || exit 9; printf 'version: 0\ncommit: %s\n' "$A" > "$E/.claude/.ai-dlc-version"; g -C "$E" add -A && g -C "$E" commit -qm e || exit 9; bash "$H" "$D" "$A" "$C" "$B" --base-root "$E" </dev/null >/dev/null 2>&1; [ "$?" = 2 ] || exit 1; mk two 0; [ "$rc" = 0 ] || exit 1; D2="$W/dist2"; mkdir -p "$D2/core/skills/x" && g init -q "$D2" || exit 9; echo alpha > "$D2/core/skills/x/a.md"; echo r1 > "$D2/core/skills/x/r.md"; g -C "$D2" add -A && g -C "$D2" commit -qm a || exit 9; A2="$(g -C "$D2" rev-parse HEAD)"; echo beta > "$D2/core/skills/x/a.md"; echo r2 > "$D2/core/skills/x/r.md"; g -C "$D2" commit -qam b || exit 9; B2="$(g -C "$D2" rev-parse HEAD)"; C="$W/su"; mkdir -p "$C/.claude/skills/x" "$C/scripts/ai-dlc" "$C/_bmad-output" || exit 9; g init -q "$C" || exit 9; printf 'version: 0\ncommit: %s\nskill_commit: %s\n' "$A2" "$A2" > "$C/.claude/.ai-dlc-version"; echo alpha > "$C/$P"; echo r1 > "$C/.claude/skills/x/r.md"; cp "$V" "$C/scripts/ai-dlc/"; printf '# u\n\n%sderived\n$ grep -c alpha %s\n1\n$ grep -c r .claude/skills/x/r.md\n1\n%s\n' "$F" "$P" "$F" > "$C/_bmad-output/su318.md"; g -C "$C" add -A && g -C "$C" commit -qm pre || exit 9; ( cd "$C" && AI_DLC_PROJECT_ROOT="$C" bash "$V" _bmad-output/su318.md ) >/dev/null 2>&1 || exit 9; echo beta > "$C/$P"; printf 'version: 0\ncommit: %s\nskill_commit: %s\n' "$A2" "$B2" > "$C/.claude/.ai-dlc-version"; g -C "$C" commit -qam su || exit 9; echo r2 > "$C/.claude/skills/x/r.md"; ( cd "$C" && AI_DLC_PROJECT_ROOT="$C" bash "$V" _bmad-output/su318.md ) >/dev/null 2>&1 && exit 9; o="$(bash "$H" "$D2" "$A2" "$C" "$B2" </dev/null 2>/dev/null)"; [ "$?" = 1 ] || exit 1; grep -q 'su318\.md:[0-9]' <<<"$o" || exit 1; g clone -q "$C" "$W/suroot" || exit 9; bash "$H" "$D2" "$A2" "$C" "$B2" --base-root "$W/suroot" </dev/null >/dev/null 2>&1; [ "$?" = 2 ] || exit 1; D3="$W/dist3"; mkdir -p "$D3/core/skills/x" && g init -q "$D3" || exit 9; echo alpha > "$D3/core/skills/x/a.md"; echo r0 > "$D3/core/skills/x/r.md"; g -C "$D3" add -A && g -C "$D3" commit -qm a0 || exit 9; A0="$(g -C "$D3" rev-parse HEAD)"; echo r1 > "$D3/core/skills/x/r.md"; g -C "$D3" commit -qam a3 || exit 9; A3="$(g -C "$D3" rev-parse HEAD)"; echo beta > "$D3/core/skills/x/a.md"; g -C "$D3" commit -qam b3 || exit 9; B3="$(g -C "$D3" rev-parse HEAD)"; mk3() { C="$W/$1"; mkdir -p "$C/.claude/skills/x" "$C/scripts/ai-dlc" "$C/_bmad-output" || exit 9; g init -q "$C" || exit 9; printf 'version: 0\ncommit: %s\n' "$A3" > "$C/.claude/.ai-dlc-version"; [ -n "$2" ] && printf 'skill_commit: %s\n' "$2" >> "$C/.claude/.ai-dlc-version"; echo alpha > "$C/$P"; echo r1 > "$C/.claude/skills/x/r.md"; cp "$V" "$C/scripts/ai-dlc/"; [ "$3" = 1 ] && printf '# k\n\n%sderived\n$ grep -c alpha %s\n1\n%s\n' "$F" "$P" "$F" > "$C/_bmad-output/sk318.md"; g -C "$C" add -A && g -C "$C" commit -qm pre || exit 9; }; mk3 s1 "$A0" 1; ( cd "$C" && AI_DLC_PROJECT_ROOT="$C" bash "$V" _bmad-output/sk318.md ) >/dev/null 2>&1 || exit 9; echo beta > "$C/$P"; o="$(bash "$H" "$D3" "$A3" "$C" "$B3" </dev/null 2>/dev/null)"; [ "$?" = 1 ] || exit 1; grep -q 'sk318\.md:[0-9]' <<<"$o" || exit 1; mk3 s3 "$A3" 1; P3="$(g -C "$C" rev-parse HEAD)"; echo beta > "$C/$P"; printf 'version: 0\ncommit: %s\nskill_commit: \n' "$A3" > "$C/.claude/.ai-dlc-version"; g -C "$C" commit -qam su || exit 9; o="$(bash "$H" "$D3" "$A3" "$C" "$B3" </dev/null 2>/dev/null)"; [ "$?" = 1 ] || exit 1; grep -qF "worktree of $P3" <<<"$o" || exit 1; mk3 old "" 0; printf 'alpha\nqqloc\n' > "$C/$P"; printf '# l\n\n%sderived\n$ grep -c qqloc %s\n1\n%s\n' "$F" "$P" "$F" > "$C/_bmad-output/loc318.md"; g -C "$C" add -A && g -C "$C" commit -qm local || exit 9; N="$(g -C "$C" rev-parse HEAD)"; ( cd "$C" && AI_DLC_PROJECT_ROOT="$C" bash "$V" _bmad-output/loc318.md ) >/dev/null 2>&1 || exit 9; echo beta > "$C/$P"; ( cd "$C" && AI_DLC_PROJECT_ROOT="$C" bash "$V" _bmad-output/loc318.md ) >/dev/null 2>&1 && exit 9; o="$(bash "$H" "$D3" "$A3" "$C" "$B3" </dev/null 2>/dev/null)"; [ "$?" = 1 ] || exit 1; grep -q 'loc318\.md:[0-9]' <<<"$o" || exit 1; grep -qF "worktree of $N" <<<"$o" || exit 1; exit 0

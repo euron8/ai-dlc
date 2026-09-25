@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh"
 # artifact-derivations — validate-artifact-derivations.sh must FAIL on a stale claim.
 #
 # WHY THIS FIXTURE IS SHAPED AS A DIFFERENTIAL. The validator's whole value is that it
@@ -768,7 +769,7 @@ else
   bad "l-m3 DID NOT APPLY -- the sentinel-check mutation matched nothing, so no verdict was scored"
 fi
 M4="$WORK/l/m4-$VBASE"
-if mut_copy "$M4" 's|eval "\$c" <&3 3<&- )|eval "$c" 3<\&- )|'; then
+if mut_copy "$M4" 's|eval "\$c" <&3 3<&-;|eval "$c" 3<\&-;|'; then
   ok "l-m4 applied          (cmp -s: the stdin-inherited mutation changed the file)"
   out="$(AI_DLC_PROJECT_ROOT="$WORK" bash "$M4" "$WORK/l/reader.md" 2>&1)"; rc=$?
   # The kill is the SWALLOW itself, asserted as a presence: exit 0 and ONE derivation counted
@@ -780,6 +781,171 @@ if mut_copy "$M4" 's|eval "\$c" <&3 3<&- )|eval "$c" 3<\&- )|'; then
   fi
 else
   bad "l-m4 DID NOT APPLY -- the stdin-inherited mutation matched nothing, so no verdict was scored"
+fi
+
+# --- M. A DERIVATION THAT NEVER RAN IS UNRUN, NEVER STALE ----------------------------------
+# The output file is empty both when a command printed nothing and when it never executed, and
+# an empty actual against a recorded value scored STALE. On the base side of
+# `derivation-differential.sh` that turned a real break into STALE-BOTH and the helper exited 0.
+# The validator now reads a MARKER the subshell writes after eval returns, and any derivation
+# whose marker is empty, or records SIGKILL/SIGTERM, makes the run exit 2 with an UNRUN line.
+#
+# THE FAULTS ARE FORCED, NEVER WAITED FOR, AND EACH TARGETS ONE COMMAND. `shasum` is on the
+# allowlist and the validator itself never calls it, so a shim of it on PATH reaches the eval and
+# nothing else:
+#   m-kill-cmd   the shim SIGKILLs itself -- the command dies, the subshell survives (marker 137)
+#   m-kill-sub   the shim SIGKILLs its parent, the eval subshell (marker empty)
+#   m-fork       a COPY with `ulimit -Su 1` before the eval: bash 3.2 cannot fork the command and
+#                abandons the subshell with 128 (marker empty). A copy, not a mutant: the fault
+#                is injected, the subject's logic is untouched, and `cmp -s` guards the edit.
+# Each carries a TRUE recorded value, so the only way to exit 1 is to score the fault as STALE.
+#
+# THE NEAR-MISSES ARE THE STATUSES A REAL DERIVATION PRODUCES ON ITS OWN, and they are why no
+# exit-status rule can replace the marker: `git show` on a missing ref exits 128 (a genuine
+# fatal), and a `cat | head -1` over a large file exits 141 under the inherited `pipefail`. Both
+# ran, both must be verdicts, and each has a twin that must come back STALE.
+mkdir -p "$WORK/m/bin"
+printf 'm-data\n' > "$WORK/src/m-data.txt"
+cp "$VALIDATOR" "$WORK/m/v.sh"
+mshim() { # $1 body of the shasum shim
+  printf '#!/bin/sh\n%s\n' "$1" > "$WORK/m/bin/shasum"; chmod +x "$WORK/m/bin/shasum"
+}
+mrun() { # $1 validator  $2 story -> sets out, rc
+  out="$(cd "$WORK" && PATH="$WORK/m/bin:$PATH" AI_DLC_PROJECT_ROOT="$WORK" bash "$1" "$2" 2>&1)"; rc=$?
+}
+{ printf '```derived\n$ shasum src/m-data.txt\nfeedface  src/m-data.txt\n```\n\n'
+  printf '```derived\n$ grep -c needle src/two-needles.txt\n2\n```\n'; } > "$WORK/m/fault.md"
+m_unrun() { # $1 label  $2 validator
+  mrun "$2" "$WORK/m/fault.md"
+  if [ "$rc" -eq 2 ] && grep -q '^UNRUN: .*fault.md:2 ' <<< "$out" && grep -q '^REFUSED: 1 derivation' <<< "$out" \
+     && ! grep -q 'FAIL (STALE)' <<< "$out"; then
+    ok "$1 exit=2  UNRUN names the derivation; no STALE was scored"
+  else
+    bad "$1 expected exit 2 with an UNRUN line naming fault.md:2 and no STALE, got $rc: $out"
+  fi
+}
+# POSITIVE CONTROL for the shim itself: with a shim that prints the recorded line, the SAME file
+# reproduces. Without it, UNRUN below could be the shim failing to be found at all.
+mshim 'echo "feedface  src/m-data.txt"'
+mrun "$WORK/m/v.sh" "$WORK/m/fault.md"
+[ "$rc" -eq 0 ] && grep -q '^OK: 2 derivation' <<< "$out" \
+  && ok "m-control              exit=0  the shasum shim is on the eval's PATH and the file reproduces" \
+  || bad "m-control the shim was not reached, so no fault arm below is about the eval (rc=$rc): $out"
+mshim 'kill -9 $$'
+m_unrun "m-kill-cmd            " "$WORK/m/v.sh"
+mshim 'kill -9 $PPID'
+m_unrun "m-kill-sub            " "$WORK/m/v.sh"
+mshim 'echo "feedface  src/m-data.txt"'
+cp "$VALIDATOR" "$WORK/m/v-fork.sh"
+"${SED:-sed}" 's|( cd "\$AI_DLC_ROOT" && { eval "\$c"|( cd "$AI_DLC_ROOT" \&\& { case "$c" in shasum*) ulimit -Su 1 ;; esac; eval "$c"|' \
+  "$VALIDATOR" > "$WORK/m/v-fork.sh" 2>/dev/null
+if cmp -s "$VALIDATOR" "$WORK/m/v-fork.sh"; then
+  bad "m-fork DID NOT APPLY -- the fork-fault injection matched nothing, so no verdict was scored"
+else
+  m_unrun "m-fork                " "$WORK/m/v-fork.sh"
+fi
+
+# The near-misses. git needs a repository for its fatal to be about the ref, not the cwd.
+#
+# THE 141 IS PRODUCED BY `awk ... exit 141`, NOT BY THE PIPE. A `cat | head -1` exits 141 only
+# when SIGPIPE is at its default disposition. `git push` runs its hooks with SIGPIPE IGNORED, and
+# bash cannot un-ignore a signal ignored on entry, so under the gate the writer gets EPIPE and the
+# pipe exits 1 -- measured: plain run pipe=141, `trap "" PIPE; exec bash run.sh` pipe=1. A control
+# pinned to the pipe's 141 was red under the gate and green by hand. The awk program is on the
+# allowlist, needs no `;` (two BEGIN blocks), and exits 141 under either disposition, so the
+# above-128-not-137/143 near-miss holds everywhere. The pipe is kept as a third near-miss with NO
+# pinned status: whichever it produces, it ran, so it must be a verdict.
+mkdir -p "$WORK/m/repo"
+git -C "$WORK/m/repo" init -q 2>/dev/null
+awk 'BEGIN { for (i = 0; i < 20000; i++) print "line-" i }' > "$WORK/m/repo/big.txt"
+( cd "$WORK/m/repo" && awk 'BEGIN { print "line-0" } BEGIN { exit 141 }' >/dev/null ); arc=$?
+( cd "$WORK/m/repo" && git show ZZ_NO_SUCH_REF_ZZ >/dev/null 2>&1 ); grc=$?
+( cd "$WORK/m/repo" && set -o pipefail && cat big.txt | head -1 >/dev/null ); prc=$?
+[ "$arc" -eq 141 ] && [ "$grc" -eq 128 ] \
+  && ok "m-natural CONTROL      awk exits 141 and git 128 on their own, so the near-misses carry those statuses (pipe gave $prc here)" \
+  || bad "m-natural CONTROL the near-misses do not produce the statuses they stand for (awk=$arc git=$grc)"
+[ "$prc" -ne 0 ] \
+  && ok "m-natural pipe         the pipe near-miss exits non-zero ($prc) on its own, so it is a status a derivation produced" \
+  || bad "m-natural pipe the cat|head near-miss exited 0, so it no longer carries a non-zero status of its own"
+mnear() { # $1 label  $2 command  $3 true output ("" = none)  $4 wrong output
+  { printf '```derived\n$ %s\n' "$2"; [ -n "$3" ] && printf '%s\n' "$3"; printf '```\n'; } > "$WORK/m/repo/$1-true.md"
+  out="$(cd "$WORK/m/repo" && AI_DLC_PROJECT_ROOT="$WORK/m/repo" bash "$VALIDATOR" "$WORK/m/repo/$1-true.md" 2>&1)"; rc=$?
+  [ "$rc" -eq 0 ] && ! grep -q 'UNRUN' <<< "$out" \
+    && ok "m-$1 (verdict)   exit=0  a status the command produced itself is not UNRUN" \
+    || bad "m-$1 a derivation that ran and exited on its own was refused (rc=$rc): $out"
+  { printf '```derived\n$ %s\n%s\n```\n' "$2" "$4"; } > "$WORK/m/repo/$1-stale.md"
+  out="$(cd "$WORK/m/repo" && AI_DLC_PROJECT_ROOT="$WORK/m/repo" bash "$VALIDATOR" "$WORK/m/repo/$1-stale.md" 2>&1)"; rc=$?
+  [ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" && ! grep -q 'UNRUN' <<< "$out" \
+    && ok "m-$1 (twin)      exit=1  STALE, not UNRUN -- the verdict path is live" \
+    || bad "m-$1 twin must be STALE and not UNRUN, got $rc: $out"
+}
+mnear git-128  "git show ZZ_NO_SUCH_REF_ZZ"                          ""       "9"
+mnear awk-141  "awk 'BEGIN { print \"line-0\" } BEGIN { exit 141 }'" "line-0" "9"
+mnear pipe     "cat big.txt | head -1"                               "line-0" "9"
+
+# M5 -- the marker check DROPPED: the defect as it shipped. The fault must come back STALE,
+# exit 1, which is the false verdict this section exists to refuse.
+# M6 -- the signal arm DROPPED: only the marker-empty half survives, so m-kill-cmd's command
+# SIGKILL (marker 137) is scored STALE again while m-kill-sub stays UNRUN.
+M5="$WORK/m/m5-$VBASE"; M6="$WORK/m/m6-$VBASE"
+mshim 'kill -9 $PPID'
+if mut_copy "$M5" "s/^    ''|\*\[!0-9\]\*|137|143)\$/    ZZ_NEVER_MATCHES_ZZ)/"; then
+  ok "m-m5 applied          (cmp -s: the marker-check-dropped mutation changed the file)"
+  mrun "$M5" "$WORK/m/fault.md"
+  [ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" && grep -q 'of 2 checked' <<< "$out" && ! grep -q 'UNRUN' <<< "$out" \
+    && ok "m-m5 KILLED           with the marker unread a killed subshell scores STALE, exit 1" \
+    || bad "m-m5 SURVIVED or did not run (rc=$rc): $out"
+else
+  bad "m-m5 DID NOT APPLY -- the marker-check mutation matched nothing, so no verdict was scored"
+fi
+mshim 'kill -9 $$'
+if mut_copy "$M6" "s/^    ''|\*\[!0-9\]\*|137|143)\$/    ''|*[!0-9]*)/"; then
+  ok "m-m6 applied          (cmp -s: the signal-arm-dropped mutation changed the file)"
+  mrun "$M6" "$WORK/m/fault.md"
+  [ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" && ! grep -q 'UNRUN' <<< "$out" \
+    && ok "m-m6 KILLED           with only the empty-marker arm a SIGKILLed command scores STALE, exit 1" \
+    || bad "m-m6 SURVIVED or did not run (rc=$rc): $out"
+else
+  bad "m-m6 DID NOT APPLY -- the signal-arm mutation matched nothing, so no verdict was scored"
+fi
+
+# M-UNBOUND. A bare unbound `$VAR` in derivation text is admissible -- the allowlist refuses only
+# `${` and `$(` -- and the validator's own `set -u` used to reach the eval subshell, abort it
+# before the marker was written, and score an ordinary stale derivation UNRUN, exit 2. The capture
+# hook then read that 2 as infrastructure and hid every real STALE in the same write. The eval now
+# runs with `set -u` off, so the variable expands empty and the derivation gets a verdict:
+#   m-unbound-stale  recorded 9 where `grep -c "needle$FILE_ZZ_UNSET"` finds 2: STALE, exit 1
+#   m-unbound-true   the same command recording its true 2: exit 0, the near-miss
+#   m-arith          `$[1/0]` is a shell error that aborts the subshell outright, whatever `set -u`
+#                    says: it did not run, so it stays UNRUN, exit 2
+# M7 drops the `set +u` bracket and must bring m-unbound-stale back to UNRUN.
+[ -z "${FILE_ZZ_UNSET+x}" ] \
+  && ok "m-unbound CONTROL      FILE_ZZ_UNSET is unset in this environment, so the seeds are about an unbound name" \
+  || bad "m-unbound CONTROL FILE_ZZ_UNSET is set, so no unbound arm below is about an unbound variable"
+printf '```derived\n$ grep -c "needle$FILE_ZZ_UNSET" src/two-needles.txt\n9\n```\n' > "$WORK/m/unbound-stale.md"
+printf '```derived\n$ grep -c "needle$FILE_ZZ_UNSET" src/two-needles.txt\n2\n```\n' > "$WORK/m/unbound-true.md"
+printf '```derived\n$ grep -c "needle$[1/0]" src/two-needles.txt\n2\n```\n' > "$WORK/m/arith.md"
+mrun "$VALIDATOR" "$WORK/m/unbound-stale.md"
+[ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" && grep -q 'actual:   2' <<< "$out" && ! grep -q 'UNRUN' <<< "$out" \
+  && ok "m-unbound-stale        exit=1  a bare unbound \$VAR expands empty and the stale record is STALE, not UNRUN" \
+  || bad "m-unbound-stale expected exit 1 STALE with actual 2 and no UNRUN, got $rc: $out"
+mrun "$VALIDATOR" "$WORK/m/unbound-true.md"
+[ "$rc" -eq 0 ] && grep -q '^OK: 1 derivation' <<< "$out" \
+  && ok "m-unbound-true         exit=0  the same command recording its true output reproduces" \
+  || bad "m-unbound-true expected exit 0 OK: 1 derivation, got $rc: $out"
+mrun "$VALIDATOR" "$WORK/m/arith.md"
+[ "$rc" -eq 2 ] && grep -q '^UNRUN: .*arith.md:2 ' <<< "$out" && ! grep -q 'FAIL (STALE)' <<< "$out" \
+  && ok "m-arith                exit=2  an arithmetic error aborts the subshell, so it is UNRUN" \
+  || bad "m-arith expected exit 2 with an UNRUN line naming arith.md:2, got $rc: $out"
+M7="$WORK/m/m7-$VBASE"
+if mut_copy "$M7" '/^  set +u$/d'; then
+  ok "m-m7 applied          (cmp -s: the set +u bracket-dropped mutation changed the file)"
+  mrun "$M7" "$WORK/m/unbound-stale.md"
+  [ "$rc" -eq 2 ] && grep -q '^UNRUN: .*unbound-stale.md:2 ' <<< "$out" && ! grep -q 'FAIL (STALE)' <<< "$out" \
+    && ok "m-m7 KILLED           with set -u reaching the eval an unbound \$VAR aborts the subshell and scores UNRUN" \
+    || bad "m-m7 SURVIVED or did not run (rc=$rc): $out"
+else
+  bad "m-m7 DID NOT APPLY -- the set +u bracket mutation matched nothing, so no verdict was scored"
 fi
 
 echo

@@ -266,6 +266,7 @@ core_manifest:
   - fixtures/fanout-untracked-corpus/**
   - fixtures/preclassify-mode-bucket/**
   - fixtures/predicate-reclassification/**
+  - fixtures/derivation-differential/**
   - fixtures/provenance-flagless-default/**
   - fixtures/provenance-not-accessible/**
   - fixtures/reconcile-blocking-list/**

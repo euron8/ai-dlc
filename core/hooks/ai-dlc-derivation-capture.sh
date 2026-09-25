@@ -74,6 +74,9 @@
 #   read-only allowlist, or opens a fence it never closes. The headline is class-neutral
 #   because the validator already names the class, and a headline that said "does not
 #   reproduce" would misdescribe the other two.
+# - stderr + exit 2: the validator's UNRUN and REFUSED lines, with any STALE it reached,
+#   when a pair this edit wrote did not run to completion. The validator exits 2 then, and
+#   the hook tells that apart from a refusal to start by those lines, never by the status.
 #
 # INSTALL
 # 1. Place at .claude/hooks/ai-dlc-derivation-capture.sh
@@ -207,14 +210,34 @@ OUT=$( ( cd "$PROJECT_DIR" 2>/dev/null && AI_DLC_PROJECT_ROOT="$PROJECT_DIR" \
          bash "$VALIDATOR" "$MASK" ) 2>&1 )
 RC=$?
 
-# 0 reproduces, 2 is the validator refusing to start (bad usage, unresolvable root) --
-# an infrastructure state, not an author's mistake. Only 1 is a verdict about the text.
-[ "$RC" = 1 ] || exit 0
+# 0 reproduces and 1 is a verdict about the text. 2 has TWO meanings, and the exit status
+# cannot separate them, so the validator's own output lines do:
+#   - an `^UNRUN:` line (and the `^REFUSED:` summary after it) names a derivation this edit
+#     wrote that did not run to completion. The validator withholds every verdict in the file
+#     then, STALE findings included, so exiting 0 here would hide a real mismatch behind one
+#     unrunnable block in the same write. It is surfaced, with any STALE lines beside it.
+#   - anything else at 2 is the validator refusing to START -- bad usage, a root it cannot
+#     resolve, a target that is not there. That is an infrastructure state, not an author's
+#     mistake, and it stays exit 0 for the reason in the header.
+# Any other status (a validator that crashed) is infrastructure too.
+UNRUN_SEEN=0
+case "$RC" in
+  1) ;;
+  2) grep -qE '^(UNRUN|REFUSED):' <<<"$OUT" || exit 0
+     UNRUN_SEEN=1 ;;
+  *) exit 0 ;;
+esac
 
 REL="${FILE#"$PROJECT_DIR"/}"
 {
-  echo "AI/DLC derivation capture: a \`\`\`derived block this edit wrote is not backed by"
-  echo "its own command. The checker's verdict follows."
+  if [ "$UNRUN_SEEN" = 1 ]; then
+    echo "AI/DLC derivation capture: a \`\`\`derived block this edit wrote did not run to"
+    echo "completion, so the checker withheld its verdict on every block this edit touched."
+    echo "Its output, including any stale finding it reached, follows."
+  else
+    echo "AI/DLC derivation capture: a \`\`\`derived block this edit wrote is not backed by"
+    echo "its own command. The checker's verdict follows."
+  fi
   echo
   # Literal, left-to-right, CONSUMING replacement. An in-place rewrite that re-searches
   # the whole line does not terminate when the replacement contains the needle, and awk
