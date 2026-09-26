@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 639..686. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 644..676. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -67,6 +67,63 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
 
+**BATCH 158 SHIPPED `v0.644.0` (`2a69bb31`, #867) AND CLOSED `BL-319` AND `BL-320`, WHICH
+DISCHARGE `PC-S313-FOLDIN-NEVER-RETAKES-ARCHITECTURE-ASSESSMENT`.** It was invoked by peer handoff.
+The opening sweep matched batch 157 on every figure and control: live 25, unfiled 12, worklist 5,
+histogram 9/46/1, ledger md5 `99072171…`. The subject was that uncommitted filing, whose premise held
+against `bug-investigation.md` with controls. Live **77 -> 75**, archive **242 -> 244**. The exit-0
+receipt set is batch 157's nine, compared by id.
+
+**A FOLDED FIX STORY NOW REACHES AN ARCHITECT.** In every variant that runs an architecture step,
+`bug-investigation.md` §4 dispatches an `architect` after the one-shot. Check 17's fold architecture
+gate is ONE command, `validate-spawn-ledger.sh --fold-architect`. It resolves the variant from the
+snapshot, then `sprint-status.yaml`, and decides whether the fold is owed BEFORE it reads the
+residue. It joins the residue to an architect ledger row after the one-shot's own row, and requires
+the story's stamp to carry the one-shot's id. Check 17 now runs at implementation gates too
+(`BL-320`), without the cross-check. BL-319 states six residuals; the lead can still write the spine
+text and can re-point then re-stamp.
+
+**SIX ADVERSARY ROUNDS, AND FIVE FOUND A DEFECT IN THE PREVIOUS ROUND'S FIX.** The contract round
+refuted the first design outright: its waiver clause already held in S313. The last tip round found
+none blocking. The one that mattered most: the fold gate's residue check failed every `bug`-variant
+sprint on correct work, because the fixture ran the extracted gate commands only in carry-over
+worlds. **A fixture that extracts gate commands must execute them in every variant the gate
+reaches, not only the one the defect came from.**
+
+**THE FIRST GATE WENT RED ON `validator-fork-budget`: 3297 against 3289.** Four forks were I7
+re-reading two manifest rows; the other ten are attributed arm by arm above `FORK_BUDGET`, now 3299.
+The re-gate passed 209 ok, 0 FAIL, with the pole SKIPPED at pool width 8. **The three new mutant
+shards ran 358-375s LOADED against ~150s solo, second only to `ledger-reverify` at 492s.** Watch
+them; a busier box can make one the pole. The operator traced all four fold fixtures, and the map
+ships in the release.
+
+**THE CONSUMER PULLED 0.642.0 -> 0.643.0 DURING THE BATCH** (reconcile `8f7f5f2da`, #1118) and
+committed `PC-S313-FOLDIN-…` to its `main` with the S313 retro (#1116). It is on sprint 314,
+carry-over, in carry-over evaluation, with no `bug-fix-oneshot*` in `s314/` (0, against 2 in `s313/`),
+so 0.644.0's new gate has nothing to fire on at its next pull. It has run no gate since the pull.
+Porcelain 1; ledger md5 `94c3a4e2…`.
+
+**ONE NEW FILING, AND IT ROUTES CORE: `PC-S314-SNAPSHOT-SWAP-BLIND-WINDOW`,** filed 2026-09-26 in
+commit `2ae6f9335`. It is pushed on the consumer's `ai-dlc/carry-over/telv3-upgrade` and absent from
+its `main`, so the derive block's union sees it as the one filing ahead of main (live 27, which is
+25 plus `PC-S313-FOLDIN-…` plus this). The claim: `route.md` Step 6 swaps `pipeline-snapshot.md`, and
+the Stop hook and the pause hook both key on that file existing, so the swap blinds both. The consumer
+records `core-paths.sh --is-core` exit 0 for both hook files. Ten core hooks name the snapshot.
+
+**NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
+- `PC-S314-SNAPSHOT-SWAP-BLIND-WINDOW` is the subject. Re-derive the premise against `route.md`
+  Step 6, `ai-dlc-continue.sh` and `ai-dlc-pause.sh`, measure the window on a scratch copy, write the
+  contract, run the adversary alone, then build. It is a hook fix, so the close is behavioural: drive
+  the hooks across the swap.
+- `BL-230` needs the full 156-run pool. Run it as a lead-owned background job with a sentinel,
+  never inside a hand, and never while a gate runs.
+- `BL-311` waits on the operator.
+
+**THE DELIVERY GAP IS ONE RELEASE.** The consumer is at 0.643.0 against `VERSION` 0.644.0. In
+`7b32fb1a..origin/main`: `apply.sh`, `preclassify.sh`, `ledger-reverify.sh` and the update skill
+have 0 commits; there are 21 raw `core/` rows, 0 mode-only; one PC id is PENDING,
+`PC-S313-FOLDIN-…`. The banked ruling stands: report the gap and write no runbook.
+
 **BATCH 157 SHIPPED `v0.643.0` (`f4b1e2c2`, #865) AND CLOSED `BL-318`, WHICH DISCHARGES
 `PC-S346-ARTIFACT-DERIVATIONS-ROW-NAMES-A-CLEAR-NO-CONSUMER-CORPUS-CAN-REACH`.** It was invoked by
 peer handoff. The opening sweep matched batch 156 on every figure and control: live 25, unfiled
@@ -123,27 +180,8 @@ plan, against a control of 1 for `PC-S346-…` in the archive.
 - **Routing:** the consumer records `core-paths.sh --is-core` as exit 0 on that path, with a
   not-core control.
 
-**NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
-- `PC-S313-FOLDIN-NEVER-RETAKES-ARCHITECTURE-ASSESSMENT` is the subject. Re-derive it from the
-  consumer's committed ledger once it lands; while it is uncommitted it is visible only in the
-  working tree. It is a step-file fix, so it closes on the structural trace plus a fixture, never
-  on a model replay (the batch-147 ruling under action 1). File its entry, re-derive the premise against
-  `bug-investigation.md` and `stories-test-strategy.md` §3a, write the contract, run the adversary
-  alone, then build.
-- `BL-230` needs the full 156-run pool. Run it as a lead-owned background job with a sentinel,
-  never inside a hand, and never while a gate runs.
-- `BL-311` waits on the operator.
-
-**THE DELIVERY GAP IS ONE RELEASE.** The consumer is at 0.642.0 against `VERSION` 0.643.0. In
-`f4dd5172..origin/main`:
-- `apply.sh` has 1 commit, and `preclassify.sh`, `ledger-reverify.sh` and the update skill have 0.
-- There are 13 raw `core/` rows, and 0 of them are mode-only.
-- One PC id is PENDING, `PC-S346-…`.
-
-`apply.sh` is bootstrapping, but the new remedy and its helper sit under `reconcile/`, which step
-2's self-update refreshes before the apply. So the pull that delivers them also emits the new row,
-unless that pull returns `SELF-UPDATE-DEFER`. The banked ruling stands: report the gap and write no
-runbook. The consumer's porcelain read 16, all from its own retro and pull.
+Batch 157's next-work list and delivery gap are spent: batch 158's block above replaces both.
+`PC-S346-…` reached the consumer with its 0.643.0 pull.
 
 **BATCH 156 SHIPPED `v0.642.0` (`78cd7a65`, #863) AND CLOSED `BL-316`.** It was invoked by peer
 handoff. The opening sweep matched batch 155 on every figure and control, with the ledger md5
@@ -602,39 +640,6 @@ changes this.
 has 2 commits), and 0 of 19 raw `core/` rows are mode-only. `0.631.0` touches no `core/` path. The
 banked ruling stands: report the gap and write no runbook. The consumer's porcelain read 1 during
 the batch, `_bmad-output/pipeline-continuation-log.md`, written by its own session.
-
-**BATCH 148 SHIPPED `v0.630.0` (`2407ce9a`, #841) AND CLOSED `BL-298`, WHICH DISCHARGES THE
-CONSUMER FILING BATCH 147 NAMED.** The release commit names
-`PC-S313-DISPATCH-GUARD-RECORDS-CITED-FALSE-AND-NEVER-DENIES` (1 hit, impossible-id control 0).
-The gate ran at `AI_DLC_FIXTURE_NO_SKIP=1`: 22 of 22 phases PASS, `dispatch-model-guard` and
-`check-22-spawn-ledger` read `ok` by name, and the remote ref was confirmed with `ls-remote` after
-the first push exited 141. Live **73 -> 72**, archive **224 -> 225**. The exit-0 receipt set is the
-same 8 ids before and after, compared by identity. The operator re-traced the read-set map for
-`dispatch-model-guard`, which now copies all of `core/hooks`; only that fixture's rows moved.
-
-**THE FILED DENY WAS REFUTED, AND THE DEFECT WAS THE RECORD.** All 7 S313 Check 22 failures were
-definition-bound dispatches, and the rendered definition body, which is the subagent's system
-prompt, carries the Rule 19(b) line. That was measured through the harness `prompt_snapshot` on
-21 of 21 joined rows. The deny would have refused 22 such consumer dispatches, and the uncited,
-in-scope population outside the definition path is 0. The guard now credits a whole-line match of
-the role-specific FIRST line; the second line is in every role's body, which the contract
-adversary caught before any build. A new ledger field, `contract_via`, records the carrier. The
-record proves DELIVERY, not the read: 6 of 21 of those teammates never read their role file. One
-of the 7 S313 rows, `toolu_1790133759826_0`, is a dispatch the Rule 29 pause denied; the guard
-writes its row before any other hook's verdict. The 7 recorded violations stay recorded and clear
-only through Check 22's four-arm disposition. A replay of all 83 S313 dispatches moved exactly
-those 7 rows and took the validator from exit 1 to exit 0.
-
-**NEXT WORK.** The inputs are what batch 147 recorded, minus this subject. The PC-backed worklist
-is the same five rows, each self-disqualifying (`BL-067`, `BL-132`, `BL-145`, `BL-215`, and
-`BL-230` awaiting a recorded cause). Unfiled is the **14** batch 143 adjudicated as consumer-owned.
-Nothing awaits a first look. Re-derive both; a new consumer filing is the only thing that changes
-this, and the batch-147 block below shows how one arrives mid-batch.
-
-**THE DELIVERY GAP IS THREE RELEASES.** The consumer installed **0.627.0** (`23aea0ef`) against
-`VERSION` **0.630.0**. None of 0.628.0-0.630.0 touched a bootstrapping file. The banked ruling
-stands: report the gap and write no runbook. The consumer's porcelain read 6-7 during the batch,
-all under `_bmad-output/`, and its ledger md5 `b6fd6280…` did not move.
 
 ### Derive the state; do not trust the numbers below
 

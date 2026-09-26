@@ -14585,3 +14585,36 @@ unfiled candidates are unchanged and adjudicated consumer-owned in the batch-143
 report the gap and write no runbook. The consumer's porcelain read 14-15 during the batch, all
 under `_bmad-output/`, and nothing this program writes was among them.
 
+**BATCH 148 SHIPPED `v0.630.0` (`2407ce9a`, #841) AND CLOSED `BL-298`, WHICH DISCHARGES THE
+CONSUMER FILING BATCH 147 NAMED.** The release commit names
+`PC-S313-DISPATCH-GUARD-RECORDS-CITED-FALSE-AND-NEVER-DENIES` (1 hit, impossible-id control 0).
+The gate ran at `AI_DLC_FIXTURE_NO_SKIP=1`: 22 of 22 phases PASS, `dispatch-model-guard` and
+`check-22-spawn-ledger` read `ok` by name, and the remote ref was confirmed with `ls-remote` after
+the first push exited 141. Live **73 -> 72**, archive **224 -> 225**. The exit-0 receipt set is the
+same 8 ids before and after, compared by identity. The operator re-traced the read-set map for
+`dispatch-model-guard`, which now copies all of `core/hooks`; only that fixture's rows moved.
+
+**THE FILED DENY WAS REFUTED, AND THE DEFECT WAS THE RECORD.** All 7 S313 Check 22 failures were
+definition-bound dispatches, and the rendered definition body, which is the subagent's system
+prompt, carries the Rule 19(b) line. That was measured through the harness `prompt_snapshot` on
+21 of 21 joined rows. The deny would have refused 22 such consumer dispatches, and the uncited,
+in-scope population outside the definition path is 0. The guard now credits a whole-line match of
+the role-specific FIRST line; the second line is in every role's body, which the contract
+adversary caught before any build. A new ledger field, `contract_via`, records the carrier. The
+record proves DELIVERY, not the read: 6 of 21 of those teammates never read their role file. One
+of the 7 S313 rows, `toolu_1790133759826_0`, is a dispatch the Rule 29 pause denied; the guard
+writes its row before any other hook's verdict. The 7 recorded violations stay recorded and clear
+only through Check 22's four-arm disposition. A replay of all 83 S313 dispatches moved exactly
+those 7 rows and took the validator from exit 1 to exit 0.
+
+**NEXT WORK.** The inputs are what batch 147 recorded, minus this subject. The PC-backed worklist
+is the same five rows, each self-disqualifying (`BL-067`, `BL-132`, `BL-145`, `BL-215`, and
+`BL-230` awaiting a recorded cause). Unfiled is the **14** batch 143 adjudicated as consumer-owned.
+Nothing awaits a first look. Re-derive both; a new consumer filing is the only thing that changes
+this, and the batch-147 block below shows how one arrives mid-batch.
+
+**THE DELIVERY GAP IS THREE RELEASES.** The consumer installed **0.627.0** (`23aea0ef`) against
+`VERSION` **0.630.0**. None of 0.628.0-0.630.0 touched a bootstrapping file. The banked ruling
+stands: report the gap and write no runbook. The consumer's porcelain read 6-7 during the batch,
+all under `_bmad-output/`, and its ledger md5 `b6fd6280…` did not move.
+
