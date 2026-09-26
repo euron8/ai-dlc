@@ -34,8 +34,9 @@
 #                         every anchor extractor in the distribution and in the
 #                         consumer-shipped layer linter at once.
 #   I7  fixture ⇔ manifest — check-manifest-bypass/seed.sh seeds exactly the
-#                         universal core + PLANNING row and none of the
-#                         IMPLEMENTATION row. Its anchor list is hand-maintained and
+#                         universal core + PLANNING row and none of the ids only the
+#                         IMPLEMENTATION row names (17 is in both rows, so the seed
+#                         carries it). Its anchor list is hand-maintained and
 #                         had already rotted (the manifest gained check 24, the
 #                         fixture did not), so H1's self-test was seeding a slice
 #                         that no longer existed.
@@ -585,7 +586,17 @@ err() { echo "FAIL: $*" >&2; fail=1; }
 #   script), I105 (three sites over reconcile scripts) and I83/I84 (three sites over shipped core
 #   `.sh`); one is `derivation-differential-mutants` joining the `.dist-only` census. HIGH
 #   reading 3283 plus the usual 6.
-FORK_BUDGET=3289
+#
+#   RAISED TO 3299 FOR CHECK 17's TWO NEW BULLETS AND FOUR NEW FIXTURE DIRECTORIES, AFTER A CUT.
+#   `--stable` by arm in clean worktrees at the same path shape: base 3283-3283, first tip
+#   3297-3297. Four of those fourteen were I7 re-reading the universal and planning manifest rows
+#   it had just read; I7 now reads each row once and still fires on a seeded implementation-only
+#   id. The reshaped tip reads 3293-3293, and the remaining +10 is per-arm: I32 +4 (two new
+#   `--require-skill` arms, the implementation-gate bullet and the fold bullet), I8 +3 (three new
+#   `.dist-only` mutant shards in the packaging census), I57 +2 (two new bullets naming the exit
+#   code that decides them) and I9 +1 (the new `--fold-architect` invocation site). HIGH reading
+#   3293 plus the usual 6; the window 3293..4704 is open.
+FORK_BUDGET=3299
 
 # --- Fork-free membership, and the reason it is worth a helper ------------------
 #
@@ -979,15 +990,31 @@ if [ -f "$SEED" ]; then
   # rotted the same way every other copy of this set rotted: the seed carried the
   # 14 ids the old gate-validation.md PROSE listed and never gained 2a or 25. The
   # universal core is a manifest row as of v0.73.0, so derive it here like any other.
-  for cid in $(manifest_row universal); do
+  # Each row is read ONCE: the ABSENT half below needs the universal and planning rows again,
+  # and re-reading them cost four forks per run of a validator the suite runs well over a
+  # hundred times per push.
+  i7_universal="$(manifest_row universal)"
+  i7_planning="$(manifest_row planning)"
+  for cid in $i7_universal; do
     seed_has "$cid" || err "check-manifest-bypass/seed.sh seeds the UNIVERSAL core but omits check $cid, which the GATE_MANIFEST universal row requires — the fixture claims to seed 'universal core + the planning row' and does not, so H1's self-test runs against a slice no gate ever loads"
   done
-  for cid in $(manifest_row planning); do
+  for cid in $i7_planning; do
     seed_has "$cid" || err "check-manifest-bypass/seed.sh seeds the PLANNING slice but omits check $cid, which the GATE_MANIFEST planning row requires — the fixture no longer seeds what it claims, and H1's self-test is testing a slice that does not exist"
   done
+  # The ABSENT half is the implementation row MINUS what the seeded slice legitimately loads.
+  # A check both rows name (17: the folded bug-fix arms run at implementation gates too) is in
+  # the seed because the PLANNING row requires it, and the two loops above demand exactly
+  # that — so testing the raw row made this arm and the planning arm demand opposite things
+  # of one anchor. The vacuity it guards is an implementation-ONLY id leaking into the seed.
+  i7_loaded=" "
+  for cid in $i7_universal $i7_planning; do i7_loaded="$i7_loaded$cid "; done
+  i7_only=0
   for cid in $(manifest_row implementation); do
+    case "$i7_loaded" in *" $cid "*) continue ;; esac
+    i7_only=$((i7_only + 1))
     seed_has "$cid" && err "check-manifest-bypass/seed.sh contains check $cid from the IMPLEMENTATION row — the fixture's whole purpose is that those anchors are ABSENT so H1 fails; including one makes the self-test vacuous"
   done
+  [ "$i7_only" -gt 0 ] || err "I7: the IMPLEMENTATION row names no check outside the universal and planning rows, so check-manifest-bypass has no anchor it can omit and H1's self-test cannot fail."
 fi
 
 # --- I8: fixture packaging (core/fixtures == install loop == uninstall loop ==

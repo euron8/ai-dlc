@@ -236,6 +236,7 @@ core_manifest:
   - fixtures/implementation-join-yield/**
   - fixtures/escalation-delivery/**
   - fixtures/extract-push-flag-decision/**
+  - fixtures/fold-architect-ledger-join/**
   - fixtures/inflight-row-shape/**
   - fixtures/known-skills-extension/**
   - fixtures/layer-anchor-declaration/**

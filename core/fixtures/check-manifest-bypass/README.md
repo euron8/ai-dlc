@@ -3,9 +3,10 @@
 Scenario: a gate declares type `implementation` but loads only the
 **planning** slice of `gate-validation.md` — universal core plus the
 planning row `1c, 17, 20` — omitting the implementation-required checks
-(6, 8, 11, and also 5, 9, 10, 11a, 19, 22). The `CHECK_LOADED` anchors
-for the omitted implementation checks are therefore absent from loaded
-context.
+(6, 8, 11, and also 5, 9, 10, 11a, 19, 22). Check 17 is on the
+implementation row too, but the planning row also loads it, so it is not
+omitted. The `CHECK_LOADED` anchors for the omitted implementation checks
+are therefore absent from loaded context.
 
 This is the adversarial self-test for the v0.24.0 Lever 2 fidelity
 re-expression: slicing weakened "whole file loaded" to "every applicable

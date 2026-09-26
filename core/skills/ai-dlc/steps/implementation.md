@@ -248,7 +248,16 @@ Monitor task progress:
 at this step are `implementation` gates — when running gate validation
 (`gate-validation.md`) at gate1/gate2/gate3, declare it `run gate
 validation [implementation]` so the loader loads the implementation
-slice (universal core + Checks 5, 6, 8, 9, 10, 11, 11a, 19, 22).
+slice (universal core + Checks 5, 6, 8, 9, 10, 11, 11a, 17, 19, 22).
+At each of those gates Check 17 runs its implementation gate arm for every
+declared folded bug-fix story in the sprint: the story's shape check, pinned to
+the `bmad-review-adversarial-general` one-shot that `bug-investigation.md` §4
+stamps it with, and the fold architecture gate, which is ONE
+`validate-spawn-ledger.sh --fold-architect` command that runs the residue's own
+shape check itself. Once per gate, a legacy `s<N>/bug-fix-oneshot.md` in the
+slot is run through that same command too. That arm leaves out the bug-fix
+arm's cross-check, because the Scope Verification, Dev Agent Record and
+`Status:` the dev writes into the story move the bytes the stamp hashed.
 
 **Pre-gate commit-presence check.** Before dispatching code review
 (gate1) for any story, run `git -C <worktree> log --oneline

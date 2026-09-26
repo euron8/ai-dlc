@@ -1,0 +1,11 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+It is the MUTATION BATTERY behind the shipped `fold-architect-ledger-join` fixture. It copies
+core's own sources — validate-spawn-ledger.sh, gate-validation.md, bug-investigation.md — into
+temp trees, removes one clause of the fold architecture gate at a time, and requires the shipped
+fixture to go red on exactly the arms that clause owns. Those sources are the distribution's; a
+consumer is denied the in-place edit of them, so every verdict here is a question about whether
+THIS repository's gate still discriminates. It also runs the shipped fixture ten times over full
+tree copies, and shipping that would put a unit the consumer cannot act on into the consumer's
+suite schedule — the v0.230.0 defect, where a distribution-only battery became the reference
+consumer's suite pole.

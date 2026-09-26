@@ -480,6 +480,11 @@ owns its gate. The fix story that section 3 writes lands in this sprint's
 `s<N>/bug-fix-oneshot-<slug>.md`. That story is a **folded bug-fix story** for
 the rest of this step and for gate-validation Check 17. A story named only by a
 legacy `s<N>/bug-fix-oneshot.md` is NOT folded and stays in the cycle below.
+`bug-investigation.md` §4's fold architecture dispatch applies to every folded
+story. Check 17's fold architecture gate owns the residue it writes. This step's
+gate runs both halves of Check 17's bug-fix arm on the story, before any dev
+dispatch; every later implementation gate runs Check 17's implementation gate
+arm for it instead, which omits the cross-check.
 
 ### 4. Story Validation Cycle (Rule 8)
 

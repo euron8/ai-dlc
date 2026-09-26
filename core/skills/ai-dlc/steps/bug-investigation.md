@@ -107,6 +107,9 @@ Create a bug-fix story in `_bmad-output/planning-artifacts/s<N>/stories/`:
 - Fix approach
 - Acceptance criteria (what "fixed" looks like)
 - Regression scope (existing tests, new tests needed)
+- `capabilities:` naming the capability the fix changes, when the fix is folded
+  into a sprint whose `pipeline_variant` runs an architecture step (section 4
+  dispatches that capability's architect)
 
 **If the user specified a particular fix approach or scope, preserve it
 (Rule 13). Do not substitute a different approach.**
@@ -123,6 +126,8 @@ nothing). The native `adversary` review is for CONVERGENCE cycles only.
 - Is test coverage sufficient?
 - **Source fidelity pass:** Does the story address the specific issue
   described? Does the fix approach match what was requested?
+- **Architecture fidelity:** does the story's `capabilities:` name the
+  capability that the files it changes implement?
 
 It writes findings to `_bmad-output/planning-artifacts/s<N>/bug-fix-oneshot-<slug>.md`,
 where `<slug>` is the fix story's own slug, so each bug in a sprint has its own
@@ -142,6 +147,41 @@ the edit.
 endpoint or admin action that turns the fix into an operator action — goes to the
 operator through section 2b's question WHEN IT IS FOUND, not after the disposition.
 
+**Fold architecture dispatch.** When the fix story is FOLDED into a sprint (by
+`stories-test-strategy.md` §3a or `route.md` Step 4) and that sprint's
+`pipeline_variant` runs an architecture step in `route.md`'s variant table, the
+sprint's architecture assessment predates the fold and says nothing about it.
+After the remediation above lands, dispatch ONE `architect` (Agent tool, bound to
+`.claude/team-roles/architect.md` per SKILL.md Rule 19) over the fix story and
+the files it changes. The architect:
+1. Runs `/bmad-review-adversarial-general` on the fix story, scoped to
+   architecture fidelity: does the change stay inside the sprint's existing ADs
+   and component boundaries, and does the story's `capabilities:` name the
+   capability the changed files implement.
+2. Dispositions that capability from what the review found: an AD extension
+   binding it, or a `- **No-AD:** CAP-<n> — REASON: …` line.
+3. Writes the residue
+   `_bmad-output/planning-artifacts/s<N>/fold-architecture-<slug>.md` (the same
+   `<slug>` as the one-shot), carrying its review's findings and one
+   `SKILL_INVOCATION_PROVENANCE v1` block with these fields:
+   - `skill: bmad-review-adversarial-general`, the skill step 1 ran;
+   - `invoked_at:` when it ran, ISO 8601 UTC;
+   - `tool_use_id:` the id of the Agent dispatch that spawned the architect, never
+     the Skill call's id, because the gate joins it to that dispatch's spawn-ledger
+     row;
+   - `mode: subagent`;
+   - `lead_role: bug-investigation.md`;
+   - `artifact:` the fix story's path, exactly as the one-shot's `artifact:` spells it;
+   - `findings_critical:`, `findings_major:`, `findings_minor:`, the review's counts;
+   - no `verdict`, because this is a one-shot.
+
+Check 17's fold architecture gate reads the residue. The lead does not author the
+disposition for a folded capability. The gate proves that an architect was
+dispatched in this sprint after the one-shot and that no other fold residue
+cites the same dispatch. It does not prove the disposition text came from that
+architect, and an unrelated architect dispatch later in the sprint also
+satisfies it.
+
 **Then stamp the story — MECHANICALLY, never by hand.** Check 17's bug-fix
 story-readiness gate requires a `SKILL_INVOCATION_PROVENANCE` block on the story
 itself, and nothing else writes one. Run:
@@ -154,6 +194,19 @@ bug-story-provenance <story-file>`
 convergence skill and demands `verdict: EXIT_CONDITION_MET`, so it refuses every
 bug story by construction. You author nothing; the gate's `--check` re-derives
 the same block and fails on any drift.
+
+**Direct fold: run the gate arms now, before any dev dispatch.** When this
+section runs for `route.md` Step 4's direct fold, sections 5 and 6 are skipped,
+so no gate follows before the dev writes into the story. Right after the stamp
+above, run Check 17's "Bug-fix story readiness gate (bug-investigation)" bullet
+on the story, both halves including the CROSS-CHECK, and Check 17's "Fold
+architecture gate (bug-investigation)" bullet, each exactly as that bullet
+spells its commands. Type none of them here and run nothing else on the
+residue. Every command must exit 0 before a dev is dispatched on the story.
+This is the last point at which the story's bytes are the ones the stamp
+hashed; the later implementation gates run only Check 17's "Implementation
+gate, declared folded bug-fix stories (implementation)" bullet, which omits
+the cross-check.
 
 ### 5. Sprint Setup
 
