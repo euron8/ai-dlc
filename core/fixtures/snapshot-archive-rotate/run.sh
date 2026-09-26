@@ -542,10 +542,205 @@ arm_rew() {
   sort -u "$hpre" > "$w.want"
   cat "$w/$HIST_REL" "$w/$ARCH_REL" 2>/dev/null | sort -u > "$w.have"
   lost="$(comm -23 "$w.want" "$w.have" | wc -l | tr -d ' ')"
-  kept="$(sed -n 's/.*kept, not deleted, at: //p' <<<"$out" | head -1)"
+  kept="$(sed -n 's/.*A file is left at \(.*\)\. It does NOT hold a verified new history.*/\1/p' <<<"$out" | head -1)"
   MSG="control: history ${hb} (preamble ${pb} + tail ${tb}) archive ${ab}, limit ${lim}; under the limit: rc=${rc} names-rewrite=$(grep -c 'writing the new history failed' <<<"$out") history-identical=${hid} ($(fbytes "$w/$HIST_REL") of $(fbytes "$hpre") bytes) snapshot-identical=${sid} pre-run lines in neither file=${lost} of $(wc -l < "$w.want" | tr -d ' ') kept-copy=${kept:-none}"
   [ "$rc" -eq 1 ] && grep -q 'writing the new history failed' <<<"$out" && [ "$hid" = yes ] && [ "$sid" = yes ] \
     && [ "$lost" -eq 0 ] && [ -s "$w.want" ] && [ -n "$kept" ] && [ -f "$kept" ]
+}
+
+# --- THE HISTORY REWRITE: two steps, each with its own guards -----------------------------------
+# Step 1 writes the new history to a temp name under `set -C` and checks status and size. Step 2
+# writes that verified copy back INTO the history (`cat temp > history`) and checks status and size.
+# Two prechecks run before any write: the history must be writable, and the temp name must be free.
+#
+# Every guard gets a subject no other guard can see, forced where no real file produces it:
+#   tlate / tshort   a `cat` shim on the step-1 call writes every byte then exits 1 / drops one
+#                    byte and exits 0. Only the step-1 status check / size check sees each.
+#   wblate / wbshort the same two shapes on the step-2 call. Only the write-back status check /
+#                    size check sees each; both also require the temp copy KEPT at the printed path
+#                    and byte-identical to the expected new history, and the printed `cp` to restore it.
+#   tmpexist         a file at the temp name BEFORE the run: refused before any write, so the
+#                    archive does not exist afterwards. `set -C` refuses too, but only after the
+#                    append, so only the `[ -e ]` precheck keeps the archive unwritten.
+#   tmprace          the file appears at the temp name DURING the run (the shim creates it while
+#                    the archive append runs, after the precheck passed). Only `set -C` sees it.
+#   rohist           a 444 history: refused before any write, archive absent. Without the `[ -w ]`
+#                    precheck the append and the absorb run first and the write-back then fails.
+#   links            a symlinked, a hard-linked and a 640 history: rc 0, the link kept with its
+#                    target rotated, the peer rotated identically, the inode and the mode unchanged.
+#                    A rename (`mv temp history`) breaks all three.
+# The shim picks its call by its ARGUMENTS: step 1 is the only call ending in `/preamble`, step 2 is
+# the only single argument carrying `.rotate.`, and the archive append of the moved block is the
+# only one ending in `/move`. It appends its mode to a sentinel file when it acts, and every shim arm
+# asserts the sentinel, so an arm whose shim never fired cannot pass.
+#
+# The temp name is `.<history basename>.rotate.$$`. The worlds that need it are started through
+# `sh -c '... exec bash rotator'`: exec keeps the pid, so the sh's `$$` IS the rotator's `$$`.
+TMPNAME=".pipeline-snapshot-history.md.rotate"
+RSHIM="$SHIM/rw"
+mkdir -p "$RSHIM" || { echo "FIXTURE ERROR: cannot build the rewrite shim" >&2; exit 2; }
+cat > "$RSHIM/cat" <<'SHIMEOF'
+#!/bin/sh
+R="$SNAPROT_REAL_CAT"; m="${SNAPROT_SHIM_MODE:-}"; hit=""
+case "$m:$#:$1" in
+  tlate:2:*/preamble|tshort:2:*/preamble) hit=1 ;;
+  wblate:1:*.rotate.*|wbshort:1:*.rotate.*) hit=1 ;;
+  race:1:*/move) hit=1 ;;
+esac
+[ -n "$hit" ] || exec "$R" "$@"
+printf '%s\n' "$m" >> "$SNAPROT_SHIM_SENT"
+case "$m" in
+  tlate|wblate) "$R" "$@"; exit 1 ;;
+  tshort|wbshort) "$R" "$@" > "$SNAPROT_SHIM_SENT.buf" || exit 1
+                  n=$(wc -c < "$SNAPROT_SHIM_SENT.buf"); head -c $((n - 1)) "$SNAPROT_SHIM_SENT.buf"; exit 0 ;;
+  race) "$R" "$@"; rc=$?; printf 'a foreign file that took the temp name mid-run\n' > "$SNAPROT_RACE"; exit $rc ;;
+esac
+SHIMEOF
+chmod +x "$RSHIM/cat" || { echo "FIXTURE ERROR: cannot chmod the rewrite shim" >&2; exit 2; }
+
+# The expected new history of the `above` world, from the SHIPPED rotator on an unmodified copy, so a
+# mutant under test cannot move its own yardstick. Asserted to differ from the pre-run history.
+EXPECT="$WORK/expect.above"
+expect_above() {
+  [ -s "$EXPECT" ] && return 0
+  local c; c="$(world above)" || return 1
+  bash "$ROT" "$c/$HIST_REL" --apply >/dev/null 2>&1 || return 1
+  cp "$c/$HIST_REL" "$EXPECT" && ! cmp -s "$EXPECT" "$TMPL/above/$HIST_REL" && [ -s "$EXPECT" ]
+}
+fmode() { ls -l "$1" | cut -c1-10; }
+finode() { ls -i "$1" | awk '{print $1}'; }
+
+# rshim <mode> <world> [race path]: drive the rotator on the world with the rewrite shim, sets OUT/RC.
+rshim() {
+  local sent="$2.sent"; : > "$sent"
+  OUT="$(SNAPROT_REAL_CAT="$REAL_CAT" SNAPROT_SHIM_MODE="$1" SNAPROT_SHIM_SENT="$sent" SNAPROT_RACE="${3:-}" \
+    PATH="$RSHIM:$PATH" bash "$R_" "$2/$HIST_REL" --absorb "$2/$SNAP_REL" --apply 2>&1)"; RC=$?
+  SENT="$(grep -c "^$1\$" "$sent")" || SENT=0
+}
+
+# tlate / tshort: step 1 fails; the history and the snapshot are byte-identical.
+arm_tshim() {  # <tlate|tshort>
+  local w pre hpre hid sid; w="$(world above)" || { MSG="world copy failed"; return 1; }
+  pre="$(snap_copy "$w")" || { MSG="snapshot copy failed"; return 1; }
+  hpre="$w.hist"; cp "$w/$HIST_REL" "$hpre" || { MSG="history copy failed"; return 1; }
+  rshim "$1" "$w"
+  hid=no; cmp -s "$hpre" "$w/$HIST_REL" && hid=yes
+  sid=no; cmp -s "$pre" "$w/$SNAP_REL" && sid=yes
+  MSG="shim=$1 acted ${SENT}x, rc=${RC}, names-rewrite=$(grep -c 'writing the new history failed' <<<"$OUT"), history-identical=${hid}, snapshot-identical=${sid}"
+  [ "$SENT" -eq 1 ] && [ "$RC" -eq 1 ] && grep -q 'writing the new history failed' <<<"$OUT" \
+    && [ "$hid" = yes ] && [ "$sid" = yes ]
+}
+
+# wblate / wbshort: step 2 fails; the temp copy is kept at the printed path, holds exactly the
+# expected new history, and the printed `cp` restores the history to it.
+arm_wbshim() {  # <wblate|wbshort>
+  local w pre kept src dst sid rest=no; expect_above || { MSG="cannot build the expected new history"; return 1; }
+  w="$(world above)" || { MSG="world copy failed"; return 1; }
+  pre="$(snap_copy "$w")" || { MSG="snapshot copy failed"; return 1; }
+  rshim "$1" "$w"
+  sid=no; cmp -s "$pre" "$w/$SNAP_REL" && sid=yes
+  kept="$(sed -n 's/.*The COMPLETE new history is kept at: //p' <<<"$OUT" | head -1)"
+  src="$(sed -n 's/.*Restore it with: cp "\(.*\)" "\(.*\)"$/\1/p' <<<"$OUT" | head -1)"
+  dst="$(sed -n 's/.*Restore it with: cp "\(.*\)" "\(.*\)"$/\2/p' <<<"$OUT" | head -1)"
+  local kid=no; [ -n "$kept" ] && [ -f "$kept" ] && cmp -s "$kept" "$EXPECT" && kid=yes
+  if [ "$kid" = yes ] && [ "$src" = "$kept" ] && [ "$dst" = "$w/$HIST_REL" ]; then
+    cp "$src" "$dst" && cmp -s "$w/$HIST_REL" "$EXPECT" && rest=yes
+  fi
+  MSG="shim=$1 acted ${SENT}x, rc=${RC}, kept copy=${kept:-none} holds the expected new history=${kid}, printed cp restores it=${rest}, snapshot-identical=${sid}"
+  [ "$SENT" -eq 1 ] && [ "$RC" -eq 1 ] && [ "$kid" = yes ] && [ "$rest" = yes ] && [ "$sid" = yes ]
+}
+
+# tmpexist: a file at the temp name before the run. Refused before any write.
+arm_tmpexist() {
+  local w pre hpre f n hid sid fid
+  w="$(world above)" || { MSG="world copy failed"; return 1; }
+  pre="$(snap_copy "$w")" || { MSG="snapshot copy failed"; return 1; }
+  hpre="$w.hist"; cp "$w/$HIST_REL" "$hpre" || { MSG="history copy failed"; return 1; }
+  printf 'a foreign file already at the temp name\n' > "$w.foreign"
+  OUT="$(sh -c 'cp "$1" "$2/'"$TMPNAME"'.$$" || exit 97; shift 2; exec bash "$@"' sh "$w.foreign" "$w/_bmad-output" \
+    "$R_" "$w/$HIST_REL" --absorb "$w/$SNAP_REL" --apply 2>&1)"; RC=$?
+  n="$(ls -a "$w/_bmad-output" | grep -c "^${TMPNAME}\.")" || n=0
+  f="$(ls -a "$w/_bmad-output" | grep "^${TMPNAME}\." | head -1)"
+  hid=no; cmp -s "$hpre" "$w/$HIST_REL" && hid=yes
+  sid=no; cmp -s "$pre" "$w/$SNAP_REL" && sid=yes
+  fid=no; [ -n "$f" ] && cmp -s "$w.foreign" "$w/_bmad-output/$f" && fid=yes
+  MSG="rc=${RC}, temp-name files=${n}, refusal names it=$(grep -cF "already exists at the temp name this run writes: $w/_bmad-output/$f" <<<"$OUT"), archive exists=$([ -e "$w/$ARCH_REL" ] && echo yes || echo no), history-identical=${hid}, snapshot-identical=${sid}, foreign file untouched=${fid}"
+  [ "$RC" -eq 1 ] && [ "$n" -eq 1 ] && grep -qF "already exists at the temp name this run writes: $w/_bmad-output/$f" <<<"$OUT" \
+    && [ ! -e "$w/$ARCH_REL" ] && [ "$hid" = yes ] && [ "$sid" = yes ] && [ "$fid" = yes ]
+}
+
+# tmprace: the file appears at the temp name while the archive append runs. `set -C` refuses step 1.
+arm_tmprace() {
+  local w pre hpre race hid sid fid sent
+  w="$(world above)" || { MSG="world copy failed"; return 1; }
+  pre="$(snap_copy "$w")" || { MSG="snapshot copy failed"; return 1; }
+  hpre="$w.hist"; cp "$w/$HIST_REL" "$hpre" || { MSG="history copy failed"; return 1; }
+  printf 'a foreign file that took the temp name mid-run\n' > "$w.foreign"
+  sent="$w.sent"; : > "$sent"
+  OUT="$(SNAPROT_REAL_CAT="$REAL_CAT" SNAPROT_SHIM_MODE=race SNAPROT_SHIM_SENT="$sent" PATH="$RSHIM:$PATH" \
+    sh -c 'SNAPROT_RACE="$1/'"$TMPNAME"'.$$"; export SNAPROT_RACE; shift; exec bash "$@"' sh "$w/_bmad-output" \
+    "$R_" "$w/$HIST_REL" --absorb "$w/$SNAP_REL" --apply 2>&1)"; RC=$?
+  SENT="$(grep -c '^race$' "$sent")" || SENT=0
+  race="$(ls -a "$w/_bmad-output" | grep "^${TMPNAME}\." | head -1)"
+  hid=no; cmp -s "$hpre" "$w/$HIST_REL" && hid=yes
+  sid=no; cmp -s "$pre" "$w/$SNAP_REL" && sid=yes
+  fid=no; [ -n "$race" ] && cmp -s "$w.foreign" "$w/_bmad-output/$race" && fid=yes
+  MSG="shim acted ${SENT}x, rc=${RC}, names-rewrite=$(grep -c 'writing the new history failed' <<<"$OUT"), says not verified=$(grep -c 'does NOT hold a verified new history' <<<"$OUT"), history-identical=${hid}, snapshot-identical=${sid}, foreign file untouched=${fid}"
+  [ "$SENT" -eq 1 ] && [ "$RC" -eq 1 ] && grep -q 'writing the new history failed' <<<"$OUT" \
+    && grep -q 'does NOT hold a verified new history' <<<"$OUT" \
+    && [ "$hid" = yes ] && [ "$sid" = yes ] && [ "$fid" = yes ]
+}
+
+# rohist: a read-only history is refused before any write. `[ -w ]` is true for root on a 444 file
+# and so is the write, so under root the world cannot express the subject: the arm says SKIP in its
+# own message and m14's score line says it too, rather than reading as a pass.
+ROHIST_SKIP=""
+arm_rohist() {
+  local w pre hpre hid sid; w="$(world above)" || { MSG="world copy failed"; return 1; }
+  pre="$(snap_copy "$w")" || { MSG="snapshot copy failed"; return 1; }
+  hpre="$w.hist"; cp "$w/$HIST_REL" "$hpre" || { MSG="history copy failed"; return 1; }
+  chmod 444 "$w/$HIST_REL" || { MSG="chmod failed"; return 1; }
+  if [ -w "$w/$HIST_REL" ]; then ROHIST_SKIP=yes; MSG="SKIP: a 444 file is writable to this user (root)"; return 0; fi
+  OUT="$(bash "$R_" "$w/$HIST_REL" --absorb "$w/$SNAP_REL" --apply 2>&1)"; RC=$?
+  chmod 644 "$w/$HIST_REL"
+  hid=no; cmp -s "$hpre" "$w/$HIST_REL" && hid=yes
+  sid=no; cmp -s "$pre" "$w/$SNAP_REL" && sid=yes
+  MSG="rc=${RC}, names not-writable=$(grep -c 'the history is not writable' <<<"$OUT"), archive exists=$([ -e "$w/$ARCH_REL" ] && echo yes || echo no), history-identical=${hid}, snapshot-identical=${sid}"
+  [ "$RC" -eq 1 ] && grep -q 'the history is not writable' <<<"$OUT" && [ ! -e "$w/$ARCH_REL" ] \
+    && [ "$hid" = yes ] && [ "$sid" = yes ]
+}
+
+# links: symlinked, hard-linked and 640 histories are rotated THROUGH the existing name.
+arm_links() {
+  local w rc ok_all=1 ino0 real="_bmad-output/real-history.md" peer="_bmad-output/peer-history.md"
+  expect_above || { MSG="cannot build the expected new history"; return 1; }
+  MSG=""
+  # symlink
+  w="$(world above)" || { MSG="world copy failed"; return 1; }
+  mv "$w/$HIST_REL" "$w/$real" && ln -s real-history.md "$w/$HIST_REL" \
+    && ( cd "$w" && git add -A && git -c user.email=f@f -c user.name=f commit -qm link ) >/dev/null 2>&1 \
+    || { MSG="cannot build the symlinked history"; return 1; }
+  bash "$R_" "$w/$HIST_REL" --absorb "$w/$SNAP_REL" --apply >/dev/null 2>&1; rc=$?
+  local isl=no tgt=no; [ -L "$w/$HIST_REL" ] && isl=yes; cmp -s "$w/$real" "$EXPECT" && tgt=yes
+  MSG="symlink: rc=${rc} still-a-link=${isl} target-rotated=${tgt}; "
+  { [ "$rc" -eq 0 ] && [ "$isl" = yes ] && [ "$tgt" = yes ]; } || ok_all=0
+  # hard link
+  w="$(world above)" || { MSG="world copy failed"; return 1; }
+  ln "$w/$HIST_REL" "$w/$peer" || { MSG="cannot hard-link the history"; return 1; }
+  ino0="$(finode "$w/$HIST_REL")"
+  bash "$R_" "$w/$HIST_REL" --absorb "$w/$SNAP_REL" --apply >/dev/null 2>&1; rc=$?
+  local hr=no pr=no si=no; cmp -s "$w/$HIST_REL" "$EXPECT" && hr=yes; cmp -s "$w/$peer" "$EXPECT" && pr=yes
+  [ "$(finode "$w/$HIST_REL")" = "$ino0" ] && si=yes
+  MSG="${MSG}hard link: rc=${rc} history-rotated=${hr} peer-rotated=${pr} same-inode=${si}; "
+  { [ "$rc" -eq 0 ] && [ "$hr" = yes ] && [ "$pr" = yes ] && [ "$si" = yes ]; } || ok_all=0
+  # mode 640
+  w="$(world above)" || { MSG="world copy failed"; return 1; }
+  chmod 640 "$w/$HIST_REL" || { MSG="chmod failed"; return 1; }
+  bash "$R_" "$w/$HIST_REL" --absorb "$w/$SNAP_REL" --apply >/dev/null 2>&1; rc=$?
+  local md; md="$(fmode "$w/$HIST_REL")"; local mr=no; cmp -s "$w/$HIST_REL" "$EXPECT" && mr=yes
+  MSG="${MSG}mode 640: rc=${rc} mode=${md} rotated=${mr}"
+  { [ "$rc" -eq 0 ] && [ "$md" = "-rw-r-----" ] && [ "$mr" = yes ]; } || ok_all=0
+  [ "$ok_all" -eq 1 ]
 }
 
 # ARGS: on the no-history path an unknown option and an --absorb naming no file are both usage
@@ -572,9 +767,17 @@ arm_idem() {
     && absorbed_ok "$w" "STALESNAP-nohist" "$pre"
 }
 
-ARMS="swap neg nohist floor above ign unw ulim wlate wshort rew args idem ro"
+ARMS="swap neg nohist floor above ign unw ulim wlate wshort rew tlate tshort wblate wbshort tmpexist tmprace rohist links args idem ro"
 arm_run() {
   case "$1" in
+    tlate)    arm_tshim tlate ;;
+    tshort)   arm_tshim tshort ;;
+    wblate)   arm_wbshim wblate ;;
+    wbshort)  arm_wbshim wbshort ;;
+    tmpexist) arm_tmpexist ;;
+    tmprace)  arm_tmprace ;;
+    rohist)   arm_rohist ;;
+    links)    arm_links ;;
     ulim)   arm_ulim ;;
     wlate)  arm_wshim late ;;
     wshort) arm_wshim short ;;
@@ -619,19 +822,33 @@ for a in $ARMS; do
     ulim)   what="REFUSAL — a regular-file archive that fills up mid-append (ulimit -f, binds root too), on no history and on the rotation path: rc 1, the archive appended part-way, snapshot and history byte-identical" ;;
     wlate)  what="REFUSAL — every byte appended but the writer reports failure: rc 1, snapshot byte-identical (only the write-status check sees this)" ;;
     wshort) what="REFUSAL — one byte short and the writer reports success: rc 1, snapshot byte-identical (only the growth check sees this)" ;;
-    rew)    what="REFUSAL — the history REWRITE fails after the archive append succeeded (ulimit -f, sizing proven by an unlimited control): rc 1, history and snapshot byte-identical, no pre-run history line in neither file, the partial copy kept at the printed path" ;;
+    rew)    what="REFUSAL — the history REWRITE fails after the archive append succeeded (ulimit -f, sizing proven by an unlimited control): rc 1, history and snapshot byte-identical, no pre-run history line in neither file, the partial temp file named at a path that exists" ;;
+    tlate)    what="REFUSAL — step 1 (temp write) lands every byte then reports failure: rc 1, history and snapshot byte-identical (only step 1's status check sees this)" ;;
+    tshort)   what="REFUSAL — step 1 (temp write) drops one byte and reports success: rc 1, history and snapshot byte-identical (only step 1's size check sees this)" ;;
+    wblate)   what="REFUSAL — step 2 (write-back) lands every byte then reports failure: rc 1, the temp copy KEPT at the printed path holding exactly the expected new history, and the printed cp restores it (only step 2's status check sees this)" ;;
+    wbshort)  what="REFUSAL — step 2 (write-back) drops one byte and reports success: rc 1, the temp copy kept and byte-identical to the expected new history, the printed cp restores it (only step 2's size check sees this)" ;;
+    tmpexist) what="REFUSAL — a file already at the temp name before the run: rc 1 before ANY write (no archive), history and snapshot byte-identical, the foreign file untouched" ;;
+    tmprace)  what="REFUSAL — a file takes the temp name DURING the run, after the precheck: set -C refuses step 1, rc 1, history and snapshot byte-identical, the foreign file untouched and not called a new history" ;;
+    rohist)   what="REFUSAL — a read-only (444) history: rc 1 before ANY write (no archive), history and snapshot byte-identical" ;;
+    links)    what="IN PLACE — a symlinked history stays a symlink with its target rotated, a hard-linked history's peer is rotated identically on the same inode, and a 640 history keeps mode 640" ;;
     args)   what="USAGE on the no-history path — unknown option rc 2, --absorb naming no file rc 2" ;;
     idem)   what="idempotent — absorbing the already-empty snapshot appends nothing" ;;
     ro)     what="REPORT-ONLY — --absorb without --apply on no history, the floor and above it writes nothing (git status empty, snapshot byte-identical, no archive) and says what it would do" ;;
   esac
-  if arm_run "$a"; then ok "$what"; else bad "$what ($MSG)"; fi
+  ROHIST_SKIP=""
+  if arm_run "$a"; then
+    if [ -n "$ROHIST_SKIP" ]; then printf '  skip  %s (%s)\n' "$what" "$MSG"; else ok "$what"; fi
+  else bad "$what ($MSG)"; fi
 done
 
 # --- MUTANTS of the absorb swap ---------------------------------------------------------------
 # Each is a copy with ONE edit, keyed on a line the subject carries exactly once, and asserted to
 # have applied (the anchor count goes 1 -> 0 and the copy differs) before its verdict is read. The
-# copies are driven by the SAME arms, and an unmutated copy from the same directory is driven
-# first: it must pass every arm, so a mutant verdict is a verdict about the edit, not the harness.
+# copies are driven by the SAME arm functions, and an unmutated copy from the same directory is
+# driven through EVERY arm first: it must pass them all, so a mutant verdict is a verdict about the
+# edit, not the harness. Each mutant then runs ONLY the arm that owns it. Re-running every arm per
+# mutant cost most of the fixture's wall clock and scored nothing more: the verdict read is whether
+# the owning arm failed.
 # The hooks' copies carry their schema siblings, because both hooks resolve `../schemas/`.
 MD="$WORK/mut"
 mkdir -p "$MD/hooks" "$MD/schemas" || { echo "FIXTURE ERROR: cannot build mutant tree" >&2; exit 2; }
@@ -666,11 +883,16 @@ fi
 
 # score <label> <must-fail arm> <rotator> <continue> <pause> <what>
 score() {
-  run_arms "$3" "$4" "$5"
-  case " ${FAILED} " in
-    *" $2 "*) ok "$1 KILLED by '$2' (failing arms:${FAILED}) — $6" ;;
-    *)        bad "$1 SURVIVED: arm '$2' did not fail (failing arms:${FAILED:- none}) — $6" ;;
-  esac
+  R_="$3"; HC_="$4"; HP_="$5"; MSG=""; ROHIST_SKIP=""
+  if arm_run "$2"; then
+    if [ -n "$ROHIST_SKIP" ]; then
+      printf '  skip  %s NOT SCORED: arm %s cannot express its subject for this user (%s) — %s\n' "$1" "'$2'" "$MSG" "$6"
+    else
+      bad "$1 SURVIVED: arm '$2' did not fail ($MSG) — $6"
+    fi
+  else
+    ok "$1 KILLED by '$2' ($MSG) — $6"
+  fi
 }
 CH="$MD/hooks/ai-dlc-continue.sh"; PH="$MD/hooks/ai-dlc-pause.sh"
 
@@ -756,6 +978,48 @@ M12_NEW='cat "$TMPD/preamble" "$TMPD/tail" > "$HISTORY" || rewrite_fail "the wri
 if mut_line "$ROT" "$MD/m12.sh" "$M12_OLD" "$M12_NEW"; then
   score m12 rew "$MD/m12.sh" "$CH" "$PH" "the history is rewritten in place (cat preamble tail > history)"
 else bad "m12 DID NOT APPLY — the history write line is not in the rotator exactly once"; fi
+
+# The two-step rewrite's guards, each deleted alone and each killed by the arm built for it.
+MA_OLD='[ "$B_GOT" -eq "$B_WANT" ] || rewrite_fail "it holds ${B_GOT} bytes where ${B_WANT} were written"'
+if mut_line "$ROT" "$MD/mA.sh" "$MA_OLD" ':'; then
+  score mA tshort "$MD/mA.sh" "$CH" "$PH" "step 1's size check deleted"
+else bad "mA DID NOT APPLY — step 1's size check is not in the rotator exactly once"; fi
+
+MB_NEW='( cat "$TMPD/preamble" "$TMPD/tail" > "$HIST_NEW" ) || rewrite_fail "the write failed"'
+if mut_line "$ROT" "$MD/mB.sh" "$M12_OLD" "$MB_NEW"; then
+  score mB tmprace "$MD/mB.sh" "$CH" "$PH" "set -C dropped from step 1 (a file that takes the temp name mid-run is overwritten)"
+else bad "mB DID NOT APPLY — step 1's write line is not in the rotator exactly once"; fi
+
+MC_NEW='( set -C; cat "$TMPD/preamble" "$TMPD/tail" > "$HIST_NEW" )'
+if mut_line "$ROT" "$MD/mC.sh" "$M12_OLD" "$MC_NEW"; then
+  score mC tlate "$MD/mC.sh" "$CH" "$PH" "step 1's write-status check deleted"
+else bad "mC DID NOT APPLY — step 1's write line is not in the rotator exactly once"; fi
+
+MWB_OLD='cat "$HIST_NEW" > "$HISTORY" || writeback_fail "the write failed"'
+if mut_line "$ROT" "$MD/mD.sh" "$MWB_OLD" 'mv -f "$HIST_NEW" "$HISTORY" || writeback_fail "the write failed"'; then
+  score mD links "$MD/mD.sh" "$CH" "$PH" "the write-back is a rename again (mv -f temp history)"
+else bad "mD DID NOT APPLY — the write-back line is not in the rotator exactly once"; fi
+
+if mut_line "$ROT" "$MD/mE.sh" 'writeback_fail() {' 'writeback_fail() { rm -f "$HIST_NEW"'; then
+  score mE wblate "$MD/mE.sh" "$CH" "$PH" "the temp copy is deleted when the write-back fails"
+else bad "mE DID NOT APPLY — 'writeback_fail() {' is not in the rotator exactly once"; fi
+
+if mut_line "$ROT" "$MD/mF.sh" "$MWB_OLD" 'cat "$HIST_NEW" > "$HISTORY"'; then
+  score mF wblate "$MD/mF.sh" "$CH" "$PH" "step 2's write-status check deleted"
+else bad "mF DID NOT APPLY — the write-back line is not in the rotator exactly once"; fi
+
+MG_OLD='[ "$B_BACK" -eq "$B_WANT" ] || writeback_fail "it holds ${B_BACK} bytes where ${B_WANT} were written"'
+if mut_line "$ROT" "$MD/mG.sh" "$MG_OLD" ':'; then
+  score mG wbshort "$MD/mG.sh" "$CH" "$PH" "step 2's size check deleted"
+else bad "mG DID NOT APPLY — step 2's size check is not in the rotator exactly once"; fi
+
+if mut_line "$ROT" "$MD/m14.sh" 'if [ ! -w "$HISTORY" ]; then' 'if false; then'; then
+  score m14 rohist "$MD/m14.sh" "$CH" "$PH" "the history-writable precheck deleted"
+else bad "m14 DID NOT APPLY — the [ -w ] precheck is not in the rotator exactly once"; fi
+
+if mut_line "$ROT" "$MD/m15.sh" 'if [ -e "$HIST_NEW" ] || [ -L "$HIST_NEW" ]; then' 'if false; then'; then
+  score m15 tmpexist "$MD/m15.sh" "$CH" "$PH" "the temp-name precheck deleted (set -C still refuses, but after the archive append)"
+else bad "m15 DID NOT APPLY — the [ -e ] precheck is not in the rotator exactly once"; fi
 
 echo
 if [ "$fails" -eq 0 ]; then

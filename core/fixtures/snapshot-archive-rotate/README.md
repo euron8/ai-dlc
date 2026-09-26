@@ -88,7 +88,16 @@ template (`seed.sh` builds `nohist`, `floor`, `above`, `nosnap`, `ignored` and `
 | ulim | a REGULAR-FILE archive pre-filled to 40 bytes under an 8 KiB `ulimit -f` (inside a subshell with `trap '' XFSZ`, so it binds root too and the writer gets EFBIG instead of dying), on no history and on the rotation path: rc 1, the archive appended part-way, snapshot and history byte-identical. Kills the rotator that keeps only `[ -f ]`, which exits 0 and empties the snapshot |
 | wlate | a `cat` shim on `PATH` writes every byte and then exits 1: rc 1, snapshot byte-identical, archive growth exact. Only the write-status check sees it |
 | wshort | a `cat` shim writes all but the last byte and exits 0: rc 1, snapshot byte-identical, archive growth one short. Only the growth check sees it |
-| rew | the history REWRITE fails after the archive append succeeded (`bigtail` under the same 8 KiB limit). An unlimited control run on a second copy first proves the sizing reaches the rewrite: the new history is over the limit, its preamble and tail each under it, the archive under it. Then: rc 1, the refusal names the rewrite, history and snapshot byte-identical, every pre-run history line still in the history or the archive, and the partial new history kept at the path the rotator prints |
+| rew | the history REWRITE fails after the archive append succeeded (`bigtail` under the same 8 KiB limit). An unlimited control run on a second copy first proves the sizing reaches the rewrite: the new history is over the limit, its preamble and tail each under it, the archive under it. Then: rc 1, the refusal names the rewrite, history and snapshot byte-identical, every pre-run history line still in the history or the archive, and the partial temp file named at a path that exists |
+| tlate / tshort | a `cat` shim acts ONLY on the step-1 temp write (the one call whose last argument ends `/preamble`): it writes every byte then exits 1 / drops one byte and exits 0. rc 1, history and snapshot byte-identical. Only step 1's status check / size check sees each |
+| wblate / wbshort | the same two shapes on the step-2 write-back (the one single-argument call naming the `.rotate.` temp). rc 1, the temp copy kept at the path printed, byte-identical to the expected new history (the shipped rotator's output on an unmodified copy), and the printed `cp` restores the history to it. Only step 2's status check / size check sees each |
+| tmpexist | a file already at the temp name, placed by `sh -c '… exec bash rotator'` so the sh's `$$` is the rotator's: rc 1 with NO archive created, history and snapshot byte-identical, the foreign file untouched |
+| tmprace | the shim creates a file at the temp name while the archive append of the moved block runs, after the precheck passed: rc 1, `set -C` refuses step 1, history and snapshot byte-identical, the foreign file untouched and the refusal saying it is NOT a verified new history |
+| rohist | a 444 history: rc 1 with NO archive created, history and snapshot byte-identical. Under root a 444 file is writable, so the arm prints `skip` and m14 is reported NOT SCORED rather than passing |
+| links | a symlinked history stays a symlink and its target is rotated; a hard-linked history's peer is rotated identically and the inode is unchanged; a 640 history keeps mode 640 |
+
+Every shim arm asserts the shim's sentinel counted exactly one action, so an arm whose shim never
+fired on its intended call cannot pass.
 | args | on the no-history path, an unknown option and an `--absorb` naming no file are both rc 2 |
 | idem | absorbing the already-empty snapshot again leaves the archive byte-identical |
 | ro | report-only `--absorb` (no `--apply`) on each of `nohist`, `floor` and `above`: rc 0, the rotator says what it would append, `git status --porcelain` is empty, the snapshot is byte-identical, and no archive exists |
@@ -97,8 +106,9 @@ The whole-content comparison is there because a marker grep alone is satisfied b
 copies ONLY the marker line — measured: `grep -E STALE "$ABSORB"` in place of `cat "$ABSORB"`
 passed every arm and the receipt before it.
 
-Mutants, each a one-line copy whose anchor must occur exactly once and be gone afterwards, driven
-by the same arms after an unmutated control copy from the same directory passes them all:
+Mutants, each a one-line copy whose anchor must occur exactly once and be gone afterwards. An
+unmutated control copy from the same directory is driven through EVERY arm first and must pass
+them all; each mutant then runs only the arm that owns it:
 
 | Mutant | Edit | Killed by |
 |---|---|---|
@@ -115,6 +125,20 @@ by the same arms after an unmutated control copy from the same directory passes 
 | m11 | the append's growth check deleted, both its numeric-operand guard and its comparison | wshort |
 | m13 | m10 and m11 together, so only the `[ -f ]` guard is left | ulim |
 | m12 | the history rewritten in place again, `cat preamble tail > "$HISTORY"` | rew |
+| mA | step 1's size check deleted | tshort |
+| mB | `set -C` dropped from step 1 | tmprace |
+| mC | step 1's `\|\| rewrite_fail` deleted (write-status check) | tlate |
+| mD | the write-back is a rename again, `mv -f "$HIST_NEW" "$HISTORY"` | links |
+| mE | `writeback_fail` deletes the temp copy before reporting | wblate |
+| mF | step 2's `\|\| writeback_fail` deleted (write-status check) | wblate |
+| mG | step 2's size check deleted | wbshort |
+| m14 | the `[ ! -w "$HISTORY" ]` precheck becomes `false` | rohist |
+| m15 | the temp-name `[ -e ]` precheck becomes `false` (`set -C` still refuses, but after the archive append) | tmpexist |
+
+`set -C` and the `[ -e ]` precheck refuse the same file at different moments, so each has a subject
+the other cannot see: a file present BEFORE the run is caught by the precheck with the archive
+unwritten (m15 leaves rc 1 but writes the archive, and `tmpexist` asserts it absent), and a file
+that appears AFTER the precheck is caught only by `set -C` (mB overwrites it and exits 0).
 
 m10 and m11 are not killed by `ulim`, and that is measured rather than overlooked. Over 88
 `ulimit -f` appends (three body sizes, three limits, up to ten pre-fill offsets) every one of the
