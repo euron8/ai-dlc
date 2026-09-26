@@ -61,10 +61,28 @@
 #     --keep-entries N     boundaries to keep live (default 10, mirroring the snapshot's own
 #                          "Recent Activity holds the last ~10 entries")
 #     --absorb PATH        additionally fold a stale pipeline-snapshot.md into the same archive
-#                          and delete it. This is route.md's fresh-start archival, which used to
-#                          mint `pipeline-snapshot.archive.<ISO>.md` -- 158 such files on the
-#                          reference consumer, in five different timestamp spellings, none of
-#                          them matched by is_archive(). One archive, one writer, no new file.
+#                          and TRUNCATE it to 0 bytes. This is route.md's fresh-start archival,
+#                          which used to mint `pipeline-snapshot.archive.<ISO>.md` -- 158 such
+#                          files on the reference consumer, in five different timestamp
+#                          spellings, none of them matched by is_archive(). One archive, one
+#                          writer, no new file.
+#
+# --absorb TRUNCATES, IT NEVER REMOVES. Every control hook keys "a pipeline is active" on the
+# snapshot's EXISTENCE (`[ -f ]`: ai-dlc-continue.sh's stall check, ai-dlc-pause.sh's pause flag,
+# Rule 29's deny, compaction recovery). The fresh start is two acts -- this call, then the lead
+# writing the new snapshot -- and a turn can end between them. A removed snapshot turns every one
+# of those hooks off for that window; an emptied one keeps them firing. So the file exists at
+# every instant, and route.md Step 0 already routes an EMPTY snapshot away from resume.
+#
+# --absorb RUNS ON EVERY PATH THAT IS NOT A REFUSAL: no history file yet, a history at or below
+# its cut floor, and a real rotation. It used to run only on the last, so on a fresh consumer (no
+# history) or a history sitting at exactly --keep-entries cut points it was a silent exit-0 no-op,
+# and the lead's next write destroyed the stale snapshot unarchived. The ignored-archive refusal
+# and the archive staging apply to the absorb on every one of those paths. An absorb of a snapshot
+# that is ALREADY EMPTY writes nothing, so a re-run after an interrupted swap appends no empty block.
+#
+# Every argument is parsed before any exit, so an unknown option or an --absorb naming no file is
+# exit 2 on every path, including the no-history one.
 #
 # Exit: 0 = reported or rotated (nothing to rotate is a normal, affirmative result)
 #       1 = REFUSED: an integrity check failed and NOTHING was written
@@ -82,13 +100,6 @@ HISTORY="${1:-}"
 [ -n "$HISTORY" ] || usage
 case "$HISTORY" in --*) usage ;; esac
 shift
-
-# Absent is not an error. The first trim of a fresh project creates this file; a rotator that
-# exits non-zero before it exists would fail the very step that is about to create it.
-[ -f "$HISTORY" ] || {
-  echo "${SELF_NAME}: no history at '${HISTORY}' -- nothing to rotate."
-  exit 0
-}
 
 APPLY=0
 KEEP_ENTRIES=10
@@ -112,6 +123,144 @@ esac
 if [ -n "$ABSORB" ] && [ ! -f "$ABSORB" ]; then
   echo "${SELF_NAME}: --absorb names no file: '${ABSORB}'" >&2
   exit 2
+fi
+
+ARCHIVE_DIR="$(dirname "$ARCHIVE")"
+IN_GIT=0
+GITROOT=""
+
+# ---------------------------------------------------------------------------
+# REFUSAL 3: the destination must be able to enter Check 35's corpus.
+#
+# This is the refusal the measurement bought, and it is the reason this script is not three lines
+# of `cat`. The corpus is `git ls-files -z -- '*.md' | xargs -0 cat`: a path that git ignores is
+# never listed, so its bytes are not in the corpus no matter what is on disk. Truncating the live
+# file into an ignored archive is not a move, it is a deletion with extra steps -- and it scores
+# on the reference consumer as 62 additional destroyed lines against a floor of 40.
+#
+# Checked BEFORE anything is written, on every path that writes (rotation or absorb), and only
+# when git can answer. Outside a work tree there is no corpus to fall out of, so there is nothing
+# to refuse. The work tree is resolved from the first of the history's directory, the archive's
+# directory and the absorbed file's directory that exists: on a fresh project the history file,
+# and possibly the archive directory, do not exist yet.
+# ---------------------------------------------------------------------------
+refuse_if_archive_ignored() {
+  local d
+  for d in "$(dirname "$HISTORY")" "$ARCHIVE_DIR" ${ABSORB:+"$(dirname "$ABSORB")"}; do
+    [ -d "$d" ] || continue
+    if git -C "$d" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      IN_GIT=1
+      GITROOT="$(git -C "$d" rev-parse --show-toplevel 2>/dev/null)"
+      break
+    fi
+  done
+  if [ "$IN_GIT" -eq 1 ] && [ -n "$GITROOT" ] && git -C "$GITROOT" check-ignore -q "$ARCHIVE" 2>/dev/null; then
+    echo "${SELF_NAME}: REFUSED -- the archive path is git-ignored: ${ARCHIVE}" >&2
+    echo "  Check 35 (validate-snapshot-conservation.sh) builds its corpus from 'git ls-files -- *.md'," >&2
+    echo "  so an ignored destination holds bytes that the conservation check cannot see. Moving the" >&2
+    echo "  live history or the absorbed snapshot there would score every relocated line as DESTROYED." >&2
+    echo "  Nothing written. Un-ignore the path, or pass --archive with one that is tracked." >&2
+    exit 1
+  fi
+}
+
+ensure_archive() {
+  mkdir -p "$ARCHIVE_DIR" || {
+    echo "${SELF_NAME}: cannot create ${ARCHIVE_DIR}. Nothing written." >&2; exit 1; }
+  if [ ! -s "$ARCHIVE" ]; then
+    {
+      echo "# Pipeline snapshot — archive"
+      echo
+      echo "Superseded snapshot narrative, rotated out of \`pipeline-snapshot-history.md\` by"
+      echo "\`scripts/ai-dlc/rotate-snapshot-archive.sh\`, plus whole snapshots absorbed at a"
+      echo "fresh start. ONE file, appended forever, never rewritten."
+      echo
+      echo "This is provenance, and it is load-bearing: Check 35"
+      echo "(\`validate-snapshot-conservation.sh\`) reads every tracked markdown file in the"
+      echo "working tree to decide whether content evicted from the snapshot still exists."
+      echo "Lines in here are the evidence that a trim was a MOVE and not a deletion. Do not"
+      echo "delete it, do not gitignore it, and do not hand-edit an entry back into the live"
+      echo "history — the rotator is the only writer."
+      echo
+    } > "$ARCHIVE"
+  fi
+}
+
+# The move is not complete until the destination is in the corpus. Staging here rather than
+# leaving it to the caller is deliberate: the caller who forgets is exactly the failure REFUSAL 3
+# exists to prevent, and an unstaged new file contributes nothing to `git ls-files`.
+stage_archive() {
+  if [ "$IN_GIT" -eq 1 ] && [ -n "$GITROOT" ]; then
+    git -C "$GITROOT" add -- "$ARCHIVE" >/dev/null 2>&1 || {
+      echo "${SELF_NAME}: WARNING -- could not stage ${ARCHIVE}." >&2
+      echo "  Until it is tracked, Check 35 cannot see the lines just moved into it." >&2
+      echo "  Run: git add -- ${ARCHIVE}" >&2
+    }
+  fi
+}
+
+# What the absorb would do, for report-only mode. Writes nothing.
+absorb_report() {
+  [ -n "$ABSORB" ] || return 0
+  if [ ! -s "$ABSORB" ]; then
+    echo "  absorb : ${ABSORB} is already empty -- nothing to absorb, nothing would be written"
+  else
+    echo "  absorb : ${ABSORB} ($(wc -l < "$ABSORB" | tr -d ' ') lines) would be appended to ${ARCHIVE}, then truncated to 0 bytes (never removed)"
+  fi
+}
+
+# Append the stale snapshot to the archive; the caller stages the archive and then calls
+# absorb_truncate. An already-empty snapshot is a no-op that writes nothing (idempotent re-run).
+ABSORB_NOTE=""
+ABSORB_DID=0
+absorb_append() {
+  [ -n "$ABSORB" ] || return 0
+  if [ ! -s "$ABSORB" ]; then
+    ABSORB_NOTE=" ${ABSORB} was already empty, nothing absorbed;"
+    return 0
+  fi
+  ensure_archive
+  A_LINES="$(wc -l < "$ABSORB" | tr -d ' ')"
+  {
+    echo ""
+    echo "<!-- absorbed whole snapshot from $(basename "$ABSORB") at fresh start: ${A_LINES} lines -->"
+    echo ""
+  } >> "$ARCHIVE"
+  cat "$ABSORB" >> "$ARCHIVE"
+  ABSORB_DID=1
+  ABSORB_NOTE=" absorbed ${ABSORB} (${A_LINES} lines) and truncated it to 0 bytes;"
+}
+
+# Truncate, never remove: the control hooks key on the file's existence (see header).
+absorb_truncate() {
+  [ "$ABSORB_DID" -eq 1 ] && : > "$ABSORB"
+  return 0
+}
+
+# The absorb alone, for the paths where the history does not rotate.
+absorb_only() {
+  [ -n "$ABSORB" ] || return 0
+  refuse_if_archive_ignored
+  if [ "$APPLY" -eq 0 ]; then
+    absorb_report
+    echo "  re-run with --apply to write."
+    return 0
+  fi
+  absorb_append
+  if [ "$ABSORB_DID" -eq 1 ]; then
+    stage_archive
+    absorb_truncate
+  fi
+  echo "${SELF_NAME}:${ABSORB_NOTE} archive: ${ARCHIVE}"
+}
+
+# Absent is not an error. The first trim of a fresh project creates this file; a rotator that
+# exits non-zero before it exists would fail the very step that is about to create it. The absorb
+# still runs: on a fresh project this is the only path the fresh-start archival ever takes.
+if [ ! -f "$HISTORY" ]; then
+  echo "${SELF_NAME}: no history at '${HISTORY}' -- nothing to rotate."
+  absorb_only
+  exit 0
 fi
 
 TMPD="$(mktemp -d "${TMPDIR:-/tmp}/aidlc-snaprotate.XXXXXX")" || {
@@ -206,6 +355,7 @@ if [ "$N_CUT" -le "$KEEP_ENTRIES" ]; then
     exit 1
   fi
   echo "${SELF_NAME}: ${N_CUT} entr(ies) present, keeping ${KEEP_ENTRIES} -- nothing to rotate (${L_ALL} lines stay)."
+  absorb_only
   exit 0
 fi
 
@@ -237,36 +387,8 @@ fi
 N_MOVE=$(( N_CUT - KEEP_ENTRIES ))
 B_MOVE="$(wc -c < "$TMPD/move" | tr -d ' ')"
 
-# ---------------------------------------------------------------------------
-# REFUSAL 3: the destination must be able to enter Check 35's corpus.
-#
-# This is the refusal the measurement bought, and it is the reason this script is not three lines
-# of `cat`. The corpus is `git ls-files -z -- '*.md' | xargs -0 cat`: a path that git ignores is
-# never listed, so its bytes are not in the corpus no matter what is on disk. Truncating the live
-# file into an ignored archive is not a move, it is a deletion with extra steps -- and it scores
-# on the reference consumer as 62 additional destroyed lines against a floor of 40.
-#
-# Checked BEFORE anything is written, and only when git can answer. Outside a work tree there is
-# no corpus to fall out of, so there is nothing to refuse.
-# ---------------------------------------------------------------------------
-ARCHIVE_DIR="$(dirname "$ARCHIVE")"
-IN_GIT=0
-if git -C "$ARCHIVE_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1 ||
-   git -C "$(dirname "$HISTORY")" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  IN_GIT=1
-fi
-
-if [ "$IN_GIT" -eq 1 ]; then
-  GITROOT="$(git -C "$(dirname "$HISTORY")" rev-parse --show-toplevel 2>/dev/null)"
-  if [ -n "$GITROOT" ] && git -C "$GITROOT" check-ignore -q "$ARCHIVE" 2>/dev/null; then
-    echo "${SELF_NAME}: REFUSED -- the archive path is git-ignored: ${ARCHIVE}" >&2
-    echo "  Check 35 (validate-snapshot-conservation.sh) builds its corpus from 'git ls-files -- *.md'," >&2
-    echo "  so an ignored destination holds bytes that the conservation check cannot see. Moving the" >&2
-    echo "  live history there would score every relocated line as DESTROYED. Nothing written." >&2
-    echo "  Un-ignore the path, or pass --archive with one that is tracked." >&2
-    exit 1
-  fi
-fi
+# REFUSAL 3 (defined above): checked before anything is written.
+refuse_if_archive_ignored
 
 # ---------------------------------------------------------------------------
 # Report-only (the default).
@@ -275,7 +397,7 @@ if [ "$APPLY" -eq 0 ]; then
   echo "${SELF_NAME}: ${N_MOVE} of ${N_CUT} entr(ies) would move -- ${L_MOVE} of ${L_ALL} lines (${B_MOVE} bytes),"
   echo "  leaving ${L_PRE} preamble + ${L_TAIL} live."
   echo "  archive: ${ARCHIVE}"
-  [ -n "$ABSORB" ] && echo "  absorb : ${ABSORB} (folded into the same archive, then removed)"
+  absorb_report
   echo "  re-run with --apply to write. Verify after: validate-snapshot-conservation.sh must report"
   echo "  the same verdict it reported before."
   exit 0
@@ -287,26 +409,7 @@ fi
 # file drops its content from the corpus the moment it hits disk, even though the index still
 # holds the old blob -- staging does not protect content, presence on disk does.
 # ---------------------------------------------------------------------------
-mkdir -p "$ARCHIVE_DIR" || {
-  echo "${SELF_NAME}: cannot create ${ARCHIVE_DIR}. Nothing written." >&2; exit 1; }
-
-if [ ! -s "$ARCHIVE" ]; then
-  {
-    echo "# Pipeline snapshot — archive"
-    echo
-    echo "Superseded snapshot narrative, rotated out of \`pipeline-snapshot-history.md\` by"
-    echo "\`scripts/ai-dlc/rotate-snapshot-archive.sh\`, plus whole snapshots absorbed at a"
-    echo "fresh start. ONE file, appended forever, never rewritten."
-    echo
-    echo "This is provenance, and it is load-bearing: Check 35"
-    echo "(\`validate-snapshot-conservation.sh\`) reads every tracked markdown file in the"
-    echo "working tree to decide whether content evicted from the snapshot still exists."
-    echo "Lines in here are the evidence that a trim was a MOVE and not a deletion. Do not"
-    echo "delete it, do not gitignore it, and do not hand-edit an entry back into the live"
-    echo "history — the rotator is the only writer."
-    echo
-  } > "$ARCHIVE"
-fi
+ensure_archive
 
 {
   echo ""
@@ -315,32 +418,12 @@ fi
 } >> "$ARCHIVE"
 cat "$TMPD/move" >> "$ARCHIVE"
 
-ABSORB_NOTE=""
-if [ -n "$ABSORB" ]; then
-  A_LINES="$(wc -l < "$ABSORB" | tr -d ' ')"
-  {
-    echo ""
-    echo "<!-- absorbed whole snapshot from $(basename "$ABSORB") at fresh start: ${A_LINES} lines -->"
-    echo ""
-  } >> "$ARCHIVE"
-  cat "$ABSORB" >> "$ARCHIVE"
-  ABSORB_NOTE=" absorbed ${ABSORB} (${A_LINES} lines);"
-fi
+absorb_append
 
 cat "$TMPD/preamble" "$TMPD/tail" > "$HISTORY"
 
-# The move is not complete until the destination is in the corpus. Staging here rather than
-# leaving it to the caller is deliberate: the caller who forgets is exactly the failure REFUSAL 3
-# exists to prevent, and an unstaged new file contributes nothing to `git ls-files`.
-if [ "$IN_GIT" -eq 1 ] && [ -n "${GITROOT:-}" ]; then
-  git -C "$GITROOT" add -- "$ARCHIVE" >/dev/null 2>&1 || {
-    echo "${SELF_NAME}: WARNING -- could not stage ${ARCHIVE}." >&2
-    echo "  Until it is tracked, Check 35 cannot see the ${L_MOVE} lines just moved into it." >&2
-    echo "  Run: git add -- ${ARCHIVE}" >&2
-  }
-  [ -n "$ABSORB" ] && git -C "$GITROOT" rm -q -- "$ABSORB" >/dev/null 2>&1
-fi
-[ -n "$ABSORB" ] && [ -f "$ABSORB" ] && rm -f "$ABSORB"
+stage_archive
+absorb_truncate
 
 echo "${SELF_NAME}: moved ${N_MOVE} entr(ies), ${L_MOVE} lines (${B_MOVE} bytes) to ${ARCHIVE};${ABSORB_NOTE} history is now $(wc -l < "$HISTORY" | tr -d ' ') lines."
 echo "  Verify: validate-snapshot-conservation.sh must report the same verdict as before this ran."
