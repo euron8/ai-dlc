@@ -167,6 +167,8 @@ mk_world ignored 0  yes yes
 # of them must be written whole, or the line-accounting refusal fires first and the rewrite is
 # never reached), the archive (header + 4 moved entries + the absorbed snapshot) is well under,
 # and preamble + tail is over. run.sh asserts all four sizes before it reads the arm's verdict.
+# The new history is built beside the history BEFORE the archive append, and its `cp -p` of the
+# old (larger) history is the first write the limit stops, so the refusal comes with no archive.
 mk_world bigtail 0 yes no
 {
   echo "# Pipeline Snapshot — History (write-only; never whole-read)"

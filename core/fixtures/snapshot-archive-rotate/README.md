@@ -88,24 +88,20 @@ template (`seed.sh` builds `nohist`, `floor`, `above`, `nosnap`, `ignored` and `
 | ulim | a REGULAR-FILE archive pre-filled to 40 bytes under an 8 KiB `ulimit -f` (inside a subshell with `trap '' XFSZ`, so it binds root too and the writer gets EFBIG instead of dying), on no history and on the rotation path: rc 1, the archive appended part-way, snapshot and history byte-identical. Kills the rotator that keeps only `[ -f ]`, which exits 0 and empties the snapshot |
 | wlate | a `cat` shim on `PATH` writes every byte and then exits 1: rc 1, snapshot byte-identical, archive growth exact. Only the write-status check sees it |
 | wshort | a `cat` shim writes all but the last byte and exits 0: rc 1, snapshot byte-identical, archive growth one short. Only the growth check sees it |
-| rew | the history REWRITE fails after the archive append succeeded (`bigtail` under the same 8 KiB limit). An unlimited control run on a second copy first proves the sizing reaches the rewrite: the new history is over the limit, its preamble and tail each under it, the archive under it. Then: rc 1, the refusal names the rewrite, history and snapshot byte-identical, every pre-run history line still in the history or the archive, and the partial temp file named at a path that exists |
-| tlate / tshort | a `cat` shim acts ONLY on the step-1 temp write (the one call whose last argument ends `/preamble`): it writes every byte then exits 1 / drops one byte and exits 0. rc 1, history and snapshot byte-identical. Only step 1's status check / size check sees each |
-| wblate / wbshort | the same two shapes on the step-2 write-back (`cat < temp > history`, the one `cat` call with no argument; the older argument form's single `.rotate.` argument is keyed too). rc 1, the temp copy kept at the path printed, byte-identical to the expected new history (the shipped rotator's output on an unmodified copy), and the printed `cp` restores the history to it. Only step 2's status check / size check sees each |
-| tmpexist | a file already at the temp name, placed by `sh -c '… exec bash rotator'` so the sh's `$$` is the rotator's: rc 1 with NO archive created, history and snapshot byte-identical, the foreign file untouched |
-| tmprace | the shim creates a file at the temp name while the archive append of the moved block runs, after the precheck passed: rc 1, `set -C` refuses step 1, history and snapshot byte-identical, the foreign file untouched and the refusal saying it is NOT a verified new history |
+| rew | the history REWRITE fails under the same 8 KiB limit (`bigtail`). An unlimited control run on a second copy first proves the sizing: the new history is over the limit, its preamble and tail each under it, the archive under it. Then: rc 1, the refusal names the rewrite, history and snapshot byte-identical, NO archive (the new history is built before the append), every pre-run history line still in the history. Under the rename design the `cp -p` of the old history is the first write to fail, so the content write's own guards are owned by tlate/tshort |
+| tlate / tshort | a `cat` shim acts ONLY on the temp write (the one call whose first argument ends `/preamble`): it writes every byte then exits 1 / drops one byte and exits 0. rc 1 before the archive append, history and snapshot byte-identical, no archive. Only the write's status check / size check sees each |
 | rohist | a 444 history: rc 1 with NO archive created, history and snapshot byte-identical. Under root a 444 file is writable, so the arm prints `skip` and m14 is reported NOT SCORED rather than passing |
-| links | a symlinked history stays a symlink and its target is rotated; a hard-linked history's peer is rotated identically and the inode is unchanged; a 640 history keeps mode 640 |
-| rerunhalf | a `cat` shim on the write-back writes half the temp copy into the history and exits 1; then the same command is re-run with no restore. The re-run is rc 1 and names the temp copy; the history, the snapshot and the archive are unchanged by it; every pre-run history line is in the history, the archive or the temp. The temp name carries the pid, so before REFUSAL 4 the re-run never saw the earlier run's temp, landed on "nothing to rotate" and exited 0 with lines only in that untracked file |
-| rerunkill | the same shim writes half and SIGKILLs its parent, the rotator, so nothing is printed and no trap runs; then the same re-run and the same assertions |
-| restore | the write-back fails half-way on a caller WITHOUT `--absorb`; the printed restore command is run exactly as printed; the same caller re-runs: rc 0, the archive in `git ls-files`, 0 pre-run history lines missing from the tracked corpus. The control: after the restore and before the re-run, lines ARE missing (the archive is untracked) |
 | rodir | a writable history in a 555 directory: rc 1 before any write, on a first and a second run, the archive never created, history and snapshot byte-identical. Under root a 555 directory is writable, so the arm prints `skip` and m19 is NOT SCORED |
-| zero | a `cat` shim on the write-back writes 0 bytes and exits 1, leaving an empty history; then a plain re-run with a `head` shim that refuses `-c 0` as BSD's does (so the arm expresses the defect on GNU too). The re-run is rc 1, prints the `cp` restore and no `head:` text. The printed restore is run as printed, then a re-run: rc 0 and the history byte-identical to a clean rotation |
-| trimmed | the write-back is SIGKILLed half-way, then a `## ` entry is appended to the history as the next trim would, so the history is no longer a prefix of the temp (asserted). The re-run is rc 1, and the listing command it prints, run as printed, outputs exactly the temp's lines found in neither the history nor the archive (computed independently, and non-empty), which covers every pre-run line lost |
-| race | a `wc` shim on step 1's size read (the last external call before step 2) removes the temp copy, as something outside the run would. rc 1 and the history byte-identical: `cat < temp > history` opens its source before the history. A `cat` shim on step 2 cannot force this, because the shell has opened both redirects before `cat` runs |
 | rosnap | a 444 snapshot on `--absorb` (no history): rc 1, the snapshot unchanged in size, and the refusal says it is archived but NOT emptied. Under root a 444 file is writable, so the arm prints `skip` and m23 is NOT SCORED |
+| links | a symlinked history and a hard-linked history: each rc 1 naming the reason, before any write. The link is still a link and its target byte-identical; the history and its peer byte-identical; the snapshot byte-identical; no archive |
+| mode | a 640 history rotates to the clean result and is still 640 after the rename; a peer file in the same directory is untouched. chmod means nothing on FAT, so this arm is about the host it runs on |
+| atomic | an `mv` shim fails the rename WITHOUT calling the real `mv`: rc 1 naming the rename, history and snapshot byte-identical, and NO file left at the temp name. The only arm that can assert "no temp left": a killed run legitimately leaves one |
+| killed | two kill points, each followed by the same caller re-run plainly. (1) With `--absorb`, an `mv` shim SIGKILLs the rotator at the rename; the kill is asserted (sentinel once, rc 137); the re-run is rc 0, rotates ("moved 4 entries"), the history EQUALS a clean rotation of the same world, and every pre-run history and snapshot line is in the history or the archive. (2) Without `--absorb`, a `git` shim SIGKILLs it at `git add` of the archive, after the rename; the control is that the archive is NOT tracked after run 1; the re-run lands on "nothing to rotate", rc 0, the archive tracked, the history equal to a clean rotation, 0 pre-run lines missing from the tracked corpus |
 
 Every shim arm asserts the shim's sentinel counted exactly one action, so an arm whose shim never
-fired on its intended call cannot pass.
+fired on its intended call cannot pass. A shim that kills sends SIGKILL to its parent, the rotator,
+and exits without calling the real program, so nothing outlives the kill to finish the rename after
+it, and no watcher polls a process table.
 
 | Arm | Asserts |
 |---|---|
@@ -135,44 +131,32 @@ them all; each mutant then runs only the arm that owns it:
 | m10 | the append's `\|\| archive_fail "the write failed"` deleted (write-status check) | wlate |
 | m11 | the append's growth check deleted, both its numeric-operand guard and its comparison | wshort |
 | m13 | m10 and m11 together, so only the `[ -f ]` guard is left | ulim |
-| m12 | the history rewritten in place again, `cat preamble tail > "$HISTORY"` | rew |
-| mA | step 1's size check deleted | tshort |
-| mB | `set -C` dropped from step 1 | tmprace |
-| mC | step 1's `\|\| rewrite_fail` deleted (write-status check) | tlate |
-| mD | the write-back is a rename again, `mv -f "$HIST_NEW" "$HISTORY"` | links |
-| mE | `writeback_fail` deletes the temp copy before reporting | wblate |
-| mF | step 2's `\|\| writeback_fail` deleted (write-status check) | wblate |
-| mG | step 2's size check deleted | wbshort |
+| m12 | the history rewritten in place again, `cat preamble tail > "$HISTORY"` (and the `cp -p` onto the temp deleted, since under the limit it fails first) | rew |
+| mA | the temp write's size check deleted | tshort |
+| mC | the temp write's `\|\| rewrite_fail` deleted (write-status check) | tlate |
 | m14 | the `[ ! -w "$HISTORY" ]` precheck becomes `false` | rohist |
-| m15 | the `refuse_if_stale_temp` call becomes `:` (`set -C` still refuses, but after the archive append) | tmpexist |
-| m16 | the stale-temp precheck's glob narrowed to this run's own pid-keyed name, the round-4 shape | rerunhalf, rerunkill |
-| m17 | the printed restore omits `&& rm -f` of the temp copy, so the re-run it recommends refuses | restore |
-| m18 | the staging call on the nothing-to-rotate (cut-floor) path deleted | restore |
+| m18 | the staging call on the nothing-to-rotate (cut-floor) path deleted | killed |
 | m19 | the `[ ! -w "$HIST_DIR" ]` precheck becomes `false` | rodir |
-| m20 | the empty-history line `[ "$hb" -eq 0 ] && return 0` in `hist_is_prefix` becomes `:` | zero |
-| m21 | the listing command in the not-a-prefix text becomes `:` | trimmed |
-| m22 | the write-back is `cat "$HIST_NEW" > "$HISTORY"` again (history opened before the source) | race |
 | m23 | the post-truncate check becomes `false` | rosnap |
+| mL1 | the `[ -L "$HISTORY" ]` precheck becomes `false` (the symlink is followed and replaced by a regular file) | links |
+| mL2 | the `-links +1` refusal becomes `false` (the peer is split off holding the old content) | links |
+| mM | `cp -p` becomes `cp` (the history comes back 600) | mode |
+| mR | `rewrite_fail` no longer removes the temp it built | atomic |
+| mK | the rename becomes a copy-back through the history, `cat "$HIST_NEW" > "$HISTORY"`; the kill lands after the shell truncated the history and before a byte is written, and the re-run finds an empty history | killed |
 
-m21 deletes the listing command rather than restoring the old "was not being restored from it"
-wording. The wording mutant differs from the fix only in prose, and any rewording satisfies an arm
-that greps prose. Deleting the command leaves the text telling the operator to put back "every line
-listed" with nothing listed, and only an arm that RUNS the printed command and compares its output
-with an independent computation can kill it, which is what `trimmed` does.
+Removed in the rename design, each because its subject no longer exists in the rotator:
+`tmpexist`/m15 and `tmprace`/mB (the pid-keyed temp name, its stale-temp precheck and `set -C`:
+the temp is a fresh `mktemp` name nothing else can hold), `wblate`/mF, `wbshort`/mG and mE (the
+write-back into the history, its checks and its kept copy: nothing writes into the history), `race`/m22
+(the write-back's source-first open), `rerunhalf`, `rerunkill`/m16 and `restore`/m17 (the stale-temp
+refusal on a re-run and the printed restore: a killed run leaves the history complete and the re-run
+exits 0), `zero`/m20 (the prefix test's empty-history case) and `trimmed`/m21 (the listing command).
+mD (the write-back made a rename) is the shipped design now.
 
-m1, mD and mF were re-anchored. m1: the truncate is now its own line followed by a check that the
-snapshot is present and empty, so m1 removes the file AND disables the check (a partial revert
-would be refused by the check and prove only it). mD and mF: the write-back line is now
-`cat < "$HIST_NEW" > "$HISTORY"`. m15 was re-anchored: the own-name `[ -e "$HIST_NEW" ]` precheck it used to delete was folded into
-REFUSAL 4, which refuses any `.<history>.rotate.*` before every exit path. `mut_line` passes its
-two lines through `ENVIRON` rather than `awk -v`, because `-v` strips one level of backslashes and
-m17's anchor carries `\"`.
-
-`set -C` and the stale-temp precheck refuse the same file at different moments, so each has a
-subject the other cannot see: a file present BEFORE the run is caught by the precheck with the
-archive unwritten (m15 leaves rc 1 but writes the archive, and `tmpexist` asserts it absent), and a
-file that appears AFTER the precheck is caught only by `set -C` (mB overwrites it and exits 0).
-m16 keeps `tmpexist` green (its file is at this run's name) and is killed only by the re-run arms.
+m1 was re-anchored: the truncate is its own line followed by a check that the snapshot is present
+and empty, so m1 removes the file AND disables the check (a partial revert would be refused by the
+check and prove only it). `mut_line` passes its two lines through `ENVIRON` rather than `awk -v`,
+because `-v` strips one level of backslashes.
 
 m10 and m11 are not killed by `ulim`, and that is measured rather than overlooked. Over 88
 `ulimit -f` appends (three body sizes, three limits, up to ten pre-fill offsets) every one of the
@@ -199,4 +183,4 @@ bash core/fixtures/snapshot-archive-rotate/run.sh
 
 Cwd-invariant: it locates the rotator by walking up for either layout marker
 (`core/scripts/` or `scripts/ai-dlc/`) rather than resolving relative to itself, and is
-verified green from `/`, from its own directory, and from the repo root.
+verified green from `/`, from its own directory, from the repo root, and in an installed consumer.

@@ -86,26 +86,43 @@
 #
 # Exit: 0 = reported or rotated (nothing to rotate is a normal, affirmative result). With --apply,
 #           an existing archive is staged on every exit-0 path, not only after a rotation.
-#       1 = REFUSED: an integrity check or a write failed. What exit 1 guarantees: the absorbed
-#           snapshot still holds all of its content (it is never emptied on exit 1), and the
-#           history EITHER is byte-identical to before OR -- only when writing the verified new
-#           history back into it failed -- a temp file beside it holds the complete new history,
-#           and its path and the `cp ... && rm -f ...` that restores it are printed, OR -- only
-#           when the absorbed snapshot could not be emptied, the last step -- the rotation
-#           completed and the snapshot is archived but still full (a re-run appends it again).
-#           It does NOT guarantee that
-#           nothing was written: a refused archive append can leave a partial block at the
-#           archive's end, and a refused history rewrite leaves the moved block appended to the
-#           archive (a duplicate of lines the history still holds) and may leave an incomplete
-#           temp file, whose path is printed with the `rm -f` that removes it once it is read.
-#           Refused BEFORE anything is written (so these leave every file as it was):
-#             - any `.<history basename>.rotate.*` beside the history, left by an earlier run,
-#               whatever its pid; each is named with its recovery. Checked before every exit path,
-#               report-only too, so a re-run after an interrupted write-back cannot exit 0 over it;
-#             - a history that is not writable, or whose directory is not writable.
-#           A process killed with SIGKILL prints nothing; what it can leave is the same temp copy,
-#           and the next run refuses on it and prints the recovery.
+#       1 = REFUSED: an integrity check or a write failed.
+#           On exit 1 the history is byte-identical to before, EXCEPT in exactly one case: the
+#           history rename succeeded and the snapshot truncate then failed (read-only snapshot).
+#           There the history is the new, complete history and the archive holds the moved block
+#           and the snapshot; re-running after making the snapshot writable appends the snapshot
+#           again. The snapshot is never emptied without having been archived. The archive may
+#           carry a duplicate block after any exit 1.
+#           Refused BEFORE anything is written, so these leave every file as it was: a history
+#           that is a symlink, has more than one hard link, is not writable, or sits in a
+#           directory that is not writable (or is sticky and owned by someone else); and any
+#           failure while building the new history beside it (the temp copy is removed).
 #       2 = usage
+#
+# THE HISTORY IS REPLACED BY AN ATOMIC RENAME, AND NOTHING EVER WRITES INTO IT. The new history is
+# built in a fresh `mktemp` file in the history's own directory (same filesystem, so `mv` is a
+# rename), verified by status and size, and renamed over the history. So the history is at every
+# instant either the complete old file or the complete new one. The in-place write-back this
+# replaces existed only to keep symlinks, hard links and the mode; every recovery text it needed
+# (a kept temp copy, a prefix test, a listing command) existed only because an interrupted
+# in-place write leaves the history partial. None of that has a subject any more.
+#   - A SYMLINKED history is REFUSED, not followed. Rotating through the link is the behaviour a
+#     rename breaks (the link becomes a regular file and its target is orphaned); refusing is the
+#     fix by subtraction. A history with more than one hard link is refused for the same reason
+#     (the rename would split it from its peer).
+#   - The mode is kept by `cp -p` onto the temp file before the new content is written into it.
+#     The OWNER is kept only where the user may set it: `cp -p` run by a user who does not own the
+#     history silently gives the temp file (and so the new history) that user's ownership, rc 0,
+#     on BSD and GNU alike. The in-place write it replaces kept the owner.
+#   - A run killed with SIGKILL at any point loses no line, and a plain re-run exits 0. It may
+#     leave a stray `.<history basename>.rotate.XXXXXX` beside the history. The history was never
+#     written through it, so it is SAFE TO DELETE; no later run reads it or refuses on it, and it
+#     is outside the `*.md` corpus Check 35 reads.
+#   - A kill between the rename and the snapshot truncate leaves the archive unstaged; the re-run
+#     lands on "nothing to rotate", stages it, and absorbs the snapshot again (a duplicate block).
+#   - ONE RUN ASSUMES NO CONCURRENT WRITER TO THE HISTORY. A writer holding it open with `>>`
+#     across a rotation writes into the replaced inode and its lines are lost; a trim appending
+#     between this run's read and its rename is lost too (as it was under the in-place design).
 set -uo pipefail
 
 SELF_NAME="rotate-snapshot-archive"
@@ -190,6 +207,7 @@ refuse_if_archive_ignored() {
 
 ensure_archive() {
   mkdir -p "$ARCHIVE_DIR" || {
+    [ -n "${HIST_NEW:-}" ] && rm -f "$HIST_NEW"
     echo "${SELF_NAME}: cannot create ${ARCHIVE_DIR}. Nothing written." >&2; exit 1; }
   if [ ! -s "$ARCHIVE" ]; then
     {
@@ -222,6 +240,7 @@ ensure_archive() {
 # is not rolled back: the archive is append-only, the bytes are duplicates of content still in the
 # live files, and a rollback would be a second write that can fail the same way.
 archive_fail() {
+  [ -n "${HIST_NEW:-}" ] && rm -f "$HIST_NEW"
   echo "${SELF_NAME}: REFUSED -- could not append to the archive ${ARCHIVE}: $1." >&2
   echo "  Nothing was truncated: the history${ABSORB:+ and ${ABSORB}} are unchanged. Make the archive a writable regular file and re-run." >&2
   exit 1
@@ -326,11 +345,12 @@ absorb_only() {
 }
 
 # The archive is staged on the paths that do not rotate too, whenever it exists and --apply was
-# given. The recovery from an interrupted write-back is "restore the history, then re-run", and
-# that re-run lands on "nothing to rotate" because the restored history is already cut. Before
-# this, that path never staged, so a caller without --absorb left a freshly created archive
-# untracked and Check 35 scored every line moved into it as destroyed. Measured: 8 of 29 pre-run
-# lines absent from `git ls-files` after the printed restore and a clean exit-0 re-run.
+# given. A run killed after the history rename and before the staging leaves the new history
+# already cut and the archive holding the moved block UNTRACKED; the re-run then lands on "nothing
+# to rotate". Without staging there, a caller without --absorb left the archive untracked and
+# Check 35 scored every line moved into it as destroyed. Measured under the earlier in-place
+# design, whose recovery landed on the same path: 8 of 29 pre-run lines absent from
+# `git ls-files` after a clean exit-0 re-run.
 #
 # It stages only; it does not refuse. An archive that already exists and is ignored is refused by
 # REFUSAL 3 on every path that writes to it, and here `git add` of it fails and prints the same
@@ -341,90 +361,9 @@ stage_existing_archive() {
   stage_archive
 }
 
-# ---------------------------------------------------------------------------
-# REFUSAL 4: a temp copy left by an earlier rotation. Checked before EVERY exit path that is not a
-# usage error, in report-only mode too.
-#
-# The temp name carries the pid, so a re-run has a new name and a precheck on its OWN name never
-# sees the earlier run's file. And the re-run rarely reaches that precheck at all: the cut history
-# holds KEEP_ENTRIES headings or fewer, so it takes "nothing to rotate" and exits 0. Measured: after
-# a half-way write-back failure, a re-run without the printed restore exited 0 with 11 of 29 pre-run
-# history lines in neither tracked file (they were only in the untracked temp copy), and absorbed the
-# snapshot a second time. After a SIGKILL during the write-back, the same 11 of 29 were lost, and no
-# restore command had ever been printed.
-#
-# So ANY `.<history basename>.rotate.*` beside the history refuses the run, whatever pid wrote it.
-# Each one is named, with the recovery it needs:
-#   - the history is a byte-prefix of it (a write-back that was cut short, or that finished and
-#     could not remove the temp): it is the verified new history, and `cp temp history && rm temp`
-#     restores it;
-#   - anything else. "Not a prefix" says nothing about where the file came from: it can be a step-1
-#     write cut short, a file this script never wrote, OR the complete new history of a killed
-#     write-back whose history a later trim has since appended to -- and then the lines the history
-#     lost exist ONLY in this file. So the text prints a command listing the file's lines found in
-#     neither the history nor the archive, and says each must go back before the file is removed.
-#   - a directory at the name: `rm -f` cannot remove it, so it gets its own remedy.
-#   It is never deleted here.
-# `set -C` on the step-1 write stays as the guard for a file that appears DURING a run.
-# ---------------------------------------------------------------------------
 HIST_DIR="$(dirname "$HISTORY")"
 HIST_BASE="$(basename "$HISTORY")"
-HIST_NEW="${HIST_DIR}/.${HIST_BASE}.rotate.$$"
-
-# hist_is_prefix TEMP: 0 when the history's bytes are exactly the first bytes of TEMP.
-hist_is_prefix() {
-  local hb tb
-  [ -f "$HISTORY" ] && [ -f "$1" ] && [ ! -L "$1" ] || return 1
-  hb="$( { wc -c < "$HISTORY"; } 2>/dev/null | tr -d ' ')" || return 1
-  tb="$( { wc -c < "$1"; } 2>/dev/null | tr -d ' ')" || return 1
-  case "${hb}${tb}" in ''|*[!0-9]*) return 1 ;; esac
-  [ "$hb" -le "$tb" ] || return 1
-  # An EMPTY history is a prefix of every file, and it is decided here, never by `head`: BSD `head`
-  # refuses `-c 0` (exit 1) where GNU accepts it, so the answer must not depend on which one runs.
-  # Measured on BSD before this line: a write-back that wrote 0 bytes was scored "NOT a prefix",
-  # and following that text lost 32 of 44 lines while the next run exited 0.
-  [ "$hb" -eq 0 ] && return 0
-  head -c "$hb" "$1" 2>/dev/null | cmp -s - "$HISTORY" 2>/dev/null
-}
-
-refuse_if_stale_temp() {
-  local t found=0
-  # bash 3.2 has no nullglob by default: an unmatched pattern comes back as itself, which the
-  # existence test below skips. `[ -L ]` catches a dangling symlink, which `[ -e ]` does not.
-  for t in "${HIST_DIR}/.${HIST_BASE}.rotate."*; do
-    [ -e "$t" ] || [ -L "$t" ] || continue
-    if [ "$found" -eq 0 ]; then
-      echo "${SELF_NAME}: REFUSED -- a temp copy from an earlier rotation is beside the history. Nothing written." >&2
-      echo "  An earlier run stopped between writing the new history and removing its temp copy, so the" >&2
-      echo "  history may be cut short and the lines it lost may be ONLY in the file(s) below." >&2
-    fi
-    found=1
-    echo "  temp copy: ${t}" >&2
-    if [ -d "$t" ] && [ ! -L "$t" ]; then
-      echo "    It is a DIRECTORY, which this script never writes, and 'rm -f' cannot remove it. List what it holds:" >&2
-      echo "      ls -la \"${t}\"" >&2
-      echo "    Put back into the history any line in it that is in no tracked file, move everything else out," >&2
-      echo "    then remove the empty directory and re-run:" >&2
-      echo "      rmdir \"${t}\"" >&2
-    elif hist_is_prefix "$t"; then
-      echo "    The history is a byte-prefix of it: it is the verified new history an interrupted write-back was" >&2
-      echo "    copying. Restore it, then re-run:" >&2
-      echo "      cp \"${t}\" \"${HISTORY}\" && rm -f \"${t}\"" >&2
-    else
-      echo "    The history is NOT a byte-prefix of it. That does not say where it came from: it may be the complete" >&2
-      echo "    new history of a write-back that was cut short (a killed run) whose history has since changed, for" >&2
-      echo "    example by a later trim appending to it. Then the lines the history lost exist ONLY in this file." >&2
-      echo "    List its lines that are in neither the history nor the archive:" >&2
-      echo "      cat \"${HISTORY}\" \"${ARCHIVE}\" 2>/dev/null | grep -vxF -f - \"${t}\"" >&2
-      echo "    Every line listed is in neither file: put each one back into the history (a listed '## ' line" >&2
-      echo "    heads the block after it) BEFORE removing this file. Then remove it and re-run:" >&2
-      echo "      rm -f \"${t}\"" >&2
-      echo "    Never delete it unread." >&2
-    fi
-  done
-  [ "$found" -eq 0 ] || exit 1
-}
-refuse_if_stale_temp
+HIST_NEW=""
 
 # Absent is not an error. The first trim of a fresh project creates this file; a rotator that
 # exits non-zero before it exists would fail the very step that is about to create it. The absorb
@@ -584,107 +523,107 @@ fi
 # file drops its content from the corpus the moment it hits disk, even though the index still
 # holds the old blob -- staging does not protect content, presence on disk does.
 # ---------------------------------------------------------------------------
-# THE HISTORY IS REWRITTEN IN TWO STEPS, AND ONLY THE SECOND ONE TOUCHES IT.
-# `cat preamble tail > "$HISTORY"` straight from $TMPD truncates the history when it opens it, so a
-# write that fails part-way leaves a cut history, and the EXIT trap then deletes $TMPD, which held
-# the only complete copy of the kept tail. Measured with `ulimit -f 8`: rc 1, the history cut to
-# 8192 bytes, 5 of 10 headings gone, 92 pre-run lines in neither file.
+# THE HISTORY IS NEVER WRITTEN THROUGH. `cat preamble tail > "$HISTORY"` truncates the history
+# when it opens it, so a write that fails part-way leaves a cut history, and the EXIT trap then
+# deletes $TMPD, which held the only complete copy of the kept tail. Measured with `ulimit -f 8`:
+# rc 1, the history cut to 8192 bytes, 5 of 10 headings gone, 92 pre-run lines in neither file.
+# The in-place write-back that followed (a verified temp copy written back INTO the history) was
+# the same hazard one step later: every recovery it needed was a new way to lose lines.
 #
-# So step 1 writes the new history to a temp file in the history's own directory, under `set -C`,
-# and checks it by exit status AND by size. Step 2 writes that verified copy back INTO the history
-# with `cat temp > history`, and checks that by exit status and size too. The temp copy is deleted
-# only after step 2 verifies. So exit 1 leaves the history byte-identical (any failure before
-# step 2), or leaves the temp copy holding the complete new history, named with the `cp` that
-# restores it (a failure in step 2).
-#
-# THE WRITE-BACK IS IN PLACE, NEVER A RENAME. `mv temp history` replaces the directory entry: a
-# symlinked history becomes a regular file and its target is orphaned (git shows a type change), a
-# hard-linked history is split from its peer, and the mode comes back as the umask default (640 ->
-# 644). Writing through the existing name keeps the inode, the link, the mode and the owner.
-# HIST_NEW is set above, beside REFUSAL 4, which has already refused any file at a `.rotate.` name.
+# So the new history is built in a fresh `mktemp` file beside the history, verified, and RENAMED
+# over it. The order is fixed, and each step's failure leaves a stated state:
+#   1. prechecks                 -- refuse, nothing written;
+#   2. build the temp, verify it -- remove the temp, refuse, nothing else written;
+#   3. archive append, verified  -- remove the temp, refuse; the archive may hold a partial block;
+#   4. rename the temp over the history -- remove the temp, refuse; the history is unchanged and
+#      the archive holds the moved block, which the next run appends again (a duplicate that
+#      conserves it);
+#   5. snapshot truncate (absorb_truncate) -- refuse; the rotation is complete.
+# The new history depends only on the history, so it is built BEFORE anything is appended: a
+# temp that cannot be built never leaves a block in the archive.
 
-# BOTH REFUSALS BELOW RUN BEFORE ANY WRITE, including the archive append. Past the append, a
-# refusal leaves the moved block duplicated in the archive; here it leaves nothing.
-#
-# A history that cannot be written would otherwise be found out only at the write-back, after the
-# archive append and the absorb. `[ -w ]` follows a symlink to the file it names. (It is true for
-# root on any file, and so is the write.)
+# PRECHECKS. Every one runs before any write. The symlink check comes before `[ -w ]`, because
+# `[ -w ]` follows the link to the file it names.
+if [ -L "$HISTORY" ]; then
+  echo "${SELF_NAME}: REFUSED -- the history is a symlink: ${HISTORY}. Nothing written." >&2
+  echo "  The new history replaces the history by a rename, which would turn the link into a regular file and" >&2
+  echo "  orphan its target. Point the caller at the link's target (or replace the link with the file) and re-run." >&2
+  exit 1
+fi
+# `find FILE -links +1` prints FILE when it has more than one hard link, on BSD and GNU. A relative
+# path is prefixed with `./` so a name starting with `-` is not read as an option, and a find that
+# FAILS refuses: its empty output would otherwise read as "one link".
+case "$HISTORY" in /*) FIND_PATH="$HISTORY" ;; *) FIND_PATH="./$HISTORY" ;; esac
+LINKED="$(find "$FIND_PATH" -links +1 2>/dev/null)"; FIND_RC=$?
+if [ "$FIND_RC" -ne 0 ]; then
+  echo "${SELF_NAME}: REFUSED -- could not read the history's hard-link count (find exited ${FIND_RC}): ${HISTORY}. Nothing written." >&2
+  exit 1
+fi
+if [ -n "$LINKED" ]; then
+  echo "${SELF_NAME}: REFUSED -- the history has more than one hard link: ${HISTORY}. Nothing written." >&2
+  echo "  The rename would split it from its peer, which would keep the old content. Remove the extra link and re-run." >&2
+  exit 1
+fi
 if [ ! -w "$HISTORY" ]; then
   echo "${SELF_NAME}: REFUSED -- the history is not writable: ${HISTORY}. Nothing written." >&2
   echo "  Make it writable (or run as a user who can write it) and re-run." >&2
   exit 1
 fi
-# A writable history in a directory that is not writable passes the check above, and step 1 then
-# cannot create the temp copy beside it -- after the archive append. Measured: every retry appended
-# the moved block again, the archive 1721 -> 2772 -> 3823 bytes. The temp copy lives in the
-# history's directory, so that directory must be writable before anything is written.
+# The temp file is created in the history's directory and renamed there, so the directory must be
+# writable. Measured under the earlier design: without this, every retry appended the moved block
+# again, the archive 1721 -> 2772 -> 3823 bytes.
 if [ ! -w "$HIST_DIR" ]; then
   echo "${SELF_NAME}: REFUSED -- the history's directory is not writable: ${HIST_DIR}. Nothing written." >&2
-  echo "  The new history is written to a temp copy beside the history first. Make the directory writable and re-run." >&2
+  echo "  The new history is built beside the history and renamed over it. Make the directory writable and re-run." >&2
+  exit 1
+fi
+# A sticky directory lets a user create the temp file but not rename it over a history someone
+# else owns, and that failure would come after the archive append.
+if [ -k "$HIST_DIR" ] && [ ! -O "$HISTORY" ] && [ "$(id -u)" -ne 0 ]; then
+  echo "${SELF_NAME}: REFUSED -- the history's directory is sticky and the history is owned by another user: ${HISTORY}. Nothing written." >&2
+  echo "  The rename over it would be refused. Run as the history's owner and re-run." >&2
   exit 1
 fi
 
-ensure_archive
-
-archive_append "${NL}<!-- rotated from $(basename "$HISTORY"): ${L_MOVE} lines, ${N_MOVE} entries -->${NL}${NL}" "$TMPD/move"
-
-absorb_append
-
-# Step 1 failed: the history has not been opened for writing, so it is byte-identical.
+ARCHIVE_WRITTEN=0
 rewrite_fail() {
-  echo "${SELF_NAME}: REFUSED -- the moved block was appended to ${ARCHIVE}, but writing the new history failed: $1." >&2
-  echo "  ${HISTORY} is unchanged${ABSORB:+, and ${ABSORB} still holds its content}. The moved lines are now in BOTH files, which conserves them." >&2
-  if [ -e "$HIST_NEW" ] || [ -L "$HIST_NEW" ]; then
-    echo "  A file is left at ${HIST_NEW}. It does NOT hold a verified new history: it is either this run's incomplete" >&2
-    echo "  write or a file that took that name before this run could create it. This run did not remove it." >&2
-    echo "  Read it, keep any line that is in no tracked file, then remove it: rm -f \"${HIST_NEW}\"" >&2
-    echo "  Fix the cause, then re-run (a re-run refuses while it is there, and appends the moved block to the archive again)." >&2
+  [ -n "$HIST_NEW" ] && rm -f "$HIST_NEW"
+  if [ "$ARCHIVE_WRITTEN" -eq 0 ]; then
+    echo "${SELF_NAME}: REFUSED -- writing the new history failed: $1. Nothing was written: ${HISTORY}, the archive${ABSORB:+ and ${ABSORB}} are unchanged, and the temp file is removed." >&2
+    echo "  Fix the cause and re-run." >&2
   else
-    echo "  Nothing was left at the temp name ${HIST_NEW}. Fix the cause, then re-run (a re-run appends the moved block to the archive again)." >&2
+    echo "${SELF_NAME}: REFUSED -- writing the new history failed: $1, after the moved block was appended to ${ARCHIVE}${ABSORB:+ with ${ABSORB}}." >&2
+    echo "  ${HISTORY} is unchanged${ABSORB:+, ${ABSORB} still holds its content,} and the temp file is removed. The moved lines are in BOTH files," >&2
+    echo "  which conserves them. Fix the cause and re-run: the re-run appends them to the archive again." >&2
   fi
   exit 1
 }
-# Step 2 failed: the history may be cut, but the temp copy is verified complete and is kept.
-#
-# Unless the temp copy is GONE -- removed between step 1 and step 2 by something outside this run.
-# Then the `cp` below would name a file that does not exist. The history is compared byte for byte
-# against the pre-run history reassembled from this run's own three parts, and when it matches
-# (the stdin write-back never opened it) the refusal says so instead of printing a dead restore.
-writeback_fail() {
-  if [ ! -e "$HIST_NEW" ] && [ ! -L "$HIST_NEW" ] \
-     && cat "$TMPD/preamble" "$TMPD/move" "$TMPD/tail" > "$TMPD/prerun" 2>/dev/null \
-     && cmp -s "$TMPD/prerun" "$HISTORY"; then
-    echo "${SELF_NAME}: REFUSED -- the verified new history could not be written back into ${HISTORY}: $1." >&2
-    echo "  The temp copy ${HIST_NEW} was removed by something outside this run before the write-back." >&2
-    echo "  ${HISTORY} is unchanged (compared byte for byte with its pre-run content)${ABSORB:+, and ${ABSORB} still holds its content}." >&2
-    echo "  The moved block is already in ${ARCHIVE}, a duplicate of lines the history still holds. Find what removed" >&2
-    echo "  the temp copy, then re-run (the re-run appends the moved block to the archive again)." >&2
-    exit 1
-  fi
-  echo "${SELF_NAME}: REFUSED -- the verified new history could not be written back into ${HISTORY}: $1." >&2
-  echo "  ${HISTORY} may now be incomplete. The COMPLETE new history is kept at: ${HIST_NEW}" >&2
-  echo "  Restore it with: cp \"${HIST_NEW}\" \"${HISTORY}\" && rm -f \"${HIST_NEW}\"" >&2
-  echo "  The moved block is already in ${ARCHIVE}${ABSORB:+, and ${ABSORB} still holds its content}. After the restore, re-run" >&2
-  echo "  to stage the archive${ABSORB:+ (the --absorb re-run appends the snapshot to the archive again, a duplicate that conserves it)}." >&2
-  echo "  A re-run refuses while the temp copy is there, so do the restore first, and never delete the temp copy unread." >&2
-  exit 1
-}
+
+# BUILD. `mktemp` with a trailing-X template (the one form BSD and GNU both substitute) makes a
+# fresh name in the history's directory, so the rename is on one filesystem and atomic. `cp -p`
+# gives it the history's mode (and owner, where this user may set it) before the new content is
+# written into it with `>`, which truncates only our own file.
+HIST_NEW="$(mktemp "${HIST_DIR}/.${HIST_BASE}.rotate.XXXXXX")" || { HIST_NEW=""; rewrite_fail "mktemp could not create a file in ${HIST_DIR}"; }
+cp -p -- "$HISTORY" "$HIST_NEW" || rewrite_fail "cp -p of the history failed"
 B_PRE="$(wc -c < "$TMPD/preamble" | tr -d ' ')"; B_TAIL="$(wc -c < "$TMPD/tail" | tr -d ' ')"
-( set -C; cat "$TMPD/preamble" "$TMPD/tail" > "$HIST_NEW" ) || rewrite_fail "the write failed"
+cat "$TMPD/preamble" "$TMPD/tail" > "$HIST_NEW" || rewrite_fail "the write failed"
 B_GOT="$(wc -c < "$HIST_NEW" | tr -d ' ')" || rewrite_fail "its size cannot be read"
 # Fail closed, for the same reason as archive_append's growth check.
 case "${B_PRE}${B_TAIL}${B_GOT}" in ''|*[!0-9]*) rewrite_fail "a size read back as non-numeric" ;; esac
 B_WANT=$(( B_PRE + B_TAIL ))
 [ "$B_GOT" -eq "$B_WANT" ] || rewrite_fail "it holds ${B_GOT} bytes where ${B_WANT} were written"
-# The source is opened BEFORE the history: `cat < temp > history` opens left to right, so a temp
-# that vanished after step 1 fails the redirect and the history is never opened. The argument form
-# `cat temp > history` opens (and truncates) the history first and then lets cat find no source:
-# measured, it left the history at 0 bytes, the stdin form left it byte-identical.
-cat < "$HIST_NEW" > "$HISTORY" || writeback_fail "the write failed"
-B_BACK="$(wc -c < "$HISTORY" | tr -d ' ')" || writeback_fail "its size cannot be read"
-case "$B_BACK" in ''|*[!0-9]*) writeback_fail "its size read back as non-numeric" ;; esac
-[ "$B_BACK" -eq "$B_WANT" ] || writeback_fail "it holds ${B_BACK} bytes where ${B_WANT} were written"
-rm -f "$HIST_NEW" || echo "${SELF_NAME}: WARNING -- the history was rewritten and verified, but the temp copy ${HIST_NEW} could not be removed. Remove it." >&2
+
+# APPEND. archive_fail and ensure_archive remove the temp before they refuse.
+ensure_archive
+
+archive_append "${NL}<!-- rotated from $(basename "$HISTORY"): ${L_MOVE} lines, ${N_MOVE} entries -->${NL}${NL}" "$TMPD/move"
+
+absorb_append
+ARCHIVE_WRITTEN=1
+
+# RENAME. The history is the complete old file until this returns and the complete new file after.
+mv -f -- "$HIST_NEW" "$HISTORY" || rewrite_fail "the rename over the history failed"
+HIST_NEW=""
 
 stage_archive
 absorb_truncate
