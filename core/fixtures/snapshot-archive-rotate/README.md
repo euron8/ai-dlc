@@ -84,6 +84,7 @@ template (`seed.sh` builds `nohist`, `floor`, `above`, `nosnap` and `ignored`):
 | neg | a tree with no snapshot keeps both hooks silent |
 | nohist / floor / above | absorb with no history, with exactly `--keep-entries` cut points, and above the floor. Each proves its path by the rotator's own verdict line, then asserts the marker is in the archive once, the archive's last N lines are byte-identical to a copy of the snapshot taken before the call (N = that copy's line count; each seeded snapshot carries several distinct lines, only one of them the marker), the snapshot is present at 0 bytes, and the archive is tracked |
 | ign | an ignored archive on the no-history path: rc 1, snapshot byte-identical, no archive |
+| unw | the archive path pre-created as a DIRECTORY (unwritable for any user, root included), on the no-history path and on the above-floor rotation path: rc 1, snapshot byte-identical to its pre-run copy, and on the rotation path the history byte-identical too |
 | args | on the no-history path, an unknown option and an `--absorb` naming no file are both rc 2 |
 | idem | absorbing the already-empty snapshot again leaves the archive byte-identical |
 | ro | report-only `--absorb` (no `--apply`) on each of `nohist`, `floor` and `above`: rc 0, the rotator says what it would append, `git status --porcelain` is empty, the snapshot is byte-identical, and no archive exists |
@@ -103,7 +104,8 @@ by the same arms after an unmutated control copy from the same directory passes 
 | m4 | the absorb path's `refuse_if_archive_ignored` becomes `:` | ign |
 | m5 | `ai-dlc-continue.sh`'s `[ ! -f "$SNAPSHOT_FILE" ]` becomes `false` | neg |
 | m6 | `ai-dlc-pause.sh`'s `[ ! -f "$SNAPSHOT_FILE" ]` becomes `false` | neg |
-| m7 | the absorb's `cat "$ABSORB" >> "$ARCHIVE"` becomes `grep -E STALE "$ABSORB" >> "$ARCHIVE"` (keeps only the marker line) | nohist |
+| m7 | the absorb's `archive_append … "$ABSORB"` is fed `grep -E STALE "$ABSORB"` instead (keeps only the marker line; the verified append still succeeds) | nohist |
+| m8 | `archive_fail() {` becomes `archive_fail() { return 0` (every append guard reports and carries on) | unw |
 | m9 | `absorb_only`'s report-only branch `if [ "$APPLY" -eq 0 ]` becomes `if false` (writes without `--apply`) | ro |
 
 The swap arm FAILS against the rotator that removed the snapshot (the one before truncation

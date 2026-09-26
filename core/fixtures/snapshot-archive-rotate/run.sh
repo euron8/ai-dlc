@@ -418,6 +418,28 @@ arm_ign() {
   [ "$rc" -eq 1 ] && [ "$same" = yes ] && [ ! -e "$w/$ARCH_REL" ] && grep -q 'git-ignored' <<<"$out"
 }
 
+# UNWRITABLE: the archive path pre-created as a DIRECTORY, so no append to it can succeed whoever
+# runs the fixture (a chmod-based world is writable by root). On the no-history path (absorb only)
+# and on the above-floor path (rotation + absorb): rc 1, the snapshot byte-identical to its pre-run
+# copy, and on the rotation path the history byte-identical too. The positive conjunct is the rc:
+# a subject that emits nothing and exits 0 fails it.
+arm_unw() {
+  local s w pre hpre rc sid hid ok_all=1; MSG=""
+  for s in nohist above; do
+    w="$(world "$s")" || { MSG="world copy failed"; return 1; }
+    mkdir -p "$w/$ARCH_REL" || { MSG="cannot pre-create the archive directory"; return 1; }
+    pre="$(snap_copy "$w")" || { MSG="snapshot copy failed"; return 1; }
+    hpre="$w.hist"; if [ -f "$w/$HIST_REL" ]; then cp "$w/$HIST_REL" "$hpre"; else : > "$hpre"; fi
+    bash "$R_" "$w/$HIST_REL" --absorb "$w/$SNAP_REL" --apply >/dev/null 2>&1; rc=$?
+    sid=no; cmp -s "$pre" "$w/$SNAP_REL" && sid=yes
+    hid=n/a
+    if [ "$s" = above ]; then hid=no; cmp -s "$hpre" "$w/$HIST_REL" && hid=yes; fi
+    MSG="${MSG}${s}: rc=${rc} snapshot-identical=${sid} history-identical=${hid}; "
+    { [ "$rc" -eq 1 ] && [ "$sid" = yes ] && [ "$hid" != no ]; } || ok_all=0
+  done
+  [ "$ok_all" -eq 1 ]
+}
+
 # ARGS: on the no-history path an unknown option and an --absorb naming no file are both usage
 # errors (rc 2), and neither touches the snapshot.
 arm_args() {
@@ -442,7 +464,7 @@ arm_idem() {
     && absorbed_ok "$w" "STALESNAP-nohist" "$pre"
 }
 
-ARMS="swap neg nohist floor above ign args idem ro"
+ARMS="swap neg nohist floor above ign unw args idem ro"
 arm_run() {
   case "$1" in
     swap)   arm_swap ;;
@@ -451,6 +473,7 @@ arm_run() {
     floor)  arm_shape floor '10 entr\(ies\) present, keeping 10' ;;
     above)  arm_shape above 'moved 4 entr\(ies\)' ;;
     ign)    arm_ign ;;
+    unw)    arm_unw ;;
     args)   arm_args ;;
     idem)   arm_idem ;;
     ro)     arm_ro ;;
@@ -480,6 +503,7 @@ for a in $ARMS; do
     floor)  what="absorb, history at exactly --keep-entries cut points (no rotation): whole snapshot is the archive's tail byte for byte, snapshot present at 0 bytes, archive tracked" ;;
     above)  what="absorb, history above the floor (rotation, the control): whole snapshot is the archive's tail byte for byte, snapshot present at 0 bytes, archive tracked" ;;
     ign)    what="REFUSAL — ignored archive on the no-history path: rc 1, snapshot byte-identical" ;;
+    unw)    what="REFUSAL — archive path is a directory (unwritable), on no history and on the rotation path: rc 1, snapshot byte-identical, history byte-identical" ;;
     args)   what="USAGE on the no-history path — unknown option rc 2, --absorb naming no file rc 2" ;;
     idem)   what="idempotent — absorbing the already-empty snapshot appends nothing" ;;
     ro)     what="REPORT-ONLY — --absorb without --apply on no history, the floor and above it writes nothing (git status empty, snapshot byte-identical, no archive) and says what it would do" ;;
@@ -561,10 +585,20 @@ if mut_line "$PH" "$MD/hooks/m6-pause.sh" 'if [ ! -f "$SNAPSHOT_FILE" ]; then' '
 else bad "m6 DID NOT APPLY — the pause hook's snapshot predicate is not in it exactly once"; fi
 
 # m7: a LOSSY absorb that keeps only the marker line. The marker-grep arms passed it; the
-# whole-content comparison in absorbed_ok is what kills it.
-if mut_line "$ROT" "$MD/m7.sh" '  cat "$ABSORB" >> "$ARCHIVE"' '  grep -E STALE "$ABSORB" >> "$ARCHIVE"'; then
+# whole-content comparison in absorbed_ok is what kills it. The lossy body is handed to the
+# rotator's own verified append as a FILE, so the append's growth check (header + body bytes)
+# is satisfied and cannot be what kills it — the mutant exits 0 and only the content differs.
+M7_OLD='  archive_append "${NL}<!-- absorbed whole snapshot from $(basename "$ABSORB") at fresh start: ${A_LINES} lines -->${NL}${NL}" "$ABSORB"'
+M7_NEW='  M7="${ABSORB}.m7"; grep -E STALE "$ABSORB" > "$M7"; archive_append "${NL}<!-- absorbed whole snapshot from $(basename "$ABSORB") at fresh start: ${A_LINES} lines -->${NL}${NL}" "$M7"'
+if mut_line "$ROT" "$MD/m7.sh" "$M7_OLD" "$M7_NEW"; then
   score m7 nohist "$MD/m7.sh" "$CH" "$PH" "the absorb copies only the marker line instead of the whole snapshot"
-else bad "m7 DID NOT APPLY — the absorb's cat line is not in the rotator exactly once"; fi
+else bad "m7 DID NOT APPLY — the absorb's archive_append call is not in the rotator exactly once"; fi
+
+# m8: every append guard reports through archive_fail, so making it RETURN instead of exit removes
+# each layer at once (not-a-regular-file, failed write, short growth). The unwritable arm dies.
+if mut_line "$ROT" "$MD/m8.sh" 'archive_fail() {' 'archive_fail() { return 0'; then
+  score m8 unw "$MD/m8.sh" "$CH" "$PH" "a failed archive append no longer stops the run before the truncate"
+else bad "m8 DID NOT APPLY — 'archive_fail() {' is not in the rotator exactly once"; fi
 
 # m9: the report-only arm is ABSENCE-shaped (it demands that nothing is written), so a mutant
 # must prove it can fail: make the absorb-only path ignore report-only mode.
