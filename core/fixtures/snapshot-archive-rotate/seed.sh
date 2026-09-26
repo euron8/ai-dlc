@@ -85,6 +85,11 @@ STALE="$PROJ/_bmad-output/pipeline-snapshot.md"
   echo
   echo "## Pipeline Position"
   echo "STALESNAP: a substantive line from the stale snapshot absorbed at fresh start."
+  echo "- story 4.2, the login flow, gate G3 pending review by the lead"
+  echo
+  echo "## Open Items"
+  echo "- OPEN-ITEM-A: retry the flaky deploy check before the next gate"
+  echo "- OPEN-ITEM-B: confirm the rollback window with operations"
   echo
 } > "$STALE"
 
@@ -128,12 +133,21 @@ mk_world() {  # <name> <history cut points, or 0 for no history> <snapshot yes|n
       done
     } > "$w/_bmad-output/pipeline-snapshot-history.md"
   fi
+  # Several DISTINCT lines, only ONE of which carries the marker: an absorb that copies the
+  # marker line and drops the rest (measured: `grep STALE` in place of `cat`) must be
+  # distinguishable from a whole-file copy, and the arms compare the archive's tail to this
+  # template byte for byte.
   if [ "$3" = yes ]; then
     {
       echo "# Pipeline Snapshot"
       echo
       echo "## Pipeline Position"
       echo "STALESNAP-$1: a substantive line from the stale snapshot absorbed at fresh start."
+      echo "- story 4.2, the login flow, gate G3 pending review by the lead ($1)"
+      echo
+      echo "## Open Items"
+      echo "- OPEN-ITEM-A-$1: retry the flaky deploy check before the next gate"
+      echo "- OPEN-ITEM-B-$1: confirm the rollback window with operations"
       echo
     } > "$w/_bmad-output/pipeline-snapshot.md"
   fi

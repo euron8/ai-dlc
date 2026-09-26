@@ -158,13 +158,19 @@ fi
 # file's existence, so the absorbed file stays on disk at 0 bytes and stays tracked. The tracked
 # *.md count therefore does not move — no dated archive was minted, and nothing was deleted.
 before_md="$( cd "$PROJ" && git ls-files -- '*.md' | wc -l | tr -d ' ' )"
+cp "$STALE" "$WORK/stale.before" || { echo "FIXTURE ERROR: cannot copy the stale snapshot" >&2; exit 2; }
 bash "$ROT" "$HIST" --absorb "$STALE" --keep-entries 5 --apply >/dev/null 2>&1
 after_md="$( cd "$PROJ" && git ls-files -- '*.md' | wc -l | tr -d ' ' )"
-if grep -q 'STALESNAP' "$ARCHIVE" && [ -f "$STALE" ] && [ ! -s "$STALE" ] \
+# The WHOLE snapshot, not its marker line: the archive's last N lines must be the pre-absorb copy
+# byte for byte, where N is that copy's line count. A marker grep alone passes a lossy absorb.
+sn="$(wc -l < "$WORK/stale.before" | tr -d ' ')"
+tail -n "$sn" "$ARCHIVE" > "$WORK/stale.tail"
+whole=no; [ "$sn" -gt 1 ] && cmp -s "$WORK/stale.before" "$WORK/stale.tail" && whole=yes
+if grep -q 'STALESNAP' "$ARCHIVE" && [ "$whole" = yes ] && [ -f "$STALE" ] && [ ! -s "$STALE" ] \
    && [ "$before_md" -gt 0 ] && [ "$after_md" -eq "$before_md" ]; then
-  ok "--absorb: the stale snapshot is inside the one archive, the snapshot is present at 0 bytes, no dated file created (tracked *.md ${before_md} -> ${after_md})"
+  ok "--absorb: the whole stale snapshot (${sn} lines, byte-identical) is the archive's tail, the snapshot is present at 0 bytes, no dated file created (tracked *.md ${before_md} -> ${after_md})"
 else
-  bad "--absorb: marker in archive=$(grep -c 'STALESNAP' "$ARCHIVE"), snapshot present=$([ -f "$STALE" ] && echo yes || echo no), bytes=$(if [ -f "$STALE" ]; then wc -c < "$STALE" | tr -d ' '; fi), tracked *.md ${before_md} -> ${after_md}"
+  bad "--absorb: marker in archive=$(grep -c 'STALESNAP' "$ARCHIVE"), whole snapshot is the archive tail=${whole} (${sn} lines), snapshot present=$([ -f "$STALE" ] && echo yes || echo no), bytes=$(if [ -f "$STALE" ]; then wc -c < "$STALE" | tr -d ' '; fi), tracked *.md ${before_md} -> ${after_md}"
 fi
 
 # --- Assertion 9: REFUSAL — a non-empty body with no boundary at all -------------------------
@@ -331,12 +337,23 @@ hooks_fire() {
 tracked() { ( cd "$1" && git ls-files --error-unmatch -- "$2" >/dev/null 2>&1 ); }
 fbytes()  { if [ -f "$1" ]; then wc -c < "$1" | tr -d ' '; fi; }
 
-# absorbed_ok <world> <marker>: the marker is in the archive, the snapshot is present at 0 bytes,
-# and the archive is tracked. All three, because each is a different way to lose the snapshot.
+# snap_copy <world>: copy the snapshot OUTSIDE the world's repo (a sibling path), so the copy is
+# the pre-absorb bytes and cannot dirty the world's `git status`. Prints the copy's path.
+snap_copy() { cp "$1/$SNAP_REL" "$1.before" && printf '%s\n' "$1.before"; }
+
+# absorbed_ok <world> <marker> <pre-absorb copy>: the marker is in the archive once, the archive's
+# last N lines are the pre-absorb copy byte for byte (N = the copy's line count, and N > 1 so the
+# copy cannot be the marker line alone), the snapshot is present at 0 bytes, and the archive is
+# tracked. Each is a different way to lose the snapshot. The marker grep alone is satisfied by an
+# absorb that copies ONLY the marker line (measured: `grep -E STALE` in place of `cat`).
 absorbed_ok() {
-  local n
+  local n sn
   n="$(grep -c "$2" "$1/$ARCH_REL" 2>/dev/null)" || n=0
-  [ "$n" -eq 1 ] && [ -f "$1/$SNAP_REL" ] && [ ! -s "$1/$SNAP_REL" ] && tracked "$1" "$ARCH_REL"
+  [ -s "$3" ] || return 1
+  sn="$(wc -l < "$3" | tr -d ' ')"
+  tail -n "$sn" "$1/$ARCH_REL" > "$1.tail" 2>/dev/null || return 1
+  [ "$n" -eq 1 ] && [ "$sn" -gt 1 ] && cmp -s "$3" "$1.tail" \
+    && [ -f "$1/$SNAP_REL" ] && [ ! -s "$1/$SNAP_REL" ] && tracked "$1" "$ARCH_REL"
 }
 
 # --- the arms. Each returns 0 (holds) or 1 and sets MSG. ----------------------------------------
@@ -365,10 +382,31 @@ arm_neg() {
 # SHAPE: one per non-refusal path. The rotator's own verdict line is asserted too, so the three
 # worlds are PROVEN to reach three different paths rather than assumed to.
 arm_shape() {  # <world> <verdict regex>
-  local w out rc; w="$(world "$1")" || { MSG="world copy failed"; return 1; }
+  local w out rc pre; w="$(world "$1")" || { MSG="world copy failed"; return 1; }
+  pre="$(snap_copy "$w")" || { MSG="snapshot copy failed"; return 1; }
   out="$(bash "$R_" "$w/$HIST_REL" --absorb "$w/$SNAP_REL" --apply 2>&1)"; rc=$?
-  MSG="rc=${rc}, path verdict matched=$(grep -cE "$2" <<<"$out"), marker in archive=$(grep -c "STALESNAP-$1" "$w/$ARCH_REL" 2>/dev/null), snapshot present=$([ -f "$w/$SNAP_REL" ] && echo yes || echo no) bytes=$(fbytes "$w/$SNAP_REL"), archive tracked=$(tracked "$w" "$ARCH_REL" && echo yes || echo no)"
-  [ "$rc" -eq 0 ] && grep -qE "$2" <<<"$out" && absorbed_ok "$w" "STALESNAP-$1"
+  local whole=no; absorbed_ok "$w" "STALESNAP-$1" "$pre" && whole=yes
+  MSG="rc=${rc}, path verdict matched=$(grep -cE "$2" <<<"$out"), marker in archive=$(grep -c "STALESNAP-$1" "$w/$ARCH_REL" 2>/dev/null), whole snapshot is the archive tail=$(cmp -s "$pre" "$w.tail" && echo yes || echo no) ($(wc -l < "$pre" | tr -d ' ') lines), snapshot present=$([ -f "$w/$SNAP_REL" ] && echo yes || echo no) bytes=$(fbytes "$w/$SNAP_REL"), archive tracked=$(tracked "$w" "$ARCH_REL" && echo yes || echo no)"
+  [ "$rc" -eq 0 ] && grep -qE "$2" <<<"$out" && [ "$whole" = yes ]
+}
+
+# REPORT-ONLY: --absorb WITHOUT --apply, on each history shape, writes nothing at all — the world's
+# `git status --porcelain` is empty, the snapshot is byte-identical to its pre-run copy, and no
+# archive exists. The positive conjunct is the rotator's own "would be appended" line, so a subject
+# that emits nothing (or exits before the absorb report) cannot pass this absence-shaped arm.
+arm_ro() {
+  local s w pre out rc st ok_all=1; MSG=""
+  for s in nohist floor above; do
+    w="$(world "$s")" || { MSG="world copy failed"; return 1; }
+    pre="$(snap_copy "$w")" || { MSG="snapshot copy failed"; return 1; }
+    out="$(bash "$R_" "$w/$HIST_REL" --absorb "$w/$SNAP_REL" 2>&1)"; rc=$?
+    st="$( cd "$w" && git status --porcelain --untracked-files=all 2>&1 )"
+    local same=no said=no; cmp -s "$pre" "$w/$SNAP_REL" && same=yes
+    grep -q 'would be appended' <<<"$out" && said=yes
+    MSG="${MSG}${s}: rc=${rc} status-lines=$(printf '%s' "$st" | grep -c .) snapshot-identical=${same} archive=$([ -e "$w/$ARCH_REL" ] && echo yes || echo no) reported=${said}; "
+    { [ "$rc" -eq 0 ] && [ -z "$st" ] && [ "$same" = yes ] && [ ! -e "$w/$ARCH_REL" ] && [ "$said" = yes ]; } || ok_all=0
+  done
+  [ "$ok_all" -eq 1 ]
 }
 
 # IGN: ignored archive on the no-history path — refused, snapshot byte-identical, no archive.
@@ -393,17 +431,18 @@ arm_args() {
 
 # IDEM: absorbing the now-empty snapshot again appends nothing.
 arm_idem() {
-  local w rc a0 a1; w="$(world nohist)" || { MSG="world copy failed"; return 1; }
+  local w rc a0 a1 pre; w="$(world nohist)" || { MSG="world copy failed"; return 1; }
+  pre="$(snap_copy "$w")" || { MSG="snapshot copy failed"; return 1; }
   bash "$R_" "$w/$HIST_REL" --absorb "$w/$SNAP_REL" --apply >/dev/null 2>&1
   a0="$(fbytes "$w/$ARCH_REL")"; [ -f "$w/$ARCH_REL" ] && cp "$w/$ARCH_REL" "$w/arch.first"
   bash "$R_" "$w/$HIST_REL" --absorb "$w/$SNAP_REL" --apply >/dev/null 2>&1; rc=$?
   a1="$(fbytes "$w/$ARCH_REL")"
   MSG="second absorb rc=${rc}, archive bytes ${a0:-none} -> ${a1:-none}, snapshot present=$([ -f "$w/$SNAP_REL" ] && echo yes || echo no)"
   [ "$rc" -eq 0 ] && [ -n "$a0" ] && [ "$a0" -gt 0 ] && cmp -s "$w/arch.first" "$w/$ARCH_REL" \
-    && absorbed_ok "$w" "STALESNAP-nohist"
+    && absorbed_ok "$w" "STALESNAP-nohist" "$pre"
 }
 
-ARMS="swap neg nohist floor above ign args idem"
+ARMS="swap neg nohist floor above ign args idem ro"
 arm_run() {
   case "$1" in
     swap)   arm_swap ;;
@@ -414,6 +453,7 @@ arm_run() {
     ign)    arm_ign ;;
     args)   arm_args ;;
     idem)   arm_idem ;;
+    ro)     arm_ro ;;
   esac
 }
 # run_arms <rotator> <continue hook> <pause hook>: sets FAILED to the space-separated failing arms.
@@ -436,12 +476,13 @@ for a in $ARMS; do
   case "$a" in
     swap)   what="ACROSS THE SWAP — after --absorb --apply the Stop hook still blocks and the pause hook still raises its flag" ;;
     neg)    what="NEGATIVE — a tree with no snapshot keeps both hooks silent" ;;
-    nohist) what="absorb, NO history: marker archived, snapshot present at 0 bytes, archive tracked" ;;
-    floor)  what="absorb, history at exactly --keep-entries cut points (no rotation): marker archived, snapshot present at 0 bytes, archive tracked" ;;
-    above)  what="absorb, history above the floor (rotation, the control): marker archived, snapshot present at 0 bytes, archive tracked" ;;
+    nohist) what="absorb, NO history: whole snapshot is the archive's tail byte for byte, snapshot present at 0 bytes, archive tracked" ;;
+    floor)  what="absorb, history at exactly --keep-entries cut points (no rotation): whole snapshot is the archive's tail byte for byte, snapshot present at 0 bytes, archive tracked" ;;
+    above)  what="absorb, history above the floor (rotation, the control): whole snapshot is the archive's tail byte for byte, snapshot present at 0 bytes, archive tracked" ;;
     ign)    what="REFUSAL — ignored archive on the no-history path: rc 1, snapshot byte-identical" ;;
     args)   what="USAGE on the no-history path — unknown option rc 2, --absorb naming no file rc 2" ;;
     idem)   what="idempotent — absorbing the already-empty snapshot appends nothing" ;;
+    ro)     what="REPORT-ONLY — --absorb without --apply on no history, the floor and above it writes nothing (git status empty, snapshot byte-identical, no archive) and says what it would do" ;;
   esac
   if arm_run "$a"; then ok "$what"; else bad "$what ($MSG)"; fi
 done
@@ -518,6 +559,18 @@ else bad "m5 DID NOT APPLY — the Stop hook's snapshot predicate is not in it e
 if mut_line "$PH" "$MD/hooks/m6-pause.sh" 'if [ ! -f "$SNAPSHOT_FILE" ]; then' 'if false; then'; then
   score m6 neg "$MD/rot-control.sh" "$CH" "$MD/hooks/m6-pause.sh" "ai-dlc-pause.sh's snapshot-existence predicate deleted"
 else bad "m6 DID NOT APPLY — the pause hook's snapshot predicate is not in it exactly once"; fi
+
+# m7: a LOSSY absorb that keeps only the marker line. The marker-grep arms passed it; the
+# whole-content comparison in absorbed_ok is what kills it.
+if mut_line "$ROT" "$MD/m7.sh" '  cat "$ABSORB" >> "$ARCHIVE"' '  grep -E STALE "$ABSORB" >> "$ARCHIVE"'; then
+  score m7 nohist "$MD/m7.sh" "$CH" "$PH" "the absorb copies only the marker line instead of the whole snapshot"
+else bad "m7 DID NOT APPLY — the absorb's cat line is not in the rotator exactly once"; fi
+
+# m9: the report-only arm is ABSENCE-shaped (it demands that nothing is written), so a mutant
+# must prove it can fail: make the absorb-only path ignore report-only mode.
+if mut_line "$ROT" "$MD/m9.sh" '  if [ "$APPLY" -eq 0 ]; then' '  if false; then'; then
+  score m9 ro "$MD/m9.sh" "$CH" "$PH" "the absorb-only path writes even without --apply"
+else bad "m9 DID NOT APPLY — absorb_only's report-only branch is not in the rotator exactly once"; fi
 
 echo
 if [ "$fails" -eq 0 ]; then
