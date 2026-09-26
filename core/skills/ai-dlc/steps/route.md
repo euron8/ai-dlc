@@ -314,8 +314,8 @@ script names per artifact — they are not interchangeable:
       bash scripts/ai-dlc/rotate-snapshot-archive.sh \
            _bmad-output/pipeline-snapshot-history.md --apply
 
-Then re-run the script. It must exit 0 before the sprint proceeds.
-On a non-zero exit, follow the rotator's printed remedy (restore or remove the named temp copy) before re-running, and never delete a kept temp copy unread.
+Then re-run `validate-artifact-budget.sh`. It must exit 0 before the sprint proceeds.
+If `rotate-snapshot-archive.sh` exits non-zero, follow its printed remedy (restore or remove the named temp copy) and re-run `rotate-snapshot-archive.sh` until it exits 0, and never delete a kept temp copy unread.
 
 ### Step 2: Analyze User Input
 
@@ -708,9 +708,12 @@ the pipeline snapshot at `_bmad-output/pipeline-snapshot.md`:
            --absorb _bmad-output/pipeline-snapshot.md --apply
 
   1. **If the rotator exits NON-ZERO, STOP.** Do not write the snapshot.
-     Report the rotator's stderr to the user verbatim. Exit 1 is a
-     refusal that wrote nothing, so the stale snapshot is still on disk
-     and still unarchived; writing over it destroys it.
+     Report the rotator's stderr to the user verbatim. Exit 1 guarantees
+     only this: the stale snapshot still holds all of its content, and the
+     history is byte-identical to before or its complete new history is in
+     the temp copy the stderr names. The archive may already carry the
+     snapshot or the moved block, a duplicate that a re-run appends again.
+     Writing over the snapshot destroys the only copy the pipeline reads.
   2. **On exit 0** the rotator has appended the stale snapshot to the
      archive and TRUNCATED the file to 0 bytes. Read the now-empty
      `_bmad-output/pipeline-snapshot.md`, then Write the initial state

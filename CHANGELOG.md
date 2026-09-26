@@ -21,8 +21,10 @@ A fresh start no longer removes the pipeline snapshot. The rotator's `--absorb` 
 stale snapshot and truncates it to 0 bytes, so every control hook keeps firing between the absorb
 and the lead's write of the new snapshot. The absorb now also runs when there is no history yet
 and when the history is at its cut floor, where it used to do nothing and exit 0. Every write the
-rotator makes is now checked, and no failure or interruption can leave a history line outside
-the tracked files while the rotator exits 0.
+rotator makes is now checked, and a failure or interruption can leave a history line outside the
+tracked files only with a non-zero exit. The one exception predates this release and is kept: when
+`git add` of the archive fails (for example, `.git/index.lock` is present), the rotator prints a
+WARNING with the `git add` to run and exits 0, and the archive stays untracked until that is done.
 
 ### `PC-S314-SNAPSHOT-SWAP-BLIND-WINDOW` — the fresh-start absorb empties the snapshot instead of removing it, and runs on every path (`BL-321`)
 
@@ -55,13 +57,26 @@ destroyed the stale snapshot without archiving it.
   write-back itself failed, keeps the complete new history in the temp copy.
 - **Prechecks refuse before anything is written**: a history that is not writable, a history
   whose directory is not writable, and any `.<history>.rotate.*` left by an earlier run,
-  whatever its pid. The last one runs before every exit path, report-only included, so a re-run
+  whatever its pid. The last one runs before every exit path except a usage error (exit 2),
+  report-only included, so a re-run
   after an interrupted or killed write-back can no longer land on "nothing to rotate" and exit 0
   with the lost lines only in an untracked temp file.
 - **The recovery instruction is printed.** A failed write-back prints
   `cp "<temp>" "<history>" && rm -f "<temp>"`. A leftover temp copy found by a later run is named
-  with the same command when the history is a byte-prefix of it, and otherwise with an
-  instruction to compare it against git and the archive before removing it.
+  with the same command when the history is a byte-prefix of it, and an empty history counts as a
+  prefix of every file. That case is decided without asking `head`, because BSD `head` refuses
+  `-c 0`. Otherwise the text makes no claim about where the temp came from, since a killed write-back
+  followed by a trim leaves a non-prefix history whose lost lines exist only in the temp. It prints
+  `cat <history> <archive> | grep -vxF -f - <temp>` to list the temp's lines found in neither file,
+  and says each listed line goes back into the history before the temp is removed. A directory at
+  the temp name gets its own remedy.
+- **The write-back opens its source first.** It is `cat < temp > history`, so a temp removed
+  between the two steps fails before the history is opened. The argument form truncated the
+  history to 0 bytes in that case.
+- **The absorb's truncate is verified.** A snapshot that cannot be emptied (a read-only file) is
+  exit 1 with a message saying it is archived but not emptied, where it used to exit 0 and print
+  "truncated it to 0 bytes" over a full file. The truncate is the last write, so on that exit 1 a
+  rotation has already completed and the archive is staged, and a re-run appends the snapshot again.
 - **The archive is staged on every path** that exits 0 with `--apply`, including "nothing to
   rotate" and "no history", so the re-run after a restore puts the moved lines into Check 35's
   corpus.
@@ -89,6 +104,10 @@ Adversary rounds on the release branch, one line each:
 - Round 5 found that a re-run after an interrupted write-back exited 0 with 11 of 29 history lines
   only in the stale temp file, that the printed restore left the archive unstaged, and that a
   non-writable history directory appended the moved block again on every retry.
+- Round 6 found that a write-back which wrote 0 bytes was scored "not a prefix" because BSD `head`
+  refuses `-c 0`, and following the printed text lost 32 of 44 lines. It also found that the
+  not-a-prefix text misdescribed a killed-then-trimmed temp, that a vanished temp truncated the
+  history, and that a read-only snapshot exited 0 claiming it had been truncated.
 
 | tree | receipt |
 |---|---|
@@ -106,6 +125,7 @@ Adversary rounds on the release branch, one line each:
 | archive staging dropped | 1 |
 | `rm -f`, then an empty file re-created | 1 |
 | 2bafa39e (re-run after a half-way write-back exits 0) | 1 |
+| 445e9c20 (an empty history is scored "not a prefix") | 1 |
 
 ## [0.644.0] - 2026-09-25
 
