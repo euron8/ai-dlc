@@ -569,9 +569,10 @@ arm_rew() {
 #   links            a symlinked, a hard-linked and a 640 history: rc 0, the link kept with its
 #                    target rotated, the peer rotated identically, the inode and the mode unchanged.
 #                    A rename (`mv temp history`) breaks all three.
-# The shim picks its call by its ARGUMENTS: step 1 is the only call ending in `/preamble`, step 2 is
-# the only single argument carrying `.rotate.`, and the archive append of the moved block is the
-# only one ending in `/move`. It appends its mode to a sentinel file when it acts, and every shim arm
+# The shim picks its call by its ARGUMENTS: step 1 is the only call ending in `/preamble`, step 2
+# (`cat < temp > history`) is the only call with NO argument, and the archive append of the moved
+# block is the only one ending in `/move`. The single `.rotate.` argument of the older argument form
+# (`cat temp > history`) is keyed too, so the same arms score a rotator of either spelling. It appends its mode to a sentinel file when it acts, and every shim arm
 # asserts the sentinel, so an arm whose shim never fired cannot pass.
 #
 # The temp name is `.<history basename>.rotate.$$`. The worlds that need it are started through
@@ -582,10 +583,10 @@ mkdir -p "$RSHIM" || { echo "FIXTURE ERROR: cannot build the rewrite shim" >&2; 
 cat > "$RSHIM/cat" <<'SHIMEOF'
 #!/bin/sh
 R="$SNAPROT_REAL_CAT"; m="${SNAPROT_SHIM_MODE:-}"; hit=""
-case "$m:$#:$1" in
+case "$m:$#:${1:-}" in
   tlate:2:*/preamble|tshort:2:*/preamble) hit=1 ;;
-  wblate:1:*.rotate.*|wbshort:1:*.rotate.*) hit=1 ;;
-  half:1:*.rotate.*|kill:1:*.rotate.*) hit=1 ;;
+  wblate:0:|wbshort:0:|half:0:|kill:0:|zero:0:) hit=1 ;;
+  wblate:1:*.rotate.*|wbshort:1:*.rotate.*|half:1:*.rotate.*|kill:1:*.rotate.*|zero:1:*.rotate.*) hit=1 ;;
   race:1:*/move) hit=1 ;;
 esac
 [ -n "$hit" ] || exec "$R" "$@"
@@ -595,9 +596,11 @@ case "$m" in
   tshort|wbshort) "$R" "$@" > "$SNAPROT_SHIM_SENT.buf" || exit 1
                   n=$(wc -c < "$SNAPROT_SHIM_SENT.buf"); head -c $((n - 1)) "$SNAPROT_SHIM_SENT.buf"; exit 0 ;;
   race) "$R" "$@"; rc=$?; printf 'a foreign file that took the temp name mid-run\n' > "$SNAPROT_RACE"; exit $rc ;;
-  half|kill) n=$(wc -c < "$1"); head -c $((n / 2)) "$1"
+  half|kill) "$R" "$@" > "$SNAPROT_SHIM_SENT.buf" || exit 1
+             n=$(wc -c < "$SNAPROT_SHIM_SENT.buf"); head -c $((n / 2)) "$SNAPROT_SHIM_SENT.buf"
              [ "$m" = kill ] && kill -KILL "$PPID"
              exit 1 ;;
+  zero) "$R" "$@" > /dev/null; exit 1 ;;
 esac
 SHIMEOF
 chmod +x "$RSHIM/cat" || { echo "FIXTURE ERROR: cannot chmod the rewrite shim" >&2; exit 2; }
@@ -781,6 +784,129 @@ arm_restore() {
     && [ "$RC" -eq 0 ] && [ "$trk" = yes ] && [ "$miss1" -eq 0 ]
 }
 
+# zero: the write-back writes ZERO bytes and exits 1 (ENOSPC on the first write), so the history is
+# empty and the temp copy is complete. Then the same caller re-runs with no restore. An empty history
+# is a byte-prefix of every file, so the re-run must name the temp with the `cp` restore. BSD `head`
+# refuses `-c 0`, so a prefix test that asks `head` scores it NOT a prefix and prints the compare-by-
+# hand text, and `head`'s own complaint. Then the printed `cp` is run exactly as printed and the caller
+# re-runs: rc 0 and the history byte-identical to a clean rotation of the same world.
+HSHIM="$SHIM/head"
+mkdir -p "$HSHIM" || { echo "FIXTURE ERROR: cannot build the head shim" >&2; exit 2; }
+REAL_HEAD="$(command -v head)"
+cat > "$HSHIM/head" <<'SHIMEOF'
+#!/bin/sh
+case "$1:${2:-}" in
+  -c:0) echo "head: illegal byte count -- 0" >&2; exit 1 ;;
+esac
+exec "$SNAPROT_REAL_HEAD" "$@"
+SHIMEOF
+chmod +x "$HSHIM/head" || { echo "FIXTURE ERROR: cannot chmod the head shim" >&2; exit 2; }
+arm_zero() {
+  local w sent rc1 hb1 cmd rest rc3 noise
+  expect_above || { MSG="cannot build the expected new history"; return 1; }
+  w="$(world above)" || { MSG="world copy failed"; return 1; }
+  sent="$w.sent"; : > "$sent"
+  OUT="$(SNAPROT_REAL_CAT="$REAL_CAT" SNAPROT_SHIM_MODE=zero SNAPROT_SHIM_SENT="$sent" \
+    PATH="$RSHIM:$PATH" bash "$R_" "$w/$HIST_REL" --apply 2>&1)"; rc1=$?
+  SENT="$(grep -c '^zero$' "$sent")" || SENT=0
+  hb1="$(fbytes "$w/$HIST_REL")"
+  # The re-run gets a `head` that refuses `-c 0` as BSD's does, so the arm expresses the defect on a
+  # GNU host too, where the real `head -c 0` succeeds and would hide a prefix test that asks it.
+  OUT2="$(SNAPROT_REAL_HEAD="$REAL_HEAD" PATH="$HSHIM:$PATH" bash "$R_" "$w/$HIST_REL" --apply 2>&1)"; RC=$?
+  noise="$(grep -c 'head:' <<<"$OUT2")" || noise=0
+  cmd="$(sed -n 's/^ *\(cp ".*" ".*" && rm -f ".*"\)$/\1/p' <<<"$OUT2" | head -1)"
+  rest=no; rc3=x
+  if [ -n "$cmd" ]; then
+    sh -c "$cmd" >/dev/null 2>&1
+    bash "$R_" "$w/$HIST_REL" --apply >/dev/null 2>&1; rc3=$?
+    [ "$rc3" -eq 0 ] && cmp -s "$w/$HIST_REL" "$EXPECT" && rest=yes
+  fi
+  MSG="shim acted ${SENT}x, run 1 rc=${rc1} history ${hb1:-none} bytes; re-run rc=${RC} prints cp=$(grep -c 'cp "' <<<"$OUT2") head-noise=${noise}; printed restore then re-run rc=${rc3}, history == clean rotation: ${rest}"
+  [ "$SENT" -eq 1 ] && [ "$rc1" -eq 1 ] && [ "$hb1" = 0 ] && [ "$RC" -eq 1 ] && grep -q 'cp "' <<<"$OUT2" \
+    && [ "$noise" -eq 0 ] && [ "$rest" = yes ]
+}
+
+# trimmed: the write-back is KILLED half-way (no message printed), then the history gets an entry
+# appended as the next gate's trim would append it. The history is no longer a prefix of the temp,
+# yet the lines it lost exist only in the temp. The re-run must refuse, and the listing command its
+# text prints -- run exactly as printed -- must output exactly the temp's lines found in neither the
+# history nor the archive, computed here independently. Every pre-run line the history and archive
+# lack must be among them, so following the text loses nothing. The positive control is that the
+# listing is non-empty: the world must hold lines ONLY in the temp.
+arm_trimmed() {
+  local w hpre sent rc1 t lcmd pfx
+  w="$(world above)" || { MSG="world copy failed"; return 1; }
+  hpre="$w.hist"; cp "$w/$HIST_REL" "$hpre" || { MSG="history copy failed"; return 1; }
+  sent="$w.sent"; : > "$sent"
+  OUT="$(TMPDIR="$WORK" SNAPROT_REAL_CAT="$REAL_CAT" SNAPROT_SHIM_MODE=kill SNAPROT_SHIM_SENT="$sent" \
+    PATH="$RSHIM:$PATH" bash "$R_" "$w/$HIST_REL" --apply 2>&1)"; rc1=$?
+  SENT="$(grep -c '^kill$' "$sent")" || SENT=0
+  t="$(ls -a "$w/_bmad-output" | grep "^${TMPNAME}\." | head -1)"
+  [ -n "$t" ] || { MSG="shim acted ${SENT}x, run 1 rc=${rc1}: no temp copy left"; return 1; }
+  printf '\n## [MOVED 2026-09-26T10:00:00Z from pipeline-snapshot.md — trim]\nTRIMMED-AFTER-KILL: a line the next gate trim appended\n' >> "$w/$HIST_REL"
+  pfx=no; head -c "$(fbytes "$w/$HIST_REL")" "$w/_bmad-output/$t" 2>/dev/null | cmp -s - "$w/$HIST_REL" && pfx=yes
+  OUT2="$(bash "$R_" "$w/$HIST_REL" --apply 2>&1)"; RC=$?
+  lcmd="$(sed -n 's/^ *\(cat ".*" 2>\/dev\/null | grep -vxF -f - ".*"\)$/\1/p' <<<"$OUT2" | head -1)"
+  sort -u "$w/_bmad-output/$t" > "$w.tset"
+  cat "$w/$HIST_REL" "$w/$ARCH_REL" 2>/dev/null | sort -u > "$w.have"
+  comm -23 "$w.tset" "$w.have" > "$w.want"
+  : > "$w.listed"; [ -n "$lcmd" ] && sh -c "$lcmd" 2>/dev/null | sort -u > "$w.listed"
+  sort -u "$hpre" | comm -23 - "$w.have" > "$w.lost"
+  local same=no covers=no; cmp -s "$w.want" "$w.listed" && same=yes
+  [ -z "$(comm -23 "$w.lost" "$w.listed")" ] && covers=yes
+  MSG="shim acted ${SENT}x, run 1 rc=${rc1}, temp=${t}, history still a prefix of the temp after the trim=${pfx}; re-run rc=${RC}, listing command printed=$([ -n "$lcmd" ] && echo yes || echo no), it lists $(wc -l < "$w.listed" | tr -d ' ') line(s) where $(wc -l < "$w.want" | tr -d ' ') are in the temp only (identical=${same}), $(wc -l < "$w.lost" | tr -d ' ') pre-run line(s) out of history+archive, all listed=${covers}"
+  [ "$SENT" -eq 1 ] && [ "$pfx" = no ] && [ "$RC" -eq 1 ] && [ -n "$lcmd" ] && [ -s "$w.want" ] \
+    && [ "$same" = yes ] && [ -s "$w.lost" ] && [ "$covers" = yes ]
+}
+
+# race: the temp copy is removed by something outside the run after step 1 wrote and verified it
+# and before step 2 opens it. Step 2 is `cat < temp > history`: the shell opens its source first, so
+# the missing temp fails the redirect and the history is never opened. The argument form `cat temp >
+# history` opens and truncates the history first, then finds no source: the history is left at 0
+# bytes with its only complete copy gone. Forced by a `wc` shim on step 1's size read, the last
+# external call before step 2 (a `cat` shim on step 2 itself runs only after the shell has opened
+# both redirects, which is too late). rc 1 and the history byte-identical.
+WSHIM="$SHIM/wc"
+mkdir -p "$WSHIM" || { echo "FIXTURE ERROR: cannot build the wc shim" >&2; exit 2; }
+REAL_WC="$(command -v wc)"
+cat > "$WSHIM/wc" <<'SHIMEOF'
+#!/bin/sh
+"$SNAPROT_REAL_WC" "$@"; rc=$?
+if [ -n "${SNAPROT_RACE:-}" ] && [ -f "$SNAPROT_RACE" ] && [ ! -s "$SNAPROT_SHIM_SENT" ]; then
+  rm -f "$SNAPROT_RACE" && printf 'gone\n' >> "$SNAPROT_SHIM_SENT"
+fi
+exit $rc
+SHIMEOF
+chmod +x "$WSHIM/wc" || { echo "FIXTURE ERROR: cannot chmod the wc shim" >&2; exit 2; }
+arm_race() {
+  local w hpre sent hid
+  w="$(world above)" || { MSG="world copy failed"; return 1; }
+  hpre="$w.hist"; cp "$w/$HIST_REL" "$hpre" || { MSG="history copy failed"; return 1; }
+  sent="$w.sent"; : > "$sent"
+  OUT="$(SNAPROT_REAL_WC="$REAL_WC" SNAPROT_SHIM_SENT="$sent" PATH="$WSHIM:$PATH" \
+    sh -c 'SNAPROT_RACE="$1/'"$TMPNAME"'.$$"; export SNAPROT_RACE; shift; exec bash "$@"' sh "$w/_bmad-output" \
+    "$R_" "$w/$HIST_REL" --apply 2>&1)"; RC=$?
+  SENT="$(grep -c '^gone$' "$sent")" || SENT=0
+  hid=no; cmp -s "$hpre" "$w/$HIST_REL" && hid=yes
+  MSG="shim removed the temp ${SENT}x, rc=${RC}, history-identical=${hid} ($(fbytes "$w/$HIST_REL") of $(fbytes "$hpre") bytes), says removed outside the run=$(grep -c 'removed by something outside this run' <<<"$OUT")"
+  [ "$SENT" -eq 1 ] && [ "$RC" -eq 1 ] && [ "$hid" = yes ]
+}
+
+# rosnap: a read-only snapshot. The append succeeds and the truncate cannot. The rotator must say so,
+# exit 1, and leave the snapshot's size unchanged -- never print "truncated it to 0 bytes" over a
+# full file. Under root a 444 file is writable: SKIP, as rohist does.
+arm_rosnap() {
+  local w b0 b1; w="$(world nohist)" || { MSG="world copy failed"; return 1; }
+  b0="$(fbytes "$w/$SNAP_REL")"
+  chmod 444 "$w/$SNAP_REL" || { MSG="chmod failed"; return 1; }
+  if [ -w "$w/$SNAP_REL" ]; then ROHIST_SKIP=yes; MSG="SKIP: a 444 file is writable to this user (root)"; return 0; fi
+  OUT="$(bash "$R_" "$w/$HIST_REL" --absorb "$w/$SNAP_REL" --apply 2>&1)"; RC=$?
+  b1="$(fbytes "$w/$SNAP_REL")"
+  chmod 644 "$w/$SNAP_REL"
+  MSG="rc=${RC}, snapshot ${b0} -> ${b1} bytes, says archived but not emptied=$(grep -c 'archived but NOT emptied' <<<"$OUT"), claims truncated=$(grep -c 'truncated it to 0 bytes' <<<"$OUT")"
+  [ "$RC" -eq 1 ] && [ -n "$b0" ] && [ "$b0" -gt 0 ] && [ "$b1" = "$b0" ] && grep -q 'archived but NOT emptied' <<<"$OUT"
+}
+
 # rodir: a writable history in a directory that is not writable (555). `[ -w history ]` passes, and
 # step 1 cannot create the temp copy beside it. Refused before any write: the archive stays absent,
 # on the first run and on a second one. The archive's own directory is pre-created so that only the
@@ -863,9 +989,13 @@ arm_idem() {
     && absorbed_ok "$w" "STALESNAP-nohist" "$pre"
 }
 
-ARMS="swap neg nohist floor above ign unw ulim wlate wshort rew tlate tshort wblate wbshort tmpexist tmprace rohist links args idem ro rerunhalf rerunkill restore rodir"
+ARMS="swap neg nohist floor above ign unw ulim wlate wshort rew tlate tshort wblate wbshort tmpexist tmprace rohist links args idem ro rerunhalf rerunkill restore rodir zero trimmed race rosnap"
 arm_run() {
   case "$1" in
+    zero)     arm_zero ;;
+    trimmed)  arm_trimmed ;;
+    race)     arm_race ;;
+    rosnap)   arm_rosnap ;;
     tlate)    arm_tshim tlate ;;
     tshort)   arm_tshim tshort ;;
     wblate)   arm_wbshim wblate ;;
@@ -934,6 +1064,10 @@ for a in $ARMS; do
     rerunkill) what="RE-RUN — the rotator is SIGKILLed mid write-back (nothing printed), then re-run: re-run rc 1 naming the temp copy, history, snapshot and archive unchanged by it, every pre-run history line in the history, the archive or the temp" ;;
     restore)  what="RESTORE — the printed restore is run exactly as printed, then a caller without --absorb re-runs: rc 0, the archive in git ls-files, 0 pre-run history lines missing from the tracked corpus (control: lines ARE missing before the re-run)" ;;
     rodir)    what="REFUSAL — a writable history in a 555 directory: rc 1 before ANY write, twice, the archive never created, history and snapshot byte-identical" ;;
+    zero)     what="ZERO — the write-back writes 0 bytes, then a plain re-run (with a head that refuses -c 0, as BSD's does): rc 1 printing the cp restore and no head noise; the printed restore then a re-run gives the history of a clean rotation" ;;
+    trimmed)  what="TRIMMED — the write-back is killed, a trim then appends to the history (no longer a prefix of the temp): re-run rc 1, and its printed listing command outputs exactly the temp's lines in no tracked file, covering every pre-run line lost" ;;
+    race)     what="RACE — the temp copy is removed between step 1 and step 2: rc 1 and the history byte-identical (the write-back opens its source before the history)" ;;
+    rosnap)   what="REFUSAL — a read-only snapshot on --absorb: rc 1, the snapshot unchanged in size, and the refusal says it is archived but NOT emptied" ;;
     links)    what="IN PLACE — a symlinked history stays a symlink with its target rotated, a hard-linked history's peer is rotated identically on the same inode, and a 640 history keeps mode 640" ;;
     args)   what="USAGE on the no-history path — unknown option rc 2, --absorb naming no file rc 2" ;;
     idem)   what="idempotent — absorbing the already-empty snapshot appends nothing" ;;
@@ -1001,7 +1135,10 @@ score() {
 }
 CH="$MD/hooks/ai-dlc-continue.sh"; PH="$MD/hooks/ai-dlc-pause.sh"
 
-if mut_line "$ROT" "$MD/m1.sh" '  [ "$ABSORB_DID" -eq 1 ] && : > "$ABSORB"' '  [ "$ABSORB_DID" -eq 1 ] && rm -f "$ABSORB"'; then
+# m1 is RE-ANCHORED: the truncate is now its own line followed by a check that the file is present
+# and empty. Both layers go, or the check refuses the removal and m1 proves only the check.
+if mut_line "$ROT" "$MD/m1a.sh" '  { : > "$ABSORB"; } 2>/dev/null' '  rm -f "$ABSORB"' \
+   && mut_line "$MD/m1a.sh" "$MD/m1.sh" '  if ! { [ -f "$ABSORB" ] && [ ! -s "$ABSORB" ]; }; then' '  if false; then'; then
   score m1 swap "$MD/m1.sh" "$CH" "$PH" "the absorb REMOVES the snapshot instead of truncating it"
 else bad "m1 DID NOT APPLY — the truncate line is not in the rotator exactly once"; fi
 
@@ -1100,7 +1237,8 @@ if mut_line "$ROT" "$MD/mC.sh" "$M12_OLD" "$MC_NEW"; then
   score mC tlate "$MD/mC.sh" "$CH" "$PH" "step 1's write-status check deleted"
 else bad "mC DID NOT APPLY — step 1's write line is not in the rotator exactly once"; fi
 
-MWB_OLD='cat "$HIST_NEW" > "$HISTORY" || writeback_fail "the write failed"'
+# Re-anchored on the stdin write-back (`cat < temp > history`); mD and mF edit that line.
+MWB_OLD='cat < "$HIST_NEW" > "$HISTORY" || writeback_fail "the write failed"'
 if mut_line "$ROT" "$MD/mD.sh" "$MWB_OLD" 'mv -f "$HIST_NEW" "$HISTORY" || writeback_fail "the write failed"'; then
   score mD links "$MD/mD.sh" "$CH" "$PH" "the write-back is a rename again (mv -f temp history)"
 else bad "mD DID NOT APPLY — the write-back line is not in the rotator exactly once"; fi
@@ -1109,7 +1247,7 @@ if mut_line "$ROT" "$MD/mE.sh" 'writeback_fail() {' 'writeback_fail() { rm -f "$
   score mE wblate "$MD/mE.sh" "$CH" "$PH" "the temp copy is deleted when the write-back fails"
 else bad "mE DID NOT APPLY — 'writeback_fail() {' is not in the rotator exactly once"; fi
 
-if mut_line "$ROT" "$MD/mF.sh" "$MWB_OLD" 'cat "$HIST_NEW" > "$HISTORY"'; then
+if mut_line "$ROT" "$MD/mF.sh" "$MWB_OLD" 'cat < "$HIST_NEW" > "$HISTORY"'; then
   score mF wblate "$MD/mF.sh" "$CH" "$PH" "step 2's write-status check deleted"
 else bad "mF DID NOT APPLY — the write-back line is not in the rotator exactly once"; fi
 
@@ -1153,6 +1291,33 @@ else bad "m18 DID NOT APPLY — the cut-floor staging call is not in the rotator
 if mut_line "$ROT" "$MD/m19.sh" 'if [ ! -w "$HIST_DIR" ]; then' 'if false; then'; then
   score m19 rodir "$MD/m19.sh" "$CH" "$PH" "the history-directory-writable precheck deleted"
 else bad "m19 DID NOT APPLY — the directory precheck is not in the rotator exactly once"; fi
+
+# m20: the empty-history line deleted, so an empty history goes to `head -c 0` again.
+if mut_line "$ROT" "$MD/m20.sh" '  [ "$hb" -eq 0 ] && return 0' '  :'; then
+  score m20 zero "$MD/m20.sh" "$CH" "$PH" "an empty history is no longer scored a byte-prefix without asking head"
+else bad "m20 DID NOT APPLY — the empty-history line is not in the rotator exactly once"; fi
+
+# m21: the listing command deleted from the not-a-prefix text, leaving the prose that tells the
+# operator to put back "every line listed" with nothing listed. Chosen over restoring the old
+# "was not being restored" wording because that mutant differs from the fix in PROSE, which any
+# rewording satisfies; this one can be killed only by an arm that RUNS the printed command and
+# compares its output with the lines computed independently, which is what arm 'trimmed' does.
+M21_OLD='      echo "      cat \"${HISTORY}\" \"${ARCHIVE}\" 2>/dev/null | grep -vxF -f - \"${t}\"" >&2'
+if mut_line "$ROT" "$MD/m21.sh" "$M21_OLD" '      :'; then
+  score m21 trimmed "$MD/m21.sh" "$CH" "$PH" "the not-a-prefix text no longer prints the command listing the temp's lines in no tracked file"
+else bad "m21 DID NOT APPLY — the listing command line is not in the rotator exactly once"; fi
+
+# m22: the write-back takes its source as an ARGUMENT again, so the shell opens (truncates) the
+# history before cat finds the source missing.
+M22_OLD='cat < "$HIST_NEW" > "$HISTORY" || writeback_fail "the write failed"'
+if mut_line "$ROT" "$MD/m22.sh" "$M22_OLD" 'cat "$HIST_NEW" > "$HISTORY" || writeback_fail "the write failed"'; then
+  score m22 race "$MD/m22.sh" "$CH" "$PH" "the write-back is cat temp > history again (the history is opened before the source)"
+else bad "m22 DID NOT APPLY — the write-back line is not in the rotator exactly once"; fi
+
+# m23: the post-truncate check deleted.
+if mut_line "$ROT" "$MD/m23.sh" '  if ! { [ -f "$ABSORB" ] && [ ! -s "$ABSORB" ]; }; then' '  if false; then'; then
+  score m23 rosnap "$MD/m23.sh" "$CH" "$PH" "the snapshot truncate is no longer verified"
+else bad "m23 DID NOT APPLY — the post-truncate check is not in the rotator exactly once"; fi
 
 echo
 if [ "$fails" -eq 0 ]; then
