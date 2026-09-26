@@ -440,6 +440,114 @@ arm_unw() {
   [ "$ok_all" -eq 1 ]
 }
 
+# ULIM: a REGULAR-FILE archive that fills up part-way through the append. The directory in arm_unw
+# is refused by the `[ -f ]` guard alone, so it cannot tell a rotator carrying the write-status and
+# growth checks from one carrying only `[ -f ]`; a `chmod 444` archive would, but root writes
+# through it. `ulimit -f` binds root too. The archive is pre-filled to a few bytes under the limit
+# (bash counts `ulimit -f` in 1024-byte units), so every append starts and none can finish. SIGXFSZ
+# is ignored in the subshell so the writer gets EFBIG instead of dying, and the rotator inherits
+# the ignored disposition across exec. On the no-history path and the rotation path: rc 1, and the
+# snapshot and the history byte-identical to their pre-run copies. The archive was measured to
+# have been appended to part-way (it grew and is at the limit), so the refusal is proven to be the
+# append failing, not the run stopping before it.
+ULIM_KIB=8
+ULIM_FILL=$(( ULIM_KIB * 1024 - 40 ))
+prefill_archive() {  # <world>: a regular-file archive ULIM_FILL bytes long, header first
+  mkdir -p "$(dirname "$1/$ARCH_REL")" || return 1
+  { printf '# Pipeline snapshot — archive\n\n'
+    head -c "$ULIM_FILL" /dev/zero | tr '\0' 'x'; } | head -c "$ULIM_FILL" > "$1/$ARCH_REL"
+  [ "$(fbytes "$1/$ARCH_REL")" -eq "$ULIM_FILL" ]
+}
+arm_ulim() {
+  local s w pre hpre rc sid hid grew ok_all=1; MSG=""
+  for s in nohist above; do
+    w="$(world "$s")" || { MSG="world copy failed"; return 1; }
+    prefill_archive "$w" || { MSG="cannot pre-fill the archive"; return 1; }
+    pre="$(snap_copy "$w")" || { MSG="snapshot copy failed"; return 1; }
+    hpre="$w.hist"; if [ -f "$w/$HIST_REL" ]; then cp "$w/$HIST_REL" "$hpre"; else : > "$hpre"; fi
+    ( trap '' XFSZ; ulimit -f "$ULIM_KIB"; bash "$R_" "$w/$HIST_REL" --absorb "$w/$SNAP_REL" --apply ) >/dev/null 2>&1; rc=$?
+    sid=no; cmp -s "$pre" "$w/$SNAP_REL" && sid=yes
+    hid=n/a
+    if [ "$s" = above ]; then hid=no; cmp -s "$hpre" "$w/$HIST_REL" && hid=yes; fi
+    grew=no; [ "$(fbytes "$w/$ARCH_REL")" -gt "$ULIM_FILL" ] && grew=yes
+    MSG="${MSG}${s}: rc=${rc} snapshot-identical=${sid} history-identical=${hid} archive-appended-part-way=${grew} ($(fbytes "$w/$ARCH_REL") bytes); "
+    { [ "$rc" -eq 1 ] && [ "$sid" = yes ] && [ "$hid" != no ] && [ "$grew" = yes ]; } || ok_all=0
+  done
+  [ "$ok_all" -eq 1 ]
+}
+
+# WLATE / WSHORT: the write-status check and the growth check COVER EACH OTHER on every regular-file
+# input `ulimit -f` can build. Measured over 3 body sizes x 3 limits x up to 10 prefill offsets (88
+# appends, 68 of them failing): every failed append both exited non-zero AND grew short, so deleting
+# either check alone leaves arm_ulim green. (A failed builtin `printf` also leaks its unwritten
+# bytes into the next `$( )`, so the growth check sees a non-numeric size; it refuses that too.) Each check therefore gets a subject the other cannot
+# see, forced by a `cat` shim ahead of the real one on PATH (the append's body is the rotator's
+# only `cat` on the no-history path):
+#   WLATE  — every byte lands, then the writer reports failure (a delayed write error on close).
+#            Only the write-status check sees it: the growth is exact.
+#   WSHORT — the last byte is dropped and the writer reports success. Only the growth check sees
+#            it: the status is 0. This is the shape the growth check was written for (a group
+#            answering with its last command), forced here because no real file produces it.
+# Both: rc 1 and the snapshot byte-identical. The positive conjunct that the shim RAN is the
+# archive's growth itself, asserted exact for WLATE and short-by-one for WSHORT.
+REAL_CAT="$(command -v cat)"
+SHIM="$WORK/shim"
+mkdir -p "$SHIM/late" "$SHIM/short" || { echo "FIXTURE ERROR: cannot build the cat shims" >&2; exit 2; }
+printf '#!/bin/sh\n"%s" "$@"\nexit 1\n' "$REAL_CAT" > "$SHIM/late/cat"
+printf '#!/bin/sh\nn=$(wc -c < "$1")\nhead -c $((n - 1)) "$1"\nexit 0\n' > "$SHIM/short/cat"
+chmod +x "$SHIM/late/cat" "$SHIM/short/cat" || { echo "FIXTURE ERROR: cannot chmod the cat shims" >&2; exit 2; }
+arm_wshim() {  # <late|short>
+  local w pre rc a0 a1 sid want; w="$(world nohist)" || { MSG="world copy failed"; return 1; }
+  pre="$(snap_copy "$w")" || { MSG="snapshot copy failed"; return 1; }
+  mkdir -p "$(dirname "$w/$ARCH_REL")" && printf '# Pipeline snapshot — archive\n\n' > "$w/$ARCH_REL" \
+    || { MSG="cannot seed the archive"; return 1; }
+  a0="$(fbytes "$w/$ARCH_REL")"
+  PATH="$SHIM/$1:$PATH" bash "$R_" "$w/$HIST_REL" --absorb "$w/$SNAP_REL" --apply >/dev/null 2>&1; rc=$?
+  a1="$(fbytes "$w/$ARCH_REL")"
+  sid=no; cmp -s "$pre" "$w/$SNAP_REL" && sid=yes
+  # header = "\n<!-- absorbed ... N lines -->\n\n"; body = the snapshot. The shim either lands all of
+  # it (late) or all but one byte (short); anything else means the shim did not run as the arm says.
+  want="$(( $(printf '\n<!-- absorbed whole snapshot from %s at fresh start: %s lines -->\n\n' "$(basename "$SNAP_REL")" "$(wc -l < "$pre" | tr -d ' ')" | wc -c) + $(wc -c < "$pre") ))"
+  [ "$1" = short ] && want=$(( want - 1 ))
+  MSG="shim=$1 rc=${rc} snapshot-identical=${sid} archive grew $(( a1 - a0 )) bytes (the shim writes ${want})"
+  [ "$rc" -eq 1 ] && [ "$sid" = yes ] && [ "$(( a1 - a0 ))" -eq "$want" ]
+}
+
+# REW: the HISTORY REWRITE fails, after the archive append succeeded. The `bigtail` world is sized
+# so every write before the rewrite fits under `ulimit -f` and the rewritten history does not. That
+# sizing is PROVEN, not assumed: an unlimited control run on a second copy must rotate (rc 0) to a
+# history whose preamble and kept tail are each under the limit and whose whole is over it, with the
+# archive under it. Then, under the limit: rc 1, the refusal names the rewrite, the history is
+# byte-identical to its pre-run copy, the snapshot byte-identical, every pre-run history line is
+# still in the history or the archive, and the partial new history is kept at the path printed.
+arm_rew() {
+  local lim w c pre hpre out rc hid sid lost kept c_rc hb pb tb ab
+  lim=$(( ULIM_KIB * 1024 ))
+  c="$(world bigtail)" || { MSG="world copy failed"; return 1; }
+  bash "$R_" "$c/$HIST_REL" --absorb "$c/$SNAP_REL" --apply >/dev/null 2>&1; c_rc=$?
+  hb="$(fbytes "$c/$HIST_REL")"; ab="$(fbytes "$c/$ARCH_REL")"
+  pb="$(awk '/^## /{exit} {print}' "$c/$HIST_REL" | wc -c | tr -d ' ')"
+  tb=$(( ${hb:-0} - pb ))
+  if ! { [ "$c_rc" -eq 0 ] && [ "${hb:-0}" -gt "$lim" ] && [ "$pb" -lt "$lim" ] && [ "$tb" -lt "$lim" ] \
+         && [ -n "$ab" ] && [ "$ab" -lt "$lim" ]; }; then
+    MSG="SEED CANNOT REACH THE REWRITE: unlimited control rc=${c_rc}, new history ${hb:-none} (preamble ${pb} + tail ${tb}), archive ${ab:-none}, limit ${lim}"
+    return 1
+  fi
+  w="$(world bigtail)" || { MSG="world copy failed"; return 1; }
+  pre="$(snap_copy "$w")" || { MSG="snapshot copy failed"; return 1; }
+  hpre="$w.hist"; cp "$w/$HIST_REL" "$hpre" || { MSG="history copy failed"; return 1; }
+  out="$( ( trap '' XFSZ; ulimit -f "$ULIM_KIB"; bash "$R_" "$w/$HIST_REL" --absorb "$w/$SNAP_REL" --apply ) 2>&1 >/dev/null )"; rc=$?
+  hid=no; cmp -s "$hpre" "$w/$HIST_REL" && hid=yes
+  sid=no; cmp -s "$pre" "$w/$SNAP_REL" && sid=yes
+  sort -u "$hpre" > "$w.want"
+  cat "$w/$HIST_REL" "$w/$ARCH_REL" 2>/dev/null | sort -u > "$w.have"
+  lost="$(comm -23 "$w.want" "$w.have" | wc -l | tr -d ' ')"
+  kept="$(sed -n 's/.*kept, not deleted, at: //p' <<<"$out" | head -1)"
+  MSG="control: history ${hb} (preamble ${pb} + tail ${tb}) archive ${ab}, limit ${lim}; under the limit: rc=${rc} names-rewrite=$(grep -c 'writing the new history failed' <<<"$out") history-identical=${hid} ($(fbytes "$w/$HIST_REL") of $(fbytes "$hpre") bytes) snapshot-identical=${sid} pre-run lines in neither file=${lost} of $(wc -l < "$w.want" | tr -d ' ') kept-copy=${kept:-none}"
+  [ "$rc" -eq 1 ] && grep -q 'writing the new history failed' <<<"$out" && [ "$hid" = yes ] && [ "$sid" = yes ] \
+    && [ "$lost" -eq 0 ] && [ -s "$w.want" ] && [ -n "$kept" ] && [ -f "$kept" ]
+}
+
 # ARGS: on the no-history path an unknown option and an --absorb naming no file are both usage
 # errors (rc 2), and neither touches the snapshot.
 arm_args() {
@@ -464,9 +572,13 @@ arm_idem() {
     && absorbed_ok "$w" "STALESNAP-nohist" "$pre"
 }
 
-ARMS="swap neg nohist floor above ign unw args idem ro"
+ARMS="swap neg nohist floor above ign unw ulim wlate wshort rew args idem ro"
 arm_run() {
   case "$1" in
+    ulim)   arm_ulim ;;
+    wlate)  arm_wshim late ;;
+    wshort) arm_wshim short ;;
+    rew)    arm_rew ;;
     swap)   arm_swap ;;
     neg)    arm_neg ;;
     nohist) arm_shape nohist 'no history at' ;;
@@ -488,7 +600,7 @@ run_arms() {
 
 # --- The arms against the shipped subject ---------------------------------------------------
 # The seed must hold every template, or each arm below reads a world nobody seeded.
-for t in nohist floor above nosnap ignored; do
+for t in nohist floor above nosnap ignored bigtail; do
   [ -d "$TMPL/$t/.git" ] || { echo "FIXTURE BROKEN: seed template '$t' is not a repository" >&2; exit 2; }
 done
 [ -f "$TMPL/floor/$HIST_REL" ] && [ ! -e "$TMPL/nohist/$HIST_REL" ] && [ ! -e "$TMPL/nosnap/$SNAP_REL" ] \
@@ -504,6 +616,10 @@ for a in $ARMS; do
     above)  what="absorb, history above the floor (rotation, the control): whole snapshot is the archive's tail byte for byte, snapshot present at 0 bytes, archive tracked" ;;
     ign)    what="REFUSAL — ignored archive on the no-history path: rc 1, snapshot byte-identical" ;;
     unw)    what="REFUSAL — archive path is a directory (unwritable), on no history and on the rotation path: rc 1, snapshot byte-identical, history byte-identical" ;;
+    ulim)   what="REFUSAL — a regular-file archive that fills up mid-append (ulimit -f, binds root too), on no history and on the rotation path: rc 1, the archive appended part-way, snapshot and history byte-identical" ;;
+    wlate)  what="REFUSAL — every byte appended but the writer reports failure: rc 1, snapshot byte-identical (only the write-status check sees this)" ;;
+    wshort) what="REFUSAL — one byte short and the writer reports success: rc 1, snapshot byte-identical (only the growth check sees this)" ;;
+    rew)    what="REFUSAL — the history REWRITE fails after the archive append succeeded (ulimit -f, sizing proven by an unlimited control): rc 1, history and snapshot byte-identical, no pre-run history line in neither file, the partial copy kept at the printed path" ;;
     args)   what="USAGE on the no-history path — unknown option rc 2, --absorb naming no file rc 2" ;;
     idem)   what="idempotent — absorbing the already-empty snapshot appends nothing" ;;
     ro)     what="REPORT-ONLY — --absorb without --apply on no history, the floor and above it writes nothing (git status empty, snapshot byte-identical, no archive) and says what it would do" ;;
@@ -605,6 +721,41 @@ else bad "m8 DID NOT APPLY — 'archive_fail() {' is not in the rotator exactly 
 if mut_line "$ROT" "$MD/m9.sh" '  if [ "$APPLY" -eq 0 ]; then' '  if false; then'; then
   score m9 ro "$MD/m9.sh" "$CH" "$PH" "the absorb-only path writes even without --apply"
 else bad "m9 DID NOT APPLY — absorb_only's report-only branch is not in the rotator exactly once"; fi
+
+# m10 / m11 / m13: the three layers of the archive-append guard. `[ -f ]` refuses a non-file, the
+# write-status check refuses a writer that failed, the growth check refuses a short append. On
+# every `ulimit -f` input measured the last two cover each other (see arm_wshim), so each is killed
+# by the shim arm the other cannot see, and the ulimit arm kills the variant keeping ONLY `[ -f ]`
+# — the one that exits 0 and empties the snapshot behind a read-only or full archive.
+M10_OLD='  { printf '"'"'%s'"'"' "$hdr"; cat "$body"; } >> "$ARCHIVE" || archive_fail "the write failed"'
+M10_NEW='  { printf '"'"'%s'"'"' "$hdr"; cat "$body"; } >> "$ARCHIVE"'
+# The growth check is TWO lines, and both go: its numeric-operand guard and its comparison. Deleting
+# only the comparison leaves the guard refusing the non-numeric size a failed builtin `printf` leaks
+# into the next substitution, which is a partial revert that proves the layer left in place.
+M11_OLD='  if ! [ "$after" -eq "$(( before + b_hdr + b_body ))" ]; then'
+M11G_OLD='  case "${before}${after}${b_hdr}${b_body}" in '"''"'|*[!0-9]*) archive_fail "a size read back as non-numeric" ;; esac'
+mut_growth() {  # <src> <dst>: delete both lines of the growth check
+  mut_line "$1" "$2.g" "$M11G_OLD" '  :' && mut_line "$2.g" "$2" "$M11_OLD" '  if false; then'
+}
+if mut_line "$ROT" "$MD/m10.sh" "$M10_OLD" "$M10_NEW"; then
+  score m10 wlate "$MD/m10.sh" "$CH" "$PH" "the append's write-status check deleted"
+else bad "m10 DID NOT APPLY — the append's write-status line is not in the rotator exactly once"; fi
+
+if mut_growth "$ROT" "$MD/m11.sh"; then
+  score m11 wshort "$MD/m11.sh" "$CH" "$PH" "the append's byte-growth check deleted (its numeric guard and its comparison)"
+else bad "m11 DID NOT APPLY — a line of the growth check is not in the rotator exactly once"; fi
+
+if mut_line "$ROT" "$MD/m13a.sh" "$M10_OLD" "$M10_NEW" && mut_growth "$MD/m13a.sh" "$MD/m13.sh"; then
+  score m13 ulim "$MD/m13.sh" "$CH" "$PH" "only the [ -f ] guard left: both the write-status and the growth checks deleted"
+else bad "m13 DID NOT APPLY — the write-status line or the growth check is not in the rotator exactly once"; fi
+
+# m12: the history is rewritten IN PLACE again. The truncating open cuts the history the moment the
+# write fails, so the rewrite arm dies; the copy to the temp name keeps every other path unchanged.
+M12_OLD='( set -C; cat "$TMPD/preamble" "$TMPD/tail" > "$HIST_NEW" ) || rewrite_fail "the write failed"'
+M12_NEW='cat "$TMPD/preamble" "$TMPD/tail" > "$HISTORY" || rewrite_fail "the write failed"; cp "$HISTORY" "$HIST_NEW"'
+if mut_line "$ROT" "$MD/m12.sh" "$M12_OLD" "$M12_NEW"; then
+  score m12 rew "$MD/m12.sh" "$CH" "$PH" "the history is rewritten in place (cat preamble tail > history)"
+else bad "m12 DID NOT APPLY — the history write line is not in the rotator exactly once"; fi
 
 echo
 if [ "$fails" -eq 0 ]; then

@@ -161,6 +161,31 @@ mk_world above   14 yes no
 mk_world nosnap  14 no  no
 mk_world ignored 0  yes yes
 
+# bigtail — for the history-REWRITE failure arm. Sized so that under `ulimit -f 8` (8192 bytes)
+# every file the rotator writes before the rewrite fits, and the rewritten history does not:
+# the preamble alone and the kept tail alone are each under 8192 (the rotator's own temp copies
+# of them must be written whole, or the line-accounting refusal fires first and the rewrite is
+# never reached), the archive (header + 4 moved entries + the absorbed snapshot) is well under,
+# and preamble + tail is over. run.sh asserts all four sizes before it reads the arm's verdict.
+mk_world bigtail 0 yes no
+{
+  echo "# Pipeline Snapshot — History (write-only; never whole-read)"
+  echo
+  i=0; while [ "$i" -lt 22 ]; do i=$((i + 1))
+    printf 'PREAMBLE-%02d: a long preamble line that stays in the live history across every rotation.\n' "$i"
+  done
+  echo
+  i=0; while [ "$i" -lt 14 ]; do i=$((i + 1))
+    printf '## [MOVED 2026-09-02T10:00:%02dZ from pipeline-snapshot.md — gate]\n\n' "$i"
+    j=0; while [ "$j" -lt 7 ]; do j=$((j + 1))
+      printf 'BIGLINE-%02d-%02d: a substantive history body line, long enough to give the tail weight.\n' "$i" "$j"
+    done
+    echo
+  done
+} > "$TMPL/bigtail/_bmad-output/pipeline-snapshot-history.md"
+( cd "$TMPL/bigtail" && git add -A \
+  && git -c user.email=fixture@ai-dlc -c user.name=fixture commit -qm "bigtail history" ) >/dev/null 2>&1 || exit 2
+
 cat > "$WORK/env.sh" <<EOF
 PROJ="$PROJ"
 HIST="$HIST"

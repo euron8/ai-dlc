@@ -76,7 +76,7 @@ truncates it to 0 bytes instead. It must also run on every path that is not a re
 lead's next write destroys the stale snapshot unarchived.
 
 These arms drive the REAL rotator and the REAL hooks, each against a fresh copy of one seed
-template (`seed.sh` builds `nohist`, `floor`, `above`, `nosnap` and `ignored`):
+template (`seed.sh` builds `nohist`, `floor`, `above`, `nosnap`, `ignored` and `bigtail`):
 
 | Arm | Asserts |
 |---|---|
@@ -84,7 +84,11 @@ template (`seed.sh` builds `nohist`, `floor`, `above`, `nosnap` and `ignored`):
 | neg | a tree with no snapshot keeps both hooks silent |
 | nohist / floor / above | absorb with no history, with exactly `--keep-entries` cut points, and above the floor. Each proves its path by the rotator's own verdict line, then asserts the marker is in the archive once, the archive's last N lines are byte-identical to a copy of the snapshot taken before the call (N = that copy's line count; each seeded snapshot carries several distinct lines, only one of them the marker), the snapshot is present at 0 bytes, and the archive is tracked |
 | ign | an ignored archive on the no-history path: rc 1, snapshot byte-identical, no archive |
-| unw | the archive path pre-created as a DIRECTORY (unwritable for any user, root included), on the no-history path and on the above-floor rotation path: rc 1, snapshot byte-identical to its pre-run copy, and on the rotation path the history byte-identical too |
+| unw | the archive path pre-created as a DIRECTORY (unwritable for any user, root included), on the no-history path and on the above-floor rotation path: rc 1, snapshot byte-identical to its pre-run copy, and on the rotation path the history byte-identical too. A directory is refused by the `[ -f ]` guard alone, so this arm cannot see the other two append guards |
+| ulim | a REGULAR-FILE archive pre-filled to 40 bytes under an 8 KiB `ulimit -f` (inside a subshell with `trap '' XFSZ`, so it binds root too and the writer gets EFBIG instead of dying), on no history and on the rotation path: rc 1, the archive appended part-way, snapshot and history byte-identical. Kills the rotator that keeps only `[ -f ]`, which exits 0 and empties the snapshot |
+| wlate | a `cat` shim on `PATH` writes every byte and then exits 1: rc 1, snapshot byte-identical, archive growth exact. Only the write-status check sees it |
+| wshort | a `cat` shim writes all but the last byte and exits 0: rc 1, snapshot byte-identical, archive growth one short. Only the growth check sees it |
+| rew | the history REWRITE fails after the archive append succeeded (`bigtail` under the same 8 KiB limit). An unlimited control run on a second copy first proves the sizing reaches the rewrite: the new history is over the limit, its preamble and tail each under it, the archive under it. Then: rc 1, the refusal names the rewrite, history and snapshot byte-identical, every pre-run history line still in the history or the archive, and the partial new history kept at the path the rotator prints |
 | args | on the no-history path, an unknown option and an `--absorb` naming no file are both rc 2 |
 | idem | absorbing the already-empty snapshot again leaves the archive byte-identical |
 | ro | report-only `--absorb` (no `--apply`) on each of `nohist`, `floor` and `above`: rc 0, the rotator says what it would append, `git status --porcelain` is empty, the snapshot is byte-identical, and no archive exists |
@@ -107,6 +111,19 @@ by the same arms after an unmutated control copy from the same directory passes 
 | m7 | the absorb's `archive_append … "$ABSORB"` is fed `grep -E STALE "$ABSORB"` instead (keeps only the marker line; the verified append still succeeds) | nohist |
 | m8 | `archive_fail() {` becomes `archive_fail() { return 0` (every append guard reports and carries on) | unw |
 | m9 | `absorb_only`'s report-only branch `if [ "$APPLY" -eq 0 ]` becomes `if false` (writes without `--apply`) | ro |
+| m10 | the append's `\|\| archive_fail "the write failed"` deleted (write-status check) | wlate |
+| m11 | the append's growth check deleted, both its numeric-operand guard and its comparison | wshort |
+| m13 | m10 and m11 together, so only the `[ -f ]` guard is left | ulim |
+| m12 | the history rewritten in place again, `cat preamble tail > "$HISTORY"` | rew |
+
+m10 and m11 are not killed by `ulim`, and that is measured rather than overlooked. Over 88
+`ulimit -f` appends (three body sizes, three limits, up to ten pre-fill offsets) every one of the
+68 that failed both exited non-zero AND grew short, so on any input `ulimit -f` can build the two
+checks cover each other and deleting either alone leaves `ulim` green. Each therefore gets a
+subject the other cannot see, forced by a `cat` shim. There is a second reason the growth check
+carries a numeric-operand guard: when the builtin `printf` fails, bash keeps the unwritten bytes
+and the next `$( )` child flushes them into its output, so the size read back is not a number, and
+`[ x -ne y ]` on it is an error an `if` reads as "the sizes match".
 
 The swap arm FAILS against the rotator that removed the snapshot (the one before truncation
 existed), because the hooks go silent once the file is gone.

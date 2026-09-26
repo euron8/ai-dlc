@@ -85,7 +85,12 @@
 # exit 2 on every path, including the no-history one.
 #
 # Exit: 0 = reported or rotated (nothing to rotate is a normal, affirmative result)
-#       1 = REFUSED: an integrity check failed and NOTHING was written
+#       1 = REFUSED: an integrity check or a write failed. What exit 1 guarantees is that the
+#           history and the absorbed snapshot are byte-identical to what they were before the
+#           run. It does NOT guarantee that nothing was written: a refused archive append can
+#           leave a partial block at the archive's end, and a refused history rewrite leaves the
+#           moved block appended to the archive (a duplicate of lines the history still holds)
+#           and its partial new history in a temp file beside the history, whose path is printed.
 #       2 = usage
 set -uo pipefail
 
@@ -213,7 +218,14 @@ archive_append() {
   { printf '%s' "$hdr"; cat "$body"; } >> "$ARCHIVE" || archive_fail "the write failed"
   after="$(wc -c < "$ARCHIVE")" || archive_fail "its size cannot be re-read"
   before="${before// /}"; after="${after// /}"; b_hdr="${b_hdr// /}"; b_body="${b_body// /}"
-  if [ "$after" -ne "$(( before + b_hdr + b_body ))" ]; then
+  # FAIL CLOSED. When the builtin `printf` fails (EFBIG, ENOSPC), bash keeps the unwritten bytes in
+  # its stdout buffer and the NEXT command substitution's child flushes them into its own output,
+  # so `after` can come back as "8192<!-- rotated from ...". `[ x -ne y ]` on that is an ERROR
+  # (status 2), which an `if` reads exactly like "the sizes match". Measured: with the write-status
+  # check deleted, a full archive made this comparison error out, the run went on, and exited 0.
+  # So every operand is proven numeric, and the comparison refuses unless it positively holds.
+  case "${before}${after}${b_hdr}${b_body}" in ''|*[!0-9]*) archive_fail "a size read back as non-numeric" ;; esac
+  if ! [ "$after" -eq "$(( before + b_hdr + b_body ))" ]; then
     archive_fail "it grew by $(( after - before )) bytes where $(( b_hdr + b_body )) were written"
   fi
 }
@@ -444,11 +456,30 @@ archive_append "${NL}<!-- rotated from $(basename "$HISTORY"): ${L_MOVE} lines, 
 
 absorb_append
 
-cat "$TMPD/preamble" "$TMPD/tail" > "$HISTORY" || {
-  echo "${SELF_NAME}: FAILED -- the moved block was appended to ${ARCHIVE}, but rewriting ${HISTORY} failed." >&2
-  echo "  Nothing was truncated${ABSORB:+ (${ABSORB} still holds its content)}. Check the history against git before re-running." >&2
+# THE HISTORY IS NEVER REWRITTEN IN PLACE. `cat preamble tail > "$HISTORY"` truncates the file
+# when it opens it, so a write that fails part-way leaves a cut history, and the EXIT trap then
+# deletes $TMPD, which held the only complete copy of the kept tail. Measured with `ulimit -f 8`:
+# rc 1, the history cut to 8192 bytes, 5 of 10 headings gone, 92 pre-run lines in neither file.
+# So the new content is written to a temp file in the history's OWN directory (a same-filesystem
+# `mv` is a rename, never a copy), checked by size, and only then renamed over the history. On any
+# failure the history is untouched, the temp copy is kept for inspection, and its path is printed.
+# `set -C` refuses to write through a temp name that already exists.
+HIST_NEW="$(dirname "$HISTORY")/.$(basename "$HISTORY").rotate.$$"
+rewrite_fail() {
+  echo "${SELF_NAME}: REFUSED -- the moved block was appended to ${ARCHIVE}, but writing the new history failed: $1." >&2
+  echo "  ${HISTORY} is unchanged${ABSORB:+, and ${ABSORB} still holds its content}. The moved lines are now in BOTH files, which conserves them." >&2
+  echo "  Whatever of the new history was written is kept, not deleted, at: ${HIST_NEW}" >&2
+  echo "  Inspect and remove it, fix the cause, then re-run (a re-run appends the moved block to the archive again)." >&2
   exit 1
 }
+B_PRE="$(wc -c < "$TMPD/preamble" | tr -d ' ')"; B_TAIL="$(wc -c < "$TMPD/tail" | tr -d ' ')"
+( set -C; cat "$TMPD/preamble" "$TMPD/tail" > "$HIST_NEW" ) || rewrite_fail "the write failed"
+B_GOT="$(wc -c < "$HIST_NEW" | tr -d ' ')" || rewrite_fail "its size cannot be read"
+# Fail closed, for the same reason as archive_append's growth check.
+case "${B_PRE}${B_TAIL}${B_GOT}" in ''|*[!0-9]*) rewrite_fail "a size read back as non-numeric" ;; esac
+B_WANT=$(( B_PRE + B_TAIL ))
+[ "$B_GOT" -eq "$B_WANT" ] || rewrite_fail "it holds ${B_GOT} bytes where ${B_WANT} were written"
+mv -f "$HIST_NEW" "$HISTORY" || rewrite_fail "renaming it over the history failed"
 
 stage_archive
 absorb_truncate
