@@ -182,9 +182,42 @@ ensure_archive() {
       echo "delete it, do not gitignore it, and do not hand-edit an entry back into the live"
       echo "history — the rotator is the only writer."
       echo
-    } > "$ARCHIVE"
+    } > "$ARCHIVE" || archive_fail "the header block could not be written"
   fi
 }
+
+# EVERY WRITE TO THE ARCHIVE IS CHECKED, AND A FAILED ONE STOPS THE RUN BEFORE ANYTHING SHRINKS.
+# The callers truncate the snapshot and rewrite the history AFTER appending, so an unchecked
+# append turns an unwritable archive (a read-only file, a read-only directory, a directory at the
+# archive path) into an exit-0 run that empties the snapshot and shrinks the history with their
+# bytes in no file. That is the one failure this script exists to make impossible.
+#
+# A partial append is caught by size, not by exit status alone: a `{ printf; cat; }` group answers
+# with its LAST command, so a failed header followed by a successful body reads as success. The
+# archive must grow by exactly the header plus the body. A partial block left behind by a refusal
+# is not rolled back: the archive is append-only, the bytes are duplicates of content still in the
+# live files, and a rollback would be a second write that can fail the same way.
+archive_fail() {
+  echo "${SELF_NAME}: REFUSED -- could not append to the archive ${ARCHIVE}: $1." >&2
+  echo "  Nothing was truncated: the history${ABSORB:+ and ${ABSORB}} are unchanged. Make the archive a writable regular file and re-run." >&2
+  exit 1
+}
+
+# archive_append HEADER BODY-FILE: append HEADER then the file's bytes, verified by growth.
+archive_append() {
+  local hdr="$1" body="$2" before after b_hdr b_body
+  [ -f "$ARCHIVE" ] || archive_fail "it is not a regular file"
+  before="$(wc -c < "$ARCHIVE")" || archive_fail "its size cannot be read"
+  b_body="$(wc -c < "$body")" || archive_fail "the source ${body} cannot be read"
+  b_hdr="$(printf '%s' "$hdr" | wc -c)" || archive_fail "the header size cannot be measured"
+  { printf '%s' "$hdr"; cat "$body"; } >> "$ARCHIVE" || archive_fail "the write failed"
+  after="$(wc -c < "$ARCHIVE")" || archive_fail "its size cannot be re-read"
+  before="${before// /}"; after="${after// /}"; b_hdr="${b_hdr// /}"; b_body="${b_body// /}"
+  if [ "$after" -ne "$(( before + b_hdr + b_body ))" ]; then
+    archive_fail "it grew by $(( after - before )) bytes where $(( b_hdr + b_body )) were written"
+  fi
+}
+NL=$'\n'
 
 # The move is not complete until the destination is in the corpus. Staging here rather than
 # leaving it to the caller is deliberate: the caller who forgets is exactly the failure REFUSAL 3
@@ -221,12 +254,8 @@ absorb_append() {
   fi
   ensure_archive
   A_LINES="$(wc -l < "$ABSORB" | tr -d ' ')"
-  {
-    echo ""
-    echo "<!-- absorbed whole snapshot from $(basename "$ABSORB") at fresh start: ${A_LINES} lines -->"
-    echo ""
-  } >> "$ARCHIVE"
-  cat "$ABSORB" >> "$ARCHIVE"
+  archive_append "${NL}<!-- absorbed whole snapshot from $(basename "$ABSORB") at fresh start: ${A_LINES} lines -->${NL}${NL}" "$ABSORB"
+  # Reached only when the append verified; archive_append exits 1 otherwise.
   ABSORB_DID=1
   ABSORB_NOTE=" absorbed ${ABSORB} (${A_LINES} lines) and truncated it to 0 bytes;"
 }
@@ -411,16 +440,15 @@ fi
 # ---------------------------------------------------------------------------
 ensure_archive
 
-{
-  echo ""
-  echo "<!-- rotated from $(basename "$HISTORY"): ${L_MOVE} lines, ${N_MOVE} entries -->"
-  echo ""
-} >> "$ARCHIVE"
-cat "$TMPD/move" >> "$ARCHIVE"
+archive_append "${NL}<!-- rotated from $(basename "$HISTORY"): ${L_MOVE} lines, ${N_MOVE} entries -->${NL}${NL}" "$TMPD/move"
 
 absorb_append
 
-cat "$TMPD/preamble" "$TMPD/tail" > "$HISTORY"
+cat "$TMPD/preamble" "$TMPD/tail" > "$HISTORY" || {
+  echo "${SELF_NAME}: FAILED -- the moved block was appended to ${ARCHIVE}, but rewriting ${HISTORY} failed." >&2
+  echo "  Nothing was truncated${ABSORB:+ (${ABSORB} still holds its content)}. Check the history against git before re-running." >&2
+  exit 1
+}
 
 stage_archive
 absorb_truncate
