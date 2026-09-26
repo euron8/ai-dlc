@@ -624,7 +624,9 @@ and which you must say out loud if you conclude it.
 **Initialize the pipeline snapshot.** Before the READ AND FOLLOW, handle
 the pipeline snapshot at `_bmad-output/pipeline-snapshot.md`:
 
-- **If the file does NOT exist:** create it with initial state:
+- **If the file does NOT exist, or exists and is EMPTY (0 bytes):**
+  create it with initial state (if the file exists, Read it first, then
+  Write):
   - Pipeline Position (detected variant, first step file, no
     last-completed step yet, no gates passed yet, current git
     branch from `git branch --show-current`; plus the **routing record**,
@@ -695,18 +697,31 @@ the pipeline snapshot at `_bmad-output/pipeline-snapshot.md`:
     - `last_red_fire_tokens: null`
     - `last_red_fire_turns: null`
 
-- **If the file ALREADY exists** (a stale snapshot from a previous
-  pipeline run — Step 0 did not dispatch to a resume, so the user is
-  starting fresh with an old snapshot still on disk): do NOT silently
+- **If the file exists and is NON-EMPTY** (a stale snapshot from a
+  previous pipeline run — Step 0 did not dispatch to a resume, so the user
+  is starting fresh with an old snapshot still on disk): do NOT silently
   overwrite. Absorb the old file into the one snapshot archive:
 
       bash scripts/ai-dlc/rotate-snapshot-archive.sh \
            _bmad-output/pipeline-snapshot-history.md \
            --absorb _bmad-output/pipeline-snapshot.md --apply
 
-  then create a new snapshot with initial state as above. Announce
-  the archival in the output so the user knows the previous state
-  was preserved.
+  1. **If the rotator exits NON-ZERO, STOP.** Do not write the snapshot.
+     Report the rotator's stderr to the user verbatim. Exit 1 is a
+     refusal that wrote nothing, so the stale snapshot is still on disk
+     and still unarchived; writing over it destroys it.
+  2. **On exit 0** the rotator has appended the stale snapshot to the
+     archive and TRUNCATED the file to 0 bytes. Read the now-empty
+     `_bmad-output/pipeline-snapshot.md`, then Write the initial state
+     as above into it. Announce the archival in the output so the user
+     knows the previous state was preserved.
+
+  **The file is emptied, never removed:** every control hook keys "a
+  pipeline is active" on the snapshot's existence, so a removed snapshot
+  turns off stall detection, the pause flag, Rule 29's deny and
+  compaction recovery until the new one is written, and a turn can end
+  between the rotator call and that Write. An empty snapshot is not a
+  resume: Step 0 item 1 requires the file to exist AND be non-empty.
 
   **One destination, one writing program, no dated files.** A per-occasion
   dated spelling (`pipeline-snapshot.archive.{ISO-timestamp}.md`) is

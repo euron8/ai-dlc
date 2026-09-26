@@ -4107,3 +4107,53 @@ cause.
 
 verify: manual
 
+## BL-321 — the fresh-start absorb removed the snapshot and turned every control hook off until the lead wrote a new one, and on a fresh history it absorbed nothing at all
+
+**DEFECT.** Carries the reference consumer's `PC-S314-SNAPSHOT-SWAP-BLIND-WINDOW`, so it is
+PC-backed and ranks above any distribution-internal entry under the provenance-first rule. The
+entry has two claims, and it closes only when both do.
+
+**CLAIM 1: THE BLIND WINDOW.** `route.md` Step 6 did a fresh start in two acts: the rotator with
+`--absorb _bmad-output/pipeline-snapshot.md --apply`, then the lead writing the new snapshot. At
+base `cb21ab0b` the rotator's absorb ended with `git rm` and `rm -f` of the snapshot, so between
+the two acts the file was absent, and a turn can end there. Every control hook keys "a pipeline is
+active" on the file's existence: `ai-dlc-continue.sh:1278` (`[ ! -f "$SNAPSHOT_FILE" ]`, the stall
+check, allows the stop) and `ai-dlc-pause.sh:263` (the same predicate, no pause flag). Rule 29's
+deny (`ai-dlc-acknowledge.sh:137`) and compaction recovery (`ai-dlc-precompact.sh:44`,
+`ai-dlc-postcompact.sh:34`, `ai-dlc-recover.sh:52`) exit 0 on the same `[ -f ]` predicate for the
+same window. Writing a
+placeholder snapshot in its place does not close this. The hooks then read fake state, and the
+next session's Step 0 dispatches a resume onto it.
+
+**CLAIM 2: THE SILENT NO-OP ABSORB.** At base the absorb ran only on the rotation path. With no
+history file (the argument parser never ran, exit 0), or a history at or below its cut floor
+("nothing to rotate", exit 0), it left the stale snapshot in place and archived nothing. Step 6's
+next sentence then had the lead write over the stale snapshot, and its content was destroyed
+without being archived. On a fresh consumer with no history yet, that was the only path. The
+reference consumer's history was live on the second shape, at exactly `KEEP_ENTRIES` cut points.
+
+**THE FIX (0.645.0).** `--absorb` truncates the snapshot to 0 bytes and never removes it. It runs
+on every non-refusal path, including no history and at the cut floor. Ignored-archive refusal and
+archive staging apply to it on each of those paths. Re-absorbing an already-empty snapshot writes
+nothing. Every argument is parsed before any exit. `route.md` Step 6 now creates the snapshot when
+the file is absent or empty, runs the rotator when it is non-empty, stops and reports stderr on a
+non-zero exit, and otherwise Reads the emptied file and writes the initial state into it.
+`route.md` Step 0 item 1 already requires "exists and is non-empty", so an empty file is not a
+resume.
+
+The receipt runs the real rotator in scratch git repos. It checks three shapes: no history, a
+history at exactly 10 cut points, and 12 cut points as the control. For each it asserts that the
+snapshot is present, 0 bytes, has the SAME inode it had before, and that its stale marker is in
+the archive and the archive is tracked. It also checks that a second absorb appends nothing, that
+an unknown option and a missing absorb path are exit 2 on the no-history path, and that an ignored
+archive is exit 1 with the snapshot byte-identical. Scored raw against 13 rotators: base 1, tip 0,
+the `route.md`-only change (rotator at base) 1, design B (a placeholder snapshot written in place
+of the truncate) 1, and a rotator that truncates but still skips the absorb with no history 1, or
+at the floor 1. Also each of `rm -f` restored 1, absorb re-gated behind rotation 1, the
+history-absent exit moved above argument parsing 1, the ignored-archive refusal dropped from the
+absorb 1, the empty-snapshot guard dropped 1, archive staging dropped 1, and `rm -f` followed by
+re-creating an empty file 1. The inode clause alone kills that last one. A second spelling that
+checks presence and size without the inode, and has no refusal, idempotence or argument arms,
+scored 0 on three regressions: the refusal dropped, the idempotence guard dropped, and rm-then-recreate.
+
+verify: sh R="$(pwd)"; S="$R/core/scripts/rotate-snapshot-archive.sh"; [ -f "$S" ] || exit 9; command -v git >/dev/null || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY; T="$(mktemp -d)" || exit 9; g(){ git -c user.name=r -c user.email=r@r -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }; P=_bmad-output/pipeline-snapshot.md; A=_bmad-output/pipeline-history/pipeline-snapshot-archive.md; mk(){ W="$T/$1"; mkdir -p "$W/_bmad-output" && g init -q "$W" || exit 9; printf '# Pipeline Snapshot\n\nSTALE321-%s\n' "$1" > "$W/$P"; printf '# History\n' > "$W/_bmad-output/pipeline-snapshot-history.md"; [ "$2" -gt 0 ] || rm -f "$W/_bmad-output/pipeline-snapshot-history.md"; i=0; while [ "$i" -lt "$2" ]; do i=$((i+1)); printf '## entry %s\n\nbody %s\n' "$i" "$i" >> "$W/_bmad-output/pipeline-snapshot-history.md"; done; [ -z "$3" ] || printf '%s\n' "$3" > "$W/.gitignore"; g -C "$W" add -A && g -C "$W" commit -qm s || exit 9; ls -i "$W/$P" | awk '{print $1}' > "$T/$1.ino"; }; ab(){ W="$T/$1"; shift; ( cd "$W" && bash "$S" _bmad-output/pipeline-snapshot-history.md "$@" </dev/null >/dev/null 2>&1 ); }; ok(){ W="$T/$1"; [ -f "$W/$P" ] && [ ! -s "$W/$P" ] && grep -q "STALE321-$1" "$W/$A" && [ -n "$(g -C "$W" ls-files -- "$A")" ] && [ "$(ls -i "$W/$P" | awk '{print $1}')" = "$(cat "$T/$1.ino")" ]; }; for s in none:0 floor:10 above:12; do n="${s%%:*}"; mk "$n" "${s#*:}" ""; ab "$n" --absorb "$P" --apply || exit 1; ok "$n" || exit 1; done; b="$(wc -c < "$T/none/$A")"; ab none --absorb "$P" --apply || exit 1; [ "$(wc -c < "$T/none/$A")" = "$b" ] || exit 1; ab none --absorb "$P" --no-such-option; [ "$?" = 2 ] || exit 1; ab none --absorb _bmad-output/no-such-file.md --apply; [ "$?" = 2 ] || exit 1; mk ign 0 "_bmad-output/pipeline-history/"; cp "$T/ign/$P" "$T/ign.before" || exit 9; ab ign --absorb "$P" --apply; [ "$?" = 1 ] || exit 1; cmp -s "$T/ign.before" "$T/ign/$P" || exit 1; exit 0
