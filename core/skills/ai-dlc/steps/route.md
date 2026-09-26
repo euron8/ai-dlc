@@ -315,6 +315,7 @@ script names per artifact — they are not interchangeable:
            _bmad-output/pipeline-snapshot-history.md --apply
 
 Then re-run the script. It must exit 0 before the sprint proceeds.
+On a non-zero exit, follow the rotator's printed remedy (restore or remove the named temp copy) before re-running, and never delete a kept temp copy unread.
 
 ### Step 2: Analyze User Input
 

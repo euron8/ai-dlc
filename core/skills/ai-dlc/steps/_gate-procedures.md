@@ -72,7 +72,9 @@ When a step file says "run sub-step snapshot update", execute:
      sub-step.** Move superseded narrative verbatim to
      `pipeline-snapshot-history.md` (write-only), then run
      `bash scripts/ai-dlc/rotate-snapshot-archive.sh _bmad-output/pipeline-snapshot-history.md --apply`,
-     re-run the budget check, then continue. The rotate is here and not at
+     re-run the budget check, then continue. On a non-zero exit from the
+     rotator, follow its printed remedy (restore or remove the named temp
+     copy) before re-running, and never delete a kept temp copy unread. The rotate is here and not at
      retro because this is the site that FEEDS the history: it fires
      between gates, all sprint, which is exactly the cadence nothing was
      bounding.

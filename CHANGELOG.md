@@ -20,7 +20,9 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 A fresh start no longer removes the pipeline snapshot. The rotator's `--absorb` archives the
 stale snapshot and truncates it to 0 bytes, so every control hook keeps firing between the absorb
 and the lead's write of the new snapshot. The absorb now also runs when there is no history yet
-and when the history is at its cut floor, where it used to do nothing and exit 0.
+and when the history is at its cut floor, where it used to do nothing and exit 0. Every write the
+rotator makes is now checked, and no failure or interruption can leave a history line outside
+the tracked files while the rotator exits 0.
 
 ### `PC-S314-SNAPSHOT-SWAP-BLIND-WINDOW` — the fresh-start absorb empties the snapshot instead of removing it, and runs on every path (`BL-321`)
 
@@ -35,22 +37,58 @@ also hit a second defect in the same call. With no history file, or with a histo
 `--keep-entries` cut points, the absorb was skipped with exit 0, and the lead's next write
 destroyed the stale snapshot without archiving it.
 
-- `rotate-snapshot-archive.sh --absorb` appends the stale snapshot to the archive and then
-  truncates it to 0 bytes. It never removes it.
-- The absorb runs on every path that is not a refusal: no history, a history at or below its cut
-  floor, and a real rotation. The ignored-archive refusal and the archive staging apply on each
-  of those paths.
-- Absorbing an already-empty snapshot writes nothing, so a re-run after an interrupted swap
-  appends no empty block.
-- Every argument is parsed before any exit, so an unknown option or an `--absorb` naming no file
-  is exit 2 on the no-history path too.
+- **The swap window is closed.** `rotate-snapshot-archive.sh --absorb` appends the stale
+  snapshot to the archive and then truncates it to 0 bytes. It never removes it.
+- **The silent no-op absorb is gone.** The absorb runs on every path that is not a refusal: no
+  history, a history at or below its cut floor, and a real rotation. Absorbing an already-empty
+  snapshot writes nothing, so a re-run after an interrupted swap appends no empty block. Every
+  argument is parsed before any exit, so an unknown option or an `--absorb` naming no file is
+  exit 2 on the no-history path too.
+- **Every archive append is checked**, by exit status and by the archive's exact growth, and a
+  failed one refuses with exit 1 before the snapshot is truncated or the history shrinks. A
+  directory at the archive path, a read-only or full archive, and a short write are all refused.
+- **The history is rewritten through a verified temp copy.** The new history is written to
+  `.<history>.rotate.<pid>` beside it under `set -C` and checked by status and size, then written
+  back INTO the history with `cat temp > history` and checked again. The write-back is in place,
+  never a rename, so a symlinked history stays a link, a hard-linked peer stays joined, and the
+  mode and owner are kept. A failed write leaves the history byte-identical, or, if the
+  write-back itself failed, keeps the complete new history in the temp copy.
+- **Prechecks refuse before anything is written**: a history that is not writable, a history
+  whose directory is not writable, and any `.<history>.rotate.*` left by an earlier run,
+  whatever its pid. The last one runs before every exit path, report-only included, so a re-run
+  after an interrupted or killed write-back can no longer land on "nothing to rotate" and exit 0
+  with the lost lines only in an untracked temp file.
+- **The recovery instruction is printed.** A failed write-back prints
+  `cp "<temp>" "<history>" && rm -f "<temp>"`. A leftover temp copy found by a later run is named
+  with the same command when the history is a byte-prefix of it, and otherwise with an
+  instruction to compare it against git and the archive before removing it.
+- **The archive is staged on every path** that exits 0 with `--apply`, including "nothing to
+  rotate" and "no history", so the re-run after a restore puts the moved lines into Check 35's
+  corpus.
 - `route.md` Step 6 creates the snapshot when the file is absent or empty, and runs the rotator
   when it is non-empty. A non-zero exit stops the fresh start and reports the rotator's stderr.
   On exit 0 the lead Reads the emptied file and writes the initial state into it. Step 0 already
-  requires a non-empty snapshot for a resume, so an empty one is never resumed.
+  requires a non-empty snapshot for a resume, so an empty one is never resumed. The three trim
+  call sites (`route.md` Step 1a, `_gate-procedures.md`, `gate-validation.md` Check 14) now say to
+  follow the rotator's printed remedy before re-running on a non-zero exit.
 
 A placeholder snapshot left in place of the delete was rejected. The hooks would read fake
 state, and the next session's Step 0 would dispatch a resume onto it.
+
+Adversary rounds on the release branch, one line each:
+
+- Round 1 found that an unwritable archive made the absorb exit 0 and empty the snapshot with its
+  bytes in no file.
+- Round 2 found that the absorb was checked only by a marker line, and that report-only
+  `--absorb` was not proven to write nothing.
+- Round 3 found that a failed history rewrite truncated the history in place and the exit trap
+  then deleted the only complete copy.
+- Round 4 found that the rename write-back broke symlinked and hard-linked histories and reset
+  the mode, and that an unwritable history or a taken temp name was refused only after the
+  archive append.
+- Round 5 found that a re-run after an interrupted write-back exited 0 with 11 of 29 history lines
+  only in the stale temp file, that the printed restore left the archive unstaged, and that a
+  non-writable history directory appended the moved block again on every retry.
 
 | tree | receipt |
 |---|---|
@@ -67,6 +105,7 @@ state, and the next session's Step 0 would dispatch a resume onto it.
 | empty-snapshot guard dropped | 1 |
 | archive staging dropped | 1 |
 | `rm -f`, then an empty file re-created | 1 |
+| 2bafa39e (re-run after a half-way write-back exits 0) | 1 |
 
 ## [0.644.0] - 2026-09-25
 
