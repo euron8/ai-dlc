@@ -15,6 +15,125 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.644.0] - 2026-09-25
+
+A fix story folded into a sprint after its architecture step now reaches an architect, whose
+dispatch is joined against the spawn ledger by one gate command. Check 17 now loads at every
+implementation gate, where it runs the story's shape check and the fold gate but never the
+cross-check. `validate-spawn-ledger.sh` no longer hangs on a trailing flag that has no value.
+
+### `PC-S313-FOLDIN-NEVER-RETAKES-ARCHITECTURE-ASSESSMENT` — a folded fix story is dispositioned by an architect dispatched after its one-shot (`BL-319`)
+
+In S313 a bug was folded in through `bug-investigation.md` after the sprint's architecture step
+had run. The folded story was a `capital_path: true` edit to `rebalancer/`, and the only
+disposition its capability ever got was a lead-written No-AD that cited the sprint's pre-fold
+assessment. No architect saw the story before merge. The filing named a consumer-owned file,
+`architecture-assessment.md`, which core does not own. It proposed a re-take or a recorded
+waiver, and the contract adversary refuted the waiver: the S313 No-AD already was one, so that
+remedy would acquit the sprint that motivated it.
+
+- `bug-investigation.md` §4 dispatches ONE `architect` after the one-shot and its remediation,
+  whenever the sprint's variant runs an architecture step. The architect runs
+  `/bmad-review-adversarial-general` on the fix story, scoped to architecture fidelity, and
+  dispositions the capability from what that review found. It stamps
+  `s<N>/fold-architecture-<slug>.md` with a provenance block whose fields §4 lists in full, so
+  the block's `skill:` line is true. `core/team-roles/architect.md` carries the instruction to
+  run the skill and emit the block.
+- Check 17's fold architecture gate is ONE command,
+  `validate-spawn-ledger.sh --fold-architect <residue> <one-shot>`. The script runs the residue's
+  shape check itself, through its sibling `validate-provenance-block.sh`, and only when the fold is
+  owed and the ledger join has passed.
+- A bug-variant sprint is now `NOT-OWED` at every gate. The previous round ran the residue's shape
+  check as a separate first command, which failed every plain bug-variant fix story for want of a
+  residue the bug variant never writes.
+- `--fold-architect` joins the residue's `tool_use_id` to an `architect` row in the one-shot's
+  sprint, cited by no other fold residue, and requires the residue's `artifact:` to name the
+  one-shot's story by full path. The ordering anchor is the `adversary` ledger row that the
+  one-shot's `tool_use_id` joins, and `invoked_at` decides nothing. The one-shot's `tool_use_id`
+  is a lead-written line, so the anchor moves whenever that line is re-pointed.
+- The story's stamp must carry the one-shot's `tool_use_id`, so an edit to the one-shot alone,
+  without touching the story, exits 1, and an unstamped story exits 1. A one-shot id that the
+  ledger records under another role exits 1 with a message naming that role.
+- The variant is read from `pipeline_variant` in the pipeline snapshot, which now skips fenced
+  code blocks and HTML comments, and it is cross-checked against the top-level `variant:` of
+  `sprint-status.yaml`, so a disagreement between the two exits 2. A snapshot that carries no
+  parseable `pipeline_variant:` line now falls back to that `variant:` instead of exiting 2, and
+  with neither the fold is owed. An unknown variant exits 2. `NOT-OWED` and `SKIP-PRE-ADOPTION`
+  exit 0 and never print `PASS`.
+- Both fold bullets also run the fold command on a legacy `s<N>/bug-fix-oneshot.md` when one is
+  present, so a legacy one-shot in a variant that runs an architecture step exits 1 through the
+  gate, and in the `bug` variant it is `NOT-OWED`.
+- A direct fold runs both halves of Check 17's bug-fix arm and the fold gate at the end of §4,
+  before any dev dispatch. That paragraph cites the two Check 17 bullets by name and types no
+  command of its own. `validate-provenance-block.sh` now tells a fold residue that cites the
+  native skill that the residue is wrong, instead of telling the reader to repoint the pin.
+
+S313 is caught through the documented command. The fold command extracted from `gate-validation.md`,
+run on a scratch copy of the consumer's ledger, snapshot, `sprint-status.yaml` and legacy S313
+one-shot, exits 1 with "legacy one-shot name in an architecture variant". With the snapshot set to
+`bug` it exits 2 on the variant disagreement, and with `sprint-status.yaml` also removed it prints
+`NOT-OWED` as the control.
+
+Six residuals remain open. The lead can still write the disposition text itself. An unrelated
+architect dispatch later in the same sprint satisfies the join. The negated-prose form of the
+bullet, "Do NOT run", cannot be caught mechanically, and it closes on the structural trace. The
+one-shot's `tool_use_id` can be re-pointed at any time, and a re-stamp, or a hand-written block
+carrying the new id, restores agreement. The variant is
+lead-written in both records, so the cross-check raises the cost of a false variant without
+removing it. A ledger row appended through Bash with no `tool_use_id` turns a fully adopted sprint
+into `SKIP-PRE-ADOPTION`.
+
+| tree | receipt |
+|---|---|
+| this release | 0 |
+| 7b32fb1a | 1 |
+| 3bc7ab11, the round this release repaired | 1 |
+| adversary-role clause dropped | 1 |
+| residue shape checked before the owed decision | 1 |
+| story-stamp equality skipped | 1 |
+| sprint-status cross-check dropped | 1 |
+| fold command's flags reordered | 0 |
+
+### `BL-320` — Check 17 loads at every implementation gate and runs no cross-check there
+
+Check 17's bug-fix arm named the bug-investigation gate, which the `bug` variant declares as
+`[implementation]`, and `route.md` sent a directly folded story to "the next gate", which is also
+an implementation gate. The implementation row did not list 17, so neither gate ever loaded the
+check. At `7b32fb1a`, `gate-slice.sh --type implementation` planned check 17 zero times, against
+a control of check 22 planned once.
+
+17 now joins the implementation row, the check's `gate_types`, and the slice that
+`implementation.md` lists. I7 in `validate-enforcement-map.sh` now tests only the ids that the
+implementation row names outside the universal and planning rows.
+
+Loading 17 there made a new failure reachable. The cross-check hashes the story body, and the dev
+writes Scope Verification, the Dev Agent Record and `Status:` into the story before gate1, so the
+cross-check would fail every correctly executed folded story at an implementation gate. Check 17
+therefore gains an "Implementation gate, declared folded bug-fix stories (implementation)" bullet.
+It runs `validate-provenance-block.sh <story-file> --require-skill bmad-review-adversarial-general`
+and the fold architecture gate, and never the cross-check. Naming that command in the bullet made
+it an I32 arm, so `implementation.md` now names `bmad-review-adversarial-general` too. Check 17's
+Scope paragraph now names the implementation gate for declared folded stories, so its skip clause
+is no longer an opt-out there.
+
+| tree | receipt |
+|---|---|
+| this release | 0 |
+| 7b32fb1a | 1 |
+| the implementation bullet also runs the cross-check | 1 |
+| 17 dropped from the implementation row | 1 |
+| 17 appended at the end of the row | 0 |
+
+### `validate-spawn-ledger.sh` refuses a trailing flag with no value
+
+Before this release `--ledger`, `--sprint`, `--settings` and `--probe`, given as the last argument
+with no value, spun forever. A `shift 2` with one argument left fails without shifting, so the
+argument loop never advanced. This was already true before `--fold-architect` existed, and the new
+mode widened its reach. Every value-taking flag now checks that its value is present. Measured
+with a 5-second alarm on each flag given alone: at `7b32fb1a` those four hung, and in this release
+all eight value-taking flags, `--ledger`, `--sprint`, `--settings`, `--probe`, `--variant`, `--route`,
+`--snapshot` and `--sprint-status`, exit 2.
+
 ## [0.643.0] - 2026-09-25
 
 The `artifact-derivations` WORKLIST row now names a clear a pull can reach. This release ships

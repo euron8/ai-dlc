@@ -849,12 +849,24 @@ if require_skill:
     # v0.58.0: the Rule 8 convergence cycle is ai-dlc-native. A pin on the retired bmad skill
     # can never be satisfied by a compliant pass, so it fails as a RETIRED PIN, not as a
     # missing block — the remedy is to repoint the pin, not to forge the provenance.
+    # A FOLD ARCHITECTURE RESIDUE is the one artifact where that pin is current, not retired:
+    # the architect bug-investigation.md section 4 dispatches RUNS the one-shot skill on the fix
+    # story. There the native citation is the defect, and "repoint the pin" would misdirect the
+    # remedy onto Check 17's correct invocation. Keyed on the path, one case.
     if require_skill == "bmad-review-adversarial-general" and "ai-dlc-adversary-review" in cited:
-        failures.append(
-            f"--require-skill bmad-review-adversarial-general is a RETIRED PIN. This artifact "
-            f"correctly cites ai-dlc-adversary-review (the native convergence review). Repoint "
-            f"the pin — an override or a step file still names the retired skill."
-        )
+        if os.path.basename(artifact_path).startswith("fold-architecture-"):
+            failures.append(
+                f"--require-skill bmad-review-adversarial-general is CORRECT for a fold "
+                f"architecture residue, and the RESIDUE is wrong: it cites ai-dlc-adversary-review. "
+                f"The fold architect runs the one-shot skill (bmad-review-adversarial-general) on "
+                f"the fix story, so its block must cite that skill. Do not repoint the pin."
+            )
+        else:
+            failures.append(
+                f"--require-skill bmad-review-adversarial-general is a RETIRED PIN. This artifact "
+                f"correctly cites ai-dlc-adversary-review (the native convergence review). Repoint "
+                f"the pin — an override or a step file still names the retired skill."
+            )
 
 if is_retro and not party_mode_blocks:
     failures.append(

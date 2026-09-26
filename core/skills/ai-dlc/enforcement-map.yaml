@@ -352,7 +352,7 @@ checks:
 
   - id: "17"
     title: Skill-invocation provenance
-    gate_types: [planning, story, retro]
+    gate_types: [planning, story, implementation, retro]
     adjudication: script
     enforcer:
       - core/scripts/validate-provenance-block.sh
@@ -1106,6 +1106,23 @@ non_catalog_units:
           producer mention — the same false-positive shape as verdict.sh and
           wait-for-deliverable.sh — while its own two arms state "exit 0 required".
     fixtures: [tests/fixtures/story-provenance]
+
+  - id: fold-architect-ledger-join
+    title: Fold architecture gate (Check 17) — a folded bug-fix story was dispositioned
+      by an architect dispatched after its one-shot, proved from the spawn ledger
+    adjudication: script
+    enforcer:
+      - core/scripts/validate-spawn-ledger.sh
+    call_sites:
+      - site: gate-validation.md Check 17 (fold architecture gate)
+        posture: FAILS the gate — `--fold-architect` exit 0 is required; NOT-OWED and
+          SKIP-PRE-ADOPTION exit 0 with their own line and are not a PASS
+        why: the residue is text the lead could write, so only a record the lead does
+          not write can prove an architect ran — the dispatch guard writes the ledger.
+          Bound here rather than on Check 17's row because that row's other call site
+          is retro.md, which never invokes this script; a multi-site row asserts every
+          enforcer at every site.
+    fixtures: [tests/fixtures/fold-architect-ledger-join]
 
   - id: h2-attestation
     title: H2 harness self-test (gate-validation.md H2) — drives the real fixtures

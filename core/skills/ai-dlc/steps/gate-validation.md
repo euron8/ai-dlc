@@ -62,7 +62,7 @@ planning gate that edits `scripts/*.sh`.
 | universal      | 1, 2, 2a, 3, 4, 7, 12, 13, 14, 15, 16, 25, 26, H1, H2, failure  |
 | planning       | 1c, 17, 20, 23, 24, 27, 28, 29, 32, 33, 34, 35                      |
 | story          | 3a, 3b, 5, 17, 24, 30, 31                                       |
-| implementation | 5, 6, 8, 9, 10, 11, 11a, 19, 22                                 |
+| implementation | 5, 6, 8, 9, 10, 11, 11a, 17, 19, 22                             |
 | sprint-review  | 18, 20, 21                                                      |
 | retro          | 8, 9, 17, core-layer-immutability                               |
 <!-- GATE_MANIFEST_END -->
@@ -1217,7 +1217,12 @@ does not account for.
 gate where a validation evaluation (bmad-party-mode,
 bmad-advanced-elicitation, bmad-review-adversarial-general,
 bmad-validate-prd, ai-dlc-adversary-review) was required by the current
-phase. Skip on gates that do not produce a provenance-bearing artifact.
+phase. Also runs at EVERY implementation gate for each declared folded
+bug-fix story (the implementation gate arm below): that obligation is keyed
+on the declaration on disk, not on what the gate produces, so an
+implementation gate owes it whether or not the gate itself produced a
+provenance-bearing artifact. A gate matching none of these three runs no arm
+of this check.
 
 **Block schema (`SKILL_INVOCATION_PROVENANCE v1`).** Owned by
 `.claude/schemas/provenance-block.json`. It is rendered into the role files of the agents
@@ -1293,7 +1298,9 @@ to a caller that has decided this artifact class carries none.
   cross-check below. A story cannot opt itself out, because the declaration
   lives in the one-shot's residue, not in the story. **Only the per-bug name
   declares.** A legacy `s<N>/bug-fix-oneshot.md` NEVER declares a folded story
-  at this gate: the story it names stays on this arm.
+  at this gate: the story it names stays on this arm. The fold architecture
+  gate below is the one place a legacy one-shot is read, and it reads it only
+  to refuse the name in a variant that runs an architecture step.
   The stories cycle is a CONVERGENCE cycle, so it stamps the native
   identifier. A consumer whose override pins the superseded
   `bmad-review-adversarial-general` name — dev/qa/code-reviewer pre-submission
@@ -1321,8 +1328,15 @@ to a caller that has decided this artifact class carries none.
   _bmad-output/planning-artifacts/s<N>/bug-fix-oneshot-<slug>.md --profile
   bug-story-provenance --check <story-file>`, where `<story-file>` is the story
   that one-shot's `artifact:` names; exit 0 required for both. This arm runs
-  at the bug-investigation gate AND, for each folded bug-fix story, at the
-  stories-test-strategy gate. At the bug-investigation gate ONLY, a sprint
+  at the bug-investigation gate (the gate `bug-investigation.md` §6 runs,
+  before any dev dispatch) AND, for each folded bug-fix story, at the
+  stories-test-strategy gate. A story folded after that step (`route.md`
+  Step 4's direct fold) runs it inside `bug-investigation.md` §4, straight
+  after the stamp and the fold architecture dispatch and before any dev
+  dispatch, because that is the last point at which the story body is the one
+  the stamp hashed. It does NOT run at an implementation gate that
+  `implementation.md` runs: the implementation gate arm below replaces it
+  there. At the bug-investigation gate ONLY, a sprint
   whose one-shot predates the per-bug name reads `s<N>/bug-fix-oneshot.md`
   here.
   The bug variant's §4 review is a ONE-SHOT, so the block carries NO `verdict`
@@ -1332,6 +1346,57 @@ to a caller that has decided this artifact class carries none.
   `EXIT_CONDITION_MET`, so it refuses every bug story by construction. Check 24
   self-skips this gate for the same reason (a one-shot stamps no verdict); the
   provenance obligation does not go away with it.
+
+- **Implementation gate, declared folded bug-fix stories (implementation):** at
+  every implementation gate `implementation.md` runs (gate1, gate2, gate3), for
+  each declared folded bug-fix story, run exactly two things: the shape
+  validator on the story,
+  `scripts/ai-dlc/validate-provenance-block.sh <story-file> --require-skill bmad-review-adversarial-general`,
+  and the fold architecture gate below. Both exit 0. Never run the
+  bug-fix arm's CROSS-CHECK here. `implementation.md` has the dev write Scope
+  Verification, the Dev Agent Record and `Status:` into that story before gate1,
+  so the story's bytes have moved by design since the stamp, the cross-check's
+  `artifact_sha` no longer matches them, and it fails every correctly executed
+  story. The cross-check already ran, before any dev dispatch, where the story
+  was folded. The fold architecture gate is its ONE
+  `validate-spawn-ledger.sh --fold-architect` command, which runs the
+  residue's shape check itself; run no separate command on the residue. Once
+  per gate, and whether or not any story is declared folded, when a legacy
+  `s<N>/bug-fix-oneshot.md` is present in the slot, also run that same fold
+  command on it as the fold architecture gate below spells it (residue
+  `s<N>/fold-architecture.md`), exit 0 required, so a legacy name in an
+  architecture variant is refused here too rather than silently declaring
+  nothing.
+
+- **Fold architecture gate (bug-investigation):** for each folded bug-fix story,
+  wherever the bug-fix arm above runs for it and at every implementation gate
+  after, the architect that `bug-investigation.md` §4 dispatches writes
+  `_bmad-output/planning-artifacts/s<N>/fold-architecture-<slug>.md`, the same
+  `<slug>` as the story's `s<N>/bug-fix-oneshot-<slug>.md`. Call that file
+  `<residue>` and the one-shot `<one-shot>`. Run this ONE command,
+  `scripts/ai-dlc/validate-spawn-ledger.sh --fold-architect <residue> <one-shot> --ledger _bmad-output/spawn-ledger.jsonl --route .claude/skills/ai-dlc/steps/route.md`;
+  exit 0 required. Run nothing else on the residue: the script runs the residue's provenance
+  shape check itself, its sibling `validate-provenance-block.sh` with
+  `--require-skill bmad-review-adversarial-general`, and ONLY when the fold is
+  owed and its join has passed, so a variant that owes no fold never reads a
+  residue it never writes. Do not pass `--variant`: the script reads
+  `pipeline_variant` from `_bmad-output/pipeline-snapshot.md` itself, and with
+  neither it holds the fold OWED. It joins the residue's `tool_use_id`
+  to an `architect` dispatch in this sprint, made at or after the one-shot, and
+  cited by no other fold residue, and requires the residue's `artifact:` to name
+  the story the one-shot names. It prints `NOT-OWED` for a variant with no
+  architecture step, and `SKIP-PRE-ADOPTION` for a sprint whose ledger predates
+  `tool_use_id`; neither is a PASS. An unknown variant is refused.
+  **When a legacy `s<N>/bug-fix-oneshot.md` is present in the slot, run the
+  same command on it as well**, once per gate, at the bug-investigation gate
+  and at every implementation gate, whether or not any story is folded, with
+  `<one-shot>` that file and `<residue>`
+  `_bmad-output/planning-artifacts/s<N>/fold-architecture.md`. The legacy name
+  still declares no folded story to any other arm of this check; this is the
+  one place it is read. It is read here so that renaming a one-shot to the
+  legacy name is REFUSED in a variant that runs an architecture step rather
+  than silently leaving its fold undeclared, and the script decides that
+  against the variant: FAIL in an architecture variant, `NOT-OWED` in `bug`.
 
 **PASS:** all required provenance scripts exit 0. **FAIL:** any
 script reports a missing block, malformed field, unknown skill,

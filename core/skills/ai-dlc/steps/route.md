@@ -413,8 +413,12 @@ operator-applicable relief reaches the operator first — then return to this
 step and fold the fix story (sections 3–4) into the current sprint: through
 `stories-test-strategy.md` §3a if the sprint has not yet passed that step;
 otherwise run `bug-investigation.md` sections 3–4 directly into the sprint's
-`stories/` directory, skipping sections 5–6, and the story takes Check 17's
-bug-fix arm at the next gate. The other options are yours to frame within
+`stories/` directory, skipping sections 5–6. Section 4's fold architecture
+dispatch applies to it, and Check 17's fold architecture gate owns the residue
+it writes. Both halves of Check 17's bug-fix arm and its fold architecture gate
+run at the end of section 4, right after the stamp and the architect dispatch
+and before any dev dispatch; every later implementation gate runs Check 17's
+implementation gate arm for the story. The other options are yours to frame within
 Rule 3's 2-4 per question.
 
 Do NOT ask if the variant is clear from the project state + input.

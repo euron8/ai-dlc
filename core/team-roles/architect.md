@@ -74,6 +74,27 @@ number you could have run in one command. Measured across four sprints of this p
 of the MAJOR findings raised after the first adversarial pass are counts, enumerations and
 `file:line` citations asserted at authoring time without being executed.
 
+## A fold architecture dispatch — run the skill, then write its provenance block
+
+When `bug-investigation.md` §4 dispatches you over a folded bug-fix story, it names
+the evaluation, the story, and the residue path. You MUST:
+
+1. **Run `/bmad-review-adversarial-general` yourself, via the Skill tool**, on the fix
+   story, scoped to architecture fidelity. Running it IS the mandate; your own reading
+   does not substitute for it.
+2. **Disposition the capability from what it found**: an AD extension, or a `No-AD`
+   line with its reason.
+3. **Emit one `SKILL_INVOCATION_PROVENANCE v1` block with `mode: subagent`** into the
+   residue, using the HTML-comment envelope. A block in a ``` fence is unparseable, and
+   the gate scores it as no block at all. `skill:` names the evaluation that ACTUALLY
+   RAN; naming a skill you did not invoke forges the block. `tool_use_id` is the Agent
+   dispatch that spawned you, because the gate joins it to that dispatch's spawn-ledger
+   row. Never write `mode: solo`, and never stamp a `verdict`: this is a one-shot.
+
+The block's fields and their grammar are owned by `.claude/schemas/provenance-block.json`
+and checked by `scripts/ai-dlc/validate-provenance-block.sh`. `bug-investigation.md` §4
+lists the values this residue carries.
+
 ## Constraints
 
 - You do NOT write application code. That is the Dev teammate's domain.

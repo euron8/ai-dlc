@@ -1,0 +1,10 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+It is shard 'b' of fold-architect-ledger-join-mutants, and it inherits that fixture's reason
+without restating it: it is the MUTATION BATTERY behind the shipped fold-architect-ledger-join
+fixture, editing copies of core's own sources in temp trees, so every verdict is a question
+about whether THIS repository's gate still discriminates.
+
+A shard is a scheduling boundary, never a subject boundary, so it can carry no ship decision
+its sibling does not. On a consumer it would be a unit the consumer cannot act on, sitting in
+that consumer's suite schedule.
