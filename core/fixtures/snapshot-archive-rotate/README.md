@@ -95,9 +95,16 @@ template (`seed.sh` builds `nohist`, `floor`, `above`, `nosnap`, `ignored` and `
 | tmprace | the shim creates a file at the temp name while the archive append of the moved block runs, after the precheck passed: rc 1, `set -C` refuses step 1, history and snapshot byte-identical, the foreign file untouched and the refusal saying it is NOT a verified new history |
 | rohist | a 444 history: rc 1 with NO archive created, history and snapshot byte-identical. Under root a 444 file is writable, so the arm prints `skip` and m14 is reported NOT SCORED rather than passing |
 | links | a symlinked history stays a symlink and its target is rotated; a hard-linked history's peer is rotated identically and the inode is unchanged; a 640 history keeps mode 640 |
+| rerunhalf | a `cat` shim on the write-back writes half the temp copy into the history and exits 1; then the same command is re-run with no restore. The re-run is rc 1 and names the temp copy; the history, the snapshot and the archive are unchanged by it; every pre-run history line is in the history, the archive or the temp. The temp name carries the pid, so before REFUSAL 4 the re-run never saw the earlier run's temp, landed on "nothing to rotate" and exited 0 with lines only in that untracked file |
+| rerunkill | the same shim writes half and SIGKILLs its parent, the rotator, so nothing is printed and no trap runs; then the same re-run and the same assertions |
+| restore | the write-back fails half-way on a caller WITHOUT `--absorb`; the printed restore command is run exactly as printed; the same caller re-runs: rc 0, the archive in `git ls-files`, 0 pre-run history lines missing from the tracked corpus. The control: after the restore and before the re-run, lines ARE missing (the archive is untracked) |
+| rodir | a writable history in a 555 directory: rc 1 before any write, on a first and a second run, the archive never created, history and snapshot byte-identical. Under root a 555 directory is writable, so the arm prints `skip` and m19 is NOT SCORED |
 
 Every shim arm asserts the shim's sentinel counted exactly one action, so an arm whose shim never
 fired on its intended call cannot pass.
+
+| Arm | Asserts |
+|---|---|
 | args | on the no-history path, an unknown option and an `--absorb` naming no file are both rc 2 |
 | idem | absorbing the already-empty snapshot again leaves the archive byte-identical |
 | ro | report-only `--absorb` (no `--apply`) on each of `nohist`, `floor` and `above`: rc 0, the rotator says what it would append, `git status --porcelain` is empty, the snapshot is byte-identical, and no archive exists |
@@ -133,12 +140,22 @@ them all; each mutant then runs only the arm that owns it:
 | mF | step 2's `\|\| writeback_fail` deleted (write-status check) | wblate |
 | mG | step 2's size check deleted | wbshort |
 | m14 | the `[ ! -w "$HISTORY" ]` precheck becomes `false` | rohist |
-| m15 | the temp-name `[ -e ]` precheck becomes `false` (`set -C` still refuses, but after the archive append) | tmpexist |
+| m15 | the `refuse_if_stale_temp` call becomes `:` (`set -C` still refuses, but after the archive append) | tmpexist |
+| m16 | the stale-temp precheck's glob narrowed to this run's own pid-keyed name, the round-4 shape | rerunhalf, rerunkill |
+| m17 | the printed restore omits `&& rm -f` of the temp copy, so the re-run it recommends refuses | restore |
+| m18 | the staging call on the nothing-to-rotate (cut-floor) path deleted | restore |
+| m19 | the `[ ! -w "$HIST_DIR" ]` precheck becomes `false` | rodir |
 
-`set -C` and the `[ -e ]` precheck refuse the same file at different moments, so each has a subject
-the other cannot see: a file present BEFORE the run is caught by the precheck with the archive
-unwritten (m15 leaves rc 1 but writes the archive, and `tmpexist` asserts it absent), and a file
-that appears AFTER the precheck is caught only by `set -C` (mB overwrites it and exits 0).
+m15 was re-anchored: the own-name `[ -e "$HIST_NEW" ]` precheck it used to delete was folded into
+REFUSAL 4, which refuses any `.<history>.rotate.*` before every exit path. `mut_line` passes its
+two lines through `ENVIRON` rather than `awk -v`, because `-v` strips one level of backslashes and
+m17's anchor carries `\"`.
+
+`set -C` and the stale-temp precheck refuse the same file at different moments, so each has a
+subject the other cannot see: a file present BEFORE the run is caught by the precheck with the
+archive unwritten (m15 leaves rc 1 but writes the archive, and `tmpexist` asserts it absent), and a
+file that appears AFTER the precheck is caught only by `set -C` (mB overwrites it and exits 0).
+m16 keeps `tmpexist` green (its file is at this run's name) and is killed only by the re-run arms.
 
 m10 and m11 are not killed by `ulim`, and that is measured rather than overlooked. Over 88
 `ulimit -f` appends (three body sizes, three limits, up to ten pre-fill offsets) every one of the
