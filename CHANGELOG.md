@@ -109,6 +109,11 @@ Adversary rounds on the release branch, one line each:
   history, and that a read-only snapshot exited 0 claiming it had been truncated.
 - Round 7 replaced the in-place write-back with an atomic rename, because rounds 4, 5 and 6 each
   found the new way to lose lines in that write-back's own recovery machinery.
+- Round 8 found that the kill in the fixture and the receipt was keyed on a command shape (any `mv`,
+  or a one-argument `cat` of the temp), so a rotator that renamed and then wrote the history back
+  through itself passed both and lost 21 of 37 lines on a kill. Both now SIGKILL the rotator at
+  every one of its external calls in turn, counted by a shim on each command, with a plain re-run
+  after each.
 
 | tree | receipt |
 |---|---|
@@ -130,7 +135,7 @@ Adversary rounds on the release branch, one line each:
 | 5697bc84 (the in-place write-back; the rename clauses) | 1 |
 | the rename with the symlink or the hard-link refusal dropped | 1 |
 | `cp` in place of `cp -p` | 1 |
-| the rename made a copy-back through the history, killed mid-write | 1 |
+| the rename replaced by a write through the history (`cat temp > history`, `cp temp history`, a rename followed by `cat copy > history`, or a rename to a side file followed by `cat side > history`), killed at any external call | 1 |
 | a rotator that never rewrites the history | 1 |
 
 ## [0.644.0] - 2026-09-25
