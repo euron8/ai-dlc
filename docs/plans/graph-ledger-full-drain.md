@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 644..676. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 379..643. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -66,6 +66,52 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 `--ceiling 130000`, it moved records 142 and 140 and left 148-143 live, with byte conservation
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
+
+**BATCH 159 SHIPPED `v0.645.0` (`e847c9dd`, #869) AND CLOSED `BL-321`, WHICH DISCHARGES
+`PC-S314-SNAPSHOT-SWAP-BLIND-WINDOW`.** It was invoked by peer handoff. The opening sweep matched
+batch 158 on every figure and control: live 27 on one qualifying ref, worklist 5, histogram 9/46/1,
+ledger md5 `94c3a4e2…`. The subject was the one filing ahead of the consumer's `main`. Live
+**75 -> 79** (`BL-321` filed and closed, four NOTEs filed), archive **244 -> 245**. The exit-0
+receipt set is batch 158's nine plus `BL-321`, compared by id.
+
+**THE FRESH-START SWAP NO LONGER BLINDS THE CONTROL HOOKS.** `--absorb` deleted
+`pipeline-snapshot.md`, and every control hook keys on that file existing. It now archives the
+snapshot in full and truncates it to 0 bytes, on every non-refusal path. The same call was a silent
+no-op on the no-history and at-the-floor paths, measured live on the consumer's own history. The
+history is rebuilt beside itself and renamed into place. `route.md` Step 6 stops on a non-zero exit.
+
+**TWELVE ADVERSARY ROUNDS, AND THE LAST FIVE FOUND NOTHING IN THE SHIPPED CODE.** Rounds 1-6 each
+found a line-loss path in the previous round's recovery code. Round 7 replaced the in-place
+write-back with a rename and that class went away. Rounds 8-12 found only fixture, receipt and
+prose gaps; five independent kill sweeps of the rotator lost no line. **The operator ruled at round
+12 that only a lost line in shipped code reopens a release; guard and prose findings file as NOTEs.**
+Round 12's four were filed as `BL-322`..`BL-325`. **Cap a subject's adversary loop the same way:
+once the shipped code is clean, stop rebuilding its guards inside the release.**
+
+The gate ran at `AI_DLC_FIXTURE_NO_SKIP=1` on the tree the squash carries: 22 phases PASS, 209 ok and
+0 FAIL, `snapshot-archive-rotate` `ok` by name against an impossible-name control of 0. That
+fixture's loaded cost rose from 12s to 118-126s, 20th of 209, against the `ledger-reverify` pole at
+346-373s. **A read-set trace is owed**: `sudo bash core/scripts/derive-fixture-readsets.sh --list
+"snapshot-archive-rotate"` on a checkout of `origin/main`; the fixture now reads `core/hooks/*.sh`.
+
+**THE SYSTEM TEMP DIRECTORY HOLDS ABOUT 518 LEAKED RECEIPT TREES, 5.9 GB**, from this batch's
+receipt runs before its cleanup landed, under `/var/folders/qr/v63hkc2n6s16yk44l131v9700000gn/T`.
+Each carries a `kb/_bmad-output` directory. The operator has not yet ruled on deleting them.
+
+**NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
+- The PC-backed worklist is the same five self-disqualifying rows. With no new filing, take the
+  oldest unexamined core candidate from the unfiled set.
+- `BL-230` needs the full 156-run pool. Run it as a lead-owned background job with a sentinel, never
+  inside a hand, and never while a gate runs.
+- `BL-311` waits on the operator.
+
+**THE DELIVERY GAP IS TWO RELEASES.** The consumer is at 0.643.0 against `VERSION` 0.645.0. In
+`7b32fb1a..origin/main` the four bootstrapping files have 0 commits. Two PC ids are PENDING:
+`PC-S313-FOLDIN-…` and `PC-S314-SNAPSHOT-SWAP-BLIND-WINDOW`. The banked ruling stands: report the gap
+and write no runbook. The consumer's porcelain moved 8 -> 41 from its own sprint; its ledger md5
+did not move.
+
+Batch 158's next-work list and delivery gap are spent: batch 159's block above replaces both.
 
 **BATCH 158 SHIPPED `v0.644.0` (`2a69bb31`, #867) AND CLOSED `BL-319` AND `BL-320`, WHICH
 DISCHARGE `PC-S313-FOLDIN-NEVER-RETAKES-ARCHITECTURE-ASSESSMENT`.** It was invoked by peer handoff.
@@ -375,271 +421,6 @@ This release adds only docs, so the bootstrapping files in range are unchanged f
 Two PC ids are now PENDING: `PC-S313-EMIT-REPORT-E2-IS-A-FOURTH-POOL-FLAKE-ARM` and `PC-S340-…`.
 The banked ruling stands: report the gap and write no runbook. The consumer's porcelain stayed 0,
 and the ledger md5 `3e62c07e…` did not move.
-
-**BATCH 153 SHIPPED THREE RELEASES AND CLOSED `BL-306` AND `BL-307`.** It was invoked by peer
-handoff. No consumer filing post-dated 2026-09-23: the one id ahead of the consumer's `main`,
-`PC-S313-EMIT-REPORT-E2-IS-A-FOURTH-POOL-FLAKE-ARM`, sits on five unpushed sprint branches and is
-already owned by `BL-230`. So the batch took `BL-230`, the only buildable worklist row.
-- `v0.637.0` (`b17bda12`, #853) ships `BL-230`'s next step, and the entry stays live. It is the
-  only commit naming that PC id; `VERSION` at that commit reads 0.637.0, and an impossible-id
-  control reads 0.
-- `v0.638.0` (`cf0dac88`, #854) closes `BL-306`.
-- `v0.639.0` (`1f838777`, #855) closes `BL-307`.
-
-Each release shipped alone, because the first two touch bootstrapping files. Every gate ran at
-`AI_DLC_FIXTURE_NO_SKIP=1`: 22 of 22 phases PASS and 203 ok, with each changed fixture read `ok`
-by name against an impossible-name control of 0, and `ls-remote` confirmed each ref. Live
-**72 -> 74** (four filed, two closed), archive **234 -> 236**. The exit-0 receipt set after the
-close is batch 151's 9, compared by identity. `BL-306`'s new receipt left it when the entry rotated.
-
-**`BL-230`'S LEAD WAS REAL, AND WIDER THAN AN EMPTY RESULT.** Forced with a git PATH shim and
-`ulimit -Su`, `preclassify.sh` exited **0** in almost every case, with EMPTY or WRONG buckets: a
-BOTH-ADDED file came out `UPSTREAM-ONLY-ADD`, which apply overwrites. `lib.sh`'s memo also
-cached the failed status for the rest of the render. `v0.637.0` makes preclassify exit 2 and stops
-the memo caching failures. `emit-report.sh` refuses five sections, `--verify` refuses with cause
-`PRECLASSIFY-REFUSED`, and `apply.sh` stops before writing. **This does not confirm the pool
-cause**: one fixture run peaks at about 63 processes against a cap of 10666. The render arms now
-print `DIAG`, so the next pool red names its cause, and the close condition is unchanged.
-
-**THE CONTRACT ADVERSARIES CHANGED ALL THREE DESIGNS BEFORE A BUILDER STARTED, AND THE TIP
-ADVERSARY FOUND A REGRESSION THE FIX ITSELF INTRODUCED.**
-- `BL-230`: an rc-only read would have missed the dominant shape.
-- `BL-306`: both named fixes (a length bound, a hash) were wrong. The defect was any memo file
-  that cannot be CREATED, including on a full disk, and a length-bound fix passed the filed receipt.
-- `BL-307`: "zero parsed entries" would have relabelled 41 real consumer states as empty,
-  including one holding live decisions. A check hoisted above the mode split read an empty file as
-  an operator citation.
-- At the tip: the new empty-result refusal wedged a legitimate pull in which a pre-relocation
-  consumer receives a range that only deletes `core/scripts/*` files. It is fixed at the source:
-  preclassify now emits `PRE-RELOCATION-NOOP`. A first push was blocked by shell-portability `S8`,
-  on an unbraced `<rev>:<path>` in a new comment, which no hand had run.
-
-**FOUR ENTRIES FILED.**
-- `BL-308` (NOTE): preclassify's `--templates` and `--untangle` modes were not force-tested.
-- `BL-309` (NOTE): ENOSPC partway through a memo fill.
-- `BL-310` (NOTE): after a transient `cat-file` or `show` failure on a present path, the memo still
-  hands one caller a wrong "absent".
-- `BL-311` (NOTE, **needs an operator decision**): the enforcement map calls `EXAMINED NOTHING` at
-  Checks 2 and 2a "not a pass", while the validators call an absent escalations file clean.
-
-**EIGHT READ-SET RE-TRACES ARE OWED, AND ONLY THE OPERATOR CAN RUN THEM.** Batch 152's two were
-never run: `.ai-dlc-fixture-readsets.tsv` last changed at `v0.634.0`. Run `sudo bash
-core/scripts/derive-fixture-readsets.sh --list "ledger-reverify layer-readopt-gate
-reconcile-emit-report preclassify-rename-row relocation-preclassify apply-drift-refile
-escalation-citation escalation-status-vocabulary suppression-lifetime"` on a checkout of
-`origin/main`, then commit the map.
-
-**THE DISK HELD 1.2 to 1.7 GiB FREE ALL BATCH**, so no hand ran the pooled `BL-230` rehearsal.
-Check `df` first; it needs space for 156 fixture runs.
-
-**NEXT WORK.** Re-derive the sweep; a new consumer filing outranks everything below. `BL-230` is
-PC-backed. Its close needs the pool run of batch 151's shape, 108 tip against 48 base, reporting
-each red's `DIAG`. `BL-311` waits on the operator. `BL-308` and `BL-310` are NOTEs, each with a
-stated receipt.
-
-**THE DELIVERY GAP IS SIX RELEASES, AND BOOTSTRAPPING FILES ARE IN RANGE.** The consumer is at
-0.633.0 (`937919e4`) against `VERSION` 0.639.0. That is past five, so the range is WIDE. In range:
-- 6 `core/` commits over 30 paths, with 0 mode-only rows;
-- `lib.sh` 3 commits, `preclassify.sh`, `apply.sh` and `emit-report.sh` 1 each, and
-  `ledger-reverify.sh` 0;
-- 1 PC id PENDING, `PC-S313-EMIT-REPORT-E2-IS-A-FOURTH-POOL-FLAKE-ARM`, with an impossible-id
-  control of 0.
-
-The installed and distribution `validate-layer-entries.sh` are byte-identical, and their findings
-over the consumer are identical, so the differential is null. **That null cannot see this range's
-subject.** Every fix is to a SILENT failure under a transient, and the consumer's installed engine
-runs the pull that delivers it, so the fix cannot protect that pull. The banked ruling stands:
-report the gap and write no runbook. The consumer's porcelain stayed 0 and the ledger md5
-`3e62c07e…` did not move.
-
-**BATCH 152 SHIPPED TWO RELEASES AND CLOSED `BL-303`, `BL-304` AND `BL-305`.** `v0.635.0`
-(`42876c2c`, #850) closed `BL-303` alone, because `lib.sh` is bootstrapping. `v0.636.0`
-(`29053a83`, #851) closed `BL-304` and `BL-305`. It was invoked by peer handoff, and no
-consumer filing post-dated 2026-09-23, so it took batch 151's ranking. Each release commit names its
-ids. The only other commit naming them is batch 151's filing (`76ba3029`), and the impossible-id
-control reads 0. Both gates ran at `AI_DLC_FIXTURE_NO_SKIP=1`: 22 of 22 phases PASS, **203 ok**,
-changed fixtures `ok` by name against an impossible-name control of 0, and `ls-remote` confirmed
-both refs. Live **73 -> 72** (two filed, three closed), archive **231 -> 234**. The exit-0 receipt
-set after the merge is batch 151's 9 plus `BL-303` and `BL-304`, compared by identity.
-
-**`BL-303`'s FILED FIX WOULD HAVE CLOSED ITS RECEIPT AND LEFT 61 OF 62 DIRECTORIES.** The entry
-named one leak per `ledger-reverify.sh` run. Measured over every `lib.sh` entry point on a graph
-clone, one round left **346** (`hard-blockers` 109 through its children, `retired-layer-contract`
-108, `unregistered-drift` 105), and this machine's `TMPDIR` held about 479,000. The shipped shape
-came from the contract adversary: build the memo at source time, export it, and shadow `trap` so
-any later EXIT handler runs the cleanup first. That removes the affordance rather than asking six
-hand-written handlers to remember it. **A tip adversary then found one BLOCKER and three DEFECTs
-on a branch whose own validators were green**: a placeholder `LANDED` line dropped the sh-receipt
-population below the pre-push floor; a trap set inside `$( )` deleted the parent's live memo;
-`set -e` skipped the caller's handler; and an armed EXIT trap made `layer-drift.sh` print 550
-`Broken pipe` lines. **Never commit a placeholder `LANDED` line on a fix branch** — it reads as
-closed to every counter.
-
-**THE FIRST 0.635.0 PUSH WAS BLOCKED BY A FIXTURE NO HAND HAD RUN.** `layer-readopt-gate` keyed a
-`mktemp` call index and a mutation anchor on exactly the shapes the fix changed, and it failed at
-tip every time, alone, against 0 at base. It ships, so the repair holds against both engines,
-measured 0 FAIL each way. **Before a lib.sh change, grep the fixtures for `mktemp` shims and for
-mutation anchors on the lines you convert.**
-
-**THE CLOSE RE-SEATS THE SH-RECEIPT FLOOR, 58 -> 56.** Rotating `BL-303` and `BL-304` took two
-`sh` receipts out while the two filed entries are `verify: manual`, so live stayed 72 and R5 of
-`validate-backlog-receipts.sh` refused the close push. Re-seated in `.githooks/pre-push:176`;
-a floor of 57 still fails against the same tree, so the arm can fire.
-
-**TWO ENTRIES FILED.** `BL-306` (DEFECT): a memo key embeds the encoded dist path, and past about
-190 characters of path the cache write fails and detectors silently change output; unchanged by
-`BL-303`, unreached by a `/Users/<name>/git/<repo>` path, and `lib.sh` again, so it ships alone.
-`BL-307` (NOTE): a zero-byte `pending.md` takes an exit-0 road through Checks 2 and 2a that prints
-no `EXAMINED NOTHING`.
-
-**TWO READ-SET RE-TRACES ARE OWED, AND ONLY THE OPERATOR CAN RUN THEM.** The `ledger-reverify`
-fixture's new mutant helper copies `reconcile/*.md`, and `layer-readopt-gate`'s shim changed. Run
-`sudo bash core/scripts/derive-fixture-readsets.sh --list "ledger-reverify layer-readopt-gate"`
-on a checkout of `origin/main`, then commit the map.
-
-**THE DISK FILLED MID-BATCH.** `/System/Volumes/Data` reached 119 MiB free. Deleting this batch's
-own spent scratch trees by literal path freed about 2 GB; Docker's disk image holds about 150 GB.
-**Check `df` before briefing a hand that builds scratch trees, and tell it to remove each tree
-once scored.**
-
-**NEXT WORK.** Re-derive the sweep; a new consumer filing outranks everything below. `BL-306`
-ships alone. `BL-230` still needs its render-arm DIAG. `BL-307` needs its measurement first.
-
-**THE DELIVERY GAP IS THREE RELEASES, AND A BOOTSTRAPPING FILE IS IN RANGE.** The consumer is at
-0.633.0 (`937919e4`) against `VERSION` 0.636.0. In range, `lib.sh` has 1 commit, and
-`preclassify.sh`, `apply.sh`, `ledger-reverify.sh` and the update skill have 0. There are 12
-`core/` paths, 0 mode-only rows, and 0 `PC-` ids. The pull that delivers `lib.sh` runs the
-consumer's installed copy, which leaks but is otherwise correct, so the delivery carries no
-bootstrapping hazard. The banked ruling stands: report the gap and write no runbook. The
-consumer's porcelain moved 3 -> 0 during the batch as it committed its own sprint-review gate
-(`66fb348fa`), and the ledger md5 `3e62c07e…` did not move.
-
-**BATCH 151 SHIPPED `v0.634.0` (`76ba3029`, #848) AND CLOSED `BL-283`, `BL-153` AND `BL-080`,
-PLUS `BL-089`'S EXIT-9 SUBJECT.** No consumer filing post-dated 2026-09-23, and the one new
-PC-backed row, `BL-230`, had no buildable fix, so the batch took the four-entry DEFECT ranking
-batch 150 left. None of the fixes touches a bootstrapping file, so they shipped as one release.
-No commit on the branch names a `PC-` id, because none discharges a consumer candidate. The gate
-ran at `AI_DLC_FIXTURE_NO_SKIP=1`: exit 0, 22 phases PASS, all gates green. `ledger-reverify`,
-`implementation-join-yield`, `backlog-ledger`, `backlog-size-ceiling`, `enforcement-map-sites`,
-`story-provenance` and `reconcile-emit-report` each read `ok` by name, against an impossible-name
-control of 0, and `ls-remote` confirmed the ref. Live **76 -> 73** after the rotation (three
-filed, three closed), archive **228 -> 231**. The exit-0 receipt set after the merge is the
-opening 8 plus `BL-080`, `BL-089`, `BL-153` and `BL-283`, compared by identity. `BL-089` stays
-live on purpose, because its exit-1 subject survives.
-
-**EVERY FILED RECEIPT IN THE BATCH WAS WRONG, AND TWO CONTRACT ADVERSARIES FOUND ALL OF THEM
-BEFORE A BUILDER STARTED.** `BL-283`'s receipt accepted only the engine-side fix. `BL-153`'s was
-closed by a comment and rejected the entry's own fix. `BL-089`'s accepted exit 9 read as
-CLOSE-CANDIDATE and as HAND-REVIEW, and the rotator moves on both. `BL-080`'s accepted a partial
-fix and a qualifier in `why:`. My own contracts carried three more errors. Pinning the clock
-before every beat turns the slow-beat near-miss red. A 31-second-per-call `date` shim rejects
-every correct fix. My census said 0 receipts exit 9, and the real figure is 1 (`BL-130`). The
-scope also widened twice: `BL-080` was filed against one row and measures six.
-
-**`BL-283` WAS FIXED IN THE FIXTURE, NOT THE ENGINE.** The laziness arm now counts in a private
-`TMPDIR` under the fixture sandbox. So `ledger-reverify.sh` stayed out of the release, and the fix
-holds against every installed engine that honours `TMPDIR`.
-
-**THREE ENTRIES FILED.** `BL-303`: every standalone `ledger-reverify.sh` run leaks one
-`reconcile-memo.*`, because the memo lookup at `ledger-reverify.sh:1523` runs in a pipeline inside
-`$( )`. This machine's `TMPDIR` held more than 429,000, none older than two days. `lib.sh` is
-bootstrapping, so its fix ships alone. `BL-304`: `fanout-payload-channel` shares `BL-283`'s class;
-the failure can occur but has not been observed. `BL-305`: the step text for Checks 26, 33 and 35 lacks
-`BL-080`'s instruction.
-
-**`BL-230` WAS MEASURED AT ITS OWN CLOSE CONDITION AND DID NOT CLOSE.** 108 tip runs against 48
-base, 6-wide: tip **2/108**, base **1/48**. No red was a kill-set arm, so the 0.625.0 instrument
-printed nothing. The live class is the `--verify` render false positive, which that instrument
-cannot reach. The measurement is recorded in the entry, with its unconfirmed lead that a
-`preclassify.sh` failure under load at `emit-report.sh:204` renders an empty orientation block.
-
-**TWO OPERATOR-VISIBLE COSTS, BOTH MINE.** I pushed the release gate while the `BL-230` pool
-still had six copies of `reconcile-emit-report` running, which action 0 forbids. The gate passed,
-and none of the pool's three reds fell in the overlap window, but a red there would have been
-unattributable. **Check `ps` for a hand's pool before pushing.** Separately, that hand stacked 14
-`waitdone.sh` waiters, one per background-wait timeout, until told to stop.
-
-**THE CONSUMER PULLED DURING THE BATCH.** Batch 150's blocked 0.631.0 reconcile was superseded. The
-consumer re-pulled straight to 0.633.0, landing it as `e7bd61eec` at 15:11 on its carry-over
-branch, and its stamp reads **0.633.0** (`937919e4`). The operator ran the owed read-set trace
-(`story-provenance` 33 rows; the reader 1, where it had been 0), and it shipped in this release.
-
-**NEXT WORK.** Re-derive the sweep; a new consumer filing outranks everything below. Three
-candidates, ranked by consequence:
-
-- `BL-303` ships ALONE, because `lib.sh` is bootstrapping. The leak grows by the thousands a day
-  on any machine that runs the suite.
-- `BL-230` needs its next instrument: a DIAG for the render arms that keeps the seed's stderr on a
-  red. It is PC-backed.
-- `BL-304` and `BL-305` can share one release.
-
-**THE DELIVERY GAP IS ONE RELEASE, AND NO BOOTSTRAPPING FILE IS IN RANGE.** The consumer is at
-0.633.0 against `VERSION` 0.634.0. `937919e4..origin/main` is 1 commit, touching 4 `core/` paths,
-none of them `preclassify.sh`, `apply.sh`, `ledger-reverify.sh` or the update skill. That commit
-names 0 `PC-` ids, so no discharged candidate is PENDING delivery. The banked ruling stands: report
-the gap and write no runbook.
-
-**BATCH 150 SHIPPED TWO RELEASES AND CLOSED `BL-102` AND `BL-299`.** `v0.632.0` (`43645568`,
-#845) closed `BL-102`, alone, because `apply.sh` and `preclassify.sh` are bootstrapping files.
-`v0.633.0` (`6e72d451`, #846) closed `BL-299`, which discharges the consumer's
-`PC-S313-STORY-PROVENANCE-ARM-R-IS-RED-IN-THE-CONSUMER-LAYOUT`. That release commit is the only
-commit naming the id (impossible-id control 0), and `VERSION` at it reads 0.633.0. Both gates ran
-at `AI_DLC_FIXTURE_NO_SKIP=1`: 22 phases PASS, **203 ok / 0 FAIL**, and `apply-restamp-worklist`,
-`story-provenance` and `validator-path-resolution` read `ok` by name against an impossible-name
-control of 0. `ls-remote` confirmed both refs. Live **71 -> 73** (four filed, two closed), archive
-**226 -> 228**. The exit-0 receipt set after the merge was the opening 8 plus `BL-102` and
-`BL-299`, compared by identity, so nothing closed incidentally.
-
-**`BL-102`'s FILED REMEDY WOULD HAVE WEDGED EVERY CONSUMER, AND THE SHIPPED ONE READS
-PRECLASSIFY'S OWN BUCKETS.** The entry said to withhold `--finish` when a consumer copy differs
-from theirs; a semantically merged file always differs, so the marker would never clear. The
-contract changed the predicate to "still in a pure-apply bucket", and the adversary, run alone,
-found three blockers in that: the added-file half wedged on every `.dist-only` fixture a range
-adds, the new check pre-empted the theirs identity guard, and BASE failed open. Measured on a
-scratch clone of the consumer applied 0.627.0 to the fix: zero `finish-unapplied` rows on the
-applied tree, 20 on the unapplied one (exactly the ordinary run's pure-apply set), and the old
-finisher stamped the unapplied clone.
-
-**`BL-299` ARRIVED MID-BATCH ON AN UNPUSHED CONSUMER BRANCH, AND THE OPERATOR ASKED ABOUT IT BY
-ID.** The consumer filed it at 11:04 in `54ca5a9df`, its 0.627.0 -> 0.631.0 reconcile commit on
-the LOCAL branch `ai-dlc-update/0.631.0-reconcile-20260924T1500Z`. The checked-out branch's ledger
-carried 0 of it, so the sweep could not have seen it. **A consumer mid-pull files onto its pull
-branch; `git -C /Users/n8/git/graph log --all -S<id>` finds it where the working-tree ledger does
-not.** Its fix had to move the reader with the writer and change `validator-path-resolution` in
-the same release, or the pull that delivers it goes red on a second shipped fixture.
-
-Batch 150's blocked consumer pull, its owed read-set trace and its next-work ranking were all
-resolved in batch 151; the record above this one says how.
-
-**BATCH 149 SHIPPED `v0.631.0` (`d150a85b`, #843) AND CLOSED `BL-289`, THE ROTATOR DEFECT.** No
-consumer filing awaited work, so the batch took the distribution-internal entry this plan had been
-working around since batch 139. The release commit names `BL-289`. The only other commit naming
-it is batch 143's docs commit that filed it; the impossible-id control is 0. The gate ran at
-`AI_DLC_FIXTURE_NO_SKIP=1`: 22 phases PASS, **203 ok / 0 FAIL**, all gates green, `plan-rotate`
-read `ok` by name against an impossible-name control of 0, and `ls-remote` confirmed the ref. Live
-**72 -> 71**, archive **225 -> 226**. The exit-0 receipt set is the previous 8 plus `BL-289`,
-compared by identity, so nothing closed incidentally.
-
-**THE CONTRACT ADVERSARY TURNED A MESSAGE FIX INTO A BUDGETING FIX.** The filed entry had two
-claims: a false banner, and a batch class blind to column 0. The adversary measured a third on
-the shipping script. It never budgeted its own pointer line, so the fixture's seed at a 2000-byte
-ceiling was written at 2012 bytes with exit 0. It also found that arm 1 cannot see a
-double-counted span, and that oldest-first rotation would have archived three standing rulings
-that lived only in batch 140's record. Two of those were already restated live, and the third was
-lifted into action 0 before the release. **Before a rotation, grep the records it will take for
-any rule that exists nowhere else.**
-
-**NEXT WORK.** The inputs are unchanged from batch 148. The PC-backed worklist is the same five
-self-disqualifying rows (`BL-067`, `BL-132`, `BL-145`, `BL-215`, and `BL-230` awaiting a recorded
-cause). Unfiled is the same **14**, with identical dates. The ledger md5 `b6fd6280…` did not move,
-and nothing awaits a first look. Re-derive both; a new consumer filing is the only thing that
-changes this.
-
-**THE DELIVERY GAP IS FOUR RELEASES.** The consumer installed **0.627.0** (`23aea0ef`) against
-`VERSION` **0.631.0**. 0 of the four bootstrapping files changed in range (control: `core/hooks`
-has 2 commits), and 0 of 19 raw `core/` rows are mode-only. `0.631.0` touches no `core/` path. The
-banked ruling stands: report the gap and write no runbook. The consumer's porcelain read 1 during
-the batch, `_bmad-output/pipeline-continuation-log.md`, written by its own session.
 
 ### Derive the state; do not trust the numbers below
 
