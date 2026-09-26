@@ -14,6 +14,9 @@
 set -uo pipefail
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/aidlc-snaprotate-fx.XXXXXX")" || exit 2
+# A seed that fails part-way exits 2 before run.sh knows the directory's name, so run.sh's own EXIT
+# trap cannot remove it. This one does, and is cleared once the name has been handed over.
+trap 'rm -rf "$WORK"' EXIT
 PROJ="$WORK/proj"
 mkdir -p "$PROJ/_bmad-output" || exit 2
 
@@ -85,6 +88,11 @@ STALE="$PROJ/_bmad-output/pipeline-snapshot.md"
   echo
   echo "## Pipeline Position"
   echo "STALESNAP: a substantive line from the stale snapshot absorbed at fresh start."
+  echo "- story 4.2, the login flow, gate G3 pending review by the lead"
+  echo
+  echo "## Open Items"
+  echo "- OPEN-ITEM-A: retry the flaky deploy check before the next gate"
+  echo "- OPEN-ITEM-B: confirm the rollback window with operations"
   echo
 } > "$STALE"
 
@@ -102,12 +110,95 @@ NOBOUND="$PROJ/_bmad-output/no-boundaries-history.md"
   && git add -A \
   && git -c user.email=fixture@ai-dlc -c user.name=fixture commit -qm "seed" ) || exit 2
 
+# --- the absorb worlds: pristine templates, copied fresh for every drive ---------------------
+# Each is a whole consumer state on its own: a git repo holding `_bmad-output/`, with exactly
+# the files named and nothing else. run.sh never drives a template; it copies one first, so a
+# mutant or an earlier arm can never leave a file behind for the next reader.
+#
+#   nohist  — stale snapshot, NO history file (a fresh consumer: the only path it ever takes)
+#   floor   — stale snapshot, history with exactly 10 cut points = the default --keep-entries,
+#             so the history does not rotate (the shape measured live on the reference consumer)
+#   above   — stale snapshot, history with 14 cut points, so the history rotates (the control)
+#   nosnap  — history, NO snapshot at all: a tree where no pipeline is active
+#   ignored — stale snapshot, no history, and the archive directory git-ignored
+TMPL="$WORK/tmpl"
+mk_world() {  # <name> <history cut points, or 0 for no history> <snapshot yes|no> <ignore yes|no>
+  local w="$TMPL/$1" i=0
+  mkdir -p "$w/_bmad-output" || exit 2
+  if [ "$2" -gt 0 ]; then
+    {
+      echo "# Pipeline Snapshot — History (write-only; never whole-read)"
+      echo
+      while [ "$i" -lt "$2" ]; do
+        i=$((i + 1))
+        printf '## [MOVED 2026-09-01T10:00:%02dZ from pipeline-snapshot.md — gate]\n\n' "$i"
+        printf 'HISTLINE-%s-%s: a substantive history body line for this entry.\n\n' "$1" "$i"
+      done
+    } > "$w/_bmad-output/pipeline-snapshot-history.md"
+  fi
+  # Several DISTINCT lines, only ONE of which carries the marker: an absorb that copies the
+  # marker line and drops the rest (measured: `grep STALE` in place of `cat`) must be
+  # distinguishable from a whole-file copy, and the arms compare the archive's tail to this
+  # template byte for byte.
+  if [ "$3" = yes ]; then
+    {
+      echo "# Pipeline Snapshot"
+      echo
+      echo "## Pipeline Position"
+      echo "STALESNAP-$1: a substantive line from the stale snapshot absorbed at fresh start."
+      echo "- story 4.2, the login flow, gate G3 pending review by the lead ($1)"
+      echo
+      echo "## Open Items"
+      echo "- OPEN-ITEM-A-$1: retry the flaky deploy check before the next gate"
+      echo "- OPEN-ITEM-B-$1: confirm the rollback window with operations"
+      echo
+    } > "$w/_bmad-output/pipeline-snapshot.md"
+  fi
+  [ "$4" = yes ] && printf '_bmad-output/pipeline-history/\n' > "$w/.gitignore"
+  ( cd "$w" && git init -q . && git add -A \
+    && git -c user.email=fixture@ai-dlc -c user.name=fixture commit -qm "seed $1" ) >/dev/null 2>&1 || exit 2
+}
+mk_world nohist  0  yes no
+mk_world floor   10 yes no
+mk_world above   14 yes no
+mk_world nosnap  14 no  no
+mk_world ignored 0  yes yes
+
+# bigtail — for the history-REWRITE failure arm. Sized so that under `ulimit -f 8` (8192 bytes)
+# every file the rotator writes before the rewrite fits, and the rewritten history does not:
+# the preamble alone and the kept tail alone are each under 8192 (the rotator's own temp copies
+# of them must be written whole, or the line-accounting refusal fires first and the rewrite is
+# never reached), the archive (header + 4 moved entries + the absorbed snapshot) is well under,
+# and preamble + tail is over. run.sh asserts all four sizes before it reads the arm's verdict.
+# The new history is built beside the history BEFORE the archive append, and its `cp -p` of the
+# old (larger) history is the first write the limit stops, so the refusal comes with no archive.
+mk_world bigtail 0 yes no
+{
+  echo "# Pipeline Snapshot — History (write-only; never whole-read)"
+  echo
+  i=0; while [ "$i" -lt 22 ]; do i=$((i + 1))
+    printf 'PREAMBLE-%02d: a long preamble line that stays in the live history across every rotation.\n' "$i"
+  done
+  echo
+  i=0; while [ "$i" -lt 14 ]; do i=$((i + 1))
+    printf '## [MOVED 2026-09-02T10:00:%02dZ from pipeline-snapshot.md — gate]\n\n' "$i"
+    j=0; while [ "$j" -lt 7 ]; do j=$((j + 1))
+      printf 'BIGLINE-%02d-%02d: a substantive history body line, long enough to give the tail weight.\n' "$i" "$j"
+    done
+    echo
+  done
+} > "$TMPL/bigtail/_bmad-output/pipeline-snapshot-history.md"
+( cd "$TMPL/bigtail" && git add -A \
+  && git -c user.email=fixture@ai-dlc -c user.name=fixture commit -qm "bigtail history" ) >/dev/null 2>&1 || exit 2
+
 cat > "$WORK/env.sh" <<EOF
 PROJ="$PROJ"
 HIST="$HIST"
 STALE="$STALE"
 NOBOUND="$NOBOUND"
 ARCHIVE="$PROJ/_bmad-output/pipeline-history/pipeline-snapshot-archive.md"
+TMPL="$TMPL"
 EOF
 
+trap - EXIT
 echo "$WORK"
