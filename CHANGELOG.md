@@ -15,6 +15,59 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.645.0] - 2026-09-26
+
+A fresh start no longer removes the pipeline snapshot. The rotator's `--absorb` archives the
+stale snapshot and truncates it to 0 bytes, so every control hook keeps firing between the absorb
+and the lead's write of the new snapshot. The absorb now also runs when there is no history yet
+and when the history is at its cut floor, where it used to do nothing and exit 0.
+
+### `PC-S314-SNAPSHOT-SWAP-BLIND-WINDOW` — the fresh-start absorb empties the snapshot instead of removing it, and runs on every path (`BL-321`)
+
+`route.md` Step 6 does a fresh start in two acts: the rotator absorbs the stale snapshot, then
+the lead writes the new one, and a turn can end between them. The rotator used to finish the
+absorb with `git rm` and `rm -f`, so the snapshot was absent for that window. Every hook that
+decides whether a pipeline is active tests `[ -f ]` on the snapshot: the stall check in
+`ai-dlc-continue.sh`, the pause flag in `ai-dlc-pause.sh`, Rule 29's deny in
+`ai-dlc-acknowledge.sh`, and compaction recovery in `ai-dlc-precompact.sh`,
+`ai-dlc-postcompact.sh` and `ai-dlc-recover.sh`. All of them went silent. The reference consumer
+also hit a second defect in the same call. With no history file, or with a history at exactly
+`--keep-entries` cut points, the absorb was skipped with exit 0, and the lead's next write
+destroyed the stale snapshot without archiving it.
+
+- `rotate-snapshot-archive.sh --absorb` appends the stale snapshot to the archive and then
+  truncates it to 0 bytes. It never removes it.
+- The absorb runs on every path that is not a refusal: no history, a history at or below its cut
+  floor, and a real rotation. The ignored-archive refusal and the archive staging apply on each
+  of those paths.
+- Absorbing an already-empty snapshot writes nothing, so a re-run after an interrupted swap
+  appends no empty block.
+- Every argument is parsed before any exit, so an unknown option or an `--absorb` naming no file
+  is exit 2 on the no-history path too.
+- `route.md` Step 6 creates the snapshot when the file is absent or empty, and runs the rotator
+  when it is non-empty. A non-zero exit stops the fresh start and reports the rotator's stderr.
+  On exit 0 the lead Reads the emptied file and writes the initial state into it. Step 0 already
+  requires a non-empty snapshot for a resume, so an empty one is never resumed.
+
+A placeholder snapshot left in place of the delete was rejected. The hooks would read fake
+state, and the next session's Step 0 would dispatch a resume onto it.
+
+| tree | receipt |
+|---|---|
+| this release | 0 |
+| cb21ab0b | 1 |
+| `route.md` changed, rotator at cb21ab0b | 1 |
+| placeholder snapshot written instead of the truncate | 1 |
+| truncates, absorb still skipped with no history | 1 |
+| truncates, absorb still skipped at the cut floor | 1 |
+| `rm -f` restored | 1 |
+| absorb re-gated behind the rotation path | 1 |
+| history-absent exit moved above argument parsing | 1 |
+| ignored-archive refusal dropped from the absorb | 1 |
+| empty-snapshot guard dropped | 1 |
+| archive staging dropped | 1 |
+| `rm -f`, then an empty file re-created | 1 |
+
 ## [0.644.0] - 2026-09-25
 
 A fix story folded into a sprint after its architecture step now reaches an architect, whose
