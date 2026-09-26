@@ -102,12 +102,58 @@ NOBOUND="$PROJ/_bmad-output/no-boundaries-history.md"
   && git add -A \
   && git -c user.email=fixture@ai-dlc -c user.name=fixture commit -qm "seed" ) || exit 2
 
+# --- the absorb worlds: pristine templates, copied fresh for every drive ---------------------
+# Each is a whole consumer state on its own: a git repo holding `_bmad-output/`, with exactly
+# the files named and nothing else. run.sh never drives a template; it copies one first, so a
+# mutant or an earlier arm can never leave a file behind for the next reader.
+#
+#   nohist  — stale snapshot, NO history file (a fresh consumer: the only path it ever takes)
+#   floor   — stale snapshot, history with exactly 10 cut points = the default --keep-entries,
+#             so the history does not rotate (the shape measured live on the reference consumer)
+#   above   — stale snapshot, history with 14 cut points, so the history rotates (the control)
+#   nosnap  — history, NO snapshot at all: a tree where no pipeline is active
+#   ignored — stale snapshot, no history, and the archive directory git-ignored
+TMPL="$WORK/tmpl"
+mk_world() {  # <name> <history cut points, or 0 for no history> <snapshot yes|no> <ignore yes|no>
+  local w="$TMPL/$1" i=0
+  mkdir -p "$w/_bmad-output" || exit 2
+  if [ "$2" -gt 0 ]; then
+    {
+      echo "# Pipeline Snapshot — History (write-only; never whole-read)"
+      echo
+      while [ "$i" -lt "$2" ]; do
+        i=$((i + 1))
+        printf '## [MOVED 2026-09-01T10:00:%02dZ from pipeline-snapshot.md — gate]\n\n' "$i"
+        printf 'HISTLINE-%s-%s: a substantive history body line for this entry.\n\n' "$1" "$i"
+      done
+    } > "$w/_bmad-output/pipeline-snapshot-history.md"
+  fi
+  if [ "$3" = yes ]; then
+    {
+      echo "# Pipeline Snapshot"
+      echo
+      echo "## Pipeline Position"
+      echo "STALESNAP-$1: a substantive line from the stale snapshot absorbed at fresh start."
+      echo
+    } > "$w/_bmad-output/pipeline-snapshot.md"
+  fi
+  [ "$4" = yes ] && printf '_bmad-output/pipeline-history/\n' > "$w/.gitignore"
+  ( cd "$w" && git init -q . && git add -A \
+    && git -c user.email=fixture@ai-dlc -c user.name=fixture commit -qm "seed $1" ) >/dev/null 2>&1 || exit 2
+}
+mk_world nohist  0  yes no
+mk_world floor   10 yes no
+mk_world above   14 yes no
+mk_world nosnap  14 no  no
+mk_world ignored 0  yes yes
+
 cat > "$WORK/env.sh" <<EOF
 PROJ="$PROJ"
 HIST="$HIST"
 STALE="$STALE"
 NOBOUND="$NOBOUND"
 ARCHIVE="$PROJ/_bmad-output/pipeline-history/pipeline-snapshot-archive.md"
+TMPL="$TMPL"
 EOF
 
 echo "$WORK"

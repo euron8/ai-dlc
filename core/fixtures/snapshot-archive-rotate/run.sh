@@ -13,6 +13,9 @@
 # Usage: run.sh
 # Exit:  0 = every assertion holds, 1 = the check regressed, 2 = fixture broken.
 set -uo pipefail
+# The absorb arms drive the real control hooks, which read AI_DLC_* tuning variables. A consumer
+# that sets any of them in settings.json must not be able to turn this fixture red.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WORK="$(bash "$HERE/seed.sh" | tail -1)" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
@@ -23,15 +26,27 @@ trap 'rm -rf "$WORK"' EXIT
 # Locate the rotator by walking UP for a marker, so this resolves from the distribution
 # (core/scripts) and from a consumer where install.sh relocates it (scripts/ai-dlc). Resolving
 # it relative to the fixture would bind the fixture to one of the two layouts.
+# The two control hooks the absorb arms drive are resolved at the SAME root, in the layout that
+# matched: `core/hooks/` beside `core/scripts/` upstream, `.claude/hooks/` beside `scripts/ai-dlc/`
+# in a consumer. Resolving them independently could pair one tree's rotator with another's hooks.
 ROT=""
+HOOKDIR=""
 d="$HERE"
 while [ "$d" != "/" ]; do
-  for base in "$d/core/scripts" "$d/scripts/ai-dlc"; do
-    if [ -f "$base/rotate-snapshot-archive.sh" ]; then ROT="$base/rotate-snapshot-archive.sh"; break 2; fi
-  done
+  if [ -f "$d/core/scripts/rotate-snapshot-archive.sh" ]; then
+    ROT="$d/core/scripts/rotate-snapshot-archive.sh"; HOOKDIR="$d/core/hooks"; break
+  fi
+  if [ -f "$d/scripts/ai-dlc/rotate-snapshot-archive.sh" ]; then
+    ROT="$d/scripts/ai-dlc/rotate-snapshot-archive.sh"; HOOKDIR="$d/.claude/hooks"; break
+  fi
   d="$(dirname "$d")"
 done
 [ -n "$ROT" ] || { echo "FIXTURE ERROR: rotate-snapshot-archive.sh not found in either layout" >&2; exit 2; }
+HOOK_C="$HOOKDIR/ai-dlc-continue.sh"
+HOOK_P="$HOOKDIR/ai-dlc-pause.sh"
+[ -f "$HOOK_C" ] && [ -f "$HOOK_P" ] \
+  || { echo "FIXTURE ERROR: ai-dlc-continue.sh / ai-dlc-pause.sh not found beside the rotator (${HOOKDIR})" >&2; exit 2; }
+command -v jq >/dev/null 2>&1 || { echo "FIXTURE ERROR: jq is required to drive the hooks" >&2; exit 2; }
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
@@ -139,13 +154,17 @@ else
 fi
 
 # --- Assertion 8: --absorb folds a stale snapshot into the SAME file, creating no new one ----
+# The snapshot is TRUNCATED, never removed: every control hook keys "a pipeline is active" on the
+# file's existence, so the absorbed file stays on disk at 0 bytes and stays tracked. The tracked
+# *.md count therefore does not move — no dated archive was minted, and nothing was deleted.
 before_md="$( cd "$PROJ" && git ls-files -- '*.md' | wc -l | tr -d ' ' )"
 bash "$ROT" "$HIST" --absorb "$STALE" --keep-entries 5 --apply >/dev/null 2>&1
 after_md="$( cd "$PROJ" && git ls-files -- '*.md' | wc -l | tr -d ' ' )"
-if grep -q 'STALESNAP' "$ARCHIVE" && [ ! -f "$STALE" ] && [ "$after_md" -lt "$before_md" ]; then
-  ok "--absorb: the stale snapshot is inside the one archive, the dated file was never created (tracked *.md ${before_md} -> ${after_md})"
+if grep -q 'STALESNAP' "$ARCHIVE" && [ -f "$STALE" ] && [ ! -s "$STALE" ] \
+   && [ "$before_md" -gt 0 ] && [ "$after_md" -eq "$before_md" ]; then
+  ok "--absorb: the stale snapshot is inside the one archive, the snapshot is present at 0 bytes, no dated file created (tracked *.md ${before_md} -> ${after_md})"
 else
-  bad "--absorb left the stale snapshot behind or created a new file (${before_md} -> ${after_md} tracked *.md)"
+  bad "--absorb: marker in archive=$(grep -c 'STALESNAP' "$ARCHIVE"), snapshot present=$([ -f "$STALE" ] && echo yes || echo no), bytes=$(if [ -f "$STALE" ]; then wc -c < "$STALE" | tr -d ' '; fi), tracked *.md ${before_md} -> ${after_md}"
 fi
 
 # --- Assertion 9: REFUSAL — a non-empty body with no boundary at all -------------------------
@@ -273,6 +292,232 @@ else
     bad "MUTATION 2: stripping the guard did not restore the silent exit 0 (rc=$m_rc); assertion 12 may be passing for another reason"
   fi
 fi
+
+# =============================================================================================
+# THE ABSORB SWAP. route.md's fresh start is two acts — the rotator absorbs the stale snapshot,
+# then the lead writes the new one — and a turn can end between them. Every control hook keys
+# "a pipeline is active" on the snapshot's EXISTENCE, so the absorb must leave the file present
+# (emptied), and it must run on every path that is not a refusal, or the lead's next write
+# destroys the stale snapshot unarchived.
+#
+# Every arm below drives a FRESH copy of one seed template, so no arm reads a tree an earlier arm
+# or a mutant wrote. The arms are a function of the rotator and the two hooks they drive, which
+# is what lets the mutants further down re-run the SAME arms against a mutated subject.
+# =============================================================================================
+STOP_JSON='{"session_id":"fx","hook_event_name":"Stop","stop_hook_active":false,"transcript_path":"/nonexistent"}'
+PROMPT_JSON='{"session_id":"fx","hook_event_name":"UserPromptSubmit","prompt":"please look at the login flow again before the next story"}'
+SNAP_REL="_bmad-output/pipeline-snapshot.md"
+HIST_REL="_bmad-output/pipeline-snapshot-history.md"
+ARCH_REL="_bmad-output/pipeline-history/pipeline-snapshot-archive.md"
+
+world() {  # <template> -> prints a fresh copy's path
+  local w
+  w="$(mktemp -d "$WORK/w.XXXXXX")" || return 1
+  cp -R "$TMPL/$1/." "$w/" || return 1
+  printf '%s\n' "$w"
+}
+
+# hooks_fire <world>: drive the REAL Stop and UserPromptSubmit hooks against the world.
+# Sets HB (count of block decisions emitted) and HF (yes/no: the pause flag was created).
+hooks_fire() {
+  local w="$1" out
+  rm -f "$w/_bmad-output/pipeline-paused.flag" "$w/_bmad-output/pipeline-block-state.txt"
+  out="$(printf '%s' "$STOP_JSON" | CLAUDE_PROJECT_DIR="$w" bash "$HC_" 2>/dev/null)"
+  HB="$(grep -c '"decision"[[:space:]]*:[[:space:]]*"block"' <<<"$out")" || HB=0
+  printf '%s' "$PROMPT_JSON" | CLAUDE_PROJECT_DIR="$w" bash "$HP_" >/dev/null 2>&1
+  if [ -f "$w/_bmad-output/pipeline-paused.flag" ]; then HF=yes; else HF=no; fi
+}
+
+tracked() { ( cd "$1" && git ls-files --error-unmatch -- "$2" >/dev/null 2>&1 ); }
+fbytes()  { if [ -f "$1" ]; then wc -c < "$1" | tr -d ' '; fi; }
+
+# absorbed_ok <world> <marker>: the marker is in the archive, the snapshot is present at 0 bytes,
+# and the archive is tracked. All three, because each is a different way to lose the snapshot.
+absorbed_ok() {
+  local n
+  n="$(grep -c "$2" "$1/$ARCH_REL" 2>/dev/null)" || n=0
+  [ "$n" -eq 1 ] && [ -f "$1/$SNAP_REL" ] && [ ! -s "$1/$SNAP_REL" ] && tracked "$1" "$ARCH_REL"
+}
+
+# --- the arms. Each returns 0 (holds) or 1 and sets MSG. ----------------------------------------
+
+# SWAP: before the call the hooks fire (the precondition — proves the arm measures the rotator,
+# not a world the hooks ignore); after --absorb --apply they STILL fire.
+arm_swap() {
+  local w; w="$(world above)" || { MSG="world copy failed"; return 1; }
+  hooks_fire "$w"; local b0="$HB" f0="$HF"
+  bash "$R_" "$w/$HIST_REL" --absorb "$w/$SNAP_REL" --apply >/dev/null 2>&1; local rc=$?
+  hooks_fire "$w"
+  MSG="before: block=${b0} flag=${f0}; rotator rc=${rc}; after: block=${HB} flag=${HF}, snapshot present=$([ -f "$w/$SNAP_REL" ] && echo yes || echo no)"
+  [ "$b0" -eq 1 ] && [ "$f0" = yes ] && [ "$rc" -eq 0 ] && [ "$HB" -eq 1 ] && [ "$HF" = yes ]
+}
+
+# NEG: a tree with no snapshot at all — the rotator runs, and both hooks stay silent. The positive
+# half of this pair is arm_swap's "before" reading, one property apart (the snapshot file).
+arm_neg() {
+  local w; w="$(world nosnap)" || { MSG="world copy failed"; return 1; }
+  bash "$R_" "$w/$HIST_REL" --apply >/dev/null 2>&1; local rc=$?
+  hooks_fire "$w"
+  MSG="rotator rc=${rc}; block=${HB} flag=${HF}; snapshot exists=$([ -e "$w/$SNAP_REL" ] && echo yes || echo no)"
+  [ "$rc" -eq 0 ] && [ ! -e "$w/$SNAP_REL" ] && [ "$HB" -eq 0 ] && [ "$HF" = no ]
+}
+
+# SHAPE: one per non-refusal path. The rotator's own verdict line is asserted too, so the three
+# worlds are PROVEN to reach three different paths rather than assumed to.
+arm_shape() {  # <world> <verdict regex>
+  local w out rc; w="$(world "$1")" || { MSG="world copy failed"; return 1; }
+  out="$(bash "$R_" "$w/$HIST_REL" --absorb "$w/$SNAP_REL" --apply 2>&1)"; rc=$?
+  MSG="rc=${rc}, path verdict matched=$(grep -cE "$2" <<<"$out"), marker in archive=$(grep -c "STALESNAP-$1" "$w/$ARCH_REL" 2>/dev/null), snapshot present=$([ -f "$w/$SNAP_REL" ] && echo yes || echo no) bytes=$(fbytes "$w/$SNAP_REL"), archive tracked=$(tracked "$w" "$ARCH_REL" && echo yes || echo no)"
+  [ "$rc" -eq 0 ] && grep -qE "$2" <<<"$out" && absorbed_ok "$w" "STALESNAP-$1"
+}
+
+# IGN: ignored archive on the no-history path — refused, snapshot byte-identical, no archive.
+arm_ign() {
+  local w out rc; w="$(world ignored)" || { MSG="world copy failed"; return 1; }
+  out="$(bash "$R_" "$w/$HIST_REL" --absorb "$w/$SNAP_REL" --apply 2>&1)"; rc=$?
+  local same=no; cmp -s "$TMPL/ignored/$SNAP_REL" "$w/$SNAP_REL" && same=yes
+  MSG="rc=${rc}, snapshot byte-identical=${same}, archive exists=$([ -e "$w/$ARCH_REL" ] && echo yes || echo no)"
+  [ "$rc" -eq 1 ] && [ "$same" = yes ] && [ ! -e "$w/$ARCH_REL" ] && grep -q 'git-ignored' <<<"$out"
+}
+
+# ARGS: on the no-history path an unknown option and an --absorb naming no file are both usage
+# errors (rc 2), and neither touches the snapshot.
+arm_args() {
+  local w rc1 rc2; w="$(world nohist)" || { MSG="world copy failed"; return 1; }
+  bash "$R_" "$w/$HIST_REL" --absorb "$w/$SNAP_REL" --no-such-option --apply >/dev/null 2>&1; rc1=$?
+  bash "$R_" "$w/$HIST_REL" --absorb "$w/_bmad-output/no-such-snapshot.md" --apply >/dev/null 2>&1; rc2=$?
+  local same=no; cmp -s "$TMPL/nohist/$SNAP_REL" "$w/$SNAP_REL" && same=yes
+  MSG="unknown option rc=${rc1}, missing --absorb path rc=${rc2}, snapshot untouched=${same}"
+  [ "$rc1" -eq 2 ] && [ "$rc2" -eq 2 ] && [ "$same" = yes ]
+}
+
+# IDEM: absorbing the now-empty snapshot again appends nothing.
+arm_idem() {
+  local w rc a0 a1; w="$(world nohist)" || { MSG="world copy failed"; return 1; }
+  bash "$R_" "$w/$HIST_REL" --absorb "$w/$SNAP_REL" --apply >/dev/null 2>&1
+  a0="$(fbytes "$w/$ARCH_REL")"; [ -f "$w/$ARCH_REL" ] && cp "$w/$ARCH_REL" "$w/arch.first"
+  bash "$R_" "$w/$HIST_REL" --absorb "$w/$SNAP_REL" --apply >/dev/null 2>&1; rc=$?
+  a1="$(fbytes "$w/$ARCH_REL")"
+  MSG="second absorb rc=${rc}, archive bytes ${a0:-none} -> ${a1:-none}, snapshot present=$([ -f "$w/$SNAP_REL" ] && echo yes || echo no)"
+  [ "$rc" -eq 0 ] && [ -n "$a0" ] && [ "$a0" -gt 0 ] && cmp -s "$w/arch.first" "$w/$ARCH_REL" \
+    && absorbed_ok "$w" "STALESNAP-nohist"
+}
+
+ARMS="swap neg nohist floor above ign args idem"
+arm_run() {
+  case "$1" in
+    swap)   arm_swap ;;
+    neg)    arm_neg ;;
+    nohist) arm_shape nohist 'no history at' ;;
+    floor)  arm_shape floor '10 entr\(ies\) present, keeping 10' ;;
+    above)  arm_shape above 'moved 4 entr\(ies\)' ;;
+    ign)    arm_ign ;;
+    args)   arm_args ;;
+    idem)   arm_idem ;;
+  esac
+}
+# run_arms <rotator> <continue hook> <pause hook>: sets FAILED to the space-separated failing arms.
+run_arms() {
+  R_="$1"; HC_="$2"; HP_="$3"; FAILED=""
+  local a
+  for a in $ARMS; do arm_run "$a" || FAILED="${FAILED} ${a}"; done
+}
+
+# --- The arms against the shipped subject ---------------------------------------------------
+# The seed must hold every template, or each arm below reads a world nobody seeded.
+for t in nohist floor above nosnap ignored; do
+  [ -d "$TMPL/$t/.git" ] || { echo "FIXTURE BROKEN: seed template '$t' is not a repository" >&2; exit 2; }
+done
+[ -f "$TMPL/floor/$HIST_REL" ] && [ ! -e "$TMPL/nohist/$HIST_REL" ] && [ ! -e "$TMPL/nosnap/$SNAP_REL" ] \
+  || { echo "FIXTURE BROKEN: seed templates do not carry the shapes the arms key on" >&2; exit 2; }
+
+R_="$ROT"; HC_="$HOOK_C"; HP_="$HOOK_P"
+for a in $ARMS; do
+  case "$a" in
+    swap)   what="ACROSS THE SWAP — after --absorb --apply the Stop hook still blocks and the pause hook still raises its flag" ;;
+    neg)    what="NEGATIVE — a tree with no snapshot keeps both hooks silent" ;;
+    nohist) what="absorb, NO history: marker archived, snapshot present at 0 bytes, archive tracked" ;;
+    floor)  what="absorb, history at exactly --keep-entries cut points (no rotation): marker archived, snapshot present at 0 bytes, archive tracked" ;;
+    above)  what="absorb, history above the floor (rotation, the control): marker archived, snapshot present at 0 bytes, archive tracked" ;;
+    ign)    what="REFUSAL — ignored archive on the no-history path: rc 1, snapshot byte-identical" ;;
+    args)   what="USAGE on the no-history path — unknown option rc 2, --absorb naming no file rc 2" ;;
+    idem)   what="idempotent — absorbing the already-empty snapshot appends nothing" ;;
+  esac
+  if arm_run "$a"; then ok "$what"; else bad "$what ($MSG)"; fi
+done
+
+# --- MUTANTS of the absorb swap ---------------------------------------------------------------
+# Each is a copy with ONE edit, keyed on a line the subject carries exactly once, and asserted to
+# have applied (the anchor count goes 1 -> 0 and the copy differs) before its verdict is read. The
+# copies are driven by the SAME arms, and an unmutated copy from the same directory is driven
+# first: it must pass every arm, so a mutant verdict is a verdict about the edit, not the harness.
+# The hooks' copies carry their schema siblings, because both hooks resolve `../schemas/`.
+MD="$WORK/mut"
+mkdir -p "$MD/hooks" "$MD/schemas" || { echo "FIXTURE ERROR: cannot build mutant tree" >&2; exit 2; }
+cp "$HOOKDIR"/*.sh "$MD/hooks/" && cp "$HOOKDIR/../schemas/"*.json "$MD/schemas/" \
+  || { echo "FIXTURE ERROR: cannot copy the hooks and schemas" >&2; exit 2; }
+cp "$ROT" "$MD/rot-control.sh"
+
+# mut_line <src> <dst> <old line> <new line>: exact whole-line replacement. 0 = applied.
+mut_line() {
+  local pre post
+  pre="$(grep -cxF -- "$3" "$1")" || pre=0
+  [ "$pre" -eq 1 ] || return 1
+  awk -v a="$3" -v b="$4" '$0 == a { print b; next } { print }' "$1" > "$2" || return 1
+  post="$(grep -cxF -- "$3" "$2")" || post=0
+  [ "$post" -eq 0 ] && ! cmp -s "$1" "$2"
+}
+# mut_before <src> <dst> <anchor line> <inserted line>: insert a line before the anchor.
+mut_before() {
+  local pre
+  pre="$(grep -cxF -- "$3" "$1")" || pre=0
+  [ "$pre" -eq 1 ] || return 1
+  awk -v a="$3" -v b="$4" '$0 == a { print b } { print }' "$1" > "$2" || return 1
+  grep -qxF -- "$4" "$2" && ! cmp -s "$1" "$2"
+}
+
+run_arms "$MD/rot-control.sh" "$MD/hooks/ai-dlc-continue.sh" "$MD/hooks/ai-dlc-pause.sh"
+if [ -z "$FAILED" ]; then
+  ok "MUTANT CONTROL: the unmutated copies in the mutant tree pass every arm — the harness runs"
+else
+  bad "MUTANT CONTROL: the unmutated copies FAILED:${FAILED} — no mutant verdict below is evidence"
+fi
+
+# score <label> <must-fail arm> <rotator> <continue> <pause> <what>
+score() {
+  run_arms "$3" "$4" "$5"
+  case " ${FAILED} " in
+    *" $2 "*) ok "$1 KILLED by '$2' (failing arms:${FAILED}) — $6" ;;
+    *)        bad "$1 SURVIVED: arm '$2' did not fail (failing arms:${FAILED:- none}) — $6" ;;
+  esac
+}
+CH="$MD/hooks/ai-dlc-continue.sh"; PH="$MD/hooks/ai-dlc-pause.sh"
+
+if mut_line "$ROT" "$MD/m1.sh" '  [ "$ABSORB_DID" -eq 1 ] && : > "$ABSORB"' '  [ "$ABSORB_DID" -eq 1 ] && rm -f "$ABSORB"'; then
+  score m1 swap "$MD/m1.sh" "$CH" "$PH" "the absorb REMOVES the snapshot instead of truncating it"
+else bad "m1 DID NOT APPLY — the truncate line is not in the rotator exactly once"; fi
+
+if mut_line "$ROT" "$MD/m2.sh" 'absorb_only() {' 'absorb_only() { return 0'; then
+  score m2 floor "$MD/m2.sh" "$CH" "$PH" "the absorb is re-gated behind the rotation path"
+else bad "m2 DID NOT APPLY — 'absorb_only() {' is not in the rotator exactly once"; fi
+
+if mut_before "$ROT" "$MD/m3.sh" 'APPLY=0' 'if [ ! -f "$HISTORY" ]; then echo "no history at $HISTORY"; exit 0; fi'; then
+  score m3 args "$MD/m3.sh" "$CH" "$PH" "the history-absent exit sits above the argument loop again"
+else bad "m3 DID NOT APPLY — 'APPLY=0' is not in the rotator exactly once"; fi
+
+if mut_line "$ROT" "$MD/m4.sh" '  refuse_if_archive_ignored' '  :'; then
+  score m4 ign "$MD/m4.sh" "$CH" "$PH" "REFUSAL 3 is dropped from the absorb path"
+else bad "m4 DID NOT APPLY — the absorb path's refusal call is not in the rotator exactly once"; fi
+
+# m5 / m6: the negative arm is ABSENCE-shaped (it demands silence), so only a mutant establishes
+# it discriminates. Delete each hook's snapshot-existence predicate and it must go red.
+if mut_line "$CH" "$MD/hooks/m5-continue.sh" 'if [ ! -f "$SNAPSHOT_FILE" ]; then' 'if false; then'; then
+  score m5 neg "$MD/rot-control.sh" "$MD/hooks/m5-continue.sh" "$PH" "ai-dlc-continue.sh's snapshot-existence predicate deleted"
+else bad "m5 DID NOT APPLY — the Stop hook's snapshot predicate is not in it exactly once"; fi
+
+if mut_line "$PH" "$MD/hooks/m6-pause.sh" 'if [ ! -f "$SNAPSHOT_FILE" ]; then' 'if false; then'; then
+  score m6 neg "$MD/rot-control.sh" "$CH" "$MD/hooks/m6-pause.sh" "ai-dlc-pause.sh's snapshot-existence predicate deleted"
+else bad "m6 DID NOT APPLY — the pause hook's snapshot predicate is not in it exactly once"; fi
 
 echo
 if [ "$fails" -eq 0 ]; then

@@ -55,7 +55,7 @@ proves the consequence of.
 | 5 | the nested verbatim snapshot's seven sections land wholly on one side, never split |
 | 6 | the archive is staged, so `git ls-files` — which *is* the corpus — contains it |
 | 7 | idempotence: a second `--apply` changes neither file; the header is seeded exactly once |
-| 8 | `--absorb` folds a stale snapshot into the same archive and creates no dated file |
+| 8 | `--absorb` folds a stale snapshot into the same archive, leaves the snapshot present at 0 bytes, and creates no dated file |
 | 9 | **REFUSAL** — a non-empty history with no `## ` heading is refused, not reported as nothing-to-rotate |
 | 10 | **REFUSAL** — a git-ignored archive path is refused before anything is written |
 | 11 | **CONTROL for 10** — the same tree with the ignore removed rotates normally, so 10 measured the ignore and not the tree |
@@ -65,6 +65,42 @@ The mutation arm exists because the line-accounting refusal **cannot be reached 
 input**: it guards the splitter against itself. The only way to show it is live is to break the
 splitter, and the arm carries the `cmp -s` guard that ledger-rotate's does — a `sed` matching
 nothing would otherwise produce a "mutant caught" that caught nothing.
+
+## The absorb swap
+
+route.md's fresh start is two acts: the rotator absorbs the stale `pipeline-snapshot.md`, then
+the lead writes the new one, and a turn can end between them. `ai-dlc-continue.sh` (Stop) and
+`ai-dlc-pause.sh` (UserPromptSubmit) both key "a pipeline is active" on the snapshot's
+**existence**. A rotator that removes the snapshot turns both off for that window, so `--absorb`
+truncates it to 0 bytes instead. It must also run on every path that is not a refusal, or the
+lead's next write destroys the stale snapshot unarchived.
+
+These arms drive the REAL rotator and the REAL hooks, each against a fresh copy of one seed
+template (`seed.sh` builds `nohist`, `floor`, `above`, `nosnap` and `ignored`):
+
+| Arm | Asserts |
+|---|---|
+| swap | the hooks block and raise the flag BEFORE the call (precondition), and still do AFTER `--absorb --apply` |
+| neg | a tree with no snapshot keeps both hooks silent |
+| nohist / floor / above | absorb with no history, with exactly `--keep-entries` cut points, and above the floor. Each proves its path by the rotator's own verdict line, then asserts the marker is in the archive, the snapshot is present at 0 bytes, and the archive is tracked |
+| ign | an ignored archive on the no-history path: rc 1, snapshot byte-identical, no archive |
+| args | on the no-history path, an unknown option and an `--absorb` naming no file are both rc 2 |
+| idem | absorbing the already-empty snapshot again leaves the archive byte-identical |
+
+Mutants, each a one-line copy whose anchor must occur exactly once and be gone afterwards, driven
+by the same arms after an unmutated control copy from the same directory passes them all:
+
+| Mutant | Edit | Killed by |
+|---|---|---|
+| m1 | the truncate becomes `rm -f "$ABSORB"` | swap |
+| m2 | `absorb_only` returns at once (absorb only on the rotation path) | floor |
+| m3 | a history-absent exit inserted above the argument loop | args |
+| m4 | the absorb path's `refuse_if_archive_ignored` becomes `:` | ign |
+| m5 | `ai-dlc-continue.sh`'s `[ ! -f "$SNAPSHOT_FILE" ]` becomes `false` | neg |
+| m6 | `ai-dlc-pause.sh`'s `[ ! -f "$SNAPSHOT_FILE" ]` becomes `false` | neg |
+
+The swap arm FAILS against the rotator that removed the snapshot (the one before truncation
+existed), because the hooks go silent once the file is gone.
 
 ## Ships to consumers
 
