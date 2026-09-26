@@ -96,12 +96,21 @@ template (`seed.sh` builds `nohist`, `floor`, `above`, `nosnap`, `ignored` and `
 | links | a symlinked history and a hard-linked history: each rc 1 naming the reason, before any write. The link is still a link and its target byte-identical; the history and its peer byte-identical; the snapshot byte-identical; no archive |
 | mode | a 640 history rotates to the clean result and is still 640 after the rename; a peer file in the same directory is untouched. chmod means nothing on FAT, so this arm is about the host it runs on |
 | atomic | an `mv` shim fails the rename WITHOUT calling the real `mv`: rc 1 naming the rename, history and snapshot byte-identical, and NO file left at the temp name. The only arm that can assert "no temp left": a killed run legitimately leaves one |
-| killed | two kill points, each followed by the same caller re-run plainly. (1) With `--absorb`, an `mv` shim SIGKILLs the rotator at the rename; the kill is asserted (sentinel once, rc 137); the re-run is rc 0, rotates ("moved 4 entries"), the history EQUALS a clean rotation of the same world, and every pre-run history and snapshot line is in the history or the archive. (2) Without `--absorb`, a `git` shim SIGKILLs it at `git add` of the archive, after the rename; the control is that the archive is NOT tracked after run 1; the re-run lands on "nothing to rotate", rc 0, the archive tracked, the history equal to a clean rotation, 0 pre-run lines missing from the tracked corpus |
+| killed | a KILL-POINT SWEEP with `--absorb`, keyed on a call COUNT, never on a command shape. Every external command the rotator calls (`basename cat cp cut dirname find git grep head id mkdir mktemp mv rm sed tail tr wc`) is a shim, and the shim directory is the rotator's whole PATH, so a command the list lacks is "not found" and the counted run refuses. A counted unkilled run first: rc 0, the history equal to a clean rotation, T calls (63 at this release). Then for every N in 1..T+1, a fresh world, the rotator SIGKILLed at its Nth call, and a plain re-run: run 1 rc 137, run 2 rc 0, 0 pre-run history and snapshot lines missing from the tracked corpus (`git ls-files` `*.md`), the history equal to a clean rotation. At call N the shim runs the real command under `ulimit -f 0`, so every open, truncate and rename happens and no byte of file data lands, then kills: a redirect into the history is killed between its truncate and its write. The sweep proves its reach: N = T+1 completes unkilled, a kill lands ON `mv`, and at least one lands after the rename. The counter is `mkdir` of a numbered directory, atomic under the concurrent shims of a pipeline |
+| staged | without `--absorb`, a `git` shim SIGKILLs the rotator at `git add` of the archive, after the rename; the control is that the archive is NOT tracked after run 1; the re-run lands on "nothing to rotate", rc 0, the archive tracked, the history equal to a clean rotation, 0 pre-run lines missing from the tracked corpus. The sweep cannot own this: with `--absorb` the re-run's absorb stages the archive itself, so m18 passes all 63 kill points and dies only here |
 
 Every shim arm asserts the shim's sentinel counted exactly one action, so an arm whose shim never
-fired on its intended call cannot pass. A shim that kills sends SIGKILL to its parent, the rotator,
-and exits without calling the real program, so nothing outlives the kill to finish the rename after
-it, and no watcher polls a process table.
+fired on its intended call cannot pass. A shim that kills sends SIGKILL to the rotator (its pid
+passed in the environment, because a pipeline stage's parent is a subshell), so nothing outlives
+the kill to finish the rename after it, and no watcher polls a process table.
+
+The sweep runs its points on 12 workers (`KPAR`), each taking every 12th N from T+1 down with no barrier, and a
+failing point stops every worker before its next point: a verdict of "failed" needs one failing
+point, and a passing subject runs all T. It replaced two shape-keyed kills, an `mv` shim and a
+one-argument `cat` of a `.rotate.` file, which accepted MX2 and MX below. It covers both of their
+kill points: the old `mv` shim killed instead of renaming, which is the kill at the call before
+`mv` (a `wc -c`, writing no file), and the old `cat` shim killed a copy-back after the shell's
+truncate, which is the kill at the copy-back's own call, where mK dies.
 
 | Arm | Asserts |
 |---|---|
@@ -135,7 +144,7 @@ them all; each mutant then runs only the arm that owns it:
 | mA | the temp write's size check deleted | tshort |
 | mC | the temp write's `\|\| rewrite_fail` deleted (write-status check) | tlate |
 | m14 | the `[ ! -w "$HISTORY" ]` precheck becomes `false` | rohist |
-| m18 | the staging call on the nothing-to-rotate (cut-floor) path deleted | killed |
+| m18 | the staging call on the nothing-to-rotate (cut-floor) path deleted | staged |
 | m19 | the `[ ! -w "$HIST_DIR" ]` precheck becomes `false` | rodir |
 | m23 | the post-truncate check becomes `false` | rosnap |
 | mL1 | the `[ -L "$HISTORY" ]` precheck becomes `false` (the symlink is followed and replaced by a regular file) | links |
@@ -143,6 +152,8 @@ them all; each mutant then runs only the arm that owns it:
 | mM | `cp -p` becomes `cp` (the history comes back 600) | mode |
 | mR | `rewrite_fail` no longer removes the temp it built | atomic |
 | mK | the rename becomes a copy-back through the history, `cat "$HIST_NEW" > "$HISTORY"`; the kill lands after the shell truncated the history and before a byte is written, and the re-run finds an empty history | killed |
+| MX2 | the shipped `mv -f` line kept, then `cp -- "$HISTORY" "$TMPD/h2" && cat "$TMPD/h2" > "$HISTORY"`; the shape-keyed kill fired on the atomic `mv` and never on this copy-back, so the old arm and receipt passed it. Killed at the `cat` it loses 21 of 37 pre-run lines | killed |
+| MX | the rename goes to a side file `.stage-x`, then `cat .stage-x > "$HISTORY"`; the old receipt passed it. Killed at the `cat` it loses 21 of 37 lines | killed |
 
 Removed in the rename design, each because its subject no longer exists in the rotator:
 `tmpexist`/m15 and `tmprace`/mB (the pid-keyed temp name, its stale-temp precheck and `set -C`:

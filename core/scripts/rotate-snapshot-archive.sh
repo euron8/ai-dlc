@@ -114,10 +114,12 @@
 #     The OWNER is kept only where the user may set it: `cp -p` run by a user who does not own the
 #     history silently gives the temp file (and so the new history) that user's ownership, rc 0,
 #     on BSD and GNU alike. The in-place write it replaces kept the owner.
-#   - A run killed with SIGKILL at any point loses no line, and a plain re-run exits 0. It may
-#     leave a stray `.<history basename>.rotate.XXXXXX` beside the history. The history was never
-#     written through it, so it is SAFE TO DELETE; no later run reads it or refuses on it, and it
-#     is outside the `*.md` corpus Check 35 reads.
+#   - A run killed with SIGKILL at any point loses no line, and a plain re-run exits 0. A run
+#     stopped by SIGKILL, SIGTERM or SIGINT between the `mktemp` and the rename may leave a stray
+#     `.<history basename>.rotate.XXXXXX` beside the history: the EXIT trap removes only the
+#     scratch directory, never that temp, and SIGKILL runs no trap at all. The stray is HARMLESS
+#     and SAFE TO DELETE: the history was never written through it, no later run reads it or
+#     refuses on it, and it is outside the `*.md` corpus Check 35 reads.
 #   - A kill between the rename and the snapshot truncate leaves the archive unstaged; the re-run
 #     lands on "nothing to rotate", stages it, and absorbs the snapshot again (a duplicate block).
 #   - ONE RUN ASSUMES NO CONCURRENT WRITER TO THE HISTORY. A writer holding it open with `>>`
@@ -589,11 +591,11 @@ ARCHIVE_WRITTEN=0
 rewrite_fail() {
   [ -n "$HIST_NEW" ] && rm -f "$HIST_NEW"
   if [ "$ARCHIVE_WRITTEN" -eq 0 ]; then
-    echo "${SELF_NAME}: REFUSED -- writing the new history failed: $1. Nothing was written: ${HISTORY}, the archive${ABSORB:+ and ${ABSORB}} are unchanged, and the temp file is removed." >&2
+    echo "${SELF_NAME}: REFUSED -- writing the new history failed: $1. Nothing was written: ${HISTORY}, the archive${ABSORB:+ and ${ABSORB}} are unchanged, and $(if [ -n "$HIST_NEW" ] && [ -e "$HIST_NEW" ]; then printf 'the temp file %s could NOT be removed; it is safe to delete' "$HIST_NEW"; else printf 'no temp file is left'; fi)." >&2
     echo "  Fix the cause and re-run." >&2
   else
     echo "${SELF_NAME}: REFUSED -- writing the new history failed: $1, after the moved block was appended to ${ARCHIVE}${ABSORB:+ with ${ABSORB}}." >&2
-    echo "  ${HISTORY} is unchanged${ABSORB:+, ${ABSORB} still holds its content,} and the temp file is removed. The moved lines are in BOTH files," >&2
+    echo "  ${HISTORY} is unchanged${ABSORB:+, ${ABSORB} still holds its content,} and $(if [ -n "$HIST_NEW" ] && [ -e "$HIST_NEW" ]; then printf 'the temp file %s could NOT be removed (it is safe to delete)' "$HIST_NEW"; else printf 'no temp file is left'; fi). The moved lines are in BOTH files," >&2
     echo "  which conserves them. Fix the cause and re-run: the re-run appends them to the archive again." >&2
   fi
   exit 1

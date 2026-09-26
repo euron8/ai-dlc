@@ -567,14 +567,14 @@ arm_rew() {
 #   mode             a 640 history keeps 640 across the rename (`cp -p`).
 #   atomic           an `mv` shim fails the rename WITHOUT renaming: rc 1, the history
 #                    byte-identical, and no temp file left.
-#   killed           the rotator is SIGKILLed at the rename, then re-run plainly; and SIGKILLed
-#                    after the rename at the staging, then re-run plainly.
+#   killed           a KILL-POINT SWEEP: the rotator is SIGKILLed at its Nth external command,
+#                    for EVERY N, each followed by a plain re-run (see arm_killed); plus a kill
+#                    at the staging without --absorb, then re-run plainly.
 #
-# A shim that kills does it itself: it appends its mode to a sentinel file, sends SIGKILL to its
-# parent (the rotator, which runs these commands directly, never in a subshell) and exits without
-# calling the real program. Nothing outlives the kill, so no orphan can finish the rename after it,
-# and there is no watcher polling a process table. Every shim arm asserts the sentinel counted
-# exactly one action, so an arm whose shim never fired cannot pass.
+# A shim that acts does it itself: it appends its mode to a sentinel file and exits without calling
+# the real program. Nothing outlives the act, and there is no watcher polling a process table.
+# Every shim arm asserts the sentinel counted exactly one action, so an arm whose shim never fired
+# cannot pass.
 TMPNAME=".pipeline-snapshot-history.md.rotate"
 tmpcount() { local n; n="$(ls -a "$1/_bmad-output" | grep -c "^${TMPNAME}\.")" || n=0; printf '%s\n' "$n"; }
 REAL_MV="$(command -v mv)"
@@ -587,7 +587,6 @@ cat > "$RSHIM/cat" <<'SHIMEOF'
 R="$SNAPROT_REAL_CAT"; m="${SNAPROT_SHIM_MODE:-}"; hit=""
 case "$m:$#:${1:-}" in
   tlate:2:*/preamble|tshort:2:*/preamble) hit=1 ;;
-  kill:1:*.rotate.*) hit=1 ;;
 esac
 [ -n "$hit" ] || exec "$R" "$@"
 printf '%s\n' "$m" >> "$SNAPROT_SHIM_SENT"
@@ -595,14 +594,12 @@ case "$m" in
   tlate) "$R" "$@"; exit 1 ;;
   tshort) "$R" "$@" > "$SNAPROT_SHIM_SENT.buf" || exit 1
           n=$(wc -c < "$SNAPROT_SHIM_SENT.buf"); head -c $((n - 1)) "$SNAPROT_SHIM_SENT.buf"; exit 0 ;;
-  kill) kill -KILL "$PPID"; exit 1 ;;
 esac
 SHIMEOF
 cat > "$RSHIM/mv" <<'SHIMEOF'
 #!/bin/sh
 case "${SNAPROT_SHIM_MODE:-}" in
   mvfail) printf 'mvfail\n' >> "$SNAPROT_SHIM_SENT"; exit 1 ;;
-  kill)   printf 'kill\n' >> "$SNAPROT_SHIM_SENT"; kill -KILL "$PPID"; exit 1 ;;
 esac
 exec "$SNAPROT_REAL_MV" "$@"
 SHIMEOF
@@ -614,6 +611,55 @@ fi
 exec "$SNAPROT_REAL_GIT" "$@"
 SHIMEOF
 chmod +x "$RSHIM/cat" "$RSHIM/mv" "$GSHIM/git" || { echo "FIXTURE ERROR: cannot chmod the rewrite shims" >&2; exit 2; }
+
+# THE KILL-POINT SWEEP'S SHIMS. One generic shim, installed under the name of every external
+# command the rotator calls, in a directory that is the rotator's WHOLE PATH: a command the list
+# misses is "command not found", and the counted unkilled run below refuses on that, so the list
+# cannot silently fall behind the rotator. Each name resolves its real program through a symlink
+# of the same name in KREAL (so a program that dispatches on its own name still sees it), and runs
+# it with the caller's real PATH.
+#
+# THE COUNTER IS A `mkdir`, BECAUSE PIPELINE STAGES CALL THEIR SHIMS CONCURRENTLY. A read-add-write
+# counter file races there: two stages read the same value, both write n+1, and a later N is never
+# reached (a counter built that way read a false zero on its own control). `mkdir` of the numbered
+# directory is atomic: the shim claims the first free number at or after the hint, so every call
+# gets a distinct number and the numbers are dense. The hint is only a starting point.
+#
+# At its Nth call the shim runs the real command with the file-size limit at 0 and SIGXFSZ ignored,
+# so the command performs every open, truncate, create, rename and removal it would, and cannot
+# write one byte into a regular file; then it SIGKILLs the rotator. That lands the kill at the worst
+# instant of that call: a `cp` or a redirect into the history has truncated it and written nothing.
+# A kill before the Nth call starts is the same state as this one at call N-1 for every call that
+# writes no file data, and a call that does is caught by its own kill. The rotator's pid comes from
+# the environment, not `$PPID`: a pipeline stage's parent is a subshell.
+KSHIM="$SHIM/sweep"
+KREAL="$SHIM/sweep-real"
+KCMDS="basename cat cp cut dirname find git grep head id mkdir mktemp mv rm sed tail tr wc"
+mkdir -p "$KSHIM" "$KREAL" || { echo "FIXTURE ERROR: cannot build the sweep shims" >&2; exit 2; }
+REAL_MKDIR="$(command -v mkdir)"
+cat > "$KSHIM/.shim" <<SHIMEOF
+#!/bin/sh
+c="\${0##*/}"; C="\$SNAPROT_KC"; n=0
+read n < "\$C/hint"
+n=\$(( \${n:-0} + 1 ))
+while ! "$REAL_MKDIR" "\$C/\$n" 2>/dev/null; do n=\$((n + 1)); done
+echo "\$n" > "\$C/hint"
+if [ "\$n" = "\${SNAPROT_KN:-0}" ]; then
+  printf '%s\n' "\$c \$*" > "\$C/hit"
+  ( trap '' XFSZ; ulimit -f 0; PATH="\$SNAPROT_RP" exec "\$SNAPROT_KR/\$c" "\$@" )
+  kill -KILL "\$SNAPROT_ROT"; exit 137
+fi
+PATH="\$SNAPROT_RP" exec "\$SNAPROT_KR/\$c" "\$@"
+SHIMEOF
+chmod +x "$KSHIM/.shim" || { echo "FIXTURE ERROR: cannot chmod the sweep shim" >&2; exit 2; }
+for _c in $KCMDS; do
+  _r="$(command -v "$_c")" || { echo "FIXTURE ERROR: '$_c' is not on PATH" >&2; exit 2; }
+  ln -s "$_r" "$KREAL/$_c" && cp "$KSHIM/.shim" "$KSHIM/$_c" \
+    || { echo "FIXTURE ERROR: cannot install the '$_c' sweep shim" >&2; exit 2; }
+done
+BASH_ABS="$(command -v bash)"
+# The kill-point sweep runs this many workers at once; every kill point has its own world and counter.
+KPAR=12
 
 # The expected new history of the `above` world, from the SHIPPED rotator on an unmodified copy, so a
 # mutant under test cannot move its own yardstick. Asserted to differ from the pre-run history.
@@ -777,37 +823,116 @@ arm_atomic() {
     && [ "$hid" = yes ] && [ "$sid" = yes ] && [ "$nt" -eq 0 ]
 }
 
-# killed: the case rounds 4-6 could not pass cleanly. Two kill points, each followed by the SAME
-# caller re-run plainly (no restore, no cleanup):
-#   rename  -- the history's rename is where the kill lands. With --absorb. The kill is asserted to
-#              have HAPPENED (the sentinel counted once, rc 137). Run 2: rc 0, it rotates normally
-#              ("moved 4 entries"), the history EQUALS a clean rotation of the same world (a
-#              rotator that never rewrites the history also exits 0 and loses nothing, so this is
-#              what separates them), and every pre-run history and snapshot line is in the history
-#              or the archive. A stray temp file may be left; that is not asserted either way.
-#   staging -- the rename has happened and the kill lands on `git add` of the archive. Without
-#              --absorb. The control: after run 1 the archive is NOT tracked, so the world expresses
-#              the defect. Run 2 lands on "nothing to rotate": rc 0, the archive tracked, the
-#              history equal to a clean rotation, and every pre-run history line in the tracked
-#              corpus.
-# The same shim set also kills a copy-back write (`cat temp > history`) after the shell has
-# truncated the history, so a rotator that writes through the history instead of renaming loses lines here.
+# killed: the case rounds 4-6 could not pass cleanly. The kill is not keyed on a command SHAPE:
+# a kill keyed on "any `mv`" or "a one-argument `cat` of the temp" accepted a rotator that renames
+# and then copies the history back through itself (`cp history x && cat x > history`), which loses
+# 21 of 26 lines on a kill between the shell's truncate and the write. So:
+#   sweep   -- with --absorb, one UNKILLED counted run first: rc 0, no "not found" from a command
+#              the shim list lacks, the history equal to a clean rotation, and T external calls.
+#              Then for EVERY N from 1 to T+1, a fresh world, the rotator SIGKILLed at its Nth call
+#              (see the sweep shim), and the SAME caller re-run plainly (no restore, no cleanup).
+#              For each N that killed: run 1 rc 137; run 2 rc 0; ZERO pre-run history and snapshot
+#              lines missing from the tracked corpus (`git ls-files` *.md, which is the history and
+#              the staged archive); the final history EQUAL to a clean rotation (a rotator that
+#              never rewrites the history also exits 0 and loses nothing, so this separates them).
+#              The sweep proves its own reach: N = T+1 must complete UNKILLED with rc 0 (so T is
+#              the whole run and no later call is missed), at least one kill must land AFTER the
+#              rename (the history already equal to a clean rotation before the re-run), and one
+#              must land ON the `mv`. A stray temp file may be left; that is not asserted.
+#              KPAR workers run the points, each its own stride of N from T+1 DOWN, with no
+#              barrier between points. A failing point drops a stop file and every worker stops
+#              before its next point: a verdict of "failed" needs one failing point. A subject
+#              that passes runs every point, and the verdict requires all T of them.
+#              It covers the two shape-keyed kills it replaces. The old `mv` shim killed INSTEAD
+#              of renaming; that state is the kill at the call before `mv`, which writes no file.
+#              The old one-argument `cat` shim killed a copy-back after the shell's truncate; that
+#              is the kill at the copy-back's own call, and mK dies there.
+#
+# staged: the rename has happened and the kill lands on `git add` of the archive, WITHOUT --absorb.
+# The sweep does not stand in for it, and that is measured: with --absorb the re-run's absorb
+# stages the archive itself, so m18 (no staging on the cut-floor path) passes all 63 kill points of
+# the sweep and dies only here. The control: after run 1 the archive is NOT tracked, so the world
+# expresses the defect. Run 2 lands on "nothing to rotate": rc 0, the archive tracked, the history
+# equal to a clean rotation, and every pre-run history line in the tracked corpus.
+sweep_one() {  # <N> <dir> [T]: one kill point; writes one result line to <dir>/r.<N>, and <dir>/stop if it fails
+  local N="$1" d="$2" w c rc1 rc2 post heq miss
+  w="$d/w$N"; c="$d/c$N"
+  cp -R "$TMPL/above" "$w" && mkdir -p "$c" "$w.tmp" && echo 0 > "$c/hint" || { echo "ERR $N" > "$d/r.$N"; : > "$d/stop"; return; }
+  ( cd "$w" && TMPDIR="$w.tmp" SNAPROT_KC="$c" SNAPROT_KN="$N" SNAPROT_KR="$KREAL" SNAPROT_RP="$PATH" PATH="$KSHIM" \
+      "$BASH_ABS" -c 'SNAPROT_ROT=$$; export SNAPROT_ROT; exec "$0" "$@"' "$BASH_ABS" "$R_" "$HIST_REL" --absorb "$SNAP_REL" --apply ) \
+      >"$w.out1" 2>&1; rc1=$?
+  if [ ! -f "$c/hit" ]; then
+    echo "UNKILLED $N $rc1 $(grep -c 'not found' "$w.out1")" > "$d/r.$N"
+    [ "$N" -eq 0 ] || { [ "$N" -gt "${3:-0}" ] && [ "$rc1" -eq 0 ]; } || : > "$d/stop"
+    return
+  fi
+  post=no; cmp -s "$w/$HIST_REL" "$EXPECT" && post=yes
+  ( cd "$w" && bash "$R_" "$HIST_REL" --absorb "$SNAP_REL" --apply ) >/dev/null 2>&1; rc2=$?
+  ( cd "$w" && git ls-files -z -- '*.md' | xargs -0 cat 2>/dev/null ) | sort -u > "$w.corpus"
+  miss="$(comm -23 "$d/want" "$w.corpus" | wc -l | tr -d ' ')"
+  heq=no; cmp -s "$w/$HIST_REL" "$EXPECT" && heq=yes
+  echo "KILLED $N $rc1 $rc2 $miss $heq $post $(wc -l < "$d/want" | tr -d ' ') $(cut -d' ' -f1 "$c/hit")" > "$d/r.$N"
+  [ "$rc1" -eq 137 ] && [ "$rc2" -eq 0 ] && [ "$miss" -eq 0 ] && [ "$heq" = yes ] || : > "$d/stop"
+}
+sweep_worker() {  # <first N> <dir> <T>: every KPAR-th point from <first N> down, until a stop file
+  local N="$1"
+  while [ "$N" -ge 1 ] && [ ! -e "$2/stop" ]; do
+    sweep_one "$N" "$2" "$3"
+    N=$((N - KPAR))
+  done
+}
 arm_killed() {
-  local w pre hpre rc1 n1 o2 rc2 heq lost trk0 trk1 miss ok_all=1
+  local heq ok_all=1 d T N j k line bad nk npost nmiss nmv first swept stop
   expect_above || { MSG="cannot build the expected new history"; return 1; }
   MSG=""
-  w="$(world above)" || { MSG="world copy failed"; return 1; }
-  pre="$(snap_copy "$w")" || { MSG="snapshot copy failed"; return 1; }
-  hpre="$w.hist"; cp "$w/$HIST_REL" "$hpre" || { MSG="history copy failed"; return 1; }
-  rshim kill "$w" "$RSHIM" absorb; rc1=$RC; n1=$SENT
-  o2="$(bash "$R_" "$w/$HIST_REL" --absorb "$w/$SNAP_REL" --apply 2>&1)"; rc2=$?
-  heq=no; cmp -s "$w/$HIST_REL" "$EXPECT" && heq=yes
-  sort -u "$hpre" "$pre" > "$w.want"
-  cat "$w/$HIST_REL" "$w/$ARCH_REL" 2>/dev/null | sort -u > "$w.have"
-  lost="$(comm -23 "$w.want" "$w.have" | wc -l | tr -d ' ')"
-  MSG="rename: shim acted ${n1}x, run 1 rc=${rc1}; run 2 rc=${rc2} rotated=$(grep -c 'moved 4 entr' <<<"$o2") history == clean rotation: ${heq}, pre-run lines lost=${lost} of $(wc -l < "$w.want" | tr -d ' '), temp files left=$(tmpcount "$w"); "
-  { [ "$n1" -eq 1 ] && [ "$rc1" -eq 137 ] && [ "$rc2" -eq 0 ] && grep -q 'moved 4 entr' <<<"$o2" \
-      && [ "$heq" = yes ] && [ -s "$w.want" ] && [ "$lost" -eq 0 ]; } || ok_all=0
+  d="$(mktemp -d "$WORK/sweep.XXXXXX")" || { MSG="sweep dir failed"; return 1; }
+  # The pre-run lines: the template's history and snapshot, the same for every kill point.
+  sort -u "$TMPL/above/$HIST_REL" "$TMPL/above/$SNAP_REL" > "$d/want" && [ -s "$d/want" ] \
+    || { MSG="cannot list the pre-run lines"; return 1; }
+  # The counted unkilled run: T, and the proof that every command the rotator runs is shimmed.
+  sweep_one 0 "$d"
+  read -r line < "$d/r.0"
+  set -- $line - - - -
+  T="$(ls "$d/c0" | grep -c '^[0-9][0-9]*$')" || T=0
+  heq=no; cmp -s "$d/w0/$HIST_REL" "$EXPECT" && heq=yes
+  if ! { [ "$1" = UNKILLED ] && [ "$3" -eq 0 ] && [ "$4" -eq 0 ] && [ "$heq" = yes ] && [ "$T" -gt 0 ]; }; then
+    MSG="sweep: the counted unkilled run did not complete cleanly (${line}, history == clean rotation: ${heq}, calls ${T}); "
+    ok_all=0; T=0
+  fi
+  bad=0; nk=0; npost=0; nmiss=0; nmv=0; first=""; swept=0; stop=0
+  if [ "$T" -gt 0 ]; then
+    j=0
+    while [ "$j" -lt "$KPAR" ]; do sweep_worker $(( T + 1 - j )) "$d" "$T" & j=$((j + 1)); done
+    wait
+    [ -e "$d/stop" ] && stop=1
+    k=$(( T + 1 ))
+    while [ "$k" -ge 1 ]; do
+      if [ -f "$d/r.$k" ]; then read -r line < "$d/r.$k"; else line="NOTSWEPT $k"; fi
+      set -- $line - - - - - - - - -
+      if [ "$k" -gt "$T" ]; then
+        # N = T+1 must NOT kill: the counted unkilled run is the whole run.
+        if ! { [ "$1" = UNKILLED ] && [ "$3" -eq 0 ]; }; then
+          bad=$((bad + 1)); [ -n "$first" ] || first="N=${k} (one past the count) did not complete unkilled: ${line}"
+        fi
+      elif [ "$1" = KILLED ]; then
+        swept=$((swept + 1)); nk=$((nk + 1)); [ "$7" = yes ] && npost=$((npost + 1)); [ "$9" = mv ] && nmv=$((nmv + 1))
+        if ! { [ "$3" -eq 137 ] && [ "$4" -eq 0 ] && [ "$5" -eq 0 ] && [ "$6" = yes ] && [ "$8" -gt 0 ]; }; then
+          bad=$((bad + 1)); [ "$5" -gt 0 ] && nmiss=$((nmiss + 1))
+          [ -n "$first" ] || first="N=${2} at ${9}: run 1 rc=${3}, re-run rc=${4}, ${5} of ${8} pre-run lines missing, history == clean rotation: ${6}"
+        fi
+      elif [ "$1" != NOTSWEPT ]; then
+        swept=$((swept + 1)); bad=$((bad + 1)); [ -n "$first" ] || first="N=${k} did not kill: ${line}"
+      fi
+      k=$((k - 1))
+    done
+    MSG="sweep: ${T} calls unkilled, N=$(( T + 1 )) completes unkilled=$([ -f "$d/r.$(( T + 1 ))" ] && [ "$(cut -d' ' -f1 "$d/r.$(( T + 1 ))")" = UNKILLED ] && echo yes || echo no); ${swept} of ${T} kill points swept (from N=${T} down$([ "$stop" -eq 1 ] && echo ', stopped at the first failure')): ${nk} killed, ${bad} failed (${nmiss} lost lines), ${npost} after the rename, ${nmv} at mv; first failure (highest N): ${first:-none}"
+    { [ "$swept" -eq "$T" ] && [ "$nk" -eq "$T" ] && [ "$bad" -eq 0 ] && [ "$npost" -ge 1 ] && [ "$nmv" -ge 1 ]; } || ok_all=0
+  fi
+  [ "$ok_all" -eq 1 ]
+}
+arm_staged() {
+  local w hpre rc1 n1 o2 rc2 heq trk0 trk1 miss
+  expect_above || { MSG="cannot build the expected new history"; return 1; }
   w="$(world above)" || { MSG="world copy failed"; return 1; }
   hpre="$w.hist"; cp "$w/$HIST_REL" "$hpre" || { MSG="history copy failed"; return 1; }
   rshim gitkill "$w" "$GSHIM"; rc1=$RC; n1=$SENT
@@ -818,11 +943,10 @@ arm_killed() {
   sort -u "$hpre" > "$w.want"
   ( cd "$w" && git ls-files -z -- '*.md' | xargs -0 cat 2>/dev/null ) | sort -u > "$w.corpus"
   miss="$(comm -23 "$w.want" "$w.corpus" | wc -l | tr -d ' ')"
-  MSG="${MSG}staging: shim acted ${n1}x, run 1 rc=${rc1}, archive tracked after run 1=${trk0}; run 2 rc=${rc2} ($(head -1 <<<"$o2" | cut -c1-70)), archive tracked=${trk1}, history == clean rotation: ${heq}, pre-run lines missing from the tracked corpus=${miss}"
-  { [ "$n1" -eq 1 ] && [ "$rc1" -eq 137 ] && [ "$trk0" = no ] && [ "$rc2" -eq 0 ] \
-      && grep -q 'nothing to rotate' <<<"$o2" && [ "$trk1" = yes ] && [ "$heq" = yes ] \
-      && [ -s "$w.want" ] && [ "$miss" -eq 0 ]; } || ok_all=0
-  [ "$ok_all" -eq 1 ]
+  MSG="staging: shim acted ${n1}x, run 1 rc=${rc1}, archive tracked after run 1=${trk0}; run 2 rc=${rc2} ($(head -1 <<<"$o2" | cut -c1-70)), archive tracked=${trk1}, history == clean rotation: ${heq}, pre-run lines missing from the tracked corpus=${miss}"
+  [ "$n1" -eq 1 ] && [ "$rc1" -eq 137 ] && [ "$trk0" = no ] && [ "$rc2" -eq 0 ] \
+    && grep -q 'nothing to rotate' <<<"$o2" && [ "$trk1" = yes ] && [ "$heq" = yes ] \
+    && [ -s "$w.want" ] && [ "$miss" -eq 0 ]
 }
 
 # ARGS: on the no-history path an unknown option and an --absorb naming no file are both usage
@@ -849,7 +973,7 @@ arm_idem() {
     && absorbed_ok "$w" "STALESNAP-nohist" "$pre"
 }
 
-ARMS="swap neg nohist floor above ign unw ulim wlate wshort rew tlate tshort rohist links mode atomic killed args idem ro rodir rosnap"
+ARMS="swap neg nohist floor above ign unw ulim wlate wshort rew tlate tshort rohist links mode atomic killed staged args idem ro rodir rosnap"
 arm_run() {
   case "$1" in
     rosnap)   arm_rosnap ;;
@@ -861,6 +985,7 @@ arm_run() {
     mode)     arm_mode ;;
     atomic)   arm_atomic ;;
     killed)   arm_killed ;;
+    staged)   arm_staged ;;
     ulim)   arm_ulim ;;
     wlate)  arm_wshim late ;;
     wshort) arm_wshim short ;;
@@ -914,14 +1039,17 @@ for a in $ARMS; do
     links)    what="REFUSAL — a symlinked history and a hard-linked history: each rc 1 before ANY write, the link and its target / the peer byte-identical, snapshot byte-identical, no archive" ;;
     mode)     what="MODE — a 640 history rotates to the clean result and is still 640 after the rename; a peer file beside it is untouched" ;;
     atomic)   what="ATOMIC — the rename fails (an mv shim that never renames): rc 1, history and snapshot byte-identical, NO temp file left" ;;
-    killed)   what="KILLED — SIGKILL at the rename (then a plain re-run: rc 0, rotates, history == clean rotation, no pre-run line lost) and SIGKILL at the staging after the rename (then a plain re-run: rc 0, archive tracked, history == clean rotation, no pre-run line missing from the corpus)" ;;
+    killed)   what="KILLED — a kill-point sweep with --absorb: SIGKILL at EVERY external call 1..T of a counted unkilled run (T+1 completes unkilled, a kill lands on mv and one after the rename), each then a plain re-run: rc 0, 0 pre-run history and snapshot lines missing from the tracked corpus, history == clean rotation" ;;
+    staged)   what="STAGED — SIGKILL at the staging after the rename, without --absorb (then a plain re-run: rc 0, archive tracked, history == clean rotation, no pre-run line missing from the corpus)" ;;
     args)   what="USAGE on the no-history path — unknown option rc 2, --absorb naming no file rc 2" ;;
     idem)   what="idempotent — absorbing the already-empty snapshot appends nothing" ;;
     ro)     what="REPORT-ONLY — --absorb without --apply on no history, the floor and above it writes nothing (git status empty, snapshot byte-identical, no archive) and says what it would do" ;;
   esac
   ROHIST_SKIP=""
   if arm_run "$a"; then
-    if [ -n "$ROHIST_SKIP" ]; then printf '  skip  %s (%s)\n' "$what" "$MSG"; else ok "$what"; fi
+    if [ -n "$ROHIST_SKIP" ]; then printf '  skip  %s (%s)\n' "$what" "$MSG"
+    elif [ "$a" = killed ]; then ok "$what ($MSG)"   # the sweep's reach is part of its verdict
+    else ok "$what"; fi
   else bad "$what ($MSG)"; fi
 done
 
@@ -1086,7 +1214,7 @@ else bad "m14 DID NOT APPLY — the [ -w ] precheck is not in the rotator exactl
 # m18: the staging call on the cut-floor path deleted. A run killed after the rename and before
 # its staging leaves the archive untracked, and the plain re-run lands on that path.
 if mut_line "$ROT" "$MD/m18.sh" '  stage_existing_archive # at the cut floor' '  :'; then
-  score m18 killed "$MD/m18.sh" "$CH" "$PH" "the archive is not staged on the nothing-to-rotate path"
+  score m18 staged "$MD/m18.sh" "$CH" "$PH" "the archive is not staged on the nothing-to-rotate path"
 else bad "m18 DID NOT APPLY — the cut-floor staging call is not in the rotator exactly once"; fi
 
 # m19: the history-directory precheck deleted.
@@ -1129,6 +1257,22 @@ MK_OLD='mv -f -- "$HIST_NEW" "$HISTORY" || rewrite_fail "the rename over the his
 if mut_line "$ROT" "$MD/mK.sh" "$MK_OLD" 'cat "$HIST_NEW" > "$HISTORY" || rewrite_fail "the rename over the history failed"'; then
   score mK killed "$MD/mK.sh" "$CH" "$PH" "the rename replaced by a copy-back through the history, killed between its truncate and its write"
 else bad "mK DID NOT APPLY — the rename line is not in the rotator exactly once"; fi
+
+# MX2 / MX: the two rotators the shape-keyed kill ACCEPTED, each a whole-line replacement of the
+# rename line (so the anchor goes 1 -> 0). MX2 keeps the shipped `mv -f` byte for byte and THEN
+# writes the history back through itself from a copy: no one-argument `cat` of a `.rotate.` file,
+# and the `mv` shim killed at a rename that was in fact atomic. MX renames to a side file outside
+# the corpus and then writes the history from it (`cat side > history`). Each loses lines on a kill
+# between the shell's truncate and the write, which the sweep reaches by count, not by shape.
+MX2_NEW="${MK_OLD}; cp -- \"\$HISTORY\" \"\$TMPD/h2\" && cat \"\$TMPD/h2\" > \"\$HISTORY\""
+if mut_line "$ROT" "$MD/mX2.sh" "$MK_OLD" "$MX2_NEW"; then
+  score MX2 killed "$MD/mX2.sh" "$CH" "$PH" "the shipped rename kept, then the history copied back through itself (cp history h2 && cat h2 > history)"
+else bad "MX2 DID NOT APPLY — the rename line is not in the rotator exactly once"; fi
+
+MX_NEW='HREAL="$HISTORY"; HISTORY="$HIST_DIR/.stage-x"; mv -f -- "$HIST_NEW" "$HISTORY" || rewrite_fail "the rename over the history failed"; HISTORY="$HREAL"; cat "$HIST_DIR/.stage-x" > "$HISTORY"; rm -f "$HIST_DIR/.stage-x"'
+if mut_line "$ROT" "$MD/mX.sh" "$MK_OLD" "$MX_NEW"; then
+  score MX killed "$MD/mX.sh" "$CH" "$PH" "the rename goes to a side file, then the history is written from it (cat side > history)"
+else bad "MX DID NOT APPLY — the rename line is not in the rotator exactly once"; fi
 
 echo
 if [ "$fails" -eq 0 ]; then
