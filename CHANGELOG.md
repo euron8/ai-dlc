@@ -15,6 +15,182 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.645.0] - 2026-09-26
+
+A fresh start no longer removes the pipeline snapshot. The rotator's `--absorb` archives the
+stale snapshot and truncates it to 0 bytes, so every control hook keeps firing between the absorb
+and the lead's write of the new snapshot. The absorb now also runs when there is no history yet
+and when the history is at its cut floor, where it used to do nothing and exit 0. Every write the
+rotator makes is now checked, the history is replaced by an atomic rename rather than written
+through, and a failure or interruption can leave a history line outside the tracked files only
+with a non-zero exit. The one exception predates this release and is kept: when
+`git add` of the archive fails (for example, `.git/index.lock` is present), the rotator prints a
+WARNING with the `git add` to run and exits 0, and the archive stays untracked until that is done.
+
+### `PC-S314-SNAPSHOT-SWAP-BLIND-WINDOW` — the fresh-start absorb empties the snapshot instead of removing it, and runs on every path (`BL-321`)
+
+`route.md` Step 6 does a fresh start in two acts: the rotator absorbs the stale snapshot, then
+the lead writes the new one, and a turn can end between them. The rotator used to finish the
+absorb with `git rm` and `rm -f`, so the snapshot was absent for that window. Every hook that
+decides whether a pipeline is active tests `[ -f ]` on the snapshot: the stall check in
+`ai-dlc-continue.sh`, the pause flag in `ai-dlc-pause.sh`, Rule 29's deny in
+`ai-dlc-acknowledge.sh`, and compaction recovery in `ai-dlc-precompact.sh`,
+`ai-dlc-postcompact.sh` and `ai-dlc-recover.sh`. All of them went silent. The reference consumer
+also hit a second defect in the same call. With no history file, or with a history at exactly
+`--keep-entries` cut points, the absorb was skipped with exit 0, and the lead's next write
+destroyed the stale snapshot without archiving it.
+
+- **The swap window is closed.** `rotate-snapshot-archive.sh --absorb` appends the stale
+  snapshot to the archive and then truncates it to 0 bytes. It never removes it.
+- **The silent no-op absorb is gone.** The absorb runs on every path that is not a refusal: no
+  history, a history at or below its cut floor, and a real rotation. Absorbing an already-empty
+  snapshot writes nothing, so a re-run after an interrupted swap appends no empty block. Every
+  argument is parsed before any exit, so an unknown option or an `--absorb` naming no file is
+  exit 2 on the no-history path too.
+- **Every archive append is checked**, by exit status and by the archive's exact growth, and a
+  failed one refuses with exit 1 before the snapshot is truncated or the history shrinks. A
+  directory at the archive path, a read-only or full archive, and a short write are all refused.
+- **The history is replaced by an atomic rename and never written through.** The new history is
+  built in a fresh `mktemp` file, `.<history>.rotate.XXXXXX`, in the history's own directory:
+  `cp -p` of the history for its mode, then the preamble and the kept tail written into it and
+  checked by status and size. That build runs before the archive append, so a failed build leaves
+  nothing written. After the verified append, `mv -f` renames the temp over the history, and a
+  failed rename removes the temp and leaves the history byte-identical. The history is the
+  complete old file or the complete new one at every instant. A SIGKILL between any two simple
+  commands of the rotator's shell, with the command before it cut at 0 or 1024 bytes of file
+  data, loses no line, and a plain re-run exits 0; that is what the fixture and the receipt
+  measure. It may leave a stray `.<history>.rotate.XXXXXX`, which is outside the `*.md` corpus
+  and safe to delete.
+- **A symlinked or hard-linked history is refused before any write.** A rename would turn a link
+  into a regular file and orphan its target, or split a hard-linked history from its peer, so both
+  are refused rather than followed. The hard-link test is `find -links +1`, and a `find` that fails
+  refuses too. A history that is not writable, a history whose directory is not writable, and a
+  sticky directory with a history owned by another user are refused before any write as well.
+  `cp -p` run by a user who does not own the history silently takes ownership of the new history,
+  where the in-place write it replaces kept the owner. One run assumes no concurrent writer to the
+  history.
+- **On exit 1 the history is byte-identical to before, EXCEPT in exactly one case: the history
+  rename succeeded and the snapshot truncate then failed (read-only snapshot). There the history is
+  the new, complete history and the archive holds the moved block and the snapshot; re-running
+  after making the snapshot writable appends the snapshot again. The snapshot is never emptied
+  without having been archived. The archive may carry a duplicate block after any exit 1.** The
+  same wording is in the rotator's header and in `route.md` Step 6.
+- **The absorb's truncate is verified.** A snapshot that cannot be emptied (a read-only file) is
+  exit 1 with a message saying it is archived but not emptied, where it used to exit 0 and print
+  "truncated it to 0 bytes" over a full file.
+- **The archive is staged on every path** that exits 0 with `--apply`, including "nothing to
+  rotate" and "no history". A run killed after the rename and before the staging leaves the
+  archive untracked, and the plain re-run lands on "nothing to rotate" and stages it there.
+- `route.md` Step 6 creates the snapshot when the file is absent or empty, and runs the rotator
+  when it is non-empty. A non-zero exit stops the fresh start and reports the rotator's stderr.
+  On exit 0 the lead Reads the emptied file and writes the initial state into it. Step 0 already
+  requires a non-empty snapshot for a resume, so an empty one is never resumed. The three trim
+  call sites (`route.md` Step 1a, `_gate-procedures.md`, `gate-validation.md` Check 14) now say to
+  read the rotator's stderr and fix what it names before re-running on a non-zero exit.
+
+A placeholder snapshot left in place of the delete was rejected. The hooks would read fake
+state, and the next session's Step 0 would dispatch a resume onto it.
+
+Adversary rounds on the release branch, one line each:
+
+- Round 1 found that an unwritable archive made the absorb exit 0 and empty the snapshot with its
+  bytes in no file.
+- Round 2 found that the absorb was checked only by a marker line, and that report-only
+  `--absorb` was not proven to write nothing.
+- Round 3 found that a failed history rewrite truncated the history in place and the exit trap
+  then deleted the only complete copy.
+- Round 4 found that the rename write-back broke symlinked and hard-linked histories and reset
+  the mode, and that an unwritable history or a taken temp name was refused only after the
+  archive append.
+- Round 5 found that a re-run after an interrupted write-back exited 0 with 11 of 29 history lines
+  only in the stale temp file, that the printed restore left the archive unstaged, and that a
+  non-writable history directory appended the moved block again on every retry.
+- Round 6 found that a write-back which wrote 0 bytes was scored "not a prefix" because BSD `head`
+  refuses `-c 0`, and following the printed text lost 32 of 44 lines. It also found that the
+  not-a-prefix text misdescribed a killed-then-trimmed temp, that a vanished temp truncated the
+  history, and that a read-only snapshot exited 0 claiming it had been truncated.
+- Round 7 replaced the in-place write-back with an atomic rename, because rounds 4, 5 and 6 each
+  found the new way to lose lines in that write-back's own recovery machinery.
+- Round 8 found that the kill in the fixture and the receipt was keyed on a command shape (any `mv`,
+  or a one-argument `cat` of the temp), so a rotator that renamed and then wrote the history back
+  through itself passed both and lost 21 of 37 lines on a kill. Both then SIGKILLed the rotator at
+  each PATH-resolved call to one of 19 shimmed commands in turn, under `ulimit -f 0`, with a plain
+  re-run after each.
+- Round 9 found that the round-8 sweep saw only PATH-resolved calls and only an empty write. A
+  write-through by builtins (`while read; printf; done > history`), by absolute path
+  (`/bin/cat x > history`), or through a keep file restored only when the history is empty each
+  passed the fixture and the receipt and lost 6 to 21 lines on a kill. The sweep now traces the
+  rotator's own shell: `BASH_ENV` installs `set -T` and a DEBUG trap, so every simple command
+  is a kill point, including builtins, redirections, absolute-path and `command -p` calls, and
+  subshells. At point N the trap sets `ulimit -f` and at N+1 it SIGKILLs the rotator. The fixture
+  runs every point at 1 block (1024 bytes, a partial write of the over-1-KiB seeded history) and,
+  from the point before the rename to the end plus every 8th point before it, at 0 blocks. The
+  receipt runs every point at both. A keep file restored only when the history is NON-empty passes
+  1 block and dies at 0, which is why both limits run. Not reached: a program that is not bash, or
+  bash started as `sh` (sh, dash, zsh, perl, python, awk, a compiled tool), is observed only after
+  it finishes, so a kill between two of its own writes is never modelled; a pipeline stage or
+  background job running at the kill outlives it; and a write of 1024 bytes or fewer is whole at 1
+  block. A child `bash` started plainly is reached from round 10 on; round 11 added what is still
+  not reached (below).
+- Round 10 found that the trap file ran `unset BASH_ENV`, so a child `bash` the rotator started was
+  untraced: a self-healing write-through in `bash -c` after the rename passed the fixture and the
+  receipt and lost 6 of 37 lines once traced. The unset is gone, in both. It found that the
+  fixture skipped the re-run of a killed world whose file contents matched the template, so a
+  rotator that made the history read-only at start-up and writable again before its prechecks
+  passed; round 11 removed that skip. It found that the fixture's L = 0
+  sampling below the rename misses a write-through before the rename that only an empty history
+  exposes (the fixture killed 1 of 8 placements; the receipt, which runs every point at both
+  limits, kills all 8), and the prose that said L = 1 still caught it is corrected. And it found
+  that the receipt left about 77 MB and 80,000 files in the system temp directory per run; it now
+  removes its scratch tree on exit, and the fixture's seed removes its own on a failed seed.
+- Round 11 found that the fixture still skipped the re-run of a killed world it judged equal to
+  the template by content and by `ls -lAnR`, and that a history made unwritable by a file flag
+  (`chflags uchg`) or a deny-write ACL passed that way, because neither reading shows a flag or an
+  ACL. The skip is deleted: every killed point in the fixture now gets its own plain re-run, as it
+  already did in the receipt. Both rotators are fixture mutants (MCF, MCA), killed by the `killed`
+  arm, and reported NOT SCORED on a host where `chflags uchg` or `chmod +a` cannot make a file
+  unwritable. It also found that "a child `bash` is reached" overstated the reach. A child started
+  as `bash --posix`, with `POSIXLY_CORRECT` set, or under `env -i` skips `BASH_ENV` and is untraced,
+  and that is now in every "not reached" list. It also said a write-through in a trap handler runs
+  whole; round 12 measured that as wrong (below). The receipt's run time is removed
+  from BL-321, because it was measured at a different figure through `backlog-reverify.sh`.
+- Round 12 found that the fixture failed as root: root writes a 444 file, so MCH's `chmod a-w`
+  never made the re-run refuse, and in Debian bookworm MCH survived 269 kills. MCH is now gated
+  on `unw_probe mode` exactly as MCF and MCA are, and reported NOT SCORED where `chmod a-w` cannot
+  make a file read as unwritable. It also found that round 11's "a write-through in a trap handler
+  runs whole" was wrong. That was read off `$BASH_COMMAND` text, which inside a handler does not
+  name the handler's commands; no kill was ever tried. With a real kill, on bash 3.2.57 and
+  5.2.15, a 3000-byte write inline in an EXIT handler is cut at 1024 bytes, as one in a called
+  function is. Every command in a trap handler is a kill point, the claim is removed from every
+  "not reached" list, and a new mutant, MT (a write-through inline in the rotator's EXIT trap), is
+  killed by the sweep. `bash -p` joins the child shells that skip `BASH_ENV`, measured on both
+  versions. The `chflags -R nouchg` that let the EXIT trap remove MCF's flagged worlds moved into
+  that trap, so a run interrupted during the MCF sweep no longer leaves them behind.
+
+| tree | receipt |
+|---|---|
+| this release | 0 |
+| cb21ab0b | 1 |
+| `route.md` changed, rotator at cb21ab0b | 1 |
+| placeholder snapshot written instead of the truncate | 1 |
+| truncates, absorb still skipped with no history | 1 |
+| truncates, absorb still skipped at the cut floor | 1 |
+| `rm -f` restored | 1 |
+| absorb re-gated behind the rotation path | 1 |
+| history-absent exit moved above argument parsing | 1 |
+| ignored-archive refusal dropped from the absorb | 1 |
+| empty-snapshot guard dropped | 1 |
+| archive staging dropped | 1 |
+| `rm -f`, then an empty file re-created | 1 |
+| 2bafa39e (re-run after a half-way write-back exits 0) | 1 |
+| 445e9c20 (an empty history is scored "not a prefix") | 1 |
+| 5697bc84 (the in-place write-back; the rename clauses) | 1 |
+| the rename with the symlink or the hard-link refusal dropped | 1 |
+| `cp` in place of `cp -p` | 1 |
+| the rename replaced by a write through the history (`cat temp > history`, `cp temp history`, a rename followed by `cat copy > history`, or a rename to a side file followed by `cat side > history`), killed at a traced point under `ulimit -f 1` or `0` | 1 |
+| after the rename, a write-through by builtins only, by absolute path, or through a keep file restored only when the history is empty, or only when it is non-empty and shorter | 1 |
+| a rotator that never rewrites the history | 1 |
+
 ## [0.644.0] - 2026-09-25
 
 A fix story folded into a sprint after its architecture step now reaches an architect, whose

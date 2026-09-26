@@ -1059,7 +1059,8 @@ Exit 1 → **Check 14 FAILS**, on either of two independent verdicts:
   ~10 entries and nothing more; superseded narrative and handoff appendices move to
   `pipeline-snapshot-history.md`, which is write-only). Then run
   `bash scripts/ai-dlc/rotate-snapshot-archive.sh _bmad-output/pipeline-snapshot-history.md --apply`
-  so the destination this trim just fed stays bounded (Rule 25(a)).
+  so the destination this trim just fed stays bounded (Rule 25(a)). On a non-zero
+  exit, read the rotator's stderr and fix what it names before re-running.
 - **Outside the seven-section schema.** The validator names each unknown section.
   Move it verbatim to `pipeline-snapshot-history.md` and delete it here. Do **not**
   fold its content into one of the seven — that keeps the bytes and loses the

@@ -55,7 +55,7 @@ proves the consequence of.
 | 5 | the nested verbatim snapshot's seven sections land wholly on one side, never split |
 | 6 | the archive is staged, so `git ls-files` — which *is* the corpus — contains it |
 | 7 | idempotence: a second `--apply` changes neither file; the header is seeded exactly once |
-| 8 | `--absorb` folds a stale snapshot into the same archive and creates no dated file |
+| 8 | `--absorb` folds a stale snapshot into the same archive — the archive's last N lines are byte-identical to a pre-absorb copy of the whole snapshot — leaves the snapshot present at 0 bytes, and creates no dated file |
 | 9 | **REFUSAL** — a non-empty history with no `## ` heading is refused, not reported as nothing-to-rotate |
 | 10 | **REFUSAL** — a git-ignored archive path is refused before anything is written |
 | 11 | **CONTROL for 10** — the same tree with the ignore removed rotates normally, so 10 measured the ignore and not the tree |
@@ -65,6 +65,164 @@ The mutation arm exists because the line-accounting refusal **cannot be reached 
 input**: it guards the splitter against itself. The only way to show it is live is to break the
 splitter, and the arm carries the `cmp -s` guard that ledger-rotate's does — a `sed` matching
 nothing would otherwise produce a "mutant caught" that caught nothing.
+
+## The absorb swap
+
+route.md's fresh start is two acts: the rotator absorbs the stale `pipeline-snapshot.md`, then
+the lead writes the new one, and a turn can end between them. `ai-dlc-continue.sh` (Stop) and
+`ai-dlc-pause.sh` (UserPromptSubmit) both key "a pipeline is active" on the snapshot's
+**existence**. A rotator that removes the snapshot turns both off for that window, so `--absorb`
+truncates it to 0 bytes instead. It must also run on every path that is not a refusal, or the
+lead's next write destroys the stale snapshot unarchived.
+
+These arms drive the REAL rotator and the REAL hooks, each against a fresh copy of one seed
+template (`seed.sh` builds `nohist`, `floor`, `above`, `nosnap`, `ignored` and `bigtail`):
+
+| Arm | Asserts |
+|---|---|
+| swap | the hooks block and raise the flag BEFORE the call (precondition), and still do AFTER `--absorb --apply` |
+| neg | a tree with no snapshot keeps both hooks silent |
+| nohist / floor / above | absorb with no history, with exactly `--keep-entries` cut points, and above the floor. Each proves its path by the rotator's own verdict line, then asserts the marker is in the archive once, the archive's last N lines are byte-identical to a copy of the snapshot taken before the call (N = that copy's line count; each seeded snapshot carries several distinct lines, only one of them the marker), the snapshot is present at 0 bytes, and the archive is tracked |
+| ign | an ignored archive on the no-history path: rc 1, snapshot byte-identical, no archive |
+| unw | the archive path pre-created as a DIRECTORY (unwritable for any user, root included), on the no-history path and on the above-floor rotation path: rc 1, snapshot byte-identical to its pre-run copy, and on the rotation path the history byte-identical too. A directory is refused by the `[ -f ]` guard alone, so this arm cannot see the other two append guards |
+| ulim | a REGULAR-FILE archive pre-filled to 40 bytes under an 8 KiB `ulimit -f` (inside a subshell with `trap '' XFSZ`, so it binds root too and the writer gets EFBIG instead of dying), on no history and on the rotation path: rc 1, the archive appended part-way, snapshot and history byte-identical. Kills the rotator that keeps only `[ -f ]`, which exits 0 and empties the snapshot |
+| wlate | a `cat` shim on `PATH` writes every byte and then exits 1: rc 1, snapshot byte-identical, archive growth exact. Only the write-status check sees it |
+| wshort | a `cat` shim writes all but the last byte and exits 0: rc 1, snapshot byte-identical, archive growth one short. Only the growth check sees it |
+| rew | the history REWRITE fails under the same 8 KiB limit (`bigtail`). An unlimited control run on a second copy first proves the sizing: the new history is over the limit, its preamble and tail each under it, the archive under it. Then: rc 1, the refusal names the rewrite, history and snapshot byte-identical, NO archive (the new history is built before the append), every pre-run history line still in the history. Under the rename design the `cp -p` of the old history is the first write to fail, so the content write's own guards are owned by tlate/tshort |
+| tlate / tshort | a `cat` shim acts ONLY on the temp write (the one call whose first argument ends `/preamble`): it writes every byte then exits 1 / drops one byte and exits 0. rc 1 before the archive append, history and snapshot byte-identical, no archive. Only the write's status check / size check sees each |
+| rohist | a 444 history: rc 1 with NO archive created, history and snapshot byte-identical. Under root a 444 file is writable, so the arm prints `skip` and m14 is reported NOT SCORED rather than passing |
+| rodir | a writable history in a 555 directory: rc 1 before any write, on a first and a second run, the archive never created, history and snapshot byte-identical. Under root a 555 directory is writable, so the arm prints `skip` and m19 is NOT SCORED |
+| rosnap | a 444 snapshot on `--absorb` (no history): rc 1, the snapshot unchanged in size, and the refusal says it is archived but NOT emptied. Under root a 444 file is writable, so the arm prints `skip` and m23 is NOT SCORED |
+| links | a symlinked history and a hard-linked history: each rc 1 naming the reason, before any write. The link is still a link and its target byte-identical; the history and its peer byte-identical; the snapshot byte-identical; no archive |
+| mode | a 640 history rotates to the clean result and is still 640 after the rename; a peer file in the same directory is untouched. chmod means nothing on FAT, so this arm is about the host it runs on |
+| atomic | an `mv` shim fails the rename WITHOUT calling the real `mv`: rc 1 naming the rename, history and snapshot byte-identical, and NO file left at the temp name. The only arm that can assert "no temp left": a killed run legitimately leaves one |
+| killed | a KILL-POINT SWEEP with `--absorb`, traced in the rotator's OWN shell: `BASH_ENV` sources a file that sets `set -T` and a DEBUG trap, so every simple command, including each one in an EXIT or ERR trap handler, is a numbered point — builtins, assignments, redirections, function calls, absolute-path and `command -p` externals, in the main shell and in every subshell. A counted unkilled run first: rc 0, the history equal to a clean rotation, T points numbered densely 1..T (219 at this release). Then, each in a fresh world with its own TMPDIR and counter, point N runs under `ulimit -f L` (SIGXFSZ ignored) and the trap SIGKILLs the rotator at point N+1; a plain re-run follows: rc 0, 0 pre-run history and snapshot lines missing from the tracked corpus (`git ls-files` `*.md`), the history equal to a clean rotation. L = 1 (1024 bytes) at every N, so a write of a longer file is cut part-way; L = 0 at every N from the point before the rename to T and at every 8th N below it, so a write is left empty. The last point is never killed and must complete clean at both limits. The sweep proves its reach: every scheduled run produced a verdict, a kill per limit lands ON `mv` and one after the rename, and at least one kill leaves a history or temp file of exactly 1024 bytes; the seed's history and the new history are each asserted over 1 KiB. The counter is an O_EXCL create (`set -C`), atomic when pipeline stages trace concurrently |
+| staged | without `--absorb`, a `git` shim SIGKILLs the rotator at `git add` of the archive, after the rename; the control is that the archive is NOT tracked after run 1; the re-run lands on "nothing to rotate", rc 0, the archive tracked, the history equal to a clean rotation, 0 pre-run lines missing from the tracked corpus. The sweep cannot own this: with `--absorb` the re-run's absorb stages the archive itself, so m18 passed all 63 kill points of the round-8 sweep and dies only here |
+
+Every shim arm asserts the shim's sentinel counted exactly one action, so an arm whose shim never
+fired on its intended call cannot pass. A shim that kills sends SIGKILL to the rotator, so nothing
+outlives the kill to finish the rename after it, and no watcher polls a process table.
+
+The sweep runs on 12 workers (`KPAR`), job i on worker i mod 12, from N = T down with no barrier,
+and a failing run stops every worker before its next job. The L = 0 window is scheduled from the
+counted run's trace (the point before its first `mv`) and then checked: the first L = 1 kill that
+found the new history already in place must lie above it, or the arm fails. Every killed run gets
+its own plain re-run on its own world. No killed world is judged equal to the template and given
+another run's result: MCH (mode bits), MCF (a `chflags uchg` file flag) and MCA (a deny-write ACL)
+each leave a world whose bytes are the template's and whose re-run is refused, and the flag and the
+ACL are invisible to `diff -r` and `ls -lAnR` (reading them needs the BSD-only `ls -O` / `ls -e`).
+Re-running every killed point measured 15s to 16s for the `killed` arm alone against 13s with the
+skip, and the whole fixture alone 102s to 134s against 78s to 98s (MCF and MCA each add a sweep),
+3 interleaved reps each at 1-minute load 12 to 16. These are snapshots of one loaded host. Every point at both limits was 90s,
+and 18 workers were no faster than 12, which is why L = 0 is sampled. It replaced the round-8 PATH-shim sweep,
+which killed only at a PATH-resolved call to one of 19 shimmed commands, under `ulimit -f 0`
+alone: a builtin write-through (MB), an absolute-path one (MA2) and a keep file restored only when
+the history is empty (MZ2) each passed it and lost 6 to 21 lines on a kill. The DEBUG trap reaches
+everything the shims did, because every shimmed call is itself a simple command of the rotator's
+shell, so no shim pass is kept.
+
+**What the sweep does not reach.** The kill lands only between simple commands of the rotator's
+own shell or of a child `bash` it starts plainly: the trap file leaves `BASH_ENV` set, so `bash -c`
+and a bash helper script source it too (MH, a self-healing write-through in `bash -c`, passed while
+the file ran `unset BASH_ENV`). A child started as `bash --posix`, as `bash -p`, with
+`POSIXLY_CORRECT` set, or under `env -i` does not source `BASH_ENV` and is untraced. Every command
+in an EXIT or ERR trap handler is a kill point, whether it is written inline in the handler's
+string or in a function the handler calls. This was measured on bash 3.2.57 and 5.2.15: a
+3000-byte write inline in an EXIT handler is cut at 1024 bytes. An earlier revision said a handler
+was untraced; that was read off `$BASH_COMMAND`, which inside a handler does not name the
+handler's commands. The rotator's only trap, `trap 'rm -rf "$TMPD"' EXIT`, is inline, and MT (a
+write-through inline in it) is killed. A program that is not bash, or bash started as `sh` (sh, dash, zsh,
+perl, python, awk, a compiled tool), runs to completion under the limit, so a kill between two of
+its own writes to the history is never modelled. A pipeline stage or background job still running
+when the kill lands is not killed with the rotator. A write of 1024 bytes or fewer is whole under
+L = 1. The L = 0 sampling below the rename can miss a write-through BEFORE the rename whose recovery
+separates an empty history from a partial one: L = 1 runs at that point, but leaves a partial
+history, which that recovery handles. Measured with MZ3's copy-back moved to just after the temp
+build at 8 successive offsets (MZ3P0-MZ3P7): the fixture killed 1 of the 8. BL-321's receipt runs
+every point at both limits and kills all 8.
+
+| Arm | Asserts |
+|---|---|
+| args | on the no-history path, an unknown option and an `--absorb` naming no file are both rc 2 |
+| idem | absorbing the already-empty snapshot again leaves the archive byte-identical |
+| ro | report-only `--absorb` (no `--apply`) on each of `nohist`, `floor` and `above`: rc 0, the rotator says what it would append, `git status --porcelain` is empty, the snapshot is byte-identical, and no archive exists |
+
+The whole-content comparison is there because a marker grep alone is satisfied by an absorb that
+copies ONLY the marker line — measured: `grep -E STALE "$ABSORB"` in place of `cat "$ABSORB"`
+passed every arm and the receipt before it.
+
+Mutants, each a one-line copy whose anchor must occur exactly once and be gone afterwards. An
+unmutated control copy from the same directory is driven through EVERY arm first and must pass
+them all; each mutant then runs only the arm that owns it:
+
+| Mutant | Edit | Killed by |
+|---|---|---|
+| m1 | the truncate becomes `rm -f "$ABSORB"`, and the post-truncate check becomes `false` | swap |
+| m2 | `absorb_only` returns at once (absorb only on the rotation path) | floor |
+| m3 | a history-absent exit inserted above the argument loop | args |
+| m4 | the absorb path's `refuse_if_archive_ignored` becomes `:` | ign |
+| m5 | `ai-dlc-continue.sh`'s `[ ! -f "$SNAPSHOT_FILE" ]` becomes `false` | neg |
+| m6 | `ai-dlc-pause.sh`'s `[ ! -f "$SNAPSHOT_FILE" ]` becomes `false` | neg |
+| m7 | the absorb's `archive_append … "$ABSORB"` is fed `grep -E STALE "$ABSORB"` instead (keeps only the marker line; the verified append still succeeds) | nohist |
+| m8 | `archive_fail() {` becomes `archive_fail() { return 0` (every append guard reports and carries on) | unw |
+| m9 | `absorb_only`'s report-only branch `if [ "$APPLY" -eq 0 ]` becomes `if false` (writes without `--apply`) | ro |
+| m10 | the append's `\|\| archive_fail "the write failed"` deleted (write-status check) | wlate |
+| m11 | the append's growth check deleted, both its numeric-operand guard and its comparison | wshort |
+| m13 | m10 and m11 together, so only the `[ -f ]` guard is left | ulim |
+| m12 | the history rewritten in place again, `cat preamble tail > "$HISTORY"` (and the `cp -p` onto the temp deleted, since under the limit it fails first) | rew |
+| mA | the temp write's size check deleted | tshort |
+| mC | the temp write's `\|\| rewrite_fail` deleted (write-status check) | tlate |
+| m14 | the `[ ! -w "$HISTORY" ]` precheck becomes `false` | rohist |
+| m18 | the staging call on the nothing-to-rotate (cut-floor) path deleted | staged |
+| m19 | the `[ ! -w "$HIST_DIR" ]` precheck becomes `false` | rodir |
+| m23 | the post-truncate check becomes `false` | rosnap |
+| mL1 | the `[ -L "$HISTORY" ]` precheck becomes `false` (the symlink is followed and replaced by a regular file) | links |
+| mL2 | the `-links +1` refusal becomes `false` (the peer is split off holding the old content) | links |
+| mM | `cp -p` becomes `cp` (the history comes back 600) | mode |
+| mR | `rewrite_fail` no longer removes the temp it built | atomic |
+| mK | the rename becomes a copy-back through the history, `cat "$HIST_NEW" > "$HISTORY"`; the kill lands after the shell truncated the history and before a byte is written, and the re-run finds an empty history | killed |
+| MX2 | the shipped `mv -f` line kept, then `cp -- "$HISTORY" "$TMPD/h2" && cat "$TMPD/h2" > "$HISTORY"`; the shape-keyed kill fired on the atomic `mv` and never on this copy-back, so the old arm and receipt passed it. Killed at the `cat` it loses 21 of 37 pre-run lines | killed |
+| MX | the rename goes to a side file `.stage-x`, then `cat .stage-x > "$HISTORY"`; the old receipt passed it. Killed at the `cat` it loses 21 of 37 lines | killed |
+| MB | the rename line kept byte for byte, and on the next line the history is copied back through itself by BUILTINS only: `while IFS= read -r _l …; do printf …; done < "$TMPD/h2" > "$HISTORY"`. The round-8 PATH shims never saw it. Dies at a limit-1 point inside the loop | killed |
+| MA2 | the rename line kept, then `/bin/cp -- "$HISTORY" "$TMPD/h2" && /bin/cat "$TMPD/h2" > "$HISTORY"`: absolute paths bypass PATH. Dies at the `/bin/cat` point, history cut at 1024 bytes, 6 of 37 lines lost | killed |
+| MZ2 | the rename line kept, then a copy-back through a keep file named like the temp, and a start-up recovery that restores it only when the history is EMPTY — the only state `ulimit -f 0` leaves. Dies at limit 1, history cut at 1024 bytes | killed |
+| MZ3 | MZ2's copy-back with the recovery inverted: restored only when the history is NON-empty and shorter than the keep file. Passes every limit-1 point; dies at limit 0, history left at 0 bytes, 21 of 37 lines lost | killed |
+| MH | the rename line kept, then `bash -c 'cp -- "$1" "$2" && { cat "$2" > "$1" \|\| mv -f -- "$2" "$1"; }' _ "$HISTORY" "$TMPD/h2"`: a write-through in a CHILD bash that restores its copy when its own write fails. Passed while the trap file ran `unset BASH_ENV`; traced, it dies at the child's `cat` with the history cut at 1024 bytes | killed |
+| MCH | `chmod a-w` on the history after `HIST_BASE=` and `chmod u+w` just before the prechecks. A kill in between leaves every file's bytes as the template's and the history 444; the re-run is refused. Passed in round 9, when a killed world `diff -r` scored identical skipped its own re-run. Root writes a 444 file, so MCH cannot die as root (measured in Debian bookworm: it survived 269 kills). It is scored only where `chmod a-w` makes a scratch file read as not writable; elsewhere NOT SCORED | killed |
+| MCF | MCH's shape with `chflags uchg` / `chflags nouchg`: the history is unwritable by a file flag, which neither `diff -r` nor `ls -lAnR` shows. Passed in round 10, when a killed world those two scored identical skipped its own re-run. Scored only where `chflags uchg` makes a scratch file read as not writable; elsewhere NOT SCORED | killed |
+| MCA | MCH's shape with `chmod +a "user:<me> deny write,append"` / `chmod -N`: a deny-write ACL, invisible to the same two readings. Passed in round 10 the same way. `chmod +a` is BSD-only; where it is unavailable MCA is NOT SCORED, never killed | killed |
+| MT | the rotator's EXIT trap string replaced by one that, on a run that renamed (a flag set on the line after the rename), copies the history back through itself inline: `cp -- "$HISTORY" keep && cat keep > "$HISTORY"`. It pins that a command written inline in a trap handler is a kill point; if it were not, the write-through would run whole and MT would survive | killed |
+
+MB, MA2, MZ2, MZ3 and MH are INSERTIONS after the rename line, which stays byte-identical, so each is
+built by `mut_after`: the anchor occurs once in the source, the anchor followed by its original next
+line occurs once before and 0 times after, the inserted line 0 times before and once after, and the
+copy differs.
+
+Removed in the rename design, each because its subject no longer exists in the rotator:
+`tmpexist`/m15 and `tmprace`/mB (the pid-keyed temp name, its stale-temp precheck and `set -C`:
+the temp is a fresh `mktemp` name nothing else can hold), `wblate`/mF, `wbshort`/mG and mE (the
+write-back into the history, its checks and its kept copy: nothing writes into the history), `race`/m22
+(the write-back's source-first open), `rerunhalf`, `rerunkill`/m16 and `restore`/m17 (the stale-temp
+refusal on a re-run and the printed restore: a killed run leaves the history complete and the re-run
+exits 0), `zero`/m20 (the prefix test's empty-history case) and `trimmed`/m21 (the listing command).
+mD (the write-back made a rename) is the shipped design now.
+
+m1 was re-anchored: the truncate is its own line followed by a check that the snapshot is present
+and empty, so m1 removes the file AND disables the check (a partial revert would be refused by the
+check and prove only it). `mut_line` passes its two lines through `ENVIRON` rather than `awk -v`,
+because `-v` strips one level of backslashes.
+
+m10 and m11 are not killed by `ulim`, and that is measured rather than overlooked. Over 88
+`ulimit -f` appends (three body sizes, three limits, up to ten pre-fill offsets) every one of the
+68 that failed both exited non-zero AND grew short, so on any input `ulimit -f` can build the two
+checks cover each other and deleting either alone leaves `ulim` green. Each therefore gets a
+subject the other cannot see, forced by a `cat` shim. There is a second reason the growth check
+carries a numeric-operand guard: when the builtin `printf` fails, bash keeps the unwritten bytes
+and the next `$( )` child flushes them into its output, so the size read back is not a number, and
+`[ x -ne y ]` on it is an error an `if` reads as "the sizes match".
+
+The swap arm FAILS against the rotator that removed the snapshot (the one before truncation
+existed), because the hooks go silent once the file is gone.
 
 ## Ships to consumers
 
@@ -79,4 +237,4 @@ bash core/fixtures/snapshot-archive-rotate/run.sh
 
 Cwd-invariant: it locates the rotator by walking up for either layout marker
 (`core/scripts/` or `scripts/ai-dlc/`) rather than resolving relative to itself, and is
-verified green from `/`, from its own directory, and from the repo root.
+verified green from `/`, from its own directory, from the repo root, and in an installed consumer.

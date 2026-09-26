@@ -4107,3 +4107,166 @@ cause.
 
 verify: manual
 
+## BL-321 — the fresh-start absorb removed the snapshot and turned every control hook off until the lead wrote a new one, and on a fresh history it absorbed nothing at all
+
+**DEFECT.** Carries the reference consumer's `PC-S314-SNAPSHOT-SWAP-BLIND-WINDOW`, so it is
+PC-backed and ranks above any distribution-internal entry under the provenance-first rule. The
+entry has two claims, and it closes only when both do.
+
+**CLAIM 1: THE BLIND WINDOW.** `route.md` Step 6 did a fresh start in two acts: the rotator with
+`--absorb _bmad-output/pipeline-snapshot.md --apply`, then the lead writing the new snapshot. At
+base `cb21ab0b` the rotator's absorb ended with `git rm` and `rm -f` of the snapshot, so between
+the two acts the file was absent, and a turn can end there. Every control hook keys "a pipeline is
+active" on the file's existence: `ai-dlc-continue.sh:1278` (`[ ! -f "$SNAPSHOT_FILE" ]`, the stall
+check, allows the stop) and `ai-dlc-pause.sh:263` (the same predicate, no pause flag). Rule 29's
+deny (`ai-dlc-acknowledge.sh:137`) and compaction recovery (`ai-dlc-precompact.sh:44`,
+`ai-dlc-postcompact.sh:34`, `ai-dlc-recover.sh:52`) exit 0 on the same `[ -f ]` predicate for the
+same window. Writing a
+placeholder snapshot in its place does not close this. The hooks then read fake state, and the
+next session's Step 0 dispatches a resume onto it.
+
+**CLAIM 2: THE SILENT NO-OP ABSORB.** At base the absorb ran only on the rotation path. With no
+history file (the argument parser never ran, exit 0), or a history at or below its cut floor
+("nothing to rotate", exit 0), it left the stale snapshot in place and archived nothing. Step 6's
+next sentence then had the lead write over the stale snapshot, and its content was destroyed
+without being archived. On a fresh consumer with no history yet, that was the only path. The
+reference consumer's history was live on the second shape, at exactly `KEEP_ENTRIES` cut points.
+
+**THE FIX (0.645.0).** `--absorb` truncates the snapshot to 0 bytes and never removes it. It runs
+on every non-refusal path, including no history and at the cut floor. Ignored-archive refusal and
+archive staging apply to it on each of those paths. Re-absorbing an already-empty snapshot writes
+nothing. Every argument is parsed before any exit. `route.md` Step 6 now creates the snapshot when
+the file is absent or empty, runs the rotator when it is non-empty, stops and reports stderr on a
+non-zero exit, and otherwise Reads the emptied file and writes the initial state into it.
+`route.md` Step 0 item 1 already requires "exists and is non-empty", so an empty file is not a
+resume.
+
+The receipt runs the real rotator in scratch git repos. It checks three shapes: no history, a
+history at exactly 10 cut points, and 12 cut points as the control. For each it asserts that the
+snapshot is present, 0 bytes, has the SAME inode it had before, that its stale marker is in
+the archive, that the archive's last N lines are byte-identical to a copy of the snapshot taken
+before the absorb (N being that copy's line count, and the seeded snapshot carrying several
+distinct lines), and that the archive is tracked. The whole-content clause is there because a
+marker grep alone scored 0 against an absorb that copied only the marker line (`grep -E STALE` in
+place of `cat`); with the clause that rotator scores 1. It also checks that a second absorb appends nothing, that
+an unknown option and a missing absorb path are exit 2 on the no-history path, that an ignored
+archive is exit 1 with the snapshot byte-identical, and that an UNWRITABLE archive (its path
+pre-created as a directory, which no user can append to) is exit 1 with the snapshot
+byte-identical on the no-history path and on the 12-cut-point rotation path, where the history
+must also be byte-identical. At the 0.645.0 release tip, before the append guard, that last
+clause fails: the rotator appended nothing, exited 0 and still truncated the snapshot. A directory
+is refused by the `[ -f ]` guard alone, so the receipt also runs both of those paths against a
+REGULAR-FILE archive pre-filled to 40 bytes under an 8 KiB `ulimit -f` (in a subshell with
+`trap '' XFSZ`, which binds root too): exit 1, snapshot and history byte-identical. A rotator
+keeping only `[ -f ]` scores 1 there and nowhere earlier; it exits 0 and empties the snapshot. The
+last clause fails the history REWRITE after a successful append: a history sized so that an
+unlimited control rotation on a copy produces a new history over 8192 bytes with its tail and the
+archive under it (exit 9 if not, so a seed that cannot reach the rewrite never scores 0), then
+under the limit exit 1, the history byte-identical, the snapshot byte-identical, and every
+pre-run history line in the history or the archive. The rotator at `88cda5ab` scores 1 on that
+clause alone (it truncates the history in place; on the fixture's `bigtail` seed the history
+is cut to 8192 of 11297 bytes and 6 of 136 distinct pre-run lines are in neither file), and so does the fix with the
+in-place `cat preamble tail > "$HISTORY"` restored. Scored raw against 13 rotators: base 1, tip 0,
+the `route.md`-only change (rotator at base) 1, design B (a placeholder snapshot written in place
+of the truncate) 1, and a rotator that truncates but still skips the absorb with no history 1, or
+at the floor 1. Also each of `rm -f` restored 1, absorb re-gated behind rotation 1, the
+history-absent exit moved above argument parsing 1, the ignored-archive refusal dropped from the
+absorb 1, the empty-snapshot guard dropped 1, archive staging dropped 1, and `rm -f` followed by
+re-creating an empty file 1. The inode clause alone kills that last one. A second spelling that
+checks presence and size without the inode, and has no refusal, idempotence or argument arms,
+scored 0 on three regressions: the refusal dropped, the idempotence guard dropped, and rm-then-recreate.
+
+The history is replaced by an atomic rename and never written through. The new history is built in
+a fresh `mktemp` file in the history's own directory: `cp -p` of the history (for its mode), then
+the preamble and the kept tail written into it, checked by status and size. That build runs BEFORE
+the archive append, so a failed build leaves nothing written. Then the moved block is appended to
+the archive, verified, and the temp is renamed over the history with `mv -f`. A failed rename
+removes the temp and leaves the history byte-identical. The history is the complete old file or
+the complete new one at every instant, so a SIGKILL between any two simple commands of the
+rotator's shell, with the command before it cut at 0 or 1024 bytes, loses no line and a plain
+re-run exits 0. It can leave a stray `.<history>.rotate.XXXXXX`, which is safe to delete.
+
+Rounds 4, 5 and 6 each found a new way to lose lines, and each was in the recovery machinery of the
+in-place write-back that preceded this design (`cat temp > history`). A plain re-run after a failed
+write-back exited 0 with 11 of 29 lines only in an untracked temp (`2bafa39e`). An empty history
+was scored "not a prefix" because BSD `head` refuses `-c 0`, and following the text lost 32 of 44
+lines (`445e9c20`). A killed-then-trimmed temp was misdescribed, and a vanished temp truncated the
+history. The in-place write-back existed only to keep symlinks, hard links and the mode. The rename
+keeps the mode by `cp -p`, and REFUSES a symlinked or hard-linked history before any write. Those
+two are refused rather than followed, because a rename turns a link into a regular file and splits
+a hard-linked peer. The whole recovery class is deleted with its subject: the stale-temp refusal,
+the prefix test, the printed restore and listing commands, and the kept temp copy.
+`cp -p` run by a user who does not own the history silently takes ownership, and the in-place
+write kept the owner. One run assumes no concurrent writer to the history.
+
+The receipt's last clauses carry the rename. A symlinked 12-cut-point history and a hard-linked
+one must each exit 1 with the link and its target, or the history and its peer, byte-identical, the
+snapshot byte-identical and no archive created. A 640 history must rotate to the clean result and
+stay 640. A rotator that never rewrites the history exits 0 and loses nothing, so the first clause
+also compares the 12-cut-point history after its absorb with the expected 10-entry history, built by
+`printf` in the receipt rather than by any rotator; that rotator scores 1 there.
+
+The last clause is a KILL-POINT SWEEP keyed on a point COUNT, not on a command shape, and traced in
+the rotator's OWN shell. Round 7's kill fired on any `mv` or a one-argument `cat` of a `.rotate.`
+file, which accepted a rename followed by `cp history h2 && cat h2 > history` (MX2) and a rename to
+a side file followed by `cat side > history` (MX). Round 8 replaced it with PATH shims on 19
+external commands under `ulimit -f 0`, which saw only PATH-resolved calls and only an empty write:
+a builtin copy-back (`while read; printf; done > history`, MB), an absolute-path one
+(`/bin/cat h2 > history`, MA2) and a keep file restored only when the history is EMPTY (MZ2) each
+scored 0 on that receipt and lost 6 to 21 of 37 lines in the fixture's world on a kill.
+
+The clause now writes a file that `BASH_ENV` sources into the rotator: `set -T` and a DEBUG trap
+that bash runs before every simple command, in the main shell, every subshell and every trap handler: builtins,
+assignments, redirections, function calls, absolute-path and `command -p` externals. `BASH_ENV` is
+left set, so a child `bash` the rotator starts sources the same file and is traced too. The
+trap claims the next point number by an O_EXCL create (`set -C`), which is atomic when pipeline
+stages trace concurrently. At point N it ignores SIGXFSZ and sets `ulimit -f L`, and at point N+1
+it SIGKILLs the rotator. The world is a 14-entry history of 3 long lines each, and the clause
+asserts, before sweeping, that the history and a clean control rotation's new history are each
+over 1024 bytes, so L = 1 cuts a write part-way (exit 9 otherwise). It makes one counted unkilled
+run (exit 0, the clean rotation, points dense 1..T). Then for L = 1 and L = 0, at EVERY N in 1..T,
+12 at a time, each in a fresh copy with its own TMPDIR and counter, it runs the killed rotator
+followed by a plain re-run. Point T has no successor and is never killed: it must exit 0 with the
+clean rotation. Every other N must re-run with exit 0, 0 pre-run history and snapshot lines missing
+from the tracked corpus (`git ls-files` `*.md`), and the history equal to the clean rotation. At
+least two kills must land after the rename, and at least one must leave the history or the temp at
+exactly 1024 bytes. Both limits run because each has a rotator only it kills: MZ2 passes L = 0,
+and MZ3 (restored only when the history is NON-empty and shorter than the keep file) passes L = 1.
+
+Scored: this release 0 (five runs, and once under `env -i PATH=/usr/bin:/bin`); MH, the rotator
+that makes the history read-only at start-up and writable before its prechecks (MCH), MZ3's
+copy-back moved before the rename (MZ3P0), MB, MZ3 and `origin/main` each 1 at round 10.
+At round 11 the shipped rotator 0, and MCH, the same shape with a `chflags uchg` file flag (MCF),
+and with a deny-write ACL (MCA) each 1. Earlier:
+MB, MA2, MZ2, MZ3, MX2, MX, the `cp temp history` rotator (MY), the
+`cat temp > history` rotator (mK), `origin/main` and `5697bc84` each 1. The round-8 receipt scored
+MB, MA2 and MZ2 0. The symlink-follow and hard-link-split rotators and the plain-`cp -p` rotator
+score 1 earlier. The failed-rename cleanup, and the staging on the cut-floor re-run path after a
+kill WITHOUT `--absorb`, need a no-rename `mv` shim and a `git` shim. They live in the fixture's
+`atomic` and `staged` arms.
+
+What neither the clause nor the fixture reaches: a program that is not bash, or bash started as
+`sh` (sh, dash, zsh, perl, python, awk, a compiled tool), runs to completion before the next point,
+so a kill between two of its own writes to the history is never modelled; a pipeline stage or
+background job still running at the kill is not killed with the rotator; and a write of 1024 bytes
+or fewer is whole at L = 1. A child `bash` started plainly is reached: with `unset BASH_ENV` in the
+trap file a rotator that wrote the history through `bash -c 'cp h h2 && { cat h2 > h || mv h2 h; }'`
+after the rename (MH) scored 0 here and 1 without it. A child started as `bash --posix`, as
+`bash -p`, with `POSIXLY_CORRECT` set, or under `env -i` does not source `BASH_ENV` and is not
+reached. Every command in an EXIT or ERR trap handler is reached, whether it is written inline in
+the handler's string or in a function the handler calls. This was measured on bash 3.2.57 and
+5.2.15: a 3000-byte write inline in an EXIT handler is cut at 1024 bytes. An earlier revision of
+this entry said a handler was not reached; that was read off `$BASH_COMMAND`, which inside a
+handler does not name the handler's commands. The rotator's only trap is inline
+(`trap 'rm -rf "$TMPD"' EXIT`). The clause re-runs every killed point on its own world; it never reuses one
+point's result for another. The clause removes its scratch tree on exit (the
+`trap 'rm -rf "$d"' EXIT` shape of BL-214's receipt); before it did, each run left one tree in the
+system temp directory, measured at 77 MB and 80,015 entries.
+
+The fixture runs L = 0 only from the point before the rename to T and at every 8th point before it,
+so it can miss a write-through BEFORE the rename whose recovery separates an empty history from a
+partial one: L = 1 runs at that point but leaves a partial history, which that recovery handles.
+Measured with MZ3's copy-back moved to just after the temp build, at 8 successive offsets: the
+fixture killed 1 of the 8. This clause covers every point at both limits and scores all 8 as 1.
+
+verify: sh R="$(pwd)"; S="$R/core/scripts/rotate-snapshot-archive.sh"; [ -f "$S" ] || exit 9; command -v git >/dev/null || exit 9; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY; T="$(mktemp -d)" || exit 9; trap 'rm -rf "$T"' EXIT; g(){ git -c user.name=r -c user.email=r@r -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }; P=_bmad-output/pipeline-snapshot.md; A=_bmad-output/pipeline-history/pipeline-snapshot-archive.md; mk(){ W="$T/$1"; mkdir -p "$W/_bmad-output" && g init -q "$W" || exit 9; printf '# Pipeline Snapshot\n\nSTALE321-%s\n- open item one for %s\n- open item two for %s\n' "$1" "$1" "$1" > "$W/$P"; printf '# History\n' > "$W/_bmad-output/pipeline-snapshot-history.md"; [ "$2" -gt 0 ] || rm -f "$W/_bmad-output/pipeline-snapshot-history.md"; i=0; while [ "$i" -lt "$2" ]; do i=$((i+1)); printf '## entry %s\n\nbody %s\n' "$i" "$i" >> "$W/_bmad-output/pipeline-snapshot-history.md"; done; [ -z "$3" ] || printf '%s\n' "$3" > "$W/.gitignore"; g -C "$W" add -A && g -C "$W" commit -qm s || exit 9; cp "$W/$P" "$T/$1.before" || exit 9; ls -i "$W/$P" | awk '{print $1}' > "$T/$1.ino"; }; ab(){ W="$T/$1"; shift; ( cd "$W" && bash "$S" _bmad-output/pipeline-snapshot-history.md "$@" </dev/null >/dev/null 2>&1 ); }; ok(){ W="$T/$1"; N="$(wc -l < "$T/$1.before" | tr -d ' ')"; [ "$N" -gt 1 ] || exit 9; tail -n "$N" "$W/$A" > "$T/$1.tail" 2>/dev/null; [ -f "$W/$P" ] && [ ! -s "$W/$P" ] && grep -q "STALE321-$1" "$W/$A" && cmp -s "$T/$1.before" "$T/$1.tail" && [ -n "$(g -C "$W" ls-files -- "$A")" ] && [ "$(ls -i "$W/$P" | awk '{print $1}')" = "$(cat "$T/$1.ino")" ]; }; for s in none:0 floor:10 above:12; do n="${s%%:*}"; mk "$n" "${s#*:}" ""; ab "$n" --absorb "$P" --apply || exit 1; ok "$n" || exit 1; done; { printf '# History\n'; i=2; while [ "$i" -lt 12 ]; do i=$((i+1)); printf '## entry %s\n\nbody %s\n' "$i" "$i"; done; } > "$T/above.want" || exit 9; cmp -s "$T/above.want" "$T/above/_bmad-output/pipeline-snapshot-history.md" || exit 1; b="$(wc -c < "$T/none/$A")"; ab none --absorb "$P" --apply || exit 1; [ "$(wc -c < "$T/none/$A")" = "$b" ] || exit 1; ab none --absorb "$P" --no-such-option; [ "$?" = 2 ] || exit 1; ab none --absorb _bmad-output/no-such-file.md --apply; [ "$?" = 2 ] || exit 1; mk ign 0 "_bmad-output/pipeline-history/"; cp "$T/ign/$P" "$T/ign.before" || exit 9; ab ign --absorb "$P" --apply; [ "$?" = 1 ] || exit 1; cmp -s "$T/ign.before" "$T/ign/$P" || exit 1; for s in unw0:0 unw12:12; do n="${s%%:*}"; mk "$n" "${s#*:}" ""; mkdir -p "$T/$n/$A" || exit 9; [ -f "$T/$n/_bmad-output/pipeline-snapshot-history.md" ] && { cp "$T/$n/_bmad-output/pipeline-snapshot-history.md" "$T/$n.hist" || exit 9; }; ab "$n" --absorb "$P" --apply; [ "$?" = 1 ] || exit 1; cmp -s "$T/$n.before" "$T/$n/$P" || exit 1; [ ! -f "$T/$n.hist" ] || cmp -s "$T/$n.hist" "$T/$n/_bmad-output/pipeline-snapshot-history.md" || exit 1; done; for s in ul0:0 ul12:12; do n="${s%%:*}"; mk "$n" "${s#*:}" ""; mkdir -p "$T/$n/_bmad-output/pipeline-history" || exit 9; head -c 8152 /dev/zero | tr '\0' x > "$T/$n/$A" || exit 9; [ -f "$T/$n/_bmad-output/pipeline-snapshot-history.md" ] && { cp "$T/$n/_bmad-output/pipeline-snapshot-history.md" "$T/$n.hist" || exit 9; }; ( trap '' XFSZ; ulimit -f 8; ab "$n" --absorb "$P" --apply ); [ "$?" = 1 ] || exit 1; cmp -s "$T/$n.before" "$T/$n/$P" || exit 1; [ ! -f "$T/$n.hist" ] || cmp -s "$T/$n.hist" "$T/$n/_bmad-output/pipeline-snapshot-history.md" || exit 1; done; mk big 0 ""; H="$T/big/_bmad-output/pipeline-snapshot-history.md"; { printf '# History\n\n'; i=0; while [ "$i" -lt 22 ]; do i=$((i+1)); printf 'PRE-%02d: a long preamble line that stays in the live history across every rotation.\n' "$i"; done; printf '\n'; i=0; while [ "$i" -lt 14 ]; do i=$((i+1)); printf '## entry %s\n\n' "$i"; j=0; while [ "$j" -lt 8 ]; do j=$((j+1)); printf 'BIG-%02d-%02d: a substantive history body line, long enough to give the tail weight.\n' "$i" "$j"; done; printf '\n'; done; } > "$H" || exit 9; g -C "$T/big" add -A && g -C "$T/big" commit -qm h || exit 9; cp -R "$T/big" "$T/bigc" || exit 9; ab bigc --absorb "$P" --apply || exit 9; C="$T/bigc/_bmad-output/pipeline-snapshot-history.md"; [ "$(wc -c < "$C")" -gt 8192 ] && [ "$(awk '/^## /{f=1} f' "$C" | wc -c)" -lt 8192 ] && [ "$(wc -c < "$T/bigc/$A")" -lt 8192 ] || exit 9; cp "$H" "$T/big.hist" || exit 9; ( trap '' XFSZ; ulimit -f 8; ab big --absorb "$P" --apply ); [ "$?" = 1 ] || exit 1; cmp -s "$T/big.hist" "$H" || exit 1; cmp -s "$T/big.before" "$T/big/$P" || exit 1; sort -u "$T/big.hist" > "$T/big.want"; cat "$H" "$T/big/$A" | sort -u > "$T/big.have"; [ -s "$T/big.want" ] && [ -z "$(comm -23 "$T/big.want" "$T/big.have")" ] || exit 1; HR=_bmad-output/pipeline-snapshot-history.md; for n in sl hl md kc; do mk "$n" 12 ""; done; ab kc --apply || exit 9; [ "$(grep -c '^## ' "$T/kc/$HR")" = 10 ] || exit 1; mv "$T/sl/$HR" "$T/sl/_bmad-output/real.md" && ln -s real.md "$T/sl/$HR" && cp "$T/sl/_bmad-output/real.md" "$T/sl.real" || exit 9; ab sl --absorb "$P" --apply; [ "$?" = 1 ] || exit 1; [ -L "$T/sl/$HR" ] && cmp -s "$T/sl.real" "$T/sl/_bmad-output/real.md" && cmp -s "$T/sl.before" "$T/sl/$P" && [ ! -e "$T/sl/$A" ] || exit 1; cp "$T/hl/$HR" "$T/hl.hist" && ln "$T/hl/$HR" "$T/hl/_bmad-output/peer.md" || exit 9; ab hl --absorb "$P" --apply; [ "$?" = 1 ] || exit 1; cmp -s "$T/hl.hist" "$T/hl/$HR" && cmp -s "$T/hl.hist" "$T/hl/_bmad-output/peer.md" && cmp -s "$T/hl.before" "$T/hl/$P" && [ ! -e "$T/hl/$A" ] || exit 1; chmod 640 "$T/md/$HR" || exit 9; ab md --apply || exit 1; [ "$(ls -l "$T/md/$HR" | cut -c1-10)" = "-rw-r-----" ] && cmp -s "$T/md/$HR" "$T/kc/$HR" || exit 1; mk kb 0 ""; KH="$T/kb/$HR"; { printf '# History\n\n'; i=0; while [ "$i" -lt 14 ]; do i=$((i+1)); printf '## entry %s\n\n' "$i"; j=0; while [ "$j" -lt 3 ]; do j=$((j+1)); printf 'KL-%02d-%02d: a history body line long enough to put the file over one KiB.\n' "$i" "$j"; done; printf '\n'; done; } > "$KH" || exit 9; g -C "$T/kb" add -A && g -C "$T/kb" commit -qm h || exit 9; cp -R "$T/kb" "$T/kbc" || exit 9; ab kbc --absorb "$P" --apply || exit 9; [ "$(wc -c < "$KH")" -gt 1024 ] && [ "$(wc -c < "$T/kbc/$HR")" -gt 1024 ] || exit 9; printf '%s\n' 'set -T' '_kp(){ _kn=; read -r _kn < "$KC/h"; _kn=$((${_kn:-0}+1)); set -C; while ! : 2>/dev/null > "$KC/$_kn"; do _kn=$((_kn+1)); done; set +C; echo "$_kn" 2>/dev/null >| "$KC/h"; if [ "$_kn" -eq "$KN" ]; then trap "" XFSZ; ulimit -f "$KL"; elif [ "$KN" -gt 0 ] && [ "$_kn" -gt "$KN" ]; then kill -KILL $$; exit 137; fi; }' 'trap _kp DEBUG' > "$T/kenv" || exit 9; sort -u "$KH" "$T/kb/$P" > "$T/k.want" || exit 9; kp(){ W="$T/k$1.$2"; C="$T/c$1.$2"; cp -R "$T/kb" "$W" && mkdir "$C" "$W.tmp" && echo 0 > "$C/h" || { echo E > "$T/r$1.$2"; return; }; ( cd "$W" && TMPDIR="$W.tmp" KC="$C" KN="$1" KL="$2" BASH_ENV="$T/kenv" bash "$S" "$HR" --absorb "$P" --apply </dev/null >/dev/null 2>&1 ); r=$?; q=n; cmp -s "$W/$HR" "$T/kbc/$HR" && q=y; if [ "$r" != 137 ]; then echo "U $r $q" > "$T/r$1.$2"; return; fi; p=n; for f in "$W/$HR" "$W/_bmad-output/.pipeline-snapshot-history.md.rotate."*; do [ -f "$f" ] && [ "$(wc -c < "$f" | tr -d ' ')" = 1024 ] && p=y; done; ( cd "$W" && bash "$S" "$HR" --absorb "$P" --apply </dev/null >/dev/null 2>&1 ); r2=$?; ( cd "$W" && git ls-files -z -- '*.md' | xargs -0 cat 2>/dev/null ) | sort -u > "$W.have"; e=n; cmp -s "$W/$HR" "$T/kbc/$HR" && e=y; echo "K $r2 $(comm -23 "$T/k.want" "$W.have" | wc -l | tr -d ' ') $e $q $p" > "$T/r$1.$2"; }; kp 0 1; read a b c < "$T/r0.1" || exit 9; KT="$(ls "$T/c0.1" | grep -c '^[0-9][0-9]*$')"; [ "$a" = U ] && [ "$b" = 0 ] && [ "$c" = y ] && [ "$KT" -gt 1 ] && [ -e "$T/c0.1/$KT" ] && [ ! -e "$T/c0.1/$((KT+1))" ] || exit 1; J=0; for L in 1 0; do N=1; while [ "$N" -le "$KT" ]; do kp "$N" "$L" & J=$((J+1)); [ $((J % 12)) = 0 ] && wait; N=$((N+1)); done; done; wait; post=0; part=0; for L in 1 0; do read a b c < "$T/r$KT.$L" && [ "$a" = U ] && [ "$b" = 0 ] && [ "$c" = y ] || exit 1; N=1; while [ "$N" -lt "$KT" ]; do read a b c d e f < "$T/r$N.$L" || exit 1; [ "$a" = K ] && [ "$b" = 0 ] && [ "$c" = 0 ] && [ "$d" = y ] || exit 1; [ "$e" = y ] && post=$((post+1)); [ "$f" = y ] && part=$((part+1)); N=$((N+1)); done; done; [ "$post" -ge 2 ] && [ "$part" -ge 1 ] || exit 1; exit 0
