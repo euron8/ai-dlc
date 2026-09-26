@@ -315,7 +315,7 @@ script names per artifact — they are not interchangeable:
            _bmad-output/pipeline-snapshot-history.md --apply
 
 Then re-run `validate-artifact-budget.sh`. It must exit 0 before the sprint proceeds.
-If `rotate-snapshot-archive.sh` exits non-zero, follow its printed remedy (restore or remove the named temp copy) and re-run `rotate-snapshot-archive.sh` until it exits 0, and never delete a kept temp copy unread.
+If `rotate-snapshot-archive.sh` exits non-zero, read its stderr and fix what it names before re-running it, and re-run it until it exits 0.
 
 ### Step 2: Analyze User Input
 
@@ -708,11 +708,14 @@ the pipeline snapshot at `_bmad-output/pipeline-snapshot.md`:
            --absorb _bmad-output/pipeline-snapshot.md --apply
 
   1. **If the rotator exits NON-ZERO, STOP.** Do not write the snapshot.
-     Report the rotator's stderr to the user verbatim. Exit 1 guarantees
-     only this: the stale snapshot still holds all of its content, and the
-     history is byte-identical to before or its complete new history is in
-     the temp copy the stderr names. The archive may already carry the
-     snapshot or the moved block, a duplicate that a re-run appends again.
+     Report the rotator's stderr to the user verbatim. On exit 1 the history
+     is byte-identical to before, EXCEPT in exactly one case: the history
+     rename succeeded and the snapshot truncate then failed (read-only
+     snapshot). There the history is the new, complete history and the
+     archive holds the moved block and the snapshot; re-running after making
+     the snapshot writable appends the snapshot again. The snapshot is never
+     emptied without having been archived. The archive may carry a duplicate
+     block after any exit 1.
      Writing over the snapshot destroys the only copy the pipeline reads.
   2. **On exit 0** the rotator has appended the stale snapshot to the
      archive and TRUNCATED the file to 0 bytes. Read the now-empty
