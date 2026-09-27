@@ -184,9 +184,34 @@ for d in check-h1-recursion check-17-bypass check-manifest-bypass; do
   printf 'seed\n' > "$WORK/tests/fixtures/$d/README.md"
 done
 
+# THE POISON SEED. Five scripts now fall back to the INSTALL's schema, walked up from their own
+# directory, when the root carries none (BL-300). Their schema lookup was the only root-keyed read
+# their argv reached, so a wrong root no longer changed their answer and all five scored INERT —
+# the fixture went red on the commit that fixed them. The seed gives the wrong root something to
+# say: an unparseable-as-a-schema `{"vpr_poison":true}` under <root>/scripts/core/schemas/ for each
+# schema name, which is the `<root>/core/schemas/` candidate when the root is <root>/scripts. A
+# script that consults the root BEFORE its install fallback loads the poison and its answer moves;
+# one that puts the install FIRST never reads it and scores inert, so this arm is also what kills
+# an install-first fallback here. The seed is not under the correct root, so the agreement runs
+# above are untouched. No exemption list: each of the five proves sensitivity the ordinary way.
+mkdir -p "$WORK/scripts/core/schemas" || exit 2
+for _pz in sprint-status.json provenance-block.json audit-anchors.json gate-adjudication-verdict.json write-format-steering.json; do
+  printf '{ "vpr_poison": true }\n' > "$WORK/scripts/core/schemas/$_pz"
+done
+
+# validate-gate-adjudication.sh needs a real enforcement-map.yaml under the CORRECT root to reach
+# the python that parses its schema; without one it stops at "map not found" from every root and
+# the poison above is never read. sprint-status.sh is driven with --render (below) for the same
+# reason: a bare run never opens the schema's content.
+for _em in "$ROOT/core/skills/ai-dlc/enforcement-map.yaml" "$ROOT/.claude/skills/ai-dlc/enforcement-map.yaml"; do
+  [ -f "$_em" ] && { cp "$_em" "$WORK/.claude/skills/ai-dlc/enforcement-map.yaml" || exit 2; break; }
+done
+[ -f "$WORK/.claude/skills/ai-dlc/enforcement-map.yaml" ] || { echo "FIXTURE ERROR: no enforcement map" >&2; exit 2; }
+
 argv_for() {
   case "$1" in
     sync-taught-schema.sh)          printf '%s' "--check" ;;
+    sprint-status.sh)               printf '%s' "--render" ;;
     validate-audit-anchors.sh)      printf '%s' "--render" ;;
     validate-gate-adjudication.sh)  printf '%s' "--expected implementation" ;;
     validate-provenance-block.sh)   printf '%s' "$WORK/docs/artifact.md" ;;

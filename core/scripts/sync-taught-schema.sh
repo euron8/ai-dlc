@@ -79,6 +79,12 @@ AI_DLC_ROOT="${AI_DLC_PROJECT_ROOT:-}"
 #   consumer     — the schemas and docs sit under .claude/ at the project root
 # Script-relative first: that is the package THIS copy shipped in, and it is the one
 # answer that stays right no matter where the package as a whole was installed.
+# The INSTALL root, walked up from this script's own directory, is the LAST candidate: in the
+# consumer layout the script-relative one is scripts/schemas/, which never exists, so an override
+# naming a root with no .claude/schemas/ failed closed (BL-300). Last, as in BL-299's pair, so a
+# root carrying its own schema still wins. The two schemas install as a set, so that branch takes
+# its ROOT and DOC_DIRS from the install too. An empty walk adds no candidate.
+AI_DLC_INSTALL_ROOT="$(ai_dlc_resolve_root "$SCRIPT_DIR" || true)"
 if [ -f "$SCRIPT_DIR/../schemas/provenance-block.json" ]; then
     SCHEMA="$(cd "$SCRIPT_DIR/../schemas" && pwd)/provenance-block.json"
     ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -91,11 +97,16 @@ elif [ -n "$AI_DLC_ROOT" ] && [ -f "$AI_DLC_ROOT/.claude/schemas/provenance-bloc
     SCHEMA="$AI_DLC_ROOT/.claude/schemas/provenance-block.json"
     ROOT="$AI_DLC_ROOT"
     DOC_DIRS=("$ROOT/.claude/skills" "$ROOT/.claude/team-roles")
+elif [ -n "$AI_DLC_INSTALL_ROOT" ] && [ -f "$AI_DLC_INSTALL_ROOT/.claude/schemas/provenance-block.json" ]; then
+    SCHEMA="$AI_DLC_INSTALL_ROOT/.claude/schemas/provenance-block.json"
+    ROOT="$AI_DLC_INSTALL_ROOT"
+    DOC_DIRS=("$ROOT/.claude/skills" "$ROOT/.claude/team-roles")
 else
     echo "sync-taught-schema: FAIL — cannot find schemas/provenance-block.json." >&2
     echo "  The schema is the source of truth; this script has no built-in copy and will not" >&2
     echo "  guess. Looked in: $SCRIPT_DIR/../schemas/ and" >&2
-    echo "  ${AI_DLC_ROOT:-<unresolved project root>}/{core,.claude}/schemas/" >&2
+    echo "  ${AI_DLC_ROOT:-<unresolved project root>}/{core,.claude}/schemas/ and" >&2
+    echo "  ${AI_DLC_INSTALL_ROOT:-<unresolved install root>}/.claude/schemas/" >&2
     exit 1
 fi
 

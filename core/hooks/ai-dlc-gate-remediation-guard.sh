@@ -140,7 +140,7 @@
 #   - `pipeline-snapshot.md` and `pipeline-snapshot-history.md` -- state records,
 #     and Rule 25(a)'s trim needs both halves (`ai-dlc-acknowledge.sh:426-459`).
 #   - `validation-cycle-log.md`, `pipeline-continuation-log.md` -- the loop's logs.
-#   - any `sprint-status.yaml` -- both homes (`sprint-status.sh:247-248`) and the
+#   - any `sprint-status.yaml` -- both homes (`sprint-status.sh:255-256`) and the
 #     `s<N>/` form.
 #   - `docs/escalations/**` -- the escalation IS the sanctioned exit from a stalled
 #     gate (Rule 12 HARD_BLOCK). Denying it would deny the way out, which is the

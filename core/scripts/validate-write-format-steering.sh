@@ -155,12 +155,20 @@ command -v python3 >/dev/null 2>&1 || {
 # copy shipped in — then the resolved root, distribution before consumer. No built-in copy
 # and no guess: a reader that falls back to a stale built-in reports about a declaration
 # nobody can see.
+# The INSTALL root, walked up from this script's own directory, is the LAST candidate: in the
+# consumer layout the script-relative one is scripts/schemas/, which never exists, so an override
+# naming a root with no .claude/schemas/ failed closed (BL-300). Last, as in BL-299's pair, so a
+# root carrying its own schema still wins. An empty walk adds no candidate.
+AI_DLC_INSTALL_ROOT="$(ai_dlc_resolve_root "$AI_DLC_SELF_DIR" || true)"
 resolve_schema() {
   _n="$1"
+  _i=""
+  [ -n "$AI_DLC_INSTALL_ROOT" ] && _i="$AI_DLC_INSTALL_ROOT/.claude/schemas/$_n"
   for _c in "$AI_DLC_SELF_DIR/../schemas/$_n" \
             "$AI_DLC_ROOT/core/schemas/$_n" \
-            "$AI_DLC_ROOT/.claude/schemas/$_n"; do
-    [ -f "$_c" ] && { printf '%s\n' "$_c"; return 0; }
+            "$AI_DLC_ROOT/.claude/schemas/$_n" \
+            "$_i"; do
+    [ -n "$_c" ] && [ -f "$_c" ] && { printf '%s\n' "$_c"; return 0; }
   done
   return 1
 }
@@ -423,7 +431,15 @@ if [ -z "$POP" ]; then
   exit 0
 fi
 
-OUT="$(run_reader live "$STEERING" "$POP" "$AI_DLC_ROOT" 2>&1)"
+# A steering schema that came from the install fallback declares its formats against the
+# INSTALL's tree, so its `declared_in` paths are resolved there too. Judged against the override
+# root instead, a root holding only .claude/ would resolve none of them and report PASS having
+# judged nothing (BL-300).
+READER_ROOT="$AI_DLC_ROOT"
+if [ -n "$AI_DLC_INSTALL_ROOT" ] && [ "$STEERING" = "$AI_DLC_INSTALL_ROOT/.claude/schemas/write-format-steering.json" ]; then
+  READER_ROOT="$AI_DLC_INSTALL_ROOT"
+fi
+OUT="$(run_reader live "$STEERING" "$POP" "$READER_ROOT" 2>&1)"
 
 if [ -z "$OUT" ]; then
   echo "validate-write-format-steering: FAIL — the reader produced NO output at all, not even" >&2

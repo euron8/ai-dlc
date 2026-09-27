@@ -4439,7 +4439,7 @@ if [ -d "$REPO_ROOT/core/fixtures" ]; then
 fi
 
 if [ -n "${i33b_hits// /}" ]; then
-  err "I33b: these fixtures reach a sibling subtree by walking up from a dirname VARIABLE:${i33b_hits}. I33 catches the one-expression form and this is the same defect one assignment apart -- true in core/, broken by the install mapping on every consumer (core/scripts/<x> -> scripts/ai-dlc/<x> while core/schemas/ -> .claude/schemas/). Root the chain at the fixture's own self-location and name BOTH layouts, the way sprint-status.sh:129-137 resolves this same schema."
+  err "I33b: these fixtures reach a sibling subtree by walking up from a dirname VARIABLE:${i33b_hits}. I33 catches the one-expression form and this is the same defect one assignment apart -- true in core/, broken by the install mapping on every consumer (core/scripts/<x> -> scripts/ai-dlc/<x> while core/schemas/ -> .claude/schemas/). Root the chain at the fixture's own self-location and name BOTH layouts, the way sprint-status.sh:129-153 resolves this same schema."
 fi
 
 # --- I33c: a SELF-ROOTED walk must name BOTH layouts ---------------------------

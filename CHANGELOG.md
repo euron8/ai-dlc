@@ -15,6 +15,43 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.646.0] - 2026-09-26
+
+Five scripts now find their schema when `AI_DLC_PROJECT_ROOT` names a root that carries none, and
+the provenance writer and reader always load the same schema. No production caller aims the
+override at such a root today. A consumer sees no change unless a fixture or an operator points
+the override at another directory.
+
+### `BL-300` — five scripts fall back to the installed schema instead of failing closed
+
+`sprint-status.sh`, `sync-taught-schema.sh`, `validate-audit-anchors.sh`,
+`validate-write-format-steering.sh` and `validate-gate-adjudication.sh` looked for their schema
+beside the script and under the project root only. In a consumer the script-relative candidate is
+`scripts/schemas/`, which never exists, so an override naming a root with no `.claude/schemas/`
+made all five fail closed. Each now tries the install's own `.claude/schemas/` copy as its LAST
+candidate. The install is found by walking up from the script for a marker, never by counting
+`..` hops. `validate-gate-adjudication.sh` does the same for `enforcement-map.yaml`. A root that
+carries its own copy still wins. Two scripts carry the fallback one step further, because their
+other inputs live beside the schema. `validate-write-format-steering.sh` resolves each format's
+`declared_in` against the install when the steering schema came from there, so it does not report
+PASS having judged nothing. `sync-taught-schema.sh` takes its taught docs from the install in that
+case. In the three scripts whose failure message lists where they looked, the list now includes the
+install location.
+
+The entry's receipt was replaced. The old one also accepted an install-first order and a
+hop-counting fallback. The new one scores 0 on this release, 1 on 0.645.0, 1 on both of those
+wrong fixes, and 0 on a second spelling of this fix.
+
+### `BL-302` — the provenance writer tries candidates in the reader's order
+
+In the distribution, `stamp-story-provenance.sh` loaded the schema beside itself first, while
+`validate-provenance-block.sh` loaded the override root's copy first. When an override root
+carried a different schema, the writer stamped a story that the reader then refused. The writer
+now uses the reader's order: root `core/`, root `.claude/`, script-relative, install. Measured
+this batch, the twelve fixtures that plant a schema give the same verdict with either order. The entry's receipt now
+also checks the writer in a fresh consumer install, where it had accepted an install-first
+writer.
+
 ## [0.645.0] - 2026-09-26
 
 A fresh start no longer removes the pipeline snapshot. The rotator's `--absorb` archives the
