@@ -219,6 +219,12 @@ fi
 # refuses yesterday's attestation. `sprint=` and `digest=` are the identity and are
 # required; everything after them is matched if present and not demanded.
 #
+# OPTIONAL IS NOT OPEN, THOUGH: the `mechanical=` value is pinned to the one --attest emits,
+# `check-17-bypass:PASS`. Under an open value class a column-1 line ending
+# `mechanical=check-17-bypass:FAIL` verified — the line recording that the mechanical item
+# FAILED granted the attestation. A pinned value leaves `:FAIL` for the tail to refuse, so
+# the line is LOCATED, never granted. The consumer's spans carry `:PASS` on every one.
+#
 # WHY THE READER IS NOT WIDENED TO ADMIT A BULLET. A consumer transcribed the line into a
 # markdown bullet, `- [core] H2 — … → \`SPAN\`; item 1 recursion guard fires …`, and
 # --verify refused it. Every tail that admits that bullet also admits a FAIL sentence in
@@ -305,7 +311,7 @@ ATTEST_TAIL='`?(\*\*)?\.?[ ]*'
 ATTEST_LOCATE='(^|[^0-9A-Za-z_])'
 # The emitted span, for the tail test and for CITATION. Its optional groups mirror the line
 # --attest emits field for field, so a field added there is matched here without being required.
-ATTEST_FIELDS='( at=[0-9A-Za-z:-]+)?( items=[0-9,]+)?( mechanical=[0-9A-Za-z:_.-]+)?'
+ATTEST_FIELDS='( at=[0-9A-Za-z:-]+)?( items=[0-9,]+)?( mechanical=check-17-bypass:PASS)?'
 ATTEST_SPAN="H2_ATTESTED v1 sprint=${SPRINT} digest=${DIGEST}${ATTEST_FIELDS}"
 # The same span at ANY digest, for the "fixture set CHANGED" arm. It carries the identical
 # lead and tail, because BOTH arms must refuse prose: guarding only the accepting arm moves

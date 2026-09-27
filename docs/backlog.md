@@ -4452,8 +4452,10 @@ NEEDS-REVIEW rather than CLOSE-CANDIDATE; exit 2 means a span that must verify w
 1 means a failed record verified. Must verify: the column-1 control, a `| Check | Result |
 Evidence |` table with a PASS row whose span is alone in its cell, and a `| Check | Evidence |
 Verdict |` table whose verdict cell reads `**PASS (attested, cite — do not re-drive)**`. Must
-refuse: the five lines above, `❌` before a backticked span, and a VOIDED verdict row under a
-Result header. Scored raw, each subject its own minimal tree built in a fresh `mktemp -d` from
+refuse: the five lines above, `❌` before a backticked span, a VOIDED verdict row under a
+Result header, and the column-1 emitted line with its last field reading
+`mechanical=check-17-bypass:FAIL`, which the 0.649.0 tip still granted because the `mechanical=`
+value class was open; it is now pinned to the `:PASS` that `--attest` emits. Scored raw, each subject its own minimal tree built in a fresh `mktemp -d` from
 the three H2 fixture dirs plus the script:
 
     fe30b4fa (0.648.0 reader)                                 1
@@ -4471,7 +4473,7 @@ the three H2 fixture dirs plus the script:
 The receipt reads nothing `validate-artifact-derivations.sh` changes; the only script it runs is
 this one.
 
-verify: sh S=core/scripts/validate-h2-attestation.sh; [ -f "$S" ] || exit 9; D=$(bash "$S" --digest 2>/dev/null) && [ -n "$D" ] || exit 9; t=$(mktemp -d) || exit 9; P="H2_ATTESTED v1 sprint=9 digest=$D items=1,2,3 mechanical=check-17-bypass:PASS"; v() { bash "$S" --verify --sprint 9 --gate-log "$t/$1.md" >/dev/null 2>&1; }; printf '%s\n' "$P" > "$t/ok.md"; printf '| Check | Result | Evidence |\n|---|---|---|\n| H2 | PASS | \140%s\140 |\n' "$P" > "$t/a.md"; printf '| Check | Evidence | Verdict |\n|---|---|---|\n| H2 | \140%s\140 | **PASS (attested, cite — do not re-drive)** |\n' "$P" > "$t/b.md"; printf '| H2 | core | FAIL | refused, re-drive owed: \140%s\140 |\n' "$P" > "$t/1.md"; printf '| H2 | core | \140%s\140 | FAIL — item 3 seed passed H1 |\n' "$P" > "$t/2.md"; printf '| Check | Evidence |\n|---|---|\n| H2 (INVALID, do not cite) | \140%s\140 |\n' "$P" > "$t/3.md"; printf '| H2 | core | FAIL -- re-drive required | \140%s\140 |\n' "$P" > "$t/4.md"; printf 'H2 FAILED, re-drive owed: %s\n' "$P" > "$t/5.md"; printf '❌ \140%s\140\n' "$P" > "$t/6.md"; printf '| Check | Result | Evidence |\n|---|---|---|\n| H2 | VOIDED | \140%s\140 |\n' "$P" > "$t/7.md"; v ok || exit 9; for f in a b; do v "$f" || exit 2; done; for f in 1 2 3 4 5 6 7; do v "$f" && exit 1; done; exit 0
+verify: sh S=core/scripts/validate-h2-attestation.sh; [ -f "$S" ] || exit 9; D=$(bash "$S" --digest 2>/dev/null) && [ -n "$D" ] || exit 9; t=$(mktemp -d) || exit 9; P="H2_ATTESTED v1 sprint=9 digest=$D items=1,2,3 mechanical=check-17-bypass:PASS"; v() { bash "$S" --verify --sprint 9 --gate-log "$t/$1.md" >/dev/null 2>&1; }; printf '%s\n' "$P" > "$t/ok.md"; printf '| Check | Result | Evidence |\n|---|---|---|\n| H2 | PASS | \140%s\140 |\n' "$P" > "$t/a.md"; printf '| Check | Evidence | Verdict |\n|---|---|---|\n| H2 | \140%s\140 | **PASS (attested, cite — do not re-drive)** |\n' "$P" > "$t/b.md"; printf '| H2 | core | FAIL | refused, re-drive owed: \140%s\140 |\n' "$P" > "$t/1.md"; printf '| H2 | core | \140%s\140 | FAIL — item 3 seed passed H1 |\n' "$P" > "$t/2.md"; printf '| Check | Evidence |\n|---|---|\n| H2 (INVALID, do not cite) | \140%s\140 |\n' "$P" > "$t/3.md"; printf '| H2 | core | FAIL -- re-drive required | \140%s\140 |\n' "$P" > "$t/4.md"; printf 'H2 FAILED, re-drive owed: %s\n' "$P" > "$t/5.md"; printf '❌ \140%s\140\n' "$P" > "$t/6.md"; printf '| Check | Result | Evidence |\n|---|---|---|\n| H2 | VOIDED | \140%s\140 |\n' "$P" > "$t/7.md"; printf '%s\n' "${P%:PASS}:FAIL" > "$t/8.md"; v ok || exit 9; for f in a b; do v "$f" || exit 2; done; for f in 1 2 3 4 5 6 7 8; do v "$f" && exit 1; done; exit 0
 
 ## BL-342 — `validate-h2-attestation.sh --verify` numbers a binary gate log with grep's banner
 

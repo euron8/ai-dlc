@@ -535,6 +535,10 @@ else
 | H2 | FAIL | ${BT}${V_OK}${BT} |"
   sd rb-fail-moved "$HR
 | H2 | FAIL | ${BT}${V_BAD}${BT} |"
+  # The emitted line with the MECHANICAL item recording a failure, at column 1. --attest only
+  # ever prints `mechanical=check-17-bypass:PASS`; an open value class granted this line.
+  sd rb-mech-fail "${V_OK%:PASS}:FAIL"
+  [ "${V_OK%:PASS}:FAIL" != "$V_OK" ] || { echo "FIXTURE ERROR: the :FAIL seed equals V_OK" >&2; exit 2; }
   # THE TWO CELL READINGS. A pipe inside a backtick code span is part of the cell under the
   # code-span reading and a cell border under the GFM reading, which is how GitHub renders
   # the row; a table row verifies only when BOTH accept it. Each seed below is accepted by
@@ -575,7 +579,8 @@ rb-emdash|3|does not begin PASS
 rb-headerless|1|no header row
 rb-noverdict|3|names no Result, Verdict, Status or Outcome
 rb-fail-hdr|3|does not begin PASS
-rb-fail-moved|3|does not begin PASS"
+rb-fail-moved|3|does not begin PASS
+rb-mech-fail|1|inside other text"
   # controls on the other two messages, so the refusal arms' "never CHANGED, never first
   # gate" conjuncts are shown to be able to fire
   sd cb-moved-pass "$HR
@@ -635,7 +640,7 @@ ${V_OK}
       echo "        '$s.md:$l QUOTES' on stderr${r:+ and the reason '$r'}." >&2; vx_show
     fi
   done <<<"$RB_ROWS"
-  [ "$n_rb" -ge 22 ] || bad "only $n_rb refusal rows were driven — the RB_ROWS list was truncated"
+  [ "$n_rb" -ge 23 ] || bad "only $n_rb refusal rows were driven — the RB_ROWS list was truncated"
   if p_changed "$SUT" cb-moved-pass; then ok "CONTROL: a PASS row at a moved digest reports CHANGED"
   else bad "CONTROL: a PASS row at a moved digest did not report CHANGED (rc=$X_RC)"; vx_show; fi
   if p_first "$SUT" cb-none; then ok "CONTROL: a log with no span reports first-gate"
@@ -728,6 +733,7 @@ ${V_OK}
   q_adv_none() { local s; for s in $ADV_SEEDS; do p_adv "$1" "$s" || return 1; done; }
   q_cs_hole()  { p_refuse "$1" rb-cs-hole 3 'does not begin PASS'; }
   q_gfm()      { p_refuse "$1" rb-gfm-mirror 3 '(reading every pipe as a cell border'; }
+  q_mech()     { p_refuse "$1" rb-mech-fail 1 'inside other text'; }
 
   # An UNMUTATED copy in the same place must pass every predicate first, so a harness that
   # cannot run a copy from $WORK is reported as broken rather than as a row of kills. Each
@@ -802,6 +808,12 @@ ${V_OK}
     M="$WORK/h2-judge-gfm-only.mutant.sh"
     mut_mk k "$M" 'GFM = 0; a = judgeone(rx); cite = CITE' 'GFM = 1; a = judgeone(rx); cite = CITE; GFM = 0' \
       && score k "$M" q_cs_hole "judging only the GFM reading grants the code-span hole" q_col1 q_hdr_pass
+    # (l) the mechanical value class reopened: `:FAIL` satisfies the field group, so the
+    #     column-1 line recording a FAILED mechanical item verifies; the :FAIL arm owns it.
+    M="$WORK/h2-mechanical-open.mutant.sh"
+    mut_mk l "$M" "ATTEST_FIELDS=" \
+      "ATTEST_FIELDS='( at=[0-9A-Za-z:-]+)?( items=[0-9,]+)?( mechanical=[0-9A-Za-z:_.-]+)?'" \
+      && score l "$M" q_mech "an open mechanical value grants the :FAIL line" q_col1 q_cell
     # (m1) locating keyed on this digest only: a moved-digest bullet falls to first-gate.
     M="$WORK/h2-locate-span.mutant.sh"
     mut_mk m1 "$M" 'locn = NR; locwhy = why' 'if ($0 ~ SPAN) { locn = NR; locwhy = why }' \
