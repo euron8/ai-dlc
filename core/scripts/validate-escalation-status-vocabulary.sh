@@ -49,7 +49,8 @@
 #   0  every Status token is in the derived vocabulary (or the escalations file is absent or holds nothing)
 #   1  at least one entry carries an out-of-vocabulary Status token
 #   2  bad arguments, or the vocabulary source could not be read — see above, this is a
-#      refusal, not a pass
+#      refusal, not a pass; or the escalations path exists but is not a regular file, or
+#      could not be read (`REFUSED:` on stderr)
 set -u
 
 ESCALATIONS="${1:-}"
@@ -139,6 +140,14 @@ if [ "$(printf '%s\n' "$VOCAB" | grep -c .)" -lt 2 ]; then
   exit 2
 fi
 
+# A path that EXISTS but is not a regular file is not the absent state. A directory, a
+# fifo, or a symlink whose target is gone all fail `-f` and would otherwise take the
+# no-file branch below and print a line Check 2 reads as a pass. `-L` is tested beside
+# `-e` because a dangling symlink fails `-e` too.
+if { [ -e "$ESCALATIONS" ] || [ -L "$ESCALATIONS" ]; } && [ ! -f "$ESCALATIONS" ]; then
+  echo "REFUSED: escalations path $ESCALATIONS exists but is not a regular file; nothing was examined." >&2
+  exit 2
+fi
 # No escalations file is a legitimate clean state — nothing to adjudicate.
 [ -f "$ESCALATIONS" ] || {
   echo "OK: EXAMINED NOTHING — no escalations file ($ESCALATIONS); nothing to check."
@@ -148,11 +157,23 @@ fi
 # the BYTES, not on zero parsed records: a populated file whose entries this parser cannot
 # read (no `**Status:**` field at all) is a grammar failure, not an empty corpus, and must
 # keep its `n=[]` line. `grep` exits 1 only when it read the file and matched nothing.
+# Status 2 REFUSES: the file could not be read, and every later read of it would fail the
+# same way and be swallowed, so the run would print an ordinary `n=[]` line over entries it
+# never saw. Unreadable is decided by the mode bit AND the status together, so a caller that
+# CAN read a mode-000 file (root) is not refused on the bit alone.
 grep -q '[^[:space:]]' "$ESCALATIONS" 2>/dev/null
 ESC_BLANK_RC=$?
 if [ "$ESC_BLANK_RC" -eq 1 ]; then
   echo "OK: EXAMINED NOTHING — escalations file present but empty ($ESCALATIONS); nothing to check."
   exit 0
+fi
+if [ "$ESC_BLANK_RC" -gt 1 ]; then
+  if [ ! -r "$ESCALATIONS" ]; then
+    echo "REFUSED: escalations file $ESCALATIONS could not be read; nothing was examined." >&2
+  else
+    echo "REFUSED: reading escalations file $ESCALATIONS failed (grep exited $ESC_BLANK_RC); nothing was examined." >&2
+  fi
+  exit 2
 fi
 
 # ---- 3. Extract one <header>\t<STATUS> record per entry ---------------------

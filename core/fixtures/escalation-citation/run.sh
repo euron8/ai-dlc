@@ -596,6 +596,136 @@ else
   en_score "M-hoist" "$EN_M3" 111110 "the check above the mode split: ONLY the --any-authorized cell goes red" hoist
 fi
 
+# --- an UNREADABLE or NON-REGULAR escalations path REFUSES (gate mode), exit 2 ------------------------
+# The blank probe's grep exits 2 on a file it cannot read, and the gate mode branched on `-eq 1` alone:
+# the status fell through, the parser's read failure was swallowed, and the run printed the ordinary
+# "no S<N> ... requires an operator citation" line over a file nobody read. A DIRECTORY at the path
+# failed `-f` and printed "no escalations file" -- the line Check 2a reads as a pass.
+#
+# SIX CELLS, ONE STRING, each mutant held to the cells its layer owns:
+#   A  mode-000 file carrying an S50 RESOLVED entry with no citation -> exit 2, `could not be read`
+#   B  a DIRECTORY at the path                                   -> exit 2, `is not a regular file`
+#   C  a DANGLING SYMLINK at the path                            -> exit 2, `is not a regular file`
+#   D  a READABLE file whose blank probe grep exits 2 (PATH stub; must FIRE) -> exit 2, `grep exited 2`
+#   E  near-miss: whitespace-only readable file                  -> exit 0, "present but empty"
+#   F  near-miss: pending-missing.md, readable, a real finding   -> exit 1, unchanged
+# A-D are presence-shaped. Cell A is `S` where mode 000 does not stop this process reading (root).
+echo
+echo "  -- an unreadable or non-regular escalations path REFUSES; a readable one is judged --"
+ER="$(mktemp -d)"; trap 'chmod -R u+rwX "$ER" 2>/dev/null; rm -rf "$ROOT" "$MWORK" "${EN_MW:-}" "$ER"' EXIT
+ER_LOCKED="$ER/pending-locked.md"; cp "$ROOT/pending-missing.md" "$ER_LOCKED"; chmod 000 "$ER_LOCKED"
+ER_DIR="$ER/pending-dir.md"; mkdir -p "$ER_DIR"
+ER_LINK="$ER/pending-dangling.md"; ln -s "$ER/pending-target-never-written.md" "$ER_LINK"
+ER_IO="$ER/pending-io.md"; cp "$ROOT/pending-missing.md" "$ER_IO"
+ER_SKIP_A=""
+if [ "$(id -u)" -eq 0 ]; then ER_SKIP_A="running as root, which reads a mode-000 file"
+elif cat "$ER_LOCKED" >/dev/null 2>&1; then ER_SKIP_A="this host reads a mode-000 file, so the seed cannot express unreadable"; fi
+[ -n "$ER_SKIP_A" ] && printf '  SKIP %-30s refusal cell A -- %s\n' "pending-locked.md" "$ER_SKIP_A"
+N=$((N + 1))
+if [ -L "$ER_LINK" ] && [ ! -e "$ER_LINK" ]; then printf '  ok   %-30s the dangling-symlink seed is a link to a missing target\n' "pending-dangling.md"
+else FAIL=$((FAIL + 1)); printf '  FAIL %-30s FIXTURE BROKEN: the dangling-symlink seed is not dangling\n' "pending-dangling.md"; fi
+ER_STUB="$ER/stub"; mkdir -p "$ER_STUB"
+ER_REALGREP="$(command -v grep)" || { echo "FIXTURE ERROR: grep is not on PATH" >&2; exit 2; }
+{
+  printf '#!/bin/sh\ncase "$*" in\n'
+  printf '  %s) printf "x\\n" >> "%s/LOG"; echo "grep: forced failure" >&2; exit 2 ;;\n' "'-q [^[:space:]] '*" "$ER_STUB"
+  printf 'esac\nexec "%s" "$@"\n' "$ER_REALGREP"
+} > "$ER_STUB/grep"
+chmod +x "$ER_STUB/grep"
+ER_RC=0; ER_O=""; ER_E=""
+er_run() {  # <validator> <file> [stub-dir] -> ER_RC ER_O ER_E
+  local p="$PATH"
+  [ -n "${3:-}" ] && p="$3:$PATH"
+  : > "$ER_STUB/LOG"
+  ER_O="$(PATH="$p" bash "$1" --escalations "$2" --sprint 50 --transcript "$ROOT/real.jsonl" 2>"$ER/err")"; ER_RC=$?
+  ER_E="$(cat "$ER/err")"
+}
+er_refused() { [ "$ER_RC" -eq 2 ] && [ -z "$ER_O" ] && grep -qE "^REFUSED: .*$1" <<<"$ER_E"; }
+ER_CELLS=""
+er_cells() {  # <validator> -> ER_CELLS
+  local v="$1" c=""
+  if [ -n "$ER_SKIP_A" ]; then c="${c}S"
+  else er_run "$v" "$ER_LOCKED"; if er_refused 'could not be read'; then c="${c}1"; else c="${c}0"; fi; fi
+  er_run "$v" "$ER_DIR";  if er_refused 'is not a regular file'; then c="${c}1"; else c="${c}0"; fi
+  er_run "$v" "$ER_LINK"; if er_refused 'is not a regular file'; then c="${c}1"; else c="${c}0"; fi
+  er_run "$v" "$ER_IO" "$ER_STUB"
+  if [ -s "$ER_STUB/LOG" ] && er_refused 'failed \(grep exited 2\)'; then c="${c}1"; else c="${c}0"; fi
+  er_run "$v" "$ROOT/pending-blank.md"
+  if [ "$ER_RC" -eq 0 ] && grep -qF 'present but empty' <<<"$ER_O" && ! grep -qF 'REFUSED' <<<"$ER_O$ER_E"; then c="${c}1"; else c="${c}0"; fi
+  er_run "$v" "$ROOT/pending-missing.md"
+  if [ "$ER_RC" -eq 1 ] && grep -qF "carries no 'Operator authorization:'" <<<"$ER_E" && ! grep -qF 'REFUSED' <<<"$ER_O$ER_E"; then c="${c}1"; else c="${c}0"; fi
+  ER_CELLS="$c"
+}
+er_want() { if [ -n "$ER_SKIP_A" ]; then printf 'S%s' "${1#?}"; else printf '%s' "$1"; fi; }
+er_cells "$VALIDATOR"
+# A SUBJECT THAT PREDATES THE REFUSAL: B, C, D read 0 and E, F hold. SKIP on a consumer; FAIL here.
+if [ "$(printf '%s' "$ER_CELLS" | cut -c2-4)" = "000" ] && [ "$(printf '%s' "$ER_CELLS" | cut -c5-6)" = "11" ] \
+   && [ "$EN_IS_DIST" -ne 1 ]; then
+  printf '  SKIP %-30s the installed validator predates the unreadable-file refusal; this fixture ships one pull ahead of it\n' "pending-locked.md"
+else
+  i=0
+  for nm in A:mode-000 B:directory C:dangling-symlink D:grep-status-2 E:whitespace-near-miss F:finding-near-miss; do
+    i=$((i + 1))
+    case "$(printf '%s' "$ER_CELLS" | cut -c"$i")" in
+      1) N=$((N + 1)); printf '  ok   %-30s refusal cell %s holds\n' "${nm#*:}" "${nm%%:*}" ;;
+      S) ;;
+      *) N=$((N + 1)); FAIL=$((FAIL + 1)); printf '  FAIL %-30s refusal cell %s does not hold (cells=%s)\n' "${nm#*:}" "${nm%%:*}" "$ER_CELLS" ;;
+    esac
+  done
+
+  # --- the mutants: one per layer of the guard, and one reverting EVERY layer -----------------------
+  # Siblings in ONE copy of the whole scripts dir, so validate-steering-budget.sh is beside each; the
+  # unmutated sibling control must score every presence cell, so a copy that cannot run is not a kill.
+  ER_MD="$ER/mut"
+  cp -R "$EN_SRC_DIR" "$ER_MD" || { FAIL=$((FAIL + 1)); echo "  FAIL refusal mutants: could not copy $EN_SRC_DIR"; }
+  ER_SRC="$ER_MD/$EN_BASE"
+  N=$((N + 1))
+  if [ -f "$ER_MD/validate-steering-budget.sh" ]; then printf '  ok   %-30s the mutant copy carries the steering sibling\n' "R-harness"
+  else FAIL=$((FAIL + 1)); printf '  FAIL %-30s the steering sibling is missing from the mutant copy\n' "R-harness"; fi
+  # er_sub <out> <anchor> <replacement> [...] -- a COPY of ER_SRC, each anchor on exactly one line.
+  # Strings reach awk through ENVIRON, never `-v`, which strips a level of backslash escaping.
+  ER_WHY=""
+  er_sub() {
+    local out="$1" n
+    shift
+    cp "$ER_SRC" "$out.work" || { ER_WHY="could not copy"; return 1; }
+    while [ "$#" -ge 2 ]; do
+      n="$(grep -cF -- "$1" "$out.work")" || n=0
+      [ "$n" -eq 1 ] || { ER_WHY="anchor matches $n line(s), not 1 -- re-anchor it, never relax the arm: $1"; return 1; }
+      A="$1" R="$2" awk '{ i = index($0, ENVIRON["A"]); if (i) $0 = substr($0, 1, i - 1) ENVIRON["R"] substr($0, i + length(ENVIRON["A"])); print }' \
+        "$out.work" > "$out.next" || { ER_WHY="awk died applying: $1"; return 1; }
+      mv "$out.next" "$out.work"
+      shift 2
+    done
+    cmp -s "$ER_SRC" "$out.work" && { ER_WHY="changed no bytes -- it would score as a kill"; return 1; }
+    mv "$out.work" "$out"
+  }
+  ER_G1='if { [ -e "$ESCALATIONS" ] || [ -L "$ESCALATIONS" ]; } && [ ! -f "$ESCALATIONS" ]; then'
+  ER_G1L='{ [ -e "$ESCALATIONS" ] || [ -L "$ESCALATIONS" ]; }'
+  ER_G2='if [ "$ESC_BLANK_RC" -gt 1 ]; then'
+  ER_G3='if [ ! -r "$ESCALATIONS" ]; then'
+  er_score() {  # <label> <name> <want> <anchor> <replacement> [...]
+    local label="$1" name="$2" want out
+    want="$(er_want "$3")"
+    shift 3
+    out="$ER_MD/_er_$name.sh"
+    N=$((N + 1))
+    if [ "$#" -eq 0 ]; then cp "$ER_SRC" "$out"
+    elif ! er_sub "$out" "$@"; then FAIL=$((FAIL + 1)); printf '  FAIL %-30s DID NOT APPLY: %s\n' "$label" "$ER_WHY"; return 0
+    elif ! bash -n "$out" 2>/dev/null; then FAIL=$((FAIL + 1)); printf '  FAIL %-30s DID NOT APPLY: the copy does not parse\n' "$label"; return 0; fi
+    er_cells "$out"
+    if [ "$ER_CELLS" = "$want" ]; then printf '  ok   %-30s %s -> %s\n' "$label" "$want" "$ER_CELLS"
+    else FAIL=$((FAIL + 1)); printf '  FAIL %-30s scored %s, wanted %s\n' "$label" "$ER_CELLS" "$want"; fi
+  }
+  er_score "R-control"         ctl             111111
+  er_score "R-revert-all"      revert-all      000011 "$ER_G1" 'if false; then' "$ER_G2" 'if false; then'
+  er_score "R-nonregular"      nonregular      100111 "$ER_G1" 'if false; then'
+  er_score "R-no-symlink"      no-symlink      110111 "$ER_G1L" '[ -e "$ESCALATIONS" ]'
+  er_score "R-rc"              rc              011011 "$ER_G2" 'if false; then'
+  er_score "R-readable-never"  readable-never  011111 "$ER_G3" 'if false; then'
+  er_score "R-readable-always" readable-always 111011 "$ER_G3" 'if true; then'
+fi
+
 # KILL COUNT. A mutation that applied cleanly to a file the run never loaded reads exactly
 # like an arm that cannot fire, and `cmp -s` cannot tell them apart. Zero kills is that state.
 N=$((N + 1))

@@ -93,7 +93,9 @@
 #      escalations file was read and the in-force rows, possibly none, were printed
 #   1  a violation above, a malformed SUPPRESSED entry, or suppression fields on an
 #      entry that does not classify as SUPPRESSED (never under --in-force)
-#   2  bad arguments, or a required input could not be read — a refusal, not a pass
+#   2  bad arguments, or a required input could not be read — a refusal, not a pass. An
+#      escalations path that exists but is not a regular file, or could not be read, refuses
+#      in both modes with `REFUSED:` on stderr and nothing on stdout
 set -u
 
 ESCALATIONS=""
@@ -157,6 +159,15 @@ AI_DLC_ROOT="${AI_DLC_PROJECT_ROOT:-}"
 }
 # --- end AI_DLC_ROOT --------------------------------------------------------
 
+# A path that EXISTS but is not a regular file is not the absent state, in either mode: a
+# directory, a fifo or a dangling symlink fails `-f` and would take the no-file branch
+# below, which reads as a pass at the gate and as an empty in-force list to its callers.
+# `-L` beside `-e` because a dangling symlink fails `-e`. Stderr only, so `--in-force`
+# stdout stays empty.
+if { [ -e "$ESCALATIONS" ] || [ -L "$ESCALATIONS" ]; } && [ ! -f "$ESCALATIONS" ]; then
+  echo "REFUSED: escalations path $ESCALATIONS exists but is not a regular file; nothing was examined." >&2
+  exit 2
+fi
 # No escalations file is a legitimate clean state — nothing to adjudicate.
 if [ ! -f "$ESCALATIONS" ]; then
   if [ "$IN_FORCE" -eq 1 ]; then
@@ -172,11 +183,23 @@ fi
 # non-row on the stream its callers parse as rows. Keyed on the BYTES, not on
 # `entries_scanned=0`: a populated file whose entries this parser cannot read is a grammar
 # failure, not an empty corpus. `grep` exits 1 only when it read the file and matched nothing.
+# Status 2 REFUSES in BOTH modes (stderr, exit 2, stdout empty): an unreadable file is not
+# an empty corpus at the gate and not an empty in-force list to a caller, and every later
+# read of it would fail and be swallowed. Unreadable is the mode bit AND the status
+# together, so a caller that CAN read a mode-000 file is not refused on the bit alone.
 grep -q '[^[:space:]]' "$ESCALATIONS" 2>/dev/null
 SL_BLANK_RC=$?
 if [ "$IN_FORCE" -ne 1 ] && [ "$SL_BLANK_RC" -eq 1 ]; then
   echo "OK: EXAMINED NOTHING — entries_scanned=0 suppressed=0 terminal_naming_check=0 malformed_attempt=0 -- escalations file present but empty ($ESCALATIONS)."
   exit 0
+fi
+if [ "$SL_BLANK_RC" -gt 1 ]; then
+  if [ ! -r "$ESCALATIONS" ]; then
+    echo "REFUSED: escalations file $ESCALATIONS could not be read; nothing was examined." >&2
+  else
+    echo "REFUSED: reading escalations file $ESCALATIONS failed (grep exited $SL_BLANK_RC); nothing was examined." >&2
+  fi
+  exit 2
 fi
 
 # ---- 1. Locate the catalog -------------------------------------------------

@@ -15,6 +15,55 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.654.0] - 2026-09-27
+
+An unreadable or non-regular escalations file now refuses at Checks 2 and 2a instead of passing,
+which closes `BL-353`. Two reconcile detectors now read the status of the git reads they depend
+on. That is the non-bootstrapping part of `BL-354`, which stays open.
+
+### An unreadable `pending.md` refuses in all three escalation validators (`BL-353`)
+
+`validate-escalation-status-vocabulary.sh`, `validate-escalation-resolution.sh` (gate mode) and
+`validate-suppression-lifetime.sh` probed the escalations file with a `grep` whose status 2 fell
+through as "not blank". The later `awk` read then failed and nobody saw it, so the run printed an
+ordinary OK line. Measured on a `chmod 000` file holding an out-of-vocabulary `FILED` entry and an
+uncited `RESOLVED` entry: at 0.653.0, all four invocations (vocabulary, resolution, lifetime, and
+lifetime `--in-force`) exit 0 with `awk: can't open file` on stderr and an ordinary result line.
+Check 2 passed on a file nobody read. At 0.654.0 all four exit 2 with `REFUSED: escalations file …
+could not be read; nothing was examined.` on stderr, and `--in-force` leaves stdout empty. A
+directory at the path used to print "no escalations file", which Check 2 reads as a pass. It now
+refuses the same way.
+
+- Each script refuses with exit 2 and `REFUSED:` on stderr when the path exists but is not a
+  regular file (tested as `-e || -L`, so a dangling symlink refuses too), when the probe exits 2
+  and the file is not readable, or when the probe exits above 1 for any other reason. The mode bit
+  and the status must both say unreadable, so a caller that can read a mode-000 file is not
+  refused. The anchored `-eq 1` lines that fixtures mutate are byte-exact, and healthy output is
+  unchanged.
+- `enforcement-map.yaml`'s three Check 2 and 2a postures and `gate-validation.md`'s two sections
+  now say that an unreadable or non-regular `pending.md` is a REFUSAL, exit 2, and never a pass.
+- `BL-353` now has an `sh` receipt. It scores 0 on this tree and 1 on 0.653.0, and it also scores
+  1 on a 0.653.0 copy of any single one of the three scripts.
+
+This discharges no consumer candidate.
+
+### Two reconcile producers read their status (`BL-354`, partial)
+
+- `retired-tokens.sh` read each side's blob with `git show … || true`, so an unreadable ref read as
+  an empty file. It now verifies both refs as commits once. For each path, an exact-line `ls-tree`
+  listing decides presence: a failed listing refuses, an absent path is the legitimate skip, and a
+  failed `show` of a present path refuses.
+- `retired-layer-contract.sh` had four silent paths: the tree listing and every blob read in
+  `collect`, the `shapes_of`/`tokens_of` statuses it discarded, and the tree listing in
+  `rulebook_set`. The last one produced a false positive. A failed theirs listing read every base
+  rulebook file as retired, so it could emit a `path:` row for a file that had not moved. `collect` and
+  `rulebook_set` now stage to files and return a status, and the main shell refuses with exit 2,
+  which `emit-report.sh` renders as `DETECTOR-REFUSED`.
+
+`apply.sh`'s four capture sites and `self-update-gate.sh`'s changed-script diff are BOOTSTRAPPING,
+so they ship alone in 0.655.0. `BL-354` also records two detectors that refuse with exit 0,
+`unregistered-drift.sh` and `retired-layer-passage.sh`, as known residue for that release.
+
 ## [0.653.0] - 2026-09-27
 
 Checks 2 and 2a treat an absent or empty escalations file as a clean pass, and say so.

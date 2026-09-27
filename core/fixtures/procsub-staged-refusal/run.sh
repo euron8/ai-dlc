@@ -301,6 +301,44 @@ gitq -C "$LTD" add -A; gitq -C "$LTD" commit -qm theirs
 LT_THEIRS="$(git -C "$LTD" rev-parse HEAD)"
 printf '# Ext\n\nWhen blocked, set DEFERRED and move on.\n' > "$LTC/.claude/skills/ai-dlc/extensions/e.md"
 
+# --- TA: retired-tokens' two ABSENT-AT-A-REF CLASSIFY buckets, beside a retired token ------------
+# `added.sh` is absent at base (BOTH-ADDED->CLASSIFY) and `deleted.sh` absent at theirs
+# (UPSTREAM-DELETED+consumer-modified->CLASSIFY). Both are the LEGITIMATE absent skip the staged blob
+# read must keep, and the reference consumer's recent ranges hold neither bucket, so a healthy run
+# there cannot discriminate this path: the world is synthesized. `validate-artifact-budget.sh` gives
+# the run a row, so a healthy twin is presence-shaped.
+TA="$W/ta"; TAD="$TA/dist"; TAC="$TA/consumer"; mkdir -p "$TAD/core/scripts" "$TAC/scripts/ai-dlc"
+printf 'CHAN="$ROOT/.chan"\nprintf x >> "$ROOT/.chan"\n' > "$TAD/core/scripts/validate-artifact-budget.sh"
+printf 'X="$ROOT/.gone"\n' > "$TAD/core/scripts/deleted.sh"
+gitq -C "$TAD" init -q; gitq -C "$TAD" add -A; gitq -C "$TAD" commit -qm base
+TA_BASE="$(git -C "$TAD" rev-parse HEAD)"
+printf 'TMPROOT="$(mktemp -d)"\nCHAN="$TMPROOT/chan"\n' > "$TAD/core/scripts/validate-artifact-budget.sh"
+printf 'Y="$ROOT/.added"\n' > "$TAD/core/scripts/added.sh"
+gitq -C "$TAD" rm -q core/scripts/deleted.sh
+gitq -C "$TAD" add -A; gitq -C "$TAD" commit -qm theirs
+TA_THEIRS="$(git -C "$TAD" rev-parse HEAD)"
+printf 'CHAN="$ROOT/.chan"\nprintf x >> "$ROOT/.chan"\npool() { :; }\n' > "$TAC/scripts/ai-dlc/validate-artifact-budget.sh"
+printf 'Y="$ROOT/.mine"\n' > "$TAC/scripts/ai-dlc/added.sh"
+printf 'X="$ROOT/.gone"\nz=1\n' > "$TAC/scripts/ai-dlc/deleted.sh"
+
+# --- RG: retired-layer-contract over a rulebook path BOTH refs ship, cited by a layer file -------
+# Theirs retires one role-file shape (so the run opens layer files and the healthy twin has a row)
+# and deletes NO rulebook file. `steps/gone.md` survives; `extensions/cites.md` cites it. A failed
+# THEIRS listing read as an empty rulebook makes every base rulebook file look retired, and the
+# pre-fix detector then printed a FALSE `path:` row for exactly this citation.
+RG="$W/rg"; RGD="$RG/dist"; RGC="$RG/consumer"
+mkdir -p "$RGD/core/skills/ai-dlc/steps" "$RGD/core/team-roles" \
+  "$RGC/.claude/skills/ai-dlc/overrides" "$RGC/.claude/skills/ai-dlc/extensions"
+printf '# Step: gone (fixture)\n\nA step both refs ship.\n' > "$RGD/core/skills/ai-dlc/steps/gone.md"
+printf '# Role: Architect\n\n**Model.**\n- Personal: `/model claude-fixture-x`\n' > "$RGD/core/team-roles/architect.md"
+gitq -C "$RGD" init -q; gitq -C "$RGD" add -A; gitq -C "$RGD" commit -qm base
+RG_BASE="$(git -C "$RGD" rev-parse HEAD)"
+printf '# Role: Architect\n\n**Model.**\n- Model: `opus`, a key.\n' > "$RGD/core/team-roles/architect.md"
+gitq -C "$RGD" add -A; gitq -C "$RGD" commit -qm theirs
+RG_THEIRS="$(git -C "$RGD" rev-parse HEAD)"
+printf -- '---\nshadows: team-roles/tea.md#Identity\n---\n- Personal: `/model claude-fixture-x`\n' > "$RGC/.claude/skills/ai-dlc/overrides/roles.md"
+printf -- '---\nhooks: steps/gone.md\n---\n# Ext\n\nAugments a step both refs ship.\n' > "$RGC/.claude/skills/ai-dlc/extensions/cites.md"
+
 # ================================================================================================
 # ARMS. Each takes a script path, returns 0 when the arm's assertion holds, and leaves ARM_WHY.
 # ================================================================================================
@@ -597,6 +635,57 @@ arm_ld_fxv() { local rc=0; mkstub grep '*"-Fxv -f"*' 0 2; ld_run "$1" "$STUB" ||
   ARM_WHY="rc=$rc fired=$(fired): $(grep -o 'and [0-9]* of yours appear nowhere' "$OUT")$(tail -1 "$ERR" | cut -c1-90)"
   failed_call 0 && [ "$rc" -eq 1 ] && grep -q 'surplus measure' "$ERR" && ! grep -q 'appear nowhere in core' "$OUT"; }
 
+# --- retired-tokens: the BLOB READS. Three git calls only it makes, each stubbed by its own argv ---
+# `rev-parse -q --verify <ref>^{commit}` (both refs, once), `ls-tree --name-only <ref> -- <path>` (per
+# path and ref), `show "${ref}:${path}"` (per present path and ref). preclassify's own git calls carry
+# none of these argv shapes, which each arm proves by its healthy half and by the stub FIRING.
+ta_run() { # ta_run <script> <stub-dir or ""> [<only-path>]
+  local p="$PATH"; [ -n "$2" ] && p="$2:$PATH"
+  PATH="$p" bash "$1" "$TAD" "$TA_BASE" "$TA_THEIRS" "$TAC" ${3:+"$3"} > "$OUT" 2> "$ERR"; }
+# The absent skip is a SKIP: the whole run emits the token row and nothing on stderr, and each absent
+# path run alone is listed and opened NONE, exit 0 -- never a refusal.
+arm_ta_healthy() { local rc=0 r1=0 r2=0
+  ta_run "$1" "" || rc=$?
+  ARM_WHY="rc=$rc: $(head -1 "$OUT")$(tail -1 "$ERR" | cut -c1-100)"
+  [ "$rc" -eq 0 ] && grep -q 'RETIRED-CONTRACT-TOKEN.*validate-artifact-budget\.sh.*\$ROOT/\.chan' "$OUT" \
+    && ! grep -qE 'added\.sh|deleted\.sh' "$OUT" && [ ! -s "$ERR" ] || return 1
+  ta_run "$1" "" core/scripts/added.sh || r1=$?
+  ARM_WHY="added.sh alone rc=$r1: $(tail -1 "$ERR" | cut -c1-110)"
+  [ "$r1" -eq 0 ] && [ ! -s "$OUT" ] && grep -q 'listed 1 CLASSIFY file(s) at core/scripts/added\.sh and opened NONE' "$ERR" || return 1
+  ta_run "$1" "" core/scripts/deleted.sh || r2=$?
+  ARM_WHY="deleted.sh alone rc=$r2: $(tail -1 "$ERR" | cut -c1-110)"
+  [ "$r2" -eq 0 ] && [ ! -s "$OUT" ] && grep -q 'listed 1 CLASSIFY file(s) at core/scripts/deleted\.sh and opened NONE' "$ERR"; }
+arm_ta_verify() { local rc=0; mkstub git '*"rev-parse -q --verify "*"^{commit}"' 0 128; ta_run "$1" "$STUB" || rc=$?
+  ARM_WHY="rc=$rc fired=$(fired): $(tail -1 "$ERR" | cut -c1-120)"
+  failed_call 0 && [ "$rc" -eq 2 ] && grep -q "resolving ${TA_BASE} to a commit .* did not run (exit 128); no verdict" "$ERR" && [ ! -s "$OUT" ]; }
+arm_ta_ls() { local rc=0; mkstub git '*"ls-tree --name-only "*" -- "*' 0 128; ta_run "$1" "$STUB" || rc=$?
+  ARM_WHY="rc=$rc fired=$(fired): $(tail -1 "$ERR" | cut -c1-120)"
+  failed_call 0 && [ "$rc" -eq 2 ] && grep -q 'listing core/scripts/.* did not run (exit 128); no verdict' "$ERR" && [ ! -s "$OUT" ]; }
+# Show calls, in order: deleted.sh@base (1; its theirs side is absent and never shown), then the
+# token file @base (2) and @theirs (3). Failing 3 is ONE side of the one file carrying the row -- the
+# pre-fix read took that side as empty, skipped the file, and lost the row with exit 0.
+arm_ta_show() { local rc=0; mkstub git '*" show "*' 3 128; ta_run "$1" "$STUB" || rc=$?
+  ARM_WHY="rc=$rc fired=$(fired): $(tail -1 "$ERR" | cut -c1-120)"
+  failed_call 3 && [ "$rc" -eq 2 ] \
+    && grep -q "reading core/scripts/validate-artifact-budget\.sh at ${TA_THEIRS} did not run (exit 128); no verdict" "$ERR" \
+    && [ ! -s "$OUT" ]; }
+
+# --- retired-layer-contract: the rulebook TREE LISTING and BLOB READS inside collect/rulebook_set ---
+rg_run() { local p="$PATH"; [ -n "${2:-}" ] && p="$2:$PATH"
+  PATH="$p" bash "$1" "$RGD" "$RG_BASE" "$RG_THEIRS" "$RGC" > "$OUT" 2> "$ERR"; }
+arm_rg_healthy() { local rc=0; rg_run "$1" || rc=$?; ARM_WHY="rc=$rc: $(head -1 "$OUT")$(tail -1 "$ERR" | cut -c1-100)"
+  [ "$rc" -eq 0 ] && grep -q 'RETIRED-LAYER-CONTRACT.*overrides/roles\.md.*Personal:/model' "$OUT" && ! grep -q 'path:' "$OUT"; }
+# The THEIRS listing fails. The pre-fix detector read it as a rulebook with no file, so every base
+# rulebook file read as RETIRED and `extensions/cites.md` got a FALSE `path:` row, exit 0.
+arm_rg_theirs_ls() { local rc=0; mkstub git "*\"ls-tree -r --name-only ${RG_THEIRS}\"*" 0 128; rg_run "$1" "$STUB" || rc=$?
+  ARM_WHY="rc=$rc fired=$(fired): $(grep -c 'path:' "$OUT") path row(s); $(tail -1 "$ERR" | cut -c1-110)"
+  failed_call 0 && [ "$rc" -eq 2 ] && grep -q "rulebook tree listing at ${RG_THEIRS} .*did not run (exit 128); no verdict" "$ERR" \
+    && ! grep -q 'path:' "$OUT" && [ ! -s "$OUT" ]; }
+# Every BASE blob read fails. The pre-fix read took each as an empty body, skipped it, and exited 0.
+arm_rg_base_show() { local rc=0; mkstub git "*\" show ${RG_BASE}:\"*" 0 128; rg_run "$1" "$STUB" || rc=$?
+  ARM_WHY="rc=$rc fired=$(fired): $(tail -1 "$ERR" | cut -c1-120)"
+  failed_call 0 && [ "$rc" -eq 2 ] && grep -q "reading core/.* at ${RG_BASE} did not run (exit 128); no verdict" "$ERR" && [ ! -s "$OUT" ]; }
+
 lt_run() { local p="$PATH"; [ -n "${2:-}" ] && p="$2:$PATH"
   PATH="$p" bash "$1" "$LTD" "$LT_BASE" "$LT_THEIRS" "$LTC" > "$OUT" 2> "$ERR"; }
 arm_rlt_healthy() { local rc=0; lt_run "$1" || rc=$?; ARM_WHY="rc=$rc: $(tail -1 "$ERR" | cut -c1-120)"
@@ -639,6 +728,8 @@ run_arm arm_lr_healthy  "$S_LE"  "validate-layer-entries: an extension's 'Rule 3
 run_arm arm_la_healthy  "$S_LE"  "validate-layer-entries: an extension's '### 31.' is E15 SECTION ID OUT OF BAND, exit 1"
 run_arm arm_rlt_healthy "$S_RLT" "retired-layer-token reports DEFERRED, retired from the rulebook and its program"
 run_arm arm_wt_healthy  "$S_LE"  "validate-layer-entries: a bare 'Check 12' on a line carrying the 912 heading's FX-4417 is W12 by tag"
+run_arm arm_ta_healthy  "$S_RT"  "retired-tokens: a path ABSENT at base and one ABSENT at theirs are skipped, not refused; the token row stands"
+run_arm arm_rg_healthy  "$S_RLC" "retired-layer-contract: a rulebook path both refs ship yields NO path: row; the shape row stands"
 
 echo "== forced producer failures (each stub must FIRE, each script must REFUSE) =="
 run_arm arm_ci_retro     "$S_CI"  "failed retro walk (find) -> exit 2, not '0 gates declared'"
@@ -666,6 +757,11 @@ run_arm arm_ld_sup       "$S_LD"  "layer-drift: sup_measure's staging write fail
 run_arm arm_pb_walk2     "$S_PB"  "--strays: the candidate walk (grep -rlI) exits 2 with NO output -> exit 2, not PASS"
 run_arm arm_pb_walk127   "$S_PB"  "--strays: the candidate walk (grep -rlI) exits 127 -> exit 2, not PASS"
 run_arm arm_cv_sort      "$S_CV"  "validate-adversarial-convergence: the pass ordering (sort) fails -> exit 2, not a judged empty series"
+run_arm arm_ta_verify    "$S_RT"  "retired-tokens: git rev-parse of a ref exits 128 -> exit 2 'did not run ... no verdict', not an absent skip"
+run_arm arm_ta_ls        "$S_RT"  "retired-tokens: git ls-tree of a path exits 128 -> exit 2, not an absent skip"
+run_arm arm_ta_show      "$S_RT"  "retired-tokens: git show of ONE side of the row's file exits 128 -> exit 2, not a lost row"
+run_arm arm_rg_theirs_ls "$S_RLC" "retired-layer-contract: the THEIRS rulebook listing exits 128 -> exit 2, no false path: row"
+run_arm arm_rg_base_show "$S_RLC" "retired-layer-contract: every BASE rulebook blob read exits 128 -> exit 2, not a skipped body"
 
 echo "== a staged FUNCTION whose body is a pipeline: its FIRST stage fails =="
 run_arm arm_rlp_norm     "$S_RLP" "retired-layer-passage: norm_lines' sed fails on one layer file -> exit 2, not 'no match'"
@@ -768,6 +864,69 @@ else
 fi
 
 # ================================================================================================
+# THE PRE-FIX DIFFERENTIAL for the two BL-354 producers. The forced arms above are PRESENCE-shaped
+# (a refusal line must appear), and each is scored here against the pre-fix copy of its script,
+# staged beside its siblings. The arm MUST FAIL there -- that is the proof it can fire at all -- and
+# the healthy twins' stdout must be BYTE-IDENTICAL to it, with a `cmp -s` control that the two script
+# files differ, so the comparison is between two programs and not one program read twice.
+# `arm_rg_theirs_ls` carries the discriminator named in the contract: the pre-fix copy prints a FALSE
+# `path:` row for steps/gone.md there, and the fixed copy refuses.
+# ================================================================================================
+PREFIX_PIN=d1c72fa904e5c8aecaaa67fa15340094d73780ab
+if ! git -C "$OWN" cat-file -e "${PREFIX_PIN}^{commit}" 2>/dev/null; then
+  skip "pre-fix differential -- the pin ${PREFIX_PIN} is not in this clone's history, so no base copy exists (this is not a pass)"
+else
+  PF="$W/prefix"; cp -R "$RC_" "$PF" || { echo "FIXTURE BROKEN: could not copy reconcile/ for the pre-fix differential" >&2; exit 2; }
+  pf_ok=1
+  for _pf in retired-tokens.sh retired-layer-contract.sh; do
+    if ! git -C "$OWN" show "${PREFIX_PIN}:core/skills/ai-dlc-update/reconcile/${_pf}" > "$PF/$_pf" 2>/dev/null; then
+      bad "pre-fix differential: could not stage ${_pf} at the pin"; pf_ok=0
+    elif cmp -s "$RC_/$_pf" "$PF/$_pf"; then
+      bad "pre-fix differential: ${_pf} at the pin is byte-identical to the tree's copy, so the differential compares one program to itself"; pf_ok=0
+    elif [ ! -f "$PF/lib.sh" ] || [ ! -f "$PF/preclassify.sh" ]; then
+      bad "pre-fix differential: the staged copy has no lib.sh / preclassify.sh beside it"; pf_ok=0
+    fi
+  done
+  if [ "$pf_ok" -eq 1 ]; then
+    ok "pre-fix differential: both scripts staged at the pin beside their siblings, and each DIFFERS from the tree's copy (cmp -s)"
+    pf_expect_fail() { # pf_expect_fail <arm> <script-basename> <what the pre-fix copy did>
+      if "$1" "$PF/$2"; then bad "pre-fix differential: $1 PASSED against the pre-fix $2, so it cannot tell the fix from its absence -- $ARM_WHY"
+      else ok "pre-fix differential: $1 FAILS against the pre-fix $2 ($3) -- $ARM_WHY"; fi
+    }
+    pf_expect_fail arm_ta_verify    retired-tokens.sh         "an unresolvable ref read as absent paths"
+    pf_expect_fail arm_ta_ls        retired-tokens.sh         "it never listed; the failure did not exist to it"
+    pf_expect_fail arm_ta_show      retired-tokens.sh         "the failed side read as empty and the row was lost"
+    pf_expect_fail arm_rg_theirs_ls retired-layer-contract.sh "a failed theirs listing read as every rulebook file retired"
+    pf_expect_fail arm_rg_base_show retired-layer-contract.sh "a failed base read skipped the body"
+    # The discriminator itself, as a positive row: the pre-fix copy EMITS the false path row.
+    mkstub git "*\"ls-tree -r --name-only ${RG_THEIRS}\"*" 0 128; pf_rc=0; rg_run "$PF/retired-layer-contract.sh" "$STUB" || pf_rc=$?
+    if failed_call 0 && [ "$pf_rc" -eq 0 ] && grep -q 'RETIRED-LAYER-CONTRACT.*extensions/cites\.md.*path:core/skills/ai-dlc/steps/gone\.md' "$OUT"; then
+      ok "pre-fix differential: under the theirs-listing stub the pre-fix copy exits 0 with a FALSE path: row for steps/gone.md, which the fixed copy refuses"
+    else
+      bad "pre-fix differential: the pre-fix copy did not print the false path: row under the theirs-listing stub (rc=$pf_rc fired=$(fired)) -- the discriminator is not the one this arm claims"
+    fi
+    # The healthy twins, byte-identical stdout.
+    pf_same() { # pf_same <run-fn> <script-basename> <label> [args...]
+      local run="$1" s="$2" lab="$3" a b
+      shift 3
+      "$run" "$RC_/$s" "$@"; a="$(cat "$OUT")"
+      "$run" "$PF/$s" "$@"; b="$(cat "$OUT")"
+      if [ -n "$a" ] && [ "$a" = "$b" ]; then ok "pre-fix differential: $lab -- stdout byte-identical to the pre-fix copy, and non-empty"
+      else bad "pre-fix differential: $lab -- stdout differs from the pre-fix copy (or is empty): fixed=[$(printf '%s' "$a" | head -2 | tr '\n' '|')] prefix=[$(printf '%s' "$b" | head -2 | tr '\n' '|')]"; fi
+    }
+    pf_same ta_run retired-tokens.sh "retired-tokens over the two absent-at-a-ref buckets" ""
+    pf_same tw_run retired-tokens.sh "retired-tokens over the TW world"
+    pf_same rg_run retired-layer-contract.sh "retired-layer-contract over the RG world"
+    pf_same rw_run retired-layer-contract.sh "retired-layer-contract over the RW world"
+    # The absent-at-a-ref runs alone carry their answer on STDERR; that must match too.
+    pf_err_a="$(ta_run "$RC_/retired-tokens.sh" "" core/scripts/added.sh; cat "$ERR")"
+    pf_err_b="$(ta_run "$PF/retired-tokens.sh" "" core/scripts/added.sh; cat "$ERR")"
+    if [ -n "$pf_err_a" ] && [ "$pf_err_a" = "$pf_err_b" ]; then ok "pre-fix differential: the absent-at-base path run alone -- stderr NOTE byte-identical to the pre-fix copy"
+    else bad "pre-fix differential: the absent-at-base path run alone -- stderr differs from the pre-fix copy: [$pf_err_a] vs [$pf_err_b]"; fi
+  fi
+fi
+
+# ================================================================================================
 # MUTANTS. One copy of each subject directory; each mutant is a sibling file in that copy, so the
 # script finds lib.sh, setup-sites.md, preclassify.sh and artifact-path-config.sh beside it.
 # ================================================================================================
@@ -843,6 +1002,8 @@ control reconcile retired-layer-passage.sh      arm_rlp_healthy arm_rw_walk arm_
 control reconcile retired-layer-contract.sh     arm_rlc_healthy arm_rw_walk arm_rlc_shapes arm_rlc_tokens
 control reconcile retired-tokens.sh             arm_rt_healthy arm_rt_base arm_rt_ours arm_rt_cmt_all arm_rt_cmt_ours
 control reconcile retired-layer-token.sh        arm_rlt_healthy arm_rlt_cmt
+control reconcile retired-tokens.sh             arm_ta_healthy arm_ta_verify arm_ta_ls arm_ta_show
+control reconcile retired-layer-contract.sh     arm_rg_healthy arm_rg_theirs_ls arm_rg_base_show
 control reconcile readopt-override.sh           arm_ro_healthy arm_ro_sort arm_ro_git arm_ro_span
 libcontrol retired-layer-passage.sh arm_rlp_healthy arm_rlp_norm arm_rlp_removed arm_rlp_latin1
 libcontrol readopt-override.sh      arm_ro_healthy arm_ro_span
@@ -984,6 +1145,26 @@ mutant RLC-SHAPES reconcile retired-layer-contract.sh arm_rlc_healthy "arm_rlc_s
 mutant RLC-TOKENS reconcile retired-layer-contract.sh arm_rlc_healthy "arm_rlc_tokens" \
   $'  [ "$_rc" -le 1 ] || return "$_rc"\n  [ -n "$_h" ] || return 0\n  printf \'%s\\n\' "$_h" | sort -u' \
   $'  [ -n "$_h" ] || return 0\n  printf \'%s\\n\' "$_h" | sort -u'
+# retired-tokens' blob reads, one mutant per layer of the fix, and one reverting EVERY layer to the
+# base `$(git show … || true)` spelling. Each layer is killed by its own arm.
+mutant RT-VERIFY reconcile retired-tokens.sh arm_ta_healthy "arm_ta_verify" \
+  '[ "$_rt_rc" -eq 0 ] || rt_refuse "resolving' 'true || rt_refuse "resolving'
+mutant RT-LS reconcile retired-tokens.sh arm_ta_healthy "arm_ta_ls" \
+  '[ "$rc" -eq 0 ] || rt_refuse "listing $2 at $1" "$rc"' 'true || rt_refuse "listing $2 at $1" "$rc"'
+mutant RT-SHOW reconcile retired-tokens.sh arm_ta_healthy "arm_ta_show" \
+  '[ "$rc" -eq 0 ] || rt_refuse "reading $2 at $1" "$rc"' 'true || rt_refuse "reading $2 at $1" "$rc"'
+mutant RT-BLOBS-ALL reconcile retired-tokens.sh arm_ta_healthy "arm_ta_verify arm_ta_ls arm_ta_show" \
+  '[ "$_rt_rc" -eq 0 ] || rt_refuse "resolving' 'true || rt_refuse "resolving' \
+  $'  rt_blob "$BASE" "$cp" "$RT_T/blob-base" || continue\n  rt_blob "$THEIRS" "$cp" "$RT_T/blob-theirs" || continue\n  b="$(cat "$RT_T/blob-base")" || rt_refuse "reading the staged base blob of $cp" "$?"\n  t="$(cat "$RT_T/blob-theirs")" || rt_refuse "reading the staged theirs blob of $cp" "$?"\n' \
+  $'  b="$(git -C "$DIST" show "${BASE}:${cp}" 2>/dev/null || true)"\n  t="$(git -C "$DIST" show "${THEIRS}:${cp}" 2>/dev/null || true)"\n'
+# retired-layer-contract: the tree listing's status and the blob read's status, each dropped, and both.
+mutant RLC-TREE reconcile retired-layer-contract.sh arm_rg_healthy "arm_rg_theirs_ls" \
+  '[ "$rc" -eq 0 ] || { RLC_WHY="the rulebook tree listing' 'true || { RLC_WHY="the rulebook tree listing'
+mutant RLC-SHOW reconcile retired-layer-contract.sh arm_rg_healthy "arm_rg_base_show" \
+  '[ "$rc" -eq 0 ] || { RLC_WHY="reading $f at $ref"' 'true || { RLC_WHY="reading $f at $ref"'
+mutant RLC-READS-ALL reconcile retired-layer-contract.sh arm_rg_healthy "arm_rg_theirs_ls arm_rg_base_show" \
+  '[ "$rc" -eq 0 ] || { RLC_WHY="the rulebook tree listing' 'true || { RLC_WHY="the rulebook tree listing' \
+  '[ "$rc" -eq 0 ] || { RLC_WHY="reading $f at $ref"' 'true || { RLC_WHY="reading $f at $ref"'
 # layer-drift: sup_measure's count reads no stage's status again.
 mutant LD-FXV reconcile layer-drift.sh arm_ld_healthy "arm_ld_fxv" \
   $' | grep -c .\n              for _ps in "${PIPESTATUS[@]}"; do [ "$_ps" -le 1 ] || exit 3; done)" || return 3\n' \

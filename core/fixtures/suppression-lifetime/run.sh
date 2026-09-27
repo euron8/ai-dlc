@@ -1077,6 +1077,159 @@ else
   sen_score "MUTANT M-hoist" "$SEN_M3" 111110 "the check applied to --in-force too: ONLY the --in-force cell goes red" hoist
 fi
 
+# ------------------------------------------------------------------------------
+# REFUSAL ARMS. An UNREADABLE or NON-REGULAR escalations path refuses in BOTH modes: `REFUSED:` on
+# stderr, exit 2, stdout empty. The blank probe's grep exits 2 on a file it cannot read, and the
+# validator branched on `-eq 1` alone, so the status fell through and every later read of the file
+# failed and was swallowed: the gate printed an ordinary OK line, and `--in-force` handed its callers
+# an EMPTY row set -- "nothing is suppressed" over a file nobody read. A directory at the path took
+# the absent branch in both modes.
+#
+# TEN CELLS, ONE STRING (g = gate mode, i = --in-force):
+#   Ag Ai  mode-000 file carrying an expired, still-failing suppression -> exit 2, `could not be read`
+#   Bg Bi  a DIRECTORY at the path                                  -> exit 2, `is not a regular file`
+#   Cg     a DANGLING SYMLINK at the path                           -> exit 2, `is not a regular file`
+#   Dg Di  a READABLE file whose blank probe grep exits 2 (PATH stub; must FIRE) -> exit 2, `grep exited 2`
+#   Eg     near-miss: whitespace-only file, gate -> exit 0, "present but empty"
+#   Ei     near-miss: whitespace-only file, --in-force -> exit 0, EMPTY stdout, IN-FORCE: on stderr
+#   Fg     near-miss: expired-still-failing, readable -> exit 1, unchanged
+# Every refusal cell also requires EMPTY stdout, which is what --in-force's callers parse as rows.
+# The directory arm calls the script directly: both callers test `[ ! -f ]` first, so a directory
+# never reaches the script through them. Ag/Ai are `S` where mode 000 does not stop this process.
+# ------------------------------------------------------------------------------
+SR="$WORK/refusal"; mkdir -p "$SR"
+SR_LOCKED="$SR/pending-locked.md"; cp "$CASES/expired-still-failing/pending.md" "$SR_LOCKED"; chmod 000 "$SR_LOCKED"
+SR_DIR="$SR/pending-dir.md"; mkdir -p "$SR_DIR"
+SR_LINK="$SR/pending-dangling.md"; ln -s "$SR/pending-target-never-written.md" "$SR_LINK"
+SR_IO="$SR/pending-io.md"; cp "$CASES/expired-still-failing/pending.md" "$SR_IO"
+trap 'chmod -R u+rwX "$WORK" 2>/dev/null; rm -rf "$WORK"' EXIT
+SR_SKIP_A=""
+if [ "$(id -u)" -eq 0 ]; then SR_SKIP_A="running as root, which reads a mode-000 file"
+elif cat "$SR_LOCKED" >/dev/null 2>&1; then SR_SKIP_A="this host reads a mode-000 file, so the seed cannot express unreadable"; fi
+[ -n "$SR_SKIP_A" ] && printf '  SKIP  refusal cells Ag/Ai (mode-000 file) -- %s\n' "$SR_SKIP_A"
+if ! { [ -L "$SR_LINK" ] && [ ! -e "$SR_LINK" ]; }; then bad "FIXTURE BROKEN: the dangling-symlink seed is not a link to a missing target"; fi
+SR_STUB="$SR/stub"; mkdir -p "$SR_STUB"
+SR_REALGREP="$(command -v grep)" || { echo "FIXTURE ERROR: grep is not on PATH" >&2; exit 2; }
+{
+  printf '#!/bin/sh\ncase "$*" in\n'
+  printf '  %s) printf "x\\n" >> "%s/LOG"; echo "grep: forced failure" >&2; exit 2 ;;\n' "'-q [^[:space:]] '*" "$SR_STUB"
+  printf 'esac\nexec "%s" "$@"\n' "$SR_REALGREP"
+} > "$SR_STUB/grep"
+chmod +x "$SR_STUB/grep"
+SR_RC=0; SR_O=""; SR_E=""
+sr_run() {  # <validator> <gate|in-force> <file> [stub-dir] -> SR_RC SR_O SR_E
+  local p="$PATH" m=""
+  [ -n "${4:-}" ] && p="$4:$PATH"
+  [ "$2" = in-force ] && m="--in-force"
+  : > "$SR_STUB/LOG"
+  SR_O="$(PATH="$p" AI_DLC_PROJECT_ROOT="$WORK" bash "$1" $m --escalations "$3" \
+            --gate-metrics "$GM_FAILING" --enforcement-map "$MAP" 2>"$SR/err")"; SR_RC=$?
+  SR_E="$(cat "$SR/err")"
+}
+sr_refused() { [ "$SR_RC" -eq 2 ] && [ -z "$SR_O" ] && grep -qE "^REFUSED: .*$1" <<<"$SR_E"; }
+sr_bit() { if "$@"; then SR_C="${SR_C}1"; else SR_C="${SR_C}0"; fi; }
+SR_CELLS=""; SR_C=""
+sr_cells() {  # <validator> -> SR_CELLS
+  local v="$1" mode
+  SR_C=""
+  for mode in gate in-force; do
+    if [ -n "$SR_SKIP_A" ]; then SR_C="${SR_C}S"
+    else sr_run "$v" "$mode" "$SR_LOCKED"; sr_bit sr_refused 'could not be read'; fi
+  done
+  for mode in gate in-force; do sr_run "$v" "$mode" "$SR_DIR"; sr_bit sr_refused 'is not a regular file'; done
+  sr_run "$v" gate "$SR_LINK"; sr_bit sr_refused 'is not a regular file'
+  for mode in gate in-force; do
+    sr_run "$v" "$mode" "$SR_IO" "$SR_STUB"
+    if [ -s "$SR_STUB/LOG" ] && sr_refused 'failed \(grep exited 2\)'; then SR_C="${SR_C}1"; else SR_C="${SR_C}0"; fi
+  done
+  sr_run "$v" gate "$CASES/blank-file/pending.md"
+  if [ "$SR_RC" -eq 0 ] && grep -qF 'present but empty' <<<"$SR_O" && ! grep -qF REFUSED <<<"$SR_O$SR_E"; then SR_C="${SR_C}1"; else SR_C="${SR_C}0"; fi
+  sr_run "$v" in-force "$CASES/blank-file/pending.md"
+  if [ "$SR_RC" -eq 0 ] && [ -z "$SR_O" ] && grep -q '^IN-FORCE: entries_scanned=0 ' <<<"$SR_E" && ! grep -qF REFUSED <<<"$SR_E"; then SR_C="${SR_C}1"; else SR_C="${SR_C}0"; fi
+  sr_run "$v" gate "$CASES/expired-still-failing/pending.md"
+  if [ "$SR_RC" -eq 1 ] && ! grep -qF REFUSED <<<"$SR_O$SR_E"; then SR_C="${SR_C}1"; else SR_C="${SR_C}0"; fi
+  SR_CELLS="$SR_C"
+}
+sr_want() { if [ -n "$SR_SKIP_A" ]; then printf 'SS%s' "$(printf '%s' "$1" | cut -c3-)"; else printf '%s' "$1"; fi; }
+sr_cells "$VALIDATOR"
+# A SUBJECT THAT PREDATES THE REFUSAL: Bg Bi Cg Dg Di read 0 and the near-misses hold. SKIP on a
+# consumer; FAIL here.
+if [ "$(printf '%s' "$SR_CELLS" | cut -c3-7)" = "00000" ] && [ "$(printf '%s' "$SR_CELLS" | cut -c8-10)" = "111" ] \
+   && [ "$SEN_IS_DIST" -ne 1 ]; then
+  printf '  SKIP  the refusal arms -- the installed validator predates the unreadable-file refusal; this fixture ships one pull ahead of it\n'
+else
+  i=0
+  for nm in "Ag mode-000 file, gate: exit 2, REFUSED could not be read, stdout empty" \
+            "Ai mode-000 file, --in-force: exit 2, REFUSED, stdout (the caller's rows) empty" \
+            "Bg a directory at the path, gate: exit 2, REFUSED is not a regular file" \
+            "Bi a directory at the path, --in-force: exit 2, REFUSED, stdout empty" \
+            "Cg a dangling symlink at the path: exit 2, REFUSED is not a regular file" \
+            "Dg a readable file whose blank probe exits 2, gate: REFUSED grep exited 2 (stub fired)" \
+            "Di the same under --in-force: REFUSED, stdout empty (stub fired)" \
+            "Eg near-miss: whitespace-only file, gate: still OK EXAMINED NOTHING, exit 0" \
+            "Ei near-miss: whitespace-only file, --in-force: exit 0, empty stdout, IN-FORCE: on stderr" \
+            "Fg near-miss: a readable expired-still-failing suppression still exits 1"; do
+    i=$((i + 1))
+    case "$(printf '%s' "$SR_CELLS" | cut -c"$i")" in
+      1) ok "refusal cell $nm" ;;
+      S) ;;
+      *) bad "refusal cell $nm does not hold (cells=$SR_CELLS)" ;;
+    esac
+  done
+
+  # --- the mutants: one per layer of the guard, and one reverting EVERY layer ----------------------
+  SR_MD="$SR/mut"
+  cp -R "$(cd "$(dirname "$VALIDATOR")" && pwd)" "$SR_MD" || bad "refusal mutants: could not copy the scripts directory"
+  SR_SRC="$SR_MD/$(basename "$VALIDATOR")"
+  # sr_sub <out> <anchor> <replacement> [...] -- a COPY of SR_SRC, each anchor on exactly one line.
+  # Strings reach awk through ENVIRON, never `-v`, which strips a level of backslash escaping.
+  SR_WHY=""
+  sr_sub() {
+    local out="$1" n
+    shift
+    cp "$SR_SRC" "$out.work" || { SR_WHY="could not copy"; return 1; }
+    while [ "$#" -ge 2 ]; do
+      n="$(grep -cF -- "$1" "$out.work")" || n=0
+      [ "$n" -eq 1 ] || { SR_WHY="anchor matches $n line(s), not 1 -- re-anchor it, never relax the arm: $1"; return 1; }
+      A="$1" R="$2" awk '{ i = index($0, ENVIRON["A"]); if (i) $0 = substr($0, 1, i - 1) ENVIRON["R"] substr($0, i + length(ENVIRON["A"])); print }' \
+        "$out.work" > "$out.next" || { SR_WHY="awk died applying: $1"; return 1; }
+      mv "$out.next" "$out.work"
+      shift 2
+    done
+    if cmp -s "$SR_SRC" "$out.work"; then SR_WHY="changed no bytes -- it would score as a kill"; return 1; fi
+    mv "$out.work" "$out"
+  }
+  SR_G1='if { [ -e "$ESCALATIONS" ] || [ -L "$ESCALATIONS" ]; } && [ ! -f "$ESCALATIONS" ]; then'
+  SR_G1L='{ [ -e "$ESCALATIONS" ] || [ -L "$ESCALATIONS" ]; }'
+  SR_G2='if [ "$SL_BLANK_RC" -gt 1 ]; then'
+  SR_G3='if [ ! -r "$ESCALATIONS" ]; then'
+  sr_score() {  # <label> <name> <want> <anchor> <replacement> [...]
+    local label="$1" name="$2" want out
+    want="$(sr_want "$3")"
+    shift 3
+    out="$SR_MD/_sr_$name.sh"
+    if [ "$#" -eq 0 ]; then cp "$SR_SRC" "$out"
+    elif ! sr_sub "$out" "$@"; then bad "$label DID NOT APPLY: $SR_WHY"; return 0
+    elif ! bash -n "$out" 2>/dev/null; then bad "$label DID NOT APPLY: the mutated copy does not parse"; return 0; fi
+    sr_cells "$out"
+    if [ "$SR_CELLS" = "$want" ]; then ok "$label scored $SR_CELLS"
+    else bad "$label scored $SR_CELLS, wanted $want"; fi
+  }
+  sr_score "MUTANT refusal-control (unmutated sibling copy): every cell holds" ctl 1111111111
+  sr_score "MUTANT R-revert-all (every layer removed): every refusal cell red in BOTH modes, the near-misses hold" \
+    revert-all 0000000111 "$SR_G1" 'if false; then' "$SR_G2" 'if false; then'
+  sr_score "MUTANT R-nonregular (the -e/-L guard removed): ONLY the directory and symlink cells go red" \
+    nonregular 1100011111 "$SR_G1" 'if false; then'
+  sr_score "MUTANT R-no-symlink (-L dropped beside -e): ONLY the dangling-symlink cell goes red" \
+    no-symlink 1111011111 "$SR_G1L" '[ -e "$ESCALATIONS" ]'
+  sr_score "MUTANT R-rc (the status > 1 guard removed): the mode-000 and I/O cells go red in both modes" \
+    rc 0011100111 "$SR_G2" 'if false; then'
+  sr_score "MUTANT R-readable-never (the -r test never true): ONLY the mode-000 cells' reason goes red" \
+    readable-never 0011111111 "$SR_G3" 'if false; then'
+  sr_score "MUTANT R-readable-always (the -r test always true): ONLY the I/O cells' reason goes red" \
+    readable-always 1111100111 "$SR_G3" 'if true; then'
+fi
+
 echo
 if [ "$fails" -ne 0 ]; then
   echo "suppression-lifetime: $fails assertion(s) FAILED" >&2

@@ -458,6 +458,118 @@ else
   bad "only $RLCN of 5 path-arm mutants were scored — a mutation that never became a mutant leaves its arm unproven and this fixture would report PASS over it"
 fi
 
+# =============================================================================
+# A FAILED RULEBOOK READ REFUSES, exit 2, AND PRINTS NO ROW
+#
+# `collect` and `rulebook_set` read the rulebook tree listing and each blob through `$( )` with the
+# status unread. A THEIRS listing that failed read as a rulebook with no file, so EVERY base rulebook
+# file read as retired: here `steps/survivor.md`, which THEIRS still ships, and `path-survivor.md`
+# then got a FALSE `path:` row with exit 0. Each failure is forced with a PATH stub on `git` that
+# claims one argv shape, logs every claimed call, and execs the real git otherwise; each arm asserts
+# its stub FIRED, because an arm whose stub nobody called asserts nothing.
+#   F1  the THEIRS tree listing exits 128 -> exit 2, `rulebook tree listing at <theirs>`, stdout EMPTY
+#   F2  every BASE rulebook blob read exits 128 -> exit 2, `reading core/... at <base>`, stdout EMPTY
+# The healthy twin is assertion 1 (the same world, no stub, a row), and the NEAR-MISS is a stub that
+# claims an argv this detector never issues: it must fire zero times and leave the output unchanged.
+# =============================================================================
+echo
+echo "  --- a failed rulebook read refuses ---"
+FX="$WORK/fx"; mkdir -p "$FX"
+FX_REALGIT="$(command -v git)" || { echo "FIXTURE ERROR: git is not on PATH" >&2; exit 2; }
+FX_STUB=""
+fx_stub() {  # <name> <case-pattern> -> FX_STUB, a directory holding a `git` failing every claimed call with 128
+  FX_STUB="$FX/stub-$1"; mkdir -p "$FX_STUB"; : > "$FX_STUB/LOG"
+  {
+    printf '#!/bin/sh\ncase "$*" in\n  %s)\n' "$2"
+    printf '    printf "x\\n" >> "%s/LOG"; echo "git: forced failure" >&2; exit 128 ;;\n' "$FX_STUB"
+    printf 'esac\nexec "%s" "$@"\n' "$FX_REALGIT"
+  } > "$FX_STUB/git"
+  chmod +x "$FX_STUB/git"
+}
+FX_RC=0
+fx_run() {  # <script> <stub-dir> -> FX_RC, $FX/out, $FX/err. A fresh process each time, and no
+            # inherited memo, so a cached listing cannot answer in place of the stubbed git.
+  : > "$2/LOG"
+  PATH="$2:$PATH" AI_DLC_RECONCILE_MEMO="" bash "$1" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" > "$FX/out" 2> "$FX/err"
+  FX_RC=$?
+}
+fx_fired() { local n; n="$(grep -c . "$1/LOG")" || n=0; printf '%s' "$n"; }
+fx_f1() {  # <script> -> 0 when F1 holds
+  fx_stub f1 "*\"ls-tree -r --name-only ${THEIRS}\"*"; fx_run "$1" "$FX_STUB"
+  [ "$(fx_fired "$FX_STUB")" -gt 0 ] && [ "$FX_RC" -eq 2 ] && [ ! -s "$FX/out" ] \
+    && grep -q "rulebook tree listing at ${THEIRS} .*did not run (exit 128); no verdict" "$FX/err"
+}
+fx_f2() {
+  fx_stub f2 "*\" show ${BASE}:core/\"*"; fx_run "$1" "$FX_STUB"
+  [ "$(fx_fired "$FX_STUB")" -gt 0 ] && [ "$FX_RC" -eq 2 ] && [ ! -s "$FX/out" ] \
+    && grep -q "reading core/.* at ${BASE} did not run (exit 128); no verdict" "$FX/err"
+}
+# SELF-PROBE FIRST, both directions. A stub on an argv nothing issues must fire 0 times and change
+# nothing (so a stub cannot pass an arm by breaking the harness), and the real stub must fire.
+fx_stub probe-miss '*"ls-tree --this-argv-is-never-issued"*'; fx_run "$SCRIPT" "$FX_STUB"
+FX_MISS_OUT="$(cat "$FX/out")"
+if [ "$(fx_fired "$FX_STUB")" -eq 0 ] && [ "$FX_RC" -eq 0 ] && [ "$FX_MISS_OUT" = "$OUT" ]; then
+  ok "  stub self-probe: a stub claiming an argv this detector never issues fires 0 times and leaves the output byte-identical"
+else
+  bad "  stub self-probe: the never-issued stub fired $(fx_fired "$FX_STUB") time(s), rc=$FX_RC, output-changed=$([ "$FX_MISS_OUT" = "$OUT" ] && echo no || echo yes) -- the stub harness is changing the run by itself"
+fi
+if fx_f1 "$SCRIPT"; then ok "F1 a failed THEIRS rulebook listing refuses: exit 2, no row (stub fired $(fx_fired "$FX_STUB"))"
+else bad "F1 a failed THEIRS rulebook listing did not refuse: rc=$FX_RC fired=$(fx_fired "$FX_STUB") rows=$(grep -c . "$FX/out") -- $(tail -1 "$FX/err" | cut -c1-140)"; fi
+if fx_f2 "$SCRIPT"; then ok "F2 failed BASE rulebook blob reads refuse: exit 2, no row (stub fired $(fx_fired "$FX_STUB"))"
+else bad "F2 failed BASE rulebook blob reads did not refuse: rc=$FX_RC fired=$(fx_fired "$FX_STUB") -- $(tail -1 "$FX/err" | cut -c1-140)"; fi
+
+# THE PRE-FIX COPY, staged beside lib.sh, must FAIL both arms, and under F1's stub it must print the
+# false `path:` row for path-survivor.md -- that row is the discriminator, not merely a different exit.
+FX_PIN=d1c72fa904e5c8aecaaa67fa15340094d73780ab
+FX_OWN="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
+if [ -z "$FX_OWN" ] || ! git -C "$FX_OWN" cat-file -e "${FX_PIN}^{commit}" 2>/dev/null; then
+  printf '  SKIP  the pre-fix differential -- the pin %s is not in this tree'"'"'s history (a consumer, or a shallow clone); this is not a pass\n' "$FX_PIN"
+else
+  FXP="$FX/prefix"; cp -R "$RLC_SRC" "$FXP" || { bad "pre-fix differential: could not copy the reconcile directory"; FXP=""; }
+  if [ -n "$FXP" ] && git -C "$FX_OWN" show "${FX_PIN}:core/skills/ai-dlc-update/reconcile/retired-layer-contract.sh" > "$FXP/retired-layer-contract.sh" 2>/dev/null \
+     && ! cmp -s "$SCRIPT" "$FXP/retired-layer-contract.sh" && [ -f "$FXP/lib.sh" ]; then
+    ok "  pre-fix copy staged at the pin beside lib.sh, and it DIFFERS from the tree's copy (cmp -s)"
+    if fx_f1 "$FXP/retired-layer-contract.sh"; then bad "  pre-fix differential: F1 PASSED against the pre-fix copy, so it cannot tell the fix from its absence"
+    else ok "  pre-fix differential: F1 FAILS against the pre-fix copy (rc=$FX_RC, fired=$(fx_fired "$FX_STUB"))"; fi
+    _fx_row="$(awk -F'\t' '$2 ~ /path-survivor\.md/ && $3 == "path:core/skills/ai-dlc/steps/survivor.md"' "$FX/out")"
+    if [ -n "$_fx_row" ] && [ "$FX_RC" -eq 0 ]; then
+      ok "  pre-fix differential: under F1's stub the pre-fix copy exits 0 with a FALSE path: row for steps/survivor.md, which THEIRS still ships"
+    else
+      bad "  pre-fix differential: the pre-fix copy did not print the false survivor path: row under F1's stub (rc=$FX_RC) -- the discriminator is not the one this arm claims"
+    fi
+    if fx_f2 "$FXP/retired-layer-contract.sh"; then bad "  pre-fix differential: F2 PASSED against the pre-fix copy"
+    else ok "  pre-fix differential: F2 FAILS against the pre-fix copy (rc=$FX_RC, fired=$(fx_fired "$FX_STUB"))"; fi
+    # HEALTHY stdout is byte-identical to the pre-fix copy on all three worlds this fixture drives.
+    fx_same=1
+    for _t in "$THEIRS" "$PATH_ONLY" "$BASE"; do
+      _a="$(bash "$SCRIPT" "$DIST" "$BASE" "$_t" "$CONSUMER" 2>/dev/null)"
+      _b="$(bash "$FXP/retired-layer-contract.sh" "$DIST" "$BASE" "$_t" "$CONSUMER" 2>/dev/null)"
+      [ "$_a" = "$_b" ] || fx_same=0
+    done
+    if [ "$fx_same" -eq 1 ] && [ -n "$OUT" ]; then ok "  pre-fix differential: healthy stdout is byte-identical to the pre-fix copy on the THEIRS, PATH_ONLY and BASE worlds"
+    else bad "  pre-fix differential: healthy stdout DIFFERS from the pre-fix copy on at least one world"; fi
+  else
+    bad "  pre-fix differential: could not stage a DIFFERING pre-fix copy beside lib.sh"
+  fi
+fi
+
+# THE MUTANTS: the listing's status dropped, the blob read's status dropped, and both. Anchored on
+# the status test each layer added; the control is the rlcctl shape row, which no mutant touches.
+fx_mut() {  # <name> <want-f1:0|1> <want-f2:0|1> <sed-arg>...
+  local name="$1" w1="$2" w2="$3" g1=0 g2=0
+  shift 3
+  rlcmut "$name" "$@" || return 0
+  fx_f1 "$RLC_MUT" && g1=1
+  fx_f2 "$RLC_MUT" && g2=1
+  if [ "$g1" = "$w1" ] && [ "$g2" = "$w2" ]; then ok "  mutant [$name] KILLED as designed: F1=$g1 F2=$g2"
+  else bad "MUTANT SURVIVED or entangled [$name]: F1=$g1 F2=$g2, wanted F1=$w1 F2=$w2"; fi
+  rlcctl "$name" "$RLC_MUT"
+}
+fx_mut f-tree-status 0 1 -e 's@  \[ "\$rc" -eq 0 \] || { RLC_WHY="the rulebook tree listing@  true || { RLC_WHY="the rulebook tree listing@'
+fx_mut f-show-status 1 0 -e 's@      \[ "\$rc" -eq 0 \] || { RLC_WHY="reading \$f at \$ref"@      true || { RLC_WHY="reading $f at $ref"@'
+fx_mut f-reads-all   0 0 -e 's@  \[ "\$rc" -eq 0 \] || { RLC_WHY="the rulebook tree listing@  true || { RLC_WHY="the rulebook tree listing@' \
+                         -e 's@      \[ "\$rc" -eq 0 \] || { RLC_WHY="reading \$f at \$ref"@      true || { RLC_WHY="reading $f at $ref"@'
+
 echo
 if [ "$fails" -eq 0 ]; then echo "retired-layer-contract: PASS"; exit 0; fi
 echo "retired-layer-contract: $fails assertion(s) FAILED" >&2
