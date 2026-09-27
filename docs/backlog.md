@@ -871,7 +871,12 @@ states the claim, because the comment is the thing that is wrong. It asserts bot
 one run — the `docs/` rev-path must stop being reported AND a genuinely absent consumer path
 must still be reported — so a fix that deletes the guard fails it.
 
-verify: sh S=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -f "$S" ] || exit 9; D="$(mktemp -d)" || exit 9; trap 'rm -rf "$D"' EXIT; mkdir -p "$D/c/docs" || exit 9; printf 'x\n' > "$D/c/docs/present.md" || exit 9; f="$(awk '/^receipt_path_tokens\(\) \{/,/^\}/' "$S")"; [ -n "$f" ] || exit 9; printf '%s\n' "$f" > "$D/lib.sh"; grep -q 'receipt_path_tokens()' "$D/lib.sh" || exit 9; grep -q 'receipt_absent_subjects()' "$D/lib.sh" || exit 9; bash -n "$D/lib.sh" 2>/dev/null || exit 9; probe() { CONSUMER="$D/c" bash -c '. "$1"; receipt_absent_subjects "$2"' _ "$D/lib.sh" "$1" 2>/dev/null; }; ctl="$(probe 'grep -q x "$CONSUMER/docs/gone.md"')"; [ -n "$ctl" ] || exit 9; pres="$(probe 'grep -q x "$CONSUMER/docs/present.md"')"; [ -z "$pres" ] || exit 9; bad="$(probe 'git -C "$DIST" show "$THEIRS:docs/backlog.md" | diff - x')"; [ -z "$bad" ]
+**The probe sets `LR_STAGE`, because 0.651.0 made it part of the calling contract.**
+`receipt_absent_subjects` now stages its tokens under the directory `lr_stage_ready` makes in the
+main shell, and returns 3 without one. The first 0.651.0 gate failed R4 on this receipt, which
+read exit 9 at its control and measured nothing.
+
+verify: sh S=core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; [ -f "$S" ] || exit 9; D="$(mktemp -d)" || exit 9; trap 'rm -rf "$D"' EXIT; mkdir -p "$D/c/docs" "$D/s" || exit 9; printf 'x\n' > "$D/c/docs/present.md" || exit 9; f="$(awk '/^receipt_path_tokens\(\) \{/,/^\}/' "$S")"; [ -n "$f" ] || exit 9; printf '%s\n' "$f" > "$D/lib.sh"; grep -q 'receipt_path_tokens()' "$D/lib.sh" || exit 9; grep -q 'receipt_absent_subjects()' "$D/lib.sh" || exit 9; bash -n "$D/lib.sh" 2>/dev/null || exit 9; probe() { CONSUMER="$D/c" LR_STAGE="$D/s" bash -c '. "$1"; receipt_absent_subjects "$2"' _ "$D/lib.sh" "$1" 2>/dev/null; }; ctl="$(probe 'grep -q x "$CONSUMER/docs/gone.md"')"; [ -n "$ctl" ] || exit 9; pres="$(probe 'grep -q x "$CONSUMER/docs/present.md"')"; [ -z "$pres" ] || exit 9; bad="$(probe 'git -C "$DIST" show "$THEIRS:docs/backlog.md" | diff - x')"; [ -z "$bad" ]
 
 ## BL-091
 
@@ -4431,6 +4436,27 @@ swallowed (`> f || true`). A `| while` loop is the same shape and was not scored
 unchanged. The behaviour is carried by this release's fixture: its diff-scoped arm refuses those
 spellings on lines added since `e4934e65`, and its forced arms make each verdict-bearing producer
 fail and assert a refusal.
+
+**v0.651.0 staged the 10 bootstrapping sites, and the receipt exits 0.** Forced at base, the worst
+was `ledger-reverify.sh`'s absent-subject split: a failed `tr` read as "every named path exists"
+and emitted a false `CLOSE-CANDIDATE`. The others were a silenced `NEEDS-REVIEW`, a missed orphan in
+`preclassify.sh`, a `BLOCKERS-RESOLVED` from `emit-report.sh --verify`, and two `SELF-UPDATE-OK`s in
+`self-update-gate.sh`. Each now refuses in its script's own vocabulary, and
+`procsub-staged-refusal-boot` forces all of them.
+
+**THE RECEIPT EXITS 0 AND THE ENTRY IS NOT CLOSED.** The batch-163 tip adversary forced three false
+clears that no `<(` spelling carries, each equally present before 0.650.0. A staged producer that
+is a FUNCTION whose body is a PIPELINE reads the wrong stage's status:
+- `retired-layer-passage.sh:167` stages `norm_lines` (`sed | tr`) in a file without `pipefail`, so
+  only `tr` is read. A failed `sed` reads "no match", and one Latin-1 byte in a layer file under the
+  default UTF-8 locale triggers it with no stub.
+- `validate-layer-entries.sh`'s `defined_rules` (E15 at `:1657`, and five sites of the same shape)
+  accepts a later `grep -E '.'`'s exit 1 on the empty input a failed first `grep` leaves: rc 1
+  ERROR E15 becomes rc 0.
+- The `retired-tokens.sh` and `retired-layer-token.sh` token helpers accept the second `grep`'s 1
+  after a failed `grep -vE` comment filter: a retired-token row is lost.
+Close only when those refuse, forced, and a sweep of every staged function in the 22 files finds no
+other instance.
 
 verify: sh git grep -qF 'pipefail' -- 'core/*.sh' ':(exclude)core/fixtures/**' || exit 9; A='{ l = $0; sub(/^[^:]*:[0-9]+:/, "", l); if (l ~ /^[[:blank:]]*#/) next; if (l ~ /^[[:blank:]]*echo /) next; if (l ~ /\047<\(/) next; n++ } END { print n + 0 }'; p="$(printf '%s\n' 'x.sh:1:  done < <(find . -type f | sort)' 'x.sh:2:  r="$(comm -23 <(printf x) <(printf y))"' "x.sh:3:RE='<([^>]*-)?id>'" 'x.sh:4:  # was <(norm)' 'x.sh:5:  echo "full: diff <(git show)"' | awk "$A")"; [ "$p" = 2 ] || exit 9; n="$(git grep -nE '<\(' -- 'core/*.sh' ':(exclude)core/fixtures/**' | awk "$A")"; [ -n "$n" ] || exit 9; [ "$n" -eq 0 ]
 

@@ -82,6 +82,14 @@ pc_fail() { # <the git call that failed> -> one stderr line, then the WHOLE run 
   kill -USR1 "$PC_TOP" 2>/dev/null
   exit 2
 }
+# pc_refuse() is pc_fail() for a producer that is not git -- a `find` walk, or a write to the
+# staging directory below. Same signal, same exit 2; only the words differ, because "git failed"
+# over a failed `find` names the wrong fault.
+pc_refuse() { # <what did not run> -> one stderr line, then the WHOLE run exits 2
+  echo "preclassify: refusing to classify: $*" >&2
+  kill -USR1 "$PC_TOP" 2>/dev/null
+  exit 2
+}
 
 # Resolve DIST and CONS to absolute paths up front. file_hash() feeds
 # "$CONS/<path>" to `git -C "$DIST" hash-object` — a RELATIVE consumer root
@@ -90,6 +98,17 @@ pc_fail() { # <the git call that failed> -> one stderr line, then the WHOLE run 
 # Absolute paths make the hash independent of the -C working dir.
 DIST="$(cd "$DIST" 2>/dev/null && pwd)" || { echo "preclassify: dist-repo not a directory: ${1}" >&2; exit 2; }
 CONS="$(cd "$CONS" 2>/dev/null && pwd)" || { echo "preclassify: consumer-root not a directory: ${4}" >&2; exit 2; }
+
+# --- EVERY LOOP BELOW READS A STAGED FILE, NEVER A `< <( )` ---------------------------------
+# A process substitution's exit status is discarded, so a producer that failed fed its loop an
+# empty stream and the pass reported nothing to do. Each producer is written to its own file in
+# this one directory, its status is read, and a failure refuses the run through pc_fail() or
+# pc_refuse(). The file keeps the loop in THIS shell, exactly as `done < <(…)` did; a pipe would
+# not. One directory per run, made here in the main shell, removed on EXIT (lib.sh's `trap()`
+# composes this handler with its own cleanup rather than replacing it).
+PC_STAGE="$(mktemp -d "${TMPDIR:-/tmp}/preclassify-stage.XXXXXX" 2>/dev/null)" || PC_STAGE=""
+[ -n "$PC_STAGE" ] && [ -d "$PC_STAGE" ] || { echo "preclassify: refusing to classify: a staging directory could not be created, so no enumeration below could be status-checked" >&2; exit 2; }
+trap '[ -n "${PC_STAGE:-}" ] && rm -rf "$PC_STAGE"; :' EXIT
 
 # core/... -> consumer-relative path.
 #
@@ -513,6 +532,11 @@ dist_only() { # core/fixtures/<name>/... -> is it marked dist-only at THEIRS?
 # overwrite-on-pull like any core file, and the row's only job is to tell the
 # operator a local adaptation is about to be discarded so they can confirm it was
 # filed as a push candidate first.
+#
+# STAGED, WITH THE ENUMERATION'S STATUS READ HERE. A failed ls-tree used to feed the loop nothing
+# and the pass reported no relocation for a consumer that holds every validator at the old path.
+git -C "$DIST" ls-tree --name-only "$THEIRS" core/scripts/ > "$PC_STAGE/relocation-ls-tree" 2>/dev/null \
+  || pc_fail "ls-tree --name-only $THEIRS core/scripts/ exited $?"
 while IFS= read -r core_path; do
   [ -n "$core_path" ] || continue
   base="${core_path#core/scripts/}"
@@ -540,11 +564,8 @@ while IFS= read -r core_path; do
 # NOT memo_ls_tree: that helper caches the RECURSIVE `-r` listing and this call is
 # deliberately non-recursive (`ls-tree --name-only`, no `-r`) — it wants only the immediate
 # entries of core/scripts/, and filtering the recursive listing to depth 1 after the fact
-# is a different, larger rewrite than caching alone. Left as a direct call.
-# THE ENUMERATION'S STATUS IS CHECKED INSIDE THE SUBSTITUTION, because a `< <( )` status is not
-# observable from the loop: a failed ls-tree fed the loop nothing and the pass reported no
-# relocation for a consumer that holds every validator at the old path.
-done < <(git -C "$DIST" ls-tree --name-only "$THEIRS" core/scripts/ 2>/dev/null || pc_fail "ls-tree --name-only $THEIRS core/scripts/ exited $?")
+# is a different, larger rewrite than caching alone. Left as a direct call, staged above the loop.
+done < "$PC_STAGE/relocation-ls-tree"
 
 # `--no-renames` IS LOAD-BEARING. Without it git pairs a delete and an add into one
 # `R100<TAB>old<TAB>new` row, `read -r status path` hands `path` the tab-joined pair,
@@ -567,12 +588,14 @@ done < <(git -C "$DIST" ls-tree --name-only "$THEIRS" core/scripts/ 2>/dev/null 
 # pipeline (this script has no `pipefail`), so a failed diff fed the loop nothing and the run
 # exited 0 with EMPTY output -- the same stdout as a range that changes nothing under `core/`.
 # The rows are taken first, the status is read off the bare call, and the loop reads them in
-# THIS shell through a process substitution -- NOT a heredoc, which bash 3.2 materialises as a
-# TMPDIR file: where that write fails (`ulimit -f 0`, a full disk) the heredoc is empty and the
-# loop is skipped with rc 0. A pipe needs no file.
+# THIS shell from a STAGED FILE whose write is itself status-checked -- NOT a heredoc, which
+# bash 3.2 materialises as a TMPDIR file whose write failure (`ulimit -f 0`, a full disk) is
+# silent: the heredoc is empty and the loop is skipped with rc 0. Here the same failure refuses.
 PC_DIFF="$(memo_diff_name_status "$DIST" "$BASE" "$THEIRS" core/)"
 PC_DIFF_RC=$?
 [ "$PC_DIFF_RC" -eq 0 ] || pc_fail "diff --no-renames --name-status $BASE $THEIRS -- core/ exited $PC_DIFF_RC"
+printf '%s\n' "$PC_DIFF" > "$PC_STAGE/changed-rows" \
+  || pc_refuse "the base..theirs rows could not be staged to $PC_STAGE/changed-rows, so the changed-files pass would read nothing"
 while IFS=$'\t' read -r status path; do
   [ -n "$path" ] || continue   # printf of an EMPTY diff is one empty line, not zero lines
   cons="$(map_consumer "$path")"
@@ -688,7 +711,7 @@ while IFS=$'\t' read -r status path; do
       ;;
   esac
   printf '%s\t%s\t%s\t%s\n' "$status" "$path" "$cons" "$bucket"
-done < <(printf '%s\n' "$PC_DIFF")
+done < "$PC_STAGE/changed-rows"
 
 # ---------------------------------------------------------------------------
 # Orphan pass — files this distribution used to write to a consumer path it no
@@ -713,10 +736,20 @@ done < <(printf '%s\n' "$PC_DIFF")
 # that upstream never shipped, is surfaced for adjudication and NEVER auto-deleted —
 # the same posture as UPSTREAM-DELETED, whose deletions are also gated per-path at
 # apply (step 7).
+#
+# THE WALK IS STAGED ALONE AND ITS STATUS READ BEFORE ANY SORT. This file has no `pipefail`, so
+# `find … | sort > f || refuse` would read only sort's status; `find` is written to its own file
+# first. A failed walk used to feed the loop nothing, which is the "no orphan here" answer, and
+# the stale copies it exists to surface survived the pull unreported. One file per stage, never
+# shared with another loop.
 while IFS='|' read -r old_prefix core_dir; do
   [ -n "$old_prefix" ] || continue
   [ -d "$CONS/$old_prefix" ] || continue
 
+  find "$CONS/$old_prefix" -type f > "$PC_STAGE/orphan-walk" 2>/dev/null \
+    || pc_refuse "the orphan walk of $CONS/$old_prefix did not complete (find exited $?), so an orphan there would read as absent"
+  sort "$PC_STAGE/orphan-walk" > "$PC_STAGE/orphan-sorted" \
+    || pc_refuse "the orphan walk of $CONS/$old_prefix could not be sorted (sort exited $?)"
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     rest="${f#"$CONS/$old_prefix/"}"
@@ -739,7 +772,7 @@ while IFS='|' read -r old_prefix core_dir; do
       bucket="ORPHANED-RELOCATED+consumer-modified->CLASSIFY"
     fi
     printf '%s\t%s\t%s\t%s\n' "O" "$core_path" "$cons_rel" "$bucket -> now at $new_path"
-  done < <(find "$CONS/$old_prefix" -type f 2>/dev/null | sort)
+  done < "$PC_STAGE/orphan-sorted"
 done <<'RELOCATIONS'
 .claude/fixtures|fixtures
 .claude/ci-templates|ci-templates

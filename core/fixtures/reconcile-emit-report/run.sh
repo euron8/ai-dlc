@@ -2129,7 +2129,10 @@ v_mk() { # v_mk <name> <expected-anchor-hits> <anchor-regex> <sed-arg...>
   return 0
 }
 V_ELIF='^elif \[ "$hard_gone" -gt 0 \] && \[ "$hard_new" -eq 0 \] && \[ "$refused_new" -eq 0 \]; then$'
-V_E9SED='s/| norm_rows)/| LC_ALL=C sort)/g'
+# E9 swaps the whitespace-normalising, de-duplicating `norm_rows` for a bare sort on BOTH staged
+# sides (the two `elif ! norm_rows < …` lines); it was anchored on `| norm_rows)` while the sides
+# were `<( )` substitutions.
+V_E9SED='s/^elif ! norm_rows < /elif ! LC_ALL=C sort < /'
 V_E10SED='s/^  if \[ "$hb_rc" -eq 0 \]; then /  if true; then /'
 
 v_mk E1 1 '^\[ "$cause" = BLOCKERS-RESOLVED \] && exit 3$' -e '/^\[ "$cause" = BLOCKERS-RESOLVED \] && exit 3$/d'
@@ -2146,9 +2149,9 @@ v_mk E6 1 '^elif \[ "$stamp_render" != "$stamp_report" \]; then$' \
 v_mk E7 1 "$V_ELIF" \
   -e 's/^elif \[ "$hard_gone" -gt 0 \] && \[ "$hard_new" -eq 0 \] && \[ "$refused_new" -eq 0 \]; then$/elif [ "$hard_gone" -gt 0 ] \&\& [ "$hard_new" -eq 0 ]; then/'
 v_mk E8 1 "^unseen_rows() { grep -Ev '" -e "s|^unseen_rows() { grep -Ev '.*\$|unseen_rows() { grep -Ev '^HARD-\|^\$'; }|"
-v_mk E9  2 '| norm_rows)' -e "$V_E9SED"
+v_mk E9  2 '^elif ! norm_rows < ' -e "$V_E9SED"
 v_mk E10 1 '^  if \[ "$hb_rc" -eq 0 \]; then ' -e "$V_E10SED"
-v_mk E11 2 '| norm_rows)' -e "$V_E9SED" -e "$V_E10SED"
+v_mk E11 2 '^elif ! norm_rows < ' -e "$V_E9SED" -e "$V_E10SED"
 
 rm -rf "$VMD/ctl"; cp -R "$(dirname "$EMIT")" "$VMD/ctl"
 v_par ship ctl $V_APPLIED

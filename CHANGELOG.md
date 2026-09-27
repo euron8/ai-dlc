@@ -15,6 +15,62 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.651.0] - 2026-09-27
+
+The four bootstrapping reconcile scripts stop reading a failed producer as an empty input. This
+release ships alone because the consumer's installed copy of each runs the pull that delivers it.
+
+### The bootstrapping `<( )` sites are staged (`BL-348`, partial)
+
+The last 10 `<( )` lines in shipped code sat in `preclassify.sh`, `ledger-reverify.sh`,
+`emit-report.sh` and `self-update-gate.sh`. Forced at base with a PATH stub, a failed producer:
+
+- in `ledger-reverify.sh`'s absent-subject split, read as "every named path exists" and emitted
+  `CLOSE-CANDIDATE`. That is a false close, the worst output the tool has.
+- in its named-subject split, silenced a `NEEDS-REVIEW` into `STILL-LIVE`, and a partial `core_map`
+  listing read as "upstream ships none of these".
+- in `preclassify.sh`'s orphan walk, reported no orphan.
+- in `emit-report.sh --verify`, read every approved HARD row as resolved: exit 3,
+  `BLOCKERS-RESOLVED`.
+- in `self-update-gate.sh`'s R1 `comm` and its `grep -Fxf` over the gating set, read as
+  `SELF-UPDATE-OK`, where the second swallowed `grep`'s exit 2 with its 1.
+
+What changed:
+
+- Each producer is staged to its own file under one temp directory per run, and its status is read.
+  `preclassify.sh` stages its `find` alone, because the file carries no `pipefail`, and refuses
+  through `pc_refuse`, exit 2. `ledger-reverify.sh`'s readers run inside `$( )`, so they return 3
+  and the caller refuses the run, exit 2; a partial `core_map` listing is `UNAVAILABLE`.
+  `emit-report.sh --verify` reports `UNDECIDED`, exit 1. `self-update-gate.sh` reports
+  `SELF-UPDATE-UNDECIDED`, accepting `grep`'s 0 and 1 in code and nothing else.
+- `ledger-reverify.sh`'s header states exit 2 as a refusal. `receipt_path_tokens` loses its
+  `|| true` so its callers see a failed `tr`; its `tr -c` class is unchanged.
+- `ledger-reverify.sh` makes its temp directory once per run, in the main shell. Measured over 8
+  interleaved runs of the engine: 4.00 CPU-seconds at base, 4.05 here, inside a ±0.5s spread, and
+  1400 against 1402 forks, the two being one `mktemp` and one `rm`.
+- Mutation anchors that sat on a moved line were moved in the same commit, in
+  `relocation-preclassify` and `reconcile-emit-report`.
+
+On a `file://` clone of the reference consumer, over its installed commit to this release and to
+0.649.0, all four engines' healthy output is byte-identical between base and tip.
+
+`procsub-staged-refusal-boot` (`.dist-only`) forces each of the sites above with a stub that must
+be seen to fire, pairs it with a no-stub control, and kills 7 mutants that restore a site's
+`<( )` spelling.
+
+`BL-348`'s receipt reads 0 lines and exits 0, and the entry stays live anyway. The receipt keys
+on the spelling, and this release's tip adversary proved three false clears it cannot see, all
+equally present before 0.650.0: a staged producer that is a function whose body is a pipeline
+reads the status of the wrong stage. `retired-layer-passage.sh`'s `norm_lines`, run without
+`pipefail`, reads only `tr`, so a `sed` that fails on one Latin-1 byte in a layer file reads "no
+match". `validate-layer-entries.sh`'s `defined_rules` and the `retired-tokens.sh` and
+`retired-layer-token.sh` token helpers accept a later `grep`'s exit 1 on the empty input a failed
+first stage leaves. None touches a bootstrapping file, and the next release corrects them.
+
+`BL-092`'s receipt drives `receipt_absent_subjects` directly, and now sets `LR_STAGE` for it, since
+the function refuses without the stage directory its caller makes. Without that it exited 9 at its
+own control and measured nothing.
+
 ## [0.650.0] - 2026-09-27
 
 Eighteen shipped scripts stop reading a producer that failed as an empty input. Every `<( )` feed

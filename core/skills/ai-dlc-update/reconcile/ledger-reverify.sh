@@ -143,7 +143,10 @@
 #                    report — it would have reached the operator as the one cause with no name.
 #                    Adding a mode means adding its prefix here; the count above is part of the
 #                    contract SKILL.md states.
-# Exit:   0 ALWAYS. A classifier, not a gate — the caller decides, and a close never blocks.
+# Exit:   0 on every classified run. A classifier, not a gate — the caller decides, and a close
+#         never blocks. 2 is a REFUSAL, never a verdict: the close grammar could not be lifted
+#         (`CLOSE_AWK`), or a receipt's path tokens could not be split (`lr_refuse`), and rows
+#         printed before it are partial. `emit-report.sh` renders any non-zero as DETECTOR-REFUSED.
 set -uo pipefail
 
 # ledger_entry_shape() — THE entry-boundary rule, from lib.sh. See that file for why it is not
@@ -779,7 +782,11 @@ base_holds() { all_present "$(base_show "$1")" "$2"; }
 # above -- "splitting on every character a path cannot contain" -- and the falsifiability partition
 # below needs the same tokens for a different question. A second copy of that class is a second
 # chance for the two to drift, and a drift here is silent in both directions at once.
-receipt_path_tokens() { printf '%s\n' "$1" | tr -c 'A-Za-z0-9_./$-' '\n' || true; }
+#
+# NO `|| true`. Both readers STAGE this output and read its status, and a swallowed `tr` failure
+# is exactly the empty token list they refuse on. Under this file's `pipefail` a failing `printf`
+# or `tr` is this function's status.
+receipt_path_tokens() { printf '%s\n' "$1" | tr -c 'A-Za-z0-9_./$-' '\n'; }
 
 # A `$THEIRS_TREE/…` TOKEN IS A DISTRIBUTION PATH AND IS ALREADY EXCLUDED, BY THE `$` THE SPLIT
 # DELIBERATELY KEEPS — `$THEIRS_TREE/core/scripts/x.sh` arrives as ONE token and fails the
@@ -836,8 +843,19 @@ receipt_path_tokens() { printf '%s\n' "$1" | tr -c 'A-Za-z0-9_./$-' '\n' || true
 # unrelated to any fix. That control runs only on the ELSE branch below, so an entry that starts
 # being flagged as absent leaves the base-controlled set and the RECEIPTS-UNDECIDED denominators
 # move with it. That is arithmetic, not a regression.
+#
+# THE TOKENS ARE STAGED, AND A FAILED SPLIT IS RETURNED AS 3, NEVER EXITED. This used to read
+# `done < <(receipt_path_tokens …)`, whose status nothing could see: a split that failed fed the
+# loop nothing, the list came back EMPTY, and empty is the "every named path exists" answer --
+# the caller then emitted CLOSE-CANDIDATE, the verdict this file's header names as the one that
+# loses information permanently. Measured with a PATH stub failing `tr -c`: base CLOSE-CANDIDATE,
+# exit 0. The function runs inside the caller's `$( )`, where an `exit` would end only the
+# subshell, so it RETURNS 3 and the caller refuses the whole run. Its own staging file; the
+# directory is made by `lr_stage_ready` in the main shell before the call.
 receipt_absent_subjects() {
   local rest="$1" p out=""
+  [ -n "$LR_STAGE" ] || return 3
+  receipt_path_tokens "$rest" > "$LR_STAGE/absent-tokens" || return 3
   while IFS= read -r p; do
     [ -n "$p" ] || continue
     p="${p#\$CONSUMER/}"
@@ -847,8 +865,9 @@ receipt_absent_subjects() {
     esac
     case "$p" in *'*'*|*'?'*|*'$'*) continue ;; esac
     [ -e "$CONSUMER/$p" ] || case " $out " in *" $p "*) ;; *) out="$out $p" ;; esac
-  done < <(receipt_path_tokens "$rest")
+  done < "$LR_STAGE/absent-tokens"
   printf '%s' "$out"
+  return 0
 }
 
 # receipt_reads_dist_as_path <sh-receipt> -> 0 when the receipt names `$DIST` somewhere other than
@@ -1155,9 +1174,34 @@ CORE_MAP_WHY=""      # why it is unavailable, rendered verbatim into the undecid
 # `rm`. `THEIRS_TREE_OWNED` is written ONLY beside the `mktemp -d` that created the directory, so
 # the handler can only ever remove a directory this process made.
 THEIRS_TREE_OWNED=""
+# THE STAGING DIRECTORY for every producer this file used to read through `< <( )`. ONE per run,
+# LAZY (the `core_map()` pattern: a ledger with no `sh` receipt pays nothing, and this engine's
+# fixture is the suite pole), made ONLY in the main shell -- the two receipt readers run inside a
+# caller's `$( )`, where a directory made on first use would be forgotten when the subshell ends,
+# so the caller calls `lr_stage_ready` first. Removed by `core_map_cleanup`, through
+# `LR_STAGE_OWNED`, for the reason `THEIRS_TREE_OWNED` records.
+LR_STAGE=""
+LR_STAGE_OWNED=""
+lr_stage_ready() { # 0 = $LR_STAGE is a directory this run made; 1 = it could not be made
+  [ -n "$LR_STAGE" ] && return 0
+  local _d
+  _d="$(mktemp -d "${TMPDIR:-/tmp}/ledger-reverify-stage.XXXXXX" 2>/dev/null)" || return 1
+  [ -n "$_d" ] && [ -d "$_d" ] || return 1
+  LR_STAGE="$_d"; LR_STAGE_OWNED="$_d"
+  return 0
+}
+# A receipt reader that could not split its receipt is not a verdict in either direction, and the
+# row it would have decided cannot be emitted. Refused for the WHOLE run, exit 2 -- the status this
+# file already uses for a refusal it cannot survive (`CLOSE_AWK` above) and the one
+# `emit-report.sh` renders as `DETECTOR-REFUSED`, never as `none`.
+lr_refuse() { # <what did not run>
+  echo "ledger-reverify: refusing to re-verify: $* — no row for this entry or any after it was decided, so this run is not a clean corpus" >&2
+  exit 2
+}
 core_map_cleanup() {
   [ -n "${CORE_MAP:-}" ] && rm -f "$CORE_MAP"
   [ -n "${THEIRS_TREE_OWNED:-}" ] && rm -rf "$THEIRS_TREE_OWNED"
+  [ -n "${LR_STAGE_OWNED:-}" ] && rm -rf "$LR_STAGE_OWNED"
   # lib.sh's `ai_dlc_memo_cleanup` removes ONLY `$AI_DLC_MEMO_OWNED` -- a directory THIS
   # process's own `ai_dlc_memo_dir()` created with `mktemp -d` -- and is a no-op when this
   # process instead borrowed `AI_DLC_RECONCILE_MEMO` from an orchestrator (`emit-report.sh`)
@@ -1273,10 +1317,18 @@ core_map() { # 0 = $CORE_MAP holds the table; 1 = UNDECIDABLE, nothing was built
   CORE_MAP="$(mktemp)" || { CORE_MAP=""; return 1; }
   # `${THEIRS}` BRACED: unbraced, zsh's `:c`/`:t` history modifiers eat the next character and the
   # ref resolves to garbage -- which git reports as an empty tree, i.e. as a clean absence.
+  # STAGED, WITH ls-tree's STATUS READ. As `done < <(git … ls-tree …)` a listing that failed
+  # PART-WAY left a non-empty partial table, which the emptiness guard below passes -- and a
+  # consumer path missing from a partial table reads as "upstream ships none of these", the
+  # bucket-2 all-clear. A failed listing is UNAVAILABLE, this function's own refusal.
+  CORE_MAP_WHY="a staging directory for the theirs listing could not be created"
+  lr_stage_ready || return 1
+  CORE_MAP_WHY="'git ls-tree -r ${THEIRS} -- core/' failed in '$DIST', so the derived consumer→core table would be partial or empty"
+  git -C "$DIST" ls-tree -r --name-only "${THEIRS}" -- core/ > "$LR_STAGE/core-map-ls-tree" 2>/dev/null || return 1
   while IFS= read -r _cp; do
     [ -n "$_cp" ] || continue
     printf '%s\t%s\n' "$(map_consumer "$_cp")" "$_cp"
-  done < <(git -C "$DIST" ls-tree -r --name-only "${THEIRS}" -- core/ 2>/dev/null) > "$CORE_MAP"
+  done < "$LR_STAGE/core-map-ls-tree" > "$CORE_MAP"
   # An EMPTY table is not a mapping with nothing in it: `core/` is never empty at a real ref, so
   # this is a bad ref or a bad repo, and answering "upstream ships none of these" from it would
   # turn every bucket-3 receipt into a bucket-2 all-clear -- an undecidable input manufacturing the
@@ -1313,8 +1365,15 @@ core_for_consumer_path() { awk -F'\t' -v q="$1" '$1 == q { print $2; exit }' "$C
 # never match anyway. The `/` test only separates bucket 2 from "nothing parsed" -- BOTH of which
 # emit STILL-LIVE -- so a junk token cannot manufacture a NEEDS-REVIEW. Only an exact hit in the
 # derived table can, and that is the whole reason the accusing direction is keyed on the table.
+#
+# STAGED, AND A FAILED SPLIT RETURNS 3 for the reason `receipt_absent_subjects` states: this runs
+# inside the caller's `$( )`. Here an empty list read as "names no path-shaped subject", which is
+# STILL-LIVE with the falsifiability check reported as not run -- a NEEDS-REVIEW the split would
+# have raised went silent. Its own staging file, never shared with the absent-subjects reader.
 receipt_named_subjects() {
   local p seen=""
+  [ -n "$LR_STAGE" ] || return 3
+  receipt_path_tokens "$1" > "$LR_STAGE/named-tokens" || return 3
   while IFS= read -r p; do
     [ -n "$p" ] || continue
     p="${p#\$CONSUMER/}"; p="${p#./}"
@@ -1324,7 +1383,8 @@ receipt_named_subjects() {
     case " $seen " in *" $p "*) continue ;; esac
     seen="$seen $p"
     printf '%s\t%s\n' "$p" "$(core_for_consumer_path "$p")"
-  done < <(receipt_path_tokens "$1")
+  done < "$LR_STAGE/named-tokens"
+  return 0
 }
 
 # Every path at THEIRS whose basename equals $1. Compared as a fixed string after splitting
@@ -2094,13 +2154,15 @@ while IFS="$(printf '\t')" read -r label ord directive; do
                 emit STILL-LIVE "$label" "verify sh: still reproduces at theirs ($TV) — falsifiability NOT checked ($CORE_MAP_WHY, so there is no derived consumer→core table to ask), so a receipt that can only ever read the consumer's installed copy would not have been caught here"
               else
                 _ns=0; _up=""
+                # STAGED WITH ITS STATUS READ, IN THIS SHELL: `core_map` above made `$LR_STAGE`
+                # here, before this call. A failed split is a refusal of the run, not "no subject".
+                receipt_named_subjects "$rest" > "$LR_STAGE/named-subjects" \
+                  || lr_refuse "the path tokens of $label's sh receipt could not be split (receipt_named_subjects returned $?), so whether it names an upstream file is unknown"
                 while IFS="$(printf '\t')" read -r _sp _sc; do
                   [ -n "$_sp" ] || continue
                   _ns=$((_ns + 1))
                   [ -n "$_sc" ] && _up="$_up $_sp (upstream ships it as $_sc)"
-                done <<EOF
-$(receipt_named_subjects "$rest")
-EOF
+                done < "$LR_STAGE/named-subjects"
                 if [ "$_ns" -eq 0 ]; then
                   emit STILL-LIVE "$label" "verify sh: still reproduces at theirs ($TV) — falsifiability NOT checked (this receipt names no path-shaped subject this can see, so there was nothing to look up in the derived consumer→core table), so a receipt that can only ever read the consumer's installed copy would not have been caught here"
                 elif [ -n "$_up" ]; then
@@ -2113,7 +2175,16 @@ EOF
         126|127)
           emit NEEDS-REVIEW "$label" "unresolved: the receipt exited $sh_rc (command not found / not executable), which is what a RENAMED or DELETED subject looks like — not a fix. A close here would record an absorption that never happened. Re-anchor the receipt at the subject's current path, then re-run. If the subject really is gone, say so in the entry rather than letting the exit status say it." ;;
         *)
+          # THE STAGING DIRECTORY IS MADE HERE, IN THIS SHELL, because the reader runs inside `$( )`.
+          # A failed split is status 3 from the reader and a refusal of the run: an empty list is
+          # the every-path-exists answer, and the next line would turn it into a CLOSE-CANDIDATE.
+          lr_stage_ready || lr_refuse "a staging directory could not be created, so the paths $label's sh receipt names could not be checked"
+          # The assignment stays one line on its own (the fixture's mutation-subject mutant anchors
+          # on it); its status is the substitution's, read on the next line.
           _gone="$(receipt_absent_subjects "$rest")"
+          _gone_rc=$?
+          [ "$_gone_rc" -eq 0 ] \
+            || lr_refuse "the path tokens of $label's sh receipt could not be split (receipt_absent_subjects returned $_gone_rc), so a missing subject would read as a fix"
           if [ -n "$_gone" ]; then
             emit NEEDS-REVIEW "$label" "unresolved: the receipt exited $sh_rc, but consumer-relative path(s) it names DO NOT EXIST:${_gone}. A receipt whose subject is missing exits non-zero for the ABSENCE, and that is indistinguishable from exiting non-zero because the defect is gone — so this status cannot be read as 'fixed'. Re-anchor it at the subject's current path and re-run. Measured on this ledger: an artifact-path migration moved one subject and the entry proposed closing a defect that still reproduced at the new path. (This detail states no mechanism the receipt was checked for: an earlier version asserted an \`&&\` chain short-circuiting, and the receipts it was shown against used \`;\` and explicit exit guards.)"
           else

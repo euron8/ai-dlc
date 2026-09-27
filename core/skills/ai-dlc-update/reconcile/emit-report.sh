@@ -894,9 +894,30 @@ echo "  what the detectors render now. Re-render with emit-report.sh and re-emit
 # GONE when only its padded copy is missing while the other copy still renders. Measured: a
 # still-rendered blocker and a genuinely resolved one were indistinguishable that way. So both
 # sides are whitespace-normalised and made unique first, and every count below is over sets.
+#
+# BOTH NORMALISED SIDES ARE STAGED, EACH WITH ITS STATUS READ, and the set difference is taken
+# only over two files that were written. As `comm <(… | norm_rows) <(… | norm_rows)` a failed
+# side was an EMPTY side: a failed `want` side left every approved row "only in the report", so
+# every HARD row read as resolved and the run exited 3 -- BLOCKERS-RESOLVED, the one cause that
+# tells the operator the difference is safe. Measured with a PATH stub failing `sed`. A side that
+# could not be computed now decides the cause itself (UNDECIDED, exit 1, below): the mismatch is
+# already established above, so this is never a pass -- only the diagnosis is withheld.
 norm_rows() { sed -E 's/[[:space:]]+/ /g' | LC_ALL=C sort -u; }
-only_render="$(LC_ALL=C comm -23 <(printf '%s\n' "$want" | norm_rows) <(printf '%s\n' "$got" | norm_rows))"
-only_report="$(LC_ALL=C comm -13 <(printf '%s\n' "$want" | norm_rows) <(printf '%s\n' "$got" | norm_rows))"
+er_sets_why=""
+only_render=""; only_report=""
+if [ -z "$_er_tmp" ]; then
+  er_sets_why="no staging directory could be created"
+elif ! printf '%s\n' "$want" > "$_er_tmp/sets.want" || ! printf '%s\n' "$got" > "$_er_tmp/sets.got"; then
+  er_sets_why="the two regions could not be staged"
+elif ! norm_rows < "$_er_tmp/sets.want" > "$_er_tmp/sets.want-rows"; then
+  er_sets_why="normalising the fresh render's rows failed"
+elif ! norm_rows < "$_er_tmp/sets.got" > "$_er_tmp/sets.got-rows"; then
+  er_sets_why="normalising the approved report's rows failed"
+elif ! only_render="$(LC_ALL=C comm -23 "$_er_tmp/sets.want-rows" "$_er_tmp/sets.got-rows")" \
+     || ! only_report="$(LC_ALL=C comm -13 "$_er_tmp/sets.want-rows" "$_er_tmp/sets.got-rows")"; then
+  er_sets_why="the set difference (comm) failed"
+  only_render=""; only_report=""
+fi
 # `_base_`/`_theirs_` ONLY here. The `_stamp_` line is rendered from the CONSUMER's stamp and
 # moves when the consumer re-stamps, not when upstream does; keyed with these it made a moved
 # stamp read as "upstream moved" with both disjuncts false, and dropped from the key altogether
@@ -933,6 +954,9 @@ if [ "$refs_render" != "$refs_report" ]; then
 elif [ "$stamp_render" != "$stamp_report" ]; then
   cause=STAMP-MOVED
   echo "  cause: STAMP-MOVED — the consumer's stamp (.claude/.ai-dlc-version commit:) changed since this report was rendered: an apply of this range already moved this tree (apply.sh decides that case from the stamp), or the stamp was edited by hand. The region is not comparable until the base is re-derived from the stamp as it now stands; re-run the dry run rather than re-approving this report. Beside the stamp, the fresh render carries ${hard_new} HARD-* row(s) the approved region lacks and lacks ${hard_gone} it carries." >&2
+elif [ -n "$er_sets_why" ]; then
+  cause=UNDECIDED
+  echo "  cause: UNDECIDED — the region does not match, but which rows differ could not be computed (${er_sets_why}), so no HARD-* row can be called resolved or new. Re-run --verify once the fault is gone; do not re-approve on this run's reading." >&2
 elif [ "$hard_gone" -gt 0 ] && [ "$hard_new" -eq 0 ] && [ "$refused_new" -eq 0 ]; then
   cause=BLOCKERS-RESOLVED
   echo "  cause: BLOCKERS-RESOLVED — ${hard_gone} HARD-* row(s) in the approved region no longer render, no HARD-* row is new, and the refs are unchanged: the blockers were resolved after this report was rendered (or the report carries a HARD row that never rendered; either way the approval saw more than exists). The fresh render carries ${other_new} finding row(s) the approval has not seen (listed below as unseen:, boilerplate excluded); re-render the region from the tree as it now stands and re-approve it reading them." >&2
