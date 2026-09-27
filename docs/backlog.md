@@ -4604,3 +4604,42 @@ which covers a non-repo tree and an empty pathspec. Scored in fresh `mktemp` tre
 - **9** in a non-repo tree and in a tree with no `core/`.
 
 verify: sh git grep -qF 'pipefail' -- 'core/*.sh' ':(exclude)core/fixtures/**' || exit 9; A='{ l = $0; sub(/^[^:]*:[0-9]+:/, "", l); if (l ~ /^[[:blank:]]*#/) next; if (l ~ /^[[:blank:]]*echo /) next; if (l ~ /\047<\(/) next; n++ } END { print n + 0 }'; p="$(printf '%s\n' 'x.sh:1:  done < <(find . -type f | sort)' 'x.sh:2:  r="$(comm -23 <(printf x) <(printf y))"' "x.sh:3:RE='<([^>]*-)?id>'" 'x.sh:4:  # was <(norm)' 'x.sh:5:  echo "full: diff <(git show)"' | awk "$A")"; [ "$p" = 2 ] || exit 9; n="$(git grep -nE '<\(' -- 'core/*.sh' ':(exclude)core/fixtures/**' | awk "$A")"; [ -n "$n" ] || exit 9; [ "$n" -eq 0 ]
+
+## BL-349 — `validate-h2-attestation.sh --verify` reads only the START of the verdict cell, and only the first verdict column
+
+**NOTE.** Found by the batch 162 tip adversary at `2f074fe5`. The verdict test is "the cell begins
+`PASS`", so `PASS (FAILED on re-drive)`, `PASSED? no`, `PASS→FAIL`, `PASS/FAIL` and `PASS~~` each
+verify under a `| Check | Result | Evidence |` header, at 0.648.0 as well. And the first header
+column matching Result, Verdict, Status or Outcome wins, so `| Result | Status |` holding
+`PASS | FAIL` verifies. The consumer's 55 span-carrying table rows at `e06783e14` have no failure
+word after a leading PASS, and its one two-verdict-column row is not granted. Anchoring the cell's
+end would refuse the consumer's real `PASS — \`H2_ATTESTED …\`` rows, so there is no one-line fix.
+
+verify: manual
+
+## BL-350 — a later revocation does not revoke an earlier H2 attestation
+
+**NOTE.** Found by the batch 162 tip adversary. A column-1 span followed later in the log by a
+`VOIDED` row carrying the same span, or by a sentence saying the attestation above is void, still
+exits 0, because any accepted placement grants. 0.648.0 behaves the same.
+
+verify: manual
+
+## BL-351 — two refused H2 spans still get the first-gate message
+
+**NOTE.** Found by the batch 162 tip adversary. BSD awk stops reading a line at a NUL, so
+`| H2 | FAIL\0 | \`SPAN\` |` reports "this is the sprint's first gate" (0.648.0 granted it), and
+`SPAN\0 FAILED, do not cite` verifies at both. `_SPAN_` also gets first-gate at both, because `_`
+is a word character in `ATTEST_LOCATE`, where `*SPAN*` is located.
+
+verify: manual
+
+## BL-352 — the `BL-341`, `BL-345` and `BL-348` receipts each accept a non-fix
+
+**NOTE.** Found by the batch 162 tip adversary. The `BL-341` and `BL-345` receipts both exit 0 on
+the 0.648.0 reader plus a whole-log failure-word denylist, which is the vocabulary design
+rejected in `BL-341`; the unmodified 0.648.0 reader exits 1 on both. The `BL-348` receipt counts
+only the `<(` spelling, so rewriting a site as unchecked staged files closes it with the defect
+intact (by inspection, not built). The fixtures, not the receipts, kill the vocabulary reader.
+
+verify: manual

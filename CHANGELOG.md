@@ -84,6 +84,14 @@ the consumer's `_bmad-output/`, 6111 derivations.
   producer that reads as an empty input. The receipt counts them and closes at zero.
 - `BL-346`, `BL-347` (NOTEs): a span in a fenced, indented or HTML-comment block still verifies;
   a tab as decoration is refused.
+- `BL-349`..`BL-352` (NOTEs, from the tip adversary): the verdict cell is read only at its start;
+  a later revocation does not revoke; a NUL or an underscore wrap still reaches the first-gate
+  message; three receipts each accept a non-fix that the fixtures kill.
+
+The tip adversary also found that a column-1 span recording `mechanical=check-17-bypass:FAIL`
+verified, as it did at 0.648.0. The field is now pinned to the value `--attest` emits, so that
+line is located. The `artifact-derivations` fixture now pins each side of the `norm` comparison
+on its own, since dropping only the actual side's check read clean and passed the old receipt.
 
 ## [0.648.0] - 2026-09-27
 
