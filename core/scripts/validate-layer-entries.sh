@@ -565,12 +565,19 @@ bold_anchors_of_file() {
 # branch harvests exactly `H1 H2 AP VH` and nothing else, and the `—` terminator harvests
 # no numeric id at all (control: the numeric branch is unchanged at 171 core matches).
 CHECK_HEAD_RE='^#{2,4}[[:space:]]+(Check[[:space:]]+)?([0-9]+[a-z-]*|[A-Z]{1,3}[0-9]*)[[:space:]]*(\.|—)'
+# The harvesting grep's status is read ALONE and only its 0 or 1 passes, for defined_rules' reason
+# below: a harvest that died must not reach a caller that accepts 1 as "no anchor".
 defined_anchors() {
   [ -f "$1" ] || return 0
-  { grep -Eho "$CHECK_HEAD_RE" "$1" 2>/dev/null \
-      | sed -E 's/^#+[[:space:]]+(Check[[:space:]]+)?//' | sed -E 's/[[:space:]]*(\.|—)$//'
-    bold_anchors_of_file "$1"
-  } | sort -u
+  local _raw _ids="" _bold _rc=0
+  _raw="$(grep -Eho "$CHECK_HEAD_RE" "$1" 2>/dev/null)" || _rc=$?
+  [ "$_rc" -le 1 ] || return "$_rc"
+  if [ -n "$_raw" ]; then
+    _ids="$(printf '%s\n' "$_raw" \
+      | sed -E 's/^#+[[:space:]]+(Check[[:space:]]+)?//' | sed -E 's/[[:space:]]*(\.|—)$//')" || return
+  fi
+  _bold="$(bold_anchors_of_file "$1")" || return
+  printf '%s\n%s\n' "$_ids" "$_bold" | sed '/^$/d' | sort -u
 }
 
 # Normalized heading TEXT for one anchor. A shared NUMBER is not a shared check:
@@ -666,11 +673,20 @@ anchor_form() { # anchor_form <file> <id> -> the id carrying the terminator its 
 # with no remedy, forever.
 RULE_RE='^#{2,4}[[:space:]]+Rule[[:space:]]+([0-9]+[a-z]*)[[:space:]]*(\[[^]]*\][[:space:]]*)?(--|—|:)'
 
+# Its status separates "no rule" from "could not read": the harvesting grep's own status is
+# read, and only its 0 or 1 passes. It used to end in `grep -E '.'`, so under pipefail a harvest
+# that DIED (2) presented as that later grep's 1 on empty input -- the status vle_stage accepts
+# as "no match" -- and E15 reported clean on a file it never read. The stages after the harvest
+# have no healthy non-zero exit, so any failure of theirs is returned too; an empty result is 0.
 defined_rules() { # defined_rules <file> -> rule numbers, one per line
   [ -f "$1" ] || return 0
-  grep -Eho "$RULE_RE" "$1" 2>/dev/null \
+  local _raw _rc=0
+  _raw="$(grep -Eho "$RULE_RE" "$1" 2>/dev/null)" || _rc=$?
+  [ "$_rc" -le 1 ] || return "$_rc"
+  [ -n "$_raw" ] || return 0
+  printf '%s\n' "$_raw" \
     | sed -E 's/^#+[[:space:]]+Rule[[:space:]]+//; s/[^0-9a-z].*$//' \
-    | grep -E '.' | sort -u
+    | sed '/^$/d' | sort -u
 }
 
 rule_title() { # rule_title <file> <n>
@@ -2330,15 +2346,42 @@ heading_raw() { # heading_raw <file> <anchor> -> the heading line, unnormalised
 }
 # Provenance tokens carried INSIDE a bracketed or parenthesised segment. See the header for
 # why the uppercase-and-digit filter is load-bearing rather than cosmetic.
+#
+# EACH GREP'S STATUS IS READ ON ITS OWN, and a 1 from one stage is an EMPTY result, never a
+# pass-through. The first versions were one pipeline each and their caller accepted 0 or 1: under
+# pipefail a first-stage grep that DIED (2) handed the next grep empty input, that grep's 1 became
+# the pipeline's status, and the dead read was accepted as "no provenance token". Now 0 or 1 from
+# every stage is healthy (1 ends the chain with an empty set, status 0) and anything else returns.
+tok_chain() { # tok_chain <text> <grep-args>... -- one grep over the text; empty set on its 1
+  local _in="$1" _out _rc=0
+  shift
+  _out="$(printf '%s\n' "$_in" | grep "$@" 2>/dev/null)" || _rc=$?
+  [ "$_rc" -le 1 ] || return "$_rc"
+  [ "$_rc" -eq 0 ] && printf '%s\n' "$_out"
+  return 0
+}
+tok_tail() { # tok_tail <text> -- the shared uppercase-and-digit, length >= 3 filter
+  local _t _rc
+  _t="$(tok_chain "$1" -E '[A-Z]')" || return
+  [ -n "$_t" ] || return 0
+  _t="$(tok_chain "$_t" -E '[0-9]')" || return
+  [ -n "$_t" ] || return 0
+  printf '%s\n' "$_t" | awk 'length($0) >= 3' | sort -u
+}
 prov_tokens() {
-  printf '%s\n' "$1" | grep -oE '\[[^]]*\]|\([^)]*\)' 2>/dev/null \
-    | grep -oE '[A-Za-z0-9]+(-[A-Za-z0-9]+)*' 2>/dev/null \
-    | grep -E '[A-Z]' | grep -E '[0-9]' | awk 'length($0) >= 3' | sort -u
+  local _t
+  _t="$(tok_chain "$1" -oE '\[[^]]*\]|\([^)]*\)')" || return
+  [ -n "$_t" ] || return 0
+  _t="$(tok_chain "$_t" -oE '[A-Za-z0-9]+(-[A-Za-z0-9]+)*')" || return
+  [ -n "$_t" ] || return 0
+  tok_tail "$_t"
 }
 # The same token grammar over a whole line, with no segment restriction: the citing side.
 line_tokens() {
-  printf '%s\n' "$1" | grep -oE '[A-Za-z0-9]+(-[A-Za-z0-9]+)*' 2>/dev/null \
-    | grep -E '[A-Z]' | grep -E '[0-9]' | awk 'length($0) >= 3' | sort -u
+  local _t
+  _t="$(tok_chain "$1" -oE '[A-Za-z0-9]+(-[A-Za-z0-9]+)*')" || return
+  [ -n "$_t" ] || return 0
+  tok_tail "$_t"
 }
 
 CONSUMER_LAYER_FILES="$( { layer_files "$EXT_DIR"; layer_files "$OVR_DIR"; } 2>/dev/null | sort -u )"

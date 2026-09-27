@@ -4458,6 +4458,12 @@ is a FUNCTION whose body is a PIPELINE reads the wrong stage's status:
 Close only when those refuse, forced, and a sweep of every staged function in the 22 files finds no
 other instance.
 
+**v0.652.0 fixes all three, and four more the sweep found.** `lib.sh`'s `section_of` returned
+`rm`'s status, `retired-layer-contract.sh`'s `shapes_of` and `tokens_of` read a dead
+`grep || true` as empty, and `layer-drift.sh`'s `sup_measure` read a dead `grep -Fxv` as a clean
+count. Each site now reads its first fallible stage alone, and `procsub-staged-refusal` forces all
+seven at 0.650.0.
+
 verify: sh git grep -qF 'pipefail' -- 'core/*.sh' ':(exclude)core/fixtures/**' || exit 9; A='{ l = $0; sub(/^[^:]*:[0-9]+:/, "", l); if (l ~ /^[[:blank:]]*#/) next; if (l ~ /^[[:blank:]]*echo /) next; if (l ~ /\047<\(/) next; n++ } END { print n + 0 }'; p="$(printf '%s\n' 'x.sh:1:  done < <(find . -type f | sort)' 'x.sh:2:  r="$(comm -23 <(printf x) <(printf y))"' "x.sh:3:RE='<([^>]*-)?id>'" 'x.sh:4:  # was <(norm)' 'x.sh:5:  echo "full: diff <(git show)"' | awk "$A")"; [ "$p" = 2 ] || exit 9; n="$(git grep -nE '<\(' -- 'core/*.sh' ':(exclude)core/fixtures/**' | awk "$A")"; [ -n "$n" ] || exit 9; [ "$n" -eq 0 ]
 
 ## BL-349 — `validate-h2-attestation.sh --verify` reads only the START of the verdict cell, and only the first verdict column

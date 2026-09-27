@@ -1424,7 +1424,12 @@ while IFS= read -r f; do
         # write returns 3 and the caller refuses; an unread pattern file matched nothing and
         # reported every line of the entry as surplus.
         printf '%s\n' "$cs" > "$LD_T/sup-core-span" || return 3
-        on="$(printf '%s\n' "$es" | grep -v '^[[:space:]]*$' | grep -Fxv -f "$LD_T/sup-core-span" | grep -c .)"
+        # EVERY STAGE'S STATUS IS READ, because pipefail reports the RIGHTMOST non-zero one: a
+        # `grep -Fxv` that died (2) left the count grep reading nothing and exiting 1, and that 1
+        # was the pipeline's status -- so the row said "0 of yours appear nowhere in core", the
+        # measurement telling the operator this action drops nothing. Each grep's 1 is healthy.
+        on="$(printf '%s\n' "$es" | grep -v '^[[:space:]]*$' | grep -Fxv -f "$LD_T/sup-core-span" | grep -c .
+              for _ps in "${PIPESTATUS[@]}"; do [ "$_ps" -le 1 ] || exit 3; done)" || return 3
         printf '%s' "MEASURED: your span under that anchor is ${en} non-blank line(s) against core's ${cn} at ${base_sha}, and ${on} of yours appear nowhere in core's -- that is what this action drops out of the rendered rulebook. If those lines are yours and you still want them, the answer is \`still-additive\` with a reason, not a narrowing you undo next sprint."
       }
       sup_surplus="$(sup_measure "$sup_raw")" || ld_refuse "staging core's span for the surplus measure of ${entry}" "$?"

@@ -347,7 +347,7 @@ mk_mutant w12-tag-off \
 # citation nothing is wrong with. This is the measured false positive, armed as a mutant so
 # the filter cannot be simplified back out.
 mk_mutant w12-token-loose \
-  "s/\\| grep -E '\\[A-Z\\]' \\| grep -E '\\[0-9\\]'/| grep -E '[0-9]'/" \
+  's/_t="\$\(tok_chain "\$1" -E .\[A-Z\].\)" \|\| return/_t="$1"/' \
   "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- hk61=- hk62=W hk64=W hk65=W apform=OK dotform=OK $W9WANT w12t26=W w12g24=W w12q17=- w12w19b=- w12x34=- w12n8=- w12p20=W w12amb=2 w12stem=A w12x26amb=A w12note=N w12self=W w12shadow5=- w12wrap21=- w12sect23=-"
 
 # M13 — accept a bare `gate-validation` stem as a core qualifier, which is the signal the

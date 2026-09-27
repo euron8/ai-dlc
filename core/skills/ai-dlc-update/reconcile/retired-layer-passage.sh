@@ -58,6 +58,12 @@
 #   2  a producer this detector reads did not run -- a refusal, never a finding or a clean
 
 set -u
+# EVERY TEXT STAGE BELOW RUNS UNDER `LC_ALL=C`, byte-wise, as its sibling retired-layer-token.sh
+# does. Under a UTF-8 locale BSD `sed` exits 1 on one byte that is not valid UTF-8 -- a Latin-1 `é`
+# in a layer file -- so normalising that file failed and it read as carrying no retired line. Both
+# sides of the comparison (the deleted core lines and the layer lines) go through the same C-locale
+# stages, so the locale cannot manufacture a difference between them. The layer WALK's sort is left
+# in the caller's locale: it sets the row order, and C collation would reorder the report.
 
 DIST="${1:?usage: retired-layer-passage.sh <dist> <base> <theirs> <consumer>}"
 BASE="${2:?}"
@@ -85,12 +91,27 @@ fi
 # shellcheck source=/dev/null
 . "$SELF/lib.sh"
 
-# Structural lines are excluded: a heading, a table row, and a fence carry no directive and
-# collide across unrelated files. These three exclusions are load-bearing to the measured
-# empty false-positive set; the word-count floor is not, and is deliberately absent.
-drop_structural() { grep -vE '^(#|\||```|$)' || true; }
+# EVERY STAGE BELOW IS STAGED TO A FILE AND ITS STATUS IS READ, the deleted-line side as much as
+# the layer side. This file does not set `pipefail`, so a pipeline reports its LAST stage: the
+# deleted-line set used to be one pipeline ending in `sort -u`, and a normalisation or filter that
+# died upstream of it read as "this release deleted no comparable line" -- the quiet NOTE below,
+# exit 0, no layer file opened. A producer that did not run exits 2, which emit-report.sh renders
+# as DETECTOR-REFUSED. One directory per run; the needle file lives in it, so this is the file's
+# only trap.
+RLP_T="$(mktemp -d "${TMPDIR:-/tmp}/retired-layer-passage.XXXXXX")" || {
+  echo "retired-layer-passage: the staging directory did not run (mktemp failed); no verdict" >&2
+  exit 2
+}
+trap 'rm -rf "$RLP_T"' EXIT
+rlp_refuse() { # rlp_refuse <what> <status>
+  echo "retired-layer-passage: $1 did not run (exit $2); no verdict" >&2
+  exit 2
+}
 
-# Every line core DELETED between base and theirs, across the declared rulebook.
+# The raw text of every line core DELETED between base and theirs, across the declared rulebook:
+# a `-` line of the diff that is not its `---` header, the `-` stripped. Returns the status of the
+# first extraction that failed. git's own status is NOT read: an unresolvable ref has always read
+# as a release that deleted nothing, and that NOTE says in words that no layer file was opened.
 #
 # `set -f` IS LOAD-BEARING. The rulebook entries are git PATHSPECS (`steps/*.md`), and an
 # unquoted expansion in `for` is subject to shell pathname expansion first — so when the
@@ -98,19 +119,32 @@ drop_structural() { grep -vE '^(#|\||```|$)' || true; }
 # paths from the WRONG tree and git then diffs paths the target repo may not have. It
 # fails by reporting nothing, which is the failure mode this whole detector exists to
 # refuse. Caught by the fixture, whose seeded repo does not share the caller's layout.
-removed_lines() {
-  local glob
+removed_raw() {
+  local glob rc=0 st
   set -f
   for glob in $GLOBS; do
     git -C "$DIST" diff "$BASE" "$THEIRS" -- "$glob" 2>/dev/null \
-      | { grep -E '^-' || true; } \
-      | { grep -vE '^---' || true; } \
-      | sed -E 's/^-//'
-  done | { set +f; norm_lines | drop_structural | sed '/^$/d' | sort -u; }
+      | LC_ALL=C sed -n -e '/^---/d' -e 's/^-//p'
+    st="${PIPESTATUS[1]}"
+    [ "$st" -eq 0 ] || [ "$rc" -ne 0 ] || rc="$st"
+  done
   set +f
+  return "$rc"
 }
-
-REMOVED="$(removed_lines)"
+_rlp_rc=0
+removed_raw > "$RLP_T/removed-raw" || _rlp_rc=$?
+[ "$_rlp_rc" -eq 0 ] || rlp_refuse "extracting the deleted rulebook lines" "$_rlp_rc"
+# norm_lines' status is its FIRST failed stage's (lib.sh), not its last stage's.
+norm_lines < "$RLP_T/removed-raw" > "$RLP_T/removed-norm" || _rlp_rc=$?
+[ "$_rlp_rc" -eq 0 ] || rlp_refuse "normalising the deleted rulebook lines" "$_rlp_rc"
+# Structural lines are excluded: a heading, a table row, and a fence carry no directive and
+# collide across unrelated files. These three exclusions are load-bearing to the measured
+# empty false-positive set; the word-count floor is not, and is deliberately absent. Blank
+# lines go with them. grep's 1 is a deleted set that was all structure, which is healthy.
+LC_ALL=C grep -vE '^(#|\||```|$)' "$RLP_T/removed-norm" > "$RLP_T/removed-kept" || _rlp_rc=$?
+case "$_rlp_rc" in 0|1) _rlp_rc=0 ;; *) rlp_refuse "filtering the deleted rulebook lines" "$_rlp_rc" ;; esac
+sort -u "$RLP_T/removed-kept" > "$RLP_T/removed" || rlp_refuse "sorting the deleted rulebook lines" "$?"
+REMOVED="$(cat "$RLP_T/removed")" || rlp_refuse "reading the deleted rulebook lines" "$?"
 
 # A ZERO THAT NEVER OPENED A FILE MUST NOT READ LIKE A ZERO THAT SCANNED EVERYTHING.
 # This is the defect its sibling shipped for nine releases and 0.359.0 repaired: the
@@ -138,18 +172,7 @@ rows=""
 # EVERY LOOP FEED IS STAGED TO A FILE AND ITS PRODUCER'S STATUS IS READ. The two loops below
 # used to read `done < <(…)`, which discards the status: a layer walk that failed read as an
 # empty directory, `scanned` stayed 0, and the run printed its "no match" NOTE and exited 0 --
-# a false clear. This file does not set `pipefail`, so each fallible stage is staged ALONE. A
-# producer that did not run exits 2, which emit-report.sh renders as DETECTOR-REFUSED.
-# The needle file lives in the same one directory, so this is still the file's only trap.
-RLP_T="$(mktemp -d "${TMPDIR:-/tmp}/retired-layer-passage.XXXXXX")" || {
-  echo "retired-layer-passage: the staging directory did not run (mktemp failed); no verdict" >&2
-  exit 2
-}
-trap 'rm -rf "$RLP_T"' EXIT
-rlp_refuse() { # rlp_refuse <what> <status>
-  echo "retired-layer-passage: $1 did not run (exit $2); no verdict" >&2
-  exit 2
-}
+# a false clear. Each fallible stage is staged ALONE, into the directory made above.
 NEEDLES="$RLP_T/needles"
 printf '%s\n' "$REMOVED" > "$NEEDLES" || rlp_refuse "staging the retired line set" "$?"
 
@@ -163,10 +186,11 @@ for dir in overrides extensions; do
     [ -n "$f" ] || continue
     scanned=$((scanned + 1))
     # norm_lines staged alone, then grep over it: grep's 1 is a file carrying no retired line.
+    # norm_lines' status is its FIRST failed stage's (lib.sh), not its last stage's.
     _rlp_rc=0
     norm_lines < "$f" > "$RLP_T/layer-norm" || _rlp_rc=$?
     [ "$_rlp_rc" -eq 0 ] || rlp_refuse "normalising ${f#"$CONSUMER"/}" "$_rlp_rc"
-    grep -nxF -f "$NEEDLES" "$RLP_T/layer-norm" > "$RLP_T/layer-hits" || _rlp_rc=$?
+    LC_ALL=C grep -nxF -f "$NEEDLES" "$RLP_T/layer-norm" > "$RLP_T/layer-hits" || _rlp_rc=$?
     case "$_rlp_rc" in 0|1) ;; *) rlp_refuse "the retired-line match over ${f#"$CONSUMER"/}" "$_rlp_rc" ;; esac
     while IFS= read -r hit; do
       [ -n "$hit" ] || continue

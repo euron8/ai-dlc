@@ -267,7 +267,7 @@ fi
 # EXTENSION-OK verdicts are earned by the span comparison rather than defaulted into.
 # It lands in lib.sh's section_of(), which is byte-identical to the authoring linter's
 # under I40 — mutating a throwaway copy does not touch that binding.
-if m="$(mk_mutant m4-span-is-file lib.sh 's|^  \[ -n "[$]_s" \] && sed -n .*|  [ -n "$_s" ] \&\& cat "$_t"|')"; then
+if m="$(mk_mutant m4-span-is-file lib.sh 's|^  if \[ "[$]_rc" -eq 0 \] && \[ -n "[$]_s" \]; then LC_ALL=C sed -n .*|  if [ "$_rc" -eq 0 ] \&\& [ -n "$_s" ]; then cat "$_t" \|\| _rc=$?; fi|')"; then
   expect m4-span-is-file \
     "with the declared span widened back to the whole file, both EXTENSION-OK cells become ANCHOR-DRIFT — the quiet verdicts are produced by comparing the anchor's own bytes, not by the presence of an extends: line" \
     "$m" \

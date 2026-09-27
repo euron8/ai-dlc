@@ -15,6 +15,57 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.652.0] - 2026-09-27
+
+A staged producer that is a function whose body is a pipeline now reports its first failed
+stage, so three false clears that survived 0.650.0 refuse. This closes `BL-348`.
+
+### A staged function reads the status of the stage that failed (`BL-348`)
+
+0.650.0 staged each `<( )` producer and read its status, but where the producer was a FUNCTION
+whose body is a PIPELINE the status came from the wrong stage. Without `pipefail` it was the last
+stage's. With it, a failed FIRST stage presented as a later `grep`'s exit 1 on the empty input it
+left, which the caller accepts as "no match". Forced at 0.650.0 with PATH stubs, and all equally
+present before it:
+
+- `retired-layer-passage.sh` staged `norm_lines` (`sed | tr`) in a file without `pipefail`. A
+  failed `sed` read "no match", exit 0. One Latin-1 byte in a layer file triggered it with no stub,
+  because BSD `sed` exits 1 on an invalid byte under the default UTF-8 locale.
+- `validate-layer-entries.sh`'s `defined_rules` accepted `grep -E '.'`'s 1 after a failed harvest:
+  an ERROR E15 run, exit 1, read "0 error(s)", exit 0. That flips the consumer pre-push gate.
+  `defined_anchors`, `prov_tokens` and `line_tokens` had the same shape.
+- The `retired-tokens.sh` and `retired-layer-token.sh` token helpers accepted the second `grep`'s 1
+  after a failed comment filter, losing a retired-token row.
+
+A sweep of every staged function in the 18 files and the `lib.sh` helpers found four more:
+`lib.sh`'s `section_of` returned `rm`'s status, `retired-layer-contract.sh`'s `shapes_of` and
+`tokens_of` read a dead `grep || true` as empty, and `layer-drift.sh`'s `sup_measure` read a dead
+`grep -Fxv` as "0 of yours appear nowhere in core".
+
+What changed:
+
+- Each site reads its first fallible stage on its own and accepts only that stage's healthy codes.
+  `norm_lines` and `section_of` return the first failed stage's status from `PIPESTATUS`. No file
+  gains `pipefail`.
+- `norm_lines`, `span_of` and the section slice run byte-wise under `LC_ALL=C`, scoped to those
+  text stages. A Latin-1 layer file is now read and flagged rather than refused. The layer walk's
+  `sort` keeps the caller's locale: a script-wide `LC_ALL=C` reordered 27 rows of
+  `retired-layer-passage.sh`'s report on a real consumer range, and was withdrawn.
+- Every caller of `norm_lines` and `section_of` was read. None runs under `set -e`, and no healthy
+  input newly fails: the one input that newly returned non-zero was the Latin-1 byte, which now
+  reads correctly.
+
+Measured on a `file://` clone of the reference consumer, engine 0.651.0 against this release: 41
+comparisons across the retired detectors, `layer-drift.sh`, `unregistered-drift.sh`,
+`preclassify.sh`, `ledger-reverify.sh`, `emit-report.sh` render and `--verify`,
+`readopt-override.sh --check` on all 10 overrides and `validate-layer-entries.sh`, over three
+ranges, are byte-identical. The consumer's installed self-update gate reads `SELF-UPDATE-OK`. No
+file the consumer's `retired-layer-passage.sh` walks carries an invalid UTF-8 byte today.
+
+`procsub-staged-refusal` gains 16 forced arms, each failing at 0.650.0, including a Latin-1 arm
+with no stub, and 13 mutants that restore a site's 0.650.0 spelling, two of them built in a copy
+of the whole reconcile directory. It kills all 41 of its mutants.
+
 ## [0.651.0] - 2026-09-27
 
 The four bootstrapping reconcile scripts stop reading a failed producer as an empty input. This
