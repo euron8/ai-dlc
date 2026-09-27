@@ -831,8 +831,27 @@ if [ -n "$R1_GV_THEIRS" ] && [ -n "$R1_GV_OURS" ]; then
   if [ -z "$r1_theirs" ] || [ -z "$r1_ours" ]; then
     emit SELF-UPDATE-UNDECIDED "gate-validation.md" "could not parse CHECK_LOADED anchors from one side (theirs=$(grep -c . <<<"$r1_theirs"), ours=$(grep -c . <<<"$r1_ours")). An empty anchor set compares equal to nothing, so this must not read as agreement."
   else
-    r1_missing="$(comm -23 <(printf '%s\n' "$r1_theirs") <(printf '%s\n' "$r1_ours") | tr '\n' ' ' | sed 's/ *$//')"
-    if [ -n "$r1_missing" ]; then
+    # STAGED, NOT `comm <( ) <( )`. A side that failed to materialise was an EMPTY side: an empty
+    # `theirs` set leaves nothing missing, so the arm read as agreement and the gate went on to OK
+    # a slice whose map needs an anchor the consumer lacks. Each side is written to its own file
+    # under the run's `$TMP` with its status read; a failure is UNDECIDED, which step 2 treats as
+    # DEFER. The `r1_missing=` line stays one assignment (self-update-join-gate's mutant A anchors
+    # on it); `r1_rc` carries the pipeline's status under this file's `pipefail`.
+    # A missing side file makes `comm` itself fail, so the staging and the difference share one
+    # status check and there is exactly one `r1_missing=` assignment in the file.
+    r1_why=""
+    if [ -z "${TMP:-}" ] || [ ! -d "$TMP" ]; then
+      r1_why="no staging directory exists for this run"
+    elif ! printf '%s\n' "$r1_theirs" > "$TMP/r1-theirs" || ! printf '%s\n' "$r1_ours" > "$TMP/r1-ours"; then
+      r1_why="the two anchor sets could not be staged"
+    fi
+    r1_missing="$(comm -23 "$TMP/r1-theirs" "$TMP/r1-ours" | tr '\n' ' ' | sed 's/ *$//')"
+    r1_rc=$?
+    [ -n "$r1_why" ] || [ "$r1_rc" -eq 0 ] || r1_why="the set difference exited $r1_rc"
+    if [ -n "$r1_why" ]; then
+      emit SELF-UPDATE-UNDECIDED "gate-validation.md" "the CHECK_LOADED anchor sets were parsed, but which of the incoming map's anchors the consumer lacks could not be computed (${r1_why}). An uncomputed difference reads as no difference, so this must not read as agreement."
+      deferred_join=1
+    elif [ -n "$r1_missing" ]; then
       emit SELF-UPDATE-DEFER "enforcement-map.yaml" "the incoming map declares check(s) [$r1_missing] whose CHECK_LOADED anchor lives in steps/gate-validation.md -- RULEBOOK, which step 2 excludes. Installing the map without it leaves validate-enforcement-map.sh failing on the consumer's own tree, and every fixture that drives it red. Machinery and rulebook must land together: fold the slice into the gated apply."
       deferred_join=1
     fi
@@ -1100,7 +1119,33 @@ if [ -z "$CHANGED" ]; then
   exit 0
 fi
 
-GATING="$(printf '%s\n' "$INVOKED" | grep -Fxf <(printf '%s\n' "$CHANGED") 2>/dev/null || true)"
+# THE PATTERN FILE IS STAGED AND grep's STATUS IS READ, NOT SWALLOWED. This was
+# `grep -Fxf <(printf … "$CHANGED") 2>/dev/null || true`: a pattern file that failed to
+# materialise matched nothing, and `|| true` took grep's own 2 ("could not read") as the same
+# empty answer as its 1 ("no match") -- so GATING came back empty and the arm below emitted
+# SELF-UPDATE-OK, sending step 2 to push a slice that replaces a script its own hook runs.
+# Measured with a PATH stub making `grep` exit 2. Accepted statuses, in code: 0 matches, 1 no
+# match (a real empty set); anything else is UNDECIDED. Both inputs are staged FILES: not a pipe,
+# so no writer can take an EPIPE if grep stops reading early, and not a here-string, which bash
+# 3.2 writes to a temp file of its own whose failed write is silent.
+gating_why=""
+GATING=""
+if [ -z "${TMP:-}" ] || [ ! -d "$TMP" ]; then
+  gating_why="no staging directory exists for this run"
+elif ! printf '%s\n' "$CHANGED" > "$TMP/gating-changed" || ! printf '%s\n' "$INVOKED" > "$TMP/gating-invoked"; then
+  gating_why="the changed-script and invoked-script sets could not be staged"
+else
+  GATING="$(grep -Fxf "$TMP/gating-changed" "$TMP/gating-invoked" 2>/dev/null)"
+  gating_rc=$?
+  case "$gating_rc" in
+    0|1) ;;
+    *) gating_why="grep exited $gating_rc"; GATING="" ;;
+  esac
+fi
+if [ -n "$gating_why" ]; then
+  emit SELF-UPDATE-UNDECIDED "-" "the slice changes $(printf '%s\n' "$CHANGED" | grep -c .) core script(s), but which of them the consumer's pre-push invokes could not be computed (${gating_why}). An uncomputed intersection reads as an empty one, which is the OK this gate exists to withhold; treat as DEFER and re-run."
+  exit 0
+fi
 
 if [ -z "$GATING" ]; then
   emit SELF-UPDATE-OK "-" "the slice changes $(printf '%s\n' "$CHANGED" | grep -c .) core script(s), none of which the consumer's pre-push invokes, so the self-update cannot install something that blocks its own push."
