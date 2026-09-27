@@ -15,6 +15,47 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.648.0] - 2026-09-27
+
+`validate-h2-attestation.sh --verify` no longer tells a sprint that attested H2 that this is its
+first gate. When the gate log carries the attestation only inside a bullet or a sentence,
+`--verify` still refuses it, and now names the line and says how to re-record it. Which
+attestations verify is unchanged.
+
+### `PC-S314-H2-ATTESTATION-PLACEMENT-GRAIN-REJECTS-THE-STEP-FILES-OWN-STYLE` — `--verify` locates a quoted attestation instead of calling it the first gate (`BL-340`)
+
+The consumer's gate log records its checks as bullets, and its lead transcribed the `--attest`
+output into one: a code span followed by `; item 1 recursion guard fires …`. Both `--verify`
+arms refused it, correctly, because the span is followed by prose. The script then fell through
+to `RE-DRIVE: no H2 attestation for sprint 314 — this is the sprint's first gate.` The CHANGED
+arm has the same tail, so a quoted span at a moved digest got the same wrong message.
+
+- A third refusal branch matches the same lead and the any-digest span without the tail. It
+  grants nothing. It prints `RE-DRIVE: <gate-log>:<line> QUOTES an H2_ATTESTED span …` for the
+  last such line, with the remedy: re-drive `--attest` and append its line on its own line at
+  column 1, nothing before or after it. It exits 1.
+- The `--attest` output and `gate-validation.md` H2 now say the line goes on its own line at
+  column 1, that a bullet, an arrow or trailing prose makes it unverifiable, and that a table
+  log's H2 evidence cell holding only the span is also accepted.
+- The reader grammar and both accepting arms are byte-identical to 0.647.0.
+
+The filing proposed widening the tail to admit a closing backtick. That was measured and not
+taken. Every tail that admits the bullet also admits a FAIL sentence in the same shape. Against
+six constructed FAIL lines, each quoting a live span: backtick then anything grants 5, backtick
+then `;` or a dash grants 4, backtick then `;` grants 3, a bare substring grants 5, and the
+shipped tail grants 0. The script's header records the table.
+
+The consumer needs no pull to proceed. Its log already carries a column-1 attestation at line 142,
+and the shipped script verifies the log at sprint 314 (rc 0).
+
+### Filed, not fixed
+
+- `BL-341`: the table-cell acceptance already grants rows that say the attestation FAILED, for
+  example `` | H2 | core | FAIL | refused, re-drive owed: `SPAN` | ``, and so does a bare line
+  with failure words before a span that ends it. The reader checks only what follows the span.
+  Refusing a failure word earlier in the cell would also refuse genuine records that say the
+  seeded fixture "would correctly FAIL", so the fix is not a one-line guard.
+
 ## [0.647.0] - 2026-09-26
 
 A step 5 report no longer prints `none` for a sample or detector that did not run. Where a
