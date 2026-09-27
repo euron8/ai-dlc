@@ -156,14 +156,23 @@ rulebook_globs() {
 
 # Contract shapes in a body: labelled directives (`- <Label>: `/<directive>`) and
 # `{<token>}` setup placeholders.
+#
+# EACH HARVESTING GREP'S STATUS IS READ ALONE: 0 or 1 is healthy (1 is a body with no shape, an
+# empty set), anything above it is returned. It used to be `{ grep … || true; }`, so a grep that
+# DIED read as a layer file carrying no retired shape -- the row this detector exists to print.
 shapes_of() {   # shapes_of <body>
-  printf '%s\n' "$1" \
-    | { grep -oE -- '- [A-Z][A-Za-z-]*: \\?`/[a-z][a-z-]*' || true; } \
-    | sed -E 's/^- ([A-Za-z-]*): \\?`\/(.*)$/\1:\/\2/' \
-    | sort -u
+  local _h _rc=0
+  _h="$(printf '%s\n' "$1" | grep -oE -- '- [A-Z][A-Za-z-]*: \\?`/[a-z][a-z-]*')" || _rc=$?
+  [ "$_rc" -le 1 ] || return "$_rc"
+  [ -n "$_h" ] || return 0
+  printf '%s\n' "$_h" | sed -E 's/^- ([A-Za-z-]*): \\?`\/(.*)$/\1:\/\2/' | sort -u
 }
 tokens_of() {
-  printf '%s\n' "$1" | { grep -oE '\{[a-z][a-z_]*\}' || true; } | sort -u
+  local _h _rc=0
+  _h="$(printf '%s\n' "$1" | grep -oE '\{[a-z][a-z_]*\}')" || _rc=$?
+  [ "$_rc" -le 1 ] || return "$_rc"
+  [ -n "$_h" ] || return 0
+  printf '%s\n' "$_h" | sort -u
 }
 
 # The rulebook FILE SET at a ref, distribution-spelled. Same globs, same resolution and
@@ -363,7 +372,12 @@ for dir in overrides extensions; do
     scanned=$((scanned + 1))
     body="$(cat "$f" 2>/dev/null || true)"
     [ -n "$body" ] || continue
-    mine="$( { shapes_of "$body"; tokens_of "$body"; } | sort -u )"
+    _rlc_rc=0
+    _sh="$(shapes_of "$body")" || _rlc_rc=$?
+    [ "$_rlc_rc" -eq 0 ] || rlc_refuse "the shape scan of ${f#"$CONSUMER"/}" "$_rlc_rc"
+    _tk="$(tokens_of "$body")" || _rlc_rc=$?
+    [ "$_rlc_rc" -eq 0 ] || rlc_refuse "the token scan of ${f#"$CONSUMER"/}" "$_rlc_rc"
+    mine="$(printf '%s\n%s\n' "$_sh" "$_tk" | sed '/^$/d' | sort -u)"
     printf '%s\n' "$mine" > "$RLC_T/mine" || rlc_refuse "staging the shape set of ${f#"$CONSUMER"/}" "$?"
     _rlc_rc=0
     comm -12 "$RLC_T/retired-shapes" "$RLC_T/mine" > "$RLC_T/mine-retired" || _rlc_rc=$?

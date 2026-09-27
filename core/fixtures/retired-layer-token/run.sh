@@ -321,7 +321,7 @@ SED
 
 # M10 — comment lines no longer stripped from a program.
 cat > "$MUTD/m10.sed" <<'SED'
-s#^  grep -vE .*#  cat | toks#
+s#^  _code="\$(grep -vE .*$#  _code="$(cat)" || _rc=$?#
 SED
 
 # M11 — the theirs-side file list taken from the BASE tree, so a rulebook file created at

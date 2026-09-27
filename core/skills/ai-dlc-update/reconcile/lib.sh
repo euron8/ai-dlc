@@ -71,8 +71,11 @@ AWK
 # needs a section's LINE RANGE (to merge one anchor of a multi-anchor override in place and
 # leave the rest byte-untouched), everything else needs its TEXT. Two functions with two copies
 # of the matcher is how the v0.52.0 and v0.54.2 divergences happened. There is one copy.
+# BYTE-WISE (LC_ALL=C). Under a UTF-8 locale BSD awk aborts on one byte that is not valid UTF-8
+# -- a Latin-1 `é` in a consumer file -- and the section read as absent. nrm() maps every byte
+# outside [a-z0-9] to a space in either locale, so valid UTF-8 resolves identically.
 span_of() { # span_of <heading-text>  < stream   ->  "<start> <end>" 1-indexed inclusive, or nothing
-  awk -v want="$1" "$(nrm_awk)"'
+  LC_ALL=C awk -v want="$1" "$(nrm_awk)"'
     BEGIN { w = nrm(want) }
     /^#{2,6}[ \t]/ {
       match($0, /^#+/); lvl = RLENGTH
@@ -86,13 +89,18 @@ span_of() { # span_of <heading-text>  < stream   ->  "<start> <end>" 1-indexed i
   '
 }
 
+# Its status is the first failed step's. It used to be `rm`'s, so a `span_of` that died -- awk
+# aborts on one byte invalid in the caller's locale -- read as "no such section", status 0, and a
+# caller that staged it and read the status accepted an empty section. A heading that is simply
+# absent is still status 0 with no output.
 section_of() { # section_of <heading-text>  < stream
-  local _t _s
+  local _t _s="" _rc=0
   _t="$(mktemp)" || return 1
-  cat > "$_t"
-  _s="$(span_of "$1" < "$_t")"
-  [ -n "$_s" ] && sed -n "${_s%% *},${_s##* }p" "$_t"
+  cat > "$_t" || _rc=$?
+  if [ "$_rc" -eq 0 ]; then _s="$(span_of "$1" < "$_t")" || _rc=$?; fi
+  if [ "$_rc" -eq 0 ] && [ -n "$_s" ]; then LC_ALL=C sed -n "${_s%% *},${_s##* }p" "$_t" || _rc=$?; fi
   rm -f "$_t"
+  return "$_rc"
 }
 
 # ---------------------------------------------------------------------------
@@ -122,14 +130,26 @@ norm() { printf '%s' "$1" | tr 'A-Z' 'a-z' | tr -d '`*' | sed -E 's/[^a-z0-9]+/ 
 #
 # LINE-PRESERVING BY CONTRACT. It emits exactly one output line per input line, so a
 # caller may take grep's line numbers as the source file's own. Do not add a filter here.
+#
+# ITS STATUS IS THE FIRST FAILED STAGE'S, NOT `tr`'s. Without it a `sed` that died -- BSD sed
+# exits 1 on one byte that is invalid in the caller's locale -- handed `tr` an empty stream and
+# the function returned 0, so a caller that read the status saw a normalised EMPTY file and
+# reported "no match". Neither stage has a healthy non-zero exit, so both must be 0. Read from
+# PIPESTATUS, never by setting pipefail on a caller's file.
+#
+# BYTE-WISE (LC_ALL=C) for the same reason: under a UTF-8 locale that `sed` dies on one Latin-1
+# byte, so a consumer file carrying one could not be normalised at all.
 norm_lines() {
-  sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//
+  local _ps
+  LC_ALL=C sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//
           s/^[-*+][[:space:]]+//
           s/^[0-9]+[.)][[:space:]]+//
           s/[`*_]//g
           s/[[:space:]]+/ /g
           s/[.[:space:]]+$//' \
-  | tr '[:upper:]' '[:lower:]'
+  | LC_ALL=C tr '[:upper:]' '[:lower:]'
+  _ps="${PIPESTATUS[*]}"
+  case "$_ps" in '0 0') return 0 ;; '0 '*) return "${_ps#0 }" ;; *) return "${_ps%% *}" ;; esac
 }
 
 # ---------------------------------------------------------------------------

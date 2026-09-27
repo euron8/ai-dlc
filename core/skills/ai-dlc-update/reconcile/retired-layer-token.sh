@@ -131,16 +131,31 @@ program_globs() {
 # normalised to newlines FIRST and the whole run is then matched, so two tokens with one
 # separator between them are both seen — a boundary-group `grep -o` consumes the
 # separator and loses the second, measured at 550 of 589 tokens on the real rulebook.
+# The separator pass is staged ALONE and its status read: in a pipeline under the caller's
+# pipefail, a `tr` that died presented as the grep's 1 on empty input, accepted as "no token".
+# The grep's 1 is an empty set (status 0); anything above it, or a failed sort, is returned.
 toks() {
-  tr -c 'A-Za-z0-9_-' '\n' \
-  | grep -E '^[A-Z][A-Z0-9_]{3,}(-[A-Z0-9_]+)*$' \
-  | sort -u
+  local _w _t _rc=0
+  _w="$(tr -c 'A-Za-z0-9_-' '\n')" || return
+  _t="$(printf '%s\n' "$_w" | grep -E '^[A-Z][A-Z0-9_]{3,}(-[A-Z0-9_]+)*$')" || _rc=$?
+  [ "$_rc" -le 1 ] || return "$_rc"
+  [ -n "$_t" ] || return 0
+  printf '%s\n' "$_t" | sort -u
 }
 # The same over a program: comment lines are dropped first, because a script's header
 # routinely documents the token it just retired (the retirement is WHY the comment is
 # there), and a word that survives only in prose about its removal is still retired.
+#
+# THE COMMENT STRIP'S STATUS IS READ ON ITS OWN. It was `grep -vE … | toks`, read under pipefail
+# by a caller accepting 0 or 1: a strip that DIED (2) handed toks empty input, toks' grep returned
+# 1, and the dead scan was accepted as "this program carries no token". Its 1 is a program that is
+# all comments -- an empty set, status 0 -- and anything above 1 is returned.
 code_toks() {
-  grep -vE '^[[:space:]]*#' | toks
+  local _code _rc=0
+  _code="$(grep -vE '^[[:space:]]*#')" || _rc=$?
+  [ "$_rc" -le 1 ] || return "$_rc"
+  [ -n "$_code" ] || return 0
+  printf '%s\n' "$_code" | toks
 }
 
 # files_at <ref> <glob>... -> every path in the tree at <ref> matching one of the globs.

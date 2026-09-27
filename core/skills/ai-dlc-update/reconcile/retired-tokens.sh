@@ -90,10 +90,20 @@ ONLY="${5:-}"
 SELF="$(cd "$(dirname "$0")" && pwd)"
 
 # Live `$VAR/path` tokens on stdin, comments stripped, sorted unique.
+#
+# EACH GREP'S STATUS IS READ ON ITS OWN. This was one pipeline, read under pipefail by a caller
+# accepting 0 or 1: a comment strip that DIED (2) handed the token grep empty input, whose 1
+# became the status, and the dead scan was accepted as "no token". Now a 1 from either grep is an
+# empty set (status 0), and anything above 1 -- or a failed sort -- is returned.
 toks() {
-  grep -vE '^[[:space:]]*#' \
-  | grep -oE '\$[A-Za-z_][A-Za-z0-9_]*/[A-Za-z0-9._/-]+' \
-  | sort -u
+  local _code _t _rc=0
+  _code="$(grep -vE '^[[:space:]]*#')" || _rc=$?
+  [ "$_rc" -le 1 ] || return "$_rc"
+  [ -n "$_code" ] || return 0
+  _t="$(printf '%s\n' "$_code" | grep -oE '\$[A-Za-z_][A-Za-z0-9_]*/[A-Za-z0-9._/-]+')" || _rc=$?
+  [ "$_rc" -le 1 ] || return "$_rc"
+  [ -n "$_t" ] || return 0
+  printf '%s\n' "$_t" | sort -u
 }
 
 # The limit a quiet run must restate, because the operator reads the RUN and never this

@@ -85,7 +85,9 @@ mkstub() {
     printf '#!/bin/sh\n'
     printf 'case "$*" in\n  %s)\n' "$pat"
     printf '    n=$(( $(wc -l < "%s/LOG") + 1 ))\n' "$STUB"
-    printf '    echo "$n $*" >> "%s/LOG"\n' "$STUB"
+    # ONE LOG LINE PER CALL, whatever the arguments hold: norm_lines' `sed` script spans six
+    # lines, and logging it raw made one call count as six.
+    printf '    printf "%%s %%s\\n" "$n" "$(printf "%%s" "$*" | tr "\\n" " ")" >> "%s/LOG"\n' "$STUB"
     printf '    if [ %s -eq 0 ] || [ %s -eq "$n" ]; then echo "%s: forced failure" >&2; exit %s; fi ;;\n' \
       "$idx" "$idx" "$tool" "$rc"
     printf 'esac\nexec "%s" "$@"\n' "$real"
@@ -248,6 +250,56 @@ for _r in 1 2; do
   printf '# Repair record\n\n### F1 — CRITICAL\n- disposition: repaired\n- edit: product-brief.md:42\n- derivation:\n    $ grep -c "load-bearing site" product-brief.md\n    3\n- claim now asserted: all three sites are enumerated\n' \
     > "$CV/s1-brief-repair-p$_r.md"
 done
+
+# --- RWL: the RW world whose consumer file carries ONE Latin-1 byte (invalid UTF-8) on line 1 ----
+# BSD `sed` under a UTF-8 locale answers such a file with "illegal byte sequence" and exit 1 -- a
+# producer failure that needs NO stub, and the one a real consumer reaches by holding one file
+# saved in a legacy encoding.
+RWL="$W/rwl"; mkdir -p "$RWL/.claude/skills/ai-dlc/extensions"
+printf '# Ext caf\351\n\n7. **Apply all improvements. Append changelog to the story.**\n' \
+  > "$RWL/.claude/skills/ai-dlc/extensions/restates.md"
+
+# --- LR: a consumer layer whose one extension allocates a Rule AND a section id from core's range --
+# Both are E15 findings, and each is harvested by its own function (`defined_rules`,
+# `defined_anchors`) whose FIRST stage is the grep the forced arms below fail.
+LR="$W/lr"; LRS="$LR/.claude/skills/ai-dlc"; mkdir -p "$LRS/extensions" "$LRS/overrides" "$LRS/steps"
+cp "$LCON" "$LRS/layer-contract.yaml"; cp "$GRAMMAR" "$LRS/artifact-path-grammar.md"
+printf -- '---\nname: gate-validation\ndescription: fixture\n---\n\n# Catalog\n\n### 12. Core check.\n<!-- CHECK_LOADED: 12 -->\nCore.\n' \
+  > "$LRS/steps/gate-validation.md"
+printf -- '---\nkind: check\nhooks: steps/gate-validation.md\nid: band-a\npush_candidate: false\nconforms_to: %s\n---\n\n## Rule 30 [ext:band-a] -- Consumer rule.\n\nBody.\n' \
+  "$LE_CV" > "$LRS/extensions/band-a.md"
+LA="$W/la"; cp -R "$LR" "$LA"; rm -f "$LA/.claude/skills/ai-dlc/extensions/band-a.md"
+printf -- '---\nkind: check\nhooks: steps/gate-validation.md\nid: band-b\npush_candidate: false\nconforms_to: %s\n---\n\n### 31. [ext:band-b] Consumer check.\n<!-- CHECK_LOADED: 31 -->\nBody.\n' \
+  "$LE_CV" > "$LA/.claude/skills/ai-dlc/extensions/band-b.md"
+gitq -C "$LR" init -q; gitq -C "$LR" add -A; gitq -C "$LR" commit -qm seed
+gitq -C "$LA" init -q; gitq -C "$LA" add -A; gitq -C "$LA" commit -qm seed
+
+# --- WT: a W12 finding decided by the TAG signal ----------------------------------------------------
+# This project's `### 912.` heading carries a provenance token (FX-4417) in a parenthesis; another
+# entry's bare `Check 12` sits on a line carrying the same token and no adjacent title. Only the
+# tag-join (prov_tokens on the heading, line_tokens on the citing line) can decide it.
+WT="$W/wt"; WTS="$WT/.claude/skills/ai-dlc"; mkdir -p "$WTS/extensions" "$WTS/overrides" "$WTS/steps"
+cp "$LCON" "$WTS/layer-contract.yaml"; cp "$GRAMMAR" "$WTS/artifact-path-grammar.md"
+printf -- '---\nname: gate-validation\ndescription: fixture\n---\n\n# Catalog\n\n### 12. Core check.\n<!-- CHECK_LOADED: 12 -->\nCore.\n' \
+  > "$WTS/steps/gate-validation.md"
+printf -- '---\nkind: check\nhooks: steps/gate-validation.md\nid: band-t\npush_candidate: false\nconforms_to: %s\n---\n\n### 912. [ext:band-t] Ledger reconciliation (FX-4417).\n<!-- CHECK_LOADED: 912 -->\nBody.\n' \
+  "$LE_CV" > "$WTS/extensions/band-t.md"
+printf -- '---\nkind: check\nhooks: steps/gate-validation.md\nid: cite-t\npush_candidate: false\nconforms_to: %s\n---\n\n### 913. [ext:cite-t] Another check.\n<!-- CHECK_LOADED: 913 -->\nRun Check 12 before closing FX-4417.\n' \
+  "$LE_CV" > "$WTS/extensions/cite-t.md"
+gitq -C "$WT" init -q; gitq -C "$WT" add -A; gitq -C "$WT" commit -qm seed
+
+# --- LT: a status token DEFERRED leaves the rulebook AND the one program that emitted it ---------
+LT="$W/lt"; LTD="$LT/dist"; LTC="$LT/consumer"
+mkdir -p "$LTD/core/skills/ai-dlc/steps" "$LTD/core/scripts" "$LTC/.claude/skills/ai-dlc/extensions"
+printf '# Step\n\nMark the story DEFERRED when blocked.\nKeep going.\n' > "$LTD/core/skills/ai-dlc/steps/s.md"
+printf '#!/bin/bash\nstatus=DEFERRED\necho "$status"\n' > "$LTD/core/scripts/st.sh"
+gitq -C "$LTD" init -q; gitq -C "$LTD" add -A; gitq -C "$LTD" commit -qm base
+LT_BASE="$(git -C "$LTD" rev-parse HEAD)"
+printf '# Step\n\nMark the story PARKED when blocked.\nKeep going.\n' > "$LTD/core/skills/ai-dlc/steps/s.md"
+printf '#!/bin/bash\nstatus=PARKED\necho "$status"\n' > "$LTD/core/scripts/st.sh"
+gitq -C "$LTD" add -A; gitq -C "$LTD" commit -qm theirs
+LT_THEIRS="$(git -C "$LTD" rev-parse HEAD)"
+printf '# Ext\n\nWhen blocked, set DEFERRED and move on.\n' > "$LTC/.claude/skills/ai-dlc/extensions/e.md"
 
 # ================================================================================================
 # ARMS. Each takes a script path, returns 0 when the arm's assertion holds, and leaves ARM_WHY.
@@ -433,13 +485,134 @@ arm_cv_sort() { local rc=0; mkstub sort '*"-k1,1n"*' 0 2; cv_run "$1" "$STUB" ||
   failed_call 0 && [ "$rc" -eq 2 ] && grep -q 'ordering the passes by number did not run' "$ERR"; }
 
 # ================================================================================================
+# A STAGED FUNCTION WHOSE BODY IS A PIPELINE. Staging a producer reads ITS status, and when the
+# producer is a function whose body pipes a fallible first stage into a later `grep`, that status
+# is not the first stage's: without `pipefail` it is the LAST stage's, and with it a failed first
+# stage leaves the later `grep` an EMPTY stream, whose exit 1 is then accepted as "no match". Each
+# arm below fails the FIRST stage of one such function and asserts the refusal; each has a healthy
+# twin on the same seed.
+# ================================================================================================
+# --- retired-layer-passage: norm_lines (lib.sh) is `sed … | tr`; this file sets no pipefail ------
+# `sed` calls carrying norm_lines' list-marker expression, in order: the retired set (1), then one
+# per layer file, overrides/ before extensions/ -- roles.md (2), restates.md (3). Failing 2 is one
+# layer read alone; the retired set and the other file still read.
+NLPAT="*'s/^[-*+][[:space:]]+//'*"
+rwl_run() { # rwl_run <script> <locale> -- the Latin-1 consumer, under LC_ALL=<locale>
+  env -u LANG LC_ALL="$2" bash "$1" "$RWD" "$RW_BASE" "$RW_THEIRS" "$RWL" > "$OUT" 2> "$ERR"; }
+arm_rlp_norm() { local rc=0; mkstub sed "$NLPAT" 2 1; rw_run "$1" "$STUB" || rc=$?
+  ARM_WHY="rc=$rc fired=$(fired): $(tail -1 "$ERR" | cut -c1-120)"
+  failed_call 2 && [ "$rc" -eq 2 ] && grep -q 'normalising .*roles\.md did not run' "$ERR" && [ ! -s "$OUT" ]; }
+# The DELETED-LINE side (call 1). At base it was one pipeline ending in `sort -u`, so a dead
+# normalisation read as "this release deleted no comparable line": exit 0, NO layer file opened.
+arm_rlp_removed() { local rc=0; mkstub sed "$NLPAT" 1 1; rw_run "$1" "$STUB" || rc=$?
+  ARM_WHY="rc=$rc fired=$(fired): $(tail -1 "$ERR" | cut -c1-120)"
+  failed_call 1 && [ "$rc" -eq 2 ] && grep -q 'normalising the deleted rulebook lines did not run' "$ERR" \
+    && [ ! -s "$OUT" ]; }
+# The NO-STUB arm. Its precondition is measured outside the subject, in the same invocation: the
+# real `sed` must refuse the file under UTF-8 ("illegal byte sequence") and accept it under C. A
+# host where that does not hold cannot express the failure, and the arm FAILS rather than passing.
+# The caller's locale is UTF-8 and the file still yields its row: the detector compares bytes
+# (it exports LC_ALL=C), so the Latin-1 file is READ, not refused. At base it read as "no match".
+latin1_pre() { local u=0 c=0
+  sed -E 's/[[:space:]]+$//' < "$RWL/.claude/skills/ai-dlc/extensions/restates.md" > /dev/null 2> "$W/l1err" || u=$?
+  env -u LANG LC_ALL=C sed -E 's/[[:space:]]+$//' <"$RWL/.claude/skills/ai-dlc/extensions/restates.md" > /dev/null 2>&1 || c=$?
+  L1_PRE="utf8-sed rc=$u c-sed rc=$c"
+  [ "$u" -ne 0 ] && [ "$c" -eq 0 ] && grep -q 'illegal byte sequence' "$W/l1err"; }
+arm_rlp_latin1_c() { local rc=0; rwl_run "$1" C || rc=$?; ARM_WHY="rc=$rc: $(tail -1 "$ERR" | cut -c1-120)"
+  [ "$rc" -eq 0 ] && grep -q 'RETIRED-LAYER-PASSAGE.*extensions/restates\.md' "$OUT"; }
+arm_rlp_latin1() { local rc=0
+  if ! LC_ALL=en_US.UTF-8 latin1_pre; then ARM_WHY="precondition not met on this host ($L1_PRE), so the arm cannot express the failure"; return 1; fi
+  rwl_run "$1" en_US.UTF-8 || rc=$?
+  ARM_WHY="$L1_PRE; rc=$rc: $(tail -1 "$ERR" | cut -c1-120)"
+  [ "$rc" -eq 0 ] && grep -q 'RETIRED-LAYER-PASSAGE.*extensions/restates\.md' "$OUT"; }
+
+# --- readopt-override: section_of (lib.sh) returned `rm`'s status, never span_of's -------------
+# `awk` calls carrying span_of's `want=`, in order: the anchor-resolution pair (1, 2), then the
+# stale scan's TO section (3)... measured by logging every call. Failing 3 -- the FROM section of
+# the superseded-line scan -- emptied the set whose members could be stale: at base the STALE row
+# vanished and the run read UNADOPTED only, exit 0.
+arm_ro_span() { local rc=0; mkstub awk '*"want="*' 3 2; ro_run "$1" "$OW_OVR" "$STUB" || rc=$?
+  ARM_WHY="rc=$rc fired=$(fired): $(head -1 "$OUT" | cut -c1-80)$(tail -1 "$ERR" | cut -c1-80)"
+  failed_call 3 && [ "$rc" -eq 2 ] && grep -q 'did not run to completion' "$ERR" \
+    && ! grep -qE '^(OK|STALE-CORE-TEXT|UNADOPTED-CORE-TEXT)' "$OUT"; }
+
+# --- validate-layer-entries: defined_rules / defined_anchors open with a `grep -Eho` --------------
+lr_run() { # lr_run <script> <world> [stub-dir]
+  local p="$PATH"; [ -n "${3:-}" ] && p="$3:$PATH"; PATH="$p" bash "$1" "$2" > "$OUT" 2> "$ERR"; }
+arm_lr_healthy() { local rc=0; lr_run "$1" "$LR" || rc=$?; ARM_WHY="rc=$rc: $(grep 'error(s)' "$OUT" | tail -1)"
+  [ "$rc" -eq 1 ] && grep -q "E15.*RULE OUT OF BAND.*'Rule 30'" "$OUT"; }
+arm_la_healthy() { local rc=0; lr_run "$1" "$LA" || rc=$?; ARM_WHY="rc=$rc: $(grep 'error(s)' "$OUT" | tail -1)"
+  [ "$rc" -eq 1 ] && grep -q "E15.*SECTION ID OUT OF BAND.*'31\.'" "$OUT"; }
+arm_lr_rules() { local rc=0; mkstub grep '*"-Eho ^#{2,4}[[:space:]]+Rule"*' 0 2; lr_run "$1" "$LR" "$STUB" || rc=$?
+  ARM_WHY="rc=$rc fired=$(fired): $(grep 'error(s)' "$OUT" | tail -1)$(tail -1 "$ERR" | cut -c1-100)"
+  failed_call 0 && [ "$rc" -eq 2 ] && grep -q 'did not run' "$ERR" && ! grep -q ' 0 error(s)' "$OUT"; }
+# At base this failure read rc=1 with E16 (an EMPTY resolvability set) -- a finding, not a refusal.
+# The arm demands the REFUSAL itself, naming the harvest that died: exit 2, never the E16's exit 1.
+# E16's own set is built from an unstaged harvest, so E16 may print before the refusal; the exit
+# and the refusal line are the verdict, and the arm reads those.
+arm_la_anchors() { local rc=0; mkstub grep '*"-Eho ^#{2,4}[[:space:]]+(Check"*' 0 2; lr_run "$1" "$LA" "$STUB" || rc=$?
+  ARM_WHY="rc=$rc fired=$(fired): $(grep 'error(s)' "$OUT" | tail -1)$(tail -1 "$ERR" | cut -c1-100)"
+  failed_call 0 && [ "$rc" -eq 2 ] && grep -q '(defined_anchors) did not run' "$ERR" \
+    && ! grep -q ' 0 error(s)' "$OUT"; }
+
+# --- retired-tokens / retired-layer-token: toks / code_toks open with `grep -vE '^[[:space:]]*#'` --
+CMTPAT='"-vE ^[[:space:]]*#"'
+# rt_cmt <index> -- the comment strip runs base (1), theirs (2), ours (3); 0 = all.
+rt_cmt() { local rc=0; mkstub grep "$CMTPAT" "$2" 2; tw_run "$1" "$STUB" || rc=$?
+  ARM_WHY="rc=$rc fired=$(fired): $(tail -1 "$ERR" | cut -c1-120)"
+  failed_call "$2" && [ "$rc" -eq 2 ] && grep -q 'did not run' "$ERR" && [ ! -s "$OUT" ]; }
+arm_rt_cmt_all()  { rt_cmt "$1" 0; }
+arm_rt_cmt_ours() { rt_cmt "$1" 3; }
+# --- validate-layer-entries W12: prov_tokens / line_tokens were grep pipelines ---------------------
+# Measured call order on WT: the bracket harvest `-oE \[…\]|\(…\)` runs once (the 912 heading);
+# the token harvest `-oE [A-Za-z0-9]+…` runs twice -- prov_tokens' second stage (1), then
+# line_tokens over the citing line (2).
+PROVPAT='*"-oE \[[^]]*\]|\([^)]*\)"*'
+TOKPAT2='*"-oE [A-Za-z0-9]+(-[A-Za-z0-9]+)*"*'
+arm_wt_healthy() { local rc=0; lr_run "$1" "$WT" || rc=$?; ARM_WHY="rc=$rc: $(grep -c W12 "$OUT") W12 row(s)"
+  [ "$rc" -eq 0 ] && grep -q 'W12.*cite-t\.md:11: cites "Check 12" on a line carrying FX-4417' "$OUT"; }
+arm_wt_prov() { local rc=0; mkstub grep "$PROVPAT" 0 2; lr_run "$1" "$WT" "$STUB" || rc=$?
+  ARM_WHY="rc=$rc fired=$(fired): $(tail -1 "$ERR" | cut -c1-110)"
+  failed_call 0 && [ "$rc" -eq 2 ] && grep -q 'provenance-token read of "912" did not run' "$ERR"; }
+arm_wt_line() { local rc=0; mkstub grep "$TOKPAT2" 2 2; lr_run "$1" "$WT" "$STUB" || rc=$?
+  ARM_WHY="rc=$rc fired=$(fired): $(tail -1 "$ERR" | cut -c1-110)"
+  failed_call 2 && [ "$rc" -eq 2 ] && grep -q 'citing-line token read of .*cite-t\.md:11 did not run' "$ERR"; }
+
+# --- retired-layer-contract: shapes_of / tokens_of were `{ grep … || true; }` pipelines -----------
+# Each harvest runs over the rulebook at base (1, 2), at theirs (3, 4), then over the layer files,
+# overrides/ first: roles.md (5), restates.md (6). Failing 5 is the consumer side alone.
+SHPAT='*"-oE -- - [A-Z][A-Za-z-]*: "*'
+TKPAT='*"-oE \{[a-z][a-z_]*\}"*'
+arm_rlc_shapes() { local rc=0; mkstub grep "$SHPAT" 5 2; rw_run "$1" "$STUB" || rc=$?
+  ARM_WHY="rc=$rc fired=$(fired): $(tail -1 "$ERR" | cut -c1-110)"
+  failed_call 5 && [ "$rc" -eq 2 ] && grep -q 'shape scan of .*roles\.md did not run' "$ERR" && [ ! -s "$OUT" ]; }
+arm_rlc_tokens() { local rc=0; mkstub grep "$TKPAT" 5 2; rw_run "$1" "$STUB" || rc=$?
+  ARM_WHY="rc=$rc fired=$(fired): $(tail -1 "$ERR" | cut -c1-110)"
+  failed_call 5 && [ "$rc" -eq 2 ] && grep -q 'token scan of .*roles\.md did not run' "$ERR" && [ ! -s "$OUT" ]; }
+
+# --- layer-drift: sup_measure's count was `… | grep -Fxv -f … | grep -c .` ------------------------
+# A `grep -Fxv` that died left `grep -c` reading nothing: "0 of yours appear nowhere in core", the
+# measurement telling the operator the action drops nothing. layer-drift's refusal is exit 1.
+arm_ld_fxv() { local rc=0; mkstub grep '*"-Fxv -f"*' 0 2; ld_run "$1" "$STUB" || rc=$?
+  ARM_WHY="rc=$rc fired=$(fired): $(grep -o 'and [0-9]* of yours appear nowhere' "$OUT")$(tail -1 "$ERR" | cut -c1-90)"
+  failed_call 0 && [ "$rc" -eq 1 ] && grep -q 'surplus measure' "$ERR" && ! grep -q 'appear nowhere in core' "$OUT"; }
+
+lt_run() { local p="$PATH"; [ -n "${2:-}" ] && p="$2:$PATH"
+  PATH="$p" bash "$1" "$LTD" "$LT_BASE" "$LT_THEIRS" "$LTC" > "$OUT" 2> "$ERR"; }
+arm_rlt_healthy() { local rc=0; lt_run "$1" || rc=$?; ARM_WHY="rc=$rc: $(tail -1 "$ERR" | cut -c1-120)"
+  [ "$rc" -eq 0 ] && grep -q 'RETIRED-LAYER-TOKEN.*extensions/e\.md.*DEFERRED' "$OUT"; }
+arm_rlt_cmt() { local rc=0; mkstub grep "$CMTPAT" 0 2; lt_run "$1" "$STUB" || rc=$?
+  ARM_WHY="rc=$rc fired=$(fired): $(tail -1 "$ERR" | cut -c1-120)"
+  failed_call 0 && [ "$rc" -eq 2 ] && grep -q 'did not run' "$ERR" && [ ! -s "$OUT" ]; }
+
+# ================================================================================================
 # THE ARM TABLE: <arm> <script-path> <description>
 # ================================================================================================
 S_CI="$SC/validate-ci-gates.sh"; S_RX="$RC_/relabel-extension-checks.sh"
 S_RLP="$RC_/retired-layer-passage.sh"; S_RLC="$RC_/retired-layer-contract.sh"
 S_RT="$RC_/retired-tokens.sh"; S_RO="$RC_/readopt-override.sh"; S_UD="$RC_/unregistered-drift.sh"
 S_MG="$SC/migrate-artifact-paths.sh"; S_AC="$SC/validate-ac-falsifiability.sh"; S_LE="$SC/validate-layer-entries.sh"
-S_LD="$RC_/layer-drift.sh"; S_PB="$SC/validate-provenance-block.sh"; S_CV="$SC/validate-adversarial-convergence.sh"
+S_LD="$RC_/layer-drift.sh"; S_RLT="$RC_/retired-layer-token.sh"; S_PB="$SC/validate-provenance-block.sh"; S_CV="$SC/validate-adversarial-convergence.sh"
 
 run_arm() { # run_arm <fn> <script> <text>
   if "$1" "$2"; then ok "$1: $3"; else bad "$1: $3 -- $ARM_WHY"; fi
@@ -461,6 +634,11 @@ run_arm arm_pb_healthy  "$S_PB"  "validate-provenance-block --strays reports the
 run_arm arm_pb_unreadable "$S_PB" "--strays: a real grep exiting 2 WITH the stray listed (one unreadable file) is accepted, exit 1"
 run_arm arm_pb_zero     "$S_PB"  "--strays: an unreadable file in a tree with ZERO carriers refuses, exit 2 (designed)"
 run_arm arm_cv_healthy  "$S_CV"  "validate-adversarial-convergence reads a converged 3-pass series, exit 0"
+run_arm arm_rlp_latin1_c "$S_RLP" "retired-layer-passage: the Latin-1 layer file under LC_ALL=C still flags the reproduced line"
+run_arm arm_lr_healthy  "$S_LE"  "validate-layer-entries: an extension's 'Rule 30' is E15 RULE OUT OF BAND, exit 1"
+run_arm arm_la_healthy  "$S_LE"  "validate-layer-entries: an extension's '### 31.' is E15 SECTION ID OUT OF BAND, exit 1"
+run_arm arm_rlt_healthy "$S_RLT" "retired-layer-token reports DEFERRED, retired from the rulebook and its program"
+run_arm arm_wt_healthy  "$S_LE"  "validate-layer-entries: a bare 'Check 12' on a line carrying the 912 heading's FX-4417 is W12 by tag"
 
 echo "== forced producer failures (each stub must FIRE, each script must REFUSE) =="
 run_arm arm_ci_retro     "$S_CI"  "failed retro walk (find) -> exit 2, not '0 gates declared'"
@@ -488,6 +666,22 @@ run_arm arm_ld_sup       "$S_LD"  "layer-drift: sup_measure's staging write fail
 run_arm arm_pb_walk2     "$S_PB"  "--strays: the candidate walk (grep -rlI) exits 2 with NO output -> exit 2, not PASS"
 run_arm arm_pb_walk127   "$S_PB"  "--strays: the candidate walk (grep -rlI) exits 127 -> exit 2, not PASS"
 run_arm arm_cv_sort      "$S_CV"  "validate-adversarial-convergence: the pass ordering (sort) fails -> exit 2, not a judged empty series"
+
+echo "== a staged FUNCTION whose body is a pipeline: its FIRST stage fails =="
+run_arm arm_rlp_norm     "$S_RLP" "retired-layer-passage: norm_lines' sed fails on one layer file -> exit 2, not 'no match'"
+run_arm arm_rlp_removed  "$S_RLP" "retired-layer-passage: norm_lines' sed fails on the deleted-line set -> exit 2, not 'deleted no line'"
+run_arm arm_rlp_latin1   "$S_RLP" "retired-layer-passage: NO STUB, a Latin-1 layer file under a UTF-8 caller is READ and flagged, not 'no match'"
+run_arm arm_ro_span      "$S_RO"  "readopt-override: span_of's awk fails inside section_of (FROM section) -> exit 2, not UNADOPTED-only"
+run_arm arm_lr_rules     "$S_LE"  "validate-layer-entries: defined_rules' grep exits 2 -> exit 2, not '0 error(s)'"
+run_arm arm_la_anchors   "$S_LE"  "validate-layer-entries: defined_anchors' grep exits 2 -> exit 2, not '0 error(s)'"
+run_arm arm_rt_cmt_all   "$S_RT"  "retired-tokens: toks' comment strip (grep) exits 2 everywhere -> exit 2, not '0 carrying a token'"
+run_arm arm_rt_cmt_ours  "$S_RT"  "retired-tokens: the CONSUMER side's comment strip alone exits 2 -> exit 2, not a lost row"
+run_arm arm_rlt_cmt      "$S_RLT" "retired-layer-token: code_toks' comment strip (grep) exits 2 -> exit 2, not 'retired NO status token'"
+run_arm arm_wt_prov      "$S_LE"  "validate-layer-entries W12: prov_tokens' bracket harvest (grep) exits 2 -> exit 2, not a withdrawn tag"
+run_arm arm_wt_line      "$S_LE"  "validate-layer-entries W12: line_tokens' harvest (grep) exits 2 -> exit 2, not a withdrawn tag"
+run_arm arm_rlc_shapes   "$S_RLC" "retired-layer-contract: shapes_of's grep exits 2 on a layer file -> exit 2, not a lost row"
+run_arm arm_rlc_tokens   "$S_RLC" "retired-layer-contract: tokens_of's grep exits 2 on a layer file -> exit 2, not a lost row"
+run_arm arm_ld_fxv       "$S_LD"  "layer-drift: sup_measure's grep -Fxv exits 2 -> exit 1 refusal, not '0 of yours appear nowhere'"
 
 if [ "$SELF_TREE" -ne 1 ]; then
   skip "spelling arm and mutants -- they run only against this fixture's own tree, not $TREE"
@@ -609,6 +803,31 @@ mutant() {
   if [ -z "$survived" ]; then ok "mutant $id killed by:$(printf ' %s' $arms)"
   else bad "mutant $id SURVIVED$survived -- that arm cannot see its own site"; fi
 }
+# libmutant <id> <script> <healthy-arm> "<arms>" <find> <replace>... -- mutate reconcile/lib.sh.
+# Every reconcile script sources "$SELF/lib.sh", so a lib.sh mutant is a WHOLE copy of the directory
+# whose lib.sh is mutated, and <script> is driven from inside that copy. The copy is asserted to
+# carry the mutation before any arm is read; `libcontrol` runs the same copy mechanics unmutated.
+libmutant() {
+  local id="$1" scr="$2" healthy="$3" arms="$4" d why a survived=""
+  shift 4
+  d="$MT/lib_$id"
+  cp -R "$MT/reconcile" "$d" || { bad "mutant $id DID NOT APPLY (could not copy reconcile/)"; return; }
+  if ! why="$(mkmut "$MT/reconcile/lib.sh" "$d/lib.sh" "$@")"; then bad "mutant $id DID NOT APPLY ($why)"; return; fi
+  if cmp -s "$MT/reconcile/lib.sh" "$d/lib.sh"; then bad "mutant $id DID NOT APPLY (lib.sh is byte-identical)"; return; fi
+  bash -n "$d/lib.sh" 2>/dev/null || { bad "mutant $id DID NOT APPLY (the mutated lib.sh does not parse)"; return; }
+  if ! "$healthy" "$d/$scr"; then bad "mutant $id: its healthy twin $healthy failed on the mutant, so no kill can be read -- $ARM_WHY"; return; fi
+  for a in $arms; do "$a" "$d/$scr" && survived="$survived $a"; done
+  if [ -z "$survived" ]; then ok "mutant $id (lib.sh) killed by:$(printf ' %s' $arms)"
+  else bad "mutant $id SURVIVED$survived -- that arm cannot see its own site"; fi
+}
+libcontrol() { # libcontrol <script> <arms...>
+  local scr="$1" d="$MT/lib_ctl" a failed=""; shift
+  [ -d "$d" ] || cp -R "$MT/reconcile" "$d" || { bad "control lib_ctl: could not copy reconcile/"; return; }
+  cmp -s "$MT/reconcile/lib.sh" "$d/lib.sh" || { bad "control lib_ctl: the copied lib.sh differs"; return; }
+  for a in "$@"; do "$a" "$d/$scr" || failed="$failed $a"; done
+  if [ -z "$failed" ]; then ok "control lib_ctl/$scr: an unmutated directory copy passes$(printf ' %s' "$@")"
+  else bad "control lib_ctl/$scr: an UNMUTATED directory copy failed$failed -- the lib mutant harness is broken"; fi
+}
 # The unmutated controls: the same copy mechanics, no edit, and every arm must still PASS.
 control() { # control <dir> <src> <arms...>
   local dir="$1" src="$2" a failed=""; shift 2
@@ -620,15 +839,18 @@ control() { # control <dir> <src> <arms...>
 echo "== unmutated controls =="
 control scripts   validate-ci-gates.sh          arm_ci_healthy arm_ci_retro arm_ci_surface
 control reconcile relabel-extension-checks.sh   arm_rx_healthy arm_rx_walk
-control reconcile retired-layer-passage.sh      arm_rlp_healthy arm_rw_walk
-control reconcile retired-layer-contract.sh     arm_rlc_healthy arm_rw_walk
-control reconcile retired-tokens.sh             arm_rt_healthy arm_rt_base arm_rt_ours
-control reconcile readopt-override.sh           arm_ro_healthy arm_ro_sort arm_ro_git
+control reconcile retired-layer-passage.sh      arm_rlp_healthy arm_rw_walk arm_rlp_norm arm_rlp_removed arm_rlp_latin1 arm_rlp_latin1_c
+control reconcile retired-layer-contract.sh     arm_rlc_healthy arm_rw_walk arm_rlc_shapes arm_rlc_tokens
+control reconcile retired-tokens.sh             arm_rt_healthy arm_rt_base arm_rt_ours arm_rt_cmt_all arm_rt_cmt_ours
+control reconcile retired-layer-token.sh        arm_rlt_healthy arm_rlt_cmt
+control reconcile readopt-override.sh           arm_ro_healthy arm_ro_sort arm_ro_git arm_ro_span
+libcontrol retired-layer-passage.sh arm_rlp_healthy arm_rlp_norm arm_rlp_removed arm_rlp_latin1
+libcontrol readopt-override.sh      arm_ro_healthy arm_ro_span
 control reconcile unregistered-drift.sh         arm_ud_healthy arm_ud_absorbed
 control scripts   migrate-artifact-paths.sh     arm_mg_healthy arm_mg_ls
 control scripts   validate-ac-falsifiability.sh arm_ac_healthy arm_ac_segment
-control scripts   validate-layer-entries.sh     arm_le_healthy arm_le_census
-control reconcile layer-drift.sh                arm_ld_healthy arm_ld_walk arm_ld_sup
+control scripts   validate-layer-entries.sh     arm_le_healthy arm_le_census arm_lr_healthy arm_la_healthy arm_wt_healthy arm_lr_rules arm_la_anchors arm_wt_prov arm_wt_line
+control reconcile layer-drift.sh                arm_ld_healthy arm_ld_walk arm_ld_sup arm_ld_fxv
 control scripts   validate-provenance-block.sh  arm_pb_healthy arm_pb_unreadable arm_pb_zero arm_pb_walk2 arm_pb_walk127
 control scripts   validate-adversarial-convergence.sh arm_cv_healthy arm_cv_sort
 
@@ -711,6 +933,65 @@ le_mut LE-LIVE      arm_le_live      live-extensions 'layer_files "$EXT_DIR"'
 le_mut LE-EXT       arm_le_ext       extensions      'layer_files "$EXT_DIR"'
 le_mut LE-W9        arm_le_w9        w9-layers       '{ layer_files "$EXT_DIR"; layer_files "$OVR_DIR"; }'
 le_mut LE-W11       arm_le_w11       w11-layers      '{ layer_files "$EXT_DIR"; layer_files "$OVR_DIR"; }'
+
+echo "== mutants: a staged FUNCTION whose body is a pipeline (each restores the v0.650.0 status) =="
+# norm_lines returns `tr`'s status again: a dead sed reads as a normalised EMPTY file.
+libmutant RLP-NORMLINES retired-layer-passage.sh arm_rlp_healthy "arm_rlp_norm arm_rlp_removed" \
+  $'norm_lines() {\n  local _ps\n' $'norm_lines() {\n' \
+  $'  _ps="${PIPESTATUS[*]}"\n  case "$_ps" in \'0 0\') return 0 ;; \'0 \'*) return "${_ps#0 }" ;; *) return "${_ps%% *}" ;; esac\n' ''
+# The deleted-line side read through a pipeline again, so its status is the LAST stage's.
+mutant RLP-REMOVED reconcile retired-layer-passage.sh arm_rlp_healthy "arm_rlp_removed" \
+  'norm_lines < "$RLP_T/removed-raw" > "$RLP_T/removed-norm" || _rlp_rc=$?' \
+  'norm_lines < "$RLP_T/removed-raw" | cat > "$RLP_T/removed-norm" || _rlp_rc=$?'
+# The caller's locale reaches norm_lines' BSD sed again: a Latin-1 layer file is refused instead
+# of read. The C locale is scoped onto that sed in lib.sh, not exported by the passage script, so
+# the mutant is built there.
+libmutant RLP-LOCALE retired-layer-passage.sh arm_rlp_healthy "arm_rlp_latin1" \
+  $'  LC_ALL=C sed -E \'s/^[[:space:]]+//; s/[[:space:]]+$//\n' $'  sed -E \'s/^[[:space:]]+//; s/[[:space:]]+$//\n'
+# defined_rules is one pipeline ending in `grep -E '.'` again: a dead harvest presents as its 1.
+mutant LE-DEFRULES scripts validate-layer-entries.sh arm_lr_healthy "arm_lr_rules" \
+  $'  local _raw _rc=0\n  _raw="$(grep -Eho "$RULE_RE" "$1" 2>/dev/null)" || _rc=$?\n  [ "$_rc" -le 1 ] || return "$_rc"\n  [ -n "$_raw" ] || return 0\n  printf \'%s\\n\' "$_raw" \\\n' \
+  $'  grep -Eho "$RULE_RE" "$1" 2>/dev/null \\\n' \
+  $'    | sed \'/^$/d\' | sort -u\n}\n\nrule_title' $'    | grep -E \'.\' | sort -u\n}\n\nrule_title'
+# defined_anchors is one brace-group pipeline again: its status is bold_anchors_of_file's.
+mutant LE-DEFANCHORS scripts validate-layer-entries.sh arm_la_healthy "arm_la_anchors" \
+  $'  local _raw _ids="" _bold _rc=0\n  _raw="$(grep -Eho "$CHECK_HEAD_RE" "$1" 2>/dev/null)" || _rc=$?\n  [ "$_rc" -le 1 ] || return "$_rc"\n  if [ -n "$_raw" ]; then\n    _ids="$(printf \'%s\\n\' "$_raw" \\\n      | sed' \
+  $'  { grep -Eho "$CHECK_HEAD_RE" "$1" 2>/dev/null \\\n      | sed' \
+  $')$//\')" || return\n  fi\n  _bold="$(bold_anchors_of_file "$1")" || return\n  printf \'%s\\n%s\\n\' "$_ids" "$_bold" | sed \'/^$/d\' | sort -u\n' \
+  $')$//\'\n    bold_anchors_of_file "$1"\n  } | sort -u\n'
+# prov_tokens / line_tokens are grep pipelines again: a dead first grep presents as a later grep's 1.
+mutant LE-PROV scripts validate-layer-entries.sh arm_wt_healthy "arm_wt_prov" \
+  $'  _t="$(tok_chain "$1" -oE \'\\[[^]]*\\]|\\([^)]*\\)\')" || return\n  [ -n "$_t" ] || return 0\n  _t="$(tok_chain "$_t" -oE \'[A-Za-z0-9]+(-[A-Za-z0-9]+)*\')" || return\n  [ -n "$_t" ] || return 0\n  tok_tail "$_t"\n' \
+  $'  printf \'%s\\n\' "$1" | grep -oE \'\\[[^]]*\\]|\\([^)]*\\)\' 2>/dev/null \\\n    | grep -oE \'[A-Za-z0-9]+(-[A-Za-z0-9]+)*\' 2>/dev/null \\\n    | grep -E \'[A-Z]\' | grep -E \'[0-9]\' | awk \'length($0) >= 3\' | sort -u\n'
+mutant LE-LINE scripts validate-layer-entries.sh arm_wt_healthy "arm_wt_line" \
+  $'line_tokens() {\n  local _t\n  _t="$(tok_chain "$1" -oE \'[A-Za-z0-9]+(-[A-Za-z0-9]+)*\')" || return\n  [ -n "$_t" ] || return 0\n  tok_tail "$_t"\n}' \
+  $'line_tokens() {\n  printf \'%s\\n\' "$1" | grep -oE \'[A-Za-z0-9]+(-[A-Za-z0-9]+)*\' 2>/dev/null \\\n    | grep -E \'[A-Z]\' | grep -E \'[0-9]\' | awk \'length($0) >= 3\' | sort -u\n}'
+# retired-tokens' toks is one pipeline again.
+mutant RT-TOKS reconcile retired-tokens.sh arm_rt_healthy "arm_rt_cmt_all arm_rt_cmt_ours" \
+  $'  local _code _t _rc=0\n  _code="$(grep -vE \'^[[:space:]]*#\')" || _rc=$?\n  [ "$_rc" -le 1 ] || return "$_rc"\n  [ -n "$_code" ] || return 0\n  _t="$(printf \'%s\\n\' "$_code" | grep -oE \'\\$[A-Za-z_][A-Za-z0-9_]*/[A-Za-z0-9._/-]+\')" || _rc=$?\n  [ "$_rc" -le 1 ] || return "$_rc"\n  [ -n "$_t" ] || return 0\n  printf \'%s\\n\' "$_t" | sort -u\n' \
+  $'  grep -vE \'^[[:space:]]*#\' \\\n  | grep -oE \'\\$[A-Za-z_][A-Za-z0-9_]*/[A-Za-z0-9._/-]+\' \\\n  | sort -u\n'
+# retired-layer-token: BOTH layers -- code_toks pipes into toks, and toks ends in a grep. Reverting
+# code_toks alone leaves toks returning 0 on empty input, and pipefail then reports the strip's 2.
+mutant RLT-CODETOKS reconcile retired-layer-token.sh arm_rlt_healthy "arm_rlt_cmt" \
+  $'  local _w _t _rc=0\n  _w="$(tr -c \'A-Za-z0-9_-\' \'\\n\')" || return\n  _t="$(printf \'%s\\n\' "$_w" | grep -E \'^[A-Z][A-Z0-9_]{3,}(-[A-Z0-9_]+)*$\')" || _rc=$?\n  [ "$_rc" -le 1 ] || return "$_rc"\n  [ -n "$_t" ] || return 0\n  printf \'%s\\n\' "$_t" | sort -u\n' \
+  $'  tr -c \'A-Za-z0-9_-\' \'\\n\' \\\n  | grep -E \'^[A-Z][A-Z0-9_]{3,}(-[A-Z0-9_]+)*$\' \\\n  | sort -u\n' \
+  $'  local _code _rc=0\n  _code="$(grep -vE \'^[[:space:]]*#\')" || _rc=$?\n  [ "$_rc" -le 1 ] || return "$_rc"\n  [ -n "$_code" ] || return 0\n  printf \'%s\\n\' "$_code" | toks\n' \
+  $'  grep -vE \'^[[:space:]]*#\' | toks\n'
+# retired-layer-contract: each harvest's status is discarded again (v0.650.0's `|| true`).
+mutant RLC-SHAPES reconcile retired-layer-contract.sh arm_rlc_healthy "arm_rlc_shapes" \
+  $'  [ "$_rc" -le 1 ] || return "$_rc"\n  [ -n "$_h" ] || return 0\n  printf \'%s\\n\' "$_h" | sed -E' \
+  $'  [ -n "$_h" ] || return 0\n  printf \'%s\\n\' "$_h" | sed -E'
+mutant RLC-TOKENS reconcile retired-layer-contract.sh arm_rlc_healthy "arm_rlc_tokens" \
+  $'  [ "$_rc" -le 1 ] || return "$_rc"\n  [ -n "$_h" ] || return 0\n  printf \'%s\\n\' "$_h" | sort -u' \
+  $'  [ -n "$_h" ] || return 0\n  printf \'%s\\n\' "$_h" | sort -u'
+# layer-drift: sup_measure's count reads no stage's status again.
+mutant LD-FXV reconcile layer-drift.sh arm_ld_healthy "arm_ld_fxv" \
+  $' | grep -c .\n              for _ps in "${PIPESTATUS[@]}"; do [ "$_ps" -le 1 ] || exit 3; done)" || return 3\n' \
+  $' | grep -c .)"\n'
+# section_of returns `rm`'s status again: a span_of that died reads as "no such section".
+libmutant RO-SECTIONOF readopt-override.sh arm_ro_healthy "arm_ro_span" \
+  $'  local _t _s="" _rc=0\n  _t="$(mktemp)" || return 1\n  cat > "$_t" || _rc=$?\n  if [ "$_rc" -eq 0 ]; then _s="$(span_of "$1" < "$_t")" || _rc=$?; fi\n  if [ "$_rc" -eq 0 ] && [ -n "$_s" ]; then LC_ALL=C sed -n "${_s%% *},${_s##* }p" "$_t" || _rc=$?; fi\n  rm -f "$_t"\n  return "$_rc"\n' \
+  $'  local _t _s\n  _t="$(mktemp)" || return 1\n  cat > "$_t"\n  _s="$(span_of "$1" < "$_t")"\n  [ -n "$_s" ] && LC_ALL=C sed -n "${_s%% *},${_s##* }p" "$_t"\n  rm -f "$_t"\n'
 
 echo
 if [ "$fails" -eq 0 ]; then echo "procsub-staged-refusal: PASS"; exit 0; fi
