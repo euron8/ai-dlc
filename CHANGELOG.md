@@ -35,8 +35,8 @@ the row label were never read. Five such lines verified, among them
   column and that cell begins `PASS`. A headerless row, a row under a header with no such column,
   and a verdict cell that begins `—`, `VOIDED` or `FAIL` are refused. A cell that begins `PASS`
   and turns to failure later, such as `PASS (FAILED on re-drive)`, still verifies; the consumer's
-  history has none, and anchoring the cell's end would refuse its real `PASS — …` rows
-  (`BL-349`). A failure-word vocabulary was measured and
+  history has none, and anchoring the cell's end would refuse its real `PASS — …` rows. A
+  failure-word vocabulary was measured and
   not taken: it refused a real sprint-289 row reading `**PASS (attested, cite — do not re-drive)**`,
   and any denylist misses `VOIDED` or `SUPERSEDED` by construction.
 - The same judgment applies at a moved digest, so a FAIL row there is located rather than
@@ -84,9 +84,10 @@ the consumer's `_bmad-output/`, 6111 derivations.
   producer that reads as an empty input. The receipt counts them and closes at zero.
 - `BL-346`, `BL-347` (NOTEs): a span in a fenced, indented or HTML-comment block still verifies;
   a tab as decoration is refused.
-- `BL-349`..`BL-352` (NOTEs, from the tip adversary): the verdict cell is read only at its start;
-  a later revocation does not revoke; a NUL or an underscore wrap still reaches the first-gate
-  message; three receipts each accept a non-fix that the fixtures kill.
+- Four NOTEs from the tip adversary, filed at the batch close once this release's entries rotate,
+  because filing them here would put the backlog over its ceiling: the verdict cell is read only
+  at its start; a later revocation does not revoke; a NUL or an underscore wrap still reaches the
+  first-gate message; three receipts each accept a non-fix that the fixtures kill.
 
 The tip adversary also found that a column-1 span recording `mechanical=check-17-bypass:FAIL`
 verified, as it did at 0.648.0. The field is now pinned to the value `--attest` emits, so that
