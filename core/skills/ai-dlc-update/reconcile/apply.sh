@@ -458,6 +458,23 @@ overwrite_from_theirs() { # <core-rel>
 # tree is at THEIRS.
 mech_fail=0
 
+# THE DIFF STAGING DIRECTORY, one per process, removed by this process's EXIT handler. The drift
+# refile's `diff` reads theirs from a staged file, never a `<( )` process substitution: under
+# concurrent bash 3.2 workers that exits 2 with `/dev/fd/63: Bad file descriptor` (3-8 in 2000 at
+# batch 160, 0 staged). Empty when `mktemp -d` failed, and the site then refuses instead of diffing.
+AP_TMP="$(mktemp -d "${TMPDIR:-/tmp}/apply-diff.XXXXXX" 2>/dev/null)" || AP_TMP=""
+trap '[ -n "$AP_TMP" ] && rm -rf "$AP_TMP"; :' EXIT
+# ap_pdiff <staged-file> <other> — the staged file PIPED into `diff -`, never passed as a path:
+# Apple diff hunks two regular files differently from a pipe and a file. Returns diff's own
+# status, or 2 when the `cat` failed. A function because a `case` or a PIPESTATUS read inside
+# `$( )` is where bash 3.2 parsing breaks.
+ap_pdiff() {
+  cat "$1" | diff - "$2"
+  local _c="${PIPESTATUS[0]}" _d="${PIPESTATUS[1]}"
+  [ "$_c" -eq 0 ] || return 2
+  return "$_d"
+}
+
 # =============================================================================================
 # THE RESOLUTION PHASES. Everything to the matching `fi` -- phases 0 through the exec-bit audit
 # -- is what `--finish` SKIPS. That mode exists to advance a stamp this program deliberately
@@ -860,8 +877,20 @@ while IFS= read -r rel; do
   cons="$(consumer_path "$rel")" || { say DECISION drift "$rel" "no consumer path mapping"; mech_fail=$((mech_fail+1)); continue; }
   case "$rel" in
     schemas/provenance-block.json)
-      added="$(diff <(git -C "$DIST" show "${THEIRS}:core/${rel}" 2>/dev/null) "$cons" 2>/dev/null \
-               | sed -n 's/^> *//p' | grep -oE '"[^"]+"' | tr -d '"' | grep -v '^known_skills$' | sort -u)"
+      # Theirs is STAGED and diff's rc read off the bare run (0/1 ran, >=2 refused): the old
+      # `diff <(git show …) | …` read no status at all, and the `<( )` fd race (3-8 in 2000 under
+      # 4 bash 3.2 workers, batch 160) exits 2 -- which read as "no known_skills added". A failed
+      # show, staging or diff is a DECISION that withholds the stamp, never an empty diff.
+      ap_d=""; ap_drc=staging-failed
+      # Piped through `ap_pdiff`; a failed `cat` is 2.
+      if [ -n "$AP_TMP" ] && git -C "$DIST" show "${THEIRS}:core/${rel}" > "$AP_TMP/theirs" 2>/dev/null; then
+        ap_d="$(ap_pdiff "$AP_TMP/theirs" "$cons" 2>/dev/null)"; ap_drc=$?
+      fi
+      if [ "$ap_drc" = staging-failed ] || [ "$ap_drc" -ge 2 ]; then
+        say DECISION drift "$rel" "the diff against ${THEIRS} did not run (${ap_drc}) — whether this edit is an additive known_skills entry is UNKNOWN, not no; re-run apply"
+        mech_fail=$((mech_fail+1)); continue
+      fi
+      added="$(printf '%s\n' "$ap_d" | sed -n 's/^> *//p' | grep -oE '"[^"]+"' | tr -d '"' | grep -v '^known_skills$' | sort -u)"
       if [ -n "$added" ]; then
         ext="$CONSUMER/.claude/skills/ai-dlc/extensions/known-skills.json"
         mkdir -p "$(dirname "$ext")"

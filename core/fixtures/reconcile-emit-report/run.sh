@@ -1658,10 +1658,56 @@ V_BASELINE='BOTH-ADDED->CLASSIFY  core/skills/ai-dlc/templates/classes.md'
 VMD="$WORK/v-mutants"; mkdir -p "$VMD"
 
 v_copy()    { local d="$VW/$1"; rm -rf "$d"; mkdir -p "$d" && cp -R "$CONSUMER" "$d/consumer"; }
+
+# R6 — A WORLD BUILT OR SCORED UNDER A TRANSIENT REFUSAL IS RE-BUILT, NOT READ AS A VERDICT.
+#
+# THE FLAKE THIS CLOSES. Batch 160's pool put E3 on V-N at `3|BLOCKERS-RESOLVED|1|1|4|4`: the
+# orientation `diff` failed once at APPROVE time and the engine rendered `ONLY IN …: none`, so
+# the approval recorded a sample that never ran. The engine now NAMES that failure (a column-0
+# `DETECTOR-REFUSED  orientation …` line), which makes the render honest and does NOT stop the
+# kill arms going red: an approval carrying the refusal still scores `…|4|4` under E3, and one
+# forced refusal while --verify scores E1 on V-HC moves that cell to `1|UNDECIDED|0|0|1|0` and
+# reports `[V-R V-U V-HC]` — every kill set becomes a flake arm. Measured unforced too: this unit
+# run ALONE went red with CONTROL(V), E4 and E7 each moved by one spontaneous
+# `orientation diff exited 2` in a verify render, and an approve-time `ONLY IN …: none` appeared
+# on its own under ~5 concurrent copies; `diff <(…) file` under four concurrent workers fails
+# `/dev/fd/63: Bad file descriptor` on roughly 0.4% of calls, where a temp file fails none.
+#
+# SO BOTH SIDES RETRY, BOUNDED AT THREE, AND ONLY ON A REFUSAL THE HEALTHY WORLD DOES NOT CARRY.
+# A retry is legitimate here only because the engine now NAMES the failure; before it, this
+# would have retried straight into a silent `none`. Three refusals in a row are not transient,
+# and they report FIXTURE BROKEN naming the world, the program and the line — never a verdict
+# on emit-report.sh.
+#
+# THE BASELINE IS DERIVED, NEVER LISTED. The seed world carries one legitimate refusal on every
+# clean run (`retired-layer-token.sh`), so keying on `^DETECTOR-REFUSED` at large would retry
+# every approval three times and fail the unit. `V_REFUSE_OK` is the set of detector NAMES the
+# seed region refuses; a scoring program built by `v_stub` adds the one sibling it killed, read
+# from the `.stubbed` file `v_stub` writes beside it.
+V_TRIES=3
+V_REFUSE_OK="$(awk 'index($0, "DETECTOR-REFUSED  ") == 1 { split($0, f, " "); printf "%s ", f[2] }' "$REGION")"
+# v_foreign <file> <line-lead> [<extra-ok-name>] -> the first column-0 refusal (after the lead,
+# which is `< ` for the fresh-render side of a --verify diff) naming a detector outside the
+# baseline. One awk per call: the whole cost of R6 on a healthy run.
+v_foreign() {
+  awk -v lead="$2" -v ok=" $V_REFUSE_OK ${3:-} " '
+    index($0, lead "DETECTOR-REFUSED  ") == 1 {
+      l = substr($0, length(lead) + 1); split(l, f, " ")
+      if (index(ok, " " f[2] " ") == 0) { print l; exit }
+    }' "$1"
+}
 v_approve() { # v_approve <world> <ref-to-render-at>
-  local d="$VW/$1"
+  local d="$VW/$1" a=0 x=""
   printf '%s\n' "$2" > "$d/ref"
-  bash "$EMIT" "$DIST" "$BASE" "$d/consumer" "$2" > "$d/region.md" 2>/dev/null
+  # `until`, where v_score's loop is `while`: the two retries are mutated separately by
+  # `emit-report-refusal`, whose battery extracts these helpers from this file and drives them.
+  until [ "$a" -ge "$V_TRIES" ]; do
+    a=$((a+1))
+    bash "$EMIT" "$DIST" "$BASE" "$d/consumer" "$2" > "$d/region.md" 2>/dev/null
+    x="$(v_foreign "$d/region.md" "")"
+    [ -z "$x" ] && break
+  done
+  [ -n "$x" ] && bad "FIXTURE BROKEN — $1 approval rendered DETECTOR-REFUSED on $V_TRIES attempts: $x"
   { echo "# Reconcile report (fixture)"; echo; cat "$d/region.md"; } > "$d/approved.md"
   [ -s "$d/region.md" ]
 }
@@ -1679,6 +1725,8 @@ v_stub() { # v_stub <emit-path> <dest-dir> <sibling-to-refuse> -> prints the emi
   local e="$1" d="$2" s="$3"
   rm -rf "$d"; cp -R "$(dirname "$e")" "$d" || return 1
   printf '#!/usr/bin/env bash\nexit 2\n' > "$d/$s"
+  # Read by v_score: this program's refusal of `$s` is the world's subject, not a transient.
+  printf '%s\n' "$s" > "$d/.stubbed"
   printf '%s\n' "$d/$(basename "$e")"
 }
 
@@ -1693,10 +1741,23 @@ v_stub() { # v_stub <emit-path> <dest-dir> <sibling-to-refuse> -> prints the emi
 # AND THE COUNTS ARE IN THE CELL BECAUSE TWO OF THE MUTANTS BELOW MOVE NOTHING ELSE. E9 and E10
 # cover each other on the VERDICT — measured, and the symptom of that is zero failures, not two —
 # so each is killed on the diagnosis fields, and E11 is what shows the pair is load-bearing.
+#
+# R6 ON THE SCORING SIDE. A refusal in the FRESH render (the `< ` side of the forwarded diff) that
+# the healthy world does not carry is re-scored, up to V_TRIES. Scoring runs in background jobs
+# where `bad` cannot count, so three refusals in a row leave `broken.<tag>` beside the score and
+# the foreground reports it (`v_broken_scan`).
 v_score() {
-  local e="$1" d="$VW/$2" f="$VW/$2/stderr.$3" rc cause nres nuns c1 c2
-  bash "$e" --verify "$d/approved.md" "$DIST" "$BASE" "$d/consumer" "$(cat "$d/ref")" >/dev/null 2>"$f"
-  rc=$?
+  local e="$1" d="$VW/$2" f="$VW/$2/stderr.$3" rc cause nres nuns c1 c2 a=0 x="" sok=""
+  [ -f "${e%/*}/.stubbed" ] && read -r sok < "${e%/*}/.stubbed"
+  while [ "$a" -lt "$V_TRIES" ]; do
+    a=$((a+1))
+    bash "$e" --verify "$d/approved.md" "$DIST" "$BASE" "$d/consumer" "$(cat "$d/ref")" >/dev/null 2>"$f"
+    rc=$?
+    x="$(v_foreign "$f" "< " "$sok")"
+    [ -z "$x" ] && break
+  done
+  rm -f "$d/broken.$3"
+  [ -n "$x" ] && printf '%s\n' "$x" > "$d/broken.$3"
   cause="$(awk '/^  cause: /{print $2; exit}' "$f")"
   nres="$(grep -c '^    resolved: ' "$f")" || nres=0
   nuns="$(grep -c '^    unseen: ' "$f")" || nuns=0
@@ -2092,6 +2153,18 @@ v_mk E11 2 '| norm_rows)' -e "$V_E9SED" -e "$V_E10SED"
 rm -rf "$VMD/ctl"; cp -R "$(dirname "$EMIT")" "$VMD/ctl"
 v_par ship ctl $V_APPLIED
 v_score "$V_DEAD_DRIFT" "$V_CONTROL_WORLD" ship > "$VW/$V_CONTROL_WORLD/score.ship"
+# The foreground half of R6's scoring guard: a cell whose fresh render refused on every attempt.
+v_broken_scan() {
+  local n t b
+  for n in $V_WORLDS $V_CONTROL_WORLD; do
+    for t in ship ctl $V_APPLIED; do
+      b="$VW/$n/broken.$t"
+      [ -f "$b" ] && bad "FIXTURE BROKEN — $n scoring under $t rendered DETECTOR-REFUSED on $V_TRIES attempts: $(cat "$b")"
+    done
+  done
+  return 0
+}
+v_broken_scan
 V_SHIP="$(v_sigstr ship)"
 V_CTL="$(v_sigstr ctl)"
 

@@ -200,6 +200,7 @@ core_manifest:
   - core/fixtures/provenance-not-accessible/**
   - core/fixtures/reconcile-blocking-list/**
   - core/fixtures/reconcile-emit-report/**
+  - core/fixtures/emit-report-refusal/**
   - core/fixtures/relabel-theirs-collision/**
   - core/fixtures/release-version-triple/**
   - core/fixtures/relocation-preclassify/**

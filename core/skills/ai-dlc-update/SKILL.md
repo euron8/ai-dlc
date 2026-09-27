@@ -153,7 +153,9 @@ which side holds what, and the resolution prose you write is the only place that
 appears — no detector re-reads it. So take it from the report's **Semantic worklist
 orientation** block, which `emit-report.sh` renders per CLASSIFY file with the two sides
 labelled and their exclusive lines shown; where a side is truncated, run the `full:` diff
-command it prints. Do not describe a side from having read the file earlier in the run.
+command it prints. A `DETECTOR-REFUSED  orientation …` line in place of a file's sample means
+that sample was never computed, not that the side is empty: derive that file's sides by running
+the diff yourself. Do not describe a side from having read the file earlier in the run.
 
 Failure caught: the sides get swapped, and because the recommended ACTION is written from
 the comparison, the swap propagates into it. Observed on the 0.106.1 → 0.113.1 pull — a

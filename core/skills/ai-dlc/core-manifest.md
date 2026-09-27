@@ -272,6 +272,7 @@ core_manifest:
   - fixtures/provenance-not-accessible/**
   - fixtures/reconcile-blocking-list/**
   - fixtures/reconcile-emit-report/**
+  - fixtures/emit-report-refusal/**
   - fixtures/relabel-theirs-collision/**
   - fixtures/release-version-triple/**
   - fixtures/relocation-preclassify/**
