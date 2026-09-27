@@ -332,9 +332,44 @@ if [ "$MODE" = "verify" ]; then
   # and no longer three greps. The program is single-quoted and may carry no apostrophe.
   _res="$(LC_ALL=C H2_LEAD="$ATTEST_LEAD" H2_TAIL="$ATTEST_TAIL" H2_LOCATE="$ATTEST_LOCATE" \
           H2_SPAN="$ATTEST_SPAN" H2_ANY="$ATTEST_ANY" awk '
-    function cells(s, arr) {
+    # cells(s, arr): split a table row into cells. A pipe written as \| is never a
+    # delimiter, and neither is a pipe inside a backtick code span: a plain split on every
+    # pipe shifted every later cell one column left, so a row whose Result cell reads FAIL
+    # was judged PASS when an earlier cell carried `| PASS`. A code span opens on a run of
+    # N backticks and closes on the next run of exactly N; an opener with no closer is a
+    # literal backtick. A GFM table splits on a pipe even inside a code span, so such a
+    # row can still render a different verdict on GitHub than this reader sees; a pipe
+    # inside a span in a verdict table is ambiguous, and the reader takes the code-span
+    # reading.
+    function closer(s, p, run,    L, r) {
+      L = length(s)
+      while (p <= L) {
+        if (substr(s, p, 1) != "`") { p++; continue }
+        r = 1; while (substr(s, p + r, 1) == "`") r++
+        if (r == run) return p
+        p += r
+      }
+      return 0
+    }
+    function cells(s, arr,    n, i, j, L, ch, cur, run) {
+      split("", arr)
       sub(/^[ ]*[|]/, "", s); sub(/[|][ ]*$/, "", s)
-      return split(s, arr, "|")
+      L = length(s); n = 0; cur = ""; i = 1
+      while (i <= L) {
+        ch = substr(s, i, 1)
+        if (ch == "\\" && substr(s, i + 1, 1) == "|") { cur = cur "\\|"; i += 2; continue }
+        if (ch == "`") {
+          run = 1; while (substr(s, i + run, 1) == "`") run++
+          j = closer(s, i + run, run)
+          if (j) { cur = cur substr(s, i, j + run - i); i = j + run }
+          else   { cur = cur substr(s, i, run); i += run }
+          continue
+        }
+        if (ch == "|") { arr[++n] = cur; cur = ""; i++; continue }
+        cur = cur ch; i++
+      }
+      arr[++n] = cur
+      return n
     }
     # judge(rx): OK when a span matching rx sits in an accepted placement on this line,
     # else the reason it was refused. Sets CITE to the accepted span.
