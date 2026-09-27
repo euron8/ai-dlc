@@ -33,7 +33,10 @@ the row label were never read. Five such lines verified, among them
   The old negated class also admitted `❌`, `~~…~~`, `<!-- -->` and `> `.
 - A table row verifies only when the table's header names a Result, Verdict, Status or Outcome
   column and that cell begins `PASS`. A headerless row, a row under a header with no such column,
-  and a `—`, `VOIDED` or `FAIL` verdict are refused. A failure-word vocabulary was measured and
+  and a verdict cell that begins `—`, `VOIDED` or `FAIL` are refused. A cell that begins `PASS`
+  and turns to failure later, such as `PASS (FAILED on re-drive)`, still verifies; the consumer's
+  history has none, and anchoring the cell's end would refuse its real `PASS — …` rows
+  (`BL-349`). A failure-word vocabulary was measured and
   not taken: it refused a real sprint-289 row reading `**PASS (attested, cite — do not re-drive)**`,
   and any denylist misses `VOIDED` or `SUPERSEDED` by construction.
 - The same judgment applies at a moved digest, so a FAIL row there is located rather than
