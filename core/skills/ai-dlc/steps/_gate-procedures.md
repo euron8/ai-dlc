@@ -482,10 +482,12 @@ scripts/ai-dlc/validate-artifact-derivations.sh _bmad-output/planning-artifacts/
 scripts/ai-dlc/report-propagation-fanout.sh <base-ref>
 ```
 
-A non-zero exit from `validate-artifact-derivations.sh` is a repair that falsified a
+Exit 1 from `validate-artifact-derivations.sh` is a repair that falsified a
 derivation — most often not its own, but one
 elsewhere in the artifact set that was counting the thing this repair moved. Send it back to
-the remediator now. It costs an exit code here and a full review-and-repair round trip if it
+the remediator now. Exit 2 is NOT a finding: an `UNRUN:` or `REFUSED:` line names a
+derivation the checker could not run or compare, and nothing in the artifact is wrong. Re-run
+the validator; never send an exit 2 to the remediator. Exit 1 costs an exit code here and a full review-and-repair round trip if it
 reaches the adversary instead: measured across four sprints of this pipeline, **78% of the
 MAJOR findings raised at pass 2 and later were introduced by a prior repair**, and the single
 largest sub-shape is a derivation that was correct when written, was never re-run after a

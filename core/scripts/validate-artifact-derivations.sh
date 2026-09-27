@@ -56,9 +56,12 @@
 # skip would let an author move a claim out of reach of the checker by writing it in a
 # language the checker does not run.
 #
-# Exit: 0 all derivations reproduce | 1 a derivation is stale or malformed | 2 usage, or a
-# derivation that did not run to completion (an `UNRUN:` line names each; run_pair says why),
-# which is a refusal and never a verdict.
+# Exit: 0 all derivations reproduce | 1 a derivation is stale or malformed | 2 usage, a
+# derivation that did not run to completion or whose output could not be COMPARED (an
+# `UNRUN:` line names each; run_pair says why), or a directory target that could not be
+# walked -- each a refusal and never a verdict. A caller treats 1 as a repair to make and 2
+# as a run to repeat; reading 2 as either a verdict or a clean is the defect run_pair's
+# comparison comment records.
 set -uo pipefail
 
 # --- AI_DLC_ROOT ------------------------------------------------------------
@@ -516,7 +519,8 @@ cmd_is_safe() { # $1 command -> 0 safe, 1 refused (reason in REFUSED)
 }
 
 TMP_SAFE="$(mktemp)"; TMP_OUT="$(mktemp)"; TMP_EXP="$(mktemp)"; TMP_SENT="$(mktemp)"; TMP_RAN="$(mktemp)"
-trap 'rm -f "$TMP_SAFE" "$TMP_OUT" "$TMP_EXP" "$TMP_SENT" "$TMP_RAN"' EXIT
+TMP_NEXP="$(mktemp)"; TMP_NOUT="$(mktemp)"; TMP_LIST="$(mktemp)"
+trap 'rm -f "$TMP_SAFE" "$TMP_OUT" "$TMP_EXP" "$TMP_SENT" "$TMP_RAN" "$TMP_NEXP" "$TMP_NOUT" "$TMP_LIST"' EXIT
 # The one-line stdin every derivation runs on -- run_pair's READS-STDIN arm says why.
 STDIN_SENTINEL="AI-DLC-DERIVATION-STDIN-SENTINEL"
 printf '%s\n' "$STDIN_SENTINEL" > "$TMP_SENT"
@@ -724,11 +728,52 @@ run_pair() { # $1 file  $2 line  $3 command   (expected output is in $TMP_EXP)
   if [ "$rc" -ne 0 ] && [ ! -s "$TMP_OUT" ] && [ ! -s "$TMP_EXP" ]; then
     return
   fi
-  if ! diff -q <(norm < "$TMP_EXP") <(norm < "$TMP_OUT") >/dev/null 2>&1; then
+  # THE COMPARISON HAS THREE OUTCOMES, AND ONLY ONE OF THEM IS STALE. `diff` exits 0 on equal
+  # inputs, 1 on different ones, and 2 or more when it could not compare at all. This line
+  # used to be `if ! diff -q <(norm ...) <(norm ...)`, which folded the third outcome into the
+  # second, and discarded the status of both `norm` producers besides. Three shapes, each
+  # measured by forcing it with a PATH stub rather than by sampling:
+  #
+  #   - `diff` exiting 2 on a derivation that REPRODUCES scored FAIL (STALE), exit 1. The
+  #     live cause is bash 3.2's `/dev/fd` process substitution: under concurrent workers
+  #     `diff` intermittently reports `/dev/fd/63: Bad file descriptor` and exits 2, at
+  #     roughly 0.15-0.4% of comparisons, measured on `diff <(printf ...) file`. At the
+  #     derivation gate that is a remediator dispatched to repair a claim that is true.
+  #   - `sed` failing inside `norm`, on a STALE derivation, scored OK, exit 0: both
+  #     substitutions were empty, so they compared equal. A silent false clear.
+  #   - `find` failing on a directory target (the walk below) scored "OK: 0 derivation(s)",
+  #     exit 0, for the same reason. It is refused there.
+  #
+  # So both normalised sides are STAGED to files with each producer's status checked, `diff`
+  # compares the two files -- `diff`, not `cmp`, because receipts stub `diff` on PATH -- and
+  # its own status decides: 0 clean, 1 STALE with the message exactly as before, anything
+  # else UNRUN. A failed `norm` is UNRUN too. UNRUN, not a new counter, because the capture
+  # hook surfaces an exit 2 only through an `UNRUN:` or `REFUSED:` line, and
+  # `derivation-differential.sh` refuses any status but 0 and 1: neither caller can read
+  # this outcome as a verdict.
+  local cmp_why="" drc=0
+  if ! norm < "$TMP_EXP" > "$TMP_NEXP"; then
+    cmp_why="normalising the recorded output failed"
+  elif ! norm < "$TMP_OUT" > "$TMP_NOUT"; then
+    cmp_why="normalising the actual output failed"
+  else
+    diff -q "$TMP_NEXP" "$TMP_NOUT" >/dev/null 2>&1 || drc=$?
+    case "$drc" in
+      0|1) ;;
+      *) cmp_why="diff exited ${drc}, which is neither equal nor different" ;;
+    esac
+  fi
+  if [ -n "$cmp_why" ]; then
+    printf 'UNRUN: %s:%s ran, but its output could not be compared (%s), so it has no verdict:\n      $ %s\n' \
+      "$f" "$ln" "$cmp_why" "$c" >&2
+    unrun=$((unrun + 1))
+    return
+  fi
+  if [ "$drc" -eq 1 ]; then
     fail "STALE" "$f:$ln records an output its own command no longer produces.
       \$ $c
-      recorded: $(norm < "$TMP_EXP" | tr '\n' '/' | sed 's:/$::' | cut -c1-160)
-      actual:   $(norm < "$TMP_OUT" | tr '\n' '/' | sed 's:/$::' | cut -c1-160)
+      recorded: $(tr '\n' '/' < "$TMP_NEXP" | sed 's:/$::' | cut -c1-160)
+      actual:   $(tr '\n' '/' < "$TMP_NOUT" | sed 's:/$::' | cut -c1-160)
       The claim this derivation supports is asserting a fact about the tree that is no
       longer true. Re-derive it and rewrite the sentence it supports -- a derivation is
       true about the tree at the moment it ran, and the usual way one goes stale is a
@@ -738,7 +783,18 @@ run_pair() { # $1 file  $2 line  $3 command   (expected output is in $TMP_EXP)
 
 for target in "$@"; do
   if [ -d "$target" ]; then
-    while IFS= read -r f; do check_file "$f"; done < <(find "$target" -type f -name '*.md' | sort)
+    # STAGED, WITH THE WALK'S STATUS READ. A `< <(find ...)` loop discards find's status, so a
+    # walk that failed read as an empty directory and the run reported "OK: 0 derivation(s)",
+    # exit 0 -- measured with a failing `find` stub. `pipefail` makes a failed `find` fail
+    # this pipeline even though `sort` succeeds on the empty stream.
+    find "$target" -type f -name '*.md' | sort > "$TMP_LIST"
+    walk_rc=$?
+    if [ "$walk_rc" -ne 0 ]; then
+      printf 'REFUSED: could not list the markdown files under %s (the walk exited %s), so its derivations were never read; no verdict. Re-run once the fault is gone.\n' \
+        "$target" "$walk_rc" >&2
+      exit 2
+    fi
+    while IFS= read -r f; do check_file "$f"; done < "$TMP_LIST"
   elif [ -f "$target" ]; then
     check_file "$target"
   else

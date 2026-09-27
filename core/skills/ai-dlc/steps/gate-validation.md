@@ -2210,9 +2210,11 @@ which re-drives the mechanical fixture itself and, on success, prints the
 `H2_ATTESTED v1` line to append to the gate log. If it exits 1, **the gate FAILS**.
 
 Append that line on its own line at column 1, with nothing before or after it.
-Any prose AFTER the line makes it unverifiable, and `--verify` will name the
-line. In a table log, the H2 row's evidence cell holding ONLY the span
-is also accepted. Nothing else about the line may change.
+Any prose AFTER the line makes it unverifiable, as does any prose before it,
+and `--verify` will name the line. In a table log, the span ALONE in a cell is
+also accepted, in a row whose Result, Verdict, Status or Outcome column reads
+PASS; a table with no header row, or no such column, is refused. Nothing else
+about the line may change.
 
 The three items:
 

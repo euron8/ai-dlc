@@ -4276,41 +4276,80 @@ verify: manual
 
 ## BL-335 — `validate-artifact-derivations.sh` scores a `<( )` diff that did not run as STALE
 
-**DEFECT.** Found by the batch-160 docs hand. It is filed as the one entry for the `<( )` sites
-0.647.0 left in `core/`, and it is a DEFECT rather than a NOTE because one of the two remaining
-shipped diff sites decides a verdict.
+**DEFECT.** Found by the batch-160 docs hand. Its second subject, the `<( )` sites no one audited,
+is re-filed as `BL-348` and does not ride on this entry's close.
 
-0.647.0 staged the five verdict-bearing reconcile diff sites (`BL-334`). At `9f153a07`,
-`git grep -nE '<\(' -- 'core/*.sh'` returns 147 lines. The count at `df3623b9` is 142; the
-difference is new comments that mention the old spelling. Leaving out comment lines gives 129,
-and leaving out `core/fixtures/` as well gives 84. Outside the fixtures, three lines still run
-`diff` on a `<( )` operand:
-- `core/scripts/sync-transient-ignore.sh:122`: `diff <(…) <(…) || true`. This is diagnostic
-  output in `--check`, printed after the verdict is already decided by the string comparison
-  at `:119` and before `exit 1`. The race can garble the printed diff but cannot move the exit.
-  **Not verdict-bearing.**
-- `core/skills/ai-dlc-update/reconcile/emit-report.sh:421`: an `echo` of the `full:` command
-  for the operator to run. It is not executed. **Not verdict-bearing.**
-- `core/scripts/validate-artifact-derivations.sh:727`:
-  `if ! diff -q <(norm < "$TMP_EXP") <(norm < "$TMP_OUT") …; then fail "STALE" …`. A diff that
-  exits 2 on the fd race takes the `!` branch and records the derivation as STALE, even though
-  the recorded and actual outputs were never compared. **Verdict-bearing.**
+The filing named one verdict-bearing site, `:727`'s
+`if ! diff -q <(norm < "$TMP_EXP") <(norm < "$TMP_OUT") …; then fail "STALE"`. The batch-162
+contract adversary found two more in the same script. Each was forced with a PATH stub against
+the base script (`fe30b4fa`), never sampled:
+- **`diff` exits 2** (the bash 3.2 `/dev/fd/63: Bad file descriptor` race, about 0.15-0.4% under
+  concurrent workers, measured on `diff <(printf …) file` in batch 160). A derivation that
+  reproduces scored `FAIL (STALE)`, exit 1.
+- **`sed` fails inside `norm`**. Both substitutions came back empty and compared equal, so a
+  STALE derivation scored `OK`, exit 0. This is a silent false clear, and it is worse than the
+  filed shape.
+- **`find` fails in the directory walk** (`:741`, `done < <(find "$target" …)`). The walk read as
+  an empty directory and scored `OK: 0 derivation(s)`, exit 0. This is also a false clear.
 
-Three consumers act on that STALE:
-- the derivation-capture hook;
-- `apply.sh`'s `artifact-derivations` worklist row;
-- `derivation-differential.sh`, which classifies by the pair of sides. A spurious STALE on the
-  base side of a derivation that genuinely broke at theirs scores **STALE-BOTH**. That class is
-  "pre-existing debt, out of this row's scope" (`derivation-differential.sh:32`), so a real
-  NEWLY-FAILING row is hidden: a false clear.
+**The old body's consumer list was wrong about `apply.sh`.** `apply.sh` never executes the
+validator. `vd_join()` is a parse-only path join, the comment above it says "NOT RUN FROM HERE",
+and `:829` only tests that the file exists so that it can name it in a WORKLIST or DECISION row.
+The two programs that do execute it both refuse exit 2 already:
+- the capture hook (`ai-dlc-derivation-capture.sh:224-228`) surfaces a 2 only when an
+  `^UNRUN:` or `^REFUSED:` line is present;
+- `derivation-differential.sh:288-289` refuses any status other than 0 or 1.
 
-This rests on reading the code and on the race rate measured on `diff <(printf …) file`. The race
-was not driven at this site. The fix is the staged-file spelling `BL-334` used, with diff's exit
-status read directly and 2 or more reported as a refusal, not as STALE. The other `<( )` lines
-feed `while read`, `comm` or `sort` rather than `diff`. None of them was audited for whether a
-failed substitution reads as an empty input that decides a verdict.
+The one reader that mis-routed was prose. `_gate-procedures.md` said that any non-zero exit is a
+repair to send to the remediator.
 
-verify: manual
+**Fixed by `fb953c85`.** Both `norm` outputs are staged to temp files, and each producer's
+status is checked. `diff` compares the two files and its status decides: 0 is clean, 1 is STALE
+(the message is unchanged), and anything else is UNRUN. A failed `norm` is UNRUN too. UNRUN
+names `file:line`, increments the existing `unrun` counter and makes the run exit 2. The walk is
+staged into a list file, and `pipefail` carries a failed `find` through `sort`. A failed walk is
+`REFUSED:`, exit 2. The header's exit contract and `_gate-procedures.md` now say that exit 1 goes
+to the remediator and exit 2 is re-run, never remediated.
+
+**The receipt** builds a scratch root under `mktemp -d` with one derivation that reproduces and
+one that is stale, both `grep -c` (a `diff` derivation would pick up the stub). It checks two
+controls under the real tools and exits 9 unless both hold: the good file exits 0, and the stale
+file exits 1 with `FAIL (STALE)`. It then drives three stubs, and each stub writes a marker when
+it fires. If any marker is missing it exits 9.
+- **diff exits 2** on a file holding both derivations. It must exit 2 with no `STALE` and an
+  `^UNRUN: …mix.md:<n>` line.
+- **sed fails on `norm`'s two expressions only** (`cmd_is_safe`'s `sed` is unaffected) on the
+  stale file. It must exit 2, with no `OK:` and an `^UNRUN: …stale.md:<n>` line.
+- **find exits 1** on the directory target. It must exit 2 with no `OK:`.
+- **sed fails on `norm` only when its input is non-empty**, on a derivation whose recorded output
+  is EMPTY and whose actual output is not, so only the ACTUAL side's `norm` fails. It must exit 2,
+  with no `OK:` and an `^UNRUN: …act.md:<n>` line. The sed row above fails `norm` on every call,
+  so the recorded side's check fires first and a build that drops only the actual side's check
+  passes it; the batch-162 tip adversary measured that build printing `OK`, exit 0, on this seed.
+
+Raw exits, one fresh `mktemp` tree per row, with the receipt run the way `backlog-reverify.sh:243`
+runs it:
+- **1** at base `fe30b4fa`. diff→1 with STALE twice, sed→0 `OK`, find→0 `OK`.
+- **0** at `fb953c85`, and at this branch's own worktree.
+- **1** on the Subject B fix `2a76c0b7`. Its copy of this script is byte-identical to base
+  (md5 `745a76fd` on both), and the receipt reads only this script.
+- **1** on each of four regressions built from `fb953c85`:
+  - rc ≥ 2 read as clean;
+  - rc ≥ 2 read as STALE;
+  - both `norm` statuses discarded;
+  - `walk_rc` forced to 0.
+- **0** on two other correct spellings:
+  - one `mktemp -d` holding the three files, `norm` as a single `sed -e … -e …`, the verdict
+    from `if diff …; then …; else drc=$?`, and `find` and `sort` run as separate steps, each
+    checked;
+  - a `cmp -s` fast path, with `diff` deciding only when `cmp` says the files differ.
+- **0** on a build that keeps the staged, checked walk but feeds the loop from a SECOND
+  `< <(find …)`, whose status nobody reads. **This is a gap the receipt accepts.** It is reachable
+  only when the first `find` succeeds and the second one fails, and the stub cannot tell the two
+  apart. `BL-348`'s receipt counts the `<(` it leaves behind.
+- **9** in a tree with no validator.
+
+verify: sh V="$PWD/core/scripts/validate-artifact-derivations.sh"; [ -f "$V" ] || exit 9; W="$(mktemp -d)" || exit 9; mkdir -p "$W/r/.claude" "$W/r/art" "$W/d" "$W/s" "$W/f" "$W/a" || exit 9; F="$(printf '\140\140\140')"; printf 'alpha\nbeta\n' > "$W/r/data.txt"; printf '%sderived\n$ grep -c alpha data.txt\n1\n%s\n' "$F" "$F" > "$W/r/art/good.md"; printf '%sderived\n$ grep -c alpha data.txt\n7\n%s\n' "$F" "$F" > "$W/r/stale.md"; cat "$W/r/art/good.md" "$W/r/stale.md" > "$W/r/mix.md" || exit 9; printf '%sderived\n$ grep -c alpha data.txt\n%s\n' "$F" "$F" > "$W/r/act.md"; printf '%s\n' '#!/bin/sh' 'case "$*" in *"[[:space:]]*\$"*|"/^\$/d") t="$(mktemp)" || exit 3; cat > "$t"; if [ -s "$t" ]; then : > "$MK.a"; exit 1; fi; /usr/bin/sed "$@" < "$t"; exit $? ;; esac' 'exec /usr/bin/sed "$@"' > "$W/a/sed"; printf '%s\n' '#!/bin/sh' ': > "$MK.d"; exit 2' > "$W/d/diff"; printf '%s\n' '#!/bin/sh' 'case "$*" in *"[[:space:]]*\$"*|"/^\$/d") : > "$MK.s"; exit 1 ;; esac' 'exec /usr/bin/sed "$@"' > "$W/s/sed"; printf '%s\n' '#!/bin/sh' ': > "$MK.f"; exit 1' > "$W/f/find"; chmod +x "$W/d/diff" "$W/s/sed" "$W/f/find" "$W/a/sed" || exit 9; export AI_DLC_PROJECT_ROOT="$W/r" MK="$W/mk"; bash "$V" "$W/r/art/good.md" > "$W/o.g" 2>&1; [ $? -eq 0 ] || exit 9; bash "$V" "$W/r/stale.md" > "$W/o.t" 2>&1; [ $? -eq 1 ] && grep -q 'FAIL (STALE)' "$W/o.t" || exit 9; bash "$V" "$W/r/act.md" > "$W/o.ac" 2>&1; [ $? -eq 1 ] && grep -q 'FAIL (STALE)' "$W/o.ac" || exit 9; PATH="$W/d:$PATH" bash "$V" "$W/r/mix.md" > "$W/o.d" 2>&1; rd=$?; PATH="$W/s:$PATH" bash "$V" "$W/r/stale.md" > "$W/o.s" 2>&1; rs=$?; PATH="$W/f:$PATH" bash "$V" "$W/r/art" > "$W/o.f" 2>&1; rf=$?; PATH="$W/a:$PATH" bash "$V" "$W/r/act.md" > "$W/o.a" 2>&1; ra=$?; [ -f "$W/mk.d" ] && [ -f "$W/mk.s" ] && [ -f "$W/mk.f" ] && [ -f "$W/mk.a" ] || exit 9; [ "$rd" -eq 2 ] && ! grep -q 'STALE' "$W/o.d" && grep -qE '^UNRUN: .*mix\.md:[0-9]+' "$W/o.d" || exit 1; [ "$rs" -eq 2 ] && ! grep -q '^OK:' "$W/o.s" && grep -qE '^UNRUN: .*stale\.md:[0-9]+' "$W/o.s" || exit 1; [ "$rf" -eq 2 ] && ! grep -q '^OK:' "$W/o.f" || exit 1; [ "$ra" -eq 2 ] && ! grep -q '^OK:' "$W/o.a" && grep -qE '^UNRUN: .*act\.md:[0-9]+' "$W/o.a" || exit 1; exit 0
 
 ## BL-336 — `apply.sh`'s refile refusal tells the operator to re-run apply, which the union gate refuses
 
@@ -4357,12 +4396,12 @@ verify: manual
 ## BL-341 — `validate-h2-attestation.sh --verify` grants an attestation whose own row or line says it FAILED
 
 **DEFECT.** Found by the batch 161 contract adversary; the prefix rows were added by the batch 161
-corpus hand. Not fixed in 0.648.0.
+corpus hand. Not fixed in 0.648.0; the reader fix is `2a76c0b7`.
 
-The accepting arm checks only what FOLLOWS the span: a lead that is not a word character, then a
-tail that reaches the cell's `|` or the end of the line. Failure words anywhere else on the line
-are never read. Each of these exits 0 on the 0.648.0 script with a live span at the right sprint
-and digest, re-verified in a scratch worktree at `0220be45`:
+The 0.648.0 accepting arm checked only what FOLLOWS the span: a lead that is not a word character,
+then a tail that reaches the cell's `|` or the end of the line. Failure words anywhere else on the
+line were never read. Each of these exits 0 on the 0.648.0 script with a live span at the right
+sprint and digest, re-verified in a scratch worktree at `0220be45`:
 - `` | H2 | core | FAIL | refused, re-drive owed: `SPAN` | `` (verdict in an earlier cell)
 - `` | H2 | core | `SPAN` | FAIL — item 3 seed passed H1 | `` (verdict in a later cell)
 - `` | H2 (INVALID, do not cite) | `SPAN` | `` (verdict in the row label)
@@ -4371,21 +4410,75 @@ and digest, re-verified in a scratch worktree at `0220be45`:
 
 Controls in the same run: `SPAN; item 3 FAILED` exits 1, and a column-1 span exits 0.
 
-The obvious fix, refusing a failure verdict earlier in the same cell, is not obviously right. It
-would refuse genuine records. The batch 161 corpus hand found that the consumer's pair for sprint 309 at digest `aab08e34` says the
-seeded fixture "would correctly FAIL" before the span. The table-cell acceptance exists because
-the step file names the H2 row's evidence cell as a placement, so narrowing it to column 1 is a
-writer-side change as well.
+**THE FIX HAS TWO HALVES, AND BOTH ARE CLOSED SETS.** Placement: the span must stand alone on its
+line or alone in its table cell, with decoration from a closed set on each side — the lead admits
+spaces, one `- ` bullet, `**` and one backtick; the tail admits one backtick, `**`, one period
+and spaces. A NEGATED class mirrored onto the lead (the shape first proposed) grants whatever
+glyph a transcriber uses to say no: `❌`, `✗`, `~~…~~`, `<!-- … -->`, `> ` and `--` all passed it,
+and the closed set refuses all six without naming any. Verdict: a span in a table row verifies
+only when the table's header row (the row directly above its `|---|` separator) names a Result,
+Verdict, Status or Outcome column and that row's cell in it BEGINS `PASS` after `*`, `_`,
+backtick and space decoration. A headerless row, a header with no such column, and a `—`,
+VOIDED or FAIL verdict cell are all refused. A span alone on its own line is not in a row and
+needs no verdict column. Both halves bind the exact-digest arm AND the moved-digest arm, so a
+FAIL row at a moved digest is located rather than reported as "fixture set CHANGED", and the
+cited span is cut from the accepted line rather than from the last occurrence in the log. A
+table row is judged under two cell readings, one keeping a `|` inside a code span in its cell
+and one splitting on every pipe as GitHub renders it, and verifies only if both accept it
+(BL-345).
 
-The receipt uses this file's polarity for an unfixed defect: **exit 0 means the fix is present**,
-any other non-zero means it still reproduces, so the entry reads STILL-LIVE today. It writes the
-five lines above at sprint 9 against the live digest and exits 1 if any of them verifies, and
-0 if all are refused. Its control is a column-1 span, which must verify; if it does not, the
-receipt exits 9, so a reader that refuses everything reads NEEDS-REVIEW rather than
-CLOSE-CANDIDATE. Scored in the same worktree: base `d38142b0` 1, `0220be45` 1, a column-1-only
-reader 0, a reader whose accepting arm never fires 9.
+**WHY A PASS ALLOWLIST AND NOT A FAILURE VOCABULARY.** A vocabulary refusing a row whose other
+cells carry FAIL, INVALID, REFUSED, RE-DRIVE or "do not cite" refused a real PASS in the
+consumer's history: sprint 289's verdict cell reads `**PASS (attested, cite — do not
+re-drive)**`, where "do not re-drive" is the instruction a passing row carries. It also misses
+VOIDED, SUPERSEDED and `❌` by construction, because a list of the words for failure is never
+finished. The allowlist is one word in a column the header names.
 
-verify: sh S=core/scripts/validate-h2-attestation.sh; [ -f "$S" ] || exit 9; D=$(bash "$S" --digest 2>/dev/null) && [ -n "$D" ] || exit 9; t=$(mktemp -d) || exit 9; P="H2_ATTESTED v1 sprint=9 digest=$D items=1,2,3 mechanical=check-17-bypass:PASS"; printf '%s\n' "$P" > "$t/ok.md"; printf '| H2 | core | FAIL | refused, re-drive owed: \140%s\140 |\n' "$P" > "$t/1.md"; printf '| H2 | core | \140%s\140 | FAIL — item 3 seed passed H1 |\n' "$P" > "$t/2.md"; printf '| Check | Evidence |\n|---|---|\n| H2 (INVALID, do not cite) | \140%s\140 |\n' "$P" > "$t/3.md"; printf '| H2 | core | FAIL -- re-drive required | \140%s\140 |\n' "$P" > "$t/4.md"; printf 'H2 FAILED, re-drive owed: %s\n' "$P" > "$t/5.md"; bash "$S" --verify --sprint 9 --gate-log "$t/ok.md" >/dev/null 2>&1 || exit 9; for f in 1 2 3 4 5; do bash "$S" --verify --sprint 9 --gate-log "$t/$f.md" >/dev/null 2>&1 && exit 1; done; exit 0
+**WHAT IT COSTS.** Measured by the fix hand over every revision of every consumer gate-log file,
+31 (sprint, digest) pairs, each driven through the real script with its digest forced and each
+pair's log whole so its rows keep their headers: the 0.648.0 reader verifies 31, this reader 29,
+a column-1-only reader 27. The two lost are 309 `aab08e34184faa3d` and 312 `0a1a18af49486682`,
+both of whose records quote the span after prose in the evidence cell; the 309 pair was voided
+and re-attested by its own sprint. Both are historical, since `--verify` is consulted for the
+current sprint only, and sprint 314, the consumer's current sprint, verifies.
+
+**CONSUMER-SIDE EXPECTATION UNTIL IT PULLS.** The consumer runs 0.643.0, whose `--attest` text
+says "as its own line at column 1 — or inside the H2 row's evidence cell. Both verify", with no
+"alone" and no verdict column (read at `scripts/ai-dlc/validate-h2-attestation.sh:291-292` of
+that tree). The batch 162 contract adversary measured two of its last six sprints attesting in a
+shape this reader refuses, so expect an H2
+re-drive roughly one sprint in three once the reader arrives without the writer text catching up
+in the same session. That is the SAFE direction: a refused attestation costs a re-drive, never a
+granted failure.
+
+**THE RECEIPT SEPARATES THE FIX FROM AN OVER-NARROW READER.** Exit 0 means the fix is present;
+exit 9 means the column-1 control span did not verify, so a reader refusing everything reads
+NEEDS-REVIEW rather than CLOSE-CANDIDATE; exit 2 means a span that must verify was refused; exit
+1 means a failed record verified. Must verify: the column-1 control, a `| Check | Result |
+Evidence |` table with a PASS row whose span is alone in its cell, and a `| Check | Evidence |
+Verdict |` table whose verdict cell reads `**PASS (attested, cite — do not re-drive)**`. Must
+refuse: the five lines above, `❌` before a backticked span, a VOIDED verdict row under a
+Result header, and the column-1 emitted line with its last field reading
+`mechanical=check-17-bypass:FAIL`, which the 0.649.0 tip still granted because the `mechanical=`
+value class was open; it is now pinned to the `:PASS` that `--attest` emits. Scored raw, each subject its own minimal tree built in a fresh `mktemp -d` from
+the three H2 fixture dirs plus the script:
+
+    fe30b4fa (0.648.0 reader)                                 1
+    2a76c0b7 (this fix)                                       0
+    fb953c85 (the other subject's fix, reader unchanged)      1
+    reader whose accepting arm never fires                    9
+    column-1-only reader                                      2
+    vocabulary-B2 in place of the verdict column              2
+    negated-class lead and tail                               1
+    verdict column ignored                                    1
+    second correct spelling (header scanned last-to-first     0
+      by index(), decoration stripped by a char loop,
+      bullet absorbing its own trailing spaces)
+
+The receipt reads nothing `validate-artifact-derivations.sh` changes; the only script it runs is
+this one.
+
+verify: sh S=core/scripts/validate-h2-attestation.sh; [ -f "$S" ] || exit 9; D=$(bash "$S" --digest 2>/dev/null) && [ -n "$D" ] || exit 9; t=$(mktemp -d) || exit 9; P="H2_ATTESTED v1 sprint=9 digest=$D items=1,2,3 mechanical=check-17-bypass:PASS"; v() { bash "$S" --verify --sprint 9 --gate-log "$t/$1.md" >/dev/null 2>&1; }; printf '%s\n' "$P" > "$t/ok.md"; printf '| Check | Result | Evidence |\n|---|---|---|\n| H2 | PASS | \140%s\140 |\n' "$P" > "$t/a.md"; printf '| Check | Evidence | Verdict |\n|---|---|---|\n| H2 | \140%s\140 | **PASS (attested, cite — do not re-drive)** |\n' "$P" > "$t/b.md"; printf '| H2 | core | FAIL | refused, re-drive owed: \140%s\140 |\n' "$P" > "$t/1.md"; printf '| H2 | core | \140%s\140 | FAIL — item 3 seed passed H1 |\n' "$P" > "$t/2.md"; printf '| Check | Evidence |\n|---|---|\n| H2 (INVALID, do not cite) | \140%s\140 |\n' "$P" > "$t/3.md"; printf '| H2 | core | FAIL -- re-drive required | \140%s\140 |\n' "$P" > "$t/4.md"; printf 'H2 FAILED, re-drive owed: %s\n' "$P" > "$t/5.md"; printf '❌ \140%s\140\n' "$P" > "$t/6.md"; printf '| Check | Result | Evidence |\n|---|---|---|\n| H2 | VOIDED | \140%s\140 |\n' "$P" > "$t/7.md"; printf '%s\n' "${P%:PASS}:FAIL" > "$t/8.md"; v ok || exit 9; for f in a b; do v "$f" || exit 2; done; for f in 1 2 3 4 5 6 7 8; do v "$f" && exit 1; done; exit 0
 
 ## BL-342 — `validate-h2-attestation.sh --verify` numbers a binary gate log with grep's banner
 
@@ -4414,3 +4507,100 @@ and then the first-gate message, rc 1. Separately, the located refusal goes to s
 CHANGED while first-gate goes to stdout, so a caller capturing only stdout sees nothing for it.
 
 verify: manual
+
+## BL-345 — `validate-h2-attestation.sh --verify` splits cells on a `|` inside a code span, so a FAIL row can verify
+
+**DEFECT.** Found by the batch 162 docs hand while scoring BL-341's receipt against `2a76c0b7`.
+That reader's `cells()` split a row on every `|`, including one inside backticks.
+`` | H2 `| PASS` | FAIL | `SPAN` | `` under a `| Check | Result | Evidence |` header, which a
+code-span-aware renderer shows with FAIL in the Result column, exited 0 because the reader saw
+`PASS` in column 2. The same row without the backticked pipe exited 1 in the same run.
+
+**ONE READING ALONE IS STEERABLE EITHER WAY, SO THE FIX REQUIRES BOTH.** `42da2d6d` splits
+cells only on pipes outside code spans, which closes the seed above and opens its mirror:
+`` | H2 `a| FAIL |b` | PASS | `SPAN` | `` has one cell under the code-span reading, with PASS in
+the Result column, while GitHub splits on every pipe and renders FAIL there. `3c2a8c80` judges a
+table row under both readings (code-span, and every unescaped pipe) and verifies it only if
+both accept it; an escaped `\|` is a delimiter in neither. Each seed exits 0 under the reader
+that ignores it and 1 under the fix.
+
+**THE ACCEPTED COST IS A FALSE REFUSAL.** A genuine PASS row carrying `` `a|b` `` in another
+cell is now refused, because the every-pipe reading shifts its verdict column; measured, that
+row exits 0 on `42da2d6d` and 1 on `3c2a8c80`. It costs one H2 re-drive, where a false grant
+would attest a check nobody drove. The fix hand reports that none of the consumer's 45
+historical span-carrying rows changes verdict; my own census of the consumer's working tree
+found 2 of 50 span-carrying table rows with a `|` between backticks and did not judge them.
+
+The receipt exits 9 if a plain PASS row under a Result header does not verify, 1 if either the
+code-span seed or the GitHub-mirror seed verifies, and 0 otherwise. Scored raw, each subject its
+own minimal `mktemp -d` tree of the three H2 fixture dirs plus the script: `2a76c0b7` 1 (the
+code-span seed verifies), `42da2d6d` 1 (the mirror seed verifies), `3c2a8c80` 0, the fix with
+both readings forced to code-span 1, and with both forced to every-pipe 1.
+
+verify: sh S=core/scripts/validate-h2-attestation.sh; [ -f "$S" ] || exit 9; D=$(bash "$S" --digest 2>/dev/null) && [ -n "$D" ] || exit 9; t=$(mktemp -d) || exit 9; P="H2_ATTESTED v1 sprint=9 digest=$D items=1,2,3 mechanical=check-17-bypass:PASS"; H='| Check | Result | Evidence |\n|---|---|---|\n'; v() { bash "$S" --verify --sprint 9 --gate-log "$t/$1.md" >/dev/null 2>&1; }; printf "$H"'| H2 | PASS | \140%s\140 |\n' "$P" > "$t/ok.md"; printf "$H"'| H2 \140| PASS\140 | FAIL | \140%s\140 |\n' "$P" > "$t/cs.md"; printf "$H"'| H2 \140a| FAIL |b\140 | PASS | \140%s\140 |\n' "$P" > "$t/gfm.md"; v ok || exit 9; v cs && exit 1; v gfm && exit 1; exit 0
+
+## BL-346 — `validate-h2-attestation.sh --verify` verifies a span inside a fenced code block, an HTML comment block or an indented code block
+
+**NOTE.** Found by the batch 162 adversary and re-measured by the docs hand at `2a76c0b7`. A span
+alone on its line between ```` ``` ```` fences, between `<!--` and `-->` lines, or indented four
+spaces each exits 0 at the live sprint and digest, because the reader judges one line at a time
+and none of those lines carries a refused lead. The 0.648.0 reader verifies all three too. The
+consumer's gate-log lines carry no four-space-indented span; fenced and multi-line-comment shapes
+were not censused.
+
+verify: manual
+
+## BL-347 — `validate-h2-attestation.sh --verify` refuses a span whose decoration is a tab
+
+**NOTE.** Found by the batch 162 docs hand. The closed decoration sets name the space character
+only, so a tab before a column-1 span, or tabs padding a PASS row's evidence cell, is refused
+(exit 1) where the same text with spaces verifies. The refusal is the safe direction. The
+consumer's 194 span-carrying lines under `_bmad-output/` contain no tab.
+
+verify: manual
+
+## BL-348 — the `<( )` operands left in shipped `core/` were never audited for a failed substitution that reads as an empty input
+
+**DEFECT.** Split from `BL-335` at batch 162. That entry's first subject is fixed. This one is
+its second subject: the `<( )` sites that neither `BL-334` nor `BL-335` touched.
+
+**Why DEFECT.** A `<( )` producer's exit status is discarded. When the producer fails, the reader
+sees an empty stream and nothing reports it. `BL-335` measured this silence three times in one
+script: an empty `norm` side and an empty `find` walk each scored `OK`, exit 0, and a `diff`
+that could not compare scored STALE. Each time the defect sat on the line that decided the
+verdict. None of the sites below has been checked for that shape.
+
+**The population is DERIVED.** Take
+`git grep -nE '<\(' -- 'core/*.sh' ':(exclude)core/fixtures/**'`, then drop comment lines,
+`echo` lines (text shown to the operator, not executed) and regex literals where a `'` opens the
+`<(`. At `fb953c85` that leaves 79 lines in 22 files. Re-derive the count; never quote it. By shape:
+- **54** are `done < <(…)` loop feeds. Six of them are fed by `find` (`validate-ci-gates.sh`,
+  `preclassify.sh`, `relabel-extension-checks.sh`, `retired-layer-contract.sh`,
+  `retired-layer-passage.sh`), which is the exact shape `BL-335` measured as a false clear. The
+  rest are fed by `printf`, `awk`, `grep`, `git` or local functions.
+- **16** are `comm` set differences and intersections. A failed side returns the other side
+  whole, or an empty result. These include the retired-contract, retired-token and self-update
+  detectors, where the result is the row set.
+- **9** are other readers, such as `grep -f <(…)` and `sort` or `cut` over a substitution. An
+  empty `-f` pattern file matches nothing, so the reader reports that nothing matched.
+- `sync-transient-ignore.sh:122`'s `diff <(…) <(…) || true` is counted. It is diagnostic output
+  printed after `:119` has already decided the exit, and it is the one member whose failure
+  cannot move a verdict. It still counts, because the receipt keys on the spelling.
+
+**What is owed.** For each site, either stage the producer to a file and check its status (the
+`BL-334`/`BL-335` spelling), or record why a failed producer cannot move a verdict there. The
+receipt closes only when no `<(` is left in shipped code. That is deliberate, because a
+per-site judgment is exactly what went unchecked here. If a site is shown to be harmless, stage
+it anyway rather than exempt it.
+
+**The receipt** counts the derived population and closes at zero. Its awk filter is first checked
+against five seeded lines (two live sites, one comment, one `echo`, one quoted regex). It must
+count exactly 2, or the receipt exits 9. A tree with no `pipefail`-bearing shipped script exits 9,
+which covers a non-repo tree and an empty pathspec. Scored in fresh `mktemp` trees, raw exits:
+- **1** at `fe30b4fa`, at `fb953c85` and at the Subject B fix `2a76c0b7`.
+- **0** on a seeded repo whose only `<(` are in a comment, an `echo`, a quoted regex and a
+  `core/fixtures/` file.
+- **1** on the same repo with one live `comm <(…)` line added.
+- **9** in a non-repo tree and in a tree with no `core/`.
+
+verify: sh git grep -qF 'pipefail' -- 'core/*.sh' ':(exclude)core/fixtures/**' || exit 9; A='{ l = $0; sub(/^[^:]*:[0-9]+:/, "", l); if (l ~ /^[[:blank:]]*#/) next; if (l ~ /^[[:blank:]]*echo /) next; if (l ~ /\047<\(/) next; n++ } END { print n + 0 }'; p="$(printf '%s\n' 'x.sh:1:  done < <(find . -type f | sort)' 'x.sh:2:  r="$(comm -23 <(printf x) <(printf y))"' "x.sh:3:RE='<([^>]*-)?id>'" 'x.sh:4:  # was <(norm)' 'x.sh:5:  echo "full: diff <(git show)"' | awk "$A")"; [ "$p" = 2 ] || exit 9; n="$(git grep -nE '<\(' -- 'core/*.sh' ':(exclude)core/fixtures/**' | awk "$A")"; [ -n "$n" ] || exit 9; [ "$n" -eq 0 ]

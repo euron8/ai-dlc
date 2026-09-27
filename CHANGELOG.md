@@ -15,6 +15,85 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.649.0] - 2026-09-27
+
+Two validators stop turning a failure into a verdict. `validate-h2-attestation.sh --verify` no
+longer grants an attestation whose own row or line says it FAILED. `validate-artifact-derivations.sh`
+no longer scores a comparison, a normalisation or a directory walk that could not run as STALE or
+as clean. Neither change discharges a consumer candidate.
+
+### `--verify` grants a span only when it is alone and its row says PASS (`BL-341`, `BL-345`)
+
+0.648.0 checked only what followed the span, so failure words before it, in another cell, or in
+the row label were never read. Five such lines verified, among them
+`` | H2 | core | FAIL | refused, re-drive owed: `SPAN` | `` and a bare `H2 FAILED, re-drive owed: SPAN`.
+
+- `--verify` is one awk pass. A span verifies only on its own line or alone in a table cell, with
+  closed decoration on both sides: spaces, an optional `- ` bullet, `**`, one backtick, a period.
+  The old negated class also admitted `❌`, `~~…~~`, `<!-- -->` and `> `.
+- A table row verifies only when the table's header names a Result, Verdict, Status or Outcome
+  column and that cell begins `PASS`. A headerless row, a row under a header with no such column,
+  and a verdict cell that begins `—`, `VOIDED` or `FAIL` are refused. A cell that begins `PASS`
+  and turns to failure later, such as `PASS (FAILED on re-drive)`, still verifies; the consumer's
+  history has none, and anchoring the cell's end would refuse its real `PASS — …` rows. A
+  failure-word vocabulary was measured and
+  not taken: it refused a real sprint-289 row reading `**PASS (attested, cite — do not re-drive)**`,
+  and any denylist misses `VOIDED` or `SUPERSEDED` by construction.
+- The same judgment applies at a moved digest, so a FAIL row there is located rather than
+  reported as `fixture set CHANGED`.
+- A table row is split two ways, honouring code spans and on every pipe as GitHub renders it, and
+  verifies only if both readings accept it (`BL-345`, found while scoring the receipt). Either
+  reading alone can be steered into granting a FAIL row. The cost is deliberate: a PASS row with a
+  `|` inside backticks in another cell is refused, which costs one re-drive.
+- A refused span is located with its reason: inside other text, no header row, no verdict column,
+  or a verdict that does not begin PASS. The PASS citation is cut from the accepted line.
+- `--attest` and `gate-validation.md` H2 state the same rule.
+- `h2-attest-scripts-dir` re-anchors every existing mutant on the new reader, since the old ones
+  no longer applied, and adds must-verify, must-refuse and both-reading arms with eleven new
+  mutants.
+
+On every `H2_ATTESTED` record in the reference consumer's gate-log history (31 sprint and digest
+pairs), 0.648.0 verifies 31 and this reader 29. The two lost pairs are historical: sprint 309 at
+`aab08e34` and sprint 312 at `0a1a18af`, each recorded only as prose before the span in a PASS
+row. The consumer's current sprint 314 still verifies and cites the same span. Its installed
+0.643.0 writer text does not carry the placement rule, so until it pulls, expect an occasional H2
+re-drive where it used to cite. That is the safe direction.
+
+### `validate-artifact-derivations.sh` reports a comparison or walk that did not run as UNRUN (`BL-335`)
+
+`diff -q <(norm …) <(norm …)` exits 2 under bash 3.2 at about 0.15-0.4% under concurrent
+workers, and the script read any non-zero as STALE. In `derivation-differential.sh` a spurious
+STALE on the base side can turn a real NEWLY-FAILING row into STALE-BOTH, which hides it.
+
+- Both `norm` outputs are staged to files with each status checked, and `diff`'s own exit
+  decides: 0 clean, 1 STALE with a byte-identical message, and 2 or a failed `norm` gives
+  `UNRUN: <file>:<line>`, exit 2. A failed `norm` used to compare empty with empty and read clean.
+- The directory walk is staged and checked. A failed `find` used to report
+  `OK: 0 derivation(s)`, exit 0, and now refuses with exit 2 naming the target.
+- `_gate-procedures.md` sends exit 1 to the remediator and exit 2 back for a re-run.
+- `artifact-derivations` forces each failure with a PATH stub whose pass-through twin proves the
+  stub was reached, with five mutants. `derivation-differential` gains A17: a base-side comparison
+  that cannot run refuses rather than clearing.
+
+Healthy output is byte-identical on every target this repo runs it on and on a scratch copy of
+the consumer's `_bmad-output/`, 6111 derivations.
+
+### Filed, not fixed
+
+- `BL-348` (DEFECT): the other `<( )` operands in shipped `core/`, never audited for a failed
+  producer that reads as an empty input. The receipt counts them and closes at zero.
+- `BL-346`, `BL-347` (NOTEs): a span in a fenced, indented or HTML-comment block still verifies;
+  a tab as decoration is refused.
+- Four NOTEs from the tip adversary, filed at the batch close once this release's entries rotate,
+  because filing them here would put the backlog over its ceiling: the verdict cell is read only
+  at its start; a later revocation does not revoke; a NUL or an underscore wrap still reaches the
+  first-gate message; three receipts each accept a non-fix that the fixtures kill.
+
+The tip adversary also found that a column-1 span recording `mechanical=check-17-bypass:FAIL`
+verified, as it did at 0.648.0. The field is now pinned to the value `--attest` emits, so that
+line is located. The `artifact-derivations` fixture now pins each side of the `norm` comparison
+on its own, since dropping only the actual side's check read clean and passed the old receipt.
+
 ## [0.648.0] - 2026-09-27
 
 `validate-h2-attestation.sh --verify` no longer tells a sprint that attested H2 that this is its
