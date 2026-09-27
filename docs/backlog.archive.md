@@ -20044,3 +20044,50 @@ base `975a861c`.
 
 verify: sh R="$(pwd)"; W="$R/core/scripts/stamp-story-provenance.sh"; V="$R/core/scripts/validate-provenance-block.sh"; K="$R/core/schemas/provenance-block.json"; [ -f "$W" ] && [ -f "$V" ] && [ -f "$K" ] && [ -f "$R/core/fixtures/story-provenance/seed.sh" ] || exit 9; command -v python3 >/dev/null || exit 9; G="$(mktemp -d)" || exit 9; M="$(mktemp -d)" || exit 9; mkdir -p "$G/.claude/schemas" || exit 9; python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); f=[x for x in s["fields"] if x.get("name")=="tool_use_id" and x.get("forbidden_match")=="prefix_ci"]; assert len(f)==1; f[0]["forbidden"].append("toolu_FIXTURE"); json.dump(s,open(sys.argv[2],"w"))' "$K" "$G/.claude/schemas/provenance-block.json" 2>/dev/null || exit 9; bash "$R/core/fixtures/story-provenance/seed.sh" --mixed-into "$M" >/dev/null 2>&1 || exit 9; P="$(AI_DLC_PROJECT_ROOT="$G" bash "$W" --print-schema 2>/dev/null)"; [ -n "$P" ] && [ "$P" -ef "$G/.claude/schemas/provenance-block.json" ] || exit 1; B=s1/stories/story-2-fix-thing.md; if ( cd "$M" && AI_DLC_PROJECT_ROOT="$G" bash "$W" --terminal s1/bug-fix-oneshot-story-2-fix-thing.md --profile bug-story-provenance "$B" ) >/dev/null 2>&1; then ( cd "$M" && AI_DLC_PROJECT_ROOT="$G" bash "$V" "$B" --require-skill bmad-review-adversarial-general ) >/dev/null 2>&1 || exit 1; fi; T="$(mktemp -d)" || exit 9; ( cd "$T" && git init -q && mkdir _bmad && git -c user.name=r -c user.email=r@r commit -q --allow-empty -m init && bash "$R/scripts/install.sh" "$T" </dev/null ) >/dev/null 2>&1 || exit 9; IW="$T/scripts/ai-dlc/stamp-story-provenance.sh"; IK="$T/.claude/schemas/provenance-block.json"; [ -f "$IW" ] && [ -f "$IK" ] || exit 9; C="$(cd "$T" && bash "$IW" --print-schema 2>/dev/null)"; [ -n "$C" ] && [ "$C" -ef "$IK" ] || exit 9; P="$(cd "$T" && AI_DLC_PROJECT_ROOT="$G" bash "$IW" --print-schema 2>/dev/null)"; [ -n "$P" ] && [ "$P" -ef "$G/.claude/schemas/provenance-block.json" ] || exit 1; exit 0
 
+## BL-334 — the render's orientation sample failed open, and a bash 3.2 fd race triggered it
+
+**DEFECT.** Split from `BL-230` at batch 160, so that the render fix carries its own receipt and
+`BL-230` keeps its pool-flake subject.
+
+`emit-report.sh`'s semantic worklist orientation block read no exit status. `diff … || true`
+swallowed diff's exit 2 along with its exit 1, and the `grep | sed | grep` sample chain and its
+`grep -c` into `${n:-0}` turned any failed step into an empty sample. A failed `git show` read
+as `THEIRS absent`. Each rendered as `ONLY IN THEIRS: none` / `ONLY IN OURS: none` at exit 0. The
+failure that reached it was the bash 3.2 `<( )` fd race: under concurrent workers,
+`diff <(printf …) file` exits 2 with `/dev/fd/63: Bad file descriptor`, at about 0.15-0.4% under 4
+workers. That is `BL-230`'s tip.32 red, reproduced byte-for-byte by forcing the failure at
+approve time.
+
+**LANDED (v0.647.0, verified 1bbf29da).** The render reads every step's status, refuses per file
+at column 0, and decides absence by `git ls-tree` (`1f0a81f3`). The five verdict-bearing
+reconcile diff sites read a staged file piped into `diff -`, never `<( )` (`9f153a07`).
+
+**THE RECEIPT FAILS ONE STEP PER MODE AND REFUSES TO SCORE A MODE WHOSE SHIM NEVER FIRED.** It
+seeds the `reconcile-emit-report` world and renders it three times under a PATH shim that is
+active only inside `emit-report.sh`:
+- **D** fails `diff` when either operand is `-` or `/dev/fd/*`.
+- **H** fails the reader of the diff output.
+- **G** fails `git` on the CLASSIFY file.
+
+Each mode must either leave the orientation block unchanged or refuse with a column-0
+`DETECTOR-REFUSED` line and no `ONLY IN …: none` or `THEIRS absent`. Every shim arm writes a
+marker when it fires. A mode whose marker is absent exits **9**, because a shim that never fired
+measured nothing. This is what the first draft lacked: its D arm keyed on `/dev/fd/*` alone,
+which the staged-file tip never passes, so D was a no-op there and the receipt still read 0.
+
+Scored in scratch clones, raw exits:
+- **0** at `9f153a07`, with the D, H and G markers all present.
+- **1** at base `df3623b9`, where D renders `ONLY IN …: none`.
+- **0** at `1f0a81f3` alone, with all three markers present, because D's `/dev/fd/*` operand
+  still fires on the `<( )` spelling.
+- **1** on a diff-only fix, in two variants. With the refusal line indented, D is not at column
+  0. With it at column 0, H renders `none`.
+- **1** at `9f153a07` with its three orientation refusal lines indented.
+- **0** on a second spelling of the fix (a `case`-mapped grep chain and `ls-tree --name-only`).
+- **9** at `9f153a07` under the same receipt with D keyed on `/dev/fd/*` only.
+
+Exit 9 also covers a missing emitter or seed, and a control render without both
+`ONLY IN … (1, complete)` lines.
+
+verify: sh E=core/skills/ai-dlc-update/reconcile/emit-report.sh; SD=core/fixtures/reconcile-emit-report/seed.sh; [ -f "$E" ] && [ -f "$SD" ] || exit 9; W="$(bash "$SD" 2>/dev/null)" && [ -f "$W/env.sh" ] || exit 9; . "$W/env.sh" || exit 9; ob() { awk '/Semantic worklist orientation/,/^\*\*Deletions/' "$1"; }; ob "$REGION" > "$W/o.ctl"; grep -qF 'ONLY IN THEIRS (1, complete):' "$W/o.ctl" && grep -qF 'ONLY IN OURS (1, complete):' "$W/o.ctl" || exit 9; B="$W/shim"; mkdir -p "$B" || exit 9; printf '%s\n' '#!/bin/bash' 'n=${0##*/}; r=/usr/bin/$n; [ -x "$r" ] || r=/bin/$n' 'case "$(/bin/ps -o command= -p $PPID)" in *emit-report.sh*) ;; *) exec "$r" "$@" ;; esac' 'case "$BM:$n" in' 'D:diff) case "${1:-}:${2:-}" in -:*|*:-|/dev/fd/*|*:/dev/fd/*) : > "$MK.D"; exit 2 ;; esac ;;' 'G:git) case " $* " in *core/skills/ai-dlc/templates/classes.md*) : > "$MK.G"; exit 128 ;; esac ;;' 'H:grep|H:sed|H:awk) t=$(/usr/bin/mktemp) || exit 2; /bin/cat > "$t"; [[ $(/usr/bin/head -1 "$t") =~ ^[0-9]+(,[0-9]+)?[acd][0-9]+(,[0-9]+)?$ ]] && { : > "$MK.H"; exit 2; }; exec "$r" "$@" < "$t" ;;' 'esac' 'exec "$r" "$@"' > "$B/shim" && chmod +x "$B/shim" || exit 9; for x in diff git grep sed awk; do ln -sf shim "$B/$x" || exit 9; done; bit=0; for m in D H G; do BM=$m MK="$W/mk" PATH="$B:/usr/bin:/bin:/usr/sbin:/sbin" bash "$E" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$W/r.$m" 2>/dev/null; ob "$W/r.$m" > "$W/o.$m"; [ -f "$W/mk.$m" ] || exit 9; cmp -s "$W/o.ctl" "$W/o.$m" && continue; bit=1; grep -qE 'ONLY IN (THEIRS|OURS): none|THEIRS absent at' "$W/o.$m" && exit 1; grep -q '^DETECTOR-REFUSED  ' "$W/o.$m" || exit 1; done; [ "$bit" -eq 1 ] || exit 9; exit 0
+
