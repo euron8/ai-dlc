@@ -4391,12 +4391,12 @@ verify: manual
 ## BL-341 — `validate-h2-attestation.sh --verify` grants an attestation whose own row or line says it FAILED
 
 **DEFECT.** Found by the batch 161 contract adversary; the prefix rows were added by the batch 161
-corpus hand. Not fixed in 0.648.0.
+corpus hand. Not fixed in 0.648.0; the reader fix is `2a76c0b7`.
 
-The accepting arm checks only what FOLLOWS the span: a lead that is not a word character, then a
-tail that reaches the cell's `|` or the end of the line. Failure words anywhere else on the line
-are never read. Each of these exits 0 on the 0.648.0 script with a live span at the right sprint
-and digest, re-verified in a scratch worktree at `0220be45`:
+The 0.648.0 accepting arm checked only what FOLLOWS the span: a lead that is not a word character,
+then a tail that reaches the cell's `|` or the end of the line. Failure words anywhere else on the
+line were never read. Each of these exits 0 on the 0.648.0 script with a live span at the right
+sprint and digest, re-verified in a scratch worktree at `0220be45`:
 - `` | H2 | core | FAIL | refused, re-drive owed: `SPAN` | `` (verdict in an earlier cell)
 - `` | H2 | core | `SPAN` | FAIL — item 3 seed passed H1 | `` (verdict in a later cell)
 - `` | H2 (INVALID, do not cite) | `SPAN` | `` (verdict in the row label)
@@ -4405,21 +4405,70 @@ and digest, re-verified in a scratch worktree at `0220be45`:
 
 Controls in the same run: `SPAN; item 3 FAILED` exits 1, and a column-1 span exits 0.
 
-The obvious fix, refusing a failure verdict earlier in the same cell, is not obviously right. It
-would refuse genuine records. The batch 161 corpus hand found that the consumer's pair for sprint 309 at digest `aab08e34` says the
-seeded fixture "would correctly FAIL" before the span. The table-cell acceptance exists because
-the step file names the H2 row's evidence cell as a placement, so narrowing it to column 1 is a
-writer-side change as well.
+**THE FIX HAS TWO HALVES, AND BOTH ARE CLOSED SETS.** Placement: the span must stand alone on its
+line or alone in its table cell, with decoration from a closed set on each side — the lead admits
+spaces, one `- ` bullet, `**` and one backtick; the tail admits one backtick, `**`, one period
+and spaces. A NEGATED class mirrored onto the lead (the shape first proposed) grants whatever
+glyph a transcriber uses to say no: `❌`, `✗`, `~~…~~`, `<!-- … -->`, `> ` and `--` all passed it,
+and the closed set refuses all six without naming any. Verdict: a span in a table row verifies
+only when the table's header row (the row directly above its `|---|` separator) names a Result,
+Verdict, Status or Outcome column and that row's cell in it BEGINS `PASS` after `*`, `_`,
+backtick and space decoration. A headerless row, a header with no such column, and a `—`,
+VOIDED or FAIL verdict cell are all refused. A span alone on its own line is not in a row and
+needs no verdict column. Both halves bind the exact-digest arm AND the moved-digest arm, so a
+FAIL row at a moved digest is located rather than reported as "fixture set CHANGED", and the
+cited span is cut from the accepted line rather than from the last occurrence in the log.
 
-The receipt uses this file's polarity for an unfixed defect: **exit 0 means the fix is present**,
-any other non-zero means it still reproduces, so the entry reads STILL-LIVE today. It writes the
-five lines above at sprint 9 against the live digest and exits 1 if any of them verifies, and
-0 if all are refused. Its control is a column-1 span, which must verify; if it does not, the
-receipt exits 9, so a reader that refuses everything reads NEEDS-REVIEW rather than
-CLOSE-CANDIDATE. Scored in the same worktree: base `d38142b0` 1, `0220be45` 1, a column-1-only
-reader 0, a reader whose accepting arm never fires 9.
+**WHY A PASS ALLOWLIST AND NOT A FAILURE VOCABULARY.** A vocabulary refusing a row whose other
+cells carry FAIL, INVALID, REFUSED, RE-DRIVE or "do not cite" refused a real PASS in the
+consumer's history: sprint 289's verdict cell reads `**PASS (attested, cite — do not
+re-drive)**`, where "do not re-drive" is the instruction a passing row carries. It also misses
+VOIDED, SUPERSEDED and `❌` by construction, because a list of the words for failure is never
+finished. The allowlist is one word in a column the header names.
 
-verify: sh S=core/scripts/validate-h2-attestation.sh; [ -f "$S" ] || exit 9; D=$(bash "$S" --digest 2>/dev/null) && [ -n "$D" ] || exit 9; t=$(mktemp -d) || exit 9; P="H2_ATTESTED v1 sprint=9 digest=$D items=1,2,3 mechanical=check-17-bypass:PASS"; printf '%s\n' "$P" > "$t/ok.md"; printf '| H2 | core | FAIL | refused, re-drive owed: \140%s\140 |\n' "$P" > "$t/1.md"; printf '| H2 | core | \140%s\140 | FAIL — item 3 seed passed H1 |\n' "$P" > "$t/2.md"; printf '| Check | Evidence |\n|---|---|\n| H2 (INVALID, do not cite) | \140%s\140 |\n' "$P" > "$t/3.md"; printf '| H2 | core | FAIL -- re-drive required | \140%s\140 |\n' "$P" > "$t/4.md"; printf 'H2 FAILED, re-drive owed: %s\n' "$P" > "$t/5.md"; bash "$S" --verify --sprint 9 --gate-log "$t/ok.md" >/dev/null 2>&1 || exit 9; for f in 1 2 3 4 5; do bash "$S" --verify --sprint 9 --gate-log "$t/$f.md" >/dev/null 2>&1 && exit 1; done; exit 0
+**WHAT IT COSTS.** Measured by the fix hand over every revision of every consumer gate-log file,
+31 (sprint, digest) pairs, each driven through the real script with its digest forced and each
+pair's log whole so its rows keep their headers: the 0.648.0 reader verifies 31, this reader 29,
+a column-1-only reader 27. The two lost are 309 `aab08e34184faa3d` and 312 `0a1a18af49486682`,
+both of whose records quote the span after prose in the evidence cell; the 309 pair was voided
+and re-attested by its own sprint. Both are historical, since `--verify` is consulted for the
+current sprint only, and sprint 314, the consumer's current sprint, verifies.
+
+**CONSUMER-SIDE EXPECTATION UNTIL IT PULLS.** The consumer runs 0.643.0, whose `--attest` text
+says "as its own line at column 1 — or inside the H2 row's evidence cell. Both verify", with no
+"alone" and no verdict column (read at `scripts/ai-dlc/validate-h2-attestation.sh:291-292` of
+that tree). The batch 162 contract adversary measured two of its last six sprints attesting in a
+shape this reader refuses, so expect an H2
+re-drive roughly one sprint in three once the reader arrives without the writer text catching up
+in the same session. That is the SAFE direction: a refused attestation costs a re-drive, never a
+granted failure.
+
+**THE RECEIPT SEPARATES THE FIX FROM AN OVER-NARROW READER.** Exit 0 means the fix is present;
+exit 9 means the column-1 control span did not verify, so a reader refusing everything reads
+NEEDS-REVIEW rather than CLOSE-CANDIDATE; exit 2 means a span that must verify was refused; exit
+1 means a failed record verified. Must verify: the column-1 control, a `| Check | Result |
+Evidence |` table with a PASS row whose span is alone in its cell, and a `| Check | Evidence |
+Verdict |` table whose verdict cell reads `**PASS (attested, cite — do not re-drive)**`. Must
+refuse: the five lines above, `❌` before a backticked span, and a VOIDED verdict row under a
+Result header. Scored raw, each subject its own minimal tree built in a fresh `mktemp -d` from
+the three H2 fixture dirs plus the script:
+
+    fe30b4fa (0.648.0 reader)                                 1
+    2a76c0b7 (this fix)                                       0
+    fb953c85 (the other subject's fix, reader unchanged)      1
+    reader whose accepting arm never fires                    9
+    column-1-only reader                                      2
+    vocabulary-B2 in place of the verdict column              2
+    negated-class lead and tail                               1
+    verdict column ignored                                    1
+    second correct spelling (header scanned last-to-first     0
+      by index(), decoration stripped by a char loop,
+      bullet absorbing its own trailing spaces)
+
+The receipt reads nothing `validate-artifact-derivations.sh` changes; the only script it runs is
+this one.
+
+verify: sh S=core/scripts/validate-h2-attestation.sh; [ -f "$S" ] || exit 9; D=$(bash "$S" --digest 2>/dev/null) && [ -n "$D" ] || exit 9; t=$(mktemp -d) || exit 9; P="H2_ATTESTED v1 sprint=9 digest=$D items=1,2,3 mechanical=check-17-bypass:PASS"; v() { bash "$S" --verify --sprint 9 --gate-log "$t/$1.md" >/dev/null 2>&1; }; printf '%s\n' "$P" > "$t/ok.md"; printf '| Check | Result | Evidence |\n|---|---|---|\n| H2 | PASS | \140%s\140 |\n' "$P" > "$t/a.md"; printf '| Check | Evidence | Verdict |\n|---|---|---|\n| H2 | \140%s\140 | **PASS (attested, cite — do not re-drive)** |\n' "$P" > "$t/b.md"; printf '| H2 | core | FAIL | refused, re-drive owed: \140%s\140 |\n' "$P" > "$t/1.md"; printf '| H2 | core | \140%s\140 | FAIL — item 3 seed passed H1 |\n' "$P" > "$t/2.md"; printf '| Check | Evidence |\n|---|---|\n| H2 (INVALID, do not cite) | \140%s\140 |\n' "$P" > "$t/3.md"; printf '| H2 | core | FAIL -- re-drive required | \140%s\140 |\n' "$P" > "$t/4.md"; printf 'H2 FAILED, re-drive owed: %s\n' "$P" > "$t/5.md"; printf '❌ \140%s\140\n' "$P" > "$t/6.md"; printf '| Check | Result | Evidence |\n|---|---|---|\n| H2 | VOIDED | \140%s\140 |\n' "$P" > "$t/7.md"; v ok || exit 9; for f in a b; do v "$f" || exit 2; done; for f in 1 2 3 4 5 6 7; do v "$f" && exit 1; done; exit 0
 
 ## BL-342 — `validate-h2-attestation.sh --verify` numbers a binary gate log with grep's banner
 
@@ -4446,6 +4495,38 @@ verify: manual
 three greps exit 2, which the script reads as no match: it prints `grep: … Permission denied`
 and then the first-gate message, rc 1. Separately, the located refusal goes to stderr like
 CHANGED while first-gate goes to stdout, so a caller capturing only stdout sees nothing for it.
+
+verify: manual
+
+## BL-345 — `validate-h2-attestation.sh --verify` splits cells on a `|` inside a code span, so a FAIL row can verify
+
+**DEFECT.** Found by the batch 162 docs hand while scoring BL-341's receipt against `2a76c0b7`.
+The reader's `cells()` splits a row on every `|`, including one inside backticks, which markdown
+renders as part of the cell. `` | H2 `| PASS` | FAIL | `SPAN` | `` under a `| Check | Result |
+Evidence |` header renders with FAIL in the Result column, and exits 0: the reader sees `PASS`
+in column 2. The same row without the backticked pipe exits 1 in the same run. Two of the
+consumer's 50 table rows carrying a span also carry a `|` between backticks, so the shape is
+written there, though neither row was measured as mis-judged.
+
+verify: manual
+
+## BL-346 — `validate-h2-attestation.sh --verify` verifies a span inside a fenced code block, an HTML comment block or an indented code block
+
+**NOTE.** Found by the batch 162 adversary and re-measured by the docs hand at `2a76c0b7`. A span
+alone on its line between ```` ``` ```` fences, between `<!--` and `-->` lines, or indented four
+spaces each exits 0 at the live sprint and digest, because the reader judges one line at a time
+and none of those lines carries a refused lead. The 0.648.0 reader verifies all three too. The
+consumer's gate-log lines carry no four-space-indented span; fenced and multi-line-comment shapes
+were not censused.
+
+verify: manual
+
+## BL-347 — `validate-h2-attestation.sh --verify` refuses a span whose decoration is a tab
+
+**NOTE.** Found by the batch 162 docs hand. The closed decoration sets name the space character
+only, so a tab before a column-1 span, or tabs padding a PASS row's evidence cell, is refused
+(exit 1) where the same text with spaces verifies. The refusal is the safe direction. The
+consumer's 194 span-carrying lines under `_bmad-output/` contain no tab.
 
 verify: manual
 
