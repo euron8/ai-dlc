@@ -332,15 +332,34 @@ if [ "$MODE" = "verify" ]; then
   # and no longer three greps. The program is single-quoted and may carry no apostrophe.
   _res="$(LC_ALL=C H2_LEAD="$ATTEST_LEAD" H2_TAIL="$ATTEST_TAIL" H2_LOCATE="$ATTEST_LOCATE" \
           H2_SPAN="$ATTEST_SPAN" H2_ANY="$ATTEST_ANY" awk '
-    # cells(s, arr): split a table row into cells. A pipe written as \| is never a
-    # delimiter, and neither is a pipe inside a backtick code span: a plain split on every
-    # pipe shifted every later cell one column left, so a row whose Result cell reads FAIL
-    # was judged PASS when an earlier cell carried `| PASS`. A code span opens on a run of
-    # N backticks and closes on the next run of exactly N; an opener with no closer is a
-    # literal backtick. A GFM table splits on a pipe even inside a code span, so such a
-    # row can still render a different verdict on GitHub than this reader sees; a pipe
-    # inside a span in a verdict table is ambiguous, and the reader takes the code-span
-    # reading.
+    # cells(s, arr): split a table row into cells, by the reading GFM selects. A TABLE ROW
+    # VERIFIES ONLY IF BOTH READINGS ACCEPT IT. A pipe written as \| is never a delimiter
+    # in either. The two differ on a pipe inside a backtick code span:
+    #   code-span reading (GFM == 0): the pipe is part of the cell. A code span opens on a
+    #     run of N backticks and closes on the next run of exactly N; an opener with no
+    #     closer is a literal backtick.
+    #   GFM reading (GFM == 1, gfmcells): every unescaped pipe delimits, code span or not,
+    #     which is how a GitHub table renders the row.
+    # Either reading alone is steerable to a false grant, because one pipe shifts every
+    # later cell one column. Splitting on every pipe judged `a| PASS` in a code span as a
+    # PASS column where the rendered-as-code row read FAIL; splitting on code spans judged
+    # `a| FAIL |b` in a code span, then a PASS cell, as PASS where GitHub renders FAIL in
+    # that column. Requiring both refuses each. The cost is a false REFUSAL of a genuine
+    # PASS row that carries a pipe inside a code span, which costs one H2 re-drive; a
+    # false grant attests a check nobody drove, which is the worst output this reader has.
+    function gfmcells(s, arr,    n, i, L, ch, cur) {
+      split("", arr)
+      sub(/^[ ]*[|]/, "", s); sub(/[|][ ]*$/, "", s)
+      L = length(s); n = 0; cur = ""; i = 1
+      while (i <= L) {
+        ch = substr(s, i, 1)
+        if (ch == "\\" && substr(s, i + 1, 1) == "|") { cur = cur "\\|"; i += 2; continue }
+        if (ch == "|") { arr[++n] = cur; cur = ""; i++; continue }
+        cur = cur ch; i++
+      }
+      arr[++n] = cur
+      return n
+    }
     function closer(s, p, run,    L, r) {
       L = length(s)
       while (p <= L) {
@@ -352,6 +371,7 @@ if [ "$MODE" = "verify" ]; then
       return 0
     }
     function cells(s, arr,    n, i, j, L, ch, cur, run) {
+      if (GFM) return gfmcells(s, arr)
       split("", arr)
       sub(/^[ ]*[|]/, "", s); sub(/[|][ ]*$/, "", s)
       L = length(s); n = 0; cur = ""; i = 1
@@ -372,8 +392,18 @@ if [ "$MODE" = "verify" ]; then
       return n
     }
     # judge(rx): OK when a span matching rx sits in an accepted placement on this line,
-    # else the reason it was refused. Sets CITE to the accepted span.
-    function judge(rx,    alone_rx, n, c, i, at, hn, hc, vi, k, v, name) {
+    # else the reason it was refused. Sets CITE to the accepted span. A table row is read
+    # under BOTH cell readings (see cells) and is OK only when both are; otherwise the
+    # first refusal names the reason.
+    function judge(rx,    a, b, cite) {
+      GFM = 0; a = judgeone(rx); cite = CITE
+      if (!istab) return a
+      GFM = 1; b = judgeone(rx); GFM = 0
+      if (a != "OK") return a
+      if (b != "OK") return b " (reading every pipe as a cell border, as GitHub renders it)"
+      CITE = cite; return "OK"
+    }
+    function judgeone(rx,    alone_rx, n, c, i, at, hn, hc, vi, k, v, name) {
       alone_rx = "^" LEAD "(" rx ")" TAIL "$"
       if (!istab) {
         if ($0 !~ alone_rx) return "inside other text"
