@@ -20091,3 +20091,74 @@ Exit 9 also covers a missing emitter or seed, and a control render without both
 
 verify: sh E=core/skills/ai-dlc-update/reconcile/emit-report.sh; SD=core/fixtures/reconcile-emit-report/seed.sh; [ -f "$E" ] && [ -f "$SD" ] || exit 9; W="$(bash "$SD" 2>/dev/null)" && [ -f "$W/env.sh" ] || exit 9; . "$W/env.sh" || exit 9; ob() { awk '/Semantic worklist orientation/,/^\*\*Deletions/' "$1"; }; ob "$REGION" > "$W/o.ctl"; grep -qF 'ONLY IN THEIRS (1, complete):' "$W/o.ctl" && grep -qF 'ONLY IN OURS (1, complete):' "$W/o.ctl" || exit 9; B="$W/shim"; mkdir -p "$B" || exit 9; printf '%s\n' '#!/bin/bash' 'n=${0##*/}; r=/usr/bin/$n; [ -x "$r" ] || r=/bin/$n' 'case "$(/bin/ps -o command= -p $PPID)" in *emit-report.sh*) ;; *) exec "$r" "$@" ;; esac' 'case "$BM:$n" in' 'D:diff) case "${1:-}:${2:-}" in -:*|*:-|/dev/fd/*|*:/dev/fd/*) : > "$MK.D"; exit 2 ;; esac ;;' 'G:git) case " $* " in *core/skills/ai-dlc/templates/classes.md*) : > "$MK.G"; exit 128 ;; esac ;;' 'H:grep|H:sed|H:awk) t=$(/usr/bin/mktemp) || exit 2; /bin/cat > "$t"; [[ $(/usr/bin/head -1 "$t") =~ ^[0-9]+(,[0-9]+)?[acd][0-9]+(,[0-9]+)?$ ]] && { : > "$MK.H"; exit 2; }; exec "$r" "$@" < "$t" ;;' 'esac' 'exec "$r" "$@"' > "$B/shim" && chmod +x "$B/shim" || exit 9; for x in diff git grep sed awk; do ln -sf shim "$B/$x" || exit 9; done; bit=0; for m in D H G; do BM=$m MK="$W/mk" PATH="$B:/usr/bin:/bin:/usr/sbin:/sbin" bash "$E" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$W/r.$m" 2>/dev/null; ob "$W/r.$m" > "$W/o.$m"; [ -f "$W/mk.$m" ] || exit 9; cmp -s "$W/o.ctl" "$W/o.$m" && continue; bit=1; grep -qE 'ONLY IN (THEIRS|OURS): none|THEIRS absent at' "$W/o.$m" && exit 1; grep -q '^DETECTOR-REFUSED  ' "$W/o.$m" || exit 1; done; [ "$bit" -eq 1 ] || exit 9; exit 0
 
+## BL-340 — `validate-h2-attestation.sh --verify` told a sprint that had attested that it was "the first gate", because the attestation was transcribed inside a prose bullet
+
+**DEFECT.** Filed by the consumer as `PC-S314-H2-ATTESTATION-PLACEMENT-GRAIN-REJECTS-THE-STEP-FILES-OWN-STYLE`. Discharges it at batch 161.
+
+The consumer's gate log has no H2 table row; its checks are bullets. The lead transcribed the
+`--attest` output into one, as `` - [core] H2 — … → `H2_ATTESTED v1 sprint=314 digest=… …:PASS`; item 1 recursion guard fires … ``.
+`--verify` refused it and printed `RE-DRIVE: no H2 attestation for sprint 314 — this is the
+sprint's first gate.`
+
+The filing's claims, scored against base `d38142b0`:
+- **Exit 1 on a sprint that attested, digest unmoved — HOLDS.** The shape reproduces.
+- **Mechanism: the closing backtick sits before the cell's `|` — PARTIAL.** A cell
+  `` | `SPAN` | `` already verifies. The refused byte is the prose AFTER the closing backtick,
+  which is what the tail was built to refuse (the sprint-311 failure sentence).
+- **The message is wrong — HOLDS.** The ANY-digest (CHANGED) arm carries the same tail, so a
+  quoted span at a moved digest was also reported as a first gate.
+- **Remedy: widen the tail to admit a closing backtick — REFUTED.** Every tail that admits the
+  bullet also admits a FAIL sentence of the same shape, because the verdict is in the prose after
+  the span. Measured in the fix commit's header against six adversarial FAIL lines, each quoting
+  a live span at the right sprint and digest: backtick then anything grants 5 of 6, including
+  the sprint-311 sentence; backtick then `;` or a dash grants 4; backtick then `;` grants 3;
+  a bare substring grants 5; the shipped tail grants 0.
+
+**LANDED (v0.648.0, verified 6af89fd1).** Fixed by the 0.648.0 release commit; the fix branch
+carried it as `0220be45`. The reader grammar and both accepting arms are
+byte-identical. `--verify` gains a third refusal branch, keyed on the lead and `ATTEST_ANY` with
+no tail. It grants nothing. It prints `RE-DRIVE: <gate-log>:<line> QUOTES an H2_ATTESTED span …`
+for the last such line, with the remedy: re-drive `--attest` and append its line on its own line
+at column 1, nothing before or after it. The `--attest` output and `gate-validation.md` H2 now
+state that placement; a table log's H2 evidence cell holding only the span is still accepted.
+
+The consumer is unblocked at its current ref without a pull. Its gate log's line 142 is a
+column-1 `H2_ATTESTED v1 sprint=314 digest=0a1a18af49486682 …` line, and the shipped script
+verifies the full log (rc 0, PASS) at that digest. With line 142 removed the fixed script
+exits 1 and names line 141, where the base script said "first gate". The batch 161 corpus hand
+measured the consumer's history (15695 blobs, 103 genuine H2 records, 31 sprint-and-digest
+pairs); not re-derived by this entry's author. The shipped reader
+keeps all 31 pairs, and 7 gate-log states at sprints 289, 301, 305 and 314 were refused and
+told "first gate". No failure sentence carrying a concrete span exists in that history; the
+sprint-311 sentence elides its span as `H2_ATTESTED v1 ...`, so the six adversarial lines are
+constructed, not observed.
+
+**The receipt** writes five logs at sprint 9 against the live digest: the consumer's bullet (a),
+the same bullet at a moved digest after a heading (b), a column-1 line (c), a log with no span
+(d), and a bullet carrying `— H2 FAILS, do not cite.` after the span (e). It needs c to pass, a
+and b to exit 1 naming `a.md:1` and `b.md:2` without "first gate" (and b without `CHANGED`), e to
+exit 1, and d to say "first gate". Scored in a scratch worktree at `0220be45`, swapping the
+subject file:
+
+| subject | exit | arm that fired |
+|---|---|---|
+| base `d38142b0` | 1 | a not located |
+| fix `0220be45` | 0 | — |
+| bare-substring tail | 1 | a granted |
+| backtick-then-anything tail, both arms | 1 | a granted |
+| backtick-then-`;`-or-dash tail | 1 | a granted |
+| backtick-then-`;` tail | 1 | a granted |
+| backtick-then-anything, accepting arm only | 1 | a granted |
+| diagnostic keyed on `ATTEST_SPAN` | 1 | b not located |
+| diagnostic deleted | 1 | a not located |
+| second spelling: other wording, line found by `awk` | 0 | — |
+
+What else satisfies it: any branch that prints `<log>:<line>` for a quoted span, exits 1, and
+avoids the words "first gate" and `CHANGED`. The receipt reads neither the remedy text nor the
+writer text in `--attest` and `gate-validation.md`, so a located refusal with no remedy passes;
+the `h2-attest-scripts-dir` fixture's placement arms hold the remedy and the `--attest`
+placement sentence. A reader that refuses
+every placement except column 1 also passes, because the receipt has no table-cell arm.
+
+verify: sh S=core/scripts/validate-h2-attestation.sh; [ -f "$S" ] || exit 9; D=$(bash "$S" --digest 2>/dev/null) && [ -n "$D" ] || exit 9; t=$(mktemp -d) || exit 9; printf -- '- [core] H2 — **PASS**. \140--attest\140 → \140H2_ATTESTED v1 sprint=9 digest=%s mechanical=check-17-bypass:PASS\140; item 1 fires.\n' "$D" > "$t/a.md"; printf -- '# log\n- [core] H2 — **PASS**. \140--attest\140 → \140H2_ATTESTED v1 sprint=9 digest=0000000000000000 mechanical=check-17-bypass:PASS\140; item 1 fires.\n' > "$t/b.md"; printf 'H2_ATTESTED v1 sprint=9 digest=%s\n' "$D" > "$t/c.md"; printf '## Gate 1\nno attestation here\n' > "$t/d.md"; printf -- '- [core] H2: \140H2_ATTESTED v1 sprint=9 digest=%s mechanical=check-17-bypass:PASS\140 — H2 FAILS, do not cite.\n' "$D" > "$t/e.md"; v() { o=$(bash "$S" --verify --sprint 9 --gate-log "$t/$1" 2>&1); r=$?; }; v c.md; [ $r -eq 0 ] || exit 1; v a.md; [ $r -eq 1 ] || exit 1; case "$o" in *"a.md:1"[!0-9]*) ;; *) exit 1 ;; esac; case "$o" in *"first gate"*) exit 1 ;; esac; v b.md; [ $r -eq 1 ] || exit 1; case "$o" in *"b.md:2"[!0-9]*) ;; *) exit 1 ;; esac; case "$o" in *"first gate"*|*CHANGED*) exit 1 ;; esac; v e.md; [ $r -eq 1 ] || exit 1; v d.md; [ $r -eq 1 ] || exit 1; case "$o" in *"first gate"*) ;; *) exit 1 ;; esac; exit 0
+

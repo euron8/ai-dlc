@@ -67,6 +67,50 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
 
+**BATCH 161 SHIPPED `v0.648.0` (`6af89fd1`, #874) AND CLOSED `BL-340`, WHICH DISCHARGES
+`PC-S314-H2-ATTESTATION-PLACEMENT-GRAIN-REJECTS-THE-STEP-FILES-OWN-STYLE`.** It was invoked by
+peer handoff. The opening sweep matched batch 160 on every figure and control except the one
+filing: live 28 on one qualifying ref, worklist 5, unfiled 13, ledger md5 `989f20cf…`, receipt
+histogram 9/44/1. Live **90 -> 94** (five filed, one closed), archive **248 -> 249**. The exit-0
+receipt set is batch 160's nine plus `BL-340`, compared by id.
+
+**THE FILING'S REMEDY WAS REFUTED AND ITS MECHANISM SENTENCE WAS INEXACT; ITS DEFECT WAS REAL.**
+The consumer wrote H2 as a bullet: the span in a code span followed by `; item 1 …`. A table cell
+`` | `SPAN` | `` already verified, so the refused byte is the prose AFTER the span, which is what
+the tail exists to refuse. Every tail that admits the bullet also grants FAIL sentences of the
+same shape (backtick-then-anything 5 of 6, backtick-then-`;` 3 of 6), measured by the contract
+adversary and by a corpus hand over 15695 consumer blobs. So the reader is unchanged and
+`--verify` gains a third refusal that NAMES the quoted line and gives the remedy, where it used to
+say "this is the sprint's first gate". Replayed over all 246 consumer gate-log cases at their own
+fixture digests, no PASS or CHANGED verdict moved and 7 first-gate misreports became located.
+
+**THE TIP ADVERSARY FOUND THE NEW WRITER TEXT WRONG.** It said a bullet or an arrow makes the line
+unverifiable; the reader never reads what precedes the span, so both verify. Reworded to "any
+prose AFTER the line", and the fixture now pins the placement sentence and the remedy (mutant m7).
+That same fact is `BL-341` (DEFECT): failure words BEFORE a span are granted, including a bare
+line, and a prefix guard costs sprint 309's only record. `BL-342`..`BL-344` are NOTEs.
+
+Both gates ran at `AI_DLC_FIXTURE_NO_SKIP=1`: 22 phases, 0 FAIL, `h2-attest-scripts-dir` `ok` by
+name against an impossible-name control of 0, `ls-remote` matching; the squash tree is identical
+to the gated tip. **No read-set trace is owed**: the fixture reads no new file.
+
+**NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
+- The unfiled set holds no new core filing. `BL-341` is the strongest distribution-internal DEFECT
+  here, filed from this batch; it names no `PC-` id, so it ranks below any new filing.
+- `BL-335`: the other 24 operand-form `<( )` sites, starting with the derivation verdict.
+- `BL-230` needs a mechanism for E1, E2 and E9.
+- `BL-311` waits on the operator. The trace owed from batch 160 for `emit-report-refusal` is still
+  owed, and the gate now also names `gate-resume` as unmapped.
+
+**THE DELIVERY GAP IS FIVE RELEASES.** The consumer is at 0.643.0 against `VERSION` 0.648.0. No
+bootstrapping file changed in `1bbf29da..origin/main`, and 0 `core/` rows are mode-only. Three PC
+ids are PENDING: `PC-S313-FOLDIN-…`, `PC-S314-SNAPSHOT-SWAP-BLIND-WINDOW` and this one. The consumer
+needs no pull for this one: its log already carries a column-1 attestation at line 142, which
+verifies. The banked ruling stands: report the gap and write no runbook. The consumer's porcelain
+moved 28 -> 35 from its own sprint; its ledger md5 did not move.
+
+Batch 160's next-work list and delivery gap are spent: batch 161's block above replaces both.
+
 **BATCH 160 SHIPPED `v0.646.0` (`df3623b9`, #871) AND `v0.647.0` (`1bbf29da`, #872), CLOSING
 `BL-300`, `BL-302` AND `BL-334`. NONE DISCHARGES A CONSUMER CANDIDATE, AND `BL-230` STAYS LIVE.** It
 was invoked by peer handoff. The opening sweep matched batch 159 on every figure and control: live
