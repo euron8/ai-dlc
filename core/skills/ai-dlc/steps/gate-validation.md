@@ -2209,8 +2209,10 @@ all three items below in full, then:
 which re-drives the mechanical fixture itself and, on success, prints the
 `H2_ATTESTED v1` line to append to the gate log. If it exits 1, **the gate FAILS**.
 
-Append that line as its own line at column 1, or inside the H2 row's evidence
-cell. Both verify; nothing else about the line may change.
+Append that line on its own line at column 1, with nothing before or after it.
+A bullet, an arrow or trailing prose makes it unverifiable, and `--verify` will
+name the line. In a table log, the H2 row's evidence cell holding ONLY the span
+is also accepted. Nothing else about the line may change.
 
 The three items:
 

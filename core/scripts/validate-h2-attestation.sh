@@ -214,6 +214,27 @@ fi
 # the emitter has not always printed the same fields, and a reader keyed on today's tail
 # refuses yesterday's attestation. `sprint=` and `digest=` are the identity and are
 # required; everything after them is matched if present and not demanded.
+#
+# WHY THE READER IS NOT WIDENED TO ADMIT A BULLET. A consumer transcribed the line into a
+# markdown bullet, `- [core] H2 — … → \`SPAN\`; item 1 recursion guard fires …`, and
+# --verify refused it. Every tail that admits that bullet also admits a FAIL sentence in
+# the same shape, because the verdict lives in the prose after the span and no grammar
+# adjudicates prose. Measured against six adversarial FAIL lines, each quoting a live span
+# at the correct sprint and digest:
+#
+#   backtick, then anything            grants 5 of 6, including the sprint-311 sentence
+#   backtick, then `;` or a dash       grants 4 of 6
+#   backtick, then a `;` separator     grants 3 of 6
+#   bare substring (no tail)           grants 5 of 6
+#   the shipped cell-bounded tail      grants 0 of 6, and refuses the consumer's bullet
+#
+# One of the three granted by the `;` form reads "`SPAN`; item 3 manifest-bypass seed
+# PASSED H1 — H2 FAILS, do not cite." SO THE READER REFUSES AND LOCATES INSTEAD. The third
+# --verify branch below matches the same lead and the ANY-digest span WITHOUT the tail,
+# grants nothing, and names `<gate-log>:<line>` of the last quoted span, so the operator
+# is told which line to replace rather than that the sprint never attested. It is keyed on
+# ATTEST_ANY, never ATTEST_SPAN: keyed on the exact digest, a quoted span at a MOVED digest
+# would fall through to "this is the sprint's first gate", the wrong message again.
 ATTEST_LEAD='(^|[^0-9A-Za-z_])'
 ATTEST_TAIL='[^0-9A-Za-z|]*(\||$)'
 # The emitted span, for the tail test and for CITATION. Its optional groups mirror `:209`
@@ -249,6 +270,18 @@ if [ "$MODE" = "verify" ]; then
     echo "RE-DRIVE: sprint ${SPRINT} has an attestation, but the fixture set CHANGED." >&2
     echo "          expected digest ${DIGEST}; the logged attestation carries another." >&2
     echo "          A changed fixture voids the attestation by design — re-drive H2 in full." >&2
+    exit 1
+  fi
+  # A QUOTED SPAN IS REFUSED BY BOTH ARMS ABOVE AND MUST NOT FALL THROUGH TO FIRST-GATE.
+  # The same lead and the same ANY-digest span, WITHOUT the tail: this branch grants
+  # nothing, it only LOCATES the line the reader refused. Keyed on ATTEST_ANY, never on
+  # ATTEST_SPAN, so a quoted span at a moved digest is located too rather than reported as
+  # a sprint that never attested.
+  if grep -qE "${ATTEST_LEAD}${ATTEST_ANY}" "$GATE_LOG"; then
+    _n="$(grep -nE "${ATTEST_LEAD}${ATTEST_ANY}" "$GATE_LOG" | tail -1 | cut -d: -f1)"
+    echo "RE-DRIVE: ${GATE_LOG}:${_n} QUOTES an H2_ATTESTED span for sprint ${SPRINT} inside other text," >&2
+    echo "          so it cannot be verified (prose about an attestation is not one). Re-drive" >&2
+    echo "          --attest and append its line on its OWN line at column 1, nothing before or after it." >&2
     exit 1
   fi
   echo "RE-DRIVE: no H2 attestation for sprint ${SPRINT} — this is the sprint's first gate."
@@ -288,8 +321,10 @@ echo ""
 echo "Items (1) H1 recursion guard and (3) manifest-bypass are LLM-adjudicated:"
 echo "drive their seeds now and record the verdicts alongside this line."
 echo ""
-echo "Append to the gate log, as its own line at column 1 — or inside the H2 row's"
-echo "evidence cell. Both verify; nothing else about the line may change."
+echo "Append the line below to the gate log on its own line at column 1, with nothing"
+echo "before or after it. A bullet, an arrow or trailing prose makes it unverifiable, and"
+echo "--verify will name the line. In a table log, the H2 row's evidence cell holding ONLY"
+echo "this span is also accepted. Nothing else about the line may change."
 echo ""
 echo "H2_ATTESTED v1 sprint=${SPRINT} digest=${DIGEST} at=${STAMP} items=1,2,3 mechanical=check-17-bypass:PASS"
 exit 0
