@@ -942,8 +942,10 @@ else
     d) echo "conservation: consumer line 5 (alpha E2-ALPHA-EDIT.)" ;;
   esac; }
   # A `diff` that exits 2 only when an input carries KEEPME (Beta's marker in the keyed seed) AND
-  # it was handed process substitutions -- substitution_only's per-section diff, never the
-  # whole-file conservation diff, which takes two real paths. So Alpha is classified, Beta alone
+  # it was handed a non-path first operand -- substitution_only's per-section diff, never the
+  # whole-file conservation diff, which takes two real paths. That operand was a `/dev/fd/*`
+  # process substitution until 0.647.0 and is `-` (the staged section piped in) since, because the
+  # `<( )` spelling races under concurrent bash 3.2; both are keyed. So Alpha is classified, Beta alone
   # is not, and the conservation check still runs for real: a mutant of layer 1 is then answered
   # by layer 2's positional check, not by a shim that happened to fail both.
   e2_diffshim() {
@@ -953,7 +955,7 @@ else
 #!/bin/sh
 t1=\$(mktemp) || exit 3; t2=\$(mktemp) || exit 3
 cat "\$1" > "\$t1"; cat "\$2" > "\$t2"
-case "\$1" in /dev/fd/*) psub=y ;; *) psub=n ;; esac
+case "\$1" in /dev/fd/*|-) psub=y ;; *) psub=n ;; esac
 if [ "\$psub" = y ] && grep -q KEEPME "\$t1" "\$t2"; then rm -f "\$t1" "\$t2"; : > "$d/.fired"; exit 2; fi
 "$E2_REALDIFF" "\$t1" "\$t2"; rc=\$?; rm -f "\$t1" "\$t2"; exit \$rc
 EOF

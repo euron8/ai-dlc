@@ -114,9 +114,29 @@ if [ -z "${AI_DLC_RECONCILE_MEMO:-}" ]; then
   AI_DLC_RECONCILE_MEMO="$(mktemp -d "${TMPDIR:-/tmp}/reconcile-memo.XXXXXX" 2>/dev/null || true)"
   if [ -n "$AI_DLC_RECONCILE_MEMO" ]; then
     _er_memo_owned="$AI_DLC_RECONCILE_MEMO"
-    trap '[ -n "${_er_memo_owned:-}" ] && rm -rf "$_er_memo_owned"' EXIT
   fi
 fi
+# THE DIFF STAGING DIRECTORY, ONE PER PROCESS, MADE HERE IN THE MAIN SHELL. Every verdict-bearing
+# `diff` below reads a staged file, never a `<( )` process substitution: under concurrent
+# bash 3.2 workers `diff <(printf …) file` exits 2 with `/dev/fd/63: Bad file descriptor` --
+# measured at batch 160 at 3 and 8 in 2000 under 4 workers, against 0 in 2000 for the temp-file
+# spelling in the same loop -- and that race was BL-230's pool trigger. Made here and not at the
+# site because the orientation loop is a pipeline subshell, where an EXIT handler cannot clean up
+# after itself. Empty when `mktemp -d` failed, and every site then REFUSES rather than diffing.
+_er_tmp="$(mktemp -d "${TMPDIR:-/tmp}/emit-report.XXXXXX" 2>/dev/null)" || _er_tmp=""
+trap '[ -n "${_er_memo_owned:-}" ] && rm -rf "$_er_memo_owned"; [ -n "${_er_tmp:-}" ] && rm -rf "$_er_tmp"; :' EXIT
+# er_pdiff <staged-file> <other> — `diff - <other>` with the staged file PIPED in, never passed as a
+# path: Apple diff hunks two REGULAR files differently from a pipe and a file (measured on a graph
+# pull, 294 lines against 293, different hunk anchors), so a two-path diff would move every
+# approved region, while the piped form is byte-identical to the old `<( )` output. Returns diff's
+# own status (0 same, 1 differ, >=2 could not compare) and 2 when the `cat` failed, never 0 for a
+# diff of nothing. A FUNCTION, not inline: a `case` inside `$( )` does not parse under bash 3.2.
+er_pdiff() {
+  cat "$1" | diff - "$2"
+  local _c="${PIPESTATUS[0]}" _d="${PIPESTATUS[1]}"
+  [ "$_c" -eq 0 ] || return 2
+  return "$_d"
+}
 
 sub() { printf '\n**%s**\n' "$1"; }
 none_or() { if [ -n "$1" ]; then printf '%s\n' "$1"; else echo "none"; fi; }
@@ -292,29 +312,96 @@ render() {
         echo "  $cp"
         # `diff THEIRS OURS`: '<' lines are THEIRS, '>' lines are OURS. Stated because getting
         # this backwards is precisely the defect, and the fixture asserts the direction.
-        t="$(git -C "$DIST" show "${THEIRS}:${cp}" 2>/dev/null)"
-        if [ -z "$t" ]; then
+        #
+        # A SAMPLE THAT DID NOT RUN RENDERED AS `ONLY IN …: none`, AND THAT IS BL-230's POOL FLAKE.
+        # Every command in this block ended in `|| true` or `2>/dev/null` with its status unread:
+        # `diff` exit 2 (it could not compare) was swallowed with exit 1 (it did), the
+        # grep|sed|grep chain that cut the sample swallowed its own failures, `grep -c` turned an
+        # empty count into `${n:-0}` = 0, and a FAILED `git show` rendered `THEIRS absent`.
+        # Measured at batch 160: a 156-run pool put 1 red on the fixture at tip, mutant E3 on world
+        # V-N scoring `3|BLOCKERS-RESOLVED|1|1|4|4`. Driven in a scratch copy, a PATH shim making
+        # `diff` exit 2 with no output -- or making the first grep of the chain fail -- at APPROVE
+        # time rendered `ONLY IN THEIRS: none` / `ONLY IN OURS: none` and exit 0, and scoring that
+        # approval under E3 reproduced tip.32 byte-for-byte, same four `unseen:` rows and same
+        # hunk. The approval had recorded a sample that never ran as an empty one.
+        #
+        # SO EVERY STEP'S STATUS IS READ, and a failed one renders ONE refusal line for THIS FILE
+        # ONLY -- the other CLASSIFY files keep their own samples, because one fork refused under
+        # load says nothing about the next. The same class `unregistered-drift.sh`'s
+        # `is_unregistered()` closed at 0.625.0, one detector over.
+        #
+        # EVERY REFUSAL LINE IS AT COLUMN 0, never indented to match the block. `--verify` keys
+        # `refused_new` and `unseen_rows()` on `^DETECTOR-REFUSED`; an indented refusal is scored as
+        # an unseen FINDING row instead, and a verify of a resolved-blocker report under the same
+        # failure then reads BLOCKERS-RESOLVED where it must read UNDECIDED.
+        #
+        # ABSENCE IS DECIDED BY `ls-tree`, NOT BY `git show` FAILING. `git show` exits 128 for a path
+        # absent at theirs AND for a read that failed, and so does `cat-file -e`; `ls-tree` exits 0
+        # with no row for the first and non-zero only for the second. An empty `t` from a SUCCESSFUL
+        # show (an empty file) keeps its old rendering, so no healthy region moves.
+        t=""; t_rc=0
+        t_ls="$(git -C "$DIST" ls-tree "$THEIRS" -- "$cp" 2>/dev/null)"; t_ls_rc=$?
+        if [ "$t_ls_rc" -eq 0 ] && [ -n "$t_ls" ]; then
+          t="$(git -C "$DIST" show "${THEIRS}:${cp}" 2>/dev/null)"; t_rc=$?
+        fi
+        if [ "$t_ls_rc" -ne 0 ] || [ "$t_rc" -ne 0 ]; then
+          echo "DETECTOR-REFUSED  orientation read of ${cp} at ${THEIRS} failed (ls-tree exited ${t_ls_rc}, show exited ${t_rc}), so THEIRS is NOT absent and this file's sample is NOT a finding of 'none'."
+        elif [ -z "$t" ]; then
           echo "    THEIRS absent at ${THEIRS} — nothing upstream to compare"
         elif [ ! -f "$local_ours" ]; then
           echo "    OURS absent at ${cons} — nothing consumer-side to compare"
         else
           echo "    OURS   $cons ($(wc -l < "$local_ours" | tr -d ' ') lines)"
           echo "    THEIRS ${THEIRS}:${cp} ($(printf '%s\n' "$t" | wc -l | tr -d ' ') lines)"
-          d="$(diff <(printf '%s\n' "$t") "$local_ours" 2>/dev/null || true)"
+          # diff's OWN contract: 0 = same, 1 = differ, >=2 = could not compare. Only the last is a
+          # refusal; the rc is read off the bare command substitution, never after a `|| true`.
+          # THEIRS is STAGED in a file, not fed through `<( )`: the fd race (3-8 in 2000 under 4
+          # bash 3.2 workers, 0 staged) is what made this exit 2 in the pool. A staging that failed
+          # is the refusal diff would have given, never an empty diff.
+          # Piped through `er_pdiff`, whose header says why a two-path diff would move the region.
+          d=""; d_rc=0
+          if [ -z "$_er_tmp" ] || ! printf '%s\n' "$t" > "$_er_tmp/orient.theirs" 2>/dev/null; then
+            d_rc=staging-failed
+          else
+            d="$(er_pdiff "$_er_tmp/orient.theirs" "$local_ours" 2>/dev/null)"; d_rc=$?
+          fi
+          if [ "$d_rc" = staging-failed ] || [ "$d_rc" -ge 2 ]; then
+            echo "DETECTOR-REFUSED  orientation diff exited ${d_rc} for ${cp}, so its ONLY IN sample is NOT a finding of 'none'."
+          else
           for side in THEIRS OURS; do
             case "$side" in
-              THEIRS) marker='^< ' ;;
-              OURS)   marker='^> ' ;;
+              THEIRS) marker='<' ;;
+              OURS)   marker='>' ;;
             esac
-            lines="$(printf '%s\n' "$d" | grep -E "$marker" | sed -E 's/^[<>] //' | grep -vE '^[[:space:]]*$' || true)"
-            n="$(printf '%s\n' "$lines" | grep -c . || true)"
+            # ONE awk replaces grep|sed|grep and the `grep -c` beside it, because awk exits 0 on
+            # no match: a non-zero exit is a failure and nothing else, where grep's 1 was both "no
+            # line" and indistinguishable from a chain that died. It prints the COUNT on its first
+            # line and the sample after it, so the count is read off the same run as the lines and
+            # a count that is not a number refuses rather than defaulting to 0. Same filter as the
+            # chain it replaces: lines opening `< ` / `> `, marker stripped, whitespace-only dropped.
+            samp="$(awk -v m="$marker" '
+              substr($0, 1, 2) == m " " { x = substr($0, 3); if (x ~ /[^[:space:]]/) { c++; s = s x "\n" } }
+              END { printf "%d\n%s", c, s }' <<<"$d")"; samp_rc=$?
+            # `$nl`, not `$'\n'` inside the double-quoted expansion: bash 3.2 does not expand
+            # ANSI-C quoting there, and the pattern would match a literal `$'\n'`.
+            nl='
+'
+            n="${samp%%${nl}*}"
+            case "$samp_rc:$n" in
+              # non-zero rc, an empty count, or a count carrying a non-digit
+              [!0]*|0:|0:*[!0-9]*)
+                echo "DETECTOR-REFUSED  orientation sample exited ${samp_rc} for ${cp} (${side}), so it is NOT a finding of 'none'."
+                continue ;;
+            esac
+            lines=""
+            case "$samp" in *"$nl"*) lines="${samp#*${nl}}" ;; esac
             # CAP=12, not 6. At 6 the sample was all boilerplate: on the pull that motivated
             # this block, both sides' first rows were table headers and the same four generic
             # class names, while the lines that actually decided the resolution -- the
             # consumer's two domain classes, upstream's two process classes -- sat in the
             # suppressed tail. A sample that shows only what the two sides have in COMMON
             # orients nobody. 12 covers that case whole; anything larger is read by command.
-            if [ "${n:-0}" -eq 0 ]; then
+            if [ "$n" -eq 0 ]; then
               echo "    ONLY IN ${side}: none"
             else
               shown=12
@@ -327,6 +414,7 @@ render() {
               printf '%s\n' "$lines" | head -12 | cut -c1-100 | sed 's/^/      /'
             fi
           done
+          fi
           # The escape hatch, printed for EVERY file so a truncated sample is never the only
           # thing available. Same argument order as above: theirs on the left, ours on the
           # right, so '<' stays THEIRS and '>' stays OURS in the operator's own terminal too.
@@ -340,14 +428,23 @@ render() {
           # this only renders it. UNCAPPED on purpose -- the signal was already inside
           # "ONLY IN OURS" above on the pull that motivated it, buried at "137
           # suppressed", and the cap is what hid it.
+          #
+          # ITS rc IS READ OFF THE BARE RUN. The header says "0 always", so a non-zero exit is a
+          # crash, and before this it rendered `RETIRED-CONTRACT-TOKEN: none` -- the BL-230 class
+          # (batch 160: a detector that did not run rendered as one that found nothing). The bare
+          # run's stdout is captured whole and projected afterwards, so `$?` is the detector's and
+          # not the projection's. Its exit-0-with-stderr refusal is its own contract, not decided here.
           if [ -n "$rt_pc" ]; then
-            rt="$(bash "$SELF/retired-tokens.sh" --bucket-rows "$rt_pc" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" "$cp" 2>/dev/null \
-                  | awk -F'\t' '{print $3}')"
+            rt="$(bash "$SELF/retired-tokens.sh" --bucket-rows "$rt_pc" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" "$cp" 2>/dev/null)"
+            rt_rc=$?
           else
-            rt="$(bash "$SELF/retired-tokens.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" "$cp" 2>/dev/null \
-                  | awk -F'\t' '{print $3}')"
+            rt="$(bash "$SELF/retired-tokens.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" "$cp" 2>/dev/null)"
+            rt_rc=$?
           fi
-          if [ -n "$rt" ]; then
+          [ "$rt_rc" -eq 0 ] && { rt="$(awk -F'\t' '{print $3}' <<<"$rt")" || rt_rc="projection-$?"; }
+          if [ "$rt_rc" != 0 ]; then
+            echo "DETECTOR-REFUSED  retired-tokens.sh exited ${rt_rc} for ${cp} without scanning, so its RETIRED-CONTRACT-TOKEN line is NOT a finding of 'none'. Run it directly: reconcile/retired-tokens.sh <dist> <base> <theirs> <consumer> ${cp}"
+          elif [ -n "$rt" ]; then
             echo "    RETIRED-CONTRACT-TOKEN — OURS still references what THEIRS eliminated (uncapped; resolve EVERY one):"
             printf '%s\n' "$rt" | sed 's/^/      /'
             echo "      Each is a live reference in the consumer's own code to a contract upstream"
@@ -537,8 +634,29 @@ render() {
   # `#{2,4}`, not a literal `### `: relabel matches headings at h2-h4, so filtering the
   # report to h3 dropped a real proposed relabel out of the operator-facing summary
   # while the tool itself reported it. The filter must be as wide as the tool.
-  rl="$(bash "$SELF/relabel-extension-checks.sh" "$CONSUMER" --dist "$DIST" --theirs "$THEIRS" 2>/dev/null | grep -E '^[[:space:]]+\+[[:space:]]+#{2,4} ' | sed 's/^[[:space:]]*+[[:space:]]*/  /' | sort -u || true)"
-  none_or "$rl"
+  #
+  # ITS rc IS READ OFF THE BARE RUN, AND ITS 1 IS A FINDING. This was `… | grep | sed | sort -u ||
+  # true`, so a relabel run that died rendered `none` -- the same class BL-230 measured in the
+  # orientation block at batch 160, where a forced exit 2 rendered an empty sample and scored a
+  # resolved-blocker verify as BLOCKERS-RESOLVED. Its own header: 0 = nothing to do, 1 =
+  # collisions found (dry-run with work outstanding), 2 = usage. So {0,1} ran and >=2 refused;
+  # reading 1 as a refusal would hide exactly the rows this section exists to show. Captured into
+  # a file for the reason the `ld`/`ud` runs above are: `$?` after a pipeline is the pipeline's.
+  local rl rl_rc rl_raw
+  rl_raw="$(mktemp)"
+  bash "$SELF/relabel-extension-checks.sh" "$CONSUMER" --dist "$DIST" --theirs "$THEIRS" >"$rl_raw" 2>/dev/null
+  rl_rc=$?
+  # The FILTER is one awk, not grep|sed with `|| true`, for the orientation block's reason: awk
+  # exits 0 on no match, so its non-zero status is a failure and is folded into the refusal.
+  local rl_f_rc
+  # `###?#? ` is `#{2,4} ` spelled without an interval expression, which not every awk honours.
+  rl="$(awk '/^[[:space:]]+\+[[:space:]]+###?#? / { sub(/^[[:space:]]*\+[[:space:]]*/, "  "); print }' "$rl_raw" | sort -u)"
+  rl_f_rc=$?
+  rm -f "$rl_raw"
+  [ "$rl_rc" -le 1 ] && [ "$rl_f_rc" -ne 0 ] && rl_rc="filter-${rl_f_rc}"
+  if [ "$rl_rc" = 0 ] || [ "$rl_rc" = 1 ]; then none_or "$rl"; else
+    echo "DETECTOR-REFUSED  relabel-extension-checks.sh exited ${rl_rc} without classifying, so this section is NOT a finding of 'none'. Run it directly against this consumer to see why: reconcile/relabel-extension-checks.sh <consumer> --dist <dist> --theirs <theirs>"
+  fi
 
   # THE ROW MUST SAY WHY. This projected fields 1 and 2 and dropped field 3 — and field 3 is the
   # only place a NEEDS-REVIEW row names its cause (`unresolved:` / `vacuous predicate:` /
@@ -550,9 +668,25 @@ render() {
   # line once per manual entry — nine times on the reference consumer — and says nothing the
   # status has not already said.
   sub "Push-candidate ledger — CLOSE-CANDIDATE / NAMED-UPSTREAM / NAMED-UPSTREAM-AMBIGUOUS / NEEDS-REVIEW / RECEIPTS-UNDECIDED / INPUT-UNRESOLVED (upstream absorbed the entry; the operator confirms and annotates, never auto-closed):"
-  local lr
-  lr="$(bash "$SELF/ledger-reverify.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | awk -F'\t' '$1!="STILL-LIVE"{ d = ($1=="HAND-REVIEW") ? "" : "  "$3; print $1"  "$2 d }' | sort -u)"
-  none_or "$lr"
+  #
+  # A LEDGER RUN THAT DIED RENDERED `none`, AND THAT ONE WAS DRIVEN. Batch 160, BL-230: a stub
+  # `ledger-reverify.sh` exiting 2 turned the fixture's two NEEDS-REVIEW rows into `none`, render
+  # rc 0, no DETECTOR-REFUSED anywhere -- while the `warn-shadowed` and `retired-layer-token`
+  # sites under the same stub rendered their refusal. Its header says "Exit: 0 ALWAYS. A
+  # classifier, not a gate", so any non-zero exit is a crash (it has `exit 1`/`exit 2` on an
+  # unsourceable lib.sh or an unliftable close grammar). The rc is read off the BARE run into a
+  # file, then filtered, for the `ld`/`ud` reason above; the same shape is used at every
+  # "0 ALWAYS" site below. Its exit-0-with-stderr refusals are that detector's own contract and
+  # are not decided here.
+  local lr lr_rc lr_raw
+  lr_raw="$(mktemp)"
+  bash "$SELF/ledger-reverify.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >"$lr_raw" 2>/dev/null
+  lr_rc=$?
+  lr="$(awk -F'\t' '$1!="STILL-LIVE"{ d = ($1=="HAND-REVIEW") ? "" : "  "$3; print $1"  "$2 d }' "$lr_raw" | sort -u)"
+  rm -f "$lr_raw"
+  if [ "$lr_rc" -eq 0 ]; then none_or "$lr"; else
+    echo "DETECTOR-REFUSED  ledger-reverify.sh exited ${lr_rc} without classifying, so this section is NOT a finding of 'none'. Run it directly against this consumer to see why: reconcile/ledger-reverify.sh <dist> <base> <consumer> <theirs>"
+  fi
 
   # ITS TWINS WERE BOTH DRIVEN HERE AND IT WAS NOT, WHICH IS THE WHOLE DEFECT. This detector
   # names itself "the twin of ledger-reverify.sh's CLOSE-CANDIDATE and layer-drift.sh's
@@ -586,20 +720,45 @@ render() {
   # says it exists to end: an LLM stands between the detector and the operator and can drop the
   # line. `--verify` could not fail on their omission because they were never in the region to
   # omit. `I105` now binds the set so a new detector cannot land outside it silently.
+  #
+  # ALL FOUR BELOW SAY "0 ALWAYS" IN THEIR OWN HEADERS, SO A NON-ZERO EXIT IS A CRASH, and each
+  # used to read its rows through `| awk | sort -u` and render `none` whatever the detector's
+  # status was -- the BL-230 class the orientation block and the ledger site above carried, where
+  # batch 160 drove a dead detector into a clean-looking section. Each site now runs its detector
+  # BARE into a file and reads the rc there (the call stays at the site, spelled
+  # `"$SELF/<name>"`, because that literal is what I105 keys "invoked" on); `a0_render` then
+  # projects the rows, so the status decided on is the detector's and not the projection's, and a
+  # non-zero rc from either renders the refusal line. Their exit-0-with-stderr refusals are each
+  # detector's own contract and are not decided here.
+  # usage: a0_render <rc> <raw-file> <awk-program> <refusal-name-and-usage>
+  a0_render() {
+    local a0_rc="$1" a0_raw="$2" a0_prog="$3" a0_what="$4" a0_rows=""
+    if [ "$a0_rc" -eq 0 ]; then
+      a0_rows="$(awk -F'\t' "$a0_prog" "$a0_raw" | sort -u)" || a0_rc="projection-$?"
+    fi
+    rm -f "$a0_raw"
+    if [ "$a0_rc" = 0 ]; then none_or "$a0_rows"; else
+      echo "DETECTOR-REFUSED  ${a0_what%% *} exited ${a0_rc} without classifying, so this section is NOT a finding of 'none'. Run it directly against this consumer to see why: reconcile/${a0_what}"
+    fi
+  }
+  local a0_raw a0_rc
   sub "Predicate reclassification (the incoming release moves an adjudication predicate over artifacts already stored):"
-  local pd
-  pd="$(bash "$SELF/predicate-differential.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null | awk -F'\t' '$1!="PREDICATE-STABLE"{print $1"  "$2"  "$3}' | sort -u)"
-  none_or "$pd"
+  a0_raw="$(mktemp)"
+  bash "$SELF/predicate-differential.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" >"$a0_raw" 2>/dev/null
+  a0_rc=$?
+  a0_render "$a0_rc" "$a0_raw" '$1!="PREDICATE-STABLE"{print $1"  "$2"  "$3}' "predicate-differential.sh <dist> <base> <theirs> <consumer>"
 
   sub "Retired core fixtures the consumer still carries (core stopped shipping them; the operator retires the orphan):"
-  local rf
-  rf="$(bash "$SELF/retired-fixtures.sh" "$DIST" "$THEIRS" "$CONSUMER" 2>/dev/null | awk -F'\t' 'NF{print $1"  "$2"  "$3}' | sort -u)"
-  none_or "$rf"
+  a0_raw="$(mktemp)"
+  bash "$SELF/retired-fixtures.sh" "$DIST" "$THEIRS" "$CONSUMER" >"$a0_raw" 2>/dev/null
+  a0_rc=$?
+  a0_render "$a0_rc" "$a0_raw" 'NF{print $1"  "$2"  "$3}' "retired-fixtures.sh <dist> <theirs> <consumer>"
 
   sub "Retired contract shapes in consumer layer files:"
-  local rlc
-  rlc="$(bash "$SELF/retired-layer-contract.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null | awk -F'\t' 'NF{print $1"  "$2"  "$3}' | sort -u)"
-  none_or "$rlc"
+  a0_raw="$(mktemp)"
+  bash "$SELF/retired-layer-contract.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" >"$a0_raw" 2>/dev/null
+  a0_rc=$?
+  a0_render "$a0_rc" "$a0_raw" 'NF{print $1"  "$2"  "$3}' "retired-layer-contract.sh <dist> <base> <theirs> <consumer>"
 
   # THIS SECTION IS NO LONGER THE ONLY CHANNEL FOR THIS CLASS, AND THE HEADING CANNOT SAY SO.
   # `apply.sh` runs this same detector at step 7 and emits a `WORKLIST retired-layer-passage`
@@ -610,9 +769,10 @@ render() {
   # approved report: a heading edit invalidates every report approved before this release, which
   # is a cost paid by consumers for a sentence that belongs to the reader of this file.
   sub "Retired core passages still carried by a consumer layer file:"
-  local rlp
-  rlp="$(bash "$SELF/retired-layer-passage.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null | awk -F'\t' 'NF{print $1"  "$2"  "$3}' | sort -u)"
-  none_or "$rlp"
+  a0_raw="$(mktemp)"
+  bash "$SELF/retired-layer-passage.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" >"$a0_raw" 2>/dev/null
+  a0_rc=$?
+  a0_render "$a0_rc" "$a0_raw" 'NF{print $1"  "$2"  "$3}' "retired-layer-passage.sh <dist> <base> <theirs> <consumer>"
 
   # This sibling exits 2 when a corpus could not be read, because its empty-theirs failure
   # is a MAXIMAL report (every rulebook token retired) rather than a silent one; a refusal
@@ -783,6 +943,16 @@ else
   echo "  cause: UNDECIDED — the fresh render carries ${hard_new} HARD-* row(s) and ${refused_new} DETECTOR-REFUSED line(s) the approved region lacks (a finding the approval never saw, or a detector that did not run), or the difference is outside the blocking list. Read the diff." >&2
 fi
 echo "  Diff (want vs report):" >&2
-diff <(printf '%s\n' "$want") <(printf '%s\n' "$got") >&2 || true
+# Staged, not `<( )`, for the fd race the orientation diff states (3-8 in 2000 under 4 bash 3.2
+# workers). This diff is the operator's only view of WHAT differs, so a failed one says so
+# instead of printing an empty section under the heading above.
+if [ -n "$_er_tmp" ] && printf '%s\n' "$want" > "$_er_tmp/verify.want" 2>/dev/null \
+   && printf '%s\n' "$got" > "$_er_tmp/verify.got" 2>/dev/null; then
+  # Piped through `er_pdiff`, not two paths, so the diagnostic reads exactly as it did.
+  er_pdiff "$_er_tmp/verify.want" "$_er_tmp/verify.got" >&2; _vd_rc=$?
+  [ "$_vd_rc" -ge 2 ] && echo "  (the diff itself failed, exit ${_vd_rc}: the difference above is decided, but its lines are not shown)" >&2
+else
+  echo "  (the want/report regions could not be staged for diff: the difference above is decided, but its lines are not shown)" >&2
+fi
 [ "$cause" = BLOCKERS-RESOLVED ] && exit 3
 exit 1

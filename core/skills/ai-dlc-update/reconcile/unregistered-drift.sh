@@ -354,7 +354,22 @@ PRECLASSIFY_SRC="$(cd "$(dirname "$0")" && pwd)/preclassify.sh"
 CARRY_STATE=cold
 CARRY_JOIN=""
 CARRY_TMP=""
-_carry_cleanup() { [ -n "$CARRY_TMP" ] && rm -rf "$CARRY_TMP"; }
+# UD_DIFF_TMP: is_unregistered()'s staging directory, one per process, made HERE in the main shell
+# because the scan below is a pipeline subshell whose EXIT handler would never clean it. Its `diff`
+# reads the base blob from a staged file, never `<( )`: under concurrent bash 3.2 workers the
+# process substitution exits 2 with `/dev/fd/63: Bad file descriptor` (3-8 in 2000 at batch 160).
+UD_DIFF_TMP="$(mktemp -d "${TMPDIR:-/tmp}/ud-diff.XXXXXX" 2>/dev/null)" || UD_DIFF_TMP=""
+# ud_pdiff <staged-file> <other> — the staged file PIPED into `diff -`, never passed as a path:
+# Apple diff hunks two regular files differently from a pipe and a file, and the awk in
+# is_unregistered() keys on hunk anchors. Returns diff's own status, or 2 when the `cat` failed.
+# A function because a `case` inside `$( )` does not parse under bash 3.2.
+ud_pdiff() {
+  cat "$1" | diff - "$2"
+  local _c="${PIPESTATUS[0]}" _d="${PIPESTATUS[1]}"
+  [ "$_c" -eq 0 ] || return 2
+  return "$_d"
+}
+_carry_cleanup() { [ -n "$CARRY_TMP" ] && rm -rf "$CARRY_TMP"; [ -n "$UD_DIFF_TMP" ] && rm -rf "$UD_DIFF_TMP"; :; }
 trap _carry_cleanup EXIT
 
 # carried_bucket <core-rel-path> -> prints the preclassify BUCKET when arm C would carry this
@@ -446,8 +461,13 @@ is_unregistered() {
   local cp="$1" cons="$2" ranges d drc
   ranges="$(exempt_ranges "$cp")"
   # The captured variable loses only diff's trailing newline, which the here-string restores; the
-  # BLOB is still streamed through `<( )`, so the phantom-final-hunk hazard above does not apply.
-  d="$(diff <(git_show "${BASE}" "${cp}") "$cons" 2>/dev/null)"; drc=$?
+  # BLOB is streamed from git into a staged FILE, never through a `$( )`, so the phantom-final-hunk
+  # hazard above does not apply. A file and not `<( )`: the fd race exits 2 at 3-8 in 2000 under 4
+  # bash 3.2 workers (batch 160). A failed staging is `unknown`, the same answer as a failed diff.
+  # Piped through `ud_pdiff`; a failed `cat` is 2, which is `unknown` below.
+  [ -n "$UD_DIFF_TMP" ] && git_show "${BASE}" "${cp}" > "$UD_DIFF_TMP/base" 2>/dev/null \
+    || { printf 'unknown'; return 0; }
+  d="$(ud_pdiff "$UD_DIFF_TMP/base" "$cons" 2>/dev/null)"; drc=$?
   if [ "$drc" -ne 1 ] || [ -z "$d" ]; then printf 'unknown'; return 0; fi
   awk -v ranges="$ranges" '
     function left_exempt(h,   p,left,n,LR,ls,le,m,RG,i,rr) {

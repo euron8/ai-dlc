@@ -124,9 +124,26 @@ SELF="$(cd "$(dirname "$0")" && pwd)"
 # token AND every token-FREE core-side line reappears verbatim on the consumer side -- so the
 # hunk changed nothing but token lines. The same rule is in the conservation check's awk below;
 # the two must agree, or the classifier skips a section the check then refuses.
+# rd_pdiff <staged-file> <other> — the staged file PIPED into `diff -`, never passed as a path:
+# Apple diff hunks two regular files differently from a pipe and a file, and the awk below reads
+# hunk boundaries. Returns diff's own status, or 2 when the `cat` failed. A function because a
+# `case` inside `$( )` does not parse under bash 3.2.
+rd_pdiff() {
+  cat "$1" | diff - "$2"
+  local _c="${PIPESTATUS[0]}" _d="${PIPESTATUS[1]}"
+  [ "$_c" -eq 0 ] || return 2
+  return "$_d"
+}
 substitution_only() { # <consumer-section-text> <dist-section-text>
   local d drc
-  d="$(diff <(printf '%s\n' "$2") <(printf '%s\n' "$1") 2>/dev/null)"; drc=$?
+  # Both sides STAGED in files, never `<( )`: under concurrent bash 3.2 workers a process
+  # substitution exits 2 with `/dev/fd/63: Bad file descriptor` (3-8 in 2000 at batch 160). A
+  # staging that failed answers `unknown`, exactly as a diff that failed does.
+  [ -n "$SO_TMP" ] && printf '%s\n' "$2" > "$SO_TMP/core.section" 2>/dev/null \
+    && printf '%s\n' "$1" > "$SO_TMP/consumer.section" 2>/dev/null \
+    || { printf 'unknown'; return 0; }
+  # Core piped through `rd_pdiff`; a failed `cat` is 2, which is `unknown` below.
+  d="$(rd_pdiff "$SO_TMP/core.section" "$SO_TMP/consumer.section" 2>/dev/null)"; drc=$?
   if [ "$drc" -ne 1 ] || [ -z "$d" ]; then printf 'unknown'; return 0; fi
   awk '
     function endh(   k) {
@@ -159,6 +176,12 @@ refuse_fixed() { printf 'register-drift: %s\n' "$1" >&2; echo "  ${CONS_FILE#$CO
 # a file with nothing to classify.
 hl="$(headings_of "$CONS_FILE")"; hrc=$?
 [ "$hrc" -le 1 ] || refuse "cannot list the headings of $CONS_FILE (grep exit $hrc)"
+
+# substitution_only()'s staging directory, made HERE in the main shell because it is called inside
+# `$( )`. Cleaned by its own EXIT handler until cleanup_tmps below takes over and removes it too.
+# Empty on a failed mktemp, and every classification then answers `unknown`, which refuses.
+SO_TMP="$(mktemp -d "${TMPDIR:-/tmp}/register-drift.XXXXXX" 2>/dev/null)" || SO_TMP=""
+trap '[ -n "$SO_TMP" ] && rm -rf "$SO_TMP"; :' EXIT
 
 changed=""
 skipped=""
@@ -263,7 +286,7 @@ EOF
 # must be a regular file or absent: `mv` onto a DIRECTORY succeeds by moving the file inside it,
 # which is the unwritable-path case above reporting success a second way.
 OUT_TMP=""; EXT_TMP=""; rtmp=""
-cleanup_tmps() { local t; for t in "$OUT_TMP" "$EXT_TMP" "$rtmp"; do [ -n "$t" ] && rm -f "$t"; done; return 0; }
+cleanup_tmps() { local t; for t in "$OUT_TMP" "$EXT_TMP" "$rtmp"; do [ -n "$t" ] && rm -f "$t"; done; [ -n "$SO_TMP" ] && rm -rf "$SO_TMP"; return 0; }
 trap cleanup_tmps EXIT
 stage() { # <target> -> path of a fresh temp file to stage it in
   if [ "$APPLY" = "--apply" ]; then

@@ -548,6 +548,86 @@ one, so this clean result does not separate a fixed tip from an unfixed one, and
 evidence either way. The close condition needs the full 156, which takes about 2.5 hours at the
 observed mean of 359s per run.
 
+**MEASURED AT BATCH 160: THE FULL POOL RAN, AND THE INSTRUMENT RECORDED A RED'S CAUSE.** The pool
+was 156 runs: 108 at tip `975a861c` (0.645.0) and 48 at base 0.624.0 (`29291758`), 6-wide, with
+the box's load average between 20 and 30. It returned **1 red at tip and 1 at base**. Every log
+carries a verdict line. There were **0** `--verify` false positives and **0** kill-set `moved the
+worlds` lines, against **156** `E2 … ok` lines as the control.
+
+**tip.32 was a kill-set red, and its `DIAG` named the world.** Mutant E3 on world V-N scored
+`3|BLOCKERS-RESOLVED|1|1|4|4` where the arm expects `…|0|0`. The approval had four rows that the
+fresh render did not, so `--verify` read the region as resolved blockers with unseen rows.
+
+**THE OUTPUT WAS REPRODUCED BYTE-FOR-BYTE BY FORCING ONE FAILURE AT APPROVE TIME.** In a scratch
+copy, a PATH shim made `diff` exit 2 with no output, or made the first `grep -E '^< '` of the
+orientation sample fail, while V-N's approval was rendered. `emit-report.sh` then printed
+`ONLY IN THEIRS: none` and `ONLY IN OURS: none` and exited 0. Scoring that approval under E3
+reproduced tip.32 exactly: the same four `unseen:` rows and the same `19,22c19,20` hunk. The
+unshimmed control renders `ONLY IN … (1, complete)` on both sides. The cause was the orientation
+block itself. It ran `diff … || true`, which swallows diff's exit 2 along with its exit 1, then a
+`grep | sed | grep … || true` chain, then `grep -c … || true` into `${n:-0}`, so every failed step
+became an empty sample. A failed `git show` read as `THEIRS absent` by the same shape.
+
+**base.2 was the same class one detector over, and 0.625.0 had already fixed it.** Its V-HB world
+rendered 0 HARD copies. That is `unregistered-drift.sh`'s `is_unregistered()` scoring a failed
+`diff` as clean, closed at `240d813a` (`unregistered-drift.sh:450-451` now reads the rc bare). The
+same shim at tip keeps 1 HARD copy.
+
+**WHAT 0.647.0 SHIPS.**
+- The orientation block reads diff's exit status bare: 0 and 1 mean it ran, and 2 or more
+  renders `DETECTOR-REFUSED  orientation diff exited <rc> for <path>` for that file.
+- One `awk` replaces the `grep | sed | grep` chain and the `grep -c`. It prints the count and the
+  sample from one run, and a non-zero exit or a count that is not a number refuses.
+- Absence at theirs is decided by `git ls-tree`, which exits 0 with no row for an absent path.
+  `git show` and `git cat-file -e` both exit 128 for an absent path and for a failed read.
+- Refusals are per file, so one refused file does not blank the others. Every refusal line
+  starts at column 0. `--verify` counts `^DETECTOR-REFUSED` in `refused_new`, so a verify under
+  the same failure reads UNDECIDED instead of BLOCKERS-RESOLVED.
+- `relabel-extension-checks.sh` has its rc read off the bare run. 0 and 1 mean it ran (1 is its
+  collision finding), and 2 or more refuses.
+- `retired-tokens`, `ledger-reverify`, `predicate-differential`, `retired-fixtures`,
+  `retired-layer-contract` and `retired-layer-passage` each say "0 ALWAYS". Each has its rc read
+  off the bare run, and a non-zero rc refuses.
+- The fixture's `v_approve` treats an approved region carrying `^DETECTOR-REFUSED` as a
+  transient world-build failure. It retries the approve up to 3 times and reports
+  `FIXTURE BROKEN` only if every attempt refuses. The retry is legitimate only because the engine
+  now names the refusal. Before this release it would have retried into a silent `none`.
+
+Healthy renders are byte-identical to 0.646.0. Measured on the reference consumer's
+`1115a426..a5cbdf0b` range: 27895 normalised bytes each side, 4 `ONLY IN` lines, 0
+`DETECTOR-REFUSED` lines on either side. This was measured on the first engine commit
+(`1f0a81f3`) and again on the staged-file commit (`9f153a07`). The detectors'
+exit-0-with-stderr refusals are not in this release; they are filed as `BL-333`.
+
+**THE TRIGGER IS A BASH 3.2 FD RACE, AND IT EXPLAINS E3/tip.32.** Under concurrent
+`/bin/bash` 3.2.57 workers, `diff <(printf …) file` exits 2 with `diff: /dev/fd/63: Bad file
+descriptor`. Three hands measured it independently at about 0.15-0.4% under 4 concurrent
+workers (3 and 8 in 2000 in two of the runs). The temp-file spelling measured 0 in 2000 in the
+same loop. `reconcile-emit-report`'s `v_par` runs 4 scorers at once, which is how an approval
+picked up a spontaneous orientation refusal. So the failure behind tip.32 was not load. It was
+this race hitting the orientation `diff`, which then rendered `none`.
+
+0.647.0 removes `<( )` from the five verdict-bearing reconcile diff sites. Each input is staged
+in a per-process `mktemp -d` file, cleaned by an EXIT handler, and `diff`'s status is read
+directly:
+- `emit-report.sh`: the orientation diff, and the `--verify` want/got diagnostic diff.
+- `register-drift.sh`'s `substitution_only()`.
+- `unregistered-drift.sh`'s `is_unregistered()`.
+- `apply.sh`'s drift refile of `provenance-block.json`. That site read no status before, and a
+  failed diff there is now a DECISION row that withholds the stamp.
+
+The staged file is PIPED into `diff -` rather than passed as a second path. That choice is for
+byte-identity: Apple `diff` hunks two regular files differently from a pipe and a file (294
+lines against 293 on a graph pull). A two-path diff would therefore have moved every approved
+region. The piped form reproduces the old `<( )` output.
+
+**BL-230 STAYS LIVE FOR E1, E2, E8 AND E9.** The batch-160 arm hand drove the orientation
+failure at approve time on 0.646.0 against their recorded extra-world shapes (E1
+`[V-R V-U V-HC]`, E2 `[V-M V-HC]`, E8 `V-R V-U`, E9 `[… V-B …]`). It did not reproduce any of
+the four. Only E3 on V-N is explained by this mechanism. The fd race may reach the other
+detectors' `<( )` sites, but that is not measured. The render fix's own receipt lives on
+`BL-334`, because it proves the fix and not this entry's close.
+
 verify: manual
 
 ## BL-099 — the exec-bit audit is one-directional, so a consumer file that upstream STOPPED shipping executable is never reported
@@ -4262,5 +4342,168 @@ verify: manual
 root and a stale generated region in the install's `retro.md` exits 0 and rewrites the install's
 file (0.645.0: rc 1, nothing written). That is the intended behaviour, and what a run with no
 override does. Arm E asserts only the already-in-sync case, so the write path has no arm.
+
+verify: manual
+
+## BL-333 — three "0 ALWAYS" detectors refuse with exit 0 and a stderr line, so the report renders `none` for a scan that never ran
+
+**DEFECT.** Found by the batch-160 contract adversary (contract D3). It is the `BL-230` class that
+0.647.0 closes for a detector that exits non-zero, in the form it leaves open: a refusal that
+exits 0.
+
+`retired-tokens.sh`, `retired-layer-contract.sh` and `retired-layer-passage.sh` each document
+"0 ALWAYS" and each refuses on stderr with exit 0 and no rows: `retired-tokens.sh:119-120`
+(preclassify listed no rows), `retired-layer-contract.sh:260-261` (no rulebook shape readable at
+base), `retired-layer-passage.sh:77-78` (the rulebook list in `setup-sites.md` unreadable).
+`emit-report.sh` discards stderr at every call site, so the section renders `none`, which is the
+same text a full scan that matched nothing renders. `--verify` keys refusals on
+`^DETECTOR-REFUSED` and cannot see these.
+
+Measured at `1f0a81f3` on the `reconcile-emit-report` seed world, with `setup-sites.md` moved
+aside: `retired-layer-passage.sh` exits **0** with **0** bytes of stdout and **1** `refusing to
+report clean` line on stderr, and `retired-layer-contract.sh` does the same. `emit-report.sh`
+exits 0 and renders both sections as `none`. The render's only `^DETECTOR-REFUSED` line is
+`retired-layer-token.sh`'s, which exits 2 on the same input and is the control. With the file in
+place, the control run also renders `none` with 0 stderr refusals.
+
+The other two detectors in the contract's list refuse differently, and neither renders `none`.
+`predicate-differential.sh` emits a `PREDICATE-UNDECIDABLE` row: with `predicate-sites.md` moved
+aside it exits 0 with that one row, and the section shows it. `--verify` counts it as an ordinary
+row, not a refusal. `retired-fixtures.sh` emits `HARD-RETIRED-FIXTURE-SCAN-UNAVAILABLE` on stdout
+(`:59-61`, `:71-73`; read from the code, not driven), which renders as a `HARD-` row.
+
+The fix changes each detector's contract to exit non-zero on a refusal, which `emit-report.sh`
+already renders as `DETECTOR-REFUSED` since 0.647.0. It also changes `apply.sh`'s callers, which
+read the same detectors' stdout with stderr discarded: `retired-tokens.sh` at `apply.sh:620` and
+`:623`, and `retired-layer-passage.sh` at `:688`. The comment above `:688` states the rlp silence
+and calls it the safe direction. `apply.sh` calls neither `retired-layer-contract.sh`,
+`retired-fixtures.sh` nor `predicate-differential.sh`.
+
+verify: manual
+
+## BL-334 — the render's orientation sample failed open, and a bash 3.2 fd race triggered it
+
+**DEFECT.** Split from `BL-230` at batch 160, so that the render fix carries its own receipt and
+`BL-230` keeps its pool-flake subject.
+
+`emit-report.sh`'s semantic worklist orientation block read no exit status. `diff … || true`
+swallowed diff's exit 2 along with its exit 1, and the `grep | sed | grep` sample chain and its
+`grep -c` into `${n:-0}` turned any failed step into an empty sample. A failed `git show` read
+as `THEIRS absent`. Each rendered as `ONLY IN THEIRS: none` / `ONLY IN OURS: none` at exit 0. The
+failure that reached it was the bash 3.2 `<( )` fd race: under concurrent workers,
+`diff <(printf …) file` exits 2 with `/dev/fd/63: Bad file descriptor`, at about 0.15-0.4% under 4
+workers. That is `BL-230`'s tip.32 red, reproduced byte-for-byte by forcing the failure at
+approve time.
+
+**LANDED (v0.647.0, verified 9f153a07).** The render reads every step's status, refuses per file
+at column 0, and decides absence by `git ls-tree` (`1f0a81f3`). The five verdict-bearing
+reconcile diff sites read a staged file piped into `diff -`, never `<( )` (`9f153a07`).
+
+**THE RECEIPT FAILS ONE STEP PER MODE AND REFUSES TO SCORE A MODE WHOSE SHIM NEVER FIRED.** It
+seeds the `reconcile-emit-report` world and renders it three times under a PATH shim that is
+active only inside `emit-report.sh`:
+- **D** fails `diff` when either operand is `-` or `/dev/fd/*`.
+- **H** fails the reader of the diff output.
+- **G** fails `git` on the CLASSIFY file.
+
+Each mode must either leave the orientation block unchanged or refuse with a column-0
+`DETECTOR-REFUSED` line and no `ONLY IN …: none` or `THEIRS absent`. Every shim arm writes a
+marker when it fires. A mode whose marker is absent exits **9**, because a shim that never fired
+measured nothing. This is what the first draft lacked: its D arm keyed on `/dev/fd/*` alone,
+which the staged-file tip never passes, so D was a no-op there and the receipt still read 0.
+
+Scored in scratch clones, raw exits:
+- **0** at `9f153a07`, with the D, H and G markers all present.
+- **1** at base `df3623b9`, where D renders `ONLY IN …: none`.
+- **0** at `1f0a81f3` alone, with all three markers present, because D's `/dev/fd/*` operand
+  still fires on the `<( )` spelling.
+- **1** on a diff-only fix, in two variants. With the refusal line indented, D is not at column
+  0. With it at column 0, H renders `none`.
+- **1** at `9f153a07` with its three orientation refusal lines indented.
+- **0** on a second spelling of the fix (a `case`-mapped grep chain and `ls-tree --name-only`).
+- **9** at `9f153a07` under the same receipt with D keyed on `/dev/fd/*` only.
+
+Exit 9 also covers a missing emitter or seed, and a control render without both
+`ONLY IN … (1, complete)` lines.
+
+verify: sh E=core/skills/ai-dlc-update/reconcile/emit-report.sh; SD=core/fixtures/reconcile-emit-report/seed.sh; [ -f "$E" ] && [ -f "$SD" ] || exit 9; W="$(bash "$SD" 2>/dev/null)" && [ -f "$W/env.sh" ] || exit 9; . "$W/env.sh" || exit 9; ob() { awk '/Semantic worklist orientation/,/^\*\*Deletions/' "$1"; }; ob "$REGION" > "$W/o.ctl"; grep -qF 'ONLY IN THEIRS (1, complete):' "$W/o.ctl" && grep -qF 'ONLY IN OURS (1, complete):' "$W/o.ctl" || exit 9; B="$W/shim"; mkdir -p "$B" || exit 9; printf '%s\n' '#!/bin/bash' 'n=${0##*/}; r=/usr/bin/$n; [ -x "$r" ] || r=/bin/$n' 'case "$(/bin/ps -o command= -p $PPID)" in *emit-report.sh*) ;; *) exec "$r" "$@" ;; esac' 'case "$BM:$n" in' 'D:diff) case "${1:-}:${2:-}" in -:*|*:-|/dev/fd/*|*:/dev/fd/*) : > "$MK.D"; exit 2 ;; esac ;;' 'G:git) case " $* " in *core/skills/ai-dlc/templates/classes.md*) : > "$MK.G"; exit 128 ;; esac ;;' 'H:grep|H:sed|H:awk) t=$(/usr/bin/mktemp) || exit 2; /bin/cat > "$t"; [[ $(/usr/bin/head -1 "$t") =~ ^[0-9]+(,[0-9]+)?[acd][0-9]+(,[0-9]+)?$ ]] && { : > "$MK.H"; exit 2; }; exec "$r" "$@" < "$t" ;;' 'esac' 'exec "$r" "$@"' > "$B/shim" && chmod +x "$B/shim" || exit 9; for x in diff git grep sed awk; do ln -sf shim "$B/$x" || exit 9; done; bit=0; for m in D H G; do BM=$m MK="$W/mk" PATH="$B:/usr/bin:/bin:/usr/sbin:/sbin" bash "$E" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$W/r.$m" 2>/dev/null; ob "$W/r.$m" > "$W/o.$m"; [ -f "$W/mk.$m" ] || exit 9; cmp -s "$W/o.ctl" "$W/o.$m" && continue; bit=1; grep -qE 'ONLY IN (THEIRS|OURS): none|THEIRS absent at' "$W/o.$m" && exit 1; grep -q '^DETECTOR-REFUSED  ' "$W/o.$m" || exit 1; done; [ "$bit" -eq 1 ] || exit 9; exit 0
+
+## BL-335 — `validate-artifact-derivations.sh` scores a `<( )` diff that did not run as STALE
+
+**DEFECT.** Found by the batch-160 docs hand. It is filed as the one entry for the `<( )` sites
+0.647.0 left in `core/`, and it is a DEFECT rather than a NOTE because one of the two remaining
+shipped diff sites decides a verdict.
+
+0.647.0 staged the five verdict-bearing reconcile diff sites (`BL-334`). At `9f153a07`,
+`git grep -nE '<\(' -- 'core/*.sh'` returns 147 lines. The count at `df3623b9` is 142; the
+difference is new comments that mention the old spelling. Leaving out comment lines gives 129,
+and leaving out `core/fixtures/` as well gives 84. Outside the fixtures, three lines still run
+`diff` on a `<( )` operand:
+- `core/scripts/sync-transient-ignore.sh:122`: `diff <(…) <(…) || true`. This is diagnostic
+  output in `--check`, printed after the verdict is already decided by the string comparison
+  at `:119` and before `exit 1`. The race can garble the printed diff but cannot move the exit.
+  **Not verdict-bearing.**
+- `core/skills/ai-dlc-update/reconcile/emit-report.sh:421`: an `echo` of the `full:` command
+  for the operator to run. It is not executed. **Not verdict-bearing.**
+- `core/scripts/validate-artifact-derivations.sh:727`:
+  `if ! diff -q <(norm < "$TMP_EXP") <(norm < "$TMP_OUT") …; then fail "STALE" …`. A diff that
+  exits 2 on the fd race takes the `!` branch and records the derivation as STALE, even though
+  the recorded and actual outputs were never compared. **Verdict-bearing.**
+
+Three consumers act on that STALE:
+- the derivation-capture hook;
+- `apply.sh`'s `artifact-derivations` worklist row;
+- `derivation-differential.sh`, which classifies by the pair of sides. A spurious STALE on the
+  base side of a derivation that genuinely broke at theirs scores **STALE-BOTH**. That class is
+  "pre-existing debt, out of this row's scope" (`derivation-differential.sh:32`), so a real
+  NEWLY-FAILING row is hidden: a false clear.
+
+This rests on reading the code and on the race rate measured on `diff <(printf …) file`. The race
+was not driven at this site. The fix is the staged-file spelling `BL-334` used, with diff's exit
+status read directly and 2 or more reported as a refusal, not as STALE. The other `<( )` lines
+feed `while read`, `comm` or `sort` rather than `diff`. None of them was audited for whether a
+failed substitution reads as an empty input that decides a verdict.
+
+verify: manual
+
+## BL-336 — `apply.sh`'s refile refusal tells the operator to re-run apply, which the union gate refuses
+
+**NOTE.** Found by the batch-160 tip adversary of 0.647.0. When the `provenance-block.json` refile's
+diff fails, 0.647.0 raises a DECISION row and withholds the stamp; its remedy reads "re-run
+apply". A bare re-run is refused by the union gate (rc 1, UNDECIDED) because the tree moved since
+approval, and that refusal names the procedure that works (re-render, re-approve, re-run). `apply.sh`'s
+own comment at `:852-859` calls a remedy of this shape a defect. Reachable only through a
+transient staging or diff failure; `--finish` gates on WORKLIST rows and does not stop on it.
+
+verify: manual
+
+## BL-337 — an unwritable `TMPDIR` renders unexplained HARD rows instead of naming the staging failure
+
+**NOTE.** Found by the batch-160 tip adversary of 0.647.0. With `TMPDIR=/nonexistent`, 0.647.0
+renders three `HARD-UNREGISTERED-CORE-DRIFT` rows (`team-roles/dev.md`, `team-roles/qa.md`,
+`steps/deploy-validate.md`) where 0.646.0 renders `CORE-TEMPLATE-SUBSTITUTED`, and no
+`DETECTOR-REFUSED` line names the failed staging in `unregistered-drift.sh`. It fails CLOSED: the
+consumer is blocked, with a wrong reason, never wrongly cleared.
+
+verify: manual
+
+## BL-338 — `reconcile-emit-report`'s R6 guard reports a deterministic engine refusal as FIXTURE BROKEN, and absorbs one that fires on every world
+
+**NOTE.** Found by the batch-160 tip adversary of 0.647.0. A `ledger-reverify.sh` stub crashing on
+V-N only still fails the unit, but reads `FIXTURE BROKEN — V-N approval rendered DETECTOR-REFUSED
+on 3 attempts`, blaming the fixture for an engine regression. The same crash on every world is
+absorbed into `V_REFUSE_OK`, which is derived from the engine's own seed render, and R6 records
+nothing; `emit-report-refusal`'s A0 (the refusal set must be exactly `retired-layer-token.sh`) is
+the arm that catches the global case, by its assertion code, not yet driven against that stub.
+
+verify: manual
+
+## BL-339 — `emit-report-refusal` ships and depends on `reconcile-emit-report` shipping, and nothing binds the two
+
+**NOTE.** Found by the batch-160 tip adversary of 0.647.0. The fixture sources the sibling's
+`seed.sh`; the dependency is stated in its README and a runtime guard that exits 2 with `FIXTURE
+ERROR: sibling … not found`. A packaging change marking `reconcile-emit-report` `.dist-only` would
+leave every consumer's `emit-report-refusal` erroring. `layer-entry-unreadable` and
+`provenance-flagless-default` carry the same unbound sibling shape.
 
 verify: manual

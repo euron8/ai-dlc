@@ -15,6 +15,66 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.647.0] - 2026-09-26
+
+A step 5 report no longer prints `none` for a sample or detector that did not run. Where a
+failed diff or a crashed detector used to render as an empty result, the consumer now sees a
+`DETECTOR-REFUSED` line naming what failed. A healthy report is byte-identical to 0.646.0.
+
+### `BL-230` — the orientation sample and eight detector sites refuse instead of printing `none`
+
+`emit-report.sh`'s semantic worklist orientation block ignored the exit status of every step. A
+`diff` that exited 2, a failed `grep` in the sample chain, or a failed `git show` all rendered
+as `ONLY IN THEIRS: none` / `ONLY IN OURS: none` or `THEIRS absent`, with exit 0. Batch 160's
+fixture pool caught one such render: an approval recorded under a failed sample later read as
+`BLOCKERS-RESOLVED` with four unseen rows. Forcing `diff` to exit 2 at approve time reproduced
+that output byte-for-byte. The render half of this is tracked as `BL-334`.
+
+- The orientation block reads diff's status directly. An exit of 2 or more renders
+  `DETECTOR-REFUSED  orientation diff exited <rc> for <path>` for that file only; the other files
+  keep their samples.
+- One `awk` computes each side's count and sample. A failure renders a `DETECTOR-REFUSED` line
+  for that side instead of `none`.
+- A file is `THEIRS absent` only when `git ls-tree` succeeds and lists nothing. A failed read
+  renders a `DETECTOR-REFUSED` line.
+- Every refusal line starts at column 0, so `--verify` counts it as a refusal and reads
+  `UNDECIDED`, not `BLOCKERS-RESOLVED`.
+- `relabel-extension-checks.sh` refuses on an exit of 2 or more. Exit 1 is still its collision
+  finding.
+- `retired-tokens.sh`, `ledger-reverify.sh`, `predicate-differential.sh`, `retired-fixtures.sh`,
+  `retired-layer-contract.sh` and `retired-layer-passage.sh` document exit 0 always. Any non-zero
+  exit from one of them now renders `DETECTOR-REFUSED` instead of `none`.
+- The `reconcile-emit-report` fixture retries an approval that rendered `DETECTOR-REFUSED`, up to
+  3 times, and reports `FIXTURE BROKEN` only if every attempt refuses.
+
+On the reference consumer's `1115a426..a5cbdf0b` range, 0.646.0 and 0.647.0 render identical
+reports: 27895 normalised bytes each, with 0 `DETECTOR-REFUSED` lines. A report approved before
+this release still verifies unless the fresh render refuses.
+
+### `BL-334` — verdict-bearing reconcile diffs read a staged file, not `<( )`
+
+The command that failed in the pool was `diff` itself. Under concurrent bash 3.2 workers,
+`diff <(printf …) file` sometimes exits 2 with `/dev/fd/63: Bad file descriptor`. Three separate
+measurements put that at about 0.15-0.4% under 4 workers, and the same loop with a temporary
+file measured 0 in 2000. The fixture scores 4 mutants at once, and the pre-push pool runs
+several fixtures at once, so a render could hit the race both when a world was approved and when
+a mutant was scored. The race is a bash 3.2 behaviour: bash 5 keeps the substitution's file
+descriptor open, and there `emit-report-refusal`'s forced race arm reports INCONCLUSIVE.
+
+Five sites now write their input to a temporary file and pipe it into `diff -`: the orientation
+diff and the `--verify` diagnostic diff in `emit-report.sh`, `register-drift.sh`,
+`unregistered-drift.sh`, and `apply.sh`'s refile of `provenance-block.json`. A failed temporary
+file or diff is a refusal at each site. At `apply.sh` it is a DECISION row that withholds the
+stamp, because that site previously read no status at all. The input is piped rather than passed
+as a second file path because Apple `diff` lays out hunks differently for two files than for a
+pipe and a file, and the piped form keeps every existing report byte-identical.
+
+What this does not do: three of the detectors above can still refuse by exiting 0 with a message
+on stderr, and their sections still read `none` then. That is filed as `BL-333`.
+`validate-artifact-derivations.sh` still diffs through `<( )` and can record a derivation as
+STALE when the race hits, which is filed as `BL-335`. Four other flaky fixture arms under
+`BL-230` (E1, E2, E8, E9) were not reproduced by this failure and remain open.
+
 ## [0.646.0] - 2026-09-26
 
 Five scripts now find their schema when `AI_DLC_PROJECT_ROOT` names a root that carries none, and
