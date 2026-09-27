@@ -113,10 +113,10 @@ confirmed. `BL-282` stays open. Every gate ran at `AI_DLC_FIXTURE_NO_SKIP=1`: 22
 changed fixtures `ok` by name against an impossible-name control of 0, and each squash tree
 identical to its gated tip.
 
-**Read-set traces owed**, each on a checkout of `origin/main`:
-`sudo bash core/scripts/derive-fixture-readsets.sh --list "procsub-staged-refusal procsub-staged-refusal-boot escalation-status-vocabulary"`.
-The first two are new directories and run on every push until traced; the third now reads
-`gate-validation.md` and `enforcement-map.yaml`.
+**No read-set trace is owed.** The operator traced `procsub-staged-refusal` (144 rows),
+`procsub-staged-refusal-boot` (57) and `escalation-status-vocabulary` (20 moved) on `origin/main`
+after the close; only those three fixtures' rows moved and no `.claude/worktrees` row was added.
+Batch 160's owed `emit-report-refusal` and `gate-resume` traces shipped in `v0.650.0`.
 
 **NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
 - The unfiled set holds no new core filing. `BL-353` and `BL-354` are the strongest
