@@ -82,7 +82,8 @@
 #                 reaffirm  old core text deliberately kept; REQUIRES --note; re-stamps
 #                 retire    upstream absorbed it; deletes the override file
 #
-# Exit: 0 ok / 1 blocked (stale core text still in the body) / 2 usage.
+# Exit: 0 ok / 1 blocked (stale core text still in the body) / 2 usage, or a scan that did
+#       not run to completion (a refusal; its reason is on stderr).
 set -uo pipefail
 
 DIST="${1:?usage: readopt-override.sh <dist> <theirs> <consumer> <override> [--check|--merge|--stamp <outcome>]}"
@@ -177,6 +178,49 @@ SELF="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib.sh
 . "$SELF/lib.sh" || { echo "readopt-override: cannot source $SELF/lib.sh" >&2; exit 1; }
 
+# EVERY LOOP FEED BELOW IS STAGED TO A FILE AND ITS PRODUCER'S STATUS IS READ. They used to read
+# `done < <(producer)`, which discards the status: a section read that failed part-way (a failed
+# `sort` or `section_of`) returned an empty base set, so `stale_lines` found nothing and `--check`
+# printed OK and exited 0 over a body still teaching the superseded rule -- the false clear this
+# gate exists to withhold. A producer that did not run is now a refusal, exit 2, never OK (0)
+# and never STALE (1).
+#
+# THE FUNCTIONS RUN INSIDE `$( )`, where an `exit` ends only the subshell, so each returns 3 on a
+# staging failure and every caller reads that status and refuses in the main shell.
+#
+# A `git show` THAT RAN AND FOUND NO SUCH PATH IS NOT ONE OF THESE, deliberately: git exits 128
+# for a path absent at the ref, that reads as an empty section exactly as it did, and
+# `anchors_resolve` turns it into UNDECIDABLE, which already withholds the stamp. Refusing it
+# would move that verdict from 1 to 2. EVERY OTHER STATUS IS: a `git` that could not be run or
+# was killed (126, 127, a signal) staged an empty section too, and `--check` then read OK over a
+# body it never compared -- so 0 passes, 128 stages empty, and anything else returns 3.
+#
+# One directory per run, one file per site, cleaned through lib.sh's composing `trap`.
+RO_T="$(mktemp -d "${TMPDIR:-/tmp}/readopt-override.XXXXXX")" || {
+  echo "readopt-override: could not create a staging directory; no verdict" >&2; exit 2; }
+trap 'rm -rf "$RO_T"' EXIT
+ro_refuse() { # ro_refuse <what did not run>
+  echo "readopt-override: $1 did not run to completion, so this run has no verdict; re-run once the fault is gone" >&2
+  exit 2
+}
+# ro_section <sha> <anchor> <site> -- the shadowed section at <sha>, staged to "$RO_T/<site>.sec".
+# The ref read's status is split (see above): 0 passes, 128 (no such path at the ref) stages an
+# empty section as it always read, anything else returns 3. section_of's failure returns 3.
+ro_section() {
+  local rc=0
+  git -C "$DIST" show "${1}:${CORE}" 2>/dev/null > "$RO_T/$3.raw" || rc=$?
+  case "$rc" in
+    0) ;;
+    128) : > "$RO_T/$3.raw" ;;
+    *) return 3 ;;
+  esac
+  section_of "$2" < "$RO_T/$3.raw" > "$RO_T/$3.sec" || return 3
+}
+# shadow_ids <site> -- the anchor ids named in `shadows:`, one per line, staged to "$RO_T/<site>".
+shadow_ids() {
+  printf '%s\n' "$SHADOWS" | tr ',' '\n' | sed -n 's/.*#//p' | sed 's/^ *//; s/ *$//' > "$RO_T/$1" || return 3
+}
+
 # Does every anchor in `shadows:` resolve in BOTH base and theirs?
 #
 # If an anchor resolves nowhere, `stale_lines` compares two empty sets, finds
@@ -186,6 +230,7 @@ SELF="$(cd "$(dirname "$0")" && pwd)"
 # past with `--stamp reaffirm --note`, which puts a human's name on the decision.
 anchors_resolve() {
   local id ok=yes
+  shadow_ids resolve-ids || return 3
   while IFS= read -r id; do
     [ -n "$id" ] || continue
     if [ -z "$(git -C "$DIST" show "${THEIRS}:${CORE}" 2>/dev/null | section_of "$id")" ] \
@@ -194,7 +239,7 @@ anchors_resolve() {
       printf 'UNRESOLVED-ANCHOR  #%s does not resolve to a heading in %s at %s/%s\n' \
         "$id" "$CORE" "$BASE_SHA" "$THEIRS_SHA" >&2
     fi
-  done < <(printf '%s\n' "$SHADOWS" | tr ',' '\n' | sed -n 's/.*#//p' | sed 's/^ *//; s/ *$//')
+  done < "$RO_T/resolve-ids"
   printf '%s' "$ok"
 }
 
@@ -280,9 +325,15 @@ body_carries() { carries "$BODY_FLAT" "$1"; }
 # section_lines <sha> <anchor> — the substantive lines of one shadowed section.
 # ONE spelling for both directions: two copies of this filter is two chances for
 # the sets being differenced to be built by different rules.
-section_lines() {
-  git -C "$DIST" show "${1}:${CORE}" 2>/dev/null | section_of "$2" \
-    | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -vE '^.{0,24}$' | sort -u
+# <site> names the staging files. Returns 3 when a stage failed; grep's 1 -- every line under
+# the floor -- is a healthy empty set.
+section_lines() { # section_lines <sha> <anchor> <site>
+  local ps
+  ro_section "$1" "$2" "$3" || return 3
+  sed 's/^[[:space:]]*//; s/[[:space:]]*$//' "$RO_T/$3.sec" | grep -vE '^.{0,24}$' | sort -u
+  ps="${PIPESTATUS[*]}"
+  case "$ps" in '0 0 0'|'0 1 0') return 0 ;; esac
+  return 3
 }
 
 # section_flat <sha> <anchor> — the same section as ONE squeezed line, the shape
@@ -296,21 +347,29 @@ section_flat() {
 # section_ordered <sha> <anchor> — the section's non-blank lines in FILE ORDER, trimmed
 # and squeezed, no floor and no sort. `carried_in_context` needs adjacency, which
 # `section_lines` discards.
-section_ordered() {
-  git -C "$DIST" show "${1}:${CORE}" 2>/dev/null | section_of "$2" \
-    | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -v '^$' | tr -s ' '
+section_ordered() { # section_ordered <sha> <anchor> <site>; returns 3 when a stage failed
+  local ps
+  ro_section "$1" "$2" "$3" || return 3
+  sed 's/^[[:space:]]*//; s/[[:space:]]*$//' "$RO_T/$3.sec" | grep -v '^$' | tr -s ' '
+  ps="${PIPESTATUS[*]}"
+  case "$ps" in '0 0 0'|'0 1 0') return 0 ;; esac
+  return 3
 }
 
 # carried_in_context <to-sha> <anchor> <line> — does the BODY carry the run of consecutive
 # TO lines that holds <line>'s words? Every start position is tried and the window grows
 # until it contains the needle, so the shortest carrier at each start is tested; a body
 # carrying any of them carries the needle IN THE CONTEXT TO GIVES IT.
+# Returns 0 carried, 1 not carried. A section that could not be staged also returns 1 -- so the
+# caller's one-line `&& continue` keeps its shape -- and drops the "$RO_T/refused" marker, which
+# changed_lines reads after its loop and turns into status 3.
 carried_in_context() {
   local needle i j n win l
   needle="$(printf '%s' "$3" | tr -s ' ')"
   local -a L
   i=0
-  while IFS= read -r l; do L[$i]="$l"; i=$((i+1)); done < <(section_ordered "$1" "$2")
+  section_ordered "$1" "$2" cic-sec > "$RO_T/cic-ordered" || { : > "$RO_T/refused"; return 1; }
+  while IFS= read -r l; do L[$i]="$l"; i=$((i+1)); done < "$RO_T/cic-ordered"
   n=$i
   i=0
   while [ "$i" -lt "$n" ]; do
@@ -356,16 +415,21 @@ carried_in_context() {
 # Whole-line presence at TO is checked first, so an UNCHANGED line the body omits is never
 # reported as new in the mirror direction. The 24-character floor on the needle side
 # excludes coincidental short matches as before.
-changed_lines() {
+# Returns 3 when any section it reads could not be staged. <site> keeps the two directions'
+# files apart.
+changed_lines() { # changed_lines <from-sha> <to-sha> <anchor> <site>
   local to_lines to_flat line
-  to_lines="$(section_lines "$2" "$3")"
+  to_lines="$(section_lines "$2" "$3" "$4-to")" || return 3
   to_flat="$(section_flat "$2" "$3")"
+  section_lines "$1" "$3" "$4-from" > "$RO_T/$4-from-lines" || return 3
+  rm -f "$RO_T/refused"
   while IFS= read -r line; do
     [ -n "$line" ] || continue
     grep -qxF -- "$line" <<<"$to_lines" && continue
     carries "$to_flat" "$line" && carried_in_context "$2" "$3" "$line" && continue
     printf '%s\n' "$line"
-  done < <(section_lines "$1" "$3")
+  done < "$RO_T/$4-from-lines"
+  [ ! -e "$RO_T/refused" ] || return 3
 }
 
 stale_lines() {
@@ -374,10 +438,11 @@ stale_lines() {
   local id line
   while IFS= read -r id; do
     [ -n "$id" ] || continue
+    changed_lines "$BASE_SHA" "$THEIRS" "$id" stale > "$RO_T/stale-changed" || return 3
     while IFS= read -r line; do
       [ -n "$line" ] || continue
       body_carries "$line" && printf '%s\n' "$line"
-    done < <(changed_lines "$BASE_SHA" "$THEIRS" "$id")
+    done < "$RO_T/stale-changed"
   done <<< "$ids"
 }
 
@@ -389,20 +454,26 @@ unadopted_lines() {
   local id line
   while IFS= read -r id; do
     [ -n "$id" ] || continue
+    changed_lines "$THEIRS" "$BASE_SHA" "$id" unadopted > "$RO_T/unadopted-changed" || return 3
     while IFS= read -r line; do
       [ -n "$line" ] || continue
       body_carries "$line" || printf '%s\n' "$line"
-    done < <(changed_lines "$THEIRS" "$BASE_SHA" "$id")
+    done < "$RO_T/unadopted-changed"
   done <<< "$ids"
 }
 
-STALE="$(stale_lines)"
+# ONLY STATUS 3 IS A REFUSAL. Each scan's loop ends on a `body_carries … && printf`, so a clean
+# body returns 1 from the function -- which is not a failure and must not be read as one.
+_ro_rc=0; STALE="$(stale_lines)" || _ro_rc=$?
+[ "$_ro_rc" -ne 3 ] || ro_refuse "the superseded-line scan (core@${BASE_SHA} against core@${THEIRS})"
 N_STALE=0
 [ -n "$STALE" ] && N_STALE="$(printf '%s\n' "$STALE" | grep -c .)"
-UNADOPTED="$(unadopted_lines)"
+_ro_rc=0; UNADOPTED="$(unadopted_lines)" || _ro_rc=$?
+[ "$_ro_rc" -ne 3 ] || ro_refuse "the unadopted-line scan (core@${THEIRS} against core@${BASE_SHA})"
 N_UNADOPTED=0
 [ -n "$UNADOPTED" ] && N_UNADOPTED="$(printf '%s\n' "$UNADOPTED" | grep -c .)"
-RESOLVE="$(anchors_resolve 2>/dev/null)"
+_ro_rc=0; RESOLVE="$(anchors_resolve 2>/dev/null)" || _ro_rc=$?
+[ "$_ro_rc" -ne 3 ] || ro_refuse "the anchor-resolution check"
 
 # ---------------------------------------------------------------------------
 case "$MODE" in

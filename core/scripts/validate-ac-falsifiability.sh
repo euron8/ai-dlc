@@ -49,7 +49,7 @@
 #   0  -- every AC block clean (waivers printed, not fatal)
 #   1  -- a forbidden term on an unwaived AC, or an unresolvable prior_evidence
 #   2  -- DISARMED or usage error. The lexicon could not be read, or parsed to
-#         zero terms. An empty term list scans every story clean and prints the
+#         zero terms, or a read of a story did not run. An empty term list scans every story clean and prints the
 #         same shape of output as a real pass, so it must not be able to exit 0.
 
 set -u
@@ -137,6 +137,22 @@ rc=0
 waivers=0
 checked=0
 
+# EVERY LOOP FEED BELOW IS STAGED TO A FILE AND ITS PRODUCER'S STATUS IS READ. They used to read
+# `done < <(awk …)` and `done < <(printf | sed | tr)`, which discard the status: an awk that could
+# not read a story segmented it into ZERO AC blocks, the label probe could not read it either,
+# and the story was skipped and the run printed PASS -- a false clear. This file does not set
+# `pipefail`, so each fallible stage is staged ALONE. A producer that did not run is DISARMED,
+# exit 2, this script's existing refusal. One directory per run, removed on exit.
+ACF_T="$(mktemp -d "${TMPDIR:-/tmp}/validate-ac-falsifiability.XXXXXX")" || {
+  echo "$PROG: DISARMED — the staging directory did not run (mktemp failed); no verdict." >&2
+  exit 2
+}
+trap 'rm -rf "$ACF_T"' EXIT
+acf_refuse() { # acf_refuse <what> <status>
+  echo "$PROG: DISARMED — $1 did not run (exit $2). Exiting 2 rather than 0: a story this script could not read is not a story that passed." >&2
+  exit 2
+}
+
 for story in "${FILES[@]}"; do
   if [ ! -f "$story" ]; then
     echo "$PROG: DISARMED — no such story file: $story" >&2
@@ -157,9 +173,8 @@ for story in "${FILES[@]}"; do
   # describing a fixture ("this exhaustive fixture also discharges AC1's property") is
   # judged as that AC's predicate.
   block_ids=()
-  while IFS='|' read -r ac_id start end; do
-    [ -n "$ac_id" ] && block_ids+=("$ac_id|$start|$end")
-  done < <(awk '
+  _acf_rc=0
+  awk '
     {
       if (match($0, /^[[:space:]]*[-*+][[:space:]]*\*\*AC[0-9]+[a-z]?[[:space:]]*(\(|—|-|:)/)) {
         if (id != "") print id "|" start "|" NR-1
@@ -169,7 +184,11 @@ for story in "${FILES[@]}"; do
       if ($0 ~ /^#{1,6}[[:space:]]/ && id != "") { print id "|" start "|" NR-1; id = "" }
     }
     END { if (id != "") print id "|" start "|" NR }
-  ' "$story")
+  ' "$story" > "$ACF_T/ac-blocks" || _acf_rc=$?
+  [ "$_acf_rc" -eq 0 ] || acf_refuse "segmenting $story into AC blocks" "$_acf_rc"
+  while IFS='|' read -r ac_id start end; do
+    [ -n "$ac_id" ] && block_ids+=("$ac_id|$start|$end")
+  done < "$ACF_T/ac-blocks"
 
   # DISARM: a story that declares acceptance criteria but presents none in the declared
   # form is not a clean story -- it is a story this script cannot read. Reporting PASS
@@ -224,6 +243,12 @@ for story in "${FILES[@]}"; do
       fi
     done <<< "$TERMS"
 
+    printf '%s\n' "$body" > "$ACF_T/ac-body" || acf_refuse "staging $story $ac_id" "$?"
+    _acf_rc=0
+    sed -n 's/^[[:space:]]*prior_evidence:[[:space:]]*//p' "$ACF_T/ac-body" > "$ACF_T/ac-cites-raw" || _acf_rc=$?
+    [ "$_acf_rc" -eq 0 ] || acf_refuse "reading the prior_evidence citations of $story $ac_id" "$_acf_rc"
+    tr -d '`' < "$ACF_T/ac-cites-raw" > "$ACF_T/ac-cites" || _acf_rc=$?
+    [ "$_acf_rc" -eq 0 ] || acf_refuse "unquoting the prior_evidence citations of $story $ac_id" "$_acf_rc"
     while IFS= read -r cite; do
       [ -n "$cite" ] || continue
       cpath="$cite"; anchor=""
@@ -241,7 +266,7 @@ for story in "${FILES[@]}"; do
         echo "FAIL: $story $ac_id cites 'prior_evidence: $cite' but '$anchor' is absent from $resolved. The file resolves and the anchor does not, so the citation points into a document that no longer says what the AC assumes." >&2
         rc=1
       fi
-    done < <(printf '%s\n' "$body" | sed -n 's/^[[:space:]]*prior_evidence:[[:space:]]*//p' | tr -d '`')
+    done < "$ACF_T/ac-cites"
   done
 done
 

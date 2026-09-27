@@ -284,7 +284,7 @@ SED
 cat > "$MUTD/m3.sed" <<'SED'
 s#^    show_at "$ref" "$f"$#    show_at "$ref" "$f" | toks | sed "s@^@$f~@"#
 s#^  done; } | toks$#  done; } | sort -u#
-s#"$THEIRS_SET"))"#"$THEIRS_SET") | cut -d~ -f2 | sort -u)"#
+s#"$RLT_T/set-theirs")"#"$RLT_T/set-theirs" | cut -d~ -f2 | sort -u)"#
 SED
 
 # M4 — the empty-retired branch stops saying it opened nothing.
@@ -465,7 +465,7 @@ fi
 #          extensions/ half, and three subjects live there.
 plan m1  "$(mkmut m1  '-done; } | toks')"                                 "00111111111111111"
 plan m2  "$(mkmut m2  '-n = split(')"                                     "11011111111111111"
-plan m3  "$(mkmut m3  '-done; } | toks' '-"$THEIRS_SET"))"' '+cut -d~ -f2')" "11101111111111101"
+plan m3  "$(mkmut m3  '-done; } | toks' '-"$RLT_T/set-theirs")"' '+cut -d~ -f2')" "11101111111111101"
 plan m4  "$(mkmut m4  '-this release retired NO status token')"           "11111011111111111"
 plan m5  "$(mkmut m5  '-set -u')"                                         "00000000000000000"
 plan m6  "$(mkmut m6  '+: mutant-nofilter')"                              "11111110111111111"

@@ -111,6 +111,7 @@
 #      chronological, every hard block was resolved on the record, and the last
 #      pass stamps EXIT_CONDITION_MET.
 #   1  any check above failed (offenders named), or no series was resolved.
+#   2  a producer this script reads did not run (reason on stderr) -- no verdict.
 set -u
 
 SERIES_PREFIX=""
@@ -243,10 +244,29 @@ done
 # and C/D would silently adjudicate the guess. Say so instead.
 DUPES="$(printf '%s\n' "${KEYED[@]:-}" | awk '{print $1}' | sort | uniq -d)"
 
+# THE ORDERING IS STAGED AND ITS STATUS READ. It used to read `done < <(printf | sort)`, which
+# discards sort's status: a sort that failed returned NO passes, and every check below judged an
+# empty series. This file does not set `pipefail`, so sort is staged ALONE. A sort that did not
+# run exits 2 -- neither converged (0) nor a failed check (1), because nothing was checked.
+AC_T="$(mktemp -d "${TMPDIR:-/tmp}/validate-adversarial-convergence.XXXXXX")" || {
+  echo "validate-adversarial-convergence.sh: the staging directory did not run (mktemp failed); no verdict" >&2
+  exit 2
+}
+trap 'rm -rf "$AC_T"' EXIT
+printf '%s\n' "${KEYED[@]:-}" > "$AC_T/keyed" || {
+  echo "validate-adversarial-convergence.sh: staging the pass keys did not run; no verdict" >&2
+  exit 2
+}
+_ac_rc=0
+sort -k1,1n "$AC_T/keyed" > "$AC_T/sorted" || _ac_rc=$?
+if [ "$_ac_rc" -ne 0 ]; then
+  echo "validate-adversarial-convergence.sh: ordering the passes by number did not run (sort exited $_ac_rc); no verdict" >&2
+  exit 2
+fi
 SORTED=()
 while IFS= read -r line; do
   [ -n "$line" ] && SORTED+=("${line#* }")
-done < <(printf '%s\n' "${KEYED[@]:-}" | sort -k1,1n)
+done < "$AC_T/sorted"
 
 # ---- provenance field extraction -------------------------------------------
 # The block is an HTML comment; fields are `key: value` lines inside it.

@@ -663,11 +663,27 @@ if [ "$HANDOFF_VOCAB_OK" = "1" ] && [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]
         # difference blocks a teammate that returned, dropping the meta narrowing blocks a
         # dispatch that never spawned -- and a fixture cannot anchor a mutation on a
         # sub-expression of a single line without editing its neighbours too.
-        _if_isect() { comm -12 <(printf '%s\n' "$1") <(printf '%s\n' "$2"); }
-        _if_minus() { comm -23 <(printf '%s\n' "$1") <(printf '%s\n' "$2"); }
+        #
+        # BOTH OPERANDS ARE STAGED TO FILES, AND A FAILED STAGE FAILS OPEN. These read
+        # `comm <(…) <(…)`, which discards each producer's status: a failed stop-record side
+        # read as "no teammate returned", so every open dispatch stayed open and the arm
+        # BLOCKED -- a failure converted into a wedge, the direction this arm's header refuses.
+        # Each helper now returns 1 when it could not stage or compare, and every caller
+        # already maps a failed call to the empty set, which is OPEN_N=0: allow. One directory
+        # per hook run, made only on this path and removed as soon as the set algebra is done.
+        _if_t="$(mktemp -d "${TMPDIR:-/tmp}/ai-dlc-continue-inflight.XXXXXX" 2>/dev/null)" || _if_t=""
+        _if_setop() { # _if_setop <comm-flag> <a> <b>
+          [ -n "$_if_t" ] || return 1
+          printf '%s\n' "$2" > "$_if_t/a" || return 1
+          printf '%s\n' "$3" > "$_if_t/b" || return 1
+          comm "$1" "$_if_t/a" "$_if_t/b" || return 1
+        }
+        _if_isect() { _if_setop -12 "$1" "$2"; }
+        _if_minus() { _if_setop -23 "$1" "$2"; }
         _if_cand="$(_if_isect "$_if_disp" "$_if_led")" || _if_cand=""
         _if_cand="$(_if_isect "$_if_cand" "$_if_metaids")" || _if_cand=""
         OPEN_IDS="$(_if_minus "$_if_cand" "$_if_stop" | sed '/^$/d')" || OPEN_IDS=""
+        [ -z "$_if_t" ] || rm -rf "$_if_t"
         OPEN_N="$(printf '%s\n' "$OPEN_IDS" | sed '/^$/d' | wc -l | tr -d ' ')"
         case "${OPEN_N:-}" in ''|*[!0-9]*) OPEN_N=0 ;; esac
       fi

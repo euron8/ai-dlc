@@ -67,7 +67,8 @@
 #   rows only; the NOTE is for the operator running step 3a-ii by hand.
 #
 # EXIT
-#   0  always (a detector reports; the caller decides)
+#   0  always when it ran (a detector reports; the caller decides)
+#   2  a producer this detector reads did not run -- a refusal, never a finding or a clean
 
 set -u
 
@@ -122,6 +123,31 @@ fi
 
 SUBJECT="$(printf '%s\n' "$ROWS" | awk -F'\t' 'NF>=4 && $4 ~ /CLASSIFY/ {print $2"\t"$3}' | sort -u)"
 
+# EVERY SET OPERAND AND LOOP FEED BELOW IS STAGED TO A FILE AND ITS PRODUCER'S STATUS IS READ.
+# They used to read `comm <(…) <(…)` and `done < <(…)`, which discard the status: a failed token
+# scan of theirs read as "theirs has no token", so every base token read as retired, and a failed
+# scan of the consumer's file read as "the consumer speaks none of them" -- the second is a false
+# clear on the one row this detector exists to print. This file does not set `pipefail`; each
+# token scan runs inside `( set -o pipefail; … )`, where `toks`' greps exit 1 on a text carrying
+# no token -- a healthy empty set -- so 0 and 1 are accepted and anything else refuses with exit
+# 2, which emit-report.sh renders as DETECTOR-REFUSED. One directory per run, removed on exit.
+RT_T="$(mktemp -d "${TMPDIR:-/tmp}/retired-tokens.XXXXXX")" || {
+  echo "retired-tokens: the staging directory did not run (mktemp failed); no verdict" >&2
+  exit 2
+}
+trap 'rm -rf "$RT_T"' EXIT
+rt_refuse() { # rt_refuse <what> <status>
+  echo "retired-tokens: $1 did not run (exit $2); no verdict" >&2
+  exit 2
+}
+rt_toks() { # rt_toks <what> <out> -- toks of stdin into <out>; 0 and 1 accepted
+  local rc=0
+  ( set -o pipefail; toks ) > "$2" || rc=$?
+  case "$rc" in 0|1) return 0 ;; esac
+  rt_refuse "the token scan of $1" "$rc"
+}
+printf '%s\n' "$SUBJECT" > "$RT_T/subject" || rt_refuse "staging the CLASSIFY subject list" "$?"
+
 listed=0; opened=0; retiring=0; rows=""
 while IFS="$(printf '\t')" read -r cp cons; do
   [ -n "${cp:-}" ] || continue
@@ -138,16 +164,23 @@ while IFS="$(printf '\t')" read -r cp cons; do
 
   # base tokens MINUS theirs tokens = what upstream retired.
   # Intersected with ours = what the consumer still speaks.
-  retired="$(comm -23 <(printf '%s\n' "$b" | toks) <(printf '%s\n' "$t" | toks))"
+  # HERE-STRINGS, NOT PIPES: rt_toks refuses with `exit`, which in a pipeline stage would end
+  # only that stage's subshell. `<<<` adds the one trailing newline `printf '%s\n'` did.
+  rt_toks "${cp}@${BASE}" "$RT_T/toks-base" <<<"$b"
+  rt_toks "${cp}@${THEIRS}" "$RT_T/toks-theirs" <<<"$t"
+  retired="$(comm -23 "$RT_T/toks-base" "$RT_T/toks-theirs")" || rt_refuse "the retired-token subtraction for $cp" "$?"
   [ -n "$retired" ] || continue
   retiring=$((retiring + 1))
 
+  printf '%s\n' "$retired" > "$RT_T/retired" || rt_refuse "staging the retired tokens of $cp" "$?"
+  rt_toks "$cons" "$RT_T/toks-ours" < "$ours"
+  comm -12 "$RT_T/retired" "$RT_T/toks-ours" > "$RT_T/spoken" || rt_refuse "the consumer-token intersection for $cp" "$?"
   while IFS= read -r tok; do
     [ -n "$tok" ] || continue
     rows="$rows$(printf 'RETIRED-CONTRACT-TOKEN\t%s\t%s' "$cp" "$tok")
 "
-  done < <(comm -12 <(printf '%s\n' "$retired") <(toks < "$ours"))
-done < <(printf '%s\n' "$SUBJECT")
+  done < "$RT_T/spoken"
+done < "$RT_T/subject"
 
 if [ -n "$rows" ]; then
   printf '%s' "$rows"

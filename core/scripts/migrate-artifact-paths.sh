@@ -387,6 +387,19 @@ PLAN="$TMP/plan"; REFUSE="$TMP/refuse"; INFERRED="$TMP/inferred"; RECOVERED="$TM
 
 SCANNED=0
 STORIES_SEEN=0
+
+# THE TRACKED-FILE LIST IS STAGED AND ITS STATUS READ. The plan loop below used to read
+# `done < <(git ls-files …)`, which discards the status: an `ls-files` that failed read as a tree
+# with no artifact under any scan root, so the run exited 3, "nothing to migrate" -- a false
+# clear on a tree full of work. A listing that did not run is exit 2, a tree this cannot safely
+# operate on. SCAN_ROOTS is word-split into pathspecs exactly as before.
+LS_RC=0
+# shellcheck disable=SC2046,SC2086
+git ls-files -- $(printf '%s ' $SCAN_ROOTS) 2>/dev/null > "$TMP/tracked" || LS_RC=$?
+if [ "$LS_RC" -ne 0 ]; then
+  echo "$PROG: git ls-files over the scan roots did not run (exit $LS_RC), so no artifact was listed; refusing rather than reporting nothing to migrate" >&2
+  exit 2
+fi
 while IFS= read -r src; do
   [ -n "$src" ] || continue
   SCANNED=$((SCANNED + 1))
@@ -545,7 +558,7 @@ EOF
   dest="$area/s$n/${out}${last}"
   [ "$dest" = "$src" ] && continue           # already conforming
   printf '%s\t%s\n' "$src" "$dest" >> "$PLAN"
-done < <(git ls-files -- $(printf '%s ' $SCAN_ROOTS) 2>/dev/null)
+done < "$TMP/tracked"
 
 # COLLISIONS ARE REFUSED, NOT RESOLVED. Two spellings of one sprint's artifact
 # (`sprint-171-adversarial-pass2.md` and `s171-adversarial-pass2.md`) collapse to one

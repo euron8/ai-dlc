@@ -31,7 +31,7 @@
 #        (default: dry-run — print the rewrites it WOULD make)
 # Exit:  0 = nothing to do, or --apply succeeded
 #        1 = collisions found and NOT applied (dry-run with work outstanding)
-#        2 = usage error
+#        2 = usage error, or the extension walk did not run (a refusal, no verdict)
 set -uo pipefail
 
 CONSUMER=""
@@ -90,6 +90,22 @@ fm() { sed -n '/^---$/,/^---$/p' "$1" | sed -n "s/^$2:[[:space:]]*//p" | head -1
 
 found=0
 applied=0
+
+# THE EXTENSION WALK IS STAGED AND ITS STATUS READ. It used to be `done < <(find … | sort)`,
+# which discards find's status: a walk that failed read as a directory with no extensions and
+# printed "no unlabelled core-number collisions.", exit 0, over live collisions -- a false
+# clear. `pipefail` makes a failed find fail this pipeline although sort succeeds on the empty
+# stream. A walk that did not run exits 2, which emit-report.sh renders as a refusal and
+# never as the collision finding (1) or a clean (0).
+RX_T="$(mktemp -d "${TMPDIR:-/tmp}/relabel-extension-checks.XXXXXX")" || {
+  echo "relabel: could not create a staging directory; no verdict" >&2; exit 2; }
+trap 'rm -rf "$RX_T"' EXIT
+ext_walk_rc=0
+find "$EXT_DIR" -name '*.md' -type f | sort > "$RX_T/ext-walk" || ext_walk_rc=$?
+if [ "$ext_walk_rc" -ne 0 ]; then
+  echo "relabel: the walk of $EXT_DIR did not run (exit $ext_walk_rc); no verdict" >&2
+  exit 2
+fi
 
 while IFS= read -r ext; do
   [ -n "$ext" ] || continue
@@ -209,7 +225,7 @@ while IFS= read -r ext; do
       applied=$((applied+1))
     fi
   done <<< "$core_rules"
-done < <(find "$EXT_DIR" -name '*.md' -type f | sort)
+done < "$RX_T/ext-walk"
 
 echo ""
 if [ "$found" -eq 0 ]; then

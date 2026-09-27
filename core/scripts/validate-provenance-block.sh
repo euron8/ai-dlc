@@ -46,7 +46,8 @@
 #         present and `--allow-missing` declared that acceptable
 #   1  -- missing block (including the flagless default), MALFORMED block, malformed field,
 #         unknown skill, or a rule violation
-#   2  -- usage error, including `--allow-missing` together with `--require-skill`
+#   2  -- usage error, including `--allow-missing` together with `--require-skill`; or, under
+#         `--strays`, an exclude-list read or candidate walk that did not run (no verdict)
 #
 # Forgeability: this is pattern-match validation, not cryptographic attestation. A motivated
 # forger can paste a well-formed block without invoking anything. validate-retro-evidence.sh
@@ -216,10 +217,24 @@ if [ "$MODE" = "strays" ]; then
     STRAY_MARKER="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["envelope"]["marker"])' "$SCHEMA")" || exit 2
     [ -n "$STRAY_MARKER" ] || { echo "FAIL: schema envelope.marker is empty." >&2; exit 2; }
 
+    # BOTH FEEDS BELOW ARE STAGED AND THEIR STATUS READ. They used to read `done < <(…)`, which
+    # discards the status: a failed exclude-list read scanned with no exclusion, and a failed
+    # candidate walk found NO candidate and answered PASS over the whole corpus -- a false clear.
+    # One directory, removed on exit; this mode runs once per invocation.
+    PB_T="$(mktemp -d "${TMPDIR:-/tmp}/validate-provenance-block.XXXXXX")" || {
+        echo "FAIL: --strays could not create its staging directory; no verdict." >&2; exit 2; }
+    trap 'rm -rf "$PB_T"' EXIT
+    _pb_rc=0
+    python3 -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1]))["stray_scan"]["scan_exclude_dirs"]))' "$SCHEMA" \
+        > "$PB_T/exclude-dirs" || _pb_rc=$?
+    if [ "$_pb_rc" -ne 0 ]; then
+        echo "FAIL: --strays could not read stray_scan.scan_exclude_dirs from $SCHEMA (python3 exited $_pb_rc); no verdict." >&2
+        exit 2
+    fi
     GREP_ARGS=()
     while IFS= read -r _d; do
         [ -n "$_d" ] && GREP_ARGS+=("--exclude-dir=$_d")
-    done < <(python3 -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1]))["stray_scan"]["scan_exclude_dirs"]))' "$SCHEMA")
+    done < "$PB_T/exclude-dirs"
 
     # No paths given = the whole tree. `.` keeps every hit repo-relative, which is what the
     # homes are judged against; an absolute scan root would make every path miss every home.
@@ -257,10 +272,25 @@ if [ "$MODE" = "strays" ]; then
         fi
     done
 
+    # grep's statuses, each decided here: 0 candidates found; 1 none; 2 WITH candidates listed is
+    # ACCEPTED, because `grep -r` returns it for any unreadable file met inside a walk that
+    # otherwise completed, WITH the candidates it did read still listed -- a healthy tree can hold
+    # one, and refusing it would wedge that tree. 2 with NOTHING listed refuses: it is also what a
+    # walk that failed outright returns, and accepting it read PASS over a corpus never walked.
+    # BY DESIGN that includes an unreadable file in a tree where no file carries the marker at
+    # all -- a tree with zero carriers is not a live project, and a refusal there is the safe
+    # side. Anything above 2 (not found, not executable, killed) means the walk did not run.
+    _pb_rc=0
+    grep -rlI "${GREP_ARGS[@]}" -- "$STRAY_MARKER" "${STRAY_SCAN_PATHS[@]}" 2>/dev/null \
+        > "$PB_T/candidates" || _pb_rc=$?
+    if [ "$_pb_rc" -gt 2 ] || { [ "$_pb_rc" -eq 2 ] && [ ! -s "$PB_T/candidates" ]; }; then
+        echo "FAIL: --strays: the candidate walk (grep -rlI) did not run (exit $_pb_rc), so the corpus was never walked; no verdict." >&2
+        exit 2
+    fi
     STRAY_CANDIDATES=()
     while IFS= read -r _f; do
         [ -n "$_f" ] && STRAY_CANDIDATES+=("$_f")
-    done < <(grep -rlI "${GREP_ARGS[@]}" -- "$STRAY_MARKER" "${STRAY_SCAN_PATHS[@]}" 2>/dev/null)
+    done < "$PB_T/candidates"
 
     # An EXPLICIT path list means the caller chose the subjects, so a home exclusion still
     # applies but the fixture-home exclusion does not — that is how a test points the scanner at

@@ -368,7 +368,7 @@ fi
 # M2 — THE PATH SUBTRACTION IS INVERTED: report every rulebook path at base rather than the
 #      retired ones. Killed by 7e — the surviving path starts being reported, which is the
 #      arm that separates "reports a retirement" from "reports a citation".
-if rlcmut m2-no-subtraction -e 's@^  RETIRED_PATHS="\$(comm -23 <(printf .%s\\n. "\$RB_BASE") <(printf .%s\\n. "\$RB_THEIRS"))"$@  RETIRED_PATHS="$RB_BASE"@'; then
+if rlcmut m2-no-subtraction -e 's@^  RETIRED_PATHS="\$(cat "\$RLC_T/rb-retired")"$@  RETIRED_PATHS="$RB_BASE"@'; then
   M2_OUT="$(rlcrun "$RLC_MUT")"
   if [ -n "$(awk -F'\t' '$2 ~ /path-survivor\.md/ && $3 ~ /^path:/' <<<"$M2_OUT")" ]; then
     ok "  mutant [m2] KILLED by 7e: without the subtraction, a SURVIVING rulebook path is reported"

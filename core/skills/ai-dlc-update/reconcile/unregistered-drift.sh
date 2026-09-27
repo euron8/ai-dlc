@@ -210,15 +210,35 @@ fi
 #
 # This never auto-reverts. Reverting DELETES consumer content, so it stays HARD- and the
 # operator confirms. The signal changes WHAT the updater recommends, not who decides.
-absorbed_pct() { # absorbed_pct <core-rel-path> <consumer-file> -> "<hits> <total>"
-  local cp="$1" cons="$2" only hits total
-  only="$(comm -23 \
-    <(sed 's/^[[:space:]]*//; s/[[:space:]]*$//' "$cons" | grep -vE '^.{0,24}$' | sort -u) \
-    <(git_show "${BASE}" "${cp}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -vE '^.{0,24}$' | sort -u))"
+#
+# EVERY OPERAND IS STAGED AND ITS PRODUCER'S STATUS READ. The two `comm`s used to read `<( )`,
+# which discards the status: a failed side read as empty, so `only` came back empty (0 0) or
+# whole, and the row fell through to a different HARD status with a different remedy. Returns 3
+# when a producer did not run -- this runs inside `$( )`, where an exit would end only that
+# subshell -- and the caller reports it as a classifier that did not run. `grep -vE` exits 1 on
+# a file whose every line is under the floor, which is a healthy empty set.
+ud_trim_floor() { # ud_trim_floor <in> <out> -- trimmed, floored, sorted-unique lines of <in>
+  local ps
+  sed 's/^[[:space:]]*//; s/[[:space:]]*$//' "$1" | grep -vE '^.{0,24}$' | sort -u > "$2"
+  ps="${PIPESTATUS[*]}"
+  case "$ps" in '0 0 0'|'0 1 0') return 0 ;; esac
+  return 3
+}
+absorbed_pct() { # absorbed_pct <core-rel-path> <consumer-file> -> "<hits> <total>"; 3 = did not run
+  local cp="$1" cons="$2" only hits total t="$UD_DIFF_TMP"
+  [ -n "$t" ] || return 3
+  ud_trim_floor "$cons" "$t/ap-cons" || return 3
+  git_show "${BASE}" "${cp}" > "$t/ap-base-blob" || return 3
+  ud_trim_floor "$t/ap-base-blob" "$t/ap-base" || return 3
+  comm -23 "$t/ap-cons" "$t/ap-base" > "$t/ap-only" || return 3
+  only="$(cat "$t/ap-only")"
   total="$(printf '%s' "$only" | grep -c . || true)"
   [ "${total:-0}" -eq 0 ] && { printf '0 0'; return; }
-  hits="$(comm -12 <(printf '%s\n' "$only" | sort -u) \
-    <(git_show "${THEIRS}" "${cp}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | sort -u) | grep -c . || true)"
+  printf '%s\n' "$only" | sort -u > "$t/ap-only-sorted" || return 3
+  git_show "${THEIRS}" "${cp}" > "$t/ap-theirs-blob" || return 3
+  sed 's/^[[:space:]]*//; s/[[:space:]]*$//' "$t/ap-theirs-blob" | sort -u > "$t/ap-theirs" || return 3
+  comm -12 "$t/ap-only-sorted" "$t/ap-theirs" > "$t/ap-hits" || return 3
+  hits="$(grep -c . "$t/ap-hits" || true)"
   printf '%s %s' "${hits:-0}" "$total"
 }
 
@@ -595,7 +615,15 @@ is_unregistered() {
       # hits == total the consumer's delta is entirely upstream's now, the revert loses nothing,
       # and ABSORBED remains the more specific and more useful claim.
       if [ -n "$THEIRS" ] && git -C "$DIST" cat-file -e "${THEIRS}:${cp}" 2>/dev/null; then
-        read -r hits total <<<"$(absorbed_pct "$cp" "$cons")"
+        if ! ap_out="$(absorbed_pct "$cp" "$cons")"; then
+          # The same row, and for the same reason, as a diff that did not run above: absorption
+          # decides which HARD remedy is printed, so an unmeasured one is reported, not guessed.
+          printf 'unregistered-drift: absorption of %s at core@%s could not be measured; classified HARD, not guessed\n' "$rel" "$THEIRS" >&2
+          emit HARD-UNREGISTERED-CORE-DRIFT "$rel" \
+            "CLASSIFIER DID NOT RUN — this file differs from core@${BASE}, but whether core@${THEIRS} ABSORBED the consumer's delta could not be measured (a line-set producer failed), so no remedy is chosen for it. Re-run unregistered-drift.sh; if this row persists, compare the file against core@${THEIRS} by hand before reverting or refiling it."
+          continue
+        fi
+        read -r hits total <<<"$ap_out"
         if [ "${total:-0}" -gt 0 ] && [ "${hits:-0}" -ge 3 ] \
            && [ $(( hits * 100 / total )) -ge 10 ] \
            && { [ -z "$carried_b" ] || [ "${hits:-0}" -eq "${total:-0}" ]; }; then

@@ -693,9 +693,28 @@ CAP_DECL_MALFORMED="$({ printf '%s\n' "$CAPS"; echo '___CAPS_END___'; printf '%s
     }
     if (bad) print item
   }' | sort -u || true)"
-CAP_DECL_DROPPED="$(comm -13 <(printf '%s\n' "$CAPS" | grep -v '^$' | sort -u) \
-  <(printf '%s\n' "$CAP_DECL_MALFORMED" | grep -oE 'CAP-[0-9][A-Za-z0-9_-]*' | sort -u) || true)"
 if [ -n "$CAP_DECL_MALFORMED" ]; then
+  # THE DROPPED-ID LIST IS STAGED, each stage alone (no `pipefail` here), and it is computed only
+  # on this path, the only one that reads it. It used to read `comm <(…) <(…) || true` on every
+  # run, which discarded every producer's status. It moves no verdict -- this path exits 2 either
+  # way -- so a failed stage names itself in the message rather than printing an empty list.
+  # grep's 1 is an empty side (no parsed id, or no id in the malformed lines), which is healthy.
+  CAP_DECL_DROPPED="(the dropped-id list could not be computed)"
+  SJ_T="$(mktemp -d "${TMPDIR:-/tmp}/validate-spec-join.XXXXXX")" || SJ_T=""
+  if [ -n "$SJ_T" ]; then
+    trap 'rm -rf "$SJ_T"' EXIT
+    _sj_ok=1
+    printf '%s\n' "$CAPS" > "$SJ_T/caps" || _sj_ok=0
+    _sj_rc=0; grep -v '^$' "$SJ_T/caps" > "$SJ_T/caps-nb" || _sj_rc=$?
+    [ "$_sj_rc" -le 1 ] || _sj_ok=0
+    sort -u "$SJ_T/caps-nb" > "$SJ_T/caps-set" || _sj_ok=0
+    printf '%s\n' "$CAP_DECL_MALFORMED" > "$SJ_T/malformed" || _sj_ok=0
+    _sj_rc=0; grep -oE 'CAP-[0-9][A-Za-z0-9_-]*' "$SJ_T/malformed" > "$SJ_T/malformed-ids" || _sj_rc=$?
+    [ "$_sj_rc" -le 1 ] || _sj_ok=0
+    sort -u "$SJ_T/malformed-ids" > "$SJ_T/malformed-set" || _sj_ok=0
+    comm -13 "$SJ_T/caps-set" "$SJ_T/malformed-set" > "$SJ_T/dropped" || _sj_ok=0
+    [ "$_sj_ok" -eq 1 ] && CAP_DECL_DROPPED="$(cat "$SJ_T/dropped")"
+  fi
   echo "$PROG: DISARMED — $KERNEL carries declaration-shaped lines that drop these capability ids: $(printf '%s' "$CAP_DECL_DROPPED" | tr '\n' ' '). A definition declares exactly ONE capability and its emphasised text must be exactly that id — CAP-<n> with an optional single lowercase suffix. A line naming two ids declares neither, and every id in it the reader could not take is absent from the capability set, exempt from every join below, and reported as nonexistent if a story cites it. Offending line(s):" >&2
   printf '%s\n' "$CAP_DECL_MALFORMED" | head -5 | sed 's/^/  /' | cut -c1-140 >&2
   exit 2

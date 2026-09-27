@@ -320,7 +320,7 @@ mk_mutant w9-no-root-anchor \
 # silent: an arm that walked one of the two layer directories would print the same clean line
 # on a tree whose overrides tell an agent to run a file that is not there.
 mk_mutant w9-extensions-only \
-  "s/\{ layer_files \"\\\$EXT_DIR\"; layer_files \"\\\$OVR_DIR\"; \}/layer_files \"\\\$EXT_DIR\"/" \
+  "s/vle_layer_list w9-layers \"\\\$EXT_DIR\" \"\\\$OVR_DIR\"/vle_layer_list w9-layers \"\\\$EXT_DIR\"/" \
   "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- hk61=- hk62=W hk64=W hk65=W apform=OK dotform=OK w9miss=W w9dot=W w9ovr=- w9ok=- w9fence=- w9dist=- w9rdme=- $W12WANT"
 
 # --- W12 (LC-R5) ------------------------------------------------------------------------

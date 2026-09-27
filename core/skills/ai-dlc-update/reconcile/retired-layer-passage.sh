@@ -54,7 +54,8 @@
 #   RETIRED-LAYER-PASSAGE<TAB><consumer-relative-layer-path>:<line><TAB><deleted core line>
 #
 # EXIT
-#   0  always (a detector reports; the caller decides)
+#   0  always when it ran (a detector reports; the caller decides)
+#   2  a producer this detector reads did not run -- a refusal, never a finding or a clean
 
 set -u
 
@@ -133,21 +134,47 @@ rows=""
 # file's own. Structural lines are filtered out of the RETIRED set only -- a layer heading
 # cannot match a set that contains no headings, so filtering the layer side too would cost
 # a process and buy nothing.
-NEEDLES="$(mktemp)"; trap 'rm -f "$NEEDLES"' EXIT
-printf '%s\n' "$REMOVED" > "$NEEDLES"
+#
+# EVERY LOOP FEED IS STAGED TO A FILE AND ITS PRODUCER'S STATUS IS READ. The two loops below
+# used to read `done < <(…)`, which discards the status: a layer walk that failed read as an
+# empty directory, `scanned` stayed 0, and the run printed its "no match" NOTE and exited 0 --
+# a false clear. This file does not set `pipefail`, so each fallible stage is staged ALONE. A
+# producer that did not run exits 2, which emit-report.sh renders as DETECTOR-REFUSED.
+# The needle file lives in the same one directory, so this is still the file's only trap.
+RLP_T="$(mktemp -d "${TMPDIR:-/tmp}/retired-layer-passage.XXXXXX")" || {
+  echo "retired-layer-passage: the staging directory did not run (mktemp failed); no verdict" >&2
+  exit 2
+}
+trap 'rm -rf "$RLP_T"' EXIT
+rlp_refuse() { # rlp_refuse <what> <status>
+  echo "retired-layer-passage: $1 did not run (exit $2); no verdict" >&2
+  exit 2
+}
+NEEDLES="$RLP_T/needles"
+printf '%s\n' "$REMOVED" > "$NEEDLES" || rlp_refuse "staging the retired line set" "$?"
 
 for dir in overrides extensions; do
   [ -d "$LAYERS/$dir" ] || continue
+  _rlp_rc=0
+  find "$LAYERS/$dir" -type f -name '*.md' 2>/dev/null > "$RLP_T/walk-$dir" || _rlp_rc=$?
+  [ "$_rlp_rc" -eq 0 ] || rlp_refuse "the layer walk of $LAYERS/$dir" "$_rlp_rc"
+  sort "$RLP_T/walk-$dir" > "$RLP_T/walk-$dir.sorted" || rlp_refuse "sorting the layer walk of $LAYERS/$dir" "$?"
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     scanned=$((scanned + 1))
+    # norm_lines staged alone, then grep over it: grep's 1 is a file carrying no retired line.
+    _rlp_rc=0
+    norm_lines < "$f" > "$RLP_T/layer-norm" || _rlp_rc=$?
+    [ "$_rlp_rc" -eq 0 ] || rlp_refuse "normalising ${f#"$CONSUMER"/}" "$_rlp_rc"
+    grep -nxF -f "$NEEDLES" "$RLP_T/layer-norm" > "$RLP_T/layer-hits" || _rlp_rc=$?
+    case "$_rlp_rc" in 0|1) ;; *) rlp_refuse "the retired-line match over ${f#"$CONSUMER"/}" "$_rlp_rc" ;; esac
     while IFS= read -r hit; do
       [ -n "$hit" ] || continue
       rows="$rows$(printf 'RETIRED-LAYER-PASSAGE\t%s:%s\t%s' \
         "${f#"$CONSUMER"/}" "${hit%%:*}" "${hit#*:}")
 "
-    done < <(norm_lines < "$f" | { grep -nxF -f "$NEEDLES" || true; })
-  done < <(find "$LAYERS/$dir" -type f -name '*.md' 2>/dev/null | sort)
+    done < "$RLP_T/layer-hits"
+  done < "$RLP_T/walk-$dir.sorted"
 done
 
 n_removed="$(printf '%s\n' "$REMOVED" | sed '/^$/d' | wc -l | tr -d ' ')"

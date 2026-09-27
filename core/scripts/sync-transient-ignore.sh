@@ -119,7 +119,18 @@ if [ "$MODE" = "check" ]; then
   if [ "$CURRENT" != "$DESIRED" ]; then
     echo "FAIL: the AI/DLC transient-state block in $GITIGNORE does not match $SCHEMA."
     echo "  It is a rendered region: change the declaration, then re-run sync-transient-ignore.sh."
-    diff <(printf '%s\n' "$CURRENT") <(printf '%s\n' "$DESIRED") || true
+    # DIAGNOSTIC ONLY: the verdict above is already decided. Staged rather than `<( )`, and diff's
+    # status is read so a diff that could not compare says so instead of printing nothing.
+    SYNC_T="$(mktemp -d "${TMPDIR:-/tmp}/sync-transient-ignore.XXXXXX")" || SYNC_T=""
+    if [ -n "$SYNC_T" ] && printf '%s\n' "$CURRENT" > "$SYNC_T/current" \
+       && printf '%s\n' "$DESIRED" > "$SYNC_T/desired"; then
+      DIFF_RC=0
+      diff "$SYNC_T/current" "$SYNC_T/desired" || DIFF_RC=$?
+      [ "$DIFF_RC" -le 1 ] || echo "  (the diagnostic diff could not compare the two blocks: diff exited $DIFF_RC)"
+    else
+      echo "  (the diagnostic diff was not run: its staging directory could not be written)"
+    fi
+    [ -z "$SYNC_T" ] || rm -rf "$SYNC_T"
     exit 1
   fi
   echo "OK: transient-state block current ($(printf '%s\n' "$PATTERNS" | wc -l | tr -d ' ') path(s))"

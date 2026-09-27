@@ -114,7 +114,9 @@
 # fields — a fourth would be dropped and the two arms would render identically.
 #
 # EXIT
-#   0  always (a detector reports; the caller decides)
+#   0  always when it ran (a detector reports; the caller decides)
+#   2  a producer this detector reads did not run -- a refusal, never a finding and never a
+#      clean; emit-report.sh renders it as DETECTOR-REFUSED
 
 set -u
 
@@ -130,6 +132,23 @@ SELF="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib.sh
 . "$SELF/lib.sh" 2>/dev/null || true
 SITES="$SELF/setup-sites.md"
+
+# EVERY SET OPERAND AND LOOP FEED IS STAGED TO A FILE AND ITS PRODUCER'S STATUS IS READ. These
+# sites used to read `comm <(…) <(…)` and `done < <(find …)`, which discard the producer's
+# status: a layer walk that failed read as an empty overrides/ or extensions/ directory, the scan
+# opened nothing, and the run printed its "no match" NOTE and exited 0 -- a false clear. This
+# file does not set `pipefail`, so each fallible stage is staged ALONE and never read through a
+# pipe. One directory per run, one file per site; the EXIT disposition composes with lib.sh's
+# own through its `trap` shadow when lib.sh loaded.
+RLC_T="$(mktemp -d "${TMPDIR:-/tmp}/retired-layer-contract.XXXXXX")" || {
+  echo "retired-layer-contract: the staging directory did not run (mktemp failed); no verdict" >&2
+  exit 2
+}
+trap 'rm -rf "$RLC_T"' EXIT
+rlc_refuse() { # rlc_refuse <what> <status>
+  echo "retired-layer-contract: $1 did not run (exit $2); no verdict" >&2
+  exit 2
+}
 rulebook_globs() {
   awk '/^rulebook:/{on=1;next} on && /^[a-z_]+:/{exit} on && /^  - /{sub(/^  - /,"");print}' \
     "$SITES" 2>/dev/null
@@ -275,7 +294,14 @@ count_of() { printf '%s\n' "$1" | sed '/^$/d' | wc -l | tr -d ' '; }
 # residue: paraphrase, and a path retired outside the rulebook globs.
 LIMIT='Prose restatements of retired core text carry no literal shape and are outside this detector'"'"'s vocabulary BY DESIGN — this zero does not cover them. Retired rulebook PATHS are covered by the path arm below; a path retired outside the rulebook globs (a script, a schema, a hook) is NOT, because the helper that would classify one is outside this engine'"'"'s permitted read set.'
 
-RETIRED="$(comm -23 <(printf '%s\n' "$BASE_SET") <(printf '%s\n' "$THEIRS_SET"))"
+_rlc_rc=0
+printf '%s\n' "$BASE_SET" > "$RLC_T/shapes-base" || _rlc_rc=$?
+[ "$_rlc_rc" -eq 0 ] || rlc_refuse "staging the base shape set" "$_rlc_rc"
+printf '%s\n' "$THEIRS_SET" > "$RLC_T/shapes-theirs" || _rlc_rc=$?
+[ "$_rlc_rc" -eq 0 ] || rlc_refuse "staging the theirs shape set" "$_rlc_rc"
+comm -23 "$RLC_T/shapes-base" "$RLC_T/shapes-theirs" > "$RLC_T/shapes-retired" || _rlc_rc=$?
+[ "$_rlc_rc" -eq 0 ] || rlc_refuse "the retired-shape subtraction" "$_rlc_rc"
+RETIRED="$(cat "$RLC_T/shapes-retired")"
 
 # THE PATH ARM'S SUBTRACTION, over the rulebook FILE SET rather than the shapes inside it.
 # Same two refs, same globs, same derivation — a release that retires no rulebook file
@@ -284,7 +310,14 @@ RB_BASE="$(rulebook_set "$BASE")"
 RB_THEIRS="$(rulebook_set "$THEIRS")"
 RETIRED_PATHS=""
 if [ -n "$RB_BASE" ]; then
-  RETIRED_PATHS="$(comm -23 <(printf '%s\n' "$RB_BASE") <(printf '%s\n' "$RB_THEIRS"))"
+  _rlc_rc=0
+  printf '%s\n' "$RB_BASE" > "$RLC_T/rb-base" || _rlc_rc=$?
+  [ "$_rlc_rc" -eq 0 ] || rlc_refuse "staging the base rulebook file set" "$_rlc_rc"
+  printf '%s\n' "$RB_THEIRS" > "$RLC_T/rb-theirs" || _rlc_rc=$?
+  [ "$_rlc_rc" -eq 0 ] || rlc_refuse "staging the theirs rulebook file set" "$_rlc_rc"
+  comm -23 "$RLC_T/rb-base" "$RLC_T/rb-theirs" > "$RLC_T/rb-retired" || _rlc_rc=$?
+  [ "$_rlc_rc" -eq 0 ] || rlc_refuse "the retired-path subtraction" "$_rlc_rc"
+  RETIRED_PATHS="$(cat "$RLC_T/rb-retired")"
 else
   # The same refusal `BASE_SET` gets, for the same reason: an unreadable rulebook at base
   # and a rulebook that retired nothing produce the identical empty set, and only one of
@@ -316,19 +349,30 @@ fi
 LAYERS="$CONSUMER/.claude/skills/ai-dlc"
 scanned=0
 rows=""
+printf '%s\n' "$RETIRED" > "$RLC_T/retired-shapes" || rlc_refuse "staging the retired shape set" "$?"
 for dir in overrides extensions; do
   [ -d "$LAYERS/$dir" ] || continue
+  # The walk is staged ALONE (no pipefail here), then sorted: a failed find refuses rather than
+  # reading as a directory with no layer file.
+  _rlc_rc=0
+  find "$LAYERS/$dir" -type f \( -name '*.md' -o -name '*.json' \) 2>/dev/null > "$RLC_T/walk-$dir" || _rlc_rc=$?
+  [ "$_rlc_rc" -eq 0 ] || rlc_refuse "the layer walk of $LAYERS/$dir" "$_rlc_rc"
+  sort "$RLC_T/walk-$dir" > "$RLC_T/walk-$dir.sorted" || rlc_refuse "sorting the layer walk of $LAYERS/$dir" "$?"
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     scanned=$((scanned + 1))
     body="$(cat "$f" 2>/dev/null || true)"
     [ -n "$body" ] || continue
     mine="$( { shapes_of "$body"; tokens_of "$body"; } | sort -u )"
+    printf '%s\n' "$mine" > "$RLC_T/mine" || rlc_refuse "staging the shape set of ${f#"$CONSUMER"/}" "$?"
+    _rlc_rc=0
+    comm -12 "$RLC_T/retired-shapes" "$RLC_T/mine" > "$RLC_T/mine-retired" || _rlc_rc=$?
+    [ "$_rlc_rc" -eq 0 ] || rlc_refuse "the retired-shape intersection for ${f#"$CONSUMER"/}" "$_rlc_rc"
     while IFS= read -r shape; do
       [ -n "$shape" ] || continue
       rows="$rows$(printf 'RETIRED-LAYER-CONTRACT\t%s\t%s' "${f#"$CONSUMER"/}" "$shape")
 "
-    done < <(comm -12 <(printf '%s\n' "$RETIRED") <(printf '%s\n' "$mine"))
+    done < "$RLC_T/mine-retired"
 
     # THE PATH ARM. A literal, whole-token match against every spelling of every retired
     # rulebook path. `grep -F` with word-ish boundaries rather than a regex built from the
@@ -363,7 +407,7 @@ EOF
     done <<EOF
 $RETIRED_PATHS
 EOF
-  done < <(find "$LAYERS/$dir" -type f \( -name '*.md' -o -name '*.json' \) 2>/dev/null | sort)
+  done < "$RLC_T/walk-$dir.sorted"
 done
 
 if [ -n "$rows" ]; then
