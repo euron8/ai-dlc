@@ -9,7 +9,7 @@
 # every other fixture's entries alone, so refreshing one fixture costs its own runtime
 # rather than a full re-derivation.
 #
-# fixtures mapped: 210    entries: 34215
+# fixtures mapped: 210    entries: 34247
 absorbed-specifics-survive	.git/HEAD
 absorbed-specifics-survive	.git/config
 absorbed-specifics-survive	.git/index
@@ -25365,16 +25365,14 @@ snapshot-archive-rotate	.git/HEAD
 snapshot-archive-rotate	.git/config
 snapshot-archive-rotate	.git/index
 snapshot-archive-rotate	.git/info/exclude
-snapshot-archive-rotate	.git/objects/33/a4425c0ed05dea70f881660ffdf01c7c86da33
-snapshot-archive-rotate	.git/objects/7f/1479d0f091b8393b8613744a84c3c8229a65a3
+snapshot-archive-rotate	.git/objects/cf/e0df168dc9af3701c441753b3263cd4f55f26a
+snapshot-archive-rotate	.git/objects/d7/7979caf7c3b8c5ab1ba55cc9e5e5047ca8de20
 snapshot-archive-rotate	.git/objects/info/commit-graphs/commit-graph-chain
-snapshot-archive-rotate	.git/objects/info/commit-graphs/graph-594d3fb29074458df4d85193fa1973ad4fd03848.graph
-snapshot-archive-rotate	.git/objects/info/commit-graphs/graph-61ac52da05ee113a5a22871cdc3010f8f63bd5f1.graph
-snapshot-archive-rotate	.git/objects/info/commit-graphs/graph-dad42b3f34d3f2afaa5e5ee7b108164a60d5f01e.graph
-snapshot-archive-rotate	.git/objects/info/commit-graphs/graph-fa7bbe6bcd67e84c678384cfb84f17a16d6fa8fa.graph
+snapshot-archive-rotate	.git/objects/info/commit-graphs/graph-7f995749f1f9f9610455fff3b31d8e4d11b046c8.graph
+snapshot-archive-rotate	.git/objects/info/commit-graphs/graph-93e6403e1d08d4a02b08f717afce6dcbebb27492.graph
 snapshot-archive-rotate	.git/objects/pack/multi-pack-index
 snapshot-archive-rotate	.git/packed-refs
-snapshot-archive-rotate	.git/refs/heads/main
+snapshot-archive-rotate	.git/refs/heads/release/0.646.0
 snapshot-archive-rotate	.gitignore
 snapshot-archive-rotate	core
 snapshot-archive-rotate	core/core/scripts/rotate-snapshot-archive.sh
@@ -25388,6 +25386,40 @@ snapshot-archive-rotate	core/fixtures/snapshot-archive-rotate/core/scripts/rotat
 snapshot-archive-rotate	core/fixtures/snapshot-archive-rotate/run.sh
 snapshot-archive-rotate	core/fixtures/snapshot-archive-rotate/scripts/ai-dlc/rotate-snapshot-archive.sh
 snapshot-archive-rotate	core/fixtures/snapshot-archive-rotate/seed.sh
+snapshot-archive-rotate	core/hooks
+snapshot-archive-rotate	core/hooks/ai-dlc-acknowledge.sh
+snapshot-archive-rotate	core/hooks/ai-dlc-answer-capture.sh
+snapshot-archive-rotate	core/hooks/ai-dlc-artifact-path-guard.sh
+snapshot-archive-rotate	core/hooks/ai-dlc-context-provenance.sh
+snapshot-archive-rotate	core/hooks/ai-dlc-context-sensor.sh
+snapshot-archive-rotate	core/hooks/ai-dlc-continue.sh
+snapshot-archive-rotate	core/hooks/ai-dlc-core-guard.sh
+snapshot-archive-rotate	core/hooks/ai-dlc-derivation-capture.sh
+snapshot-archive-rotate	core/hooks/ai-dlc-dispatch-guard.sh
+snapshot-archive-rotate	core/hooks/ai-dlc-driver-signal.sh
+snapshot-archive-rotate	core/hooks/ai-dlc-escalation-delivery.sh
+snapshot-archive-rotate	core/hooks/ai-dlc-gate-remediation-guard.sh
+snapshot-archive-rotate	core/hooks/ai-dlc-handoff-entry.sh
+snapshot-archive-rotate	core/hooks/ai-dlc-handoff-pending.sh
+snapshot-archive-rotate	core/hooks/ai-dlc-pause.sh
+snapshot-archive-rotate	core/hooks/ai-dlc-postcompact.sh
+snapshot-archive-rotate	core/hooks/ai-dlc-precompact.sh
+snapshot-archive-rotate	core/hooks/ai-dlc-protect.sh
+snapshot-archive-rotate	core/hooks/ai-dlc-recover-gate.sh
+snapshot-archive-rotate	core/hooks/ai-dlc-recover.sh
+snapshot-archive-rotate	core/hooks/ai-dlc-rules-floor.sh
+snapshot-archive-rotate	core/hooks/ai-dlc-subagent-probe.sh
+snapshot-archive-rotate	core/hooks/ai-dlc-window.sh
+snapshot-archive-rotate	core/schemas
+snapshot-archive-rotate	core/schemas/audit-anchors.json
+snapshot-archive-rotate	core/schemas/gate-adjudication-verdict.json
+snapshot-archive-rotate	core/schemas/harness-origin.json
+snapshot-archive-rotate	core/schemas/layer-adjudication-register.json
+snapshot-archive-rotate	core/schemas/pause-routing.json
+snapshot-archive-rotate	core/schemas/pipeline-state-paths.json
+snapshot-archive-rotate	core/schemas/provenance-block.json
+snapshot-archive-rotate	core/schemas/sprint-status.json
+snapshot-archive-rotate	core/schemas/write-format-steering.json
 snapshot-archive-rotate	core/scripts/ai-dlc/rotate-snapshot-archive.sh
 snapshot-archive-rotate	core/scripts/rotate-snapshot-archive.sh
 snapshot-conservation	.git
