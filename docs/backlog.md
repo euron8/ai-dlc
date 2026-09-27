@@ -4276,41 +4276,75 @@ verify: manual
 
 ## BL-335 — `validate-artifact-derivations.sh` scores a `<( )` diff that did not run as STALE
 
-**DEFECT.** Found by the batch-160 docs hand. It is filed as the one entry for the `<( )` sites
-0.647.0 left in `core/`, and it is a DEFECT rather than a NOTE because one of the two remaining
-shipped diff sites decides a verdict.
+**DEFECT.** Found by the batch-160 docs hand. Its second subject, the `<( )` sites no one audited,
+is re-filed as `BL-348` and does not ride on this entry's close.
 
-0.647.0 staged the five verdict-bearing reconcile diff sites (`BL-334`). At `9f153a07`,
-`git grep -nE '<\(' -- 'core/*.sh'` returns 147 lines. The count at `df3623b9` is 142; the
-difference is new comments that mention the old spelling. Leaving out comment lines gives 129,
-and leaving out `core/fixtures/` as well gives 84. Outside the fixtures, three lines still run
-`diff` on a `<( )` operand:
-- `core/scripts/sync-transient-ignore.sh:122`: `diff <(…) <(…) || true`. This is diagnostic
-  output in `--check`, printed after the verdict is already decided by the string comparison
-  at `:119` and before `exit 1`. The race can garble the printed diff but cannot move the exit.
-  **Not verdict-bearing.**
-- `core/skills/ai-dlc-update/reconcile/emit-report.sh:421`: an `echo` of the `full:` command
-  for the operator to run. It is not executed. **Not verdict-bearing.**
-- `core/scripts/validate-artifact-derivations.sh:727`:
-  `if ! diff -q <(norm < "$TMP_EXP") <(norm < "$TMP_OUT") …; then fail "STALE" …`. A diff that
-  exits 2 on the fd race takes the `!` branch and records the derivation as STALE, even though
-  the recorded and actual outputs were never compared. **Verdict-bearing.**
+The filing named one verdict-bearing site, `:727`'s
+`if ! diff -q <(norm < "$TMP_EXP") <(norm < "$TMP_OUT") …; then fail "STALE"`. The batch-162
+contract adversary found two more in the same script. Each was forced with a PATH stub against
+the base script (`fe30b4fa`), never sampled:
+- **`diff` exits 2** (the bash 3.2 `/dev/fd/63: Bad file descriptor` race, about 0.15-0.4% under
+  concurrent workers, measured on `diff <(printf …) file` in batch 160). A derivation that
+  reproduces scored `FAIL (STALE)`, exit 1.
+- **`sed` fails inside `norm`**. Both substitutions came back empty and compared equal, so a
+  STALE derivation scored `OK`, exit 0. This is a silent false clear, and it is worse than the
+  filed shape.
+- **`find` fails in the directory walk** (`:741`, `done < <(find "$target" …)`). The walk read as
+  an empty directory and scored `OK: 0 derivation(s)`, exit 0. This is also a false clear.
 
-Three consumers act on that STALE:
-- the derivation-capture hook;
-- `apply.sh`'s `artifact-derivations` worklist row;
-- `derivation-differential.sh`, which classifies by the pair of sides. A spurious STALE on the
-  base side of a derivation that genuinely broke at theirs scores **STALE-BOTH**. That class is
-  "pre-existing debt, out of this row's scope" (`derivation-differential.sh:32`), so a real
-  NEWLY-FAILING row is hidden: a false clear.
+**The old body's consumer list was wrong about `apply.sh`.** `apply.sh` never executes the
+validator. `vd_join()` is a parse-only path join, the comment above it says "NOT RUN FROM HERE",
+and `:829` only tests that the file exists so that it can name it in a WORKLIST or DECISION row.
+The two programs that do execute it both refuse exit 2 already:
+- the capture hook (`ai-dlc-derivation-capture.sh:224-228`) surfaces a 2 only when an
+  `^UNRUN:` or `^REFUSED:` line is present;
+- `derivation-differential.sh:288-289` refuses any status other than 0 or 1.
 
-This rests on reading the code and on the race rate measured on `diff <(printf …) file`. The race
-was not driven at this site. The fix is the staged-file spelling `BL-334` used, with diff's exit
-status read directly and 2 or more reported as a refusal, not as STALE. The other `<( )` lines
-feed `while read`, `comm` or `sort` rather than `diff`. None of them was audited for whether a
-failed substitution reads as an empty input that decides a verdict.
+The one reader that mis-routed was prose. `_gate-procedures.md` said that any non-zero exit is a
+repair to send to the remediator.
 
-verify: manual
+**Fixed by `fb953c85`.** Both `norm` outputs are staged to temp files, and each producer's
+status is checked. `diff` compares the two files and its status decides: 0 is clean, 1 is STALE
+(the message is unchanged), and anything else is UNRUN. A failed `norm` is UNRUN too. UNRUN
+names `file:line`, increments the existing `unrun` counter and makes the run exit 2. The walk is
+staged into a list file, and `pipefail` carries a failed `find` through `sort`. A failed walk is
+`REFUSED:`, exit 2. The header's exit contract and `_gate-procedures.md` now say that exit 1 goes
+to the remediator and exit 2 is re-run, never remediated.
+
+**The receipt** builds a scratch root under `mktemp -d` with one derivation that reproduces and
+one that is stale, both `grep -c` (a `diff` derivation would pick up the stub). It checks two
+controls under the real tools and exits 9 unless both hold: the good file exits 0, and the stale
+file exits 1 with `FAIL (STALE)`. It then drives three stubs, and each stub writes a marker when
+it fires. If any marker is missing it exits 9.
+- **diff exits 2** on a file holding both derivations. It must exit 2 with no `STALE` and an
+  `^UNRUN: …mix.md:<n>` line.
+- **sed fails on `norm`'s two expressions only** (`cmd_is_safe`'s `sed` is unaffected) on the
+  stale file. It must exit 2, with no `OK:` and an `^UNRUN: …stale.md:<n>` line.
+- **find exits 1** on the directory target. It must exit 2 with no `OK:`.
+
+Raw exits, one fresh `mktemp` tree per row, with the receipt run the way `backlog-reverify.sh:243`
+runs it:
+- **1** at base `fe30b4fa`. diff→1 with STALE twice, sed→0 `OK`, find→0 `OK`.
+- **0** at `fb953c85`, and at this branch's own worktree.
+- **1** on the Subject B fix `2a76c0b7`. Its copy of this script is byte-identical to base
+  (md5 `745a76fd` on both), and the receipt reads only this script.
+- **1** on each of four regressions built from `fb953c85`:
+  - rc ≥ 2 read as clean;
+  - rc ≥ 2 read as STALE;
+  - both `norm` statuses discarded;
+  - `walk_rc` forced to 0.
+- **0** on two other correct spellings:
+  - one `mktemp -d` holding the three files, `norm` as a single `sed -e … -e …`, the verdict
+    from `if diff …; then …; else drc=$?`, and `find` and `sort` run as separate steps, each
+    checked;
+  - a `cmp -s` fast path, with `diff` deciding only when `cmp` says the files differ.
+- **0** on a build that keeps the staged, checked walk but feeds the loop from a SECOND
+  `< <(find …)`, whose status nobody reads. **This is a gap the receipt accepts.** It is reachable
+  only when the first `find` succeeds and the second one fails, and the stub cannot tell the two
+  apart. `BL-348`'s receipt counts the `<(` it leaves behind.
+- **9** in a tree with no validator.
+
+verify: sh V="$PWD/core/scripts/validate-artifact-derivations.sh"; [ -f "$V" ] || exit 9; W="$(mktemp -d)" || exit 9; mkdir -p "$W/r/.claude" "$W/r/art" "$W/d" "$W/s" "$W/f" || exit 9; F="$(printf '\140\140\140')"; printf 'alpha\nbeta\n' > "$W/r/data.txt"; printf '%sderived\n$ grep -c alpha data.txt\n1\n%s\n' "$F" "$F" > "$W/r/art/good.md"; printf '%sderived\n$ grep -c alpha data.txt\n7\n%s\n' "$F" "$F" > "$W/r/stale.md"; cat "$W/r/art/good.md" "$W/r/stale.md" > "$W/r/mix.md" || exit 9; printf '%s\n' '#!/bin/sh' ': > "$MK.d"; exit 2' > "$W/d/diff"; printf '%s\n' '#!/bin/sh' 'case "$*" in *"[[:space:]]*\$"*|"/^\$/d") : > "$MK.s"; exit 1 ;; esac' 'exec /usr/bin/sed "$@"' > "$W/s/sed"; printf '%s\n' '#!/bin/sh' ': > "$MK.f"; exit 1' > "$W/f/find"; chmod +x "$W/d/diff" "$W/s/sed" "$W/f/find" || exit 9; export AI_DLC_PROJECT_ROOT="$W/r" MK="$W/mk"; bash "$V" "$W/r/art/good.md" > "$W/o.g" 2>&1; [ $? -eq 0 ] || exit 9; bash "$V" "$W/r/stale.md" > "$W/o.t" 2>&1; [ $? -eq 1 ] && grep -q 'FAIL (STALE)' "$W/o.t" || exit 9; PATH="$W/d:$PATH" bash "$V" "$W/r/mix.md" > "$W/o.d" 2>&1; rd=$?; PATH="$W/s:$PATH" bash "$V" "$W/r/stale.md" > "$W/o.s" 2>&1; rs=$?; PATH="$W/f:$PATH" bash "$V" "$W/r/art" > "$W/o.f" 2>&1; rf=$?; [ -f "$W/mk.d" ] && [ -f "$W/mk.s" ] && [ -f "$W/mk.f" ] || exit 9; [ "$rd" -eq 2 ] && ! grep -q 'STALE' "$W/o.d" && grep -qE '^UNRUN: .*mix\.md:[0-9]+' "$W/o.d" || exit 1; [ "$rs" -eq 2 ] && ! grep -q '^OK:' "$W/o.s" && grep -qE '^UNRUN: .*stale\.md:[0-9]+' "$W/o.s" || exit 1; [ "$rf" -eq 2 ] && ! grep -q '^OK:' "$W/o.f" || exit 1; exit 0
 
 ## BL-336 — `apply.sh`'s refile refusal tells the operator to re-run apply, which the union gate refuses
 
@@ -4414,3 +4448,49 @@ and then the first-gate message, rc 1. Separately, the located refusal goes to s
 CHANGED while first-gate goes to stdout, so a caller capturing only stdout sees nothing for it.
 
 verify: manual
+
+## BL-348 — the `<( )` operands left in shipped `core/` were never audited for a failed substitution that reads as an empty input
+
+**DEFECT.** Split from `BL-335` at batch 162. That entry's first subject is fixed. This one is
+its second subject: the `<( )` sites that neither `BL-334` nor `BL-335` touched.
+
+**Why DEFECT.** A `<( )` producer's exit status is discarded. When the producer fails, the reader
+sees an empty stream and nothing reports it. `BL-335` measured this silence three times in one
+script: an empty `norm` side and an empty `find` walk each scored `OK`, exit 0, and a `diff`
+that could not compare scored STALE. Each time the defect sat on the line that decided the
+verdict. None of the sites below has been checked for that shape.
+
+**The population is DERIVED.** Take
+`git grep -nE '<\(' -- 'core/*.sh' ':(exclude)core/fixtures/**'`, then drop comment lines,
+`echo` lines (text shown to the operator, not executed) and regex literals where a `'` opens the
+`<(`. At `fb953c85` that leaves 79 lines in 22 files. Re-derive the count; never quote it. By shape:
+- **54** are `done < <(…)` loop feeds. Six of them are fed by `find` (`validate-ci-gates.sh`,
+  `preclassify.sh`, `relabel-extension-checks.sh`, `retired-layer-contract.sh`,
+  `retired-layer-passage.sh`), which is the exact shape `BL-335` measured as a false clear. The
+  rest are fed by `printf`, `awk`, `grep`, `git` or local functions.
+- **16** are `comm` set differences and intersections. A failed side returns the other side
+  whole, or an empty result. These include the retired-contract, retired-token and self-update
+  detectors, where the result is the row set.
+- **9** are other readers, such as `grep -f <(…)` and `sort` or `cut` over a substitution. An
+  empty `-f` pattern file matches nothing, so the reader reports that nothing matched.
+- `sync-transient-ignore.sh:122`'s `diff <(…) <(…) || true` is counted. It is diagnostic output
+  printed after `:119` has already decided the exit, and it is the one member whose failure
+  cannot move a verdict. It still counts, because the receipt keys on the spelling.
+
+**What is owed.** For each site, either stage the producer to a file and check its status (the
+`BL-334`/`BL-335` spelling), or record why a failed producer cannot move a verdict there. The
+receipt closes only when no `<(` is left in shipped code. That is deliberate, because a
+per-site judgment is exactly what went unchecked here. If a site is shown to be harmless, stage
+it anyway rather than exempt it.
+
+**The receipt** counts the derived population and closes at zero. Its awk filter is first checked
+against five seeded lines (two live sites, one comment, one `echo`, one quoted regex). It must
+count exactly 2, or the receipt exits 9. A tree with no `pipefail`-bearing shipped script exits 9,
+which covers a non-repo tree and an empty pathspec. Scored in fresh `mktemp` trees, raw exits:
+- **1** at `fe30b4fa`, at `fb953c85` and at the Subject B fix `2a76c0b7`.
+- **0** on a seeded repo whose only `<(` are in a comment, an `echo`, a quoted regex and a
+  `core/fixtures/` file.
+- **1** on the same repo with one live `comm <(…)` line added.
+- **9** in a non-repo tree and in a tree with no `core/`.
+
+verify: sh git grep -qF 'pipefail' -- 'core/*.sh' ':(exclude)core/fixtures/**' || exit 9; A='{ l = $0; sub(/^[^:]*:[0-9]+:/, "", l); if (l ~ /^[[:blank:]]*#/) next; if (l ~ /^[[:blank:]]*echo /) next; if (l ~ /\047<\(/) next; n++ } END { print n + 0 }'; p="$(printf '%s\n' 'x.sh:1:  done < <(find . -type f | sort)' 'x.sh:2:  r="$(comm -23 <(printf x) <(printf y))"' "x.sh:3:RE='<([^>]*-)?id>'" 'x.sh:4:  # was <(norm)' 'x.sh:5:  echo "full: diff <(git show)"' | awk "$A")"; [ "$p" = 2 ] || exit 9; n="$(git grep -nE '<\(' -- 'core/*.sh' ':(exclude)core/fixtures/**' | awk "$A")"; [ -n "$n" ] || exit 9; [ "$n" -eq 0 ]
