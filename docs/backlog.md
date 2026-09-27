@@ -4068,30 +4068,6 @@ receipt must fill a small volume during a fill and read the cached bytes back ag
 
 verify: manual
 
-## BL-311 — Checks 2 and 2a have no step text for `EXAMINED NOTHING`, and the map calls it a failure where the validators call it clean
-
-**NOTE.** Found at batch 153 by the `BL-307` contract adversary. It discharges no consumer
-candidate, and it needs an operator decision before anything is built.
-
-`core/skills/ai-dlc/enforcement-map.yaml` gives Checks 2 and 2a the posture that `EXAMINED
-NOTHING` "is not a pass, nothing was verified". The three validators' own headers call an absent
-escalations file a legitimate clean state. `gate-validation.md`'s Check 2 and 2a sections carry 0
-mentions of the token, against 7 in the whole file, because `BL-305` added the instruction to
-Checks 26, 33 and 35 only. Adding that instruction here as written would make every consumer with
-no escalations file fail Check 2. Which reading is right is the operator's call. How an
-adjudicator actually rules on the token at Check 2 today was available to measure and was not.
-
-**Operator ruling, batch 163: an absent or empty escalations file is a CLEAN PASS at Checks 2 and
-2a**, because the file exists only once something is escalated, so its absence means there is no
-unresolved HARD_BLOCK. Checks 26, 33 and 35 are unchanged: their corpus must exist. The map's three
-postures and the Check 2 and 2a step text now say so, quoting the validators' printed
-`OK: EXAMINED NOTHING` line. Measured on the reference consumer: 0 of its 209 committed Check 2 and
-4 Check 2a verdicts carry the token (control: 50 hits under other checks), because its
-`docs/escalations/pending.md` was present and non-empty at all 898 commits touching it. The ruling
-moves no recorded verdict.
-
-verify: manual
-
 ## BL-310 — after a transient `cat-file` or `show` failure on a present path, the memo still hands one caller a wrong "absent"
 
 **NOTE.** Found at batch 153 by the `BL-230` tip adversary, reading the 0.637.0 memo change. It
@@ -4378,103 +4354,6 @@ consumer's 194 span-carrying lines under `_bmad-output/` contain no tab.
 
 verify: manual
 
-## BL-348 — the `<( )` operands left in shipped `core/` were never audited for a failed substitution that reads as an empty input
-
-**DEFECT.** Split from `BL-335` at batch 162. That entry's first subject is fixed. This one is
-its second subject: the `<( )` sites that neither `BL-334` nor `BL-335` touched.
-
-**Why DEFECT.** A `<( )` producer's exit status is discarded. When the producer fails, the reader
-sees an empty stream and nothing reports it. `BL-335` measured this silence three times in one
-script: an empty `norm` side and an empty `find` walk each scored `OK`, exit 0, and a `diff`
-that could not compare scored STALE. Each time the defect sat on the line that decided the
-verdict. None of the sites below has been checked for that shape.
-
-**The population is DERIVED.** Take
-`git grep -nE '<\(' -- 'core/*.sh' ':(exclude)core/fixtures/**'`, then drop comment lines,
-`echo` lines (text shown to the operator, not executed) and regex literals where a `'` opens the
-`<(`. At `fb953c85` that leaves 79 lines in 22 files. Re-derive the count; never quote it. By shape:
-- **54** are `done < <(…)` loop feeds. Six of them are fed by `find` (`validate-ci-gates.sh`,
-  `preclassify.sh`, `relabel-extension-checks.sh`, `retired-layer-contract.sh`,
-  `retired-layer-passage.sh`), which is the exact shape `BL-335` measured as a false clear. The
-  rest are fed by `printf`, `awk`, `grep`, `git` or local functions.
-- **16** are `comm` set differences and intersections. A failed side returns the other side
-  whole, or an empty result. These include the retired-contract, retired-token and self-update
-  detectors, where the result is the row set.
-- **9** are other readers, such as `grep -f <(…)` and `sort` or `cut` over a substitution. An
-  empty `-f` pattern file matches nothing, so the reader reports that nothing matched.
-- `sync-transient-ignore.sh:122`'s `diff <(…) <(…) || true` is counted. It is diagnostic output
-  printed after `:119` has already decided the exit, and it is the one member whose failure
-  cannot move a verdict. It still counts, because the receipt keys on the spelling.
-
-**What is owed.** For each site, either stage the producer to a file and check its status (the
-`BL-334`/`BL-335` spelling), or record why a failed producer cannot move a verdict there. The
-receipt closes only when no `<(` is left in shipped code. That is deliberate, because a
-per-site judgment is exactly what went unchecked here. If a site is shown to be harmless, stage
-it anyway rather than exempt it.
-
-**The receipt** counts the derived population and closes at zero. Its awk filter is first checked
-against five seeded lines (two live sites, one comment, one `echo`, one quoted regex). It must
-count exactly 2, or the receipt exits 9. A tree with no `pipefail`-bearing shipped script exits 9,
-which covers a non-repo tree and an empty pathspec. Scored in fresh `mktemp` trees, raw exits:
-- **1** at `fe30b4fa`, at `fb953c85` and at the Subject B fix `2a76c0b7`.
-- **0** on a seeded repo whose only `<(` are in a comment, an `echo`, a quoted regex and a
-  `core/fixtures/` file.
-- **1** on the same repo with one live `comm <(…)` line added.
-- **9** in a non-repo tree and in a tree with no `core/`.
-
-**v0.650.0 staged the non-bootstrapping sites; the entry stays live.** The receipt's own filter
-reads 79 lines in 22 files at `e4934e65` and 10 lines in 4 files after the fix, so 69 lines in 18
-files are staged, each producer's status is read, and a producer that did not run refuses in the
-script's own vocabulary. The remaining 10 are all in BOOTSTRAPPING files: `preclassify.sh`,
-`ledger-reverify.sh`, `emit-report.sh` and `self-update-gate.sh`. The last one is bootstrapping
-because the update skill's step 2 runs it before the engine lands. Those four ship alone next, and
-the receipt exits 1 until they do. False clears proven by forcing the producer to fail at base:
-- `validate-ci-gates.sh:139`: a failed retro walk read "0 gates declared", exit 0.
-- `validate-ci-gates.sh:163`: a failed surface walk inside `code_hits` reported a wired gate
-  DORMANT, exit 1. This one is a false finding.
-- `relabel-extension-checks.sh:212`: "no unlabelled core-number collisions.", exit 0.
-- `retired-layer-passage.sh:150` and `retired-layer-contract.sh:366`: "checked against 0 layer
-  file(s); no match", exit 0.
-- `validate-layer-entries.sh`'s `layer_files` walks: "0 error(s)", exit 0, over an unlisted layer.
-- `readopt-override.sh`'s `stale_lines`: an empty base set, so `--check` read OK, exit 0.
-- `unregistered-drift.sh`: a failed `comm` side chose the wrong HARD remedy (absorbed versus drift).
-
-**The receipt keys on SPELLING, and that is a known weakness.** Scored on the 10 remaining sites,
-raw exits: rewriting each one as `<<< "$(…)"` exits 0, and so does staging with the status
-swallowed (`> f || true`). A `| while` loop is the same shape and was not scored. The receipt line is
-unchanged. The behaviour is carried by this release's fixture: its diff-scoped arm refuses those
-spellings on lines added since `e4934e65`, and its forced arms make each verdict-bearing producer
-fail and assert a refusal.
-
-**v0.651.0 staged the 10 bootstrapping sites, and the receipt exits 0.** Forced at base, the worst
-was `ledger-reverify.sh`'s absent-subject split: a failed `tr` read as "every named path exists"
-and emitted a false `CLOSE-CANDIDATE`. The others were a silenced `NEEDS-REVIEW`, a missed orphan in
-`preclassify.sh`, a `BLOCKERS-RESOLVED` from `emit-report.sh --verify`, and two `SELF-UPDATE-OK`s in
-`self-update-gate.sh`. Each now refuses in its script's own vocabulary, and
-`procsub-staged-refusal-boot` forces all of them.
-
-**THE RECEIPT EXITS 0 AND THE ENTRY IS NOT CLOSED.** The batch-163 tip adversary forced three false
-clears that no `<(` spelling carries, each equally present before 0.650.0. A staged producer that
-is a FUNCTION whose body is a PIPELINE reads the wrong stage's status:
-- `retired-layer-passage.sh:167` stages `norm_lines` (`sed | tr`) in a file without `pipefail`, so
-  only `tr` is read. A failed `sed` reads "no match", and one Latin-1 byte in a layer file under the
-  default UTF-8 locale triggers it with no stub.
-- `validate-layer-entries.sh`'s `defined_rules` (E15 at `:1657`, and five sites of the same shape)
-  accepts a later `grep -E '.'`'s exit 1 on the empty input a failed first `grep` leaves: rc 1
-  ERROR E15 becomes rc 0.
-- The `retired-tokens.sh` and `retired-layer-token.sh` token helpers accept the second `grep`'s 1
-  after a failed `grep -vE` comment filter: a retired-token row is lost.
-Close only when those refuse, forced, and a sweep of every staged function in the 22 files finds no
-other instance.
-
-**v0.652.0 fixes all three, and four more the sweep found.** `lib.sh`'s `section_of` returned
-`rm`'s status, `retired-layer-contract.sh`'s `shapes_of` and `tokens_of` read a dead
-`grep || true` as empty, and `layer-drift.sh`'s `sup_measure` read a dead `grep -Fxv` as a clean
-count. Each site now reads its first fallible stage alone, and `procsub-staged-refusal` forces all
-seven at 0.650.0.
-
-verify: sh git grep -qF 'pipefail' -- 'core/*.sh' ':(exclude)core/fixtures/**' || exit 9; A='{ l = $0; sub(/^[^:]*:[0-9]+:/, "", l); if (l ~ /^[[:blank:]]*#/) next; if (l ~ /^[[:blank:]]*echo /) next; if (l ~ /\047<\(/) next; n++ } END { print n + 0 }'; p="$(printf '%s\n' 'x.sh:1:  done < <(find . -type f | sort)' 'x.sh:2:  r="$(comm -23 <(printf x) <(printf y))"' "x.sh:3:RE='<([^>]*-)?id>'" 'x.sh:4:  # was <(norm)' 'x.sh:5:  echo "full: diff <(git show)"' | awk "$A")"; [ "$p" = 2 ] || exit 9; n="$(git grep -nE '<\(' -- 'core/*.sh' ':(exclude)core/fixtures/**' | awk "$A")"; [ -n "$n" ] || exit 9; [ "$n" -eq 0 ]
-
 ## BL-349 — `validate-h2-attestation.sh --verify` reads only the START of the verdict cell, and only the first verdict column
 
 **NOTE.** Found by the batch 162 tip adversary at `2f074fe5`. The verdict test is "the cell begins
@@ -4513,5 +4392,95 @@ only the `<(` spelling, so rewriting a site as unchecked staged files closes it 
 intact (by inspection, not built). The fixtures, not the receipts, kill the vocabulary reader.
 The `BL-348` half was built and scored at batch 163: on the 10 remaining sites, `<<< "$(…)"` and
 `> f || true` each exit 0. `procsub-staged-refusal`'s diff-scoped arm and forced arms reject both.
+
+verify: manual
+
+## BL-353 — the three escalation validators read an unreadable `pending.md` as clean, so Check 2 passes on a file nobody read
+
+**DEFECT.** Found by the batch-163 tip adversary on 0.653.0; present before it, identically. It
+discharges no consumer candidate.
+
+`validate-escalation-status-vocabulary.sh:151`, `validate-escalation-resolution.sh:260` (gate
+mode) and `validate-suppression-lifetime.sh:175` probe the escalations file with
+`grep -q '[^[:space:]]' "$ESCALATIONS" 2>/dev/null`. On an unreadable file that probe exits 2, the
+branch reads it as "not blank", and the later `awk` read failure (`can't open file`) is swallowed.
+Measured with an out-of-vocabulary `FILED` entry and an uncited this-sprint `RESOLVED` entry: readable,
+two of the scripts exit 1; after `chmod 000`, all three exit 0 with an ordinary OK line
+(`n=[]`, `entries_scanned=0`, "no S5 … requires an operator citation"). Check 2 then passes.
+0.653.0's pass wording does not cover this case, because no `EXAMINED NOTHING` line is printed.
+
+A directory at the `pending.md` path prints "no escalations file", which 0.653.0's "absent or
+empty" wording would read as a pass. Exotic, and the same remedy covers it.
+
+**Remedy:** in all three, refuse with exit 2 when the probe's status is 2, when the path exists and
+is not a regular file, or when it is not readable. The fixture half: `escalation-status-vocabulary`
+asserts only the literal `is not a pass` is absent from Checks 2 and 2a, so a sentence appending
+"treat that line as a FAIL" survives it, and nothing guards Checks 26, 33 and 35 still saying "not a
+pass". Add one cell for each.
+
+verify: manual
+
+## BL-354 — failure silences one step upstream of the staged sites, and `apply.sh` reads a detector refusal as "no worklist row"
+
+**DEFECT.** Found by the batch-163 contract adversary (the upstream half) and the 0.651.0 tip
+adversary (the `apply.sh` half). Split from `BL-348`, which closed on the `<( )` sites alone. It
+discharges no consumer candidate.
+
+**Upstream `$( )` producers whose failure still reads as empty**, each outside `BL-348`'s spelling:
+- `self-update-gate.sh:1114`: `CHANGED="$(git … diff --name-only … 2>/dev/null | …)"`. A failed
+  diff reads as no changed script, which the gate reports as `SELF-UPDATE-OK`. BOOTSTRAPPING.
+- `retired-tokens.sh:170-171`: `git show … 2>/dev/null || true`, so an unreadable ref side reads as
+  an empty file and its tokens as retired or absent.
+- `retired-layer-contract.sh:254` `collect`, called through `$( )`, whose failure the caller does
+  not read.
+
+**`apply.sh` discards every detector refusal the 0.650.0-0.652.0 releases added.** It captures
+stdout only, with `2>/dev/null`, at `:565`/`:567` (`unregistered-drift.sh`), `:637`/`:640`
+(`retired-tokens.sh`), `:705` (`retired-layer-passage.sh`) and `:925` (`layer-drift.sh`). A detector
+that now refuses with exit 1 or 2 and empty stdout reads there as "nothing to report", so the
+WORKLIST loses the row silently. `emit-report.sh` already renders the same refusal as
+`DETECTOR-REFUSED` at step 5, which is the partial cover; the apply-time worklist has none.
+`apply.sh` is BOOTSTRAPPING, so that half ships alone.
+
+**Remedy:** read each producer's status and refuse in the script's vocabulary, as `BL-348` did;
+for `apply.sh`, read each detector's exit and emit a refusal row on non-zero, as `emit-report.sh`
+does.
+
+verify: manual
+
+## BL-355 — `norm_lines` folds case byte-wise, so an accented capital no longer matches its lower-case form
+
+**DEFECT, latent.** Found by the 0.652.0 tip adversary; introduced by 0.652.0. It discharges no
+consumer candidate.
+
+0.652.0 runs `norm_lines`' `tr '[:upper:]' '[:lower:]'` under `LC_ALL=C`
+(`core/skills/ai-dlc-update/reconcile/lib.sh:150`), which fixed the Latin-1 abort in its `sed` but
+folds only ASCII. Forced: core deletes `1. Élan must always be recorded in the story file before
+merge.` (valid UTF-8), a consumer extension carries `- élan must always …`; 0.651.0 reads 1
+`RETIRED-LAYER-PASSAGE` row, 0.652.0 reads 0 with "no match". An ASCII case-differing control and a
+same-case accented control read 1 on both. `retired-layer-passage.sh:61-66`'s comment says the
+locale "cannot manufacture a difference between them", which is false for case.
+
+**Not reachable today:** the rulebook set carries 0 files with a non-ASCII letter byte (control: 63
+with an em-dash), and core carries 0 non-ASCII capitals.
+
+**Remedy:** keep `sed` under C. Fold case in the caller's locale only when the staged stream is
+valid UTF-8 (`iconv -f UTF-8 -t UTF-8`), otherwise under C. Dropping `LC_ALL=C` from `tr` alone is
+wrong: under UTF-8, `tr` on a Latin-1 byte prints "Illegal byte sequence", truncates, and still
+exits 0.
+
+**Five NOTEs from the same three adversaries, none a lost verdict today:**
+- `norm_lines`' `case` over `"${PIPESTATUS[*]}"` depends on `IFS`: `IFS=$'\n'` makes a healthy run
+  return 255, `IFS=''` makes a failed `sed` return 10. No caller sets `IFS`. Respell as an array,
+  as `readopt-override.sh:334,354` already do.
+- `readopt-override.sh:589-590` ignore `section_of`'s status. Both failing reads `UNCHANGED`, rc 0,
+  as before 0.650.0; the later stamp gate still blocks.
+- `validate-layer-entries.sh`'s `defined_rules` and `defined_anchors` accept a post-harvest
+  `sed`'s exit 1 as "no rule". No natural trigger was found.
+- Four `defined_anchors` calls in `validate-layer-entries.sh` (`:1394`, `:1405`, `:2223`, and the
+  `:1720` history arm) discard their status, so a forced failure prints a spurious E16 before the
+  correct refusal.
+- `validate-ci-gates.sh`'s `code_hits` counts with `sed | grep -c || true`; a failed `sed` reads 0,
+  which is a false DORMANT finding (exit 1), the blocking direction.
 
 verify: manual
