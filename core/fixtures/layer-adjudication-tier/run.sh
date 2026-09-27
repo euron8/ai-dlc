@@ -1141,11 +1141,11 @@ M10BPY
   python3 - "$DRIFT" "$M10D" <<'M10DPY' 2>/dev/null
 import sys
 s = open(sys.argv[1]).read()
-a = '  done < <(sort -u "$ADJ_LIST_FILE" 2>/dev/null | awk'
+a = '  sort -u "$ADJ_LIST_FILE" 2>/dev/null | awk'
 if a in s:
     i = s.index(a)
-    j = s.index("    ')", i) + len("    ')")
-    open(sys.argv[2], "w").write(s[:i] + '  done < <(sort -u "$ADJ_LIST_FILE" 2>/dev/null)' + s[j:])
+    j = s.index("    ' > \"$LD_T/adj-list-subjects\"", i) + len("    '")
+    open(sys.argv[2], "w").write(s[:i] + '  sort -u "$ADJ_LIST_FILE" 2>/dev/null' + s[j:])
 M10DPY
   if [ ! -s "$M10D" ] || cmp -s "$DRIFT" "$M10D"; then
     bad "FIXTURE ERROR: the whole-line-dedupe mutation matched nothing, so nothing here proves the subject dedupe is load-bearing. Update the M10D block to match the listing's real dedupe pipeline"

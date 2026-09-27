@@ -1,0 +1,8 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Two of the rule's three shapes apply. It is a MUTATION BATTERY: every mutant edits a copy of
+core's own sources to restore the `<( )` spelling a staged producer replaced, which a consumer
+has no reason to run. And its spelling arm diffs shipped core against a pinned distribution
+commit, which exists only in this repository's history; on a consumer that arm could only
+SKIP. Shipping it would also add a reconcile-detector fixture to the release that must stay
+machinery-only, which is the release this fixture was written for.

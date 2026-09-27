@@ -7,7 +7,7 @@
 # Exit codes:
 #   0  — clean scan (no dormant gates)
 #   1  — one or more dormant gates detected (declared in a retro, no enforcer match)
-#   2  — tool-availability failure
+#   2  — tool-availability failure, or a walk or scan it reads did not run (no verdict)
 #   78 — EXAMINED NOTHING: no enforcement surface exists to scan against. A check that CANNOT
 #        run must not share an exit code with one that ran and passed (0) or one that
 #        ran and found a specific dormant gate (1). A consumer that disabled GitHub
@@ -111,6 +111,22 @@ if [ ! -d "${RETRO_DIR}" ]; then
   echo "  enforcement surface:  ${WORKFLOW_DIR}"
   exit 0
 fi
+# EVERY PRODUCER THIS SCRIPT READS IS STAGED TO A FILE AND ITS STATUS IS READ. The loops below
+# used to read `done < <(find …)` and `done < <(grep … || true)`, which discard the producer's
+# exit status: a retro walk that failed read as a directory with no retros ("0 gates declared",
+# exit 0 -- a false clear), and a surface walk that failed inside code_hits counted 0 hits, so a
+# wired gate was reported DORMANT (exit 1 -- a false finding). A producer that did not run is now
+# a refusal, exit 2, which is neither verdict. One directory per run, removed on exit.
+CI_T="$(mktemp -d "${TMPDIR:-/tmp}/validate-ci-gates.XXXXXX")" || {
+  echo "ERROR: validate-ci-gates.sh: could not create a staging directory; no verdict" >&2
+  exit 2
+}
+trap 'rm -rf "$CI_T"' EXIT
+ci_refuse() { # $1 what did not run  $2 its exit status
+  echo "ERROR: validate-ci-gates.sh: $1 did not run (exit $2); no verdict" >&2
+  exit 2
+}
+
 retro_count=0
 dormant_count=0
 # Match backtick-quoted gate name preceded by the explicit "CI gate"
@@ -120,9 +136,20 @@ declare_pattern='CI gate `[^`]+`'
 
 # Collect declared gate names (portable: avoid mapfile for bash 3.2 compat).
 declared_gates=""
+walk_rc=0
+find "${RETRO_DIR}" -type f -name '*.md' 2>/dev/null > "$CI_T/retro-walk" || walk_rc=$?
+[ "$walk_rc" -eq 0 ] || ci_refuse "the retro walk of ${RETRO_DIR}" "$walk_rc"
 while IFS= read -r retro_file; do
   retro_count=$((retro_count + 1))
   # Use sed/awk to pull backtick-delimited tokens after a declaration phrase.
+  # grep exits 1 on a retro that declares no gate, which is healthy; 2 or more means the retro
+  # could not be read, which is a refusal -- not the `|| true` that used to fold it into "none".
+  decl_rc=0
+  grep -hoEi "$declare_pattern" "$retro_file" 2>/dev/null > "$CI_T/retro-decl" || decl_rc=$?
+  case "$decl_rc" in 0|1) ;; *) ci_refuse "the declaration scan of ${retro_file}" "$decl_rc" ;; esac
+  names_rc=0
+  sed -E 's/^[^`]*`([^`]+)`.*$/\1/' "$CI_T/retro-decl" > "$CI_T/retro-names" || names_rc=$?
+  [ "$names_rc" -eq 0 ] || ci_refuse "the gate-name extraction for ${retro_file}" "$names_rc"
   while IFS= read -r name; do
     [ -z "$name" ] && continue
     # Skip angle-bracket placeholders: a retro TEMPLATE or the declaration-format
@@ -133,10 +160,8 @@ while IFS= read -r retro_file; do
     case "$name" in *"<"*">"*) continue ;; esac
     declared_gates="${declared_gates}${name}
 "
-  done < <(grep -hoEi "$declare_pattern" "$retro_file" 2>/dev/null \
-           | sed -E 's/^[^`]*`([^`]+)`.*$/\1/' \
-           || true)
-done < <(find "${RETRO_DIR}" -type f -name '*.md' 2>/dev/null)
+  done < "$CI_T/retro-names"
+done < "$CI_T/retro-walk"
 
 # Deduplicate.
 unique_gates=$(printf '%s' "$declared_gates" | awk 'NF' | sort -u)
@@ -153,14 +178,21 @@ fi
 # code. A whole-line comment (optional leading whitespace + '#') is stripped first,
 # because a gate name that survives only in a comment banner is not enforcement.
 # For a directory, every file under it is scanned. Prints an integer.
+# A directory walk that fails REFUSES: code_hits runs inside `$( )`, so its `exit 2` ends only
+# that subshell, and the one caller with a DIRECTORY target (the surface match below) reads the
+# status with `|| exit 2` -- the refusal message is already on stderr by then. Counting 0 for an
+# unwalked surface is what reported a wired gate DORMANT. The alias legs pass a FILE target,
+# which walks nothing and cannot reach the refusal.
 code_hits() {
-  local target="$1" literal="$2" f total=0 n
+  local target="$1" literal="$2" f total=0 n walk_rc=0
   if [ -d "$target" ]; then
+    find "$target" -type f 2>/dev/null > "$CI_T/surface-walk" || walk_rc=$?
+    [ "$walk_rc" -eq 0 ] || ci_refuse "the enforcement-surface walk of ${target}" "$walk_rc"
     while IFS= read -r f; do
       [ -f "$f" ] || continue
       n="$(sed -e 's/^[[:space:]]*#.*$//' "$f" 2>/dev/null | grep -cF -- "$literal" 2>/dev/null || true)"
       total=$((total + ${n:-0}))
-    done < <(find "$target" -type f 2>/dev/null)
+    done < "$CI_T/surface-walk"
   elif [ -f "$target" ]; then
     n="$(sed -e 's/^[[:space:]]*#.*$//' "$target" 2>/dev/null | grep -cF -- "$literal" 2>/dev/null || true)"
     total=${n:-0}
@@ -234,7 +266,9 @@ alias_resolves() {
 dormant_gates=""
 while IFS= read -r gate; do
   [ -z "$gate" ] && continue
-  if [ "$(code_hits "${WORKFLOW_DIR}" "$gate")" -ge 1 ]; then
+  # The status is read here because code_hits runs in a subshell; its refusal is on stderr.
+  surface_hits="$(code_hits "${WORKFLOW_DIR}" "$gate")" || exit 2
+  if [ "$surface_hits" -ge 1 ]; then
     :  # enforced under its own name, in non-comment code
   elif alias_resolves "$gate"; then
     :  # aliased: enforcer wired AND anchor present exactly once (both legs)

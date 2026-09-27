@@ -1940,7 +1940,7 @@ EOF
   # (8 lines, and 8 would be reported), so ONLY the control can see this; that is why it is paired.
   MUTS="$ROOT/drift-mutant-surplus"; rm -rf "$MUTS"; mkdir -p "$MUTS"
   cp "$(dirname "$DRIFT")"/* "$MUTS"/ 2>/dev/null
-  sed 's/| grep -Fxv -f <(printf .%s\\n. "\$cs") | grep -c \./| grep -c ./' "$DRIFT" > "$MUTS/layer-drift.sh"
+  sed 's/| grep -Fxv -f "\$LD_T\/sup-core-span" | grep -c \./| grep -c ./' "$DRIFT" > "$MUTS/layer-drift.sh"
   if cmp -s "$DRIFT" "$MUTS/layer-drift.sh"; then
     bad "  mutation surplus-comparison: the mutation matched nothing, so the control above proves nothing"
   else

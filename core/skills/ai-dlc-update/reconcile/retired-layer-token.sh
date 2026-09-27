@@ -184,6 +184,33 @@ fi
 BASE_SET="$(collect "$BASE")"
 THEIRS_SET="$(collect "$THEIRS")"
 
+# EVERY SET OPERAND AND LOOP FEED BELOW IS STAGED TO A FILE AND ITS PRODUCER'S STATUS IS READ.
+# They used to read `comm <(…) <(…)` and `done < <(…)`, which discard the producer's status: a
+# failed `comm` over the two rulebook sets read as an empty retired set and took the quiet NOTE
+# path, exit 0, over a release that retired some -- a false clear -- and a failed side of a program-witness
+# intersection read as "no program witnesses this word", which acquits a status as emphasis.
+# This file does not set `pipefail`; the token pipelines are staged inside `( set -o pipefail;
+# … )`, where `code_toks`' grep exits 1 on a program carrying no token -- a healthy empty set --
+# so 0 and 1 are accepted there and anything else refuses. Exit 2 is this detector's existing
+# refusal, which the driver renders as DETECTOR-REFUSED. One directory per run, one file per
+# site; the needle file below moves into it, so the file's one EXIT trap stays one.
+RLT_T="$(mktemp -d "${TMPDIR:-/tmp}/retired-layer-token.XXXXXX")" || {
+  echo "retired-layer-token: the staging directory did not run (mktemp failed); no verdict" >&2
+  exit 2
+}
+trap 'rm -rf "$RLT_T"' EXIT
+rlt_refuse() { # rlt_refuse <what> <status>
+  echo "retired-layer-token: $1 did not run (exit $2); refusing, because a set that was never computed and an empty one are the same rows" >&2
+  exit 2
+}
+# rlt_toks <text> <out> -- code_toks of <text> into <out>; 0 and 1 accepted (see above).
+rlt_toks() {
+  local rc=0
+  ( set -o pipefail; printf '%s\n' "$1" | code_toks ) > "$2" || rc=$?
+  case "$rc" in 0|1) return 0 ;; esac
+  rlt_refuse "the program token scan" "$rc"
+}
+
 count_of() { printf '%s\n' "$1" | sed '/^$/d' | wc -l | tr -d ' '; }
 listed()   { printf '%s\n' "$1" | sed '/^$/d' | tr '\n' ' ' | sed 's/ $//'; }
 
@@ -201,7 +228,9 @@ if [ -z "$THEIRS_SET" ]; then
 fi
 
 # Every word the whole rulebook dropped, split by shape.
-DROPPED="$(comm -23 <(printf '%s\n' "$BASE_SET") <(printf '%s\n' "$THEIRS_SET"))"
+printf '%s\n' "$BASE_SET" > "$RLT_T/set-base" || rlt_refuse "staging the base token set" "$?"
+printf '%s\n' "$THEIRS_SET" > "$RLT_T/set-theirs" || rlt_refuse "staging the theirs token set" "$?"
+DROPPED="$(comm -23 "$RLT_T/set-base" "$RLT_T/set-theirs")" || rlt_refuse "the dropped-token subtraction" "$?"
 JOINED="$(printf '%s\n' "$DROPPED" | { grep -E '[-_]' || true; })"
 PLAIN="$(printf '%s\n' "$DROPPED" | { grep -vE '[-_]' || true; } | sed '/^$/d')"
 
@@ -219,26 +248,33 @@ if [ -n "$PLAIN" ]; then
   PROGRAMS="$(files_at "$BASE" $(program_globs))"
   set +f
   RENAMES="$(git -C "$DIST" diff -M --name-status --diff-filter=R "$BASE" "$THEIRS" 2>/dev/null | awk -F'\t' '$1 ~ /^R/ {print $2"\t"$3}')"
+  printf '%s\n' "$PLAIN" > "$RLT_T/plain" || rlt_refuse "staging the plain candidate set" "$?"
+  printf '%s\n' "$PROGRAMS" > "$RLT_T/programs" || rlt_refuse "staging the program file list" "$?"
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     b="$(show_at "$BASE" "$f")"
     [ -n "$b" ] || continue
     opened=$((opened + 1))
-    hit="$(comm -12 <(printf '%s\n' "$PLAIN") <(printf '%s\n' "$b" | code_toks))"
+    rlt_toks "$b" "$RLT_T/prog-base-toks"
+    hit="$(comm -12 "$RLT_T/plain" "$RLT_T/prog-base-toks")" || rlt_refuse "the witness intersection for $f" "$?"
     [ -n "$hit" ] || continue
     t="$(show_at "$THEIRS" "$f")"
     if [ -z "$t" ]; then
       to="$(awk -F'\t' -v f="$f" '$1==f {print $2; exit}' <<<"$RENAMES")"
       [ -z "$to" ] || t="$(show_at "$THEIRS" "$to")"
     fi
-    gone="$(comm -23 <(printf '%s\n' "$hit") <(printf '%s\n' "$t" | code_toks))"
+    printf '%s\n' "$hit" > "$RLT_T/prog-hit" || rlt_refuse "staging the witnessed candidates for $f" "$?"
+    rlt_toks "$t" "$RLT_T/prog-theirs-toks"
+    gone="$(comm -23 "$RLT_T/prog-hit" "$RLT_T/prog-theirs-toks")" || rlt_refuse "the witness subtraction for $f" "$?"
     [ -n "$gone" ] || continue
     WITNESSED="$WITNESSED$gone
 "
-  done < <(printf '%s\n' "$PROGRAMS")
+  done < "$RLT_T/programs"
 fi
 WITNESSED="$(printf '%s\n' "$WITNESSED" | sed '/^$/d' | sort -u)"
-UNWITNESSED="$(comm -23 <(printf '%s\n' "$PLAIN") <(printf '%s\n' "$WITNESSED"))"
+printf '%s\n' "$PLAIN" > "$RLT_T/plain-all" || rlt_refuse "staging the plain candidate set" "$?"
+printf '%s\n' "$WITNESSED" > "$RLT_T/witnessed" || rlt_refuse "staging the witnessed set" "$?"
+UNWITNESSED="$(comm -23 "$RLT_T/plain-all" "$RLT_T/witnessed")" || rlt_refuse "the unwitnessed subtraction" "$?"
 RETIRED="$(printf '%s\n%s\n' "$JOINED" "$WITNESSED" | sed '/^$/d' | sort -u)"
 
 # A plain word that left the rulebook is acquitted as emphasis unless a program witnesses
@@ -269,8 +305,8 @@ if [ -z "$RETIRED" ]; then
 fi
 
 LAYERS="$CONSUMER/.claude/skills/ai-dlc"
-NEEDLES="$(mktemp)"; trap 'rm -f "$NEEDLES"' EXIT
-printf '%s\n' "$RETIRED" > "$NEEDLES"
+NEEDLES="$RLT_T/needles"
+printf '%s\n' "$RETIRED" > "$NEEDLES" || rlt_refuse "staging the retired token set" "$?"
 
 # ONE PROCESS FOR THE WHOLE CORPUS. The needle file is read first (FNR==NR), then every
 # layer file; each line is split on the same non-token class the derivation used, so a

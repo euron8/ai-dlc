@@ -427,12 +427,18 @@ fi
 # over-broad filter produces, so a map built entirely of them would report success while
 # skipping nothing. One fixture whose set is a proper subset of the union is enough to
 # establish that the instrument separates; zero of them is not.
-while IFS= read -r cfx; do
-  [ -n "$cfx" ] || continue
-  if ! grep -qxF "$cfx	$FIXTURE_ROOT/$cfx/run.sh" "$WORK/map"; then
-    echo "  FAIL  $cfx's read-set does not name its own driver $FIXTURE_ROOT/$cfx/run.sh"; FAIL=1
-  fi
-done < <(cut -f1 "$WORK/map" | sort -u)
+# STAGED, WITH ITS STATUS READ: a `< <(cut … | sort -u)` feed discarded it, so a failed read of
+# the map checked no fixture and this POSITIVE control passed having looked at nothing.
+if cut -f1 "$WORK/map" | sort -u > "$WORK/map-fixtures"; then
+  while IFS= read -r cfx; do
+    [ -n "$cfx" ] || continue
+    if ! grep -qxF "$cfx	$FIXTURE_ROOT/$cfx/run.sh" "$WORK/map"; then
+      echo "  FAIL  $cfx's read-set does not name its own driver $FIXTURE_ROOT/$cfx/run.sh"; FAIL=1
+    fi
+  done < "$WORK/map-fixtures"
+else
+  echo "  FAIL  the fixture list could not be read out of $WORK/map, so this positive control did not run"; FAIL=1
+fi
 
 # THE MERGE HAPPENS HERE, ABOVE THE NEGATIVE CONTROL, BECAUSE THAT CONTROL JUDGES THE MAP THIS
 # RUN WILL WRITE -- which is the merged one, never the handful of fixtures this run traced.

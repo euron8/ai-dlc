@@ -15,6 +15,78 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.650.0] - 2026-09-27
+
+Eighteen shipped scripts stop reading a producer that failed as an empty input. Every `<( )` feed
+and set operand outside the bootstrapping reconcile files is staged to a file and its status is
+read, so a walk, a read or a set difference that did not run now refuses instead of reporting a
+clean verdict. This release changes machinery only.
+
+### Non-bootstrapping `<( )` feeds are staged, and a producer that did not run refuses (`BL-348`, partial)
+
+A `<( )` producer's exit status is discarded, so a failed `find`, `git`, `awk` or `comm` side
+reads as an empty stream. At base, forcing the producer to fail produced these false clears:
+
+- `validate-ci-gates.sh`: a failed retro walk read "0 gates declared", exit 0. A failed surface
+  walk inside `code_hits` reported a wired gate DORMANT, exit 1, which is a false finding. An inner
+  `|| true` also swallowed `grep`'s exit 2 on an unreadable retro, and it is gone.
+- `relabel-extension-checks.sh`: "no unlabelled core-number collisions.", exit 0.
+- `retired-layer-passage.sh` and `retired-layer-contract.sh`: "checked against 0 layer file(s);
+  no match", exit 0.
+- `validate-layer-entries.sh`: its `layer_files` walks read "0 error(s)", exit 0.
+- `readopt-override.sh`: an empty base set in `stale_lines`, so `--check` read OK, exit 0.
+- `unregistered-drift.sh`: a failed `comm` side chose the wrong HARD remedy.
+- The fix commits' per-site tables record the same shape in `validate-ac-falsifiability.sh`,
+  `validate-provenance-block.sh --strays` and `migrate-artifact-paths.sh`, each of which passed,
+  or reported nothing to do, over input it never read.
+- The first staged spelling left two silences, and the fixture caught both. `readopt-override.sh`'s
+  `ro_section` folded every `git show` failure into an empty section; it now takes 128 (the anchor
+  file is absent at the ref) as UNDECIDABLE and refuses on anything else. `validate-provenance-block.sh
+  --strays` accepted `grep -r`'s exit 2 even when the walk listed nothing; it now refuses that case.
+
+What changed:
+
+- Each producer writes to its own file under one `mktemp -d` per run, and the reader reads that
+  file. `done < "$file"` keeps each loop in the main shell, as `done < <(…)` did.
+- A producer that did not run refuses with the script's existing code. The validators and the
+  `retired-*` detectors use exit 2, and `readopt-override.sh` uses exit 2, never OK or STALE.
+  `layer-drift.sh` uses exit 1, its existing refusal for an unreadable input. `unregistered-drift.sh`
+  keeps "0 always" and emits `HARD-UNREGISTERED-CORE-DRIFT` with "CLASSIFIER DID NOT RUN".
+  `emit-report.sh` and `hard-blockers.sh` render these refusals as `DETECTOR-REFUSED`.
+- A refusal raised inside `$( )` is returned as a distinct status that the caller reads, so it
+  reaches the verdict. This covers `code_hits`, `sup_measure`, `stale_lines`, `unadopted_lines`,
+  `anchors_resolve` and `absorbed_pct`. `retired-tokens.sh` feeds its token scan through a
+  here-string instead of a pipe for the same reason.
+- A `grep`-shaped producer accepts exit 1 (no match) and refuses above it. A failed `find` is
+  staged on its own, so its failure is never confused with a `grep` 1. `validate-provenance-block.sh`
+  also accepts `grep -r`'s exit 2 when the walk listed a candidate, which means an unreadable
+  file inside a walk that completed.
+- Files without `pipefail` stage each fallible stage alone, or run it in `( set -o pipefail; … )`.
+  No file gains `pipefail` as a whole.
+- `ai-dlc-continue.sh` fails OPEN, as its header requires. A staging failure maps to the empty set
+  and the stop is allowed.
+- `sync-transient-ignore.sh`'s diagnostic diff is staged, and says so when it could not compare.
+  Its verdict is unchanged.
+- The exit-code headers of `validate-layer-entries.sh`, `validate-ci-gates.sh`,
+  `validate-provenance-block.sh` and `validate-ac-falsifiability.sh` now name the refusal as an exit
+  2 meaning.
+- Mutation anchors that sat on a moved line were moved to the staged spelling in the same commit,
+  in `layer-catalog-collision`, `layer-reference-resolution`, `layer-adjudication-tier`,
+  `layer-readopt-gate`, `retired-layer-contract` and `retired-layer-token`.
+
+`BL-348` stays live. Its receipt reads 79 lines in 22 files at `e4934e65` and 10 lines in 4 files
+now, and it exits 1. The 10 are in the bootstrapping files `preclassify.sh`, `ledger-reverify.sh`,
+`emit-report.sh` and `self-update-gate.sh`, which ship alone in the next release. The receipt keys
+on the spelling, so a rewrite as `<<< "$(…)"` or `> f || true` satisfies it. Both scored exit 0 on
+the 10 remaining sites. The fixture's diff-scoped arm and forced arms carry the behaviour.
+
+`procsub-staged-refusal` (`.dist-only`) forces each proven false clear with a PATH stub that must
+be seen to fire, pairs every forced arm with a healthy twin, and kills 28 mutants that restore a
+site's `<( )` spelling or its old refusal. Its diff-scoped arm refuses a here-string of `$(…)`, a
+`| while` feed, a staging redirect followed by `|| true` or `|| :`, and a heredoc of `$(…)` on any
+line added since `e4934e65`. The read-set map also gains `emit-report-refusal` and `gate-resume`,
+the two fixtures the gate named as unmapped.
+
 ## [0.649.0] - 2026-09-27
 
 Two validators stop turning a failure into a verdict. `validate-h2-attestation.sh --verify` no

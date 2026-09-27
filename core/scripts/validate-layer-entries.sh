@@ -17,7 +17,9 @@
 # detectable here, with no distribution access.
 #
 # Usage: validate-layer-entries.sh [project-root]
-# Exit:  0 = no errors (warnings may print), 1 = at least one ERROR, 2 = bad usage
+# Exit:  0 = no errors (warnings may print), 1 = at least one ERROR, 2 = bad usage, an
+#        entry it could not read, or a producer it reads that did not run (a refusal, no
+#        verdict)
 #
 # SEVERITY IS TIERED ON PURPOSE. ERROR is reserved for mechanized invariants with
 # no false-positive path — a linter that errors dozens of times on first contact
@@ -244,6 +246,77 @@ if [ ! -d "$SKILL_DIR" ]; then
   echo "Not an ai-dlc consumer: $SKILL_DIR not found" >&2
   exit 2
 fi
+
+# EVERY LOOP FEED IS STAGED TO A FILE AND ITS PRODUCER'S STATUS IS READ. The loops below used
+# to read `done < <(producer)`, which discards the producer's status: a layer walk that failed
+# read as an empty extensions/ or overrides/ directory, so every pass over it reported nothing
+# and the run printed "0 error(s)" and exited 0 over a layer it never listed -- a false clear.
+# A producer that did not run is now a refusal, exit 2, the code this script already gives an
+# entry it could not read. One directory per run, one file per site (a file shared between two
+# nested loops truncates the outer one), removed on exit.
+VLE_T="$(mktemp -d "${TMPDIR:-/tmp}/validate-layer-entries.XXXXXX")" || {
+  echo "validate-layer-entries: could not create a staging directory; no verdict" >&2
+  exit 2
+}
+trap 'rm -rf "$VLE_T"' EXIT
+vle_refuse() { # vle_refuse <what did not run> <its exit status>
+  echo "validate-layer-entries: $1 did not run (exit $2); no verdict" >&2
+  exit 2
+}
+# vle_accept <status> <what> -- a grep-shaped producer exits 1 on a healthy input with no
+# match, so 0 and 1 are accepted and anything else refuses.
+vle_accept() {
+  case "$1" in 0|1) return 0 ;; esac
+  vle_refuse "$2" "$1"
+}
+# vle_stage <site> <cmd>... -- run a grep-shaped producer into "$VLE_T/<site>", accepting 0|1.
+vle_stage() {
+  local site="$1" rc=0
+  shift
+  "$@" > "$VLE_T/$site" || rc=$?
+  vle_accept "$rc" "$site ($1)"
+}
+# vle_recorded_unreadable <file> -- 0 when entry_unreadable already recorded <file>. The late
+# passes below re-read every layer entry by name; one this run could not open is already on
+# the end-of-run refusal list, and its reader failing again here must not pre-empt the findings
+# and the footer that list is printed after. At base those readers failed silently on it.
+vle_recorded_unreadable() {
+  case "
+${UNREADABLE_ENTRIES}" in
+    *"
+$1
+"*) return 0 ;;
+  esac
+  return 1
+}
+# vle_read_status <rc> <ok-max> <file> <site> -- judge a staged per-file reader. The reader is
+# staged ALONE (grep before its sed and sort), so grep's 1 -- no match, healthy -- is never
+# confused with a later stage's failure; <ok-max> is 1 for grep and 0 for awk. Above it the read
+# failed: an entry already recorded unreadable stages empty, which is what base read and what
+# the end-of-run refusal accounts for; anything else refuses now.
+vle_read_status() {
+  [ "$1" -le "$2" ] && return 0
+  if vle_recorded_unreadable "$3"; then : > "$VLE_T/$4"; return 0; fi
+  vle_refuse "reading $3 ($4)" "$1"
+}
+# vle_filter <site> <in-site> <cmd>... -- run a stdin filter from one staged file into another.
+vle_filter() {
+  local site="$1" in="$2" rc=0
+  shift 2
+  "$@" < "$VLE_T/$in" > "$VLE_T/$site" || rc=$?
+  [ "$rc" -eq 0 ] || vle_refuse "$site ($1)" "$rc"
+}
+# vle_layer_list <site> <dir>... -- stage every dir's layer_files into "$VLE_T/<site>".
+vle_layer_list() {
+  local out="$VLE_T/$1" d rc
+  shift
+  : > "$out"
+  for d in "$@"; do
+    rc=0
+    layer_files "$d" >> "$out" || rc=$?
+    [ "$rc" -eq 0 ] || vle_refuse "the layer walk of $d" "$rc"
+  done
+}
 
 # ONE heading normalizer. nrm() was defined identically in two awk programs in this file
 # (heading_title and rule_title) and a third copy was about to be added for the anchor-arm check
@@ -855,6 +928,7 @@ else
 fi
 
 if [ -n "$LC_CV" ]; then
+  vle_layer_list census-layers "$EXT_DIR" "$OVR_DIR"
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     # THE FOURTH SITE, AND IT IS THE ONE THE FIRST THREE GUARDS DID NOT COVER. This census loop
@@ -885,7 +959,7 @@ if [ -n "$LC_CV" ]; then
     else
       LC_CURRENT=$((LC_CURRENT+1))
     fi
-  done < <(layer_files "$EXT_DIR"; layer_files "$OVR_DIR")
+  done < "$VLE_T/census-layers"
 fi
 
 # W6 — ONE line per run, not one per entry, and the reason is the one the E16 degraded-mode
@@ -906,6 +980,7 @@ fi
 # Pass 1 — overrides (E1, E2, E3)
 # ---------------------------------------------------------------------------
 echo "== overrides =="
+vle_layer_list overrides "$OVR_DIR"
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   # THE STATUS IS TAKEN OFF THE CALL THAT ALREADY HAPPENS, so the guard costs no extra read and
@@ -1000,7 +1075,7 @@ diverges from upstream; without it a later re-adoption has nothing to adjudicate
 $(shadow_parts "$shadows")
 EOF
   fi
-done < <(layer_files "$OVR_DIR")
+done < "$VLE_T/overrides"
 
 # ---------------------------------------------------------------------------
 # Pass 2 — extensions (E4, E5, W1, W2)
@@ -1288,6 +1363,7 @@ fi
 LIVE_ANCHORS=''
 LIVE_RULES=''
 LIVE_ENTRY_N=0
+vle_layer_list live-extensions "$EXT_DIR"
 while IFS= read -r _lf; do
   [ -n "$_lf" ] || continue
   # READ FIRST, THEN COUNT AND HARVEST. The read guard used to sit below the two harvests, which
@@ -1313,7 +1389,7 @@ $(defined_rules "$_lf")"
 $(defined_anchors "$_lc")"
   LIVE_RULES="$LIVE_RULES
 $(defined_rules "$_lc")"
-done < <(layer_files "$EXT_DIR")
+done < "$VLE_T/live-extensions"
 LIVE_ANCHORS="$(printf '%s\n' "$LIVE_ANCHORS" | grep -E '.' | sort -u)"
 LIVE_RULES="$(printf '%s\n' "$LIVE_RULES" | grep -E '.' | sort -u)"
 # A zero here is E16's PASS, so it cannot be allowed to pass silently: an empty live set
@@ -1335,6 +1411,7 @@ LIVE_RULES="$(printf '%s\n' "$LIVE_RULES" | grep -E '.' | sort -u)"
 if [ -z "$LIVE_ANCHORS" ] && [ -z "$LIVE_RULES" ] && [ "$LIVE_ENTRY_N" -gt 0 ]; then
   err E16 "built an EMPTY resolvability set from the $LIVE_ENTRY_N layer entr(y/ies) present and the core files they hook. Every id any entry has ever defined would read as retired, so this arm's output is meaningless in both directions — it cannot be trusted to fire and it cannot be trusted to stay quiet."
 fi
+vle_layer_list extensions "$EXT_DIR"
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   # THE GUARD GOES ON `kind`, NOT ON `hooks`, and the pipe is the reason. `$(fm … | awk …)`
@@ -1506,6 +1583,7 @@ while IFS= read -r f; do
   # extensions, but a step number is never committed to evidence -- it is a
   # legibility problem in the rendered pipeline, not a corrupted audit trail.
   core_anchors="$(defined_anchors "$core_path")"
+  vle_stage ext-anchors-e6 defined_anchors "$f"
   while IFS= read -r a; do
     [ -n "$a" ] || continue
     grep -Fxq -- "$a" <<<"$core_anchors" || continue
@@ -1530,7 +1608,7 @@ while IFS= read -r f; do
     else
       warn W1 "$(rel "$f"): RESTATES core section '$a.' (\"${t_core:-$a}\") from '$hooks'. Rule 27(c): an extension MUST NOT restate a core section — the copy cannot drift-check against the original, so it forks silently and then contradicts it. If this entry only ADDS to the core check, hook it without redefining the number; if it RESTRICTS core, it is an override wearing extension frontmatter and belongs in overrides/ with a base_sha."
     fi
-  done < <(defined_anchors "$f")
+  done < "$VLE_T/ext-anchors-e6"
 
   # W4 — the same collision in the RULE namespace. See the header note.
   #
@@ -1539,6 +1617,7 @@ while IFS= read -r f; do
   # relabelling of the consumer's own catalog — blocking a pull on it would mean a
   # consumer cannot take a fix until it has renamed its own rules.
   core_rules="$(defined_rules "$core_path")"
+  vle_stage ext-rules-w4 defined_rules "$f"
   while IFS= read -r n; do
     [ -n "$n" ] || continue
     grep -Fxq -- "$n" <<<"$core_rules" || continue
@@ -1557,7 +1636,7 @@ while IFS= read -r f; do
     if [ "$(rule_labelled "$f" "$n")" = yes ]; then continue; fi
 
     warn W4 "$(rel "$f"): RULE NUMBER COLLISION on 'Rule $n' — this defines \"$r_ext\" while core '$hooks' defines \"$r_core\" at the same number. Extensions are ADDITIVE, so both render into one merged rulebook under one integer and a bare \"Rule $n\" in a gate log, retro finding or dispatch brief has two referents. Give this rule a catalog-labelled heading (\"## Rule $n [ext:$id] -- …\") per the Consumer-catalog crosswalk; the integer never moves. \`reconcile/relabel-extension-checks.sh --apply\` writes it."
-  done < <(defined_rules "$f")
+  done < "$VLE_T/ext-rules-w4"
 
   # E15 — an allocation from core's range. See the header note for why this is a
   # partition rather than a detector, and for every exclusion the predicate carries.
@@ -1575,6 +1654,7 @@ while IFS= read -r f; do
   # not define never enters that loop, so the relabeller is blind to E15's entire
   # subject set by construction. Prescribing it would hand the operator a tool that
   # exits "no unlabelled core-number collisions" on a tree full of findings.
+  vle_stage ext-rules-e15 defined_rules "$f"
   while IFS= read -r n; do
     [ -n "$n" ] || continue
     want="$(out_of_band "$n")" || continue
@@ -1583,7 +1663,7 @@ while IFS= read -r f; do
     else
       err E15 "$(rel "$f"): RULE OUT OF BAND — 'Rule $n' allocates from core's range. Core '$hooks' does not define rule $n TODAY, so no collision is reported and none can be: the collision appears in the release where core allocates $n, retroactively, across every gate log, retro and escalation already written against it. Consumer rules are reserved at ${BAND_FLOOR} and above — renumber to 'Rule $want' or the next free id in your band, and add a crosswalk row in extensions/README.md resolving the bare \"Rule $n\" your existing history already carries. A catalog label does not settle this; it resolves a collision that exists, and the band prevents one that does not yet."
     fi
-  done < <(defined_rules "$f")
+  done < "$VLE_T/ext-rules-e15"
 
   # THE SECTION-ID NAMESPACE, AND IT IS NO LONGER SCOPED TO `kind: check`. It was, on
   # the reasoning E6 uses — a step number is a position in an ordered procedure, not an
@@ -1593,6 +1673,7 @@ while IFS= read -r f; do
   # beside a CORE section of the same number. A consumer section that must render inside
   # a core section is `kind: qualifier` with `extends:`, which is the grain built for it
   # and does not need to borrow core's integer to do it.
+  vle_stage ext-anchors-e15 defined_anchors "$f"
   while IFS= read -r a; do
     [ -n "$a" ] || continue
     want="$(out_of_band "$a")" || continue
@@ -1607,7 +1688,7 @@ while IFS= read -r f; do
     else
       err E15 "$(rel "$f"): SECTION ID OUT OF BAND — '$a_form' allocates from core's range. Core '$hooks' does not define '$a_form' TODAY, so E6 has nothing to join against and reports clean: the collision appears in the release where core allocates $a, retroactively, across every gate log already written — and a gate log is the durable audit record, so it cannot be corrected after the fact. Consumer section ids are reserved at ${BAND_FLOOR} and above, or at the '${BAND_ALPHA_PREFIX}' prefix for alphabetic ids — rename to '$want_form' or the next free id in your band, and add a crosswalk row in extensions/README.md resolving the bare \"$a\" your existing history already carries."
     fi
-  done < <(defined_anchors "$f")
+  done < "$VLE_T/ext-anchors-e15"
 
   # E16 — every id this entry has RETIRED needs a crosswalk row resolving it.
   #
@@ -1638,13 +1719,23 @@ while IFS= read -r f; do
           crosswalk_unreadable "$(rel "$f") (${_ns})"
           continue
         fi
+        # Both sides of the set difference are staged, each producer's status read: a failed
+        # `sort` on the live side read as an empty live set and reported every id this entry
+        # ever defined as retired.
+        _cw_rc=0
+        printf '%s\n' "$_was" | sort -u > "$VLE_T/e16-was" || _cw_rc=$?
+        [ "$_cw_rc" -eq 0 ] || vle_refuse "the E16 historical id set for $(rel "$f")" "$_cw_rc"
+        printf '%s\n' "$_now" | sort -u > "$VLE_T/e16-now" || _cw_rc=$?
+        [ "$_cw_rc" -eq 0 ] || vle_refuse "the E16 live id set" "$_cw_rc"
+        comm -23 "$VLE_T/e16-was" "$VLE_T/e16-now" > "$VLE_T/e16-retired" || _cw_rc=$?
+        [ "$_cw_rc" -eq 0 ] || vle_refuse "the E16 retired-id difference for $(rel "$f")" "$_cw_rc"
         while IFS= read -r _rid; do
           [ -n "$_rid" ] || continue
           grep -Fxq -- "$_rid" <<<"$CROSSWALK_IDS" && continue
           grep -Fxq -- "${_lbl}${_rid}" <<<"$CROSSWALK_IDS" && continue
           grep -Fxq -- "Check ${_rid}" <<<"$CROSSWALK_IDS" && continue
           err E16 "$(rel "$f"): RETIRED ID WITH NO CROSSWALK ROW — this entry used to define '${_lbl}${_rid}' and no longer does, and the crosswalk file (${CROSSWALK_REL:-undeclared}) carries no row resolving it. Every gate log, retro and escalation written while it was live cites a bare \"${_lbl}${_rid}\", those citations are permanent, and no renumber can reach back into them — the row is the only thing that keeps them resolvable. Add one naming '${_lbl}${_rid}', the id it became, and the title, then this clears. Core does NOT claim to check the table's completeness against your evidence and cannot; it checks the one thing it can see, which is an id leaving this entry."
-        done < <(comm -23 <(printf '%s\n' "$_was" | sort -u) <(printf '%s\n' "$_now" | sort -u))
+        done < "$VLE_T/e16-retired"
       done
     fi
   else
@@ -1655,7 +1746,7 @@ while IFS= read -r f; do
   if grep -Eqi 'only[^.]{0,60}(are|is) valid|is NOT subject to|are the only valid' "$f"; then
     warn W2 "$(rel "$f"): contains restricting language (\"only … are valid\" / \"is NOT subject to\"). An extension ADDS behavior; a restriction on a core rule belongs in overrides/ with a base_sha so drift is tracked."
   fi
-done < <(layer_files "$EXT_DIR")
+done < "$VLE_T/extensions"
 
 # E16's degraded mode, emitted ONCE per run rather than once per entry: on a clone with
 # no usable history every entry lands here, and a wall of identical lines is a wall an
@@ -1687,11 +1778,16 @@ GLOBAL_STEP_ANCHORS="$(while IFS= read -r f; do [ -n "$f" ] && defined_step_anch
 
 while IFS= read -r f; do
   [ -n "$f" ] || continue
+  _rd_rc=0
+  grep -Eoh 'Step[ -][0-9]+[a-z-]*' "$f" 2>/dev/null > "$VLE_T/w3-step-raw" || _rd_rc=$?
+  vle_read_status "$_rd_rc" 1 "$f" w3-step-raw
+  vle_filter w3-step-ids w3-step-raw sed -E 's/^Step[ -]//'
+  vle_filter w3-step-refs w3-step-ids sort -u
   while IFS= read -r ref; do
     [ -n "$ref" ] || continue
     grep -Fxq -- "$ref" <<<"$GLOBAL_STEP_ANCHORS" && continue
     warn W3 "$(rel "$f"): references \"Step $ref\" but no core file, extension, or override defines Step $ref anywhere in the rendered rulebook — dangling step pointer"
-  done < <(grep -Eoh 'Step[ -][0-9]+[a-z-]*' "$f" 2>/dev/null | sed -E 's/^Step[ -]//' | sort -u)
+  done < "$VLE_T/w3-step-refs"
 done <<< "$all_files"
 
 # ---------------------------------------------------------------------------
@@ -1733,13 +1829,11 @@ done <<< "$all_files"
 # candidate, `scripts/scan-stray-provenance.sh`, still exists), but the shape is real and it
 # is why an ERROR here would eventually wedge a consumer for writing true prose.
 echo "== script citations =="
+vle_layer_list w9-layers "$EXT_DIR" "$OVR_DIR"
 while IFS= read -r f; do
   [ -n "$f" ] || continue
-  while IFS= read -r p; do
-    [ -n "$p" ] || continue
-    [ -e "$PROJECT_ROOT/$p" ] && continue
-    warn W9 "$(rel "$f"): names \`$p\`, and no such file exists in this project. A layer entry that cites an executable is telling a dispatched agent to run it; a citation that resolves nowhere is an instruction that fails at the moment it is followed. Either the path is stale and should be repointed or removed, or the file was never added. If this line is PROSE recording that the script was retired, name it without a runnable path."
-  done < <(awk '
+  _rd_rc=0
+  awk '
     /^[[:space:]]*```/ { fence = 1 - fence; next }
     fence { next }
     {
@@ -1751,8 +1845,15 @@ while IFS= read -r f; do
         if (t ~ /^scripts\//) print t
       }
     }
-  ' "$f" 2>/dev/null | sort -u)
-done < <({ layer_files "$EXT_DIR"; layer_files "$OVR_DIR"; })
+  ' "$f" 2>/dev/null > "$VLE_T/w9-raw" || _rd_rc=$?
+  vle_read_status "$_rd_rc" 0 "$f" w9-raw
+  vle_filter w9-paths w9-raw sort -u
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    [ -e "$PROJECT_ROOT/$p" ] && continue
+    warn W9 "$(rel "$f"): names \`$p\`, and no such file exists in this project. A layer entry that cites an executable is telling a dispatched agent to run it; a citation that resolves nowhere is an instruction that fails at the moment it is followed. Either the path is stale and should be repointed or removed, or the file was never added. If this line is PROSE recording that the script was retired, name it without a runnable path."
+  done < "$VLE_T/w9-paths"
+done < "$VLE_T/w9-layers"
 
 # ---------------------------------------------------------------------------
 # W11 / LC-R4 — an ARTIFACT path a layer entry prescribes, held to core's grammar
@@ -1884,8 +1985,25 @@ else
   else
     LC_ALT="$(printf '%s\n' "$LC_ROOTS" | sed 's#/*$##' | paste -sd'|' -)"
     LC_AP_SEEN=0; LC_AP_HIT=0
+    vle_layer_list w11-layers "$EXT_DIR" "$OVR_DIR"
     while IFS= read -r f; do
       [ -n "$f" ] || continue
+      _rd_rc=0
+      awk -v alt="$LC_ALT" '
+        /^[[:space:]]*```/ { fence = 1 - fence; next }
+        fence { next }
+        {
+          s = $0
+          while (match(s, "(" alt ")/[A-Za-z0-9_./<>{}*-]*")) {
+            t = substr(s, RSTART, RLENGTH)
+            s = substr(s, RSTART + RLENGTH)
+            sub(/[.,)]+$/, "", t)
+            if (t != "") print t
+          }
+        }
+      ' "$f" 2>/dev/null > "$VLE_T/w11-raw" || _rd_rc=$?
+      vle_read_status "$_rd_rc" 0 "$f" w11-raw
+      vle_filter w11-paths w11-raw sort -u
       while IFS= read -r p; do
         [ -n "$p" ] || continue
         LC_AP_SEEN=$((LC_AP_SEEN + 1))
@@ -1907,12 +2025,15 @@ else
         # a clause reporting a clean zero over a corpus it never judged. The guard below keeps the
         # arm's old behaviour in that case, which over-reports rather than under-reports.
         bad=""
+        _cmp_rc=0
+        printf '%s\n' "$q" | tr '/' '\n' > "$VLE_T/w11-components" || _cmp_rc=$?
+        [ "$_cmp_rc" -eq 0 ] || vle_refuse "splitting \`$p\` into components" "$_cmp_rc"
         while IFS= read -r c; do
           [ -n "$c" ] || continue
           [ -n "$LC_SLOTRE" ] && grep -qE "$LC_SLOTRE" <<<"$c" && continue
           [ -z "$LC_SLOTRE" ] && { [ "$c" = 's<N>' ] && continue; [ "$c" = 's*' ] && continue; }
           grep -qE "$LC_TOKRE" <<<"$c" && bad="$c"
-        done < <(printf '%s\n' "$q" | tr '/' '\n')
+        done < "$VLE_T/w11-components"
         if [ -n "$bad" ]; then
           LC_AP_HIT=$((LC_AP_HIT + 1))
           warn W11 "$(rel "$f"): prescribes \`$p\`, whose component '$bad' carries a sprint token outside the reserved \`s<N>/\` directory slot. The directory is the only sprint slot; a basename that carries one makes every reader search for the current file, and search means mtime. Rewrite it as <area>/s<N>/<kind>.md. This is an entry telling an agent where an artifact lives, so a wrong grammar here is executed rather than merely written."
@@ -1927,20 +2048,8 @@ else
         grep -qE "$LC_ST_PARENT_RE" <<<"$parent" && continue
         LC_AP_HIT=$((LC_AP_HIT + 1))
         warn W11 "$(rel "$f"): prescribes \`$p\`, which is the story corpus written off its declared location. \`stories_dir\` in schemas/sprint-status.json declares it as \`${LC_ST_T}\`, so the corpus this entry names is not the one a sprint writes to. It may well RESOLVE — a migration leaves the old directory behind — and that is what makes it worse than a dangling path: an agent following this entry reads a residue of earlier sprints and nothing fails. Repoint it at the slotted form."
-      done < <(awk -v alt="$LC_ALT" '
-        /^[[:space:]]*```/ { fence = 1 - fence; next }
-        fence { next }
-        {
-          s = $0
-          while (match(s, "(" alt ")/[A-Za-z0-9_./<>{}*-]*")) {
-            t = substr(s, RSTART, RLENGTH)
-            s = substr(s, RSTART + RLENGTH)
-            sub(/[.,)]+$/, "", t)
-            if (t != "") print t
-          }
-        }
-      ' "$f" 2>/dev/null | sort -u)
-    done < <({ layer_files "$EXT_DIR"; layer_files "$OVR_DIR"; })
+      done < "$VLE_T/w11-paths"
+    done < "$VLE_T/w11-layers"
     # THE COUNT IS THE CONTROL. This arm's answer is normally an absence, and an absence is what
     # a broken extractor, an empty corpus and a conforming layer all print. Stating the subject
     # count makes the three distinguishable without re-running anything.
@@ -2070,8 +2179,16 @@ hook_declared_ids() { # hook_declared_ids <hook-file>
 # alone would make one resolver disagree with the others about what a row means.
 hook_resolves_ref() { # hook_resolves_ref <citing-file> <ref>
   [ -d "$HOOKS_DIR" ] || return 1
-  local line hook_base ids
+  local line hook_base ids _hr_rc=0
+  # Called directly, never through `$( )`, so a refusal below ends the run. Each feed is staged
+  # with grep alone, whose 1 is a line or file naming no hook -- healthy.
+  grep -nE "Check[ -]$2([^0-9a-z-]|\$)" "$1" 2>/dev/null > "$VLE_T/w7-cite-lines" || _hr_rc=$?
+  vle_read_status "$_hr_rc" 1 "$1" w7-cite-lines
   while IFS= read -r line; do
+    _hr_rc=0
+    grep -oE 'ai-dlc-[a-z0-9-]+\.sh' <<<"$line" > "$VLE_T/w7-hook-raw" || _hr_rc=$?
+    vle_accept "$_hr_rc" "the hook-name scan of a citation in $1"
+    vle_filter w7-hook-names w7-hook-raw sort -u
     while IFS= read -r hook_base; do
       [ -n "$hook_base" ] || continue
       # NEVER FEED `grep -q` FROM A PIPE. It leaves at its first match while the writer is
@@ -2082,8 +2199,8 @@ hook_resolves_ref() { # hook_resolves_ref <citing-file> <ref>
       # below is the shape v0.231.0 converted seventeen sites to.
       ids="$(hook_declared_ids "$HOOKS_DIR/$hook_base")"
       grep -Fxq -- "$2" <<<"$ids" && return 0
-    done < <(printf '%s\n' "$line" | grep -oE 'ai-dlc-[a-z0-9-]+\.sh' | sort -u)
-  done < <(grep -nE "Check[ -]$2([^0-9a-z-]|\$)" "$1" 2>/dev/null)
+    done < "$VLE_T/w7-hook-names"
+  done < "$VLE_T/w7-cite-lines"
   return 1
 }
 
@@ -2091,6 +2208,11 @@ GLOBAL_CHECK_ANCHORS="$(while IFS= read -r f; do [ -n "$f" ] && defined_anchors 
 
 while IFS= read -r f; do
   [ -n "$f" ] || continue
+  _rd_rc=0
+  grep -Eoh 'Check[ -][0-9]+[a-z-]*' "$f" 2>/dev/null > "$VLE_T/w7-check-raw" || _rd_rc=$?
+  vle_read_status "$_rd_rc" 1 "$f" w7-check-raw
+  vle_filter w7-check-ids w7-check-raw sed -E 's/^Check[ -]//'
+  vle_filter w7-check-refs w7-check-ids sort -u
   while IFS= read -r ref; do
     [ -n "$ref" ] || continue
     hook_resolves_ref "$f" "$ref" && continue
@@ -2098,7 +2220,7 @@ while IFS= read -r f; do
     grep -Fxq -- "$ref" <<<"$CROSSWALK_IDS" && continue
     grep -Fxq -- "Check $ref" <<<"$CROSSWALK_IDS" && continue
     warn W7 "$(rel "$f"): references \"Check $ref\" but no core file, extension, or override defines check $ref anywhere in the rendered rulebook, no shipped hook named on that line declares it, and the crosswalk file (${CROSSWALK_REL:-undeclared}) carries no crosswalk row resolving it — dangling check pointer. Either repoint the citation at the id the check carries today, or add a crosswalk row naming '$ref', the id it became, and the title. If the check is implemented in a hook, name that hook on the same line as the citation — the hook's own \`# Check $ref:\` declaration is what resolves it. A renumber into the reserved band does not reach back into prose that cites the old id, which is how these are made."
-  done < <(grep -Eoh 'Check[ -][0-9]+[a-z-]*' "$f" 2>/dev/null | sed -E 's/^Check[ -]//' | sort -u)
+  done < "$VLE_T/w7-check-refs"
 done <<< "$all_files"
 
 # ---------------------------------------------------------------------------
@@ -2233,12 +2355,10 @@ crosswalk_corroborates() { # crosswalk_corroborates <ref> <band-title-nrm> <core
   [ -n "$_x" ] || return 1
   for _f in "$CROSSWALK_MD" "$CROSSWALK_LEGACY"; do
     [ -n "$_f" ] && [ -f "$_f" ] || continue
-    while IFS= read -r _cell; do
-      [ -n "$_cell" ] || continue
-      [ "${_x#"$_cell"}" = "$_x" ] && continue
-      [ -n "$_c" ] && [ "${_c#"$_cell"}" != "$_c" ] && continue
-      return 0
-    done < <(awk -F'|' -v r="$_r" "$NRM_FN"'
+    # Called directly (never inside `$( )`), so a refusal here ends the run. An unread crosswalk
+    # row set read as "no corroborating row", which restores the exemption this reader removes.
+    local _cc_rc=0
+    awk -F'|' -v r="$_r" "$NRM_FN"'
       /^[[:space:]]*```/ { fence = !fence; next }
       fence { next }
       /^[[:space:]]*\|/ {
@@ -2246,7 +2366,14 @@ crosswalk_corroborates() { # crosswalk_corroborates <ref> <band-title-nrm> <core
         sub(/^[Cc]heck[ \t]+/,"",v)
         if (v != r) next
         for (i = 3; i <= NF; i++) { c = nrm($i); if (c != "") print c }
-      }' "$_f" 2>/dev/null)
+      }' "$_f" 2>/dev/null > "$VLE_T/w12-crosswalk-cells" || _cc_rc=$?
+    [ "$_cc_rc" -eq 0 ] || vle_refuse "the crosswalk row read of $_f" "$_cc_rc"
+    while IFS= read -r _cell; do
+      [ -n "$_cell" ] || continue
+      [ "${_x#"$_cell"}" = "$_x" ] && continue
+      [ -n "$_c" ] && [ "${_c#"$_cell"}" != "$_c" ] && continue
+      return 0
+    done < "$VLE_T/w12-crosswalk-cells"
   done
   return 1
 }
@@ -2293,10 +2420,27 @@ while IFS= read -r f; do
   # verdict change; key them on the spurious ROWS printed before the abort instead.
   _sh_raw="$(fm "$f" shadows)" || entry_unreadable "$f"
   shadow_anc="$(shadow_parts "$(unquote "$_sh_raw")" 2>/dev/null | head -1 | cut -f2)"
+  _rd_rc=0
+  awk '
+    /^#{2,4}[ \t]+/ {
+      h = $0; sub(/^#+[ \t]+/, "", h); sub(/^[Cc]heck[ \t]+/, "", h)
+      if (match(h, /^([0-9]+[a-z-]*|[A-Z]{1,3}[0-9]*)[ \t]*(\.|—)/)) {
+        sec = substr(h, 1, RLENGTH); sub(/[ \t]*(\.|—)$/, "", sec)
+      } else { sec = "" }
+    }
+    /Check[ -][0-9]/ { print NR "\t" sec "\t" prev "\t" $0 }
+    { prev = $0 }
+  ' "$f" 2>/dev/null > "$VLE_T/w12-hits" || _rd_rc=$?
+  vle_read_status "$_rd_rc" 0 "$f" w12-hits
   while IFS= read -r hit; do
     [ -n "$hit" ] || continue
     ln="${hit%%	*}"; rest="${hit#*	}"; sec="${rest%%	*}"
     rest="${rest#*	}"; prevline="${rest%%	*}"; text="${rest#*	}"
+    _rf_rc=0
+    grep -oE 'Check[ -][0-9]+[a-z-]*' <<<"$text" > "$VLE_T/w12-ref-raw" || _rf_rc=$?
+    vle_accept "$_rf_rc" "the Check-citation scan of $(rel "$f"):$ln"
+    vle_filter w12-ref-ids w12-ref-raw sed -E 's/^Check[ -]//'
+    vle_filter w12-refs w12-ref-ids sort -u
     while IFS= read -r ref; do
       [ -n "$ref" ] || continue
       band="$(pad9 "$ref")"
@@ -2367,8 +2511,20 @@ while IFS= read -r f; do
          && { [ -z "$ctitle" ] || [ "${ctitle#"$cite_n"}" = "$ctitle" ]; }; then
         verdict="title"
       else
-        shared="$(comm -12 <(prov_tokens "$(raw_in "$CONSUMER_LAYER_FILES" "$band")") \
-                           <(line_tokens "$text") | head -3 | tr '\n' ' ')"
+        # Both token sides are staged. Each function ends in a `grep` filter, so under
+        # `pipefail` it returns 1 on a heading or line that carries no provenance token -- a
+        # healthy empty set -- and 2 or more only when a stage failed. A failed side read as an
+        # empty set, which withdrew the tag signal and demoted a finding to AMBIGUOUS.
+        _tk_rc=0
+        prov_tokens "$(raw_in "$CONSUMER_LAYER_FILES" "$band")" > "$VLE_T/w12-prov" || _tk_rc=$?
+        vle_accept "$_tk_rc" "the provenance-token read of \"$band\""
+        _tk_rc=0
+        line_tokens "$text" > "$VLE_T/w12-line" || _tk_rc=$?
+        vle_accept "$_tk_rc" "the citing-line token read of $(rel "$f"):$ln"
+        _tk_rc=0
+        comm -12 "$VLE_T/w12-prov" "$VLE_T/w12-line" > "$VLE_T/w12-shared" || _tk_rc=$?
+        [ "$_tk_rc" -eq 0 ] || vle_refuse "the shared-token intersection for $(rel "$f"):$ln" "$_tk_rc"
+        shared="$(head -3 "$VLE_T/w12-shared" | tr '\n' ' ')"
         if [ -n "${shared// /}" ]; then
           verdict="tag"
         # I54: `grep -q` leaves at its first match and the writer takes the EPIPE, so a
@@ -2444,17 +2600,8 @@ while IFS= read -r f; do
           AMBIGUOUS_REFS=$((AMBIGUOUS_REFS + 1))
           [ "$CHECK_REFS" = "1" ] && printf '  ambiguous  %s:%s: "Check %s" — this project also defines %s, and nothing in the line decides which is meant\n' "$(rel "$f")" "$ln" "$ref" "$band" ;;
       esac
-    done < <(printf '%s\n' "$text" | grep -oE 'Check[ -][0-9]+[a-z-]*' | sed -E 's/^Check[ -]//' | sort -u)
-  done < <(awk '
-    /^#{2,4}[ \t]+/ {
-      h = $0; sub(/^#+[ \t]+/, "", h); sub(/^[Cc]heck[ \t]+/, "", h)
-      if (match(h, /^([0-9]+[a-z-]*|[A-Z]{1,3}[0-9]*)[ \t]*(\.|—)/)) {
-        sec = substr(h, 1, RLENGTH); sub(/[ \t]*(\.|—)$/, "", sec)
-      } else { sec = "" }
-    }
-    /Check[ -][0-9]/ { print NR "\t" sec "\t" prev "\t" $0 }
-    { prev = $0 }
-  ' "$f" 2>/dev/null)
+    done < "$VLE_T/w12-refs"
+  done < "$VLE_T/w12-hits"
 done <<< "$CONSUMER_LAYER_FILES"
 
 if [ "$AMBIGUOUS_REFS" -gt 0 ] && [ "$CHECK_REFS" != "1" ]; then
@@ -2544,11 +2691,16 @@ fi
 # consumer has pulled is one that cannot be run to find out what to pull.
 lc_m_unclaimed=''
 if [ -n "$LC_CODE_ROWS" ]; then
+  # grep exits 1 on a run that fired nothing, which is healthy; 2+ refuses.
+  _fc_rc=0
+  printf '%s\n' $LC_FIRED | grep -E '.' > "$VLE_T/fired-raw" || _fc_rc=$?
+  vle_accept "$_fc_rc" "the fired-code list"
+  vle_filter fired-codes fired-raw sort -u
   while read -r lc_m_c; do
     [ -n "$lc_m_c" ] || continue
     awk -v c="$lc_m_c" '$1 == c { found=1 } END { exit !found }' <<<"$LC_CODE_ROWS" && continue
     lc_m_unclaimed="${lc_m_unclaimed}${lc_m_unclaimed:+,}${lc_m_c}"
-  done < <(printf '%s\n' $LC_FIRED | grep -E '.' | sort -u)
+  done < "$VLE_T/fired-codes"
 fi
 
 # A `-` in every derived cell, never a plausible 0. The populations stay numeric because the

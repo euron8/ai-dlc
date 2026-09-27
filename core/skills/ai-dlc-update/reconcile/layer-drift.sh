@@ -23,6 +23,8 @@
 # Output: TSV to stdout — STATUS<TAB>ENTRY<TAB>TARGET<TAB>DETAIL
 # Exit:   0 always (a classifier, not a gate). The CALLER decides; statuses
 #         prefixed HARD- must block `apply` until the operator adjudicates.
+#         Non-zero only when it REFUSED -- usage (2), or an input it could not read (1,
+#         with the reason on stderr) -- never as a finding.
 #
 # Statuses
 #   HARD-OVERRIDE-BASE-CONSUMER-SHA  base_sha resolves in the CONSUMER repo, so it
@@ -274,6 +276,27 @@ ADJ_LIST_FILE=""
 SELF="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib.sh
 . "$SELF/lib.sh" || { echo "layer-drift: cannot source $SELF/lib.sh" >&2; exit 1; }
+
+# EVERY LOOP FEED AND SET OPERAND IS STAGED TO A FILE, AND ITS PRODUCER'S STATUS IS READ. These
+# sites used to read `done < <(producer)` and `comm <(…) <(…)`, which discard the producer's
+# status: a layer walk that failed read as an empty overrides/ or extensions/ directory and the
+# classifier emitted no row for any entry in it -- the same output a clean layer produces. A
+# producer that did not run is now a refusal: a message on stderr and exit 1, which is how this
+# classifier already refuses an unreadable input, and which emit-report.sh and hard-blockers.sh
+# render as DETECTOR-REFUSED rather than as a finding of 'none'.
+#
+# ONE DIRECTORY PER RUN, one file per site. The EXIT disposition below goes through lib.sh's
+# composing `trap`, so it runs after lib.sh's own cleanup rather than replacing it; lib.sh
+# already arms an EXIT handler in this shell, so this adds a command to it, not a trap.
+LD_T="$(mktemp -d "${TMPDIR:-/tmp}/layer-drift.XXXXXX")" || {
+  echo "layer-drift: could not create a staging directory, so no input can be read; refusing" >&2
+  exit 1
+}
+trap 'rm -rf "$LD_T"' EXIT
+ld_refuse() { # ld_refuse <what did not run> <its exit status>
+  echo "layer-drift: $1 did not run (exit $2), so this run has no rows to give; refusing" >&2
+  exit 1
+}
 
 # emit() is also where the layer conformance adjudication is applied — see the ADJUDICATION
 # block below for why the duty lives HERE and not at the two drift call sites.
@@ -604,6 +627,13 @@ if [ "$MODE" = codes ]; then
   exit 0
 fi
 
+# The vocabulary adj_lookup matches a recorded verdict against, staged ONCE here in the main
+# shell: adj_lookup runs inside `$( )` at most of its call sites, where a refusal would end only
+# the subshell. It used to read `grep -f <(printf …)` per call.
+_av_rc=0
+printf '%s\n' "$ADJ_VERDICTS" > "$LD_T/adj-verdicts" || _av_rc=$?
+[ "$_av_rc" -eq 0 ] || ld_refuse "staging the verdict vocabulary" "$_av_rc"
+
 adj_active() { [ -n "$ADJ_CODES" ]; }
 
 # A vocabulary that came back empty while clauses sit at ADJUDICATED means the extraction broke,
@@ -680,7 +710,7 @@ adj_lookup() { # $1 digest -> 0 if a record with a vocabulary verdict exists
   found="$(adj_verdict "$1")"; rc=$?
   [ "$rc" -eq 2 ] && return 2
   [ -n "$found" ] || return 1
-  grep -qxF -f <(printf '%s\n' "$ADJ_VERDICTS") <<<"$found"
+  grep -qxF -f "$LD_T/adj-verdicts" <<<"$found"
 }
 
 # WHY A SPENT VERDICT AND A NEVER-RECORDED ONE PRINTED THE SAME ROW, AND WHY THAT IS THE WHOLE
@@ -1235,6 +1265,9 @@ same_section() { # same_section <textA> <textB>
 # ---------------------------------------------------------------------------
 # Overrides
 # ---------------------------------------------------------------------------
+_lw_rc=0
+layer_files "$OVR_DIR" > "$LD_T/overrides" || _lw_rc=$?
+[ "$_lw_rc" -eq 0 ] || ld_refuse "the walk of $OVR_DIR" "$_lw_rc"
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   entry="$(rel "$f")"
@@ -1387,10 +1420,14 @@ while IFS= read -r f; do
         fi
         en="$(printf '%s\n' "$es" | grep -cv '^[[:space:]]*$')"
         cn="$(printf '%s\n' "$cs" | grep -cv '^[[:space:]]*$')"
-        on="$(printf '%s\n' "$es" | grep -v '^[[:space:]]*$' | grep -Fxv -f <(printf '%s\n' "$cs") | grep -c .)"
+        # Core's span is staged as the pattern file. sup_measure runs inside `$( )`, so a failed
+        # write returns 3 and the caller refuses; an unread pattern file matched nothing and
+        # reported every line of the entry as surplus.
+        printf '%s\n' "$cs" > "$LD_T/sup-core-span" || return 3
+        on="$(printf '%s\n' "$es" | grep -v '^[[:space:]]*$' | grep -Fxv -f "$LD_T/sup-core-span" | grep -c .)"
         printf '%s' "MEASURED: your span under that anchor is ${en} non-blank line(s) against core's ${cn} at ${base_sha}, and ${on} of yours appear nowhere in core's -- that is what this action drops out of the rendered rulebook. If those lines are yours and you still want them, the answer is \`still-additive\` with a reason, not a narrowing you undo next sprint."
       }
-      sup_surplus="$(sup_measure "$sup_raw")"
+      sup_surplus="$(sup_measure "$sup_raw")" || ld_refuse "staging core's span for the surplus measure of ${entry}" "$?"
 
       # ONE ROW PER SUPERSEDED ANCHOR, which is why the old `break` is gone. Two anchors of one
       # entry can be superseded by two different core releases needing two different keys;
@@ -1496,7 +1533,12 @@ while IFS= read -r f; do
     if [ -n "$s_theirs" ] && [ -n "$ov_ticks" ]; then
       inner="$(printf '%s\n' "$s_theirs" | awk 'NR>1 && /^#{2,6}[ \t]/' | ticks_of)"
       if [ -n "$inner" ]; then
-        both="$(comm -12 <(printf '%s\n' "$ov_ticks") <(printf '%s\n' "$inner") | tr '\n' ' ')"
+        _dl_rc=0
+        printf '%s\n' "$ov_ticks" > "$LD_T/deleg-ov-ticks" || _dl_rc=$?
+        printf '%s\n' "$inner" > "$LD_T/deleg-inner" || _dl_rc=$?
+        comm -12 "$LD_T/deleg-ov-ticks" "$LD_T/deleg-inner" > "$LD_T/deleg-both" || _dl_rc=$?
+        [ "$_dl_rc" -eq 0 ] || ld_refuse "the delegation intersection for ${entry} #${id}" "$_dl_rc"
+        both="$(tr '\n' ' ' < "$LD_T/deleg-both")"
         both="${both% }"
         [ -n "$both" ] && delegated="${delegated:+$delegated; }#${id} -> ${both}"
       fi
@@ -1565,7 +1607,7 @@ while IFS= read -r f; do
   # that validator is consumer-run and skippable, and the pull is not.
   [ -n "$loose" ] && emit OVERRIDE-LOOSE-ANCHOR "$entry" "$tgt" \
     "anchor(s) that resolve only by the REVERSE arm of the containment match -- the anchor CONTAINS the heading rather than the heading containing the anchor: ${loose}. An anchor finer than a heading (a paragraph, a sub-clause, a renamed section) is not a grain the resolver can address, so it silently resolves to the WHOLE section instead: you believe you shadowed a narrower span and you have shadowed everything under that heading. Write the anchor as the heading named above, or narrow shadows: to the sub-headings actually rewritten. Report-only -- the resolution is unchanged and the entry still renders; what is wrong is what the operator believes it covers."
-done < <(layer_files "$OVR_DIR")
+done < "$LD_T/overrides"
 
 # ---------------------------------------------------------------------------
 # OVERRIDE-DOUBLE-SHADOW — two entries claiming one (file, anchor)
@@ -1621,6 +1663,9 @@ SKELETON_TITLES="$(skeleton_titles_of "$THEIRS")"
 [ -n "$SKELETON_TITLES" ] || printf '%s\n' \
   "layer-drift: WARNING — derived NO skeleton headings from core-manifest.md's rulebook: list at $THEIRS. The unnumbered title arm is running WITHOUT its shared-heading exclusion, so expect rows on structural headings (Identity, Responsibilities). Check that core-manifest.md is readable at that ref." >&2
 
+_lw_rc=0
+layer_files "$EXT_DIR" > "$LD_T/extensions" || _lw_rc=$?
+[ "$_lw_rc" -eq 0 ] || ld_refuse "the walk of $EXT_DIR" "$_lw_rc"
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   entry="$(rel "$f")"
@@ -1950,7 +1995,7 @@ while IFS= read -r f; do
   else
     emit EXTENSION-HOOK-DRIFT "$entry" "$hooks" "$(adj_prefix "$entry" "$hooks" EXTENSION-HOOK-DRIFT)hooked core file changed ${BASE}..${THEIRS} — this entry declares no extends: anchor, so its drift subject is the whole file; re-read it against the new core text"
   fi
-done < <(layer_files "$EXT_DIR")
+done < "$LD_T/extensions"
 
 # --- `--list-adjudications`: THE REPORT -----------------------------------------------------
 #
@@ -1981,6 +2026,19 @@ done < <(layer_files "$EXT_DIR")
 # about a zero being reported with its own control.
 if [ "$MODE" = list ]; then
   _n=0; _withv=0; _without=0
+  # STAGED, WITH THE DEDUPE'S STATUS READ: a failed dedupe read as a layer with no keyed subject,
+  # and the count line below then said ZERO -- the one reading it warns is not a clean.
+  _al_rc=0
+  sort -u "$ADJ_LIST_FILE" 2>/dev/null | awk -F"$TAB" -v OFS="$TAB" '
+      { k = $1 OFS $2 OFS $3
+        if (!(k in seen)) { seen[k] = 1; order[++nk] = k }
+        if ($4 != "" && index("," cl[k] ",", "," $4 ",") == 0) cl[k] = (cl[k] == "" ? $4 : cl[k] "," $4) }
+      END { for (i = 1; i <= nk; i++) print order[i], cl[order[i]] }
+    ' > "$LD_T/adj-list-subjects" || _al_rc=$?
+  if [ "$_al_rc" -ne 0 ]; then
+    rm -f "$ADJ_LIST_FILE"
+    ld_refuse "the subject dedupe of the adjudication listing" "$_al_rc"
+  fi
   while IFS="$TAB" read -r _e _t _d _c; do
     [ -n "$_e" ] || continue
     _n=$((_n + 1))
@@ -2012,12 +2070,7 @@ if [ "$MODE" = list ]; then
     # over eb49b783..a798e215; the count line said 18 and would have been counting rows while
     # calling them subjects. Comma-joined and sorted, for the reason the verdict column beside it
     # is: showing one of two would hide the thing the operator opened the listing to find.
-  done < <(sort -u "$ADJ_LIST_FILE" 2>/dev/null | awk -F"$TAB" -v OFS="$TAB" '
-      { k = $1 OFS $2 OFS $3
-        if (!(k in seen)) { seen[k] = 1; order[++nk] = k }
-        if ($4 != "" && index("," cl[k] ",", "," $4 ",") == 0) cl[k] = (cl[k] == "" ? $4 : cl[k] "," $4) }
-      END { for (i = 1; i <= nk; i++) print order[i], cl[order[i]] }
-    ')
+  done < "$LD_T/adj-list-subjects"
   rm -f "$ADJ_LIST_FILE"
   echo "layer-drift --list-adjudications: ${_n} keyed subject(s) in ${BASE}..${THEIRS} — ${_withv} with a recorded verdict, ${_without} without. A subject is any row this pass asked adj_digest to key; ZERO means the pass produced no keyed row, not that the layer is clean." >&2
   exit 0

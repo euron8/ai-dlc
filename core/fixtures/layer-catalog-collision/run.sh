@@ -431,7 +431,7 @@ mutant "forcing the core-membership test false turns every COLLIDED cell into OO
 # M4 — the step-domain scope really is gone. Restoring `kind: check` must silence exactly
 # the two ids that come from step-domain entries and leave every check-side cell alone.
 mutant "restoring the kind: check scope silences ONLY the step-domain ids" \
-  's|^  while IFS= read -r a; do$|  if [ "$kind" = check ]; then while IFS= read -r a; do|; s|^  done < <(defined_anchors "\$f")$|  done < <(defined_anchors "$f"); fi|' \
+  's|^  while IFS= read -r a; do$|  if [ "$kind" = check ]; then while IFS= read -r a; do|; s|^  done < "\$VLE_T/ext-anchors-e6"$|  done < "$VLE_T/ext-anchors-e6"; fi|; s|^  done < "\$VLE_T/ext-anchors-e15"$|  done < "$VLE_T/ext-anchors-e15"; fi|' \
   "5=COLLIDED 24=COLLIDED 30=OOB 33=OOB 40b=OOB 933=- AP=OOB XQ=- 0=- 7a-post=- Rule 8=COLLIDED Rule 29=COLLIDED Rule 30=COLLIDED Rule 44=OOB Rule 931=-" \
   "'0.' and '7a-post.' are prose.md's, which is kind: step-domain. The rule cells must not move — rules were never kind-scoped — and no check-side cell may move either, or the scope is doing more than it claims."
 

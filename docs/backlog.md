@@ -4408,6 +4408,30 @@ which covers a non-repo tree and an empty pathspec. Scored in fresh `mktemp` tre
 - **1** on the same repo with one live `comm <(…)` line added.
 - **9** in a non-repo tree and in a tree with no `core/`.
 
+**v0.650.0 staged the non-bootstrapping sites; the entry stays live.** The receipt's own filter
+reads 79 lines in 22 files at `e4934e65` and 10 lines in 4 files after the fix, so 69 lines in 18
+files are staged, each producer's status is read, and a producer that did not run refuses in the
+script's own vocabulary. The remaining 10 are all in BOOTSTRAPPING files: `preclassify.sh`,
+`ledger-reverify.sh`, `emit-report.sh` and `self-update-gate.sh`. The last one is bootstrapping
+because the update skill's step 2 runs it before the engine lands. Those four ship alone next, and
+the receipt exits 1 until they do. False clears proven by forcing the producer to fail at base:
+- `validate-ci-gates.sh:139`: a failed retro walk read "0 gates declared", exit 0.
+- `validate-ci-gates.sh:163`: a failed surface walk inside `code_hits` reported a wired gate
+  DORMANT, exit 1. This one is a false finding.
+- `relabel-extension-checks.sh:212`: "no unlabelled core-number collisions.", exit 0.
+- `retired-layer-passage.sh:150` and `retired-layer-contract.sh:366`: "checked against 0 layer
+  file(s); no match", exit 0.
+- `validate-layer-entries.sh`'s `layer_files` walks: "0 error(s)", exit 0, over an unlisted layer.
+- `readopt-override.sh`'s `stale_lines`: an empty base set, so `--check` read OK, exit 0.
+- `unregistered-drift.sh`: a failed `comm` side chose the wrong HARD remedy (absorbed versus drift).
+
+**The receipt keys on SPELLING, and that is a known weakness.** Scored on the 10 remaining sites,
+raw exits: rewriting each one as `<<< "$(…)"` exits 0, and so does staging with the status
+swallowed (`> f || true`). A `| while` loop is the same shape and was not scored. The receipt line is
+unchanged. The behaviour is carried by this release's fixture: its diff-scoped arm refuses those
+spellings on lines added since `e4934e65`, and its forced arms make each verdict-bearing producer
+fail and assert a refusal.
+
 verify: sh git grep -qF 'pipefail' -- 'core/*.sh' ':(exclude)core/fixtures/**' || exit 9; A='{ l = $0; sub(/^[^:]*:[0-9]+:/, "", l); if (l ~ /^[[:blank:]]*#/) next; if (l ~ /^[[:blank:]]*echo /) next; if (l ~ /\047<\(/) next; n++ } END { print n + 0 }'; p="$(printf '%s\n' 'x.sh:1:  done < <(find . -type f | sort)' 'x.sh:2:  r="$(comm -23 <(printf x) <(printf y))"' "x.sh:3:RE='<([^>]*-)?id>'" 'x.sh:4:  # was <(norm)' 'x.sh:5:  echo "full: diff <(git show)"' | awk "$A")"; [ "$p" = 2 ] || exit 9; n="$(git grep -nE '<\(' -- 'core/*.sh' ':(exclude)core/fixtures/**' | awk "$A")"; [ -n "$n" ] || exit 9; [ "$n" -eq 0 ]
 
 ## BL-349 — `validate-h2-attestation.sh --verify` reads only the START of the verdict cell, and only the first verdict column
@@ -4446,5 +4470,7 @@ the 0.648.0 reader plus a whole-log failure-word denylist, which is the vocabula
 rejected in `BL-341`; the unmodified 0.648.0 reader exits 1 on both. The `BL-348` receipt counts
 only the `<(` spelling, so rewriting a site as unchecked staged files closes it with the defect
 intact (by inspection, not built). The fixtures, not the receipts, kill the vocabulary reader.
+The `BL-348` half was built and scored at batch 163: on the 10 remaining sites, `<<< "$(…)"` and
+`> f || true` each exit 0. `procsub-staged-refusal`'s diff-scoped arm and forced arms reject both.
 
 verify: manual
