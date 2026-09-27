@@ -4417,7 +4417,10 @@ backtick and space decoration. A headerless row, a header with no such column, a
 VOIDED or FAIL verdict cell are all refused. A span alone on its own line is not in a row and
 needs no verdict column. Both halves bind the exact-digest arm AND the moved-digest arm, so a
 FAIL row at a moved digest is located rather than reported as "fixture set CHANGED", and the
-cited span is cut from the accepted line rather than from the last occurrence in the log.
+cited span is cut from the accepted line rather than from the last occurrence in the log. A
+table row is judged under two cell readings, one keeping a `|` inside a code span in its cell
+and one splitting on every pipe as GitHub renders it, and verifies only if both accept it
+(BL-345).
 
 **WHY A PASS ALLOWLIST AND NOT A FAILURE VOCABULARY.** A vocabulary refusing a row whose other
 cells carry FAIL, INVALID, REFUSED, RE-DRIVE or "do not cite" refused a real PASS in the
@@ -4501,14 +4504,33 @@ verify: manual
 ## BL-345 — `validate-h2-attestation.sh --verify` splits cells on a `|` inside a code span, so a FAIL row can verify
 
 **DEFECT.** Found by the batch 162 docs hand while scoring BL-341's receipt against `2a76c0b7`.
-The reader's `cells()` splits a row on every `|`, including one inside backticks, which markdown
-renders as part of the cell. `` | H2 `| PASS` | FAIL | `SPAN` | `` under a `| Check | Result |
-Evidence |` header renders with FAIL in the Result column, and exits 0: the reader sees `PASS`
-in column 2. The same row without the backticked pipe exits 1 in the same run. Two of the
-consumer's 50 table rows carrying a span also carry a `|` between backticks, so the shape is
-written there, though neither row was measured as mis-judged.
+That reader's `cells()` split a row on every `|`, including one inside backticks.
+`` | H2 `| PASS` | FAIL | `SPAN` | `` under a `| Check | Result | Evidence |` header, which a
+code-span-aware renderer shows with FAIL in the Result column, exited 0 because the reader saw
+`PASS` in column 2. The same row without the backticked pipe exited 1 in the same run.
 
-verify: manual
+**ONE READING ALONE IS STEERABLE EITHER WAY, SO THE FIX REQUIRES BOTH.** `42da2d6d` splits
+cells only on pipes outside code spans, which closes the seed above and opens its mirror:
+`` | H2 `a| FAIL |b` | PASS | `SPAN` | `` has one cell under the code-span reading, with PASS in
+the Result column, while GitHub splits on every pipe and renders FAIL there. `3c2a8c80` judges a
+table row under both readings (code-span, and every unescaped pipe) and verifies it only if
+both accept it; an escaped `\|` is a delimiter in neither. Each seed exits 0 under the reader
+that ignores it and 1 under the fix.
+
+**THE ACCEPTED COST IS A FALSE REFUSAL.** A genuine PASS row carrying `` `a|b` `` in another
+cell is now refused, because the every-pipe reading shifts its verdict column; measured, that
+row exits 0 on `42da2d6d` and 1 on `3c2a8c80`. It costs one H2 re-drive, where a false grant
+would attest a check nobody drove. The fix hand reports that none of the consumer's 45
+historical span-carrying rows changes verdict; my own census of the consumer's working tree
+found 2 of 50 span-carrying table rows with a `|` between backticks and did not judge them.
+
+The receipt exits 9 if a plain PASS row under a Result header does not verify, 1 if either the
+code-span seed or the GitHub-mirror seed verifies, and 0 otherwise. Scored raw, each subject its
+own minimal `mktemp -d` tree of the three H2 fixture dirs plus the script: `2a76c0b7` 1 (the
+code-span seed verifies), `42da2d6d` 1 (the mirror seed verifies), `3c2a8c80` 0, the fix with
+both readings forced to code-span 1, and with both forced to every-pipe 1.
+
+verify: sh S=core/scripts/validate-h2-attestation.sh; [ -f "$S" ] || exit 9; D=$(bash "$S" --digest 2>/dev/null) && [ -n "$D" ] || exit 9; t=$(mktemp -d) || exit 9; P="H2_ATTESTED v1 sprint=9 digest=$D items=1,2,3 mechanical=check-17-bypass:PASS"; H='| Check | Result | Evidence |\n|---|---|---|\n'; v() { bash "$S" --verify --sprint 9 --gate-log "$t/$1.md" >/dev/null 2>&1; }; printf "$H"'| H2 | PASS | \140%s\140 |\n' "$P" > "$t/ok.md"; printf "$H"'| H2 \140| PASS\140 | FAIL | \140%s\140 |\n' "$P" > "$t/cs.md"; printf "$H"'| H2 \140a| FAIL |b\140 | PASS | \140%s\140 |\n' "$P" > "$t/gfm.md"; v ok || exit 9; v cs && exit 1; v gfm && exit 1; exit 0
 
 ## BL-346 — `validate-h2-attestation.sh --verify` verifies a span inside a fenced code block, an HTML comment block or an indented code block
 
