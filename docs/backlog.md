@@ -4418,7 +4418,17 @@ asserts only the literal `is not a pass` is absent from Checks 2 and 2a, so a se
 "treat that line as a FAIL" survives it, and nothing guards Checks 26, 33 and 35 still saying "not a
 pass". Add one cell for each.
 
-verify: manual
+**Receipt.** It stages an out-of-vocabulary `FILED` entry and an uncited this-sprint `RESOLVED`
+entry, proves both readable scripts exit 1 on it, then `chmod 000`s it and also builds a directory
+at a second path. All four invocations (vocabulary, resolution in gate mode, lifetime, lifetime
+`--in-force`) must exit 2 with `REFUSED:` on stderr and empty stdout, on both paths. It exits 9 as
+root, when the file stays readable after `chmod 000`, when a script is absent, or when the readable
+control does not exit 1. Scored in extracted trees: 0.654.0 tip 0; 0.653.0 1; a 0.653.0 copy of
+any one of the three scripts 1 each; dropping only the unreadable block from one script 1; dropping
+only the non-regular guard from one script 1; a reworded fix using `-ne 0 && -ne 1` 0; `FILED`
+added to the vocabulary 9; a script moved away 9.
+
+verify: sh [ "$(id -u)" -ne 0 ] || exit 9; V=core/scripts/validate-escalation-status-vocabulary.sh; R=core/scripts/validate-escalation-resolution.sh; L=core/scripts/validate-suppression-lifetime.sh; for s in "$V" "$R" "$L"; do [ -f "$s" ] || exit 9; done; d=$(mktemp -d) || exit 9; p="$d/pending.md"; printf '%s\n' '## S1 - probe one' '' '**Status:** FILED' '' '## S1 - probe two' '' '**Status:** RESOLVED' > "$p" || exit 9; bash "$V" "$p" >/dev/null 2>&1; a=$?; bash "$R" --escalations "$p" --sprint 1 >/dev/null 2>&1; b=$?; if [ "$a" -ne 1 ] || [ "$b" -ne 1 ]; then rm -f "$p"; rmdir "$d"; exit 9; fi; chmod 000 "$p" || exit 9; if [ -r "$p" ]; then chmod 600 "$p"; rm -f "$p"; rmdir "$d"; exit 9; fi; mkdir "$d/dir.md" || exit 9; f=0; for q in "$p" "$d/dir.md"; do for m in V R L I; do o=""; case $m in V) e=$(bash "$V" "$q" 2>&1 >/dev/null); c=$? ;; R) e=$(bash "$R" --escalations "$q" --sprint 1 2>&1 >/dev/null); c=$? ;; L) e=$(bash "$L" --escalations "$q" 2>&1 >/dev/null); c=$? ;; I) o=$(bash "$L" --in-force --escalations "$q" 2>"$d/err"); c=$?; e=$(cat "$d/err") ;; esac; [ "$c" -eq 2 ] || f=1; [ -z "$o" ] || f=1; case "$e" in *REFUSED:*) ;; *) f=1 ;; esac; done; done; chmod 600 "$p"; rm -f "$p" "$d/err"; rmdir "$d/dir.md" "$d"; exit $f
 
 ## BL-354 — failure silences one step upstream of the staged sites, and `apply.sh` reads a detector refusal as "no worklist row"
 
@@ -4426,13 +4436,27 @@ verify: manual
 adversary (the `apply.sh` half). Split from `BL-348`, which closed on the `<( )` sites alone. It
 discharges no consumer candidate.
 
-**Upstream `$( )` producers whose failure still reads as empty**, each outside `BL-348`'s spelling:
+**PARTIAL: 0.654.0 closed the two non-bootstrapping producers, and the entry stays open for the
+rest.** Line numbers below are 0.653.0's.
+
+**Closed in 0.654.0:**
+- `retired-tokens.sh:170-171`: `git show … 2>/dev/null || true` read an unreadable ref side as an
+  empty file, and its tokens as retired or absent. Both refs are now verified as commits once. Per
+  path, an exact-line `ls-tree` listing decides presence: a failed listing refuses, an absent path
+  is the legitimate skip, and a failed `show` of a present path refuses. The empty-blob skip is
+  unchanged.
+- `retired-layer-contract.sh`, four silent paths rather than the one this entry first named: the
+  tree listing in `collect` (`_rlc_tree="$(memo_ls_tree …)"`, or its `git ls-tree` fallback);
+  every rulebook blob read in `collect` (`body=… || true`); the `shapes_of`/`tokens_of` statuses
+  that `all="$all$(shapes_of …)$(tokens_of …)"` discarded; and the unread tree listing in
+  `rulebook_set`, where a failed theirs listing read every base rulebook file as retired, so it
+  could emit a false `path:` row. `collect` and `rulebook_set` now stage to files and return a status,
+  and the main shell refuses on it with exit 2.
+
+**Still open, and both BOOTSTRAPPING, so they ship alone in 0.655.0:**
 - `self-update-gate.sh:1114`: `CHANGED="$(git … diff --name-only … 2>/dev/null | …)"`. A failed
-  diff reads as no changed script, which the gate reports as `SELF-UPDATE-OK`. BOOTSTRAPPING.
-- `retired-tokens.sh:170-171`: `git show … 2>/dev/null || true`, so an unreadable ref side reads as
-  an empty file and its tokens as retired or absent.
-- `retired-layer-contract.sh:254` `collect`, called through `$( )`, whose failure the caller does
-  not read.
+  diff reads as no changed script, which the gate reports as `SELF-UPDATE-OK`.
+- `apply.sh`'s four capture sites, below.
 
 **`apply.sh` discards every detector refusal the 0.650.0-0.652.0 releases added.** It captures
 stdout only, with `2>/dev/null`, at `:565`/`:567` (`unregistered-drift.sh`), `:637`/`:640`
@@ -4445,6 +4469,18 @@ WORKLIST loses the row silently. `emit-report.sh` already renders the same refus
 **Remedy:** read each producer's status and refuse in the script's vocabulary, as `BL-348` did;
 for `apply.sh`, read each detector's exit and emit a refusal row on non-zero, as `emit-report.sh`
 does.
+
+**Known residue: two detectors refuse with exit 0, so reading the exit alone will not see them.**
+- `unregistered-drift.sh:348-350` emits `HARD-DRIFT-SCAN-UNAVAILABLE` and exits 0 when it cannot
+  load `map_consumer()`. `apply.sh`'s awk keeps only `HARD-UNREGISTERED-CORE-DRIFT` rows, so the
+  refusal is dropped and the worklist reads as no drift.
+- `retired-layer-passage.sh:83-85` prints its refusal to stderr and exits 0 when it cannot read the
+  rulebook list, and `apply.sh:705` discards stderr.
+
+**Why this stays `manual`.** Every open claim lives in `apply.sh` or `self-update-gate.sh`, and
+a receipt that asserts the defect has to drive one of them through a whole reconcile world with a
+failing detector. 0.655.0 builds that forcing in its fixtures and writes the receipt then. A
+receipt that grepped for a refusal token would close on prose, so none is written now.
 
 verify: manual
 

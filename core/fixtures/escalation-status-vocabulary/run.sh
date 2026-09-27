@@ -469,6 +469,262 @@ elif [ -f "$EN_GV" ] && [ -f "$EN_MAP" ]; then
   en_score "MUTANT M-map (one Check 2 posture restores 'is not a pass')" "$EN_GV" "$EN_M3" 110 "ONLY the map cell goes red" map
 fi
 
+# fx_sub <src> <out> <anchor> <replacement> [<anchor> <replacement>]... -- a COPY of <src> with each
+# anchor, which must sit on EXACTLY ONE line, replaced as a literal substring. Sets FX_WHY and returns
+# 1 when an anchor matches 0 or 2+ lines or the copy is byte-identical. The strings reach awk through
+# ENVIRON, never `-v`, because `-v` strips one level of backslash escaping.
+FX_WHY=""
+fx_sub() {
+  local src="$1" out="$2" n
+  shift 2
+  cp "$src" "$out.work" || { FX_WHY="could not copy $src"; return 1; }
+  while [ "$#" -ge 2 ]; do
+    n="$(grep -cF -- "$1" "$out.work")" || n=0
+    [ "$n" -eq 1 ] || { FX_WHY="anchor matches $n line(s), not 1 -- re-anchor it, never relax the arm: $1"; return 1; }
+    A="$1" R="$2" awk '{ i = index($0, ENVIRON["A"]); if (i) $0 = substr($0, 1, i - 1) ENVIRON["R"] substr($0, i + length(ENVIRON["A"])); print }' \
+      "$out.work" > "$out.next" || { FX_WHY="awk died applying: $1"; return 1; }
+    mv "$out.next" "$out.work"
+    shift 2
+  done
+  if cmp -s "$src" "$out.work"; then FX_WHY="changed no bytes -- it would score as a kill"; return 1; fi
+  mv "$out.work" "$out"
+}
+
+# --- Assertions 19-24: an UNREADABLE or NON-REGULAR escalations path REFUSES, exit 2 ---------------
+# `grep -q '[^[:space:]]'` exits 2 on a file it cannot read, and the validator used to branch on
+# `-eq 1` alone: a status of 2 fell through, the parser's own read failure was swallowed, and the run
+# printed an ordinary `OK: n=[]` line over entries nobody read. A DIRECTORY at the path failed `-f`
+# and printed "no escalations file" -- the line Check 2 reads as a pass. Now both refuse: `REFUSED:`
+# on stderr, exit 2, nothing on stdout.
+#
+# SIX CELLS, ONE STRING, so each mutant below is held to moving only the cells its layer owns:
+#   A  mode-000 file carrying an out-of-vocabulary entry -> exit 2, `could not be read`
+#   B  a DIRECTORY at the path                         -> exit 2, `is not a regular file`
+#   C  a DANGLING SYMLINK at the path (fails -e AND -f) -> exit 2, `is not a regular file`
+#   D  a READABLE file whose blank probe grep exits 2 (PATH stub; the stub must FIRE)
+#                                                      -> exit 2, `failed (grep exited 2)`
+#   E  near-miss: a whitespace-only readable file      -> exit 0, the existing "present but empty" line
+#   F  near-miss: a readable file with a finding       -> exit 1, unchanged
+# A through D are presence-shaped (a REFUSED line must appear), so a subject that prints nothing
+# fails them. Cell A is `S` when mode 000 does not stop this process reading -- root does, and the
+# guard deliberately does not refuse on the mode bit alone.
+VR="$WORK/refusal"; mkdir -p "$VR"
+VR_LOCKED="$VR/pending-locked.md"; cp "$DRIFT" "$VR_LOCKED"; chmod 000 "$VR_LOCKED"
+VR_DIR="$VR/pending-dir.md"; mkdir -p "$VR_DIR"
+VR_LINK="$VR/pending-dangling.md"; ln -s "$VR/pending-target-never-written.md" "$VR_LINK"
+VR_IO="$VR/pending-io.md"; cp "$DRIFT" "$VR_IO"
+VR_SKIP_A=""
+if [ "$(id -u)" -eq 0 ]; then VR_SKIP_A="running as root, which reads a mode-000 file"
+elif cat "$VR_LOCKED" >/dev/null 2>&1; then VR_SKIP_A="this host reads a mode-000 file, so the seed cannot express unreadable"; fi
+[ -n "$VR_SKIP_A" ] && printf '  SKIP  refusal cell A (mode-000 file) -- %s\n' "$VR_SKIP_A"
+if ! { [ -L "$VR_LINK" ] && [ ! -e "$VR_LINK" ]; }; then bad "FIXTURE BROKEN: the dangling-symlink seed is not a link to a missing target"; fi
+# THE STUB claims only the blank probe's argv (`-q [^[:space:]] <file>`), logs each claimed call and
+# execs the real grep for everything else.
+VR_STUB="$VR/stub"; mkdir -p "$VR_STUB"
+VR_REALGREP="$(command -v grep)" || { echo "FIXTURE ERROR: grep is not on PATH" >&2; exit 2; }
+{
+  printf '#!/bin/sh\ncase "$*" in\n'
+  printf '  %s) printf "x\\n" >> "%s/LOG"; echo "grep: forced failure" >&2; exit 2 ;;\n' "'-q [^[:space:]] '*" "$VR_STUB"
+  printf 'esac\nexec "%s" "$@"\n' "$VR_REALGREP"
+} > "$VR_STUB/grep"
+chmod +x "$VR_STUB/grep"
+VR_RC=0; VR_O=""; VR_E=""
+vr_run() {  # <validator> <file> [stub-dir] -> VR_RC VR_O VR_E
+  local p="$PATH"
+  [ -n "${3:-}" ] && p="$3:$PATH"
+  : > "$VR_STUB/LOG"
+  VR_O="$(PATH="$p" bash "$1" "$2" "$SPEC_SRC" 2>"$VR/err")"; VR_RC=$?
+  VR_E="$(cat "$VR/err")"
+}
+vr_refused() {  # <reason-ERE> -> the last run refused, for that reason, with stdout empty
+  [ "$VR_RC" -eq 2 ] && [ -z "$VR_O" ] && grep -qE "^REFUSED: .*$1" <<<"$VR_E"
+}
+VR_CELLS=""
+vr_cells() {  # <validator> -> VR_CELLS
+  local v="$1" c=""
+  if [ -n "$VR_SKIP_A" ]; then c="${c}S"
+  else vr_run "$v" "$VR_LOCKED"; if vr_refused 'could not be read'; then c="${c}1"; else c="${c}0"; fi; fi
+  vr_run "$v" "$VR_DIR";  if vr_refused 'is not a regular file'; then c="${c}1"; else c="${c}0"; fi
+  vr_run "$v" "$VR_LINK"; if vr_refused 'is not a regular file'; then c="${c}1"; else c="${c}0"; fi
+  vr_run "$v" "$VR_IO" "$VR_STUB"
+  if [ -s "$VR_STUB/LOG" ] && vr_refused 'failed \(grep exited 2\)'; then c="${c}1"; else c="${c}0"; fi
+  vr_run "$v" "$BLANK"
+  if [ "$VR_RC" -eq 0 ] && grep -qF 'present but empty' <<<"$VR_O" && ! grep -qF 'REFUSED' <<<"$VR_O$VR_E"; then c="${c}1"; else c="${c}0"; fi
+  vr_run "$v" "$DRIFT"
+  if [ "$VR_RC" -eq 1 ] && grep -qF 'out-of-vocabulary status' <<<"$VR_O$VR_E" && ! grep -qF 'REFUSED' <<<"$VR_O$VR_E"; then c="${c}1"; else c="${c}0"; fi
+  VR_CELLS="$c"
+}
+vr_want() { if [ -n "$VR_SKIP_A" ]; then printf 'S%s' "${1#?}"; else printf '%s' "$1"; fi; }
+vr_cells "$VALIDATOR"
+# A SUBJECT THAT PREDATES THE REFUSAL. This fixture ships one pull ahead of the validator: there B, C
+# and D read 0 and E, F still hold. SKIP there; FAIL here.
+if [ "$(printf '%s' "$VR_CELLS" | cut -c2-4)" = "000" ] && [ "$(printf '%s' "$VR_CELLS" | cut -c5-6)" = "11" ] \
+   && [ "$VEN_IS_DIST" -ne 1 ]; then
+  printf '  SKIP  the refusal arms -- the installed validator predates the unreadable-file refusal; this fixture ships one pull ahead of it\n'
+else
+  i=0
+  for nm in "A mode-000 file refuses: exit 2, REFUSED could not be read, stdout empty" \
+            "B a directory at the path refuses: exit 2, REFUSED is not a regular file" \
+            "C a dangling symlink at the path refuses: exit 2, REFUSED is not a regular file" \
+            "D a readable file whose blank probe exits 2 refuses: exit 2, REFUSED grep exited 2 (stub fired)" \
+            "E near-miss: a whitespace-only readable file is still OK EXAMINED NOTHING, exit 0" \
+            "F near-miss: a readable file with a finding still exits 1"; do
+    i=$((i + 1))
+    case "$(printf '%s' "$VR_CELLS" | cut -c"$i")" in
+      1) ok "refusal cell $nm" ;;
+      S) ;;
+      *) bad "refusal cell $nm does not hold (cells=$VR_CELLS)" ;;
+    esac
+  done
+
+  # --- the mutants: one per layer of the guard, plus one reverting EVERY layer ---------------------
+  # Siblings in ONE copy of the whole scripts directory; the unmutated control is a sibling too, so a
+  # copy that cannot run fails the control's presence cells rather than scoring as a kill.
+  VR_MD="$VR/mut"
+  cp -R "$(cd "$(dirname "$VALIDATOR")" && pwd)" "$VR_MD" || bad "refusal mutants: could not copy the scripts directory"
+  VR_SRC="$VR_MD/$(basename "$VALIDATOR")"
+  VR_G1='if { [ -e "$ESCALATIONS" ] || [ -L "$ESCALATIONS" ]; } && [ ! -f "$ESCALATIONS" ]; then'
+  VR_G1L='{ [ -e "$ESCALATIONS" ] || [ -L "$ESCALATIONS" ]; }'
+  VR_G2='if [ "$ESC_BLANK_RC" -gt 1 ]; then'
+  VR_G3='if [ ! -r "$ESCALATIONS" ]; then'
+  vr_score() {  # <label> <name> <want> <why> <anchor> <replacement> [...]
+    local label="$1" name="$2" want out
+    want="$(vr_want "$3")"
+    shift 4
+    out="$VR_MD/_vr_$name.sh"
+    if [ "$#" -eq 0 ]; then cp "$VR_SRC" "$out"
+    elif ! fx_sub "$VR_SRC" "$out" "$@"; then bad "$label DID NOT APPLY: $FX_WHY"; return 0
+    elif ! bash -n "$out" 2>/dev/null; then bad "$label DID NOT APPLY: the mutated copy does not parse"; return 0; fi
+    vr_cells "$out"
+    if [ "$VR_CELLS" = "$want" ]; then ok "$label scored $VR_CELLS"
+    else bad "$label scored $VR_CELLS, wanted $want"; fi
+  }
+  vr_score "MUTANT refusal-control (unmutated sibling copy): every cell holds" ctl 111111 ""
+  vr_score "MUTANT R-revert-all (every layer removed, grep status 2 falls through): A-D red, E and F hold" \
+    revert-all 000011 "" "$VR_G1" 'if false; then' "$VR_G2" 'if false; then'
+  vr_score "MUTANT R-nonregular (the -e/-L guard removed): ONLY the directory and symlink cells go red" \
+    nonregular 100111 "" "$VR_G1" 'if false; then'
+  vr_score "MUTANT R-no-symlink (-L dropped beside -e): ONLY the dangling-symlink cell goes red" \
+    no-symlink 110111 "" "$VR_G1L" '[ -e "$ESCALATIONS" ]'
+  vr_score "MUTANT R-rc (the status > 1 guard removed): the mode-000 and I/O cells go red" \
+    rc 011011 "" "$VR_G2" 'if false; then'
+  vr_score "MUTANT R-readable-never (the -r test never true): ONLY the mode-000 cell's reason goes red" \
+    readable-never 011111 "" "$VR_G3" 'if false; then'
+  vr_score "MUTANT R-readable-always (the -r test always true): ONLY the I/O cell's reason goes red" \
+    readable-always 111011 "" "$VR_G3" 'if true; then'
+fi
+
+# --- Assertions 25-31: the Check 2/2a text says an unreadable pending.md REFUSES, never "FAIL" -------
+# The existing posture cells FAIL on the literal `is not a pass` in those sections and count three
+# `IS a pass` phrases in the map. Neither sees a sentence that appends "treat that line as a FAIL" to
+# the pass ruling, which re-inverts it for an adjudicator, nor the refusal clause being dropped. And
+# Checks 26/33/35, whose corpus MUST exist, still carry the opposite reading.
+#   A  map, Check 2/2a postures: exactly 3 carry the refusal clause
+#   B  step text, Check 2: the refusal sentence and its `REFUSED:` / never-a-pass tail
+#   C  step text, Check 2a: the same
+#   D2, D2a, Dm  no sentence containing "treat that line as a FAIL" (any case) in step 2, step 2a, map 2/2a
+#   E  map rows 26, 33, 35: "is not a pass, nothing was verified" once in each, 3 in total
+RP_MAP='unreadable or non-regular `pending.md` is a REFUSAL, exit 2 with `REFUSED:` on stderr, never a pass'
+RP_STEP='An unreadable or non-regular `pending.md` is a REFUSAL:'
+RP_TAIL='with `REFUSED:` on stderr, and that is never a pass.'
+RP_FAIL='treat that line as a fail'
+RP_NOTPASS='is not a pass, nothing was verified'
+RP_CELLS=""
+rp_count() { local n; n="$(grep -oF -- "$1" <<<"$2" | grep -c .)" || n=0; printf '%s' "$n"; }
+rp_has_fail() { local lc; lc="$(tr '[:upper:]' '[:lower:]' <<<"$1")"; grep -qF -- "$RP_FAIL" <<<"$lc"; }
+rp_cells() {  # <gate-validation.md> <enforcement-map.yaml> -> RP_CELLS
+  local s2 s2a m m26 m33 m35 c="" n26 n33 n35
+  s2="$(en_flat "$1" '^### 2\. ' '^### 2a\. ')"
+  s2a="$(en_flat "$1" '^### 2a\. ' '^### 3\. ')"
+  m="$(en_flat "$2" '^  - id: "2"$' '^  - id: "3"$')"
+  m26="$(en_flat "$2" '^  - id: "26"$' '^  - id: "')"
+  m33="$(en_flat "$2" '^  - id: "33"$' '^  - id: "')"
+  m35="$(en_flat "$2" '^  - id: "35"$' '^  - id: "')"
+  if [ "$(rp_count "$RP_MAP" "$m")" -eq 3 ]; then c="${c}1"; else c="${c}0"; fi
+  if grep -qF -- "$RP_STEP" <<<"$s2" && grep -qF -- "$RP_TAIL" <<<"$s2"; then c="${c}1"; else c="${c}0"; fi
+  if grep -qF -- "$RP_STEP" <<<"$s2a" && grep -qF -- "$RP_TAIL" <<<"$s2a"; then c="${c}1"; else c="${c}0"; fi
+  if [ -n "$s2" ] && ! rp_has_fail "$s2"; then c="${c}1"; else c="${c}0"; fi
+  if [ -n "$s2a" ] && ! rp_has_fail "$s2a"; then c="${c}1"; else c="${c}0"; fi
+  if [ -n "$m" ] && ! rp_has_fail "$m"; then c="${c}1"; else c="${c}0"; fi
+  n26="$(rp_count "$RP_NOTPASS" "$m26")"; n33="$(rp_count "$RP_NOTPASS" "$m33")"; n35="$(rp_count "$RP_NOTPASS" "$m35")"
+  if [ "$n26" -ge 1 ] && [ "$n33" -ge 1 ] && [ "$n35" -ge 1 ] && [ $((n26 + n33 + n35)) -eq 3 ]; then c="${c}1"; else c="${c}0"; fi
+  RP_CELLS="$c"
+}
+# SELF-PROBE FIRST, on synthesized files, both directions: a conforming pair scores every cell, the
+# same pair with "Treat that line as a FAIL." appended to step 2 moves ONLY D2, and a near-miss
+# ("Treat that line as a PASS.") stays quiet.
+RPP="$WORK/rp-probe"; mkdir -p "$RPP"
+rpp_gv() {  # <extra sentence for step 2> -> a synthesized gate-validation.md on stdout
+  printf '### 2. No unresolved HARD_BLOCKs?\n\nAbsent is a PASS. %s\n  REFUSAL: both scripts exit 2 %s%s\n\n' "$RP_STEP" "$RP_TAIL" "$1"
+  printf '### 2a. Citation?\n\n%s\nREFUSAL: the script exits 2 %s\n\n### 3. Next.\n' "$RP_STEP" "$RP_TAIL"
+}
+{
+  printf 'checks:\n  - id: "2"\n'
+  for _p in a b c; do printf '    posture: IS a pass; an %s)\n' "$RP_MAP"; done
+  printf '  - id: "3"\n'
+  for _id in 26 33 35; do printf '  - id: "%s"\n    posture: %s\n' "$_id" "$RP_NOTPASS"; done
+  printf '  - id: "36"\n'
+} > "$RPP/map.yaml"
+rpp_gv "" > "$RPP/gv-ok.md"
+rpp_gv " Treat that line as a FAIL." > "$RPP/gv-fail.md"
+rpp_gv " Treat that line as a PASS." > "$RPP/gv-near.md"
+rp_cells "$RPP/gv-ok.md" "$RPP/map.yaml"; RPP_OK="$RP_CELLS"
+rp_cells "$RPP/gv-fail.md" "$RPP/map.yaml"; RPP_FAIL="$RP_CELLS"
+rp_cells "$RPP/gv-near.md" "$RPP/map.yaml"; RPP_NEAR="$RP_CELLS"
+if [ "$RPP_OK" = 1111111 ] && [ "$RPP_FAIL" = 1110111 ] && [ "$RPP_NEAR" = 1111111 ]; then
+  ok "refusal-prose self-probe: a conforming pair scores 1111111, the FAIL sentence moves ONLY D2, the near-miss is quiet"
+else
+  bad "refusal-prose self-probe read ok=$RPP_OK fail=$RPP_FAIL near=$RPP_NEAR, wanted 1111111/1110111/1111111 -- the cells cannot be trusted on the real files"
+fi
+if [ ! -f "$EN_GV" ] || [ ! -f "$EN_MAP" ]; then
+  bad "refusal-prose arms cannot run: gate-validation.md or enforcement-map.yaml is not beside $SPEC_SRC"
+else
+  rp_cells "$EN_GV" "$EN_MAP"
+  # A TREE THAT PREDATES THE REFUSAL SENTENCE: A, B and C all read 0 there. SKIP on a consumer only.
+  if [ "$(printf '%s' "$RP_CELLS" | cut -c1-3)" = "000" ] && [ "$VEN_IS_DIST" -ne 1 ]; then
+    printf '  SKIP  the refusal-prose arms -- the installed step and map files predate the unreadable-file refusal\n'
+  else
+    i=0
+    for nm in "A the map's three Check 2/2a postures carry the refusal clause" \
+              "B Check 2's step text carries the refusal sentence" \
+              "C Check 2a's step text carries the refusal sentence" \
+              "D2 Check 2's step text has no 'treat that line as a FAIL'" \
+              "D2a Check 2a's step text has no 'treat that line as a FAIL'" \
+              "Dm the map's Check 2/2a rows have no 'treat that line as a FAIL'" \
+              "E Checks 26, 33 and 35 still say 'is not a pass, nothing was verified', once each"; do
+      i=$((i + 1))
+      if [ "$(printf '%s' "$RP_CELLS" | cut -c"$i")" = "1" ]; then ok "refusal-prose cell $nm"
+      else bad "refusal-prose cell $nm does not hold (cells=$RP_CELLS)"; fi
+    done
+    RP_MW="$WORK/rp-mut"; mkdir -p "$RP_MW"
+    rp_score() {  # <label> <which: gv|map> <name> <want-rp> <want-en> <anchor> <replacement>
+      local label="$1" which="$2" out gv="$EN_GV" map="$EN_MAP" wrp="$4" wen="$5"
+      out="$RP_MW/$3"
+      shift 5
+      if [ "$which" = gv ]; then fx_sub "$EN_GV" "$out" "$@" && gv="$out"; else fx_sub "$EN_MAP" "$out" "$@" && map="$out"; fi
+      if [ ! -f "$out" ]; then bad "$label DID NOT APPLY: $FX_WHY"; return 0; fi
+      rp_cells "$gv" "$map"; en_cells "$gv" "$map"
+      if [ "$RP_CELLS" = "$wrp" ] && [ "$EN_CELLS" = "$wen" ]; then ok "$label scored refusal=$RP_CELLS posture=$EN_CELLS"
+      else bad "$label scored refusal=$RP_CELLS posture=$EN_CELLS, wanted $wrp/$wen"; fi
+    }
+    # THE BL-353 GAP: the old posture cells stay 111 under this mutant, and only the new D2 cell sees it.
+    rp_score "MUTANT RP-fail-sentence (step 2 appends 'Treat that line as a FAIL.'): ONLY D2 goes red; the old posture cells cannot see it" \
+      gv fail-sentence 1110111 111 \
+      'both scripts exit 2 with `REFUSED:` on stderr, and that is never a pass.' \
+      'both scripts exit 2 with `REFUSED:` on stderr, and that is never a pass. Treat that line as a FAIL.'
+    rp_score "MUTANT RP-map-clause (one Check 2 posture drops the refusal clause): ONLY A goes red" \
+      map map-clause 0111111 111 \
+      'because no escalation exists to be unresolved; an unreadable or non-regular' \
+      'because no escalation exists to be unresolved; a missing'
+    rp_score "MUTANT RP-step-2a-tail (Check 2a drops the REFUSED: tail): ONLY C goes red" \
+      gv step2a-tail 1101111 111 \
+      'REFUSAL: the script exits 2 with `REFUSED:` on stderr' 'REFUSAL: the script exits 2 on stderr'
+    rp_score "MUTANT RP-check-26 (Check 26 turns 'is not a pass' into a pass): ONLY E goes red" \
+      map check-26 1111110 111 \
+      'is not a pass, nothing was verified — no verdict carried a gate_series_id' 'is a pass — no verdict carried a gate_series_id'
+  fi
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "escalation-status-vocabulary: PASS"; exit 0; fi
 echo "escalation-status-vocabulary: $fails assertion(s) FAILED" >&2

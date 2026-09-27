@@ -175,21 +175,43 @@ tokens_of() {
   printf '%s\n' "$_h" | sort -u
 }
 
+# THE TREE LISTING AND EVERY BLOB READ BELOW RETURN THEIR STATUS, AND THE CALLER REFUSES. `collect`
+# and `rulebook_set` used to run inside `$( )` and read the listing as `_t="$(memo_ls_tree …)"`
+# and each body as `$(memo_show …) || true`, all unread: a listing that failed at THEIRS read as a
+# rulebook with no file, so every base rulebook file read as RETIRED (a false positive on every
+# layer file citing one), and a failed listing at base read as the "could not read" NOTE with exit
+# 0. Each now writes its answer to a staged file and returns non-zero with the failed stage named
+# in RLC_WHY; the caller, in the main shell, turns that into rlc_refuse's exit 2.
+RLC_WHY=""
+rlc_tree() {   # rlc_tree <ref> <out> -- the full recursive listing at <ref> into <out>
+  local rc=0
+  if command -v memo_ls_tree >/dev/null 2>&1; then memo_ls_tree "$DIST" "$1" > "$2" || rc=$?
+  else git -C "$DIST" ls-tree -r --name-only "$1" > "$2" 2>/dev/null || rc=$?; fi
+  # The phrase `refusing to report clean` is the one the unreadable-base warning always carried
+  # (retired-layer-contract/run.sh assertion 6 reads it); the exit is now 2, not 0.
+  [ "$rc" -eq 0 ] || { RLC_WHY="the rulebook tree listing at $1 (refusing to report clean, because 'no shapes' and 'nothing retired' are the same output)"; return "$rc"; }
+}
+rlc_glob_files() {   # rlc_glob_files <tree-file> <glob> <out> -- the tree lines the glob names
+  local rc=0
+  grep -E "^$(printf '%s' "$2" | sed 's/\./\\./g; s/\*/[^\/]*/g')$" "$1" > "$3" || rc=$?
+  [ "$rc" -le 1 ] || { RLC_WHY="the rulebook glob match of $2"; return "$rc"; }
+  return 0
+}
+
 # The rulebook FILE SET at a ref, distribution-spelled. Same globs, same resolution and
 # the same `set -f` discipline as `collect` below — it is the corpus this detector
 # already derives, read for its membership rather than for its contents.
-rulebook_set() {   # rulebook_set <ref>
-  local ref="$1" glob f out="" _t
+rulebook_set() {   # rulebook_set <ref> <out>
+  local ref="$1" glob out="" rc=0
   set -f
-  if command -v memo_ls_tree >/dev/null 2>&1; then _t="$(memo_ls_tree "$DIST" "$ref")"
-  else _t="$(git -C "$DIST" ls-tree -r --name-only "$ref" 2>/dev/null)"; fi
+  rlc_tree "$ref" "$RLC_T/rbset-tree" || { rc=$?; set +f; return "$rc"; }
   for glob in $(rulebook_globs); do
-    out="$out$(printf '%s\n' "$_t" \
-      | { grep -E "^$(printf '%s' "$glob" | sed 's/\./\\./g; s/\*/[^\/]*/g')$" || true; })
+    rlc_glob_files "$RLC_T/rbset-tree" "$glob" "$RLC_T/rbset-hits" || { rc=$?; set +f; return "$rc"; }
+    out="$out$(cat "$RLC_T/rbset-hits")
 "
   done
   set +f
-  printf '%s\n' "$out" | sed '/^$/d' | sort -u
+  printf '%s\n' "$out" | sed '/^$/d' | sort -u > "$2" || { rc=$?; RLC_WHY="staging the rulebook file set at $ref"; return "$rc"; }
 }
 
 # Every spelling a layer file may cite a rulebook path in. An entry's `hooks:`/`extends:`
@@ -251,8 +273,8 @@ spellings_of() {   # spellings_of <dist-relative-rulebook-path>
   esac
 }
 
-collect() {     # collect <ref> -> every shape+token across the rulebook at that ref
-  local ref="$1" glob body all=""
+collect() {     # collect <ref> <out> -> every shape+token across the rulebook at that ref, into <out>
+  local ref="$1" glob body all="" f rc=0 _sh _tk
   # `set -f` IS LOAD-BEARING, same defect its sibling retired-layer-passage.sh carries a
   # note about. These entries are PATHSPECS; unquoted in `for` they are subject to shell
   # pathname expansion first, so when the caller's cwd contains matching files bash
@@ -260,27 +282,36 @@ collect() {     # collect <ref> -> every shape+token across the rulebook at that
   # not in the caller's working tree is then silently skipped, and this detector reports a
   # smaller corpus with the same clean line.
   set -f
-  local _rlc_tree
-  if command -v memo_ls_tree >/dev/null 2>&1; then _rlc_tree="$(memo_ls_tree "$DIST" "$ref")"
-  else _rlc_tree="$(git -C "$DIST" ls-tree -r --name-only "$ref" 2>/dev/null)"; fi
+  rlc_tree "$ref" "$RLC_T/collect-tree" || { rc=$?; set +f; return "$rc"; }
   for glob in $(rulebook_globs); do
-    # git ls-tree expands the glob against the tree at <ref>.
-    for f in $(printf '%s\n' "$_rlc_tree" \
-               | { grep -E "^$(printf '%s' "$glob" | sed 's/\./\\./g; s/\*/[^\/]*/g')$" || true; }); do
-      if command -v memo_show >/dev/null 2>&1; then body="$(memo_show "$DIST" "$ref" "$f")" || true
-      else body="$(git -C "$DIST" show "$ref:$f" 2>/dev/null || true)"; fi
+    # The glob is matched against the tree listing at <ref>, never against the cwd.
+    rlc_glob_files "$RLC_T/collect-tree" "$glob" "$RLC_T/collect-hits" || { rc=$?; set +f; return "$rc"; }
+    for f in $(cat "$RLC_T/collect-hits"); do
+      # Every f came from the listing at this ref, so it EXISTS there: any failed read is a
+      # refusal, never an absent file. An empty blob still reads as empty and is skipped.
+      rc=0
+      if command -v memo_show >/dev/null 2>&1; then memo_show "$DIST" "$ref" "$f" > "$RLC_T/collect-body" || rc=$?
+      else git -C "$DIST" show "${ref}:${f}" > "$RLC_T/collect-body" 2>/dev/null || rc=$?; fi
+      [ "$rc" -eq 0 ] || { RLC_WHY="reading $f at $ref"; set +f; return "$rc"; }
+      body="$(cat "$RLC_T/collect-body")" || { rc=$?; RLC_WHY="reading the staged body of $f at $ref"; set +f; return "$rc"; }
       [ -n "$body" ] || continue
-      all="$all$(shapes_of "$body")
-$(tokens_of "$body")
+      # The same status read the layer-file site below applies: 0 is a set, possibly empty.
+      _sh="$(shapes_of "$body")" || { rc=$?; RLC_WHY="the shape scan of $f at $ref"; set +f; return "$rc"; }
+      _tk="$(tokens_of "$body")" || { rc=$?; RLC_WHY="the token scan of $f at $ref"; set +f; return "$rc"; }
+      all="$all$_sh
+$_tk
 "
     done
   done
   set +f
-  printf '%s\n' "$all" | sed '/^$/d' | sort -u
+  printf '%s\n' "$all" | sed '/^$/d' | sort -u > "$2" || { rc=$?; RLC_WHY="staging the shape set at $ref"; return "$rc"; }
 }
 
-BASE_SET="$(collect "$BASE")"
-THEIRS_SET="$(collect "$THEIRS")"
+# In the MAIN shell, never inside `$( )`, so the refusal ends the run rather than a subshell.
+collect "$BASE" "$RLC_T/collect-base" || rlc_refuse "$RLC_WHY" "$?"
+collect "$THEIRS" "$RLC_T/collect-theirs" || rlc_refuse "$RLC_WHY" "$?"
+BASE_SET="$(cat "$RLC_T/collect-base")" || rlc_refuse "reading the staged base shape set" "$?"
+THEIRS_SET="$(cat "$RLC_T/collect-theirs")" || rlc_refuse "reading the staged theirs shape set" "$?"
 
 # A release that retires nothing has nothing to report. Distinguish that from an
 # unresolvable rulebook list, which would silently report clean for every release.
@@ -315,8 +346,10 @@ RETIRED="$(cat "$RLC_T/shapes-retired")"
 # THE PATH ARM'S SUBTRACTION, over the rulebook FILE SET rather than the shapes inside it.
 # Same two refs, same globs, same derivation — a release that retires no rulebook file
 # produces an empty set here and no row, with no list to maintain.
-RB_BASE="$(rulebook_set "$BASE")"
-RB_THEIRS="$(rulebook_set "$THEIRS")"
+rulebook_set "$BASE" "$RLC_T/rbset-base" || rlc_refuse "$RLC_WHY" "$?"
+rulebook_set "$THEIRS" "$RLC_T/rbset-theirs" || rlc_refuse "$RLC_WHY" "$?"
+RB_BASE="$(cat "$RLC_T/rbset-base")" || rlc_refuse "reading the staged base rulebook file set" "$?"
+RB_THEIRS="$(cat "$RLC_T/rbset-theirs")" || rlc_refuse "reading the staged theirs rulebook file set" "$?"
 RETIRED_PATHS=""
 if [ -n "$RB_BASE" ]; then
   _rlc_rc=0

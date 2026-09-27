@@ -290,7 +290,8 @@ Two arms, either satisfies (dual-arm OR):
   reports nothing. See `escalations.md` for the `SUPPRESSED` field set.
 - **An absent or empty `pending.md` is a PASS.** Both scripts then exit 0 with a line
   containing `OK: EXAMINED NOTHING`, and at this check that line IS a pass, because no
-  escalation exists to be unresolved.
+  escalation exists to be unresolved. An unreadable or non-regular `pending.md` is a
+  REFUSAL: both scripts exit 2 with `REFUSED:` on stderr, and that is never a pass.
 - **The blocking clause is SCOPED BY SPRINT, and the entry header carries the scope.**
   If an entry has status `HARD_BLOCK`, is not RESOLVED, and its header names THIS
   sprint, do NOT proceed. `touch _bmad-output/pipeline-paused.flag` (Rule 3), then
@@ -367,7 +368,8 @@ disarm the check.
 
 **An absent or empty `pending.md` is a PASS.** The script then exits 0 with a line
 containing `OK: EXAMINED NOTHING`, and at this check that line IS a pass, because no
-escalation exists to be unresolved.
+escalation exists to be unresolved. An unreadable or non-regular `pending.md` is a
+REFUSAL: the script exits 2 with `REFUSED:` on stderr, and that is never a pass.
 
 **Pass `--transcript-dir` too. It is MANDATORY: `--transcript` alone is not an
 acceptable invocation of this check.** A sprint spans sessions: an

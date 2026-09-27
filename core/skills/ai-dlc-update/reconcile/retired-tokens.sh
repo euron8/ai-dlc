@@ -158,6 +158,34 @@ rt_toks() { # rt_toks <what> <out> -- toks of stdin into <out>; 0 and 1 accepted
 }
 printf '%s\n' "$SUBJECT" > "$RT_T/subject" || rt_refuse "staging the CLASSIFY subject list" "$?"
 
+# THE BLOB READS ARE STAGED AND THEIR STATUS IS READ. They used to be `$(git show … || true)`, so a
+# ref side git could not read came back as an EMPTY file: the path was skipped as though absent,
+# or -- one side read, the other not -- the tokens of the readable side were subtracted from
+# nothing. Two states are legitimate and both are an empty listing, never a failed one: a path
+# ABSENT at base or at theirs, which preclassify's BOTH-ADDED and UPSTREAM-DELETED CLASSIFY
+# buckets produce by construction. `git cat-file -e` cannot separate that from a failed read --
+# it answers 128 for an absent path, a bad ref and no repository alike -- so both refs are
+# verified ONCE here, and per path an `ls-tree` listing decides presence: its failure refuses,
+# its empty answer is the absent skip, and a present path whose `show` fails refuses.
+for _rt_ref in "$BASE" "$THEIRS"; do
+  _rt_rc=0
+  git -C "$DIST" rev-parse -q --verify "${_rt_ref}^{commit}" > "$RT_T/ref-verify" 2>/dev/null || _rt_rc=$?
+  [ "$_rt_rc" -eq 0 ] || rt_refuse "resolving ${_rt_ref} to a commit in $DIST" "$_rt_rc"
+done
+rt_blob() { # rt_blob <ref> <path> <out> -- 0 staged into <out>; 1 absent at <ref>; refuses otherwise
+  local rc=0 l present=""
+  git -C "$DIST" ls-tree --name-only "$1" -- "$2" > "$3.ls" 2>/dev/null || rc=$?
+  [ "$rc" -eq 0 ] || rt_refuse "listing $2 at $1" "$rc"
+  # ls-tree matches a pathspec by prefix, so presence is an EXACT line, never a non-empty file.
+  while IFS= read -r l; do
+    [ "$l" = "$2" ] && { present=yes; break; }
+  done < "$3.ls"
+  [ -n "$present" ] || return 1
+  git -C "$DIST" show "${1}:${2}" > "$3" 2>/dev/null || rc=$?
+  [ "$rc" -eq 0 ] || rt_refuse "reading $2 at $1" "$rc"
+  return 0
+}
+
 listed=0; opened=0; retiring=0; rows=""
 while IFS="$(printf '\t')" read -r cp cons; do
   [ -n "${cp:-}" ] || continue
@@ -167,8 +195,10 @@ while IFS="$(printf '\t')" read -r cp cons; do
   ours="$CONSUMER/$cons"
   [ -f "$ours" ] || continue
 
-  b="$(git -C "$DIST" show "${BASE}:${cp}" 2>/dev/null || true)"
-  t="$(git -C "$DIST" show "${THEIRS}:${cp}" 2>/dev/null || true)"
+  rt_blob "$BASE" "$cp" "$RT_T/blob-base" || continue
+  rt_blob "$THEIRS" "$cp" "$RT_T/blob-theirs" || continue
+  b="$(cat "$RT_T/blob-base")" || rt_refuse "reading the staged base blob of $cp" "$?"
+  t="$(cat "$RT_T/blob-theirs")" || rt_refuse "reading the staged theirs blob of $cp" "$?"
   [ -n "$b" ] && [ -n "$t" ] || continue
   opened=$((opened + 1))
 

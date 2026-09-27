@@ -87,7 +87,8 @@
 #   1  a current-sprint resolution cites no genuine operator message, or omits the citation, or
 #      (gate mode) no transcript was provided to verify against; --any-authorized: no entry in
 #      the file carries a well-formed operator citation
-#   2  bad arguments / unreadable escalations file
+#   2  bad arguments / (gate mode) an escalations path that exists but is not a regular
+#      file, or could not be read -- `REFUSED:` on stderr
 set -u
 
 # A DIRECTORY IS NOT A CORPUS. `-d` answers whether the path EXISTS, never whether it holds
@@ -241,6 +242,13 @@ else
     echo "FAIL: --escalations <pending.md> and --sprint <N> are required" >&2
     exit 2
   fi
+  # A path that EXISTS but is not a regular file is not the absent state: a directory, a
+  # fifo or a dangling symlink fails `-f` and would take the no-file branch below, whose
+  # line Check 2a reads as a pass. `-L` beside `-e` because a dangling symlink fails `-e`.
+  if { [ -e "$ESCALATIONS" ] || [ -L "$ESCALATIONS" ]; } && [ ! -f "$ESCALATIONS" ]; then
+    echo "REFUSED: escalations path $ESCALATIONS exists but is not a regular file; nothing was examined." >&2
+    exit 2
+  fi
   # No escalations file is a legitimate clean state -- nothing to adjudicate.
   [ -f "$ESCALATIONS" ] || { echo "OK: EXAMINED NOTHING — no escalations file ($ESCALATIONS); nothing to check."; exit 0; }
   # A FILE THAT EXISTS AND HOLDS NO NON-WHITESPACE BYTE IS THE ABSENT STATE, AND SAYS SO. It
@@ -253,7 +261,11 @@ else
   # live entries in a shape this parser cannot read; "zero parsed records" would relabel a
   # grammar failure as nothing having been there. None of the 891 is empty or
   # whitespace-only. `grep` exits 1 only when it READ the file and found nothing; an
-  # unreadable file exits 2 and keeps its old path.
+  # unreadable file exits 2 and REFUSES (exit 2, `REFUSED:` on stderr). It used to fall
+  # through, the parser's read failure was swallowed, and the run printed the ordinary
+  # "no S<N> ... requires an operator citation" line over a file nobody read. Unreadable is
+  # the mode bit AND the status together, so a caller that CAN read a mode-000 file is not
+  # refused on the bit alone.
   #
   # BELOW THE --any-authorized SPLIT, deliberately. There an empty file is no citation and
   # must stay `NONE:` / exit 1; a check hoisted above the split would answer "authorized".
@@ -262,6 +274,14 @@ else
   if [ "$ESC_BLANK_RC" -eq 1 ]; then
     echo "OK: EXAMINED NOTHING — escalations file present but empty ($ESCALATIONS); nothing to check."
     exit 0
+  fi
+  if [ "$ESC_BLANK_RC" -gt 1 ]; then
+    if [ ! -r "$ESCALATIONS" ]; then
+      echo "REFUSED: escalations file $ESCALATIONS could not be read; nothing was examined." >&2
+    else
+      echo "REFUSED: reading escalations file $ESCALATIONS failed (grep exited $ESC_BLANK_RC); nothing was examined." >&2
+    fi
+    exit 2
   fi
 
   # Normalize the sprint token: accept "290" or "S290".
