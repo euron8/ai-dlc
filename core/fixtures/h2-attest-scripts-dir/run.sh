@@ -535,7 +535,29 @@ else
 | H2 | FAIL | ${BT}${V_OK}${BT} |"
   sd rb-fail-moved "$HR
 | H2 | FAIL | ${BT}${V_BAD}${BT} |"
-  RB_ROWS="rb-bl1|1|
+  # THE TWO CELL READINGS. A pipe inside a backtick code span is part of the cell under the
+  # code-span reading and a cell border under the GFM reading, which is how GitHub renders
+  # the row; a table row verifies only when BOTH accept it. Each seed below is accepted by
+  # exactly one reading, so it separates the two:
+  #   (i)   code-span hole: `| PASS` inside a code span. Split on every pipe, the Result
+  #         column reads PASS; read as code, it reads FAIL. Refused by the code-span reading.
+  #   (ii)  GFM mirror: `a| FAIL |b` inside a code span before a PASS cell. Read as code, the
+  #         Result column reads PASS; GitHub renders FAIL there. Refused by the GFM reading,
+  #         and the message must say so.
+  #   (iii) a genuine PASS row carrying `a|b` in its label cell: the pipe shifts every later
+  #         cell under the GFM reading, so it is refused BY DESIGN — a false refusal costs one
+  #         re-drive, a false grant attests a check nobody drove.
+  sd rb-cs-hole "$HR
+| H2 ${BT}| PASS${BT} | FAIL | ${BT}${V_OK}${BT} |"
+  sd rb-gfm-mirror "| Check | Note | Result | Evidence |
+|---|---|---|---|
+| H2 | ${BT}a| FAIL |b${BT} | PASS | ${BT}${V_OK}${BT} |"
+  sd rb-pipe-in-code "$HR
+| H2 ${BT}a|b${BT} | PASS | ${BT}${V_OK}${BT} |"
+  RB_ROWS="rb-cs-hole|3|does not begin PASS
+rb-gfm-mirror|3|(reading every pipe as a cell border
+rb-pipe-in-code|3|(reading every pipe as a cell border
+rb-bl1|1|
 rb-bl2|1|
 rb-bl3|3|
 rb-bl4|1|
@@ -613,7 +635,7 @@ ${V_OK}
       echo "        '$s.md:$l QUOTES' on stderr${r:+ and the reason '$r'}." >&2; vx_show
     fi
   done <<<"$RB_ROWS"
-  [ "$n_rb" -ge 19 ] || bad "only $n_rb refusal rows were driven — the RB_ROWS list was truncated"
+  [ "$n_rb" -ge 22 ] || bad "only $n_rb refusal rows were driven — the RB_ROWS list was truncated"
   if p_changed "$SUT" cb-moved-pass; then ok "CONTROL: a PASS row at a moved digest reports CHANGED"
   else bad "CONTROL: a PASS row at a moved digest did not report CHANGED (rc=$X_RC)"; vx_show; fi
   if p_first "$SUT" cb-none; then ok "CONTROL: a log with no span reports first-gate"
@@ -704,6 +726,8 @@ ${V_OK}
   q_fail_mv()  { p_refuse "$1" rb-fail-moved 3 'does not begin PASS'; }
   q_cite()     { p_cite "$1"; }
   q_adv_none() { local s; for s in $ADV_SEEDS; do p_adv "$1" "$s" || return 1; done; }
+  q_cs_hole()  { p_refuse "$1" rb-cs-hole 3 'does not begin PASS'; }
+  q_gfm()      { p_refuse "$1" rb-gfm-mirror 3 '(reading every pipe as a cell border'; }
 
   # An UNMUTATED copy in the same place must pass every predicate first, so a harness that
   # cannot run a copy from $WORK is reported as broken rather than as a row of kills. Each
@@ -764,6 +788,20 @@ ${V_OK}
       'if (pass) print "PASS|" cite' 'if (pass) print "PASS|" lastspan' \
       && score h "$M" q_cite "citing the last span in the log prints the refused re-drive" q_col1 q_cell
 
+    # (i2) the splitter before code spans were read: every pipe is a border in BOTH readings,
+    #      so the code-span hole reads PASS in the Result column; arm (i) owns it.
+    M="$WORK/h2-cells-every-pipe.mutant.sh"
+    mut_mk i2 "$M" 'if (GFM) return gfmcells(s, arr)' 'return gfmcells(s, arr)' \
+      && score i2 "$M" q_cs_hole "a splitter blind to code spans grants the code-span hole" q_col1 q_hdr_pass
+    # (j) only the code-span reading judged: the GFM mirror verifies; arm (ii) owns it.
+    M="$WORK/h2-judge-codespan-only.mutant.sh"
+    mut_mk j "$M" 'GFM = 1; b = judgeone(rx); GFM = 0' 'b = "OK"' \
+      && score j "$M" q_gfm "judging only the code-span reading grants the GFM mirror" q_col1 q_hdr_pass
+    # (k) only the GFM reading judged: both judgeone calls split on every pipe, so the
+    #     code-span hole verifies; arm (i) owns it.
+    M="$WORK/h2-judge-gfm-only.mutant.sh"
+    mut_mk k "$M" 'GFM = 0; a = judgeone(rx); cite = CITE' 'GFM = 1; a = judgeone(rx); cite = CITE; GFM = 0' \
+      && score k "$M" q_cs_hole "judging only the GFM reading grants the code-span hole" q_col1 q_hdr_pass
     # (m1) locating keyed on this digest only: a moved-digest bullet falls to first-gate.
     M="$WORK/h2-locate-span.mutant.sh"
     mut_mk m1 "$M" 'locn = NR; locwhy = why' 'if ($0 ~ SPAN) { locn = NR; locwhy = why }' \
