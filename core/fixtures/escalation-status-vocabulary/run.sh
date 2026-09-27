@@ -381,6 +381,94 @@ else
   ven_score "MUTANT M-zero-records" "$VEN_M2" 11101 "zero parsed records read as empty: ONLY the populated-zero-record cell goes red" zero-records
 fi
 
+# --- Assertions 16-18: at Checks 2 and 2a, `OK: EXAMINED NOTHING` IS a pass ----------------
+# The escalations file exists only once something has been escalated, so its absence is
+# exactly Check 2's predicate holding: no unresolved HARD_BLOCK. The three scripts have always
+# said so. The enforcement map's postures for these two checks said the opposite -- "is not a
+# pass, nothing was verified", the reading that is RIGHT at Checks 26/33/35, whose corpus must
+# exist -- and the step text said nothing at all, so an adjudicator reading the map would fail
+# every consumer that has never escalated.
+#
+# THREE CELLS, one per artifact an adjudicator reads, each scored over a FLATTENED section so a
+# re-wrap of the prose cannot move a cell:
+#   A gate-validation.md Check 2 section: states the absent/empty PASS, names the printed line,
+#     and carries no "is not a pass"
+#   B gate-validation.md Check 2a section: the same
+#   C enforcement-map.yaml rows 2 and 2a: exactly three postures say IS a pass, none says
+#     "is not a pass"
+# Every cell is presence-shaped on its first conjunct, so an unreadable or missing file fails
+# it rather than acquitting it.
+EN_DIR="$(cd "$(dirname "$SPEC_SRC")" && pwd)"
+EN_GV="$EN_DIR/steps/gate-validation.md"
+EN_MAP="$EN_DIR/enforcement-map.yaml"
+EN_PASS='IS a pass, because no escalation exists to be unresolved'
+EN_CELLS=""
+en_flat() {  # <file> <start-regex> <end-regex> -> the lines from start up to (not incl.) end, on one line
+  awk -v s="$2" -v e="$3" '$0 ~ s { on = 1; print; next } on && $0 ~ e { exit } on { print }' "$1" 2>/dev/null \
+    | tr '\n' ' ' | tr -s ' '
+}
+en_step_cell() {  # <flattened section> -> 1 or 0
+  if grep -qF "An absent or empty \`pending.md\` is a PASS." <<<"$1" && grep -qF "$EN_PASS" <<<"$1" \
+     && grep -qF 'OK: EXAMINED NOTHING' <<<"$1" && ! grep -qF 'is not a pass' <<<"$1"; then echo 1; else echo 0; fi
+}
+en_cells() {  # <gate-validation.md> <enforcement-map.yaml> -> sets EN_CELLS
+  local s2 s2a m n
+  s2="$(en_flat "$1" '^### 2\. ' '^### 2a\. ')"
+  s2a="$(en_flat "$1" '^### 2a\. ' '^### 3\. ')"
+  m="$(en_flat "$2" '^  - id: "2"$' '^  - id: "3"$')"
+  n="$(grep -oF "$EN_PASS" <<<"$m" | grep -c .)" || n=0
+  EN_CELLS="$(en_step_cell "$s2")$(en_step_cell "$s2a")"
+  if [ "$n" -eq 3 ] && ! grep -qF 'is not a pass' <<<"$m"; then EN_CELLS="${EN_CELLS}1"; else EN_CELLS="${EN_CELLS}0"; fi
+}
+if [ ! -f "$EN_GV" ] || [ ! -f "$EN_MAP" ]; then
+  bad "Checks 2/2a posture arms cannot run: gate-validation.md or enforcement-map.yaml is not beside $SPEC_SRC"
+else
+  en_cells "$EN_GV" "$EN_MAP"
+fi
+# A TREE THAT PREDATES THE RULING. This fixture ships, and a consumer can run it against step
+# and map files installed before the ruling: all three cells read 0. SKIP there; FAIL here.
+if [ -f "$EN_GV" ] && [ -f "$EN_MAP" ] && [ "$EN_CELLS" = "000" ] && [ "$VEN_IS_DIST" -ne 1 ]; then
+  printf '  SKIP  the Checks 2/2a posture arms -- the installed step and map files predate the absent-file-is-a-pass reading\n'
+elif [ -f "$EN_GV" ] && [ -f "$EN_MAP" ]; then
+  i=0
+  for nm in "A Check 2's step text states an absent or empty pending.md is a PASS" \
+            "B Check 2a's step text states an absent or empty pending.md is a PASS" \
+            "C the map's three Check 2/2a postures say OK: EXAMINED NOTHING IS a pass"; do
+    i=$((i + 1))
+    if [ "$(printf '%s' "$EN_CELLS" | cut -c"$i")" = "1" ]; then ok "posture cell $nm"
+    else bad "posture cell $nm does not hold (cells=$EN_CELLS)"; fi
+  done
+
+  # --- the mutants restore the old reading, each in ONE artifact, in copies ----------------
+  EN_MW="$WORK/posture-mut"; mkdir -p "$EN_MW"
+  en_mut() {  # <name> <file> <literal-anchor> <replacement> -> prints the copy, or nothing
+    local n
+    n="$(grep -cF -- "$3" "$2")" || n=0
+    [ "$n" -ge 1 ] || { echo "anchor matches 0 line(s) of $(basename "$2")" > "$EN_MW/$1.why"; return 1; }
+    awk -v A="$3" -v R="$4" '{ i = index($0, A); if (i) $0 = substr($0, 1, i - 1) R substr($0, i + length(A)); print }' \
+      "$2" > "$EN_MW/$1"
+    if cmp -s "$2" "$EN_MW/$1"; then echo "changed no bytes" > "$EN_MW/$1.why"; return 1; fi
+    printf '%s\n' "$EN_MW/$1"
+  }
+  en_score() {  # <label> <gv> <map> <want> <why> <mk-name>
+    if [ -z "$2" ] || [ -z "$3" ]; then bad "$1 was never built: $(cat "$EN_MW/$6.why" 2>/dev/null || echo 'no reason recorded')"; return 0; fi
+    en_cells "$2" "$3"
+    if [ "$EN_CELLS" = "$4" ]; then ok "$1 scored $EN_CELLS -- $5"
+    else bad "$1 scored $EN_CELLS, wanted $4 -- $5"; fi
+  }
+  # The step-text sentence is wrapped identically in both sections, so the anchor is each
+  # section's OWN lead-in, which differs: Check 2's is a bullet, Check 2a's is a paragraph.
+  EN_M1="$(en_mut gv-2 "$EN_GV" '- **An absent or empty `pending.md` is a PASS.** Both scripts' \
+    '- **An absent or empty `pending.md` is not a pass, nothing was verified.** Both scripts')" || EN_M1=""
+  en_score "MUTANT M-step-2 (Check 2 restores 'is not a pass')" "$EN_M1" "$EN_MAP" 011 "ONLY Check 2's step cell goes red" gv-2
+  EN_M2="$(en_mut gv-2a "$EN_GV" '**An absent or empty `pending.md` is a PASS.** The script' \
+    '**An absent or empty `pending.md` is not a pass, nothing was verified.** The script')" || EN_M2=""
+  en_score "MUTANT M-step-2a (Check 2a restores 'is not a pass')" "$EN_M2" "$EN_MAP" 101 "ONLY Check 2a's step cell goes red" gv-2a
+  EN_M3="$(en_mut map "$EN_MAP" 'with entries_scanned=0 when no escalations file exists or it holds nothing — IS a pass,' \
+    'with entries_scanned=0 when no escalations file exists or it holds nothing — is not a pass, nothing was verified,')" || EN_M3=""
+  en_score "MUTANT M-map (one Check 2 posture restores 'is not a pass')" "$EN_GV" "$EN_M3" 110 "ONLY the map cell goes red" map
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "escalation-status-vocabulary: PASS"; exit 0; fi
 echo "escalation-status-vocabulary: $fails assertion(s) FAILED" >&2

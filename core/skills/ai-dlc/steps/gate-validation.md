@@ -288,6 +288,9 @@ Two arms, either satisfies (dual-arm OR):
   no-op. Past its `**Expires after:**` count a suppression whose named check is
   still recorded `FAIL` needs fresh authorization; one whose cause was fixed
   reports nothing. See `escalations.md` for the `SUPPRESSED` field set.
+- **An absent or empty `pending.md` is a PASS.** Both scripts then exit 0 with a line
+  containing `OK: EXAMINED NOTHING`, and at this check that line IS a pass, because no
+  escalation exists to be unresolved.
 - **The blocking clause is SCOPED BY SPRINT, and the entry header carries the scope.**
   If an entry has status `HARD_BLOCK`, is not RESOLVED, and its header names THIS
   sprint, do NOT proceed. `touch _bmad-output/pipeline-paused.flag` (Rule 3), then
@@ -361,6 +364,10 @@ genuine operator message **FAILS**. If you made the call yourself, its status is
 `DECIDED_AUTONOMOUSLY` (informational, non-blocking, no citation). Fails
 **closed** if neither flag is given — a forgotten flag cannot silently
 disarm the check.
+
+**An absent or empty `pending.md` is a PASS.** The script then exits 0 with a line
+containing `OK: EXAMINED NOTHING`, and at this check that line IS a pass, because no
+escalation exists to be unresolved.
 
 **Pass `--transcript-dir` too. It is MANDATORY: `--transcript` alone is not an
 acceptable invocation of this check.** A sprint spans sessions: an
