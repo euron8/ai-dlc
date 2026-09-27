@@ -948,6 +948,152 @@ else
   bad "m-m7 DID NOT APPLY -- the set +u bracket mutation matched nothing, so no verdict was scored"
 fi
 
+# --- N. A COMPARISON OR A WALK THAT COULD NOT RUN IS A REFUSAL, NEVER A VERDICT ------------------
+# Three verdict-bearing steps AROUND the derivation used to discard their own status:
+#   - the comparison was `if ! diff -q <(norm ...) <(norm ...)`, so `diff` exiting 2 -- bash 3.2's
+#     `/dev/fd/63: Bad file descriptor` under concurrent workers -- took the `!` branch and a TRUE
+#     derivation scored STALE, exit 1, which the gate sends to a remediator;
+#   - `norm` (two `sed` stages) ran inside those substitutions, so a failing `sed` emptied BOTH
+#     sides and a STALE derivation compared equal: OK, exit 0, a silent false clear;
+#   - a directory target was walked by `done < <(find ...)`, so a failing `find` read as an empty
+#     directory: `OK: 0 derivation(s)`, exit 0.
+# Each is FORCED here with a PATH stub, never sampled. The seed command is `grep -c`, never `diff`,
+# `sed` or `find`, so no stub can leak into the derivation itself and move its output.
+#
+# EVERY STUB ARM HAS A PASS-THROUGH TWIN in the same world: the same stub file, writing the same
+# sentinel, but handing the call to the real binary. The twin must reach the ordinary verdict and
+# leave its sentinel -- which proves the stub is on the validator's PATH and is reached by the step
+# under test, so the failing arm is about that step and not about a stub nobody called.
+#
+# THE ARMS ARE A FUNCTION OF THE VALIDATOR so the mutants below drive the IDENTICAL arm set, and a
+# mutant is scored by WHICH arms it fails -- that set must equal the one it declares. A mutant that
+# fails nothing survived; one that fails an arm it does not own means two arms are entangled.
+N="$WORK/n"
+mkdir -p "$N/nostub" "$N/dir"
+printf 'nn\nxx\nnn\n' > "$WORK/src/n-data.txt"
+{ printf '```derived\n$ grep -c nn src/n-data.txt\n2\n```\n'; } > "$N/good.md"
+{ printf '```derived\n$ grep -c nn src/n-data.txt\n7\n```\n'; } > "$N/stale.md"
+{ printf '```derived\n$ grep -c nn src/n-data.txt\n2\n```\n'; } > "$N/dir/good.md"
+REAL_DIFF="$(command -v diff)"; REAL_SED="$(command -v sed)"; REAL_FIND="$(command -v find)"
+[ -n "$REAL_DIFF" ] && [ -n "$REAL_SED" ] && [ -n "$REAL_FIND" ] \
+  || { echo "FIXTURE ERROR: diff, sed or find is not on PATH, so no stub below can pass through" >&2; exit 2; }
+# nstub <dir> <tool> <real path> <fail: 1|0> <sed args that fail, or empty = every call>
+# The stub appends one line to <dir>/SENT per call it CLAIMS (fails, or would have failed in the
+# pass-through twin), then fails or execs the real tool.
+nstub() {
+  local d="$1" tool="$2" real="$3" failing="$4" match="$5" act
+  mkdir -p "$d"; : > "$d/SENT"
+  if [ "$failing" = 1 ]; then act='echo "'"$tool"': forced failure" >&2; exit 2'; else act=':'; fi
+  [ "$tool" = find ] && [ "$failing" = 1 ] && act='echo "find: forced failure" >&2; exit 1'
+  {
+    printf '#!/bin/sh\n'
+    if [ -n "$match" ]; then
+      printf 'case "$*" in\n  %s) echo "$*" >> "%s/SENT"; %s ;;\nesac\n' "$match" "$d" "$act"
+    else
+      printf 'echo "$*" >> "%s/SENT"; %s\n' "$d" "$act"
+    fi
+    printf 'exec "%s" "$@"\n' "$real"
+  } > "$d/$tool"
+  chmod +x "$d/$tool"
+}
+nstub "$N/diff-fail" diff "$REAL_DIFF" 1 ""
+nstub "$N/diff-pass" diff "$REAL_DIFF" 0 ""
+# Only norm's two exact scripts fail. The allowlist scan and the STALE message call sed too, with
+# other scripts, and must keep working, or the arm would be about them.
+nstub "$N/sed-fail"  sed  "$REAL_SED"  1 "'s/[[:space:]]*\$//'|'/^\$/d'"
+nstub "$N/sed-pass"  sed  "$REAL_SED"  0 "'s/[[:space:]]*\$//'|'/^\$/d'"
+nstub "$N/find-fail" find "$REAL_FIND" 1 ""
+nstub "$N/find-pass" find "$REAL_FIND" 0 ""
+
+nrun() { # $1 validator  $2 stub dir  $3 target -> sets out, rc
+  : > "$2/SENT" 2>/dev/null
+  out="$(cd "$WORK" && PATH="$2:$PATH" AI_DLC_PROJECT_ROOT="$WORK" bash "$1" "$3" 2>&1)"; rc=$?
+}
+sent() { [ -s "$1/SENT" ]; }
+
+# n_arms <validator> <quiet: 1|0> -> runs every N arm; sets N_FAILED to the sorted failed arm ids.
+n_arms() {
+  local V="$1" q="$2" failed=""
+  narm() { # $1 id  $2 0=pass/1=fail  $3 message
+    if [ "$2" -eq 0 ]; then [ "$q" = 1 ] || ok "$1 $3"
+    else failed="$failed $1"; [ "$q" = 1 ] || bad "$1 $3 (rc=$rc): $out"; fi
+  }
+  # CONTROL: the pass-through diff stub is reached by the comparison and the file reproduces.
+  nrun "$V" "$N/diff-pass" "$N/good.md"
+  [ "$rc" -eq 0 ] && grep -q '^OK: 1 derivation' <<< "$out" && sent "$N/diff-pass"
+  narm n-diff-ctl $? "      exit=0  a pass-through diff stub is reached by the comparison and the derivation reproduces"
+  # THE SUBJECT: diff exits 2 on a derivation that reproduces.
+  nrun "$V" "$N/diff-fail" "$N/good.md"
+  [ "$rc" -eq 2 ] && ! grep -q 'STALE' <<< "$out" && grep -q '^REFUSED: 1 derivation' <<< "$out" && sent "$N/diff-fail"
+  narm n-diff-verdict $? "  exit=2  diff exiting 2 on a TRUE derivation is a refusal, never STALE"
+  grep -q '^UNRUN: .*/n/good\.md:2 ' <<< "$out"
+  narm n-diff-names $? "    the UNRUN line names the derivation as <file>:<line>"
+  # THE CONTROL THAT THE ARMS CAN SEE A STALE: the real diff on a genuinely stale derivation.
+  nrun "$V" "$N/nostub" "$N/stale.md"
+  [ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" && grep -q 'recorded: 7' <<< "$out" \
+    && grep -q 'actual:   2' <<< "$out" && ! grep -q '^UNRUN' <<< "$out"
+  narm n-stale $? "         exit=1  a genuinely stale derivation is STALE under the real diff"
+  # CONTROL: the pass-through sed stub is reached by norm and the stale derivation is still STALE.
+  nrun "$V" "$N/sed-pass" "$N/stale.md"
+  [ "$rc" -eq 1 ] && grep -q 'FAIL (STALE)' <<< "$out" && sent "$N/sed-pass"
+  narm n-sed-ctl $? "       exit=1  a pass-through sed stub is reached by norm and STALE still reads STALE"
+  # THE SUBJECT: norm fails on a STALE derivation. Before, both sides were empty and compared equal.
+  nrun "$V" "$N/sed-fail" "$N/stale.md"
+  [ "$rc" -eq 2 ] && grep -q '^UNRUN: ' <<< "$out" && ! grep -q '^OK:' <<< "$out" \
+    && ! grep -q 'STALE' <<< "$out" && sent "$N/sed-fail"
+  narm n-sed $? "           exit=2  a failing norm is UNRUN, never OK and never STALE"
+  grep -q '^UNRUN: .*/n/stale\.md:2 ' <<< "$out"
+  narm n-sed-names $? "     the UNRUN line names the derivation as <file>:<line>"
+  # CONTROL: the pass-through find stub walks the directory and finds its one derivation.
+  nrun "$V" "$N/find-pass" "$N/dir"
+  [ "$rc" -eq 0 ] && grep -q '^OK: 1 derivation' <<< "$out" && sent "$N/find-pass"
+  narm n-find-ctl $? "      exit=0  a pass-through find stub walks the directory and finds 1 derivation"
+  # THE SUBJECT: the walk fails on a directory target. Before: `OK: 0 derivation(s)`, exit 0.
+  nrun "$V" "$N/find-fail" "$N/dir"
+  [ "$rc" -eq 2 ] && grep -q "^REFUSED: could not list the markdown files under $N/dir " <<< "$out" \
+    && ! grep -q '^OK:' <<< "$out" && sent "$N/find-fail"
+  narm n-find $? "          exit=2  a failed walk of a directory target is REFUSED naming it, never OK: 0"
+  N_FAILED="$(printf '%s\n' $failed | sed '/^$/d' | sort -u | tr '\n' ' ')"
+}
+n_arms "$VALIDATOR" 0
+
+# N's mutants. Each is a COPY guarded by `cmp -s`, driven through the identical arm set, and must
+# fail EXACTLY its declared arms. The unmutated run above is the control: it failed none.
+#   n-m1  diff rc >= 2 treated as CLEAN
+#   n-m2  diff rc >= 2 routed through STALE -- the defect as it shipped
+#   n-m3  both norm statuses unchecked (both layers, or the second one alone proves the first)
+#   n-m4  the walk's status unchecked
+#   n-m5  the UNRUN line stops naming <file>:<line>
+[ -z "$N_FAILED" ] \
+  && ok "n-control              the unmutated validator fails no N arm, so a mutant's failed set is its own" \
+  || bad "n-control the unmutated validator failed N arm(s): $N_FAILED -- no mutant verdict below is readable"
+n_mutant() { # $1 label  $2 declared failed arms (space-separated, sorted)  $3.. sed expressions
+  local label="$1" want="$2"; shift 2
+  local M="$N/$label-$VBASE"
+  if ! mut_copy "$M" "$@"; then
+    bad "$label DID NOT APPLY -- the mutation matched nothing, so no verdict was scored"; return
+  fi
+  n_arms "$M" 1
+  if [ -z "$N_FAILED" ]; then
+    bad "$label SURVIVED -- no N arm failed against it"
+  elif [ "$N_FAILED" = "$want " ]; then
+    ok "$label KILLED           by exactly its declared arm(s): $N_FAILED"
+  else
+    bad "$label killed by the WRONG arm set: failed [$N_FAILED], declared [$want]"
+  fi
+}
+n_mutant n-m1 "n-diff-names n-diff-verdict" \
+  's/^      \*) cmp_why="diff exited \${drc}, which is neither equal nor different" ;;$/      *) drc=0 ;;/'
+n_mutant n-m2 "n-diff-names n-diff-verdict" \
+  's/^      \*) cmp_why="diff exited \${drc}, which is neither equal nor different" ;;$/      *) drc=1 ;;/'
+n_mutant n-m3 "n-sed n-sed-names" \
+  's/^  if ! norm < "\$TMP_EXP" > "\$TMP_NEXP"; then$/  if ! { norm < "$TMP_EXP" > "$TMP_NEXP"; true; }; then/' \
+  's/^  elif ! norm < "\$TMP_OUT" > "\$TMP_NOUT"; then$/  elif ! { norm < "$TMP_OUT" > "$TMP_NOUT"; true; }; then/'
+n_mutant n-m4 "n-find" \
+  's/^    walk_rc=\$?$/    walk_rc=0/'
+n_mutant n-m5 "n-diff-names n-sed-names" \
+  's/"\$f" "\$ln" "\$cmp_why" "\$c" >&2$/"a derivation" "?" "$cmp_why" "$c" >\&2/'
+
 echo
 if [ "$fails" -gt 0 ]; then
   echo "FAIL: $fails assertion(s) wrong."

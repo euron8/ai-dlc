@@ -525,6 +525,53 @@ dd "$W16N"; OUT16N="$OUT"; RC16N="$RC"
 rc_is "A16n near-miss: the applied tree keeps the edit -> exit 0" 0 "$RC16N"
 ck "A16o and it is reached from the newest commit carrying <base>" "base root (worktree of $(cat "$W16N/.NEW"))" "$OUT16N"
 
+# ---- A17: a base-side COMPARISON that could not run is a refusal, never STALE-BOTH ------------
+# The validator used to fold `diff` exiting 2 into STALE. On the base side that turned a derivation
+# this pull broke -- qqalpha, which REPRODUCES at base -- into STALE-BOTH, and with qqgamma still
+# passing at base the broken-root guard (A9) does not fire, so the run CLEARED: exit 0, "zero
+# NEWLY-FAILING". The validator now reports that comparison UNRUN and exits 2, and this helper
+# refuses any side status but 0 and 1.
+#
+# FORCED, NEVER SAMPLED: a `diff` stub on PATH fails ONLY the FIRST comparison on the BASE side
+# (the side whose root lacks the untracked `.consumer-side` marker), which is qqalpha's, the first
+# derivation in the file. The helper itself runs no bare `diff` (its range read is `git diff`), so
+# the stub reaches the validator and nothing else. The PASS-THROUGH TWIN is the same stub, counting
+# the same call, handing it to the real `diff`: it must reach A1's verdict and leave the sentinel,
+# which proves the stub sits on the base side's PATH and is reached by the comparison.
+REAL_DIFF="$(command -v diff)"
+[ -n "$REAL_DIFF" ] || { echo "FIXTURE ERROR: diff is not on PATH, so the A17 stub cannot pass through" >&2; exit 2; }
+W17="$WORK/w17-cmp";   build_consumer "$W17" "$THEIRS_BREAK" 1 real; : > "$W17/.consumer-side"
+W17N="$WORK/w17-cmp-n"; build_consumer "$W17N" "$THEIRS_BREAK" 1 real; : > "$W17N/.consumer-side"
+dstub() { # dstub <dir> <fail: 1|0> -- counts base-side calls in <dir>/SENT, fails the first when asked
+  local d="$1" act=':'
+  mkdir -p "$d"; : > "$d/SENT"
+  [ "$2" = 1 ] && act='echo "diff: /dev/fd/63: Bad file descriptor" >&2; exit 2'
+  {
+    printf '#!/bin/sh\n'
+    printf 'if [ ! -f "${AI_DLC_PROJECT_ROOT:-}/.consumer-side" ]; then\n'
+    printf '  echo x >> "%s/SENT"\n' "$d"
+    printf '  if [ "$(wc -l < "%s/SENT" | tr -d " ")" = 1 ]; then %s; fi\n' "$d" "$act"
+    printf 'fi\n'
+    printf 'exec "%s" "$@"\n' "$REAL_DIFF"
+  } > "$d/diff"
+  chmod +x "$d/diff"
+}
+dstub "$WORK/dstub-fail" 1
+dstub "$WORK/dstub-pass" 0
+_opath="$PATH"
+PATH="$WORK/dstub-pass:$_opath"; dd "$W17N"; OUT17N="$OUT"; RC17N="$RC"
+PATH="$WORK/dstub-fail:$_opath"; dd "$W17";  OUT17="$OUT";  RC17="$RC"
+PATH="$_opath"
+rc_is "A17n near-miss: the pass-through stub reaches A1's verdict -> exit 1" 1 "$RC17N"
+ck "A17o and names the broken derivation" "$(printf 'NEWLY-FAILING\t%s\t' "$K_ALPHA")" "$OUT17N"
+[ -s "$WORK/dstub-pass/SENT" ] && [ -s "$WORK/dstub-fail/SENT" ] \
+  && ok "A17c control: both stubs were reached by a base-side comparison (sentinels written)" \
+  || bad "A17c control: a stub was never reached on the base side -- A17a/A17b are not about the comparison"
+rc_is "A17a a base-side comparison diff could not run -> exit 2" 2 "$RC17"
+ck "A17b and the refusal names the base side and its status" "$(printf 'REFUSED\tvalidator\tthe base-side run exited 2')" "$OUT17"
+nk "A17d the broken derivation is never scored STALE-BOTH" "$(printf 'STALE-BOTH\t%s\t' "$K_ALPHA")" "$OUT17"
+nk "A17e and no clear is printed" "zero NEWLY-FAILING" "$OUT17"
+
 # ---- A10: the default base root leaves no worktree and no scratch behind --------------------
 # CONTROL FIRST: the counter must see a worktree when one exists, or a 1 below is a counter that
 # cannot count.
@@ -538,7 +585,7 @@ else
   bad "A10a control: the counter read $c_ctl on a repository carrying one extra worktree, expected 2 -- A10b is unreadable"
 fi
 leaked=""
-for c in "$W1" "$W2" "$W3" "$W5" "$W5P" "$WSU" "$WSUN" "$W13" "$W13N" "$WS3" "$WS3N" "$W16" "$W16N"; do
+for c in "$W1" "$W2" "$W3" "$W5" "$W5P" "$WSU" "$WSUN" "$W13" "$W13N" "$WS3" "$WS3N" "$W16" "$W16N" "$W17" "$W17N"; do
   # W6 is left out on purpose: it carries the seeded LEAKED worktree A12c asserts is kept.
   n="$(wtcount "$c")"; [ "$n" = 1 ] || leaked="$leaked $(basename "$c")=$n"
 done
