@@ -310,22 +310,122 @@ else
     fi
   done
 
+  # vx <script> <seed> <sprint> -> X_RC, X_OUT (stdout), X_ERR (stderr), kept apart
+  # because the located diagnostic goes to stderr and "no PASS" is a claim about stdout.
+  # Every predicate below takes the SCRIPT as its argument, so the same predicate is the
+  # arm against the subject and the kill test against each mutant further down.
+  vx() {
+    ( cd "$WORK" && bash "$1" --verify --sprint "$3" --gate-log "$VLOG/$2.md" ) \
+      >"$WORK/vx.out" 2>"$WORK/vx.err"
+    X_RC=$?
+    X_OUT="$(cat "$WORK/vx.out")"; X_ERR="$(cat "$WORK/vx.err")"
+  }
+  located() { grep -qF "$VLOG/$1.md:$2 QUOTES" <<<"$X_ERR"; }  # located <seed> <line>
+  vx_show() { printf '%s\n%s\n' "$X_OUT" "$X_ERR" | head -3 | sed 's/^/        /' >&2; }
+
   # L + M. THE TRAILING ACQUITTAL, and it is the half that makes a widened reader WORSE
   # than the anchored one. A gate log's own narrative QUOTES the line it complains about,
-  # at the same sprint and the same digest. Both seeds must reach the FIRST-GATE message,
-  # not merely exit 1: routing prose to the CHANGED branch still tells an operator the
-  # sprint attested and the fixtures moved, when neither happened.
+  # at the same sprint and the same digest. Both seeds must be refused WITHOUT a PASS and
+  # WITHOUT the CHANGED message — routing prose to CHANGED still tells an operator the
+  # sprint attested and the fixtures moved, when neither happened — and must be LOCATED:
+  # the span is there, so "this is the sprint's first gate" is the wrong diagnostic too.
+  p_lm() {  # p_lm <script> <seed>
+    vx "$1" "$2" 311
+    [ "$X_RC" -eq 1 ] && ! grep -q 'PASS' <<<"$X_OUT" \
+      && ! grep -q 'CHANGED' <<<"$X_OUT$X_ERR" && located "$2" 1
+  }
   for seed in prose-failure col1-then-prose; do
-    v_run "$seed"
-    if [ "$V_RC" -eq 1 ] && grep -q "this is the sprint's first gate" <<<"$V_OUT"; then
-      ok "--verify refuses $seed (a span followed by WORDS is prose, not an attestation)"
-    elif [ "$V_RC" -eq 1 ]; then
-      bad "--verify refused $seed with the WRONG message — prose reached the CHANGED arm,"
-      echo "        so only the accepting arm carries the tail guard." >&2
-      printf '%s\n' "$V_OUT" | head -2 | sed 's/^/        /'
+    if p_lm "$SUT" "$seed"; then
+      ok "--verify refuses $seed and LOCATES it (a span followed by WORDS is prose)"
     else
-      bad "--verify ACCEPTED $seed (rc=$V_RC) — a sentence reporting that THIS GATE FAILED"
-      echo "        manufactured an attestation nobody drove." >&2
+      bad "--verify on $seed (rc=$X_RC): wanted rc 1, no PASS, no CHANGED, and"
+      echo "        '$seed.md:1 QUOTES' on stderr." >&2
+      vx_show
+    fi
+  done
+
+  # P-V. THE CONSUMER'S BULLET. Line 89 of the consumer's gate log (graph, ref
+  # ai-dlc/carry-over/telv3-upgrade, _bmad-output/implementation-artifacts/gate-log.md),
+  # byte for byte except the digest, which is this tree's so the span is LIVE. The reader
+  # refuses it by design — every tail that admits it also admits FAIL sentences of the
+  # same shape (the six seeds below) — so what these arms pin is the DIAGNOSTIC: refused,
+  # located at <log>:<line>, never "first gate" (the span is there) and never CHANGED.
+  # The bullet sits on line 2, never line 1, so a hardcoded or off-by-one number fails.
+  B_FMT='- [core] H2 — Harness self-test: **PASS**. \140validate-h2-attestation.sh --attest --sprint 314\140 → \140H2_ATTESTED v1 sprint=314 digest=%s at=2026-09-26T21:11:09Z items=1,2,3 mechanical=check-17-bypass:PASS\140; item 1 recursion guard fires (H1_DEPTH=1 → immediate PASS, no re-enumeration); item 3 manifest-bypass seed correctly FAILs (missing implementation anchors).\n'
+  B_LIVE="$(printf -- "$B_FMT" "$DIG_OUT")"
+  B_MOVED="$(printf -- "$B_FMT" 0000000000000000)"
+  C314="H2_ATTESTED v1 sprint=314 digest=${DIG_OUT} at=2026-09-27T02:06:52Z items=1,2,3 mechanical=check-17-bypass:PASS"
+  printf '# gate log\n%s\n' "$B_LIVE"  > "$VLOG/bullet-live.md"
+  printf '# gate log\n%s\n' "$B_MOVED" > "$VLOG/bullet-moved.md"
+  printf '## Gate 1\nno attestation here\n' > "$VLOG/empty-log.md"
+  # Both placements in one log: the bullet on line 3, the canonical line on line 5. The
+  # ACCEPTING arm must win — a diagnostic branch hoisted above it would refuse this log.
+  printf '## Gate 1\nnotes\n%s\nmore notes\n%s\n' "$B_LIVE" "$C314" > "$VLOG/bullet-then-col1.md"
+  # Two quoted bullets, lines 2 and 4: the message names the LAST (4), not the first.
+  printf '## Gate 1\n%s\n## Gate 2\n%s\n' "$B_LIVE" "$B_LIVE" > "$VLOG/two-bullets.md"
+  cmp -s "$VLOG/bullet-live.md" "$VLOG/bullet-moved.md" && {
+    echo "FIXTURE ERROR: the live and moved bullet seeds are byte-identical" >&2; exit 2; }
+
+  p_bullet_live() {
+    vx "$1" bullet-live 314
+    [ "$X_RC" -eq 1 ] && located bullet-live 2 && ! grep -q 'PASS' <<<"$X_OUT"
+  }
+  p_bullet_moved() {
+    vx "$1" bullet-moved 314
+    [ "$X_RC" -eq 1 ] && located bullet-moved 2 \
+      && ! grep -q 'first gate' <<<"$X_OUT$X_ERR" && ! grep -q 'CHANGED' <<<"$X_OUT$X_ERR"
+  }
+  p_empty() { vx "$1" empty-log 314; [ "$X_RC" -eq 1 ] && grep -q "this is the sprint's first gate" <<<"$X_OUT"; }
+  p_order() { vx "$1" bullet-then-col1 314; [ "$X_RC" -eq 0 ] && grep -q 'PASS  H2 attested for sprint 314' <<<"$X_OUT"; }
+  p_two()   { vx "$1" two-bullets 314; [ "$X_RC" -eq 1 ] && located two-bullets 4 && ! located two-bullets 2; }
+
+  if p_bullet_live "$SUT"; then
+    ok "--verify refuses the consumer's bullet at the live digest and names bullet-live.md:2"
+  else
+    bad "--verify on the consumer's live bullet (rc=$X_RC): wanted rc 1, no PASS on stdout,"
+    echo "        and 'bullet-live.md:2 QUOTES' on stderr." >&2; vx_show
+  fi
+  if p_bullet_moved "$SUT"; then
+    ok "--verify LOCATES the bullet at a moved digest (not first-gate, not CHANGED)"
+  else
+    bad "--verify on the moved-digest bullet (rc=$X_RC): wanted rc 1 and 'bullet-moved.md:2"
+    echo "        QUOTES', with neither 'first gate' nor 'CHANGED'." >&2; vx_show
+  fi
+  if p_empty "$SUT"; then
+    ok "--verify still reports first-gate for a log with no line for the sprint"
+  else
+    bad "--verify on a log with no attestation (rc=$X_RC) lost the first-gate message"; vx_show
+  fi
+  if p_order "$SUT"; then
+    ok "--verify ACCEPTS a log with a bullet on line 3 and the column-1 line on line 5"
+  else
+    bad "--verify refused a log that carries a column-1 attestation (rc=$X_RC) — the"
+    echo "        diagnostic branch pre-empted the accepting arm." >&2; vx_show
+  fi
+  if p_two "$SUT"; then
+    ok "--verify names the LAST quoted line (two-bullets.md:4, not :2)"
+  else
+    bad "--verify on two quoted bullets (rc=$X_RC) did not name line 4 alone"; vx_show
+  fi
+
+  # W. THE SIX ADVERSARIAL FAIL LINES. Each quotes a live span at the right sprint and
+  # digest inside a sentence that reports a FAILURE. Every widening that admits the
+  # bullet above admits some of these; the reader must grant none of them.
+  ADV_SPAN="$C314"
+  printf '2. **H2 citation is not machine-verifiable across gates**, because the \140%s\140 line from the requirements gate was embedded in a table cell. THIS GATE FAILED -- re-drive required.\n' "$ADV_SPAN" > "$VLOG/adv-311-sentence.md"
+  printf 'Do not cite \140%s\140; it was pasted before item 3 was judged.\n' "$ADV_SPAN" > "$VLOG/adv-do-not-cite.md"
+  printf -- '- [core] H2 — **FAIL**: \140%s\140 — item 1 recursion guard did NOT fire.\n' "$ADV_SPAN" > "$VLOG/adv-emdash-fail.md"
+  printf -- '- [core] H2 — Harness self-test: **FAIL**. \140validate-h2-attestation.sh --attest --sprint 314\140 → \140%s\140; item 3 manifest-bypass seed PASSED H1 (H1 blind to the slice) — H2 FAILS, do not cite.\n' "$ADV_SPAN" > "$VLOG/adv-item3-fail-bullet.md"
+  printf -- '- [core] H2: \140NOT_%s\140; re-drive.\n' "$ADV_SPAN" > "$VLOG/adv-notprefix-bullet.md"
+  printf -- '- [core] H2 — Harness self-test: **PASS** claimed at requirements as \140%s\140; retracted: item 3 re-judged FAIL.\n' "$ADV_SPAN" > "$VLOG/adv-pass-then-retract.md"
+  ADV_SEEDS="adv-311-sentence adv-do-not-cite adv-emdash-fail adv-item3-fail-bullet adv-notprefix-bullet adv-pass-then-retract"
+  p_adv() { vx "$1" "$2" 314; [ "$X_RC" -eq 1 ] && ! grep -q 'PASS' <<<"$X_OUT"; }
+  for seed in $ADV_SEEDS; do
+    [ -s "$VLOG/$seed.md" ] || { echo "FIXTURE ERROR: adversarial seed $seed is empty" >&2; exit 2; }
+    if p_adv "$SUT" "$seed"; then
+      ok "--verify grants nothing to $seed"
+    else
+      bad "--verify GRANTED $seed (rc=$X_RC) — a FAIL sentence produced an attestation"; vx_show
     fi
   done
 
@@ -426,6 +526,141 @@ else
       echo "        prose=${mc_p}" >&2
     fi
   fi
+
+  # X. MUTATION BATTERY FOR THE LOCATING BRANCH. Three wrong shapes of the third --verify
+  # branch, each built as a COPY, each required to have APPLIED (differs by cmp) and to
+  # PARSE (bash -n) before any verdict is read — a mutant that did neither reads as killed.
+  #   (m1) diagnostic keyed on ATTEST_SPAN, not ATTEST_ANY -> a moved-digest bullet falls
+  #        through to "first gate"; the moved-digest arm owns the kill.
+  #   (m2) diagnostic branch deleted -> every quoted span reads as "first gate"; the live
+  #        bullet arm owns the kill.
+  #   (m3) tail widened to backtick-then-anything -> FAIL sentences are granted; the
+  #        adversarial arms own the kill. The backtick comes from printf '\140' into a FILE
+  #        that awk reads with getline: `awk -v` decodes the escape into a live backtick
+  #        and the resulting mutant exits 2 on parse.
+  # An UNMUTATED copy in the same place must pass every predicate first, so a harness
+  # that cannot run a copy from $WORK is reported as broken rather than as five kills.
+  MCTL="$WORK/h2-locate-control.copy.sh"
+  cp "$SUT" "$MCTL" || exit 2
+  M1="$WORK/h2-locate-span.mutant.sh"
+  sed 's/\${ATTEST_LEAD}\${ATTEST_ANY}" "\$GATE_LOG"/${ATTEST_LEAD}${ATTEST_SPAN}" "$GATE_LOG"/g' "$SUT" > "$M1"
+  M2="$WORK/h2-locate-deleted.mutant.sh"
+  awk 'skip==0 && index($0, "if grep -qE \"${ATTEST_LEAD}${ATTEST_ANY}\" \"$GATE_LOG\"; then") == 3 { skip=1; next }
+       skip==1 { if ($0 == "  fi") skip=2; next }
+       { print }' "$SUT" > "$M2"
+  M3="$WORK/h2-tail-backtick-any.mutant.sh"
+  M3LINE="$WORK/m3-tail-line.txt"
+  printf '%s\140%s\n' "ATTEST_TAIL='(" '|[^0-9A-Za-z|]*(\||$))'"'" > "$M3LINE"
+  awk -v f="$M3LINE" 'BEGIN { if ((getline r < f) <= 0) exit 3 }
+       /^ATTEST_TAIL=/ { print r; next } { print }' "$SUT" > "$M3"
+
+  ctl_ok=1
+  for p in p_bullet_live p_bullet_moved p_empty p_order p_two; do
+    "$p" "$MCTL" || { ctl_ok=0; bad "MUTATION CONTROL: the unmutated copy fails $p (rc=$X_RC) —"
+      echo "        the harness cannot drive a copy from \$WORK, so no mutant verdict is evidence." >&2; }
+  done
+  for seed in $ADV_SEEDS; do
+    p_adv "$MCTL" "$seed" || { ctl_ok=0; bad "MUTATION CONTROL: the unmutated copy grants $seed"; }
+  done
+  [ "$ctl_ok" -eq 1 ] && ok "MUTATION CONTROL: an unmutated copy in \$WORK passes every locating arm"
+
+  mut_ready() {  # mut_ready <label> <mutant> -> 0 only if it applied AND parses
+    if cmp -s "$SUT" "$2"; then
+      bad "MUTATION ($1) DID NOT APPLY — its anchor matched nothing. Re-anchor it."; return 1
+    fi
+    if ! bash -n "$2" 2>/dev/null; then
+      bad "MUTATION ($1) does not PARSE (bash -n) — it cannot score a kill."; return 1
+    fi
+    return 0
+  }
+
+  if [ "$ctl_ok" -eq 1 ] && mut_ready m1 "$M1"; then
+    n1="$(grep -c 'ATTEST_LEAD}${ATTEST_SPAN}" "$GATE_LOG"' "$M1")" || n1=0
+    if [ "$n1" -ne 2 ]; then
+      bad "MUTATION (m1) rewrote $n1 site(s), not the diagnostic's 2 — it is not the shape it models"
+    elif p_bullet_moved "$M1"; then
+      bad "MUTATION (m1) SURVIVED: keyed on ATTEST_SPAN, the moved-digest bullet is still located"
+    elif ! p_bullet_live "$M1"; then
+      bad "MUTATION (m1) broke the live bullet too — the kill is not the moved-digest arm's alone"
+    else
+      ok "MUTATION (m1): a diagnostic keyed on ATTEST_SPAN loses the moved digest — its arm kills it"
+    fi
+  fi
+  if [ "$ctl_ok" -eq 1 ] && mut_ready m2 "$M2"; then
+    if grep -q 'QUOTES an H2_ATTESTED span' "$M2"; then
+      bad "MUTATION (m2) left the located message in place — the branch was not deleted"
+    elif p_bullet_live "$M2"; then
+      bad "MUTATION (m2) SURVIVED: with the branch deleted the live bullet is still located"
+    elif ! p_empty "$M2" || ! p_order "$M2"; then
+      bad "MUTATION (m2) broke first-gate or the accepting arm — the deletion overran the branch"
+    else
+      ok "MUTATION (m2): deleting the locating branch fails the consumer-bullet arm"
+    fi
+  fi
+  if [ "$ctl_ok" -eq 1 ] && mut_ready m3 "$M3"; then
+    granted=0
+    for seed in $ADV_SEEDS; do p_adv "$M3" "$seed" || granted=$((granted + 1)); done
+    if ! grep -q '^ATTEST_TAIL=.(.|' "$M3" || ! grep -q "$(printf '\140')" "$M3"; then
+      bad "MUTATION (m3) did not write a backtick alternative into ATTEST_TAIL"
+    elif [ "$granted" -eq 0 ]; then
+      bad "MUTATION (m3) SURVIVED: backtick-then-anything granted none of the six FAIL lines"
+    elif ! p_order "$M3"; then
+      bad "MUTATION (m3) broke the column-1 accept — it is not the widening it models"
+    else
+      ok "MUTATION (m3): backtick-then-anything grants $granted of 6 FAIL lines — the adversarial arms kill it"
+    fi
+  fi
+
+  # (m4-m6) The three arms the BASE script passes too (it refuses correctly, just with the
+  # wrong words), so the base run cannot show they fire. Each gets a mutant of its own:
+  #   (m4) diagnostic HOISTED above the accepting arm -> the order arm dies
+  #   (m5) diagnostic made unconditional              -> the empty-log arm dies
+  #   (m6) FIRST quoted line named, not the last      -> the two-bullets arm dies
+  DIAG_IF='  if grep -qE "${ATTEST_LEAD}${ATTEST_ANY}" "$GATE_LOG"; then'
+  ACCEPT_IF='  if grep -qE "${ATTEST_LEAD}${ATTEST_SPAN}${ATTEST_TAIL}" "$GATE_LOG"; then'
+  M4BLK="$WORK/m4-block.txt"
+  awk -v a="$DIAG_IF" 'on==0 && $0 == a { on=1 } on==1 { print; if ($0 == "  fi") exit }' "$SUT" > "$M4BLK"
+  M4="$WORK/h2-locate-hoisted.mutant.sh"
+  awk -v a="$DIAG_IF" -v b="$ACCEPT_IF" -v f="$M4BLK" '
+       $0 == b { while ((getline l < f) > 0) print l }
+       skip==0 && $0 == a { skip=1; next }
+       skip==1 { if ($0 == "  fi") skip=2; next }
+       { print }' "$SUT" > "$M4"
+  M5="$WORK/h2-locate-always.mutant.sh"
+  awk -v a="$DIAG_IF" '$0 == a { print "  if true; then"; next } { print }' "$SUT" > "$M5"
+  M6="$WORK/h2-locate-first.mutant.sh"
+  sed 's/| tail -1 | cut -d: -f1)/| head -1 | cut -d: -f1)/' "$SUT" > "$M6"
+
+  if [ "$ctl_ok" -eq 1 ] && mut_ready m4 "$M4"; then
+    nblk="$(grep -c . "$M4BLK")" || nblk=0
+    if [ "$nblk" -lt 3 ] || [ "$(wc -l < "$M4")" -ne "$(wc -l < "$SUT")" ]; then
+      bad "MUTATION (m4) did not MOVE the branch intact (block=$nblk lines)"
+    elif p_order "$M4"; then
+      bad "MUTATION (m4) SURVIVED: a hoisted diagnostic still accepted the column-1 line"
+    elif ! p_bullet_live "$M4"; then
+      bad "MUTATION (m4) broke the live bullet too — the kill is not the order arm's alone"
+    else
+      ok "MUTATION (m4): a diagnostic hoisted above the accepting arm fails the order arm"
+    fi
+  fi
+  if [ "$ctl_ok" -eq 1 ] && mut_ready m5 "$M5"; then
+    if p_empty "$M5"; then
+      bad "MUTATION (m5) SURVIVED: an unconditional diagnostic still said first-gate"
+    elif ! p_bullet_live "$M5"; then
+      bad "MUTATION (m5) broke the live bullet too — the kill is not the empty-log arm's alone"
+    else
+      ok "MUTATION (m5): an unconditional diagnostic fails the empty-log arm"
+    fi
+  fi
+  if [ "$ctl_ok" -eq 1 ] && mut_ready m6 "$M6"; then
+    if p_two "$M6"; then
+      bad "MUTATION (m6) SURVIVED: naming the FIRST quoted line still read as line 4"
+    elif ! p_bullet_live "$M6"; then
+      bad "MUTATION (m6) broke the one-bullet case too — the kill is not the two-bullets arm's"
+    else
+      ok "MUTATION (m6): naming the first quoted line, not the last, fails the two-bullets arm"
+    fi
+  fi
 fi
 
 echo ""
@@ -434,7 +669,8 @@ if [ "$fails" -eq 0 ]; then
   echo "  --attest drives its fixture from an installed consumer layout; a wrong explicit"
   echo "  --scripts is fatal; the pre-relocation derivation is one. --verify admits a"
   echo "  transcribed line in a table cell and at column 1, refuses a non-token prefix,"
-  echo "  and reaches the CHANGED branch from either placement."
+  echo "  and reaches the CHANGED branch from either placement. A span quoted inside other"
+  echo "  text — the consumer's bullet, six FAIL sentences — grants nothing and is LOCATED."
   exit 0
 fi
 echo "h2-attest-scripts-dir: FAIL ($fails assertion(s))" >&2
