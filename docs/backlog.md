@@ -3999,67 +3999,6 @@ shell has no `PIPESTATUS` and a pipeline answers with its last stage.
 
 verify: sh set -e; r=.claude/rules/verification-discipline.md; [ -r "$r" ] || exit 9; LC_ALL=C grep -q 'green gate is not a landed push' "$r" || exit 9; n="$(grep -rlF 'ls-remote' .githooks/ scripts/ 2>/dev/null | grep -cv '^$')" || n=0; [ "$n" -gt 0 ] && exit 0; exit 1
 
-## BL-300 — five sibling scripts fail closed in the consumer layout under an override root carrying no schema
-
-**DEFECT.** The failure is latent. Found by the batch 150 contract adversary, while it was
-attacking the fix for `BL-299`. It discharges no consumer candidate.
-
-**THE SAME SHAPE AS `BL-299`, IN FIVE MORE PROGRAMS.** `sprint-status.sh`,
-`sync-taught-schema.sh`, `validate-audit-anchors.sh`, `validate-write-format-steering.sh` and
-`validate-gate-adjudication.sh` each look for their schema beside the script
-(`../schemas/`) and under the resolved project root. None of them falls back to the install
-root. In the consumer layout the script-relative candidate is `scripts/schemas/`, which does not
-exist. So an `AI_DLC_PROJECT_ROOT` naming a root without `.claude/schemas/` makes every one of
-them fail closed. `validate-gate-adjudication.sh` resolves `enforcement-map.yaml` the same
-root-keyed way (at `core/scripts/validate-gate-adjudication.sh:327-329`), so it needs both
-lookups fixed.
-
-**MEASURED IN A FRESH INSTALL OF `14129c75`**, against a foreign root holding only `.claude/`.
-Each script was run from the consumer root with and without the override, and the `not found`
-or `cannot find` diagnostic was counted in both runs. Without the override, all five print
-neither (the control). With it, all five print one, and `sprint-status`, `sync-taught-schema`,
-`validate-audit-anchors` and `validate-write-format-steering` exit 1.
-`validate-gate-adjudication` needs `--expected implementation` to get past its usage exit
-before it reads the schema, and then it exits 2 with
-`schemas/gate-adjudication-verdict.json not found`. The fixed pair from `BL-299`, run the same
-way, prints neither diagnostic.
-
-**WHY IT IS LATENT.** No production caller points the override at a root with no schema. A
-consumer's override names the consumer, which carries `.claude/schemas/`. The failure needs a
-fixture or an operator to aim the override somewhere foreign, which is exactly what arm R did
-for the writer.
-
-**ANY FIX ALSO NEEDS THE `validator-path-resolution` TREATMENT.** Every one of these scripts
-mentions `AI_DLC_PROJECT_ROOT`, so that fixture's non-vacuity arm requires each to change its
-output under a wrong root. For any script whose only root-keyed read reachable from its current
-`argv_for` is the schema lookup, an install-root fallback makes that script score inert, and the
-arm goes red, as it did for the provenance pair. Each fixed script needs an `argv_for` that
-reaches a root-keyed read that is not the schema. Apply the same order rule as `BL-299`: append
-the fallback LAST.
-
-The receipt exits 0 once none of the five prints a `not found` or `cannot find` diagnostic under
-the foreign override. It exits 9 if the no-override control already prints one, or if the install
-fails. It scores **1** at `14129c75`, printing five `LIVE:` lines.
-
-**THE RECEIPT ABOVE WAS REPLACED AT BATCH 160, BECAUSE IT ACCEPTED TWO WRONG FIXES.** It only
-counted a missing-schema diagnostic under a foreign root carrying no schema, so it exited 0 on a
-fix that put the install candidate FIRST, which lets the install outrank a root carrying its own
-schema, and on a fallback that counts `../..` hops from the script instead of walking up for a
-marker. The replacement, written by the batch-160 contract adversary, keeps that arm and adds
-three. The exit code under the foreign root must equal the no-override control. A foreign root
-carrying an unparseable schema must make every script exit non-zero, and must be the file
-`validate-write-format-steering` names. Each script is also run from a legacy `scripts/<name>.sh`
-copy, where a hop count lands outside the install. Scored in scratch trees of the whole tree:
-**0** at the fix tip `0c017188`, **1** at base `975a861c`, **1** on an install-first variant
-(six `INSTALL-OUTRANKS-ROOT:` lines), **1** on a hop-counting variant (`LIVE:` on every legacy
-copy), and **0** on a second spelling of the correct fix (renamed variables, the two `elif`
-chains rewritten as a first-found `for` loop).
-
-**LANDED (v0.646.0, verified 0c017188).** The replacement receipt exits 0 at the fix tip and 1 at
-base `975a861c`.
-
-verify: sh R="$(pwd)"; command -v git >/dev/null || exit 9; T="$(mktemp -d)" || exit 9; F="$(mktemp -d)" || exit 9; G="$(mktemp -d)" || exit 9; mkdir -p "$F/.claude" "$G/.claude/schemas" "$G/.claude/skills/ai-dlc" || exit 9; ( cd "$T" && git init -q && mkdir _bmad && git -c user.name=r -c user.email=r@r commit -q --allow-empty -m init && bash "$R/scripts/install.sh" "$T" </dev/null ) >/dev/null 2>&1 || exit 9; bad=0; for s in sprint-status sync-taught-schema validate-audit-anchors validate-write-format-steering validate-gate-adjudication; do case $s in sprint-status) n=sprint-status.json; a="--render" ;; sync-taught-schema) n=provenance-block.json; a="--check" ;; validate-audit-anchors) n=audit-anchors.json; a="--render" ;; validate-write-format-steering) n=write-format-steering.json; a="" ;; validate-gate-adjudication) n=gate-adjudication-verdict.json; a="--expected implementation" ;; esac; p="$T/scripts/ai-dlc/$s.sh"; [ -f "$p" ] && [ -f "$T/.claude/schemas/$n" ] || exit 9; printf '{ NOT JSON' > "$G/.claude/schemas/$n"; cp "$p" "$T/scripts/$s.sh" || exit 9; c="$(cd "$T" && bash "$p" $a 2>&1)"; cr=$?; case "$c" in *"not found"*|*"cannot find"*) exit 9 ;; esac; for q in "$p" "$T/scripts/$s.sh"; do e="$(cd "$T" && AI_DLC_PROJECT_ROOT="$F" bash "$q" $a 2>&1)"; er=$?; [ "$er" -eq "$cr" ] || { echo "EXIT-MOVED: $s ${cr}->${er} (${q#"$T"/})"; bad=1; }; case "$e" in *"not found"*|*"cannot find"*) echo "LIVE: $s (${q#"$T"/})"; bad=1 ;; esac; done; g="$(cd "$T" && AI_DLC_PROJECT_ROOT="$G" bash "$p" $a 2>&1)" && { echo "INSTALL-OUTRANKS-ROOT: $s (exit 0 over a corrupt root schema)"; bad=1; }; [ "$s" = validate-write-format-steering ] && case "$g" in *"$G/.claude/schemas/$n"*) ;; *) echo "INSTALL-OUTRANKS-ROOT: $s (root schema not read)"; bad=1 ;; esac; rm -f "$G/.claude/schemas/$n"; done; [ "$bad" -eq 0 ]
-
 ## BL-301 — the gate runs no shipped fixture in the consumer layout, so a fixture red on every consumer ships green
 
 **DEFECT.** Found by the batch 150 contract adversary. It discharges no consumer candidate.
@@ -4094,52 +4033,6 @@ entry by hand on the release whose gate shows the new phase failing on a seeded 
 fixture and passing on its removal.
 
 verify: manual
-
-## BL-302 — in the distribution layout the provenance writer and reader load different schemas when the override root carries its own
-
-**DEFECT.** The disagreement predates `BL-299` and is not changed by it. Found by the batch 150
-contract adversary. It discharges no consumer candidate.
-
-**THE TWO CHAINS ARE ORDERED DIFFERENTLY.** In `core/scripts/stamp-story-provenance.sh` the
-writer tries `$SP_SCRIPT_DIR/../schemas/` FIRST, and the root candidates after it. In
-`core/scripts/validate-provenance-block.sh` the reader tries `<root>/core/schemas/` and
-`<root>/.claude/schemas/` first, and its script-relative candidate after them. In the
-distribution the script-relative candidate always exists. So when `AI_DLC_PROJECT_ROOT` names a
-root that carries its own schema, the writer loads `core/schemas/` while the reader loads the
-foreign root's copy. On a consumer the writer's first candidate is `scripts/schemas/`, which
-does not exist, so the pair already agree there. `BL-299`'s fix appended the install root last
-in both chains and left their first candidates as they were, so this split survives the fix.
-
-**MEASURED AT `14129c75`, in the distribution layout.** The override root carries a copy of the
-schema whose `tool_use_id` `forbidden` list additionally names `toolu_FIXTURE`. That field
-matches by `prefix_ci`, and the fixture seed's ids begin with that stem. Under that override the
-writer's `--print-schema` names `core/scripts/../schemas/provenance-block.json`. The writer stamps
-the bug story (`wrote s1/stories/story-2-fix-thing.md`), and the reader then refuses it with
-`tool_use_id: toolu_FIXTUREaaaaaaaa is forbidden`, exit 1. Each program is consistent with its
-own schema, and the two schemas differ.
-
-**THE RECEIPT, AND A FIX-SHAPED CONTROL.** The receipt asserts that the writer's `--print-schema`
-is `-ef` the override root's copy. Then, if the writer stamps at all, the reader accepts what it
-stamped. It scores **1** at `14129c75`. A scratch copy with the writer's script-relative
-candidate moved after its two root candidates, which is the reader's order, scores **0**. That
-control establishes that the receipt can close, and that a fix of that shape closes it.
-**Check the fixtures before shipping that reorder.** Several fixtures plant a schema into a world
-and drive the writer or the reader against it. The order is load-bearing for them, and the
-contract for `BL-299` forbade reordering for exactly that reason.
-
-**THE RECEIPT WAS EXTENDED AT BATCH 160, BECAUSE IT ACCEPTED AN INSTALL-FIRST WRITER.** It ran
-only in the distribution layout, where the install candidate `.claude/schemas/` does not exist,
-so a writer that put the install candidate first was indistinguishable from the fix and scored
-**0**. The receipt now also installs into a `mktemp -d` consumer and asserts that the installed
-writer's `--print-schema` is `-ef` the override root's copy, with the no-override run naming the
-install's copy as its control. Scored in scratch trees of the whole tree: **0** at the fix tip
-`0c017188`, **1** at base `975a861c`, **1** on an install-first variant, and **0** on a second
-spelling of the correct fix.
-
-**LANDED (v0.646.0, verified 0c017188).** The extended receipt exits 0 at the fix tip and 1 at
-base `975a861c`.
-
-verify: sh R="$(pwd)"; W="$R/core/scripts/stamp-story-provenance.sh"; V="$R/core/scripts/validate-provenance-block.sh"; K="$R/core/schemas/provenance-block.json"; [ -f "$W" ] && [ -f "$V" ] && [ -f "$K" ] && [ -f "$R/core/fixtures/story-provenance/seed.sh" ] || exit 9; command -v python3 >/dev/null || exit 9; G="$(mktemp -d)" || exit 9; M="$(mktemp -d)" || exit 9; mkdir -p "$G/.claude/schemas" || exit 9; python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); f=[x for x in s["fields"] if x.get("name")=="tool_use_id" and x.get("forbidden_match")=="prefix_ci"]; assert len(f)==1; f[0]["forbidden"].append("toolu_FIXTURE"); json.dump(s,open(sys.argv[2],"w"))' "$K" "$G/.claude/schemas/provenance-block.json" 2>/dev/null || exit 9; bash "$R/core/fixtures/story-provenance/seed.sh" --mixed-into "$M" >/dev/null 2>&1 || exit 9; P="$(AI_DLC_PROJECT_ROOT="$G" bash "$W" --print-schema 2>/dev/null)"; [ -n "$P" ] && [ "$P" -ef "$G/.claude/schemas/provenance-block.json" ] || exit 1; B=s1/stories/story-2-fix-thing.md; if ( cd "$M" && AI_DLC_PROJECT_ROOT="$G" bash "$W" --terminal s1/bug-fix-oneshot-story-2-fix-thing.md --profile bug-story-provenance "$B" ) >/dev/null 2>&1; then ( cd "$M" && AI_DLC_PROJECT_ROOT="$G" bash "$V" "$B" --require-skill bmad-review-adversarial-general ) >/dev/null 2>&1 || exit 1; fi; T="$(mktemp -d)" || exit 9; ( cd "$T" && git init -q && mkdir _bmad && git -c user.name=r -c user.email=r@r commit -q --allow-empty -m init && bash "$R/scripts/install.sh" "$T" </dev/null ) >/dev/null 2>&1 || exit 9; IW="$T/scripts/ai-dlc/stamp-story-provenance.sh"; IK="$T/.claude/schemas/provenance-block.json"; [ -f "$IW" ] && [ -f "$IK" ] || exit 9; C="$(cd "$T" && bash "$IW" --print-schema 2>/dev/null)"; [ -n "$C" ] && [ "$C" -ef "$IK" ] || exit 9; P="$(cd "$T" && AI_DLC_PROJECT_ROOT="$G" bash "$IW" --print-schema 2>/dev/null)"; [ -n "$P" ] && [ "$P" -ef "$G/.claude/schemas/provenance-block.json" ] || exit 1; exit 0
 
 ## BL-308 — `preclassify.sh --templates` and `--untangle` route through the new failure path, but neither mode was force-tested on its own
 
@@ -4380,53 +4273,6 @@ and calls it the safe direction. `apply.sh` calls neither `retired-layer-contrac
 `retired-fixtures.sh` nor `predicate-differential.sh`.
 
 verify: manual
-
-## BL-334 — the render's orientation sample failed open, and a bash 3.2 fd race triggered it
-
-**DEFECT.** Split from `BL-230` at batch 160, so that the render fix carries its own receipt and
-`BL-230` keeps its pool-flake subject.
-
-`emit-report.sh`'s semantic worklist orientation block read no exit status. `diff … || true`
-swallowed diff's exit 2 along with its exit 1, and the `grep | sed | grep` sample chain and its
-`grep -c` into `${n:-0}` turned any failed step into an empty sample. A failed `git show` read
-as `THEIRS absent`. Each rendered as `ONLY IN THEIRS: none` / `ONLY IN OURS: none` at exit 0. The
-failure that reached it was the bash 3.2 `<( )` fd race: under concurrent workers,
-`diff <(printf …) file` exits 2 with `/dev/fd/63: Bad file descriptor`, at about 0.15-0.4% under 4
-workers. That is `BL-230`'s tip.32 red, reproduced byte-for-byte by forcing the failure at
-approve time.
-
-**LANDED (v0.647.0, verified 9f153a07).** The render reads every step's status, refuses per file
-at column 0, and decides absence by `git ls-tree` (`1f0a81f3`). The five verdict-bearing
-reconcile diff sites read a staged file piped into `diff -`, never `<( )` (`9f153a07`).
-
-**THE RECEIPT FAILS ONE STEP PER MODE AND REFUSES TO SCORE A MODE WHOSE SHIM NEVER FIRED.** It
-seeds the `reconcile-emit-report` world and renders it three times under a PATH shim that is
-active only inside `emit-report.sh`:
-- **D** fails `diff` when either operand is `-` or `/dev/fd/*`.
-- **H** fails the reader of the diff output.
-- **G** fails `git` on the CLASSIFY file.
-
-Each mode must either leave the orientation block unchanged or refuse with a column-0
-`DETECTOR-REFUSED` line and no `ONLY IN …: none` or `THEIRS absent`. Every shim arm writes a
-marker when it fires. A mode whose marker is absent exits **9**, because a shim that never fired
-measured nothing. This is what the first draft lacked: its D arm keyed on `/dev/fd/*` alone,
-which the staged-file tip never passes, so D was a no-op there and the receipt still read 0.
-
-Scored in scratch clones, raw exits:
-- **0** at `9f153a07`, with the D, H and G markers all present.
-- **1** at base `df3623b9`, where D renders `ONLY IN …: none`.
-- **0** at `1f0a81f3` alone, with all three markers present, because D's `/dev/fd/*` operand
-  still fires on the `<( )` spelling.
-- **1** on a diff-only fix, in two variants. With the refusal line indented, D is not at column
-  0. With it at column 0, H renders `none`.
-- **1** at `9f153a07` with its three orientation refusal lines indented.
-- **0** on a second spelling of the fix (a `case`-mapped grep chain and `ls-tree --name-only`).
-- **9** at `9f153a07` under the same receipt with D keyed on `/dev/fd/*` only.
-
-Exit 9 also covers a missing emitter or seed, and a control render without both
-`ONLY IN … (1, complete)` lines.
-
-verify: sh E=core/skills/ai-dlc-update/reconcile/emit-report.sh; SD=core/fixtures/reconcile-emit-report/seed.sh; [ -f "$E" ] && [ -f "$SD" ] || exit 9; W="$(bash "$SD" 2>/dev/null)" && [ -f "$W/env.sh" ] || exit 9; . "$W/env.sh" || exit 9; ob() { awk '/Semantic worklist orientation/,/^\*\*Deletions/' "$1"; }; ob "$REGION" > "$W/o.ctl"; grep -qF 'ONLY IN THEIRS (1, complete):' "$W/o.ctl" && grep -qF 'ONLY IN OURS (1, complete):' "$W/o.ctl" || exit 9; B="$W/shim"; mkdir -p "$B" || exit 9; printf '%s\n' '#!/bin/bash' 'n=${0##*/}; r=/usr/bin/$n; [ -x "$r" ] || r=/bin/$n' 'case "$(/bin/ps -o command= -p $PPID)" in *emit-report.sh*) ;; *) exec "$r" "$@" ;; esac' 'case "$BM:$n" in' 'D:diff) case "${1:-}:${2:-}" in -:*|*:-|/dev/fd/*|*:/dev/fd/*) : > "$MK.D"; exit 2 ;; esac ;;' 'G:git) case " $* " in *core/skills/ai-dlc/templates/classes.md*) : > "$MK.G"; exit 128 ;; esac ;;' 'H:grep|H:sed|H:awk) t=$(/usr/bin/mktemp) || exit 2; /bin/cat > "$t"; [[ $(/usr/bin/head -1 "$t") =~ ^[0-9]+(,[0-9]+)?[acd][0-9]+(,[0-9]+)?$ ]] && { : > "$MK.H"; exit 2; }; exec "$r" "$@" < "$t" ;;' 'esac' 'exec "$r" "$@"' > "$B/shim" && chmod +x "$B/shim" || exit 9; for x in diff git grep sed awk; do ln -sf shim "$B/$x" || exit 9; done; bit=0; for m in D H G; do BM=$m MK="$W/mk" PATH="$B:/usr/bin:/bin:/usr/sbin:/sbin" bash "$E" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$W/r.$m" 2>/dev/null; ob "$W/r.$m" > "$W/o.$m"; [ -f "$W/mk.$m" ] || exit 9; cmp -s "$W/o.ctl" "$W/o.$m" && continue; bit=1; grep -qE 'ONLY IN (THEIRS|OURS): none|THEIRS absent at' "$W/o.$m" && exit 1; grep -q '^DETECTOR-REFUSED  ' "$W/o.$m" || exit 1; done; [ "$bit" -eq 1 ] || exit 9; exit 0
 
 ## BL-335 — `validate-artifact-derivations.sh` scores a `<( )` diff that did not run as STALE
 
