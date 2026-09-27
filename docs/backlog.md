@@ -4377,7 +4377,7 @@ The filing's claims, scored against base `d38142b0`:
   the sprint-311 sentence; backtick then `;` or a dash grants 4; backtick then `;` grants 3;
   a bare substring grants 5; the shipped tail grants 0.
 
-**Fixed on the 0.648.0 release branch by `0220be45`; the landed annotation waits for the merge
+**Fixed on the 0.648.0 release branch by its fix commit (content-identical to `0220be45` on the fix branch); the landed annotation waits for the merge
 sha.** The reader grammar and both accepting arms are
 byte-identical. `--verify` gains a third refusal branch, keyed on the lead and `ATTEST_ANY` with
 no tail. It grants nothing. It prints `RE-DRIVE: <gate-log>:<line> QUOTES an H2_ATTESTED span …`
@@ -4418,8 +4418,9 @@ subject file:
 
 What else satisfies it: any branch that prints `<log>:<line>` for a quoted span, exits 1, and
 avoids the words "first gate" and `CHANGED`. The receipt reads neither the remedy text nor the
-writer text in `--attest` and `gate-validation.md`, so a located refusal with no remedy passes,
-and the writer half is held only by the `h2-attest-scripts-dir` fixture. A reader that refuses
+writer text in `--attest` and `gate-validation.md`, so a located refusal with no remedy passes;
+the `h2-attest-scripts-dir` fixture's placement arms hold the remedy and the `--attest`
+placement sentence. A reader that refuses
 every placement except column 1 also passes, because the receipt has no table-cell arm.
 
 verify: sh S=core/scripts/validate-h2-attestation.sh; [ -f "$S" ] || exit 9; D=$(bash "$S" --digest 2>/dev/null) && [ -n "$D" ] || exit 9; t=$(mktemp -d) || exit 9; printf -- '- [core] H2 — **PASS**. \140--attest\140 → \140H2_ATTESTED v1 sprint=9 digest=%s mechanical=check-17-bypass:PASS\140; item 1 fires.\n' "$D" > "$t/a.md"; printf -- '# log\n- [core] H2 — **PASS**. \140--attest\140 → \140H2_ATTESTED v1 sprint=9 digest=0000000000000000 mechanical=check-17-bypass:PASS\140; item 1 fires.\n' > "$t/b.md"; printf 'H2_ATTESTED v1 sprint=9 digest=%s\n' "$D" > "$t/c.md"; printf '## Gate 1\nno attestation here\n' > "$t/d.md"; printf -- '- [core] H2: \140H2_ATTESTED v1 sprint=9 digest=%s mechanical=check-17-bypass:PASS\140 — H2 FAILS, do not cite.\n' "$D" > "$t/e.md"; v() { o=$(bash "$S" --verify --sprint 9 --gate-log "$t/$1" 2>&1); r=$?; }; v c.md; [ $r -eq 0 ] || exit 1; v a.md; [ $r -eq 1 ] || exit 1; case "$o" in *"a.md:1"[!0-9]*) ;; *) exit 1 ;; esac; case "$o" in *"first gate"*) exit 1 ;; esac; v b.md; [ $r -eq 1 ] || exit 1; case "$o" in *"b.md:2"[!0-9]*) ;; *) exit 1 ;; esac; case "$o" in *"first gate"*|*CHANGED*) exit 1 ;; esac; v e.md; [ $r -eq 1 ] || exit 1; v d.md; [ $r -eq 1 ] || exit 1; case "$o" in *"first gate"*) ;; *) exit 1 ;; esac; exit 0
@@ -4456,3 +4457,31 @@ CLOSE-CANDIDATE. Scored in the same worktree: base `d38142b0` 1, `0220be45` 1, a
 reader 0, a reader whose accepting arm never fires 9.
 
 verify: sh S=core/scripts/validate-h2-attestation.sh; [ -f "$S" ] || exit 9; D=$(bash "$S" --digest 2>/dev/null) && [ -n "$D" ] || exit 9; t=$(mktemp -d) || exit 9; P="H2_ATTESTED v1 sprint=9 digest=$D items=1,2,3 mechanical=check-17-bypass:PASS"; printf '%s\n' "$P" > "$t/ok.md"; printf '| H2 | core | FAIL | refused, re-drive owed: \140%s\140 |\n' "$P" > "$t/1.md"; printf '| H2 | core | \140%s\140 | FAIL — item 3 seed passed H1 |\n' "$P" > "$t/2.md"; printf '| Check | Evidence |\n|---|---|\n| H2 (INVALID, do not cite) | \140%s\140 |\n' "$P" > "$t/3.md"; printf '| H2 | core | FAIL -- re-drive required | \140%s\140 |\n' "$P" > "$t/4.md"; printf 'H2 FAILED, re-drive owed: %s\n' "$P" > "$t/5.md"; bash "$S" --verify --sprint 9 --gate-log "$t/ok.md" >/dev/null 2>&1 || exit 9; for f in 1 2 3 4 5; do bash "$S" --verify --sprint 9 --gate-log "$t/$f.md" >/dev/null 2>&1 && exit 1; done; exit 0
+
+## BL-342 — `validate-h2-attestation.sh --verify` numbers a binary gate log with grep's banner
+
+**NOTE.** Found by the batch-161 tip adversary. A NUL byte anywhere in the gate log makes
+`grep -nE` print `Binary file <log> matches` instead of `<n>:<line>`, and `cut -d: -f1` then
+takes the whole banner, so the located refusal reads `RE-DRIVE: <log>:Binary file <log>
+matches QUOTES …`. The exit is still 1 and nothing is granted. `grep -a` would number it.
+
+verify: manual
+
+## BL-343 — `validate-h2-attestation.sh --verify` falls back to the first-gate message on a non-UTF-8 byte under a UTF-8 locale
+
+**NOTE.** Found by the batch-161 tip adversary. One cp1252 byte (`\223`) on the quoted bullet's
+line: under `LC_ALL=C` the refusal is located; under `LC_ALL=en_US.UTF-8` it reads "this is the
+sprint's first gate", which is the misreport 0.648.0 removes. The accepting arm has the same
+exposure on such a line. The fixture runs under the caller's locale and seeds no such byte.
+
+verify: manual
+
+## BL-344 — `validate-h2-attestation.sh` interpolates `--sprint` into its regex unescaped, and an unreadable log reads as the first gate
+
+**NOTE.** Found by the batch-161 tip adversary; both predate 0.648.0. `--sprint '.*'` and
+`--sprint '5|'` each verify a `sprint=5` line (rc 0, PASS). A gate log at mode 000 makes all
+three greps exit 2, which the script reads as no match: it prints `grep: … Permission denied`
+and then the first-gate message, rc 1. Separately, the located refusal goes to stderr like
+CHANGED while first-gate goes to stdout, so a caller capturing only stdout sees nothing for it.
+
+verify: manual

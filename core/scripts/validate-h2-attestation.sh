@@ -165,8 +165,10 @@ fi
 # rows: the line the consumer pasted read `| H2 | core | PASS | \`H2_ATTESTED v1
 # sprint=311 …\`. |`, which `^H2_ATTESTED` cannot reach. Measured at the release tree
 # against the shipping script and the real fixture digest, five gate logs differing
-# only in what precedes one byte-identical attestation: column 1 exits 0; a table
-# cell, a backtick wrap, a `- ` bullet and a four-space indent all exit 1.
+# only in what precedes one byte-identical attestation: under that `^` anchor column 1
+# exited 0, and a table cell, a backtick wrap, a `- ` bullet and a four-space indent all
+# exited 1. Under the token boundary below all five exit 0 — what PRECEDES the span is
+# not read at all, which is why failure words before it are granted (see the backlog).
 #
 # WHY NOT A BARE SUBSTRING EITHER. Dropping the anchor makes `XH2_ATTESTED` and
 # `NOT_H2_ATTESTED` count, so a line that DENIES an attestation grants one. The
@@ -322,9 +324,9 @@ echo "Items (1) H1 recursion guard and (3) manifest-bypass are LLM-adjudicated:"
 echo "drive their seeds now and record the verdicts alongside this line."
 echo ""
 echo "Append the line below to the gate log on its own line at column 1, with nothing"
-echo "before or after it. A bullet, an arrow or trailing prose makes it unverifiable, and"
-echo "--verify will name the line. In a table log, the H2 row's evidence cell holding ONLY"
-echo "this span is also accepted. Nothing else about the line may change."
+echo "before or after it. Any prose AFTER the line makes it unverifiable, and --verify"
+echo "will name the line. In a table log, the H2 row's evidence cell holding ONLY this"
+echo "span is also accepted. Nothing else about the line may change."
 echo ""
 echo "H2_ATTESTED v1 sprint=${SPRINT} digest=${DIGEST} at=${STAMP} items=1,2,3 mechanical=check-17-bypass:PASS"
 exit 0

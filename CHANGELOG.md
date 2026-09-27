@@ -35,8 +35,12 @@ arm has the same tail, so a quoted span at a moved digest got the same wrong mes
   last such line, with the remedy: re-drive `--attest` and append its line on its own line at
   column 1, nothing before or after it. It exits 1.
 - The `--attest` output and `gate-validation.md` H2 now say the line goes on its own line at
-  column 1, that a bullet, an arrow or trailing prose makes it unverifiable, and that a table
-  log's H2 evidence cell holding only the span is also accepted.
+  column 1, that any prose after it makes it unverifiable, and that a table log's H2 evidence
+  cell holding only the span is also accepted. The reader never reads what precedes the span,
+  so a leading bullet or arrow verifies; the instruction is stricter than the reader on purpose.
+- `h2-attest-scripts-dir` pins the consumer's bullet at a live and a moved digest, the last of
+  two quoted lines, the column-1 line winning over a quoted one, six FAIL sentences, the
+  placement sentence `--attest` prints, and the remedy the refusal prints, with seven mutants.
 - The reader grammar and both accepting arms are byte-identical to 0.647.0.
 
 The filing proposed widening the tail to admit a closing backtick. That was measured and not
@@ -55,6 +59,9 @@ and the shipped script verifies the log at sprint 314 (rc 0).
   with failure words before a span that ends it. The reader checks only what follows the span.
   Refusing a failure word earlier in the cell would also refuse genuine records that say the
   seeded fixture "would correctly FAIL", so the fix is not a one-line guard.
+- `BL-342`..`BL-344` (NOTEs): a NUL byte garbles the located line number; a non-UTF-8 byte under
+  a UTF-8 locale falls back to the first-gate message; `--sprint` is interpolated into the regex
+  unescaped, and an unreadable log reads as the first gate.
 
 ## [0.647.0] - 2026-09-26
 

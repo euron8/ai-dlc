@@ -158,6 +158,16 @@ else
   bad "--attest exited 0 but printed no well-formed H2_ATTESTED v1 line"
   printf '%s\n' "$ATT_OUT" | tail -5 | sed 's/^/        /'
 fi
+# A2. THE PLACEMENT SENTENCE --attest prints above the line. It is the writer half of the
+# contract --verify's locating branch enforces: a lead transcribes where this says, so a
+# reverted or reworded instruction reopens the bullet-with-prose shape the reader refuses.
+# Keyed on the two clauses that carry the rule, never on the wrap.
+if grep -qF 'on its own line at column 1, with nothing' <<<"$ATT_OUT" \
+   && grep -qF 'Any prose AFTER the line makes it unverifiable' <<<"$ATT_OUT"; then
+  ok "--attest tells the lead to append the line alone at column 1, and why"
+else
+  bad "--attest no longer prints the column-1 placement rule above the H2_ATTESTED line"
+fi
 
 # --- B. non-vacuity: a WRONG explicit --scripts must be fatal -------------------
 # $WORK/core/scripts is precisely what the shipped derivation computed in a consumer,
@@ -407,6 +417,17 @@ else
   else
     bad "--verify on two quoted bullets (rc=$X_RC) did not name line 4 alone"; vx_show
   fi
+  # THE REMEDY. A located refusal that does not say what to do sends the lead back to the
+  # same bullet; the arm demands the instruction, not just the line number.
+  p_remedy() {
+    vx "$1" bullet-live 314
+    located bullet-live 2 && grep -qF 'OWN line at column 1, nothing before or after it.' <<<"$X_ERR"
+  }
+  if p_remedy "$SUT"; then
+    ok "--verify's located refusal carries the remedy: re-drive, append alone at column 1"
+  else
+    bad "--verify located the bullet but gave no column-1 remedy"; vx_show
+  fi
 
   # W. THE SIX ADVERSARIAL FAIL LINES. Each quotes a live span at the right sprint and
   # digest inside a sentence that reports a FAILURE. Every widening that admits the
@@ -555,7 +576,7 @@ else
        /^ATTEST_TAIL=/ { print r; next } { print }' "$SUT" > "$M3"
 
   ctl_ok=1
-  for p in p_bullet_live p_bullet_moved p_empty p_order p_two; do
+  for p in p_bullet_live p_bullet_moved p_empty p_order p_two p_remedy; do
     "$p" "$MCTL" || { ctl_ok=0; bad "MUTATION CONTROL: the unmutated copy fails $p (rc=$X_RC) —"
       echo "        the harness cannot drive a copy from \$WORK, so no mutant verdict is evidence." >&2; }
   done
@@ -659,6 +680,18 @@ else
       bad "MUTATION (m6) broke the one-bullet case too — the kill is not the two-bullets arm's"
     else
       ok "MUTATION (m6): naming the first quoted line, not the last, fails the two-bullets arm"
+    fi
+  fi
+  # (m7) the REMEDY line deleted, the location kept -> only the remedy arm dies.
+  M7="$WORK/h2-locate-no-remedy.mutant.sh"
+  grep -vF -- '--attest and append its line on its OWN line at column 1' "$SUT" > "$M7"
+  if [ "$ctl_ok" -eq 1 ] && mut_ready m7 "$M7"; then
+    if p_remedy "$M7"; then
+      bad "MUTATION (m7) SURVIVED: with the remedy line deleted the remedy arm still passed"
+    elif ! p_bullet_live "$M7"; then
+      bad "MUTATION (m7) broke the location too — the kill is not the remedy arm's alone"
+    else
+      ok "MUTATION (m7): deleting the remedy line fails the remedy arm and keeps the location"
     fi
   fi
 fi
