@@ -4081,6 +4081,15 @@ Checks 26, 33 and 35 only. Adding that instruction here as written would make ev
 no escalations file fail Check 2. Which reading is right is the operator's call. How an
 adjudicator actually rules on the token at Check 2 today was available to measure and was not.
 
+**Operator ruling, batch 163: an absent or empty escalations file is a CLEAN PASS at Checks 2 and
+2a**, because the file exists only once something is escalated, so its absence means there is no
+unresolved HARD_BLOCK. Checks 26, 33 and 35 are unchanged: their corpus must exist. The map's three
+postures and the Check 2 and 2a step text now say so, quoting the validators' printed
+`OK: EXAMINED NOTHING` line. Measured on the reference consumer: 0 of its 209 committed Check 2 and
+4 Check 2a verdicts carry the token (control: 50 hits under other checks), because its
+`docs/escalations/pending.md` was present and non-empty at all 898 commits touching it. The ruling
+moves no recorded verdict.
+
 verify: manual
 
 ## BL-310 — after a transient `cat-file` or `show` failure on a present path, the memo still hands one caller a wrong "absent"

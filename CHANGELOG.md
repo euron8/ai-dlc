@@ -15,6 +15,33 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.653.0] - 2026-09-27
+
+Checks 2 and 2a treat an absent or empty escalations file as a clean pass, and say so.
+
+### `EXAMINED NOTHING` at Checks 2 and 2a is a pass (`BL-311`)
+
+The enforcement map gave Checks 2 and 2a the posture that `EXAMINED NOTHING` "is not a pass,
+nothing was verified". The three validators they invoke call an absent escalations file a clean
+state and print `OK: EXAMINED NOTHING`, exit 0, and `gate-validation.md`'s Check 2 and 2a sections
+said nothing either way. So an adjudicator read a map calling it a failure, a validator calling it
+clean, and no instruction.
+
+Operator ruling: it is a pass. The escalations file exists only once something has been escalated,
+so its absence means no HARD_BLOCK is unresolved, which is exactly what Check 2 asks. Checks 26, 33
+and 35 are unchanged, because their corpus must exist and an empty scan there verified nothing.
+
+- `enforcement-map.yaml`'s three Check 2 and 2a postures say `OK: EXAMINED NOTHING` from an absent or
+  empty escalations file IS a pass, and each keeps "exit 0 required". The first posture had
+  misquoted the printed line as `OK — EXAMINED NOTHING`.
+- `gate-validation.md`'s Check 2 and 2a sections state the same, naming the printed line.
+- `escalation-status-vocabulary` gains an arm asserting both step sections and the map's rows, with
+  three mutants restoring "is not a pass" in one artifact each, each failing only its own cell.
+
+On the reference consumer this moves no recorded verdict: 0 of its 209 committed Check 2 and 4 Check
+2a verdicts carry `EXAMINED NOTHING`, because its escalations file was present and non-empty at all
+898 commits touching it.
+
 ## [0.652.0] - 2026-09-27
 
 A staged producer that is a function whose body is a pipeline now reports its first failed
