@@ -67,6 +67,57 @@ claiming "under the ceiling" when it cannot reach the ceiling. Measured on a scr
 exact and P8-P13 green. **A record is moved whole, including any standing rule written inside
 it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in a batch record.
 
+**BATCH 162 SHIPPED `v0.649.0` (`7dcee030`, #876) AND CLOSED `BL-341`, `BL-345` AND `BL-335`. NONE
+DISCHARGES A CONSUMER CANDIDATE.** It was invoked by peer handoff. The opening sweep matched batch
+161 on every figure except one: live 28 on one qualifying ref, worklist 5, ledger md5 `989f20cf…`,
+receipt histogram 9/45/1, and the unfiled set is **12**, not the 13 batch 161's block said — the
+same twelve ids and dates, so the 13 was a stale figure, not a moved ledger. With no new filing,
+the batch took batch 161's two named DEFECTs. Live **94 -> 99** (eight filed, three closed),
+archive **249 -> 252**. The exit-0 receipt set is batch 160's nine, compared by id.
+
+**`BL-341`: THE H2 READER GRANTS A SPAN ONLY WHEN IT IS ALONE AND ITS ROW SAYS PASS.** The contract
+adversary replaced both halves of the first design. The lead's failure-word vocabulary refused a
+real sprint-289 PASS row and could not name `VOIDED`, so a table row now needs a header-named
+Result/Verdict/Status/Outcome cell that begins `PASS`. The negated-class lead admitted `❌` and
+`~~…~~`, so decoration is a closed set. A docs hand then found `BL-345` in the fix itself (a `|`
+inside backticks split a cell), and its first repair opened the GitHub-rendering mirror, so a row
+now verifies only if both splits accept it. The tip adversary found `mechanical=…:FAIL` verifying,
+as at 0.648.0; that field is pinned. Over the consumer's 31 historical pairs: 31 at 0.648.0, 29
+now, both losses historical. Sprint 314 still verifies with the same citation.
+
+**`BL-335`: A DERIVATION THAT COULD NOT BE COMPARED IS UNRUN, NOT STALE.** The adversary found two
+more verdict sites the entry had missed, each forced by a PATH stub at 0.648.0: a failed `norm`
+compared empty with empty and read clean, and a failed `find` walk read `OK: 0 derivation(s)`.
+All three exit 2 now. The entry's second subject, the other `<( )` operands in `core/`, is
+`BL-348`.
+
+**THE SECOND PUSH BLOCKED ON THE BACKLOG CEILING, NOT A FIXTURE.** Filing four tip-adversary NOTEs
+inside the release took `docs/backlog.md` to 102 of 100. They were held and filed in the close
+commit after the rotation, as `BL-349`..`BL-352`. **The backlog is now at 99 of 100, so the next
+filing breaches B1: close and rotate before you file.**
+
+Every gate ran at `AI_DLC_FIXTURE_NO_SKIP=1`; the third, on `43249c8d`: 22 phases, 0 FAIL, the four
+changed fixtures `ok` by name against an impossible-name control of 0, `ls-remote` matching, and
+the squash tree identical to the gated tip.
+
+**NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
+- The unfiled set holds no new core filing. `BL-348` (DEFECT, the unaudited `<( )` operands) is the
+  strongest distribution-internal entry, and it continues the thread batches 160-162 opened.
+- `BL-230` needs a mechanism for E1, E2 and E9.
+- `BL-311` waits on the operator. Two fixtures are still unmapped in the read-set map,
+  `emit-report-refusal` and `gate-resume`, and the gate names both.
+
+**THE DELIVERY GAP IS SIX RELEASES**, past action 7's WIDE threshold. The consumer is at 0.643.0
+against `VERSION` 0.649.0. The one bootstrapping commit in `7b32fb1a..origin/main` is still
+0.647.0's `emit-report.sh`/`apply.sh` change; none since. 0 of 53 `core/` rows are mode-only. Three
+PC ids are PENDING, unchanged from batch 161, each named by one `origin/main` commit (control 0).
+Nothing this release ships changes the consumer's in-flight answer: its installed
+`validate-layer-entries.sh` is byte-identical to ours, and its sprint-314 H2 log verifies under
+both readers. The banked ruling stands: report the gap and write no runbook. The consumer's
+porcelain moved 35 -> 11 from its own sprint; its ledger md5 did not move.
+
+Batch 161's next-work list and delivery gap are spent: batch 162's block above replaces both.
+
 **BATCH 161 SHIPPED `v0.648.0` (`6af89fd1`, #874) AND CLOSED `BL-340`, WHICH DISCHARGES
 `PC-S314-H2-ATTESTATION-PLACEMENT-GRAIN-REJECTS-THE-STEP-FILES-OWN-STYLE`.** It was invoked by
 peer handoff. The opening sweep matched batch 160 on every figure and control except the one
