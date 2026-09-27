@@ -304,13 +304,27 @@ GA_ROOT="${AI_DLC_PROJECT_ROOT:-}"
 GA_ROOT="${GA_ROOT:-/nonexistent}"
 # --- end AI_DLC_ROOT --------------------------------------------------------
 
+# The INSTALL root, walked up from this script's own directory, is the LAST candidate for both
+# the schema and enforcement-map.yaml: in the consumer layout the script-relative ones sit under
+# scripts/, where neither exists, so an override naming a root with no .claude/ copy failed closed
+# (BL-300). Last, as in BL-299's pair, so a root carrying its own copy still wins. An empty walk
+# adds no candidate.
+GA_INSTALL_ROOT="$(ai_dlc_resolve_root "$GA_SCRIPT_DIR" || true)"
+GA_INSTALL_SCHEMA=""
+GA_INSTALL_MAP=""
+if [ -n "$GA_INSTALL_ROOT" ]; then
+    GA_INSTALL_SCHEMA="$GA_INSTALL_ROOT/.claude/schemas/gate-adjudication-verdict.json"
+    GA_INSTALL_MAP="$GA_INSTALL_ROOT/.claude/skills/ai-dlc/enforcement-map.yaml"
+fi
+
 SCHEMA="${AI_DLC_VERDICT_SCHEMA:-}"
 if [ -z "$SCHEMA" ]; then
     for cand in \
         "$GA_ROOT/core/schemas/gate-adjudication-verdict.json" \
         "$GA_ROOT/.claude/schemas/gate-adjudication-verdict.json" \
-        "$GA_SCRIPT_DIR/../schemas/gate-adjudication-verdict.json"; do
-        [ -f "$cand" ] && { SCHEMA="$cand"; break; }
+        "$GA_SCRIPT_DIR/../schemas/gate-adjudication-verdict.json" \
+        "$GA_INSTALL_SCHEMA"; do
+        [ -n "$cand" ] && [ -f "$cand" ] && { SCHEMA="$cand"; break; }
     done
 fi
 if [ -z "$SCHEMA" ] || [ ! -f "$SCHEMA" ]; then
@@ -326,8 +340,9 @@ if [ -z "$MAP" ]; then
     for cand in \
         "$GA_ROOT/core/skills/ai-dlc/enforcement-map.yaml" \
         "$GA_ROOT/.claude/skills/ai-dlc/enforcement-map.yaml" \
-        "$GA_SCRIPT_DIR/../skills/ai-dlc/enforcement-map.yaml"; do
-        [ -f "$cand" ] && { MAP="$cand"; break; }
+        "$GA_SCRIPT_DIR/../skills/ai-dlc/enforcement-map.yaml" \
+        "$GA_INSTALL_MAP"; do
+        [ -n "$cand" ] && [ -f "$cand" ] && { MAP="$cand"; break; }
     done
 fi
 if [ -z "$MAP" ] || [ ! -f "$MAP" ]; then

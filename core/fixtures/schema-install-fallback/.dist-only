@@ -1,0 +1,9 @@
+DISTRIBUTION-ONLY: its subject is a tree built by running scripts/install.sh into an empty
+directory, and install.sh is not shipped to consumers. On a consumer this fixture cannot resolve
+its installer and would exit 2 on every run.
+
+It is also a MUTATION BATTERY: it edits copies of five installed core scripts
+(sprint-status.sh, sync-taught-schema.sh, validate-audit-anchors.sh,
+validate-write-format-steering.sh, validate-gate-adjudication.sh) inside whole-tree copies of
+that install. The distribution-side half of the same property — each script consults its root
+before its install fallback — reaches consumers through validator-path-resolution, which ships.

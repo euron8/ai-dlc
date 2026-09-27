@@ -710,5 +710,98 @@ score_guard "mutant ID (writer: walk guard removed) by G" stamp-story-provenance
 score_guard "mutant ID2 (reader: walk guard removed) by G" validate-provenance-block.sh \
   "$(mk_imut "$READER" md2-reader.sh "$UNGUARD_PROG")" "$NM/probe.md" --allow-missing
 
+# --- BL-302: THE WRITER AND THE READER LOAD ONE SCHEMA IN THE DISTRIBUTION LAYOUT TOO. The arms
+# above run in the consumer layout, where the script-relative candidate (`scripts/schemas/`) never
+# exists, so the writer's candidate ORDER cannot show there. In the distribution it always exists:
+# a writer that tried `$SCRIPT_DIR/../schemas/` first loaded core/schemas/ while the reader, which
+# tries the override root first, loaded the root's own copy — and refused what the writer stamped.
+# So this world is built in the distribution's shape wherever the fixture runs:
+#   <d>/core/scripts/{writer,reader}   <d>/core/schemas/provenance-block.json (the source schema)
+#   <g>/.claude/schemas/provenance-block.json — MODIFIED: the placeholder prefix is no longer
+#       forbidden on tool_use_id, so a pass carrying `toolu_placeholder…` stamps under <g>'s schema
+#       and is refused under the source one. The modification is what separates the two schemas.
+#   DP  the writer's --print-schema under AI_DLC_PROJECT_ROOT=<g> IS <g>'s copy (identity)
+#   DS  the writer stamps that pass under <g>, and the reader under <g> accepts the stamp
+#   DC  CONTROL: with no override the same writer REFUSES the pass as a placeholder, so DS passes
+#       because of <g>'s schema and for no other reason
+# Mutant WR — the script-relative candidate put back FIRST — must fail DP and DS and hold DC.
+B302="$(mktemp -d "$ROOT/b302.XXXXXX")"
+B302_TID="toolu_placeholderBL302zzzz"
+b302_world() { # $1 writer to install -> world dir
+  local w; w="$(mktemp -d "$B302/w.XXXXXX")" || return 1
+  mkdir -p "$w/d/core/scripts" "$w/d/core/schemas" "$w/d/core/skills/ai-dlc" "$w/g/.claude/schemas" "$w/g/stories" || return 1
+  cp "$1" "$w/d/core/scripts/stamp-story-provenance.sh" || return 1
+  cp "$READER" "$w/d/core/scripts/validate-provenance-block.sh" || return 1
+  cp "$SCHEMA_SRC" "$w/d/core/schemas/$SCH" || return 1
+  python3 -c '
+import json, sys
+s = json.load(open(sys.argv[1]))
+f = [x for x in s["fields"] if x.get("name") == "tool_use_id" and x.get("forbidden_match") == "prefix_ci"]
+assert len(f) == 1, "tool_use_id carries no prefix_ci forbidden list"
+before = len(f[0]["forbidden"])
+f[0]["forbidden"] = [v for v in f[0]["forbidden"] if not v.lower().startswith("toolu_placeholder")]
+assert len(f[0]["forbidden"]) < before, "no placeholder prefix to lift"
+json.dump(s, open(sys.argv[2], "w"), indent=2)
+' "$SCHEMA_SRC" "$w/g/.claude/schemas/$SCH" || return 1
+  sed "s/^tool_use_id:.*/tool_use_id: $B302_TID/" "$ROOT/converged/s1-stories-adversarial-p2.md" > "$w/g/pass-p2.md" || return 1
+  printf '# Story b302\n\n## Acceptance Criteria\n- AC(a): thing.\n' > "$w/g/stories/story-b302.md"
+  printf '%s\n' "$w"
+}
+# -> "<DP><DS><DC>" for writer $1, each 0 held / 1 failed / 2 broken
+b302_vector() { local w out st rd rc v=""
+  w="$(b302_world "$1")" || { echo 222; return; }
+  out="$(cd "$w/g" && AI_DLC_PROJECT_ROOT="$w/g" bash "$w/d/core/scripts/stamp-story-provenance.sh" --print-schema 2>&1)"
+  if [ -n "$out" ] && [ "$out" -ef "$w/g/.claude/schemas/$SCH" ]; then v="${v}0"; else v="${v}1"; fi
+  st="$(cd "$w/g" && AI_DLC_PROJECT_ROOT="$w/g" bash "$w/d/core/scripts/stamp-story-provenance.sh" \
+        --terminal pass-p2.md stories/story-b302.md 2>&1)"
+  rd="$(cd "$w/g" && AI_DLC_PROJECT_ROOT="$w/g" bash "$w/d/core/scripts/validate-provenance-block.sh" \
+        stories/story-b302.md --require-skill ai-dlc-adversary-review 2>&1)"; rc=$?
+  if grep -qF "stamped 1 of 1" <<<"$st" && grep -qF "$B302_TID" "$w/g/stories/story-b302.md" \
+     && [ "$rc" -eq 0 ] && grep -qF "PASS (stories/story-b302.md, 1 block(s)" <<<"$rd"; then v="${v}0"; else v="${v}1"; fi
+  # The control drives a FRESH copy of the pass and story, with the override unset: the walk from
+  # the world's cwd finds <d> through nothing, so the root comes from the writer's own install.
+  cp "$w/g/pass-p2.md" "$w/d/pass-p2.md"; printf '# Story c\n' > "$w/d/story-c.md"
+  st="$(cd "$w/d" && env -u AI_DLC_PROJECT_ROOT -u CLAUDE_PROJECT_DIR bash "$w/d/core/scripts/stamp-story-provenance.sh" \
+        --terminal pass-p2.md story-c.md 2>&1)"
+  if grep -qF "placeholder literal the schema forbids" <<<"$st" && ! grep -qF "$B302_TID" "$w/d/story-c.md"; then v="${v}0"; else v="${v}1"; fi
+  printf '%s\n' "$v"
+}
+B302V="$(b302_vector "$WRITER")"
+i=0
+for lbl in "BL-302 dist: writer resolves the root's schema (DP)" \
+           "BL-302 dist: reader accepts the writer's stamp (DS)" \
+           "BL-302 dist: control refuses without it (DC)"; do
+  i=$((i + 1)); ASSERTIONS=$((ASSERTIONS + 1))
+  c="$(printf '%s' "$B302V" | cut -c"$i")"
+  if [ "$c" = 0 ]; then printf '  ok    %-46s\n' "$lbl"
+  else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s result=%s\n' "$lbl" "${c:-none}"; fi
+done
+# WR: the script-relative candidate moved back to the head of the writer's loop. Anchored on that
+# one candidate line and on the loop head, each exactly once, and refused unless the copy differs.
+WR_PROG='
+import sys
+src = open(sys.argv[1]).read()
+c = "    \x22$SP_SCRIPT_DIR/../schemas/provenance-block.json\x22 \\\n"
+h = "for cand in \\\n"
+if src.count(c) != 1 or src.count(h) != 1:
+    sys.exit("anchor: candidate %d, loop head %d" % (src.count(c), src.count(h)))
+if src.index(h) + len(h) == src.index(c):
+    sys.exit("anchor: the script-relative candidate is already first")
+open(sys.argv[2], "w").write(src.replace(c, "").replace(h, h + c))
+'
+ASSERTIONS=$((ASSERTIONS + 1))
+WR_MUT="$(mk_imut "$WRITER" wr-writer.sh "$WR_PROG")"
+case "$WR_MUT" in
+  "DID NOT APPLY"*) FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "mutant WR (writer reorder reverted)" "$WR_MUT" ;;
+  *)
+    if [ "$B302V" != 000 ]; then
+      FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "mutant WR (writer reorder reverted)" "FIXTURE BROKEN: unmutated vector is $B302V"
+    else
+      got="$(b302_vector "$WR_MUT")"
+      if [ "$got" = 110 ]; then printf '  ok    %-46s\n' "mutant WR (writer reorder reverted) by DP+DS"
+      else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-46s %s\n' "mutant WR (writer reorder reverted)" "vector $got, want 110 (DP DS DC)"; fi
+    fi ;;
+esac
+
 echo "  ---- $ASSERTIONS assertions, $FAILURES failing ----"
 [ "$FAILURES" -eq 0 ]

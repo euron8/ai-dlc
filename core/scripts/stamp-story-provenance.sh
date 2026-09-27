@@ -141,14 +141,18 @@ SP_ROOT="${AI_DLC_PROJECT_ROOT:-}"
 # writer load the install's schema while validate-provenance-block.sh loads an override root's own,
 # and the reader would refuse the stamp. An empty walk answer is skipped, never turned into
 # /.claude/schemas/ at the filesystem root.
+# The whole chain is the READER's order — root core/, root .claude/, script-relative, install — so
+# both programs pick the same file under every override. Script-relative first made this writer load
+# core/schemas/ in the distribution while the reader loaded an override root's own copy, and the
+# reader refused the stamp (BL-302).
 SP_INSTALL_ROOT="$(ai_dlc_resolve_root "$SP_SCRIPT_DIR" || true)"
 SP_INSTALL_SCHEMA=""
 [ -n "$SP_INSTALL_ROOT" ] && SP_INSTALL_SCHEMA="$SP_INSTALL_ROOT/.claude/schemas/provenance-block.json"
 SCHEMA=""
 for cand in \
-    "$SP_SCRIPT_DIR/../schemas/provenance-block.json" \
     "${SP_ROOT:-/nonexistent}/core/schemas/provenance-block.json" \
     "${SP_ROOT:-/nonexistent}/.claude/schemas/provenance-block.json" \
+    "$SP_SCRIPT_DIR/../schemas/provenance-block.json" \
     "$SP_INSTALL_SCHEMA"; do
     [ -n "$cand" ] && [ -f "$cand" ] && { SCHEMA="$cand"; break; }
 done

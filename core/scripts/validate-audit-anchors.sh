@@ -106,6 +106,11 @@ AI_DLC_ROOT="${AI_DLC_PROJECT_ROOT:-}"
 # Resolve the schema in both layouts (distribution core/schemas, consumer .claude/schemas), with
 # an env override for tests. No built-in copy: if it cannot be found we fail closed, never guess.
 # Script-relative first — that is the package THIS copy shipped in — then the resolved root.
+# The INSTALL root, walked up from this script's own directory, is the LAST candidate: in the
+# consumer layout the script-relative one is scripts/schemas/, which never exists, so an override
+# naming a root with no .claude/schemas/ failed closed (BL-300). Last, as in BL-299's pair, so a
+# root carrying its own schema still wins. An empty walk adds no candidate.
+AI_DLC_INSTALL_ROOT="$(ai_dlc_resolve_root "$SCRIPT_DIR" || true)"
 if [ -n "${AI_DLC_AUDIT_ANCHORS_SCHEMA:-}" ] && [ -f "${AI_DLC_AUDIT_ANCHORS_SCHEMA}" ]; then
   SCHEMA="$AI_DLC_AUDIT_ANCHORS_SCHEMA"
 elif [ -f "$SCRIPT_DIR/../schemas/audit-anchors.json" ]; then
@@ -114,10 +119,13 @@ elif [ -n "$AI_DLC_ROOT" ] && [ -f "$AI_DLC_ROOT/core/schemas/audit-anchors.json
   SCHEMA="$AI_DLC_ROOT/core/schemas/audit-anchors.json"
 elif [ -n "$AI_DLC_ROOT" ] && [ -f "$AI_DLC_ROOT/.claude/schemas/audit-anchors.json" ]; then
   SCHEMA="$AI_DLC_ROOT/.claude/schemas/audit-anchors.json"
+elif [ -n "$AI_DLC_INSTALL_ROOT" ] && [ -f "$AI_DLC_INSTALL_ROOT/.claude/schemas/audit-anchors.json" ]; then
+  SCHEMA="$AI_DLC_INSTALL_ROOT/.claude/schemas/audit-anchors.json"
 else
   echo "validate-audit-anchors: FAIL — cannot find schemas/audit-anchors.json (the source of truth;" >&2
   echo "  this script has no built-in copy and will not guess). Looked in $SCRIPT_DIR/../schemas/" >&2
-  echo "  and ${AI_DLC_ROOT:-<unresolved project root>}/{core,.claude}/schemas/." >&2
+  echo "  and ${AI_DLC_ROOT:-<unresolved project root>}/{core,.claude}/schemas/ and" >&2
+  echo "  ${AI_DLC_INSTALL_ROOT:-<unresolved install root>}/.claude/schemas/." >&2
   exit 1
 fi
 

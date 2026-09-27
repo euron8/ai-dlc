@@ -429,7 +429,7 @@ rm -f "$WORK/_bmad-output/planning-artifacts/s288/locked-requirements.md"
 # permanent stop on the consumer's own pre-push, which is how the reference consumer
 # found it (PC-S326). The chain is rooted at the FIXTURE's own self-location and names
 # both layouts explicitly, which is what lines 53-56 above already do for the validator
-# and what sprint-status.sh:129-137 does for this same schema.
+# and what sprint-status.sh:129-153 does for this same schema.
 BIN="$WORK/bin"
 mkdir -p "$BIN" "$WORK/schemas" || exit 2
 SCRIPTS_DIR="$(dirname "$VALIDATOR")"
