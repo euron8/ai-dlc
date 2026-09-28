@@ -301,6 +301,42 @@ ld_refuse() { # ld_refuse <what did not run> <its exit status>
   exit 1
 }
 
+# NO HERE-STRING ANYWHERE IN THIS FILE, AND THIS IS WHY. bash 3.2 stages every `<<<` to a temp
+# file, and when that write fails -- `ulimit -f`, a full or read-only TMPDIR -- it prints `cannot
+# create temp file for here document` and runs the command with EMPTY stdin. The command's exit is
+# its own and says nothing about the lost input: a `$( )` capture comes back empty, a `grep -q`
+# answers "absent", a `! grep -q` answers "present", a `done <<<` loop runs zero times. Measured on
+# a consumer clone over one pull's range: the 78 KB layer contract lost at `ulimit -f 12` emptied
+# ADJ_CODES, so no HARD-LAYER-ADJUDICATION-MISSING row could be generated; a 189 KB core file lost
+# at 80..160 flipped OVERRIDE-OK rows to OVERRIDE-DRIFT-FILE. Every run rc 0.
+#
+# Three shapes replace it, each chosen so the empty-input state is either unconstructible or read:
+#   * a whole-line MEMBERSHIP test is `ld_has_line` below -- a `case`, no file and no fork, so it
+#     cannot fail at all;
+#   * a CAPTURE is fed by a pipe from `printf` (immune to staging) or from a file staged once, and
+#     the capture's own status is read;
+#   * a LOOP reads a file staged with `ld_stage`, whose write status is read.
+# `ld_stage` writes exactly the bytes the here-string fed (`printf '%s\n'`), so healthy output is
+# byte-identical. A staging or producer failure refuses through `ld_refuse_staging`, whose first
+# line is the `layer-drift: REFUSED` one `apply.sh` quotes; `ld_refuse`'s own line follows it
+# unchanged. Refusals from inside a `$( )` cannot end this shell, so a function called there
+# returns 3 and its CALLER refuses.
+NL='
+'
+ld_refuse_staging() { # ld_refuse_staging <what> <its exit status>
+  echo "layer-drift: REFUSED — $1 could not be staged (exit $2); refusing rather than reading an empty input as clean" >&2
+  ld_refuse "$1" "$2"
+}
+ld_stage() { # ld_stage <file> <value> <what> -- MAIN SHELL ONLY; the bytes a here-string would feed
+  local _rc=0
+  printf '%s\n' "$2" > "$1" || _rc=$?
+  [ "$_rc" -eq 0 ] || ld_refuse_staging "$3" "$_rc"
+}
+ld_has_line() { # ld_has_line <haystack> <needle> -> 0 when <needle> is a WHOLE line of <haystack>
+  case "$NL$1$NL" in *"$NL$2$NL"*) return 0 ;; esac
+  return 1
+}
+
 # EVERY ROW'S WRITE IS COUNTED, AND THE SCRIPT'S EXIT IS DECIDED BY THE COUNT. The row writers
 # used to discard printf's status and the script fell off its last line (list mode: an explicit
 # `exit 0`), so a row that could not be written -- stdout closed, EFBIG on the regular file
@@ -510,13 +546,15 @@ unclaimed_body_sections() { # unclaimed_body_sections <entry-file> <shadow_parts
   _tab="$(printf '\t')"
   _b="$(mktemp)" || return 0
   body_of "$1" > "$_b"
+  # Runs inside `$( )`, so a failed staging write RETURNS 3 and the caller refuses.
+  printf '%s\n' "$2" > "$LD_T/unclaimed-pairs" || { rm -f "$_b"; return 3; }
   while IFS= read -r _pair; do
     [ -n "$_pair" ] || continue
     _id="${_pair#*"$_tab"}"
     [ -n "$_id" ] || continue
     _sp="$(span_of "$_id" < "$_b")"
     [ -n "$_sp" ] && _spans="${_spans}${_sp%% *}:${_sp##* } "
-  done <<< "$2"
+  done < "$LD_T/unclaimed-pairs"
   if [ -n "$_spans" ]; then
     awk -v spans="$_spans" '
       BEGIN { n = split(spans, S, " ")
@@ -627,16 +665,45 @@ ADJ_CONTRACT_REL="core/skills/ai-dlc/layer-contract.yaml"
 # THE CONTRACT AT THEIRS, READ ONCE. Both derivations below are awk passes over THIS text and
 # not two `git show` calls, so a clause whose level says one thing to the first reader and whose
 # id says another to the second is not constructible: there is one snapshot.
-ADJ_CONTRACT_TEXT="$(git_show "$THEIRS" "$ADJ_CONTRACT_REL")"
+#
+# ITS STATUS IS READ, AND BEFORE THE `codes` BRANCH, so `--adjudicated-codes` refuses too rather
+# than printing an empty set -- which that mode documents as a LEGITIMATE answer. Both awk passes
+# are fed by a pipe from `printf`, which has no temp file to lose, and each capture's status is
+# read: under pipefail a failed writer or reader is the capture's status.
+#
+# A CONTRACT ABSENT AT THEIRS IS NOT A READ FAILURE, and stays what it always was: an empty text
+# and no adjudication tier. Only a contract `have` says is THERE and that could not be read
+# refuses -- `git show` answers 128 for an absent path and for a failed one alike.
+_ac_rc=0
+ADJ_CONTRACT_TEXT=""
+if have "$THEIRS" "$ADJ_CONTRACT_REL"; then
+  ADJ_CONTRACT_TEXT="$(git_show "$THEIRS" "$ADJ_CONTRACT_REL")" || _ac_rc=$?
+fi
+[ "$_ac_rc" -eq 0 ] || ld_refuse_staging "reading $ADJ_CONTRACT_REL at $THEIRS" "$_ac_rc"
 
 # The ADJUDICATED code set, DERIVED from the contract at THEIRS — the version being pulled is
 # the version the consumer is held to. `level:` precedes `code:` in every clause, which is what
 # lets one pass carry the level forward onto the code it belongs to.
-ADJ_CODES="$(awk '
+_ac_rc=0
+ADJ_CODES="$(printf '%s\n' "$ADJ_CONTRACT_TEXT" | awk '
   /^  - id:/       { lvl=""; next }
   /^    level:/    { lvl=$2; next }
   /^    code:/     { if (lvl == "ADJUDICATED") print $2; next }
-' <<<"$ADJ_CONTRACT_TEXT")"
+')" || _ac_rc=$?
+[ "$_ac_rc" -eq 0 ] || ld_refuse_staging "the ADJUDICATED code set out of $ADJ_CONTRACT_REL" "$_ac_rc"
+
+# A CONTRACT THAT CARRIES A CLAUSE AT ADJUDICATED AND AN EMPTY CODE SET IS A READER THAT DID NOT
+# READ, and empty ADJ_CODES is the state that switches the whole tier off (`adj_active`). Keyed on
+# the level LINE's own grammar -- four spaces, `level:`, the token, nothing after -- never on the
+# token anywhere in the text: the contract's prose mentions ADJUDICATED, and I58's negative probe
+# rewrites the level to ADJUDICATEDX, and neither is a clause. Zero clauses at that level is a
+# sanctioned state and passes. Counted through a pipe and `grep -c`, which reads to EOF, so the
+# writer cannot EPIPE; `grep -c`'s exit 1 on a zero count is an answer, not a failure.
+_ac_n="$(printf '%s\n' "$ADJ_CONTRACT_TEXT" | grep -c '^    level:[[:space:]]*ADJUDICATED[[:space:]]*$')" || _ac_n=0
+if [ "$_ac_n" -gt 0 ] && [ -z "$ADJ_CODES" ]; then
+  echo "layer-drift: REFUSED — $ADJ_CONTRACT_REL at $THEIRS carries ${_ac_n} clause(s) at level ADJUDICATED and the code set read out of it is EMPTY, so the adjudication tier would be switched off and no HARD-LAYER-ADJUDICATION-MISSING row could be generated; refusing rather than reading that as a layer with nothing to adjudicate" >&2
+  ld_refuse "the ADJUDICATED code set out of $ADJ_CONTRACT_REL" 1
+fi
 
 # STATUS -> CLAUSE ID, over EVERY clause and not only the adjudicable ones, because the row that
 # most needs the id is LC-E19's — level WARN, prescribing a register record all the same.
@@ -654,17 +721,21 @@ ADJ_CODES="$(awk '
 # in the other direction. A status this map cannot spell yields EMPTY and never a guess: a
 # wrong-but-well-formed clause passes the schema's pattern and lands in an append-only register,
 # so a missing field an operator must supply is strictly better than a plausible wrong one.
-ADJ_CLAUSE_MAP="$(awk -v TAB="$TAB" '
+_ac_rc=0
+ADJ_CLAUSE_MAP="$(printf '%s\n' "$ADJ_CONTRACT_TEXT" | awk -v TAB="$TAB" '
   /^  - id:/    { id=$3; next }
   /^    code:/  { if (id != "") print $2 TAB id; next }
-' <<<"$ADJ_CONTRACT_TEXT")"
+')" || _ac_rc=$?
+[ "$_ac_rc" -eq 0 ] || ld_refuse_staging "the status-to-clause map out of $ADJ_CONTRACT_REL" "$_ac_rc"
 
 # Never a `case` and never a hand-written pair: a restated map drifts tighter than the contract
 # and reads as correct while it does. Whole-line field match, for the reason adj_is_adjudicated
 # matches whole lines — a code that is a prefix of another must not inherit its id.
 adj_clause_of() { # $1 status -> the clause id, or nothing
   [ -n "$1" ] || return 0
-  awk -F"$TAB" -v s="$1" '$1 == s { print $2; exit }' <<<"$ADJ_CLAUSE_MAP"
+  # Fed by a pipe, and the reader reads to EOF (first match wins, no `exit`), so it cannot EPIPE
+  # the writer under pipefail.
+  printf '%s\n' "$ADJ_CLAUSE_MAP" | awk -F"$TAB" -v s="$1" '$1 == s && !hit { print $2; hit = 1 }'
 }
 
 # The verdict vocabulary, read from the schema's own `verdict` enum rather than restated. A
@@ -690,12 +761,9 @@ if [ "$MODE" = codes ]; then
   exit 0
 fi
 
-# The vocabulary adj_lookup matches a recorded verdict against, staged ONCE here in the main
-# shell: adj_lookup runs inside `$( )` at most of its call sites, where a refusal would end only
-# the subshell. It used to read `grep -f <(printf …)` per call.
-_av_rc=0
-printf '%s\n' "$ADJ_VERDICTS" > "$LD_T/adj-verdicts" || _av_rc=$?
-[ "$_av_rc" -eq 0 ] || ld_refuse "staging the verdict vocabulary" "$_av_rc"
+# The vocabulary adj_lookup matches a recorded verdict against is ADJ_VERDICTS itself, tested with
+# `ld_has_line`: no file, so nothing to stage and nothing to lose inside the `$( )` most of its
+# call sites run in. It used to be a staged pattern file read by `grep -f` against a here-string.
 
 adj_active() { [ -n "$ADJ_CODES" ]; }
 
@@ -709,7 +777,7 @@ fi
 
 # Does this status name a clause at ADJUDICATED? Whole-line match: a substring test would let
 # one code that is a prefix of another inherit its level.
-adj_is_adjudicated() { adj_active && grep -qxF -- "$1" <<<"$ADJ_CODES"; }
+adj_is_adjudicated() { adj_active && ld_has_line "$ADJ_CODES" "$1"; }
 
 # (entry file at the consumer) + (target file at THEIRS). Either moving moves the digest.
 #
@@ -759,7 +827,8 @@ adj_digest() { # $1 entry (consumer-relative), $2 core-relative target, [$3 firi
 # writer, and the pipeline then reports the WRITER's status — so a MATCH answers non-zero once
 # the value clears the pipe buffer. Here a match means "adjudicated", so the failure direction
 # would be a blocking row on a consumer who had recorded the verdict. Both sides are read into
-# variables first and the test is a here-string.
+# variables first and the test is a `case` per recorded line -- no pipe, and no here-string
+# either (see `ld_has_line`).
 # ONE jq EXPRESSION, TWO CALLERS. adj_lookup answers "is there a verdict"; adj_verdict
 # answers "which one". They must never disagree about what counts as a record, so the
 # second is written in terms of the first rather than beside it.
@@ -773,7 +842,14 @@ adj_lookup() { # $1 digest -> 0 if a record with a vocabulary verdict exists
   found="$(adj_verdict "$1")"; rc=$?
   [ "$rc" -eq 2 ] && return 2
   [ -n "$found" ] || return 1
-  grep -qxF -f "$LD_T/adj-verdicts" <<<"$found"
+  # ANY recorded line that is a whole vocabulary member answers 0 -- the `grep -qxF -f <vocab>`
+  # this replaces, spelled as a walk over `found`'s lines.
+  local _rest="$found$NL" _l
+  while [ -n "$_rest" ]; do
+    _l="${_rest%%"$NL"*}"; _rest="${_rest#*"$NL"}"
+    ld_has_line "$ADJ_VERDICTS" "$_l" && return 0
+  done
+  return 1
 }
 
 # WHY A SPENT VERDICT AND A NEVER-RECORDED ONE PRINTED THE SAME ROW, AND WHY THAT IS THE WHOLE
@@ -866,7 +942,7 @@ ADJ_ROW_TOKEN="adjudicated"
 # it is checked against the schema enum this run actually read, not against a copy.
 ADJ_KEEP_VERDICT="still-additive"
 
-if adj_active && ! grep -qxF -- "$ADJ_KEEP_VERDICT" <<<"$ADJ_VERDICTS"; then
+if adj_active && ! ld_has_line "$ADJ_VERDICTS" "$ADJ_KEEP_VERDICT"; then
   echo "layer-drift: ADJ_KEEP_VERDICT is '${ADJ_KEEP_VERDICT}', which is not a member of the verdict vocabulary read from ${ADJ_SCHEMA_REL} at ${THEIRS} ($(printf '%s' "$ADJ_VERDICTS" | tr '\n' ' ')). apply.sh branches the override retire-sequence on this name, so every recorded verdict would take the wrong arm. Fix the declaration or the schema enum; do not read the resulting rows as findings." >&2
   exit 1
 fi
@@ -1112,14 +1188,19 @@ titles_only() { cut -f2 | sort -u; }
 # Derived by subtraction against `anchors_of_file`/`heading_text_for` rather than by a second
 # "is this numbered" grammar, so the two passes cannot disagree about which headings they
 # each cover, and a heading can never be reported twice for one absorption.
+#
+# RUNS INSIDE `$( )`, so a failed staging write RETURNS 3 and the caller refuses. Every other
+# path ends in an explicit `return 0`: the status of the final pipeline was never read, and it is
+# not read now -- the caller keys on the 3 alone.
 unnumbered_titles_of_file() {
   _f="$1"; _claimed=""; _anchors="$(anchors_of_file "$_f")"
+  printf '%s\n' "$_anchors" > "$LD_T/unnumbered-anchors" || return 3
   while IFS= read -r _a; do
     [ -n "$_a" ] || continue
     _t="$(heading_text_for "$_a" < "$_f")"
     [ -n "$_t" ] && _claimed="${_claimed}${_t}
 "
-  done <<< "$_anchors"
+  done < "$LD_T/unnumbered-anchors"
 
   # A CONTAINER FOR A NUMBERED SECTION BELONGS TO THE NUMBERED ARM.
   #
@@ -1138,24 +1219,28 @@ unnumbered_titles_of_file() {
   while IFS= read -r _a; do
     [ -n "$_a" ] || continue
     _anchor_re="${_anchor_re}${_anchor_re:+|}$(printf '%s' "$_a" | sed 's/[][\.*^$(){}?+|/]/\\&/g')"
-  done <<< "$_anchors"
+  done < "$LD_T/unnumbered-anchors"
 
   grep -nE '^#{2,4}[[:space:]]+' "$_f" 2>/dev/null | while IFS= read -r _line; do
     _raw="${_line#*:}"
     _bare="$(printf '%s' "$_raw" | sed -E 's/^#+[[:space:]]+//')"
-    # HERE-STRING, NOT A PIPE. `printf | grep -q` under pipefail answers with the WRITER's
-    # EPIPE once the value clears the pipe buffer, so the test reports 'not found' on input
-    # that contains the pattern — permanently, and here that would silently re-admit the
-    # container headings this block exists to drop. I54/I54b catch it; v0.207.0 and v0.231.0
-    # converted every prior site.
-    if [ -n "$_anchor_re" ] && grep -qE "^(Check[[:space:]]+)?(${_anchor_re})([^A-Za-z0-9]|$)" <<< "$_bare"; then
-      continue
+    # A COUNT FROM A PIPE, NOT `grep -q`. `printf | grep -q` under pipefail answers with the
+    # WRITER's EPIPE once the value clears the pipe buffer, so the test reports 'not found' on
+    # input that contains the pattern — permanently, and here that would silently re-admit the
+    # container headings this block exists to drop (I54/I54b). `grep -c` reads to EOF, so the
+    # writer cannot EPIPE; and a here-string, the previous spelling, reads a value that could
+    # not be staged as an EMPTY one (see `ld_has_line`). `grep -c`'s 1 on zero is an answer.
+    _hit=0
+    if [ -n "$_anchor_re" ]; then
+      _hit="$(printf '%s\n' "$_bare" | grep -cE "^(Check[[:space:]]+)?(${_anchor_re})([^A-Za-z0-9]|$)")" || _hit=0
     fi
+    [ "$_hit" -gt 0 ] && continue
     printf '%s\n' "$_raw"
   done | heading_titles_of_stream | while IFS="$TAB" read -r _d _t; do
     [ -n "$_t" ] || continue
-    grep -Fxq -- "$_t" <<< "$_claimed" || printf '%s\t%s\n' "$_d" "$_t"
+    ld_has_line "$_claimed" "$_t" || printf '%s\t%s\n' "$_d" "$_t"
   done
+  return 0
 }
 
 # --- SKELETON HEADINGS ARE NOT SECTIONS -----------------------------------------------
@@ -1188,6 +1273,13 @@ unnumbered_titles_of_file() {
 #
 # A GLOB THAT MATCHES NOTHING IS THE FAILURE, so it is reported per glob rather than by
 # checking whether the total is non-empty. A partial set and a complete set are both non-empty.
+glob_lines() { # glob_lines <shell-glob>  < lines -> the non-empty lines the glob matches, in order
+  local _p
+  while IFS= read -r _p; do
+    [ -n "$_p" ] || continue
+    case "$_p" in $1) printf '%s\n' "$_p" ;; esac
+  done
+}
 rulebook_files_of() {
   _globs="$(git_show "$1" core/skills/ai-dlc/core-manifest.md | awk '
     /^rulebook:/ { inblk=1; next }
@@ -1204,13 +1296,19 @@ rulebook_files_of() {
   # have returned for `-- core/`.
   _tree="$(memo_ls_tree "$DIST" "$1" | grep '^core/' || true)"
   [ -n "$_tree" ] || return 1
+  # FED BY A PIPE, AND ITS STATUS IS READ. This runs in a pipeline stage inside `$( )`, where a
+  # staged file would have nowhere to refuse from; a pipe has no temp file to lose, the loop reads
+  # to EOF so its writer cannot EPIPE, and a failure RETURNS 3, which `skeleton_titles_of`'s
+  # caller reads. The matches are collected and printed with the `printf '%s\n'` each one was
+  # printed with before, and `_n` is whether any matched.
+  # The filter is a FUNCTION rather than an inline loop because bash 3.2 closes a `$( )` at the
+  # first unbalanced `)` -- a `case` pattern inside one is a syntax error there.
+  local _m
   for _g in $_globs; do
     _dg="$(dist_path "$_g")"
     _n=0
-    while IFS= read -r _p; do
-      [ -n "$_p" ] || continue
-      case "$_p" in $_dg) printf '%s\n' "$_p"; _n=$((_n+1)) ;; esac
-    done <<< "$_tree"
+    _m="$(printf '%s\n' "$_tree" | glob_lines "$_dg")" || return 3
+    [ -n "$_m" ] && { printf '%s\n' "$_m"; _n=1; }
     [ "$_n" -gt 0 ] || printf '%s\n' \
       "layer-drift: WARNING — core-manifest.md declares rulebook glob '${_g}' (distribution path '${_dg}') and it matches NO file at $1. The skeleton-heading exclusion is running on a PARTIAL rulebook set, which reads exactly like a complete one." >&2
   done
@@ -1313,13 +1411,16 @@ heading_labelled_for() { # heading_labelled_for <anchor>  < stream
 SURVIVAL_SCOPE_RE='(surrounding|rest of the|remainder of the|every other part of|other parts of|rest of this)[ ]?[a-z0-9 ]{0,20}(section|check|rule|clause)'
 SURVIVAL_CLAIM_RE="unchanged|untouched|still governs?|still applies|still holds?|remains in force|survives?|is core's"
 asserts_shadow_survives() { # asserts_shadow_survives <body-text>  -> 0 if it makes the claim
-  # HERE-STRINGS, NOT A PIPE INTO `grep -q`. lib.sh arms an EXIT trap in every sourcing shell, and
-  # with one armed bash reports a builtin writer's EPIPE (`printf: write error: Broken pipe`) when
-  # its reader leaves early, which `grep -q` does at its first match.
-  local _flat _scoped
+  # NOT A PIPE INTO `grep -q`, AND NOT A HERE-STRING EITHER. lib.sh arms an EXIT trap in every
+  # sourcing shell, and with one armed bash reports a builtin writer's EPIPE (`printf: write error:
+  # Broken pipe`) when its reader leaves early, which `grep -q` does at its first match. A
+  # here-string reads a value that could not be staged as EMPTY (see `ld_has_line`). So both
+  # readers take a pipe and read to EOF: `grep -o` prints every match, `grep -c` counts them.
+  local _flat _scoped _n
   _flat="$(printf '%s' "$1" | tr '\n' ' ' | tr -s ' ')"
-  _scoped="$(grep -oiE "$SURVIVAL_SCOPE_RE.{0,250}" <<<"$_flat")" || return 1
-  grep -qiE "$SURVIVAL_CLAIM_RE" <<<"$_scoped"
+  _scoped="$(printf '%s\n' "$_flat" | grep -oiE "$SURVIVAL_SCOPE_RE.{0,250}")" || return 1
+  _n="$(printf '%s\n' "$_scoped" | grep -ciE "$SURVIVAL_CLAIM_RE")" || _n=0
+  [ "$_n" -gt 0 ]
 }
 
 same_section() { # same_section <textA> <textB>
@@ -1448,19 +1549,40 @@ while IFS= read -r f; do
   # it matched before. The key is `norm(file)#norm(anchor)`; `norm` collapses everything outside
   # [a-z0-9] to spaces, so its output can never contain a `#` and neither side can forge the
   # separator out of its own text.
+  #
+  # Every feed below is STAGED with its producer's status read (`shadow_parts`, `supersessions_of`)
+  # or piped with the capture's status read -- see `ld_has_line` for why no here-string survives.
   ent_keys=""
+  _sp_rc=0; _sp_v="$(shadow_parts "$shadows")" || _sp_rc=$?
+  [ "$_sp_rc" -eq 0 ] || ld_refuse_staging "the shadow parts of ${entry}" "$_sp_rc"
+  ld_stage "$LD_T/ent-parts" "$_sp_v" "the shadow parts of ${entry}"
   while IFS="$TAB" read -r p_file p_anchor; do
     [ -n "$p_file$p_anchor" ] || continue
     ent_keys="${ent_keys}$(norm "$p_file")#$(norm "$p_anchor")${TAB}${p_file}#${p_anchor}
 "
-  done <<< "$(shadow_parts "$shadows")"
-  ent_nparts="$(awk 'NF{n++} END{print n+0}' <<< "$ent_keys")"
+  done < "$LD_T/ent-parts"
+  _sp_rc=0
+  ent_nparts="$(printf '%s\n' "$ent_keys" | awk 'NF{n++} END{print n+0}')" || _sp_rc=$?
+  [ "$_sp_rc" -eq 0 ] || ld_refuse_staging "the anchor count of ${entry}" "$_sp_rc"
 
+  # A contract ABSENT at theirs declares no supersession, as it always did (`git show` of an absent
+  # path is 128, which the here-string this replaced discarded); only a present one that could not
+  # be read refuses. Measured: a world with no layer-contract.yaml refused here before this guard.
+  _sp_rc=0; _sp_v=""
+  if have "$THEIRS" "$ADJ_CONTRACT_REL"; then _sp_v="$(supersessions_of "$THEIRS")" || _sp_rc=$?; fi
+  [ "$_sp_rc" -eq 0 ] || ld_refuse_staging "the override_supersessions block of layer-contract.yaml at $THEIRS" "$_sp_rc"
+  ld_stage "$LD_T/supersessions" "$_sp_v" "the override_supersessions block of layer-contract.yaml at $THEIRS"
   while IFS="$TAB" read -r s_shadows s_since s_env; do
     [ -n "$s_shadows" ] || continue
+    _sp_rc=0; _sp_v="$(shadow_parts "$s_shadows")" || _sp_rc=$?
+    [ "$_sp_rc" -eq 0 ] || ld_refuse_staging "the shadow parts of a supersession declaration" "$_sp_rc"
+    ld_stage "$LD_T/sup-parts" "$_sp_v" "the shadow parts of a supersession declaration"
     while IFS="$TAB" read -r d_file d_anchor; do
       [ -n "$d_file$d_anchor" ] || continue
-      sup_raw="$(awk -F"$TAB" -v k="$(norm "$d_file")#$(norm "$d_anchor")" '$1==k {print $2; exit}' <<< "$ent_keys")"
+      # First match wins and the reader runs to EOF, so its writer cannot EPIPE under pipefail.
+      _sp_rc=0
+      sup_raw="$(printf '%s\n' "$ent_keys" | awk -F"$TAB" -v k="$(norm "$d_file")#$(norm "$d_anchor")" '$1==k && !hit {print $2; hit=1}')" || _sp_rc=$?
+      [ "$_sp_rc" -eq 0 ] || ld_refuse_staging "the supersession join for ${entry}" "$_sp_rc"
       [ -n "$sup_raw" ] || continue
 
       # IF A VERDICT IS ALREADY RECORDED FOR THIS EXACT SUBJECT, SAY SO IN THE ROW.
@@ -1552,8 +1674,8 @@ while IFS= read -r f; do
         emit OVERRIDE-SUPERSEDED "$entry" "$tgt" \
           "${sup_adj}core ${s_since} ADOPTED what this entry says, so it can be RETIRED rather than re-adopted -- and there is nothing to configure first: run readopt-override.sh --stamp retire on its own. See override_supersessions in layer-contract.yaml for the reason core recorded and the verify: command that checks the adoption landed. Retiring it also releases every unrelated line this entry froze at its base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. ${sup_surplus} The clause is ADJUDICATED, so this row needs a RECORDED verdict before the pull applies -- and keeping the shadow IS one of them: a consumer that still wants it for its own reasons records \`still-additive\` with a reason and the block clears. What is refused is proceeding without an answer, never the answer."
       fi
-    done <<< "$(shadow_parts "$s_shadows")"
-  done <<< "$(supersessions_of "$THEIRS")"
+    done < "$LD_T/sup-parts"
+  done < "$LD_T/supersessions"
 
   have "$THEIRS" "$cp" || { emit OVERRIDE-ANCHOR-UNRESOLVED "$entry" "$tgt" "target absent at $THEIRS"; continue; }
 
@@ -1570,8 +1692,11 @@ while IFS= read -r f; do
   #
   # `tgt`/`cp`/`file_changed` above stay as the ENTRY-level values: they are what the emitted
   # row's third column has always named, and what the base_sha provenance arm resolved against.
-  pairs="$(shadow_parts "$shadows")"
+  _pr_rc=0
+  pairs="$(shadow_parts "$shadows")" || _pr_rc=$?
+  [ "$_pr_rc" -eq 0 ] || ld_refuse_staging "the shadow pairs of ${entry}" "$_pr_rc"
   [ -n "$pairs" ] || pairs="$(printf '%s\t' "$tgt")"
+  ld_stage "$LD_T/ov-pairs" "$pairs" "the shadow pairs of ${entry}"
 
   # A multi-anchor override must report EVERY affected anchor, not just the last
   # one examined. Accumulate per category and compose the detail after the loop:
@@ -1610,22 +1735,30 @@ while IFS= read -r f; do
       continue
     fi
 
-    # HERE-STRING, NOT A PIPE, and the blob read ONCE. `anchor_arm` exits its awk program the
-    # moment it finds a forward match, which closes the pipe under a still-writing `git show`
-    # and printed a `write error: Broken pipe` per anchor to stderr — noise on a classifier
-    # whose stderr an operator is meant to read. It also re-ran `git show` three times per
-    # anchor on a 200+ line file.
-    a_text="$(git_show "$THEIRS" "$a_cp")"
+    # A STAGED FILE, NOT A PIPE, and the blob read ONCE. `anchor_arm` exits its awk program the
+    # moment it finds a forward match, which closes a pipe under a still-writing writer -- a
+    # `write error: Broken pipe` per anchor on stderr, and under pipefail a false refusal. It also
+    # re-ran `git show` three times per anchor on a 200+ line file. It was a here-string, which
+    # reads a blob that could not be staged as EMPTY: measured on a 189 KB core file at `ulimit -f`
+    # 80..160, every anchor then resolved to nothing and OVERRIDE-OK read OVERRIDE-DRIFT-FILE at
+    # rc 0. So the read's status, the staging write's status and each reader's status are read.
+    _at_rc=0
+    a_text="$(git_show "$THEIRS" "$a_cp")" || _at_rc=$?
+    [ "$_at_rc" -eq 0 ] || ld_refuse_staging "reading ${a_cp} at ${THEIRS} for ${entry} #${id}" "$_at_rc"
+    ld_stage "$LD_T/a_text" "$a_text" "${a_cp} at ${THEIRS} for ${entry} #${id}"
 
     # LOOSE ANCHOR — resolves only by the REVERSE arm of the containment match, so it silently
     # widens the shadow to the whole section. The authoring linter errors on this (E7); the
     # authoring linter is consumer-run and skippable, and the pull is not.
-    arm="$(anchor_arm "$id" <<< "$a_text")"
+    arm="$(anchor_arm "$id" < "$LD_T/a_text")" || _at_rc=$?
+    [ "$_at_rc" -eq 0 ] || ld_refuse_staging "anchor_arm for ${entry} #${id}" "$_at_rc"
     case "$arm" in
       REVERSE:*) loose="${loose:+$loose; }#${id} -> '${arm#REVERSE:}'" ;;
     esac
 
-    s_theirs="$(section_of "$id" <<< "$a_text")"
+    # section_of stages its OWN copy of stdin to a mktemp file; its status is that copy's.
+    s_theirs="$(section_of "$id" < "$LD_T/a_text")" || _at_rc=$?
+    [ "$_at_rc" -eq 0 ] || ld_refuse_staging "section_of for ${entry} #${id}" "$_at_rc"
 
     # Does this override delegate INTO the section it replaces?  See the status
     # note in the header.  `s_theirs` is the exact text the override displaces, so
@@ -1662,7 +1795,7 @@ while IFS= read -r f; do
       worst=HARD-OVERRIDE-DRIFT-SECTION
       drifted="${drifted:+$drifted, }#$id"
     fi
-  done <<< "$pairs"
+  done < "$LD_T/ov-pairs"
 
   # `emit` writes one tab-separated line, so the detail stays on one line.
   n_of() { printf '%s' "$1" | awk -F', ' '{print NF}'; }
@@ -1700,7 +1833,9 @@ while IFS= read -r f; do
   # The sixth: not whether the body is truthful, but whether it is REACHED. An anchor removed
   # from `shadows:` leaves its section in the body, claimed by nothing and applied by nothing --
   # and LC-O15's own narrowing remedy for a multi-anchor entry is the act that creates it.
-  unclaimed="$(unclaimed_body_sections "$f" "$pairs")"
+  _uc_rc=0
+  unclaimed="$(unclaimed_body_sections "$f" "$pairs")" || _uc_rc=$?
+  [ "$_uc_rc" -eq 3 ] && ld_refuse_staging "the shadow pairs of ${entry} for the unclaimed-body check" 3
   if [ -n "$unclaimed" ]; then
     emit OVERRIDE-BODY-UNCLAIMED "$entry" "$tgt" \
       "body section(s) that no shadows: anchor claims: $(printf '%s' "$unclaimed" | tr '\n' ';' | sed 's/;$//'). The body is sliced PER ANCHOR, so a section no anchor names is applied by nothing: it renders nowhere, reaches no lead, and every mechanical check stays green while the consumer machinery in it silently stops governing. Restore the anchor to shadows:, move the text to a section an anchor does claim, or delete it. Report-only -- deliberate dead prose is indistinguishable from a dropped claim, and only the author knows which this is."
@@ -1780,7 +1915,11 @@ unset base_sha
 # than quietly cleaner -- so the failure direction is loud by construction. Say so on stderr
 # and keep going: suppressing the arm on a failed derivation would trade visible noise for
 # invisible silence, which is the trade this whole file exists to refuse.
-SKELETON_TITLES="$(skeleton_titles_of "$THEIRS")"
+# Keyed on 3 ALONE, which is `rulebook_files_of`'s staging failure: its 1 (no rulebook: list, no
+# tree) has always fallen through to the warning below, and still does.
+_sk_rc=0
+SKELETON_TITLES="$(skeleton_titles_of "$THEIRS")" || _sk_rc=$?
+[ "$_sk_rc" -eq 3 ] && ld_refuse_staging "the rulebook tree listing at $THEIRS for the skeleton-heading set" 3
 [ -n "$SKELETON_TITLES" ] || printf '%s\n' \
   "layer-drift: WARNING — derived NO skeleton headings from core-manifest.md's rulebook: list at $THEIRS. The unnumbered title arm is running WITHOUT its shared-heading exclusion, so expect rows on structural headings (Identity, Responsibilities). Check that core-manifest.md is readable at that ref." >&2
 
@@ -1833,18 +1972,29 @@ while IFS= read -r f; do
   ext_anchors="$(anchors_of_file "$f")"
   if [ -n "$ext_anchors" ]; then
     base_anchors="$(git_show "$BASE" "$cp" | anchors_of_stream)"
-    theirs_blob="$(git_show "$THEIRS" "$cp")"
+    # THE BLOB IS STAGED ONCE PER FILE AND READ FROM THE FILE. `heading_text_for` exits its awk at
+    # the first match, so a pipe would EPIPE its writer; a here-string, the previous spelling, read
+    # a blob that could not be staged as EMPTY, so every same-number check read as untitled. The
+    # read's status is read too: `have` above established the path exists at theirs.
+    _tb_rc=0
+    theirs_blob="$(git_show "$THEIRS" "$cp")" || _tb_rc=$?
+    [ "$_tb_rc" -eq 0 ] || ld_refuse_staging "reading ${cp} at ${THEIRS} for ${entry}" "$_tb_rc"
+    ld_stage "$LD_T/theirs_blob" "$theirs_blob" "${cp} at ${THEIRS} for ${entry}"
     theirs_anchors="$(printf '%s' "$theirs_blob" | anchors_of_stream)"
+    ld_stage "$LD_T/ext-anchors" "$ext_anchors" "the numbered anchors of ${entry}"
+    ld_stage "$LD_T/theirs-anchors" "$theirs_anchors" "the numbered anchors of ${cp} at ${THEIRS}"
 
     while IFS= read -r a; do
       [ -n "$a" ] || continue
       t_ext="$(heading_text_for "$a" < "$f")"
       [ -n "$t_ext" ] || continue
 
-      if grep -Fxq -- "$a" <<<"$theirs_anchors"; then
+      if ld_has_line "$theirs_anchors" "$a"; then
         # -- same NUMBER upstream. Title decides which defect this is.
-        t_up="$(heading_text_for "$a" <<<"$theirs_blob")"
-        if grep -Fxq -- "$a" <<<"$base_anchors"; then tag=PRE-EXISTING; else tag=NEW-THIS-PULL; fi
+        _tb_rc=0
+        t_up="$(heading_text_for "$a" < "$LD_T/theirs_blob")" || _tb_rc=$?
+        [ "$_tb_rc" -eq 0 ] || ld_refuse_staging "heading_text_for '$a' in ${cp} at ${THEIRS}" "$_tb_rc"
+        if ld_has_line "$base_anchors" "$a"; then tag=PRE-EXISTING; else tag=NEW-THIS-PULL; fi
 
         if same_section "$t_ext" "$t_up"; then
           if [ "$tag" = NEW-THIS-PULL ]; then
@@ -1879,9 +2029,11 @@ while IFS= read -r f; do
       while IFS= read -r b; do
         [ "$b" = "$a" ] && continue
         [ -n "$b" ] || continue
-        t_up="$(heading_text_for "$b" <<<"$theirs_blob")"
+        _tb_rc=0
+        t_up="$(heading_text_for "$b" < "$LD_T/theirs_blob")" || _tb_rc=$?
+        [ "$_tb_rc" -eq 0 ] || ld_refuse_staging "heading_text_for '$b' in ${cp} at ${THEIRS}" "$_tb_rc"
         same_section "$t_ext" "$t_up" || continue
-        if grep -Fxq -- "$b" <<<"$base_anchors"; then
+        if ld_has_line "$base_anchors" "$b"; then
           emit EXTENSION-RESTATES-CORE "$entry" "$hooks" \
             "PRE-EXISTING (renumbered): this entry's '$a. $t_ext' IS core's '$b. $t_up'. Upstream absorbed it under a DIFFERENT number, so a number-keyed retirement signal could never fire and the duplicate has been carried silently ever since. Retire it, or refile as an override if it hardens core."
         else
@@ -1889,8 +2041,8 @@ while IFS= read -r f; do
             "NEW-THIS-PULL (renumbered): upstream now defines this entry's '$a. $t_ext' as core '$b' — absorbed under a different number; retire the consumer copy"
         fi
         break
-      done <<< "$theirs_anchors"
-    done <<< "$ext_anchors"
+      done < "$LD_T/theirs-anchors"
+    done < "$LD_T/ext-anchors"
   fi
 
   # The same absorption question, asked of the headings that carry no number. Deliberately
@@ -1928,10 +2080,16 @@ while IFS= read -r f; do
   # duplicates core's section, or record an adjudication if it augments one. `extends:` is still
   # worth declaring and the emit still says so, because it narrows the DRIFT subject to that
   # span -- it just was never what stops this row.
-  ext_titles="$(unnumbered_titles_of_file "$f")"
+  _ut_rc=0
+  ext_titles="$(unnumbered_titles_of_file "$f")" || _ut_rc=$?
+  [ "$_ut_rc" -eq 3 ] && ld_refuse_staging "the anchors of ${entry} for the unnumbered title arm" 3
   if [ -n "$ext_titles" ]; then
     theirs_titles="$(git_show "$THEIRS" "$cp" | heading_titles_of_stream | titles_only)"
     base_titles="$(git_show "$BASE" "$cp" | heading_titles_of_stream | titles_only)"
+    # Each loop feed staged with its write status read (see `ld_has_line` for why not `<<<`).
+    ld_stage "$LD_T/ext-titles" "$ext_titles" "the unnumbered headings of ${entry}"
+    ld_stage "$LD_T/theirs-titles" "$theirs_titles" "the headings of ${cp} at ${THEIRS}"
+    ld_stage "$LD_T/base-titles" "$base_titles" "the headings of ${cp} at ${BASE}"
 
     # A DECLARED `extends:` ON THE MATCHED SECTION IS NOT A REASON TO STAY QUIET, and the
     # first cut of this arm suppressed on exactly that. It looked right — the entry has
@@ -1945,17 +2103,23 @@ while IFS= read -r f; do
     cand=""
     while IFS="$TAB" read -r ud ut; do
       [ -n "$ut" ] || continue
-      grep -Fxq -- "$ut" <<< "$SKELETON_TITLES" && continue
+      ld_has_line "$SKELETON_TITLES" "$ut" && continue
       hit=""
       while IFS= read -r ct; do
         [ -n "$ct" ] || continue
         same_section "$ut" "$ct" || continue
         hit="$ct"; break
-      done <<< "$theirs_titles"
+      done < "$LD_T/theirs-titles"
       [ -n "$hit" ] || continue
       cand="${cand}${ud}${TAB}${ut}${TAB}${hit}
 "
-    done <<< "$ext_titles"
+    done < "$LD_T/ext-titles"
+
+    # The deepest-heading reduction, staged with its producer's status read: a reduction that did
+    # not run would read as "no title match", the same output a clean entry produces.
+    _cd_rc=0
+    printf '%s' "$cand" | awk -F"$TAB" 'NF>=3 { if ($1 > d[$3]) { d[$3]=$1; r[$3]=$0 } } END { for (k in r) print r[k] }' > "$LD_T/title-cands" || _cd_rc=$?
+    [ "$_cd_rc" -eq 0 ] || ld_refuse_staging "the deepest-heading reduction for ${entry}" "$_cd_rc"
 
     # DEEPEST HEADING WINS. `## Handoff -- No self-scheduling skill re-entry` wrapping
     # `### No self-scheduling skill re-entry` is ONE claim written at two levels; emitting
@@ -1967,7 +2131,7 @@ while IFS= read -r f; do
         [ -n "$bt" ] || continue
         same_section "$ut" "$bt" || continue
         was_at_base=yes; break
-      done <<< "$base_titles"
+      done < "$LD_T/base-titles"
       # PRE-EXISTING is decided by the same predicate against BASE, not by a string compare:
       # core may have reworded the heading between base and theirs while still having carried
       # the section all along, and calling that NEW-THIS-PULL would date the duplication to
@@ -2014,7 +2178,7 @@ while IFS= read -r f; do
       # answers EMPTY when the code resolves to nothing, which is what the helper's guard reads.
       emit EXTENSION-TITLE-MATCHES-CORE "$entry" "$hooks" \
         "${when}: this entry's heading '$ut' names the same section as core's '$hit' in '$hooks', matched on TEXT because neither side carries a number. ${extra}. THREE dispositions, and the entry decides which: if the body DUPLICATES core's section, retire it per Rule 27(b) — an absorbed-but-kept entry starts as an exact copy and diverges from there. If it AUGMENTS that section, record it in ${ADJ_REGISTER#"$CONSUMER"/} with clause $(adj_clause_cell EXTENSION-TITLE-MATCHES-CORE) and subject_digest ${tm_digest:-<unkeyable: entry or target unreadable>} and a verdict of $(printf '%s' "$ADJ_VERDICTS" | tr '\n' '|' | sed 's/|$//'), plus a reason -- that is what clears this row, and it is the only thing that does. The digest covers this entry AND the core file it hooks at ${THEIRS}, so the verdict is spent the next time either one moves; it is a record of a reading, not an exemption for the path. If it REPRODUCES core's section in order to append to it, neither of those is the answer and the grain is: \`kind: qualifier\` with \`extends: '#${hit}'\` and \`position: append\`, which renders your addition INSIDE core's section and carries no obligation on the prose you did not write. Recording an augmenting verdict on a reproduction clears this row and leaves the copy frozen, and a frozen copy cannot receive an upstream improvement -- measured on the reference consumer at this exact clause: 165 lines reproducing a 133-line core section to carry 49 additive ones, and core's step 1 had already gained guidance the copy never received. That is Rule 27(c)'s silent fork, and the verdict channel is not where it gets fixed. Declaring \`extends: '#${hit}'\` (spelled as the core heading actually reads) is worth doing anyway because it narrows the DRIFT subject to that span, but it does NOT silence this row and never has: \`extends:\` answers 'which span do I augment', never 'does core now carry my body'. Weaker than EXTENSION-RESTATES-CORE on purpose: a numbered anchor is an identity claim, a prose heading is not, so this reports the match and does not prescribe the delete.$([ -n "$tm_digest" ] && adj_spent_note "$entry" "$tm_digest" "$(adj_clause_of EXTENSION-TITLE-MATCHES-CORE)")"
-    done <<< "$(printf '%s' "$cand" | awk -F"$TAB" 'NF>=3 { if ($1 > d[$3]) { d[$3]=$1; r[$3]=$0 } } END { for (k in r) print r[k] }')"
+    done < "$LD_T/title-cands"
   fi
 
   # --- AN ENTRY WITH NO HEADING AT ALL IS CHECKED BY NOTHING, AND SAYS SO -----------------

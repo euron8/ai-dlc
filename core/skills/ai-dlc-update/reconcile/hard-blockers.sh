@@ -263,9 +263,29 @@ REFUSALS=""
 # the clean line is absent found it inside the refusal explaining its absence. Measured: the
 # fixture arm asserting suppression failed against a wrapper that was suppressing correctly. Text
 # about a program is not the program, and here the text was scored as the program.
-if [ -z "$LD_ROWS_FILE" ] && [ "${LD_RC:-0}" -ne 0 ]; then
+#
+# EXCEPT FOR layer-drift.sh, WHOSE REFUSAL IS RENDERED HERE WHETHER OR NOT ITS ROWS WERE SUPPLIED.
+# With `--ld-rows` the rule above suppressed it, and the affirmative line below then printed on an
+# empty list -- measured through `emit-report.sh` with a layer-drift stub exiting 2 after three
+# non-HARD rows: rc 0 and `0 HARD blockers.` in the blocking region, the refusal only in the layer
+# section further down; with a partial 20-row set, six HARD rows rendered as a complete list. A
+# refused layer-drift run's rows are a PREFIX of the classification (it stops at the first failed
+# write or input), so its HARD rows are the ones it reached, never the set. The row therefore
+# belongs in the blocking region, where the list it qualifies is. No fixture counts a
+# `layer-drift.sh` DETECTOR-REFUSED line in this region today (Assertion 6 and V-D below are both
+# unregistered-drift's), so the second copy in an emit-report render is new and deliberate.
+if [ "${LD_RC:-0}" -ne 0 ]; then
   REFUSALS="$(printf '%-32s %s\n' "DETECTOR-REFUSED" "layer-drift.sh exited ${LD_RC} without classifying, so this list is NOT a clean sheet — the layer's HARD rows, if any, were never computed. Run it directly: reconcile/layer-drift.sh <dist> <base> <theirs> <consumer>")"
 fi
+# unregistered-drift.sh KEEPS THE OWNERSHIP RULE ABOVE, AND THE ASYMMETRY IS DELIBERATE -- do not
+# "fix" it to match the layer-drift arm. `emit-report.sh` renders this detector's refusal in its own
+# unregistered-drift section, and two fixture arms pin the region's count: reconcile-blocking-list
+# Assertion 6 (0 rows when --ud-rows is supplied, 1 when the wrapper ran it) and reconcile-emit-report
+# V-D (`1 DETECTOR-REFUSED line(s)` under --verify). What this detector's supplied refusal must
+# still do is SUPPRESS the affirmative line, which `UD_SUPPLIED_REFUSED` carries below without
+# adding a row.
+UD_SUPPLIED_REFUSED=""
+[ -n "$UD_ROWS_FILE" ] && [ "${UD_RC:-0}" -ne 0 ] && UD_SUPPLIED_REFUSED=yes
 if [ -z "$UD_ROWS_FILE" ] && [ "${UD_RC:-0}" -ne 0 ]; then
   _ud_refusal="$(printf '%-32s %s\n' "DETECTOR-REFUSED" "unregistered-drift.sh exited ${UD_RC} without classifying, so this list is NOT a clean sheet — in-place core edits, if any, were never computed. Run it directly: reconcile/unregistered-drift.sh <dist> <base> <consumer> <theirs>")"
   if [ -n "$REFUSALS" ]; then REFUSALS="${REFUSALS}
@@ -284,7 +304,7 @@ if [ "$MODE" = "print" ]; then
   # anchored on `^<!-- END`.
   [ -n "$REFUSALS" ] && printf '%s\n' "$REFUSALS"
   if [ -z "$BLOCKERS" ]; then
-    [ -z "$REFUSALS" ] && echo "0 HARD blockers."
+    [ -z "$REFUSALS" ] && [ -z "$UD_SUPPLIED_REFUSED" ] && echo "0 HARD blockers."
   else
     while IFS="$(printf '\t')" read -r st path; do
       [ -n "$st" ] || continue
