@@ -21,6 +21,15 @@ source; do not infer either value from anywhere else.
   header, in the review commit. Dev owns the earlier `status: review` write
   (`dev.md`); QA verifies the two files match and rejects on mismatch. Three
   roles write this file by design — the transitions are what separate them.
+- **With `done` you write the story's `deferred_acs`, in BOTH canonical views**
+  (`_bmad-output/implementation-artifacts/sprint-status.yaml` and
+  `_bmad-output/planning-artifacts/sprint-status.yaml`): the id of every AC for
+  which QA's verdict recorded a deferral predicate (`qa.md` "Deferred-AC
+  discharge predicate"), as ONE single-line list — `deferred_acs: [AC5, AC6]`.
+  If the story has no deferred AC, write `deferred_acs: []`. Never a block list
+  and never a list wrapped over two lines: `sprint-status.sh check-stories`
+  reports either as a FINDING and `close` refuses on it. deploy-validate §4b
+  clears the ids; `close` refuses the sprint while any remain.
 
 ## Responsibilities
 
@@ -41,7 +50,8 @@ source; do not infer either value from anywhere else.
   header. Flag as Important if missing.
 - Approve, request changes, or block the PR with clear justification.
 - After approving the final gate for a story, update `sprint-status.yaml`
-  and the story file `Status:` header to `done` in the review commit.
+  and the story file `Status:` header to `done` in the review commit, with
+  the story's `deferred_acs` written beside `status: done` in both views.
 
 ## Constraints
 

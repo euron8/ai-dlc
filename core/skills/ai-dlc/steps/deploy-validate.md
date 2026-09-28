@@ -294,6 +294,24 @@ not run, or runs non-green, BLOCKS done: it is either a HARD_BLOCK (the
 promised behavior is absent in production) or a re-deferral with a fresh
 recorded predicate — never a silent pass.
 
+The owed ACs are listed per story in `sprint-status.yaml` as
+`deferred_acs: [AC5, AC6]`, in both canonical views (written by the
+code-reviewer at `done`). Clear each id, in BOTH views, only by one of:
+
+1. **Discharged GREEN** — its predicate ran against production and returned
+   the stated result, recorded under `deferred_ac_discharge`. Remove the id.
+2. **Re-deferred** — first append it to
+   `_bmad-output/planning-artifacts/carry-over-backlog.md` as an OPEN item
+   `CO-S<N>-<descriptor>` (ID grammar and `**Status:** OPEN` floor owned by
+   `carry-over-evaluation.md`) carrying the AC and its fresh predicate, then
+   record that CO id against the AC under `deferred_ac_discharge`, THEN
+   remove the id.
+
+When a story has no id left, write `deferred_acs: []`. Never delete an id
+on any other ground. `sprint-status.sh close` (retro Close-Out Sweep) exits
+3 and writes neither view while any story still carries an id, or carries
+the field in any shape other than one single-line `[..]` list.
+
 **Minimum mechanism (Rule 26(c)).** Failure caught: an AC deferred to
 "verify after deploy" that no step ever re-checks, so the sprint closes
 with an unverified acceptance criterion. False-positive cost: one
