@@ -20595,3 +20595,105 @@ with status 0 on an empty set, so that mutant is equivalent at this tree. Its ou
 
 verify: sh R0=core/skills/ai-dlc-update/reconcile; S=core/fixtures/apply-drift-after-write/seed.sh; [ -f "$R0/apply.sh" ] && [ -f "$R0/unregistered-drift.sh" ] && [ -f "$R0/layer-drift.sh" ] && [ -f "$S" ] || exit 9; d="$(mktemp -d)" || exit 9; W1=""; W2=""; W3=""; trap 'rm -rf "$d" "$W1" "$W2" "$W3"' EXIT; g() { git -C "$d/u" -c user.name=r -c user.email=r@r -c commit.gpgsign=false "$@" >/dev/null 2>&1; }; mkdir -p "$d/u/core/skills/ai-dlc/steps" "$d/c/.claude/skills/ai-dlc/steps" && git init -q "$d/u" && printf 'not scanned, no md sh or json suffix\n' > "$d/u/core/skills/ai-dlc/notes.txt" && g add -A && g commit -qm e || exit 9; E="$(git -C "$d/u" rev-parse HEAD)" || exit 9; printf '# A\n\nThe lead reads this file at the top of the alpha phase.\n' > "$d/u/core/skills/ai-dlc/steps/a.md" && cp "$d/u/core/skills/ai-dlc/steps/a.md" "$d/c/.claude/skills/ai-dlc/steps/a.md" && g add -A && g commit -qm p || exit 9; P="$(git -C "$d/u" rev-parse HEAD)" || exit 9; po="$(bash "$R0/unregistered-drift.sh" "$d/u" "$P" "$d/c" 2>/dev/null)"; grep -q '^CORE-OK' <<<"$po" || exit 9; eo="$(bash "$R0/unregistered-drift.sh" "$d/u" "$E" "$d/c" 2>/dev/null)"; [ "$?" -eq 0 ] || exit 1; grep -q 'HARD-DRIFT-SCAN-UNAVAILABLE' <<<"$eo" && exit 1; R="$d/r"; cp -R "$R0" "$R" || exit 9; printf '#!/bin/sh\n: > "%s/ran"\necho "stub: layer-drift cannot read its inputs" >&2\nexit 2\n' "$d" > "$R/layer-drift.sh" || exit 9; W1="$(bash "$S")" || exit 9; ( . "$W1/env.sh" && bash "$R/apply.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" ) > "$d/stub.out" 2>/dev/null; [ -f "$d/ran" ] || exit 9; grep -q '^RESOLVED' "$d/stub.out" || exit 9; n="$(awk -F'\t' '$1=="DECISION" && $2=="layer-drift-refused" && /DETECTOR-REFUSED/ && /exited 2/ {c++} END{print c+0}' "$d/stub.out")"; [ "$n" -eq 1 ] || exit 1; W2="$(bash "$S")" || exit 9; ( . "$W2/env.sh" && bash "$R0/apply.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" ) > "$d/ok.out" 2>/dev/null; grep -q '^RESOLVED' "$d/ok.out" || exit 9; h="$(awk -F'\t' '$2 ~ /-refused$/ {c++} END{print c+0}' "$d/ok.out")"; [ "$h" -eq 0 ] || exit 1; G="$(command -v git)" || exit 9; mkdir -p "$d/bin" && printf '#!/bin/sh\ncase " $* " in *" diff "*"--name-only"*) echo "shim: diff refused" >&2; exit 128;; esac\nexec "%s" "$@"\n' "$G" > "$d/bin/git" && chmod +x "$d/bin/git" || exit 9; W3="$(bash "$S")" || exit 9; . "$W3/env.sh" || exit 9; mkdir -p "$CONSUMER/.githooks" && printf '#!/bin/sh\nbash scripts/ai-dlc/validate-nothing.sh\n' > "$CONSUMER/.githooks/pre-push" || exit 9; ho="$(bash "$R0/self-update-gate.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)"; grep -q '^SELF-UPDATE-OK' <<<"$ho" || exit 9; so="$(PATH="$d/bin:$PATH" bash "$R0/self-update-gate.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)"; grep -q '^SELF-UPDATE-OK' <<<"$so" && exit 1; grep -q '^SELF-UPDATE-UNDECIDED' <<<"$so" || exit 1; exit 0
 
+## BL-357 — a failed WRITE to a staged detector file reads as a clean empty scan, and `unregistered-drift.sh`'s explicit `exit 0` blesses it
+
+**LANDED (v0.656.0, verified 8b025e69).** Receipt exits 0 on `origin/main`; the gate ran at
+`AI_DLC_FIXTURE_NO_SKIP=1` with `procsub-staged-refusal-boot` and `preclassify-rename-row` both
+`ok` by name against an impossible-name control of 0.
+
+**DEFECT.** Found by the batch 164 Release B tip adversary on 0.655.0. It discharges no consumer
+candidate. `BL-354` replaced pipes with staged files and reads each producer's exit; nothing reads
+whether the WRITE to the staged file succeeded.
+
+Forced with `trap '' XFSZ; ulimit -f N` on the detector (every regular-file write past N KiB fails
+with EFBIG; pipe writes are unaffected), on a `file://` clone of the reference consumer with one
+in-place edit seeded into `steps/retro.md`, range `d1c72fa9..fd0a0fd2`:
+
+- `apply.sh` `detector_run` (`core/skills/ai-dlc-update/reconcile/apply.sh:493`): under
+  `ulimit -f 6`, 0.654.0's piped `apply.sh` emitted `DECISION drift …retro.md` (1 row); 0.655.0
+  loses that row and emits no `unregistered-drift-refused` row, because `unregistered-drift.sh`
+  ends `exit 0` after its `emit` writes failed. Control with no limit: 1 row on both engines. The
+  re-stamp was still withheld in that run only because other detectors' refusal rows fired.
+- `unregistered-drift.sh`'s memo listing staged to `scan-tree`: on a cache HIT `memo_ls_tree`
+  (`lib.sh:1090-1092`) serves the listing with `cat` and returns the CACHED git status, not cat's,
+  so a truncated write reads status 0. Warm memo, 8 KiB limit: 0.655.0 rc 0, 0 rows, no
+  SCAN-UNAVAILABLE row (stderr `cat: stdout: File too large`) against 95 rows at 0.654.0; at 24 KiB
+  33 rows and the HARD row lost. Cold memo agrees on both engines (105/105), because git's own
+  write failure is read. `apply.sh` exports no memo (0 against a control of 6 in `emit-report.sh`),
+  so this form reaches `emit-report.sh` and `hard-blockers.sh`.
+- The fixture defends it: `procsub-staged-refusal-boot` arm U5 pins `CLOSED-RC0` as the tip shape
+  and scores `M-U-exit` (which restores rc 1) as KILLED. That rc 1 is what would let `detector_run`
+  refuse. U5 is also weak: any rc-0 early exit after the stub fires reads the same.
+
+**Remedy:** make the scan's final status reflect a failed `emit` (track write failures rather than
+a blanket `exit 0`), serve a memo hit with `cat`'s status, and re-aim U5 at the write failure
+rather than the exit line. Alternatively `apply.sh` refuses when a detector returns no rows while
+its input set is non-empty.
+
+**NOTEs carried here** (batch 164 docs hand, no separate filing): the `<detector>-refused` row
+names no re-run command; `SKILL.md` never mentions `DECISION <detector>-refused` (its 4
+`DETECTOR-REFUSED` hits describe emit-report's rendering); `retired-tokens.sh:66` still says both
+callers "discard stderr and read the rows only"; `apply.sh:164`'s site counts are stale.
+
+**Claims against the engine change `c00e611f`**, one by one. The entry has five subjects, and it
+closes only when every one of them does.
+
+1. **`detector_run` loses the row and no `-refused` row fires.** CLOSED by `c00e611f` as amended
+   by `d794b5a4`. `emit` now counts every failed `printf`, the scan stops at the first failed
+   write, and `ud_finish` exits 2 with `unregistered-drift: REFUSED — a row could not be written
+   to stdout after N row(s) were; …` on stderr, which `detector_run` reads as a refusal. N is the
+   number of rows written before the failure. Under `ulimit -f` it is exact; under a pipe reader
+   that truncates mid-row (`head -c`) N can be one more than the whole rows the reader holds,
+   because the pipe accepted the partial write. Bash 3.2 leaks the unflushed failed write into
+   later `$( )` captures, corrupting `$cons`, so without the break the rest of the scan was
+   skipped by `[ -f ]` without being scanned. On the consumer range d1c72fa9..c16d83ce wrapped
+   at 4500 bytes, `c00e611f` printed "1 row(s)" with 29 iterations running after the failure;
+   `d794b5a4` prints N=65 with 64 complete rows landed and 0 iterations after the failure.
+   Measured on the receipt's world (20 `CORE-OK` rows and one
+   `HARD-UNREGISTERED-CORE-DRIFT` row, written last). Under `ulimit -f 1`, base `c8491750` exits
+   0 with 10 of 21 rows and the HARD row lost; tip exits 2 with the named line. With stdout
+   closed, base exits 0 and tip exits 2. This does not measure `apply.sh` end to end; the
+   consumer-clone `apply.sh` run is the D4 measurement.
+2. **A memo HIT serves the cached git status over a failed `cat`.** CLOSED by `c00e611f`. Every
+   failed serve in `lib.sh` now returns the sentinel 125, and `unregistered-drift.sh` then takes
+   the direct listing. Measured on the same world, with the warmed `t …` listing made unreadable:
+   base exits 0 with 0 rows, and tip exits 0 with all 21 rows.
+3. **The fixture defends the defect** (U5 pins `CLOSED-RC0`; `M-U-exit` is scored KILLED for
+   restoring rc 1). This SURVIVES `c00e611f`, which does not touch the fixture. The fixture
+   commit of the same release closes it.
+4. **U5 is weak: any rc-0 early exit after the stub fires reads the same.** This SURVIVES
+   `c00e611f`, and the same fixture commit closes it. A pre-flight probe of stdout passes a
+   closed-stdout U5, so arm U5b's mid-stream `ulimit -f 1` world is the arm that kills it.
+5. **Alternative remedy** (refuse on no rows over a non-empty input set). Not taken: world `ne`'s
+   scan set is legitimately empty.
+
+The four NOTEs above: `SKILL.md` step 7 now names `DECISION <detector>-refused`, and the
+`retired-tokens.sh` header now says `apply.sh` keeps stderr. `d794b5a4` corrected the
+`apply.sh:164` counts (22 `say WORKLIST`, 39 `say DECISION`, comment lines excluded). The re-run
+command in the `-refused` row is a one-line `apply.sh` edit and is proposed to the release that
+owns that file.
+
+Two further NOTEs, carried here and not filed. `emit-report.sh` and `hard-blockers.sh` render the
+exit-2 refusal as "exited 2 without classifying", which is inaccurate for a detector that
+classified and then lost its output. On the consumer's current range the re-stamp is withheld by
+six outstanding `WORKLIST` rows on both engines, so the discriminating signal of the fix there is
+the `DECISION unregistered-drift-refused` row and the presence of the drift row, not the stamp.
+
+**The receipt** builds that world under `mktemp -d` and runs four cells. Stdout open, it requires
+rc 0 and exactly 21 rows, with 20 `CORE-OK` and one `HARD-UNREGISTERED-CORE-DRIFT`. With stdout
+closed (`2>&1 >&-`), it requires rc 2 and the `^unregistered-drift: REFUSED.*could not be written
+to stdout` line. Under `trap '' XFSZ; ulimit -f 1`, it requires rc 2 and the same line, and exits
+9 unless between 1 and 20 rows landed, which proves the failure came mid-stream. With a warmed
+memo whose `t …` listing is unreadable, it requires all 21 rows. Scored: tip 0; base `c8491750`
+1; a stub that `exit 2`s with the named line 1 (killed by the open-stdout cell); a bare `exit 0`
+stub 1; a base copy that pre-flight-tests stdout once 1 (killed by the mid-stream cell, not by
+the closed-stdout one); tip `unregistered-drift.sh` over base `lib.sh` 1, and a hit-path-only
+revert of `memo_ls_tree`'s `|| return 125` 1 (both killed by the memo cell); emit ignoring
+`printf`'s status 1; `ud_finish` short-circuited to `exit 0` 1; a second spelling of the correct
+fix that rewords the line but keeps the prefix and the phrase 0. The unamended engine `c00e611f`
+also scores 0, because the receipt keys on the prefix and the phrase, which both forms carry. In
+the receipt's world only one row fails, so the break at the first failed write is not observable
+there.
+
+verify: sh s=core/skills/ai-dlc-update/reconcile/unregistered-drift.sh; [ -f "$s" ] || exit 9; w="$(mktemp -d)" || exit 9; D="$w/d"; C="$w/c"; S=core/skills/ai-dlc/steps; mkdir -p "$D/$S" "$C/.claude/skills/ai-dlc/steps" || exit 9; for i in 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20; do printf '# ok %s\n' "$i" > "$D/$S/a$i.md"; cp "$D/$S/a$i.md" "$C/.claude/skills/ai-dlc/steps/"; done; printf '# z\n\nThe lead reads this.\n' > "$D/$S/zz.md"; cp "$D/$S/zz.md" "$C/.claude/skills/ai-dlc/steps/"; printf 'The consumer added this line in place.\n' >> "$C/.claude/skills/ai-dlc/steps/zz.md"; printf '0.1.0\n' > "$D/VERSION"; g() { git -C "$D" -c user.email=r@r -c user.name=r -c commit.gpgsign=false "$@"; }; { g init -q && g add -A && g commit -qm b; } >/dev/null 2>&1 || exit 9; B="$(git -C "$D" rev-parse HEAD)"; printf '0.2.0\n' > "$D/VERSION"; { g add -A && g commit -qm t; } >/dev/null 2>&1 || exit 9; T="$(git -C "$D" rev-parse HEAD)"; printf 'version: 0.1.0\ncommit: %s\n' "$B" > "$C/.claude/.ai-dlc-version"; bash "$s" "$D" "$B" "$C" "$T" > "$w/open" 2>/dev/null || exit 1; [ "$(awk -F'\t' '$1=="HARD-UNREGISTERED-CORE-DRIFT"' "$w/open" | wc -l | tr -d ' ')" = 1 ] && [ "$(awk -F'\t' '$1=="CORE-OK"' "$w/open" | wc -l | tr -d ' ')" = 20 ] && [ "$(wc -l < "$w/open" | tr -d ' ')" = 21 ] || exit 1; err="$(bash "$s" "$D" "$B" "$C" "$T" 2>&1 >&-)"; [ $? -eq 2 ] || exit 1; printf '%s\n' "$err" > "$w/e1"; grep -q '^unregistered-drift: REFUSED.*could not be written to stdout' "$w/e1" || exit 1; err="$( ( trap '' XFSZ; ulimit -f 1; exec bash "$s" "$D" "$B" "$C" "$T" > "$w/mid" ) 2>&1 )"; rc=$?; n="$(wc -l < "$w/mid" | tr -d ' ')"; [ "$n" -ge 1 ] && [ "$n" -lt 21 ] || exit 9; [ "$rc" -eq 2 ] || exit 1; printf '%s\n' "$err" > "$w/e2"; grep -q '^unregistered-drift: REFUSED.*could not be written to stdout' "$w/e2" || exit 1; M="$w/m"; mkdir "$M" || exit 9; AI_DLC_RECONCILE_MEMO="$M" bash "$s" "$D" "$B" "$C" "$T" >/dev/null 2>&1 || exit 1; k=0; for f in "$M"/t\ *.c; do [ -f "$f" ] && chmod 000 "$f" && k=$((k+1)); done; [ "$k" -ge 1 ] || exit 9; AI_DLC_RECONCILE_MEMO="$M" bash "$s" "$D" "$B" "$C" "$T" > "$w/hit" 2>/dev/null || exit 1; [ "$(wc -l < "$w/hit" | tr -d ' ')" = 21 ] && [ "$(awk -F'\t' '$1=="HARD-UNREGISTERED-CORE-DRIFT"' "$w/hit" | wc -l | tr -d ' ')" = 1 ]
+
