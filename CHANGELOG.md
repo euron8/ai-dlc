@@ -15,6 +15,112 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.658.0] - 2026-09-28
+
+`layer-drift.sh` no longer uses a here-string anywhere, and it refuses when an input it reads
+could not be staged. Before this release it read that input as empty and reported a cleaner
+layer at rc 0. A refused layer-drift run no longer renders beside `0 HARD blockers.` in the
+reconcile report. This closes `BL-359`.
+
+### An input layer-drift could not stage is a refusal, not an empty input (`BL-359`, closes)
+
+Bash 3.2 writes every `<<<` here-string and heredoc to a temp file. When that write fails, which
+happens under `ulimit -f` or with a full or read-only `$TMPDIR`, bash prints `cannot create temp
+file for here document` and runs the command on EMPTY stdin. The command's exit is its own, so a
+`$( )` capture comes back empty, a `grep -q` answers "absent", and a `done <<<` loop runs zero
+times. In `layer-drift.sh`, an empty contract text emptied `ADJ_CODES`. That switched the
+adjudication tier off, so no `HARD-LAYER-ADJUDICATION-MISSING` row could be generated. An empty
+override anchor text flipped `OVERRIDE-OK` rows to `OVERRIDE-DRIFT-FILE`. Every such run exited 0,
+and `BL-358`'s write counter could not see it, because no row write failed.
+
+- **All 34 non-comment `<<<` sites are gone**, converted in three shapes. Whole-line membership
+  tests use `ld_has_line`, which is a `case` with no file and no fork, so it cannot fail.
+  Captures are fed by a pipe from `printf` or from a file staged once, and the capture's status
+  is read. Loops read a file staged by `ld_stage`, which reads its write status. A staging or
+  producer failure refuses through the new `ld_refuse_staging`. That function prints
+  `layer-drift: REFUSED — <what> could not be staged (exit N)`, the line `apply.sh` quotes, and
+  then calls `ld_refuse`, whose own line is unchanged. A function that runs inside `$( )`
+  returns 3, and its caller refuses.
+- **The contract read's status is read before the `codes` branch**, so `--adjudicated-codes`
+  refuses too. Before this release it printed an empty set, which that mode documents as a
+  legitimate answer.
+- **An R2 post-condition refuses a contract that carries a clause at ADJUDICATED alongside an
+  empty code set.** It is keyed on the level line's own grammar: four spaces, `level:`,
+  `ADJUDICATED`, and nothing after. The contract's prose mentions of the token and I58's
+  `ADJUDICATEDX` probe do not fire it, and a contract with zero clauses at that level passes.
+- **A contract ABSENT at theirs is still an empty contract, not a refusal.** `git show` answers
+  128 for an absent path and for a failed read alike, so the read is gated on `have`, and only a
+  contract that exists and could not be read refuses. The same guard covers the
+  `override_supersessions` read. This keeps the pre-fix behaviour for a distribution that
+  predates the contract. It also means a failed `have` probe reads as an absent contract, and
+  this release does not close that gap.
+- **`hard-blockers.sh` suppresses `0 HARD blockers.` beside a refused detector.** With `--ld-rc`
+  non-zero it renders the `layer-drift.sh` DETECTOR-REFUSED row in the blocking region, even
+  when `--ld-rows` is supplied. A refused layer-drift run's rows are a prefix of the
+  classification, and the row qualifies the list it sits beside. A supplied non-zero `--ud-rc`
+  suppresses the affirmative line and adds NO row. The asymmetry is deliberate: `emit-report.sh`
+  already renders that detector's refusal in its own section, and two fixture arms pin the
+  region's count (`reconcile-blocking-list` Assertion 6, `reconcile-emit-report` V-D). This was
+  the first of the two findings `BL-359` carried, and it closes here rather than being filed.
+- **The override anchor and title reads run in the C locale.** Once their status was read, a
+  single Latin-1 byte ahead of the match made awk abort with rc 2 in a UTF-8 locale, so the run
+  refused where 0.657.0 had quietly misclassified. `anchor_arm` takes `LC_ALL=C` at its
+  `layer-drift.sh` call site, because I40 binds its body byte-identical to
+  `validate-layer-entries.sh`'s copy. `heading_text_for` carries it inside. `section_of` and
+  `span_of` already ran under it. None of the reference consumer's 128 core `.md` blobs aborts
+  either way.
+- **Healthy output is byte-identical to 0.657.0.** That covers classify, `--list-adjudications`,
+  `--adjudicated-codes` and the full `emit-report.sh` render, including stdout, stderr and rc,
+  over two consumer ranges, d1c72fa9..c16d83ce and 7b32fb1a..d1c72fa9.
+- **The consumer's real exposure was the per-override sites, not the contract.** On a `file://`
+  clone of the reference consumer over d1c72fa9..c16d83ce, the 78356-byte `layer-contract.yaml`
+  is not the largest input. `steps/gate-validation.md` at theirs is 189344 bytes, and it feeds
+  the override anchor and section reads (`a_text`) and the extension reads (`theirs_blob`). At
+  `ulimit -f` 80 to 160, only those sites failed: rc 0, two `OVERRIDE-OK` rows became
+  `OVERRIDE-DRIFT-FILE`, and all six HARD rows were kept. At 12 the contract failed too, which
+  gave 54 rows and 1 HARD row. So the likelier real-world failure is a quietly wrong override
+  classification, not a disarmed tier.
+- `SKILL.md` step 3c documents the exit-1 `could not be staged` refusal and the R2 refusal. It
+  also says `--adjudicated-codes` refuses the same way and that an absent contract is not a
+  refusal. The step 7 blocking-layer gate and the re-adoption re-run now name both exits.
+- `BL-359` now has an `sh` receipt. It uses a seeded one-override world with a 56 KB contract
+  and runs under `ulimit -f 16` with XFSZ ignored. It exits 0 only when two forced runs refuse
+  with a `layer-drift: REFUSED —` line naming `layer-contract.yaml`: one on the world, and one on
+  an empty consumer with a cold memo, where the contract read is the first input to fail. It
+  scores 0 on this tree and 1 on 0.657.0. It also scores 1 on an `ld_stage` that discards its
+  write status and 1 on a contract read whose status check is deleted. It scores 0 on a second
+  spelling of the fix that stages the contract to a file in place of the pipe. It does
+  not observe the per-override sites or the `hard-blockers.sh` half; the
+  `procsub-staged-refusal-boot` fixture carries those.
+- **`procsub-staged-refusal-boot` gains nine cells, each run against both engines.** Every cell
+  runs on this tree and on `a0a9c556`'s engine in the same invocation. The cells cover:
+  - the contract over the limit in classify mode, with a cold memo and with a warm one;
+  - the contract over the limit in `--adjudicated-codes` mode, with a cold memo;
+  - a shadow target over the limit, cold and warm;
+  - `section_of`'s own mktemp failing;
+  - an `awk` stub that empties only the code set;
+  - `hard-blockers.sh` given `--ld-rows` with `--ld-rc 2`, and given `--ud-rows` with
+    `--ud-rc 2`.
+
+  Seven mutants each die on a named cell. The cells that could not otherwise fire at all
+  are the warm-memo and `section_of` ones. A cold memo refuses at the read, before any
+  staging write or `section_of` call. A spelling arm holds the file at zero non-comment `<<<`
+  lines; it fires on a seeded offender and stays quiet on a commented one. A cell reads
+  INCONCLUSIVE only when the base engine did not hit a here-string failure. It never keys on the
+  bash version. `L5-pre`'s tip shape is now the contract refusal, and `layer-adjudication-tier`'s
+  `M10A` mutant is re-anchored on the new `adj_clause_of` line. The fixture's loaded cost rose
+  about 16%.
+
+Two things `BL-359` carried are not closed here. The W3 contradiction-awk count and the
+double-shadow grouping `sort` refusal still have no fixture cell. The same here-string class
+also stands in the other reconcile scripts. Both are filed at the close.
+
+`layer-drift.sh` is read by `apply.sh`, so it is BOOTSTRAPPING and ships alone. The pull that
+delivers 0.658.0 runs under the consumer's installed engine, so the new refusal protects only the
+pull after it.
+
+This discharges no consumer candidate.
+
 ## [0.657.0] - 2026-09-28
 
 `layer-drift.sh` now exits 2 when any row it produced could not be written, instead of exiting 0

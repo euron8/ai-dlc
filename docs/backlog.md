@@ -4503,4 +4503,36 @@ exceeds the limit, asserting a refusal and not an rc-0 run with zero HARD rows.
 - `emit-report.sh` prints `0 HARD blockers.` beside a layer-drift refusal, because `hard-blockers.sh:266` suppresses its own DETECTOR-REFUSED when `--ld-rows` is supplied and `:286-287` then prints the affirmative line — the line `:234` calls the one the HARD- contract keys on. Forced with a stub exiting 2 after three non-HARD rows: `emit-report.sh` rc 0, line 48 `0 HARD blockers.`, the refusal only in the layer-drift section. With a partial 20-row set, six HARD rows rendered as if complete. The standalone `hard-blockers.sh` path is correct. Remedy: with `--ld-rc` non-zero, suppress the affirmative line and render the refusal in the blocking-layer region.
 - Two `layer-drift.sh` refusal paths have no fixture cell: the W3 contradiction-awk count (`adj_register_contradictions`, a mutant replacing its `PIPESTATUS[1]` read with `_rc=0` loses a `HARD-REGISTER-CONTRADICTION` row silently; `mk_ld_world` never writes the register, and the `BL-358` receipt world has none either) and the grouping refusal on the staged double-shadow `sort` (forced with a PATH `awk` stub: tip rc 1, base rc 0 with the pair lost; no cell forces the producer). Also surviving, lower consequence: the listing-loop break removed, the list-mode count line printed after a failure, an `emit_raw` guard moved after its printf. Missing cells: an L5f world with two conflicting register records and stdout closed; one stub cell for the grouping.
 
-verify: manual
+**Fixed in 0.658.0 (e52a87ff), with the carried findings dispositioned.**
+
+- **Main subject: fixed.** `layer-drift.sh` has no here-string left (34 non-comment sites
+  converted), the contract read's status is read before the `codes` branch, and an R2
+  post-condition refuses a contract that carries a `^    level: ADJUDICATED$` clause alongside an
+  empty code set. A contract ABSENT at theirs is still an empty contract and not a refusal, which
+  is the pre-fix behaviour.
+- **First carried finding (`0 HARD blockers.` beside a layer-drift refusal): fixed in the same
+  release.** With `--ld-rc` non-zero, `hard-blockers.sh` renders DETECTOR-REFUSED in the blocking
+  region even when `--ld-rows` is supplied, which suppresses the affirmative line. A supplied
+  non-zero `--ud-rc` suppresses the line and adds no row.
+- **Second carried finding (the W3 contradiction-awk count and the double-shadow grouping `sort`
+  have no fixture cell): NOT closed by this release.** Split out as two NOTEs at the close.
+
+The receipt drives the shipping `layer-drift.sh` on a seeded world, never the consumer. The world
+has one override and a 56 KB contract with one ADJUDICATED clause, and the run happens under
+`ulimit -f 16` with XFSZ ignored. The receipt makes two forced runs: one on that world with a warm
+memo, and one on an empty consumer with a cold memo, where the contract read itself is the first
+input to fail. It exits 0 only when both runs exit non-zero, the first run's stderr carries a
+`layer-drift: REFUSED —` line naming `layer-contract.yaml`, and the second run's refusal is the
+one for `reading core/skills/ai-dlc/layer-contract.yaml`. Its
+preconditions exit 9: the contract must exceed the limit, `--adjudicated-codes` must answer
+`EXTENSION-HOOK-DRIFT` when unforced, and the unforced classify must exit 0 with at least one row
+and no refusal. Scored, each variant in a scratch tree differing from tip by `cmp`: tip 0; base
+`31a056c3` 1 (rc 0, `cannot create temp file` at 643/660/1714, the `OVERRIDE-OK` row intact); an
+`ld_stage` that discards its write status 1 (rc 0, no refusal line); the contract read's status
+check deleted 1; the contract STAGED to a file by `ld_stage` in place of the printf pipe 0 (a
+second spelling of the fix). The scores were taken through `scripts/backlog-reverify.sh`'s own
+`eval` shape, and that engine reports the entry `CLOSE-CANDIDATE` on this tree. This receipt observes
+neither the per-override `a_text`/`theirs_blob` sites nor the `hard-blockers.sh` half; the
+`procsub-staged-refusal-boot` fixture carries those.
+
+verify: sh s=core/skills/ai-dlc-update/reconcile/layer-drift.sh; [ -f "$s" ] || exit 9; w="$(mktemp -d)" || exit 9; D="$w/d"; C="$w/c"; K=core/skills/ai-dlc; O="$C/.claude/skills/ai-dlc/overrides"; mkdir -p "$D/$K/steps" "$D/core/schemas" "$O" "$w/m" || exit 9; { printf 'clauses:\n  - id: LC-E4\n    level: ADJUDICATED\n    code: EXTENSION-HOOK-DRIFT\noverride_supersessions:\n'; i=0; while [ $i -lt 700 ]; do printf '  - shadows: steps/pad-%04d.md#Pad heading %04d\n    since_core_version: "0.1.0"\n' $i $i; i=$((i+1)); done; } > "$D/$K/layer-contract.yaml" || exit 9; printf '{\n  "properties": {\n    "verdict": {\n      "enum": [\n        "still-additive",\n        "contradicts-core",\n        "retire"\n      ]\n    }\n  }\n}\n' > "$D/core/schemas/layer-adjudication-register.json"; printf '# Demo\n\n## Gamma\n\nbase body\n' > "$D/$K/steps/demo.md"; g() { git -C "$D" -c user.email=r@r -c user.name=r -c commit.gpgsign=false "$@"; }; { g init -q && g add -A && g commit -qm b; } >/dev/null 2>&1 || exit 9; B="$(git -C "$D" rev-parse HEAD)"; printf '# Other\n' > "$D/$K/steps/other.md"; { g add -A && g commit -qm t; } >/dev/null 2>&1 || exit 9; T="$(git -C "$D" rev-parse HEAD)"; printf -- '---\nshadows: steps/demo.md#Gamma\nbase_sha: %s\nreason: r\n---\n\n## Gamma\n\nbase body\n' "$B" > "$O/steps__demo.md"; [ "$(wc -c < "$D/$K/layer-contract.yaml")" -gt 32768 ] || exit 9; [ "$(AI_DLC_RECONCILE_MEMO="$w/m" bash "$s" --adjudicated-codes "$D" "$T" 2>/dev/null)" = EXTENSION-HOOK-DRIFT ] || exit 9; AI_DLC_RECONCILE_MEMO="$w/m" bash "$s" "$D" "$B" "$T" "$C" > "$w/h" 2> "$w/he" || exit 9; grep -q 'REFUSED\|cannot create temp' "$w/he" && exit 9; [ "$(wc -l < "$w/h" | tr -d ' ')" -ge 1 ] || exit 9; ( trap '' XFSZ; ulimit -f 16; AI_DLC_RECONCILE_MEMO="$w/m" bash "$s" "$D" "$B" "$T" "$C" > "$w/o" 2> "$w/e" ); rc=$?; mkdir -p "$w/c2" "$w/m2" || exit 9; ( trap '' XFSZ; ulimit -f 16; AI_DLC_RECONCILE_MEMO="$w/m2" bash "$s" "$D" "$B" "$T" "$w/c2" > "$w/o2" 2> "$w/e2" ); rc2=$?; [ "$rc" -ne 0 ] && grep -q 'layer-drift: REFUSED — .*layer-contract\.yaml' "$w/e" && [ "$rc2" -ne 0 ] && grep -q 'layer-drift: REFUSED — reading core/skills/ai-dlc/layer-contract\.yaml' "$w/e2"

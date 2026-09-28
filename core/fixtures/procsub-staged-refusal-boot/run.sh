@@ -60,11 +60,37 @@
 #   L5e layer-drift      the same world, the cut inside an OVERRIDE-OK row with more overrides after
 #                        it: the OVERRIDES loop's own stop, which L5b (extensions) cannot see.
 #   L5-pre               THE PRECONDITION: a world whose layer-contract.yaml is larger than the limit.
-#                        bash 3.2 writes a here-string to a temp file under the same limit, the
-#                        contract is read through `<<<`, and a failed one reads as an EMPTY contract
-#                        (no HARD row, rc 0, for a reason that is not the emit). This cell must read
-#                        BROKEN-HEREDOC, proving the detector the L5b/L5d cells refuse on can fire;
-#                        any OTHER cell reading it ends the fixture FIXTURE BROKEN, never a verdict.
+#                        bash 3.2 writes a here-string to a temp file under the same limit, and the
+#                        a0a9c556 engine read the contract through `<<<`: a failed one read as an
+#                        EMPTY contract (no HARD row, rc 0, for a reason that is not the emit). On
+#                        that engine this cell must read BROKEN-HEREDOC, proving the detector the
+#                        L5b/L5d cells refuse on can fire; any OTHER cell reading it ends the fixture
+#                        FIXTURE BROKEN, never a verdict. The tip carries no here-string (BL-359) and
+#                        refuses naming the contract read instead: REFUSED-CONTRACT.
+#   C*  layer-drift      BL-359: an input the engine used to read through a `<<<` that could not be
+#                        staged, read as EMPTY at rc 0. Each cell's base shape is that silent read.
+#   C1                   the contract larger than the limit, every other write under it, cold memo
+#                        -> rc 0 with no HARD row; now a refusal naming the contract read.
+#   C1w                  the same with a WARM memo, so the contract reaches the engine with no file
+#                        written: the tip classifies in full under the limit, base still loses it.
+#                        The discriminating input for M3 (the awk fed by `<<<` again).
+#   C4                   C1's world and limit, --adjudicated-codes -> rc 0 and an EMPTY code set,
+#                        which that mode documents as a legitimate answer; now a refusal.
+#   C2                   an override whose shadow target at theirs is larger than the limit, cold
+#                        memo -> OVERRIDE-OK read as OVERRIDE-DRIFT-FILE at rc 0 (the consumer's
+#                        measured exposure); now a refusal naming the target read.
+#   C2w                  the same, warm memo: the target's STAGING write is the first to fail.
+#                        The discriminating input for M1 (the staging write's status ignored).
+#   C2s                  C2's world, no limit, `section_of`'s own mktemp copy failed by a stub ->
+#                        OVERRIDE-DRIFT-FILE; now a refusal naming section_of. C2 and C2w refuse
+#                        at the read or the staging BEFORE section_of runs, so neither can see M4.
+#   C3                   an `awk` stub that reads the contract program's input and prints nothing
+#                        -> the tier switched off at rc 0; now the R2 post-condition refuses.
+#   C5-ld hard-blockers  --ld-rows supplied with --ld-rc 2 -> `0 HARD blockers.` over a partial
+#                        list; now the DETECTOR-REFUSED row and no affirmative line.
+#   C5-ud hard-blockers  --ud-rows supplied with --ud-rc 2 -> `0 HARD blockers.`; now neither the
+#                        affirmative line nor a second refusal row (emit-report renders that one).
+#   SPELL                layer-drift.sh carries no non-comment `<<<`, probed both ways first.
 #   A*  apply.sh         each of the four detectors it consults, and the scan-unavailable row:
 #                        a refusal (exit 2, reason on stderr) read as "found nothing" -> no row.
 #                        Now a `DECISION <detector>-refused` row carrying the exit and the first
@@ -124,8 +150,9 @@ SIB="$HERE/../reconcile-emit-report"
 REAL_TR="$(command -v tr)"; REAL_GIT="$(command -v git)"; REAL_FIND="$(command -v find)"
 REAL_SED="$(command -v sed)"; REAL_COMM="$(command -v comm)"; REAL_GREP="$(command -v grep)"
 REAL_BASH="$(command -v bash)"; REAL_CAT="$(command -v cat)"
-for _b in "$REAL_TR" "$REAL_GIT" "$REAL_FIND" "$REAL_SED" "$REAL_COMM" "$REAL_GREP" "$REAL_BASH" "$REAL_CAT"; do
-  case "$_b" in /*) ;; *) echo "FIXTURE ERROR: tr/git/find/sed/comm/grep/bash/cat must resolve to binaries on PATH (got '$_b'), or no stub can pass through" >&2; exit 2 ;; esac
+REAL_AWK="$(command -v awk)"; REAL_MKTEMP="$(command -v mktemp)"
+for _b in "$REAL_TR" "$REAL_GIT" "$REAL_FIND" "$REAL_SED" "$REAL_COMM" "$REAL_GREP" "$REAL_BASH" "$REAL_CAT" "$REAL_AWK" "$REAL_MKTEMP"; do
+  case "$_b" in /*) ;; *) echo "FIXTURE ERROR: tr/git/find/sed/comm/grep/bash/cat/awk/mktemp must resolve to binaries on PATH (got '$_b'), or no stub can pass through" >&2; exit 2 ;; esac
 done
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/psb-boot.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
@@ -187,7 +214,21 @@ mkstub_for() {
     U6-hit|U6-fill) stub "$2" cat "$REAL_CAT" "*'/t '*'.c'" "$LOGF; exit 1" ;;
     # The L cells fail nothing: their forcing input is the closed stdout or the file-size limit
     # ld_shape runs them under. The stub logs layer_files' walk, so FIRED > 0 proves the run reached it.
-    L5|L5c|L5b|L5b-hard|L5d|L5e|L5-pre) stub "$2" find "$REAL_FIND" "*' -type f -name '*" "$LOGF" ;;
+    L5|L5c|L5b|L5b-hard|L5d|L5e) stub "$2" find "$REAL_FIND" "*' -type f -name '*" "$LOGF" ;;
+    # L5-pre, C1, C4: the tip refuses at the contract read, BEFORE layer_files' walk, so the stub
+    # logs the read itself -- a cold memo's fill runs `git show` of the contract.
+    L5-pre|C1|C4) stub "$2" git "$REAL_GIT" "*' show '*':core/skills/ai-dlc/layer-contract.yaml'" "$LOGF" ;;
+    # C1w / C2w: a WARM memo serves the blob with `cat` of its `.c` file and runs no git at all.
+    C1w)   stub "$2" cat "$REAL_CAT" "*'layer-contract.yaml.c'" "$LOGF" ;;
+    C2)    stub "$2" git "$REAL_GIT" "*' show '*':core/skills/ai-dlc/steps/zz-psb-huge.md'" "$LOGF" ;;
+    C2w)   stub "$2" cat "$REAL_CAT" "*'zz-psb-huge.md.c'" "$LOGF" ;;
+    # C2s: `mktemp` with NO argument is section_of's copy of its stdin (lib.sh); the staging
+    # directory and the memo pass arguments and reach the real binary.
+    C2s)   stub "$2" mktemp "$REAL_MKTEMP" "''" "echo mktemp-no-args >> \"\$F\"; exit 1" ;;
+    # C3: the ADJUDICATED code-set program alone (the only awk program carrying this comparison).
+    # It READS its input, so the writer cannot EPIPE, and prints nothing: a reader that did not read.
+    C3)    stub "$2" awk "$REAL_AWK" "*'lvl == \"ADJUDICATED\"'*" "echo contract-program >> \"\$F\"; cat > /dev/null; exit 0" ;;
+    C5-ld|C5-ud) stub "$2" cat "$REAL_CAT" "*'/hb-rows-'*" "$LOGF" ;;
     Aud)   ap_stub "$2" unregistered-drift ;;
     Art)   ap_stub "$2" retired-tokens ;;
     Arlp)  ap_stub "$2" retired-layer-passage ;;
@@ -627,7 +668,16 @@ LD_BASE_SHA=a0a9c556
 # regular file under the limit -- a listing past the limit fails the walk (a refusal of its own).
 LD_HOOK="steps/zz-psb-a-hooked-core-directory-whose-name-is-long-so-every-extension-ok-row-is-hundreds-of-bytes-wide-and-outweighs-its-own-entry/zz-psb-a-hooked-core-step-that-never-moves-across-the-range-and-whose-name-is-long-for-the-same-reason-as-its-directory-so-the-rows-fill-the-limit-before-any-staged-file.md"
 LD_LAST=".claude/skills/ai-dlc/extensions/zz-psb-the-entry-hooking-the-moving-step-sorts-last.md"
-mk_ld_world() { # <dir> <ext|ds|big>
+#   huge (BL-359) overrides only: ONE override shadowing `## Tail Rule`, the LAST section of a core
+#        step padded past the C2 limit. Only its HEAD section moves, so the healthy row is OVERRIDE-OK.
+LD_HUGE_REL="steps/zz-psb-huge.md"
+ld_huge_md() { # <base|theirs>
+  local i=0
+  printf '# Huge\n\n## Head Rule\n\n%s head body\n\n## Padding\n\n' "$1"
+  while [ "$i" -lt 400 ]; do printf 'padding line %03d that makes this core step larger than the file-size limit of the C2 cells\n' "$i"; i=$((i+1)); done
+  printf '\n## Tail Rule\n\ntail body that never moves\n'
+}
+mk_ld_world() { # <dir> <ext|ds|big|huge>
   local W="$1" D="$1/dist" C="$1/consumer" X i
   X="$C/.claude/skills/ai-dlc"
   mkdir -p "$D/core/skills/ai-dlc/$(dirname "$LD_HOOK")" "$D/core/schemas" "$X/extensions" "$X/overrides" \
@@ -644,13 +694,20 @@ mk_ld_world() { # <dir> <ext|ds|big>
   { printf '# Still\n\n## Alpha\n\nbody\n'; for i in 1 2 3 4 5 6 7 8 9 10 11 12; do printf '\n## Rule %s\n\ncore rule %s\n' "$i" "$i"; done; } \
     > "$D/core/skills/ai-dlc/$LD_HOOK"
   printf '# Skill\n\n## Rule 7\n\nseven\n' > "$D/core/skills/ai-dlc/SKILL.md"
+  [ "$2" = huge ] && ld_huge_md base > "$D/core/skills/ai-dlc/$LD_HUGE_REL"
   { gi "$D" init -q && gi "$D" add -A && gi "$D" commit -qm base; } >/dev/null 2>&1 || return 1
   git -C "$D" rev-parse HEAD > "$W/B"
   printf '0.2.0\n' > "$D/VERSION"
   printf '# Moving\n\n## Gamma\n\ntheirs body REWRITTEN\n' > "$D/core/skills/ai-dlc/steps/moving.md"
+  [ "$2" = huge ] && ld_huge_md theirs > "$D/core/skills/ai-dlc/$LD_HUGE_REL"
   { gi "$D" add -A && gi "$D" commit -qm theirs; } >/dev/null 2>&1 || return 1
   git -C "$D" rev-parse HEAD > "$W/T"
-  if [ "$2" = ds ]; then
+  if [ "$2" = huge ]; then
+    # ONE override, shadowing the section at the very END of a core file larger than the limit.
+    # The file moves base->theirs (its HEAD section), the shadowed section does not: OVERRIDE-OK.
+    printf -- '---\nshadows: %s#Tail Rule\nbase_sha: %s\nreason: seeded\n---\n\n## Tail Rule\n\nconsumer text.\n' \
+      "$LD_HUGE_REL" "$(cat "$W/B")" > "$X/overrides/huge.md"
+  elif [ "$2" = ds ]; then
     for i in 01 02 03 04 05 06 07 08 09 10 11 12; do
       printf -- '---\nshadows: %s#Rule %s\nbase_sha: %s\nreason: seeded\n---\n\n## Rule %s\n\nconsumer text.\n' \
         "$LD_HOOK" "${i#0}" "$(cat "$W/B")" "${i#0}" > "$X/overrides/r$i.md"
@@ -667,14 +724,20 @@ mk_ld_world() { # <dir> <ext|ds|big>
   fi
   { gi "$C" init -q && gi "$C" add -A && gi "$C" commit -qm consumer; } >/dev/null 2>&1 || return 1
 }
-LW_EXT="$WORK/ldw-ext"; LW_DS="$WORK/ldw-ds"; LW_BIG="$WORK/ldw-big"
+LW_EXT="$WORK/ldw-ext"; LW_DS="$WORK/ldw-ds"; LW_BIG="$WORK/ldw-big"; LW_HUGE="$WORK/ldw-huge"
 mk_ld_world "$LW_EXT" ext || { echo "FIXTURE ERROR: ld ext world" >&2; exit 2; }
 mk_ld_world "$LW_DS" ds || { echo "FIXTURE ERROR: ld ds world" >&2; exit 2; }
 mk_ld_world "$LW_BIG" big || { echo "FIXTURE ERROR: ld big world" >&2; exit 2; }
+mk_ld_world "$LW_HUGE" huge || { echo "FIXTURE ERROR: ld huge world" >&2; exit 2; }
+# The base copy carries a0a9c556's hard-blockers.sh too: the C5 cells' failing control.
 LD_BASE="$WORK/ld-base"
 mkdir -p "$LD_BASE" && cp -R "$RECON/." "$LD_BASE/" \
   && git -C "$TREE_TOP" show "${LD_BASE_SHA}:core/skills/ai-dlc-update/reconcile/layer-drift.sh" > "$LD_BASE/layer-drift.sh" 2>/dev/null \
-  || { echo "FIXTURE BROKEN: could not stage layer-drift.sh at ${LD_BASE_SHA}, the failing control of every L cell" >&2; exit 2; }
+  && git -C "$TREE_TOP" show "${LD_BASE_SHA}:core/skills/ai-dlc-update/reconcile/hard-blockers.sh" > "$LD_BASE/hard-blockers.sh" 2>/dev/null \
+  || { echo "FIXTURE BROKEN: could not stage layer-drift.sh and hard-blockers.sh at ${LD_BASE_SHA}, the failing control of every L and C cell" >&2; exit 2; }
+if cmp -s "$RECON/hard-blockers.sh" "$LD_BASE/hard-blockers.sh"; then
+  echo "FIXTURE BROKEN: the staged ${LD_BASE_SHA} hard-blockers.sh is identical to tip, so the C5 cells have no failing control" >&2; exit 2
+fi
 _h="$("$REAL_GREP" -c 'ld_finish\|ld_emit_failed' "$LD_BASE/layer-drift.sh")" || _h=0
 _t="$("$REAL_GREP" -c 'ld_finish' "$RECON/layer-drift.sh")" || _t=0
 if cmp -s "$RECON/layer-drift.sh" "$LD_BASE/layer-drift.sh" || [ "$_h" -ne 0 ] || [ "$_t" -eq 0 ]; then
@@ -787,9 +850,13 @@ ld_shape() {
   err="$( ( trap '' XFSZ; ulimit -f "$L"; PATH="$p"; export PATH
     exec "$REAL_BASH" -x "$1/layer-drift.sh" "$W/dist" "$(cat "$W/B")" "$(cat "$W/T")" "$W/consumer" > "$out" ) 2>&1 )"; rc=$?
   # THE PRECONDITION. bash 3.2 writes a here-string to a temp file under the SAME limit, and the
-  # engine reads layer-contract.yaml through `<<<`: a failed one reads as an EMPTY contract, the
-  # adjudication is disarmed and the HARD row never exists, at rc 0 -- a reason that is not the emit.
-  # Such a run is no verdict. L5-pre is the one cell built to reach it.
+  # a0a9c556 engine read layer-contract.yaml through `<<<`: a failed one read as an EMPTY contract,
+  # the adjudication disarmed and the HARD row never existed, at rc 0 -- a reason that is not the
+  # emit. Such a run is no verdict. L5-pre is the one cell built to reach it, and on that engine it
+  # still reads BROKEN-HEREDOC. The tip carries no here-string (BL-359), so on the tip L5-pre reads
+  # REFUSED-CONTRACT: the contract's READ fails under the limit and the engine refuses naming it,
+  # exit non-zero with no row. A tip run that prints the here-string message at all means a `<<<`
+  # came back; the SPELL arm below owns that, and this cell then reads BROKEN-HEREDOC, not its tip shape.
   if "$REAL_GREP" -q 'cannot create temp file for here' <<<"$err"; then
     [ "$2" = L5-pre ] || printf '%s via %s\n' "$2" "$1" >> "$LD_HEREDOC_BAD"
     echo BROKEN-HEREDOC; rm -f "$out"; return 0
@@ -797,22 +864,175 @@ ld_shape() {
   nm="$(ld_named "$err")"; nn="$(ld_n "$err")"
   nw="$(tr -cd '\n' < "$out" | wc -c | tr -d ' ')"
   # Only WHOLE rows count as written: the row the limit cut is a fragment, not a row.
-  nsub="$(head -n "$nw" "$out" | awk -F'\t' -v s="$subj" '$1==s' | "$REAL_GREP" -c .)" || nsub=0
+  nsub=0
+  [ "$nw" -eq 0 ] || { nsub="$(head -n "$nw" "$out" | awk -F'\t' -v s="$subj" '$1==s' | "$REAL_GREP" -c .)" || nsub=0; }
   nb="$(wc -c < "$out" | tr -d ' ')"
   nit="$(awk '/write error/ && !f { f=1; next } f && /^\+ entry=/ { n++ } END { print n+0 }' <<<"$err")"
   rm -f "$out"
-  if [ "$2" = L5-pre ]; then echo "OTHER(no-heredoc-failure,rc=$rc)"
+  # The refusal line is read UNTRACED: under `bash -x` its echo is traced as `+ echo '...'`, so only
+  # a line OPENING with the prefix is the engine's own output.
+  local nrc
+  nrc="$(awk 'index($0, "layer-drift: REFUSED — reading core/skills/ai-dlc/layer-contract.yaml at ") == 1' <<<"$err" | "$REAL_GREP" -c .)" || nrc=0
+  if [ "$2" = L5-pre ]; then
+    if [ "$rc" -ne 0 ] && [ "$nw" -eq 0 ] && [ "$nrc" -eq 1 ]; then echo REFUSED-CONTRACT
+    else echo "OTHER(no-heredoc-failure,rc=$rc,whole=$nw,contract-refusal=$nrc)"; fi
   elif [ "$nw" -ne "$want" ]; then echo "OTHER(whole=$nw,want=$want,rc=$rc)"
   elif [ "$rc" -eq 0 ] && [ "$nsub" -lt "$full" ] && [ "$nm" -eq 0 ]; then echo XFSZ-RC0-LOST
   elif [ "$rc" -eq 2 ] && [ "$nsub" -lt "$full" ] && [ "$nm" -eq 1 ] && [ "$nn" -eq "$nw" ] && [ "$nit" -eq 0 ]; then echo XFSZ-RC2-NAMED
   elif [ "$rc" -eq 2 ] && [ "$nsub" -lt "$full" ] && [ "$nm" -eq 1 ] && [ "$nit" -gt 0 ]; then echo XFSZ-RC2-NOSTOP
   else echo "OTHER(rc=$rc,whole=$nw,N=$nn,iterations=$nit,subject=$nsub,named=$nm,bytes=$nb)"; fi
 }
-ld_heredoc_gate() { # a non-precondition cell that hit the here-string floor ends the run BROKEN
+# A non-precondition L cell that hit the here-string floor ends the run BROKEN. Only a pre-fix copy
+# (the a0a9c556 engine, a mutant restoring a `<<<`) can: the tip carries none. The C cells below
+# reach the floor on purpose on the base engine and keep their own reading, so they never log here.
+ld_heredoc_gate() {
   if [ -s "$LD_HEREDOC_BAD" ]; then
     echo "FIXTURE BROKEN: an L cell's run failed a here-string under its file-size limit ($(tr '\n' ';' < "$LD_HEREDOC_BAD")) -- its shape is not a verdict about the emit" >&2
     exit 2
   fi
+}
+
+# === WORLDS lc / hb: BL-359, the here-string that could not be staged ============================
+# EVERY C CELL RUNS WITHOUT XTRACE, stderr to a PIPE and stdout to a file under the limit. The limit
+# LD_LC is chosen so exactly ONE input is larger than it -- the contract (big world) or the huge
+# step (huge world) -- and everything else the run writes fits: asserted below, or a cell's shape
+# would be the result of a different write failing. The cold cells run with the engine's own fresh
+# memo, so the subject's FIRST read is a memo fill that fails; the warm (`w`) cells hand the engine a
+# memo one healthy run of the SAME engine filled, so the subject arrives through `cat` of a cached
+# file with nothing written, and the first write that fails is the engine's own staging of it.
+LD_LC=12
+ld_run "$RECON" "$LW_BIG" > "$LW_BIG.out" && ld_run "$RECON" "$LW_HUGE" > "$LW_HUGE.out" \
+  || { echo "FIXTURE ERROR: lc worlds: a healthy tip run exited non-zero" >&2; exit 2; }
+_cb="$(wc -c < "$LW_BIG/dist/core/skills/ai-dlc/layer-contract.yaml" | tr -d ' ')"
+_hb="$(git -C "$LW_HUGE/dist" cat-file -s "$(cat "$LW_HUGE/T"):core/skills/ai-dlc/$LD_HUGE_REL")" || _hb=0
+_ob="$( { git -C "$LW_BIG/dist" ls-tree -r -l "$(cat "$LW_BIG/T")"; git -C "$LW_HUGE/dist" ls-tree -r -l "$(cat "$LW_HUGE/T")"
+          git -C "$LW_HUGE/dist" ls-tree -r -l "$(cat "$LW_HUGE/B")"; } \
+        | awk '$5 !~ /layer-contract[.]yaml$/ && $5 !~ /zz-psb-huge[.]md$/ && $4 + 0 > m { m = $4 + 0 } END { print m + 0 }')"
+_bo="$(wc -c < "$LW_BIG.out" | tr -d ' ')"; _ho="$(wc -c < "$LW_HUGE.out" | tr -d ' ')"
+_lim=$(( LD_LC * LD_BLK ))
+if [ "$_cb" -le $(( _lim + LD_BLK )) ] || [ "$_hb" -le $(( _lim + LD_BLK )) ] || [ "$_ob" -ge "$_lim" ] \
+   || [ "$_bo" -ge "$_lim" ] || [ "$_ho" -ge "$_lim" ] || [ "$_lx" -ge "$_lim" ]; then
+  echo "FIXTURE ERROR: lc worlds: the limit ($_lim B) must lie below the contract ($_cb B) and the huge step ($_hb B) by a block and above every other blob ($_ob B), each healthy output ($_bo / $_ho B) and the staged listing ($_lx B)" >&2; exit 2
+fi
+_ho_row="$(awk -F'\t' '$2 == ".claude/skills/ai-dlc/overrides/huge.md" {print $1}' "$LW_HUGE.out" | tr '\n' ' ')"
+[ "$_ho_row" = "OVERRIDE-OK " ] \
+  || { echo "FIXTURE ERROR: lc huge world: the healthy run's rows for overrides/huge.md are '$_ho_row', want exactly one OVERRIDE-OK -- the shadowed section must be unchanged while its file moves" >&2; exit 2; }
+# The two warm memos, filled ONCE by a healthy tip run each (see lc_shape's C1w/C2w branch).
+LC_MEMO_BIG="$WORK/lc-memo-big"; LC_MEMO_HUGE="$WORK/lc-memo-huge"
+mkdir -p "$LC_MEMO_BIG" "$LC_MEMO_HUGE" || { echo "FIXTURE ERROR: mkdir lc memos" >&2; exit 2; }
+AI_DLC_RECONCILE_MEMO="$LC_MEMO_BIG" ld_run "$RECON" "$LW_BIG" >/dev/null \
+  && AI_DLC_RECONCILE_MEMO="$LC_MEMO_HUGE" ld_run "$RECON" "$LW_HUGE" >/dev/null \
+  || { echo "FIXTURE ERROR: lc worlds: a healthy memo-warming run exited non-zero" >&2; exit 2; }
+echo "  (lc worlds: limit $LD_LC block(s) = $_lim B; contract $_cb B, huge step $_hb B, largest other blob $_ob B, healthy outputs $_bo / $_ho B)"
+
+# lc_shape <recon> <arm> <stub-dir or -> -> the SHAPE of one BL-359 layer-drift run.
+# A forced run whose stderr carries bash's here-string failure leaves a HEREDOC marker in its stub
+# directory, which is what the base loop keys INCONCLUSIVE on: a bash that feeds a here-string
+# without a temp file cannot lose one, and the cell then discriminates nothing on that bash.
+lc_shape() {
+  local R="$1" A="$2" sd="$3" W p="$PATH" b t out err rc m="" memo="" lim="" her=0 ref nrow nhard ndrift ovr
+  case "$A" in C2|C2w|C2s) W="$LW_HUGE" ;; *) W="$LW_BIG" ;; esac
+  b="$(cat "$W/B")"; t="$(cat "$W/T")"
+  [ "$A" = C4 ] && m=--adjudicated-codes
+  if [ "$sd" != - ]; then
+    p="$sd:$PATH"
+    case "$A" in C1|C1w|C4|C2|C2w) lim="$LD_LC" ;; esac
+    case "$A" in
+      C1w|C2w)
+        # A FRESH memo per drive, COPIED from the one warmed once per world below: a memo holds git's
+        # blobs keyed by dist and ref, never an engine's answer, so a copy warmed by the tip serves a
+        # mutant or the base the same bytes -- and a fresh copy means no drive reads another's fills.
+        memo="$(mktemp -d "$WORK/lc-memo.XXXXXX")" || { echo "OTHER(mktemp)"; return 0; }
+        case "$A" in C1w) cp -R "$LC_MEMO_BIG/." "$memo/" ;; *) cp -R "$LC_MEMO_HUGE/." "$memo/" ;; esac \
+          || { echo "OTHER(memo-copy)"; return 0; }
+        # The memo key embeds the ref, so the check names THEIRS: the huge step is read at base_sha too.
+        case "$A" in C1w) set -- "$R" "$A" "$sd" "${t}:core%2Fskills%2Fai-dlc%2Flayer-contract.yaml.c" ;;
+                     *)   set -- "$R" "$A" "$sd" "${t}:core%2Fskills%2Fai-dlc%2Fsteps%2Fzz-psb-huge.md.c" ;; esac
+        [ "$(ls "$memo" | "$REAL_GREP" -cF -- "$4")" -eq 1 ] || { echo "OTHER(memo-not-warm)"; return 0; } ;;
+    esac
+  fi
+  out="$(mktemp "$WORK/lc-out.XXXXXX")" || { echo "OTHER(mktemp)"; return 0; }
+  err="$( ( trap '' XFSZ; [ -z "$lim" ] || ulimit -f "$lim"; PATH="$p"; export PATH
+            [ -z "$memo" ] || { AI_DLC_RECONCILE_MEMO="$memo"; export AI_DLC_RECONCILE_MEMO; }
+            if [ -n "$m" ]; then exec "$REAL_BASH" "$R/layer-drift.sh" "$m" "$W/dist" "$t" > "$out"
+            else exec "$REAL_BASH" "$R/layer-drift.sh" "$W/dist" "$b" "$t" "$W/consumer" > "$out"; fi ) 2>&1 )"; rc=$?
+  if "$REAL_GREP" -qF 'cannot create temp file for here' <<<"$err"; then her=1; [ "$sd" = - ] || : > "$sd/HEREDOC"; fi
+  ref="$(awk 'index($0, "layer-drift: REFUSED — ") == 1 { print; exit }' <<<"$err")"
+  nrow="$("$REAL_GREP" -c . "$out")" || nrow=0
+  nhard="$(awk -F'\t' '$1=="HARD-LAYER-ADJUDICATION-MISSING"' "$out" | "$REAL_GREP" -c .)" || nhard=0
+  ndrift="$(awk -F'\t' '$1=="EXTENSION-HOOK-DRIFT"' "$out" | "$REAL_GREP" -c .)" || ndrift=0
+  ovr="$(awk -F'\t' '$2 == ".claude/skills/ai-dlc/overrides/huge.md" {print $1; exit}' "$out")"
+  rm -f "$out"
+  # A REFUSAL is exit non-zero, NO row, and the engine's own `REFUSED —` line naming the site.
+  if [ "$rc" -ne 0 ] && [ "$nrow" -eq 0 ]; then
+    case "$ref" in
+      *"REFUSED — reading core/skills/ai-dlc/layer-contract.yaml at "*) echo REFUSED-CONTRACT ;;
+      *"REFUSED — the ADJUDICATED code set out of "*"could not be staged"*) echo REFUSED-CODES ;;
+      *"clause(s) at level ADJUDICATED and the code set read out of it is EMPTY"*) echo REFUSED-R2 ;;
+      *"REFUSED — reading core/skills/ai-dlc/$LD_HUGE_REL at "*) echo REFUSED-READ ;;
+      *"REFUSED — core/skills/ai-dlc/$LD_HUGE_REL at "*"could not be staged"*) echo REFUSED-STAGE ;;
+      *"REFUSED — section_of for "*) echo REFUSED-SECTION ;;
+      *) echo "OTHER(rc=$rc,no-row,refusal=${ref:-none})" | tr ' ' '_' ;;
+    esac
+    return 0
+  fi
+  [ "$rc" -eq 0 ] || { echo "OTHER(rc=$rc,rows=$nrow)"; return 0; }
+  case "$A" in
+    C4)
+      # --adjudicated-codes prints bare codes, one per line: the world's one ADJUDICATED clause keys
+      # EXTENSION-HOOK-DRIFT, so the healthy listing IS that line (counted by `ndrift` above).
+      if [ "$nrow" -eq 1 ] && [ "$ndrift" -eq 1 ]; then echo CODES-LISTED
+      elif [ "$nrow" -eq 0 ] && [ "$her" -eq 1 ]; then echo CODES-EMPTY-HEREDOC
+      elif [ "$nrow" -eq 0 ]; then echo CODES-EMPTY
+      else echo "OTHER(rows=$nrow)"; fi ;;
+    C2|C2w|C2s)
+      # THE SHAPE IS "THE OK ROW WAS LOST", and deliberately not the name of the row that replaced it:
+      # these cells are about a silent read of the shadow target, not about LC-O7's whole-file shadow,
+      # and naming that clause's code at a code line would enter this fixture in I65's index as LC-O7's
+      # proof. Measured on the base engine: the lost row is the unprovable-anchor one (the anchor
+      # resolves to nothing in an empty blob); under M1 it is the section-drift one (a truncated blob).
+      # The -HEREDOC suffix is what separates base's lost row from M1's on C2w.
+      if [ "$ovr" = OVERRIDE-OK ]; then echo OVERRIDE-OK
+      elif [ -z "$ovr" ]; then echo "OTHER(no-row-for-the-override)"
+      elif [ "$her" -eq 1 ]; then echo OK-LOST-HEREDOC
+      else echo OK-LOST; fi ;;
+    *)
+      # The positive conjunct: the EXTENSION-HOOK-DRIFT row the adjudicated clause keys on is THERE,
+      # so a run that lost the HARD row still classified -- it is not a copy that never ran.
+      if [ "$ndrift" -ne 1 ]; then echo "OTHER(hook-drift=$ndrift,hard=$nhard)"
+      elif [ "$nhard" -eq 1 ]; then echo ALL-ROWS
+      elif [ "$her" -eq 1 ]; then echo LOST-HEREDOC
+      else echo TIER-OFF; fi ;;
+  esac
+}
+
+# hb_shape <recon> <arm> <stub-dir or -> -> the SHAPE of one hard-blockers.sh render from SUPPLIED
+# rows. The layer-drift rows are a PARTIAL set -- three non-HARD rows of the ext world's healthy run,
+# a prefix of what a refused run leaves behind -- and unregistered-drift's are empty. The forcing input
+# is the supplied rc: 2 for the cell's own detector when forced, 0 for both in the control.
+HB_LD_ROWS="$WORK/hb-rows-ld"; HB_UD_ROWS="$WORK/hb-rows-ud"
+head -n 3 "$LW_EXT.out" > "$HB_LD_ROWS"; : > "$HB_UD_ROWS"
+_n="$(awk -F'\t' '$1 !~ /^HARD-/' "$HB_LD_ROWS" | "$REAL_GREP" -c .)" || _n=0
+[ "$_n" -eq 3 ] || { echo "FIXTURE ERROR: hb rows: the partial layer-drift set holds $_n non-HARD row(s), want 3" >&2; exit 2; }
+hb_shape() {
+  local R="$1" A="$2" sd="$3" p="$PATH" out rc lrc=0 urc=0 nref nld naff nb ne
+  if [ "$sd" != - ]; then
+    p="$sd:$PATH"
+    case "$A" in C5-ld) lrc=2 ;; C5-ud) urc=2 ;; esac
+  fi
+  out="$(PATH="$p" "$REAL_BASH" "$R/hard-blockers.sh" --ld-rows "$HB_LD_ROWS" --ld-rc "$lrc" --ud-rows "$HB_UD_ROWS" --ud-rc "$urc" \
+           "$LW_EXT/dist" "$(cat "$LW_EXT/B")" "$LW_EXT/consumer" "$(cat "$LW_EXT/T")" 2>/dev/null)"; rc=$?
+  nref="$("$REAL_GREP" -c '^DETECTOR-REFUSED' <<<"$out")" || nref=0
+  nld="$("$REAL_GREP" -c '^DETECTOR-REFUSED.*layer-drift[.]sh exited 2 ' <<<"$out")" || nld=0
+  naff="$("$REAL_GREP" -cxF '0 HARD blockers.' <<<"$out")" || naff=0
+  nb="$("$REAL_GREP" -c '^<!-- BEGIN GENERATED: hard-blockers' <<<"$out")" || nb=0
+  ne="$("$REAL_GREP" -c '^<!-- END GENERATED: hard-blockers' <<<"$out")" || ne=0
+  # The region's two markers are the positive conjunct: a copy that never ran renders neither.
+  if [ "$rc" -ne 0 ] || [ "$nb" -ne 1 ] || [ "$ne" -ne 1 ]; then echo "OTHER(rc=$rc,begin=$nb,end=$ne)"
+  elif [ "$naff" -eq 1 ] && [ "$nref" -eq 0 ]; then echo AFFIRMATIVE
+  elif [ "$naff" -eq 0 ] && [ "$nref" -eq 1 ] && [ "$nld" -eq 1 ]; then echo REFUSED-ROW
+  elif [ "$naff" -eq 0 ] && [ "$nref" -eq 0 ]; then echo NO-AFFIRMATIVE
+  else echo "OTHER(affirmative=$naff,refused=$nref,ld-refused=$nld)"; fi
 }
 
 # === ONE ARM ======================================================================================
@@ -826,6 +1046,8 @@ arm_shape() {
     U1|U2|U2b|U3|U4|U5|U5b|U6-hit|U6-fill) ud_shape "$2" "$1" "$3" ;;
     Aud|Art|Arlp|Ald|Ana) ap_shape "$2" "$1" "$3" ;;
     L5|L5c|L5b|L5b-hard|L5d|L5e|L5-pre) ld_shape "$2" "$1" "$3" ;;
+    C1|C1w|C4|C2|C2w|C2s|C3) lc_shape "$2" "$1" "$3" ;;
+    C5-ld|C5-ud) hb_shape "$2" "$1" "$3" ;;
   esac
 }
 # THE EXPECTATION TABLE. <arm> <key> <control shape> <tip shape> <base shape>
@@ -857,7 +1079,20 @@ L5b ld ALL-ROWS XFSZ-RC2-NAMED XFSZ-RC0-LOST
 L5b-hard ld ALL-ROWS XFSZ-RC2-NAMED XFSZ-RC0-LOST
 L5d ld ALL-ROWS-DS XFSZ-RC2-NAMED XFSZ-RC0-LOST
 L5e ld ALL-ROWS-DS XFSZ-RC2-NAMED XFSZ-RC0-LOST
-L5-pre ld ALL-ROWS BROKEN-HEREDOC BROKEN-HEREDOC'
+L5-pre ld ALL-ROWS REFUSED-CONTRACT BROKEN-HEREDOC
+C1 lc ALL-ROWS REFUSED-CONTRACT LOST-HEREDOC
+C1w lc ALL-ROWS ALL-ROWS LOST-HEREDOC
+C4 lc CODES-LISTED REFUSED-CONTRACT CODES-EMPTY-HEREDOC
+C2 lo OVERRIDE-OK REFUSED-READ OK-LOST-HEREDOC
+C2w lo OVERRIDE-OK REFUSED-STAGE OK-LOST-HEREDOC
+C2s lo OVERRIDE-OK REFUSED-SECTION OK-LOST
+C3 lc ALL-ROWS REFUSED-R2 TIER-OFF
+C5-ld hb AFFIRMATIVE REFUSED-ROW AFFIRMATIVE
+C5-ud hb AFFIRMATIVE NO-AFFIRMATIVE AFFIRMATIVE'
+# The base cells whose base reading IS a here-string that could not be staged. On a bash that feeds
+# a here-string without a temp file the base cannot lose one, and those cells then read INCONCLUSIVE
+# -- keyed on the base run printing bash's own message, never on the bash version.
+LC_HEREDOC_ARMS=' C1 C1w C4 C2w '
 col() { awk -v a="$1" -v c="$2" '$1==a {print $c}' <<<"$EXPECT"; }
 arms_of() { awk -v k="$1" '$2==k {print $1}' <<<"$EXPECT"; }
 
@@ -1236,6 +1471,45 @@ for A in $(arms_of ld); do
     bad "$A on the ${LD_BASE_SHA} engine: $1, expected $(col "$A" 5) -- the cell cannot tell the pre-fix engine from the fix"
   fi
 done
+# The C cells on the same pre-fix copy (whose hard-blockers.sh is a0a9c556's too). A here-string cell
+# whose base run did NOT print bash's here-string message reads INCONCLUSIVE, never ok and never FAIL:
+# that bash lost nothing, so the cell discriminates nothing on it.
+for A in $(arms_of lc) $(arms_of lo) $(arms_of hb); do
+  set -- $(forced "$A" "$LD_BASE" base)
+  case "$LC_HEREDOC_ARMS" in
+    *" $A "*) if [ ! -f "$WORK/stub/base-$A/HEREDOC" ]; then
+                printf '  INCONCLUSIVE  %s on the %s engine: %s, and the run printed no here-string failure -- this bash staged nothing it could lose, so the cell cannot fail the pre-fix engine here\n' "$A" "$LD_BASE_SHA" "$1"
+                continue
+              fi ;;
+  esac
+  if [ "${2:-0}" -gt 0 ] && [ "$1" = "$(col "$A" 5)" ]; then
+    ok "$A on the ${LD_BASE_SHA} engine (stub fired ${2}x): $1 -- the cell fails the pre-fix engine"
+  elif [ "${2:-0}" -eq 0 ]; then
+    bad "$A FIXTURE BROKEN: on the ${LD_BASE_SHA} engine the stub never fired, so its shape ($1) says nothing"
+  else
+    bad "$A on the ${LD_BASE_SHA} engine: $1, expected $(col "$A" 5) -- the cell cannot tell the pre-fix engine from the fix"
+  fi
+done
+
+# === SPELL: layer-drift.sh carries no here-string =================================================
+# A non-comment `<<<` count, probed on a mktemp copy BEFORE the corpus in both directions: a seeded
+# offender must count, and a seeded near-miss -- the operator inside a comment, indented as the
+# engine's own comments are -- must not. The a0a9c556 engine is the positive control on the real text.
+spell_count() { awk '/^[[:space:]]*#/ { next } /<<</ { n++ } END { print n + 0 }' "$1"; }
+_sp="$(mktemp -d "$WORK/spell.XXXXXX")" || { echo "FIXTURE ERROR: mktemp spell" >&2; exit 2; }
+cp "$RECON/layer-drift.sh" "$_sp/offender.sh" && cp "$RECON/layer-drift.sh" "$_sp/nearmiss.sh" \
+  || { echo "FIXTURE ERROR: spell probe copies" >&2; exit 2; }
+printf '  x="$(awk %s <<<"$y")"\n' "'{print}'" >> "$_sp/offender.sh"
+printf '    # a comment naming the here-string operator, <<<"$y", is not a site\n' >> "$_sp/nearmiss.sh"
+_so="$(spell_count "$_sp/offender.sh")"; _sn="$(spell_count "$_sp/nearmiss.sh")"; _st="$(spell_count "$RECON/layer-drift.sh")"
+_sb="$(spell_count "$LD_BASE/layer-drift.sh")"
+if [ "$_so" -ne $(( _st + 1 )) ] || [ "$_sn" -ne "$_st" ] || [ "$_sb" -eq 0 ]; then
+  bad "SPELL probe: a seeded offender counted $_so (want $(( _st + 1 ))), a seeded comment near-miss $_sn (want $_st), the ${LD_BASE_SHA} engine $_sb (want > 0) -- the count cannot discriminate, so its zero below is no finding"
+elif [ "$_st" -eq 0 ]; then
+  ok "SPELL: layer-drift.sh carries 0 non-comment here-strings (probe: offender +1, comment near-miss +0, the ${LD_BASE_SHA} engine $_sb)"
+else
+  bad "SPELL: layer-drift.sh carries $_st non-comment here-string(s) -- a \`<<<\` whose temp file cannot be written feeds its command EMPTY stdin at the command's own exit status (BL-359)"
+fi
 # THE HEALTHY PATH IS BYTE-IDENTICAL TO THE PRE-FIX ENGINE, in both modes, on every L world. The two
 # engine files are asserted to DIFFER first, or the comparison reads one program twice.
 if cmp -s "$RECON/layer-drift.sh" "$LD_BASE/layer-drift.sh"; then
@@ -1334,6 +1608,77 @@ LD_RAWB="  printf '%s\\t%s\\t%s\\t%s\\n' \"\$1\" \"\$2\" \"\$3\" \"\$4\""
        mut M-LD-raw-uncounted "$LDS" "$SWAP" "$LD_RAWB" - "$LD_RAW")" \
     && score_as M-LD-raw-uncounted ld "$d" L5b-hard=XFSZ-RC0-LOST \
     || mutreport M-LD-raw-uncounted
+
+# === BL-359 MUTANTS: each restores ONE silent-read site, anchored on the line that decides it ======
+# TWO SCORING KEYS, lc (the contract cells, big world) and lo (the override cells, huge world), and
+# the split is a COST decision: one key made every mutant re-run all seven cells, and the unit rose
+# ~31% over its pre-change wall clock (interleaved, alone). Each mutant is now held to its own key's
+# cells staying at the tip shape; every cell of both keys still runs once on the tip and once on the
+# a0a9c556 engine above, so no cell is unscored -- what is given up is a cross-key ENTANGLEMENT read.
+# M1: ld_stage's write status ignored. Under `trap '' XFSZ` the write fails EFBIG and leaves a
+# TRUNCATED file, which the readers then take as whole: C2w's anchor sits past the cut, and the
+# override loses its OK row at rc 0 (measured: to the section-drift row) with NO here-string failure
+# -- OK-LOST, not base's OK-LOST-HEREDOC: the truncation alone is the wrong read.
+LD_STAGE_T="  printf '%s\\n' \"\$2\" > \"\$1\" || _rc=\$?"
+LD_STAGE_M="  printf '%s\\n' \"\$2\" > \"\$1\" || true"
+  d="$(DROP1="$N0" DROP2="$N0" OLD="$LD_STAGE_T" NEW="$LD_STAGE_M" \
+       mut M1-stage-status "$LDS" "$SWAP" "$LD_STAGE_M" - "$LD_STAGE_T")" \
+    && score_as M1-stage-status lo "$d" C2w=OK-LOST \
+    || mutreport M1-stage-status
+# M2: the R2 post-condition deleted -- its test line through its closing `fi` (the ld_refuse line
+# inside is anchored too, so the block the mutation removes is that one and no other).
+LD_R2_IF='if [ "$_ac_n" -gt 0 ] && [ -z "$ADJ_CODES" ]; then'
+LD_R2_REF='  ld_refuse "the ADJUDICATED code set out of $ADJ_CONTRACT_REL" 1'
+  d="$(START="$LD_R2_IF" END='fi' NFI=1 NEW=': ZZ-PSB-M2-NO-R2' \
+       mut M2-no-r2 "$LDS" "$BLOCK" ': ZZ-PSB-M2-NO-R2' 'set read out of it is EMPTY' "$LD_R2_IF" "$LD_R2_REF")" \
+    && score M2-no-r2 C3 "$d" \
+    || mutreport M2-no-r2
+# M3: the ADJUDICATED code-set awk fed by `<<<` again. A cold contract read refuses before the awk
+# runs, so only C1w -- the contract served from a warm memo with nothing written -- reaches it; there
+# the here-string's temp file is what fails. THE FIX IS THREE LAYERS AT THIS SITE and each is scored:
+#   M3  the feed alone: bash 3.2 does not run a command whose here-string cannot be staged and the
+#       site returns 1, which the KEPT status read refuses -- REFUSED-CODES, not the tip's ALL-ROWS.
+#   M3b the feed AND the status read: the capture comes back empty at 0, and R2 -- the contract carries
+#       a level-ADJUDICATED line, the code set is empty -- is what refuses: REFUSED-R2.
+#   M2 above deletes R2 alone, on C3. The three together say no one layer is standing in for another.
+LD_CODES_T="ADJ_CODES=\"\$(printf '%s\\n' \"\$ADJ_CONTRACT_TEXT\" | awk '"
+LD_CODES_E="')\" || _ac_rc=\$?"
+LD_CODES_B="' <<<\"\$ADJ_CONTRACT_TEXT\")\" || _ac_rc=\$?"
+LD_CODES_B2="' <<<\"\$ADJ_CONTRACT_TEXT\")\""
+M3_PROG='$0==ENVIRON["S"] {print "ADJ_CODES=\"$(awk '"'"'"; inb=1; next}
+         inb && $0==ENVIRON["E"] {print ENVIRON["NB"]; inb=0; next} {print}'
+  d="$(S="$LD_CODES_T" E="$LD_CODES_E" NB="$LD_CODES_B" \
+       mut M3-codes-herestring "$LDS" "$M3_PROG" "$LD_CODES_B" "$LD_CODES_T" "$LD_CODES_T")" \
+    && score_as M3-codes-herestring lc "$d" C1w=REFUSED-CODES \
+    || mutreport M3-codes-herestring
+  d="$(S="$LD_CODES_T" E="$LD_CODES_E" NB="$LD_CODES_B2" \
+       mut M3b-codes-herestring-unread "$LDS" "$M3_PROG" "$LD_CODES_B2" "$LD_CODES_T" "$LD_CODES_T")" \
+    && score_as M3b-codes-herestring-unread lc "$d" C1w=REFUSED-R2 \
+    || mutreport M3b-codes-herestring-unread
+# M4: section_of's status discarded at the override site -- the refusal line after it deleted.
+# C2 and C2w refuse at the blob's read or staging before section_of runs; C2s fails section_of's own
+# mktemp and is the only cell that reaches this line with a failing call.
+LD_SEC_R='    [ "$_at_rc" -eq 0 ] || ld_refuse_staging "section_of for ${entry} #${id}" "$_at_rc"'
+  d="$(DROP1="$N0" DROP2="$N0" OLD="$LD_SEC_R" NEW='    : ZZ-PSB-M4-SECTION-UNREAD' \
+       mut M4-section-status "$LDS" "$SWAP" '    : ZZ-PSB-M4-SECTION-UNREAD' '"section_of for ${entry}' \
+         "$LD_SEC_R" '    s_theirs="$(section_of "$id" < "$LD_T/a_text")" || _at_rc=$?')" \
+    && score M4-section-status C2s "$d" \
+    || mutreport M4-section-status
+# M5 / M6: hard-blockers.sh's two suppressions restored to the 31a056c3 spelling, one each. Anchored
+# on the TEST lines, never on the DETECTOR-REFUSED row text, which is reworded independently.
+HB=hard-blockers.sh
+HB_LD_T='if [ "${LD_RC:-0}" -ne 0 ]; then'
+HB_LD_B='if [ -z "$LD_ROWS_FILE" ] && [ "${LD_RC:-0}" -ne 0 ]; then'
+  d="$(DROP1="$N0" DROP2="$N0" OLD="$HB_LD_T" NEW="$HB_LD_B" \
+       mut M5-hb-ld "$HB" "$SWAP" "$HB_LD_B" - "$HB_LD_T")" \
+    && score M5-hb-ld C5-ld "$d" \
+    || mutreport M5-hb-ld
+HB_UD_T='    [ -z "$REFUSALS" ] && [ -z "$UD_SUPPLIED_REFUSED" ] && echo "0 HARD blockers."'
+HB_UD_B='    [ -z "$REFUSALS" ] && echo "0 HARD blockers."'
+  d="$(DROP1="$N0" DROP2="$N0" OLD="$HB_UD_T" NEW="$HB_UD_B" \
+       mut M6-hb-ud "$HB" "$SWAP" "$HB_UD_B" - "$HB_UD_T")" \
+    && score M6-hb-ud C5-ud "$d" \
+    || mutreport M6-hb-ud
 ld_heredoc_gate
 
 echo

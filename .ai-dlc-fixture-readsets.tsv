@@ -9,7 +9,7 @@
 # every other fixture's entries alone, so refreshing one fixture costs its own runtime
 # rather than a full re-derivation.
 #
-# fixtures mapped: 214    entries: 34573
+# fixtures mapped: 214    entries: 34584
 absorbed-specifics-survive	.git/HEAD
 absorbed-specifics-survive	.git/config
 absorbed-specifics-survive	.git/index
@@ -21148,13 +21148,14 @@ preclassify-rename-row	.git/HEAD
 preclassify-rename-row	.git/config
 preclassify-rename-row	.git/index
 preclassify-rename-row	.git/info/exclude
-preclassify-rename-row	.git/objects/49/330f4a1b67ec0aedaecf2b276983c1287ee47b
-preclassify-rename-row	.git/objects/7d/7c68d9a8da8fe97f6ca4a8bda439f717b1a34c
+preclassify-rename-row	.git/objects/d2/76fcfe330a9411841c6c6b51b04988d6c6f4a5
+preclassify-rename-row	.git/objects/e5/2a87ffc90b2cc2bd26e11aa48e008a5faa6a9e
 preclassify-rename-row	.git/objects/info/commit-graphs/commit-graph-chain
 preclassify-rename-row	.git/objects/info/commit-graphs/graph-93e6403e1d08d4a02b08f717afce6dcbebb27492.graph
+preclassify-rename-row	.git/objects/info/commit-graphs/graph-d42403a589c72531d2a70bbcab5c31aa22fceed3.graph
 preclassify-rename-row	.git/objects/pack/multi-pack-index
 preclassify-rename-row	.git/packed-refs
-preclassify-rename-row	.git/refs/heads/main
+preclassify-rename-row	.git/refs/heads/release/0.658.0-bl359
 preclassify-rename-row	.gitignore
 preclassify-rename-row	core
 preclassify-rename-row	core/fixtures
@@ -21168,6 +21169,7 @@ preclassify-rename-row	core/skills/ai-dlc-update/reconcile
 preclassify-rename-row	core/skills/ai-dlc-update/reconcile/adopt-extension-checks.sh
 preclassify-rename-row	core/skills/ai-dlc-update/reconcile/apply.sh
 preclassify-rename-row	core/skills/ai-dlc-update/reconcile/classify-block.md
+preclassify-rename-row	core/skills/ai-dlc-update/reconcile/derivation-differential.sh
 preclassify-rename-row	core/skills/ai-dlc-update/reconcile/emit-report.sh
 preclassify-rename-row	core/skills/ai-dlc-update/reconcile/hard-blockers.sh
 preclassify-rename-row	core/skills/ai-dlc-update/reconcile/layer-drift.sh
@@ -21400,15 +21402,24 @@ procsub-staged-refusal-boot	.git/config
 procsub-staged-refusal-boot	.git/index
 procsub-staged-refusal-boot	.git/info/exclude
 procsub-staged-refusal-boot	.git/objects
-procsub-staged-refusal-boot	.git/objects/12/513e55937abe7820e32fcca4043f2580fa4ccd
-procsub-staged-refusal-boot	.git/objects/e7/9994cb8108cefb5b36b836641511882b842526
+procsub-staged-refusal-boot	.git/objects/12/047aa17323ca0bd1ef47a60c8e0f421c328fca
+procsub-staged-refusal-boot	.git/objects/14/5978eb5d30d0aac55fdb8bb01f522a90928d95
+procsub-staged-refusal-boot	.git/objects/1b/7f4df617f66020d36a9010b9f8a6fc06f605c7
+procsub-staged-refusal-boot	.git/objects/46/c803edd65ece658d1e7a4f5f126d09e790fda6
+procsub-staged-refusal-boot	.git/objects/9f/7338a4704a32fbebccf4fe59660c50966117fb
+procsub-staged-refusal-boot	.git/objects/a0/a9c556b926527a6f92285df31739b10e83fc38
+procsub-staged-refusal-boot	.git/objects/a2/3a02559c6c80a6c25259701f0c065b506c7ade
+procsub-staged-refusal-boot	.git/objects/d9/2a7bb7f588f213c01dabf6a93628db290d4155
+procsub-staged-refusal-boot	.git/objects/fc/ae05622632e003d6bb77a2be59efa59bdf9d6d
 procsub-staged-refusal-boot	.git/objects/info/commit-graphs/commit-graph-chain
 procsub-staged-refusal-boot	.git/objects/info/commit-graphs/graph-93e6403e1d08d4a02b08f717afce6dcbebb27492.graph
 procsub-staged-refusal-boot	.git/objects/info/commit-graphs/graph-d42403a589c72531d2a70bbcab5c31aa22fceed3.graph
 procsub-staged-refusal-boot	.git/objects/pack/multi-pack-index
+procsub-staged-refusal-boot	.git/objects/pack/pack-311bbc7a1e36ecef56f58653104310cb62bdedcf.idx
+procsub-staged-refusal-boot	.git/objects/pack/pack-311bbc7a1e36ecef56f58653104310cb62bdedcf.pack
 procsub-staged-refusal-boot	.git/packed-refs
 procsub-staged-refusal-boot	.git/refs
-procsub-staged-refusal-boot	.git/refs/heads/docs/close-batch-163
+procsub-staged-refusal-boot	.git/refs/heads/release/0.658.0-bl359
 procsub-staged-refusal-boot	.gitignore
 procsub-staged-refusal-boot	core
 procsub-staged-refusal-boot	core/fixtures
