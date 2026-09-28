@@ -37,6 +37,14 @@
 #   U2b unregistered-drift  memo listing alone fails -- the NEAR-MISS for U2: the direct listing
 #                        still answers, so the scan must still run. A refusal keyed on the memo's
 #                        failure alone would pass U2 and fail here.
+#   U5  unregistered-drift  stdout CLOSED         the HARD row cannot be written -> rc 0 with the
+#                        row gone; now rc 2 and one named `unregistered-drift: REFUSED` line
+#   U5b unregistered-drift  EFBIG mid-stream      20 rows, then the HARD row last, into a 1 KiB file
+#                        -> rc 0 with the HARD row lost; now rc 2 and the named line. The case a
+#                        one-shot probe of stdout at start cannot see.
+#   U6  unregistered-drift  memo SERVE fails      the cached listing's `cat` fails -> the cached 0
+#   (-hit, -fill)        was returned, the scan set was empty, rc 0 with no row; now 125, the
+#                        direct listing runs and the file is scanned. One cell per code path.
 #   A*  apply.sh         each of the four detectors it consults, and the scan-unavailable row:
 #                        a refusal (exit 2, reason on stderr) read as "found nothing" -> no row.
 #                        Now a `DECISION <detector>-refused` row carrying the exit and the first
@@ -95,15 +103,20 @@ SIB="$HERE/../reconcile-emit-report"
 
 REAL_TR="$(command -v tr)"; REAL_GIT="$(command -v git)"; REAL_FIND="$(command -v find)"
 REAL_SED="$(command -v sed)"; REAL_COMM="$(command -v comm)"; REAL_GREP="$(command -v grep)"
-REAL_BASH="$(command -v bash)"
-for _b in "$REAL_TR" "$REAL_GIT" "$REAL_FIND" "$REAL_SED" "$REAL_COMM" "$REAL_GREP" "$REAL_BASH"; do
-  case "$_b" in /*) ;; *) echo "FIXTURE ERROR: tr/git/find/sed/comm/grep/bash must resolve to binaries on PATH (got '$_b'), or no stub can pass through" >&2; exit 2 ;; esac
+REAL_BASH="$(command -v bash)"; REAL_CAT="$(command -v cat)"
+for _b in "$REAL_TR" "$REAL_GIT" "$REAL_FIND" "$REAL_SED" "$REAL_COMM" "$REAL_GREP" "$REAL_BASH" "$REAL_CAT"; do
+  case "$_b" in /*) ;; *) echo "FIXTURE ERROR: tr/git/find/sed/comm/grep/bash/cat must resolve to binaries on PATH (got '$_b'), or no stub can pass through" >&2; exit 2 ;; esac
 done
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/psb-boot.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd)"
 EW=""
-trap 'rm -rf "$WORK"; [ -n "$EW" ] && rm -rf "$EW"' EXIT
+# A RUN THAT NEVER REACHED ITS VERDICT EXITS 2. A `set -u` abort mid-battery reaches this trap with
+# `$?` = 0 on bash 3.2 (measured: the fixture exited 0 over an unbound-variable abort, every later
+# mutant unscored), so the status cannot be recovered here -- only the flag the verdict sets can say
+# whether the run got that far.
+PSB_DONE=0
+trap 'rm -rf "$WORK"; [ -n "$EW" ] && rm -rf "$EW"; [ "$PSB_DONE" = 1 ] || { echo "FIXTURE BROKEN: procsub-staged-refusal-boot stopped before its verdict" >&2; exit 2; }' EXIT
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
@@ -146,8 +159,12 @@ mkstub_for() {
     U2b)   stub "$2" git "$REAL_GIT" "*' ls-tree -r --name-only $(cat "$UW_OK/B")'" "$LOGF; echo 'fatal: forced failure' >&2; exit 128" ;;
     U3)    stub "$2" grep "$REAL_GREP" "*'(md|sh|json)'*" "$LOGF; echo 'grep: forced failure' >&2; exit 2" ;;
     U4)    stub "$2" grep "$REAL_GREP" "*'core/team-roles/|core/hooks/'*" "$LOGF; echo 'grep: forced failure' >&2; exit 2" ;;
-    # U5 fails nothing either: its forcing input is the CLOSED STDOUT ud_shape runs it under.
-    U5)    stub "$2" git "$REAL_GIT" "*' ls-tree '*" "$LOGF" ;;
+    # U5 and U5b fail nothing either: their forcing input is the CLOSED STDOUT, or the 1 KiB
+    # file-size limit, that ud_shape runs them under. The stub proves the run reached the listing.
+    U5|U5b) stub "$2" git "$REAL_GIT" "*' ls-tree '*" "$LOGF" ;;
+    # U6: the memo's serve of the cached ls-tree listing -- the `t <dist> <ref>` key's `.c` file --
+    # exits 1 with no output. lib.sh calls `cat` by bare name, so the PATH stub reaches it.
+    U6-hit|U6-fill) stub "$2" cat "$REAL_CAT" "*'/t '*'.c'" "$LOGF; exit 1" ;;
     Aud)   ap_stub "$2" unregistered-drift ;;
     Art)   ap_stub "$2" retired-tokens ;;
     Arlp)  ap_stub "$2" retired-layer-passage ;;
@@ -361,18 +378,33 @@ sg_shape() { # <recon> <arm S1|S2> <stub-dir or ->
 #       base spelling exited 1 on through `pipefail` -- grep's "no match" as the script's status.
 #   ok  one .md, consumer copy byte-identical to base: one CORE-OK row, the positive conjunct that
 #       separates a scan that ran from a copy that never did.
-#   hu  one .md the consumer edited in place: one HARD-UNREGISTERED-CORE-DRIFT row, the one emit in
-#       the loop with no `continue` after it, so it is the loop's last command. U5 runs it with
-#       STDOUT CLOSED: the emit fails, and without the explicit `exit 0` that failure is the loop's
-#       status and the script's (measured: rc 1 at d1c72fa9 and with the `exit 0` deleted, rc 0 on
-#       tip). U1 CANNOT see that line: once the scan set is staged, an empty one runs the loop zero
-#       times and exits 0 without it -- the `exit 0` guards a failing LAST WRITE, nothing else.
-mk_ud_world() { # <dir> <ne|ok|hu>
-  local D="$1/dist" C="$1/consumer"
+#   hu  one .md the consumer edited in place: one HARD-UNREGISTERED-CORE-DRIFT row. U5 runs it with
+#       STDOUT CLOSED, so that row cannot be written. The parent release (c8491750) discarded
+#       printf's status and ended in `exit 0`: rc 0, the row gone, the truncated set read as "no
+#       in-place core edit". The fix counts every failed emit and exits 2 with a named stderr line.
+#   big 20 CORE-OK .md files and ONE in-place edit sorted LAST (`zz-last.md`). U5b runs it with the
+#       file-size limit at 1 KiB: the first rows land, the HARD row does not. This is the MID-STREAM
+#       write failure a one-shot probe of stdout at start cannot see -- stdout is a writable file
+#       when the script begins -- so it is the input that separates a per-emit count from a probe.
+#   U6 (world ok) fails the memo's SERVE of the cached `ls-tree` listing -- a PATH `cat` that exits
+#       1 with no output on the `t <dist> <ref>` key's `.c` file. The parent lib.sh returned the
+#       CACHED 0 for that serve, the prefix filter ran over an empty listing and the scan set was
+#       empty: rc 0, no row. Two cells, because the two serves are two code paths: U6-hit (a memo
+#       warmed by one healthy run, the hit path) and U6-fill (a fresh memo, `_ai_dlc_memo_commit`).
+mk_ud_world() { # <dir> <ne|ok|hu|big>
+  local D="$1/dist" C="$1/consumer" i
   mkdir -p "$D/core/skills/ai-dlc/steps" "$C/.claude/skills/ai-dlc/steps"
   printf '0.1.0\n' > "$D/VERSION"
   if [ "$2" = ne ]; then
     printf 'n\n' > "$D/core/skills/ai-dlc/notes.txt"; printf 'n\n' > "$C/.claude/skills/ai-dlc/notes.txt"
+  elif [ "$2" = big ]; then
+    for i in 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20; do
+      printf '# a%s\n' "$i" > "$D/core/skills/ai-dlc/steps/a$i.md"
+      cp "$D/core/skills/ai-dlc/steps/a$i.md" "$C/.claude/skills/ai-dlc/steps/a$i.md"
+    done
+    printf '# Last step\n\nThe lead reads this file at the top of the last phase.\n' > "$D/core/skills/ai-dlc/steps/zz-last.md"
+    cp "$D/core/skills/ai-dlc/steps/zz-last.md" "$C/.claude/skills/ai-dlc/steps/zz-last.md"
+    printf 'The consumer added this long line to the last phase in place.\n' >> "$C/.claude/skills/ai-dlc/steps/zz-last.md"
   elif [ "$2" = hu ]; then
     printf '# One step\n\nThe lead reads this file at the top of the one phase.\n' > "$D/core/skills/ai-dlc/steps/one.md"
     cp "$D/core/skills/ai-dlc/steps/one.md" "$C/.claude/skills/ai-dlc/steps/one.md"
@@ -387,7 +419,7 @@ mk_ud_world() { # <dir> <ne|ok|hu>
   git -C "$D" rev-parse HEAD > "$1/T"
   printf 'version: 0.1.0\ncommit: %s\n' "$(cat "$1/B")" > "$C/.claude/.ai-dlc-version"
 }
-UW_NE="$WORK/uw-ne"; UW_OK="$WORK/uw-ok"; UW_HU="$WORK/uw-hu"
+UW_NE="$WORK/uw-ne"; UW_OK="$WORK/uw-ok"; UW_HU="$WORK/uw-hu"; UW_BIG="$WORK/uw-big"
 mk_ud_world "$UW_NE" ne || { echo "FIXTURE ERROR: ud ne world" >&2; exit 2; }
 mk_ud_world "$UW_OK" ok || { echo "FIXTURE ERROR: ud ok world" >&2; exit 2; }
 mk_ud_world "$UW_HU" hu || { echo "FIXTURE ERROR: ud hu world" >&2; exit 2; }
@@ -395,15 +427,103 @@ _n="$(git -C "$UW_NE/dist" ls-tree -r --name-only "$(cat "$UW_NE/B")" -- core/sk
 _c="$(git -C "$UW_NE/dist" ls-tree -r --name-only "$(cat "$UW_NE/B")" -- core/skills/ai-dlc | "$REAL_GREP" -c .)" || _c=0
 [ "$_n" -eq 0 ] && [ "$_c" -ge 1 ] \
   || { echo "FIXTURE ERROR: ud ne world: its scan subtree lists $_c path(s), $_n of them .md/.sh/.json (want >= 1 and 0), so U1 cannot express an EMPTY scan set" >&2; exit 2; }
+mk_ud_world "$UW_BIG" big || { echo "FIXTURE ERROR: ud big world" >&2; exit 2; }
+# The 1 KiB limit binds EVERY regular file the run writes, the staged listing and the memo's copy
+# of it included. A listing that itself overflowed would drop `zz-last.md` from the scan set and
+# lose the HARD row for a reason that is not the emit -- so the listing must fit.
+_c="$(git -C "$UW_BIG/dist" ls-tree -r --name-only "$(cat "$UW_BIG/B")" | wc -c | tr -d ' ')" || _c=0
+_n="$(git -C "$UW_BIG/dist" ls-tree -r --name-only "$(cat "$UW_BIG/B")" -- core/skills/ai-dlc/steps | "$REAL_GREP" -c '\.md$')" || _n=0
+[ "$_c" -gt 0 ] && [ "$_c" -lt 1024 ] && [ "$_n" -eq 21 ] \
+  || { echo "FIXTURE ERROR: ud big world: its listing is $_c byte(s) (want 1..1023, so the staged listing survives the 1 KiB limit) with $_n .md file(s) (want 21)" >&2; exit 2; }
+# ud_named <stderr-text> -> how many lines carry the detector's own refusal. Keyed on its PREFIX and
+# its phrase, never on "write error": bash prints `printf: write error: ...` itself, at base too.
+ud_named() {
+  local n
+  n="$(awk '/^unregistered-drift: REFUSED/ && /could not be written to stdout/' <<<"$1" | "$REAL_GREP" -c .)" || n=0
+  printf '%s' "$n"
+}
 ud_shape() { # <recon> <arm> <stub-dir or ->
-  local W p="$PATH" out rc n nun nok nhu det
-  case "$2" in U1) W="$UW_NE" ;; U5) W="$UW_HU" ;; *) W="$UW_OK" ;; esac
+  local W p="$PATH" out rc n nun nok nhu det err nm md mv=""
+  case "$2" in U1) W="$UW_NE" ;; U5) W="$UW_HU" ;; U5b) W="$UW_BIG" ;; *) W="$UW_OK" ;; esac
   [ "$3" = - ] || p="$3:$PATH"
   if [ "$2" = U5 ] && [ "$3" != - ]; then
-    PATH="$p" "$REAL_BASH" "$1/unregistered-drift.sh" "$W/dist" "$(cat "$W/B")" "$W/consumer" "$(cat "$W/T")" >&- 2>/dev/null
-    echo "CLOSED-RC$?"; return 0
+    # stderr to the capture, THEN stdout closed -- in that order, or the capture is closed too.
+    err="$(PATH="$p" "$REAL_BASH" "$1/unregistered-drift.sh" "$W/dist" "$(cat "$W/B")" "$W/consumer" "$(cat "$W/T")" 2>&1 >&-)"; rc=$?
+    nm="$(ud_named "$err")"
+    # rc 2 WITHOUT the line, or the line with another rc, is OTHER: an early exit 2 for a different
+    # reason must not pass. rc 0 is the parent release (the row lost silently); rc 1 is the
+    # pipe-to-`while` listing before it (M-U-base), where the failed write became the loop's status.
+    if [ "$rc" -eq 2 ] && [ "$nm" -eq 1 ]; then echo CLOSED-RC2-NAMED
+    elif [ "$rc" -le 1 ] && [ "$nm" -eq 0 ]; then echo "CLOSED-RC$rc"
+    else echo "OTHER(rc=$rc,named=$nm)"
+    fi
+    return 0
   fi
-  out="$(PATH="$p" "$REAL_BASH" "$1/unregistered-drift.sh" "$W/dist" "$(cat "$W/B")" "$W/consumer" "$(cat "$W/T")" 2>/dev/null)"; rc=$?
+  if [ "$2" = U5b ]; then
+    # THE rc IS READ THROUGH THE SUBSHELL ONLY. SIGXFSZ is ignored, so a write past 1 KiB fails with
+    # EFBIG instead of killing the script, which is what a regular staged file does under a quota.
+    # STDERR GOES TO A PIPE, NOT A FILE: the limit binds every regular file the process writes, and
+    # bash's own `<path>: line N: printf: write error: File too large`, one per lost row, fills a
+    # 1 KiB stderr FILE before the named line is reached -- which would read as the fix not naming it.
+    out="$(mktemp "$WORK/u5b-out.XXXXXX")" || { echo "OTHER(mktemp)"; return 0; }
+    if [ "$3" = - ]; then
+      err="$( ( exec "$REAL_BASH" "$1/unregistered-drift.sh" "$W/dist" "$(cat "$W/B")" "$W/consumer" "$(cat "$W/T")" > "$out" ) 2>&1 )"; rc=$?
+    else
+      # UNDER XTRACE, so the scan loop's iterations can be COUNTED (`+ rel=` is its first assignment
+      # after the break). After a failed write bash leaks the unwritten row into every later `$( )`,
+      # so an iteration past the failure skips its file and emits nothing, and no PATH binary runs in
+      # it: a scan that did NOT stop there prints exactly what one that stopped prints -- same rc,
+      # same rows, same N (measured: 11 rows, N=10, both ways) -- and differs only in iterations,
+      # 11 against 21. bash 3.2 has no BASH_XTRACEFD, so the trace shares the stderr pipe.
+      err="$( ( trap '' XFSZ; ulimit -f 1; PATH="$p"; export PATH
+        exec "$REAL_BASH" -x "$1/unregistered-drift.sh" "$W/dist" "$(cat "$W/B")" "$W/consumer" "$(cat "$W/T")" > "$out" ) 2>&1 )"; rc=$?
+    fi
+    nok="$(awk -F'\t' '$1=="CORE-OK"' "$out" | "$REAL_GREP" -c .)" || nok=0
+    nhu="$(awk -F'\t' '$1=="HARD-UNREGISTERED-CORE-DRIFT" && $2=="skills/ai-dlc/steps/zz-last.md"' "$out" | "$REAL_GREP" -c .)" || nhu=0
+    n="$("$REAL_GREP" -c . "$out")" || n=0
+    nm="$(ud_named "$err")"
+    local nb nit nw nn; nb="$(wc -c < "$out" | tr -d ' ')"
+    # nw: rows that landed WHOLE (the last one the limit cut is not); nn: the N the refusal names.
+    nw="$(awk -F'\t' -v b="byte-identical to $(cat "$W/B")" '$1=="CORE-OK" && $3==b' "$out" | "$REAL_GREP" -c .)" || nw=0
+    nit="$("$REAL_GREP" -c '^+ rel=' <<<"$err")" || nit=0
+    nn="$(awk '/^unregistered-drift: REFUSED/ { for (i=1;i<=NF;i++) if ($i=="after") { print $(i+1); exit } }' <<<"$err")"
+    case "$nn" in ''|*[!0-9]*) nn=-1 ;; esac
+    if [ "$3" = - ]; then
+      # A WORLD WHOSE WHOLE OUTPUT FITS IN 1 KiB CANNOT HIT THE LIMIT, and its forced run would read
+      # exactly like a fixed script. The control asserts the full output is larger than the limit.
+      if [ "$rc" -eq 0 ] && [ "$n" -eq 21 ] && [ "$nok" -eq 20 ] && [ "$nhu" -eq 1 ] && [ "$nb" -gt 1024 ]; then echo ALL-ROWS
+      else echo "OTHER(rc=$rc,rows=$n,ok=$nok,hard=$nhu,bytes=$nb)"; fi
+    # Both forced shapes demand that SOME rows landed and that the HARD row, written last, did not:
+    # a write failure that began at the first row is U5's case, not this one.
+    elif [ "$rc" -le 1 ] && [ "$nhu" -eq 0 ] && [ "$nok" -ge 1 ] && [ "$nm" -eq 0 ]; then echo "XFSZ-RC$rc-LOST"
+    # The fixed shape also STOPPED: every row it wrote came from its own iteration, so iterations are
+    # the whole rows plus the one whose write failed, and the refusal's N is the whole rows.
+    elif [ "$rc" -eq 2 ] && [ "$nhu" -eq 0 ] && [ "$nok" -ge 1 ] && [ "$nm" -eq 1 ] \
+         && [ "$nn" -eq "$nw" ] && [ "$nit" -eq $(( nw + 1 )) ]; then echo XFSZ-RC2-NAMED
+    elif [ "$rc" -eq 2 ] && [ "$nhu" -eq 0 ] && [ "$nm" -eq 1 ] && [ "$nit" -gt $(( nw + 1 )) ]; then echo XFSZ-RC2-NOSTOP
+    else echo "OTHER(rc=$rc,ok=$nok,whole=$nw,N=$nn,iterations=$nit,hard=$nhu,named=$nm,bytes=$nb)"
+    fi
+    rm -f "$out"
+    return 0
+  fi
+  case "$2" in
+    U6-hit|U6-fill)
+      # A MEMO THE RUN IS HANDED, per call: the hit cell's must hold the `t` key's answer before the
+      # forced run (warmed by one healthy run), the fill cell's must not -- or the two cells would
+      # exercise one code path twice.
+      md="$(mktemp -d "$WORK/u6-memo.XXXXXX")" || { echo "OTHER(mktemp)"; return 0; }
+      if [ "$2" = U6-hit ]; then
+        AI_DLC_RECONCILE_MEMO="$md" "$REAL_BASH" "$1/unregistered-drift.sh" "$W/dist" "$(cat "$W/B")" "$W/consumer" "$(cat "$W/T")" >/dev/null 2>&1
+      fi
+      set -- "$1" "$2" "$3" "$(ls "$md" | "$REAL_GREP" -c '^t .*\.s$')"
+      case "$2:$4" in U6-hit:1|U6-fill:0) ;; *) echo "OTHER(memo-t-keys=$4)"; return 0 ;; esac
+      mv="$md" ;;
+  esac
+  if [ -n "$mv" ]; then
+    out="$(AI_DLC_RECONCILE_MEMO="$mv" PATH="$p" "$REAL_BASH" "$1/unregistered-drift.sh" "$W/dist" "$(cat "$W/B")" "$W/consumer" "$(cat "$W/T")" 2>/dev/null)"; rc=$?
+  else
+    out="$(PATH="$p" "$REAL_BASH" "$1/unregistered-drift.sh" "$W/dist" "$(cat "$W/B")" "$W/consumer" "$(cat "$W/T")" 2>/dev/null)"; rc=$?
+  fi
   n="$("$REAL_GREP" -c . <<<"$out")" || n=0
   nun="$(awk -F'\t' '$1=="HARD-DRIFT-SCAN-UNAVAILABLE"' <<<"$out" | "$REAL_GREP" -c .)" || nun=0
   nok="$(awk -F'\t' '$1=="CORE-OK"' <<<"$out" | "$REAL_GREP" -c .)" || nok=0
@@ -475,7 +595,7 @@ arm_shape() {
     P1) pc_shape "$2" "$3" ;;
     E1) er_shape "$2" "$3" ;;
     S1|S2|S3) sg_shape "$2" "$1" "$3" ;;
-    U1|U2|U2b|U3|U4|U5) ud_shape "$2" "$1" "$3" ;;
+    U1|U2|U2b|U3|U4|U5|U5b|U6-hit|U6-fill) ud_shape "$2" "$1" "$3" ;;
     Aud|Art|Arlp|Ald|Ana) ap_shape "$2" "$1" "$3" ;;
   esac
 }
@@ -493,7 +613,10 @@ U2 ud SCANNED UNAVAILABLE-LISTING RC1-NOROW
 U2b ud SCANNED SCANNED SCANNED
 U3 ud SCANNED UNAVAILABLE-EXT RC2-NOROW
 U4 ud SCANNED UNAVAILABLE-PREFIX SCANNED
-U5 ud HARD-UNREG CLOSED-RC0 CLOSED-RC1
+U5 ud HARD-UNREG CLOSED-RC2-NAMED CLOSED-RC0
+U5b ud ALL-ROWS XFSZ-RC2-NAMED XFSZ-RC0-LOST
+U6-hit ud SCANNED SCANNED EMPTY
+U6-fill ud SCANNED SCANNED EMPTY
 Aud ap NO-REFUSAL REFUSED NO-REFUSAL
 Art ap NO-REFUSAL REFUSED NO-REFUSAL
 Arlp ap NO-REFUSAL REFUSED NO-REFUSAL
@@ -593,8 +716,12 @@ score() {
 # shape OTHER than the base spelling's (M-U2a reads EMPTY, the silent clear, where the whole base
 # pipeline read rc 1), or that two arms genuinely both own. Every arm NOT named must stay at its
 # tip shape, so an undeclared move is still ENTANGLED.
+# ITS LOCAL IS `sfails`, NEVER `fails`: a local of that name shadows the global counter, and `bad`'s
+# `$((fails+1))` then evaluates the SURVIVED detail (`U5b=XFSZ-RC0-LOST(...)`) as arithmetic, which
+# under `set -u` aborts the whole fixture on its first unbound word -- exit 0 through the EXIT trap,
+# every later mutant unscored. Measured on the first survivor this function ever reported.
 score_as() {
-  local m="$1" k="$2" d="$3" A want got fails="" others_ok=1 detail="" named=""
+  local m="$1" k="$2" d="$3" A want got sfails="" others_ok=1 detail="" named=""
   shift 3
   for A in $(arms_of "$k"); do
     want=""
@@ -603,12 +730,12 @@ score_as() {
     got="$1"; local fired="${2:-0}"; shift 2
     if [ -n "$want" ]; then
       named="$named $A=$got"
-      [ "$fired" -gt 0 ] && [ "$got" = "$want" ] || fails="$fails $A=$got(want $want,fired=$fired)"
+      [ "$fired" -gt 0 ] && [ "$got" = "$want" ] || sfails="$sfails $A=$got(want $want,fired=$fired)"
     else
       [ "$fired" -gt 0 ] && [ "$got" = "$(col "$A" 4)" ] || { others_ok=0; detail="$detail $A=$got"; }
     fi
   done
-  if [ -n "$fails" ]; then bad "MUTANT SURVIVED [$m]:$fails -- the arm cannot see its own site revert"
+  if [ -n "$sfails" ]; then bad "MUTANT SURVIVED [$m]:$sfails -- the arm cannot see its own site revert"
   elif [ "$others_ok" -eq 1 ]; then ok "MUTANT KILLED [$m]:$named, every other $k arm stays at its tip shape"
   else bad "MUTANT ENTANGLED [$m]:$named but undeclared arm(s) moved too:$detail"; fi
   return 0
@@ -720,18 +847,40 @@ cat > "$U_BASE_F" <<'EOB' || { echo "FIXTURE ERROR: could not write $U_BASE_F" >
 EOB
 _h="$("$REAL_GREP" -c . "$U_BASE_F")" || _h=0
 [ "$_h" -eq 7 ] || { echo "FIXTURE ERROR: the base listing block is $_h line(s), not 7" >&2; exit 2; }
+# THE EMIT, EVERY LAYER. The tip counts each failed write and leaves through `ud_finish`; the base
+# spelling discards printf's status and exits where it stands. M-U-base restores all of it, so the
+# copy is the whole earlier program and not a hybrid whose listing is old and whose exit is new.
+# U_EMIT_T is the tip emit's FAILURE branch -- the line that counts a lost row; U_EMIT_B the whole
+# one-line base emit. U_BREAK_T is the scan loop's stop at the first failed write.
+U_EMIT_T='  else ud_emit_failed=$(( ud_emit_failed + 1 )); fi'
+U_EMIT_B="emit() { printf '%s\\t%s\\t%s\\n' \"\$1\" \"\$2\" \"\$3\"; }"
+U_BREAK_T='      [ "$ud_emit_failed" -eq 0 ] || break'
 U_BASE_PROG='!inb && $0==ENVIRON["START"] {inb=1; while ((getline l < ENVIRON["NEWF"]) > 0) print l; next}
   inb { if ($0==ENVIRON["END"]) inb=0; next }
+  $0=="emit() {" {print ENVIRON["EMIT_B"]; ine=1; next}
+  ine { if ($0=="}") ine=0; next }
+  $0=="ud_emit_failed=0" || $0=="ud_emit_ok=0" || $0==ENVIRON["BREAK_T"] {next}
+  $0=="ud_finish() {" {inf=1; next}
+  inf { if ($0=="}") inf=0; next }
+  $0=="  ud_finish" {print "  exit 0"; next}
   $0==ENVIRON["DONE_T"] {print "    done"; tail=1; next}
-  tail && ($0 ~ /^#/ || $0=="exit 0") {next}
+  tail && ($0 ~ /^#/ || $0=="ud_finish") {next}
   {print}'
   d="$(START='ud_scan_why=""' END='while IFS= read -r cp; do' NEWF="$U_BASE_F" DONE_T='    done < "$UD_DIFF_TMP/scan-set"' \
+       EMIT_B="$U_EMIT_B" BREAK_T="$U_BREAK_T" \
        mut M-U-base "$UD" "$U_BASE_PROG" "  | grep -E '\\.(md|sh|json)\$' \\" 'ud_scan_why' \
-         'ud_scan_why=""' 'while IFS= read -r cp; do' '    done < "$UD_DIFF_TMP/scan-set"' 'exit 0')" \
-    && { score_as M-U-base ud "$d" U1=RC1-NOROW U2=RC1-NOROW U2b=SCANNED U3=RC2-NOROW U4=SCANNED U5=CLOSED-RC1
-         # THE HEALTHY PATH IS BYTE-IDENTICAL TO THE BASE SPELLING, on both worlds that scan a file.
+         'ud_scan_why=""' 'while IFS= read -r cp; do' '    done < "$UD_DIFF_TMP/scan-set"' 'ud_finish' \
+         'ud_emit_failed=0' 'ud_emit_ok=0' 'emit() {' 'ud_finish() {' "$U_EMIT_T" "$U_BREAK_T")" \
+    && { _h="$("$REAL_GREP" -v '^ *#' "$d/$UD" | "$REAL_GREP" -c 'ud_finish\|ud_emit_failed\|ud_emit_ok')" || _h=0
+         [ "$_h" -eq 0 ] || bad "MUTANT PARTIAL [M-U-base]: $_h code line(s) still carry ud_finish/ud_emit_failed/ud_emit_ok -- the emit layer was not restored"
+         # U5 reads rc 1 here, not the parent release's 0: before the scan set was staged the loop
+         # was the last stage of a pipeline, and the failed write became its status. U5b reads rc 0
+         # even so (measured on the d1c72fa9 copy: rc 0, 11 of 21 rows, the HARD row lost) -- the
+         # pipeline status carried a closed fd's failure and not EFBIG's.
+         score_as M-U-base ud "$d" U1=RC1-NOROW U2=RC1-NOROW U2b=SCANNED U3=RC2-NOROW U4=SCANNED U5=CLOSED-RC1 U5b=XFSZ-RC0-LOST
+         # THE HEALTHY PATH IS BYTE-IDENTICAL TO THE BASE SPELLING, on every world that scans a file.
          # The two sides are asserted to DIFFER first, or the comparison reads the same program twice.
-         for _w in "$UW_OK" "$UW_HU"; do
+         for _w in "$UW_OK" "$UW_HU" "$UW_BIG"; do
            _a="$("$REAL_BASH" "$RECON/$UD" "$_w/dist" "$(cat "$_w/B")" "$_w/consumer" "$(cat "$_w/T")" 2>/dev/null)"
            _b="$("$REAL_BASH" "$d/$UD" "$_w/dist" "$(cat "$_w/B")" "$_w/consumer" "$(cat "$_w/T")" 2>/dev/null)"
            if cmp -s "$RECON/$UD" "$d/$UD"; then bad "U healthy differential: the two unregistered-drift.sh copies are identical, so the comparison reads one program twice"
@@ -739,18 +888,66 @@ U_BASE_PROG='!inb && $0==ENVIRON["START"] {inb=1; while ((getline l < ENVIRON["N
            else bad "U healthy ($(basename "$_w")): the staged listing and the base pipeline disagree on a world both can scan (tip [$(cut -f1 <<<"$_a" | tr '\n' ' ')] base [$(cut -f1 <<<"$_b" | tr '\n' ' ')])"; fi
          done; } \
     || mutreport M-U-base
-# M-U-exit: the explicit `exit 0` deleted. U1 CANNOT kill it -- a staged empty scan set runs the
-# loop zero times and exits 0 without that line -- so its killer is U5, the failed last write.
-  d="$(mut M-U-exit "$UD" '$0=="exit 0" {next} {print}' '    done < "$UD_DIFF_TMP/scan-set"' - 'exit 0')" \
-    && score M-U-exit U5 "$d" \
+# THE WRITE-FAILURE FIX IS TWO LAYERS -- the per-emit COUNT and the CHECK in `ud_finish` that reads
+# it -- and each has its own mutant. Either one alone restores the parent release's behaviour, so
+# both land on U5 AND U5b at the parent's shapes: the two arms genuinely both own each of them.
+# M-U-emit-status: emit discards printf's status again, so the count never moves. The emit's
+# failure branch becomes a no-op; the success count is left as it is (nothing reads it on rc 0).
+  d="$(DROP1="$N0" DROP2="$N0" OLD="$U_EMIT_T" NEW='  else :; fi' \
+       mut M-U-emit-status "$UD" "$SWAP" '  else :; fi' 'else ud_emit_failed=$((' "$U_EMIT_T")" \
+    && score_as M-U-emit-status ud "$d" U5=CLOSED-RC0 U5b=XFSZ-RC0-LOST \
+    || mutreport M-U-emit-status
+# M-U-exit: the final write-failure check deleted, so `ud_finish` exits 0 whatever the count says.
+# (Before the fix this mutant deleted a trailing `exit 0`; that line is gone, and deleting the check
+# is the mutation that asserts the same observable -- a lost row is not an rc-0 clean scan.)
+  d="$(START='  if [ "$ud_emit_failed" -gt 0 ]; then' END='  fi' NFI=1 NEW='  : ZZ-PSB-M-UEXIT' \
+       mut M-U-exit "$UD" "$BLOCK" '  : ZZ-PSB-M-UEXIT' 'the scan stopped there and its output is INCOMPLETE' \
+         '  if [ "$ud_emit_failed" -gt 0 ]; then')" \
+    && score_as M-U-exit ud "$d" U5=CLOSED-RC0 U5b=XFSZ-RC0-LOST \
     || mutreport M-U-exit
+# M-U-probe: the per-emit count replaced by ONE pre-flight test of stdout at start -- the wrong fix
+# that satisfies a closed-stdout arm. U5 CANNOT kill it (a closed fd fails the probe and the named
+# refusal follows); U5b is its killer, because a file that accepts the first write and refuses a
+# later one passes a probe taken before any row. That asymmetry is why U5b exists.
+# The probe is `( exec 3>&1 )`, measured to fail on a closed fd and to PASS on a file that will hit
+# EFBIG -- the pre-flight test a closed-stdout arm cannot tell from a count.
+  d="$(E="$U_EMIT_T" \
+       mut M-U-probe "$UD" '$0==ENVIRON["E"] {print "  else :; fi"; next}
+         $0=="ud_emit_ok=0" {print; print "( exec 3>&1 ) 2>/dev/null || ud_emit_failed=1"; next} {print}' \
+         '( exec 3>&1 ) 2>/dev/null || ud_emit_failed=1' 'else ud_emit_failed=$((' "$U_EMIT_T" 'ud_emit_ok=0')" \
+    && score M-U-probe U5b "$d" \
+    || mutreport M-U-probe
+# M-U-nobreak: the scan loop's stop at the first failed write deleted. Its rc, its rows and its N
+# are all the fixed script's (a leaked row makes every later iteration skip its file), so only the
+# ITERATION count U5b reads can see it: XFSZ-RC2-NOSTOP. U5's one-file world cannot.
+  d="$(BREAK_T="$U_BREAK_T" mut M-U-nobreak "$UD" '$0==ENVIRON["BREAK_T"] {next} {print}' '      rel="${cp#core/}"' '|| break' \
+         "$U_BREAK_T" '      rel="${cp#core/}"')" \
+    && score_as M-U-nobreak ud "$d" U5b=XFSZ-RC2-NOSTOP \
+    || mutreport M-U-nobreak
 # M-U-memo: the memo branch's status unread, so a failed memo listing is taken as an empty one and
 # the direct listing is never tried. U2 reads EMPTY -- the silent clear, not the base's rc 1 -- and
-# U2b, the near-miss whose direct listing WOULD have answered, reads EMPTY too: both own it.
+# U2b, the near-miss whose direct listing WOULD have answered, reads EMPTY too: both own it. So do
+# U6-hit and U6-fill: the memo's 125 for a failed serve reaches the fallback only through this read.
   d="$(DROP1="$N0" DROP2="$N0" OLD='    ud_memo_rc=$?' NEW='    ud_memo_rc=0' \
        mut M-U-memo "$UD" "$SWAP" '    ud_memo_rc=0' 'ud_memo_rc=$?' '    ud_memo_rc=$?')" \
-    && score_as M-U-memo ud "$d" U2=EMPTY U2b=EMPTY \
+    && score_as M-U-memo ud "$d" U2=EMPTY U2b=EMPTY U6-hit=EMPTY U6-fill=EMPTY \
     || mutreport M-U-memo
+# lib.sh's two serves of the cached ls-tree listing, one mutant each, each killed by its own cell.
+# M-L-cat-status: memo_ls_tree's HIT path returns the cached status whatever its `cat` did. The hit
+# line is spelled identically in all four memo functions, so the mutation anchors on what SEPARATES
+# them -- the first such line after `memo_ls_tree() {` -- and the other three stay fixed.
+LIB=lib.sh
+  d="$(mut M-L-cat-status "$LIB" '$0=="memo_ls_tree() {" {inl=1}
+         inl && $0=="  cat \"$_f.c\" || return 125" {print "  cat \"$_f.c\""; inl=0; next} {print}' \
+         '  cat "$_f.c"' - 'memo_ls_tree() {')" \
+    && score M-L-cat-status U6-hit "$d" \
+    || mutreport M-L-cat-status
+# M-L-commit-status: `_ai_dlc_memo_commit` returns 0 after a failed serve of the fill. Returning
+# cat's own 1 would NOT be this mutant: the callers fold any non-zero into 125.
+  d="$(DROP1="$N0" DROP2="$N0" OLD='  cat "$1.c" || return 125' NEW='  cat "$1.c"; return 0' \
+       mut M-L-commit-status "$LIB" "$SWAP" '  cat "$1.c"; return 0' - '  cat "$1.c" || return 125')" \
+    && score M-L-commit-status U6-fill "$d" \
+    || mutreport M-L-commit-status
 # M-U-ext / M-U-pfx: a grep status >1 accepted as "no match", one filter each.
   d="$(DROP1="$N0" DROP2="$N0" OLD='    [ "$ud_rc" -le 1 ] || ud_scan_why="the file-type filter over the tree listing exited ${ud_rc}"' NEW='    : ZZ-PSB-M-UEXT' \
        mut M-U-ext "$UD" "$SWAP" '    : ZZ-PSB-M-UEXT' 'the file-type filter over the tree listing exited' \
@@ -791,6 +988,7 @@ ap_off M-Ana  Ana  '  '     'if [ -n "$UD_NA" ]; then'            'if [ -n "$UD_
     || mutreport M-Art-merge
 
 echo
+PSB_DONE=1
 if [ "$fails" -eq 0 ]; then
   echo "procsub-staged-refusal-boot: PASS"
   exit 0

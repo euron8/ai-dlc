@@ -15,6 +15,82 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.656.0] - 2026-09-27
+
+`unregistered-drift.sh` now exits 2 when any row it produced could not be written, instead of
+exiting 0 over a truncated row set. A memo serve that fails now returns 125 rather than the cached
+git status. This closes `BL-357`.
+
+### A row the drift scan could not write is a refusal (`BL-357`, closes)
+
+0.655.0 staged each detector's stdout to a regular file and read its exit. Nothing read whether
+the write itself succeeded. `unregistered-drift.sh`'s `emit` discarded `printf`'s status and the
+script ended in an explicit `exit 0`, so a row lost to a closed stdout, to EFBIG on the staged
+file, or to EPIPE with SIGPIPE ignored disappeared with rc 0. `apply.sh` then read the shortened
+set as "no in-place core edit" and went on to overwrite core. Measured on a world of 20 `CORE-OK`
+files and one in-place edit written last: under `ulimit -f 1`, 0.655.0 exits 0 with 10 of 21 rows
+and the `HARD-UNREGISTERED-CORE-DRIFT` row lost, and 0.656.0 exits 2. With stdout closed, 0.655.0
+exits 0 and 0.656.0 exits 2.
+
+- `emit` counts every failed write in the main shell, and `ud_finish` is now the script's only
+  exit. With every row written it exits 0, whatever was found. The scan stops at the first failed
+  write. It then prints `unregistered-drift: REFUSED — a row could not be written to stdout after
+  N row(s) were; the scan stopped there and its output is INCOMPLETE. Re-run
+  unregistered-drift.sh.` to stderr and exits 2. N is the number of rows whose `printf` succeeded
+  before the failure (`ud_emit_ok`). Under `ulimit -f` it is exact. Under a pipe reader that
+  truncates mid-row, such as `head -c`, N can be one more than the whole rows the reader holds,
+  because the pipe accepted the partial write. The two refusal rows
+  (`HARD-DRIFT-SCAN-UNAVAILABLE`) leave through it too, so a refusal that could not be written is
+  a refusal. `apply.sh` reads the 2 as `DECISION unregistered-drift-refused` and withholds the
+  re-stamp. `emit-report.sh` and `hard-blockers.sh` render it as `DETECTOR-REFUSED`.
+- The counter tracks every write rather than probing stdout once at start. A probe catches a
+  closed stdout and misses a write that fails mid-stream.
+- The scan loop's first statement is a break on a failed write. Bash 3.2 leaks the unflushed
+  failed write into every later `$( )` capture, which corrupts `$cons`, so without the break the
+  rest of the scan was skipped by `[ -f ]` without being scanned. Measured on the reference
+  consumer's range d1c72fa9..c16d83ce with stdout through `head -c 4500` and SIGPIPE ignored: the
+  first form of the fix (`c00e611f`) printed "1 row(s)" and ran 29 loop iterations after the
+  failure, and the amended form (`d794b5a4`) prints N=65 with 64 complete rows landed and 0
+  iterations after the failure.
+- `lib.sh`'s memo served a cache hit with `cat` and returned the CACHED git status, so a serve
+  whose write failed returned 0 with a truncated or empty listing. `unregistered-drift.sh` then
+  scanned nothing. Every failed serve (the four hit paths, both branches of `_ai_dlc_memo_commit`,
+  and `_ai_dlc_memo_serve`) now returns 125. That value is none of the memo'd subcommands' answers
+  (0, 1, 128). Returning cat's own 1 would have made `memo_rev_parse` report a present path as
+  absent. Measured with the warmed listing made unreadable: 0.655.0 exits 0 with 0 rows, and
+  0.656.0 takes the direct listing and prints all 21 rows.
+- `apply.sh`'s `detector_refused` quotes the detector's first `: REFUSED` stderr line, and stderr's
+  line 1 only when there is none. Bash's own `printf: write error` precedes the detector's line.
+- `SKILL.md` step 3d documents the exit-2 row, and step 7 names `DECISION <detector>-refused` as a
+  refusal that must not be read as "none". The `retired-tokens.sh` header no longer says
+  `apply.sh` discards its stderr.
+- On a clone of the reference consumer over d1c72fa9..c16d83ce, healthy output is byte-identical:
+  95 rows at rc 0 on both engines. With stdout closed there, 0.655.0 exits 0 and 0.656.0 exits 2
+  with the named line.
+- On that range the re-stamp is withheld on both engines by six outstanding `WORKLIST` rows. The
+  signal that discriminates the fix there is the `DECISION unregistered-drift-refused` row and the
+  presence of the drift row, not the stamp.
+- NOTE: `emit-report.sh` and `hard-blockers.sh` render the exit-2 refusal as "exited 2 without
+  classifying". That is inaccurate for a detector that classified and then lost its output.
+- `apply.sh`'s emitter comment now counts 22 `say WORKLIST` and 39 `say DECISION` sites on
+  non-comment lines, and its detector comment names exit 2 for a `HARD-DRIFT-SCAN-UNAVAILABLE` row
+  that could not itself be written.
+- `BL-357` now has an `sh` receipt. It scores 0 on this tree and 1 on c8491750, and it scores 1
+  on each of these: an unconditional `exit 2`, an `exit 0` stub, a pre-flight stdout probe, tip
+  `unregistered-drift.sh` over the old `lib.sh`, a hit-path-only revert, an `emit` that ignores its
+  status, and a `ud_finish` that always exits 0. A reworded line with the same prefix and phrase
+  scores 0. The unamended `c00e611f` scores 0 too, because the receipt keys on the prefix and the
+  phrase and does not observe the break.
+
+`unregistered-drift.sh` and `lib.sh` are read by `apply.sh`, so they are BOOTSTRAPPING and ship
+alone. The pull that delivers 0.656.0 runs under the consumer's installed engine, so the new
+refusal protects only the pull after it.
+
+`layer-drift.sh` has the same class and is filed separately. `apply.sh` derives four verdicts from
+its output, and with stdout closed it still exits 0.
+
+This discharges no consumer candidate.
+
 ## [0.655.0] - 2026-09-27
 
 `apply.sh` now reads each detector's exit and hands a refusal back as a `DECISION` row instead of

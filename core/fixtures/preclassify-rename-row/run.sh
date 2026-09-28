@@ -293,10 +293,19 @@ SHIMEOF
   # c run owns a fresh memo, so the cache is never re-read there.
   B230_M="$WORK/b230-mutant"
   cp -R "$RECON" "$B230_M" || exit 2
-  _anchor='    if [ "$_st" -eq 0 ]; then _ai_dlc_memo_commit "$_f" "$_t" "$_st"; else _ai_dlc_memo_serve "$_t"; fi'
+  # The filter is spelled across TWO lines since 0.656.0 (a failed serve returns 125 on each
+  # branch), so the anchor is the `if` line and the mutation also drops the `else` line that
+  # follows it -- both counted, both rewritten, the same "cache every status" observable.
+  _anchor='    if [ "$_st" -eq 0 ]; then _ai_dlc_memo_commit "$_f" "$_t" "$_st" || return 125'
+  _anchor2='    else _ai_dlc_memo_serve "$_t" || return 125; fi'
   _hits="$(grep -cxF "$_anchor" "$RECON/lib.sh")" || _hits=0
+  _hits2="$(grep -cxF "$_anchor2" "$RECON/lib.sh")" || _hits2=0
+  [ "$_hits2" -eq "$_hits" ] || _hits=0
   _ctl="$(grep -cxF 'ZZ-NO-SUCH-MEMO-ANCHOR-ZZ' "$RECON/lib.sh")" || _ctl=0
-  B230_A="$_anchor" awk '$0 == ENVIRON["B230_A"] { print "    _ai_dlc_memo_commit \"$_f\" \"$_t\" \"$_st\""; next } { print }' \
+  B230_A="$_anchor" B230_B="$_anchor2" awk '
+    $0 == ENVIRON["B230_A"] { print "    _ai_dlc_memo_commit \"$_f\" \"$_t\" \"$_st\" || return 125"; skip=1; next }
+    skip && $0 == ENVIRON["B230_B"] { skip=0; next }
+    { skip=0; print }' \
     "$RECON/lib.sh" > "$B230_M/lib.sh"
   if [ "$_hits" -ne 2 ] || [ "$_ctl" -ne 0 ]; then
     bad "FIXTURE STALE [BL-230 memo mutant]: the status-filter anchor matches $_hits lines of lib.sh (want 2; impossible-anchor control $_ctl, want 0). Re-anchor on the same observable"
