@@ -1088,7 +1088,9 @@ else
   # MUTANT (a): the map is HARDCODED to LC-E4 rather than derived from the contract. This is the
   # implementation an LC-E4-only seed cannot tell from the real one.
   M10A="$M10DIR/layer-drift-hardcoded.sh"
-  M10A_OLD='  awk -F"$TAB" -v s="$1" '"'"'$1 == s { print $2; exit }'"'"' <<<"$ADJ_CLAUSE_MAP"'
+  # adj_clause_of's lookup line. Fed by a pipe, reading to EOF (first match wins), since the engine
+  # carries no here-string (BL-359); the mutation replaces the whole lookup, whatever feeds it.
+  M10A_OLD='  printf '"'"'%s\n'"'"' "$ADJ_CLAUSE_MAP" | awk -F"$TAB" -v s="$1" '"'"'$1 == s && !hit { print $2; hit = 1 }'"'"''
   M10A_OLD="$M10A_OLD" python3 -c 'import os,sys; s=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(s.replace(os.environ["M10A_OLD"],"  printf %s\\\\n LC-E4",1))' \
     "$DRIFT" "$M10A" 2>/dev/null
   if [ ! -s "$M10A" ] || cmp -s "$DRIFT" "$M10A"; then
