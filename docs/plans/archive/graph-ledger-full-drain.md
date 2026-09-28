@@ -15135,3 +15135,60 @@ plan, against a control of 1 for `PC-S346-…` in the archive.
 Batch 157's next-work list and delivery gap are spent: batch 158's block above replaces both.
 `PC-S346-…` reached the consumer with its 0.643.0 pull.
 
+**BATCH 158 SHIPPED `v0.644.0` (`2a69bb31`, #867) AND CLOSED `BL-319` AND `BL-320`, WHICH
+DISCHARGE `PC-S313-FOLDIN-NEVER-RETAKES-ARCHITECTURE-ASSESSMENT`.** It was invoked by peer handoff.
+The opening sweep matched batch 157 on every figure and control: live 25, unfiled 12, worklist 5,
+histogram 9/46/1, ledger md5 `99072171…`. The subject was that uncommitted filing, whose premise held
+against `bug-investigation.md` with controls. Live **77 -> 75**, archive **242 -> 244**. The exit-0
+receipt set is batch 157's nine, compared by id.
+
+**A FOLDED FIX STORY NOW REACHES AN ARCHITECT.** In every variant that runs an architecture step,
+`bug-investigation.md` §4 dispatches an `architect` after the one-shot. Check 17's fold architecture
+gate is ONE command, `validate-spawn-ledger.sh --fold-architect`. It resolves the variant from the
+snapshot, then `sprint-status.yaml`, and decides whether the fold is owed BEFORE it reads the
+residue. It joins the residue to an architect ledger row after the one-shot's own row, and requires
+the story's stamp to carry the one-shot's id. Check 17 now runs at implementation gates too
+(`BL-320`), without the cross-check. BL-319 states six residuals; the lead can still write the spine
+text and can re-point then re-stamp.
+
+**SIX ADVERSARY ROUNDS, AND FIVE FOUND A DEFECT IN THE PREVIOUS ROUND'S FIX.** The contract round
+refuted the first design outright: its waiver clause already held in S313. The last tip round found
+none blocking. The one that mattered most: the fold gate's residue check failed every `bug`-variant
+sprint on correct work, because the fixture ran the extracted gate commands only in carry-over
+worlds. **A fixture that extracts gate commands must execute them in every variant the gate
+reaches, not only the one the defect came from.**
+
+**THE FIRST GATE WENT RED ON `validator-fork-budget`: 3297 against 3289.** Four forks were I7
+re-reading two manifest rows; the other ten are attributed arm by arm above `FORK_BUDGET`, now 3299.
+The re-gate passed 209 ok, 0 FAIL, with the pole SKIPPED at pool width 8. **The three new mutant
+shards ran 358-375s LOADED against ~150s solo, second only to `ledger-reverify` at 492s.** Watch
+them; a busier box can make one the pole. The operator traced all four fold fixtures, and the map
+ships in the release.
+
+**THE CONSUMER PULLED 0.642.0 -> 0.643.0 DURING THE BATCH** (reconcile `8f7f5f2da`, #1118) and
+committed `PC-S313-FOLDIN-…` to its `main` with the S313 retro (#1116). It is on sprint 314,
+carry-over, in carry-over evaluation, with no `bug-fix-oneshot*` in `s314/` (0, against 2 in `s313/`),
+so 0.644.0's new gate has nothing to fire on at its next pull. It has run no gate since the pull.
+Porcelain 1; ledger md5 `94c3a4e2…`.
+
+**ONE NEW FILING, AND IT ROUTES CORE: `PC-S314-SNAPSHOT-SWAP-BLIND-WINDOW`,** filed 2026-09-26 in
+commit `2ae6f9335`. It is pushed on the consumer's `ai-dlc/carry-over/telv3-upgrade` and absent from
+its `main`, so the derive block's union sees it as the one filing ahead of main (live 27, which is
+25 plus `PC-S313-FOLDIN-…` plus this). The claim: `route.md` Step 6 swaps `pipeline-snapshot.md`, and
+the Stop hook and the pause hook both key on that file existing, so the swap blinds both. The consumer
+records `core-paths.sh --is-core` exit 0 for both hook files. Ten core hooks name the snapshot.
+
+**NEXT WORK.** Re-derive the sweep; a later consumer filing outranks everything below.
+- `PC-S314-SNAPSHOT-SWAP-BLIND-WINDOW` is the subject. Re-derive the premise against `route.md`
+  Step 6, `ai-dlc-continue.sh` and `ai-dlc-pause.sh`, measure the window on a scratch copy, write the
+  contract, run the adversary alone, then build. It is a hook fix, so the close is behavioural: drive
+  the hooks across the swap.
+- `BL-230` needs the full 156-run pool. Run it as a lead-owned background job with a sentinel,
+  never inside a hand, and never while a gate runs.
+- `BL-311` waits on the operator.
+
+**THE DELIVERY GAP IS ONE RELEASE.** The consumer is at 0.643.0 against `VERSION` 0.644.0. In
+`7b32fb1a..origin/main`: `apply.sh`, `preclassify.sh`, `ledger-reverify.sh` and the update skill
+have 0 commits; there are 21 raw `core/` rows, 0 mode-only; one PC id is PENDING,
+`PC-S313-FOLDIN-…`. The banked ruling stands: report the gap and write no runbook.
+
