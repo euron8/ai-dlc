@@ -32,10 +32,12 @@ reads only the exit and derives four verdicts from `ld.out`, so a lost
 stdout closed, rc 0 and 51 `write error` lines with no refusal. With a `head -c` reader cut at
 1000, 3000, 4000, 6000 and 12000 bytes, rc 0 every time with 2 to 5 of the 5 HARD rows lost.
 
-- Every stdout writer counts its status into `ld_emit_ok` / `ld_emit_failed` in the main shell:
-  `emit`, `emit_raw` (which writes every `HARD-LAYER-ADJUDICATION-MISSING` row),
+- Every row-writing stdout site counts its status into `ld_emit_ok` / `ld_emit_failed` in the
+  main shell: `emit`, `emit_raw` (which writes every `HARD-LAYER-ADJUDICATION-MISSING` row),
   `adj_register_contradictions`' awk (its own `PIPESTATUS`, one failure unit), and the
-  `--list-adjudications` listing, so N is real in both modes.
+  `--list-adjudications` listing, so N is real in both modes. `--adjudicated-codes` is out of
+  scope by the header's own statement: its only reader is a `$( )` capture, which cannot lose
+  a write.
 - The first failed write ends the scan. Every writer returns without writing once one write has
   failed, and the overrides loop, the extensions loop and the listing loop open with a break on
   the count. After a failed write, bash 3.2 leaks the unflushed row into later `$( )` captures.
