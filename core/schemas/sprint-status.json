@@ -49,8 +49,35 @@
     "housekeeping_re": "^sprint_([0-9]+)_housekeeping:[ \\t]*(?:#.*)?$",
     "stories_re": "^stories:[ \\t]*(?:#.*)?$",
     "story_key_re": "^([ \\t]+)([^ \\t#][^:]*?):[ \\t]*(?:#.*)?$",
-    "story_field_re": "^([ \\t]+)([A-Za-z_][A-Za-z0-9_]*):[ \\t]*(.*?)[ \\t]*$"
+    "story_field_re": "^([ \\t]+)([A-Za-z_][A-Za-z0-9_]*):[ \\t]*(.*?)[ \\t]*$",
+    "deferred_ac_id_re": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
   },
+
+  "$deferred_acs_comment": [
+    "`deferred_acs` IS THE ONE PLACE A `done` STORY SAYS IT IS NOT FINISHED. A story closes `done` at",
+    "gate-3 while an AC whose discharge predicate runs only against production (qa.md 'Deferred-AC",
+    "discharge predicate') is still owed to deploy-validate section 4b. Before this field the envelope read",
+    "that story as fully closed, and `close` stamped the sprint over it.",
+    "",
+    "ONE SPELLING, AND IT IS A SINGLE-LINE INLINE LIST: `deferred_acs: [AC5, AC6]`. `[]` and an ABSENT",
+    "field both read as nothing deferred. Every other spelling is a FINDING in `check-stories` and a",
+    "refusal in `close`, never an empty list: this file's line parser reads a block list",
+    "(`deferred_acs:` then `- AC5` lines) as the empty string and a flow list wrapped over two lines",
+    "as `[AC5,` -- so a reader that quietly accepted either would report the deferral discharged. A",
+    "bare `deferred_acs:` with nothing after it is a YAML null, not `[]`, and is refused for the same",
+    "reason. Each id matches `keys.deferred_ac_id_re`.",
+    "",
+    "WRITERS. code-reviewer writes it at the `done` transition, in BOTH canonical views, from the",
+    "deferral predicates QA recorded. deploy-validate section 4b removes an id when its predicate runs",
+    "GREEN, or, on re-deferral, after filing it as a carry-over OPEN item. `close` refuses (exit 3)",
+    "while any story still carries one, checked across every view before any view is written.",
+    "",
+    "`check-stories` compares it across the two views as it compares `status`, prints a `done`",
+    "story that still carries ids as DEFERRED, and REPORTS -- never fails -- a `done` story whose",
+    "file's `layered_ac_count` has live_ops + manual_operator > 0 while its entry carries no",
+    "`deferred_acs` field at all: the writer may have forgotten it, or every such AC may have been",
+    "verified at the gate, and only the reviewer knows which. `[]` is how the reviewer says the second."
+  ],
 
   "$story_grammar_comment": [
     "THE STORY-ENTRY GRAMMAR IS DELIBERATELY INDENT-RELATIVE AND ID-BLIND, and both halves are",
@@ -94,7 +121,8 @@
 
   "story_entry_fields": {
     "status": { "required": true, "desc": "the story's status; MUST equal the status in the story file this entry names (Check 5)" },
-    "file": { "required": false, "desc": "path to the story file, relative to the canonical's own directory. Absent -> the entry key's sprint-stripped stem is globbed against the resolved stories_dir." }
+    "file": { "required": false, "desc": "path to the story file, relative to the canonical's own directory. Absent -> the entry key's sprint-stripped stem is globbed against the resolved stories_dir." },
+    "deferred_acs": { "required": false, "desc": "AC ids closed `done` but still owed to deploy-validate section 4b, as ONE single-line inline list (`[AC5, AC6]`); `[]` or absent = none. See $deferred_acs_comment." }
   },
 
   "$story_file_comment": [
@@ -166,6 +194,9 @@
     "  means in-flight. Only `done` carries mechanical meaning.",
     "- `stories:` — a MAPPING keyed by normalized story id (`story-<N>-<M>:`). NOT a list:",
     "  a list form matches no reader and reports vacuous-green all sprint.",
+    "- `deferred_acs: [AC5, AC6]` — optional, per story: ACs closed `done` but still owed",
+    "  to deploy-validate §4b. ONE single-line inline list; `[]` or absent = none. `close`",
+    "  refuses while any story carries one.",
     "- `sprint_<N>_housekeeping:` — the close envelope, written ONLY by",
     "  `sprint-status.sh close`. Carries `envelope_status: done` + non-empty",
     "  `closure_evidence`. Check 3 (validate-mandatory-rules.sh) fails closed without it.",

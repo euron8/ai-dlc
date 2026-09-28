@@ -494,13 +494,229 @@ mutant A21 "cross-view arm removed" 's/^        if len(vals) > 1 and len(set(val
 # A22: widen the index glob to `<stem>*`, the collision that compares story-1 against story-10.
 mutant A22 "id glob widened to a prefix match" 's/stories.glob(stem + "-\*.md")/stories.glob(stem + "*.md")/'
 
+# =============================================================================
+# PART 3 — `deferred_acs`: a `done` story still owing ACs to deploy-validate §4b
+#
+# Before this field a story that closed `done` at gate-3 with ACs deferred to production read as
+# fully closed, and `close` stamped the sprint over it. ONE spelling is accepted — a single-line
+# inline list — because this file's line parser reads a block list as '' and a wrapped flow list as
+# `[AC5,`; D3/D4 pin that neither is ever read as empty. The seeds are written as the reviewer
+# writes them (code-reviewer.md), two views each, and the close arms compare BYTES of both views.
+# =============================================================================
+
+# A story file carrying the frontmatter stories-test-strategy.md prescribes, with a layered count.
+story_layered() {   # <name> <status> <live_ops> <manual_operator>
+  printf -- '---\nstatus: %s\nsprint: 291\nlayered_ac_count:\n  unit: 2\n  integration: 0\n  e2e: 0\n  live_ops: %s\n  manual_operator: %s\n---\n\n# story\n' \
+    "$2" "$3" "$4" > "$CSTORIES/$1.md"
+}
+# One envelope with story-291-1 done; $1 is the entry's extra field line(s), '' for none.
+env_one() {
+  printf 'sprint: 291\nstatus: in_progress\nstories:\n  story-291-1:\n    file: stories/story-1.md\n    status: done\n%s' "$1"
+}
+cl_run() {
+  CL_OUT="$(AI_DLC_SPRINT_STATUS_SCHEMA="$SCHEMA" bash "$1" close --evidence "fixture" --root "$CS" 2>&1)"
+  CL_RC=$?
+}
+
+ds_battery() {
+  local T="$1"
+
+  # D1 — the inline list parses, is printed as DEFERRED with its ids, and is a state, not a finding.
+  cs_reset; story_fm story-1 done
+  env_one '    deferred_acs: [AC5, AC6]
+' > "$CIMPL/sprint-status.yaml"
+  env_one '    deferred_acs: [AC6, AC5]  # reviewer order differs
+' > "$CPLAN/sprint-status.yaml"
+  cs_run "$T"
+  if [ "$CS_RC" -eq 0 ] && grep -q 'DEFERRED \[story-291-1\] status `done`, 2 AC(s) .*AC5, AC6' <<<"$CS_OUT" \
+     && ! grep -q 'FINDING' <<<"$CS_OUT"; then echo "D1 PASS"; else echo "D1 FAIL"; fi
+
+  # D2 — `[]` in one view and ABSENT in the other are the same value: no finding, no DEFERRED.
+  # The near-miss for D5, and the legacy state every envelope before this field is in.
+  cs_reset; story_fm story-1 done
+  env_one '    deferred_acs: []
+' > "$CIMPL/sprint-status.yaml"
+  env_one '' > "$CPLAN/sprint-status.yaml"
+  cs_run "$T"
+  if [ "$CS_RC" -eq 0 ] && grep -q 'PASS — 2 comparison(s)' <<<"$CS_OUT" \
+     && ! grep -q 'DEFERRED\|FINDING' <<<"$CS_OUT"; then echo "D2 PASS"; else echo "D2 FAIL"; fi
+
+  # D3 — the BLOCK form. The line parser hands the field over as ''; read as empty it would report
+  # the deferral discharged. A FINDING.
+  cs_reset; story_fm story-1 done
+  env_one '    deferred_acs:
+      - AC5
+' > "$CIMPL/sprint-status.yaml"
+  cs_run "$T"
+  if [ "$CS_RC" -eq 1 ] && grep -q 'FINDING \[implementation/story-291-1\] `deferred_acs` is not one single-line inline list: empty value' <<<"$CS_OUT"; then
+    echo "D3 PASS"; else echo "D3 FAIL"; fi
+
+  # D4 — a flow list wrapped onto a second line: the parser sees `[AC5,`. A FINDING.
+  cs_reset; story_fm story-1 done
+  env_one '    deferred_acs: [AC5,
+      AC6]
+' > "$CIMPL/sprint-status.yaml"
+  cs_run "$T"
+  if [ "$CS_RC" -eq 1 ] && grep -q 'FINDING \[implementation/story-291-1\] `deferred_acs` is not one single-line inline list: `\[AC5,`' <<<"$CS_OUT"; then
+    echo "D4 PASS"; else echo "D4 FAIL"; fi
+
+  # D5 — one view owes an AC the other has cleared: `close` would see the deferral from one side.
+  cs_reset; story_fm story-1 done
+  env_one '    deferred_acs: [AC5]
+' > "$CIMPL/sprint-status.yaml"
+  env_one '    deferred_acs: []
+' > "$CPLAN/sprint-status.yaml"
+  cs_run "$T"
+  if [ "$CS_RC" -eq 1 ] && grep -q 'disagree on `deferred_acs`' <<<"$CS_OUT"; then
+    echo "D5 PASS"; else echo "D5 FAIL"; fi
+
+  # D6 — the writer-forgot REPORT. Three stories: live_ops>0 and no field (REPORTED), live_ops>0
+  # with `[]` (the reviewer's "verified at the gate", NOT reported), and live_ops=manual=0 with no
+  # field (nothing owed, NOT reported). The exit code must not move: a REPORT is not a finding.
+  cs_reset
+  story_layered story-1 done 1 0
+  story_layered story-2 done 2 1
+  story_layered story-3 done 0 0
+  put "$CIMPL/sprint-status.yaml" 'sprint: 291
+status: in_progress
+stories:
+  story-291-1:
+    file: stories/story-1.md
+    status: done
+  story-291-2:
+    file: stories/story-2.md
+    status: done
+    deferred_acs: []
+  story-291-3:
+    file: stories/story-3.md
+    status: done'
+  cs_run "$T"
+  if [ "$CS_RC" -eq 0 ] && grep -q 'REPORT \[story-291-1\] `done` with 1 live_ops/manual_operator' <<<"$CS_OUT" \
+     && [ "$(grep -c 'REPORT \[' <<<"$CS_OUT")" = "1" ]; then echo "D6 PASS"; else echo "D6 FAIL"; fi
+
+  # D7 — `close` REFUSES while an id is owed, and writes NEITHER view. The owed id sits in the
+  # PLANNING view only, which the write loop reaches SECOND — so a refusal made inside the loop
+  # would already have stamped the implementation view `done`. Both views compared as bytes.
+  cs_reset; story_fm story-1 done
+  env_one '    deferred_acs: []
+' > "$CIMPL/sprint-status.yaml"
+  env_one '    deferred_acs: [AC5]
+' > "$CPLAN/sprint-status.yaml"
+  cp "$CIMPL/sprint-status.yaml" "$CS/impl.before"; cp "$CPLAN/sprint-status.yaml" "$CS/plan.before"
+  cl_run "$T"
+  if [ "$CL_RC" -eq 3 ] && grep -q 'refusing to close:.*\[planning/story-291-1\] deferred_acs AC5' <<<"$CL_OUT" \
+     && cmp -s "$CIMPL/sprint-status.yaml" "$CS/impl.before" \
+     && cmp -s "$CPLAN/sprint-status.yaml" "$CS/plan.before"; then echo "D7 PASS"; else echo "D7 FAIL"; fi
+
+  # D8 — a MALFORMED value refuses too (a token that is no AC id), rather than closing over it.
+  cs_reset; story_fm story-1 done
+  env_one '    deferred_acs: [AC5 AC6]
+' > "$CIMPL/sprint-status.yaml"
+  cp "$CIMPL/sprint-status.yaml" "$CS/impl.before"
+  cl_run "$T"
+  if [ "$CL_RC" -eq 3 ] && grep -q 'unreadable' <<<"$CL_OUT" \
+     && cmp -s "$CIMPL/sprint-status.yaml" "$CS/impl.before"; then echo "D8 PASS"; else echo "D8 FAIL"; fi
+
+  # D9 — cleared (`[]`) and legacy-absent both CLOSE: the refusal is keyed on owed ids, not on
+  # the field's presence. The near-miss for D7, and the proof a pre-field envelope is not wedged.
+  cs_reset; story_fm story-1 done
+  env_one '    deferred_acs: []
+' > "$CIMPL/sprint-status.yaml"
+  env_one '' > "$CPLAN/sprint-status.yaml"
+  cl_run "$T"
+  if [ "$CL_RC" -eq 0 ] && grep -q '^status: done' "$CIMPL/sprint-status.yaml" \
+     && grep -q '^status: done' "$CPLAN/sprint-status.yaml"; then echo "D9 PASS"; else echo "D9 FAIL"; fi
+
+  # D10/D11 — `deferred_acs` at a NON-FIELD indent, after `status:`. The relative-indent parser
+  # keeps only lines at the entry's first field indent, so this line was DROPPED: check-stories 0,
+  # close 0, the sprint stamped over an owed AC. Each is a FINDING in check-stories and a refusal in
+  # close with both views byte-unchanged. D10 is six spaces under four-space fields, D11 a tab; the
+  # second story is a clean entry, so a parser that stopped reading at the bad line shows up too.
+  local d n
+  for d in D10 D11; do
+    if [ "$d" = D10 ]; then n='      '; else n="$(printf '\t')"; fi
+    cs_reset; story_fm story-1 done; story_fm story-2 done
+    printf 'sprint: 291\nstatus: in_progress\nstories:\n  story-291-1:\n    file: stories/story-1.md\n    status: done\n%sdeferred_acs: [AC5]\n  story-291-2:\n    file: stories/story-2.md\n    status: done\n' "$n" \
+      > "$CIMPL/sprint-status.yaml"
+    cp "$CIMPL/sprint-status.yaml" "$CPLAN/sprint-status.yaml"
+    cp "$CIMPL/sprint-status.yaml" "$CS/impl.before"; cp "$CPLAN/sprint-status.yaml" "$CS/plan.before"
+    cs_run "$T"
+    local csok=0 clok=0
+    if [ "$CS_RC" -eq 1 ] \
+       && grep -q 'FINDING \[implementation/story-291-1\] `deferred_acs` is not one single-line inline list: `deferred_acs` on line 7 sits at indent' <<<"$CS_OUT" \
+       && grep -q 'FINDING \[planning/story-291-1\] `deferred_acs`' <<<"$CS_OUT" \
+       && grep -q '2 comparison(s) over 2 entries\|4 comparison(s) over 4 entries' <<<"$CS_OUT"; then csok=1; fi
+    cl_run "$T"
+    if [ "$CL_RC" -eq 3 ] && grep -q 'refusing to close:.*\[implementation/story-291-1\] `deferred_acs` unreadable' <<<"$CL_OUT" \
+       && cmp -s "$CIMPL/sprint-status.yaml" "$CS/impl.before" \
+       && cmp -s "$CPLAN/sprint-status.yaml" "$CS/plan.before"; then clok=1; fi
+    if [ "$csok$clok" = 11 ]; then echo "$d PASS"; else echo "$d FAIL"; fi
+  done
+}
+
+echo
+echo "sprint-status-lifecycle (Part 3 — deferred_acs):"
+DBATTERY="$(ds_battery "$TOOL")"
+printf '%s\n' "$DBATTERY" | while read -r id verdict; do
+  [ "$verdict" = "PASS" ] && printf '  ok    %s deferred_acs battery\n' "$id"
+done
+DS_FAILED="$(printf '%s\n' "$DBATTERY" | awk '$2=="FAIL"{printf "%s ", $1}')"
+DS_COUNT="$(printf '%s\n' "$DBATTERY" | awk '$2=="PASS"{n++} END{print n+0}')"
+if [ -n "$DS_FAILED" ]; then
+  bad "deferred_acs battery failed on the SHIPPING tool: $DS_FAILED"
+elif [ "$DS_COUNT" != "11" ]; then
+  bad "deferred_acs battery reported $DS_COUNT PASS lines, expected 11 — an arm produced no verdict"
+else
+  ok "deferred_acs: all 11 assertions pass on the shipping tool"
+fi
+
+dmutant() {                      # <expected-assertion> <label> <sed-program>
+  local want="$1" label="$2" prog="$3"
+  local m="$WORK/dmutant-$want.sh"
+  sed "$prog" "$TOOL" > "$m" 2>/dev/null
+  if cmp -s "$TOOL" "$m"; then
+    bad "MUTANT $want ($label): the sed changed nothing — the mutation never happened"
+    return
+  fi
+  local failed
+  failed="$(ds_battery "$m" | awk '$2=="FAIL"{printf "%s ", $1}' | sed 's/ $//')"
+  if [ "$failed" = "$want" ]; then
+    ok "MUTANT $want ($label) fails exactly $want"
+  elif [ -z "$failed" ]; then
+    bad "MUTANT $want ($label) was NOT CAUGHT — the battery stayed green on a broken tool"
+  else
+    bad "MUTANT $want ($label) failed [$failed], expected exactly [$want] — entangled assertions"
+  fi
+}
+
+dmutant D1 "owed ids never printed" 's/^                if dids:$/                if False:/'
+dmutant D2 "absent and [] compared as different values" 's/deferred_view.setdefault(key, {})\[view\] = ", ".join(sorted(dids))/deferred_view.setdefault(key, {})[view] = dstate + ", ".join(sorted(dids))/'
+dmutant D3 "block form read as empty" 's/^        return ("malformed", "empty value/        return ("ok", []) or ("malformed", "empty value/'
+dmutant D4 "unclosed [ accepted" 's/if not (v.startswith("\[") and v.endswith("\]")):/if not v.startswith("["):/'
+dmutant D5 "cross-view deferred_acs join removed" 's/^        if len(set(vals.values())) > 1:$/        if False:/'
+dmutant D6 "writer-forgot REPORT removed" 's/^                if owed_n:$/                if False:/'
+# D7: the pre-write scan reads only the FIRST view — the shape of a refusal made inside the write
+# loop, which has stamped the implementation view before it reads the planning one.
+dmutant D7 "refusal reads the first view only" '/^    owed = \[\]$/,/^    if owed:$/s/in existing:$/in existing[:1]:/'
+# D8 owns D10 and D11's CLOSE half too, by design rather than entanglement: a misindented
+# `deferred_acs` reaches close as a malformed value, so skipping malformed values in close closes
+# over it as well. The parser guard D10/D11 exist for is isolated by their own three mutants below.
+dmutant "D8 D10 D11" "close skips a malformed value" 's/^            if state == "malformed":$/            if False:/'
+dmutant D9 "close refuses on [] and absent" 's/^            elif state == "ok" and ids:$/            elif True:/'
+# D10/D11: the misindented-key guard. The full revert restores the drop and must fail both; the two
+# partial fixes each handle one indent form, and each must fail only the other form's cell.
+DMI='            if dm is not None and dm.group(2) == "deferred_acs" and indent != field_indent:$'
+dmutant "D10 D11" "misindented deferred_acs dropped again" "s/^${DMI}/            if False:/"
+dmutant D10 "only a tab is caught, deeper spaces dropped" "s/^\\(${DMI%:\$}\\):\$/\\1 and \"\\\\t\" in dm.group(1):/"
+dmutant D11 "only deeper spaces are caught, a tab dropped" "s/^\\(${DMI%:\$}\\):\$/\\1 and \"\\\\t\" not in dm.group(1):/"
+
 # --- Unmutated control -------------------------------------------------------
 # A copy in the same directory as the mutants, mutated not at all. If the harness itself is what
 # breaks a copy — a resolver that only works in core/scripts/, a schema it cannot find — every
 # mutant above "passes" for a reason that has nothing to do with its mutation.
 CTRL="$WORK/mutant-control.sh"
 cp "$TOOL" "$CTRL"
-CTRL_FAILED="$(cs_battery "$CTRL" | awk '$2=="FAIL"{printf "%s ", $1}')"
+CTRL_FAILED="$( { cs_battery "$CTRL"; ds_battery "$CTRL"; } | awk '$2=="FAIL"{printf "%s ", $1}')"
 if [ -z "$CTRL_FAILED" ]; then
   ok "CONTROL: an unmutated copy beside the mutants passes the whole battery"
 else

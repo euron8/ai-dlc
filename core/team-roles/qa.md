@@ -172,7 +172,9 @@ For each completed task, verify:
   A bare "deferred" / "verify after deploy" with no citable discharge
   predicate is REJECT: it is an untracked hole, not a deferral. QA records
   each deferred AC's predicate in the validation verdict so a later step can
-  mechanically confirm it. Catches a deferred AC that no step is bound to
+  mechanically confirm it; the code-reviewer copies those AC ids into the
+  story's `deferred_acs` in `sprint-status.yaml` at `done` (`code-reviewer.md`),
+  which is how `sprint-status.sh close` sees them still owed. Catches a deferred AC that no step is bound to
   re-check, so it silently never gets verified; false positive is an AC
   whose discharge is genuinely a single named check already scheduled (cite
   it); remove when deferred ACs carry a machine-checked discharge reference

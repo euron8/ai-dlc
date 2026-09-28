@@ -18,6 +18,11 @@
 #      Otherwise the cheapest way past the check is to write `none`.
 set -uo pipefail
 
+# The deferred-items arms below build scratch git repositories. Git exports GIT_DIR to a
+# hook run from a linked worktree, and an inherited one turns `git init` into a silent
+# no-op that redirects every later commit onto the caller's index.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+
 # The pre-push gate inherits every AI_DLC_* tunable a consumer set in settings.json. A
 # fixture that drives a validator while inheriting them tests the CONFIG, not the code.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
@@ -800,6 +805,560 @@ if [ "$SC_CTL_OK" = "1" ]; then
       bad "MUTANT G SURVIVED — a per-run nonce that names no corpus satisfies assertion 33, so that assertion is a differ-check and not a naming check"
     else
       ok "mutant G: a per-run nonce varies the output exactly as the real paths do and still fails assertion 33 ($SC_IDENT_WHY) — the arm demands the corpus be NAMED"
+    fi
+  fi
+fi
+
+# =============================================================================
+# ASSERTIONS 38-: scope_deferred_items -- the part of the ask Step 6 deferred is a
+# FILED carry-over item, and an absent field is legacy only by a date no agent writes.
+# =============================================================================
+# THE DEFECT. A sprint's scope confirmation ratified a phase split, and the deferred phase
+# was recorded only in the lead-authored question -- no hash covers it and no later step
+# reads it. The arm resolves every listed id to a not-CLOSED `### <id>` item in the live
+# carry-over backlog or its archive, and decides an ABSENT field by comparing the hook's
+# answer timestamp against the commit that first stamped the introducing release.
+#
+# THE BACKLOG IS SEEDED IN THE CONSUMER'S OWN SHAPES, not the reader's accept-set: both
+# status spellings the reference consumer writes (`**Status:** X` 37 times and
+# `**Status: X` 52 times in its live backlog), an item whose CURRENT status sits above a
+# superseded one, a heading carrying trailing prose, and headings that are a string
+# PREFIX of another id.
+SD="$WORK/sdi"; mkdir -p "$SD/pa"
+cat > "$SD/pa/carry-over-backlog.md" <<'BL'
+# Carry-over Backlog
+
+## Open items
+
+### CO-S315-PHASE-2-BACKFILL — the historical backfill phase the operator deferred [P2]
+**Status:** OPEN
+Filed at route.md Step 6.
+
+### CO-S315-PHASE-3-CUTOVER
+**Status: OPEN.** The second status spelling the consumer writes.
+
+### CO-S312-IN-SPRINT-ITEM
+**Status:** IN SPRINT (S315, carry-over-evaluation)
+
+### CO-S310-DEFERRAL-ITEM
+**Status:** DEFERRAL_REQUESTED
+
+### CO-S309-CLOSED-ITEM
+**Status:** CLOSED - delivered in sprint 314 via story-S314-2
+
+### CO-S308-REOPENED-ITEM
+**Status:** OPEN — reopened at S315 triage
+**Status:** CLOSED (superseded, retained for history)
+
+### CO-S315-bad_id
+**Status:** OPEN
+
+### CO-S315-PARTIAL-X
+**Status:** OPEN
+
+### CO-S307-NO-STATUS-ITEM
+A body with no status line at all.
+BL
+cat > "$SD/pa/carry-over-backlog-archive.md" <<'AR'
+# Carry-over Backlog Archive
+
+### CO-S290-ARCHIVED-OPEN
+**Status:** DEFERRAL_REQUESTED
+
+### CO-S290-ARCHIVED-CLOSED
+**Status: CLOSED - delivered in sprint 291.**
+AR
+SD_BL="$SD/pa/carry-over-backlog.md"
+
+# One routing record per value. `-` omits the field entirely (the ABSENT case).
+sd_snap() {   # $1 name, $2 value or '-', $3 cite (default $SHA)
+  local f="$SD/snap-$1.md"
+  {
+    echo "# Pipeline Snapshot"; echo; echo "## Pipeline Position"
+    echo "- user_request_verbatim: Sprint 315: TELv3 upgrade, phased."
+    echo "- scope_confirmed: confirmed"
+    echo "- scope_confirmed_cite: ${3:-$SHA}"
+    [ "$2" = "-" ] || printf -- '- scope_deferred_items: %s\n' "$2"
+  } > "$f"
+}
+sd_snap none      "none"
+sd_snap one       "[CO-S315-PHASE-2-BACKFILL]"
+sd_snap spell2    "[CO-S315-PHASE-3-CUTOVER]"
+sd_snap two       "[CO-S315-PHASE-2-BACKFILL, CO-S315-PHASE-3-CUTOVER]"
+sd_snap second    "[CO-S315-PHASE-2-BACKFILL, CO-S315-NEVER-FILED]"
+sd_snap malformed "[CO-S315-bad_id]"
+sd_snap closed    "[CO-S309-CLOSED-ITEM]"
+sd_snap live      "[CO-S312-IN-SPRINT-ITEM, CO-S310-DEFERRAL-ITEM]"
+sd_snap reopened  "[CO-S308-REOPENED-ITEM]"
+sd_snap archived  "[CO-S290-ARCHIVED-OPEN]"
+sd_snap archclosed "[CO-S290-ARCHIVED-CLOSED]"
+sd_snap prefix    "[CO-S315-PARTIAL]"
+sd_snap nostatus  "[CO-S307-NO-STATUS-ITEM]"
+sd_snap emptylist "[]"
+sd_snap unclosed  "[CO-S315-PHASE-2-BACKFILL,"
+sd_snap absent    "-"
+sd_snap absentnone "-" none
+# The producer's bold grammar, a backticked list, and a block list (refused, never empty).
+{ echo "# Pipeline Snapshot"; echo "## Pipeline Position"
+  echo "- **user_request_verbatim:** Sprint 315."
+  echo "- **scope_confirmed:** confirmed — the operator took the phased split."
+  echo "- **scope_confirmed_cite:** \`$SHA\`"
+  echo "- **scope_deferred_items:** \`[CO-S315-PHASE-2-BACKFILL, CO-S315-PHASE-3-CUTOVER]\` — both filed at Step 6."
+} > "$SD/snap-bold.md"
+{ echo "# Pipeline Snapshot"; echo "## Pipeline Position"
+  echo "- user_request_verbatim: Sprint 315."
+  echo "- scope_confirmed: confirmed"
+  echo "- scope_confirmed_cite: $SHA"
+  echo "- scope_deferred_items:"
+  echo "  - CO-S315-PHASE-2-BACKFILL"
+} > "$SD/snap-block.md"
+
+# --- the dated worlds: answers and repositories -------------------------------
+# The answer heading is the hook's; only its timestamp is varied, and the entry the cite
+# resolves to is otherwise the hook's own bytes.
+sd_answers() {   # $1 name, $2 ISO-Z timestamp
+  sed "s/^## [0-9][0-9T:Z-]* -- AskUserQuestion/## $2 -- AskUserQuestion/" "$ANSWERS" > "$SD/answers-$1.md"
+}
+sd_answers early   2026-09-26T07:29:05Z
+sd_answers late    2026-09-29T00:00:00Z
+sd_answers tzgap   2026-09-28T17:00:00Z
+sd_answers between 2026-10-02T00:00:00Z
+# The hash covers the answer body alone, so a short answer recurs. The reference consumer's
+# live cite resolves to three entries whose body is `Confirmed`. Here the same entry appears
+# twice: first before the release stamp, then after it. The NEWEST entry dates the answer.
+{ cat "$SD/answers-early.md"; echo; sed -n '/^## /,$p' "$SD/answers-late.md"; } > "$SD/answers-dup.md"
+
+# sd_repo <name> <version@committer-date> ... -- one commit per stamp, oldest first.
+sd_repo() {
+  local d="$SD/repo-$1" s v t; shift
+  mkdir -p "$d/.claude"
+  git -C "$d" init -q 2>/dev/null || return 1
+  for s in "$@"; do
+    v="${s%%@*}"; t="${s#*@}"
+    printf 'version: %s\ncommit: 0000000\ninstalled_at: 2026-06-13T13:56:26Z\n' "$v" > "$d/.claude/.ai-dlc-version"
+    git -C "$d" add .claude/.ai-dlc-version
+    GIT_AUTHOR_DATE="$t" GIT_COMMITTER_DATE="$t" \
+      git -C "$d" -c user.name=f -c user.email=f@f -c commit.gpgsign=false commit -q -m "stamp $v" || return 1
+  done
+}
+# The release lands at 15:54:22-04:00 = 19:54:22Z, spelled with an explicit offset.
+sd_repo std  "0.658.0@2026-09-20T10:00:00-04:00" "0.659.0@2026-09-28T15:54:22-04:00"
+sd_repo old  "0.657.0@2026-09-10T10:00:00Z" "0.658.0@2026-09-20T10:00:00Z"
+# 0.7.0 is OLDER than 0.659.0 and string-compares as NEWER.
+sd_repo lex  "0.7.0@2026-01-05T10:00:00Z" "0.658.0@2026-09-20T10:00:00Z" "0.659.0@2026-09-28T19:54:22Z"
+# Two qualifying stamps: the FIRST one decides.
+sd_repo two  "0.659.0@2026-09-28T19:54:22Z" "0.660.0@2026-10-05T10:00:00Z"
+mkdir -p "$SD/nogit"
+
+SD_REPO_OK=1
+for r in std old lex two; do
+  n="$(git -C "$SD/repo-$r" rev-list --count HEAD 2>/dev/null)" || n=0
+  [ "${n:-0}" -ge 2 ] || SD_REPO_OK=0
+done
+if [ "$SD_REPO_OK" = "1" ] && ! git -C "$SD/nogit" rev-parse --git-dir >/dev/null 2>&1; then
+  ok "SEED: four dated repositories built with their commits, and the no-git directory is not inside one"
+else
+  bad "SEED BROKEN: a dated repository has fewer than two commits, or the no-git directory resolves to a repository — every legacy verdict below would be about the wrong history"
+fi
+
+SD_OUT=""; SD_RC=0
+sd_run() {   # $1 validator, $2 snapshot name, $3 answers path, $4 repo path, [$5 TZ]
+  SD_OUT="$(TZ="${5:-UTC}" bash "$1" --snapshot "$SD/snap-$2.md" --answers "$3" \
+            --backlog "$SD_BL" --repo "$4" 2>&1)"; SD_RC=$?
+}
+sd_has() { grep -qF -- "$1" <<<"$SD_OUT"; }
+REPO_STD="$SD/repo-std"
+
+# sd_verdicts <validator> -> one token per arm, in a fixed order. Every arm below reads its
+# own position, and every mutant is scored against the same vector, so a mutant that moves
+# a cell it does not own is visible as entanglement rather than hidden as a kill.
+SD_CELLS="none one spell2 two second malformed closed live reopened archived archclosed prefix nostatus emptylist unclosed bold block absent-early absent-late nogit nostamp tzgap lex first absentnone duphash"
+sd_verdicts() {
+  local v="$1" out=""
+  sd_cell() { out="$out $1=$SD_RC"; }
+  sd_run "$v" none "$ANSWERS" "$REPO_STD"
+  sd_has "scope_deferred_items: none" || SD_RC="${SD_RC}x"; sd_cell none
+  sd_run "$v" one "$ANSWERS" "$REPO_STD"
+  sd_has "deferred_items_checked: 1" || SD_RC="${SD_RC}x"; sd_cell one
+  sd_run "$v" spell2 "$ANSWERS" "$REPO_STD"; sd_cell spell2
+  sd_run "$v" two "$ANSWERS" "$REPO_STD"
+  sd_has "deferred_items_checked: 2" || SD_RC="${SD_RC}x"; sd_cell two
+  sd_run "$v" second "$ANSWERS" "$REPO_STD"
+  sd_has "CO-S315-NEVER-FILED" || SD_RC="${SD_RC}x"; sd_cell second
+  sd_run "$v" malformed "$ANSWERS" "$REPO_STD"
+  sd_has "malformed" || SD_RC="${SD_RC}x"; sd_cell malformed
+  sd_run "$v" closed "$ANSWERS" "$REPO_STD"; sd_cell closed
+  sd_run "$v" live "$ANSWERS" "$REPO_STD"; sd_cell live
+  sd_run "$v" reopened "$ANSWERS" "$REPO_STD"; sd_cell reopened
+  sd_run "$v" archived "$ANSWERS" "$REPO_STD"; sd_cell archived
+  sd_run "$v" archclosed "$ANSWERS" "$REPO_STD"; sd_cell archclosed
+  sd_run "$v" prefix "$ANSWERS" "$REPO_STD"; sd_cell prefix
+  sd_run "$v" nostatus "$ANSWERS" "$REPO_STD"; sd_cell nostatus
+  sd_run "$v" emptylist "$ANSWERS" "$REPO_STD"; sd_cell emptylist
+  sd_run "$v" unclosed "$ANSWERS" "$REPO_STD"; sd_cell unclosed
+  sd_run "$v" bold "$ANSWERS" "$REPO_STD"
+  sd_has "deferred_items_checked: 2" || SD_RC="${SD_RC}x"; sd_cell bold
+  sd_run "$v" block "$ANSWERS" "$REPO_STD"; sd_cell block
+  sd_run "$v" absent "$SD/answers-early.md" "$REPO_STD"; sd_cell absent-early
+  sd_run "$v" absent "$SD/answers-late.md" "$REPO_STD"
+  sd_has "no 'scope_deferred_items' field" || SD_RC="${SD_RC}x"; sd_cell absent-late
+  sd_run "$v" absent "$SD/answers-late.md" "$SD/nogit"; sd_cell nogit
+  sd_run "$v" absent "$SD/answers-late.md" "$SD/repo-old"; sd_cell nostamp
+  sd_run "$v" absent "$SD/answers-tzgap.md" "$REPO_STD" America/New_York; sd_cell tzgap
+  sd_run "$v" absent "$SD/answers-early.md" "$SD/repo-lex"; sd_cell lex
+  sd_run "$v" absent "$SD/answers-between.md" "$SD/repo-two"; sd_cell first
+  sd_run "$v" absentnone "$ANSWERS_EMPTY" "$REPO_STD"; sd_cell absentnone
+  sd_run "$v" absent "$SD/answers-dup.md" "$REPO_STD"; sd_cell duphash
+  printf '%s\n' "${out# }"
+}
+# The expected vector. An `x` suffix means the rc was right but the owning message was not.
+SD_EXPECT="none=0 one=0 spell2=0 two=0 second=1 malformed=1 closed=1 live=0 reopened=0 archived=0 archclosed=1 prefix=1 nostatus=1 emptylist=1 unclosed=1 bold=0 block=1 absent-early=3 absent-late=1 nogit=3 nostamp=3 tzgap=3 lex=3 first=1 absentnone=3 duphash=1"
+sd_cell_of() { tr ' ' '\n' <<<"$1" | awk -F= -v k="$2" '$1==k{print $2}'; }
+
+sd_why() {
+  case "$1" in
+    none)        echo "'none' is the honest empty value; refusing it wedges every sprint that deferred nothing" ;;
+    one|spell2)  echo "a filed OPEN item must resolve in either status spelling the consumer writes" ;;
+    two|bold)    echo "every id of a multi-id list must be read, in the plain and the producer's bold+backticked grammar" ;;
+    second)      echo "a SECOND id that was never filed passed — the extractor reads only the first token" ;;
+    malformed)   echo "a token outside CO-S<N>-<DESCRIPTOR> passed because a heading happened to carry it" ;;
+    closed|archclosed) echo "a CLOSED item cannot be the part of the ask this sprint just deferred" ;;
+    live)        echo "IN SPRINT and DEFERRAL_REQUESTED are live statuses and must resolve" ;;
+    reopened)    echo "the CURRENT status is the first one in the item; a superseded line below it must not decide" ;;
+    archived)    echo "retro moves items to carry-over-backlog-archive.md; an id resolvable only there must resolve" ;;
+    prefix)      echo "an id that is only a string PREFIX of a filed heading resolved to it" ;;
+    nostatus)    echo "an item with no status line is not a filed OPEN item" ;;
+    emptylist|unclosed|block) echo "a list that reads as nothing must be refused, never read as empty" ;;
+    absent-early) echo "an absent field on an answer that predates the release stamp must be PENDING, not FAIL" ;;
+    absent-late) echo "an absent field on an answer given after the release stamp is the skipped write and must FAIL" ;;
+    nogit|nostamp) echo "no git, or no commit stamping the release, leaves the date undecidable: PENDING" ;;
+    tzgap)       echo "the hook timestamp is UTC; read in the caller's zone it lands after the stamp and FAILS a legacy record" ;;
+    lex)         echo "0.7.0 is older than 0.659.0; a string compare dates the release to the wrong commit" ;;
+    first)       echo "the FIRST commit stamping the release decides; a later one reads a post-release answer as legacy" ;;
+    absentnone)  echo "a 'none' cite carries no answer timestamp, so an absent field beside it is PENDING" ;;
+    duphash)     echo "a recurring answer hash was dated by its OLDEST entry, reading a post-release skipped write as legacy" ;;
+  esac
+}
+
+# --- Assertions 38-62: every cell against the shipping validator ---------------
+SD_GOT="$(sd_verdicts "$VALIDATOR")"
+for c in $SD_CELLS; do
+  want="$(sd_cell_of "$SD_EXPECT" "$c")"; got="$(sd_cell_of "$SD_GOT" "$c")"
+  if [ "$want" = "$got" ]; then
+    ok "deferred-items cell '$c': rc=$got as required"
+  else
+    bad "deferred-items cell '$c': got '$got', expected '$want' — $(sd_why "$c")"
+  fi
+done
+
+# --- Assertion 63: the two consumer layouts do not change the answer ------------
+# The arm reads `carry-over-backlog-archive.md` BESIDE the backlog it was given, never from
+# the root, so a backlog passed by path finds its own archive from any working directory.
+SD_CWD_OUT="$( cd / && bash "$VALIDATOR" --snapshot "$SD/snap-archived.md" --answers "$ANSWERS" \
+                 --backlog "$SD_BL" --repo "$REPO_STD" 2>&1 )"; SD_CWD_RC=$?
+if [ "$SD_CWD_RC" = "0" ] && grep -qF "deferred_items_checked: 1" <<<"$SD_CWD_OUT"; then
+  ok "run from / the archive beside the given backlog still resolves — the arm is cwd-invariant"
+else
+  bad "run from / the archived id returned rc=$SD_CWD_RC — the archive is located relative to the working directory: $SD_CWD_OUT"
+fi
+
+# --- the deferred-items mutation battery ----------------------------------------
+# Each mutant is a COPY with ONE anchored substitution. It must move the cells it OWNS and
+# NO other cell, against a control copy that reproduces the whole expected vector. The
+# anchors carry no backslash, because `awk -v` would eat one and the mutation would match
+# nothing — `cmp -s` refuses that, and so does the anchor-count guard.
+SD_MUT_KILLS=0; SD_MUT_BUILT=0
+sd_mut() {   # $1 label, $2 anchor, $3 replacement, $4 expected anchor count, $5 owned cells
+  local label="$1" anchor="$2" repl="$3" want_n="$4" owned="$5" out n got c w g moved stray
+  out="$SD/mutant-$label.sh"
+  n="$(grep -cF -- "$anchor" "$VALIDATOR")" || n=0
+  if [ "$n" != "$want_n" ]; then
+    bad "FIXTURE STALE: mutant $label's anchor occurs $n times, not $want_n — the mutation could land on the wrong line"
+    return
+  fi
+  awk -v a="$anchor" -v r="$repl" '{
+      i = index($0, a)
+      if (i) { $0 = substr($0, 1, i - 1) r substr($0, i + length(a)) }
+      print
+    }' "$VALIDATOR" > "$out"
+  if cmp -s "$VALIDATOR" "$out"; then
+    bad "FIXTURE STALE: mutant $label is byte-identical to the validator — the substitution matched nothing"; return
+  fi
+  if ! bash -n "$out" 2>/dev/null; then
+    bad "FIXTURE BROKEN: mutant $label is not a valid shell script, so a kill would only mean the copy could not run"; return
+  fi
+  SD_MUT_BUILT=$((SD_MUT_BUILT + 1))
+  got="$(sd_verdicts "$out")"
+  moved=""; stray=""
+  for c in $SD_CELLS; do
+    w="$(sd_cell_of "$SD_EXPECT" "$c")"; g="$(sd_cell_of "$got" "$c")"
+    case " $owned " in
+      *" $c "*) [ "$w" != "$g" ] && moved="$moved $c" ;;
+      *)        [ "$w" != "$g" ] && stray="$stray $c=$g" ;;
+    esac
+  done
+  if [ -n "$stray" ]; then
+    bad "mutant $label moved cells it does not own:$stray — the arms are entangled and one of them is vacuous"
+  elif [ "$(echo $moved | wc -w)" -ne "$(echo $owned | wc -w)" ]; then
+    bad "MUTANT $label SURVIVED on some of its own cells (moved:${moved:- none}; owned: $owned) — those cells are not testing what this mutant removes"
+  else
+    SD_MUT_KILLS=$((SD_MUT_KILLS + 1))
+    ok "mutant $label killed on exactly its own cells:$moved"
+  fi
+}
+
+# Control: an unmutated copy reproduces the whole vector, so a mutant verdict means mutation.
+SD_CTL="$SD/control.sh"; cp "$VALIDATOR" "$SD_CTL"
+SD_CTL_GOT="$(sd_verdicts "$SD_CTL")"
+if [ "$SD_CTL_GOT" = "$SD_EXPECT" ]; then
+  ok "control: an unmutated copy reproduces all $(echo $SD_CELLS | wc -w) deferred-items cells, PASS, FAIL and PENDING alike"
+
+  # REGRESSION 1 — field_of reused: it stops at the first space, so a list collapses to its
+  # FIRST id once the brackets and comma are stripped, and a second unfiled id rides along.
+  sd_mut fieldof 'SDI_RAW="$(deferred_items_of "$SNAPSHOT")"' \
+    'SDI_RAW="$(v="$(field_of scope_deferred_items "$SNAPSHOT" | tr -d "[],")"; if [ "$v" = none ]; then echo "@none"; elif [ -n "$v" ]; then echo "@[$v]"; fi)"' \
+    1 "two second unclosed bold"
+  # REGRESSION 2 — the absent field read as PENDING unconditionally: the FAIL branch
+  # reports PENDING instead, so every post-release cell sees it. `duphash` is one of them
+  # by construction; `oldestanswer` below is what isolates it.
+  sd_mut absentpending 'which owes it." >&2' 'which owes it." >&2; exit 3' 1 "absent-late first duphash"
+  # `two` and `bold` each carry a second-spelling id, so they are owned here too — the
+  # corpus being faithful, not the arms being entangled: `spell2` isolates the spelling.
+  sd_mut spelling 'found && index($0, "**Status: ")' 'found && 0 && index($0, "**Status: ")' 1 "spell2 two bold"
+  sd_mut noarchive '[ "$st" = "NOHEAD" ] && [ -f "$ARCHIVE" ]' 'false' 1 "archived"
+  sd_mut noclosed '            CLOSED*)' '            CLOSED-NEVER-A-STATUS*)' 1 "closed archclosed"
+  sd_mut nogrammar "if ! grep -Eq '^CO-S[0-9]+-[A-Z0-9-]+\$' <<<\"\$tok\"; then" 'if false; then' 1 "malformed"
+  sd_mut prefixmatch '!found && $1 == "###" && $2 == id' '!found && $1 == "###" && index($2, id) == 1' 1 "prefix"
+  sd_mut emptyok '    if [ "$SDI_N" -eq 0 ]; then' '    if false; then' 1 "emptylist"
+  sd_mut strversion 'ge(v, rel) && (best' '(v >= rel) && (best' 1 "lex"
+  sd_mut laststamp '(best == "" || t < best)' '(best == "" || t > best)' 1 "first"
+  sd_mut oldestanswer '$0 == c { t = h } END { print t }' '$0 == c { print h; exit }' 1 "duphash"
+  if TZ=UTC date -j -u -f '%Y-%m-%dT%H:%M:%SZ' 2026-01-01T00:00:00Z +%s >/dev/null 2>&1; then
+    # BSD date only: GNU `date -d` honours the trailing Z whatever TZ says, so this mutant
+    # cannot express the defect there and is not built.
+    sd_mut localzone "TZ=UTC date -j -u -f" "date -j -f" 1 "tzgap"
+    SD_MUT_WANT=12
+  else
+    ok "GNU date: the zone mutant is not built here — GNU parses the trailing Z itself, so the defect it seeds is unconstructible on this platform"
+    SD_MUT_WANT=11
+  fi
+  if [ "$SD_MUT_KILLS" -eq "$SD_MUT_WANT" ]; then
+    ok "all $SD_MUT_WANT deferred-items mutants killed against the resolved validator $VALIDATOR"
+  else
+    bad "only $SD_MUT_KILLS of $SD_MUT_WANT deferred-items mutants were killed ($SD_MUT_BUILT built) — an unkilled mutant is an arm that cannot fire"
+  fi
+else
+  bad "CONTROL FAILED: an unmutated copy returned [$SD_CTL_GOT], expected [$SD_EXPECT] — every mutant verdict below would be uninterpretable"
+fi
+
+# =============================================================================
+# THE UNREADABLE CORPUS -- a backlog or archive that exists and cannot be read REFUSES (exit 2).
+# =============================================================================
+# THE DEFECT. status_of is awk over the file. Against a file awk cannot open it prints nothing and
+# exits before END, so `st` came back EMPTY, and the verdict case's catch-all arm acquitted the
+# empty string as "found, not CLOSED": a CLOSED id and an id never filed both passed at exit 0
+# against a mode-000 backlog. The fix is three layers, and each cell below is the subject of ONE
+# of them, because layers that reach the same subject cover each other and no mutant of either
+# can die:
+#   precheck  -- an existing, unreadable (or non-regular) backlog/archive refuses before any
+#                lookup. Its own subjects: the archive unreadable while the id resolves in the
+#                backlog (never looked up), and a backlog path that is a DIRECTORY (root-proof).
+#   lookuprc  -- the lookup's exit status. Subject: a stub awk that prints `S OPEN` and exits 2.
+#   verdict   -- only `S <status>` is FOUND. Subject: a stub awk that exits 0 printing nothing.
+# The mode-000 cells cannot express unreadable under root (or any host that reads a mode-000
+# file). They are then INCONCLUSIVE -- `S` in the vector, never `ok` -- and the directory and stub
+# cells still carry every mutant.
+UR="$SD/ur"; mkdir -p "$UR/ok" "$UR/b0" "$UR/a0" "$UR/dir" "$UR/stub"
+SD_ARCH="$SD/pa/carry-over-backlog-archive.md"
+for w in ok b0 a0; do cp "$SD_BL" "$UR/$w/carry-over-backlog.md"; cp "$SD_ARCH" "$UR/$w/carry-over-backlog-archive.md"; done
+mkdir -p "$UR/dir/carry-over-backlog.md"; cp "$SD_ARCH" "$UR/dir/carry-over-backlog-archive.md"
+chmod 000 "$UR/b0/carry-over-backlog.md" "$UR/a0/carry-over-backlog-archive.md"
+sd_snap unfiled "[CO-S315-NEVER-FILED]"
+UR_SKIP=""
+if [ "$(id -u)" -eq 0 ]; then UR_SKIP="running as root, which reads a mode-000 file"
+elif cat "$UR/b0/carry-over-backlog.md" >/dev/null 2>&1 || cat "$UR/a0/carry-over-backlog-archive.md" >/dev/null 2>&1; then
+  UR_SKIP="this host reads a mode-000 file, so the seed cannot express unreadable"
+fi
+[ -n "$UR_SKIP" ] && printf '  INCONCLUSIVE  unreadable-corpus mode-000 cells -- %s\n' "$UR_SKIP"
+UR_MODE000="bl-closed bl-unfiled bl-none ar-only ar-unreached"
+
+# The stub claims ONLY status_of (its argv carries `-v id=`), logs the claim, and execs the real
+# awk for everything else.
+UR_REALAWK="$(command -v awk)" || { echo "FIXTURE ERROR: awk is not on PATH" >&2; exit 2; }
+{
+  printf '#!/bin/sh\ncase " $* " in\n'
+  printf '  *" id="*) printf "x\\n" >> "%s/LOG"\n' "$UR/stub"
+  printf '    case "$UR_AWK_MODE" in failok) echo "S OPEN"; exit 2 ;; silent) exit 0 ;; esac ;;\n'
+  printf 'esac\nexec "%s" "$@"\n' "$UR_REALAWK"
+} > "$UR/stub/awk"
+chmod +x "$UR/stub/awk"
+
+UR_OUT=""; UR_RC=0
+ur_run() {   # $1 validator, $2 world, $3 snapshot name, [$4 stub mode]
+  : > "$UR/stub/LOG"
+  if [ -n "${4:-}" ]; then
+    UR_OUT="$(PATH="$UR/stub:$PATH" UR_AWK_MODE="$4" TZ=UTC bash "$1" --snapshot "$SD/snap-$3.md" \
+              --answers "$ANSWERS" --backlog "$UR/$2/carry-over-backlog.md" --repo "$REPO_STD" 2>&1)"; UR_RC=$?
+  else
+    UR_OUT="$(TZ=UTC bash "$1" --snapshot "$SD/snap-$3.md" --answers "$ANSWERS" \
+              --backlog "$UR/$2/carry-over-backlog.md" --repo "$REPO_STD" 2>&1)"; UR_RC=$?
+  fi
+}
+ur_refused() {   # $1 the file the refusal must name
+  grep -qF "cannot read the carry-over corpus" <<<"$UR_OUT" && grep -qF -- "$1" <<<"$UR_OUT"
+}
+UR_CELLS="ctl-closed ctl-archclosed bl-closed bl-unfiled bl-none ar-only ar-unreached dir stub-failok stub-silent"
+ur_verdicts() {
+  local v="$1" out="" c
+  ur_cell() { out="$out $1=$UR_RC"; }
+  ur_skip() { case " $UR_MODE000 " in *" $1 "*) [ -n "$UR_SKIP" ] && { out="$out $1=S"; return 0; } ;; esac; return 1; }
+  # Readable twins, same invocation: the SAME ids against the SAME bytes read CLOSED -> 1.
+  ur_run "$v" ok closed; ur_cell ctl-closed
+  ur_run "$v" ok archclosed; ur_cell ctl-archclosed
+  ur_skip bl-closed || { ur_run "$v" b0 closed; ur_refused "$UR/b0/carry-over-backlog.md" || UR_RC="${UR_RC}x"; ur_cell bl-closed; }
+  ur_skip bl-unfiled || { ur_run "$v" b0 unfiled; ur_refused "$UR/b0/carry-over-backlog.md" || UR_RC="${UR_RC}x"; ur_cell bl-unfiled; }
+  # Near-miss: `none` consults no corpus, so an unreadable one does not wedge it.
+  ur_skip bl-none || { ur_run "$v" b0 none; ur_cell bl-none; }
+  ur_skip ar-only || { ur_run "$v" a0 archclosed; ur_refused "$UR/a0/carry-over-backlog-archive.md" || UR_RC="${UR_RC}x"; ur_cell ar-only; }
+  ur_skip ar-unreached || { ur_run "$v" a0 one; ur_refused "$UR/a0/carry-over-backlog-archive.md" || UR_RC="${UR_RC}x"; ur_cell ar-unreached; }
+  ur_run "$v" dir one; ur_refused "$UR/dir/carry-over-backlog.md" || UR_RC="${UR_RC}x"; ur_cell dir
+  for c in failok silent; do
+    ur_run "$v" ok closed "$c"
+    [ -s "$UR/stub/LOG" ] || UR_RC="${UR_RC}n"     # the stub never ran: this cell observed nothing
+    ur_refused "$UR/ok/carry-over-backlog.md" || UR_RC="${UR_RC}x"; ur_cell "stub-$c"
+  done
+  printf '%s\n' "${out# }"
+}
+UR_EXPECT="ctl-closed=1 ctl-archclosed=1 bl-closed=2 bl-unfiled=2 bl-none=0 ar-only=2 ar-unreached=2 dir=2 stub-failok=2 stub-silent=2"
+if [ -n "$UR_SKIP" ]; then
+  for c in $UR_MODE000; do UR_EXPECT="$(sed "s/ $c=[0-9]*/ $c=S/" <<<" $UR_EXPECT")"; UR_EXPECT="${UR_EXPECT# }"; done
+fi
+
+UR_GOT="$(ur_verdicts "$VALIDATOR")"
+for c in $UR_CELLS; do
+  want="$(sd_cell_of "$UR_EXPECT" "$c")"; got="$(sd_cell_of "$UR_GOT" "$c")"
+  if [ "$want" = "S" ] && [ "$got" = "S" ]; then continue; fi
+  if [ "$want" = "$got" ]; then
+    ok "unreadable-corpus cell '$c': rc=$got as required"
+  else
+    bad "unreadable-corpus cell '$c': got '$got', expected '$want' — an id looked up in a corpus nobody could read was given a verdict (x: the refusal did not name the file; n: the stub awk never ran)"
+  fi
+done
+
+UR_MUT_KILLS=0; UR_MUT_WANT=0
+ur_mut() {   # $1 label, $2 owned cells, then anchor/replacement pairs; every anchor occurs exactly once
+  local label="$1" owned="" c prev out n got moved stray w g
+  for c in $2; do
+    case " $UR_MODE000 " in *" $c "*) [ -n "$UR_SKIP" ] && continue ;; esac
+    owned="$owned $c"
+  done
+  owned="${owned# }"; shift 2
+  UR_MUT_WANT=$((UR_MUT_WANT + 1))
+  out="$UR/mutant-$label.sh"; cp "$VALIDATOR" "$out"
+  while [ $# -ge 2 ]; do
+    n="$(grep -cF -- "$1" "$out")" || n=0
+    if [ "$n" != "1" ]; then
+      bad "FIXTURE STALE: unreadable-corpus mutant $label's anchor '$1' occurs $n times, not 1"; return
+    fi
+    prev="$out.prev"; cp "$out" "$prev"
+    awk -v a="$1" -v r="$2" '{ i = index($0, a); if (i) { $0 = substr($0, 1, i - 1) r substr($0, i + length(a)) } print }' "$prev" > "$out"
+    if cmp -s "$prev" "$out"; then
+      bad "FIXTURE STALE: unreadable-corpus mutant $label's substitution for '$1' matched nothing"; return
+    fi
+    shift 2
+  done
+  if ! bash -n "$out" 2>/dev/null; then
+    bad "FIXTURE BROKEN: unreadable-corpus mutant $label is not a valid shell script"; return
+  fi
+  got="$(ur_verdicts "$out")"
+  moved=""; stray=""
+  for c in $UR_CELLS; do
+    w="$(sd_cell_of "$UR_EXPECT" "$c")"; g="$(sd_cell_of "$got" "$c")"
+    case " $owned " in
+      *" $c "*) [ "$w" != "$g" ] && moved="$moved $c" ;;
+      *)        [ "$w" != "$g" ] && stray="$stray $c=$g" ;;
+    esac
+  done
+  if [ -n "$stray" ]; then
+    bad "unreadable-corpus mutant $label moved cells it does not own:$stray — the layers are entangled"
+  elif [ -z "$owned" ] || [ "$(echo $moved | wc -w)" -ne "$(echo $owned | wc -w)" ]; then
+    bad "UNREADABLE-CORPUS MUTANT $label SURVIVED on some of its own cells (moved:${moved:- none}; owned: ${owned:-none})"
+  else
+    UR_MUT_KILLS=$((UR_MUT_KILLS + 1))
+    ok "unreadable-corpus mutant $label killed on exactly its own cells:$moved"
+  fi
+}
+
+UR_CTL="$UR/control.sh"; cp "$VALIDATOR" "$UR_CTL"
+UR_CTL_GOT="$(ur_verdicts "$UR_CTL")"
+if [ "$UR_CTL_GOT" = "$UR_EXPECT" ]; then
+  ok "control: an unmutated copy reproduces every unreadable-corpus cell, the readable CLOSED twins at 1 included"
+  UR_A1='if [ -e "$sdi_f" ] && {'; UR_R1='if false && {'
+  UR_A2='      if [ "$sdi_lrc" -ne 0 ]; then'; UR_R2='      if false; then'
+  UR_A3='        "S "*)'; UR_R3='        *)'
+  ur_mut precheck "ar-unreached dir" "$UR_A1" "$UR_R1"
+  ur_mut lookuprc "stub-failok" "$UR_A2" "$UR_R2"
+  ur_mut verdict "stub-silent" "$UR_A3" "$UR_R3"
+  # The pre-fix shape: every layer reverted, so an unopenable file's empty answer falls through
+  # to the catch-all and is acquitted.
+  ur_mut fallthrough "bl-closed bl-unfiled ar-only ar-unreached dir stub-failok stub-silent" \
+    "$UR_A1" "$UR_R1" "$UR_A2" "$UR_R2" "$UR_A3" "$UR_R3"
+  if [ "$UR_MUT_KILLS" -eq "$UR_MUT_WANT" ] && [ "$UR_MUT_WANT" -eq 4 ]; then
+    ok "all 4 unreadable-corpus mutants killed against the resolved validator $VALIDATOR"
+  else
+    bad "only $UR_MUT_KILLS of $UR_MUT_WANT unreadable-corpus mutants were killed (4 expected)"
+  fi
+else
+  bad "CONTROL FAILED: an unmutated copy returned [$UR_CTL_GOT], expected [$UR_EXPECT] — every unreadable-corpus mutant verdict would be uninterpretable"
+fi
+chmod 644 "$UR/b0/carry-over-backlog.md" "$UR/a0/carry-over-backlog-archive.md" 2>/dev/null
+
+# --- A non-UTF-8 byte in a READABLE item is not an unreadable corpus ---------------------------
+# Once the lookup's awk exit is read, a UTF-8 locale makes BSD awk abort (`towc: multibyte
+# conversion failure`) on one Latin-1 byte inside the item's section, and that abort refused a
+# healthy OPEN item as "cannot read the carry-over corpus". The CLOSED twin is the same bytes one
+# status apart, so a subject that refuses or acquits everything fails one of the pair. The cells
+# run under a UTF-8 locale; a host without one cannot express the defect and says so.
+LB="$SD/latin1"; mkdir -p "$LB/open" "$LB/closed"
+printf '# Carry-over Backlog\n\n### CO-S315-LATIN1-ITEM\ncaf\351 note carried from a pasted email\n**Status:** OPEN\n' \
+  > "$LB/open/carry-over-backlog.md"
+printf '# Carry-over Backlog\n\n### CO-S315-LATIN1-ITEM\ncaf\351 note carried from a pasted email\n**Status:** CLOSED - delivered\n' \
+  > "$LB/closed/carry-over-backlog.md"
+sd_snap latin1 "[CO-S315-LATIN1-ITEM]"
+LB_LOC=""
+for l in en_US.UTF-8 C.UTF-8; do
+  if [ "$(LC_ALL="$l" locale charmap 2>/dev/null)" = "UTF-8" ]; then LB_LOC="$l"; break; fi
+done
+lb_run() {   # $1 validator, $2 world -> echoes rc
+  LC_ALL="$LB_LOC" LANG="$LB_LOC" TZ=UTC bash "$1" --snapshot "$SD/snap-latin1.md" --answers "$ANSWERS" \
+    --backlog "$LB/$2/carry-over-backlog.md" --repo "$REPO_STD" >/dev/null 2>&1
+  echo $?
+}
+if [ -z "$LB_LOC" ]; then
+  printf '  INCONCLUSIVE  latin1 cells -- this host has no UTF-8 locale, so it cannot express the abort\n'
+else
+  r_open="$(lb_run "$VALIDATOR" open)"; r_closed="$(lb_run "$VALIDATOR" closed)"
+  if [ "$r_open" = "0" ] && [ "$r_closed" = "1" ]; then
+    ok "a Latin-1 byte in a readable item under $LB_LOC: OPEN passes (0), its CLOSED twin fails (1)"
+  else
+    bad "a Latin-1 byte in a readable item under $LB_LOC: OPEN rc=$r_open (want 0), CLOSED rc=$r_closed (want 1) — an encoding read as an unreadable corpus, or a CLOSED item acquitted"
+  fi
+  LB_MUT="$LB/mutant-unpinned.sh"
+  n="$(grep -cF -- '  LC_ALL=C awk -v id="$1"' "$VALIDATOR")" || n=0
+  if [ "$n" != "1" ]; then
+    bad "FIXTURE STALE: the latin1 mutant's anchor occurs $n times in $VALIDATOR, not 1"
+  else
+    awk '{ i = index($0, "  LC_ALL=C awk -v id=\"$1\""); if (i) $0 = "  awk -v id=\"$1\"" substr($0, i + length("  LC_ALL=C awk -v id=\"$1\"")); print }' \
+      "$VALIDATOR" > "$LB_MUT"
+    if cmp -s "$VALIDATOR" "$LB_MUT"; then
+      bad "FIXTURE STALE: the latin1 mutant (locale pin removed) matched nothing"
+    else
+      m_open="$(lb_run "$LB_MUT" open)"; m_closed="$(lb_run "$LB_MUT" closed)"
+      if [ "$m_open" != "0" ] && [ "$m_closed" != "0" ]; then
+        ok "latin1 mutant (locale pin removed) killed: OPEN rc=$m_open under $LB_LOC"
+      else
+        bad "LATIN1 MUTANT SURVIVED: with the locale pin removed the OPEN item still passed (rc=$m_open) — the cell cannot see the abort"
+      fi
     fi
   fi
 fi

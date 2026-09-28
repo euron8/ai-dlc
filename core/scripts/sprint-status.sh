@@ -19,7 +19,8 @@
 #   sprint-status.sh check-stories [--sprint <N>] [--root <dir>]
 #                                              # gate-validation.md Check 5: every story entry's
 #                                              # `status:` equals the status in the story file it
-#                                              # names, in every canonical copy
+#                                              # names, in every canonical copy; `deferred_acs`
+#                                              # parsed, compared across views, owed ids printed
 #   sprint-status.sh derive-stories [--check] [--sprint <N>] [--root <dir>]
 #                                              # the WRITE half of that same join: rewrite each
 #                                              # derivable field's value from the story file
@@ -74,6 +75,9 @@
 #        authoritative (route.md Step 6 rule 5). Surface both and wait for the operator.
 #        derive-stories also: MATCHED NO STORY FILES. Compared nothing because there was nothing
 #        to compare against, which is not the same answer as compared-and-clean.
+#        close also: a story in some view still carries `deferred_acs` ids, or carries the field
+#        in a shape this parser cannot read as a list. Refused before ANY view is written — an AC
+#        still owed to deploy-validate §4b must not be stamped closed (schema $deferred_acs_comment).
 #   4  — check-stories only: NOTHING WAS COMPARED (no canonical on disk, or no `stories:` key in
 #        the sprint that is live). Its own code, never folded into 0, because "compared nothing"
 #        and "compared and found no drift" are the two states every consumer implementation of
@@ -234,6 +238,9 @@ HOUSE_RE   = re.compile(KEYS["housekeeping_re"], re.M)
 STORIES_RE = re.compile(KEYS["stories_re"])
 STORY_KEY_RE   = re.compile(KEYS["story_key_re"])
 STORY_FIELD_RE = re.compile(KEYS["story_field_re"])
+DEFERRED_ID_RE = re.compile(KEYS["deferred_ac_id_re"])
+# Not a valid field name, so no reader keyed on a declared field can ever collide with it.
+DEFERRED_MISINDENT = "deferred_acs!misindented"
 
 SFILE         = schema["story_file"]
 # A TEMPLATE, NOT A PATH. The sprint slot moved out of the story FILENAME and into the DIRECTORY
@@ -511,6 +518,26 @@ def close():
         fail("no sprint-status.yaml canonical exists to close. A sprint must be rolled before it can "
              "be closed (sprint-status.sh roll).", code=1)
 
+    # THE DEFERRED-AC REFUSAL RUNS OVER EVERY VIEW BEFORE THE WRITE LOOP, NOT INSIDE IT. Inside the
+    # loop the implementation view would be stamped `done` before the planning view's owed AC was
+    # read, and a refusal that leaves one view closed is the two-view drift route.md rule 5 exists
+    # to stop. A malformed value refuses too: read as empty, it would close over the deferral.
+    owed = []
+    for view, canonical in existing:
+        _st, entries = parse_story_entries(canonical.read_text())
+        for key, fields, lineno in entries:
+            state, ids = deferred_acs_of(fields)
+            if state == "malformed":
+                owed.append("[%s/%s] `deferred_acs` unreadable (%s, line %d)" % (view, key, ids, lineno))
+            elif state == "ok" and ids:
+                owed.append("[%s/%s] deferred_acs %s" % (view, key, ", ".join(ids)))
+    if owed:
+        fail("refusing to close: %d stor%s still owe%s an AC to deploy-validate §4b — %s. §4b clears "
+             "each id when its discharge predicate runs GREEN, or files it as a carry-over OPEN item "
+             "and then clears it; a malformed value must be rewritten as one inline list. No view "
+             "was written." % (len(owed), "y" if len(owed) == 1 else "ies",
+                               "s" if len(owed) == 1 else "", "; ".join(owed)), code=3)
+
     written = []
     for view, canonical in existing:
         text = canonical.read_text()
@@ -552,6 +579,78 @@ def strip_value(v):
     if i != -1:
         v = v[:i]
     return v.strip()
+
+
+def deferred_acs_of(fields):
+    """(state, ids-or-why) for one entry's `deferred_acs`. state is one of:
+      absent     — the entry carries no such field. Every legacy envelope, so NEVER a finding.
+      ok         — one single-line inline list; `[]` gives no ids.
+      malformed  — anything else, with the reason. NEVER folded into empty.
+
+    THE EMPTY VALUE IS MALFORMED, AND THAT IS THE LOAD-BEARING LINE. parse_story_entries hands a
+    block list (`deferred_acs:` then `- AC5` lines, deeper or at the field's own indent) to this
+    function as the empty string, because a `- ` line is not a field line. Reading '' as "none
+    deferred" is how a deferral written in ordinary YAML would close silently. A bare YAML null
+    is refused with it: the one spelling of "none" is `[]`, which is also what the reviewer
+    writes to say every live-ops AC was verified at the gate."""
+    if DEFERRED_MISINDENT in fields:
+        return ("malformed", fields[DEFERRED_MISINDENT])
+    if "deferred_acs" not in fields:
+        return ("absent", [])
+    v = fields["deferred_acs"]
+    if v == "":
+        return ("malformed", "empty value — a block list or a bare null, not one inline `[..]` list")
+    if not (v.startswith("[") and v.endswith("]")):
+        return ("malformed", "`%s` is not one single-line `[..]` list (an unclosed `[` is a flow "
+                             "list wrapped onto a second line)" % v)
+    inner = v[1:-1].strip()
+    if inner == "":
+        return ("ok", [])
+    ids = [t.strip() for t in inner.split(",")]
+    bad = [t for t in ids if not DEFERRED_ID_RE.match(t)]
+    if bad:
+        return ("malformed", "`%s` carries a token that is not an AC id: %s"
+                             % (v, ", ".join("`%s`" % b for b in bad)))
+    return ("ok", ids)
+
+
+def layered_owed(path):
+    """live_ops + manual_operator from a story file's frontmatter `layered_ac_count`, or None
+    when the file carries no such count. Those two layers are the ones stories-test-strategy.md
+    defines as verified against production or by an operator — the ACs a gate-3 `done` cannot
+    have discharged unless someone recorded that it did. Block and inline-flow forms both read;
+    anything unreadable is None, because this feeds a REPORT and must not invent a number."""
+    try:
+        text = Path(path).read_text(errors="replace")
+    except OSError:
+        return None
+    if not (text.startswith("---\n") or text.startswith("---\r\n")):
+        return None
+    end = text.find("\n---", 3)
+    if end == -1:
+        return None
+    lines = text[4:end].split("\n")
+    for i, ln in enumerate(lines):
+        m = re.match(r"^layered_ac_count:[ \t]*(.*?)[ \t]*$", ln)
+        if not m:
+            continue
+        found = {}
+        if m.group(1).startswith("{"):
+            for k, n in re.findall(r"([A-Za-z_]+)[ \t]*:[ \t]*([0-9]+)", m.group(1)):
+                found[k] = int(n)
+        else:
+            for sub in lines[i + 1:]:
+                if sub.strip() == "" or sub.lstrip().startswith("#"):
+                    continue
+                if sub[:1] not in (" ", "\t"):
+                    break
+                sm = re.match(r"^[ \t]+([A-Za-z_]+):[ \t]*([0-9]+)[ \t]*(?:#.*)?$", sub)
+                if sm:
+                    found[sm.group(1)] = int(sm.group(2))
+        if "live_ops" not in found and "manual_operator" not in found:
+            return None
+        return found.get("live_ops", 0) + found.get("manual_operator", 0)
+    return None
 
 
 def parse_story_entries(text):
@@ -600,6 +699,27 @@ def parse_story_entries(text):
             if km is None:
                 continue                           # not a bare key — keep looking for one
             entry_indent = indent
+        # `deferred_acs` IS NEVER DROPPED FOR ITS INDENT, and this is scoped to that one key. Every
+        # other field keeps the relative contract above: a line at a non-field indent is not a
+        # field. For this key that contract closed a sprint over an owed AC -- `deferred_acs: [AC5]`
+        # six spaces deep under four-space fields, or tab-indented, placed after `status:`, was
+        # skipped, and `check-stories` and `close` both exited 0. Inside an entry, a
+        # `deferred_acs:` line at any indent other than the entry's field indent is recorded as
+        # MISINDENTED, which deferred_acs_of reports as malformed: a FINDING in check-stories, a
+        # refusal in close. Two exemptions, both the existing grammar: a bare key at the ENTRY
+        # indent is an entry key, and the first field of an entry still DEFINES the field indent.
+        # Residue, loud rather than silent: a block-scalar continuation line that begins with
+        # `deferred_acs:` is refused too.
+        if cur is not None and not (indent == entry_indent and km is not None) \
+                and not (field_indent is None and indent > entry_indent):
+            dm = STORY_FIELD_RE.match(ln)
+            if dm is not None and dm.group(2) == "deferred_acs" and indent != field_indent:
+                cur[DEFERRED_MISINDENT] = (
+                    "`deferred_acs` on line %d sits at indent %d (%s), not this entry's field "
+                    "indent %s — a misindented or tab-indented field is refused, never dropped"
+                    % (start + off + 1, indent, "tab" if "\t" in dm.group(1) else "spaces",
+                       field_indent if field_indent is not None else "(none yet)"))
+                continue
         if indent == entry_indent:
             if km is None:
                 continue
@@ -738,6 +858,12 @@ def check_stories():
     entries_total = 0
     views_present = 0
     per_view = {}
+    # `deferred_acs` per key per view, normalised so absent and `[]` compare equal and id order
+    # does not. Kept apart from `per_view` because that one is filled only for entries whose story
+    # file resolved, and a deferral written into one view only is a finding whether or not it did.
+    deferred_view = {}
+    deferred_owed = {}     # key -> (status, ids): printed as DEFERRED, a state and not a finding
+    writer_forgot = {}     # key -> (count, file name): REPORT only, never moves the exit code
 
     print("sprint-status check-stories: sprint %d" % target)
 
@@ -779,6 +905,16 @@ def check_stories():
                                 % (view, key, seen[key], lineno))
                 continue
             seen[key] = lineno
+            dstate, dids = deferred_acs_of(fields)
+            if dstate == "malformed":
+                findings.append("[%s/%s] `deferred_acs` is not one single-line inline list: %s "
+                                "(line %d). Read as empty it would report the deferral "
+                                "discharged; write it as `deferred_acs: [AC5, AC6]`, or `[]`."
+                                % (view, key, dids, lineno))
+            else:
+                deferred_view.setdefault(key, {})[view] = ", ".join(sorted(dids))
+                if dids:
+                    deferred_owed[key] = (fields.get("status"), sorted(dids))
             ystatus = fields.get("status")
             if ystatus is None:
                 findings.append("[%s/%s] entry carries no `status:` field (line %d)."
@@ -813,6 +949,10 @@ def check_stories():
                 findings.append("[%s/%s] STATUS MISMATCH — %s says `%s` (%s), %s says `%s` "
                                 "(line %d)." % (view, key, resolved.name, fstatus, how,
                                                 p.name, ystatus, lineno))
+            if ystatus == "done" and dstate == "absent":
+                owed_n = layered_owed(resolved)
+                if owed_n:
+                    writer_forgot[key] = (owed_n, resolved.name)
         print("  %-15s %d entr%s, %d comparison(s)"
               % (view + ":", len(entries), "y" if len(entries) == 1 else "ies", view_compared))
 
@@ -824,8 +964,31 @@ def check_stories():
         if len(vals) > 1 and len(set(vals.values())) > 1:
             findings.append("[%s] the two canonical copies disagree: %s"
                             % (key, ", ".join("%s=`%s`" % (v, s) for v, s in sorted(vals.items()))))
+    # The same join for `deferred_acs`. The reviewer writes it into BOTH views; one view carrying
+    # an id the other lacks is a deferral that `close` would see from one side only.
+    for key in sorted(deferred_view):
+        vals = deferred_view[key]
+        if len(set(vals.values())) > 1:
+            findings.append("[%s] the two canonical copies disagree on `deferred_acs`: %s"
+                            % (key, ", ".join("%s=`[%s]`" % (v, s) for v, s in sorted(vals.items()))))
 
     print("")
+    # A STATE, NOT A FINDING. A story may close `done` at gate-3 with ACs owed to deploy-validate
+    # §4b; mid-sprint that is correct. It is printed so the envelope stops reading as fully closed,
+    # and `close` is what refuses on it.
+    for key in sorted(deferred_owed):
+        st, ids = deferred_owed[key]
+        print("sprint-status: DEFERRED [%s] status `%s`, %d AC(s) still owed to deploy-validate §4b: %s"
+              % (key, st, len(ids), ", ".join(ids)))
+    # A REPORT, NEVER A FINDING, because the absence has two honest readings: the reviewer forgot
+    # the field, or every live-ops/operator AC was verified at the gate. Only the reviewer knows,
+    # and `[]` is how they say the second. Failing here would wedge every envelope written before
+    # the field existed.
+    for key in sorted(writer_forgot):
+        n, fname = writer_forgot[key]
+        print("sprint-status: REPORT [%s] `done` with %d live_ops/manual_operator AC(s) in %s and "
+              "no `deferred_acs` field — list the ids still owed to §4b, or write `deferred_acs: []`"
+              % (key, n, fname))
     if findings:
         for f in findings:
             sys.stderr.write("sprint-status: FINDING %s\n" % f)
