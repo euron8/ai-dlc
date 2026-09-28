@@ -91,7 +91,8 @@
 #                         consumer's own `skill_commit` is already at or past the named ref its
 #                         machinery has already landed, and the row says the split buys nothing
 #                         rather than recommending a hop that would advance only the rulebook.
-# Exit:   0 ALWAYS. A classifier, not a gate — the CALLER decides, same posture as layer-drift.sh.
+# Exit:   0 ALWAYS. A classifier, not a gate — the CALLER decides. (layer-drift.sh shares the
+#         classifier posture but NOT the exit: it exits 2 when a row could not be written.)
 #
 # THE VERDICT IS RECORDED, NOT ONLY PRINTED. Step 2 cuts a branch, writes the machinery slice,
 # pushes and auto-merges without an operator, and until this record existed the only artifact of

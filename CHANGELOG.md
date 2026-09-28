@@ -15,6 +15,69 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.657.0] - 2026-09-28
+
+`layer-drift.sh` now exits 2 when any row it produced could not be written, instead of exiting 0
+over a truncated row set. `apply.sh` renders that as `DECISION layer-drift-refused` and withholds
+the re-stamp. This closes `BL-358`.
+
+### A row layer-drift could not write is a refusal (`BL-358`, closes)
+
+`layer-drift.sh` discarded every row write's status. Classify mode ended by falling off its last
+line and `--list-adjudications` ended in an explicit `exit 0`, so a row lost to a closed stdout,
+to EFBIG on the staged `ld.out`, or to EPIPE with SIGPIPE ignored disappeared with rc 0. `apply.sh`
+reads only the exit and derives four verdicts from `ld.out`, so a lost
+`HARD-LAYER-ADJUDICATION-MISSING` row was an `apply` that proceeded. Measured at 0.656.0 on a
+`file://` clone of the reference consumer over d1c72fa9..c16d83ce (59 rows, 5 of them HARD): with
+stdout closed, rc 0 and 51 `write error` lines with no refusal. With a `head -c` reader cut at
+1000, 3000, 4000, 6000 and 12000 bytes, rc 0 every time with 2 to 5 of the 5 HARD rows lost.
+
+- Every row-writing stdout site counts its status into `ld_emit_ok` / `ld_emit_failed` in the
+  main shell: `emit`, `emit_raw` (which writes every `HARD-LAYER-ADJUDICATION-MISSING` row),
+  `adj_register_contradictions`' awk (its own `PIPESTATUS`, one failure unit), and the
+  `--list-adjudications` listing, so N is real in both modes. `--adjudicated-codes` is out of
+  scope by the header's own statement: its only reader is a `$( )` capture, which cannot lose
+  a write.
+- The first failed write ends the scan. Every writer returns without writing once one write has
+  failed, and the overrides loop, the extensions loop and the listing loop open with a break on
+  the count. After a failed write, bash 3.2 leaks the unflushed row into later `$( )` captures.
+- `ld_finish` is the one exit of classify mode and of `--list-adjudications`. With every row
+  written it exits 0, whatever was found. Otherwise it prints, on a line opening with a newline,
+  `layer-drift: REFUSED — a row could not be written to stdout after N row(s) were; the scan
+  stopped there and its output is INCOMPLETE. Re-run layer-drift.sh.` and exits 2. `apply.sh`
+  already matches `: REFUSED` unanchored. In list mode the closing count line is withheld after a
+  failure.
+- The `OVERRIDE-DOUBLE-SHADOW` block ran `emit` inside `| while | while` subshells, where its count
+  was thrown away. The grouping awk, text unchanged, is now staged to `$LD_T/double-shadow` with
+  its status read, and the per-entry split reads a here-string, so both loops run in the main
+  shell.
+- Healthy stdout and stderr are byte-identical to 0.656.0 in both modes on the consumer's real
+  ranges d1c72fa9..c16d83ce and d1c72fa9..origin/main. At the same `head -c` cuts the tip exits 2
+  with N equal to whole rows landed plus one, and with stdout closed it exits 2 with N=0 in both
+  modes.
+- `ulimit -f` cannot force a stdout fault on this script, as the adversary measured. Bash 3.2
+  writes every here-string and heredoc to a temp file under the same limit, and the 78356-byte
+  `layer-contract.yaml` fed by here-string is larger than the whole healthy output. Any limit that
+  would truncate stdout fails that here-string first. An EFBIG arm needs a world whose
+  here-strings fit under the limit, and the receipt uses a truncating pipe instead.
+- The header's exit documentation, the `self-update-gate.sh` and `predicate-differential.sh`
+  "same posture" comments, and the `self-update-gate` fixture's comment now say layer-drift exits
+  2 on a lost row. `SKILL.md` step 3c documents the exit-2 row, the step 7 blocking-layer gate
+  says a non-zero run reported no `HARD-` status because it did not finish, and the re-adoption
+  re-run requires both detectors to have exited 0.
+- `BL-358` now has an `sh` receipt: a two-row world whose last row is the HARD row, cut 40 bytes
+  short of row 1's end with SIGPIPE ignored. It scores 0 on this tree, 1 on 0.656.0, 1 on a
+  pre-flight stdout probe with the per-write count removed, and 1 on an `emit_raw` that does not
+  count its write. A reworded refusal with the same prefix scores 0. It does not observe the
+  loop breaks or the double-shadow restaging; the `procsub-staged-refusal-boot` fixture carries
+  those.
+
+`layer-drift.sh` is read by `apply.sh`, so it is BOOTSTRAPPING and ships alone. The pull that
+delivers 0.657.0 runs under the consumer's installed engine, so the new refusal protects only the
+pull after it.
+
+This discharges no consumer candidate.
+
 ## [0.656.0] - 2026-09-27
 
 `unregistered-drift.sh` now exits 2 when any row it produced could not be written, instead of

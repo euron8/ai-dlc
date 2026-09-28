@@ -49,7 +49,8 @@
 #                           silently folded into STABLE: a detector that cannot read its own
 #                           subject must not return clean.
 # Exit: 0 ALWAYS. A classifier, not a gate — the CALLER decides, same posture as
-#       self-update-gate.sh and layer-drift.sh.
+#       self-update-gate.sh. (layer-drift.sh shares the classifier posture but NOT the exit:
+#       it exits 2 when a row could not be written.)
 set -uo pipefail
 
 DIST="${1:?usage: predicate-differential.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root>}"

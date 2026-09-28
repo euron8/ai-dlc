@@ -45,6 +45,26 @@
 #   U6  unregistered-drift  memo SERVE fails      the cached listing's `cat` fails -> the cached 0
 #   (-hit, -fill)        was returned, the scan set was empty, rc 0 with no row; now 125, the
 #                        direct listing runs and the file is scanned. One cell per code path.
+#   L5  layer-drift      stdout CLOSED, a HARD-LAYER-ADJUDICATION-MISSING world -> rc 0 with every
+#                        row gone; now rc 2 and one `layer-drift: REFUSED` line naming N=0
+#   L5c layer-drift      the same, --list-adjudications: its listing is the writer -> rc 0; now rc 2
+#   L5b layer-drift      EFBIG mid-stream (`ulimit -f`, SIGXFSZ ignored), the cut inside an
+#                        EXTENSION-OK row with more entries after it -> rc 0, the HARD row lost; now
+#                        rc 2, N == the whole rows in the file, and ZERO outer-loop iterations after
+#                        the first write error. The case a one-shot probe of stdout cannot see.
+#   L5b-hard             the cut inside the HARD row itself, written LAST by `emit_raw` -> rc 0; now
+#                        rc 2. The only cell whose one failed write is emit_raw's.
+#   L5d layer-drift      an overrides-only world whose FINAL rows are an OVERRIDE-DOUBLE-SHADOW
+#                        pair, the cut inside that pair -> rc 0; now rc 2. The block's emit used to
+#                        run inside `| while | while`, where its count is thrown away.
+#   L5e layer-drift      the same world, the cut inside an OVERRIDE-OK row with more overrides after
+#                        it: the OVERRIDES loop's own stop, which L5b (extensions) cannot see.
+#   L5-pre               THE PRECONDITION: a world whose layer-contract.yaml is larger than the limit.
+#                        bash 3.2 writes a here-string to a temp file under the same limit, the
+#                        contract is read through `<<<`, and a failed one reads as an EMPTY contract
+#                        (no HARD row, rc 0, for a reason that is not the emit). This cell must read
+#                        BROKEN-HEREDOC, proving the detector the L5b/L5d cells refuse on can fire;
+#                        any OTHER cell reading it ends the fixture FIXTURE BROKEN, never a verdict.
 #   A*  apply.sh         each of the four detectors it consults, and the scan-unavailable row:
 #                        a refusal (exit 2, reason on stderr) read as "found nothing" -> no row.
 #                        Now a `DECISION <detector>-refused` row carrying the exit and the first
@@ -165,6 +185,9 @@ mkstub_for() {
     # U6: the memo's serve of the cached ls-tree listing -- the `t <dist> <ref>` key's `.c` file --
     # exits 1 with no output. lib.sh calls `cat` by bare name, so the PATH stub reaches it.
     U6-hit|U6-fill) stub "$2" cat "$REAL_CAT" "*'/t '*'.c'" "$LOGF; exit 1" ;;
+    # The L cells fail nothing: their forcing input is the closed stdout or the file-size limit
+    # ld_shape runs them under. The stub logs layer_files' walk, so FIRED > 0 proves the run reached it.
+    L5|L5c|L5b|L5b-hard|L5d|L5e|L5-pre) stub "$2" find "$REAL_FIND" "*' -type f -name '*" "$LOGF" ;;
     Aud)   ap_stub "$2" unregistered-drift ;;
     Art)   ap_stub "$2" retired-tokens ;;
     Arlp)  ap_stub "$2" retired-layer-passage ;;
@@ -587,6 +610,211 @@ ap_shape() { # <recon> <arm> <stub-dir or ->
   if [ "$nmerge" -eq 0 ]; then echo REFUSED-NOMERGE; else echo REFUSED; fi
 }
 
+# === WORLDS ld: layer-drift =======================================================================
+# THE FAILING CONTROL IS THE PRE-FIX ENGINE ITSELF, staged from the release before the fix into a
+# copy of the whole reconcile/ directory (it sources lib.sh beside itself). Every L cell runs on it
+# in the same run and must read its base shape there -- that is what proves each cell can fail.
+LD_BASE_SHA=a0a9c556
+#   ext  twelve extensions hooking a core step that never moves (EXTENSION-OK), and ONE hooking a
+#        step that moves, sorted LAST: its EXTENSION-HOOK-DRIFT row is at an ADJUDICATED clause, so
+#        `emit_raw` writes a HARD-LAYER-ADJUDICATION-MISSING row after it, the last row of the run.
+#   ds   overrides only: twelve OVERRIDE-OK entries and a pair declaring the same shadow target, whose
+#        two OVERRIDE-DOUBLE-SHADOW rows are the FINAL rows (the block runs after the loop).
+#   big  ext with a layer-contract.yaml padded past the file-size limit: L5-pre's world.
+# EVERY FILE THE ENGINE READS THROUGH A HERE-STRING IS SMALL, and the contract and schema are seeded,
+# never copied from this tree (the real contract is tens of KB). A HOOKED PATH THAT IS LONG is the
+# lever: it widens every row without widening the staged listing of entry paths, which is itself a
+# regular file under the limit -- a listing past the limit fails the walk (a refusal of its own).
+LD_HOOK="steps/zz-psb-a-hooked-core-directory-whose-name-is-long-so-every-extension-ok-row-is-hundreds-of-bytes-wide-and-outweighs-its-own-entry/zz-psb-a-hooked-core-step-that-never-moves-across-the-range-and-whose-name-is-long-for-the-same-reason-as-its-directory-so-the-rows-fill-the-limit-before-any-staged-file.md"
+LD_LAST=".claude/skills/ai-dlc/extensions/zz-psb-the-entry-hooking-the-moving-step-sorts-last.md"
+mk_ld_world() { # <dir> <ext|ds|big>
+  local W="$1" D="$1/dist" C="$1/consumer" X i
+  X="$C/.claude/skills/ai-dlc"
+  mkdir -p "$D/core/skills/ai-dlc/$(dirname "$LD_HOOK")" "$D/core/schemas" "$X/extensions" "$X/overrides" \
+           "$C/_bmad-output/ai-dlc-update" || return 1
+  printf '0.1.0\n' > "$D/VERSION"
+  { printf 'clauses:\n  - id: LC-E4\n    level: ADJUDICATED\n    code: EXTENSION-HOOK-DRIFT\n'
+    if [ "$2" = big ]; then
+      i=0; while [ "$i" -lt 200 ]; do printf '# padding line %03d that makes this contract larger than the file-size limit\n' "$i"; i=$((i+1)); done
+    fi
+  } > "$D/core/skills/ai-dlc/layer-contract.yaml"
+  printf '{\n  "properties": {\n    "verdict": {\n      "enum": [\n        "still-additive",\n        "retire"\n      ]\n    }\n  }\n}\n' \
+    > "$D/core/schemas/layer-adjudication-register.json"
+  printf '# Moving\n\n## Gamma\n\nbase body\n' > "$D/core/skills/ai-dlc/steps/moving.md"
+  { printf '# Still\n\n## Alpha\n\nbody\n'; for i in 1 2 3 4 5 6 7 8 9 10 11 12; do printf '\n## Rule %s\n\ncore rule %s\n' "$i" "$i"; done; } \
+    > "$D/core/skills/ai-dlc/$LD_HOOK"
+  printf '# Skill\n\n## Rule 7\n\nseven\n' > "$D/core/skills/ai-dlc/SKILL.md"
+  { gi "$D" init -q && gi "$D" add -A && gi "$D" commit -qm base; } >/dev/null 2>&1 || return 1
+  git -C "$D" rev-parse HEAD > "$W/B"
+  printf '0.2.0\n' > "$D/VERSION"
+  printf '# Moving\n\n## Gamma\n\ntheirs body REWRITTEN\n' > "$D/core/skills/ai-dlc/steps/moving.md"
+  { gi "$D" add -A && gi "$D" commit -qm theirs; } >/dev/null 2>&1 || return 1
+  git -C "$D" rev-parse HEAD > "$W/T"
+  if [ "$2" = ds ]; then
+    for i in 01 02 03 04 05 06 07 08 09 10 11 12; do
+      printf -- '---\nshadows: %s#Rule %s\nbase_sha: %s\nreason: seeded\n---\n\n## Rule %s\n\nconsumer text.\n' \
+        "$LD_HOOK" "${i#0}" "$(cat "$W/B")" "${i#0}" > "$X/overrides/r$i.md"
+    done
+    for i in a b; do
+      printf -- '---\nshadows: SKILL.md#Rule 7\nbase_sha: %s\nreason: seeded, entry %s of two claiming one anchor\n---\n\n## Rule 7\n\nconsumer text %s.\n' \
+        "$(cat "$W/B")" "$i" "$i" > "$X/overrides/dup-$i.md"
+    done
+  else
+    for i in 01 02 03 04 05 06 07 08 09 10 11 12; do
+      printf -- '---\nkind: check\nhooks: %s\nreason: seeded\n---\n\n### 9%s. [ext:a%s] Entry.\n\nBody.\n' "$LD_HOOK" "$i" "$i" > "$X/extensions/a$i.md"
+    done
+    printf -- '---\nkind: check\nhooks: steps/moving.md\nreason: seeded\n---\n\n### 999. [ext:zz] Entry.\n\nBody.\n' > "$C/$LD_LAST"
+  fi
+  { gi "$C" init -q && gi "$C" add -A && gi "$C" commit -qm consumer; } >/dev/null 2>&1 || return 1
+}
+LW_EXT="$WORK/ldw-ext"; LW_DS="$WORK/ldw-ds"; LW_BIG="$WORK/ldw-big"
+mk_ld_world "$LW_EXT" ext || { echo "FIXTURE ERROR: ld ext world" >&2; exit 2; }
+mk_ld_world "$LW_DS" ds || { echo "FIXTURE ERROR: ld ds world" >&2; exit 2; }
+mk_ld_world "$LW_BIG" big || { echo "FIXTURE ERROR: ld big world" >&2; exit 2; }
+LD_BASE="$WORK/ld-base"
+mkdir -p "$LD_BASE" && cp -R "$RECON/." "$LD_BASE/" \
+  && git -C "$TREE_TOP" show "${LD_BASE_SHA}:core/skills/ai-dlc-update/reconcile/layer-drift.sh" > "$LD_BASE/layer-drift.sh" 2>/dev/null \
+  || { echo "FIXTURE BROKEN: could not stage layer-drift.sh at ${LD_BASE_SHA}, the failing control of every L cell" >&2; exit 2; }
+_h="$("$REAL_GREP" -c 'ld_finish\|ld_emit_failed' "$LD_BASE/layer-drift.sh")" || _h=0
+_t="$("$REAL_GREP" -c 'ld_finish' "$RECON/layer-drift.sh")" || _t=0
+if cmp -s "$RECON/layer-drift.sh" "$LD_BASE/layer-drift.sh" || [ "$_h" -ne 0 ] || [ "$_t" -eq 0 ]; then
+  echo "FIXTURE BROKEN: the staged ${LD_BASE_SHA} layer-drift.sh is not the pre-fix engine (identical to tip, or it carries $_h ld_finish/ld_emit_failed line(s); tip carries $_t ld_finish)" >&2; exit 2
+fi
+# `ulimit -f` counts in BLOCKS, and the block is measured here rather than assumed.
+LD_BLK="$( ( trap '' XFSZ; ulimit -f 1; printf '%08192d' 0 > "$WORK/ld-blk" ) 2>/dev/null; wc -c < "$WORK/ld-blk" | tr -d ' ')"
+case "$LD_BLK" in ''|*[!0-9]*|0) echo "FIXTURE ERROR: could not measure the ulimit -f block (got '$LD_BLK')" >&2; exit 2 ;; esac
+ld_run() { # <recon> <world> [flag] -> the healthy stdout
+  local R="$1" W="$2"; shift 2
+  "$REAL_BASH" "$R/layer-drift.sh" "$@" "$W/dist" "$(cat "$W/B")" "$(cat "$W/T")" "$W/consumer" 2>/dev/null
+}
+ld_run "$RECON" "$LW_EXT" > "$LW_EXT.out" && ld_run "$RECON" "$LW_DS" > "$LW_DS.out" \
+  || { echo "FIXTURE ERROR: ld worlds: a healthy tip run exited non-zero" >&2; exit 2; }
+# ld_cut <world> <status> <first-L> -> the smallest limit L >= first-L whose boundary L*BLK falls
+# STRICTLY INSIDE a row of that status (never on its newline), or empty. Read off the healthy run.
+ld_cut() {
+  awk -F'\t' -v s="$2" -v b="$LD_BLK" -v l0="$3" '
+    BEGIN { n = 0; o = 0 }
+    { st = o; o += length($0) + 1; if ($1 == s) { lo[n] = st; hi[n] = o; n++ } }
+    END { for (L = l0; L * b < o; L++) for (i = 0; i < n; i++) if (lo[i] < L * b && L * b < hi[i] - 1) { print L; exit } }' "$1.out"
+}
+ld_whole() { # <world> <L> -> the rows of the healthy output that end at or before L*BLK
+  awk -v c="$(( $2 * LD_BLK ))" '{ o += length($0) + 1; if (o <= c) n++ } END { print n + 0 }' "$1.out"
+}
+_lx="$("$REAL_FIND" "$LW_EXT/consumer/.claude/skills/ai-dlc/extensions" -type f | wc -c | tr -d ' ')"
+_lo="$("$REAL_FIND" "$LW_DS/consumer/.claude/skills/ai-dlc/overrides" -type f | wc -c | tr -d ' ')"
+# NO CUT BELOW 2 BLOCKS. Measured: at a 1-block limit the pre-fix engine, scanning on past its failed
+# write, fed a later here-string larger than 1 KiB and hit the here-string floor -- BROKEN-HEREDOC
+# on the base side of L5e, which the precondition correctly refused as a verdict.
+_fx=$(( _lx / LD_BLK + 1 )); [ "$_fx" -ge 2 ] || _fx=2
+_fo=$(( _lo / LD_BLK + 1 )); [ "$_fo" -ge 2 ] || _fo=2
+LD_L_MID="$(ld_cut "$LW_EXT" EXTENSION-OK "$_fx")"
+LD_L_HARD="$(ld_cut "$LW_EXT" HARD-LAYER-ADJUDICATION-MISSING "$_fx")"
+LD_L_OVR="$(ld_cut "$LW_DS" OVERRIDE-OK "$_fo")"
+LD_L_DS="$(ld_cut "$LW_DS" OVERRIDE-DOUBLE-SHADOW "$_fo")"
+[ -n "$LD_L_MID" ] && [ -n "$LD_L_HARD" ] && [ -n "$LD_L_OVR" ] && [ -n "$LD_L_DS" ] \
+  || { echo "FIXTURE ERROR: ld worlds: no file-size limit cuts inside an EXTENSION-OK row (L=$LD_L_MID), the HARD row (L=$LD_L_HARD), an OVERRIDE-OK row (L=$LD_L_OVR) or an OVERRIDE-DOUBLE-SHADOW row (L=$LD_L_DS) above the staged listings ($_lx / $_lo bytes, block $LD_BLK)" >&2; exit 2; }
+LD_W_MID="$(ld_whole "$LW_EXT" "$LD_L_MID")"; LD_W_HARD="$(ld_whole "$LW_EXT" "$LD_L_HARD")"
+LD_W_OVR="$(ld_whole "$LW_DS" "$LD_L_OVR")"; LD_W_DS="$(ld_whole "$LW_DS" "$LD_L_DS")"
+# THE WORLDS EXPRESS THEIR CASES: the HARD row is the ext world's LAST row; the double-shadow pair
+# is the ds world's last two; and the L5b / L5e cuts leave ENTRIES STILL TO SCAN after the row they
+# cut, or a scan that failed to stop would read exactly like one that stopped.
+_r="$(awk -F'\t' '{print $1}' "$LW_EXT.out" | tr '\n' ' ')"
+_s="$(awk -F'\t' '{print $1}' "$LW_DS.out" | tr '\n' ' ')"
+case "$_r|$_s" in
+  *"EXTENSION-OK EXTENSION-HOOK-DRIFT HARD-LAYER-ADJUDICATION-MISSING |"*"OVERRIDE-OK OVERRIDE-DOUBLE-SHADOW OVERRIDE-DOUBLE-SHADOW ") ;;
+  *) echo "FIXTURE ERROR: ld worlds do not end on the HARD row ($_r) and on the double-shadow pair ($_s)" >&2; exit 2 ;;
+esac
+_ne="$(awk -F'\t' '$1=="EXTENSION-OK"' "$LW_EXT.out" | "$REAL_GREP" -c .)" || _ne=0
+_no="$(awk -F'\t' '$1=="OVERRIDE-OK"' "$LW_DS.out" | "$REAL_GREP" -c .)" || _no=0
+[ "$LD_W_MID" -le $(( _ne - 2 )) ] && [ "$LD_W_OVR" -le $(( _no - 2 )) ] \
+  || { echo "FIXTURE ERROR: ld worlds: the L5b cut leaves $LD_W_MID of $_ne EXTENSION-OK rows whole and the L5e cut $LD_W_OVR of $_no OVERRIDE-OK rows (want at most two short of each, so an entry remains after the cut row)" >&2; exit 2; }
+echo "  (ld worlds: block $LD_BLK B; L5b cut at $LD_L_MID block(s) after $LD_W_MID whole row(s), L5b-hard at $LD_L_HARD after $LD_W_HARD, L5e at $LD_L_OVR after $LD_W_OVR, L5d at $LD_L_DS after $LD_W_DS; staged listings $_lx / $_lo B)"
+# The refusal line, keyed on its PREFIX and phrase UNANCHORED (a leaked stdout buffer was measured
+# prefixing it; `apply.sh` reads it the same way), never on "write error". Xtrace lines are skipped:
+# under `bash -x` the printf that writes the refusal is traced with the same words.
+ld_named() {
+  local n
+  n="$(awk '!/^\+/ && /layer-drift: REFUSED/ && /could not be written to stdout/' <<<"$1" | "$REAL_GREP" -c .)" || n=0
+  printf '%s' "$n"
+}
+ld_n() {
+  local nn
+  nn="$(awk '!/^\+/ && /layer-drift: REFUSED/ { for (i=1;i<=NF;i++) if ($i=="after") { print $(i+1); exit } }' <<<"$1")"
+  case "$nn" in ''|*[!0-9]*) nn=-1 ;; esac
+  printf '%s' "$nn"
+}
+LD_HEREDOC_BAD="$WORK/ld-heredoc-broken"
+# ld_shape <recon> <arm> <stub-dir or -> -> the SHAPE of one layer-drift run
+ld_shape() {
+  local W p="$PATH" out err rc nm nn nsub nb nw nit want L m="" subj=HARD-LAYER-ADJUDICATION-MISSING full=1
+  # `full` is how many subject rows the healthy run writes; a forced run holding fewer LOST one.
+  case "$2" in L5d|L5e) W="$LW_DS"; subj=OVERRIDE-DOUBLE-SHADOW; full=2 ;; L5-pre) W="$LW_BIG" ;; *) W="$LW_EXT" ;; esac
+  case "$2" in L5c) m=--list-adjudications ;; esac
+  [ "$3" = - ] || p="$3:$PATH"
+  if [ "$3" = - ]; then
+    # THE CONTROL: stdout open, no limit. Presence-shaped -- the subject row must be THERE.
+    out="$(PATH="$p" "$REAL_BASH" "$1/layer-drift.sh" $m "$W/dist" "$(cat "$W/B")" "$(cat "$W/T")" "$W/consumer" 2>/dev/null)"; rc=$?
+    if [ -n "$m" ]; then
+      nsub="$(awk -F'\t' -v e="$LD_LAST" '$1=="ADJUDICABLE" && $2==e' <<<"$out" | "$REAL_GREP" -c .)" || nsub=0
+      if [ "$rc" -eq 0 ] && [ "$nsub" -eq 1 ]; then echo LISTED; else echo "OTHER(rc=$rc,listed=$nsub)"; fi
+    else
+      nsub="$(awk -F'\t' -v s="$subj" '$1==s' <<<"$out" | "$REAL_GREP" -c .)" || nsub=0
+      case "$subj:$rc:$nsub" in
+        HARD-*:0:1) echo ALL-ROWS ;; OVERRIDE-*:0:2) echo ALL-ROWS-DS ;; *) echo "OTHER(rc=$rc,subject=$nsub)" ;;
+      esac
+    fi
+    return 0
+  fi
+  case "$2" in
+    L5|L5c)
+      # stderr to the capture, THEN stdout closed -- in that order, or the capture is closed too.
+      err="$(PATH="$p" "$REAL_BASH" "$1/layer-drift.sh" $m "$W/dist" "$(cat "$W/B")" "$(cat "$W/T")" "$W/consumer" 2>&1 >&-)"; rc=$?
+      nm="$(ld_named "$err")"; nn="$(ld_n "$err")"
+      if [ "$rc" -eq 2 ] && [ "$nm" -eq 1 ] && [ "$nn" -eq 0 ]; then echo CLOSED-RC2-N0
+      elif [ "$rc" -eq 0 ] && [ "$nm" -eq 0 ]; then echo CLOSED-RC0
+      else echo "OTHER(rc=$rc,named=$nm,N=$nn)"; fi
+      return 0 ;;
+  esac
+  case "$2" in
+    L5b|L5-pre) L="$LD_L_MID"; want="$LD_W_MID" ;; L5b-hard) L="$LD_L_HARD"; want="$LD_W_HARD" ;;
+    L5e) L="$LD_L_OVR"; want="$LD_W_OVR" ;; L5d) L="$LD_L_DS"; want="$LD_W_DS" ;;
+  esac
+  out="$(mktemp "$WORK/ld-out.XXXXXX")" || { echo "OTHER(mktemp)"; return 0; }
+  # SIGXFSZ ignored, so a write past the limit fails with EFBIG and N is EXACT: a row either landed
+  # whole before the limit or its write failed. Stderr goes to a PIPE, never a file the limit binds.
+  # UNDER XTRACE, so the outer loops' iterations after the first failed write can be COUNTED --
+  # `+ entry=` is each loop's first assignment after its break. bash 3.2 has no BASH_XTRACEFD.
+  err="$( ( trap '' XFSZ; ulimit -f "$L"; PATH="$p"; export PATH
+    exec "$REAL_BASH" -x "$1/layer-drift.sh" "$W/dist" "$(cat "$W/B")" "$(cat "$W/T")" "$W/consumer" > "$out" ) 2>&1 )"; rc=$?
+  # THE PRECONDITION. bash 3.2 writes a here-string to a temp file under the SAME limit, and the
+  # engine reads layer-contract.yaml through `<<<`: a failed one reads as an EMPTY contract, the
+  # adjudication is disarmed and the HARD row never exists, at rc 0 -- a reason that is not the emit.
+  # Such a run is no verdict. L5-pre is the one cell built to reach it.
+  if "$REAL_GREP" -q 'cannot create temp file for here' <<<"$err"; then
+    [ "$2" = L5-pre ] || printf '%s via %s\n' "$2" "$1" >> "$LD_HEREDOC_BAD"
+    echo BROKEN-HEREDOC; rm -f "$out"; return 0
+  fi
+  nm="$(ld_named "$err")"; nn="$(ld_n "$err")"
+  nw="$(tr -cd '\n' < "$out" | wc -c | tr -d ' ')"
+  # Only WHOLE rows count as written: the row the limit cut is a fragment, not a row.
+  nsub="$(head -n "$nw" "$out" | awk -F'\t' -v s="$subj" '$1==s' | "$REAL_GREP" -c .)" || nsub=0
+  nb="$(wc -c < "$out" | tr -d ' ')"
+  nit="$(awk '/write error/ && !f { f=1; next } f && /^\+ entry=/ { n++ } END { print n+0 }' <<<"$err")"
+  rm -f "$out"
+  if [ "$2" = L5-pre ]; then echo "OTHER(no-heredoc-failure,rc=$rc)"
+  elif [ "$nw" -ne "$want" ]; then echo "OTHER(whole=$nw,want=$want,rc=$rc)"
+  elif [ "$rc" -eq 0 ] && [ "$nsub" -lt "$full" ] && [ "$nm" -eq 0 ]; then echo XFSZ-RC0-LOST
+  elif [ "$rc" -eq 2 ] && [ "$nsub" -lt "$full" ] && [ "$nm" -eq 1 ] && [ "$nn" -eq "$nw" ] && [ "$nit" -eq 0 ]; then echo XFSZ-RC2-NAMED
+  elif [ "$rc" -eq 2 ] && [ "$nsub" -lt "$full" ] && [ "$nm" -eq 1 ] && [ "$nit" -gt 0 ]; then echo XFSZ-RC2-NOSTOP
+  else echo "OTHER(rc=$rc,whole=$nw,N=$nn,iterations=$nit,subject=$nsub,named=$nm,bytes=$nb)"; fi
+}
+ld_heredoc_gate() { # a non-precondition cell that hit the here-string floor ends the run BROKEN
+  if [ -s "$LD_HEREDOC_BAD" ]; then
+    echo "FIXTURE BROKEN: an L cell's run failed a here-string under its file-size limit ($(tr '\n' ';' < "$LD_HEREDOC_BAD")) -- its shape is not a verdict about the emit" >&2
+    exit 2
+  fi
+}
+
 # === ONE ARM ======================================================================================
 # arm_shape <arm> <recon> <stub-dir or -> -> the shape
 arm_shape() {
@@ -597,6 +825,7 @@ arm_shape() {
     S1|S2|S3) sg_shape "$2" "$1" "$3" ;;
     U1|U2|U2b|U3|U4|U5|U5b|U6-hit|U6-fill) ud_shape "$2" "$1" "$3" ;;
     Aud|Art|Arlp|Ald|Ana) ap_shape "$2" "$1" "$3" ;;
+    L5|L5c|L5b|L5b-hard|L5d|L5e|L5-pre) ld_shape "$2" "$1" "$3" ;;
   esac
 }
 # THE EXPECTATION TABLE. <arm> <key> <control shape> <tip shape> <base shape>
@@ -621,7 +850,14 @@ Aud ap NO-REFUSAL REFUSED NO-REFUSAL
 Art ap NO-REFUSAL REFUSED NO-REFUSAL
 Arlp ap NO-REFUSAL REFUSED NO-REFUSAL
 Ald ap NO-REFUSAL REFUSED NO-REFUSAL
-Ana ap NO-REFUSAL REFUSED NO-REFUSAL'
+Ana ap NO-REFUSAL REFUSED NO-REFUSAL
+L5 ld ALL-ROWS CLOSED-RC2-N0 CLOSED-RC0
+L5c ld LISTED CLOSED-RC2-N0 CLOSED-RC0
+L5b ld ALL-ROWS XFSZ-RC2-NAMED XFSZ-RC0-LOST
+L5b-hard ld ALL-ROWS XFSZ-RC2-NAMED XFSZ-RC0-LOST
+L5d ld ALL-ROWS-DS XFSZ-RC2-NAMED XFSZ-RC0-LOST
+L5e ld ALL-ROWS-DS XFSZ-RC2-NAMED XFSZ-RC0-LOST
+L5-pre ld ALL-ROWS BROKEN-HEREDOC BROKEN-HEREDOC'
 col() { awk -v a="$1" -v c="$2" '$1==a {print $c}' <<<"$EXPECT"; }
 arms_of() { awk -v k="$1" '$2==k {print $1}' <<<"$EXPECT"; }
 
@@ -986,6 +1222,119 @@ ap_off M-Ana  Ana  '  '     'if [ -n "$UD_NA" ]; then'            'if [ -n "$UD_
          if [ "$_h" -eq 1 ]; then score_as M-Art-merge ap "$d" Art=REFUSED-NOMERGE
          else bad "MUTANT DID NOT APPLY [M-Art-merge]: the plain merge row is present $_h time(s) in the copy, want 1 (the refusal branch's removed, the plain branch's kept)"; fi; } \
     || mutreport M-Art-merge
+
+# === layer-drift: THE PRE-FIX ENGINE, EVERY L CELL ================================================
+# Each L cell must read its BASE shape on the a0a9c556 engine in this same run: the cell is shown
+# able to fail, on the input it discriminates, before its tip reading above is believed.
+for A in $(arms_of ld); do
+  set -- $(forced "$A" "$LD_BASE" base)
+  if [ "${2:-0}" -gt 0 ] && [ "$1" = "$(col "$A" 5)" ]; then
+    ok "$A on the ${LD_BASE_SHA} engine (stub fired ${2}x): $1 -- the cell fails the pre-fix engine"
+  elif [ "${2:-0}" -eq 0 ]; then
+    bad "$A FIXTURE BROKEN: on the ${LD_BASE_SHA} engine the stub never fired, so its shape ($1) says nothing"
+  else
+    bad "$A on the ${LD_BASE_SHA} engine: $1, expected $(col "$A" 5) -- the cell cannot tell the pre-fix engine from the fix"
+  fi
+done
+# THE HEALTHY PATH IS BYTE-IDENTICAL TO THE PRE-FIX ENGINE, in both modes, on every L world. The two
+# engine files are asserted to DIFFER first, or the comparison reads one program twice.
+if cmp -s "$RECON/layer-drift.sh" "$LD_BASE/layer-drift.sh"; then
+  bad "L healthy differential: the tip and ${LD_BASE_SHA} layer-drift.sh copies are identical"
+else
+  for _w in ext ds; do
+    for _m in classify --list-adjudications; do
+      case "$_w" in ext) _W="$LW_EXT" ;; *) _W="$LW_DS" ;; esac
+      set -- ; [ "$_m" = classify ] || set -- "$_m"
+      "$REAL_BASH" "$RECON/layer-drift.sh" "$@" "$_W/dist" "$(cat "$_W/B")" "$(cat "$_W/T")" "$_W/consumer" > "$WORK/ldh-tip" 2>/dev/null; _ra=$?
+      "$REAL_BASH" "$LD_BASE/layer-drift.sh" "$@" "$_W/dist" "$(cat "$_W/B")" "$(cat "$_W/T")" "$_W/consumer" > "$WORK/ldh-base" 2>/dev/null; _rb=$?
+      _n="$("$REAL_GREP" -c . "$WORK/ldh-tip")" || _n=0
+      # ds has no adjudicable row, so its listing is legitimately empty; every other pair must carry rows.
+      if [ "$_ra" -eq 0 ] && [ "$_rb" -eq 0 ] && cmp -s "$WORK/ldh-tip" "$WORK/ldh-base" \
+         && { [ "$_n" -gt 0 ] || [ "$_w:$_m" = "ds:--list-adjudications" ]; }; then
+        ok "L healthy ($_w, $_m): rc 0 both, tip stdout byte-identical to ${LD_BASE_SHA} ($_n row(s))"
+      else
+        bad "L healthy ($_w, $_m): tip rc $_ra, ${LD_BASE_SHA} rc $_rb, $_n tip row(s), outputs $(cmp -s "$WORK/ldh-tip" "$WORK/ldh-base" && echo equal || echo DIFFER)"
+      fi
+    done
+  done
+fi
+
+# === layer-drift MUTANTS ==========================================================================
+# Each applied by anchor to a copy of the TIP engine in a copy of the whole reconcile/ directory.
+LDS=layer-drift.sh
+LD_BRK_O='  [ "$ld_emit_failed" -eq 0 ] || break'
+LD_BRK_E='  [ "$ld_emit_failed" -eq 0 ] || break   # as in the overrides loop'
+LD_EXT_WALK='layer_files "$EXT_DIR" > "$LD_T/extensions" || _lw_rc=$?'
+ld_nobreak_check() { # <copy> <want-overrides-break> <want-extensions-break>
+  local a b
+  a="$("$REAL_GREP" -cxF -- "$LD_BRK_O" "$1/$LDS")" || a=0
+  b="$("$REAL_GREP" -cxF -- "$LD_BRK_E" "$1/$LDS")" || b=0
+  [ "$a" -eq "$2" ] && [ "$b" -eq "$3" ] && return 0
+  bad "MUTANT PARTIAL: the overrides-loop break is present $a time(s) (want $2) and the extensions-loop break $b (want $3)"
+  return 1
+}
+# m1: NO BREAK at either outer loop. Rows, rc and N are the fix's (every writer is guarded), so only
+# the ITERATION count after the first failed write can see it: L5b (extensions) and L5e (overrides).
+  d="$(O1="$LD_BRK_O" O2="$LD_BRK_E" mut M-LD-nobreak "$LDS" '$0==ENVIRON["O1"] || $0==ENVIRON["O2"] {next} {print}' \
+         "$LD_EXT_WALK" - "$LD_BRK_O" "$LD_BRK_E" "$LD_EXT_WALK")" \
+    && { ld_nobreak_check "$d" 0 0 && score_as M-LD-nobreak ld "$d" L5b=XFSZ-RC2-NOSTOP L5e=XFSZ-RC2-NOSTOP; } \
+    || mutreport M-LD-nobreak
+# m1a / m1b: one loop's break each, so each break has a cell the other cannot cover.
+  d="$(O1="$LD_BRK_O" mut M-LD-nobreak-ovr "$LDS" '$0==ENVIRON["O1"] {next} {print}' \
+         "$LD_EXT_WALK" - "$LD_BRK_O" "$LD_EXT_WALK")" \
+    && { ld_nobreak_check "$d" 0 1 && score_as M-LD-nobreak-ovr ld "$d" L5e=XFSZ-RC2-NOSTOP; } \
+    || mutreport M-LD-nobreak-ovr
+  d="$(O2="$LD_BRK_E" mut M-LD-nobreak-ext "$LDS" '$0==ENVIRON["O2"] {next} {print}' \
+         "$LD_EXT_WALK" - "$LD_BRK_E" "$LD_EXT_WALK")" \
+    && { ld_nobreak_check "$d" 1 0 && score_as M-LD-nobreak-ext ld "$d" L5b=XFSZ-RC2-NOSTOP; } \
+    || mutreport M-LD-nobreak-ext
+# m2: the per-write count replaced by ONE pre-flight probe of stdout at start. A closed fd fails the
+# probe, so L5 and L5c cannot kill it; every EFBIG cell does, because a file that accepts the first
+# write and refuses a later one passes a probe taken before any row.
+LD_FAILBR='  else ld_emit_failed=$(( ld_emit_failed + 1 )); fi'
+LD_PROBE='( exec 3>&1 ) 2>/dev/null || ld_emit_failed=1'
+  d="$(E="$LD_FAILBR" P="$LD_PROBE" mut M-LD-probe "$LDS" '$0==ENVIRON["E"] {print "  else :; fi"; next}
+         $0=="ld_emit_failed=0" {print; print ENVIRON["P"]; next} {print}' \
+         "$LD_PROBE" 'else ld_emit_failed=$((' "$LD_FAILBR" 'ld_emit_failed=0')" \
+    && score_as M-LD-probe ld "$d" L5b=XFSZ-RC0-LOST L5b-hard=XFSZ-RC0-LOST L5d=XFSZ-RC0-LOST L5e=XFSZ-RC0-LOST \
+    || mutreport M-LD-probe
+# m3: the OVERRIDE-DOUBLE-SHADOW block back in its `| while | while` subshells, the pre-fix shape
+# restored line for line: the emit's count lands in a copy that is thrown away. L5d owns it.
+LD_DS1="  ' | sort > \"\$LD_T/double-shadow\" || _ds_rc=\$?"
+LD_DS2='  [ "$_ds_rc" -eq 0 ] || ld_refuse "the grouping of shadow targets for OVERRIDE-DOUBLE-SHADOW" "$_ds_rc"'
+LD_DS3='  while IFS="$TAB" read -r label entries cnt; do'
+LD_DS4='    while IFS= read -r one; do'
+LD_DS5='    done < "$LD_T/double-shadow-entries"'
+LD_DS6='  done < "$LD_T/double-shadow"'
+# The entry split is staged too (its own status read, its own ld_refuse): the mutant deletes those
+# three lines along with the grouping's, so the restored block is the pre-fix pipe and nothing else.
+LD_DS7='    _dse_rc=0'
+LD_DS8="    printf '%s\\n' \"\$entries\" | tr ',' '\\n' | sed 's/^ *//' > \"\$LD_T/double-shadow-entries\" || _dse_rc=\$?"
+LD_DS9='    [ "$_dse_rc" -eq 0 ] || ld_refuse "the entry split for OVERRIDE-DOUBLE-SHADOW '"'"'${label}'"'"'" "$_dse_rc"'
+LD_DS1B="  ' | sort | while IFS=\"\$TAB\" read -r label entries cnt; do"
+LD_DS4B="    printf '%s\\n' \"\$entries\" | tr ',' '\\n' | sed 's/^ *//' | while IFS= read -r one; do"
+  d="$(A1="$LD_DS1" A2="$LD_DS2" A3="$LD_DS3" A4="$LD_DS4" A5="$LD_DS5" A6="$LD_DS6" A7="$LD_DS7" A8="$LD_DS8" A9="$LD_DS9" N1="$LD_DS1B" N4="$LD_DS4B" \
+       mut M-LD-ds-subshell "$LDS" '$0==ENVIRON["A1"] {print ENVIRON["N1"]; next}
+         $0==ENVIRON["A2"] || $0==ENVIRON["A3"] {next}
+         $0==ENVIRON["A7"] || $0==ENVIRON["A8"] || $0==ENVIRON["A9"] {next}
+         $0==ENVIRON["A4"] {print ENVIRON["N4"]; next}
+         $0==ENVIRON["A5"] {print "    done"; next}
+         $0==ENVIRON["A6"] {print "  done"; next} {print}' \
+         "$LD_DS4B" 'LD_T/double-shadow' "$LD_DS1" "$LD_DS2" "$LD_DS3" "$LD_DS4" "$LD_DS5" "$LD_DS6" "$LD_DS7" "$LD_DS8" "$LD_DS9")" \
+    && { _h="$("$REAL_GREP" -cxF -- "$LD_DS1B" "$d/$LDS")" || _h=0
+         if [ "$_h" -eq 1 ] && "$REAL_GREP" -qxF -- "$LD_DS1B" "$LD_BASE/$LDS" && "$REAL_GREP" -qxF -- "$LD_DS4B" "$LD_BASE/$LDS"; then
+           score_as M-LD-ds-subshell ld "$d" L5d=XFSZ-RC0-LOST
+         else bad "MUTANT DID NOT APPLY [M-LD-ds-subshell]: the restored pipe lines are not the ${LD_BASE_SHA} spelling (outer present $_h time(s))"; fi; } \
+    || mutreport M-LD-ds-subshell
+# m4: emit_raw uncounted -- the writer of every HARD-LAYER-ADJUDICATION-MISSING row. L5b-hard, whose
+# one failed write is that row, reads rc 0; no other cell's failing write is emit_raw's.
+LD_RAW="  printf '%s\\t%s\\t%s\\t%s\\n' \"\$1\" \"\$2\" \"\$3\" \"\$4\"; ld_wrote \$?"
+LD_RAWB="  printf '%s\\t%s\\t%s\\t%s\\n' \"\$1\" \"\$2\" \"\$3\" \"\$4\""
+  d="$(DROP1="$N0" DROP2="$N0" OLD="$LD_RAW" NEW="$LD_RAWB" \
+       mut M-LD-raw-uncounted "$LDS" "$SWAP" "$LD_RAWB" - "$LD_RAW")" \
+    && score_as M-LD-raw-uncounted ld "$d" L5b-hard=XFSZ-RC0-LOST \
+    || mutreport M-LD-raw-uncounted
+ld_heredoc_gate
 
 echo
 PSB_DONE=1

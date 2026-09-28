@@ -84,7 +84,8 @@ else
   printf '  FAIL  %-16s no summary DEFER row — a caller scanning only the last line would proceed\n' "summary-defer"
 fi
 
-# Classifier, not a gate: the CALLER decides, same posture as layer-drift.sh.
+# Classifier, not a gate: the CALLER decides. (layer-drift.sh shares the classifier posture but
+# exits 2 when a row could not be written; this script has no such exit.)
 ASSERTIONS=$((ASSERTIONS + 1))
 if [ "$RC" -eq 0 ]; then
   printf '  ok    %-16s exit 0  (classifier never blocks; the caller decides)\n' "exit-code"
